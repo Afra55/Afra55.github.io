@@ -1,2 +1,2 @@
-# afra55.github.com
+# afra55.github.io
 github pages
