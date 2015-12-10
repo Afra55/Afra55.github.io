@@ -2,21 +2,21 @@
 title: Afra55
 email: yunomo73@163.com
 description: 你好，我好，大家好！
-baseurl: "http://afra55.github.io/"
-url: "http://nandomoreira.me"
+baseurl: "http://afra55.github.io"
+url: "http://afra55.github.io"
 
 author:
   name     : 'Fernando Moreira'
   email    : hi@nandomoreira.me
-  url      : http://nandomoreira.me
+  url      : http://afra55.github.io
   facebook : http://facebook.com/fernando.dev
   twitter  : http://twitter.com/nandomoreirame
 
-github: https://github.com/nandomoreirame/zetsu
-disqus_shortname: "fernandomoreira"
-google_analytics: UA-52446115-1
+github: https://github.com/Afra55
+disqus_shortname: "afra55"
+google_analytics: 
 
-paginate: 2
+paginate: 10
 comments: true
 paginate_path: "/page/:num"
 
