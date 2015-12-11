@@ -1,9 +1,11 @@
 ---
 layout: page
-title: Afra55
+title: Author
 permalink: /author/
 slug: author
 ---
+
+###Afra55
 
 别名：AAA啊哈
 
