@@ -1,12 +1,16 @@
 ---
 layout: page
-title: Author
+title: Afra55
 permalink: /author/
 slug: author
 ---
 
-##Afra55
 Email：yunmo73@163.com
-Sina：[新浪微博](http://weibo.com/yang73)
+
+Sina：[http://weibo.com/yang73](http://weibo.com/yang73)
+
 CSDN：[http://blog.csdn.net/yang786654260](http://blog.csdn.net/yang786654260)
+
 别名：AAA啊哈
+
+QQ：1937525930
