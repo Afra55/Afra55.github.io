@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "Welcome to Afra55!"
-date:   2015-12-11
+date:   2015-12-11 12:00:00
 categories: Welcome
 comments: true
 ---
