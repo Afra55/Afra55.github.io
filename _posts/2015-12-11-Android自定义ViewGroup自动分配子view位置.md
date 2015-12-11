@@ -9,7 +9,9 @@ description: 子布局的view的宽高是wrap属性，功能是自动分配子vi
 
 ##图示
 ![图示](http://img.blog.csdn.net/20151203125404815)
+
 ##代码
+
 	import android.content.Context;
 	import android.util.AttributeSet;
 	import android.view.View;
