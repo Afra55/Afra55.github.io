@@ -6,14 +6,14 @@ baseurl: "http://afra55.github.io"
 url: "http://afra55.github.io"
 
 author:
-  name     : 'Fernando Moreira'
-  email    : hi@nandomoreira.me
+  name     : 'Afar55'
+  email    : yunomo73@163.com
   url      : http://afra55.github.io
   csdn : http://blog.csdn.net/yang786654260
   sina  : http://weibo.com/yang73
 
 github: https://github.com/Afra55
-disqus_shortname: "afra55"
+disqus_shortname: "Afra55"
 google_analytics: 
 
 paginate: 10
