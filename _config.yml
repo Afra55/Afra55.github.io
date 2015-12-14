@@ -27,3 +27,9 @@ sass:
 # Build settings
 markdown  : kramdown
 permalink : /:title/
+
+SimpleJekyllSearch({
+  searchInput: document.getElementById('search-input'),
+  resultsContainer: document.getElementById('results-container'),
+  json: '/search.json',
+})
