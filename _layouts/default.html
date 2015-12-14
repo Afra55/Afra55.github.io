@@ -10,14 +10,6 @@ layout: compress
   <body class="{{ page.slug }}">
     <main class="main">
       {% include header.html %}
-	  <!-- Html Elements for Search -->
-		<div id="search-container">
-		<input type="text" id="search-input" placeholder="search...">
-		<ul id="results-container"></ul>
-		</div>
-		 
-		<!-- Script pointing to jekyll-search.js -->
-		<script src="{{ site.baseurl }}/simple-jekyll-search/dest/jekyll-search.js"
       {{ content }}
       {% include footer.html %}
     </main>
