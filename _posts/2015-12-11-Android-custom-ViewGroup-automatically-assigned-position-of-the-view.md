@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "Android custom ViewGroup automatically assigned position of the view"
+title:  "Android自定义ViewGroup自动分配子view位置"
 date:   2015-12-11 17:49
 categories: Android
 comments: true
