@@ -9,11 +9,11 @@ layout: compress
   </head>
   <body class="{{ page.slug }}">
     <main class="main">
-      {% include header.html %}
-	  <div id="search-demo-container">
+	<div id="search-demo-container">
       <input type="text" id="search-input" placeholder="search...">
       <ul id="results-container"></ul>
     </div>
+      {% include header.html %}
       {{ content }}
       {% include footer.html %}
     </main>
