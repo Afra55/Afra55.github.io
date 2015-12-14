@@ -32,7 +32,9 @@ $gray-color-light: lighten($gray-color, 40%) !default;
 $gray-color-dark:  darken($gray-color, 25%) !default;
 
 // Width of the content area
-$content-width:    800px !default;
+$content-width:    920px !default;
 $on-laptop:        $content-width !default;
+$author-content-width:    800px !default;
+$author-on-laptop:        $content-width !default;
 $on-palm:          560px !default;
 $on-phone:         480px !default;

@@ -18,6 +18,23 @@
   }
 }
 
+.author_container {
+  max-width: -webkit-calc(#{$author-content-width} - (#{$spacing-unit} * 2));
+  max-width:         calc(#{$author-content-width} - (#{$spacing-unit} * 2));
+  margin-right: auto;
+  margin-left: auto;
+  padding-right: $spacing-unit;
+  padding-left: $spacing-unit;
+  @extend %clearfix;
+
+  @include media-query($author-on-laptop) {
+    max-width: -webkit-calc(#{$author-content-width} - (#{$spacing-unit}));
+    max-width:         calc(#{$author-content-width} - (#{$spacing-unit}));
+    padding-right: $spacing-unit / 2;
+    padding-left: $spacing-unit / 2;
+  }
+}
+
 .card {
   padding: $spacing-unit;
   background-color: #fff;
