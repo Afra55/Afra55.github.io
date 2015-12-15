@@ -28,3 +28,4 @@ sass:
 markdown  : kramdown
 permalink : /:title/
 safe: false
+
