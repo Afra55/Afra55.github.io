@@ -1,0 +1,243 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Afra55</title>
+    <description>你好，我好，大家好！</description>
+    <link>http://afra55.github.iohttp://afra55.github.io/</link>
+    <atom:link href="http://afra55.github.iohttp://afra55.github.io/feed.xml" rel="self" type="application/rss+xml"/>
+    <pubDate>Tue, 15 Dec 2015 11:20:36 +0800</pubDate>
+    <lastBuildDate>Tue, 15 Dec 2015 11:20:36 +0800</lastBuildDate>
+    <generator>Jekyll v3.0.1</generator>
+    
+      <item>
+        <title>daydream 1</title>
+        <description>&lt;p&gt;  只感觉脖子凉飕飕的，猛的睁眼一看，视线在空中旋转，没有头的身体正在被马群践踏，耳中充斥着兵戎撞击的巨响以及士兵的呐喊。在空中的高速旋转让我一阵眩晕，我想喊出来，但是没有了脖子无法发出声音。“duang”，我的头重重的摔到了地上，刚好视线能看到变成了肉泥的身体，只想“为什么我还没死啊！”，随即便晕厥了过去。&lt;/p&gt;
+
+&lt;p&gt;  ————&lt;/p&gt;
+
+&lt;p&gt;  耳边惨叫声连绵不绝，我一哆嗦，感觉身下的沙地是如此的炽热，睁开眼睛，用手使劲擦了擦眼角的血液，来不及震惊身体恢复了原状，只见百米外一名士兵的胸口被一只手贯穿，鲜红的心脏在手上挣扎跃动。黄昏下，一身黄衣在鲜血的陪衬下，尽显疯狂，不禁屏住呼吸，周围十几个士兵申请麻木的站在原地，痴痴的看着黄衣人。手猛的抽了回去，我轻声惊呼，黄衣人突然转头看向了我，只觉一双妩媚的明眸，让我一阵悸动。我使劲撑起虚弱的身体，往远方跑去。极广阔的沙地上，横横竖竖躺着无数的尸体，以及各种肉沫。突然感觉全身的力量流向了胸前，一只惨白却又沾满了鲜血的玉手出现在胸前，手心正是我的心脏。看着手慢慢从胸前抽了回去，我无法发出一点声音，身后传来毛骨悚然的“哧哧”声音，像人类的笑声，更像野兽的低吼。&lt;/p&gt;
+
+&lt;p&gt;  “味道真好，真希望再能尝到你的心脏，可惜你已经是个死人。再见喽，接下来我要去屠村了。”声音是如此的动听，却也带有一丝凄凉，竟让人无比惋惜。我笔直的倒了下去，周围再次陷入的寂静，我又要再死一次了，死之前要是能见到这个血腥疯狂的黄衣人的容貌就好了。爬在沙地上难受的不得了，不知爬了有多久，一阵寒风袭来，月色凝重，我惊呼，“我还活着？老天，你要怎么玩我啊，让不让我死！”。我爬了起来看看健壮的胸口，没有一丝伤口。周围一股腥臭味，尸体，肉沫，血液，在月色中是无比的惊悚。我仿佛看的麻木了，没有丝毫的情感出现，只能僵硬的向前的走去。&lt;/p&gt;
+</description>
+        <pubDate>Mon, 14 Dec 2015 16:51:00 +0800</pubDate>
+        <link>http://afra55.github.iohttp://afra55.github.io/daydream-1/</link>
+        <guid isPermaLink="true">http://afra55.github.iohttp://afra55.github.io/daydream-1/</guid>
+        
+        
+        <category>daydream</category>
+        
+      </item>
+    
+      <item>
+        <title>Welcome to Afra55!</title>
+        <description>&lt;p&gt;Afra55博客正式创建于2015年12月11日，谢谢支持。&lt;/p&gt;
+</description>
+        <pubDate>Fri, 11 Dec 2015 20:00:00 +0800</pubDate>
+        <link>http://afra55.github.iohttp://afra55.github.io/welcome-to-Afra55/</link>
+        <guid isPermaLink="true">http://afra55.github.iohttp://afra55.github.io/welcome-to-Afra55/</guid>
+        
+        
+        <category>Welcome</category>
+        
+      </item>
+    
+      <item>
+        <title>Android自定义ViewGroup自动分配子view位置</title>
+        <description>&lt;h2 id=&quot;section&quot;&gt;图示&lt;/h2&gt;
+&lt;p&gt;&lt;img src=&quot;http://img.blog.csdn.net/20151203125404815&quot; alt=&quot;图示&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;section-1&quot;&gt;代码&lt;/h2&gt;
+
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;import android.content.Context;
+import android.util.AttributeSet;
+import android.view.View;
+import android.view.ViewGroup;
+
+import com.magus.trainingfirstapp.utils.DisplayUtil;
+
+/**
+ * Created by yangshuai in the 17:25 of 2015.12.02 .
+ * 自动分配子view的位置, 具有自动换行,水平居中的功能
+ */
+public class AutoDisplayChildViewContainer extends ViewGroup {
+    private int parentWidth;
+    private int totaleft = 0;
+    private int totalTop = 0;
+    private int margin = 10;
+    private int maxChildHeight = 0;
+    private int totalRight = 0;
+
+    public AutoDisplayChildViewContainer(Context context) {
+        super(context);
+    }
+
+    public AutoDisplayChildViewContainer(Context context, AttributeSet attrs) {
+        super(context, attrs);
+    }
+
+    public AutoDisplayChildViewContainer(Context context, AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+    }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+
+        /* 测量父布局 */
+        parentWidth = measureSize(widthMeasureSpec, DisplayUtil.dip2px(getContext(), 240));
+
+        int count = getChildCount();
+        int tempMaxChildHeight = 0;
+        int tempTotalHeight = 0;
+        int tempTotalRight = 0;
+        for (int i = 0; i &amp;lt; count; i++) {
+            View child = getChildAt(i);
+            if (child.getVisibility() != View.GONE) {
+
+                /* 测量子布局 */
+                if (child.getMeasuredWidth() &amp;gt; parentWidth) {
+                    child.measure(parentWidth, child.getMeasuredHeight());
+                } else
+                    child.measure(child.getMeasuredWidth(), child.getMeasuredHeight());
+
+                tempMaxChildHeight = Math.max(tempMaxChildHeight, child.getMeasuredHeight());
+                tempTotalRight += child.getMeasuredWidth();
+                if (tempTotalRight &amp;gt; parentWidth) {
+                    tempTotalHeight += tempMaxChildHeight;
+                    tempMaxChildHeight = child.getMeasuredHeight();
+                    tempTotalRight = child.getMeasuredWidth();
+                }
+            }
+        }
+
+        /* 获取适配子布局后的高度 */
+        int parentHeight = tempTotalHeight + tempMaxChildHeight + margin;
+        setMeasuredDimension(parentWidth, parentHeight);
+    }
+
+    private int measureSize(int measureSpec, int defaultSize) {
+        int mode = MeasureSpec.getMode(measureSpec);
+        int size = MeasureSpec.getSize(measureSpec);
+        int result = defaultSize;
+
+        if (mode == MeasureSpec.EXACTLY) {
+            result = size;
+        } else if (mode == MeasureSpec.AT_MOST) {
+            result = Math.max(size, result);
+        }
+
+        return result;
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int l, int t, int r, int b) {
+
+        int count = getChildCount();
+        int lineViewCount = 0;
+
+        for (int i = 0; i &amp;lt; count; i++) {
+            View child = getChildAt(i);
+            if (child.getVisibility() != View.GONE) {
+
+                if (i != 0) {
+                    /* child 的 left 是上个子 view 的宽加上 margin */
+                    totaleft += getChildAt(i - 1).getMeasuredWidth() + margin;
+                } else {
+                    totaleft = 0;
+                    totalTop = 0;
+                    maxChildHeight = child.getMeasuredHeight();
+                }
+                /* child 的 right */
+                totalRight = totaleft + child.getMeasuredWidth();
+                /* 如果 rigth 大于 父布局的宽， 则换行 */
+                if (totalRight &amp;gt; parentWidth) {
+                    adjustLine(lineViewCount, i); // 调整这一行的子布局的位置
+                    lineViewCount = 0;  // 这一行的子 child 的数量充值
+                    totalTop += maxChildHeight;
+                    totaleft = 0;
+                    maxChildHeight = child.getMeasuredHeight();
+                    totalRight = child.getMeasuredWidth();
+                }else {
+                    maxChildHeight = Math.max(maxChildHeight, child.getMeasuredHeight());
+                }
+
+                child.layout(
+                        totaleft,
+                        totalTop,
+                        totalRight,
+                        totalTop + child.getMeasuredHeight()
+                );
+
+                /* 统计这一行的子view的数量 */
+                lineViewCount++;
+            }
+        }
+
+        /* 调整最后一行子布局的位置 */
+        totaleft = totalRight + margin;
+        adjustLine(lineViewCount, count);
+
+    }
+
+    /* 调整一行，让这一行的子布局水平居中 */
+    private void adjustLine(int lineViewCount, int i) {
+        totaleft = (parentWidth - totaleft) / 2;
+        int marginTop;
+        for (int lineViewNumber = lineViewCount; lineViewNumber &amp;gt; 0; lineViewNumber--) {
+            View lineViewChild = getChildAt(i - lineViewNumber);
+            totalRight = totaleft + lineViewChild.getMeasuredWidth();
+            if (lineViewChild.getMeasuredHeight() != maxChildHeight) {
+                marginTop = (maxChildHeight - lineViewChild.getMeasuredHeight()) / 2;
+            } else {
+                marginTop = 0;
+            }
+            lineViewChild.layout(totaleft, totalTop + marginTop, totalRight, totalTop + marginTop + lineViewChild.getMeasuredHeight());
+            totaleft += lineViewChild.getMeasuredWidth() + margin;
+        }
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;/div&gt;
+
+&lt;h2 id=&quot;github&quot;&gt;github&lt;/h2&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://github.com/Afra55/TrainingFirstApp&quot;&gt;https://github.com/Afra55/TrainingFirstApp&lt;/a&gt;&lt;/p&gt;
+</description>
+        <pubDate>Fri, 11 Dec 2015 17:49:00 +0800</pubDate>
+        <link>http://afra55.github.iohttp://afra55.github.io/Android-custom-ViewGroup-automatically-assigned-position-of-the-view/</link>
+        <guid isPermaLink="true">http://afra55.github.iohttp://afra55.github.io/Android-custom-ViewGroup-automatically-assigned-position-of-the-view/</guid>
+        
+        
+        <category>Android</category>
+        
+      </item>
+    
+      <item>
+        <title>AAA啊哈，你每天都应该想想这7条</title>
+        <description>&lt;h2 id=&quot;section&quot;&gt;1.你的技术要具有突破性而不仅仅是稍有改进.&lt;/h2&gt;
+
+&lt;h2 id=&quot;section-1&quot;&gt;2.现在开创事业,时机合适吗?&lt;/h2&gt;
+
+&lt;h2 id=&quot;section-2&quot;&gt;3.占有市场大份额，接近垄断.&lt;/h2&gt;
+
+&lt;h2 id=&quot;section-3&quot;&gt;4.合适的团队.&lt;/h2&gt;
+
+&lt;h2 id=&quot;section-4&quot;&gt;5.除了创造,还要销售.&lt;/h2&gt;
+
+&lt;h2 id=&quot;section-5&quot;&gt;6.未来10年或20年,要能保住市场地位.&lt;/h2&gt;
+
+&lt;h2 id=&quot;section-6&quot;&gt;7.独特的密秘. &lt;/h2&gt;
+
+&lt;p&gt;&lt;em&gt;实现以上7条，便可召唤神龙！&lt;/em&gt;&lt;/p&gt;
+
+</description>
+        <pubDate>Fri, 11 Dec 2015 17:15:00 +0800</pubDate>
+        <link>http://afra55.github.iohttp://afra55.github.io/AAA%E5%95%8A%E5%93%88-%E4%BD%A0%E6%AF%8F%E5%A4%A9%E9%83%BD%E5%BA%94%E8%AF%A5%E6%83%B3%E6%83%B3%E8%BF%997%E6%9D%A1/</link>
+        <guid isPermaLink="true">http://afra55.github.iohttp://afra55.github.io/AAA%E5%95%8A%E5%93%88-%E4%BD%A0%E6%AF%8F%E5%A4%A9%E9%83%BD%E5%BA%94%E8%AF%A5%E6%83%B3%E6%83%B3%E8%BF%997%E6%9D%A1/</guid>
+        
+        
+        <category>生活</category>
+        
+      </item>
+    
+  </channel>
+</rss>
