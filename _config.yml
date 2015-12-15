@@ -27,5 +27,5 @@ sass:
 # Build settings
 markdown  : kramdown
 permalink : /:title/
-safe: false
+safe: true
 
