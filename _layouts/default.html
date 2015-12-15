@@ -12,6 +12,9 @@ layout: compress
       <input type="text" id="search-input" placeholder="search...">
       <ul id="results-container"></ul>
    </div>
+   <aside id="left-side">
+        {% include categories.ext %}
+      </aside>
     <main class="main">
       {% include header.html %}
       {{ content }}
