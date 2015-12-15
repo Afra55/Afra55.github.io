@@ -12,10 +12,11 @@ layout: compress
       <input type="text" id="search-input" placeholder="search...">
       <ul id="results-container"></ul>
    </div>
+   {\% for post in site.categories.[page.category] %\}
+    {\{ post.date }\} {\{ post.title }\}
+{\% endfor %\}
     <main class="main">
       {% include header.html %}
-	  {% include category-archive.html %}
-
       {{ content }}
       {% include footer.html %}
     </main>
