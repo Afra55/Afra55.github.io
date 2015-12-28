@@ -7,7 +7,7 @@ comments: true
 description: 设计模式总结!
 ---
 
-##单例模式
+##1.单例模式
 
 ###DCL(Double CheckLock)
     public class Singleton {
@@ -41,10 +41,14 @@ description: 设计模式总结!
     	}
     }
 
-##Builder 模式
+----------
+
+##2.Builder 模式
 参照 Android 源码 AlertDialog.java 经典 Builder 模式。
 
-##原型模式
+----------
+
+##3.原型模式
 即克隆原始的文件获得副本，对副本进行修改并不会影响原始文件。
 *需要注意的是：使用 Cloneable 实现拷贝时，并不会执行构造函数。*
 
@@ -112,3 +116,5 @@ description: 设计模式总结!
         }
 
     }
+
+----------
