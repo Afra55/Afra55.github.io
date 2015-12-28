@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "Welcome to Afra55!"
+title:  "设计模式总结"
 date:   2015-12-28 9:50:18 
 categories: DesignMode
 comments: true
