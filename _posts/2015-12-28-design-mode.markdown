@@ -118,20 +118,23 @@ description: 设计模式总结!
     }
 
 ----------
+
 ##4.工厂模式
 
 定义一个创建对象的接口，让子类决定实例化哪个类。
 
 ###创建抽象类
+
     /**
-     * Created by yangshuai in the 16:05 of 2016.01.11 .
-     * 抽象类
+	     * Created by yangshuai in the 16:05 of 2016.01.11 .
+	     * 抽象类
      */
     public abstract class BaseFacory {
     	public abstract void start();
     }
 
 ###创建子类
+
 	/**
 	 * Created by yangshuai in the 16:09 of 2016.01.11 .
 	 * 具体工厂类
@@ -144,6 +147,7 @@ description: 设计模式总结!
 	}
 
 ###获取工厂实例反射方法（仅参考）
+
 	/**
 	     * 获取工厂实例
 	     * @param tClass
@@ -166,6 +170,7 @@ description: 设计模式总结!
     }
 
 ###使用方法
+
 	BaseFacory factoryMode = FactoryMode.getInstatnce(MyFacory.class);
         if (factoryMode != null) {
             factoryMode.start();
