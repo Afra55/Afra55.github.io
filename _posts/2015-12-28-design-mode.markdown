@@ -28,7 +28,7 @@ description: 设计模式总结!
     	}
     }
 
-##静态内部类
+###静态内部类
     public class Singleton{
     	private Singleton(){}
     
@@ -41,10 +41,27 @@ description: 设计模式总结!
     	}
     }
 
+###优点
+
+1. 在内存中只有一个实例，减少内存开支，减少系统性能开销；
+2. 避免对资源的多重占用；
+3. 可以在系统设置全局的访问点，优化和共享资源访问。
+
+###缺点
+1. 扩展困难；
+2. 如果持有Context，很容易引发内存泄漏，此时最好传递个单例对象的 Context 最好是 Application Context。
+
 ----------
 
 ##2.Builder 模式
 参照 Android 源码 AlertDialog.java 经典 Builder 模式。
+
+###优点
+1. 封装良好。
+2. 建造者独立，益于扩展。
+
+###缺点
+会产生多余的Builder以及Director对象，消耗内存。
 
 ----------
 
@@ -117,6 +134,12 @@ description: 设计模式总结!
 
     }
 
+###优点
+原型模式是在内存中二进制流的拷贝，比直接 new 一个对象性能好很多，特别是在循环体内产生大量对象时。
+
+###缺点
+直接在内存中拷贝，构造函数是不执行的，在实际开发当中要注意这个问题。
+
 ----------
 
 ##4.工厂模式
@@ -143,6 +166,13 @@ description: 设计模式总结!
 	    @Override
 	    public void start() {
 	        Log.d("MyFactory", "start");
+	    }
+	}
+
+	public class MyFacory2 extends BaseFacory {
+	    @Override
+	    public void start() {
+	        Log.d("MyFactory2", "start");
 	    }
 	}
 
