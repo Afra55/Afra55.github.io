@@ -207,3 +207,67 @@ description: 设计模式总结!
         }
 
 ----------
+
+##5.策略模式
+
+定义了一些列算法，并分别封装，并且互相可以替换。经常回用来多个if-else或switch-case。
+
+###定义通用接口
+
+    /**
+	     * Created by yangshuai in the 10:56 of 2016.01.29 .
+     */
+    public interface Strategy {
+    	public int strategy();
+    }
+
+###封装算法
+
+	/**
+	 * Created by yangshuai in the 11:37 of 2016.01.29 .
+	 */
+	public class StrategyOne implements Strategy {
+	    @Override
+	    public int strategy() {
+	        Log.d("StrategyOne", "OneStrategy");
+	        /* 算法操作 */
+	        return 1;
+	    }
+	}
+
+	/**
+	 * Created by yangshuai in the 11:37 of 2016.01.29 .
+	 */
+	public class StrategyTwo implements Strategy {
+	    @Override
+	    public int strategy() {
+	        Log.d("StrategyTwo", "TwoStrategy");
+	        /* 算法操作 */
+	        return 2;
+	    }
+	}
+
+###使用
+
+	/**
+	 * Created by yangshuai in the 11:39 of 2016.01.29 .
+	 */
+	public class UseStrategy {
+	
+	    private Strategy strategy = new StrategyOne();
+	
+	    public Strategy getStrategy() {
+	        return strategy;
+	    }
+	
+	    public void setStrategy(Strategy strategy) {
+	        this.strategy = strategy;
+	    }
+	
+	    public int strategy() {
+	        return strategy.strategy();
+	    }
+	}
+
+
+----------
