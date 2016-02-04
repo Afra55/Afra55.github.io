@@ -1,11 +1,12 @@
 ---
 layout: post
 title:  "View的滑动冲突处理方法"
-date:   2016-2-4 16:09:52 
+date:   2016-2-4 16:09
 categories: Android
 comments: true
 description: View的滑动冲突处理方法
 ---
+
 
 ##外部拦截法
 
