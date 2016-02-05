@@ -5,6 +5,9 @@ comments: true
 permalink: /about/
 ---
 
+* content
+{:toc}
+
 # 感谢
 
 你好!
