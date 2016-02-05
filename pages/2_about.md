@@ -33,7 +33,7 @@ permalink: /about/
 
 GitHub：[https://github.com/Afra55](https://github.com/Afra55)
 
-Email：yunmo73@163.com
+Email：1937525930@qq.com
 
 Sina：[http://weibo.com/yang73](http://weibo.com/yang73)
 
