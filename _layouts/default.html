@@ -1,29 +1,28 @@
-{% strip %}<!DOCTYPE html>
+<!DOCTYPE html>
 <html>
-  <head>
-    {% include head.html %}
 
-    <meta name="robots" content="noindex"> <!--=====  Please remove it ! ! !  ======-->
-    <meta name="googlebot" content="noindex"> <!--=====  Please remove it ! ! !  ======-->
-  </head>
-  <body class="{% if page.bodyclass %}{{ page.bodyclass }}{% endif %}">
+  {% include head.html %}
 
-    <main class="main-container">
+ <!--  <body data-spy="scroll" data-target="#myAffix"> -->
+  <body>
 
-        {% include header.html %}
+    {% include header.html %}
 
-        <section class="main-content">
-          {{ content }}
-        </section>
+    <div id="main" class="container main">
+      {{ content }}
+    </div>
 
-        {% include footer.html %}
+    
+    <div id="top" data-toggle="tooltip" data-placement="left" title="back to top">
+      <a href="javascript:;">
+        <div class="arrow"></div>
+        <div class="stick"></div>
+      </a>
+    </div>
 
-    </main>
+    {% include footer.html %}
 
-    {% include github-corner.html %}
-
-    <script src="{{ '/js/jquery.min.js' | prepend: site.baseurl }}"></script>
-    <script src="{{ '/js/jekyll-search.min.js' | prepend: site.baseurl }}"></script>
-    <script src="{{ '/js/main.js' | prepend: site.baseurl }}"></script>
+    {% include newpost.html %}
+  
   </body>
-</html>{% endstrip %}
+</html>
