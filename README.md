@@ -1,4 +1,4 @@
-# LiXizhi's Personal Website
+# Afra55's Personal Website
 
-Runing on Github + Jekyll theme by [Gaohaoyang](https://github.com/Gaohaoyang/gaohaoyang.github.io)**
+[http://afra55.github.io/](http://afra55.github.io/)
 
