@@ -4,7 +4,8 @@ title: About
 comments: true
 permalink: /about/
 ---
-#感谢
+
+# 感谢
 
 你好!
 
@@ -23,7 +24,7 @@ permalink: /about/
 祝你好运，健康。
 
 
-#About Me
+# About 
 
 别名：AAA啊哈
 
