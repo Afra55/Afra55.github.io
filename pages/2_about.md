@@ -8,7 +8,7 @@ permalink: /about/
 * content
 {:toc}
 
-# 感谢
+## 感谢
 
 你好!
 
@@ -27,7 +27,7 @@ permalink: /about/
 祝你好运，健康。
 
 
-# About 
+## About Me
 
 别名：AAA啊哈
 
