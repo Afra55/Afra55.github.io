@@ -7,6 +7,9 @@ comments: true
 description: View的滑动冲突处理方法
 ---
 
+* content
+{:toc}
+
 # 外部拦截法
 
 	private int mLastXIntercept;
