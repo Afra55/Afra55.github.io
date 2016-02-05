@@ -4,51 +4,35 @@ title: About
 comments: true
 permalink: /about/
 ---
+#感谢
 
-* content
-{:toc}
+你好!
 
-## About the site
-This is a personal website of LiXizhi, created with github and jekyll. 
-Create your own website is as easy as clone or fork a [template](https://github.com/LiXizhi/lixizhi.github.io) on github, and [commit](http://jekyllrb.com/docs/posts/) to `_posts` folder. 
+这里是Afra55的博客!
 
-### Admin tools
-* site [configuration file](https://github.com/LiXizhi/lixizhi.github.io/blob/master/_config.yml)
-* Jekyll + [lixizhi.duoshuo.com](http://lixizhi.duoshuo.com/admin/)
-* Jekyll + [lixizhi.disqus.com](http://lixizhi.disqus.com/admin/)
-* Jekyll theme templates: [jekyllthemes.org](http://jekyllthemes.org)
-   * Theme used: [cool-concise](http://jekyllthemes.org/themes/cool-concise-high-end/)
-* Jekyll official site: [jekyllrb.com](http://jekyllrb.com)
-* YAML for human readable markdown: [yaml.org](http://www.yaml.org/)
-* markdown reference: [kramdown](http://kramdown.gettalong.org/quickref.html)
+旨在总结工作中的问题，分享解决的经验，以免不在一个坑中跌两次。
 
-### About comments
-Add a variable called `comments` to the [YAML front matter](http://jekyllrb.com/docs/frontmatter/) and set its value to true. A sample might look like:
+这个世界，没有大神高手一说，只有知识掌握的熟练度分级。
 
-    ---
-    layout: post
-    comments: true
-    # other options
-    ---
+在生活工作中的点点滴滴都是我们宝贵的练级法宝。
 
-### Sample markdowns
-Click view source at the bottom of the page
+开发是一门艺术，在艺术的路上探索出自己的山头。
 
-* Embedding code
-{% highlight lua %}
-local function main()
-	print("hello world everyone")
-end
-{% endhighlight %}
+不断努力前进，总有一天你的价值就会在云彩中提升。
+
+祝你好运，健康。
 
 
-## About me
+#About Me
 
-My primary research interest is in artificial intelligence, programming and education. See my project page for details.
+别名：AAA啊哈
 
+GitHub：[https://github.com/Afra55](https://github.com/Afra55)
 
-### 2005 Old Website 
-Here is my old personal website when I was in University. It was mostly on my projects and thoughts before 2005.
+Email：yunmo73@163.com
 
-* [Xizhi's old website before 2005](/oldsite2005/index.htm). 
+Sina：[http://weibo.com/yang73](http://weibo.com/yang73)
 
+CSDN：[http://blog.csdn.net/yang786654260](http://blog.csdn.net/yang786654260)
+
+QQ：1937525930
