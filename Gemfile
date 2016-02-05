@@ -4,7 +4,6 @@ source 'http://rubygems.org'
 
 group :development do
   gem 'rake', '~> 10.4.2'
-  gem 'sass', '~> 3.4.20'
-  gem 'jekyll', '~> 3.0.1'
-  gem 'paginate', '~> 4.0.0'
+  gem 'sass', '~> 3.4.10'
+  gem 'jekyll', '~> 2.5.3'
 end
