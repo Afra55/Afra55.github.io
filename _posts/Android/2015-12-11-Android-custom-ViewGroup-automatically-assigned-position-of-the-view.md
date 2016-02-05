@@ -7,10 +7,11 @@ comments: true
 description: 子布局的view的宽高是wrap属性，功能是自动分配子view的位置, 具有自动换行,水平居中的功能
 ---
 
-##图示
+## 图示
+
 ![图示](http://img.blog.csdn.net/20151203125404815)
 
-##代码
+## 代码
 
 	import android.content.Context;
 	import android.util.AttributeSet;
@@ -160,6 +161,6 @@ description: 子布局的view的宽高是wrap属性，功能是自动分配子vi
 	    }
 	}
 
-##github
+## github
 
 [https://github.com/Afra55/TrainingFirstApp](https://github.com/Afra55/TrainingFirstApp)

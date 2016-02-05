@@ -7,7 +7,8 @@ comments: true
 description: View的滑动冲突处理方法
 ---
 
-#外部拦截法
+# 外部拦截法
+
 	private int mLastXIntercept;
     private int mLastYIntercept;
 

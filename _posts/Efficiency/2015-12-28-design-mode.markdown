@@ -7,9 +7,10 @@ comments: true
 description: 设计模式总结!
 ---
 
-##1.单例模式
+## 1.单例模式
 
-###DCL(Double CheckLock)
+### DCL(Double CheckLock)
+
     public class Singleton {
     	private static Singleton sInstance = null;
     
@@ -28,7 +29,7 @@ description: 设计模式总结!
     	}
     }
 
-###静态内部类
+### 静态内部类
     public class Singleton{
     	private Singleton(){}
     
@@ -53,19 +54,23 @@ description: 设计模式总结!
 
 ----------
 
-##2.Builder 模式
+## 2.Builder 模式
+
 参照 Android 源码 AlertDialog.java 经典 Builder 模式。
 
-###优点
+### 优点
+
 1. 封装良好。
 2. 建造者独立，益于扩展。
 
-###缺点
+### 缺点
+
 会产生多余的Builder以及Director对象，消耗内存。
 
 ----------
 
-##3.原型模式
+## 3.原型模式
+
 即克隆原始的文件获得副本，对副本进行修改并不会影响原始文件。
 *需要注意的是：使用 Cloneable 实现拷贝时，并不会执行构造函数。*
 
@@ -134,19 +139,20 @@ description: 设计模式总结!
 
     }
 
-###优点
+### 优点
 原型模式是在内存中二进制流的拷贝，比直接 new 一个对象性能好很多，特别是在循环体内产生大量对象时。
 
-###缺点
+### 缺点
+
 直接在内存中拷贝，构造函数是不执行的，在实际开发当中要注意这个问题。
 
 ----------
 
-##4.工厂模式
+## 4.工厂模式
 
 定义一个创建对象的接口，让子类决定实例化哪个类。
 
-###创建抽象类
+### 创建抽象类
 
     /**
 	     * Created by yangshuai in the 16:05 of 2016.01.11 .
@@ -156,7 +162,7 @@ description: 设计模式总结!
     	public abstract void start();
     }
 
-###创建子类
+### 创建子类
 
 	/**
 	 * Created by yangshuai in the 16:09 of 2016.01.11 .
@@ -176,7 +182,7 @@ description: 设计模式总结!
 	    }
 	}
 
-###获取工厂实例反射方法（仅参考）
+### 获取工厂实例反射方法（仅参考）
 
 	/**
 	     * 获取工厂实例
@@ -199,7 +205,7 @@ description: 设计模式总结!
         return (T) baseFacory;
     }
 
-###使用方法
+### 使用方法
 
 	BaseFacory factoryMode = FactoryMode.getInstatnce(MyFacory.class);
         if (factoryMode != null) {
@@ -208,11 +214,11 @@ description: 设计模式总结!
 
 ----------
 
-##5.策略模式
+## 5.策略模式
 
 定义了一些列算法，并分别封装，并且互相可以替换。经常回用来多个if-else或switch-case。
 
-###定义通用接口
+### 定义通用接口
 
     /**
 	     * Created by yangshuai in the 10:56 of 2016.01.29 .
@@ -221,7 +227,7 @@ description: 设计模式总结!
     	public int strategy();
     }
 
-###封装算法
+### 封装算法
 
 	/**
 	 * Created by yangshuai in the 11:37 of 2016.01.29 .
@@ -247,7 +253,7 @@ description: 设计模式总结!
 	    }
 	}
 
-###使用
+### 使用
 
 	/**
 	 * Created by yangshuai in the 11:39 of 2016.01.29 .
@@ -269,13 +275,14 @@ description: 设计模式总结!
 	    }
 	}
 
-###优点
+### 优点
 
 1. 结构简单明了，使用简单直观；
 2. 耦合度相对较低，扩展方便；
 3. 操作封装更彻底，数据更安全。
 
-###缺点
+### 缺点
+
 随着策略的增加，子类会变得繁多。
 
 ----------

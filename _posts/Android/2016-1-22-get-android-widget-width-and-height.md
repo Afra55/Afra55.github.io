@@ -7,7 +7,7 @@ comments: true
 description: 获取Android控件的宽高
 ---
 
-#一
+# 一
 
 	/**
 	     * view 初始化完毕，宽高已经确定。<br/>
@@ -24,7 +24,7 @@ description: 获取Android控件的宽高
         }
     }
 
-#二
+# 二
 
 	@Override	
     protected void onStart() {
@@ -59,9 +59,9 @@ description: 获取Android控件的宽高
         }
 	}
 
-#四
+# 四
 
-##具体数值
+## 具体数值
 
 	/* 比如宽高是100px */
         int widthMeasureSpec = View.MeasureSpec.makeMeasureSpec(100, View.MeasureSpec.EXACTLY);
@@ -70,7 +70,7 @@ description: 获取Android控件的宽高
         int width = view.getMeasuredWidth();
         int height = view.getMeasuredHeight();
 
-##wrap_content
+## wrap_content
 
 	/* view 的尺寸是使用20位二进制表示（最大是30个1，即 2的30次方-1 ，也就是 (1 << 30) - 1 */
         int widthMeasureSpec = View.MeasureSpec.makeMeasureSpec((1 << 30) - 1, View.MeasureSpec.AT_MOST);
@@ -79,4 +79,4 @@ description: 获取Android控件的宽高
         int width = view.getMeasuredWidth();
         int height = view.getMeasuredHeight();
 
-##match_parent 不可用
+## match_parent 不可用
