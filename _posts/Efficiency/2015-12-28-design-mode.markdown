@@ -7,6 +7,9 @@ comments: true
 description: 设计模式总结!
 ---
 
+* content
+{:toc}
+
 ## 1.单例模式
 
 ### DCL(Double CheckLock)
