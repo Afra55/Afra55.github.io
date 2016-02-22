@@ -4,7 +4,7 @@ title:  "属性动画"
 date:   2016-2-22 11:26
 categories: Android
 comments: true
-description: View的滑动冲突处理方法
+description: 属性动画
 ---
 
 * content
