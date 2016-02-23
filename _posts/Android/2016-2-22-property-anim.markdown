@@ -72,3 +72,12 @@ description: 属性动画
         });
 		valueAnimator.setDuration(5000).start();
     }
+
+# 注意事项
+
+1. OOM问题：避免使用帧动画；
+2. 内存泄漏：无限循环的属性动画需要有停止操作；
+3. 兼容性：3.0以下的动画有兼容问题。
+4. View动画：View动画只是对View的影响做动画，并不能真正改变view的状态，所以有时候会出现View动画结束后View无法隐藏的现象（setVisibility（View.Gone）失效），此时调用view.clearAnimation即可。
+5. 使用dp，不能使用px。
+6. 动画过程中，建议开启硬件加速。
