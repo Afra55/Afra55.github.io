@@ -46,3 +46,44 @@ description: View的滑动冲突处理方法
     private boolean interceptEvent(MotionEvent ev) {
         return true;
     }
+
+# 内部拦截法
+
+## 子 View
+
+	private int mLastX;
+    private int mLastY;
+
+    @Override
+    public boolean dispatchTouchEvent(MotionEvent ev) {
+        int x = (int) ev.getX();
+        int y = (int) ev.getY();
+        switch (ev.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                getParent().requestDisallowInterceptTouchEvent(true);
+                break;
+            case MotionEvent.ACTION_MOVE:
+                int detailX = x - mLastX;
+                int detailY = y - mLastY;
+                if (父容器需要的点击事件) {
+                    getParent().requestDisallowInterceptTouchEvent(false);
+                }
+                break;
+            case MotionEvent.ACTION_UP:
+                break;
+        }
+        mLastX = x;
+        mLastY = y;
+        return super.dispatchTouchEvent(ev);
+    }
+
+## 父容器
+
+	@Override
+    public boolean onInterceptTouchEvent(MotionEvent ev) {
+        if (ev.getAction() == MotionEvent.ACTION_DOWN) {
+            return false;
+        } else {
+            return true;
+        }
+    }
