@@ -12,6 +12,8 @@ description: View的滑动冲突处理方法
 
 # 外部拦截法
 
+父容器不拦截 ACTION_DOWN 事件，否则 ＡＣＴＩＯＮ＿ＭＯＶＥ 和　ＡＣＴＩＯＮ＿ＵＰ　都会由父容器处理，　在　ＡＣＴＩＯＮ＿ＭＯＶＥ　只对要处理的事件返回　ｔｒｕｅ，　在　ＡＣＴＩＯＮ＿ＵＰ　也要返回　ｆａｌｓｅ。
+
 	private int mLastXIntercept;
     private int mLastYIntercept;
 
