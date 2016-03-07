@@ -1,8 +1,8 @@
 ---
 layout: post
 title:  "Android代码性能优化"
-date:   2015-3-7 12:00:00
-categories: Life
+date:   2015-12-11 12:00:00
+categories: Efficiency
 comments: true
 description: Android代码性能优化
 ---
