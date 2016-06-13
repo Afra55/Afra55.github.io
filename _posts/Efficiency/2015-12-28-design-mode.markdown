@@ -289,3 +289,149 @@ description: 设计模式总结!
 随着策略的增加，子类会变得繁多。
 
 ----------
+
+## 6.状态模式
+
+如果有大量的 分支 语句（if-else， switch-case）或者 要根据状态的改变而改变行为时，状态模式是最佳选择。举例如下：
+
+### 创建状态接口
+
+    /*
+    	状态接口，有三种模式，睡眠、行走、进食。
+    */
+    public interface State{
+    	public void sleep();
+    	public void walk();
+    	public void eatting();
+    }
+
+### 创建行为接口
+
+    /*
+    	动作接口，分别是唱歌、移动、玩游戏。
+    */
+    public interface Action{
+    	public void sing();
+    	public void move();
+    	public void playGame();
+    }
+
+### 模拟各种状态下的行为执行方式
+
+	// 睡眠模式下的所有行为的模拟
+    public class SleepState implements Action{
+    
+    	@Override
+    	public void sing(){
+    		System.out.println("You are sleeping, no sing");
+    	}
+    
+    	@Override
+    	public void move(){
+    		System.out.println("You are sleeping, no move");
+    	}
+    
+    	@Override
+    	public void playGame(){
+    		System.out.println("You are sleeping, no playGame");
+    	}
+    }
+    
+	// 行走模式下的所有行为的模拟
+    public class WalkState implements Action{
+    
+    	@Override
+    	public void sing(){
+    		System.out.println("You can sing");
+    	}
+    
+    	@Override
+    	public void move(){
+    		System.out.println("You can move");
+    	}
+    
+    	@Override
+    	public void playGame(){
+    		System.out.println("You can playGame");
+    	}
+    }
+    
+	// 进食模式下的所有行为的模拟
+    public class EatingState implements Action{
+    
+    	@Override
+    	public void sing(){
+    		System.out.println("You are eatting, no sing");
+    	}
+    
+    	@Override
+    	public void move(){
+    		System.out.println("You are eatting and you could move");
+    	}
+    
+    	@Override
+    	public void playGame(){
+    		System.out.println("You are eatting and you could playGame");
+    	}
+    }
+    
+
+### 创建状态控制器
+
+    /*
+    	控制器, 用于切换状态和执行行为
+    */
+    public class StateContorller implements State {
+    	private State mState;
+    
+    	public void setState(State s){
+    		mState = s;
+    	}
+    
+    	@Override
+    	public void sleep(){
+    		setState(new SleepState);
+    	}
+    
+    	@Override
+    	public void walk(){
+    		setState(new WalkState);
+    	}
+    
+    	@Override
+    	public void eatting(){
+    		setState(new EatingState);
+    	}
+    	
+    	public void sing(){
+    		mState.sing();
+    	}
+    	public void move(){
+    		mState.move();
+    	}
+    	public void playGame(){
+    		mState.playGame();
+    	}
+    }
+
+### 使用
+
+在不同的状态下，执行的行为不同：
+
+		StateContorller contorller = new StateContorller();
+		contorller.eatting();
+		contorller.move();
+
+		contorller.sleep();
+		contorller.sing();
+
+		contorller.walk();
+		contorller.playGame();
+
+### 优点
+
+优化了繁琐的状态判断，提高了可扩展性和可维护性。像上面这个例子，使用if-else对比下就显而易见了。
+
+### 缺点
+
+增加了类和对象的个数。
