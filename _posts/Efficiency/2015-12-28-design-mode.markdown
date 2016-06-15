@@ -435,3 +435,172 @@ description: 设计模式总结!
 ### 缺点
 
 增加了类和对象的个数。
+
+
+----------
+
+## 7.责任链模式
+
+当多个对象都可以处理一个请求，而且由请求的某个标志决定哪个对象进行处理时使用。
+
+请求也可以是从服务端获取的数据，根据某个特性来决定处理的对象.
+
+### 请求基类
+
+	/**
+	 * Created by yangshuai in the 21:48 of 2016.06.15 .
+	 */
+	public abstract class BaseDutyRequest {
+
+		// 请求的对象是未知，千变万化的
+	    private Object mObject;
+	
+	    public BaseDutyRequest(Object object) {
+	        mObject = object;
+	    }
+	
+	    public Object getRequestObject() {
+	        return mObject;
+	    }
+	
+		// 这里由 一个 int 型的值来标志特性
+	    public abstract int getDutyLevel();
+	
+	}
+
+### 执行职责的基类
+
+	/**
+	 * Created by yangshuai in the 21:43 of 2016.06.15 .
+	 */
+	public abstract class BaseDuty {
+		// 存储下一个节点，最后一个节点的下个节点是null
+	    private BaseDuty nextOne = null;
+	
+	    public final void setNextOne(BaseDuty baseDuty) {
+	        nextOne = baseDuty;
+	    }
+	
+	    public final BaseDuty getNextOne() {
+	        return nextOne;
+	    }
+		
+		// 获取请求，根据请求的特性判断由谁来处理
+	    public final void setDutyRequest(BaseDutyRequest request) {
+	        if (request.getDutyLevel() == getDutyLevel()) {
+	            doDuty(request);
+	        } else if (getNextOne() != null) {
+	            getNextOne().setDutyRequest(request);
+	        } else {
+	            beyondTheResponsibilityLevel(request);
+	        }
+	    }
+	
+		// 执行职责能够处理的特性，与请求的特性进行对比
+	    protected abstract int getDutyLevel();
+	
+		// 处理请求
+	    protected abstract void doDuty(BaseDutyRequest request);
+	
+	    // 在最后一个节点使用,千万不要掉到死循环的bug中
+	    protected void beyondTheResponsibilityLevel(BaseDutyRequest request) {
+	        // you can do someting or not;
+	    }
+	}
+
+### 请求举例
+
+	/**
+	 * Created by yangshuai in the 22:02 of 2016.06.15 .
+	 */
+	public class DutyRequestOne extends BaseDutyRequest {
+	    public DutyRequestOne(Object object) {
+	        super(object);
+	    }
+	
+	    @Override
+	    public int getDutyLevel() {
+	        return 0;
+	    }
+	}
+
+	/**
+	 * Created by yangshuai in the 22:02 of 2016.06.15 .
+	 */
+	public class DutyRequestTwo extends BaseDutyRequest {
+	
+	    public DutyRequestTwo(Object object) {
+	        super(object);
+	    }
+	
+	    @Override
+	    public int getDutyLevel() {
+	        return 0;
+	    }
+	}
+
+### 执行职责举例
+
+	/**
+	 * Created by yangshuai in the 22:00 of 2016.06.15 .
+	 */
+	public class DutyOne extends BaseDuty {
+	    @Override
+	    protected int getDutyLevel() {
+	        return 0;
+	    }
+	
+	    @Override
+	    protected void doDuty(BaseDutyRequest request) {
+	        // do what you wan't to do;
+	        request.getRequestObject();
+	    }
+	}
+
+	/**
+	 * Created by yangshuai in the 22:01 of 2016.06.15 .
+	 */
+	public class DutyTwo extends BaseDuty {
+	    @Override
+	    protected int getDutyLevel() {
+	        return 1;
+	    }
+	
+	    @Override
+	    protected void doDuty(BaseDutyRequest request) {
+	        // do what you wan't to do;
+	        request.getRequestObject();
+	    }
+	}
+
+### 使用方法
+
+	/**
+	 * Created by yangshuai in the 22:03 of 2016.06.15 .
+	 */
+	public class DutyMode {
+	    public static void main(String[] args) {
+	
+	        // 执行对象
+	        DutyOne dutyOne = new DutyOne();
+	        DutyTwo dutyTwo = new DutyTwo();
+	
+	        dutyOne.setNextOne(dutyTwo);
+	
+	        // 请求对象，请求可能是从服务器获取的数据
+	        DutyRequestOne dutyRequestOne = new DutyRequestOne("one");
+	        DutyRequestTwo dutyRequestTwo = new DutyRequestTwo("two");
+	
+	        // 每次都从第一个节点进入
+	        dutyOne.setDutyRequest(dutyRequestOne);
+	        dutyOne.setDutyRequest(dutyRequestTwo);
+	    }
+	}
+### 优点
+请求和处理解耦，代码更灵活。
+
+### 缺点
+
+当处理太多，遍历的方式会降低性能。
+
+----------
