@@ -596,6 +596,8 @@ description: 设计模式总结!
 	        dutyOne.setDutyRequest(dutyRequestTwo);
 	    }
 	}
+
+
 ### 优点
 请求和处理解耦，代码更灵活。
 
