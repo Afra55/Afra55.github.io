@@ -606,3 +606,209 @@ description: 设计模式总结!
 当处理太多，遍历的方式会降低性能。
 
 ----------
+
+## 8.命令模式
+
+把执行命令分离，记录执行顺序。
+
+### 创建具体执行类（命令接收者）
+
+	/**
+	 * Created by yangshuai in the 20:52 of 2016.06.20 .
+	 * 在电脑上操作，有多种命令，比如 复制文件，移动文件，新建文件等。
+	 * Compter类用于实现具体方法。接收各种命令来执行方法，即接收者。
+	 */
+	public class Computer {
+	
+	    public void doCopy(String from, String to) {
+	
+	    }
+	
+	    public void doMove(String from, String to) {
+	
+	    }
+	
+	    public void doNewDefaultFile() {
+	
+	    }
+	}
+
+### 创建命令接口
+
+	/**
+	 * Created by yangshuai in the 20:48 of 2016.06.20 .
+	 * Command 接口，定义通用执行方法，不止一个，可能有多个执行.
+	 */
+	public interface Command {
+	    public void execute();
+	    public void execute(String from, String to);
+	}
+
+### 创建命令实现类
+
+	/**
+	 * Created by yangshuai in the 20:58 of 2016.06.20 .
+	 * Copy 的命令实现类。
+	 */
+	public class DoCopyCommand implements Command {
+	
+	    private final Computer mComputer;
+	
+	    public DoCopyCommand(Computer computer) {
+	        mComputer = computer;
+	    }
+	
+	    @Override
+	    public void execute() {
+	        throw new IllegalArgumentException("DoCopyCommand need from and to");
+	    }
+	
+	    @Override
+	    public void execute(String from, String to) {
+	        mComputer.doCopy(from, to);
+	    }
+	}
+
+	/**
+	 * Created by yangshuai in the 20:58 of 2016.06.20 .
+	 * Move 的命令实现类。
+	 */
+	public class DoMoveCommand implements Command {
+	
+	    private final Computer mComputer;
+	
+	    public DoMoveCommand(Computer computer) {
+	        mComputer = computer;
+	    }
+	
+	    @Override
+	    public void execute() {
+	        throw new IllegalArgumentException("DoMoveCommand need from and to");
+	    }
+	
+	    @Override
+	    public void execute(String from, String to) {
+	        mComputer.doMove(from, to);
+	    }
+	}
+
+	/**
+	 * Created by yangshuai in the 20:58 of 2016.06.20 .
+	 * New file 的命令实现类。
+	 */
+	public class DoNewDefaultCommand implements Command {
+	
+	    private final Computer mComputer;
+	
+	    public DoNewDefaultCommand(Computer computer) {
+	        mComputer = computer;
+	    }
+	
+	    @Override
+	    public void execute() {
+	        mComputer.doNewDefaultFile();
+	    }
+	
+	    @Override
+	    public void execute(String from, String to) {
+	        throw new IllegalArgumentException("DoNewDefaultCommand do not need arguments");
+	    }
+	}
+
+### 创建请求类
+
+	/**
+	 * Created by yangshuai in the 21:06 of 2016.06.20 .
+	 * 这些命令都能用鼠标来在电脑上操作实现。
+	 * Mouse 用于发起命令，充当请求者模式。并可以记录执行命令，方便取消等操作。
+	 */
+	public class Mouse {
+	    private Command doCopyCommand;
+	    private Command doMoveCommand;
+	    private Command doNewDefaultCommand;
+	
+	    private List<Command> doCommands = new ArrayList<>();
+	
+	    public List<Command> getDoCommands() {
+	        return doCommands;
+	    }
+	
+	    public void setDoCopyCommand(Command doCopyCommand) {
+	        this.doCopyCommand = doCopyCommand;
+	    }
+	
+	    public void setDoMoveCommand(Command doMoveCommand) {
+	        this.doMoveCommand = doMoveCommand;
+	    }
+	
+	    public void setDoNewDefaultCommand(Command doNewDefaultCommand) {
+	        this.doNewDefaultCommand = doNewDefaultCommand;
+	    }
+	
+	    public void doCopy(String from, String to) {
+	        if (doCopyCommand == null) {
+	            return;
+	        }
+	        doCopyCommand.execute(from, to);
+	        doCommands.add(doCopyCommand);
+	    }
+	
+	    public void doMove(String from, String to) {
+	        if (doMoveCommand == null) {
+	            return;
+	        }
+	        doMoveCommand.execute(from, to);
+	        doCommands.add(doMoveCommand);
+	    }
+	
+	    public void doNewDefaultFile() {
+	        if (doNewDefaultCommand == null) {
+	            return;
+	        }
+	        doNewDefaultCommand.execute();
+	        doCommands.add(doNewDefaultCommand);
+	    }
+	}
+
+### 执行
+
+	/**
+	 * Created by yangshuai in the 21:19 of 2016.06.20 .
+	 * 由人来决定怎么去执行
+	 */
+	public class People {
+	    public static void main(String []args) {
+	
+	        // 要创建一个电脑，即命令接收者来实现命令
+	        Computer computer = new Computer();
+	
+	        // 创建命令
+	        Command doCopyCommand = new DoCopyCommand(computer);
+	        Command doMoveCommand = new DoMoveCommand(computer);
+	        Command doNewDefaultCommand = new DoNewDefaultCommand(computer);
+	
+	        // 创建鼠标，用来发起命令请求
+	        Mouse mouse = new Mouse();
+	
+	        // 准备命令
+	        mouse.setDoCopyCommand(doCopyCommand);
+	        mouse.setDoMoveCommand(doMoveCommand);
+	        mouse.setDoNewDefaultCommand(doNewDefaultCommand);
+	
+	        // 执行命令
+	        mouse.doNewDefaultFile();
+	        mouse.doMove("from", "to");
+	        mouse.doCopy("from", "to");
+	    }
+	}
+
+### 优点
+
+增加了扩展性，分离了请求者和接收者，弱化耦合。我觉得做大的优点是可以记录命令的执行顺序，进而实现撤销操作。
+
+### 缺点
+
+为什么我不直接 new 一个 computer 类直接调用方法呢?这种写法极大的增加了代码量，创建了大量的类。如果，不需要记录执行命令，我觉得还是别用的好。
+
+
+----------
