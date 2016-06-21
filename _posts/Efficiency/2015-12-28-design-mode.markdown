@@ -812,3 +812,91 @@ description: 设计模式总结!
 
 
 ----------
+
+## 9. 观察者模式
+
+多个对象来监听一个行为，这个时候用观察者模式比较好。
+下面举例，多个吃货接收到食堂发来的食品菜单。
+
+### 创建观察者
+
+	import com.afra55.baseclient.util.Log;
+	
+	import java.util.Observable;
+	import java.util.Observer;
+	
+	/**
+	 * Created by yangshuai in the 20:37 of 2016.06.21 .
+	 * 吃货的手机会接收到食堂发来的最新菜单，在 update 方法中接收信息
+	 */
+	public class Eater implements Observer {
+	
+	    private String phone;
+	
+	    public Eater(String phone) {
+	        this.phone = phone;
+	    }
+	
+	    @Override
+	    public void update(Observable observable, Object data) {
+	        Log.d("Eater", "Today's food menu: " + data +" has sent to " + phone);
+	    }
+	}
+
+### 创建被观察者
+
+	import java.util.Observable;
+	
+	/**
+	 * Created by yangshuai in the 20:47 of 2016.06.21 .
+	 * 食堂管理员收到新的菜单信息，发送给所有已经注册过的吃货
+	 */
+	public class CanteenManager extends Observable {
+	
+	
+	    public void sendNewFoodMenu(String menu) {
+	        setChanged();
+	        notifyObservers(menu);
+	    }
+	}
+
+### 关联观察者与被观察者
+	
+	/**
+	 * Created by yangshuai in the 20:49 of 2016.06.21 .
+	 */
+	public class FoodMaker {
+	
+	    public static void main(String[] args) {
+	
+	        // 创建食堂管理员
+	        CanteenManager canteenManager = new CanteenManager();
+	
+	        // 创建吃货
+	        Eater eater = new Eater("111111");
+	        Eater eater2 = new Eater("222222");
+	        Eater eater3 = new Eater("333333");
+	
+	        // 注册吃货
+	        canteenManager.addObserver(eater);
+	        canteenManager.addObserver(eater2);
+	        canteenManager.addObserver(eater3);
+	
+	        // 更新食物菜单,每个注册了的吃货都会 在 update 方法里接收到新的信息
+	        canteenManager.sendNewFoodMenu("米饭");
+	        canteenManager.sendNewFoodMenu("饺子");
+	        canteenManager.sendNewFoodMenu("嘛事");
+	
+	    }
+	}
+
+### 优点
+
+被观察者有信息变动观察者都会收到信息，便于功能变更，业务扩展，同时增强了灵活性。
+
+### 缺点
+
+观察者太多会造成性能降低，不便于问题排查。
+
+
+----------
