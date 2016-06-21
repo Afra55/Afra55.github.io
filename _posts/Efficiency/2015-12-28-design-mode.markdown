@@ -33,6 +33,7 @@ description: 设计模式总结!
     }
 
 ### 静态内部类
+
     public class Singleton{
     	private Singleton(){}
     
@@ -45,13 +46,14 @@ description: 设计模式总结!
     	}
     }
 
-###优点
+### 优点
 
 1. 在内存中只有一个实例，减少内存开支，减少系统性能开销；
 2. 避免对资源的多重占用；
 3. 可以在系统设置全局的访问点，优化和共享资源访问。
 
-###缺点
+### 缺点
+
 1. 扩展困难；
 2. 如果持有Context，很容易引发内存泄漏，此时最好传递个单例对象的 Context 最好是 Application Context。
 
