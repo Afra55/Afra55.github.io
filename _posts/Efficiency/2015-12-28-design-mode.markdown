@@ -902,3 +902,124 @@ description: 设计模式总结!
 
 
 ----------
+
+## 10.备忘录模式
+
+备忘录模式很简单，在某个时刻保存某个对象的状态或者数据，或者对象的状态不想被外界直接获取到而是利用中间代理存储状态并暴露给外界，这个时候备忘录模式是很好的选择。
+下面以看书为例，介绍备忘录模式：
+
+### 需要存储对象的类
+
+	/**
+	 * Created by yangshuai in the 22:40 of 2016.06.22 .
+	 * 书本每次阅读页数都会加1，在不阅读的情况下要记录当前阅读的页数，以便下次接着阅读
+	 */
+	public class Book {
+	
+	    private int page;
+	
+	    /**
+	     * 每次阅读页数都会加1
+	     */
+	    public void read() {
+	        page++;
+	    }
+	
+	    /**
+	     * 不阅读，合起书本的时候页数会变为0
+	     */
+	    public void leave() {
+	        page = 0;
+	    }
+	
+	    /**
+	     * 创建书签，存储当前阅读的页数
+	     * @return
+	     */
+	    public Bookmark createBookmark() {
+	        Bookmark bookmark = new Bookmark();
+	        bookmark.setPage(page);
+	        return bookmark;
+	    }
+	
+	    /**
+	     * 继续阅读，翻到书签的那一页
+	     * @param bookmark
+	     */
+	    public void backToRead(Bookmark bookmark) {
+	        page = bookmark.getPage();
+	    }
+	
+	}
+
+### 创建备忘录类
+	
+	/**
+	 * Created by yangshuai in the 22:43 of 2016.06.22 .
+	 * 书签，备忘录该存储的数据类
+	 */
+	public class Bookmark {
+	
+	    private int page = 0;
+	
+	    public int getPage() {
+	        return page;
+	    }
+	
+	    public void setPage(int page) {
+	        this.page = page;
+	    }
+	}
+
+### 创建备忘录管理员
+
+	/**
+	 * Created by yangshuai in the 22:51 of 2016.06.22 .
+	 * 管理书签，用来存储和获取备忘录,如果外界想获取状态，只能通过中间管理员获取
+	 */
+	public class People {
+	    private Bookmark bookmark;
+	
+	    public Bookmark getBookmark() {
+	        return bookmark;
+	    }
+	
+	    public void setBookmark(Bookmark bookmark) {
+	        this.bookmark = bookmark;
+	    }
+	}
+
+### 使用
+
+	/**
+	 * Created by yangshuai in the 22:54 of 2016.06.22 .
+	 */
+	public class World {
+	    public static void main(String[] args) {
+	        // 创建一本书
+	        Book book = new Book();
+	        book.read();
+	
+	        // 创建一个管理者，管理备忘录
+	        People people = new People();
+	
+	        // 管理者存储书签
+	        people.setBookmark(book.createBookmark());
+	
+	        // 不再阅读书，合起书
+	        book.leave();
+	
+	        // 一段时间后继续阅读未读完的书，接着上次的页数
+	        book.backToRead(people.getBookmark());
+	        book.read();
+	    }
+	}
+
+### 优点
+
+1. 为程序提供了对象的状态恢复机制；
+2. 对数据进行了封装，使用者不必关心如何实现保存细节，只用存储或者获取数据。
+
+### 缺点
+
+设计模式的通病，类的泛滥，而且存取状态会占用资源。
