@@ -41,7 +41,7 @@ description: 设计模式总结!
     		public static final Singleton sInstance = new Singleton();
     	}
     
-    	public static getInstance(){
+    	public static Singleton getInstance(){
     		return SingletonHolder.sInstance;
     	}
     }
@@ -1023,3 +1023,237 @@ description: 设计模式总结!
 ### 缺点
 
 设计模式的通病，类的泛滥，而且存取状态会占用资源。
+
+
+----------
+
+## 11.迭代器模式
+
+遍历对象的时候使用，在遍历多种容器的对象的时候使用最佳。
+
+下面以遍历男子高校和女子高校的信息举例：
+
+### 创建对象
+
+	/**
+	 * Created by yangshuai in the 21:15 of 2016.06.30 .
+	 * 元素对象，这里以人的信息举例
+	 */
+	public class People {
+	
+	    private String name;
+	    private int age;
+	
+	    public People(String name, int age) {
+	        this.name = name;
+	        this.age = age;
+	    }
+	
+	    @Override
+	    public String toString() {
+	        return name + ": " + age;
+	    }
+	}
+
+
+### 创建迭代器接口
+
+	
+	/**
+	 * Created by yangshuai in the 21:12 of 2016.06.30 .
+	 * 迭代器接口
+	 */
+	public interface Iterator {
+	
+	    /**
+	     * 判断是否还有下一个元素
+	     * @return
+	     */
+	    boolean hasNext();
+	
+	    /**
+	     * 返回当前位置的元素，并将位置参数加 1
+	     * @return
+	     */
+	    Object next();
+	}
+
+### 创建迭代器
+
+	import java.util.ArrayList;
+	import java.util.List;
+	
+	/**
+	 * Created by yangshuai in the 21:14 of 2016.06.30 .
+	 * 男子高校人员信息迭代器
+	 */
+	public class ManIterator implements Iterator {
+	
+	    private List<People> list = new ArrayList<>();
+	    private int index = 0;
+	
+	    public ManIterator(List<People> list) {
+	        list.addAll(list);
+	    }
+	
+	    @Override
+	    public boolean hasNext() {
+	        return index < list.size() && list.get(index) != null;
+	    }
+	
+	    @Override
+	    public Object next() {
+	        return list.get(index++);
+	    }
+	}
+	
+	import java.util.ArrayList;
+	import java.util.List;
+	
+	/**
+	 * Created by yangshuai in the 21:24 of 2016.06.30 .
+	 * 女子高校人员信息迭代器
+	 */
+	public class WomanIterator implements Iterator {
+	
+	    private List<People> list = new ArrayList<>();
+	    private int index = 0;
+	
+	    public WomanIterator(List<People> list) {
+	        this.list.addAll(list);
+	    }
+	
+	    @Override
+	    public boolean hasNext() {
+	        return index < list.size() && list.get(index) != null;
+	    }
+	
+	    @Override
+	    public Object next() {
+	        return list.get(index++);
+	    }
+	}
+
+### 创建容器接口
+
+	/**
+	 * Created by yangshuai in the 21:29 of 2016.06.30 .
+	 * 定义一个通用接口，用来返回容器，或者也可以进行添加删除人员, 也可以更新人员信息(略)。
+	 */
+	public interface School {
+	
+	    void add(People people);
+	
+	    void Remove(People people);
+	
+	    /**
+	     * 只有在使用的时候在创建容器对象
+	     * @return
+	     */
+	    Iterator iterator();
+	}
+
+### 创建容器
+
+	import java.util.ArrayList;
+	import java.util.List;
+	
+	/**
+	 * Created by yangshuai in the 21:27 of 2016.06.30 .
+	 */
+	public class ManSchool implements School {
+	
+	    private List<People> list;
+	
+	    public ManSchool() {
+	        list = new ArrayList<>();
+	    }
+	
+	    @Override
+	    public void add(People people) {
+	        list.add(people);
+	    }
+	
+	    @Override
+	    public void Remove(People people) {
+	        if (list.contains(people)) {
+	            list.remove(people);
+	        }
+	    }
+	
+	    @Override
+	    public Iterator iterator() {
+	        return new ManIterator(list);
+	    }
+	}
+
+	import java.util.ArrayList;
+	import java.util.List;
+	
+	/**
+	 * Created by yangshuai in the 21:27 of 2016.06.30 .
+	 */
+	public class WomanSchool implements School {
+	
+	    private List<People> list;
+	
+	    public WomanSchool() {
+	        list = new ArrayList<>();
+	    }
+	
+	    @Override
+	    public void add(People people) {
+	        list.add(people);
+	    }
+	
+	    @Override
+	    public void Remove(People people) {
+	        if (list.contains(people)) {
+	            list.remove(people);
+	        }
+	    }
+	
+	    @Override
+	    public Iterator iterator() {
+	        return new WomanIterator(list);
+	    }
+	}
+
+### 调用方法
+	
+	/**
+	 * Created by yangshuai in the 21:34 of 2016.06.30 .
+	 * 遍历男子高校和女子高校的信息就可以使用一种方法。
+	 */
+	public class Use {
+	    public static void main(String []args) {
+	        WomanSchool womanSchool = new WomanSchool();
+	        womanSchool.add(new People("a", 11));
+	        womanSchool.add(new People("b", 11));
+	        womanSchool.add(new People("c", 11));
+	        showSchoolPeopleInfo(womanSchool.iterator());
+	
+	
+	        ManSchool manSchool = new ManSchool();
+	        manSchool.add(new People("d", 11));
+	        manSchool.add(new People("e", 11));
+	        manSchool.add(new People("f", 11));
+	        showSchoolPeopleInfo(womanSchool.iterator());
+	
+	
+	    }
+	
+	    public static void showSchoolPeopleInfo(Iterator iterator) {
+	        if (iterator.hasNext()) {
+	            iterator.next().toString();
+	        }
+	    }
+	}
+
+### 优点
+
+分离遍历算法和容器。
+
+### 缺点
+
+增加了类文件。
