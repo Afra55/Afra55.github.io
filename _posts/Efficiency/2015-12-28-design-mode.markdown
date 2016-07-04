@@ -1276,3 +1276,211 @@ description: 设计模式总结!
 
 
 ----------
+
+
+## 13.访问者模式
+
+一个对象有有多个互不关联的方法，这些方法又被不同的对象调用，这个时候使用访问者模式比较好。
+
+下面以游客逛公园举例，公园有熊猫和跳跳虎，年轻人与熊猫玩给跳跳虎喂食，老年人看看介绍就可以了：
+
+### 创建访问者
+
+访问者要对不同的元素有不同的访问方式，给跳跳虎喂食，与熊猫玩耍,所以要区分开来：
+
+	/**
+	 * Created by yangshuai in the 21:09 of 2016.07.04 .
+	 * 访问者接口，访问每个动物。
+	 */
+	public interface Visitor {
+	    void visit(Tigger tigger);
+	
+	    void visit(Panda panda);
+	}
+
+### 创建元素接口或抽象类，定义被访问对象
+
+被访问者要实现 accept 接口，用来接收访问者的访问：
+
+	/**
+	 * Created by yangshuai in the 21:00 of 2016.07.04 .
+	 * 动物基类，有两个属性 名字和种类
+	 */
+	public abstract class Anim {
+	    public String name;
+	    public String variety;
+	
+	    public Anim(String name, String variety) {
+	        this.name = name;
+	        this.variety = variety;
+	    }
+	
+	    /**
+	     * 接受访问者的访问
+	     * @param visitor
+	     */
+	    protected abstract void accept(Visitor visitor);
+	}
+
+### 创建具体的被访问者
+
+	/**
+	 * Created by yangshuai in the 21:11 of 2016.07.04 .
+	 * 熊猫
+	 */
+	public class Panda extends Anim {
+	
+	    public Panda(String name) {
+	        super(name, "吃竹子的");
+	    }
+	
+	    @Override
+	    protected void accept(Visitor visitor) {
+	        visitor.visit(this);
+	    }
+	
+	    /**
+	     * 熊猫玩耍
+	     * @param player
+	     * @return
+	     */
+	    public String playWith(String player) {
+	        Log.d(name, "和" + player + "玩的超级开心呐");
+	        return "玩的开心";
+	    }
+	}
+	
+	/**
+	 * Created by yangshuai in the 21:10 of 2016.07.04 .
+	 * 跳跳虎
+	 */
+	public class Tigger extends Anim{
+	    public Tigger(String name) {
+	        super(name, "吃肉的");
+	    }
+	
+	    @Override
+	    protected void accept(Visitor visitor) {
+	        visitor.visit(this);
+	    }
+	
+	    /**
+	     * 老虎进食
+	     * @param food
+	     * @return
+	     */
+	    public String eat(String food) {
+	        Log.d(name, "eat :" + food);
+	        return "吃的开心";
+	    }
+	}
+
+### 创建被访问元素的集合
+
+	/**
+	 * Created by yangshuai in the 21:25 of 2016.07.04 .
+	 * 动物园，有三个熊猫，两个跳跳虎
+	 */
+	public class Zoo {
+	    private List<Anim> list = new LinkedList<>();
+	
+	    public Zoo() {
+	        list.add(new Panda("小花"));
+	        list.add(new Panda("小1"));
+	        list.add(new Panda("小a"));
+	        list.add(new Tigger("小妞"));
+	        list.add(new Tigger("小BB"));
+	    }
+	
+	    /**
+	     * 开门营业，访问者访问每个动物
+	     * @param visitor
+	     */
+	    public void openDoor(Visitor visitor) {
+	        for (Anim anim : list) {
+	            anim.accept(visitor);
+	        }
+	    }
+	}
+
+
+### 创建具体的访问者
+
+	/**
+	 * Created by yangshuai in the 21:20 of 2016.07.04 .
+	 * 老人只要知道动物的种类就可以了
+	 */
+	public class OldMan implements Visitor {
+	
+	    @Override
+	    public void visit(Tigger tigger) {
+	        Log.d("OldMan", tigger.variety);
+	    }
+	
+	    @Override
+	    public void visit(Panda panda) {
+	        Log.d("OldMan", panda.variety);
+	    }
+	}
+
+	/**
+	 * Created by yangshuai in the 21:20 of 2016.07.04 .
+	 * 年轻人不仅要知道动物的名字还要和动物互动
+	 */
+	public class YoungMan implements Visitor {
+	    @Override
+	    public void visit(Tigger tigger) {
+	        Log.d("YoungMan", tigger.name + ":" + tigger.eat("food"));
+	    }
+	
+	    @Override
+	    public void visit(Panda panda) {
+	        Log.d("YoungMan", panda.name + ":" + panda.playWith("Afra"));
+	    }
+	}
+
+### 使用方法
+
+	/**
+	 * Created by yangshuai in the 21:28 of 2016.07.04 .
+	 */
+	public class IsTimeToPlay {
+	    public static void main(String[] args) {
+	
+	        // 创建动物园
+	        Zoo zoo = new Zoo();
+	
+	        // 创建老年访问者
+	        OldMan oldMan = new OldMan();
+	        zoo.openDoor(oldMan);
+	
+	        // 创建青年访问者
+	        YoungMan youngMan = new YoungMan();
+	        zoo.openDoor(youngMan);
+	
+	    }
+	}
+
+### 优点
+
+上面的情景要是使用 if-else 的话，难以扩展和维护，甚至类型多的情况下会很复杂：
+
+	if 老年人
+	   读取动物介绍
+	else if 年轻人
+	    if 跳跳虎
+		     动物喂食
+	    if 熊猫
+	         动物玩
+
+1. 访问者模式另各个角色分离；
+2. 扩展性良好，更灵活；
+3. 数据和操作解耦；
+
+### 缺点
+
+1.被访问者修改了后，操作修改变更大；
+2.为了对访问的对象有不同的操作，而依赖了具体的类；
+
+
+----------
