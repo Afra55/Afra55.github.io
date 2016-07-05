@@ -1484,3 +1484,140 @@ description: 设计模式总结!
 
 
 ----------
+
+## 14.中间人模式
+
+当多个对象的操作互相依赖，互相影响时，中间人模式是个很好的选择。
+
+接下来以拍电影举例，导演喊开始，中间人跑去跟演员说导演喊开始啦，然后演员开始表演，演员突然笑场，要中间人跑去给导演说，演员笑场了，然后导演重新喊开始：
+
+### 定义中间人抽象类，也可以是接口
+
+	
+	/**
+	 * Created by yangshuai in the 22:07 of 2016.07.05 .
+	 * 中间人，跑腿的，每个人的状态更新后都要去通知相关的人。
+	 */
+	public abstract class Mediator {
+	
+	    public abstract void updataState(People people);
+	}
+
+### 定义互相影响的对象的抽象基类，也可以是接口
+	
+	/**
+	 * Created by yangshuai in the 22:07 of 2016.07.05 .
+	 * 人的抽象类，可以是接口
+	 */
+	public abstract class People {
+	    protected Mediator mediator;
+	
+	    public People(Mediator mediator) {
+	        this.mediator = mediator;
+	    }
+	}
+
+### 创建具体的互相影响的对象
+	
+	/**
+	 * Created by yangshuai in the 22:13 of 2016.07.05 .
+	 * 导演，用于喊 开始，然后演员开始演戏
+	 */
+	public class Director extends People {
+	    public Director(Mediator mediator) {
+	        super(mediator);
+	    }
+	
+	    public void action() {
+	        mediator.updataState(this);
+	    }
+	}
+	
+	/**
+	 * Created by yangshuai in the 22:15 of 2016.07.05 .
+	 * 演员，在导演喊开始后开始演戏，中间笑场了导演要重新喊开始。
+	 */
+	public class Player extends People {
+	    public Player(Mediator mediator) {
+	        super(mediator);
+	    }
+	
+	    public void laughAload() {
+	        mediator.updataState(this);
+	    }
+	
+	    public void play() {
+	        // 开始表演
+	    }
+	}
+
+### 创建具体的中间人
+	
+	/**
+	 * Created by yangshuai in the 22:17 of 2016.07.05 .
+	 * 跑腿的就是中间人，负责通知导演或者演员状态更新。
+	 */
+	public class Footwork extends Mediator {
+	
+	    private Player player;
+	    private Director director;
+	
+	    public void setPlayer(Player player) {
+	        this.player = player;
+	    }
+	
+	    public void setDirector(Director director) {
+	        this.director = director;
+	    }
+	
+	    @Override
+	    public void updataState(People people) {
+	        if (people instanceof Director) { // 导演喊开始了，这里简化了判断
+	            if (player != null) {
+	                player.play();
+	            }
+	        } else if (people instanceof Player) {  // 演员笑场了，这里简化了判断
+	            if (director != null) {
+	                director.action();
+	            }
+	        }
+	    }
+	}
+
+### 使用
+
+	/**
+	 * Created by yangshuai in the 22:22 of 2016.07.05 .
+	 */
+	public class Room {
+	    public static void main(String args[]) {
+	
+	        // 创建中间人，即跑腿的
+	        Footwork mediator = new Footwork();
+	
+	        // 创建导演
+	        Director director = new Director(mediator);
+	        mediator.setDirector(director);
+	
+	        // 创建演员
+	        Player player = new Player(mediator);
+	        mediator.setPlayer(player);
+	
+	        // 导演喊开始了，然后中间人通知演员开始演戏
+	        director.action();
+	
+	        // 演员笑场了，然后中间人通知导演重新喊开始
+	        player.laughAload();
+	    }
+	}
+
+### 优点
+
+解耦复杂的依赖，清晰逻辑，降低复杂度，提高扩展性。
+
+### 缺点
+
+要是互相依赖的操作量少，中间人模式可能会导致代码的逻辑结构更加复杂化。
+
+
+----------
