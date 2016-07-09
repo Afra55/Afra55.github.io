@@ -1621,3 +1621,174 @@ description: 设计模式总结!
 
 
 ----------
+
+## 15.代理模式
+
+当没法去访问一个对象时可以通过代理模式间接访问。代理对象和被代理对象要有相同的接口。
+
+以下以中午带饭为例进行举例：
+
+### 创建代理接口(代理人和被代理人都要实现)
+
+	/**
+	 * Created by Afra55 on 2016.07.09 .
+	 * 中午吃饭接口, 走路去饭店，购买自己喜欢的食物
+	 */
+	public interface IEat {
+	
+	    /**
+	     * 走路去饭店
+	     */
+	    void walk();
+	
+	    /**
+	     * 选择食物
+	     */
+	    void choose();
+	
+	    /**
+	     * 购买
+	     */
+	    void buy();
+	
+	}
+
+### 创建懒人（被代理人）
+
+	/**
+	 * Created by Afra55 on 2016.07.09 .
+	 * 具体的中午吃饭的人
+	 */
+	public class Layzer implements IEat {
+	
+	    @Override
+	    public void walk() {
+	        System.out.println("走路去飯店");
+	    }
+	
+	    @Override
+	    public void choose() {
+	        System.out.println("选择食物");
+	    }
+	
+	    @Override
+	    public void buy() {
+	        System.out.println("掏钱买");
+	    }
+	}
+
+### 静态代理
+
+#### 创建代理人
+
+	/**
+	 * Created by Afra55 on 2016.07.09 .
+	 * 懒人懒得出去买饭，交给 Greater 去买，Greater 就是代理人
+	 */
+	public class Greater implements IEat {
+	
+	    private final IEat eater;
+	
+	    public Greater(IEat iEat) {
+	        this.eater = iEat;
+	    }
+	
+	    @Override
+	    public void walk() {
+	        eater.walk();
+	    }
+	
+	    @Override
+	    public void choose() {
+	        eater.choose();
+	    }
+	
+	    @Override
+	    public void buy() {
+	        eater.buy();
+	    }
+	}
+
+#### 使用方法
+	
+	/**
+	 * Created by Afra55 on 2016.07.09 .
+	 * 被代理人 通过 代理人 来完成一些列事情
+	 */
+	public class Main {
+	    public static void main(String []args) {
+	
+	        // 被代理对象
+	        IEat layzer = new Layzer();
+	
+	        // 代理人
+	        IEat greater = new Greater(layzer);
+	
+	        greater.walk();
+	        greater.choose();
+	        greater.buy();
+	    }
+	}
+
+### 动态代理
+
+动态代理即通过反射动态生成代理对象，在运行阶段来决定被代理对象而不是编码阶段。在这里使用java提供的动态代理接口 InvocationHandler。
+
+#### 创建动态代理实现类
+	
+	/**
+	 * Created by Afra55 on 2016.07.09 .
+	 * 动态代理
+	 */
+	public class DynamicProxy implements InvocationHandler {
+	
+	    private final Object object;
+	
+	    public DynamicProxy(Object o) {
+	        this.object = o;
+	    }
+	
+	    @Override
+	    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+	        return method.invoke(object, args);
+	    }
+	}
+
+#### 使用
+	
+	/**
+	 * Created by Afra55 on 2016.07.09 .
+	 * 被代理人 通过 代理人 来完成一些列事情
+	 */
+	public class Main {
+	    public static void main(String []args) {
+	
+	        // 被代理对象
+	        IEat layzer = new Layzer();
+	
+	        // 获取 classloader
+	        ClassLoader classLoader = Layzer.class.getClassLoader();
+	
+	        // 创建动态代理
+	        DynamicProxy dynamicProxy = new DynamicProxy(layzer);
+	
+	        // 动态创建代理人，完全与被代理对象解耦，不必关心去代理谁，也不必创建代理人类
+	        IEat greater = (IEat) Proxy.newProxyInstance(classLoader, new Class[]{IEat.class}, dynamicProxy);
+	
+	        greater.walk();
+	        greater.choose();
+	        greater.buy();
+	
+	    }
+	}
+
+### 优点
+
+叼。
+
+### 缺点
+
+叼。
+
+
+----------
