@@ -1792,3 +1792,456 @@ description: 设计模式总结!
 
 
 ----------
+
+## 16.组合模式
+
+如果一个整体能独立出一部分模块或功能时使用。例如，团队和个人。
+下面以社会举例，社会由群众组成，群众由团队组成，团队由个人组成。
+
+### 安全的组合模式
+
+#### 创建抽象基类
+	
+	/**
+	 * Created by Afra55 on 2016.07.12 .
+	 * 抽象类，用于表示整个社会
+	 */
+	public abstract class Society {
+	
+	    protected String name;
+	
+	    public Society(String name) {
+	        this.name = name;
+	    }
+	
+	    public abstract void doSomething();
+	}
+
+#### 创建群众
+
+	import java.util.ArrayList;
+	import java.util.List;
+	
+	/**
+	 * Created by Afra55 on 2016.07.12 .
+	 * 社会由群体组成，群体是社会的具体实现.
+	 * 群体又由各个团队组成.
+	 */
+	public class Mass extends Society {
+	
+	    /**
+	     * 存储各个团队的容器
+	     */
+	    private List<Society> societyList = new ArrayList<>();
+	
+	    public Mass(String name) {
+	        super(name);
+	    }
+	
+	    /**
+	     * 添加团队
+	     * @param society 团队
+	     */
+	    public void addTeam(Society society) {
+	        societyList.add(society);
+	    }
+	
+	    /**
+	     * 移除团队
+	     * @param society 团队
+	     */
+	    public void removeTeam(Society society) {
+	        if (societyList.contains(society)) {
+	            societyList.remove(society);
+	        }
+	    }
+	
+	    /**
+	     * 获取团队数量
+	     * @return 团队的数量
+	     */
+	    public int getTeamCount() {
+	        return societyList.size();
+	    }
+	
+	    /**
+	     * 获取团队
+	     * @param index 团队索引
+	     * @return
+	     */
+	    public Society getTeam(int index) {
+	        if (index < getTeamCount()) {
+	            return societyList.get(index);
+	        } else {
+	            throw new IndexOutOfBoundsException("这个团队不存在");
+	        }
+	    }
+	
+	    @Override
+	    public void doSomething() {
+	        System.out.println(name + "群众是伟大的");
+	        for (int i = 0 ; i< getTeamCount(); i++) {
+	            getTeam(i).doSomething();
+	        }
+	    }
+	}
+
+#### 创建团队
+
+	/**
+	 * Created by Afra55 on 2016.07.12 .
+	 * 个人组成了群众，个人又有个人组成
+	 */
+	public class Team extends Society {
+	
+	    /**
+	     * 存储个人的容器
+	     */
+	    private List<Society> societyList = new ArrayList<>();
+	    
+	    public Team(String name) {
+	        super(name);
+	    }
+	
+	    /**
+	     * 添加个人
+	     * @param society 个人
+	     */
+	    public void addPeople(Society society) {
+	        societyList.add(society);
+	    }
+	
+	    /**
+	     * 移除个人
+	     * @param society 个人
+	     */
+	    public void removePeople(Society society) {
+	        if (societyList.contains(society)) {
+	            societyList.remove(society);
+	        }
+	    }
+	
+	    /**
+	     * 获取个人数量
+	     * @return 个人的数量
+	     */
+	    public int getPeopleCount() {
+	        return societyList.size();
+	    }
+	
+	    /**
+	     * 获取个人
+	     * @param index 个人索引
+	     * @return
+	     */
+	    public Society getPeople(int index) {
+	        if (index < getPeopleCount()) {
+	            return societyList.get(index);
+	        } else {
+	            throw new IndexOutOfBoundsException("这个人不存在");
+	        }
+	    }
+	
+	    @Override
+	    public void doSomething() {
+	        System.out.println(name + "团队是伟大的");
+	        for (int i = 0 ; i< getPeopleCount(); i++) {
+	            getPeople(i).doSomething();
+	        }
+	    }
+	}
+
+#### 创建个人
+
+	/**
+	 * Created by Afra55 on 2016.07.12 .
+	 * 个人组成了团队，是整个社会的记事
+	 */
+	public class People extends Society {
+	
+	    public People(String name) {
+	        super(name);
+	    }
+	
+	    @Override
+	    public void doSomething() {
+	        System.out.println(name + "是伟大的");
+	    }
+	}
+
+#### 使用
+
+	public class Main {
+	    public static void main(String []args) {
+	
+	        // 创建个人
+	        People afra55 = new People("Afra55");
+	        People victor = new People("Victor");
+	        People aaa = new People("AAA啊哈");
+	
+	        // 创建 java tema
+	        Team javaTeam = new Team("Java");
+	        javaTeam.addPeople(afra55);
+	
+	        // 创建 android team
+	        Team androidTeam = new Team("Andrid");
+	        androidTeam.addPeople(victor);
+	        androidTeam.addPeople(aaa);
+	
+	        // 创建群众
+	        Mass mass = new Mass("西安");
+	        mass.addTeam(javaTeam);
+	        mass.addTeam(androidTeam);
+	
+	        mass.doSomething();
+	    }
+	}
+
+输出：
+
+	西安群众是伟大的
+	Java团队是伟大的
+	Afra55是伟大的
+	Andrid团队是伟大的
+	Victor是伟大的
+	AAA啊哈是伟大的
+
+### 透明的组合模式
+
+ 上述的例子中，不同的成员是有着不同的结构，在透明的组合模式中，他们都有着相同的结构，因而一些操作要放到内部进行判断。对于面向接口的编程，这个方法优先考虑。
+
+#### 创建抽象基类
+
+	/**
+	 * Created by Afra55 on 2016.07.12 .
+	 * 抽象类，用于表示整个社会
+	 */
+	public abstract class Society {
+	
+	    protected String name;
+	
+	    public Society(String name) {
+	        this.name = name;
+	    }
+	
+	    /**
+	     * 添加子模块
+	     * @param society
+	     */
+	    public abstract void addSubSociety(Society society);
+	
+	    /**
+	     * 移除子模块
+	     * @param society
+	     */
+	    public abstract void removeSubSociety(Society society);
+	
+	    /**
+	     * 获取子模块个数
+	     * @return
+	     */
+	    public abstract int getSubSocietyCount();
+	
+	    /**
+	     * 获取子模块
+	     * @param index 子模块索引
+	     * @return
+	     */
+	    public abstract Society getSubSociety(int index);
+	
+	    public abstract void doSomething();
+	}
+
+#### 创建群众
+
+	/**
+	 * Created by Afra55 on 2016.07.12 .
+	 * 社会由群体组成，群体是社会的具体实现.
+	 * 群体又由各个团队组成.
+	 */
+	public class Mass extends Society {
+	
+	    /**
+	     * 存储各个团队的容器
+	     */
+	    private List<Society> societyList = new ArrayList<>();
+	
+	    public Mass(String name) {
+	        super(name);
+	    }
+	
+	    @Override
+	    public void addSubSociety(Society society) {
+	        societyList.add(society);
+	    }
+	
+	    @Override
+	    public void removeSubSociety(Society society) {
+	        if (societyList.contains(society)) {
+	            societyList.remove(society);
+	        }
+	    }
+	
+	    @Override
+	    public int getSubSocietyCount() {
+	        return societyList.size();
+	    }
+	
+	    @Override
+	    public Society getSubSociety(int index) {
+	        if (index < getSubSocietyCount()) {
+	            return societyList.get(index);
+	        } else {
+	            throw new IndexOutOfBoundsException("这个团队不存在");
+	        }
+	    }
+	
+	
+	    @Override
+	    public void doSomething() {
+	        System.out.println(name + "群众是伟大的");
+	        for (int i = 0 ; i< getSubSocietyCount(); i++) {
+	            getSubSociety(i).doSomething();
+	        }
+	    }
+	}
+
+#### 创建团队
+
+	/**
+	 * Created by Afra55 on 2016.07.12 .
+	 * 个人组成了群众，个人又有个人组成
+	 */
+	public class Team extends Society {
+	
+	    /**
+	     * 存储个人的容器
+	     */
+	    private List<Society> societyList = new ArrayList<>();
+	    
+	    public Team(String name) {
+	        super(name);
+	    }
+	
+	    @Override
+	    public void addSubSociety(Society society) {
+	        societyList.add(society);
+	    }
+	
+	    @Override
+	    public void removeSubSociety(Society society) {
+	        if (societyList.contains(society)) {
+	            societyList.remove(society);
+	        }
+	    }
+	
+	    @Override
+	    public int getSubSocietyCount() {
+	        return societyList.size();
+	    }
+	
+	    @Override
+	    public Society getSubSociety(int index) {
+	        if (index < getSubSocietyCount()) {
+	            return societyList.get(index);
+	        } else {
+	            throw new IndexOutOfBoundsException("这个人不存在");
+	        }
+	    }
+	
+	    @Override
+	    public void doSomething() {
+	        System.out.println(name + "团队是伟大的");
+	        for (int i = 0 ; i< getSubSocietyCount(); i++) {
+	            getSubSociety(i).doSomething();
+	        }
+	    }
+	}
+
+#### 创建个人
+
+	/**
+	 * Created by Afra55 on 2016.07.12 .
+	 * 个人组成了团队，是整个社会的记事
+	 */
+	public class People extends Society {
+	
+	    public People(String name) {
+	        super(name);
+	    }
+	
+	    @Override
+	    public void addSubSociety(Society society) {
+	        throw new UnsupportedOperationException("个人是个个体，没有子模块");
+	    }
+	
+	    @Override
+	    public void removeSubSociety(Society society) {
+	        throw new UnsupportedOperationException("个人是个个体，没有子模块");
+	    }
+	
+	    @Override
+	    public int getSubSocietyCount() {
+	        throw new UnsupportedOperationException("个人是个个体，没有子模块");
+	    }
+	
+	    @Override
+	    public Society getSubSociety(int index) {
+	        throw new UnsupportedOperationException("个人是个个体，没有子模块");
+	    }
+	
+	    @Override
+	    public void doSomething() {
+	        System.out.println(name + "是伟大的");
+	    }
+	}
+
+
+#### 使用
+
+	public class Main {
+	    public static void main(String []args) {
+	
+	        // 创建个人
+	        People afra55 = new People("Afra55");
+	        People victor = new People("Victor");
+	        People aaa = new People("AAA啊哈");
+	
+	        // 创建 java tema
+	        Team javaTeam = new Team("Java");
+	        javaTeam.addSubSociety(afra55);
+	
+	        // 创建 android team
+	        Team androidTeam = new Team("Andrid");
+	        androidTeam.addSubSociety(victor);
+	        androidTeam.addSubSociety(aaa);
+	
+	        // 创建群众
+	        Mass mass = new Mass("西安");
+	        mass.addSubSociety(javaTeam);
+	        mass.addSubSociety(androidTeam);
+	
+	        mass.doSomething();
+	    }
+	}
+	
+输出：
+
+	西安群众是伟大的
+	Java团队是伟大的
+	Afra55是伟大的
+	Andrid团队是伟大的
+	Victor是伟大的
+	AAA啊哈是伟大的
+
+### 优点
+
+不必关心对象是个集合还是个体，新增各种成员都很方便，只要继承基类实现抽象方法即可，不用修改现有的类。
+组合模式可以生成复杂的树形结构，对各个节点的操作统一而且简单。
+
+### 缺点
+
+新增的成员局限于基类，想要统一新功能就要修改基类，所有的继承基类的类都会进行修改。如果不修改基类，依赖类型，则会对类型进行判断，增加了代码复杂度。
+
+
+----------
