@@ -2245,3 +2245,110 @@ description: 设计模式总结!
 
 
 ----------
+
+## 适配器模式
+
+当接口不兼容而去兼容接口，或者建立一个可以重复被不同对象使用的类，或者统一输出接口，设配器模式很合适。
+
+下面以蓝牙耳机举例，假设某款蓝牙耳机支持蓝牙4.1的设备不支持4.0的蓝牙设备，现在有个蓝牙4.0的手机连接蓝牙耳机，需要把蓝牙耳机的蓝牙设备版本4.1兼容4.0。
+
+### 创建接口
+
+	 /**
+	 * Created by Afra55 on 2016.07.13 .
+	 * 蓝牙版本接口
+	 */
+	public interface IVersion {
+	
+	    double getVersion();
+	}
+
+
+### 需要适配的类
+
+	/**
+	 * Created by Afra55 on 2016.07.13 .
+	 * 蓝牙耳机支持的蓝牙版本是4.1，不支持4.0
+	 */
+	public class BluetoothHeadset implements IVersion {
+	    @Override
+	    public double getVersion() {
+	        return 4.1;
+	    }
+	}
+
+### 类适配器模式
+
+#### 创建适配器
+
+	/**
+	 * Created by Afra55 on 2016.07.13 .
+	 * 蓝牙适配器吧蓝牙耳机的蓝牙版本转换为4.0，以便连接手机。
+	 */
+	public class BluetoothAdapter extends BluetoothHeadset {
+	
+	    @Override
+	    public double getVersion() {
+	        return 4.0;
+	    }
+	}
+
+#### 使用 
+
+	public class Main {
+	    public static void main(String []args) {
+	        BluetoothAdapter bluetoothAdapter = new BluetoothAdapter();
+	        System.out.println(bluetoothAdapter.getVersion());
+	    }
+	}
+
+### 对象适配器模式
+
+#### 创建适配器
+
+	/**
+	 * Created by Afra55 on 2016.07.13 .
+	 * 蓝牙适配器吧蓝牙耳机的蓝牙版本转换为4.0，以便连接手机。
+	 */
+	public class BluetoothAdapter implements IVersion {
+	
+	    private final BluetoothHeadset bluetoothHeadset;
+	
+	    public BluetoothAdapter(BluetoothHeadset bluetoothHeadset) {
+	       this.bluetoothHeadset = bluetoothHeadset;
+	    }
+	
+	    public double getOriginVersion() {
+	        return bluetoothHeadset.getVersion();
+	    }
+	
+	    @Override
+	    public double getVersion() {
+	        // 在这里进行蓝牙版本转换
+	        return 4.0;
+	    }
+	}
+
+#### 使用
+
+
+	public class Main {
+	    public static void main(String []args) {
+	        BluetoothHeadset bluetoothHeadset = new BluetoothHeadset();
+	        BluetoothAdapter bluetoothAdapter = new BluetoothAdapter(bluetoothHeadset);
+	
+	        System.out.println("蓝牙耳机支持的版本： " + bluetoothAdapter.getOriginVersion());
+	        System.out.println("蓝牙耳机适配后的版本： " + bluetoothAdapter.getVersion());
+	    }
+	}
+
+### 优点
+
+良好的复用性和扩展性。
+
+### 缺点
+
+过多的使用适配器，会造成代码的复杂度提升。
+
+
+----------
