@@ -10,6 +10,10 @@ description: 设计模式总结!
 * content
 {:toc}
 
+## 原文
+
+[http://afra55.github.io/2015/12/28/design-mode/](http://afra55.github.io/2015/12/28/design-mode/)
+
 ## 1.单例模式
 
 ### DCL(Double CheckLock)
@@ -2277,7 +2281,7 @@ description: 设计模式总结!
 	    }
 	}
 
-### 类适配器模式
+### 17.类适配器模式
 
 #### 创建适配器
 
@@ -2352,3 +2356,5 @@ description: 设计模式总结!
 
 
 ----------
+
+## 18.
