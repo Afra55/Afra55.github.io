@@ -2357,4 +2357,144 @@ description: 设计模式总结!
 
 ----------
 
-## 18.
+## 18.装饰模式
+
+要透明且动态的扩展类的功能时，装饰模式是个好的选择。
+
+比如，给人穿不同的衣服，人的 dress 方法是 准备穿衣，现在要扩展功能，穿各种各样的衣服：
+
+### 创建人的抽象基类，也可以是接口
+
+	/**
+	 * Created by Afra55 on 2016.07.14 .
+	 * 人的抽象基类，有个穿衣服的抽象方法
+	 */
+	public abstract class People {
+	
+	    /**
+	     * 穿衣服
+	     */
+	    public abstract void dressed();
+	}
+
+### 人的实现类
+
+	/**
+	 * Created by Afra55 on 2016.07.14 .
+	 * 人的实现类
+	 */
+	public class Man extends People {
+	
+	    private String name;
+	
+	    public Man(String name) {
+	        this.name = name;
+	    }
+	
+	    public String getName() {
+	        return name;
+	    }
+	
+	    /**
+	     * 只有准备衣服的功能
+	     */
+	    @Override
+	    public void dressed() {
+	        System.out.println(getName() +" 准备衣服");
+	    }
+	}
+
+### 创建衣服的抽象基类，这里偷懒了
+	
+	/**
+	 * Created by Afra55 on 2016.07.14 .
+	 * 衣服基类，保持了一个 people 的引用
+	 */
+	public class Cloth extends People {
+	
+	    protected People people;
+	
+	    public Cloth(People people) {
+	        this.people = people;
+	    }
+	
+	    @Override
+	    public void dressed() {
+	        people.dressed();
+	    }
+	}
+
+### 创建裙子
+
+	/**
+	 * Created by Afra55 on 2016.07.14 .
+	 * 裙子
+	 */
+	public class Skirt extends Cloth {
+	
+	    public Skirt(People people) {
+	        super(people);
+	    }
+	
+	    @Override
+	    public void dressed() {
+	        super.dressed();
+	        dressSkirt();
+	    }
+	
+	    private void dressSkirt() {
+	        System.out.println("穿连衣裙");
+	    }
+	}
+
+### 创建西服
+	
+	/**
+	 * Created by Afra55 on 2016.07.14 .
+	 * 西服
+	 */
+	public class Suit extends Cloth {
+	
+	    public Suit(People people) {
+	        super(people);
+	    }
+	
+	    @Override
+	    public void dressed() {
+	        super.dressed();
+	        dressSuit();
+	    }
+	
+	    private void dressSuit() {
+	        System.out.println("穿上西服");
+	    }
+	}
+
+### 使用
+
+	public class Main {
+	    public static void main(String []args) {
+	
+	        // 创建了一个人
+	        People you = new Man("Victoor");
+	
+	        // 创建西服，持有 you 对象
+	        Cloth suit = new Suit(you);
+	        suit.dressed();
+	
+	        // 创建连衣裙，持有 you 对象
+	        Cloth skirt = new Skirt(you);
+	        skirt.dressed();
+	
+	    }
+	}
+
+### 优点
+
+动态扩展对象的功能。
+
+### 缺点
+
+
+
+----------
