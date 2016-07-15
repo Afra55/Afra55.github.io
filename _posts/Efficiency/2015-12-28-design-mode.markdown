@@ -2250,7 +2250,7 @@ description: 设计模式总结!
 
 ----------
 
-## 适配器模式
+## 17.适配器模式
 
 当接口不兼容而去兼容接口，或者建立一个可以重复被不同对象使用的类，或者统一输出接口，设配器模式很合适。
 
@@ -2281,7 +2281,7 @@ description: 设计模式总结!
 	    }
 	}
 
-### 17.类适配器模式
+### 类适配器模式
 
 #### 创建适配器
 
@@ -2495,6 +2495,105 @@ description: 设计模式总结!
 
 ### 缺点
 
+
+
+----------
+
+## 19.享元模式
+
+当有大量的重复对象出现，每次调用都会去new 一个新的对象，这个对象并没有什么改变，这个时候使用享元模式较好，可以避免创建多个对象。也可以充当缓冲池使用。
+
+以下以天气查询举例，每天都会有人通过日期查询天气，日期相同返回的结果就相同，当有数以百万计的人查询一个相同的日期时，每次创建新的信息对象会对系统造成很大的负担，像这类重复的对象，可以使用缓冲池来读取缓存里的对象：
+
+### 创建接口
+
+	/**
+	 * Created by Afra55 on 2016.07.15 .
+	 * 天气接口，只获取天气情况
+	 */
+	public interface IWeather {
+	
+	    String getWeatherItem();
+	}
+
+### 创建实现类
+
+	/**
+	 * Created by Afra55 on 2016.07.15 .
+	 * 天气的实现类
+	 */
+	public class WeatherItem implements IWeather {
+	
+	    private String date;
+	
+	    public WeatherItem(String date) {
+	        this.date = date;
+	    }
+	
+	    @Override
+	    public String getWeatherItem() {
+	
+	        String result = "未查到信息";
+	        // 请忽略偷懒的代码
+	        int random = new Random().nextInt(100);
+	        switch (date) {
+	            case "今天":
+	                result = "晴天 "  + random + "摄氏度";
+	                break;
+	            case "明天":
+	                result = "小雨 " + random + "摄氏度";
+	                break;
+	            case "后天":
+	                result = "阴天 " + random + "摄氏度";
+	                break;
+	        }
+	
+	        return result;
+	    }
+	}
+
+### 创建享元工厂
+
+	/**
+	 * Created by Afra55 on 2016.07.15 .
+	 * 享元模式的体现，减少重复对象的存在，让同类对象多次复用
+	 */
+	public class WeatherFactory {
+	    // 使用 map 容器来存储 天气 对象，以便在下一次查询时只拿缓存中的
+	    private static Map<String, IWeather> weatherMap = new ConcurrentHashMap<>();
+	
+	    public static IWeather getWeatherInfo(String date) {
+	
+	        if (weatherMap.containsKey(date)) { // 使用缓存的
+	            return weatherMap.get(date);
+	        } else {
+	            IWeather weather = new WeatherItem(date);  // 创建新对象
+	            weatherMap.put(date, weather);
+	            return weather;
+	        }
+	    }
+	}
+
+### 使用举例
+	
+	public class Main {
+	    public static void main(String []args) {
+	
+	        for (int i = 0 ;i < 100; i++) {
+	            System.out.println(WeatherFactory.getWeatherInfo("今天").getWeatherItem());
+	            System.out.println(WeatherFactory.getWeatherInfo("明天").getWeatherItem());
+	            System.out.println(WeatherFactory.getWeatherInfo("后天").getWeatherItem());
+	        }
+	    }
+	}
+
+### 优点
+
+减少重复类的创建，降低内存使用。
+
+### 缺点
+
+逻辑复杂，代码复杂，从缓冲区中读取从而增加了读取时间。
 
 
 ----------
