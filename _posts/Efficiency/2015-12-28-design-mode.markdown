@@ -2614,3 +2614,139 @@ description: 设计模式总结!
 
 
 ----------
+
+## 21.桥接模式
+
+当类存在两个独立的功能，而且都要进行扩展时，使用桥接模式。
+
+下面以奶茶为例，奶茶有 大杯加糖，大杯加盐，小杯加糖，小杯加盐。大杯和小杯属于杯子大小功能的扩展，加盐和加糖属于添加剂功能的扩展，不管谁变化，都没有交集。
+
+### 创建实现部分的抽象基类
+
+	
+	/**
+	 * Created by Afra55 on 2016.07.15 .
+	 * 添加剂
+	 */
+	public abstract class Additive {
+	    public abstract String getAdditive();
+	}
+
+### 创建实现部分具体的实现
+	
+	public class Salt extends Additive {
+	
+	    @Override
+	    public String getAdditive() {
+			// 具体的实现
+	        return "加盐";
+	    }
+	}
+	
+	public class Sugar extends Additive {
+	
+	    @Override
+	    public String getAdditive() {
+			// 具体的实现
+	        return "加糖";
+	    }
+	}
+
+
+### 创建抽象部分的抽象基类
+
+	/**
+	 * Created by Afra55 on 2016.07.15 .
+	 * 奶茶抽象基类
+	 */
+	public abstract class MilkyTea {
+	
+	    protected Additive additive;
+	
+	    public MilkyTea(Additive additive) {
+	        this.additive = additive;
+	    }
+	
+		// 由子类决定奶茶的创建
+	    public abstract void make();
+	
+	}
+
+### 创建抽象部分的子类
+
+	/**
+	 * Created by Afra55 on 2016.07.15 .
+	 * 大杯奶茶
+	 */
+	public class BigMildyTea extends MilkyTea{
+	
+	    public BigMildyTea(Additive additive) {
+	        super(additive);
+	    }
+	
+	    @Override
+	    public void make() {
+			// 通过调用实现部分的方法来实现功能
+	        System.out.println("大杯的" + additive.getAdditive() + "奶茶");
+	    }
+	}
+
+	
+	
+	
+	/**
+	 * Created by Afra55 on 2016.07.15 .
+	 * 小杯奶茶
+	 */
+	public class SmallMildyTea extends MilkyTea{
+	
+	    public SmallMildyTea(Additive additive) {
+	        super(additive);
+	    }
+	
+	    @Override
+	    public void make() {
+			// 通过调用实现部分的方法来实现功能
+	        System.out.println("小杯的" + additive.getAdditive() + "奶茶");
+	    }
+	}
+
+### 使用
+	
+	public class Main {
+	    public static void main(String []args) {
+	        BigMildyTea bigMildyTea = new BigMildyTea(new Sugar());
+	        bigMildyTea.make();
+	
+	        BigMildyTea bigMildyTea1 = new BigMildyTea(new Salt());
+	        bigMildyTea1.make();
+	
+	        SmallMildyTea smallMildyTea = new SmallMildyTea(new Sugar());
+	        smallMildyTea.make();
+	
+	        SmallMildyTea smallMildyTea1 = new SmallMildyTea(new Salt());
+	        smallMildyTea1.make();
+	    }
+	}
+
+输出:
+
+	大杯的加糖奶茶
+	大杯的加盐奶茶
+	小杯的加糖奶茶
+	小杯的加盐奶茶
+
+### 优点
+
+分离抽象与实现，灵活的扩展，对使用的透明。
+
+### 缺点
+
+不容易设计，经验尚浅，就是想不到怎么做（笑脸）。
+
+
+----------
+
+
+
+
