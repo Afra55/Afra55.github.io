@@ -2750,7 +2750,165 @@ description: 设计模式总结!
 ## 22.抽象工厂模式
 
 先复习工厂模式先。
+一个对象族有相同的约束时，可以使用工厂模式。
+看下面的例子， 鞋子 A3 和 B3 就是个对象族，他们的相同约束是材质制作和浸染颜色：
 
+### 抽象工厂类
+
+	/**
+	 * Created by Afra55 on 2016.07.19 .
+	 * 鞋子抽象工厂类，用于制造鞋子，这里只定义了两种，用于浸染颜色和制造材质。
+	 */
+	public abstract class ShoeFactory {
+	
+	    /**
+	     * 制作材质
+	     * @return 材质
+	     */
+	    public abstract ITexture createTexture();
+	
+	    /**
+	     * 浸染颜色
+	     * @return 颜色
+	     */
+	    public abstract IColor changeColor();
+	}
+
+### 材质相关
+
+	/**
+	 * Created by Afra55 on 2016.07.19 .
+	 * 材质接口
+	 */
+	public interface ITexture {
+	
+	    void texture();
+	
+	}
+
+	public class CowhideTexture implements ITexture {
+	    @Override
+	    public void texture() {
+	        System.out.println("制作牛皮材质");
+	    }
+	}
+	
+	public class DecorativeRndTexture implements ITexture {
+	    @Override
+	    public void texture() {
+	        System.out.println("制作花皮材质");
+	    }
+	}
+
+### 颜色相关
+	
+	/**
+	 * Created by Afra55 on 2016.07.19 .
+	 * 颜色接口
+	 */
+	public interface IColor {
+	
+	    void color();
+	}
+	
+	public class GreenColor implements IColor {
+	    @Override
+	    public void color() {
+	        System.out.println("浸染绿色");
+	    }
+	}
+	
+	public class RedColor implements IColor {
+	    @Override
+	    public void color() {
+	        System.out.println("浸染红色");
+	    }
+	}
+
+### 具体工厂类
+	
+	/**
+	 * Created by Afra55 on 2016.07.19 .
+	 * 绿鞋，牛皮材质
+	 */
+	public class A2Factory extends ShoeFactory {
+	
+	    @Override
+	    public ITexture createTexture() {
+	        return new CowhideTexture();
+	    }
+	
+	    @Override
+	    public IColor changeColor() {
+	        return new GreenColor();
+	    }
+	
+	    public A2Factory create() {
+	        System.out.println("开始制作 A2 鞋子：");
+	        createTexture().texture();
+	        changeColor().color();
+	        System.out.println("A2 鞋子制作完成。。。");
+	        return this;
+	    }
+	}
+
+	
+	/**
+	 * Created by Afra55 on 2016.07.19 .
+	 * 红鞋，花皮材质
+	 */
+	public class B3Factory extends ShoeFactory {
+	
+	    @Override
+	    public ITexture createTexture() {
+	        return new DecorativeRndTexture();
+	    }
+	
+	    @Override
+	    public IColor changeColor() {
+	        return new RedColor();
+	    }
+	
+	    public B3Factory create() {
+	        System.out.println("开始制作 B3 鞋子：");
+	        createTexture().texture();
+	        changeColor().color();
+	        System.out.println("B3 鞋子制作完成。。。");
+	        return this;
+	    }
+	}
+
+### 使用
+	
+	public class Main {
+	    public static void main(String []args) {
+	        A2Factory a2Factory = new A2Factory();
+	        a2Factory.create();
+	
+	        B3Factory b3Factory = new B3Factory();
+	        b3Factory.create();
+	    }
+	}
+
+输出：
+	
+	开始制作 A2 鞋子：
+	制作牛皮材质
+	浸染绿色
+	A2 鞋子制作完成。。。
+	开始制作 B3 鞋子：
+	制作花皮材质
+	浸染红色
+	B3 鞋子制作完成。。。
+
+### 优点
+
+分离接口与实现。
+
+### 缺点
+
+类文件的增加。
+每次修改功能，修改抽象工厂，具体工厂都会被修改。
 
 ----------
 
