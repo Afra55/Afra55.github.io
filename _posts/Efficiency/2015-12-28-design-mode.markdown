@@ -2914,6 +2914,52 @@ description: 设计模式总结!
 
 ## 23.解释器模式
 
+解释器模式使用较少，主要功能就是解释，例如 1 # 3 其中把特殊字符 # 解释成 加号，即 1 # 3 就是 1 + 3，这种行为就是解释器。
+
+### 接口
+
+	
+	/**
+	 * Created by Afra55 on 2016.07.19 .
+	 * 抽象表达式，定义抽象的解释方法
+	 */
+	public abstract class AbstractExpression {
+	
+	    public abstract void explain();
+	    
+	}
+
+### 具体实现 
+	
+	/**
+	 * Created by Afra55 on 2016.07.19 .
+	 * 符号解释器，例如 解释 # 为 +
+	 */
+	public class CharExpression extends AbstractExpression {
+	    @Override
+	    public void explain() {
+	
+	    }
+	}
+	
+	/**
+	 * Created by Afra55 on 2016.07.19 .
+	 * 数字解释器，例如 1 3，非符号类
+	 */
+	public class NumExpression extends AbstractExpression {
+	    @Override
+	    public void explain() {
+	
+	    }
+	}
+
+### 优点
+
+扩展方便灵活。只需要增加相应解释器即可。
+
+### 缺点
+
+对于过于繁琐的内容进行解释，会造成解释器混乱繁琐。解释器要酌情使用。
 
 ----------
 
