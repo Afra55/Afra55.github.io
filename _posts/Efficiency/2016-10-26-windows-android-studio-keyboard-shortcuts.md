@@ -12,6 +12,8 @@ description: Windows Android Studio keyboard shortcuts
 
 ## 本文
 
+http://afra55.github.io/2016/10/26/windows-android-studio-keyboard-shortcuts/
+
 默认的快捷方式。
 
 ## 常用快捷键
