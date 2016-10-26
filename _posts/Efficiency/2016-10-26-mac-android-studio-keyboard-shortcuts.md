@@ -16,7 +16,7 @@ https://developer.android.com/studio/intro/keyboard-shortcuts.html#configure_cus
 
 ## 本文
 
-http://afra55.github.io/2016/07/29/mac-android-studio-keyboard-shortcuts/
+http://afra55.github.io/2016/10/26/mac-android-studio-keyboard-shortcuts/
 
 ## 常用快捷键
 
