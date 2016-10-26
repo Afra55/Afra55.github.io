@@ -156,13 +156,14 @@ http://afra55.github.io/2016/10/26/mac-android-studio-keyboard-shortcuts/
 | 切换标签 | Control + 左/右箭头 |
 | 跳转到源代码 | F4 / Command + 向下箭头 |
 | 在新窗口中打开当前选定的标签tab | Shift + F4 |
-| 最近打开的文件列表弹框 | Command + Shift + E |
+| 最近打开的文件列表弹框 | Command + E |
+| 最近编辑的文件列表弹框 | Command + Shift + E |
 | 返回上一个编辑的位置 | Command + Shift + Backspace |
 | 关闭当前活动标签tab | Command + W |
 | 从工具窗口返回到编辑窗口 | Esc |
 | 隐藏当前或者上一个活动的工具窗口 | Shift + Esc |
 | 跳转到这一行 | Command + L |
-| 打开类型分级结构（就是继承实现关系）| Command + Shift + H |
+| 打开类型分级结构（就是继承实现关系）| Control + H |
 | 打开当前选中方法的层级结构 | Command + Shift + H |
 | 打开调用层级结构即谁调用了当前选中的对象 | Control + Option + H |
 | 写代码 |
