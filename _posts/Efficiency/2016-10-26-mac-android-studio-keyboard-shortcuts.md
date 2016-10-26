@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "Mac Android Studio keyboard shortcuts"
-date:   2016-7-29 15:32:00
+date:   2016-10-26 21:32:00
 categories: Efficiency
 comments: true
 description: Mac Android Studio keyboard shortcuts
@@ -9,6 +9,126 @@ description: Mac Android Studio keyboard shortcuts
 
 * content
 {:toc}
+
+## 原文
+
+https://developer.android.com/studio/intro/keyboard-shortcuts.html#configure_custom_keymaps
+
+## 本文
+
+http://afra55.github.io/2016/07/29/mac-android-studio-keyboard-shortcuts/
+
+## 常用快捷键
+
+### 重命名
+
+    Shift + F6
+
+### 代码内联（Inline,比如把全局属性变为局部属性）
+
+	Command + Option + N
+
+### 把代码块提取为方法
+
+	Command + Option + M
+
+### 把选中代码提取为变量
+	
+	Command + Option + V
+
+### 把方法内选中代码提取为属性（局部到全局，与 Inline相反）
+
+	Command + Option + F
+
+### 提取为常量
+
+	Command + Option + C
+
+### 提取为方法的参数
+
+	Command + Option + P
+
+### 查找类 
+	
+	 Command + O
+
+### 查找文件 
+
+	Command + Shift + O 
+
+### 全局搜索（Find in path）
+ 	
+	Command + Shift + F
+
+### Optimize imports 
+
+	Control + Option + O
+
+### Surround with (if...else / try...catch / etc.) 
+
+	 Command + Option + T
+
+### 复制当前行或者选中的代码 
+	
+	 Command + D
+
+### 补全当前语句(比如自动加分号，自动加花括号) 
+
+	 Command + Shift + Enter 
+
+### 打开调用层级结构即谁调用了当前选中的对象 
+
+	 Control + Option + H
+
+### Open VCS popup 
+
+	 Control + V
+
+### 补全当前语句(比如自动加分号，自动加花括号) 
+
+	 Command + Shift + Enter
+
+### 智能代码补全 
+
+	 Control + Shift + Space
+
+### 快速修复 
+
+	 Option + Enter
+
+### 格式化代码 
+	
+	Command + Option + L
+
+### 返回上一个编辑的位置 
+
+	 Command + Shift + Backspace
+
+### 代码自动生成 （getters, setters, constructors, hashCode/equals, toString, new file, new class等）
+
+	 Command + N
+
+### 折叠/展开当前代码块 
+	
+	Command + 减号/加号
+
+### 显示选中方法的参数 
+
+	  Command + P
+
+### 跳转到实现的代码 
+
+	 Command + Alt + B 
+
+### 跳转到父类方法/超类 
+
+	 Command + U
+
+### 跳转到下一个/上一个高亮错误 
+
+	 F2 / Shift + F2
+
+## 完整快捷键
 
 | Description | Mac |
 
@@ -28,7 +148,7 @@ description: Mac Android Studio keyboard shortcuts
 
 | 打开设置对话框 | Command + , (comma) |
 
-| 打开项目结构（project structure）对话框 | Command + ; (semicolon) |
+| 打开项目结构配置（project structure） | Command + ; (semicolon) |
 
 | 标签和工具窗口之间互相切换 | Control + Tab |
 
