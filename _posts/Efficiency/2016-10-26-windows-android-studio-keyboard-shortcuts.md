@@ -74,9 +74,13 @@ http://afra55.github.io/2016/10/26/windows-android-studio-keyboard-shortcuts/
 
 	 Control + Shift + Enter
 
-### 打开调用层级结构即谁调用了当前选中的对象 
+### Find Usages(查找使用这个属性或方法等的地方)
 
-	 Control + Alt + H
+	 Alt + F7
+
+### Find Usages in file(在这个文件中查找使用这个属性或方法等的地方)
+
+	 Ctrl + F7
 
 ### Open VCS popup 
 
