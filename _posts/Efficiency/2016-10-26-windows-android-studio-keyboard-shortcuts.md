@@ -126,6 +126,15 @@ http://afra55.github.io/2016/10/26/windows-android-studio-keyboard-shortcuts/
 
 	 F2 / Shift + F2
 
+
+### 切换大小写
+
+	 Control + Shift + U
+
+### 返回上一个预览的位置
+
+	Control + Shift + Left
+
 ## 完整快捷键
 
 | Description | Mac |
