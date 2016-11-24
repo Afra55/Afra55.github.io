@@ -52,12 +52,16 @@ Editing
 | Alt + .         | Close current html tag                                    |
 
 Windows
-```````
+
+| Keypress        | Command                                                   |
+| ------------- | :-----:|
 | Ctrl + Alt + Up   | Column selection up                                     |
 | Ctrl + Alt + Down | Column selection down                                   |
 
 Linux
-`````
+
+| Keypress        | Command                                                   |
+| ------------- | :-----:|
 | Alt + ⇧ + Up    | Column selection up                                       |
 | Alt + ⇧ + Down  | Column selection down                                     |
 
