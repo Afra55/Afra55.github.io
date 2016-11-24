@@ -24,8 +24,8 @@ Editing
 
 | Keypress        | Command                                                   |
 | ------------- | :-----:|
-| Ctrl + X        | Cut line                                                  |
-| Ctrl + ↩        | Insert line after                                         |
+| Ctrl + X        | 剪切                                                  |
+| Ctrl + ↩        | 在本行下面插入一行                                         |
 | Ctrl + ⇧ + ↩    | Insert line before                                        |
 | Ctrl + ⇧ + ↑    | Move line/selection up                                    |
 | Ctrl + ⇧ + ↓    | Move line/selection down                                  |
