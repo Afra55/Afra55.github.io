@@ -12,7 +12,7 @@ description: Sublime Keyboard Shortcuts - Windows/Linux
 
 ## 本文
 
-http://afra55.github.io/2016/11/24/windows-sublime-keyboard-shortcuts/
+[http://afra55.github.io/2016/11/24/windows-sublime-keyboard-shortcuts/](http://afra55.github.io/2016/11/24/windows-sublime-keyboard-shortcuts/)
 
 ## 常用快捷键
 

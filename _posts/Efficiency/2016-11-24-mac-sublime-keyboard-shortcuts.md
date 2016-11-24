@@ -13,7 +13,7 @@ description: Sublime Keyboard Shortcuts - OSX
 
 ## 本文
 
-http://afra55.github.io/2016/11/24/mac-sublime-keyboard-shortcuts/
+[http://afra55.github.io/2016/11/24/mac-sublime-keyboard-shortcuts/](http://afra55.github.io/2016/11/24/mac-sublime-keyboard-shortcuts/)
 
 ## 常用快捷键
 
