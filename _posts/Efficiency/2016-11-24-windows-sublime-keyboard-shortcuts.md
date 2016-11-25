@@ -26,37 +26,36 @@ Editing
 | ------------- | :-----:|
 | Ctrl + X        | 剪切                                                  |
 | Ctrl + ↩        | 在本行下面插入一行                                         |
-| Ctrl + ⇧ + ↩    | Insert line before                                        |
-| Ctrl + ⇧ + ↑    | Move line/selection up                                    |
-| Ctrl + ⇧ + ↓    | Move line/selection down                                  |
-| Ctrl + L        | Select line - Repeat to select next lines                 |
-| Ctrl + D        | Select word - Repeat select others occurrences            |
-| Ctrl + M        | Jump to closing parentheses                               |
-|                 | Repeat to jump to opening parentheses                     |
-| Ctrl + ⇧ + M    | Select all contents of the current parentheses            |
-| Ctrl + ⇧ + K    | Delete Line                                               |
-| Ctrl + KK       | Delete from cursor to end of line                         |
-| Ctrl + K + ⌫    | Delete from cursor to start of line                       |
-| Ctrl + ]        | Indent current line(s)                                    |
-| Ctrl + [        | Un-indent current line(s)                                 |
-| Ctrl + ⇧ + D    | Duplicate line(s)                                         |
-| Ctrl + J        | Join line below to the end of the current line            |
-| Ctrl + /        | Comment/un-comment current line                           |
-| Ctrl + ⇧ + /    | Block comment current selection                           |
-| Ctrl + Y        | Redo, or repeat last keyboard shortcut command            |
+| Ctrl + ⇧ + ↩    | 在本行上面插入一行                                       |
+| Ctrl + ⇧ + ↑    | 将光标所在行向上移动                                    |
+| Ctrl + ⇧ + ↓    | 将光标所在行向下移动                                  |
+| Ctrl + L        | 选择光标所在行 - 重复选择下一行                 |
+| Ctrl + D        | 选择光标所单词 - Repeat select others occurrences            |
+| Ctrl + M        | 跳转到代码块结束的位置（即 "}"的左边）                               |
+|                 | 再按会跳转到代码块开始的位置                     |
+| Ctrl + ⇧ + M    | 选择"{}"之间的内容            |
+| Ctrl + ⇧ + K    | 删掉光标所在行                                              |
+| Ctrl + KK       | 删除光标到这一行结束的内容                        |
+| Ctrl + K + ⌫    | 删除光标到这一行开始的内容                         |
+| Ctrl + ]        | 向右缩进当前行(s)                                    |
+| Ctrl + [        | 向左缩进当前行(s)                                 |
+| Ctrl + ⇧ + D    | 复制当前行(s)                                         |
+| Ctrl + J        | 把下一行加在本行代码后面            |
+| Ctrl + /        | 注释/取消注释 本行(s)代码                           |
+| Ctrl + ⇧ + /    | 注释所选代码块                           |
+| Ctrl + Y        | 重做, 或者重复上一次快捷键            |
 | Ctrl + ⇧ + V    | Paste and indent correctly                                |
-| Ctrl + Space    | Select next auto-complete suggestion                      |
-| Ctrl + U        | soft undo; jumps to your last change before               |
-|                 | undoing change when repeated                              |
-| Alt + ⇧ +  W    | Wrap Selection in html tag                                |
+| Ctrl + Space    | 选择下一个自动补全建议                      |
+| Ctrl + U        | 撤销; 跳转到上次修改的地方，再按一次执行撤销操作               |
+| Alt + ⇧ +  W    | 使用 html标签 包括所选内容                                |
 | Alt + .         | Close current html tag                                    |
 
 Windows
 
 | Keypress        | Command                                                   |
 | ------------- | :-----:|
-| Ctrl + Alt + Up   | Column selection up                                     |
-| Ctrl + Alt + Down | Column selection down                                   |
+| Ctrl + Alt + Up   | 重复向上选择列（即向上同列出现多个光标）                                     |
+| Ctrl + Alt + Down | 重复向下选择列（即向下同列出现多个光标）                                     |
 
 Linux
 
@@ -70,17 +69,17 @@ Navigation/Goto Anywhere
 
 | Keypress        | Command                                                   |
 | ------------- | :-----:|
-| Ctrl + P        | Quick-open files by name                                  |
-| Ctrl + R        | Goto symbol                                               |
-| Ctrl + ;        | Goto word in current file                                 |
-| Ctrl + G        | Goto line in current file                                 |
+| Ctrl + P        | 快速通过名字打开文件                                  |
+| Ctrl + R        | Goto symbol （比如速跳转到方法）                                              |
+| Ctrl + ;        | 跳转到当前文件的某个单词                                 |
+| Ctrl + G        | 跳转到当前文件的某一行                                 |
 
 General
 ------------------------
 
 | Keypress              | Command                                             |
 | ------------- | :-----:|
-| Ctrl + ⇧ + P          | Command prompt                                      |
+| Ctrl + ⇧ + P          | Command prompt  快捷命令提示                                    |
 | Ctrl + KB             | Toggle side bar                                     |
 | Ctrl + ⇧ + Alt + P    | Show scope in status bar                            |
 
@@ -89,21 +88,21 @@ Find/Replace
 
 | Keypress        | Command                                                   |
 | ------------- | :-----:|
-| Ctrl + F        | Find                                                      |
-| Ctrl + H        | Replace                                                   |
-| Ctrl + ⇧ + F    | Find in files                                             |
+| Ctrl + F        | 查找                                                      |
+| Ctrl + H        | 替换                                                   |
+| Ctrl + ⇧ + F    | 在文件中查找                                             |
 
 Tabs
 ------------------------
 
 | Keypress        | Command                                                   |
 | ------------- | :-----:|
-| Ctrl + ⇧ + t    | Open last closed tab                                      |
-| Ctrl + PgUp     | Cycle up through tabs                                     |
-| Ctrl + PgDn     | Cycle down through tabs                                   |
-| Ctrl + ⇆        | Find in files                                             |
-| Ctrl + W        | Close current tab                                         |
-| Alt + [NUM]     | Switch to tab number [NUM] where [NUM] <= number of tabs  |
+| Ctrl + ⇧ + t    | 打开上一个关闭的标签                                      |
+| Ctrl + PgUp     | 循环向左切换标签                                     |
+| Ctrl + PgDn     | 循环向右切换标签                                   |
+| Ctrl + ⇆        | 循环向右切换标签                                              |
+| Ctrl + W        | 关闭当前标签                                         |
+| Alt + [NUM]     | 切换到第[NUM]个标签 [NUM] where [NUM] <= number of tabs  |
 
 Split window
 ------------------------
@@ -124,15 +123,15 @@ Bookmarks
 
 | Keypress        | Command                                                   |
 | ------------- | :-----:|
-| Ctrl + F2       | Toggle bookmark                                           |
-| F2              | Next bookmark                                             |
-| ⇧ + F2          | Previous bookmark                                         |
-| Ctrl + ⇧ + F2   | Clear bookmarks                                           |
+| Ctrl + F2       | 标记取消标记书签                                           |
+| F2              | 切换到下一个书签                                             |
+| ⇧ + F2          | 切换到上一个书签                                         |
+| Ctrl + ⇧ + F2   | 清除所有书签                                           |
 
 Text manipulation
 ------------------------
 
 | Keypress        | Command                                                   |
 | ------------- | :-----:|
-| Ctrl + KU       | Transform to Uppercase                                    |
-| Ctrl + KL       | Transform to Lowercase                                    |
+| Ctrl + KU       | 大写光标所在单词                                    |
+| Ctrl + KL       | 小写光标所在单词                                   |
