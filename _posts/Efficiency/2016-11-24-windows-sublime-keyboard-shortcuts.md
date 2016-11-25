@@ -100,7 +100,7 @@ Tabs
 | Ctrl + ⇧ + t    | 打开上一个关闭的标签                                      |
 | Ctrl + PgUp     | 循环向左切换标签                                     |
 | Ctrl + PgDn     | 循环向右切换标签                                   |
-| Ctrl + ⇆        | 循环向右切换标签                                              |
+| Ctrl + ⇆        | 循环切换最近打开的标签                                              |
 | Ctrl + W        | 关闭当前标签                                         |
 | Alt + [NUM]     | 切换到第[NUM]个标签 [NUM] where [NUM] <= number of tabs  |
 
@@ -109,21 +109,21 @@ Split window
 
 | Keypress        | Command                                                   |
 | ------------- | :-----:|
-| Alt + ⇧ + 1     | Revert view to single column                              |
-| Alt + ⇧ + 2     | Split view into two columns                               |
-| Alt + ⇧ + 3     | Split view into three columns                             |
-| Alt + ⇧ + 4     | Split view into four columns                              |
-| Alt + ⇧ + 5     | Set view to grid (4 groups)                               |
-| Alt + ⇧ + 8     | Split view into two rows                                  |
-| Ctrl + [NUM]    | Jump to group where num is 1-4                            |
-| Ctrl + ⇧ + [NUM]| Move file to specified group where num is 1-4             |
+| Alt + ⇧ + 1     | 恢复为默认的1列窗口                               |
+| Alt + ⇧ + 2     | 分离窗口显示成2列                                |
+| Alt + ⇧ + 3     | 分离窗口显示成3列                              |
+| Alt + ⇧ + 4     | 分离窗口显示成4列                               |
+| Alt + ⇧ + 5     | 以表格的方式显示窗口 (4 个窗口)                               |
+| Alt + ⇧ + 8     | 分离窗口显示成2行                                  |
+| Ctrl + [NUM]    | 跳转到[NUM]窗口 1-4                            |
+| Ctrl + ⇧ + [NUM]| 移动当前文件到[NUM]窗口 1-4             |
 
 Bookmarks
 ------------------------
 
 | Keypress        | Command                                                   |
 | ------------- | :-----:|
-| Ctrl + F2       | 标记取消标记书签                                           |
+| Ctrl + F2       | 标记/取消标记书签                                           |
 | F2              | 切换到下一个书签                                             |
 | ⇧ + F2          | 切换到上一个书签                                         |
 | Ctrl + ⇧ + F2   | 清除所有书签                                           |
