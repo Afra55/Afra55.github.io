@@ -33,10 +33,12 @@ permalink: /about/
 
 GitHub：[https://github.com/Afra55](https://github.com/Afra55)
 
-Email：1937525930@qq.com
+Email：<786654260@qq.com>
 
 Sina：[http://weibo.com/yang73](http://weibo.com/yang73)
 
 CSDN：[http://blog.csdn.net/yang786654260](http://blog.csdn.net/yang786654260)
 
-QQ：1937525930
+QQ：786654260
+
+QQ群： [http://shang.qq.com/wpa/qunwpa?idkey=013f2401f103961ec08b3ac5f9c3b2f9ac8aa1d415b7f5794e0f00bc97026e14](485897149)
