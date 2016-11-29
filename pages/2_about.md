@@ -31,13 +31,11 @@ permalink: /about/
 
 别名：AAA啊哈
 
-GitHub：[https://github.com/Afra55](https://github.com/Afra55)
+GitHub：<a href="https://github.com/Afra55" target="_blank">https://github.com/Afra55</a>
 
 Email：<786654260@qq.com>
 
-Sina：[http://weibo.com/yang73](http://weibo.com/yang73)
-
-CSDN：[http://blog.csdn.net/yang786654260](http://blog.csdn.net/yang786654260)
+CSDN：<a href="http://blog.csdn.net/yang786654260" target="_blank">http://blog.csdn.net/yang786654260</a>
 
 QQ：786654260
 
