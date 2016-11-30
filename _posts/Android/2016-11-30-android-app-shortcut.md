@@ -57,4 +57,4 @@ description: Android版本的 3D Touch
 
 通过以上 3部曲，就完成了 快捷方式的静态配置。
 
-![shortcut_static_sample](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/shortcut_static_sample.gif)
+![shortcut_static_sample](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/blog_picture/shortcuts/shortcut_static_sample.gif)
