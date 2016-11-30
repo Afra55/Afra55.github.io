@@ -58,3 +58,36 @@ description: Android版本的 3D Touch
 通过以上 3部曲，就完成了 快捷方式的静态配置。
 
 ![shortcut_static_sample](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/blog_picture/shortcuts/shortcut_static_sample.gif)
+
+## 动态创建快捷方式
+
+### [ShortcutManager](https://developer.android.com/reference/android/content/pm/ShortcutManager.html) API 允许操作动态快捷方式（注：是动态，静态无法操作）的方法有以下三种：
+
+- Publish: 使用 [setDynamicShortcuts (List<ShortcutInfo> shortcutInfoList)](https://developer.android.com/reference/android/content/pm/ShortcutManager.html#setDynamicShortcuts(java.util.List%3Candroid.content.pm.ShortcutInfo%3E)) 方法去重新配置整个列表的动态捷径， 或者使用 [addDynamicShortcuts (List<ShortcutInfo> shortcutInfoList)](https://developer.android.com/reference/android/content/pm/ShortcutManager.html#addDynamicShortcuts(java.util.List%3Candroid.content.pm.ShortcutInfo%3E)) 去添加扩大现有的捷径列表。
+- Update: 使用 [updateShortcuts (List<ShortcutInfo> shortcutInfoList) ](https://developer.android.com/reference/android/content/pm/ShortcutManager.html#updateShortcuts(java.util.List%3Candroid.content.pm.ShortcutInfo%3E))去更新现有的捷径列表。 
+- Remove: 使用 [removeDynamicShortcuts (List<String> shortcutIds)](https://developer.android.com/reference/android/content/pm/ShortcutManager.html#removeDynamicShortcuts(java.util.List%3Cjava.lang.String%3E)) 通过 id 删除已有的动态快捷方式。
+
+下面就是一个创建动态快捷方式的例子：
+
+		ShortcutManager shortcutManager = getSystemService(ShortcutManager.class);
+		
+		ShortcutInfo shortcut = new ShortcutInfo.Builder(this, "id1")
+		    .setShortLabel("Web site")
+		    .setLongLabel("Open the web site")
+		    .setIcon(Icon.createWithResource(context, R.drawable.icon_website))
+		    .setIntent(new Intent(Intent.ACTION_VIEW,
+		                   Uri.parse("https://afra55.github.io/")))
+		    .build();
+		
+		shortcutManager.setDynamicShortcuts(Arrays.asList(shortcut));
+
+### 追踪快捷方式的使用
+
+[void reportShortcutUsed (String shortcutId)](https://developer.android.com/reference/android/content/pm/ShortcutManager.html#reportShortcutUsed(java.lang.String))
+
+应用在发布一个快捷方式的时候需要调用这个方法，下面的两种情景都应该调用:
+
+- 用户选择给定ID的快捷方式;
+- 者用户打开 app 手动完成对应于相同的快捷方式的操作比如更新删除该快捷方式。
+
+这样应用程序就能通过这个信息来构建预加载模块，以便在操作时可以立即响应。
