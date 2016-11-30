@@ -33,7 +33,7 @@ permalink: /about/
 
 GitHub：<a href="https://github.com/Afra55" target="_blank">https://github.com/Afra55</a>
 
-Email：<786654260@qq.com>
+Email：<afra55@qq.com>
 
 CSDN：<a href="http://blog.csdn.net/yang786654260" target="_blank">http://blog.csdn.net/yang786654260</a>
 
