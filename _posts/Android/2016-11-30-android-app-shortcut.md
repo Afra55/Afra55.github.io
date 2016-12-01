@@ -76,9 +76,9 @@ Android 版本的 3D TOUCH。
 
 ### [ShortcutManager](https://developer.android.com/reference/android/content/pm/ShortcutManager.html) API 允许操作动态快捷方式（注：是动态，静态无法操作）的方法有以下三种：
 
-1. Publish: 使用 [setDynamicShortcuts (List<ShortcutInfo> shortcutInfoList)](https://developer.android.com/reference/android/content/pm/ShortcutManager.html#setDynamicShortcuts(java.util.List%3Candroid.content.pm.ShortcutInfo%3E)) 方法去重新配置整个列表的动态捷径， 或者使用 [addDynamicShortcuts (List<ShortcutInfo> shortcutInfoList)](https://developer.android.com/reference/android/content/pm/ShortcutManager.html#addDynamicShortcuts(java.util.List%3Candroid.content.pm.ShortcutInfo%3E)) 去添加扩大现有的捷径列表。
-2. Update: 使用 [updateShortcuts (List<ShortcutInfo> shortcutInfoList) ](https://developer.android.com/reference/android/content/pm/ShortcutManager.html#updateShortcuts(java.util.List%3Candroid.content.pm.ShortcutInfo%3E)) 去更新现有的捷径列表。 
-3. Remove: 使用 [removeDynamicShortcuts (List<String> shortcutIds)](https://developer.android.com/reference/android/content/pm/ShortcutManager.html#removeDynamicShortcuts(java.util.List%3Cjava.lang.String%3E)) 通过 id 删除已有的动态快捷方式。
+1. Publish: 使用 `setDynamicShortcuts (List<ShortcutInfo> shortcutInfoList)` 方法去重新配置整个列表的动态捷径， 或者使用 `addDynamicShortcuts (List<ShortcutInfo> shortcutInfoList)` 去添加扩大现有的捷径列表。
+2. Update: 使用 `updateShortcuts (List<ShortcutInfo> shortcutInfoList)` 去更新现有的捷径列表。 
+3. Remove: 使用 `removeDynamicShortcuts (List<String> shortcutIds)` 通过 id 删除已有的动态快捷方式。
 
 下面就是一个创建动态快捷方式的例子：
 
