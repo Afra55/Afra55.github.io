@@ -4,8 +4,18 @@
 	<meta name="baidu-site-verification" content="7b9175a6ef59e3778cdc494d94a3ccc7"/>
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<title>{% if page.title %}{{ page.title }}{% else %}{{ site.title }}{% endif %}</title>
-	<link rel="apple-touch-icon" href="/favicon.ico">
-    <link rel="shortcut icon" type="image/x-icon" href="/favicon.ico">
+
+	<link rel="apple-touch-icon" sizes="16*16" href="/blog_picture/icon/favicon_16X16.ico">
+    <link rel="shortcut icon" sizes="16*16" type="image/x-icon" href="/blog_picture/icon/favicon_16X16.ico">
+    <link rel="apple-touch-icon" sizes="32*32" href="/blog_picture/icon/favicon_32X32.ico">
+    <link rel="shortcut icon" sizes="32*32" type="image/x-icon" href="/blog_picture/icon/favicon_32*32.ico">
+    <link rel="apple-touch-icon" sizes="48*48" href="/blog_picture/icon/favicon_48*48.ico">
+    <link rel="shortcut icon" sizes="48*48" type="image/x-icon" href="/blog_picture/icon/favicon_48*48.ico">
+    <link rel="apple-touch-icon" sizes="64*64" href="/blog_picture/icon/favicon_64*64.ico">
+    <link rel="shortcut icon" sizes="64*64" type="image/x-icon" href="/blog_picture/icon/favicon_64*64.ico">
+    <link rel="apple-touch-icon" sizes="128*128" href="/blog_picture/icon/favicon_128*128.ico">
+    <link rel="shortcut icon" sizes="128*128" type="image/x-icon" href="/blog_picture/icon/favicon_128*128.ico">
+
 	<meta name="description" content="{% if page.excerpt %}{{ page.excerpt | strip_html | strip_newlines | truncate: 160 }}{% else %}{{ site.description }}{% endif %}">
 	
 	<link rel="canonical" href="{{ page.url | replace:'index.html','' | prepend: site.baseurl | prepend: site.url }}">
