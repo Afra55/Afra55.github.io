@@ -10,6 +10,10 @@ description: Android版本的 3D Touch
 * content
 {:toc}
 
+## 本文
+
+[http://afra55.github.io/2016/11/30/android-app-shortcut/](http://afra55.github.io/2016/11/30/android-app-shortcut/)
+
 ## 简介
 
 Android 版本的 3D TOUCH。
