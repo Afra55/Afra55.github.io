@@ -1,10 +1,10 @@
 ---
 layout: post
-title:  "Android App 快捷方式之 Android 版本的 3D Touch"
-date:   2016-11-30 15:07
+title:  "Custom Dilog"
+date:   2016-12-22 15:07
 categories: Android
 comments: true
-description: Android版本的 3D Touch
+description: Custom Dilog
 ---
 
 * content
