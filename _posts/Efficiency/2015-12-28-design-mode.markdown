@@ -67,6 +67,8 @@ description: 设计模式总结!
 
 参照 Android 源码 AlertDialog.java 经典 Builder 模式。
 
+[http://afra55.github.io/2016/12/22/normal-dialog/](http://afra55.github.io/2016/12/22/normal-dialog/)
+
 ### 优点
 
 1. 封装良好。

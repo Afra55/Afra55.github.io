@@ -1,10 +1,10 @@
 ---
 layout: post
-title:  "Custom Dilog"
+title:  "Android Custom Dilog"
 date:   2016-12-22 15:07
 categories: Android
 comments: true
-description: Custom Dilog
+description: Custom Dialog
 ---
 
 * content
@@ -12,6 +12,7 @@ description: Custom Dilog
 
 ## 本文
 
+[http://afra55.github.io/2016/12/22/normal-dialog/](http://afra55.github.io/2016/12/22/normal-dialog/)
 
 
 ## 图示
