@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "Android Custom Dilog"
+title:  "Android Custom Dialog"
 date:   2016-12-22 15:07
 categories: Android
 comments: true
