@@ -12,7 +12,7 @@ description: Android Verification Code View
 
 ## 本文
 
-
+[http://afra55.github.io/2016/12/22/verification_code_view/](http://afra55.github.io/2016/12/22/verification_code_view/)
 
 ## 图示
 
