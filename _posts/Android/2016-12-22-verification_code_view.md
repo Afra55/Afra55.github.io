@@ -18,6 +18,8 @@ description: Android Verification Code View
 
 ![](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/blog_picture/view/VerificationCodeView.png)
 
+![](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/blog_picture/view/VerificationCodeViewTesting.gif)
+
 ## 前情提要
 
 思路是用一个横向的 LinearLayout 包 TextView 展示的。
