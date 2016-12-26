@@ -390,25 +390,25 @@ description: 设计模式总结!
     	控制器, 用于切换状态和执行行为
     */
     public class StateContorller implements State {
-    	private State mState;
+    	private Action mState;
     
-    	public void setState(State s){
+    	public void setState(Action s){
     		mState = s;
     	}
     
     	@Override
     	public void sleep(){
-    		setState(new SleepState);
+    		setState(new SleepState());
     	}
     
     	@Override
     	public void walk(){
-    		setState(new WalkState);
+    		setState(new WalkState());
     	}
     
     	@Override
     	public void eatting(){
-    		setState(new EatingState);
+    		setState(new EatingState());
     	}
     	
     	public void sing(){
