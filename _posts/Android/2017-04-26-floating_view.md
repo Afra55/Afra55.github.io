@@ -12,11 +12,11 @@ description: Android Floating View
 
 ## 本文
 
-[http://afra55.github.io/2016/12/22/verification_code_view/](http://afra55.github.io/2016/12/22/verification_code_view/)
+[http://afra55.github.io/2017/04/26/floating_view/](http://afra55.github.io/2017/04/26/floating_view/)
 
 ## 图示
 
-![](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/FloatViewDemo.gif?raw=true)
+![demo动画](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/FloatViewDemo.gif?raw=true)
 
 ## 前情提要
 
