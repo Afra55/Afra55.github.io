@@ -12,7 +12,7 @@ description: Get android device SN
 
 ## 本文
 
-[http://afra55.github.io/2017/04/26/floating_view/](http://afra55.github.io/2017/04/26/floating_view/)
+[http://afra55.github.io/2017/05/05/get_android_device_sn/](http://afra55.github.io/2017/05/05/get_android_device_sn/)
 
 ## 前情提要
 
@@ -79,7 +79,7 @@ SN 码不能直接获取，需要通过反射的方法获取。
         return null;
     }			
 
-### 获取代码
+### 代码获取 SN 码
 
 		try {
 			String.valueOf(ReflectionUtil.invokeDeclaredMethod(new Build(), "getString", new Object[]{"gsm.serial"}));
