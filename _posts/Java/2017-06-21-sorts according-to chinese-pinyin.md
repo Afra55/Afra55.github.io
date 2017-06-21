@@ -12,7 +12,7 @@ description: Sorts according to Chinese Pinyin！
 
 ## 本文
 
-[http://afra55.github.io/2017/05/05/get_android_device_sn/](http://afra55.github.io/2017/05/05/get_android_device_sn/)
+[http://afra55.github.io/2017/06/21/sorts-according-to-chinese-pinyin/](http://afra55.github.io/2017/06/21/sorts-according-to-chinese-pinyin/)
 
 ## 前情提要
 
