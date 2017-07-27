@@ -12,7 +12,7 @@ description: Drag down to show more
 
 ## 本文
 
-[http://afra55.github.io/2017/05/05/get_android_device_sn/](http://afra55.github.io/2017/05/05/get_android_device_sn/)
+[http://afra55.github.io/2017/07/27/drag_down_to_show_more/](http://afra55.github.io/2017/07/27/drag_down_to_show_more/)
 
 ## 前情提要
 
