@@ -27,7 +27,7 @@ description: Drag down to show more
         </declare-styleable>
 
 
-## 自定义 RecyclerView (大前提需要设置 minHeight， 通过 minHeight 来判断一行到高度)
+## 自定义 RecyclerView (大前提需要设置 minHeight， 通过 minHeight 来判断一行的高度)
 
 这里已经做到了与 adapter 的分离，只要adapter 实现 DragMinHeightAdapterListener 接口即可，详细代码附带注释如下：
 
