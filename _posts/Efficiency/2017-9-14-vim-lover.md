@@ -17,7 +17,9 @@ description: Vim Lover
 # 插件
 
 [https://github.com/tpope/vim-pathogen](https://github.com/tpope/vim-pathogen)
+
 [https://github.com/tpope/vim-commentary](https://github.com/tpope/vim-commentary)
+
 [https://github.com/kana/vim-textobj-entire](https://github.com/kana/vim-textobj-entire)
 
 # 中文乱码
