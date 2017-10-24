@@ -40,6 +40,14 @@ description: Vim Lover
 | {code}        | 字符编码(普通情况三位数字，例如 A 是 065)(u{code} 可输入unicode 编码，例如 ¿ 是 u00bf)         |
 | `<C-a>`        | Control键 + a键                                               |
 |  连续两次命令      | 作用于本行，例如：gUU,guu,dd                                              |
+|  :{start},{end}      |  第{start}行到第{end}行                                            |
+|  :.      |  代表当前行                                           |
+|  :%      |  代表所有行                                           |
+|  `:'<,'>`      |  代表高亮选区                                           |
+|  `:/{start}/,/{end}/`      |  {start}标签所在行到{end}标签所在行，内容如果有特殊字符则需要转义                                           |
+|  {range}      |  代表范围，一行，一块，一个等                                          |
+|  {address}      |  代表地址，一行，一块，一个等                                          |
+
 
 
 # 普通模式 
@@ -87,8 +95,10 @@ description: Vim Lover
 | F{char}        |               查找行内上一处{char}出现的位置(;重复)(,回退)                                    |
 | /pattern        | 在文档中查找下一处的匹配项(n重复)(N回退)                                                  |
 | ?pattern        | 在文档中查找上一处的匹配项(n重复)(N回退)                                                   |
+| {nuber}G        | 跳转到该行行首，不加数字则跳转到文本末尾                                               |
 | ga        | 查看当前字符的编码                                               |
 | gv        | 重选上次的高亮选择区域                                               |
+| gU{motion}        | 大些对应字符                                               |
 | h        | 光标移动到同行上一列                                                |
 | j        | 光标移动到同列下一行                                                  |
 | J        | 把下一行拼接在当前行后面                                                 |
@@ -148,6 +158,17 @@ Ex模式
 | :s/target/replacement       | 替换当前行 {target} 为 {replacement} (&重复)(u回退)                                                 |
 | :%s/target/replacement/g       | 替换所有 {target} 为 {replacement}                                               |
 | :h digraph-table      |     查看二合字母列表                                          |
+| :tabnew      |     创建新标签页                                          |
+| :{number}      |     光标跳转到该行行首                                          |
+| :{number}d      |     删除第{number}行                                          |
+| :join      |     使下一行拼接在本行后面                                          |
+| :p     |     显示本行内容                                          |
+| :0     |     文件开头                                          |
+| :1     |     文件到第一行                                          |
+| :$     |     文件的最后一行                                          |
+| :{range}t{address}    |     把{range}复制到{address}行之后,{range}不写就代表本行                                          |
+| :{range}m{address}    |     把{range}移动到{address}行,{range}不写就代表本行                                          |
+| @:   |     重复上次操作                                          |
 
 # 可视模式
 
@@ -166,6 +187,8 @@ Ex模式
 | V       |    面向行的可视模式                                             |
 | `<C-v>`       |    面向块的可视模式                                             |
 | o       |    切换至高亮的两端                                             |
+| U       |    大写选中内容                                             |
+| u       |    小写选中内容                                             |
 
 
 
