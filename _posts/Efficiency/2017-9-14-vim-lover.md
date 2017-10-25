@@ -12,7 +12,7 @@ description: Vim Lover
 
 # 本文
 
-[http://afra55.github.io/2017/9/14/vim-lover/](http://afra55.github.io/2017/9/14/vim-lover/)
+[http://afra55.github.io/2017/09/14/vim-lover/](http://afra55.github.io/2017/09/14/vim-lover/)
 
 # 插件
 
