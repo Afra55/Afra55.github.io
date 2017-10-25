@@ -150,7 +150,7 @@ description: Vim Lover
 
 ==================================
 
-Ex模式
+Ex模式（按 `<tab>` 键自动补全命令,`<C-d>` 显示可用的补全列表，个人习惯补全设置 `:set wildmode=longest,list`）
 -------
 
 | Keypress        | Command                                                   |
@@ -168,6 +168,7 @@ Ex模式
 | :$     |     文件的最后一行                                          |
 | :{range}t{address}    |     把{range}复制到{address}行之后,{range}不写就代表本行                                          |
 | :{range}m{address}    |     把{range}移动到{address}行,{range}不写就代表本行                                          |
+| :{range}normal {普通命令}    |           在连续{range}包含的行上执行一条普通命令                                    |
 | @:   |     重复上次操作                                          |
 
 # 可视模式
