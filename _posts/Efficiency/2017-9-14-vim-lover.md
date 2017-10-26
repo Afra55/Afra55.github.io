@@ -169,7 +169,9 @@ Ex模式（按 `<tab>` 键自动补全命令,`<C-d>` 显示可用的补全列表
 | :{range}t{address}    |     把{range}复制到{address}行之后,{range}不写就代表本行                                          |
 | :{range}m{address}    |     把{range}移动到{address}行,{range}不写就代表本行                                          |
 | :{range}normal {普通命令}    |           在连续{range}包含的行上执行一条普通命令                                    |
+| `:{range}substitute/{pattern}/{string}/[flags]`    |    substitute 缩写是 s, 把{range}范围内{pattern}出现的地方替换为{string}                                    |
 | @:   |     重复上次操作                                          |
+| `<C-r><C-w>`  |     把光标所在单词插入到命令行                                          |
 
 # 可视模式
 
