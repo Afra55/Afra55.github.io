@@ -27,7 +27,7 @@ description: Vim Lover
 编辑 .vimrc
 添加 set fileencodings=ucs-bom,utf-8,cp936,gb18030,big5,euc-jp,euc-kr,latin1
 
-#提高Ex命令记忆条数
+# 提高Ex命令记忆条数
 
 添加 set history=200
 
@@ -51,6 +51,14 @@ description: Vim Lover
 |  `:/{start}/,/{end}/`      |  {start}标签所在行到{end}标签所在行，内容如果有特殊字符则需要转义                                           |
 |  {range}      |  代表范围，一行，一块，一个等                                          |
 |  {address}      |  代表地址，一行，一块，一个等                                          |
+
+# vim 后台待命
+
+| Keypress        | Command                                                   |
+| ------------- | :-----: |
+| `<C-z>` | 把当前 vim 置于后台待命 |
+| jobs | 查看当前后台待命的 vim 进程 |
+| fg | 唤起 vim 进程 |
 
 
 
@@ -176,6 +184,8 @@ Ex模式（按 `<tab>` 键自动补全命令,`<C-d>` 显示可用的补全列表
 | `:{range}substitute/{pattern}/{string}/[flags]`    |    substitute 缩写是 s, 把{range}范围内{pattern}出现的地方替换为{string}                                    |
 | @:   |     重复上次操作                                          |
 | `<C-r><C-w>`  |     把光标所在单词插入到命令行                                          |
+| :!{commond}  |  执行 shell 命令                                          |
+| :!shell  |  启动 shell 交互窗口                                          |
 
 # 可视模式
 
