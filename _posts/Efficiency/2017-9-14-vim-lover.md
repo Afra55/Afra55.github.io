@@ -22,14 +22,12 @@ description: Vim Lover
 
 [https://github.com/kana/vim-textobj-entire](https://github.com/kana/vim-textobj-entire)
 
-# 中文乱码
+# vimrc通用配置
 
 编辑 .vimrc
-添加 set fileencodings=ucs-bom,utf-8,cp936,gb18030,big5,euc-jp,euc-kr,latin1
-
-# 提高Ex命令记忆条数
-
-添加 set history=200
+添加 `set fileencodings=ucs-bom,utf-8,cp936,gb18030,big5,euc-jp,euc-kr,latin1`
+添加 `cnoremap <expr> %% getcmdtype() == ':' ? expand('%:h'). '/' :'%%'`
+添加 `set history=200`
 
 # 名词简介
 
@@ -52,6 +50,7 @@ description: Vim Lover
 |  {range}      |  代表范围，一行，一块，一个等                                          |
 |  {address}      |  代表地址，一行，一块，一个等                                          |
 |  {n}      |  代表数字                                       |
+|  <TAB>     |  table 制表符键                                      |
 
 # vim 后台待命
 
@@ -207,6 +206,9 @@ Ex模式（按 `<tab>` 键自动补全命令,`<C-d>` 显示可用的补全列表
 | :tabonly | 关闭其他标签页 |
 | :only | 关闭除当前活动窗口外的其他窗口 |
 | :tabedit {filename} | 在新标签页中打开 {filename}, 可省略 {filename} 打开一个空白标签页 |
+| :pwd | 打印工作目录 |
+| :edit {file} | 打开文件 |
+| :find {file} | 打开文件 |
 
 # 可视模式
 
