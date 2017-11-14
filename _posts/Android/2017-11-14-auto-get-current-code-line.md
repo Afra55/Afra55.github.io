@@ -10,6 +10,10 @@ description: Log 打印当前代码行以及当前类
 * content
 {:toc}
 
+## 本文
+
+[http://afra55.github.io/2017/11/14/auto-get-current-code-line/](http://afra55.github.io/2017/11/14/auto-get-current-code-line/)
+
 ## LogUtils
 
 
