@@ -12,7 +12,7 @@ description: Python First Step！
 
 # 本文
 
-[http://afra55.github.io/2017/06/21/sorts-according-to-chinese-pinyin/](http://afra55.github.io/2017/06/21/sorts-according-to-chinese-pinyin/)
+[http://afra55.github.io/2017/11/21/python-first-step/](http://afra55.github.io/2017/11/21/python-first-step/)
 
 # 基础知识
 
