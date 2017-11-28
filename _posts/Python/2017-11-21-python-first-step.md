@@ -58,6 +58,10 @@ If the implementation is easy to explain, it may be a good idea.
 
 Namespaces are one honking great idea -- let's do more of those!
 
+## PEP 8
+
+[https://python.org/dev/peps/pep-0008/](https://python.org/dev/peps/pep-0008/)
+
 ## 注释
 
 注释使用 井号来标志 `#`, `#` 后面的内容都会被解释器忽略
@@ -65,6 +69,10 @@ Namespaces are one honking great idea -- let's do more of those!
 ## 变量
 
 命名只能包含 小写字母 + 数字 + 下划线, 不能以数字开头
+
+## 计算
+
+`**` 代表乘方运算 比如 `2 ** 3` 指 2 的 3次方， 结果是 8
 
 ## 基本类型
 
@@ -157,11 +165,81 @@ reverse() 方法，颠倒当前列表的排列顺序
 
 len() 方法，获取列表的长度
 
+### for
+
     names = ['afra55', 'bfra55', 'cfra55', 'dfra55']
     for name in names:
         print(name)
 
 for 循环用于遍历列表
+
+    for value in range(1, 5):
+        print(value)    # 1 2 3 4 
+
+range() 方法用于生成一系列数字： range(1, 5) 代表 1～4
+
+    numbers = list(range(1, 5))
+    print(numbers)      # [1, 2, 3, 4]
+
+list() 方法将 range() 的结果转化为列表
+
+    numbers = list(range(2, 11, 3))
+    print(numbers)  # [2, 5, 8]
+
+range(2, 11, 3) 指 从 2 开始获取值，然后每获取一次加一次 3，直到超出 数值 11
+
+    numbers = list(range(1, 11))
+    print(numbers)          # [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    print(min(numbers))     # 1
+    print(max(numbers))     # 10
+    print(sum(numbers))     # 55
+
+min() 方法获取数字列表最小的数值
+
+max() 方法获取数字列表最大的数值
+
+sum() 方法获取数字列表的所有数值只和
+
+### 列表解析
+
+    numbers = [value ** 2 for value in range(1, 11)]
+    print(numbers)  # [1, 4, 9, 16, 25, 36, 49, 64, 81, 100]
+
+`[value ** 2 for value in range(1, 11)]` 这种语法称之为列表解析，用于高效创建列表，以方括号扩起来，表达式是 `value ** 2` 获取平方值，后面的 for 循环用于提供 value 值给表达式
+
+### 切片
+
+对切片的修改不会印象原列表，这里的切片即代表了一个副本，这与 golang 有差别
+
+    names = ['Afra55', 'Bfra55', 'Cfra55', 'Dfra55', 'Fra55']
+    print(names[1:3])   # ['Bfra55', 'Cfra55']
+    print(names[:4])    # ['Afra55', 'Bfra55', 'Cfra55', 'Dfra55']
+    print(names[2:])    # ['Cfra55', 'Dfra55', 'Fra55']
+    print(names[-3:])   # ['Cfra55', 'Dfra55', 'Fra55']
+    print(names[:-3])   # ['Afra55', 'Bfra55']
+
+`names[1:3]` 指 names 列表中的部分，即包含索引为 1～2 的元素副本
+
+`names[:4]` 指 names 列表中的部分，从列表开头到索引是 3 的元素副本
+
+`names[2:]` 指 names 列表的部分，从索引为 2 到末尾的元素副本
+
+`names[-3:]` 指 names 列表的部分，从倒数第3个到末尾的元素副本
+
+`names[:-3]` 指 names 列表的部分，从列表开头到倒数第4个的元素副本
+
+`names[:]` 指 整个列表的副本
+
+## 元组
+
+不能修改的值即为不可变的，不可变的列表即为元组，以圆括号 `()` 来标志 例如：names = ('Afra55', 'Bfra55')
+
+
+
+
+
+
+
 
 
 
