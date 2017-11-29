@@ -235,6 +235,60 @@ sum() 方法获取数字列表的所有数值只和
 不能修改的值即为不可变的，不可变的列表即为元组，以圆括号 `()` 来标志 例如：names = ('Afra55', 'Bfra55')
 
 
+## if
+
+    names = ('Afra55', 'Bfra55', 'Cfra55', 'Dfra55', 'Fra55')
+    for name in names:
+        if name == 'Bfra55':
+            print('I find you : ' + name)
+        elif name == 'Dfra55':
+            print('Hi boy : ' + name)
+        else:
+            print(name)
+    # Afra55
+    # I find you : Bfra55
+    # Cfra55
+    # Hi boy : Dfra55
+    # Fra55
+
+
+    age = 22
+    print(30 > age > 20)            # True
+    print(age < 30 and age > 20)    # True
+    print(age < 30 or age > 20)     # True
+
+与 and
+
+或 or
+
+    names = ('Afra55', 'Bfra55', 'Cfra55', 'Dfra55', 'Fra55')
+    print('Afra55' in names)    # True
+    print('B' in names)         # False
+    print('Bfra55' not in names) # False
+
+in 检查值是否包含在列表中
+
+not in 检查值是否不包含在列表中
+
+### 布尔表达式
+
+True
+
+False
+
+    name = []
+    if name:    # 判断列表是否是空列表
+        print('非空列表')
+    else:
+        print('空列表')
+
+## 字典
+
+    afra = {'first': 'victor', 'second': 24}
+    print(afra['first'])        # 'victor'
+    print(afra['second'])       # 24
+
+字典是一系列键值对，任何类型都可以存储为值，字典用 花括号 {} 包裹，键值之间用冒号分割，键值对之间用逗号分隔
 
 
 
