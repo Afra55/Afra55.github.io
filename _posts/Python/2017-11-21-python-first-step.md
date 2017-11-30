@@ -284,18 +284,68 @@ False
 
 ## 字典
 
-    afra = {'first': 'victor', 'second': 24}
+    afra = {
+        'first': 'victor', 
+        'second': 24
+        }
     print(afra['first'])        # 'victor'
     print(afra['second'])       # 24
 
 字典是一系列键值对，任何类型都可以存储为值，字典用 花括号 {} 包裹，键值之间用冒号分割，键值对之间用逗号分隔
 
+    afra55 = {
+        'name': 'victor', 
+        'age': 25
+        }
+    print(afra55)               # {'name': 'victor', 'age': 25}
+    afra55['weight'] = 144
+    afra55['height'] = 177
+    print(afra55)               # {'name': 'victor', 'age': 25, 'weight': 144, 'height': 177}
+    del afra55['age']
+    print(afra55)               # {'name': 'victor', 'weight': 144, 'height': 177}
 
+`afra55['height'] = 177` 这样的写法即新增键值对
 
+`del afra55['age']` 指 删除 字典 afra55 中键为 'age' 的键值对
 
+### 遍历字典
 
+    people_one = {
+        'first_name': 'victor',
+        'last_name': 'afra55',
+        'age': 25,
+        'city': "xi'an"
+        }
+    for key, value in people_one.items():
+        print('Key: ' + key + ', value: ' + str(value))
 
+    # Key: first_name, value: victor
+    # Key: last_name, value: afra55
+    # Key: age, value: 25
+    # Key: city, value: xi'an
 
+`for 键，值 in 字典.items():` 遍历字典
+
+    for key in people_one.keys():
+        print(key)
+
+`for 键 in 字典.keys():` 遍历字典中的所有键, 相当于 `for 键 in 字典:`
+
+    if 'ff' in people_one.keys():
+        print(people_one['ff'])
+    elif 'age' in people_one.keys():
+        print(people_one['age'])        # 25
+
+如果需要排序，可以使用 sorted() 方法获取字典 key 特定排序的 副本： `for key in sorted(people_one.keys()):`
+
+    for value in people_one.values():
+        print(value)
+
+`for 值 in 字典.values():` 遍历字典中所有的值
+
+可以使用 集合 set 来获取字典中的唯一值，去除重复项：`for 值 in set(字典.values()):`
+
+字典值和列表值可以互相包含
 
 
 
