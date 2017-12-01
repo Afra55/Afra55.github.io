@@ -347,5 +347,44 @@ False
 
 字典值和列表值可以互相包含
 
+## 用户输入
+
+    message = input('what do you want to do?\n')       # 输入 232323
+    print('oh,2323 ' + message)                        # oh, 232323
+
+input() 函数让程序暂停运行，等待用户输入文本，并存储为一个变量，类型是字符串
+
+## while
+
+    number = 1
+    while number < 5:
+        print(number)
+        number += 1
+
+    message = ''
+    while message != 'quit':
+        message = input('Enter cmd: ')
+        print(message)
+
+    while True:
+        message = input('Enter cmd: ')
+        if message == 'quit':
+            print(message)
+            break
+        else:
+            print('wrong key')
+
+使用 break 跳出循环
+
+使用 continue 返回循环开头
+
+    names = ['Afra55', 'Bfra55', 'Cfra55', 'Dfra55', 'Fra55']
+    while names:            # 在列表为空时退出循环
+        print(names.pop())
+
+
+
+
+
 
 
