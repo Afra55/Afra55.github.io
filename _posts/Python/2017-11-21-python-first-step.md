@@ -66,6 +66,8 @@ Namespaces are one honking great idea -- let's do more of those!
 
 注释使用 井号来标志 `#`, `#` 后面的内容都会被解释器忽略
 
+""" 注释 """ 三个双引号之间是注释，可跨行
+
 ## 变量
 
 命名只能包含 小写字母 + 数字 + 下划线, 不能以数字开头
@@ -381,6 +383,29 @@ input() 函数让程序暂停运行，等待用户输入文本，并存储为一
     names = ['Afra55', 'Bfra55', 'Cfra55', 'Dfra55', 'Fra55']
     while names:            # 在列表为空时退出循环
         print(names.pop())
+
+
+## 函数
+
+    def greet_user(username):               # 形参
+        print('Hello! ' + username)
+    greet_user(input('input your name: '))  # 实参
+
+    def greet_user(username, age):
+        print('Hello! ' + username.title() + " you are " + age)
+    name = input('Name: ')
+    age = input('age: ')
+    greet_user(age=age, username=name)      # 关键字实参
+
+关键字实参 不用考虑传参顺序
+
+    def greet_user(username, age='22'):     # age 参数拥有默认值，调用函数时可不传 age
+        print('Hello! ' + username.title() + " you are " + age)
+    name = input('Name: ')
+    greet_user(name)                        # 这个时候最好使用关键字实参
+
+
+
 
 
 
