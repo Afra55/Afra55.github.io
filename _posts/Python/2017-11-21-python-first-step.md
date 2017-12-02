@@ -404,8 +404,67 @@ input() 函数让程序暂停运行，等待用户输入文本，并存储为一
     name = input('Name: ')
     greet_user(name)                        # 这个时候最好使用关键字实参
 
+    def get_full_name(first, second):
+        return first + ' ' + second
+    fullname = get_full_name('Victor', 'Afra55')
+    print(fullname)         # Victor Afra55
 
+return 可返回任何类型的值
 
+### 传递列表
+
+    def greet_users(temps):
+    i = 0
+    while i < len(temps):
+        temps[i] = 'I get you ' + temps[i]
+        i += 1
+    names = ['Afra55', 'Bfra55', 'Cfra55', 'Dfra55', 'Fra55']
+    print(names)                    # ['Afra55', 'Bfra55', 'Cfra55', 'Dfra55', 'Fra55']
+    greet_users(names)
+    print(names)                    # ['I get you Afra55', 'I get you Bfra55', 'I get you Cfra55', 'I get you Dfra55', 'I get you Fra55']
+
+在函数中对传递进来的列表进行的修改,会修改原列表的值，是永久性的
+
+如果不想改变原列表，则传递副本即可，例如：`names[:]`
+
+### 传递未知数量的参数
+
+    def chat_friends(*friends):             # * 让 python 创建了一个 名为 friends 的 空元组，传人的参数都封装到了 friends 中  
+        print(friends)
+    chat_friends('Afra')                    # ('Afra',)
+    chat_friends('Afra', 'Bfra', 'Cfra')    # ('Afra', 'Bfra', 'Cfra')
+
+如果需要传入不同参数，则 位置实参或者关键字实参都要在 `*friends` 之前：`def chat_friends(me, *friends):` 
+
+    def create_people(name, **info):                        # ** 让 python 创建了一个 名为 info 的 空字典，传参类型是 键值对 key=value
+        print(name)
+        print(info)
+    create_people('Afra', sex='man', age='22', space='af')  # Afra
+                                                            # {'sex': 'man', 'age': '22', 'space': 'af'}
+
+### 在模块中存储函数
+
+模块，即扩展名为 .py 的文件
+
+import module_name 用于倒入模块, 然后就可以使用该模块下的函数： module_name.function()
+
+from module_name import function_name_0, function_name_1 从模块中倒入特定的（多个）函数, 然后就可以直接使用该方法：function_name_0()
+
+from module_name import function_name as other_name 其中 as 用于给函数指定别名 other_name，以避免命名冲突
+
+import module_name as other_module_name 其中 as 用于给 模块起个别名
+
+from module_name import * 倒入模块中的所有函数，如果有同名函数或变量，当前文件中的函数或变量会覆盖倒入模块的函数或变量，不建议这种操作
+
+### 建议
+
+给形参指定默认值时，或传入关键字实参时，等号两边不要有空格
+
+使用两个空行将函数分隔开
+
+import 应在文件开头
+
+## 类
 
 
 
