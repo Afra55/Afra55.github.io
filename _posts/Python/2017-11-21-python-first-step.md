@@ -66,7 +66,7 @@ Namespaces are one honking great idea -- let's do more of those!
 
 注释使用 井号来标志 `#`, `#` 后面的内容都会被解释器忽略
 
-""" 注释 """ 三个双引号之间是注释，可跨行
+""" 注释 """ 三个双引号之间是注释，可跨行，文档字符串
 
 ## 变量
 
@@ -465,6 +465,124 @@ from module_name import * 倒入模块中的所有函数，如果有同名函数
 import 应在文件开头
 
 ## 类
+
+类名采用驼峰命名法
+
+实例名和模块名使用小写字母加下划线的方式命名
+
+在类中使用一个空行来分隔方法
+
+使用两个空行来分隔类
+
+    class People:            # 首字母大写的名称专指 类
+        """类"""
+        def __init__(self, name, age):    # 当创建这个类当实例时，会自动运行初始化方法 __init__()
+            """初始化方法"""
+            self.name = name
+            self.age = age
+        def sing(self):
+            print(self.name + " sing a song!")
+        def age_info(self):
+            print(self.name + " age is " + self.age)
+
+初始化方法 __init__() init 前后各有两个下划线，这是规定
+
+类中的每个方法的第一个形数都是 self 用于指向实例本身，以便访问类中的方法和属性，self 自动传递，开发者不需要传递它
+
+    people_one = People('Afra', 22)
+    people_one.sing()           # Afra sing a song!
+    people_one.age_info()       # Afra age is 22
+    print(people_one.name)      # Afra
+    print(people_one.age)       # 22
+
+初始化方法隐式的包含retrun语句，用于返回实例
+
+对象名.方法
+
+对象名.属性
+
+### 继承
+
+    class Person:
+        def __init__(self, name, age, sex):
+            self.name = name
+            self.age = age
+            self.sex = sex
+        def print_info(self):
+            print(self.name + " " + str(self.age) + " " + self.sex)
+
+
+    class Man(Person):
+        def __init__(self, name, age):
+            super().__init__(name, age, '男')
+
+
+    class Woman(Person):
+        def __init__(self, name, age):
+            super().__init__(name, age, '女')
+
+
+    man = Man('Afra', 23)
+    man.print_info()            # Afra 23 男
+
+    woman = Woman('Bfra', 23)
+    woman.print_info()          # Bfra 23 女
+
+`class 子类名(父类名):` 继承，子类继承父类时，同时也获得了父类的所有方法和属性
+
+super() 用于调用父类的方法或属性
+
+父类与子类必须在同一文件中，且父类位于子类之前
+
+必要的时候，重写父类方法
+
+属性也可以是一个对象
+
+### 导入类
+
+    from common import Person
+
+`from module_name import class_name， class_name_1, class_name_2` 导入类, 多个点时候用逗号分隔
+
+    import common
+
+`import module_name` 导入整个模块，这样可以使用模块中的所用函数和类, 最优选, 以 module_name.function_name() , module_name.class_name 引用方法或类
+
+`from module_name import *` 导入模块中的所有类， 不推荐
+
+## Python 标准库
+
+标准库的内容很丰富，不断的探索，才是乐趣的所在
+
+[https://pymotw.com/3/](https://pymotw.com/3/)
+
+    from collections import OrderedDict
+    favorite_languages = OrderedDict()
+    favorite_languages['Afra55'] = 'python'
+    favorite_languages['Bfra55'] = 'java'
+    favorite_languages['Cfra55'] = 'golong'
+    favorite_languages['Dfra55'] = 'ruby'
+    for name, language in favorite_languages.items():
+        print(name.title() + "'s favorite language is " + language.title() + ".")
+
+
+    # Afra55's favorite language is Python.
+    # Bfra55's favorite language is Java.
+    # Cfra55's favorite language is Golong.
+    # Dfra55's favorite language is Ruby.
+
+OrderedDict 实例的行为几乎与字典相同，不同的是，OrderedDict 记录了 添加键值对的顺序
+
+    from random import randint
+    x = randint(1, 6)
+    print(x)    # [1, 6] 的随机数字
+
+
+
+
+
+
+
 
 
 
