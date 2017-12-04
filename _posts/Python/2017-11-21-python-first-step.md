@@ -211,6 +211,7 @@ sum() 方法获取数字列表的所有数值只和
 
 ### 切片
 
+
 对切片的修改不会印象原列表，这里的切片即代表了一个副本，这与 golang 有差别
 
     names = ['Afra55', 'Bfra55', 'Cfra55', 'Dfra55', 'Fra55']
@@ -231,6 +232,8 @@ sum() 方法获取数字列表的所有数值只和
 `names[:-3]` 指 names 列表的部分，从列表开头到倒数第4个的元素副本
 
 `names[:]` 指 整个列表的副本
+
+字符串也可以使用切片
 
 ## 元组
 
@@ -576,6 +579,132 @@ OrderedDict 实例的行为几乎与字典相同，不同的是，OrderedDict �
     from random import randint
     x = randint(1, 6)
     print(x)    # [1, 6] 的随机数字
+
+
+## 文件
+
+    with open('file_path/file_name.txt') as file_object:    # windows 系统中 ，路径间隔符号是反斜杠 \
+        contents = file_object.read()
+        print(contents)
+
+open() 函数即，打开文件，返回一个表示文件的对象，传入的参数是要打开的文件的路径
+
+with 关键字的意思是，在不需要访问该文件时，自动将其关闭，该文件仅在 with 代码块内使用
+
+如果不使用 with 则需要使用 close() 来关闭文件
+
+read() 函数用于读取文件的全部内容，并将内容以字符串的形式返回
+
+read() 函数读取到文件末尾时会返回一个空字符串，print 打印出来就是一个空行
+
+    print(r'\n\tfffff')     # \n\tfffff
+
+在字符串前面加 r 代表该字符串内部没有转移字符，都是原始字符
+
+### 逐行读取
+
+    with open(r'file_name.txt') as file_object:
+        for line in file_object:
+            print(line)
+
+可以使用for 循环来遍历每一行内容，注意每一行的结尾都有一个换行符
+
+    with open(r'pi_digits.txt') as file_object:
+        lines = file_object.readlines()     
+
+readlines() 函数从文件中读取每一行，存储在一个列表中，并返回该列表
+
+
+### 写入文件
+
+    with open(r'file_name.txt', 'w') as file_object:
+        file_object.write("i love python!")
+
+如果要写入文件，则需要给open() 函数出入第二个实参打开模式('r','w','r+','a'), 以所需的模式打开 这个文件
+
+读取模式 ('r')
+
+写入模式 ('w'), 会在返回该文件对象的时候，清空文件的内容, 慎用
+
+读取和写入模式 ('r+')
+
+附加模式 ('a')，将内容附加在原文件所有内容之后
+
+如果写入的文件不存在，open() 函数会自动创建这个文件
+
+write() 函数用于写入内容到文件, 只能写入字符串
+
+## 异常
+
+异常，是一个特殊的对象，用于管理程序运行期间发生的错误
+
+如果没有对异常进行处理，程序会停止，并显示错误信息
+
+    try:
+        print(str(5/0))
+    except ZeroDivisionError:
+        print('wrong')
+
+使用 try-except 代码块捕获异常
+
+    try:
+        answer = 5 / 1
+    except ZeroDivisionError:
+        print('wrong')
+    else:
+        print(answer)
+
+try-except-else 其中 try 代码块成功执行的代码都应该放到 else 代码块中去使用
+
+    try:
+        answer = 5 / 0
+    except ZeroDivisionError:
+        pass
+    else:
+        print(answer)
+
+关键字 pass 告诉 python 这个地方什么都不用做
+
+    msg = 'I have a word what i can not read, please help me check this word'
+    print(msg.count('word'))        # 2
+
+count() 函数用于返回 该字符串包含特定 字符串 的个数
+
+## 模块 json 存储数据
+
+    import json
+
+    filename = 'file/json_file.json'
+
+    names = ['Afra55', 'Bfra55', 'Cfra55', 'Dfra55', 'Fra55']
+
+    with open(filename, 'w') as file_obj:
+        json.dump(names, file_obj)  # 存储了一个列表
+
+    with open(filename) as file_obj:
+        print(file_obj.read())      # ["Afra55", "Bfra55", "Cfra55", "Dfra55", "Fra55"]
+
+json.dump(存储的数据，用于存储数据的文件对象) 将数据存储到文件中，通常文件扩展名实 .json 
+
+    import json
+
+    filename = 'file/json_file.json'
+
+    with open(filename) as file_obj:
+        temp_names = json.load(file_obj)    # 返回了一个列表
+
+    print(temp_names)   # ['Afra55', 'Bfra55', 'Cfra55', 'Dfra55', 'Fra55']
+
+json.load(文件对象) 读取文件并存储到变量中返回
+
+## 测试代码
+
+
+
+
+
+
+
 
 
 
