@@ -699,7 +699,131 @@ json.load(文件对象) 读取文件并存储到变量中返回
 
 ## 测试代码
 
+单元测试用于检查某个函数的某个功能有没有问题
 
+测试用例是一组单元测试
+
+全覆盖测试，包含一整套单元测试，涉及各种可能性
+
+    def get_fullname(first, last):
+        fullname = first + ' ' + last
+        return fullname.title()
+
+对上面这个方法进行单元测试，使用 公共库 unittest 
+
+    import unittest
+
+    class NamesTestCase(unittest.TestCase):
+        def test_first_last_name(self):
+            fullname = get_fullname('one', 'two')
+            self.assertEqual(fullname, 'one two'.title())
+
+
+    unittest.main()
+
+测试类必须继承 unittest.TestCase 
+
+当运行时，所有以 test 开头的方法都将自动运行
+
+assert 断言 
+
+assertEqual() 用于检查结果是否与预期相符
+
+unittest.main() 让 python 运行这个文件中的测试
+
+### 常用断言
+
+
+| 方法        | 含义                                                   |
+| ------------- | :----- |
+| assertEqual(a, b) | a == b  |
+| assertNotEqual(a, b) | a != b |
+| assertTrue(a) | a == True |
+| assertFalse(a) | a == False |
+| assertIn(item, list) | if item in list |
+| assertNotIn(item, list) | if item not in list |
+
+### 测试类
+
+    class People:
+
+        def __init__(self, first_name, last_name, age):
+            self.first_name = first_name
+            self.last_name = last_name
+            self.age = age
+            self.books = []
+
+        def show_info(self):
+            print(self.first_name + ' ' + self.last_name + ' ' + str(self.age))
+
+        def store_book(self, book):
+            self.books.append(book)
+
+        def show_books(self):
+            i = 1
+            for book in self.books:
+                print(str(i) + ':' + book)
+
+测试上面的类
+
+    import unittest
+
+
+    class TestPeople(unittest.TestCase):
+
+        def test_store_book(self):
+            people = People('one', 'two', 22)
+            people.store_book('Python')
+            self.assertIn('Python', people.books)
+
+        def test_store_four_book(self):
+            people = People('one', 'two', 22)
+            books = ['Python', 'Ruby', 'Java', 'Go']
+            for book in books:
+                people.store_book(book)
+            for book in books:
+                self.assertIn(book, people.books)
+
+
+    unittest.main()
+
+类的测试需要实例化对象, 上面对每个测试方法都创建了一个实例
+
+    import unittest
+
+
+    class TestPeople(unittest.TestCase):
+
+        def setUp(self):
+            self.people = People('one', 'two', 22)
+            self.books = ['Python', 'Ruby', 'Java', 'Go']
+
+        def test_store_book(self):
+            self.people.store_book('Python')
+            self.assertIn('Python', self.people.books)
+
+        def test_store_four_book(self):
+            for book in self.books:
+                self.people.store_book(book)
+            for book in self.books:
+                self.assertIn(book, self.people.books)
+
+
+    unittest.main()
+
+setUp() 方法，创建测试类的属性，这些属性可以在这个类中的任何地方使用
+
+### 测试结果
+
+测试通过 `..`
+
+测试引发错误 `E`
+
+测试断言失败 `F`
+
+###
+
+一些人，先写测试用例，再写函数或类
 
 
 
