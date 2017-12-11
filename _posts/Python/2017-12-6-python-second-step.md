@@ -12,7 +12,7 @@ description: Python Second Step！
 
 # 本文
 
-[http://afra55.github.io/2017/12/6/python-second-step/](http://afra55.github.io/2017/12/6/python-second-step/)
+[http://afra55.github.io/2017/12/06/python-second-step/](http://afra55.github.io/2017/12/06/python-second-step/)
 
 
 # 项目
