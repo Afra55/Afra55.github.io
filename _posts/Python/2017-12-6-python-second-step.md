@@ -77,11 +77,17 @@ pygame 的颜色以 RGB（0-255）值指定，红（255, 0, 0）, 绿（0, 255, 
 
 surface 的 fill() 方法接受一个颜色实参，来设置背景的填充颜色: `screen.fill(bg_color)`
 
+`def fill(self, color, rect=None, special_flags=0)` 如果传入 rect 则在 rect 位置区域上绘制背景 color
+
 surface 的 blit(surface， rect) 方法根据指定的位置 rect 绘制实参 surfcae 到调用这个方法的 surface 上
+
+### 图片
 
 创建一个图片 surface : `pygame.image.load_basic('images/view.bmp')`
 
 获取 surface 的 rect 属性： `image.get_rect()`, rect 包含 x, y, center, centerx, centery, top, bottom, left, right, height, width
+
+`rect.collidepoint(x, y)` 返回一个 布尔类型，用于判断 （x, y） 这个点是否在 rect 区域内
 
 显示所有的绘制：`pygame.display.flip()`
 
@@ -121,7 +127,32 @@ spritecollideany 方法第一个实参是精灵，第二个是编组，用于检
 
 `sleep(seconds)`  让程序睡眠 seconds 秒
 
+### 文本
 
+`import pygame.ftfont` pygame.ftfont 能够再屏幕上渲染文本
+
+`font = pygame.ftfont.SysFont(None, 48)` 返回一个 FontType 指用什么字体来渲染文本， 实参None指使用默认字体， 48指文本等字号，详细配置看文档
+
+`msg_image = font.render(msg, True, self.text_color, self.button_color)`
+
+`def render(self, text, antialias, color, background=None)` 
+将 text 文本转换为图像，并返回图像 surface，antialias 布尔类型是否开启反锯齿功能， color 指文本颜色， background 指背景色（默认是透明色）
+
+`not Flast == True`
+
+`not True == False`
+
+`not` 类似 java 中的 `!`
+
+`def round(number, ndigits=None)` round() 让小数精确到小数点后 ndigits 位，如果 ndigits 为负数， round() 将圆整到最近的 10,100,100 等多整数倍
+
+`"{:,}".format(rounded_score)` 将数值转化为字符串时，在其中插入逗号，例如 1,000,000
+
+## 小结
+
+Python编程 从入门到实践 里面的打飞机游戏很有意思，做完后有了更深一层的认识 
+
+https://github.com/Afra55/alien_invasion
 
 
 
