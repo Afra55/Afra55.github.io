@@ -383,9 +383,7 @@ requests 让 Python 向网站请求信息并检查返回的响应
 
 r.status_code 属性是返回码，用于判断是否请求成功, 200 即请求成功
 
-### https://news.ycombinator.com
 
-在这个网站获取文章
 
 ## 附录
 
