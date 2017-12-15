@@ -129,14 +129,38 @@ MacOs `pip3 install --user pygal`
 Windows `python -m pip install --user pygal`
 
 ### 绘制直方图
-
-    bar = pygal.Bar()   # 获取 Bar 条形图
+    
+    my_config = pygal.Config()      # Config() 可以配置各种参数，具体看源码
+    my_config.x_label_rotation = 45     # 横轴刻度以 斜 45度角展示
+    bar = pygal.Bar(my_config)   # 获取 Bar 条形图
     bar.title = 'Title'     # 图标标题
     bar.x_labels = ['1', '2', '3', '4', '5', '6']   # 横轴刻度值
     bar.x_title = "X Title"     # 横轴标题
     bar.y_title = "Y Title"     # 纵轴标题
     bar.add('Values Name', value_list)  # 第一个实参代表这个值的含义，第二个实参是个列表代表条形图的纵轴值
     bar.render_to_file('test_visual.svg')      # 把图标渲染成 svg 格式的文件保存起来
+
+### 可以自定义提示内容
+
+    value_list = [
+        {'value': 110, 'label': 'Label1'},
+        {'value': 112, 'label': 'Label2'},
+        {'value': 132, 'label': 'Label2'}
+    ]
+    bar.add('Values Name', value_list)
+
+这样鼠标交互时，就会提示 自定义的 lable 内容, 需要严格按照 {'value': value, 'label': babel} 形式写
+
+### 添加可点击链接
+
+    values = [
+        {'value': 110, 'label': 'Label1', 'xlink': 'http://afra55.github.io'},
+        {'value': 112, 'label': 'Label2'},
+        {'value': 132, 'label': 'Label2'}
+    ]
+    bar.add('Values Name', value_list)
+
+这样鼠标交互时，单机第一条形就可以跳转到指定的链接上， 是可选内容, 需要严格按照 {'value': value, 'label': babel, 'xlink': link} 形式写
 
 ### World map 世界地图
 
@@ -334,6 +358,93 @@ test.json
     %X 本地相应的时间表示
     %Z 当前时区的名称
     %% %号本身
+
+## Web API
+
+获取 GitHub 当前托管的 Python 项目，按照 star 数排序
+[https://api.github.com/search/repositories?q=language:python&sort=stars](https://api.github.com/search/repositories?q=language:python&sort=stars)
+
+### requests
+
+    pip3 install --user requests
+
+requests 让 Python 向网站请求信息并检查返回的响应
+
+    import requests
+
+
+    url = 'https://api.github.com/search/repositories?q=language:python&sort=stars'
+    r = requests.get(url)   # 执行 Get 请求
+    print('Status code:', r.status_code)    # Status code: 200
+
+    request_dict = r.json()     # 转换返回的 json字串为一个对象， 这个响应返回的是字典类型的 json 数据
+
+    print(request_dict.keys())  # dict_keys(['total_count', 'incomplete_results', 'items'])
+
+r.status_code 属性是返回码，用于判断是否请求成功, 200 即请求成功
+
+### https://news.ycombinator.com
+
+在这个网站获取文章
+
+## 附录
+
+    import requests
+
+
+    url = 'https://api.github.com/search/repositories?q=language:python&sort=stars'
+    r = requests.get(url)   # 执行 Get 请求
+    print('Status code:', r.status_code)    # Status code: 200
+
+    request_dict = r.json()     # 转换返回的 json字串为一个对象， 这个响应返回的是字典类型的 json 数据
+
+    print('Total repositories: ', request_dict['total_count'])
+
+    repo_dicts = request_dict['items']
+    print('Repositories returned:', len(repo_dicts))
+
+    with open(r'python_most_like_top_30.txt', 'a') as file_object:
+        file_object.write("| name | homepage | html_nrl | description |\n")
+        file_object.write("| :-------- | :-------- | :-------- | :-------- |\n")
+        for item in repo_dicts:
+            file_object.write("| {} | {} | {} | {} |\n".format(
+                item['name'], str(item['homepage']), item['html_url'], str(item['description'])))
+
+2017.12.15 Github 上 Python 项目 star top 30
+
+| name | homepage | html_nrl | description |
+| :-------- | :-------- | :-------- | :-------- |
+| awesome-python | https://awesome-python.com/ | https://github.com/vinta/awesome-python | A curated list of awesome Python frameworks, libraries, software and resources |
+| httpie | https://twitter.com/clihttp | https://github.com/jakubroztocil/httpie | Modern command line HTTP client – user-friendly curl alternative with intuitive UI, JSON support, syntax highlighting, wget-like downloads, extensions, etc.  https://httpie.org |
+| thefuck |  | https://github.com/nvbn/thefuck | Magnificent app which corrects your previous console command. |
+| youtube-dl | http://rg3.github.io/youtube-dl/ | https://github.com/rg3/youtube-dl | Command-line program to download videos from YouTube.com and other video sites |
+| flask | http://flask.pocoo.org/ | https://github.com/pallets/flask | A microframework based on Werkzeug, Jinja2 and good intentions |
+| django | https://www.djangoproject.com/ | https://github.com/django/django | The Web framework for perfectionists with deadlines. |
+| requests | http://python-requests.org | https://github.com/requests/requests | Python HTTP Requests for Humans™ ✨🍰✨ |
+| awesome-machine-learning | None | https://github.com/josephmisiti/awesome-machine-learning | A curated list of awesome Machine Learning frameworks, libraries and software. |
+| ansible | https://www.ansible.com/ | https://github.com/ansible/ansible | Ansible is a radically simple IT automation platform that makes your applications and systems easier to deploy. Avoid writing scripts or custom code to deploy and update your applications— automate in a language that approaches plain English, using SSH, with no agents to install on remote systems. |
+| models |  | https://github.com/tensorflow/models | Models and examples built with TensorFlow |
+| scrapy | https://scrapy.org | https://github.com/scrapy/scrapy | Scrapy, a fast high-level web crawling & scraping framework for Python. |
+| scikit-learn | http://scikit-learn.org | https://github.com/scikit-learn/scikit-learn | scikit-learn: machine learning in Python |
+| keras | http://keras.io/ | https://github.com/keras-team/keras | Deep Learning for humans |
+| shadowsocks |  | https://github.com/shadowsocks/shadowsocks | None |
+| big-list-of-naughty-strings | None | https://github.com/minimaxir/big-list-of-naughty-strings | The Big List of Naughty Strings is a list of strings which have a high probability of causing issues when used as user-input data. |
+| system-design-primer |  | https://github.com/donnemartin/system-design-primer | Learn how to design large-scale systems. Prep for the system design interview.  Includes Anki flashcards. |
+| certbot |  | https://github.com/certbot/certbot | Certbot is EFF's tool to obtain certs from Let's Encrypt and (optionally) auto-enable HTTPS on your server.  It can also act as a client for any other CA that uses the ACME protocol. |
+| XX-Net |  | https://github.com/XX-net/XX-Net | a web proxy tool |
+| incubator-superset |  | https://github.com/apache/incubator-superset | Apache Superset (incubating) is a modern, enterprise-ready business intelligence web application |
+| you-get | https://you-get.org/ | https://github.com/soimort/you-get | :arrow_double_down: Dumb downloader that scrapes the web |
+| CppCoreGuidelines | http://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines | https://github.com/isocpp/CppCoreGuidelines | The C++ Core Guidelines are a set of tried-and-true guidelines, rules, and best practices about coding in C++ |
+| YouCompleteMe | http://valloric.github.io/YouCompleteMe/ | https://github.com/Valloric/YouCompleteMe | A code-completion engine for Vim |
+| Deep-Learning-Papers-Reading-Roadmap |  | https://github.com/songrotek/Deep-Learning-Papers-Reading-Roadmap | Deep Learning papers reading roadmap for anyone who are eager to learn this amazing tech! |
+| sentry | https://sentry.io | https://github.com/getsentry/sentry | Sentry is a cross-platform crash reporting and aggregation platform. |
+| tornado | http://www.tornadoweb.org/ | https://github.com/tornadoweb/tornado | Tornado is a Python web framework and asynchronous networking library, originally developed at FriendFeed. |
+| cpython | https://www.python.org/ | https://github.com/python/cpython | The Python programming language |
+| reddit |  | https://github.com/reddit/reddit | historical code from reddit.com |
+| python-patterns |  | https://github.com/faif/python-patterns | A collection of design patterns/idioms in Python |
+| macOS-Security-and-Privacy-Guide |  | https://github.com/drduh/macOS-Security-and-Privacy-Guide | A practical guide to securing macOS. |
+| incubator-mxnet | http://mxnet.io | https://github.com/apache/incubator-mxnet | Lightweight, Portable, Flexible Distributed/Mobile Deep Learning with Dynamic, Mutation-aware Dataflow Dep Scheduler; for Python, R, Julia, Scala, Go, Javascript and more |
+
 
 
 
