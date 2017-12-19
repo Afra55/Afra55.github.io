@@ -135,6 +135,161 @@ makemigrations 命令让 Django 确定如何修改数据库，使其能够存储
 
 每次修改 model.py 后，都需要调用 makemigrations 命令来确认修改，并 migrate 应用修改，一共三步骤
 
+### Django 管理网站
+
+#### 创建超级用户
+
+`python3 manage.py createsuperuser`
+
+Django 存储的密码时从原密码派生出来的散列值
+
+#### 注册模型
+
+在相应应用包名下，在 admin.py 中注册模型,
+
+    from django.contrib import admin
+
+    from app_name.models import TestModel
+
+    # Register your models here.
+    admin.site.register(TestModel)
+
+注册完成后，访问： http://127.0.0.1:8000/admin/ 
+输入用户名和密码进入管理网站的页面, 这个页面可以提那家和修改用户和用户组，还可以管理自定义的 model  
+
+#### Django shell
+
+在输入数据后，可以通过 Django shell 查看这些数据, 多用于测试项目和排除故障
+
+`python3 manage.py shell`
+
+    >>> from app_name.models import TestModel
+    >>> TestModel.objects.all()
+
+`TestModel.objects.all()` 用来获取 model 多所有实例，返回了一个列表（这个列表称为查询集，queryset), 可以像列表一样遍历查询
+
+    >>> tests = TestModel.objects.all()
+    >>> for test in tests:
+    ...     print(test.id, test)
+    ... 
+
+知道 id 后，可以通过id 获取相应的数据 ：`t = TestModel.objects.get(id=1)`
+
+如果有外键，则可以从外键获取对应关系的数据, 使用相关模型的小写加下划线加set来获取：`t.model_set.all()`
+
+注意：每次修改 model 后都需要重启 shell 才能看到修改后的效果
+
+退出 shell 按 `<Control-D>`， windows 按 `<Control-Z><Enter>`
+
+### 创建网页
+
+三步骤：定义URL，编写 view， 编写模板
+
+定义 URL，让 Django 知道如何将浏览器请求与网站 URL 匹配, 来确定返回哪个网页
+
+view, 每个 URL 都被映射到特定的视图，视图函数用于获取并处理网页所需的数据
+
+模板，视图函数通常调用一个模板，让模板生成浏览器能够理解的网页
+
+#### 映射 URL
+
+默认情况下，主页URL(http://127.0.0.1:8000/) 返回默认的 Django 网站
+
+项目主文件夹 `mysite` 下面的 `urls.py` 文件
+
+    """learning_log URL Configuration
+
+    The `urlpatterns` list routes URLs to views. For more information please see:
+        https://docs.djangoproject.com/en/2.0/topics/http/urls/
+    Examples:
+    Function views
+        1. Add an import:  from my_app import views
+        2. Add a URL to urlpatterns:  path('', views.home, name='home')
+    Class-based views
+        1. Add an import:  from other_app.views import Home
+        2. Add a URL to urlpatterns:  path('', Home.as_view(), name='home')
+    Including another URLconf
+        1. Import the include() function: from django.urls import include, path
+        2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
+    """
+    from django.contrib import admin
+    from django.urls import path
+
+    urlpatterns = [
+        path('admin/', admin.site.urls),
+    ]
+
+admin.site.urls 定义了可以在管理网站中请求的所有URL
+
+urlpatterns 包含了项目中的应用程序的 URL
+
+将自己的应用 url 添加到 urlpatterns 中
+
+    from django.contrib import admin
+    from django.urls import path, include
+
+    urlpatterns = [
+        path('admin/', admin.site.urls),
+        path('', include(('app_name.urls', 'app_name'), namespace='app_name'))
+    ]
+
+在自己的应用 `app_name` 包下创建 `urls.py`
+
+    from django.urls import path
+
+    from . import views
+
+
+    urlpatterns = [
+        path('', views.index, name='index'),  # 默认忽略基本 URL (http://127.0.0.1:8000/) ，所以这个 path 指 http://127.0.0.1:8000
+    ]
+
+urlpatterns 是一个列表，包含可在应用 app_name 中请求的网址
+
+path 接受三个实参，
+第一个是正则用于 Django 在 urlpatterns 查找与请求的 url 字符串匹配的内容;
+第二个实参指定调用视图函数；
+第三个实参将这个模式命名为 index ，以便在代码的其他地方引用
+
+#### 编写视图
+
+应用 app_name 包下的 views.py 
+
+    from django.shortcuts import render
+
+    # Create your views here.
+
+render() 根据视图提供的数据渲染响应
+
+编写 index 函数
+
+    from django.shortcuts import render
+
+
+    # Create your views here.
+    def index(request):
+        return render(request, 'app_name/index.html')
+
+render() 第一个实参指原始的请求对象，第二个是模板
+
+#### 编写模板
+
+模板就是 html 网页
+
+在 应用 app_name 包下新建一个名为 templates 的 文件夹 再创建一个 app_name 文件夹，index.html 放在最里层
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
