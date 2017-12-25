@@ -10,7 +10,7 @@ description: Python Fourth Step！
 * content
 {:toc}
 
-# 本文
+## 本文
 
 [http://afra55.github.io/2017/12/15/python-fourth-step/](http://afra55.github.io/2017/12/15/python-fourth-step/)
 
@@ -20,7 +20,7 @@ description: Python Fourth Step！
 
 ### 准备
 
-~使用 PyCharm 编译器可以略过准备，直接创建 Django 项目~
+使用 PyCharm 编译器可以略过准备，直接创建 Django 项目
 
 创建名为 name 的虚拟环境： `python -m venv name`
 
@@ -30,7 +30,7 @@ description: Python Fourth Step！
 
 在对象项目目录中安装 Django `pip3 install Django`
 
-创建 mysite 项目:` django-admin startproject mysite`
+创建 mysite 项目:`django-admin startproject mysite`
 
 创建完成后，会自动生成几个文件：
 
@@ -278,3 +278,71 @@ render() 第一个实参指原始的请求对象，第二个是模板:
         tests = TestModel.objects.order_by('date_added')
         context = {'tests': tests}
         return render(request, 'app_name/index.html', context)
+
+可以在视图函数里进行数据库查询,例如:`tests = TestModel.objects.order_by('date_added')`请求 Topic 对象,按照属性`'date_added'`排序,将返回集存储在 tests 中
+
+可以给模板发送上下文 context，这是一个字典, 例如： {'tests': tests}, 键是模版中用来访问数据的名称,值是发送给模板的数据, 使用 render() 传递 context
+
+然后在模板中获取 context数据，例 for 循环遍历打印有序列表，内容 是 tests 里存储的内容
+
+    {% for test in tests %}
+        <li>{{ test }}</li>
+        {% empty %}
+        <li>No tests have been added yet.</li>
+    {% endfor %}
+
+`{% endfor %}` 用于结束循环
+
+`{{ test }}` 会被替换为 当前遍历的test值
+
+`{% empty %}` 为空时该如何处理
+
+
+#### 编写模板
+
+模板就是 html 网页
+
+在 应用 app_name 包下新建一个名为 templates 的 文件夹 再创建一个 app_name 文件夹，`index.html` 放在最里层
+
+
+### 创建模板网页
+
+创建其他网页
+
+#### 模版继承
+
+网页都包含一些共有的元素，这种情况下，可以编写一个父模板，让每个网页都继承这个模板, 不用在每个页面重复定义这些共有的元素
+
+#### 父模块
+
+base.html
+
+`{% block content %}{% endblock %}`
+
+模版标签，用大括号和百分号表示 ({%   %})
+
+`{% url 'app_name:index' %}` 生成一个 URL, app_name 是命名空间，index 是该命名空间的 URL 模式 (就是 path 的第三个参数)， 与 app_name/urls.py 中 index 的 URL 模式匹配
+
+`<a href="{% url 'app_name:index' %}">App Name</a>` 
+
+`{% block content %}{% endblock %}` 一对块标签，块名是 content，是一个占位符,其中的信息由子模块指定, 可以有多个不同块名的块标签
+
+#### 子模块
+
+index.html
+
+    {% extends "app_name/base.html" %}
+
+    {% block content %}
+
+    <p>天净沙·秋思</p>
+
+    <p>枯藤老树昏鸦，小桥流水人家，古道西风瘦马。夕阳西下，断肠人在天涯。</p>
+
+    {% endblock %}
+
+`{% extends "app_name/base.html" %}` 让 Django 知道它继承了哪个父模板
+
+`{% block content %}` 定义 content 块的开始
+
+`{% endblock %}` 定义 content 块的结束
