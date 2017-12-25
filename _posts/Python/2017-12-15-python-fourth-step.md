@@ -287,7 +287,7 @@ render() 第一个实参指原始的请求对象，第二个是模板
 
 ![picture_1](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/python_fourth_pic_1.png?raw=true)
 
-{% raw %}`{% endfor %}`{% raw %} 用于结束循环
+`{% endfor %}` 用于结束循环
 
 `{{ test }}` 会被替换为当前遍历的test值
 
