@@ -285,7 +285,7 @@ render() 第一个实参指原始的请求对象，第二个是模板
 
 然后在模板中获取 context数据，例 for 循环遍历打印有序列表，内容 是 tests 里存储的内容
 
-
+![picture_1](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/python_fourth_pic_1.png?raw=true)
 
 `{% endfor %}` 用于结束循环
 
