@@ -272,32 +272,32 @@ render() 根据视图提供的数据渲染响应
     def index(request):
         return render(request, 'app_name/index.html')
 
-render() 第一个实参指原始的请求对象，第二个是模板:
+    render() 第一个实参指原始的请求对象，第二个是模板:
 
-        def index(request):
-            tests = TestModel.objects.order_by('date_added')
-            context = {'tests': tests}
-            return render(request, 'app_name/index.html', context)
+            def index(request):
+                tests = TestModel.objects.order_by('date_added')
+                context = {'tests': tests}
+                return render(request, 'app_name/index.html', context)
 
 
-可以在视图函数里进行数据库查询,
-例如: `tests = TestModel.objects.order_by('date_added')` 请求 Topic 对象，按照属性 'date_added' 排序，将返回集存储在 tests 中
+    可以在视图函数里进行数据库查询,
+    例如: `tests = TestModel.objects.order_by('date_added')` 请求 Topic 对象，按照属性 'date_added' 排序，将返回集存储在 tests 中
 
-可以给模板发送上下文 context，这是一个字典, 例如： {'tests': tests}, 键是模版中用来访问数据的名称,值是发送给模板的数据, 使用 render() 传递 context
+    可以给模板发送上下文 context，这是一个字典, 例如： {'tests': tests}, 键是模版中用来访问数据的名称,值是发送给模板的数据, 使用 render() 传递 context
 
-然后在模板中获取 context数据，例 for 循环遍历打印有序列表，内容 是 tests 里存储的内容：
+    然后在模板中获取 context数据，例 for 循环遍历打印有序列表，内容 是 tests 里存储的内容：
 
-    {% for test in tests %}
-        <li>{{ test }}</li>
-        {% empty %}
-        <li>No tests have been added yet.</li>
-    {% endfor %}
+        {% for test in tests %}
+            <li>{{ test }}</li>
+            {% empty %}
+            <li>No tests have been added yet.</li>
+        {% endfor %}
 
-`{% endfor %}` 用于结束循环
+    `{% endfor %}` 用于结束循环
 
-`{{ test }}`  会被替换为 当前遍历的test值　
+    `{{ test }}`  会被替换为 当前遍历的test值　
 
-`{% empty %}` 为空时该如何处理
+    `{% empty %}` 为空时该如何处理
 
 
 
@@ -320,7 +320,7 @@ render() 第一个实参指原始的请求对象，第二个是模板:
 
 base.html
 
-    `{% block content %}{% endblock %}`
+`{% block content %}{% endblock %}`
 
 模版标签，用大括号和百分号表示 ({%   %})
 
