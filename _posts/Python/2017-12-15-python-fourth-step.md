@@ -285,12 +285,7 @@ render() 第一个实参指原始的请求对象，第二个是模板
 
 然后在模板中获取 context数据，例 for 循环遍历打印有序列表，内容 是 tests 里存储的内容
 
-```
-    {% for test in tests %}
-        <li>{{ test }}</li>
-        --- snip ---
-    {% endfor %}
-```
+
 
 `{% endfor %}` 用于结束循环
 
