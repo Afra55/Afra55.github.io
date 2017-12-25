@@ -334,3 +334,35 @@ index.html
 ![picture_12](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/python_fourth_pic_12.png?raw=true) 定义 content 块的开始
 
 ![picture_13](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/python_fourth_pic_13.png?raw=true) 定义 content 块的结束
+
+### 自定义表单
+
+forms.py
+
+    from django import forms
+
+    from .models import TestModel
+
+
+    class TestModelForm(forms.ModelForm):
+        class Meta:     # 指出表单基于的模型，以及表单包含的哪些字段
+            fields = ['text']
+            labels = {'text': ''}
+            widgets = {'text': forms.Textarea(attrs={'cols': 80})}  # 小部件，Textarea，区域宽度 80
+
+views.py
+
+    def lalala(request):
+        if request.method != 'POST':  # 判断请求的方法
+            form = TopiTestModelFormcForm()
+        else:
+            form = TestModelForm(request.POST)
+
+        if form.is_valid():  # 验证表单字段是否都填写了（默认都必须填写）
+            form.save()  # 将表单数据写入数据库
+            return HttpResponseRedirect(reverse('app_name:hahaha'))  # 重定向 URL
+
+        context = {'form': form}
+        return render(request, 'app_name/lalala.html', context)
+
+
