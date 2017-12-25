@@ -288,8 +288,7 @@ render() 第一个实参指原始的请求对象，第二个是模板
 ```
     {% for test in tests %}
         <li>{{ test }}</li>
-        `{% empty %}`
-        <li>No tests have been added yet.</li>
+        --- snip ---
     {% endfor %}
 ```
 
