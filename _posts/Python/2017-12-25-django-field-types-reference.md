@@ -277,7 +277,9 @@ True，代表这个字段在整个表是唯一的。
 
 `class BinaryField(**options)` [源码](https://docs.djangoproject.com/en/2.0/_modules/django/db/models/fields/#BinaryField)
 
-存储原始二进制数据的字段。需要注意这个字段的功能有限。例如，不可能在 `BinaryField` 上过滤查询集(queryset)。也不可能在一个`ModelForm`中包含一个`BinaryField`。
+
+存储原始二进制数据的字段。需要注意这个字段的功能有限。例如，不可能在 `BinaryField` 上过滤查询集(queryset)。也不可能在一个 `ModelForm` 中包含一个 `BinaryField` 。
+
 
 ### BooleanField
 
