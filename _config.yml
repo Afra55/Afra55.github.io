@@ -29,3 +29,5 @@ markdown: kramdown
 # highlighter: pygments
 # highlighter: rouge
 # highlighter: false
+
+excerpt_separator: ""
