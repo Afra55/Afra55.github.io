@@ -306,10 +306,12 @@ render() 第一个实参指原始的请求对象，第二个是模板
 
 模板就是 html 网页
 
-在 应用 app_name 包下新建一个名为 templates 的 文件夹 再创建一个 app_name 文件夹，index.html 放在最里层
+在 应用 app_name 包下新建一个名为 templates 的 文件夹 再创建一个 app_name 文件夹，`index.html` 放在最里层
 
 
-### 创建其他网页
+### 创建模板网页
+
+创建其他网页
 
 #### 模版继承
 
