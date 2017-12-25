@@ -279,17 +279,19 @@ render() 第一个实参指原始的请求对象，第二个是模板
         context = {'tests': tests}
         return render(request, 'app_name/index.html', context)
 
-可以在视图函数里进行数据库查询,例如:`tests = TestModel.objects.order_by('date_added')`请求 Topic 对象,按照属性`'date_added'`排序,将返回集存储在 tests 中
+可以在视图函数里进行数据库查询,例如:`tests=TestModel.objects.order_by('date_added')`请求 Topic 对象,按照属性`'date_added'`排序,将返回集存储在 tests 中
 
 可以给模板发送上下文 context，这是一个字典, 例如： {'tests': tests}, 键是模版中用来访问数据的名称,值是发送给模板的数据, 使用 render() 传递 context
 
 然后在模板中获取 context数据，例 for 循环遍历打印有序列表，内容 是 tests 里存储的内容
 
+```
     {% for test in tests %}
         <li>{{ test }}</li>
         {% empty %}
         <li>No tests have been added yet.</li>
     {% endfor %}
+```
 
 `{% endfor %}` 用于结束循环
 
@@ -319,7 +321,7 @@ base.html
 
 `{% block content %}{% endblock %}`
 
-模版标签，用大括号和百分号表示 ({%   %})
+模版标签，用大括号和百分号表示 `({%   %})`
 
 `{% url 'app_name:index' %}` 生成一个 URL, app_name 是命名空间，index 是该命名空间的 URL 模式 (就是 path 的第三个参数)， 与 app_name/urls.py 中 index 的 URL 模式匹配
 
@@ -331,6 +333,7 @@ base.html
 
 index.html
 
+```
     {% extends "app_name/base.html" %}
 
     {% block content %}
@@ -340,6 +343,7 @@ index.html
     <p>枯藤老树昏鸦，小桥流水人家，古道西风瘦马。夕阳西下，断肠人在天涯。</p>
 
     {% endblock %}
+```
 
 `{% extends "app_name/base.html" %}` 让 Django 知道它继承了哪个父模板
 
