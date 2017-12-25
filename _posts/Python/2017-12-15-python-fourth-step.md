@@ -287,11 +287,11 @@ render() 第一个实参指原始的请求对象，第二个是模板
 
 ![picture_1](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/python_fourth_pic_1.png?raw=true)
 
-`{% endfor %}` 用于结束循环
+![picture_2](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/python_fourth_pic_2.png?raw=true) 用于结束循环
 
-`{{ test }}` 会被替换为当前遍历的test值
+![picture_3](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/python_fourth_pic_3.png?raw=true) 会被替换为当前遍历的test值
 
-`{% empty %}` 为空时该如何处理
+![picture_4](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/python_fourth_pic_4.png?raw=true) 为空时该如何处理
 
 
 #### 编写模板
@@ -313,34 +313,24 @@ render() 第一个实参指原始的请求对象，第二个是模板
 
 base.html
 
-`{% block content %}{% endblock %}`
+![picture_5](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/python_fourth_pic_5.png?raw=true)
 
-模版标签，用大括号和百分号表示 `({%   %})`
+模版标签，用大括号和百分号表示 ![picture_6](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/python_fourth_pic_6.png?raw=true)
 
-`{% url 'app_name:index' %}` 生成一个 URL, app_name 是命名空间，index 是该命名空间的 URL 模式 (就是 path 的第三个参数)， 与 app_name/urls.py 中 index 的 URL 模式匹配
+![picture_7](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/python_fourth_pic_7.png?raw=true) 生成一个 URL, app_name 是命名空间，index 是该命名空间的 URL 模式 (就是 path 的第三个参数)， 与 app_name/urls.py 中 index 的 URL 模式匹配
 
-`<a href="{% url 'app_name:index' %}">App Name</a>` 
+![picture_8](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/python_fourth_pic_8.png?raw=true) 
 
-`{% block content %}{% endblock %}` 一对块标签，块名是 content，是一个占位符,其中的信息由子模块指定, 可以有多个不同块名的块标签
+![picture_9](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/python_fourth_pic_9.png?raw=true) 一对块标签，块名是 content，是一个占位符,其中的信息由子模块指定, 可以有多个不同块名的块标签
 
 #### 子模块
 
 index.html
 
-```
-    {% extends "app_name/base.html" %}
+![picture_10](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/python_fourth_pic_10.png?raw=true)
 
-    {% block content %}
+![picture_11](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/python_fourth_pic_11.png?raw=true) 让 Django 知道它继承了哪个父模板
 
-    <p>天净沙·秋思</p>
+![picture_12](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/python_fourth_pic_12.png?raw=true) 定义 content 块的开始
 
-    <p>枯藤老树昏鸦，小桥流水人家，古道西风瘦马。夕阳西下，断肠人在天涯。</p>
-
-    {% endblock %}
-```
-
-`{% extends "app_name/base.html" %}` 让 Django 知道它继承了哪个父模板
-
-`{% block content %}` 定义 content 块的开始
-
-`{% endblock %}` 定义 content 块的结束
+![picture_13](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/python_fourth_pic_13.png?raw=true) 定义 content 块的结束
