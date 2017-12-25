@@ -287,11 +287,11 @@ render() 第一个实参指原始的请求对象，第二个是模板
 
 ![picture_1](https://github.com/Afra55/Afra55.github.io/blob/master/blog_picture/shortcuts/python_fourth_pic_1.png?raw=true)
 
-`{% endfor %}` 用于结束循环
+`\{% endfor %\}` 用于结束循环
 
-`{{ test }}` 会被替换为当前遍历的test值
+`\{{ test }\}` 会被替换为当前遍历的test值
 
-`{% empty %}` 为空时该如何处理
+`\{% empty %\}` 为空时该如何处理
 
 
 #### 编写模板
@@ -313,34 +313,34 @@ render() 第一个实参指原始的请求对象，第二个是模板
 
 base.html
 
-`{% block content %}{% endblock %}`
+`\{% block content %\}\{% endblock %\}`
 
-模版标签，用大括号和百分号表示 `({%   %})`
+模版标签，用大括号和百分号表示 `(\{%   %\})`
 
 `{% url 'app_name:index' %}` 生成一个 URL, app_name 是命名空间，index 是该命名空间的 URL 模式 (就是 path 的第三个参数)， 与 app_name/urls.py 中 index 的 URL 模式匹配
 
-`<a href="{% url 'app_name:index' %}">App Name</a>` 
+`<a href="\{% url 'app_name:index' %\}">App Name</a>` 
 
-`{% block content %}{% endblock %}` 一对块标签，块名是 content，是一个占位符,其中的信息由子模块指定, 可以有多个不同块名的块标签
+`\{% block content %\}\{% endblock %\}` 一对块标签，块名是 content，是一个占位符,其中的信息由子模块指定, 可以有多个不同块名的块标签
 
 #### 子模块
 
 index.html
 
 ```
-    {% extends "app_name/base.html" %}
+    \{% extends "app_name/base.html" %\}
 
-    {% block content %}
+    \{% block content %\}
 
     <p>天净沙·秋思</p>
 
     <p>枯藤老树昏鸦，小桥流水人家，古道西风瘦马。夕阳西下，断肠人在天涯。</p>
 
-    {% endblock %}
+    \{% endblock %\}
 ```
 
-`{% extends "app_name/base.html" %}` 让 Django 知道它继承了哪个父模板
+`\{% extends "app_name/base.html" %\}` 让 Django 知道它继承了哪个父模板
 
-`{% block content %}` 定义 content 块的开始
+`\{% block content %\}` 定义 content 块的开始
 
-`{% endblock %}` 定义 content 块的结束
+`\{% endblock %\}` 定义 content 块的结束
