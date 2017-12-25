@@ -272,7 +272,7 @@ render() 根据视图提供的数据渲染响应
     def index(request):
         return render(request, 'app_name/index.html')
 
-render() 第一个实参指原始的请求对象，第二个是模板:
+render() 第一个实参指原始的请求对象，第二个是模板
 
     def index(request):
         tests = TestModel.objects.order_by('date_added')
