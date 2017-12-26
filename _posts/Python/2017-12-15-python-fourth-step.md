@@ -54,6 +54,10 @@ wsgi.py : An entry-point for WSGI-compatible web servers to serve your project
 
 migrate 指迁移，修改数据库即迁移数据库，在新项目使用 migrate 命令时，Django 会新建一个数据库 db.sqlite3
 
+### 重置数据库
+
+`python3 manage.py flush`
+
 ### 启动服务
 
 `python3 manage.py runserver` 启动服务后，在浏览器中访问 http://127.0.0.1:8000 来查看项目是否成功创建
@@ -309,6 +313,8 @@ render() 第一个实参指原始的请求对象，第二个是模板
 
 网页都包含一些共有的元素，这种情况下，可以编写一个父模板，让每个网页都继承这个模板, 不用在每个页面重复定义这些共有的元素
 
+一个应用程序的模板可以继承另一个应用程序的模板
+
 #### 父模块
 
 base.html
@@ -365,4 +371,23 @@ views.py
         context = {'form': form}
         return render(request, 'app_name/lalala.html', context)
 
+### 装饰器
 
+装饰器是放在函数定义前面的指令，类似于 java 中的注解
+
+例如： views.py 视图函数
+
+    from django.contrib.auth.decorators import login_required
+
+
+    @login_required
+    def test(request):
+
+`@login_required` 指把函数 login_required() 作为装饰器， 用于检查用户是否登录，仅当已登录时，Django 才运行 test() 代码，如果未登陆，会重定向到登陆页面, 需要在 settings.py 中配置重定向路径, 在最后添加如下配置:
+
+LOGIN_URL = '/app_name/login/'
+
+
+## 小结
+
+https://github.com/Afra55/learning_log
