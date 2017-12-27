@@ -387,6 +387,194 @@ views.py
 
 LOGIN_URL = '/app_name/login/'
 
+## django-bootstrap
+
+Bootstrap 工具库，为 web 程序设置样式。
+
+### 安装
+
+`pip3 install django-bootstrap3`
+
+引入到项目中，在 settings.py 中配置：
+
+    INSTALLED_APPS = [
+        'django.contrib.admin',
+        'django.contrib.auth',
+        'django.contrib.contenttypes',
+        'django.contrib.sessions',
+        'django.contrib.messages',
+        'django.contrib.staticfiles',
+        'bootstrap3',   # 第三方应用
+        'app_name'      # 我的应用
+    ]
+
+需要让 django-bootstrap3 包含 jQuery, 在 settins.py 后添加如下配置：
+
+    BOOTSTRAP3 = {
+        'include_jquery': True
+    }
+
+## Heroku
+
+在 https://heroku.com/ 注册，验证的时候需要梯子
+
+在 https://devcenter.heroku.com/articles/heroku-cli 查找安装方式，并安装
+
+在项目中安装如下包包：
+
+    (venv) afra55deMacBook-Air:learning_log yangshuai$ pip3 install dj-database-url     # 用于 Django 与 Heroku 使用的数据库通信
+    (venv) afra55deMacBook-Air:learning_log yangshuai$ pip3 install dj-static       # 管理静态文件
+    (venv) afra55deMacBook-Air:learning_log yangshuai$ pip3 install gunicorn        # 服务器软件，在在线环境下支持应用程序提供的服务
+
+使用 freeze 命令将项目安装的所有包的名称写入到文件中：
+
+    (venv) afra55deMacBook-Air:learning_log yangshuai$ pip3 freeze > requirements.txt
+
+requirements.txt:
+
+    dj-database-url==0.4.2
+    dj-static==0.0.6
+    Django==2.0
+    django-bootstrap==0.2.4
+    django-bootstrap3==9.1.0
+    gunicorn==19.7.1
+    pytz==2017.3
+    static3==0.7.0
+
+在 manage.py 相同目录下创建 runtime.txt, 来指定 Python 版本
+
+runtime.txt:
+
+    python-3.6.2
+
+在 settings.py 中如下配置：
+
+    cwd = os.getcwd()   # 获取当前到工作目录
+    if cwd == '/app' or cwd[:4] == '/tmp':  # 在 Heroku 部署中，当签工作目录总是 /app
+        import dj_database_url
+
+        # 配置数据库
+        DATABASES = {
+            'default': dj_database_url.config(default='postgres://localhost')
+        }
+
+        # 支持 https 请求
+        SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+        # Only allow heroku to host the project.
+        ALLOWED_HOSTS = ['*']
+        DEBUG = False
+
+        # Static asset configuration
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        STATIC_ROOT = 'staticfiles'
+        STATICFILES_DIRS = (
+            os.path.join(BASE_DIR, 'static'),
+        )
+
+创建启动进程的 Procfile，来告诉 Heroku 启动了哪些进程, 在 manage.py 同目录下创建文件 `Procfile`, `Procfile` 内容如下：
+
+    web: gunicorn mysite.wsgi --log-file -
+
+这行，让 Heroku 将 gunicorn 用作服务器，并使用 mysite/wsgi.py 中的设置来启动应用程序
+
+修改 wsgi.py， 使用 Cling 启动应用程序:
+
+    """
+    WSGI config for mysite project.
+
+    It exposes the WSGI callable as a module-level variable named ``application``.
+
+    For more information on this file, see
+    https://docs.djangoproject.com/en/2.0/howto/deployment/wsgi/
+    """
+
+    import os
+
+    from dj_static import Cling
+    from django.core.wsgi import get_wsgi_application
+
+    os.environ.setdefault("DJANGO_SETTINGS_MODULE", "mysite.settings")
+
+    application = Cling(get_wsgi_application())
+
+创建用于存储静态文件的目录，这个目录在 mysite/mysite/ 下，名字为 static,即 mysite/mysite/static/
+
+尝试在本地使用 gunicorn 服务器（仅限 OS X, Linux 系统）：
+
+    (venv) afra55deMacBook-Air:mysite yangshuai$ heroku local
+    22:25:51 web.1   |  [2017-12-27 22:25:51 +0800] [4514] [INFO] Starting gunicorn 19.7.1
+    22:25:51 web.1   |  [2017-12-27 22:25:51 +0800] [4514] [INFO] Listening at: http://0.0.0.0:5000 (4514)
+    22:25:51 web.1   |  [2017-12-27 22:25:51 +0800] [4514] [INFO] Using worker: sync
+    22:25:51 web.1   |  [2017-12-27 22:25:51 +0800] [4517] [INFO] Booting worker with pid: 4517
+    22:27:54 web.1   |  Not Found: /favicon.ico
+
+
+然后访问： http://localhost:5000 查看网页
+
+使用 `<Control-C>` 停止服务
+
+在激活的虚拟环境命令行中：
+    heroku create   # 创建一个空项目
+    git push heroku master  # 让 git 将项目分支 master 推送到 Heroku 创建的仓库中
+
+推送到仓库后，命令行日志 `remote:        https://evening-headland-33619.herokuapp.com/ deployed to Heroku` 即显示访问这个项目的 URL
+
+执行 `heroku ps` 核实是否正确启动了项目
+
+    Free dyno hours quota remaining this month: 550h 0m (100%)
+    For more information on dyno sleeping and how to upgrade, see:
+    https://devcenter.heroku.com/articles/dyno-sleeping
+
+    === web (Free): gunicorn mysite.wsgi --log-file - (1)
+    web.1: up 2017/12/27 22:41:05 +0800 (~ 5m ago)
+
+使用命令 `heroku open` 在浏览器打开应用
+
+可以使用 `heroku run ` + python 命令在 Heroku 项目执行 python 命令
+
+在 Heroku 上创建数据库: `heroku run python manage.py migrate`
+
+在 Heroku 上创建超级用户使用 `heroku run bash` 命令，打开 bash 终端会话，然后在创建超级用户，与本地创建方法一致
+
+重命名应用程序： `heroku apps:rename afra55-mysite`, 这时就可以使用好记的域名来访问项目来
+
+如果对项目进行了修改，则先要提交代码到 git 仓库, 再将修改推送到 Heroku
+
+    git push heroku master
+
+注当在 settings.py 中，本地 DEBUG 模式关闭时，需要设置一个主机
+
+    DEBUG = False
+
+    ALLOWED_HOSTS = ['localhost']
+
+在 mysite/mysite/templates 文件夹下创建类似 `404.html`, `500html` 然后在 setting.py 里面配置:
+
+    TEMPLATES = [
+        {
+            'BACKEND': 'django.template.backends.django.DjangoTemplates',
+            'DIRS': [os.path.join(BASE_DIR, 'mysite/templates')]    # 错误时，会展示我们指定的错误页面
+            ,
+            'APP_DIRS': True,
+            'OPTIONS': {
+                'context_processors': [
+                    'django.template.context_processors.debug',
+                    'django.template.context_processors.request',
+                    'django.contrib.auth.context_processors.auth',
+                    'django.contrib.messages.context_processors.messages',
+                ],
+            },
+        },
+    ]
+
+当服务器错误时，会展示我们自己指定的错误页面
+
+可以使用 Django 函数 get_object_or_404 自动在找不到对象时引发 404 错误，例如：
+
+    test = get_object_or_404(Test, id=topic_id)  # test = Test.objects.get(id=test_id)
+
+可以使用命令 `heroku apps:destroy --app mysite` 删除项目
 
 ## 小结
 
