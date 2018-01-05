@@ -38,5 +38,3 @@ Email：<afra55@foxmail.com>
 CSDN：<a href="http://blog.csdn.net/yang786654260" target="_blank">http://blog.csdn.net/yang786654260</a>
 
 QQ：<a href="http://wpa.qq.com/msgrd?v=3&uin=786654260&site=qq&menu=yes" target="_blank">786654260</a>
-
-QQ群： <a href="http://shang.qq.com/wpa/qunwpa?idkey=013f2401f103961ec08b3ac5f9c3b2f9ac8aa1d415b7f5794e0f00bc97026e14" target="_blank">485897149</a>
