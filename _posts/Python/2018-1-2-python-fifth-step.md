@@ -103,6 +103,81 @@ Kleene 闭包: `*`
 
 `\d+(\.\d*)?` 任何十进制数字后面可以接一个小数点和零个或多个数字，例如 0.003, 3, 33.
 
+### 使用 Python 写正则
+
+Python 通过 re 模块来支持正则表达式
+
+| re 模块函数 | 说明 |
+| :------ | :------ |
+| `compile(pattern, flags=0)` | 使用可选的标记（flags）来编译正则表达式的模式，并返回一个正则表达式对象 |
+
+| re 模块函数和正则表达式对象的方法 | 说明 |
+| :------ | :------ |
+| `match(pattern, string, flags=0)` | 使用带有可选标记(flags)的正则表达式对象来匹配字符串，如果匹配成功则返回匹配对象，否则返回 None |
+| `search(pattern, string, flags=0)` | 使用可选标记搜索字符串中第一次出现的正则表达式模式，如果匹配成功则返回匹配对象，否则返回 None |
+| `findall(pattern, string, flags=0)` | 查找字符串中所有（非重复）出现的正则表达式模式，并返回一个匹配列表 |
+| `finditer(pattern, string, flags=0)` | 与 findall() 函数相同，但返回的是一个迭代器，对每一次匹配，迭代器都返回一个匹配对象 |
+| `split(pattern, string, maxsplit=0, flags=0)` | 根据正则表达式的模式分隔符， 将字符串分隔为列表， 然后返回成功匹配的列表，分隔最多操作 maxsplite 次(默认分隔所有匹配成功的位置) |
+| `sub(pattern, repl, string, count=0, flags=0)` | 使用 repl 替换所有正则表达式模式在字符串中出现的位置, 除非定义 count 否则替换所有位置(subn()函数返回替换操作的数目) |
+| `purge()` | 清除隐式编译的正则表达式模式 |
+
+| 常用的匹配对象方法 | 说明 |
+| :------ | :------ |
+| `group(self, *args)` | 默认返回整个匹配对象，如果传入数字(`group(num=0)`)则子组模式的匹配对象，默认是0即整个匹配对象，如果传入多个参数(`group(0, 1, 2)`则返回一个元组包含传入编号的子组的匹配对象 |
+| `groups(self, default=None)` | 返回一个包含所有匹配子组的元组,如果没有匹配成功，则返回空元组 |
+| `groupdict(self, default=None)` | 返回一个包含所有匹配的命名子组的字典，所有子组名称作为字典的键，如果没有成功匹配，则反回一个空字典 |
+
+| 常用的模块属性(用于正则表达式的标记 flags) | 说明 |
+| :------ | :------ |
+| `re.I` `re.IGNORECASE` | 不区分大小写匹配 |
+| `re.L` `re.LOCALE` | 根据所使用的本地语言环境通过 `\w,\W,\b,\B,\s,\S` 实现匹配 |
+| `re.M` `re.MULTILINE` | `^`和`$`分别匹配目标字符串中行的起始和结尾，而不是严格匹配整个字符串本身的起始和结尾 |
+| `re.S` `re.DOTALL` | 表示 `.`点能够匹配所有字符包括 `\n` 换行符 |
+| `re.X` `re.VERBOSE` | 通过反斜杠转义，否则所有空格和#（以及该行中所有的后续文字）都被忽略，除非在字符类中或者允许注释且提高可读性 |
+
+match() 函数从字符串起始部分对模式进行匹配，如果匹配成功返回一个匹配对象，匹配失败返回None
+
+    m = re.match('victor', 'victor')    # 匹配成功，则返回一个匹配对象 <_sre.SRE_Match object; span=(0, 6), match='victor'>
+    if m is not None:
+        m.group()   # victor, 返回匹配的字符串
+
+search() 在字符串中查找模式, 当需要匹配的模式出现在字符串中间时('aavictor') 则 match() 会匹配失败，search() 会在任意位置对正则表达式的模式进行匹配，如果搜索到成功的匹配，就会返回一个匹配对象, 否则返回 None
+
+    m = re.match('victor', 'i am victor')   # None
+    if m is not None:
+        print(m.group())
+    print('--')
+    s = re.search('victor', 'i am victor')  # <_sre.SRE_Match object; span=(5, 11), match='victor'>
+    if s is not None:
+        print(s.group())    # victor
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
