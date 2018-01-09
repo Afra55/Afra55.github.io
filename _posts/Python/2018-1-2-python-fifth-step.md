@@ -53,7 +53,7 @@ description: Python Fifth Step！
 
 | 扩展表示法 | 说明 | 示例 |
 | :------ | :------ | :------ |
-| `(?iLmsux)` | 在正则表达式中嵌入一个或多个特殊“标记”参数（或函数/方法） | `(?x), (?im)` |
+| `(?iLmsux)` | 在正则表达式中嵌入一个或多个特殊“标记”参数（或函数/方法） | `(?i), (?x), (?im)` |
 | `(?:...)` | 表示一个匹配不用保存的分组 | `(?:\w+\.)*` |
 | `(?P<name>)...` | 表示一个仅由 name 标识而不是数字标识的正则分组 | `(?P<data>)` |
 | `(?P=name)` | 在同一字符串中匹配之前的 `(?P<name>)` 正则分组 | `(?P=data)` |
@@ -127,7 +127,7 @@ Python 通过 re 模块来支持正则表达式
 | `groups(self, default=None)` | 返回一个包含所有匹配子组的元组,如果没有匹配成功，则返回空元组 |
 | `groupdict(self, default=None)` | 返回一个包含所有匹配的命名子组的字典，所有子组名称作为字典的键，如果没有成功匹配，则反回一个空字典 |
 
-| 常用的模块属性(用于正则表达式的标记 flags) | 说明 |
+| 常用的模块属性(用于正则表达式的标记 flags, (?iLmsux)) | 说明 |
 | :------ | :------ |
 | `re.I` `re.IGNORECASE` | 不区分大小写匹配 |
 | `re.L` `re.LOCALE` | 根据所使用的本地语言环境通过 `\w,\W,\b,\B,\s,\S` 实现匹配 |
@@ -151,14 +151,101 @@ search() 在字符串中查找模式, 当需要匹配的模式出现在字符串
     if s is not None:
         print(s.group())    # victor
 
+子组
+
+    m = re.match('(\w\w\w)-(\d\d\d)', 'abc-123')
+    if m is not None:
+        print(m.group(), m.group(1), m.group(2))    # abc-123 abc 123
+        print(m.groups())                           # ('abc', '123')
+
+findall()
+
+    m = re.findall('victor', 'victor i am victor yvictor')
+    if m is not None:
+        print(m)         # ['victor', 'victor', 'victor']   
+
+sub() subn()
+
+
+    m = re.sub('X', 'Victor', 'I am X, i love X')
+    if m is not None:
+        print(m)        # I am Victor, i love Victor
+
+    m = re.subn('X', 'Victor', 'I am X, i love X')
+    if m is not None:
+        print(m)        # ('I am Victor, i love Victor', 2)
+
+    m = re.sub(r'(\d{1,2})/(\d{1,2})/(\d{2}|\d{4})', r'\2/\1/\3', '20/3/2018')  # \1, \2, \3 分别代表分组1，2，3,即前面模式中圆括号扩起来的
+    if m is not None:
+        print(m)        # 3/20/2018
+
+split()
+
+    m = re.split(':', '1:2:3:and')
+    if m is not None:
+        print(m)    # ['1', '2', '3', 'and']
 
 
 
 
+    data = (
+        'A, 129',
+        'B, 230',
+        'C, 409',
+        'D MN',
+        'E HU'
+    )
+    for d in data:
+        m = re.split(', | (?=(?:\d{3}|[A-Z]{2}))', d)
+        if m is not None:
+            print(m)
 
+    """
+    输出
+    ['A', '129']
+    ['B', '230']
+    ['C', '409']
+    ['D', 'MN']
+    ['E', 'HU']
+    """
 
+扩展符号
 
+(?iLmsux)
 
+    m = re.findall('yes', 'yes, Yes, YES')
+    if m is not None:
+        print(m)    # ['yes']
+
+    m = re.findall('(?i)yes', 'yes, Yes, YES')
+    if m is not None:
+        print(m)    # ['yes', 'Yes', 'YES']
+
+    m = re.findall('yes', 'yes, Yes, YES', flags=re.I)
+    if m is not None:
+        print(m)    # ['yes', 'Yes', 'YES']
+
+    m = re.findall('(?im)(^th[\w]+)', """
+    The me is that.
+    That what i have you.
+    th hh h h.
+    """)
+    if m is not None:
+        print(m)    # ['The', 'That']
+
+原始字符串差异, 如果 有 符号 同时 用于 ASCII 和 正 则 表达式，则需要使用原始字符串来避免问题,例如： `r'\b'`
+
+    m = re.match('\byes', 'yes')    # \b 退格符号
+    if m is not None:
+        print(m.group())    # None
+
+    m = re.match('\\byes', 'yes')   # \\b 正则表达式
+    if m is not None:
+        print(m.group())    # yes
+
+    m = re.match(r'\byes', 'yes')   # \b 正则表达式
+    if m is not None:
+        print(m.group())    # yes
 
 
 
