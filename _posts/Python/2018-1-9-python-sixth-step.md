@@ -100,7 +100,7 @@ description: Python Sixth Step！
     tcp_ser_sock.bind(ADDR)     # 将套接字绑定到服务器地址
     tcp_ser_sock.listen(5)      # 开启 TCP 监听器， 参数 5 代表连接被转接或拒绝前，接收连接请求的最大数
 
-    while True:     # 无限循环
+    while True:     # 无限循环, 可以对这个循环进行 KeyboardInterrupt 或 EOFError 异常捕获，在 finally 中关闭服务器套接字
         print('阻塞中，等待客户端连接...')
         tcp_client_sock, addr = tcp_ser_sock.accept()   # 被动接受 TCP 客户端连接，一直等待直到连接到达
         print('已连接到地址:', addr)
@@ -109,7 +109,7 @@ description: Python Sixth Step！
             data = tcp_client_sock.recv(BUFSIZE)    # 接收消息
             if not data:    # 如果消息空白，意味客户端已经退出，此时跳出对话循环
                 break
-            tcp_client_sock.send('[%s] %s' % (bytes(ctime(), 'utf-8'), data))   # 如果接收到使用信息，将信息格式化并返回相同到数据
+            tcp_client_sock.send(bytes('[%s] %s' % (ctime(), data), 'utf-8'))    # 如果接收到使用信息，将信息格式化并返回相同到数据
 
         tcp_client_sock.close()     # 关闭当前客户端连接
 
@@ -117,9 +117,57 @@ description: Python Sixth Step！
 
 ### 创建 TCP客户端 的一般套路
 
-    
+    创建客户端套接字    cs = socket()
+    连接服务器         cs.connect()
+    通信循环
+    对话（接收，发送)   cs.recv()   cs.send()
+    关闭客户端套接字    cs.close()
+
+示例
+
+    from socket import *
 
 
+    HOST = 'localhost'  # 本地服务器主机名, 如果是 IPv6 则需要把本地主机修改成它的 IPv6 地址: HOST = '::1'
+    PORT = 21566        # 服务器端口号，需要与服务器设置的完全相同
+    BUFSIZE = 1024      # 缓冲区带下 1KB
+    ADDR = (HOST, PORT)
+
+    tcp_client_sock = socket(AF_INET, SOCK_STREAM)  # 创建 tcp 套接字, 如果使用IPv6，则替换 AF_INET 为 AF_INET6 即可
+    tcp_client_sock.connect(ADDR)   # 连接到服务器
+
+    while True:     # 无限循环
+        data = input('输入发送的数据: ')   # 输入数据
+        if not data:    # 没有输入数据时，跳出循环
+            break
+        tcp_client_sock.send(bytes(data, 'utf-8'))     # 发送数据到服务器进行处理
+        data = tcp_client_sock.recv(BUFSIZE)    # 接收到服务器返回到数据
+        if not data:    # 服务器终止或者 recv() 方法调用失败时跳出循环
+            break
+        print(data.decode('utf-8'))     # 使用数据
+
+    tcp_client_sock.close()
+
+### 执行 TCP 服务器和客户端
+
+首先启动服务器, 再进行启动客户端
+
+服务器控制台
+
+    阻塞中，等待客户端连接...
+    已连接到地址: ('127.0.0.1', 54736)
+
+客户端控制台
+
+    输入发送的数据: 2222222
+    [Wed Jan 10 23:32:35 2018] b'2222222'
+    输入发送的数据: 2323232
+    [Wed Jan 10 23:33:23 2018] b'2323232'
+    输入发送的数据: fefefef
+    [Wed Jan 10 23:33:25 2018] b'fefefef'
+    输入发送的数据: 
+
+    Process finished with exit code 0
 
 
 
