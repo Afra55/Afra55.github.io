@@ -279,6 +279,16 @@ description: Python Sixth Step！
 
     与 TCP 一致
 
+### 扩展
+
+socketserver是标准库到一个高级模块，简化创建网络服务器和客户端所必须的样板代码
+
+Twisted 完整的事件驱动的网络框架， 可以使用也可以开发完整的异步网络应用程序和协议, 提供 了 大量 的 支持 来 建立 完整 的 系统， 包括 网络 协议、 线程、 安全性 和 身份 验证、 聊天/ IM、 DBM 及 RDBMS 数据库 集成、 Web/ 因 特 网、 电子邮件、 命令行 参数、 GUI 集成 工具包 等, http://twistedmatrix.com/trac/
+
+
+
+
+
 
 
 
