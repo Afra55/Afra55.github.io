@@ -26,6 +26,8 @@ description: Python Sixth Step！
 
     udp_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
+### 常用方法
+
 | 服务器套接字方法 | 描述 |
 | :--------- | :--------- |
 | s.bind() | 将地址(主机名，端口号对)绑定到套接字上 |
@@ -72,6 +74,49 @@ description: Python Sixth Step！
 | s.family | 套接字地址族 |
 | s.type | 套接字类型 |
 | s.proto | 套接字协议 |
+
+### socket 模块属性
+
+| 数据属性 | 描述 |
+| :--------- | :--------- |
+| AF_UNIX, AF_INET, AF_INET6, AF_NETLINK, AF_TIPC | Python 中支持的套接字地址族 |
+| SO_STREAM, SO_DGRAM | 套接字类型（TCP=流，UDP=数据报） |
+| has_ipv6 | 布尔标记，是否支持 IPv6 |
+
+| 异常 | 描述 |
+| :--------- | :--------- |
+| error | 套接字相关错误 |
+| herror | 主机和地址相关错误 |
+| gaierror | 地址相关错误 |
+| timeout | 超时时间 |
+
+| 函数 | 描述 |
+| :--------- | :--------- |
+| socket() | 以给定的套接字族，套接字协议和协议类型创建一个套接字对象 |
+| socketpair() | 以给定的套接字族，套接字协议和协议类型创建一个套接字对象 |
+| create_connection() | 接收一个地址（主机名，端口号）对，返回套接字对象 |
+| fromfd() | 以一个打开的文件描述符创建一个套接字对象 |
+| ssl() | 通过套接字启动一个安全套接字层链接，不执行证书验证 |
+| getaddrinfo() | 获取一个五元组序列形式的地址信息 |
+| getnameinfo() | 给定一个套接字地址，返回（主机名，端口号）二元组 |
+| getfqdn() | 返回完整的域名 |
+| gethostname() | 返回当前主机名 |
+| gethostbyname() | 返回主机名对应的 IP 地址 |
+| gethostbyname_ex() | 返回真实的主机名，别名列表和IP地址列表 |
+| gethostbyaddr() | 返回真实的主机名，别名列表和IP地址列表 |
+| getprotobyname() | 返回指定协议的协议号（几乎没有使用过） |
+| getservbyname() | 从服务名称和协议名称中返回一个端口号,如果传入协议名则应该是 tcp 或 udp |
+| getservbyport() | 从端口号和协议名称中返回服务名称, 如果传入协议名则应该是 tcp 或 udp |
+| ntohl() | 将网络中的32位整数转换为主机字节顺序 |
+| ntohs() | 将网络中的16位整数转换为主机字节顺序 |
+| htonl() | 将主机的32位整数转换为网络字节顺序 |
+| htohs() | 将主机的16位整数转换为网络字节顺序 |
+| inet_aton() | 将字符串格式的IP地址（123.45.67.89）转换为32位的包格式(仅用于 IPv4)  |
+| inet_ntoa() | 将32位的包格转换为字符串形式的IP地址(仅用于 IPv4) |
+| inet_pton() | 将字符串格式的IP地址转换为适用于低级网络功能的压缩字符串 |
+| inet_ntop() | 将给定族的压缩IP地址转换为字符串格式 |
+| getdefaulttimeout() | 以秒为单位(浮点数)返回默认套接字超时时间 |
+| setdefaulttimeout() | 以秒为单位(浮点数)设置默认套接字超时时间 |
 
 ### 创建 TCP服务器 的一般套路
 
@@ -169,10 +214,70 @@ description: Python Sixth Step！
 
     Process finished with exit code 0
 
+### 创建 UDP 服务器的一般套路
+
+    创建服务器套接字    s = socket()
+    绑定服务器套接字    s.bind()
+    服务器无限循环     
+    接收或发送UDP消息     s.recvfrom()  s.sendto()
+    关闭服务器套接字    s.close() 
+
+示例
+
+    from socket import *
+    from time import ctime
 
 
+    HOST = ''
+    PORT = '21565'
+    BUFSIZE = 1024
+    ADDR = (HOST, PORT)
+
+    udp_service_sock = socket(AF_INET, SOCK_DGRAM)
+    udp_service_sock.bind(ADDR)     # UDP 是无连接到，所以绑定后，不需要开启监听器
+
+    while True:
+        print('阻塞，等待消息...')     # UDP 不需要连接，只需要等待接收消息
+        data, addr = udp_service_sock.recvfrom(BUFSIZE)
+        udp_service_sock.sendto(bytes('[%s] %s' % (ctime(), data), 'utf-8'), addr)
+        print('接收到信息，并返回信息到', addr)
+
+    udp_service_sock.close()
+
+### 创建 UDP 客户端的一般套路
+
+    创建客户端套接字    cs = socket()
+    通信循环
+    对话（发送/接收）   cs.sendto() cs.recvfrom()
+    关闭客户端套接字    cs.close()
+
+示例
+
+    from socket import *
 
 
+    HOST = 'localhost'
+    PORT = 21565
+    BUFFSIZE = 1024
+    ADDR = (HOST, PORT)
+
+    udp_client_sock = socket(AF_INET, SOCK_DGRAM)
+
+    while True:
+        data = input('请输入数据:')
+        if not data:
+            break
+        udp_client_sock.sendto(bytes(data, 'utf-8'), ADDR)
+        data, addr = udp_client_sock.recvfrom(BUFFSIZE)
+        if not data:
+            break
+        print(data)
+
+    udp_client_sock.close()
+
+### 执行 UDP 服务器和客户端
+
+    与 TCP 一致
 
 
 
