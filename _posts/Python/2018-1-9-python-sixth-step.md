@@ -285,6 +285,302 @@ socketserver是标准库到一个高级模块，简化创建网络服务器和�
 
 Twisted 完整的事件驱动的网络框架， 可以使用也可以开发完整的异步网络应用程序和协议, 提供 了 大量 的 支持 来 建立 完整 的 系统， 包括 网络 协议、 线程、 安全性 和 身份 验证、 聊天/ IM、 DBM 及 RDBMS 数据库 集成、 Web/ 因 特 网、 电子邮件、 命令行 参数、 GUI 集成 工具包 等, http://twistedmatrix.com/trac/
 
+## 文件传输 FTP
+
+FTP，文件传输协议
+
+UUCP, UNIX 到 UNIX 复制 协议
+
+rcp，Unix 下的远程网络复制命令
+
+HTTP, Web 超文本传输协议, 主要用于基于 Web 的文件下载以及访问 Web 服务
+
+### FTP
+
+文件传输协议(File Transfor Protocol, FTP), 主要用于匿名下载公共文件，也可以在两台计算机中传输文件
+
+工作流程 
+    
+    客户端连接远程主机上的 FTP 服务器
+    客户端输入用户名和密码（或者 'anonymous'和电子邮件地址）
+    客户端进行各种文件传输和信息查询操作
+    客户端从远程FTP服务器退出，结束传输
+
+如果客户端超过 15分钟（900秒）还没响应，FTP会因为超时中断传输
+
+FTP 在底层只使用 TCP，不使用 UDP
+
+FTP 客户端和 FTP 服务器由两个套接字来通信：一个时控制和命令端口21，一个时数据传输端口20
+
+| ftplib.FTP类方法 | 描述 |
+| :--------- | :--------- |
+| login(user = '', passwd = '', acct = '') | 登陆 FTP 服务器，所有参数时可选的 |
+| pwd() | 获取当前工作目录 | 
+| cwd(dirname) | 把当前工作目录设置为 dirname 所在的路径 |
+| dir(*args) | 列出目录里的内容, 可选的最后一个参数是回调函数，会传递给 retrlines() 方法 |
+| nlst(*args) | 与 dir() 类似，但返回文件名列表，而不是显示文件名 | 
+| retrlines(cmd, callback=None) | 给定 FTP 命令（例如：'RETR filename'），用于下载文本文件， 回调函数 callback 用于处理文件的每一行 |
+| retrbinary(cmd, callback, blocksize=8192, rest=None) | cmd命令用于处理二进制文件，回调函数 callback 用于处理文件的每一块（块大小默认8KB）下载的数据 |
+| storlines(cmd, fp, callback=None) | 给定 FTP 命令(例如：'STOR filename'), 用来上传文本文件。需要给定文本对象 fp |
+| storbinary(cmd, fp, blocksize=8192, callback=None, rest=None) | cmd 指令用于处理二进制文件，需要给定文件对象 fp，上传块大小默认为 8KB |
+| rename(fromname, toname) | 把远程文件 fromname 重命名为 toname | 
+| delete(filename) | 删除远程文件 filename | 
+| mkd(dirname) | 创建远程目录 |
+| rmd(dirname) | 删除远程目录 |
+| quit() | 关闭连接并退出 |
+
+可以参考如下命令直接在命令行连接 FTP服务器
+
+    from ftplib import FTP
+
+
+    f = FTP('ftp.python.org')
+    f.login()
+    f.dir()
+    f.retrlines('RETR motd')
+    f.quit()
+
+### 客户端FTP示例
+
+    import ftplib
+    import os
+    import socket
+
+
+    HOST = 'ftp.mozilla.org'
+    DIR = 'pub/webtools/'
+    FILE = 'mozbot-LATEST.tar.gz'
+
+
+    def main():
+        try:
+            f = ftplib.FTP(HOST)    # 创建 FTP 对象, 并尝试连接到 FTP 服务器
+        except (socket.error, socket.gaierror):
+            print('ERROR 无法连接到 "%s"' % HOST)
+            return
+
+        print('连接到 FTP 服务器 "%s"' % HOST)
+
+        try:
+            f.login()   # 匿名登陆
+        except ftplib.error_perm:
+            print('ERROR 无法匿名登陆')
+            f.quit()
+            return
+
+        print('匿名登陆成功')
+
+        try:
+            f.cwd(DIR)  # 转到目录
+        except ftplib.error_perm:
+            print('ERROR 无法切换目录到 "%s"' % DIR)
+            f.quit()
+            return
+
+        print('切换目录到 "%s"' % DIR)
+
+        try:
+            local_file = open(FILE, 'wb')
+            f.retrbinary('RETR %s' % FILE, local_file.write)  # 下载文件
+            local_file.close()
+        except ftplib.error_perm:
+            print('ERROR 无法读取文件 "%s"' % FILE)
+            os.unlink(FILE)     # 如果下载失败，就移除这个空文件
+        else:
+            print('下载文件 "%s"' % FILE)
+
+        f.quit()
+
+
+    if __name__ == '__main__':
+        main()
+
+## 新闻网络传输协议 NNTP 
+
+NNTP 只使用一个标准端口 119 来通信
+
+    连接到服务器
+    登陆
+    发出服务请求
+    退出
+
+伪代码
+
+    from nntplib import NNTP
+
+
+    n = NNTP('your.nntp.server')
+    r, c, f, l, g = n.group('comp.lang.python')     # 服务器到回复，文章到数量，第一篇和最后一篇到文章ID，新闻组到名称
+    # 其他操作
+    n.quit()
+
+## 电子邮件
+
+电子邮件消息由头字段（消息标题）以及后面可选的正文组成, 邮件可以没有正文但是一定要有标题（标题只需要两个字段发送地址字段'From:' 和 发送日期字段'Date:'）
+
+MTA 消息传输代理，在邮件交换主机上运行的服务器进程，负责邮件的路由，队列处理和发送工作
+
+MTA 通过 DNS域名服务来查找目的域名的 MX（邮件交换 mail eXchange）
+
+MTA 之间通过消息传输系统 MTS 互相通信
+
+SMTP 简单邮件传输协议
+
+LMTP 本地邮件传输协议
+
+    连接到服务器
+    登陆(可选)
+    发出服务请求
+    退出
+
+SMTP 通信时只需要一个端口 25
+
+| SMTP对象常见方法 | 描述 |
+| :--------- | :--------- |
+| `sendmail(from_addr, to_addrs, msg, mail_options=[], rcpt_options=[])` | 将msg从from_addr发送至to_addrs(列表或元组),还可以设置ESMTP邮件(mail_options)和收件人(rcpt_options)选项 |
+| ehlo(name='') | 使用 EHLO 初始化 SMTP (可选，sendmail（）会自动调用相关内容)  |
+| helo(name='') | 使用 HELO 初始化 SMTP (可选，sendmail（）会自动调用相关内容) |
+| starttls(keyfile=None, certfile=None, context=None) | 让服务器启动 TLS 模式，如果给定 keyfile 和 certfile 则它们用来创建安全套接字 |
+| set_debuglevel(debuglevel) | 为服务器通信设置调试级别 |
+| quit() | 关闭连接并退出 |
+| login(user, password, *, initial_response_ok=True) | 使用用户名和密码登陆 SMTP 服务器 |
+
+发送邮件伪代码
+
+    from smtplib import SMTP as smtp
+
+
+    s = smtp('smtp.host')
+    s.set_debuglevel(1)
+
+    s.sendmail('afra55@foxmail.com', ('afra@foxmail.com', '786654260@qq.com'), '''From:afra55@foxmail.com\r\nTo:afra@foxmail.com,786654260@qq.com\r\nSubject:test message\r\n\r\nAfra55\r\n.''')
+    s.quit()
+
+MUA 邮件用户代理
+
+POP 邮件协议, 第一个用于下载邮件的协议, 最新版时 POP3
+
+Python 中 poplib.POP3类 提供了许多方法用来下载和离线管理邮箱
+
+POP3 伪代码
+
+    from poplib import POP3 
+    p = POP3('pop.python.is.cool') 
+    p.user(...)
+    p.pass_(...)
+    ...
+    p.quit()
+
+IMAP 因特网消息访问协议(因特网邮件访问协议，交互式邮件访问协议，临时邮件访问协议)
+
+IMAP 伪代码
+
+    from imaplib import IMAP4 
+    s = IMAP4('imap.python.is.cool') 
+    s.login(...) 
+    ... 
+    s.close()
+    s.logout()
+
+### 发送邮件示例
+
+    from email.mime.image import MIMEImage
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+    from smtplib import SMTP
+
+
+    def make_mpa_msg():
+        """
+        包含纯文本消息，和 HTML 消息，由邮件客户端显示哪个部分
+        基于 Web 的 电子邮件 系统 会 显示 HTML 版本， 而 基于 命令 行的 邮件 阅读 器 只会 显示 纯 文本 版本
+        :return: MIMEMultipart
+        """
+        email = MIMEMultipart('alternative')  # 如果不传 alternative ，则文本和 HTML 会分别作为消息中的附件发送
+        text = MIMEText('Hello World!\r\n', 'plain')
+        email.attach(text)  # 附加到邮件中
+        html = MIMEText(
+            '<html><body><h4>Hello World!</h4>'
+            '</body></html>', 'html')
+        email.attach(html)  # 附加到邮件中
+        return email
+
+
+    def make_img_msg(fn):
+        """
+        图片消息
+        :param fn: 文件名
+        :return: MIMEImage
+        """
+        f = open(fn, 'r')
+        data = f.read()
+        f.close()
+        email = MIMEImage(data, name=fn)
+        email.add_header('Content-Disposition',
+                         'attachment; filename="%s"' % fn)  # 添加 Header
+        return email
+
+
+    def send_msg(fr, to, msg):
+        """
+        获取 基本 的 电子邮件 发送 信息（ 发 件 人、 收件人、 消息 正文）， 接着 传送 消息， 然后 返回 给 调用 者
+        :param fr:
+        :param to:
+        :param msg:
+        :return:
+        """
+        s = SMTP('localhost')
+        errs = s.sendmail(fr, to, msg)
+        s.quit()
+
+
+    if __name__ == '__main__':
+        print('sending multipart alternative msg')
+        msg = make_mpa_msg()
+        msg['From'] = SENDER
+        msg['To'] = ', '.join(RECIPS)
+        msg['Subject'] = 'multipart alternative test'
+        send_msg(SENDER, RECIPS, msg.as_string())
+
+        print('sending image msg')
+        msg = make_img_msg(SOME_IMG_FILE)
+        msg['From'] = SENDER
+        msg['To'] = ', '.join(RECIPS)
+        msg['Subject'] = 'image file test'
+        send_msg(SENDER, RECIPS, msg.as_string())
+
+### 解析 email
+
+    import email
+
+
+    def processMsg(entire_msg):
+        body = ''
+        msg = email.message_from_string(entire_msg)
+        if msg.is_multipart(): 
+            for part in msg.walk(): 
+                if part.get_content_type() == 'text/ plain': 
+                    body = part.get_payload() 
+                    break 
+                else: 
+                    body = msg.get_payload(decode=True) 
+        else: 
+            body = msg.get_payload(decode=True) 
+            return body
+
+email.message_from_string()： 用来 解析 消息
+
+msg.walk()： 遍历 消息 的 附件
+
+part.get_content_type()： 获得 正确 MIME 类型
+
+msg.get_payload()： 从 消息 正文 中 获取 特定 的 部分。 通常 decode 标记 会 设为 True， 即 邮件 正文 根据 每个 Content- Transfer- Encoding 头 解码
+
+
+
+
+
+
 
 
 
