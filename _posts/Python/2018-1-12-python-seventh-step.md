@@ -55,6 +55,8 @@ Queue 模块，用于创建队列数据结构在多线程之间进行数据共�
 
 注意：避免使用 thread 模块，尽量使用 threading 模块
 
+多线程适用于 I/O 密集型应用而不是计算密集型应用
+
 ## thread 模块
 
 锁 对象（ lock object， 也叫 原 语 锁、 简单 锁、 互斥 锁、 互斥 和 二进制 信号 量）
@@ -199,6 +201,8 @@ Queue 模块，用于创建队列数据结构在多线程之间进行数据共�
 守护线程 一般 是一 个 等待 客户 端 请求 服务 的 服务器。 如果 没有 客户 端 请求， 守护 线程 就是 空闲 的。 如果 把 一个 线程 设置 为 守护 线程， 就 表示 这个 线程 是 不重 要的， 进程 退出 时不 需要 等待 这个 线程 执行 完成
 
 主线程在所有非守护线程退出后才会退出
+
+注：如果多线程共享改变同一个数据时，应使用一个锁来使这个数据唯一
 
 ### Thread
 
@@ -382,7 +386,202 @@ Queue 模块，用于创建队列数据结构在多线程之间进行数据共�
 
 
 
+#### 信号量
 
+信号 量 是最 古老 的 同步 原 语 之一。 它是 一个 计数器， 当 资源 消耗 时 递减， 当 资源 释放 时 递增。
+
+模拟 一个 简化 的 糖果 机。 这个 特制 的 机器 只有 5 个 可 用的 槽 来 保持 库存（ 糖果）。 如果 所 有的 槽 都 满了， 糖果 就不能 再加 到这 个 机器 中了； 相似 地， 如果 每个 槽 都 空了， 想要 购买 的 消费者 就 无法 买到 糖果 了
+
+    from atexit import register
+    from random import randrange
+    from threading import BoundedSemaphore, Lock, Thread
+    from time import sleep, ctime
+
+    lock = Lock()   # 一个锁
+    MAX = 5         # 最大值
+    candytray = BoundedSemaphore(MAX)   # 信号量，即计数器
+
+
+    def refill():
+        lock.acquire()
+        print('填装糖果...', end=' ')
+        try:
+            candytray.release()     # 增加信号量
+        except ValueError:          # 当大于最大值时
+            print('已经满了')
+        else:
+            print('OK')
+        lock.release()
+
+
+    def buy():
+        lock.acquire()
+        print('购买糖果...', end=' ')
+        if candytray.acquire(False):    # 减少信号量, 不阻塞
+            print('OK')
+        else:
+            print('卖完了')
+        lock.release()
+
+
+    def producer(loops):
+        for i in range(loops):
+            refill()    # 制作糖果
+            sleep(randrange(3))
+
+
+    def consumer(loops):
+        for i in range(loops):
+            buy()       # 购买糖果
+            sleep(randrange(3))
+
+
+    def _main():
+        print('开始时间:', ctime())
+        nloops = randrange(2, 6)
+        print('糖果机 (最大库存数 %d)!' % MAX)
+        Thread(target=consumer, args=(randrange(
+            nloops, nloops + MAX + 2),)).start()  # buyer
+        Thread(target=producer, args=(nloops,)).start()  # vendor
+
+
+    @register       # register 注解，用于在主线程结束时调用该注解方法
+    def _atexit():
+        print('完成时间:', ctime())
+
+
+    if __name__ == '__main__':
+        _main()
+
+
+输出
+
+    开始时间: Tue Jan 16 15:31:40 2018
+    糖果机 (最大库存数 5)!
+    购买糖果... OK
+    填装糖果... OK
+    购买糖果... OK
+    填装糖果... OK
+    购买糖果... OK
+    购买糖果... OK
+    填装糖果... OK
+    完成时间: Tue Jan 16 15:31:47 2018
+
+    Process finished with exit code 0
+
+## queue 模块
+
+队列
+
+| queue 模块的类 | 描述 |
+| :--------- | :--------- |
+| Queue(maxsize=0) | 创建一个先入先出队列。如果给定最大值，则队列会在没有空间时阻塞，否则是无限队列 |
+| LifoQueue(maxsize=0) | 创建一个后入先出队列。如果给定最大值，则队列会在没有空间时阻塞，否则是无限队列 |
+| PriorityQueue(maxsize=0) | 创建一个优先级队列。如果给定最大值，则队列会在没有空间时阻塞，否则是无限队列 |
+
+| queue 异常 | 描述 |
+| :--------- | :--------- |
+| Empty | 当对空队列调用 get*() 方法时抛出异常 |
+| Full | 当对已满的队列使用 put*() 方法时抛出异常 |
+
+| queue 对象的方法 | 描述 |
+| :--------- | :--------- |
+| qsize() | 返回队列大小（由于反回时，该值可能被其他线程修改，so 这是个近似值） |
+| empty() | 返回布尔值，判断队列是否为空 |
+| full() | 返回布尔值，判断队列是否已满 |
+| put(item, block=True, timeout=None) | 将 item 放入队列。如果 block 是 True 和 timeout 是 None，则队列会在有可用空间之前阻塞， 通过设置 timeout 来设置最多阻塞时间（秒）；如果 block 为 False 则队列在没有空间时 put（） 会抛出 Full 异常 |
+| put_nowait(item) | 即 put(item, block=False) |
+| get(block=true, timeout=none) | 从队列中取得元素。如果 block 是 True 和 timeout 是 None, 则队列会在有可用元素之前阻塞，通过设置 timeout 来设置最多阻塞时间（秒）；如果 block 为 False 则队列在没有可用元素时 get() 会抛出 Empty 异常 |
+| get_nowait() | 即 get(block=False) |
+| task_done() | 用于表示队列中的某个元素执行完成, 该方法会被 join() 使用 |
+| join() | 在队列中所有元素执行完毕并调用上面的 task_done() 之前，保持阻塞 |
+
+一个消费和生产的例子
+
+    import threading
+    from random import randrange
+    from time import sleep, ctime
+    import queue
+
+
+    class MyThread(threading.Thread):
+        def __init__(self, func, args, name='', verb=False):
+            threading.Thread.__init__(self)
+            self.name = name
+            self.func = func
+            self.args = args
+            self.verb = verb
+
+        def get_result(self):
+            return self.res
+
+        def run(self):
+            if self.verb:
+                print('starting', self.name, 'at:', ctime())
+            self.res = self.func(*self.args)
+            if self.verb:
+                print(self.name, 'finished at:', ctime())
+
+
+    def write_q(temp_queue):
+        print('放入队列一个...', end='')
+        temp_queue.put('xxx', True)     # 放入队列
+        print("size now", temp_queue.qsize())
+
+
+    def read_q(temp_queue):
+        val = temp_queue.get(True)  # 从队列取出
+        print('从队列取出一个... size now', temp_queue.qsize())
+
+
+    def writer(temp_queue, loops):
+        for i in range(loops):
+            write_q(temp_queue)
+            sleep(randrange(1, 4))
+
+
+    def reader(temp_queue, loops):
+        for i in range(loops):
+            read_q(temp_queue)
+            sleep(randrange(2, 6))
+
+
+    funcs = [writer, reader]
+    nfuncs = range(len(funcs))
+
+
+    def main():
+        n_loops = randrange(2, 6)
+        q = queue.Queue(32)     # 队列
+
+        threads = []
+        for i in nfuncs:
+            t = MyThread(funcs[i], (q, n_loops), funcs[i].__name__)
+            threads.append(t)
+
+        for i in nfuncs:
+            threads[i].start()
+
+        for i in nfuncs:
+            threads[i].join()
+
+        print('all DONE')
+
+
+    if __name__ == '__main__':
+        main()
+
+## 相关模块
+
+subprocess 模块：可用于派生进程，可以 单纯 地 执行任务， 或者 通过 标准 文件（ stdin、 stdout、 stderr） 进行 进程 间 通信
+
+multiprocessing 模块：允许 为多 核 或 多 CPU 派生 进程， 其 接口 与 threading 模块 非常 相似。 该 模块 同样 也 包括 在 共享 任务 的 进程 间 传输 数据 的 多种 方式
+
+concurrent.futures 模块：不再 需要 过分 关注 同步 和 线程/ 进程 的 管理 了， 只需 要 指定 一个 给定 了“ worker” 数量 的 线程/ 进程 池， 提交 任务， 然后 整理 结果
+
+mutex 模块：互斥对象
+
+SocketServer 模块：创建管理线程控制的 TCP/UDP 服务器
 
 
 
