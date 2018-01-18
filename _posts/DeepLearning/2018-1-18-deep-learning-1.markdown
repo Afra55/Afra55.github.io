@@ -67,12 +67,12 @@ description: Deep Learning 1!
 
 | 微积分 | 描述 |
 | :--------- | :--------- |
-| $$\\frac{dy}{dx}$$ | y 关于 x 的导数 |
-| $$\\frac{&part;y}{&part;x}$$ | y 关于 x 的偏导 |
+| $$\frac\{dy\}\{dx\}$$ | y 关于 x 的导数 |
+| $$\\frac\{&part;y\}\{&part;x\}$$ | y 关于 x 的偏导 |
 | &nabla;<sub>_x_</sub>y | y 关于 _x_ 的梯度 |
 | &nabla;<sub>___X___</sub>y | y 关于 ___X___ 的矩阵导数 |
 | &nabla;<sub>__X__</sub>y | y 关于 __X__ 求导后的张量 |
-| \$\frac{&part;&fnof;}{&part;__x__}\$ | &fnof;: R<sup>n</sup> &rarr; R<sup>m</sup> 的Jacobian矩阵 ___J___ &isin; R<sup>mxn</sup> |
+| \$\\frac{&part;&fnof;}{&part;__x__}\$ | &fnof;: R<sup>n</sup> &rarr; R<sup>m</sup> 的Jacobian矩阵 ___J___ &isin; R<sup>mxn</sup> |
 | &part;<sub>x</sub><sup>2</sup>&fnof;(__x__) or H(&fnof;)(__x__) | f 在 __x__ 处的 Hessian 矩阵 |
 | &int;f(__x__) dx | __x__ 整个域上的定积分 |
 | &int;<sub>S</sub>f(__x__) dx | 集合 S 上关于 x 的定积分 |
