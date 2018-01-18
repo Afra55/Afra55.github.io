@@ -77,8 +77,8 @@ description: Deep Learning 1!
 | &int;f(__x__) dx | __x__ 整个域上的定积分 |
 | &int;<sub>S</sub>f(__x__) dx | 集合 S 上关于 x 的定积分 |
 
-$$x=\frac{-b\pm\sqrt{b^2-4ac}}{2a}$$
-\\(x=\frac{-b\pm\sqrt{b^2-4ac}}{2a}\\)
+
+
 
 
 
