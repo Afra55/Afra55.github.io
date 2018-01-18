@@ -74,9 +74,11 @@ description: Deep Learning 1!
 | &nabla;<sub>__X__</sub>y | y 关于 __X__ 求导后的张量 |
 | $\frac{&part;&fnof;}{&part;__x__}$ | &fnof;: R<sup>n</sup> &rarr; R<sup>m</sup> 的Jacobian矩阵 ___J___ &isin; R<sup>mxn</sup> |
 | &part;<sub>x</sub><sup>2</sup>&fnof;(__x__) or H(&fnof;)(__x__) | f 在 __x__ 处的 Hessian 矩阵 |
-| &int;f(__x__) d__x__ | __x__ 整个域上的定积分 |
-| &int;<sub>S</sub>f(__x__) d__x__ | 集合 S 上关于 x 的定积分 |
+| &int;f(__x__) dx | __x__ 整个域上的定积分 |
+| &int;<sub>S</sub>f(__x__) dx | 集合 S 上关于 x 的定积分 |
 
+$$x=\frac{-b\pm\sqrt{b^2-4ac}}{2a}$$
+\\(x=\frac{-b\pm\sqrt{b^2-4ac}}{2a}\\)
 
 
 
