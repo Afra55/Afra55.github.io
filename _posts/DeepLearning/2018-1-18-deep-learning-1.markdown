@@ -37,17 +37,17 @@ description: Deep Learning 1!
 
 | 集合和图 | 描述 |
 | :--------- | :--------- |
-| A(空心A) | 集合 |
-| R(空心R) | 实数集 |
+| $$\Bbb {A}$$ | 集合 |
+| $$\Bbb {R}$$ | 实数集 |
 | {0,1} | 包含0和1的集合 |
 | {0,1,...,n} | 包含0和n以及之间的所有整数的集合 |
 | `[a,b]` | 包含 a 和 b 的实数区间 |
 | `(a,b]` | 不包含 a 但包含 b 的实数区间 |
-| A\B | 差集，即元素包含于 A 但不包含于 B |
+| $$\Bbb {A}$$ \ $$\Bbb {B}$$ | 差集，即元素包含于 $$\Bbb {A}$$ 但不包含于 $$\Bbb {B}$$ |
 | &sigmaf; | 图 |
 | _Pa<sub>&sigmaf;</sub>_(X<sub>i</sub>) | 图 &sigmaf; 中 x<sub>i</sub> 的父节点 |
 
-| 集合和图 | 描述 |
+| 索引 | 描述 |
 | :--------- | :--------- |
 | a<sub>i</sub> | 向量 ___a___ 的第 i 个元素, 其中索引从 1 开始 |
 | a<sub>-i</sub> | 除了第 i 个元素，___a___ 的所有元素 |
@@ -72,10 +72,10 @@ description: Deep Learning 1!
 | &nabla;<sub>_x_</sub>y | y 关于 _x_ 的梯度 |
 | &nabla;<sub>___X___</sub>y | y 关于 ___X___ 的矩阵导数 |
 | &nabla;<sub>__X__</sub>y | y 关于 __X__ 求导后的张量 |
-| $$\frac{∂ƒ}{∂x}$$ | &fnof;: R<sup>n</sup> &rarr; R<sup>m</sup> 的Jacobian矩阵 ___J___ &isin; R<sup>mxn</sup> |
+| $$\frac{∂ƒ}{∂x}$$ | &fnof;: $$\Bbb {R}$$<sup>n</sup> &rarr; $$\Bbb {R}$$<sup>m</sup> 的Jacobian矩阵 ___J___ &isin; $$\Bbb {R}$$<sup>m x n</sup> |
 | &part;<sub>x</sub><sup>2</sup>&fnof;(__x__) or H(&fnof;)(__x__) | f 在 __x__ 处的 Hessian 矩阵 |
 | &int;f(__x__) dx | __x__ 整个域上的定积分 |
-| &int;<sub>S</sub>f(__x__) dx | 集合 S 上关于 x 的定积分 |
+| &int;<sub>$$\Bbb {S}$$</sub>f(__x__) dx | 集合 $$\Bbb {S}$$ 上关于 x 的定积分 |
 
 | 概率和信息论 | 描述 |
 | :--------- | :--------- |
@@ -84,16 +84,16 @@ description: Deep Learning 1!
 | P(a) | 离散变量上的概率分布 |
 | p(a) | 连续变量上(或变量类型未指定时)的概率分布 |
 | a~P | 具有分布 P 的随机变量a |
-| E<sub>x~P</sub>\[&fnof;(x)\] or E&fnof;(x) | f(___x___) 关于 P(x)的期望 |
+| $$\Bbb {E}$$<sub>x~P</sub>\[&fnof;(x)\] or $$\Bbb {E}$$&fnof;(x) | f(___x___) 关于 P(x)的期望 |
 | Var(f(___x___)) | f(___x___) 在分布 P(x) 下的方差 |
 | Cov(f(___x___), g(x)) | f(___x___) 和 g(x) 在分布 P(x) 的协方差 |
 | H(x) | 随机变量的x的香浓熵 |
 | D<sub>KL</sub>(P&#124;&#124;Q) | P 和 Q 的 KL 散度 |
-| ___N(x; &mu;, &sum; )___ | 均值为 &mu;, 协方差为 &sum;, x 上的高斯分布 |
+| ___$$\mathcal {N}$$(x; &mu;, &sum; )___ | 均值为 &mu;, 协方差为 &sum;, x 上的高斯分布 |
 
 | 函数 | 描述 |
 | :--------- | :--------- |
-| &fnof; : A &rarr; B | 定义域为 A，值域为 B 的函数 f |
+| &fnof; : $$\Bbb {A} $$ &rarr; $$\Bbb {B} $$ | 定义域为 $$\Bbb {A} $$，值域为 $$\Bbb {B} $$ 的函数 f |
 | f&ordm;g | f 和 g 的组合 |
 | f(___x;&theta;___) | 由 &theta; 参数变化，关于 x 的函数（有时为了简化而忽略了 &theta; 记为 f(___x___)） |
 | log x | x 的自然对数　|
