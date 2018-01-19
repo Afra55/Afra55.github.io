@@ -157,9 +157,315 @@ SQL 的 NULL 值 对 应于 Python 的 NULL 对象 None
 
 [更多数据库编程信息](https://wiki.python.org/moin/DatabaseProgramming)
 
+### 适配器示例
+
+    from distutils.log import warn as printf
+    import os
+    from random import randrange as rand
 
 
+    COLSIZ = 10
+    FIELDS = ('login', 'userid', 'projid')
+    RDBMSs = {'s': 'sqlite', 'm': 'mysql', 'g': 'gadfly'}
+    DBNAME = 'test'
+    DBUSER = 'root'
+    DB_EXC = None  # 数据库异常
+    NAMELEN = 16
 
+    tformat = lambda s: str(s).title().ljust(COLSIZ)  # 格式化字符串来显示标题
+    cformat = lambda s: s.upper().ljust(COLSIZ)  # 全大写
+
+
+    def setup():
+        return RDBMSs[input('''
+    选择一个数据库系统:
+
+    (M)ySQL
+    (G)adfly
+    (S)QLite
+
+    输入: ''').strip().lower()[0]]
+
+
+    def connect(db):
+        """
+        找到合适的模块，并加载数据库，建立连接
+        :param db:  模块名
+        :return:    返回 Connection 对象
+        """
+        global DB_EXC
+        dbDir = '%s_%s' % (db, DBNAME)
+
+        if db == 'sqlite':
+            try:
+                import sqlite3
+            except ImportError:
+                try:
+                    from pysqlite2 import dbapi2 as sqlite3
+                except ImportError:
+                    return None
+
+            DB_EXC = sqlite3
+            if not os.path.isdir(dbDir):
+                os.mkdir(dbDir)
+            cxn = sqlite3.connect(os.path.join(dbDir, DBNAME))
+
+        elif db == 'mysql':
+            try:
+                import MySQLdb
+                import _mysql_exceptions as DB_EXC
+
+                try:
+                    cxn = MySQLdb.connect(db=DBNAME)
+                except DB_EXC.OperationalError:
+                    try:
+                        cxn = MySQLdb.connect(user=DBUSER)
+                        cxn.query('CREATE DATABASE %s' % DBNAME)
+                        cxn.commit()
+                        cxn.close()
+                        cxn = MySQLdb.connect(db=DBNAME)
+                    except DB_EXC.OperationalError:
+                        return None
+            except ImportError:
+                try:
+                    import mysql.connector
+                    import mysql.connector.errors as DB_EXC
+                    try:
+                        cxn = mysql.connector.Connect(**{
+                            'database': DBNAME,
+                            'user': DBUSER,
+                        })
+                    except DB_EXC.InterfaceError:
+                        return None
+                except ImportError:
+                    return None
+
+        elif db == 'gadfly':
+            try:
+                from gadfly import gadfly
+                DB_EXC = gadfly
+            except ImportError:
+                return None
+
+            try:
+                cxn = gadfly(DBNAME, dbDir)
+            except IOError:
+                cxn = gadfly()
+                if not os.path.isdir(dbDir):
+                    os.mkdir(dbDir)
+                cxn.startup(DBNAME, dbDir)
+        else:
+            return None
+        return cxn
+
+
+    def create(cur):
+        """
+        在数据库中创建一个新表 users
+        :param cur:
+        :return:
+        """
+        try:
+            cur.execute('''
+                CREATE TABLE users (
+                    login  VARCHAR(%d),
+                    userid INTEGER,
+                    projid INTEGER)
+            ''' % NAMELEN)
+        except (DB_EXC.OperationalError, DB_EXC.ProgrammingError):
+            drop(cur)
+            create(cur)
+
+
+    drop = lambda cur: cur.execute('DROP TABLE users')  # 删除users表
+
+    NAMES = (
+        ('aaron', 8312), ('angela', 7603), ('dave', 7306),
+        ('davina', 7902), ('elliot', 7911), ('ernie', 7410),
+        ('jess', 7912), ('jim', 7512), ('larry', 7311),
+        ('leslie', 7808), ('melissa', 8602), ('pat', 7711),
+        ('serena', 7003), ('stan', 7607), ('faye', 6812),
+        ('amy', 7209), ('mona', 7404), ('jennifer', 7608),
+    )
+
+
+    def rand_name():
+        """
+        获取名字及ID
+        :return: 名字及ID
+        """
+        pick = set(NAMES)
+        while pick:
+            yield pick.pop()
+
+
+    def insert(cur, db):
+        """
+        插入名字和ID到users表中
+        :param cur: 游标
+        :param db: 模块
+        :return:
+        """
+        if db == 'sqlite':
+            cur.executemany("INSERT INTO users VALUES(?, ?, ?)",
+                            [(who, uid, rand(1, 5)) for who, uid in rand_name()])
+        elif db == 'gadfly':
+            for who, uid in rand_name():
+                cur.execute("INSERT INTO users VALUES(?, ?, ?)",
+                            (who, uid, rand(1, 5)))
+        elif db == 'mysql':
+            cur.executemany("INSERT INTO users VALUES(%s, %s, %s)",
+                            [(who, uid, rand(1, 5)) for who, uid in rand_name()])
+
+
+    get_rc = lambda cur: cur.rowcount if hasattr(cur, 'rowcount') else -1  # 上次 excute() 方法处理或影响的行数
+
+
+    def update(cur):
+        """
+        随机更新表中的行的projid通过projid
+        :param cur:
+        :return:
+        """
+        fr = rand(1, 5)
+        to = rand(1, 5)
+        cur.execute(
+            "UPDATE users SET projid=%d WHERE projid=%d" % (to, fr))
+        return fr, to, get_rc(cur)
+
+
+    def delete(cur):
+        """
+        随机删除表中的行通过projid
+        :param cur:
+        :return:
+        """
+        rm = rand(1, 5)
+        cur.execute('DELETE FROM users WHERE projid=%d' % rm)
+        return rm, get_rc(cur)
+
+
+    def db_dump(cur):
+        """
+        从数据库中拉取所有行，并显示
+        :param cur:
+        :return:
+        """
+        cur.execute('SELECT * FROM users')
+        printf('\n%s' % ''.join(map(cformat, FIELDS)))
+        for data in cur.fetchall():
+            printf(''.join(map(tformat, data)))
+
+
+    def main():
+        db = setup()
+        printf('*** 连接到数据库 %r ' % db)
+        cxn = connect(db)
+        if not cxn:
+            printf('ERROR:不支持 %r 数据库或者无法获取该数据库, exit' % db)
+            return
+        cur = cxn.cursor()
+
+        printf('\n*** 创建 users 表')
+        create(cur)
+
+        printf('\n*** 插入 names 到表中')
+        insert(cur, db)
+        db_dump(cur)
+
+        printf('\n*** 随机移动用户到另一个组')
+        fr, to, num = update(cur)
+        printf('\t(%d 个用户被移动) 从 (%d) 到 (%d)' % (num, fr, to))
+        db_dump(cur)
+
+        printf('\n*** 随机删除用户组')
+        rm, num = delete(cur)
+        printf('\t(组 #%d; %d 用户被删除)' % (rm, num))
+        db_dump(cur)
+
+        printf('\n*** 删除表')
+        drop(cur)
+        printf('\n*** 关闭连接')
+        cur.close()
+        cxn.commit()
+        cxn.close()
+
+
+    if __name__ == '__main__':
+        main()
+
+
+### ORM
+
+ORM 系统将 纯 SQL 语句 进行 了 抽象化 处理， 将其 实现 为 Python 中的 对象， 这样 你 只 操作 这些 对象 就能 完成 与生 成 SQL 语句 相同 的 任务
+
+SQLObject 更加 简单、 更加 类似 Python、 更 快速， 而在 SQLAlchemy 中 对象 的 抽象化 十分 完美，以及更好的 灵活性 用来 提交 原生 SQL 语句
+
+SQLAlchemy: http://sqlalchemy.org
+SQLObject: http://sqlobject.org
+
+### 非关系数据库
+
+MongoDB 类示例
+
+    from pymongo import Connection, errors
+
+    class MongoTest(object):
+        def __init__(self):
+            try:
+                cxn = Connection()
+            except errors.AutoReconnect:
+                raise RuntimeError()
+            self.db = cxn[DBNAME]   # 创建或复用数据库
+            self.users = self.db[COLLECTION]    # 获取 users 集合
+
+        def insert(self):
+            """
+            插入用户名和ID 到 users 集合中
+            :return:
+            """
+            self.users.insert(dict(login=who, userid=uid, projid=rand(1, 5)) for who, uid in randName())
+
+        def update(self):
+            """
+            更新projid
+            :return:
+            """
+            fr = rand(1, 5)
+            to = rand(1, 5)
+            i = -1
+            for i, user in enumerate(self.users.find({'projid': fr})):
+                self.users.update(user,
+                                  {'$set': {'projid': to}})
+            return fr, to, i + 1
+
+        def delete(self):
+            """
+            删除行
+            :return:
+            """
+            rm = rand(1, 5)
+            i = -1
+            for i, user in enumerate(self.users.find({'projid': rm})):
+                self.users.remove(user)
+            return rm, i + 1
+
+        def db_dump(self):
+            """
+            获取所有行
+            :return:
+            """
+            printf('\n%s' % ''.join(map(cformat, FIELDS)))
+            for user in self.users.find():
+                printf(''.join(map(tformat,
+                                   (user[k] for k in FIELDS))))
+
+        def finish(self):
+            """
+            断开连接
+            :return:
+            """
+            self.db.connection.disconnect()
 
 
 
