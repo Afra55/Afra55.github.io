@@ -146,6 +146,39 @@ pyw 扩展名 用于 抑制 终端 的 显示， 其 目的 是 运行 一个 �
 
 ### Outlook
 
+    from tkinter import Tk
+    from tkinter.messagebox import showwarning
+    import win32com.client as win32
+
+    warn = lambda app: showwarning(app, 'Exit?')
+    RANGE = list(range(3, 8))
+
+
+    def outlook():
+        app = 'Outlook'
+        olook = win32.gencache.EnsureDispatch('%s.Application' % app)
+
+        mail = olook.CreateItem(win32.constants.olMailItem)     # 创建邮件
+        recip = mail.Recipients.Add('you@127.0.0.1')        # 收件人
+        subj = mail.Subject = 'Python-to-%s Demo' % app     # 主题题
+        body = ["第 %d 行" % i for i in RANGE]
+        body.insert(0, '%s\r\n' % subj)
+        body.append("\r\nTh-th-th-that's all folks!")
+        mail.Body = '\r\n'.join(body)           # 正文内容
+        mail.Send()         # 发送
+
+        ns = olook.GetNamespace("MAPI")
+        obox = ns.GetDefaultFolder(win32.constants.olFolderOutbox)  # 用于打开 Outbox 并显示
+        obox.Display()
+        obox.Items.Item(1).Display()
+
+        warn(app)
+        olook.Quit()
+
+
+    if __name__ == '__main__':
+        Tk().withdraw()
+        outlook()
 
 
 
