@@ -133,7 +133,144 @@ HTTP 验证示例
         print(str(f.readline(), 'utf-8'))
         f.close()
 
-## 
+## 推荐使用 requests
+
+[requests](http://cn.python-requests.org/zh_CN/latest/)
+
+## 爬虫
+
+[更多内容，上 github 搜爬虫](https://github.com/search?o=desc&q=爬虫&s=stars&type=Repositories&utf8=✓)
+
+使用 [requests](http://cn.python-requests.org/zh_CN/latest/)
+
+使用 [Beautiful Soup](http://beautifulsoup.readthedocs.io/zh_CN/latest/)
+
+一个爬小说的例子：
+
+    import requests
+    from bs4 import BeautifulSoup
+
+    server = 'http://www.biqukan.com'
+    target = 'http://www.biqukan.com/1_1496/'
+
+
+    def req_get_bf(url):
+        return BeautifulSoup(requests.get(url).text, 'html.parser')
+
+
+    def get_content(content_url):
+        bf = req_get_bf(content_url)
+        texts = bf.find_all('div', 'showtxt')
+        return texts[0].text.replace('\xa0' * 8, '\n\n')
+
+
+    def get_target_url(main_url, name_list, url_list):
+        div_bf = req_get_bf(main_url)
+        div = div_bf.find_all('div', 'listmain')
+        a_div_bf = BeautifulSoup(str(div[0]), 'html.parser')
+        a = a_div_bf.find_all('a')[12:]
+        for item in a:
+            url_list.append(server + item.get('href'))
+            name_list.append(item.string)
+
+        return len(a)
+
+
+    def write_to_file(name, path, text):
+        with open(path, 'a', encoding='utf-8') as f:
+            f.write(name + '\n')
+            f.writelines(text)
+            f.write('\n\n')
+
+
+    if __name__ == '__main__':
+        names = []  # 存放章节名
+        urls = []  # 存放章节链接
+        nums = get_target_url(target, names, urls)
+        for i in range(nums):
+            print('正在下载', names[i])
+            write_to_file(names[i], '龙王传说.txt', get_content(urls[i]))
+
+## Web(http)服务器
+
+要 建立 一个 Web 服务器， 必须 建立 一个 基本 的 服务器 和 一个“ 处理 程序”
+
+基础 的 Web 服务器 是一 个 模板。 其 角色 是在 客户 端 和 服务器 端 完成 必要 的 HTTP 交互
+
+处理 程序 是一 些 处理 主要“ Web 服务” 的 简单 软件。 它 用于 处理 客户 端 的 请求， 并 返回 适当 的 文件， 包括 静态 文件 或 动态 文件。 处理 程序 的 复杂性 决定了 Web 服务器 的 复杂 程度
+
+以下是三种不同的处理程序，都整合在 http.server 模块中:
+
+1. BaseHTTPResquestHandler  除了 获得 客户 端 的 请求 外， 没有 实现 其他 处理 工作
+2. SimpleHTTPRequestHandler  建立 在 BaseHTTPResquestHandler 的 基础上， 以 非常 直接 的 形式 实现 了 标准 的 GET 和 HEAD 请求
+3. CGIHTTPRequestHandler 这个 处理 程序 可以 获取 SimpleHTTPRequestHandler， 并 添 加了 对 POST 请求 的 支持,其 可以 调用 CGI 脚本 完成 请求 处理 过程, 也可以 将 生成 的 HTML 脚本 返回 给 客户 端
+
+一个简单的 Web服务器示例，可以读取 GET 请求，获取 Web页面 html文件，并返回给调用的客户端:
+
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+
+
+    class MyHandler(BaseHTTPRequestHandler):
+        def do_get(self):
+            try:
+                f = open(self.path[1:], 'r')
+                self.send_response(200)
+                self.send_header('Content-type', 'text/html')
+                self.end_headers()
+                self.wfile.write(f.read())
+                f.close()
+            except IOError:
+                self.send_error(404, 'File Not Found: %s' % self.path)
+
+
+    def main():
+        server = HTTPServer(('', 8080), MyHandler)
+        try:
+            print('Welcome to the machine...')
+            print('Press ^C once or twice to quit')
+            server.serve_forever()
+        except KeyboardInterrupt:
+            print('^C received, shutting down server')
+        finally:
+            if server:
+                server.socket.close()
+
+
+    if __name__ == '__main__':
+        main()
+
+| Web 应用程序　| 描述 |
+| :--------- | :--------- |
+| cgi | 冲标准网关（CGI）获取数据 |
+| cgitb | 处理 CGI 返回数据 |
+| HTMLparse | HTML, XHTML 解析器 |
+| htmlentitydefs | 一些 HTML 普通实体定义 |
+| Cookie | 用于 HTTP 状态管理的服务器端 cookie |
+| cookielib | HTTP 客户端的 cookie 处理类 |
+| webbrowser | 控制器：向浏览器加载文档 |
+| sgmllib | 解析简单的 SGML 文件 |
+| robotparser | 解析 robots.txt 文件，对 URL 做“可获得性分析” |
+| httplib | 用来创建 HTTP 客户端　|
+| urllib | 通过 URL 或相关工具访问服务器 |
+
+| Xml 处理 | 描述 |
+| :--------- | :--------- |
+| xml | 包含许多不同解析器的 XML 包 |
+| xml.sax | 用于兼容 SAX2 的 XML（SAX）解析器 |
+| xml.dom | 文档对象模型(DOM)XML解析器 |
+| xml.etree | 树型 xml 解析器，基于 Element 灵活容器对象 |
+| xml.parsers.expat | 非验证型 Expat XML 解析器的接口 |
+| xmlrpclib | 通过 HTTP 提供 XML 远程过程调用 （RPC）客户端 |
+| SimpleXMLRPCServer | python XML-RPC 服务器的基本框架 |
+| DocXMLRPCServer | 自描述XML-RPC 服务器的基本框架 |
+
+| Web 服务器 | 描述 |
+| :--------- | :--------- |
+| BaseHTTPServer | 开发 Web服务器的抽象类 |
+| SimpleHTTPServer | 处理最简单的 HTTP 请求 (HEAD 和 GET) |
+| CGIHTTPServer | 像 SimpleHTTPServer 一样处理 Web文件，还能处理 CGI （HTTP POST） 请求 |
+| wsgiref | 定义 Web 服务器和 Python Web 应用程序间的标准接口的包 |
+
 
 
 
