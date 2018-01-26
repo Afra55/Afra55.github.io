@@ -14,6 +14,8 @@ description: Python Tenth Step！
 
 [http://afra55.github.io/2018/01/22/python-tenth-step/](http://afra55.github.io/2018/01/22/python-tenth-step/)
 
+推荐用 http://cn.python-requests.org/zh_CN/latest/
+
 ##  Web 客户端和服务器
 
 HTTP（ HyperText Transfer Protocol， 超 文本 传输）
