@@ -271,6 +271,254 @@ HTTP 验证示例
 | CGIHTTPServer | 像 SimpleHTTPServer 一样处理 Web文件，还能处理 CGI （HTTP POST） 请求 |
 | wsgiref | 定义 Web 服务器和 Python Web 应用程序间的标准接口的包 |
 
+## Web 编程：CGI 和 WSGI
+
+CGI， 通用网关接口
+
+WSGI，Web服务器网关接口
+
+### 创建 Web服务
+
+创建文件 `cgihttpd.py`, 包含如下内容：
+
+    from http.server import CGIHTTPRequestHandler, test
+
+
+    test(CGIHTTPRequestHandler)     # test 默认 port 为 8000
+
+然后使用命名行执行： `python3 cgihttpd.py`
+
+在 `cgihttpd.py` 相同目录下创建文件夹 `cgi-bin`, 放入 Python CGI 脚本
+
+将 一些 HTML 文件 放到 启动 服务器 的 目录 中， 可能 要在 `cgi-bin` 中 放 些 Python CGI 脚本， 然后 就可 以在 地址 栏中 输入 这些 地址 来 访问 Web 站点
+
+    http://localhost:8000/hello.htm
+    http://localhost:8080/cgi-bin/helloA.py
+
+可以通过以下方式在 cgi 脚本中获取表单：
+
+    form = cgi.FieldStorage()   # 获取 表单
+        if 'person' in form:
+            who = form['person'].value  # 获取表单中 key person 的值
+        else:
+            who = 'NEW USER'
+
+    print(who)  # 通过 print 返回数据
+
+以下是使用 UTF-8 进行编码输出的示例：
+
+    print('''Content-Type: text/html; charset=UTF-8
+
+    真实数据
+    '''.replace('\n', '\r\n'))
+
+目前， CGI 特别 指出 只允许两种表单编码：“application/x-www-form-urlencoded”和“multipart/form-dat”, 前者是默认的
+
+cookie 通俗点来说是 Web 站点 服务器 要求 保存 在 客户 端（ 如 浏览器） 上 的 二进制 数据
+
+cookie 是以 分号 分隔 的 键值 对 存在 的， 即 以 分号（） 分隔 各个 键值 对， 每个 键值 对 中间 都由 等号（=） 分开
+
+一旦 在 客户 端 建立 了 cookie， HTTP_COOKIE 环境 变量 会 将那 些 cookie 自动 放到 请求 中 发送 给 服务器
+
+    from os import environ
+
+
+    if 'HTTP_COOKIE' in environ:    # 获取 cookie
+        cookies = [x.strip() for x in environ['HTTP_COOKIE'].split(';')]
+
+设置 cookie 就是服务器向客户端发送 `Set-Cookie` 头文件要求客户端存储 cookie
+
+    print('Set-Cookie: cookie_key=cookie_value; path=/') 
+
+### WSGi
+
+WSGI 不是 服务器， 也不 是 用于 与 程序 交互 的 API， 更不 是 真实的 代码， 而 只是 定义 的 一个 接口
+
+其 目标 是在 Web 服务器 和 Web 框架 层 之间 提供 一个 通用 的 API 标准， 减少 之 间的 互 操作性 并 形成 统一 的 调用 方式
+
+    def simple_wsgi_app(environ, start_response): 
+        status = '200 OK' 
+        headers = [('Content-type', 'text/plain')] 
+        start_response(status, headers) 
+        return ['Hello world!']
+
+environ 变量 包含 一些 熟悉 的 环境 变量， 如 HTTP_ HOST、 HTTP_ USER_ AGENT、 SERVER_ PROTOCOL 等。 而 start_ response() 这个 可调 用 对象 必须 在 应用 执行， 生成 最终 会 发送 回 客户 端 的 响应。 响应 必须 含有 HTTP 返回 码（ 200、 300 等）， 以及 HTTP 响应 头
+
+详细，可以参考示例 `simple_server.py`:
+
+    """BaseHTTPServer that implements the Python WSGI protocol (PEP 3333)
+
+    This is both an example of how WSGI can be implemented, and a basis for running
+    simple web applications on a local machine, such as might be done when testing
+    or debugging an application.  It has not been reviewed for security issues,
+    however, and we strongly recommend that you use a "real" web server for
+    production use.
+
+    For example usage, see the 'if __name__=="__main__"' block at the end of the
+    module.  See also the BaseHTTPServer module docs for other API information.
+    """
+
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    import sys
+    import urllib.parse
+    from wsgiref.handlers import SimpleHandler
+    from platform import python_implementation
+
+    __version__ = "0.2"
+    __all__ = ['WSGIServer', 'WSGIRequestHandler', 'demo_app', 'make_server']
+
+
+    server_version = "WSGIServer/" + __version__
+    sys_version = python_implementation() + "/" + sys.version.split()[0]
+    software_version = server_version + ' ' + sys_version
+
+
+    class ServerHandler(SimpleHandler):
+
+        server_software = software_version
+
+        def close(self):
+            try:
+                self.request_handler.log_request(
+                    self.status.split(' ',1)[0], self.bytes_sent
+                )
+            finally:
+                SimpleHandler.close(self)
+
+
+
+    class WSGIServer(HTTPServer):
+
+        """BaseHTTPServer that implements the Python WSGI protocol"""
+
+        application = None
+
+        def server_bind(self):
+            """Override server_bind to store the server name."""
+            HTTPServer.server_bind(self)
+            self.setup_environ()
+
+        def setup_environ(self):
+            # Set up base environment
+            env = self.base_environ = {}
+            env['SERVER_NAME'] = self.server_name
+            env['GATEWAY_INTERFACE'] = 'CGI/1.1'
+            env['SERVER_PORT'] = str(self.server_port)
+            env['REMOTE_HOST']=''
+            env['CONTENT_LENGTH']=''
+            env['SCRIPT_NAME'] = ''
+
+        def get_app(self):
+            return self.application
+
+        def set_app(self,application):
+            self.application = application
+
+
+
+    class WSGIRequestHandler(BaseHTTPRequestHandler):
+
+        server_version = "WSGIServer/" + __version__
+
+        def get_environ(self):
+            env = self.server.base_environ.copy()
+            env['SERVER_PROTOCOL'] = self.request_version
+            env['SERVER_SOFTWARE'] = self.server_version
+            env['REQUEST_METHOD'] = self.command
+            if '?' in self.path:
+                path,query = self.path.split('?',1)
+            else:
+                path,query = self.path,''
+
+            env['PATH_INFO'] = urllib.parse.unquote(path, 'iso-8859-1')
+            env['QUERY_STRING'] = query
+
+            host = self.address_string()
+            if host != self.client_address[0]:
+                env['REMOTE_HOST'] = host
+            env['REMOTE_ADDR'] = self.client_address[0]
+
+            if self.headers.get('content-type') is None:
+                env['CONTENT_TYPE'] = self.headers.get_content_type()
+            else:
+                env['CONTENT_TYPE'] = self.headers['content-type']
+
+            length = self.headers.get('content-length')
+            if length:
+                env['CONTENT_LENGTH'] = length
+
+            for k, v in self.headers.items():
+                k=k.replace('-','_').upper(); v=v.strip()
+                if k in env:
+                    continue                    # skip content length, type,etc.
+                if 'HTTP_'+k in env:
+                    env['HTTP_'+k] += ','+v     # comma-separate multiple headers
+                else:
+                    env['HTTP_'+k] = v
+            return env
+
+        def get_stderr(self):
+            return sys.stderr
+
+        def handle(self):
+            """Handle a single HTTP request"""
+
+            self.raw_requestline = self.rfile.readline(65537)
+            if len(self.raw_requestline) > 65536:
+                self.requestline = ''
+                self.request_version = ''
+                self.command = ''
+                self.send_error(414)
+                return
+
+            if not self.parse_request(): # An error code has been sent, just exit
+                return
+
+            handler = ServerHandler(
+                self.rfile, self.wfile, self.get_stderr(), self.get_environ()
+            )
+            handler.request_handler = self      # backpointer for logging
+            handler.run(self.server.get_app())
+
+
+
+    def demo_app(environ,start_response):
+        from io import StringIO
+        stdout = StringIO()
+        print("Hello world!", file=stdout)
+        print(file=stdout)
+        h = sorted(environ.items())
+        for k,v in h:
+            print(k,'=',repr(v), file=stdout)
+        start_response("200 OK", [('Content-Type','text/plain; charset=utf-8')])
+        return [stdout.getvalue().encode("utf-8")]
+
+
+    def make_server(
+        host, port, app, server_class=WSGIServer, handler_class=WSGIRequestHandler
+    ):
+        """Create a new WSGI server listening on `host` and `port` for `app`"""
+        server = server_class((host, port), handler_class)
+        server.set_app(app)
+        return server
+
+
+    if __name__ == '__main__':
+        with make_server('', 8000, demo_app) as httpd:
+            sa = httpd.socket.getsockname()
+            print("Serving HTTP on", sa[0], "port", sa[1], "...")
+            import webbrowser
+            webbrowser.open('http://localhost:8000/xyz?abc')
+            httpd.handle_request()  # serve one request, then exit
+
+
+
+
+
+
+
+
+
 
 
 
