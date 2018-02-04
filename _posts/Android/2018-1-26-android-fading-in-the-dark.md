@@ -249,6 +249,201 @@ Java 程序运行时的内存分配策略有三种,分别是静态分配,栈式�
 - 避免重写 finalize() 方法,finalize 方法被执行的时间不确定，不能依赖与它来释放紧缺的资源,finalize 方法只会被执行一次，即使对象被复活，如果已经执行过了 finalize 方法，再次被 GC 时也不会再执行了,含有Finalize方法的object需要至少经过两轮GC才有可能被释放
 - 资源未关闭造成的内存泄漏, 使用了BraodcastReceiver，ContentObserver，File，游标 Cursor，Stream，Bitmap等资源，应该在Activity销毁时及时关闭或者注销，否则这些资源将不会被回收，造成内存泄漏
 
+## AsyncTask
+
+从Android3.0开始，系统要求网络访问必须在子线程中进行，否则网络访问将会失败并抛出NetworkOnMainThreadException这个异常，这样做是为了避免主线程由于耗时操作所阻塞从而出现ANR现象
+
+AsyncTask封装了线程池和Handler。AsyncTask有两个线程池：SerialExecutor和THREAD_POOL_EXECUTOR。前者是用于任务的排队，默认是串行的线程池：后者用于真正的执行任务。AsyncTask还有一个Handler，叫InternalHandler，用于将执行环境从线程池切换到主线程。AsyncTask内部就是通过InternalHandler来发送任务执行的进度以及执行结束等消息
+
+排队执行过程：系统先把参数Params封装为FutureTask对象，它相当于Runnable，接着FutureTask交给SerialExcutor的execute方法，它先把FutureTask插入到任务队列tasks中，如果这个时候没有正在活动的AsyncTask任务，那么就会执行下一个AsyncTask任务，同时当一个AsyncTask任务执行完毕之后，AsyncTask会继续执行其他任务直到所有任务都被执行为止
+
+AsyncTask对应的线程池ThreadPoolExecutor都是进程范围内共享的，都是static的，所以是AsyncTask控制着进程范围内所有的子类实例。由于这个限制的存在，当使用默认线程池时，如果线程数超过线程池的最大容量，线程池就会爆掉(3.0默认串行执行，不会出现这个问题)。针对这种情况。可以尝试自定义线程池，配合AsyncTask使用
+
+## 动态加载dex
+
+Android使用Dalvik虚拟机加载可执行程序，所以不能直接加载基于class的jar，而是需要将class转化为dex字节码。
+
+Android支持动态加载的两种方式是：DexClassLoader和PathClassLoader，DexClassLoader可加载jar/apk/dex，且支持从SD卡加载；PathClassLoader据说只能加载已经安装在Android系统内APK文件
+
+## 插件化
+
+- 开发者将插件代码封装成Jar或者APK
+- 宿主下载或者从本地加载Jar或者APK到宿主中
+- 将宿主调用插件中的算法或者Android特定的Class（如Activity）
+
+动态加载技术就是使用类加载器加载相应的apk、dex、jar(必须含有dex文件)，再通过反射获得该apk、dex、jar内部的资源（class、图片、color等等）进而供宿主app使用
+
+## 事件分发
+
+![事件分发](https://raw.githubusercontent.com/Afra55/Afra55.github.io/7579eaba4fdf1af8fe4ea768c25edbee6cb85d63/blog_picture/shortcuts/事件分发.jpeg)
+
+## ANR
+
+在Android上，如果你的应用程序有一段时间响应不够灵敏，系统会向用户显示一个对话框，这个对话框称作应用程序无响应（ANR：Application Not Responding）对话框
+
+一般有三种类型:
+
+- KeyDispatchTimeout(5 seconds) :按键或触摸事件在特定时间内无响应
+- BroadcastTimeout(10 seconds) :BroadcastReceiver在特定时间内无法处理完成
+- ServiceTimeout(20 secends) :小概率事件 Service在特定的时间内无法处理完成
+
+在主线程执行以下操作时，会导致ANR ：
+
+- 高耗时的操作，如图像变换
+- 磁盘读写，数据库读写操作
+- 大量的创建新对象
+
+UI线程尽量只做跟UI相关的工作, 耗时的操作(比如数据库操作，I/O，连接网络或者别的有可能阻塞UI线程的操作)把它放在单独的线程处理, 尽量用Handler来处理UIThread和别的Thread之间的交互
+
+可以获取 ANR 追踪信息， 从trace.txt文件查看调用stack `adb pull data/anr/traces.txt ./mytraces.txt`
+
+## Force Close
+
+- Error
+- OOM（Out Of Memory），内存溢出即 加载对象过大或相应资源过多，来不及释放
+- StackOverFlowError
+- Runtime,比如说空指针异常
+
+## ART和Dalvik区别
+
+ART: Ahead of Time Dalvik: Just in Time
+
+Art上应用启动快，运行快，但是耗费更多存储空间，安装时间长，总的来说ART的功效就是"空间换时间"
+
+Dalvik是Google公司自己设计用于Android平台的Java虚拟机
+
+Dalvik虚拟机是Google等厂商合作开发的Android移动设备平台的核心组成部分之一，它可以支持已转换为.dex(即Dalvik Executable)格式的Java应用程序的运行，.dex格式是专为Dalvik应用设计的一种压缩格式，适合内存和处理器速度有限的系统。Dalvik经过优化，允许在有限的内存中同时运行多个虚拟机的实例，并且每一个Dalvik应用作为独立的Linux进程执行。独立的进程可以防止在虚拟机崩溃的时候所有程序都被关闭
+
+什么是ART:Android操作系统已经成熟，Google的Android团队开始将注意力转向一些底层组件，其中之一是负责应用程序运行的Dalvik运行时。Google开发者已经花了多年时间开发更快执行效率更高更省电的替代ART运行时。ART代表Android Runtime,其处理应用程序执行的方式完全不同于Dalvik，Dalvik是依靠一个Just-In-Time(JIT)编译器去解释字节码。开发者编译后的应用代码需要通过一个解释器在用户的设备上运行，这一机制并不高效，但让应用能更容易在不同硬件和架构上运行。ART则完全改变了这套做法，在应用安装的时候就预编译字节码到机器语言，这一机制叫Ahead-Of-Time(AOT)编译。在移除解释代码这一过程后，应用程序执行将更有效率，启动更快
+
+ART优点：
+
+- 系统性能的显著提升
+- 应用启动更快、运行更快、体验更流畅、触感反馈更及时
+- 更长的电池续航能力
+- 支持更低的硬件
+
+ART缺点：
+
+- 更大的存储空间占用，可能会增加10%-20%
+- 更长的应用安装时间
+
+## SurfaceView
+
+因为 View 的绘制存在缺陷，所以 SurfaceView 来替代 View 绘制
+
+View的绘图存在以下缺陷：
+
+- View缺乏双缓冲机制
+- 当程序需要更新View上的图像时，程序必须重绘View上显示的整张图片
+- 新线程无法直接更新View组件
+
+SurfaceView的绘图机
+
+- 一般会与SurfaceView结合使用
+- 调用SurfaceView的getHolder()方法即可获得SurfaceView关联的SurfaceHolder
+
+    SurfaceView surface = (SurfaceView) findViewById(R.id.surface);
+    // 初始化SurfaceHolder对象
+    holder = surface.getHolder();
+    holder.addCallback(new Callback(){
+        @Override
+        public void surfaceChanged(SurfaceHolder arg0, int arg1, int arg2,
+                int arg3){
+        }
+        @Override
+        public void surfaceCreated(SurfaceHolder holder){
+        }
+        @Override
+        public void surfaceDestroyed(SurfaceHolder holder){
+        }
+    });
+    // 为surface的触摸事件绑定监听器
+    surface.setOnTouchListener(new OnTouchListener(){
+        @Override
+        public boolean onTouch(View source, MotionEvent event){
+            
+            return false;
+        }
+    });
+
+SurfaceHolder提供了如下方法来获取Canvas对象
+
+- Canvas canvas = holder.lockCanvas():锁定整个SurfaceView对象，获取该Surface上的Canvas
+- Canvas canvas = holder.lockCanvas(Rect dirty):锁定SurfaceView上Rect划分的区域，获取该Surface上的Canvas
+- holder.unlockCanvasAndPost(canvas):释放绘图、提交所绘制的图形，需要注意，当调用SurfaceHolder上的unlockCanvasAndPost方法之后，该方法之前所绘制的图形还处于缓冲之中，下一次lockCanvas()方法锁定的区域可能会“遮挡”它
+
+## 图片的三级缓存
+
+- 网络加载，不优先加载，速度慢，浪费流量
+- 本地缓存，次优先加载，速度快
+- 内存缓存，优先加载，速度最快
+
+## Bitmap
+
+创建Bitmap的时候，Java不提供new Bitmap()的形式去创建，而是通过BitmapFactory中的静态方法去创建,如:`BitmapFactory.decodeStream(is);` 
+
+在Android中，4.4版本及以上默认采用Config.ARGB_8888的参数去创建一个Bitmap，这是Google推荐的配置色彩参数(Bitmap.Config.inPreferredConfig的默认值)，那么每一个像素将会占用4byte，如果一张手机照片的尺寸为1280×720，那么我们可以很容易的计算出这张图片占用的内存大小为 1280x720x4 = 3686400(byte) = 3.5M
+
+    BitmapFactory.Options options = new BitmapFactory.Options();
+    //当这个参数为true的时候,意味着你可以在解析时候不申请内存的情况下去获取Bitmap的宽和高
+    //这是调整Bitmap Size一个很重要的参数设置
+    options.inJustDecodeBounds = true;
+    BitmapFactory.decodeStream(is, null, options);
+    int realHeight = options.outHeight;
+    int realWidth = options.outWidth;
+    double wr = (double) realWidth / screenWidth;   // screenWidth 希望图片压缩的目的宽度
+    double hr = (double) realHeight / 300;      // 300 希望图片压缩的目的高度
+    double ratio = Math.min(wr, hr);
+    float n = 1.0f;
+    //这里我们为什么要寻找 与ratio最接近的2的倍数呢？
+    //原因就在于API中对于inSimpleSize的注释：最终的inSimpleSize应该为2的倍数，我们应该向上取与压缩比最接近的2的倍数。
+    while ((n * 2) <= ratio) {
+        n *= 2;
+    }
+    options.inSampleSize = n;
+    //当你希望得到Bitmap实例的时候，不要忘了将这个参数设置为false
+    options.inJustDecodeBounds = false;
+    Bitmap bitmap = BitmapFactory.decodeStream(is,null,options);
+    iv.setImageBitmap(bitmap);
+
+一定要记得及时回收Bitmap，否则如上分析，你的native以及dalvik的内存都会被一直占用着，最终导致OOM
+
+     // 先判断是否已经回收
+     if(bitmap != null && !bitmap.isRecycled()){
+         // 回收并且置为null
+         bitmap.recycle();
+         bitmap = null;
+     }
+     System.gc();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
