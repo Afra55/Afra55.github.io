@@ -175,7 +175,7 @@ root之后放到system/app变成系统级应用
 
 - tween 补间动画。通过指定View的初末状态和变化时间、方式，对View的内容完成一系列的图形变换来实现动画效果。 Alpha Scale Translate Rotate
 - frame 帧动画 AnimationDrawable 控制 animation-list xml布局
-- PropertyAnimation 属性动画
+- PropertyAnimation [属性动画](http://afra55.github.io/2016/02/22/property-anim/)
 
 ## 数据存储形式
 
