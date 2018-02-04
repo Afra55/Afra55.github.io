@@ -343,29 +343,29 @@ SurfaceView的绘图机
 - 一般会与SurfaceView结合使用
 - 调用SurfaceView的getHolder()方法即可获得SurfaceView关联的SurfaceHolder
 
-    SurfaceView surface = (SurfaceView) findViewById(R.id.surface);
-    // 初始化SurfaceHolder对象
-    holder = surface.getHolder();
-    holder.addCallback(new Callback(){
-        @Override
-        public void surfaceChanged(SurfaceHolder arg0, int arg1, int arg2,
-                int arg3){
-        }
-        @Override
-        public void surfaceCreated(SurfaceHolder holder){
-        }
-        @Override
-        public void surfaceDestroyed(SurfaceHolder holder){
-        }
-    });
-    // 为surface的触摸事件绑定监听器
-    surface.setOnTouchListener(new OnTouchListener(){
-        @Override
-        public boolean onTouch(View source, MotionEvent event){
-            
-            return false;
-        }
-    });
+        SurfaceView surface = (SurfaceView) findViewById(R.id.surface);
+        // 初始化SurfaceHolder对象
+        holder = surface.getHolder();
+        holder.addCallback(new Callback(){
+            @Override
+            public void surfaceChanged(SurfaceHolder arg0, int arg1, int arg2,
+                    int arg3){
+            }
+            @Override
+            public void surfaceCreated(SurfaceHolder holder){
+            }
+            @Override
+            public void surfaceDestroyed(SurfaceHolder holder){
+            }
+        });
+        // 为surface的触摸事件绑定监听器
+        surface.setOnTouchListener(new OnTouchListener(){
+            @Override
+            public boolean onTouch(View source, MotionEvent event){
+                
+                return false;
+            }
+        });
 
 SurfaceHolder提供了如下方法来获取Canvas对象
 
@@ -417,9 +417,129 @@ SurfaceHolder提供了如下方法来获取Canvas对象
      }
      System.gc();
 
+## MVC
+
+- 视图（View）:用户界面
+- 控制器（Controller）:业务逻辑
+- 模型（Model）:数据保存
+
+各部分之间的通信方式如下：
+
+- View传送指令到Controller
+- Controller完成业务逻辑后，要求Model改变状态
+- Model将新的数据发送到View，用户得到反馈
+
+所有的通信都是单向的
+
+## MVP
+
+MVP模式将Controller改名为Presenter，同时改变了通信方向
+
+- 各部分之间的通信，都是双向的
+- View和Model不发生联系，都通过Presenter传递
+- View非常薄，不部署任何业务逻辑，称为"被动视图"(Passive View)，即没有任何主动性，而Presenter非常厚，所有逻辑都部署在那里
+
+## MVVM
+
+MVVM模式将Presenter改名为ViewModel，基本上与MVP模式完全一致
+
+唯一的区别是，它采用[双向绑定(data-binding)](http://blog.csdn.net/yang786654260/article/details/51277373)：View的变动，自动反映在ViewModel，反之亦然
+
+## Android开机过程
+
+- BootLoder引导,然后加载Linux内核.
+- 0号进程init启动.加载init.rc配置文件,配置文件有个命令启动了zygote进程
+- zygote开始fork出SystemServer进程
+- SystemServer加载各种JNI库,然后init1,init2方法,init2方法中开启了新线程ServerThread.
+- 在SystemServer中会创建一个socket客户端，后续AMS（ActivityManagerService）会通过此客户端和zygote通信
+- ServerThread的run方法中开启了AMS,还孵化新进程ServiceManager,加载注册了一溜的服务,最后一句话进入loop 死循环
+- run方法的SystemReady调用resumeTopActivityLocked打开锁屏界面
+
+## Eventbus 
+
+[http://jakewharton.github.io/butterknife/](http://jakewharton.github.io/butterknife/)
+
+## Grandle
+
+[http://blog.csdn.net/yang786654260/article/details/52274568](http://blog.csdn.net/yang786654260/article/details/52274568)
+
+修改apk打包名字 自定义 Generate Signed Apk 输出名
+
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            def outputFile = output.outputFile
+            if (outputFile != null && outputFile.name.endsWith('release.apk')) {
+                def fileName = "AFRA_${variant.productFlavors[0].name}_v${defaultConfig.versionName}_${releaseTime()}.apk"
+                output.outputFileName = fileName
+            }
+        }
+    }
+
+    //release打包时间
+    def releaseTime() {
+        return new Date().format("yyyyMMdd.kk.mm", java.util.TimeZone.getTimeZone("GMT+8"))
+    }
+
+## 设计模式
+
+[http://afra55.github.io/2015/12/28/design-mode/](http://afra55.github.io/2015/12/28/design-mode/)
+
+## git
+
+1. 修改错误的提交信息（commit message）
+
+提交信息很长时间内会一直保留在你的代码库（code base）中，所以你肯定希望通过这个信息正确地了解代码修改情况。 下面这个命令可以让你编辑最近一次的提交信息，但是你必须确保没有对当前的代码库（working copy）做修改，否则这些修改也会随之一起提交
+
+`$ git commit --amend -m ”YOUR-NEW-COMMIT-MESSAGE”`
+
+假如你已经将代码提交（git commit）推送（git push）到了远程分支，那么你需要通过下面的命令强制推送这次的代码提交
+
+`$ git push <remote> <branch> --force`
 
 
+2. 提交之前撤销git add
 
+如果你往暂存区（staging area）中加入了一些错误的文件，但是还没有提交代码。你可以使用一条简单的命令就可以撤销。如果只需要移除一个文件，那么请输入：
+
+`$ git reset <文件名>`
+
+或者如果你想从暂存区移除所有没有提交的修改：
+
+`$ git reset`
+
+3. 撤销最近一次代码提交
+
+有时候你可能会不小心提交了错误的文件或一开始就遗漏了某些东西。下面这三步操作可以帮助你解决这个问题
+
+`$ git reset --soft HEAD~1`
+
+`对工作文件进行必要的更改`
+
+`$ git add -A .$ git commit -c ORIG_HEAD`
+
+你执行第一个命令时，Git会将HEAD指针（pointer）后移到此前的一次提交，之后你才能移动文件或作必要的修改
+
+然后你就可以添加所有的修改，而且当你执行最后的命令时，Git会打开你的默认文本编辑器，其中会包含上一次提交时的信息。如果愿意的话，你可以修改提交信息，或者你也可以在最后的命令中使用-C而不是-c，来跳过这一步
+
+4. 撤销合并（Merge）
+
+要想撤销合并，你可能必须要使用恢复命令（HARD RESET）回到上一次提交的状态。“合并”所做的工作基本上就是重置索引，更新working tree（工作树）中的不同文件，即当前提交（）代码中与HEAD游标所指向代码之间的不同文件；但是合并会保留索引与working tree之间的差异部分（例如那些没有被追踪的修改）
+
+`$ git checkout -b <SHA>`
+
+5. 删除本地和远程Git分支
+
+删除本地分支：
+
+`$ git branch --delete --force <branchName>`
+
+或者使用选项-D作为简写：
+
+`$ git branch -D`
+
+删除远程分支：
+
+`$ git push origin --delete <branchName>`
 
 
 
