@@ -18,6 +18,8 @@ description: Python Fourth Step！
 
 [https://www.djangoproject.com](https://www.djangoproject.com)
 
+[官方引导](https://docs.djangoproject.com/en/2.0/intro/)
+
 ### 准备
 
 使用 PyCharm 编译器可以略过准备，直接创建 Django 项目
@@ -387,7 +389,7 @@ views.py
 
 LOGIN_URL = '/app_name/login/'
 
-## django-bootstrap
+### django-bootstrap
 
 Bootstrap 工具库，为 web 程序设置样式。
 
@@ -414,7 +416,7 @@ Bootstrap 工具库，为 web 程序设置样式。
         'include_jquery': True
     }
 
-## Heroku
+### Heroku
 
 在 https://heroku.com/ 注册，验证的时候需要梯子
 
@@ -576,6 +578,149 @@ runtime.txt:
 
 可以使用命令 `heroku apps:destroy --app mysite` 删除项目
 
-## 小结
+### 小结
 
-https://github.com/Afra55/learning_log
+[https://github.com/Afra55/learning_log](https://github.com/Afra55/learning_log)
+
+## 再谈 Web 框架: Django
+
+在产线环境需要使用 Web 服务器的王者 Apache
+
+建议使用 Apache 的 mod_wdgi 这个模块，[安装教程](https://docs.djangoproject.com/en/2.0/topics/install/#install-apache-and-mod-wsgi), [开发文档 ](https://docs.djangoproject.com/en/2.0/howto/deployment/wsgi/modwsgi/)
+
+[数据库安装](https://docs.djangoproject.com/en/2.0/topics/install/#get-your-database-running)
+
+[Django 安装](https://www.djangoproject.com/download/)
+
+[Django 开源项目](http://pinaxproject.com)
+
+| Django 项目文件名 | 描述 |
+| :--------- | :--------- |
+| `__init__.py` | 告诉 python 这是一个软件包 |
+| urls.py | 全局 URL 配置 ("URLconf") |
+| settings.py | 项目相关配置 |
+| manage.py | 应用命令行接口 |
+
+| Django 应用文件名 | 描述 |
+| :--------- | :--------- |
+| `__init__.py` | 告诉 python 这是一个包 |
+| urls.py | 应用的 URL 配置 ("URLconf") |
+| models.py | 数据模型 |
+| views.py | 视图函数(MVC 中的控制器) |
+| tests.py | 单元测试 |
+
+可以在 settings 配置 数据库 [教程](https://docs.djangoproject.com/en/2.0/ref/settings/#databases)
+
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',      # 引擎
+            'NAME': 'mydatabase',       # 数据库路径
+            'USER': 'mydatabaseuser',       # 用户名
+            'PASSWORD': 'mypassword',       # 密码
+            'HOST': '127.0.0.1',        
+            'PORT': '5432',
+        }
+    } 
+
+在配置完 INSTALLED_APPS 以及对应的 models.py 后，执行 `manage.py syncdb`  Django 会找到每个模型然后进行数据库表的创建
+
+Django 使用的是 MTV 模式, 即 模型-模版-视图, 数据 模型 保持 不变， 但 视图 在 Django 中 是 模板， 因为 模板 用来 定义 用户 可见 的 内容。 最后， Django 中的 视图 表示 视图 函数， 它们 组成 控制器 的 逻辑
+
+Django 提供 了 Python 应用 shell， 通过 这个 工具， 可以 实例 化 模型， 并与 应用 交互, 启动命令 `manage.py shell`, [更多信息](https://docs.djangoproject.com/en/2.0/intro/tutorial02/#playing-with-the-api)
+
+[通用视图](https://docs.djangoproject.com/en/2.0/ref/class-based-views/base/), 即只要在 urls.py 中配置，既可以重定向链接:
+
+    from django.urls import path
+    from django.views.generic.base import RedirectView
+
+    urlpatterns = [
+        path('go-to-django/', RedirectView.as_view(url='https://djangoproject.com'), name='go-to-django'),
+    ]
+
+在 test.py 中写单元测试，下面是一个例子：
+
+    from datetime import datetime
+    from django.test import TestCase
+    from django.test.client import Client
+    from example.models import ExamplePost
+
+    class ExamplePostTest(TestCase):
+        def test_obj_create(self):      # 单元测试的测试方法必须以 'test_' 开头
+            ExamplePost.objects.create(title='raw title',
+                body='raw body', timestamp=datetime.now())
+            self.assertEqual(1, ExamplePost.objects.count())
+            self.assertEqual('raw title',
+                ExamplePost.objects.get(id=1).title)
+
+        def test_home(self):
+            """
+            用于检测用户界面
+            如果子类化 django.test.TestCase， 会自动免费获得一个 Django 测试客户端 实例， 并直接使用 self.client 来引用它
+            """
+            response = self.client.get('/example/')     # 调用应用主页面
+            self.failUnlessEqual(response.status_code, 200)     # 确保返回的状态码是 200
+
+        def test_slash(self):
+            response = self.client.get('/')
+            self.assertIn(response.status_code, (301, 302))
+
+        def test_empty_create(self):
+            response = self.client.get('/example/create/')
+            self.assertIn(response.status_code, (301, 302))
+
+        def test_post_create(self):
+            “”“
+            模拟用户 POST 请求
+            ”“”
+            response = self.client.post('/example/create/', {
+                'title': 'post title',
+                'body': 'post body',
+            })
+            self.assertIn(response.status_code, (301, 302))
+            self.assertEqual(1, ExamplePost.objects.count())
+            self.assertEqual('post title',
+                ExamplePost.objects.get(id=1).title)
+
+[Django 验证系统](https://docs.djangoproject.com/en/2.0/topics/auth/)
+
+当下以返回的数据格式普遍为 Json 格式， 下面是用 Django 返回 Json 数据的示例：
+
+    import json  
+    from django.http import HttpResponse  
+      
+
+    def get_json_data(request):
+        response_data = {'result':'success', 'statue': 0}      # 用字典
+        return HttpResponse(json.dumps(response_data), content_type="application/json") 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
