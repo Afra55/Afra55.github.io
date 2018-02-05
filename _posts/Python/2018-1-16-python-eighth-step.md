@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "Python Eighth Step"
+title:  "Python Eighth Step: 数据库编程"
 date:   2018-01-16 16:50
 categories: Python
 comments: true

@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "Python Second Step"
+title:  "Python Second Step: GUI 编程"
 date:   2017-12-6 20:36
 categories: Python
 comments: true

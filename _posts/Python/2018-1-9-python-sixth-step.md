@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "Python Sixth Step"
+title:  "Python Sixth Step: socket"
 date:   2018-01-09 21:14
 categories: Python
 comments: true

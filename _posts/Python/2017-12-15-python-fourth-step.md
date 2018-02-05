@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "Python Fourth Step"
+title:  "Python Fourth Step: Django"
 date:   2017-12-15 22:00
 categories: Python
 comments: true

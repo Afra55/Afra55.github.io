@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "Python Seventh Step"
+title:  "Python Seventh Step: 线程"
 date:   2018-01-12 17:45
 categories: Python
 comments: true

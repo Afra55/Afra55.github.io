@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "Python First Step"
+title:  "Python First Step: 基础知识"
 date:   2017-11-21 14:07
 categories: Python
 comments: true

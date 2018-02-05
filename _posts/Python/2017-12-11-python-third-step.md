@@ -1,6 +1,6 @@
 ---
 layout: post
-title:  "Python Third Step"
+title:  "Python Third Step: 图表"
 date:   2017-12-11 23:03
 categories: Python
 comments: true
