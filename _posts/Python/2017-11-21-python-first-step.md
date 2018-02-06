@@ -90,6 +90,10 @@ yield
 | str(obj) | 可打印的字符串表示 | str |
 | type(obj) | obj 对象的类型 | type |
 
+
+[链接](https://github.com/Afra55/Afra55.github.io/tree/master/blog_picture/python%C2%A0内置函数)
+
+
 ## 格式化操作符转换符号 
 
 | 格式化操作符转换符号 | 描述 |
@@ -150,9 +154,6 @@ strip() 方法删除字符串开头和末尾的空白
 
 函数 str()，用于把各种类型转义为字符串
 
-### 内置方法
-
-[链接](https://github.com/Afra55/Afra55.github.io/tree/master/blog_picture/python%C2%A0内置函数)
 
 ### 浮点数
 
