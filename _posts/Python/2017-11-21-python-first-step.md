@@ -62,6 +62,51 @@ Namespaces are one honking great idea -- let's do more of those!
 
 [https://python.org/dev/peps/pep-0008/](https://python.org/dev/peps/pep-0008/)
 
+## 关键字
+
+and     as      assert
+break
+class   continue    
+def     del
+elif    else    except      exec
+finally     for     from    
+global      
+if      import      in      is
+lambda      
+nonlocal    not
+or
+pass    print
+raise   return
+try
+while   with
+yield
+
+## 内置函数
+
+| 内置和工厂函数 | 描述 | 返回结果 |
+| :--------- | :--------- | :--------- |
+| cmp(obj1, obj2) | 比较两个对象 | int |
+| repr(obj) | 将 obj 转化为字符串，并可以调用 eval(repr(obj)) 函数再将其转化回 obj | str |
+| str(obj) | 可打印的字符串表示 | str |
+| type(obj) | obj 对象的类型 | type |
+
+## 格式化操作符转换符号 
+
+| 格式化操作符转换符号 | 描述 |
+| :--------- | :---------- |
+| %c | 字符 |
+| %r | 通过 repr() 转化的字符串 |
+| %s | 通过 str() 转化的字符串 |
+| %d  %i  | 有符号十进制整数 |
+| %u | 无符号十进制整数　 |
+| %o | （无符号）八进制整数 |
+| %x  %X | (无符号)十六进制整数(小写或大写字母) |
+| %e  %E | 指数符号（小写e 或大写E） |
+| %f  %F | 浮点实数（自动截断小数） |
+| %g  %G | 根据值的大小采用%e或%f，但最多保留6位有效数字 |
+| %% | 非转义的百分号字符(%) |
+
+
 ## 注释
 
 注释使用 井号来标志 `#`, `#` 后面的内容都会被解释器忽略
@@ -104,6 +149,10 @@ strip() 方法删除字符串开头和末尾的空白
     str(number)     # "number"
 
 函数 str()，用于把各种类型转义为字符串
+
+### 内置方法
+
+[链接](https://github.com/Afra55/Afra55.github.io/tree/master/blog_picture/python%C2%A0内置函数)
 
 ### 浮点数
 
