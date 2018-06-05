@@ -61,6 +61,72 @@ p 输出结果，换行符等特殊字符不会转义
 
 在程序首行添加 `# encoding: UTF-8` 来指定编码格式
 
+## 变量
+
+    name = "Afra55"
+    print "My name is #{name}"  # My name is Afra55
+
+在字符串中可以使用 #{变量名} 显示变量值，也可以是一个公式例如：#{1 * 2 * 3}
+
+## 注释
+
+    # 我是注释
+
+    =begin
+    我是注释体
+    我是注释体
+    我是注释体
+    =end
+
+## 控制语句
+
+### if
+
+    a = 20
+    if a > 10 then
+      puts "大于10"
+    end
+
+    a = 9
+    if a < 10 then
+      puts "小于10"
+    end
+
+    a = 10
+    if a == 10    # 可以省略 then
+      puts "等于10"
+    end
+
+### while
+
+    i = 1
+    while i < 10
+      print i, " "
+      i = i + 1
+    end     # 1 2 3 4 5 6 7 8 9 
+
+    10.times do     # 迭代器
+      print "L "
+    end     # L L L L L L L L L L 
+
+## 数组
+
+    objs = []   # 空数组
+
+    objs = ["Abc", 1, -1, 1.0, nil, "xx"]
+    puts objs[0]    # Abc
+    objs[0] = "Ijb"
+    puts objs[0]    # Ijb
+    puts objs.size # 6
+
+数组.each do |变量|
+    循环体
+end
+
+    objs.each do |x|
+      print x, ","
+    end     # Ijb,1,-1,1.0,,xx,
+
 
 
 
