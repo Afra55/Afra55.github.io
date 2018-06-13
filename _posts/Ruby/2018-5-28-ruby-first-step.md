@@ -127,9 +127,96 @@ end
       print x, ","
     end     # Ijb,1,-1,1.0,,xx,
 
+## 散列
+
+    符号 = :标志符
+
+    sym = :foo  # 表示符号 :foo
+    sym.to_s    # 将符号转换为字符串
+    "foo".to_sym    # 将字符串转换为符号
+
+散列 = {键 => 对象, key => obj}
+
+    people = {:name => "Afra55", :age => 25, :sex => "man"}
+    puts people     # {:name=>"Afra55", :age=>25, :sex=>"man"}
+    people[:name] = "Bfra55"
+    people[:age] = 88
+    puts people     # {:name=>"Bfra55", :age=>88, :sex=>"man"}
+
+    people.each do |key, value|
+      print "#{key}:#{value} "
+    end     # name:Bfra55 age:88 sex:man 
 
 
+## 正则表达式
 
+`/模式/ =～ 希望匹配到字符串`
+
+匹配成功则返回匹配到位置，失败则返回 nil
+
+    x = /Afra/ =~ "fefefAfra3333"
+    puts x      # 5
+
+## ARGV
+
+ARGV 一个 Ruby 预定义数据，用于从命令行获取数据
+
+    puts ARGV[0]
+    puts "第二个: #{ARGV[1]}"
+
+`> ruby helloruby.rb qq bb`
+
+输出：
+
+    qq
+    第二个: bb
+
+
+## 文件读取
+
+    filename = ARGV[0]
+    file = File.open(filename)
+    text = file.read
+    puts text
+    file.close
+
+`ruby helloruby.rb helloruby.rb`
+
+输出：
+
+    filename = ARGV[0]
+    file = File.open(filename)
+    text = file.read
+    puts text
+    file.close
+
+或者，直接使用 read 方法
+
+    filename = ARGV[0]
+    text = File.read(filename)
+    puts text
+
+逐行读取
+
+    filename = ARGV[0]
+    file = File.open(filename)
+    file.each_line do |line|
+      puts line
+    end
+    file.close
+
+## 方法
+
+    def 方法名
+        # your code
+    end
+
+使用 `require 'name'` 来引用库文件
+使用 `require_relative ‘name’` 根据程序目录来引用库
+
+    require 'date'
+
+    puts Date.today     # 2018-06-13
 
 
 
