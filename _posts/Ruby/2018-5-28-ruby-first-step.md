@@ -218,7 +218,17 @@ ARGV 一个 Ruby 预定义数据，用于从命令行获取数据
 
     puts Date.today     # 2018-06-13
 
+# Rails 命令大全
 
+`rails new 项目名`
+
+`bundle install`
+
+`rails server -b IP地址 -p 端口号`
+
+通过脚手架创建模型: `rails generate scaffold User name:string email:string`
+
+迁移数据库: `rails db:migrate`
 
 
 
