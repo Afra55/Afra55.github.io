@@ -105,14 +105,15 @@ void initArrayTemp() {
         }
     }
 ```
+
 ![030f47d3474ec6a9be9120900747b862](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/重温C语言(4)之数组与指针.resources/AF6615BA-C8C2-4D1B-8D27-654B348A1C61.png)
 
 
 ![08c0864a05bcb9dfe4c7bb9f32b05e6e](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/重温C语言(4)之数组与指针.resources/E98DA0BF-A96A-4BE4-9E1A-8C7D35D7E68C.png)
 
 ```
- printf("\n多维数组赋值1\n");
-    int b[2][3] = {{1,2}, {2, 3}};
+    printf("\n多维数组赋值1\n");
+    int b[2][3] = { {1,2}, {2, 3} };
     for (int k = 0; k < 2; ++k) {
         for (int i = 0; i < 3; ++i) {
             printf("b[%d][%d]=%d  ", k, i, b[k][i]);
