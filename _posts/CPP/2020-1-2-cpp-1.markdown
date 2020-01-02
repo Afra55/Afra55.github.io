@@ -17,7 +17,7 @@ description: 重温C语言(1)之准备!
 当程序员好几年了，学了好多语言，倒是发现C语言越来越重要，很多核心技术都是C撑起来的，因此，拿出大学时候的笔记课程，决定重温学过的C语言，让程序员的道路可以走的更遥远。
 
 ## 开发工具
-![e922eb14266895325666d1cc2476db4e](重温C语言(1)之准备.resources/0ED82ADB-09B9-4ACE-BC64-4F41925CB600.png)
+![e922eb14266895325666d1cc2476db4e](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/%E9%87%8D%E6%B8%A9C%E8%AF%AD%E8%A8%80(1)%E4%B9%8B%E5%87%86%E5%A4%87.resources/0ED82ADB-09B9-4ACE-BC64-4F41925CB600.png)
 
 [http://www.jetbrains.com/clion/?fromMenu](http://www.jetbrains.com/clion/?fromMenu)
 
@@ -31,14 +31,14 @@ CLion 是收费的。
 2. 下载 jar 包，链接: https://pan.baidu.com/s/1S99YPZru4Ym6X4iRZaaALQ 提取码: cy47 ；
 3. 将 jar 包放到 `/Applications/CLion.app/Contents/bin` 路径下；
 4. 点击 CLion 菜单 `Configure` 下的 `Edit Custom VM Options...`；
-![image.png](https://upload-images.jianshu.io/upload_images/10733883-69725b2bbf5a2604.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+![image.png](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/重温C语言(1)之准备.resources/10733883-69725b2bbf5a2604.png)
 5. 添加 `-javaagent:/Applications/CLion.app/Contents/bin/jetbrains-agent.jar`；
-![java](https://upload-images.jianshu.io/upload_images/10733883-a7cc05a385c76842.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+![java](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/重温C语言(1)之准备.resources/10733883-a7cc05a385c76842.png)
 6. 重启 CLion;
 7. 点击 `Get Help` 菜单下的`Register...` 或者 `Configure` 下的 `Manage Licnese...`;
-![image.png](https://upload-images.jianshu.io/upload_images/10733883-ef04a465cdc55fed.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+![image.png](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/重温C语言(1)之准备.resources/10733883-ef04a465cdc55fed.png)
 8. 在弹出框里选择 `License server`， 点击 `Discover Server`;
-![image.png](https://upload-images.jianshu.io/upload_images/10733883-2c33da21d6ef0d3d.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+![image.png](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/重温C语言(1)之准备.resources/10733883-2c33da21d6ef0d3d.png)
 9. `Activate` 开心的使用吧。
 
 ## 系列文章代码仓库
@@ -83,7 +83,7 @@ C是一门流行的语言，常年稳居排行榜前三。C很高效，可移植
 
 ### Hellow World
 
-![d3ec2f1e513dc60c0234b5bb099d65a6](重温C语言(1)之准备.resources/F8CDC03C-2B83-4FCD-8DAA-86688183F3F1.png)
+![d3ec2f1e513dc60c0234b5bb099d65a6](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/重温C语言(1)之准备.resources/F8CDC03C-2B83-4FCD-8DAA-86688183F3F1.png)
 
 ```
 // 预编译器，把stdio.h文件中的所有内容都输入该行所在的位置, stdio.h 包含了供编译器使用的输入输出函数
@@ -120,10 +120,10 @@ int main() { // <- 函数体开始
 }
 ```
 
-![97c0d38e6841d2f3709f7b7daa586457](重温C语言(1)之准备.resources/161E59FB-B621-4771-B8D3-4693F25AC05B.png)
+![97c0d38e6841d2f3709f7b7daa586457](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/重温C语言(1)之准备.resources/161E59FB-B621-4771-B8D3-4693F25AC05B.png)
 
 
-![7ca692273d8eb63b70e52992be3175e1](重温C语言(1)之准备.resources/EC1AC43C-81EF-4323-A692-8B1F2E32B5C2.png)
+![7ca692273d8eb63b70e52992be3175e1](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/重温C语言(1)之准备.resources/EC1AC43C-81EF-4323-A692-8B1F2E32B5C2.png)
 
 
 ## C 关键字
@@ -132,7 +132,7 @@ int main() { // <- 函数体开始
 
 还有一些保留标志符，如 printf 它们已经有了自己的用途，不能随意使用。
 
-![c40cc30e88f963f182d215257b8d58e9](重温C语言(1)之准备.resources/BCE0601F-E1A5-413D-BAA3-295600A91450.png)
+![c40cc30e88f963f182d215257b8d58e9](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/重温C语言(1)之准备.resources/BCE0601F-E1A5-413D-BAA3-295600A91450.png)
 
 ## 小结
 
