@@ -1,0 +1,159 @@
+---
+layout: post
+title:  "重温C语言(1)之准备"
+date:   2020-02-02 12:00:00
+categories: CPP
+comments: true
+description: 重温C语言(1)之准备!
+---
+
+
+* content
+{:toc}
+
+想拥有自由，就要时刻保持警惕。
+
+## 前话
+当程序员好几年了，学了好多语言，倒是发现C语言越来越重要，很多核心技术都是C撑起来的，因此，拿出大学时候的笔记课程，决定重温学过的C语言，让程序员的道路可以走的更遥远。
+
+## 开发工具
+![e922eb14266895325666d1cc2476db4e](重温C语言(1)之准备.resources/0ED82ADB-09B9-4ACE-BC64-4F41925CB600.png)
+
+[http://www.jetbrains.com/clion/?fromMenu](http://www.jetbrains.com/clion/?fromMenu)
+
+我使用的是 JetBrains 的CLion，你也可以选择自己的编译器。
+
+CLion 是收费的。
+
+为什么我不用 Xcode，人各有志，喜欢即可。
+
+1. 安装好后，点击试用；
+2. 下载 jar 包，链接: https://pan.baidu.com/s/1S99YPZru4Ym6X4iRZaaALQ 提取码: cy47 ；
+3. 将 jar 包放到 `/Applications/CLion.app/Contents/bin` 路径下；
+4. 点击 CLion 菜单 `Configure` 下的 `Edit Custom VM Options...`；
+![image.png](https://upload-images.jianshu.io/upload_images/10733883-69725b2bbf5a2604.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+5. 添加 `-javaagent:/Applications/CLion.app/Contents/bin/jetbrains-agent.jar`；
+![java](https://upload-images.jianshu.io/upload_images/10733883-a7cc05a385c76842.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+6. 重启 CLion;
+7. 点击 `Get Help` 菜单下的`Register...` 或者 `Configure` 下的 `Manage Licnese...`;
+![image.png](https://upload-images.jianshu.io/upload_images/10733883-ef04a465cdc55fed.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+8. 在弹出框里选择 `License server`， 点击 `Discover Server`;
+![image.png](https://upload-images.jianshu.io/upload_images/10733883-2c33da21d6ef0d3d.png?imageMogr2/auto-orient/strip%7CimageView2/2/w/1240)
+9. `Activate` 开心的使用吧。
+
+## 系列文章代码仓库
+[https://gitee.com/afra55/cpp](https://gitee.com/afra55/cpp)
+
+## 准备
+C是一门流行的语言，常年稳居排行榜前三。C很高效，可移植，灵活而强大，当然没有 kotlin、swift、golang等语言简单好写，C语言的年度混乱代码大赛可不是盖的。
+
+### C 语言能干啥？
+
+* C语言能写个 windows系统，Windows、Linux、Unix 等操作系统的内核90%以上都使用C语言开发的；
+* 嵌入式开发；
+* 服务器开发；
+* cocos2d 写游戏；
+* FFmpeg 音视频处理；
+* OpenCV 计算机视觉处理，比如人脸识别；
+* 外挂；
+* 底层驱动开发，比如Android内核；
+* 白帽子；
+
+等等。会C语言和不会C语言真的是两个级别。
+
+### 编程步骤
+编程一般分了七个步骤：
+
+1. 确定程序干啥；
+2. 设计程序；
+3. 编写代码；
+4. 编译,把源代码转换为可执行代码，C编译器把C代码翻译成特定的机器语言，并将源代码与C库的代码合并（通过链接器合并）成最终程序；
+5. 运行程序；
+6. 测试和调试；
+7. 维护和修改；
+
+### 环境（Mac环境）
+
+确保已经安装 gcc，更多信息查看链接： http://www.gnu.org/software/gcc/index.html
+
+在命令行执行 gcc， 如果提示错误
+`xcrun: error: invalid active developer path (/Library/Developer/CommandLineTools), missing xcrun at: /Library/Developer/CommandLineTools/usr/bin/xcrun`
+则执行命令 `xcode-select --install` 安装相应插件。
+
+
+### Hellow World
+
+![d3ec2f1e513dc60c0234b5bb099d65a6](重温C语言(1)之准备.resources/F8CDC03C-2B83-4FCD-8DAA-86688183F3F1.png)
+
+```
+// 预编译器，把stdio.h文件中的所有内容都输入该行所在的位置, stdio.h 包含了供编译器使用的输入输出函数
+#include <stdio.h> // <- C 预处理指令
+// 在 C 程序顶部的信息集合被称为头文件
+
+/**
+ * 代码块注释, main() 函数是第一个被调用的函数
+ * @return
+ */
+int main() { // <- 函数体开始
+
+    /* 声明变量 num, 所有变量必须先声明才能被使用；
+     * 变量以小写字母、大写字母、数字和下划线（_）来命名，名称的第1个字符必须是字母或下划线；
+       int 是一种数据类型，属于关键字，关键字用于定义语言，不能用作其他用途，例如 int 不能作为变量使用；
+       num 是标志符，声明把特定标识符与计算机内存中的特定位置联系起来，同时也确定了储存在某位置的信息类型或数据类型；
+     */
+    int num;
+
+    // 给 num 赋值 17970, 赋值表达式语句，把右侧的值赋到左侧
+    num = 17970;
+
+    // 调用标准函数 printf() 函数, \n 指换行
+    printf("Hello, World!\n");
+
+    // %d 代表 num 输出的形式, 。%提醒程序，要在该处打印一个变量，d表明把变量作为十进制整数打印。
+    printf("%d 的意思是：要娶就娶你", num);
+
+    // 用户按下一个键后再退出程序
+    getchar();
+
+    // int main(void)中的int表明main()函数应返回一个整数, C标准要求main()这样做
+    return 0; // <- 函数体结束
+}
+```
+
+![97c0d38e6841d2f3709f7b7daa586457](重温C语言(1)之准备.resources/161E59FB-B621-4771-B8D3-4693F25AC05B.png)
+
+
+![7ca692273d8eb63b70e52992be3175e1](重温C语言(1)之准备.resources/EC1AC43C-81EF-4323-A692-8B1F2E32B5C2.png)
+
+
+## C 关键字
+
+关键字不能用做标志符，如变量名。
+
+还有一些保留标志符，如 printf 它们已经有了自己的用途，不能随意使用。
+
+![c40cc30e88f963f182d215257b8d58e9](重温C语言(1)之准备.resources/BCE0601F-E1A5-413D-BAA3-295600A91450.png)
+
+## 小结
+
+C程序由一个或多个C函数组成。每个C程序必须包含一个main()函数，这是C程序要调用的第1个函数。
+从今天开始，重温C语言，有趣的语言带动有趣的灵魂，今天比昨天进步一点，明天比今天进步一点。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
