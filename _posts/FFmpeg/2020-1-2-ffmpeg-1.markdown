@@ -13,7 +13,7 @@ description: FFmpeg 从未知到牵手（1） - 下载、安装与基本命令!
 
 更多有意思的内容，会在后续发布，请关注 Mr无畏公众号：
 
-![c1e42400e1dd5302d92fd8195f6f7cfa](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/ffmpeg1/Mr无谓公众号.jpg)
+![c1e42400e1dd5302d92fd8195f6f7cfa](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/FFmpeg/ffmpeg1/Mr无谓公众号.jpg)
 
 
 [TOC]
@@ -73,7 +73,7 @@ git clone https://git.ffmpeg.org/ffmpeg.git
 
 ## 目录结构
 
-![cef5943dbe525355b0972239882d27ed](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/ffmpeg1/AB6CA517-C6E6-4058-B12D-0182FEF3C787.png)
+![cef5943dbe525355b0972239882d27ed](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/FFmpeg/ffmpeg1/AB6CA517-C6E6-4058-B12D-0182FEF3C787.png)
 
 libavutil： 常用工具， hash 器，解码器，及其他工具
 
@@ -120,19 +120,19 @@ Help options:
 
 解码器把数据编码文件转为模拟视音频
 
-![3c7c792945a05047cc566983471e49aa](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/ffmpeg1/37759254-5778-45CB-A0B2-4BB3C7D43589.png)
+![3c7c792945a05047cc566983471e49aa](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/FFmpeg/ffmpeg1/37759254-5778-45CB-A0B2-4BB3C7D43589.png)
 
 ### 显示所有可用的编码器
 
 编码器主要把模拟视音频信号压缩数据编码文件
 
-![5661c124d2d358a89fcd0cbc19969de8](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/ffmpeg1/A94843D4-C279-443F-AF32-A3036B0C1506.png)
+![5661c124d2d358a89fcd0cbc19969de8](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/FFmpeg/ffmpeg1/A94843D4-C279-443F-AF32-A3036B0C1506.png)
 
 ## 显示所有可用滤镜
 
 这里有很多音视频特效处理的功能，比如视频缩放、截取、翻转、叠加、跑马灯、视频转GIF等功能
 
-![60afbecd960abc179213602b2b779310](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/ffmpeg1/4361D259-4B0D-473E-81C5-55CA5B514BB5.png)
+![60afbecd960abc179213602b2b779310](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/FFmpeg/ffmpeg1/4361D259-4B0D-473E-81C5-55CA5B514BB5.png)
 
 ## 编译
 
@@ -167,17 +167,17 @@ make && make install
 ```
 
 安装完成后的路径及结构：
-![ded9157cba3d5052849f5c1efc81240b](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/ffmpeg1/91C31905-5C83-4EB0-9BA1-3A586C693459.png)
+![ded9157cba3d5052849f5c1efc81240b](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/FFmpeg/ffmpeg1/91C31905-5C83-4EB0-9BA1-3A586C693459.png)
 
 include 文件夹下是头文件
-![6c543930f8cff2cb65208b9dd65e8122](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/ffmpeg1/5406E87C-4BB7-4601-B91F-44C17607366E.png)
+![6c543930f8cff2cb65208b9dd65e8122](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/FFmpeg/ffmpeg1/5406E87C-4BB7-4601-B91F-44C17607366E.png)
 
 lib 里是动态库
 
 share 里是文档相关及例子
 
 如果编译后没有 ffplay
-![67445c1daf1c192b3b102ef7b87595d1](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/ffmpeg1/4C60C63A-A3D3-4232-A750-E55036E16C53.png)
+![67445c1daf1c192b3b102ef7b87595d1](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/FFmpeg/ffmpeg1/4C60C63A-A3D3-4232-A750-E55036E16C53.png)
 
 可能有以下几个原因导致：
 
@@ -194,7 +194,7 @@ ffplay 是多媒体播放器
 
 执行命令一般用以下路径的 ffmpeg
 
-![44c281e369918062d25244c0142b97a6](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/ffmpeg1/3181F0A4-2BDC-484A-8E83-4280577DAB1A.png)
+![44c281e369918062d25244c0142b97a6](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/FFmpeg/ffmpeg1/3181F0A4-2BDC-484A-8E83-4280577DAB1A.png)
 
 `/usr/local/ffmpeg/bin/ffmpeg`
 
