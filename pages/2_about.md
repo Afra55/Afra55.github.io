@@ -38,3 +38,5 @@ Email：<afra55@foxmail.com>
 CSDN：<a href="http://blog.csdn.net/yang786654260" target="_blank">http://blog.csdn.net/yang786654260</a>
 
 QQ：<a href="http://wpa.qq.com/msgrd?v=3&uin=786654260&site=qq&menu=yes" target="_blank">786654260</a>
+
+简书：<a href="https://www.jianshu.com/u/2e9bda9dc932" target="_blank">鸡蛋绝缘体</a>
