@@ -1,0 +1,412 @@
+---
+layout: post
+title:  "重温C语言(10)之预处理及C库"
+date:   2020-02-05 16:00:07
+categories: CPP
+comments: true
+description: 重温C语言(10)之预处理及C库!
+---
+
+
+* content
+{:toc}
+
+## 1 `#define`
+C预处理器遵循预处理器指令，在编译源代码之前调整源代码。
+
+`#define` 用来定义符号常量.
+```
+#define 宏 替换文本
+```
+
+一旦预处理器在程序中找到宏的示实例后，就会用替换体代替该宏。
+
+宏也可以添加宏参数，注意不要有空格，替换文本有空格会被识别为字符串。
+```
+#define 宏(宏参数a,宏参数b)  宏参数a*宏参数b
+```
+示例：
+```
+#define SQUARE(X) (X)*(X)
+```
+`SQUARE(X)`出现的地方都会被 `(X)*(X)` 替换。记住确保准确性，括号是必须加的。
+
+```
+#define PSQUARE(X) print("X的平方结果是%d.\n", ((X)*(X)));
+```
+```
+PSQUARE(3); // X的平方结果是9.
+```
+
+### `#`运算符
+
+```
+#define PSQUARE(X) print(""#X"的平方结果是: %d.\n", ((X)*(X)));
+```
+```
+    PSQUARE(2); // 2的平方结果是: 4
+    PSQUARE((2 + 3)); // (2 + 3)的平方结果是: 25
+    PSQUARE(2 + 3); // 2 + 3的平方结果是: 25
+    int y = 6;  
+    PSQUARE(y); // y的平方结果是: 36
+```
+
+`#`运算符 会把宏参数字符串化, 注意使用 `#`的时候，其要被双引号包含。
+
+### `##`运算符
+
+```
+#define INDEXX(N) x ## N
+#define PRINT_INDEXX(N) printf("x"#N"=%d\n", x ## N );
+```
+```
+    int INDEXX(1) = 12; //int x1 = 12
+    int INDEXX(2) = 13; //int x2 = 13
+    int INDEXX(3) = 2; //int x3 = 2
+    PRINT_INDEXX(1); // x1=12
+    PRINT_INDEXX(2); // x2=13
+    PRINT_INDEXX(3); // x3=2
+```
+`##`运算符把两个记号组合成了一个记号。
+
+### 变参宏:`...`和`__VA_ARGS__`
+
+```
+#define MYPRINT(X, ...) printf("输出信息 "#X"："__VA_ARGS__);
+```
+
+```
+    MYPRINT("name", "Victor\n");
+    MYPRINT("biu", "a = %d, b = %.2f\n", 2, 2.55555);
+```
+```
+输出信息 "name"：Victor
+输出信息 "biu"：a = 2, b = 2.56
+```
+
+`...` 只能是最后一个宏参数，`__VA_ARGS__`表明省略号代表什么。
+
+---
+
+## 2 `#include`
+`#include` 通过查看文件名把文件内容包含在当前文件中。
+
+```
+#include <stdio.h>  // 查找系统目录
+#include "hot.h"    // 查找当前工作目录
+#include "/usr/victor/hello.h"  // 查找 /usr/victor 目录
+```
+
+在源代码里定义一个文件作用域的外部链接变量：
+```
+int total_number = 0; // 文件作用域，在原代码文件中
+```
+然后在与源代码文件相关联的头文件中进行引用式声明：
+```
+extern int status;
+```
+这行代码会出现在包含了该头文件的文件中，这样使用该系列函数的文件都能使用这个变量。
+
+
+## 3 `#undef`
+`#undef` 取消之前已经定义的 `#define` 指令。
+
+```
+#define MAX 100
+#undef MAX
+```
+通过`#undef`移除了 MAX 的原来的定义，然后就可以对 MAX 进行一个新的定义。
+```
+#define MAX 200
+```
+
+## 4 `#ifdef`、`#else`、`#endif`
+```
+#ifdef YOU
+    // 如果 #define 已经定义了 YOU,  则执行下面指令
+    #include "wife.h"
+    #define AGE 20
+#else
+    // 如果 #define 没有定义 YOU, 则执行下面指令
+    #include "friend.h"
+    #define AGE 22
+#endif
+```
+
+## 5 `#ifndef`
+与 `#ifdef` 相反
+
+```
+#ifdef YOU
+    // 如果 #define 没有定义 YOU,  则执行下面指令
+    #include "wife.h"
+    #define AGE 20
+#else
+    // 如果 #define 已经定义了 YOU, 则执行下面指令
+    #include "friend.h"
+    #define AGE 22
+#endif
+```
+
+## 6 `#if`、`#elif`
+`#if` 后面跟整型常量表达式，如果表达式为非零，则表达式为真。
+```
+#if AGE == 20
+    #include "one.h"
+#else AGE == 21
+    #include "two.h"
+#else AGE == 22
+    #include "three.h"
+#endif
+```
+可以使用 `#if defined (参数)` 来代替 `#ifdef 参数`;
+
+```
+#if defined (YOU)
+    // 如果 #define 已经定义了 YOU,  则执行下面指令
+    #include "wife.h"
+    #define AGE 20
+#elif defined (HER)
+    // 如果 #define 已经定义了 HER, 则执行下面指令
+    #include "friend.h"
+    #define AGE 22
+#else
+    // 否则
+    #include "lover.h"
+    #define AGE 23
+#endif
+```
+
+## 7 `__DATE__`
+预处理日期（"Mmm dd yyyy"形式字符串字面量，例如 Nov 03 2022）。
+
+## 8 `__FILE__`
+表示当前源代码文件名的字符串字面量。
+
+## 9 `__LINE__`
+表示当前源代码文件中当前行号的整形常量。
+
+## 10 `__STDC__`
+值为1，表示遵循C标准。
+
+## 11 `__STDC_HOSTED__`
+若编译器的目标系统环境中包含完整的标准C库, 那么这个宏定义为1,否则宏值为0。
+
+## 12 `__STDC_VERSION__`
+支持C99标准，设置为199901L；支持C11标准，设置为201112L。
+
+## 13 `__TIME__`
+翻译代码的时间 `hh::mm::ss`。
+
+## 14 `__func__`
+表示当前函数名，必须在函数作用域内。
+
+```
+int main() {
+    printf("__DATE__ : %s\n", __DATE__);
+    printf("__FILE__ : %s\n", __FILE__);
+    printf("__LINE__ : %d\n", __LINE__);
+    printf("__STDC__ : %d\n", __STDC__);
+    printf("__STDC_HOSTED__ : %d\n", __STDC_HOSTED__);
+    printf("__STDC_VERSION__ : %ld\n", __STDC_VERSION__);
+    printf("__TIME__ : %s\n", __TIME__);
+    printf("__func__ : %s\n", __func__);
+    return 0;
+}
+```
+
+```
+__DATE__ : Apr  2 2020
+__FILE__ : /Users/victor/Program/Cline/cpp/6/main.c
+__LINE__ : 50
+__STDC__ : 1
+__STDC_HOSTED__ : 1
+__STDC_VERSION__ : 199901
+__TIME__ : 20:40:48
+__func__ : main
+```
+
+## 15 `#line`、`#error`
+
+`#line` 重置 `__LINE__` 和 `__FILE__`。
+
+```
+    printf("__LINE__ : %d\n", __LINE__);
+#line 1999
+    printf("__LINE__ : %d\n", __LINE__);
+    
+    printf("__FILE__ : %s\n", __FILE__);
+#line 30 "good.c"
+    printf("__FILE__ : %s\n", __FILE__);
+```
+输出:
+```
+__LINE__ : 50
+__LINE__ : 1999
+__FILE__ : /Users/victor/Program/Cline/cpp/6/main.c
+__FILE__ : good.c
+```
+
+`#error`指令让预处理器发出一条错误消息，该消息包含指令中的文本。如果可能的话，编译过程应该中断。
+
+```
+#if __STDC_VERSION__!=201112L
+#error Not C11
+#endif
+```
+输出:
+```
+Scanning dependencies of target cpp
+[ 50%] Building C object CMakeFiles/cpp.dir/6/main.c.o
+/Users/victor/Program/Cline/cpp/6/main.c:53:2: error: Not C11
+#error Not C11
+ ^
+1 error generated.
+make[3]: *** [CMakeFiles/cpp.dir/6/main.c.o] Error 1
+make[2]: *** [CMakeFiles/cpp.dir/all] Error 2
+make[1]: *** [CMakeFiles/cpp.dir/rule] Error 2
+make: *** [cpp] Error 2
+```
+
+## 16 `#pragma`
+`#pragma`把编译器指令放入源代码中。
+```
+#pragma c9x on
+```
+让编译器支持 C99。
+
+上面的指令和下面的  `_Pragma` 预处理运算符等价：
+```
+_Pragma("c9x on")
+```
+
+## 17 泛型选择 `_Generic`
+
+`_Generic(x, int:0, float:1, double:2, default:3)`
+第1个项是一个表达式，后面的每个项都由一个类型、一个冒号和一个值组成，如float:1。第1个项的类型匹配哪个标签，整个表达式的值是该标签后面的值，没有匹配的类型则选择 default 标签后面的值。
+
+```
+#define MY_TYPE(X) _Generic((X), int:"int", double:"double", float:"float", default:"unknow")
+```
+```
+   printf("%s", MY_TYPE(4)); // int
+```
+
+## 18 内联函数
+函数调用都有开销，使用内联函数可以减少开销，编译器会让内联函数的内联代码直接替换函数的调用，或者也一并执行了某些优化。
+
+```
+inline static void sing(){ ... }
+```
+在调用 `sing()` 的地方，`sing()`内部代码会替换 `sing()`。
+
+内联函数的定义与调用该函数的代码必须在同一个文件中。
+
+## 19 `_Noreturn`
+`_Noreturn` 的目的是告诉用户和编译器，这个特殊的函数不会把控制返回主调程序。告诉用户以免滥用该函数，通知编译器可优化一些代码。
+
+exit()函数是_Noreturn函数的一个示例，一旦调用exit()，它不会再返回主调函数。注意，这与void返回类型不同。void类型的函数在执行完毕后返回主调函数，只是它不提供返回值。
+
+## 20 数学库
+`math.h`
+
+| 函数 | 描述 |
+| --- | --- |
+|double acos(double x) | 返回余弦值为x的角度（0～π弧度）|
+|double asin(double x)|返回正弦值为x的角度（−π/2～π/2弧度）|
+|double atan(double x)|返回正切值为x的角度（−π/2～π/2弧度）|
+|double atan2(double y,double x)|返回正弦值为y/x的角度（−π～π弧度）|
+|double cos(double x)|返回x的余弦值，x的单位为弧度|
+|double sin(double x)|返回x的正弦值，x的单位为弧度|
+|double tan(double x)|返回x的正切值，x的单位为弧度|
+|double exp(double x)|返回x的指数函数的值（`e^x`）|
+|double log(double x)|返回x的自然对数值|
+|double log10(double x)|返回x的以10为底的对数值|
+|double pow(double x,double y)|返回x的y次幂|
+|double sqrt(double x)|返回x的平方值|
+|double cbrt(double x)|返回x的立方值|
+|double ceil(double x)|返回不小于x的最小整数值|
+|double fabs(double x)|返回x的绝对值|
+|double floor(double x)|返回不大于x的最大整数值|
+
+## 21 `exit()`和`atexit()`
+ANSI标准还新增了一些不错的功能，其中最重要的是可以指定在执行exit()时调用的特定函数。atexit()函数通过退出时注册被调用的函数提供这种功能，atexit()函数接受一个函数指针作为参数。可以多次注册退出时调用的函数，依据先注册后执行原则在`exit()`执行这些函数。
+
+exit()执行完atexit()指定的函数后，会完成一些清理工作：刷新所有输出流、关闭所有打开的流和关闭由标准I/O函数tmpfile()创建的临时文件。然后exit()把控制权返回主机环境，如果可能的话，向主机环境报告终止状态。
+exit()接收名为EXIT_FAILURE的宏表示终止失败,0和EXIT_SUCCESS表示成功终止。
+
+
+
+## 22 `qsort()`
+快速排序：数组分成两部分，一部分的值都小于另一部分的值。这个过程一直持续到数组完全排序好为止。
+
+```
+void	 qsort(void *__base, size_t __nel, size_t __width,
+	    int (* _Nonnull __compar)(const void *, const void *));
+```
+第1个参数是指针，指向待排序数组的首元素。
+第2个参数是待排序项的数量.
+第3个参数显式指明待排序数组中每个元素的大小。例如，如果排序double类型的数组，那么第3个参数应该是sizeof(double)。
+第4个参数指向函数的指针，这个被指针指向的比较函数用于确定排序的顺序。该函数应接受两个参数：分别指向待比较两项的指针。如果第1项的值大于第2项，比较函数则返回正数；如果两项相同，则返回0；如果第1项的值小于第2项，则返回负数。
+
+## 23 `assert.h`
+`assert()`宏是为了标识出程序中某些条件为真的关键位置，如果其中的一个具体条件为假，就用`assert()`语句终止程序。通常，`assert()`的参数是一个条件表达式或逻辑表达式。如果`assert()`中止了程序，它首先会显示失败的测试、包含测试的文件名和行号。
+```
+    int z = 2;
+    assert(z < 0);
+```
+`Assertion failed: (z < 0), function main, file /Users/victoryang/Dev/cpp/6/main.c, line 48.`
+
+把 `#define NDEBUG` 宏定义包含在`assert.h`前面，并重新编译程序，这样编译器就会禁用文件中的所有assert()语句。
+
+`_Static_assert` 声明，可以在编译时检查`assert()`表达式。因此，`assert()`可以导致正在运行的程序中止，而`_Static_assert()`可以导致程序无法通过编译。`_Static_assert()`接受两个参数。第1个参数是整型常量表达式，第2个参数是一个字符串。如果第1个表达式求值为0（或_False），编译器会显示字符串，而且不编译该程序。这样更有效率。
+
+## 24 `memcpy()`、`memmove()`
+类似用`strcpy()`和`strncpy()`函数来拷贝字符数组, `memcpy()`、`memmove()`可以拷贝任意数组。
+
+```
+void *memcpy(void restrict *dst, const void *src, size_t n);
+void *memmove(void *dst, const void *src, size_t n) ;
+```
+从 src 指向的位置，拷贝 n 字节到 dst 指向的位置。
+
+`memcpy()`假设两个内存区域之间没有重叠；而`memmove()`不作这样的假设，所以拷贝过程类似于先把所有字节拷贝到一个临时缓冲区，然后再拷贝到最终目的地。
+
+如果要拷贝数组中10个double类型的元素，最后一个参数要使用`10*sizeof(double)`，而不是10。
+
+## 25 `stdarg.h`
+`stdarg.h` 提供了一个可变参数的功能，需要依据以下步骤实施：
+1．提供一个使用省略号的函数原型；
+```
+void f1(int n, ...);
+```
+省略号的前一个形参起着特殊的作用，标准中用parmN这个术语来描述该形参。传递给该形参的实际参数是省略号部分代表的参数数量。
+2．在函数定义中创建一个va_list类型的变量；
+3．用宏把该变量初始化为一个参数列表；
+4．用宏访问参数列表；
+5．用宏完成清理工作。
+
+```
+void f1(int n, ...){
+    // va_list类型代表一种用于储存形参对应的形参列表中省略号部分的数据对象
+    va_list ap;
+    // va_start()宏，把参数列表拷贝到va_list类型的变量中
+    va_start(ap, n);
+    // 通过 va_arg() 访问参数列表内容
+    // 第一个参数时 va_list类型的变量， 第二个参数是一个类型名
+    // 第1次调用va_arg()时，它返回参数列表的第1项；第2次调用时返回第2项，以此类推
+    int one = va_arg(ap, int);  // 检索第1个参数
+    double two = va_arg(ap, double); // 检索第2个参数
+    
+    // 清理工作
+    va_end(ap);
+}
+```
+
+因为`va_arg()`不提供退回之前参数的方法，所以有必要保存`va_list`类型变量的副本。C99新增了一个宏用于处理这种情况：`va_copy()`。该宏接受两个`va_list`类型的变量作为参数，它把第2个参数拷贝给第1个参数。
+```
+va_list apcopy;
+va_copy(apcopy, ap);
+```
+
+

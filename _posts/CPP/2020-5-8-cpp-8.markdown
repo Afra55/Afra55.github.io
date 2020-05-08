@@ -1,0 +1,205 @@
+---
+layout: post
+title:  "重温C语言(8)之C结构"
+date:   2020-02-05 16:00:07
+categories: CPP
+comments: true
+description: 重温C语言(8)之C结构!
+---
+
+
+* content
+{:toc}
+
+## 结构声明
+
+`struct` 关键字表明跟在后面的是一个结构
+```
+struct man{
+    char name[40];
+    int age;
+};
+```
+
+```
+struct man afra;
+```
+
+`afra` 是一个结构变量，它的结构布局是 `main`。
+
+## 初始化结构
+
+```
+    struct man afra = {
+            "Afra55",
+            2
+    };
+    
+     printf("我的名字是%s, 我今年%d岁了", afra.name, afra.age);
+```
+
+```
+我的名字是Afra55, 我今年2岁了
+```
+
+## 指定初始化
+```
+ struct man bfra55 = {.age = 12, .name = "Bfra55"};
+```
+可以指定某个成员变量的值。
+
+## 结构中的字符数组和字符指针
+
+```
+struct a {
+    char strA[40];
+    char strB[20];
+}
+```
+```
+struct a testA = {"Victor", "Afra55"}
+```
+testA 的字符串都存储在结构变量内部，需要分配60个字节存储；
+```
+struct b {
+    char * strA;
+    char * strB;
+}
+```
+```
+struct b testB = {"Victor", "Afra55"}
+```
+testB 的字符串都存储在编译器存储常量的地方，结构本身只存储两个地址占用16字节；
+注意如果没有初始化 strA 和 strB 可以是任意地址，直接存储值很危险；
+
+## malloc()
+
+`malloc()` 可以为字符串分配合适的存储空间，能够有效避免使用字符指针带来的潜在危险。
+```
+// 假设temp字符数组存储了字符串
+testB.strA = (char *) malloc(strlen(temp) + 1);
+strcpy(testB.strA, temp)
+```
+在使用完内存后，记得使用`free()`函数释放内存:
+```
+free(testB.strA);
+```
+
+## 复合字面量结构
+对于临时结构，复合字面亮好用：
+```
+(struct a){"Victor", "Afra55"}
+```
+
+## flexible array member 伸缩数组成员
+
+```
+struct flex{
+    int age;
+    char name[];    // 伸缩型数组成员，该成员的内存大小可以通过编程分配
+}
+```
+伸缩型数组成员必须是最后一个成员；声明的方括号中是空的；
+
+声明一个struct flex类型的结构变量时，不能用 name 做任何事，因为没有给这个数组预留存储空间。
+通常声明struct flex类型为指针，之后用 malloc() 分配足够空间来存储伸缩型数组所需的额外空间：
+```
+struct flex * pt;
+pt = malloc(sizeof(struct flex) + 40 * sizeof(char))
+```
+分配空间后，就可以安全的使用这些成员了；当然在使用完内存后，记得使用`free()`函数释放内存；
+```
+free(pt);
+```
+
+## 匿名结构
+```
+struct user{
+    int age;
+    struct {char firstname[40]; char lastname[40]}; // 这就是匿名函数
+}
+```
+初始化:
+```
+struct user a = {97, {"Victor", "Afra55"}};
+```
+访问方式：
+```
+puts(a.firstname);
+```
+
+## 保存结构到文件中
+```
+struct wifi{
+    char neme[40];
+    char password[40];
+}
+```
+可以使用 `fread()` 进行存储；
+```
+struct wifi a = {"afra", "123"};
+fwrite(&a, sizeof(struct wifi), 1, pfile);
+```
+sizeof 表示拷贝数据的大小；
+1 表示1次拷贝1块数据；
+
+可以使用 `fread()` 进行读取；
+```
+fread(&a, sizeof(struct wifi), 1, pfile);
+```
+
+## 数据类型：union
+联合，能在同一个内存空间中存储不同的数据类型；
+```
+union user{
+    int a;
+    double b;
+    char c;
+}
+```
+不知道即将要存储哪种类型的数据，可以使用 union， 声明 union 的变量只能存储结构中出现的一种类型的值；
+
+编译器会给变量分配union声明中占用最大空间类型字节，比如 user 中的 double 占用了最大类型 64位即8字节，那么 user 的变量是 8 个字节；
+
+```
+union user test;
+test.a = 12;   // 12存储在test中，占2字节
+test.b = 2.0;   // 清除12，存储 2.0，占8字节
+test.c = 'p';   // 清除2.0，存储h， 占1字节
+```
+## 数据类型：enum
+枚举，声明符号名称来表示整型常量。
+```
+// 枚举中的常量默认从0开始，red是1，orange是2等
+enum spectrum {red, orange, yellow, green, blue, white};
+enum spectrum color;
+```
+变量 color 的值可能是`red, orange, yellow, green, blue, white`, 这些符号常量是枚举符。
+```
+color = white;
+if(color == white){...}
+for(color = red; color <= white; color++){...}
+switch(color){
+    case red: ...
+        break;
+    case orange: ...
+        break;
+        ...
+}
+```
+
+可以在声明枚举的时候指定整数值：
+```
+enum age {unknow, teen = 18, man = 24, old = 70, other};
+```
+unknow 默认赋值 0；
+other 会默认赋值为 71;
+
+## typedef
+typedef 创建的符号名不能用于值，只受限于类型；
+其由编译器解释，不是预处理器；
+说白了，就是别名的意思；
+```
+typedef int afra;
+```
+afra 就可以定义int类型变量；

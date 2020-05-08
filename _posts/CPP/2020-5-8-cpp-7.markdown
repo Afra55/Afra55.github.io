@@ -1,0 +1,252 @@
+---
+layout: post
+title:  "重温C语言(7)之文件输入与输出"
+date:   2020-02-05 16:00:06
+categories: CPP
+comments: true
+description: 重温C语言(7)之文件输入与输出!
+---
+
+
+* content
+{:toc}
+
+
+## 文件
+
+File （文件）是硬盘磁盘上的被命名的存储空间。
+C 把文件看作是一系列的字节，每个字节都能被单独读取。
+
+所有文件的内容都是以二进制存储的。文本文件以二进制编码的字符比如ASCLL或Unicode 存储，二进制文件以机器语言代码或树值数据或图片或音乐编码存储。
+
+`exit()`函数关闭搜有打开的文件并结束程序,`exit(0)` 或 `exit(EXIT_SUCCESS)` 表示成功结束程序, `eixt(EXIT_FAILURE)` 表示结束程序失败。
+
+`return` 会把控制权交给上级函数，直到最初函数。
+
+### fopen()
+
+`fopen()` 函数用于打开文件，第一个参数是地址，第二个参数是打开文件的模式。返回文件指针（指向FILE的指针）。
+
+模式有如下几个：
+
+| 模式 | 含义 |
+| --- | --- |
+| "r" | 以只读模式打开文件 |
+| "w" | 写模式，把文件长度截取为0即文件内容被删除，文件不存在则创建新的 |
+| "a" | 写模式，在文件末尾添加内容，文件不存在则创建新的 |
+| "r+" | 更新模式，可以读写文件 |
+| "w+" | 更新模式，文件长度截取为0，文件不存在则创建新的 |
+| "a+" | 更新模式，只允许在文件末尾添加内容，文件不存在则创建新的，这个模式可以读取整个文件 |
+| "rb","wb","ab","rb+","r+b","wb+","w+b","ab+","a+b" | 更新模式，以二进制模式打开文件 |
+| "wx","wbx","w+x","wb+x,"w+bx" | （C11）类似非x模式，但是如果文件已存在或以独占模式打开文件，则打开文件失败 |
+
+带x字母的写模式，即使fopen()操作失败，原文件的内容也不会被删除。第二，如果环境允许，x模式的独占特性使得其他程序或线程无法访问正在被打开的文件。
+
+### getc()
+
+`getc(文件指针)` 从文件指针指向的文件获取一个字符。
+
+### putc()
+`getc(字符,文件指针)` 把字符放入文件指针指向的文件中。
+
+### fclose()
+`fclose(文件指针)` 关闭文件指针指向的文件，关闭成功返回 0， 否则返回 EOF，必要的时候刷新缓冲区。
+
+示例(1)：
+
+```
+// 预编译器，把stdio.h文件中的所有内容都输入该行所在的位置, stdio.h 包含了供编译器使用的输入输出函数
+#include <stdio.h> // <- C 预处理指令
+
+
+int main() { // <- 函数体开始
+
+
+    int ch;
+    FILE * fp = fopen("../test/test.txt", "r");
+    FILE * fpout = fopen("../test/testout.txt", "w");
+    ch = getc(fp);
+    while ((ch = getc(fp)) != EOF) { // 得到一个输入,判断是否是文件末尾
+        putchar(ch);
+        putc(ch, fpout);
+    }
+
+    if(fclose(fp) != 0){
+
+        printf("关闭test文件失败\n");
+    }
+    if(fclose(fpout) != 0){
+        printf("关闭testout文件失败\n");
+    }
+
+    return 0; // <- 函数体结束
+}
+```
+
+### fprintf()
+
+与 `printf()` 类似，但是又多了一个参数，第一个参数是个文件指针，例如:
+
+```
+fprintf(stderr, "error %s", "error");
+fprintf(stdout, "error %s", "error");
+```
+`stderr` 指针用于把错误信息发送至标准错误。
+`stdout` 指针用于把信息发送至标准输出。
+
+```
+fprintf(文件指针, "msg %s", "msg");
+```
+把信息写入到 文件指针指向的文件中。
+
+### fscanf()
+与 `scanf()` 类似，但是又多了一个参数，第一个参数是个文件指针，例如:
+```
+char words[41];
+fscanf(stdin, "%40s", words);
+```
+从标准输入读取信息到 words 中。
+```
+fscanf(文件指针, "%s", words);
+```
+读取文件指针指向的文件中的单词到 words 中。
+
+### rewind()
+`rewind(文件指针)` 使程序返回到文件开始处。
+
+### fgets()
+`fgets(字符指针, 字符串大小, 文件指针)`
+
+会读取到第一个换行符，或者文件末尾，或者指定字符串大小个字符。
+`fgets()`会在字符串末尾加上一个空字符。
+
+### fputs()
+
+`fputs(字符串地址, 文件指针)`
+
+把字符串写入到指定文件中。
+
+### fseek() 和 ftell()
+
+`fseek(文件指针, 偏移量, SEEK_SET|SEEK_CUR|SEEK_END)` 可以在打开的文件中移动到任意字节处。
+`ftell()` 返回 long 类型值表示文件的当前位置。
+
+* `SEEK_SET` 文件开始处;
+* `SEEK_CUR` 当前位置；
+* `SEEK_END` 文件末尾;
+
+```
+  long last;
+    FILE * fp = fopen("../test/test.txt", "rb");
+    // 定位到文件末尾
+    fseek(fp, 0, SEEK_END);
+    int ch;
+    last = ftell(fp);
+    for (long i = 1; i <= last; ++i) {
+        // 定位到文件末尾的前 i 位
+        fseek(fp, -i, SEEK_END);
+        ch = getc(fp);
+        putchar(ch);
+    }
+    fclose(fp);
+```
+
+### fgetpos() 和 fsetpos()
+
+突破 fseek() 和 ftell() 的 long 限制。
+
+`fpos_t`: 文件定位类型, 它的对象或变量可以指定文件中的一个位置。
+
+`int fgetpos(FILE * __restrict, fpos_t * restrict pos);` 成功返回0，否则非0，获取当前位置并存入`pos`, `pos` 指向的是 `fpos_t` 类型值，描述文件当前位置到文件开头的字节数字。
+
+`int fsetpos(FILE *, const fpos_t * restrict pos);` 成功返回0，失败返回非0，设置文件指针指向的位置。
+
+### ungetc()
+`int ungetc(int c, FILE *fp);`函数把c指定的字符放回输入流中。如果把一个字符放回输入流，下次调用标准输入函数时将读取该字符。
+
+### fflush()
+`int fflush(FILE *fp);` 刷新缓冲区，调用fflush()函数引起输出缓冲区中所有的未写入数据被发送到fp指定的输出文件。
+
+### setvbuf()
+在打开文件后且未对流进行其他操作之前，调用它创建缓冲区。
+`int setvbuf(FILE * __restrict fp, char * __restrict buf, int mode, size_t size);`创建了一个供标准I/O函数替换使用的缓冲区, 成功返回0，否则非0.
+`fp`: 待处理的流；
+`buf`: 待使用的存储区, 如果是 NULL 会自动创建;
+`mode`: `_IOFBF` 完全缓冲区即缓冲区慢点时候刷新,`_IONBF`无缓冲 ;
+`size`: size_t 派生整数类型，数组的大小；
+
+### fwrite()
+函数用于二进制形式的数据写入处理。
+`size_t	fwrite(const void * __restrict __ptr, size_t __size, size_t __nitems, FILE * __restrict __stream);` 把二进制数据写入文件， 返回成功写入项目的数量；
+
+`size_t` 是 `unsigned int`, 是 `sizeof` 运算符返回的类型;size表示待写入数据块的大小（以字节为单位）;nmemb表示待写入数据块的数量;
+例如： 保存 含有10个 double类型值的数组
+```
+double a[10];
+fwrite(a, sizeof(double), 10, fp);
+```
+
+### fread()
+
+函数用于二进制形式的数据写入处理。
+`size_t	 fread(void * __restrict __ptr, size_t __size, size_t __nitems, FILE * __restrict __stream);` 读取被 fwrite() 写入文件的数据， 返回成功读取项的数量；
+
+例如： 读取含有 10 个 double 类型值的数组，并拷贝到 oa 中,
+```
+double oa[10];
+fread(oa, sizeof(double), 10, fp);
+```
+
+### feof() ferror()
+```
+int	 feof(FILE *);
+int	 ferror(FILE *);
+```
+文件末尾时，函数返回 EOF，但是文件出错也返回 EOF，这两个函数就是来判断这两个情景的。
+当上一次输入调用检测到文件结尾时，feof()函数返回一个非零值，否则返回0。当读或写出现错误，ferror()函数返回一个非零值，否则返回0。
+
+## 示例
+
+### 获取文件名
+```
+char * s_gets(char * st, int n{
+    char * ret_val;
+    char * find;
+    ret_val = fgets(st, n, stdin);
+    if(ret_val){
+        find = strchr(st, '\n');//查找换行符  
+        if(find)    //如果地址不是NULL，
+            *find='\0';     //在此处放置一个空字符
+        else
+            while(getchar() != '\n')
+                continue;
+     }
+
+    return ret_val;
+}
+```
+
+### 拷贝
+记得要给文件创建缓冲区
+```
+if(setvbuf( fa, NULL, _IOFBF, BUFSIZE) != 0){
+    fputs("无法创建缓冲区\n", stderr);
+    exit(EXIT_FAILURE);
+}
+```
+```
+void append(FILE * source, FILE * dest){
+    size_t bytes;
+    static char temp[BUFSIZE];//只分配一次
+    while((bytes = fread(temp, sizeof(char), BUFSIZE, source)) > 0)
+    fwrite(temp, sizeof(char), bytes, dest);
+}
+
+
+```
+
+## 总结
+当输入函数发现已读完缓冲区中的所有字符时，会请求把下一个缓冲大小的数据块从文件拷贝到该缓冲区中。以这种方式，输入函数可以读取文件中的所有内容，直到文件结尾。函数在读取缓冲区中的最后一个字符后，把结尾指示器设置为真。于是，下一次被调用的输入函数将返回EOF。输出函数以类似的方式把数据写入缓冲区。当缓冲区被填满时，数据将被拷贝至文件中。
+
+fopen()函数为标准I/O打开一个文件，并创建一个用于存储文件和缓冲区信息的结构。
+feof()和ferror()函数报告I/O操作失败的原因。

@@ -1,0 +1,548 @@
+---
+layout: post
+title:  "重温C语言(5)之字符串"
+date:   2020-02-05 16:00:04
+categories: CPP
+comments: true
+description: 重温C语言(5)之字符串!
+---
+
+
+* content
+{:toc}
+
+## 前言
+字符串可以说是C语言中最有用、最重要的数据类型了。
+字符串是以空字符（\0）结尾的char类型数组。
+用双引号扩起来的内容是字符串字面量（或着叫字符串常量）。
+字符串常量属于静态存储类别，即只要在函数中使用字符串常量，这个字符串只会被存储一次，并且存活在整个程序生命周期内。
+
+
+
+
+```
+//
+// Created by Victor on 2019/10/22.
+//
+
+#include <stdio.h>
+
+#define MSG "define a message"
+#define MAX_LENGTH 81
+
+int main() {
+
+    char hi[MAX_LENGTH] = "Hi, i am victor yang!";
+    const char * pt = "i do not know, why you dismiss.";
+    puts("your message:"); // puts 函数只显示字符串，并且自动在末尾加换行符
+    puts(MSG);
+    puts(hi);
+    puts(pt);
+    hi[3] = 'H';
+    puts(hi);
+
+    return 0;
+}
+```
+```
+your message:
+define a message
+Hi, i am victor yang!
+i do not know, why you dismiss.
+Hi,Hi am victor yang!
+```
+
+记住字符串最后都会有个空字符：
+
+```
+  char a[] = {'a', 'b', 'c'}; // 这是字符数组
+  char b[] = {'a', 'b', 'c', '\0'}; // 这是字符串
+```
+
+字符串与指针紧密相连：
+```
+    char hi[MAX_LENGTH] = "Hi, I miss u";
+    printf("%p\n", hi);     // 0x7ffee2023ab0
+    printf("%p\n", &hi[0]);     // 0x7ffee2023ab0
+    printf("%c\n",*hi);     // H
+    printf("%c\n", hi[0]);      // H
+    printf("%c\n", *(hi + 1));      // i
+    printf("%c\n", hi[1]);      // i
+    
+```
+ 
+字符串与数组回顾：
+ ```
+ #include <stdio.h>
+
+#define MSG "define a message"
+
+int main() {
+
+     // 字符串存储在静态存储区
+    // 在程序运行的时候才给 a 数组分配内存，之后才将字符串'拷贝'到数组中
+    char a[] = MSG;
+
+    // 字符串字面量是常量 const 数据
+    // 由于 pt 指向const数据，所以 pt 应该声明为 const 数据到指针
+    const char * pt = MSG;
+    printf("%p\n", "define a message");  // 0x103f1aeb0
+    printf("%p\n", a);  // 0x7ffeebce5af0
+    printf("%p\n", pt);   // 0x103f1aeb0
+    printf("%p\n", MSG);   // 0x103f1aeb0
+    printf("%p\n", "define a message");   // 0x103f1aeb0
+    return 0;
+}
+```
+ 虽然字符串字面量"defin a message" 在 printf 函数中出现了两次，但是编译器只使用了一个存储位置，而且与MSG的地址相同。
+ 编译器可以把多次使用的相同字面量储存在一处或多处。
+ 
+ 数组的元素是变量（除非数组被声明为const），但是数组名是地址常量。
+ 
+ ![7807b76f62150b2316de3c9e6921c2c1.png](https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/_posts/CPP/重温C语言(5)之字符串.resources/C7EBA484-4CB1-4445-9DB5-35A2C5C09DAE.png)
+ 
+ 二维字符数组每个数组的分配空间是一样的，指针数组的分配空间更灵活也更高效但是不能修改内容；
+ 
+ ## 指针和字符串
+ 
+```
+    const char * a = "I Love U";
+    const char * b;
+
+    b = a;
+    printf("%s\n", b);
+    printf("a = %s, &a = %p, a指针变量存储的地址值 = %p\n", a, &a, a);
+    printf("b = %s, &b = %p, b指针变量存储的地址值 = %p\n", b, &b, b);
+```
+ 
+```
+ I Love U
+a = I Love U, &a = 0x7ffee4126b00, a指针变量存储的地址值 = 0x10bad9e30
+b = I Love U, &b = 0x7ffee4126af8, b指针变量存储的地址值 = 0x10bad9e30
+```
+ 
+ 
+ 
+ ## 字符串输入
+ 
+ ### gets()
+ 
+```
+    char think[81];
+    puts("请输入你的想法");
+    gets(think);
+    printf("已经接受到你到想法: %s\n", think);
+    puts(think);
+```
+ 
+```
+ 请输入你的想法
+warning: this program uses gets(), which is unsafe.
+i see you, balalalalal...
+已经接受到你到想法: i see you, balalalalal...
+i see you, balalalalal...
+```
+ 
+ gets() 无法检查数组是否能够存储该行，只能知道数组的开始处。如果输入的字符串过长，就会造成*缓冲区溢出*（多余的字符超出了指定空间）.
+输入超过数组容量的字符串会提示 `Process finished with exit code 11`, 说明该程序试图访问未分配的内存, 这样的行为是不安全的，可能会被插入一些破坏系统的代码。
+
+### fgets()
+```
+    char think[5];
+    puts("请输入你的想法");
+    fgets(think, 5, stdin); // 第二个参数表示读入字符的最大长度数量，第三个参数是读入第文件 stdin 是标准输入
+    puts(think);
+    fputs(think, stdout); // stdout 标准输出
+```
+```
+请输入你的想法
+abcdefgh
+abcd
+abcd
+```
+输入的`abcdefgh\n`, 其实只存储了 `abcd\0`
+`fgets()`函数会存储换行符，而`gets()`不会：
+```
+请输入你的想法
+123
+123
+
+123
+
+```
+有时候不需要`fgets()`最后存储的换行符，那么我们可以进行如下骚操作进行处理：
+```
+while(words[i] != '\n')//假设\n在words中
+    i++;
+words[i] = '\0';
+```
+
+下面是个实用的示例：
+```
+    char think[5];
+    int i;
+    puts("请输入你的想法");
+    // 重复获取输入内容，直到文件末尾或该行第一个字符是换行符时结束
+    while (fgets(think, 5, stdin) != NULL && think[0] != '\n'){
+        i = 0;
+        // 找到该行的结尾，如果是换行符则该行内容没有超出规定大小
+        while (think[i] != '\n' && think[i] != '\0')
+            i++;
+        if (think[i] == '\n'){
+            think[i] = '\0';
+        } else{
+            // 这个分支是该行内容多与规定大小，为了舍弃多余字符，让剩余的字符读取但不存储, 包括遇到但第一个换行符
+            while (getchar() != '\n'){}
+        }
+        puts(think);
+    }
+```
+
+`\0` 是空字符的意思，是整数类型，是一个字符占用了1个字节，是用于标记C字符串末尾的字符，其对应字符编码是0。由于其他字符的编码不可能是0，所以不可能是字符串的一部。
+`NULL` 是空指针的意思，是指针类型，是一个地址占用了4个字节，该值不会与任何数据的有效地址对应。
+
+### gets_s()
+
+* 只从标准输入中读取数据；
+* 读到换行符会丢弃不存储；
+* 如果读到最大字符数但是没有读到换行符，会把最大字符数下的字符设置为空字符，读取并丢弃随后的输入直至读到换行符或文件结尾，然后返回空指针，可能会中止或退出程序。
+
+### 读取整行输入并用空字符代替换行符，或者读取一部分输入，并丢弃其余部分
+```
+char * afra_gets(char* think, int n){
+    // 重复获取输入内容，直到文件末尾或该行第一个字符是换行符时结束
+    while (fgets(think, n, stdin) != NULL && think[0] != '\n'){
+        i = 0;
+        // 找到该行的结尾，如果是换行符则该行内容没有超出规定大小
+        while (think[i] != '\n' && think[i] != '\0')
+            i++;
+        if (think[i] == '\n'){
+            think[i] = '\0';
+        } else{
+            // 这个分支是该行内容多与规定大小，为了舍弃多余字符，让剩余的字符读取但不存储, 包括遇到但第一个换行符
+            while (getchar() != '\n'){}
+        }
+        puts(think);
+    }
+}
+```
+如果不舍弃多出来的字符，那些字符会留在缓冲区，成为下一次读取的输入。
+
+### scanf()
+
+
+| 语句 | 输入内容 | temp 的内容 | 剩余的内容 |
+| --- | --- | --- | --- |
+| scanf("%s", temp); | Hi Afra | Hi |  Afra |
+| scanf("%5s", temp); | Hi Afra | Hi |  Afra |
+| scanf("%5s", temp); | Afra55Blalal | Afra55  | Blalal |
+
+`scanf()` 返回一个整数值 是读取成功的总个数，或文件结尾时反回`EOF`。
+
+```
+    int count;
+    char think1[10], think2[10];
+    printf("请输入你的想法:\n");
+    count = scanf("%5s %3s", think1, think2);
+    printf("%d %s %s", count, think1, think2);
+```
+```
+请输入你的想法:
+123456789 abcdefghijk
+2 12345 678
+```
+```
+请输入你的想法:
+abcde 1234567890
+2 abcde 123
+```
+```
+请输入你的想法:
+123 abcdefghijk
+2 123 abc
+```
+```
+请输入你的想法:
+123456 abcdefg
+2 12345 6
+```
+
+## 字符串输出
+
+### puts()
+
+```
+    char str[80] = "Hi i am Afra55 from victor";
+    char str2[80] = "I come from your dream!";
+    puts(str);
+    puts(str2);
+```
+```
+Hi i am Afra55 from victor
+I come from your dream!
+```
+`puts()`在显示字符串时会自动在其末尾添加一个换行符。该函数在遇到空字符时就停止输出，所以必须确保有空字符。
+
+### fputs()
+
+`fputs()`不会再输出的末尾加上换行符。
+```
+    fputs(str2, stdout);
+    fputs("is fputs", stdout);
+```
+```
+I come from your dream!is fputs
+```
+
+### printf()
+`printf()`不会自动在每个字符串末尾加上一个换行符。因此，必须在参数中指明应该在哪里使用换行符。
+`printf()` 虽然更复杂，但是打印多个字符串更简单。
+
+
+## 自定义输入输出
+可以使用 `getchar()` `putchar()` 单个字符的输入输出来自定义。
+
+## 字符串函数
+
+### strlen()
+统计字符串长度：
+
+```
+    char a[] = "I Love U\0Hi hahahahah";
+    puts(a);
+    printf("%lu\n", strlen(a));
+    puts(a + 9);
+```
+```
+I Love U
+8
+Hi hahahahah
+```
+
+### strcat()
+拼接两个字符串，接受两个字符串作为参数，把第2个字符串的备份附加在第1个字符串末尾，并把拼接后形成的新字符串作为第1个字符串，第2个字符串不变。`strcat()`函数的类型是`char *`（即，指向char的指针）。`strcat()`函数返回第1个参数，即拼接第2个字符串后的第1个字符串的地址。
+
+```
+    char a[10] = "I u.";
+    char b[] = "you";
+    strcat(a, b);
+    puts(a);
+    puts(b);
+```
+```
+I u.you
+you
+```
+`strcat()`函数无法检查第一个数组是否容纳第二个数组，如果分配给第一个数组的空间不大，多出来的字符溢出到相邻存储单元就会出现问题。
+
+### strncat()
+函数可以传入第三个参数，用来指定最大添加到字符数。
+
+```
+    char a[10] = "I u.";
+    char b[] = "you";
+    strncat(a, b, 2);
+    puts(a);
+    puts(b);
+```
+```
+I u.yo
+you
+```
+
+### strcmp()
+用来比较两个字符串。如果两个字符串相同，则返回0，否则返回非0值。
+
+```
+    char a[] = "I miss u";
+    char b[] = "I miss u";
+    char c[] = "U miss i";
+    printf("a 与 b 比较: %d\n", strcmp(a, b));
+    printf("a 与 c 比较: %d", strcmp(a, c));
+```
+```
+a 与 b 比较: 0
+a 与 c 比较: -12
+```
+非0值都是“真”。
+
+如果在字母表中第1个字符串位于第2个字符串前面，strcmp()中就返回负数；反之，strcmp()则返回正数。
+```
+    printf("A 与 A 比较: %d\n", strcmp("A", "A"));
+    printf("A 与 B 比较: %d\n", strcmp("A", "B"));
+    printf("A 与 C 比较: %d\n", strcmp("A", "C"));
+    printf("C 与 A 比较: %d\n", strcmp("C", "A"));
+    printf("D 与 A 比较: %d\n", strcmp("D", "A"));
+```
+
+```
+A 与 A 比较: 0
+A 与 B 比较: -1
+A 与 C 比较: -1
+C 与 A 比较: 1
+D 与 A 比较: 1
+```
+
+ASCII标准规定，在字母表中，如果第1个字符串在第2个字符串前面，strcmp()返回一个负数；如果两个字符串相同，strcmp()返回0；如果第1个字符串在第2个字符串后面，strcmp()返回正数。然而，返回的具体值取决于实现。
+
+`char`类型实际上是整数类型，可以使用关系运算符来比较字符。
+
+### strncmp()
+
+strcmp()函数比较字符串中的字符，直到发现不同的字符为止，这一过程可能会持续到字符串的末尾。而strncmp()函数在比较两个字符串时，可以比较到字符不同的地方，也可以只比较第3个参数指定的字符数。例如，要查找以"victor"开头的字符串，可以限定函数只查找这6个字符。
+
+```
+    const char * list[3] = {"victor blallalal", "bbbbvictorcccc", "ssssss victor"};
+    printf("查找 list[0]: %d\n", strncmp(list[0], "victor", 6));
+    printf("查找 list[1]: %d\n", strncmp(list[1], "victor", 6));
+    printf("查找 list[2]: %d\n", strncmp(list[2], "victor", 6));
+```
+```
+查找 list[0]: 0
+查找 list[1]: -20
+查找 list[2]: -3
+```
+
+### strcpy(), strncpy()
+用于拷贝整个字符串，
+
+```
+    char temp[8];
+    char a[] = "afra55";
+    strcpy(temp, a);
+    puts(a);
+    puts(temp);
+```
+```
+afra55
+afra55
+```
+
+`strcpy()`第2个参数指向的字符串被拷贝至第1个参数指向的数组中。拷贝出来的字符串被称为目标字符串，最初的字符串被称为源字符串。参考赋值表达式语句，很容易记住`strcpy()`参数的顺序，即第1个是目标字符串，第2个是源字符串。
+
+`strcpy()`的返回类型是`char*`，该函数返回的是第1个参数的值，即一个字符的地址;
+第1个参数不必指向数组的开始。这个属性可用于拷贝数组的一部分。
+
+拷贝字符串用`strncpy()`更安全，该函数的第3个参数指明可拷贝的最大字符数。
+
+strncpy(target,source,n)把source中的n个字符或空字符之前的字符（先满足哪个条件就拷贝到何处）拷贝至target中。因此，如果source中的字符数小于n，则拷贝整个字符串，包括空字符。但是，strncpy()拷贝字符串的长度不会超过n，如果拷贝到第n个字符时还未拷贝完整个源字符串，就不会拷贝空字符。所以，拷贝的副本中不一定有空字符。鉴于此，该程序把n设置为比目标数组大小少1（TARGSIZE1），然后把数组最后一个元素设置为空字符.
+
+### sprintf()
+sprintf()函数声明在stdio.h中，而不是在string.h中。该函数和printf()类似，但是它是把数据写入字符串，而不是打印在显示器上。因此，该函数可以把多个元素组合成一个字符串。sprintf()的第1个参数是目标字符串的地址。其余参数和printf()相同，即格式字符串和待写入项的列表。
+```
+    char a[20];
+    sprintf(a, "%s %d $%6.2f", "hahah", 12, 987.123);
+    puts(a);
+```
+```
+hahah 12 $987.12
+```
+
+### 其他字符串
+
+* `char * strcpy(char * restrict s1, const char * restrict s2);`该函数把s2指向的字符串（包括空字符）拷贝至s1指向的位置，返回值是s1。
+* `char * strncpy(char * restrict s1, const char * restrict s2, size_tn);`该函数把s2指向的字符串拷贝至s1指向的位置，拷贝的字符数不超过n，其返回值是s1。该函数不会拷贝空字符后面的字符，如果源字符串的字符少于n个，目标字符串就以拷贝的空字符结尾；如果源字符串有n个或超过n个字符，就不拷贝空字符。
+* `char * strcat(char * restrict s1, const char * restrict s2);`该函数把s2指向的字符串拷贝至s1指向的字符串末尾。s2字符串的第1个字符将覆盖s1字符串末尾的空字符。该函数返回s1。
+* `char * strncat(char * restrict s1, const char * restrict s2, size_tn);`该函数把s2字符串中的n个字符拷贝至s1字符串末尾。s2字符串的第1个字符将覆盖s1字符串末尾的空字符。不会拷贝s2字符串中空字符和其后的字符，并在拷贝字符的末尾添加一个空字符。该函数返回s1。
+* `int strcmp(const char * s1,const char * s2);`如果s1字符串在机器排序序列中位于s2字符串的后面，该函数返回一个正数；如果两个字符串相等，则返回0；如果s1字符串在机器排序序列中位于s2字符串的前面，则返回一个负数。
+* `int strncmp(const char * s1, const char * s2, size_tn);`该函数的作用和`strcmp()`类似，不同的是，该函数在比较n个字符后或遇到第1个空字符时停止比较。
+* `char * strchr(const char * s, int c);`如果s字符串中包含c字符，该函数返回指向s字符串首次出现的c字符的指针（末尾的空字符也是字符串的一部分，所以在查找范围内）；如果在字符串s中未找到c字符，该函数则返回空指针。
+* `char * strpbrk(const char * s1, const char * s2);`如果s1字符中包含s2字符串中的任意字符，该函数返回指向s1字符串首位置的指针；如果在s1字符串中未找到任何s2字符串中的字符，则返回空字符。
+* `char * strrchr(const char * s, int c);`该函数返回s字符串中c字符的最后一次出现的位置（末尾的空字符也是字符串的一部分，所以在查找范围内）。如果未找到c字符，则返回空指针。
+* `char * strstr(const char * s1, const char * s2);`该函数返回指向s1字符串中s2字符串出现的首位置。如果在s1中没有找到s2，则返回空指针。
+* `size_tstrlen(const char * s);`该函数返回s字符串中的字符数，不包括末尾的空字符。
+
+关键字restrict限制了函数参数的用法。例如，不能把字符串拷贝给本身。
+
+## ctype.h
+
+`toupper()`函数用于大写字符串：
+```
+void toUpperChar(char * a){
+    while (*a){
+        *a = toupper(*a);
+        a++;
+    }
+}
+```
+```
+    char a[] ="abcdef";
+    toUpperChar(a);
+    puts(a);
+```
+```
+ABCDEF
+```
+
+利用`ispunct()`统计字符串中的标点符号个数:
+
+```
+int punchCount(char * a){
+    int count = 0;
+    while (*a){
+        if (ispunct(*a)) {
+            count++;
+        }
+        a++;
+    }
+    return count;
+}
+```
+```
+    char a[] = "a, bc, c, c!@#$";
+    printf("a 的字符有 %d 个", punchCount(a));
+```
+```
+a 的字符有 7 个
+```
+
+## 命令行参数
+C编译器允许`main()`没有参数或者有两个参数（一些实现允许`main()`有更多参数，属于对标准的扩展）。`main()`有两个参数时，第1个参数是命令行中的字符串数量。过去，这个`int`类型的参数被称为`argc`（表示参数计数`(argumentcount)`）。系统用空格表示一个字符串的结束和下一个字符串的开始。
+
+```
+int main(int argc,char **argv)
+int main(int argc,char *argv[])
+```
+假如有个程序 `hello.c`, 输入命令 `hello i love you`, 那么 `main()` 函数的 `argc = 4`, argv 共有四个字符串，后三个用于 hello 程序去使用，`char **argv = {"hello", "i", "love", "you"}`。
+
+如果 对命令行参数加上双引号，那么就认为这是一个单词，例如：
+`hello "i love you"`
+那么`argc = 2`, `char **argv = {"hello", "i love you"}`。
+
+## 把字符串转换为数字
+
+`stdlib.h` 有 `atoi()` 函数可以把字母数字转换为整数,该函数接受一个字符串作为参数，返回相应的整数值。
+```
+    printf("%d\n", atoi("333"));
+    printf("%d\n", atoi("333abcde"));
+    printf("%d\n", atoi("abced333"));
+```
+```
+333
+333
+0
+```
+`atof()`函数把字符串转换成`double`类型的值，`atol()`函数把字符串转换成`long`类型的值.
+
+`srtol()`把字符串转换成`long`类型的值，`strtoul()`把字符串转换成`unsigned long`类型的值，`strtod()`把字符串转换成`double`类型的值。
+```
+long strtol(const char * restrict nptr, char ** restrict endptr, int base);
+```
+nptr是指向待转换字符串的指针，endptr是一个指针的地址,该指针被设置为标志输入数字结束字符的地址，base 表示以什么进制写入数字(10:十进制，16:十六进制，8:八进制)。
+```
+    char a[] = "1234defg";
+    char * end;
+    long value = strtol(a, &end, 10);
+    printf("%ld, %s, %d", value, end, *end);
+```
+```
+333
+333
+0
+1234, defg, 100
+```
+
+`strtol()`函数最多可以转换三十六进制，'a'~'z'字符都可用作数字。`strtoul()`函数与该函数类似，但是它把字符串转换成无符号值。`strtod()`函数只以十进制转换，因此它值需要两个参数。
+
+## 小结
+C字符串是一系列char类型的字符，以空字符（'\0'）结尾。字符串可以储存在字符数组中。字符串还可以用字符串常量来表示，里面都是字符，括在双引号中（空字符除外）。编译器提供空字符。因此，"joy"被储存为4个字符j、o、y和\0。strlen()函数可以统计字符串的长度，空字符不计算在内。
