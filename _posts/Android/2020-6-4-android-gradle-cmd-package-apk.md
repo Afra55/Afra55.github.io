@@ -90,6 +90,8 @@ Mac 安装路径： `/usr/local/Caskroom/android-sdk/4333796/build-tools/29.0.1`
 
 ## 构建调试 APK
 
+在此之前你需要修改 `local.properties` 文件中的 sdk 路径。
+
 请打开命令行，然后转到项目的根目录：
 ```
 gradlew assembleDebug
@@ -103,6 +105,9 @@ gradlew installDebug
 ```
 
 ## 构建发布版本 APK
+
+在此之前你需要修改 `local.properties` 文件中的 sdk 路径。
+
 ### 生层私钥
 ```
     keytool -genkey -v -keystore my-release-key.jks -keyalg RSA -keysize 2048 -validity 10000 -alias my-alias
@@ -189,3 +194,7 @@ C:\Android\android-sdk\build-tools\29.0.1
 C:\ProgramData\chocolatey\lib-bkp\gradle\tools\gradle-6.3\bin
 ```
 
+## 查看 APK 签名命令
+```
+keytool -list -printcert -jarfile app-relase-.apk
+```
