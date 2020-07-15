@@ -10,7 +10,7 @@ description: Android Status Bar 透明
 * content
 {:toc}
 
-## 代码
+## 状态栏透明
 
 ```
 fun transparentStatusBar(window: Window) {
@@ -27,6 +27,24 @@ fun transparentStatusBar(window: Window) {
             window.addFlags(WindowManager.LayoutParams.FLAG_TRANSLUCENT_STATUS)
         }
     } catch (e: Exception) {
+    }
+}
+```
+## 状态栏文字深色亮色切换
+```
+fun setStatusBarLightMode(
+    window: Window,
+    isLightMode: Boolean
+) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        val decorView = window.decorView
+        var vis = decorView.systemUiVisibility
+        vis = if (isLightMode) {
+            vis or View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR
+        } else {
+            vis and View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR.inv()
+        }
+        decorView.systemUiVisibility = vis
     }
 }
 ```
