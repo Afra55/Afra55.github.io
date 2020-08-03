@@ -66,20 +66,20 @@ class MyFlashLightingView : View {
         init(attrs, defStyleAttr)
     }
 
-    lateinit var flashPaint: Paint
+    var flashPaint: Paint? = null
 
     /**
      * 圆角大小，px
      */
     var roundedCornerSize = 0F
-    lateinit var gradient: LinearGradient
-    lateinit var gradientMatrix: Matrix
-    lateinit var rect: RectF
+    var gradient: LinearGradient? = null
+    var gradientMatrix: Matrix? = null
+    var rect: RectF? = null
 
     /**
      * 动画，用来让闪光移动
      */
-    lateinit var valueAnimator: ValueAnimator
+    var valueAnimator: ValueAnimator? = null
 
     /**
      * 动画时间，秒
@@ -106,23 +106,26 @@ class MyFlashLightingView : View {
         rect = RectF()
 
         valueAnimator = ValueAnimator.ofFloat(0F, 1F)
-        valueAnimator.repeatCount = INFINITE
-        valueAnimator.duration = (animDuration * 1000).toLong()
-        valueAnimator.addUpdateListener {
-            val v = it.animatedValue as Float
-            // 通过 matrix translate 移动闪光, 从 -width 移动到 2 * width， 整个移动长度是 3 * width, 起点是 -width, 高度可以不移动
-            // TODO： 整个长度按需修改
-            gradientMatrix.setTranslate(-width + width * 3 * v , height * v)
-            gradient.setLocalMatrix(gradientMatrix)
-            postInvalidate()
+        valueAnimator?.repeatCount = INFINITE
+        valueAnimator?.duration = (animDuration * 1000).toLong()
+        valueAnimator?.addUpdateListener {
+            try {
+                val v = it.animatedValue as Float
+                // 通过 matrix translate 移动闪光, 从 -width 移动到 2 * width， 整个移动长度是 3 * width, 起点是 -width, 高度可以不移动
+                // TODO： 整个长度按需修改
+                gradientMatrix?.setTranslate(-width + width * 3 * v, height * v)
+                gradient?.setLocalMatrix(gradientMatrix)
+                postInvalidate()
+            } catch (e: Exception) {
+            }
         }
 
 
-        post {
-            valueAnimator.start()
-        }
     }
 
+    fun startAnim() {
+        valueAnimator?.start()
+    }
 
     override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
         super.onSizeChanged(w, h, oldw, oldh)
@@ -139,25 +142,38 @@ class MyFlashLightingView : View {
             floatArrayOf(0.0f, 0.25f, 0.5f, 0.75f, 1F),
             Shader.TileMode.CLAMP // 如果着色器超出原始边界范围，会复制边缘颜色
         )
-        flashPaint.shader = gradient
+        flashPaint?.shader = gradient
 
         // 设置 xfermode 取光亮与底下的像素的最大值
-        flashPaint.xfermode = PorterDuffXfermode(PorterDuff.Mode.LIGHTEN)
+        flashPaint?.xfermode = PorterDuffXfermode(PorterDuff.Mode.LIGHTEN)
 
         //  先把光亮放到控件的左边 -width 到 0  处
         // TODO， 如果控件高度高，因为 CLAMP 的原因，起始和结束的闪光不会移出去，这时候需要再往外挪闪光的位置, 同时整个闪光的移动范围也要增大
-        gradientMatrix.setTranslate(-w.toFloat(), h.toFloat())
-        gradient.setLocalMatrix(gradientMatrix)
+        gradientMatrix?.setTranslate(-w.toFloat(), h.toFloat())
+        gradient?.setLocalMatrix(gradientMatrix)
 
         // 绘制光亮的宽高，和控件宽高一致
-        rect.set(0F, 0F, w.toFloat(), h.toFloat())
+        rect?.set(0F, 0F, w.toFloat(), h.toFloat())
 
+        if (w > 0) {
+            post {
+                startAnim()
+            }
+        }
     }
 
     override fun onDraw(canvas: Canvas?) {
         super.onDraw(canvas)
-        if (::gradientMatrix.isLateinit) {
-            canvas?.drawRoundRect(rect, roundedCornerSize, roundedCornerSize, flashPaint)
+        try {
+            if (rect != null && flashPaint != null) {
+                canvas?.drawRoundRect(
+                    rect!!,
+                    roundedCornerSize,
+                    roundedCornerSize,
+                    flashPaint!!
+                )
+            }
+        } catch (e: Exception) {
         }
     }
 
