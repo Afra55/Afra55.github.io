@@ -1,0 +1,888 @@
+---
+layout: post
+title:  "C#笔记(1)-基础知识"
+date:   2020-02-05 16:01:10
+categories: C#
+comments: true
+description: C#笔记(1)-基础知识!
+---
+
+
+* content
+{:toc}
+
+## 一 前言
+C# 是类型安全的面向对象的精妙语言，可帮助开发者生成在 .NET 生态系统中运行的各种安全可靠的应用程序。C# 可用于创建 Windows 客户端应用程序、XML Web service、分布式组件、客户端服务器应用程序、数据库应用程序等。
+
+栈是存储局部变量和参数的内存块。堆是保存对象（例如引用类型的实例）的内存块。
+
+
+## 二 关键字
+C# 关键字是预定义的保留标识符。在前面加 `@` 前缀才能用作标志符:
+```
+abstract,as,base,bool,break,byte,case,catch,char,checked,class,const,continue,decimal,default,delegate,do,double,else,enum,event,explicit,extern,false,finally,fixed,float,for,foreach,goto,if,implicit,in,int,interface,internal,is,lock,long,namespace,new,null,object,operator,out,override,params,private,protected,public,readonly,ref,return,sbyte,sealed,short,sizeof,stackalloc,static,string,struct,switch,this,throw,true,try,typeof,uint,ulong,unchecked,unsafe,ushort,using,virtual,void,volatile,while		
+```
+下面是上下文关键字，上下文关键字用于在代码中提供特定含义，但它不是 C# 中的保留字:
+```
+add,alias,ascending,async,await,by,descending,dynamic,equals,from,get,global,group,into,join,let,nameof,notnull,on,orderby,partial（类型）,partial（方法）,remove,select,set,unmanaged（泛型类型约束）,value,var,when（筛选条件）,where（泛型类型约束）,where（查询子句）,yield
+```
+
+## 三 Hello World!
+```
+using System;
+
+// 生成exe命令: dotnet publish -r win10-x64 /p:PublishSingleFile=true
+// namespace 命名空间在一个命名空间中声明的类的名称与另一个命名空间中声明的相同的类的名称不冲突。
+namespace FristApp
+{
+    class Program
+    {
+        /**
+         * 程序执行的默认入口点
+         */
+        static void Main(string[] args)
+        {
+            // 控制台输出字符串 "Hello World!"
+            Console.WriteLine("Hello World!");
+            
+            // 声明 int 类型变量x 并初始化
+            int x = 12 * 30;
+            Console.WriteLine(x);
+            // 修改x的值
+            x = 73;
+            Console.WriteLine(x);
+
+            // 声明一个常量, 常量的值不能修改
+            const int y = 360;
+            Console.WriteLine(333 + y.ToString()); // 333360
+
+
+            // 调用 FeetToInches 方法并输出
+            Console.WriteLine(FeetToInches(12));
+
+            // User 实例
+            var user = new User(22, "afra55");
+            Console.WriteLine(user.SingASong());
+            user.age = 133;
+            // 引用类型变量赋值只会复制引用
+            var user2 = user;
+            user2.age = 33;
+            user2.name = "Bfra55";
+            Console.WriteLine(user2.SingASong());
+            Console.WriteLine(user.SingASong());
+            
+            // 值类型实例
+            var myStruct = new MyStruct();
+            myStruct.age = 22;
+            Console.WriteLine(myStruct.age); // 22
+            // 值类型赋值是值的复制而不是引用
+            var myStruct2 = myStruct;
+            myStruct2.age = 100;
+            Console.WriteLine(myStruct2.age); // 100
+            Console.WriteLine(myStruct.age); // 22
+
+        }
+
+        static int FeetToInches(int feet)
+        {
+            int inches = feet * 12;
+            return inches;
+        }
+    }
+
+    // 自定义类型
+    class User
+    {
+        public int age;
+        public string name;
+
+        /**
+         * 构造方法
+         */
+        public User(int age, string name)
+        {
+            this.age = age;
+            this.name = name;
+        }
+
+        // public 将方法公开
+        public string SingASong()
+        {
+            return $"{name}({age}) sing a song {"{}"}";
+        }
+    }
+
+    // struct 定义了值类型
+    public struct MyStruct
+    {
+        public int age;
+    }
+
+}
+```
+
+## 四 预定义类型
+都在 System 命名空间下
+
+值类型：
+
+1. 数值
+2. 有符号整数（sbyte、short、int、long）
+3. 无符号整数（byte、ushort、uint、ulong）
+4. 实数（float、double、decimal）
+5. 逻辑值（bool）
+6. 字符（char）
+
+引用类型：
+
+1. 字符串（string）
+2. 对象（object）
+
+### 1. 数值
+整数:
+|C#类型/关键字|范围|大小|.NET 类型|后缀|
+|-----|-----|-----|-----|-----|
+|sbyte|-128到127|8位带符号整数|System.SByte||
+|byte|0到255|无符号的 8 位整数|System.Byte||
+|short|-32,768 到 32,767|有符号 16 位整数|System.Int16||
+|ushort|0 到 65,535|无符号 16 位整数|System.UInt16||
+|int|-2,147,483,648 到 2,147,483,647|带符号的 32 位整数|System.Int32||
+|uint|0 到 4,294,967,295|无符号的 32 位整数|System.UInt32|U|
+|long|-9,223,372,036,854,775,808 到 9,223,372,036,854,775,807|64 位带符号整数|System.Int64|L|
+|ulong|0 到 18,446,744,073,709,551,615|无符号 64 位整数|System.UInt64|UL|
+
+实数:
+|C#类型/关键字|范围|大小|.NET 类型|后缀|
+|-----|-----|-----|-----|-----|
+|float|±1.5 x 10−45 至 ±3.4 x 1038	大约 6-9 位数字|4 个字节|System.Single|F|
+|double|±5.0 × 10−324 到 ±1.7 × 10308	大约 15-17 位数字|8 个字节|System.Double|D|
+|decimal|±1.0 x 10-28 至 ±7.9228 x 1028	28-29 位|16 个字节|System.Decimal|M|
+
+#### 获取类型，类型转换，检查溢出
+```
+            // 获取类型
+            Console.WriteLine(1.1.GetType()); // System.Double
+            Console.WriteLine(1.GetType()); // System.Int32
+
+            var a = 1.1;
+            // 类型转换
+            var b = (int) a;
+            Console.WriteLine(b); // 1
+
+            var c = int.MinValue;
+            var d = c - 1; // 整数溢出，不会抛出异常，超出部分的进位被丢弃
+            Console.WriteLine(d == int.MaxValue); // true
+
+            try
+            {
+                var e = 1000000;
+                var f = 1000000;
+                // checked 会检查到溢出时抛出异常
+                // Unhandled exception. System.OverflowException: Arithmetic operation resulted in an overflow.
+                // checked 对  double 和 float 类型无作用
+                int g = checked(e * f);
+                Console.WriteLine(g);
+                // checked 可以对整个代码块进行检测
+                checked
+                {
+                    // do something
+                    unchecked
+                    {
+                        // 在这里不检测溢出
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine(e);
+            }
+            
+            Console.WriteLine("end"); 
+```
+
+Out：
+```
+System.Double
+System.Int32
+1
+True
+System.OverflowException: Arithmetic operation resulted in an overflow.
+   at Sceond.Project.test() in /Users/victor/Program/RiderProject/Solution1/ConsoleApp1/ConsoleApp1/Second.cs:line 27
+end
+```
+
+#### 浮点类型
+double:
+```
+
+    public const double MinValue = -1.7976931348623157E+308;
+    public const double MaxValue = 1.7976931348623157E+308;
+    public const double Epsilon = 5E-324;
+    public const double NegativeInfinity = -1.0 / 0.0;
+    public const double PositiveInfinity = 1.0 / 0.0;
+    public const double NaN = 0.0 / 0.0;
+```
+float:
+```
+    public const float MinValue = -3.4028235E+38f;
+    public const float Epsilon = 1E-45f;
+    public const float MaxValue = 3.4028235E+38f;
+    public const float PositiveInfinity = 1.0f / 0.0f;
+    public const float NegativeInfinity = -1.0f / 0.0f;
+    public const float NaN = 0.0f / 0.0f;
+```
+
+```
+    Console.WriteLine(-1.0 / 0.0); // -Infinity
+    Console.WriteLine(1.0 / 0.0); // Infinity
+    Console.WriteLine(0.0 / 0.0); // NaN
+    Console.WriteLine(Double.NaN == Double.NaN);  // false
+```
+
+double类型经常用于科学计算(例如计算空间坐标)。
+decimal经常用于金融计算和计算那些“人为”的而非真实世界度量。
+
+### 2 字符串和字符
+```
+            Console.WriteLine( '\'');
+            Console.WriteLine( '\"');
+            Console.WriteLine( '\\');
+            // \0 空(null)
+            Console.WriteLine( '\a'); // 警告
+            Console.WriteLine( '\b'); // 退格
+            Console.WriteLine( '\f'); // 走纸
+            Console.WriteLine( '\n'); // 换行
+            Console.WriteLine( '\r'); // 回车
+            Console.WriteLine( '\t'); // 水平制表符号
+            Console.WriteLine( '\v'); // 垂直制表符
+            
+            string a = "Hello";
+            string b = "Hello";
+            Console.WriteLine(a == b); // True
+            Console.Write("a\n"); // 输出 a 并回车
+            // @ 输出的字符串不支持转义字符，支持多行输入
+            Console.Write(@"a\n"); // 输出 a\n
+            Console.WriteLine("\n" + "Balala");
+
+            int number = 56;
+            // $ 和 {} 能将表达式放到字符串中计算, 并将结果转换为字符串
+            Console.WriteLine($"number = {number + 2}");
+```
+### 3 数组
+```
+            // 字符集合
+            char[] a = new char[5];
+            // 集合默认是按位取0的内存表示的值，比如 int 集合，元素默认值就是0
+            Console.WriteLine(a[0]);
+            a[0] = '1';
+            a[1] = '2';
+            a[2] = '3';
+            a[3] = '4';
+            a[4] = '5';
+            Console.WriteLine(a[0]);
+            // for 循环遍历每个元素
+            for (int i = 1; i < a.Length; i++)
+            {
+                Console.WriteLine(a[i]);
+            }
+            // 初始化字符集合
+            char[] b = new char[] {'0', '1', '2', '3', '4'};
+            char[] c = {'0', '1', '2', '3', '4'};
+```
+
+不论元素是何种类型，数组本身总是引用类型对象。
+
+#### 值类型
+```
+    public struct ValueClass
+    {
+        public int a, b;
+    }
+    // -----
+    // 值类型
+    ValueClass[] vArr = new ValueClass[100];
+    Console.WriteLine(vArr[0].a); // 0
+```
+
+#### 引用类型
+```
+    public class ReferClass
+    {
+        public int a, b; 
+    }
+    // -----
+       // 引用类型
+            ReferClass[] rArr = new ReferClass[100];
+            // 没有初始化就使用会抛出异常
+            Console.WriteLine(rArr[0].a); // Unhandled exception. System.NullReferenceException: Object reference not set to an instance of an object.
+
+```
+
+
+### 4 多维数组
+```
+            // 二维矩阵数组, 3 * 3
+            int[,] matrix = new int[3, 3];
+            for (int i = 0; i < matrix.GetLength(0); i++)
+            {
+                for (int j = 0; j < matrix.GetLength(1); j++)
+                {
+                    matrix[i, j] = i * j;
+                }
+            }
+
+
+            // 三维矩阵数组， 3 * 3 * 3
+            int[,,] matrix2 = new int[3, 3, 3]
+            {
+                {
+                    {0, 1, 2},
+                    {3, 4, 5},
+                    {6, 7, 8}
+                },
+                {
+                    {0, 1, 2},
+                    {3, 4, 5},
+                    {6, 7, 8}
+                },
+                {
+                    {0, 1, 2},
+                    {3, 4, 5},
+                    {6, 7, 8}
+                }
+            };
+
+            // 锯齿形数组
+            int[][] m = new int[3][];
+            for (int i = 0; i < m.Length; i++)
+            {
+                m[i] = new int[3];
+                for (int j = 0; j < m[i].Length; j++)
+                {
+                    m[i][j] = i * 3 + j;
+                }
+            }
+
+            int[][] m2 = new int[][]
+            {
+                new int[] {0, 1, 2},
+                new int[] {3, 4, 5},
+                new int[] {6, 7, 9}
+            };
+```
+### 5 ref 修饰符
+```
+        /**
+         * ref 修饰符指按引用传递参数， p 和传入的参数指向同一内存位置
+         */
+        static void Foo(ref int p)
+        {
+            p = p + 1; 
+            Console.WriteLine(p);
+        }
+
+       public static void Test6()
+        {
+            var x = 9; 
+            Foo(ref x); // 把 x 的引用传进去进行修改，x的值也会变化
+            Console.WriteLine(x);  // 10
+        }
+```
+### 6 out 修饰符
+out 修饰符永雨获得方法的多个返回值，参数必须在方法结束之前赋值；
+out 参数也是引用传递；
+
+```
+       static void Split(string name, out string firstName, out string lastName)
+       {
+           int i = name.LastIndexOf(' ');
+           firstName = name.Substring(0, i);
+           lastName = name.Substring(i + 1);
+       }
+       public static void Test7()
+       {
+           string a, b;
+           Split("Victor afra55", out a, out b);
+           Console.WriteLine(a); //Victor
+           Console.WriteLine(b); // afra55
+           
+           // 可以使用 _ 丢弃参数
+           Split("Bfra afra55", out a, out _);
+           Console.WriteLine(a); // Bfra
+       }
+```
+
+### 7 params 修饰符
+params参数修饰符只能修饰方法中的最后一个参数，它能够使方法接受任意数量的指定类型参数。
+
+```
+       static void Sum(out int sum, params int[] ints)
+       {
+           sum = 0;
+           for (int i = 0; i < ints.Length; i++)
+           {
+               sum += ints[i];
+           }
+       }
+       
+       public static void Test8()
+       {
+           // 可以直接传入数字
+           Sum(out int sum, 1, 2, 3, 4, 5, 65); // 80
+           Console.WriteLine(sum);
+           
+           // 可以传入一个数组
+           Sum(out int sum2, new int[]{2, 3, 4, 5, 6, 1109});
+           Console.WriteLine(sum2); // 1129
+       }
+```
+
+### 8 可选参数
+```
+ // x 提供默认值 321
+ void Foo(int x = 321)
+       {
+            Console.WriteLine(x); 
+       }
+```
+可选参数在调用方法的时候可以省略。
+`Foo(); // 321`
+
+### 9 命名参数
+可以通过如下形式改变传入参数的顺序，按位置传递的参数，必须在命名参数之前。
+```
+       static void Foo(int x = 321, int y = 333)
+       {
+           Console.WriteLine(x + y);
+       }
+
+       public static void Test9()
+       {
+           Foo(y:23, x:2); // 25
+           Foo(y:23);  // 344
+       }
+```
+
+### 10 运算符
+
+|符号|描述|可重载｜
+|-----|-----|-----|
+|.|成员访问 x.y |否|
+|->|结构体指针 x->y|否|
+|()|函数调用 x()|否｜
+｜[]｜数组/索引 a[x]｜通过索引器|
+|++|后自增 x++， 前自增 ++x|是|
+|--|后自减 x--, 前自减 --x|是|
+|new|创建实例 new Foo()|否|
+|stackalloc|不安全的栈空间分配 stackalloc(11)|否|
+|typeof|从标志符中获得类型 typeof(int)|否|
+|nameof|从标志服中获得名称 nameof(x)|否|
+|checked|检测整数溢出 checked(x)|否|
+|unchecked|不检测整数溢出 unchecked(x)|否|
+|default|默认值 default(char)|否｜
+|await|等待异步操作 await myTask|否|
+|sizeof|获得结构体的大小 sizeof(int)|否|
+|?.|null 条件运算符 x?.y|否|
+|+|正数 +x|是|
+|-|负数 -x|是|
+|!|非 !x|是|
+|~|按位求反 ~x|是|
+|()|转换 (int)x|否|
+|`*`|取地址中的值，不安全 `*x`|否|
+|&|取值的地址,不安全 &x|否|
+|`*`|乘法 x * y|是|
+|/|除 x/y|是|
+|%|取余 x%y|是|
+|+|加 x+y|是|
+|-|减 x-y|是|
+|<<|左移 x<<1|是|
+|>>|右移 x>>1|是|
+|<|小于 x<y|是|
+|>|大于 x>y|是|
+|<=|小于等于 x<=y|是|
+|>=|大于等于 x>=y|是|
+|is|类型是或是子类 x is y|否|
+|as|类型转换 `x as y`|否|
+|==|相等 x==y|是|
+|!=|不相等 x!=y|是|
+|&|与 x&y|是|
+|^|异或 x^y|是|
+|`|`|或 `x|y`|是|
+|&&|条件与 x&&y|通过&|
+|`||`|条件或`x||y`|通过`|`|
+|??|null合并运算符 x??y|否|
+|?:|条件运算符 |否|
+|=|赋值 x=y|否|
+|`*=`|自乘 x*=4|`通过*`|
+|/=|自除 x/=4| 通过/|
+|+=|自加 x+=4|通过+|
+|-=|自减 x-=4|通过-|
+|<<=|自身左移 x<<=2|通过<<|
+|>>=|自身右移 x>>=2|通过>>|
+|&=|自身与 x&=2|通过&|
+|^=|自身异或 x^=2|通过^|
+|`|=`|自身或 `x|=2`|`通过|`|
+|=>|Lambda x => x + 1|否|
+
+#### null 相关运算符
+
+```
+           string s1 = null;
+           // 左侧表达式是 null 的时候，右侧表达式才会进行
+           string s2 = s1 ?? "afra55";
+           Console.WriteLine(s2); // afra55
+           string s3 = s2 ?? "bfra55";
+           Console.WriteLine(s3); // afra55
+
+           string s4 = null;
+           // 当运算符?的左侧为null的时候，该表达式的运算结果也是null而不会抛出NullReferenceException异常
+           Console.WriteLine(s4?.ToString());
+           Console.WriteLine(s4.ToString()); //  抛出异常 System.NullReferenceException
+```
+
+### 11 类型 switch
+```
+       static void CheckType(object obj)
+       {
+           switch (obj)
+           {
+               case int i :
+                   Console.WriteLine($"int {i}");
+                   break;
+               case float i :
+                   Console.WriteLine($"float {i}");
+                   break;
+               case double i :
+                   Console.WriteLine($"double {i}");
+                   break;
+               case string i :
+                   Console.WriteLine($"string {i}");
+                   break;
+               default:
+                   Console.WriteLine($"unknow {obj}");
+                   break;
+           }
+       }
+
+       public static void Test11()
+       {
+           CheckType(1); // int 1
+           CheckType(1F); // float 1
+           CheckType(11.1); // double 11.1
+           CheckType("Hi Afra"); // string Hi Afra
+           CheckType(false); // unknow False
+       }
+```
+
+### 12 foreach
+foreach语句遍历可枚举对象的每一个元素。
+
+```
+           // 遍历 Afra55 的每一个元素，最终输出 A f r a 5 5 
+           foreach (var VARIABLE in "Afra55")
+           {
+               Console.Write(VARIABLE + " ");
+           }
+```
+
+## 四 创建类型
+
+### 1 字段
+
+修饰符：
+·静态修饰符：static
+·访问权限修饰符：public internal private protected
+·继承修饰符：new
+·不安全代码修饰符：unsafe
+·只读修饰符：readonly
+·线程访问修饰符：volatile
+
+### 2 方法
+修饰符：
+·静态修饰符：static
+·访问权限修饰符：public internal private protected
+·继承修饰符：new virtual abstract override sealed
+·部分方法修饰符：partial
+·非托管代码修饰符：unsafe extern
+·异步代码修饰符：async
+
+#### 解构器
+一个解构器（或称之为解构方法）就像构造器的反过程：构造器使用若干值作为参数，并且将它们赋值给字段；而解构器则相反将字段反向赋值给若干变量。解构方法的名字必须为`Deconstruct`，并且拥有一个或多个out参数.
+
+```
+        class Rectangle
+        {
+            public readonly float Width, Height;
+
+            public Rectangle(float width, float height)
+            {
+                Width = width;
+                Height = height;
+            }
+
+            public void Deconstruct(out float width, out float height)
+            {
+                width = Width;
+                height = Height;
+            }
+        }
+
+        public static void Test1()
+        {
+            var rect = new Rectangle(3, 4);
+            // 调用解构器
+            (float width, float height) = rect;
+            Console.WriteLine(width + " " + height); // 3 4
+        }
+```
+
+### 3 属性
+属性（Property）和字段很类似，但是属性内部像方法一样含有逻辑，属性比字段多了 get 或 set 代码块。
+```
+        private int field;
+        public int Property
+        {
+            get { return field; }
+            set { field = value; }
+        }
+```
+
+属性支持以下的修饰符：
+·静态修饰符：static
+·访问权限修饰符：public internal private protected
+·继承修饰符：new virtual abstract override sealed
+·非托管代码修饰符：unsafe extern
+
+上面的例子可以写成自动属性省略 field：
+```
+   public int Property { get; set; }
+```
+编译器会自动生成一个后台私有字段，该字段的名称由编译器生成且无法引用。
+
+### 4 常量
+const 关键字声明常量，常量必须用值初始化。常量是一种值永远不会改变的静态字段。常量会在编译时静态赋值，编译器会在常量使用点上直接替换该值。
+
+```
+        public const string Message = "Hi Vicrtoria";
+```
+
+### 5 终结器
+
+在垃圾回收器回收未引用的对象占用的内存前调用。
+
+```
+       class ClassFinalizerTest
+        {
+            // 终结器, 是 C# 语言重写 Object 的 Finalize 方法的语句。
+            ~ClassFinalizerTest()
+            {
+                
+            }
+        }
+```
+
+### 6 分部类型和方法
+主要用于扩展类型和改写方法。
+类型可以分开定义，比如在多个文件中定义。
+每个部分的声明必须包含 `partial`:
+
+### 7 object 类型
+object 类型是所有类型的最终基类，任何类型都能向上转换为objhect类型。
+
+### 8 装箱和拆箱
+装箱是将值类型实例转换为引用类型实例的行为。
+```
+int x = 9;
+object obj = x;
+```
+拆箱需要显式类型转换。
+```
+int y = (int)obj;
+```
+
+### 9 结构体
+
+* 结构体是值类型，类是引用类型；
+* 结构体不支持继承；
+* 结构体可以包含：无参构造器，字段初始化器，终结器，虚成员或protected成员；
+* 结构体隐式包含一个无法重写的无参数构造器，将字段按位置为0；
+* 定义结构体的构造器时，必须显式为每一个字段赋值。
+
+```
+        public struct MyStruct
+        {
+            public int x;
+            public int y;
+
+            public MyStruct(int x, int y)
+            {
+                this.x = x;
+                this.y = y;
+            }
+        }
+        
+        public static void Test5()
+        {
+            MyStruct myStruct =new MyStruct(1, 2);
+            Console.WriteLine(myStruct.x + " " + myStruct.y); // 1 2
+            MyStruct myStruct2 = new MyStruct();
+            Console.WriteLine(myStruct2.x + " " + myStruct2.y); // 0 0 
+
+        }
+```
+
+### 10 访问权限修饰符
+
+* public：完全访问权限。枚举类型成员或接口成员隐含的可访问性。
+* internal：仅可以在程序集内访问，或供友元程序集访问。这是非嵌套类型的默认可访问性。
+* private：仅可以在包含类型中访问。这是类或者结构体成员的默认可访问性。
+* protected：仅可以在包含类型或子类中访问。
+* protected internal：protected和internal可访问性的并集。
+
+### 11 接口
+
+* 接口只为成员提供定义而不提供实现;
+* 接口的成员都是隐式抽象的。类可以包含抽象的成员和有具体实现的成员;
+* 一个类（或者结构体）可以实现多个接口。而一个类只能够继承一个类，结构体则完全不支持继承（只能从System.ValueType派生）;
+* 接口可以从其他接口派生；
+
+```
+        public interface IInterface
+        {
+            bool MoveNext();
+            object Current { get; }
+            void Reset();
+
+            void Name();
+        }
+        
+        public interface IInterface2 : IInterface
+        {
+            // 从  IInterface 派生
+        }
+        
+        public interface IName
+        {
+            string Name();
+        }
+        
+        public class MyImp:IInterface, IName
+        {
+            private int count = 11;
+            public bool MoveNext()
+            {
+                return count-- > 0;
+            }
+
+            public object Current { get => count; }
+            public void Reset()
+            {
+                throw new NotImplementedException();
+            }
+
+            void IInterface.Name()
+            {
+                Console.WriteLine("IInterface.Name()");
+            }
+
+            string IName.Name()
+            {
+                Console.WriteLine("IName.Name()");
+                return "IName";
+            }
+        }
+        public static void Test6()
+        {
+            IInterface myImp = new MyImp();
+            while (myImp.MoveNext())
+            {
+                Console.Write($"{myImp.Current} "); // 10 9 8 7 6 5 4 3 2 1 0 
+            }
+
+        }
+```
+
+### 12 枚举
+
+* 每一个枚举成员都对应一个整数;
+* 按照枚举成员的声明顺序，自动按照0、1、2……进行常量赋值;
+
+```
+        public enum  MyEnum
+        {
+            One, Two, Three
+        }
+        
+        public enum MyByteEnum:long
+        {
+            // 可以指定数字类型，也可以显式的指定数字
+            One = 1, Tow, Three = 90, Four
+        }
+        public static void Test7()
+        {
+            MyEnum one = MyEnum.One;
+            MyEnum Two = MyEnum.Two;
+            MyEnum Three = MyEnum.Three;
+            
+            Console.WriteLine((long)MyByteEnum.Four); // 91
+            Console.WriteLine(MyByteEnum.Four.ToString()); // Four
+            Console.WriteLine(sizeof(MyByteEnum)); // 8
+        }
+
+```
+
+### 13 泛型
+泛型是为了代码能够跨类型复用而设计的。
+```
+        public class Stack<T>
+        
+        {
+            private int position;
+            private T[] data = new T[100];
+            public void Push(T obj) => data[position++] = obj;
+            public T Pop() => data[--position];
+
+            void Zap<T>(T[] array)
+            {
+                for (int i = 0; i < array.Length; i++)
+                {
+                    // default 关键字可以用于获取泛型类型参数的默认值，引用类型默认值是 null，值默认值是0
+                    array[i] = default(T);
+                }
+            }
+        }
+        
+        public class MStack<T, T1, T2>
+        {
+            void Init<T>(T[] array) where T:new() // where 约束泛型
+            {
+                
+            }
+            
+        }
+        
+        public static void Test8()
+        {
+            
+            var stack = new Stack<int>();
+            stack.Push(1);
+            var stack2 = new Stack<String>();
+            stack2.Push("1");
+            var stack3 = new Stack<double>();
+            stack3.Push(1.0);
+
+            Type a = typeof(Stack<>);
+        }
+
+```
+有协变和逆变的概念，我瞌睡了。
+out 协变子转父，in 逆变父转子。你在说啥子～
+```
+        public interface IComparerOut<out T>
+        {
+        }
+        public interface IComparerIn<in T>
+        {
+            
+        }
+```
