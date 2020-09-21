@@ -1,0 +1,489 @@
+---
+layout: post
+title:  "C#笔记(2)-基础高级特性"
+date:   2020-09-21 12:01:10
+categories: C#
+comments: true
+description: C#笔记(2)-高级特性!
+---
+
+
+* content
+{:toc}
+
+## 一 委托
+委托类似代理，也类似别名，使用关键字delegate定义，例如：
+```
+        // 定义一个委托类型, 它兼容任何返回类型是 int 并有一个int 类型的参数的方法，比如下面的 Square
+        delegate int Transformer(int x);
+        static int Square(int x) => x * x;
+        static int AddOne(int x) => x + 1;
+        public static void Test1()
+        {
+            // 将方法赋值给委托变量就能创建一个委托实例
+            Transformer t = Square;
+            // 委托就类似于别名一样
+            int answer = t(12);
+            Console.WriteLine(answer); // 144
+            Console.WriteLine(t.Method); // Int32 Square(Int32)
+            t += AddOne;
+            // 多播委托可以联结多个委托实例， t 先调用 Square 再调用 AddOne 并返回最后一个委托实例返回的值
+            answer = t(12);
+            Console.WriteLine(answer); // 13
+            Console.WriteLine(t.Method); // Int32 AddOne(Int32)
+        }
+    
+```
+委托都可以用接口来替代实现。
+
+## 二 事件
+
+使用委托可以实现观察者模式，即广播和订阅。
+
+下面是一个监听数字变化的例子：
+
+```
+        // 声明委托
+        public delegate void NumberChangedHandler(int oldNumber, int newNumber);
+        
+        public class FunnyNumber
+        {
+            private string symbol;
+            private int number;
+
+            public FunnyNumber(string symbol)
+            {
+                this.symbol = symbol;
+            }
+            
+            // 声明事件，在委托成员前面加 event 关键字即可
+            public event NumberChangedHandler NumberChanged;
+
+            public int Number
+            {
+                get => number;
+                set
+                {
+                    if (number == value)
+                    {
+                        // 数字无变化
+                        return;
+
+                    }
+
+                    int oldNumber = number;
+                    number = value;
+                    if (NumberChanged != null)
+                    {
+                        // 所有委托的方法会被调用，这里实现了观察着模式
+                        NumberChanged(oldNumber, number);
+                    }
+                }
+            }
+        }
+```
+### 标准事件模式
+
+```
+        /**
+         * 标准事件模式的委托必须以 void 为返回值；
+         * 委托必须接受两个参数，object 类型的事件广播者 和 传递的信息；
+         * 委托名称必须以 EventHandler 结尾。
+         * 下面是C#2.0及以后内置的源码:
+         */
+        // public delegate void EventHandler<TEventArgs>(object source, TEventArgs e) where TEventArgs : EventArgs;
+```
+标准观察者模式的应用：
+```
+       public class NumberChangedEventArgs:System.EventArgs
+        {
+            public readonly int LastNumber;
+            public readonly int NewNumber;
+
+            public NumberChangedEventArgs(int lastNumber, int newNumber)
+            {
+                LastNumber = lastNumber;
+                NewNumber = newNumber;
+            }
+            
+        }
+        
+        public class FoodNumber
+        {
+            private string symbol;
+            private int number;
+
+            public FoodNumber(string symbol)
+            {
+                this.symbol = symbol;
+            }
+            
+            public event EventHandler<NumberChangedEventArgs> NumberChanged;
+
+            /**
+             * 该模式需要编写一个 protected 的虚方法来触发事件，方法名是 On 加上事件名，并接受唯一参数 EventArgs
+             */
+            protected virtual void OnNumberChanged(NumberChangedEventArgs e)
+            {
+                NumberChanged?.Invoke(this, e);
+            }
+
+            public int Number
+            {
+                get => number;
+                set
+                {
+                    if (number == value)
+                    {
+                        return;
+                    }
+
+                    int oldNumber = number;
+                    number = value;
+                    OnNumberChanged(new NumberChangedEventArgs(oldNumber, number));
+                }
+            }
+        }
+        
+        public static void Test2()
+        {
+            FoodNumber foodNumber = new FoodNumber("Afra55");
+            foodNumber.Number = 100;
+            // 注册事件
+            foodNumber.NumberChanged += food_NumberChanged;
+            foodNumber.Number = 200;
+            foodNumber.Number = 300;
+            foodNumber.Number = 400;
+        }
+
+        static void food_NumberChanged(object sender, NumberChangedEventArgs e)
+        {
+            Console.WriteLine($"{e.LastNumber} -> {e.NewNumber}");       
+        }
+```
+## 三 匿名方法
+delegate 关键字后加上参数的声明和方法体：
+```
+            Transformer sqr = delegate(int i) { return i * i; };
+            Console.WriteLine(sqr(12));
+            Transformer sqrLambda = x => x * x;
+            Console.WriteLine(sqrLambda(2));
+
+```
+## 四 扩展方法
+扩展方法允许在现有类型上扩展新的方法而无须修改原始类型的定义，是静态类的静态方法.
+```
+    public static class StringHelper
+    {
+        public static bool isCapitalized(this string s)
+        {
+            if (string.IsNullOrEmpty(s)) return false;
+            return char.IsUpper(s[0]);
+        }
+    }
+    
+    ...
+    
+    Console.WriteLine("Afra55".isCapitalized()); // True
+    Console.WriteLine("afra55".isCapitalized()); // False
+
+
+```
+## 五 匿名类型
+new 关键字加上对象初始化器：
+
+```
+            // 只能通过 var 引用
+            var person = new {Name = "Afra55", Age = 20};
+            var person1 = new {Name = "Afra55", Age = 20};
+            Console.WriteLine(person  == person1); // False
+            Console.WriteLine(person.Equals(person1)); // True
+            Console.WriteLine(person.GetType() == person1.GetType()); // True
+
+```
+
+## 六 元组
+```
+            // 元组元素可以简单的在括号中初始化值
+            var user = ("Bfra55", 10);
+            Console.WriteLine(user.Item1);  // Bfra55
+            Console.WriteLine(user.Item2);  // 10
+
+            // 元组是值类型，可以指定元组元素类型
+            (string, long) u = ("Bfra55", 20);
+
+            // 可以为元素定义名字
+            var u1 = (Name: "Cfra55", Age: 22);
+            Console.WriteLine(u1.Name);
+            Console.WriteLine(u1.Age);
+
+            (string Name, int Age) u2 = ("Dfra55", 22);
+            Console.WriteLine(u2.Equals(u1)); // True
+
+```
+## 七 动态绑定
+动态绑定将解析类型、成员和操作的过程从编译时延迟到运行时。
+
+```
+        class User
+        {
+            private int age;
+            private string name;
+
+            public int Age
+            {
+                get => age;
+                set => age = value;
+            }
+
+            public string Name
+            {
+                get => name;
+                set => name = value;
+            }
+
+            public void ShowInfo()
+            {
+                Console.WriteLine( $"{Age}, {Name}");
+            }
+        }
+
+        public static void Test5()
+        {
+            // 动态绑定
+            dynamic d = new User();
+            // 编译时并不知道 d 有 ShowInfo 方法，在运行时才会去查找这个方法
+            d.Name = "Afra55";
+            d.Age = 123;
+            d.ShowInfo(); // 123, Afra55
+            // 当方法不存在时就会抛出异常
+            d.WhatDoYouDo(); // Microsoft.CSharp.RuntimeBinder.RuntimeBinderException:
+        }
+```
+### 自定义绑定
+避免方法不存在时抛出异常可以让类继承 DynamicObject, 并重写 TryInvokeMember 方法：
+```
+       class User : DynamicObject
+        {
+            private int age;
+            private string name;
+
+            public int Age
+            {
+                get => age;
+                set => age = value;
+            }
+
+            public string Name
+            {
+                get => name;
+                set => name = value;
+            }
+
+            public void ShowInfo()
+            {
+                Console.WriteLine( $"{Age}, {Name}");
+            }
+
+            public override bool TryInvokeMember(InvokeMemberBinder binder, object[] args, out object result)
+            {
+                Console.WriteLine(binder.Name + " method was called");
+                result = null;
+                return true;
+                // return base.TryInvokeMember(binder, args, out result);
+            }
+        }
+
+        public static void Test5()
+        {
+            // 动态绑定
+            dynamic d = new User();
+            // 编译时并不知道 d 有 ShowInfo 方法，在运行时才会去查找这个方法
+            d.Name = "Afra55";
+            d.Age = 123;
+            d.ShowInfo();
+            d.WhatDoYouDo(); // WhatDoYouDo method was called
+        }
+```
+动态绑定失去了静态绑定时的类型安全保证，可能出现运行时异常：
+```
+        // 参数动态绑定，返回值也动态绑定，失去了类型安全的保护，可能发生运行时异常
+        static dynamic Mean(dynamic x, dynamic y) => (x + y) / 2;
+        public static void Test6()
+        {
+            int x = 3, y = 4;
+            Console.WriteLine(Mean(x, y));
+            Console.WriteLine(Mean(x, "22")); // .RuntimeBinderException
+        }
+
+```
+动态引用可以指向 指针类型以外的任何类型对象：
+```
+            dynamic x = "Afra55";
+            Console.WriteLine(x.GetType().Name); // String
+            x = 32;
+            Console.WriteLine(x.GetType().Name); // Int32
+
+```
+
+var 是用编译器确定类型；
+dynamic 是运行时确定类型。
+
+## 八 运算符函数
+
+* 函数名为operator关键字跟上运算符符号。
+* 运算符函数必须是static和public的。
+* 运算符函数的参数即操作数。
+* 运算符函数的返回类型表示表达式的结果。
+* 运算符函数的操作数中至少有一个类型和声明运算符函数的类型是一致的。
+
+```
+       public struct Lover
+        {
+            int age;
+            string name;
+
+            public Lover(int age, string name)
+            {
+                this.age = age;
+                this.name = name;
+            }
+
+            public static Lover operator +(Lover a, Lover b)
+            {
+                return new Lover(a.age + b.age, a.name + " and " + b.name);
+            }
+
+            public int Age
+            {
+                get => age;
+                set => age = value;
+            }
+            public string Name
+            {
+                get => name;
+                set => name = value;
+            } 
+            
+        }
+
+        public static void Test7()
+        {
+            Lover A = new Lover(12, "Afra");
+            Lover B = new Lover(32, "Bfra");
+            Lover C = A + B;
+            Console.WriteLine($"{C.Name} ~ {C.Age}"); // Afra and Bfra ~ 44
+        }
+```
+
+## 九 unsafe
+使用unsafe关键字修饰类型、类型成员或者语句块，就可以在该范围内使用指针类型并可以对作用域内的内存执行指针操作。
+
+每一种值类型或引用类型类型，它都有对应的指针类型；
+
+| 运算符 | 作用 |
+| --- | --- |
+| `&` | 取址运算符，返回变量地址的指针 |
+| `*` | 解引用运算符，放回指针指向地址的变量 |
+| `->` | 指针取成员运算符， `x->y` 相当于 `(*x).y` |
+
+
+`fixed`语句则告诉垃圾回收器“锁定”这个对象，而且不要移动它, 避免指向该对象的指针无效。
+
+```
+            class FixTest
+            {
+                public int number = 0;
+            }
+            
+            // ...
+            FixTest fixTest = new FixTest();
+            unsafe
+            {
+                fixed (int* p = &fixTest.number)
+                {
+                    *p = 9;
+                }
+                Console.WriteLine(fixTest.number); // 9
+            }
+```
+## 十 数组
+### stackalloc 关键字
+staclalloc关键字将在栈上显式分配一块内存, 因为是在栈内分配，因此生命周期和其他局部变量受限于法执行期。
+```
+            unsafe
+            {
+                int* a = stackalloc int[10];
+                for (int i = 0; i < 10; i++)
+                {
+                    Console.WriteLine(a[i]);
+                }
+            }
+```
+### fixed 关键字
+fixed 关键字在结构中创建固定大小的缓冲区：
+```
+        unsafe struct UnsafeUnicodeString
+        {
+            public short Length;
+            public fixed byte Buffer[30]; // 分配30字节缓冲区
+        }
+```
+
+## 十一 预处理指令
+```
+#define DEBUG
+    class DebugTest
+    {
+        void Test()
+        {
+#if DEBUG
+            //根据DEBUG符号定义与否来有条件地对其中语句进行编译, 如果移除 #define DEBUG 就不会进行下面语句的编译
+            Console.WriteLine("Debug");
+#endif
+        }
+    }
+```
+
+
+| 预处理指令 | 操作 |
+| --- | --- |
+| `#define symbol` | 定义 symbol 符号 |
+| `#undef symbol` | 取消 symbol 符号的定义 |
+| `#if symbol [operator symbol2]...` | 判断 symbol 符号，其中。operator 可以是 `==, !=, &&, ||`, #if 指令后可以跟 `#else, #elif, #endif` |
+| `#else` | 执行到下个 `#endif` 之前的代码 |
+| `#elif symbol [operator symbol2]` | 组合 `#else` 分支和 `#if` 判断 |
+| `#endif` | 角黍条件指令 |
+| `#warning text` | 在编译器输出中显示 text 警告 |
+| `#error text` | 在编译器输出中显示 text 错误信息|
+| `#pragma warning [disable | restore]` | 禁用/恢复编译器警告 |
+| `#line [[number['file']] | hidden]` | `number` 源代码行号；`file` 输出的文件名；`hidden` 调试器忽略此处到下一个 `#line` 指令之间的代码 |
+| `#region name` | 标记大纲开始  |
+| `#endregion` | 结束一个大纲区域 |
+
+```
+class MainClass
+{
+    static void Main()
+    {
+#line 200 "Special"
+        int i;
+        int j;
+#line default
+        char c;
+        float f;
+#line hidden // numbering not affected
+        string s;
+        double d;
+    }
+}
+```
+`#line`输出测试:
+```
+Special(200,13): warning CS0168: The variable 'i' is declared but never used
+Special(201,13): warning CS0168: The variable 'j' is declared but never used
+MainClass.cs(9,14): warning CS0168: The variable 'c' is declared but never used
+MainClass.cs(10,15): warning CS0168: The variable 'f' is declared but never used
+MainClass.cs(12,16): warning CS0168: The variable 's' is declared but never used
+MainClass.cs(13,16): warning CS0168: The variable 'd' is declared but never used
+```
