@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "《超能勇士》与《猛兽侠》：一篇读完的完整故事"
-date:   2026-7-14 12:00:00
+date:   2026-7-14 03:00:00
 categories: Life
 comments: true
 description: 以连贯叙事讲透美版《Beast Wars》与续作《Beast Machines》的完整剧情、角色关系与关键细节，素材整理自 TFWiki.net。
