@@ -111,10 +111,11 @@ function backToTop() {
             $("#top").fadeOut(500);
         }
     });
-    //点击回到顶部
-    $("#top").click(function() {
-        $("body").animate({
-            scrollTop: "0"
+    //点击回到顶部（同时滚 html 与 body，兼容现代浏览器）
+    $("#top").click(function(e) {
+        e.preventDefault();
+        $("html, body").stop(true).animate({
+            scrollTop: 0
         }, 500);
     });
 
