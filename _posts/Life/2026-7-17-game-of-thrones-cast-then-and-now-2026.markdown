@@ -16,7 +16,7 @@ description: 面向中文读者的权游十五周年盘点：每人配「剧中 
 2. **刚出道/开播时演员本人什么样**
 3. **2026 年前后他们又变成什么样、在拍什么**
 
-本文按中文观众最熟的家族线展开，主要人物尽量配上 **「剧中 / 昔 / 今」三联图**：左为剧中角色宣传照，中为较早公开活动照，右为近年公开活动照。文字融合 [Entertainment Weekly](https://ew.com/game-of-thrones-cast-where-are-they-now-11950251)、[Winter is Coming](https://winteriscoming.net/where-the-game-of-thrones-cast-is-now-15-years-after-season-1-debut)、[GameRant](https://gamerant.com/game-of-thrones-stars-today/)、[Film Daily](https://filmdaily.co/news/then-vs-now-where-every-surviving-game-of-thrones-cast-is/) 与 [Daily Mail 童星专题](https://www.dailymail.co.uk/tvshowbiz/article-15735259/What-happened-Game-Thrones-child-stars-landing-leading-roles-disappearing-spotlight-varied-lives-young-cast-series-celebrates-15th-anniversary.html) 等 2026 年报道。年龄为约数；个别演员缺少可引用的剧中剧照时，只放演员今昔拼图。
+本文按中文观众最熟的家族线展开，主要人物配上 **「剧中 / 昔 / 今」三联图**：左为剧中角色宣传照或剧集截图，中为较早公开活动照，右为近年公开活动照。文字融合 [Entertainment Weekly](https://ew.com/game-of-thrones-cast-where-are-they-now-11950251)、[Winter is Coming](https://winteriscoming.net/where-the-game-of-thrones-cast-is-now-15-years-after-season-1-debut)、[GameRant](https://gamerant.com/game-of-thrones-stars-today/)、[Film Daily](https://filmdaily.co/news/then-vs-now-where-every-surviving-game-of-thrones-cast-is/) 与 [Daily Mail 童星专题](https://www.dailymail.co.uk/tvshowbiz/article-15735259/What-happened-Game-Thrones-child-stars-landing-leading-roles-disappearing-spotlight-varied-lives-young-cast-series-celebrates-15th-anniversary.html) 等 2026 年报道。年龄为约数。
 
 ---
 
@@ -82,15 +82,15 @@ description: 面向中文读者的权游十五周年盘点：每人配「剧中 
 
 ### 耶哥蕊特｜Rose Leslie
 
-![耶哥蕊特 / Rose Leslie 演员今昔](/static/images/got-cast-then-now/rose-leslie-then-now.jpg)
-*公开可引用的剧中剧照较少，这里放演员今昔拼图*
+![耶哥蕊特 / Rose Leslie：剧中截图、昔、今](/static/images/got-cast-then-now/triple/rose-leslie-triple.jpg)
+*左：剧中耶哥蕊特（截图） · 中/右：演员公开活动照*
 
 「你什么都不懂，琼恩·雪诺。」2018 年与 Kit Harington 结婚，育有一子一女；舞台与英剧持续出演。
 
 ### 莱安娜·莫尔蒙（小熊岛）｜Bella Ramsey
 
-![莱安娜·莫尔蒙 / Bella Ramsey 演员今昔](/static/images/got-cast-then-now/bella-ramsey-then-now.jpg)
-*演员今昔拼图（公开剧中剧照有限）*
+![莱安娜·莫尔蒙 / Bella Ramsey：剧中截图、昔、今](/static/images/got-cast-then-now/triple/bella-ramsey-triple.jpg)
+*左：剧中小熊岛（截图） · 中/右：演员公开活动照*
 
 戏份不多、句句扎心。之后主演 HBO《最后生还者》Ellie，获艾美提名，第三季预计 2027——权游童星后劲最猛者之一。
 
@@ -166,15 +166,15 @@ description: 面向中文读者的权游十五周年盘点：每人配「剧中 
 
 ### 卡奥·卓戈｜Jason Momoa
 
-![卡奥·卓戈 / Jason Momoa 演员今昔](/static/images/got-cast-then-now/jason-momoa-then-now.jpg)
-*演员今昔（公开可引用的单人剧中剧照有限）*
+![卡奥·卓戈 / Jason Momoa：剧中截图、昔、今](/static/images/got-cast-then-now/triple/jason-momoa-triple.jpg)
+*左：剧中卓戈（截图） · 中/右：演员公开活动照*
 
 第一季戏份不长，却是「出圈肉体符号」。之后成为 DC 海王、快打旋风刘康，并进入《沙丘》宇宙——从「一个季的卡奥」到全球动作巨星。
 
 ### 灰虫子｜Jacob Anderson
 
-![灰虫子 / Jacob Anderson 演员今昔](/static/images/got-cast-then-now/jacob-anderson-then-now.jpg)
-*演员今昔拼图*
+![灰虫子 / Jacob Anderson：剧中截图、昔、今](/static/images/got-cast-then-now/triple/jacob-anderson-triple.jpg)
+*左：剧中灰虫子（截图） · 中/右：演员公开活动照*
 
 无垢者指挥官。权游后在 AMC《夜访吸血鬼》饰 Louis，剧评口碑很高，常被称作「第二人生」标杆。
 
@@ -286,15 +286,15 @@ description: 面向中文读者的权游十五周年盘点：每人配「剧中 
 
 ### 攸伦·葛雷乔伊｜Pilou Asbæk
 
-![攸伦 / Pilou Asbæk 演员今昔](/static/images/got-cast-then-now/pilou-asbaek-then-now.jpg)
-*演员今昔拼图*
+![攸伦 / Pilou Asbæk：剧中截图、昔、今](/static/images/got-cast-then-now/triple/pilou-asbaek-triple.jpg)
+*左：剧中攸伦（截图） · 中/右：演员公开活动照*
 
 丹麦演员；权游后有《鬼戏院》等，北欧与国际项目持续活跃。
 
 ### 波隆｜Jerome Flynn
 
-![波隆 / Jerome Flynn 演员今昔](/static/images/got-cast-then-now/jerome-flynn-then-now.jpg)
-*演员今昔拼图*
+![波隆 / Jerome Flynn：剧中截图、昔、今](/static/images/got-cast-then-now/triple/jerome-flynn-triple.jpg)
+*左：剧中波隆（截图） · 中/右：演员公开活动照*
 
 「要钱不要命」名梗担当；英剧喜剧持续接活。
 
@@ -343,7 +343,6 @@ description: 面向中文读者的权游十五周年盘点：每人配「剧中 
 
 ## 图片与资料说明
 
-- **三联图「剧中」**：主要为剧集宣传用角色静帧（经维基百科等公开页面转引，用于评论介绍），版权仍属 HBO / Warner Bros. 等权利方。
-- **「昔 / 今」**：多为 Wikimedia Commons 上可再利用的公开活动照片（CC 许可），**不是**剧中官方剧照。
-- 个别角色缺少可稳定引用的单人剧中剧照时，只保留演员今昔拼图，避免误用。
+- **三联图「剧中」**：剧集宣传静帧或剧集截图（用于评论介绍）；原先缺少单人宣传照的角色（卓戈、灰虫子、耶哥蕊特、小熊岛、攸伦、波隆等）已补剧集截图。版权仍属 HBO / Warner Bros. 等权利方。
+- **「昔 / 今」**：多为 Wikimedia Commons 上可再利用的公开活动照片（CC 许可）。
 - 文字主要参考 EW、Winter is Coming、GameRant、Film Daily、Daily Mail、Variety 等 2026 年报道；项目档期可能随官方公告变化。
