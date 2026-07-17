@@ -1,7 +1,7 @@
 ---
 layout: post
 title:  "《权力的游戏》演员与角色今昔对比（2011→2026）：十五周年全景盘点"
-date:   2026-7-17 12:00:00
+date:   2026-7-17 00:10:00
 categories: Life
 comments: true
 description: 融合 Entertainment Weekly、Winter is Coming、GameRant、Film Daily、Daily Mail 等 2026 年十五周年报道，按家族与阵营详述权游主要演员的剧中形象、真实年龄变化与最新事业。
