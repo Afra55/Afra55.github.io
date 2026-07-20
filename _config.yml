@@ -24,6 +24,8 @@ disqus_url: "http://Afra55.github.io"
 
 # Build settings
 markdown: kramdown
+# 发布日期晚于构建时间的文章也纳入 site.posts（默认 false 会隐藏「未来文」）
+future: true
 
 # highlight
 # highlighter: pygments
