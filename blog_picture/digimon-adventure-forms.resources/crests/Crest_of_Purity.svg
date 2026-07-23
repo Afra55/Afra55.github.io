@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   xmlns:dc="http://purl.org/dc/elements/1.1/"
+   xmlns:cc="http://creativecommons.org/ns#"
+   xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+   xmlns:svg="http://www.w3.org/2000/svg"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   version="1.1"
+   id="Layer_1"
+   x="0px"
+   y="0px"
+   width="100%"
+   viewBox="0 0 677 991"
+   enable-background="new 0 0 677 991"
+   xml:space="preserve"
+   sodipodi:docname="Crest of Purity.svg"
+   inkscape:version="0.92.3 (2405546, 2018-03-11)"><metadata
+   id="metadata15"><rdf:RDF><cc:Work
+       rdf:about=""><dc:format>image/svg+xml</dc:format><dc:type
+         rdf:resource="http://purl.org/dc/dcmitype/StillImage" /></cc:Work></rdf:RDF></metadata><defs
+   id="defs13" /><sodipodi:namedview
+   pagecolor="#ffffff"
+   bordercolor="#666666"
+   borderopacity="1"
+   objecttolerance="10"
+   gridtolerance="10"
+   guidetolerance="10"
+   inkscape:pageopacity="0"
+   inkscape:pageshadow="2"
+   inkscape:window-width="1920"
+   inkscape:window-height="1017"
+   id="namedview11"
+   showgrid="false"
+   inkscape:zoom="0.44248231"
+   inkscape:cx="350.14381"
+   inkscape:cy="701.87498"
+   inkscape:window-x="-8"
+   inkscape:window-y="-8"
+   inkscape:window-maximized="1"
+   inkscape:current-layer="Layer_1" />
+
+<path
+   d="M 293.03082,980.00403 C 163.09402,959.32275 60.897022,869.88965 24.590876,745.27093 14.825554,711.75201 10.169157,677.45196 12.300044,642.5929 14.476892,606.98206 23.045395,572.52142 35.709911,539.2818 42.251423,522.11279 49.907307,505.11755 59.162685,489.27213 159.81558,323.46084 340.96353,8.834136 340.96353,8.834136 c 0,0 200.24827,340.772724 284.96903,485.367284 18.61328,31.7702 28.74755,66.72381 37.06762,102.31091 24.32209,104.03113 -16.09906,222.73517 -96.17547,297.28424 -50.95685,47.43939 -110.72712,76.52203 -179.73304,86.40064 -31.21435,4.46856 -62.42266,4.31036 -94.06085,-0.19318 m 16.24854,-556.23041 c -5.89679,1.03015 -11.83426,1.86972 -17.68439,3.11847 C 162.87016,454.37039 82.188133,585.49255 115.67923,712.72223 148.46028,837.25452 273.7431,911.5415 398.71573,879.7901 512.01709,851.00403 587.6051,742.06158 571.65179,623.25384 563.64966,563.65967 536.21191,514.04755 489.94745,475.64871 437.77222,432.34412 377.42792,415.60007 309.27936,423.77362 Z"
+   id="path4"
+   inkscape:connector-curvature="0"
+   style="opacity:1;fill:#32c800;stroke:none"
+   sodipodi:nodetypes="cssscccccccccssccc" />
+
+<path
+   fill="#32C800"
+   opacity="1.000000"
+   stroke="none"
+   d=" M204.964890,685.962524   C186.557373,611.988281 235.848297,533.794678 310.521606,517.997681   C389.541840,501.281006 463.910278,551.030579 478.679993,630.489014   C492.647522,705.631836 438.843079,780.519958 363.561615,792.240967   C290.460114,803.622559 221.719589,757.080139 204.964890,685.962524  z"
+   id="path8" />
+</svg>
