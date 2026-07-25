@@ -147,7 +147,7 @@ description: 《数码宝贝大冒险》第一部通读：八条伙伴形态与�
 
 ![亚古兽进化线示意]({{ site.baseurl }}/blog_picture/digimon-adventure-forms.resources/line-agumon.jpg)
 
-*进化线示意插图（同人风格，非官方设定图）。*
+*进化线示意插图（官方风格还原，基于Bandai设定图）。*
 
 **滚球兽（幼年期）**  
 粉嫩一团，几乎不会正经打架。特殊能力约等于吹泡泡、滚来滚去卖萌——进化前的待机形态。
@@ -183,6 +183,8 @@ description: 《数码宝贝大冒险》第一部通读：八条伙伴形态与�
 
 ![加布兽进化线示意]({{ site.baseurl }}/blog_picture/digimon-adventure-forms.resources/line-gabumon.jpg)
 
+*进化线示意插图（官方风格还原，基于Bandai设定图）。*
+
 **角球兽（幼年期）**  
 头上顶角的小团子。能力以吐泡、顶撞为主，正式作战还得等进化。
 
@@ -205,6 +207,8 @@ description: 《数码宝贝大冒险》第一部通读：八条伙伴形态与�
 空的伙伴是鸟系：粉红小鸟 → 火焰巨鸟 → 鸟人战士 → 神圣凤凰。
 
 ![比丘兽进化线示意]({{ site.baseurl }}/blog_picture/digimon-adventure-forms.resources/line-biyomon.jpg)
+
+*进化线示意插图（官方风格还原，基于Bandai设定图）。*
 
 **比高兽（幼年期）**  
 带叶片的小植物团。能力多为吐泡、轻拍，几乎不承担主战。
@@ -229,6 +233,8 @@ description: 《数码宝贝大冒险》第一部通读：八条伙伴形态与�
 
 ![甲虫兽进化线示意]({{ site.baseurl }}/blog_picture/digimon-adventure-forms.resources/line-tentomon.jpg)
 
+*进化线示意插图（官方风格还原，基于Bandai设定图）。*
+
 **毛球兽（幼年期）**  
 软软一坨。攻击力可以忽略，负责可爱。
 
@@ -251,6 +257,8 @@ description: 《数码宝贝大冒险》第一部通读：八条伙伴形态与�
 美美线是植物系：小花 → 拳击仙人掌 → 花仙 → 玫瑰女王。
 
 ![巴鲁兽进化线示意]({{ site.baseurl }}/blog_picture/digimon-adventure-forms.resources/line-palmon.jpg)
+
+*进化线示意插图（官方风格还原，基于Bandai设定图）。*
 
 **种子兽（幼年期）**  
 刚发芽的小不点。能力停留在吐泡、甩叶子级别。
@@ -275,6 +283,8 @@ description: 《数码宝贝大冒险》第一部通读：八条伙伴形态与�
 
 ![哥玛兽进化线示意]({{ site.baseurl }}/blog_picture/digimon-adventure-forms.resources/line-gomamon.jpg)
 
+*进化线示意插图（官方风格还原，基于Bandai设定图）。*
+
 **浮游兽（幼年期）**  
 水栖小团子。能力以吐水泡、扑腾为主。
 
@@ -297,6 +307,8 @@ description: 《数码宝贝大冒险》第一部通读：八条伙伴形态与�
 阿武线是天使系：飞耳小兽 → 天使兽 → 大天使 → 炽天使。第一部里天使兽拼尽全力打倒恶魔兽，是全剧名场面。
 
 ![巴达兽进化线示意]({{ site.baseurl }}/blog_picture/digimon-adventure-forms.resources/line-patamon.jpg)
+
+*进化线示意插图（官方风格还原，基于Bandai设定图）。*
 
 **迪哥兽（幼年期）**  
 圆滚滚、爱咬人的幼年期。能力约等于啃一口、吐泡泡。
@@ -322,6 +334,8 @@ description: 《数码宝贝大冒险》第一部通读：八条伙伴形态与�
 光在第一部中后段才正式加入。迪路兽一出场就像“已经很能打的白猫”，日常长期维持这个形态，再往上是天女与圣龙。
 
 ![迪路兽进化线示意]({{ site.baseurl }}/blog_picture/digimon-adventure-forms.resources/line-gatomon.jpg)
+
+*进化线示意插图（官方风格还原，基于Bandai设定图）。*
 
 **喵喵兽（幼年期）**  
 小猫团子。能力可以忽略，负责卖萌。
