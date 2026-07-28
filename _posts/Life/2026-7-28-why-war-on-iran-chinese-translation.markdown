@@ -11,6 +11,8 @@ description: Hicham Ismaili《Why War on Iran?》中文全译，并附截至 202
 {:toc}
 
 > **译者说明**：本文为 MEPEI 网站文章 [Why War on Iran?](https://mepei.com/why-war-on-iran/)（作者 Hicham Ismaili）的中文全译，供中文读者阅读。原文发表于 2026 年 2 月战争爆发之后，分析开战成因；观点与事实均属原文作者，译文仅作忠实转述，不代表本站立场。脚注编号与原文对应，便于对照。文末「译者补记」据公开报道补充截至 2026 年 7 月 28 日的战事进展，不属于原文内容。
+>
+> 若觉得译文偏学术、读着费劲，可先看白话版：[美伊战争怎么回事？一篇看懂](/2026/07/28/us-iran-war-explainer-for-chinese-readers/)。
 
 ---
 
