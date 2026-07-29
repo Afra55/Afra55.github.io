@@ -139,6 +139,24 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
+  flex: 1;
+  margin: 0;
+  animation: none;
+  position: static;
+  top: auto;
+  z-index: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  backdrop-filter: none;
+}
+
+.nav-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0.55rem 0.75rem;
   margin-bottom: 1.25rem;
   animation: rise 0.7s ease 0.08s both;
   position: sticky;
@@ -151,6 +169,25 @@ body {
   backdrop-filter: blur(12px);
 }
 
+.nav-reset {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: rgba(232, 238, 248, 0.05);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  border-radius: 999px;
+  padding: 0.35rem 0.7rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.2s, border-color 0.2s, background 0.2s;
+}
+
+.nav-reset:hover {
+  color: var(--ink);
+  border-color: rgba(46, 196, 182, 0.35);
+}
+
 .tool-nav-link {
   color: var(--muted);
   text-decoration: none;
@@ -158,7 +195,23 @@ body {
   border: 1px solid transparent;
   border-radius: 999px;
   font-size: 0.86rem;
-  transition: color 0.2s, border-color 0.2s, background 0.2s;
+  cursor: grab;
+  user-select: none;
+  transition: color 0.2s, border-color 0.2s, background 0.2s, transform 0.15s;
+}
+
+.tool-nav-link:active {
+  cursor: grabbing;
+}
+
+.tool-nav-link.is-dragging {
+  opacity: 0.45;
+}
+
+.tool-nav-link.drag-over {
+  border-color: rgba(46, 196, 182, 0.55);
+  background: rgba(46, 196, 182, 0.12);
+  color: var(--ink);
 }
 
 .tool-nav-link:hover,

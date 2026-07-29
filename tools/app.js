@@ -743,24 +743,152 @@
     btn.addEventListener("click", () => copyFromValueEl(btn.dataset.copyValue));
   });
 
-  const navLinks = $$(".tool-nav-link");
-  const sections = navLinks
-    .map((link) => {
-      const id = (link.getAttribute("href") || "").replace(/^#/, "");
-      return id ? document.getElementById(id) : null;
-    })
-    .filter(Boolean);
+  // ---- Tool order (group default + user drag) ----
+  const ORDER_KEY = "devtools-tool-order-v1";
+  const DEFAULT_ORDER = [
+    "timestamp",
+    "timediff",
+    "cron",
+    "ahex",
+    "color",
+    "base64",
+    "imgb64",
+    "url",
+    "hash",
+    "uuid",
+    "json",
+    "yaml",
+    "query",
+    "text",
+    "regex",
+    "diff",
+    "qrcode",
+    "units",
+  ];
+
+  const navEl = $("#tool-nav") || $(".tool-nav");
+  const shellEl = $(".shell");
+  const comingEl = $("#coming");
+
+  function getNavLinks() {
+    return $$(".tool-nav-link", navEl);
+  }
+
+  function currentOrderFromDom() {
+    return getNavLinks()
+      .map((link) => link.dataset.tool || (link.getAttribute("href") || "").replace(/^#/, ""))
+      .filter(Boolean);
+  }
+
+  function loadOrder() {
+    try {
+      const raw = localStorage.getItem(ORDER_KEY);
+      if (!raw) return DEFAULT_ORDER.slice();
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return DEFAULT_ORDER.slice();
+      const cleaned = parsed.filter((id) => DEFAULT_ORDER.includes(id));
+      for (const id of DEFAULT_ORDER) {
+        if (!cleaned.includes(id)) cleaned.push(id);
+      }
+      return cleaned;
+    } catch (_) {
+      return DEFAULT_ORDER.slice();
+    }
+  }
+
+  function saveOrder(order) {
+    localStorage.setItem(ORDER_KEY, JSON.stringify(order));
+  }
+
+  function applyOrder(order) {
+    const linkMap = new Map(getNavLinks().map((link) => [link.dataset.tool, link]));
+    order.forEach((id) => {
+      const link = linkMap.get(id);
+      if (link) navEl.appendChild(link);
+    });
+
+    order.forEach((id) => {
+      const section = document.getElementById(id);
+      if (section && shellEl) {
+        if (comingEl) shellEl.insertBefore(section, comingEl);
+        else shellEl.appendChild(section);
+      }
+    });
+    if (comingEl && shellEl) shellEl.appendChild(comingEl);
+  }
+
+  function getSectionsInNavOrder() {
+    return getNavLinks()
+      .map((link) => document.getElementById(link.dataset.tool))
+      .filter(Boolean);
+  }
 
   function syncNav() {
-    const y = window.scrollY + 120;
+    const sections = getSectionsInNavOrder();
+    const y = window.scrollY + 140;
     let current = sections[0]?.id;
     for (const section of sections) {
       if (section && section.offsetTop <= y) current = section.id;
     }
-    navLinks.forEach((link) => {
-      link.classList.toggle("is-active", link.getAttribute("href") === `#${current}`);
+    getNavLinks().forEach((link) => {
+      link.classList.toggle("is-active", link.dataset.tool === current);
     });
   }
+
+  applyOrder(loadOrder());
+
+  let dragId = null;
+  let didDrag = false;
+  getNavLinks().forEach((link) => {
+    link.addEventListener("dragstart", (e) => {
+      dragId = link.dataset.tool;
+      didDrag = true;
+      link.classList.add("is-dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", dragId);
+    });
+    link.addEventListener("dragend", () => {
+      link.classList.remove("is-dragging");
+      getNavLinks().forEach((l) => l.classList.remove("drag-over"));
+      dragId = null;
+      setTimeout(() => {
+        didDrag = false;
+      }, 0);
+    });
+    link.addEventListener("click", (e) => {
+      if (didDrag) e.preventDefault();
+    });
+    link.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      link.classList.add("drag-over");
+    });
+    link.addEventListener("dragleave", () => link.classList.remove("drag-over"));
+    link.addEventListener("drop", (e) => {
+      e.preventDefault();
+      link.classList.remove("drag-over");
+      const from = e.dataTransfer.getData("text/plain") || dragId;
+      const to = link.dataset.tool;
+      if (!from || !to || from === to) return;
+      const order = currentOrderFromDom();
+      const fromIdx = order.indexOf(from);
+      const toIdx = order.indexOf(to);
+      if (fromIdx < 0 || toIdx < 0) return;
+      order.splice(fromIdx, 1);
+      order.splice(toIdx, 0, from);
+      applyOrder(order);
+      saveOrder(order);
+      syncNav();
+      showToast("已保存排序");
+    });
+  });
+
+  $("#nav-reset")?.addEventListener("click", () => {
+    localStorage.removeItem(ORDER_KEY);
+    applyOrder(DEFAULT_ORDER.slice());
+    syncNav();
+    showToast("已恢复默认排序");
+  });
 
   window.addEventListener("scroll", syncNav, { passive: true });
 
