@@ -215,6 +215,15 @@
     return Math.min(255, Math.max(0, Math.round(n)));
   }
 
+  function alphaToOpacityPct(a) {
+    return Math.round((a / 255) * 100);
+  }
+
+  function opacityPctToAlpha(pct) {
+    if (!Number.isFinite(pct)) return null;
+    return clampByte((Math.min(100, Math.max(0, pct)) / 100) * 255);
+  }
+
   function toHex2(n) {
     return n.toString(16).toUpperCase().padStart(2, "0");
   }
@@ -312,11 +321,16 @@
       numG.value = String(g);
       numB.value = String(b);
 
-      numOpacity.value = String(Math.round((a / 255) * 1000) / 10);
-      editR.value = String(r);
-      editG.value = String(g);
-      editB.value = String(b);
-      editHex.value = `#${toHex2(r)}${toHex2(g)}${toHex2(b)}`;
+      // 输入过程中不要回写，避免 8→7.8、1→1.2 这类跳动
+      if (document.activeElement !== numOpacity) {
+        numOpacity.value = String(alphaToOpacityPct(a));
+      }
+      if (document.activeElement !== editR) editR.value = String(r);
+      if (document.activeElement !== editG) editG.value = String(g);
+      if (document.activeElement !== editB) editB.value = String(b);
+      if (document.activeElement !== editHex) {
+        editHex.value = `#${toHex2(r)}${toHex2(g)}${toHex2(b)}`;
+      }
 
       ahexSwatch.style.backgroundColor = css;
       ahexCss.textContent = css;
@@ -370,11 +384,15 @@
 
   numOpacity.addEventListener("input", () => {
     if (syncing) return;
+    if (numOpacity.value === "") return;
     const pct = Number(numOpacity.value);
-    if (!Number.isFinite(pct)) return;
-    const a = clampByte((Math.min(100, Math.max(0, pct)) / 100) * 255);
+    const a = opacityPctToAlpha(pct);
     if (a === null) return;
     applyColor({ ...color, a });
+  });
+
+  numOpacity.addEventListener("blur", () => {
+    numOpacity.value = String(alphaToOpacityPct(color.a));
   });
 
   [
