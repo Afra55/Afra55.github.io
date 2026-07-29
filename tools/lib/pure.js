@@ -18,37 +18,60 @@
   }
 
   function parseFlexibleTime(raw) {
-    const text = String(raw || "").trim();
+    let text = String(raw || "").trim();
     if (!text) return null;
-    if (/^-?\d+$/.test(text)) {
-      const n = Number(text);
+
+    // 允许 1719792000、1_719_792_000、1,719,792,000 等时间戳写法
+    const compact = text.replace(/[,_\s]/g, "");
+    if (/^-?\d+$/.test(compact)) {
+      const n = Number(compact);
+      if (!Number.isFinite(n)) return null;
       const abs = Math.abs(n);
-      const ms = abs < 1e11 ? n * 1000 : n;
-      return Number.isFinite(ms) ? ms : null;
+      let ms;
+      let unit;
+      if (abs < 1e11) {
+        ms = n * 1000;
+        unit = "秒时间戳";
+      } else if (abs < 1e14) {
+        ms = n;
+        unit = "毫秒时间戳";
+      } else if (abs < 1e17) {
+        ms = Math.trunc(n / 1000);
+        unit = "微秒时间戳";
+      } else {
+        return null;
+      }
+      if (!Number.isFinite(ms)) return null;
+      return { ms, unit, input: compact };
     }
+
     const m = text.match(
       /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})(?:[ T](\d{1,2}):(\d{1,2})(?::(\d{1,2}))?)?$/
     );
-    if (!m) {
-      const t = Date.parse(text);
-      return Number.isNaN(t) ? null : t;
+    if (m) {
+      const ms = new Date(
+        Number(m[1]),
+        Number(m[2]) - 1,
+        Number(m[3]),
+        Number(m[4] || 0),
+        Number(m[5] || 0),
+        Number(m[6] || 0)
+      ).getTime();
+      if (Number.isNaN(ms)) return null;
+      return { ms, unit: "日期时间", input: text };
     }
-    return new Date(
-      Number(m[1]),
-      Number(m[2]) - 1,
-      Number(m[3]),
-      Number(m[4] || 0),
-      Number(m[5] || 0),
-      Number(m[6] || 0)
-    ).getTime();
+
+    const t = Date.parse(text);
+    if (Number.isNaN(t)) return null;
+    return { ms: t, unit: "日期时间", input: text };
   }
 
   function timeDiff(aRaw, bRaw) {
     const a = parseFlexibleTime(aRaw);
     const b = parseFlexibleTime(bRaw);
-    if (a === null || b === null) throw new Error("时间格式无效");
-    const delta = Math.abs(b - a);
-    const sign = b >= a ? "B - A" : "A - B";
+    if (!a || !b) throw new Error("时间格式无效，请输入时间戳或 YYYY-MM-DD HH:mm:ss");
+    const delta = Math.abs(b.ms - a.ms);
+    const sign = b.ms >= a.ms ? "B - A" : "A - B";
     const sec = Math.floor(delta / 1000);
     const days = Math.floor(sec / 86400);
     const hours = Math.floor((sec % 86400) / 3600);
@@ -56,9 +79,13 @@
     const secs = sec % 60;
     return {
       ms: delta,
-      text: `${sign} = ${days}天 ${hours}时 ${mins}分 ${secs}秒（${delta} ms）`,
       a,
       b,
+      text: [
+        `A: ${formatDateTime(a.ms)}（${a.unit}）`,
+        `B: ${formatDateTime(b.ms)}（${b.unit}）`,
+        `${sign} = ${days}天 ${hours}时 ${mins}分 ${secs}秒（${delta} ms）`,
+      ].join("\n"),
     };
   }
 

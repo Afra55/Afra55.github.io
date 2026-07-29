@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260729e" />
+  <link rel="stylesheet" href="./style.css?v=20260729f" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -104,27 +104,36 @@
 <section id="timediff" class="panel" data-reveal>
       <div class="panel-head">
         <h1>时间差计算</h1>
-        <p>计算两个日期时间或时间戳之间的差值。</p>
+        <p>支持秒/毫秒时间戳，也支持 <span class="mono">YYYY-MM-DD HH:mm:ss</span>，两侧可混用。</p>
       </div>
       <div class="panel-body">
         <div class="convert-grid">
           <div class="field-block">
             <label for="td-a">时间 A</label>
-            <input id="td-a" class="mono" type="text" placeholder="YYYY-MM-DD HH:mm:ss 或时间戳" autocomplete="off" />
+            <input id="td-a" class="mono" type="text" placeholder="1719792000 或 2024-07-01 00:00:00" autocomplete="off" />
+            <div class="btn-row tool-actions">
+              <button type="button" class="ghost-btn" id="td-now-a">日期=现在</button>
+              <button type="button" class="ghost-btn" id="td-ts-a">秒戳=现在</button>
+              <button type="button" class="ghost-btn" id="td-ms-a">毫秒=现在</button>
+            </div>
           </div>
           <div class="field-block">
             <label for="td-b">时间 B</label>
-            <input id="td-b" class="mono" type="text" placeholder="YYYY-MM-DD HH:mm:ss 或时间戳" autocomplete="off" />
+            <input id="td-b" class="mono" type="text" placeholder="1719878400000 或 2024-07-02 00:00:00" autocomplete="off" />
+            <div class="btn-row tool-actions">
+              <button type="button" class="ghost-btn" id="td-now-b">日期=现在</button>
+              <button type="button" class="ghost-btn" id="td-ts-b">秒戳=现在</button>
+              <button type="button" class="ghost-btn" id="td-ms-b">毫秒=现在</button>
+            </div>
           </div>
         </div>
+        <p class="hint">时间戳可带逗号/下划线，如 <span class="mono">1_719_792_000</span>；10 位按秒、13 位按毫秒识别。</p>
         <div class="btn-row tool-actions">
           <button type="button" class="primary-btn" id="td-calc">计算差值</button>
-          <button type="button" class="ghost-btn" id="td-now-a">A=现在</button>
-          <button type="button" class="ghost-btn" id="td-now-b">B=现在</button>
         </div>
         <div class="result" id="td-result" hidden>
           <span class="result-label">结果</span>
-          <code class="result-value mono" id="td-result-value"></code>
+          <code class="result-value mono" id="td-result-value" style="white-space:pre-wrap"></code>
         </div>
         <p class="error" id="td-error" hidden></p>
       </div>
@@ -651,8 +660,8 @@ hello@world.org</textarea>
   <script src="./vendor/spark-md5.min.js"></script>
   <script src="./vendor/qrcode.min.js"></script>
   <script src="./vendor/jsQR.js"></script>
-  <script src="./lib/pure.js?v=20260729e"></script>
-  <script src="./app.js?v=20260729e"></script>
-  <script src="./extra.js?v=20260729e"></script>
+  <script src="./lib/pure.js?v=20260729f"></script>
+  <script src="./app.js?v=20260729f"></script>
+  <script src="./extra.js?v=20260729f"></script>
 </body>
 </html>

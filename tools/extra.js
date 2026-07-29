@@ -43,13 +43,16 @@
   const tdValue = $("#td-result-value");
   const tdError = $("#td-error");
 
-  function fillNow(input) {
+  function fillNowDate(input) {
     input.value = P.formatDateTime(Date.now());
   }
 
-  $("#td-now-a")?.addEventListener("click", () => fillNow(tdA));
-  $("#td-now-b")?.addEventListener("click", () => fillNow(tdB));
-  $("#td-calc")?.addEventListener("click", () => {
+  function fillNowTs(input, asMs) {
+    const now = Date.now();
+    input.value = String(asMs ? now : Math.floor(now / 1000));
+  }
+
+  function calcTimeDiff() {
     try {
       const r = P.timeDiff(tdA.value, tdB.value);
       tdValue.textContent = r.text;
@@ -59,8 +62,24 @@
       tdResult.hidden = true;
       setError(tdError, err.message || String(err));
     }
+  }
+
+  $("#td-now-a")?.addEventListener("click", () => fillNowDate(tdA));
+  $("#td-now-b")?.addEventListener("click", () => fillNowDate(tdB));
+  $("#td-ts-a")?.addEventListener("click", () => fillNowTs(tdA, false));
+  $("#td-ts-b")?.addEventListener("click", () => fillNowTs(tdB, false));
+  $("#td-ms-a")?.addEventListener("click", () => fillNowTs(tdA, true));
+  $("#td-ms-b")?.addEventListener("click", () => fillNowTs(tdB, true));
+  $("#td-calc")?.addEventListener("click", calcTimeDiff);
+  [tdA, tdB].forEach((el) => {
+    el?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") calcTimeDiff();
+    });
   });
-  fillNow(tdA);
+
+  // 默认演示：秒时间戳 vs 日期时间
+  fillNowTs(tdA, false);
+  fillNowDate(tdB);
   tdB.value = P.formatDateTime(Date.now() + 86400000);
 
   // ---- Color convert ----

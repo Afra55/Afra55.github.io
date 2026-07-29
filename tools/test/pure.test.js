@@ -48,6 +48,13 @@ test("uuid", () => {
 test("time diff", () => {
   const r = P.timeDiff("2024-01-01 00:00:00", "2024-01-02 01:02:03");
   assert.strictEqual(r.ms, ((24 + 1) * 3600 + 2 * 60 + 3) * 1000);
+  const mixed = P.timeDiff("1719792000", "1719878400000");
+  assert.strictEqual(mixed.ms, 86400000);
+  assert.strictEqual(mixed.a.unit, "秒时间戳");
+  assert.strictEqual(mixed.b.unit, "毫秒时间戳");
+  const spaced = P.timeDiff("1_719_792_000", "2024-07-02 08:00:00");
+  assert.ok(spaced.ms >= 0);
+  assert.match(spaced.text, /秒时间戳/);
 });
 
 test("text tools", () => {
