@@ -744,7 +744,7 @@
   });
 
   // ---- Tool order (group default + user drag) ----
-  const ORDER_KEY = "devtools-tool-order-v1";
+  const ORDER_KEY = "devtools-tool-order-v2";
   const DEFAULT_ORDER = [
     "timestamp",
     "timediff",
@@ -758,12 +758,12 @@
     "uuid",
     "json",
     "yaml",
+    "sharecard",
     "query",
     "text",
     "regex",
     "diff",
     "qrcode",
-    "sharecard",
     "units",
   ];
 
