@@ -192,6 +192,37 @@
   const ahexError = $("#ahex-error");
   const ahexChannels = $("#ahex-channels");
 
+  const sliderA = $("#slider-a");
+  const sliderR = $("#slider-r");
+  const sliderG = $("#slider-g");
+  const sliderB = $("#slider-b");
+  const numA = $("#num-a");
+  const numR = $("#num-r");
+  const numG = $("#num-g");
+  const numB = $("#num-b");
+  const numOpacity = $("#num-opacity");
+  const editR = $("#edit-r");
+  const editG = $("#edit-g");
+  const editB = $("#edit-b");
+  const editHex = $("#edit-hex");
+
+  /** @type {{a:number,r:number,g:number,b:number}} */
+  let color = { a: 255, r: 0, g: 0, b: 0 };
+  let syncing = false;
+
+  function clampByte(n) {
+    if (!Number.isFinite(n)) return null;
+    return Math.min(255, Math.max(0, Math.round(n)));
+  }
+
+  function toHex2(n) {
+    return n.toString(16).toUpperCase().padStart(2, "0");
+  }
+
+  function colorToAhex({ a, r, g, b }) {
+    return `#${toHex2(a)}${toHex2(r)}${toHex2(g)}${toHex2(b)}`;
+  }
+
   function parseAhex(value) {
     let v = value.trim().toUpperCase();
     if (v.startsWith("0X")) v = v.slice(2);
@@ -217,18 +248,87 @@
       };
     }
     if (/^[0-9A-F]{4}$/.test(v)) {
-      // ARGB nibble shorthand → expand
       const a = parseInt(v[0] + v[0], 16);
       const r = parseInt(v[1] + v[1], 16);
       const g = parseInt(v[2] + v[2], 16);
       const b = parseInt(v[3] + v[3], 16);
-      const full = [a, r, g, b].map((n) => n.toString(16).padStart(2, "0")).join("").toUpperCase();
-      return { a, r, g, b, normalized: `#${full}` };
+      return { a, r, g, b, normalized: colorToAhex({ a, r, g, b }) };
     }
     return null;
   }
 
-  function renderAhex() {
+  function parseHexRgb(value) {
+    let v = value.trim().toUpperCase();
+    if (v.startsWith("#")) v = v.slice(1);
+    if (/^[0-9A-F]{6}$/.test(v)) {
+      return {
+        r: parseInt(v.slice(0, 2), 16),
+        g: parseInt(v.slice(2, 4), 16),
+        b: parseInt(v.slice(4, 6), 16),
+      };
+    }
+    if (/^[0-9A-F]{3}$/.test(v)) {
+      return {
+        r: parseInt(v[0] + v[0], 16),
+        g: parseInt(v[1] + v[1], 16),
+        b: parseInt(v[2] + v[2], 16),
+      };
+    }
+    return null;
+  }
+
+  function setSliderFill(slider, value) {
+    slider.style.setProperty("--slider-pct", `${(value / 255) * 100}%`);
+  }
+
+  function applyColor(next, { updateAhexInput = true } = {}) {
+    color = {
+      a: clampByte(next.a) ?? color.a,
+      r: clampByte(next.r) ?? color.r,
+      g: clampByte(next.g) ?? color.g,
+      b: clampByte(next.b) ?? color.b,
+    };
+
+    const { a, r, g, b } = color;
+    const alpha = +(a / 255).toFixed(4);
+    const css = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    const ahex = colorToAhex(color);
+
+    syncing = true;
+    try {
+      if (updateAhexInput) ahexInput.value = ahex;
+
+      sliderA.value = String(a);
+      sliderR.value = String(r);
+      sliderG.value = String(g);
+      sliderB.value = String(b);
+      setSliderFill(sliderA, a);
+      setSliderFill(sliderR, r);
+      setSliderFill(sliderG, g);
+      setSliderFill(sliderB, b);
+
+      numA.value = String(a);
+      numR.value = String(r);
+      numG.value = String(g);
+      numB.value = String(b);
+
+      numOpacity.value = String(Math.round((a / 255) * 1000) / 10);
+      editR.value = String(r);
+      editG.value = String(g);
+      editB.value = String(b);
+      editHex.value = `#${toHex2(r)}${toHex2(g)}${toHex2(b)}`;
+
+      ahexSwatch.style.backgroundColor = css;
+      ahexCss.textContent = css;
+      ahexResult.hidden = false;
+      ahexChannels.hidden = false;
+      ahexError.hidden = true;
+    } finally {
+      syncing = false;
+    }
+  }
+
+  function renderFromAhexInput() {
     const parsed = parseAhex(ahexInput.value);
     if (!parsed) {
       ahexResult.hidden = true;
@@ -238,37 +338,67 @@
       ahexSwatch.style.backgroundColor = "transparent";
       return;
     }
-
-    ahexError.hidden = true;
-    const { a, r, g, b } = parsed;
-    const alpha = +(a / 255).toFixed(4);
-    const css = `rgba(${r}, ${g}, ${b}, ${alpha})`;
-
-    ahexSwatch.style.backgroundColor = css;
-    ahexCss.textContent = css;
-    ahexResult.hidden = false;
-    ahexChannels.hidden = false;
-
-    $("#ch-a").textContent = `${a} (0x${a.toString(16).toUpperCase().padStart(2, "0")})`;
-    $("#ch-r").textContent = `${r} (0x${r.toString(16).toUpperCase().padStart(2, "0")})`;
-    $("#ch-g").textContent = `${g} (0x${g.toString(16).toUpperCase().padStart(2, "0")})`;
-    $("#ch-b").textContent = `${b} (0x${b.toString(16).toUpperCase().padStart(2, "0")})`;
-    $("#bar-a").style.width = `${(a / 255) * 100}%`;
-    $("#bar-r").style.width = `${(r / 255) * 100}%`;
-    $("#bar-g").style.width = `${(g / 255) * 100}%`;
-    $("#bar-b").style.width = `${(b / 255) * 100}%`;
-    $("#ch-opacity").textContent = `${Math.round((a / 255) * 1000) / 10}%`;
-    $("#ch-rgb").textContent = `rgb(${r}, ${g}, ${b})`;
-    $("#ch-hex").textContent = `#${[r, g, b]
-      .map((n) => n.toString(16).toUpperCase().padStart(2, "0"))
-      .join("")}`;
+    applyColor(parsed, { updateAhexInput: false });
   }
 
-  ahexInput.addEventListener("input", renderAhex);
+  function updateChannel(key, raw) {
+    const value = clampByte(Number(raw));
+    if (value === null) return;
+    applyColor({ ...color, [key]: value });
+  }
+
+  ahexInput.addEventListener("input", () => {
+    if (syncing) return;
+    renderFromAhexInput();
+  });
+
+  [
+    [sliderA, numA, "a"],
+    [sliderR, numR, "r"],
+    [sliderG, numG, "g"],
+    [sliderB, numB, "b"],
+  ].forEach(([slider, num, key]) => {
+    slider.addEventListener("input", () => {
+      if (syncing) return;
+      updateChannel(key, slider.value);
+    });
+    num.addEventListener("input", () => {
+      if (syncing) return;
+      updateChannel(key, num.value);
+    });
+  });
+
+  numOpacity.addEventListener("input", () => {
+    if (syncing) return;
+    const pct = Number(numOpacity.value);
+    if (!Number.isFinite(pct)) return;
+    const a = clampByte((Math.min(100, Math.max(0, pct)) / 100) * 255);
+    if (a === null) return;
+    applyColor({ ...color, a });
+  });
+
+  [
+    [editR, "r"],
+    [editG, "g"],
+    [editB, "b"],
+  ].forEach(([el, key]) => {
+    el.addEventListener("input", () => {
+      if (syncing) return;
+      updateChannel(key, el.value);
+    });
+  });
+
+  editHex.addEventListener("input", () => {
+    if (syncing) return;
+    const parsed = parseHexRgb(editHex.value);
+    if (!parsed) return;
+    applyColor({ ...color, ...parsed });
+  });
+
   $$(".preset").forEach((btn) => {
     btn.addEventListener("click", () => {
       ahexInput.value = btn.dataset.ahex;
-      renderAhex();
+      renderFromAhexInput();
     });
   });
 
@@ -301,6 +431,6 @@
   tsInput.value = String(Math.floor(now / 1000));
   dtInput.value = formatDateTime(now, timezone);
   convertTsToDate();
-  renderAhex();
+  renderFromAhexInput();
   syncNav();
 })();
