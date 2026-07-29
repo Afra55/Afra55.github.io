@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260729c" />
+  <link rel="stylesheet" href="./style.css?v=20260729d" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -526,17 +526,45 @@ features:
 
     <section id="qrcode" class="panel" data-reveal>
       <div class="panel-head">
-        <h1>二维码生成</h1>
-        <p>把文本或链接生成二维码（本地绘制）。</p>
+        <h1>二维码</h1>
+        <p>本地生成二维码，也可从图片或摄像头识别内容。</p>
       </div>
       <div class="panel-body">
-        <label for="qr-text">内容</label>
-        <textarea id="qr-text" class="mono area" rows="4" placeholder="https://afra55.github.io/tools/" spellcheck="false">https://afra55.github.io/tools/</textarea>
-        <div class="btn-row tool-actions">
-          <button type="button" class="primary-btn" id="qr-gen">生成</button>
+        <div class="convert-grid">
+          <div class="field-block">
+            <h2 class="subhead">生成</h2>
+            <label for="qr-text">内容</label>
+            <textarea id="qr-text" class="mono area" rows="4" placeholder="https://afra55.github.io/tools/" spellcheck="false">https://afra55.github.io/tools/</textarea>
+            <div class="btn-row tool-actions">
+              <button type="button" class="primary-btn" id="qr-gen">生成</button>
+            </div>
+            <div id="qr-box" class="qr-box" aria-live="polite"></div>
+            <p class="error" id="qr-error" hidden></p>
+          </div>
+
+          <div class="field-block">
+            <h2 class="subhead">识别</h2>
+            <div class="btn-row tool-actions">
+              <label class="file-btn" for="qr-file">选择图片识别</label>
+              <input id="qr-file" type="file" accept="image/*" hidden />
+              <button type="button" class="secondary-btn" id="qr-cam-start">打开摄像头</button>
+              <button type="button" class="ghost-btn" id="qr-cam-stop" hidden>关闭摄像头</button>
+            </div>
+            <p class="hint">支持上传二维码截图；摄像头需浏览器授权（HTTPS / 本地预览可用）。</p>
+            <div class="qr-scan-wrap">
+              <video id="qr-video" class="qr-video" playsinline muted hidden></video>
+              <canvas id="qr-scan-canvas" hidden></canvas>
+              <img id="qr-scan-preview" class="img-preview" alt="待识别图片预览" hidden />
+            </div>
+            <div class="label-row" style="margin-top:0.8rem">
+              <label for="qr-decoded">识别结果</label>
+              <button type="button" class="copy-btn" data-copy-value="qr-decoded">复制</button>
+            </div>
+            <textarea id="qr-decoded" class="mono area" rows="4" readonly placeholder="识别结果会显示在这里" spellcheck="false"></textarea>
+            <p class="hint" id="qr-decode-meta"></p>
+            <p class="error" id="qr-decode-error" hidden></p>
+          </div>
         </div>
-        <div id="qr-box" class="qr-box" aria-live="polite"></div>
-        <p class="error" id="qr-error" hidden></p>
       </div>
     </section>
 
@@ -619,8 +647,9 @@ features:
   <script src="./vendor/js-yaml.min.js"></script>
   <script src="./vendor/spark-md5.min.js"></script>
   <script src="./vendor/qrcode.min.js"></script>
-  <script src="./lib/pure.js?v=20260729c"></script>
-  <script src="./app.js?v=20260729c"></script>
-  <script src="./extra.js?v=20260729c"></script>
+  <script src="./vendor/jsQR.js"></script>
+  <script src="./lib/pure.js?v=20260729d"></script>
+  <script src="./app.js?v=20260729d"></script>
+  <script src="./extra.js?v=20260729d"></script>
 </body>
 </html>

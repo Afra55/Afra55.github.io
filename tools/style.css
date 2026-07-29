@@ -1011,3 +1011,21 @@ input[type="text"]:focus {
 .input-with-action .select-input {
   min-width: 4.8rem;
 }
+
+.qr-scan-wrap {
+  margin-top: 0.55rem;
+}
+
+.qr-video {
+  display: block;
+  width: 100%;
+  max-height: 280px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: #000;
+  object-fit: cover;
+}
+
+.subhead {
+  margin: 0 0 0.7rem;
+}
