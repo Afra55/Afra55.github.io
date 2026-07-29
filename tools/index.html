@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="实用小工具：时间戳与日期互转、AHEX 颜色预览" />
+  <title>DevTools · 实用小工具</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="bg" aria-hidden="true">
+    <div class="bg-grid"></div>
+    <div class="bg-glow bg-glow-a"></div>
+    <div class="bg-glow bg-glow-b"></div>
+  </div>
+
+  <header class="site-header">
+    <a class="brand" href="./">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span class="brand-name">DevTools</span>
+    </a>
+    <p class="tagline">时间 · 颜色 · 更多工具陆续加入</p>
+  </header>
+
+  <main class="shell">
+    <nav class="tool-nav" aria-label="工具导航">
+      <a class="tool-nav-link is-active" href="#timestamp">时间戳</a>
+      <a class="tool-nav-link" href="#ahex">AHEX 颜色</a>
+      <a class="tool-nav-link is-soon" href="#coming">更多 · 预留</a>
+    </nav>
+
+    <section id="timestamp" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>时间戳转换</h1>
+        <p>秒 / 毫秒时间戳与年月日时分秒互转，支持本地时区与 UTC。</p>
+      </div>
+
+      <div class="panel-body">
+        <div class="field-row">
+          <label for="tz">时区</label>
+          <div class="seg" role="group" aria-label="时区选择">
+            <button type="button" class="seg-btn is-active" data-tz="local">本地</button>
+            <button type="button" class="seg-btn" data-tz="utc">UTC</button>
+          </div>
+        </div>
+
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="ts-input">时间戳</label>
+            <div class="input-with-action">
+              <input id="ts-input" class="mono" type="text" inputmode="numeric" placeholder="例如 1719792000 或 1719792000000" autocomplete="off" />
+              <button type="button" class="ghost-btn" id="ts-now" title="填入当前时间戳">现在</button>
+            </div>
+            <p class="hint" id="ts-hint">自动识别秒 / 毫秒</p>
+            <button type="button" class="primary-btn" id="ts-to-date">转为日期时间</button>
+            <div class="result" id="ts-result" hidden>
+              <span class="result-label">结果</span>
+              <code class="result-value mono" id="ts-result-value"></code>
+              <button type="button" class="copy-btn" data-copy="ts-result-value">复制</button>
+            </div>
+          </div>
+
+          <div class="field-block">
+            <label for="dt-input">年月日时分秒</label>
+            <input id="dt-input" class="mono" type="text" placeholder="YYYY-MM-DD HH:mm:ss" autocomplete="off" />
+            <p class="hint">也支持 <span class="mono">YYYY/MM/DD HH:mm:ss</span> 或 HTML datetime-local</p>
+            <div class="btn-row">
+              <button type="button" class="primary-btn" id="date-to-ts-s">转为秒时间戳</button>
+              <button type="button" class="secondary-btn" id="date-to-ts-ms">转为毫秒</button>
+            </div>
+            <div class="result" id="dt-result" hidden>
+              <span class="result-label">结果</span>
+              <code class="result-value mono" id="dt-result-value"></code>
+              <button type="button" class="copy-btn" data-copy="dt-result-value">复制</button>
+            </div>
+          </div>
+        </div>
+
+        <p class="error" id="ts-error" hidden></p>
+      </div>
+    </section>
+
+    <section id="ahex" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>AHEX 颜色</h1>
+        <p>输入 <span class="mono">#AARRGGBB</span>（如 Android 的 <span class="mono">#FF000000</span>），预览颜色与通道拆解。</p>
+      </div>
+
+      <div class="panel-body">
+        <div class="color-layout">
+          <div class="field-block">
+            <label for="ahex-input">AHEX</label>
+            <input id="ahex-input" class="mono" type="text" value="#FF000000" maxlength="9" spellcheck="false" autocomplete="off" />
+            <p class="hint">格式：<span class="mono">#AARRGGBB</span>，也可省略 <span class="mono">#</span></p>
+
+            <div class="swatch-stack" aria-hidden="true">
+              <div class="swatch-checker"></div>
+              <div class="swatch" id="ahex-swatch"></div>
+            </div>
+
+            <div class="result" id="ahex-result" hidden>
+              <span class="result-label">CSS</span>
+              <code class="result-value mono" id="ahex-css"></code>
+              <button type="button" class="copy-btn" data-copy="ahex-css">复制</button>
+            </div>
+            <p class="error" id="ahex-error" hidden></p>
+          </div>
+
+          <div class="channel-grid" id="ahex-channels" hidden>
+            <div class="channel">
+              <span class="channel-name">Alpha</span>
+              <span class="channel-value mono" id="ch-a">—</span>
+              <div class="channel-bar"><i id="bar-a"></i></div>
+            </div>
+            <div class="channel">
+              <span class="channel-name">Red</span>
+              <span class="channel-value mono" id="ch-r">—</span>
+              <div class="channel-bar bar-r"><i id="bar-r"></i></div>
+            </div>
+            <div class="channel">
+              <span class="channel-name">Green</span>
+              <span class="channel-value mono" id="ch-g">—</span>
+              <div class="channel-bar bar-g"><i id="bar-g"></i></div>
+            </div>
+            <div class="channel">
+              <span class="channel-name">Blue</span>
+              <span class="channel-value mono" id="ch-b">—</span>
+              <div class="channel-bar bar-b"><i id="bar-b"></i></div>
+            </div>
+            <div class="channel-meta">
+              <div><span>不透明度</span><strong class="mono" id="ch-opacity">—</strong></div>
+              <div><span>RGB</span><strong class="mono" id="ch-rgb">—</strong></div>
+              <div><span>HEX RGB</span><strong class="mono" id="ch-hex">—</strong></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="preset-row" aria-label="常用示例">
+          <button type="button" class="preset" data-ahex="#FF000000">黑 #FF000000</button>
+          <button type="button" class="preset" data-ahex="#FFFFFFFF">白 #FFFFFFFF</button>
+          <button type="button" class="preset" data-ahex="#FFFF0000">红 #FFFF0000</button>
+          <button type="button" class="preset" data-ahex="#FF00FF00">绿 #FF00FF00</button>
+          <button type="button" class="preset" data-ahex="#FF0000FF">蓝 #FF0000FF</button>
+          <button type="button" class="preset" data-ahex="#80FF5722">半透明橙 #80FF5722</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="coming" class="panel panel-soon" data-reveal>
+      <div class="panel-head">
+        <h1>更多功能 · 预留</h1>
+        <p>这里留给后续工具扩展，互不干扰、按需启用。</p>
+      </div>
+      <div class="panel-body">
+        <ul class="roadmap">
+          <li>
+            <span class="roadmap-status">计划中</span>
+            <strong>Base64 编解码</strong>
+            <span>文本 / 文件互转</span>
+          </li>
+          <li>
+            <span class="roadmap-status">计划中</span>
+            <strong>JSON 格式化</strong>
+            <span>压缩、美化、校验</span>
+          </li>
+          <li>
+            <span class="roadmap-status">计划中</span>
+            <strong>正则测试</strong>
+            <span>实时匹配与分组</span>
+          </li>
+          <li>
+            <span class="roadmap-status">占位</span>
+            <strong>你的下一个工具</strong>
+            <span>接口已预留，随时接入</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <a href="/">← 返回主站</a>
+    <span>本地处理，数据不上传</span>
+  </footer>
+
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <script src="./app.js"></script>
+</body>
+</html>
