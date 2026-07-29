@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260729i" />
+  <link rel="stylesheet" href="./style.css?v=20260729j" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -47,6 +47,8 @@
         <a class="tool-nav-link" href="#diff" draggable="true" data-tool="diff">Diff</a>
         <a class="tool-nav-link" href="#qrcode" draggable="true" data-tool="qrcode">二维码</a>
         <a class="tool-nav-link" href="#units" draggable="true" data-tool="units">单位换算</a>
+        <a class="tool-nav-link" href="#numbase" draggable="true" data-tool="numbase">进制转换</a>
+        <a class="tool-nav-link" href="#markdown" draggable="true" data-tool="markdown">Markdown</a>
       </nav>
       <button type="button" class="nav-reset" id="nav-reset" title="恢复默认分组排序">恢复默认排序</button>
     </div>
@@ -466,7 +468,19 @@ fun Greeting(name: String) {
                 <option value="kotlin">Kotlin / Compose</option>
                 <option value="java">Java</option>
                 <option value="javascript">JavaScript</option>
+                <option value="typescript">TypeScript</option>
                 <option value="python">Python</option>
+                <option value="go">Go</option>
+                <option value="rust">Rust</option>
+                <option value="swift">Swift</option>
+                <option value="dart">Dart / Flutter</option>
+                <option value="c">C</option>
+                <option value="cpp">C++</option>
+                <option value="ruby">Ruby</option>
+                <option value="php">PHP</option>
+                <option value="sql">SQL</option>
+                <option value="shell">Shell / Bash</option>
+                <option value="css">CSS</option>
                 <option value="xml">XML / HTML</option>
                 <option value="text">纯文本</option>
               </select>
@@ -705,6 +719,69 @@ hello@world.org</textarea>
       </div>
     </section>
 
+
+<section id="numbase" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>进制转换</h1>
+        <p>二 / 八 / 十 / 十六进制互转。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="nb-input">输入数值</label>
+            <input id="nb-input" class="mono" type="text" value="255" autocomplete="off" />
+            <label for="nb-from">输入进制</label>
+            <select id="nb-from" class="mono select-input">
+              <option value="10" selected>十进制</option>
+              <option value="2">二进制</option>
+              <option value="8">八进制</option>
+              <option value="16">十六进制</option>
+            </select>
+          </div>
+          <div class="field-block">
+            <div class="channel-meta" style="border:0;padding-top:0">
+              <div class="meta-row"><span>二进制</span><strong class="mono" id="nb-bin">—</strong></div>
+              <div class="meta-row"><span>八进制</span><strong class="mono" id="nb-oct">—</strong></div>
+              <div class="meta-row"><span>十进制</span><strong class="mono" id="nb-dec">—</strong></div>
+              <div class="meta-row"><span>十六进制</span><strong class="mono" id="nb-hex">—</strong></div>
+            </div>
+          </div>
+        </div>
+        <p class="error" id="nb-error" hidden></p>
+      </div>
+    </section>
+
+
+<section id="markdown" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>Markdown 预览</h1>
+        <p>本地渲染 Markdown（标题、列表、粗体、链接、代码）。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="md-input">Markdown</label>
+            <textarea id="md-input" class="mono area" rows="12" spellcheck="false"># Hello
+
+**粗体** _斜体_ `代码`
+
+- 列表 1
+- 列表 2
+
+```json
+{"hello": "world"}
+```
+
+[链接](https://afra55.github.io/tools/)</textarea>
+          </div>
+          <div class="field-block">
+            <label>预览</label>
+            <div class="md-preview" id="md-preview"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
 <section id="coming" class="panel panel-soon" data-reveal>
       <div class="panel-head">
         <h1>更多功能 · 预留</h1>
@@ -734,8 +811,8 @@ hello@world.org</textarea>
   <script src="./vendor/qrcode.min.js"></script>
   <script src="./vendor/jsQR.js"></script>
   <script src="./vendor/html2canvas.min.js"></script>
-  <script src="./lib/pure.js?v=20260729i"></script>
-  <script src="./app.js?v=20260729i"></script>
-  <script src="./extra.js?v=20260729i"></script>
+  <script src="./lib/pure.js?v=20260729j"></script>
+  <script src="./app.js?v=20260729j"></script>
+  <script src="./extra.js?v=20260729j"></script>
 </body>
 </html>

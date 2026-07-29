@@ -464,7 +464,13 @@
       return "java";
     }
     if (/=>|function\b|const\b|let\b|var\b|console\.log\b|import\s+.*\s+from\s+/.test(t)) return "javascript";
+    if (/:\s*(string|number|boolean|any|void)\b|interface\s+\w+\s*\{|<[A-Z]\w*>/.test(t) && /\b(const|let|function|import)\b/.test(t)) return "typescript";
     if (/\bdef\s+\w+\s*\(|\bimport\s+\w+|print\s*\(/.test(t)) return "python";
+    if (/\bfunc\s+\w+\s*\(.*\)\s*(->|\{)|import\s+"/.test(t)) return "go";
+    if (/\bfn\s+\w+|let\s+mut\b|use\s+\w+::|impl\b/.test(t)) return "rust";
+    if (/\bfunc\s+\w+\s*\(|import\s+(UIKit|SwiftUI|Foundation)\b|var\s+\w+\s*:\s*some\b/.test(t)) return "swift";
+    if (/\bWidget\b.*build\b|\bStatelessWidget\b|\bStatefulWidget\b|import\s+'package:/.test(t)) return "dart";
+    if (/SELECT\s+.*\s+FROM\s+/i.test(t)) return "sql";
     if (/<\/?[a-zA-Z][^>]*>/.test(t)) return "xml";
     return "text";
   }
@@ -533,13 +539,37 @@
 
   const LANG_KEYWORDS = {
     javascript:
-      "const let var function return if else for while class new import export from async await try catch throw typeof instanceof of in switch case break continue default",
+      "const let var function return if else for while class new import export from async await try catch throw typeof instanceof of in switch case break continue default yield",
+    typescript:
+      "const let var function return if else for while class new import export from async await try catch throw typeof instanceof of in switch case break continue default yield type interface enum namespace declare abstract implements extends readonly as keyof infer never unknown any void",
     java:
       "abstract assert boolean break byte case catch char class const continue default do double else enum extends final finally float for goto if implements import instanceof int interface long native new package private protected public return short static strictfp super switch synchronized this throw throws transient try void volatile while var record sealed permits yields true false null",
     kotlin:
       "abstract actual annotation as break by catch class companion const constructor continue crossinline data do dynamic else enum expect external final finally for fun get if import infix inline inner interface internal is lateinit noinline null object open operator override package private protected public reified return sealed set super suspend this throw try typealias typeof val var when where while true false",
     python:
       "False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield",
+    go:
+      "break case chan const continue default defer else fallthrough for func go goto if import interface map package range return select struct switch type var true false nil iota",
+    rust:
+      "as async await break const continue crate dyn else enum extern false fn for if impl in let loop match mod move mut pub ref return self Self static struct super trait true type unsafe use where while",
+    swift:
+      "associatedtype class deinit enum extension fileprivate func import init inout internal let open operator private protocol public rethrows return static struct subscript super typealias var break case continue default defer do else fallthrough for guard if in repeat switch where while as Any catch false is nil self Self super throw throws true try",
+    c:
+      "auto break case char const continue default do double else enum extern float for goto if inline int long register restrict return short signed sizeof static struct switch typedef union unsigned void volatile while true false NULL",
+    cpp:
+      "alignas alignof and and_eq asm auto bitand bitor bool break case catch char char8_t char16_t char32_t class compl concept const consteval constexpr constinit const_cast continue co_await co_return co_yield decltype default delete do double dynamic_cast else enum explicit export extern false float for friend goto if inline int long mutable namespace new noexcept not not_eq nullptr operator or or_eq private protected public register reinterpret_cast requires return short signed sizeof static static_assert static_cast struct switch template this thread_local throw true try typedef typeid typename union unsigned using virtual void volatile wchar_t while",
+    dart:
+      "abstract as assert async await break case catch class const continue covariant default deferred do dynamic else enum export extends extension external factory false final finally for Function get hide if implements import in interface is late library mixin new null on operator part required rethrow return sealed set show static super switch sync this throw true try typedef var void while with yield",
+    ruby:
+      "alias and begin break case class def defined? do else elsif end ensure false for if in module next nil not or redo rescue retry return self super then true undef unless until when while yield",
+    php:
+      "abstract and array as break callable case catch class clone const continue declare default die do echo else elseif empty enddeclare endfor endforeach endif endswitch endwhile eval exit extends final finally fn for foreach function global goto if implements include include_once instanceof insteadof interface isset list match namespace new or print private protected public readonly require require_once return static switch throw trait try unset use var while xor yield true false null",
+    sql:
+      "SELECT FROM WHERE AND OR NOT IN IS NULL LIKE BETWEEN JOIN INNER LEFT RIGHT OUTER ON AS INSERT INTO VALUES UPDATE SET DELETE CREATE TABLE ALTER DROP INDEX PRIMARY KEY FOREIGN REFERENCES UNIQUE CHECK DEFAULT CONSTRAINT ORDER BY GROUP HAVING LIMIT OFFSET UNION ALL DISTINCT EXISTS CASE WHEN THEN ELSE END COUNT SUM AVG MIN MAX ASC DESC TRUE FALSE",
+    shell:
+      "if then else elif fi case esac for while until do done in function select time coproc true false",
+    css:
+      "important charset media keyframes font-face import page supports namespace",
   };
 
   function highlightByKeywords(text, lang) {
@@ -549,20 +579,20 @@
       .map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
       .join("|");
     let out = escapeHtml(text);
-    // strings
     out = out.replace(/(&quot;.*?&quot;|'.*?'|`.*?`)/g, '<span class="tok-str">$1</span>');
-    // annotations / attributes
     out = out.replace(/(@[A-Za-z_][\w.]*)/g, '<span class="tok-anno">$1</span>');
-    // numbers
-    out = out.replace(/\b(\d+(?:\.\d+)?[fFlL]?)\b/g, '<span class="tok-num">$1</span>');
+    out = out.replace(/\b(\d+(?:\.\d+)?[fFlLuU]?)\b/g, '<span class="tok-num">$1</span>');
     if (keywords) {
-      out = out.replace(new RegExp(`\\b(${keywords})\\b`, "g"), '<span class="tok-kw">$1</span>');
+      const flags = lang === "sql" ? "gi" : "g";
+      out = out.replace(new RegExp(`\\b(${keywords})\\b`, flags), '<span class="tok-kw">$1</span>');
     }
-    // comments
     out = out.replace(/(\/\/.*?$)/gm, '<span class="tok-comment">$1</span>');
     out = out.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="tok-comment">$1</span>');
-    if (lang === "python") {
+    if (lang === "python" || lang === "ruby" || lang === "shell") {
       out = out.replace(/(#.*?$)/gm, '<span class="tok-comment">$1</span>');
+    }
+    if (lang === "sql") {
+      out = out.replace(/(--.*?$)/gm, '<span class="tok-comment">$1</span>');
     }
     return out;
   }

@@ -765,6 +765,8 @@
     "diff",
     "qrcode",
     "units",
+    "numbase",
+    "markdown",
   ];
 
   const navEl = $("#tool-nav") || $(".tool-nav");
