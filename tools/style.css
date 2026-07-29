@@ -178,6 +178,12 @@ body {
   box-shadow: none;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .nav-bar {
+    transition: none;
+  }
+}
+
 .nav-reset {
   appearance: none;
   border: 1px solid var(--line);
