@@ -520,6 +520,8 @@
   const scWatermark = $("#sc-watermark");
   const scLines = $("#sc-lines");
   const scPretty = $("#sc-pretty");
+  const scDots = $("#sc-dots");
+  const scDotsEl = $("#sc-dots-el");
   const scCard = $("#sc-card");
   const scCode = $("#sc-code");
   const scCardTitle = $("#sc-card-title");
@@ -527,6 +529,16 @@
   const scMeta = $("#sc-meta");
   const scError = $("#sc-error");
   const scCapture = $("#sc-capture");
+
+  const LANG_LABEL = {
+    json: "JSON",
+    kotlin: "Kotlin / Compose",
+    java: "Java",
+    javascript: "JavaScript",
+    python: "Python",
+    xml: "XML / HTML",
+    text: "纯文本",
+  };
 
   function refreshShareCard() {
     if (!scCard || !scCode) return;
@@ -542,7 +554,8 @@
       const mark = scWatermark.value.trim();
       scCardWatermark.textContent = mark;
       scCardWatermark.hidden = !mark;
-      scMeta.textContent = `预览 · ${rendered.lang} · ${rendered.lineCount} 行`;
+      if (scDotsEl) scDotsEl.hidden = !scDots?.checked;
+      scMeta.textContent = `预览 · ${LANG_LABEL[rendered.lang] || rendered.lang} · ${rendered.lineCount} 行`;
       setError(scError, "");
     } catch (err) {
       setError(scError, err.message || String(err));
@@ -557,6 +570,7 @@
     scWatermark,
     scLines,
     scPretty,
+    scDots,
   ].forEach((el) => {
     el?.addEventListener("input", refreshShareCard);
     el?.addEventListener("change", refreshShareCard);

@@ -450,7 +450,22 @@
         return "json";
       } catch (_) {}
     }
-    if (/=>|function\b|const\b|let\b|var\b/.test(t)) return "javascript";
+    if (
+      /@Composable\b|fun\s+\w+\s*\(|val\s+\w+\s*[:=]|var\s+\w+\s*[:=]|suspend\s+fun\b|import\s+androidx\.|package\s+[\w.]+/.test(t) &&
+      !/\bpublic\s+class\b|\bSystem\.out\b/.test(t)
+    ) {
+      return "kotlin";
+    }
+    if (
+      /\b(public|private|protected)\s+(static\s+)?(class|interface|void|int|String)\b|\bSystem\.out\.println\b|@Override\b|import\s+java\./.test(
+        t
+      )
+    ) {
+      return "java";
+    }
+    if (/=>|function\b|const\b|let\b|var\b|console\.log\b|import\s+.*\s+from\s+/.test(t)) return "javascript";
+    if (/\bdef\s+\w+\s*\(|\bimport\s+\w+|print\s*\(/.test(t)) return "python";
+    if (/<\/?[a-zA-Z][^>]*>/.test(t)) return "xml";
     return "text";
   }
 
@@ -467,7 +482,7 @@
     let i = 0;
     while (i < src.length) {
       const ch = src[i];
-      if (ch === '"' ) {
+      if (ch === '"') {
         let j = i + 1;
         let esc = false;
         while (j < src.length) {
@@ -516,13 +531,48 @@
     return out;
   }
 
-  function highlightJavascript(text) {
-    const keywords = /\b(const|let|var|function|return|if|else|for|while|class|new|import|export|from|async|await|try|catch|throw|typeof|instanceof)\b/g;
+  const LANG_KEYWORDS = {
+    javascript:
+      "const let var function return if else for while class new import export from async await try catch throw typeof instanceof of in switch case break continue default",
+    java:
+      "abstract assert boolean break byte case catch char class const continue default do double else enum extends final finally float for goto if implements import instanceof int interface long native new package private protected public return short static strictfp super switch synchronized this throw throws transient try void volatile while var record sealed permits yields true false null",
+    kotlin:
+      "abstract actual annotation as break by catch class companion const constructor continue crossinline data do dynamic else enum expect external final finally for fun get if import infix inline inner interface internal is lateinit noinline null object open operator override package private protected public reified return sealed set super suspend this throw try typealias typeof val var when where while true false",
+    python:
+      "False None True and as assert async await break class continue def del elif else except finally for from global if import in is lambda nonlocal not or pass raise return try while with yield",
+  };
+
+  function highlightByKeywords(text, lang) {
+    const keywords = (LANG_KEYWORDS[lang] || "")
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+      .join("|");
     let out = escapeHtml(text);
+    // strings
     out = out.replace(/(&quot;.*?&quot;|'.*?'|`.*?`)/g, '<span class="tok-str">$1</span>');
-    out = out.replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="tok-num">$1</span>');
-    out = out.replace(keywords, '<span class="tok-kw">$1</span>');
+    // annotations / attributes
+    out = out.replace(/(@[A-Za-z_][\w.]*)/g, '<span class="tok-anno">$1</span>');
+    // numbers
+    out = out.replace(/\b(\d+(?:\.\d+)?[fFlL]?)\b/g, '<span class="tok-num">$1</span>');
+    if (keywords) {
+      out = out.replace(new RegExp(`\\b(${keywords})\\b`, "g"), '<span class="tok-kw">$1</span>');
+    }
+    // comments
     out = out.replace(/(\/\/.*?$)/gm, '<span class="tok-comment">$1</span>');
+    out = out.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="tok-comment">$1</span>');
+    if (lang === "python") {
+      out = out.replace(/(#.*?$)/gm, '<span class="tok-comment">$1</span>');
+    }
+    return out;
+  }
+
+  function highlightXml(text) {
+    let out = escapeHtml(text);
+    out = out.replace(/(&lt;\/?[A-Za-z][\w:.-]*)/g, '<span class="tok-kw">$1</span>');
+    out = out.replace(/\s([A-Za-z_:][\w:.-]*)=/g, ' <span class="tok-key">$1</span>=');
+    out = out.replace(/(&quot;.*?&quot;)/g, '<span class="tok-str">$1</span>');
+    out = out.replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="tok-comment">$1</span>');
     return out;
   }
 
@@ -538,7 +588,8 @@
     }
     let html;
     if (resolved === "json") html = highlightJson(source);
-    else if (resolved === "javascript") html = highlightJavascript(source);
+    else if (resolved === "xml") html = highlightXml(source);
+    else if (LANG_KEYWORDS[resolved]) html = highlightByKeywords(source, resolved);
     else html = escapeHtml(source);
 
     const lines = html.split("\n");

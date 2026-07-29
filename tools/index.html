@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260729h" />
+  <link rel="stylesheet" href="./style.css?v=20260729i" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -448,22 +448,26 @@ features:
 <section id="sharecard" class="panel" data-reveal>
       <div class="panel-head">
         <h1>代码卡片</h1>
-        <p>把代码或 JSON 生成精美分享图，可加水印并导出 PNG。</p>
+        <p>把代码或 JSON 生成精美分享图，可加水印并导出 PNG。左上角彩色圆点是仿 macOS 窗口装饰，可关闭。</p>
       </div>
       <div class="panel-body">
         <div class="convert-grid">
           <div class="field-block">
             <label for="sc-input">代码 / JSON</label>
-            <textarea id="sc-input" class="mono area" rows="12" spellcheck="false">{
-  "name": "DevTools",
-  "features": ["timestamp", "color", "share"]
+            <textarea id="sc-input" class="mono area" rows="12" spellcheck="false" placeholder="粘贴 Java / Kotlin / Compose / JSON / JS 等代码…">@Composable
+fun Greeting(name: String) {
+    Text(text = "Hello, $name!")
 }</textarea>
             <div class="field-row" style="flex-wrap:wrap;margin-top:0.8rem">
               <label for="sc-lang">语言</label>
               <select id="sc-lang" class="mono select-input">
-                <option value="auto">自动</option>
-                <option value="json" selected>JSON</option>
+                <option value="auto" selected>自动</option>
+                <option value="json">JSON</option>
+                <option value="kotlin">Kotlin / Compose</option>
+                <option value="java">Java</option>
                 <option value="javascript">JavaScript</option>
+                <option value="python">Python</option>
+                <option value="xml">XML / HTML</option>
                 <option value="text">纯文本</option>
               </select>
               <label for="sc-theme">主题</label>
@@ -476,7 +480,7 @@ features:
             </div>
             <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
               <label for="sc-title">标题</label>
-              <input id="sc-title" class="mono" type="text" value="snippet.json" spellcheck="false" />
+              <input id="sc-title" class="mono" type="text" value="Greeting.kt" spellcheck="false" />
             </div>
             <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
               <label for="sc-watermark">水印</label>
@@ -485,6 +489,7 @@ features:
             <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
               <label class="flag"><input id="sc-lines" type="checkbox" checked /> 行号</label>
               <label class="flag"><input id="sc-pretty" type="checkbox" checked /> JSON 自动美化</label>
+              <label class="flag"><input id="sc-dots" type="checkbox" checked /> 窗口圆点</label>
             </div>
             <div class="btn-row tool-actions">
               <button type="button" class="primary-btn" id="sc-export">导出 PNG</button>
@@ -498,9 +503,9 @@ features:
             <div class="share-stage" id="sc-stage">
               <div class="share-capture" id="sc-capture">
                 <div class="share-card theme-midnight" id="sc-card">
-                  <div class="share-chrome">
-                    <span class="share-dot"></span><span class="share-dot"></span><span class="share-dot"></span>
-                    <span class="share-title mono" id="sc-card-title">snippet.json</span>
+                  <div class="share-chrome" id="sc-chrome">
+                    <span class="share-dots" id="sc-dots-el" aria-hidden="true" title="macOS 风格窗口装饰"></span>
+                    <span class="share-title mono" id="sc-card-title">Greeting.kt</span>
                   </div>
                   <pre class="share-code mono" id="sc-code"></pre>
                   <div class="share-watermark" id="sc-card-watermark">Afra55 DevTools</div>
@@ -729,8 +734,8 @@ hello@world.org</textarea>
   <script src="./vendor/qrcode.min.js"></script>
   <script src="./vendor/jsQR.js"></script>
   <script src="./vendor/html2canvas.min.js"></script>
-  <script src="./lib/pure.js?v=20260729h"></script>
-  <script src="./app.js?v=20260729h"></script>
-  <script src="./extra.js?v=20260729h"></script>
+  <script src="./lib/pure.js?v=20260729i"></script>
+  <script src="./app.js?v=20260729i"></script>
+  <script src="./extra.js?v=20260729i"></script>
 </body>
 </html>

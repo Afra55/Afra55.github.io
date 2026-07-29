@@ -90,10 +90,15 @@ test("share card render", () => {
   assert.ok(json.html.includes("tok-key"));
   assert.ok(json.html.includes("tok-num"));
   assert.ok(json.lineCount >= 4);
-  const auto = P.detectShareLang('{"ok":true}', "auto");
-  assert.strictEqual(auto, "json");
+  assert.strictEqual(P.detectShareLang('{"ok":true}', "auto"), "json");
+  assert.strictEqual(P.detectShareLang("@Composable\nfun Hi() {}", "auto"), "kotlin");
+  assert.strictEqual(P.detectShareLang("public class Main { public static void main(String[] a) {} }", "auto"), "java");
+  const kt = P.renderShareCode("@Composable\nfun Hi(name: String) { Text(name) }", { lang: "auto" });
+  assert.strictEqual(kt.lang, "kotlin");
+  assert.ok(kt.html.includes("tok-kw"));
+  assert.ok(kt.html.includes("tok-anno"));
   const js = P.renderShareCode("const x = 1; // hi", { lang: "javascript", lineNumbers: false });
-  assert.ok(js.html.includes("tok-kw") || js.html.includes("const"));
+  assert.ok(js.html.includes("tok-kw"));
 });
 
 console.log("\nAll pure tests passed.");
