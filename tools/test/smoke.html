@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /><title>smoke</title></head>
+<body>
+<pre id="out">running...</pre>
+<script src="../vendor/js-yaml.min.js"></script>
+<script src="../vendor/spark-md5.min.js"></script>
+<script src="../vendor/qrcode.min.js"></script>
+<script src="../lib/pure.js"></script>
+<script>
+(async () => {
+  const out = [];
+  const ok = (name, cond, detail="") => out.push((cond ? "OK  " : "FAIL") + " " + name + (detail ? " " + detail : ""));
+  try {
+    const P = DevToolsPure;
+    ok("pure loaded", !!P);
+    ok("md5", P.md5("abc") === "900150983cd24fb0d6963f7d28e17f72");
+    ok("spark", typeof SparkMD5 !== "undefined");
+    ok("jsyaml", typeof jsyaml !== "undefined");
+    ok("qrcode", typeof QRCode !== "undefined");
+    const y = jsyaml.load("a: 1\nb:\n  - x");
+    ok("yaml parse", y.a === 1 && y.b[0] === "x");
+    ok("yaml dump", jsyaml.dump({a:1}).includes("a: 1"));
+    ok("query", P.parseQuery("q=1").q === "1");
+    ok("color", P.colorFrom("hex", "#ffffff").rgb === "rgb(255, 255, 255)");
+    ok("unit", Math.abs(P.convertUnit("temp", 100, "C", "F") - 212) < 1e-9);
+    const box = document.createElement("div");
+    document.body.appendChild(box);
+    new QRCode(box, { text: "hello", width: 80, height: 80 });
+    ok("qr render", box.querySelector("canvas,img") != null);
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode("abc"));
+    const hex = [...new Uint8Array(digest)].map(b => b.toString(16).padStart(2,"0")).join("");
+    ok("sha256", hex === "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+  } catch (e) {
+    out.push("FAIL exception " + e.stack);
+  }
+  document.getElementById("out").textContent = out.join("\n");
+  document.title = out.every(l => l.startsWith("OK")) ? "SMOKE_OK" : "SMOKE_FAIL";
+})();
+</script>
+</body>
+</html>

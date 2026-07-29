@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="实用小工具：时间戳互转、AHEX 颜色、Base64、JSON、正则测试" />
+  <meta name="description" content="实用小工具：时间戳、颜色、Base64、JSON、正则、URL、UUID、Hash、文本、JWT、YAML、二维码等" />
   <title>DevTools · 实用小工具</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260729b" />
+  <link rel="stylesheet" href="./style.css?v=20260729c" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -22,16 +22,29 @@
       <span class="brand-mark" aria-hidden="true"></span>
       <span class="brand-name">DevTools</span>
     </a>
-    <p class="tagline">时间 · 颜色 · Base64 · JSON · 正则</p>
+    <p class="tagline">常用开发小工具合集 · 本地处理不上传</p>
   </header>
 
   <main class="shell">
     <nav class="tool-nav" aria-label="工具导航">
       <a class="tool-nav-link is-active" href="#timestamp">时间戳</a>
-      <a class="tool-nav-link" href="#ahex">AHEX 颜色</a>
+      <a class="tool-nav-link" href="#timediff">时间差</a>
+      <a class="tool-nav-link" href="#ahex">AHEX</a>
+      <a class="tool-nav-link" href="#color">颜色互转</a>
       <a class="tool-nav-link" href="#base64">Base64</a>
+      <a class="tool-nav-link" href="#imgb64">图片 Base64</a>
       <a class="tool-nav-link" href="#json">JSON</a>
+      <a class="tool-nav-link" href="#yaml">YAML</a>
       <a class="tool-nav-link" href="#regex">正则</a>
+      <a class="tool-nav-link" href="#url">URL</a>
+      <a class="tool-nav-link" href="#query">Query / JWT</a>
+      <a class="tool-nav-link" href="#uuid">UUID</a>
+      <a class="tool-nav-link" href="#hash">Hash</a>
+      <a class="tool-nav-link" href="#text">文本</a>
+      <a class="tool-nav-link" href="#diff">Diff</a>
+      <a class="tool-nav-link" href="#qrcode">二维码</a>
+      <a class="tool-nav-link" href="#cron">Cron</a>
+      <a class="tool-nav-link" href="#units">单位换算</a>
     </nav>
 
     <section id="timestamp" class="panel" data-reveal>
@@ -274,6 +287,311 @@ hello@world.org</textarea>
       </div>
     </section>
 
+    <section id="timediff" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>时间差计算</h1>
+        <p>计算两个日期时间或时间戳之间的差值。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="td-a">时间 A</label>
+            <input id="td-a" class="mono" type="text" placeholder="YYYY-MM-DD HH:mm:ss 或时间戳" autocomplete="off" />
+          </div>
+          <div class="field-block">
+            <label for="td-b">时间 B</label>
+            <input id="td-b" class="mono" type="text" placeholder="YYYY-MM-DD HH:mm:ss 或时间戳" autocomplete="off" />
+          </div>
+        </div>
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="td-calc">计算差值</button>
+          <button type="button" class="ghost-btn" id="td-now-a">A=现在</button>
+          <button type="button" class="ghost-btn" id="td-now-b">B=现在</button>
+        </div>
+        <div class="result" id="td-result" hidden>
+          <span class="result-label">结果</span>
+          <code class="result-value mono" id="td-result-value"></code>
+        </div>
+        <p class="error" id="td-error" hidden></p>
+      </div>
+    </section>
+
+    <section id="color" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>颜色互转</h1>
+        <p>HEX / RGB / HSL 互相转换，并实时预览。</p>
+      </div>
+      <div class="panel-body">
+        <div class="color-layout">
+          <div class="field-block">
+            <label for="c-hex">HEX</label>
+            <input id="c-hex" class="mono" type="text" value="#2EC4B6" maxlength="7" spellcheck="false" />
+            <label for="c-rgb">RGB</label>
+            <input id="c-rgb" class="mono" type="text" value="rgb(46, 196, 182)" spellcheck="false" />
+            <label for="c-hsl">HSL</label>
+            <input id="c-hsl" class="mono" type="text" value="hsl(174, 62%, 47%)" spellcheck="false" />
+            <p class="error" id="c-error" hidden></p>
+          </div>
+          <div class="field-block">
+            <div class="swatch-stack"><div class="swatch-checker"></div><div class="swatch" id="c-swatch"></div></div>
+            <div class="channel-meta" style="border:0;padding-top:0.8rem;margin-top:0.8rem">
+              <div class="meta-row"><span>预览</span><strong class="mono" id="c-preview-hex">#2EC4B6</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="url" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>URL 编解码</h1>
+        <p>支持 encodeURIComponent / decodeURIComponent。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="url-raw">原文</label>
+            <textarea id="url-raw" class="mono area" rows="6" placeholder="https://example.com/?q=你好" spellcheck="false"></textarea>
+          </div>
+          <div class="field-block">
+            <label for="url-enc">编码结果</label>
+            <textarea id="url-enc" class="mono area" rows="6" spellcheck="false"></textarea>
+          </div>
+        </div>
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="url-encode">编码 →</button>
+          <button type="button" class="secondary-btn" id="url-decode">← 解码</button>
+          <button type="button" class="secondary-btn" id="url-swap">互换</button>
+        </div>
+        <p class="error" id="url-error" hidden></p>
+      </div>
+    </section>
+
+    <section id="query" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>Query / JWT 解析</h1>
+        <p>解析 URL 查询参数，或拆开 JWT 查看 Header / Payload（不校验签名）。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="q-input">URL 或 Query</label>
+            <textarea id="q-input" class="mono area" rows="5" placeholder="https://a.com/?name=tom&age=18 或 name=tom&age=18" spellcheck="false"></textarea>
+            <button type="button" class="primary-btn" id="q-parse">解析 Query</button>
+            <pre class="mono highlight-box" id="q-out" style="margin-top:0.8rem"></pre>
+          </div>
+          <div class="field-block">
+            <label for="jwt-input">JWT</label>
+            <textarea id="jwt-input" class="mono area" rows="5" placeholder="eyJhbGciOi... .eyJzdWIiOi... .sig" spellcheck="false"></textarea>
+            <button type="button" class="primary-btn" id="jwt-parse">解析 JWT</button>
+            <pre class="mono highlight-box" id="jwt-out" style="margin-top:0.8rem"></pre>
+          </div>
+        </div>
+        <p class="error" id="q-error" hidden></p>
+      </div>
+    </section>
+
+    <section id="uuid" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>UUID 生成</h1>
+        <p>生成 UUID v4，可批量输出。</p>
+      </div>
+      <div class="panel-body">
+        <div class="field-row">
+          <label for="uuid-count">数量</label>
+          <input id="uuid-count" class="mono meta-input" type="number" min="1" max="200" value="5" />
+          <label class="flag"><input id="uuid-upper" type="checkbox" /> 大写</label>
+          <label class="flag"><input id="uuid-nohyphen" type="checkbox" /> 无连字符</label>
+        </div>
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="uuid-gen">生成</button>
+          <button type="button" class="copy-btn" data-copy-value="uuid-out">复制</button>
+        </div>
+        <textarea id="uuid-out" class="mono area" rows="8" readonly spellcheck="false"></textarea>
+      </div>
+    </section>
+
+    <section id="hash" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>Hash</h1>
+        <p>计算文本的 MD5 / SHA-256（本地计算）。</p>
+      </div>
+      <div class="panel-body">
+        <label for="hash-input">文本</label>
+        <textarea id="hash-input" class="mono area" rows="5" placeholder="输入要哈希的文本" spellcheck="false"></textarea>
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="hash-run">计算</button>
+        </div>
+        <div class="channel-meta" style="border-top:1px solid var(--line);padding-top:0.8rem;margin-top:0.4rem">
+          <div class="meta-row"><span>MD5</span><strong class="mono" id="hash-md5">—</strong><button type="button" class="copy-btn" data-copy="hash-md5">复制</button></div>
+          <div class="meta-row"><span>SHA-256</span><strong class="mono" id="hash-sha256">—</strong><button type="button" class="copy-btn" data-copy="hash-sha256">复制</button></div>
+        </div>
+        <p class="error" id="hash-error" hidden></p>
+      </div>
+    </section>
+
+    <section id="text" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>文本处理</h1>
+        <p>大小写、去空行、去首尾空白，以及字数统计。</p>
+      </div>
+      <div class="panel-body">
+        <textarea id="text-input" class="mono area" rows="8" placeholder="在这里粘贴文本…" spellcheck="false"></textarea>
+        <div class="btn-row tool-actions">
+          <button type="button" class="secondary-btn" data-text-action="upper">大写</button>
+          <button type="button" class="secondary-btn" data-text-action="lower">小写</button>
+          <button type="button" class="secondary-btn" data-text-action="trim">去首尾空白</button>
+          <button type="button" class="secondary-btn" data-text-action="dedupe-empty">去空行</button>
+          <button type="button" class="secondary-btn" data-text-action="sort">按行排序</button>
+          <button type="button" class="secondary-btn" data-text-action="reverse">行倒序</button>
+        </div>
+        <p class="hint" id="text-stats"></p>
+      </div>
+    </section>
+
+    <section id="diff" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>文本 Diff</h1>
+        <p>按行对比两段文本，高亮新增与删除。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="diff-a">文本 A</label>
+            <textarea id="diff-a" class="mono area" rows="8" spellcheck="false"></textarea>
+          </div>
+          <div class="field-block">
+            <label for="diff-b">文本 B</label>
+            <textarea id="diff-b" class="mono area" rows="8" spellcheck="false"></textarea>
+          </div>
+        </div>
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="diff-run">对比</button>
+        </div>
+        <pre class="mono highlight-box diff-box" id="diff-out"></pre>
+      </div>
+    </section>
+
+    <section id="yaml" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>YAML ⇄ JSON</h1>
+        <p>本地互转与格式化。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="yaml-in">YAML</label>
+            <textarea id="yaml-in" class="mono area" rows="10" spellcheck="false">name: DevTools
+features:
+  - timestamp
+  - color</textarea>
+          </div>
+          <div class="field-block">
+            <label for="json-from-yaml">JSON</label>
+            <textarea id="json-from-yaml" class="mono area" rows="10" spellcheck="false"></textarea>
+          </div>
+        </div>
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="yaml-to-json">YAML → JSON</button>
+          <button type="button" class="secondary-btn" id="json-to-yaml">JSON → YAML</button>
+        </div>
+        <p class="error" id="yaml-error" hidden></p>
+      </div>
+    </section>
+
+    <section id="imgb64" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>图片转 Base64</h1>
+        <p>选择图片后生成 Data URL，并预览。</p>
+      </div>
+      <div class="panel-body">
+        <label class="file-btn" for="img-file">选择图片</label>
+        <input id="img-file" type="file" accept="image/*" hidden />
+        <div class="convert-grid" style="margin-top:1rem">
+          <div class="field-block">
+            <img id="img-preview" class="img-preview" alt="预览将显示在这里" />
+            <p class="hint" id="img-meta"></p>
+          </div>
+          <div class="field-block">
+            <div class="label-row">
+              <label for="img-b64">Data URL / Base64</label>
+              <button type="button" class="copy-btn" data-copy-value="img-b64">复制</button>
+            </div>
+            <textarea id="img-b64" class="mono area" rows="10" readonly spellcheck="false"></textarea>
+          </div>
+        </div>
+        <p class="error" id="img-error" hidden></p>
+      </div>
+    </section>
+
+    <section id="qrcode" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>二维码生成</h1>
+        <p>把文本或链接生成二维码（本地绘制）。</p>
+      </div>
+      <div class="panel-body">
+        <label for="qr-text">内容</label>
+        <textarea id="qr-text" class="mono area" rows="4" placeholder="https://afra55.github.io/tools/" spellcheck="false">https://afra55.github.io/tools/</textarea>
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="qr-gen">生成</button>
+        </div>
+        <div id="qr-box" class="qr-box" aria-live="polite"></div>
+        <p class="error" id="qr-error" hidden></p>
+      </div>
+    </section>
+
+    <section id="cron" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>Cron 表达式</h1>
+        <p>解析标准 5 段 cron，并估算接下来几次触发时间。</p>
+      </div>
+      <div class="panel-body">
+        <label for="cron-input">Cron</label>
+        <input id="cron-input" class="mono" type="text" value="*/5 * * * *" spellcheck="false" autocomplete="off" />
+        <p class="hint">格式：分 时 日 月 周（例 <span class="mono">0 9 * * 1-5</span>）</p>
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="cron-run">解析</button>
+        </div>
+        <p class="hint" id="cron-desc"></p>
+        <pre class="mono highlight-box" id="cron-next"></pre>
+        <p class="error" id="cron-error" hidden></p>
+      </div>
+    </section>
+
+    <section id="units" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>单位换算</h1>
+        <p>长度、重量、温度常用单位互转。</p>
+      </div>
+      <div class="panel-body">
+        <div class="field-row" style="flex-wrap:wrap">
+          <label for="unit-cat">类别</label>
+          <select id="unit-cat" class="mono select-input">
+            <option value="length">长度</option>
+            <option value="weight">重量</option>
+            <option value="temp">温度</option>
+          </select>
+        </div>
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="unit-from-val">从</label>
+            <div class="input-with-action">
+              <input id="unit-from-val" class="mono" type="number" value="1" step="any" />
+              <select id="unit-from" class="mono select-input"></select>
+            </div>
+          </div>
+          <div class="field-block">
+            <label for="unit-to-val">到</label>
+            <div class="input-with-action">
+              <input id="unit-to-val" class="mono" type="number" readonly step="any" />
+              <select id="unit-to" class="mono select-input"></select>
+            </div>
+          </div>
+        </div>
+        <p class="hint" id="unit-hint"></p>
+      </div>
+    </section>
+
     <section id="coming" class="panel panel-soon" data-reveal>
       <div class="panel-head">
         <h1>更多功能 · 预留</h1>
@@ -296,7 +614,13 @@ hello@world.org</textarea>
     <span>本地处理，数据不上传</span>
   </footer>
 
+
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-  <script src="./app.js?v=20260729b"></script>
+  <script src="./vendor/js-yaml.min.js"></script>
+  <script src="./vendor/spark-md5.min.js"></script>
+  <script src="./vendor/qrcode.min.js"></script>
+  <script src="./lib/pure.js?v=20260729c"></script>
+  <script src="./app.js?v=20260729c"></script>
+  <script src="./extra.js?v=20260729c"></script>
 </body>
 </html>

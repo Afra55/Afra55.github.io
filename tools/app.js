@@ -730,19 +730,26 @@
   }
 
   $$("[data-copy]").forEach((btn) => {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = "1";
     btn.addEventListener("click", () => {
       const target = document.getElementById(btn.dataset.copy);
       if (target?.textContent) copyText(target.textContent);
     });
   });
   $$("[data-copy-value]").forEach((btn) => {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = "1";
     btn.addEventListener("click", () => copyFromValueEl(btn.dataset.copyValue));
   });
 
   const navLinks = $$(".tool-nav-link");
-  const sections = ["timestamp", "ahex", "base64", "json", "regex", "coming"].map((id) =>
-    document.getElementById(id)
-  );
+  const sections = navLinks
+    .map((link) => {
+      const id = (link.getAttribute("href") || "").replace(/^#/, "");
+      return id ? document.getElementById(id) : null;
+    })
+    .filter(Boolean);
 
   function syncNav() {
     const y = window.scrollY + 120;
