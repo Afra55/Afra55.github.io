@@ -695,7 +695,13 @@ input[type="text"]:focus {
 }
 
 .area[readonly] {
-  color: #c9d4e8;
+  color: var(--ink);
+  opacity: 0.95;
+}
+
+.primary-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 
 .tool-actions {

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260729m" />
+  <link rel="stylesheet" href="./style.css?v=20260729n" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -285,7 +285,7 @@
           <label class="file-btn" for="eye-file">上传图片取色</label>
           <input id="eye-file" type="file" accept="image/*" hidden />
         </div>
-        <p class="hint" id="eye-hint">Chrome / Edge 支持屏幕取色；不支持时仍可用图片取色。</p>
+        <p class="hint" id="eye-hint">Chrome / Edge 桌面版支持屏幕取色；Firefox / Safari 请用下方「上传图片取色」，点击图片取样。</p>
         <div class="convert-grid" style="margin-top:1rem">
           <div class="field-block">
             <div class="swatch-stack"><div class="swatch-checker"></div><div class="swatch" id="eye-swatch"></div></div>
@@ -327,8 +327,8 @@
           <button type="button" class="primary-btn" id="pw-generate">生成密码</button>
           <button type="button" class="copy-btn" data-copy-value="pw-output">复制全部</button>
         </div>
-        <textarea id="pw-output" class="mono area" rows="8" readonly spellcheck="false"></textarea>
-        <p class="hint" id="pw-meta"></p>
+        <textarea id="pw-output" class="mono area" rows="8" readonly spellcheck="false" placeholder="点击「生成密码」后显示结果"></textarea>
+        <p class="hint" id="pw-meta">打开页面后会自动生成一组示例密码。</p>
         <p class="error" id="pw-error" hidden></p>
       </div>
     </section>
@@ -870,8 +870,8 @@ hello@world.org</textarea>
   <script src="./vendor/qrcode.min.js"></script>
   <script src="./vendor/jsQR.js"></script>
   <script src="./vendor/html2canvas.min.js"></script>
-  <script src="./lib/pure.js?v=20260729m"></script>
-  <script src="./app.js?v=20260729m"></script>
-  <script src="./extra.js?v=20260729m"></script>
+  <script src="./lib/pure.js?v=20260729n"></script>
+  <script src="./app.js?v=20260729n"></script>
+  <script src="./extra.js?v=20260729n"></script>
 </body>
 </html>
