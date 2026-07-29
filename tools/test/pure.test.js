@@ -93,12 +93,29 @@ test("share card render", () => {
   assert.strictEqual(P.detectShareLang('{"ok":true}', "auto"), "json");
   assert.strictEqual(P.detectShareLang("@Composable\nfun Hi() {}", "auto"), "kotlin");
   assert.strictEqual(P.detectShareLang("public class Main { public static void main(String[] a) {} }", "auto"), "java");
-  const kt = P.renderShareCode("@Composable\nfun Hi(name: String) { Text(name) }", { lang: "auto" });
+  const kt = P.renderShareCode(
+    '@Composable\nfun Greeting(name: String) {\n    Text(text = "Hello, $name!")\n}',
+    { lang: "auto" }
+  );
   assert.strictEqual(kt.lang, "kotlin");
   assert.ok(kt.html.includes("tok-kw"));
   assert.ok(kt.html.includes("tok-anno"));
+  assert.ok(kt.html.includes("tok-str"));
+  assert.ok(!kt.html.includes('<span <span'));
+  assert.ok(!kt.html.includes('class="tok-kw">class</span>="tok-'));
+  assert.ok(kt.html.includes('<span class="tok-anno">@Composable</span>'));
+  assert.ok(kt.html.includes('<span class="tok-kw">fun</span>'));
+  assert.ok(kt.html.includes('<span class="tok-str">&quot;Hello, $name!&quot;</span>'));
+  const java = P.renderShareCode("public class Main {}", { lang: "java", lineNumbers: false });
+  assert.ok(java.html.includes('<span class="tok-kw">class</span>'));
+  assert.ok(!java.html.includes('<span <span'));
   const js = P.renderShareCode("const x = 1; // hi", { lang: "javascript", lineNumbers: false });
   assert.ok(js.html.includes("tok-kw"));
+  assert.ok(js.html.includes("tok-comment"));
+  const xml = P.renderShareCode('<div class="box">hi</div>', { lang: "xml", lineNumbers: false });
+  assert.ok(xml.html.includes("tok-kw"));
+  assert.ok(xml.html.includes("tok-key"));
+  assert.ok(!xml.html.includes('<span <span'));
 });
 
 

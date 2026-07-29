@@ -623,36 +623,176 @@
   };
 
   function highlightByKeywords(text, lang) {
-    const keywords = (LANG_KEYWORDS[lang] || "")
-      .split(/\s+/)
-      .filter(Boolean)
-      .map((k) => k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-      .join("|");
-    let out = escapeHtml(text);
-    out = out.replace(/(&quot;.*?&quot;|'.*?'|`.*?`)/g, '<span class="tok-str">$1</span>');
-    out = out.replace(/(@[A-Za-z_][\w.]*)/g, '<span class="tok-anno">$1</span>');
-    out = out.replace(/\b(\d+(?:\.\d+)?[fFlLuU]?)\b/g, '<span class="tok-num">$1</span>');
-    if (keywords) {
-      const flags = lang === "sql" ? "gi" : "g";
-      out = out.replace(new RegExp(`\\b(${keywords})\\b`, flags), '<span class="tok-kw">$1</span>');
-    }
-    out = out.replace(/(\/\/.*?$)/gm, '<span class="tok-comment">$1</span>');
-    out = out.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="tok-comment">$1</span>');
-    if (lang === "python" || lang === "ruby" || lang === "shell") {
-      out = out.replace(/(#.*?$)/gm, '<span class="tok-comment">$1</span>');
-    }
-    if (lang === "sql") {
-      out = out.replace(/(--.*?$)/gm, '<span class="tok-comment">$1</span>');
+    const keywordSet = new Set(
+      (LANG_KEYWORDS[lang] || "")
+        .split(/\s+/)
+        .filter(Boolean)
+        .map((k) => (lang === "sql" ? k.toUpperCase() : k))
+    );
+    const src = String(text ?? "");
+    let out = "";
+    let i = 0;
+
+    const wrap = (cls, value) => `<span class="tok-${cls}">${escapeHtml(value)}</span>`;
+    const hashComment = lang === "python" || lang === "ruby" || lang === "shell";
+    const dashComment = lang === "sql";
+
+    while (i < src.length) {
+      const ch = src[i];
+      const next = src[i + 1];
+
+      // line comments
+      if (ch === "/" && next === "/") {
+        let j = i + 2;
+        while (j < src.length && src[j] !== "\n") j += 1;
+        out += wrap("comment", src.slice(i, j));
+        i = j;
+        continue;
+      }
+      if (hashComment && ch === "#") {
+        let j = i + 1;
+        while (j < src.length && src[j] !== "\n") j += 1;
+        out += wrap("comment", src.slice(i, j));
+        i = j;
+        continue;
+      }
+      if (dashComment && ch === "-" && next === "-") {
+        let j = i + 2;
+        while (j < src.length && src[j] !== "\n") j += 1;
+        out += wrap("comment", src.slice(i, j));
+        i = j;
+        continue;
+      }
+
+      // block comments
+      if (ch === "/" && next === "*") {
+        let j = i + 2;
+        while (j < src.length - 1 && !(src[j] === "*" && src[j + 1] === "/")) j += 1;
+        j = Math.min(src.length, j + 2);
+        out += wrap("comment", src.slice(i, j));
+        i = j;
+        continue;
+      }
+
+      // strings / chars
+      if (ch === '"' || ch === "'" || ch === "`") {
+        const quote = ch;
+        let j = i + 1;
+        let esc = false;
+        while (j < src.length) {
+          if (esc) {
+            esc = false;
+          } else if (src[j] === "\\") {
+            esc = true;
+          } else if (src[j] === quote) {
+            j += 1;
+            break;
+          } else if (quote !== "`" && src[j] === "\n") {
+            break;
+          }
+          j += 1;
+        }
+        out += wrap("str", src.slice(i, j));
+        i = j;
+        continue;
+      }
+
+      // annotations / decorators / attributes
+      if (ch === "@" && /[A-Za-z_]/.test(next || "")) {
+        let j = i + 1;
+        while (j < src.length && /[A-Za-z0-9_.]/.test(src[j])) j += 1;
+        out += wrap("anno", src.slice(i, j));
+        i = j;
+        continue;
+      }
+
+      // numbers
+      if (/\d/.test(ch) || (ch === "." && /\d/.test(next || ""))) {
+        const m = src.slice(i).match(/^(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?[fFlLuU]?/);
+        if (m) {
+          out += wrap("num", m[0]);
+          i += m[0].length;
+          continue;
+        }
+      }
+
+      // identifiers / keywords
+      if (/[A-Za-z_$]/.test(ch)) {
+        let j = i + 1;
+        while (j < src.length && /[A-Za-z0-9_$]/.test(src[j])) j += 1;
+        const word = src.slice(i, j);
+        const key = lang === "sql" ? word.toUpperCase() : word;
+        out += keywordSet.has(key) ? wrap("kw", word) : escapeHtml(word);
+        i = j;
+        continue;
+      }
+
+      out += escapeHtml(ch);
+      i += 1;
     }
     return out;
   }
 
   function highlightXml(text) {
-    let out = escapeHtml(text);
-    out = out.replace(/(&lt;\/?[A-Za-z][\w:.-]*)/g, '<span class="tok-kw">$1</span>');
-    out = out.replace(/\s([A-Za-z_:][\w:.-]*)=/g, ' <span class="tok-key">$1</span>=');
-    out = out.replace(/(&quot;.*?&quot;)/g, '<span class="tok-str">$1</span>');
-    out = out.replace(/(&lt;!--[\s\S]*?--&gt;)/g, '<span class="tok-comment">$1</span>');
+    const src = String(text ?? "");
+    let out = "";
+    let i = 0;
+    const wrap = (cls, value) => `<span class="tok-${cls}">${escapeHtml(value)}</span>`;
+
+    while (i < src.length) {
+      if (src.startsWith("<!--", i)) {
+        let j = src.indexOf("-->", i + 4);
+        j = j === -1 ? src.length : j + 3;
+        out += wrap("comment", src.slice(i, j));
+        i = j;
+        continue;
+      }
+
+      if (src[i] === "<") {
+        let j = i + 1;
+        const isClose = src[j] === "/";
+        if (isClose) j += 1;
+        const nameStart = j;
+        while (j < src.length && /[A-Za-z0-9:_-]/.test(src[j])) j += 1;
+        if (j > nameStart) {
+          out += wrap("kw", src.slice(i, j));
+          i = j;
+          while (i < src.length && src[i] !== ">") {
+            if (/\s/.test(src[i])) {
+              out += escapeHtml(src[i]);
+              i += 1;
+              continue;
+            }
+            if (/[A-Za-z_:]/.test(src[i])) {
+              let k = i + 1;
+              while (k < src.length && /[A-Za-z0-9:._-]/.test(src[k])) k += 1;
+              out += wrap("key", src.slice(i, k));
+              i = k;
+              continue;
+            }
+            if (src[i] === '"' || src[i] === "'") {
+              const quote = src[i];
+              let k = i + 1;
+              while (k < src.length && src[k] !== quote) k += 1;
+              if (k < src.length) k += 1;
+              out += wrap("str", src.slice(i, k));
+              i = k;
+              continue;
+            }
+            out += escapeHtml(src[i]);
+            i += 1;
+          }
+          if (i < src.length && src[i] === ">") {
+            out += escapeHtml(">");
+            i += 1;
+          }
+          continue;
+        }
+      }
+
+      out += escapeHtml(src[i]);
+      i += 1;
+    }
     return out;
   }
 
