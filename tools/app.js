@@ -402,16 +402,317 @@
     });
   });
 
+  // ---- Base64 ----
+  const b64Text = $("#b64-text");
+  const b64Encoded = $("#b64-encoded");
+  const b64Error = $("#b64-error");
+  const b64Meta = $("#b64-meta");
+
+  function setToolError(el, msg) {
+    if (!msg) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    el.textContent = msg;
+  }
+
+  function bytesToBase64(bytes) {
+    let binary = "";
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+    }
+    return btoa(binary);
+  }
+
+  function base64ToBytes(b64) {
+    const cleaned = b64.replace(/\s+/g, "");
+    const binary = atob(cleaned);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
+  function encodeTextToBase64(text) {
+    return bytesToBase64(new TextEncoder().encode(text));
+  }
+
+  function decodeBase64ToText(b64) {
+    return new TextDecoder().decode(base64ToBytes(b64));
+  }
+
+  function encodeBase64() {
+    try {
+      const encoded = encodeTextToBase64(b64Text.value);
+      b64Encoded.value = encoded;
+      setToolError(b64Error, "");
+      b64Meta.textContent = `已编码 · 文本 ${b64Text.value.length} 字符 → Base64 ${encoded.length} 字符`;
+    } catch (err) {
+      setToolError(b64Error, `编码失败：${err.message || err}`);
+    }
+  }
+
+  function decodeBase64() {
+    try {
+      const decoded = decodeBase64ToText(b64Encoded.value);
+      b64Text.value = decoded;
+      setToolError(b64Error, "");
+      b64Meta.textContent = `已解码 · Base64 ${b64Encoded.value.replace(/\s+/g, "").length} 字符 → 文本 ${decoded.length} 字符`;
+    } catch (err) {
+      setToolError(b64Error, "解码失败：请检查 Base64 是否合法");
+    }
+  }
+
+  $("#b64-encode").addEventListener("click", encodeBase64);
+  $("#b64-decode").addEventListener("click", decodeBase64);
+  $("#b64-swap").addEventListener("click", () => {
+    const t = b64Text.value;
+    b64Text.value = b64Encoded.value;
+    b64Encoded.value = t;
+    b64Meta.textContent = "已互换两侧内容";
+    setToolError(b64Error, "");
+  });
+  $("#b64-clear").addEventListener("click", () => {
+    b64Text.value = "";
+    b64Encoded.value = "";
+    b64Meta.textContent = "";
+    setToolError(b64Error, "");
+  });
+  $("#b64-file").addEventListener("change", async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const buffer = await file.arrayBuffer();
+      const encoded = bytesToBase64(new Uint8Array(buffer));
+      b64Encoded.value = encoded;
+      b64Text.value = "";
+      setToolError(b64Error, "");
+      b64Meta.textContent = `已编码文件「${file.name}」· ${file.size} 字节 → Base64 ${encoded.length} 字符`;
+    } catch (err) {
+      setToolError(b64Error, `文件编码失败：${err.message || err}`);
+    } finally {
+      e.target.value = "";
+    }
+  });
+
+  // ---- JSON ----
+  const jsonInput = $("#json-input");
+  const jsonOutput = $("#json-output");
+  const jsonError = $("#json-error");
+  const jsonMeta = $("#json-meta");
+
+  function parseJsonInput() {
+    const raw = jsonInput.value.trim();
+    if (!raw) throw new Error("请先输入 JSON");
+    return JSON.parse(raw);
+  }
+
+  function runJson(mode) {
+    try {
+      const data = parseJsonInput();
+      setToolError(jsonError, "");
+      if (mode === "validate") {
+        jsonOutput.value = "";
+        jsonMeta.textContent = `校验通过 · 根类型 ${Array.isArray(data) ? "array" : typeof data}`;
+        showToast("JSON 合法");
+        return;
+      }
+      const out = mode === "pretty" ? JSON.stringify(data, null, 2) : JSON.stringify(data);
+      jsonOutput.value = out;
+      jsonMeta.textContent =
+        mode === "pretty"
+          ? `已美化 · ${out.split("\n").length} 行 · ${out.length} 字符`
+          : `已压缩 · ${out.length} 字符`;
+    } catch (err) {
+      jsonOutput.value = "";
+      jsonMeta.textContent = "";
+      setToolError(jsonError, `JSON 无效：${err.message || err}`);
+    }
+  }
+
+  $("#json-pretty").addEventListener("click", () => runJson("pretty"));
+  $("#json-minify").addEventListener("click", () => runJson("minify"));
+  $("#json-validate").addEventListener("click", () => runJson("validate"));
+  $("#json-clear").addEventListener("click", () => {
+    jsonInput.value = "";
+    jsonOutput.value = "";
+    jsonMeta.textContent = "";
+    setToolError(jsonError, "");
+  });
+
+  // ---- Regex ----
+  const rePattern = $("#re-pattern");
+  const reFlags = $("#re-flags");
+  const reText = $("#re-text");
+  const reHighlight = $("#re-highlight");
+  const reMatches = $("#re-matches");
+  const reMeta = $("#re-meta");
+  const reError = $("#re-error");
+  const flagChecks = $$("[data-flag]");
+  let flagsSyncing = false;
+
+  function uniqueFlags(raw) {
+    const allowed = new Set(["g", "i", "m", "s", "u", "y", "d"]);
+    const out = [];
+    for (const ch of String(raw).toLowerCase()) {
+      if (allowed.has(ch) && !out.includes(ch)) out.push(ch);
+    }
+    return out.join("");
+  }
+
+  function syncFlagsFromChecks() {
+    flagsSyncing = true;
+    reFlags.value = flagChecks
+      .filter((el) => el.checked)
+      .map((el) => el.dataset.flag)
+      .join("");
+    flagsSyncing = false;
+  }
+
+  function syncChecksFromFlags() {
+    flagsSyncing = true;
+    const flags = uniqueFlags(reFlags.value);
+    reFlags.value = flags;
+    flagChecks.forEach((el) => {
+      el.checked = flags.includes(el.dataset.flag);
+    });
+    flagsSyncing = false;
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function runRegex() {
+    const pattern = rePattern.value;
+    const text = reText.value;
+    const flags = uniqueFlags(reFlags.value);
+
+    if (!pattern) {
+      reHighlight.textContent = text;
+      reMatches.innerHTML = `<p class="match-empty">输入正则后开始匹配</p>`;
+      reMeta.textContent = "0 处匹配";
+      setToolError(reError, "");
+      return;
+    }
+
+    let regex;
+    try {
+      regex = new RegExp(pattern, flags);
+      setToolError(reError, "");
+    } catch (err) {
+      reHighlight.textContent = text;
+      reMatches.innerHTML = "";
+      reMeta.textContent = "表达式无效";
+      setToolError(reError, `正则无效：${err.message || err}`);
+      return;
+    }
+
+    const matches = [];
+    if (flags.includes("g")) {
+      let m;
+      let guard = 0;
+      while ((m = regex.exec(text)) !== null) {
+        matches.push(m);
+        if (m[0] === "") {
+          regex.lastIndex += 1;
+        }
+        guard += 1;
+        if (guard > 5000) break;
+      }
+    } else {
+      const m = regex.exec(text);
+      if (m) matches.push(m);
+    }
+
+    // highlight
+    if (!matches.length) {
+      reHighlight.innerHTML = escapeHtml(text) || "&nbsp;";
+      reMatches.innerHTML = `<p class="match-empty">无匹配</p>`;
+      reMeta.textContent = "0 处匹配";
+      return;
+    }
+
+    let html = "";
+    let cursor = 0;
+    matches.forEach((m) => {
+      const start = m.index;
+      const end = start + m[0].length;
+      if (start < cursor) return; // overlapping / zero-width skip already advanced
+      html += escapeHtml(text.slice(cursor, start));
+      html += `<mark class="re-mark">${escapeHtml(text.slice(start, end)) || "∅"}</mark>`;
+      cursor = end;
+    });
+    html += escapeHtml(text.slice(cursor));
+    reHighlight.innerHTML = html || "&nbsp;";
+
+    reMeta.textContent = `${matches.length} 处匹配`;
+    reMatches.innerHTML = matches
+      .map((m, i) => {
+        const groups = m.slice(1)
+          .map((g, gi) => `<li>组 ${gi + 1}: <strong class="mono">${escapeHtml(g ?? "undefined")}</strong></li>`)
+          .join("");
+        const named =
+          m.groups && Object.keys(m.groups).length
+            ? Object.entries(m.groups)
+                .map(([k, v]) => `<li>${escapeHtml(k)}: <strong class="mono">${escapeHtml(v ?? "undefined")}</strong></li>`)
+                .join("")
+            : "";
+        return `<article class="match-card">
+          <div class="match-card-head">
+            <span>#${i + 1}</span>
+            <span class="mono">index ${m.index} · len ${m[0].length}</span>
+          </div>
+          <code class="match-text mono">${escapeHtml(m[0]) || "∅"}</code>
+          ${groups || named ? `<ul class="match-groups">${groups}${named}</ul>` : ""}
+        </article>`;
+      })
+      .join("");
+  }
+
+  flagChecks.forEach((el) => {
+    el.addEventListener("change", () => {
+      if (flagsSyncing) return;
+      syncFlagsFromChecks();
+      runRegex();
+    });
+  });
+  reFlags.addEventListener("input", () => {
+    if (flagsSyncing) return;
+    syncChecksFromFlags();
+    runRegex();
+  });
+  rePattern.addEventListener("input", runRegex);
+  reText.addEventListener("input", runRegex);
+
   // ---- Copy / nav ----
+  function copyFromValueEl(id) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const text = "value" in el ? el.value : el.textContent;
+    if (text) copyText(text);
+  }
+
   $$("[data-copy]").forEach((btn) => {
     btn.addEventListener("click", () => {
       const target = document.getElementById(btn.dataset.copy);
       if (target?.textContent) copyText(target.textContent);
     });
   });
+  $$("[data-copy-value]").forEach((btn) => {
+    btn.addEventListener("click", () => copyFromValueEl(btn.dataset.copyValue));
+  });
 
   const navLinks = $$(".tool-nav-link");
-  const sections = ["timestamp", "ahex", "coming"].map((id) => document.getElementById(id));
+  const sections = ["timestamp", "ahex", "base64", "json", "regex", "coming"].map((id) =>
+    document.getElementById(id)
+  );
 
   function syncNav() {
     const y = window.scrollY + 120;
@@ -432,5 +733,7 @@
   dtInput.value = formatDateTime(now, timezone);
   convertTsToDate();
   renderFromAhexInput();
+  syncChecksFromFlags();
+  runRegex();
   syncNav();
 })();

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="实用小工具：时间戳与日期互转、AHEX 颜色预览" />
+  <meta name="description" content="实用小工具：时间戳互转、AHEX 颜色、Base64、JSON、正则测试" />
   <title>DevTools · 实用小工具</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -22,14 +22,16 @@
       <span class="brand-mark" aria-hidden="true"></span>
       <span class="brand-name">DevTools</span>
     </a>
-    <p class="tagline">时间 · 颜色 · 更多工具陆续加入</p>
+    <p class="tagline">时间 · 颜色 · Base64 · JSON · 正则</p>
   </header>
 
   <main class="shell">
     <nav class="tool-nav" aria-label="工具导航">
       <a class="tool-nav-link is-active" href="#timestamp">时间戳</a>
       <a class="tool-nav-link" href="#ahex">AHEX 颜色</a>
-      <a class="tool-nav-link is-soon" href="#coming">更多 · 预留</a>
+      <a class="tool-nav-link" href="#base64">Base64</a>
+      <a class="tool-nav-link" href="#json">JSON</a>
+      <a class="tool-nav-link" href="#regex">正则</a>
     </nav>
 
     <section id="timestamp" class="panel" data-reveal>
@@ -169,28 +171,116 @@
       </div>
     </section>
 
+    <section id="base64" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>Base64 编解码</h1>
+        <p>文本与 Base64 互转，支持 UTF-8；也可选择本地文件编码为 Base64。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="b64-text">文本</label>
+            <textarea id="b64-text" class="mono area" rows="8" placeholder="输入要编码的文本…" spellcheck="false"></textarea>
+          </div>
+          <div class="field-block">
+            <label for="b64-encoded">Base64</label>
+            <textarea id="b64-encoded" class="mono area" rows="8" placeholder="输入要解码的 Base64…" spellcheck="false"></textarea>
+          </div>
+        </div>
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="b64-encode">编码 →</button>
+          <button type="button" class="secondary-btn" id="b64-decode">← 解码</button>
+          <button type="button" class="secondary-btn" id="b64-swap">互换</button>
+          <button type="button" class="ghost-btn" id="b64-clear">清空</button>
+          <label class="file-btn" for="b64-file">选择文件编码</label>
+          <input id="b64-file" type="file" hidden />
+        </div>
+        <p class="hint" id="b64-meta"></p>
+        <p class="error" id="b64-error" hidden></p>
+      </div>
+    </section>
+
+    <section id="json" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>JSON 格式化</h1>
+        <p>校验、美化与压缩，全部在本地完成。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="json-input">输入</label>
+            <textarea id="json-input" class="mono area" rows="10" placeholder='{"hello":"world"}' spellcheck="false"></textarea>
+          </div>
+          <div class="field-block">
+            <div class="label-row">
+              <label for="json-output">输出</label>
+              <button type="button" class="copy-btn" data-copy-value="json-output">复制</button>
+            </div>
+            <textarea id="json-output" class="mono area" rows="10" readonly placeholder="结果会显示在这里" spellcheck="false"></textarea>
+          </div>
+        </div>
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="json-pretty">美化</button>
+          <button type="button" class="secondary-btn" id="json-minify">压缩</button>
+          <button type="button" class="secondary-btn" id="json-validate">仅校验</button>
+          <button type="button" class="ghost-btn" id="json-clear">清空</button>
+        </div>
+        <p class="hint" id="json-meta"></p>
+        <p class="error" id="json-error" hidden></p>
+      </div>
+    </section>
+
+    <section id="regex" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>正则测试</h1>
+        <p>实时匹配、高亮与捕获分组，支持常用 flags。</p>
+      </div>
+      <div class="panel-body">
+        <div class="field-block">
+          <label for="re-pattern">正则表达式</label>
+          <div class="regex-line">
+            <span class="regex-slash mono" aria-hidden="true">/</span>
+            <input id="re-pattern" class="mono" type="text" value="(\w+)@(\w+)\.(\w+)" spellcheck="false" autocomplete="off" />
+            <span class="regex-slash mono" aria-hidden="true">/</span>
+            <input id="re-flags" class="mono flags-input" type="text" value="g" maxlength="8" spellcheck="false" autocomplete="off" aria-label="flags" />
+          </div>
+          <div class="flag-row" role="group" aria-label="正则 flags">
+            <label class="flag"><input type="checkbox" data-flag="g" checked /> g 全局</label>
+            <label class="flag"><input type="checkbox" data-flag="i" /> i 忽略大小写</label>
+            <label class="flag"><input type="checkbox" data-flag="m" /> m 多行</label>
+            <label class="flag"><input type="checkbox" data-flag="s" /> s 点号匹配换行</label>
+            <label class="flag"><input type="checkbox" data-flag="u" /> u Unicode</label>
+          </div>
+        </div>
+
+        <div class="convert-grid regex-grid">
+          <div class="field-block">
+            <label for="re-text">测试文本</label>
+            <textarea id="re-text" class="mono area" rows="8" spellcheck="false">contact@example.com
+hello@world.org</textarea>
+          </div>
+          <div class="field-block">
+            <label>高亮预览</label>
+            <pre class="mono highlight-box" id="re-highlight" aria-live="polite"></pre>
+          </div>
+        </div>
+
+        <div class="label-row">
+          <h2 class="subhead">匹配结果</h2>
+          <span class="hint tight" id="re-meta">0 处匹配</span>
+        </div>
+        <div class="match-list" id="re-matches"></div>
+        <p class="error" id="re-error" hidden></p>
+      </div>
+    </section>
+
     <section id="coming" class="panel panel-soon" data-reveal>
       <div class="panel-head">
         <h1>更多功能 · 预留</h1>
-        <p>这里留给后续工具扩展，互不干扰、按需启用。</p>
+        <p>后续工具仍可按同样方式继续接入。</p>
       </div>
       <div class="panel-body">
         <ul class="roadmap">
-          <li>
-            <span class="roadmap-status">计划中</span>
-            <strong>Base64 编解码</strong>
-            <span>文本 / 文件互转</span>
-          </li>
-          <li>
-            <span class="roadmap-status">计划中</span>
-            <strong>JSON 格式化</strong>
-            <span>压缩、美化、校验</span>
-          </li>
-          <li>
-            <span class="roadmap-status">计划中</span>
-            <strong>正则测试</strong>
-            <span>实时匹配与分组</span>
-          </li>
           <li>
             <span class="roadmap-status">占位</span>
             <strong>你的下一个工具</strong>
