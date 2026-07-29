@@ -707,3 +707,117 @@
   }
   mdInput?.addEventListener("input", refreshMarkdown);
   refreshMarkdown();
+
+  // ---- EyeDropper / image color picker ----
+  const eyePick = $("#eye-pick");
+  const eyeFile = $("#eye-file");
+  const eyeSwatch = $("#eye-swatch");
+  const eyeHex = $("#eye-hex");
+  const eyeRgb = $("#eye-rgb");
+  const eyeAhex = $("#eye-ahex");
+  const eyeImg = $("#eye-img");
+  const eyeMeta = $("#eye-meta");
+  const eyeHint = $("#eye-hint");
+  const eyeError = $("#eye-error");
+
+  function applyPickedColor(hex) {
+    const c = P.colorFrom("hex", hex);
+    eyeSwatch.style.backgroundColor = c.rgb;
+    eyeHex.textContent = c.hex;
+    eyeRgb.textContent = c.rgb;
+    eyeAhex.textContent = P.rgbStringToAhex(c.rgb);
+    setError(eyeError, "");
+  }
+
+  if (!("EyeDropper" in window)) {
+    eyeHint.textContent = "当前浏览器不支持屏幕取色，可改用图片取色。Chrome / Edge 桌面版通常支持。";
+  }
+
+  eyePick?.addEventListener("click", async () => {
+    if (!("EyeDropper" in window)) {
+      setError(eyeError, "当前浏览器不支持屏幕取色");
+      return;
+    }
+    try {
+      const eyeDropper = new window.EyeDropper();
+      const result = await eyeDropper.open();
+      applyPickedColor(result.sRGBHex);
+      eyeMeta.textContent = `屏幕取色：${result.sRGBHex}`;
+    } catch (err) {
+      if (String(err && err.name) === "AbortError") return;
+      setError(eyeError, `取色失败：${err.message || err}`);
+    }
+  });
+
+  eyeFile?.addEventListener("change", (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    eyeImg.hidden = false;
+    eyeImg.src = url;
+    eyeMeta.textContent = `点击图片任意位置取色 · ${file.name}`;
+    setError(eyeError, "");
+    e.target.value = "";
+  });
+
+  eyeImg?.addEventListener("click", (e) => {
+    try {
+      const rect = eyeImg.getBoundingClientRect();
+      const scaleX = eyeImg.naturalWidth / rect.width;
+      const scaleY = eyeImg.naturalHeight / rect.height;
+      const x = Math.max(0, Math.min(eyeImg.naturalWidth - 1, Math.floor((e.clientX - rect.left) * scaleX)));
+      const y = Math.max(0, Math.min(eyeImg.naturalHeight - 1, Math.floor((e.clientY - rect.top) * scaleY)));
+      const canvas = document.createElement("canvas");
+      canvas.width = eyeImg.naturalWidth;
+      canvas.height = eyeImg.naturalHeight;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(eyeImg, 0, 0);
+      const data = ctx.getImageData(x, y, 1, 1).data;
+      const hex = `#${[data[0], data[1], data[2]].map((n) => n.toString(16).toUpperCase().padStart(2, "0")).join("")}`;
+      applyPickedColor(hex);
+      eyeMeta.textContent = `图片取色：(${x}, ${y}) ${hex}`;
+    } catch (err) {
+      setError(eyeError, `图片取色失败：${err.message || err}`);
+    }
+  });
+  applyPickedColor("#2EC4B6");
+
+  // ---- Password generator ----
+  const pwLength = $("#pw-length");
+  const pwCount = $("#pw-count");
+  const pwUpper = $("#pw-upper");
+  const pwLower = $("#pw-lower");
+  const pwNumber = $("#pw-number");
+  const pwSymbol = $("#pw-symbol");
+  const pwNoAmbiguous = $("#pw-no-ambiguous");
+  const pwOutput = $("#pw-output");
+  const pwMeta = $("#pw-meta");
+  const pwError = $("#pw-error");
+
+  function genPasswords() {
+    try {
+      const list = P.generatePasswords({
+        length: Math.min(128, Math.max(4, Number(pwLength.value) || 16)),
+        count: Math.min(20, Math.max(1, Number(pwCount.value) || 1)),
+        upper: !!pwUpper.checked,
+        lower: !!pwLower.checked,
+        number: !!pwNumber.checked,
+        symbol: !!pwSymbol.checked,
+        noAmbiguous: !!pwNoAmbiguous.checked,
+      });
+      pwOutput.value = list.join("\n");
+      pwMeta.textContent = `已生成 ${list.length} 个密码 · 长度 ${list[0]?.length || 0}`;
+      setError(pwError, "");
+    } catch (err) {
+      pwOutput.value = "";
+      pwMeta.textContent = "";
+      setError(pwError, err.message || String(err));
+    }
+  }
+
+  $("#pw-generate")?.addEventListener("click", genPasswords);
+  [pwLength, pwCount, pwUpper, pwLower, pwNumber, pwSymbol, pwNoAmbiguous].forEach((el) => {
+    el?.addEventListener("input", genPasswords);
+    el?.addEventListener("change", genPasswords);
+  });
+  genPasswords();

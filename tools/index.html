@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260729j" />
+  <link rel="stylesheet" href="./style.css?v=20260729k" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -33,10 +33,12 @@
         <a class="tool-nav-link" href="#cron" draggable="true" data-tool="cron">Cron</a>
         <a class="tool-nav-link" href="#ahex" draggable="true" data-tool="ahex">AHEX</a>
         <a class="tool-nav-link" href="#color" draggable="true" data-tool="color">颜色互转</a>
+        <a class="tool-nav-link" href="#eyedropper" draggable="true" data-tool="eyedropper">屏幕取色</a>
         <a class="tool-nav-link" href="#base64" draggable="true" data-tool="base64">Base64</a>
         <a class="tool-nav-link" href="#imgb64" draggable="true" data-tool="imgb64">图片 Base64</a>
         <a class="tool-nav-link" href="#url" draggable="true" data-tool="url">URL</a>
         <a class="tool-nav-link" href="#hash" draggable="true" data-tool="hash">Hash</a>
+        <a class="tool-nav-link" href="#password" draggable="true" data-tool="password">密码生成</a>
         <a class="tool-nav-link" href="#uuid" draggable="true" data-tool="uuid">UUID</a>
         <a class="tool-nav-link" href="#json" draggable="true" data-tool="json">JSON</a>
         <a class="tool-nav-link" href="#yaml" draggable="true" data-tool="yaml">YAML</a>
@@ -269,6 +271,65 @@
             </div>
           </div>
         </div>
+      </div>
+    </section>
+
+<section id="eyedropper" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>屏幕取色</h1>
+        <p>支持浏览器屏幕取色；也可上传图片后在图片上点击取色。</p>
+      </div>
+      <div class="panel-body">
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="eye-pick">屏幕取色</button>
+          <label class="file-btn" for="eye-file">上传图片取色</label>
+          <input id="eye-file" type="file" accept="image/*" hidden />
+        </div>
+        <p class="hint" id="eye-hint">Chrome / Edge 支持屏幕取色；不支持时仍可用图片取色。</p>
+        <div class="convert-grid" style="margin-top:1rem">
+          <div class="field-block">
+            <div class="swatch-stack"><div class="swatch-checker"></div><div class="swatch" id="eye-swatch"></div></div>
+            <div class="channel-meta" style="border-top:1px solid var(--line);padding-top:0.8rem;margin-top:0.8rem">
+              <div class="meta-row"><span>HEX</span><strong class="mono" id="eye-hex">#000000</strong><button type="button" class="copy-btn" data-copy="eye-hex">复制</button></div>
+              <div class="meta-row"><span>RGB</span><strong class="mono" id="eye-rgb">rgb(0, 0, 0)</strong><button type="button" class="copy-btn" data-copy="eye-rgb">复制</button></div>
+              <div class="meta-row"><span>AHEX</span><strong class="mono" id="eye-ahex">#FF000000</strong><button type="button" class="copy-btn" data-copy="eye-ahex">复制</button></div>
+            </div>
+          </div>
+          <div class="field-block">
+            <img id="eye-img" class="img-preview eye-img" alt="上传图片后可点击取色" hidden />
+            <p class="hint" id="eye-meta"></p>
+          </div>
+        </div>
+        <p class="error" id="eye-error" hidden></p>
+      </div>
+    </section>
+
+<section id="password" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>密码生成器</h1>
+        <p>可配置长度、字符类型，生成多个随机密码。</p>
+      </div>
+      <div class="panel-body">
+        <div class="field-row" style="flex-wrap:wrap">
+          <label for="pw-length">长度</label>
+          <input id="pw-length" class="mono meta-input" type="number" min="4" max="128" value="16" />
+          <label for="pw-count">数量</label>
+          <input id="pw-count" class="mono meta-input" type="number" min="1" max="20" value="5" />
+        </div>
+        <div class="field-row" style="flex-wrap:wrap">
+          <label class="flag"><input id="pw-upper" type="checkbox" checked /> 大写</label>
+          <label class="flag"><input id="pw-lower" type="checkbox" checked /> 小写</label>
+          <label class="flag"><input id="pw-number" type="checkbox" checked /> 数字</label>
+          <label class="flag"><input id="pw-symbol" type="checkbox" checked /> 符号</label>
+          <label class="flag"><input id="pw-no-ambiguous" type="checkbox" /> 排除易混淆字符</label>
+        </div>
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="pw-generate">生成密码</button>
+          <button type="button" class="copy-btn" data-copy-value="pw-output">复制全部</button>
+        </div>
+        <textarea id="pw-output" class="mono area" rows="8" readonly spellcheck="false"></textarea>
+        <p class="hint" id="pw-meta"></p>
+        <p class="error" id="pw-error" hidden></p>
       </div>
     </section>
 
@@ -719,7 +780,6 @@ hello@world.org</textarea>
       </div>
     </section>
 
-
 <section id="numbase" class="panel" data-reveal>
       <div class="panel-head">
         <h1>进制转换</h1>
@@ -750,7 +810,6 @@ hello@world.org</textarea>
         <p class="error" id="nb-error" hidden></p>
       </div>
     </section>
-
 
 <section id="markdown" class="panel" data-reveal>
       <div class="panel-head">
@@ -811,8 +870,8 @@ hello@world.org</textarea>
   <script src="./vendor/qrcode.min.js"></script>
   <script src="./vendor/jsQR.js"></script>
   <script src="./vendor/html2canvas.min.js"></script>
-  <script src="./lib/pure.js?v=20260729j"></script>
-  <script src="./app.js?v=20260729j"></script>
-  <script src="./extra.js?v=20260729j"></script>
+  <script src="./lib/pure.js?v=20260729k"></script>
+  <script src="./app.js?v=20260729k"></script>
+  <script src="./extra.js?v=20260729k"></script>
 </body>
 </html>

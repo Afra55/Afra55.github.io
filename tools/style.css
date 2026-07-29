@@ -1302,3 +1302,7 @@ input[type="text"]:focus {
 .md-preview strong {
   font-weight: 650;
 }
+
+.eye-img {
+  cursor: crosshair;
+}

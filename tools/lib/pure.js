@@ -422,6 +422,56 @@
     throw new Error("未知温度单位");
   }
 
+
+  function rgbStringToAhex(rgbText) {
+    const m = String(rgbText || "").match(/^rgb\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\)$/i);
+    if (!m) throw new Error("RGB 格式无效");
+    const vals = [Number(m[1]), Number(m[2]), Number(m[3])].map((n) => clamp(n, 0, 255));
+    return `#FF${vals.map((n) => Math.round(n).toString(16).toUpperCase().padStart(2, "0")).join("")}`;
+  }
+
+  function generatePasswords({ length = 16, count = 1, upper = true, lower = true, number = true, symbol = true, noAmbiguous = false } = {}) {
+    const sets = [];
+    if (upper) sets.push("ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    if (lower) sets.push("abcdefghijklmnopqrstuvwxyz");
+    if (number) sets.push("0123456789");
+    if (symbol) sets.push("!@#$%^&*()-_=+[]{};:,.?/\|");
+    if (!sets.length) throw new Error("至少选择一种字符类型");
+
+    const ambiguous = new Set(["0", "O", "o", "1", "l", "I"]);
+    const normalize = (s) => (noAmbiguous ? [...s].filter((ch) => !ambiguous.has(ch)).join("") : s);
+    const normalizedSets = sets.map(normalize).filter(Boolean);
+    if (!normalizedSets.length) throw new Error("可用字符为空");
+    const pool = normalizedSets.join("");
+    const rnd = (max) => {
+      if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+        const arr = new Uint32Array(1);
+        crypto.getRandomValues(arr);
+        return arr[0] % max;
+      }
+      if (typeof require === "function") {
+        try {
+          const buf = require("crypto").randomBytes(4);
+          return buf.readUInt32BE(0) % max;
+        } catch (_) {}
+      }
+      return Math.floor(Math.random() * max);
+    };
+    const out = [];
+    for (let i = 0; i < count; i++) {
+      const chars = [];
+      // guarantee one from each selected set
+      normalizedSets.forEach((set) => chars.push(set[rnd(set.length)]));
+      while (chars.length < length) chars.push(pool[rnd(pool.length)]);
+      for (let j = chars.length - 1; j > 0; j--) {
+        const k = rnd(j + 1);
+        [chars[j], chars[k]] = [chars[k], chars[j]];
+      }
+      out.push(chars.slice(0, length).join(""));
+    }
+    return out;
+  }
+
   function convertUnit(category, value, from, to) {
     const n = Number(value);
     if (!Number.isFinite(n)) throw new Error("数值无效");
@@ -663,6 +713,8 @@
     nextCronTimes,
     UNIT_TABLES,
     convertUnit,
+    rgbStringToAhex,
+    generatePasswords,
     escapeHtml,
     detectShareLang,
     prettyJsonText,

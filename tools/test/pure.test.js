@@ -101,5 +101,16 @@ test("share card render", () => {
   assert.ok(js.html.includes("tok-kw"));
 });
 
+
+test("password generator", () => {
+  const list = P.generatePasswords({ length: 12, count: 3, upper: true, lower: true, number: true, symbol: false, noAmbiguous: true });
+  assert.strictEqual(list.length, 3);
+  assert.ok(list.every((s) => s.length === 12));
+  assert.ok(list.every((s) => !/[0Ool1I]/.test(s)));
+  assert.throws(() => P.generatePasswords({ upper: false, lower: false, number: false, symbol: false }), /至少/);
+  assert.strictEqual(P.rgbStringToAhex('rgb(46, 196, 182)'), '#FF2EC4B6');
+});
+
 console.log("\nAll pure tests passed.");
+
 

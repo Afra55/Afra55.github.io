@@ -751,6 +751,8 @@
     "cron",
     "ahex",
     "color",
+    "eyedropper",
+    "password",
     "base64",
     "imgb64",
     "url",
