@@ -605,38 +605,6 @@
 
   refreshShareCard();
 
-  // Rebind copy buttons added dynamically in HTML for new panels
-  $$("[data-copy]").forEach((btn) => {
-    if (btn.dataset.bound) return;
-    btn.dataset.bound = "1";
-    btn.addEventListener("click", async () => {
-      const target = document.getElementById(btn.dataset.copy);
-      const text = target?.textContent || "";
-      if (!text || text === "—") return;
-      try {
-        await navigator.clipboard.writeText(text);
-        toast("已复制");
-      } catch (_) {
-        toast("复制失败");
-      }
-    });
-  });
-  $$("[data-copy-value]").forEach((btn) => {
-    if (btn.dataset.bound) return;
-    btn.dataset.bound = "1";
-    btn.addEventListener("click", async () => {
-      const target = document.getElementById(btn.dataset.copyValue);
-      const text = target?.value || "";
-      if (!text) return;
-      try {
-        await navigator.clipboard.writeText(text);
-        toast("已复制");
-      } catch (_) {
-        toast("复制失败");
-      }
-    });
-  });
-})();
 
   // ---- Number base ----
   const nbInput = $("#nb-input");
@@ -796,21 +764,22 @@
 
   function genPasswords() {
     try {
+      if (!pwLength || !pwCount || !pwOutput) return;
       const list = P.generatePasswords({
         length: Math.min(128, Math.max(4, Number(pwLength.value) || 16)),
         count: Math.min(20, Math.max(1, Number(pwCount.value) || 1)),
-        upper: !!pwUpper.checked,
-        lower: !!pwLower.checked,
-        number: !!pwNumber.checked,
-        symbol: !!pwSymbol.checked,
-        noAmbiguous: !!pwNoAmbiguous.checked,
+        upper: !!pwUpper?.checked,
+        lower: !!pwLower?.checked,
+        number: !!pwNumber?.checked,
+        symbol: !!pwSymbol?.checked,
+        noAmbiguous: !!pwNoAmbiguous?.checked,
       });
       pwOutput.value = list.join("\n");
       pwMeta.textContent = `已生成 ${list.length} 个密码 · 长度 ${list[0]?.length || 0}`;
       setError(pwError, "");
     } catch (err) {
-      pwOutput.value = "";
-      pwMeta.textContent = "";
+      if (pwOutput) pwOutput.value = "";
+      if (pwMeta) pwMeta.textContent = "";
       setError(pwError, err.message || String(err));
     }
   }
@@ -821,3 +790,36 @@
     el?.addEventListener("change", genPasswords);
   });
   genPasswords();
+
+  // Rebind copy buttons added dynamically in HTML for new panels
+  $$("[data-copy]").forEach((btn) => {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", async () => {
+      const target = document.getElementById(btn.dataset.copy);
+      const text = target?.textContent || "";
+      if (!text || text === "—") return;
+      try {
+        await navigator.clipboard.writeText(text);
+        toast("已复制");
+      } catch (_) {
+        toast("复制失败");
+      }
+    });
+  });
+  $$("[data-copy-value]").forEach((btn) => {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", async () => {
+      const target = document.getElementById(btn.dataset.copyValue);
+      const text = target?.value || "";
+      if (!text) return;
+      try {
+        await navigator.clipboard.writeText(text);
+        toast("已复制");
+      } catch (_) {
+        toast("复制失败");
+      }
+    });
+  });
+})();
