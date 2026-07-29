@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css" />
+  <link rel="stylesheet" href="./style.css?v=20260729b" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -137,7 +137,7 @@
               <div class="meta-row">
                 <label for="num-opacity">不透明度</label>
                 <div class="meta-edit">
-                  <input class="meta-input mono" id="num-opacity" type="number" min="0" max="100" step="1" inputmode="numeric" />
+                  <input class="meta-input mono" id="num-opacity" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" spellcheck="false" />
                   <span class="meta-unit">%</span>
                 </div>
               </div>
@@ -297,6 +297,6 @@ hello@world.org</textarea>
   </footer>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
-  <script src="./app.js"></script>
+  <script src="./app.js?v=20260729b"></script>
 </body>
 </html>

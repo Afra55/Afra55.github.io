@@ -224,6 +224,14 @@
     return clampByte((Math.min(100, Math.max(0, pct)) / 100) * 255);
   }
 
+  function parseOpacityInput(raw) {
+    const digits = String(raw ?? "").replace(/[^\d]/g, "");
+    if (digits === "") return { text: "", pct: null };
+    const pct = Math.min(100, parseInt(digits, 10));
+    if (!Number.isFinite(pct)) return { text: "", pct: null };
+    return { text: String(pct), pct };
+  }
+
   function toHex2(n) {
     return n.toString(16).toUpperCase().padStart(2, "0");
   }
@@ -299,8 +307,8 @@
     };
 
     const { a, r, g, b } = color;
-    const alpha = +(a / 255).toFixed(4);
-    const css = `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    const opacityPct = alphaToOpacityPct(a);
+    const css = `rgba(${r}, ${g}, ${b}, ${opacityPct / 100})`;
     const ahex = colorToAhex(color);
 
     syncing = true;
@@ -316,14 +324,14 @@
       setSliderFill(sliderG, g);
       setSliderFill(sliderB, b);
 
-      numA.value = String(a);
-      numR.value = String(r);
-      numG.value = String(g);
-      numB.value = String(b);
+      if (document.activeElement !== numA) numA.value = String(a);
+      if (document.activeElement !== numR) numR.value = String(r);
+      if (document.activeElement !== numG) numG.value = String(g);
+      if (document.activeElement !== numB) numB.value = String(b);
 
-      // 输入过程中不要回写，避免 8→7.8、1→1.2 这类跳动
+      // 始终以整数百分比显示；输入过程中也不要回写成小数
       if (document.activeElement !== numOpacity) {
-        numOpacity.value = String(alphaToOpacityPct(a));
+        numOpacity.value = String(opacityPct);
       }
       if (document.activeElement !== editR) editR.value = String(r);
       if (document.activeElement !== editG) editG.value = String(g);
@@ -384,9 +392,13 @@
 
   numOpacity.addEventListener("input", () => {
     if (syncing) return;
-    if (numOpacity.value === "") return;
-    const pct = Number(numOpacity.value);
-    const a = opacityPctToAlpha(pct);
+    const parsed = parseOpacityInput(numOpacity.value);
+    // 过滤小数点等非数字，输入框始终保持整数文本
+    if (numOpacity.value !== parsed.text) {
+      numOpacity.value = parsed.text;
+    }
+    if (parsed.pct === null) return;
+    const a = opacityPctToAlpha(parsed.pct);
     if (a === null) return;
     applyColor({ ...color, a });
   });
