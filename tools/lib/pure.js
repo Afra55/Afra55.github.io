@@ -294,6 +294,111 @@
     }
   }
 
+  function splitIdentifierWords(input) {
+    const raw = String(input ?? "").trim();
+    if (!raw) return [];
+    const spaced = raw
+      .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+      .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+      .replace(/[_\-.]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    return spaced
+      .split(" ")
+      .filter(Boolean)
+      .map((w) => w.toLowerCase());
+  }
+
+  function wordsToCamel(words) {
+    return words
+      .map((w, i) => (i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1)))
+      .join("");
+  }
+
+  function wordsToPascal(words) {
+    return words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join("");
+  }
+
+  function wordsToSnake(words) {
+    return words.join("_");
+  }
+
+  function wordsToScreamingSnake(words) {
+    return words.map((w) => w.toUpperCase()).join("_");
+  }
+
+  function wordsToKebab(words) {
+    return words.join("-");
+  }
+
+  function wordsToDot(words) {
+    return words.join(".");
+  }
+
+  function wordsToPath(words) {
+    return words.join("/");
+  }
+
+  function convertIdentifier(input) {
+    const words = splitIdentifierWords(input);
+    if (!words.length) {
+      return {
+        words: [],
+        camel: "",
+        pascal: "",
+        snake: "",
+        screaming: "",
+        kebab: "",
+        dot: "",
+        path: "",
+        title: "",
+      };
+    }
+    return {
+      words,
+      camel: wordsToCamel(words),
+      pascal: wordsToPascal(words),
+      snake: wordsToSnake(words),
+      screaming: wordsToScreamingSnake(words),
+      kebab: wordsToKebab(words),
+      dot: wordsToDot(words),
+      path: wordsToPath(words),
+      title: words.map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" "),
+    };
+  }
+
+  function convertCaseLines(text) {
+    const lines = String(text ?? "").split(/\r\n|\n|\r/);
+    const keys = ["camel", "pascal", "snake", "screaming", "kebab", "dot", "path", "title"];
+    const out = Object.fromEntries(keys.map((k) => [k, []]));
+    let converted = 0;
+    for (const line of lines) {
+      if (!line.trim()) {
+        keys.forEach((k) => out[k].push(""));
+        continue;
+      }
+      const one = convertIdentifier(line);
+      if (!one.words.length) {
+        keys.forEach((k) => out[k].push(""));
+        continue;
+      }
+      converted += 1;
+      keys.forEach((k) => out[k].push(one[k]));
+    }
+    const join = (arr) => arr.join("\n").replace(/\n+$/, "");
+    return {
+      count: converted,
+      camel: join(out.camel),
+      pascal: join(out.pascal),
+      snake: join(out.snake),
+      screaming: join(out.screaming),
+      kebab: join(out.kebab),
+      dot: join(out.dot),
+      path: join(out.path),
+      title: join(out.title),
+    };
+  }
+
   function diffLines(aText, bText) {
     const a = String(aText).split(/\r\n|\n|\r/);
     const b = String(bText).split(/\r\n|\n|\r/);
@@ -848,6 +953,9 @@
     md5,
     textStats,
     transformText,
+    splitIdentifierWords,
+    convertIdentifier,
+    convertCaseLines,
     diffLines,
     describeCron,
     nextCronTimes,

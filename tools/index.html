@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="实用小工具：时间戳、颜色、Base64、JSON、正则、URL、UUID、Hash、文本、JWT、YAML、二维码等" />
+  <meta name="description" content="实用小工具：时间戳、颜色、Base64、JSON、正则、URL、UUID、Hash、文本、命名转换、JWT、YAML、二维码等" />
   <title>DevTools · 实用小工具</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260729p" />
+  <link rel="stylesheet" href="./style.css?v=20260729q" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -45,6 +45,7 @@
         <a class="tool-nav-link" href="#sharecard" draggable="true" data-tool="sharecard">代码卡片</a>
         <a class="tool-nav-link" href="#query" draggable="true" data-tool="query">Query / JWT</a>
         <a class="tool-nav-link" href="#text" draggable="true" data-tool="text">文本</a>
+        <a class="tool-nav-link" href="#caseconv" draggable="true" data-tool="caseconv">命名转换</a>
         <a class="tool-nav-link" href="#regex" draggable="true" data-tool="regex">正则</a>
         <a class="tool-nav-link" href="#diff" draggable="true" data-tool="diff">Diff</a>
         <a class="tool-nav-link" href="#qrcode" draggable="true" data-tool="qrcode">二维码</a>
@@ -635,6 +636,36 @@ fun Greeting(name: String) {
       </div>
     </section>
 
+<section id="caseconv" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>命名转换</h1>
+        <p>camelCase / snake_case / kebab-case 等风格互转，支持多行。</p>
+      </div>
+      <div class="panel-body">
+        <div class="field-block">
+          <label for="case-input">输入标识符</label>
+          <textarea id="case-input" class="mono area" rows="5" placeholder="userOrderId&#10;user-order-id&#10;USER_ORDER_ID" spellcheck="false">userOrderId</textarea>
+        </div>
+        <p class="hint" id="case-meta">每行一个名称，自动识别并转换。</p>
+        <div class="channel-meta case-results" style="border-top:1px solid var(--line);padding-top:0.85rem;margin-top:0.85rem">
+          <div class="meta-row"><span>camelCase</span><strong class="mono case-out" id="case-camel">—</strong><button type="button" class="copy-btn" data-copy="case-camel">复制</button></div>
+          <div class="meta-row"><span>PascalCase</span><strong class="mono case-out" id="case-pascal">—</strong><button type="button" class="copy-btn" data-copy="case-pascal">复制</button></div>
+          <div class="meta-row"><span>snake_case</span><strong class="mono case-out" id="case-snake">—</strong><button type="button" class="copy-btn" data-copy="case-snake">复制</button></div>
+          <div class="meta-row"><span>SCREAMING_SNAKE</span><strong class="mono case-out" id="case-screaming">—</strong><button type="button" class="copy-btn" data-copy="case-screaming">复制</button></div>
+          <div class="meta-row"><span>kebab-case</span><strong class="mono case-out" id="case-kebab">—</strong><button type="button" class="copy-btn" data-copy="case-kebab">复制</button></div>
+          <div class="meta-row"><span>dot.case</span><strong class="mono case-out" id="case-dot">—</strong><button type="button" class="copy-btn" data-copy="case-dot">复制</button></div>
+          <div class="meta-row"><span>path/case</span><strong class="mono case-out" id="case-path">—</strong><button type="button" class="copy-btn" data-copy="case-path">复制</button></div>
+          <div class="meta-row"><span>Title Case</span><strong class="mono case-out" id="case-title">—</strong><button type="button" class="copy-btn" data-copy="case-title">复制</button></div>
+        </div>
+        <div class="btn-row tool-actions" style="margin-top:0.9rem">
+          <button type="button" class="secondary-btn" id="case-use-camel">填入 camelCase</button>
+          <button type="button" class="secondary-btn" id="case-use-snake">填入 snake_case</button>
+          <button type="button" class="secondary-btn" id="case-use-kebab">填入 kebab-case</button>
+          <button type="button" class="ghost-btn" id="case-clear">清空</button>
+        </div>
+      </div>
+    </section>
+
 <section id="regex" class="panel" data-reveal>
       <div class="panel-head">
         <h1>正则测试</h1>
@@ -870,8 +901,8 @@ hello@world.org</textarea>
   <script src="./vendor/qrcode.min.js"></script>
   <script src="./vendor/jsQR.js"></script>
   <script src="./vendor/html2canvas.min.js"></script>
-  <script src="./lib/pure.js?v=20260729p"></script>
-  <script src="./app.js?v=20260729p"></script>
-  <script src="./extra.js?v=20260729p"></script>
+  <script src="./lib/pure.js?v=20260729q"></script>
+  <script src="./app.js?v=20260729q"></script>
+  <script src="./extra.js?v=20260729q"></script>
 </body>
 </html>

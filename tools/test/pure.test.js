@@ -128,6 +128,24 @@ test("password generator", () => {
   assert.strictEqual(P.rgbStringToAhex('rgb(46, 196, 182)'), '#FF2EC4B6');
 });
 
+test("case convert", () => {
+  const one = P.convertIdentifier("userOrderId");
+  assert.deepStrictEqual(one.words, ["user", "order", "id"]);
+  assert.strictEqual(one.camel, "userOrderId");
+  assert.strictEqual(one.pascal, "UserOrderId");
+  assert.strictEqual(one.snake, "user_order_id");
+  assert.strictEqual(one.screaming, "USER_ORDER_ID");
+  assert.strictEqual(one.kebab, "user-order-id");
+  assert.strictEqual(one.dot, "user.order.id");
+  assert.strictEqual(P.convertIdentifier("XMLParser").pascal, "XmlParser");
+  assert.strictEqual(P.convertIdentifier("user-order-id").camel, "userOrderId");
+  assert.strictEqual(P.convertIdentifier("USER_ORDER_ID").kebab, "user-order-id");
+  const multi = P.convertCaseLines("userOrderId\nxml_parser\n");
+  assert.strictEqual(multi.count, 2);
+  assert.strictEqual(multi.snake, "user_order_id\nxml_parser");
+  assert.strictEqual(multi.pascal, "UserOrderId\nXmlParser");
+});
+
 console.log("\nAll pure tests passed.");
 
 

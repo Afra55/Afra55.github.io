@@ -763,6 +763,7 @@
     "sharecard",
     "query",
     "text",
+    "caseconv",
     "regex",
     "diff",
     "qrcode",
