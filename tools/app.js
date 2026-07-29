@@ -897,6 +897,61 @@
 
   window.addEventListener("scroll", syncNav, { passive: true });
 
+  // Mobile: hide sticky nav on scroll down, show on scroll up
+  const navBar = $(".nav-bar");
+  const mobileNavMq = window.matchMedia("(max-width: 700px)");
+  let lastScrollY = window.scrollY;
+  let scrollAcc = 0;
+  const NAV_HIDE_THRESHOLD = 28;
+  const NAV_TOP_FORCE_SHOW = 56;
+
+  function setNavCollapsed(collapsed) {
+    if (!navBar) return;
+    navBar.classList.toggle("is-collapsed", !!collapsed);
+  }
+
+  function onNavAutohideScroll() {
+    if (!navBar) return;
+    if (!mobileNavMq.matches) {
+      setNavCollapsed(false);
+      lastScrollY = window.scrollY;
+      scrollAcc = 0;
+      return;
+    }
+    const y = Math.max(0, window.scrollY);
+    const dy = y - lastScrollY;
+    lastScrollY = y;
+    if (y <= NAV_TOP_FORCE_SHOW) {
+      setNavCollapsed(false);
+      scrollAcc = 0;
+      return;
+    }
+    if (Math.abs(dy) < 1) return;
+    if ((dy > 0 && scrollAcc < 0) || (dy < 0 && scrollAcc > 0)) scrollAcc = 0;
+    scrollAcc += dy;
+    if (scrollAcc > NAV_HIDE_THRESHOLD) {
+      setNavCollapsed(true);
+      scrollAcc = 0;
+    } else if (scrollAcc < -NAV_HIDE_THRESHOLD) {
+      setNavCollapsed(false);
+      scrollAcc = 0;
+    }
+  }
+
+  window.addEventListener("scroll", onNavAutohideScroll, { passive: true });
+  if (typeof mobileNavMq.addEventListener === "function") {
+    mobileNavMq.addEventListener("change", () => {
+      if (!mobileNavMq.matches) setNavCollapsed(false);
+    });
+  } else if (typeof mobileNavMq.addListener === "function") {
+    mobileNavMq.addListener(() => {
+      if (!mobileNavMq.matches) setNavCollapsed(false);
+    });
+  }
+  getNavLinks().forEach((link) => {
+    link.addEventListener("click", () => setNavCollapsed(false));
+  });
+
   // Init
   const now = Date.now();
   tsInput.value = String(Math.floor(now / 1000));
