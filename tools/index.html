@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260729f" />
+  <link rel="stylesheet" href="./style.css?v=20260729g" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -45,6 +45,7 @@
         <a class="tool-nav-link" href="#regex" draggable="true" data-tool="regex">正则</a>
         <a class="tool-nav-link" href="#diff" draggable="true" data-tool="diff">Diff</a>
         <a class="tool-nav-link" href="#qrcode" draggable="true" data-tool="qrcode">二维码</a>
+        <a class="tool-nav-link" href="#sharecard" draggable="true" data-tool="sharecard">代码卡片</a>
         <a class="tool-nav-link" href="#units" draggable="true" data-tool="units">单位换算</a>
       </nav>
       <button type="button" class="nav-reset" id="nav-reset" title="恢复默认分组排序">恢复默认排序</button>
@@ -598,6 +599,73 @@ hello@world.org</textarea>
       </div>
     </section>
 
+<section id="sharecard" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>代码卡片</h1>
+        <p>把代码或 JSON 生成精美分享图，可加水印并导出 PNG。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="sc-input">代码 / JSON</label>
+            <textarea id="sc-input" class="mono area" rows="12" spellcheck="false">{
+  "name": "DevTools",
+  "features": ["timestamp", "color", "share"]
+}</textarea>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.8rem">
+              <label for="sc-lang">语言</label>
+              <select id="sc-lang" class="mono select-input">
+                <option value="auto">自动</option>
+                <option value="json" selected>JSON</option>
+                <option value="javascript">JavaScript</option>
+                <option value="text">纯文本</option>
+              </select>
+              <label for="sc-theme">主题</label>
+              <select id="sc-theme" class="mono select-input">
+                <option value="midnight">Midnight</option>
+                <option value="ember">Ember</option>
+                <option value="mint">Mint</option>
+                <option value="paper">Paper</option>
+              </select>
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+              <label for="sc-title">标题</label>
+              <input id="sc-title" class="mono" type="text" value="snippet.json" spellcheck="false" />
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+              <label for="sc-watermark">水印</label>
+              <input id="sc-watermark" class="mono" type="text" value="Afra55 DevTools" spellcheck="false" />
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+              <label class="flag"><input id="sc-lines" type="checkbox" checked /> 行号</label>
+              <label class="flag"><input id="sc-pretty" type="checkbox" checked /> JSON 自动美化</label>
+            </div>
+            <div class="btn-row tool-actions">
+              <button type="button" class="primary-btn" id="sc-export">导出 PNG</button>
+              <button type="button" class="secondary-btn" id="sc-refresh">刷新预览</button>
+            </div>
+            <p class="hint" id="sc-meta"></p>
+            <p class="error" id="sc-error" hidden></p>
+          </div>
+          <div class="field-block">
+            <label>预览</label>
+            <div class="share-stage" id="sc-stage">
+              <div class="share-capture" id="sc-capture">
+                <div class="share-card theme-midnight" id="sc-card">
+                  <div class="share-chrome">
+                    <span class="share-dot"></span><span class="share-dot"></span><span class="share-dot"></span>
+                    <span class="share-title mono" id="sc-card-title">snippet.json</span>
+                  </div>
+                  <pre class="share-code mono" id="sc-code"></pre>
+                  <div class="share-watermark" id="sc-card-watermark">Afra55 DevTools</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
 <section id="units" class="panel" data-reveal>
       <div class="panel-head">
         <h1>单位换算</h1>
@@ -660,8 +728,9 @@ hello@world.org</textarea>
   <script src="./vendor/spark-md5.min.js"></script>
   <script src="./vendor/qrcode.min.js"></script>
   <script src="./vendor/jsQR.js"></script>
-  <script src="./lib/pure.js?v=20260729f"></script>
-  <script src="./app.js?v=20260729f"></script>
-  <script src="./extra.js?v=20260729f"></script>
+  <script src="./vendor/html2canvas.min.js"></script>
+  <script src="./lib/pure.js?v=20260729g"></script>
+  <script src="./app.js?v=20260729g"></script>
+  <script src="./extra.js?v=20260729g"></script>
 </body>
 </html>

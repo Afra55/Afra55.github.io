@@ -512,6 +512,85 @@
   [unitFrom, unitTo, unitFromVal].forEach((el) => el?.addEventListener("input", convertUnits));
   fillUnitSelects();
 
+  // ---- Share card ----
+  const scInput = $("#sc-input");
+  const scLang = $("#sc-lang");
+  const scTheme = $("#sc-theme");
+  const scTitle = $("#sc-title");
+  const scWatermark = $("#sc-watermark");
+  const scLines = $("#sc-lines");
+  const scPretty = $("#sc-pretty");
+  const scCard = $("#sc-card");
+  const scCode = $("#sc-code");
+  const scCardTitle = $("#sc-card-title");
+  const scCardWatermark = $("#sc-card-watermark");
+  const scMeta = $("#sc-meta");
+  const scError = $("#sc-error");
+  const scCapture = $("#sc-capture");
+
+  function refreshShareCard() {
+    if (!scCard || !scCode) return;
+    try {
+      const rendered = P.renderShareCode(scInput.value, {
+        lang: scLang.value,
+        prettyJson: !!scPretty?.checked,
+        lineNumbers: !!scLines?.checked,
+      });
+      scCode.innerHTML = rendered.html;
+      scCard.className = `share-card theme-${scTheme.value}`;
+      scCardTitle.textContent = scTitle.value.trim() || "untitled";
+      const mark = scWatermark.value.trim();
+      scCardWatermark.textContent = mark;
+      scCardWatermark.hidden = !mark;
+      scMeta.textContent = `预览 · ${rendered.lang} · ${rendered.lineCount} 行`;
+      setError(scError, "");
+    } catch (err) {
+      setError(scError, err.message || String(err));
+    }
+  }
+
+  [
+    scInput,
+    scLang,
+    scTheme,
+    scTitle,
+    scWatermark,
+    scLines,
+    scPretty,
+  ].forEach((el) => {
+    el?.addEventListener("input", refreshShareCard);
+    el?.addEventListener("change", refreshShareCard);
+  });
+  $("#sc-refresh")?.addEventListener("click", refreshShareCard);
+
+  $("#sc-export")?.addEventListener("click", async () => {
+    refreshShareCard();
+    if (typeof html2canvas !== "function") {
+      setError(scError, "html2canvas 未加载");
+      return;
+    }
+    try {
+      const canvas = await html2canvas(scCapture, {
+        backgroundColor: null,
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+      const link = document.createElement("a");
+      const name = (scTitle.value.trim() || "code-card").replace(/[^\w.-]+/g, "_");
+      link.download = `${name}.png`;
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+      scMeta.textContent = `已导出 ${canvas.width}×${canvas.height} PNG`;
+      toast("已导出图片");
+      setError(scError, "");
+    } catch (err) {
+      setError(scError, `导出失败：${err.message || err}`);
+    }
+  });
+
+  refreshShareCard();
+
   // Rebind copy buttons added dynamically in HTML for new panels
   $$("[data-copy]").forEach((btn) => {
     if (btn.dataset.bound) return;

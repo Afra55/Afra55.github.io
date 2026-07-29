@@ -763,6 +763,7 @@
     "regex",
     "diff",
     "qrcode",
+    "sharecard",
     "units",
   ];
 

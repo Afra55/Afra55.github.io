@@ -432,6 +432,135 @@
     return base / table.units[to];
   }
 
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function detectShareLang(text, preferred) {
+    if (preferred && preferred !== "auto") return preferred;
+    const t = String(text || "").trim();
+    if (!t) return "text";
+    if (/^[\[{]/.test(t)) {
+      try {
+        JSON.parse(t);
+        return "json";
+      } catch (_) {}
+    }
+    if (/=>|function\b|const\b|let\b|var\b/.test(t)) return "javascript";
+    return "text";
+  }
+
+  function prettyJsonText(text) {
+    const raw = String(text || "").trim();
+    if (!raw) return "";
+    const data = JSON.parse(raw);
+    return JSON.stringify(data, null, 2);
+  }
+
+  function highlightJson(text) {
+    const src = String(text);
+    let out = "";
+    let i = 0;
+    while (i < src.length) {
+      const ch = src[i];
+      if (ch === '"' ) {
+        let j = i + 1;
+        let esc = false;
+        while (j < src.length) {
+          if (esc) {
+            esc = false;
+          } else if (src[j] === "\\") {
+            esc = true;
+          } else if (src[j] === '"') {
+            break;
+          }
+          j += 1;
+        }
+        const end = Math.min(j + 1, src.length);
+        const token = src.slice(i, end);
+        let k = end;
+        while (k < src.length && /\s/.test(src[k])) k += 1;
+        const isKey = src[k] === ":";
+        out += `<span class="tok-${isKey ? "key" : "str"}">${escapeHtml(token)}</span>`;
+        i = end;
+        continue;
+      }
+      if (/[-0-9]/.test(ch)) {
+        const m = src.slice(i).match(/^-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/);
+        if (m) {
+          out += `<span class="tok-num">${escapeHtml(m[0])}</span>`;
+          i += m[0].length;
+          continue;
+        }
+      }
+      if (/[a-zA-Z]/.test(ch)) {
+        const m = src.slice(i).match(/^(true|false|null)/);
+        if (m) {
+          out += `<span class="tok-bool">${m[0]}</span>`;
+          i += m[0].length;
+          continue;
+        }
+      }
+      if (/[{}\[\]:,]/.test(ch)) {
+        out += `<span class="tok-punc">${escapeHtml(ch)}</span>`;
+        i += 1;
+        continue;
+      }
+      out += escapeHtml(ch);
+      i += 1;
+    }
+    return out;
+  }
+
+  function highlightJavascript(text) {
+    const keywords = /\b(const|let|var|function|return|if|else|for|while|class|new|import|export|from|async|await|try|catch|throw|typeof|instanceof)\b/g;
+    let out = escapeHtml(text);
+    out = out.replace(/(&quot;.*?&quot;|'.*?'|`.*?`)/g, '<span class="tok-str">$1</span>');
+    out = out.replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="tok-num">$1</span>');
+    out = out.replace(keywords, '<span class="tok-kw">$1</span>');
+    out = out.replace(/(\/\/.*?$)/gm, '<span class="tok-comment">$1</span>');
+    return out;
+  }
+
+  function renderShareCode(text, { lang = "auto", prettyJson = true, lineNumbers = true } = {}) {
+    let source = String(text ?? "");
+    let resolved = detectShareLang(source, lang);
+    if (resolved === "json" && prettyJson) {
+      try {
+        source = prettyJsonText(source);
+      } catch (_) {
+        resolved = detectShareLang(source, "text");
+      }
+    }
+    let html;
+    if (resolved === "json") html = highlightJson(source);
+    else if (resolved === "javascript") html = highlightJavascript(source);
+    else html = escapeHtml(source);
+
+    const lines = html.split("\n");
+    if (!lineNumbers) {
+      return {
+        lang: resolved,
+        html: lines.map((line) => `<div class="sc-line"><span class="sc-code">${line || " "}</span></div>`).join(""),
+        lineCount: lines.length,
+      };
+    }
+    return {
+      lang: resolved,
+      html: lines
+        .map((line, idx) => {
+          const n = String(idx + 1).padStart(String(lines.length).length, " ");
+          return `<div class="sc-line"><span class="sc-ln">${n}</span><span class="sc-code">${line || " "}</span></div>`;
+        })
+        .join(""),
+      lineCount: lines.length,
+    };
+  }
+
   return {
     formatDateTime,
     parseFlexibleTime,
@@ -453,5 +582,9 @@
     nextCronTimes,
     UNIT_TABLES,
     convertUnit,
+    escapeHtml,
+    detectShareLang,
+    prettyJsonText,
+    renderShareCode,
   };
 });

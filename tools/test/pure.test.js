@@ -83,4 +83,18 @@ test("cron next", () => {
   assert.throws(() => P.describeCron("* * *"), /5/);
 });
 
+
+test("share card render", () => {
+  const json = P.renderShareCode('{"a":1,"b":"x"}', { lang: "json", prettyJson: true, lineNumbers: true });
+  assert.strictEqual(json.lang, "json");
+  assert.ok(json.html.includes("tok-key"));
+  assert.ok(json.html.includes("tok-num"));
+  assert.ok(json.lineCount >= 4);
+  const auto = P.detectShareLang('{"ok":true}', "auto");
+  assert.strictEqual(auto, "json");
+  const js = P.renderShareCode("const x = 1; // hi", { lang: "javascript", lineNumbers: false });
+  assert.ok(js.html.includes("tok-kw") || js.html.includes("const"));
+});
+
 console.log("\nAll pure tests passed.");
+
