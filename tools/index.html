@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="实用小工具：时间戳、颜色、Base64、JSON、正则、URL、UUID、Hash、文本、命名转换、GIF 合成/拆帧/转视频、JWT、YAML、二维码等" />
+  <meta name="description" content="实用小工具：时间戳、颜色、Base64、JSON、正则、URL、UUID、Hash、文本、命名转换、GIF 合成/拆帧/视频转 GIF、JWT、YAML、二维码等" />
   <title>DevTools · 实用小工具</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260730d" />
+  <link rel="stylesheet" href="./style.css?v=20260730e" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -878,7 +878,7 @@ hello@world.org</textarea>
 <section id="gifmaker" class="panel" data-reveal>
       <div class="panel-head">
         <h1>GIF 工具</h1>
-        <p>多图合成 GIF，或把 GIF 拆成图片、导出 WebM 视频；本地处理，带进度。</p>
+        <p>多图合成 GIF、GIF 拆帧/转 WebM，或把视频（含实况导出的 MOV）转成 GIF；本地处理，带进度。</p>
       </div>
       <div class="panel-body">
         <div class="convert-grid">
@@ -950,6 +950,44 @@ hello@world.org</textarea>
             <p class="error" id="gifx-error" hidden></p>
           </div>
         </div>
+
+        <div class="field-block" style="margin-top:1.5rem">
+          <h2 class="subhead">视频转 GIF</h2>
+          <div class="btn-row tool-actions">
+            <label class="file-btn" for="v2g-file">选择视频</label>
+            <input id="v2g-file" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" hidden />
+            <button type="button" class="ghost-btn" id="v2g-clear">清空</button>
+          </div>
+          <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
+            <label for="v2g-fps">帧率 FPS</label>
+            <input id="v2g-fps" class="mono meta-input" type="number" min="2" max="15" step="1" value="8" />
+            <label for="v2g-width">最大宽度</label>
+            <input id="v2g-width" class="mono meta-input" type="number" min="64" max="720" step="1" value="360" />
+            <label for="v2g-maxsec">最长秒数</label>
+            <input id="v2g-maxsec" class="mono meta-input" type="number" min="1" max="15" step="0.5" value="6" />
+            <label for="v2g-start">起始秒</label>
+            <input id="v2g-start" class="mono meta-input" type="number" min="0" max="600" step="0.1" value="0" />
+            <label for="v2g-quality">质量 (1–30)</label>
+            <input id="v2g-quality" class="mono meta-input" type="number" min="1" max="30" step="1" value="12" />
+          </div>
+          <p class="hint" id="v2g-meta">支持 MP4 / WebM / MOV（实况照片可先导出为影片再上传）。帧数过多会很慢、文件也会很大。</p>
+          <div class="gif-preview-wrap">
+            <video id="v2g-video" class="img-preview gif-preview" controls playsinline muted hidden></video>
+          </div>
+          <div class="btn-row tool-actions" style="margin-top:1rem">
+            <button type="button" class="primary-btn" id="v2g-generate" disabled>转为 GIF</button>
+            <button type="button" class="ghost-btn" id="v2g-abort" hidden>取消</button>
+            <a class="secondary-btn" id="v2g-download" href="#" download="from-video.gif" hidden>下载 GIF</a>
+          </div>
+          <div class="gif-progress" id="v2g-progress" hidden>
+            <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="v2g-progress-fill"></span></div>
+            <p class="hint" id="v2g-progress-text">准备中…</p>
+          </div>
+          <div class="gif-preview-wrap">
+            <img id="v2g-preview" class="img-preview gif-preview" alt="视频转 GIF 预览" hidden />
+          </div>
+          <p class="error" id="v2g-error" hidden></p>
+        </div>
       </div>
     </section>
 
@@ -985,8 +1023,8 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./lib/pure.js?v=20260730d"></script>
-  <script src="./app.js?v=20260730d"></script>
-  <script src="./extra.js?v=20260730d"></script>
+  <script src="./lib/pure.js?v=20260730e"></script>
+  <script src="./app.js?v=20260730e"></script>
+  <script src="./extra.js?v=20260730e"></script>
 </body>
 </html>

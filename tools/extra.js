@@ -1611,6 +1611,346 @@
     console.error("gif extract init failed", err);
   }
 
+  // ---- Video to GIF ----
+  try {
+    const v2gFile = $("#v2g-file");
+    const v2gVideo = $("#v2g-video");
+    const v2gMeta = $("#v2g-meta");
+    const v2gError = $("#v2g-error");
+    const v2gFps = $("#v2g-fps");
+    const v2gWidth = $("#v2g-width");
+    const v2gMaxsec = $("#v2g-maxsec");
+    const v2gStart = $("#v2g-start");
+    const v2gQuality = $("#v2g-quality");
+    const v2gGenerate = $("#v2g-generate");
+    const v2gAbort = $("#v2g-abort");
+    const v2gProgress = $("#v2g-progress");
+    const v2gProgressFill = $("#v2g-progress-fill");
+    const v2gProgressText = $("#v2g-progress-text");
+    const v2gPreview = $("#v2g-preview");
+    const v2gDownload = $("#v2g-download");
+    const MAX_V2G_FRAMES = 80;
+    let videoObjectUrl = "";
+    let gifObjectUrl = "";
+    let activeV2gGif = null;
+    let abortV2g = false;
+
+    function setV2gProgress(visible, ratio, text) {
+      if (!v2gProgress) return;
+      v2gProgress.hidden = !visible;
+      const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)));
+      if (v2gProgressFill) v2gProgressFill.style.width = `${pct}%`;
+      if (v2gProgressText) v2gProgressText.textContent = text || `${pct}%`;
+    }
+
+    function revokeV2gGif() {
+      if (gifObjectUrl) {
+        URL.revokeObjectURL(gifObjectUrl);
+        gifObjectUrl = "";
+      }
+      if (v2gPreview) {
+        v2gPreview.hidden = true;
+        v2gPreview.removeAttribute("src");
+      }
+      if (v2gDownload) {
+        v2gDownload.hidden = true;
+        v2gDownload.removeAttribute("href");
+      }
+    }
+
+    function clearV2g() {
+      abortV2g = true;
+      if (activeV2gGif) {
+        try {
+          activeV2gGif.abort();
+        } catch (_) {}
+        activeV2gGif = null;
+      }
+      if (videoObjectUrl) {
+        URL.revokeObjectURL(videoObjectUrl);
+        videoObjectUrl = "";
+      }
+      if (v2gVideo) {
+        v2gVideo.pause?.();
+        v2gVideo.removeAttribute("src");
+        v2gVideo.load?.();
+        v2gVideo.hidden = true;
+      }
+      revokeV2gGif();
+      if (v2gGenerate) v2gGenerate.disabled = true;
+      if (v2gAbort) v2gAbort.hidden = true;
+      setV2gProgress(false, 0, "");
+      setError(v2gError, "");
+      if (v2gMeta) {
+        v2gMeta.textContent = "支持 MP4 / WebM / MOV（实况照片可先导出为影片再上传）。帧数过多会很慢、文件也会很大。";
+      }
+      if (v2gFile) v2gFile.value = "";
+      abortV2g = false;
+    }
+
+    function seekVideo(video, time) {
+      return new Promise((resolve, reject) => {
+        if (!Number.isFinite(time)) {
+          reject(new Error("无效的时间点"));
+          return;
+        }
+        const onSeeked = () => {
+          video.removeEventListener("seeked", onSeeked);
+          video.removeEventListener("error", onError);
+          resolve();
+        };
+        const onError = () => {
+          video.removeEventListener("seeked", onSeeked);
+          video.removeEventListener("error", onError);
+          reject(new Error("视频定位失败"));
+        };
+        video.addEventListener("seeked", onSeeked);
+        video.addEventListener("error", onError);
+        const maxT = Number.isFinite(video.duration) ? Math.max(0, video.duration - 0.001) : time;
+        const target = Math.max(0, Math.min(time, maxT));
+        if (Math.abs((video.currentTime || 0) - target) < 0.001) {
+          video.removeEventListener("seeked", onSeeked);
+          video.removeEventListener("error", onError);
+          resolve();
+          return;
+        }
+        video.currentTime = target;
+      });
+    }
+
+    function waitFrame() {
+      return new Promise((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(resolve));
+      });
+    }
+
+    async function loadVideoFile(file) {
+      if (!file) return;
+      clearV2g();
+      setError(v2gError, "");
+      setV2gProgress(true, 0.05, "加载视频…");
+      try {
+        videoObjectUrl = URL.createObjectURL(file);
+        if (!v2gVideo) throw new Error("视频预览未找到");
+        v2gVideo.hidden = false;
+        v2gVideo.muted = true;
+        v2gVideo.playsInline = true;
+        v2gVideo.preload = "auto";
+        await new Promise((resolve, reject) => {
+          const onMeta = () => {
+            cleanup();
+            resolve();
+          };
+          const onErr = () => {
+            cleanup();
+            reject(new Error("无法读取该视频（格式可能不受当前浏览器支持）"));
+          };
+          const cleanup = () => {
+            v2gVideo.removeEventListener("loadedmetadata", onMeta);
+            v2gVideo.removeEventListener("error", onErr);
+          };
+          v2gVideo.addEventListener("loadedmetadata", onMeta);
+          v2gVideo.addEventListener("error", onErr);
+          v2gVideo.src = videoObjectUrl;
+          v2gVideo.load();
+        });
+        // Some WebM blobs report Infinity until more data is parsed
+        let duration = Number(v2gVideo.duration) || 0;
+        if (!Number.isFinite(duration) || duration <= 0) {
+          const start = Date.now();
+          while (Date.now() - start < 2500) {
+            await new Promise((r) => setTimeout(r, 100));
+            duration = Number(v2gVideo.duration) || 0;
+            if (Number.isFinite(duration) && duration > 0) break;
+          }
+        }
+        if ((!Number.isFinite(duration) || duration <= 0) && v2gVideo.videoWidth) {
+          duration = 0; // unknown; conversion will use playback capture
+        }
+        if (!v2gVideo.videoWidth || !v2gVideo.videoHeight) throw new Error("视频时长或尺寸无效");
+        if (v2gMeta) {
+          const durText = Number.isFinite(duration) && duration > 0 ? `${duration.toFixed(2)}s` : "时长未知";
+          v2gMeta.textContent = `${file.name} · ${durText} · ${v2gVideo.videoWidth}×${v2gVideo.videoHeight}`;
+        }
+        if (v2gGenerate) v2gGenerate.disabled = false;
+        setV2gProgress(true, 1, "视频已加载，可开始转换");
+        toast("视频已加载");
+      } catch (err) {
+        clearV2g();
+        setError(v2gError, err.message || String(err));
+      }
+    }
+
+    async function convertVideoToGif() {
+      if (!v2gVideo || !v2gVideo.src) {
+        setError(v2gError, "请先选择视频");
+        return;
+      }
+      if (typeof GIF !== "function") {
+        setError(v2gError, "gif.js 未加载");
+        return;
+      }
+      abortV2g = false;
+      revokeV2gGif();
+      setError(v2gError, "");
+      if (v2gGenerate) v2gGenerate.disabled = true;
+      if (v2gAbort) v2gAbort.hidden = false;
+      setV2gProgress(true, 0.02, "准备抽帧…");
+
+      let cleanupWorker = null;
+      try {
+        const fps = Math.min(15, Math.max(2, Number(v2gFps?.value) || 8));
+        const maxW = Math.min(720, Math.max(64, Number(v2gWidth?.value) || 360));
+        const maxSec = Math.min(15, Math.max(1, Number(v2gMaxsec?.value) || 6));
+        const startSec = Math.max(0, Number(v2gStart?.value) || 0);
+        const quality = Math.min(30, Math.max(1, Number(v2gQuality?.value) || 12));
+        let duration = Number(v2gVideo.duration) || 0;
+        const hasDuration = Number.isFinite(duration) && duration > 0;
+        if (hasDuration && startSec >= duration) throw new Error("起始时间超出视频长度");
+        const endSec = hasDuration ? Math.min(duration, startSec + maxSec) : startSec + maxSec;
+        const span = Math.max(0.05, endSec - startSec);
+        const delay = Math.round(1000 / fps);
+        let frameCount = Math.max(2, Math.floor(span * fps) + 1);
+        if (frameCount > MAX_V2G_FRAMES) frameCount = MAX_V2G_FRAMES;
+
+        const srcW = v2gVideo.videoWidth || 0;
+        const srcH = v2gVideo.videoHeight || 0;
+        if (!srcW || !srcH) throw new Error("无法读取视频尺寸");
+        const scale = srcW > maxW ? maxW / srcW : 1;
+        const outW = Math.max(1, Math.round(srcW * scale));
+        const outH = Math.max(1, Math.round(srcH * scale));
+
+        const canvas = document.createElement("canvas");
+        canvas.width = outW;
+        canvas.height = outH;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+        const workerSource = await fetch(new URL("./vendor/gif.worker.js", document.baseURI || window.location.href)).then((r) => {
+          if (!r.ok) throw new Error("无法加载 gif.worker.js");
+          return r.text();
+        });
+        const workerScript = URL.createObjectURL(new Blob([workerSource], { type: "application/javascript" }));
+        cleanupWorker = () => {
+          try {
+            URL.revokeObjectURL(workerScript);
+          } catch (_) {}
+        };
+
+        const gif = new GIF({
+          workers: 2,
+          quality,
+          width: outW,
+          height: outH,
+          workerScript,
+          repeat: 0,
+          background: "#000000",
+        });
+        activeV2gGif = gif;
+
+        const paint = () => {
+          ctx.fillStyle = "#000000";
+          ctx.fillRect(0, 0, outW, outH);
+          ctx.drawImage(v2gVideo, 0, 0, outW, outH);
+          gif.addFrame(ctx, { delay, copy: true });
+        };
+
+        if (hasDuration) {
+          for (let i = 0; i < frameCount; i++) {
+            if (abortV2g) throw new Error("已取消");
+            const t = startSec + (span * i) / Math.max(1, frameCount - 1);
+            await seekVideo(v2gVideo, t);
+            await waitFrame();
+            paint();
+            setV2gProgress(true, ((i + 1) / frameCount) * 0.45, `抽帧… ${i + 1}/${frameCount}`);
+          }
+        } else {
+          // Playback capture fallback when duration is unknown/Infinity
+          v2gVideo.currentTime = startSec;
+          await waitFrame();
+          try {
+            await v2gVideo.play();
+          } catch (_) {}
+          const startedAt = performance.now();
+          let captured = 0;
+          let lastAt = -Infinity;
+          while (captured < frameCount) {
+            if (abortV2g) throw new Error("已取消");
+            if (v2gVideo.ended) break;
+            const elapsed = (performance.now() - startedAt) / 1000;
+            if (elapsed > maxSec + 0.5) break;
+            const now = performance.now();
+            if (now - lastAt >= delay * 0.9) {
+              paint();
+              captured += 1;
+              lastAt = now;
+              setV2gProgress(true, (captured / frameCount) * 0.45, `抽帧… ${captured}/${frameCount}`);
+            }
+            await waitFrame();
+          }
+          v2gVideo.pause();
+          frameCount = Math.max(2, captured);
+          if (captured < 2) throw new Error("未能从视频抓取足够帧");
+        }
+
+        const blob = await new Promise((resolve, reject) => {
+          gif.on("progress", (p) => {
+            setV2gProgress(true, 0.45 + p * 0.55, `编码 GIF… ${Math.round(p * 100)}%`);
+          });
+          gif.on("finished", (b) => resolve(b));
+          gif.on("abort", () => reject(new Error("已取消")));
+          try {
+            gif.render();
+          } catch (err) {
+            reject(err);
+          }
+        });
+
+        gifObjectUrl = URL.createObjectURL(blob);
+        if (v2gPreview) {
+          v2gPreview.src = gifObjectUrl;
+          v2gPreview.hidden = false;
+        }
+        if (v2gDownload) {
+          v2gDownload.href = gifObjectUrl;
+          v2gDownload.hidden = false;
+        }
+        setV2gProgress(true, 1, `完成 · ${frameCount} 帧 · ${outW}×${outH} · ${(blob.size / 1024).toFixed(1)} KB`);
+        if (v2gMeta) {
+          v2gMeta.textContent = `已转换 ${frameCount} 帧 · ${fps} FPS · ${outW}×${outH} · ${(blob.size / 1024).toFixed(1)} KB`;
+        }
+        toast("GIF 已生成");
+      } catch (err) {
+        if (String(err && err.message) !== "已取消") {
+          setError(v2gError, err.message || String(err));
+          setV2gProgress(false, 0, "");
+        } else {
+          setV2gProgress(false, 0, "");
+          toast("已取消转换");
+        }
+      } finally {
+        if (typeof cleanupWorker === "function") cleanupWorker();
+        activeV2gGif = null;
+        abortV2g = false;
+        if (v2gAbort) v2gAbort.hidden = true;
+        if (v2gGenerate) v2gGenerate.disabled = !v2gVideo?.src;
+      }
+    }
+
+    v2gFile?.addEventListener("change", (e) => loadVideoFile(e.target.files?.[0]));
+    $("#v2g-clear")?.addEventListener("click", clearV2g);
+    v2gGenerate?.addEventListener("click", convertVideoToGif);
+    v2gAbort?.addEventListener("click", () => {
+      abortV2g = true;
+      if (activeV2gGif) {
+        try {
+          activeV2gGif.abort();
+        } catch (_) {}
+      }
+    });
+  } catch (err) {
+    console.error("video to gif init failed", err);
+  }
+
   // Rebind copy buttons added dynamically in HTML for new panels
   $$("[data-copy]").forEach((btn) => {
     if (btn.dataset.bound) return;
