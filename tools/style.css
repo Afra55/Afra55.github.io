@@ -1203,12 +1203,10 @@ input[type="text"]:focus {
 }
 
 .share-dots {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #ff5f57;
-  box-shadow: 16px 0 0 #febc2e, 32px 0 0 #28c840;
-  margin-right: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-right: 0.55rem;
   flex: 0 0 auto;
 }
 
@@ -1216,9 +1214,21 @@ input[type="text"]:focus {
   width: 10px;
   height: 10px;
   border-radius: 50%;
+  flex: 0 0 auto;
+  display: block;
+  box-shadow: none;
+}
+
+.share-dot-close {
   background: #ff5f57;
-  box-shadow: 16px 0 0 #febc2e, 32px 0 0 #28c840;
-  margin-right: 28px;
+}
+
+.share-dot-min {
+  background: #febc2e;
+}
+
+.share-dot-max {
+  background: #28c840;
 }
 
 .share-title {
@@ -1314,9 +1324,14 @@ input[type="text"]:focus {
   background: linear-gradient(160deg, #f8fafc 0%, #eef2ff 55%, #e2e8f0 100%);
   border-color: rgba(15, 23, 42, 0.08);
 }
-.theme-paper .share-dot {
+.theme-paper .share-dot-close {
   background: #ef4444;
-  box-shadow: 16px 0 0 #f59e0b, 32px 0 0 #22c55e;
+}
+.theme-paper .share-dot-min {
+  background: #f59e0b;
+}
+.theme-paper .share-dot-max {
+  background: #22c55e;
 }
 .theme-paper .tok-key { color: #2563eb; }
 .theme-paper .tok-str { color: #059669; }
@@ -1326,10 +1341,6 @@ input[type="text"]:focus {
 .theme-paper .tok-kw { color: #7c3aed; }
 .theme-paper .tok-comment { color: #94a3b8; }
 .theme-paper .tok-anno { color: #db2777; }
-.theme-paper .share-dots {
-  background: #ef4444;
-  box-shadow: 16px 0 0 #f59e0b, 32px 0 0 #22c55e;
-}
 
 .md-preview {
   min-height: 12rem;
