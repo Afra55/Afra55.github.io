@@ -512,7 +512,7 @@ features:
 <section id="sharecard" class="panel" data-reveal>
       <div class="panel-head">
         <h1>代码卡片</h1>
-        <p>把代码或 JSON 生成精美分享图，可加水印并导出 PNG。左上角彩色圆点是仿 macOS 窗口装饰，可关闭。</p>
+        <p>把代码或 JSON 生成精美分享图，可加水印并导出 PNG。左上角可显示装饰圆点。</p>
       </div>
       <div class="panel-body">
         <div class="convert-grid">
@@ -565,7 +565,7 @@ fun Greeting(name: String) {
             <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
               <label class="flag"><input id="sc-lines" type="checkbox" checked /> 行号</label>
               <label class="flag"><input id="sc-pretty" type="checkbox" checked /> JSON 自动美化</label>
-              <label class="flag"><input id="sc-dots" type="checkbox" checked /> 窗口圆点</label>
+              <label class="flag"><input id="sc-dots" type="checkbox" checked /> 装饰圆点</label>
             </div>
             <div class="btn-row tool-actions">
               <button type="button" class="primary-btn" id="sc-export">导出 PNG</button>
@@ -580,10 +580,8 @@ fun Greeting(name: String) {
               <div class="share-capture" id="sc-capture">
                 <div class="share-card theme-midnight" id="sc-card">
                   <div class="share-chrome" id="sc-chrome">
-                    <span class="share-dots" id="sc-dots-el" aria-hidden="true" title="macOS 风格窗口装饰">
-                      <i class="share-dot share-dot-close"></i>
-                      <i class="share-dot share-dot-min"></i>
-                      <i class="share-dot share-dot-max"></i>
+                    <span class="share-dots" id="sc-dots-el" aria-hidden="true" title="装饰圆点">
+                      <i class="share-dot"></i>
                     </span>
                     <span class="share-title mono" id="sc-card-title">Greeting.kt</span>
                   </div>
