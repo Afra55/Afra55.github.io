@@ -424,6 +424,13 @@ input[type="text"]:focus {
   padding: 0.7rem 1rem;
 }
 
+a.secondary-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+}
+
 .ghost-btn {
   background: rgba(244, 162, 97, 0.12);
   color: #ffd7b0;
@@ -1383,4 +1390,101 @@ input[type="text"]:focus {
 
 .eye-img {
   cursor: crosshair;
+}
+
+.gif-frame-list {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 0.9rem;
+}
+
+.gif-frame {
+  display: grid;
+  grid-template-columns: 72px 1fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  padding: 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(14, 22, 38, 0.55);
+}
+
+.gif-frame-thumb {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #0a101c;
+}
+
+.gif-frame-meta {
+  display: grid;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.gif-frame-name {
+  font-size: 0.86rem;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gif-frame-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
+.gif-frame-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.gif-progress {
+  margin-top: 0.9rem;
+}
+
+.gif-progress-track {
+  height: 0.55rem;
+  border-radius: 999px;
+  background: rgba(232, 238, 248, 0.08);
+  overflow: hidden;
+  border: 1px solid var(--line);
+}
+
+.gif-progress-fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), #1b9e93);
+  transition: width 0.18s ease;
+}
+
+.gif-preview-wrap {
+  margin-top: 1rem;
+}
+
+.gif-preview {
+  max-height: 420px;
+  width: auto;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+@media (max-width: 700px) {
+  .gif-frame {
+    grid-template-columns: 64px 1fr;
+  }
+
+  .gif-frame-actions {
+    grid-column: 1 / -1;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
 }

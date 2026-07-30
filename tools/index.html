@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="实用小工具：时间戳、颜色、Base64、JSON、正则、URL、UUID、Hash、文本、命名转换、JWT、YAML、二维码等" />
+  <meta name="description" content="实用小工具：时间戳、颜色、Base64、JSON、正则、URL、UUID、Hash、文本、命名转换、GIF 合成、JWT、YAML、二维码等" />
   <title>DevTools · 实用小工具</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260730b" />
+  <link rel="stylesheet" href="./style.css?v=20260730c" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -49,6 +49,7 @@
         <a class="tool-nav-link" href="#regex" draggable="true" data-tool="regex">正则</a>
         <a class="tool-nav-link" href="#diff" draggable="true" data-tool="diff">Diff</a>
         <a class="tool-nav-link" href="#qrcode" draggable="true" data-tool="qrcode">二维码</a>
+        <a class="tool-nav-link" href="#gifmaker" draggable="true" data-tool="gifmaker">GIF 合成</a>
         <a class="tool-nav-link" href="#units" draggable="true" data-tool="units">单位换算</a>
         <a class="tool-nav-link" href="#numbase" draggable="true" data-tool="numbase">进制转换</a>
         <a class="tool-nav-link" href="#markdown" draggable="true" data-tool="markdown">Markdown</a>
@@ -874,6 +875,44 @@ hello@world.org</textarea>
       </div>
     </section>
 
+<section id="gifmaker" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>GIF 合成</h1>
+        <p>多张图片合成动图，可分别设置每帧时长；本地编码，带进度。</p>
+      </div>
+      <div class="panel-body">
+        <div class="btn-row tool-actions">
+          <label class="file-btn" for="gif-file">添加图片</label>
+          <input id="gif-file" type="file" accept="image/*" multiple hidden />
+          <button type="button" class="secondary-btn" id="gif-apply-delay">应用统一时长</button>
+          <button type="button" class="ghost-btn" id="gif-clear">清空</button>
+        </div>
+        <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
+          <label for="gif-delay">默认时长 (ms)</label>
+          <input id="gif-delay" class="mono meta-input" type="number" min="20" max="10000" step="10" value="500" />
+          <label for="gif-width">最大宽度</label>
+          <input id="gif-width" class="mono meta-input" type="number" min="64" max="1280" step="1" value="480" />
+          <label for="gif-quality">质量 (1–30，越小越好)</label>
+          <input id="gif-quality" class="mono meta-input" type="number" min="1" max="30" step="1" value="10" />
+        </div>
+        <p class="hint" id="gif-meta">选择至少 2 张图片。单帧建议不超过 1280px，张数过多会较慢。</p>
+        <div class="gif-frame-list" id="gif-frames" aria-live="polite"></div>
+        <div class="btn-row tool-actions" style="margin-top:1rem">
+          <button type="button" class="primary-btn" id="gif-generate">生成 GIF</button>
+          <button type="button" class="ghost-btn" id="gif-abort" hidden>取消</button>
+          <a class="secondary-btn" id="gif-download" href="#" download="animation.gif" hidden>下载 GIF</a>
+        </div>
+        <div class="gif-progress" id="gif-progress" hidden>
+          <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="gif-progress-fill"></span></div>
+          <p class="hint" id="gif-progress-text">准备中…</p>
+        </div>
+        <div class="gif-preview-wrap">
+          <img id="gif-preview" class="img-preview gif-preview" alt="生成的 GIF 预览" hidden />
+        </div>
+        <p class="error" id="gif-error" hidden></p>
+      </div>
+    </section>
+
 <section id="coming" class="panel panel-soon" data-reveal>
       <div class="panel-head">
         <h1>更多功能 · 预留</h1>
@@ -903,8 +942,9 @@ hello@world.org</textarea>
   <script src="./vendor/qrcode.min.js"></script>
   <script src="./vendor/jsQR.js"></script>
   <script src="./vendor/html2canvas.min.js"></script>
-  <script src="./lib/pure.js?v=20260730b"></script>
-  <script src="./app.js?v=20260730b"></script>
-  <script src="./extra.js?v=20260730b"></script>
+  <script src="./vendor/gif.js"></script>
+  <script src="./lib/pure.js?v=20260730c"></script>
+  <script src="./app.js?v=20260730c"></script>
+  <script src="./extra.js?v=20260730c"></script>
 </body>
 </html>

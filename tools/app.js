@@ -767,6 +767,7 @@
     "regex",
     "diff",
     "qrcode",
+    "gifmaker",
     "units",
     "numbase",
     "markdown",
