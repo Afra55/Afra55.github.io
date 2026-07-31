@@ -351,7 +351,7 @@ description: 以 Ranker 假小子动漫角色榜为底稿，剔除不像假小�
 
 <p align="center"><img src="{{ site.baseurl }}/blog_picture/tomboy-anime.resources/chars/74-baby-5.jpg" alt="Baby 5" width="280"></p>
 
-出自《海贼王》。原堂吉诃德家族干部，武器武器果实能力者。身体部件武器化。战斗女仆＋缺爱，有行动派一面，假小子中等。
+出自《海贼王》。原堂吉诃德家族干部，武器武器果实能力者。身体部件武器化。战斗女仆加上缺爱性格，行动派一面很强，假小子感中等偏上。
 
 ### 55. 夏洛特·斯慕吉
 
