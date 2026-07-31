@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="实用小工具：时间戳、颜色、Base64、JSON、正则、URL、UUID、Hash、文本、命名转换、GIF 合成/拆帧/视频转 GIF、JWT、YAML、二维码等" />
+  <meta name="description" content="实用小工具：时间戳、颜色、Base64、JSON、正则、URL、UUID、Hash、文本、命名转换、坐标系互转、GIF 合成/拆帧/视频转 GIF、JWT、YAML、二维码等" />
   <title>DevTools · 实用小工具</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260730e" />
+  <link rel="stylesheet" href="./style.css?v=20260731a" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -51,6 +51,7 @@
         <a class="tool-nav-link" href="#qrcode" draggable="true" data-tool="qrcode">二维码</a>
         <a class="tool-nav-link" href="#gifmaker" draggable="true" data-tool="gifmaker">GIF 工具</a>
         <a class="tool-nav-link" href="#units" draggable="true" data-tool="units">单位换算</a>
+        <a class="tool-nav-link" href="#coord" draggable="true" data-tool="coord">坐标系互转</a>
         <a class="tool-nav-link" href="#numbase" draggable="true" data-tool="numbase">进制转换</a>
         <a class="tool-nav-link" href="#markdown" draggable="true" data-tool="markdown">Markdown</a>
       </nav>
@@ -814,6 +815,70 @@ hello@world.org</textarea>
       </div>
     </section>
 
+<section id="coord" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>坐标系互转</h1>
+        <p>WGS84 / GCJ02 / BD09 / CGCS2000 本地公式互转，格式为经度,纬度。</p>
+      </div>
+      <div class="panel-body">
+        <div class="field-row" style="flex-wrap:wrap">
+          <label for="coord-system">输入坐标系</label>
+          <select id="coord-system" class="mono select-input">
+            <option value="wgs84" selected>WGS84（GPS）</option>
+            <option value="gcj02">GCJ02（国测局 / 高德 / 腾讯）</option>
+            <option value="bd09">BD09（百度）</option>
+            <option value="cgcs2000">CGCS2000（近似 WGS84）</option>
+          </select>
+        </div>
+        <div class="field-block">
+          <label for="coord-input">经纬度（lng,lat）</label>
+          <textarea id="coord-input" class="mono area" rows="4" placeholder="116.397428,39.90923&#10;121.4737 31.2304" spellcheck="false">116.397428,39.90923</textarea>
+        </div>
+        <p class="hint" id="coord-meta">每行一组坐标，顺序为经度在前、纬度在后。CGCS2000 按 WGS84 近似处理。</p>
+        <p class="error" id="coord-error" hidden></p>
+        <div class="channel-meta case-results coord-results" style="border-top:1px solid var(--line);padding-top:0.85rem;margin-top:0.85rem">
+          <div class="meta-row coord-row">
+            <span>WGS84</span>
+            <div class="coord-vals">
+              <strong class="mono case-out" id="coord-wgs84">—</strong>
+              <span class="mono coord-dms" id="coord-wgs84-dms">—</span>
+            </div>
+            <button type="button" class="copy-btn" data-copy="coord-wgs84">复制</button>
+          </div>
+          <div class="meta-row coord-row">
+            <span>GCJ02</span>
+            <div class="coord-vals">
+              <strong class="mono case-out" id="coord-gcj02">—</strong>
+              <span class="mono coord-dms" id="coord-gcj02-dms">—</span>
+            </div>
+            <button type="button" class="copy-btn" data-copy="coord-gcj02">复制</button>
+          </div>
+          <div class="meta-row coord-row">
+            <span>BD09</span>
+            <div class="coord-vals">
+              <strong class="mono case-out" id="coord-bd09">—</strong>
+              <span class="mono coord-dms" id="coord-bd09-dms">—</span>
+            </div>
+            <button type="button" class="copy-btn" data-copy="coord-bd09">复制</button>
+          </div>
+          <div class="meta-row coord-row">
+            <span>CGCS2000</span>
+            <div class="coord-vals">
+              <strong class="mono case-out" id="coord-cgcs2000">—</strong>
+              <span class="mono coord-dms" id="coord-cgcs2000-dms">—</span>
+            </div>
+            <button type="button" class="copy-btn" data-copy="coord-cgcs2000">复制</button>
+          </div>
+        </div>
+        <div class="btn-row tool-actions" style="margin-top:0.9rem">
+          <button type="button" class="secondary-btn" id="coord-use-wgs84">填入 WGS84</button>
+          <button type="button" class="secondary-btn" id="coord-use-gcj02">填入 GCJ02</button>
+          <button type="button" class="secondary-btn" id="coord-use-bd09">填入 BD09</button>
+          <button type="button" class="ghost-btn" id="coord-clear">清空</button>
+        </div>
+      </div>
+    </section>
+
 <section id="numbase" class="panel" data-reveal>
       <div class="panel-head">
         <h1>进制转换</h1>
@@ -1023,8 +1088,8 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./lib/pure.js?v=20260730e"></script>
-  <script src="./app.js?v=20260730e"></script>
-  <script src="./extra.js?v=20260730e"></script>
+  <script src="./lib/pure.js?v=20260731a"></script>
+  <script src="./app.js?v=20260731a"></script>
+  <script src="./extra.js?v=20260731a"></script>
 </body>
 </html>

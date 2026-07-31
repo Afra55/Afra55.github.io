@@ -937,6 +937,238 @@
     };
   }
 
+  // ---- Map coordinate transforms (offline formulas) ----
+  const COORD_PI = Math.PI;
+  const COORD_X_PI = (COORD_PI * 3000.0) / 180.0;
+  const COORD_A = 6378245.0;
+  const COORD_EE = 0.00669342162296594323;
+
+  function outOfChina(lng, lat) {
+    return lng < 72.004 || lng > 137.8347 || lat < 0.8293 || lat > 55.8271;
+  }
+
+  function transformLat(lng, lat) {
+    let ret =
+      -100.0 +
+      2.0 * lng +
+      3.0 * lat +
+      0.2 * lat * lat +
+      0.1 * lng * lat +
+      0.2 * Math.sqrt(Math.abs(lng));
+    ret += ((20.0 * Math.sin(6.0 * lng * COORD_PI) + 20.0 * Math.sin(2.0 * lng * COORD_PI)) * 2.0) / 3.0;
+    ret += ((20.0 * Math.sin(lat * COORD_PI) + 40.0 * Math.sin((lat / 3.0) * COORD_PI)) * 2.0) / 3.0;
+    ret += ((160.0 * Math.sin((lat / 12.0) * COORD_PI) + 320.0 * Math.sin((lat * COORD_PI) / 30.0)) * 2.0) / 3.0;
+    return ret;
+  }
+
+  function transformLng(lng, lat) {
+    let ret =
+      300.0 +
+      lng +
+      2.0 * lat +
+      0.1 * lng * lng +
+      0.1 * lng * lat +
+      0.1 * Math.sqrt(Math.abs(lng));
+    ret += ((20.0 * Math.sin(6.0 * lng * COORD_PI) + 20.0 * Math.sin(2.0 * lng * COORD_PI)) * 2.0) / 3.0;
+    ret += ((20.0 * Math.sin(lng * COORD_PI) + 40.0 * Math.sin((lng / 3.0) * COORD_PI)) * 2.0) / 3.0;
+    ret += ((150.0 * Math.sin((lng / 12.0) * COORD_PI) + 300.0 * Math.sin((lng / 30.0) * COORD_PI)) * 2.0) / 3.0;
+    return ret;
+  }
+
+  function deltaWGS84ToGCJ02(lng, lat) {
+    let dLat = transformLat(lng - 105.0, lat - 35.0);
+    let dLng = transformLng(lng - 105.0, lat - 35.0);
+    const radLat = (lat / 180.0) * COORD_PI;
+    let magic = Math.sin(radLat);
+    magic = 1 - COORD_EE * magic * magic;
+    const sqrtMagic = Math.sqrt(magic);
+    dLat = (dLat * 180.0) / (((COORD_A * (1 - COORD_EE)) / (magic * sqrtMagic)) * COORD_PI);
+    dLng = (dLng * 180.0) / ((COORD_A / sqrtMagic) * Math.cos(radLat) * COORD_PI);
+    return { dLng, dLat };
+  }
+
+  function wgs84ToGcj02(lng, lat) {
+    if (outOfChina(lng, lat)) return { lng, lat };
+    const { dLng, dLat } = deltaWGS84ToGCJ02(lng, lat);
+    return { lng: lng + dLng, lat: lat + dLat };
+  }
+
+  function gcj02ToWgs84(lng, lat) {
+    if (outOfChina(lng, lat)) return { lng, lat };
+    // iterative approximation for better accuracy
+    let wgsLng = lng;
+    let wgsLat = lat;
+    for (let i = 0; i < 8; i++) {
+      const { dLng, dLat } = deltaWGS84ToGCJ02(wgsLng, wgsLat);
+      const nextLng = lng - dLng;
+      const nextLat = lat - dLat;
+      if (Math.abs(nextLng - wgsLng) < 1e-9 && Math.abs(nextLat - wgsLat) < 1e-9) {
+        return { lng: nextLng, lat: nextLat };
+      }
+      wgsLng = nextLng;
+      wgsLat = nextLat;
+    }
+    return { lng: wgsLng, lat: wgsLat };
+  }
+
+  function gcj02ToBd09(lng, lat) {
+    const z = Math.sqrt(lng * lng + lat * lat) + 0.00002 * Math.sin(lat * COORD_X_PI);
+    const theta = Math.atan2(lat, lng) + 0.000003 * Math.cos(lng * COORD_X_PI);
+    return {
+      lng: z * Math.cos(theta) + 0.0065,
+      lat: z * Math.sin(theta) + 0.006,
+    };
+  }
+
+  function bd09ToGcj02(lng, lat) {
+    const x = lng - 0.0065;
+    const y = lat - 0.006;
+    const z = Math.sqrt(x * x + y * y) - 0.00002 * Math.sin(y * COORD_X_PI);
+    const theta = Math.atan2(y, x) - 0.000003 * Math.cos(x * COORD_X_PI);
+    return {
+      lng: z * Math.cos(theta),
+      lat: z * Math.sin(theta),
+    };
+  }
+
+  function wgs84ToBd09(lng, lat) {
+    const gcj = wgs84ToGcj02(lng, lat);
+    return gcj02ToBd09(gcj.lng, gcj.lat);
+  }
+
+  function bd09ToWgs84(lng, lat) {
+    const gcj = bd09ToGcj02(lng, lat);
+    return gcj02ToWgs84(gcj.lng, gcj.lat);
+  }
+
+  // CGCS2000 ≈ WGS84 for web map purposes (sub-meter level for most apps)
+  function toWGS84(system, lng, lat) {
+    switch (system) {
+      case "wgs84":
+      case "cgcs2000":
+        return { lng, lat };
+      case "gcj02":
+        return gcj02ToWgs84(lng, lat);
+      case "bd09":
+        return bd09ToWgs84(lng, lat);
+      default:
+        throw new Error("不支持的坐标系");
+    }
+  }
+
+  function fromWGS84(system, lng, lat) {
+    switch (system) {
+      case "wgs84":
+      case "cgcs2000":
+        return { lng, lat };
+      case "gcj02":
+        return wgs84ToGcj02(lng, lat);
+      case "bd09":
+        return wgs84ToBd09(lng, lat);
+      default:
+        throw new Error("不支持的坐标系");
+    }
+  }
+
+  function parseCoordPair(text) {
+    const raw = String(text || "").trim();
+    if (!raw) throw new Error("请输入经纬度");
+    const cleaned = raw
+      .replace(/[，]/g, ",")
+      .replace(/[^\deE+\-.,\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    let lng;
+    let lat;
+    if (cleaned.includes(",")) {
+      const parts = cleaned.split(",").map((s) => s.trim()).filter(Boolean);
+      if (parts.length < 2) throw new Error("格式应为 lng,lat");
+      lng = Number(parts[0]);
+      lat = Number(parts[1]);
+    } else {
+      const parts = cleaned.split(" ").filter(Boolean);
+      if (parts.length < 2) throw new Error("格式应为 lng lat 或 lng,lat");
+      lng = Number(parts[0]);
+      lat = Number(parts[1]);
+    }
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) throw new Error("经纬度数值无效");
+    if (Math.abs(lng) > 180 || Math.abs(lat) > 90) throw new Error("经纬度超出范围");
+    return { lng, lat };
+  }
+
+  function formatCoord(value, digits = 8) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "";
+    return Number(n.toFixed(digits)).toString();
+  }
+
+  function toDms(value, isLng) {
+    const abs = Math.abs(value);
+    const deg = Math.floor(abs);
+    const minFloat = (abs - deg) * 60;
+    const min = Math.floor(minFloat);
+    const sec = (minFloat - min) * 60;
+    const hemi = isLng ? (value >= 0 ? "E" : "W") : value >= 0 ? "N" : "S";
+    return `${deg}°${String(min).padStart(2, "0")}′${sec.toFixed(2).padStart(5, "0")}″${hemi}`;
+  }
+
+  function convertCoordinates(system, text) {
+    const input = parseCoordPair(text);
+    const wgs = toWGS84(system, input.lng, input.lat);
+    const systems = ["wgs84", "gcj02", "bd09", "cgcs2000"];
+    const out = {};
+    for (const key of systems) {
+      const point = fromWGS84(key, wgs.lng, wgs.lat);
+      out[key] = {
+        lng: point.lng,
+        lat: point.lat,
+        decimal: `${formatCoord(point.lng)},${formatCoord(point.lat)}`,
+        dms: `${toDms(point.lng, true)}, ${toDms(point.lat, false)}`,
+      };
+    }
+    return {
+      input,
+      source: system,
+      results: out,
+    };
+  }
+
+  function convertCoordinateLines(system, text) {
+    const lines = String(text ?? "").split(/\r\n|\n|\r/);
+    const systems = ["wgs84", "gcj02", "bd09", "cgcs2000"];
+    const decimal = Object.fromEntries(systems.map((k) => [k, []]));
+    const dms = Object.fromEntries(systems.map((k) => [k, []]));
+    let ok = 0;
+    let fail = 0;
+    let firstError = "";
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const row = convertCoordinates(system, line);
+        for (const key of systems) {
+          decimal[key].push(row.results[key].decimal);
+          dms[key].push(row.results[key].dms);
+        }
+        ok += 1;
+      } catch (err) {
+        fail += 1;
+        if (!firstError) firstError = err.message || String(err);
+        for (const key of systems) {
+          decimal[key].push("—");
+          dms[key].push("—");
+        }
+      }
+    }
+    if (!ok && !fail) throw new Error("请输入至少一行坐标");
+    return {
+      ok,
+      fail,
+      error: fail ? firstError || "部分坐标无效" : "",
+      decimal: Object.fromEntries(systems.map((k) => [k, decimal[k].join("\n")])),
+      dms: Object.fromEntries(systems.map((k) => [k, dms[k].join("\n")])),
+    };
+  }
+
   return {
     formatDateTime,
     parseFlexibleTime,
@@ -967,5 +1199,15 @@
     detectShareLang,
     prettyJsonText,
     renderShareCode,
+    outOfChina,
+    wgs84ToGcj02,
+    gcj02ToWgs84,
+    gcj02ToBd09,
+    bd09ToGcj02,
+    wgs84ToBd09,
+    bd09ToWgs84,
+    parseCoordPair,
+    convertCoordinates,
+    convertCoordinateLines,
   };
 });

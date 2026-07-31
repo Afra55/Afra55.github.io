@@ -769,6 +769,7 @@
     "qrcode",
     "gifmaker",
     "units",
+    "coord",
     "numbase",
     "markdown",
   ];

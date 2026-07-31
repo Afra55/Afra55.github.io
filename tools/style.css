@@ -653,6 +653,27 @@ a.secondary-btn {
   font-weight: 600;
 }
 
+.coord-row {
+  align-items: flex-start;
+}
+
+.coord-vals {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.2rem;
+}
+
+.coord-dms {
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: right;
+}
+
 .meta-edit {
   display: inline-flex;
   align-items: center;

@@ -146,6 +146,35 @@ test("case convert", () => {
   assert.strictEqual(multi.pascal, "UserOrderId\nXmlParser");
 });
 
+test("coord convert", () => {
+  const p = P.parseCoordPair("116.397428, 39.90923");
+  assert.ok(Math.abs(p.lng - 116.397428) < 1e-9);
+  assert.ok(Math.abs(p.lat - 39.90923) < 1e-9);
+  assert.throws(() => P.parseCoordPair("bad"), /格式/);
+
+  const gcj = P.wgs84ToGcj02(116.397428, 39.90923);
+  assert.ok(Math.abs(gcj.lng - 116.397428) > 0.001);
+  const back = P.gcj02ToWgs84(gcj.lng, gcj.lat);
+  assert.ok(Math.abs(back.lng - 116.397428) < 1e-6);
+  assert.ok(Math.abs(back.lat - 39.90923) < 1e-6);
+
+  const bd = P.gcj02ToBd09(gcj.lng, gcj.lat);
+  const gcj2 = P.bd09ToGcj02(bd.lng, bd.lat);
+  assert.ok(Math.abs(gcj2.lng - gcj.lng) < 1e-6);
+  assert.ok(Math.abs(gcj2.lat - gcj.lat) < 1e-6);
+
+  const one = P.convertCoordinates("wgs84", "116.397428,39.90923");
+  assert.ok(one.results.gcj02.decimal.includes(","));
+  assert.ok(one.results.wgs84.dms.includes("°"));
+  assert.ok(Math.abs(one.results.cgcs2000.lng - one.results.wgs84.lng) < 1e-12);
+
+  const multi = P.convertCoordinateLines("wgs84", "116.397428,39.90923\nbad\n121.4737 31.2304");
+  assert.strictEqual(multi.ok, 2);
+  assert.strictEqual(multi.fail, 1);
+  assert.ok(multi.decimal.gcj02.split("\n").length === 3);
+  assert.ok(multi.decimal.gcj02.includes("—"));
+});
+
 console.log("\nAll pure tests passed.");
 
 
