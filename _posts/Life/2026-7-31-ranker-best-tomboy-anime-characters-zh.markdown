@@ -27,7 +27,7 @@ description: 以 Ranker 假小子动漫角色榜为底稿，剔除不像假小�
 
 ---
 
-## 角色图鉴
+## 57人图鉴
 
 ### 1. 莱维（Revy / Rebecca）
 
