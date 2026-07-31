@@ -1,20 +1,20 @@
 ---
 layout: post
-title:  "Ranker「最佳动漫假小子角色」中文对照图鉴"
+title:  "57个动漫假小子角色图鉴：中文名、能力与为何够格"
 date:   2026-7-31 23:30:00
 categories: Life
 comments: true
-description: 对照 Ranker 榜单 The 25+ Best Tomboy Anime Characters，剔除明显不像假小子、重复与错条后，做中文译名校对、简介、能力与「为何算假小子」说明，并附角色图。
+description: 以 Ranker 假小子动漫角色榜为底稿，剔除不像假小子、重复与错条后精选 57 人；含中文译名校对、简介、能力与「为何算假小子」，并附角色图。
 ---
 
 * content
 {:toc}
 
 <p align="center">
-  <img src="{{ site.baseurl }}/blog_picture/tomboy-anime.resources/cover.jpg" alt="Ranker 假小子动漫角色榜封面" width="640">
+  <img src="{{ site.baseurl }}/blog_picture/tomboy-anime.resources/cover.jpg" alt="动漫假小子角色图鉴封面" width="640">
 </p>
 
-来源：[Ranker - The 25+ Best Tomboy Anime Characters of All Time](https://www.ranker.com/list/best-tomboy-anime/ranker-anime)（list id `1927524`）。原榜 API 返回 80 条；本文已去掉明显不像假小子、重复节点与错链条目，保留 **57** 人。图片主要来自 Ranker / AniList 公开角色图，仅供对照阅读，版权归原作与平台。
+底稿来自 [Ranker 假小子动漫角色投票榜](https://www.ranker.com/list/best-tomboy-anime/ranker-anime)（原榜约 80 条）。本文不是照单全翻：已去掉明显不像假小子、重复节点与错链条目，留下 **57** 人做中文图鉴。图片主要来自 Ranker / AniList 公开角色图，仅供对照阅读，版权归原作与平台。
 
 ---
 
