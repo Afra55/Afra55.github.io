@@ -1,0 +1,103 @@
+#!/usr/bin/env node
+"use strict";
+
+const http = require("http");
+const { spawn } = require("child_process");
+const path = require("path");
+
+const PORT = 17991;
+const TOKEN = "devtools-adb";
+const HOST = "127.0.0.1";
+
+function req(method, urlPath, { headers = {}, body } = {}) {
+  return new Promise((resolve, reject) => {
+    const r = http.request(
+      {
+        host: HOST,
+        port: PORT,
+        path: urlPath,
+        method,
+        headers,
+      },
+      (res) => {
+        const chunks = [];
+        res.on("data", (c) => chunks.push(c));
+        res.on("end", () => {
+          const text = Buffer.concat(chunks).toString("utf8");
+          let json = null;
+          try {
+            json = JSON.parse(text);
+          } catch {
+            json = null;
+          }
+          resolve({ status: res.statusCode, json, text });
+        });
+      }
+    );
+    r.on("error", reject);
+    if (body) r.write(body);
+    r.end();
+  });
+}
+
+async function main() {
+  const child = spawn(process.execPath, [path.join(__dirname, "server.js")], {
+    env: {
+      ...process.env,
+      ADB_BRIDGE_PORT: String(PORT),
+      ADB_BRIDGE_TOKEN: TOKEN,
+      ADB_BRIDGE_ORIGINS: "http://127.0.0.1:8080,https://afra55.github.io",
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+
+  let boot = "";
+  child.stdout.on("data", (d) => {
+    boot += d.toString("utf8");
+  });
+  child.stderr.on("data", (d) => {
+    boot += d.toString("utf8");
+  });
+
+  try {
+    let healthy = null;
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 100));
+      try {
+        healthy = await req("GET", "/health");
+        if (healthy.status === 200) break;
+      } catch {
+        /* retry */
+      }
+    }
+    if (!healthy || healthy.status !== 200 || !healthy.json?.ok) {
+      throw new Error(`health failed: ${boot || JSON.stringify(healthy)}`);
+    }
+
+    const denied = await req("GET", "/devices");
+    if (denied.status !== 401) throw new Error(`expected 401 without token, got ${denied.status}`);
+
+    const devices = await req("GET", "/devices", { headers: { "X-Adb-Token": TOKEN } });
+    if (![200, 503].includes(devices.status)) {
+      throw new Error(`devices unexpected status ${devices.status}: ${devices.text}`);
+    }
+    if (devices.status === 200 && !Array.isArray(devices.json.devices)) {
+      throw new Error("devices payload invalid");
+    }
+
+    const badPath = await req("GET", "/fs/list?serial=demo&path=/data/data", {
+      headers: { "X-Adb-Token": TOKEN },
+    });
+    if (badPath.status === 200) throw new Error("expected path guard to reject /data/data");
+
+    console.log("adb-bridge smoke-check: ok");
+  } finally {
+    child.kill("SIGTERM");
+  }
+}
+
+main().catch((err) => {
+  console.error("adb-bridge smoke-check: fail");
+  console.error(err);
+  process.exit(1);
+});

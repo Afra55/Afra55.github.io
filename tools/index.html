@@ -3,12 +3,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="实用小工具：时间戳、颜色、Base64、JSON、正则、URL、UUID、Hash、文本、命名转换、坐标系互转、GIF 合成/拆帧/视频转 GIF、JWT、YAML、二维码等" />
+  <meta name="description" content="实用小工具：时间戳、颜色、Base64、JSON、正则、URL、UUID、Hash、文本、命名转换、坐标系互转、ADB 设备/文件管理、GIF 合成/拆帧/视频转 GIF、JWT、YAML、二维码等" />
   <title>DevTools · 实用小工具</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260731a" />
+  <link rel="stylesheet" href="./style.css?v=20260801a" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -54,6 +54,7 @@
         <a class="tool-nav-link" href="#coord" draggable="true" data-tool="coord">坐标系互转</a>
         <a class="tool-nav-link" href="#numbase" draggable="true" data-tool="numbase">进制转换</a>
         <a class="tool-nav-link" href="#markdown" draggable="true" data-tool="markdown">Markdown</a>
+        <a class="tool-nav-link" href="#adb" draggable="true" data-tool="adb">ADB 工具</a>
       </nav>
       <button type="button" class="nav-reset" id="nav-reset" title="恢复默认分组排序">恢复默认排序</button>
     </div>
@@ -1056,6 +1057,87 @@ hello@world.org</textarea>
       </div>
     </section>
 
+<section id="adb" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>ADB 工具</h1>
+        <p>通过本机 ADB 桥管理多台设备与文件。使用前需本机已安装 <code class="mono">adb</code>，并启动本地桥接服务。</p>
+      </div>
+      <div class="panel-body">
+        <div class="adb-status" id="adb-status">
+          <div class="adb-status-main">
+            <span class="adb-dot" id="adb-dot" aria-hidden="true"></span>
+            <div>
+              <strong id="adb-status-title">未连接本机桥</strong>
+              <p class="hint tight" id="adb-status-text">请先下载启动脚本并双击运行，再点「连接本机桥」。</p>
+            </div>
+          </div>
+          <div class="btn-row tool-actions adb-status-actions">
+            <button type="button" class="primary-btn" id="adb-connect">连接本机桥</button>
+            <button type="button" class="secondary-btn" id="adb-refresh" disabled>刷新设备</button>
+            <a class="secondary-btn" id="adb-dl-mac" href="./adb-bridge/start-mac.command" download="start-adb-bridge.command">下载 macOS 启动脚本</a>
+            <a class="secondary-btn" id="adb-dl-win" href="./adb-bridge/start-win.bat" download="start-adb-bridge.bat">下载 Windows 启动脚本</a>
+            <a class="secondary-btn" id="adb-dl-linux" href="./adb-bridge/start-linux.sh" download="start-adb-bridge.sh">下载 Linux 启动脚本</a>
+          </div>
+        </div>
+
+        <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
+          <label for="adb-base">桥地址</label>
+          <input id="adb-base" class="mono" type="text" value="http://127.0.0.1:17888" autocomplete="off" spellcheck="false" />
+          <label for="adb-token">Token</label>
+          <input id="adb-token" class="mono" type="text" value="devtools-adb" autocomplete="off" spellcheck="false" />
+        </div>
+        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机；文件范围限于 <span class="mono">/sdcard</span> 与 <span class="mono">/storage/emulated/0</span>。</p>
+        <p class="error" id="adb-error" hidden></p>
+
+        <div class="adb-layout" id="adb-workspace" hidden>
+          <div class="adb-side">
+            <div class="label-row">
+              <h2 class="subhead">设备</h2>
+              <span class="hint tight" id="adb-device-meta">0 台</span>
+            </div>
+            <div class="adb-device-list" id="adb-device-list" role="listbox" aria-label="设备列表"></div>
+          </div>
+
+          <div class="adb-main">
+            <div class="label-row">
+              <h2 class="subhead">设备信息</h2>
+              <span class="hint tight" id="adb-info-meta">未选择设备</span>
+            </div>
+            <div class="channel-meta adb-info" id="adb-info">
+              <div class="meta-row"><span>序列号</span><strong class="mono" id="adb-info-serial">—</strong></div>
+              <div class="meta-row"><span>状态</span><strong class="mono" id="adb-info-state">—</strong></div>
+              <div class="meta-row"><span>厂商 / 型号</span><strong class="mono" id="adb-info-model">—</strong></div>
+              <div class="meta-row"><span>Android</span><strong class="mono" id="adb-info-android">—</strong></div>
+              <div class="meta-row"><span>分辨率 / DPI</span><strong class="mono" id="adb-info-screen">—</strong></div>
+              <div class="meta-row"><span>电量</span><strong class="mono" id="adb-info-battery">—</strong></div>
+              <div class="meta-row"><span>存储 (/sdcard)</span><strong class="mono" id="adb-info-storage">—</strong></div>
+              <div class="meta-row"><span>ABI / Build</span><strong class="mono" id="adb-info-build">—</strong></div>
+            </div>
+
+            <div class="label-row" style="margin-top:1.25rem">
+              <h2 class="subhead">文件管理</h2>
+              <span class="hint tight" id="adb-fs-meta">选择设备后浏览文件</span>
+            </div>
+            <div class="adb-path-row">
+              <button type="button" class="ghost-btn" id="adb-fs-up" title="上级目录">上级</button>
+              <input id="adb-fs-path" class="mono" type="text" value="/sdcard" spellcheck="false" autocomplete="off" />
+              <button type="button" class="secondary-btn" id="adb-fs-go">打开</button>
+              <button type="button" class="ghost-btn" id="adb-fs-refresh">刷新</button>
+            </div>
+            <div class="btn-row tool-actions" style="margin-top:0.65rem">
+              <label class="file-btn" for="adb-fs-upload">上传到当前目录</label>
+              <input id="adb-fs-upload" type="file" multiple hidden />
+              <button type="button" class="secondary-btn" id="adb-fs-mkdir">新建文件夹</button>
+              <button type="button" class="ghost-btn" id="adb-fs-home">/sdcard</button>
+              <button type="button" class="ghost-btn" id="adb-fs-download-dir">Download</button>
+            </div>
+            <div class="adb-fs-list" id="adb-fs-list" aria-live="polite"></div>
+            <p class="hint" id="adb-fs-hint">点击文件夹进入；文件可下载或删除。删除前会确认。</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
 <section id="coming" class="panel panel-soon" data-reveal>
       <div class="panel-head">
         <h1>更多功能 · 预留</h1>
@@ -1088,8 +1170,8 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./lib/pure.js?v=20260731a"></script>
-  <script src="./app.js?v=20260731a"></script>
-  <script src="./extra.js?v=20260731a"></script>
+  <script src="./lib/pure.js?v=20260801a"></script>
+  <script src="./app.js?v=20260801a"></script>
+  <script src="./extra.js?v=20260801a"></script>
 </body>
 </html>

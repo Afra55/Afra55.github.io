@@ -772,6 +772,7 @@
     "coord",
     "numbase",
     "markdown",
+    "adb",
   ];
 
   const navEl = $("#tool-nav") || $(".tool-nav");

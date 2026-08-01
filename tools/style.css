@@ -1509,3 +1509,200 @@ a.secondary-btn {
     flex-wrap: wrap;
   }
 }
+
+.adb-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(8, 14, 26, 0.45);
+}
+
+.adb-status-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.adb-status-main strong {
+  display: block;
+  font-size: 1rem;
+}
+
+.adb-status-actions {
+  flex-wrap: wrap;
+}
+
+.adb-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-top: 0.35rem;
+  border-radius: 50%;
+  background: #6b7280;
+  box-shadow: 0 0 0 3px rgba(107, 114, 128, 0.18);
+  flex: 0 0 auto;
+}
+
+.adb-dot.is-ok {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px rgba(46, 196, 182, 0.2);
+}
+
+.adb-dot.is-warn {
+  background: var(--accent-2);
+  box-shadow: 0 0 0 3px rgba(244, 162, 97, 0.2);
+}
+
+.adb-dot.is-err {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px rgba(255, 107, 122, 0.18);
+}
+
+.adb-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) 1fr;
+  gap: 1.1rem;
+  margin-top: 1.1rem;
+}
+
+.adb-side,
+.adb-main {
+  min-width: 0;
+}
+
+.adb-device-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-height: 28rem;
+  overflow: auto;
+  padding-right: 0.15rem;
+}
+
+.adb-device {
+  text-align: left;
+  width: 100%;
+  border: 1px solid var(--line);
+  background: rgba(8, 14, 26, 0.35);
+  color: var(--ink);
+  border-radius: 12px;
+  padding: 0.7rem 0.8rem;
+  cursor: pointer;
+}
+
+.adb-device:hover {
+  border-color: rgba(46, 196, 182, 0.45);
+}
+
+.adb-device.is-active {
+  border-color: rgba(46, 196, 182, 0.7);
+  background: rgba(46, 196, 182, 0.1);
+}
+
+.adb-device strong {
+  display: block;
+  font-size: 0.92rem;
+}
+
+.adb-device span {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-family: var(--mono);
+  word-break: break-all;
+}
+
+.adb-info .meta-row strong {
+  text-align: right;
+  word-break: break-all;
+}
+
+.adb-path-row {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.adb-path-row input {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.adb-fs-list {
+  margin-top: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(8, 14, 26, 0.35);
+  max-height: 26rem;
+  overflow-y: auto;
+}
+
+.adb-fs-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 0.55rem;
+  align-items: center;
+  padding: 0.55rem 0.75rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.88rem;
+}
+
+.adb-fs-row:first-child {
+  border-top: 0;
+}
+
+.adb-fs-row button.linkish {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 0;
+  word-break: break-all;
+}
+
+.adb-fs-row button.linkish:hover {
+  color: var(--accent);
+}
+
+.adb-fs-row .adb-fs-meta {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.adb-fs-actions {
+  display: inline-flex;
+  gap: 0.35rem;
+}
+
+.adb-fs-empty {
+  padding: 1rem 0.85rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 860px) {
+  .adb-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .adb-device-list {
+    max-height: 12rem;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .adb-device {
+    width: auto;
+    min-width: min(100%, 12rem);
+  }
+}
