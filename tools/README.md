@@ -44,6 +44,7 @@ python3 -m http.server 8080 --directory .
 
 ```bash
 node tools/test/pure.test.js
+node tools/adb-bridge/smoke-check.js
 # 可选浏览器冒烟（需静态服务）
 # python3 -m http.server 8080 --directory tools
 # 打开 /test/smoke.html

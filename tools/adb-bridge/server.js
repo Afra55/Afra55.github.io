@@ -10,7 +10,7 @@
 
 const http = require("http");
 const { URL } = require("url");
-const { spawn, execFile } = require("child_process");
+const { execFile } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
