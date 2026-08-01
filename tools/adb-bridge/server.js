@@ -39,7 +39,7 @@ const ROOTS = ["/sdcard", "/storage/emulated/0"];
 const TMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "adb-bridge-"));
 const JOBS = new Map();
 const UPLOADS = new Map();
-const BRIDGE_VERSION = "0.4.0";
+const BRIDGE_VERSION = "0.5.0";
 
 function sendJson(res, status, data, origin) {
   const body = JSON.stringify(data);
@@ -563,7 +563,319 @@ async function appAction(serial, packageName, action) {
     });
     return { ok: true, action, packageName: pkg, output: `${stdout}\n${stderr}`.trim() };
   }
+  if (action === "clear") {
+    const { stdout, stderr } = await adbSerial(serial, ["shell", "pm", "clear", pkg], {
+      timeout: 60000,
+    });
+    const text = `${stdout}\n${stderr}`;
+    if (/Failed|Error/i.test(text) && !/Success/i.test(text)) {
+      throw new Error(text.trim() || "清数据失败");
+    }
+    return { ok: true, action, packageName: pkg, output: text.trim() };
+  }
   throw new Error("不支持的应用操作");
+}
+
+async function appPermission(serial, packageName, action, permission) {
+  const pkg = String(packageName || "").trim();
+  const perm = String(permission || "").trim();
+  if (!pkg || !/^[A-Za-z0-9._]+$/.test(pkg)) throw new Error("包名无效");
+  if (!perm || !/^[A-Za-z0-9._]+$/.test(perm)) throw new Error("权限名无效");
+  if (action !== "grant" && action !== "revoke") throw new Error("仅支持 grant/revoke");
+  const { stdout, stderr } = await adbSerial(serial, ["shell", "pm", action, pkg, perm], {
+    timeout: 30000,
+  });
+  return { ok: true, action, packageName: pkg, permission: perm, output: `${stdout}\n${stderr}`.trim() };
+}
+
+function parsePackageDump(text, packageName) {
+  const versionName = (text.match(/versionName=([^\s]+)/) || [])[1] || "";
+  const versionCode = (text.match(/versionCode=(\d+)/) || [])[1] || "";
+  const minSdk = (text.match(/minSdk=(\d+)/) || [])[1] || "";
+  const targetSdk = (text.match(/targetSdk=(\d+)/) || [])[1] || "";
+  const enabled = !/Package \[.*?\][\s\S]*?enabled=false/i.test(text);
+  const permissions = [];
+  const granted = [];
+  for (const line of text.split(/\r?\n/)) {
+    const req = line.match(/^\s*android\.permission\.[A-Z0-9_]+|^\s*[a-zA-Z0-9_.]+\.permission\.[A-Z0-9_]+/);
+    if (req) permissions.push(req[0].trim());
+    const g = line.match(/^\s*(android\.permission\.[A-Z0-9_]+): granted=true/);
+    if (g) granted.push(g[1]);
+    const g2 = line.match(/^\s*([a-zA-Z0-9_.]+\.permission\.[A-Z0-9_]+): granted=true/);
+    if (g2) granted.push(g2[1]);
+  }
+  const activities = [];
+  const actRe = new RegExp(`${packageName.replace(/\./g, "\\.")}/[^\\s]+`, "g");
+  const seen = new Set();
+  for (const m of text.matchAll(actRe)) {
+    if (!seen.has(m[0])) {
+      seen.add(m[0]);
+      activities.push(m[0]);
+    }
+    if (activities.length >= 30) break;
+  }
+  return {
+    packageName,
+    versionName,
+    versionCode,
+    minSdk,
+    targetSdk,
+    enabled,
+    permissions: [...new Set(permissions)].slice(0, 80),
+    grantedPermissions: [...new Set(granted)].slice(0, 80),
+    activities,
+  };
+}
+
+async function getPackageInfo(serial, packageName) {
+  const pkg = String(packageName || "").trim();
+  if (!pkg || !/^[A-Za-z0-9._]+$/.test(pkg)) throw new Error("包名无效");
+  const { stdout } = await adbSerial(serial, ["shell", "dumpsys", "package", pkg], {
+    timeout: 60000,
+    maxBuffer: 30 * 1024 * 1024,
+  });
+  if (!stdout || /Unable to find package/i.test(stdout)) throw new Error("找不到该包");
+  let launchActivity = "";
+  try {
+    const resolved = await adbSerial(
+      serial,
+      ["shell", "cmd", "package", "resolve-activity", "--brief", pkg],
+      { timeout: 15000 }
+    );
+    const lines = resolved.stdout
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    launchActivity = lines[lines.length - 1] || "";
+  } catch {
+    launchActivity = "";
+  }
+  const parsed = parsePackageDump(stdout, pkg);
+  return {
+    ok: true,
+    ...parsed,
+    launchActivity,
+    rawPreview: stdout.split(/\r?\n/).slice(0, 120).join("\n"),
+  };
+}
+
+async function analyzeLocalApk(filePath, filename) {
+  const tools = ["aapt", "aapt2"];
+  let badging = "";
+  let tool = "";
+  for (const bin of tools) {
+    try {
+      const { stdout } = await execFileAsync(bin, ["dump", "badging", filePath], {
+        timeout: 30000,
+        maxBuffer: 10 * 1024 * 1024,
+      });
+      badging = stdout || "";
+      tool = bin;
+      break;
+    } catch {
+      /* try next */
+    }
+  }
+  if (!badging) {
+    return {
+      ok: true,
+      filename,
+      tool: "",
+      note: "本机未找到 aapt/aapt2，仅返回文件大小。安装 Android build-tools 后可解析包名/权限。",
+      size: fs.statSync(filePath).size,
+    };
+  }
+  const packageName = (badging.match(/package: name='([^']+)'/) || [])[1] || "";
+  const versionName = (badging.match(/versionName='([^']+)'/) || [])[1] || "";
+  const versionCode = (badging.match(/versionCode='([^']+)'/) || [])[1] || "";
+  const minSdk = (badging.match(/sdkVersion:'([^']+)'/) || [])[1] || "";
+  const targetSdk = (badging.match(/targetSdkVersion:'([^']+)'/) || [])[1] || "";
+  const launchActivity = (badging.match(/launchable-activity: name='([^']+)'/) || [])[1] || "";
+  const permissions = [...badging.matchAll(/uses-permission: name='([^']+)'/g)].map((m) => m[1]);
+  const label = (badging.match(/application-label(?:-zh(?:-CN)?)?:'([^']+)'/) ||
+    badging.match(/application-label:'([^']+)'/) || [])[1] || "";
+  return {
+    ok: true,
+    filename,
+    tool,
+    packageName,
+    label,
+    versionName,
+    versionCode,
+    minSdk,
+    targetSdk,
+    launchActivity: packageName && launchActivity ? `${packageName}/${launchActivity}` : launchActivity,
+    permissions: permissions.slice(0, 100),
+    size: fs.statSync(filePath).size,
+    rawPreview: badging.split(/\r?\n/).slice(0, 80).join("\n"),
+  };
+}
+
+async function getProxy(serial) {
+  const httpProxy = await shellCapture(serial, "settings get global http_proxy", 8000);
+  const host = await shellCapture(serial, "settings get global global_http_proxy_host", 8000);
+  const port = await shellCapture(serial, "settings get global global_http_proxy_port", 8000);
+  return {
+    ok: true,
+    httpProxy: httpProxy === "null" ? "" : httpProxy,
+    host: host === "null" ? "" : host,
+    port: port === "null" ? "" : port,
+  };
+}
+
+async function setProxy(serial, host, port) {
+  const h = String(host || "").trim();
+  const p = String(port || "").trim();
+  if (!h || !p) throw new Error("请填写代理 host 与 port");
+  if (!/^\d+$/.test(p)) throw new Error("端口无效");
+  await adbSerial(serial, ["shell", "settings", "put", "global", "http_proxy", `${h}:${p}`], {
+    timeout: 10000,
+  });
+  return { ok: true, ...(await getProxy(serial)), message: `已设置代理 ${h}:${p}` };
+}
+
+async function clearProxy(serial) {
+  await adbSerial(serial, ["shell", "settings", "put", "global", "http_proxy", ":0"], {
+    timeout: 10000,
+  });
+  try {
+    await adbSerial(serial, ["shell", "settings", "delete", "global", "global_http_proxy_host"], {
+      timeout: 8000,
+    });
+    await adbSerial(serial, ["shell", "settings", "delete", "global", "global_http_proxy_port"], {
+      timeout: 8000,
+    });
+  } catch {
+    /* ignore */
+  }
+  return { ok: true, ...(await getProxy(serial)), message: "已清除代理" };
+}
+
+async function listForwards(serial) {
+  const { stdout } = await adb(["forward", "--list"], { timeout: 10000 });
+  const forwards = [];
+  const reverses = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    const parts = trimmed.split(/\s+/);
+    if (parts.length >= 3) {
+      if (!serial || parts[0] === serial) {
+        forwards.push({ serial: parts[0], local: parts[1], remote: parts[2] });
+      }
+    }
+  }
+  try {
+    const rev = await adb(["reverse", "--list"], { timeout: 10000 });
+    for (const line of rev.stdout.split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      // reverse --list format varies; often "UsbFfs tcp:xxx tcp:yyy" or with serial
+      const parts = trimmed.split(/\s+/);
+      if (parts.length >= 2) {
+        reverses.push({ raw: trimmed, parts });
+      }
+    }
+  } catch {
+    /* reverse list may fail on some adb */
+  }
+  if (serial) {
+    try {
+      const revSerial = await adbSerial(serial, ["reverse", "--list"], { timeout: 10000 });
+      for (const line of revSerial.stdout.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const parts = trimmed.split(/\s+/);
+        if (parts.length >= 2) {
+          reverses.push({ serial, local: parts[0], remote: parts[1], raw: trimmed });
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return { ok: true, forwards, reverses };
+}
+
+async function addForward(serial, local, remote, direction = "forward") {
+  const loc = String(local || "").trim();
+  const rem = String(remote || "").trim();
+  if (!loc || !rem) throw new Error("请填写 local 与 remote，例如 tcp:8080");
+  const cmd = direction === "reverse" ? "reverse" : "forward";
+  await adbSerial(serial, [cmd, loc, rem], { timeout: 15000 });
+  return { ok: true, ...(await listForwards(serial)), message: `已添加 ${cmd} ${loc} -> ${rem}` };
+}
+
+async function removeForward(serial, local, direction = "forward", removeAll = false) {
+  const cmd = direction === "reverse" ? "reverse" : "forward";
+  if (removeAll) {
+    await adbSerial(serial, [cmd, "--remove-all"], { timeout: 15000 });
+    return { ok: true, ...(await listForwards(serial)), message: `已清除全部 ${cmd}` };
+  }
+  const loc = String(local || "").trim();
+  if (!loc) throw new Error("请填写要移除的 local 端口，例如 tcp:8080");
+  await adbSerial(serial, [cmd, "--remove", loc], { timeout: 15000 });
+  return { ok: true, ...(await listForwards(serial)), message: `已移除 ${cmd} ${loc}` };
+}
+
+async function getDeveloperOptions(serial) {
+  const read = async (ns, key) => shellCapture(serial, `settings get ${ns} ${key}`, 8000);
+  const showTouches = await read("system", "show_touches");
+  const pointerLocation = await read("system", "pointer_location");
+  const windowAnim = await read("global", "window_animation_scale");
+  const transitionAnim = await read("global", "transition_animation_scale");
+  const animatorAnim = await read("global", "animator_duration_scale");
+  const layout = await shellCapture(serial, "getprop debug.layout", 8000);
+  const stayOn = await read("global", "stay_on_while_plugged_in");
+  return {
+    ok: true,
+    showTouches: showTouches === "1" || showTouches === "true",
+    pointerLocation: pointerLocation === "1" || pointerLocation === "true",
+    layoutBounds: layout === "true" || layout === "1",
+    windowAnimationScale: windowAnim === "null" ? "1.0" : windowAnim || "1.0",
+    transitionAnimationScale: transitionAnim === "null" ? "1.0" : transitionAnim || "1.0",
+    animatorDurationScale: animatorAnim === "null" ? "1.0" : animatorAnim || "1.0",
+    stayOnWhilePluggedIn: stayOn === "null" ? "0" : stayOn || "0",
+    raw: { showTouches, pointerLocation, layout, windowAnim, transitionAnim, animatorAnim, stayOn },
+  };
+}
+
+async function setDeveloperOption(serial, key, value) {
+  const k = String(key || "").trim();
+  async function put(ns, name, val) {
+    await adbSerial(serial, ["shell", "settings", "put", ns, name, String(val)], { timeout: 10000 });
+  }
+  if (k === "show_touches") {
+    await put("system", "show_touches", value ? "1" : "0");
+  } else if (k === "pointer_location") {
+    await put("system", "pointer_location", value ? "1" : "0");
+  } else if (k === "layout_bounds") {
+    await adbSerial(serial, ["shell", "setprop", "debug.layout", value ? "true" : "false"], {
+      timeout: 10000,
+    });
+    // Refresh UI hierarchy overlay
+    try {
+      await adbSerial(serial, ["shell", "service", "call", "activity", "1599295570"], {
+        timeout: 10000,
+      });
+    } catch {
+      /* ignore refresh failure */
+    }
+  } else if (k === "window_animation_scale") {
+    await put("global", "window_animation_scale", value);
+  } else if (k === "transition_animation_scale") {
+    await put("global", "transition_animation_scale", value);
+  } else if (k === "animator_duration_scale") {
+    await put("global", "animator_duration_scale", value);
+  } else if (k === "animation_scale_all") {
+    const scale = String(value ?? "1");
+    await put("global", "window_animation_scale", scale);
+    await put("global", "transition_animation_scale", scale);
+    await put("global", "animator_duration_scale", scale);
+  } else {
+    throw new Error("不支持的开发者选项");
+  }
+  return { ok: true, ...(await getDeveloperOptions(serial)), message: `已更新 ${k}` };
 }
 
 async function dumpLogcat(serial, opts = {}) {
@@ -1159,6 +1471,10 @@ async function handleApi(req, res, url) {
             "clipboard",
             "snapshot",
             "device-control",
+            "apk-info",
+            "proxy",
+            "forward",
+            "developer",
           ],
           adb: adbInfo,
           deviceCount: devices.length,
@@ -1301,6 +1617,32 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    if (url.pathname === "/apps/permission" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req, 1024 * 1024));
+      sendJson(
+        res,
+        200,
+        await appPermission(body.serial, body.packageName, body.action, body.permission),
+        origin
+      );
+      return;
+    }
+
+    if (url.pathname === "/apps/info" && req.method === "GET") {
+      const serial = url.searchParams.get("serial") || "";
+      const packageName = url.searchParams.get("package") || "";
+      sendJson(res, 200, await getPackageInfo(serial, packageName), origin);
+      return;
+    }
+
+    if (url.pathname === "/apk/info" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req, 1024 * 1024));
+      const upload = UPLOADS.get(body.uploadId);
+      if (!upload) throw new Error("找不到已上传的 APK，请先上传");
+      sendJson(res, 200, await analyzeLocalApk(upload.path, upload.filename), origin);
+      return;
+    }
+
     if (url.pathname === "/apps/backup" && req.method === "POST") {
       const body = parseJsonBody(await readBody(req, 1024 * 1024));
       const serial = body.serial || "";
@@ -1367,6 +1709,60 @@ async function handleApi(req, res, url) {
     if (url.pathname === "/device/control" && req.method === "POST") {
       const body = parseJsonBody(await readBody(req, 1024 * 1024));
       sendJson(res, 200, await deviceControl(body.serial, body.action), origin);
+      return;
+    }
+
+    if (url.pathname === "/network/proxy" && req.method === "GET") {
+      const serial = url.searchParams.get("serial") || "";
+      sendJson(res, 200, await getProxy(serial), origin);
+      return;
+    }
+
+    if (url.pathname === "/network/proxy" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req, 1024 * 1024));
+      if (body.clear) {
+        sendJson(res, 200, await clearProxy(body.serial), origin);
+        return;
+      }
+      sendJson(res, 200, await setProxy(body.serial, body.host, body.port), origin);
+      return;
+    }
+
+    if (url.pathname === "/network/forward" && req.method === "GET") {
+      const serial = url.searchParams.get("serial") || "";
+      sendJson(res, 200, await listForwards(serial), origin);
+      return;
+    }
+
+    if (url.pathname === "/network/forward" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req, 1024 * 1024));
+      if (body.remove || body.removeAll) {
+        sendJson(
+          res,
+          200,
+          await removeForward(body.serial, body.local, body.direction || "forward", Boolean(body.removeAll)),
+          origin
+        );
+        return;
+      }
+      sendJson(
+        res,
+        200,
+        await addForward(body.serial, body.local, body.remote, body.direction || "forward"),
+        origin
+      );
+      return;
+    }
+
+    if (url.pathname === "/developer" && req.method === "GET") {
+      const serial = url.searchParams.get("serial") || "";
+      sendJson(res, 200, await getDeveloperOptions(serial), origin);
+      return;
+    }
+
+    if (url.pathname === "/developer" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req, 1024 * 1024));
+      sendJson(res, 200, await setDeveloperOption(body.serial, body.key, body.value), origin);
       return;
     }
 
@@ -1453,7 +1849,7 @@ server.listen(PORT, HOST, () => {
   console.log(` 版本: ${BRIDGE_VERSION}`);
   console.log(` 地址: http://${HOST}:${PORT}`);
   console.log(` Token: ${TOKEN}`);
-  console.log(" 能力: 文件 / 安装 / 应用 / 截图录屏 / Logcat / 输入 / 设备控制 / 任务");
+  console.log(" 能力: 文件 / 安装 / 应用 / 网络代理转发 / 开发者选项 / Logcat / 任务");
   console.log(" 请保持此窗口打开，然后回到网页点击「连接」");
   console.log("========================================");
   console.log("");

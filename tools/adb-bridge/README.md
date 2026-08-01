@@ -48,8 +48,14 @@ node server.js
 | POST | `/upload?name=` | 上传 APK 到桥临时区 |
 | POST | `/install` | 批量/单设备安装（任务） |
 | GET | `/apps?serial=&kind=` | 应用列表 `all/system/third` |
-| POST | `/apps/action` | 卸载 / 停用 / 启用 |
+| GET | `/apps/info?serial=&package=` | 已安装应用详情 |
+| POST | `/apps/action` | 打开 / 强停 / 清数据 / 卸载 / 停用 / 启用 |
+| POST | `/apps/permission` | 授予 / 撤销权限 |
+| POST | `/apk/info` | 分析已上传 APK（需本机 aapt/aapt2） |
 | POST | `/apps/backup` | 备份 APK（可 `async` 任务） |
+| GET/POST | `/network/proxy` | HTTP 代理查询/设置/清除 |
+| GET/POST | `/network/forward` | forward/reverse 端口转发 |
+| GET/POST | `/developer` | 开发者选项状态与开关 |
 | POST | `/media/screenshot` | 多设备截图任务 |
 | POST | `/media/record` | 当前设备录屏任务 |
 | GET | `/logcat?serial=&lines=&package=&query=` | 拉取 logcat |

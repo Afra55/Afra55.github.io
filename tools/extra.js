@@ -2078,6 +2078,7 @@
     let adbApps = [];
     let adbApkFile = null;
     let adbTab = "info";
+    let adbPermPackage = "";
 
     function adbBase() {
       return String(adbBaseInput?.value || "http://127.0.0.1:17888").replace(/\/+$/, "");
@@ -2200,6 +2201,11 @@
       if (tab === "apps" && adbSelected && !adbApps.length) loadApps().catch(() => {});
       if (tab === "jobs") refreshJobs().catch(() => {});
       if (tab === "info" && adbSelected) loadSnapshot({ silent: true }).catch(() => {});
+      if (tab === "network" && adbSelected) {
+        refreshProxy({ silent: true }).catch(() => {});
+        refreshForwards({ silent: true }).catch(() => {});
+      }
+      if (tab === "developer" && adbSelected) refreshDeveloper({ silent: true }).catch(() => {});
     }
 
     function renderAdbDevices() {
@@ -2307,7 +2313,11 @@
             </div>
             <span></span>
             <div class="adb-fs-actions">
+              <button type="button" class="ghost-btn" data-adb-app-select="${escapeHtml(app.packageName)}">选中</button>
               <button type="button" class="primary-btn" data-adb-app-open="${escapeHtml(app.packageName)}">打开</button>
+              <button type="button" class="secondary-btn" data-adb-app-info="${escapeHtml(app.packageName)}">详情</button>
+              <button type="button" class="ghost-btn" data-adb-app-stop="${escapeHtml(app.packageName)}">强停</button>
+              <button type="button" class="ghost-btn" data-adb-app-clear="${escapeHtml(app.packageName)}">清数据</button>
               <button type="button" class="secondary-btn" data-adb-app-backup="${escapeHtml(app.packageName)}">备份APK</button>
               <button type="button" class="ghost-btn" data-adb-app-disable="${escapeHtml(app.packageName)}">停用</button>
               <button type="button" class="ghost-btn" data-adb-app-enable="${escapeHtml(app.packageName)}">启用</button>
@@ -2667,6 +2677,129 @@
     function setApkButtonsEnabled(on) {
       if ($("#adb-apk-install-selected")) $("#adb-apk-install-selected").disabled = !on;
       if ($("#adb-apk-install-current")) $("#adb-apk-install-current").disabled = !on;
+      if ($("#adb-apk-analyze")) $("#adb-apk-analyze").disabled = !on;
+    }
+
+    function setPermTarget(pkg) {
+      adbPermPackage = pkg || "";
+      if ($("#adb-perm-target")) {
+        $("#adb-perm-target").textContent = adbPermPackage
+          ? `权限目标：${adbPermPackage}`
+          : "先点某个应用的「选中」再授予/撤销";
+      }
+    }
+
+    async function showAppInfo(packageName) {
+      const serial = requireCurrentSerial();
+      const data = await adbFetch(
+        `/apps/info?serial=${encodeURIComponent(serial)}&package=${encodeURIComponent(packageName)}`
+      );
+      const el = $("#adb-app-detail");
+      if (!el) return;
+      el.hidden = false;
+      el.textContent = [
+        `包名: ${data.packageName}`,
+        `版本: ${data.versionName || "—"} (${data.versionCode || "—"})`,
+        `SDK: min ${data.minSdk || "—"} / target ${data.targetSdk || "—"}`,
+        `启动 Activity: ${data.launchActivity || "—"}`,
+        `已授予权限 (${(data.grantedPermissions || []).length}):`,
+        ...(data.grantedPermissions || []).slice(0, 40),
+        "",
+        `声明权限 (${(data.permissions || []).length}):`,
+        ...(data.permissions || []).slice(0, 40),
+        "",
+        "预览:",
+        data.rawPreview || "",
+      ].join("\n");
+      setPermTarget(packageName);
+      switchAdbTab("apps");
+    }
+
+    async function analyzeSelectedApk() {
+      if (!adbApkFile) throw new Error("请先选择 APK");
+      const buffer = new Uint8Array(await adbApkFile.arrayBuffer());
+      const uploaded = await adbFetch(`/upload?name=${encodeURIComponent(adbApkFile.name)}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "X-Filename": encodeURIComponent(adbApkFile.name),
+        },
+        body: buffer,
+      });
+      const data = await adbFetch("/apk/info", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uploadId: uploaded.uploadId }),
+      });
+      const el = $("#adb-apk-info");
+      if (!el) return;
+      el.hidden = false;
+      el.textContent = [
+        `文件: ${data.filename || adbApkFile.name}`,
+        `大小: ${formatBytes(data.size || adbApkFile.size)}`,
+        `解析工具: ${data.tool || "无"}`,
+        data.note || "",
+        `应用名: ${data.label || "—"}`,
+        `包名: ${data.packageName || "—"}`,
+        `版本: ${data.versionName || "—"} (${data.versionCode || "—"})`,
+        `SDK: min ${data.minSdk || "—"} / target ${data.targetSdk || "—"}`,
+        `启动: ${data.launchActivity || "—"}`,
+        `权限 (${(data.permissions || []).length}):`,
+        ...(data.permissions || []).slice(0, 60),
+        "",
+        data.rawPreview || "",
+      ]
+        .filter((line) => line !== "")
+        .join("\n");
+      toast("APK 信息已解析");
+    }
+
+    async function refreshProxy({ silent = false } = {}) {
+      const serial = requireCurrentSerial();
+      const data = await adbFetch(`/network/proxy?serial=${encodeURIComponent(serial)}`);
+      if ($("#adb-proxy-host") && data.host) $("#adb-proxy-host").value = data.host;
+      if ($("#adb-proxy-port") && data.port) $("#adb-proxy-port").value = data.port;
+      if ($("#adb-proxy-meta")) {
+        $("#adb-proxy-meta").textContent = data.httpProxy
+          ? `当前代理：${data.httpProxy}`
+          : "当前未设置 HTTP 代理";
+      }
+      if (!silent) toast("代理状态已刷新");
+    }
+
+    async function refreshForwards({ silent = false } = {}) {
+      const serial = requireCurrentSerial();
+      const data = await adbFetch(`/network/forward?serial=${encodeURIComponent(serial)}`);
+      const lines = [];
+      lines.push("forward:");
+      if (!(data.forwards || []).length) lines.push("  (无)");
+      for (const f of data.forwards || []) {
+        lines.push(`  ${f.serial}  ${f.local}  ->  ${f.remote}`);
+      }
+      lines.push("reverse:");
+      const reverses = (data.reverses || []).filter((r) => r.local || r.raw);
+      if (!reverses.length) lines.push("  (无)");
+      for (const r of reverses) {
+        lines.push(r.local ? `  ${r.local}  ->  ${r.remote}` : `  ${r.raw}`);
+      }
+      if ($("#adb-fwd-out")) $("#adb-fwd-out").textContent = lines.join("\n");
+      if ($("#adb-forward-meta")) {
+        $("#adb-forward-meta").textContent = `forward ${(data.forwards || []).length} · reverse ${reverses.length}`;
+      }
+      if (!silent) toast("转发列表已刷新");
+    }
+
+    async function refreshDeveloper({ silent = false } = {}) {
+      const serial = requireCurrentSerial();
+      const data = await adbFetch(`/developer?serial=${encodeURIComponent(serial)}`);
+      if ($("#adb-dev-show-touches")) $("#adb-dev-show-touches").textContent = data.showTouches ? "开" : "关";
+      if ($("#adb-dev-pointer")) $("#adb-dev-pointer").textContent = data.pointerLocation ? "开" : "关";
+      if ($("#adb-dev-layout")) $("#adb-dev-layout").textContent = data.layoutBounds ? "开" : "关";
+      if ($("#adb-dev-scales")) {
+        $("#adb-dev-scales").textContent = `window ${data.windowAnimationScale} / transition ${data.transitionAnimationScale} / animator ${data.animatorDurationScale}`;
+      }
+      if ($("#adb-dev-meta")) $("#adb-dev-meta").textContent = "已同步当前设备状态";
+      if (!silent) toast("开发者选项已刷新");
     }
 
     restoreAdbSettings();
@@ -2858,6 +2991,9 @@
       }
       setApkButtonsEnabled(Boolean(adbApkFile));
     });
+    $("#adb-apk-analyze")?.addEventListener("click", () =>
+      analyzeSelectedApk().catch((err) => setError(adbError, err.message || String(err)))
+    );
     $("#adb-apk-install-selected")?.addEventListener("click", async () => {
       try {
         await startInstall(targetSerials(true));
@@ -2877,17 +3013,183 @@
     $("#adb-apps-refresh")?.addEventListener("click", () =>
       loadApps().catch((err) => setError(adbError, err.message || String(err)))
     );
+    async function runPermAction(action) {
+      if (!adbPermPackage) throw new Error("请先在应用列表点「选中」");
+      const permission = String($("#adb-perm-name")?.value || "").trim();
+      if (!permission) throw new Error("请填写权限名");
+      await adbFetch("/apps/permission", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serial: requireCurrentSerial(),
+          packageName: adbPermPackage,
+          action,
+          permission,
+        }),
+      });
+      toast(action === "grant" ? "已授予权限" : "已撤销权限");
+    }
+    $("#adb-perm-grant")?.addEventListener("click", () =>
+      runPermAction("grant").catch((err) => setError(adbError, err.message || String(err)))
+    );
+    $("#adb-perm-revoke")?.addEventListener("click", () =>
+      runPermAction("revoke").catch((err) => setError(adbError, err.message || String(err)))
+    );
+
+    $("#adb-proxy-refresh")?.addEventListener("click", () =>
+      refreshProxy().catch((err) => setError(adbError, err.message || String(err)))
+    );
+    $("#adb-proxy-set")?.addEventListener("click", async () => {
+      try {
+        const data = await adbFetch("/network/proxy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            serial: requireCurrentSerial(),
+            host: $("#adb-proxy-host")?.value || "",
+            port: $("#adb-proxy-port")?.value || "",
+          }),
+        });
+        toast(data.message || "代理已设置");
+        await refreshProxy({ silent: true });
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    });
+    $("#adb-proxy-clear")?.addEventListener("click", async () => {
+      try {
+        const data = await adbFetch("/network/proxy", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serial: requireCurrentSerial(), clear: true }),
+        });
+        toast(data.message || "代理已清除");
+        if ($("#adb-proxy-host")) $("#adb-proxy-host").value = "";
+        if ($("#adb-proxy-port")) $("#adb-proxy-port").value = "";
+        await refreshProxy({ silent: true });
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    });
+    $("#adb-fwd-refresh")?.addEventListener("click", () =>
+      refreshForwards().catch((err) => setError(adbError, err.message || String(err)))
+    );
+    $("#adb-fwd-add")?.addEventListener("click", async () => {
+      try {
+        const data = await adbFetch("/network/forward", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            serial: requireCurrentSerial(),
+            direction: $("#adb-fwd-dir")?.value || "forward",
+            local: $("#adb-fwd-local")?.value || "",
+            remote: $("#adb-fwd-remote")?.value || "",
+          }),
+        });
+        toast(data.message || "已添加转发");
+        await refreshForwards({ silent: true });
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    });
+    $("#adb-fwd-remove")?.addEventListener("click", async () => {
+      try {
+        const data = await adbFetch("/network/forward", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            serial: requireCurrentSerial(),
+            direction: $("#adb-fwd-dir")?.value || "forward",
+            local: $("#adb-fwd-local")?.value || "",
+            remove: true,
+          }),
+        });
+        toast(data.message || "已移除");
+        await refreshForwards({ silent: true });
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    });
+    $("#adb-fwd-clear")?.addEventListener("click", async () => {
+      try {
+        if (!window.confirm("确认清除当前方向的全部端口转发？")) return;
+        const data = await adbFetch("/network/forward", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            serial: requireCurrentSerial(),
+            direction: $("#adb-fwd-dir")?.value || "forward",
+            removeAll: true,
+          }),
+        });
+        toast(data.message || "已清除");
+        await refreshForwards({ silent: true });
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    });
+
+    $("#adb-dev-refresh")?.addEventListener("click", () =>
+      refreshDeveloper().catch((err) => setError(adbError, err.message || String(err)))
+    );
+    $("#adb-open-dev-page")?.addEventListener("click", () =>
+      deviceControl("open_developer").catch((err) => setError(adbError, err.message || String(err)))
+    );
+    $$("[data-adb-dev]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          const key = btn.dataset.adbDev;
+          const raw = btn.dataset.adbDevVal;
+          const value = raw === "1" || raw === "true";
+          const data = await adbFetch("/developer", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ serial: requireCurrentSerial(), key, value }),
+          });
+          toast(data.message || "已更新");
+          await refreshDeveloper({ silent: true });
+        } catch (err) {
+          setError(adbError, err.message || String(err));
+        }
+      });
+    });
+    $("#adb-anim-apply")?.addEventListener("click", async () => {
+      try {
+        const data = await adbFetch("/developer", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            serial: requireCurrentSerial(),
+            key: "animation_scale_all",
+            value: $("#adb-anim-scale")?.value || "1",
+          }),
+        });
+        toast(data.message || "动画倍率已应用");
+        await refreshDeveloper({ silent: true });
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    });
     $("#adb-apps-kind")?.addEventListener("change", () =>
       loadApps().catch((err) => setError(adbError, err.message || String(err)))
     );
     $("#adb-apps-filter")?.addEventListener("input", () => renderApps());
     adbAppsList?.addEventListener("click", async (e) => {
+      const selectBtn = e.target.closest("[data-adb-app-select]");
       const openBtn = e.target.closest("[data-adb-app-open]");
+      const infoBtn = e.target.closest("[data-adb-app-info]");
+      const stopBtn = e.target.closest("[data-adb-app-stop]");
+      const clearBtn = e.target.closest("[data-adb-app-clear]");
       const backupBtn = e.target.closest("[data-adb-app-backup]");
       const disableBtn = e.target.closest("[data-adb-app-disable]");
       const enableBtn = e.target.closest("[data-adb-app-enable]");
       const uninstallBtn = e.target.closest("[data-adb-app-uninstall]");
       try {
+        if (selectBtn) {
+          setPermTarget(selectBtn.dataset.adbAppSelect);
+          toast("已选中应用");
+          return;
+        }
         if (openBtn) {
           await adbFetch("/apps/action", {
             method: "POST",
@@ -2899,6 +3201,37 @@
             }),
           });
           toast("已尝试打开应用");
+          return;
+        }
+        if (infoBtn) {
+          await showAppInfo(infoBtn.dataset.adbAppInfo);
+          return;
+        }
+        if (stopBtn) {
+          await adbFetch("/apps/action", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              serial: adbSelected,
+              packageName: stopBtn.dataset.adbAppStop,
+              action: "force-stop",
+            }),
+          });
+          toast("已强制停止");
+          return;
+        }
+        if (clearBtn) {
+          if (!window.confirm(`确认清除 ${clearBtn.dataset.adbAppClear} 的数据？`)) return;
+          await adbFetch("/apps/action", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              serial: adbSelected,
+              packageName: clearBtn.dataset.adbAppClear,
+              action: "clear",
+            }),
+          });
+          toast("已清除数据");
           return;
         }
         if (backupBtn) {

@@ -92,7 +92,18 @@ async function main() {
 
     const health2 = await req("GET", "/health");
     const features = health2.json?.features || [];
-    for (const need of ["jobs", "logcat", "input", "clipboard", "snapshot", "device-control"]) {
+    for (const need of [
+      "jobs",
+      "logcat",
+      "input",
+      "clipboard",
+      "snapshot",
+      "device-control",
+      "apk-info",
+      "proxy",
+      "forward",
+      "developer",
+    ]) {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
     }
 

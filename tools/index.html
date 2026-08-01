@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260801c" />
+  <link rel="stylesheet" href="./style.css?v=20260801d" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -1060,7 +1060,7 @@ hello@world.org</textarea>
 <section id="adb" class="panel" data-reveal>
       <div class="panel-head">
         <h1>ADB 工具</h1>
-        <p>通过本机 ADB 桥管理多台设备：文件、安装、应用、Logcat、输入自动化、状态快照与截图录屏。使用前需本机已安装 <code class="mono">adb</code>，并启动本地桥接服务。</p>
+        <p>通过本机 ADB 桥管理多台设备：文件、安装、应用、网络代理/转发、开发者选项、Logcat、输入与截图录屏。使用前需本机已安装 <code class="mono">adb</code>，并启动本地桥接服务。</p>
       </div>
       <div class="panel-body">
         <div class="adb-status" id="adb-status">
@@ -1109,6 +1109,8 @@ hello@world.org</textarea>
               <button type="button" class="adb-tab" data-adb-tab="files">文件</button>
               <button type="button" class="adb-tab" data-adb-tab="install">安装</button>
               <button type="button" class="adb-tab" data-adb-tab="apps">应用</button>
+              <button type="button" class="adb-tab" data-adb-tab="network">网络</button>
+              <button type="button" class="adb-tab" data-adb-tab="developer">开发者</button>
               <button type="button" class="adb-tab" data-adb-tab="logcat">Logcat</button>
               <button type="button" class="adb-tab" data-adb-tab="input">输入</button>
               <button type="button" class="adb-tab" data-adb-tab="media">截图录屏</button>
@@ -1188,9 +1190,11 @@ hello@world.org</textarea>
               </div>
               <p class="hint" id="adb-apk-name">尚未选择 APK</p>
               <div class="btn-row tool-actions" style="margin-top:0.75rem">
+                <button type="button" class="secondary-btn" id="adb-apk-analyze" disabled>分析 APK 信息</button>
                 <button type="button" class="primary-btn" id="adb-apk-install-selected" disabled>安装到勾选设备</button>
                 <button type="button" class="secondary-btn" id="adb-apk-install-current" disabled>仅安装到当前设备</button>
               </div>
+              <pre class="mono adb-pre" id="adb-apk-info" hidden></pre>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="apps" hidden>
@@ -1209,8 +1213,108 @@ hello@world.org</textarea>
                 <input id="adb-apps-filter" class="mono" type="search" placeholder="包名关键字" autocomplete="off" />
                 <button type="button" class="secondary-btn" id="adb-apps-refresh">刷新列表</button>
               </div>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+                <label for="adb-perm-name">权限</label>
+                <input id="adb-perm-name" class="mono" type="text" placeholder="android.permission.CAMERA" spellcheck="false" autocomplete="off" />
+                <span class="hint tight" id="adb-perm-target">先点某个应用的「选中」再授予/撤销</span>
+              </div>
+              <div class="btn-row tool-actions" style="margin-top:0.45rem">
+                <button type="button" class="secondary-btn" id="adb-perm-grant">授予权限</button>
+                <button type="button" class="ghost-btn" id="adb-perm-revoke">撤销权限</button>
+              </div>
               <div class="adb-fs-list adb-apps-list" id="adb-apps-list" aria-live="polite"></div>
-              <p class="hint">可打开应用；系统应用卸载/停用可能失败或影响系统，请谨慎操作。</p>
+              <pre class="mono adb-pre" id="adb-app-detail" hidden></pre>
+              <p class="hint">支持打开 / 详情 / 强停 / 清数据 / 权限；系统应用操作可能失败。</p>
+            </div>
+
+            <div class="adb-tab-panel" data-adb-panel="network" hidden>
+              <div class="label-row">
+                <h2 class="subhead">HTTP 代理</h2>
+                <span class="hint tight" id="adb-proxy-meta">当前设备全局代理</span>
+              </div>
+              <div class="field-row" style="flex-wrap:wrap">
+                <label for="adb-proxy-host">Host</label>
+                <input id="adb-proxy-host" class="mono" type="text" placeholder="192.168.1.8" autocomplete="off" spellcheck="false" />
+                <label for="adb-proxy-port">Port</label>
+                <input id="adb-proxy-port" class="mono meta-input" type="number" min="1" max="65535" placeholder="8888" />
+                <button type="button" class="primary-btn" id="adb-proxy-set">设置代理</button>
+                <button type="button" class="ghost-btn" id="adb-proxy-clear">清除代理</button>
+                <button type="button" class="secondary-btn" id="adb-proxy-refresh">刷新</button>
+              </div>
+
+              <div class="label-row" style="margin-top:1.1rem">
+                <h2 class="subhead">端口转发</h2>
+                <span class="hint tight" id="adb-forward-meta">adb forward / reverse</span>
+              </div>
+              <div class="field-row" style="flex-wrap:wrap">
+                <label for="adb-fwd-dir">方向</label>
+                <select id="adb-fwd-dir" class="mono select-input">
+                  <option value="forward" selected>forward（电脑→手机）</option>
+                  <option value="reverse">reverse（手机→电脑）</option>
+                </select>
+                <label for="adb-fwd-local">Local</label>
+                <input id="adb-fwd-local" class="mono" type="text" value="tcp:8080" spellcheck="false" autocomplete="off" />
+                <label for="adb-fwd-remote">Remote</label>
+                <input id="adb-fwd-remote" class="mono" type="text" value="tcp:8080" spellcheck="false" autocomplete="off" />
+              </div>
+              <div class="btn-row tool-actions" style="margin-top:0.55rem">
+                <button type="button" class="primary-btn" id="adb-fwd-add">添加</button>
+                <button type="button" class="ghost-btn" id="adb-fwd-remove">移除 Local</button>
+                <button type="button" class="ghost-btn" id="adb-fwd-clear">清除全部</button>
+                <button type="button" class="secondary-btn" id="adb-fwd-refresh">刷新列表</button>
+              </div>
+              <pre class="mono adb-pre" id="adb-fwd-out">尚未加载</pre>
+            </div>
+
+            <div class="adb-tab-panel" data-adb-panel="developer" hidden>
+              <div class="label-row">
+                <h2 class="subhead">开发者选项</h2>
+                <span class="hint tight" id="adb-dev-meta">显示触摸 / 布局边界 / 动画倍率</span>
+              </div>
+              <div class="btn-row tool-actions">
+                <button type="button" class="secondary-btn" id="adb-dev-refresh">刷新状态</button>
+                <button type="button" class="ghost-btn" id="adb-open-dev-page">打开开发者设置页</button>
+              </div>
+              <div class="channel-meta adb-info" style="margin-top:0.75rem">
+                <div class="meta-row">
+                  <span>显示触摸操作</span>
+                  <div class="adb-fs-actions">
+                    <button type="button" class="secondary-btn" data-adb-dev="show_touches" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="show_touches" data-adb-dev-val="0">关</button>
+                    <strong class="mono" id="adb-dev-show-touches">—</strong>
+                  </div>
+                </div>
+                <div class="meta-row">
+                  <span>指针位置</span>
+                  <div class="adb-fs-actions">
+                    <button type="button" class="secondary-btn" data-adb-dev="pointer_location" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="pointer_location" data-adb-dev-val="0">关</button>
+                    <strong class="mono" id="adb-dev-pointer">—</strong>
+                  </div>
+                </div>
+                <div class="meta-row">
+                  <span>布局边界</span>
+                  <div class="adb-fs-actions">
+                    <button type="button" class="secondary-btn" data-adb-dev="layout_bounds" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="layout_bounds" data-adb-dev-val="0">关</button>
+                    <strong class="mono" id="adb-dev-layout">—</strong>
+                  </div>
+                </div>
+              </div>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
+                <label for="adb-anim-scale">动画倍率</label>
+                <select id="adb-anim-scale" class="mono select-input">
+                  <option value="0">0（关闭动画）</option>
+                  <option value="0.5">0.5x</option>
+                  <option value="1" selected>1x</option>
+                  <option value="1.5">1.5x</option>
+                  <option value="2">2x</option>
+                  <option value="5">5x</option>
+                  <option value="10">10x</option>
+                </select>
+                <button type="button" class="primary-btn" id="adb-anim-apply">应用到全部动画</button>
+              </div>
+              <p class="hint" id="adb-dev-scales">window / transition / animator：—</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="logcat" hidden>
@@ -1349,8 +1453,8 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./lib/pure.js?v=20260801c"></script>
-  <script src="./app.js?v=20260801c"></script>
-  <script src="./extra.js?v=20260801c"></script>
+  <script src="./lib/pure.js?v=20260801d"></script>
+  <script src="./app.js?v=20260801d"></script>
+  <script src="./extra.js?v=20260801d"></script>
 </body>
 </html>
