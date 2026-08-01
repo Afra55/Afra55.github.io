@@ -2045,7 +2045,7 @@
   }
 
   // Rebind copy buttons added dynamically in HTML for new panels
-  // ---- ADB bridge client (P0) ----
+  // ---- ADB bridge client (P0–P3) ----
   try {
     const ADB_STORE_BASE = "devtools-adb-base";
     const ADB_STORE_TOKEN = "devtools-adb-token";
@@ -2058,14 +2058,26 @@
     const adbWorkspace = $("#adb-workspace");
     const adbDeviceList = $("#adb-device-list");
     const adbDeviceMeta = $("#adb-device-meta");
+    const adbSelectedMeta = $("#adb-selected-meta");
     const adbFsList = $("#adb-fs-list");
     const adbFsPath = $("#adb-fs-path");
     const adbFsMeta = $("#adb-fs-meta");
     const adbInfoMeta = $("#adb-info-meta");
+    const adbAppsList = $("#adb-apps-list");
+    const adbAppsMeta = $("#adb-apps-meta");
+    const adbJobsList = $("#adb-jobs-list");
+    const adbJobsMeta = $("#adb-jobs-meta");
+    const adbInstallMeta = $("#adb-install-meta");
+    const adbApkName = $("#adb-apk-name");
     let adbConnected = false;
     let adbDevices = [];
     let adbSelected = "";
+    let adbChecked = new Set();
     let adbPollTimer = 0;
+    let adbJobTimer = 0;
+    let adbApps = [];
+    let adbApkFile = null;
+    let adbTab = "info";
 
     function adbBase() {
       return String(adbBaseInput?.value || "http://127.0.0.1:17888").replace(/\/+$/, "");
@@ -2118,6 +2130,31 @@
       return `${base}/${String(name || "").replace(/^\/+/, "")}`;
     }
 
+    function checkedSerials() {
+      return [...adbChecked];
+    }
+
+    function targetSerials(preferChecked) {
+      const list = preferChecked ? checkedSerials() : [];
+      if (list.length) return list;
+      return adbSelected ? [adbSelected] : [];
+    }
+
+    function updateSelectedMeta() {
+      if (!adbSelectedMeta) return;
+      const n = adbChecked.size;
+      adbSelectedMeta.textContent = adbSelected
+        ? `当前：${adbSelected}${n ? ` · 已勾选 ${n} 台` : " · 未勾选批量设备"}`
+        : "请选择当前设备；勾选用于批量安装与截图";
+      if (adbInstallMeta) {
+        adbInstallMeta.textContent = n
+          ? `将安装到勾选的 ${n} 台设备`
+          : adbSelected
+            ? `未勾选时，「安装到勾选设备」会回退到当前设备`
+            : "请先选择设备";
+      }
+    }
+
     async function adbFetch(pathname, options = {}) {
       const headers = Object.assign({}, options.headers || {});
       if (options.auth !== false) headers["X-Adb-Token"] = adbToken();
@@ -2147,11 +2184,24 @@
       return res;
     }
 
+    function switchAdbTab(tab) {
+      adbTab = tab;
+      $$(".adb-tab").forEach((btn) => {
+        btn.classList.toggle("is-active", btn.dataset.adbTab === tab);
+      });
+      $$("[data-adb-panel]").forEach((panel) => {
+        panel.hidden = panel.dataset.adbPanel !== tab;
+      });
+      if (tab === "apps" && adbSelected && !adbApps.length) loadApps().catch(() => {});
+      if (tab === "jobs") refreshJobs().catch(() => {});
+    }
+
     function renderAdbDevices() {
       if (!adbDeviceList) return;
       if (!adbDevices.length) {
         adbDeviceList.innerHTML = `<div class="adb-fs-empty">未检测到设备。请检查 USB 调试授权后点「刷新设备」。</div>`;
         if (adbDeviceMeta) adbDeviceMeta.textContent = "0 台";
+        updateSelectedMeta();
         return;
       }
       if (adbDeviceMeta) adbDeviceMeta.textContent = `${adbDevices.length} 台`;
@@ -2159,12 +2209,17 @@
         .map((d) => {
           const title = d.model || d.product || d.serial;
           const active = d.serial === adbSelected ? " is-active" : "";
-          return `<button type="button" class="adb-device${active}" data-serial="${escapeHtml(d.serial)}" role="option" aria-selected="${d.serial === adbSelected}">
-            <strong>${escapeHtml(title)}</strong>
-            <span>${escapeHtml(d.serial)} · ${escapeHtml(d.state)}</span>
-          </button>`;
+          const checked = adbChecked.has(d.serial) ? "checked" : "";
+          return `<div class="adb-device${active}" data-serial-wrap="${escapeHtml(d.serial)}">
+            <input class="adb-device-check" type="checkbox" data-adb-check="${escapeHtml(d.serial)}" ${checked} aria-label="勾选 ${escapeHtml(d.serial)}" />
+            <button type="button" class="adb-device-body linkish" data-serial="${escapeHtml(d.serial)}">
+              <strong>${escapeHtml(title)}</strong>
+              <span>${escapeHtml(d.serial)} · ${escapeHtml(d.state)}</span>
+            </button>
+          </div>`;
         })
         .join("");
+      updateSelectedMeta();
     }
 
     function fillAdbInfo(info) {
@@ -2173,14 +2228,7 @@
         if (el) el.textContent = value || "—";
       };
       if (!info) {
-        set("#adb-info-serial", "—");
-        set("#adb-info-state", "—");
-        set("#adb-info-model", "—");
-        set("#adb-info-android", "—");
-        set("#adb-info-screen", "—");
-        set("#adb-info-battery", "—");
-        set("#adb-info-storage", "—");
-        set("#adb-info-build", "—");
+        ["#adb-info-serial", "#adb-info-state", "#adb-info-model", "#adb-info-android", "#adb-info-screen", "#adb-info-battery", "#adb-info-storage", "#adb-info-build"].forEach((id) => set(id, "—"));
         if (adbInfoMeta) adbInfoMeta.textContent = "未选择设备";
         return;
       }
@@ -2216,19 +2264,100 @@
           const openBtn = isDir
             ? `<button type="button" class="linkish" data-adb-open="${escapeHtml(full)}">${escapeHtml(item.name)}/</button>`
             : `<span class="mono">${escapeHtml(item.name)}</span>`;
-          const actions = isDir
-            ? `<div class="adb-fs-actions">
-                <button type="button" class="ghost-btn" data-adb-open="${escapeHtml(full)}">打开</button>
-                <button type="button" class="ghost-btn" data-adb-del="${escapeHtml(full)}" data-adb-del-name="${escapeHtml(item.name)}">删除</button>
-              </div>`
-            : `<div class="adb-fs-actions">
-                <button type="button" class="secondary-btn" data-adb-dl="${escapeHtml(full)}" data-adb-dl-name="${escapeHtml(item.name)}">下载</button>
-                <button type="button" class="ghost-btn" data-adb-del="${escapeHtml(full)}" data-adb-del-name="${escapeHtml(item.name)}">删除</button>
-              </div>`;
           return `<div class="adb-fs-row">
             ${openBtn}
             <span class="adb-fs-meta">${escapeHtml(meta)}</span>
-            ${actions}
+            <div class="adb-fs-actions">
+              ${isDir ? `<button type="button" class="ghost-btn" data-adb-open="${escapeHtml(full)}">打开</button>` : `<button type="button" class="secondary-btn" data-adb-dl="${escapeHtml(full)}" data-adb-dl-name="${escapeHtml(item.name)}">下载</button>`}
+              <button type="button" class="ghost-btn" data-adb-rename="${escapeHtml(full)}" data-adb-rename-name="${escapeHtml(item.name)}">重命名</button>
+              <button type="button" class="ghost-btn" data-adb-move="${escapeHtml(full)}">移动</button>
+              <button type="button" class="ghost-btn" data-adb-copy="${escapeHtml(full)}">复制</button>
+              <button type="button" class="ghost-btn" data-adb-del="${escapeHtml(full)}" data-adb-del-name="${escapeHtml(item.name)}">删除</button>
+            </div>
+          </div>`;
+        })
+        .join("");
+    }
+
+    function renderApps() {
+      if (!adbAppsList) return;
+      const q = String($("#adb-apps-filter")?.value || "")
+        .trim()
+        .toLowerCase();
+      const list = adbApps.filter((app) => !q || app.packageName.toLowerCase().includes(q));
+      if (adbAppsMeta) adbAppsMeta.textContent = `${list.length}/${adbApps.length} · ${adbSelected || "未选择"}`;
+      if (!list.length) {
+        adbAppsList.innerHTML = `<div class="adb-fs-empty">无匹配应用</div>`;
+        return;
+      }
+      adbAppsList.innerHTML = list
+        .slice(0, 400)
+        .map((app) => {
+          const kind = app.isSystem ? "系统" : "三方";
+          return `<div class="adb-fs-row">
+            <div>
+              <strong class="mono">${escapeHtml(app.packageName)}</strong>
+              <div class="adb-fs-meta">${kind}${app.apkPath ? ` · ${escapeHtml(app.apkPath)}` : ""}</div>
+            </div>
+            <span></span>
+            <div class="adb-fs-actions">
+              <button type="button" class="secondary-btn" data-adb-app-backup="${escapeHtml(app.packageName)}">备份APK</button>
+              <button type="button" class="ghost-btn" data-adb-app-disable="${escapeHtml(app.packageName)}">停用</button>
+              <button type="button" class="ghost-btn" data-adb-app-enable="${escapeHtml(app.packageName)}">启用</button>
+              <button type="button" class="ghost-btn" data-adb-app-uninstall="${escapeHtml(app.packageName)}">卸载</button>
+            </div>
+          </div>`;
+        })
+        .join("");
+      if (list.length > 400) {
+        adbAppsList.insertAdjacentHTML(
+          "beforeend",
+          `<div class="adb-fs-empty">仅显示前 400 条，请用过滤缩小范围</div>`
+        );
+      }
+    }
+
+    function jobTypeLabel(type) {
+      return (
+        {
+          install: "安装 APK",
+          screenshot: "截图",
+          record: "录屏",
+          backup: "备份 APK",
+        }[type] || type
+      );
+    }
+
+    function renderJobs(jobs) {
+      if (!adbJobsList) return;
+      if (!jobs?.length) {
+        adbJobsList.innerHTML = `<div class="adb-fs-empty">暂无任务</div>`;
+        if (adbJobsMeta) adbJobsMeta.textContent = "暂无任务";
+        return;
+      }
+      if (adbJobsMeta) adbJobsMeta.textContent = `${jobs.length} 条最近任务`;
+      adbJobsList.innerHTML = jobs
+        .map((job) => {
+          const items = (job.items || [])
+            .map((it) => `<li>${escapeHtml(it.serial || "")}: ${escapeHtml(it.status)} ${escapeHtml(it.message || "")}</li>`)
+            .join("");
+          const arts = (job.artifacts || [])
+            .map(
+              (a) =>
+                `<button type="button" class="secondary-btn" data-adb-art-job="${escapeHtml(job.id)}" data-adb-art-name="${escapeHtml(a.name)}">下载 ${escapeHtml(a.name)}</button>`
+            )
+            .join("");
+          return `<div class="adb-job">
+            <div class="adb-job-head">
+              <strong>${escapeHtml(jobTypeLabel(job.type))} · ${escapeHtml(job.status)}</strong>
+              <span>${escapeHtml(String(job.progress || 0))}%</span>
+            </div>
+            <div class="gif-progress" style="margin-top:0.45rem">
+              <div class="gif-progress-track"><span class="gif-progress-fill" style="width:${Number(job.progress) || 0}%"></span></div>
+            </div>
+            <p class="adb-job-msg">${escapeHtml(job.message || job.error || "")}</p>
+            ${items ? `<ul class="adb-job-items">${items}</ul>` : ""}
+            ${arts ? `<div class="adb-job-arts">${arts}</div>` : ""}
           </div>`;
         })
         .join("");
@@ -2268,20 +2397,35 @@
       }
     }
 
+    async function loadApps() {
+      if (!adbSelected) return;
+      if (adbAppsMeta) adbAppsMeta.textContent = "加载中…";
+      const kind = $("#adb-apps-kind")?.value || "third";
+      const data = await adbFetch(
+        `/apps?serial=${encodeURIComponent(adbSelected)}&kind=${encodeURIComponent(kind)}`
+      );
+      adbApps = data.apps || [];
+      renderApps();
+    }
+
     async function selectAdbDevice(serial) {
       adbSelected = serial;
       renderAdbDevices();
       await loadAdbInfo(serial);
       await loadFs(adbFsPath?.value || "/sdcard");
+      if (adbTab === "apps") await loadApps();
     }
 
     async function refreshAdbDevices({ silent = false } = {}) {
       const data = await adbFetch("/devices");
       adbDevices = data.devices || [];
-      if (!adbSelected || !adbDevices.some((d) => d.serial === adbSelected)) {
+      const serialSet = new Set(adbDevices.map((d) => d.serial));
+      adbChecked = new Set([...adbChecked].filter((s) => serialSet.has(s)));
+      if (!adbSelected || !serialSet.has(adbSelected)) {
         const ready = adbDevices.find((d) => d.state === "device");
         adbSelected = (ready || adbDevices[0] || {}).serial || "";
       }
+      if (!adbChecked.size && adbSelected) adbChecked.add(adbSelected);
       renderAdbDevices();
       if (adbSelected) {
         await loadAdbInfo(adbSelected);
@@ -2294,7 +2438,7 @@
       setAdbStatus(
         adbDevices.length ? "is-ok" : "is-warn",
         adbDevices.length ? `已连接 · ${adbDevices.length} 台设备` : "已连接桥 · 无设备",
-        `${adbLine}。可在左侧切换设备进行文件管理。`
+        `${adbLine}。支持文件 / 安装 / 应用 / 截图录屏。`
       );
       if (!silent) toast(adbDevices.length ? `已刷新 ${adbDevices.length} 台设备` : "桥已连接，未发现设备");
     }
@@ -2307,7 +2451,7 @@
         if (!health.adb?.ok) {
           adbConnected = true;
           if (adbWorkspace) adbWorkspace.hidden = true;
-          $("#adb-refresh") && ($("#adb-refresh").disabled = true);
+          if ($("#adb-refresh")) $("#adb-refresh").disabled = true;
           setAdbStatus("is-err", "桥已启动，但未找到 adb", health.adb?.error || "请安装 platform-tools 并确保 adb 在 PATH 中");
           setError(adbError, health.adb?.error || "本机未找到 adb 命令");
           return false;
@@ -2404,11 +2548,79 @@
       if (adbFsMeta) adbFsMeta.textContent = `已下载 ${name || ""}`;
     }
 
+    async function downloadArtifact(jobId, name) {
+      const res = await adbFetch(`/jobs/${encodeURIComponent(jobId)}/artifact/${encodeURIComponent(name)}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast("已开始下载");
+    }
+
+    function watchJobs() {
+      clearInterval(adbJobTimer);
+      adbJobTimer = setInterval(() => {
+        if (!adbConnected) return;
+        if (adbTab === "jobs" || document.visibilityState === "visible") {
+          refreshJobs({ silent: true }).catch(() => {});
+        }
+      }, 1500);
+    }
+
+    async function refreshJobs({ silent = false } = {}) {
+      const data = await adbFetch("/jobs");
+      renderJobs(data.jobs || []);
+      if (!silent) toast("任务已刷新");
+    }
+
+    async function trackJob(job) {
+      switchAdbTab("jobs");
+      toast(`任务已创建：${jobTypeLabel(job.type)}`);
+      await refreshJobs({ silent: true });
+      watchJobs();
+    }
+
+    async function startInstall(serials) {
+      if (!adbApkFile) throw new Error("请先选择 APK");
+      if (!serials.length) throw new Error("请选择设备");
+      const buffer = new Uint8Array(await adbApkFile.arrayBuffer());
+      const uploaded = await adbFetch(`/upload?name=${encodeURIComponent(adbApkFile.name)}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/octet-stream",
+          "X-Filename": encodeURIComponent(adbApkFile.name),
+        },
+        body: buffer,
+      });
+      const data = await adbFetch("/install", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          uploadId: uploaded.uploadId,
+          serials,
+          replace: Boolean($("#adb-apk-replace")?.checked),
+        }),
+      });
+      await trackJob(data.job);
+    }
+
+    function setApkButtonsEnabled(on) {
+      if ($("#adb-apk-install-selected")) $("#adb-apk-install-selected").disabled = !on;
+      if ($("#adb-apk-install-current")) $("#adb-apk-install-current").disabled = !on;
+    }
+
     restoreAdbSettings();
     setAdbStatus("is-err", "未连接本机桥", "使用本工具需要本机已安装 adb。请下载启动脚本并运行后连接。");
 
     $("#adb-connect")?.addEventListener("click", () => connectAdbBridge());
-    $("#adb-refresh")?.addEventListener("click", () => refreshAdbDevices().catch((err) => setError(adbError, err.message || String(err))));
+    $("#adb-refresh")?.addEventListener("click", () =>
+      refreshAdbDevices().catch((err) => setError(adbError, err.message || String(err)))
+    );
     adbBaseInput?.addEventListener("change", persistAdbSettings);
     adbTokenInput?.addEventListener("change", persistAdbSettings);
 
@@ -2425,10 +2637,33 @@
       downloadAdbScriptAndWait($("#adb-dl-linux"));
     });
 
+    $$(".adb-tab").forEach((btn) => {
+      btn.addEventListener("click", () => switchAdbTab(btn.dataset.adbTab));
+    });
+
+    $("#adb-select-all")?.addEventListener("click", () => {
+      adbChecked = new Set(adbDevices.map((d) => d.serial));
+      renderAdbDevices();
+    });
+    $("#adb-select-none")?.addEventListener("click", () => {
+      adbChecked = new Set();
+      renderAdbDevices();
+    });
+
     adbDeviceList?.addEventListener("click", (e) => {
+      const check = e.target.closest("[data-adb-check]");
+      if (check) return;
       const btn = e.target.closest("[data-serial]");
       if (!btn) return;
       selectAdbDevice(btn.dataset.serial).catch((err) => setError(adbError, err.message || String(err)));
+    });
+    adbDeviceList?.addEventListener("change", (e) => {
+      const check = e.target.closest("[data-adb-check]");
+      if (!check) return;
+      const serial = check.dataset.adbCheck;
+      if (check.checked) adbChecked.add(serial);
+      else adbChecked.delete(serial);
+      updateSelectedMeta();
     });
 
     $("#adb-fs-go")?.addEventListener("click", () => loadFs(adbFsPath?.value || "/sdcard"));
@@ -2490,6 +2725,57 @@
         }
         return;
       }
+      const renameBtn = e.target.closest("[data-adb-rename]");
+      if (renameBtn) {
+        const next = window.prompt("新名称", renameBtn.dataset.adbRenameName || "");
+        if (!next || !next.trim()) return;
+        try {
+          await adbFetch("/fs/rename", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ serial: adbSelected, path: renameBtn.dataset.adbRename, name: next.trim() }),
+          });
+          toast("已重命名");
+          await loadFs(adbFsPath?.value || "/sdcard");
+        } catch (err) {
+          setError(adbError, err.message || String(err));
+        }
+        return;
+      }
+      const moveBtn = e.target.closest("[data-adb-move]");
+      if (moveBtn) {
+        const to = window.prompt("移动到（完整路径）", adbFsPath?.value || "/sdcard");
+        if (!to || !to.trim()) return;
+        try {
+          await adbFetch("/fs/move", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ serial: adbSelected, from: moveBtn.dataset.adbMove, to: to.trim() }),
+          });
+          toast("已移动");
+          await loadFs(adbFsPath?.value || "/sdcard");
+        } catch (err) {
+          setError(adbError, err.message || String(err));
+        }
+        return;
+      }
+      const copyBtn = e.target.closest("[data-adb-copy]");
+      if (copyBtn) {
+        const to = window.prompt("复制到（完整路径）", `${adbFsPath?.value || "/sdcard"}/copy-${Date.now()}`);
+        if (!to || !to.trim()) return;
+        try {
+          await adbFetch("/fs/copy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ serial: adbSelected, from: copyBtn.dataset.adbCopy, to: to.trim() }),
+          });
+          toast("已复制");
+          await loadFs(adbFsPath?.value || "/sdcard");
+        } catch (err) {
+          setError(adbError, err.message || String(err));
+        }
+        return;
+      }
       const delBtn = e.target.closest("[data-adb-del]");
       if (delBtn) {
         const name = delBtn.dataset.adbDelName || delBtn.dataset.adbDel;
@@ -2508,7 +2794,158 @@
       }
     });
 
-    // Best-effort detect preferred download button
+    $("#adb-apk-file")?.addEventListener("change", (e) => {
+      adbApkFile = e.target.files?.[0] || null;
+      if (adbApkName) {
+        adbApkName.textContent = adbApkFile
+          ? `${adbApkFile.name}（${formatBytes(adbApkFile.size)}）`
+          : "尚未选择 APK";
+      }
+      setApkButtonsEnabled(Boolean(adbApkFile));
+    });
+    $("#adb-apk-install-selected")?.addEventListener("click", async () => {
+      try {
+        await startInstall(targetSerials(true));
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    });
+    $("#adb-apk-install-current")?.addEventListener("click", async () => {
+      try {
+        if (!adbSelected) throw new Error("请先选择当前设备");
+        await startInstall([adbSelected]);
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    });
+
+    $("#adb-apps-refresh")?.addEventListener("click", () =>
+      loadApps().catch((err) => setError(adbError, err.message || String(err)))
+    );
+    $("#adb-apps-kind")?.addEventListener("change", () =>
+      loadApps().catch((err) => setError(adbError, err.message || String(err)))
+    );
+    $("#adb-apps-filter")?.addEventListener("input", () => renderApps());
+    adbAppsList?.addEventListener("click", async (e) => {
+      const backupBtn = e.target.closest("[data-adb-app-backup]");
+      const disableBtn = e.target.closest("[data-adb-app-disable]");
+      const enableBtn = e.target.closest("[data-adb-app-enable]");
+      const uninstallBtn = e.target.closest("[data-adb-app-uninstall]");
+      try {
+        if (backupBtn) {
+          const data = await adbFetch("/apps/backup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              serial: adbSelected,
+              packageName: backupBtn.dataset.adbAppBackup,
+              async: true,
+            }),
+          });
+          await trackJob(data.job);
+          return;
+        }
+        if (disableBtn) {
+          if (!window.confirm(`确认停用 ${disableBtn.dataset.adbAppDisable}？`)) return;
+          await adbFetch("/apps/action", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              serial: adbSelected,
+              packageName: disableBtn.dataset.adbAppDisable,
+              action: "disable",
+            }),
+          });
+          toast("已请求停用");
+          return;
+        }
+        if (enableBtn) {
+          await adbFetch("/apps/action", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              serial: adbSelected,
+              packageName: enableBtn.dataset.adbAppEnable,
+              action: "enable",
+            }),
+          });
+          toast("已请求启用");
+          return;
+        }
+        if (uninstallBtn) {
+          if (!window.confirm(`确认卸载 ${uninstallBtn.dataset.adbAppUninstall}？此操作不可恢复。`)) return;
+          await adbFetch("/apps/action", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              serial: adbSelected,
+              packageName: uninstallBtn.dataset.adbAppUninstall,
+              action: "uninstall",
+            }),
+          });
+          toast("已卸载");
+          await loadApps();
+        }
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    });
+
+    $("#adb-shot-selected")?.addEventListener("click", async () => {
+      try {
+        const serials = targetSerials(true);
+        if (!serials.length) throw new Error("请选择设备");
+        const data = await adbFetch("/media/screenshot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serials }),
+        });
+        await trackJob(data.job);
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    });
+    $("#adb-shot-current")?.addEventListener("click", async () => {
+      try {
+        if (!adbSelected) throw new Error("请先选择当前设备");
+        const data = await adbFetch("/media/screenshot", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serials: [adbSelected] }),
+        });
+        await trackJob(data.job);
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    });
+    $("#adb-record-current")?.addEventListener("click", async () => {
+      try {
+        if (!adbSelected) throw new Error("请先选择当前设备");
+        const seconds = Number($("#adb-record-sec")?.value || 30);
+        const data = await adbFetch("/media/record", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serial: adbSelected, seconds }),
+        });
+        await trackJob(data.job);
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    });
+
+    $("#adb-jobs-refresh")?.addEventListener("click", () =>
+      refreshJobs().catch((err) => setError(adbError, err.message || String(err)))
+    );
+    adbJobsList?.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-adb-art-job]");
+      if (!btn) return;
+      try {
+        await downloadArtifact(btn.dataset.adbArtJob, btn.dataset.adbArtName);
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    });
+
     const ua = navigator.userAgent || "";
     if (/Windows/i.test(ua)) {
       $("#adb-dl-win")?.classList.add("primary-btn");
@@ -2521,7 +2958,6 @@
       $("#adb-dl-linux")?.classList.remove("secondary-btn");
     }
 
-    // Auto probe once quietly
     connectAdbBridge({ fromPoll: true }).catch(() => {});
   } catch (err) {
     console.error("adb tool init failed", err);

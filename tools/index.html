@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260801a" />
+  <link rel="stylesheet" href="./style.css?v=20260801b" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -1095,44 +1095,127 @@ hello@world.org</textarea>
               <h2 class="subhead">设备</h2>
               <span class="hint tight" id="adb-device-meta">0 台</span>
             </div>
-            <div class="adb-device-list" id="adb-device-list" role="listbox" aria-label="设备列表"></div>
+            <div class="btn-row tool-actions" style="margin-bottom:0.55rem">
+              <button type="button" class="ghost-btn" id="adb-select-all">全选</button>
+              <button type="button" class="ghost-btn" id="adb-select-none">清空</button>
+            </div>
+            <div class="adb-device-list" id="adb-device-list" aria-label="设备列表"></div>
+            <p class="hint tight" id="adb-selected-meta">当前设备用于文件/应用；勾选用于批量安装与截图。</p>
           </div>
 
           <div class="adb-main">
-            <div class="label-row">
-              <h2 class="subhead">设备信息</h2>
-              <span class="hint tight" id="adb-info-meta">未选择设备</span>
-            </div>
-            <div class="channel-meta adb-info" id="adb-info">
-              <div class="meta-row"><span>序列号</span><strong class="mono" id="adb-info-serial">—</strong></div>
-              <div class="meta-row"><span>状态</span><strong class="mono" id="adb-info-state">—</strong></div>
-              <div class="meta-row"><span>厂商 / 型号</span><strong class="mono" id="adb-info-model">—</strong></div>
-              <div class="meta-row"><span>Android</span><strong class="mono" id="adb-info-android">—</strong></div>
-              <div class="meta-row"><span>分辨率 / DPI</span><strong class="mono" id="adb-info-screen">—</strong></div>
-              <div class="meta-row"><span>电量</span><strong class="mono" id="adb-info-battery">—</strong></div>
-              <div class="meta-row"><span>存储 (/sdcard)</span><strong class="mono" id="adb-info-storage">—</strong></div>
-              <div class="meta-row"><span>ABI / Build</span><strong class="mono" id="adb-info-build">—</strong></div>
+            <div class="adb-tabs" role="tablist" aria-label="ADB 功能">
+              <button type="button" class="adb-tab is-active" data-adb-tab="info">信息</button>
+              <button type="button" class="adb-tab" data-adb-tab="files">文件</button>
+              <button type="button" class="adb-tab" data-adb-tab="install">安装</button>
+              <button type="button" class="adb-tab" data-adb-tab="apps">应用</button>
+              <button type="button" class="adb-tab" data-adb-tab="media">截图录屏</button>
+              <button type="button" class="adb-tab" data-adb-tab="jobs">任务</button>
             </div>
 
-            <div class="label-row" style="margin-top:1.25rem">
-              <h2 class="subhead">文件管理</h2>
-              <span class="hint tight" id="adb-fs-meta">选择设备后浏览文件</span>
+            <div class="adb-tab-panel" data-adb-panel="info">
+              <div class="label-row">
+                <h2 class="subhead">设备信息</h2>
+                <span class="hint tight" id="adb-info-meta">未选择设备</span>
+              </div>
+              <div class="channel-meta adb-info" id="adb-info">
+                <div class="meta-row"><span>序列号</span><strong class="mono" id="adb-info-serial">—</strong></div>
+                <div class="meta-row"><span>状态</span><strong class="mono" id="adb-info-state">—</strong></div>
+                <div class="meta-row"><span>厂商 / 型号</span><strong class="mono" id="adb-info-model">—</strong></div>
+                <div class="meta-row"><span>Android</span><strong class="mono" id="adb-info-android">—</strong></div>
+                <div class="meta-row"><span>分辨率 / DPI</span><strong class="mono" id="adb-info-screen">—</strong></div>
+                <div class="meta-row"><span>电量</span><strong class="mono" id="adb-info-battery">—</strong></div>
+                <div class="meta-row"><span>存储 (/sdcard)</span><strong class="mono" id="adb-info-storage">—</strong></div>
+                <div class="meta-row"><span>ABI / Build</span><strong class="mono" id="adb-info-build">—</strong></div>
+              </div>
             </div>
-            <div class="adb-path-row">
-              <button type="button" class="ghost-btn" id="adb-fs-up" title="上级目录">上级</button>
-              <input id="adb-fs-path" class="mono" type="text" value="/sdcard" spellcheck="false" autocomplete="off" />
-              <button type="button" class="secondary-btn" id="adb-fs-go">打开</button>
-              <button type="button" class="ghost-btn" id="adb-fs-refresh">刷新</button>
+
+            <div class="adb-tab-panel" data-adb-panel="files" hidden>
+              <div class="label-row">
+                <h2 class="subhead">文件管理</h2>
+                <span class="hint tight" id="adb-fs-meta">选择设备后浏览文件</span>
+              </div>
+              <div class="adb-path-row">
+                <button type="button" class="ghost-btn" id="adb-fs-up" title="上级目录">上级</button>
+                <input id="adb-fs-path" class="mono" type="text" value="/sdcard" spellcheck="false" autocomplete="off" />
+                <button type="button" class="secondary-btn" id="adb-fs-go">打开</button>
+                <button type="button" class="ghost-btn" id="adb-fs-refresh">刷新</button>
+              </div>
+              <div class="btn-row tool-actions" style="margin-top:0.65rem">
+                <label class="file-btn" for="adb-fs-upload">上传到当前目录</label>
+                <input id="adb-fs-upload" type="file" multiple hidden />
+                <button type="button" class="secondary-btn" id="adb-fs-mkdir">新建文件夹</button>
+                <button type="button" class="ghost-btn" id="adb-fs-home">/sdcard</button>
+                <button type="button" class="ghost-btn" id="adb-fs-download-dir">Download</button>
+              </div>
+              <div class="adb-fs-list" id="adb-fs-list" aria-live="polite"></div>
+              <p class="hint" id="adb-fs-hint">支持打开、下载、删除、重命名、移动、复制。删除前会确认。</p>
             </div>
-            <div class="btn-row tool-actions" style="margin-top:0.65rem">
-              <label class="file-btn" for="adb-fs-upload">上传到当前目录</label>
-              <input id="adb-fs-upload" type="file" multiple hidden />
-              <button type="button" class="secondary-btn" id="adb-fs-mkdir">新建文件夹</button>
-              <button type="button" class="ghost-btn" id="adb-fs-home">/sdcard</button>
-              <button type="button" class="ghost-btn" id="adb-fs-download-dir">Download</button>
+
+            <div class="adb-tab-panel" data-adb-panel="install" hidden>
+              <div class="label-row">
+                <h2 class="subhead">APK 安装</h2>
+                <span class="hint tight" id="adb-install-meta">可安装到当前设备或勾选的多台设备</span>
+              </div>
+              <div class="btn-row tool-actions">
+                <label class="file-btn" for="adb-apk-file">选择 APK</label>
+                <input id="adb-apk-file" type="file" accept=".apk,application/vnd.android.package-archive" hidden />
+                <label class="flag"><input type="checkbox" id="adb-apk-replace" checked /> 覆盖安装 (-r)</label>
+              </div>
+              <p class="hint" id="adb-apk-name">尚未选择 APK</p>
+              <div class="btn-row tool-actions" style="margin-top:0.75rem">
+                <button type="button" class="primary-btn" id="adb-apk-install-selected" disabled>安装到勾选设备</button>
+                <button type="button" class="secondary-btn" id="adb-apk-install-current" disabled>仅安装到当前设备</button>
+              </div>
             </div>
-            <div class="adb-fs-list" id="adb-fs-list" aria-live="polite"></div>
-            <p class="hint" id="adb-fs-hint">点击文件夹进入；文件可下载或删除。删除前会确认。</p>
+
+            <div class="adb-tab-panel" data-adb-panel="apps" hidden>
+              <div class="label-row">
+                <h2 class="subhead">已安装应用</h2>
+                <span class="hint tight" id="adb-apps-meta">当前设备</span>
+              </div>
+              <div class="field-row" style="flex-wrap:wrap">
+                <label for="adb-apps-kind">类型</label>
+                <select id="adb-apps-kind" class="mono select-input">
+                  <option value="third" selected>三方应用</option>
+                  <option value="system">系统应用</option>
+                  <option value="all">全部</option>
+                </select>
+                <label for="adb-apps-filter">过滤</label>
+                <input id="adb-apps-filter" class="mono" type="search" placeholder="包名关键字" autocomplete="off" />
+                <button type="button" class="secondary-btn" id="adb-apps-refresh">刷新列表</button>
+              </div>
+              <div class="adb-fs-list adb-apps-list" id="adb-apps-list" aria-live="polite"></div>
+              <p class="hint">系统应用卸载/停用可能失败或影响系统，请谨慎操作。</p>
+            </div>
+
+            <div class="adb-tab-panel" data-adb-panel="media" hidden>
+              <div class="label-row">
+                <h2 class="subhead">截图 / 录屏</h2>
+                <span class="hint tight" id="adb-media-meta">截图支持多设备；录屏针对当前设备</span>
+              </div>
+              <div class="btn-row tool-actions">
+                <button type="button" class="primary-btn" id="adb-shot-selected">截图勾选设备</button>
+                <button type="button" class="secondary-btn" id="adb-shot-current">截图当前设备</button>
+              </div>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
+                <label for="adb-record-sec">录屏秒数</label>
+                <input id="adb-record-sec" class="mono meta-input" type="number" min="1" max="180" value="30" />
+                <button type="button" class="secondary-btn" id="adb-record-current">录屏当前设备</button>
+              </div>
+              <p class="hint">完成后可在「任务」页下载图片/视频。Android 录屏最长约 180 秒。</p>
+            </div>
+
+            <div class="adb-tab-panel" data-adb-panel="jobs" hidden>
+              <div class="label-row">
+                <h2 class="subhead">任务中心</h2>
+                <span class="hint tight" id="adb-jobs-meta">安装 / 截图 / 录屏 / 备份</span>
+              </div>
+              <div class="btn-row tool-actions">
+                <button type="button" class="secondary-btn" id="adb-jobs-refresh">刷新任务</button>
+              </div>
+              <div class="adb-jobs-list" id="adb-jobs-list" aria-live="polite"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -1170,8 +1253,8 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./lib/pure.js?v=20260801a"></script>
-  <script src="./app.js?v=20260801a"></script>
-  <script src="./extra.js?v=20260801a"></script>
+  <script src="./lib/pure.js?v=20260801b"></script>
+  <script src="./app.js?v=20260801b"></script>
+  <script src="./extra.js?v=20260801b"></script>
 </body>
 </html>

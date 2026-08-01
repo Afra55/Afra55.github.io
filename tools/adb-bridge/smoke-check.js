@@ -90,6 +90,16 @@ async function main() {
     });
     if (badPath.status === 200) throw new Error("expected path guard to reject /data/data");
 
+    const health2 = await req("GET", "/health");
+    if (!Array.isArray(health2.json?.features) || !health2.json.features.includes("jobs")) {
+      throw new Error("health missing P1-P3 features");
+    }
+
+    const jobs = await req("GET", "/jobs", { headers: { "X-Adb-Token": TOKEN } });
+    if (jobs.status !== 200 || !Array.isArray(jobs.json?.jobs)) {
+      throw new Error("jobs endpoint failed");
+    }
+
     console.log("adb-bridge smoke-check: ok");
   } finally {
     child.kill("SIGTERM");

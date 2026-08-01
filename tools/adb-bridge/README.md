@@ -34,7 +34,7 @@ node server.js
 2. 下载并运行对应系统的启动脚本
 3. 回到网页点击「连接本机桥」
 
-## P0 接口
+## 接口（P0–P3）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -42,10 +42,17 @@ node server.js
 | GET | `/devices` | 设备列表 |
 | GET | `/device/info?serial=` | 设备信息 |
 | GET | `/fs/list?serial=&path=` | 列目录 |
-| POST | `/fs/mkdir` | 新建目录 |
-| POST | `/fs/delete` | 删除文件/目录 |
-| POST | `/fs/upload?serial=&path=&name=` | 上传（body 为文件字节） |
-| GET | `/fs/download?serial=&path=` | 下载 |
+| POST | `/fs/mkdir` `/fs/delete` `/fs/rename` `/fs/move` `/fs/copy` | 文件操作 |
+| POST | `/fs/upload?serial=&path=&name=` | 上传到设备 |
+| GET | `/fs/download?serial=&path=` | 从设备下载 |
+| POST | `/upload?name=` | 上传 APK 到桥临时区 |
+| POST | `/install` | 批量/单设备安装（任务） |
+| GET | `/apps?serial=&kind=` | 应用列表 `all/system/third` |
+| POST | `/apps/action` | 卸载 / 停用 / 启用 |
+| POST | `/apps/backup` | 备份 APK（可 `async` 任务） |
+| POST | `/media/screenshot` | 多设备截图任务 |
+| POST | `/media/record` | 当前设备录屏任务 |
+| GET | `/jobs` `/jobs/:id` `/jobs/:id/artifact/:name` | 任务与产物下载 |
 
 除 `/health` 外均需请求头：`X-Adb-Token: devtools-adb`  
 文件访问范围仅限 `/sdcard` 与 `/storage/emulated/0`。
