@@ -2184,6 +2184,11 @@
       return res;
     }
 
+    function requireCurrentSerial() {
+      if (!adbSelected) throw new Error("请先选择当前设备");
+      return adbSelected;
+    }
+
     function switchAdbTab(tab) {
       adbTab = tab;
       $$(".adb-tab").forEach((btn) => {
@@ -2194,6 +2199,7 @@
       });
       if (tab === "apps" && adbSelected && !adbApps.length) loadApps().catch(() => {});
       if (tab === "jobs") refreshJobs().catch(() => {});
+      if (tab === "info" && adbSelected) loadSnapshot({ silent: true }).catch(() => {});
     }
 
     function renderAdbDevices() {
@@ -2301,6 +2307,7 @@
             </div>
             <span></span>
             <div class="adb-fs-actions">
+              <button type="button" class="primary-btn" data-adb-app-open="${escapeHtml(app.packageName)}">打开</button>
               <button type="button" class="secondary-btn" data-adb-app-backup="${escapeHtml(app.packageName)}">备份APK</button>
               <button type="button" class="ghost-btn" data-adb-app-disable="${escapeHtml(app.packageName)}">停用</button>
               <button type="button" class="ghost-btn" data-adb-app-enable="${escapeHtml(app.packageName)}">启用</button>
@@ -2408,12 +2415,60 @@
       renderApps();
     }
 
+    async function loadSnapshot({ silent = false } = {}) {
+      const serial = requireCurrentSerial();
+      const snapMeta = $("#adb-snap-meta");
+      const out = $("#adb-snap-out");
+      if (snapMeta) snapMeta.textContent = "加载中…";
+      const data = await adbFetch(`/device/snapshot?serial=${encodeURIComponent(serial)}`);
+      const text = [
+        `前台:\n${data.foreground || "—"}`,
+        `uptime: ${data.uptime || "—"}`,
+        `屏幕常亮(stay_on_while_plugged_in): ${data.stayOnWhilePluggedIn || "—"}`,
+        `\n磁盘:\n${data.disk || "—"}`,
+        `\n内存:\n${data.meminfo || "—"}`,
+        `\n进程:\n${data.top || "—"}`,
+      ].join("\n");
+      if (out) out.textContent = text;
+      if (snapMeta) snapMeta.textContent = "已更新";
+      if (!silent) toast("快照已刷新");
+    }
+
+    async function deviceControl(action) {
+      const serial = requireCurrentSerial();
+      const data = await adbFetch("/device/control", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serial, action }),
+      });
+      toast(data.message || "已执行");
+      return data;
+    }
+
+    async function fetchLogcat() {
+      const serial = requireCurrentSerial();
+      const lines = Number($("#adb-log-lines")?.value || 400);
+      const packageName = String($("#adb-log-package")?.value || "").trim();
+      const query = String($("#adb-log-query")?.value || "").trim();
+      const params = new URLSearchParams({
+        serial,
+        lines: String(lines),
+      });
+      if (packageName) params.set("package", packageName);
+      if (query) params.set("query", query);
+      if ($("#adb-log-meta")) $("#adb-log-meta").textContent = "拉取中…";
+      const data = await adbFetch(`/logcat?${params.toString()}`);
+      if ($("#adb-log-out")) $("#adb-log-out").textContent = data.text || "(无日志)";
+      if ($("#adb-log-meta")) $("#adb-log-meta").textContent = `已拉取 ${data.lines || 0} 行`;
+    }
+
     async function selectAdbDevice(serial) {
       adbSelected = serial;
       renderAdbDevices();
       await loadAdbInfo(serial);
       await loadFs(adbFsPath?.value || "/sdcard");
       if (adbTab === "apps") await loadApps();
+      if (adbTab === "info") await loadSnapshot({ silent: true }).catch(() => {});
     }
 
     async function refreshAdbDevices({ silent = false } = {}) {
@@ -2827,11 +2882,25 @@
     );
     $("#adb-apps-filter")?.addEventListener("input", () => renderApps());
     adbAppsList?.addEventListener("click", async (e) => {
+      const openBtn = e.target.closest("[data-adb-app-open]");
       const backupBtn = e.target.closest("[data-adb-app-backup]");
       const disableBtn = e.target.closest("[data-adb-app-disable]");
       const enableBtn = e.target.closest("[data-adb-app-enable]");
       const uninstallBtn = e.target.closest("[data-adb-app-uninstall]");
       try {
+        if (openBtn) {
+          await adbFetch("/apps/action", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              serial: adbSelected,
+              packageName: openBtn.dataset.adbAppOpen,
+              action: "open",
+            }),
+          });
+          toast("已尝试打开应用");
+          return;
+        }
         if (backupBtn) {
           const data = await adbFetch("/apps/backup", {
             method: "POST",
@@ -2941,6 +3010,156 @@
       if (!btn) return;
       try {
         await downloadArtifact(btn.dataset.adbArtJob, btn.dataset.adbArtName);
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    });
+
+    $("#adb-snap-refresh")?.addEventListener("click", () =>
+      loadSnapshot().catch((err) => setError(adbError, err.message || String(err)))
+    );
+    $("#adb-stay-on")?.addEventListener("click", () =>
+      deviceControl("stay_awake_on").catch((err) => setError(adbError, err.message || String(err)))
+    );
+    $("#adb-stay-off")?.addEventListener("click", () =>
+      deviceControl("stay_awake_off").catch((err) => setError(adbError, err.message || String(err)))
+    );
+    $("#adb-open-dev")?.addEventListener("click", () =>
+      deviceControl("open_developer").catch((err) => setError(adbError, err.message || String(err)))
+    );
+    $("#adb-open-log")?.addEventListener("click", () =>
+      deviceControl("open_logging").catch((err) => setError(adbError, err.message || String(err)))
+    );
+    $("#adb-usb-install")?.addEventListener("click", () =>
+      deviceControl("enable_usb_install").catch((err) => setError(adbError, err.message || String(err)))
+    );
+    $("#adb-open-unknown")?.addEventListener("click", () =>
+      deviceControl("open_install_unknown").catch((err) => setError(adbError, err.message || String(err)))
+    );
+
+    $("#adb-log-fetch")?.addEventListener("click", () =>
+      fetchLogcat().catch((err) => setError(adbError, err.message || String(err)))
+    );
+    $("#adb-log-clear")?.addEventListener("click", async () => {
+      try {
+        const serial = requireCurrentSerial();
+        if (!window.confirm("确认清空设备 logcat 缓冲？")) return;
+        await adbFetch("/logcat/clear", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serial }),
+        });
+        toast("已清空日志缓冲");
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    });
+    $("#adb-log-copy")?.addEventListener("click", async () => {
+      const text = $("#adb-log-out")?.textContent || "";
+      if (!text || text === "尚未拉取") return;
+      try {
+        await navigator.clipboard.writeText(text);
+        toast("日志已复制");
+      } catch (_) {
+        toast("复制失败");
+      }
+    });
+    $("#adb-log-download")?.addEventListener("click", () => {
+      const text = $("#adb-log-out")?.textContent || "";
+      if (!text || text === "尚未拉取") return;
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `logcat-${adbSelected || "device"}-${Date.now()}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    });
+
+    $("#adb-tap-run")?.addEventListener("click", async () => {
+      try {
+        await adbFetch("/input", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            serial: requireCurrentSerial(),
+            action: "tap",
+            x: Number($("#adb-tap-x")?.value),
+            y: Number($("#adb-tap-y")?.value),
+          }),
+        });
+        toast("已点击");
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    });
+    $("#adb-swipe-run")?.addEventListener("click", async () => {
+      try {
+        await adbFetch("/input", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            serial: requireCurrentSerial(),
+            action: "swipe",
+            x1: Number($("#adb-swipe-x1")?.value),
+            y1: Number($("#adb-swipe-y1")?.value),
+            x2: Number($("#adb-swipe-x2")?.value),
+            y2: Number($("#adb-swipe-y2")?.value),
+            duration: Number($("#adb-swipe-ms")?.value || 300),
+          }),
+        });
+        toast("已滑动");
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    });
+    $$("[data-adb-key]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          await adbFetch("/input", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              serial: requireCurrentSerial(),
+              action: "key",
+              key: btn.dataset.adbKey,
+            }),
+          });
+          toast(`按键 ${btn.dataset.adbKey}`);
+        } catch (err) {
+          setError(adbError, err.message || String(err));
+        }
+      });
+    });
+    $("#adb-input-text-run")?.addEventListener("click", async () => {
+      try {
+        await adbFetch("/input", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            serial: requireCurrentSerial(),
+            action: "text",
+            text: $("#adb-input-text")?.value || "",
+          }),
+        });
+        toast("已输入文本");
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    });
+    $("#adb-clip-run")?.addEventListener("click", async () => {
+      try {
+        const data = await adbFetch("/clipboard", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            serial: requireCurrentSerial(),
+            text: $("#adb-clip-text")?.value || "",
+          }),
+        });
+        toast(data.note || "已推送剪贴板");
       } catch (err) {
         setError(adbError, err.message || String(err));
       }

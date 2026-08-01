@@ -91,14 +91,21 @@ async function main() {
     if (badPath.status === 200) throw new Error("expected path guard to reject /data/data");
 
     const health2 = await req("GET", "/health");
-    if (!Array.isArray(health2.json?.features) || !health2.json.features.includes("jobs")) {
-      throw new Error("health missing P1-P3 features");
+    const features = health2.json?.features || [];
+    for (const need of ["jobs", "logcat", "input", "clipboard", "snapshot", "device-control"]) {
+      if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
     }
 
     const jobs = await req("GET", "/jobs", { headers: { "X-Adb-Token": TOKEN } });
     if (jobs.status !== 200 || !Array.isArray(jobs.json?.jobs)) {
       throw new Error("jobs endpoint failed");
     }
+
+    const badInput = await req("POST", "/input", {
+      headers: { "X-Adb-Token": TOKEN, "Content-Type": "application/json" },
+      body: JSON.stringify({ serial: "demo", action: "nope" }),
+    });
+    if (badInput.status === 200) throw new Error("input should reject unknown action");
 
     console.log("adb-bridge smoke-check: ok");
   } finally {

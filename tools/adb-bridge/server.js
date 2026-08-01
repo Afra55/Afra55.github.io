@@ -39,7 +39,7 @@ const ROOTS = ["/sdcard", "/storage/emulated/0"];
 const TMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "adb-bridge-"));
 const JOBS = new Map();
 const UPLOADS = new Map();
-const BRIDGE_VERSION = "0.3.0";
+const BRIDGE_VERSION = "0.4.0";
 
 function sendJson(res, status, data, origin) {
   const body = JSON.stringify(data);
@@ -545,7 +545,382 @@ async function appAction(serial, packageName, action) {
     });
     return { ok: true, action, packageName: pkg, output: `${stdout}\n${stderr}`.trim() };
   }
+  if (action === "open" || action === "launch") {
+    const { stdout, stderr } = await adbSerial(
+      serial,
+      ["shell", "monkey", "-p", pkg, "-c", "android.intent.category.LAUNCHER", "1"],
+      { timeout: 30000 }
+    );
+    const text = `${stdout}\n${stderr}`;
+    if (/No activities found|Error|Exception/i.test(text) && !/Events injected/i.test(text)) {
+      throw new Error(text.trim() || "无法打开应用（可能没有桌面入口）");
+    }
+    return { ok: true, action: "open", packageName: pkg, output: text.trim() };
+  }
+  if (action === "force-stop") {
+    const { stdout, stderr } = await adbSerial(serial, ["shell", "am", "force-stop", pkg], {
+      timeout: 20000,
+    });
+    return { ok: true, action, packageName: pkg, output: `${stdout}\n${stderr}`.trim() };
+  }
   throw new Error("不支持的应用操作");
+}
+
+async function dumpLogcat(serial, opts = {}) {
+  const lines = Math.max(20, Math.min(5000, Number(opts.lines) || 500));
+  const query = String(opts.query || "").trim();
+  const packageName = String(opts.packageName || "").trim();
+  const args = ["logcat", "-d", "-v", "time", "-t", String(lines)];
+  if (packageName) {
+    try {
+      const { stdout } = await adbSerial(serial, ["shell", "pidof", "-s", packageName], {
+        timeout: 8000,
+      });
+      const pid = stdout.trim().split(/\s+/)[0];
+      if (pid && /^\d+$/.test(pid)) args.push("--pid", pid);
+    } catch {
+      /* ignore pid filter */
+    }
+  }
+  const { stdout } = await adbSerial(serial, args, { timeout: 60000, maxBuffer: 30 * 1024 * 1024 });
+  let text = stdout || "";
+  if (query) {
+    const q = query.toLowerCase();
+    text = text
+      .split(/\r?\n/)
+      .filter((line) => line.toLowerCase().includes(q))
+      .join("\n");
+  }
+  return { ok: true, text, lines: text ? text.split(/\r?\n/).filter(Boolean).length : 0 };
+}
+
+async function clearLogcat(serial) {
+  await adbSerial(serial, ["logcat", "-c"], { timeout: 15000 });
+  return { ok: true };
+}
+
+function encodeAdbInputText(text) {
+  // `input text` uses %s for spaces; many special chars break — strip risky ones.
+  return String(text ?? "")
+    .replace(/ /g, "%s")
+    .replace(/['"\\<>|;`$]/g, "")
+    .slice(0, 2000);
+}
+
+const KEYCODE_MAP = {
+  BACK: "4",
+  HOME: "3",
+  RECENTS: "187",
+  ENTER: "66",
+  DEL: "67",
+  TAB: "61",
+  POWER: "26",
+  VOLUME_UP: "24",
+  VOLUME_DOWN: "25",
+  MENU: "82",
+  APP_SWITCH: "187",
+};
+
+async function runInput(serial, body = {}) {
+  const action = String(body.action || "").trim();
+  if (action === "tap") {
+    const x = Number(body.x);
+    const y = Number(body.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error("坐标无效");
+    await adbSerial(serial, ["shell", "input", "tap", String(Math.round(x)), String(Math.round(y))], {
+      timeout: 15000,
+    });
+    return { ok: true, action };
+  }
+  if (action === "swipe") {
+    const x1 = Number(body.x1);
+    const y1 = Number(body.y1);
+    const x2 = Number(body.x2);
+    const y2 = Number(body.y2);
+    const duration = Math.max(50, Math.min(5000, Number(body.duration) || 300));
+    if (![x1, y1, x2, y2].every(Number.isFinite)) throw new Error("滑动坐标无效");
+    await adbSerial(
+      serial,
+      [
+        "shell",
+        "input",
+        "swipe",
+        String(Math.round(x1)),
+        String(Math.round(y1)),
+        String(Math.round(x2)),
+        String(Math.round(y2)),
+        String(duration),
+      ],
+      { timeout: 20000 }
+    );
+    return { ok: true, action };
+  }
+  if (action === "key") {
+    const raw = String(body.key || body.keycode || "").trim().toUpperCase();
+    const code = KEYCODE_MAP[raw] || (/^\d+$/.test(raw) ? raw : "");
+    if (!code) throw new Error("按键无效");
+    await adbSerial(serial, ["shell", "input", "keyevent", code], { timeout: 15000 });
+    return { ok: true, action, key: raw, keycode: code };
+  }
+  if (action === "text") {
+    const encoded = encodeAdbInputText(body.text);
+    if (!encoded) throw new Error("文本为空或无可输入字符");
+    await adbSerial(serial, ["shell", "input", "text", encoded], { timeout: 30000 });
+    return { ok: true, action, note: "已输入到当前焦点；空格已转义，部分符号会被忽略" };
+  }
+  throw new Error("不支持的输入操作");
+}
+
+async function pushClipboard(serial, text) {
+  const value = String(text ?? "");
+  if (!value) throw new Error("剪贴板内容为空");
+  const errors = [];
+
+  // Try broadcast helpers / OEM clipper receivers first.
+  try {
+    const { stdout, stderr } = await adbSerial(
+      serial,
+      [
+        "shell",
+        "am",
+        "broadcast",
+        "-a",
+        "clipper.set",
+        "-e",
+        "text",
+        value.slice(0, 4000),
+      ],
+      { timeout: 15000 }
+    );
+    const out = `${stdout}\n${stderr}`;
+    if (!/Error|Exception|not found/i.test(out)) {
+      return { ok: true, method: "clipper.broadcast", output: out.trim() };
+    }
+    errors.push(out.trim());
+  } catch (err) {
+    errors.push(err.message || String(err));
+  }
+
+  // service call clipboard (works on some Android versions; length-limited)
+  try {
+    const clipped = value.slice(0, 180);
+    const { stdout, stderr } = await adbSerial(
+      serial,
+      ["shell", `service call clipboard 2 i32 1 i32 1 s16 ${shellQuote(clipped)}`],
+      { timeout: 15000 }
+    );
+    return {
+      ok: true,
+      method: "service.call",
+      truncated: value.length > 180,
+      output: `${stdout}\n${stderr}`.trim(),
+      note: value.length > 180 ? "内容已截断到约 180 字符" : "",
+    };
+  } catch (err) {
+    errors.push(err.message || String(err));
+  }
+
+  throw new Error(
+    `剪贴板推送失败（机型/系统限制）。可改用「输入文本」到当前焦点。${errors[0] ? `详情：${errors[0]}` : ""}`
+  );
+}
+
+async function shellCapture(serial, command, timeout = 15000) {
+  try {
+    const { stdout, stderr } = await adbSerial(serial, ["shell", command], { timeout });
+    return `${stdout || ""}${stderr || ""}`.trim();
+  } catch (err) {
+    return "";
+  }
+}
+
+async function deviceSnapshot(serial) {
+  const info = await deviceInfo(serial);
+  const [
+    foreground,
+    meminfo,
+    top,
+    df,
+    uptime,
+    stayOn,
+  ] = await Promise.all([
+    shellCapture(
+      serial,
+      "dumpsys activity activities | grep -E 'mResumedActivity|topResumedActivity' | head -n 5",
+      20000
+    ),
+    shellCapture(serial, "dumpsys meminfo -s | head -n 20", 20000),
+    shellCapture(serial, "top -n 1 -m 8 -q", 20000),
+    shellCapture(serial, "df -h /data /sdcard 2>/dev/null | head -n 10", 15000),
+    shellCapture(serial, "uptime", 8000),
+    shellCapture(serial, "settings get global stay_on_while_plugged_in", 8000),
+  ]);
+
+  return {
+    ok: true,
+    info,
+    foreground: foreground || "—",
+    meminfo: meminfo || "—",
+    top: top || "—",
+    disk: df || "—",
+    uptime: uptime || "—",
+    stayOnWhilePluggedIn: stayOn || "—",
+  };
+}
+
+async function deviceControl(serial, action) {
+  const act = String(action || "").trim();
+  const results = [];
+
+  async function run(label, args) {
+    try {
+      const { stdout, stderr } = await adbSerial(serial, args, { timeout: 20000 });
+      results.push({ label, ok: true, output: `${stdout}\n${stderr}`.trim() });
+    } catch (err) {
+      results.push({ label, ok: false, output: err.message || String(err) });
+    }
+  }
+
+  if (act === "stay_awake_on") {
+    await run("stay_on_while_plugged_in=7", [
+      "shell",
+      "settings",
+      "put",
+      "global",
+      "stay_on_while_plugged_in",
+      "7",
+    ]);
+    await run("svc power stayon true", ["shell", "svc", "power", "stayon", "true"]);
+    return { ok: true, action: act, results, message: "已尝试开启充电时屏幕常亮" };
+  }
+  if (act === "stay_awake_off") {
+    await run("stay_on_while_plugged_in=0", [
+      "shell",
+      "settings",
+      "put",
+      "global",
+      "stay_on_while_plugged_in",
+      "0",
+    ]);
+    await run("svc power stayon false", ["shell", "svc", "power", "stayon", "false"]);
+    return { ok: true, action: act, results, message: "已尝试关闭屏幕常亮" };
+  }
+  if (act === "open_developer") {
+    await run("development_settings_enabled=1", [
+      "shell",
+      "settings",
+      "put",
+      "global",
+      "development_settings_enabled",
+      "1",
+    ]);
+    await run("open developer settings", [
+      "shell",
+      "am",
+      "start",
+      "-a",
+      "android.settings.APPLICATION_DEVELOPMENT_SETTINGS",
+    ]);
+    return { ok: true, action: act, results, message: "已打开开发者选项" };
+  }
+  if (act === "open_logging") {
+    // Open developer options where OEM logging switches usually live.
+    await run("open developer settings", [
+      "shell",
+      "am",
+      "start",
+      "-a",
+      "android.settings.APPLICATION_DEVELOPMENT_SETTINGS",
+    ]);
+    // Best-effort: some OEMs expose logging toggles via these keys.
+    await run("enable debug.app-info", [
+      "shell",
+      "settings",
+      "put",
+      "global",
+      "debug_app",
+      "null",
+    ]);
+    return {
+      ok: true,
+      action: act,
+      results,
+      message: "已打开开发者选项，请在手机上开启「日志/USB 调试日志」等相关开关",
+    };
+  }
+  if (act === "open_install_unknown") {
+    await run("open manage unknown app sources", [
+      "shell",
+      "am",
+      "start",
+      "-a",
+      "android.settings.MANAGE_UNKNOWN_APP_SOURCES",
+    ]);
+    await run("open security settings fallback", [
+      "shell",
+      "am",
+      "start",
+      "-a",
+      "android.settings.SECURITY_SETTINGS",
+    ]);
+    return {
+      ok: true,
+      action: act,
+      results,
+      message: "已打开安装未知应用/安全设置页",
+    };
+  }
+  if (act === "enable_usb_install") {
+    await run("install_non_market_apps global", [
+      "shell",
+      "settings",
+      "put",
+      "global",
+      "install_non_market_apps",
+      "1",
+    ]);
+    await run("install_non_market_apps secure", [
+      "shell",
+      "settings",
+      "put",
+      "secure",
+      "install_non_market_apps",
+      "1",
+    ]);
+    await run("verifier_verify_adb_installs=0", [
+      "shell",
+      "settings",
+      "put",
+      "global",
+      "verifier_verify_adb_installs",
+      "0",
+    ]);
+    await run("package_verifier_enable=0", [
+      "shell",
+      "settings",
+      "put",
+      "global",
+      "package_verifier_enable",
+      "0",
+    ]);
+    // Xiaomi / OEM style best-effort props
+    await run("persist.security.adbinput=1", ["shell", "setprop", "persist.security.adbinput", "1"]);
+    await run("open developer settings", [
+      "shell",
+      "am",
+      "start",
+      "-a",
+      "android.settings.APPLICATION_DEVELOPMENT_SETTINGS",
+    ]);
+    return {
+      ok: true,
+      action: act,
+      results,
+      message:
+        "已尝试开启 USB 安装相关设置，并打开开发者选项。部分品牌（如小米）仍需在手机上手动打开「USB 安装」。",
+    };
+  }
+  throw new Error("不支持的设备控制操作");
 }
 
 async function backupApp(serial, packageName) {
@@ -772,7 +1147,19 @@ async function handleApi(req, res, url) {
           port: PORT,
           tokenRequired: true,
           defaultTokenHint: "devtools-adb",
-          features: ["fs", "install", "apps", "screenshot", "record", "jobs"],
+          features: [
+            "fs",
+            "install",
+            "apps",
+            "screenshot",
+            "record",
+            "jobs",
+            "logcat",
+            "input",
+            "clipboard",
+            "snapshot",
+            "device-control",
+          ],
           adb: adbInfo,
           deviceCount: devices.length,
           roots: ROOTS,
@@ -942,6 +1329,47 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    if (url.pathname === "/logcat" && req.method === "GET") {
+      const serial = url.searchParams.get("serial") || "";
+      const result = await dumpLogcat(serial, {
+        lines: url.searchParams.get("lines"),
+        query: url.searchParams.get("query"),
+        packageName: url.searchParams.get("package"),
+      });
+      sendJson(res, 200, result, origin);
+      return;
+    }
+
+    if (url.pathname === "/logcat/clear" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req, 1024 * 1024));
+      sendJson(res, 200, await clearLogcat(body.serial), origin);
+      return;
+    }
+
+    if (url.pathname === "/input" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req, 1024 * 1024));
+      sendJson(res, 200, await runInput(body.serial, body), origin);
+      return;
+    }
+
+    if (url.pathname === "/clipboard" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req, 1024 * 1024));
+      sendJson(res, 200, await pushClipboard(body.serial, body.text), origin);
+      return;
+    }
+
+    if (url.pathname === "/device/snapshot" && req.method === "GET") {
+      const serial = url.searchParams.get("serial") || "";
+      sendJson(res, 200, await deviceSnapshot(serial), origin);
+      return;
+    }
+
+    if (url.pathname === "/device/control" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req, 1024 * 1024));
+      sendJson(res, 200, await deviceControl(body.serial, body.action), origin);
+      return;
+    }
+
     if (url.pathname === "/media/screenshot" && req.method === "POST") {
       const body = parseJsonBody(await readBody(req, 1024 * 1024));
       const serials = parseSerials(body.serials || body.serial);
@@ -1025,7 +1453,7 @@ server.listen(PORT, HOST, () => {
   console.log(` 版本: ${BRIDGE_VERSION}`);
   console.log(` 地址: http://${HOST}:${PORT}`);
   console.log(` Token: ${TOKEN}`);
-  console.log(" 能力: 文件 / 安装 / 应用 / 截图录屏 / 任务");
+  console.log(" 能力: 文件 / 安装 / 应用 / 截图录屏 / Logcat / 输入 / 设备控制 / 任务");
   console.log(" 请保持此窗口打开，然后回到网页点击「连接」");
   console.log("========================================");
   console.log("");

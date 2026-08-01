@@ -52,6 +52,12 @@ node server.js
 | POST | `/apps/backup` | 备份 APK（可 `async` 任务） |
 | POST | `/media/screenshot` | 多设备截图任务 |
 | POST | `/media/record` | 当前设备录屏任务 |
+| GET | `/logcat?serial=&lines=&package=&query=` | 拉取 logcat |
+| POST | `/logcat/clear` | 清空 logcat 缓冲 |
+| POST | `/input` | 点击 / 滑动 / 按键 / 文本 |
+| POST | `/clipboard` | 推送剪贴板（机型相关） |
+| GET | `/device/snapshot?serial=` | 状态快照 |
+| POST | `/device/control` | 常亮 / 开发者选项 / USB 安装等 |
 | GET | `/jobs` `/jobs/:id` `/jobs/:id/artifact/:name` | 任务与产物下载 |
 
 除 `/health` 外均需请求头：`X-Adb-Token: devtools-adb`  

@@ -1734,6 +1734,25 @@ a.secondary-btn {
   align-items: start;
 }
 
+.adb-pre {
+  margin-top: 0.75rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(8, 14, 26, 0.45);
+  color: var(--ink);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 22rem;
+  overflow: auto;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.adb-log-pre {
+  max-height: 28rem;
+}
+
 .adb-jobs-list {
   display: flex;
   flex-direction: column;
