@@ -39,7 +39,7 @@ const ROOTS = ["/sdcard", "/storage/emulated/0"];
 const TMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "adb-bridge-"));
 const JOBS = new Map();
 const UPLOADS = new Map();
-const BRIDGE_VERSION = "0.5.0";
+const BRIDGE_VERSION = "0.5.1";
 
 function sendJson(res, status, data, origin) {
   const body = JSON.stringify(data);
@@ -1183,6 +1183,31 @@ async function deviceControl(serial, action) {
     };
   }
   if (act === "enable_usb_install") {
+    // Common OEM / vendor toggle (e.g. some Chinese ROM USB install switches)
+    await run("adb_install_enabled system=1", [
+      "shell",
+      "settings",
+      "put",
+      "system",
+      "adb_install_enabled",
+      "1",
+    ]);
+    await run("adb_install_enabled global=1", [
+      "shell",
+      "settings",
+      "put",
+      "global",
+      "adb_install_enabled",
+      "1",
+    ]);
+    await run("adb_install_enabled secure=1", [
+      "shell",
+      "settings",
+      "put",
+      "secure",
+      "adb_install_enabled",
+      "1",
+    ]);
     await run("install_non_market_apps global", [
       "shell",
       "settings",
@@ -1229,7 +1254,7 @@ async function deviceControl(serial, action) {
       action: act,
       results,
       message:
-        "已尝试开启 USB 安装相关设置，并打开开发者选项。部分品牌（如小米）仍需在手机上手动打开「USB 安装」。",
+        "已尝试开启 USB 安装（含 settings put system adb_install_enabled 1）并打开开发者选项。部分品牌仍需在手机上再确认一次。",
     };
   }
   throw new Error("不支持的设备控制操作");
