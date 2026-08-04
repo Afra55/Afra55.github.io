@@ -218,8 +218,26 @@ test("image toolkit helpers", () => {
   const aligned = P.calcAlignedStitchCrop(1000, 500, "horizontal", 200, 100, 50, 50);
   assert.strictEqual(aligned.outH, 200);
   assert.ok(aligned.outW > 0);
+  assert.ok(Number.isInteger(aligned.cropX));
+  assert.ok(Number.isInteger(aligned.cropY));
+  assert.ok(Number.isInteger(aligned.cropW));
+  assert.ok(Number.isInteger(aligned.cropH));
+  assert.ok(aligned.cropX + aligned.cropW <= 1000);
+  assert.ok(aligned.cropY + aligned.cropH <= 500);
   const alignedV = P.calcAlignedStitchCrop(1000, 500, "vertical", 200, 200, 0, 50);
   assert.strictEqual(alignedV.outW, 200);
+  assert.ok(alignedV.cropX + alignedV.cropW <= 1000);
+  assert.ok(alignedV.cropY + alignedV.cropH <= 500);
+  // Zoomed pan extremes must stay inside source
+  for (const pan of [0, 50, 100]) {
+    for (const cross of [0, 50, 100]) {
+      const z = P.calcAlignedStitchCrop(1920, 1080, "horizontal", 720, 350, pan, cross);
+      assert.ok(z.cropX >= 0 && z.cropY >= 0);
+      assert.ok(z.cropX + z.cropW <= 1920);
+      assert.ok(z.cropY + z.cropH <= 1080);
+      assert.strictEqual(z.outH, 720);
+    }
+  }
   assert.strictEqual(P.suggestStitchEdge([{ width: 100, height: 40 }, { width: 80, height: 60 }], "horizontal"), 40);
   assert.strictEqual(P.suggestStitchEdge([{ width: 100, height: 40 }, { width: 80, height: 60 }], "vertical"), 80);
   assert.strictEqual(P.extFromFormat("jpeg"), "jpg");

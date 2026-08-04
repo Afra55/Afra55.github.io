@@ -1362,48 +1362,49 @@
    * horizontal: output height = commonEdge, width follows zoomed aspect
    * vertical: output width = commonEdge, height follows zoomed aspect
    * panPct 0-100 moves the crop window along the free axis (and slightly on both when zoomed).
+   * Returns integer crop rects fully inside the source (safe for canvas drawImage).
    */
   function calcAlignedStitchCrop(srcW, srcH, mode, commonEdge, zoomPct = 100, panPct = 50, panCrossPct = 50) {
-    const sw = Math.max(1, Number(srcW) || 1);
-    const sh = Math.max(1, Number(srcH) || 1);
+    const sw = Math.max(1, Math.round(Number(srcW) || 1));
+    const sh = Math.max(1, Math.round(Number(srcH) || 1));
     const edge = Math.max(1, Math.round(Number(commonEdge) || 1));
     const zoom = Math.max(1, Math.min(5, (Number(zoomPct) || 100) / 100));
     const pan = clampNumber(panPct, 0, 100) / 100;
     const panCross = clampNumber(panCrossPct, 0, 100) / 100;
 
+    const cropW0 = Math.min(sw, Math.max(1, sw / zoom));
+    const cropH0 = Math.min(sh, Math.max(1, sh / zoom));
+
+    let cropX;
+    let cropY;
+    let outW;
+    let outH;
+
     if (mode === "vertical") {
       // Equal width
-      const outW = edge;
-      const cropW = sw / zoom;
-      const cropH = sh / zoom;
-      const cropX = (sw - cropW) * pan;
-      const cropY = (sh - cropH) * panCross;
-      const outH = Math.max(1, Math.round((outW * cropH) / cropW));
-      return {
-        cropX: Math.max(0, cropX),
-        cropY: Math.max(0, cropY),
-        cropW: Math.min(cropW, sw),
-        cropH: Math.min(cropH, sh),
-        outW,
-        outH,
-      };
+      outW = edge;
+      cropX = (sw - cropW0) * pan;
+      cropY = (sh - cropH0) * panCross;
+      outH = Math.max(1, Math.round((outW * cropH0) / cropW0));
+    } else {
+      // horizontal (default): equal height
+      outH = edge;
+      cropX = (sw - cropW0) * panCross;
+      cropY = (sh - cropH0) * pan;
+      outW = Math.max(1, Math.round((outH * cropW0) / cropH0));
     }
 
-    // horizontal (default): equal height
-    const outH = edge;
-    const cropW = sw / zoom;
-    const cropH = sh / zoom;
-    const cropX = (sw - cropW) * panCross;
-    const cropY = (sh - cropH) * pan;
-    const outW = Math.max(1, Math.round((outH * cropW) / cropH));
-    return {
-      cropX: Math.max(0, cropX),
-      cropY: Math.max(0, cropY),
-      cropW: Math.min(cropW, sw),
-      cropH: Math.min(cropH, sh),
-      outW,
-      outH,
-    };
+    // Integerize and clamp so the source rect never exceeds the image.
+    cropX = Math.floor(clampNumber(cropX, 0, Math.max(0, sw - cropW0)));
+    cropY = Math.floor(clampNumber(cropY, 0, Math.max(0, sh - cropH0)));
+    let cropW = Math.min(Math.ceil(cropW0), sw - cropX);
+    let cropH = Math.min(Math.ceil(cropH0), sh - cropY);
+    cropW = Math.max(1, cropW);
+    cropH = Math.max(1, cropH);
+    if (cropX + cropW > sw) cropX = Math.max(0, sw - cropW);
+    if (cropY + cropH > sh) cropY = Math.max(0, sh - cropH);
+
+    return { cropX, cropY, cropW, cropH, outW, outH };
   }
 
   function suggestStitchEdge(sizes, mode) {
