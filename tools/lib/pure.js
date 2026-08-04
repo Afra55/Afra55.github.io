@@ -1301,24 +1301,37 @@
     if (!list.length) return { width: 0, height: 0, items: [] };
 
     if (mode === "horizontal") {
-      const height = Math.max(...list.map((s) => s.height));
+      // Prefer equal height layout when provided; fall back to max height padding.
+      const equalH = Number(opts.equalEdge);
+      const height = Number.isFinite(equalH) && equalH > 0 ? Math.round(equalH) : Math.max(...list.map((s) => s.height));
       let x = 0;
       const items = list.map((s) => {
-        const item = { x, y: Math.round((height - s.height) / 2), ...s };
-        x += s.width + gap;
+        const item = {
+          x,
+          y: Math.round((height - s.height) / 2),
+          width: s.width,
+          height: Number.isFinite(equalH) && equalH > 0 ? height : s.height,
+        };
+        x += item.width + gap;
         return item;
       });
-      return { width: x - gap, height, items };
+      return { width: Math.max(0, x - gap), height, items };
     }
     if (mode === "vertical") {
-      const width = Math.max(...list.map((s) => s.width));
+      const equalW = Number(opts.equalEdge);
+      const width = Number.isFinite(equalW) && equalW > 0 ? Math.round(equalW) : Math.max(...list.map((s) => s.width));
       let y = 0;
       const items = list.map((s) => {
-        const item = { x: Math.round((width - s.width) / 2), y, ...s };
-        y += s.height + gap;
+        const item = {
+          x: Math.round((width - s.width) / 2),
+          y,
+          width: Number.isFinite(equalW) && equalW > 0 ? width : s.width,
+          height: s.height,
+        };
+        y += item.height + gap;
         return item;
       });
-      return { width, height: y - gap, items };
+      return { width, height: Math.max(0, y - gap), items };
     }
 
     const items = [];
@@ -1342,6 +1355,64 @@
       y += rh + gap;
     }
     return { width, height: Math.max(0, y - gap), items };
+  }
+
+  /**
+   * Cover-crop a source image into an equal-edge stitch cell.
+   * horizontal: output height = commonEdge, width follows zoomed aspect
+   * vertical: output width = commonEdge, height follows zoomed aspect
+   * panPct 0-100 moves the crop window along the free axis (and slightly on both when zoomed).
+   */
+  function calcAlignedStitchCrop(srcW, srcH, mode, commonEdge, zoomPct = 100, panPct = 50, panCrossPct = 50) {
+    const sw = Math.max(1, Number(srcW) || 1);
+    const sh = Math.max(1, Number(srcH) || 1);
+    const edge = Math.max(1, Math.round(Number(commonEdge) || 1));
+    const zoom = Math.max(1, Math.min(5, (Number(zoomPct) || 100) / 100));
+    const pan = clampNumber(panPct, 0, 100) / 100;
+    const panCross = clampNumber(panCrossPct, 0, 100) / 100;
+
+    if (mode === "vertical") {
+      // Equal width
+      const outW = edge;
+      const cropW = sw / zoom;
+      const cropH = sh / zoom;
+      const cropX = (sw - cropW) * pan;
+      const cropY = (sh - cropH) * panCross;
+      const outH = Math.max(1, Math.round((outW * cropH) / cropW));
+      return {
+        cropX: Math.max(0, cropX),
+        cropY: Math.max(0, cropY),
+        cropW: Math.min(cropW, sw),
+        cropH: Math.min(cropH, sh),
+        outW,
+        outH,
+      };
+    }
+
+    // horizontal (default): equal height
+    const outH = edge;
+    const cropW = sw / zoom;
+    const cropH = sh / zoom;
+    const cropX = (sw - cropW) * panCross;
+    const cropY = (sh - cropH) * pan;
+    const outW = Math.max(1, Math.round((outH * cropW) / cropH));
+    return {
+      cropX: Math.max(0, cropX),
+      cropY: Math.max(0, cropY),
+      cropW: Math.min(cropW, sw),
+      cropH: Math.min(cropH, sh),
+      outW,
+      outH,
+    };
+  }
+
+  function suggestStitchEdge(sizes, mode) {
+    const list = sizes || [];
+    if (!list.length) return 1;
+    if (mode === "vertical") {
+      return Math.max(1, Math.round(Math.min(...list.map((s) => Number(s.width) || 1))));
+    }
+    return Math.max(1, Math.round(Math.min(...list.map((s) => Number(s.height) || 1))));
   }
 
   function readExifAscii(view, offset, length) {
@@ -1471,6 +1542,8 @@
     calcCropRect,
     calcNineGridRects,
     calcStitchLayout,
+    calcAlignedStitchCrop,
+    suggestStitchEdge,
     parseJpegExif,
     mimeFromFormat,
     extFromFormat,

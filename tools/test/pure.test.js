@@ -197,6 +197,31 @@ test("image toolkit helpers", () => {
   );
   assert.strictEqual(stitch.width, 45);
   assert.strictEqual(stitch.height, 20);
+  const stitchEqual = P.calcStitchLayout(
+    [
+      { width: 400, height: 200 },
+      { width: 300, height: 200 },
+    ],
+    { mode: "horizontal", gap: 10, equalEdge: 200 }
+  );
+  assert.strictEqual(stitchEqual.height, 200);
+  assert.strictEqual(stitchEqual.width, 710);
+  const stitchEqualV = P.calcStitchLayout(
+    [
+      { width: 200, height: 100 },
+      { width: 200, height: 150 },
+    ],
+    { mode: "vertical", gap: 0, equalEdge: 200 }
+  );
+  assert.strictEqual(stitchEqualV.width, 200);
+  assert.strictEqual(stitchEqualV.height, 250);
+  const aligned = P.calcAlignedStitchCrop(1000, 500, "horizontal", 200, 100, 50, 50);
+  assert.strictEqual(aligned.outH, 200);
+  assert.ok(aligned.outW > 0);
+  const alignedV = P.calcAlignedStitchCrop(1000, 500, "vertical", 200, 200, 0, 50);
+  assert.strictEqual(alignedV.outW, 200);
+  assert.strictEqual(P.suggestStitchEdge([{ width: 100, height: 40 }, { width: 80, height: 60 }], "horizontal"), 40);
+  assert.strictEqual(P.suggestStitchEdge([{ width: 100, height: 40 }, { width: 80, height: 60 }], "vertical"), 80);
   assert.strictEqual(P.extFromFormat("jpeg"), "jpg");
   assert.strictEqual(P.mimeFromFormat("webp"), "image/webp");
   assert.ok(P.APP_ICON_SIZES.android.includes(512));

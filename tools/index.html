@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260804a" />
+  <link rel="stylesheet" href="./style.css?v=20260804b" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -1586,19 +1586,29 @@ hello@world.org</textarea>
                   <input id="imgkit-border-color" type="color" value="#111827" />
                 </div>
                 <h2 class="subhead" style="margin-top:0.9rem">拼接参数</h2>
+                <p class="hint">横向齐高、竖向齐宽；每张图可单独缩放/平移取景，下方实时预览。宫格模式不使用取景裁剪。</p>
                 <div class="field-row" style="flex-wrap:wrap">
                   <label for="imgkit-stitch-mode">方式</label>
                   <select id="imgkit-stitch-mode" class="mono select-input">
-                    <option value="horizontal" selected>横向</option>
-                    <option value="vertical">纵向</option>
+                    <option value="horizontal" selected>横向（齐高）</option>
+                    <option value="vertical">竖向（齐宽）</option>
                     <option value="grid">宫格</option>
                   </select>
+                  <label for="imgkit-stitch-edge">统一边长</label>
+                  <input id="imgkit-stitch-edge" class="mono meta-input" type="number" min="1" step="1" value="" placeholder="自动" title="横向=统一高度；竖向=统一宽度。留空取各图对应边最小值" />
                   <label for="imgkit-stitch-gap">间距</label>
                   <input id="imgkit-stitch-gap" class="mono meta-input" type="number" min="0" max="80" value="8" />
                   <label for="imgkit-stitch-cols">宫格列数</label>
                   <input id="imgkit-stitch-cols" class="mono meta-input" type="number" min="1" max="8" value="2" />
                   <label for="imgkit-stitch-bg">背景</label>
                   <input id="imgkit-stitch-bg" type="color" value="#ffffff" />
+                </div>
+                <div class="imgkit-stitch-studio" id="imgkit-stitch-studio">
+                  <div class="imgkit-stitch-preview-wrap">
+                    <canvas id="imgkit-stitch-preview" class="imgkit-stitch-preview" width="1" height="1"></canvas>
+                    <p class="hint" id="imgkit-stitch-meta">添加至少 2 张图后显示拼接预览</p>
+                  </div>
+                  <div class="imgkit-stitch-crops" id="imgkit-stitch-crops"></div>
                 </div>
                 <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem">
                   <label for="imgkit-icon-platform">图标平台</label>
@@ -1654,9 +1664,9 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./lib/pure.js?v=20260804a"></script>
-  <script src="./app.js?v=20260804a"></script>
-  <script src="./extra.js?v=20260804a"></script>
-  <script src="./imgkit.js?v=20260804a"></script>
+  <script src="./lib/pure.js?v=20260804b"></script>
+  <script src="./app.js?v=20260804b"></script>
+  <script src="./extra.js?v=20260804b"></script>
+  <script src="./imgkit.js?v=20260804b"></script>
 </body>
 </html>
