@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260804g" />
+  <link rel="stylesheet" href="./style.css?v=20260804h" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -1425,7 +1425,7 @@ hello@world.org</textarea>
 <section id="imgkit" class="panel" data-reveal>
       <div class="panel-head">
         <h1>图片工具</h1>
-        <p>本地压缩、改尺寸、转格式、裁剪、水印、拼接、九宫格与 App 图标导出；处理在浏览器完成。</p>
+        <p>本地压缩、改尺寸、转格式、裁剪、水印、拼接、九宫格与 App 图标导出；按页签操作，底部随时可导出。</p>
       </div>
       <div class="panel-body">
         <div class="imgkit-drop" id="imgkit-drop">
@@ -1455,193 +1455,219 @@ hello@world.org</textarea>
               <img id="imgkit-preview" class="imgkit-preview" alt="处理预览" hidden />
             </div>
 
-            <div class="convert-grid" style="margin-top:1rem">
-              <div class="field-block">
-                <h2 class="subhead">图片信息</h2>
-                <pre class="mono adb-pre" id="imgkit-info">选择或添加图片后显示信息</pre>
-                <h2 class="subhead" style="margin-top:0.85rem">EXIF</h2>
-                <pre class="mono adb-pre" id="imgkit-exif">—</pre>
-                <label class="flag" style="margin-top:0.55rem"><input type="checkbox" id="imgkit-strip-exif" checked /> 导出时清除 EXIF（隐私，画布重编码）</label>
+            <div class="imgkit-workspace">
+              <div class="imgkit-tabs" role="tablist" aria-label="图片工具分类">
+                <button type="button" class="imgkit-tab is-active" role="tab" aria-selected="true" data-imgkit-tab="adjust">格式尺寸</button>
+                <button type="button" class="imgkit-tab" role="tab" aria-selected="false" data-imgkit-tab="crop">裁剪旋转</button>
+                <button type="button" class="imgkit-tab" role="tab" aria-selected="false" data-imgkit-tab="style">水印边框</button>
+                <button type="button" class="imgkit-tab" role="tab" aria-selected="false" data-imgkit-tab="stitch">拼接</button>
+                <button type="button" class="imgkit-tab" role="tab" aria-selected="false" data-imgkit-tab="more">信息图标</button>
               </div>
 
-              <div class="field-block">
-                <h2 class="subhead">格式与压缩</h2>
-                <div class="field-row" style="flex-wrap:wrap">
-                  <label for="imgkit-format">格式</label>
-                  <select id="imgkit-format" class="mono select-input">
-                    <option value="webp">WebP</option>
-                    <option value="jpeg">JPEG</option>
-                    <option value="png" selected>PNG</option>
-                  </select>
-                  <label for="imgkit-quality">质量</label>
-                  <input id="imgkit-quality" class="mono meta-input" type="number" min="0.05" max="1" step="0.05" value="0.9" />
-                  <label for="imgkit-target-kb">目标 KB</label>
-                  <input id="imgkit-target-kb" class="mono meta-input" type="number" min="0" step="1" value="0" title="0 表示不限制；JPEG/WebP 有效" />
-                </div>
-                <p class="hint">目标体积会对 JPEG/WebP 自动二分质量；PNG 忽略质量/目标体积。</p>
-              </div>
-            </div>
-
-            <div class="convert-grid" style="margin-top:0.75rem">
-              <div class="field-block">
-                <h2 class="subhead">尺寸</h2>
-                <div class="field-row" style="flex-wrap:wrap">
-                  <label for="imgkit-resize-mode">模式</label>
-                  <select id="imgkit-resize-mode" class="mono select-input">
-                    <option value="max" selected>最长边</option>
-                    <option value="wh">宽高</option>
-                    <option value="percent">百分比</option>
-                  </select>
-                  <label class="flag"><input type="checkbox" id="imgkit-keep-aspect" checked /> 等比</label>
-                </div>
-                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem" data-resize-field="max">
-                  <label for="imgkit-max-edge">最长边</label>
-                  <input id="imgkit-max-edge" class="mono meta-input" type="number" min="1" value="1280" />
-                </div>
-                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem" data-resize-field="wh" hidden>
-                  <label for="imgkit-width">宽</label>
-                  <input id="imgkit-width" class="mono meta-input" type="number" min="1" value="1280" />
-                  <label for="imgkit-height">高</label>
-                  <input id="imgkit-height" class="mono meta-input" type="number" min="1" value="720" />
-                </div>
-                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem" data-resize-field="percent" hidden>
-                  <label for="imgkit-percent">百分比</label>
-                  <input id="imgkit-percent" class="mono meta-input" type="number" min="1" max="400" value="100" />
-                </div>
-              </div>
-
-              <div class="field-block">
-                <h2 class="subhead">裁剪 / 旋转</h2>
-                <div class="field-row" style="flex-wrap:wrap">
-                  <label for="imgkit-aspect">比例</label>
-                  <select id="imgkit-aspect" class="mono select-input">
-                    <option value="free" selected>自由</option>
-                    <option value="1:1">1:1</option>
-                    <option value="16:9">16:9</option>
-                    <option value="4:3">4:3</option>
-                    <option value="9:16">9:16</option>
-                  </select>
-                  <label for="imgkit-rotate">旋转</label>
-                  <select id="imgkit-rotate" class="mono select-input">
-                    <option value="0" selected>0°</option>
-                    <option value="90">90°</option>
-                    <option value="180">180°</option>
-                    <option value="270">270°</option>
-                  </select>
-                  <label class="flag"><input type="checkbox" id="imgkit-flip-h" /> 水平翻转</label>
-                  <label class="flag"><input type="checkbox" id="imgkit-flip-v" /> 垂直翻转</label>
-                </div>
-                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem">
-                  <label for="imgkit-crop-x">裁剪 X%</label>
-                  <input id="imgkit-crop-x" class="mono meta-input" type="number" min="0" max="99" value="0" />
-                  <label for="imgkit-crop-y">Y%</label>
-                  <input id="imgkit-crop-y" class="mono meta-input" type="number" min="0" max="99" value="0" />
-                  <label for="imgkit-crop-w">W%</label>
-                  <input id="imgkit-crop-w" class="mono meta-input" type="number" min="1" max="100" value="100" />
-                  <label for="imgkit-crop-h">H%</label>
-                  <input id="imgkit-crop-h" class="mono meta-input" type="number" min="1" max="100" value="100" />
-                </div>
-                <div class="imgkit-crop-editor" id="imgkit-crop-editor">
-                  <p class="hint tight">在下方选区拖动绿框平移，拖角点/边点调整范围；固定比例时选框会锁定比例。</p>
-                  <div class="imgkit-crop-stage" id="imgkit-crop-stage">
-                    <canvas id="imgkit-crop-canvas" width="1" height="1"></canvas>
-                    <div class="imgkit-crop-box" id="imgkit-crop-box" hidden>
-                      <span class="imgkit-crop-handle" data-crop-handle="nw"></span>
-                      <span class="imgkit-crop-handle" data-crop-handle="n"></span>
-                      <span class="imgkit-crop-handle" data-crop-handle="ne"></span>
-                      <span class="imgkit-crop-handle" data-crop-handle="e"></span>
-                      <span class="imgkit-crop-handle" data-crop-handle="se"></span>
-                      <span class="imgkit-crop-handle" data-crop-handle="s"></span>
-                      <span class="imgkit-crop-handle" data-crop-handle="sw"></span>
-                      <span class="imgkit-crop-handle" data-crop-handle="w"></span>
+              <div class="imgkit-tab-panels">
+                <div class="imgkit-tab-panel is-active" data-imgkit-panel="adjust" role="tabpanel">
+                  <div class="field-block">
+                    <h2 class="subhead">格式与压缩</h2>
+                    <div class="field-row" style="flex-wrap:wrap">
+                      <label for="imgkit-format">格式</label>
+                      <select id="imgkit-format" class="mono select-input">
+                        <option value="webp">WebP</option>
+                        <option value="jpeg">JPEG</option>
+                        <option value="png" selected>PNG</option>
+                      </select>
+                      <label for="imgkit-quality">质量</label>
+                      <input id="imgkit-quality" class="mono meta-input" type="number" min="0.05" max="1" step="0.05" value="0.9" />
+                      <label for="imgkit-target-kb">目标 KB</label>
+                      <input id="imgkit-target-kb" class="mono meta-input" type="number" min="0" step="1" value="0" title="0 表示不限制；JPEG/WebP 有效" />
                     </div>
-                    <p class="imgkit-crop-empty hint" id="imgkit-crop-empty">添加图片后可在此选择裁剪区域</p>
+                    <p class="hint">目标体积会对 JPEG/WebP 自动二分质量；PNG 忽略质量/目标体积。</p>
+                  </div>
+                  <div class="field-block" style="margin-top:0.85rem">
+                    <h2 class="subhead">尺寸</h2>
+                    <div class="field-row" style="flex-wrap:wrap">
+                      <label for="imgkit-resize-mode">模式</label>
+                      <select id="imgkit-resize-mode" class="mono select-input">
+                        <option value="max" selected>最长边</option>
+                        <option value="wh">宽高</option>
+                        <option value="percent">百分比</option>
+                      </select>
+                      <label class="flag"><input type="checkbox" id="imgkit-keep-aspect" checked /> 等比</label>
+                    </div>
+                    <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem" data-resize-field="max">
+                      <label for="imgkit-max-edge">最长边</label>
+                      <input id="imgkit-max-edge" class="mono meta-input" type="number" min="1" value="1280" />
+                    </div>
+                    <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem" data-resize-field="wh" hidden>
+                      <label for="imgkit-width">宽</label>
+                      <input id="imgkit-width" class="mono meta-input" type="number" min="1" value="1280" />
+                      <label for="imgkit-height">高</label>
+                      <input id="imgkit-height" class="mono meta-input" type="number" min="1" value="720" />
+                    </div>
+                    <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem" data-resize-field="percent" hidden>
+                      <label for="imgkit-percent">百分比</label>
+                      <input id="imgkit-percent" class="mono meta-input" type="number" min="1" max="400" value="100" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="imgkit-tab-panel" data-imgkit-panel="crop" role="tabpanel" hidden>
+                  <div class="field-block">
+                    <h2 class="subhead">裁剪 / 旋转</h2>
+                    <div class="field-row" style="flex-wrap:wrap">
+                      <label for="imgkit-aspect">比例</label>
+                      <select id="imgkit-aspect" class="mono select-input">
+                        <option value="free" selected>自由</option>
+                        <option value="1:1">1:1</option>
+                        <option value="16:9">16:9</option>
+                        <option value="4:3">4:3</option>
+                        <option value="9:16">9:16</option>
+                      </select>
+                      <label for="imgkit-rotate">旋转</label>
+                      <select id="imgkit-rotate" class="mono select-input">
+                        <option value="0" selected>0°</option>
+                        <option value="90">90°</option>
+                        <option value="180">180°</option>
+                        <option value="270">270°</option>
+                      </select>
+                      <label class="flag"><input type="checkbox" id="imgkit-flip-h" /> 水平翻转</label>
+                      <label class="flag"><input type="checkbox" id="imgkit-flip-v" /> 垂直翻转</label>
+                    </div>
+                    <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem">
+                      <label for="imgkit-crop-x">裁剪 X%</label>
+                      <input id="imgkit-crop-x" class="mono meta-input" type="number" min="0" max="99" value="0" />
+                      <label for="imgkit-crop-y">Y%</label>
+                      <input id="imgkit-crop-y" class="mono meta-input" type="number" min="0" max="99" value="0" />
+                      <label for="imgkit-crop-w">W%</label>
+                      <input id="imgkit-crop-w" class="mono meta-input" type="number" min="1" max="100" value="100" />
+                      <label for="imgkit-crop-h">H%</label>
+                      <input id="imgkit-crop-h" class="mono meta-input" type="number" min="1" max="100" value="100" />
+                    </div>
+                    <div class="imgkit-crop-editor" id="imgkit-crop-editor">
+                      <p class="hint tight">拖动绿框平移，拖角点/边点调整范围；调好后直接点底部「导出当前」，无需再往下翻。</p>
+                      <div class="imgkit-crop-stage" id="imgkit-crop-stage">
+                        <canvas id="imgkit-crop-canvas" width="1" height="1"></canvas>
+                        <div class="imgkit-crop-box" id="imgkit-crop-box" hidden>
+                          <span class="imgkit-crop-handle" data-crop-handle="nw"></span>
+                          <span class="imgkit-crop-handle" data-crop-handle="n"></span>
+                          <span class="imgkit-crop-handle" data-crop-handle="ne"></span>
+                          <span class="imgkit-crop-handle" data-crop-handle="e"></span>
+                          <span class="imgkit-crop-handle" data-crop-handle="se"></span>
+                          <span class="imgkit-crop-handle" data-crop-handle="s"></span>
+                          <span class="imgkit-crop-handle" data-crop-handle="sw"></span>
+                          <span class="imgkit-crop-handle" data-crop-handle="w"></span>
+                        </div>
+                        <p class="imgkit-crop-empty hint" id="imgkit-crop-empty">添加图片后可在此选择裁剪区域</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="imgkit-tab-panel" data-imgkit-panel="style" role="tabpanel" hidden>
+                  <div class="field-block">
+                    <h2 class="subhead">水印</h2>
+                    <div class="field-row" style="flex-wrap:wrap">
+                      <label for="imgkit-wm-text">文字</label>
+                      <input id="imgkit-wm-text" class="mono" type="text" placeholder="可选水印文字" />
+                      <label for="imgkit-wm-size">字号</label>
+                      <input id="imgkit-wm-size" class="mono meta-input" type="number" min="10" max="200" value="28" />
+                      <label for="imgkit-wm-color">颜色</label>
+                      <input id="imgkit-wm-color" type="color" value="#ffffff" />
+                    </div>
+                    <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem">
+                      <label for="imgkit-wm-opacity">透明度</label>
+                      <input id="imgkit-wm-opacity" class="mono meta-input" type="number" min="0.05" max="1" step="0.05" value="0.45" />
+                      <label for="imgkit-wm-pos">位置</label>
+                      <select id="imgkit-wm-pos" class="mono select-input">
+                        <option value="br" selected>右下</option>
+                        <option value="bl">左下</option>
+                        <option value="tr">右上</option>
+                        <option value="tl">左上</option>
+                        <option value="c">居中</option>
+                      </select>
+                      <label class="file-btn" for="imgkit-wm-file">图片水印</label>
+                      <input id="imgkit-wm-file" type="file" accept="image/*" hidden />
+                      <label for="imgkit-wm-scale">水印占比%</label>
+                      <input id="imgkit-wm-scale" class="mono meta-input" type="number" min="2" max="80" value="20" />
+                      <button type="button" class="ghost-btn" id="imgkit-wm-clear">清除水印图</button>
+                    </div>
+                  </div>
+                  <div class="field-block" style="margin-top:0.85rem">
+                    <h2 class="subhead">圆角 / 边框</h2>
+                    <div class="field-row" style="flex-wrap:wrap">
+                      <label for="imgkit-round">圆角</label>
+                      <input id="imgkit-round" class="mono meta-input" type="number" min="0" max="500" value="0" />
+                      <label for="imgkit-border">边框</label>
+                      <input id="imgkit-border" class="mono meta-input" type="number" min="0" max="80" value="0" />
+                      <label for="imgkit-border-color">边框色</label>
+                      <input id="imgkit-border-color" type="color" value="#111827" />
+                    </div>
+                  </div>
+                </div>
+
+                <div class="imgkit-tab-panel" data-imgkit-panel="stitch" role="tabpanel" hidden>
+                  <div class="field-block">
+                    <h2 class="subhead">拼接</h2>
+                    <p class="hint">横向齐高、竖向齐宽。拖动绿色选框取景；调好后点底部「拼接导出」。</p>
+                    <div class="field-row" style="flex-wrap:wrap">
+                      <label for="imgkit-stitch-mode">方式</label>
+                      <select id="imgkit-stitch-mode" class="mono select-input">
+                        <option value="horizontal" selected>横向（齐高）</option>
+                        <option value="vertical">竖向（齐宽）</option>
+                        <option value="grid">宫格</option>
+                      </select>
+                      <label for="imgkit-stitch-edge">统一边长</label>
+                      <input id="imgkit-stitch-edge" class="mono meta-input" type="number" min="1" step="1" value="" placeholder="自动" title="横向=统一高度；竖向=统一宽度。留空取各图对应边最小值" />
+                      <label for="imgkit-stitch-gap">间距</label>
+                      <input id="imgkit-stitch-gap" class="mono meta-input" type="number" min="0" max="80" value="8" />
+                      <label for="imgkit-stitch-cols">宫格列数</label>
+                      <input id="imgkit-stitch-cols" class="mono meta-input" type="number" min="1" max="8" value="2" />
+                      <label for="imgkit-stitch-bg">背景</label>
+                      <input id="imgkit-stitch-bg" type="color" value="#ffffff" />
+                    </div>
+                    <div class="imgkit-stitch-studio" id="imgkit-stitch-studio">
+                      <div class="imgkit-stitch-preview-wrap">
+                        <canvas id="imgkit-stitch-preview" class="imgkit-stitch-preview" width="1" height="1"></canvas>
+                        <p class="hint" id="imgkit-stitch-meta">添加至少 2 张图后显示拼接预览</p>
+                      </div>
+                      <div class="imgkit-stitch-crops" id="imgkit-stitch-crops"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="imgkit-tab-panel" data-imgkit-panel="more" role="tabpanel" hidden>
+                  <div class="field-block">
+                    <h2 class="subhead">图片信息</h2>
+                    <pre class="mono adb-pre" id="imgkit-info">选择或添加图片后显示信息</pre>
+                    <h2 class="subhead" style="margin-top:0.85rem">EXIF</h2>
+                    <pre class="mono adb-pre" id="imgkit-exif">—</pre>
+                    <label class="flag" style="margin-top:0.55rem"><input type="checkbox" id="imgkit-strip-exif" checked /> 导出时清除 EXIF（隐私，画布重编码）</label>
+                  </div>
+                  <div class="field-block" style="margin-top:0.85rem">
+                    <h2 class="subhead">App 图标</h2>
+                    <div class="field-row" style="flex-wrap:wrap">
+                      <label for="imgkit-icon-platform">图标平台</label>
+                      <select id="imgkit-icon-platform" class="mono select-input">
+                        <option value="android" selected>Android</option>
+                        <option value="ios">iOS</option>
+                      </select>
+                    </div>
+                    <p class="hint">导出多尺寸图标包请用底部「App 图标 ZIP」；九宫格用「九宫格 ZIP」。</p>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div class="convert-grid" style="margin-top:0.75rem">
-              <div class="field-block">
-                <h2 class="subhead">水印</h2>
-                <div class="field-row" style="flex-wrap:wrap">
-                  <label for="imgkit-wm-text">文字</label>
-                  <input id="imgkit-wm-text" class="mono" type="text" placeholder="可选水印文字" />
-                  <label for="imgkit-wm-size">字号</label>
-                  <input id="imgkit-wm-size" class="mono meta-input" type="number" min="10" max="200" value="28" />
-                  <label for="imgkit-wm-color">颜色</label>
-                  <input id="imgkit-wm-color" type="color" value="#ffffff" />
-                </div>
-                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem">
-                  <label for="imgkit-wm-opacity">透明度</label>
-                  <input id="imgkit-wm-opacity" class="mono meta-input" type="number" min="0.05" max="1" step="0.05" value="0.45" />
-                  <label for="imgkit-wm-pos">位置</label>
-                  <select id="imgkit-wm-pos" class="mono select-input">
-                    <option value="br" selected>右下</option>
-                    <option value="bl">左下</option>
-                    <option value="tr">右上</option>
-                    <option value="tl">左上</option>
-                    <option value="c">居中</option>
-                  </select>
-                  <label class="file-btn" for="imgkit-wm-file">图片水印</label>
-                  <input id="imgkit-wm-file" type="file" accept="image/*" hidden />
-                  <label for="imgkit-wm-scale">水印占比%</label>
-                  <input id="imgkit-wm-scale" class="mono meta-input" type="number" min="2" max="80" value="20" />
-                  <button type="button" class="ghost-btn" id="imgkit-wm-clear">清除水印图</button>
+            <div class="imgkit-action-bar" id="imgkit-action-bar">
+              <div class="imgkit-action-bar-inner">
+                <p class="hint tight imgkit-action-hint" id="imgkit-action-hint">随时可导出，不必滑到页面底部</p>
+                <div class="btn-row tool-actions imgkit-action-btns">
+                  <button type="button" class="primary-btn" id="imgkit-export" data-imgkit-action="export">导出当前</button>
+                  <button type="button" class="secondary-btn" id="imgkit-batch" data-imgkit-action="batch">批量 ZIP</button>
+                  <button type="button" class="secondary-btn" id="imgkit-stitch" data-imgkit-action="stitch">拼接导出</button>
+                  <button type="button" class="secondary-btn" id="imgkit-nine" data-imgkit-action="nine">九宫格 ZIP</button>
+                  <button type="button" class="secondary-btn" id="imgkit-icons" data-imgkit-action="icons">App 图标 ZIP</button>
                 </div>
               </div>
-
-              <div class="field-block">
-                <h2 class="subhead">圆角 / 边框</h2>
-                <div class="field-row" style="flex-wrap:wrap">
-                  <label for="imgkit-round">圆角</label>
-                  <input id="imgkit-round" class="mono meta-input" type="number" min="0" max="500" value="0" />
-                  <label for="imgkit-border">边框</label>
-                  <input id="imgkit-border" class="mono meta-input" type="number" min="0" max="80" value="0" />
-                  <label for="imgkit-border-color">边框色</label>
-                  <input id="imgkit-border-color" type="color" value="#111827" />
-                </div>
-                <h2 class="subhead" style="margin-top:0.9rem">拼接参数</h2>
-                <p class="hint">横向齐高、竖向齐宽。下方大图取景：拖动绿色选框平移，拖角点/边点缩放，滚轮也可缩放；左侧实时预览。宫格模式不使用取景裁剪。</p>
-                <div class="field-row" style="flex-wrap:wrap">
-                  <label for="imgkit-stitch-mode">方式</label>
-                  <select id="imgkit-stitch-mode" class="mono select-input">
-                    <option value="horizontal" selected>横向（齐高）</option>
-                    <option value="vertical">竖向（齐宽）</option>
-                    <option value="grid">宫格</option>
-                  </select>
-                  <label for="imgkit-stitch-edge">统一边长</label>
-                  <input id="imgkit-stitch-edge" class="mono meta-input" type="number" min="1" step="1" value="" placeholder="自动" title="横向=统一高度；竖向=统一宽度。留空取各图对应边最小值" />
-                  <label for="imgkit-stitch-gap">间距</label>
-                  <input id="imgkit-stitch-gap" class="mono meta-input" type="number" min="0" max="80" value="8" />
-                  <label for="imgkit-stitch-cols">宫格列数</label>
-                  <input id="imgkit-stitch-cols" class="mono meta-input" type="number" min="1" max="8" value="2" />
-                  <label for="imgkit-stitch-bg">背景</label>
-                  <input id="imgkit-stitch-bg" type="color" value="#ffffff" />
-                </div>
-                <div class="imgkit-stitch-studio" id="imgkit-stitch-studio">
-                  <div class="imgkit-stitch-preview-wrap">
-                    <canvas id="imgkit-stitch-preview" class="imgkit-stitch-preview" width="1" height="1"></canvas>
-                    <p class="hint" id="imgkit-stitch-meta">添加至少 2 张图后显示拼接预览</p>
-                  </div>
-                  <div class="imgkit-stitch-crops" id="imgkit-stitch-crops"></div>
-                </div>
-                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem">
-                  <label for="imgkit-icon-platform">图标平台</label>
-                  <select id="imgkit-icon-platform" class="mono select-input">
-                    <option value="android" selected>Android</option>
-                    <option value="ios">iOS</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div class="btn-row tool-actions" style="margin-top:1rem">
-              <button type="button" class="primary-btn" id="imgkit-export">导出当前</button>
-              <button type="button" class="secondary-btn" id="imgkit-batch">批量 ZIP</button>
-              <button type="button" class="secondary-btn" id="imgkit-stitch">拼接导出</button>
-              <button type="button" class="secondary-btn" id="imgkit-nine">九宫格 ZIP</button>
-              <button type="button" class="secondary-btn" id="imgkit-icons">App 图标 ZIP</button>
             </div>
           </div>
         </div>
@@ -1680,9 +1706,9 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./lib/pure.js?v=20260804g"></script>
-  <script src="./app.js?v=20260804g"></script>
-  <script src="./extra.js?v=20260804g"></script>
-  <script src="./imgkit.js?v=20260804g"></script>
+  <script src="./lib/pure.js?v=20260804h"></script>
+  <script src="./app.js?v=20260804h"></script>
+  <script src="./extra.js?v=20260804h"></script>
+  <script src="./imgkit.js?v=20260804h"></script>
 </body>
 </html>
