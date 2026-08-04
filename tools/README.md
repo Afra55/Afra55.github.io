@@ -25,12 +25,13 @@
 网页不能直接调用 `adb`。使用前请：
 
 1. 确认本机已安装 Node.js 与 `adb`（`adb devices` 可用）
-2. 在「ADB 工具」页下载并运行启动脚本，或执行：
+2. 在「ADB 工具」页下载对应系统的**完整 ZIP 包**（内含 `server.js` 与启动脚本），解压到同一目录后运行脚本；或执行：
 
 ```bash
 node tools/adb-bridge/server.js
 ```
 
+> 注意：不要只下载启动脚本。缺少同目录的 `server.js` 会导致无法启动（提示找不到 server.js）。
 3. 回到网页点击「连接本机桥」（默认 `http://127.0.0.1:17888`，Token `devtools-adb`）
 
 ## 本地预览

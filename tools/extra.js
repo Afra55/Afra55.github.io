@@ -2534,8 +2534,8 @@
           "is-err",
           "未连接本机桥",
           fromPoll
-            ? "已下载启动脚本的话，请双击运行并保持窗口打开；正在等待桥启动…"
-            : "请先下载并运行启动脚本，再点连接。需本机已安装 adb。"
+            ? "已下载完整包的话，请解压并运行启动脚本（同目录需有 server.js），保持窗口打开；正在等待桥启动…"
+            : "请先下载完整 ZIP 并运行启动脚本，再点连接。需本机已安装 adb。"
         );
         if (!fromPoll) setError(adbError, err.message || "无法连接本机桥");
         return false;
@@ -2552,7 +2552,94 @@
       }, 2000);
     }
 
+    function downloadBlobFile(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function fetchTextAsset(path) {
+      const res = await fetch(path, { cache: "no-cache" });
+      if (!res.ok) throw new Error(`无法读取 ${path}（${res.status}）`);
+      return res.text();
+    }
+
+    async function downloadAdbBridgeBundle(platform) {
+      if (typeof JSZip === "undefined") throw new Error("JSZip 未加载，无法打包下载");
+      const map = {
+        mac: {
+          scriptPath: "./adb-bridge/start-mac.command",
+          scriptName: "start-adb-bridge.command",
+          zipName: "devtools-adb-bridge-mac.zip",
+          runHint: "解压后在终端执行：chmod +x start-adb-bridge.command && ./start-adb-bridge.command\n也可在 Finder 中双击 start-adb-bridge.command。",
+        },
+        win: {
+          scriptPath: "./adb-bridge/start-win.bat",
+          scriptName: "start-adb-bridge.bat",
+          zipName: "devtools-adb-bridge-win.zip",
+          runHint: "解压后双击 start-adb-bridge.bat。请保持窗口打开。",
+        },
+        linux: {
+          scriptPath: "./adb-bridge/start-linux.sh",
+          scriptName: "start-adb-bridge.sh",
+          zipName: "devtools-adb-bridge-linux.zip",
+          runHint: "解压后执行：chmod +x start-adb-bridge.sh && ./start-adb-bridge.sh",
+        },
+      };
+      const cfg = map[platform];
+      if (!cfg) throw new Error("未知平台");
+      const [serverJs, scriptText] = await Promise.all([
+        fetchTextAsset("./adb-bridge/server.js"),
+        fetchTextAsset(cfg.scriptPath),
+      ]);
+      if (!/ADB_BRIDGE_TOKEN|devtools-adb-bridge|DevTools local ADB bridge/.test(serverJs)) {
+        throw new Error("server.js 内容异常，请刷新页面后重试");
+      }
+      const readme = [
+        "DevTools ADB Bridge 完整包",
+        "",
+        "本压缩包必须同时保留：",
+        "  - server.js          （桥接服务，缺它会提示找不到 server.js）",
+        "  - " + cfg.scriptName + "  （启动脚本）",
+        "",
+        "使用步骤：",
+        "1. 解压到任意文件夹（两个文件放在同一目录）",
+        "2. 本机已安装 Node.js 与 adb，并可用 adb devices",
+        "3. " + cfg.runHint.replace(/\n/g, "\n   "),
+        "4. 回到网页点击「连接本机桥」",
+        "",
+        "默认地址 http://127.0.0.1:17888  Token: devtools-adb",
+        "",
+      ].join("\n");
+      const zip = new JSZip();
+      zip.file("server.js", serverJs);
+      zip.file(cfg.scriptName, scriptText);
+      zip.file("使用说明.txt", readme);
+      const blob = await zip.generateAsync({ type: "blob" });
+      downloadBlobFile(blob, cfg.zipName);
+      setAdbStatus(
+        "is-warn",
+        "等待本机桥启动…",
+        "完整包已下载。请解压后运行启动脚本（同目录需有 server.js），并保持窗口打开；网页会自动重试连接。"
+      );
+      toast("已下载完整包，请解压后运行");
+      startAdbWaitPoll();
+    }
+
     function downloadAdbScriptAndWait(anchor) {
+      const platform = anchor?.dataset?.adbBundle;
+      if (platform) {
+        downloadAdbBridgeBundle(platform).catch((err) => {
+          setError(adbError, err.message || String(err));
+          setAdbStatus("is-err", "下载失败", err.message || String(err));
+        });
+        return;
+      }
       const href = anchor?.getAttribute("href");
       const filename = anchor?.getAttribute("download") || "start-adb-bridge";
       if (href) {
@@ -2803,7 +2890,7 @@
     }
 
     restoreAdbSettings();
-    setAdbStatus("is-err", "未连接本机桥", "使用本工具需要本机已安装 adb。请下载启动脚本并运行后连接。");
+    setAdbStatus("is-err", "未连接本机桥", "使用本工具需要本机已安装 adb。请下载完整 ZIP（含 server.js）并运行后连接。");
 
     $("#adb-connect")?.addEventListener("click", () => connectAdbBridge());
     $("#adb-refresh")?.addEventListener("click", () =>

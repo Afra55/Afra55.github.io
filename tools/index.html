@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260804c" />
+  <link rel="stylesheet" href="./style.css?v=20260804d" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -1069,15 +1069,15 @@ hello@world.org</textarea>
             <span class="adb-dot" id="adb-dot" aria-hidden="true"></span>
             <div>
               <strong id="adb-status-title">未连接本机桥</strong>
-              <p class="hint tight" id="adb-status-text">请先下载启动脚本并双击运行，再点「连接本机桥」。</p>
+              <p class="hint tight" id="adb-status-text">请下载完整 ZIP（含 server.js 与启动脚本），解压后运行脚本，再点「连接本机桥」。</p>
             </div>
           </div>
           <div class="btn-row tool-actions adb-status-actions">
             <button type="button" class="primary-btn" id="adb-connect">连接本机桥</button>
             <button type="button" class="secondary-btn" id="adb-refresh" disabled>刷新设备</button>
-            <a class="secondary-btn" id="adb-dl-mac" href="./adb-bridge/start-mac.command" download="start-adb-bridge.command">下载 macOS 启动脚本</a>
-            <a class="secondary-btn" id="adb-dl-win" href="./adb-bridge/start-win.bat" download="start-adb-bridge.bat">下载 Windows 启动脚本</a>
-            <a class="secondary-btn" id="adb-dl-linux" href="./adb-bridge/start-linux.sh" download="start-adb-bridge.sh">下载 Linux 启动脚本</a>
+            <button type="button" class="secondary-btn" id="adb-dl-mac" data-adb-bundle="mac">下载 macOS 完整包</button>
+            <button type="button" class="secondary-btn" id="adb-dl-win" data-adb-bundle="win">下载 Windows 完整包</button>
+            <button type="button" class="secondary-btn" id="adb-dl-linux" data-adb-bundle="linux">下载 Linux 完整包</button>
           </div>
         </div>
 
@@ -1087,7 +1087,7 @@ hello@world.org</textarea>
           <label for="adb-token">Token</label>
           <input id="adb-token" class="mono" type="text" value="devtools-adb" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机；文件范围限于 <span class="mono">/sdcard</span> 与 <span class="mono">/storage/emulated/0</span>。</p>
+        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机；文件范围限于 <span class="mono">/sdcard</span> 与 <span class="mono">/storage/emulated/0</span>。完整包内含 <span class="mono">server.js</span>，请解压到同一文件夹后再运行启动脚本（勿只保留脚本）。</p>
         <p class="error" id="adb-error" hidden></p>
 
         <div class="adb-layout" id="adb-workspace" hidden>
@@ -1664,9 +1664,9 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./lib/pure.js?v=20260804c"></script>
-  <script src="./app.js?v=20260804c"></script>
-  <script src="./extra.js?v=20260804c"></script>
-  <script src="./imgkit.js?v=20260804c"></script>
+  <script src="./lib/pure.js?v=20260804d"></script>
+  <script src="./app.js?v=20260804d"></script>
+  <script src="./extra.js?v=20260804d"></script>
+  <script src="./imgkit.js?v=20260804d"></script>
 </body>
 </html>
