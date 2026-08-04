@@ -13,17 +13,20 @@
 任选其一：
 
 ```bash
-# macOS：双击，或
-bash start-mac.command
+# 推荐：从网页下载「完整 ZIP 包」解压后运行（ZIP 内含 server.js）
+# macOS
+chmod +x start-adb-bridge.command && ./start-adb-bridge.command
 
-# Windows：双击 start-win.bat
+# Windows：双击 start-adb-bridge.bat
 
 # Linux
-bash start-linux.sh
+chmod +x start-adb-bridge.sh && ./start-adb-bridge.sh
 
-# 或直接
+# 或在本仓库目录直接
 node server.js
 ```
+
+启动脚本会优先使用**同目录**的 `server.js`；若缺失则尝试从 GitHub Pages / raw 下载。若仍失败，请重新下载完整 ZIP。
 
 默认地址：`http://127.0.0.1:17888`  
 默认 Token：`devtools-adb`（可用环境变量 `ADB_BRIDGE_TOKEN` 覆盖）
@@ -31,9 +34,8 @@ node server.js
 ## 网页使用
 
 1. 打开 Tools →「ADB 工具」
-2. 下载并运行对应系统的启动脚本
+2. 下载对应系统的完整 ZIP，解压后运行启动脚本（勿只保留脚本、删掉 server.js）
 3. 回到网页点击「连接本机桥」
-
 ## 接口（P0–P3）
 
 | 方法 | 路径 | 说明 |
