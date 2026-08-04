@@ -2613,14 +2613,24 @@
         "3. " + cfg.runHint.replace(/\n/g, "\n   "),
         "4. 回到网页点击「连接本机桥」",
         "",
+        "若窗口一闪而过：",
+        "- macOS：在终端执行 chmod +x " + cfg.scriptName + " 后再运行；或 bash " + cfg.scriptName,
+        "- 查看日志：用户目录下 .devtools-adb-bridge/last-start.log",
+        "- 确认未重复打开多个桥（端口占用会自动换端口并提示）",
+        "",
         "默认地址 http://127.0.0.1:17888  Token: devtools-adb",
         "",
       ].join("\n");
       const zip = new JSZip();
       zip.file("server.js", serverJs);
-      zip.file(cfg.scriptName, scriptText);
+      zip.file(cfg.scriptName, scriptText, {
+        unixPermissions: platform === "win" ? undefined : 0o755,
+      });
       zip.file("使用说明.txt", readme);
-      const blob = await zip.generateAsync({ type: "blob" });
+      const blob = await zip.generateAsync({
+        type: "blob",
+        platform: platform === "win" ? "DOS" : "UNIX",
+      });
       downloadBlobFile(blob, cfg.zipName);
       setAdbStatus(
         "is-warn",

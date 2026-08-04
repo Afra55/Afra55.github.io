@@ -28,9 +28,14 @@ node server.js
 
 启动脚本会优先使用**同目录**的 `server.js`；若缺失则尝试从 GitHub Pages / raw 下载。若仍失败，请重新下载完整 ZIP。
 
+双击后窗口一闪而过时：
+- 查看 `~/.devtools-adb-bridge/last-start.log`（Windows 在用户目录同名文件夹）
+- macOS 可先执行 `chmod +x start-adb-bridge.command`，或用 `bash start-adb-bridge.command`
+- 确认已安装 Node.js 与 adb，且在终端中可运行 `node -v` / `adb devices`
+
 默认地址：`http://127.0.0.1:17888`  
 默认 Token：`devtools-adb`（可用环境变量 `ADB_BRIDGE_TOKEN` 覆盖）
-
+若端口被占用，桥会自动尝试下一个端口并在窗口提示。
 ## 网页使用
 
 1. 打开 Tools →「ADB 工具」
