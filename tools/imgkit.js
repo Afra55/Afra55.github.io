@@ -178,6 +178,10 @@
     previewUrl: "",
     stitchPreviewToken: 0,
     stitchDrag: null,
+    cropSource: null,
+    cropSourceKey: "",
+    cropDrag: null,
+    cropPreviewTimer: 0,
   };
 
   const els = {
@@ -233,6 +237,225 @@
       stitchBg: $("#imgkit-stitch-bg")?.value || "#ffffff",
       iconPlatform: $("#imgkit-icon-platform")?.value || "android",
     };
+  }
+
+  function parseAspectRatio(aspect) {
+    const a = String(aspect || "free");
+    if (a === "free") return null;
+    const parts = a.split(":").map(Number);
+    if (parts.length === 2 && parts[0] > 0 && parts[1] > 0) return parts[0] / parts[1];
+    return null;
+  }
+
+  function setCropPercentInputs(xPct, yPct, wPct, hPct) {
+    const xEl = $("#imgkit-crop-x");
+    const yEl = $("#imgkit-crop-y");
+    const wEl = $("#imgkit-crop-w");
+    const hEl = $("#imgkit-crop-h");
+    const x = Math.max(0, Math.min(99, Math.round(Number(xPct) || 0)));
+    const y = Math.max(0, Math.min(99, Math.round(Number(yPct) || 0)));
+    let w = Math.max(1, Math.min(100, Math.round(Number(wPct) || 100)));
+    let h = Math.max(1, Math.min(100, Math.round(Number(hPct) || 100)));
+    if (x + w > 100) w = Math.max(1, 100 - x);
+    if (y + h > 100) h = Math.max(1, 100 - y);
+    if (xEl) xEl.value = String(x);
+    if (yEl) yEl.value = String(y);
+    if (wEl) wEl.value = String(w);
+    if (hEl) hEl.value = String(h);
+  }
+
+  function buildRotatedSource(item, opts) {
+    const exif = item.exif || { orientation: 1 };
+    const base = applyOrientation(item.img, exif.orientation || 1);
+    const rot = ((Number(opts.rotate) || 0) % 360 + 360) % 360;
+    let w = base.width;
+    let h = base.height;
+    const swap = rot === 90 || rot === 270;
+    const rotated = document.createElement("canvas");
+    rotated.width = swap ? h : w;
+    rotated.height = swap ? w : h;
+    const rctx = rotated.getContext("2d");
+    rctx.translate(rotated.width / 2, rotated.height / 2);
+    rctx.rotate((rot * Math.PI) / 180);
+    rctx.scale(opts.flipH ? -1 : 1, opts.flipV ? -1 : 1);
+    rctx.drawImage(base, -w / 2, -h / 2);
+    return rotated;
+  }
+
+  function getCropSource(item, opts) {
+    const key = `${item.id}:${opts.rotate}:${opts.flipH ? 1 : 0}:${opts.flipV ? 1 : 0}:${item.exif?.orientation || 1}`;
+    if (state.cropSourceKey === key && state.cropSource) return state.cropSource;
+    state.cropSource = buildRotatedSource(item, opts);
+    state.cropSourceKey = key;
+    return state.cropSource;
+  }
+
+  function measureImageCropGeom(src, stageW, stageH, opts) {
+    const sw = src.width;
+    const sh = src.height;
+    const fit = Math.min(stageW / sw, stageH / sh);
+    const dw = sw * fit;
+    const dh = sh * fit;
+    const ox = (stageW - dw) / 2;
+    const oy = (stageH - dh) / 2;
+    const rect = P.calcCropRect(sw, sh, {
+      aspect: opts.aspect,
+      usePercent: true,
+      xPercent: opts.cropX,
+      yPercent: opts.cropY,
+      wPercent: opts.cropW,
+      hPercent: opts.cropH,
+      center: false,
+    });
+    return {
+      sw,
+      sh,
+      fit,
+      ox,
+      oy,
+      dw,
+      dh,
+      rect,
+      box: {
+        x: ox + rect.x * fit,
+        y: oy + rect.y * fit,
+        w: Math.max(8, rect.width * fit),
+        h: Math.max(8, rect.height * fit),
+      },
+    };
+  }
+
+  function scheduleCropPreview() {
+    clearTimeout(state.cropPreviewTimer);
+    state.cropPreviewTimer = setTimeout(() => {
+      refreshPreview();
+    }, 80);
+  }
+
+  function syncImageCropEditor() {
+    const stage = $("#imgkit-crop-stage");
+    const canvas = $("#imgkit-crop-canvas");
+    const boxEl = $("#imgkit-crop-box");
+    if (!stage || !canvas || !boxEl) return;
+    const item = selectedItem();
+    if (!item) {
+      stage.classList.remove("has-image", "is-dragging");
+      boxEl.hidden = true;
+      canvas.width = 1;
+      canvas.height = 1;
+      return;
+    }
+    const opts = readOptions();
+    const src = getCropSource(item, opts);
+    const stageW = Math.max(160, Math.round(stage.clientWidth || 320));
+    const stageH = Math.max(160, Math.round(stage.clientHeight || 280));
+    const geom = measureImageCropGeom(src, stageW, stageH, opts);
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(stageW * dpr);
+    canvas.height = Math.round(stageH * dpr);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, stageW, stageH);
+    ctx.fillStyle = "#0a101c";
+    ctx.fillRect(0, 0, stageW, stageH);
+    ctx.drawImage(src, geom.ox, geom.oy, geom.dw, geom.dh);
+    boxEl.hidden = false;
+    boxEl.style.left = `${geom.box.x}px`;
+    boxEl.style.top = `${geom.box.y}px`;
+    boxEl.style.width = `${geom.box.w}px`;
+    boxEl.style.height = `${geom.box.h}px`;
+    stage.classList.add("has-image");
+    stage._cropGeom = geom;
+    stage._cropSrc = src;
+  }
+
+  function fitCropToAspect(aspect) {
+    const item = selectedItem();
+    if (!item) return;
+    const opts = { ...readOptions(), aspect };
+    const src = getCropSource(item, opts);
+    const rect = P.calcCropRect(src.width, src.height, { aspect, center: true });
+    setCropPercentInputs(
+      (rect.x / src.width) * 100,
+      (rect.y / src.height) * 100,
+      (rect.width / src.width) * 100,
+      (rect.height / src.height) * 100
+    );
+  }
+
+  function applyCropBoxToInputs(box, geom, aspect) {
+    const ratio = parseAspectRatio(aspect);
+    let x = (box.x - geom.ox) / geom.fit;
+    let y = (box.y - geom.oy) / geom.fit;
+    let w = box.w / geom.fit;
+    let h = box.h / geom.fit;
+    if (ratio) {
+      const cx = x + w / 2;
+      const cy = y + h / 2;
+      if (w / h > ratio) w = h * ratio;
+      else h = w / ratio;
+      if (w > geom.sw) {
+        w = geom.sw;
+        h = w / ratio;
+      }
+      if (h > geom.sh) {
+        h = geom.sh;
+        w = h * ratio;
+      }
+      x = Math.max(0, Math.min(geom.sw - w, cx - w / 2));
+      y = Math.max(0, Math.min(geom.sh - h, cy - h / 2));
+    } else {
+      w = Math.max(1, Math.min(geom.sw, w));
+      h = Math.max(1, Math.min(geom.sh, h));
+      x = Math.max(0, Math.min(geom.sw - w, x));
+      y = Math.max(0, Math.min(geom.sh - h, y));
+    }
+    setCropPercentInputs((x / geom.sw) * 100, (y / geom.sh) * 100, (w / geom.sw) * 100, (h / geom.sh) * 100);
+  }
+
+  function resizeImageCropBox(startBox, handle, dx, dy, aspectRatio, minSide, imgRect) {
+    let x = startBox.x;
+    let y = startBox.y;
+    let w = startBox.w;
+    let h = startBox.h;
+    const minW = minSide;
+    const minH = aspectRatio ? minSide / aspectRatio : minSide;
+
+    if (!aspectRatio) {
+      if (handle.includes("e")) w = startBox.w + dx;
+      if (handle.includes("w")) {
+        w = startBox.w - dx;
+        x = startBox.x + dx;
+      }
+      if (handle.includes("s")) h = startBox.h + dy;
+      if (handle.includes("n")) {
+        h = startBox.h - dy;
+        y = startBox.y + dy;
+      }
+      w = Math.max(minW, w);
+      h = Math.max(minH, h);
+      if (handle.includes("w")) x = startBox.x + startBox.w - w;
+      if (handle.includes("n")) y = startBox.y + startBox.h - h;
+    } else {
+      // locked aspect — reuse stitch helper style
+      return resizeBoxWithHandle(
+        startBox,
+        handle,
+        dx,
+        dy,
+        aspectRatio,
+        minW,
+        imgRect.w,
+        imgRect
+      );
+    }
+
+    if (w > imgRect.w) w = imgRect.w;
+    if (h > imgRect.h) h = imgRect.h;
+    x = Math.max(imgRect.x, Math.min(imgRect.x + imgRect.w - w, x));
+    y = Math.max(imgRect.y, Math.min(imgRect.y + imgRect.h - h, y));
+    return { x, y, w, h };
   }
 
   function defaultStitchCrop() {
@@ -715,24 +938,9 @@
   }
 
   async function processItem(item, opts, { skipResize } = {}) {
-    const exif = item.exif || { orientation: 1 };
-    // Canvas re-encode cannot preserve EXIF; always bake orientation into pixels.
-    const base = applyOrientation(item.img, exif.orientation || 1);
-
-    const rot = ((Number(opts.rotate) || 0) % 360 + 360) % 360;
-    let w = base.width;
-    let h = base.height;
-    const swap = rot === 90 || rot === 270;
-    const rotated = document.createElement("canvas");
-    rotated.width = swap ? h : w;
-    rotated.height = swap ? w : h;
-    const rctx = rotated.getContext("2d");
-    rctx.translate(rotated.width / 2, rotated.height / 2);
-    rctx.rotate((rot * Math.PI) / 180);
-    rctx.scale(opts.flipH ? -1 : 1, opts.flipV ? -1 : 1);
-    rctx.drawImage(base, -w / 2, -h / 2);
-    w = rotated.width;
-    h = rotated.height;
+    const rotated = buildRotatedSource(item, opts);
+    const w = rotated.width;
+    const h = rotated.height;
 
     const crop = P.calcCropRect(w, h, {
       aspect: opts.aspect,
@@ -741,7 +949,8 @@
       yPercent: opts.cropY,
       wPercent: opts.cropW,
       hPercent: opts.cropH,
-      center: opts.aspect !== "free",
+      // Always honor the visual / percent selection (including locked aspect).
+      center: false,
     });
 
     let outW = crop.width;
@@ -884,11 +1093,13 @@
         els.preview.hidden = true;
       }
       updateInfo(null);
+      syncImageCropEditor();
       if (els.meta) els.meta.textContent = "本地处理，不会上传";
       return;
     }
     try {
       if (els.meta) els.meta.textContent = "处理中…";
+      if (!state.cropDrag) syncImageCropEditor();
       const result = await processItem(item, readOptions());
       if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
       state.previewUrl = URL.createObjectURL(result.blob);
@@ -1066,6 +1277,8 @@
     });
     state.items = [];
     state.selected = "";
+    state.cropSource = null;
+    state.cropSourceKey = "";
     renderList();
     refreshPreview();
     renderStitchCrops();
@@ -1112,13 +1325,108 @@
     const el = document.getElementById(id);
     el?.addEventListener("input", () => {
       if (id === "imgkit-resize-mode") syncResizeFields();
+      if (id === "imgkit-aspect") {
+        fitCropToAspect($("#imgkit-aspect")?.value || "free");
+      }
+      if (
+        id === "imgkit-rotate" ||
+        id === "imgkit-flip-h" ||
+        id === "imgkit-flip-v" ||
+        id === "imgkit-aspect"
+      ) {
+        state.cropSource = null;
+        state.cropSourceKey = "";
+      }
+      syncImageCropEditor();
       refreshPreview();
     });
     el?.addEventListener("change", () => {
       if (id === "imgkit-resize-mode") syncResizeFields();
+      if (id === "imgkit-aspect") {
+        fitCropToAspect($("#imgkit-aspect")?.value || "free");
+      }
+      if (
+        id === "imgkit-rotate" ||
+        id === "imgkit-flip-h" ||
+        id === "imgkit-flip-v" ||
+        id === "imgkit-aspect"
+      ) {
+        state.cropSource = null;
+        state.cropSourceKey = "";
+      }
+      syncImageCropEditor();
       refreshPreview();
     });
   });
+
+  const cropStage = $("#imgkit-crop-stage");
+  cropStage?.addEventListener("pointerdown", (e) => {
+    const box = e.target.closest("#imgkit-crop-box");
+    if (!box || box.hidden) return;
+    const item = selectedItem();
+    if (!item) return;
+    const opts = readOptions();
+    const src = getCropSource(item, opts);
+    const stageW = Math.max(160, Math.round(cropStage.clientWidth || 320));
+    const stageH = Math.max(160, Math.round(cropStage.clientHeight || 280));
+    const geom = cropStage._cropGeom || measureImageCropGeom(src, stageW, stageH, opts);
+    const handle = e.target.closest("[data-crop-handle]")?.dataset?.cropHandle || "";
+    cropStage.setPointerCapture(e.pointerId);
+    cropStage.classList.add("is-dragging");
+    state.cropDrag = {
+      handle,
+      kind: handle ? "resize" : "pan",
+      x0: e.clientX,
+      y0: e.clientY,
+      box0: { ...geom.box },
+      geom,
+      aspect: opts.aspect,
+    };
+    e.preventDefault();
+  });
+  cropStage?.addEventListener("pointermove", (e) => {
+    const drag = state.cropDrag;
+    if (!drag) return;
+    const boxEl = $("#imgkit-crop-box");
+    const geom = drag.geom;
+    const dx = e.clientX - drag.x0;
+    const dy = e.clientY - drag.y0;
+    const imgRect = { x: geom.ox, y: geom.oy, w: geom.dw, h: geom.dh };
+    const ratio = parseAspectRatio(drag.aspect);
+    let nextBox;
+    if (drag.kind === "pan") {
+      nextBox = {
+        x: drag.box0.x + dx,
+        y: drag.box0.y + dy,
+        w: drag.box0.w,
+        h: drag.box0.h,
+      };
+      nextBox.x = Math.max(imgRect.x, Math.min(imgRect.x + imgRect.w - nextBox.w, nextBox.x));
+      nextBox.y = Math.max(imgRect.y, Math.min(imgRect.y + imgRect.h - nextBox.h, nextBox.y));
+    } else {
+      nextBox = resizeImageCropBox(drag.box0, drag.handle, dx, dy, ratio, 24, imgRect);
+    }
+    boxEl.style.left = `${nextBox.x}px`;
+    boxEl.style.top = `${nextBox.y}px`;
+    boxEl.style.width = `${nextBox.w}px`;
+    boxEl.style.height = `${nextBox.h}px`;
+    applyCropBoxToInputs(nextBox, geom, drag.aspect);
+    scheduleCropPreview();
+  });
+  const endCropDrag = (e) => {
+    if (!state.cropDrag) return;
+    cropStage?.classList.remove("is-dragging");
+    try {
+      cropStage?.releasePointerCapture?.(e.pointerId);
+    } catch (_) {
+      /* ignore */
+    }
+    state.cropDrag = null;
+    syncImageCropEditor();
+    refreshPreview();
+  };
+  cropStage?.addEventListener("pointerup", endCropDrag);
+  cropStage?.addEventListener("pointercancel", endCropDrag);
 
   [
     "imgkit-stitch-mode",
@@ -1312,9 +1620,10 @@
   renderStitchCrops();
   scheduleStitchPreview();
   window.addEventListener("resize", () => {
-    if (state.stitchDrag) return;
-    const mode = $("#imgkit-stitch-mode")?.value || "horizontal";
-    if (mode === "grid") return;
-    state.items.forEach((it) => syncCropEditor(it, mode));
+    if (!state.stitchDrag) {
+      const mode = $("#imgkit-stitch-mode")?.value || "horizontal";
+      if (mode !== "grid") state.items.forEach((it) => syncCropEditor(it, mode));
+    }
+    if (!state.cropDrag) syncImageCropEditor();
   });
 })();

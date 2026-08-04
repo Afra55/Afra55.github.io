@@ -1239,12 +1239,11 @@
     }
 
     if (aspect !== "free") {
-      const [aw, ah] = aspect.split(":").map(Number);
+      const [aw, ah] = String(aspect).split(":").map(Number);
       if (aw > 0 && ah > 0) {
         const target = aw / ah;
-        const current = w / h;
-        if (opts.center !== false) {
-          // Fit largest rect with aspect inside image
+        if (opts.center !== false && !opts.usePercent) {
+          // Fit largest rect with aspect inside image (centered).
           if (sw / sh > target) {
             h = sh;
             w = h * target;
@@ -1254,10 +1253,22 @@
           }
           x = (sw - w) / 2;
           y = (sh - h) / 2;
-        } else if (current > target) {
-          w = h * target;
         } else {
-          h = w / target;
+          // Respect manual selection: lock aspect around current center, then clamp.
+          const cx = x + w / 2;
+          const cy = y + h / 2;
+          if (w / h > target) w = h * target;
+          else h = w / target;
+          if (w > sw) {
+            w = sw;
+            h = w / target;
+          }
+          if (h > sh) {
+            h = sh;
+            w = h * target;
+          }
+          x = clampNumber(cx - w / 2, 0, Math.max(0, sw - w));
+          y = clampNumber(cy - h / 2, 0, Math.max(0, sh - h));
         }
       }
     }
