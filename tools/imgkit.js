@@ -1614,11 +1614,62 @@
     }
   });
 
+  function switchImgkitTab(tabId) {
+    const id = String(tabId || "adjust");
+    $$(".imgkit-tab").forEach((btn) => {
+      const on = btn.dataset.imgkitTab === id;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    $$("[data-imgkit-panel]").forEach((panel) => {
+      const on = panel.dataset.imgkitPanel === id;
+      panel.classList.toggle("is-active", on);
+      panel.hidden = !on;
+    });
+    const hints = {
+      adjust: "调好格式/尺寸后，点「导出当前」或「批量 ZIP」",
+      crop: "裁剪完成后直接点「导出当前」，不必再往下翻",
+      style: "水印/边框调好后点「导出当前」",
+      stitch: "拼接取景调好后点「拼接导出」",
+      more: "九宫格 / App 图标请用对应导出按钮",
+    };
+    const hint = $("#imgkit-action-hint");
+    if (hint) hint.textContent = hints[id] || "随时可导出";
+    $$("[data-imgkit-action]").forEach((btn) => {
+      const key = btn.dataset.imgkitAction;
+      const emphasize =
+        (id === "stitch" && key === "stitch") ||
+        (id === "more" && (key === "nine" || key === "icons")) ||
+        ((id === "adjust" || id === "crop" || id === "style") && key === "export");
+      btn.classList.toggle("is-emphasized", emphasize && !btn.classList.contains("primary-btn"));
+      if (key === "export") {
+        btn.classList.toggle("primary-btn", emphasize || id === "adjust" || id === "crop" || id === "style");
+        btn.classList.toggle("secondary-btn", !(emphasize || id === "adjust" || id === "crop" || id === "style"));
+      }
+      if (key === "stitch") {
+        btn.classList.toggle("primary-btn", id === "stitch");
+        btn.classList.toggle("secondary-btn", id !== "stitch");
+      }
+    });
+    requestAnimationFrame(() => {
+      if (id === "crop") syncImageCropEditor();
+      if (id === "stitch") {
+        renderStitchCrops();
+        scheduleStitchPreview();
+      }
+    });
+  }
+
+  $$(".imgkit-tab").forEach((btn) => {
+    btn.addEventListener("click", () => switchImgkitTab(btn.dataset.imgkitTab));
+  });
+
   syncResizeFields();
   renderList();
   updateInfo(null);
   renderStitchCrops();
   scheduleStitchPreview();
+  switchImgkitTab("adjust");
   window.addEventListener("resize", () => {
     if (!state.stitchDrag) {
       const mode = $("#imgkit-stitch-mode")?.value || "horizontal";
