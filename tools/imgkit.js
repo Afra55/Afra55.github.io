@@ -458,8 +458,43 @@
     return { x, y, w, h };
   }
 
+  function clampPct(n, lo, hi) {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return lo;
+    return Math.max(lo, Math.min(hi, v));
+  }
+
   function defaultStitchCrop() {
-    return { zoom: 100, pan: 50, panCross: 50 };
+    return { x: 0, y: 0, w: 100, h: 100 };
+  }
+
+  function normalizeStitchCrop(raw) {
+    if (!raw || typeof raw !== "object") return defaultStitchCrop();
+    // Free-rect percent format.
+    if (raw.w != null || raw.h != null || (raw.x != null && raw.zoom == null)) {
+      let x = clampPct(raw.x, 0, 100);
+      let y = clampPct(raw.y, 0, 100);
+      let w = clampPct(raw.w, 1, 100);
+      let h = clampPct(raw.h, 1, 100);
+      if (x + w > 100) w = Math.max(1, 100 - x);
+      if (y + h > 100) h = Math.max(1, 100 - y);
+      return { x, y, w, h };
+    }
+    // Legacy zoom/pan → free crop keeping source aspect.
+    if (raw.zoom != null || raw.pan != null) {
+      const zoom = clampPct(raw.zoom, 100, 400) / 100;
+      const pan = clampPct(raw.pan, 0, 100) / 100;
+      const panCross = clampPct(raw.panCross, 0, 100) / 100;
+      const size = 100 / zoom;
+      const maxOff = Math.max(0, 100 - size);
+      return {
+        x: clampPct(panCross * maxOff, 0, maxOff),
+        y: clampPct(pan * maxOff, 0, maxOff),
+        w: size,
+        h: size,
+      };
+    }
+    return defaultStitchCrop();
   }
 
   function sourceSize(src) {
@@ -494,16 +529,9 @@
     return items.map((it) => {
       const src = getOrientedSource(it);
       const size = sourceSize(src);
-      const crop = it.stitch || defaultStitchCrop();
-      const aligned = P.calcAlignedStitchCrop(
-        size.width,
-        size.height,
-        mode,
-        edge,
-        crop.zoom,
-        crop.pan,
-        crop.panCross
-      );
+      const crop = normalizeStitchCrop(it.stitch);
+      it.stitch = crop;
+      const aligned = P.calcFreeStitchCrop(size.width, size.height, mode, edge, crop);
       return { src, ...aligned };
     });
   }
@@ -621,16 +649,9 @@
     const ox = (stageW - dw) / 2;
     const oy = (stageH - dh) / 2;
     const edge = resolveStitchEdge(mode, state.items, Number($("#imgkit-stitch-edge")?.value || 0) || 0);
-    const crop = item.stitch || defaultStitchCrop();
-    const aligned = P.calcAlignedStitchCrop(
-      size.width,
-      size.height,
-      mode,
-      edge,
-      crop.zoom,
-      crop.pan,
-      crop.panCross
-    );
+    const crop = normalizeStitchCrop(item.stitch);
+    item.stitch = crop;
+    const aligned = P.calcFreeStitchCrop(size.width, size.height, mode, edge, crop);
     return {
       src,
       size,
@@ -650,67 +671,34 @@
     };
   }
 
-  function stitchParamsFromSourceCrop(mode, size, cropX, cropY, cropW, cropH) {
-    const sw = size.width;
-    const sh = size.height;
-    const aspect = sw / sh;
+  function stitchParamsFromSourceCrop(size, cropX, cropY, cropW, cropH) {
+    const sw = Math.max(1, size.width);
+    const sh = Math.max(1, size.height);
     let w = Math.max(1, Number(cropW) || 1);
     let h = Math.max(1, Number(cropH) || 1);
-    // Keep source aspect (aligned stitch zoom is uniform).
-    if (w / h > aspect) h = w / aspect;
-    else w = h * aspect;
-    const minW = sw / 4; // zoom 400%
-    const maxW = sw; // zoom 100%
-    w = Math.min(maxW, Math.max(minW, w));
-    h = w / aspect;
-    if (h > sh) {
-      h = sh;
-      w = h * aspect;
-    }
+    w = Math.min(sw, w);
+    h = Math.min(sh, h);
     let x = Math.max(0, Math.min(sw - w, Number(cropX) || 0));
     let y = Math.max(0, Math.min(sh - h, Number(cropY) || 0));
-    const zoom = Math.max(100, Math.min(400, Math.round((100 * sw) / w)));
-    const freeX = Math.max(0, sw - w);
-    const freeY = Math.max(0, sh - h);
-    const panX = freeX < 0.5 ? 50 : (x / freeX) * 100;
-    const panY = freeY < 0.5 ? 50 : (y / freeY) * 100;
-    if (mode === "vertical") {
-      return {
-        zoom,
-        pan: Math.max(0, Math.min(100, Math.round(panX))),
-        panCross: Math.max(0, Math.min(100, Math.round(panY))),
-      };
-    }
-    return {
-      zoom,
-      pan: Math.max(0, Math.min(100, Math.round(panY))),
-      panCross: Math.max(0, Math.min(100, Math.round(panX))),
-    };
+    return normalizeStitchCrop({
+      x: (x / sw) * 100,
+      y: (y / sh) * 100,
+      w: (w / sw) * 100,
+      h: (h / sh) * 100,
+    });
   }
 
   function applyStitchCrop(id, partial, { preview = true, syncInputs = true } = {}) {
     const item = state.items.find((it) => it.id === id);
     if (!item) return;
-    if (!item.stitch) item.stitch = defaultStitchCrop();
-    if (partial.zoom != null) {
-      const z = Number(partial.zoom);
-      if (Number.isFinite(z)) item.stitch.zoom = Math.max(100, Math.min(400, Math.round(z)));
-    }
-    if (partial.pan != null) {
-      const p = Number(partial.pan);
-      if (Number.isFinite(p)) item.stitch.pan = Math.max(0, Math.min(100, Math.round(p)));
-    }
-    if (partial.panCross != null) {
-      const p = Number(partial.panCross);
-      if (Number.isFinite(p)) item.stitch.panCross = Math.max(0, Math.min(100, Math.round(p)));
-    }
+    item.stitch = normalizeStitchCrop({ ...normalizeStitchCrop(item.stitch), ...partial });
     if (syncInputs) {
       const card = document.querySelector(`.imgkit-stitch-crop[data-stitch-id="${cssAttrEscape(id)}"]`);
-      ["zoom", "pan", "panCross"].forEach((field) => {
+      ["x", "y", "w", "h"].forEach((field) => {
         const valEl = card?.querySelector(`[data-stitch-val="${field}"]`);
         const input = card?.querySelector(`input[data-stitch-field="${field}"]`);
-        const v = item.stitch[field];
-        if (valEl) valEl.textContent = field === "zoom" ? `${v}%` : String(v);
+        const v = Math.round(item.stitch[field]);
+        if (valEl) valEl.textContent = `${v}%`;
         if (input && Number(input.value) !== v) input.value = String(v);
       });
     }
@@ -772,17 +760,20 @@
       return;
     }
 
-    const panLabel = mode === "vertical" ? "左右" : "上下";
-    const crossLabel = mode === "vertical" ? "上下" : "左右";
     host.innerHTML = state.items
       .map((it) => {
-        const s = it.stitch || defaultStitchCrop();
+        const s = normalizeStitchCrop(it.stitch);
+        it.stitch = s;
+        const rx = Math.round(s.x);
+        const ry = Math.round(s.y);
+        const rw = Math.round(s.w);
+        const rh = Math.round(s.h);
         const safeName = P.escapeHtml(it.name || "image");
         const safeId = P.escapeHtml(it.id);
         return `<div class="imgkit-stitch-crop" data-stitch-id="${safeId}">
           <div class="imgkit-stitch-crop-head">
             <div class="imgkit-stitch-crop-meta">${safeName}</div>
-            <p class="hint tight">拖绿框平移；拖角点/边点缩放；滚轮也可缩放</p>
+            <p class="hint tight">拖绿框平移；拖角点/边点自由裁剪（不锁比例）；滚轮缩放选区</p>
           </div>
           <div class="imgkit-stitch-crop-stage" data-stitch-stage="${safeId}">
             <canvas data-stitch-thumb="${safeId}"></canvas>
@@ -798,9 +789,10 @@
             </div>
           </div>
           <div class="imgkit-stitch-crop-fields">
-            <label>缩放<input type="range" min="100" max="400" step="1" value="${s.zoom}" data-stitch-field="zoom" data-stitch-id="${safeId}" /><span class="mono" data-stitch-val="zoom">${s.zoom}%</span></label>
-            <label>${panLabel}<input type="range" min="0" max="100" step="1" value="${s.pan}" data-stitch-field="pan" data-stitch-id="${safeId}" /><span class="mono" data-stitch-val="pan">${s.pan}</span></label>
-            <label>${crossLabel}<input type="range" min="0" max="100" step="1" value="${s.panCross}" data-stitch-field="panCross" data-stitch-id="${safeId}" /><span class="mono" data-stitch-val="panCross">${s.panCross}</span></label>
+            <label>X<input type="range" min="0" max="99" step="1" value="${rx}" data-stitch-field="x" data-stitch-id="${safeId}" /><span class="mono" data-stitch-val="x">${rx}%</span></label>
+            <label>Y<input type="range" min="0" max="99" step="1" value="${ry}" data-stitch-field="y" data-stitch-id="${safeId}" /><span class="mono" data-stitch-val="y">${ry}%</span></label>
+            <label>宽<input type="range" min="1" max="100" step="1" value="${rw}" data-stitch-field="w" data-stitch-id="${safeId}" /><span class="mono" data-stitch-val="w">${rw}%</span></label>
+            <label>高<input type="range" min="1" max="100" step="1" value="${rh}" data-stitch-field="h" data-stitch-id="${safeId}" /><span class="mono" data-stitch-val="h">${rh}%</span></label>
           </div>
         </div>`;
       })
@@ -1494,9 +1486,7 @@
     const dx = e.clientX - drag.x0;
     const dy = e.clientY - drag.y0;
     const imgRect = { x: geom.ox, y: geom.oy, w: geom.dw, h: geom.dh };
-    const aspect = geom.size.width / geom.size.height;
-    const minW = (geom.size.width / 4) * geom.fit;
-    const maxW = geom.size.width * geom.fit;
+    const minSide = Math.max(8, 0.05 * Math.min(imgRect.w, imgRect.h));
 
     let nextBox;
     if (drag.kind === "pan") {
@@ -1510,7 +1500,8 @@
       nextBox.x = Math.max(imgRect.x, Math.min(imgRect.x + imgRect.w - nextBox.w, nextBox.x));
       nextBox.y = Math.max(imgRect.y, Math.min(imgRect.y + imgRect.h - nextBox.h, nextBox.y));
     } else {
-      nextBox = resizeBoxWithHandle(drag.box0, drag.handle, dx, dy, aspect, minW, maxW, imgRect);
+      // Free resize — no aspect lock.
+      nextBox = resizeImageCropBox(drag.box0, drag.handle, dx, dy, null, minSide, imgRect);
     }
 
     positionCropBox(boxEl, nextBox);
@@ -1518,7 +1509,7 @@
     const cropY = (nextBox.y - geom.oy) / geom.fit;
     const cropW = nextBox.w / geom.fit;
     const cropH = nextBox.h / geom.fit;
-    const params = stitchParamsFromSourceCrop(drag.mode, geom.size, cropX, cropY, cropW, cropH);
+    const params = stitchParamsFromSourceCrop(geom.size, cropX, cropY, cropW, cropH);
     applyStitchCrop(drag.id, params, { preview: true, syncInputs: true });
     const size = getStitchStageSize(stage);
     const fresh = measureStitchGeom(item, drag.mode, size.w, size.h);
@@ -1551,9 +1542,19 @@
       const id = stage.dataset.stitchStage;
       const item = state.items.find((it) => it.id === id);
       if (!item) return;
-      if (!item.stitch) item.stitch = defaultStitchCrop();
-      const delta = e.deltaY > 0 ? -12 : 12;
-      setStitchField(id, "zoom", item.stitch.zoom + delta);
+      const crop = normalizeStitchCrop(item.stitch);
+      const factor = e.deltaY > 0 ? 1.08 : 1 / 1.08;
+      const cx = crop.x + crop.w / 2;
+      const cy = crop.y + crop.h / 2;
+      let nw = clampPct(crop.w * factor, 5, 100);
+      let nh = clampPct(crop.h * factor, 5, 100);
+      let nx = cx - nw / 2;
+      let ny = cy - nh / 2;
+      if (nx < 0) nx = 0;
+      if (ny < 0) ny = 0;
+      if (nx + nw > 100) nx = 100 - nw;
+      if (ny + nh > 100) ny = 100 - nh;
+      applyStitchCrop(id, { x: nx, y: ny, w: nw, h: nh }, { preview: true, syncInputs: true });
     },
     { passive: false }
   );
