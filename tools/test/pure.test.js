@@ -266,6 +266,18 @@ test("image toolkit helpers", () => {
       assert.strictEqual(z.outH, 720);
     }
   }
+  // Free stitch crop: arbitrary aspect, not locked to source
+  const free = P.calcFreeStitchCrop(1000, 500, "horizontal", 200, { x: 10, y: 20, w: 40, h: 30 });
+  assert.strictEqual(free.outH, 200);
+  assert.ok(Math.abs(free.outW / free.outH - free.cropW / free.cropH) < 0.02);
+  assert.ok(free.cropW / free.cropH !== 1000 / 500);
+  assert.ok(free.cropX + free.cropW <= 1000);
+  assert.ok(free.cropY + free.cropH <= 500);
+  const freeV = P.calcFreeStitchCrop(800, 600, "vertical", 300, { x: 0, y: 0, w: 50, h: 100 });
+  assert.strictEqual(freeV.outW, 300);
+  assert.ok(freeV.cropW < freeV.cropH || freeV.outH > freeV.outW);
+  assert.ok(freeV.cropX + freeV.cropW <= 800);
+  assert.ok(freeV.cropY + freeV.cropH <= 600);
   assert.strictEqual(P.suggestStitchEdge([{ width: 100, height: 40 }, { width: 80, height: 60 }], "horizontal"), 40);
   assert.strictEqual(P.suggestStitchEdge([{ width: 100, height: 40 }, { width: 80, height: 60 }], "vertical"), 80);
   assert.strictEqual(P.extFromFormat("jpeg"), "jpg");

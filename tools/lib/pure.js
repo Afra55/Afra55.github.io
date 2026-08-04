@@ -1369,53 +1369,76 @@
   }
 
   /**
-   * Cover-crop a source image into an equal-edge stitch cell.
-   * horizontal: output height = commonEdge, width follows zoomed aspect
-   * vertical: output width = commonEdge, height follows zoomed aspect
-   * panPct 0-100 moves the crop window along the free axis (and slightly on both when zoomed).
-   * Returns integer crop rects fully inside the source (safe for canvas drawImage).
+   * Free-rect crop then scale into an equal-edge stitch cell.
+   * horizontal: output height = commonEdge, width follows crop aspect
+   * vertical: output width = commonEdge, height follows crop aspect
+   * rect uses percent fields: x/y/w/h (0-100).
+   */
+  function calcFreeStitchCrop(srcW, srcH, mode, commonEdge, rect = {}) {
+    const sw = Math.max(1, Math.round(Number(srcW) || 1));
+    const sh = Math.max(1, Math.round(Number(srcH) || 1));
+    const edge = Math.max(1, Math.round(Number(commonEdge) || 1));
+    let xPct = clampNumber(rect.x ?? rect.xPercent ?? 0, 0, 100);
+    let yPct = clampNumber(rect.y ?? rect.yPercent ?? 0, 0, 100);
+    let wPct = clampNumber(rect.w ?? rect.wPercent ?? 100, 1, 100);
+    let hPct = clampNumber(rect.h ?? rect.hPercent ?? 100, 1, 100);
+    if (xPct + wPct > 100) wPct = Math.max(1, 100 - xPct);
+    if (yPct + hPct > 100) hPct = Math.max(1, 100 - yPct);
+
+    let cropX = (xPct / 100) * sw;
+    let cropY = (yPct / 100) * sh;
+    let cropW = (wPct / 100) * sw;
+    let cropH = (hPct / 100) * sh;
+
+    cropX = Math.floor(clampNumber(cropX, 0, Math.max(0, sw - 1)));
+    cropY = Math.floor(clampNumber(cropY, 0, Math.max(0, sh - 1)));
+    cropW = Math.max(1, Math.min(Math.round(cropW), sw - cropX));
+    cropH = Math.max(1, Math.min(Math.round(cropH), sh - cropY));
+    if (cropX + cropW > sw) cropX = Math.max(0, sw - cropW);
+    if (cropY + cropH > sh) cropY = Math.max(0, sh - cropH);
+
+    let outW;
+    let outH;
+    if (mode === "vertical") {
+      outW = edge;
+      outH = Math.max(1, Math.round((outW * cropH) / cropW));
+    } else {
+      outH = edge;
+      outW = Math.max(1, Math.round((outH * cropW) / cropH));
+    }
+    return {
+      cropX,
+      cropY,
+      cropW,
+      cropH,
+      outW,
+      outH,
+      xPct,
+      yPct,
+      wPct,
+      hPct,
+    };
+  }
+
+  /**
+   * Legacy uniform-zoom crop (keeps source aspect). Prefer calcFreeStitchCrop for free selection.
    */
   function calcAlignedStitchCrop(srcW, srcH, mode, commonEdge, zoomPct = 100, panPct = 50, panCrossPct = 50) {
     const sw = Math.max(1, Math.round(Number(srcW) || 1));
     const sh = Math.max(1, Math.round(Number(srcH) || 1));
-    const edge = Math.max(1, Math.round(Number(commonEdge) || 1));
     const zoom = Math.max(1, Math.min(5, (Number(zoomPct) || 100) / 100));
     const pan = clampNumber(panPct, 0, 100) / 100;
     const panCross = clampNumber(panCrossPct, 0, 100) / 100;
-
     const cropW0 = Math.min(sw, Math.max(1, sw / zoom));
     const cropH0 = Math.min(sh, Math.max(1, sh / zoom));
-
-    let cropX;
-    let cropY;
-    let outW;
-    let outH;
-
-    if (mode === "vertical") {
-      // Equal width
-      outW = edge;
-      cropX = (sw - cropW0) * pan;
-      cropY = (sh - cropH0) * panCross;
-      outH = Math.max(1, Math.round((outW * cropH0) / cropW0));
-    } else {
-      // horizontal (default): equal height
-      outH = edge;
-      cropX = (sw - cropW0) * panCross;
-      cropY = (sh - cropH0) * pan;
-      outW = Math.max(1, Math.round((outH * cropW0) / cropH0));
-    }
-
-    // Integerize and clamp so the source rect never exceeds the image.
-    cropX = Math.floor(clampNumber(cropX, 0, Math.max(0, sw - cropW0)));
-    cropY = Math.floor(clampNumber(cropY, 0, Math.max(0, sh - cropH0)));
-    let cropW = Math.min(Math.ceil(cropW0), sw - cropX);
-    let cropH = Math.min(Math.ceil(cropH0), sh - cropY);
-    cropW = Math.max(1, cropW);
-    cropH = Math.max(1, cropH);
-    if (cropX + cropW > sw) cropX = Math.max(0, sw - cropW);
-    if (cropY + cropH > sh) cropY = Math.max(0, sh - cropH);
-
-    return { cropX, cropY, cropW, cropH, outW, outH };
+    const cropX = mode === "vertical" ? (sw - cropW0) * pan : (sw - cropW0) * panCross;
+    const cropY = mode === "vertical" ? (sh - cropH0) * panCross : (sh - cropH0) * pan;
+    return calcFreeStitchCrop(sw, sh, mode, commonEdge, {
+      x: (cropX / sw) * 100,
+      y: (cropY / sh) * 100,
+      w: (cropW0 / sw) * 100,
+      h: (cropH0 / sh) * 100,
+    });
   }
 
   function suggestStitchEdge(sizes, mode) {
@@ -1554,6 +1577,7 @@
     calcCropRect,
     calcNineGridRects,
     calcStitchLayout,
+    calcFreeStitchCrop,
     calcAlignedStitchCrop,
     suggestStitchEdge,
     parseJpegExif,
