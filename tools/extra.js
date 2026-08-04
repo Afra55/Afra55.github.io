@@ -2582,7 +2582,8 @@
           scriptPath: "./adb-bridge/start-win.bat",
           scriptName: "start-adb-bridge.bat",
           zipName: "devtools-adb-bridge-win.zip",
-          runHint: "解压后双击 start-adb-bridge.bat。请保持窗口打开。",
+          runHint:
+            "解压后优先双击 start-adb-bridge.cmd（更不易闪退）；也可双击 start-adb-bridge.bat。请保持窗口打开。",
         },
         linux: {
           scriptPath: "./adb-bridge/start-linux.sh",
@@ -2593,10 +2594,13 @@
       };
       const cfg = map[platform];
       if (!cfg) throw new Error("未知平台");
-      const [serverJs, scriptText] = await Promise.all([
+      const [serverJs, scriptRaw] = await Promise.all([
         fetchTextAsset("./adb-bridge/server.js"),
         fetchTextAsset(cfg.scriptPath),
       ]);
+      // Windows cmd.exe is fragile with LF-only / UTF-8 Chinese .bat files.
+      const scriptText =
+        platform === "win" ? String(scriptRaw).replace(/\r?\n/g, "\r\n") : scriptRaw;
       if (!/ADB_BRIDGE_TOKEN|devtools-adb-bridge|DevTools local ADB bridge/.test(serverJs)) {
         throw new Error("server.js 内容异常，请刷新页面后重试");
       }
@@ -2614,8 +2618,10 @@
         "4. 回到网页点击「连接本机桥」",
         "",
         "若窗口一闪而过：",
-        "- macOS：在终端执行 chmod +x " + cfg.scriptName + " 后再运行；或 bash " + cfg.scriptName,
-        "- 查看日志：用户目录下 .devtools-adb-bridge/last-start.log",
+        "- Windows：请重新下载本完整包（已修复编码闪退）；窗口结束时会 pause",
+        "- Windows 日志：%USERPROFILE%\\.devtools-adb-bridge\\last-start.log",
+        "- Windows 也会复制到桌面：devtools-adb-bridge-last-start.log",
+        "- macOS：chmod +x " + cfg.scriptName + " 后运行；或 bash " + cfg.scriptName,
         "- 确认未重复打开多个桥（端口占用会自动换端口并提示）",
         "",
         "默认地址 http://127.0.0.1:17888  Token: devtools-adb",
@@ -2626,7 +2632,17 @@
       zip.file(cfg.scriptName, scriptText, {
         unixPermissions: platform === "win" ? undefined : 0o755,
       });
-      zip.file("使用说明.txt", readme);
+      if (platform === "win") {
+        // Outer wrapper always pauses, even if the .bat hits a parser error.
+        const wrapper = [
+          "@echo off",
+          'cd /d "%~dp0"',
+          'cmd /d /c ""%~dp0start-adb-bridge.bat" & echo. & echo Log: %USERPROFILE%\\.devtools-adb-bridge\\last-start.log & echo Desktop copy: devtools-adb-bridge-last-start.log & pause"',
+          "",
+        ].join("\r\n");
+        zip.file("start-adb-bridge.cmd", wrapper);
+      }
+      zip.file(platform === "win" ? "README.txt" : "使用说明.txt", readme.replace(/\r?\n/g, platform === "win" ? "\r\n" : "\n"));
       const blob = await zip.generateAsync({
         type: "blob",
         platform: platform === "win" ? "DOS" : "UNIX",

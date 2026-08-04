@@ -1,101 +1,145 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
-rem Prefer keeping the window open on any failure (avoid flash-close).
 
-cd /d "%~dp0" 2>nul
-echo DevTools ADB Bridge 启动中...
-echo 使用本工具需要本机已安装 adb，并可用：adb devices
+rem ASCII-only control flow. UTF-8 Chinese in .bat often flash-closes on CN Windows.
+rem Always pause at the end so the console never disappears instantly.
+
+set "EXIT_CODE=0"
+set "LOG_FILE=%TEMP%\devtools-adb-bridge-last-start.log"
+call :MAIN
+set "EXIT_CODE=!ERRORLEVEL!"
+
 echo.
+echo ========================================
+echo Exit code: !EXIT_CODE!
+echo Log file:  !LOG_FILE!
+if exist "%USERPROFILE%\Desktop\" (
+  copy /Y "!LOG_FILE!" "%USERPROFILE%\Desktop\devtools-adb-bridge-last-start.log" >nul 2>&1
+  if exist "%USERPROFILE%\Desktop\devtools-adb-bridge-last-start.log" (
+    echo Also copied to Desktop: devtools-adb-bridge-last-start.log
+  )
+)
+echo ========================================
+echo.
+pause
+exit /b !EXIT_CODE!
 
-set "BRIDGE_DIR=%USERPROFILE%\.devtools-adb-bridge"
-if not exist "%BRIDGE_DIR%" mkdir "%BRIDGE_DIR%"
-set "LOG_FILE=%BRIDGE_DIR%\last-start.log"
+:MAIN
+cd /d "%~dp0" 2>nul
 set "SCRIPT_DIR=%~dp0"
-set "TARGET=%BRIDGE_DIR%\server.js"
-if "%ADB_BRIDGE_BASE_URL%"=="" set "ADB_BRIDGE_BASE_URL=https://afra55.github.io/tools/adb-bridge"
+set "BRIDGE_DIR=%USERPROFILE%\.devtools-adb-bridge"
+if not exist "%BRIDGE_DIR%" mkdir "%BRIDGE_DIR%" 2>nul
+if exist "%BRIDGE_DIR%\" set "LOG_FILE=%BRIDGE_DIR%\last-start.log"
 
 echo ==== %DATE% %TIME% ==== > "%LOG_FILE%"
 echo SCRIPT_DIR=%SCRIPT_DIR%>> "%LOG_FILE%"
+echo BRIDGE_DIR=%BRIDGE_DIR%>> "%LOG_FILE%"
+echo CD=%CD%>> "%LOG_FILE%"
 where node >> "%LOG_FILE%" 2>&1
 where adb >> "%LOG_FILE%" 2>&1
+where curl >> "%LOG_FILE%" 2>&1
+
+echo [ADB Bridge] Starting...
+echo [ADB Bridge] Log: %LOG_FILE%
+echo.
 
 where node >nul 2>&1
 if errorlevel 1 (
-  echo 未找到 node。请先安装 Node.js：https://nodejs.org/
-  echo 若已安装，请重新打开终端或把 node 加入 PATH。
-  echo 日志：%LOG_FILE%
-  goto :fail
+  echo [ERROR] node.exe not found.
+  echo Install Node.js: https://nodejs.org/
+  echo Then reopen this window / check PATH.
+  echo [ERROR] node not found>> "%LOG_FILE%"
+  exit /b 1
 )
 
 where adb >nul 2>&1
 if errorlevel 1 (
-  echo 未找到 adb。请安装 Android platform-tools，并确保 adb 在 PATH 中。
-  echo 日志：%LOG_FILE%
-  goto :fail
+  echo [ERROR] adb.exe not found.
+  echo Install Android platform-tools and add it to PATH.
+  echo [ERROR] adb not found>> "%LOG_FILE%"
+  exit /b 1
 )
 
+set "TARGET=%BRIDGE_DIR%\server.js"
+set "LOCAL_SERVER=%SCRIPT_DIR%server.js"
 set "HAVE_SERVER=0"
-if exist "%SCRIPT_DIR%server.js" (
-  findstr /I /C:"ADB_BRIDGE_TOKEN" /C:"devtools-adb-bridge" /C:"DevTools local ADB bridge" "%SCRIPT_DIR%server.js" >nul 2>&1
-  if not errorlevel 1 (
-    copy /Y "%SCRIPT_DIR%server.js" "%TARGET%" >nul
-    echo 已使用同目录 server.js
+
+if exist "%LOCAL_SERVER%" (
+  copy /Y "%LOCAL_SERVER%" "%TARGET%" >nul
+  if exist "%TARGET%" (
+    echo [OK] Using server.js next to this script
+    echo using local server.js>> "%LOG_FILE%"
     set "HAVE_SERVER=1"
   )
 )
 
 if "!HAVE_SERVER!"=="0" if exist "%TARGET%" (
-  findstr /I /C:"ADB_BRIDGE_TOKEN" /C:"devtools-adb-bridge" /C:"DevTools local ADB bridge" "%TARGET%" >nul 2>&1
-  if not errorlevel 1 (
-    echo 已使用本地缓存：%TARGET%
-    set "HAVE_SERVER=1"
-  )
+  echo [OK] Using cached server.js
+  echo using cached server.js>> "%LOG_FILE%"
+  set "HAVE_SERVER=1"
 )
 
 if "!HAVE_SERVER!"=="0" (
-  echo 正在下载桥接服务…
-  powershell -NoProfile -ExecutionPolicy Bypass -Command "try { $urls=@('%ADB_BRIDGE_BASE_URL%/server.js','https://afra55.github.io/tools/adb-bridge/server.js','https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/tools/adb-bridge/server.js'); $out='%TARGET%'; $ok=$false; foreach($u in $urls){ try { Write-Host ('尝试: ' + $u); Invoke-WebRequest -UseBasicParsing -Uri $u -OutFile ($out + '.tmp') -TimeoutSec 120; $t=Get-Content -Raw ($out + '.tmp'); if($t -match 'ADB_BRIDGE_TOKEN|devtools-adb-bridge|DevTools local ADB bridge'){ Move-Item -Force ($out + '.tmp') $out; $ok=$true; break } else { Remove-Item -Force ($out + '.tmp') -ErrorAction SilentlyContinue } } catch { Remove-Item -Force ($out + '.tmp') -ErrorAction SilentlyContinue; Write-Host ('失败: ' + $_.Exception.Message) } }; if(-not $ok){ exit 1 }; exit 0 } catch { Write-Host $_.Exception.Message; exit 1 }"
-  if errorlevel 1 (
-    echo.
-    echo 无法获取 server.js（桥接服务主文件）。
-    echo 请回到网页重新下载「完整 ZIP 包」，解压后确保与启动脚本同目录有 server.js，再运行。
-    echo 日志：%LOG_FILE%
-    goto :fail
+  echo [..] Downloading server.js ...
+  echo downloading server.js>> "%LOG_FILE%"
+  if exist "%TARGET%.tmp" del /f /q "%TARGET%.tmp" >nul 2>&1
+
+  where curl >nul 2>&1
+  if not errorlevel 1 (
+    curl.exe -fsSL --connect-timeout 15 --max-time 120 "https://afra55.github.io/tools/adb-bridge/server.js" -o "%TARGET%.tmp" >> "%LOG_FILE%" 2>&1
+    if errorlevel 1 (
+      curl.exe -fsSL --connect-timeout 15 --max-time 120 "https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/tools/adb-bridge/server.js" -o "%TARGET%.tmp" >> "%LOG_FILE%" 2>&1
+    )
+  ) else (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-WebRequest -UseBasicParsing 'https://afra55.github.io/tools/adb-bridge/server.js' -OutFile '%TARGET%.tmp'; exit 0 } catch { try { Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/tools/adb-bridge/server.js' -OutFile '%TARGET%.tmp'; exit 0 } catch { exit 1 } }" >> "%LOG_FILE%" 2>&1
   )
-  echo 下载完成
+
+  if not exist "%TARGET%.tmp" (
+    echo [ERROR] Could not get server.js
+    echo Keep server.js in the SAME folder as this .bat ^(re-download the ZIP^).
+    echo [ERROR] download failed>> "%LOG_FILE%"
+    exit /b 1
+  )
+
+  findstr /I /C:"ADB_BRIDGE_TOKEN" /C:"devtools-adb-bridge" /C:"DevTools local ADB bridge" "%TARGET%.tmp" >nul 2>&1
+  if errorlevel 1 (
+    echo [ERROR] Downloaded file is invalid.
+    del /f /q "%TARGET%.tmp" >nul 2>&1
+    echo [ERROR] invalid download>> "%LOG_FILE%"
+    exit /b 1
+  )
+
+  move /Y "%TARGET%.tmp" "%TARGET%" >nul
+  echo [OK] Download complete
+  set "HAVE_SERVER=1"
 )
 
 if not exist "%TARGET%" (
-  echo 找不到 server.js：%TARGET%
-  echo 日志：%LOG_FILE%
-  goto :fail
+  echo [ERROR] Missing server.js: %TARGET%
+  echo [ERROR] missing target>> "%LOG_FILE%"
+  exit /b 1
 )
 
 cd /d "%BRIDGE_DIR%"
 if "%ADB_BRIDGE_TOKEN%"=="" set "ADB_BRIDGE_TOKEN=devtools-adb"
 if "%ADB_BRIDGE_PORT%"=="" set "ADB_BRIDGE_PORT=17888"
-echo adb 版本：
+
+echo [OK] adb:
 adb version
 echo.
-echo 启动桥：%TARGET%
-echo 若失败请查看日志：%LOG_FILE%
+echo [OK] Starting: %TARGET%
+echo      Keep this window open, then click Connect on the webpage.
 echo.
 
-node server.js
+node "%TARGET%"
 set "CODE=!ERRORLEVEL!"
 echo node exit=!CODE!>> "%LOG_FILE%"
 echo.
 if not "!CODE!"=="0" (
-  echo 桥进程退出，代码 !CODE!。请向上滚动查看错误。
-  echo 日志：%LOG_FILE%
-  goto :fail
+  echo [ERROR] Bridge exited with code !CODE!
+  echo Scroll up for details. Log: %LOG_FILE%
+  exit /b !CODE!
 )
 
-echo 桥已退出。
-pause
+echo [OK] Bridge stopped.
 exit /b 0
-
-:fail
-echo.
-pause
-exit /b 1
