@@ -1,1 +1,2 @@
 start-win.bat text eol=crlf
+start-win.cmd text eol=crlf
