@@ -39,7 +39,7 @@ const ROOTS = ["/sdcard", "/storage/emulated/0"];
 const TMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "adb-bridge-"));
 const JOBS = new Map();
 const UPLOADS = new Map();
-const BRIDGE_VERSION = "0.5.1";
+const BRIDGE_VERSION = "0.5.2";
 
 function sendJson(res, status, data, origin) {
   const body = JSON.stringify(data);
@@ -1867,22 +1867,71 @@ const server = http.createServer((req, res) => {
   handleApi(req, res, url);
 });
 
-server.listen(PORT, HOST, () => {
+function printBanner(activePort) {
   console.log("");
   console.log("========================================");
   console.log(" DevTools ADB Bridge 已启动");
   console.log(` 版本: ${BRIDGE_VERSION}`);
-  console.log(` 地址: http://${HOST}:${PORT}`);
+  console.log(` 地址: http://${HOST}:${activePort}`);
   console.log(` Token: ${TOKEN}`);
   console.log(" 能力: 文件 / 安装 / 应用 / 网络代理转发 / 开发者选项 / Logcat / 任务");
   console.log(" 请保持此窗口打开，然后回到网页点击「连接」");
+  if (activePort !== PORT) {
+    console.log(` 注意: 默认端口 ${PORT} 被占用，已改用 ${activePort}`);
+    console.log(" 请在网页把桥地址改成上述端口后再连接");
+  }
   console.log("========================================");
   console.log("");
-});
+}
+
+function listenWithFallback(startPort, maxTries = 12) {
+  let port = startPort;
+  let tries = 0;
+
+  const tryListen = () => {
+    const onError = (err) => {
+      server.removeListener("listening", onListening);
+      if (err && err.code === "EADDRINUSE" && tries < maxTries - 1) {
+        tries += 1;
+        const next = startPort + tries;
+        console.warn(`端口 ${port} 已被占用，尝试 ${next}…`);
+        port = next;
+        setTimeout(tryListen, 50);
+        return;
+      }
+      console.error("");
+      console.error("启动失败:", err && err.message ? err.message : String(err));
+      if (err && err.code === "EADDRINUSE") {
+        console.error(`端口 ${startPort} 起连续 ${maxTries} 个均被占用。`);
+        console.error("请关闭旧的桥接窗口，或设置环境变量 ADB_BRIDGE_PORT 换端口。");
+      }
+      console.error("");
+      process.exitCode = 1;
+    };
+
+    const onListening = () => {
+      server.removeListener("error", onError);
+      printBanner(port);
+    };
+
+    server.once("error", onError);
+    server.once("listening", onListening);
+    server.listen(port, HOST);
+  };
+
+  tryListen();
+}
+
+listenWithFallback(PORT);
 
 function cleanup() {
   try {
     fs.rmSync(TMP_ROOT, { recursive: true, force: true });
+  } catch {
+    /* ignore */
+  }
+  try {
+    server.close();
   } catch {
     /* ignore */
   }
@@ -1891,3 +1940,10 @@ function cleanup() {
 
 process.on("SIGINT", cleanup);
 process.on("SIGTERM", cleanup);
+
+process.on("uncaughtException", (err) => {
+  console.error("");
+  console.error("未捕获异常:", err && err.stack ? err.stack : err);
+  console.error("窗口将保持打开，便于查看错误。按 Ctrl+C 退出。");
+});
+
