@@ -1627,11 +1627,12 @@
       panel.classList.toggle("is-active", on);
       panel.hidden = !on;
     });
+    $(".imgkit-main")?.classList.toggle("is-stitch-mode", id === "stitch");
     const hints = {
       adjust: "调好格式/尺寸后，点「导出当前」或「批量 ZIP」",
       crop: "裁剪完成后直接点「导出当前」，不必再往下翻",
       style: "水印/边框调好后点「导出当前」",
-      stitch: "拼接取景调好后点「拼接导出」",
+      stitch: "左侧/上方看整体效果，右侧取景；调好后点「拼接导出」",
       more: "九宫格 / App 图标请用对应导出按钮",
     };
     const hint = $("#imgkit-action-hint");
