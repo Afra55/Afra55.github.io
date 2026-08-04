@@ -177,6 +177,7 @@
     watermarkImage: null,
     previewUrl: "",
     stitchPreviewToken: 0,
+    stitchDrag: null,
   };
 
   const els = {
@@ -381,29 +382,21 @@
     };
   }
 
-  function drawCropThumb(canvas, item, mode) {
-    const src = getOrientedSource(item);
-    if (!src || !canvas) return;
-    const size = sourceSize(src);
-    const css = 88;
-    const dpr = Math.min(2, window.devicePixelRatio || 1);
-    canvas.width = Math.round(css * dpr);
-    canvas.height = Math.round(css * dpr);
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, css, css);
-    ctx.fillStyle = "#0a101c";
-    ctx.fillRect(0, 0, css, css);
+  function getStitchStageSize(stage) {
+    if (!stage) return { w: 320, h: 280 };
+    const w = Math.max(160, Math.round(stage.clientWidth || 320));
+    const h = Math.max(160, Math.round(stage.clientHeight || 280));
+    return { w, h };
+  }
 
-    const fit = Math.min(css / size.width, css / size.height);
+  function measureStitchGeom(item, mode, stageW, stageH) {
+    const src = getOrientedSource(item);
+    const size = sourceSize(src);
+    const fit = Math.min(stageW / size.width, stageH / size.height);
     const dw = size.width * fit;
     const dh = size.height * fit;
-    const dx = (css - dw) / 2;
-    const dy = (css - dh) / 2;
-    ctx.drawImage(src, dx, dy, dw, dh);
-
-    if (mode === "grid") return;
+    const ox = (stageW - dw) / 2;
+    const oy = (stageH - dh) / 2;
     const edge = resolveStitchEdge(mode, state.items, Number($("#imgkit-stitch-edge")?.value || 0) || 0);
     const crop = item.stitch || defaultStitchCrop();
     const aligned = P.calcAlignedStitchCrop(
@@ -415,18 +408,128 @@
       crop.pan,
       crop.panCross
     );
-    const rx = dx + aligned.cropX * fit;
-    const ry = dy + aligned.cropY * fit;
-    const rw = Math.max(2, aligned.cropW * fit);
-    const rh = Math.max(2, aligned.cropH * fit);
-    ctx.fillStyle = "rgba(8, 14, 26, 0.45)";
-    ctx.beginPath();
-    ctx.rect(dx, dy, dw, dh);
-    ctx.rect(rx, ry, rw, rh);
-    ctx.fill("evenodd");
-    ctx.strokeStyle = "rgba(46, 196, 182, 0.95)";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(rx, ry, rw, rh);
+    return {
+      src,
+      size,
+      fit,
+      ox,
+      oy,
+      dw,
+      dh,
+      edge,
+      aligned,
+      box: {
+        x: ox + aligned.cropX * fit,
+        y: oy + aligned.cropY * fit,
+        w: Math.max(8, aligned.cropW * fit),
+        h: Math.max(8, aligned.cropH * fit),
+      },
+    };
+  }
+
+  function stitchParamsFromSourceCrop(mode, size, cropX, cropY, cropW, cropH) {
+    const sw = size.width;
+    const sh = size.height;
+    const aspect = sw / sh;
+    let w = Math.max(1, Number(cropW) || 1);
+    let h = Math.max(1, Number(cropH) || 1);
+    // Keep source aspect (aligned stitch zoom is uniform).
+    if (w / h > aspect) h = w / aspect;
+    else w = h * aspect;
+    const minW = sw / 4; // zoom 400%
+    const maxW = sw; // zoom 100%
+    w = Math.min(maxW, Math.max(minW, w));
+    h = w / aspect;
+    if (h > sh) {
+      h = sh;
+      w = h * aspect;
+    }
+    let x = Math.max(0, Math.min(sw - w, Number(cropX) || 0));
+    let y = Math.max(0, Math.min(sh - h, Number(cropY) || 0));
+    const zoom = Math.max(100, Math.min(400, Math.round((100 * sw) / w)));
+    const freeX = Math.max(0, sw - w);
+    const freeY = Math.max(0, sh - h);
+    const panX = freeX < 0.5 ? 50 : (x / freeX) * 100;
+    const panY = freeY < 0.5 ? 50 : (y / freeY) * 100;
+    if (mode === "vertical") {
+      return {
+        zoom,
+        pan: Math.max(0, Math.min(100, Math.round(panX))),
+        panCross: Math.max(0, Math.min(100, Math.round(panY))),
+      };
+    }
+    return {
+      zoom,
+      pan: Math.max(0, Math.min(100, Math.round(panY))),
+      panCross: Math.max(0, Math.min(100, Math.round(panX))),
+    };
+  }
+
+  function applyStitchCrop(id, partial, { preview = true, syncInputs = true } = {}) {
+    const item = state.items.find((it) => it.id === id);
+    if (!item) return;
+    if (!item.stitch) item.stitch = defaultStitchCrop();
+    if (partial.zoom != null) {
+      const z = Number(partial.zoom);
+      if (Number.isFinite(z)) item.stitch.zoom = Math.max(100, Math.min(400, Math.round(z)));
+    }
+    if (partial.pan != null) {
+      const p = Number(partial.pan);
+      if (Number.isFinite(p)) item.stitch.pan = Math.max(0, Math.min(100, Math.round(p)));
+    }
+    if (partial.panCross != null) {
+      const p = Number(partial.panCross);
+      if (Number.isFinite(p)) item.stitch.panCross = Math.max(0, Math.min(100, Math.round(p)));
+    }
+    if (syncInputs) {
+      const card = document.querySelector(`.imgkit-stitch-crop[data-stitch-id="${cssAttrEscape(id)}"]`);
+      ["zoom", "pan", "panCross"].forEach((field) => {
+        const valEl = card?.querySelector(`[data-stitch-val="${field}"]`);
+        const input = card?.querySelector(`input[data-stitch-field="${field}"]`);
+        const v = item.stitch[field];
+        if (valEl) valEl.textContent = field === "zoom" ? `${v}%` : String(v);
+        if (input && Number(input.value) !== v) input.value = String(v);
+      });
+    }
+    const mode = $("#imgkit-stitch-mode")?.value || "horizontal";
+    if (!state.stitchDrag) syncCropEditor(item, mode);
+    if (preview) scheduleStitchPreview();
+  }
+
+  function drawCropImage(canvas, geom, stageW, stageH) {
+    if (!canvas || !geom?.src) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(stageW * dpr);
+    canvas.height = Math.round(stageH * dpr);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, stageW, stageH);
+    ctx.fillStyle = "#0a101c";
+    ctx.fillRect(0, 0, stageW, stageH);
+    ctx.drawImage(geom.src, geom.ox, geom.oy, geom.dw, geom.dh);
+  }
+
+  function positionCropBox(boxEl, box) {
+    if (!boxEl || !box) return;
+    boxEl.style.left = `${box.x}px`;
+    boxEl.style.top = `${box.y}px`;
+    boxEl.style.width = `${box.w}px`;
+    boxEl.style.height = `${box.h}px`;
+  }
+
+  function syncCropEditor(item, mode) {
+    const host = $("#imgkit-stitch-crops");
+    if (!host || !item) return;
+    const stage = host.querySelector(`[data-stitch-stage="${cssAttrEscape(item.id)}"]`);
+    if (!stage) return;
+    const canvas = stage.querySelector("canvas");
+    const boxEl = stage.querySelector("[data-stitch-box]");
+    const { w: stageW, h: stageH } = getStitchStageSize(stage);
+    const geom = measureStitchGeom(item, mode, stageW, stageH);
+    drawCropImage(canvas, geom, stageW, stageH);
+    positionCropBox(boxEl, geom.box);
+    stage._stitchGeom = geom;
   }
 
   function renderStitchCrops() {
@@ -454,25 +557,33 @@
         const safeName = P.escapeHtml(it.name || "image");
         const safeId = P.escapeHtml(it.id);
         return `<div class="imgkit-stitch-crop" data-stitch-id="${safeId}">
-          <div class="imgkit-stitch-crop-view" data-stitch-drag="${safeId}" title="拖拽平移取景">
-            <canvas data-stitch-thumb="${safeId}"></canvas>
-          </div>
-          <div>
+          <div class="imgkit-stitch-crop-head">
             <div class="imgkit-stitch-crop-meta">${safeName}</div>
-            <div class="imgkit-stitch-crop-fields">
-              <label>缩放<input type="range" min="100" max="400" step="1" value="${s.zoom}" data-stitch-field="zoom" data-stitch-id="${safeId}" /><span class="mono" data-stitch-val="zoom">${s.zoom}%</span></label>
-              <label>${panLabel}<input type="range" min="0" max="100" step="1" value="${s.pan}" data-stitch-field="pan" data-stitch-id="${safeId}" /><span class="mono" data-stitch-val="pan">${s.pan}</span></label>
-              <label>${crossLabel}<input type="range" min="0" max="100" step="1" value="${s.panCross}" data-stitch-field="panCross" data-stitch-id="${safeId}" /><span class="mono" data-stitch-val="panCross">${s.panCross}</span></label>
+            <p class="hint tight">拖绿框平移；拖角点/边点缩放；滚轮也可缩放</p>
+          </div>
+          <div class="imgkit-stitch-crop-stage" data-stitch-stage="${safeId}">
+            <canvas data-stitch-thumb="${safeId}"></canvas>
+            <div class="imgkit-stitch-crop-box" data-stitch-box="${safeId}">
+              <span class="imgkit-stitch-handle" data-handle="nw"></span>
+              <span class="imgkit-stitch-handle" data-handle="n"></span>
+              <span class="imgkit-stitch-handle" data-handle="ne"></span>
+              <span class="imgkit-stitch-handle" data-handle="e"></span>
+              <span class="imgkit-stitch-handle" data-handle="se"></span>
+              <span class="imgkit-stitch-handle" data-handle="s"></span>
+              <span class="imgkit-stitch-handle" data-handle="sw"></span>
+              <span class="imgkit-stitch-handle" data-handle="w"></span>
             </div>
+          </div>
+          <div class="imgkit-stitch-crop-fields">
+            <label>缩放<input type="range" min="100" max="400" step="1" value="${s.zoom}" data-stitch-field="zoom" data-stitch-id="${safeId}" /><span class="mono" data-stitch-val="zoom">${s.zoom}%</span></label>
+            <label>${panLabel}<input type="range" min="0" max="100" step="1" value="${s.pan}" data-stitch-field="pan" data-stitch-id="${safeId}" /><span class="mono" data-stitch-val="pan">${s.pan}</span></label>
+            <label>${crossLabel}<input type="range" min="0" max="100" step="1" value="${s.panCross}" data-stitch-field="panCross" data-stitch-id="${safeId}" /><span class="mono" data-stitch-val="panCross">${s.panCross}</span></label>
           </div>
         </div>`;
       })
       .join("");
 
-    state.items.forEach((it) => {
-      const c = host.querySelector(`canvas[data-stitch-thumb="${cssAttrEscape(it.id)}"]`);
-      drawCropThumb(c, it, mode);
-    });
+    state.items.forEach((it) => syncCropEditor(it, mode));
   }
 
   function scheduleStitchPreview() {
@@ -497,7 +608,7 @@
     const opts = readOptions();
     let built;
     try {
-      built = buildStitchCanvas({ ...opts, previewMaxEdge: 1400 });
+      built = buildStitchCanvas({ ...opts, previewMaxEdge: 1600 });
     } catch (err) {
       if (meta) meta.textContent = err.message || String(err);
       return;
@@ -520,35 +631,72 @@
     const host = $("#imgkit-stitch-crops");
     const mode = opts.stitchMode;
     const cards = host ? host.querySelectorAll("[data-stitch-id]").length : 0;
-    // Rebuild controls when count drifts or when leaving/entering grid mode leftovers.
     if (mode === "grid") {
       if (!host || host.querySelector("[data-stitch-id]")) renderStitchCrops();
     } else if (!host || cards !== state.items.length) {
       renderStitchCrops();
-    } else {
-      state.items.forEach((it) => {
-        const c = host.querySelector(`canvas[data-stitch-thumb="${cssAttrEscape(it.id)}"]`);
-        drawCropThumb(c, it, mode);
-      });
+    } else if (!state.stitchDrag) {
+      // Avoid fighting active pointer interactions.
+      state.items.forEach((it) => syncCropEditor(it, mode));
     }
   }
 
   function setStitchField(id, field, value) {
-    const item = state.items.find((it) => it.id === id);
-    if (!item) return;
-    if (!item.stitch) item.stitch = defaultStitchCrop();
-    let v = Number(value);
-    if (!Number.isFinite(v)) return;
-    if (field === "zoom") v = Math.max(100, Math.min(400, Math.round(v)));
-    else if (field === "pan" || field === "panCross") v = Math.max(0, Math.min(100, Math.round(v)));
-    else return;
-    item.stitch[field] = v;
-    const card = document.querySelector(`.imgkit-stitch-crop[data-stitch-id="${cssAttrEscape(id)}"]`);
-    const valEl = card?.querySelector(`[data-stitch-val="${field}"]`);
-    const input = card?.querySelector(`input[data-stitch-field="${field}"]`);
-    if (valEl) valEl.textContent = field === "zoom" ? `${v}%` : String(v);
-    if (input && Number(input.value) !== v) input.value = String(v);
-    scheduleStitchPreview();
+    applyStitchCrop(id, { [field]: value });
+  }
+
+  function resizeBoxWithHandle(startBox, handle, dx, dy, aspect, minW, maxW, imgRect) {
+    let x = startBox.x;
+    let y = startBox.y;
+    let w = startBox.w;
+    let h = startBox.h;
+    const useX = handle.includes("e") || handle.includes("w");
+    const useY = handle.includes("n") || handle.includes("s");
+
+    if (handle === "e" || handle === "w") {
+      const signed = handle === "e" ? dx : -dx;
+      w = startBox.w + signed;
+      h = w / aspect;
+      if (handle === "w") x = startBox.x + startBox.w - w;
+      y = startBox.y + (startBox.h - h) / 2;
+    } else if (handle === "n" || handle === "s") {
+      const signed = handle === "s" ? dy : -dy;
+      h = startBox.h + signed;
+      w = h * aspect;
+      if (handle === "n") y = startBox.y + startBox.h - h;
+      x = startBox.x + (startBox.w - w) / 2;
+    } else {
+      // corners: pick dominant delta, keep opposite corner fixed
+      let nw = startBox.w;
+      let nh = startBox.h;
+      if (handle.includes("e")) nw = startBox.w + dx;
+      if (handle.includes("w")) nw = startBox.w - dx;
+      if (handle.includes("s")) nh = startBox.h + dy;
+      if (handle.includes("n")) nh = startBox.h - dy;
+      if (Math.abs(dx) >= Math.abs(dy) || !useY) {
+        w = nw;
+        h = w / aspect;
+      } else {
+        h = nh;
+        w = h * aspect;
+      }
+      if (handle.includes("w")) x = startBox.x + startBox.w - w;
+      else x = startBox.x;
+      if (handle.includes("n")) y = startBox.y + startBox.h - h;
+      else y = startBox.y;
+    }
+
+    w = Math.min(maxW, Math.max(minW, w));
+    h = w / aspect;
+    // Re-anchor after clamp for west/north handles
+    if (handle.includes("w")) x = startBox.x + startBox.w - w;
+    if (handle.includes("n")) y = startBox.y + startBox.h - h;
+    if (handle === "e" || handle === "w") y = startBox.y + (startBox.h - h) / 2;
+    if (handle === "n" || handle === "s") x = startBox.x + (startBox.w - w) / 2;
+
+    x = Math.max(imgRect.x, Math.min(imgRect.x + imgRect.w - w, x));
+    y = Math.max(imgRect.y, Math.min(imgRect.y + imgRect.h - h, y));
+    return { x, y, w, h };
   }
 
   function watermarkAnchor(pos, canvasW, canvasH, markW, markH, pad = 16) {
@@ -997,53 +1145,110 @@
     setStitchField(input.dataset.stitchId, input.dataset.stitchField, input.value);
   });
 
-  // Drag to pan crop window on thumbnails
-  let dragState = null;
+  // Interactive crop box: drag to pan (box follows finger), handles to zoom/resize, wheel to zoom
   stitchCropsHost?.addEventListener("pointerdown", (e) => {
-    const view = e.target.closest("[data-stitch-drag]");
-    if (!view) return;
-    const id = view.dataset.stitchDrag;
+    const stage = e.target.closest("[data-stitch-stage]");
+    if (!stage) return;
+    const id = stage.dataset.stitchStage;
     const item = state.items.find((it) => it.id === id);
     if (!item) return;
     if (!item.stitch) item.stitch = defaultStitchCrop();
-    view.setPointerCapture(e.pointerId);
-    view.classList.add("is-dragging");
-    dragState = {
+    const mode = $("#imgkit-stitch-mode")?.value || "horizontal";
+    const { w: stageW, h: stageH } = getStitchStageSize(stage);
+    const geom = stage._stitchGeom || measureStitchGeom(item, mode, stageW, stageH);
+    const handle = e.target.closest("[data-handle]")?.dataset?.handle || "";
+    const onBox = Boolean(e.target.closest("[data-stitch-box]"));
+    if (!handle && !onBox) return;
+
+    stage.setPointerCapture(e.pointerId);
+    stage.classList.add("is-dragging");
+    state.stitchDrag = {
       id,
-      x: e.clientX,
-      y: e.clientY,
-      pan: item.stitch.pan,
-      panCross: item.stitch.panCross,
+      mode,
+      handle,
+      kind: handle ? "resize" : "pan",
+      x0: e.clientX,
+      y0: e.clientY,
+      box0: { ...geom.box },
+      geom,
     };
     e.preventDefault();
   });
+
   stitchCropsHost?.addEventListener("pointermove", (e) => {
-    if (!dragState) return;
-    const mode = $("#imgkit-stitch-mode")?.value || "horizontal";
-    const dx = e.clientX - dragState.x;
-    const dy = e.clientY - dragState.y;
-    // Dragging content feels natural: move opposite to pan direction
-    if (mode === "vertical") {
-      setStitchField(dragState.id, "pan", dragState.pan - dx * 0.6);
-      setStitchField(dragState.id, "panCross", dragState.panCross - dy * 0.6);
+    const drag = state.stitchDrag;
+    if (!drag) return;
+    const item = state.items.find((it) => it.id === drag.id);
+    if (!item) return;
+    const stage = stitchCropsHost.querySelector(`[data-stitch-stage="${cssAttrEscape(drag.id)}"]`);
+    const boxEl = stage?.querySelector("[data-stitch-box]");
+    const geom = drag.geom;
+    const dx = e.clientX - drag.x0;
+    const dy = e.clientY - drag.y0;
+    const imgRect = { x: geom.ox, y: geom.oy, w: geom.dw, h: geom.dh };
+    const aspect = geom.size.width / geom.size.height;
+    const minW = (geom.size.width / 4) * geom.fit;
+    const maxW = geom.size.width * geom.fit;
+
+    let nextBox;
+    if (drag.kind === "pan") {
+      // Green box follows the pointer (not inverted).
+      nextBox = {
+        x: drag.box0.x + dx,
+        y: drag.box0.y + dy,
+        w: drag.box0.w,
+        h: drag.box0.h,
+      };
+      nextBox.x = Math.max(imgRect.x, Math.min(imgRect.x + imgRect.w - nextBox.w, nextBox.x));
+      nextBox.y = Math.max(imgRect.y, Math.min(imgRect.y + imgRect.h - nextBox.h, nextBox.y));
     } else {
-      setStitchField(dragState.id, "pan", dragState.pan - dy * 0.6);
-      setStitchField(dragState.id, "panCross", dragState.panCross - dx * 0.6);
+      nextBox = resizeBoxWithHandle(drag.box0, drag.handle, dx, dy, aspect, minW, maxW, imgRect);
     }
+
+    positionCropBox(boxEl, nextBox);
+    const cropX = (nextBox.x - geom.ox) / geom.fit;
+    const cropY = (nextBox.y - geom.oy) / geom.fit;
+    const cropW = nextBox.w / geom.fit;
+    const cropH = nextBox.h / geom.fit;
+    const params = stitchParamsFromSourceCrop(drag.mode, geom.size, cropX, cropY, cropW, cropH);
+    applyStitchCrop(drag.id, params, { preview: true, syncInputs: true });
+    const size = getStitchStageSize(stage);
+    const fresh = measureStitchGeom(item, drag.mode, size.w, size.h);
+    positionCropBox(boxEl, fresh.box);
+    stage._stitchGeom = fresh;
   });
-  const endDrag = (e) => {
-    if (!dragState) return;
-    const view = stitchCropsHost?.querySelector(`[data-stitch-drag="${cssAttrEscape(dragState.id)}"]`);
-    view?.classList.remove("is-dragging");
+
+  const endStitchDrag = (e) => {
+    const drag = state.stitchDrag;
+    if (!drag) return;
+    const stage = stitchCropsHost?.querySelector(`[data-stitch-stage="${cssAttrEscape(drag.id)}"]`);
+    stage?.classList.remove("is-dragging");
     try {
-      view?.releasePointerCapture?.(e.pointerId);
+      stage?.releasePointerCapture?.(e.pointerId);
     } catch (_) {
       /* ignore */
     }
-    dragState = null;
+    state.stitchDrag = null;
+    scheduleStitchPreview();
   };
-  stitchCropsHost?.addEventListener("pointerup", endDrag);
-  stitchCropsHost?.addEventListener("pointercancel", endDrag);
+  stitchCropsHost?.addEventListener("pointerup", endStitchDrag);
+  stitchCropsHost?.addEventListener("pointercancel", endStitchDrag);
+
+  stitchCropsHost?.addEventListener(
+    "wheel",
+    (e) => {
+      const stage = e.target.closest("[data-stitch-stage]");
+      if (!stage) return;
+      e.preventDefault();
+      const id = stage.dataset.stitchStage;
+      const item = state.items.find((it) => it.id === id);
+      if (!item) return;
+      if (!item.stitch) item.stitch = defaultStitchCrop();
+      const delta = e.deltaY > 0 ? -12 : 12;
+      setStitchField(id, "zoom", item.stitch.zoom + delta);
+    },
+    { passive: false }
+  );
 
   $("#imgkit-wm-file")?.addEventListener("change", async (e) => {
     try {
@@ -1106,4 +1311,10 @@
   updateInfo(null);
   renderStitchCrops();
   scheduleStitchPreview();
+  window.addEventListener("resize", () => {
+    if (state.stitchDrag) return;
+    const mode = $("#imgkit-stitch-mode")?.value || "horizontal";
+    if (mode === "grid") return;
+    state.items.forEach((it) => syncCropEditor(it, mode));
+  });
 })();
