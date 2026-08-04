@@ -520,8 +520,10 @@
     const host = $("#imgkit-stitch-crops");
     const mode = opts.stitchMode;
     const cards = host ? host.querySelectorAll("[data-stitch-id]").length : 0;
-    const needRebuild = !host || mode === "grid" || cards !== state.items.length;
-    if (needRebuild) {
+    // Rebuild controls when count drifts or when leaving/entering grid mode leftovers.
+    if (mode === "grid") {
+      if (!host || host.querySelector("[data-stitch-id]")) renderStitchCrops();
+    } else if (!host || cards !== state.items.length) {
       renderStitchCrops();
     } else {
       state.items.forEach((it) => {
