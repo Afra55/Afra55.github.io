@@ -1311,4 +1311,10 @@
   updateInfo(null);
   renderStitchCrops();
   scheduleStitchPreview();
+  window.addEventListener("resize", () => {
+    if (state.stitchDrag) return;
+    const mode = $("#imgkit-stitch-mode")?.value || "horizontal";
+    if (mode === "grid") return;
+    state.items.forEach((it) => syncCropEditor(it, mode));
+  });
 })();
