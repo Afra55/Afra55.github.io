@@ -2582,7 +2582,8 @@
           scriptPath: "./adb-bridge/start-win.bat",
           scriptName: "start-adb-bridge.bat",
           zipName: "devtools-adb-bridge-win.zip",
-          runHint: "解压后双击 start-adb-bridge.bat。请保持窗口打开。",
+          runHint:
+            "解压后优先双击 start-adb-bridge.cmd（更不易闪退）；也可双击 start-adb-bridge.bat。请保持窗口打开。",
         },
         linux: {
           scriptPath: "./adb-bridge/start-linux.sh",
@@ -2631,6 +2632,16 @@
       zip.file(cfg.scriptName, scriptText, {
         unixPermissions: platform === "win" ? undefined : 0o755,
       });
+      if (platform === "win") {
+        // Outer wrapper always pauses, even if the .bat hits a parser error.
+        const wrapper = [
+          "@echo off",
+          'cd /d "%~dp0"',
+          'cmd /d /c ""%~dp0start-adb-bridge.bat" & echo. & echo Log: %USERPROFILE%\\.devtools-adb-bridge\\last-start.log & echo Desktop copy: devtools-adb-bridge-last-start.log & pause"',
+          "",
+        ].join("\r\n");
+        zip.file("start-adb-bridge.cmd", wrapper);
+      }
       zip.file(platform === "win" ? "README.txt" : "使用说明.txt", readme.replace(/\r?\n/g, platform === "win" ? "\r\n" : "\n"));
       const blob = await zip.generateAsync({
         type: "blob",
