@@ -1658,6 +1658,7 @@
       if (id === "stitch") {
         renderStitchCrops();
         scheduleStitchPreview();
+        $("#imgkit-stitch-studio")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
       }
     });
   }
