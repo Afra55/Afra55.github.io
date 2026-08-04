@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260804e" />
+  <link rel="stylesheet" href="./style.css?v=20260804f" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -1541,7 +1541,23 @@ hello@world.org</textarea>
                   <label for="imgkit-crop-h">H%</label>
                   <input id="imgkit-crop-h" class="mono meta-input" type="number" min="1" max="100" value="100" />
                 </div>
-                <p class="hint">非自由比例时默认居中裁剪；自由比例使用上方百分比区域。</p>
+                <div class="imgkit-crop-editor" id="imgkit-crop-editor">
+                  <p class="hint tight">在下方选区拖动绿框平移，拖角点/边点调整范围；固定比例时选框会锁定比例。</p>
+                  <div class="imgkit-crop-stage" id="imgkit-crop-stage">
+                    <canvas id="imgkit-crop-canvas" width="1" height="1"></canvas>
+                    <div class="imgkit-crop-box" id="imgkit-crop-box" hidden>
+                      <span class="imgkit-crop-handle" data-crop-handle="nw"></span>
+                      <span class="imgkit-crop-handle" data-crop-handle="n"></span>
+                      <span class="imgkit-crop-handle" data-crop-handle="ne"></span>
+                      <span class="imgkit-crop-handle" data-crop-handle="e"></span>
+                      <span class="imgkit-crop-handle" data-crop-handle="se"></span>
+                      <span class="imgkit-crop-handle" data-crop-handle="s"></span>
+                      <span class="imgkit-crop-handle" data-crop-handle="sw"></span>
+                      <span class="imgkit-crop-handle" data-crop-handle="w"></span>
+                    </div>
+                    <p class="imgkit-crop-empty hint" id="imgkit-crop-empty">添加图片后可在此选择裁剪区域</p>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -1664,9 +1680,9 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./lib/pure.js?v=20260804e"></script>
-  <script src="./app.js?v=20260804e"></script>
-  <script src="./extra.js?v=20260804e"></script>
-  <script src="./imgkit.js?v=20260804e"></script>
+  <script src="./lib/pure.js?v=20260804f"></script>
+  <script src="./app.js?v=20260804f"></script>
+  <script src="./extra.js?v=20260804f"></script>
+  <script src="./imgkit.js?v=20260804f"></script>
 </body>
 </html>

@@ -185,6 +185,34 @@ test("image toolkit helpers", () => {
   const crop = P.calcCropRect(1600, 900, { aspect: "1:1", center: true });
   assert.strictEqual(crop.width, crop.height);
   assert.strictEqual(crop.width, 900);
+  const manual = P.calcCropRect(1000, 500, {
+    aspect: "1:1",
+    usePercent: true,
+    xPercent: 10,
+    yPercent: 0,
+    wPercent: 40,
+    hPercent: 80,
+    center: false,
+  });
+  assert.strictEqual(manual.width, manual.height);
+  assert.ok(manual.x >= 0 && manual.y >= 0);
+  assert.ok(manual.x + manual.width <= 1000);
+  assert.ok(manual.y + manual.height <= 500);
+  // Manual percent must not be forced to image center when center:false
+  assert.notStrictEqual(manual.x, Math.round((1000 - manual.width) / 2));
+  const freePct = P.calcCropRect(200, 100, {
+    aspect: "free",
+    usePercent: true,
+    xPercent: 25,
+    yPercent: 10,
+    wPercent: 50,
+    hPercent: 40,
+    center: false,
+  });
+  assert.strictEqual(freePct.x, 50);
+  assert.strictEqual(freePct.y, 10);
+  assert.strictEqual(freePct.width, 100);
+  assert.strictEqual(freePct.height, 40);
   const grids = P.calcNineGridRects(300, 300);
   assert.strictEqual(grids.length, 9);
   assert.strictEqual(grids[8].width + grids[8].x, 300);
