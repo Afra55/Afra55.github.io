@@ -2096,38 +2096,83 @@ a.secondary-btn {
   margin-top: 0.75rem;
   display: grid;
   gap: 0.9rem;
+  align-items: start;
 }
 
 .imgkit-stitch-preview-wrap {
-  min-height: 200px;
+  position: sticky;
+  top: 0.65rem;
+  z-index: 6;
+  min-height: 120px;
+  max-height: min(38vh, 280px);
   display: grid;
   place-items: center;
-  gap: 0.45rem;
+  gap: 0.35rem;
   border: 1px solid var(--line);
   border-radius: 14px;
   background:
     linear-gradient(45deg, rgba(232, 238, 248, 0.06) 25%, transparent 25%),
     linear-gradient(-45deg, rgba(232, 238, 248, 0.06) 25%, transparent 25%),
     linear-gradient(45deg, transparent 75%, rgba(232, 238, 248, 0.06) 75%),
-    linear-gradient(-45deg, transparent 75%, rgba(232, 238, 248, 0.06) 75%);
-  background-size: 20px 20px;
-  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+    linear-gradient(-45deg, transparent 75%, rgba(232, 238, 248, 0.06) 75%),
+    rgba(10, 16, 28, 0.94);
+  background-size: 20px 20px, 20px 20px, 20px 20px, 20px 20px, auto;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0, 0 0;
   overflow: auto;
-  padding: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(10px);
+}
+
+.imgkit-stitch-preview-label {
+  justify-self: start;
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
 }
 
 .imgkit-stitch-preview {
   max-width: 100%;
-  max-height: 520px;
+  max-height: min(30vh, 220px);
   width: auto;
   height: auto;
   display: block;
   border-radius: 6px;
 }
 
+.imgkit-stitch-preview-wrap .hint {
+  margin: 0;
+}
+
 .imgkit-stitch-crops {
   display: grid;
   gap: 0.85rem;
+  min-width: 0;
+}
+
+@media (min-width: 960px) {
+  .imgkit-stitch-studio:not(.is-grid) {
+    grid-template-columns: minmax(260px, 0.95fr) minmax(320px, 1.15fr);
+    gap: 1rem;
+  }
+
+  .imgkit-stitch-preview-wrap {
+    top: 0.75rem;
+    max-height: calc(100vh - 7.5rem);
+    min-height: 220px;
+    align-content: start;
+  }
+
+  .imgkit-stitch-preview {
+    max-height: calc(100vh - 11rem);
+  }
+}
+
+@media (max-width: 959px) {
+  /* Keep a compact live preview pinned while scrolling crop editors */
+  .imgkit-stitch-preview-wrap {
+    top: 0.4rem;
+  }
 }
 
 .imgkit-stitch-crop {
