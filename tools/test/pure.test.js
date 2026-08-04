@@ -175,6 +175,33 @@ test("coord convert", () => {
   assert.ok(multi.decimal.gcj02.includes("—"));
 });
 
+test("image toolkit helpers", () => {
+  const resized = P.calcResizeSize(1000, 500, { mode: "max", maxEdge: 200 });
+  assert.strictEqual(resized.width, 200);
+  assert.strictEqual(resized.height, 100);
+  const pct = P.calcResizeSize(200, 100, { mode: "percent", percent: 50 });
+  assert.strictEqual(pct.width, 100);
+  assert.strictEqual(pct.height, 50);
+  const crop = P.calcCropRect(1600, 900, { aspect: "1:1", center: true });
+  assert.strictEqual(crop.width, crop.height);
+  assert.strictEqual(crop.width, 900);
+  const grids = P.calcNineGridRects(300, 300);
+  assert.strictEqual(grids.length, 9);
+  assert.strictEqual(grids[8].width + grids[8].x, 300);
+  const stitch = P.calcStitchLayout(
+    [
+      { width: 10, height: 20 },
+      { width: 30, height: 10 },
+    ],
+    { mode: "horizontal", gap: 5 }
+  );
+  assert.strictEqual(stitch.width, 45);
+  assert.strictEqual(stitch.height, 20);
+  assert.strictEqual(P.extFromFormat("jpeg"), "jpg");
+  assert.strictEqual(P.mimeFromFormat("webp"), "image/webp");
+  assert.ok(P.APP_ICON_SIZES.android.includes(512));
+});
+
 console.log("\nAll pure tests passed.");
 
 

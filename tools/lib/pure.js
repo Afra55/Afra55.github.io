@@ -1169,6 +1169,263 @@
     };
   }
 
+  // ---- Image toolkit helpers ----
+  const APP_ICON_SIZES = {
+    android: [512, 192, 144, 96, 72, 48, 36],
+    ios: [1024, 180, 167, 152, 120, 87, 80, 76, 60, 58, 40, 29, 20],
+  };
+
+  function clampNumber(n, min, max) {
+    const x = Number(n);
+    if (!Number.isFinite(x)) return min;
+    return Math.min(max, Math.max(min, x));
+  }
+
+  function calcResizeSize(srcW, srcH, opts = {}) {
+    const sw = Math.max(1, Math.round(Number(srcW) || 1));
+    const sh = Math.max(1, Math.round(Number(srcH) || 1));
+    const mode = opts.mode || "max"; // wh | max | percent
+    const keep = opts.keepAspect !== false;
+    let tw = Number(opts.width);
+    let th = Number(opts.height);
+    const maxEdge = Number(opts.maxEdge);
+    const percent = Number(opts.percent);
+
+    if (mode === "percent" && Number.isFinite(percent) && percent > 0) {
+      return {
+        width: Math.max(1, Math.round((sw * percent) / 100)),
+        height: Math.max(1, Math.round((sh * percent) / 100)),
+      };
+    }
+    if (mode === "max" && Number.isFinite(maxEdge) && maxEdge > 0) {
+      const edge = Math.max(sw, sh);
+      if (edge <= maxEdge) return { width: sw, height: sh };
+      const scale = maxEdge / edge;
+      return {
+        width: Math.max(1, Math.round(sw * scale)),
+        height: Math.max(1, Math.round(sh * scale)),
+      };
+    }
+    if (!Number.isFinite(tw) || tw <= 0) tw = sw;
+    if (!Number.isFinite(th) || th <= 0) th = sh;
+    if (keep) {
+      if (opts.width && !opts.height) {
+        th = Math.max(1, Math.round((sh * tw) / sw));
+      } else if (opts.height && !opts.width) {
+        tw = Math.max(1, Math.round((sw * th) / sh));
+      } else {
+        const scale = Math.min(tw / sw, th / sh);
+        tw = Math.max(1, Math.round(sw * scale));
+        th = Math.max(1, Math.round(sh * scale));
+      }
+    }
+    return { width: Math.max(1, Math.round(tw)), height: Math.max(1, Math.round(th)) };
+  }
+
+  function calcCropRect(srcW, srcH, opts = {}) {
+    const sw = Math.max(1, Number(srcW) || 1);
+    const sh = Math.max(1, Number(srcH) || 1);
+    const aspect = opts.aspect || "free"; // free | 1:1 | 16:9 | 4:3 | 9:16
+    let x = clampNumber(opts.x, 0, sw - 1);
+    let y = clampNumber(opts.y, 0, sh - 1);
+    let w = clampNumber(opts.width ?? sw, 1, sw);
+    let h = clampNumber(opts.height ?? sh, 1, sh);
+
+    if (opts.usePercent) {
+      x = (clampNumber(opts.xPercent ?? 0, 0, 100) / 100) * sw;
+      y = (clampNumber(opts.yPercent ?? 0, 0, 100) / 100) * sh;
+      w = (clampNumber(opts.wPercent ?? 100, 1, 100) / 100) * sw;
+      h = (clampNumber(opts.hPercent ?? 100, 1, 100) / 100) * sh;
+    }
+
+    if (aspect !== "free") {
+      const [aw, ah] = aspect.split(":").map(Number);
+      if (aw > 0 && ah > 0) {
+        const target = aw / ah;
+        const current = w / h;
+        if (opts.center !== false) {
+          // Fit largest rect with aspect inside image
+          if (sw / sh > target) {
+            h = sh;
+            w = h * target;
+          } else {
+            w = sw;
+            h = w / target;
+          }
+          x = (sw - w) / 2;
+          y = (sh - h) / 2;
+        } else if (current > target) {
+          w = h * target;
+        } else {
+          h = w / target;
+        }
+      }
+    }
+
+    w = Math.min(w, sw - x);
+    h = Math.min(h, sh - y);
+    return {
+      x: Math.max(0, Math.round(x)),
+      y: Math.max(0, Math.round(y)),
+      width: Math.max(1, Math.round(w)),
+      height: Math.max(1, Math.round(h)),
+    };
+  }
+
+  function calcNineGridRects(width, height) {
+    const w = Math.max(1, Math.round(Number(width) || 1));
+    const h = Math.max(1, Math.round(Number(height) || 1));
+    const cw = Math.floor(w / 3);
+    const ch = Math.floor(h / 3);
+    const rects = [];
+    for (let row = 0; row < 3; row++) {
+      for (let col = 0; col < 3; col++) {
+        const x = col * cw;
+        const y = row * ch;
+        const rw = col === 2 ? w - x : cw;
+        const rh = row === 2 ? h - y : ch;
+        rects.push({ index: row * 3 + col + 1, row, col, x, y, width: rw, height: rh });
+      }
+    }
+    return rects;
+  }
+
+  function calcStitchLayout(sizes, opts = {}) {
+    const mode = opts.mode || "horizontal"; // horizontal | vertical | grid
+    const gap = Math.max(0, Math.round(Number(opts.gap) || 0));
+    const cols = Math.max(1, Math.round(Number(opts.cols) || 2));
+    const list = (sizes || []).map((s) => ({
+      width: Math.max(1, Math.round(s.width || 1)),
+      height: Math.max(1, Math.round(s.height || 1)),
+    }));
+    if (!list.length) return { width: 0, height: 0, items: [] };
+
+    if (mode === "horizontal") {
+      const height = Math.max(...list.map((s) => s.height));
+      let x = 0;
+      const items = list.map((s) => {
+        const item = { x, y: Math.round((height - s.height) / 2), ...s };
+        x += s.width + gap;
+        return item;
+      });
+      return { width: x - gap, height, items };
+    }
+    if (mode === "vertical") {
+      const width = Math.max(...list.map((s) => s.width));
+      let y = 0;
+      const items = list.map((s) => {
+        const item = { x: Math.round((width - s.width) / 2), y, ...s };
+        y += s.height + gap;
+        return item;
+      });
+      return { width, height: y - gap, items };
+    }
+
+    const items = [];
+    const rowHeights = [];
+    const rowWidths = [];
+    for (let i = 0; i < list.length; i += cols) {
+      const row = list.slice(i, i + cols);
+      rowHeights.push(Math.max(...row.map((s) => s.height)));
+      rowWidths.push(row.reduce((sum, s, idx) => sum + s.width + (idx ? gap : 0), 0));
+    }
+    const width = Math.max(...rowWidths, 0);
+    let y = 0;
+    for (let r = 0; r < rowHeights.length; r++) {
+      const row = list.slice(r * cols, r * cols + cols);
+      let x = 0;
+      const rh = rowHeights[r];
+      for (const s of row) {
+        items.push({ x, y: y + Math.round((rh - s.height) / 2), ...s });
+        x += s.width + gap;
+      }
+      y += rh + gap;
+    }
+    return { width, height: Math.max(0, y - gap), items };
+  }
+
+  function readExifAscii(view, offset, length) {
+    let out = "";
+    for (let i = 0; i < length; i++) {
+      const c = view.getUint8(offset + i);
+      if (c === 0) break;
+      out += String.fromCharCode(c);
+    }
+    return out.trim();
+  }
+
+  function parseJpegExif(buffer) {
+    const bytes = buffer instanceof ArrayBuffer ? new Uint8Array(buffer) : new Uint8Array(buffer || []);
+    if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) {
+      return { ok: false, format: "non-jpeg", tags: {}, orientation: 1 };
+    }
+    let offset = 2;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    while (offset + 4 < bytes.length) {
+      if (bytes[offset] !== 0xff) break;
+      const marker = bytes[offset + 1];
+      const size = view.getUint16(offset + 2, false);
+      if (marker === 0xe1) {
+        const start = offset + 4;
+        if (start + 6 >= bytes.length) break;
+        const head = String.fromCharCode(...bytes.slice(start, start + 4));
+        if (head !== "Exif") break;
+        const tiff = start + 6;
+        if (tiff + 8 >= bytes.length) break;
+        const le = view.getUint16(tiff, false) === 0x4949;
+        const magic = view.getUint16(tiff + 2, le);
+        if (magic !== 0x002a) break;
+        const ifd0 = tiff + view.getUint32(tiff + 4, le);
+        if (ifd0 + 2 >= bytes.length) break;
+        const count = view.getUint16(ifd0, le);
+        const tags = {};
+        let orientation = 1;
+        for (let i = 0; i < count; i++) {
+          const entry = ifd0 + 2 + i * 12;
+          if (entry + 12 > bytes.length) break;
+          const tag = view.getUint16(entry, le);
+          const type = view.getUint16(entry + 2, le);
+          const num = view.getUint32(entry + 4, le);
+          let valueOffset = entry + 8;
+          const typeSize = type === 3 ? 2 : type === 4 ? 4 : type === 2 ? 1 : 0;
+          if (typeSize && num * typeSize > 4) valueOffset = tiff + view.getUint32(entry + 8, le);
+          if (tag === 0x0112 && type === 3) orientation = view.getUint16(valueOffset, le);
+          if (type === 2) {
+            const text = readExifAscii(view, valueOffset, num);
+            if (tag === 0x010f) tags.Make = text;
+            if (tag === 0x0110) tags.Model = text;
+            if (tag === 0x0132) tags.DateTime = text;
+            if (tag === 0x0131) tags.Software = text;
+          }
+          if (tag === 0x0112) tags.Orientation = String(orientation);
+          if (tag === 0x00a002 && type === 3) tags.PixelXDimension = String(view.getUint16(valueOffset, le));
+          if (tag === 0x00a002 && type === 4) tags.PixelXDimension = String(view.getUint32(valueOffset, le));
+          if (tag === 0x00a003 && type === 3) tags.PixelYDimension = String(view.getUint16(valueOffset, le));
+          if (tag === 0x00a003 && type === 4) tags.PixelYDimension = String(view.getUint32(valueOffset, le));
+        }
+        return { ok: true, format: "jpeg", tags, orientation: orientation || 1 };
+      }
+      if (size < 2) break;
+      offset += 2 + size;
+      if (marker === 0xda) break;
+    }
+    return { ok: true, format: "jpeg", tags: {}, orientation: 1 };
+  }
+
+  function mimeFromFormat(format) {
+    const f = String(format || "png").toLowerCase();
+    if (f === "jpeg" || f === "jpg") return "image/jpeg";
+    if (f === "webp") return "image/webp";
+    return "image/png";
+  }
+
+  function extFromFormat(format) {
+    const f = String(format || "png").toLowerCase();
+    if (f === "jpeg" || f === "jpg") return "jpg";
+    if (f === "webp") return "webp";
+    return "png";
+  }
+
   return {
     formatDateTime,
     parseFlexibleTime,
@@ -1209,5 +1466,13 @@
     parseCoordPair,
     convertCoordinates,
     convertCoordinateLines,
+    APP_ICON_SIZES,
+    calcResizeSize,
+    calcCropRect,
+    calcNineGridRects,
+    calcStitchLayout,
+    parseJpegExif,
+    mimeFromFormat,
+    extFromFormat,
   };
 });

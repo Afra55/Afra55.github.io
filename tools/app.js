@@ -768,6 +768,7 @@
     "diff",
     "qrcode",
     "gifmaker",
+    "imgkit",
     "units",
     "coord",
     "numbase",

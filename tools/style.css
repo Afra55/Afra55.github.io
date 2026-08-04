@@ -1821,3 +1821,113 @@ a.secondary-btn {
     min-width: min(100%, 14rem);
   }
 }
+
+.imgkit-drop {
+  padding: 0.95rem 1rem;
+  border: 1px dashed rgba(46, 196, 182, 0.35);
+  border-radius: 14px;
+  background: rgba(8, 14, 26, 0.35);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.imgkit-drop.is-drag {
+  border-color: rgba(46, 196, 182, 0.8);
+  background: rgba(46, 196, 182, 0.08);
+}
+
+.imgkit-layout {
+  display: grid;
+  grid-template-columns: minmax(160px, 220px) 1fr;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.imgkit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-height: 36rem;
+  overflow: auto;
+}
+
+.imgkit-empty {
+  color: var(--muted);
+  font-size: 0.88rem;
+  padding: 0.6rem 0;
+}
+
+.imgkit-thumb {
+  display: grid;
+  grid-template-columns: 52px 1fr;
+  gap: 0.55rem;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--line);
+  background: rgba(8, 14, 26, 0.35);
+  color: var(--ink);
+  border-radius: 12px;
+  padding: 0.4rem;
+  cursor: pointer;
+}
+
+.imgkit-thumb.is-active {
+  border-color: rgba(46, 196, 182, 0.7);
+  background: rgba(46, 196, 182, 0.1);
+}
+
+.imgkit-thumb img {
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #0a101c;
+}
+
+.imgkit-thumb span {
+  font-size: 0.78rem;
+  word-break: break-all;
+  color: var(--muted);
+}
+
+.imgkit-preview-wrap {
+  min-height: 220px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background:
+    linear-gradient(45deg, rgba(232, 238, 248, 0.06) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(232, 238, 248, 0.06) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(232, 238, 248, 0.06) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(232, 238, 248, 0.06) 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+  overflow: auto;
+  padding: 0.75rem;
+}
+
+.imgkit-preview {
+  max-width: 100%;
+  max-height: 420px;
+  width: auto;
+  height: auto;
+  display: block;
+}
+
+@media (max-width: 900px) {
+  .imgkit-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .imgkit-list {
+    flex-direction: row;
+    flex-wrap: wrap;
+    max-height: none;
+  }
+
+  .imgkit-thumb {
+    width: auto;
+    min-width: 9.5rem;
+  }
+}
