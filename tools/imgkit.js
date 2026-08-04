@@ -172,10 +172,11 @@
   }
 
   const state = {
-    items: [], // {id,file,img,buffer,exif,name}
+    items: [], // {id,file,img,buffer,exif,name,stitch:{zoom,pan,panCross}}
     selected: "",
     watermarkImage: null,
     previewUrl: "",
+    stitchPreviewToken: 0,
   };
 
   const els = {
@@ -225,11 +226,327 @@
       wmPos: $("#imgkit-wm-pos")?.value || "br",
       wmScale: Number($("#imgkit-wm-scale")?.value || 20),
       stitchMode: $("#imgkit-stitch-mode")?.value || "horizontal",
+      stitchEdge: Number($("#imgkit-stitch-edge")?.value || 0) || 0,
       stitchGap: Number($("#imgkit-stitch-gap")?.value || 8),
       stitchCols: Number($("#imgkit-stitch-cols")?.value || 2),
       stitchBg: $("#imgkit-stitch-bg")?.value || "#ffffff",
       iconPlatform: $("#imgkit-icon-platform")?.value || "android",
     };
+  }
+
+  function defaultStitchCrop() {
+    return { zoom: 100, pan: 50, panCross: 50 };
+  }
+
+  function sourceSize(src) {
+    if (!src) return { width: 1, height: 1 };
+    const width = Math.max(1, Math.round(src.naturalWidth || src.width || 1));
+    const height = Math.max(1, Math.round(src.naturalHeight || src.height || 1));
+    return { width, height };
+  }
+
+  function cssAttrEscape(value) {
+    if (typeof CSS !== "undefined" && typeof CSS.escape === "function") return CSS.escape(value);
+    return String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  }
+
+  function getOrientedSource(item) {
+    if (!item) return null;
+    if (item._oriented) return item._oriented;
+    const orientation = Number(item.exif?.orientation) || 1;
+    // Orientation 1: reuse the original image to avoid an extra full-size canvas copy.
+    item._oriented = orientation === 1 ? item.img : applyOrientation(item.img, orientation);
+    return item._oriented;
+  }
+
+  function resolveStitchEdge(mode, items, explicit) {
+    const edge = Number(explicit);
+    if (Number.isFinite(edge) && edge > 0) return Math.round(edge);
+    const sizes = items.map((it) => sourceSize(getOrientedSource(it)));
+    return P.suggestStitchEdge(sizes, mode === "vertical" ? "vertical" : "horizontal");
+  }
+
+  function buildAlignedStitchPieces(items, mode, edge) {
+    return items.map((it) => {
+      const src = getOrientedSource(it);
+      const size = sourceSize(src);
+      const crop = it.stitch || defaultStitchCrop();
+      const aligned = P.calcAlignedStitchCrop(
+        size.width,
+        size.height,
+        mode,
+        edge,
+        crop.zoom,
+        crop.pan,
+        crop.panCross
+      );
+      return { src, ...aligned };
+    });
+  }
+
+  const STITCH_MAX_SIDE = 8192;
+  const STITCH_MAX_PIXELS = 64 * 1024 * 1024;
+
+  function assertStitchCanvasSize(width, height) {
+    const w = Math.max(1, Math.round(width));
+    const h = Math.max(1, Math.round(height));
+    if (w > STITCH_MAX_SIDE || h > STITCH_MAX_SIDE || w * h > STITCH_MAX_PIXELS) {
+      throw new Error(
+        `拼接尺寸过大（${w}×${h}）。请减小「统一边长」或图片数量后再试（单边≤${STITCH_MAX_SIDE}）。`
+      );
+    }
+    return { width: w, height: h };
+  }
+
+  function buildStitchCanvas(opts = {}) {
+    const mode = opts.stitchMode || "horizontal";
+    const gap = Math.max(0, Math.round(Number(opts.stitchGap) || 0));
+    const cols = Math.max(1, Math.round(Number(opts.stitchCols) || 2));
+    const bg = opts.stitchBg || "#ffffff";
+    const maxEdge = Number(opts.previewMaxEdge) || 0;
+    const items = state.items;
+    if (items.length < 2) return null;
+
+    let layout;
+    let drawers;
+    let edge = 0;
+
+    if (mode === "grid") {
+      drawers = items.map((it) => {
+        const src = getOrientedSource(it);
+        const size = sourceSize(src);
+        return {
+          src,
+          cropX: 0,
+          cropY: 0,
+          cropW: size.width,
+          cropH: size.height,
+          outW: size.width,
+          outH: size.height,
+        };
+      });
+      layout = P.calcStitchLayout(
+        drawers.map((d) => ({ width: d.outW, height: d.outH })),
+        { mode: "grid", gap, cols }
+      );
+    } else {
+      edge = resolveStitchEdge(mode, items, opts.stitchEdge);
+      drawers = buildAlignedStitchPieces(items, mode, edge);
+      layout = P.calcStitchLayout(
+        drawers.map((d) => ({ width: d.outW, height: d.outH })),
+        { mode, gap, equalEdge: edge }
+      );
+    }
+
+    let scale = 1;
+    if (maxEdge > 0) {
+      const longest = Math.max(layout.width, layout.height, 1);
+      if (longest > maxEdge) scale = maxEdge / longest;
+    }
+
+    const outW = Math.max(1, Math.round(layout.width * scale));
+    const outH = Math.max(1, Math.round(layout.height * scale));
+    // Export (no previewMaxEdge) must stay within safe canvas limits.
+    if (!maxEdge) assertStitchCanvasSize(layout.width, layout.height);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = outW;
+    canvas.height = outH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("无法创建画布");
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    layout.items.forEach((slot, idx) => {
+      const d = drawers[idx];
+      if (!d) return;
+      // Round edges independently so scaled preview tiles do not leave 1px gaps.
+      const dx = Math.round(slot.x * scale);
+      const dy = Math.round(slot.y * scale);
+      const dw = Math.max(1, Math.round((slot.x + slot.width) * scale) - dx);
+      const dh = Math.max(1, Math.round((slot.y + slot.height) * scale) - dy);
+      try {
+        ctx.drawImage(d.src, d.cropX, d.cropY, d.cropW, d.cropH, dx, dy, dw, dh);
+      } catch (err) {
+        throw new Error(`拼接绘制失败（第 ${idx + 1} 张）：${err.message || err}`);
+      }
+    });
+    return {
+      canvas,
+      layout,
+      scale,
+      width: layout.width,
+      height: layout.height,
+      mode,
+      edge,
+    };
+  }
+
+  function drawCropThumb(canvas, item, mode) {
+    const src = getOrientedSource(item);
+    if (!src || !canvas) return;
+    const size = sourceSize(src);
+    const css = 88;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = Math.round(css * dpr);
+    canvas.height = Math.round(css * dpr);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, css, css);
+    ctx.fillStyle = "#0a101c";
+    ctx.fillRect(0, 0, css, css);
+
+    const fit = Math.min(css / size.width, css / size.height);
+    const dw = size.width * fit;
+    const dh = size.height * fit;
+    const dx = (css - dw) / 2;
+    const dy = (css - dh) / 2;
+    ctx.drawImage(src, dx, dy, dw, dh);
+
+    if (mode === "grid") return;
+    const edge = resolveStitchEdge(mode, state.items, Number($("#imgkit-stitch-edge")?.value || 0) || 0);
+    const crop = item.stitch || defaultStitchCrop();
+    const aligned = P.calcAlignedStitchCrop(
+      size.width,
+      size.height,
+      mode,
+      edge,
+      crop.zoom,
+      crop.pan,
+      crop.panCross
+    );
+    const rx = dx + aligned.cropX * fit;
+    const ry = dy + aligned.cropY * fit;
+    const rw = Math.max(2, aligned.cropW * fit);
+    const rh = Math.max(2, aligned.cropH * fit);
+    ctx.fillStyle = "rgba(8, 14, 26, 0.45)";
+    ctx.beginPath();
+    ctx.rect(dx, dy, dw, dh);
+    ctx.rect(rx, ry, rw, rh);
+    ctx.fill("evenodd");
+    ctx.strokeStyle = "rgba(46, 196, 182, 0.95)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(rx, ry, rw, rh);
+  }
+
+  function renderStitchCrops() {
+    const host = $("#imgkit-stitch-crops");
+    const studio = $("#imgkit-stitch-studio");
+    if (!host) return;
+    const mode = $("#imgkit-stitch-mode")?.value || "horizontal";
+    studio?.classList.toggle("is-grid", mode === "grid");
+
+    if (state.items.length < 2) {
+      host.innerHTML = `<p class="hint">添加至少 2 张图后，可在此调节每张图的取景区域。</p>`;
+      return;
+    }
+
+    if (mode === "grid") {
+      host.innerHTML = `<p class="hint">宫格模式按原图尺寸拼合，无需取景裁剪。切换横向/竖向可调节齐高/齐宽取景。</p>`;
+      return;
+    }
+
+    const panLabel = mode === "vertical" ? "左右" : "上下";
+    const crossLabel = mode === "vertical" ? "上下" : "左右";
+    host.innerHTML = state.items
+      .map((it) => {
+        const s = it.stitch || defaultStitchCrop();
+        const safeName = P.escapeHtml(it.name || "image");
+        const safeId = P.escapeHtml(it.id);
+        return `<div class="imgkit-stitch-crop" data-stitch-id="${safeId}">
+          <div class="imgkit-stitch-crop-view" data-stitch-drag="${safeId}" title="拖拽平移取景">
+            <canvas data-stitch-thumb="${safeId}"></canvas>
+          </div>
+          <div>
+            <div class="imgkit-stitch-crop-meta">${safeName}</div>
+            <div class="imgkit-stitch-crop-fields">
+              <label>缩放<input type="range" min="100" max="400" step="1" value="${s.zoom}" data-stitch-field="zoom" data-stitch-id="${safeId}" /><span class="mono" data-stitch-val="zoom">${s.zoom}%</span></label>
+              <label>${panLabel}<input type="range" min="0" max="100" step="1" value="${s.pan}" data-stitch-field="pan" data-stitch-id="${safeId}" /><span class="mono" data-stitch-val="pan">${s.pan}</span></label>
+              <label>${crossLabel}<input type="range" min="0" max="100" step="1" value="${s.panCross}" data-stitch-field="panCross" data-stitch-id="${safeId}" /><span class="mono" data-stitch-val="panCross">${s.panCross}</span></label>
+            </div>
+          </div>
+        </div>`;
+      })
+      .join("");
+
+    state.items.forEach((it) => {
+      const c = host.querySelector(`canvas[data-stitch-thumb="${cssAttrEscape(it.id)}"]`);
+      drawCropThumb(c, it, mode);
+    });
+  }
+
+  function scheduleStitchPreview() {
+    const token = ++state.stitchPreviewToken;
+    requestAnimationFrame(() => {
+      if (token !== state.stitchPreviewToken) return;
+      updateStitchPreview();
+    });
+  }
+
+  function updateStitchPreview() {
+    const canvas = $("#imgkit-stitch-preview");
+    const meta = $("#imgkit-stitch-meta");
+    if (!canvas) return;
+    if (state.items.length < 2) {
+      canvas.width = 1;
+      canvas.height = 1;
+      if (meta) meta.textContent = "添加至少 2 张图后显示拼接预览";
+      renderStitchCrops();
+      return;
+    }
+    const opts = readOptions();
+    let built;
+    try {
+      built = buildStitchCanvas({ ...opts, previewMaxEdge: 1400 });
+    } catch (err) {
+      if (meta) meta.textContent = err.message || String(err);
+      return;
+    }
+    if (!built) return;
+    const ctx = canvas.getContext("2d");
+    canvas.width = built.canvas.width;
+    canvas.height = built.canvas.height;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(built.canvas, 0, 0);
+    if (meta) {
+      const edgeTip =
+        built.mode === "grid"
+          ? "宫格"
+          : built.mode === "vertical"
+            ? `齐宽 ${built.edge}px`
+            : `齐高 ${built.edge}px`;
+      meta.textContent = `预览 ${built.width}×${built.height} · ${edgeTip} · ${state.items.length} 张`;
+    }
+    const host = $("#imgkit-stitch-crops");
+    const mode = opts.stitchMode;
+    const cards = host ? host.querySelectorAll("[data-stitch-id]").length : 0;
+    const needRebuild = !host || mode === "grid" || cards !== state.items.length;
+    if (needRebuild) {
+      renderStitchCrops();
+    } else {
+      state.items.forEach((it) => {
+        const c = host.querySelector(`canvas[data-stitch-thumb="${cssAttrEscape(it.id)}"]`);
+        drawCropThumb(c, it, mode);
+      });
+    }
+  }
+
+  function setStitchField(id, field, value) {
+    const item = state.items.find((it) => it.id === id);
+    if (!item) return;
+    if (!item.stitch) item.stitch = defaultStitchCrop();
+    let v = Number(value);
+    if (!Number.isFinite(v)) return;
+    if (field === "zoom") v = Math.max(100, Math.min(400, Math.round(v)));
+    else if (field === "pan" || field === "panCross") v = Math.max(0, Math.min(100, Math.round(v)));
+    else return;
+    item.stitch[field] = v;
+    const card = document.querySelector(`.imgkit-stitch-crop[data-stitch-id="${cssAttrEscape(id)}"]`);
+    const valEl = card?.querySelector(`[data-stitch-val="${field}"]`);
+    const input = card?.querySelector(`input[data-stitch-field="${field}"]`);
+    if (valEl) valEl.textContent = field === "zoom" ? `${v}%` : String(v);
+    if (input && Number(input.value) !== v) input.value = String(v);
+    scheduleStitchPreview();
   }
 
   function watermarkAnchor(pos, canvasW, canvasH, markW, markH, pad = 16) {
@@ -457,11 +774,15 @@
         exif,
         name: file.name,
         thumbUrl,
+        stitch: defaultStitchCrop(),
+        _oriented: null,
       });
       state.selected = id;
     }
     renderList();
+    renderStitchCrops();
     await refreshPreview();
+    scheduleStitchPreview();
     toast(`已添加 ${files.length} 张`);
   }
 
@@ -497,30 +818,11 @@
   async function exportStitch() {
     if (state.items.length < 2) throw new Error("拼接至少需要 2 张图");
     const opts = readOptions();
-    const processed = [];
-    for (const item of state.items) {
-      const result = await processItem(item, opts);
-      const url = URL.createObjectURL(result.blob);
-      const img = await loadImageFromFile(new File([result.blob], item.name, { type: result.blob.type }));
-      URL.revokeObjectURL(url);
-      processed.push({ img, width: img.naturalWidth, height: img.naturalHeight });
-    }
-    const layout = P.calcStitchLayout(
-      processed.map((p) => ({ width: p.width, height: p.height })),
-      { mode: opts.stitchMode, gap: opts.stitchGap, cols: opts.stitchCols }
-    );
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, layout.width);
-    canvas.height = Math.max(1, layout.height);
-    const ctx = canvas.getContext("2d");
-    ctx.fillStyle = opts.stitchBg || "#fff";
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    layout.items.forEach((slot, idx) => {
-      ctx.drawImage(processed[idx].img, slot.x, slot.y, slot.width, slot.height);
-    });
-    const blob = await encodeCanvas(canvas, opts.format, opts.quality, 0);
+    const built = buildStitchCanvas(opts);
+    if (!built) throw new Error("无法生成拼接图");
+    const blob = await encodeCanvas(built.canvas, opts.format, opts.quality, 0);
     downloadBlob(blob, `stitch.${P.extFromFormat(opts.format)}`);
-    toast("拼接图已导出");
+    toast(`拼接图已导出（${built.width}×${built.height}）`);
   }
 
   async function exportNineGrid() {
@@ -616,6 +918,8 @@
     state.selected = "";
     renderList();
     refreshPreview();
+    renderStitchCrops();
+    scheduleStitchPreview();
   });
 
   els.list?.addEventListener("click", (e) => {
@@ -665,6 +969,79 @@
       refreshPreview();
     });
   });
+
+  [
+    "imgkit-stitch-mode",
+    "imgkit-stitch-edge",
+    "imgkit-stitch-gap",
+    "imgkit-stitch-cols",
+    "imgkit-stitch-bg",
+  ].forEach((id) => {
+    const el = document.getElementById(id);
+    el?.addEventListener("input", () => {
+      if (id === "imgkit-stitch-mode") renderStitchCrops();
+      scheduleStitchPreview();
+    });
+    el?.addEventListener("change", () => {
+      if (id === "imgkit-stitch-mode") renderStitchCrops();
+      scheduleStitchPreview();
+    });
+  });
+
+  const stitchCropsHost = $("#imgkit-stitch-crops");
+  stitchCropsHost?.addEventListener("input", (e) => {
+    const input = e.target.closest("input[data-stitch-field]");
+    if (!input) return;
+    setStitchField(input.dataset.stitchId, input.dataset.stitchField, input.value);
+  });
+
+  // Drag to pan crop window on thumbnails
+  let dragState = null;
+  stitchCropsHost?.addEventListener("pointerdown", (e) => {
+    const view = e.target.closest("[data-stitch-drag]");
+    if (!view) return;
+    const id = view.dataset.stitchDrag;
+    const item = state.items.find((it) => it.id === id);
+    if (!item) return;
+    if (!item.stitch) item.stitch = defaultStitchCrop();
+    view.setPointerCapture(e.pointerId);
+    view.classList.add("is-dragging");
+    dragState = {
+      id,
+      x: e.clientX,
+      y: e.clientY,
+      pan: item.stitch.pan,
+      panCross: item.stitch.panCross,
+    };
+    e.preventDefault();
+  });
+  stitchCropsHost?.addEventListener("pointermove", (e) => {
+    if (!dragState) return;
+    const mode = $("#imgkit-stitch-mode")?.value || "horizontal";
+    const dx = e.clientX - dragState.x;
+    const dy = e.clientY - dragState.y;
+    // Dragging content feels natural: move opposite to pan direction
+    if (mode === "vertical") {
+      setStitchField(dragState.id, "pan", dragState.pan - dx * 0.6);
+      setStitchField(dragState.id, "panCross", dragState.panCross - dy * 0.6);
+    } else {
+      setStitchField(dragState.id, "pan", dragState.pan - dy * 0.6);
+      setStitchField(dragState.id, "panCross", dragState.panCross - dx * 0.6);
+    }
+  });
+  const endDrag = (e) => {
+    if (!dragState) return;
+    const view = stitchCropsHost?.querySelector(`[data-stitch-drag="${cssAttrEscape(dragState.id)}"]`);
+    view?.classList.remove("is-dragging");
+    try {
+      view?.releasePointerCapture?.(e.pointerId);
+    } catch (_) {
+      /* ignore */
+    }
+    dragState = null;
+  };
+  stitchCropsHost?.addEventListener("pointerup", endDrag);
+  stitchCropsHost?.addEventListener("pointercancel", endDrag);
 
   $("#imgkit-wm-file")?.addEventListener("change", async (e) => {
     try {
@@ -725,4 +1102,6 @@
   syncResizeFields();
   renderList();
   updateInfo(null);
+  renderStitchCrops();
+  scheduleStitchPreview();
 })();
