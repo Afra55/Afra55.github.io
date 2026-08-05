@@ -43,12 +43,12 @@ description: 按 EternumVN Wiki 第四章摘要完整译成简体中文，含原
 ## 潜入赌场
 
 <p align="center">
-  <img src="{{ site.baseurl }}/blog_picture/eternum-ch4.resources/Orion_and_Nova_arrive_at_the_casino.jpg" alt="奥赖恩与诺瓦抵达赌场" width="640">
+  <img src="{{ site.baseurl }}/blog_picture/eternum-ch4.resources/Orion_and_Nova_arrive_at_the_casino.jpg" alt="奥赖恩与诺娃抵达赌场" width="640">
 </p>
 
-*奥赖恩与诺瓦抵达赌场。*
+*奥赖恩与诺娃抵达赌场。*
 
-倒回 8:55。奥赖恩（代号：木星 Jupiter）在 **新维加斯**（New Vegas）加林顿赌场吓了收银员一跳。**诺瓦·约翰逊**（Nova Johnson，代号：水星 Mercury）现身，奥赖恩宣布她是新婚妻子。两人自称亚尼斯·夏普（Yanis Sharp）与尼娜·T·莱利（Nina T. Riley），庆祝新婚。奥赖恩临场编造相识故事；若走诺瓦线，可选择几乎照实说、只改名字——诺瓦会惊讶他好像真的想和她有共同未来。
+倒回 8:55。奥赖恩（代号：木星 Jupiter）在 **新维加斯**（New Vegas）加林顿赌场吓了收银员一跳。**诺娃·约翰逊**（Nova Johnson，代号：水星 Mercury）现身，奥赖恩宣布她是新婚妻子。两人自称亚尼斯·夏普（Yanis Sharp）与尼娜·T·莱利（Nina T. Riley），庆祝新婚。奥赖恩临场编造相识故事；若走诺娃线，可选择几乎照实说、只改名字——诺娃会惊讶他好像真的想和她有共同未来。
 
 <p align="center">
   <img src="{{ site.baseurl }}/blog_picture/eternum-ch4.resources/Penny_pretends_to_be_an_entitled_VIP.jpg" alt="佩内洛普假扮难缠 VIP" width="640">
@@ -56,7 +56,7 @@ description: 按 EternumVN Wiki 第四章摘要完整译成简体中文，含原
 
 *佩内洛普假扮难缠 VIP。*
 
-**佩内洛普·卡特**（Penelope Carter / Penny，代号：金星 Venus）进场，要求进入 VIP 区。守卫不认识她，须与收银员商量她是不是她自称的名人。诺瓦似乎黑进收银电脑；收银员发现她「是」卡伦·维纳斯小姐（Miss Karen Venus）——拥有 380 万粉丝的 Twitch 主播——于是放行。
+**佩内洛普·卡特**（Penelope Carter / Penny，代号：金星 Venus）进场，要求进入 VIP 区。守卫不认识她，须与收银员商量她是不是她自称的名人。诺娃似乎黑进收银电脑；收银员发现她「是」卡伦·维纳斯小姐（Miss Karen Venus）——拥有 380 万粉丝的 Twitch 主播——于是放行。
 
 **卡吕普索**（Calypso，代号：盖亚 Gaia）走向前台，自称凯莉（Carrie）。她误报自己 84 岁，还对「灯泡」这种概念困惑不已，把收银员搞懵了。
 
@@ -64,7 +64,7 @@ description: 按 EternumVN Wiki 第四章摘要完整译成简体中文，含原
 
 ## 魔术手
 
-时间来到 9:09。奥赖恩与诺瓦进入游戏区。可选择搂住她，把夫妻戏做足；诺瓦对此反应不错。奥赖恩坐到老虎机旁等待目标 **博比·布里格斯**（Bobbie Briggs）。首局就赢了 20 **永恒币**（eternals）。可继续玩：余额低于 470 或高于 1900 时他会收手。
+时间来到 9:09。奥赖恩与诺娃进入游戏区。可选择搂住她，把夫妻戏做足；诺娃对此反应不错。奥赖恩坐到老虎机旁等待目标 **博比·布里格斯**（Bobbie Briggs）。首局就赢了 20 **永恒币**（eternals）。可继续玩：余额低于 470 或高于 1900 时他会收手。
 
 <p align="center">
   <img src="{{ site.baseurl }}/blog_picture/eternum-ch4.resources/Luna_the_dealer.jpg" alt="露娜当荷官" width="640">
@@ -80,7 +80,7 @@ description: 按 EternumVN Wiki 第四章摘要完整译成简体中文，含原
 
 *布里格斯先生输掉后目瞪口呆。*
 
-第三局布里格斯加注 1500；奥赖恩承认钱不够，提出把「与诺瓦共度一夜」押上，条件是对方也把 VIP 通行证放进底池。布里格斯同意。他亮出满堂红，奥赖恩只有一对二——露娜翻开最后两张：又是两张二。靠露娜的「魔术手」，奥赖恩赢下 1630 永恒币与 VIP 通行证，决定收手。布里格斯彻底懵了。
+第三局布里格斯加注 1500；奥赖恩承认钱不够，提出把「与诺娃共度一夜」押上，条件是对方也把 VIP 通行证放进底池。布里格斯同意。他亮出满堂红，奥赖恩只有一对二——露娜翻开最后两张：又是两张二。靠露娜的「魔术手」，奥赖恩赢下 1630 永恒币与 VIP 通行证，决定收手。布里格斯彻底懵了。
 
 ---
 
@@ -268,7 +268,7 @@ description: 按 EternumVN Wiki 第四章摘要完整译成简体中文，含原
 
 若走佩内洛普线，她要奥赖恩在两张照片里选更好的一张；可先说都喜欢，但最终必须选。
 
-若走诺瓦线，她问：杀完恶魔救下女孩后，他会说什么台词。
+若走诺娃线，她问：杀完恶魔救下女孩后，他会说什么台词。
 
 <p align="center">
   <img src="{{ site.baseurl }}/blog_picture/eternum-ch4.resources/Mr._Hernandez_selfie.jpg" alt="埃尔南德斯先生自拍" width="640">
