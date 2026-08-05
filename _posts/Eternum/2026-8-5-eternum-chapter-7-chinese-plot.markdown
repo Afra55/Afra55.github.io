@@ -4,17 +4,10 @@ title:  "《Eternum》第七章完整剧情（简体中文）"
 date:   2026-8-5 15:00:00
 categories: Eternum
 comments: true
-description: 按 EternumVN Wiki 第七章摘要完整译成简体中文，含原站剧情插图；角色中文名后附英文，便于对照。成人向视觉小说，含剧情向成人内容简述。
+description: 《Eternum》第七章完整剧情（简体中文）
 ---
-
 * content
 {:toc}
-
-本文依据粉丝维基 [EternumVN Wiki · Chapter 7](https://eternumvn.fandom.com/wiki/Chapter_7) 的剧情摘要译写，插图来自同站章节页。原文是社区整理的**剧情梗概**，不是游戏逐句台词；翻译力求与英文摘要同一意思，并尽量读起来顺。
-
-《Eternum》是 Caribdis 用 Ren’Py 制作的成人向选择式视觉小说（仍在更新）。主角默认名 **奥赖恩·理查兹**（Orion Richards，玩家可改名），维基标注年龄 **18**。正文角色首次出现时写「中文名（英文）」，后文多用中文简称。游戏里存在分支选项，下文会标出常见分叉，但不展开所有数值攻略。
-
----
 
 ## 威廉在亚历克斯公寓
 
@@ -260,13 +253,3 @@ description: 按 EternumVN Wiki 第七章摘要完整译成简体中文，含原
 
 与诺娃的场景结束后，奥赖恩出门买披萨，抄近路穿过唐人街。两名暴徒伏击他；他打倒一人，随即中枪。倒在湿水泥地上时，他短暂看见失望的伊德瑞尔——第七章至此结束。
 
----
-
-## 译注与来源
-
-- 原文： [Chapter 7 · EternumVN Wiki](https://eternumvn.fandom.com/wiki/Chapter_7)
-- 插图：同页 `File:` 资源，本地镜像于 `blog_picture/eternum-ch7.resources/`，便于离线阅读；版权归属原作者 / Fandom 上传者，本文仅作剧情导读用途。
-- 专名：地名、服务器名、道具名尽量保留英文或采用常见音译，并在首次出现标注原文。
-- 分支：摘要中的「可选择」已保留（狼人线 / 吸血鬼线等）；具体数值、好感与全收集请以游戏与攻略为准。
-
-若需要，可继续按同一体例译第八章。

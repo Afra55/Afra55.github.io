@@ -4,17 +4,10 @@ title:  "《Eternum》第三章完整剧情（简体中文）"
 date:   2026-8-5 11:00:00
 categories: Eternum
 comments: true
-description: 按 EternumVN Wiki 第三章摘要完整译成简体中文，含原站剧情插图；角色中文名后附英文，便于对照。成人向视觉小说，含剧情向成人内容简述。
+description: 《Eternum》第三章完整剧情（简体中文）
 ---
-
 * content
 {:toc}
-
-本文依据粉丝维基 [EternumVN Wiki · Chapter 3](https://eternumvn.fandom.com/wiki/Chapter_3) 的剧情摘要译写，插图来自同站章节页。原文是社区整理的**剧情梗概**，不是游戏逐句台词；翻译力求与英文摘要同一意思，并尽量读起来顺。
-
-《Eternum》是 Caribdis 用 Ren’Py 制作的成人向选择式视觉小说（仍在更新）。主角默认名 **奥赖恩·理查兹**（Orion Richards，玩家可改名），维基标注年龄 **18**。正文角色首次出现时写「中文名（英文）」，后文多用中文简称。游戏里存在分支选项，下文会标出常见分叉，但不展开所有数值攻略。
-
----
 
 ## 终于：卡吕普索
 
@@ -378,13 +371,3 @@ description: 按 EternumVN Wiki 第三章摘要完整译成简体中文，含原
 
 奥赖恩开始简报：他们将闯入 **新拉斯维加斯**（New Vegas）服务器加林顿区、加林顿银行的金库。科尼利厄斯·加林顿精明，建筑安保近乎无懈可击。弱点是冲动的儿子本尼·加林顿（Bennie Garrington）——他也能关闭守护金库的生物识别系统。讲解被敲门打断。奥赖恩困惑地去开门：走廊空无一人；回头喊女孩们，却无人应答。他紧张起来，开始恐慌。
 
----
-
-## 译注与来源
-
-- 原文： [Chapter 3 · EternumVN Wiki](https://eternumvn.fandom.com/wiki/Chapter_3)
-- 插图：同页 `File:` 资源，本地镜像于 `blog_picture/eternum-ch3.resources/`，便于离线阅读；版权归属原作者 / Fandom 上传者，本文仅作剧情导读用途。
-- 专名：地名、服务器名、道具名尽量保留英文或采用常见音译，并在首次出现标注原文。
-- 分支：摘要中的「可选择」已保留；具体数值、好感与全收集请以游戏与攻略为准。
-
-若需要，可继续按同一体例译第四章。
