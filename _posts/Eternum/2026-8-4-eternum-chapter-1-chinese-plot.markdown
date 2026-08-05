@@ -4,17 +4,10 @@ title:  "《Eternum》第一章完整剧情（简体中文）"
 date:   2026-8-4 23:30:00
 categories: Eternum
 comments: true
-description: 按 EternumVN Wiki 第一章摘要完整译成简体中文，含原站剧情插图；角色中文名后附英文，便于对照。成人向视觉小说，含剧情向成人内容简述。
+description: 《Eternum》第一章完整剧情（简体中文）
 ---
-
 * content
 {:toc}
-
-本文依据粉丝维基 [EternumVN Wiki · Chapter 1](https://eternumvn.fandom.com/wiki/Chapter_1) 的剧情摘要译写，插图来自同站章节页。原文是社区整理的**剧情梗概**，不是游戏逐句台词；翻译力求与英文摘要同一意思，并尽量读起来顺。
-
-《Eternum》是 Caribdis 用 Ren’Py 制作的成人向选择式视觉小说（仍在更新）。主角默认名 **奥赖恩·理查兹**（Orion Richards，玩家可改名），维基标注年龄 **18**。正文角色首次出现时写「中文名（英文）」，后文多用中文简称。游戏里存在分支选项，下文会标出常见分叉，但不展开所有数值攻略。
-
----
 
 ## 火车上：回故乡
 
@@ -378,13 +371,3 @@ description: 按 EternumVN Wiki 第一章摘要完整译成简体中文，含原
 
 基廷先生走进教室，准备上电脑课，却先宣布：同学本杰明于夜间去世。阿克塞尔大吼这一定是玩笑；基廷说，本杰明是在运动后中风。
 
----
-
-## 译注与来源
-
-- 原文： [Chapter 1 · EternumVN Wiki](https://eternumvn.fandom.com/wiki/Chapter_1)
-- 插图：同页 `File:` 资源，本地镜像于 `blog_picture/eternum-ch1.resources/`，便于离线阅读；版权归属原作者 / Fandom 上传者，本文仅作剧情导读用途。
-- 专名：地名、服务器名、道具名尽量保留英文或采用常见音译，并在首次出现标注原文。
-- 分支：摘要中的「可选择」已保留；具体数值、好感与全收集请以游戏与攻略为准。
-
-若需要，可继续按同一体例译第二章。
