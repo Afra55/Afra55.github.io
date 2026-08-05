@@ -18,7 +18,7 @@ permalink: /eternum/
 ## 章节目录
 
 <ol class="eternum-chapter-list">
-{% assign eternum_posts = site.categories.永恒世界 | sort: 'date' %}
+{% assign eternum_posts = site.categories.Eternum | sort: 'date' %}
 {% for post in eternum_posts %}
   <li>
     <a href="{{ post.url | prepend: site.baseurl }}">{{ post.title }}</a>
@@ -27,6 +27,6 @@ permalink: /eternum/
 {% endfor %}
 </ol>
 
-{% if eternum_posts.size == 0 %}
+{% if site.categories.Eternum.size == 0 %}
 <p>暂无文章。</p>
 {% endif %}

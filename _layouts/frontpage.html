@@ -21,7 +21,7 @@ layout: default
         {% assign main_post_count = 0 %}
         <div class="all-posts" post-cate="All">
           {% for post in site.posts %}
-            {% unless post.categories contains '永恒世界' %}
+            {% unless post.categories contains 'Eternum' %}
             {% assign main_post_count = main_post_count | plus: 1 %}
             <a class="post-list-item" href="{{ post.url | prepend: site.baseurl }}">
               <h2>
@@ -34,7 +34,7 @@ layout: default
         </div>
         <!-- <div class="posts-in-categories"> -->
         {% for category in site.categories %}
-          {% unless category[0] == '永恒世界' %}
+          {% unless category[0] == 'Eternum' %}
           <div post-cate="{{category | first}}">
             {% for posts in category  %}
               {% for post in posts %}
@@ -65,7 +65,7 @@ layout: default
         All<span class="my-badge"> {{ main_post_count }}</span>
       </a>
       {% for category in site.categories %}
-        {% unless category[0] == '永恒世界' %}
+        {% unless category[0] == 'Eternum' %}
         <a href="javascript:;" class="categories-list-item" cate="{{ category | first }}">
           {{ category | first }} <span class="my-badge">{{ category | last | size }}</span>
         </a>
@@ -75,7 +75,7 @@ layout: default
         专题
       </div>
       <a href="{{ site.baseurl }}/eternum/" class="categories-list-item">
-        永恒世界 <span class="my-badge">{% if site.categories.永恒世界 %}{{ site.categories.永恒世界 | size }}{% else %}0{% endif %}</span>
+        永恒世界 <span class="my-badge">{% if site.categories.Eternum %}{{ site.categories.Eternum | size }}{% else %}0{% endif %}</span>
       </a>
     </div>
   </div>
