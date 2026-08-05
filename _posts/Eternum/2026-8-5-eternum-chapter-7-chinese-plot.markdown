@@ -2,7 +2,7 @@
 layout: post
 title:  "《Eternum》第七章完整剧情（简体中文）"
 date:   2026-8-5 15:00:00
-categories: Life
+categories: 永恒世界
 comments: true
 description: 按 EternumVN Wiki 第七章摘要完整译成简体中文，含原站剧情插图；角色中文名后附英文，便于对照。成人向视觉小说，含剧情向成人内容简述。
 ---

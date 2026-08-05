@@ -140,6 +140,14 @@ nav{
 	-moz-transition:0.4s ease;
 	-o-transition:0.4s ease;
 }
+.eternum-chapter-list {
+  padding-left: 1.4em;
+  line-height: 1.9;
+}
+.eternum-chapter-list li {
+  margin-bottom: 0.35em;
+}
+
 .categories-list-item:hover .my-badge{
 	-webkit-transform:rotate(360deg) scale(1.2);
 	-moz-transform:rotate(360deg) scale(1.2);
