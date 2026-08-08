@@ -110,6 +110,8 @@ description: 完整翻译 Collider《30 Best Game of Thrones Female Characters, 
 
 她是盲信悲剧的样本。对光之王的虔诚改善了她对丈夫的观感，只因她把他当成预言中的「应许王子」，于是火刑活人等暴行都被合理化——凡以拉赫洛之名皆非恶。塔拉·菲茨杰拉德的表演阴冷，尤其是她对周围暴力的抽离感。
 
+需要分清：希琳被烧并非赛丽丝推动。提议的是红袍女，拍板的是史坦尼斯；赛丽丝长期冷待女儿、又对「为拉赫洛烧人」整体默许，但火刑当场她崩溃冲过去想救，被卫兵拦住。事后她因愧疚自尽——盲信的代价，最终落在自己身上。
+
 ### 22. 莱莎·艾林
 
 <p align="center"><img src="{{ site.baseurl }}/blog_picture/got-female-characters.resources/chars/22-lysa-arryn.jpg" alt="莱莎·艾林" width="480"></p>
