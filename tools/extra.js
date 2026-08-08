@@ -36,6 +36,51 @@
     }, 1400);
   }
 
+  function formatKb(bytes) {
+    const n = Number(bytes) || 0;
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  const GIF_COMPRESS_PRESETS = {
+    light: { label: "轻度", args: "-O1 --lossy=30" },
+    standard: { label: "标准", args: "-O1 --lossy=60" },
+    strong: { label: "强力", args: "-O1 --lossy=100 --colors 128" },
+  };
+
+  let gifsicleModulePromise = null;
+
+  function loadGifsicle() {
+    if (!gifsicleModulePromise) {
+      const url = new URL("./vendor/gifsicle.min.js", document.baseURI || window.location.href).href;
+      gifsicleModulePromise = import(url)
+        .then((mod) => mod.default || mod)
+        .catch((err) => {
+          gifsicleModulePromise = null;
+          throw err;
+        });
+    }
+    return gifsicleModulePromise;
+  }
+
+  async function compressGifBlob(blob, level = "standard", onProgress) {
+    if (!blob) throw new Error("没有可压缩的 GIF");
+    const preset = GIF_COMPRESS_PRESETS[level] || GIF_COMPRESS_PRESETS.standard;
+    onProgress?.(0.05, "加载压缩引擎…");
+    const gifsicle = await loadGifsicle();
+    if (!gifsicle || typeof gifsicle.run !== "function") throw new Error("压缩引擎未加载");
+    onProgress?.(0.2, `压缩中（${preset.label}）…`);
+    const out = await gifsicle.run({
+      input: [{ file: blob, name: "in.gif" }],
+      command: [`${preset.args} in.gif -o /out/out.gif`],
+    });
+    const file = Array.isArray(out) ? out[0] : null;
+    if (!file) throw new Error("压缩失败，未得到输出");
+    onProgress?.(1, "压缩完成");
+    return file instanceof Blob ? file : new Blob([file], { type: "image/gif" });
+  }
+
   // ---- Time diff ----
   const tdA = $("#td-a");
   const tdB = $("#td-b");
@@ -1013,14 +1058,22 @@
     const gifDownload = $("#gif-download");
     const gifGenerate = $("#gif-generate");
     const gifAbort = $("#gif-abort");
+    const gifCompress = $("#gif-compress");
+    const gifCompressLevel = $("#gif-compress-level");
     const MAX_GIF_FRAMES = 40;
     const frames = [];
     let frameSeq = 0;
     let activeGif = null;
     let previewUrl = "";
+    let latestGifBlob = null;
+    let compressingGif = false;
 
     function defaultDelay() {
       return Math.min(10000, Math.max(20, Number(gifDelay?.value) || 500));
+    }
+
+    function setGifCompressEnabled(on) {
+      if (gifCompress) gifCompress.disabled = !on || compressingGif;
     }
 
     function revokePreview() {
@@ -1028,6 +1081,8 @@
         URL.revokeObjectURL(previewUrl);
         previewUrl = "";
       }
+      latestGifBlob = null;
+      setGifCompressEnabled(false);
       if (gifPreview) {
         gifPreview.hidden = true;
         gifPreview.removeAttribute("src");
@@ -1036,6 +1091,25 @@
         gifDownload.hidden = true;
         gifDownload.removeAttribute("href");
       }
+    }
+
+    function applyGifOutput(blob, metaText) {
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+        previewUrl = "";
+      }
+      latestGifBlob = blob;
+      previewUrl = URL.createObjectURL(blob);
+      if (gifPreview) {
+        gifPreview.src = previewUrl;
+        gifPreview.hidden = false;
+      }
+      if (gifDownload) {
+        gifDownload.href = previewUrl;
+        gifDownload.hidden = false;
+      }
+      setGifCompressEnabled(true);
+      if (metaText && gifMeta) gifMeta.textContent = metaText;
     }
 
     function setProgress(visible, ratio, text) {
@@ -1286,20 +1360,12 @@
           }
         });
 
-        previewUrl = URL.createObjectURL(blob);
-        if (gifPreview) {
-          gifPreview.src = previewUrl;
-          gifPreview.hidden = false;
-        }
-        if (gifDownload) {
-          gifDownload.href = previewUrl;
-          gifDownload.hidden = false;
-        }
-        setProgress(true, 1, `完成 · ${(blob.size / 1024).toFixed(1)} KB`);
+        applyGifOutput(
+          blob,
+          `已生成 ${outW}×${outH} · ${frames.length} 帧 · ${formatKb(blob.size)}`
+        );
+        setProgress(true, 1, `完成 · ${formatKb(blob.size)}`);
         toast("GIF 已生成");
-        if (gifMeta) {
-          gifMeta.textContent = `已生成 ${outW}×${outH} · ${frames.length} 帧 · ${(blob.size / 1024).toFixed(1)} KB`;
-        }
       } catch (err) {
         if (String(err && err.message) !== "已取消") {
           setError(gifError, err.message || String(err));
@@ -1309,6 +1375,34 @@
         if (typeof cleanupWorker === "function") cleanupWorker();
         activeGif = null;
         setBusy(false);
+      }
+    }
+
+    async function compressGeneratedGif() {
+      if (!latestGifBlob || compressingGif) return;
+      compressingGif = true;
+      setGifCompressEnabled(false);
+      if (gifGenerate) gifGenerate.disabled = true;
+      setError(gifError, "");
+      const before = latestGifBlob.size;
+      try {
+        const level = gifCompressLevel?.value || "standard";
+        const out = await compressGifBlob(latestGifBlob, level, (ratio, text) => {
+          setProgress(true, ratio, text);
+        });
+        const after = out.size;
+        const saved = before > 0 ? Math.max(0, Math.round((1 - after / before) * 100)) : 0;
+        applyGifOutput(out, `已压缩 ${formatKb(before)} → ${formatKb(after)}（约省 ${saved}%）`);
+        setProgress(true, 1, `压缩完成 · ${formatKb(before)} → ${formatKb(after)}`);
+        toast(after < before ? `已压缩，约省 ${saved}%` : "压缩完成（体积无明显下降）");
+      } catch (err) {
+        setError(gifError, err.message || String(err));
+        setProgress(false, 0, "");
+        setGifCompressEnabled(Boolean(latestGifBlob));
+      } finally {
+        compressingGif = false;
+        if (gifGenerate) gifGenerate.disabled = false;
+        setGifCompressEnabled(Boolean(latestGifBlob));
       }
     }
 
@@ -1332,6 +1426,9 @@
     });
     gifGenerate?.addEventListener("click", generateGif);
     gifAbort?.addEventListener("click", abortGif);
+    gifCompress?.addEventListener("click", () => {
+      compressGeneratedGif().catch((err) => setError(gifError, err.message || String(err)));
+    });
     updateGifMeta();
   } catch (err) {
     console.error("gif maker init failed", err);
@@ -1722,12 +1819,38 @@
     const v2gProgressText = $("#v2g-progress-text");
     const v2gPreview = $("#v2g-preview");
     const v2gDownload = $("#v2g-download");
+    const v2gCompress = $("#v2g-compress");
+    const v2gCompressLevel = $("#v2g-compress-level");
     const MAX_V2G_FRAMES = 300;
     const MAX_V2G_SECONDS = 600;
     let videoObjectUrl = "";
     let gifObjectUrl = "";
+    let latestV2gBlob = null;
     let activeV2gGif = null;
     let abortV2g = false;
+    let compressingV2g = false;
+
+    function setV2gCompressEnabled(on) {
+      if (v2gCompress) v2gCompress.disabled = !on || compressingV2g;
+    }
+
+    function applyV2gOutput(blob) {
+      if (gifObjectUrl) {
+        URL.revokeObjectURL(gifObjectUrl);
+        gifObjectUrl = "";
+      }
+      latestV2gBlob = blob;
+      gifObjectUrl = URL.createObjectURL(blob);
+      if (v2gPreview) {
+        v2gPreview.src = gifObjectUrl;
+        v2gPreview.hidden = false;
+      }
+      if (v2gDownload) {
+        v2gDownload.href = gifObjectUrl;
+        v2gDownload.hidden = false;
+      }
+      setV2gCompressEnabled(true);
+    }
 
     function setV2gProgress(visible, ratio, text) {
       if (!v2gProgress) return;
@@ -1742,6 +1865,8 @@
         URL.revokeObjectURL(gifObjectUrl);
         gifObjectUrl = "";
       }
+      latestV2gBlob = null;
+      setV2gCompressEnabled(false);
       if (v2gPreview) {
         v2gPreview.hidden = true;
         v2gPreview.removeAttribute("src");
@@ -1777,7 +1902,7 @@
       setError(v2gError, "");
       if (v2gMeta) {
         v2gMeta.textContent =
-          "支持 MP4 / WebM / MOV（实况照片可先导出为影片再上传）。上传后「最长秒数」默认等于视频时长；很长时转换会较慢、文件也会较大。";
+          "支持 MP4 / WebM / MOV（实况照片可先导出为影片再上传）。上传后「最长秒数」默认等于视频时长；转完后可用「压缩体积」再缩小文件。";
       }
       if (v2gMaxsec) {
         v2gMaxsec.value = "";
@@ -2029,22 +2154,14 @@
           }
         });
 
-        gifObjectUrl = URL.createObjectURL(blob);
-        if (v2gPreview) {
-          v2gPreview.src = gifObjectUrl;
-          v2gPreview.hidden = false;
-        }
-        if (v2gDownload) {
-          v2gDownload.href = gifObjectUrl;
-          v2gDownload.hidden = false;
-        }
-        setV2gProgress(true, 1, `完成 · ${frameCount} 帧 · ${outW}×${outH} · ${(blob.size / 1024).toFixed(1)} KB`);
+        applyV2gOutput(blob);
+        setV2gProgress(true, 1, `完成 · ${frameCount} 帧 · ${outW}×${outH} · ${formatKb(blob.size)}`);
         if (v2gMeta) {
           const effFps = frameCount > 1 ? (frameCount - 1) / span : fps;
           const capTip = framesCapped
             ? ` · 为控制体积已抽稀到 ${frameCount} 帧（约 ${effFps.toFixed(1)} FPS）`
             : "";
-          v2gMeta.textContent = `已转换 ${frameCount} 帧 · ${span.toFixed(1)}s · ${fps} FPS · ${outW}×${outH} · ${(blob.size / 1024).toFixed(1)} KB${capTip}`;
+          v2gMeta.textContent = `已转换 ${frameCount} 帧 · ${span.toFixed(1)}s · ${fps} FPS · ${outW}×${outH} · ${formatKb(blob.size)}${capTip}`;
         }
         toast("GIF 已生成");
       } catch (err) {
@@ -2064,9 +2181,43 @@
       }
     }
 
+    async function compressV2gGif() {
+      if (!latestV2gBlob || compressingV2g) return;
+      compressingV2g = true;
+      setV2gCompressEnabled(false);
+      if (v2gGenerate) v2gGenerate.disabled = true;
+      setError(v2gError, "");
+      const before = latestV2gBlob.size;
+      try {
+        const level = v2gCompressLevel?.value || "standard";
+        const out = await compressGifBlob(latestV2gBlob, level, (ratio, text) => {
+          setV2gProgress(true, ratio, text);
+        });
+        const after = out.size;
+        const saved = before > 0 ? Math.max(0, Math.round((1 - after / before) * 100)) : 0;
+        applyV2gOutput(out);
+        if (v2gMeta) {
+          v2gMeta.textContent = `已压缩 ${formatKb(before)} → ${formatKb(after)}（约省 ${saved}%）`;
+        }
+        setV2gProgress(true, 1, `压缩完成 · ${formatKb(before)} → ${formatKb(after)}`);
+        toast(after < before ? `已压缩，约省 ${saved}%` : "压缩完成（体积无明显下降）");
+      } catch (err) {
+        setError(v2gError, err.message || String(err));
+        setV2gProgress(false, 0, "");
+        setV2gCompressEnabled(Boolean(latestV2gBlob));
+      } finally {
+        compressingV2g = false;
+        if (v2gGenerate) v2gGenerate.disabled = !v2gVideo?.src;
+        setV2gCompressEnabled(Boolean(latestV2gBlob));
+      }
+    }
+
     v2gFile?.addEventListener("change", (e) => loadVideoFile(e.target.files?.[0]));
     $("#v2g-clear")?.addEventListener("click", clearV2g);
     v2gGenerate?.addEventListener("click", convertVideoToGif);
+    v2gCompress?.addEventListener("click", () => {
+      compressV2gGif().catch((err) => setError(v2gError, err.message || String(err)));
+    });
     v2gAbort?.addEventListener("click", () => {
       abortV2g = true;
       if (activeV2gGif) {

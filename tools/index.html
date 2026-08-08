@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260808a" />
+  <link rel="stylesheet" href="./style.css?v=20260808b" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -967,9 +967,16 @@ hello@world.org</textarea>
             </div>
             <p class="hint" id="gif-meta">选择至少 2 张图片。单帧建议不超过 1280px，张数过多会较慢。</p>
             <div class="gif-frame-list" id="gif-frames" aria-live="polite"></div>
-            <div class="btn-row tool-actions" style="margin-top:1rem">
+            <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
               <button type="button" class="primary-btn" id="gif-generate">生成 GIF</button>
               <button type="button" class="ghost-btn" id="gif-abort" hidden>取消</button>
+              <label for="gif-compress-level" class="hint tight" style="margin:0">压缩</label>
+              <select id="gif-compress-level" class="mono select-input" title="压缩档位">
+                <option value="light">轻度</option>
+                <option value="standard" selected>标准</option>
+                <option value="strong">强力</option>
+              </select>
+              <button type="button" class="secondary-btn" id="gif-compress" disabled>压缩体积</button>
               <a class="secondary-btn" id="gif-download" href="#" download="animation.gif" hidden>下载 GIF</a>
             </div>
             <div class="gif-progress" id="gif-progress" hidden>
@@ -1037,13 +1044,20 @@ hello@world.org</textarea>
             <label for="v2g-quality">质量 (1–30)</label>
             <input id="v2g-quality" class="mono meta-input" type="number" min="1" max="30" step="1" value="12" />
           </div>
-          <p class="hint" id="v2g-meta">支持 MP4 / WebM / MOV（实况照片可先导出为影片再上传）。上传后「最长秒数」默认等于视频时长；很长时转换会较慢、文件也会较大。</p>
+          <p class="hint" id="v2g-meta">支持 MP4 / WebM / MOV（实况照片可先导出为影片再上传）。上传后「最长秒数」默认等于视频时长；转完后可用「压缩体积」再缩小文件。</p>
           <div class="gif-preview-wrap">
             <video id="v2g-video" class="img-preview gif-preview" controls playsinline muted hidden></video>
           </div>
-          <div class="btn-row tool-actions" style="margin-top:1rem">
+          <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
             <button type="button" class="primary-btn" id="v2g-generate" disabled>转为 GIF</button>
             <button type="button" class="ghost-btn" id="v2g-abort" hidden>取消</button>
+            <label for="v2g-compress-level" class="hint tight" style="margin:0">压缩</label>
+            <select id="v2g-compress-level" class="mono select-input" title="压缩档位">
+              <option value="light">轻度</option>
+              <option value="standard" selected>标准</option>
+              <option value="strong">强力</option>
+            </select>
+            <button type="button" class="secondary-btn" id="v2g-compress" disabled>压缩体积</button>
             <a class="secondary-btn" id="v2g-download" href="#" download="from-video.gif" hidden>下载 GIF</a>
           </div>
           <div class="gif-progress" id="v2g-progress" hidden>
@@ -1707,9 +1721,9 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./lib/pure.js?v=20260808a"></script>
-  <script src="./app.js?v=20260808a"></script>
-  <script src="./extra.js?v=20260808a"></script>
-  <script src="./imgkit.js?v=20260808a"></script>
+  <script src="./lib/pure.js?v=20260808b"></script>
+  <script src="./app.js?v=20260808b"></script>
+  <script src="./extra.js?v=20260808b"></script>
+  <script src="./imgkit.js?v=20260808b"></script>
 </body>
 </html>
