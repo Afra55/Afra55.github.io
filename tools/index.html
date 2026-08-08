@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260808b" />
+  <link rel="stylesheet" href="./style.css?v=20260808c" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -945,7 +945,7 @@ hello@world.org</textarea>
 <section id="gifmaker" class="panel" data-reveal>
       <div class="panel-head">
         <h1>GIF 工具</h1>
-        <p>多图合成 GIF、GIF 拆帧/转 WebM，或把视频（含实况导出的 MOV）转成 GIF；本地处理，带进度。</p>
+        <p>多图合成 GIF、压缩已有 GIF、拆帧/转 WebM，或把视频转成 GIF；本地处理，带进度。</p>
       </div>
       <div class="panel-body">
         <div class="convert-grid">
@@ -1023,6 +1023,39 @@ hello@world.org</textarea>
             </div>
             <p class="error" id="gifx-error" hidden></p>
           </div>
+        </div>
+
+        <div class="field-block" style="margin-top:1.5rem">
+          <h2 class="subhead">压缩已有 GIF</h2>
+          <div class="btn-row tool-actions">
+            <label class="file-btn" for="gifc-file">选择 GIF</label>
+            <input id="gifc-file" type="file" accept="image/gif,.gif" hidden />
+            <button type="button" class="ghost-btn" id="gifc-clear">清空</button>
+          </div>
+          <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
+            <label for="gifc-compress-level">压缩档位</label>
+            <select id="gifc-compress-level" class="mono select-input" title="压缩档位">
+              <option value="light">轻度</option>
+              <option value="standard" selected>标准</option>
+              <option value="strong">强力</option>
+            </select>
+          </div>
+          <p class="hint" id="gifc-meta">上传本地已有 GIF，选择档位后压缩体积；处理全程在浏览器完成。</p>
+          <div class="gif-preview-wrap">
+            <img id="gifc-source" class="img-preview gif-preview" alt="原始 GIF 预览" hidden />
+          </div>
+          <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
+            <button type="button" class="primary-btn" id="gifc-compress" disabled>压缩体积</button>
+            <a class="secondary-btn" id="gifc-download" href="#" download="compressed.gif" hidden>下载压缩 GIF</a>
+          </div>
+          <div class="gif-progress" id="gifc-progress" hidden>
+            <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="gifc-progress-fill"></span></div>
+            <p class="hint" id="gifc-progress-text">准备中…</p>
+          </div>
+          <div class="gif-preview-wrap">
+            <img id="gifc-preview" class="img-preview gif-preview" alt="压缩后 GIF 预览" hidden />
+          </div>
+          <p class="error" id="gifc-error" hidden></p>
         </div>
 
         <div class="field-block" style="margin-top:1.5rem">
@@ -1721,9 +1754,9 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./lib/pure.js?v=20260808b"></script>
-  <script src="./app.js?v=20260808b"></script>
-  <script src="./extra.js?v=20260808b"></script>
-  <script src="./imgkit.js?v=20260808b"></script>
+  <script src="./lib/pure.js?v=20260808c"></script>
+  <script src="./app.js?v=20260808c"></script>
+  <script src="./extra.js?v=20260808c"></script>
+  <script src="./imgkit.js?v=20260808c"></script>
 </body>
 </html>
