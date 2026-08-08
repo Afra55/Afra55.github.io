@@ -2230,6 +2230,147 @@
     console.error("video to gif init failed", err);
   }
 
+  // ---- Compress existing GIF ----
+  try {
+    const gifcFile = $("#gifc-file");
+    const gifcMeta = $("#gifc-meta");
+    const gifcError = $("#gifc-error");
+    const gifcLevel = $("#gifc-compress-level");
+    const gifcCompress = $("#gifc-compress");
+    const gifcDownload = $("#gifc-download");
+    const gifcSource = $("#gifc-source");
+    const gifcPreview = $("#gifc-preview");
+    const gifcProgress = $("#gifc-progress");
+    const gifcProgressFill = $("#gifc-progress-fill");
+    const gifcProgressText = $("#gifc-progress-text");
+    let sourceBlob = null;
+    let sourceUrl = "";
+    let outUrl = "";
+    let sourceName = "compressed.gif";
+    let compressingExisting = false;
+
+    function setGifcProgress(visible, ratio, text) {
+      if (!gifcProgress) return;
+      gifcProgress.hidden = !visible;
+      const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)));
+      if (gifcProgressFill) gifcProgressFill.style.width = `${pct}%`;
+      if (gifcProgressText) gifcProgressText.textContent = text || `${pct}%`;
+    }
+
+    function revokeGifcOut() {
+      if (outUrl) {
+        URL.revokeObjectURL(outUrl);
+        outUrl = "";
+      }
+      if (gifcPreview) {
+        gifcPreview.hidden = true;
+        gifcPreview.removeAttribute("src");
+      }
+      if (gifcDownload) {
+        gifcDownload.hidden = true;
+        gifcDownload.removeAttribute("href");
+      }
+    }
+
+    function clearGifc() {
+      sourceBlob = null;
+      if (sourceUrl) {
+        URL.revokeObjectURL(sourceUrl);
+        sourceUrl = "";
+      }
+      revokeGifcOut();
+      if (gifcSource) {
+        gifcSource.hidden = true;
+        gifcSource.removeAttribute("src");
+      }
+      if (gifcCompress) gifcCompress.disabled = true;
+      if (gifcFile) gifcFile.value = "";
+      setGifcProgress(false, 0, "");
+      setError(gifcError, "");
+      if (gifcMeta) {
+        gifcMeta.textContent = "上传本地已有 GIF，选择档位后压缩体积；处理全程在浏览器完成。";
+      }
+      sourceName = "compressed.gif";
+      compressingExisting = false;
+    }
+
+    async function loadExistingGif(file) {
+      if (!file) return;
+      clearGifc();
+      setError(gifcError, "");
+      const type = String(file.type || "").toLowerCase();
+      const name = String(file.name || "");
+      if (type && type !== "image/gif" && !/\.gif$/i.test(name)) {
+        setError(gifcError, "请选择 GIF 文件");
+        return;
+      }
+      sourceBlob = file;
+      sourceName = name.replace(/\.gif$/i, "") || "compressed";
+      sourceName = `${sourceName}-compressed.gif`;
+      sourceUrl = URL.createObjectURL(file);
+      if (gifcSource) {
+        gifcSource.src = sourceUrl;
+        gifcSource.hidden = false;
+      }
+      if (gifcCompress) gifcCompress.disabled = false;
+      if (gifcMeta) {
+        gifcMeta.textContent = `${file.name} · ${formatKb(file.size)} · 选择档位后点「压缩体积」`;
+      }
+      toast("GIF 已加载");
+    }
+
+    async function compressExistingGif() {
+      if (!sourceBlob || compressingExisting) return;
+      compressingExisting = true;
+      if (gifcCompress) gifcCompress.disabled = true;
+      setError(gifcError, "");
+      revokeGifcOut();
+      const before = sourceBlob.size;
+      try {
+        const level = gifcLevel?.value || "standard";
+        const out = await compressGifBlob(sourceBlob, level, (ratio, text) => {
+          setGifcProgress(true, ratio, text);
+        });
+        const after = out.size;
+        const saved = before > 0 ? Math.max(0, Math.round((1 - after / before) * 100)) : 0;
+        outUrl = URL.createObjectURL(out);
+        if (gifcPreview) {
+          gifcPreview.src = outUrl;
+          gifcPreview.hidden = false;
+        }
+        if (gifcDownload) {
+          gifcDownload.href = outUrl;
+          gifcDownload.download = sourceName;
+          gifcDownload.hidden = false;
+        }
+        // Allow re-compress from the new result or original: keep source as original,
+        // but also let user compress again from output by replacing working blob? Keep original
+        // as source; re-click compresses original again with current level.
+        if (gifcMeta) {
+          gifcMeta.textContent = `已压缩 ${formatKb(before)} → ${formatKb(after)}（约省 ${saved}%）`;
+        }
+        setGifcProgress(true, 1, `压缩完成 · ${formatKb(before)} → ${formatKb(after)}`);
+        toast(after < before ? `已压缩，约省 ${saved}%` : "压缩完成（体积无明显下降）");
+      } catch (err) {
+        setError(gifcError, err.message || String(err));
+        setGifcProgress(false, 0, "");
+      } finally {
+        compressingExisting = false;
+        if (gifcCompress) gifcCompress.disabled = !sourceBlob;
+      }
+    }
+
+    gifcFile?.addEventListener("change", (e) => {
+      loadExistingGif(e.target.files?.[0]).catch((err) => setError(gifcError, err.message || String(err)));
+    });
+    $("#gifc-clear")?.addEventListener("click", clearGifc);
+    gifcCompress?.addEventListener("click", () => {
+      compressExistingGif().catch((err) => setError(gifcError, err.message || String(err)));
+    });
+  } catch (err) {
+    console.error("gif compress existing init failed", err);
+  }
+
   // Rebind copy buttons added dynamically in HTML for new panels
   // ---- ADB bridge client (P0–P3) ----
   try {
