@@ -126,9 +126,9 @@ description: 完整翻译 Collider《30 Best Game of Thrones Female Characters, 
 
 <p align="center"><img src="{{ site.baseurl }}/blog_picture/got-female-characters.resources/chars/21-leaf.jpg" alt="叶子" width="480"></p>
 
-**英名**：Leaf　｜　**饰演**：Octavia Alexandru and Kae Alexander。
+**英名**：Leaf　｜　**饰演**：Octavia Alexandru and Kae Alexander　｜　**译名**：叶子（英文名直译，大陆通行如此称呼）。
 
-森林之子「叶子」在剧中亲手把一名人类男子变成夜王，以此对抗砍伐林地的远古人类；异鬼大军由此而来（是否等同「她一人造出全部异鬼」，粉圈仍有争议）。异鬼反噬，几乎灭绝森林之子。包括叶子在内的幸存者投效三眼乌鸦，试图找到消灭夜王与亡灵大军的办法。
+远古时，先民入侵维斯特洛，砍伐森林之子的圣树、大肆屠戮。森林之子不敌，便抓来一名人类男子，由叶子用龙晶匕首刺入胸口，把他变成夜王——本意是造出武器自卫。异鬼后来失控反噬，几乎灭绝森林之子。包括叶子在内的幸存者投效三眼乌鸦，试图找到消灭夜王与亡灵大军的办法。
 
 戏份不多，却大幅解释了魔法如何嵌入维斯特洛历史。尽管与人类有宿怨，她仍愿并肩求生，甚至牺牲自己让新的三眼乌鸦布兰逃走。两位演员中，凯·亚历山大更突出，神秘而超凡。
 
