@@ -16,7 +16,7 @@ description: 完整翻译 Collider《30 Best Game of Thrones Female Characters, 
 
 这是 Collider 的一篇编辑排名：[30 Best 'Game of Thrones' Female Characters, Ranked](https://collider.com/best-game-of-thrones-female-characters-ranked/)（作者 Haley Petersen 等，后有修订再刊）。不是投票榜，而是编辑按角色写得深不深、人物厚不厚来排。瑟曦再可恨也能排很高，因为层次够。
 
-下文按原文翻译（30→1）。中文名用大陆通行译法和常见昵称（龙妈、二丫、红袍女、荆棘女王等）。原文拼写错误（Elaria、Selys、Gwendolyn 等）按正确通行名处理。每人补一句剧集结局，方便对照。图片来自 Collider／HBO，仅供对照，版权归原方。
+下文按原文翻译（30→1）。中文名用大陆通行译法；常见昵称写在标题括号里（如羞耻修女、二丫、龙妈、荆棘女王等）。原文拼写错误（Elaria、Selys、Gwendolyn 等）按正确通行名处理。每人补一句剧集结局，方便对照。图片来自 Collider／HBO，仅供对照，版权归原方。
 
 ---
 
@@ -236,11 +236,11 @@ HBO 还要拍新的《权游》衍生剧，这部戏已是新千年最重要的�
 
 **结局**：第四季攻打黑城堡时中箭身亡。
 
-### 13. 雅拉·葛雷乔伊
+### 13. 雅拉·葛雷乔伊（阿莎）
 
 <p align="center"><img src="{{ site.baseurl }}/blog_picture/got-female-characters.resources/chars/13-yara-greyjoy.jpg" alt="雅拉·葛雷乔伊" width="480"></p>
 
-**英名**：Yara Greyjoy　｜　**饰演**：Gemma Whelan。
+**英名**：Yara Greyjoy　｜　**饰演**：Gemma Whelan　｜　**昵称／书名**：阿莎。
 
 杰玛·惠兰从第二季起饰演刚烈的雅拉·葛雷乔伊。她是巴隆长女、席恩姐姐，一次次试图把蠢弟从自己惹的祸里捞出来。
 
@@ -284,11 +284,11 @@ HBO 还要拍新的《权游》衍生剧，这部戏已是新千年最重要的�
 
 **结局**：第八季被瑟曦俘获，在君临城墙上被魔山斩首。
 
-### 9. 凯特琳·史塔克
+### 9. 凯特琳·史塔克（猫姨）
 
 <p align="center"><img src="{{ site.baseurl }}/blog_picture/got-female-characters.resources/chars/09-catelyn-stark.jpg" alt="凯特琳·史塔克" width="480"></p>
 
-**英名**：Catelyn Stark　｜　**饰演**：Michelle Fairley。
+**英名**：Catelyn Stark　｜　**饰演**：Michelle Fairley　｜　**昵称**：猫姨。
 
 有缺点，仍是全剧最好的角色之一。她是五个孩子的母亲，做事多半为了家人；但对琼恩·雪诺一直很冷——亲生之外的孩子，她给不出同样的爱。
 
@@ -344,11 +344,11 @@ HBO 还要拍新的《权游》衍生剧，这部戏已是新千年最重要的�
 
 **结局**：第七季高庭陷落后，服下詹姆带来的毒药，临死前承认毒死乔佛里，按自己的方式死去。
 
-### 4. 玛格丽·提利尔
+### 4. 玛格丽·提利尔（高庭玫瑰）
 
 <p align="center"><img src="{{ site.baseurl }}/blog_picture/got-female-characters.resources/chars/04-margaery-tyrell.jpg" alt="玛格丽·提利尔" width="480"></p>
 
-**英名**：Margaery Tyrell　｜　**饰演**：Natalie Dormer。
+**英名**：Margaery Tyrell　｜　**饰演**：Natalie Dormer　｜　**昵称**：高庭玫瑰。
 
 娜塔莉·多默尔把玛格丽演得出色：或许是「游戏」里最被低估的玩家。美丽、狡黠、迷人、聪明，她用姿色、口才和智力达成目标；更能在绝境翻盘——蓝礼死后联兰尼斯特，瑟曦扶植麻雀派后她甚至能讨好大麻雀一派。
 
@@ -356,11 +356,11 @@ HBO 还要拍新的《权游》衍生剧，这部戏已是新千年最重要的�
 
 **结局**：第六季死于瑟曦炸毁贝勒大圣堂。
 
-### 3. 珊莎·史塔克
+### 3. 珊莎·史塔克（三傻）
 
 <p align="center"><img src="{{ site.baseurl }}/blog_picture/got-female-characters.resources/chars/03-sansa-stark.jpg" alt="珊莎·史塔克" width="480"></p>
 
-**英名**：Sansa Stark　｜　**饰演**：Sophie Turner　｜　**早年昵称**：三傻（黑称，她变强后少人再用）。
+**英名**：Sansa Stark　｜　**饰演**：Sophie Turner　｜　**昵称**：三傻（早年黑称，她变强后少人再用）。
 
 索菲·特纳饰演的珊莎，开场时特别天真，也为此吃尽苦头：亲眼看父亲被斩；被乔佛里扣在君临当人质，受了好几季欺凌；又落到喜怒无常的姨妈莱莎手里；最后被送回临冬城，落入拉姆斯之手。
 
@@ -368,11 +368,11 @@ HBO 还要拍新的《权游》衍生剧，这部戏已是新千年最重要的�
 
 **结局**：第八季北境独立，她成为北境女王。
 
-### 2. 瑟曦·兰尼斯特
+### 2. 瑟曦·兰尼斯特（狮后）
 
 <p align="center"><img src="{{ site.baseurl }}/blog_picture/got-female-characters.resources/chars/02-cersei-lannister.jpg" alt="瑟曦·兰尼斯特" width="480"></p>
 
-**英名**：Cersei Lannister　｜　**饰演**：Lena Headey。
+**英名**：Cersei Lannister　｜　**饰演**：Lena Headey　｜　**昵称**：狮后。
 
 或许是剧中最可憎的角色，却也层次极厚；琳娜·海蒂的表演是高强度示范。她既是受害者又是施害者，一生困在镀金牢笼，渴望足以自定规则的权力。
 
