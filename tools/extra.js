@@ -1722,7 +1722,8 @@
     const v2gProgressText = $("#v2g-progress-text");
     const v2gPreview = $("#v2g-preview");
     const v2gDownload = $("#v2g-download");
-    const MAX_V2G_FRAMES = 80;
+    const MAX_V2G_FRAMES = 300;
+    const MAX_V2G_SECONDS = 600;
     let videoObjectUrl = "";
     let gifObjectUrl = "";
     let activeV2gGif = null;
@@ -1775,8 +1776,14 @@
       setV2gProgress(false, 0, "");
       setError(v2gError, "");
       if (v2gMeta) {
-        v2gMeta.textContent = "支持 MP4 / WebM / MOV（实况照片可先导出为影片再上传）。帧数过多会很慢、文件也会很大。";
+        v2gMeta.textContent =
+          "支持 MP4 / WebM / MOV（实况照片可先导出为影片再上传）。上传后「最长秒数」默认等于视频时长；很长时转换会较慢、文件也会较大。";
       }
+      if (v2gMaxsec) {
+        v2gMaxsec.value = "";
+        v2gMaxsec.max = String(MAX_V2G_SECONDS);
+      }
+      if (v2gStart) v2gStart.value = "0";
       if (v2gFile) v2gFile.value = "";
       abortV2g = false;
     }
@@ -1861,9 +1868,24 @@
           duration = 0; // unknown; conversion will use playback capture
         }
         if (!v2gVideo.videoWidth || !v2gVideo.videoHeight) throw new Error("视频时长或尺寸无效");
+        if (v2gMaxsec) {
+          if (Number.isFinite(duration) && duration > 0) {
+            const secs = Math.min(MAX_V2G_SECONDS, Math.max(0.5, Math.round(duration * 10) / 10));
+            v2gMaxsec.value = String(secs);
+            v2gMaxsec.max = String(Math.max(MAX_V2G_SECONDS, Math.ceil(secs)));
+          } else {
+            v2gMaxsec.value = "";
+            v2gMaxsec.placeholder = "时长未知，请手动填写";
+          }
+        }
+        if (v2gStart) v2gStart.value = "0";
         if (v2gMeta) {
           const durText = Number.isFinite(duration) && duration > 0 ? `${duration.toFixed(2)}s` : "时长未知";
-          v2gMeta.textContent = `${file.name} · ${durText} · ${v2gVideo.videoWidth}×${v2gVideo.videoHeight}`;
+          const maxTip =
+            Number.isFinite(duration) && duration > 0
+              ? ` · 最长秒数已设为 ${v2gMaxsec?.value || "—"}s`
+              : "";
+          v2gMeta.textContent = `${file.name} · ${durText} · ${v2gVideo.videoWidth}×${v2gVideo.videoHeight}${maxTip}`;
         }
         if (v2gGenerate) v2gGenerate.disabled = false;
         setV2gProgress(true, 1, "视频已加载，可开始转换");
@@ -1894,17 +1916,26 @@
       try {
         const fps = Math.min(15, Math.max(2, Number(v2gFps?.value) || 8));
         const maxW = Math.min(720, Math.max(64, Number(v2gWidth?.value) || 360));
-        const maxSec = Math.min(15, Math.max(1, Number(v2gMaxsec?.value) || 6));
         const startSec = Math.max(0, Number(v2gStart?.value) || 0);
         const quality = Math.min(30, Math.max(1, Number(v2gQuality?.value) || 12));
         let duration = Number(v2gVideo.duration) || 0;
         const hasDuration = Number.isFinite(duration) && duration > 0;
         if (hasDuration && startSec >= duration) throw new Error("起始时间超出视频长度");
+        const rawMax = Number(v2gMaxsec?.value);
+        let maxSec;
+        if (Number.isFinite(rawMax) && rawMax > 0) {
+          maxSec = Math.min(MAX_V2G_SECONDS, Math.max(0.5, rawMax));
+        } else if (hasDuration) {
+          maxSec = Math.min(MAX_V2G_SECONDS, Math.max(0.5, duration - startSec));
+        } else {
+          maxSec = 6;
+        }
         const endSec = hasDuration ? Math.min(duration, startSec + maxSec) : startSec + maxSec;
         const span = Math.max(0.05, endSec - startSec);
         const delay = Math.round(1000 / fps);
-        let frameCount = Math.max(2, Math.floor(span * fps) + 1);
-        if (frameCount > MAX_V2G_FRAMES) frameCount = MAX_V2G_FRAMES;
+        const naturalFrames = Math.max(2, Math.floor(span * fps) + 1);
+        let frameCount = Math.min(MAX_V2G_FRAMES, naturalFrames);
+        const framesCapped = naturalFrames > MAX_V2G_FRAMES;
 
         const srcW = v2gVideo.videoWidth || 0;
         const srcH = v2gVideo.videoHeight || 0;
@@ -2009,7 +2040,11 @@
         }
         setV2gProgress(true, 1, `完成 · ${frameCount} 帧 · ${outW}×${outH} · ${(blob.size / 1024).toFixed(1)} KB`);
         if (v2gMeta) {
-          v2gMeta.textContent = `已转换 ${frameCount} 帧 · ${fps} FPS · ${outW}×${outH} · ${(blob.size / 1024).toFixed(1)} KB`;
+          const effFps = frameCount > 1 ? (frameCount - 1) / span : fps;
+          const capTip = framesCapped
+            ? ` · 为控制体积已抽稀到 ${frameCount} 帧（约 ${effFps.toFixed(1)} FPS）`
+            : "";
+          v2gMeta.textContent = `已转换 ${frameCount} 帧 · ${span.toFixed(1)}s · ${fps} FPS · ${outW}×${outH} · ${(blob.size / 1024).toFixed(1)} KB${capTip}`;
         }
         toast("GIF 已生成");
       } catch (err) {
