@@ -44,9 +44,9 @@
   }
 
   const GIF_COMPRESS_PRESETS = {
-    light: { label: "轻度", args: "-O1 --lossy=30" },
-    standard: { label: "标准", args: "-O1 --lossy=60" },
-    strong: { label: "强力", args: "-O1 --lossy=100 --colors 128" },
+    light: { label: "轻度", baseLossy: 30 },
+    standard: { label: "标准", baseLossy: 60 },
+    strong: { label: "强力", baseLossy: 100 },
   };
 
   let gifsicleModulePromise = null;
@@ -64,16 +64,41 @@
     return gifsicleModulePromise;
   }
 
-  async function compressGifBlob(blob, level = "standard", onProgress) {
-    if (!blob) throw new Error("没有可压缩的 GIF");
+  function buildGifCompressArgs(level = "standard", round = 1) {
     const preset = GIF_COMPRESS_PRESETS[level] || GIF_COMPRESS_PRESETS.standard;
+    const r = Math.max(1, Math.round(Number(round) || 1));
+    // Each continue pass steps up lossy / palette / optional scale.
+    const lossy = Math.min(200, preset.baseLossy + (r - 1) * 30);
+    const parts = [`-O1`, `--lossy=${lossy}`];
+    if (level === "strong" || r >= 2) {
+      parts.push(`--colors ${r >= 4 ? 64 : 128}`);
+    }
+    if (r >= 7) parts.push("--scale 0.85");
+    else if (r >= 5) parts.push("--scale 0.9");
+    return { label: preset.label, args: parts.join(" "), round: r, lossy };
+  }
+
+  function gifCompressSummary(originalSize, beforeSize, afterSize, round) {
+    const stepSaved = beforeSize > 0 ? Math.max(0, Math.round((1 - afterSize / beforeSize) * 100)) : 0;
+    const totalSaved =
+      originalSize > 0 ? Math.max(0, Math.round((1 - afterSize / originalSize) * 100)) : stepSaved;
+    return {
+      stepSaved,
+      totalSaved,
+      text: `第 ${round} 次压缩：${formatKb(beforeSize)} → ${formatKb(afterSize)}（本轮约省 ${stepSaved}%）· 相对原图 ${formatKb(originalSize)} → ${formatKb(afterSize)}（累计约省 ${totalSaved}%）`,
+    };
+  }
+
+  async function compressGifBlob(blob, level = "standard", onProgress, opts = {}) {
+    if (!blob) throw new Error("没有可压缩的 GIF");
+    const plan = buildGifCompressArgs(level, opts.round || 1);
     onProgress?.(0.05, "加载压缩引擎…");
     const gifsicle = await loadGifsicle();
     if (!gifsicle || typeof gifsicle.run !== "function") throw new Error("压缩引擎未加载");
-    onProgress?.(0.2, `压缩中（${preset.label}）…`);
+    onProgress?.(0.2, `压缩中（${plan.label} · 第 ${plan.round} 次 · lossy=${plan.lossy}）…`);
     const out = await gifsicle.run({
       input: [{ file: blob, name: "in.gif" }],
-      command: [`${preset.args} in.gif -o /out/out.gif`],
+      command: [`${plan.args} in.gif -o /out/out.gif`],
     });
     const file = Array.isArray(out) ? out[0] : null;
     if (!file) throw new Error("压缩失败，未得到输出");
@@ -1059,6 +1084,7 @@
     const gifGenerate = $("#gif-generate");
     const gifAbort = $("#gif-abort");
     const gifCompress = $("#gif-compress");
+    const gifCompressAgain = $("#gif-compress-again");
     const gifCompressLevel = $("#gif-compress-level");
     const MAX_GIF_FRAMES = 40;
     const frames = [];
@@ -1066,6 +1092,9 @@
     let activeGif = null;
     let previewUrl = "";
     let latestGifBlob = null;
+    let baseGifBlob = null;
+    let originalGifSize = 0;
+    let gifCompressRound = 0;
     let compressingGif = false;
 
     function defaultDelay() {
@@ -1074,6 +1103,11 @@
 
     function setGifCompressEnabled(on) {
       if (gifCompress) gifCompress.disabled = !on || compressingGif;
+      if (gifCompressAgain) {
+        const canAgain = on && gifCompressRound > 0 && !compressingGif;
+        gifCompressAgain.disabled = !canAgain;
+        gifCompressAgain.hidden = gifCompressRound <= 0;
+      }
     }
 
     function revokePreview() {
@@ -1082,6 +1116,9 @@
         previewUrl = "";
       }
       latestGifBlob = null;
+      baseGifBlob = null;
+      originalGifSize = 0;
+      gifCompressRound = 0;
       setGifCompressEnabled(false);
       if (gifPreview) {
         gifPreview.hidden = true;
@@ -1093,12 +1130,17 @@
       }
     }
 
-    function applyGifOutput(blob, metaText) {
+    function applyGifOutput(blob, metaText, { resetCompress = false } = {}) {
       if (previewUrl) {
         URL.revokeObjectURL(previewUrl);
         previewUrl = "";
       }
       latestGifBlob = blob;
+      if (resetCompress) {
+        baseGifBlob = blob;
+        originalGifSize = blob.size;
+        gifCompressRound = 0;
+      }
       previewUrl = URL.createObjectURL(blob);
       if (gifPreview) {
         gifPreview.src = previewUrl;
@@ -1360,10 +1402,9 @@
           }
         });
 
-        applyGifOutput(
-          blob,
-          `已生成 ${outW}×${outH} · ${frames.length} 帧 · ${formatKb(blob.size)}`
-        );
+        applyGifOutput(blob, `已生成 ${outW}×${outH} · ${frames.length} 帧 · ${formatKb(blob.size)}`, {
+          resetCompress: true,
+        });
         setProgress(true, 1, `完成 · ${formatKb(blob.size)}`);
         toast("GIF 已生成");
       } catch (err) {
@@ -1378,27 +1419,37 @@
       }
     }
 
-    async function compressGeneratedGif() {
-      if (!latestGifBlob || compressingGif) return;
+    async function compressGeneratedGif({ again = false } = {}) {
+      const input = again ? latestGifBlob : baseGifBlob || latestGifBlob;
+      if (!input || compressingGif) return;
       compressingGif = true;
       setGifCompressEnabled(false);
       if (gifGenerate) gifGenerate.disabled = true;
       setError(gifError, "");
-      const before = latestGifBlob.size;
+      const before = input.size;
+      const nextRound = again ? gifCompressRound + 1 : 1;
+      if (!again) {
+        originalGifSize = (baseGifBlob || input).size;
+        gifCompressRound = 0;
+      }
       try {
         const level = gifCompressLevel?.value || "standard";
-        const out = await compressGifBlob(latestGifBlob, level, (ratio, text) => {
+        const out = await compressGifBlob(input, level, (ratio, text) => {
           setProgress(true, ratio, text);
-        });
+        }, { round: nextRound });
         const after = out.size;
-        const saved = before > 0 ? Math.max(0, Math.round((1 - after / before) * 100)) : 0;
-        applyGifOutput(out, `已压缩 ${formatKb(before)} → ${formatKb(after)}（约省 ${saved}%）`);
-        setProgress(true, 1, `压缩完成 · ${formatKb(before)} → ${formatKb(after)}`);
-        toast(after < before ? `已压缩，约省 ${saved}%` : "压缩完成（体积无明显下降）");
+        gifCompressRound = nextRound;
+        const summary = gifCompressSummary(originalGifSize || before, before, after, nextRound);
+        applyGifOutput(out, summary.text);
+        setProgress(true, 1, `第 ${nextRound} 次压缩完成 · ${formatKb(before)} → ${formatKb(after)}`);
+        toast(
+          after < before
+            ? `第 ${nextRound} 次已压缩，本轮约省 ${summary.stepSaved}%`
+            : `第 ${nextRound} 次完成（本轮体积无明显下降，可换更强档位再试）`
+        );
       } catch (err) {
         setError(gifError, err.message || String(err));
         setProgress(false, 0, "");
-        setGifCompressEnabled(Boolean(latestGifBlob));
       } finally {
         compressingGif = false;
         if (gifGenerate) gifGenerate.disabled = false;
@@ -1427,7 +1478,10 @@
     gifGenerate?.addEventListener("click", generateGif);
     gifAbort?.addEventListener("click", abortGif);
     gifCompress?.addEventListener("click", () => {
-      compressGeneratedGif().catch((err) => setError(gifError, err.message || String(err)));
+      compressGeneratedGif({ again: false }).catch((err) => setError(gifError, err.message || String(err)));
+    });
+    gifCompressAgain?.addEventListener("click", () => {
+      compressGeneratedGif({ again: true }).catch((err) => setError(gifError, err.message || String(err)));
     });
     updateGifMeta();
   } catch (err) {
@@ -1820,26 +1874,40 @@
     const v2gPreview = $("#v2g-preview");
     const v2gDownload = $("#v2g-download");
     const v2gCompress = $("#v2g-compress");
+    const v2gCompressAgain = $("#v2g-compress-again");
     const v2gCompressLevel = $("#v2g-compress-level");
     const MAX_V2G_FRAMES = 300;
     const MAX_V2G_SECONDS = 600;
     let videoObjectUrl = "";
     let gifObjectUrl = "";
     let latestV2gBlob = null;
+    let baseV2gBlob = null;
+    let originalV2gSize = 0;
+    let v2gCompressRound = 0;
     let activeV2gGif = null;
     let abortV2g = false;
     let compressingV2g = false;
 
     function setV2gCompressEnabled(on) {
       if (v2gCompress) v2gCompress.disabled = !on || compressingV2g;
+      if (v2gCompressAgain) {
+        const canAgain = on && v2gCompressRound > 0 && !compressingV2g;
+        v2gCompressAgain.disabled = !canAgain;
+        v2gCompressAgain.hidden = v2gCompressRound <= 0;
+      }
     }
 
-    function applyV2gOutput(blob) {
+    function applyV2gOutput(blob, { resetCompress = false } = {}) {
       if (gifObjectUrl) {
         URL.revokeObjectURL(gifObjectUrl);
         gifObjectUrl = "";
       }
       latestV2gBlob = blob;
+      if (resetCompress) {
+        baseV2gBlob = blob;
+        originalV2gSize = blob.size;
+        v2gCompressRound = 0;
+      }
       gifObjectUrl = URL.createObjectURL(blob);
       if (v2gPreview) {
         v2gPreview.src = gifObjectUrl;
@@ -1866,6 +1934,9 @@
         gifObjectUrl = "";
       }
       latestV2gBlob = null;
+      baseV2gBlob = null;
+      originalV2gSize = 0;
+      v2gCompressRound = 0;
       setV2gCompressEnabled(false);
       if (v2gPreview) {
         v2gPreview.hidden = true;
@@ -1902,7 +1973,7 @@
       setError(v2gError, "");
       if (v2gMeta) {
         v2gMeta.textContent =
-          "支持 MP4 / WebM / MOV（实况照片可先导出为影片再上传）。上传后「最长秒数」默认等于视频时长；转完后可用「压缩体积」再缩小文件。";
+          "支持 MP4 / WebM / MOV。上传后「最长秒数」默认等于视频时长；转完可「压缩体积」，不满意再点「继续压缩」。";
       }
       if (v2gMaxsec) {
         v2gMaxsec.value = "";
@@ -2154,7 +2225,7 @@
           }
         });
 
-        applyV2gOutput(blob);
+        applyV2gOutput(blob, { resetCompress: true });
         setV2gProgress(true, 1, `完成 · ${frameCount} 帧 · ${outW}×${outH} · ${formatKb(blob.size)}`);
         if (v2gMeta) {
           const effFps = frameCount > 1 ? (frameCount - 1) / span : fps;
@@ -2181,30 +2252,38 @@
       }
     }
 
-    async function compressV2gGif() {
-      if (!latestV2gBlob || compressingV2g) return;
+    async function compressV2gGif({ again = false } = {}) {
+      const input = again ? latestV2gBlob : baseV2gBlob || latestV2gBlob;
+      if (!input || compressingV2g) return;
       compressingV2g = true;
       setV2gCompressEnabled(false);
       if (v2gGenerate) v2gGenerate.disabled = true;
       setError(v2gError, "");
-      const before = latestV2gBlob.size;
+      const before = input.size;
+      const nextRound = again ? v2gCompressRound + 1 : 1;
+      if (!again) {
+        originalV2gSize = (baseV2gBlob || input).size;
+        v2gCompressRound = 0;
+      }
       try {
         const level = v2gCompressLevel?.value || "standard";
-        const out = await compressGifBlob(latestV2gBlob, level, (ratio, text) => {
+        const out = await compressGifBlob(input, level, (ratio, text) => {
           setV2gProgress(true, ratio, text);
-        });
+        }, { round: nextRound });
         const after = out.size;
-        const saved = before > 0 ? Math.max(0, Math.round((1 - after / before) * 100)) : 0;
+        v2gCompressRound = nextRound;
+        const summary = gifCompressSummary(originalV2gSize || before, before, after, nextRound);
         applyV2gOutput(out);
-        if (v2gMeta) {
-          v2gMeta.textContent = `已压缩 ${formatKb(before)} → ${formatKb(after)}（约省 ${saved}%）`;
-        }
-        setV2gProgress(true, 1, `压缩完成 · ${formatKb(before)} → ${formatKb(after)}`);
-        toast(after < before ? `已压缩，约省 ${saved}%` : "压缩完成（体积无明显下降）");
+        if (v2gMeta) v2gMeta.textContent = summary.text;
+        setV2gProgress(true, 1, `第 ${nextRound} 次压缩完成 · ${formatKb(before)} → ${formatKb(after)}`);
+        toast(
+          after < before
+            ? `第 ${nextRound} 次已压缩，本轮约省 ${summary.stepSaved}%`
+            : `第 ${nextRound} 次完成（本轮体积无明显下降，可换更强档位再试）`
+        );
       } catch (err) {
         setError(v2gError, err.message || String(err));
         setV2gProgress(false, 0, "");
-        setV2gCompressEnabled(Boolean(latestV2gBlob));
       } finally {
         compressingV2g = false;
         if (v2gGenerate) v2gGenerate.disabled = !v2gVideo?.src;
@@ -2216,7 +2295,10 @@
     $("#v2g-clear")?.addEventListener("click", clearV2g);
     v2gGenerate?.addEventListener("click", convertVideoToGif);
     v2gCompress?.addEventListener("click", () => {
-      compressV2gGif().catch((err) => setError(v2gError, err.message || String(err)));
+      compressV2gGif({ again: false }).catch((err) => setError(v2gError, err.message || String(err)));
+    });
+    v2gCompressAgain?.addEventListener("click", () => {
+      compressV2gGif({ again: true }).catch((err) => setError(v2gError, err.message || String(err)));
     });
     v2gAbort?.addEventListener("click", () => {
       abortV2g = true;
@@ -2237,6 +2319,7 @@
     const gifcError = $("#gifc-error");
     const gifcLevel = $("#gifc-compress-level");
     const gifcCompress = $("#gifc-compress");
+    const gifcCompressAgain = $("#gifc-compress-again");
     const gifcDownload = $("#gifc-download");
     const gifcSource = $("#gifc-source");
     const gifcPreview = $("#gifc-preview");
@@ -2244,6 +2327,9 @@
     const gifcProgressFill = $("#gifc-progress-fill");
     const gifcProgressText = $("#gifc-progress-text");
     let sourceBlob = null;
+    let workingBlob = null;
+    let originalSize = 0;
+    let compressRound = 0;
     let sourceUrl = "";
     let outUrl = "";
     let sourceName = "compressed.gif";
@@ -2255,6 +2341,15 @@
       const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)));
       if (gifcProgressFill) gifcProgressFill.style.width = `${pct}%`;
       if (gifcProgressText) gifcProgressText.textContent = text || `${pct}%`;
+    }
+
+    function setGifcButtons() {
+      if (gifcCompress) gifcCompress.disabled = !sourceBlob || compressingExisting;
+      if (gifcCompressAgain) {
+        const canAgain = Boolean(workingBlob) && compressRound > 0 && !compressingExisting;
+        gifcCompressAgain.disabled = !canAgain;
+        gifcCompressAgain.hidden = compressRound <= 0;
+      }
     }
 
     function revokeGifcOut() {
@@ -2274,6 +2369,9 @@
 
     function clearGifc() {
       sourceBlob = null;
+      workingBlob = null;
+      originalSize = 0;
+      compressRound = 0;
       if (sourceUrl) {
         URL.revokeObjectURL(sourceUrl);
         sourceUrl = "";
@@ -2283,15 +2381,16 @@
         gifcSource.hidden = true;
         gifcSource.removeAttribute("src");
       }
-      if (gifcCompress) gifcCompress.disabled = true;
       if (gifcFile) gifcFile.value = "";
       setGifcProgress(false, 0, "");
       setError(gifcError, "");
       if (gifcMeta) {
-        gifcMeta.textContent = "上传本地已有 GIF，选择档位后压缩体积；处理全程在浏览器完成。";
+        gifcMeta.textContent =
+          "上传本地已有 GIF，选择档位后压缩；效果不满意可点「继续压缩」，会基于当前结果再压一轮。";
       }
       sourceName = "compressed.gif";
       compressingExisting = false;
+      setGifcButtons();
     }
 
     async function loadExistingGif(file) {
@@ -2305,6 +2404,9 @@
         return;
       }
       sourceBlob = file;
+      workingBlob = file;
+      originalSize = file.size;
+      compressRound = 0;
       sourceName = name.replace(/\.gif$/i, "") || "compressed";
       sourceName = `${sourceName}-compressed.gif`;
       sourceUrl = URL.createObjectURL(file);
@@ -2312,27 +2414,34 @@
         gifcSource.src = sourceUrl;
         gifcSource.hidden = false;
       }
-      if (gifcCompress) gifcCompress.disabled = false;
+      setGifcButtons();
       if (gifcMeta) {
-        gifcMeta.textContent = `${file.name} · ${formatKb(file.size)} · 选择档位后点「压缩体积」`;
+        gifcMeta.textContent = `${file.name} · ${formatKb(file.size)} · 选择档位后点「压缩体积」；可多次「继续压缩」`;
       }
       toast("GIF 已加载");
     }
 
-    async function compressExistingGif() {
-      if (!sourceBlob || compressingExisting) return;
+    async function compressExistingGif({ again = false } = {}) {
+      const input = again ? workingBlob : sourceBlob;
+      if (!input || compressingExisting) return;
       compressingExisting = true;
-      if (gifcCompress) gifcCompress.disabled = true;
+      setGifcButtons();
       setError(gifcError, "");
-      revokeGifcOut();
-      const before = sourceBlob.size;
+      const before = input.size;
+      const nextRound = again ? compressRound + 1 : 1;
+      if (!again) {
+        workingBlob = sourceBlob;
+        originalSize = sourceBlob.size;
+      }
       try {
         const level = gifcLevel?.value || "standard";
-        const out = await compressGifBlob(sourceBlob, level, (ratio, text) => {
+        const out = await compressGifBlob(input, level, (ratio, text) => {
           setGifcProgress(true, ratio, text);
-        });
+        }, { round: nextRound });
         const after = out.size;
-        const saved = before > 0 ? Math.max(0, Math.round((1 - after / before) * 100)) : 0;
+        compressRound = nextRound;
+        workingBlob = out;
+        if (outUrl) URL.revokeObjectURL(outUrl);
         outUrl = URL.createObjectURL(out);
         if (gifcPreview) {
           gifcPreview.src = outUrl;
@@ -2343,20 +2452,20 @@
           gifcDownload.download = sourceName;
           gifcDownload.hidden = false;
         }
-        // Allow re-compress from the new result or original: keep source as original,
-        // but also let user compress again from output by replacing working blob? Keep original
-        // as source; re-click compresses original again with current level.
-        if (gifcMeta) {
-          gifcMeta.textContent = `已压缩 ${formatKb(before)} → ${formatKb(after)}（约省 ${saved}%）`;
-        }
-        setGifcProgress(true, 1, `压缩完成 · ${formatKb(before)} → ${formatKb(after)}`);
-        toast(after < before ? `已压缩，约省 ${saved}%` : "压缩完成（体积无明显下降）");
+        const summary = gifCompressSummary(originalSize || before, before, after, nextRound);
+        if (gifcMeta) gifcMeta.textContent = summary.text;
+        setGifcProgress(true, 1, `第 ${nextRound} 次压缩完成 · ${formatKb(before)} → ${formatKb(after)}`);
+        toast(
+          after < before
+            ? `第 ${nextRound} 次已压缩，本轮约省 ${summary.stepSaved}%`
+            : `第 ${nextRound} 次完成（本轮体积无明显下降，可换更强档位再试）`
+        );
       } catch (err) {
         setError(gifcError, err.message || String(err));
         setGifcProgress(false, 0, "");
       } finally {
         compressingExisting = false;
-        if (gifcCompress) gifcCompress.disabled = !sourceBlob;
+        setGifcButtons();
       }
     }
 
@@ -2365,7 +2474,10 @@
     });
     $("#gifc-clear")?.addEventListener("click", clearGifc);
     gifcCompress?.addEventListener("click", () => {
-      compressExistingGif().catch((err) => setError(gifcError, err.message || String(err)));
+      compressExistingGif({ again: false }).catch((err) => setError(gifcError, err.message || String(err)));
+    });
+    gifcCompressAgain?.addEventListener("click", () => {
+      compressExistingGif({ again: true }).catch((err) => setError(gifcError, err.message || String(err)));
     });
   } catch (err) {
     console.error("gif compress existing init failed", err);
