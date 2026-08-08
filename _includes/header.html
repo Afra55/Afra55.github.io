@@ -34,7 +34,8 @@
         </li>
 
         {% for p in site.pages %}
-          {% if p.title and p.permalink != "/eternum/" %}
+          {% comment %}只显示正式页面，避免 README / 资源目录被扫进导航{% endcomment %}
+          {% if p.layout == "page" and p.permalink != "/eternum/" and p.title %}
             {% if p.url == page.url %}
               <li class="active">
               {% else %}
