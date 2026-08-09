@@ -2018,7 +2018,7 @@ a.secondary-btn {
 
 .imgkit-action-bar {
   position: sticky;
-  bottom: 0.65rem;
+  bottom: 4.6rem; /* sit above the fixed temp-bar */
   z-index: 15;
   margin-top: 0.9rem;
 }
