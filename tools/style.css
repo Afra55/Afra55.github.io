@@ -1111,6 +1111,16 @@ a.secondary-btn {
   display: none;
 }
 
+.temp-bar-title-desktop {
+  display: none;
+}
+
+@media (min-width: 701px) {
+  .temp-bar-title-desktop {
+    display: inline;
+  }
+}
+
 .toast {
   position: fixed;
   left: 50%;
