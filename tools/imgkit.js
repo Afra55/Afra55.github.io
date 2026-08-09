@@ -1259,23 +1259,30 @@
     }
   });
 
-  $("#imgkit-clear")?.addEventListener("click", () => {
+  function clearImgkitTemps() {
     state.items.forEach((it) => {
       try {
         URL.revokeObjectURL(it.thumbUrl);
       } catch (_) {
         /* ignore */
       }
+      it._oriented = null;
     });
     state.items = [];
     state.selected = "";
     state.cropSource = null;
     state.cropSourceKey = "";
+    state.watermarkImage = null;
+    state.stitchDrag = null;
+    state.cropDrag = null;
     renderList();
     refreshPreview();
     renderStitchCrops();
     scheduleStitchPreview();
-  });
+  }
+
+  $("#imgkit-clear")?.addEventListener("click", clearImgkitTemps);
+  window.DevToolsTemp?.registerCleanup(clearImgkitTemps);
 
   els.list?.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-img-id]");

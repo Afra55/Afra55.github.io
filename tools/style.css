@@ -984,7 +984,7 @@ a.secondary-btn {
 .site-footer {
   max-width: 980px;
   margin: 0 auto;
-  padding: 0 1.25rem 2.5rem;
+  padding: 0 1.25rem 5.5rem;
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -1002,10 +1002,63 @@ a.secondary-btn {
   text-decoration: underline;
 }
 
+.temp-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  padding: 0.55rem 0.85rem calc(0.55rem + env(safe-area-inset-bottom, 0px));
+  border-top: 1px solid rgba(46, 196, 182, 0.28);
+  background: rgba(10, 16, 28, 0.94);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.temp-bar[data-has-temp="1"] {
+  border-top-color: rgba(46, 196, 182, 0.55);
+}
+
+.temp-bar-inner {
+  max-width: 980px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.temp-bar-copy {
+  display: grid;
+  gap: 0.15rem;
+  min-width: min(100%, 22rem);
+}
+
+.temp-bar-title {
+  font-size: 0.86rem;
+  color: var(--ink);
+}
+
+.temp-bar-copy .hint {
+  margin: 0;
+}
+
+.temp-bar-note {
+  opacity: 0.85;
+}
+
+.temp-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  align-items: center;
+}
+
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 1.4rem;
+  bottom: 5.2rem;
   transform: translateX(-50%) translateY(12px);
   background: #18312e;
   color: #d7fff8;
@@ -1016,7 +1069,7 @@ a.secondary-btn {
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.2s, transform 0.2s;
-  z-index: 20;
+  z-index: 40;
 }
 
 .toast.is-show {
@@ -1965,7 +2018,7 @@ a.secondary-btn {
 
 .imgkit-action-bar {
   position: sticky;
-  bottom: 0.65rem;
+  bottom: 4.6rem; /* sit above the fixed temp-bar */
   z-index: 15;
   margin-top: 0.9rem;
 }
