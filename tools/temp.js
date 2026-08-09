@@ -182,6 +182,7 @@
   async function refreshUi() {
     const blobMeta = document.querySelector("#temp-blob-meta");
     const storeMeta = document.querySelector("#temp-store-meta");
+    const summaryMeta = document.querySelector("#temp-summary-meta");
     const bar = document.querySelector("#temp-bar");
     if (!bar) return;
 
@@ -194,13 +195,22 @@
     }
 
     const store = await storageStats();
+    let storeText = "站点存储：—";
     if (storeMeta) {
       if (!store) {
-        storeMeta.textContent = "站点存储：当前浏览器不支持估算";
+        storeText = "站点存储：当前浏览器不支持估算";
       } else {
         const quotaText = store.quota > 0 ? ` / 配额 ${formatBytes(store.quota)}` : "";
-        storeMeta.textContent = `站点存储：${formatBytes(store.usage)}${quotaText}`;
+        storeText = `站点存储：${formatBytes(store.usage)}${quotaText}`;
       }
+      storeMeta.textContent = storeText;
+    }
+
+    if (summaryMeta) {
+      summaryMeta.textContent =
+        blob.count > 0
+          ? `${formatBytes(blob.bytes)} · ${blob.count} 项`
+          : "接近 0";
     }
 
     bar.dataset.hasTemp = blob.count > 0 ? "1" : "0";
@@ -221,29 +231,59 @@
     }, 1600);
   }
 
+  function runClear(triggerBtn) {
+    const buttons = [document.querySelector("#temp-clear"), document.querySelector("#temp-clear-compact")].filter(
+      Boolean
+    );
+    buttons.forEach((btn) => {
+      btn.disabled = true;
+    });
+    if (triggerBtn) triggerBtn.disabled = true;
+    return clearAll()
+      .then((result) => {
+        const freed = Math.max(0, (result.before.bytes || 0) - (result.after.bytes || 0));
+        toast(
+          freed > 0
+            ? `已清理临时文件约 ${formatBytes(freed)}`
+            : "已执行清理（主要释放页面内存中的上传/预览）"
+        );
+        const bar = document.querySelector("#temp-bar");
+        const toggle = document.querySelector("#temp-toggle");
+        if (bar) bar.dataset.expanded = "0";
+        if (toggle) toggle.setAttribute("aria-expanded", "false");
+      })
+      .catch((err) => toast(err.message || String(err)))
+      .finally(() => {
+        buttons.forEach((btn) => {
+          btn.disabled = false;
+        });
+      });
+  }
+
   function bindUi() {
     const refreshBtn = document.querySelector("#temp-refresh");
     const clearBtn = document.querySelector("#temp-clear");
+    const clearCompactBtn = document.querySelector("#temp-clear-compact");
+    const toggleBtn = document.querySelector("#temp-toggle");
+    const bar = document.querySelector("#temp-bar");
+
+    toggleBtn?.addEventListener("click", () => {
+      if (!bar) return;
+      const next = bar.dataset.expanded === "1" ? "0" : "1";
+      bar.dataset.expanded = next;
+      toggleBtn.setAttribute("aria-expanded", next === "1" ? "true" : "false");
+    });
+
     refreshBtn?.addEventListener("click", () => {
       refreshUi()
         .then(() => toast("已刷新占用信息"))
         .catch(() => {});
     });
     clearBtn?.addEventListener("click", () => {
-      clearBtn.disabled = true;
-      clearAll()
-        .then((result) => {
-          const freed = Math.max(0, (result.before.bytes || 0) - (result.after.bytes || 0));
-          toast(
-            freed > 0
-              ? `已清理临时文件约 ${formatBytes(freed)}`
-              : "已执行清理（主要释放页面内存中的上传/预览）"
-          );
-        })
-        .catch((err) => toast(err.message || String(err)))
-        .finally(() => {
-          clearBtn.disabled = false;
-        });
+      runClear(clearBtn);
+    });
+    clearCompactBtn?.addEventListener("click", () => {
+      runClear(clearCompactBtn);
     });
     refreshUi().catch(() => {});
     // Periodic light refresh while page is visible
