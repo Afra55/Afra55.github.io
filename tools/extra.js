@@ -1457,15 +1457,26 @@
       }
     }
 
-    gifFile?.addEventListener("change", (e) => addFiles(e.target.files));
-    $("#gif-clear")?.addEventListener("click", () => {
+    function clearGifMakerTemps() {
       frames.splice(0).forEach((f) => URL.revokeObjectURL(f.url));
       renderFrameList();
       updateGifMeta();
       revokePreview();
       setError(gifError, "");
       setProgress(false, 0, "");
-    });
+      if (activeGif) {
+        try {
+          activeGif.abort();
+        } catch (_) {
+          /* ignore */
+        }
+        activeGif = null;
+      }
+    }
+
+    gifFile?.addEventListener("change", (e) => addFiles(e.target.files));
+    $("#gif-clear")?.addEventListener("click", clearGifMakerTemps);
+    window.DevToolsTemp?.registerCleanup(clearGifMakerTemps);
     $("#gif-apply-delay")?.addEventListener("click", () => {
       const delay = defaultDelay();
       frames.forEach((f) => {
@@ -1846,6 +1857,7 @@
 
     gifxFile?.addEventListener("change", (e) => loadGifFile(e.target.files?.[0]));
     $("#gifx-clear")?.addEventListener("click", clearExtracted);
+    window.DevToolsTemp?.registerCleanup(clearExtracted);
     gifxZipBtn?.addEventListener("click", downloadZip);
     gifxVideoBtn?.addEventListener("click", exportVideo);
     gifxAbort?.addEventListener("click", () => {
@@ -2293,6 +2305,7 @@
 
     v2gFile?.addEventListener("change", (e) => loadVideoFile(e.target.files?.[0]));
     $("#v2g-clear")?.addEventListener("click", clearV2g);
+    window.DevToolsTemp?.registerCleanup(clearV2g);
     v2gGenerate?.addEventListener("click", convertVideoToGif);
     v2gCompress?.addEventListener("click", () => {
       compressV2gGif({ again: false }).catch((err) => setError(v2gError, err.message || String(err)));
@@ -2473,6 +2486,7 @@
       loadExistingGif(e.target.files?.[0]).catch((err) => setError(gifcError, err.message || String(err)));
     });
     $("#gifc-clear")?.addEventListener("click", clearGifc);
+    window.DevToolsTemp?.registerCleanup(clearGifc);
     gifcCompress?.addEventListener("click", () => {
       compressExistingGif({ again: false }).catch((err) => setError(gifcError, err.message || String(err)));
     });
