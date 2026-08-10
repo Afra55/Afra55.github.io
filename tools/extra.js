@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.10-p";
+  const GIF_TOOL_VERSION = "2026.08.10-q";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -76,9 +76,23 @@
   }
 
   /** 试验路径：懒加载单线程 ffmpeg.wasm（本地 vendor），用于 palettegen/paletteuse 出 GIF */
-  const FFMPEG_VENDOR_BASE = new URL("./vendor/ffmpeg/", document.baseURI || window.location.href);
+  function resolveFfmpegVendorBase() {
+    // 相对 extra.js 定位，避免页面 baseURI / hash 路由导致路径跑偏
+    const nodes = document.getElementsByTagName("script");
+    for (let i = nodes.length - 1; i >= 0; i--) {
+      const src = nodes[i].src || "";
+      if (/extra\.js(\?|#|$)/i.test(src)) {
+        return new URL("./vendor/ffmpeg/", src);
+      }
+    }
+    return new URL("./vendor/ffmpeg/", document.baseURI || window.location.href);
+  }
+
+  const FFMPEG_VENDOR_BASE = resolveFfmpegVendorBase();
   let ffmpegModsPromise = null;
   let ffmpegInstance = null;
+  /** @type {string[]} */
+  let ffmpegBlobUrls = [];
 
   function loadFfmpegMods() {
     if (!ffmpegModsPromise) {
@@ -100,31 +114,118 @@
     return new Uint8Array(buf);
   }
 
+  /**
+   * 预下载资源为 blob URL。worker 再拉 31MB wasm 时，手机网络易报 NetworkError。
+   * 注意：worker.js 本身必须用同源真实 URL（blob worker 无法解析相对 import）。
+   */
+  async function fetchToBlobURL(url, mime, onProgress, label, progressFrom, progressTo) {
+    onProgress?.(progressFrom, `${label}…`);
+    let res;
+    try {
+      res = await fetch(url, { cache: "force-cache" });
+    } catch (err) {
+      throw new Error(`${label}网络失败：${err?.message || err}（${url}）`);
+    }
+    if (!res.ok) throw new Error(`${label}下载失败 HTTP ${res.status}（${url}）`);
+    const total = Number(res.headers.get("content-length")) || 0;
+    if (!res.body || !total || typeof res.body.getReader !== "function") {
+      const buf = await res.arrayBuffer();
+      onProgress?.(progressTo, `${label}完成`);
+      const blobUrl = URL.createObjectURL(new Blob([buf], { type: mime }));
+      ffmpegBlobUrls.push(blobUrl);
+      return blobUrl;
+    }
+    const reader = res.body.getReader();
+    const chunks = [];
+    let received = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
+      received += value.byteLength;
+      const ratio = Math.min(1, received / total);
+      const mb = (received / (1024 * 1024)).toFixed(1);
+      const totalMb = (total / (1024 * 1024)).toFixed(1);
+      onProgress?.(
+        progressFrom + (progressTo - progressFrom) * ratio,
+        `${label} ${mb}/${totalMb} MB`
+      );
+    }
+    const merged = new Uint8Array(received);
+    let offset = 0;
+    for (const c of chunks) {
+      merged.set(c, offset);
+      offset += c.byteLength;
+    }
+    onProgress?.(progressTo, `${label}完成`);
+    const blobUrl = URL.createObjectURL(new Blob([merged], { type: mime }));
+    ffmpegBlobUrls.push(blobUrl);
+    return blobUrl;
+  }
+
   async function getFfmpegInstance(onProgress) {
     if (ffmpegInstance?.loaded) return ffmpegInstance;
-    onProgress?.(0.03, "加载 FFmpeg 模块…");
+    onProgress?.(0.02, "加载 FFmpeg 模块…");
     const { FFmpeg } = await loadFfmpegMods();
-    onProgress?.(0.1, "初始化 FFmpeg 引擎…");
+    const coreJsURL = new URL("core/ffmpeg-core.js", FFMPEG_VENDOR_BASE).href;
+    const wasmURL = new URL("core/ffmpeg-core.wasm", FFMPEG_VENDOR_BASE).href;
+    const workerURL = new URL("ff/worker.js", FFMPEG_VENDOR_BASE).href;
+
+    // 先把大文件拉进 blob，再交给 worker，减少手机端二次请求失败
+    const coreBlob = await fetchToBlobURL(coreJsURL, "text/javascript", onProgress, "下载 ffmpeg-core.js", 0.04, 0.08);
+    const wasmBlob = await fetchToBlobURL(
+      wasmURL,
+      "application/wasm",
+      onProgress,
+      "下载 ffmpeg-core.wasm",
+      0.08,
+      0.18
+    );
+
+    onProgress?.(0.19, "初始化 FFmpeg Worker…");
     const ffmpeg = new FFmpeg();
-    // 同源绝对路径：避免 CDN Worker 跨域；wasm 约 31MB，首次加载较慢
-    await ffmpeg.load({
-      classWorkerURL: new URL("ff/worker.js", FFMPEG_VENDOR_BASE).href,
-      coreURL: new URL("core/ffmpeg-core.js", FFMPEG_VENDOR_BASE).href,
-      wasmURL: new URL("core/ffmpeg-core.wasm", FFMPEG_VENDOR_BASE).href,
-    });
+    try {
+      await ffmpeg.load({
+        classWorkerURL: workerURL,
+        coreURL: coreBlob,
+        wasmURL: wasmBlob,
+      });
+    } catch (err) {
+      try {
+        ffmpeg.terminate();
+      } catch (_) {
+        /* ignore */
+      }
+      terminateFfmpegInstance();
+      const msg = err?.message || String(err);
+      throw new Error(
+        /NetworkError|Failed to fetch|Aborted/i.test(msg)
+          ? `FFmpeg 引擎加载失败（多为手机网络中断或内存不足，可换 Wi‑Fi / 缩短片段后重试）：${msg}`
+          : `FFmpeg 引擎加载失败：${msg}`
+      );
+    }
     ffmpegInstance = ffmpeg;
-    onProgress?.(0.2, "FFmpeg 就绪");
+    onProgress?.(0.22, "FFmpeg 就绪");
     return ffmpeg;
   }
 
   function terminateFfmpegInstance() {
-    if (!ffmpegInstance) return;
-    try {
-      ffmpegInstance.terminate();
-    } catch (_) {
-      /* ignore */
+    if (ffmpegInstance) {
+      try {
+        ffmpegInstance.terminate();
+      } catch (_) {
+        /* ignore */
+      }
+      ffmpegInstance = null;
     }
-    ffmpegInstance = null;
+    while (ffmpegBlobUrls.length) {
+      const u = ffmpegBlobUrls.pop();
+      try {
+        URL.revokeObjectURL(u);
+      } catch (_) {
+        /* ignore */
+      }
+    }
   }
 
   /**
