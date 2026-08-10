@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.10-n";
+  const GIF_TOOL_VERSION = "2026.08.10-o";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -223,7 +223,8 @@
   }
 
   /**
-   * 压缩策略：第 1 轮先 -O3（几乎不伤画质），之后再逐步 lossy / 减色 / 缩放。
+   * 手动压缩：第 1 轮先 -O3，之后再逐步 lossy / 减色 / 缩放。
+   * 黑盒请用 buildBlackbox*，勿直接复用（避免第 1 轮纯 O3 浪费有效压缩轮次）。
    */
   function buildGifCompressArgs(level = "standard", round = 1) {
     const preset = GIF_COMPRESS_PRESETS[level] || GIF_COMPRESS_PRESETS.standard;
@@ -241,14 +242,29 @@
     return { label: preset.label, args: parts.join(" "), round: r, lossy };
   }
 
-  /** 黑盒高帧档：先 O3，再轻 lossy，不减色/缩放，优先保住更高 FPS */
+  /**
+   * 黑盒高帧档轻柔压缩（对齐 -l 基线）：每轮都带 lossy，不减色/缩放，优先保住 12FPS。
+   * 附带 -O3，但不单独占一轮。
+   */
   function buildBlackboxSoftCompressArgs(round = 1) {
     const r = Math.max(1, Math.round(Number(round) || 1));
-    if (r === 1) {
-      return { label: "轻柔·优化", args: "-O3", round: 1, lossy: 0 };
-    }
-    const lossy = Math.min(70, 28 + (r - 2) * 24); // 2→28, 3→52
+    const lossy = Math.min(75, 25 + (r - 1) * 22); // 1→25, 2→47, 3→69
     return { label: "轻柔", args: `-O3 --lossy=${lossy}`, round: r, lossy };
+  }
+
+  /** 黑盒最后一档：每轮都有 lossy（对齐 -l 力度），避免首轮纯 O3 白占一轮 */
+  function buildBlackboxHardCompressArgs(round = 1) {
+    const r = Math.max(1, Math.round(Number(round) || 1));
+    const level = r <= 2 ? "standard" : "strong";
+    const baseLossy = level === "strong" ? 100 : 60;
+    const lossy = Math.min(200, baseLossy + (r - 1) * 30);
+    const parts = ["-O3", `--lossy=${lossy}`];
+    if (level === "strong" || r >= 2) {
+      parts.push(`--colors ${r >= 4 ? 64 : 128}`);
+    }
+    if (r >= 7) parts.push("--scale 0.85");
+    else if (r >= 5) parts.push("--scale 0.9");
+    return { label: level === "strong" ? "强力" : "标准", args: parts.join(" "), round: r, lossy };
   }
 
   function gifCompressSummary(originalSize, beforeSize, afterSize, round) {
@@ -2110,11 +2126,11 @@
     const V2G_BLACKBOX_MAX_W = 420;
     const V2G_BLACKBOX_QUALITY = 5;
     const V2G_BLACKBOX_MAX_COMPRESS_ROUNDS = 10;
-    /** 非最后一档：O3→轻lossy，最多 3 轮（不减色）；多给高帧档机会再降 FPS */
+    /** 非最后一档：每轮轻lossy（对齐 -l），最多 3 轮不减色；多给高帧档机会再降 FPS */
     const V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS = 3;
     const V2G_BLACKBOX_LONG_SPAN_SEC = 20;
     const V2G_DEFAULT_META =
-      "支持 MP4 / WebM / MOV。默认 15FPS / 宽480 / 质量5。可转 GIF、动画 WebP，或黑盒 GIF（≤6MB）。WebP 通常更清晰更小（部分浏览器不支持编码）。";
+      "支持 MP4 / WebM / MOV。默认 15FPS / 宽480 / 质量5。可转 GIF、动画 WebP（需浏览器支持编码，多数手机 Safari 不行），或黑盒 GIF（≤6MB）。";
     let videoObjectUrl = "";
     let gifObjectUrl = "";
     let latestV2gBlob = null;
@@ -2127,12 +2143,26 @@
     let abortV2g = false;
     let compressingV2g = false;
     let v2gBusy = false;
+    const webpEncodeSupported = canEncodeStillWebp();
+
+    function refreshWebpButtonGate() {
+      if (!v2gGenerateWebp) return;
+      if (webpEncodeSupported) {
+        v2gGenerateWebp.title = "浏览器原生编码各帧再封装为动画 WebP；通常比 GIF 更清晰更小";
+        v2gGenerateWebp.hidden = false;
+        return;
+      }
+      v2gGenerateWebp.disabled = true;
+      v2gGenerateWebp.title = "当前浏览器不支持编码 WebP（常见于手机 Safari）。可用「转为 GIF」或「黑盒 GIF」。";
+      v2gGenerateWebp.textContent = "动画 WebP（本机不支持）";
+    }
+    refreshWebpButtonGate();
 
     function setV2gActionButtons() {
       const hasVideo = Boolean(v2gVideo?.src);
       const canRun = hasVideo && !v2gBusy && !compressingV2g;
       if (v2gGenerate) v2gGenerate.disabled = !canRun;
-      if (v2gGenerateWebp) v2gGenerateWebp.disabled = !canRun;
+      if (v2gGenerateWebp) v2gGenerateWebp.disabled = !canRun || !webpEncodeSupported;
       if (v2gBlackbox) v2gBlackbox.disabled = !canRun;
     }
 
@@ -2650,8 +2680,8 @@
 
     /**
      * 单档：编码后若超 6MB 再压缩。
-     * 非最后一档：先 -O3 再轻 lossy（不减色），不够则降帧。
-     * 最后一档：O3 → 标准/强力多轮，尽量挤进 6MB。
+     * 非最后一档：轻柔 lossy（对齐 -l，不减色），不够则降帧。
+     * 最后一档：标准/强力多轮（每轮都有 lossy），尽量挤进 6MB。
      * @returns {{ candidate: object, underBudget: boolean }}
      */
     async function encodeAndCompressBlackboxTier(fps, tierIndex, tierTotal) {
@@ -2684,7 +2714,7 @@
         if (abortV2g) throw new Error("已取消");
         const before = candidate.blob.size;
         const plan = isLastTier
-          ? buildGifCompressArgs(round <= 2 ? "standard" : "strong", round)
+          ? buildBlackboxHardCompressArgs(round)
           : buildBlackboxSoftCompressArgs(round);
         const modeTip = isLastTier ? plan.label : "轻柔保画质";
         setV2gProgress(
@@ -2789,6 +2819,10 @@
     async function convertVideoToWebp() {
       if (!v2gVideo || !v2gVideo.src) {
         setError(v2gError, "请先选择视频");
+        return;
+      }
+      if (!webpEncodeSupported) {
+        setError(v2gError, "当前浏览器不支持编码 WebP（常见于手机 Safari）。请用「转为 GIF」或「黑盒 GIF」");
         return;
       }
       if (v2gBusy) return;
