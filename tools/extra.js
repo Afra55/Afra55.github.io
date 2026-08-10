@@ -3153,12 +3153,13 @@
 
       if (abortV2g) throw new Error("已取消");
       mapProgress(0.03, `${stageLabel}准备 FFmpeg 引擎…`);
+      let ticker = null;
       const ffmpeg = await getFfmpegInstance((ratio, text) => {
         mapProgress(0.03 + Math.min(0.12, (ratio || 0) * 0.12), `${stageLabel}${text || "加载引擎…"}`);
       });
       if (abortV2g) throw new Error("已取消");
 
-      const ticker = createEncodeProgressTicker(mapProgress, 0.2, 0.72, `${stageLabel}准备编码`);
+      ticker = createEncodeProgressTicker(mapProgress, 0.2, 0.72, `${stageLabel}准备编码`);
       const onFfmpegProgress = ({ progress }) => {
         if (abortV2g) return;
         const p = Math.max(0, Math.min(1, Number(progress) || 0));
@@ -3224,6 +3225,7 @@
         if (code !== 0) throw new Error(`FFmpeg 失败（code=${code}）`);
 
         ticker.stop();
+        ticker = null;
         mapProgress(0.94, `${stageLabel}读取 GIF…`);
         const data = await ffmpeg.readFile(outName);
         const raw = data instanceof Uint8Array ? data : new Uint8Array(data);
@@ -3247,7 +3249,7 @@
           watermark: usedWm,
         };
       } finally {
-        ticker.stop();
+        if (ticker) ticker.stop();
         try {
           ffmpeg.off("progress", onFfmpegProgress);
         } catch (_) {}
