@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260810u" />
+  <link rel="stylesheet" href="./style.css?v=20260810v" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -946,9 +946,9 @@ hello@world.org</textarea>
       <div class="panel-head">
         <div class="panel-title-row">
           <h1>GIF 工具</h1>
-          <span class="tool-ver mono" id="gif-tool-version" title="GIF 工具逻辑版本">v2026.08.10-u</span>
+          <span class="tool-ver mono" id="gif-tool-version" title="GIF 工具逻辑版本">v2026.08.10-v</span>
         </div>
-        <p>多图合成 GIF、压缩已有 GIF、拆帧/转 WebM，或把视频转成 GIF / 动画 WebP；本地处理，带进度。当前版本 <strong class="mono" id="gif-tool-version-inline">v2026.08.10-u</strong>。</p>
+        <p>多图合成 GIF、压缩已有 GIF、拆帧/转 WebM，或把视频转成 GIF / 动画 WebP；本地处理，带进度。当前版本 <strong class="mono" id="gif-tool-version-inline">v2026.08.10-v</strong>。</p>
       </div>
       <div class="panel-body">
         <div class="convert-grid">
@@ -1104,28 +1104,30 @@ hello@world.org</textarea>
               <option value="large">大</option>
             </select>
           </div>
-          <div class="v2g-bright" id="v2g-bright">
-            <div class="field-row v2g-bright-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
-              <label class="flag"><input type="checkbox" id="v2g-bright-enable" /> 调亮画面</label>
-              <div class="seg v2g-bright-seg" id="v2g-bright-presets" hidden role="group" aria-label="调亮档位">
-                <button type="button" class="seg-btn" data-bright="10">稍亮</button>
-                <button type="button" class="seg-btn is-active" data-bright="20">更亮</button>
-                <button type="button" class="seg-btn" data-bright="35">最亮</button>
-              </div>
-              <button type="button" class="ghost-btn" id="v2g-bright-fine-toggle" hidden>细调</button>
-            </div>
-            <div class="v2g-bright-fine field-row" id="v2g-bright-fine" hidden>
-              <label for="v2g-bright-amount">亮度 <span class="mono" id="v2g-bright-amount-label">+20%</span></label>
-              <input id="v2g-bright-amount" class="v2g-bright-range" type="range" min="0" max="50" step="1" value="20" />
-            </div>
+          <div class="field-row v2g-bright-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
+            <label class="flag"><input type="checkbox" id="v2g-bright-enable" /> 调亮画面</label>
+            <span class="hint tight" style="margin:0">开启后在视频下方预览并调节</span>
           </div>
           <p class="hint" id="v2g-meta">支持 MP4 / WebM / MOV。默认 15FPS / 宽480 / 质量5。默认 FFmpeg 转 GIF（进入本页预热引擎，持久保存）；也可转动画 WebP，或黑盒 GIF（≤6MB）。可选调亮并实时预览。</p>
           <div class="gif-preview-wrap">
             <video id="v2g-video" class="img-preview gif-preview" controls playsinline muted hidden></video>
           </div>
-          <div class="v2g-bright-preview-wrap" id="v2g-bright-preview-wrap" hidden>
-            <canvas id="v2g-bright-preview" class="img-preview gif-preview v2g-bright-preview" width="480" height="270" aria-label="调亮预览"></canvas>
-            <p class="hint tight">调亮预览（起始秒附近单帧，拖滑条即时看效果）</p>
+          <div class="v2g-bright-panel" id="v2g-bright-panel" hidden>
+            <div class="v2g-bright-preview-wrap" id="v2g-bright-preview-wrap">
+              <canvas id="v2g-bright-preview" class="img-preview gif-preview v2g-bright-preview" width="480" height="270" aria-label="调亮预览"></canvas>
+              <p class="hint tight">调亮预览（起始秒附近单帧）</p>
+            </div>
+            <div class="v2g-bright-controls">
+              <div class="seg v2g-bright-seg" id="v2g-bright-presets" role="group" aria-label="调亮档位">
+                <button type="button" class="seg-btn" data-bright="10">稍亮</button>
+                <button type="button" class="seg-btn is-active" data-bright="20">更亮</button>
+                <button type="button" class="seg-btn" data-bright="35">最亮</button>
+              </div>
+              <div class="v2g-bright-fine" id="v2g-bright-fine">
+                <label for="v2g-bright-amount">亮度 <span class="mono" id="v2g-bright-amount-label">+20%</span></label>
+                <input id="v2g-bright-amount" class="v2g-bright-range" type="range" min="0" max="50" step="1" value="20" />
+              </div>
+            </div>
           </div>
           <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
             <button type="button" class="primary-btn" id="v2g-generate" disabled title="使用 FFmpeg 双通道调色板编码 GIF">转为 GIF</button>
@@ -1832,10 +1834,10 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./temp.js?v=20260810u"></script>
+  <script src="./temp.js?v=20260810v"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260810l"></script>
-  <script src="./extra.js?v=20260810u"></script>
+  <script src="./extra.js?v=20260810v"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>
