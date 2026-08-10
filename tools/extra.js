@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.10-w";
+  const GIF_TOOL_VERSION = "2026.08.10-x";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -2518,7 +2518,8 @@
     const v2gBrightPanel = $("#v2g-bright-panel");
     const v2gBrightPresets = $("#v2g-bright-presets");
     const v2gBrightAmount = $("#v2g-bright-amount");
-    const v2gBrightAmountLabel = $("#v2g-bright-amount-label");
+    const v2gBrightPct = $("#v2g-bright-pct");
+    const v2gBrightReset = $("#v2g-bright-reset");
     const v2gBrightPreview = $("#v2g-bright-preview");
     const v2gGenerate = $("#v2g-generate");
     const v2gGenerateWebp = $("#v2g-generate-webp");
@@ -2544,6 +2545,10 @@
     const V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS = 3;
     const V2G_BLACKBOX_LONG_SPAN_SEC = 20;
     const V2G_FFMPEG_WARN_BYTES = 40 * 1024 * 1024;
+    /** 滑块默认上限；数字框可更高，滑块 max 会跟着扩展 */
+    const V2G_BRIGHT_SLIDER_MAX = 200;
+    /** 防误触软顶（%）；实际无业务硬限 */
+    const V2G_BRIGHT_SOFT_MAX = 999;
     const V2G_DEFAULT_META =
       "支持 MP4 / WebM / MOV。默认 15FPS / 宽480 / 质量5。默认 FFmpeg 转 GIF（引擎持久预热）；也可转动画 WebP，或黑盒 GIF（≤6MB）。可选调亮并实时预览。";
     let v2gBrightPreviewTimer = 0;
@@ -2697,16 +2702,22 @@
       abortV2g = false;
     }
 
-    /** @returns {number} 0–0.5，相对提亮量（与 CSS brightness(1+x) / 像素乘算一致） */
+    function clampV2gBrightPct(raw) {
+      const n = Math.round(Number(raw));
+      if (!Number.isFinite(n)) return 0;
+      return Math.min(V2G_BRIGHT_SOFT_MAX, Math.max(0, n));
+    }
+
+    /** @returns {number} ≥0 相对提亮量（与 CSS brightness(1+x) / 像素乘算一致） */
     function readV2gBrightness() {
       if (!v2gBrightEnable?.checked) return 0;
-      const pct = Math.min(50, Math.max(0, Math.round(Number(v2gBrightAmount?.value) || 0)));
-      return pct / 100;
+      const raw = v2gBrightPct?.value ?? v2gBrightAmount?.value;
+      return clampV2gBrightPct(raw) / 100;
     }
 
     /** 乘法系数：+20% → 1.2（预览 CSS / WebP 像素 / FFmpeg 共用） */
     function v2gBrightMultiplier(bright) {
-      const b = Math.min(0.5, Math.max(0, Number(bright) || 0));
+      const b = Math.max(0, Number(bright) || 0);
       return 1 + b;
     }
 
@@ -2727,13 +2738,36 @@
     }
 
     function syncV2gBrightUi() {
-      const pct = Math.min(50, Math.max(0, Math.round(Number(v2gBrightAmount?.value) || 0)));
-      if (v2gBrightAmountLabel) v2gBrightAmountLabel.textContent = `+${pct}%`;
+      const pct = clampV2gBrightPct(v2gBrightPct?.value ?? v2gBrightAmount?.value);
+      if (v2gBrightAmount) {
+        const sliderMax = Math.max(V2G_BRIGHT_SLIDER_MAX, pct);
+        if (Number(v2gBrightAmount.max) !== sliderMax) v2gBrightAmount.max = String(sliderMax);
+        if (Number(v2gBrightAmount.value) !== pct) v2gBrightAmount.value = String(pct);
+      }
+      if (v2gBrightPct && Number(v2gBrightPct.value) !== pct) v2gBrightPct.value = String(pct);
+      if (v2gBrightReset) v2gBrightReset.disabled = pct <= 0;
       if (v2gBrightPresets) {
         v2gBrightPresets.querySelectorAll("[data-bright]").forEach((btn) => {
           const v = Math.round(Number(btn.getAttribute("data-bright")) || 0);
           btn.classList.toggle("is-active", v === pct);
         });
+      }
+    }
+
+    function setV2gBrightPct(raw, { preview = true } = {}) {
+      const pct = clampV2gBrightPct(raw);
+      if (v2gBrightPct) v2gBrightPct.value = String(pct);
+      if (v2gBrightAmount) {
+        v2gBrightAmount.max = String(Math.max(V2G_BRIGHT_SLIDER_MAX, pct));
+        v2gBrightAmount.value = String(pct);
+      }
+      if (preview) {
+        applyV2gBrightCssFilter();
+        if (!v2gBrightFrameReady && v2gBrightEnable?.checked) {
+          scheduleV2gBrightPreview({ forceCapture: true });
+        }
+      } else {
+        syncV2gBrightUi();
       }
     }
 
@@ -3808,8 +3842,8 @@
         syncV2gBrightUi();
         return;
       }
-      if (v2gBrightAmount && !Number(v2gBrightAmount.value)) {
-        v2gBrightAmount.value = "20";
+      if (clampV2gBrightPct(v2gBrightPct?.value ?? v2gBrightAmount?.value) <= 0) {
+        setV2gBrightPct(20, { preview: false });
       }
       v2gBrightFrameReady = false;
       scheduleV2gBrightPreview({ forceCapture: true });
@@ -3817,16 +3851,20 @@
     v2gBrightPresets?.addEventListener("click", (e) => {
       const btn = e.target?.closest?.("[data-bright]");
       if (!btn || !v2gBrightPresets.contains(btn)) return;
-      const pct = Math.min(50, Math.max(0, Math.round(Number(btn.getAttribute("data-bright")) || 0)));
-      if (v2gBrightAmount) v2gBrightAmount.value = String(pct);
-      applyV2gBrightCssFilter();
-      if (!v2gBrightFrameReady) scheduleV2gBrightPreview({ forceCapture: true });
+      setV2gBrightPct(btn.getAttribute("data-bright"));
+    });
+    v2gBrightReset?.addEventListener("click", () => {
+      setV2gBrightPct(0);
+      toast("已还原为原始亮度");
     });
     v2gBrightAmount?.addEventListener("input", () => {
-      applyV2gBrightCssFilter();
-      if (!v2gBrightFrameReady && v2gBrightEnable?.checked) {
-        scheduleV2gBrightPreview({ forceCapture: true });
-      }
+      setV2gBrightPct(v2gBrightAmount.value);
+    });
+    v2gBrightPct?.addEventListener("input", () => {
+      setV2gBrightPct(v2gBrightPct.value);
+    });
+    v2gBrightPct?.addEventListener("change", () => {
+      setV2gBrightPct(v2gBrightPct.value);
     });
     v2gStart?.addEventListener("change", () => scheduleV2gBrightPreview({ forceCapture: true }));
     v2gStart?.addEventListener("input", () => scheduleV2gBrightPreview({ forceCapture: true }));
