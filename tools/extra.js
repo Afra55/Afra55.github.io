@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.10-u";
+  const GIF_TOOL_VERSION = "2026.08.10-v";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -2515,12 +2515,10 @@
     const v2gStart = $("#v2g-start");
     const v2gQuality = $("#v2g-quality");
     const v2gBrightEnable = $("#v2g-bright-enable");
+    const v2gBrightPanel = $("#v2g-bright-panel");
     const v2gBrightPresets = $("#v2g-bright-presets");
-    const v2gBrightFineToggle = $("#v2g-bright-fine-toggle");
-    const v2gBrightFine = $("#v2g-bright-fine");
     const v2gBrightAmount = $("#v2g-bright-amount");
     const v2gBrightAmountLabel = $("#v2g-bright-amount-label");
-    const v2gBrightPreviewWrap = $("#v2g-bright-preview-wrap");
     const v2gBrightPreview = $("#v2g-bright-preview");
     const v2gGenerate = $("#v2g-generate");
     const v2gGenerateWebp = $("#v2g-generate-webp");
@@ -2550,6 +2548,7 @@
       "支持 MP4 / WebM / MOV。默认 15FPS / 宽480 / 质量5。默认 FFmpeg 转 GIF（引擎持久预热）；也可转动画 WebP，或黑盒 GIF（≤6MB）。可选调亮并实时预览。";
     let v2gBrightPreviewTimer = 0;
     let v2gBrightPreviewToken = 0;
+    let v2gBrightFrameReady = false;
     let videoObjectUrl = "";
     let gifObjectUrl = "";
     let latestV2gBlob = null;
@@ -2692,7 +2691,9 @@
       }
       if (v2gStart) v2gStart.value = "0";
       if (v2gFile) v2gFile.value = "";
-      if (v2gBrightPreviewWrap) v2gBrightPreviewWrap.hidden = true;
+      if (v2gBrightPanel) v2gBrightPanel.hidden = true;
+      v2gBrightFrameReady = false;
+      if (v2gBrightPreview) v2gBrightPreview.style.filter = "none";
       abortV2g = false;
     }
 
@@ -2710,16 +2711,6 @@
     }
 
     function syncV2gBrightUi() {
-      const on = Boolean(v2gBrightEnable?.checked);
-      if (v2gBrightPresets) v2gBrightPresets.hidden = !on;
-      if (v2gBrightFineToggle) v2gBrightFineToggle.hidden = !on;
-      if (!on) {
-        if (v2gBrightFine) v2gBrightFine.hidden = true;
-        if (v2gBrightFineToggle) v2gBrightFineToggle.textContent = "细调";
-        if (v2gBrightPreviewWrap) v2gBrightPreviewWrap.hidden = true;
-      } else if (v2gBrightFineToggle && v2gBrightFine) {
-        v2gBrightFineToggle.textContent = v2gBrightFine.hidden ? "细调" : "收起细调";
-      }
       const pct = Math.min(50, Math.max(0, Math.round(Number(v2gBrightAmount?.value) || 0)));
       if (v2gBrightAmountLabel) v2gBrightAmountLabel.textContent = `+${pct}%`;
       if (v2gBrightPresets) {
@@ -2730,50 +2721,71 @@
       }
     }
 
-    async function renderV2gBrightPreview() {
+    /** 预览用 CSS filter（比 canvas ctx.filter 更兼容手机浏览器） */
+    function applyV2gBrightCssFilter() {
       syncV2gBrightUi();
+      if (!v2gBrightPreview) return;
+      const bright = readV2gBrightness();
+      v2gBrightPreview.style.filter = bright > 0 ? `brightness(${1 + bright})` : "none";
+    }
+
+    /**
+     * 抓取起始秒附近原画到 canvas，再套 CSS 亮度。
+     * 仅亮度变化时不必重抓，直接改 CSS。
+     */
+    async function captureV2gBrightPreviewFrame() {
       if (!v2gBrightEnable?.checked || !v2gVideo?.src || !v2gVideo.videoWidth) {
-        if (v2gBrightPreviewWrap) v2gBrightPreviewWrap.hidden = true;
+        if (v2gBrightPanel) v2gBrightPanel.hidden = true;
+        v2gBrightFrameReady = false;
         return;
       }
-      if (!v2gBrightPreview || !v2gBrightPreviewWrap) return;
+      if (!v2gBrightPreview || !v2gBrightPanel) return;
       const token = ++v2gBrightPreviewToken;
-      const bright = readV2gBrightness();
       const startSec = Math.max(0, Number(v2gStart?.value) || 0);
       try {
         await seekVideo(v2gVideo, startSec);
         if (token !== v2gBrightPreviewToken) return;
         await waitFrame();
         if (token !== v2gBrightPreviewToken) return;
+        // 部分机型 seek 后首帧仍空，再等一小拍
+        await new Promise((r) => setTimeout(r, 30));
+        if (token !== v2gBrightPreviewToken) return;
         const srcW = v2gVideo.videoWidth;
         const srcH = v2gVideo.videoHeight;
+        if (!srcW || !srcH) throw new Error("无尺寸");
         const maxW = 480;
         const scale = srcW > maxW ? maxW / srcW : 1;
         const outW = Math.max(1, Math.round(srcW * scale));
         const outH = Math.max(1, Math.round(srcH * scale));
         v2gBrightPreview.width = outW;
         v2gBrightPreview.height = outH;
-        const ctx = v2gBrightPreview.getContext("2d");
-        if (!ctx) return;
+        const ctx = v2gBrightPreview.getContext("2d", { alpha: false });
+        if (!ctx) throw new Error("无画布");
         ctx.fillStyle = "#000000";
         ctx.fillRect(0, 0, outW, outH);
-        ctx.filter = bright > 0 ? `brightness(${1 + bright})` : "none";
         ctx.drawImage(v2gVideo, 0, 0, outW, outH);
-        ctx.filter = "none";
-        v2gBrightPreviewWrap.hidden = false;
+        v2gBrightFrameReady = true;
+        v2gBrightPanel.hidden = false;
+        applyV2gBrightCssFilter();
       } catch (_) {
-        if (token === v2gBrightPreviewToken && v2gBrightPreviewWrap) {
-          v2gBrightPreviewWrap.hidden = true;
+        if (token === v2gBrightPreviewToken) {
+          v2gBrightFrameReady = false;
+          if (v2gBrightPanel) v2gBrightPanel.hidden = true;
         }
       }
     }
 
-    function scheduleV2gBrightPreview() {
+    function scheduleV2gBrightPreview(opts = {}) {
+      const forceCapture = Boolean(opts.forceCapture);
+      if (!forceCapture && v2gBrightFrameReady && v2gBrightEnable?.checked && v2gBrightPanel && !v2gBrightPanel.hidden) {
+        applyV2gBrightCssFilter();
+        return;
+      }
       if (v2gBrightPreviewTimer) window.clearTimeout(v2gBrightPreviewTimer);
       v2gBrightPreviewTimer = window.setTimeout(() => {
         v2gBrightPreviewTimer = 0;
-        renderV2gBrightPreview().catch(() => {});
-      }, 80);
+        captureV2gBrightPreviewFrame().catch(() => {});
+      }, forceCapture ? 60 : 40);
     }
 
     function seekVideo(video, time) {
@@ -2880,7 +2892,7 @@
         setV2gProgress(true, 1, "视频已加载，可开始转换");
         toast("视频已加载");
         scheduleFfmpegPrewarm();
-        scheduleV2gBrightPreview();
+        scheduleV2gBrightPreview({ forceCapture: true });
       } catch (err) {
         clearV2g();
         setError(v2gError, err.message || String(err));
@@ -2949,9 +2961,22 @@
       const paint = () => {
         ctx.fillStyle = "#000000";
         ctx.fillRect(0, 0, outW, outH);
-        ctx.filter = bright > 0 ? `brightness(${1 + bright})` : "none";
         ctx.drawImage(video, 0, 0, outW, outH);
-        ctx.filter = "none";
+        if (bright > 0) {
+          try {
+            const img = ctx.getImageData(0, 0, outW, outH);
+            const d = img.data;
+            const m = 1 + bright;
+            for (let i = 0; i < d.length; i += 4) {
+              d[i] = Math.min(255, d[i] * m);
+              d[i + 1] = Math.min(255, d[i + 1] * m);
+              d[i + 2] = Math.min(255, d[i + 2] * m);
+            }
+            ctx.putImageData(img, 0, 0);
+          } catch (_) {
+            // 跨域/受保护帧时跳过像素调亮
+          }
+        }
         drawGifTextWatermark(ctx, outW, outH, wm);
       };
 
@@ -3760,31 +3785,35 @@
       scheduleFfmpegPrewarm();
     });
     v2gBrightEnable?.addEventListener("change", () => {
-      if (v2gBrightEnable.checked && v2gBrightAmount && !Number(v2gBrightAmount.value)) {
+      if (!v2gBrightEnable.checked) {
+        if (v2gBrightPanel) v2gBrightPanel.hidden = true;
+        v2gBrightFrameReady = false;
+        if (v2gBrightPreview) v2gBrightPreview.style.filter = "none";
+        syncV2gBrightUi();
+        return;
+      }
+      if (v2gBrightAmount && !Number(v2gBrightAmount.value)) {
         v2gBrightAmount.value = "20";
       }
-      syncV2gBrightUi();
-      scheduleV2gBrightPreview();
+      v2gBrightFrameReady = false;
+      scheduleV2gBrightPreview({ forceCapture: true });
     });
     v2gBrightPresets?.addEventListener("click", (e) => {
       const btn = e.target?.closest?.("[data-bright]");
       if (!btn || !v2gBrightPresets.contains(btn)) return;
       const pct = Math.min(50, Math.max(0, Math.round(Number(btn.getAttribute("data-bright")) || 0)));
       if (v2gBrightAmount) v2gBrightAmount.value = String(pct);
-      syncV2gBrightUi();
-      scheduleV2gBrightPreview();
-    });
-    v2gBrightFineToggle?.addEventListener("click", () => {
-      if (!v2gBrightFine) return;
-      v2gBrightFine.hidden = !v2gBrightFine.hidden;
-      v2gBrightFineToggle.textContent = v2gBrightFine.hidden ? "细调" : "收起细调";
+      applyV2gBrightCssFilter();
+      if (!v2gBrightFrameReady) scheduleV2gBrightPreview({ forceCapture: true });
     });
     v2gBrightAmount?.addEventListener("input", () => {
-      syncV2gBrightUi();
-      scheduleV2gBrightPreview();
+      applyV2gBrightCssFilter();
+      if (!v2gBrightFrameReady && v2gBrightEnable?.checked) {
+        scheduleV2gBrightPreview({ forceCapture: true });
+      }
     });
-    v2gStart?.addEventListener("change", () => scheduleV2gBrightPreview());
-    v2gStart?.addEventListener("input", () => scheduleV2gBrightPreview());
+    v2gStart?.addEventListener("change", () => scheduleV2gBrightPreview({ forceCapture: true }));
+    v2gStart?.addEventListener("input", () => scheduleV2gBrightPreview({ forceCapture: true }));
     syncV2gBrightUi();
   } catch (err) {
     console.error("video to gif init failed", err);
