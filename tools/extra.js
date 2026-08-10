@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.10-r";
+  const GIF_TOOL_VERSION = "2026.08.10-s";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -88,10 +88,15 @@
   }
 
   const FFMPEG_VENDOR_BASE = resolveFfmpegVendorBase();
-  const FFMPEG_CACHE_NAME = "devtools-ffmpeg-core-0.12.6";
+  /** IndexedDB / Cache 均用 persist 前缀，避免被「清理临时」删掉 */
+  const FFMPEG_IDB_NAME = "devtools-persist-ffmpeg";
+  const FFMPEG_IDB_STORE = "assets";
+  const FFMPEG_IDB_VERSION = 1;
+  const FFMPEG_ASSET_KEY_CORE = "core-js-0.12.6";
+  const FFMPEG_ASSET_KEY_WASM = "core-wasm-0.12.6";
   let ffmpegModsPromise = null;
   let ffmpegInstance = null;
-  /** 预热后的资源 blob（terminate 实例时保留，避免重复下 31MB） */
+  /** 预热后的资源 blob（持久，不计入临时占用，也不随清理撤销） */
   let ffmpegAssetBlobs = null;
   let ffmpegWarmPromise = null;
   /** @type {"idle"|"warming"|"ready"|"error"} */
@@ -118,33 +123,66 @@
     return new Uint8Array(buf);
   }
 
-  async function cachedFetch(url) {
-    try {
-      if (window.caches?.open) {
-        const cache = await caches.open(FFMPEG_CACHE_NAME);
-        const hit = await cache.match(url);
-        if (hit) return hit;
-        const res = await fetch(url);
-        if (res.ok) {
-          try {
-            await cache.put(url, res.clone());
-          } catch (_) {
-            /* quota / private mode */
-          }
-        }
-        return res;
+  function openFfmpegIdb() {
+    return new Promise((resolve, reject) => {
+      if (!window.indexedDB) {
+        reject(new Error("当前浏览器不支持 IndexedDB"));
+        return;
       }
-    } catch (_) {
-      /* fall through */
-    }
-    return fetch(url);
+      const req = indexedDB.open(FFMPEG_IDB_NAME, FFMPEG_IDB_VERSION);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(FFMPEG_IDB_STORE)) {
+          db.createObjectStore(FFMPEG_IDB_STORE);
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error || new Error("打开 IndexedDB 失败"));
+    });
   }
 
-  async function fetchToBlobURL(url, mime, onProgress, label, progressFrom, progressTo) {
+  async function idbGetAsset(key) {
+    try {
+      const db = await openFfmpegIdb();
+      return await new Promise((resolve, reject) => {
+        const tx = db.transaction(FFMPEG_IDB_STORE, "readonly");
+        const req = tx.objectStore(FFMPEG_IDB_STORE).get(key);
+        req.onsuccess = () => resolve(req.result || null);
+        req.onerror = () => reject(req.error || new Error("读取引擎缓存失败"));
+      });
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function idbPutAsset(key, buffer) {
+    try {
+      const db = await openFfmpegIdb();
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction(FFMPEG_IDB_STORE, "readwrite");
+        tx.objectStore(FFMPEG_IDB_STORE).put(buffer, key);
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error || new Error("写入引擎缓存失败"));
+      });
+    } catch (_) {
+      /* private mode / quota：忽略，仍可用本次内存 blob */
+    }
+  }
+
+  function createEngineObjectURL(buf, mime) {
+    const blob = new Blob([buf], { type: mime });
+    if (window.DevToolsTemp?.createPersistentObjectURL) {
+      return window.DevToolsTemp.createPersistentObjectURL(blob);
+    }
+    // 无 temp 钩子时退回原生 API（同样不进临时统计）
+    return URL.createObjectURL(blob);
+  }
+
+  async function fetchArrayBufferProgress(url, onProgress, label, progressFrom, progressTo) {
     onProgress?.(progressFrom, `${label}…`);
     let res;
     try {
-      res = await cachedFetch(url);
+      res = await fetch(url);
     } catch (err) {
       throw new Error(`${label}网络失败：${err?.message || err}（${url}）`);
     }
@@ -153,7 +191,7 @@
     if (!res.body || !total || typeof res.body.getReader !== "function") {
       const buf = await res.arrayBuffer();
       onProgress?.(progressTo, `${label}完成`);
-      return URL.createObjectURL(new Blob([buf], { type: mime }));
+      return buf;
     }
     const reader = res.body.getReader();
     const chunks = [];
@@ -178,7 +216,24 @@
       offset += c.byteLength;
     }
     onProgress?.(progressTo, `${label}完成`);
-    return URL.createObjectURL(new Blob([merged], { type: mime }));
+    return merged.buffer;
+  }
+
+  async function loadEngineBuffer(key, url, onProgress, label, progressFrom, progressTo) {
+    const cached = await idbGetAsset(key);
+    if (cached instanceof ArrayBuffer && cached.byteLength > 0) {
+      onProgress?.(progressTo, `${label}（本地已存）`);
+      return cached;
+    }
+    if (cached?.buffer instanceof ArrayBuffer && cached.byteLength > 0) {
+      // 偶发存成 TypedArray
+      const copy = cached.buffer.slice(cached.byteOffset, cached.byteOffset + cached.byteLength);
+      onProgress?.(progressTo, `${label}（本地已存）`);
+      return copy;
+    }
+    const buf = await fetchArrayBufferProgress(url, onProgress, label, progressFrom, progressTo);
+    await idbPutAsset(key, buf);
+    return buf;
   }
 
   async function ensureFfmpegAssets(onProgress) {
@@ -186,16 +241,27 @@
     const coreJsURL = new URL("core/ffmpeg-core.js", FFMPEG_VENDOR_BASE).href;
     const wasmURL = new URL("core/ffmpeg-core.wasm", FFMPEG_VENDOR_BASE).href;
     const workerURL = new URL("ff/worker.js", FFMPEG_VENDOR_BASE).href;
-    const coreBlob = await fetchToBlobURL(coreJsURL, "text/javascript", onProgress, "预载 ffmpeg-core.js", 0.04, 0.08);
-    const wasmBlob = await fetchToBlobURL(
-      wasmURL,
-      "application/wasm",
+    const coreBuf = await loadEngineBuffer(
+      FFMPEG_ASSET_KEY_CORE,
+      coreJsURL,
       onProgress,
-      "预载 ffmpeg-core.wasm",
+      "引擎 core.js",
+      0.04,
+      0.08
+    );
+    const wasmBuf = await loadEngineBuffer(
+      FFMPEG_ASSET_KEY_WASM,
+      wasmURL,
+      onProgress,
+      "引擎 wasm",
       0.08,
       0.18
     );
-    ffmpegAssetBlobs = { coreBlob, wasmBlob, workerURL };
+    ffmpegAssetBlobs = {
+      coreBlob: createEngineObjectURL(coreBuf, "text/javascript"),
+      wasmBlob: createEngineObjectURL(wasmBuf, "application/wasm"),
+      workerURL,
+    };
     return ffmpegAssetBlobs;
   }
 
@@ -244,12 +310,20 @@
       }
       ffmpegInstance = null;
     }
+    // 默认永不 revoke 引擎 blob：IndexedDB 仍在，内存 URL 也可复用；且不进临时占用清理
     if (revokeAssets && ffmpegAssetBlobs) {
+      const revoke =
+        window.DevToolsTemp?.revokePersistentObjectURL ||
+        ((u) => {
+          try {
+            URL.revokeObjectURL(u);
+          } catch (_) {}
+        });
       try {
-        URL.revokeObjectURL(ffmpegAssetBlobs.coreBlob);
+        revoke(ffmpegAssetBlobs.coreBlob);
       } catch (_) {}
       try {
-        URL.revokeObjectURL(ffmpegAssetBlobs.wasmBlob);
+        revoke(ffmpegAssetBlobs.wasmBlob);
       } catch (_) {}
       ffmpegAssetBlobs = null;
     }
@@ -263,13 +337,13 @@
     const btn = document.getElementById("v2g-generate-hq");
     if (!el && !btn) return;
     let text = "";
-    let title = "试验：本地 ffmpeg.wasm 双通道调色板；进入本页会后台预热引擎";
+    let title = "试验：本地 ffmpeg.wasm；引擎持久保存在本机，清理临时占用不会删除";
     if (ffmpegWarmState === "warming") {
       text = "引擎预热中…";
-      title = "正在后台预载 FFmpeg（约 31MB，仅首次较慢）";
+      title = "正在装载 FFmpeg（首次需下载并写入本机持久存储）";
     } else if (ffmpegWarmState === "ready") {
       text = "引擎已就绪";
-      title = "FFmpeg 已预热，可直接点「高质量 GIF（试验）」";
+      title = "FFmpeg 已就绪（持久存储，不受临时清理影响）";
     } else if (ffmpegWarmState === "error") {
       text = "引擎预热失败";
       title = ffmpegWarmError || "预热失败，点击按钮时会再试";
@@ -2443,7 +2517,7 @@
     const V2G_BLACKBOX_LONG_SPAN_SEC = 20;
     const V2G_FFMPEG_WARN_BYTES = 40 * 1024 * 1024;
     const V2G_DEFAULT_META =
-      "支持 MP4 / WebM / MOV。默认 15FPS / 宽480 / 质量5。可转 GIF、高质量 GIF（试验/ffmpeg，进入本页会预热引擎）、动画 WebP，或黑盒 GIF（≤6MB）。";
+      "支持 MP4 / WebM / MOV。默认 15FPS / 宽480 / 质量5。可转 GIF、高质量 GIF（试验/ffmpeg，引擎持久保存不随临时清理删除）、动画 WebP，或黑盒 GIF（≤6MB）。";
     let videoObjectUrl = "";
     let gifObjectUrl = "";
     let latestV2gBlob = null;

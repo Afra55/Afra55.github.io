@@ -106,10 +106,25 @@
     if (!window.caches?.keys) return 0;
     try {
       const keys = await caches.keys();
-      await Promise.all(keys.map((k) => caches.delete(k)));
-      return keys.length;
+      // 持久资源（如 FFmpeg 引擎）永不随「清理临时」删除
+      const ephemeral = keys.filter((k) => !String(k).startsWith("devtools-persist-"));
+      await Promise.all(ephemeral.map((k) => caches.delete(k)));
+      return ephemeral.length;
     } catch (_) {
       return 0;
+    }
+  }
+
+  /** 创建不计入「临时占用」的 Object URL（用于持久引擎等） */
+  function createPersistentObjectURL(obj) {
+    return origCreate(obj);
+  }
+
+  function revokePersistentObjectURL(url) {
+    try {
+      origRevoke(url);
+    } catch (_) {
+      /* ignore */
     }
   }
 
@@ -168,6 +183,9 @@
     clearAll,
     formatBytes,
     refresh: refreshUi,
+    createPersistentObjectURL,
+    revokePersistentObjectURL,
+    persistCachePrefix: "devtools-persist-",
   };
   window.DevToolsTemp = api;
 

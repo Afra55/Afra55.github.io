@@ -946,9 +946,9 @@ hello@world.org</textarea>
       <div class="panel-head">
         <div class="panel-title-row">
           <h1>GIF 工具</h1>
-          <span class="tool-ver mono" id="gif-tool-version" title="GIF 工具逻辑版本">v2026.08.10-r</span>
+          <span class="tool-ver mono" id="gif-tool-version" title="GIF 工具逻辑版本">v2026.08.10-s</span>
         </div>
-        <p>多图合成 GIF、压缩已有 GIF、拆帧/转 WebM，或把视频转成 GIF / 动画 WebP；本地处理，带进度。当前版本 <strong class="mono" id="gif-tool-version-inline">v2026.08.10-r</strong>。</p>
+        <p>多图合成 GIF、压缩已有 GIF、拆帧/转 WebM，或把视频转成 GIF / 动画 WebP；本地处理，带进度。当前版本 <strong class="mono" id="gif-tool-version-inline">v2026.08.10-s</strong>。</p>
       </div>
       <div class="panel-body">
         <div class="convert-grid">
@@ -1104,13 +1104,13 @@ hello@world.org</textarea>
               <option value="large">大</option>
             </select>
           </div>
-          <p class="hint" id="v2g-meta">支持 MP4 / WebM / MOV。默认 15FPS / 宽480 / 质量5。可转 GIF、高质量 GIF（试验/ffmpeg，进入本页会预热引擎）、动画 WebP，或黑盒 GIF（≤6MB）。</p>
+          <p class="hint" id="v2g-meta">支持 MP4 / WebM / MOV。默认 15FPS / 宽480 / 质量5。可转 GIF、高质量 GIF（试验/ffmpeg，引擎持久保存不随临时清理删除）、动画 WebP，或黑盒 GIF（≤6MB）。</p>
           <div class="gif-preview-wrap">
             <video id="v2g-video" class="img-preview gif-preview" controls playsinline muted hidden></video>
           </div>
           <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
             <button type="button" class="primary-btn" id="v2g-generate" disabled>转为 GIF</button>
-            <button type="button" class="secondary-btn" id="v2g-generate-hq" disabled title="试验：本地 ffmpeg.wasm 双通道调色板；进入本页会后台预热引擎">高质量 GIF（试验）</button>
+            <button type="button" class="secondary-btn" id="v2g-generate-hq" disabled title="试验：本地 ffmpeg.wasm；引擎持久保存在本机，清理临时占用不会删除">高质量 GIF（试验）</button>
             <span class="hint tight" id="v2g-hq-warm" aria-live="polite"></span>
             <button type="button" class="secondary-btn" id="v2g-generate-webp" disabled title="浏览器原生编码各帧再封装为动画 WebP；通常比 GIF 更清晰更小">转为动画 WebP</button>
             <button type="button" class="secondary-btn" id="v2g-blackbox" disabled title="固定宽 420，按 15→12→10 串行尝试并压到 ≤6MB">黑盒 GIF（≤6MB）</button>
@@ -1788,7 +1788,7 @@ hello@world.org</textarea>
           <strong class="temp-bar-title temp-bar-title-desktop">临时占用</strong>
           <span class="hint tight" id="temp-blob-meta">本页临时文件：统计中…</span>
           <span class="hint tight" id="temp-store-meta">站点存储：统计中…</span>
-          <span class="hint tight temp-bar-note">上传视频主要占页面内存；清理后可释放，关标签页也会释放。</span>
+          <span class="hint tight temp-bar-note">上传视频主要占页面内存；清理只删临时文件，不会删除已持久保存的 FFmpeg 引擎。</span>
         </div>
         <div class="temp-bar-actions">
           <button type="button" class="ghost-btn" id="temp-refresh">刷新</button>
@@ -1808,10 +1808,10 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./temp.js?v=20260810l"></script>
+  <script src="./temp.js?v=20260810s"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260810l"></script>
-  <script src="./extra.js?v=20260810r"></script>
+  <script src="./extra.js?v=20260810s"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>
