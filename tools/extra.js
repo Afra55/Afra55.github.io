@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.10-t";
+  const GIF_TOOL_VERSION = "2026.08.10-u";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -2514,6 +2514,14 @@
     const v2gMaxsec = $("#v2g-maxsec");
     const v2gStart = $("#v2g-start");
     const v2gQuality = $("#v2g-quality");
+    const v2gBrightEnable = $("#v2g-bright-enable");
+    const v2gBrightPresets = $("#v2g-bright-presets");
+    const v2gBrightFineToggle = $("#v2g-bright-fine-toggle");
+    const v2gBrightFine = $("#v2g-bright-fine");
+    const v2gBrightAmount = $("#v2g-bright-amount");
+    const v2gBrightAmountLabel = $("#v2g-bright-amount-label");
+    const v2gBrightPreviewWrap = $("#v2g-bright-preview-wrap");
+    const v2gBrightPreview = $("#v2g-bright-preview");
     const v2gGenerate = $("#v2g-generate");
     const v2gGenerateWebp = $("#v2g-generate-webp");
     const v2gBlackbox = $("#v2g-blackbox");
@@ -2539,7 +2547,9 @@
     const V2G_BLACKBOX_LONG_SPAN_SEC = 20;
     const V2G_FFMPEG_WARN_BYTES = 40 * 1024 * 1024;
     const V2G_DEFAULT_META =
-      "支持 MP4 / WebM / MOV。默认 15FPS / 宽480 / 质量5。默认 FFmpeg 转 GIF（引擎持久预热）；也可转动画 WebP，或黑盒 GIF（≤6MB）。";
+      "支持 MP4 / WebM / MOV。默认 15FPS / 宽480 / 质量5。默认 FFmpeg 转 GIF（引擎持久预热）；也可转动画 WebP，或黑盒 GIF（≤6MB）。可选调亮并实时预览。";
+    let v2gBrightPreviewTimer = 0;
+    let v2gBrightPreviewToken = 0;
     let videoObjectUrl = "";
     let gifObjectUrl = "";
     let latestV2gBlob = null;
@@ -2682,7 +2692,88 @@
       }
       if (v2gStart) v2gStart.value = "0";
       if (v2gFile) v2gFile.value = "";
+      if (v2gBrightPreviewWrap) v2gBrightPreviewWrap.hidden = true;
       abortV2g = false;
+    }
+
+    /** @returns {number} 0–0.5，对应 FFmpeg eq=brightness */
+    function readV2gBrightness() {
+      if (!v2gBrightEnable?.checked) return 0;
+      const pct = Math.min(50, Math.max(0, Math.round(Number(v2gBrightAmount?.value) || 0)));
+      return pct / 100;
+    }
+
+    function formatV2gBrightTip(bright) {
+      const b = Number(bright) || 0;
+      if (b <= 0) return "";
+      return ` · 已调亮 +${Math.round(b * 100)}%`;
+    }
+
+    function syncV2gBrightUi() {
+      const on = Boolean(v2gBrightEnable?.checked);
+      if (v2gBrightPresets) v2gBrightPresets.hidden = !on;
+      if (v2gBrightFineToggle) v2gBrightFineToggle.hidden = !on;
+      if (!on) {
+        if (v2gBrightFine) v2gBrightFine.hidden = true;
+        if (v2gBrightFineToggle) v2gBrightFineToggle.textContent = "细调";
+        if (v2gBrightPreviewWrap) v2gBrightPreviewWrap.hidden = true;
+      } else if (v2gBrightFineToggle && v2gBrightFine) {
+        v2gBrightFineToggle.textContent = v2gBrightFine.hidden ? "细调" : "收起细调";
+      }
+      const pct = Math.min(50, Math.max(0, Math.round(Number(v2gBrightAmount?.value) || 0)));
+      if (v2gBrightAmountLabel) v2gBrightAmountLabel.textContent = `+${pct}%`;
+      if (v2gBrightPresets) {
+        v2gBrightPresets.querySelectorAll("[data-bright]").forEach((btn) => {
+          const v = Math.round(Number(btn.getAttribute("data-bright")) || 0);
+          btn.classList.toggle("is-active", v === pct);
+        });
+      }
+    }
+
+    async function renderV2gBrightPreview() {
+      syncV2gBrightUi();
+      if (!v2gBrightEnable?.checked || !v2gVideo?.src || !v2gVideo.videoWidth) {
+        if (v2gBrightPreviewWrap) v2gBrightPreviewWrap.hidden = true;
+        return;
+      }
+      if (!v2gBrightPreview || !v2gBrightPreviewWrap) return;
+      const token = ++v2gBrightPreviewToken;
+      const bright = readV2gBrightness();
+      const startSec = Math.max(0, Number(v2gStart?.value) || 0);
+      try {
+        await seekVideo(v2gVideo, startSec);
+        if (token !== v2gBrightPreviewToken) return;
+        await waitFrame();
+        if (token !== v2gBrightPreviewToken) return;
+        const srcW = v2gVideo.videoWidth;
+        const srcH = v2gVideo.videoHeight;
+        const maxW = 480;
+        const scale = srcW > maxW ? maxW / srcW : 1;
+        const outW = Math.max(1, Math.round(srcW * scale));
+        const outH = Math.max(1, Math.round(srcH * scale));
+        v2gBrightPreview.width = outW;
+        v2gBrightPreview.height = outH;
+        const ctx = v2gBrightPreview.getContext("2d");
+        if (!ctx) return;
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(0, 0, outW, outH);
+        ctx.filter = bright > 0 ? `brightness(${1 + bright})` : "none";
+        ctx.drawImage(v2gVideo, 0, 0, outW, outH);
+        ctx.filter = "none";
+        v2gBrightPreviewWrap.hidden = false;
+      } catch (_) {
+        if (token === v2gBrightPreviewToken && v2gBrightPreviewWrap) {
+          v2gBrightPreviewWrap.hidden = true;
+        }
+      }
+    }
+
+    function scheduleV2gBrightPreview() {
+      if (v2gBrightPreviewTimer) window.clearTimeout(v2gBrightPreviewTimer);
+      v2gBrightPreviewTimer = window.setTimeout(() => {
+        v2gBrightPreviewTimer = 0;
+        renderV2gBrightPreview().catch(() => {});
+      }, 80);
     }
 
     function seekVideo(video, time) {
@@ -2789,6 +2880,7 @@
         setV2gProgress(true, 1, "视频已加载，可开始转换");
         toast("视频已加载");
         scheduleFfmpegPrewarm();
+        scheduleV2gBrightPreview();
       } catch (err) {
         clearV2g();
         setError(v2gError, err.message || String(err));
@@ -2851,12 +2943,15 @@
       canvas.height = outH;
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
       const wm = readGifWatermarkOptions("v2g");
+      const bright = Number.isFinite(opts.brightness) ? Number(opts.brightness) : readV2gBrightness();
       const prefix = stageLabel ? `${stageLabel} · ` : "";
 
       const paint = () => {
         ctx.fillStyle = "#000000";
         ctx.fillRect(0, 0, outW, outH);
+        ctx.filter = bright > 0 ? `brightness(${1 + bright})` : "none";
         ctx.drawImage(video, 0, 0, outW, outH);
+        ctx.filter = "none";
         drawGifTextWatermark(ctx, outW, outH, wm);
       };
 
@@ -3135,6 +3230,9 @@
       const maxW = Math.min(720, Math.max(64, Number(opts.maxW) || 360));
       const quality = Math.min(30, Math.max(1, Number(opts.quality) || 12));
       const maxColors = gifQualityToMaxColors(quality);
+      const bright = Number.isFinite(opts.brightness) ? Number(opts.brightness) : readV2gBrightness();
+      const brightFilter =
+        bright > 0 ? `,eq=brightness=${Math.min(1, Math.max(-1, bright)).toFixed(3)}` : "";
       const { startSec, span } = resolveV2gSpan();
       const naturalFrames = Math.max(2, Math.floor(span * fps) + 1);
       const framesCapped = naturalFrames > MAX_V2G_FRAMES;
@@ -3193,7 +3291,7 @@
           await ffmpeg.writeFile(wmName, wmBytes);
           filterArgs = [
             "-filter_complex",
-            `[0:v]fps=${fps},scale=${maxW}:-2:flags=lanczos[base];` +
+            `[0:v]fps=${fps},scale=${maxW}:-2:flags=lanczos${brightFilter}[base];` +
               `[1:v]format=rgba[wm];[base][wm]overlay=0:0:format=auto[v];` +
               `[v]split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=diff[p];` +
               `[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`,
@@ -3201,7 +3299,7 @@
         } else {
           filterArgs = [
             "-vf",
-            `fps=${fps},scale=${maxW}:-2:flags=lanczos,` +
+            `fps=${fps},scale=${maxW}:-2:flags=lanczos${brightFilter},` +
               `split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=diff[p];` +
               `[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`,
           ];
@@ -3247,6 +3345,7 @@
           maxColors,
           engine: "ffmpeg",
           watermark: usedWm,
+          brightness: bright,
         };
       } finally {
         if (ticker) ticker.stop();
@@ -3302,7 +3401,7 @@
       v2gCompressRound = candidate.compressRounds || 0;
       setV2gCompressEnabled(true);
       if (v2gMeta) {
-        v2gMeta.textContent = `${note} · ${describeBlackboxCandidate(candidate)}`;
+        v2gMeta.textContent = `${note} · ${describeBlackboxCandidate(candidate)}${formatV2gBrightTip(candidate.brightness)}`;
       }
       setV2gProgress(true, 1, `黑盒完成 · ${describeBlackboxCandidate(candidate)}`);
       toast(`黑盒 GIF 已生成 · ${candidate.fps}FPS · ${formatKb(candidate.blob.size)}`);
@@ -3430,7 +3529,8 @@
             ? ` · 为控制体积已抽稀到 ${result.frameCount} 帧（约 ${effFps.toFixed(1)} FPS）`
             : "";
           const wmTip = result.watermark ? " · 含水印" : "";
-          v2gMeta.textContent = `已转换 GIF（FFmpeg） ${result.frameCount} 帧 · ${result.span.toFixed(1)}s · ${result.fps} FPS · ${result.outW}×${result.outH} · ${result.maxColors}色 · ${formatKb(result.blob.size)}${wmTip}${capTip}`;
+          const brightTip = formatV2gBrightTip(result.brightness);
+          v2gMeta.textContent = `已转换 GIF（FFmpeg） ${result.frameCount} 帧 · ${result.span.toFixed(1)}s · ${result.fps} FPS · ${result.outW}×${result.outH} · ${result.maxColors}色 · ${formatKb(result.blob.size)}${wmTip}${brightTip}${capTip}`;
         }
         toast("GIF 已生成");
       } catch (err) {
@@ -3490,7 +3590,8 @@
             ? ` · 已抽稀到 ${result.frameCount} 帧（约 ${effFps.toFixed(1)} FPS）`
             : "";
           const qTip = ` · WebP质量≈${Math.round((result.webpQuality || 0) * 100)}%`;
-          v2gMeta.textContent = `已转换动画 WebP ${result.frameCount} 帧 · ${result.span.toFixed(1)}s · ${result.fps} FPS · ${result.outW}×${result.outH} · ${formatKb(result.blob.size)}${qTip}${capTip}`;
+          const brightTip = formatV2gBrightTip(readV2gBrightness());
+          v2gMeta.textContent = `已转换动画 WebP ${result.frameCount} 帧 · ${result.span.toFixed(1)}s · ${result.fps} FPS · ${result.outW}×${result.outH} · ${formatKb(result.blob.size)}${qTip}${brightTip}${capTip}`;
         }
         toast("动画 WebP 已生成");
       } catch (err) {
@@ -3658,6 +3759,33 @@
       terminateFfmpegInstance({ revokeAssets: false });
       scheduleFfmpegPrewarm();
     });
+    v2gBrightEnable?.addEventListener("change", () => {
+      if (v2gBrightEnable.checked && v2gBrightAmount && !Number(v2gBrightAmount.value)) {
+        v2gBrightAmount.value = "20";
+      }
+      syncV2gBrightUi();
+      scheduleV2gBrightPreview();
+    });
+    v2gBrightPresets?.addEventListener("click", (e) => {
+      const btn = e.target?.closest?.("[data-bright]");
+      if (!btn || !v2gBrightPresets.contains(btn)) return;
+      const pct = Math.min(50, Math.max(0, Math.round(Number(btn.getAttribute("data-bright")) || 0)));
+      if (v2gBrightAmount) v2gBrightAmount.value = String(pct);
+      syncV2gBrightUi();
+      scheduleV2gBrightPreview();
+    });
+    v2gBrightFineToggle?.addEventListener("click", () => {
+      if (!v2gBrightFine) return;
+      v2gBrightFine.hidden = !v2gBrightFine.hidden;
+      v2gBrightFineToggle.textContent = v2gBrightFine.hidden ? "细调" : "收起细调";
+    });
+    v2gBrightAmount?.addEventListener("input", () => {
+      syncV2gBrightUi();
+      scheduleV2gBrightPreview();
+    });
+    v2gStart?.addEventListener("change", () => scheduleV2gBrightPreview());
+    v2gStart?.addEventListener("input", () => scheduleV2gBrightPreview());
+    syncV2gBrightUi();
   } catch (err) {
     console.error("video to gif init failed", err);
   }
