@@ -1969,7 +1969,7 @@
     const V2G_BLACKBOX_MAX_W = 420;
     const V2G_BLACKBOX_QUALITY = 5;
     const V2G_BLACKBOX_MAX_COMPRESS_ROUNDS = 10;
-    /** 非最后一档轻柔压缩轮数（不减色）；多给 12FPS 机会再降到 10 */
+    /** 非最后一档：O3→轻lossy，最多 3 轮（不减色）；多给高帧档机会再降 FPS */
     const V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS = 3;
     const V2G_BLACKBOX_LONG_SPAN_SEC = 20;
     let videoObjectUrl = "";
