@@ -43,13 +43,153 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.10-m";
+  const GIF_TOOL_VERSION = "2026.08.10-n";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
     standard: { label: "标准", baseLossy: 55 },
     strong: { label: "强力", baseLossy: 90 },
   };
+
+  /** 探测浏览器是否能用 canvas 编码静图 WebP（动画需自行 mux） */
+  function canEncodeStillWebp() {
+    try {
+      const c = document.createElement("canvas");
+      c.width = 1;
+      c.height = 1;
+      return c.toDataURL("image/webp").indexOf("data:image/webp") === 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /** gif.js quality(1好–30差) → canvas WebP quality(0–1，越大越好) */
+  function gifQualityToWebpQuality(q) {
+    const gq = Math.min(30, Math.max(1, Number(q) || 12));
+    return Math.max(0.35, Math.min(0.95, 1.02 - gq / 40));
+  }
+
+  /**
+   * 把浏览器 canvas.toBlob("image/webp") 得到的静图，封装成动画 WebP（VP8X+ANIM+ANMF）。
+   * 无 WASM：浏览器负责每帧编码，这里只做容器拼接。
+   */
+  function encodeAnimatedWebpFromStillFrames(frames, width, height, loop = 0) {
+    class ByteWriter {
+      constructor() {
+        this.buf = new Uint8Array(4096);
+        this.len = 0;
+      }
+      ensure(n) {
+        if (this.len + n <= this.buf.length) return;
+        let cap = this.buf.length * 2;
+        while (cap < this.len + n) cap *= 2;
+        const next = new Uint8Array(cap);
+        next.set(this.buf.subarray(0, this.len));
+        this.buf = next;
+      }
+      u8(v) {
+        this.ensure(1);
+        this.buf[this.len++] = v & 0xff;
+      }
+      u16(v) {
+        this.u8(v);
+        this.u8(v >>> 8);
+      }
+      u24(v) {
+        this.u8(v);
+        this.u8(v >>> 8);
+        this.u8(v >>> 16);
+      }
+      u32(v) {
+        this.u8(v);
+        this.u8(v >>> 8);
+        this.u8(v >>> 16);
+        this.u8(v >>> 24);
+      }
+      fourcc(s) {
+        for (let i = 0; i < 4; i++) this.u8(s.charCodeAt(i));
+      }
+      bytes(b) {
+        this.ensure(b.length);
+        this.buf.set(b, this.len);
+        this.len += b.length;
+      }
+      take() {
+        return this.buf.subarray(0, this.len);
+      }
+    }
+
+    const u32le = (b, o) => (b[o] | (b[o + 1] << 8) | (b[o + 2] << 16) | (b[o + 3] << 24)) >>> 0;
+
+    function frameImageChunks(file) {
+      let off = 12;
+      const parts = [];
+      let hasAlpha = false;
+      while (off + 8 <= file.length) {
+        const cc = String.fromCharCode(file[off], file[off + 1], file[off + 2], file[off + 3]);
+        const size = u32le(file, off + 4);
+        const end = off + 8 + size + (size & 1);
+        if (cc !== "VP8X") {
+          parts.push(file.subarray(off, Math.min(end, file.length)));
+          if (cc === "ALPH") hasAlpha = true;
+        }
+        off = end;
+      }
+      let total = 0;
+      for (const p of parts) total += p.length;
+      const data = new Uint8Array(total);
+      let at = 0;
+      for (const p of parts) {
+        data.set(p, at);
+        at += p.length;
+      }
+      return { data, hasAlpha };
+    }
+
+    if (!frames || !frames.length) throw new Error("没有可封装的 WebP 帧");
+    const w = Math.max(1, Math.round(width));
+    const h = Math.max(1, Math.round(height));
+    const parsed = frames.map((f) => ({
+      ...frameImageChunks(f.file),
+      durationMs: f.durationMs,
+    }));
+    const hasAlpha = parsed.some((p) => p.hasAlpha);
+    const body = new ByteWriter();
+
+    body.fourcc("VP8X");
+    body.u32(10);
+    body.u8(0x02 | (hasAlpha ? 0x10 : 0));
+    body.u24(0);
+    body.u24(w - 1);
+    body.u24(h - 1);
+
+    body.fourcc("ANIM");
+    body.u32(6);
+    body.u32(0);
+    body.u16(loop & 0xffff);
+
+    for (const p of parsed) {
+      const payload = 16 + p.data.length;
+      body.fourcc("ANMF");
+      body.u32(payload);
+      body.u24(0);
+      body.u24(0);
+      body.u24(w - 1);
+      body.u24(h - 1);
+      body.u24(Math.max(0, Math.round(p.durationMs)));
+      body.u8(0x02);
+      body.bytes(p.data);
+      if (payload & 1) body.u8(0);
+    }
+
+    const bodyBytes = body.take();
+    const out = new ByteWriter();
+    out.fourcc("RIFF");
+    out.u32(4 + bodyBytes.length);
+    out.fourcc("WEBP");
+    out.bytes(bodyBytes);
+    return new Blob([new Uint8Array(out.take())], { type: "image/webp" });
+  }
 
   function paintGifToolVersion() {
     const label = `v${GIF_TOOL_VERSION}`;
@@ -1951,6 +2091,7 @@
     const v2gStart = $("#v2g-start");
     const v2gQuality = $("#v2g-quality");
     const v2gGenerate = $("#v2g-generate");
+    const v2gGenerateWebp = $("#v2g-generate-webp");
     const v2gBlackbox = $("#v2g-blackbox");
     const v2gAbort = $("#v2g-abort");
     const v2gProgress = $("#v2g-progress");
@@ -1972,12 +2113,16 @@
     /** 非最后一档：O3→轻lossy，最多 3 轮（不减色）；多给高帧档机会再降 FPS */
     const V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS = 3;
     const V2G_BLACKBOX_LONG_SPAN_SEC = 20;
+    const V2G_DEFAULT_META =
+      "支持 MP4 / WebM / MOV。默认 15FPS / 宽480 / 质量5。可转 GIF、动画 WebP，或黑盒 GIF（≤6MB）。WebP 通常更清晰更小（部分浏览器不支持编码）。";
     let videoObjectUrl = "";
     let gifObjectUrl = "";
     let latestV2gBlob = null;
     let baseV2gBlob = null;
     let originalV2gSize = 0;
     let v2gCompressRound = 0;
+    /** @type {"gif"|"webp"} */
+    let latestV2gFormat = "gif";
     let activeV2gGifs = new Set();
     let abortV2g = false;
     let compressingV2g = false;
@@ -1987,24 +2132,27 @@
       const hasVideo = Boolean(v2gVideo?.src);
       const canRun = hasVideo && !v2gBusy && !compressingV2g;
       if (v2gGenerate) v2gGenerate.disabled = !canRun;
+      if (v2gGenerateWebp) v2gGenerateWebp.disabled = !canRun;
       if (v2gBlackbox) v2gBlackbox.disabled = !canRun;
     }
 
     function setV2gCompressEnabled(on) {
-      if (v2gCompress) v2gCompress.disabled = !on || compressingV2g || v2gBusy;
+      const allow = Boolean(on) && latestV2gFormat === "gif";
+      if (v2gCompress) v2gCompress.disabled = !allow || compressingV2g || v2gBusy;
       if (v2gCompressAgain) {
-        const canAgain = on && v2gCompressRound > 0 && !compressingV2g && !v2gBusy;
+        const canAgain = allow && v2gCompressRound > 0 && !compressingV2g && !v2gBusy;
         v2gCompressAgain.disabled = !canAgain;
-        v2gCompressAgain.hidden = v2gCompressRound <= 0;
+        v2gCompressAgain.hidden = v2gCompressRound <= 0 || latestV2gFormat !== "gif";
       }
     }
 
-    function applyV2gOutput(blob, { resetCompress = false } = {}) {
+    function applyV2gOutput(blob, { resetCompress = false, format = "gif" } = {}) {
       if (gifObjectUrl) {
         URL.revokeObjectURL(gifObjectUrl);
         gifObjectUrl = "";
       }
       latestV2gBlob = blob;
+      latestV2gFormat = format === "webp" ? "webp" : "gif";
       if (resetCompress) {
         baseV2gBlob = blob;
         originalV2gSize = blob.size;
@@ -2014,12 +2162,15 @@
       if (v2gPreview) {
         v2gPreview.src = gifObjectUrl;
         v2gPreview.hidden = false;
+        v2gPreview.alt = latestV2gFormat === "webp" ? "视频转动画 WebP 预览" : "视频转 GIF 预览";
       }
       if (v2gDownload) {
         v2gDownload.href = gifObjectUrl;
         v2gDownload.hidden = false;
+        v2gDownload.download = latestV2gFormat === "webp" ? "from-video.webp" : "from-video.gif";
+        v2gDownload.textContent = latestV2gFormat === "webp" ? "下载 WebP" : "下载 GIF";
       }
-      setV2gCompressEnabled(true);
+      setV2gCompressEnabled(latestV2gFormat === "gif");
     }
 
     function setV2gProgress(visible, ratio, text) {
@@ -2039,6 +2190,7 @@
       baseV2gBlob = null;
       originalV2gSize = 0;
       v2gCompressRound = 0;
+      latestV2gFormat = "gif";
       setV2gCompressEnabled(false);
       if (v2gPreview) {
         v2gPreview.hidden = true;
@@ -2047,6 +2199,8 @@
       if (v2gDownload) {
         v2gDownload.hidden = true;
         v2gDownload.removeAttribute("href");
+        v2gDownload.download = "from-video.gif";
+        v2gDownload.textContent = "下载 GIF";
       }
     }
 
@@ -2074,8 +2228,7 @@
       setV2gProgress(false, 0, "");
       setError(v2gError, "");
       if (v2gMeta) {
-        v2gMeta.textContent =
-          "支持 MP4 / WebM / MOV。上传后「最长秒数」默认等于视频时长；转完可「压缩体积」，不满意再点「继续压缩」。也可一键「黑盒 GIF」：固定宽 420，按 15→12→10 试到 ≤6MB。";
+        v2gMeta.textContent = V2G_DEFAULT_META;
       }
       if (v2gMaxsec) {
         v2gMaxsec.value = "";
@@ -2214,10 +2367,10 @@
     }
 
     /**
-     * Encode video segment to GIF with explicit params.
-     * @param {{ fps:number, maxW:number, quality:number, video?:HTMLVideoElement, workerScript?:string, progressBase?:number, progressSpan?:number, stageLabel?:string, onProgress?:(local:number,text:string)=>void }} opts
+     * 按当前 UI 参数抽帧到 canvas，每帧 paint 后回调 onFrame(ctx, index, total)。
+     * @returns {Promise<{frameCount:number,span:number,fps:number,outW:number,outH:number,framesCapped:boolean,quality:number,maxW:number,delay:number,canvas:HTMLCanvasElement,ctx:CanvasRenderingContext2D}>}
      */
-    async function encodeV2gGif(opts) {
+    async function sampleV2gFrames(opts) {
       const video = opts.video || v2gVideo;
       if (!video) throw new Error("视频未找到");
       const fps = Math.min(15, Math.max(2, Number(opts.fps) || 8));
@@ -2226,6 +2379,7 @@
       const progressBase = Number(opts.progressBase) || 0;
       const progressSpan = Number(opts.progressSpan) || 1;
       const stageLabel = opts.stageLabel || "";
+      const sampleShare = Number.isFinite(opts.sampleShare) ? opts.sampleShare : 0.45;
       const mapProgress = (local, text) => {
         if (typeof opts.onProgress === "function") opts.onProgress(local, text);
         else setV2gProgress(true, progressBase + local * progressSpan, text);
@@ -2248,7 +2402,77 @@
       canvas.width = outW;
       canvas.height = outH;
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      const wm = readGifWatermarkOptions("v2g");
+      const prefix = stageLabel ? `${stageLabel} · ` : "";
 
+      const paint = () => {
+        ctx.fillStyle = "#000000";
+        ctx.fillRect(0, 0, outW, outH);
+        ctx.drawImage(video, 0, 0, outW, outH);
+        drawGifTextWatermark(ctx, outW, outH, wm);
+      };
+
+      if (hasDuration) {
+        for (let i = 0; i < frameCount; i++) {
+          if (abortV2g) throw new Error("已取消");
+          const t = startSec + (span * i) / Math.max(1, frameCount - 1);
+          await seekVideo(video, t);
+          await waitFrame();
+          paint();
+          await opts.onFrame?.(ctx, i, frameCount);
+          mapProgress(((i + 1) / frameCount) * sampleShare, `${prefix}抽帧… ${i + 1}/${frameCount}`);
+        }
+      } else {
+        video.currentTime = startSec;
+        await waitFrame();
+        try {
+          await video.play();
+        } catch (_) {}
+        const startedAt = performance.now();
+        let captured = 0;
+        let lastAt = -Infinity;
+        while (captured < frameCount) {
+          if (abortV2g) throw new Error("已取消");
+          if (video.ended) break;
+          const elapsed = (performance.now() - startedAt) / 1000;
+          if (elapsed > maxSec + 0.5) break;
+          const now = performance.now();
+          if (now - lastAt >= delay * 0.9) {
+            paint();
+            await opts.onFrame?.(ctx, captured, frameCount);
+            captured += 1;
+            lastAt = now;
+            mapProgress((captured / frameCount) * sampleShare, `${prefix}抽帧… ${captured}/${frameCount}`);
+          }
+          await waitFrame();
+        }
+        video.pause();
+        frameCount = Math.max(2, captured);
+        if (captured < 2) throw new Error("未能从视频抓取足够帧");
+      }
+
+      return {
+        frameCount,
+        span,
+        fps,
+        outW,
+        outH,
+        framesCapped,
+        quality,
+        maxW,
+        delay,
+        canvas,
+        ctx,
+        mapProgress,
+        prefix,
+      };
+    }
+
+    /**
+     * Encode video segment to GIF with explicit params.
+     * @param {{ fps:number, maxW:number, quality:number, video?:HTMLVideoElement, workerScript?:string, progressBase?:number, progressSpan?:number, stageLabel?:string, onProgress?:(local:number,text:string)=>void }} opts
+     */
+    async function encodeV2gGif(opts) {
       let ownedWorkerScript = "";
       let workerScript = opts.workerScript || "";
       const cleanupWorker = () => {
@@ -2269,67 +2493,35 @@
 
       let gif = null;
       try {
-        gif = new GIF({
-          workers: opts.workers || 2,
-          quality,
-          width: outW,
-          height: outH,
-          workerScript,
-          repeat: 0,
-          background: "#000000",
-        });
-        activeV2gGifs.add(gif);
-
-        const wm = readGifWatermarkOptions("v2g");
-        const paint = () => {
-          ctx.fillStyle = "#000000";
-          ctx.fillRect(0, 0, outW, outH);
-          ctx.drawImage(video, 0, 0, outW, outH);
-          drawGifTextWatermark(ctx, outW, outH, wm);
-          gif.addFrame(ctx, { delay, copy: true });
-        };
-
-        const prefix = stageLabel ? `${stageLabel} · ` : "";
-        if (hasDuration) {
-          for (let i = 0; i < frameCount; i++) {
-            if (abortV2g) throw new Error("已取消");
-            const t = startSec + (span * i) / Math.max(1, frameCount - 1);
-            await seekVideo(video, t);
-            await waitFrame();
-            paint();
-            mapProgress(((i + 1) / frameCount) * 0.45, `${prefix}抽帧… ${i + 1}/${frameCount}`);
-          }
-        } else {
-          video.currentTime = startSec;
-          await waitFrame();
-          try {
-            await video.play();
-          } catch (_) {}
-          const startedAt = performance.now();
-          let captured = 0;
-          let lastAt = -Infinity;
-          while (captured < frameCount) {
-            if (abortV2g) throw new Error("已取消");
-            if (video.ended) break;
-            const elapsed = (performance.now() - startedAt) / 1000;
-            if (elapsed > maxSec + 0.5) break;
-            const now = performance.now();
-            if (now - lastAt >= delay * 0.9) {
-              paint();
-              captured += 1;
-              lastAt = now;
-              mapProgress((captured / frameCount) * 0.45, `${prefix}抽帧… ${captured}/${frameCount}`);
+        let outW = 0;
+        let outH = 0;
+        const sampled = await sampleV2gFrames({
+          ...opts,
+          sampleShare: 0.45,
+          onFrame: async (ctx, _i, _total) => {
+            if (!gif) {
+              outW = ctx.canvas.width;
+              outH = ctx.canvas.height;
+              gif = new GIF({
+                workers: opts.workers || 2,
+                quality: Math.min(30, Math.max(1, Number(opts.quality) || 12)),
+                width: outW,
+                height: outH,
+                workerScript,
+                repeat: 0,
+                background: "#000000",
+              });
+              activeV2gGifs.add(gif);
             }
-            await waitFrame();
-          }
-          video.pause();
-          frameCount = Math.max(2, captured);
-          if (captured < 2) throw new Error("未能从视频抓取足够帧");
-        }
+            const delay = Math.round(1000 / Math.min(15, Math.max(2, Number(opts.fps) || 8)));
+            gif.addFrame(ctx, { delay, copy: true });
+          },
+        });
 
+        if (!gif) throw new Error("未能创建 GIF 编码器");
         const blob = await new Promise((resolve, reject) => {
           gif.on("progress", (p) => {
-            mapProgress(0.45 + p * 0.55, `${prefix}编码 GIF… ${Math.round(p * 100)}%`);
+            sampled.mapProgress(0.45 + p * 0.55, `${sampled.prefix}编码 GIF… ${Math.round(p * 100)}%`);
           });
           gif.on("finished", (b) => resolve(b));
           gif.on("abort", () => reject(new Error("已取消")));
@@ -2342,19 +2534,80 @@
 
         return {
           blob,
-          frameCount,
-          span,
-          fps,
-          outW,
-          outH,
-          framesCapped,
-          quality,
-          maxW,
+          frameCount: sampled.frameCount,
+          span: sampled.span,
+          fps: sampled.fps,
+          outW: sampled.outW,
+          outH: sampled.outH,
+          framesCapped: sampled.framesCapped,
+          quality: sampled.quality,
+          maxW: sampled.maxW,
         };
       } finally {
         if (gif) activeV2gGifs.delete(gif);
         cleanupWorker();
       }
+    }
+
+    async function canvasToWebpBytes(canvas, quality01) {
+      const blob = await new Promise((resolve, reject) => {
+        try {
+          canvas.toBlob((b) => resolve(b), "image/webp", quality01);
+        } catch (err) {
+          reject(err);
+        }
+      });
+      if (!blob) throw new Error("当前浏览器无法编码 WebP");
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      const isWebp =
+        buf.length >= 12 &&
+        buf[0] === 0x52 &&
+        buf[1] === 0x49 &&
+        buf[2] === 0x46 &&
+        buf[3] === 0x46 &&
+        buf[8] === 0x57 &&
+        buf[9] === 0x45 &&
+        buf[10] === 0x42 &&
+        buf[11] === 0x50;
+      if (!isWebp) throw new Error("当前浏览器不支持编码 WebP（可改用「转为 GIF」）");
+      return buf;
+    }
+
+    /**
+     * Encode video segment to animated WebP (browser still-WebP + ANMF mux).
+     */
+    async function encodeV2gWebp(opts) {
+      if (!canEncodeStillWebp()) {
+        throw new Error("当前浏览器不支持 WebP 编码，请换 Chrome / Edge / Firefox 再试");
+      }
+      const webpQ = gifQualityToWebpQuality(opts.quality);
+      const stillFrames = [];
+      const sampled = await sampleV2gFrames({
+        ...opts,
+        sampleShare: 0.88,
+        onFrame: async (ctx) => {
+          const file = await canvasToWebpBytes(ctx.canvas, webpQ);
+          stillFrames.push({ file, durationMs: 100 });
+        },
+      });
+      for (const f of stillFrames) f.durationMs = sampled.delay;
+      if (stillFrames.length < 2) throw new Error("未能从视频抓取足够帧");
+
+      sampled.mapProgress(0.92, `${sampled.prefix}封装动画 WebP…`);
+      const blob = encodeAnimatedWebpFromStillFrames(stillFrames, sampled.outW, sampled.outH, 0);
+      sampled.mapProgress(1, `${sampled.prefix}完成`);
+      return {
+        blob,
+        frameCount: sampled.frameCount,
+        span: sampled.span,
+        fps: sampled.fps,
+        outW: sampled.outW,
+        outH: sampled.outH,
+        framesCapped: sampled.framesCapped,
+        quality: sampled.quality,
+        maxW: sampled.maxW,
+        webpQuality: webpQ,
+      };
     }
 
     function describeBlackboxCandidate(c) {
@@ -2385,7 +2638,7 @@
     }
 
     function applyBlackboxSuccess(candidate, note) {
-      applyV2gOutput(candidate.blob, { resetCompress: true });
+      applyV2gOutput(candidate.blob, { resetCompress: true, format: "gif" });
       v2gCompressRound = candidate.compressRounds || 0;
       setV2gCompressEnabled(true);
       if (v2gMeta) {
@@ -2502,7 +2755,7 @@
         const maxW = Math.min(720, Math.max(64, Number(v2gWidth?.value) || 360));
         const quality = Math.min(30, Math.max(1, Number(v2gQuality?.value) || 12));
         const result = await encodeV2gGif({ fps, maxW, quality });
-        applyV2gOutput(result.blob, { resetCompress: true });
+        applyV2gOutput(result.blob, { resetCompress: true, format: "gif" });
         setV2gProgress(
           true,
           1,
@@ -2513,9 +2766,61 @@
           const capTip = result.framesCapped
             ? ` · 为控制体积已抽稀到 ${result.frameCount} 帧（约 ${effFps.toFixed(1)} FPS）`
             : "";
-          v2gMeta.textContent = `已转换 ${result.frameCount} 帧 · ${result.span.toFixed(1)}s · ${result.fps} FPS · ${result.outW}×${result.outH} · ${formatKb(result.blob.size)}${capTip}`;
+          v2gMeta.textContent = `已转换 GIF ${result.frameCount} 帧 · ${result.span.toFixed(1)}s · ${result.fps} FPS · ${result.outW}×${result.outH} · ${formatKb(result.blob.size)}${capTip}`;
         }
         toast("GIF 已生成");
+      } catch (err) {
+        if (String(err && err.message) !== "已取消") {
+          setError(v2gError, err.message || String(err));
+          setV2gProgress(false, 0, "");
+        } else {
+          setV2gProgress(false, 0, "");
+          toast("已取消转换");
+        }
+      } finally {
+        abortV2g = false;
+        v2gBusy = false;
+        if (v2gAbort) v2gAbort.hidden = true;
+        setV2gActionButtons();
+        setV2gCompressEnabled(Boolean(latestV2gBlob));
+      }
+    }
+
+    async function convertVideoToWebp() {
+      if (!v2gVideo || !v2gVideo.src) {
+        setError(v2gError, "请先选择视频");
+        return;
+      }
+      if (v2gBusy) return;
+      abortV2g = false;
+      v2gBusy = true;
+      revokeV2gGif();
+      setError(v2gError, "");
+      setV2gActionButtons();
+      setV2gCompressEnabled(false);
+      if (v2gAbort) v2gAbort.hidden = false;
+      setV2gProgress(true, 0.02, "准备抽帧并编码 WebP…");
+
+      try {
+        const fps = Math.min(15, Math.max(2, Number(v2gFps?.value) || 8));
+        const maxW = Math.min(720, Math.max(64, Number(v2gWidth?.value) || 360));
+        const quality = Math.min(30, Math.max(1, Number(v2gQuality?.value) || 12));
+        const result = await encodeV2gWebp({ fps, maxW, quality });
+        applyV2gOutput(result.blob, { resetCompress: true, format: "webp" });
+        setV2gProgress(
+          true,
+          1,
+          `完成 · WebP ${result.frameCount} 帧 · ${result.outW}×${result.outH} · ${formatKb(result.blob.size)}`
+        );
+        if (v2gMeta) {
+          const effFps = result.frameCount > 1 ? (result.frameCount - 1) / result.span : result.fps;
+          const capTip = result.framesCapped
+            ? ` · 已抽稀到 ${result.frameCount} 帧（约 ${effFps.toFixed(1)} FPS）`
+            : "";
+          const qTip = ` · WebP质量≈${Math.round((result.webpQuality || 0) * 100)}%`;
+          v2gMeta.textContent = `已转换动画 WebP ${result.frameCount} 帧 · ${result.span.toFixed(1)}s · ${result.fps} FPS · ${result.outW}×${result.outH} · ${formatKb(result.blob.size)}${qTip}${capTip}`;
+        }
+        toast("动画 WebP 已生成");
       } catch (err) {
         if (String(err && err.message) !== "已取消") {
           setError(v2gError, err.message || String(err));
@@ -2579,7 +2884,7 @@
 
         const fallback = tried.slice().sort((a, b) => a.blob.size - b.blob.size)[0] || null;
         if (fallback) {
-          applyV2gOutput(fallback.blob, { resetCompress: true });
+          applyV2gOutput(fallback.blob, { resetCompress: true, format: "gif" });
           v2gCompressRound = fallback.compressRounds || 0;
           setV2gCompressEnabled(true);
           const tip = summarizeBlackboxCandidates(tried);
@@ -2613,6 +2918,10 @@
     async function compressV2gGif({ again = false } = {}) {
       const input = again ? latestV2gBlob : baseV2gBlob || latestV2gBlob;
       if (!input || compressingV2g || v2gBusy) return;
+      if (latestV2gFormat !== "gif") {
+        setError(v2gError, "动画 WebP 暂不支持 gifsicle 压缩，请改用 GIF 或直接下载");
+        return;
+      }
       compressingV2g = true;
       setV2gCompressEnabled(false);
       setV2gActionButtons();
@@ -2631,7 +2940,7 @@
         const after = out.size;
         v2gCompressRound = nextRound;
         const summary = gifCompressSummary(originalV2gSize || before, before, after, nextRound);
-        applyV2gOutput(out);
+        applyV2gOutput(out, { format: "gif" });
         if (v2gMeta) v2gMeta.textContent = summary.text;
         setV2gProgress(true, 1, `第 ${nextRound} 次压缩完成 · ${formatKb(before)} → ${formatKb(after)}`);
         toast(
@@ -2653,6 +2962,9 @@
     $("#v2g-clear")?.addEventListener("click", clearV2g);
     window.DevToolsTemp?.registerCleanup(clearV2g);
     v2gGenerate?.addEventListener("click", convertVideoToGif);
+    v2gGenerateWebp?.addEventListener("click", () => {
+      convertVideoToWebp().catch((err) => setError(v2gError, err.message || String(err)));
+    });
     v2gBlackbox?.addEventListener("click", () => {
       convertVideoToGifBlackBox().catch((err) => setError(v2gError, err.message || String(err)));
     });
