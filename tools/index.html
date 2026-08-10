@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260810w" />
+  <link rel="stylesheet" href="./style.css?v=20260810x" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -946,9 +946,9 @@ hello@world.org</textarea>
       <div class="panel-head">
         <div class="panel-title-row">
           <h1>GIF 工具</h1>
-          <span class="tool-ver mono" id="gif-tool-version" title="GIF 工具逻辑版本">v2026.08.10-w</span>
+          <span class="tool-ver mono" id="gif-tool-version" title="GIF 工具逻辑版本">v2026.08.10-x</span>
         </div>
-        <p>多图合成 GIF、压缩已有 GIF、拆帧/转 WebM，或把视频转成 GIF / 动画 WebP；本地处理，带进度。当前版本 <strong class="mono" id="gif-tool-version-inline">v2026.08.10-w</strong>。</p>
+        <p>多图合成 GIF、压缩已有 GIF、拆帧/转 WebM，或把视频转成 GIF / 动画 WebP；本地处理，带进度。当前版本 <strong class="mono" id="gif-tool-version-inline">v2026.08.10-x</strong>。</p>
       </div>
       <div class="panel-body">
         <div class="convert-grid">
@@ -1124,8 +1124,13 @@ hello@world.org</textarea>
                 <button type="button" class="seg-btn" data-bright="35">最亮</button>
               </div>
               <div class="v2g-bright-fine" id="v2g-bright-fine">
-                <label for="v2g-bright-amount">亮度 <span class="mono" id="v2g-bright-amount-label">+20%</span></label>
-                <input id="v2g-bright-amount" class="v2g-bright-range" type="range" min="0" max="50" step="1" value="20" />
+                <div class="v2g-bright-fine-head">
+                  <label for="v2g-bright-pct">亮度</label>
+                  <input id="v2g-bright-pct" class="mono meta-input v2g-bright-pct" type="number" min="0" step="1" value="20" inputmode="numeric" title="相对提亮百分比，可输入超过滑块范围" />
+                  <span class="hint tight v2g-bright-pct-unit">%</span>
+                  <button type="button" class="ghost-btn v2g-bright-reset" id="v2g-bright-reset" title="恢复为原始亮度（+0%）">还原</button>
+                </div>
+                <input id="v2g-bright-amount" class="v2g-bright-range" type="range" min="0" max="200" step="1" value="20" aria-label="亮度滑块" />
               </div>
             </div>
           </div>
@@ -1834,10 +1839,10 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./temp.js?v=20260810w"></script>
+  <script src="./temp.js?v=20260810x"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260810l"></script>
-  <script src="./extra.js?v=20260810w"></script>
+  <script src="./extra.js?v=20260810x"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>
