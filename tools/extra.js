@@ -89,6 +89,40 @@
     };
   }
 
+  const GIF_WM_DEFAULT_TEXT = "Elliot718703";
+
+  function readGifWatermarkOptions(prefix) {
+    const enabled = Boolean($(`#${prefix}-wm-enable`)?.checked);
+    const text = String($(`#${prefix}-wm-text`)?.value ?? GIF_WM_DEFAULT_TEXT).trim();
+    const sizeKey = String($(`#${prefix}-wm-size`)?.value || "small");
+    return { enabled, text, sizeKey };
+  }
+
+  function drawGifTextWatermark(ctx, canvasW, canvasH, opts) {
+    if (!ctx || !opts?.enabled) return;
+    const text = String(opts.text || "").trim();
+    if (!text) return;
+    const w = Math.max(1, Number(canvasW) || 1);
+    const h = Math.max(1, Number(canvasH) || 1);
+    const ratio = opts.sizeKey === "large" ? 0.055 : opts.sizeKey === "medium" ? 0.04 : 0.028;
+    const fontSize = Math.max(8, Math.round(Math.min(w, h) * ratio));
+    const pad = Math.max(4, Math.round(fontSize * 0.55));
+    ctx.save();
+    ctx.font = `600 ${fontSize}px "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif`;
+    ctx.textAlign = "right";
+    ctx.textBaseline = "top";
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
+    ctx.lineWidth = Math.max(1, Math.round(fontSize * 0.16));
+    ctx.strokeStyle = "rgba(0, 0, 0, 0.55)";
+    ctx.fillStyle = "rgba(255, 255, 255, 0.88)";
+    const x = w - pad;
+    const y = pad;
+    ctx.strokeText(text, x, y);
+    ctx.fillText(text, x, y);
+    ctx.restore();
+  }
+
   async function compressGifBlob(blob, level = "standard", onProgress, opts = {}) {
     if (!blob) throw new Error("没有可压缩的 GIF");
     const plan = buildGifCompressArgs(level, opts.round || 1);
@@ -1381,6 +1415,7 @@
           ctx.fillStyle = "#000000";
           ctx.fillRect(0, 0, outW, outH);
           ctx.drawImage(frame.img, x, y, size.width, size.height);
+          drawGifTextWatermark(ctx, outW, outH, readGifWatermarkOptions("gif"));
           gif.addFrame(ctx, {
             delay: Math.min(10000, Math.max(20, Number(frame.delay) || defaultDelay())),
             copy: true,
@@ -2179,10 +2214,12 @@
         });
         activeV2gGif = gif;
 
+        const wm = readGifWatermarkOptions("v2g");
         const paint = () => {
           ctx.fillStyle = "#000000";
           ctx.fillRect(0, 0, outW, outH);
           ctx.drawImage(v2gVideo, 0, 0, outW, outH);
+          drawGifTextWatermark(ctx, outW, outH, wm);
           gif.addFrame(ctx, { delay, copy: true });
         };
 

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260809b" />
+  <link rel="stylesheet" href="./style.css?v=20260810a" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -965,6 +965,17 @@ hello@world.org</textarea>
               <label for="gif-quality">质量 (1–30，越小越好)</label>
               <input id="gif-quality" class="mono meta-input" type="number" min="1" max="30" step="1" value="10" />
             </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
+              <label class="flag"><input type="checkbox" id="gif-wm-enable" /> 右上角文字水印</label>
+              <label for="gif-wm-text">文字</label>
+              <input id="gif-wm-text" class="mono meta-input" type="text" value="Elliot718703" maxlength="40" style="min-width:10rem" />
+              <label for="gif-wm-size">字号</label>
+              <select id="gif-wm-size" class="mono select-input">
+                <option value="small" selected>小</option>
+                <option value="medium">中</option>
+                <option value="large">大</option>
+              </select>
+            </div>
             <p class="hint" id="gif-meta">选择至少 2 张图片。单帧建议不超过 1280px，张数过多会较慢。</p>
             <div class="gif-frame-list" id="gif-frames" aria-live="polite"></div>
             <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
@@ -1078,6 +1089,17 @@ hello@world.org</textarea>
             <input id="v2g-start" class="mono meta-input" type="number" min="0" max="600" step="0.1" value="0" />
             <label for="v2g-quality">质量 (1–30)</label>
             <input id="v2g-quality" class="mono meta-input" type="number" min="1" max="30" step="1" value="12" />
+          </div>
+          <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
+            <label class="flag"><input type="checkbox" id="v2g-wm-enable" /> 右上角文字水印</label>
+            <label for="v2g-wm-text">文字</label>
+            <input id="v2g-wm-text" class="mono meta-input" type="text" value="Elliot718703" maxlength="40" style="min-width:10rem" />
+            <label for="v2g-wm-size">字号</label>
+            <select id="v2g-wm-size" class="mono select-input">
+              <option value="small" selected>小</option>
+              <option value="medium">中</option>
+              <option value="large">大</option>
+            </select>
           </div>
           <p class="hint" id="v2g-meta">支持 MP4 / WebM / MOV。上传后「最长秒数」默认等于视频时长；转完可「压缩体积」，不满意再点「继续压缩」。</p>
           <div class="gif-preview-wrap">
@@ -1779,10 +1801,10 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./temp.js?v=20260809b"></script>
-  <script src="./lib/pure.js?v=20260809b"></script>
-  <script src="./app.js?v=20260809b"></script>
-  <script src="./extra.js?v=20260809b"></script>
-  <script src="./imgkit.js?v=20260809b"></script>
+  <script src="./temp.js?v=20260810a"></script>
+  <script src="./lib/pure.js?v=20260810a"></script>
+  <script src="./app.js?v=20260810a"></script>
+  <script src="./extra.js?v=20260810a"></script>
+  <script src="./imgkit.js?v=20260810a"></script>
 </body>
 </html>
