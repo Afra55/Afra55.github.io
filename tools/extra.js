@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.10-j";
+  const GIF_TOOL_VERSION = "2026.08.10-k";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 30 },
