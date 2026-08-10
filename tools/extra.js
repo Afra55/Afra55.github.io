@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.10-v";
+  const GIF_TOOL_VERSION = "2026.08.10-w";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -2697,11 +2697,27 @@
       abortV2g = false;
     }
 
-    /** @returns {number} 0–0.5，对应 FFmpeg eq=brightness */
+    /** @returns {number} 0–0.5，相对提亮量（与 CSS brightness(1+x) / 像素乘算一致） */
     function readV2gBrightness() {
       if (!v2gBrightEnable?.checked) return 0;
       const pct = Math.min(50, Math.max(0, Math.round(Number(v2gBrightAmount?.value) || 0)));
       return pct / 100;
+    }
+
+    /** 乘法系数：+20% → 1.2（预览 CSS / WebP 像素 / FFmpeg 共用） */
+    function v2gBrightMultiplier(bright) {
+      const b = Math.min(0.5, Math.max(0, Number(bright) || 0));
+      return 1 + b;
+    }
+
+    /**
+     * FFmpeg 乘法提亮（勿用 eq=brightness：那是 -1..1 加性，同等数值会亮很多）。
+     * 例：+20% → colorchannelmixer rr/gg/bb=1.2
+     */
+    function v2gBrightFfmpegFilter(bright) {
+      if (!(Number(bright) > 0)) return "";
+      const m = v2gBrightMultiplier(bright).toFixed(4);
+      return `,colorchannelmixer=rr=${m}:gg=${m}:bb=${m}`;
     }
 
     function formatV2gBrightTip(bright) {
@@ -2721,12 +2737,13 @@
       }
     }
 
-    /** 预览用 CSS filter（比 canvas ctx.filter 更兼容手机浏览器） */
+    /** 预览用 CSS filter，系数与导出乘法提亮一致 */
     function applyV2gBrightCssFilter() {
       syncV2gBrightUi();
       if (!v2gBrightPreview) return;
       const bright = readV2gBrightness();
-      v2gBrightPreview.style.filter = bright > 0 ? `brightness(${1 + bright})` : "none";
+      const m = v2gBrightMultiplier(bright);
+      v2gBrightPreview.style.filter = bright > 0 ? `brightness(${m})` : "none";
     }
 
     /**
@@ -2966,7 +2983,7 @@
           try {
             const img = ctx.getImageData(0, 0, outW, outH);
             const d = img.data;
-            const m = 1 + bright;
+            const m = v2gBrightMultiplier(bright);
             for (let i = 0; i < d.length; i += 4) {
               d[i] = Math.min(255, d[i] * m);
               d[i + 1] = Math.min(255, d[i + 1] * m);
@@ -3256,8 +3273,7 @@
       const quality = Math.min(30, Math.max(1, Number(opts.quality) || 12));
       const maxColors = gifQualityToMaxColors(quality);
       const bright = Number.isFinite(opts.brightness) ? Number(opts.brightness) : readV2gBrightness();
-      const brightFilter =
-        bright > 0 ? `,eq=brightness=${Math.min(1, Math.max(-1, bright)).toFixed(3)}` : "";
+      const brightFilter = v2gBrightFfmpegFilter(bright);
       const { startSec, span } = resolveV2gSpan();
       const naturalFrames = Math.max(2, Math.floor(span * fps) + 1);
       const framesCapped = naturalFrames > MAX_V2G_FRAMES;
