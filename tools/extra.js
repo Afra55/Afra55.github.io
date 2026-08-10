@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.10-i";
+  const GIF_TOOL_VERSION = "2026.08.10-j";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 30 },
@@ -51,13 +51,21 @@
     strong: { label: "强力", baseLossy: 100 },
   };
 
-  (() => {
-    const el = $("#gif-tool-version");
-    if (el) {
-      el.textContent = `v${GIF_TOOL_VERSION}`;
-      el.title = `GIF 工具逻辑版本 ${GIF_TOOL_VERSION}（与脚本缓存联动，更新后应看到此号变化）`;
-    }
-  })();
+  function paintGifToolVersion() {
+    const label = `v${GIF_TOOL_VERSION}`;
+    ["#gif-tool-version", "#gif-tool-version-inline"].forEach((sel) => {
+      const el = $(sel);
+      if (!el) return;
+      el.textContent = label;
+      el.title = `GIF 工具逻辑版本 ${GIF_TOOL_VERSION}（更新后应看到此号变化）`;
+    });
+    try {
+      window.GIF_TOOL_VERSION = GIF_TOOL_VERSION;
+    } catch (_) {}
+  }
+
+  paintGifToolVersion();
+  document.addEventListener("DOMContentLoaded", paintGifToolVersion);
 
   let gifsicleModulePromise = null;
 
