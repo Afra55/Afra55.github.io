@@ -81,7 +81,7 @@
   /** 黑盒高帧档轻柔压缩：只加 lossy，不减色/缩放，避免第 2 轮毁画质 */
   function buildBlackboxSoftCompressArgs(round = 1) {
     const r = Math.max(1, Math.round(Number(round) || 1));
-    const lossy = Math.min(80, 35 + (r - 1) * 25); // 1→35, 2→60
+    const lossy = Math.min(70, 25 + (r - 1) * 20); // 1→25, 2→45
     return { label: "轻柔", args: `-O1 --lossy=${lossy}`, round: r, lossy };
   }
 
@@ -1934,10 +1934,10 @@
     const MAX_V2G_FRAMES = 300;
     const MAX_V2G_SECONDS = 600;
     const V2G_BLACKBOX_MAX_BYTES = 6 * 1024 * 1024;
-    /** 黑盒：固定宽 420；串行 15→12→10。高帧档只轻柔压，压不够就降帧，避免毁画质 */
+    /** 黑盒：固定宽 480；串行 15→12→10。高帧档只轻柔压，压不够就降帧，避免毁画质 */
     const V2G_BLACKBOX_FPS_LIST = [15, 12, 10];
-    const V2G_BLACKBOX_MAX_W = 420;
-    const V2G_BLACKBOX_QUALITY = 7;
+    const V2G_BLACKBOX_MAX_W = 480;
+    const V2G_BLACKBOX_QUALITY = 5;
     const V2G_BLACKBOX_MAX_COMPRESS_ROUNDS = 10;
     /** 非最后一档最多轻柔压缩轮数（不减色）；最后一档才允许强压 */
     const V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS = 2;
@@ -2045,7 +2045,7 @@
       setError(v2gError, "");
       if (v2gMeta) {
         v2gMeta.textContent =
-          "支持 MP4 / WebM / MOV。上传后「最长秒数」默认等于视频时长；转完可「压缩体积」，不满意再点「继续压缩」。也可一键「黑盒 GIF」：固定宽 420，按 15→12→10 试到 ≤6MB。";
+          "支持 MP4 / WebM / MOV。上传后「最长秒数」默认等于视频时长；转完可「压缩体积」，不满意再点「继续压缩」。也可一键「黑盒 GIF」：固定宽 480，按 15→12→10 试到 ≤6MB。";
       }
       if (v2gMaxsec) {
         v2gMaxsec.value = "";
