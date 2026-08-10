@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.10-k";
+  const GIF_TOOL_VERSION = "2026.08.10-l";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 30 },
@@ -96,10 +96,10 @@
     return { label: preset.label, args: parts.join(" "), round: r, lossy };
   }
 
-  /** 黑盒高帧档轻柔压缩：只加 lossy，不减色/缩放，避免第 2 轮毁画质 */
+  /** 黑盒高帧档轻柔压缩：只加 lossy，不减色/缩放；宁可多一轮轻压也优先保住 12FPS */
   function buildBlackboxSoftCompressArgs(round = 1) {
     const r = Math.max(1, Math.round(Number(round) || 1));
-    const lossy = Math.min(70, 25 + (r - 1) * 20); // 1→25, 2→45
+    const lossy = Math.min(75, 25 + (r - 1) * 22); // 1→25, 2→47, 3→69
     return { label: "轻柔", args: `-O1 --lossy=${lossy}`, round: r, lossy };
   }
 
@@ -1952,13 +1952,13 @@
     const MAX_V2G_FRAMES = 300;
     const MAX_V2G_SECONDS = 600;
     const V2G_BLACKBOX_MAX_BYTES = 6 * 1024 * 1024;
-    /** 黑盒：固定宽 480；串行 15→12→10。高帧档只轻柔压，压不够就降帧，避免毁画质 */
+    /** 黑盒：宽 420 + quality 5；优先保住 12FPS，避免 480 过大掉到 10FPS */
     const V2G_BLACKBOX_FPS_LIST = [15, 12, 10];
-    const V2G_BLACKBOX_MAX_W = 480;
+    const V2G_BLACKBOX_MAX_W = 420;
     const V2G_BLACKBOX_QUALITY = 5;
     const V2G_BLACKBOX_MAX_COMPRESS_ROUNDS = 10;
-    /** 非最后一档最多轻柔压缩轮数（不减色）；最后一档才允许强压 */
-    const V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS = 2;
+    /** 非最后一档轻柔压缩轮数（不减色）；多给 12FPS 机会再降到 10 */
+    const V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS = 3;
     const V2G_BLACKBOX_LONG_SPAN_SEC = 20;
     let videoObjectUrl = "";
     let gifObjectUrl = "";
@@ -2063,7 +2063,7 @@
       setError(v2gError, "");
       if (v2gMeta) {
         v2gMeta.textContent =
-          "支持 MP4 / WebM / MOV。上传后「最长秒数」默认等于视频时长；转完可「压缩体积」，不满意再点「继续压缩」。也可一键「黑盒 GIF」：固定宽 480，按 15→12→10 试到 ≤6MB。";
+          "支持 MP4 / WebM / MOV。上传后「最长秒数」默认等于视频时长；转完可「压缩体积」，不满意再点「继续压缩」。也可一键「黑盒 GIF」：固定宽 420，按 15→12→10 试到 ≤6MB。";
       }
       if (v2gMaxsec) {
         v2gMaxsec.value = "";
