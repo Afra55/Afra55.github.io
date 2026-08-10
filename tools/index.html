@@ -946,9 +946,9 @@ hello@world.org</textarea>
       <div class="panel-head">
         <div class="panel-title-row">
           <h1>GIF 工具</h1>
-          <span class="tool-ver mono" id="gif-tool-version" title="GIF 工具逻辑版本">v2026.08.10-l</span>
+          <span class="tool-ver mono" id="gif-tool-version" title="GIF 工具逻辑版本">v2026.08.10-m</span>
         </div>
-        <p>多图合成 GIF、压缩已有 GIF、拆帧/转 WebM，或把视频转成 GIF；本地处理，带进度。当前版本 <strong class="mono" id="gif-tool-version-inline">v2026.08.10-l</strong>。</p>
+        <p>多图合成 GIF、压缩已有 GIF、拆帧/转 WebM，或把视频转成 GIF；本地处理，带进度。当前版本 <strong class="mono" id="gif-tool-version-inline">v2026.08.10-m</strong>。</p>
       </div>
       <div class="panel-body">
         <div class="convert-grid">
@@ -1083,15 +1083,15 @@ hello@world.org</textarea>
           </div>
           <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
             <label for="v2g-fps">帧率 FPS</label>
-            <input id="v2g-fps" class="mono meta-input" type="number" min="2" max="15" step="1" value="8" />
+            <input id="v2g-fps" class="mono meta-input" type="number" min="2" max="15" step="1" value="15" />
             <label for="v2g-width">最大宽度</label>
-            <input id="v2g-width" class="mono meta-input" type="number" min="64" max="720" step="1" value="360" />
+            <input id="v2g-width" class="mono meta-input" type="number" min="64" max="720" step="1" value="480" />
             <label for="v2g-maxsec">最长秒数</label>
             <input id="v2g-maxsec" class="mono meta-input" type="number" min="0.5" max="600" step="0.1" value="" placeholder="自动=全长" title="上传后自动填入视频时长，可手动缩短" />
             <label for="v2g-start">起始秒</label>
             <input id="v2g-start" class="mono meta-input" type="number" min="0" max="600" step="0.1" value="0" />
             <label for="v2g-quality">质量 (1–30)</label>
-            <input id="v2g-quality" class="mono meta-input" type="number" min="1" max="30" step="1" value="12" />
+            <input id="v2g-quality" class="mono meta-input" type="number" min="1" max="30" step="1" value="5" />
           </div>
           <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
             <label class="flag"><input type="checkbox" id="v2g-wm-enable" /> 右上角文字水印</label>
@@ -1104,7 +1104,7 @@ hello@world.org</textarea>
               <option value="large">大</option>
             </select>
           </div>
-          <p class="hint" id="v2g-meta">支持 MP4 / WebM / MOV。上传后「最长秒数」默认等于视频时长；转完可「压缩体积」，不满意再点「继续压缩」。也可一键「黑盒 GIF」：固定宽 420，按 15→12→10 试到 ≤6MB。</p>
+          <p class="hint" id="v2g-meta">支持 MP4 / WebM / MOV。默认 15FPS / 宽480 / 质量5（接近原片观感，不限体积）。上传后「最长秒数」默认等于视频时长；也可一键「黑盒 GIF」压到 ≤6MB。</p>
           <div class="gif-preview-wrap">
             <video id="v2g-video" class="img-preview gif-preview" controls playsinline muted hidden></video>
           </div>
@@ -1808,7 +1808,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260810l"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260810l"></script>
-  <script src="./extra.js?v=20260810l"></script>
+  <script src="./extra.js?v=20260810m"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>

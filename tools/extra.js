@@ -43,12 +43,12 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.10-l";
+  const GIF_TOOL_VERSION = "2026.08.10-m";
 
   const GIF_COMPRESS_PRESETS = {
-    light: { label: "轻度", baseLossy: 30 },
-    standard: { label: "标准", baseLossy: 60 },
-    strong: { label: "强力", baseLossy: 100 },
+    light: { label: "轻度", baseLossy: 35 },
+    standard: { label: "标准", baseLossy: 55 },
+    strong: { label: "强力", baseLossy: 90 },
   };
 
   function paintGifToolVersion() {
@@ -82,25 +82,33 @@
     return gifsicleModulePromise;
   }
 
+  /**
+   * 压缩策略：第 1 轮先 -O3（几乎不伤画质），之后再逐步 lossy / 减色 / 缩放。
+   */
   function buildGifCompressArgs(level = "standard", round = 1) {
     const preset = GIF_COMPRESS_PRESETS[level] || GIF_COMPRESS_PRESETS.standard;
     const r = Math.max(1, Math.round(Number(round) || 1));
-    // Each continue pass steps up lossy / palette / optional scale.
-    const lossy = Math.min(200, preset.baseLossy + (r - 1) * 30);
-    const parts = [`-O1`, `--lossy=${lossy}`];
-    if (level === "strong" || r >= 2) {
-      parts.push(`--colors ${r >= 4 ? 64 : 128}`);
+    if (r === 1) {
+      return { label: `${preset.label}·优化`, args: "-O3", round: 1, lossy: 0 };
     }
-    if (r >= 7) parts.push("--scale 0.85");
-    else if (r >= 5) parts.push("--scale 0.9");
+    const lossy = Math.min(200, preset.baseLossy + (r - 2) * 30);
+    const parts = ["-O3", `--lossy=${lossy}`];
+    if (level === "strong" || r >= 3) {
+      parts.push(`--colors ${r >= 5 ? 64 : 128}`);
+    }
+    if (r >= 8) parts.push("--scale 0.85");
+    else if (r >= 6) parts.push("--scale 0.9");
     return { label: preset.label, args: parts.join(" "), round: r, lossy };
   }
 
-  /** 黑盒高帧档轻柔压缩：只加 lossy，不减色/缩放；宁可多一轮轻压也优先保住 12FPS */
+  /** 黑盒高帧档：先 O3，再轻 lossy，不减色/缩放，优先保住更高 FPS */
   function buildBlackboxSoftCompressArgs(round = 1) {
     const r = Math.max(1, Math.round(Number(round) || 1));
-    const lossy = Math.min(75, 25 + (r - 1) * 22); // 1→25, 2→47, 3→69
-    return { label: "轻柔", args: `-O1 --lossy=${lossy}`, round: r, lossy };
+    if (r === 1) {
+      return { label: "轻柔·优化", args: "-O3", round: 1, lossy: 0 };
+    }
+    const lossy = Math.min(70, 28 + (r - 2) * 24); // 2→28, 3→52
+    return { label: "轻柔", args: `-O3 --lossy=${lossy}`, round: r, lossy };
   }
 
   function gifCompressSummary(originalSize, beforeSize, afterSize, round) {
@@ -154,7 +162,11 @@
     onProgress?.(0.05, "加载压缩引擎…");
     const gifsicle = await loadGifsicle();
     if (!gifsicle || typeof gifsicle.run !== "function") throw new Error("压缩引擎未加载");
-    onProgress?.(0.2, `压缩中（${plan.label} · 第 ${plan.round} 次 · lossy=${plan.lossy}）…`);
+    const detail =
+      plan.lossy > 0
+        ? `${plan.label} · 第 ${plan.round} 次 · lossy=${plan.lossy}`
+        : `${plan.label} · 第 ${plan.round} 次 · -O3 优化`;
+    onProgress?.(0.2, `压缩中（${detail}）…`);
     const out = await gifsicle.run({
       input: [{ file: blob, name: "in.gif" }],
       command: [`${plan.args} in.gif -o /out/out.gif`],
@@ -2385,8 +2397,8 @@
 
     /**
      * 单档：编码后若超 6MB 再压缩。
-     * 非最后一档：最多 2 轮轻柔压缩（不减色/缩放），不够则交给更低 FPS。
-     * 最后一档：允许标准→强力多轮，尽量挤进 6MB。
+     * 非最后一档：先 -O3 再轻 lossy（不减色），不够则降帧。
+     * 最后一档：O3 → 标准/强力多轮，尽量挤进 6MB。
      * @returns {{ candidate: object, underBudget: boolean }}
      */
     async function encodeAndCompressBlackboxTier(fps, tierIndex, tierTotal) {
