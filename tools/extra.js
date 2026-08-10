@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.10-x";
+  const GIF_TOOL_VERSION = "2026.08.10-y";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -2536,9 +2536,13 @@
     const MAX_V2G_FRAMES = 300;
     const MAX_V2G_SECONDS = 600;
     const V2G_BLACKBOX_MAX_BYTES = 6 * 1024 * 1024;
-    /** 黑盒：宽 420 + quality 5；优先保住 12FPS，避免 480 过大掉到 10FPS */
+    /** 体积有余（<5MB）时尝试加宽，把预算用在清晰度上 */
+    const V2G_BLACKBOX_WIDEN_BYTES = 5 * 1024 * 1024;
+    /** 黑盒：起点宽 420 + quality 5；优先保住 12FPS；够小时再加宽 */
     const V2G_BLACKBOX_FPS_LIST = [15, 12, 10];
-    const V2G_BLACKBOX_MAX_W = 420;
+    const V2G_BLACKBOX_BASE_W = 420;
+    const V2G_BLACKBOX_WIDTH_STEP = 60;
+    const V2G_BLACKBOX_WIDTH_CAP = 720;
     const V2G_BLACKBOX_QUALITY = 5;
     const V2G_BLACKBOX_MAX_COMPRESS_ROUNDS = 10;
     /** 非最后一档：每轮轻lossy（对齐 -l），最多 3 轮不减色；多给高帧档机会再降 FPS */
@@ -3482,25 +3486,92 @@
       toast(`黑盒 GIF 已生成 · ${candidate.fps}FPS · ${formatKb(candidate.blob.size)}`);
     }
 
+    function resolveBlackboxWidthCap() {
+      const srcW = Number(v2gVideo?.videoWidth) || 0;
+      if (srcW > 0) return Math.min(V2G_BLACKBOX_WIDTH_CAP, srcW);
+      return V2G_BLACKBOX_WIDTH_CAP;
+    }
+
+    /**
+     * 体积有余（<5MB）时按步进加宽；某档超过 6MB 则回退上一档。
+     * 加宽只重编码、不压缩，避免牺牲刚换来的清晰度。
+     */
+    async function tryWidenBlackboxCandidate(baseCandidate, fps) {
+      let best = baseCandidate;
+      if (!best?.blob || best.blob.size >= V2G_BLACKBOX_WIDEN_BYTES) return best;
+      if (best.blob.size > V2G_BLACKBOX_MAX_BYTES) return best;
+
+      const hardMax = resolveBlackboxWidthCap();
+      let nextW = (Number(best.maxW) || V2G_BLACKBOX_BASE_W) + V2G_BLACKBOX_WIDTH_STEP;
+      if (nextW > hardMax) {
+        setV2gProgress(true, 0.96, `黑盒：体积有余但已达源宽度上限（≤${hardMax}）`);
+        return best;
+      }
+
+      let step = 0;
+      while (nextW <= hardMax) {
+        if (abortV2g) throw new Error("已取消");
+        step += 1;
+        const progress = Math.min(0.97, 0.72 + step * 0.05);
+        setV2gProgress(
+          true,
+          progress,
+          `黑盒：${formatKb(best.blob.size)} < 5MB，试加宽至 ${nextW}（保 ${fps}FPS）…`
+        );
+        const encoded = await encodeV2gGifFfmpeg({
+          file: v2gSourceFile,
+          fps,
+          maxW: nextW,
+          quality: V2G_BLACKBOX_QUALITY,
+          stageLabel: `${fps}FPS·宽${nextW}`,
+          onProgress: (local, text) => {
+            setV2gProgress(
+              true,
+              Math.min(0.97, progress + Math.min(0.04, (local || 0) * 0.04)),
+              text || `黑盒加宽 ${nextW}…`
+            );
+          },
+        });
+        const cand = { ...encoded, compressRounds: 0, maxW: nextW };
+        if (cand.blob.size > V2G_BLACKBOX_MAX_BYTES) {
+          setV2gProgress(
+            true,
+            0.98,
+            `黑盒：宽 ${nextW} 超 6MB（${formatKb(cand.blob.size)}），沿用宽≤${best.maxW}`
+          );
+          break;
+        }
+        best = cand;
+        if (best.outW > 0 && best.outW < nextW - 2) {
+          // 源视频本身更窄，继续加宽无收益
+          setV2gProgress(true, 0.98, `黑盒：输出宽已达源尺寸 ${best.outW}，停止加宽`);
+          break;
+        }
+        nextW += V2G_BLACKBOX_WIDTH_STEP;
+      }
+      return best;
+    }
+
     /**
      * 单档：编码后若超 6MB 再压缩。
      * 非最后一档：轻柔 lossy（对齐 -l，不减色），不够则降帧。
      * 最后一档：标准/强力多轮（每轮都有 lossy），尽量挤进 6MB。
      * @returns {{ candidate: object, underBudget: boolean }}
      */
-    async function encodeAndCompressBlackboxTier(fps, tierIndex, tierTotal) {
+    async function encodeAndCompressBlackboxTier(fps, tierIndex, tierTotal, maxW = V2G_BLACKBOX_BASE_W) {
       if (abortV2g) throw new Error("已取消");
       const base = tierIndex / Math.max(1, tierTotal);
       const spanShare = 1 / Math.max(1, tierTotal);
       const isLastTier = tierIndex >= tierTotal - 1;
       const maxRounds = isLastTier ? V2G_BLACKBOX_MAX_COMPRESS_ROUNDS : V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS;
+      const width = Math.min(V2G_BLACKBOX_WIDTH_CAP, Math.max(64, Number(maxW) || V2G_BLACKBOX_BASE_W));
 
-      setV2gProgress(true, base + 0.02 * spanShare, `黑盒：尝试 ${fps}FPS（宽≤${V2G_BLACKBOX_MAX_W}）…`);
+      setV2gProgress(true, base + 0.02 * spanShare, `黑盒：尝试 ${fps}FPS（宽≤${width}）…`);
 
       const encoded = await encodeV2gGifFfmpeg({
         file: v2gSourceFile,
         fps,
-        maxW: V2G_BLACKBOX_MAX_W,
+        maxW: width,
         quality: V2G_BLACKBOX_QUALITY,
         stageLabel: `${fps}FPS`,
         onProgress: (local, text) => {
@@ -3508,7 +3579,7 @@
         },
       });
 
-      let candidate = { ...encoded, compressRounds: 0, maxW: V2G_BLACKBOX_MAX_W };
+      let candidate = { ...encoded, compressRounds: 0, maxW: width };
       if (candidate.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
         return { candidate, underBudget: true };
       }
@@ -3703,7 +3774,11 @@
       setV2gActionButtons();
       setV2gCompressEnabled(false);
       if (v2gAbort) v2gAbort.hidden = false;
-      setV2gProgress(true, 0.02, `黑盒：固定宽 ${V2G_BLACKBOX_MAX_W}，按需 15→12→10…`);
+      setV2gProgress(
+        true,
+        0.02,
+        `黑盒：起点宽 ${V2G_BLACKBOX_BASE_W}，按需 15→12→10；够小时再加宽…`
+      );
 
       try {
         await prewarmFfmpegEngine().catch(() => {});
@@ -3712,21 +3787,35 @@
         if (!fpsList.length) throw new Error("没有可用的黑盒帧率方案");
 
         const skipTip =
-          fpsList[0] < 15 ? `片段约 ${span.toFixed(1)}s，跳过 15FPS，从 ${fpsList[0]} 起试` : `依次尝试 ${fpsList.join("/")} FPS`;
+          fpsList[0] < 15
+            ? `片段约 ${span.toFixed(1)}s，跳过 15FPS，从 ${fpsList[0]} 起试`
+            : `依次尝试 ${fpsList.join("/")} FPS（宽从 ${V2G_BLACKBOX_BASE_W} 起）`;
         setV2gProgress(true, 0.03, `黑盒：${skipTip}`);
 
         const tried = [];
         for (let i = 0; i < fpsList.length; i++) {
           if (abortV2g) throw new Error("已取消");
           const fps = fpsList[i];
-          const { candidate, underBudget } = await encodeAndCompressBlackboxTier(fps, i, fpsList.length);
+          const { candidate, underBudget } = await encodeAndCompressBlackboxTier(
+            fps,
+            i,
+            fpsList.length,
+            V2G_BLACKBOX_BASE_W
+          );
           tried.push(candidate);
           if (underBudget) {
+            let finalCand = candidate;
+            if (candidate.blob.size < V2G_BLACKBOX_WIDEN_BYTES) {
+              finalCand = await tryWidenBlackboxCandidate(candidate, fps);
+            }
+            const widened = (finalCand.maxW || 0) > (candidate.maxW || 0);
             const note =
               candidate.compressRounds > 0
-                ? `黑盒完成 · ${fps}FPS 压缩 ${candidate.compressRounds} 轮后达标`
-                : `黑盒完成 · ${fps}FPS 未压缩即达标`;
-            applyBlackboxSuccess(candidate, note);
+                ? `黑盒完成 · ${fps}FPS 压缩 ${candidate.compressRounds} 轮后达标${widened ? "并加宽" : ""}`
+                : widened
+                  ? `黑盒完成 · ${fps}FPS 达标后加宽至 ≤${finalCand.maxW}`
+                  : `黑盒完成 · ${fps}FPS 未压缩即达标`;
+            applyBlackboxSuccess(finalCand, note);
             return;
           }
         }
