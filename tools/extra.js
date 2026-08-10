@@ -2519,7 +2519,6 @@
     const v2gBrightPresets = $("#v2g-bright-presets");
     const v2gBrightAmount = $("#v2g-bright-amount");
     const v2gBrightAmountLabel = $("#v2g-bright-amount-label");
-    const v2gBrightPreviewWrap = $("#v2g-bright-preview-wrap");
     const v2gBrightPreview = $("#v2g-bright-preview");
     const v2gGenerate = $("#v2g-generate");
     const v2gGenerateWebp = $("#v2g-generate-webp");
