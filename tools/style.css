@@ -1705,6 +1705,66 @@ a.secondary-btn {
   margin-top: 0.45rem;
 }
 
+.v2g-bright-row {
+  gap: 0.55rem 0.75rem;
+}
+
+.v2g-bright-seg {
+  flex-wrap: wrap;
+}
+
+.v2g-bright-fine {
+  margin-top: 0.45rem;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.v2g-bright-range {
+  flex: 1 1 12rem;
+  min-width: 10rem;
+  max-width: 22rem;
+  accent-color: var(--accent);
+}
+
+.v2g-bright-preview-wrap {
+  margin-top: 0.75rem;
+  text-align: center;
+}
+
+.v2g-bright-preview {
+  display: block;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #0a0f18;
+}
+
+@media (max-width: 700px) {
+  .v2g-bright-seg {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border-radius: 12px;
+    padding: 4px;
+  }
+
+  .v2g-bright-seg .seg-btn {
+    min-height: 2.75rem;
+    padding: 0.55rem 0.35rem;
+    font-size: 0.95rem;
+    border-radius: 10px;
+  }
+
+  .v2g-bright-fine {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .v2g-bright-range {
+    max-width: none;
+    width: 100%;
+  }
+}
+
 .gif-preview-wrap {
   margin-top: 1rem;
 }
