@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.10-q";
+  const GIF_TOOL_VERSION = "2026.08.10-r";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -75,9 +75,8 @@
     return Math.max(96, Math.min(256, Math.round(256 - (gq - 1) * (160 / 29))));
   }
 
-  /** 试验路径：懒加载单线程 ffmpeg.wasm（本地 vendor），用于 palettegen/paletteuse 出 GIF */
+  /** 试验路径：懒加载单线程 ffmpeg.wasm（本地 vendor），进入 GIF 工具时预热 */
   function resolveFfmpegVendorBase() {
-    // 相对 extra.js 定位，避免页面 baseURI / hash 路由导致路径跑偏
     const nodes = document.getElementsByTagName("script");
     for (let i = nodes.length - 1; i >= 0; i--) {
       const src = nodes[i].src || "";
@@ -89,10 +88,15 @@
   }
 
   const FFMPEG_VENDOR_BASE = resolveFfmpegVendorBase();
+  const FFMPEG_CACHE_NAME = "devtools-ffmpeg-core-0.12.6";
   let ffmpegModsPromise = null;
   let ffmpegInstance = null;
-  /** @type {string[]} */
-  let ffmpegBlobUrls = [];
+  /** 预热后的资源 blob（terminate 实例时保留，避免重复下 31MB） */
+  let ffmpegAssetBlobs = null;
+  let ffmpegWarmPromise = null;
+  /** @type {"idle"|"warming"|"ready"|"error"} */
+  let ffmpegWarmState = "idle";
+  let ffmpegWarmError = "";
 
   function loadFfmpegMods() {
     if (!ffmpegModsPromise) {
@@ -114,15 +118,33 @@
     return new Uint8Array(buf);
   }
 
-  /**
-   * 预下载资源为 blob URL。worker 再拉 31MB wasm 时，手机网络易报 NetworkError。
-   * 注意：worker.js 本身必须用同源真实 URL（blob worker 无法解析相对 import）。
-   */
+  async function cachedFetch(url) {
+    try {
+      if (window.caches?.open) {
+        const cache = await caches.open(FFMPEG_CACHE_NAME);
+        const hit = await cache.match(url);
+        if (hit) return hit;
+        const res = await fetch(url);
+        if (res.ok) {
+          try {
+            await cache.put(url, res.clone());
+          } catch (_) {
+            /* quota / private mode */
+          }
+        }
+        return res;
+      }
+    } catch (_) {
+      /* fall through */
+    }
+    return fetch(url);
+  }
+
   async function fetchToBlobURL(url, mime, onProgress, label, progressFrom, progressTo) {
     onProgress?.(progressFrom, `${label}…`);
     let res;
     try {
-      res = await fetch(url, { cache: "force-cache" });
+      res = await cachedFetch(url);
     } catch (err) {
       throw new Error(`${label}网络失败：${err?.message || err}（${url}）`);
     }
@@ -131,9 +153,7 @@
     if (!res.body || !total || typeof res.body.getReader !== "function") {
       const buf = await res.arrayBuffer();
       onProgress?.(progressTo, `${label}完成`);
-      const blobUrl = URL.createObjectURL(new Blob([buf], { type: mime }));
-      ffmpegBlobUrls.push(blobUrl);
-      return blobUrl;
+      return URL.createObjectURL(new Blob([buf], { type: mime }));
     }
     const reader = res.body.getReader();
     const chunks = [];
@@ -158,37 +178,40 @@
       offset += c.byteLength;
     }
     onProgress?.(progressTo, `${label}完成`);
-    const blobUrl = URL.createObjectURL(new Blob([merged], { type: mime }));
-    ffmpegBlobUrls.push(blobUrl);
-    return blobUrl;
+    return URL.createObjectURL(new Blob([merged], { type: mime }));
+  }
+
+  async function ensureFfmpegAssets(onProgress) {
+    if (ffmpegAssetBlobs?.coreBlob && ffmpegAssetBlobs?.wasmBlob) return ffmpegAssetBlobs;
+    const coreJsURL = new URL("core/ffmpeg-core.js", FFMPEG_VENDOR_BASE).href;
+    const wasmURL = new URL("core/ffmpeg-core.wasm", FFMPEG_VENDOR_BASE).href;
+    const workerURL = new URL("ff/worker.js", FFMPEG_VENDOR_BASE).href;
+    const coreBlob = await fetchToBlobURL(coreJsURL, "text/javascript", onProgress, "预载 ffmpeg-core.js", 0.04, 0.08);
+    const wasmBlob = await fetchToBlobURL(
+      wasmURL,
+      "application/wasm",
+      onProgress,
+      "预载 ffmpeg-core.wasm",
+      0.08,
+      0.18
+    );
+    ffmpegAssetBlobs = { coreBlob, wasmBlob, workerURL };
+    return ffmpegAssetBlobs;
   }
 
   async function getFfmpegInstance(onProgress) {
     if (ffmpegInstance?.loaded) return ffmpegInstance;
     onProgress?.(0.02, "加载 FFmpeg 模块…");
     const { FFmpeg } = await loadFfmpegMods();
-    const coreJsURL = new URL("core/ffmpeg-core.js", FFMPEG_VENDOR_BASE).href;
-    const wasmURL = new URL("core/ffmpeg-core.wasm", FFMPEG_VENDOR_BASE).href;
-    const workerURL = new URL("ff/worker.js", FFMPEG_VENDOR_BASE).href;
-
-    // 先把大文件拉进 blob，再交给 worker，减少手机端二次请求失败
-    const coreBlob = await fetchToBlobURL(coreJsURL, "text/javascript", onProgress, "下载 ffmpeg-core.js", 0.04, 0.08);
-    const wasmBlob = await fetchToBlobURL(
-      wasmURL,
-      "application/wasm",
-      onProgress,
-      "下载 ffmpeg-core.wasm",
-      0.08,
-      0.18
-    );
+    const assets = await ensureFfmpegAssets(onProgress);
 
     onProgress?.(0.19, "初始化 FFmpeg Worker…");
     const ffmpeg = new FFmpeg();
     try {
       await ffmpeg.load({
-        classWorkerURL: workerURL,
-        coreURL: coreBlob,
-        wasmURL: wasmBlob,
+        classWorkerURL: assets.workerURL,
+        coreURL: assets.coreBlob,
+        wasmURL: assets.wasmBlob,
       });
     } catch (err) {
       try {
@@ -196,7 +219,7 @@
       } catch (_) {
         /* ignore */
       }
-      terminateFfmpegInstance();
+      terminateFfmpegInstance({ revokeAssets: false });
       const msg = err?.message || String(err);
       throw new Error(
         /NetworkError|Failed to fetch|Aborted/i.test(msg)
@@ -205,11 +228,14 @@
       );
     }
     ffmpegInstance = ffmpeg;
+    ffmpegWarmState = "ready";
+    ffmpegWarmError = "";
     onProgress?.(0.22, "FFmpeg 就绪");
+    paintFfmpegWarmHint();
     return ffmpeg;
   }
 
-  function terminateFfmpegInstance() {
+  function terminateFfmpegInstance({ revokeAssets = false } = {}) {
     if (ffmpegInstance) {
       try {
         ffmpegInstance.terminate();
@@ -218,14 +244,140 @@
       }
       ffmpegInstance = null;
     }
-    while (ffmpegBlobUrls.length) {
-      const u = ffmpegBlobUrls.pop();
+    if (revokeAssets && ffmpegAssetBlobs) {
       try {
-        URL.revokeObjectURL(u);
-      } catch (_) {
-        /* ignore */
-      }
+        URL.revokeObjectURL(ffmpegAssetBlobs.coreBlob);
+      } catch (_) {}
+      try {
+        URL.revokeObjectURL(ffmpegAssetBlobs.wasmBlob);
+      } catch (_) {}
+      ffmpegAssetBlobs = null;
     }
+    if (ffmpegWarmState === "ready") ffmpegWarmState = "idle";
+    ffmpegWarmPromise = null;
+    paintFfmpegWarmHint();
+  }
+
+  function paintFfmpegWarmHint() {
+    const el = document.getElementById("v2g-hq-warm");
+    const btn = document.getElementById("v2g-generate-hq");
+    if (!el && !btn) return;
+    let text = "";
+    let title = "试验：本地 ffmpeg.wasm 双通道调色板；进入本页会后台预热引擎";
+    if (ffmpegWarmState === "warming") {
+      text = "引擎预热中…";
+      title = "正在后台预载 FFmpeg（约 31MB，仅首次较慢）";
+    } else if (ffmpegWarmState === "ready") {
+      text = "引擎已就绪";
+      title = "FFmpeg 已预热，可直接点「高质量 GIF（试验）」";
+    } else if (ffmpegWarmState === "error") {
+      text = "引擎预热失败";
+      title = ffmpegWarmError || "预热失败，点击按钮时会再试";
+    }
+    if (el) el.textContent = text;
+    if (btn) btn.title = title;
+  }
+
+  function injectFfmpegPreloadLinks() {
+    const id = "ffmpeg-preload-wasm";
+    if (document.getElementById(id)) return;
+    const wasm = new URL("core/ffmpeg-core.wasm", FFMPEG_VENDOR_BASE).href;
+    const core = new URL("core/ffmpeg-core.js", FFMPEG_VENDOR_BASE).href;
+    [
+      [id, wasm, "fetch", "application/wasm"],
+      ["ffmpeg-preload-core", core, "fetch", "application/javascript"],
+    ].forEach(([linkId, href, as, type]) => {
+      if (document.getElementById(linkId)) return;
+      const link = document.createElement("link");
+      link.id = linkId;
+      link.rel = "preload";
+      link.href = href;
+      link.as = as;
+      link.type = type;
+      link.crossOrigin = "anonymous";
+      document.head.appendChild(link);
+    });
+  }
+
+  function isGifmakerActive() {
+    const panel = document.getElementById("gifmaker");
+    if (!panel) return false;
+    const hash = String(location.hash || "").replace(/^#/, "");
+    if (hash === "gifmaker") return true;
+    if (panel.classList.contains("is-active")) return true;
+    if (panel.hidden) return false;
+    // 部分布局用 display 切换
+    try {
+      return window.getComputedStyle(panel).display !== "none";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function prewarmFfmpegEngine() {
+    if (ffmpegInstance?.loaded) {
+      ffmpegWarmState = "ready";
+      paintFfmpegWarmHint();
+      return Promise.resolve(ffmpegInstance);
+    }
+    if (ffmpegWarmPromise) return ffmpegWarmPromise;
+    injectFfmpegPreloadLinks();
+    ffmpegWarmState = "warming";
+    ffmpegWarmError = "";
+    paintFfmpegWarmHint();
+    ffmpegWarmPromise = getFfmpegInstance(() => {
+      /* silent background; hint already shows warming */
+    })
+      .then((ff) => {
+        ffmpegWarmState = "ready";
+        paintFfmpegWarmHint();
+        return ff;
+      })
+      .catch((err) => {
+        ffmpegWarmState = "error";
+        ffmpegWarmError = err?.message || String(err);
+        ffmpegWarmPromise = null;
+        paintFfmpegWarmHint();
+        throw err;
+      });
+    return ffmpegWarmPromise;
+  }
+
+  function scheduleFfmpegPrewarm() {
+    if (!isGifmakerActive()) return;
+    const run = () => {
+      prewarmFfmpegEngine().catch(() => {});
+    };
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(run, { timeout: 1500 });
+    } else {
+      setTimeout(run, 300);
+    }
+  }
+
+  function bindFfmpegPrewarmTriggers() {
+    paintFfmpegWarmHint();
+    scheduleFfmpegPrewarm();
+    window.addEventListener("hashchange", scheduleFfmpegPrewarm);
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) scheduleFfmpegPrewarm();
+    });
+    const panel = document.getElementById("gifmaker");
+    if (panel && typeof MutationObserver === "function") {
+      new MutationObserver(scheduleFfmpegPrewarm).observe(panel, {
+        attributes: true,
+        attributeFilter: ["class", "hidden", "style"],
+      });
+    }
+    document.querySelectorAll('.tool-nav-link[data-tool="gifmaker"]').forEach((link) => {
+      link.addEventListener("click", () => setTimeout(scheduleFfmpegPrewarm, 0));
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bindFfmpegPrewarmTriggers);
+  } else {
+    bindFfmpegPrewarmTriggers();
   }
 
   /**
@@ -2291,7 +2443,7 @@
     const V2G_BLACKBOX_LONG_SPAN_SEC = 20;
     const V2G_FFMPEG_WARN_BYTES = 40 * 1024 * 1024;
     const V2G_DEFAULT_META =
-      "支持 MP4 / WebM / MOV。默认 15FPS / 宽480 / 质量5。可转 GIF、高质量 GIF（试验/ffmpeg，首次加载引擎约 31MB）、动画 WebP，或黑盒 GIF（≤6MB）。";
+      "支持 MP4 / WebM / MOV。默认 15FPS / 宽480 / 质量5。可转 GIF、高质量 GIF（试验/ffmpeg，进入本页会预热引擎）、动画 WebP，或黑盒 GIF（≤6MB）。";
     let videoObjectUrl = "";
     let gifObjectUrl = "";
     let latestV2gBlob = null;
@@ -2406,7 +2558,7 @@
         } catch (_) {}
       });
       activeV2gGifs.clear();
-      terminateFfmpegInstance();
+      // 不清掉已预热的 FFmpeg，避免每次清空视频都重下 31MB
       v2gSourceFile = null;
       if (videoObjectUrl) {
         URL.revokeObjectURL(videoObjectUrl);
@@ -2538,6 +2690,7 @@
         setV2gActionButtons();
         setV2gProgress(true, 1, "视频已加载，可开始转换");
         toast("视频已加载");
+        scheduleFfmpegPrewarm();
       } catch (err) {
         clearV2g();
         setError(v2gError, err.message || String(err));
@@ -3140,11 +3293,14 @@
         toast("高质量 GIF（试验）已生成");
       } catch (err) {
         if (abortV2g || String(err && err.message) === "已取消") {
-          terminateFfmpegInstance();
+          terminateFfmpegInstance({ revokeAssets: false });
+          scheduleFfmpegPrewarm();
           setV2gProgress(false, 0, "");
           toast("已取消转换");
         } else {
-          terminateFfmpegInstance();
+          // 保留已下载的 wasm；仅在实例不可用时重建
+          if (!ffmpegInstance?.loaded) terminateFfmpegInstance({ revokeAssets: false });
+          scheduleFfmpegPrewarm();
           const msg = err?.message || String(err);
           setError(
             v2gError,
@@ -3365,7 +3521,9 @@
           gif.abort();
         } catch (_) {}
       });
-      terminateFfmpegInstance();
+      // 中断进行中的任务；保留已下载资源，后台再预热实例
+      terminateFfmpegInstance({ revokeAssets: false });
+      scheduleFfmpegPrewarm();
     });
   } catch (err) {
     console.error("video to gif init failed", err);
