@@ -1914,6 +1914,7 @@
     const v2gStart = $("#v2g-start");
     const v2gQuality = $("#v2g-quality");
     const v2gGenerate = $("#v2g-generate");
+    const v2gBlackbox = $("#v2g-blackbox");
     const v2gAbort = $("#v2g-abort");
     const v2gProgress = $("#v2g-progress");
     const v2gProgressFill = $("#v2g-progress-fill");
@@ -1925,6 +1926,19 @@
     const v2gCompressLevel = $("#v2g-compress-level");
     const MAX_V2G_FRAMES = 300;
     const MAX_V2G_SECONDS = 600;
+    const V2G_BLACKBOX_MAX_BYTES = 6 * 1024 * 1024;
+    const V2G_BLACKBOX_SPECS = [
+      { fps: 15, maxW: 480, quality: 12 },
+      { fps: 15, maxW: 360, quality: 12 },
+      { fps: 15, maxW: 280, quality: 12 },
+      { fps: 15, maxW: 240, quality: 12 },
+      { fps: 12, maxW: 240, quality: 12 },
+      { fps: 10, maxW: 240, quality: 12 },
+      { fps: 8, maxW: 240, quality: 12 },
+      { fps: 6, maxW: 240, quality: 12 },
+      { fps: 6, maxW: 240, quality: 18 },
+      { fps: 6, maxW: 240, quality: 24 },
+    ];
     let videoObjectUrl = "";
     let gifObjectUrl = "";
     let latestV2gBlob = null;
@@ -1934,11 +1948,19 @@
     let activeV2gGif = null;
     let abortV2g = false;
     let compressingV2g = false;
+    let v2gBusy = false;
+
+    function setV2gActionButtons() {
+      const hasVideo = Boolean(v2gVideo?.src);
+      const canRun = hasVideo && !v2gBusy && !compressingV2g;
+      if (v2gGenerate) v2gGenerate.disabled = !canRun;
+      if (v2gBlackbox) v2gBlackbox.disabled = !canRun;
+    }
 
     function setV2gCompressEnabled(on) {
-      if (v2gCompress) v2gCompress.disabled = !on || compressingV2g;
+      if (v2gCompress) v2gCompress.disabled = !on || compressingV2g || v2gBusy;
       if (v2gCompressAgain) {
-        const canAgain = on && v2gCompressRound > 0 && !compressingV2g;
+        const canAgain = on && v2gCompressRound > 0 && !compressingV2g && !v2gBusy;
         v2gCompressAgain.disabled = !canAgain;
         v2gCompressAgain.hidden = v2gCompressRound <= 0;
       }
@@ -2014,13 +2036,13 @@
         v2gVideo.hidden = true;
       }
       revokeV2gGif();
-      if (v2gGenerate) v2gGenerate.disabled = true;
+      setV2gActionButtons();
       if (v2gAbort) v2gAbort.hidden = true;
       setV2gProgress(false, 0, "");
       setError(v2gError, "");
       if (v2gMeta) {
         v2gMeta.textContent =
-          "支持 MP4 / WebM / MOV。上传后「最长秒数」默认等于视频时长；转完可「压缩体积」，不满意再点「继续压缩」。";
+          "支持 MP4 / WebM / MOV。上传后「最长秒数」默认等于视频时长；转完可「压缩体积」，不满意再点「继续压缩」。也可一键「黑盒 GIF」：从 15FPS 起自动压到 ≤6MB。";
       }
       if (v2gMaxsec) {
         v2gMaxsec.value = "";
@@ -2130,7 +2152,7 @@
               : "";
           v2gMeta.textContent = `${file.name} · ${durText} · ${v2gVideo.videoWidth}×${v2gVideo.videoHeight}${maxTip}`;
         }
-        if (v2gGenerate) v2gGenerate.disabled = false;
+        setV2gActionButtons();
         setV2gProgress(true, 1, "视频已加载，可开始转换");
         toast("视频已加载");
       } catch (err) {
@@ -2139,70 +2161,70 @@
       }
     }
 
-    async function convertVideoToGif() {
-      if (!v2gVideo || !v2gVideo.src) {
-        setError(v2gError, "请先选择视频");
-        return;
+    function resolveV2gSpan() {
+      const startSec = Math.max(0, Number(v2gStart?.value) || 0);
+      let duration = Number(v2gVideo.duration) || 0;
+      const hasDuration = Number.isFinite(duration) && duration > 0;
+      if (hasDuration && startSec >= duration) throw new Error("起始时间超出视频长度");
+      const rawMax = Number(v2gMaxsec?.value);
+      let maxSec;
+      if (Number.isFinite(rawMax) && rawMax > 0) {
+        maxSec = Math.min(MAX_V2G_SECONDS, Math.max(0.5, rawMax));
+      } else if (hasDuration) {
+        maxSec = Math.min(MAX_V2G_SECONDS, Math.max(0.5, duration - startSec));
+      } else {
+        maxSec = 6;
       }
-      if (typeof GIF !== "function") {
-        setError(v2gError, "gif.js 未加载");
-        return;
-      }
-      abortV2g = false;
-      revokeV2gGif();
-      setError(v2gError, "");
-      if (v2gGenerate) v2gGenerate.disabled = true;
-      if (v2gAbort) v2gAbort.hidden = false;
-      setV2gProgress(true, 0.02, "准备抽帧…");
+      const endSec = hasDuration ? Math.min(duration, startSec + maxSec) : startSec + maxSec;
+      const span = Math.max(0.05, endSec - startSec);
+      return { startSec, maxSec, span, hasDuration, duration };
+    }
 
-      let cleanupWorker = null;
+    /**
+     * Encode video segment to GIF with explicit params.
+     * @param {{ fps:number, maxW:number, quality:number, progressBase?:number, progressSpan?:number, stageLabel?:string }} opts
+     */
+    async function encodeV2gGif(opts) {
+      const fps = Math.min(15, Math.max(2, Number(opts.fps) || 8));
+      const maxW = Math.min(720, Math.max(64, Number(opts.maxW) || 360));
+      const quality = Math.min(30, Math.max(1, Number(opts.quality) || 12));
+      const progressBase = Number(opts.progressBase) || 0;
+      const progressSpan = Number(opts.progressSpan) || 1;
+      const stageLabel = opts.stageLabel || "";
+      const mapProgress = (local, text) => {
+        setV2gProgress(true, progressBase + local * progressSpan, text);
+      };
+
+      const { startSec, maxSec, span, hasDuration } = resolveV2gSpan();
+      const delay = Math.round(1000 / fps);
+      const naturalFrames = Math.max(2, Math.floor(span * fps) + 1);
+      let frameCount = Math.min(MAX_V2G_FRAMES, naturalFrames);
+      const framesCapped = naturalFrames > MAX_V2G_FRAMES;
+
+      const srcW = v2gVideo.videoWidth || 0;
+      const srcH = v2gVideo.videoHeight || 0;
+      if (!srcW || !srcH) throw new Error("无法读取视频尺寸");
+      const scale = srcW > maxW ? maxW / srcW : 1;
+      const outW = Math.max(1, Math.round(srcW * scale));
+      const outH = Math.max(1, Math.round(srcH * scale));
+
+      const canvas = document.createElement("canvas");
+      canvas.width = outW;
+      canvas.height = outH;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+
+      const workerSource = await fetch(new URL("./vendor/gif.worker.js", document.baseURI || window.location.href)).then((r) => {
+        if (!r.ok) throw new Error("无法加载 gif.worker.js");
+        return r.text();
+      });
+      const workerScript = URL.createObjectURL(new Blob([workerSource], { type: "application/javascript" }));
+      const cleanupWorker = () => {
+        try {
+          URL.revokeObjectURL(workerScript);
+        } catch (_) {}
+      };
+
       try {
-        const fps = Math.min(15, Math.max(2, Number(v2gFps?.value) || 8));
-        const maxW = Math.min(720, Math.max(64, Number(v2gWidth?.value) || 360));
-        const startSec = Math.max(0, Number(v2gStart?.value) || 0);
-        const quality = Math.min(30, Math.max(1, Number(v2gQuality?.value) || 12));
-        let duration = Number(v2gVideo.duration) || 0;
-        const hasDuration = Number.isFinite(duration) && duration > 0;
-        if (hasDuration && startSec >= duration) throw new Error("起始时间超出视频长度");
-        const rawMax = Number(v2gMaxsec?.value);
-        let maxSec;
-        if (Number.isFinite(rawMax) && rawMax > 0) {
-          maxSec = Math.min(MAX_V2G_SECONDS, Math.max(0.5, rawMax));
-        } else if (hasDuration) {
-          maxSec = Math.min(MAX_V2G_SECONDS, Math.max(0.5, duration - startSec));
-        } else {
-          maxSec = 6;
-        }
-        const endSec = hasDuration ? Math.min(duration, startSec + maxSec) : startSec + maxSec;
-        const span = Math.max(0.05, endSec - startSec);
-        const delay = Math.round(1000 / fps);
-        const naturalFrames = Math.max(2, Math.floor(span * fps) + 1);
-        let frameCount = Math.min(MAX_V2G_FRAMES, naturalFrames);
-        const framesCapped = naturalFrames > MAX_V2G_FRAMES;
-
-        const srcW = v2gVideo.videoWidth || 0;
-        const srcH = v2gVideo.videoHeight || 0;
-        if (!srcW || !srcH) throw new Error("无法读取视频尺寸");
-        const scale = srcW > maxW ? maxW / srcW : 1;
-        const outW = Math.max(1, Math.round(srcW * scale));
-        const outH = Math.max(1, Math.round(srcH * scale));
-
-        const canvas = document.createElement("canvas");
-        canvas.width = outW;
-        canvas.height = outH;
-        const ctx = canvas.getContext("2d", { willReadFrequently: true });
-
-        const workerSource = await fetch(new URL("./vendor/gif.worker.js", document.baseURI || window.location.href)).then((r) => {
-          if (!r.ok) throw new Error("无法加载 gif.worker.js");
-          return r.text();
-        });
-        const workerScript = URL.createObjectURL(new Blob([workerSource], { type: "application/javascript" }));
-        cleanupWorker = () => {
-          try {
-            URL.revokeObjectURL(workerScript);
-          } catch (_) {}
-        };
-
         const gif = new GIF({
           workers: 2,
           quality,
@@ -2223,6 +2245,7 @@
           gif.addFrame(ctx, { delay, copy: true });
         };
 
+        const prefix = stageLabel ? `${stageLabel} · ` : "";
         if (hasDuration) {
           for (let i = 0; i < frameCount; i++) {
             if (abortV2g) throw new Error("已取消");
@@ -2230,10 +2253,9 @@
             await seekVideo(v2gVideo, t);
             await waitFrame();
             paint();
-            setV2gProgress(true, ((i + 1) / frameCount) * 0.45, `抽帧… ${i + 1}/${frameCount}`);
+            mapProgress(((i + 1) / frameCount) * 0.45, `${prefix}抽帧… ${i + 1}/${frameCount}`);
           }
         } else {
-          // Playback capture fallback when duration is unknown/Infinity
           v2gVideo.currentTime = startSec;
           await waitFrame();
           try {
@@ -2252,7 +2274,7 @@
               paint();
               captured += 1;
               lastAt = now;
-              setV2gProgress(true, (captured / frameCount) * 0.45, `抽帧… ${captured}/${frameCount}`);
+              mapProgress((captured / frameCount) * 0.45, `${prefix}抽帧… ${captured}/${frameCount}`);
             }
             await waitFrame();
           }
@@ -2263,7 +2285,7 @@
 
         const blob = await new Promise((resolve, reject) => {
           gif.on("progress", (p) => {
-            setV2gProgress(true, 0.45 + p * 0.55, `编码 GIF… ${Math.round(p * 100)}%`);
+            mapProgress(0.45 + p * 0.55, `${prefix}编码 GIF… ${Math.round(p * 100)}%`);
           });
           gif.on("finished", (b) => resolve(b));
           gif.on("abort", () => reject(new Error("已取消")));
@@ -2274,14 +2296,80 @@
           }
         });
 
-        applyV2gOutput(blob, { resetCompress: true });
-        setV2gProgress(true, 1, `完成 · ${frameCount} 帧 · ${outW}×${outH} · ${formatKb(blob.size)}`);
+        return {
+          blob,
+          frameCount,
+          span,
+          fps,
+          outW,
+          outH,
+          framesCapped,
+          quality,
+          maxW,
+        };
+      } finally {
+        cleanupWorker();
+        activeV2gGif = null;
+      }
+    }
+
+    async function compressTowardBudget(blob, maxBytes, { progressBase = 0.7, progressSpan = 0.25, maxRounds = 8 } = {}) {
+      let current = blob;
+      let round = 0;
+      let stagnant = 0;
+      while (current.size > maxBytes && round < maxRounds) {
+        if (abortV2g) throw new Error("已取消");
+        round += 1;
+        const level = round <= 2 ? "standard" : "strong";
+        const before = current.size;
+        const out = await compressGifBlob(current, level, (ratio, text) => {
+          setV2gProgress(true, progressBase + ratio * progressSpan, `压至 ≤6MB · 第 ${round} 轮 · ${text}`);
+        }, { round });
+        const after = out.size;
+        current = out;
+        if (after >= before * 0.99) stagnant += 1;
+        else stagnant = 0;
+        if (stagnant >= 2) break;
+      }
+      return { blob: current, compressRounds: round };
+    }
+
+    async function convertVideoToGif() {
+      if (!v2gVideo || !v2gVideo.src) {
+        setError(v2gError, "请先选择视频");
+        return;
+      }
+      if (typeof GIF !== "function") {
+        setError(v2gError, "gif.js 未加载");
+        return;
+      }
+      if (v2gBusy) return;
+      abortV2g = false;
+      v2gBusy = true;
+      revokeV2gGif();
+      setError(v2gError, "");
+      setV2gActionButtons();
+      setV2gCompressEnabled(false);
+      if (v2gAbort) v2gAbort.hidden = false;
+      setV2gProgress(true, 0.02, "准备抽帧…");
+
+      try {
+        const fps = Math.min(15, Math.max(2, Number(v2gFps?.value) || 8));
+        const maxW = Math.min(720, Math.max(64, Number(v2gWidth?.value) || 360));
+        const quality = Math.min(30, Math.max(1, Number(v2gQuality?.value) || 12));
+        const result = await encodeV2gGif({ fps, maxW, quality });
+        applyV2gOutput(result.blob, { resetCompress: true });
+        setV2gProgress(
+          true,
+          1,
+          `完成 · ${result.frameCount} 帧 · ${result.outW}×${result.outH} · ${formatKb(result.blob.size)}`
+        );
         if (v2gMeta) {
-          const effFps = frameCount > 1 ? (frameCount - 1) / span : fps;
-          const capTip = framesCapped
-            ? ` · 为控制体积已抽稀到 ${frameCount} 帧（约 ${effFps.toFixed(1)} FPS）`
+          const effFps = result.frameCount > 1 ? (result.frameCount - 1) / result.span : result.fps;
+          const capTip = result.framesCapped
+            ? ` · 为控制体积已抽稀到 ${result.frameCount} 帧（约 ${effFps.toFixed(1)} FPS）`
             : "";
-          v2gMeta.textContent = `已转换 ${frameCount} 帧 · ${span.toFixed(1)}s · ${fps} FPS · ${outW}×${outH} · ${formatKb(blob.size)}${capTip}`;
+          v2gMeta.textContent = `已转换 ${result.frameCount} 帧 · ${result.span.toFixed(1)}s · ${result.fps} FPS · ${result.outW}×${result.outH} · ${formatKb(result.blob.size)}${capTip}`;
         }
         toast("GIF 已生成");
       } catch (err) {
@@ -2293,20 +2381,134 @@
           toast("已取消转换");
         }
       } finally {
-        if (typeof cleanupWorker === "function") cleanupWorker();
-        activeV2gGif = null;
         abortV2g = false;
+        v2gBusy = false;
         if (v2gAbort) v2gAbort.hidden = true;
-        if (v2gGenerate) v2gGenerate.disabled = !v2gVideo?.src;
+        setV2gActionButtons();
+        setV2gCompressEnabled(Boolean(latestV2gBlob));
+      }
+    }
+
+    async function convertVideoToGifBlackBox() {
+      if (!v2gVideo || !v2gVideo.src) {
+        setError(v2gError, "请先选择视频");
+        return;
+      }
+      if (typeof GIF !== "function") {
+        setError(v2gError, "gif.js 未加载");
+        return;
+      }
+      if (v2gBusy) return;
+      abortV2g = false;
+      v2gBusy = true;
+      revokeV2gGif();
+      setError(v2gError, "");
+      setV2gActionButtons();
+      setV2gCompressEnabled(false);
+      if (v2gAbort) v2gAbort.hidden = false;
+      setV2gProgress(true, 0.01, "黑盒：估算参数…");
+
+      try {
+        const total = V2G_BLACKBOX_SPECS.length;
+        let best = null;
+        let lastResult = null;
+
+        for (let i = 0; i < total; i++) {
+          if (abortV2g) throw new Error("已取消");
+          const spec = V2G_BLACKBOX_SPECS[i];
+          const slice = 1 / total;
+          const base = i * slice;
+          const stageLabel = `黑盒 ${i + 1}/${total} · ${spec.fps}FPS · 宽≤${spec.maxW}`;
+          setV2gProgress(true, base + 0.02 * slice, `${stageLabel} · 开始抽帧`);
+
+          const encoded = await encodeV2gGif({
+            fps: spec.fps,
+            maxW: spec.maxW,
+            quality: spec.quality,
+            progressBase: base,
+            progressSpan: slice * 0.55,
+            stageLabel,
+          });
+          lastResult = encoded;
+
+          let blob = encoded.blob;
+          let compressRounds = 0;
+          if (blob.size > V2G_BLACKBOX_MAX_BYTES) {
+            const compressed = await compressTowardBudget(blob, V2G_BLACKBOX_MAX_BYTES, {
+              progressBase: base + slice * 0.55,
+              progressSpan: slice * 0.4,
+              maxRounds: 8,
+            });
+            blob = compressed.blob;
+            compressRounds = compressed.compressRounds;
+          }
+
+          const candidate = { ...encoded, blob, compressRounds, attempt: i + 1 };
+          if (!best || blob.size < best.blob.size) best = candidate;
+
+          if (blob.size <= V2G_BLACKBOX_MAX_BYTES) {
+            applyV2gOutput(blob, { resetCompress: true });
+            v2gCompressRound = compressRounds;
+            if (compressRounds > 0) setV2gCompressEnabled(true);
+            const effFps =
+              encoded.frameCount > 1 ? (encoded.frameCount - 1) / encoded.span : encoded.fps;
+            const capTip = encoded.framesCapped
+              ? ` · 已抽稀到 ${encoded.frameCount} 帧（约 ${effFps.toFixed(1)} FPS）`
+              : "";
+            const compressTip = compressRounds > 0 ? ` · 自动压缩 ${compressRounds} 轮` : "";
+            if (v2gMeta) {
+              v2gMeta.textContent = `黑盒完成 · ${formatKb(blob.size)}（≤6MB）· ${encoded.fps} FPS · ${encoded.outW}×${encoded.outH} · ${encoded.span.toFixed(1)}s · 方案 ${i + 1}/${total}${compressTip}${capTip}`;
+            }
+            setV2gProgress(true, 1, `黑盒完成 · ${formatKb(blob.size)} · ${encoded.fps}FPS · ${encoded.outW}×${encoded.outH}`);
+            toast(`黑盒 GIF 已生成 · ${formatKb(blob.size)}`);
+            return;
+          }
+
+          setV2gProgress(
+            true,
+            base + slice * 0.98,
+            `${stageLabel} · 仍 ${formatKb(blob.size)}，降低规格重试…`
+          );
+        }
+
+        // All attempts still over budget — keep smallest
+        if (best) {
+          applyV2gOutput(best.blob, { resetCompress: true });
+          v2gCompressRound = best.compressRounds || 0;
+          setV2gCompressEnabled(true);
+          if (v2gMeta) {
+            v2gMeta.textContent = `黑盒已尽力 · ${formatKb(best.blob.size)}（仍超过 6MB）· ${best.fps} FPS · ${best.outW}×${best.outH} · 建议缩短「最长秒数」后再试`;
+          }
+          setV2gProgress(true, 1, `仍超 6MB · 已保留最小结果 ${formatKb(best.blob.size)}`);
+          setError(v2gError, "自动压到 6MB 失败：片段可能过长或画面过复杂，请缩短「最长秒数」后重试");
+          toast(`黑盒未达 6MB，已保留最小 ${formatKb(best.blob.size)}`);
+          return;
+        }
+
+        throw new Error(lastResult ? "黑盒转换失败" : "未能生成 GIF");
+      } catch (err) {
+        if (String(err && err.message) !== "已取消") {
+          setError(v2gError, err.message || String(err));
+          setV2gProgress(false, 0, "");
+        } else {
+          setV2gProgress(false, 0, "");
+          toast("已取消转换");
+        }
+      } finally {
+        abortV2g = false;
+        v2gBusy = false;
+        if (v2gAbort) v2gAbort.hidden = true;
+        setV2gActionButtons();
+        setV2gCompressEnabled(Boolean(latestV2gBlob));
       }
     }
 
     async function compressV2gGif({ again = false } = {}) {
       const input = again ? latestV2gBlob : baseV2gBlob || latestV2gBlob;
-      if (!input || compressingV2g) return;
+      if (!input || compressingV2g || v2gBusy) return;
       compressingV2g = true;
       setV2gCompressEnabled(false);
-      if (v2gGenerate) v2gGenerate.disabled = true;
+      setV2gActionButtons();
       setError(v2gError, "");
       const before = input.size;
       const nextRound = again ? v2gCompressRound + 1 : 1;
@@ -2335,7 +2537,7 @@
         setV2gProgress(false, 0, "");
       } finally {
         compressingV2g = false;
-        if (v2gGenerate) v2gGenerate.disabled = !v2gVideo?.src;
+        setV2gActionButtons();
         setV2gCompressEnabled(Boolean(latestV2gBlob));
       }
     }
@@ -2344,6 +2546,9 @@
     $("#v2g-clear")?.addEventListener("click", clearV2g);
     window.DevToolsTemp?.registerCleanup(clearV2g);
     v2gGenerate?.addEventListener("click", convertVideoToGif);
+    v2gBlackbox?.addEventListener("click", () => {
+      convertVideoToGifBlackBox().catch((err) => setError(v2gError, err.message || String(err)));
+    });
     v2gCompress?.addEventListener("click", () => {
       compressV2gGif({ again: false }).catch((err) => setError(v2gError, err.message || String(err)));
     });
