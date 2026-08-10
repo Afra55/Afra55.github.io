@@ -78,6 +78,13 @@
     return { label: preset.label, args: parts.join(" "), round: r, lossy };
   }
 
+  /** 黑盒高帧档轻柔压缩：只加 lossy，不减色/缩放，避免第 2 轮毁画质 */
+  function buildBlackboxSoftCompressArgs(round = 1) {
+    const r = Math.max(1, Math.round(Number(round) || 1));
+    const lossy = Math.min(80, 35 + (r - 1) * 25); // 1→35, 2→60
+    return { label: "轻柔", args: `-O1 --lossy=${lossy}`, round: r, lossy };
+  }
+
   function gifCompressSummary(originalSize, beforeSize, afterSize, round) {
     const stepSaved = beforeSize > 0 ? Math.max(0, Math.round((1 - afterSize / beforeSize) * 100)) : 0;
     const totalSaved =
@@ -125,7 +132,7 @@
 
   async function compressGifBlob(blob, level = "standard", onProgress, opts = {}) {
     if (!blob) throw new Error("没有可压缩的 GIF");
-    const plan = buildGifCompressArgs(level, opts.round || 1);
+    const plan = opts.plan || buildGifCompressArgs(level, opts.round || 1);
     onProgress?.(0.05, "加载压缩引擎…");
     const gifsicle = await loadGifsicle();
     if (!gifsicle || typeof gifsicle.run !== "function") throw new Error("压缩引擎未加载");
@@ -1927,11 +1934,13 @@
     const MAX_V2G_FRAMES = 300;
     const MAX_V2G_SECONDS = 600;
     const V2G_BLACKBOX_MAX_BYTES = 6 * 1024 * 1024;
-    /** 黑盒：固定宽 420；串行 15→12→10，每档先编码再按需压缩，达标即停 */
+    /** 黑盒：固定宽 420；串行 15→12→10。高帧档只轻柔压，压不够就降帧，避免毁画质 */
     const V2G_BLACKBOX_FPS_LIST = [15, 12, 10];
     const V2G_BLACKBOX_MAX_W = 420;
     const V2G_BLACKBOX_QUALITY = 7;
     const V2G_BLACKBOX_MAX_COMPRESS_ROUNDS = 10;
+    /** 非最后一档最多轻柔压缩轮数（不减色）；最后一档才允许强压 */
+    const V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS = 2;
     const V2G_BLACKBOX_LONG_SPAN_SEC = 20;
     let videoObjectUrl = "";
     let gifObjectUrl = "";
@@ -2357,13 +2366,17 @@
     }
 
     /**
-     * 单档：编码后若超 6MB 则只压这一档，直到达标或收益停滞。
+     * 单档：编码后若超 6MB 再压缩。
+     * 非最后一档：最多 2 轮轻柔压缩（不减色/缩放），不够则交给更低 FPS。
+     * 最后一档：允许标准→强力多轮，尽量挤进 6MB。
      * @returns {{ candidate: object, underBudget: boolean }}
      */
     async function encodeAndCompressBlackboxTier(fps, tierIndex, tierTotal) {
       if (abortV2g) throw new Error("已取消");
       const base = tierIndex / Math.max(1, tierTotal);
       const spanShare = 1 / Math.max(1, tierTotal);
+      const isLastTier = tierIndex >= tierTotal - 1;
+      const maxRounds = isLastTier ? V2G_BLACKBOX_MAX_COMPRESS_ROUNDS : V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS;
 
       setV2gProgress(true, base + 0.02 * spanShare, `黑盒：尝试 ${fps}FPS（宽≤${V2G_BLACKBOX_MAX_W}）…`);
 
@@ -2384,26 +2397,29 @@
         return { candidate, underBudget: true };
       }
 
-      for (let round = 1; round <= V2G_BLACKBOX_MAX_COMPRESS_ROUNDS; round++) {
+      for (let round = 1; round <= maxRounds; round++) {
         if (abortV2g) throw new Error("已取消");
-        const level = round <= 2 ? "standard" : "strong";
         const before = candidate.blob.size;
+        const plan = isLastTier
+          ? buildGifCompressArgs(round <= 2 ? "standard" : "strong", round)
+          : buildBlackboxSoftCompressArgs(round);
+        const modeTip = isLastTier ? plan.label : "轻柔保画质";
         setV2gProgress(
           true,
-          base + (0.55 + (round / (V2G_BLACKBOX_MAX_COMPRESS_ROUNDS + 1)) * 0.4) * spanShare,
-          `黑盒：${fps}FPS 第 ${round} 轮压缩（${level}）· ${formatKb(before)}…`
+          base + (0.55 + (round / (maxRounds + 1)) * 0.4) * spanShare,
+          `黑盒：${fps}FPS 第 ${round}/${maxRounds} 轮压缩（${modeTip}）· ${formatKb(before)}…`
         );
         const out = await compressGifBlob(
           candidate.blob,
-          level,
+          "standard",
           (ratio, text) => {
             setV2gProgress(
               true,
-              base + (0.55 + ((round - 1 + ratio) / (V2G_BLACKBOX_MAX_COMPRESS_ROUNDS + 1)) * 0.4) * spanShare,
+              base + (0.55 + ((round - 1 + ratio) / (maxRounds + 1)) * 0.4) * spanShare,
               `黑盒：${fps}FPS 第 ${round} 轮 · ${text}`
             );
           },
-          { round }
+          { round, plan }
         );
         candidate = { ...candidate, blob: out, compressRounds: round };
         if (out.size <= V2G_BLACKBOX_MAX_BYTES) {
@@ -2413,10 +2429,20 @@
           setV2gProgress(
             true,
             base + 0.96 * spanShare,
-            `黑盒：${fps}FPS 压缩收益不足（${formatKb(out.size)}），改试更低帧率…`
+            isLastTier
+              ? `黑盒：${fps}FPS 压缩收益不足（${formatKb(out.size)}）`
+              : `黑盒：${fps}FPS 轻柔压缩后仍 ${formatKb(out.size)}，改试更低帧率以保画质…`
           );
           break;
         }
+      }
+
+      if (!isLastTier && candidate.blob.size > V2G_BLACKBOX_MAX_BYTES) {
+        setV2gProgress(
+          true,
+          base + 0.98 * spanShare,
+          `黑盒：${fps}FPS 轻柔压后仍超 6MB（${formatKb(candidate.blob.size)}），降帧保画质…`
+        );
       }
 
       return { candidate, underBudget: false };
