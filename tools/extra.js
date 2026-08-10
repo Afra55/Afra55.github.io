@@ -1927,12 +1927,12 @@
     const MAX_V2G_FRAMES = 300;
     const MAX_V2G_SECONDS = 600;
     const V2G_BLACKBOX_MAX_BYTES = 6 * 1024 * 1024;
-    /** 黑盒：固定手机阅读宽度，仅并行多档 FPS 择优，避免多宽矩阵拖垮页面 */
+    /** 黑盒：固定宽 420；串行 15→12→10，每档先编码再按需压缩，达标即停 */
     const V2G_BLACKBOX_FPS_LIST = [15, 12, 10];
     const V2G_BLACKBOX_MAX_W = 420;
     const V2G_BLACKBOX_QUALITY = 7;
     const V2G_BLACKBOX_MAX_COMPRESS_ROUNDS = 10;
-    const V2G_BLACKBOX_ENCODE_CONCURRENCY = 3;
+    const V2G_BLACKBOX_LONG_SPAN_SEC = 20;
     let videoObjectUrl = "";
     let gifObjectUrl = "";
     let latestV2gBlob = null;
@@ -2036,7 +2036,7 @@
       setError(v2gError, "");
       if (v2gMeta) {
         v2gMeta.textContent =
-          "支持 MP4 / WebM / MOV。上传后「最长秒数」默认等于视频时长；转完可「压缩体积」，不满意再点「继续压缩」。也可一键「黑盒 GIF」：固定宽 420，并行 15/12/10FPS，在 ≤6MB 内选最佳。";
+          "支持 MP4 / WebM / MOV。上传后「最长秒数」默认等于视频时长；转完可「压缩体积」，不满意再点「继续压缩」。也可一键「黑盒 GIF」：固定宽 420，按 15→12→10 试到 ≤6MB。";
       }
       if (v2gMaxsec) {
         v2gMaxsec.value = "";
@@ -2318,62 +2318,6 @@
       }
     }
 
-    async function createDetachedVideoClone() {
-      if (!videoObjectUrl) throw new Error("没有可克隆的视频");
-      const video = document.createElement("video");
-      video.muted = true;
-      video.playsInline = true;
-      video.preload = "auto";
-      await new Promise((resolve, reject) => {
-        const onMeta = () => {
-          cleanup();
-          resolve();
-        };
-        const onErr = () => {
-          cleanup();
-          reject(new Error("视频副本加载失败"));
-        };
-        const cleanup = () => {
-          video.removeEventListener("loadedmetadata", onMeta);
-          video.removeEventListener("error", onErr);
-        };
-        video.addEventListener("loadedmetadata", onMeta);
-        video.addEventListener("error", onErr);
-        video.src = videoObjectUrl;
-        video.load();
-      });
-      return video;
-    }
-
-    function disposeDetachedVideo(video) {
-      if (!video) return;
-      try {
-        video.pause?.();
-      } catch (_) {}
-      try {
-        video.removeAttribute("src");
-        video.load?.();
-      } catch (_) {}
-    }
-
-    /** 在 ≤6MB 候选里挑画质/动画最优：高 FPS > 大分辨率 > 少压缩轮次 > 更接近 6MB（预算用满） */
-    function pickBestBlackboxCandidate(candidates, maxBytes) {
-      const ok = (candidates || []).filter((c) => c?.blob && c.blob.size <= maxBytes);
-      if (!ok.length) return null;
-      ok.sort((a, b) => {
-        if (b.fps !== a.fps) return b.fps - a.fps;
-        const areaDiff = b.outW * b.outH - (a.outW * a.outH);
-        if (areaDiff) return areaDiff;
-        if (a.quality !== b.quality) return a.quality - b.quality;
-        const roundA = a.compressRounds || 0;
-        const roundB = b.compressRounds || 0;
-        if (roundA !== roundB) return roundA - roundB;
-        // closer to budget = larger under-cap size
-        return b.blob.size - a.blob.size;
-      });
-      return ok[0];
-    }
-
     function describeBlackboxCandidate(c) {
       if (!c) return "";
       const compressTip = c.compressRounds > 0 ? ` · 已压 ${c.compressRounds} 轮` : " · 未压缩";
@@ -2391,22 +2335,91 @@
         .join(" · ");
     }
 
-    async function mapPool(items, concurrency, workerFn) {
-      const list = items || [];
-      const results = new Array(list.length);
-      let next = 0;
-      const limit = Math.max(1, Math.min(concurrency || 1, list.length || 1));
-      async function run() {
-        while (true) {
-          if (abortV2g) throw new Error("已取消");
-          const i = next;
-          next += 1;
-          if (i >= list.length) return;
-          results[i] = await workerFn(list[i], i);
+    /** 长片跳过 15：触顶 300 帧后名义 15 无意义，且更慢 */
+    function resolveBlackboxFpsList(span) {
+      const s = Number(span) || 0;
+      const framesAt15 = Math.floor(s * 15) + 1;
+      if (s > V2G_BLACKBOX_LONG_SPAN_SEC || framesAt15 > MAX_V2G_FRAMES) {
+        return V2G_BLACKBOX_FPS_LIST.filter((fps) => fps <= 12);
+      }
+      return V2G_BLACKBOX_FPS_LIST.slice();
+    }
+
+    function applyBlackboxSuccess(candidate, note) {
+      applyV2gOutput(candidate.blob, { resetCompress: true });
+      v2gCompressRound = candidate.compressRounds || 0;
+      setV2gCompressEnabled(true);
+      if (v2gMeta) {
+        v2gMeta.textContent = `${note} · ${describeBlackboxCandidate(candidate)}`;
+      }
+      setV2gProgress(true, 1, `黑盒完成 · ${describeBlackboxCandidate(candidate)}`);
+      toast(`黑盒 GIF 已生成 · ${candidate.fps}FPS · ${formatKb(candidate.blob.size)}`);
+    }
+
+    /**
+     * 单档：编码后若超 6MB 则只压这一档，直到达标或收益停滞。
+     * @returns {{ candidate: object, underBudget: boolean }}
+     */
+    async function encodeAndCompressBlackboxTier(fps, tierIndex, tierTotal) {
+      if (abortV2g) throw new Error("已取消");
+      const base = tierIndex / Math.max(1, tierTotal);
+      const spanShare = 1 / Math.max(1, tierTotal);
+
+      setV2gProgress(true, base + 0.02 * spanShare, `黑盒：尝试 ${fps}FPS（宽≤${V2G_BLACKBOX_MAX_W}）…`);
+
+      const encoded = await encodeV2gGif({
+        video: v2gVideo,
+        fps,
+        maxW: V2G_BLACKBOX_MAX_W,
+        quality: V2G_BLACKBOX_QUALITY,
+        workers: 2,
+        stageLabel: `${fps}FPS`,
+        onProgress: (local, text) => {
+          setV2gProgress(true, base + Math.min(0.55, local * 0.55) * spanShare, text || `黑盒 ${fps}FPS 编码中…`);
+        },
+      });
+
+      let candidate = { ...encoded, compressRounds: 0, maxW: V2G_BLACKBOX_MAX_W };
+      if (candidate.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
+        return { candidate, underBudget: true };
+      }
+
+      for (let round = 1; round <= V2G_BLACKBOX_MAX_COMPRESS_ROUNDS; round++) {
+        if (abortV2g) throw new Error("已取消");
+        const level = round <= 2 ? "standard" : "strong";
+        const before = candidate.blob.size;
+        setV2gProgress(
+          true,
+          base + (0.55 + (round / (V2G_BLACKBOX_MAX_COMPRESS_ROUNDS + 1)) * 0.4) * spanShare,
+          `黑盒：${fps}FPS 第 ${round} 轮压缩（${level}）· ${formatKb(before)}…`
+        );
+        const out = await compressGifBlob(
+          candidate.blob,
+          level,
+          (ratio, text) => {
+            setV2gProgress(
+              true,
+              base + (0.55 + ((round - 1 + ratio) / (V2G_BLACKBOX_MAX_COMPRESS_ROUNDS + 1)) * 0.4) * spanShare,
+              `黑盒：${fps}FPS 第 ${round} 轮 · ${text}`
+            );
+          },
+          { round }
+        );
+        candidate = { ...candidate, blob: out, compressRounds: round };
+        if (out.size <= V2G_BLACKBOX_MAX_BYTES) {
+          return { candidate, underBudget: true };
+        }
+        if (out.size >= before * 0.99) {
+          setV2gProgress(
+            true,
+            base + 0.96 * spanShare,
+            `黑盒：${fps}FPS 压缩收益不足（${formatKb(out.size)}），改试更低帧率…`
+          );
+          break;
         }
       }
-      await Promise.all(Array.from({ length: Math.min(limit, list.length) }, () => run()));
-      return results;
+
+      return { candidate, underBudget: false };
     }
 
     async function convertVideoToGif() {
@@ -2481,120 +2494,41 @@
       setV2gActionButtons();
       setV2gCompressEnabled(false);
       if (v2gAbort) v2gAbort.hidden = false;
-      setV2gProgress(true, 0.02, `黑盒：固定宽 ${V2G_BLACKBOX_MAX_W}，并行 15/12/10 FPS…`);
+      setV2gProgress(true, 0.02, `黑盒：固定宽 ${V2G_BLACKBOX_MAX_W}，按需 15→12→10…`);
 
       try {
-        const fpsList = V2G_BLACKBOX_FPS_LIST.slice();
-        const encodeProgress = fpsList.map(() => 0);
-        const bumpEncodeProgress = () => {
-          const avg = encodeProgress.reduce((a, b) => a + b, 0) / Math.max(1, encodeProgress.length);
-          const parts = fpsList
-            .map((fps, i) => `${fps}FPS ${Math.round(encodeProgress[i] * 100)}%`)
-            .join(" · ");
-          setV2gProgress(true, 0.05 + avg * 0.5, `黑盒并行编码（宽≤${V2G_BLACKBOX_MAX_W}）：${parts}`);
-        };
+        const { span } = resolveV2gSpan();
+        const fpsList = resolveBlackboxFpsList(span);
+        if (!fpsList.length) throw new Error("没有可用的黑盒帧率方案");
 
-        let candidates = await mapPool(fpsList, V2G_BLACKBOX_ENCODE_CONCURRENCY, async (fps, i) => {
+        const skipTip =
+          fpsList[0] < 15 ? `片段约 ${span.toFixed(1)}s，跳过 15FPS，从 ${fpsList[0]} 起试` : `依次尝试 ${fpsList.join("/")} FPS`;
+        setV2gProgress(true, 0.03, `黑盒：${skipTip}`);
+
+        const tried = [];
+        for (let i = 0; i < fpsList.length; i++) {
           if (abortV2g) throw new Error("已取消");
-          const video = await createDetachedVideoClone();
-          try {
-            const encoded = await encodeV2gGif({
-              video,
-              fps,
-              maxW: V2G_BLACKBOX_MAX_W,
-              quality: V2G_BLACKBOX_QUALITY,
-              workers: 1,
-              stageLabel: `${fps}FPS`,
-              onProgress: (local) => {
-                encodeProgress[i] = Math.max(0, Math.min(1, Number(local) || 0));
-                bumpEncodeProgress();
-              },
-            });
-            encodeProgress[i] = 1;
-            bumpEncodeProgress();
-            return { ...encoded, compressRounds: 0, maxW: V2G_BLACKBOX_MAX_W };
-          } finally {
-            disposeDetachedVideo(video);
-          }
-        });
-
-        const sizesTip = summarizeBlackboxCandidates(candidates);
-        setV2gProgress(true, 0.58, `黑盒：三档已生成（${sizesTip}），挑选 ≤6MB 最优…`);
-
-        let picked = pickBestBlackboxCandidate(candidates, V2G_BLACKBOX_MAX_BYTES);
-        if (picked) {
-          applyV2gOutput(picked.blob, { resetCompress: true });
-          if (v2gMeta) {
-            v2gMeta.textContent = `黑盒完成 · 未压缩即达标 · ${describeBlackboxCandidate(picked)}（候选 ${sizesTip}）`;
-          }
-          setV2gProgress(true, 1, `黑盒完成 · ${describeBlackboxCandidate(picked)}`);
-          toast(`黑盒 GIF 已生成 · ${picked.fps}FPS · ${formatKb(picked.blob.size)}`);
-          return;
-        }
-
-        for (let round = 1; round <= V2G_BLACKBOX_MAX_COMPRESS_ROUNDS; round++) {
-          if (abortV2g) throw new Error("已取消");
-          if (!candidates.length) break;
-          const level = round <= 2 ? "standard" : "strong";
-          const beforeSizes = candidates.map((c) => c.blob.size);
-          setV2gProgress(
-            true,
-            0.58 + (round / (V2G_BLACKBOX_MAX_COMPRESS_ROUNDS + 1)) * 0.35,
-            `黑盒：第 ${round} 轮同步压缩 15/12/10（${level}）…`
-          );
-
-          const compressProgress = candidates.map(() => 0);
-          const bumpCompress = () => {
-            const avg = compressProgress.reduce((a, b) => a + b, 0) / Math.max(1, compressProgress.length);
-            setV2gProgress(
-              true,
-              0.58 + ((round - 1 + avg) / (V2G_BLACKBOX_MAX_COMPRESS_ROUNDS + 1)) * 0.35,
-              `黑盒：第 ${round} 轮同步压缩… ${Math.round(avg * 100)}%`
-            );
-          };
-
-          candidates = await Promise.all(
-            candidates.map(async (c, i) => {
-              if (abortV2g) throw new Error("已取消");
-              const out = await compressGifBlob(
-                c.blob,
-                level,
-                (ratio) => {
-                  compressProgress[i] = Math.max(0, Math.min(1, Number(ratio) || 0));
-                  bumpCompress();
-                },
-                { round }
-              );
-              return { ...c, blob: out, compressRounds: round };
-            })
-          );
-
-          const afterTip = summarizeBlackboxCandidates(candidates);
-          picked = pickBestBlackboxCandidate(candidates, V2G_BLACKBOX_MAX_BYTES);
-          if (picked) {
-            applyV2gOutput(picked.blob, { resetCompress: true });
-            v2gCompressRound = picked.compressRounds || round;
-            setV2gCompressEnabled(true);
-            if (v2gMeta) {
-              v2gMeta.textContent = `黑盒完成 · 第 ${round} 轮压缩后优选 · ${describeBlackboxCandidate(picked)}（本轮后 ${afterTip}）`;
-            }
-            setV2gProgress(true, 1, `黑盒完成 · ${describeBlackboxCandidate(picked)}`);
-            toast(`黑盒 GIF 已生成 · ${picked.fps}FPS · ${formatKb(picked.blob.size)}`);
+          const fps = fpsList[i];
+          const { candidate, underBudget } = await encodeAndCompressBlackboxTier(fps, i, fpsList.length);
+          tried.push(candidate);
+          if (underBudget) {
+            const note =
+              candidate.compressRounds > 0
+                ? `黑盒完成 · ${fps}FPS 压缩 ${candidate.compressRounds} 轮后达标`
+                : `黑盒完成 · ${fps}FPS 未压缩即达标`;
+            applyBlackboxSuccess(candidate, note);
             return;
           }
-
-          const stagnant = candidates.every((c, i) => c.blob.size >= beforeSizes[i] * 0.99);
-          if (stagnant) break;
         }
 
-        const fallback = candidates.slice().sort((a, b) => a.blob.size - b.blob.size)[0] || null;
+        const fallback = tried.slice().sort((a, b) => a.blob.size - b.blob.size)[0] || null;
         if (fallback) {
           applyV2gOutput(fallback.blob, { resetCompress: true });
           v2gCompressRound = fallback.compressRounds || 0;
           setV2gCompressEnabled(true);
-          const tip = summarizeBlackboxCandidates(candidates);
+          const tip = summarizeBlackboxCandidates(tried);
           if (v2gMeta) {
-            v2gMeta.textContent = `黑盒已尽力 · 仍超过 6MB · 已保留最小 ${describeBlackboxCandidate(fallback)}（${tip}）· 建议缩短「最长秒数」`;
+            v2gMeta.textContent = `黑盒已尽力 · 仍超过 6MB · 已保留最小 ${describeBlackboxCandidate(fallback)}（试过 ${tip}）· 建议缩短「最长秒数」`;
           }
           setV2gProgress(true, 1, `仍超 6MB · 已保留最小 ${formatKb(fallback.blob.size)}`);
           setError(v2gError, "自动压到 6MB 失败：片段可能过长或画面过复杂，请缩短「最长秒数」后重试");
