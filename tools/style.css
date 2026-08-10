@@ -278,6 +278,20 @@ body {
   letter-spacing: -0.02em;
 }
 
+.tool-ver {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.12rem 0.42rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.68em;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--muted);
+  vertical-align: 0.12em;
+  user-select: all;
+}
+
 .panel-head p {
   margin: 0.4rem 0 0;
   color: var(--muted);

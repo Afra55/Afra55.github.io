@@ -43,11 +43,21 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
+  const GIF_TOOL_VERSION = "2026.08.10-i";
+
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 30 },
     standard: { label: "标准", baseLossy: 60 },
     strong: { label: "强力", baseLossy: 100 },
   };
+
+  (() => {
+    const el = $("#gif-tool-version");
+    if (el) {
+      el.textContent = `v${GIF_TOOL_VERSION}`;
+      el.title = `GIF 工具逻辑版本 ${GIF_TOOL_VERSION}（与脚本缓存联动，更新后应看到此号变化）`;
+    }
+  })();
 
   let gifsicleModulePromise = null;
 
