@@ -855,7 +855,8 @@
 
   function syncNav() {
     const sections = getSectionsInNavOrder();
-    const y = window.scrollY + 140;
+    const desktopSidebar = window.matchMedia("(min-width: 901px)").matches;
+    const y = window.scrollY + (desktopSidebar ? 96 : 140);
     let current = sections[0]?.id;
     for (const section of sections) {
       if (section && section.offsetTop <= y) current = section.id;
