@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260811a" />
+  <link rel="stylesheet" href="./style.css?v=20260811b" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,8 +25,8 @@
     <p class="tagline">常用开发小工具合集 · 本地处理不上传 · 可拖拽导航排序</p>
   </header>
 
-  <main class="shell">
-    <div class="nav-bar">
+  <div class="app-layout">
+    <aside class="nav-bar" id="nav-bar">
       <nav class="tool-nav" id="tool-nav" aria-label="工具导航">
         <a class="tool-nav-link is-active" href="#timestamp" draggable="true" data-tool="timestamp">时间戳</a>
         <a class="tool-nav-link" href="#timediff" draggable="true" data-tool="timediff">时间差</a>
@@ -58,8 +58,9 @@
         <a class="tool-nav-link" href="#adb" draggable="true" data-tool="adb">ADB 工具</a>
       </nav>
       <button type="button" class="nav-reset" id="nav-reset" title="恢复默认分组排序">恢复默认排序</button>
-    </div>
+    </aside>
 
+    <main class="shell">
     <section id="timestamp" class="panel" data-reveal>
       <div class="panel-head">
         <h1>时间戳转换</h1>
@@ -1794,34 +1795,13 @@ hello@world.org</textarea>
         </ul>
       </div>
     </section>
-</main>
+    </main>
+  </div>
 
   <footer class="site-footer">
     <a href="/">← 返回主站</a>
     <span>本地处理，数据不上传</span>
   </footer>
-
-  <div class="temp-bar" id="temp-bar" data-has-temp="0" data-expanded="0">
-    <div class="temp-bar-inner">
-      <button type="button" class="temp-bar-summary" id="temp-toggle" aria-expanded="false" title="展开或收起占用详情">
-        <strong class="temp-bar-title">临时占用</strong>
-        <span class="hint tight" id="temp-summary-meta">统计中…</span>
-        <span class="temp-bar-chevron" aria-hidden="true"></span>
-      </button>
-      <div class="temp-bar-details" id="temp-details">
-        <div class="temp-bar-copy">
-          <span class="hint tight" id="temp-blob-meta">本页临时文件：统计中…</span>
-          <span class="hint tight" id="temp-store-meta">站点存储：统计中…</span>
-          <span class="hint tight temp-bar-note">上传视频主要占页面内存；清理只删临时文件，不会删除已持久保存的 FFmpeg 引擎。</span>
-        </div>
-        <div class="temp-bar-actions">
-          <button type="button" class="ghost-btn" id="temp-refresh">刷新</button>
-          <button type="button" class="secondary-btn" id="temp-clear">清理</button>
-        </div>
-      </div>
-      <button type="button" class="secondary-btn temp-bar-clear-compact" id="temp-clear-compact">清理</button>
-    </div>
-  </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
   <script src="./vendor/js-yaml.min.js"></script>
@@ -1832,9 +1812,9 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./temp.js?v=20260811a"></script>
+  <script src="./temp.js?v=20260811b"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260810z"></script>
+  <script src="./app.js?v=20260811b"></script>
   <script src="./extra.js?v=20260810y"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
