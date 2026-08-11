@@ -779,6 +779,13 @@ a.secondary-btn {
   opacity: 0.95;
 }
 
+.json-area {
+  min-height: 12rem;
+  max-height: none;
+  overflow: auto;
+  field-sizing: content;
+}
+
 .primary-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;

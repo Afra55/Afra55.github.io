@@ -529,9 +529,9 @@
 
   // ---- JSON ----
   const jsonInput = $("#json-input");
-  const jsonOutput = $("#json-output");
   const jsonError = $("#json-error");
   const jsonMeta = $("#json-meta");
+  const JSON_AREA_MIN_PX = 192;
 
   function parseJsonInput() {
     const raw = jsonInput.value.trim();
@@ -539,24 +539,44 @@
     return JSON.parse(raw);
   }
 
+  /** 按内容撑高，尽量完整展示 JSON（超高时仍可滚动） */
+  function fitJsonArea() {
+    if (!jsonInput) return;
+    const maxPx = Math.max(JSON_AREA_MIN_PX, Math.floor(window.innerHeight * 0.85));
+    jsonInput.style.height = "auto";
+    const needed = Math.ceil(jsonInput.scrollHeight + 2);
+    const next = Math.min(maxPx, Math.max(JSON_AREA_MIN_PX, needed));
+    jsonInput.style.height = `${next}px`;
+    jsonInput.style.overflowY = needed > maxPx ? "auto" : "hidden";
+  }
+
+  function resetJsonAreaHeight() {
+    if (!jsonInput) return;
+    jsonInput.style.height = "";
+    jsonInput.style.overflowY = "";
+  }
+
   function runJson(mode) {
     try {
       const data = parseJsonInput();
       setToolError(jsonError, "");
       if (mode === "validate") {
-        jsonOutput.value = "";
-        jsonMeta.textContent = `校验通过 · 根类型 ${Array.isArray(data) ? "array" : typeof data}`;
+        // 校验通过时顺带美化，便于完整预览
+        const pretty = JSON.stringify(data, null, 2);
+        jsonInput.value = pretty;
+        jsonMeta.textContent = `校验通过 · 根类型 ${Array.isArray(data) ? "array" : typeof data} · ${pretty.split("\n").length} 行`;
+        fitJsonArea();
         showToast("JSON 合法");
         return;
       }
       const out = mode === "pretty" ? JSON.stringify(data, null, 2) : JSON.stringify(data);
-      jsonOutput.value = out;
+      jsonInput.value = out;
       jsonMeta.textContent =
         mode === "pretty"
           ? `已美化 · ${out.split("\n").length} 行 · ${out.length} 字符`
           : `已压缩 · ${out.length} 字符`;
+      fitJsonArea();
     } catch (err) {
-      jsonOutput.value = "";
       jsonMeta.textContent = "";
       setToolError(jsonError, `JSON 无效：${err.message || err}`);
     }
@@ -567,9 +587,9 @@
   $("#json-validate").addEventListener("click", () => runJson("validate"));
   $("#json-clear").addEventListener("click", () => {
     jsonInput.value = "";
-    jsonOutput.value = "";
     jsonMeta.textContent = "";
     setToolError(jsonError, "");
+    resetJsonAreaHeight();
   });
 
   // ---- Regex ----
