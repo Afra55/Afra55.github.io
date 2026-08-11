@@ -1103,6 +1103,14 @@ a.secondary-btn {
     overflow: auto;
     overscroll-behavior: contain;
     padding: 0.65rem;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* legacy Edge */
+  }
+
+  .nav-bar::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none; /* Chrome / Safari */
   }
 
   .nav-bar.is-collapsed {
