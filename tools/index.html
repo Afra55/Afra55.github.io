@@ -1152,8 +1152,12 @@ hello@world.org</textarea>
             </div>
           </div>
           <div class="gif-progress" id="v2g-progress" hidden>
+            <div class="gif-progress-head">
+              <p class="hint gif-progress-title" id="v2g-progress-text">准备中…</p>
+              <span class="mono gif-progress-pct" id="v2g-progress-pct">0%</span>
+            </div>
             <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="v2g-progress-fill"></span></div>
-            <p class="hint" id="v2g-progress-text">准备中…</p>
+            <p class="hint tight gif-progress-sub" id="v2g-progress-sub" hidden></p>
           </div>
           <div class="gif-preview-wrap">
             <img id="v2g-preview" class="img-preview gif-preview" alt="视频转 GIF 预览" hidden />

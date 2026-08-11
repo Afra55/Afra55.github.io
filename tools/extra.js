@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.10-y";
+  const GIF_TOOL_VERSION = "2026.08.11-a";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -726,19 +726,34 @@
     onProgress?.(0.05, "加载压缩引擎…");
     const gifsicle = await loadGifsicle();
     if (!gifsicle || typeof gifsicle.run !== "function") throw new Error("压缩引擎未加载");
-    const detail =
-      plan.lossy > 0
-        ? `${plan.label} · 第 ${plan.round} 次 · lossy=${plan.lossy}`
-        : `${plan.label} · 第 ${plan.round} 次 · -O3 优化`;
-    onProgress?.(0.2, `压缩中（${detail}）…`);
-    const out = await gifsicle.run({
-      input: [{ file: blob, name: "in.gif" }],
-      command: [`${plan.args} in.gif -o /out/out.gif`],
-    });
-    const file = Array.isArray(out) ? out[0] : null;
-    if (!file) throw new Error("压缩失败，未得到输出");
-    onProgress?.(1, "压缩完成");
-    return file instanceof Blob ? file : new Blob([file], { type: "image/gif" });
+    const modeLabel = plan.lossy > 0 ? `${plan.label} lossy=${plan.lossy}` : `${plan.label} O3`;
+    const startedAt = Date.now();
+    let tick = 0.18;
+    let timer = null;
+    const pushBusy = (forceRatio) => {
+      if (typeof forceRatio === "number") tick = forceRatio;
+      else tick = Math.min(0.9, tick + 0.018);
+      const elapsed = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+      onProgress?.(
+        tick,
+        `压缩中 · ${modeLabel} · 已用时 ${elapsed}s`,
+        { busy: true, elapsed }
+      );
+    };
+    pushBusy(0.2);
+    timer = setInterval(() => pushBusy(), 700);
+    try {
+      const out = await gifsicle.run({
+        input: [{ file: blob, name: "in.gif" }],
+        command: [`${plan.args} in.gif -o /out/out.gif`],
+      });
+      const file = Array.isArray(out) ? out[0] : null;
+      if (!file) throw new Error("压缩失败，未得到输出");
+      onProgress?.(1, "压缩完成");
+      return file instanceof Blob ? file : new Blob([file], { type: "image/gif" });
+    } finally {
+      if (timer) clearInterval(timer);
+    }
   }
 
   // ---- Time diff ----
@@ -2528,6 +2543,8 @@
     const v2gProgress = $("#v2g-progress");
     const v2gProgressFill = $("#v2g-progress-fill");
     const v2gProgressText = $("#v2g-progress-text");
+    const v2gProgressSub = $("#v2g-progress-sub");
+    const v2gProgressPct = $("#v2g-progress-pct");
     const v2gPreview = $("#v2g-preview");
     const v2gDownload = $("#v2g-download");
     const v2gCompress = $("#v2g-compress");
@@ -2632,15 +2649,26 @@
       setV2gCompressEnabled(latestV2gFormat === "gif");
     }
 
-    function setV2gProgress(visible, ratio, text) {
+    function setV2gProgress(visible, ratio, text, opts = {}) {
       if (!v2gProgress) return;
       v2gProgress.hidden = !visible;
       const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)));
+      const busy = Boolean(opts.busy) || (Boolean(visible) && pct > 0 && pct < 100);
       if (v2gProgressFill) {
-        v2gProgressFill.style.width = `${pct}%`;
-        v2gProgressFill.classList.toggle("is-active", Boolean(visible) && pct > 0 && pct < 100);
+        v2gProgressFill.style.width = `${Math.max(pct, busy && pct < 8 ? 8 : pct)}%`;
+        v2gProgressFill.classList.toggle("is-active", busy);
+        v2gProgressFill.classList.toggle("is-busy", Boolean(opts.busy));
       }
-      if (v2gProgressText) v2gProgressText.textContent = text || `${pct}%`;
+      if (v2gProgressPct) {
+        v2gProgressPct.textContent = `${pct}%`;
+        v2gProgressPct.hidden = !visible;
+      }
+      if (v2gProgressText) v2gProgressText.textContent = text || (visible ? `${pct}%` : "");
+      if (v2gProgressSub) {
+        const sub = opts.sub || "";
+        v2gProgressSub.textContent = sub;
+        v2gProgressSub.hidden = !visible || !sub;
+      }
     }
 
     function revokeV2gGif() {
@@ -3516,7 +3544,8 @@
         setV2gProgress(
           true,
           progress,
-          `黑盒：${formatKb(best.blob.size)} < 5MB，试加宽至 ${nextW}（保 ${fps}FPS）…`
+          `黑盒加宽 · ${fps}FPS`,
+          { sub: `${formatKb(best.blob.size)} → 试宽 ${nextW}`, busy: true }
         );
         const encoded = await encodeV2gGifFfmpeg({
           file: v2gSourceFile,
@@ -3528,7 +3557,8 @@
             setV2gProgress(
               true,
               Math.min(0.97, progress + Math.min(0.04, (local || 0) * 0.04)),
-              text || `黑盒加宽 ${nextW}…`
+              `黑盒加宽 · ${fps}FPS`,
+              { sub: text || `编码宽 ${nextW}…`, busy: local > 0 && local < 1 }
             );
           },
         });
@@ -3537,7 +3567,8 @@
           setV2gProgress(
             true,
             0.98,
-            `黑盒：宽 ${nextW} 超 6MB（${formatKb(cand.blob.size)}），沿用宽≤${best.maxW}`
+            `黑盒加宽超限 · 沿用宽≤${best.maxW}`,
+            { sub: `宽 ${nextW} · ${formatKb(cand.blob.size)}` }
           );
           break;
         }
@@ -3566,7 +3597,9 @@
       const maxRounds = isLastTier ? V2G_BLACKBOX_MAX_COMPRESS_ROUNDS : V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS;
       const width = Math.min(V2G_BLACKBOX_WIDTH_CAP, Math.max(64, Number(maxW) || V2G_BLACKBOX_BASE_W));
 
-      setV2gProgress(true, base + 0.02 * spanShare, `黑盒：尝试 ${fps}FPS（宽≤${width}）…`);
+      setV2gProgress(true, base + 0.02 * spanShare, `黑盒编码 · ${fps}FPS`, {
+        sub: `宽≤${width} · 档位 ${tierIndex + 1}/${tierTotal}`,
+      });
 
       const encoded = await encodeV2gGifFfmpeg({
         file: v2gSourceFile,
@@ -3575,7 +3608,12 @@
         quality: V2G_BLACKBOX_QUALITY,
         stageLabel: `${fps}FPS`,
         onProgress: (local, text) => {
-          setV2gProgress(true, base + Math.min(0.55, local * 0.55) * spanShare, text || `黑盒 ${fps}FPS 编码中…`);
+          setV2gProgress(
+            true,
+            base + Math.min(0.55, local * 0.55) * spanShare,
+            `黑盒编码 · ${fps}FPS`,
+            { sub: text || "编码中…", busy: local > 0 && local < 1 }
+          );
         },
       });
 
@@ -3590,20 +3628,28 @@
         const plan = isLastTier
           ? buildBlackboxHardCompressArgs(round)
           : buildBlackboxSoftCompressArgs(round);
-        const modeTip = isLastTier ? plan.label : "轻柔保画质";
+        const modeTip = isLastTier ? plan.label : "轻柔";
         setV2gProgress(
           true,
           base + (0.55 + (round / (maxRounds + 1)) * 0.4) * spanShare,
-          `黑盒：${fps}FPS 第 ${round}/${maxRounds} 轮压缩（${modeTip}）· ${formatKb(before)}…`
+          `黑盒压缩 · ${fps}FPS`,
+          {
+            sub: `第 ${round}/${maxRounds} 轮 · ${modeTip} · ${formatKb(before)}`,
+            busy: true,
+          }
         );
         const out = await compressGifBlob(
           candidate.blob,
           "standard",
-          (ratio, text) => {
+          (ratio, text, meta) => {
             setV2gProgress(
               true,
               base + (0.55 + ((round - 1 + ratio) / (maxRounds + 1)) * 0.4) * spanShare,
-              `黑盒：${fps}FPS 第 ${round} 轮 · ${text}`
+              `黑盒压缩 · ${fps}FPS`,
+              {
+                sub: `第 ${round}/${maxRounds} 轮 · ${text || modeTip}`,
+                busy: Boolean(meta?.busy) || ratio < 1,
+              }
             );
           },
           { round, plan }
@@ -3616,9 +3662,8 @@
           setV2gProgress(
             true,
             base + 0.96 * spanShare,
-            isLastTier
-              ? `黑盒：${fps}FPS 压缩收益不足（${formatKb(out.size)}）`
-              : `黑盒：${fps}FPS 轻柔压缩后仍 ${formatKb(out.size)}，改试更低帧率以保画质…`
+            isLastTier ? `黑盒 · ${fps}FPS 压缩收益不足` : `黑盒 · ${fps}FPS 将降帧`,
+            { sub: formatKb(out.size) }
           );
           break;
         }
@@ -3628,7 +3673,8 @@
         setV2gProgress(
           true,
           base + 0.98 * spanShare,
-          `黑盒：${fps}FPS 轻柔压后仍超 6MB（${formatKb(candidate.blob.size)}），降帧保画质…`
+          `黑盒 · ${fps}FPS 仍超 6MB`,
+          { sub: `${formatKb(candidate.blob.size)} · 改试更低帧率` }
         );
       }
 
@@ -3774,11 +3820,10 @@
       setV2gActionButtons();
       setV2gCompressEnabled(false);
       if (v2gAbort) v2gAbort.hidden = false;
-      setV2gProgress(
-        true,
-        0.02,
-        `黑盒：起点宽 ${V2G_BLACKBOX_BASE_W}，按需 15→12→10；够小时再加宽…`
-      );
+      setV2gProgress(true, 0.02, "黑盒准备中", {
+        sub: `起点宽 ${V2G_BLACKBOX_BASE_W} · 15→12→10 · 够小再加宽`,
+        busy: true,
+      });
 
       try {
         await prewarmFfmpegEngine().catch(() => {});
@@ -3788,9 +3833,9 @@
 
         const skipTip =
           fpsList[0] < 15
-            ? `片段约 ${span.toFixed(1)}s，跳过 15FPS，从 ${fpsList[0]} 起试`
-            : `依次尝试 ${fpsList.join("/")} FPS（宽从 ${V2G_BLACKBOX_BASE_W} 起）`;
-        setV2gProgress(true, 0.03, `黑盒：${skipTip}`);
+            ? `约 ${span.toFixed(1)}s，从 ${fpsList[0]}FPS 起试`
+            : `尝试 ${fpsList.join("/")} FPS`;
+        setV2gProgress(true, 0.03, "黑盒开始", { sub: skipTip, busy: true });
 
         const tried = [];
         for (let i = 0; i < fpsList.length; i++) {

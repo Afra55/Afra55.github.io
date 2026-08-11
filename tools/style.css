@@ -1602,6 +1602,34 @@ a.secondary-btn {
   margin-top: 0.9rem;
 }
 
+.gif-progress-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+}
+
+.gif-progress-title {
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.gif-progress-pct {
+  flex: 0 0 auto;
+  font-size: 0.82rem;
+  color: var(--accent);
+}
+
+.gif-progress-sub {
+  margin: 0.4rem 0 0;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
 .gif-progress-track {
   height: 0.55rem;
   border-radius: 999px;
@@ -1623,6 +1651,21 @@ a.secondary-btn {
   animation: gif-progress-pulse 1.4s ease-in-out infinite;
 }
 
+.gif-progress-fill.is-busy {
+  background-size: 28px 28px;
+  background-image: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.18) 25%,
+    transparent 25%,
+    transparent 50%,
+    rgba(255, 255, 255, 0.18) 50%,
+    rgba(255, 255, 255, 0.18) 75%,
+    transparent 75%,
+    transparent
+  );
+  animation: gif-progress-pulse 1.4s ease-in-out infinite, gif-progress-stripe 0.9s linear infinite;
+}
+
 @keyframes gif-progress-pulse {
   0%,
   100% {
@@ -1630,6 +1673,33 @@ a.secondary-btn {
   }
   50% {
     filter: brightness(1.18);
+  }
+}
+
+@keyframes gif-progress-stripe {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 28px 0;
+  }
+}
+
+@media (max-width: 700px) {
+  .gif-progress-head {
+    gap: 0.45rem;
+  }
+
+  .gif-progress-title {
+    font-size: 0.92rem;
+  }
+
+  .gif-progress-sub {
+    font-size: 0.78rem;
+  }
+
+  .gif-progress-track {
+    height: 0.65rem;
   }
 }
 
