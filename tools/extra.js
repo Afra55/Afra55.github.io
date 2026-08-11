@@ -2652,8 +2652,24 @@
     function setV2gProgress(visible, ratio, text, opts = {}) {
       if (!v2gProgress) return;
       v2gProgress.hidden = !visible;
+      if (!visible) {
+        if (v2gProgressFill) {
+          v2gProgressFill.style.width = "0%";
+          v2gProgressFill.classList.remove("is-active", "is-busy");
+        }
+        if (v2gProgressPct) {
+          v2gProgressPct.textContent = "0%";
+          v2gProgressPct.hidden = true;
+        }
+        if (v2gProgressText) v2gProgressText.textContent = "";
+        if (v2gProgressSub) {
+          v2gProgressSub.textContent = "";
+          v2gProgressSub.hidden = true;
+        }
+        return;
+      }
       const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)));
-      const busy = Boolean(opts.busy) || (Boolean(visible) && pct > 0 && pct < 100);
+      const busy = Boolean(opts.busy) || (pct > 0 && pct < 100);
       if (v2gProgressFill) {
         v2gProgressFill.style.width = `${Math.max(pct, busy && pct < 8 ? 8 : pct)}%`;
         v2gProgressFill.classList.toggle("is-active", busy);
@@ -2661,13 +2677,13 @@
       }
       if (v2gProgressPct) {
         v2gProgressPct.textContent = `${pct}%`;
-        v2gProgressPct.hidden = !visible;
+        v2gProgressPct.hidden = false;
       }
-      if (v2gProgressText) v2gProgressText.textContent = text || (visible ? `${pct}%` : "");
+      if (v2gProgressText) v2gProgressText.textContent = text || `${pct}%`;
       if (v2gProgressSub) {
         const sub = opts.sub || "";
         v2gProgressSub.textContent = sub;
-        v2gProgressSub.hidden = !visible || !sub;
+        v2gProgressSub.hidden = !sub;
       }
     }
 
