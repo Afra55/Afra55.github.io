@@ -1094,13 +1094,16 @@ a.secondary-btn {
     position: sticky;
     top: 0.65rem;
     z-index: 5;
+    align-self: start;
     flex-direction: column;
     flex-wrap: nowrap;
     align-items: stretch;
     gap: 0.55rem;
     margin-bottom: 0;
-    max-height: calc(100vh - 1.3rem);
-    overflow: auto;
+    /* JS 按 header/视口动态写入；回退值预留顶栏，避免页顶时底部菜单够不着 */
+    max-height: var(--nav-max-height, calc(100dvh - 7rem));
+    overflow-x: hidden;
+    overflow-y: auto;
     overscroll-behavior: contain;
     padding: 0.65rem;
     scrollbar-width: none; /* Firefox */

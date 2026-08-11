@@ -925,7 +925,9 @@
 
   // Mobile: hide sticky nav on scroll down, show on scroll up
   const navBar = $(".nav-bar");
+  const siteHeader = $(".site-header");
   const mobileNavMq = window.matchMedia("(max-width: 700px)");
+  const desktopNavMq = window.matchMedia("(min-width: 901px)");
   let lastScrollY = window.scrollY;
   let scrollAcc = 0;
   const NAV_HIDE_THRESHOLD = 28;
@@ -936,8 +938,24 @@
     navBar.classList.toggle("is-collapsed", !!collapsed);
   }
 
+  /** 桌面侧栏：max-height 扣掉当前可见顶栏，保证页顶也能滚到菜单底部 */
+  function syncDesktopNavMaxHeight() {
+    if (!navBar) return;
+    if (!desktopNavMq.matches) {
+      navBar.style.removeProperty("--nav-max-height");
+      return;
+    }
+    const stickyTop = 10;
+    const bottomGap = 12;
+    const headerBottom = siteHeader ? siteHeader.getBoundingClientRect().bottom : 0;
+    const start = Math.max(stickyTop, Math.ceil(headerBottom) + 8);
+    const available = Math.floor(window.innerHeight - start - bottomGap);
+    navBar.style.setProperty("--nav-max-height", `${Math.max(160, available)}px`);
+  }
+
   function onNavAutohideScroll() {
     if (!navBar) return;
+    syncDesktopNavMaxHeight();
     if (!mobileNavMq.matches) {
       setNavCollapsed(false);
       lastScrollY = window.scrollY;
@@ -965,18 +983,28 @@
   }
 
   window.addEventListener("scroll", onNavAutohideScroll, { passive: true });
+  window.addEventListener("resize", syncDesktopNavMaxHeight, { passive: true });
+  if (typeof desktopNavMq.addEventListener === "function") {
+    desktopNavMq.addEventListener("change", syncDesktopNavMaxHeight);
+  } else if (typeof desktopNavMq.addListener === "function") {
+    desktopNavMq.addListener(syncDesktopNavMaxHeight);
+  }
   if (typeof mobileNavMq.addEventListener === "function") {
     mobileNavMq.addEventListener("change", () => {
       if (!mobileNavMq.matches) setNavCollapsed(false);
+      syncDesktopNavMaxHeight();
     });
   } else if (typeof mobileNavMq.addListener === "function") {
     mobileNavMq.addListener(() => {
       if (!mobileNavMq.matches) setNavCollapsed(false);
+      syncDesktopNavMaxHeight();
     });
   }
   getNavLinks().forEach((link) => {
     link.addEventListener("click", () => setNavCollapsed(false));
   });
+  syncDesktopNavMaxHeight();
+  requestAnimationFrame(syncDesktopNavMaxHeight);
 
   // Init
   const now = Date.now();
