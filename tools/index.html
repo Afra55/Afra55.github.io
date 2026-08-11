@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260811d" />
+  <link rel="stylesheet" href="./style.css?v=20260811e" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -941,9 +941,9 @@ hello@world.org</textarea>
       <div class="panel-head">
         <div class="panel-title-row">
           <h1>GIF 工具</h1>
-          <span class="tool-ver mono" id="gif-tool-version" title="GIF 工具逻辑版本">v2026.08.10-y</span>
+          <span class="tool-ver mono" id="gif-tool-version" title="GIF 工具逻辑版本">v2026.08.11-a</span>
         </div>
-        <p>多图合成 GIF、压缩已有 GIF、拆帧/转 WebM，或把视频转成 GIF / 动画 WebP；本地处理，带进度。当前版本 <strong class="mono" id="gif-tool-version-inline">v2026.08.10-y</strong>。</p>
+        <p>多图合成 GIF、压缩已有 GIF、拆帧/转 WebM，或把视频转成 GIF / 动画 WebP；本地处理，带进度。当前版本 <strong class="mono" id="gif-tool-version-inline">v2026.08.11-a</strong>。</p>
       </div>
       <div class="panel-body">
         <div class="convert-grid">
@@ -1152,8 +1152,12 @@ hello@world.org</textarea>
             </div>
           </div>
           <div class="gif-progress" id="v2g-progress" hidden>
+            <div class="gif-progress-head">
+              <p class="hint gif-progress-title" id="v2g-progress-text">准备中…</p>
+              <span class="mono gif-progress-pct" id="v2g-progress-pct">0%</span>
+            </div>
             <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="v2g-progress-fill"></span></div>
-            <p class="hint" id="v2g-progress-text">准备中…</p>
+            <p class="hint tight gif-progress-sub" id="v2g-progress-sub" hidden></p>
           </div>
           <div class="gif-preview-wrap">
             <img id="v2g-preview" class="img-preview gif-preview" alt="视频转 GIF 预览" hidden />
@@ -1815,7 +1819,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260811b"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260811d"></script>
-  <script src="./extra.js?v=20260810y"></script>
+  <script src="./extra.js?v=20260811e"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>
