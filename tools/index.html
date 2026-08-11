@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260810y" />
+  <link rel="stylesheet" href="./style.css?v=20260810z" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -459,21 +459,15 @@
 <section id="json" class="panel" data-reveal>
       <div class="panel-head">
         <h1>JSON 格式化</h1>
-        <p>校验、美化与压缩，全部在本地完成。</p>
+        <p>校验、美化与压缩，全部在本地完成。输入与结果共用同一编辑框。</p>
       </div>
       <div class="panel-body">
-        <div class="convert-grid">
-          <div class="field-block">
-            <label for="json-input">输入</label>
-            <textarea id="json-input" class="mono area" rows="10" placeholder='{"hello":"world"}' spellcheck="false"></textarea>
+        <div class="field-block">
+          <div class="label-row">
+            <label for="json-input">JSON</label>
+            <button type="button" class="copy-btn" data-copy-value="json-input">复制</button>
           </div>
-          <div class="field-block">
-            <div class="label-row">
-              <label for="json-output">输出</label>
-              <button type="button" class="copy-btn" data-copy-value="json-output">复制</button>
-            </div>
-            <textarea id="json-output" class="mono area" rows="10" readonly placeholder="结果会显示在这里" spellcheck="false"></textarea>
-          </div>
+          <textarea id="json-input" class="mono area json-area" rows="12" placeholder='{"hello":"world"}' spellcheck="false"></textarea>
         </div>
         <div class="btn-row tool-actions">
           <button type="button" class="primary-btn" id="json-pretty">美化</button>
@@ -1841,7 +1835,7 @@ hello@world.org</textarea>
   <script src="./vendor/jszip.min.js"></script>
   <script src="./temp.js?v=20260810y"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260810l"></script>
+  <script src="./app.js?v=20260810z"></script>
   <script src="./extra.js?v=20260810y"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
