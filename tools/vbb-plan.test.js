@@ -12,6 +12,7 @@ const VBB_MIN_SPAN = 0.5;
 const VBB_CLARITY_MAX_SPAN = 20;
 const VBB_DURATION_MAX_SPAN = 30;
 const VBB_SAMPLE_SPAN = 2.5;
+const VBB_SOFT_COMPRESS_KEEP = 0.72;
 
 function buildVbbRanges(duration, targetSpan) {
   const d = Number(duration) || 0;
@@ -53,24 +54,41 @@ function estimateVbbBytesAtWidth(bps15, span, width, srcW) {
   return Math.round(bps15 * s * scale);
 }
 
-function estimateVbbBytesBlackbox(bps15, span, srcW) {
+function estimateVbbBlackboxPlan(bps15, span, srcW) {
   const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
+  const maxBytes = V2G_BLACKBOX_MAX_BYTES;
   const at15 = estimateVbbBytesAtWidth(bps15, s, vbbSampleBaseWidth(srcW), srcW);
-  if (at15 <= V2G_BLACKBOX_MAX_BYTES) return at15;
+  if (at15 <= maxBytes) return { bytes: at15, fps: 15, compressRounds: 0 };
+  const at15Soft = Math.round(at15 * VBB_SOFT_COMPRESS_KEEP);
+  if (at15Soft <= maxBytes) {
+    return {
+      bytes: Math.min(maxBytes, Math.max(at15Soft, Math.round(maxBytes * 0.9))),
+      fps: 15,
+      compressRounds: 1,
+    };
+  }
   const at12 = Math.round(at15 * (12 / 15));
-  if (at12 <= V2G_BLACKBOX_MAX_BYTES) return at12;
+  if (at12 <= maxBytes) return { bytes: at12, fps: 12, compressRounds: 0 };
+  const at12Soft = Math.round(at12 * VBB_SOFT_COMPRESS_KEEP);
+  if (at12Soft <= maxBytes) {
+    return {
+      bytes: Math.min(maxBytes, Math.max(at12Soft, Math.round(maxBytes * 0.9))),
+      fps: 12,
+      compressRounds: 1,
+    };
+  }
   const at10 = Math.round(at15 * (10 / 15));
-  if (at10 <= V2G_BLACKBOX_MAX_BYTES) return at10;
-  return V2G_BLACKBOX_MAX_BYTES;
+  if (at10 <= maxBytes) return { bytes: at10, fps: 10, compressRounds: 0 };
+  return { bytes: maxBytes, fps: 10, compressRounds: 2 };
+}
+
+function estimateVbbBytesBlackbox(bps15, span, srcW) {
+  return estimateVbbBlackboxPlan(bps15, span, srcW).bytes;
 }
 
 function estimateVbbFps(bps15, span, mode, width, srcW) {
   if (mode !== "duration" && mode !== "blackbox") return 15;
-  const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
-  const at15 = estimateVbbBytesAtWidth(bps15, s, vbbSampleBaseWidth(srcW), srcW);
-  if (at15 <= V2G_BLACKBOX_MAX_BYTES) return 15;
-  if (Math.round(at15 * (12 / 15)) <= V2G_BLACKBOX_MAX_BYTES) return 12;
-  return 10;
+  return estimateVbbBlackboxPlan(bps15, span, srcW).fps;
 }
 
 function estimateVbbBytes(bps15, span, mode, width, srcW) {
@@ -147,8 +165,7 @@ function almost(a, b, eps = 1e-6) {
 }
 
 {
-  // 黑盒预估应随时长单调不减；超预算时贴近 6MB，而不是被压到很小
-  const bps = 800000; // 约 0.8MB/s @15FPS/420
+  const bps = 800000;
   const e4 = estimateVbbBytes(bps, 4, "duration");
   const e6 = estimateVbbBytes(bps, 6, "duration");
   const e8 = estimateVbbBytes(bps, 8, "duration");
@@ -162,7 +179,15 @@ function almost(a, b, eps = 1e-6) {
 }
 
 {
-  // 自定义：更少段（更长）在黑盒路径下预估不应更小
+  // 12s：未压超 6MB、轻压可进预算 → 仍应预估 15FPS（与实装「先压再降帧」一致）
+  const bps = (7.2 * 1024 * 1024) / 12; // 12s 原始约 7.2MB
+  const plan = estimateVbbBlackboxPlan(bps, 12);
+  assert(plan.fps === 15, `12s soft-fit should stay 15fps, got ${plan.fps}`);
+  assert(plan.compressRounds >= 1, "12s over raw should expect compress");
+  assert(plan.bytes <= V2G_BLACKBOX_MAX_BYTES, "soft plan under 6MB");
+}
+
+{
   const bps15 = (3.2 * 1024 * 1024) / 2.5;
   const duration = 56;
   const r8 = buildVbbRanges(duration, 7);
@@ -208,8 +233,7 @@ function almost(a, b, eps = 1e-6) {
 }
 
 {
-  // 高码率：缩短后应能抬宽
-  const bps15 = (5.5 * 1024 * 1024) / 10; // ~5.5MB / 10s @420
+  const bps15 = (5.5 * 1024 * 1024) / 10;
   const wAt10 = resolveVbbWidthForSpan(bps15, 10, 1280);
   const wAt5 = resolveVbbWidthForSpan(bps15, 5, 1280);
   assert(wAt10 === 420, `10s should stay near base, got ${wAt10}`);

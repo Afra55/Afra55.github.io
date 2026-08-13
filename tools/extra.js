@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.13-i";
+  const GIF_TOOL_VERSION = "2026.08.13-k";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -4824,6 +4824,15 @@
     let vbbClips = [];
     let vbbZipUrl = "";
     let vbbMergedUrl = "";
+    /** 仅预览当前选中片段，避免手机同时解码多个大 GIF 白屏 */
+    let vbbPreviewIdx = -1;
+
+    function isLikelyMobileBrowser() {
+      return (
+        window.matchMedia("(max-width: 900px)").matches ||
+        /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || "")
+      );
+    }
 
     function setVbbProgress(visible, ratio, text, opts = {}) {
       if (!vbbProgress) return;
@@ -4876,6 +4885,7 @@
         } catch (_) {}
       });
       vbbClips = [];
+      vbbPreviewIdx = -1;
       if (vbbList) vbbList.innerHTML = "";
       if (vbbZipUrl) {
         try {
@@ -4961,25 +4971,59 @@
       return Math.round(bps15 * s * scale);
     }
 
-    /** 黑盒路径体积预估：随时长单调不减，超预算时贴近 6MB */
-    function estimateVbbBytesBlackbox(bps15, span, srcW) {
+    /**
+     * 对齐 encodeBlackboxClip：先 15FPS，超限再轻柔压缩（可保 15），不够才 12→10。
+     * Soft keep≈0.72 对应约 1–2 轮 --lossy 轻压的经验体积。
+     */
+    const VBB_SOFT_COMPRESS_KEEP = 0.72;
+
+    function estimateVbbBlackboxPlan(bps15, span, srcW) {
       const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
+      const maxBytes = V2G_BLACKBOX_MAX_BYTES;
       const at15 = estimateVbbBytesAtWidth(bps15, s, vbbSampleBaseWidth(srcW), srcW);
-      if (at15 <= V2G_BLACKBOX_MAX_BYTES) return at15;
+      if (at15 <= maxBytes) {
+        return { bytes: at15, fps: 15, compressRounds: 0 };
+      }
+      const at15Soft = Math.round(at15 * VBB_SOFT_COMPRESS_KEEP);
+      if (at15Soft <= maxBytes) {
+        // 实装通常「压到刚好进 6MB」；取 soft 与接近上限的较大值，避免比更短未压段还小
+        return {
+          bytes: Math.min(maxBytes, Math.max(at15Soft, Math.round(maxBytes * 0.9))),
+          fps: 15,
+          compressRounds: 1,
+        };
+      }
       const at12 = Math.round(at15 * (12 / 15));
-      if (at12 <= V2G_BLACKBOX_MAX_BYTES) return at12;
+      if (at12 <= maxBytes) {
+        return { bytes: at12, fps: 12, compressRounds: 0 };
+      }
+      const at12Soft = Math.round(at12 * VBB_SOFT_COMPRESS_KEEP);
+      if (at12Soft <= maxBytes) {
+        return {
+          bytes: Math.min(maxBytes, Math.max(at12Soft, Math.round(maxBytes * 0.9))),
+          fps: 12,
+          compressRounds: 1,
+        };
+      }
       const at10 = Math.round(at15 * (10 / 15));
-      if (at10 <= V2G_BLACKBOX_MAX_BYTES) return at10;
-      return V2G_BLACKBOX_MAX_BYTES;
+      if (at10 <= maxBytes) {
+        return { bytes: at10, fps: 10, compressRounds: 0 };
+      }
+      return { bytes: maxBytes, fps: 10, compressRounds: 2 };
+    }
+
+    function estimateVbbBytesBlackbox(bps15, span, srcW) {
+      return estimateVbbBlackboxPlan(bps15, span, srcW).bytes;
     }
 
     function estimateVbbFps(bps15, span, mode, width, srcW) {
       if (mode !== "duration" && mode !== "blackbox") return 15;
-      const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
-      const at15 = estimateVbbBytesAtWidth(bps15, s, vbbSampleBaseWidth(srcW), srcW);
-      if (at15 <= V2G_BLACKBOX_MAX_BYTES) return 15;
-      if (Math.round(at15 * (12 / 15)) <= V2G_BLACKBOX_MAX_BYTES) return 12;
-      return 10;
+      return estimateVbbBlackboxPlan(bps15, span, srcW).fps;
+    }
+
+    function estimateVbbCompressRounds(bps15, span, mode, srcW) {
+      if (mode !== "duration" && mode !== "blackbox") return 0;
+      return estimateVbbBlackboxPlan(bps15, span, srcW).compressRounds;
     }
 
     function estimateVbbBytes(bps15, span, mode, width, srcW) {
@@ -4988,6 +5032,12 @@
         return estimateVbbBytesBlackbox(bps15, s, srcW);
       }
       return estimateVbbBytesAtWidth(bps15, s, width || vbbSampleBaseWidth(srcW), srcW);
+    }
+
+    function formatVbbFpsTip(fps, compressRounds) {
+      const n = Number(compressRounds) || 0;
+      if (n > 0) return `${fps || 15}FPS（预计压${n}轮）`;
+      return `${fps || 15}FPS`;
     }
 
     function resolveVbbWidthForSpan(bps15, span, srcW) {
@@ -5007,19 +5057,20 @@
       return Math.max(VBB_MIN_SPAN, Math.min(VBB_CLARITY_MAX_SPAN, span));
     }
 
-    function describeVbbExpect(mode, targetSpan, clarityMax, durationMax, maxW, estFps) {
+    function describeVbbExpect(mode, targetSpan, clarityMax, durationMax, maxW, estFps, compressRounds) {
       const fps = estFps || 15;
+      const compressTip = compressRounds > 0 ? `，预计压${compressRounds}轮` : "";
       if (mode === "clarity") return "不压缩 · ≤6MB";
       if (mode === "sharp") return "缩短加宽 · 不压缩 · ≤6MB";
-      if (mode === "duration") return "必要时 15→12→10 降帧并压缩 · 够小再加宽 · ≤6MB";
+      if (mode === "duration") return `优先保 15FPS（超限先轻压再 12→10）${compressTip} · ≤6MB`;
       if (targetSpan < clarityMax - 0.05) {
         return `短于清晰档 · 目标宽${maxW || "?"} · 不压缩`;
       }
       if (targetSpan <= clarityMax + 0.05) return "接近清晰优先 · 尽量不压缩";
       if (targetSpan <= durationMax + 0.05) {
-        return `超过清晰安全时长 · 走黑盒（预计约 ${fps}FPS，可降帧/压缩）`;
+        return `超过清晰安全时长 · 走黑盒（预计 ${fps}FPS${compressTip}）`;
       }
-      return `目标偏长 · 走黑盒（预计约 ${fps}FPS），个别段可能接近 6MB 上限`;
+      return `目标偏长 · 走黑盒（预计 ${fps}FPS${compressTip}），个别段可能接近 6MB 上限`;
     }
 
     function annotateVbbPlan(plan, bps15, srcW) {
@@ -5036,6 +5087,7 @@
       const estMode = encode === "blackbox" ? "duration" : "clarity";
       const estBytes = estimateVbbBytes(bps15, avgSpan, estMode, maxW, srcW);
       const estFps = estimateVbbFps(bps15, avgSpan, estMode, maxW, srcW);
+      const estCompressRounds = estimateVbbCompressRounds(bps15, avgSpan, estMode, srcW);
       if ((encode === "clarity" || encode === "sharp") && estBytes > V2G_BLACKBOX_MAX_BYTES) {
         unsafe = true;
         note = `${note} · 预估超 6MB`;
@@ -5044,7 +5096,7 @@
         unsafe = true;
         note = `${note} · 实际单段长于安全时长`;
       }
-      return { ...plan, note, encode, unsafe, maxW, estBytes, estFps };
+      return { ...plan, note, encode, unsafe, maxW, estBytes, estFps, estCompressRounds };
     }
 
     function makeVbbPlanVariant(key, label, duration, maxSpan, bps15, note, opts = {}) {
@@ -5111,7 +5163,7 @@
       const ranges = buildVbbRanges(duration, target);
       const avgSpan = ranges.reduce((a, r) => a + r.span, 0) / Math.max(1, ranges.length);
       if (avgSpan > clarity.maxSpan + 0.05) {
-        const estFps = estimateVbbFps(bps15, avgSpan, "duration", V2G_BLACKBOX_BASE_W, srcW);
+        const estPlan = estimateVbbBlackboxPlan(bps15, avgSpan, srcW);
         return annotateVbbPlan(
           {
             key: "custom",
@@ -5120,9 +5172,18 @@
             ranges,
             count: ranges.length,
             avgSpan,
-            estBytes: estimateVbbBytes(bps15, avgSpan, "duration", V2G_BLACKBOX_BASE_W, srcW),
-            estFps,
-            note: describeVbbExpect("custom", target, clarity.maxSpan, durationPlan.maxSpan, V2G_BLACKBOX_BASE_W, estFps),
+            estBytes: estPlan.bytes,
+            estFps: estPlan.fps,
+            estCompressRounds: estPlan.compressRounds,
+            note: describeVbbExpect(
+              "custom",
+              target,
+              clarity.maxSpan,
+              durationPlan.maxSpan,
+              V2G_BLACKBOX_BASE_W,
+              estPlan.fps,
+              estPlan.compressRounds
+            ),
             encode: "blackbox",
             maxW: V2G_BLACKBOX_BASE_W,
           },
@@ -5143,7 +5204,8 @@
           avgSpan,
           estBytes: estimateVbbBytes(bps15, avgSpan, "clarity", maxW, srcW),
           estFps,
-          note: describeVbbExpect("custom", target, clarity.maxSpan, durationPlan.maxSpan, maxW, estFps),
+          estCompressRounds: 0,
+          note: describeVbbExpect("custom", target, clarity.maxSpan, durationPlan.maxSpan, maxW, estFps, 0),
           encode,
           maxW,
         },
@@ -5175,7 +5237,7 @@
           const line = document.createElement("span");
           line.className = "hint tight";
           const widthTip = p.maxW ? ` · 宽${p.maxW}` : "";
-          const fpsTip = p.estFps ? ` · ${p.estFps}FPS` : " · 15FPS";
+          const fpsTip = ` · ${formatVbbFpsTip(p.estFps || 15, p.estCompressRounds || 0)}`;
           line.textContent = `${p.count} 段 · 约 ${p.avgSpan.toFixed(1)}s/段${widthTip}${fpsTip} · 预估 ${formatKb(p.estBytes)}/段`;
           const note = document.createElement("span");
           note.className = "hint tight";
@@ -5191,7 +5253,7 @@
 
       if (vbbPlanSummary && active) {
         const widthTip = active.maxW ? ` · 目标宽 ${active.maxW}` : "";
-        const fpsTip = ` · ${active.estFps || 15}FPS`;
+        const fpsTip = ` · ${formatVbbFpsTip(active.estFps || 15, active.estCompressRounds || 0)}`;
         const warn = active.unsafe ? " ⚠ 可能超预算，执行时超限会降宽或改走黑盒。" : "";
         vbbPlanSummary.textContent = `将生成 ${active.count} 个切片 · 每段约 ${active.avgSpan.toFixed(1)}s${widthTip}${fpsTip} · 预估约 ${formatKb(active.estBytes)}/段 · ${active.note}（体积为估算，执行后以实测为准）${warn}`;
       }
@@ -5207,11 +5269,14 @@
           meta.className = "hint";
           const w = active.maxW || V2G_BLACKBOX_BASE_W;
           const mode = active.encode === "blackbox" ? "duration" : "clarity";
-          const rowFps = estimateVbbFps(vbbAnalysis.bps15, r.span, mode, w, vbbAnalysis.srcW);
-          meta.textContent = `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)} · ${r.span.toFixed(1)}s · 宽${w} · ${rowFps}FPS`;
+          const rowPlan =
+            mode === "duration"
+              ? estimateVbbBlackboxPlan(vbbAnalysis.bps15, r.span, vbbAnalysis.srcW)
+              : { fps: 15, compressRounds: 0, bytes: estimateVbbBytes(vbbAnalysis.bps15, r.span, mode, w, vbbAnalysis.srcW) };
+          meta.textContent = `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)} · ${r.span.toFixed(1)}s · 宽${w} · ${formatVbbFpsTip(rowPlan.fps, rowPlan.compressRounds)}`;
           const est = document.createElement("span");
           est.className = "mono hint tight";
-          est.textContent = `≈${formatKb(estimateVbbBytes(vbbAnalysis.bps15, r.span, mode, w, vbbAnalysis.srcW))}`;
+          est.textContent = `≈${formatKb(rowPlan.bytes)}`;
           row.append(title, meta, est);
           vbbPlanList.appendChild(row);
         });
@@ -5259,20 +5324,34 @@
         meta.textContent = bits.join(" · ");
         const actions = document.createElement("div");
         actions.className = "btn-row";
-        if (c.gifUrl) {
+        if (c.gifBlob) {
+          if (!c.gifUrl) c.gifUrl = URL.createObjectURL(c.gifBlob);
           const a = document.createElement("a");
           a.className = "secondary-btn";
           a.href = c.gifUrl;
           a.download = `bb-${String(idx + 1).padStart(2, "0")}.gif`;
           a.textContent = "下载 GIF";
           actions.appendChild(a);
+          const previewBtn = document.createElement("button");
+          previewBtn.type = "button";
+          previewBtn.className = "ghost-btn";
+          previewBtn.textContent = vbbPreviewIdx === idx ? "收起预览" : "预览";
+          previewBtn.addEventListener("click", () => {
+            vbbPreviewIdx = vbbPreviewIdx === idx ? -1 : idx;
+            renderVbbResults();
+          });
+          actions.appendChild(previewBtn);
         }
         top.append(title, meta, actions);
         row.appendChild(top);
-        if (c.gifUrl) {
+        // 默认不挂载全部 <img>，避免手机同时解码多个大 GIF 导致白屏/杀进程
+        if (c.gifBlob && vbbPreviewIdx === idx) {
+          if (!c.gifUrl) c.gifUrl = URL.createObjectURL(c.gifBlob);
           const img = document.createElement("img");
           img.className = "vsplit-clip-gif";
           img.alt = `黑盒片段 ${idx + 1}`;
+          img.loading = "lazy";
+          img.decoding = "async";
           img.src = c.gifUrl;
           row.appendChild(img);
         }
@@ -5448,6 +5527,9 @@
           `分析完成 · 样片 ${formatKb(sample.blob.size)} / ${vbbAnalysis.sampleSpan.toFixed(1)}s`
         );
         toast(`清晰 ${clarity.count} 段 · 锐度 ${sharp.count} 段(宽${sharp.maxW}) · 时长 ${durationPlan.count} 段`);
+        if (isLikelyMobileBrowser() && duration >= 90) {
+          toast("约 2 分钟及以上视频在手机上容易内存不足白屏，建议缩短片段或用电脑处理");
+        }
       } catch (err) {
         if (String(err && err.message) !== "已取消") setError(vbbError, err.message || String(err));
         else toast("已取消分析");
@@ -5473,6 +5555,11 @@
       const srcW = vbbVideo?.videoWidth || vbbAnalysis?.srcW || 0;
       const srcH = vbbVideo?.videoHeight || vbbAnalysis?.srcH || 0;
       const isAborted = () => abortVbb;
+      const mobile = isLikelyMobileBrowser();
+      const longJob = (vbbAnalysis?.duration || 0) >= 90 || plan.ranges.length >= 8;
+      if (mobile && longJob) {
+        toast("视频较长：手机可能因内存不足白屏。已改为按需预览；建议分段处理或用电脑。");
+      }
       try {
         await prewarmFfmpegEngine().catch(() => {});
         for (let i = 0; i < plan.ranges.length; i++) {
@@ -5565,7 +5652,8 @@
             }
             if (!encoded?.blob) throw new Error("未产出 GIF");
             clip.gifBlob = encoded.blob;
-            clip.gifUrl = URL.createObjectURL(encoded.blob);
+            // 延迟创建 ObjectURL：列表默认不解码预览
+            clip.gifUrl = "";
             const bits = [];
             if (usedFallback) bits.push("超限→黑盒");
             else if (isWide && usedWidth !== (plan.maxW || V2G_BLACKBOX_BASE_W)) bits.push(`已降宽${usedWidth}`);
@@ -5584,7 +5672,16 @@
             clip.error = err.message || String(err);
           }
           vbbClips.push(clip);
+          // 只刷新列表元数据，不自动展开全部预览
           renderVbbResults();
+          // 让出主线程，便于 Safari 回收临时内存
+          await new Promise((r) => setTimeout(r, mobile ? 80 : 16));
+          if (mobile && (i + 1) % 3 === 0 && i < plan.ranges.length - 1) {
+            try {
+              terminateFfmpegInstance({ revokeAssets: false });
+            } catch (_) {}
+            await prewarmFfmpegEngine().catch(() => {});
+          }
         }
         const gifs = vbbClips.map((c, i) => ({ c, i })).filter((x) => x.c.gifBlob);
         if (gifs.length) {
@@ -5600,7 +5697,7 @@
         }
         const failN = vbbClips.filter((c) => c.error || !c.gifBlob).length;
         setVbbProgress(true, 1, `完成 · 成功 ${gifs.length}/${vbbClips.length}`);
-        toast(failN ? `完成，${failN} 段有问题` : `已生成 ${gifs.length} 个 GIF`);
+        toast(failN ? `完成，${failN} 段有问题` : `已生成 ${gifs.length} 个 GIF（点「预览」查看，避免占内存）`);
       } catch (err) {
         if (String(err && err.message) !== "已取消") setError(vbbError, err.message || String(err));
         else toast("已取消");
