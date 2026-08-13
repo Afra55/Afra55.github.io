@@ -47,11 +47,17 @@
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
+  width: 100%;
+  box-sizing: border-box;
   margin-bottom: 0.35rem;
 }
 
 .nav-close-btn {
   flex: 0 0 auto;
+  min-height: 2.5rem;
+  min-width: 3.25rem;
+  padding: 0.45rem 0.85rem;
+  touch-action: manipulation;
 }
 
 .nav-search-wrap {
@@ -210,7 +216,16 @@ body.nav-open {
   .nav-menu-btn,
   .workspace-switch,
   .nav-drawer-head {
-    display: inline-flex;
+    display: flex;
+  }
+
+  .nav-menu-btn,
+  .workspace-switch {
+    touch-action: manipulation;
+  }
+
+  .nav-drawer-head {
+    width: 100%;
   }
 
   .nav-backdrop {
