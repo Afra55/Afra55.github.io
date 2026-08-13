@@ -790,9 +790,9 @@ a.secondary-btn {
 
 .json-area {
   min-height: 12rem;
-  max-height: none;
+  max-height: min(42vh, 28rem);
   overflow: auto;
-  field-sizing: content;
+  resize: vertical;
 }
 
 .primary-btn:disabled {
