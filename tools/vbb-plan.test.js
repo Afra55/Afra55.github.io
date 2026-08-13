@@ -53,11 +53,30 @@ function estimateVbbBytesAtWidth(bps15, span, width, srcW) {
   return Math.round(bps15 * s * scale);
 }
 
+function estimateVbbBytesBlackbox(bps15, span, srcW) {
+  const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
+  const at15 = estimateVbbBytesAtWidth(bps15, s, vbbSampleBaseWidth(srcW), srcW);
+  if (at15 <= V2G_BLACKBOX_MAX_BYTES) return at15;
+  const at12 = Math.round(at15 * (12 / 15));
+  if (at12 <= V2G_BLACKBOX_MAX_BYTES) return at12;
+  const at10 = Math.round(at15 * (10 / 15));
+  if (at10 <= V2G_BLACKBOX_MAX_BYTES) return at10;
+  return V2G_BLACKBOX_MAX_BYTES;
+}
+
+function estimateVbbFps(bps15, span, mode, width, srcW) {
+  if (mode !== "duration" && mode !== "blackbox") return 15;
+  const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
+  const at15 = estimateVbbBytesAtWidth(bps15, s, vbbSampleBaseWidth(srcW), srcW);
+  if (at15 <= V2G_BLACKBOX_MAX_BYTES) return 15;
+  if (Math.round(at15 * (12 / 15)) <= V2G_BLACKBOX_MAX_BYTES) return 12;
+  return 10;
+}
+
 function estimateVbbBytes(bps15, span, mode, width, srcW) {
   const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
   if (mode === "duration" || mode === "blackbox") {
-    const raw = bps15 * (10 / 15) * 0.55 * s;
-    return Math.min(V2G_BLACKBOX_MAX_BYTES, Math.round(raw));
+    return estimateVbbBytesBlackbox(bps15, s, srcW);
   }
   return estimateVbbBytesAtWidth(bps15, s, width || vbbSampleBaseWidth(srcW), srcW);
 }
@@ -125,6 +144,37 @@ function almost(a, b, eps = 1e-6) {
   const w420 = estimateVbbBytesAtWidth(bps, 5, 420, 1280);
   assert(w540 > w420, "wider => larger estimate");
   assert(almost(w540 / w420, (540 / 420) ** 2, 0.02), "width scales ~square");
+}
+
+{
+  // 黑盒预估应随时长单调不减；超预算时贴近 6MB，而不是被压到很小
+  const bps = 800000; // 约 0.8MB/s @15FPS/420
+  const e4 = estimateVbbBytes(bps, 4, "duration");
+  const e6 = estimateVbbBytes(bps, 6, "duration");
+  const e8 = estimateVbbBytes(bps, 8, "duration");
+  const e20 = estimateVbbBytes(bps, 20, "duration");
+  assert(e6 >= e4, `blackbox 6s >= 4s (${e6} vs ${e4})`);
+  assert(e8 >= e6, `blackbox 8s >= 6s (${e8} vs ${e6})`);
+  assert(e20 >= e8, `blackbox 20s >= 8s (${e20} vs ${e8})`);
+  assert(e20 >= 5 * 1024 * 1024, `long blackbox should near 6MB, got ${e20}`);
+  assert(estimateVbbFps(bps, 4, "duration") === 15, "short blackbox stays 15fps");
+  assert(estimateVbbFps(bps, 20, "duration") <= 12, "long blackbox drops fps");
+}
+
+{
+  // 自定义：更少段（更长）在黑盒路径下预估不应更小
+  const bps15 = (3.2 * 1024 * 1024) / 2.5;
+  const duration = 56;
+  const r8 = buildVbbRanges(duration, 7);
+  const r7 = buildVbbRanges(duration, 8);
+  assert(r8.length === 8, `expect 8 clips, got ${r8.length}`);
+  assert(r7.length === 7, `expect 7 clips, got ${r7.length}`);
+  const avg8 = r8.reduce((a, x) => a + x.span, 0) / r8.length;
+  const avg7 = r7.reduce((a, x) => a + x.span, 0) / r7.length;
+  assert(avg7 > avg8, "7 clips should be longer each");
+  const est8 = estimateVbbBytes(bps15, avg8, "duration");
+  const est7 = estimateVbbBytes(bps15, avg7, "duration");
+  assert(est7 >= est8, `7 clips est should >= 8 clips (${est7} vs ${est8})`);
 }
 
 {
