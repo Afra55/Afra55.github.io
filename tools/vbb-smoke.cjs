@@ -293,7 +293,9 @@ async function main() {
   if (afterAnalyze.cards !== 3) problems.push(`expected 3 compare cards, got ${afterAnalyze.cards}`);
   if (afterAnalyze.runDisabled !== false) problems.push("run should enable after analyze");
   if (!durationMode.active) problems.push("duration mode not active");
+  if (!/FPS/i.test(durationMode.summary)) problems.push("duration summary missing FPS");
   if (!sharpMode.active) problems.push("sharp mode not active");
+  if (!/FPS/i.test(sharpMode.summary + sharpMode.cardText)) problems.push("sharp summary missing FPS");
   if (!/宽\s*[4-7][0-9]{2}|宽[4-7][0-9]{2}/.test(sharpMode.summary + sharpMode.cardText)) {
     problems.push("sharp mode missing width hint");
   }

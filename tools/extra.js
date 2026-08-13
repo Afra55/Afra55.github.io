@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.13-g";
+  const GIF_TOOL_VERSION = "2026.08.13-i";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -4961,11 +4961,31 @@
       return Math.round(bps15 * s * scale);
     }
 
+    /** 黑盒路径体积预估：随时长单调不减，超预算时贴近 6MB */
+    function estimateVbbBytesBlackbox(bps15, span, srcW) {
+      const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
+      const at15 = estimateVbbBytesAtWidth(bps15, s, vbbSampleBaseWidth(srcW), srcW);
+      if (at15 <= V2G_BLACKBOX_MAX_BYTES) return at15;
+      const at12 = Math.round(at15 * (12 / 15));
+      if (at12 <= V2G_BLACKBOX_MAX_BYTES) return at12;
+      const at10 = Math.round(at15 * (10 / 15));
+      if (at10 <= V2G_BLACKBOX_MAX_BYTES) return at10;
+      return V2G_BLACKBOX_MAX_BYTES;
+    }
+
+    function estimateVbbFps(bps15, span, mode, width, srcW) {
+      if (mode !== "duration" && mode !== "blackbox") return 15;
+      const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
+      const at15 = estimateVbbBytesAtWidth(bps15, s, vbbSampleBaseWidth(srcW), srcW);
+      if (at15 <= V2G_BLACKBOX_MAX_BYTES) return 15;
+      if (Math.round(at15 * (12 / 15)) <= V2G_BLACKBOX_MAX_BYTES) return 12;
+      return 10;
+    }
+
     function estimateVbbBytes(bps15, span, mode, width, srcW) {
       const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
       if (mode === "duration" || mode === "blackbox") {
-        const raw = bps15 * (10 / 15) * 0.55 * s;
-        return Math.min(V2G_BLACKBOX_MAX_BYTES, Math.round(raw));
+        return estimateVbbBytesBlackbox(bps15, s, srcW);
       }
       return estimateVbbBytesAtWidth(bps15, s, width || vbbSampleBaseWidth(srcW), srcW);
     }
@@ -4987,16 +5007,19 @@
       return Math.max(VBB_MIN_SPAN, Math.min(VBB_CLARITY_MAX_SPAN, span));
     }
 
-    function describeVbbExpect(mode, targetSpan, clarityMax, durationMax, maxW) {
-      if (mode === "clarity") return "固定 15FPS · 宽420 · 不压缩 · ≤6MB";
-      if (mode === "sharp") return `15FPS · 宽${maxW || "?"} · 缩短加宽 · 不压缩 · ≤6MB`;
-      if (mode === "duration") return "现网黑盒：15→12→10 · 可压缩 · 够小再加宽 · ≤6MB";
+    function describeVbbExpect(mode, targetSpan, clarityMax, durationMax, maxW, estFps) {
+      const fps = estFps || 15;
+      if (mode === "clarity") return "不压缩 · ≤6MB";
+      if (mode === "sharp") return "缩短加宽 · 不压缩 · ≤6MB";
+      if (mode === "duration") return "必要时 15→12→10 降帧并压缩 · 够小再加宽 · ≤6MB";
       if (targetSpan < clarityMax - 0.05) {
-        return `短于清晰档：15FPS · 目标宽${maxW || "?"} · 不压缩`;
+        return `短于清晰档 · 目标宽${maxW || "?"} · 不压缩`;
       }
-      if (targetSpan <= clarityMax + 0.05) return "接近清晰优先：尽量 15FPS 不压缩";
-      if (targetSpan <= durationMax + 0.05) return "超过清晰安全时长：执行时走完整黑盒（可降帧/压缩）";
-      return "目标偏长：执行走黑盒，个别段可能仍接近 6MB 上限";
+      if (targetSpan <= clarityMax + 0.05) return "接近清晰优先 · 尽量不压缩";
+      if (targetSpan <= durationMax + 0.05) {
+        return `超过清晰安全时长 · 走黑盒（预计约 ${fps}FPS，可降帧/压缩）`;
+      }
+      return `目标偏长 · 走黑盒（预计约 ${fps}FPS），个别段可能接近 6MB 上限`;
     }
 
     function annotateVbbPlan(plan, bps15, srcW) {
@@ -5012,6 +5035,7 @@
       }
       const estMode = encode === "blackbox" ? "duration" : "clarity";
       const estBytes = estimateVbbBytes(bps15, avgSpan, estMode, maxW, srcW);
+      const estFps = estimateVbbFps(bps15, avgSpan, estMode, maxW, srcW);
       if ((encode === "clarity" || encode === "sharp") && estBytes > V2G_BLACKBOX_MAX_BYTES) {
         unsafe = true;
         note = `${note} · 预估超 6MB`;
@@ -5020,7 +5044,7 @@
         unsafe = true;
         note = `${note} · 实际单段长于安全时长`;
       }
-      return { ...plan, note, encode, unsafe, maxW, estBytes };
+      return { ...plan, note, encode, unsafe, maxW, estBytes, estFps };
     }
 
     function makeVbbPlanVariant(key, label, duration, maxSpan, bps15, note, opts = {}) {
@@ -5070,7 +5094,7 @@
         duration,
         targetSpan,
         bps15,
-        `15FPS · 宽${maxW} · 缩短加宽 · 不压缩 · ≤6MB`,
+        `宽${maxW} · 缩短加宽 · 不压缩 · ≤6MB`,
         { encode: "sharp", maxW, srcW }
       );
     }
@@ -5087,6 +5111,7 @@
       const ranges = buildVbbRanges(duration, target);
       const avgSpan = ranges.reduce((a, r) => a + r.span, 0) / Math.max(1, ranges.length);
       if (avgSpan > clarity.maxSpan + 0.05) {
+        const estFps = estimateVbbFps(bps15, avgSpan, "duration", V2G_BLACKBOX_BASE_W, srcW);
         return annotateVbbPlan(
           {
             key: "custom",
@@ -5096,7 +5121,8 @@
             count: ranges.length,
             avgSpan,
             estBytes: estimateVbbBytes(bps15, avgSpan, "duration", V2G_BLACKBOX_BASE_W, srcW),
-            note: describeVbbExpect("custom", target, clarity.maxSpan, durationPlan.maxSpan, V2G_BLACKBOX_BASE_W),
+            estFps,
+            note: describeVbbExpect("custom", target, clarity.maxSpan, durationPlan.maxSpan, V2G_BLACKBOX_BASE_W, estFps),
             encode: "blackbox",
             maxW: V2G_BLACKBOX_BASE_W,
           },
@@ -5106,6 +5132,7 @@
       }
       const maxW = resolveVbbWidthForSpan(bps15, avgSpan, srcW);
       const encode = maxW > vbbSampleBaseWidth(srcW) + 1 ? "sharp" : "clarity";
+      const estFps = 15;
       return annotateVbbPlan(
         {
           key: "custom",
@@ -5115,7 +5142,8 @@
           count: ranges.length,
           avgSpan,
           estBytes: estimateVbbBytes(bps15, avgSpan, "clarity", maxW, srcW),
-          note: describeVbbExpect("custom", target, clarity.maxSpan, durationPlan.maxSpan, maxW),
+          estFps,
+          note: describeVbbExpect("custom", target, clarity.maxSpan, durationPlan.maxSpan, maxW, estFps),
           encode,
           maxW,
         },
@@ -5147,7 +5175,8 @@
           const line = document.createElement("span");
           line.className = "hint tight";
           const widthTip = p.maxW ? ` · 宽${p.maxW}` : "";
-          line.textContent = `${p.count} 段 · 约 ${p.avgSpan.toFixed(1)}s/段${widthTip} · 预估 ${formatKb(p.estBytes)}/段`;
+          const fpsTip = p.estFps ? ` · ${p.estFps}FPS` : " · 15FPS";
+          line.textContent = `${p.count} 段 · 约 ${p.avgSpan.toFixed(1)}s/段${widthTip}${fpsTip} · 预估 ${formatKb(p.estBytes)}/段`;
           const note = document.createElement("span");
           note.className = "hint tight";
           note.textContent = p.note;
@@ -5162,8 +5191,9 @@
 
       if (vbbPlanSummary && active) {
         const widthTip = active.maxW ? ` · 目标宽 ${active.maxW}` : "";
+        const fpsTip = ` · ${active.estFps || 15}FPS`;
         const warn = active.unsafe ? " ⚠ 可能超预算，执行时超限会降宽或改走黑盒。" : "";
-        vbbPlanSummary.textContent = `将生成 ${active.count} 个切片 · 每段约 ${active.avgSpan.toFixed(1)}s${widthTip} · 预估约 ${formatKb(active.estBytes)}/段 · ${active.note}（体积为估算，执行后以实测为准）${warn}`;
+        vbbPlanSummary.textContent = `将生成 ${active.count} 个切片 · 每段约 ${active.avgSpan.toFixed(1)}s${widthTip}${fpsTip} · 预估约 ${formatKb(active.estBytes)}/段 · ${active.note}（体积为估算，执行后以实测为准）${warn}`;
       }
 
       if (vbbPlanList && active) {
@@ -5176,10 +5206,11 @@
           const meta = document.createElement("p");
           meta.className = "hint";
           const w = active.maxW || V2G_BLACKBOX_BASE_W;
-          meta.textContent = `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)} · ${r.span.toFixed(1)}s · 宽${w}`;
+          const mode = active.encode === "blackbox" ? "duration" : "clarity";
+          const rowFps = estimateVbbFps(vbbAnalysis.bps15, r.span, mode, w, vbbAnalysis.srcW);
+          meta.textContent = `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)} · ${r.span.toFixed(1)}s · 宽${w} · ${rowFps}FPS`;
           const est = document.createElement("span");
           est.className = "mono hint tight";
-          const mode = active.encode === "blackbox" ? "duration" : "clarity";
           est.textContent = `≈${formatKb(estimateVbbBytes(vbbAnalysis.bps15, r.span, mode, w, vbbAnalysis.srcW))}`;
           row.append(title, meta, est);
           vbbPlanList.appendChild(row);
@@ -5382,7 +5413,7 @@
           duration,
           clarityMax,
           bps15,
-          "15FPS · 宽420 · 不压缩 · ≤6MB",
+          "宽420 · 不压缩 · ≤6MB",
           { encode: "clarity", maxW: V2G_BLACKBOX_BASE_W, srcW }
         );
         const sharp = makeSharpPlan(duration, bps15, srcW, clarityMax);
@@ -5392,7 +5423,7 @@
           duration,
           durationMax,
           bps15,
-          "可降帧/压缩（现网黑盒）· 段更长、段数更少",
+          "可降帧/压缩 · 段更长、段数更少",
           { encode: "blackbox", maxW: V2G_BLACKBOX_BASE_W, srcW }
         );
         vbbAnalysis = {
