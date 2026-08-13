@@ -763,66 +763,102 @@
     btn.addEventListener("click", () => copyFromValueEl(btn.dataset.copyValue));
   });
 
-  // ---- Tool order (group default + user drag) ----
-  const ORDER_KEY = "devtools-tool-order-v2";
-  const DEFAULT_ORDER = [
-    "timestamp",
-    "timediff",
-    "cron",
-    "ahex",
-    "color",
-    "eyedropper",
-    "password",
-    "base64",
-    "imgb64",
-    "url",
-    "hash",
-    "uuid",
-    "json",
-    "yaml",
-    "sharecard",
-    "query",
-    "text",
-    "caseconv",
-    "regex",
-    "diff",
-    "qrcode",
-    "gifmaker",
-    "vsplit",
-    "vbb",
-    "imgkit",
-    "units",
-    "coord",
-    "numbase",
-    "markdown",
-    "adb",
+  // ---- Workspace shell: groups, search, single-tool route ----
+  const ORDER_KEY = "devtools-tool-order-v3";
+  const RECENT_KEY = "devtools-tool-recent-v1";
+  const MEDIA_TABS = ["gifmaker", "vsplit", "vbb"];
+  const HASH_ALIASES = {
+    gifmaker: { tool: "media", tab: "gifmaker" },
+    vsplit: { tool: "media", tab: "vsplit" },
+    vbb: { tool: "media", tab: "vbb" },
+  };
+  const TOOL_GROUPS = [
+    { id: "time", label: "时间", tools: ["timestamp", "timediff", "cron"] },
+    { id: "color", label: "颜色", tools: ["ahex", "color", "eyedropper"] },
+    { id: "encode", label: "编码与安全", tools: ["base64", "imgb64", "url", "hash", "password", "uuid"] },
+    {
+      id: "data",
+      label: "数据与文本",
+      tools: ["json", "yaml", "sharecard", "query", "text", "caseconv", "regex", "diff", "qrcode", "markdown"],
+    },
+    { id: "media", label: "媒体", tools: ["media"] },
+    { id: "image", label: "图片", tools: ["imgkit"] },
+    { id: "convert", label: "换算", tools: ["units", "coord", "numbase"] },
+    { id: "device", label: "设备", tools: ["adb"] },
   ];
+  const TOOL_META = {
+    timestamp: { name: "时间戳", aliases: ["时间", "timestamp", "date"] },
+    timediff: { name: "时间差", aliases: ["时差", "diff time"] },
+    cron: { name: "Cron", aliases: ["定时", "crontab"] },
+    ahex: { name: "AHEX", aliases: ["颜色", "alpha"] },
+    color: { name: "颜色互转", aliases: ["rgb", "hex", "hsl"] },
+    eyedropper: { name: "屏幕取色", aliases: ["取色", "eyedropper"] },
+    password: { name: "密码生成", aliases: ["password", "随机密码"] },
+    base64: { name: "Base64", aliases: ["编码", "b64"] },
+    imgb64: { name: "图片 Base64", aliases: ["图片编码"] },
+    url: { name: "URL", aliases: ["encode", "decode"] },
+    hash: { name: "Hash", aliases: ["md5", "sha"] },
+    uuid: { name: "UUID", aliases: ["guid"] },
+    json: { name: "JSON", aliases: ["格式化", "压缩"] },
+    yaml: { name: "YAML", aliases: ["yml"] },
+    sharecard: { name: "代码卡片", aliases: ["分享", "卡片"] },
+    query: { name: "Query / JWT", aliases: ["jwt", "token", "query"] },
+    text: { name: "文本", aliases: ["统计", "去重"] },
+    caseconv: { name: "命名转换", aliases: ["驼峰", "snake", "case"] },
+    regex: { name: "正则", aliases: ["regexp", "正则表达式"] },
+    diff: { name: "Diff", aliases: ["对比", "差异"] },
+    qrcode: { name: "二维码", aliases: ["qr", "扫码"] },
+    media: { name: "媒体 / 动图", aliases: ["gif", "视频", "黑盒", "切分", "webp", "ffmpeg"] },
+    imgkit: { name: "图片工具", aliases: ["裁剪", "压缩", "水印", "拼接"] },
+    units: { name: "单位换算", aliases: ["长度", "质量"] },
+    coord: { name: "坐标系互转", aliases: ["gps", "坐标", "gcj", "wgs"] },
+    numbase: { name: "进制转换", aliases: ["二进制", "十六进制"] },
+    markdown: { name: "Markdown", aliases: ["md", "预览"] },
+    adb: { name: "ADB 工具", aliases: ["安卓", "android", "设备"] },
+  };
+  const DEFAULT_ORDER = TOOL_GROUPS.flatMap((g) => g.tools);
 
   const navEl = $("#tool-nav") || $(".tool-nav");
   const shellEl = $(".shell");
   const comingEl = $("#coming");
+  const navBar = $("#nav-bar") || $(".nav-bar");
+  const navBackdrop = $("#nav-backdrop");
+  const navOpenBtn = $("#nav-open");
+  const navCloseBtn = $("#nav-close");
+  const workspaceSwitch = $("#workspace-switch");
+  const workspaceTitle = $("#workspace-title");
+  const mediaSubnav = $("#media-subnav");
+  const toolSearch = $("#tool-search");
+  const recentWrap = $("#tool-recent");
+  const recentList = $("#tool-recent-list");
 
-  function getNavLinks() {
-    return $$(".tool-nav-link", navEl);
+  let currentTool = "timestamp";
+  let currentMediaTab = "gifmaker";
+
+  function toolName(id) {
+    return TOOL_META[id]?.name || id;
   }
 
-  function currentOrderFromDom() {
-    return getNavLinks()
-      .map((link) => link.dataset.tool || (link.getAttribute("href") || "").replace(/^#/, ""))
-      .filter(Boolean);
+  function normalizeOrder(raw) {
+    const legacyMap = { gifmaker: "media", vsplit: "media", vbb: "media" };
+    const seen = new Set();
+    const out = [];
+    const push = (id) => {
+      const next = legacyMap[id] || id;
+      if (!DEFAULT_ORDER.includes(next) || seen.has(next)) return;
+      seen.add(next);
+      out.push(next);
+    };
+    (Array.isArray(raw) ? raw : []).forEach(push);
+    DEFAULT_ORDER.forEach(push);
+    return out;
   }
 
   function loadOrder() {
     try {
-      const raw = localStorage.getItem(ORDER_KEY);
+      const raw = localStorage.getItem(ORDER_KEY) || localStorage.getItem("devtools-tool-order-v2");
       if (!raw) return DEFAULT_ORDER.slice();
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) return DEFAULT_ORDER.slice();
-      const cleaned = parsed.filter((id) => DEFAULT_ORDER.includes(id));
-      for (const id of DEFAULT_ORDER) {
-        if (!cleaned.includes(id)) cleaned.push(id);
-      }
-      return cleaned;
+      return normalizeOrder(JSON.parse(raw));
     } catch (_) {
       return DEFAULT_ORDER.slice();
     }
@@ -832,181 +868,292 @@
     localStorage.setItem(ORDER_KEY, JSON.stringify(order));
   }
 
-  function applyOrder(order) {
-    const linkMap = new Map(getNavLinks().map((link) => [link.dataset.tool, link]));
-    order.forEach((id) => {
-      const link = linkMap.get(id);
-      if (link) navEl.appendChild(link);
-    });
-
-    order.forEach((id) => {
-      const section = document.getElementById(id);
-      if (section && shellEl) {
-        if (comingEl) shellEl.insertBefore(section, comingEl);
-        else shellEl.appendChild(section);
-      }
-    });
-    if (comingEl && shellEl) shellEl.appendChild(comingEl);
-  }
-
-  function getSectionsInNavOrder() {
-    return getNavLinks()
-      .map((link) => document.getElementById(link.dataset.tool))
-      .filter(Boolean);
-  }
-
-  function syncNav() {
-    const sections = getSectionsInNavOrder();
-    const desktopSidebar = window.matchMedia("(min-width: 901px)").matches;
-    const y = window.scrollY + (desktopSidebar ? 96 : 140);
-    let current = sections[0]?.id;
-    for (const section of sections) {
-      if (section && section.offsetTop <= y) current = section.id;
+  function loadRecent() {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
+      return normalizeOrder(parsed).slice(0, 8);
+    } catch (_) {
+      return [];
     }
-    getNavLinks().forEach((link) => {
-      link.classList.toggle("is-active", link.dataset.tool === current);
+  }
+
+  function pushRecent(id) {
+    if (!DEFAULT_ORDER.includes(id)) return;
+    const next = [id, ...loadRecent().filter((x) => x !== id)].slice(0, 8);
+    localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+    renderRecent();
+  }
+
+  function getNavLinks() {
+    return $$(".tool-nav-link", navEl);
+  }
+
+  function renderNav(order) {
+    if (!navEl) return;
+    const list = order || loadOrder();
+    navEl.innerHTML = "";
+    TOOL_GROUPS.forEach((group) => {
+      const tools = list.filter((id) => group.tools.includes(id));
+      if (!tools.length) return;
+      const wrap = document.createElement("div");
+      wrap.className = "nav-group";
+      wrap.dataset.group = group.id;
+      const title = document.createElement("p");
+      title.className = "nav-group-title";
+      title.textContent = group.label;
+      wrap.appendChild(title);
+      tools.forEach((id) => {
+        const a = document.createElement("a");
+        a.className = "tool-nav-link";
+        a.href = id === "media" ? "#media/gifmaker" : `#${id}`;
+        a.dataset.tool = id;
+        a.draggable = true;
+        a.textContent = toolName(id);
+        wrap.appendChild(a);
+      });
+      navEl.appendChild(wrap);
+    });
+    bindNavInteractions();
+    applySearchFilter(toolSearch?.value || "");
+  }
+
+  function renderRecent() {
+    if (!recentWrap || !recentList) return;
+    const items = loadRecent();
+    recentList.innerHTML = "";
+    if (!items.length) {
+      recentWrap.hidden = true;
+      return;
+    }
+    recentWrap.hidden = false;
+    items.forEach((id) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "nav-recent-chip";
+      btn.textContent = toolName(id);
+      btn.addEventListener("click", () => navigateTo(id, id === "media" ? currentMediaTab : null));
+      recentList.appendChild(btn);
     });
   }
 
-  applyOrder(loadOrder());
+  function setDrawerOpen(open) {
+    document.body.classList.toggle("nav-open", !!open);
+    if (navOpenBtn) navOpenBtn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (navBackdrop) navBackdrop.hidden = !open;
+    if (open) {
+      setTimeout(() => toolSearch?.focus?.(), 50);
+    }
+  }
+
+  function parseRoute() {
+    const raw = String(location.hash || "").replace(/^#/, "").trim();
+    if (!raw) return { tool: "timestamp", tab: "gifmaker" };
+    const parts = raw.split(/[/?]/).filter(Boolean);
+    const head = parts[0] || "timestamp";
+    if (HASH_ALIASES[head]) return { ...HASH_ALIASES[head] };
+    if (head === "media") {
+      const tab = MEDIA_TABS.includes(parts[1]) ? parts[1] : "gifmaker";
+      return { tool: "media", tab };
+    }
+    if (DEFAULT_ORDER.includes(head)) return { tool: head, tab: "gifmaker" };
+    return { tool: "timestamp", tab: "gifmaker" };
+  }
+
+  function routeHash(tool, tab) {
+    if (tool === "media") return `#media/${tab || "gifmaker"}`;
+    return `#${tool}`;
+  }
+
+  function applyRoute({ skipRecent } = {}) {
+    const route = parseRoute();
+    currentTool = route.tool;
+    currentMediaTab = route.tab || "gifmaker";
+
+    // 旧深链 #gifmaker / #vsplit / #vbb → 规范为 #media/...
+    const rawHead = String(location.hash || "")
+      .replace(/^#/, "")
+      .trim()
+      .split(/[/?]/)[0];
+    const canonical = routeHash(currentTool, currentMediaTab);
+    if (HASH_ALIASES[rawHead] || (rawHead === "media" && !String(location.hash || "").includes("/"))) {
+      if (`#${String(location.hash || "").replace(/^#/, "")}` !== canonical) {
+        history.replaceState(null, "", canonical);
+      }
+    }
+
+    $$(".tool-panel").forEach((panel) => {
+      const id = panel.id;
+      let active = false;
+      if (currentTool === "media") active = id === currentMediaTab;
+      else active = id === currentTool;
+      panel.classList.toggle("is-workspace-active", active);
+      panel.hidden = !active;
+    });
+    if (comingEl) {
+      comingEl.hidden = true;
+      comingEl.classList.remove("is-workspace-active");
+    }
+
+    if (mediaSubnav) {
+      mediaSubnav.hidden = currentTool !== "media";
+      $$(".media-tab", mediaSubnav).forEach((btn) => {
+        const on = btn.dataset.mediaTab === currentMediaTab;
+        btn.classList.toggle("is-active", on);
+        btn.setAttribute("aria-selected", on ? "true" : "false");
+      });
+    }
+
+    const title =
+      currentTool === "media"
+        ? `${toolName("media")} · ${
+            currentMediaTab === "vsplit" ? "视频切分" : currentMediaTab === "vbb" ? "一键黑盒" : "GIF"
+          }`
+        : toolName(currentTool);
+    if (workspaceTitle) workspaceTitle.textContent = title;
+    document.title = `${title} · DevTools`;
+
+    getNavLinks().forEach((link) => {
+      link.classList.toggle("is-active", link.dataset.tool === currentTool);
+    });
+
+    if (!skipRecent) pushRecent(currentTool);
+    setDrawerOpen(false);
+    window.scrollTo(0, 0);
+    window.dispatchEvent(
+      new CustomEvent("devtools:route", {
+        detail: { tool: currentTool, mediaTab: currentMediaTab },
+      })
+    );
+  }
+
+  function navigateTo(tool, tab, { replace = false } = {}) {
+    const hash = routeHash(tool, tab || (tool === "media" ? currentMediaTab : null));
+    const current = `#${String(location.hash || "").replace(/^#/, "")}`;
+    if (replace) history.replaceState(null, "", hash);
+    else if (current !== hash) history.pushState(null, "", hash);
+    applyRoute();
+  }
+
+  function applySearchFilter(query) {
+    const q = String(query || "").trim().toLowerCase();
+    $$(".nav-group", navEl).forEach((group) => {
+      let any = false;
+      $$(".tool-nav-link", group).forEach((link) => {
+        const id = link.dataset.tool;
+        const meta = TOOL_META[id] || { name: id, aliases: [] };
+        const hay = `${meta.name} ${(meta.aliases || []).join(" ")} ${id}`.toLowerCase();
+        const show = !q || hay.includes(q);
+        link.classList.toggle("is-filtered-out", !show);
+        if (show) any = true;
+      });
+      group.classList.toggle("is-filtered-out", !any);
+    });
+  }
 
   let dragId = null;
   let didDrag = false;
-  getNavLinks().forEach((link) => {
-    link.addEventListener("dragstart", (e) => {
-      dragId = link.dataset.tool;
-      didDrag = true;
-      link.classList.add("is-dragging");
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData("text/plain", dragId);
+  function bindNavInteractions() {
+    getNavLinks().forEach((link) => {
+      if (link.dataset.boundNav === "1") return;
+      link.dataset.boundNav = "1";
+      link.addEventListener("dragstart", (e) => {
+        dragId = link.dataset.tool;
+        didDrag = true;
+        link.classList.add("is-dragging");
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", dragId);
+      });
+      link.addEventListener("dragend", () => {
+        link.classList.remove("is-dragging");
+        getNavLinks().forEach((l) => l.classList.remove("drag-over"));
+        dragId = null;
+        setTimeout(() => {
+          didDrag = false;
+        }, 0);
+      });
+      link.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (didDrag) return;
+        navigateTo(link.dataset.tool, link.dataset.tool === "media" ? currentMediaTab : null);
+      });
+      link.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        link.classList.add("drag-over");
+      });
+      link.addEventListener("dragleave", () => link.classList.remove("drag-over"));
+      link.addEventListener("drop", (e) => {
+        e.preventDefault();
+        link.classList.remove("drag-over");
+        const from = e.dataTransfer.getData("text/plain") || dragId;
+        const to = link.dataset.tool;
+        if (!from || !to || from === to) return;
+        const order = loadOrder();
+        const fromIdx = order.indexOf(from);
+        const toIdx = order.indexOf(to);
+        if (fromIdx < 0 || toIdx < 0) return;
+        order.splice(fromIdx, 1);
+        order.splice(toIdx, 0, from);
+        saveOrder(order);
+        renderNav(order);
+        applyRoute({ skipRecent: true });
+        showToast("已保存排序");
+      });
     });
-    link.addEventListener("dragend", () => {
-      link.classList.remove("is-dragging");
-      getNavLinks().forEach((l) => l.classList.remove("drag-over"));
-      dragId = null;
-      setTimeout(() => {
-        didDrag = false;
-      }, 0);
-    });
-    link.addEventListener("click", (e) => {
-      if (didDrag) e.preventDefault();
-    });
-    link.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = "move";
-      link.classList.add("drag-over");
-    });
-    link.addEventListener("dragleave", () => link.classList.remove("drag-over"));
-    link.addEventListener("drop", (e) => {
-      e.preventDefault();
-      link.classList.remove("drag-over");
-      const from = e.dataTransfer.getData("text/plain") || dragId;
-      const to = link.dataset.tool;
-      if (!from || !to || from === to) return;
-      const order = currentOrderFromDom();
-      const fromIdx = order.indexOf(from);
-      const toIdx = order.indexOf(to);
-      if (fromIdx < 0 || toIdx < 0) return;
-      order.splice(fromIdx, 1);
-      order.splice(toIdx, 0, from);
-      applyOrder(order);
-      saveOrder(order);
-      syncNav();
-      showToast("已保存排序");
-    });
-  });
+  }
 
   $("#nav-reset")?.addEventListener("click", () => {
     localStorage.removeItem(ORDER_KEY);
-    applyOrder(DEFAULT_ORDER.slice());
-    syncNav();
+    localStorage.removeItem("devtools-tool-order-v2");
+    renderNav(DEFAULT_ORDER.slice());
+    applyRoute({ skipRecent: true });
     showToast("已恢复默认排序");
   });
 
-  window.addEventListener("scroll", syncNav, { passive: true });
+  navOpenBtn?.addEventListener("click", () => setDrawerOpen(true));
+  navCloseBtn?.addEventListener("click", () => setDrawerOpen(false));
+  navBackdrop?.addEventListener("click", () => setDrawerOpen(false));
+  workspaceSwitch?.addEventListener("click", () => setDrawerOpen(true));
+  toolSearch?.addEventListener("input", () => applySearchFilter(toolSearch.value));
+  mediaSubnav?.addEventListener("click", (e) => {
+    const btn = e.target?.closest?.("[data-media-tab]");
+    if (!btn) return;
+    navigateTo("media", btn.dataset.mediaTab);
+  });
+  window.addEventListener("hashchange", () => applyRoute());
+  window.addEventListener("popstate", () => applyRoute());
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") setDrawerOpen(false);
+  });
 
-  // Mobile: hide sticky nav on scroll down, show on scroll up
-  const navBar = $(".nav-bar");
-  const siteHeader = $(".site-header");
-  const mobileNavMq = window.matchMedia("(max-width: 700px)");
+  // Desktop sidebar max-height only
   const desktopNavMq = window.matchMedia("(min-width: 901px)");
-  let lastScrollY = window.scrollY;
-  let scrollAcc = 0;
-  const NAV_HIDE_THRESHOLD = 28;
-  const NAV_TOP_FORCE_SHOW = 56;
-
-  function setNavCollapsed(collapsed) {
-    if (!navBar) return;
-    navBar.classList.toggle("is-collapsed", !!collapsed);
-  }
-
-  /** 桌面侧栏：max-height 扣掉当前可见顶栏，保证页顶也能滚到菜单底部 */
   function syncDesktopNavMaxHeight() {
     if (!navBar) return;
     if (!desktopNavMq.matches) {
       navBar.style.removeProperty("--nav-max-height");
       return;
     }
-    const stickyTop = 10;
-    const bottomGap = 12;
-    const headerBottom = siteHeader ? siteHeader.getBoundingClientRect().bottom : 0;
-    const start = Math.max(stickyTop, Math.ceil(headerBottom) + 8);
-    const available = Math.floor(window.innerHeight - start - bottomGap);
-    navBar.style.setProperty("--nav-max-height", `${Math.max(160, available)}px`);
+    const header = $(".site-header");
+    const headerH = header ? header.getBoundingClientRect().height : 64;
+    const topGap = 0.65 * 16;
+    const bottomGap = 16;
+    const maxH = Math.max(240, window.innerHeight - headerH - topGap - bottomGap);
+    navBar.style.setProperty("--nav-max-height", `${Math.floor(maxH)}px`);
   }
-
-  function onNavAutohideScroll() {
-    if (!navBar) return;
-    syncDesktopNavMaxHeight();
-    if (!mobileNavMq.matches) {
-      setNavCollapsed(false);
-      lastScrollY = window.scrollY;
-      scrollAcc = 0;
-      return;
-    }
-    const y = Math.max(0, window.scrollY);
-    const dy = y - lastScrollY;
-    lastScrollY = y;
-    if (y <= NAV_TOP_FORCE_SHOW) {
-      setNavCollapsed(false);
-      scrollAcc = 0;
-      return;
-    }
-    if (Math.abs(dy) < 1) return;
-    if ((dy > 0 && scrollAcc < 0) || (dy < 0 && scrollAcc > 0)) scrollAcc = 0;
-    scrollAcc += dy;
-    if (scrollAcc > NAV_HIDE_THRESHOLD) {
-      setNavCollapsed(true);
-      scrollAcc = 0;
-    } else if (scrollAcc < -NAV_HIDE_THRESHOLD) {
-      setNavCollapsed(false);
-      scrollAcc = 0;
-    }
-  }
-
-  window.addEventListener("scroll", onNavAutohideScroll, { passive: true });
   window.addEventListener("resize", syncDesktopNavMaxHeight, { passive: true });
   if (typeof desktopNavMq.addEventListener === "function") {
-    desktopNavMq.addEventListener("change", syncDesktopNavMaxHeight);
-  } else if (typeof desktopNavMq.addListener === "function") {
-    desktopNavMq.addListener(syncDesktopNavMaxHeight);
-  }
-  if (typeof mobileNavMq.addEventListener === "function") {
-    mobileNavMq.addEventListener("change", () => {
-      if (!mobileNavMq.matches) setNavCollapsed(false);
-      syncDesktopNavMaxHeight();
-    });
-  } else if (typeof mobileNavMq.addListener === "function") {
-    mobileNavMq.addListener(() => {
-      if (!mobileNavMq.matches) setNavCollapsed(false);
+    desktopNavMq.addEventListener("change", () => {
+      setDrawerOpen(false);
       syncDesktopNavMaxHeight();
     });
   }
-  getNavLinks().forEach((link) => {
-    link.addEventListener("click", () => setNavCollapsed(false));
-  });
   syncDesktopNavMaxHeight();
-  requestAnimationFrame(syncDesktopNavMaxHeight);
+
+  renderNav(loadOrder());
+  renderRecent();
+  if (!location.hash) history.replaceState(null, "", "#timestamp");
+  applyRoute();
 
   // Init
   const now = Date.now();
@@ -1016,5 +1163,4 @@
   renderFromAhexInput();
   syncChecksFromFlags();
   runRegex();
-  syncNav();
 })();

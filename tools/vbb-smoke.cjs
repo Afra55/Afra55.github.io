@@ -76,7 +76,11 @@ async function main() {
   const result = await page.evaluate(async () => {
     const out = {
       hasSection: Boolean(document.getElementById("vbb")),
-      hasNav: Boolean(document.querySelector('.tool-nav-link[data-tool="vbb"]')),
+      hasNav: Boolean(document.querySelector('.tool-nav-link[data-tool="media"]')),
+      mediaActive: document.querySelector('.tool-nav-link[data-tool="media"]')?.classList.contains("is-active"),
+      vbbActive: document.getElementById("vbb")?.classList.contains("is-workspace-active"),
+      hash: location.hash,
+      mediaSubnavVisible: !document.getElementById("media-subnav")?.hidden,
       version: document.getElementById("gif-tool-version")?.textContent || "",
       analyzeDisabled: document.getElementById("vbb-analyze")?.disabled,
       runDisabled: document.getElementById("vbb-run")?.disabled,
@@ -93,16 +97,13 @@ async function main() {
         "vbb-plan-list",
         "vbb-list",
       ].map((id) => ({ id, ok: Boolean(document.getElementById(id)) })),
-      orderHasVbb: false,
+      orderHasMedia: false,
     };
     try {
-      const raw = localStorage.getItem("devtools-tool-order-v2");
-      // DEFAULT_ORDER is internal; check nav contains vbb after app init
-      out.orderHasVbb = [...document.querySelectorAll(".tool-nav-link")].some((a) => a.dataset.tool === "vbb");
-      out.navAfterGif =
-        [...document.querySelectorAll(".tool-nav-link")].findIndex((a) => a.dataset.tool === "vsplit") >= 0 &&
-        [...document.querySelectorAll(".tool-nav-link")].findIndex((a) => a.dataset.tool === "vbb") >
-          [...document.querySelectorAll(".tool-nav-link")].findIndex((a) => a.dataset.tool === "vsplit");
+      out.orderHasMedia = [...document.querySelectorAll(".tool-nav-link")].some((a) => a.dataset.tool === "media");
+      out.noLegacyMediaNav = ![...document.querySelectorAll(".tool-nav-link")].some((a) =>
+        ["gifmaker", "vsplit", "vbb"].includes(a.dataset.tool)
+      );
     } catch (_) {}
     return out;
   });
@@ -185,10 +186,41 @@ async function main() {
   });
 
   const todayTools = await page.evaluate(() => ({
-    vsplit: Boolean(document.getElementById("vsplit") && document.querySelector('[data-tool="vsplit"]')),
+    vsplit: Boolean(document.getElementById("vsplit")),
     gifm: Boolean(document.getElementById("gifm-merge") && document.getElementById("gifm-file")),
     vbbSharp: Boolean(document.getElementById("vbb-mode-sharp")),
+    mediaTabs: document.querySelectorAll("#media-subnav [data-media-tab]").length,
   }));
+
+  // Mobile drawer + media tab switch
+  await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+  await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#timestamp`, {
+    waitUntil: "networkidle0",
+    timeout: 60000,
+  });
+  await page.click("#nav-open");
+  const drawerOpen = await page.evaluate(() => document.body.classList.contains("nav-open"));
+  await page.click('.tool-nav-link[data-tool="media"]');
+  await page.waitForFunction(() => location.hash.indexOf("#media/") === 0, { timeout: 5000 });
+  const afterMedia = await page.evaluate(() => ({
+    hash: location.hash,
+    gifActive: document.getElementById("gifmaker")?.classList.contains("is-workspace-active"),
+    drawerClosed: !document.body.classList.contains("nav-open"),
+    subnav: !document.getElementById("media-subnav")?.hidden,
+  }));
+  await page.click('[data-media-tab="vbb"]');
+  await page.waitForFunction(() => location.hash === "#media/vbb", { timeout: 5000 });
+  const mobileShell = {
+    drawerOpen,
+    afterMedia,
+    hashVbb: await page.evaluate(() => location.hash),
+    vbbActive: await page.evaluate(() =>
+      document.getElementById("vbb")?.classList.contains("is-workspace-active")
+    ),
+    onlyOneActive: await page.evaluate(
+      () => document.querySelectorAll(".tool-panel.is-workspace-active").length === 1
+    ),
+  };
 
   await browser.close();
   server.close();
@@ -196,7 +228,13 @@ async function main() {
   const problems = [];
   if (errors.length) problems.push(`page errors: ${errors.join(" | ")}`);
   if (!result.hasSection) problems.push("missing #vbb");
-  if (!result.hasNav) problems.push("missing nav");
+  if (!result.hasNav) problems.push("missing media nav");
+  if (!result.mediaActive) problems.push("media nav should be active for #vbb");
+  if (!result.vbbActive) problems.push("vbb panel should be workspace-active");
+  if (result.hash !== "#media/vbb") problems.push(`legacy #vbb should redirect, got ${result.hash}`);
+  if (!result.mediaSubnavVisible) problems.push("media subnav should show");
+  if (!result.orderHasMedia) problems.push("nav missing media entry");
+  if (result.noLegacyMediaNav === false) problems.push("legacy gifmaker/vsplit/vbb nav links should be gone");
   if (!result.version.includes("2026.08.13")) problems.push(`bad version ${result.version}`);
   if (result.analyzeDisabled !== true) problems.push("analyze should start disabled");
   if (result.runDisabled !== true) problems.push("run should start disabled");
@@ -219,6 +257,13 @@ async function main() {
   if (!todayTools.vsplit) problems.push("missing video split tool");
   if (!todayTools.gifm) problems.push("missing gif merge UI");
   if (!todayTools.vbbSharp) problems.push("missing sharp mode");
+  if (todayTools.mediaTabs !== 3) problems.push("media subnav should have 3 tabs");
+  if (!mobileShell.drawerOpen) problems.push("mobile drawer failed to open");
+  if (!mobileShell.afterMedia.gifActive) problems.push("media entry should open gif tab");
+  if (!mobileShell.afterMedia.drawerClosed) problems.push("drawer should close after navigate");
+  if (mobileShell.hashVbb !== "#media/vbb") problems.push(`media tab switch hash: ${mobileShell.hashVbb}`);
+  if (!mobileShell.vbbActive) problems.push("vbb tab switch failed");
+  if (!mobileShell.onlyOneActive) problems.push("more than one panel active");
 
   if (problems.length) {
     console.error("FAIL", {
@@ -230,6 +275,7 @@ async function main() {
       afterRun,
       analyze,
       todayTools,
+      mobileShell,
       errors,
     });
     process.exit(1);
@@ -240,6 +286,7 @@ async function main() {
     cards: afterAnalyze.cards,
     clips: afterRun.clips,
     sharp: sharpMode.summary.slice(0, 90),
+    mobile: mobileShell.hashVbb,
   });
 }
 
