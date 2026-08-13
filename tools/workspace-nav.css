@@ -261,9 +261,11 @@ body.nav-open {
     flex-wrap: nowrap !important;
     align-items: stretch !important;
     gap: 0.45rem !important;
-    transform: translateX(-105%) !important;
+    /* 关闭态：移出屏幕 + 立刻不可见 + 不接收点击（Safari 合成层卡住时也能兜底） */
+    transform: translate3d(-105%, 0, 0) !important;
+    visibility: hidden;
     opacity: 1 !important;
-    pointer-events: auto !important;
+    pointer-events: none !important;
     overflow-x: hidden !important;
     overflow-y: auto !important;
     overscroll-behavior: contain;
@@ -273,8 +275,11 @@ body.nav-open {
   }
 
   body.nav-open .nav-bar,
-  body.nav-open .nav-bar.is-collapsed {
-    transform: translateX(0) !important;
+  body.nav-open .nav-bar.is-collapsed,
+  body.nav-drawer-open .nav-bar {
+    transform: translate3d(0, 0, 0) !important;
+    visibility: visible;
+    pointer-events: auto !important;
   }
 
   .tool-nav {
@@ -338,8 +343,10 @@ body.nav-open {
   .nav-bar,
   .nav-bar.is-collapsed {
     transform: none !important;
+    visibility: visible !important;
     opacity: 1 !important;
     pointer-events: auto !important;
+    transition: none;
   }
 
   .tool-nav {
