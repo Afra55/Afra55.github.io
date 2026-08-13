@@ -168,17 +168,17 @@ async function main() {
   await page.click("#vbb-run");
   await page.waitForFunction(() => {
     const list = document.getElementById("vbb-list");
-    return list && list.querySelectorAll(".vsplit-clip-gif, .vsplit-clip").length > 0;
+    return list && list.querySelectorAll(".vsplit-clip").length > 0;
   }, { timeout: 180000 });
 
   const afterRun = await page.evaluate(() => {
     const clips = document.querySelectorAll("#vbb-list .vsplit-clip").length;
-    const previews = document.querySelectorAll("#vbb-list .vsplit-clip-gif").length;
+    const downloads = [...document.querySelectorAll("#vbb-list a[download]")].length;
     const mergeDisabled = document.getElementById("vbb-merge")?.disabled;
     const err = document.getElementById("vbb-error");
     return {
       clips,
-      previews,
+      downloads,
       mergeDisabled,
       errorVisible: err ? !err.hidden && Boolean(err.textContent) : false,
       errorText: err?.textContent || "",
@@ -323,7 +323,7 @@ async function main() {
     problems.push(`sharp mode should widen above 420 for 1280 source: ${sharpMode.summary}`);
   }
   if (!analyze.ready) problems.push("GIF_TOOL_VERSION missing");
-  if (!afterRun.clips || !afterRun.previews) problems.push(`execute preview missing: ${JSON.stringify(afterRun)}`);
+  if (!afterRun.clips || !afterRun.downloads) problems.push(`execute clips/download missing: ${JSON.stringify(afterRun)}`);
   if (afterRun.errorVisible) problems.push(`execute error: ${afterRun.errorText}`);
   if (!todayTools.vsplit) problems.push("missing video split tool");
   if (!todayTools.gifm) problems.push("missing gif merge UI");
@@ -374,7 +374,6 @@ async function main() {
     rows: afterAnalyze.rows,
     cards: afterAnalyze.cards,
     clips: afterRun.clips,
-    sharp: sharpMode.summary.slice(0, 90),
     mobile: mobileShell.hashVbb,
     shellFixes,
   });
