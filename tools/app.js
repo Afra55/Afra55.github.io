@@ -789,6 +789,7 @@
     "qrcode",
     "gifmaker",
     "vsplit",
+    "vbb",
     "imgkit",
     "units",
     "coord",
