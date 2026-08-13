@@ -539,10 +539,10 @@
     return JSON.parse(raw);
   }
 
-  /** 按内容撑高，尽量完整展示 JSON（超高时仍可滚动） */
+  /** 按内容适度撑高，但留出按钮区域，超出则框内滚动 */
   function fitJsonArea() {
     if (!jsonInput) return;
-    const maxPx = Math.max(JSON_AREA_MIN_PX, Math.floor(window.innerHeight * 0.85));
+    const maxPx = Math.max(JSON_AREA_MIN_PX, Math.min(448, Math.floor(window.innerHeight * 0.42)));
     jsonInput.style.height = "auto";
     const needed = Math.ceil(jsonInput.scrollHeight + 2);
     const next = Math.min(maxPx, Math.max(JSON_AREA_MIN_PX, needed));
