@@ -207,7 +207,24 @@ async function main() {
   const stayedClosedAfterGhostOpen = await page.evaluate(
     () => !document.body.classList.contains("nav-open")
   );
-  // 等防抖窗口过后再正常打开
+  // Safari pageshow / 回前台应强制关闭
+  await new Promise((r) => setTimeout(r, 500));
+  await page.click("#nav-open");
+  await page.waitForFunction(() => document.body.classList.contains("nav-open"), { timeout: 5000 });
+  await page.evaluate(() => {
+    window.dispatchEvent(new Event("pageshow"));
+  });
+  const closedByPageshow = await page.evaluate(() => !document.body.classList.contains("nav-open"));
+  const defaultClosedStyle = await page.evaluate(() => {
+    const nav = document.getElementById("nav-bar");
+    const cs = getComputedStyle(nav);
+    return {
+      visibility: cs.visibility,
+      pointerEvents: cs.pointerEvents,
+      hasNavOpen: document.body.classList.contains("nav-open"),
+    };
+  });
+  // 再等防抖窗口后正常打开
   await new Promise((r) => setTimeout(r, 500));
   await page.click("#nav-open");
   await page.waitForFunction(() => document.body.classList.contains("nav-open"), { timeout: 5000 });
@@ -225,6 +242,8 @@ async function main() {
     drawerOpen,
     closedByBtn,
     stayedClosedAfterGhostOpen,
+    closedByPageshow,
+    defaultClosedStyle,
     afterMedia,
     hashVbb: await page.evaluate(() => location.hash),
     vbbActive: await page.evaluate(() =>
@@ -314,6 +333,14 @@ async function main() {
   if (!mobileShell.closedByBtn) problems.push("nav-close should close drawer");
   if (!mobileShell.stayedClosedAfterGhostOpen) {
     problems.push("drawer should stay closed when open button gets ghost click after close");
+  }
+  if (!mobileShell.closedByPageshow) problems.push("pageshow should force drawer closed");
+  if (mobileShell.defaultClosedStyle?.hasNavOpen) problems.push("drawer should not stay open after pageshow");
+  if (mobileShell.defaultClosedStyle?.visibility !== "hidden") {
+    problems.push(`closed drawer visibility should be hidden, got ${mobileShell.defaultClosedStyle?.visibility}`);
+  }
+  if (mobileShell.defaultClosedStyle?.pointerEvents !== "none") {
+    problems.push(`closed drawer pointer-events should be none, got ${mobileShell.defaultClosedStyle?.pointerEvents}`);
   }
   if (!mobileShell.afterMedia.gifActive) problems.push("media entry should open gif tab");
   if (!mobileShell.afterMedia.drawerClosed) problems.push("drawer should close after navigate");

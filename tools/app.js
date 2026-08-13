@@ -853,6 +853,10 @@
   let drawerFocusTimer = 0;
   let drawerIgnoreOpenUntil = 0;
 
+  function isMobileDrawer() {
+    return !canDesktopDrag();
+  }
+
   function toolName(id) {
     return TOOL_META[id]?.name || id;
   }
@@ -979,18 +983,29 @@
   }
 
   function setDrawerOpen(open) {
-    const wantOpen = !!open;
+    const wantOpen = !!open && isMobileDrawer();
     if (!wantOpen) {
       // 部分手机在关闭时若立刻 focus「工具」按钮，会再次合成 click 把抽屉打开
       drawerIgnoreOpenUntil = Date.now() + 450;
       window.clearTimeout(drawerFocusTimer);
     }
     document.body.classList.toggle("nav-open", wantOpen);
+    document.body.classList.toggle("nav-drawer-open", wantOpen);
     if (navOpenBtn) navOpenBtn.setAttribute("aria-expanded", wantOpen ? "true" : "false");
-    if (navBackdrop) navBackdrop.hidden = !wantOpen;
+    if (navBackdrop) {
+      if (wantOpen) navBackdrop.removeAttribute("hidden");
+      else navBackdrop.setAttribute("hidden", "");
+    }
     if (navBar) {
-      navBar.setAttribute("aria-hidden", wantOpen || canDesktopDrag() ? "false" : "true");
-      if (wantOpen && !canDesktopDrag()) {
+      const showForA11y = wantOpen || !isMobileDrawer();
+      navBar.setAttribute("aria-hidden", showForA11y ? "false" : "true");
+      if ("inert" in navBar) navBar.inert = isMobileDrawer() && !wantOpen;
+      // Safari 后台恢复后 transform 可能卡住：关抽屉时清掉内联残留
+      if (!wantOpen) {
+        navBar.style.removeProperty("transform");
+        navBar.style.removeProperty("visibility");
+      }
+      if (wantOpen && isMobileDrawer()) {
         navBar.setAttribute("role", "dialog");
         navBar.setAttribute("aria-modal", "true");
         navBar.setAttribute("aria-labelledby", "nav-drawer-title");
@@ -1030,6 +1045,26 @@
         } catch (_) {}
       }, 0);
     }
+  }
+
+  /** 默认/恢复时强制关闭（Safari bfcache、后台回收后再开） */
+  function forceDrawerClosed() {
+    window.clearTimeout(drawerFocusTimer);
+    document.body.classList.remove("nav-open", "nav-drawer-open");
+    if (navOpenBtn) navOpenBtn.setAttribute("aria-expanded", "false");
+    if (navBackdrop) navBackdrop.setAttribute("hidden", "");
+    if (navBar) {
+      navBar.style.removeProperty("transform");
+      navBar.style.removeProperty("visibility");
+      if ("inert" in navBar) navBar.inert = isMobileDrawer();
+      navBar.setAttribute("aria-hidden", isMobileDrawer() ? "true" : "false");
+      navBar.setAttribute("role", "navigation");
+      navBar.removeAttribute("aria-modal");
+      navBar.removeAttribute("aria-labelledby");
+      // 触发一次重绘，避免 Safari 合成层残留
+      void navBar.offsetWidth;
+    }
+    lastFocusBeforeDrawer = null;
   }
 
   function parseRoute() {
@@ -1211,14 +1246,31 @@
   navOpenBtn?.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
+    const isOpen = document.body.classList.contains("nav-open");
+    // 已打开时点「工具」一律关闭，不受防抖限制
+    if (isOpen) {
+      setDrawerOpen(false);
+      return;
+    }
     if (Date.now() < drawerIgnoreOpenUntil) return;
-    setDrawerOpen(!document.body.classList.contains("nav-open"));
+    setDrawerOpen(true);
   });
   navCloseBtn?.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
     setDrawerOpen(false);
   });
+  // Safari 对 click 不稳定时，额外用 touchend/pointerup 关抽屉
+  navCloseBtn?.addEventListener(
+    "pointerup",
+    (e) => {
+      if (e.pointerType === "mouse") return;
+      e.preventDefault();
+      e.stopPropagation();
+      setDrawerOpen(false);
+    },
+    { passive: false }
+  );
   const closeFromBackdrop = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1229,6 +1281,10 @@
   workspaceSwitch?.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (document.body.classList.contains("nav-open")) {
+      setDrawerOpen(false);
+      return;
+    }
     if (Date.now() < drawerIgnoreOpenUntil) return;
     setDrawerOpen(true);
   });
@@ -1255,12 +1311,22 @@
   });
   window.addEventListener("hashchange", () => applyRoute());
   window.addEventListener("popstate", () => applyRoute());
+  // Safari：bfcache / 后台回收后恢复时强制关闭菜单
+  window.addEventListener("pageshow", () => {
+    forceDrawerClosed();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) forceDrawerClosed();
+  });
+  window.addEventListener("pagehide", () => {
+    forceDrawerClosed();
+  });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && document.body.classList.contains("nav-open")) {
       setDrawerOpen(false);
       return;
     }
-    if (e.key !== "Tab" || !document.body.classList.contains("nav-open") || canDesktopDrag()) return;
+    if (e.key !== "Tab" || !document.body.classList.contains("nav-open") || !isMobileDrawer()) return;
     const items = drawerFocusables();
     if (items.length < 2) return;
     const first = items[0];
@@ -1292,7 +1358,7 @@
   window.addEventListener("resize", syncDesktopNavMaxHeight, { passive: true });
   if (typeof desktopNavMq.addEventListener === "function") {
     desktopNavMq.addEventListener("change", () => {
-      setDrawerOpen(false);
+      forceDrawerClosed();
       syncDesktopNavMaxHeight();
       renderNav(loadOrder());
     });
@@ -1303,6 +1369,8 @@
   renderRecent();
   if (!location.hash) history.replaceState(null, "", "#timestamp");
   applyRoute();
+  // 默认关闭；防止 Safari 恢复残留开态
+  forceDrawerClosed();
 
   // Init
   const now = Date.now();
