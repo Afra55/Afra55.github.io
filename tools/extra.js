@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.13-c";
+  const GIF_TOOL_VERSION = "2026.08.13-d";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -4938,9 +4938,8 @@
     function estimateVbbBytes(bps15, span, mode) {
       const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
       if (mode === "clarity") return Math.round(bps15 * s);
-      // 时长优先：按可降到约 10FPS + 压缩后的体积粗估，并封顶 6MB
       const raw = bps15 * (10 / 15) * 0.55 * s;
-      return Math.round(Math.min(V2G_BLACKBOX_MAX_BYTES * 0.98, raw));
+      return Math.min(V2G_BLACKBOX_MAX_BYTES, Math.round(raw));
     }
 
     function describeVbbExpect(mode, targetSpan, clarityMax, durationMax) {
@@ -4951,47 +4950,75 @@
       return "目标偏长：执行走黑盒，个别段可能仍接近 6MB 上限";
     }
 
+    function annotateVbbPlan(plan, bps15) {
+      const avgSpan = plan.avgSpan;
+      const capped = plan.count >= VBB_MAX_CLIPS && avgSpan > plan.maxSpan * 1.02;
+      let note = plan.note;
+      let encode = plan.encode;
+      let unsafe = false;
+      if (capped) {
+        unsafe = true;
+        note = `${note} · 已达 ${VBB_MAX_CLIPS} 段上限，单段约 ${avgSpan.toFixed(1)}s`;
+      }
+      if (encode === "clarity" && plan.estBytes > V2G_BLACKBOX_MAX_BYTES) {
+        unsafe = true;
+        note = `${note} · 预估超 6MB`;
+      }
+      if (encode === "clarity" && avgSpan > plan.maxSpan * 1.05) {
+        unsafe = true;
+        note = `${note} · 实际单段长于安全时长`;
+      }
+      return { ...plan, note, encode, unsafe, estBytes: estimateVbbBytes(bps15, avgSpan, encode === "clarity" ? "clarity" : "duration") };
+    }
+
     function makeVbbPlanVariant(key, label, duration, maxSpan, bps15, note) {
-      const safeMax = Math.max(VBB_MIN_SPAN, Math.min(maxSpan, key === "clarity" ? VBB_CLARITY_MAX_SPAN : VBB_DURATION_MAX_SPAN));
+      const hardCap = key === "clarity" ? VBB_CLARITY_MAX_SPAN : VBB_DURATION_MAX_SPAN;
+      const safeMax = Math.max(VBB_MIN_SPAN, Math.min(maxSpan, hardCap));
       const ranges = buildVbbRanges(duration, safeMax);
-      const avgSpan = ranges.reduce((a, r) => a + r.span, 0) / ranges.length;
-      const estMode = key === "clarity" ? "clarity" : "duration";
-      const estBytes = estimateVbbBytes(bps15, avgSpan, estMode);
-      return {
-        key,
-        label,
-        maxSpan: safeMax,
-        ranges,
-        count: ranges.length,
-        avgSpan,
-        estBytes,
-        note,
-        encode: key === "clarity" ? "clarity" : "blackbox",
-      };
+      const avgSpan = ranges.reduce((a, r) => a + r.span, 0) / Math.max(1, ranges.length);
+      const encode = key === "clarity" ? "clarity" : "blackbox";
+      const estMode = encode === "clarity" ? "clarity" : "duration";
+      return annotateVbbPlan(
+        {
+          key,
+          label,
+          maxSpan: safeMax,
+          ranges,
+          count: ranges.length,
+          avgSpan,
+          estBytes: estimateVbbBytes(bps15, avgSpan, estMode),
+          note,
+          encode,
+        },
+        bps15
+      );
     }
 
     function resolveActiveVbbPlan() {
       if (!vbbAnalysis) return null;
       const { duration, bps15, clarity, durationPlan } = vbbAnalysis;
-      if (vbbMode === "clarity") return { ...clarity, encode: "clarity" };
+      if (vbbMode === "clarity") return { ...clarity, encode: clarity.encode || "clarity" };
       if (vbbMode === "duration") return { ...durationPlan, encode: "blackbox" };
       let target = Number(vbbTargetSpan?.value);
       if (!(target > 0)) target = clarity.maxSpan;
       target = Math.max(VBB_MIN_SPAN, Math.min(VBB_DURATION_MAX_SPAN, target));
       const ranges = buildVbbRanges(duration, target);
-      const avgSpan = ranges.reduce((a, r) => a + r.span, 0) / ranges.length;
-      const useClarity = target <= clarity.maxSpan + 0.05;
-      return {
-        key: "custom",
-        label: "自定义时长",
-        maxSpan: target,
-        ranges,
-        count: ranges.length,
-        avgSpan,
-        estBytes: estimateVbbBytes(bps15, avgSpan, useClarity ? "clarity" : "duration"),
-        note: describeVbbExpect("custom", target, clarity.maxSpan, durationPlan.maxSpan),
-        encode: useClarity ? "clarity" : "blackbox",
-      };
+      const avgSpan = ranges.reduce((a, r) => a + r.span, 0) / Math.max(1, ranges.length);
+      const useClarity = avgSpan <= clarity.maxSpan + 0.05;
+      return annotateVbbPlan(
+        {
+          key: "custom",
+          label: "自定义时长",
+          maxSpan: target,
+          ranges,
+          count: ranges.length,
+          avgSpan,
+          estBytes: estimateVbbBytes(bps15, avgSpan, useClarity ? "clarity" : "duration"),
+          note: describeVbbExpect("custom", target, clarity.maxSpan, durationPlan.maxSpan),
+          encode: useClarity ? "clarity" : "blackbox",
+        },
+        bps15
+      );
     }
 
     function paintVbbPlan() {
@@ -5011,7 +5038,15 @@
           const card = document.createElement("button");
           card.type = "button";
           card.className = `vbb-plan-card${vbbMode === p.key ? " is-selected" : ""}`;
-          card.innerHTML = `<strong>${p.label}</strong><span class="hint tight">${p.count} 段 · 约 ${p.avgSpan.toFixed(1)}s/段 · 预估 ${formatKb(p.estBytes)}/段</span><span class="hint tight">${p.note}</span>`;
+          const title = document.createElement("strong");
+          title.textContent = p.label;
+          const line = document.createElement("span");
+          line.className = "hint tight";
+          line.textContent = `${p.count} 段 · 约 ${p.avgSpan.toFixed(1)}s/段 · 预估 ${formatKb(p.estBytes)}/段`;
+          const note = document.createElement("span");
+          note.className = "hint tight";
+          note.textContent = p.note;
+          card.append(title, line, note);
           card.addEventListener("click", () => {
             vbbMode = p.key;
             paintVbbPlan();
@@ -5021,7 +5056,8 @@
       }
 
       if (vbbPlanSummary && active) {
-        vbbPlanSummary.textContent = `将生成 ${active.count} 个切片 · 每段约 ${active.avgSpan.toFixed(1)}s · 预估约 ${formatKb(active.estBytes)}/段 · ${active.note}（体积为估算，执行后以实测为准）`;
+        const warn = active.unsafe ? " ⚠ 可能超预算，执行时清晰档超限会自动改走黑盒。" : "";
+        vbbPlanSummary.textContent = `将生成 ${active.count} 个切片 · 每段约 ${active.avgSpan.toFixed(1)}s · 预估约 ${formatKb(active.estBytes)}/段 · ${active.note}（体积为估算，执行后以实测为准）${warn}`;
       }
 
       if (vbbPlanList && active) {
@@ -5165,6 +5201,7 @@
       });
       const duration = Number(vbbVideo.duration) || 0;
       if (!(duration > 0) || !vbbVideo.videoWidth) throw new Error("视频时长或尺寸无效");
+      if (duration < VBB_MIN_SPAN) throw new Error(`视频太短，至少约 ${VBB_MIN_SPAN} 秒`);
       if (vbbMeta) {
         vbbMeta.textContent = `${file.name} · ${duration.toFixed(1)}s · ${vbbVideo.videoWidth}×${vbbVideo.videoHeight}`;
       }
@@ -5183,10 +5220,11 @@
       clearVbbResults();
       try {
         const duration = Number(vbbVideo.duration) || 0;
+        if (!(duration >= VBB_MIN_SPAN)) throw new Error(`视频太短，至少约 ${VBB_MIN_SPAN} 秒`);
         const srcW = vbbVideo.videoWidth || 0;
         const srcH = vbbVideo.videoHeight || 0;
-        const sampleSpan = Math.min(VBB_SAMPLE_SPAN, Math.max(1, duration * 0.12));
-        const sampleStart = Math.max(0, Math.min(duration - sampleSpan, duration * 0.4));
+        const sampleSpan = Math.min(VBB_SAMPLE_SPAN, Math.max(VBB_MIN_SPAN, duration * 0.12), duration);
+        const sampleStart = Math.max(0, Math.min(Math.max(0, duration - sampleSpan), duration * 0.4));
         setVbbProgress(true, 0.08, "分析中 · 编码样片", {
           sub: `${sampleSpan.toFixed(1)}s @ 15FPS / 宽420`,
           busy: true,
@@ -5308,6 +5346,7 @@
           };
           try {
             let encoded;
+            let usedFallback = false;
             if (plan.encode === "clarity") {
               encoded = await encodeV2gGifFfmpeg({
                 file: vbbSourceFile,
@@ -5330,7 +5369,24 @@
                   }),
               });
               if (encoded?.blob?.size > V2G_BLACKBOX_MAX_BYTES) {
-                clip.error = `超 6MB（${formatKb(encoded.blob.size)}），未压缩；可改时长优先重跑`;
+                setVbbProgress(true, (i + 0.4) / plan.ranges.length, `清晰超限，改走黑盒 · ${i + 1}/${plan.ranges.length}`, {
+                  sub: formatKb(encoded.blob.size),
+                  busy: true,
+                });
+                encoded = await encodeBlackboxClip({
+                  file: vbbSourceFile,
+                  startSec: r.start,
+                  span: r.span,
+                  srcW,
+                  srcH,
+                  isAborted,
+                  onProgress: (local, text) =>
+                    setVbbProgress(true, (i + 0.4 + Math.min(0.58, local) * 0.58) / plan.ranges.length, `黑盒回退 · ${i + 1}/${plan.ranges.length}`, {
+                      sub: text,
+                      busy: true,
+                    }),
+                });
+                usedFallback = true;
               }
             } else {
               encoded = await encodeBlackboxClip({
@@ -5351,13 +5407,14 @@
             clip.gifBlob = encoded.blob;
             clip.gifUrl = URL.createObjectURL(encoded.blob);
             const bits = [];
+            if (usedFallback) bits.push("清晰超限→黑盒");
             if (encoded.fps) bits.push(`${encoded.fps}FPS`);
             if (encoded.outW && encoded.outH) bits.push(`${encoded.outW}×${encoded.outH}`);
             if (encoded.compressRounds > 0) bits.push(`已压 ${encoded.compressRounds} 轮`);
             if (encoded.maxW) bits.push(`宽≤${encoded.maxW}`);
             if (encoded.framesCapped) bits.push(`已抽稀 ${encoded.frameCount} 帧`);
             clip.gifNote = bits.join(" · ");
-            if (!clip.error && encoded.blob.size > V2G_BLACKBOX_MAX_BYTES) {
+            if (encoded.blob.size > V2G_BLACKBOX_MAX_BYTES) {
               clip.error = `仍超 6MB（${formatKb(encoded.blob.size)}）`;
             }
           } catch (err) {
