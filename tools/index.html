@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260813d" />
+  <link rel="stylesheet" href="./style.css?v=20260813e" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -943,9 +943,9 @@ hello@world.org</textarea>
       <div class="panel-head">
         <div class="panel-title-row">
           <h1>GIF 工具</h1>
-          <span class="tool-ver mono" id="gif-tool-version" title="GIF 工具逻辑版本">v2026.08.13-d</span>
+          <span class="tool-ver mono" id="gif-tool-version" title="GIF 工具逻辑版本">v2026.08.13-e</span>
         </div>
-        <p>多图合成 GIF、压缩已有 GIF、合并 GIF、拆帧/转 WebM，或把视频转成 GIF / 动画 WebP；本地处理，带进度。当前版本 <strong class="mono" id="gif-tool-version-inline">v2026.08.13-d</strong>。</p>
+        <p>多图合成 GIF、压缩已有 GIF、合并 GIF、拆帧/转 WebM，或把视频转成 GIF / 动画 WebP；本地处理，带进度。当前版本 <strong class="mono" id="gif-tool-version-inline">v2026.08.13-e</strong>。</p>
       </div>
       <div class="panel-body">
         <div class="convert-grid">
@@ -1262,7 +1262,7 @@ hello@world.org</textarea>
 <section id="vbb" class="panel" data-reveal>
       <div class="panel-head">
         <h1>一键黑盒切片</h1>
-        <p>上传视频后先分析切分方案：清晰优先（15FPS、不压缩）或时长优先（可降帧/压缩）。确认后再转 GIF，可预览下载。</p>
+        <p>上传视频后先分析切分方案：清晰优先、锐度优先（缩短加宽）、时长优先（可压缩）。确认后再转 GIF，可预览下载。</p>
       </div>
       <div class="panel-body">
         <div class="btn-row tool-actions">
@@ -1270,7 +1270,7 @@ hello@world.org</textarea>
           <input id="vbb-file" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" hidden />
           <button type="button" class="ghost-btn" id="vbb-clear">清空</button>
         </div>
-        <p class="hint" id="vbb-meta">支持 MP4 / WebM / MOV。分析阶段会抽 2–3 秒样片估体积；确认前不会批量转 GIF。</p>
+        <p class="hint" id="vbb-meta">支持 MP4 / WebM / MOV。分析阶段会抽 2–3 秒样片估体积；缩短段长可抬高宽度换清晰度；确认前不会批量转 GIF。</p>
         <div class="gif-preview-wrap">
           <video id="vbb-video" class="img-preview gif-preview" controls playsinline muted hidden></video>
         </div>
@@ -1296,6 +1296,7 @@ hello@world.org</textarea>
           <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
             <span class="seg" role="group" aria-label="方案档位">
               <button type="button" class="seg-btn is-active" id="vbb-mode-clarity" data-vbb-mode="clarity">清晰优先</button>
+              <button type="button" class="seg-btn" id="vbb-mode-sharp" data-vbb-mode="sharp">锐度优先</button>
               <button type="button" class="seg-btn" id="vbb-mode-duration" data-vbb-mode="duration">时长优先</button>
               <button type="button" class="seg-btn" id="vbb-mode-custom" data-vbb-mode="custom">自定义时长</button>
             </span>
@@ -1972,8 +1973,8 @@ hello@world.org</textarea>
   <script src="./vendor/jszip.min.js"></script>
   <script src="./temp.js?v=20260811b"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260813d"></script>
-  <script src="./extra.js?v=20260813d"></script>
+  <script src="./app.js?v=20260813e"></script>
+  <script src="./extra.js?v=20260813e"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>

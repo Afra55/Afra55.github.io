@@ -111,7 +111,7 @@ async function main() {
   const tmpMp4 = "/tmp/vbb-smoke.mp4";
   const { execSync } = require("child_process");
   execSync(
-    `ffmpeg -y -f lavfi -i color=c=blue:s=320x240:d=3 -f lavfi -i sine=f=440:d=3 -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest ${tmpMp4}`,
+    `ffmpeg -y -f lavfi -i testsrc=size=1280x720:rate=30:duration=4 -f lavfi -i sine=f=440:d=4 -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest ${tmpMp4}`,
     { stdio: "pipe" }
   );
 
@@ -153,6 +153,16 @@ async function main() {
     return { summary, active };
   });
 
+  await page.click("#vbb-mode-sharp");
+  const sharpMode = await page.evaluate(() => {
+    const summary = document.getElementById("vbb-plan-summary")?.textContent || "";
+    const active = document.getElementById("vbb-mode-sharp")?.classList.contains("is-active");
+    const card = [...document.querySelectorAll("#vbb-plan-compare .vbb-plan-card")].find((el) =>
+      /锐度/.test(el.textContent || "")
+    );
+    return { summary, active, cardText: card?.textContent || "" };
+  });
+
   await page.click("#vbb-mode-clarity");
   await page.click("#vbb-run");
   await page.waitForFunction(() => {
@@ -174,6 +184,12 @@ async function main() {
     };
   });
 
+  const todayTools = await page.evaluate(() => ({
+    vsplit: Boolean(document.getElementById("vsplit") && document.querySelector('[data-tool="vsplit"]')),
+    gifm: Boolean(document.getElementById("gifm-merge") && document.getElementById("gifm-file")),
+    vbbSharp: Boolean(document.getElementById("vbb-mode-sharp")),
+  }));
+
   await browser.close();
   server.close();
 
@@ -186,22 +202,44 @@ async function main() {
   if (result.runDisabled !== true) problems.push("run should start disabled");
   if (!result.ids.every((x) => x.ok)) problems.push("missing ids");
   if (!afterAnalyze.rows) problems.push("no plan rows after analyze");
-  if (afterAnalyze.cards !== 2) problems.push(`expected 2 compare cards, got ${afterAnalyze.cards}`);
+  if (afterAnalyze.cards !== 3) problems.push(`expected 3 compare cards, got ${afterAnalyze.cards}`);
   if (afterAnalyze.runDisabled !== false) problems.push("run should enable after analyze");
   if (!durationMode.active) problems.push("duration mode not active");
+  if (!sharpMode.active) problems.push("sharp mode not active");
+  if (!/宽\s*[4-7][0-9]{2}|宽[4-7][0-9]{2}/.test(sharpMode.summary + sharpMode.cardText)) {
+    problems.push("sharp mode missing width hint");
+  }
+  // 1280 源 + 短片：锐度档应能抬到 >420
+  if (!/宽\s*(?:480|540|600|660|720)|宽(?:480|540|600|660|720)/.test(sharpMode.summary + sharpMode.cardText)) {
+    problems.push(`sharp mode should widen above 420 for 1280 source: ${sharpMode.summary}`);
+  }
   if (!analyze.ready) problems.push("GIF_TOOL_VERSION missing");
   if (!afterRun.clips || !afterRun.previews) problems.push(`execute preview missing: ${JSON.stringify(afterRun)}`);
   if (afterRun.errorVisible) problems.push(`execute error: ${afterRun.errorText}`);
+  if (!todayTools.vsplit) problems.push("missing video split tool");
+  if (!todayTools.gifm) problems.push("missing gif merge UI");
+  if (!todayTools.vbbSharp) problems.push("missing sharp mode");
 
   if (problems.length) {
-    console.error("FAIL", { problems, result, afterAnalyze, durationMode, afterRun, analyze, errors });
+    console.error("FAIL", {
+      problems,
+      result,
+      afterAnalyze,
+      durationMode,
+      sharpMode,
+      afterRun,
+      analyze,
+      todayTools,
+      errors,
+    });
     process.exit(1);
   }
   console.log("vbb-smoke: all passed", {
     version: result.version,
     rows: afterAnalyze.rows,
+    cards: afterAnalyze.cards,
     clips: afterRun.clips,
-    summary: afterAnalyze.summary.slice(0, 80),
+    sharp: sharpMode.summary.slice(0, 90),
   });
 }
 
