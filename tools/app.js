@@ -156,9 +156,9 @@
     dtResult.hidden = false;
   }
 
-  $$(".seg-btn").forEach((btn) => {
+  $$(".seg-btn[data-tz]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      $$(".seg-btn").forEach((b) => b.classList.remove("is-active"));
+      $$(".seg-btn[data-tz]").forEach((b) => b.classList.remove("is-active"));
       btn.classList.add("is-active");
       timezone = btn.dataset.tz;
       if (tsInput.value.trim()) convertTsToDate();
@@ -788,6 +788,7 @@
     "diff",
     "qrcode",
     "gifmaker",
+    "vsplit",
     "imgkit",
     "units",
     "coord",

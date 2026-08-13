@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260813a" />
+  <link rel="stylesheet" href="./style.css?v=20260813b" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -50,6 +50,7 @@
         <a class="tool-nav-link" href="#diff" draggable="true" data-tool="diff">Diff</a>
         <a class="tool-nav-link" href="#qrcode" draggable="true" data-tool="qrcode">二维码</a>
         <a class="tool-nav-link" href="#gifmaker" draggable="true" data-tool="gifmaker">GIF 工具</a>
+        <a class="tool-nav-link" href="#vsplit" draggable="true" data-tool="vsplit">视频切分</a>
         <a class="tool-nav-link" href="#imgkit" draggable="true" data-tool="imgkit">图片工具</a>
         <a class="tool-nav-link" href="#units" draggable="true" data-tool="units">单位换算</a>
         <a class="tool-nav-link" href="#coord" draggable="true" data-tool="coord">坐标系互转</a>
@@ -941,9 +942,9 @@ hello@world.org</textarea>
       <div class="panel-head">
         <div class="panel-title-row">
           <h1>GIF 工具</h1>
-          <span class="tool-ver mono" id="gif-tool-version" title="GIF 工具逻辑版本">v2026.08.11-a</span>
+          <span class="tool-ver mono" id="gif-tool-version" title="GIF 工具逻辑版本">v2026.08.13-b</span>
         </div>
-        <p>多图合成 GIF、压缩已有 GIF、拆帧/转 WebM，或把视频转成 GIF / 动画 WebP；本地处理，带进度。当前版本 <strong class="mono" id="gif-tool-version-inline">v2026.08.11-a</strong>。</p>
+        <p>多图合成 GIF、压缩已有 GIF、合并 GIF、拆帧/转 WebM，或把视频转成 GIF / 动画 WebP；本地处理，带进度。当前版本 <strong class="mono" id="gif-tool-version-inline">v2026.08.13-b</strong>。</p>
       </div>
       <div class="panel-body">
         <div class="convert-grid">
@@ -1070,6 +1071,29 @@ hello@world.org</textarea>
         </div>
 
         <div class="field-block" style="margin-top:1.5rem">
+          <h2 class="subhead">合并 GIF</h2>
+          <div class="btn-row tool-actions">
+            <label class="file-btn" for="gifm-file">添加 GIF</label>
+            <input id="gifm-file" type="file" accept="image/gif,.gif" multiple hidden />
+            <button type="button" class="ghost-btn" id="gifm-clear">清空</button>
+          </div>
+          <p class="hint" id="gifm-meta">按添加顺序拼接成一条长 GIF，不重新调色板（各段宽高需一致）。至少 2 个。</p>
+          <div class="gif-frame-list" id="gifm-list" aria-live="polite"></div>
+          <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
+            <button type="button" class="primary-btn" id="gifm-merge" disabled>合并为一条 GIF</button>
+            <a class="secondary-btn" id="gifm-download" href="#" download="merged.gif" hidden>下载合并 GIF</a>
+          </div>
+          <div class="gif-progress" id="gifm-progress" hidden>
+            <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="gifm-progress-fill"></span></div>
+            <p class="hint" id="gifm-progress-text">准备中…</p>
+          </div>
+          <div class="gif-preview-wrap">
+            <img id="gifm-preview" class="img-preview gif-preview" alt="合并 GIF 预览" hidden />
+          </div>
+          <p class="error" id="gifm-error" hidden></p>
+        </div>
+
+        <div class="field-block" style="margin-top:1.5rem">
           <h2 class="subhead">视频转 GIF</h2>
           <div class="btn-row tool-actions">
             <label class="file-btn" for="v2g-file">选择视频</label>
@@ -1164,6 +1188,73 @@ hello@world.org</textarea>
           </div>
           <p class="error" id="v2g-error" hidden></p>
         </div>
+      </div>
+    </section>
+
+<section id="vsplit" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>视频切分</h1>
+        <p>上传视频后按份数等分，或按固定时长切片；可下载片段，并批量转高清 / 黑盒 GIF，支持预览与合并。</p>
+      </div>
+      <div class="panel-body">
+        <div class="btn-row tool-actions">
+          <label class="file-btn" for="vsplit-file">选择视频</label>
+          <input id="vsplit-file" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" hidden />
+          <button type="button" class="ghost-btn" id="vsplit-clear">清空</button>
+        </div>
+        <p class="hint" id="vsplit-meta">支持 MP4 / WebM / MOV。切分优先复制编码（快）；失败则重编码该段。</p>
+        <div class="gif-preview-wrap">
+          <video id="vsplit-video" class="img-preview gif-preview" controls playsinline muted hidden></video>
+        </div>
+        <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem;align-items:center">
+          <span class="seg" role="group" aria-label="切分方式">
+            <button type="button" class="seg-btn is-active" id="vsplit-mode-n" data-vsplit-mode="count">等分成 n 份</button>
+            <button type="button" class="seg-btn" id="vsplit-mode-t" data-vsplit-mode="duration">按每段时长</button>
+          </span>
+        </div>
+        <div class="field-row" id="vsplit-count-row" style="flex-wrap:wrap;margin-top:0.55rem">
+          <label for="vsplit-count">份数 n</label>
+          <input id="vsplit-count" class="mono meta-input" type="number" min="2" max="50" step="1" value="3" />
+        </div>
+        <div class="field-row" id="vsplit-duration-row" hidden style="flex-wrap:wrap;margin-top:0.55rem">
+          <label for="vsplit-h">时</label>
+          <input id="vsplit-h" class="mono meta-input" type="number" min="0" max="99" step="1" value="0" />
+          <label for="vsplit-m">分</label>
+          <input id="vsplit-m" class="mono meta-input" type="number" min="0" max="59" step="1" value="0" />
+          <label for="vsplit-s">秒</label>
+          <input id="vsplit-s" class="mono meta-input" type="number" min="0" max="59.9" step="0.1" value="15" />
+        </div>
+        <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+          <label for="vsplit-fps">高清 GIF 帧率</label>
+          <input id="vsplit-fps" class="mono meta-input" type="number" min="2" max="15" step="1" value="15" />
+          <label for="vsplit-width">最大宽度</label>
+          <input id="vsplit-width" class="mono meta-input" type="number" min="64" max="720" step="1" value="480" />
+          <label for="vsplit-quality">质量 (1–30)</label>
+          <input id="vsplit-quality" class="mono meta-input" type="number" min="1" max="30" step="1" value="5" />
+        </div>
+        <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
+          <button type="button" class="primary-btn" id="vsplit-cut" disabled>开始切分</button>
+          <button type="button" class="secondary-btn" id="vsplit-gif-hq" disabled>全部转高清 GIF</button>
+          <button type="button" class="secondary-btn" id="vsplit-gif-bb" disabled>全部转黑盒 GIF</button>
+          <button type="button" class="secondary-btn" id="vsplit-merge" disabled title="用 gifsicle 拼接各段 GIF，不重新调色板；宽高需一致">合并 GIF</button>
+          <button type="button" class="ghost-btn" id="vsplit-abort" hidden>取消</button>
+          <a class="secondary-btn" id="vsplit-zip-video" href="#" download="clips-video.zip" hidden>下载全部视频</a>
+          <a class="secondary-btn" id="vsplit-zip-gif" href="#" download="clips-gif.zip" hidden>下载全部 GIF</a>
+          <a class="secondary-btn" id="vsplit-merged-dl" href="#" download="clips-merged.gif" hidden>下载合并 GIF</a>
+        </div>
+        <div class="gif-progress" id="vsplit-progress" hidden>
+          <div class="gif-progress-head">
+            <p class="hint gif-progress-title" id="vsplit-progress-text">准备中…</p>
+            <span class="mono gif-progress-pct" id="vsplit-progress-pct">0%</span>
+          </div>
+          <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="vsplit-progress-fill"></span></div>
+          <p class="hint tight gif-progress-sub" id="vsplit-progress-sub" hidden></p>
+        </div>
+        <div class="gif-frame-list" id="vsplit-list" aria-live="polite"></div>
+        <div class="gif-preview-wrap">
+          <img id="vsplit-merged-preview" class="img-preview gif-preview" alt="合并 GIF 预览" hidden />
+        </div>
+        <p class="error" id="vsplit-error" hidden></p>
       </div>
     </section>
 
@@ -1818,8 +1909,8 @@ hello@world.org</textarea>
   <script src="./vendor/jszip.min.js"></script>
   <script src="./temp.js?v=20260811b"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260813a"></script>
-  <script src="./extra.js?v=20260811e"></script>
+  <script src="./app.js?v=20260813b"></script>
+  <script src="./extra.js?v=20260813b"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>
