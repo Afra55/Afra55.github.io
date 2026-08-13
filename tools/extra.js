@@ -5508,10 +5508,10 @@
         if (!(duration >= VBB_MIN_SPAN)) throw new Error(`视频太短，至少约 ${VBB_MIN_SPAN} 秒`);
         const srcW = vbbVideo.videoWidth || 0;
         const srcH = vbbVideo.videoHeight || 0;
-        const sampleSpan = Math.min(VBB_SAMPLE_SPAN, Math.max(VBB_MIN_SPAN, duration * 0.12), duration);
+        const sampleSpan = Math.min(VBB_SAMPLE_SPAN, Math.max(VBB_MIN_SPAN, duration));
         const sampleStart = Math.max(0, Math.min(Math.max(0, duration - sampleSpan), duration * 0.4));
         setVbbProgress(true, 0.08, "分析中 · 编码样片", {
-          sub: `${sampleSpan.toFixed(1)}s @ 15FPS / 宽420`,
+          sub: `${sampleSpan.toFixed(1)}s @ 15FPS / 宽${V2G_BLACKBOX_BASE_W}`,
           busy: true,
         });
         await prewarmFfmpegEngine().catch(() => {});

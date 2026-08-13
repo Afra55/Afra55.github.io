@@ -161,7 +161,7 @@ function resolveVbbSpanForWidth(bps15, width, srcW) {
 }
 
 function sampleSpanFor(duration) {
-  return Math.min(VBB_SAMPLE_SPAN, Math.max(VBB_MIN_SPAN, duration * 0.12), duration);
+  return Math.min(VBB_SAMPLE_SPAN, Math.max(VBB_MIN_SPAN, duration));
 }
 
 function assert(cond, msg) {
@@ -273,6 +273,8 @@ function almost(a, b, eps = 1e-6) {
 
 {
   assert(sampleSpanFor(0.8) <= 0.8, "sample <= duration for short");
+  assert(sampleSpanFor(2) === 2, "under-cap video samples full clip");
+  assert(sampleSpanFor(4) === VBB_SAMPLE_SPAN, "4s samples up to 2.5s cap");
   assert(sampleSpanFor(30) === VBB_SAMPLE_SPAN, "sample uses default for long");
 }
 
