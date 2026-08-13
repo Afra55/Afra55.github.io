@@ -1834,9 +1834,44 @@ a.secondary-btn {
   margin: 0 auto;
 }
 
+.vsplit-clip {
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+.vsplit-clip-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.vsplit-clip-gif {
+  display: block;
+  max-height: 180px;
+  width: auto;
+  max-width: 100%;
+  margin: 0.35rem auto 0;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
+.gifm-thumb {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
 @media (max-width: 700px) {
   .gif-frame {
     grid-template-columns: 64px 1fr;
+  }
+
+  .vsplit-clip {
+    grid-template-columns: 1fr;
   }
 
   .gif-frame-actions {

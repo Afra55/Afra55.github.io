@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.11-a";
+  const GIF_TOOL_VERSION = "2026.08.13-b";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -396,13 +396,15 @@
   }
 
   function isGifmakerActive() {
+    const hash = String(location.hash || "").replace(/^#/, "");
+    if (hash === "gifmaker" || hash === "vsplit") return true;
+    const gifLink = document.querySelector('.tool-nav-link[data-tool="gifmaker"]');
+    const splitLink = document.querySelector('.tool-nav-link[data-tool="vsplit"]');
+    if (gifLink?.classList.contains("is-active") || splitLink?.classList.contains("is-active")) return true;
     const panel = document.getElementById("gifmaker");
     if (!panel) return false;
-    const hash = String(location.hash || "").replace(/^#/, "");
-    if (hash === "gifmaker") return true;
     if (panel.classList.contains("is-active")) return true;
     if (panel.hidden) return false;
-    // 部分布局用 display 切换
     try {
       return window.getComputedStyle(panel).display !== "none";
     } catch (_) {
@@ -466,7 +468,7 @@
         attributeFilter: ["class", "hidden", "style"],
       });
     }
-    document.querySelectorAll('.tool-nav-link[data-tool="gifmaker"]').forEach((link) => {
+    document.querySelectorAll('.tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"]').forEach((link) => {
       link.addEventListener("click", () => setTimeout(scheduleFfmpegPrewarm, 0));
     });
   }
@@ -751,6 +753,63 @@
       if (!file) throw new Error("压缩失败，未得到输出");
       onProgress?.(1, "压缩完成");
       return file instanceof Blob ? file : new Blob([file], { type: "image/gif" });
+    } finally {
+      if (timer) clearInterval(timer);
+    }
+  }
+
+  /**
+   * 用 gifsicle --merge 拼接已有 GIF，不重新调色板编码。
+   * 各段尺寸宜一致，否则可能失败。
+   */
+  async function mergeGifBlobs(blobs, onProgress) {
+    const list = (blobs || []).filter(Boolean);
+    if (list.length < 2) throw new Error("至少需要 2 个 GIF 才能合并");
+    onProgress?.(0.06, "加载合并引擎…");
+    const gifsicle = await loadGifsicle();
+    if (!gifsicle || typeof gifsicle.run !== "function") throw new Error("合并引擎未加载");
+    const input = list.map((file, i) => ({ file, name: `in${i}.gif` }));
+    const names = input.map((x) => x.name).join(" ");
+    const startedAt = Date.now();
+    let tick = 0.2;
+    let timer = null;
+    const pushBusy = (forceRatio) => {
+      if (typeof forceRatio === "number") tick = forceRatio;
+      else tick = Math.min(0.9, tick + 0.02);
+      const elapsed = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
+      onProgress?.(tick, `拼接 ${list.length} 段 · 已用时 ${elapsed}s`);
+    };
+    pushBusy(0.22);
+    timer = setInterval(() => pushBusy(), 700);
+    const commands = [`--merge ${names} -o /out/out.gif`, `${names} -o /out/out.gif`];
+    try {
+      let blob = null;
+      let lastErr = "";
+      for (const cmd of commands) {
+        try {
+          const out = await gifsicle.run({
+            input,
+            command: [cmd],
+          });
+          const file = Array.isArray(out) ? out[0] : null;
+          if (!file) {
+            lastErr = "合并失败：请确认各 GIF 宽高一致";
+            continue;
+          }
+          const next = file instanceof Blob ? file : new Blob([file], { type: "image/gif" });
+          if (!next.size) {
+            lastErr = "合并结果为空";
+            continue;
+          }
+          blob = next;
+          break;
+        } catch (err) {
+          lastErr = err?.message || String(err);
+        }
+      }
+      if (!blob) throw new Error(lastErr || "合并失败：请确认各 GIF 宽高一致");
+      onProgress?.(1, "合并完成");
+      return blob;
     } finally {
       if (timer) clearInterval(timer);
     }
@@ -3286,13 +3345,14 @@
       return "mp4";
     }
 
-    function createEncodeProgressTicker(mapProgress, base, span, initialPhase) {
+    function createEncodeProgressTicker(mapProgress, base, span, initialPhase, isAborted) {
       let phase = initialPhase || "处理中";
       let lastP = 0;
       let lastBumpAt = Date.now();
       const startedAt = Date.now();
+      const aborted = typeof isAborted === "function" ? isAborted : () => abortV2g;
       const timer = setInterval(() => {
-        if (abortV2g) return;
+        if (aborted()) return;
         const elapsed = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
         const stalled = Date.now() - lastBumpAt > 900;
         if (stalled) {
@@ -3354,14 +3414,27 @@
       const maxW = Math.min(720, Math.max(64, Number(opts.maxW) || 360));
       const quality = Math.min(30, Math.max(1, Number(opts.quality) || 12));
       const maxColors = gifQualityToMaxColors(quality);
-      const bright = Number.isFinite(opts.brightness) ? Number(opts.brightness) : readV2gBrightness();
+      const skipWm = Boolean(opts.skipWatermark);
+      const bright = opts.skipBright
+        ? 0
+        : Number.isFinite(opts.brightness)
+          ? Number(opts.brightness)
+          : readV2gBrightness();
       const brightFilter = v2gBrightFfmpegFilter(bright);
-      const { startSec, span } = resolveV2gSpan();
+      let startSec;
+      let span;
+      if (Number.isFinite(opts.startSec) && Number.isFinite(opts.span)) {
+        startSec = Math.max(0, Number(opts.startSec));
+        span = Math.max(0.05, Number(opts.span));
+      } else {
+        ({ startSec, span } = resolveV2gSpan());
+      }
+      const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
       const naturalFrames = Math.max(2, Math.floor(span * fps) + 1);
       const framesCapped = naturalFrames > MAX_V2G_FRAMES;
       const frameCount = Math.min(MAX_V2G_FRAMES, naturalFrames);
-      const srcW = v2gVideo?.videoWidth || 0;
-      const srcH = v2gVideo?.videoHeight || 0;
+      const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
+      const srcH = Number(opts.srcH) || v2gVideo?.videoHeight || 0;
       const scale = srcW > maxW && srcW > 0 ? maxW / srcW : 1;
       const outW = srcW ? Math.max(2, Math.round((srcW * scale) / 2) * 2) : maxW;
       const outH = srcH ? Math.max(2, Math.round((srcH * scale) / 2) * 2) : Math.round(outW * 0.75);
@@ -3372,17 +3445,17 @@
         else setV2gProgress(true, local, text);
       };
 
-      if (abortV2g) throw new Error("已取消");
+      if (aborted()) throw new Error("已取消");
       mapProgress(0.03, `${stageLabel}准备 FFmpeg 引擎…`);
       let ticker = null;
       const ffmpeg = await getFfmpegInstance((ratio, text) => {
         mapProgress(0.03 + Math.min(0.12, (ratio || 0) * 0.12), `${stageLabel}${text || "加载引擎…"}`);
       });
-      if (abortV2g) throw new Error("已取消");
+      if (aborted()) throw new Error("已取消");
 
-      ticker = createEncodeProgressTicker(mapProgress, 0.2, 0.72, `${stageLabel}准备编码`);
+      ticker = createEncodeProgressTicker(mapProgress, 0.2, 0.72, `${stageLabel}准备编码`, aborted);
       const onFfmpegProgress = ({ progress }) => {
-        if (abortV2g) return;
+        if (aborted()) return;
         const p = Math.max(0, Math.min(1, Number(progress) || 0));
         ticker.setProgress(p);
         ticker.setPhase(p < 0.45 ? `${stageLabel}分析调色板` : `${stageLabel}写入 GIF 帧`);
@@ -3405,9 +3478,9 @@
         ticker.setPhase(`${stageLabel}写入视频`);
         mapProgress(0.16, `${stageLabel}写入视频到引擎…`);
         await ffmpeg.writeFile(inName, await fetchFileBytes(file));
-        if (abortV2g) throw new Error("已取消");
+        if (aborted()) throw new Error("已取消");
 
-        const wmBytes = await buildV2gWatermarkPng(outW, outH);
+        const wmBytes = skipWm ? null : await buildV2gWatermarkPng(outW, outH);
         let filterArgs;
         if (wmBytes && wmBytes.length) {
           usedWm = true;
@@ -3442,7 +3515,7 @@
           outName
         );
         const code = await ffmpeg.exec(args);
-        if (abortV2g) throw new Error("已取消");
+        if (aborted()) throw new Error("已取消");
         if (code !== 0) throw new Error(`FFmpeg 失败（code=${code}）`);
 
         ticker.stop();
@@ -3695,6 +3768,94 @@
       }
 
       return { candidate, underBudget: false };
+    }
+
+    async function encodeBlackboxClip(clipOpts) {
+      const file = clipOpts.file;
+      const startSec = clipOpts.startSec;
+      const span = clipOpts.span;
+      const srcW = clipOpts.srcW;
+      const srcH = clipOpts.srcH;
+      const isAborted = clipOpts.isAborted || (() => abortV2g);
+      const onProgress = clipOpts.onProgress || (() => {});
+      const fpsList = resolveBlackboxFpsList(span);
+      if (!fpsList.length) throw new Error("没有可用的黑盒帧率方案");
+      const tried = [];
+      const common = {
+        file,
+        startSec,
+        span,
+        srcW,
+        srcH,
+        skipWatermark: true,
+        skipBright: true,
+        brightness: 0,
+        isAborted,
+        quality: V2G_BLACKBOX_QUALITY,
+      };
+      for (let i = 0; i < fpsList.length; i++) {
+        if (isAborted()) throw new Error("已取消");
+        const fps = fpsList[i];
+        const isLast = i >= fpsList.length - 1;
+        const maxRounds = isLast ? V2G_BLACKBOX_MAX_COMPRESS_ROUNDS : V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS;
+        onProgress((i + 0.02) / fpsList.length, `黑盒编码 · ${fps}FPS`);
+        const encoded = await encodeV2gGifFfmpeg({
+          ...common,
+          fps,
+          maxW: V2G_BLACKBOX_BASE_W,
+          stageLabel: `${fps}FPS`,
+          onProgress: (local, text) => onProgress((i + Math.min(0.55, local * 0.55)) / fpsList.length, text),
+        });
+        let candidate = { ...encoded, compressRounds: 0, maxW: V2G_BLACKBOX_BASE_W };
+        if (candidate.blob.size > V2G_BLACKBOX_MAX_BYTES) {
+          for (let round = 1; round <= maxRounds; round++) {
+            if (isAborted()) throw new Error("已取消");
+            const before = candidate.blob.size;
+            const plan = isLast ? buildBlackboxHardCompressArgs(round) : buildBlackboxSoftCompressArgs(round);
+            const out = await compressGifBlob(
+              candidate.blob,
+              "standard",
+              (ratio, text) => {
+                onProgress(
+                  (i + 0.55 + ((round - 1 + ratio) / (maxRounds + 1)) * 0.4) / fpsList.length,
+                  `黑盒压缩 · ${fps}FPS · ${text || plan.label}`
+                );
+              },
+              { round, plan }
+            );
+            candidate = { ...candidate, blob: out, compressRounds: round };
+            if (out.size <= V2G_BLACKBOX_MAX_BYTES) break;
+            if (out.size >= before * 0.99) break;
+          }
+        }
+        tried.push(candidate);
+        if (candidate.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
+          if (candidate.blob.size < V2G_BLACKBOX_WIDEN_BYTES) {
+            let best = candidate;
+            const hardMax = srcW > 0 ? Math.min(V2G_BLACKBOX_WIDTH_CAP, srcW) : V2G_BLACKBOX_WIDTH_CAP;
+            let nextW = (Number(best.maxW) || V2G_BLACKBOX_BASE_W) + V2G_BLACKBOX_WIDTH_STEP;
+            while (nextW <= hardMax) {
+              if (isAborted()) throw new Error("已取消");
+              onProgress(0.92, `黑盒加宽 · ${nextW}`);
+              const wider = await encodeV2gGifFfmpeg({
+                ...common,
+                fps,
+                maxW: nextW,
+                stageLabel: `${fps}FPS·宽${nextW}`,
+                onProgress: (local, text) => onProgress(0.92 + local * 0.05, text),
+              });
+              const cand = { ...wider, compressRounds: 0, maxW: nextW };
+              if (cand.blob.size > V2G_BLACKBOX_MAX_BYTES) break;
+              best = cand;
+              if (best.outW > 0 && best.outW < nextW - 2) break;
+              nextW += V2G_BLACKBOX_WIDTH_STEP;
+            }
+            return best;
+          }
+          return candidate;
+        }
+      }
+      return tried.slice().sort((a, b) => a.blob.size - b.blob.size)[0] || null;
     }
 
     async function convertVideoToGif() {
@@ -4019,6 +4180,596 @@
     v2gStart?.addEventListener("change", () => scheduleV2gBrightPreview({ forceCapture: true }));
     v2gStart?.addEventListener("input", () => scheduleV2gBrightPreview({ forceCapture: true }));
     syncV2gBrightUi();
+
+    // ---- Video split (shares FFmpeg / blackbox encoder) ----
+    const vsplitFile = $("#vsplit-file");
+    const vsplitVideo = $("#vsplit-video");
+    const vsplitMeta = $("#vsplit-meta");
+    const vsplitError = $("#vsplit-error");
+    const vsplitCount = $("#vsplit-count");
+    const vsplitCountRow = $("#vsplit-count-row");
+    const vsplitDurationRow = $("#vsplit-duration-row");
+    const vsplitH = $("#vsplit-h");
+    const vsplitM = $("#vsplit-m");
+    const vsplitS = $("#vsplit-s");
+    const vsplitFps = $("#vsplit-fps");
+    const vsplitWidth = $("#vsplit-width");
+    const vsplitQuality = $("#vsplit-quality");
+    const vsplitCut = $("#vsplit-cut");
+    const vsplitGifHq = $("#vsplit-gif-hq");
+    const vsplitGifBb = $("#vsplit-gif-bb");
+    const vsplitMerge = $("#vsplit-merge");
+    const vsplitAbort = $("#vsplit-abort");
+    const vsplitList = $("#vsplit-list");
+    const vsplitZipVideo = $("#vsplit-zip-video");
+    const vsplitZipGif = $("#vsplit-zip-gif");
+    const vsplitMergedDl = $("#vsplit-merged-dl");
+    const vsplitMergedPreview = $("#vsplit-merged-preview");
+    const vsplitProgress = $("#vsplit-progress");
+    const vsplitProgressFill = $("#vsplit-progress-fill");
+    const vsplitProgressText = $("#vsplit-progress-text");
+    const vsplitProgressSub = $("#vsplit-progress-sub");
+    const vsplitProgressPct = $("#vsplit-progress-pct");
+    const VSPLIT_MAX_CLIPS = 50;
+    const VSPLIT_MIN_SPAN = 0.5;
+    let vsplitSourceFile = null;
+    let vsplitObjectUrl = "";
+    let vsplitClips = [];
+    let vsplitBusy = false;
+    let abortVsplit = false;
+    let vsplitZipVideoUrl = "";
+    let vsplitZipGifUrl = "";
+    let vsplitMergedUrl = "";
+    let vsplitMode = "count";
+
+    function setVsplitProgress(visible, ratio, text, opts = {}) {
+      if (!vsplitProgress) return;
+      vsplitProgress.hidden = !visible;
+      if (!visible) {
+        if (vsplitProgressFill) {
+          vsplitProgressFill.style.width = "0%";
+          vsplitProgressFill.classList.remove("is-active", "is-busy");
+        }
+        if (vsplitProgressPct) vsplitProgressPct.hidden = true;
+        if (vsplitProgressSub) vsplitProgressSub.hidden = true;
+        return;
+      }
+      const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)));
+      const busy = Boolean(opts.busy) || (pct > 0 && pct < 100);
+      if (vsplitProgressFill) {
+        vsplitProgressFill.style.width = `${Math.max(pct, busy && pct < 8 ? 8 : pct)}%`;
+        vsplitProgressFill.classList.toggle("is-active", busy);
+        vsplitProgressFill.classList.toggle("is-busy", Boolean(opts.busy));
+      }
+      if (vsplitProgressPct) {
+        vsplitProgressPct.textContent = `${pct}%`;
+        vsplitProgressPct.hidden = false;
+      }
+      if (vsplitProgressText) vsplitProgressText.textContent = text || `${pct}%`;
+      if (vsplitProgressSub) {
+        vsplitProgressSub.textContent = opts.sub || "";
+        vsplitProgressSub.hidden = !opts.sub;
+      }
+    }
+
+    function formatClock(sec) {
+      const s = Math.max(0, Number(sec) || 0);
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      const r = Math.floor(s % 60);
+      const tenths = Math.round((s - Math.floor(s)) * 10);
+      const tail = tenths ? `.${tenths}` : "";
+      if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}${tail}`;
+      return `${m}:${String(r).padStart(2, "0")}${tail}`;
+    }
+
+    function revokeUrl(url) {
+      if (!url) return;
+      try {
+        URL.revokeObjectURL(url);
+      } catch (_) {}
+    }
+
+    function hideDownloadLink(el) {
+      if (!el) return;
+      el.hidden = true;
+      el.removeAttribute("href");
+    }
+
+    function revokeVsplitGifOutputs() {
+      revokeUrl(vsplitZipGifUrl);
+      revokeUrl(vsplitMergedUrl);
+      vsplitZipGifUrl = "";
+      vsplitMergedUrl = "";
+      hideDownloadLink(vsplitZipGif);
+      hideDownloadLink(vsplitMergedDl);
+      if (vsplitMergedPreview) {
+        vsplitMergedPreview.hidden = true;
+        vsplitMergedPreview.removeAttribute("src");
+      }
+    }
+
+    function revokeVsplitDownloads() {
+      revokeUrl(vsplitZipVideoUrl);
+      vsplitZipVideoUrl = "";
+      hideDownloadLink(vsplitZipVideo);
+      revokeVsplitGifOutputs();
+    }
+
+    function resetVsplitAbort() {
+      abortVsplit = false;
+      abortV2g = false;
+    }
+
+    function clearVsplitClips() {
+      vsplitClips.forEach((c) => {
+        try {
+          if (c.videoUrl) URL.revokeObjectURL(c.videoUrl);
+        } catch (_) {}
+        try {
+          if (c.gifUrl) URL.revokeObjectURL(c.gifUrl);
+        } catch (_) {}
+      });
+      vsplitClips = [];
+      if (vsplitList) vsplitList.innerHTML = "";
+      revokeVsplitDownloads();
+    }
+
+    function setVsplitButtons() {
+      const hasVideo = Boolean(vsplitVideo?.src);
+      const hasClips = vsplitClips.length > 0;
+      const gifCount = vsplitClips.filter((c) => c.gifBlob).length;
+      if (vsplitCut) vsplitCut.disabled = !hasVideo || vsplitBusy;
+      if (vsplitGifHq) vsplitGifHq.disabled = !hasClips || vsplitBusy;
+      if (vsplitGifBb) vsplitGifBb.disabled = !hasClips || vsplitBusy;
+      if (vsplitMerge) vsplitMerge.disabled = gifCount < 2 || vsplitBusy;
+    }
+
+    function syncVsplitMode() {
+      const isCount = vsplitMode === "count";
+      $("#vsplit-mode-n")?.classList.toggle("is-active", isCount);
+      $("#vsplit-mode-t")?.classList.toggle("is-active", !isCount);
+      if (vsplitCountRow) vsplitCountRow.hidden = !isCount;
+      if (vsplitDurationRow) vsplitDurationRow.hidden = isCount;
+    }
+
+    function computeVsplitRanges(duration) {
+      const d = Number(duration) || 0;
+      if (!(d > 0)) throw new Error("无法读取视频时长");
+      const ranges = [];
+      if (vsplitMode === "count") {
+        const n = Math.min(VSPLIT_MAX_CLIPS, Math.max(2, Math.round(Number(vsplitCount?.value) || 2)));
+        const part = d / n;
+        if (part < VSPLIT_MIN_SPAN) throw new Error("每段太短，请减少份数");
+        for (let i = 0; i < n; i++) {
+          const start = i * part;
+          const end = i === n - 1 ? d : (i + 1) * part;
+          ranges.push({ start, span: Math.max(VSPLIT_MIN_SPAN, end - start) });
+        }
+      } else {
+        const h = Math.max(0, Number(vsplitH?.value) || 0);
+        const m = Math.max(0, Number(vsplitM?.value) || 0);
+        const s = Math.max(0, Number(vsplitS?.value) || 0);
+        const part = h * 3600 + m * 60 + s;
+        if (part < VSPLIT_MIN_SPAN) throw new Error("每段时长至少 0.5 秒");
+        let start = 0;
+        let i = 0;
+        while (start < d - 0.04 && i < VSPLIT_MAX_CLIPS) {
+          const span = Math.min(part, d - start);
+          if (span < VSPLIT_MIN_SPAN && i > 0) break;
+          ranges.push({ start, span: Math.max(span, Math.min(VSPLIT_MIN_SPAN, d - start)) });
+          start += part;
+          i += 1;
+        }
+        if (!ranges.length) throw new Error("无法按此时长切分");
+      }
+      return ranges;
+    }
+
+    function renderVsplitList() {
+      if (!vsplitList) return;
+      vsplitList.innerHTML = "";
+      vsplitClips.forEach((c, idx) => {
+        const row = document.createElement("div");
+        row.className = "gif-frame vsplit-clip";
+        const top = document.createElement("div");
+        top.className = "vsplit-clip-top";
+        const title = document.createElement("strong");
+        title.textContent = `#${String(idx + 1).padStart(2, "0")}  ${formatClock(c.start)}–${formatClock(c.start + c.span)}`;
+        const meta = document.createElement("span");
+        meta.className = "hint tight";
+        const bits = [`${c.span.toFixed(1)}s`];
+        if (c.videoBlob) bits.push(`视频 ${formatKb(c.videoBlob.size)}`);
+        if (c.gifBlob) bits.push(`GIF ${formatKb(c.gifBlob.size)}`);
+        if (c.gifNote) bits.push(c.gifNote);
+        if (c.error) bits.push(c.error);
+        meta.textContent = bits.join(" · ");
+        const actions = document.createElement("div");
+        actions.className = "btn-row";
+        if (c.videoUrl) {
+          const a = document.createElement("a");
+          a.className = "secondary-btn";
+          a.href = c.videoUrl;
+          a.download = `clip-${String(idx + 1).padStart(2, "0")}.mp4`;
+          a.textContent = "下载视频";
+          actions.appendChild(a);
+        }
+        if (c.gifUrl) {
+          const a = document.createElement("a");
+          a.className = "secondary-btn";
+          a.href = c.gifUrl;
+          a.download = `clip-${String(idx + 1).padStart(2, "0")}.gif`;
+          a.textContent = "下载 GIF";
+          actions.appendChild(a);
+        }
+        top.append(title, meta, actions);
+        row.appendChild(top);
+        if (c.gifUrl) {
+          const img = document.createElement("img");
+          img.className = "vsplit-clip-gif";
+          img.alt = `片段 ${idx + 1} GIF 预览`;
+          img.src = c.gifUrl;
+          row.appendChild(img);
+        }
+        vsplitList.appendChild(row);
+      });
+      setVsplitButtons();
+    }
+
+    async function readClipBytes(ffmpeg, name) {
+      try {
+        const data = await ffmpeg.readFile(name);
+        const raw = data instanceof Uint8Array ? data : new Uint8Array(data);
+        if (!raw.byteLength) return null;
+        const bytes = new Uint8Array(raw.byteLength);
+        bytes.set(raw);
+        return bytes;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    async function cutOneClip(ffmpeg, inName, start, span, outName) {
+      const ss = String(start);
+      const tt = String(span);
+      const attempts = [
+        ["copy", ["-ss", ss, "-t", tt, "-i", inName, "-c", "copy", "-avoid_negative_ts", "make_zero", "-movflags", "+faststart", "-y", outName]],
+        ["mpeg4", ["-ss", ss, "-t", tt, "-i", inName, "-an", "-c:v", "mpeg4", "-q:v", "7", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-y", outName]],
+        ["x264", ["-ss", ss, "-t", tt, "-i", inName, "-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-y", outName]],
+      ];
+      for (const [kind, args] of attempts) {
+        try {
+          await ffmpeg.deleteFile(outName);
+        } catch (_) {}
+        try {
+          const code = await ffmpeg.exec(args);
+          const bytes = code === 0 ? await readClipBytes(ffmpeg, outName) : null;
+          if (bytes && bytes.byteLength > 32) return { bytes, copied: kind === "copy" };
+        } catch (_) {}
+      }
+      return { bytes: null, copied: false };
+    }
+
+    async function zipBlobs(entries, zipName) {
+      if (typeof JSZip !== "function") throw new Error("JSZip 未加载");
+      const zip = new JSZip();
+      entries.forEach((e) => zip.file(e.name, e.blob));
+      const blob = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(blob);
+      return { blob, url, name: zipName };
+    }
+
+    function clearVsplit() {
+      if (vsplitBusy) {
+        abortVsplit = true;
+        abortV2g = true;
+        terminateFfmpegInstance({ revokeAssets: false });
+        scheduleFfmpegPrewarm();
+      }
+      vsplitBusy = false;
+      vsplitSourceFile = null;
+      clearVsplitClips();
+      if (vsplitObjectUrl) {
+        URL.revokeObjectURL(vsplitObjectUrl);
+        vsplitObjectUrl = "";
+      }
+      if (vsplitVideo) {
+        vsplitVideo.pause?.();
+        vsplitVideo.removeAttribute("src");
+        vsplitVideo.load?.();
+        vsplitVideo.hidden = true;
+      }
+      if (vsplitFile) vsplitFile.value = "";
+      if (vsplitAbort) vsplitAbort.hidden = true;
+      setVsplitProgress(false, 0, "");
+      setError(vsplitError, "");
+      if (vsplitMeta) {
+        vsplitMeta.textContent = "支持 MP4 / WebM / MOV。切分优先复制编码（快）；失败则重编码该段。";
+      }
+      resetVsplitAbort();
+      setVsplitButtons();
+    }
+
+    async function loadVsplitFile(file) {
+      if (!file) return;
+      clearVsplit();
+      vsplitSourceFile = file;
+      setError(vsplitError, "");
+      vsplitObjectUrl = URL.createObjectURL(file);
+      if (!vsplitVideo) throw new Error("视频预览未找到");
+      vsplitVideo.hidden = false;
+      vsplitVideo.muted = true;
+      vsplitVideo.playsInline = true;
+      await new Promise((resolve, reject) => {
+        const onMeta = () => {
+          cleanup();
+          resolve();
+        };
+        const onErr = () => {
+          cleanup();
+          reject(new Error("无法读取该视频"));
+        };
+        const cleanup = () => {
+          vsplitVideo.removeEventListener("loadedmetadata", onMeta);
+          vsplitVideo.removeEventListener("error", onErr);
+        };
+        vsplitVideo.addEventListener("loadedmetadata", onMeta);
+        vsplitVideo.addEventListener("error", onErr);
+        vsplitVideo.src = vsplitObjectUrl;
+        vsplitVideo.load();
+      });
+      const duration = Number(vsplitVideo.duration) || 0;
+      if (!(duration > 0) || !vsplitVideo.videoWidth) throw new Error("视频时长或尺寸无效");
+      if (vsplitMeta) {
+        vsplitMeta.textContent = `${file.name} · ${duration.toFixed(1)}s · ${vsplitVideo.videoWidth}×${vsplitVideo.videoHeight}`;
+      }
+      setVsplitButtons();
+      toast("视频已加载");
+      scheduleFfmpegPrewarm();
+    }
+
+    async function runVsplitCut() {
+      if (!vsplitSourceFile || !vsplitVideo?.src || vsplitBusy) return;
+      abortVsplit = false;
+      vsplitBusy = true;
+      setVsplitButtons();
+      if (vsplitAbort) vsplitAbort.hidden = false;
+      setError(vsplitError, "");
+      clearVsplitClips();
+      try {
+        const duration = Number(vsplitVideo.duration) || 0;
+        const ranges = computeVsplitRanges(duration);
+        setVsplitProgress(true, 0.04, "准备切分", { sub: `共 ${ranges.length} 段`, busy: true });
+        await prewarmFfmpegEngine().catch(() => {});
+        const ffmpeg = await getFfmpegInstance();
+        const ext = v2gSourceExt(vsplitSourceFile);
+        const inName = `split-in.${ext}`;
+        await ffmpeg.writeFile(inName, await fetchFileBytes(vsplitSourceFile));
+        try {
+          for (let i = 0; i < ranges.length; i++) {
+            if (abortVsplit) throw new Error("已取消");
+            const r = ranges[i];
+            const outName = `clip-${i}.mp4`;
+            setVsplitProgress(true, (i + 0.05) / ranges.length, `切分视频 · ${i + 1}/${ranges.length}`, {
+              sub: `${formatClock(r.start)}–${formatClock(r.start + r.span)}`,
+              busy: true,
+            });
+            const { bytes, copied } = await cutOneClip(ffmpeg, inName, r.start, r.span, outName);
+            const blob = bytes ? new Blob([bytes], { type: "video/mp4" }) : null;
+            vsplitClips.push({
+              start: r.start,
+              span: r.span,
+              videoBlob: blob,
+              videoUrl: blob ? URL.createObjectURL(blob) : "",
+              copied,
+              gifBlob: null,
+              gifUrl: "",
+              gifNote: "",
+              error: blob ? "" : "视频切片失败（仍可转 GIF）",
+            });
+            try {
+              await ffmpeg.deleteFile(outName);
+            } catch (_) {}
+            renderVsplitList();
+          }
+        } finally {
+          try {
+            await ffmpeg.deleteFile(inName);
+          } catch (_) {}
+        }
+        const videos = vsplitClips.map((c, i) => ({ c, i })).filter((x) => x.c.videoBlob);
+        if (videos.length) {
+          const packed = await zipBlobs(
+            videos.map((x) => ({ name: `clip-${String(x.i + 1).padStart(2, "0")}.mp4`, blob: x.c.videoBlob })),
+            "clips-video.zip"
+          );
+          vsplitZipVideoUrl = packed.url;
+          if (vsplitZipVideo) {
+            vsplitZipVideo.href = packed.url;
+            vsplitZipVideo.hidden = false;
+          }
+        }
+        const failN = vsplitClips.filter((c) => !c.videoBlob).length;
+        setVsplitProgress(true, 1, `切分完成 · ${vsplitClips.length} 段`);
+        toast(failN ? `已切 ${vsplitClips.length} 段，${failN} 段视频失败（仍可转 GIF）` : `已切成 ${vsplitClips.length} 段`);
+      } catch (err) {
+        if (String(err && err.message) !== "已取消") setError(vsplitError, err.message || String(err));
+        else toast("已取消切分");
+        if (String(err && err.message) === "已取消") setVsplitProgress(false, 0, "");
+      } finally {
+        vsplitBusy = false;
+        resetVsplitAbort();
+        if (vsplitAbort) vsplitAbort.hidden = true;
+        setVsplitButtons();
+      }
+    }
+
+    async function runVsplitGifs(mode) {
+      if (!vsplitSourceFile || !vsplitClips.length || vsplitBusy) return;
+      abortVsplit = false;
+      vsplitBusy = true;
+      setVsplitButtons();
+      if (vsplitAbort) vsplitAbort.hidden = false;
+      setError(vsplitError, "");
+      revokeVsplitGifOutputs();
+      const fps = Math.min(15, Math.max(2, Number(vsplitFps?.value) || 15));
+      const maxW = Math.min(720, Math.max(64, Number(vsplitWidth?.value) || 480));
+      const quality = Math.min(30, Math.max(1, Number(vsplitQuality?.value) || 5));
+      const srcW = vsplitVideo?.videoWidth || 0;
+      const srcH = vsplitVideo?.videoHeight || 0;
+      const isAborted = () => abortVsplit;
+      try {
+        await prewarmFfmpegEngine().catch(() => {});
+        for (let i = 0; i < vsplitClips.length; i++) {
+          if (abortVsplit) throw new Error("已取消");
+          const c = vsplitClips[i];
+          if (c.gifUrl) {
+            try {
+              URL.revokeObjectURL(c.gifUrl);
+            } catch (_) {}
+          }
+          c.gifBlob = null;
+          c.gifUrl = "";
+          c.gifNote = "";
+          c.error = "";
+          const label = mode === "blackbox" ? "黑盒 GIF" : "高清 GIF";
+          setVsplitProgress(true, i / vsplitClips.length, `${label} · ${i + 1}/${vsplitClips.length}`, {
+            sub: `${formatClock(c.start)}–${formatClock(c.start + c.span)}`,
+            busy: true,
+          });
+          try {
+            const encoded =
+              mode === "blackbox"
+                ? await encodeBlackboxClip({
+                    file: vsplitSourceFile,
+                    startSec: c.start,
+                    span: c.span,
+                    srcW,
+                    srcH,
+                    isAborted,
+                    onProgress: (local, text) =>
+                      setVsplitProgress(true, (i + Math.min(0.98, local)) / vsplitClips.length, `${label} · ${i + 1}/${vsplitClips.length}`, {
+                        sub: text,
+                        busy: true,
+                      }),
+                  })
+                : await encodeV2gGifFfmpeg({
+                    file: vsplitSourceFile,
+                    fps,
+                    maxW,
+                    quality,
+                    startSec: c.start,
+                    span: c.span,
+                    srcW,
+                    srcH,
+                    skipWatermark: true,
+                    skipBright: true,
+                    brightness: 0,
+                    isAborted,
+                    stageLabel: `#${i + 1}`,
+                    onProgress: (local, text) =>
+                      setVsplitProgress(true, (i + Math.min(0.98, local)) / vsplitClips.length, `${label} · ${i + 1}/${vsplitClips.length}`, {
+                        sub: text,
+                        busy: true,
+                      }),
+                  });
+            if (!encoded?.blob) throw new Error("未产出 GIF");
+            c.gifBlob = encoded.blob;
+            c.gifUrl = URL.createObjectURL(encoded.blob);
+            c.gifNote = encoded.framesCapped ? `已抽稀 ${encoded.frameCount} 帧` : `${encoded.outW}×${encoded.outH}`;
+          } catch (err) {
+            if (String(err && err.message) === "已取消") throw err;
+            c.error = err.message || String(err);
+          }
+          renderVsplitList();
+        }
+        const gifs = vsplitClips.map((c, i) => ({ c, i })).filter((x) => x.c.gifBlob);
+        if (gifs.length) {
+          const packed = await zipBlobs(
+            gifs.map((x) => ({ name: `clip-${String(x.i + 1).padStart(2, "0")}.gif`, blob: x.c.gifBlob })),
+            "clips-gif.zip"
+          );
+          vsplitZipGifUrl = packed.url;
+          if (vsplitZipGif) {
+            vsplitZipGif.href = packed.url;
+            vsplitZipGif.hidden = false;
+          }
+        }
+        const failN = vsplitClips.filter((c) => c.error).length;
+        setVsplitProgress(true, 1, `GIF 完成 · 成功 ${gifs.length}/${vsplitClips.length}`);
+        toast(failN ? `完成，${failN} 段失败` : `已生成 ${gifs.length} 个 GIF`);
+      } catch (err) {
+        if (String(err && err.message) !== "已取消") setError(vsplitError, err.message || String(err));
+        else toast("已取消");
+      } finally {
+        vsplitBusy = false;
+        resetVsplitAbort();
+        if (vsplitAbort) vsplitAbort.hidden = true;
+        setVsplitButtons();
+      }
+    }
+
+    async function runVsplitMerge() {
+      const blobs = vsplitClips.map((c) => c.gifBlob).filter(Boolean);
+      if (blobs.length < 2 || vsplitBusy) return;
+      vsplitBusy = true;
+      setVsplitButtons();
+      setError(vsplitError, "");
+      try {
+        const blob = await mergeGifBlobs(blobs, (ratio, text) =>
+          setVsplitProgress(true, ratio, "合并 GIF", { sub: text, busy: ratio < 1 })
+        );
+        if (vsplitMergedUrl) URL.revokeObjectURL(vsplitMergedUrl);
+        vsplitMergedUrl = URL.createObjectURL(blob);
+        if (vsplitMergedPreview) {
+          vsplitMergedPreview.src = vsplitMergedUrl;
+          vsplitMergedPreview.hidden = false;
+        }
+        if (vsplitMergedDl) {
+          vsplitMergedDl.href = vsplitMergedUrl;
+          vsplitMergedDl.hidden = false;
+        }
+        setVsplitProgress(true, 1, `合并完成 · ${formatKb(blob.size)}`);
+        toast("已合并为一条 GIF");
+      } catch (err) {
+        setError(vsplitError, err.message || String(err));
+      } finally {
+        vsplitBusy = false;
+        resetVsplitAbort();
+        setVsplitButtons();
+      }
+    }
+
+    $("#vsplit-mode-n")?.addEventListener("click", () => {
+      vsplitMode = "count";
+      syncVsplitMode();
+    });
+    $("#vsplit-mode-t")?.addEventListener("click", () => {
+      vsplitMode = "duration";
+      syncVsplitMode();
+    });
+    vsplitFile?.addEventListener("change", (e) => {
+      loadVsplitFile(e.target.files?.[0]).catch((err) => {
+        clearVsplit();
+        setError(vsplitError, err.message || String(err));
+      });
+    });
+    $("#vsplit-clear")?.addEventListener("click", clearVsplit);
+    window.DevToolsTemp?.registerCleanup(clearVsplit);
+    vsplitCut?.addEventListener("click", () => runVsplitCut().catch((err) => setError(vsplitError, err.message || String(err))));
+    vsplitGifHq?.addEventListener("click", () => runVsplitGifs("hq").catch((err) => setError(vsplitError, err.message || String(err))));
+    vsplitGifBb?.addEventListener("click", () =>
+      runVsplitGifs("blackbox").catch((err) => setError(vsplitError, err.message || String(err)))
+    );
+    vsplitMerge?.addEventListener("click", () => runVsplitMerge().catch((err) => setError(vsplitError, err.message || String(err))));
+    vsplitAbort?.addEventListener("click", () => {
+      abortVsplit = true;
+      abortV2g = true;
+      terminateFfmpegInstance({ revokeAssets: false });
+      scheduleFfmpegPrewarm();
+    });
+    syncVsplitMode();
+    setVsplitButtons();
   } catch (err) {
     console.error("video to gif init failed", err);
   }
@@ -4193,6 +4944,171 @@
     });
   } catch (err) {
     console.error("gif compress existing init failed", err);
+  }
+
+  // ---- Merge GIFs ----
+  try {
+    const gifmFile = $("#gifm-file");
+    const gifmList = $("#gifm-list");
+    const gifmMeta = $("#gifm-meta");
+    const gifmError = $("#gifm-error");
+    const gifmMerge = $("#gifm-merge");
+    const gifmDownload = $("#gifm-download");
+    const gifmPreview = $("#gifm-preview");
+    const gifmProgress = $("#gifm-progress");
+    const gifmProgressFill = $("#gifm-progress-fill");
+    const gifmProgressText = $("#gifm-progress-text");
+    const items = [];
+    let mergedUrl = "";
+    let merging = false;
+
+    function setGifmProgress(visible, ratio, text) {
+      if (!gifmProgress) return;
+      gifmProgress.hidden = !visible;
+      const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)));
+      if (gifmProgressFill) gifmProgressFill.style.width = `${pct}%`;
+      if (gifmProgressText) gifmProgressText.textContent = text || `${pct}%`;
+    }
+
+    function revokeMerged() {
+      if (mergedUrl) {
+        URL.revokeObjectURL(mergedUrl);
+        mergedUrl = "";
+      }
+      if (gifmPreview) {
+        gifmPreview.hidden = true;
+        gifmPreview.removeAttribute("src");
+      }
+      if (gifmDownload) {
+        gifmDownload.hidden = true;
+        gifmDownload.removeAttribute("href");
+      }
+    }
+
+    function renderGifmList() {
+      if (!gifmList) return;
+      gifmList.innerHTML = "";
+      items.forEach((it, idx) => {
+        const row = document.createElement("div");
+        row.className = "gif-frame";
+        const img = document.createElement("img");
+        img.className = "gif-frame-thumb gifm-thumb";
+        img.alt = `GIF ${idx + 1}`;
+        img.src = it.url;
+        const meta = document.createElement("div");
+        meta.className = "gif-frame-meta";
+        const nameEl = document.createElement("strong");
+        nameEl.className = "gif-frame-name";
+        nameEl.textContent = `${idx + 1}. ${it.name}`;
+        const sizeEl = document.createElement("span");
+        sizeEl.className = "hint tight";
+        sizeEl.textContent = formatKb(it.blob.size);
+        meta.append(nameEl, sizeEl);
+        const actions = document.createElement("div");
+        actions.className = "gif-frame-actions";
+        const up = document.createElement("button");
+        up.type = "button";
+        up.className = "ghost-btn";
+        up.textContent = "上移";
+        up.disabled = idx === 0;
+        up.addEventListener("click", () => {
+          if (idx <= 0) return;
+          const cur = items.splice(idx, 1)[0];
+          items.splice(idx - 1, 0, cur);
+          renderGifmList();
+        });
+        const down = document.createElement("button");
+        down.type = "button";
+        down.className = "ghost-btn";
+        down.textContent = "下移";
+        down.disabled = idx === items.length - 1;
+        down.addEventListener("click", () => {
+          if (idx >= items.length - 1) return;
+          const cur = items.splice(idx, 1)[0];
+          items.splice(idx + 1, 0, cur);
+          renderGifmList();
+        });
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "ghost-btn";
+        del.textContent = "移除";
+        del.addEventListener("click", () => {
+          URL.revokeObjectURL(it.url);
+          items.splice(idx, 1);
+          renderGifmList();
+        });
+        actions.append(up, down, del);
+        row.append(img, meta, actions);
+        gifmList.appendChild(row);
+      });
+      if (gifmMerge) gifmMerge.disabled = merging || items.length < 2;
+      if (gifmMeta) {
+        gifmMeta.textContent =
+          items.length >= 2
+            ? `已选 ${items.length} 个 GIF，点「合并为一条 GIF」按当前顺序拼接（不重编码）`
+            : "按添加顺序拼接成一条长 GIF，不重新调色板（各段宽高需一致）。至少 2 个。";
+      }
+    }
+
+    function clearGifm() {
+      items.splice(0, items.length).forEach((it) => {
+        try {
+          URL.revokeObjectURL(it.url);
+        } catch (_) {}
+      });
+      revokeMerged();
+      if (gifmFile) gifmFile.value = "";
+      setGifmProgress(false, 0, "");
+      setError(gifmError, "");
+      renderGifmList();
+    }
+
+    gifmFile?.addEventListener("change", (e) => {
+      const files = [...(e.target.files || [])];
+      files.forEach((file) => {
+        const type = String(file.type || "").toLowerCase();
+        const name = String(file.name || "");
+        if (type && type !== "image/gif" && !/\.gif$/i.test(name)) return;
+        items.push({ blob: file, name: name || "clip.gif", url: URL.createObjectURL(file) });
+      });
+      if (gifmFile) gifmFile.value = "";
+      renderGifmList();
+    });
+    $("#gifm-clear")?.addEventListener("click", clearGifm);
+    window.DevToolsTemp?.registerCleanup(clearGifm);
+    gifmMerge?.addEventListener("click", async () => {
+      if (items.length < 2 || merging) return;
+      merging = true;
+      gifmMerge.disabled = true;
+      setError(gifmError, "");
+      revokeMerged();
+      try {
+        const blob = await mergeGifBlobs(
+          items.map((it) => it.blob),
+          (ratio, text) => setGifmProgress(true, ratio, text)
+        );
+        mergedUrl = URL.createObjectURL(blob);
+        if (gifmPreview) {
+          gifmPreview.src = mergedUrl;
+          gifmPreview.hidden = false;
+        }
+        if (gifmDownload) {
+          gifmDownload.href = mergedUrl;
+          gifmDownload.hidden = false;
+        }
+        setGifmProgress(true, 1, `合并完成 · ${formatKb(blob.size)}`);
+        toast("GIF 已合并，可预览下载");
+      } catch (err) {
+        setError(gifmError, err.message || String(err));
+        setGifmProgress(false, 0, "");
+      } finally {
+        merging = false;
+        renderGifmList();
+      }
+    });
+    renderGifmList();
+  } catch (err) {
+    console.error("gif merge init failed", err);
   }
 
   // Rebind copy buttons added dynamically in HTML for new panels
