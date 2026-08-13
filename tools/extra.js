@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.13-e";
+  const GIF_TOOL_VERSION = "2026.08.13-f";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -396,27 +396,22 @@
   }
 
   function isGifmakerActive() {
-    const hash = String(location.hash || "").replace(/^#/, "");
-    if (hash === "gifmaker" || hash === "vsplit" || hash === "vbb") return true;
-    const gifLink = document.querySelector('.tool-nav-link[data-tool="gifmaker"]');
-    const splitLink = document.querySelector('.tool-nav-link[data-tool="vsplit"]');
-    const vbbLink = document.querySelector('.tool-nav-link[data-tool="vbb"]');
+    const hash = String(location.hash || "").replace(/^#/, "").toLowerCase();
     if (
-      gifLink?.classList.contains("is-active") ||
-      splitLink?.classList.contains("is-active") ||
-      vbbLink?.classList.contains("is-active")
+      hash === "gifmaker" ||
+      hash === "vsplit" ||
+      hash === "vbb" ||
+      hash === "media" ||
+      hash.indexOf("media/") === 0
     ) {
       return true;
     }
-    const panel = document.getElementById("gifmaker");
-    if (!panel) return false;
-    if (panel.classList.contains("is-active")) return true;
-    if (panel.hidden) return false;
-    try {
-      return window.getComputedStyle(panel).display !== "none";
-    } catch (_) {
-      return false;
-    }
+    const mediaLink = document.querySelector('.tool-nav-link[data-tool="media"]');
+    if (mediaLink?.classList.contains("is-active")) return true;
+    return ["gifmaker", "vsplit", "vbb"].some((id) => {
+      const panel = document.getElementById(id);
+      return !!(panel && panel.classList.contains("is-workspace-active") && !panel.hidden);
+    });
   }
 
   function prewarmFfmpegEngine() {
@@ -465,20 +460,25 @@
     paintFfmpegWarmHint();
     scheduleFfmpegPrewarm();
     window.addEventListener("hashchange", scheduleFfmpegPrewarm);
+    window.addEventListener("devtools:route", scheduleFfmpegPrewarm);
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) scheduleFfmpegPrewarm();
     });
-    const panel = document.getElementById("gifmaker");
-    if (panel && typeof MutationObserver === "function") {
-      new MutationObserver(scheduleFfmpegPrewarm).observe(panel, {
-        attributes: true,
-        attributeFilter: ["class", "hidden", "style"],
+    if (typeof MutationObserver === "function") {
+      ["gifmaker", "vsplit", "vbb"].forEach((id) => {
+        const panel = document.getElementById(id);
+        if (!panel) return;
+        new MutationObserver(scheduleFfmpegPrewarm).observe(panel, {
+          attributes: true,
+          attributeFilter: ["class", "hidden", "style"],
+        });
       });
     }
-    document
-      .querySelectorAll('.tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"]')
-      .forEach((link) => {
-      link.addEventListener("click", () => setTimeout(scheduleFfmpegPrewarm, 0));
+    document.addEventListener("click", (e) => {
+      const t = e.target?.closest?.(
+        '.tool-nav-link[data-tool="media"], [data-media-tab], .tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"]'
+      );
+      if (t) setTimeout(scheduleFfmpegPrewarm, 0);
     });
   }
 

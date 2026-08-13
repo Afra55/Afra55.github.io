@@ -8,7 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260813e" />
+  <link rel="stylesheet" href="./style.css?v=20260813f" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260813f" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -18,52 +19,48 @@
   </div>
 
   <header class="site-header">
-    <a class="brand" href="./">
-      <span class="brand-mark" aria-hidden="true"></span>
-      <span class="brand-name">DevTools</span>
-    </a>
-    <p class="tagline">常用开发小工具合集 · 本地处理不上传 · 可拖拽导航排序</p>
+    <div class="header-row">
+      <a class="brand" href="./">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-name">DevTools</span>
+      </a>
+      <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false">工具</button>
+    </div>
+    <p class="tagline">常用开发小工具合集 · 本地处理不上传 · 单工具工作台</p>
   </header>
 
   <div class="app-layout">
-    <aside class="nav-bar" id="nav-bar">
-      <nav class="tool-nav" id="tool-nav" aria-label="工具导航">
-        <a class="tool-nav-link is-active" href="#timestamp" draggable="true" data-tool="timestamp">时间戳</a>
-        <a class="tool-nav-link" href="#timediff" draggable="true" data-tool="timediff">时间差</a>
-        <a class="tool-nav-link" href="#cron" draggable="true" data-tool="cron">Cron</a>
-        <a class="tool-nav-link" href="#ahex" draggable="true" data-tool="ahex">AHEX</a>
-        <a class="tool-nav-link" href="#color" draggable="true" data-tool="color">颜色互转</a>
-        <a class="tool-nav-link" href="#eyedropper" draggable="true" data-tool="eyedropper">屏幕取色</a>
-        <a class="tool-nav-link" href="#base64" draggable="true" data-tool="base64">Base64</a>
-        <a class="tool-nav-link" href="#imgb64" draggable="true" data-tool="imgb64">图片 Base64</a>
-        <a class="tool-nav-link" href="#url" draggable="true" data-tool="url">URL</a>
-        <a class="tool-nav-link" href="#hash" draggable="true" data-tool="hash">Hash</a>
-        <a class="tool-nav-link" href="#password" draggable="true" data-tool="password">密码生成</a>
-        <a class="tool-nav-link" href="#uuid" draggable="true" data-tool="uuid">UUID</a>
-        <a class="tool-nav-link" href="#json" draggable="true" data-tool="json">JSON</a>
-        <a class="tool-nav-link" href="#yaml" draggable="true" data-tool="yaml">YAML</a>
-        <a class="tool-nav-link" href="#sharecard" draggable="true" data-tool="sharecard">代码卡片</a>
-        <a class="tool-nav-link" href="#query" draggable="true" data-tool="query">Query / JWT</a>
-        <a class="tool-nav-link" href="#text" draggable="true" data-tool="text">文本</a>
-        <a class="tool-nav-link" href="#caseconv" draggable="true" data-tool="caseconv">命名转换</a>
-        <a class="tool-nav-link" href="#regex" draggable="true" data-tool="regex">正则</a>
-        <a class="tool-nav-link" href="#diff" draggable="true" data-tool="diff">Diff</a>
-        <a class="tool-nav-link" href="#qrcode" draggable="true" data-tool="qrcode">二维码</a>
-        <a class="tool-nav-link" href="#gifmaker" draggable="true" data-tool="gifmaker">GIF 工具</a>
-        <a class="tool-nav-link" href="#vsplit" draggable="true" data-tool="vsplit">视频切分</a>
-        <a class="tool-nav-link" href="#vbb" draggable="true" data-tool="vbb">一键黑盒切片</a>
-        <a class="tool-nav-link" href="#imgkit" draggable="true" data-tool="imgkit">图片工具</a>
-        <a class="tool-nav-link" href="#units" draggable="true" data-tool="units">单位换算</a>
-        <a class="tool-nav-link" href="#coord" draggable="true" data-tool="coord">坐标系互转</a>
-        <a class="tool-nav-link" href="#numbase" draggable="true" data-tool="numbase">进制转换</a>
-        <a class="tool-nav-link" href="#markdown" draggable="true" data-tool="markdown">Markdown</a>
-        <a class="tool-nav-link" href="#adb" draggable="true" data-tool="adb">ADB 工具</a>
-      </nav>
-      <button type="button" class="nav-reset" id="nav-reset" title="恢复默认分组排序">恢复默认排序</button>
+    <div class="nav-backdrop" id="nav-backdrop" hidden></div>
+    <aside class="nav-bar" id="nav-bar" aria-label="工具导航抽屉">
+      <div class="nav-drawer-head">
+        <strong>选择工具</strong>
+        <button type="button" class="ghost-btn nav-close-btn" id="nav-close">关闭</button>
+      </div>
+      <label class="nav-search-wrap" for="tool-search">
+        <span class="visually-hidden">搜索工具</span>
+        <input id="tool-search" class="nav-search" type="search" placeholder="搜索工具…" autocomplete="off" enterkeyhint="search" />
+      </label>
+      <div class="nav-recent" id="tool-recent" hidden>
+        <p class="nav-recent-label">最近使用</p>
+        <div class="nav-recent-list" id="tool-recent-list"></div>
+      </div>
+      <nav class="tool-nav" id="tool-nav" aria-label="工具分组"></nav>
+      <button type="button" class="nav-reset" id="nav-reset" title="恢复默认排序">恢复默认排序</button>
     </aside>
 
     <main class="shell">
-    <section id="timestamp" class="panel" data-reveal>
+      <div class="workspace-top" id="workspace-top">
+        <div class="workspace-tool-meta">
+          <h1 class="workspace-title" id="workspace-title">时间戳</h1>
+          <button type="button" class="ghost-btn workspace-switch" id="workspace-switch">切换工具</button>
+        </div>
+        <div class="media-subnav" id="media-subnav" hidden role="tablist" aria-label="媒体子功能">
+          <button type="button" class="media-tab is-active" role="tab" data-media-tab="gifmaker" aria-selected="true">GIF</button>
+          <button type="button" class="media-tab" role="tab" data-media-tab="vsplit" aria-selected="false">视频切分</button>
+          <button type="button" class="media-tab" role="tab" data-media-tab="vbb" aria-selected="false">一键黑盒</button>
+        </div>
+      </div>
+    <section id="timestamp" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>时间戳转换</h1>
         <p>秒 / 毫秒时间戳与年月日时分秒互转，支持本地时区与 UTC。</p>
@@ -114,7 +111,7 @@
       </div>
     </section>
 
-<section id="timediff" class="panel" data-reveal>
+<section id="timediff" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>时间差计算</h1>
         <p>支持秒/毫秒时间戳，也支持 <span class="mono">YYYY-MM-DD HH:mm:ss</span>，两侧可混用。</p>
@@ -152,7 +149,7 @@
       </div>
     </section>
 
-<section id="cron" class="panel" data-reveal>
+<section id="cron" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>Cron 表达式</h1>
         <p>解析标准 5 段 cron，并估算接下来几次触发时间。</p>
@@ -170,7 +167,7 @@
       </div>
     </section>
 
-<section id="ahex" class="panel" data-reveal>
+<section id="ahex" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>AHEX 颜色</h1>
         <p>输入或调节 <span class="mono">#AARRGGBB</span>（如 <span class="mono">#FF000000</span>），滑块与通道可实时互相同步。</p>
@@ -256,7 +253,7 @@
       </div>
     </section>
 
-<section id="color" class="panel" data-reveal>
+<section id="color" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>颜色互转</h1>
         <p>HEX / RGB / HSL 互相转换，并实时预览。</p>
@@ -282,7 +279,7 @@
       </div>
     </section>
 
-<section id="eyedropper" class="panel" data-reveal>
+<section id="eyedropper" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>屏幕取色</h1>
         <p>支持浏览器屏幕取色；也可上传图片后在图片上点击取色。</p>
@@ -312,7 +309,7 @@
       </div>
     </section>
 
-<section id="password" class="panel" data-reveal>
+<section id="password" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>密码生成器</h1>
         <p>可配置长度、字符类型，生成多个随机密码。</p>
@@ -341,7 +338,7 @@
       </div>
     </section>
 
-<section id="base64" class="panel" data-reveal>
+<section id="base64" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>Base64 编解码</h1>
         <p>文本与 Base64 互转，支持 UTF-8；也可选择本地文件编码为 Base64。</p>
@@ -370,7 +367,7 @@
       </div>
     </section>
 
-<section id="imgb64" class="panel" data-reveal>
+<section id="imgb64" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>图片转 Base64</h1>
         <p>选择图片后生成 Data URL，并预览。</p>
@@ -395,7 +392,7 @@
       </div>
     </section>
 
-<section id="url" class="panel" data-reveal>
+<section id="url" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>URL 编解码</h1>
         <p>支持 encodeURIComponent / decodeURIComponent。</p>
@@ -420,7 +417,7 @@
       </div>
     </section>
 
-<section id="hash" class="panel" data-reveal>
+<section id="hash" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>Hash</h1>
         <p>计算文本的 MD5 / SHA-256（本地计算）。</p>
@@ -439,7 +436,7 @@
       </div>
     </section>
 
-<section id="uuid" class="panel" data-reveal>
+<section id="uuid" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>UUID 生成</h1>
         <p>生成 UUID v4，可批量输出。</p>
@@ -459,7 +456,7 @@
       </div>
     </section>
 
-<section id="json" class="panel" data-reveal>
+<section id="json" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>JSON 格式化</h1>
         <p>校验、美化与压缩，全部在本地完成。输入与结果共用同一编辑框。</p>
@@ -483,7 +480,7 @@
       </div>
     </section>
 
-<section id="yaml" class="panel" data-reveal>
+<section id="yaml" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>YAML ⇄ JSON</h1>
         <p>本地互转与格式化。</p>
@@ -510,7 +507,7 @@ features:
       </div>
     </section>
 
-<section id="sharecard" class="panel" data-reveal>
+<section id="sharecard" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>代码卡片</h1>
         <p>把代码或 JSON 生成精美分享图，可加水印并导出 PNG。左上角可显示装饰圆点。</p>
@@ -596,7 +593,7 @@ fun Greeting(name: String) {
       </div>
     </section>
 
-<section id="query" class="panel" data-reveal>
+<section id="query" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>Query / JWT 解析</h1>
         <p>解析 URL 查询参数，或拆开 JWT 查看 Header / Payload（不校验签名）。</p>
@@ -620,7 +617,7 @@ fun Greeting(name: String) {
       </div>
     </section>
 
-<section id="text" class="panel" data-reveal>
+<section id="text" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>文本处理</h1>
         <p>大小写、去空行、去首尾空白，以及字数统计。</p>
@@ -639,7 +636,7 @@ fun Greeting(name: String) {
       </div>
     </section>
 
-<section id="caseconv" class="panel" data-reveal>
+<section id="caseconv" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>命名转换</h1>
         <p>camelCase / snake_case / kebab-case 等风格互转，支持多行。</p>
@@ -669,7 +666,7 @@ fun Greeting(name: String) {
       </div>
     </section>
 
-<section id="regex" class="panel" data-reveal>
+<section id="regex" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>正则测试</h1>
         <p>实时匹配、高亮与捕获分组，支持常用 flags。</p>
@@ -713,7 +710,7 @@ hello@world.org</textarea>
       </div>
     </section>
 
-<section id="diff" class="panel" data-reveal>
+<section id="diff" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>文本 Diff</h1>
         <p>按行对比两段文本，高亮新增与删除。</p>
@@ -736,7 +733,7 @@ hello@world.org</textarea>
       </div>
     </section>
 
-<section id="qrcode" class="panel" data-reveal>
+<section id="qrcode" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>二维码</h1>
         <p>本地生成二维码，也可从图片或摄像头识别内容。</p>
@@ -780,7 +777,7 @@ hello@world.org</textarea>
       </div>
     </section>
 
-<section id="units" class="panel" data-reveal>
+<section id="units" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>单位换算</h1>
         <p>长度、重量、温度常用单位互转。</p>
@@ -814,7 +811,7 @@ hello@world.org</textarea>
       </div>
     </section>
 
-<section id="coord" class="panel" data-reveal>
+<section id="coord" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>坐标系互转</h1>
         <p>WGS84 / GCJ02 / BD09 / CGCS2000 本地公式互转，格式为经度,纬度。</p>
@@ -878,7 +875,7 @@ hello@world.org</textarea>
       </div>
     </section>
 
-<section id="numbase" class="panel" data-reveal>
+<section id="numbase" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>进制转换</h1>
         <p>二 / 八 / 十 / 十六进制互转。</p>
@@ -909,7 +906,7 @@ hello@world.org</textarea>
       </div>
     </section>
 
-<section id="markdown" class="panel" data-reveal>
+<section id="markdown" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>Markdown 预览</h1>
         <p>本地渲染 Markdown（标题、列表、粗体、链接、代码）。</p>
@@ -939,13 +936,13 @@ hello@world.org</textarea>
       </div>
     </section>
 
-<section id="gifmaker" class="panel" data-reveal>
+<section id="gifmaker" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <div class="panel-title-row">
           <h1>GIF 工具</h1>
-          <span class="tool-ver mono" id="gif-tool-version" title="GIF 工具逻辑版本">v2026.08.13-e</span>
+          <span class="tool-ver mono" id="gif-tool-version" title="GIF 工具逻辑版本">v2026.08.13-f</span>
         </div>
-        <p>多图合成 GIF、压缩已有 GIF、合并 GIF、拆帧/转 WebM，或把视频转成 GIF / 动画 WebP；本地处理，带进度。当前版本 <strong class="mono" id="gif-tool-version-inline">v2026.08.13-e</strong>。</p>
+        <p>多图合成 GIF、压缩已有 GIF、合并 GIF、拆帧/转 WebM，或把视频转成 GIF / 动画 WebP；本地处理，带进度。当前版本 <strong class="mono" id="gif-tool-version-inline">v2026.08.13-f</strong>。</p>
       </div>
       <div class="panel-body">
         <div class="convert-grid">
@@ -1192,7 +1189,7 @@ hello@world.org</textarea>
       </div>
     </section>
 
-<section id="vsplit" class="panel" data-reveal>
+<section id="vsplit" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>视频切分</h1>
         <p>上传视频后按份数等分，或按固定时长切片；可下载片段，并批量转高清 / 黑盒 GIF，支持预览与合并。</p>
@@ -1259,7 +1256,7 @@ hello@world.org</textarea>
       </div>
     </section>
 
-<section id="vbb" class="panel" data-reveal>
+<section id="vbb" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>一键黑盒切片</h1>
         <p>上传视频后先分析切分方案：清晰优先、锐度优先（缩短加宽）、时长优先（可压缩）。确认后再转 GIF，可预览下载。</p>
@@ -1322,7 +1319,7 @@ hello@world.org</textarea>
       </div>
     </section>
 
-<section id="adb" class="panel" data-reveal>
+<section id="adb" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>ADB 工具</h1>
         <p>通过本机 ADB 桥管理多台设备：文件、安装、应用、网络代理/转发、开发者选项、Logcat、输入与截图录屏。使用前需本机已安装 <code class="mono">adb</code>，并启动本地桥接服务。</p>
@@ -1686,7 +1683,7 @@ hello@world.org</textarea>
       </div>
     </section>
 
-<section id="imgkit" class="panel" data-reveal>
+<section id="imgkit" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>图片工具</h1>
         <p>本地压缩、改尺寸、转格式、裁剪、水印、拼接、九宫格与 App 图标导出；按页签操作，底部随时可导出。</p>
@@ -1939,7 +1936,7 @@ hello@world.org</textarea>
       </div>
     </section>
 
-<section id="coming" class="panel panel-soon" data-reveal>
+<section id="coming" class="panel tool-panel panel-soon tool-panel" data-reveal>
       <div class="panel-head">
         <h1>更多功能 · 预留</h1>
         <p>后续工具仍可按同样方式继续接入。</p>
@@ -1973,8 +1970,8 @@ hello@world.org</textarea>
   <script src="./vendor/jszip.min.js"></script>
   <script src="./temp.js?v=20260811b"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260813e"></script>
-  <script src="./extra.js?v=20260813e"></script>
+  <script src="./app.js?v=20260813f"></script>
+  <script src="./extra.js?v=20260813f"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>
