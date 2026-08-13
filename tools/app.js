@@ -850,6 +850,8 @@
   let currentTool = "timestamp";
   let currentMediaTab = "gifmaker";
   let lastFocusBeforeDrawer = null;
+  let drawerFocusTimer = 0;
+  let drawerIgnoreOpenUntil = 0;
 
   function toolName(id) {
     return TOOL_META[id]?.name || id;
@@ -978,6 +980,11 @@
 
   function setDrawerOpen(open) {
     const wantOpen = !!open;
+    if (!wantOpen) {
+      // 部分手机在关闭时若立刻 focus「工具」按钮，会再次合成 click 把抽屉打开
+      drawerIgnoreOpenUntil = Date.now() + 450;
+      window.clearTimeout(drawerFocusTimer);
+    }
     document.body.classList.toggle("nav-open", wantOpen);
     if (navOpenBtn) navOpenBtn.setAttribute("aria-expanded", wantOpen ? "true" : "false");
     if (navBackdrop) navBackdrop.hidden = !wantOpen;
@@ -986,21 +993,42 @@
       if (wantOpen && !canDesktopDrag()) {
         navBar.setAttribute("role", "dialog");
         navBar.setAttribute("aria-modal", "true");
+        navBar.setAttribute("aria-labelledby", "nav-drawer-title");
       } else {
         navBar.setAttribute("role", "navigation");
         navBar.removeAttribute("aria-modal");
+        navBar.removeAttribute("aria-labelledby");
       }
     }
     if (wantOpen) {
       lastFocusBeforeDrawer = document.activeElement;
-      setTimeout(() => {
-        (toolSearch || navCloseBtn || drawerFocusables()[0])?.focus?.();
+      window.clearTimeout(drawerFocusTimer);
+      drawerFocusTimer = window.setTimeout(() => {
+        try {
+          (toolSearch || navCloseBtn || drawerFocusables()[0])?.focus?.({ preventScroll: true });
+        } catch (_) {}
       }, 50);
-    } else if (lastFocusBeforeDrawer && typeof lastFocusBeforeDrawer.focus === "function") {
-      try {
-        lastFocusBeforeDrawer.focus();
-      } catch (_) {}
-      lastFocusBeforeDrawer = null;
+      return;
+    }
+
+    navCloseBtn?.blur?.();
+    const restore = lastFocusBeforeDrawer;
+    lastFocusBeforeDrawer = null;
+    const openerBtns = new Set([navOpenBtn, workspaceSwitch].filter(Boolean));
+    // 不要把焦点立刻还回「工具/切换工具」，避免移动端二次点击重开
+    if (restore && !openerBtns.has(restore) && typeof restore.focus === "function") {
+      window.setTimeout(() => {
+        try {
+          restore.focus({ preventScroll: true });
+        } catch (_) {}
+      }, 0);
+    } else if (workspaceTitle) {
+      workspaceTitle.setAttribute("tabindex", "-1");
+      window.setTimeout(() => {
+        try {
+          workspaceTitle.focus({ preventScroll: true });
+        } catch (_) {}
+      }, 0);
     }
   }
 
@@ -1180,10 +1208,30 @@
     showToast("已恢复默认排序");
   });
 
-  navOpenBtn?.addEventListener("click", () => setDrawerOpen(true));
-  navCloseBtn?.addEventListener("click", () => setDrawerOpen(false));
-  navBackdrop?.addEventListener("click", () => setDrawerOpen(false));
-  workspaceSwitch?.addEventListener("click", () => setDrawerOpen(true));
+  navOpenBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (Date.now() < drawerIgnoreOpenUntil) return;
+    setDrawerOpen(!document.body.classList.contains("nav-open"));
+  });
+  navCloseBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDrawerOpen(false);
+  });
+  const closeFromBackdrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDrawerOpen(false);
+  };
+  navBackdrop?.addEventListener("click", closeFromBackdrop);
+  navBackdrop?.addEventListener("pointerdown", closeFromBackdrop);
+  workspaceSwitch?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (Date.now() < drawerIgnoreOpenUntil) return;
+    setDrawerOpen(true);
+  });
   toolSearch?.addEventListener("input", () => applySearchFilter(toolSearch.value));
   mediaSubnav?.addEventListener("click", (e) => {
     const btn = e.target?.closest?.("[data-media-tab]");

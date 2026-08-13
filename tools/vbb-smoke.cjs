@@ -200,6 +200,17 @@ async function main() {
   });
   await page.click("#nav-open");
   const drawerOpen = await page.evaluate(() => document.body.classList.contains("nav-open"));
+  await page.click("#nav-close");
+  const closedByBtn = await page.evaluate(() => !document.body.classList.contains("nav-open"));
+  // 模拟部分手机：关闭后焦点回到「工具」并再次合成 click
+  await page.evaluate(() => document.getElementById("nav-open")?.click());
+  const stayedClosedAfterGhostOpen = await page.evaluate(
+    () => !document.body.classList.contains("nav-open")
+  );
+  // 等防抖窗口过后再正常打开
+  await new Promise((r) => setTimeout(r, 500));
+  await page.click("#nav-open");
+  await page.waitForFunction(() => document.body.classList.contains("nav-open"), { timeout: 5000 });
   await page.click('.tool-nav-link[data-tool="media"]');
   await page.waitForFunction(() => location.hash.indexOf("#media/") === 0, { timeout: 5000 });
   const afterMedia = await page.evaluate(() => ({
@@ -212,6 +223,8 @@ async function main() {
   await page.waitForFunction(() => location.hash === "#media/vbb", { timeout: 5000 });
   const mobileShell = {
     drawerOpen,
+    closedByBtn,
+    stayedClosedAfterGhostOpen,
     afterMedia,
     hashVbb: await page.evaluate(() => location.hash),
     vbbActive: await page.evaluate(() =>
@@ -296,6 +309,10 @@ async function main() {
   if (!todayTools.vbbSharp) problems.push("missing sharp mode");
   if (todayTools.mediaTabs !== 3) problems.push("media subnav should have 3 tabs");
   if (!mobileShell.drawerOpen) problems.push("mobile drawer failed to open");
+  if (!mobileShell.closedByBtn) problems.push("nav-close should close drawer");
+  if (!mobileShell.stayedClosedAfterGhostOpen) {
+    problems.push("drawer should stay closed when open button gets ghost click after close");
+  }
   if (!mobileShell.afterMedia.gifActive) problems.push("media entry should open gif tab");
   if (!mobileShell.afterMedia.drawerClosed) problems.push("drawer should close after navigate");
   if (mobileShell.hashVbb !== "#media/vbb") problems.push(`media tab switch hash: ${mobileShell.hashVbb}`);
