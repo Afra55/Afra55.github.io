@@ -1865,6 +1865,52 @@ a.secondary-btn {
   border: 1px solid var(--line);
 }
 
+.vbb-plan {
+  margin-top: 1.15rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(8, 14, 26, 0.4);
+}
+
+.vbb-plan-compare {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+}
+
+.vbb-plan-card {
+  padding: 0.7rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(14, 22, 38, 0.55);
+}
+
+.vbb-plan-card.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, rgba(14, 22, 38, 0.55));
+}
+
+.vbb-plan-card strong {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.vbb-plan-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.55rem 0.75rem;
+  align-items: center;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(14, 22, 38, 0.45);
+}
+
+.vbb-plan-row .hint {
+  margin: 0;
+}
+
 @media (max-width: 700px) {
   .gif-frame {
     grid-template-columns: 64px 1fr;

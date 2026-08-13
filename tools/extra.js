@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.13-b";
+  const GIF_TOOL_VERSION = "2026.08.13-c";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -397,10 +397,17 @@
 
   function isGifmakerActive() {
     const hash = String(location.hash || "").replace(/^#/, "");
-    if (hash === "gifmaker" || hash === "vsplit") return true;
+    if (hash === "gifmaker" || hash === "vsplit" || hash === "vbb") return true;
     const gifLink = document.querySelector('.tool-nav-link[data-tool="gifmaker"]');
     const splitLink = document.querySelector('.tool-nav-link[data-tool="vsplit"]');
-    if (gifLink?.classList.contains("is-active") || splitLink?.classList.contains("is-active")) return true;
+    const vbbLink = document.querySelector('.tool-nav-link[data-tool="vbb"]');
+    if (
+      gifLink?.classList.contains("is-active") ||
+      splitLink?.classList.contains("is-active") ||
+      vbbLink?.classList.contains("is-active")
+    ) {
+      return true;
+    }
     const panel = document.getElementById("gifmaker");
     if (!panel) return false;
     if (panel.classList.contains("is-active")) return true;
@@ -468,7 +475,9 @@
         attributeFilter: ["class", "hidden", "style"],
       });
     }
-    document.querySelectorAll('.tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"]').forEach((link) => {
+    document
+      .querySelectorAll('.tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"]')
+      .forEach((link) => {
       link.addEventListener("click", () => setTimeout(scheduleFfmpegPrewarm, 0));
     });
   }
@@ -4770,6 +4779,695 @@
     });
     syncVsplitMode();
     setVsplitButtons();
+
+    // ---- One-click blackbox split planner (vbb) ----
+    const vbbFile = $("#vbb-file");
+    const vbbVideo = $("#vbb-video");
+    const vbbMeta = $("#vbb-meta");
+    const vbbError = $("#vbb-error");
+    const vbbAnalyze = $("#vbb-analyze");
+    const vbbRun = $("#vbb-run");
+    const vbbMerge = $("#vbb-merge");
+    const vbbAbort = $("#vbb-abort");
+    const vbbZip = $("#vbb-zip");
+    const vbbMergedDl = $("#vbb-merged-dl");
+    const vbbMergedPreview = $("#vbb-merged-preview");
+    const vbbProgress = $("#vbb-progress");
+    const vbbProgressFill = $("#vbb-progress-fill");
+    const vbbProgressText = $("#vbb-progress-text");
+    const vbbProgressSub = $("#vbb-progress-sub");
+    const vbbProgressPct = $("#vbb-progress-pct");
+    const vbbPlan = $("#vbb-plan");
+    const vbbPlanSummary = $("#vbb-plan-summary");
+    const vbbPlanCompare = $("#vbb-plan-compare");
+    const vbbPlanList = $("#vbb-plan-list");
+    const vbbList = $("#vbb-list");
+    const vbbResultBlock = $("#vbb-result-block");
+    const vbbCustomRow = $("#vbb-custom-row");
+    const vbbTargetSpan = $("#vbb-target-span");
+    const vbbTargetRange = $("#vbb-target-range");
+    const VBB_SAMPLE_SPAN = 2.5;
+    const VBB_SAFETY = 0.85;
+    const VBB_MAX_CLIPS = 50;
+    const VBB_MIN_SPAN = 0.5;
+    const VBB_CLARITY_MAX_SPAN = 20;
+    const VBB_DURATION_MAX_SPAN = 30;
+    const VBB_DEFAULT_META =
+      "支持 MP4 / WebM / MOV。分析阶段会抽 2–3 秒样片估体积；确认前不会批量转 GIF。";
+
+    let vbbSourceFile = null;
+    let vbbObjectUrl = "";
+    let vbbBusy = false;
+    let abortVbb = false;
+    let vbbMode = "clarity";
+    let vbbAnalysis = null;
+    let vbbClips = [];
+    let vbbZipUrl = "";
+    let vbbMergedUrl = "";
+
+    function setVbbProgress(visible, ratio, text, opts = {}) {
+      if (!vbbProgress) return;
+      vbbProgress.hidden = !visible;
+      if (!visible) {
+        if (vbbProgressFill) {
+          vbbProgressFill.style.width = "0%";
+          vbbProgressFill.classList.remove("is-active", "is-busy");
+        }
+        if (vbbProgressPct) vbbProgressPct.hidden = true;
+        if (vbbProgressSub) vbbProgressSub.hidden = true;
+        return;
+      }
+      const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)));
+      const busy = Boolean(opts.busy) || (pct > 0 && pct < 100);
+      if (vbbProgressFill) {
+        vbbProgressFill.style.width = `${Math.max(pct, busy && pct < 8 ? 8 : pct)}%`;
+        vbbProgressFill.classList.toggle("is-active", busy);
+        vbbProgressFill.classList.toggle("is-busy", Boolean(opts.busy));
+      }
+      if (vbbProgressPct) {
+        vbbProgressPct.textContent = `${pct}%`;
+        vbbProgressPct.hidden = false;
+      }
+      if (vbbProgressText) vbbProgressText.textContent = text || `${pct}%`;
+      if (vbbProgressSub) {
+        vbbProgressSub.textContent = opts.sub || "";
+        vbbProgressSub.hidden = !opts.sub;
+      }
+    }
+
+    function resetVbbAbort() {
+      abortVbb = false;
+      abortV2g = false;
+    }
+
+    function formatVbbClock(sec) {
+      const s = Math.max(0, Number(sec) || 0);
+      const m = Math.floor(s / 60);
+      const r = Math.floor(s % 60);
+      const tenths = Math.round((s - Math.floor(s)) * 10);
+      const tail = tenths ? `.${tenths}` : "";
+      return `${m}:${String(r).padStart(2, "0")}${tail}`;
+    }
+
+    function clearVbbResults() {
+      vbbClips.forEach((c) => {
+        try {
+          if (c.gifUrl) URL.revokeObjectURL(c.gifUrl);
+        } catch (_) {}
+      });
+      vbbClips = [];
+      if (vbbList) vbbList.innerHTML = "";
+      if (vbbZipUrl) {
+        try {
+          URL.revokeObjectURL(vbbZipUrl);
+        } catch (_) {}
+      }
+      vbbZipUrl = "";
+      if (vbbMergedUrl) {
+        try {
+          URL.revokeObjectURL(vbbMergedUrl);
+        } catch (_) {}
+      }
+      vbbMergedUrl = "";
+      if (vbbZip) {
+        vbbZip.hidden = true;
+        vbbZip.removeAttribute("href");
+      }
+      if (vbbMergedDl) {
+        vbbMergedDl.hidden = true;
+        vbbMergedDl.removeAttribute("href");
+      }
+      if (vbbMergedPreview) {
+        vbbMergedPreview.hidden = true;
+        vbbMergedPreview.removeAttribute("src");
+      }
+      if (vbbResultBlock) vbbResultBlock.hidden = true;
+    }
+
+    function setVbbButtons() {
+      const hasVideo = Boolean(vbbVideo?.src && vbbSourceFile);
+      const hasPlan = Boolean(vbbAnalysis?.active?.ranges?.length);
+      const gifCount = vbbClips.filter((c) => c.gifBlob).length;
+      if (vbbAnalyze) vbbAnalyze.disabled = !hasVideo || vbbBusy;
+      if (vbbRun) vbbRun.disabled = !hasPlan || vbbBusy;
+      if (vbbMerge) vbbMerge.disabled = gifCount < 2 || vbbBusy;
+    }
+
+    function syncVbbModeUi() {
+      $("#vbb-mode-clarity")?.classList.toggle("is-active", vbbMode === "clarity");
+      $("#vbb-mode-duration")?.classList.toggle("is-active", vbbMode === "duration");
+      $("#vbb-mode-custom")?.classList.toggle("is-active", vbbMode === "custom");
+      if (vbbCustomRow) vbbCustomRow.hidden = vbbMode !== "custom";
+    }
+
+    function buildVbbRanges(duration, targetSpan) {
+      const d = Number(duration) || 0;
+      const part = Math.max(VBB_MIN_SPAN, Number(targetSpan) || VBB_MIN_SPAN);
+      if (!(d > 0)) throw new Error("无法读取视频时长");
+      const n = Math.min(VBB_MAX_CLIPS, Math.max(1, Math.ceil(d / part - 1e-9)));
+      const slice = d / n;
+      const ranges = [];
+      for (let i = 0; i < n; i++) {
+        const start = i * slice;
+        const end = i === n - 1 ? d : (i + 1) * slice;
+        ranges.push({ start, span: Math.max(VBB_MIN_SPAN, end - start) });
+      }
+      return ranges;
+    }
+
+    function estimateVbbBytes(bps15, span, mode) {
+      const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
+      if (mode === "clarity") return Math.round(bps15 * s);
+      // 时长优先：按可降到约 10FPS + 压缩后的体积粗估，并封顶 6MB
+      const raw = bps15 * (10 / 15) * 0.55 * s;
+      return Math.round(Math.min(V2G_BLACKBOX_MAX_BYTES * 0.98, raw));
+    }
+
+    function describeVbbExpect(mode, targetSpan, clarityMax, durationMax) {
+      if (mode === "clarity") return "固定 15FPS · 宽420 · 不压缩 · ≤6MB";
+      if (mode === "duration") return "现网黑盒：15→12→10 · 可压缩 · 够小再加宽 · ≤6MB";
+      if (targetSpan <= clarityMax + 0.05) return "接近清晰优先：尽量 15FPS 不压缩";
+      if (targetSpan <= durationMax + 0.05) return "超过清晰安全时长：执行时走完整黑盒（可降帧/压缩）";
+      return "目标偏长：执行走黑盒，个别段可能仍接近 6MB 上限";
+    }
+
+    function makeVbbPlanVariant(key, label, duration, maxSpan, bps15, note) {
+      const safeMax = Math.max(VBB_MIN_SPAN, Math.min(maxSpan, key === "clarity" ? VBB_CLARITY_MAX_SPAN : VBB_DURATION_MAX_SPAN));
+      const ranges = buildVbbRanges(duration, safeMax);
+      const avgSpan = ranges.reduce((a, r) => a + r.span, 0) / ranges.length;
+      const estMode = key === "clarity" ? "clarity" : "duration";
+      const estBytes = estimateVbbBytes(bps15, avgSpan, estMode);
+      return {
+        key,
+        label,
+        maxSpan: safeMax,
+        ranges,
+        count: ranges.length,
+        avgSpan,
+        estBytes,
+        note,
+        encode: key === "clarity" ? "clarity" : "blackbox",
+      };
+    }
+
+    function resolveActiveVbbPlan() {
+      if (!vbbAnalysis) return null;
+      const { duration, bps15, clarity, durationPlan } = vbbAnalysis;
+      if (vbbMode === "clarity") return { ...clarity, encode: "clarity" };
+      if (vbbMode === "duration") return { ...durationPlan, encode: "blackbox" };
+      let target = Number(vbbTargetSpan?.value);
+      if (!(target > 0)) target = clarity.maxSpan;
+      target = Math.max(VBB_MIN_SPAN, Math.min(VBB_DURATION_MAX_SPAN, target));
+      const ranges = buildVbbRanges(duration, target);
+      const avgSpan = ranges.reduce((a, r) => a + r.span, 0) / ranges.length;
+      const useClarity = target <= clarity.maxSpan + 0.05;
+      return {
+        key: "custom",
+        label: "自定义时长",
+        maxSpan: target,
+        ranges,
+        count: ranges.length,
+        avgSpan,
+        estBytes: estimateVbbBytes(bps15, avgSpan, useClarity ? "clarity" : "duration"),
+        note: describeVbbExpect("custom", target, clarity.maxSpan, durationPlan.maxSpan),
+        encode: useClarity ? "clarity" : "blackbox",
+      };
+    }
+
+    function paintVbbPlan() {
+      if (!vbbAnalysis) {
+        if (vbbPlan) vbbPlan.hidden = true;
+        setVbbButtons();
+        return;
+      }
+      const active = resolveActiveVbbPlan();
+      vbbAnalysis.active = active;
+      if (vbbPlan) vbbPlan.hidden = false;
+      syncVbbModeUi();
+
+      if (vbbPlanCompare) {
+        vbbPlanCompare.innerHTML = "";
+        [vbbAnalysis.clarity, vbbAnalysis.durationPlan].forEach((p) => {
+          const card = document.createElement("button");
+          card.type = "button";
+          card.className = `vbb-plan-card${vbbMode === p.key ? " is-selected" : ""}`;
+          card.innerHTML = `<strong>${p.label}</strong><span class="hint tight">${p.count} 段 · 约 ${p.avgSpan.toFixed(1)}s/段 · 预估 ${formatKb(p.estBytes)}/段</span><span class="hint tight">${p.note}</span>`;
+          card.addEventListener("click", () => {
+            vbbMode = p.key;
+            paintVbbPlan();
+          });
+          vbbPlanCompare.appendChild(card);
+        });
+      }
+
+      if (vbbPlanSummary && active) {
+        vbbPlanSummary.textContent = `将生成 ${active.count} 个切片 · 每段约 ${active.avgSpan.toFixed(1)}s · 预估约 ${formatKb(active.estBytes)}/段 · ${active.note}（体积为估算，执行后以实测为准）`;
+      }
+
+      if (vbbPlanList && active) {
+        vbbPlanList.innerHTML = "";
+        active.ranges.forEach((r, idx) => {
+          const row = document.createElement("div");
+          row.className = "vbb-plan-row";
+          const title = document.createElement("strong");
+          title.textContent = `#${String(idx + 1).padStart(2, "0")}`;
+          const meta = document.createElement("p");
+          meta.className = "hint";
+          meta.textContent = `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)} · ${r.span.toFixed(1)}s`;
+          const est = document.createElement("span");
+          est.className = "mono hint tight";
+          est.textContent = `≈${formatKb(estimateVbbBytes(vbbAnalysis.bps15, r.span, active.encode === "clarity" ? "clarity" : "duration"))}`;
+          row.append(title, meta, est);
+          vbbPlanList.appendChild(row);
+        });
+      }
+
+      if (vbbTargetSpan && vbbTargetRange && vbbAnalysis) {
+        const min = Math.max(VBB_MIN_SPAN, Math.min(vbbAnalysis.clarity.maxSpan, vbbAnalysis.durationPlan.maxSpan));
+        const max = Math.max(vbbAnalysis.clarity.maxSpan, vbbAnalysis.durationPlan.maxSpan);
+        vbbTargetRange.min = String(Number(min.toFixed(1)));
+        vbbTargetRange.max = String(Number(max.toFixed(1)));
+        let cur = Number(vbbTargetSpan.value);
+        if (!(cur >= min && cur <= max)) {
+          cur = Math.min(max, Math.max(min, vbbAnalysis.clarity.maxSpan));
+          vbbTargetSpan.value = String(Number(cur.toFixed(1)));
+        }
+        vbbTargetRange.value = String(Number(cur.toFixed(1)));
+        vbbTargetSpan.min = vbbTargetRange.min;
+        vbbTargetSpan.max = vbbTargetRange.max;
+      }
+
+      setVbbButtons();
+    }
+
+    function renderVbbResults() {
+      if (!vbbList) return;
+      vbbList.innerHTML = "";
+      if (vbbResultBlock) vbbResultBlock.hidden = vbbClips.length === 0;
+      vbbClips.forEach((c, idx) => {
+        const row = document.createElement("div");
+        row.className = "gif-frame vsplit-clip";
+        const top = document.createElement("div");
+        top.className = "vsplit-clip-top";
+        const title = document.createElement("strong");
+        title.textContent = `#${String(idx + 1).padStart(2, "0")}  ${formatVbbClock(c.start)}–${formatVbbClock(c.start + c.span)}`;
+        const meta = document.createElement("span");
+        meta.className = "hint tight";
+        const bits = [`${c.span.toFixed(1)}s`];
+        if (c.gifBlob) bits.push(formatKb(c.gifBlob.size));
+        if (c.gifNote) bits.push(c.gifNote);
+        if (c.error) bits.push(c.error);
+        meta.textContent = bits.join(" · ");
+        const actions = document.createElement("div");
+        actions.className = "btn-row";
+        if (c.gifUrl) {
+          const a = document.createElement("a");
+          a.className = "secondary-btn";
+          a.href = c.gifUrl;
+          a.download = `bb-${String(idx + 1).padStart(2, "0")}.gif`;
+          a.textContent = "下载 GIF";
+          actions.appendChild(a);
+        }
+        top.append(title, meta, actions);
+        row.appendChild(top);
+        if (c.gifUrl) {
+          const img = document.createElement("img");
+          img.className = "vsplit-clip-gif";
+          img.alt = `黑盒片段 ${idx + 1}`;
+          img.src = c.gifUrl;
+          row.appendChild(img);
+        }
+        vbbList.appendChild(row);
+      });
+      setVbbButtons();
+    }
+
+    function clearVbb() {
+      if (vbbBusy) {
+        abortVbb = true;
+        abortV2g = true;
+        terminateFfmpegInstance({ revokeAssets: false });
+        scheduleFfmpegPrewarm();
+      }
+      vbbBusy = false;
+      vbbSourceFile = null;
+      vbbAnalysis = null;
+      clearVbbResults();
+      if (vbbObjectUrl) {
+        URL.revokeObjectURL(vbbObjectUrl);
+        vbbObjectUrl = "";
+      }
+      if (vbbVideo) {
+        vbbVideo.pause?.();
+        vbbVideo.removeAttribute("src");
+        vbbVideo.load?.();
+        vbbVideo.hidden = true;
+      }
+      if (vbbFile) vbbFile.value = "";
+      if (vbbAbort) vbbAbort.hidden = true;
+      if (vbbPlan) vbbPlan.hidden = true;
+      if (vbbPlanCompare) vbbPlanCompare.innerHTML = "";
+      if (vbbPlanList) vbbPlanList.innerHTML = "";
+      setVbbProgress(false, 0, "");
+      setError(vbbError, "");
+      if (vbbMeta) vbbMeta.textContent = VBB_DEFAULT_META;
+      resetVbbAbort();
+      setVbbButtons();
+    }
+
+    async function loadVbbFile(file) {
+      if (!file) return;
+      clearVbb();
+      vbbSourceFile = file;
+      setError(vbbError, "");
+      vbbObjectUrl = URL.createObjectURL(file);
+      if (!vbbVideo) throw new Error("视频预览未找到");
+      vbbVideo.hidden = false;
+      vbbVideo.muted = true;
+      vbbVideo.playsInline = true;
+      await new Promise((resolve, reject) => {
+        const onMeta = () => {
+          cleanup();
+          resolve();
+        };
+        const onErr = () => {
+          cleanup();
+          reject(new Error("无法读取该视频"));
+        };
+        const cleanup = () => {
+          vbbVideo.removeEventListener("loadedmetadata", onMeta);
+          vbbVideo.removeEventListener("error", onErr);
+        };
+        vbbVideo.addEventListener("loadedmetadata", onMeta);
+        vbbVideo.addEventListener("error", onErr);
+        vbbVideo.src = vbbObjectUrl;
+        vbbVideo.load();
+      });
+      const duration = Number(vbbVideo.duration) || 0;
+      if (!(duration > 0) || !vbbVideo.videoWidth) throw new Error("视频时长或尺寸无效");
+      if (vbbMeta) {
+        vbbMeta.textContent = `${file.name} · ${duration.toFixed(1)}s · ${vbbVideo.videoWidth}×${vbbVideo.videoHeight}`;
+      }
+      setVbbButtons();
+      toast("视频已加载，可分析切分方案");
+      scheduleFfmpegPrewarm();
+    }
+
+    async function runVbbAnalyze() {
+      if (!vbbSourceFile || !vbbVideo?.src || vbbBusy) return;
+      abortVbb = false;
+      vbbBusy = true;
+      setVbbButtons();
+      if (vbbAbort) vbbAbort.hidden = false;
+      setError(vbbError, "");
+      clearVbbResults();
+      try {
+        const duration = Number(vbbVideo.duration) || 0;
+        const srcW = vbbVideo.videoWidth || 0;
+        const srcH = vbbVideo.videoHeight || 0;
+        const sampleSpan = Math.min(VBB_SAMPLE_SPAN, Math.max(1, duration * 0.12));
+        const sampleStart = Math.max(0, Math.min(duration - sampleSpan, duration * 0.4));
+        setVbbProgress(true, 0.08, "分析中 · 编码样片", {
+          sub: `${sampleSpan.toFixed(1)}s @ 15FPS / 宽420`,
+          busy: true,
+        });
+        await prewarmFfmpegEngine().catch(() => {});
+        const sample = await encodeV2gGifFfmpeg({
+          file: vbbSourceFile,
+          fps: 15,
+          maxW: V2G_BLACKBOX_BASE_W,
+          quality: V2G_BLACKBOX_QUALITY,
+          startSec: sampleStart,
+          span: sampleSpan,
+          srcW,
+          srcH,
+          skipWatermark: true,
+          skipBright: true,
+          brightness: 0,
+          isAborted: () => abortVbb,
+          stageLabel: "样片",
+          onProgress: (local, text) =>
+            setVbbProgress(true, 0.08 + Math.min(0.75, local) * 0.75, "分析中 · 编码样片", {
+              sub: text,
+              busy: true,
+            }),
+        });
+        if (abortVbb) throw new Error("已取消");
+        if (!sample?.blob?.size) throw new Error("样片编码失败");
+        const bps15 = sample.blob.size / Math.max(0.5, sample.span || sampleSpan);
+        const clarityMax = Math.max(
+          VBB_MIN_SPAN,
+          Math.min(VBB_CLARITY_MAX_SPAN, (V2G_BLACKBOX_MAX_BYTES * VBB_SAFETY) / bps15)
+        );
+        const durationMax = Math.max(
+          clarityMax,
+          Math.min(
+            VBB_DURATION_MAX_SPAN,
+            (V2G_BLACKBOX_MAX_BYTES * VBB_SAFETY) / Math.max(1, bps15 * (10 / 15) * 0.55)
+          )
+        );
+        const clarity = makeVbbPlanVariant(
+          "clarity",
+          "清晰优先",
+          duration,
+          clarityMax,
+          bps15,
+          "15FPS · 宽420 · 不压缩 · ≤6MB"
+        );
+        const durationPlan = makeVbbPlanVariant(
+          "duration",
+          "时长优先",
+          duration,
+          durationMax,
+          bps15,
+          "可降帧/压缩（现网黑盒）· 段更长、段数更少"
+        );
+        vbbAnalysis = {
+          duration,
+          srcW,
+          srcH,
+          bps15,
+          sampleBytes: sample.blob.size,
+          sampleSpan: sample.span || sampleSpan,
+          clarity,
+          durationPlan,
+          active: null,
+        };
+        if (vbbTargetSpan) vbbTargetSpan.value = String(Number(clarity.maxSpan.toFixed(1)));
+        if (vbbTargetRange) vbbTargetRange.value = vbbTargetSpan.value;
+        vbbMode = "clarity";
+        paintVbbPlan();
+        setVbbProgress(
+          true,
+          1,
+          `分析完成 · 样片 ${formatKb(sample.blob.size)} / ${vbbAnalysis.sampleSpan.toFixed(1)}s`
+        );
+        toast(`建议清晰优先 ${clarity.count} 段，或时长优先 ${durationPlan.count} 段`);
+      } catch (err) {
+        if (String(err && err.message) !== "已取消") setError(vbbError, err.message || String(err));
+        else toast("已取消分析");
+        if (String(err && err.message) === "已取消") setVbbProgress(false, 0, "");
+      } finally {
+        vbbBusy = false;
+        resetVbbAbort();
+        if (vbbAbort) vbbAbort.hidden = true;
+        setVbbButtons();
+      }
+    }
+
+    async function runVbbExecute() {
+      const plan = resolveActiveVbbPlan();
+      if (!vbbSourceFile || !plan?.ranges?.length || vbbBusy) return;
+      vbbAnalysis.active = plan;
+      abortVbb = false;
+      vbbBusy = true;
+      setVbbButtons();
+      if (vbbAbort) vbbAbort.hidden = false;
+      setError(vbbError, "");
+      clearVbbResults();
+      const srcW = vbbVideo?.videoWidth || vbbAnalysis?.srcW || 0;
+      const srcH = vbbVideo?.videoHeight || vbbAnalysis?.srcH || 0;
+      const isAborted = () => abortVbb;
+      try {
+        await prewarmFfmpegEngine().catch(() => {});
+        for (let i = 0; i < plan.ranges.length; i++) {
+          if (abortVbb) throw new Error("已取消");
+          const r = plan.ranges[i];
+          const label = plan.encode === "clarity" ? "清晰黑盒" : "时长黑盒";
+          setVbbProgress(true, i / plan.ranges.length, `${label} · ${i + 1}/${plan.ranges.length}`, {
+            sub: `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)}`,
+            busy: true,
+          });
+          const clip = {
+            start: r.start,
+            span: r.span,
+            gifBlob: null,
+            gifUrl: "",
+            gifNote: "",
+            error: "",
+          };
+          try {
+            let encoded;
+            if (plan.encode === "clarity") {
+              encoded = await encodeV2gGifFfmpeg({
+                file: vbbSourceFile,
+                fps: 15,
+                maxW: V2G_BLACKBOX_BASE_W,
+                quality: V2G_BLACKBOX_QUALITY,
+                startSec: r.start,
+                span: r.span,
+                srcW,
+                srcH,
+                skipWatermark: true,
+                skipBright: true,
+                brightness: 0,
+                isAborted,
+                stageLabel: `#${i + 1}`,
+                onProgress: (local, text) =>
+                  setVbbProgress(true, (i + Math.min(0.98, local)) / plan.ranges.length, `${label} · ${i + 1}/${plan.ranges.length}`, {
+                    sub: text,
+                    busy: true,
+                  }),
+              });
+              if (encoded?.blob?.size > V2G_BLACKBOX_MAX_BYTES) {
+                clip.error = `超 6MB（${formatKb(encoded.blob.size)}），未压缩；可改时长优先重跑`;
+              }
+            } else {
+              encoded = await encodeBlackboxClip({
+                file: vbbSourceFile,
+                startSec: r.start,
+                span: r.span,
+                srcW,
+                srcH,
+                isAborted,
+                onProgress: (local, text) =>
+                  setVbbProgress(true, (i + Math.min(0.98, local)) / plan.ranges.length, `${label} · ${i + 1}/${plan.ranges.length}`, {
+                    sub: text,
+                    busy: true,
+                  }),
+              });
+            }
+            if (!encoded?.blob) throw new Error("未产出 GIF");
+            clip.gifBlob = encoded.blob;
+            clip.gifUrl = URL.createObjectURL(encoded.blob);
+            const bits = [];
+            if (encoded.fps) bits.push(`${encoded.fps}FPS`);
+            if (encoded.outW && encoded.outH) bits.push(`${encoded.outW}×${encoded.outH}`);
+            if (encoded.compressRounds > 0) bits.push(`已压 ${encoded.compressRounds} 轮`);
+            if (encoded.maxW) bits.push(`宽≤${encoded.maxW}`);
+            if (encoded.framesCapped) bits.push(`已抽稀 ${encoded.frameCount} 帧`);
+            clip.gifNote = bits.join(" · ");
+            if (!clip.error && encoded.blob.size > V2G_BLACKBOX_MAX_BYTES) {
+              clip.error = `仍超 6MB（${formatKb(encoded.blob.size)}）`;
+            }
+          } catch (err) {
+            if (String(err && err.message) === "已取消") throw err;
+            clip.error = err.message || String(err);
+          }
+          vbbClips.push(clip);
+          renderVbbResults();
+        }
+        const gifs = vbbClips.map((c, i) => ({ c, i })).filter((x) => x.c.gifBlob);
+        if (gifs.length) {
+          const packed = await zipBlobs(
+            gifs.map((x) => ({ name: `bb-${String(x.i + 1).padStart(2, "0")}.gif`, blob: x.c.gifBlob })),
+            "blackbox-clips.zip"
+          );
+          vbbZipUrl = packed.url;
+          if (vbbZip) {
+            vbbZip.href = packed.url;
+            vbbZip.hidden = false;
+          }
+        }
+        const failN = vbbClips.filter((c) => c.error || !c.gifBlob).length;
+        setVbbProgress(true, 1, `完成 · 成功 ${gifs.length}/${vbbClips.length}`);
+        toast(failN ? `完成，${failN} 段有问题` : `已生成 ${gifs.length} 个 GIF`);
+      } catch (err) {
+        if (String(err && err.message) !== "已取消") setError(vbbError, err.message || String(err));
+        else toast("已取消");
+      } finally {
+        vbbBusy = false;
+        resetVbbAbort();
+        if (vbbAbort) vbbAbort.hidden = true;
+        setVbbButtons();
+      }
+    }
+
+    async function runVbbMerge() {
+      const blobs = vbbClips.map((c) => c.gifBlob).filter(Boolean);
+      if (blobs.length < 2 || vbbBusy) return;
+      vbbBusy = true;
+      setVbbButtons();
+      setError(vbbError, "");
+      try {
+        const blob = await mergeGifBlobs(blobs, (ratio, text) =>
+          setVbbProgress(true, ratio, "合并 GIF", { sub: text, busy: ratio < 1 })
+        );
+        if (vbbMergedUrl) URL.revokeObjectURL(vbbMergedUrl);
+        vbbMergedUrl = URL.createObjectURL(blob);
+        if (vbbMergedPreview) {
+          vbbMergedPreview.src = vbbMergedUrl;
+          vbbMergedPreview.hidden = false;
+        }
+        if (vbbMergedDl) {
+          vbbMergedDl.href = vbbMergedUrl;
+          vbbMergedDl.hidden = false;
+        }
+        if (vbbResultBlock) vbbResultBlock.hidden = false;
+        setVbbProgress(true, 1, `合并完成 · ${formatKb(blob.size)}`);
+        toast("已合并为一条 GIF");
+      } catch (err) {
+        setError(vbbError, err.message || String(err));
+      } finally {
+        vbbBusy = false;
+        setVbbButtons();
+      }
+    }
+
+    $("#vbb-mode-clarity")?.addEventListener("click", () => {
+      vbbMode = "clarity";
+      paintVbbPlan();
+    });
+    $("#vbb-mode-duration")?.addEventListener("click", () => {
+      vbbMode = "duration";
+      paintVbbPlan();
+    });
+    $("#vbb-mode-custom")?.addEventListener("click", () => {
+      vbbMode = "custom";
+      paintVbbPlan();
+    });
+    const syncCustomTarget = (raw) => {
+      if (!vbbAnalysis) return;
+      const min = Number(vbbTargetRange?.min) || VBB_MIN_SPAN;
+      const max = Number(vbbTargetRange?.max) || VBB_DURATION_MAX_SPAN;
+      const val = Math.max(min, Math.min(max, Number(raw) || min));
+      if (vbbTargetSpan) vbbTargetSpan.value = String(Number(val.toFixed(1)));
+      if (vbbTargetRange) vbbTargetRange.value = String(Number(val.toFixed(1)));
+      if (vbbMode !== "custom") vbbMode = "custom";
+      paintVbbPlan();
+    };
+    vbbTargetSpan?.addEventListener("change", () => syncCustomTarget(vbbTargetSpan.value));
+    vbbTargetSpan?.addEventListener("input", () => syncCustomTarget(vbbTargetSpan.value));
+    vbbTargetRange?.addEventListener("input", () => syncCustomTarget(vbbTargetRange.value));
+    vbbFile?.addEventListener("change", (e) => {
+      loadVbbFile(e.target.files?.[0]).catch((err) => {
+        clearVbb();
+        setError(vbbError, err.message || String(err));
+      });
+    });
+    $("#vbb-clear")?.addEventListener("click", clearVbb);
+    window.DevToolsTemp?.registerCleanup(clearVbb);
+    vbbAnalyze?.addEventListener("click", () => runVbbAnalyze().catch((err) => setError(vbbError, err.message || String(err))));
+    vbbRun?.addEventListener("click", () => runVbbExecute().catch((err) => setError(vbbError, err.message || String(err))));
+    vbbMerge?.addEventListener("click", () => runVbbMerge().catch((err) => setError(vbbError, err.message || String(err))));
+    vbbAbort?.addEventListener("click", () => {
+      abortVbb = true;
+      abortV2g = true;
+      terminateFfmpegInstance({ revokeAssets: false });
+      scheduleFfmpegPrewarm();
+    });
+    syncVbbModeUi();
+    setVbbButtons();
   } catch (err) {
     console.error("video to gif init failed", err);
   }

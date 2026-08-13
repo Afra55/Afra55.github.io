@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260813b" />
+  <link rel="stylesheet" href="./style.css?v=20260813c" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -51,6 +51,7 @@
         <a class="tool-nav-link" href="#qrcode" draggable="true" data-tool="qrcode">二维码</a>
         <a class="tool-nav-link" href="#gifmaker" draggable="true" data-tool="gifmaker">GIF 工具</a>
         <a class="tool-nav-link" href="#vsplit" draggable="true" data-tool="vsplit">视频切分</a>
+        <a class="tool-nav-link" href="#vbb" draggable="true" data-tool="vbb">一键黑盒切片</a>
         <a class="tool-nav-link" href="#imgkit" draggable="true" data-tool="imgkit">图片工具</a>
         <a class="tool-nav-link" href="#units" draggable="true" data-tool="units">单位换算</a>
         <a class="tool-nav-link" href="#coord" draggable="true" data-tool="coord">坐标系互转</a>
@@ -942,9 +943,9 @@ hello@world.org</textarea>
       <div class="panel-head">
         <div class="panel-title-row">
           <h1>GIF 工具</h1>
-          <span class="tool-ver mono" id="gif-tool-version" title="GIF 工具逻辑版本">v2026.08.13-b</span>
+          <span class="tool-ver mono" id="gif-tool-version" title="GIF 工具逻辑版本">v2026.08.13-c</span>
         </div>
-        <p>多图合成 GIF、压缩已有 GIF、合并 GIF、拆帧/转 WebM，或把视频转成 GIF / 动画 WebP；本地处理，带进度。当前版本 <strong class="mono" id="gif-tool-version-inline">v2026.08.13-b</strong>。</p>
+        <p>多图合成 GIF、压缩已有 GIF、合并 GIF、拆帧/转 WebM，或把视频转成 GIF / 动画 WebP；本地处理，带进度。当前版本 <strong class="mono" id="gif-tool-version-inline">v2026.08.13-c</strong>。</p>
       </div>
       <div class="panel-body">
         <div class="convert-grid">
@@ -1255,6 +1256,68 @@ hello@world.org</textarea>
           <img id="vsplit-merged-preview" class="img-preview gif-preview" alt="合并 GIF 预览" hidden />
         </div>
         <p class="error" id="vsplit-error" hidden></p>
+      </div>
+    </section>
+
+<section id="vbb" class="panel" data-reveal>
+      <div class="panel-head">
+        <h1>一键黑盒切片</h1>
+        <p>上传视频后先分析切分方案：清晰优先（15FPS、不压缩）或时长优先（可降帧/压缩）。确认后再转 GIF，可预览下载。</p>
+      </div>
+      <div class="panel-body">
+        <div class="btn-row tool-actions">
+          <label class="file-btn" for="vbb-file">选择视频</label>
+          <input id="vbb-file" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" hidden />
+          <button type="button" class="ghost-btn" id="vbb-clear">清空</button>
+        </div>
+        <p class="hint" id="vbb-meta">支持 MP4 / WebM / MOV。分析阶段会抽 2–3 秒样片估体积；确认前不会批量转 GIF。</p>
+        <div class="gif-preview-wrap">
+          <video id="vbb-video" class="img-preview gif-preview" controls playsinline muted hidden></video>
+        </div>
+        <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
+          <button type="button" class="primary-btn" id="vbb-analyze" disabled>分析切分方案</button>
+          <button type="button" class="secondary-btn" id="vbb-run" disabled>确认执行转 GIF</button>
+          <button type="button" class="secondary-btn" id="vbb-merge" disabled title="合并各段 GIF，不重新调色板">合并 GIF</button>
+          <button type="button" class="ghost-btn" id="vbb-abort" hidden>取消</button>
+          <a class="secondary-btn" id="vbb-zip" href="#" download="blackbox-clips.zip" hidden>下载全部 GIF</a>
+          <a class="secondary-btn" id="vbb-merged-dl" href="#" download="blackbox-merged.gif" hidden>下载合并 GIF</a>
+        </div>
+        <div class="gif-progress" id="vbb-progress" hidden>
+          <div class="gif-progress-head">
+            <p class="hint gif-progress-title" id="vbb-progress-text">准备中…</p>
+            <span class="mono gif-progress-pct" id="vbb-progress-pct">0%</span>
+          </div>
+          <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="vbb-progress-fill"></span></div>
+          <p class="hint tight gif-progress-sub" id="vbb-progress-sub" hidden></p>
+        </div>
+
+        <div class="vbb-plan" id="vbb-plan" hidden>
+          <h2 class="subhead">切分方案</h2>
+          <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
+            <span class="seg" role="group" aria-label="方案档位">
+              <button type="button" class="seg-btn is-active" id="vbb-mode-clarity" data-vbb-mode="clarity">清晰优先</button>
+              <button type="button" class="seg-btn" id="vbb-mode-duration" data-vbb-mode="duration">时长优先</button>
+              <button type="button" class="seg-btn" id="vbb-mode-custom" data-vbb-mode="custom">自定义时长</button>
+            </span>
+          </div>
+          <div class="field-row" id="vbb-custom-row" hidden style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
+            <label for="vbb-target-span">目标段时长（秒）</label>
+            <input id="vbb-target-span" class="mono meta-input" type="number" min="0.5" max="60" step="0.1" value="12" />
+            <input id="vbb-target-range" class="v2g-bright-range" type="range" min="5" max="30" step="0.1" value="12" aria-label="目标段时长滑块" />
+          </div>
+          <p class="hint" id="vbb-plan-summary">分析完成后显示段数、时长与预估体积。</p>
+          <div class="vbb-plan-compare" id="vbb-plan-compare"></div>
+          <div class="gif-frame-list" id="vbb-plan-list" aria-live="polite"></div>
+        </div>
+
+        <div class="field-block" style="margin-top:1.25rem" id="vbb-result-block" hidden>
+          <h2 class="subhead">生成结果</h2>
+          <div class="gif-frame-list" id="vbb-list" aria-live="polite"></div>
+          <div class="gif-preview-wrap">
+            <img id="vbb-merged-preview" class="img-preview gif-preview" alt="合并 GIF 预览" hidden />
+          </div>
+        </div>
+        <p class="error" id="vbb-error" hidden></p>
       </div>
     </section>
 
@@ -1909,8 +1972,8 @@ hello@world.org</textarea>
   <script src="./vendor/jszip.min.js"></script>
   <script src="./temp.js?v=20260811b"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260813b"></script>
-  <script src="./extra.js?v=20260813b"></script>
+  <script src="./app.js?v=20260813c"></script>
+  <script src="./extra.js?v=20260813c"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>
