@@ -4,21 +4,28 @@
 
 在线地址：[https://afra55.github.io/tools/](https://afra55.github.io/tools/)
 
+## 使用方式
+
+- **单工具工作台**：同一时间只显示一个工具；用 hash 深链分享，例如 `#json`、`#media/vbb`
+- **手机**：点顶栏「工具」打开抽屉；支持搜索与最近使用
+- **桌面**：左侧分组导航；可拖拽排序（保存在本地），可恢复默认排序
+- **媒体入口**：GIF / 视频切分 / 一键黑盒 合并为「媒体」内 Tab；旧链接 `#gifmaker`、`#vsplit`、`#vbb` 会自动跳到 `#media/...`
+
 ## 已实现
 
-- 时间戳转换 / 时间差计算
-- AHEX 颜色调节、HEX / RGB / HSL 互转
+- 时间戳转换 / 时间差计算 / Cron
+- AHEX 颜色调节、HEX / RGB / HSL 互转、屏幕取色、密码生成
 - Base64、图片转 Base64（预览）
-- JSON 格式化、YAML ⇄ JSON
-- 正则测试、文本 Diff
+- JSON 格式化、YAML ⇄ JSON、代码卡片分享图
+- 正则测试、文本 Diff、文本处理、命名转换
 - URL 编解码、Query / JWT 解析
 - UUID 生成、MD5 / SHA-256
-- 文本处理、命名转换、二维码生成/识别、代码卡片分享图、进制转换、Markdown 预览、Cron、单位换算、坐标系互转（WGS84 / GCJ02 / BD09 / CGCS2000）
-- GIF 合成、拆帧 ZIP、转 WebM、视频转 GIF
+- 二维码生成/识别、进制转换、Markdown 预览、单位换算、坐标系互转（WGS84 / GCJ02 / BD09 / CGCS2000）
+- **媒体**：GIF 合成/压缩/合并、拆帧 ZIP、转 WebM、视频转 GIF、视频切分、一键黑盒切片
 - 图片工具：压缩/目标体积、改尺寸、WebP·JPEG·PNG、裁剪、旋转翻转、批量 ZIP、文字/图片水印、圆角边框、EXIF 查看清除、九宫格、App 图标多尺寸、拼接
 - ADB 工具：本机桥连接、多设备信息/状态快照、文件管理、APK 安装与信息分析、应用管理（打开/详情/强停/清数据/权限/卸载/备份）、HTTP 代理与端口转发、开发者选项（触摸/布局边界/动画）、Logcat、输入自动化、剪贴板、截图录屏与任务中心（需本机 `adb`）
 
-默认按「时间 / 颜色 / 编码 / 数据 / 文本 / 其他」分组排列。可拖拽顶部导航手动排序，顺序会保存在浏览器本地；也可一键恢复默认排序。
+分组大致为：时间 / 颜色 / 编码与安全 / 数据与文本 / 媒体 / 图片 / 换算 / 设备。
 
 ### ADB 工具（本机桥）
 
@@ -40,16 +47,16 @@ node tools/adb-bridge/server.js
 python3 -m http.server 8080 --directory .
 ```
 
-打开 `http://localhost:8080/`。
+打开 `http://localhost:8080/tools/`。
 
 ## 测试
 
 ```bash
 node tools/test/pure.test.js
+node tools/vbb-plan.test.js
 node tools/adb-bridge/smoke-check.js
-# 可选浏览器冒烟（需静态服务）
-# python3 -m http.server 8080 --directory tools
-# 打开 /test/smoke.html
+# 可选：浏览器冒烟（需 Chrome + ffmpeg）
+# node tools/vbb-smoke.cjs
 ```
 
 ## 说明

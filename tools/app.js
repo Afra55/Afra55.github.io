@@ -808,7 +808,23 @@
     regex: { name: "正则", aliases: ["regexp", "正则表达式"] },
     diff: { name: "Diff", aliases: ["对比", "差异"] },
     qrcode: { name: "二维码", aliases: ["qr", "扫码"] },
-    media: { name: "媒体 / 动图", aliases: ["gif", "视频", "黑盒", "切分", "webp", "ffmpeg"] },
+    media: {
+      name: "媒体 / 动图",
+      aliases: [
+        "gif",
+        "gifmaker",
+        "视频",
+        "视频切分",
+        "vsplit",
+        "黑盒",
+        "一键黑盒",
+        "vbb",
+        "切分",
+        "webp",
+        "ffmpeg",
+        "动图",
+      ],
+    },
     imgkit: { name: "图片工具", aliases: ["裁剪", "压缩", "水印", "拼接"] },
     units: { name: "单位换算", aliases: ["长度", "质量"] },
     coord: { name: "坐标系互转", aliases: ["gps", "坐标", "gcj", "wgs"] },
@@ -819,8 +835,6 @@
   const DEFAULT_ORDER = TOOL_GROUPS.flatMap((g) => g.tools);
 
   const navEl = $("#tool-nav") || $(".tool-nav");
-  const shellEl = $(".shell");
-  const comingEl = $("#coming");
   const navBar = $("#nav-bar") || $(".nav-bar");
   const navBackdrop = $("#nav-backdrop");
   const navOpenBtn = $("#nav-open");
@@ -831,26 +845,37 @@
   const toolSearch = $("#tool-search");
   const recentWrap = $("#tool-recent");
   const recentList = $("#tool-recent-list");
+  const canDesktopDrag = () => window.matchMedia("(min-width: 901px)").matches;
 
   let currentTool = "timestamp";
   let currentMediaTab = "gifmaker";
+  let lastFocusBeforeDrawer = null;
 
   function toolName(id) {
     return TOOL_META[id]?.name || id;
   }
 
-  function normalizeOrder(raw) {
+  function sanitizeToolIds(raw) {
     const legacyMap = { gifmaker: "media", vsplit: "media", vbb: "media" };
     const seen = new Set();
     const out = [];
-    const push = (id) => {
+    (Array.isArray(raw) ? raw : []).forEach((id) => {
       const next = legacyMap[id] || id;
       if (!DEFAULT_ORDER.includes(next) || seen.has(next)) return;
       seen.add(next);
       out.push(next);
-    };
-    (Array.isArray(raw) ? raw : []).forEach(push);
-    DEFAULT_ORDER.forEach(push);
+    });
+    return out;
+  }
+
+  function normalizeOrder(raw) {
+    const out = sanitizeToolIds(raw);
+    const seen = new Set(out);
+    DEFAULT_ORDER.forEach((id) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      out.push(id);
+    });
     return out;
   }
 
@@ -871,7 +896,14 @@
   function loadRecent() {
     try {
       const parsed = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
-      return normalizeOrder(parsed).slice(0, 8);
+      const cleaned = sanitizeToolIds(parsed).slice(0, 8);
+      // 曾误把默认排序整表写入「最近」：若与默认前缀完全一致则清空
+      const defPrefix = DEFAULT_ORDER.slice(0, cleaned.length);
+      if (cleaned.length >= 6 && cleaned.every((id, i) => id === defPrefix[i])) {
+        localStorage.removeItem(RECENT_KEY);
+        return [];
+      }
+      return cleaned;
     } catch (_) {
       return [];
     }
@@ -891,6 +923,7 @@
   function renderNav(order) {
     if (!navEl) return;
     const list = order || loadOrder();
+    const allowDrag = canDesktopDrag();
     navEl.innerHTML = "";
     TOOL_GROUPS.forEach((group) => {
       const tools = list.filter((id) => group.tools.includes(id));
@@ -907,7 +940,7 @@
         a.className = "tool-nav-link";
         a.href = id === "media" ? "#media/gifmaker" : `#${id}`;
         a.dataset.tool = id;
-        a.draggable = true;
+        a.draggable = allowDrag;
         a.textContent = toolName(id);
         wrap.appendChild(a);
       });
@@ -936,12 +969,38 @@
     });
   }
 
+  function drawerFocusables() {
+    if (!navBar) return [];
+    return [...navBar.querySelectorAll("a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])")].filter(
+      (el) => !el.hasAttribute("hidden") && el.getAttribute("aria-hidden") !== "true"
+    );
+  }
+
   function setDrawerOpen(open) {
-    document.body.classList.toggle("nav-open", !!open);
-    if (navOpenBtn) navOpenBtn.setAttribute("aria-expanded", open ? "true" : "false");
-    if (navBackdrop) navBackdrop.hidden = !open;
-    if (open) {
-      setTimeout(() => toolSearch?.focus?.(), 50);
+    const wantOpen = !!open;
+    document.body.classList.toggle("nav-open", wantOpen);
+    if (navOpenBtn) navOpenBtn.setAttribute("aria-expanded", wantOpen ? "true" : "false");
+    if (navBackdrop) navBackdrop.hidden = !wantOpen;
+    if (navBar) {
+      navBar.setAttribute("aria-hidden", wantOpen || canDesktopDrag() ? "false" : "true");
+      if (wantOpen && !canDesktopDrag()) {
+        navBar.setAttribute("role", "dialog");
+        navBar.setAttribute("aria-modal", "true");
+      } else {
+        navBar.setAttribute("role", "navigation");
+        navBar.removeAttribute("aria-modal");
+      }
+    }
+    if (wantOpen) {
+      lastFocusBeforeDrawer = document.activeElement;
+      setTimeout(() => {
+        (toolSearch || navCloseBtn || drawerFocusables()[0])?.focus?.();
+      }, 50);
+    } else if (lastFocusBeforeDrawer && typeof lastFocusBeforeDrawer.focus === "function") {
+      try {
+        lastFocusBeforeDrawer.focus();
+      } catch (_) {}
+      lastFocusBeforeDrawer = null;
     }
   }
 
@@ -988,11 +1047,9 @@
       else active = id === currentTool;
       panel.classList.toggle("is-workspace-active", active);
       panel.hidden = !active;
+      if (active) panel.removeAttribute("aria-hidden");
+      else panel.setAttribute("aria-hidden", "true");
     });
-    if (comingEl) {
-      comingEl.hidden = true;
-      comingEl.classList.remove("is-workspace-active");
-    }
 
     if (mediaSubnav) {
       mediaSubnav.hidden = currentTool !== "media";
@@ -1000,6 +1057,7 @@
         const on = btn.dataset.mediaTab === currentMediaTab;
         btn.classList.toggle("is-active", on);
         btn.setAttribute("aria-selected", on ? "true" : "false");
+        btn.tabIndex = on ? 0 : -1;
       });
     }
 
@@ -1014,6 +1072,7 @@
 
     getNavLinks().forEach((link) => {
       link.classList.toggle("is-active", link.dataset.tool === currentTool);
+      link.setAttribute("aria-current", link.dataset.tool === currentTool ? "page" : "false");
     });
 
     if (!skipRecent) pushRecent(currentTool);
@@ -1027,9 +1086,14 @@
   }
 
   function navigateTo(tool, tab, { replace = false } = {}) {
-    const hash = routeHash(tool, tab || (tool === "media" ? currentMediaTab : null));
+    const nextTab = tab || (tool === "media" ? currentMediaTab : null);
+    const hash = routeHash(tool, nextTab);
     const current = `#${String(location.hash || "").replace(/^#/, "")}`;
-    if (replace) history.replaceState(null, "", hash);
+    // 媒体内切 Tab 用 replace，避免系统返回在子功能间来回跳
+    const mediaTabOnly =
+      tool === "media" && currentTool === "media" && nextTab && nextTab !== currentMediaTab;
+    const shouldReplace = replace || mediaTabOnly;
+    if (shouldReplace) history.replaceState(null, "", hash);
     else if (current !== hash) history.pushState(null, "", hash);
     applyRoute();
   }
@@ -1057,6 +1121,10 @@
       if (link.dataset.boundNav === "1") return;
       link.dataset.boundNav = "1";
       link.addEventListener("dragstart", (e) => {
+        if (!link.draggable) {
+          e.preventDefault();
+          return;
+        }
         dragId = link.dataset.tool;
         didDrag = true;
         link.classList.add("is-dragging");
@@ -1077,6 +1145,7 @@
         navigateTo(link.dataset.tool, link.dataset.tool === "media" ? currentMediaTab : null);
       });
       link.addEventListener("dragover", (e) => {
+        if (!canDesktopDrag()) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         link.classList.add("drag-over");
@@ -1085,6 +1154,7 @@
       link.addEventListener("drop", (e) => {
         e.preventDefault();
         link.classList.remove("drag-over");
+        if (!canDesktopDrag()) return;
         const from = e.dataTransfer.getData("text/plain") || dragId;
         const to = link.dataset.tool;
         if (!from || !to || from === to) return;
@@ -1120,10 +1190,40 @@
     if (!btn) return;
     navigateTo("media", btn.dataset.mediaTab);
   });
+  mediaSubnav?.addEventListener("keydown", (e) => {
+    const tabs = $$(".media-tab", mediaSubnav);
+    if (!tabs.length) return;
+    const idx = tabs.indexOf(document.activeElement);
+    if (idx < 0) return;
+    let next = -1;
+    if (e.key === "ArrowRight" || e.key === "ArrowDown") next = (idx + 1) % tabs.length;
+    if (e.key === "ArrowLeft" || e.key === "ArrowUp") next = (idx - 1 + tabs.length) % tabs.length;
+    if (e.key === "Home") next = 0;
+    if (e.key === "End") next = tabs.length - 1;
+    if (next < 0) return;
+    e.preventDefault();
+    tabs[next].focus();
+    navigateTo("media", tabs[next].dataset.mediaTab);
+  });
   window.addEventListener("hashchange", () => applyRoute());
   window.addEventListener("popstate", () => applyRoute());
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") setDrawerOpen(false);
+    if (e.key === "Escape" && document.body.classList.contains("nav-open")) {
+      setDrawerOpen(false);
+      return;
+    }
+    if (e.key !== "Tab" || !document.body.classList.contains("nav-open") || canDesktopDrag()) return;
+    const items = drawerFocusables();
+    if (items.length < 2) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
   });
 
   // Desktop sidebar max-height only
@@ -1146,6 +1246,7 @@
     desktopNavMq.addEventListener("change", () => {
       setDrawerOpen(false);
       syncDesktopNavMaxHeight();
+      renderNav(loadOrder());
     });
   }
   syncDesktopNavMaxHeight();

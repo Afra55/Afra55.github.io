@@ -181,10 +181,10 @@ body {
 }
 
 .nav-bar.is-collapsed {
-  transform: translateY(calc(-100% - 0.85rem));
-  opacity: 0;
-  pointer-events: none;
-  box-shadow: none;
+  /* 旧折叠态已废弃；保留类名以免历史缓存样式异常 */
+  transform: none;
+  opacity: 1;
+  pointer-events: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1175,38 +1175,7 @@ a.secondary-btn {
     overflow: hidden;
   }
 
-  .nav-bar {
-    top: 0.35rem;
-    flex-wrap: nowrap;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.4rem 0.4rem 0.4rem 0.35rem;
-    margin-bottom: 0.9rem;
-  }
-
-  .tool-nav {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    mask-image: linear-gradient(90deg, #000 0%, #000 calc(100% - 1.2rem), transparent 100%);
-  }
-
-  .tool-nav::-webkit-scrollbar {
-    display: none;
-  }
-
-  .tool-nav-link {
-    flex: 0 0 auto;
-    white-space: nowrap;
-  }
-
-  .nav-reset {
-    flex: 0 0 auto;
-    padding: 0.32rem 0.55rem;
-    font-size: 0.74rem;
-  }
+  /* 手机导航由 workspace-nav.css 抽屉接管，不再使用横滑顶栏 */
 }
 
 @media (max-width: 600px) {

@@ -222,6 +222,43 @@ async function main() {
     ),
   };
 
+  // 媒体 Tab 应 replace 而非堆历史；最近使用不应被默认排序灌满
+  const histBefore = await page.evaluate(() => history.length);
+  await page.click('[data-media-tab="gifmaker"]');
+  await page.waitForFunction(() => location.hash === "#media/gifmaker", { timeout: 5000 });
+  await page.click('[data-media-tab="vsplit"]');
+  await page.waitForFunction(() => location.hash === "#media/vsplit", { timeout: 5000 });
+  const shellFixes = await page.evaluate((prevLen) => {
+    const recentRaw = localStorage.getItem("devtools-tool-recent-v1");
+    let recent = [];
+    try {
+      recent = JSON.parse(recentRaw || "[]");
+    } catch (_) {}
+    const search = document.getElementById("tool-search");
+    if (search) {
+      search.value = "vbb";
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    const mediaVisible = ![...document.querySelectorAll('.tool-nav-link[data-tool="media"]')].some((a) =>
+      a.classList.contains("is-filtered-out")
+    );
+    const comingGone = !document.getElementById("coming");
+    return {
+      historyGrew: history.length > prevLen + 1,
+      historyLength: history.length,
+      prevLen,
+      recentCount: recent.length,
+      recentLooksDefault:
+        recent.length >= 6 &&
+        recent[0] === "timestamp" &&
+        recent[1] === "timediff" &&
+        recent[2] === "cron",
+      searchFindsMedia: mediaVisible,
+      comingGone,
+      noDragOnMobile: [...document.querySelectorAll(".tool-nav-link")].every((a) => a.draggable === false),
+    };
+  }, histBefore);
+
   await browser.close();
   server.close();
 
@@ -264,6 +301,11 @@ async function main() {
   if (mobileShell.hashVbb !== "#media/vbb") problems.push(`media tab switch hash: ${mobileShell.hashVbb}`);
   if (!mobileShell.vbbActive) problems.push("vbb tab switch failed");
   if (!mobileShell.onlyOneActive) problems.push("more than one panel active");
+  if (shellFixes.historyGrew) problems.push("media tab switches should replaceState, not grow history much");
+  if (shellFixes.recentLooksDefault) problems.push("recent list looks like default order padding");
+  if (!shellFixes.searchFindsMedia) problems.push("search vbb should match media");
+  if (!shellFixes.comingGone) problems.push("#coming placeholder should be removed");
+  if (!shellFixes.noDragOnMobile) problems.push("mobile nav links should not be draggable");
 
   if (problems.length) {
     console.error("FAIL", {
@@ -276,6 +318,7 @@ async function main() {
       analyze,
       todayTools,
       mobileShell,
+      shellFixes,
       errors,
     });
     process.exit(1);
@@ -287,6 +330,7 @@ async function main() {
     clips: afterRun.clips,
     sharp: sharpMode.summary.slice(0, 90),
     mobile: mobileShell.hashVbb,
+    shellFixes,
   });
 }
 

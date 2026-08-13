@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260813f" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260813f" />
+  <link rel="stylesheet" href="./style.css?v=20260813g" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260813g" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -24,16 +24,16 @@
         <span class="brand-mark" aria-hidden="true"></span>
         <span class="brand-name">DevTools</span>
       </a>
-      <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false">工具</button>
+      <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
     <p class="tagline">常用开发小工具合集 · 本地处理不上传 · 单工具工作台</p>
   </header>
 
   <div class="app-layout">
     <div class="nav-backdrop" id="nav-backdrop" hidden></div>
-    <aside class="nav-bar" id="nav-bar" aria-label="工具导航抽屉">
+    <aside class="nav-bar" id="nav-bar" role="navigation" aria-label="工具导航" aria-hidden="true">
       <div class="nav-drawer-head">
-        <strong>选择工具</strong>
+        <strong id="nav-drawer-title">选择工具</strong>
         <button type="button" class="ghost-btn nav-close-btn" id="nav-close">关闭</button>
       </div>
       <label class="nav-search-wrap" for="tool-search">
@@ -55,9 +55,9 @@
           <button type="button" class="ghost-btn workspace-switch" id="workspace-switch">切换工具</button>
         </div>
         <div class="media-subnav" id="media-subnav" hidden role="tablist" aria-label="媒体子功能">
-          <button type="button" class="media-tab is-active" role="tab" data-media-tab="gifmaker" aria-selected="true">GIF</button>
-          <button type="button" class="media-tab" role="tab" data-media-tab="vsplit" aria-selected="false">视频切分</button>
-          <button type="button" class="media-tab" role="tab" data-media-tab="vbb" aria-selected="false">一键黑盒</button>
+          <button type="button" class="media-tab is-active" role="tab" id="media-tab-gifmaker" data-media-tab="gifmaker" aria-controls="gifmaker" aria-selected="true">GIF</button>
+          <button type="button" class="media-tab" role="tab" id="media-tab-vsplit" data-media-tab="vsplit" aria-controls="vsplit" aria-selected="false" tabindex="-1">视频切分</button>
+          <button type="button" class="media-tab" role="tab" id="media-tab-vbb" data-media-tab="vbb" aria-controls="vbb" aria-selected="false" tabindex="-1">一键黑盒</button>
         </div>
       </div>
     <section id="timestamp" class="panel tool-panel" data-reveal>
@@ -936,7 +936,7 @@ hello@world.org</textarea>
       </div>
     </section>
 
-<section id="gifmaker" class="panel tool-panel" data-reveal>
+<section id="gifmaker" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-gifmaker">
       <div class="panel-head">
         <div class="panel-title-row">
           <h1>GIF 工具</h1>
@@ -1189,7 +1189,7 @@ hello@world.org</textarea>
       </div>
     </section>
 
-<section id="vsplit" class="panel tool-panel" data-reveal>
+<section id="vsplit" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-vsplit">
       <div class="panel-head">
         <h1>视频切分</h1>
         <p>上传视频后按份数等分，或按固定时长切片；可下载片段，并批量转高清 / 黑盒 GIF，支持预览与合并。</p>
@@ -1256,7 +1256,7 @@ hello@world.org</textarea>
       </div>
     </section>
 
-<section id="vbb" class="panel tool-panel" data-reveal>
+<section id="vbb" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-vbb">
       <div class="panel-head">
         <h1>一键黑盒切片</h1>
         <p>上传视频后先分析切分方案：清晰优先、锐度优先（缩短加宽）、时长优先（可压缩）。确认后再转 GIF，可预览下载。</p>
@@ -1936,21 +1936,6 @@ hello@world.org</textarea>
       </div>
     </section>
 
-<section id="coming" class="panel tool-panel panel-soon tool-panel" data-reveal>
-      <div class="panel-head">
-        <h1>更多功能 · 预留</h1>
-        <p>后续工具仍可按同样方式继续接入。</p>
-      </div>
-      <div class="panel-body">
-        <ul class="roadmap">
-          <li>
-            <span class="roadmap-status">占位</span>
-            <strong>你的下一个工具</strong>
-            <span>接口已预留，随时接入</span>
-          </li>
-        </ul>
-      </div>
-    </section>
     </main>
   </div>
 
@@ -1970,8 +1955,8 @@ hello@world.org</textarea>
   <script src="./vendor/jszip.min.js"></script>
   <script src="./temp.js?v=20260811b"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260813f"></script>
-  <script src="./extra.js?v=20260813f"></script>
+  <script src="./app.js?v=20260813g"></script>
+  <script src="./extra.js?v=20260813g"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>

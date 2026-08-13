@@ -128,6 +128,19 @@
   display: none !important;
 }
 
+/* 标题已在 workspace-top 展示，面板内 h1 仅保留给读屏 */
+.tool-panel > .panel-head > h1:first-child {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
 .workspace-top {
   position: sticky;
   top: 0;
@@ -283,10 +296,6 @@ body.nav-open {
     margin-right: -0.15rem;
     padding-left: 0.15rem;
     padding-right: 0.15rem;
-  }
-
-  .tool-panel.is-workspace-active > .panel-head h1 {
-    font-size: 1.05rem;
   }
 
   .media-tab {
