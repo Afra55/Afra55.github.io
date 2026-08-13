@@ -3,9 +3,11 @@
 
 /** 纯函数自测：一键黑盒切片规划逻辑（与 extra.js 对齐） */
 const V2G_BLACKBOX_MAX_BYTES = 6 * 1024 * 1024;
+const V2G_BLACKBOX_WIDEN_BYTES = 5 * 1024 * 1024;
 const V2G_BLACKBOX_BASE_W = 420;
 const V2G_BLACKBOX_WIDTH_STEP = 60;
 const V2G_BLACKBOX_WIDTH_CAP = 720;
+const MAX_V2G_FRAMES = 300;
 const VBB_SAFETY = 0.85;
 const VBB_MAX_CLIPS = 50;
 const VBB_MIN_SPAN = 0.5;
@@ -13,6 +15,7 @@ const VBB_CLARITY_MAX_SPAN = 20;
 const VBB_DURATION_MAX_SPAN = 30;
 const VBB_SAMPLE_SPAN = 2.5;
 const VBB_SOFT_COMPRESS_KEEP = 0.72;
+const VBB_BLACKBOX_LONG_SPAN_SEC = 20;
 
 function buildVbbRanges(duration, targetSpan) {
   const d = Number(duration) || 0;
@@ -54,32 +57,73 @@ function estimateVbbBytesAtWidth(bps15, span, width, srcW) {
   return Math.round(bps15 * s * scale);
 }
 
+function estimateVbbBytesAtFpsWidth(bps15, span, fps, width, srcW) {
+  const f = Math.max(1, Number(fps) || 15);
+  return Math.round(estimateVbbBytesAtWidth(bps15, span, width, srcW) * (f / 15));
+}
+
+function resolveBlackboxEstimateFpsList(span) {
+  const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
+  const framesAt15 = Math.floor(s * 15) + 1;
+  if (s > VBB_BLACKBOX_LONG_SPAN_SEC || framesAt15 > MAX_V2G_FRAMES) return [12, 10];
+  return [15, 12, 10];
+}
+
+function resolveVbbWidenWidthForEst(bps15, span, fps, srcW, startBytes, startW) {
+  const budget = V2G_BLACKBOX_MAX_BYTES;
+  const widenGate = V2G_BLACKBOX_WIDEN_BYTES;
+  let best = Math.max(64, Number(startW) || vbbSampleBaseWidth(srcW));
+  let bestBytes = Math.max(1, Number(startBytes) || estimateVbbBytesAtFpsWidth(bps15, span, fps, best, srcW));
+  if (bestBytes >= widenGate) return { maxW: best, bytes: bestBytes };
+  for (const w of vbbWidthLadder(srcW)) {
+    if (w <= best) continue;
+    const est = estimateVbbBytesAtFpsWidth(bps15, span, fps, w, srcW);
+    if (est <= budget) {
+      best = w;
+      bestBytes = est;
+    } else break;
+  }
+  return { maxW: best, bytes: bestBytes };
+}
+
 function estimateVbbBlackboxPlan(bps15, span, srcW) {
   const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
   const maxBytes = V2G_BLACKBOX_MAX_BYTES;
-  const at15 = estimateVbbBytesAtWidth(bps15, s, vbbSampleBaseWidth(srcW), srcW);
-  if (at15 <= maxBytes) return { bytes: at15, fps: 15, compressRounds: 0 };
-  const at15Soft = Math.round(at15 * VBB_SOFT_COMPRESS_KEEP);
-  if (at15Soft <= maxBytes) {
-    return {
-      bytes: Math.min(maxBytes, Math.max(at15Soft, Math.round(maxBytes * 0.9))),
-      fps: 15,
-      compressRounds: 1,
-    };
+  const baseW = vbbSampleBaseWidth(srcW);
+  const fpsList = resolveBlackboxEstimateFpsList(s);
+
+  for (let i = 0; i < fpsList.length; i++) {
+    const fps = fpsList[i];
+    const isLast = i >= fpsList.length - 1;
+    const atBase = estimateVbbBytesAtFpsWidth(bps15, s, fps, baseW, srcW);
+
+    if (atBase <= maxBytes) {
+      const wide = resolveVbbWidenWidthForEst(bps15, s, fps, srcW, atBase, baseW);
+      return { bytes: wide.bytes, fps, compressRounds: 0, maxW: wide.maxW };
+    }
+
+    const soft = Math.round(atBase * VBB_SOFT_COMPRESS_KEEP);
+    if (soft <= maxBytes) {
+      if (soft < V2G_BLACKBOX_WIDEN_BYTES) {
+        const wide = resolveVbbWidenWidthForEst(bps15, s, fps, srcW, soft, baseW);
+        if (wide.maxW > baseW) {
+          return { bytes: wide.bytes, fps, compressRounds: 0, maxW: wide.maxW };
+        }
+      }
+      return {
+        bytes: Math.min(maxBytes, Math.max(soft, Math.round(maxBytes * 0.88))),
+        fps,
+        compressRounds: 1,
+        maxW: baseW,
+      };
+    }
+
+    if (isLast) {
+      return { bytes: maxBytes, fps, compressRounds: 2, maxW: baseW };
+    }
   }
-  const at12 = Math.round(at15 * (12 / 15));
-  if (at12 <= maxBytes) return { bytes: at12, fps: 12, compressRounds: 0 };
-  const at12Soft = Math.round(at12 * VBB_SOFT_COMPRESS_KEEP);
-  if (at12Soft <= maxBytes) {
-    return {
-      bytes: Math.min(maxBytes, Math.max(at12Soft, Math.round(maxBytes * 0.9))),
-      fps: 12,
-      compressRounds: 1,
-    };
-  }
-  const at10 = Math.round(at15 * (10 / 15));
-  if (at10 <= maxBytes) return { bytes: at10, fps: 10, compressRounds: 0 };
-  return { bytes: maxBytes, fps: 10, compressRounds: 2 };
+
+  return { bytes: maxBytes, fps: 10, compressRounds: 2, maxW: baseW };
 }
 
 function estimateVbbBytesBlackbox(bps15, span, srcW) {
@@ -167,15 +211,15 @@ function almost(a, b, eps = 1e-6) {
 {
   const bps = 800000;
   const e4 = estimateVbbBytes(bps, 4, "duration");
-  const e6 = estimateVbbBytes(bps, 6, "duration");
-  const e8 = estimateVbbBytes(bps, 8, "duration");
   const e20 = estimateVbbBytes(bps, 20, "duration");
-  assert(e6 >= e4, `blackbox 6s >= 4s (${e6} vs ${e4})`);
-  assert(e8 >= e6, `blackbox 8s >= 6s (${e8} vs ${e6})`);
-  assert(e20 >= e8, `blackbox 20s >= 8s (${e20} vs ${e8})`);
-  assert(e20 >= 5 * 1024 * 1024, `long blackbox should near 6MB, got ${e20}`);
+  // 短段会加宽、长段会降帧/轻压，体积不必随秒数单调递增
+  assert(e4 <= V2G_BLACKBOX_MAX_BYTES, "short blackbox under 6MB");
+  assert(e20 <= V2G_BLACKBOX_MAX_BYTES, "long blackbox under 6MB");
+  assert(e20 >= 4 * 1024 * 1024, `long blackbox should be sizable, got ${e20}`);
   assert(estimateVbbFps(bps, 4, "duration") === 15, "short blackbox stays 15fps");
   assert(estimateVbbFps(bps, 20, "duration") <= 12, "long blackbox drops fps");
+  const p4 = estimateVbbBlackboxPlan(bps, 4, 1280);
+  assert(p4.maxW > 420, "short low-bps should widen");
 }
 
 {
@@ -185,6 +229,31 @@ function almost(a, b, eps = 1e-6) {
   assert(plan.fps === 15, `12s soft-fit should stay 15fps, got ${plan.fps}`);
   assert(plan.compressRounds >= 1, "12s over raw should expect compress");
   assert(plan.bytes <= V2G_BLACKBOX_MAX_BYTES, "soft plan under 6MB");
+}
+
+{
+  // 短段够小应预估加宽（<5MB 门槛）
+  const bps = (2.0 * 1024 * 1024) / 4; // 4s @420 ≈ 2MB
+  const plan = estimateVbbBlackboxPlan(bps, 4, 1280);
+  assert(plan.fps === 15, "small 4s stays 15fps");
+  assert(plan.compressRounds === 0, "small 4s no compress");
+  assert(plan.maxW > 420, `small 4s should widen, got maxW=${plan.maxW}`);
+  assert(plan.bytes > 2 * 1024 * 1024, "widened estimate > base");
+  assert(plan.bytes <= V2G_BLACKBOX_MAX_BYTES, "widened under 6MB");
+}
+
+{
+  // 贴近 5–6MB 不应加宽
+  const bps = (5.4 * 1024 * 1024) / 8;
+  const plan = estimateVbbBlackboxPlan(bps, 8, 1280);
+  assert(plan.maxW === 420, `near-cap should stay 420, got ${plan.maxW}`);
+}
+
+{
+  // 20s：帧上限触发，从 12FPS 起
+  const bps = (3 * 1024 * 1024) / 2.5;
+  const plan = estimateVbbBlackboxPlan(bps, 20, 1280);
+  assert(plan.fps <= 12, `20s should start <=12fps, got ${plan.fps}`);
 }
 
 {

@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.13-k";
+  const GIF_TOOL_VERSION = "2026.08.13-l";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -4812,6 +4812,10 @@
     const VBB_MIN_SPAN = 0.5;
     const VBB_CLARITY_MAX_SPAN = 20;
     const VBB_DURATION_MAX_SPAN = 30;
+    /** 与 V2G_BLACKBOX_LONG_SPAN_SEC 对齐：超过该秒数（或 15FPS 触顶帧）黑盒从 12FPS 起试 */
+    const VBB_BLACKBOX_LONG_SPAN_SEC = 20;
+    /** Soft keep≈0.72 对应约 1–2 轮 --lossy 轻压 */
+    const VBB_SOFT_COMPRESS_KEEP = 0.72;
     const VBB_DEFAULT_META =
       "支持 MP4 / WebM / MOV。分析阶段会抽 2–3 秒样片估体积；缩短段长可抬高宽度换清晰度；确认前不会批量转 GIF。";
 
@@ -4971,45 +4975,84 @@
       return Math.round(bps15 * s * scale);
     }
 
-    /**
-     * 对齐 encodeBlackboxClip：先 15FPS，超限再轻柔压缩（可保 15），不够才 12→10。
-     * Soft keep≈0.72 对应约 1–2 轮 --lossy 轻压的经验体积。
-     */
-    const VBB_SOFT_COMPRESS_KEEP = 0.72;
+    function estimateVbbBytesAtFpsWidth(bps15, span, fps, width, srcW) {
+      const f = Math.max(1, Number(fps) || 15);
+      return Math.round(estimateVbbBytesAtWidth(bps15, span, width, srcW) * (f / 15));
+    }
 
+    function resolveBlackboxEstimateFpsList(span) {
+      const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
+      const framesAt15 = Math.floor(s * 15) + 1;
+      // 与 resolveBlackboxFpsList 一致：超长秒数或 15FPS 会触顶帧上限时从 12 起
+      if (s > VBB_BLACKBOX_LONG_SPAN_SEC || framesAt15 > MAX_V2G_FRAMES) return [12, 10];
+      return [15, 12, 10];
+    }
+
+    /**
+     * 对齐 encodeBlackboxClip 加宽：仅当当前体积 < 5MB 才尝试加宽，
+     * 并取仍 ≤6MB 的最大宽（加宽重编码不带压缩）。
+     */
+    function resolveVbbWidenWidthForEst(bps15, span, fps, srcW, startBytes, startW) {
+      const budget = V2G_BLACKBOX_MAX_BYTES;
+      const widenGate = V2G_BLACKBOX_WIDEN_BYTES;
+      let best = Math.max(64, Number(startW) || vbbSampleBaseWidth(srcW));
+      let bestBytes = Math.max(1, Number(startBytes) || estimateVbbBytesAtFpsWidth(bps15, span, fps, best, srcW));
+      if (bestBytes >= widenGate) return { maxW: best, bytes: bestBytes };
+      for (const w of vbbWidthLadder(srcW)) {
+        if (w <= best) continue;
+        const est = estimateVbbBytesAtFpsWidth(bps15, span, fps, w, srcW);
+        if (est <= budget) {
+          best = w;
+          bestBytes = est;
+        } else break;
+      }
+      return { maxW: best, bytes: bestBytes };
+    }
+
+    /**
+     * 对齐 encodeBlackboxClip：
+     * - 长段/触顶帧从 12FPS 起
+     * - 每档先 420 宽；超限轻柔压缩；体积 <5MB 再加宽到 ≤6MB 最大宽
+     */
     function estimateVbbBlackboxPlan(bps15, span, srcW) {
       const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
       const maxBytes = V2G_BLACKBOX_MAX_BYTES;
-      const at15 = estimateVbbBytesAtWidth(bps15, s, vbbSampleBaseWidth(srcW), srcW);
-      if (at15 <= maxBytes) {
-        return { bytes: at15, fps: 15, compressRounds: 0 };
+      const baseW = vbbSampleBaseWidth(srcW);
+      const fpsList = resolveBlackboxEstimateFpsList(s);
+
+      for (let i = 0; i < fpsList.length; i++) {
+        const fps = fpsList[i];
+        const isLast = i >= fpsList.length - 1;
+        const atBase = estimateVbbBytesAtFpsWidth(bps15, s, fps, baseW, srcW);
+
+        if (atBase <= maxBytes) {
+          const wide = resolveVbbWidenWidthForEst(bps15, s, fps, srcW, atBase, baseW);
+          return { bytes: wide.bytes, fps, compressRounds: 0, maxW: wide.maxW };
+        }
+
+        const soft = Math.round(atBase * VBB_SOFT_COMPRESS_KEEP);
+        if (soft <= maxBytes) {
+          // 实装：轻压进预算后若 <5MB，会用不带压缩的更宽重编码加宽（compressRounds 归零）
+          if (soft < V2G_BLACKBOX_WIDEN_BYTES) {
+            const wide = resolveVbbWidenWidthForEst(bps15, s, fps, srcW, soft, baseW);
+            if (wide.maxW > baseW) {
+              return { bytes: wide.bytes, fps, compressRounds: 0, maxW: wide.maxW };
+            }
+          }
+          return {
+            bytes: Math.min(maxBytes, Math.max(soft, Math.round(maxBytes * 0.88))),
+            fps,
+            compressRounds: 1,
+            maxW: baseW,
+          };
+        }
+
+        if (isLast) {
+          return { bytes: maxBytes, fps, compressRounds: 2, maxW: baseW };
+        }
       }
-      const at15Soft = Math.round(at15 * VBB_SOFT_COMPRESS_KEEP);
-      if (at15Soft <= maxBytes) {
-        // 实装通常「压到刚好进 6MB」；取 soft 与接近上限的较大值，避免比更短未压段还小
-        return {
-          bytes: Math.min(maxBytes, Math.max(at15Soft, Math.round(maxBytes * 0.9))),
-          fps: 15,
-          compressRounds: 1,
-        };
-      }
-      const at12 = Math.round(at15 * (12 / 15));
-      if (at12 <= maxBytes) {
-        return { bytes: at12, fps: 12, compressRounds: 0 };
-      }
-      const at12Soft = Math.round(at12 * VBB_SOFT_COMPRESS_KEEP);
-      if (at12Soft <= maxBytes) {
-        return {
-          bytes: Math.min(maxBytes, Math.max(at12Soft, Math.round(maxBytes * 0.9))),
-          fps: 12,
-          compressRounds: 1,
-        };
-      }
-      const at10 = Math.round(at15 * (10 / 15));
-      if (at10 <= maxBytes) {
-        return { bytes: at10, fps: 10, compressRounds: 0 };
-      }
-      return { bytes: maxBytes, fps: 10, compressRounds: 2 };
+
+      return { bytes: maxBytes, fps: 10, compressRounds: 2, maxW: baseW };
     }
 
     function estimateVbbBytesBlackbox(bps15, span, srcW) {
@@ -5085,9 +5128,20 @@
         note = `${note} · 已达 ${VBB_MAX_CLIPS} 段上限，单段约 ${avgSpan.toFixed(1)}s`;
       }
       const estMode = encode === "blackbox" ? "duration" : "clarity";
-      const estBytes = estimateVbbBytes(bps15, avgSpan, estMode, maxW, srcW);
-      const estFps = estimateVbbFps(bps15, avgSpan, estMode, maxW, srcW);
-      const estCompressRounds = estimateVbbCompressRounds(bps15, avgSpan, estMode, srcW);
+      let estBytes;
+      let estFps;
+      let estCompressRounds = 0;
+      let outMaxW = maxW;
+      if (estMode === "duration") {
+        const bb = estimateVbbBlackboxPlan(bps15, avgSpan, srcW);
+        estBytes = bb.bytes;
+        estFps = bb.fps;
+        estCompressRounds = bb.compressRounds;
+        outMaxW = bb.maxW || maxW;
+      } else {
+        estBytes = estimateVbbBytes(bps15, avgSpan, estMode, maxW, srcW);
+        estFps = 15;
+      }
       if ((encode === "clarity" || encode === "sharp") && estBytes > V2G_BLACKBOX_MAX_BYTES) {
         unsafe = true;
         note = `${note} · 预估超 6MB`;
@@ -5096,7 +5150,16 @@
         unsafe = true;
         note = `${note} · 实际单段长于安全时长`;
       }
-      return { ...plan, note, encode, unsafe, maxW, estBytes, estFps, estCompressRounds };
+      return {
+        ...plan,
+        note,
+        encode,
+        unsafe,
+        maxW: outMaxW,
+        estBytes,
+        estFps,
+        estCompressRounds,
+      };
     }
 
     function makeVbbPlanVariant(key, label, duration, maxSpan, bps15, note, opts = {}) {
@@ -5777,6 +5840,17 @@
     });
     $("#vbb-clear")?.addEventListener("click", clearVbb);
     window.DevToolsTemp?.registerCleanup(clearVbb);
+    // 供预估准确性测试读取（不影响 UI）
+    window.DevToolsVbb = {
+      getBps15: () => vbbAnalysis?.bps15 ?? null,
+      getSrcW: () => vbbAnalysis?.srcW ?? 0,
+      getActivePlan: () => (vbbAnalysis ? resolveActiveVbbPlan() : null),
+      getClips: () => vbbClips.slice(),
+      estimateBlackbox: (span) => {
+        if (!vbbAnalysis) return null;
+        return estimateVbbBlackboxPlan(vbbAnalysis.bps15, span, vbbAnalysis.srcW);
+      },
+    };
     vbbAnalyze?.addEventListener("click", () => runVbbAnalyze().catch((err) => setError(vbbError, err.message || String(err))));
     vbbRun?.addEventListener("click", () => runVbbExecute().catch((err) => setError(vbbError, err.message || String(err))));
     vbbMerge?.addEventListener("click", () => runVbbMerge().catch((err) => setError(vbbError, err.message || String(err))));
