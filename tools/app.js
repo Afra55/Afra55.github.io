@@ -1029,13 +1029,9 @@
   function navigateTo(tool, tab, { replace = false } = {}) {
     const hash = routeHash(tool, tab || (tool === "media" ? currentMediaTab : null));
     const current = `#${String(location.hash || "").replace(/^#/, "")}`;
-    if (replace) {
-      history.replaceState(null, "", hash);
-      applyRoute();
-      return;
-    }
-    if (current !== hash) location.hash = hash;
-    else applyRoute();
+    if (replace) history.replaceState(null, "", hash);
+    else if (current !== hash) history.pushState(null, "", hash);
+    applyRoute();
   }
 
   function applySearchFilter(query) {
@@ -1125,6 +1121,7 @@
     navigateTo("media", btn.dataset.mediaTab);
   });
   window.addEventListener("hashchange", () => applyRoute());
+  window.addEventListener("popstate", () => applyRoute());
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") setDrawerOpen(false);
   });
@@ -1166,5 +1163,4 @@
   renderFromAhexInput();
   syncChecksFromFlags();
   runRegex();
-  syncNav();
 })();
