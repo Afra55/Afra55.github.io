@@ -5,6 +5,7 @@
   const cleaners = [];
   const origCreate = URL.createObjectURL.bind(URL);
   const origRevoke = URL.revokeObjectURL.bind(URL);
+  let unloading = false;
 
   function kindOf(obj) {
     if (!obj) return "unknown";
@@ -139,6 +140,32 @@
     return urls.length;
   }
 
+  function releaseEngine() {
+    try {
+      window.DevToolsTemp.releaseEngine?.();
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  /** 关闭标签 / 离开页面：同步丢掉本次视频、GIF 与编码器内存拷贝 */
+  function releaseOnLeave() {
+    if (unloading) return 0;
+    unloading = true;
+    window.DevToolsTemp.isUnloading = true;
+    releaseEngine();
+    for (const fn of cleaners) {
+      try {
+        fn();
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    stripBlobMedia();
+    clearFileInputs();
+    return revokeAllTracked();
+  }
+
   async function clearAll() {
     const before = blobStats();
     for (const fn of cleaners) {
@@ -149,13 +176,15 @@
       }
     }
     // Click known clear buttons as a second pass for tools that keep private state.
-    ["#gif-clear", "#gifx-clear", "#v2g-clear", "#gifc-clear", "#imgkit-clear"].forEach((sel) => {
-      try {
-        document.querySelector(sel)?.click();
-      } catch (_) {
-        /* ignore */
+    ["#gif-clear", "#gifx-clear", "#v2g-clear", "#gifc-clear", "#imgkit-clear", "#vbb-clear", "#vsplit-clear"].forEach(
+      (sel) => {
+        try {
+          document.querySelector(sel)?.click();
+        } catch (_) {
+          /* ignore */
+        }
       }
-    });
+    );
     stripBlobMedia();
     clearFileInputs();
     const revoked = revokeAllTracked();
@@ -172,15 +201,31 @@
     if (typeof fn === "function") cleaners.push(fn);
   }
 
+  window.addEventListener("pagehide", (ev) => {
+    if (ev.persisted) {
+      // 进后台 / 往返缓存：丢掉编码器里的视频拷贝，避免后台继续占几百 MB
+      releaseEngine();
+      return;
+    }
+    releaseOnLeave();
+  });
+  window.addEventListener("beforeunload", () => {
+    releaseOnLeave();
+  });
+
   window.DevToolsTemp = {
     registerCleanup,
     blobStats,
     storageStats,
     clearAll,
+    releaseOnLeave,
     formatBytes,
     refresh: async () => {},
     createPersistentObjectURL,
     revokePersistentObjectURL,
     persistCachePrefix: "devtools-persist-",
+    autoReleaseOnLeave: true,
+    isUnloading: false,
+    releaseEngine: null,
   };
 })();

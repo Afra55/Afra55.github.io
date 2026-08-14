@@ -1104,7 +1104,7 @@ hello@world.org</textarea>
             <label for="v2g-width">最大宽度</label>
             <input id="v2g-width" class="mono meta-input" type="number" min="64" max="720" step="1" value="480" />
             <label for="v2g-maxsec">最长秒数</label>
-            <input id="v2g-maxsec" class="mono meta-input" type="number" min="0.5" max="600" step="0.1" value="" placeholder="自动=全长" title="上传后自动填入视频时长，可手动缩短" />
+            <input id="v2g-maxsec" class="mono meta-input" type="number" min="0.5" max="600" step="0.1" value="" placeholder="自动=全长" title="选择后自动填入视频时长，可手动缩短" />
             <label for="v2g-start">起始秒</label>
             <input id="v2g-start" class="mono meta-input" type="number" min="0" max="600" step="0.1" value="0" />
             <label for="v2g-quality">质量 (1–30)</label>
@@ -1125,9 +1125,9 @@ hello@world.org</textarea>
             <label class="flag"><input type="checkbox" id="v2g-bright-enable" /> 调亮画面</label>
             <span class="hint tight" style="margin:0">开启后在视频下方预览并调节</span>
           </div>
-          <p class="hint" id="v2g-meta">支持 MP4 / WebM / MOV。默认 15FPS / 宽480 / 质量5。默认 FFmpeg 转 GIF（进入本页预热引擎，持久保存）；也可转动画 WebP，或黑盒 GIF（≤6MB）。可选调亮并实时预览。</p>
+          <p class="hint" id="v2g-meta">支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。默认 15FPS / 宽480 / 质量5。关闭页面会释放本次视频和 GIF；约 30MB 编码器缓存会保留。</p>
           <div class="gif-preview-wrap">
-            <video id="v2g-video" class="img-preview gif-preview" controls playsinline muted hidden></video>
+            <video id="v2g-video" class="img-preview gif-preview" controls playsinline muted preload="metadata" hidden></video>
           </div>
           <div class="v2g-bright-panel" id="v2g-bright-panel" hidden>
             <div class="v2g-bright-preview-wrap" id="v2g-bright-preview-wrap">
@@ -1167,7 +1167,7 @@ hello@world.org</textarea>
             <a class="secondary-btn" id="v2g-download" href="#" download="from-video.gif" hidden>下载 GIF</a>
           </div>
           <div class="v2g-engine-warm" id="v2g-engine-warm" style="margin-top:0.55rem">
-            <p class="hint tight" id="v2g-hq-warm" aria-live="polite">进入本页将自动预热 FFmpeg 引擎</p>
+            <p class="hint tight" id="v2g-hq-warm" aria-live="polite">进入本页将预热本地编码器（不上传视频）</p>
             <div class="gif-progress" id="v2g-warm-progress" hidden>
               <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="v2g-warm-progress-fill"></span></div>
               <p class="hint" id="v2g-warm-progress-text">准备引擎…</p>
@@ -1192,7 +1192,7 @@ hello@world.org</textarea>
 <section id="vsplit" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-vsplit">
       <div class="panel-head">
         <h1>视频切分</h1>
-        <p>上传视频后按份数等分，或按固定时长切片；可下载片段，并批量转高清 / 黑盒 GIF，支持预览与合并。</p>
+        <p>选择视频后按份数等分，或按固定时长切片；全程本地处理，不会上传。可下载片段，并批量转高清 / 黑盒 GIF。</p>
       </div>
       <div class="panel-body">
         <div class="btn-row tool-actions">
@@ -1200,9 +1200,9 @@ hello@world.org</textarea>
           <input id="vsplit-file" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" hidden />
           <button type="button" class="ghost-btn" id="vsplit-clear">清空</button>
         </div>
-        <p class="hint" id="vsplit-meta">支持 MP4 / WebM / MOV。切分优先复制编码（快）；失败则重编码该段。</p>
+        <p class="hint" id="vsplit-meta">支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。切分优先复制编码（快）；失败则重编码该段。关闭页面会释放本次视频和 GIF。</p>
         <div class="gif-preview-wrap">
-          <video id="vsplit-video" class="img-preview gif-preview" controls playsinline muted hidden></video>
+          <video id="vsplit-video" class="img-preview gif-preview" controls playsinline muted preload="metadata" hidden></video>
         </div>
         <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem;align-items:center">
           <span class="seg" role="group" aria-label="切分方式">
@@ -1259,7 +1259,7 @@ hello@world.org</textarea>
 <section id="vbb" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-vbb">
       <div class="panel-head">
         <h1>一键黑盒切片</h1>
-        <p>上传视频后先分析切分方案：清晰优先、锐度优先（缩短加宽）、时长优先（可压缩）。确认后再转 GIF，可预览下载。</p>
+        <p>选择视频后先分析切分方案：清晰优先、锐度优先（缩短加宽）、时长优先（可压缩）。全程本地处理，不会上传。确认后再转 GIF。</p>
       </div>
       <div class="panel-body">
         <div class="btn-row tool-actions">
@@ -1267,9 +1267,9 @@ hello@world.org</textarea>
           <input id="vbb-file" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" hidden />
           <button type="button" class="ghost-btn" id="vbb-clear">清空</button>
         </div>
-        <p class="hint" id="vbb-meta">支持 MP4 / WebM / MOV。分析阶段会抽 2–3 秒样片估体积；缩短段长可抬高宽度换清晰度；确认前不会批量转 GIF。</p>
+        <p class="hint" id="vbb-meta">支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。分析阶段抽 2–3 秒样片估体积；关闭页面会释放本次视频和 GIF。</p>
         <div class="gif-preview-wrap">
-          <video id="vbb-video" class="img-preview gif-preview" controls playsinline muted hidden></video>
+          <video id="vbb-video" class="img-preview gif-preview" controls playsinline muted preload="metadata" hidden></video>
         </div>
         <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
           <button type="button" class="primary-btn" id="vbb-analyze" disabled>分析切分方案</button>
@@ -1943,7 +1943,7 @@ hello@world.org</textarea>
   </div>
 
   <footer class="site-footer">
-    <span>本地处理，数据不上传</span>
+    <span>本地处理，数据不上传 · 关闭页面会释放本次视频和 GIF</span>
   </footer>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
@@ -1955,10 +1955,10 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./temp.js?v=20260811b"></script>
+  <script src="./temp.js?v=20260814e"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260813j"></script>
-  <script src="./extra.js?v=20260814d"></script>
+  <script src="./extra.js?v=20260814e"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>
