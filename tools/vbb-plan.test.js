@@ -429,6 +429,9 @@ function almost(a, b, eps = 1e-6) {
   assert(!shouldReuseVbbFirstPlan(mixed, 3), "remainder last does not reuse");
   const two = [{ span: 3 }, { span: 1 }];
   assert(!shouldReuseVbbFirstPlan(two, 1), "two clips: last never reuses");
+  const threeSame = [{ span: 0.8 }, { span: 0.8 }, { span: 0.8 }];
+  assert(shouldReuseVbbFirstPlan(threeSame, 1), "3 equal clips: middle reuses");
+  assert(!shouldReuseVbbFirstPlan(threeSame, 2), "3 equal clips: last does not reuse");
 }
 
 console.log("vbb-plan.test.js: all passed");

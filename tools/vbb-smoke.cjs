@@ -283,6 +283,65 @@ async function main() {
     };
   });
 
+  // 2.4s / 0.8s → 3 段等长：中间段应沿用 #01，末段独立探测
+  const tmpReuse = "/tmp/vbb-smoke-reuse.mp4";
+  execSync(
+    `ffmpeg -y -f lavfi -i testsrc=size=1280x720:rate=30:duration=2.4 -f lavfi -i sine=f=440:d=2.4 -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest ${tmpReuse}`,
+    { stdio: "pipe" }
+  );
+  await input.uploadFile(tmpReuse);
+  await page.waitForFunction(() => {
+    const b = document.getElementById("vbb-analyze");
+    return b && !b.disabled;
+  }, { timeout: 15000 });
+  await page.click("#vbb-analyze");
+  await page.waitForFunction(() => {
+    const plan = document.getElementById("vbb-plan");
+    return plan && !plan.hidden;
+  }, { timeout: 180000 });
+  await page.click("#vbb-mode-custom");
+  await page.evaluate(() => {
+    const el = document.getElementById("vbb-target-span");
+    el.value = "0.8";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const reusePlan = await page.evaluate(() => {
+    const plan = window.DevToolsVbb?.getActivePlan?.();
+    const reuse = window.DevToolsVbb?.shouldReuseFirstPlan;
+    const ranges = plan?.ranges || [];
+    return {
+      count: plan?.count,
+      spans: ranges.map((r) => Number(r.span.toFixed(3))),
+      flags: ranges.map((_, i) => (typeof reuse === "function" ? reuse(ranges, i) : null)),
+    };
+  });
+  if (reusePlan.count !== 3 || reusePlan.spans.some((s) => Math.abs(s - 0.8) > 0.05)) {
+    throw new Error(`reuse plan should be 3×0.8s, got ${JSON.stringify(reusePlan)}`);
+  }
+  if (reusePlan.flags[0] !== false || reusePlan.flags[1] !== true || reusePlan.flags[2] !== false) {
+    throw new Error(`reuse flags should be [false,true,false], got ${JSON.stringify(reusePlan)}`);
+  }
+  await page.click("#vbb-run");
+  await page.waitForFunction(() => {
+    const notes = window.DevToolsVbb?.getClips?.() || [];
+    return notes.length >= 3 && notes.every((c) => c.gifBlob || c.error);
+  }, { timeout: 180000 });
+  const reuseRun = await page.evaluate(() => {
+    const clips = window.DevToolsVbb?.getClips?.() || [];
+    return clips.map((c) => ({
+      span: Number((c.span || 0).toFixed(3)),
+      note: c.gifNote || "",
+      error: c.error || "",
+      hasBlob: Boolean(c.gifBlob),
+    }));
+  });
+  if (reuseRun.length !== 3 || reuseRun.some((c) => !c.hasBlob || c.error)) {
+    throw new Error(`reuse encode failed: ${JSON.stringify(reuseRun)}`);
+  }
+  if (/沿用#01/.test(reuseRun[0].note)) throw new Error(`#01 should probe, got ${reuseRun[0].note}`);
+  if (!/沿用#01/.test(reuseRun[1].note)) throw new Error(`#02 should reuse #01, got ${reuseRun[1].note}`);
+  if (/沿用#01/.test(reuseRun[2].note)) throw new Error(`last clip should not reuse, got ${reuseRun[2].note}`);
+
   const todayTools = await page.evaluate(() => ({
     vsplit: Boolean(document.getElementById("vsplit")),
     gifm: Boolean(document.getElementById("gifm-merge") && document.getElementById("gifm-file")),
@@ -467,6 +526,8 @@ async function main() {
       durationMode,
       sharpMode,
       afterRun,
+      reusePlan,
+      reuseRun,
       analyze,
       todayTools,
       mobileShell,
@@ -480,6 +541,7 @@ async function main() {
     rows: afterAnalyze.rows,
     cards: afterAnalyze.cards,
     clips: afterRun.clips,
+    reuseRun,
     customRemainder,
     mobile: mobileShell.hashVbb,
     shellFixes,

@@ -5926,6 +5926,7 @@
                 });
 
               encoded = await tryEncodeWide(usedWidth, reuseSeed ? "沿用#01" : label, 0, 0.55);
+              if (!encoded?.blob) throw new Error("未产出 GIF");
               encoded = { ...encoded, compressRounds: encoded.compressRounds || 0, maxW: usedWidth };
               while (encoded?.blob?.size > V2G_BLACKBOX_MAX_BYTES && usedWidth > V2G_BLACKBOX_BASE_W) {
                 usedWidth = Math.max(V2G_BLACKBOX_BASE_W, usedWidth - V2G_BLACKBOX_WIDTH_STEP);
