@@ -43,7 +43,55 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.14-d";
+  function formatLocalPickMeta(file, extra) {
+    const name = file?.name || "未命名";
+    const size = formatKb(file?.size || 0);
+    const tail = extra ? ` · ${extra}` : "";
+    return `${name} · ${size} · 本地文件，不上传${tail}`;
+  }
+
+  function attachLocalVideoPreview(video, url) {
+    if (!video) throw new Error("视频预览未找到");
+    video.hidden = false;
+    video.muted = true;
+    video.playsInline = true;
+    video.preload = "metadata";
+    try {
+      video.setAttribute("playsinline", "");
+      video.setAttribute("webkit-playsinline", "");
+      video.disableRemotePlayback = true;
+    } catch (_) {
+      /* ignore */
+    }
+    video.src = url;
+    video.load();
+  }
+
+  function waitVideoMetadata(video, timeoutMs = 12000) {
+    return new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (ok, arg) => {
+        if (settled) return;
+        settled = true;
+        video.removeEventListener("loadedmetadata", onMeta);
+        video.removeEventListener("error", onErr);
+        window.clearTimeout(timer);
+        if (ok) resolve(arg);
+        else reject(arg);
+      };
+      const onMeta = () => finish(true);
+      const onErr = () => finish(false, new Error("无法读取该视频"));
+      const timer = window.setTimeout(() => {
+        if (video.videoWidth) finish(true);
+        else finish(false, new Error("读取视频信息超时（文件仍在本地，未上传）"));
+      }, timeoutMs);
+      video.addEventListener("loadedmetadata", onMeta);
+      video.addEventListener("error", onErr);
+      if (video.readyState >= 1 && video.videoWidth) finish(true);
+    });
+  }
+
+  const GIF_TOOL_VERSION = "2026.08.14-e";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -123,11 +171,33 @@
     return ffmpegModsPromise;
   }
 
-  async function fetchFileBytes(file) {
+  async function fetchFileBytes(file, onProgress) {
     if (!file) throw new Error("缺少文件");
     if (file instanceof Uint8Array) return file;
-    const buf = await file.arrayBuffer();
-    return new Uint8Array(buf);
+    const size = Number(file.size) || 0;
+    const note = (ratio, read, total) => {
+      if (total >= 1024 * 1024) {
+        return `本地读取 ${formatKb(read)} / ${formatKb(total)}（不上传）`;
+      }
+      return ratio >= 1 ? "本地读取完成（未上传）" : "本地读取（不上传）…";
+    };
+    if (!size || size < 4 * 1024 * 1024 || typeof file.slice !== "function") {
+      onProgress?.(0.35, "本地读取（不上传）…");
+      const buf = new Uint8Array(await file.arrayBuffer());
+      onProgress?.(1, "本地读取完成（未上传）");
+      return buf;
+    }
+    const chunkSize = 4 * 1024 * 1024;
+    const out = new Uint8Array(size);
+    let offset = 0;
+    while (offset < size) {
+      const end = Math.min(offset + chunkSize, size);
+      const chunk = new Uint8Array(await file.slice(offset, end).arrayBuffer());
+      out.set(chunk, offset);
+      offset = end;
+      onProgress?.(offset / size, note(offset / size, offset, size));
+    }
+    return out;
   }
 
   function ffmpegInputKey(file) {
@@ -157,8 +227,9 @@
       } catch (_) {}
       ffmpegCachedInput = null;
     }
-    onWrite?.(0, "写入视频到引擎…");
-    await ffmpeg.writeFile(inName, await fetchFileBytes(file));
+    onWrite?.(0, "载入本地编码器（不上传）…");
+    await ffmpeg.writeFile(inName, await fetchFileBytes(file, onWrite));
+    onWrite?.(1, "已载入本地编码器（未上传）");
     ffmpegCachedInput = { key, name: inName };
     return inName;
   }
@@ -289,7 +360,7 @@
       FFMPEG_ASSET_KEY_CORE,
       coreJsURL,
       onProgress,
-      "引擎 core.js",
+      "首次准备本地编码器 core.js",
       0.04,
       0.08
     );
@@ -297,7 +368,7 @@
       FFMPEG_ASSET_KEY_WASM,
       wasmURL,
       onProgress,
-      "引擎 wasm",
+      "首次准备本地编码器 wasm",
       0.08,
       0.18
     );
@@ -390,11 +461,11 @@
     if (ffmpegWarmState === "warming") {
       text = ffmpegWarmDetail.text || "引擎预热中…";
     } else if (ffmpegWarmState === "ready") {
-      text = "引擎已就绪（持久保存，清理临时不会删除）";
+      text = "本地编码器已就绪（约 30MB 引擎缓存会保留；本次视频/GIF 关闭页面即释放）";
     } else if (ffmpegWarmState === "error") {
       text = ffmpegWarmError || "引擎预热失败，转换时会重试";
     } else {
-      text = "进入本页将自动预热 FFmpeg 引擎";
+      text = "进入本页将预热本地编码器（不上传视频）";
     }
     if (el) el.textContent = text;
     const showBar = ffmpegWarmState === "warming";
@@ -474,7 +545,7 @@
     })
       .then((ff) => {
         ffmpegWarmState = "ready";
-        setFfmpegWarmProgress(1, "引擎已就绪（持久保存，清理临时不会删除）");
+        setFfmpegWarmProgress(1, "本地编码器已就绪（引擎缓存会保留，不是你的视频）");
         paintFfmpegWarmHint();
         return ff;
       })
@@ -489,6 +560,7 @@
   }
 
   function scheduleFfmpegPrewarm() {
+    if (window.DevToolsTemp?.isUnloading) return;
     if (!isGifmakerActive()) return;
     const run = () => {
       prewarmFfmpegEngine().catch(() => {});
@@ -501,6 +573,9 @@
   }
 
   function bindFfmpegPrewarmTriggers() {
+    if (window.DevToolsTemp) {
+      window.DevToolsTemp.releaseEngine = () => terminateFfmpegInstance({ revokeAssets: false });
+    }
     paintFfmpegWarmHint();
     scheduleFfmpegPrewarm();
     window.addEventListener("hashchange", scheduleFfmpegPrewarm);
@@ -2683,7 +2758,7 @@
     /** 防误触软顶（%）；实际无业务硬限 */
     const V2G_BRIGHT_SOFT_MAX = 999;
     const V2G_DEFAULT_META =
-      "支持 MP4 / WebM / MOV。默认 15FPS / 宽480 / 质量5。默认 FFmpeg 转 GIF（引擎持久预热）；也可转动画 WebP，或黑盒 GIF（≤6MB）。可选调亮并实时预览。";
+      "支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。默认 15FPS / 宽480 / 质量5。关闭页面会释放本次视频和 GIF；约 30MB 编码器缓存会保留。";
     let v2gBrightPreviewTimer = 0;
     let v2gBrightPreviewToken = 0;
     let v2gBrightFrameReady = false;
@@ -3040,32 +3115,14 @@
       clearV2g();
       v2gSourceFile = file;
       setError(v2gError, "");
-      setV2gProgress(true, 0.05, "加载视频…");
+      if (v2gMeta) v2gMeta.textContent = formatLocalPickMeta(file, "正在读取时长…");
+      toast("已选择，仅本机处理，不会上传");
+      setV2gProgress(true, 0.12, "本地读取视频信息（不上传）…");
       try {
         videoObjectUrl = URL.createObjectURL(file);
         if (!v2gVideo) throw new Error("视频预览未找到");
-        v2gVideo.hidden = false;
-        v2gVideo.muted = true;
-        v2gVideo.playsInline = true;
-        v2gVideo.preload = "auto";
-        await new Promise((resolve, reject) => {
-          const onMeta = () => {
-            cleanup();
-            resolve();
-          };
-          const onErr = () => {
-            cleanup();
-            reject(new Error("无法读取该视频（格式可能不受当前浏览器支持）"));
-          };
-          const cleanup = () => {
-            v2gVideo.removeEventListener("loadedmetadata", onMeta);
-            v2gVideo.removeEventListener("error", onErr);
-          };
-          v2gVideo.addEventListener("loadedmetadata", onMeta);
-          v2gVideo.addEventListener("error", onErr);
-          v2gVideo.src = videoObjectUrl;
-          v2gVideo.load();
-        });
+        attachLocalVideoPreview(v2gVideo, videoObjectUrl);
+        await waitVideoMetadata(v2gVideo);
         // Some WebM blobs report Infinity until more data is parsed
         let duration = Number(v2gVideo.duration) || 0;
         if (!Number.isFinite(duration) || duration <= 0) {
@@ -3097,12 +3154,11 @@
             Number.isFinite(duration) && duration > 0
               ? ` · 最长秒数已设为 ${v2gMaxsec?.value || "—"}s`
               : "";
-          v2gMeta.textContent = `${file.name} · ${durText} · ${v2gVideo.videoWidth}×${v2gVideo.videoHeight}${maxTip}`;
+          v2gMeta.textContent = formatLocalPickMeta(file, `${durText} · ${v2gVideo.videoWidth}×${v2gVideo.videoHeight}${maxTip}`);
         }
         setV2gActionButtons();
-        setV2gProgress(true, 1, "视频已加载，可开始转换");
-        toast("视频已加载");
-        scheduleFfmpegPrewarm();
+        setV2gProgress(true, 1, "视频已就绪（未上传）");
+        toast("视频已就绪");
         scheduleV2gBrightPreview({ forceCapture: true });
       } catch (err) {
         clearV2g();
@@ -3532,10 +3588,10 @@
       let encodeT = span;
 
       try {
-        ticker.setPhase(`${stageLabel}写入视频`);
-        mapProgress(0.16, `${stageLabel}写入视频到引擎…`);
+        ticker.setPhase(`${stageLabel}本地载入`);
+        mapProgress(0.16, `${stageLabel}载入本地编码器（不上传）…`);
         inName = await ensureFfmpegInputWritten(ffmpeg, file, (_r, text) => {
-          mapProgress(0.16, `${stageLabel}${text || "写入视频到引擎…"}`);
+          mapProgress(0.16, `${stageLabel}${text || "载入本地编码器（不上传）…"}`);
         });
         encodeInput = inName;
         if (aborted()) throw new Error("已取消");
@@ -4680,7 +4736,8 @@
       setVsplitProgress(false, 0, "");
       setError(vsplitError, "");
       if (vsplitMeta) {
-        vsplitMeta.textContent = "支持 MP4 / WebM / MOV。切分优先复制编码（快）；失败则重编码该段。";
+        vsplitMeta.textContent =
+          "支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。切分优先复制编码（快）；失败则重编码该段。关闭页面会释放本次视频和 GIF。";
       }
       resetVsplitAbort();
       setVsplitButtons();
@@ -4691,37 +4748,21 @@
       clearVsplit();
       vsplitSourceFile = file;
       setError(vsplitError, "");
+      if (vsplitMeta) vsplitMeta.textContent = formatLocalPickMeta(file, "正在读取时长…");
+      toast("已选择，仅本机处理，不会上传");
       vsplitObjectUrl = URL.createObjectURL(file);
-      if (!vsplitVideo) throw new Error("视频预览未找到");
-      vsplitVideo.hidden = false;
-      vsplitVideo.muted = true;
-      vsplitVideo.playsInline = true;
-      await new Promise((resolve, reject) => {
-        const onMeta = () => {
-          cleanup();
-          resolve();
-        };
-        const onErr = () => {
-          cleanup();
-          reject(new Error("无法读取该视频"));
-        };
-        const cleanup = () => {
-          vsplitVideo.removeEventListener("loadedmetadata", onMeta);
-          vsplitVideo.removeEventListener("error", onErr);
-        };
-        vsplitVideo.addEventListener("loadedmetadata", onMeta);
-        vsplitVideo.addEventListener("error", onErr);
-        vsplitVideo.src = vsplitObjectUrl;
-        vsplitVideo.load();
-      });
+      attachLocalVideoPreview(vsplitVideo, vsplitObjectUrl);
+      await waitVideoMetadata(vsplitVideo);
       const duration = Number(vsplitVideo.duration) || 0;
       if (!(duration > 0) || !vsplitVideo.videoWidth) throw new Error("视频时长或尺寸无效");
       if (vsplitMeta) {
-        vsplitMeta.textContent = `${file.name} · ${duration.toFixed(1)}s · ${vsplitVideo.videoWidth}×${vsplitVideo.videoHeight}`;
+        vsplitMeta.textContent = formatLocalPickMeta(
+          file,
+          `${duration.toFixed(1)}s · ${vsplitVideo.videoWidth}×${vsplitVideo.videoHeight}`
+        );
       }
       setVsplitButtons();
-      toast("视频已加载");
-      scheduleFfmpegPrewarm();
+      toast("视频已就绪");
     }
 
     async function runVsplitCut() {
@@ -4735,12 +4776,20 @@
       try {
         const duration = Number(vsplitVideo.duration) || 0;
         const ranges = computeVsplitRanges(duration);
-        setVsplitProgress(true, 0.04, "准备切分", { sub: `共 ${ranges.length} 段`, busy: true });
+        setVsplitProgress(true, 0.02, "本地读取视频（不上传）…", { sub: `共 ${ranges.length} 段`, busy: true });
         await prewarmFfmpegEngine().catch(() => {});
         const ffmpeg = await getFfmpegInstance();
         const ext = v2gSourceExt(vsplitSourceFile);
         const inName = `split-in.${ext}`;
-        await ffmpeg.writeFile(inName, await fetchFileBytes(vsplitSourceFile));
+        await ffmpeg.writeFile(
+          inName,
+          await fetchFileBytes(vsplitSourceFile, (ratio, text) => {
+            setVsplitProgress(true, 0.02 + Math.min(0.1, (Number(ratio) || 0) * 0.1), text || "本地读取（不上传）…", {
+              sub: `共 ${ranges.length} 段`,
+              busy: true,
+            });
+          })
+        );
         try {
           for (let i = 0; i < ranges.length; i++) {
             if (abortVsplit) throw new Error("已取消");
@@ -5007,7 +5056,7 @@
     /** Soft keep≈0.72 对应约 1–2 轮 --lossy 轻压 */
     const VBB_SOFT_COMPRESS_KEEP = 0.72;
     const VBB_DEFAULT_META =
-      "支持 MP4 / WebM / MOV。分析阶段会抽 2–3 秒样片估体积；缩短段长可抬高宽度换清晰度；确认前不会批量转 GIF。";
+      "支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。分析阶段抽 2–3 秒样片估体积；关闭页面会释放本次视频和 GIF。";
 
     let vbbSourceFile = null;
     let vbbObjectUrl = "";
@@ -5697,38 +5746,22 @@
       clearVbb();
       vbbSourceFile = file;
       setError(vbbError, "");
+      if (vbbMeta) vbbMeta.textContent = formatLocalPickMeta(file, "正在读取时长…");
+      toast("已选择，仅本机处理，不会上传");
       vbbObjectUrl = URL.createObjectURL(file);
-      if (!vbbVideo) throw new Error("视频预览未找到");
-      vbbVideo.hidden = false;
-      vbbVideo.muted = true;
-      vbbVideo.playsInline = true;
-      await new Promise((resolve, reject) => {
-        const onMeta = () => {
-          cleanup();
-          resolve();
-        };
-        const onErr = () => {
-          cleanup();
-          reject(new Error("无法读取该视频"));
-        };
-        const cleanup = () => {
-          vbbVideo.removeEventListener("loadedmetadata", onMeta);
-          vbbVideo.removeEventListener("error", onErr);
-        };
-        vbbVideo.addEventListener("loadedmetadata", onMeta);
-        vbbVideo.addEventListener("error", onErr);
-        vbbVideo.src = vbbObjectUrl;
-        vbbVideo.load();
-      });
+      attachLocalVideoPreview(vbbVideo, vbbObjectUrl);
+      await waitVideoMetadata(vbbVideo);
       const duration = Number(vbbVideo.duration) || 0;
       if (!(duration > 0) || !vbbVideo.videoWidth) throw new Error("视频时长或尺寸无效");
       if (duration < VBB_MIN_SPAN) throw new Error(`视频太短，至少约 ${VBB_MIN_SPAN} 秒`);
       if (vbbMeta) {
-        vbbMeta.textContent = `${file.name} · ${duration.toFixed(1)}s · ${vbbVideo.videoWidth}×${vbbVideo.videoHeight}`;
+        vbbMeta.textContent = formatLocalPickMeta(
+          file,
+          `${duration.toFixed(1)}s · ${vbbVideo.videoWidth}×${vbbVideo.videoHeight}`
+        );
       }
       setVbbButtons();
-      toast("视频已加载，可分析切分方案");
-      scheduleFfmpegPrewarm();
+      toast("视频已就绪，可分析切分方案");
     }
 
     async function runVbbAnalyze() {

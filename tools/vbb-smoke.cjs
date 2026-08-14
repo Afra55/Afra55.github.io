@@ -101,6 +101,11 @@ async function main() {
       footerText: document.querySelector(".site-footer")?.textContent || "",
       homeLinkCount: [...document.querySelectorAll("a")].filter((a) => /返回主站/.test(a.textContent || "")).length,
       footerHomeHref: [...document.querySelectorAll(".site-footer a")].some((a) => a.getAttribute("href") === "/"),
+      vbbPreload: document.getElementById("vbb-video")?.getAttribute("preload") || "",
+      v2gPreload: document.getElementById("v2g-video")?.getAttribute("preload") || "",
+      vsplitPreload: document.getElementById("vsplit-video")?.getAttribute("preload") || "",
+      autoRelease: Boolean(window.DevToolsTemp?.autoReleaseOnLeave),
+      hasReleaseOnLeave: typeof window.DevToolsTemp?.releaseOnLeave === "function",
     };
     try {
       out.orderHasMedia = [...document.querySelectorAll(".tool-nav-link")].some((a) => a.dataset.tool === "media");
@@ -134,6 +139,17 @@ async function main() {
     const b = document.getElementById("vbb-analyze");
     return b && !b.disabled;
   }, { timeout: 15000 });
+  const localPick = await page.evaluate(() => ({
+    meta: document.getElementById("vbb-meta")?.textContent || "",
+    preload: document.getElementById("vbb-video")?.preload || "",
+    blobCount: window.DevToolsTemp?.blobStats?.().count || 0,
+  }));
+  if (!/本地文件，不上传/.test(localPick.meta)) {
+    throw new Error(`select should show local-only hint, got: ${localPick.meta}`);
+  }
+  if (localPick.preload !== "metadata") {
+    throw new Error(`vbb video preload should be metadata, got ${localPick.preload}`);
+  }
 
   await page.click("#vbb-analyze");
   await page.waitForFunction(() => {
@@ -342,6 +358,31 @@ async function main() {
   if (!/沿用#01/.test(reuseRun[1].note)) throw new Error(`#02 should reuse #01, got ${reuseRun[1].note}`);
   if (/沿用#01/.test(reuseRun[2].note)) throw new Error(`last clip should not reuse, got ${reuseRun[2].note}`);
 
+  const cleanup = await page.evaluate(async () => {
+    const before = window.DevToolsTemp?.blobStats?.() || { count: -1, bytes: -1 };
+    const revoked = window.DevToolsTemp?.releaseOnLeave?.() ?? -1;
+    const after = window.DevToolsTemp?.blobStats?.() || { count: -1 };
+    const videoSrc = document.getElementById("vbb-video")?.getAttribute("src") || "";
+    const analyzeDisabled = document.getElementById("vbb-analyze")?.disabled;
+    return {
+      beforeCount: before.count,
+      beforeBytes: before.bytes,
+      revoked,
+      afterCount: after.count,
+      videoSrc,
+      analyzeDisabled,
+      unloading: Boolean(window.DevToolsTemp?.isUnloading),
+    };
+  });
+  if (!(cleanup.beforeCount > 0)) {
+    throw new Error(`expected tracked blobs before leave-cleanup, got ${JSON.stringify(cleanup)}`);
+  }
+  if (cleanup.afterCount !== 0) {
+    throw new Error(`leave-cleanup should revoke blobs, got ${JSON.stringify(cleanup)}`);
+  }
+  if (cleanup.videoSrc) throw new Error(`video src should be cleared, got ${cleanup.videoSrc}`);
+  if (cleanup.analyzeDisabled !== true) throw new Error("analyze should disable after leave-cleanup");
+
   const todayTools = await page.evaluate(() => ({
     vsplit: Boolean(document.getElementById("vsplit")),
     gifm: Boolean(document.getElementById("gifm-merge") && document.getElementById("gifm-file")),
@@ -468,6 +509,12 @@ async function main() {
   if (result.homeLinkCount) problems.push("footer should not have 返回主站");
   if (result.footerHomeHref) problems.push("footer should not link to /");
   if (!/本地处理/.test(result.footerText || "")) problems.push("footer privacy note missing");
+  if (!/关闭页面会释放/.test(result.footerText || "")) problems.push("footer should mention auto-release on close");
+  if (result.vbbPreload !== "metadata") problems.push(`vbb preload should be metadata, got ${result.vbbPreload}`);
+  if (result.v2gPreload !== "metadata") problems.push(`v2g preload should be metadata, got ${result.v2gPreload}`);
+  if (result.vsplitPreload !== "metadata") problems.push(`vsplit preload should be metadata, got ${result.vsplitPreload}`);
+  if (!result.autoRelease) problems.push("DevToolsTemp.autoReleaseOnLeave missing");
+  if (!result.hasReleaseOnLeave) problems.push("DevToolsTemp.releaseOnLeave missing");
   if (!afterAnalyze.summary) problems.push("plan summary missing after analyze");
   if (afterAnalyze.rows) problems.push("per-clip estimate preview should be removed");
   if (/预计压/.test(afterAnalyze.summary || "")) problems.push("summary should not show per-clip compress preview");
@@ -528,6 +575,8 @@ async function main() {
       afterRun,
       reusePlan,
       reuseRun,
+      localPick,
+      cleanup,
       analyze,
       todayTools,
       mobileShell,
@@ -543,6 +592,8 @@ async function main() {
     clips: afterRun.clips,
     reuseRun,
     customRemainder,
+    localPick,
+    cleanup,
     mobile: mobileShell.hashVbb,
     shellFixes,
   });
