@@ -1023,6 +1023,7 @@
           (toolSearch || navCloseBtn || drawerFocusables()[0])?.focus?.({ preventScroll: true });
         } catch (_) {}
       }, 50);
+      window.DevToolsTemp?.refresh?.();
       return;
     }
 
@@ -1243,6 +1244,31 @@
     showToast("已恢复默认排序");
   });
 
+  async function runNavCacheClear() {
+    const btn = $("#nav-cache-clear");
+    if (btn?.disabled) return;
+    if (btn) btn.disabled = true;
+    try {
+      if (typeof window.DevToolsTemp?.purgeSiteCache !== "function") {
+        showToast("清理功能未就绪");
+        return;
+      }
+      const result = await window.DevToolsTemp.purgeSiteCache();
+      showToast(result?.message || "已清理本站缓存");
+    } catch (err) {
+      showToast(err?.message || "清理失败");
+    } finally {
+      if (btn) btn.disabled = false;
+      try {
+        await window.DevToolsTemp?.refresh?.();
+      } catch (_) {}
+    }
+  }
+
+  $("#nav-cache-clear")?.addEventListener("click", () => {
+    runNavCacheClear();
+  });
+
   navOpenBtn?.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -1380,4 +1406,5 @@
   renderFromAhexInput();
   syncChecksFromFlags();
   runRegex();
+  window.DevToolsTemp?.refresh?.();
 })();

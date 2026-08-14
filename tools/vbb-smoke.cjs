@@ -106,6 +106,9 @@ async function main() {
       vsplitPreload: document.getElementById("vsplit-video")?.getAttribute("preload") || "",
       autoRelease: Boolean(window.DevToolsTemp?.autoReleaseOnLeave),
       hasReleaseOnLeave: typeof window.DevToolsTemp?.releaseOnLeave === "function",
+      hasCacheBtn: Boolean(document.getElementById("nav-cache-clear")),
+      hasCacheMeta: Boolean(document.getElementById("nav-cache-meta")),
+      hasPurge: typeof window.DevToolsTemp?.purgeSiteCache === "function",
     };
     try {
       out.orderHasMedia = [...document.querySelectorAll(".tool-nav-link")].some((a) => a.dataset.tool === "media");
@@ -396,6 +399,32 @@ async function main() {
     waitUntil: "networkidle0",
     timeout: 60000,
   });
+  const cacheUi = await page.evaluate(async () => {
+    const btn = document.getElementById("nav-cache-clear");
+    const meta = document.getElementById("nav-cache-meta");
+    const inNav = Boolean(document.getElementById("nav-bar")?.contains(btn));
+    const result = await window.DevToolsTemp.purgeSiteCache();
+    let idbGone = true;
+    try {
+      const dbs = typeof indexedDB.databases === "function" ? await indexedDB.databases() : [];
+      idbGone = !(dbs || []).some((d) => String(d?.name || "").includes("ffmpeg"));
+    } catch (_) {}
+    return {
+      inNav,
+      btnText: (btn?.textContent || "").trim(),
+      hasMeta: Boolean(meta),
+      msg: result?.message || "",
+      blobs: window.DevToolsTemp.blobStats().count,
+      hasPurgeEngine: typeof window.DevToolsTemp.purgePersistedEngine === "function",
+      idbGone,
+    };
+  });
+  if (!cacheUi.inNav || cacheUi.btnText !== "一键清理缓存") {
+    throw new Error(`sidebar cache button missing: ${JSON.stringify(cacheUi)}`);
+  }
+  if (!cacheUi.msg || cacheUi.blobs !== 0) {
+    throw new Error(`purgeSiteCache failed: ${JSON.stringify(cacheUi)}`);
+  }
   await page.click("#nav-open");
   const drawerOpen = await page.evaluate(() => document.body.classList.contains("nav-open"));
   await page.click("#nav-close");
@@ -515,6 +544,10 @@ async function main() {
   if (result.vsplitPreload !== "metadata") problems.push(`vsplit preload should be metadata, got ${result.vsplitPreload}`);
   if (!result.autoRelease) problems.push("DevToolsTemp.autoReleaseOnLeave missing");
   if (!result.hasReleaseOnLeave) problems.push("DevToolsTemp.releaseOnLeave missing");
+  if (!result.hasCacheBtn) problems.push("missing #nav-cache-clear in sidebar");
+  if (!result.hasCacheMeta) problems.push("missing #nav-cache-meta in sidebar");
+  if (!result.hasPurge) problems.push("DevToolsTemp.purgeSiteCache missing");
+  if (!/侧栏/.test(result.footerText || "")) problems.push("footer should mention sidebar cache cleanup");
   if (!afterAnalyze.summary) problems.push("plan summary missing after analyze");
   if (afterAnalyze.rows) problems.push("per-clip estimate preview should be removed");
   if (/预计压/.test(afterAnalyze.summary || "")) problems.push("summary should not show per-clip compress preview");
@@ -577,6 +610,7 @@ async function main() {
       reuseRun,
       localPick,
       cleanup,
+      cacheUi,
       analyze,
       todayTools,
       mobileShell,
@@ -594,6 +628,7 @@ async function main() {
     customRemainder,
     localPick,
     cleanup,
+    cacheUi,
     mobile: mobileShell.hashVbb,
     shellFixes,
   });

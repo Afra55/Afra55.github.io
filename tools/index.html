@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260813j" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260813j" />
+  <link rel="stylesheet" href="./style.css?v=20260814f" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260814f" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -45,7 +45,11 @@
         <div class="nav-recent-list" id="tool-recent-list"></div>
       </div>
       <nav class="tool-nav" id="tool-nav" aria-label="工具分组"></nav>
-      <button type="button" class="nav-reset" id="nav-reset" title="恢复默认排序">恢复默认排序</button>
+      <div class="nav-footer-actions">
+        <p class="nav-cache-meta" id="nav-cache-meta">本站缓存（视频 / GIF / 编码器）可在此清理</p>
+        <button type="button" class="nav-reset nav-cache-clear" id="nav-cache-clear" title="清掉本站临时视频、GIF 和编码器缓存；不会删除系统相册或文件里已下载的内容">一键清理缓存</button>
+        <button type="button" class="nav-reset" id="nav-reset" title="恢复默认排序">恢复默认排序</button>
+      </div>
     </aside>
 
     <main class="shell">
@@ -1125,7 +1129,7 @@ hello@world.org</textarea>
             <label class="flag"><input type="checkbox" id="v2g-bright-enable" /> 调亮画面</label>
             <span class="hint tight" style="margin:0">开启后在视频下方预览并调节</span>
           </div>
-          <p class="hint" id="v2g-meta">支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。默认 15FPS / 宽480 / 质量5。关闭页面会释放本次视频和 GIF；约 30MB 编码器缓存会保留。</p>
+          <p class="hint" id="v2g-meta">支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。默认 15FPS / 宽480 / 质量5。关闭页面会释放本次视频和 GIF；编码器缓存可在侧栏一键清理。</p>
           <div class="gif-preview-wrap">
             <video id="v2g-video" class="img-preview gif-preview" controls playsinline muted preload="metadata" hidden></video>
           </div>
@@ -1943,7 +1947,7 @@ hello@world.org</textarea>
   </div>
 
   <footer class="site-footer">
-    <span>本地处理，数据不上传 · 关闭页面会释放本次视频和 GIF</span>
+    <span>本地处理，数据不上传 · 关闭页面会释放本次视频和 GIF · 侧栏可清理站点缓存</span>
   </footer>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
@@ -1955,10 +1959,10 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./temp.js?v=20260814e"></script>
+  <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260813j"></script>
-  <script src="./extra.js?v=20260814e"></script>
+  <script src="./app.js?v=20260814f"></script>
+  <script src="./extra.js?v=20260814f"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>

@@ -303,8 +303,20 @@ body.nav-open {
 
   .nav-reset {
     width: 100%;
-    margin-top: 0.35rem;
+    margin-top: 0;
     text-align: center;
+  }
+
+  .nav-footer-actions {
+    margin-top: auto;
+    padding-top: 0.75rem;
+  }
+
+  .nav-cache-clear,
+  .nav-footer-actions .nav-reset {
+    width: 100%;
+    min-height: 2.5rem;
+    border-radius: 12px;
   }
 
   .site-header {

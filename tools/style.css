@@ -212,6 +212,38 @@ body {
   border-color: rgba(46, 196, 182, 0.35);
 }
 
+.nav-footer-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.55rem;
+  width: 100%;
+  margin-top: 0.15rem;
+}
+
+.nav-cache-meta {
+  margin: 0;
+  width: 100%;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.nav-cache-clear {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.nav-cache-clear:hover {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+}
+
+.nav-cache-clear:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
 .tool-nav-link {
   color: var(--muted);
   text-decoration: none;
@@ -1138,6 +1170,10 @@ a.secondary-btn {
     width: 100%;
     border-radius: 10px;
     text-align: center;
+  }
+
+  .nav-footer-actions {
+    width: 100%;
   }
 
   .shell {
