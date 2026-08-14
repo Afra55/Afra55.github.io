@@ -98,6 +98,9 @@ async function main() {
         "vbb-list",
       ].map((id) => ({ id, ok: Boolean(document.getElementById(id)) })),
       orderHasMedia: false,
+      footerText: document.querySelector(".site-footer")?.textContent || "",
+      homeLinkCount: [...document.querySelectorAll("a")].filter((a) => /返回主站/.test(a.textContent || "")).length,
+      footerHomeHref: [...document.querySelectorAll(".site-footer a")].some((a) => a.getAttribute("href") === "/"),
     };
     try {
       out.orderHasMedia = [...document.querySelectorAll(".tool-nav-link")].some((a) => a.dataset.tool === "media");
@@ -349,6 +352,9 @@ async function main() {
   if (result.analyzeDisabled !== true) problems.push("analyze should start disabled");
   if (result.runDisabled !== true) problems.push("run should start disabled");
   if (!result.ids.every((x) => x.ok)) problems.push("missing ids");
+  if (result.homeLinkCount) problems.push("footer should not have 返回主站");
+  if (result.footerHomeHref) problems.push("footer should not link to /");
+  if (!/本地处理/.test(result.footerText || "")) problems.push("footer privacy note missing");
   if (!afterAnalyze.rows) problems.push("no plan rows after analyze");
   if (afterAnalyze.cards !== 3) problems.push(`expected 3 compare cards, got ${afterAnalyze.cards}`);
   if (afterAnalyze.runDisabled !== false) problems.push("run should enable after analyze");
