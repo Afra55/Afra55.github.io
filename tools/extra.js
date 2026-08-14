@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.13-l";
+  const GIF_TOOL_VERSION = "2026.08.14-a";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -103,6 +103,12 @@
   let ffmpegWarmState = "idle";
   let ffmpegWarmError = "";
   let ffmpegWarmDetail = { ratio: 0, text: "" };
+  /**
+   * 当前引擎实例里已写入的源视频，避免大文件每段都 arrayBuffer+writeFile（手机易白屏）。
+   * @type {null|{key:string,name:string}}
+   */
+  let ffmpegCachedInput = null;
+  const FFMPEG_SEG_FILE_BYTES = 48 * 1024 * 1024;
 
   function loadFfmpegMods() {
     if (!ffmpegModsPromise) {
@@ -122,6 +128,43 @@
     if (file instanceof Uint8Array) return file;
     const buf = await file.arrayBuffer();
     return new Uint8Array(buf);
+  }
+
+  function ffmpegInputKey(file) {
+    if (!file) return "";
+    return `${file.name || "file"}:${file.size || 0}:${file.lastModified || 0}`;
+  }
+
+  function guessVideoExt(file) {
+    const name = String(file?.name || "").toLowerCase();
+    if (name.endsWith(".webm")) return "webm";
+    if (name.endsWith(".mov")) return "mov";
+    if (name.endsWith(".m4v")) return "m4v";
+    if (name.endsWith(".mkv")) return "mkv";
+    return "mp4";
+  }
+
+  async function ensureFfmpegInputWritten(ffmpeg, file, onWrite) {
+    const ext = guessVideoExt(file);
+    const inName = `in.${ext}`;
+    const key = ffmpegInputKey(file);
+    if (ffmpegCachedInput?.key === key && ffmpegCachedInput?.name === inName) {
+      return inName;
+    }
+    if (ffmpegCachedInput?.name) {
+      try {
+        await ffmpeg.deleteFile(ffmpegCachedInput.name);
+      } catch (_) {}
+      ffmpegCachedInput = null;
+    }
+    onWrite?.(0, "写入视频到引擎…");
+    await ffmpeg.writeFile(inName, await fetchFileBytes(file));
+    ffmpegCachedInput = { key, name: inName };
+    return inName;
+  }
+
+  function clearFfmpegInputCache() {
+    ffmpegCachedInput = null;
   }
 
   function openFfmpegIdb() {
@@ -311,6 +354,7 @@
       }
       ffmpegInstance = null;
     }
+    clearFfmpegInputCache();
     // 默认永不 revoke 引擎 blob：IndexedDB 仍在，内存 URL 也可复用；且不进临时占用清理
     if (revokeAssets && ffmpegAssetBlobs) {
       const revoke =
@@ -3478,16 +3522,61 @@
       } catch (_) {}
 
       const ext = v2gSourceExt(file);
-      const inName = `in.${ext}`;
       const outName = "out.gif";
       const wmName = "wm.png";
       let usedWm = false;
+      let inName = `in.${ext}`;
+      let segName = null;
+      let encodeInput = inName;
+      let encodeSs = startSec;
+      let encodeT = span;
 
       try {
         ticker.setPhase(`${stageLabel}写入视频`);
         mapProgress(0.16, `${stageLabel}写入视频到引擎…`);
-        await ffmpeg.writeFile(inName, await fetchFileBytes(file));
+        inName = await ensureFfmpegInputWritten(ffmpeg, file, (_r, text) => {
+          mapProgress(0.16, `${stageLabel}${text || "写入视频到引擎…"}`);
+        });
+        encodeInput = inName;
         if (aborted()) throw new Error("已取消");
+
+        // 大文件先按段 remux，避免整片在调色板滤镜里反复解复用（手机易加载失败/白屏）
+        const wantSeg =
+          file.size >= FFMPEG_SEG_FILE_BYTES &&
+          Number.isFinite(opts.startSec) &&
+          Number.isFinite(opts.span);
+        if (wantSeg) {
+          segName = `seg-${Date.now().toString(36)}.${ext}`;
+          ticker.setPhase(`${stageLabel}抽取片段`);
+          mapProgress(0.18, `${stageLabel}抽取片段…`);
+          const cutCode = await ffmpeg.exec([
+            "-ss",
+            String(startSec),
+            "-t",
+            String(Math.min(span + 0.15, span * 1.05 + 0.05)),
+            "-i",
+            inName,
+            "-c",
+            "copy",
+            "-avoid_negative_ts",
+            "make_zero",
+            "-movflags",
+            "+faststart",
+            "-y",
+            segName,
+          ]);
+          if (aborted()) throw new Error("已取消");
+          if (cutCode === 0) {
+            encodeInput = segName;
+            encodeSs = 0;
+            encodeT = span;
+          } else {
+            try {
+              await ffmpeg.deleteFile(segName);
+            } catch (_) {}
+            segName = null;
+          }
+        }
 
         const wmBytes = skipWm ? null : await buildV2gWatermarkPng(outW, outH);
         let filterArgs;
@@ -3512,7 +3601,9 @@
 
         ticker.setPhase(`${stageLabel}双通道调色板编码`);
         ticker.setProgress(0.05);
-        const args = ["-ss", String(startSec), "-t", String(span), "-i", inName];
+        const args = [];
+        if (encodeSs > 0.001) args.push("-ss", String(encodeSs));
+        args.push("-t", String(encodeT), "-i", encodeInput);
         if (usedWm) args.push("-i", wmName);
         args.push(
           ...filterArgs,
@@ -3560,9 +3651,12 @@
         try {
           ffmpeg.off("log", onFfmpegLog);
         } catch (_) {}
-        try {
-          await ffmpeg.deleteFile(inName);
-        } catch (_) {}
+        // 源视频保留在引擎内复用；仅清理段文件与输出
+        if (segName) {
+          try {
+            await ffmpeg.deleteFile(segName);
+          } catch (_) {}
+        }
         try {
           await ffmpeg.deleteFile(outName);
         } catch (_) {}
@@ -4808,6 +4902,8 @@
     const vbbTargetRange = $("#vbb-target-range");
     const VBB_SAMPLE_SPAN = 2.5;
     const VBB_SAFETY = 0.85;
+    /** 清晰优先：按接近 6MB 规划段长（略留余量，避免实测偶发超限） */
+    const VBB_CLARITY_FILL = 0.97;
     const VBB_MAX_CLIPS = 50;
     const VBB_MIN_SPAN = 0.5;
     const VBB_CLARITY_MAX_SPAN = 20;
@@ -5540,13 +5636,13 @@
         const bps15 = sample.blob.size / Math.max(0.5, sample.span || sampleSpan);
         const clarityMax = Math.max(
           VBB_MIN_SPAN,
-          Math.min(VBB_CLARITY_MAX_SPAN, (V2G_BLACKBOX_MAX_BYTES * VBB_SAFETY) / bps15)
+          Math.min(VBB_CLARITY_MAX_SPAN, (V2G_BLACKBOX_MAX_BYTES * VBB_CLARITY_FILL) / bps15)
         );
         const durationMax = Math.max(
           clarityMax,
           Math.min(
             VBB_DURATION_MAX_SPAN,
-            (V2G_BLACKBOX_MAX_BYTES * VBB_SAFETY) / Math.max(1, bps15 * (10 / 15) * 0.55)
+            (V2G_BLACKBOX_MAX_BYTES * 0.92) / Math.max(1, bps15 * (10 / 15) * 0.55)
           )
         );
         const clarity = makeVbbPlanVariant(
@@ -5555,7 +5651,7 @@
           duration,
           clarityMax,
           bps15,
-          "宽420 · 不压缩 · ≤6MB",
+          "宽420 · 贴紧6MB · 不压缩",
           { encode: "clarity", maxW: V2G_BLACKBOX_BASE_W, srcW }
         );
         const sharp = makeSharpPlan(duration, bps15, srcW, clarityMax);
@@ -5590,8 +5686,8 @@
           `分析完成 · 样片 ${formatKb(sample.blob.size)} / ${vbbAnalysis.sampleSpan.toFixed(1)}s`
         );
         toast(`清晰 ${clarity.count} 段 · 锐度 ${sharp.count} 段(宽${sharp.maxW}) · 时长 ${durationPlan.count} 段`);
-        if (isLikelyMobileBrowser() && duration >= 90) {
-          toast("约 2 分钟及以上视频在手机上容易内存不足白屏，建议缩短片段或用电脑处理");
+        if (isLikelyMobileBrowser() && (duration >= 90 || (vbbSourceFile?.size || 0) >= 200 * 1024 * 1024)) {
+          toast("大视频在手机上易内存不足。已优化分段写入；仍建议少段处理或用电脑。");
         }
       } catch (err) {
         if (String(err && err.message) !== "已取消") setError(vbbError, err.message || String(err));
@@ -5619,12 +5715,25 @@
       const srcH = vbbVideo?.videoHeight || vbbAnalysis?.srcH || 0;
       const isAborted = () => abortVbb;
       const mobile = isLikelyMobileBrowser();
-      const longJob = (vbbAnalysis?.duration || 0) >= 90 || plan.ranges.length >= 8;
+      const fileBytes = vbbSourceFile?.size || 0;
+      const hugeFile = fileBytes >= 120 * 1024 * 1024;
+      const longJob = (vbbAnalysis?.duration || 0) >= 90 || plan.ranges.length >= 8 || hugeFile;
       if (mobile && longJob) {
-        toast("视频较长：手机可能因内存不足白屏。已改为按需预览；建议分段处理或用电脑。");
+        toast(
+          hugeFile
+            ? "源视频较大：已改为整片只写入一次并按段抽取，仍可能因内存不足失败。"
+            : "视频较长：手机可能因内存不足白屏。已改为按需预览；建议分段处理或用电脑。"
+        );
       }
       try {
         await prewarmFfmpegEngine().catch(() => {});
+        // 大文件先写入一次，后续片段复用，避免每段再 arrayBuffer 整文件
+        if (hugeFile || plan.ranges.length >= 4) {
+          try {
+            const ff = await getFfmpegInstance();
+            await ensureFfmpegInputWritten(ff, vbbSourceFile, () => {});
+          } catch (_) {}
+        }
         for (let i = 0; i < plan.ranges.length; i++) {
           if (abortVbb) throw new Error("已取消");
           const r = plan.ranges[i];
@@ -5738,12 +5847,19 @@
           // 只刷新列表元数据，不自动展开全部预览
           renderVbbResults();
           // 让出主线程，便于 Safari 回收临时内存
-          await new Promise((r) => setTimeout(r, mobile ? 80 : 16));
-          if (mobile && (i + 1) % 3 === 0 && i < plan.ranges.length - 1) {
+          const pauseMs = mobile ? (hugeFile ? 220 : 120) : 16;
+          await new Promise((r) => setTimeout(r, pauseMs));
+          const recycleEvery = mobile ? (hugeFile ? 1 : 2) : hugeFile ? 2 : 4;
+          if ((i + 1) % recycleEvery === 0 && i < plan.ranges.length - 1) {
             try {
               terminateFfmpegInstance({ revokeAssets: false });
             } catch (_) {}
+            await new Promise((r) => setTimeout(r, mobile ? 160 : 40));
             await prewarmFfmpegEngine().catch(() => {});
+            try {
+              const ff = await getFfmpegInstance();
+              await ensureFfmpegInputWritten(ff, vbbSourceFile, () => {});
+            } catch (_) {}
           }
         }
         const gifs = vbbClips.map((c, i) => ({ c, i })).filter((x) => x.c.gifBlob);

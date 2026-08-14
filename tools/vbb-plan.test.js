@@ -9,6 +9,7 @@ const V2G_BLACKBOX_WIDTH_STEP = 60;
 const V2G_BLACKBOX_WIDTH_CAP = 720;
 const MAX_V2G_FRAMES = 300;
 const VBB_SAFETY = 0.85;
+const VBB_CLARITY_FILL = 0.97;
 const VBB_MAX_CLIPS = 50;
 const VBB_MIN_SPAN = 0.5;
 const VBB_CLARITY_MAX_SPAN = 20;
@@ -279,14 +280,28 @@ function almost(a, b, eps = 1e-6) {
 }
 
 {
+  // 清晰优先：按 CLARITY_FILL 贴紧 6MB，而不是 0.85 安全系数
+  const bps15 = (4.93 * 1024 * 1024) / 8.3;
+  const clarityMax = Math.max(
+    VBB_MIN_SPAN,
+    Math.min(VBB_CLARITY_MAX_SPAN, (V2G_BLACKBOX_MAX_BYTES * VBB_CLARITY_FILL) / bps15)
+  );
+  const oldMax = (V2G_BLACKBOX_MAX_BYTES * VBB_SAFETY) / bps15;
+  assert(clarityMax > oldMax + 0.5, `clarity span should extend vs 0.85 safety (${clarityMax} vs ${oldMax})`);
+  const est = estimateVbbBytes(bps15, clarityMax, "clarity", 420);
+  assert(est >= V2G_BLACKBOX_MAX_BYTES * 0.94, `clarity est should near 6MB, got ${est}`);
+  assert(est <= V2G_BLACKBOX_MAX_BYTES * 1.02, `clarity est should not far exceed 6MB, got ${est}`);
+}
+
+{
   const bps15 = (3 * 1024 * 1024) / 2.5;
   const clarityMax = Math.max(
     VBB_MIN_SPAN,
-    Math.min(VBB_CLARITY_MAX_SPAN, (V2G_BLACKBOX_MAX_BYTES * VBB_SAFETY) / bps15)
+    Math.min(VBB_CLARITY_MAX_SPAN, (V2G_BLACKBOX_MAX_BYTES * VBB_CLARITY_FILL) / bps15)
   );
   const durationMax = Math.max(
     clarityMax,
-    Math.min(VBB_DURATION_MAX_SPAN, (V2G_BLACKBOX_MAX_BYTES * VBB_SAFETY) / Math.max(1, bps15 * (10 / 15) * 0.55))
+    Math.min(VBB_DURATION_MAX_SPAN, (V2G_BLACKBOX_MAX_BYTES * 0.92) / Math.max(1, bps15 * (10 / 15) * 0.55))
   );
   assert(durationMax >= clarityMax, "duration max >= clarity max");
   const clarityPlan = buildVbbRanges(120, clarityMax);
