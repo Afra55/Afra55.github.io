@@ -146,6 +146,31 @@ async function main() {
     return { summary, runDisabled, rows, cards };
   });
 
+  // 自定义时长：4s 视频目标 3s → 前段 3.0s、末段 1.0s，不得均分成 2.0s
+  await page.click("#vbb-mode-custom");
+  await page.evaluate(() => {
+    const el = document.getElementById("vbb-target-span");
+    el.value = "3";
+    el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  const customRemainder = await page.evaluate(() => {
+    const plan = window.DevToolsVbb?.getActivePlan?.();
+    const rows = [...document.querySelectorAll("#vbb-plan-list .vbb-plan-row")].map((el) => el.textContent);
+    return {
+      summary: document.getElementById("vbb-plan-summary")?.textContent || "",
+      count: plan?.count,
+      spans: (plan?.ranges || []).map((r) => Number(r.span.toFixed(3))),
+      starts: (plan?.ranges || []).map((r) => Number(r.start.toFixed(3))),
+      rows,
+    };
+  });
+  if (customRemainder.count !== 2 || customRemainder.spans[0] !== 3 || Math.abs(customRemainder.spans[1] - 1) > 0.05) {
+    throw new Error(`custom remainder split failed: ${JSON.stringify(customRemainder)}`);
+  }
+  if (!/前1段 3\.0s/.test(customRemainder.summary) || !/末段 1\.0s/.test(customRemainder.summary)) {
+    throw new Error(`custom summary should show remainder split, got: ${customRemainder.summary}`);
+  }
+
   // Switch duration mode and ensure plan updates
   await page.click("#vbb-mode-duration");
   const durationMode = await page.evaluate(() => {
@@ -304,7 +329,7 @@ async function main() {
   if (!result.mediaSubnavVisible) problems.push("media subnav should show");
   if (!result.orderHasMedia) problems.push("nav missing media entry");
   if (result.noLegacyMediaNav === false) problems.push("legacy gifmaker/vsplit/vbb nav links should be gone");
-  if (!result.version.includes("2026.08.13")) problems.push(`bad version ${result.version}`);
+  if (!/2026\.08\.14/.test(result.version)) problems.push(`bad version ${result.version}`);
   if (result.analyzeDisabled !== true) problems.push("analyze should start disabled");
   if (result.runDisabled !== true) problems.push("run should start disabled");
   if (!result.ids.every((x) => x.ok)) problems.push("missing ids");
@@ -358,6 +383,7 @@ async function main() {
       problems,
       result,
       afterAnalyze,
+      customRemainder,
       durationMode,
       sharpMode,
       afterRun,
@@ -374,6 +400,7 @@ async function main() {
     rows: afterAnalyze.rows,
     cards: afterAnalyze.cards,
     clips: afterRun.clips,
+    customRemainder,
     mobile: mobileShell.hashVbb,
     shellFixes,
   });

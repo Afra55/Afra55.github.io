@@ -223,6 +223,40 @@ function almost(a, b, eps = 1e-6) {
 }
 
 {
+  const r = buildVbbRanges(20.4, 10);
+  assert(r.length === 2, "20.4/10 => 10 + merged 10.4");
+  assert(almost(r[0].span, 10), "front stays 10");
+  assert(almost(r[1].span, 10.4), "tail shorter than min span merges into last");
+}
+
+{
+  const cases = [
+    [71.2, 10],
+    [22, 10],
+    [4, 3],
+    [50, 20],
+    [8, 12],
+    [10.3, 10],
+    [148, 8.3],
+    [56, 7],
+    [56, 8],
+  ];
+  for (const [d, t] of cases) {
+    const r = buildVbbRanges(d, t);
+    const sum = r.reduce((a, x) => a + x.span, 0);
+    assert(almost(sum, d, 1e-6), `coverage sum ${sum} != ${d} (t=${t})`);
+    assert(almost(r[0].start, 0), "starts at 0");
+    assert(almost(r[r.length - 1].start + r[r.length - 1].span, d, 1e-6), "ends at duration");
+    for (let i = 1; i < r.length; i++) {
+      assert(almost(r[i].start, r[i - 1].start + r[i - 1].span, 1e-6), `gap/overlap at ${i}`);
+    }
+    for (let i = 0; i < r.length - 1; i++) {
+      assert(almost(r[i].span, t, 1e-6), `front clip ${i} should be ${t}, got ${r[i].span}`);
+    }
+  }
+}
+
+{
   const r = buildVbbRanges(600, 0.5);
   assert(r.length === VBB_MAX_CLIPS, "cap at max clips");
   assert(r[0].span > 0.5, "capped clips become longer than target");
