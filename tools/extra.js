@@ -91,7 +91,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.14-e";
+  const GIF_TOOL_VERSION = "2026.08.14-f";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -136,7 +136,7 @@
   }
 
   const FFMPEG_VENDOR_BASE = resolveFfmpegVendorBase();
-  /** IndexedDB / Cache 均用 persist 前缀，避免被「清理临时」删掉 */
+  /** IndexedDB / Cache 均用 persist 前缀；侧栏「一键清理缓存」可整库删除 */
   const FFMPEG_IDB_NAME = "devtools-persist-ffmpeg";
   const FFMPEG_IDB_STORE = "assets";
   const FFMPEG_IDB_VERSION = 1;
@@ -157,6 +157,9 @@
    */
   let ffmpegCachedInput = null;
   const FFMPEG_SEG_FILE_BYTES = 48 * 1024 * 1024;
+  /** 用户点「一键清理缓存」后，不再自动预热，以免马上重新占空间 */
+  let ffmpegSkipAutoPrewarm = false;
+  let ffmpegEngineEpoch = 0;
 
   function loadFfmpegMods() {
     if (!ffmpegModsPromise) {
@@ -257,8 +260,9 @@
   }
 
   async function idbGetAsset(key) {
+    let db = null;
     try {
-      const db = await openFfmpegIdb();
+      db = await openFfmpegIdb();
       return await new Promise((resolve, reject) => {
         const tx = db.transaction(FFMPEG_IDB_STORE, "readonly");
         const req = tx.objectStore(FFMPEG_IDB_STORE).get(key);
@@ -267,12 +271,17 @@
       });
     } catch (_) {
       return null;
+    } finally {
+      try {
+        db?.close();
+      } catch (_) {}
     }
   }
 
   async function idbPutAsset(key, buffer) {
+    let db = null;
     try {
-      const db = await openFfmpegIdb();
+      db = await openFfmpegIdb();
       await new Promise((resolve, reject) => {
         const tx = db.transaction(FFMPEG_IDB_STORE, "readwrite");
         tx.objectStore(FFMPEG_IDB_STORE).put(buffer, key);
@@ -281,7 +290,36 @@
       });
     } catch (_) {
       /* private mode / quota：忽略，仍可用本次内存 blob */
+    } finally {
+      try {
+        db?.close();
+      } catch (_) {}
     }
+  }
+
+  function deleteFfmpegIndexedDb() {
+    return new Promise((resolve) => {
+      if (!window.indexedDB?.deleteDatabase) {
+        resolve(false);
+        return;
+      }
+      const req = indexedDB.deleteDatabase(FFMPEG_IDB_NAME);
+      req.onsuccess = () => resolve(true);
+      req.onerror = () => resolve(false);
+      req.onblocked = () => resolve(true);
+    });
+  }
+
+  async function purgePersistedEngine() {
+    ffmpegSkipAutoPrewarm = true;
+    ffmpegEngineEpoch += 1;
+    terminateFfmpegInstance({ revokeAssets: true });
+    ffmpegWarmState = "idle";
+    ffmpegWarmError = "";
+    ffmpegWarmPromise = null;
+    const ok = await deleteFfmpegIndexedDb();
+    paintFfmpegWarmHint();
+    return ok;
   }
 
   function createEngineObjectURL(buf, mime) {
@@ -381,7 +419,9 @@
   }
 
   async function getFfmpegInstance(onProgress) {
+    ffmpegSkipAutoPrewarm = false;
     if (ffmpegInstance?.loaded) return ffmpegInstance;
+    const epoch = ffmpegEngineEpoch;
     onProgress?.(0.02, "加载 FFmpeg 模块…");
     const { FFmpeg } = await loadFfmpegMods();
     const assets = await ensureFfmpegAssets(onProgress);
@@ -411,6 +451,13 @@
     ffmpegInstance = ffmpeg;
     ffmpegWarmState = "ready";
     ffmpegWarmError = "";
+    if (epoch !== ffmpegEngineEpoch) {
+      try {
+        ffmpeg.terminate();
+      } catch (_) {}
+      ffmpegInstance = null;
+      throw new Error("已取消");
+    }
     onProgress?.(0.22, "FFmpeg 就绪");
     paintFfmpegWarmHint();
     return ffmpeg;
@@ -461,9 +508,11 @@
     if (ffmpegWarmState === "warming") {
       text = ffmpegWarmDetail.text || "引擎预热中…";
     } else if (ffmpegWarmState === "ready") {
-      text = "本地编码器已就绪（约 30MB 引擎缓存会保留；本次视频/GIF 关闭页面即释放）";
+      text = "本地编码器已就绪（约 30MB 引擎缓存可在侧栏一键清理）";
     } else if (ffmpegWarmState === "error") {
       text = ffmpegWarmError || "引擎预热失败，转换时会重试";
+    } else if (ffmpegSkipAutoPrewarm) {
+      text = "编码器缓存已清理，开始转换时会重新下载";
     } else {
       text = "进入本页将预热本地编码器（不上传视频）";
     }
@@ -561,6 +610,7 @@
 
   function scheduleFfmpegPrewarm() {
     if (window.DevToolsTemp?.isUnloading) return;
+    if (ffmpegSkipAutoPrewarm) return;
     if (!isGifmakerActive()) return;
     const run = () => {
       prewarmFfmpegEngine().catch(() => {});
@@ -575,6 +625,7 @@
   function bindFfmpegPrewarmTriggers() {
     if (window.DevToolsTemp) {
       window.DevToolsTemp.releaseEngine = () => terminateFfmpegInstance({ revokeAssets: false });
+      window.DevToolsTemp.purgePersistedEngine = purgePersistedEngine;
     }
     paintFfmpegWarmHint();
     scheduleFfmpegPrewarm();
@@ -2758,7 +2809,7 @@
     /** 防误触软顶（%）；实际无业务硬限 */
     const V2G_BRIGHT_SOFT_MAX = 999;
     const V2G_DEFAULT_META =
-      "支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。默认 15FPS / 宽480 / 质量5。关闭页面会释放本次视频和 GIF；约 30MB 编码器缓存会保留。";
+      "支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。默认 15FPS / 宽480 / 质量5。关闭页面会释放本次视频和 GIF；编码器缓存可在侧栏一键清理。";
     let v2gBrightPreviewTimer = 0;
     let v2gBrightPreviewToken = 0;
     let v2gBrightFrameReady = false;
