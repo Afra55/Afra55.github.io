@@ -171,6 +171,22 @@ async function main() {
     throw new Error(`custom summary should show remainder split, got: ${customRemainder.summary}`);
   }
 
+  await page.click("#vbb-equalize");
+  const customEqualize = await page.evaluate(() => {
+    const plan = window.DevToolsVbb?.getActivePlan?.();
+    return {
+      checked: Boolean(document.getElementById("vbb-equalize")?.checked),
+      summary: document.getElementById("vbb-plan-summary")?.textContent || "",
+      count: plan?.count,
+      spans: (plan?.ranges || []).map((r) => Number(r.span.toFixed(3))),
+    };
+  });
+  if (!customEqualize.checked) throw new Error("equalize checkbox should turn on");
+  if (customEqualize.count !== 2 || customEqualize.spans.some((s) => Math.abs(s - 2) > 0.05)) {
+    throw new Error(`equalize should split 4s/3s into 2×2s, got ${JSON.stringify(customEqualize)}`);
+  }
+  await page.click("#vbb-equalize");
+
   // Switch duration mode and ensure plan updates
   await page.click("#vbb-mode-duration");
   const durationMode = await page.evaluate(() => {
@@ -384,6 +400,7 @@ async function main() {
       result,
       afterAnalyze,
       customRemainder,
+      customEqualize,
       durationMode,
       sharpMode,
       afterRun,

@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.14-b";
+  const GIF_TOOL_VERSION = "2026.08.14-c";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -4900,6 +4900,7 @@
     const vbbCustomRow = $("#vbb-custom-row");
     const vbbTargetSpan = $("#vbb-target-span");
     const vbbTargetRange = $("#vbb-target-range");
+    const vbbEqualize = $("#vbb-equalize");
     const VBB_SAMPLE_SPAN = 2.5;
     const VBB_SAFETY = 0.85;
     /** 清晰优先：按接近 6MB 规划段长（略留余量，避免实测偶发超限） */
@@ -5031,14 +5032,19 @@
       if (vbbCustomRow) vbbCustomRow.hidden = vbbMode !== "custom";
     }
 
-    function buildVbbRanges(duration, targetSpan) {
+    function isVbbEqualize() {
+      return Boolean(vbbEqualize?.checked);
+    }
+
+    function buildVbbRanges(duration, targetSpan, equalize) {
       const d = Number(duration) || 0;
       const part = Math.max(VBB_MIN_SPAN, Number(targetSpan) || VBB_MIN_SPAN);
       if (!(d > 0)) throw new Error("无法读取视频时长");
       const needed = Math.max(1, Math.ceil(d / part - 1e-9));
-      // 触顶段数上限时只能拉长每段，仍均分，避免末段吞下整段剩余
-      if (needed > VBB_MAX_CLIPS) {
-        const n = VBB_MAX_CLIPS;
+      const useEqual = Boolean(equalize) || needed > VBB_MAX_CLIPS;
+      // 均分，或触顶段数上限：每段等长
+      if (useEqual) {
+        const n = Math.min(VBB_MAX_CLIPS, needed);
         const slice = d / n;
         const ranges = [];
         for (let i = 0; i < n; i++) {
@@ -5296,7 +5302,7 @@
     function makeVbbPlanVariant(key, label, duration, maxSpan, bps15, note, opts = {}) {
       const hardCap = key === "duration" ? VBB_DURATION_MAX_SPAN : VBB_CLARITY_MAX_SPAN;
       const safeMax = Math.max(VBB_MIN_SPAN, Math.min(maxSpan, hardCap));
-      const ranges = buildVbbRanges(duration, safeMax);
+      const ranges = buildVbbRanges(duration, safeMax, isVbbEqualize());
       const avgSpan = ranges.reduce((a, r) => a + r.span, 0) / Math.max(1, ranges.length);
       const typicalSpan = typicalVbbSpan(ranges, safeMax);
       const encode = opts.encode || (key === "duration" ? "blackbox" : key === "sharp" ? "sharp" : "clarity");
@@ -5347,6 +5353,31 @@
       );
     }
 
+    function rebuildVbbDerivedPlans() {
+      if (!vbbAnalysis) return;
+      const { duration, bps15, srcW, clarityMax, durationMax } = vbbAnalysis;
+      if (!(duration > 0) || !(bps15 > 0) || !(clarityMax > 0)) return;
+      vbbAnalysis.clarity = makeVbbPlanVariant(
+        "clarity",
+        "清晰优先",
+        duration,
+        clarityMax,
+        bps15,
+        "宽420 · 贴紧6MB · 不压缩",
+        { encode: "clarity", maxW: V2G_BLACKBOX_BASE_W, srcW }
+      );
+      vbbAnalysis.sharp = makeSharpPlan(duration, bps15, srcW, clarityMax);
+      vbbAnalysis.durationPlan = makeVbbPlanVariant(
+        "duration",
+        "时长优先",
+        duration,
+        durationMax,
+        bps15,
+        "可降帧/压缩 · 段更长、段数更少",
+        { encode: "blackbox", maxW: V2G_BLACKBOX_BASE_W, srcW }
+      );
+    }
+
     function resolveActiveVbbPlan() {
       if (!vbbAnalysis) return null;
       const { duration, bps15, clarity, sharp, durationPlan, srcW } = vbbAnalysis;
@@ -5356,7 +5387,7 @@
       let target = Number(vbbTargetSpan?.value);
       if (!(target > 0)) target = clarity.maxSpan;
       target = Math.max(VBB_MIN_SPAN, Math.min(VBB_DURATION_MAX_SPAN, target));
-      const ranges = buildVbbRanges(duration, target);
+      const ranges = buildVbbRanges(duration, target, isVbbEqualize());
       const avgSpan = ranges.reduce((a, r) => a + r.span, 0) / Math.max(1, ranges.length);
       const typicalSpan = typicalVbbSpan(ranges, target);
       if (typicalSpan > clarity.maxSpan + 0.05) {
@@ -5711,6 +5742,8 @@
           bps15,
           sampleBytes: sample.blob.size,
           sampleSpan: sample.span || sampleSpan,
+          clarityMax,
+          durationMax,
           clarity,
           sharp,
           durationPlan,
@@ -5988,6 +6021,10 @@
     vbbTargetSpan?.addEventListener("change", () => syncCustomTarget(vbbTargetSpan.value));
     vbbTargetSpan?.addEventListener("input", () => syncCustomTarget(vbbTargetSpan.value));
     vbbTargetRange?.addEventListener("input", () => syncCustomTarget(vbbTargetRange.value));
+    vbbEqualize?.addEventListener("change", () => {
+      rebuildVbbDerivedPlans();
+      paintVbbPlan();
+    });
     vbbFile?.addEventListener("change", (e) => {
       loadVbbFile(e.target.files?.[0]).catch((err) => {
         clearVbb();
@@ -6006,6 +6043,7 @@
         if (!vbbAnalysis) return null;
         return estimateVbbBlackboxPlan(vbbAnalysis.bps15, span, vbbAnalysis.srcW);
       },
+      isEqualize: () => isVbbEqualize(),
     };
     vbbAnalyze?.addEventListener("click", () => runVbbAnalyze().catch((err) => setError(vbbError, err.message || String(err))));
     vbbRun?.addEventListener("click", () => runVbbExecute().catch((err) => setError(vbbError, err.message || String(err))));

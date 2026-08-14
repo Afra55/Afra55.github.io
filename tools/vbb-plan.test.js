@@ -18,13 +18,14 @@ const VBB_SAMPLE_SPAN = 2.5;
 const VBB_SOFT_COMPRESS_KEEP = 0.72;
 const VBB_BLACKBOX_LONG_SPAN_SEC = 20;
 
-function buildVbbRanges(duration, targetSpan) {
+function buildVbbRanges(duration, targetSpan, equalize) {
   const d = Number(duration) || 0;
   const part = Math.max(VBB_MIN_SPAN, Number(targetSpan) || VBB_MIN_SPAN);
   if (!(d > 0)) throw new Error("无法读取视频时长");
   const needed = Math.max(1, Math.ceil(d / part - 1e-9));
-  if (needed > VBB_MAX_CLIPS) {
-    const n = VBB_MAX_CLIPS;
+  const useEqual = Boolean(equalize) || needed > VBB_MAX_CLIPS;
+  if (useEqual) {
+    const n = Math.min(VBB_MAX_CLIPS, needed);
     const slice = d / n;
     const ranges = [];
     for (let i = 0; i < n; i++) {
@@ -214,6 +215,12 @@ function almost(a, b, eps = 1e-6) {
   assert(r.length === 8, "71.2/10 => 7 full + remainder");
   assert(r.slice(0, 7).every((x) => almost(x.span, 10)), "front 7 clips are 10s");
   assert(almost(r[7].span, 1.2, 1e-6), `last remainder 1.2s, got ${r[7].span}`);
+}
+
+{
+  const r = buildVbbRanges(71.2, 10, true);
+  assert(r.length === 8, "equalize 71.2/10 => 8 clips");
+  assert(r.every((x) => almost(x.span, 8.9, 0.01)), "equalize makes even spans");
 }
 
 {
