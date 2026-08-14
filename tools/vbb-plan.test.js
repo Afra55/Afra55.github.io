@@ -221,6 +221,16 @@ function almost(a, b, eps = 1e-6) {
   const r = buildVbbRanges(71.2, 10, true);
   assert(r.length === 8, "equalize 71.2/10 => 8 clips");
   assert(r.every((x) => almost(x.span, 8.9, 0.01)), "equalize makes even spans");
+  const off = buildVbbRanges(71.2, 10, false);
+  assert(almost(off[0].span, 10) && almost(off[7].span, 1.2), "equalize off restores remainder");
+}
+
+{
+  const off = buildVbbRanges(50, 20, false);
+  const on = buildVbbRanges(50, 20, true);
+  assert(almost(off[0].span, 20) && almost(off[2].span, 10), "default remainder 20+20+10");
+  assert(on.length === 3 && on.every((x) => almost(x.span, 50 / 3, 1e-6)), "equalize 50/20 even thirds");
+  assert(almost(on[0].start, 0) && almost(on[2].start + on[2].span, 50), "equalize covers full duration");
 }
 
 {

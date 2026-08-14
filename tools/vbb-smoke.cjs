@@ -146,8 +146,21 @@ async function main() {
     const runDisabled = document.getElementById("vbb-run")?.disabled;
     const rows = document.querySelectorAll("#vbb-plan-list .vbb-plan-row").length;
     const cards = document.querySelectorAll("#vbb-plan-compare .vbb-plan-card").length;
-    return { summary, runDisabled, rows, cards };
+    const eq = document.getElementById("vbb-equalize");
+    return {
+      summary,
+      runDisabled,
+      rows,
+      cards,
+      equalizeExists: Boolean(eq),
+      equalizeChecked: Boolean(eq?.checked),
+      hookEqualize: Boolean(window.DevToolsVbb?.isEqualize?.()),
+    };
   });
+  if (!afterAnalyze.equalizeExists) throw new Error("missing #vbb-equalize switch");
+  if (afterAnalyze.equalizeChecked || afterAnalyze.hookEqualize) {
+    throw new Error("equalize should default off");
+  }
 
   // 自定义时长：4s 视频目标 3s → 前段 3.0s、末段 1.0s，不得均分成 2.0s
   await page.click("#vbb-mode-custom");
@@ -188,7 +201,42 @@ async function main() {
   if (customEqualize.count !== 2 || customEqualize.spans.some((s) => Math.abs(s - 2) > 0.05)) {
     throw new Error(`equalize should split 4s/3s into 2×2s, got ${JSON.stringify(customEqualize)}`);
   }
+  if (!/每段 2\.0s/.test(customEqualize.summary) || /末段/.test(customEqualize.summary)) {
+    throw new Error(`equalize summary should be even spans, got: ${customEqualize.summary}`);
+  }
+
   await page.click("#vbb-equalize");
+  const customEqualizeOff = await page.evaluate(() => {
+    const plan = window.DevToolsVbb?.getActivePlan?.();
+    return {
+      checked: Boolean(document.getElementById("vbb-equalize")?.checked),
+      summary: document.getElementById("vbb-plan-summary")?.textContent || "",
+      spans: (plan?.ranges || []).map((r) => Number(r.span.toFixed(3))),
+    };
+  });
+  if (customEqualizeOff.checked) throw new Error("equalize should turn off");
+  if (customEqualizeOff.spans[0] !== 3 || Math.abs(customEqualizeOff.spans[1] - 1) > 0.05) {
+    throw new Error(`turning equalize off should restore 3+1, got ${JSON.stringify(customEqualizeOff)}`);
+  }
+
+  // 均分打开时切换预设不应报错，且关均分后自定义仍是末段剩余
+  await page.click("#vbb-equalize");
+  await page.click("#vbb-mode-clarity");
+  await page.click("#vbb-mode-duration");
+  await page.click("#vbb-mode-custom");
+  await page.click("#vbb-equalize");
+  const afterModeSwitch = await page.evaluate(() => {
+    const plan = window.DevToolsVbb?.getActivePlan?.();
+    return {
+      checked: Boolean(document.getElementById("vbb-equalize")?.checked),
+      spans: (plan?.ranges || []).map((r) => Number(r.span.toFixed(3))),
+      errors: document.getElementById("vbb-error")?.textContent || "",
+    };
+  });
+  if (afterModeSwitch.checked) throw new Error("equalize should stay off after mode switch");
+  if (afterModeSwitch.spans[0] !== 3 || Math.abs(afterModeSwitch.spans[1] - 1) > 0.05) {
+    throw new Error(`mode switch with toggle should keep remainder, got ${JSON.stringify(afterModeSwitch)}`);
+  }
 
   // Switch duration mode and ensure plan updates
   await page.click("#vbb-mode-duration");
@@ -356,6 +404,7 @@ async function main() {
   if (result.footerHomeHref) problems.push("footer should not link to /");
   if (!/本地处理/.test(result.footerText || "")) problems.push("footer privacy note missing");
   if (!afterAnalyze.rows) problems.push("no plan rows after analyze");
+  if (afterAnalyze.equalizeChecked) problems.push("equalize switch should default off");
   if (afterAnalyze.cards !== 3) problems.push(`expected 3 compare cards, got ${afterAnalyze.cards}`);
   if (afterAnalyze.runDisabled !== false) problems.push("run should enable after analyze");
   if (!durationMode.active) problems.push("duration mode not active");
