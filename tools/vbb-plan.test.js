@@ -178,6 +178,13 @@ function resolveVbbSpanForWidth(bps15, width, srcW) {
   return Math.max(VBB_MIN_SPAN, Math.min(VBB_CLARITY_MAX_SPAN, span));
 }
 
+function shouldReuseVbbFirstPlan(ranges, index) {
+  if (!Array.isArray(ranges) || index <= 0 || index >= ranges.length - 1) return false;
+  const a = Number(ranges[0]?.span) || 0;
+  const b = Number(ranges[index]?.span) || 0;
+  return a > 0 && Math.abs(a - b) < 0.08;
+}
+
 function sampleSpanFor(duration) {
   return Math.min(VBB_SAMPLE_SPAN, Math.max(VBB_MIN_SPAN, duration));
 }
@@ -409,6 +416,19 @@ function almost(a, b, eps = 1e-6) {
   const span720 = resolveVbbSpanForWidth(bps15, 720, 1280);
   assert(span720 < 10, "720 needs shorter span than 10s");
   assert(resolveVbbWidthForSpan(bps15, span720, 1280) >= 660, "span for 720 should allow near-top width");
+}
+
+{
+  const nine = Array.from({ length: 9 }, (_, i) => ({ start: i * 12, span: 12 }));
+  assert(!shouldReuseVbbFirstPlan(nine, 0), "first clip probes");
+  assert(shouldReuseVbbFirstPlan(nine, 1), "middle same-span reuses #01");
+  assert(shouldReuseVbbFirstPlan(nine, 7), "penultimate same-span reuses");
+  assert(!shouldReuseVbbFirstPlan(nine, 8), "last clip does not reuse");
+  const mixed = [{ span: 12 }, { span: 12 }, { span: 12 }, { span: 3.2 }];
+  assert(shouldReuseVbbFirstPlan(mixed, 1) && shouldReuseVbbFirstPlan(mixed, 2), "front same-span reuse");
+  assert(!shouldReuseVbbFirstPlan(mixed, 3), "remainder last does not reuse");
+  const two = [{ span: 3 }, { span: 1 }];
+  assert(!shouldReuseVbbFirstPlan(two, 1), "two clips: last never reuses");
 }
 
 console.log("vbb-plan.test.js: all passed");

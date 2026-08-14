@@ -94,7 +94,7 @@ async function main() {
         "vbb-mode-clarity",
         "vbb-mode-duration",
         "vbb-mode-custom",
-        "vbb-plan-list",
+        "vbb-plan-compare",
         "vbb-list",
       ].map((id) => ({ id, ok: Boolean(document.getElementById(id)) })),
       orderHasMedia: false,
@@ -171,13 +171,15 @@ async function main() {
   });
   const customRemainder = await page.evaluate(() => {
     const plan = window.DevToolsVbb?.getActivePlan?.();
-    const rows = [...document.querySelectorAll("#vbb-plan-list .vbb-plan-row")].map((el) => el.textContent);
+    const reuse = window.DevToolsVbb?.shouldReuseFirstPlan;
     return {
       summary: document.getElementById("vbb-plan-summary")?.textContent || "",
       count: plan?.count,
       spans: (plan?.ranges || []).map((r) => Number(r.span.toFixed(3))),
       starts: (plan?.ranges || []).map((r) => Number(r.start.toFixed(3))),
-      rows,
+      planRows: document.querySelectorAll("#vbb-plan-list .vbb-plan-row").length,
+      reuseMid: typeof reuse === "function" ? reuse(plan?.ranges || [], 1) : null,
+      reuseLast: typeof reuse === "function" ? reuse(plan?.ranges || [], (plan?.ranges || []).length - 1) : null,
     };
   });
   if (customRemainder.count !== 2 || customRemainder.spans[0] !== 3 || Math.abs(customRemainder.spans[1] - 1) > 0.05) {
@@ -185,6 +187,10 @@ async function main() {
   }
   if (!/前1段 3\.0s/.test(customRemainder.summary) || !/末段 1\.0s/.test(customRemainder.summary)) {
     throw new Error(`custom summary should show remainder split, got: ${customRemainder.summary}`);
+  }
+  if (customRemainder.planRows) throw new Error("plan list estimates should stay hidden");
+  if (customRemainder.reuseMid !== false || customRemainder.reuseLast !== false) {
+    throw new Error(`2-clip plan must not reuse last clip: ${JSON.stringify(customRemainder)}`);
   }
 
   await page.click("#vbb-equalize");
@@ -403,7 +409,9 @@ async function main() {
   if (result.homeLinkCount) problems.push("footer should not have 返回主站");
   if (result.footerHomeHref) problems.push("footer should not link to /");
   if (!/本地处理/.test(result.footerText || "")) problems.push("footer privacy note missing");
-  if (!afterAnalyze.rows) problems.push("no plan rows after analyze");
+  if (!afterAnalyze.summary) problems.push("plan summary missing after analyze");
+  if (afterAnalyze.rows) problems.push("per-clip estimate preview should be removed");
+  if (/预计压/.test(afterAnalyze.summary || "")) problems.push("summary should not show per-clip compress preview");
   if (afterAnalyze.equalizeChecked) problems.push("equalize switch should default off");
   if (afterAnalyze.cards !== 3) problems.push(`expected 3 compare cards, got ${afterAnalyze.cards}`);
   if (afterAnalyze.runDisabled !== false) problems.push("run should enable after analyze");
