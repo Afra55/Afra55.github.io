@@ -43,7 +43,7 @@
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  const GIF_TOOL_VERSION = "2026.08.14-a";
+  const GIF_TOOL_VERSION = "2026.08.14-b";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -5035,15 +5035,48 @@
       const d = Number(duration) || 0;
       const part = Math.max(VBB_MIN_SPAN, Number(targetSpan) || VBB_MIN_SPAN);
       if (!(d > 0)) throw new Error("无法读取视频时长");
-      const n = Math.min(VBB_MAX_CLIPS, Math.max(1, Math.ceil(d / part - 1e-9)));
-      const slice = d / n;
-      const ranges = [];
-      for (let i = 0; i < n; i++) {
-        const start = i * slice;
-        const end = i === n - 1 ? d : (i + 1) * slice;
-        ranges.push({ start, span: Math.max(VBB_MIN_SPAN, end - start) });
+      const needed = Math.max(1, Math.ceil(d / part - 1e-9));
+      // 触顶段数上限时只能拉长每段，仍均分，避免末段吞下整段剩余
+      if (needed > VBB_MAX_CLIPS) {
+        const n = VBB_MAX_CLIPS;
+        const slice = d / n;
+        const ranges = [];
+        for (let i = 0; i < n; i++) {
+          const start = i * slice;
+          const end = i === n - 1 ? d : (i + 1) * slice;
+          ranges.push({ start, span: Math.max(VBB_MIN_SPAN, end - start) });
+        }
+        return ranges;
       }
+      const ranges = [];
+      let start = 0;
+      while (start < d - 1e-9) {
+        const remaining = d - start;
+        // 剩余不足一段、或切完会留下过短尾巴：并入末段
+        if (remaining <= part + 1e-6 || remaining - part < VBB_MIN_SPAN) {
+          ranges.push({ start, span: remaining });
+          break;
+        }
+        ranges.push({ start, span: part });
+        start += part;
+      }
+      if (!ranges.length) ranges.push({ start: 0, span: d });
       return ranges;
+    }
+
+    function typicalVbbSpan(ranges, fallback) {
+      if (ranges?.length) return ranges[0].span;
+      return Math.max(VBB_MIN_SPAN, Number(fallback) || VBB_MIN_SPAN);
+    }
+
+    function formatVbbRangesSpanTip(ranges) {
+      if (!ranges?.length) return "";
+      const first = ranges[0].span;
+      const last = ranges[ranges.length - 1].span;
+      if (ranges.length === 1 || Math.abs(last - first) < 0.08) {
+        return `每段 ${first.toFixed(1)}s`;
+      }
+      return `前${ranges.length - 1}段 ${first.toFixed(1)}s · 末段 ${last.toFixed(1)}s`;
     }
 
     function vbbWidthLadder(srcW) {
@@ -5214,14 +5247,15 @@
 
     function annotateVbbPlan(plan, bps15, srcW) {
       const avgSpan = plan.avgSpan;
+      const typicalSpan = plan.typicalSpan || typicalVbbSpan(plan.ranges, avgSpan);
       const maxW = plan.maxW || vbbSampleBaseWidth(srcW);
-      const capped = plan.count >= VBB_MAX_CLIPS && avgSpan > plan.maxSpan * 1.02;
+      const capped = plan.count >= VBB_MAX_CLIPS && typicalSpan > plan.maxSpan * 1.02;
       let note = plan.note;
       let encode = plan.encode;
       let unsafe = false;
       if (capped) {
         unsafe = true;
-        note = `${note} · 已达 ${VBB_MAX_CLIPS} 段上限，单段约 ${avgSpan.toFixed(1)}s`;
+        note = `${note} · 已达 ${VBB_MAX_CLIPS} 段上限，单段约 ${typicalSpan.toFixed(1)}s`;
       }
       const estMode = encode === "blackbox" ? "duration" : "clarity";
       let estBytes;
@@ -5229,25 +5263,26 @@
       let estCompressRounds = 0;
       let outMaxW = maxW;
       if (estMode === "duration") {
-        const bb = estimateVbbBlackboxPlan(bps15, avgSpan, srcW);
+        const bb = estimateVbbBlackboxPlan(bps15, typicalSpan, srcW);
         estBytes = bb.bytes;
         estFps = bb.fps;
         estCompressRounds = bb.compressRounds;
         outMaxW = bb.maxW || maxW;
       } else {
-        estBytes = estimateVbbBytes(bps15, avgSpan, estMode, maxW, srcW);
+        estBytes = estimateVbbBytes(bps15, typicalSpan, estMode, maxW, srcW);
         estFps = 15;
       }
       if ((encode === "clarity" || encode === "sharp") && estBytes > V2G_BLACKBOX_MAX_BYTES) {
         unsafe = true;
         note = `${note} · 预估超 6MB`;
       }
-      if ((encode === "clarity" || encode === "sharp") && avgSpan > plan.maxSpan * 1.05) {
+      if ((encode === "clarity" || encode === "sharp") && typicalSpan > plan.maxSpan * 1.05) {
         unsafe = true;
         note = `${note} · 实际单段长于安全时长`;
       }
       return {
         ...plan,
+        typicalSpan,
         note,
         encode,
         unsafe,
@@ -5263,6 +5298,7 @@
       const safeMax = Math.max(VBB_MIN_SPAN, Math.min(maxSpan, hardCap));
       const ranges = buildVbbRanges(duration, safeMax);
       const avgSpan = ranges.reduce((a, r) => a + r.span, 0) / Math.max(1, ranges.length);
+      const typicalSpan = typicalVbbSpan(ranges, safeMax);
       const encode = opts.encode || (key === "duration" ? "blackbox" : key === "sharp" ? "sharp" : "clarity");
       const srcW = opts.srcW || 0;
       const maxW = opts.maxW || vbbSampleBaseWidth(srcW);
@@ -5274,7 +5310,8 @@
           ranges,
           count: ranges.length,
           avgSpan,
-          estBytes: estimateVbbBytes(bps15, avgSpan, encode === "blackbox" ? "duration" : "clarity", maxW, srcW),
+          typicalSpan,
+          estBytes: estimateVbbBytes(bps15, typicalSpan, encode === "blackbox" ? "duration" : "clarity", maxW, srcW),
           note,
           encode,
           maxW,
@@ -5321,8 +5358,9 @@
       target = Math.max(VBB_MIN_SPAN, Math.min(VBB_DURATION_MAX_SPAN, target));
       const ranges = buildVbbRanges(duration, target);
       const avgSpan = ranges.reduce((a, r) => a + r.span, 0) / Math.max(1, ranges.length);
-      if (avgSpan > clarity.maxSpan + 0.05) {
-        const estPlan = estimateVbbBlackboxPlan(bps15, avgSpan, srcW);
+      const typicalSpan = typicalVbbSpan(ranges, target);
+      if (typicalSpan > clarity.maxSpan + 0.05) {
+        const estPlan = estimateVbbBlackboxPlan(bps15, typicalSpan, srcW);
         return annotateVbbPlan(
           {
             key: "custom",
@@ -5331,12 +5369,13 @@
             ranges,
             count: ranges.length,
             avgSpan,
+            typicalSpan,
             estBytes: estPlan.bytes,
             estFps: estPlan.fps,
             estCompressRounds: estPlan.compressRounds,
             note: describeVbbExpect(
               "custom",
-              target,
+              typicalSpan,
               clarity.maxSpan,
               durationPlan.maxSpan,
               V2G_BLACKBOX_BASE_W,
@@ -5350,7 +5389,7 @@
           srcW
         );
       }
-      const maxW = resolveVbbWidthForSpan(bps15, avgSpan, srcW);
+      const maxW = resolveVbbWidthForSpan(bps15, typicalSpan, srcW);
       const encode = maxW > vbbSampleBaseWidth(srcW) + 1 ? "sharp" : "clarity";
       const estFps = 15;
       return annotateVbbPlan(
@@ -5361,10 +5400,11 @@
           ranges,
           count: ranges.length,
           avgSpan,
-          estBytes: estimateVbbBytes(bps15, avgSpan, "clarity", maxW, srcW),
+          typicalSpan,
+          estBytes: estimateVbbBytes(bps15, typicalSpan, "clarity", maxW, srcW),
           estFps,
           estCompressRounds: 0,
-          note: describeVbbExpect("custom", target, clarity.maxSpan, durationPlan.maxSpan, maxW, estFps, 0),
+          note: describeVbbExpect("custom", typicalSpan, clarity.maxSpan, durationPlan.maxSpan, maxW, estFps, 0),
           encode,
           maxW,
         },
@@ -5397,7 +5437,7 @@
           line.className = "hint tight";
           const widthTip = p.maxW ? ` · 宽${p.maxW}` : "";
           const fpsTip = ` · ${formatVbbFpsTip(p.estFps || 15, p.estCompressRounds || 0)}`;
-          line.textContent = `${p.count} 段 · 约 ${p.avgSpan.toFixed(1)}s/段${widthTip}${fpsTip} · 预估 ${formatKb(p.estBytes)}/段`;
+          line.textContent = `${p.count} 段 · ${formatVbbRangesSpanTip(p.ranges)}${widthTip}${fpsTip} · 预估 ${formatKb(p.estBytes)}/段`;
           const note = document.createElement("span");
           note.className = "hint tight";
           note.textContent = p.note;
@@ -5414,7 +5454,7 @@
         const widthTip = active.maxW ? ` · 目标宽 ${active.maxW}` : "";
         const fpsTip = ` · ${formatVbbFpsTip(active.estFps || 15, active.estCompressRounds || 0)}`;
         const warn = active.unsafe ? " ⚠ 可能超预算，执行时超限会降宽或改走黑盒。" : "";
-        vbbPlanSummary.textContent = `将生成 ${active.count} 个切片 · 每段约 ${active.avgSpan.toFixed(1)}s${widthTip}${fpsTip} · 预估约 ${formatKb(active.estBytes)}/段 · ${active.note}（体积为估算，执行后以实测为准）${warn}`;
+        vbbPlanSummary.textContent = `将生成 ${active.count} 个切片 · ${formatVbbRangesSpanTip(active.ranges)}${widthTip}${fpsTip} · 预估约 ${formatKb(active.estBytes)}/段 · ${active.note}（体积为估算，执行后以实测为准）${warn}`;
       }
 
       if (vbbPlanList && active) {

@@ -22,14 +22,30 @@ function buildVbbRanges(duration, targetSpan) {
   const d = Number(duration) || 0;
   const part = Math.max(VBB_MIN_SPAN, Number(targetSpan) || VBB_MIN_SPAN);
   if (!(d > 0)) throw new Error("无法读取视频时长");
-  const n = Math.min(VBB_MAX_CLIPS, Math.max(1, Math.ceil(d / part - 1e-9)));
-  const slice = d / n;
-  const ranges = [];
-  for (let i = 0; i < n; i++) {
-    const start = i * slice;
-    const end = i === n - 1 ? d : (i + 1) * slice;
-    ranges.push({ start, span: Math.max(VBB_MIN_SPAN, end - start) });
+  const needed = Math.max(1, Math.ceil(d / part - 1e-9));
+  if (needed > VBB_MAX_CLIPS) {
+    const n = VBB_MAX_CLIPS;
+    const slice = d / n;
+    const ranges = [];
+    for (let i = 0; i < n; i++) {
+      const start = i * slice;
+      const end = i === n - 1 ? d : (i + 1) * slice;
+      ranges.push({ start, span: Math.max(VBB_MIN_SPAN, end - start) });
+    }
+    return ranges;
   }
+  const ranges = [];
+  let start = 0;
+  while (start < d - 1e-9) {
+    const remaining = d - start;
+    if (remaining <= part + 1e-6 || remaining - part < VBB_MIN_SPAN) {
+      ranges.push({ start, span: remaining });
+      break;
+    }
+    ranges.push({ start, span: part });
+    start += part;
+  }
+  if (!ranges.length) ranges.push({ start: 0, span: d });
   return ranges;
 }
 
@@ -189,6 +205,21 @@ function almost(a, b, eps = 1e-6) {
   const r = buildVbbRanges(50, 20);
   assert(r.length === 3, "50/20 => 3 clips");
   assert(almost(r.reduce((a, x) => a + x.span, 0), 50), "spans sum to duration");
+  assert(almost(r[0].span, 20) && almost(r[1].span, 20), "front clips keep target");
+  assert(almost(r[2].span, 10), "last clip takes remainder");
+}
+
+{
+  const r = buildVbbRanges(71.2, 10);
+  assert(r.length === 8, "71.2/10 => 7 full + remainder");
+  assert(r.slice(0, 7).every((x) => almost(x.span, 10)), "front 7 clips are 10s");
+  assert(almost(r[7].span, 1.2, 1e-6), `last remainder 1.2s, got ${r[7].span}`);
+}
+
+{
+  const r = buildVbbRanges(10.3, 10);
+  assert(r.length === 1, "tiny leftover merges into last clip");
+  assert(almost(r[0].span, 10.3), "merged span = duration");
 }
 
 {
