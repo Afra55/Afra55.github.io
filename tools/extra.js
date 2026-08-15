@@ -92,11 +92,7 @@
     });
   }
 
-<<<<<<< HEAD
-  const TOOLS_VERSION = "2026.08.15-y";
-=======
   const TOOLS_VERSION = "2026.08.15-z";
->>>>>>> origin/cursor/nav-group-sort-ad72
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
