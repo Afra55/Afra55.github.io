@@ -748,6 +748,35 @@ async function main() {
   if (!(manualMarks.scrubDotCount >= 4)) {
     throw new Error(`scrub marks should paint start/end dots: ${JSON.stringify(manualMarks)}`);
   }
+  // 狂点不应靠 normalize 拉长而瞬间堆段
+  const spamMarks = await pageMarks.evaluate(async () => {
+    window.DevToolsVsplit.setMarks([]);
+    const scrub = document.getElementById("vsplit-scrub");
+    const tap = document.getElementById("vsplit-mark-tap");
+    const max = Number(scrub.max) || 1000;
+    scrub.value = String(Math.round(max * 0.2));
+    scrub.dispatchEvent(new Event("input", { bubbles: true }));
+    scrub.dispatchEvent(new Event("change", { bubbles: true }));
+    for (let i = 0; i < 20; i++) tap?.click();
+    const afterSamePos = (window.DevToolsVsplit.getMarks?.() || []).length;
+    const draft = window.DevToolsVsplit.getDraftStart?.();
+    scrub.value = String(Math.round(max * 0.45));
+    scrub.dispatchEvent(new Event("input", { bubbles: true }));
+    scrub.dispatchEvent(new Event("change", { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 40));
+    tap?.click();
+    const afterFar = (window.DevToolsVsplit.getMarks?.() || []).length;
+    return { afterSamePos, draft, afterFar };
+  });
+  if (spamMarks.afterSamePos !== 0) {
+    throw new Error(`spam taps at same time must not create marks: ${JSON.stringify(spamMarks)}`);
+  }
+  if (spamMarks.draft == null) {
+    throw new Error(`spam should leave a draft start: ${JSON.stringify(spamMarks)}`);
+  }
+  if (spamMarks.afterFar !== 1) {
+    throw new Error(`one valid end after gap should add 1 mark: ${JSON.stringify(spamMarks)}`);
+  }
   // 编辑某段时只显示该段圆点；退出后再显示全部
   const editFocusMarks = await pageMarks.evaluate(() => {
     const dur = Number(document.getElementById("vsplit-video")?.duration) || 4;
