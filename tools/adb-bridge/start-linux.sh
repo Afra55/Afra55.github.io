@@ -7,6 +7,17 @@ echo "使用本工具需要本机已安装 adb，并可用：adb devices"
 echo ""
 
 export PATH="$HOME/Android/Sdk/platform-tools:/usr/local/bin:/usr/bin:$PATH"
+# Prepend newest build-tools (apksigner / aapt) when SDK is present
+for sdk in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Android/Sdk"; do
+  [ -n "$sdk" ] || continue
+  if [ -d "$sdk/build-tools" ]; then
+    newest="$(ls -1 "$sdk/build-tools" 2>/dev/null | sort -V | tail -n 1 || true)"
+    if [ -n "$newest" ] && [ -d "$sdk/build-tools/$newest" ]; then
+      export PATH="$sdk/build-tools/$newest:$PATH"
+      export ANDROID_HOME="${ANDROID_HOME:-$sdk}"
+    fi
+  fi
+done
 # Debian/Ubuntu OpenJDK 与常见自装路径
 for jdk in /usr/lib/jvm/default-java /usr/lib/jvm/java-21-openjdk-amd64 /usr/lib/jvm/java-17-openjdk-amd64; do
   if [ -d "${jdk}/bin" ]; then

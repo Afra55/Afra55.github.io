@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260815x" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260815x" />
+  <link rel="stylesheet" href="./style.css?v=20260815y" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260815y" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-x</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-y</span>
       </div>
       <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
@@ -1418,7 +1418,7 @@ hello@world.org</textarea>
           <label for="adb-token">Token</label>
           <input id="adb-token" class="mono" type="text" value="devtools-adb" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Android Studio Device File Explorer）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.9），请解压到同一文件夹后运行启动脚本。</p>
+        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Android Studio Device File Explorer）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.10），请解压到同一文件夹后运行启动脚本。</p>
         <div class="adb-guide" id="adb-setup-guide">
           <strong>本机依赖怎么配？</strong>
           <ol>
@@ -1619,7 +1619,7 @@ hello@world.org</textarea>
                   <li>安装 JDK 17+，确认终端里 <span class="mono">keytool -help</span> 可用；若只用 GUI 启动桥，请<strong>重启桥</span>（新版启动脚本会自动补 JAVA_HOME / Homebrew OpenJDK 路径）。</li>
                   <li>解析仅有 v2/v3 的 APK 需要 <span class="mono">apksigner</span>：安装 Android SDK build-tools 并加入 PATH（仅有 keytool 不够）。</li>
                   <li>可选：安装 <span class="mono">openssl</span>，用于解析 META-INF 证书。</li>
-                  <li>配好后<strong>重启本机 ADB 桥</strong>再点「分析 APK 信息」。连接区会显示本机工具探测（keytool✓/✗）。</li>
+                  <li>配好后<strong>重启本机 ADB 桥</strong>（完整 ZIP 包需 ≥0.6.10）再点「分析 APK 信息」。失败时看分析结果里的「工具路径 / 错误」行，对照连接区 keytool✓/✗、apksigner✓/✗。</li>
                 </ul>
               </div>
               <p class="hint" id="adb-apk-name">尚未选择 APK</p>
@@ -2374,7 +2374,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260815x"></script>
+  <script src="./extra.js?v=20260815y"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>

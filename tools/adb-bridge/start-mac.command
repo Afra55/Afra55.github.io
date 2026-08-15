@@ -8,6 +8,17 @@ echo ""
 
 # Finder 双击时 PATH 很短，补上常见安装位置
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$HOME/Library/Android/sdk/platform-tools:$HOME/Android/Sdk/platform-tools:$PATH"
+# Prepend newest build-tools (apksigner / aapt)
+for sdk in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Library/Android/sdk" "$HOME/Android/Sdk"; do
+  [ -n "$sdk" ] || continue
+  if [ -d "$sdk/build-tools" ]; then
+    newest="$(ls -1 "$sdk/build-tools" 2>/dev/null | sort -V | tail -n 1 || true)"
+    if [ -n "$newest" ] && [ -d "$sdk/build-tools/$newest" ]; then
+      export PATH="$sdk/build-tools/$newest:$PATH"
+      export ANDROID_HOME="${ANDROID_HOME:-$sdk}"
+    fi
+  fi
+done
 # Homebrew OpenJDK 常为 keg-only，不会进 /opt/homebrew/bin
 for jdk in \
   /opt/homebrew/opt/openjdk \
