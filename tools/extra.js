@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.15-z";
+  const TOOLS_VERSION = "2026.08.15-fs";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -8078,7 +8078,7 @@
     const ADB_STORE_BASE = "devtools-adb-base";
     const ADB_STORE_TOKEN = "devtools-adb-token";
     const ADB_FS_ROOTS_HINT_HTML =
-      "对标桌面文件管理器：单击打开/预览，⋯/右键操作；筛选排序、拖入上传。Delete 删除 · F2 重命名 · Ctrl+A 全选。「内部存储」= /storage/emulated/0。";
+      "对标桌面文件管理器：单击打开/预览，⋯/右键操作；筛选排序、拖入上传到设备。下载默认落到「本机保存目录」。Delete 删除 · F2 重命名 · Ctrl+A 全选。「内部存储」= /storage/emulated/0。";
     const adbBaseInput = $("#adb-base");
     const adbTokenInput = $("#adb-token");
     const adbDot = $("#adb-dot");
@@ -8112,6 +8112,8 @@
     let adbApkUploadId = "";
     let adbApkInfo = null;
     let adbFsSelected = "";
+    let adbBridgeFeatures = [];
+    let adbBridgeVersion = "";
     let adbFsChecked = new Map(); // path -> { path, name, isDir }
     let adbFsClipboard = null; // { mode: 'cut'|'copy', items: [{path, name}] }
     let adbFsPreviewUrl = "";
@@ -8126,6 +8128,7 @@
     let adbFsHistIdx = -1;
     let adbFsDirWritable = true;
     const ADB_STORE_FSVIEW = "devtools-adb-fs-view";
+    const ADB_STORE_LOCAL_PATH = "devtools-adb-local-path";
     let adbFsView = "list"; // list | grid
     let adbFsThumbUrls = []; // blob URLs to revoke on next repaint
     const ADB_FS_THUMB_MAX = 2 * 1024 * 1024;
@@ -9031,8 +9034,20 @@
         const data = await adbFetch("/local/roots");
         adbLocalRoots = data.roots || [];
         renderLocalRoots();
+        let preferred = "";
+        try {
+          preferred = String(localStorage.getItem(ADB_STORE_LOCAL_PATH) || "").trim();
+        } catch (_) {
+          preferred = "";
+        }
+        if (preferred) {
+          await loadLocalPath(preferred);
+          if (adbLocalPath) return;
+        }
         if (!adbLocalPath && adbLocalRoots.length) {
           await loadLocalPath(adbLocalRoots[0].path);
+        } else {
+          syncLocalSaveMeta();
         }
       } catch (err) {
         const meta = $("#adb-fs-local-meta");
@@ -9051,14 +9066,19 @@
         adbLocalEntries = data.entries || [];
         adbLocalChecked.clear();
         if ($("#adb-fs-local-path")) $("#adb-fs-local-path").value = adbLocalPath;
+        try {
+          localStorage.setItem(ADB_STORE_LOCAL_PATH, adbLocalPath);
+        } catch (_) {
+          /* ignore */
+        }
         renderLocalList();
-        if (meta) meta.textContent = `${adbLocalEntries.length} 项 · ${adbLocalPath}`;
+        syncLocalSaveMeta();
         syncLocalPushBtn();
       } catch (err) {
         if ($("#adb-fs-local-list")) {
           $("#adb-fs-local-list").innerHTML = `<div class="adb-fs-empty">${escapeHtml(err.message || String(err))}</div>`;
         }
-        if (meta) meta.textContent = "读取失败";
+        if (meta) meta.textContent = err.message || "读取失败";
       } finally {
         adbLocalBusy = false;
       }
@@ -9266,6 +9286,8 @@
     }
 
     function updateHostToolsProbe(health) {
+      adbBridgeFeatures = Array.isArray(health?.features) ? health.features.slice() : [];
+      adbBridgeVersion = health?.version ? String(health.version) : "";
       const el = $("#adb-tools-probe");
       if (!el) return;
       const tools = health?.tools || {};
@@ -9298,6 +9320,31 @@
         // Show guide when connected and signing tools missing; keep hidden until we know
         if (health?.tools) signGuide.hidden = Boolean(signingOk);
       }
+      syncLocalSaveMeta();
+    }
+
+    function canLocalPull() {
+      return Boolean(adbLocalPath) && adbBridgeFeatures.includes("local-pull");
+    }
+
+    function syncLocalSaveMeta() {
+      const meta = $("#adb-fs-local-meta");
+      if (!meta) return;
+      if (!adbConnected) {
+        meta.textContent = "连接桥后可设置本机保存目录";
+        return;
+      }
+      if (!adbBridgeFeatures.includes("local-pull")) {
+        meta.textContent = adbBridgeVersion
+          ? `当前桥 ${adbBridgeVersion} 不支持直存本机，请更新到 ≥0.6.11；下载仍走浏览器`
+          : "下载将保存到此目录（需桥 ≥0.6.11）";
+        return;
+      }
+      if (!adbLocalPath) {
+        meta.textContent = "请选择本机目录：下载将保存到这里";
+        return;
+      }
+      meta.textContent = `下载保存到：${adbLocalPath}`;
     }
 
     function updateFsHistButtons() {
@@ -9862,6 +9909,21 @@
       }
     }
 
+    async function pullRemoteToLocalDir(remotePath, name, { signal } = {}) {
+      if (!canLocalPull()) throw new Error("本机直存不可用");
+      return adbFetch("/local/pull", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          serial: adbSelected,
+          remotePath,
+          localDir: adbLocalPath,
+          name: name || basenameRemote(remotePath),
+        }),
+        signal,
+      });
+    }
+
     async function downloadAdbFile(remotePath, name, { nested = false, signal: parentSignal } = {}) {
       if (!adbSelected) return;
       let controller = null;
@@ -9879,6 +9941,22 @@
       try {
         updateFsXfer({ title: nested ? "批量下载" : "下载中", name: name || remotePath, loaded: 0, total: 0, started });
         if (adbFsMeta) adbFsMeta.textContent = `下载中：${name || remotePath}`;
+        if (canLocalPull()) {
+          const data = await pullRemoteToLocalDir(remotePath, name, { signal });
+          updateFsXfer({
+            title: nested ? "批量下载" : "已保存到本机",
+            name: data.localPath || name || remotePath,
+            loaded: data.size || 1,
+            total: data.size || 1,
+            started,
+          });
+          if (!nested) toast(`已保存到 ${data.localPath || adbLocalPath}`);
+          if (adbFsMeta) adbFsMeta.textContent = `已保存 ${name || ""} → ${adbLocalPath}`;
+          if ($("#adb-fs-local-panel")?.open) {
+            loadLocalPath(adbLocalPath).catch(() => {});
+          }
+          return data;
+        }
         const res = await adbFetch(
           `/fs/download?serial=${encodeURIComponent(adbSelected)}&path=${encodeURIComponent(remotePath)}`,
           signal ? { signal } : {}
@@ -9929,7 +10007,7 @@
         a.click();
         a.remove();
         URL.revokeObjectURL(url);
-        if (!nested) toast("已开始下载到电脑");
+        if (!nested) toast("已开始下载到浏览器默认目录");
         if (adbFsMeta) adbFsMeta.textContent = `已下载 ${name || ""}`;
       } finally {
         if (!nested) {
@@ -9999,6 +10077,15 @@
       adbFsXferAbort = controller;
       const started = performance.now();
       try {
+        if (canLocalPull()) {
+          updateFsXfer({ title: "拉取文件夹到本机", name: name || remotePath, loaded: 0, total: 0, started });
+          const data = await pullRemoteToLocalDir(remotePath, name, { signal: controller.signal });
+          toast(`文件夹已保存到 ${data.localPath || adbLocalPath}`);
+          if ($("#adb-fs-local-panel")?.open) {
+            loadLocalPath(adbLocalPath).catch(() => {});
+          }
+          return;
+        }
         updateFsXfer({ title: "打包文件夹", name: name || remotePath, loaded: 0, total: 0, started });
         const { blob, count, skipped } = await downloadFolderBlob(remotePath, {
           signal: controller.signal,
@@ -10803,30 +10890,90 @@
       }
     });
     {
-      const dropEl = adbFsList;
+      const dropEl = $("#adb-fs-workspace") || adbFsList;
       const hasFiles = (dt) => dt && [...(dt.types || [])].includes("Files");
+      const readEntryFile = (fileEntry) =>
+        new Promise((resolve, reject) => {
+          fileEntry.file(resolve, reject);
+        });
+      const readEntries = (reader) =>
+        new Promise((resolve, reject) => {
+          reader.readEntries(resolve, reject);
+        });
+      async function walkEntry(entry, prefix, out) {
+        if (!entry) return;
+        if (entry.isFile) {
+          const file = await readEntryFile(entry);
+          try {
+            Object.defineProperty(file, "webkitRelativePath", {
+              configurable: true,
+              value: prefix ? `${prefix}/${file.name}` : file.name,
+            });
+          } catch (_) {
+            /* ignore */
+          }
+          out.push(file);
+          return;
+        }
+        if (entry.isDirectory) {
+          const reader = entry.createReader();
+          const nextPrefix = prefix ? `${prefix}/${entry.name}` : entry.name;
+          while (true) {
+            const batch = await readEntries(reader);
+            if (!batch.length) break;
+            for (const child of batch) {
+              await walkEntry(child, nextPrefix, out);
+            }
+          }
+        }
+      }
+      async function collectDroppedFiles(dt) {
+        const out = [];
+        const items = dt?.items ? [...dt.items] : [];
+        if (items.some((it) => typeof it.webkitGetAsEntry === "function" && it.webkitGetAsEntry())) {
+          for (const item of items) {
+            if (item.kind !== "file") continue;
+            const entry = item.webkitGetAsEntry?.();
+            if (entry) await walkEntry(entry, "", out);
+            else if (item.getAsFile) {
+              const f = item.getAsFile();
+              if (f) out.push(f);
+            }
+          }
+          return out;
+        }
+        return [...(dt?.files || [])];
+      }
       dropEl?.addEventListener("dragenter", (e) => {
         if (!hasFiles(e.dataTransfer)) return;
         e.preventDefault();
         dropEl.classList.add("is-drop");
+        adbFsList?.classList.add("is-drop");
       });
       dropEl?.addEventListener("dragover", (e) => {
         if (!hasFiles(e.dataTransfer)) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "copy";
         dropEl.classList.add("is-drop");
+        adbFsList?.classList.add("is-drop");
       });
       dropEl?.addEventListener("dragleave", (e) => {
-        if (e.target !== dropEl && !dropEl.contains(e.relatedTarget)) dropEl.classList.remove("is-drop");
-        if (e.target === dropEl) dropEl.classList.remove("is-drop");
+        if (e.relatedTarget && dropEl.contains(e.relatedTarget)) return;
+        dropEl.classList.remove("is-drop");
+        adbFsList?.classList.remove("is-drop");
       });
       dropEl?.addEventListener("drop", (e) => {
         if (!hasFiles(e.dataTransfer)) return;
         e.preventDefault();
         dropEl.classList.remove("is-drop");
-        const files = e.dataTransfer?.files;
-        if (!files?.length) return;
-        uploadAdbFiles(files).catch((err) => setError(adbError, err.message || String(err)));
+        adbFsList?.classList.remove("is-drop");
+        collectDroppedFiles(e.dataTransfer)
+          .then((files) => {
+            if (!files.length) return;
+            const hasRel = files.some((f) => f.webkitRelativePath && f.webkitRelativePath.includes("/"));
+            return uploadAdbFiles(files, { relativePaths: hasRel });
+          })
+          .catch((err) => setError(adbError, err.message || String(err)));
       });
     }
     adbFsList?.addEventListener("contextmenu", (e) => {
@@ -10925,26 +11072,31 @@
           const it = items[i];
           if (it.isDir) {
             updateFsXfer({
-              title: `批量下载 ${i + 1}/${items.length} · 打包文件夹`,
+              title: `批量下载 ${i + 1}/${items.length} · ${canLocalPull() ? "拉取文件夹" : "打包文件夹"}`,
               name: it.name,
               loaded: i,
               total: items.length,
               started,
             });
-            const { blob, count, skipped } = await downloadFolderBlob(it.path, {
-              signal: controller.signal,
-              onProgress: ({ name: n }) => {
-                updateFsXfer({
-                  title: `批量下载 ${i + 1}/${items.length} · 打包文件夹`,
-                  name: n,
-                  loaded: i,
-                  total: items.length,
-                  started,
-                });
-              },
-            });
-            downloadBlobFile(blob, `${it.name || basenameRemote(it.path) || "folder"}.zip`);
-            toast(skipped ? `「${it.name}」已打包 ${count} 个文件（已达上限）` : `「${it.name}」已打包 ${count} 个文件`);
+            if (canLocalPull()) {
+              await pullRemoteToLocalDir(it.path, it.name, { signal: controller.signal });
+              toast(`「${it.name}」已保存到本机目录`);
+            } else {
+              const { blob, count, skipped } = await downloadFolderBlob(it.path, {
+                signal: controller.signal,
+                onProgress: ({ name: n }) => {
+                  updateFsXfer({
+                    title: `批量下载 ${i + 1}/${items.length} · 打包文件夹`,
+                    name: n,
+                    loaded: i,
+                    total: items.length,
+                    started,
+                  });
+                },
+              });
+              downloadBlobFile(blob, `${it.name || basenameRemote(it.path) || "folder"}.zip`);
+              toast(skipped ? `「${it.name}」已打包 ${count} 个文件（已达上限）` : `「${it.name}」已打包 ${count} 个文件`);
+            }
           } else {
             updateFsXfer({
               title: `批量下载 ${i + 1}/${items.length}`,
@@ -10956,7 +11108,10 @@
             await downloadAdbFile(it.path, it.name, { nested: true, signal: controller.signal });
           }
         }
-        toast(`已开始下载 ${items.length} 项`);
+        toast(canLocalPull() ? `已保存 ${items.length} 项到本机目录` : `已开始下载 ${items.length} 项`);
+        if (canLocalPull() && $("#adb-fs-local-panel")?.open) {
+          loadLocalPath(adbLocalPath).catch(() => {});
+        }
       } catch (err) {
         if (err?.name === "AbortError") toast("已取消批量下载");
         else setError(adbError, err.message || String(err));
