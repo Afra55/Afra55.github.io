@@ -92,7 +92,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.15-j";
+  const GIF_TOOL_VERSION = "2026.08.15-k";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -5397,6 +5397,20 @@
     let vsplitChipPaintSig = "";
     let vsplitChipScrollIdx = -2;
 
+    function scrollVsplitActiveChipIntoView() {
+      if (vsplitFsOpen || vsplitEditIdx < 0) return;
+      if (vsplitEditIdx === vsplitChipScrollIdx) return;
+      const active = vsplitMarkChips?.querySelector(".vsplit-mark-chip.is-active");
+      if (active?.scrollIntoView) {
+        try {
+          active.scrollIntoView({ inline: "center", block: "nearest", behavior: "auto" });
+        } catch (_) {
+          /* ignore */
+        }
+      }
+      vsplitChipScrollIdx = vsplitEditIdx;
+    }
+
     function paintVsplitMarkChips() {
       if (!vsplitMarkChips) return;
       if (vsplitMode !== "manual" || !vsplitMarks.length) {
@@ -5413,13 +5427,7 @@
         $$("#vsplit-mark-chips .vsplit-mark-chip").forEach((chip, idx) => {
           chip.classList.toggle("is-active", vsplitEditIdx === idx);
         });
-        if (vsplitEditIdx >= 0 && vsplitEditIdx !== vsplitChipScrollIdx) {
-          const active = vsplitMarkChips.querySelector(".vsplit-mark-chip.is-active");
-          if (active?.scrollIntoView) {
-            active.scrollIntoView({ inline: "center", block: "nearest", behavior: "auto" });
-          }
-          vsplitChipScrollIdx = vsplitEditIdx;
-        }
+        scrollVsplitActiveChipIntoView();
         if (vsplitEditIdx < 0) vsplitChipScrollIdx = -2;
         return;
       }
@@ -5438,6 +5446,12 @@
         chip.textContent = `#${String(idx + 1).padStart(2, "0")} ${s}→${e}`;
         chip.title = `编辑第 ${idx + 1} 段`;
         chip.addEventListener("click", () => {
+          // 全屏打点时芯片只作跳转预览，禁止进入编辑（编辑栏在全屏被隐藏）
+          if (vsplitFsOpen) {
+            const jump = mark.start != null ? mark.start : mark.end;
+            if (jump != null) seekVsplitPreview(jump, { keepPlaying: true });
+            return;
+          }
           hideVsplitMarkPicker();
           if (vsplitEditIdx === idx) {
             const next = vsplitEditFocus === "start" && mark.end != null ? "end" : "start";
@@ -5449,18 +5463,12 @@
         });
         vsplitMarkChips.appendChild(chip);
       });
-      if (vsplitEditIdx >= 0 && vsplitEditIdx !== vsplitChipScrollIdx) {
-        const active = vsplitMarkChips.querySelector(".vsplit-mark-chip.is-active");
-        if (active?.scrollIntoView) {
-          active.scrollIntoView({ inline: "center", block: "nearest", behavior: "auto" });
-        }
-        vsplitChipScrollIdx = vsplitEditIdx;
-      }
+      scrollVsplitActiveChipIntoView();
       if (vsplitEditIdx < 0) vsplitChipScrollIdx = -2;
     }
 
     function onVsplitMarksTrackPointer(e) {
-      if (vsplitMode !== "manual" || vsplitBusy) return;
+      if (vsplitMode !== "manual" || vsplitBusy || vsplitFsOpen) return;
       if (e.target.closest(".vsplit-scrub-mark")) return;
       if (e.target.closest(".vsplit-mark-picker")) return;
       const resolved = resolveVsplitMarkTap(e.clientX);
@@ -5767,9 +5775,22 @@
     }
 
     function flushVsplitMarkPaint() {
-      paintVsplitMarks();
-      paintVsplitNow();
-      setVsplitButtons();
+      try {
+        if (vsplitFsOpen) {
+          // 全屏时只刷进度条圆点，避免重绘下方长列表把手机内存打爆（白屏/闪退）
+          paintVsplitDraft();
+          paintVsplitScrubMarks();
+          paintVsplitNow();
+          setVsplitButtons();
+          return;
+        }
+        paintVsplitMarks();
+        paintVsplitNow();
+        setVsplitButtons();
+      } catch (err) {
+        console.error(err);
+        toast(err?.message || "标记刷新失败");
+      }
     }
 
     let vsplitMarkTapCooldownUntil = 0;
