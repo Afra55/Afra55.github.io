@@ -91,7 +91,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.14-g";
+  const GIF_TOOL_VERSION = "2026.08.14-h";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -4493,7 +4493,10 @@
     const vsplitCountRow = $("#vsplit-count-row");
     const vsplitDurationRow = $("#vsplit-duration-row");
     const vsplitManualRow = $("#vsplit-manual-row");
+    const vsplitStage = $("#vsplit-stage");
+    const vsplitScrub = $("#vsplit-scrub");
     const vsplitManualNow = $("#vsplit-manual-now");
+    const vsplitManualCount = $("#vsplit-manual-count");
     const vsplitManualDraft = $("#vsplit-manual-draft");
     const vsplitMarksEl = $("#vsplit-marks");
     const vsplitMarkStart = $("#vsplit-mark-start");
@@ -4537,6 +4540,8 @@
     let vsplitMarks = [];
     /** @type {number|null} */
     let vsplitDraftStart = null;
+    let vsplitScrubbing = false;
+    const VSPLIT_SCRUB_STEPS = 1000;
 
     function setVsplitProgress(visible, ratio, text, opts = {}) {
       if (!vsplitProgress) return;
@@ -4649,6 +4654,7 @@
       if (vsplitMarkStart) vsplitMarkStart.disabled = !hasVideo || vsplitBusy;
       if (vsplitMarkEnd) vsplitMarkEnd.disabled = !hasVideo || vsplitBusy;
       if (vsplitMarkClear) vsplitMarkClear.disabled = (!hasMarks && vsplitDraftStart == null) || vsplitBusy;
+      if (vsplitScrub) vsplitScrub.disabled = !hasVideo || vsplitBusy || vsplitMode !== "manual";
     }
 
     function syncVsplitMode() {
@@ -4661,7 +4667,15 @@
       if (vsplitCountRow) vsplitCountRow.hidden = !isCount;
       if (vsplitDurationRow) vsplitDurationRow.hidden = !isDuration;
       if (vsplitManualRow) vsplitManualRow.hidden = !isManual;
+      if (vsplitMarksEl) vsplitMarksEl.hidden = !isManual;
+      vsplitStage?.classList.toggle("is-manual", isManual);
+      if (vsplitVideo) {
+        // 手动选段用自定义滑块实时预览，关掉原生控件减少占位
+        if (isManual) vsplitVideo.removeAttribute("controls");
+        else vsplitVideo.setAttribute("controls", "");
+      }
       if (isManual) {
+        syncVsplitScrubFromVideo();
         paintVsplitNow();
         paintVsplitMarks();
       }
@@ -4683,6 +4697,68 @@
       return Number.isFinite(d) && d > 0 ? d : 0;
     }
 
+    function scrubValueToTime(raw) {
+      const dur = vsplitVideoDuration();
+      if (!(dur > 0)) return 0;
+      const steps = Math.max(1, Number(vsplitScrub?.max) || VSPLIT_SCRUB_STEPS);
+      const v = Math.max(0, Math.min(steps, Number(raw) || 0));
+      return (v / steps) * dur;
+    }
+
+    function timeToScrubValue(sec) {
+      const dur = vsplitVideoDuration();
+      if (!(dur > 0)) return 0;
+      const steps = Math.max(1, Number(vsplitScrub?.max) || VSPLIT_SCRUB_STEPS);
+      return Math.round((Math.max(0, Math.min(sec, dur)) / dur) * steps);
+    }
+
+    function syncVsplitScrubFromVideo() {
+      if (!vsplitScrub || vsplitScrubbing) return;
+      const dur = vsplitVideoDuration();
+      const has = Boolean(vsplitSourceFile && dur > 0);
+      vsplitScrub.disabled = !has || vsplitBusy;
+      if (!has) {
+        vsplitScrub.value = "0";
+        return;
+      }
+      vsplitScrub.max = String(VSPLIT_SCRUB_STEPS);
+      vsplitScrub.value = String(timeToScrubValue(Number(vsplitVideo?.currentTime) || 0));
+    }
+
+    function seekVsplitPreview(sec, opts = {}) {
+      if (!vsplitVideo) return;
+      const dur = vsplitVideoDuration();
+      let t = Number(sec) || 0;
+      if (dur > 0) t = Math.max(0, Math.min(t, Math.max(0, dur - 0.001)));
+      try {
+        vsplitVideo.pause?.();
+      } catch (_) {}
+      try {
+        vsplitVideo.currentTime = t;
+      } catch (_) {}
+      if (!opts.fromScrub) syncVsplitScrubFromVideo();
+      paintVsplitNow();
+    }
+
+    function onVsplitScrubInput() {
+      if (!vsplitScrub || !vsplitSourceFile) return;
+      vsplitScrubbing = true;
+      const t = scrubValueToTime(vsplitScrub.value);
+      seekVsplitPreview(t, { fromScrub: true });
+      // 拖拽时用更细的当前时间文案（不强制四舍五入到 0.1，读感更跟手）
+      if (vsplitManualNow) {
+        const dur = vsplitVideoDuration();
+        vsplitManualNow.textContent = `${formatClock(t)} / ${formatClock(dur)}`;
+      }
+    }
+
+    function onVsplitScrubCommit() {
+      onVsplitScrubInput();
+      vsplitScrubbing = false;
+      syncVsplitScrubFromVideo();
+      paintVsplitNow();
+    }
+
     function clearVsplitMarks() {
       vsplitMarks = [];
       vsplitDraftStart = null;
@@ -4696,14 +4772,16 @@
     }
 
     function paintVsplitNow() {
-      if (!vsplitManualNow) return;
-      const now = vsplitVideoNow();
+      const now = vsplitScrubbing ? scrubValueToTime(vsplitScrub?.value) : vsplitVideoNow();
       const dur = vsplitVideoDuration();
-      if (!vsplitSourceFile || !(dur > 0)) {
-        vsplitManualNow.textContent = "拖动进度条定位后，点「设为起点 / 终点」打点；可改秒数或删除。";
-        return;
+      if (vsplitManualNow) {
+        if (!vsplitSourceFile || !(dur > 0)) vsplitManualNow.textContent = "0:00 / 0:00";
+        else vsplitManualNow.textContent = `${formatClock(now)} / ${formatClock(dur)}`;
       }
-      vsplitManualNow.textContent = `当前 ${formatClock(now)} / ${formatClock(dur)} · 已标记 ${vsplitMarks.length} 段`;
+      if (vsplitManualCount) {
+        vsplitManualCount.textContent = `${vsplitMarks.length} 段`;
+      }
+      if (!vsplitScrubbing) syncVsplitScrubFromVideo();
     }
 
     function paintVsplitDraft() {
@@ -4714,7 +4792,7 @@
         return;
       }
       vsplitManualDraft.hidden = false;
-      vsplitManualDraft.textContent = `待确认起点 ${formatClock(vsplitDraftStart)} · 拖到终点后点「设为终点」`;
+      vsplitManualDraft.textContent = `已设起点 ${formatClock(vsplitDraftStart)} · 拖滑块到终点后点「设为终点」`;
     }
 
     function sortVsplitMarks() {
@@ -4755,7 +4833,7 @@
         if (vsplitMode === "manual" && vsplitSourceFile) {
           const empty = document.createElement("p");
           empty.className = "hint tight";
-          empty.textContent = "还没有片段。拖动进度条后设起点、再设终点。";
+          empty.textContent = "还没有片段。拖滑块预览后点「设为起点 / 终点」。";
           vsplitMarksEl.appendChild(empty);
         }
         setVsplitButtons();
@@ -4820,18 +4898,10 @@
         startInp.addEventListener("change", applyEdit);
         endInp.addEventListener("change", applyEdit);
         jumpStart.addEventListener("click", () => {
-          if (!vsplitVideo) return;
-          try {
-            vsplitVideo.currentTime = mark.start;
-          } catch (_) {}
-          paintVsplitNow();
+          seekVsplitPreview(mark.start);
         });
         jumpEnd.addEventListener("click", () => {
-          if (!vsplitVideo) return;
-          try {
-            vsplitVideo.currentTime = mark.end;
-          } catch (_) {}
-          paintVsplitNow();
+          seekVsplitPreview(mark.end);
         });
         del.addEventListener("click", () => {
           vsplitMarks.splice(idx, 1);
@@ -4852,7 +4922,7 @@
         toast("请先选择视频");
         return;
       }
-      const t = vsplitVideoNow();
+      const t = roundVsplitTime(vsplitScrubbing ? scrubValueToTime(vsplitScrub?.value) : vsplitVideoNow());
       vsplitDraftStart = t;
       paintVsplitDraft();
       paintVsplitNow();
@@ -4874,7 +4944,7 @@
         return;
       }
       let start = vsplitDraftStart;
-      let end = vsplitVideoNow();
+      let end = roundVsplitTime(vsplitScrubbing ? scrubValueToTime(vsplitScrub?.value) : vsplitVideoNow());
       if (Math.abs(end - start) < 0.05) {
         toast("终点需与起点不同");
         return;
@@ -5105,6 +5175,7 @@
       }
       setVsplitButtons();
       paintVsplitNow();
+      syncVsplitScrubFromVideo();
       if (vsplitMode === "manual") paintVsplitMarks();
       toast("视频已就绪");
     }
@@ -5353,11 +5424,23 @@
       paintVsplitNow();
       toast("已清空标记");
     });
+    vsplitScrub?.addEventListener("pointerdown", () => {
+      vsplitScrubbing = true;
+    });
+    vsplitScrub?.addEventListener("input", () => onVsplitScrubInput());
+    vsplitScrub?.addEventListener("change", () => onVsplitScrubCommit());
+    vsplitScrub?.addEventListener("pointerup", () => onVsplitScrubCommit());
+    vsplitScrub?.addEventListener("touchend", () => onVsplitScrubCommit(), { passive: true });
     const onVsplitTime = () => {
-      if (vsplitMode === "manual") paintVsplitNow();
+      if (vsplitMode !== "manual" || vsplitScrubbing) return;
+      paintVsplitNow();
     };
     vsplitVideo?.addEventListener("timeupdate", onVsplitTime);
     vsplitVideo?.addEventListener("seeked", onVsplitTime);
+    vsplitVideo?.addEventListener("loadedmetadata", () => {
+      syncVsplitScrubFromVideo();
+      paintVsplitNow();
+    });
     vsplitFile?.addEventListener("change", (e) => {
       loadVsplitFile(e.target.files?.[0]).catch((err) => {
         clearVsplit();

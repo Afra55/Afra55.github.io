@@ -1844,19 +1844,109 @@ a.secondary-btn {
   align-items: stretch;
 }
 
-.vsplit-manual {
+.vsplit-stage {
   margin-top: 0.65rem;
-  padding: 0.75rem 0.85rem;
+}
+
+.vsplit-preview-wrap {
+  margin-bottom: 0;
+}
+
+.vsplit-stage.is-manual #vsplit-video {
+  max-height: min(42vh, 320px);
+  width: auto;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.vsplit-manual {
+  margin-top: 0.45rem;
+  padding: 0.65rem 0.7rem 0.7rem;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(232, 238, 248, 0.03);
+  background: rgba(11, 18, 32, 0.92);
+}
+
+.vsplit-scrub-block {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.vsplit-scrub {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 1.65rem;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.vsplit-scrub:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.vsplit-scrub::-webkit-slider-runnable-track {
+  height: 0.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 28%, rgba(232, 238, 248, 0.16));
+}
+
+.vsplit-scrub::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.35rem;
+  height: 1.35rem;
+  margin-top: -0.5rem;
+  border-radius: 50%;
+  border: 2px solid rgba(11, 18, 32, 0.9);
+  background: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.vsplit-scrub::-moz-range-track {
+  height: 0.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 28%, rgba(232, 238, 248, 0.16));
+}
+
+.vsplit-scrub::-moz-range-thumb {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  border: 2px solid rgba(11, 18, 32, 0.9);
+  background: var(--accent);
+}
+
+.vsplit-scrub-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.vsplit-mark-btns {
+  margin-top: 0.55rem;
+  flex-wrap: nowrap;
+}
+
+.vsplit-mark-btns .secondary-btn,
+.vsplit-mark-btns .ghost-btn {
+  flex: 1 1 0;
+  min-height: 2.55rem;
+  justify-content: center;
+  text-align: center;
 }
 
 .vsplit-marks {
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
-  margin-top: 0.65rem;
+  margin-top: 0.75rem;
 }
 
 .vsplit-mark {
@@ -1897,6 +1987,39 @@ a.secondary-btn {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35rem;
+}
+
+@media (max-width: 900px) {
+  .vsplit-stage.is-manual {
+    position: sticky;
+    top: 3.85rem;
+    z-index: 3;
+    margin-left: -0.15rem;
+    margin-right: -0.15rem;
+    padding: 0.35rem 0.15rem 0.45rem;
+    background: linear-gradient(180deg, rgba(11, 18, 32, 0.98) 55%, rgba(11, 18, 32, 0.88) 100%);
+    backdrop-filter: blur(10px);
+  }
+
+  .vsplit-stage.is-manual #vsplit-video {
+    max-height: min(34vh, 240px);
+  }
+
+  .vsplit-manual {
+    border-radius: 12px;
+    padding: 0.55rem 0.6rem 0.6rem;
+  }
+
+  .vsplit-mark-btns {
+    gap: 0.35rem;
+  }
+
+  .vsplit-mark-btns .secondary-btn,
+  .vsplit-mark-btns .ghost-btn {
+    padding-left: 0.55rem;
+    padding-right: 0.55rem;
+    font-size: 0.9rem;
+  }
 }
 
 .vsplit-clip-top {
