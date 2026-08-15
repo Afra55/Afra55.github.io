@@ -35,7 +35,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.6.7";
+const BRIDGE_VERSION = "0.6.8";
 
 /** Preferred quick roots shown in UI (reads are not limited to these) */
 const ROOTS = [
@@ -515,6 +515,24 @@ function parseLsLine(line) {
   return { name: trimmed, type: "unknown", mode: "", size: 0, date: "" };
 }
 
+/** Annotate listDir result with writable hints for UI */
+function withListWritable(result) {
+  const writable =
+    result.access === "packages-virtual"
+      ? false
+      : !/^\/(system|vendor|product|apex)(\/|$)/.test(String(result.path || ""));
+  result.writable = writable;
+  for (const entry of result.entries || []) {
+    const mode = String(entry.mode || "");
+    if (mode.length >= 10) {
+      entry.writable = mode.includes("w");
+    } else {
+      entry.writable = writable;
+    }
+  }
+  return result;
+}
+
 async function listDir(serial, remotePath) {
   const candidates = await resolveFsListPath(serial, remotePath);
   const errors = [];
@@ -525,24 +543,29 @@ async function listDir(serial, remotePath) {
       try {
         const normal = await tryListDirShell(serial, dir);
         if (normal.entries.length) {
-          return { path: dir, entries: normal.entries, access: "shell" };
+          return withListWritable({ path: dir, entries: normal.entries, access: "shell" });
         }
       } catch (err) {
         errors.push(`${dir} shell: ${err.message || err}`);
       }
-      return listDataDataVirtual(serial, dir);
+      return withListWritable(await listDataDataVirtual(serial, dir));
     }
 
     try {
       const normal = await tryListDirShell(serial, dir);
-      return { path: dir, entries: normal.entries, access: "shell" };
+      return withListWritable({ path: dir, entries: normal.entries, access: "shell" });
     } catch (err) {
       errors.push(`${dir} shell: ${err.message || err}`);
     }
 
     try {
       const rooted = await tryListDirShell(serial, dir, { su: true });
-      return { path: dir, entries: rooted.entries, access: "su", note: "已通过 su 读取（设备已 root）" };
+      return withListWritable({
+        path: dir,
+        entries: rooted.entries,
+        access: "su",
+        note: "已通过 su 读取（设备已 root）",
+      });
     } catch (err) {
       errors.push(`${dir} su: ${err.message || err}`);
     }
@@ -551,12 +574,12 @@ async function listDir(serial, remotePath) {
     if (pkg) {
       try {
         const runAs = await tryListDirShell(serial, dir, { runAs: pkg });
-        return {
+        return withListWritable({
           path: dir,
           entries: runAs.entries,
           access: `run-as:${pkg}`,
           note: `已通过 run-as ${pkg} 读取（仅 debuggable 应用）`,
-        };
+        });
       } catch (err) {
         errors.push(`${dir} run-as: ${err.message || err}`);
       }
@@ -676,6 +699,93 @@ async function probeFsRoots(serial) {
     }
   }
   return { ok: true, roots };
+}
+
+function localFsRoots() {
+  const roots = [
+    { path: os.homedir(), name: "Home" },
+    { path: os.tmpdir(), name: "Temp" },
+  ];
+  if (process.platform === "win32") {
+    for (const letter of "CDEFGHIJKLMNOPQRSTUVWXYZ") {
+      const drive = `${letter}:\\`;
+      try {
+        if (fs.existsSync(drive)) roots.push({ path: drive, name: `${letter}:` });
+      } catch {
+        // skip inaccessible drives
+      }
+    }
+  }
+  return roots;
+}
+
+function isPathUnderRoot(realPath, rootReal) {
+  const a = path.resolve(realPath);
+  const b = path.resolve(rootReal);
+  if (a === b) return true;
+  const prefix = b.endsWith(path.sep) ? b : b + path.sep;
+  return a.startsWith(prefix);
+}
+
+async function resolveLocalListPath(inputPath) {
+  const raw = String(inputPath || "").trim();
+  if (!raw) throw new Error("缺少 path");
+  const roots = localFsRoots();
+  const resolvedRoots = [];
+  for (const r of roots) {
+    try {
+      resolvedRoots.push(await fs.promises.realpath(r.path));
+    } catch {
+      // skip missing roots
+    }
+  }
+  if (!resolvedRoots.length) throw new Error("无可用本机根目录");
+  const candidate = path.resolve(raw);
+  let real;
+  try {
+    real = await fs.promises.realpath(candidate);
+  } catch (err) {
+    throw new Error(err.code === "ENOENT" ? `路径不存在: ${candidate}` : err.message || String(err));
+  }
+  if (!resolvedRoots.some((root) => isPathUnderRoot(real, root))) {
+    throw new Error("路径不在允许的本机根目录内");
+  }
+  return real;
+}
+
+async function listLocalDir(inputPath) {
+  const real = await resolveLocalListPath(inputPath);
+  const st = await fs.promises.stat(real);
+  if (!st.isDirectory()) throw new Error("不是目录");
+  const dirents = await fs.promises.readdir(real, { withFileTypes: true });
+  const entries = [];
+  for (const d of dirents) {
+    const full = path.join(real, d.name);
+    let size = 0;
+    let date = "";
+    let writable = false;
+    const type = d.isDirectory() ? "dir" : "file";
+    try {
+      const s = await fs.promises.stat(full);
+      size = s.isFile() ? s.size : 0;
+      date = s.mtime ? new Date(s.mtime).toISOString() : "";
+    } catch {
+      // keep defaults when stat fails
+    }
+    try {
+      await fs.promises.access(full, fs.constants.W_OK);
+      writable = true;
+    } catch {
+      writable = false;
+    }
+    entries.push({ name: d.name, type, size, date, writable });
+  }
+  entries.sort((a, b) => {
+    if (a.type === "dir" && b.type !== "dir") return -1;
+    if (a.type !== "dir" && b.type === "dir") return 1;
+    return a.name.localeCompare(b.name);
+  });
+  return { ok: true, path: real, entries };
 }
 
 function mimeFromFilename(filename) {
@@ -3038,6 +3148,17 @@ async function handleApi(req, res, url) {
       const remotePath = url.searchParams.get("path") || "/";
       const result = await listDir(serial, remotePath);
       sendJson(res, 200, { ok: true, ...result }, origin);
+      return;
+    }
+
+    if (url.pathname === "/local/roots" && req.method === "GET") {
+      sendJson(res, 200, { ok: true, roots: localFsRoots() }, origin);
+      return;
+    }
+
+    if (url.pathname === "/local/list" && req.method === "GET") {
+      const localPath = url.searchParams.get("path") || "";
+      sendJson(res, 200, await listLocalDir(localPath), origin);
       return;
     }
 

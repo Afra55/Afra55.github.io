@@ -41,15 +41,17 @@ node server.js
 1. 打开 Tools →「ADB 工具」
 2. 下载对应系统的完整 ZIP，解压后运行启动脚本（勿只保留脚本、删掉 server.js）
 3. 回到网页点击「连接本机桥」
-## 接口（P0–P3，bridge 0.6.7）
+## 接口（P0–P3，bridge 0.6.8）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/health` | 健康检查（可不带 token；含本机 adb/keytool/apksigner 探测与配置提示） |
 | GET | `/devices` | 设备列表 |
 | GET | `/device/info?serial=` | 设备信息 |
-| GET | `/fs/list?serial=&path=` | 列目录（默认 `/`；无权限时 su / run-as；`/data/data` 可虚拟列包名） |
+| GET | `/fs/list?serial=&path=` | 列目录（默认 `/`；无权限时 su / run-as；`/data/data` 可虚拟列包名；含 `writable`） |
 | GET | `/fs/roots?serial=` | 探测常用根目录是否可读 |
+| GET | `/local/roots` | 本机可浏览根目录（Home / Temp；Windows 含盘符） |
+| GET | `/local/list?path=` | 列本机目录（仅允许 `/local/roots` 下路径） |
 | POST | `/fs/mkdir` `/fs/delete` `/fs/rename` `/fs/move` `/fs/copy` | 文件操作（默认可写：sdcard / tmp） |
 | POST | `/fs/upload?serial=&path=&name=&forcePush=` | 上传到设备；`forcePush=1` 才可写系统 APK 路径 |
 | GET | `/fs/download?serial=&path=` | 从设备下载（pull 失败时尝试 run-as / su） |
