@@ -142,9 +142,41 @@ body.nav-sorting {
   cursor: grabbing;
 }
 
+/* 拖拽分类时收起子工具，只留分类标题，更好对准 */
+body.nav-sorting .tool-nav-link,
+body.nav-sorting .nav-recent,
+body.nav-sorting .nav-sort-hint,
+body.nav-sorting .nav-search-wrap,
+body.nav-sorting .nav-footer-actions {
+  display: none !important;
+}
+
+body.nav-sorting .nav-group {
+  margin-bottom: 0.35rem;
+}
+
+body.nav-sorting .nav-group-title.is-sortable {
+  display: block;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0.72rem 0.8rem;
+  font-size: 0.95rem;
+  letter-spacing: 0.03em;
+  border: 1px solid var(--line);
+  background: rgba(232, 238, 248, 0.07);
+}
+
+body.nav-sorting .nav-group.is-dragging > .nav-group-title {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
 body.nav-sorting .nav-bar {
-  overflow-y: hidden !important;
-  overscroll-behavior: none;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+  touch-action: none;
 }
 
 .nav-recent-list {
