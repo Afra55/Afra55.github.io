@@ -1145,7 +1145,7 @@
     return `#${tool}`;
   }
 
-  function applyRoute({ skipRecent } = {}) {
+  function applyRoute({ skipRecent, keepDrawer } = {}) {
     const route = parseRoute();
     currentTool = route.tool;
     currentMediaTab = route.tab || "gifmaker";
@@ -1174,8 +1174,9 @@
     });
 
     if (mediaSubnav) {
-      mediaSubnav.hidden = currentTool !== "media";
-      $$(".media-tab", mediaSubnav).forEach((btn) => {
+      const showMedia = currentTool === "media";
+      mediaSubnav.hidden = !showMedia;
+      $$("[data-media-tab]", mediaSubnav).forEach((btn) => {
         const on = btn.dataset.mediaTab === currentMediaTab;
         btn.classList.toggle("is-active", on);
         btn.setAttribute("aria-selected", on ? "true" : "false");
@@ -1198,8 +1199,11 @@
     });
 
     if (!skipRecent) pushRecent(currentTool);
-    setDrawerOpen(false);
-    window.scrollTo(0, 0);
+    // 手机分类拖拽排序后需保持抽屉打开
+    if (!keepDrawer) {
+      setDrawerOpen(false);
+      window.scrollTo(0, 0);
+    }
     window.dispatchEvent(
       new CustomEvent("devtools:route", {
         detail: { tool: currentTool, mediaTab: currentMediaTab },
@@ -1240,6 +1244,7 @@
   let didDrag = false;
   /** 手机侧栏：长按分类标题后的 Pointer 排序状态（HTML5 DnD 在触控上不可靠） */
   let pointerSort = null;
+  let pointerSortScrollRaf = 0;
 
   function clearNavDragStyles() {
     getNavLinks().forEach((l) => l.classList.remove("drag-over", "is-dragging"));
@@ -1255,8 +1260,63 @@
     return null;
   }
 
+  function stopPointerSortAutoScroll() {
+    if (pointerSortScrollRaf) {
+      cancelAnimationFrame(pointerSortScrollRaf);
+      pointerSortScrollRaf = 0;
+    }
+    if (pointerSort) {
+      pointerSort.scrollDir = 0;
+      pointerSort.scrollSpeed = 0;
+    }
+  }
+
+  function tickPointerSortAutoScroll() {
+    pointerSortScrollRaf = 0;
+    if (!pointerSort?.active || !navBar) return;
+    const dir = pointerSort.scrollDir || 0;
+    const speed = pointerSort.scrollSpeed || 0;
+    if (!dir || !speed) return;
+    navBar.scrollTop += dir * speed;
+    // 滚动后按当前手指位置刷新高亮目标
+    if (pointerSort.lastX != null && pointerSort.lastY != null) {
+      clearNavDragStyles();
+      pointerSort.wrap?.classList.add("is-dragging");
+      const target = navGroupAtPoint(pointerSort.lastX, pointerSort.lastY);
+      if (target && target !== pointerSort.wrap) target.classList.add("drag-over");
+    }
+    pointerSortScrollRaf = requestAnimationFrame(tickPointerSortAutoScroll);
+  }
+
+  function updatePointerSortAutoScroll(clientY) {
+    if (!navBar || !pointerSort?.active) {
+      stopPointerSortAutoScroll();
+      return;
+    }
+    const rect = navBar.getBoundingClientRect();
+    const edge = 64;
+    let dir = 0;
+    let speed = 0;
+    if (clientY < rect.top + edge) {
+      dir = -1;
+      const t = Math.max(0, Math.min(1, (rect.top + edge - clientY) / edge));
+      speed = 8 + t * 22;
+    } else if (clientY > rect.bottom - edge) {
+      dir = 1;
+      const t = Math.max(0, Math.min(1, (clientY - (rect.bottom - edge)) / edge));
+      speed = 8 + t * 22;
+    }
+    pointerSort.scrollDir = dir;
+    pointerSort.scrollSpeed = speed;
+    if (dir && !pointerSortScrollRaf) {
+      pointerSortScrollRaf = requestAnimationFrame(tickPointerSortAutoScroll);
+    }
+    if (!dir) stopPointerSortAutoScroll();
+  }
+
   function cancelPointerSort({ keepDidDrag = false } = {}) {
     if (pointerSort?.timer) clearTimeout(pointerSort.timer);
+    stopPointerSortAutoScroll();
     pointerSort = null;
     document.body.classList.remove("nav-sorting");
     clearNavDragStyles();
@@ -1268,12 +1328,12 @@
     }
   }
 
-  function commitGroupReorder(fromId, toId) {
+  function commitGroupReorder(fromId, toId, { keepDrawer = false } = {}) {
     if (!fromId || !toId || fromId === toId) return false;
     const next = moveGroupOrder(fromId, toId);
     saveGroupOrder(next);
     renderNav(loadOrder());
-    applyRoute({ skipRecent: true });
+    applyRoute({ skipRecent: true, keepDrawer });
     showToast("已保存分类排序");
     return true;
   }
@@ -1423,6 +1483,7 @@
         if (canDesktopDrag()) return;
         if (e.pointerType === "mouse" && e.button !== 0) return;
         if (pointerSort?.timer) clearTimeout(pointerSort.timer);
+        stopPointerSortAutoScroll();
         pointerSort = {
           kind: "group",
           id: wrap.dataset.group,
@@ -1431,7 +1492,11 @@
           pointerId: e.pointerId,
           startX: e.clientX,
           startY: e.clientY,
+          lastX: e.clientX,
+          lastY: e.clientY,
           active: false,
+          scrollDir: 0,
+          scrollSpeed: 0,
           timer: window.setTimeout(() => {
             if (!pointerSort || pointerSort.pointerId !== e.pointerId) return;
             pointerSort.active = true;
@@ -1449,7 +1514,7 @@
             } catch (_) {
               /* ignore */
             }
-            showToast("拖动到目标分类处松开");
+            showToast("拖到边缘可滚动 · 松手放到目标分类");
           }, LONG_MS),
         };
       });
@@ -1464,10 +1529,13 @@
             return;
           }
           e.preventDefault();
+          pointerSort.lastX = e.clientX;
+          pointerSort.lastY = e.clientY;
           clearNavDragStyles();
           pointerSort.wrap.classList.add("is-dragging");
           const target = navGroupAtPoint(e.clientX, e.clientY);
           if (target && target !== pointerSort.wrap) target.classList.add("drag-over");
+          updatePointerSortAutoScroll(e.clientY);
         },
         { passive: false }
       );
@@ -1486,7 +1554,7 @@
         cancelPointerSort({ keepDidDrag: wasActive });
         if (!wasActive) return;
         const target = navGroupAtPoint(x, y);
-        commitGroupReorder(fromId, target?.dataset?.group);
+        commitGroupReorder(fromId, target?.dataset?.group, { keepDrawer: true });
         setTimeout(() => {
           didDrag = false;
         }, 0);
