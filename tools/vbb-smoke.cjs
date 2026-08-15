@@ -554,6 +554,8 @@ async function main() {
       tapLabel: (document.getElementById("vsplit-mark-tap")?.textContent || "").trim(),
       hasNudge: Boolean(document.getElementById("vsplit-nudge-m01")),
       hasScrubMarks: Boolean(document.getElementById("vsplit-scrub-marks")),
+      hasMarkChips: Boolean(document.getElementById("vsplit-mark-chips")),
+      hasMarkPicker: Boolean(document.getElementById("vsplit-mark-picker")),
       hasQuickExport: Boolean(document.getElementById("vsplit-quick-export")),
       hasFsOpen: Boolean(document.getElementById("vsplit-fs-open")),
       hasFsLayer: Boolean(document.getElementById("vsplit-fs")),
