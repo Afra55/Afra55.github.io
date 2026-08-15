@@ -551,6 +551,10 @@ async function main() {
       videoControls: video?.hasAttribute("controls"),
       cutLabel: (document.getElementById("vsplit-cut")?.textContent || "").trim(),
       hasPlay: Boolean(document.getElementById("vsplit-play")),
+      hasMute: Boolean(document.getElementById("vsplit-mute")),
+      hasFsMute: Boolean(document.getElementById("vsplit-fs-mute")),
+      muteLabel: (document.getElementById("vsplit-mute")?.textContent || "").trim(),
+      videoMuted: Boolean(document.getElementById("vsplit-video")?.muted),
       tapLabel: (document.getElementById("vsplit-mark-tap")?.textContent || "").trim(),
       hasNudge: Boolean(document.getElementById("vsplit-nudge-m01")),
       hasScrubMarks: Boolean(document.getElementById("vsplit-scrub-marks")),
@@ -583,6 +587,31 @@ async function main() {
   }
   if (!manualUi.hasPlay || !manualUi.hasNudge || manualUi.tapLabel !== "打起点") {
     throw new Error(`play/nudge/tap missing: ${JSON.stringify(manualUi)}`);
+  }
+  if (!manualUi.hasMute || !manualUi.hasFsMute) {
+    throw new Error(`mute toggle missing: ${JSON.stringify(manualUi)}`);
+  }
+  if (!manualUi.videoMuted || manualUi.muteLabel !== "开声音") {
+    throw new Error(`default should be muted: ${JSON.stringify(manualUi)}`);
+  }
+  const muteToggle = await pageMarks.evaluate(() => {
+    document.getElementById("vsplit-mute")?.click();
+    const video = document.getElementById("vsplit-video");
+    const label = (document.getElementById("vsplit-mute")?.textContent || "").trim();
+    const fsLabel = (document.getElementById("vsplit-fs-mute")?.textContent || "").trim();
+    const unmuted = { muted: Boolean(video?.muted), label, fsLabel };
+    document.getElementById("vsplit-mute")?.click();
+    return {
+      unmuted,
+      remuted: Boolean(document.getElementById("vsplit-video")?.muted),
+      relabel: (document.getElementById("vsplit-mute")?.textContent || "").trim(),
+    };
+  });
+  if (muteToggle.unmuted.muted || muteToggle.unmuted.label !== "静音" || muteToggle.unmuted.fsLabel !== "静音") {
+    throw new Error(`unmute failed: ${JSON.stringify(muteToggle)}`);
+  }
+  if (!muteToggle.remuted || muteToggle.relabel !== "开声音") {
+    throw new Error(`remute failed: ${JSON.stringify(muteToggle)}`);
   }
   if (!manualUi.hasMarkUndo) {
     throw new Error(`undo last mark button missing: ${JSON.stringify(manualUi)}`);

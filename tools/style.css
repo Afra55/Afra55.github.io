@@ -1888,10 +1888,16 @@ a.secondary-btn {
 }
 
 .vsplit-transport #vsplit-play,
+.vsplit-transport #vsplit-mute,
 .vsplit-transport #vsplit-fs-open {
   flex: 0 0 auto;
   min-width: 4.2rem;
   min-height: 2.4rem;
+}
+
+.vsplit-transport #vsplit-mute.is-muted,
+#vsplit-fs-mute.is-muted {
+  opacity: 0.85;
 }
 
 .vsplit-transport .vsplit-scrub-meta {
@@ -2491,6 +2497,7 @@ body.vsplit-fs-open {
   }
 
   .vsplit-transport #vsplit-play,
+  .vsplit-transport #vsplit-mute,
   .vsplit-transport #vsplit-fs-open {
     min-height: 2.15rem;
     min-width: 3.6rem;

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260815h" />
+  <link rel="stylesheet" href="./style.css?v=20260815i" />
   <link rel="stylesheet" href="./workspace-nav.css?v=20260814f" />
 </head>
 <body>
@@ -1233,6 +1233,7 @@ hello@world.org</textarea>
             <div class="vsplit-manual-transport" id="vsplit-manual-transport" hidden>
               <div class="vsplit-transport">
                 <button type="button" class="secondary-btn" id="vsplit-play" disabled>播放</button>
+                <button type="button" class="ghost-btn" id="vsplit-mute" disabled title="切换静音" aria-pressed="true">开声音</button>
                 <button type="button" class="ghost-btn" id="vsplit-fs-open" disabled title="全屏预览并打点">全屏打点</button>
                 <div class="vsplit-scrub-meta">
                   <span class="mono" id="vsplit-manual-now">0:00 / 0:00</span>
@@ -2179,6 +2180,7 @@ hello@world.org</textarea>
     <p class="vsplit-fs-note" id="vsplit-fs-note" hidden></p>
     <div class="vsplit-fs-bottom">
       <button type="button" class="secondary-btn" id="vsplit-fs-play">播放</button>
+      <button type="button" class="ghost-btn" id="vsplit-fs-mute" aria-pressed="true">开声音</button>
       <button type="button" class="ghost-btn" id="vsplit-fs-undo" disabled>取消上一段</button>
       <button type="button" class="primary-btn vsplit-fs-mark" id="vsplit-fs-mark">打起点</button>
     </div>
@@ -2194,7 +2196,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260815h"></script>
+  <script src="./extra.js?v=20260815i"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>
