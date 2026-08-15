@@ -1867,9 +1867,31 @@ a.secondary-btn {
   background: rgba(11, 18, 32, 0.92);
 }
 
+.vsplit-transport {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 0.35rem;
+}
+
+.vsplit-transport #vsplit-play {
+  flex: 0 0 auto;
+  min-width: 4.5rem;
+  min-height: 2.4rem;
+}
+
+.vsplit-transport .vsplit-scrub-meta {
+  flex: 1 1 auto;
+  margin: 0;
+}
+
 .vsplit-scrub-block {
   display: grid;
-  gap: 0.35rem;
+  gap: 0.25rem;
+}
+
+.vsplit-scrub-hit {
+  padding: 0.15rem 0;
 }
 
 .vsplit-scrub {
@@ -1929,17 +1951,63 @@ a.secondary-btn {
   font-size: 0.9rem;
 }
 
+.vsplit-nudge-btns {
+  margin-top: 0.35rem;
+  flex-wrap: nowrap;
+  gap: 0.3rem;
+}
+
+.vsplit-nudge-btns .ghost-btn {
+  flex: 1 1 0;
+  min-height: 2.2rem;
+  padding-left: 0.35rem;
+  padding-right: 0.35rem;
+  font-size: 0.86rem;
+}
+
 .vsplit-mark-btns {
-  margin-top: 0.55rem;
+  margin-top: 0.45rem;
   flex-wrap: nowrap;
 }
 
+.vsplit-mark-btns .primary-btn,
 .vsplit-mark-btns .secondary-btn,
 .vsplit-mark-btns .ghost-btn {
   flex: 1 1 0;
   min-height: 2.55rem;
   justify-content: center;
   text-align: center;
+}
+
+.vsplit-mark-btns .primary-btn {
+  flex: 1.4 1 0;
+}
+
+.vsplit-edit-bar {
+  margin-top: 0.5rem;
+  padding-top: 0.45rem;
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 0.45rem;
+}
+
+.vsplit-edit-focus {
+  width: 100%;
+}
+
+.vsplit-edit-focus .seg-btn {
+  flex: 1 1 0;
+}
+
+.vsplit-edit-actions {
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.vsplit-edit-actions .secondary-btn,
+.vsplit-edit-actions .ghost-btn {
+  flex: 1 1 auto;
+  min-height: 2.35rem;
 }
 
 .vsplit-marks {
@@ -1958,29 +2026,21 @@ a.secondary-btn {
   background: rgba(8, 14, 26, 0.35);
 }
 
+.vsplit-mark.is-editing {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent) 12%, rgba(8, 14, 26, 0.4));
+}
+
+.vsplit-mark.is-incomplete {
+  border-color: color-mix(in srgb, #e8a45a 50%, var(--line));
+}
+
 .vsplit-mark-head {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.35rem 0.75rem;
-}
-
-.vsplit-mark-fields {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.35rem 0.55rem;
-}
-
-.vsplit-mark-fields label {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.82rem;
-}
-
-.vsplit-mark-fields .meta-input {
-  width: 5.5rem;
 }
 
 .vsplit-mark-actions {
@@ -2002,23 +2062,25 @@ a.secondary-btn {
   }
 
   .vsplit-stage.is-manual #vsplit-video {
-    max-height: min(34vh, 240px);
+    max-height: min(30vh, 220px);
   }
 
   .vsplit-manual {
     border-radius: 12px;
-    padding: 0.55rem 0.6rem 0.6rem;
+    padding: 0.5rem 0.55rem 0.55rem;
   }
 
-  .vsplit-mark-btns {
-    gap: 0.35rem;
+  .vsplit-mark-btns,
+  .vsplit-nudge-btns {
+    gap: 0.3rem;
   }
 
-  .vsplit-mark-btns .secondary-btn,
-  .vsplit-mark-btns .ghost-btn {
-    padding-left: 0.55rem;
-    padding-right: 0.55rem;
-    font-size: 0.9rem;
+  .vsplit-mark-btns .primary-btn,
+  .vsplit-mark-btns .ghost-btn,
+  .vsplit-nudge-btns .ghost-btn {
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+    font-size: 0.88rem;
   }
 }
 

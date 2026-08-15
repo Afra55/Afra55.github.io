@@ -547,7 +547,9 @@ async function main() {
       scrubDisabled: scrub?.disabled,
       videoControls: video?.hasAttribute("controls"),
       cutLabel: (document.getElementById("vsplit-cut")?.textContent || "").trim(),
-      markStartDisabled: document.getElementById("vsplit-mark-start")?.disabled,
+      hasPlay: Boolean(document.getElementById("vsplit-play")),
+      tapLabel: (document.getElementById("vsplit-mark-tap")?.textContent || "").trim(),
+      hasNudge: Boolean(document.getElementById("vsplit-nudge-m01")),
       scrubUnderVideo: Boolean(stage?.contains(scrub) && stage?.contains(video)),
     };
   });
@@ -556,6 +558,9 @@ async function main() {
   }
   if (!manualUi.scrubExists || manualUi.scrubDisabled || !manualUi.scrubUnderVideo) {
     throw new Error(`scrub UI missing/disabled: ${JSON.stringify(manualUi)}`);
+  }
+  if (!manualUi.hasPlay || !manualUi.hasNudge || manualUi.tapLabel !== "打起点") {
+    throw new Error(`play/nudge/tap missing: ${JSON.stringify(manualUi)}`);
   }
   if (manualUi.videoControls) {
     throw new Error("manual mode should hide native video controls");
@@ -574,48 +579,68 @@ async function main() {
       await new Promise((r) => setTimeout(r, 80));
     };
     await seekByScrub(0.12);
-    document.getElementById("vsplit-mark-start")?.click();
+    document.getElementById("vsplit-mark-tap")?.click();
+    const afterStart = (document.getElementById("vsplit-mark-tap")?.textContent || "").trim();
     await seekByScrub(0.55);
-    document.getElementById("vsplit-mark-end")?.click();
+    document.getElementById("vsplit-mark-tap")?.click();
     await seekByScrub(0.62);
-    document.getElementById("vsplit-mark-start")?.click();
+    document.getElementById("vsplit-mark-tap")?.click();
     await seekByScrub(0.9);
-    document.getElementById("vsplit-mark-end")?.click();
+    document.getElementById("vsplit-mark-tap")?.click();
     const marks = window.DevToolsVsplit?.getMarks?.() || [];
     const ranges = window.DevToolsVsplit?.computeRanges?.(Number(video.duration) || 4) || [];
     const rows = document.querySelectorAll("#vsplit-marks .vsplit-mark").length;
     const cutDisabled = document.getElementById("vsplit-cut")?.disabled;
     const gifDisabled = document.getElementById("vsplit-gif-bb")?.disabled;
-    const nowText = document.getElementById("vsplit-manual-now")?.textContent || "";
-    const endInp = document.querySelector('#vsplit-marks .vsplit-mark input[aria-label="片段 1 终点秒"]');
-    if (endInp) {
-      endInp.value = "1.8";
-      endInp.dispatchEvent(new Event("change", { bubbles: true }));
-    }
+    // 编辑第一段：删终点 → 不完整 → 用滑块补终点
+    window.DevToolsVsplit.enterEdit(0);
+    document.getElementById("vsplit-edit-del-end")?.click();
+    const incomplete = window.DevToolsVsplit.getMarks()?.[0] || null;
+    document.querySelector('#vsplit-edit-focus [data-edit-focus="end"]')?.click();
+    await seekByScrub(0.45);
+    document.getElementById("vsplit-edit-apply")?.click();
+    document.getElementById("vsplit-edit-done")?.click();
     const afterEdit = window.DevToolsVsplit?.getMarks?.() || [];
+    // 微调按钮
+    const beforeNudge = Number(video.currentTime) || 0;
+    document.getElementById("vsplit-nudge-p01")?.click();
+    await new Promise((r) => setTimeout(r, 40));
+    const afterNudge = Number(video.currentTime) || 0;
     return {
       marks,
       ranges,
       rows,
       cutDisabled,
       gifDisabled,
+      afterStart,
+      incomplete,
       afterEdit,
       draft: window.DevToolsVsplit?.getDraftStart?.(),
-      nowText,
+      editIdx: window.DevToolsVsplit?.getEditIdx?.(),
       scrubbedTime: Number(video.currentTime) || 0,
+      nudgeDelta: afterNudge - beforeNudge,
     };
   });
+  if (manualMarks.afterStart !== "打终点") {
+    throw new Error(`tap should switch to 打终点, got ${manualMarks.afterStart}`);
+  }
   if (manualMarks.marks.length !== 2 || manualMarks.rows !== 2) {
     throw new Error(`expected 2 marks, got ${JSON.stringify(manualMarks)}`);
   }
   if (manualMarks.cutDisabled || manualMarks.gifDisabled) {
     throw new Error(`cut/gif should enable with marks: ${JSON.stringify(manualMarks)}`);
   }
-  if (!(manualMarks.scrubbedTime > 2.5)) {
-    throw new Error(`scrub should seek video near end, got ${manualMarks.scrubbedTime}`);
+  if (manualMarks.incomplete?.end != null) {
+    throw new Error(`delete end failed: ${JSON.stringify(manualMarks.incomplete)}`);
   }
-  if (Math.abs(manualMarks.afterEdit[0].end - 1.8) > 0.05) {
-    throw new Error(`edit end failed: ${JSON.stringify(manualMarks.afterEdit)}`);
+  if (!(manualMarks.afterEdit[0]?.end > manualMarks.afterEdit[0]?.start)) {
+    throw new Error(`re-apply end failed: ${JSON.stringify(manualMarks.afterEdit)}`);
+  }
+  if (manualMarks.editIdx !== -1) {
+    throw new Error(`should exit edit, got ${manualMarks.editIdx}`);
+  }
+  if (!(manualMarks.nudgeDelta > 0.05)) {
+    throw new Error(`nudge +0.1s failed, delta=${manualMarks.nudgeDelta}`);
   }
   await pageMarks.close();
 
