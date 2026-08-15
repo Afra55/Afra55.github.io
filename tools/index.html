@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260815w" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260815w" />
+  <link rel="stylesheet" href="./style.css?v=20260815x" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260815x" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-w</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-x</span>
       </div>
       <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
@@ -1418,7 +1418,7 @@ hello@world.org</textarea>
           <label for="adb-token">Token</label>
           <input id="adb-token" class="mono" type="text" value="devtools-adb" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Android Studio Device File Explorer）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.8），请解压到同一文件夹后运行启动脚本。</p>
+        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Android Studio Device File Explorer）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.9），请解压到同一文件夹后运行启动脚本。</p>
         <div class="adb-guide" id="adb-setup-guide">
           <strong>本机依赖怎么配？</strong>
           <ol>
@@ -1731,106 +1731,207 @@ hello@world.org</textarea>
                 <button type="button" class="secondary-btn" id="adb-dev-refresh">刷新状态</button>
                 <button type="button" class="ghost-btn" id="adb-open-dev-page">打开开发者设置页</button>
               </div>
-              <div class="channel-meta adb-info" style="margin-top:0.75rem">
-                <div class="meta-row">
-                  <span>显示触摸操作</span>
-                  <div class="adb-fs-actions">
+
+              <h3 class="adb-dev-section">交互调试</h3>
+              <div class="adb-dev-list">
+                <div class="adb-dev-row">
+                  <div class="adb-dev-label">
+                    <strong>显示触摸操作</strong>
+                    <span>录屏/演示时在屏幕上显示点击点</span>
+                  </div>
+                  <div class="adb-dev-controls">
+                    <span class="adb-dev-state mono" id="adb-dev-show-touches">—</span>
                     <button type="button" class="secondary-btn" data-adb-dev="show_touches" data-adb-dev-val="1">开</button>
                     <button type="button" class="ghost-btn" data-adb-dev="show_touches" data-adb-dev-val="0">关</button>
-                    <strong class="mono" id="adb-dev-show-touches">—</strong>
                   </div>
                 </div>
-                <div class="meta-row">
-                  <span>指针位置</span>
-                  <div class="adb-fs-actions">
+                <div class="adb-dev-row">
+                  <div class="adb-dev-label">
+                    <strong>指针位置</strong>
+                    <span>顶部显示触摸坐标与轨迹</span>
+                  </div>
+                  <div class="adb-dev-controls">
+                    <span class="adb-dev-state mono" id="adb-dev-pointer">—</span>
                     <button type="button" class="secondary-btn" data-adb-dev="pointer_location" data-adb-dev-val="1">开</button>
                     <button type="button" class="ghost-btn" data-adb-dev="pointer_location" data-adb-dev-val="0">关</button>
-                    <strong class="mono" id="adb-dev-pointer">—</strong>
                   </div>
                 </div>
-                <div class="meta-row">
-                  <span>布局边界</span>
-                  <div class="adb-fs-actions">
+                <div class="adb-dev-row">
+                  <div class="adb-dev-label">
+                    <strong>布局边界</strong>
+                    <span>绘制 View 裁剪与边距线</span>
+                  </div>
+                  <div class="adb-dev-controls">
+                    <span class="adb-dev-state mono" id="adb-dev-layout">—</span>
                     <button type="button" class="secondary-btn" data-adb-dev="layout_bounds" data-adb-dev-val="1">开</button>
                     <button type="button" class="ghost-btn" data-adb-dev="layout_bounds" data-adb-dev-val="0">关</button>
-                    <strong class="mono" id="adb-dev-layout">—</strong>
                   </div>
                 </div>
-                <div class="meta-row">
-                  <span>充电时保持唤醒</span>
-                  <div class="adb-fs-actions">
-                    <button type="button" class="secondary-btn" data-adb-dev="stay_on" data-adb-dev-val="1">开</button>
-                    <button type="button" class="ghost-btn" data-adb-dev="stay_on" data-adb-dev-val="0">关</button>
-                    <strong class="mono" id="adb-dev-stay-on">—</strong>
+                <div class="adb-dev-row">
+                  <div class="adb-dev-label">
+                    <strong>强制 RTL 布局</strong>
+                    <span>模拟从右到左语言排版</span>
                   </div>
-                </div>
-                <div class="meta-row">
-                  <span>强制 RTL</span>
-                  <div class="adb-fs-actions">
+                  <div class="adb-dev-controls">
+                    <span class="adb-dev-state mono" id="adb-dev-force-rtl">—</span>
                     <button type="button" class="secondary-btn" data-adb-dev="force_rtl" data-adb-dev-val="1">开</button>
                     <button type="button" class="ghost-btn" data-adb-dev="force_rtl" data-adb-dev-val="0">关</button>
-                    <strong class="mono" id="adb-dev-force-rtl">—</strong>
-                  </div>
-                </div>
-                <div class="meta-row">
-                  <span>不保留活动</span>
-                  <div class="adb-fs-actions">
-                    <button type="button" class="secondary-btn" data-adb-dev="dont_keep_activities" data-adb-dev-val="1">开</button>
-                    <button type="button" class="ghost-btn" data-adb-dev="dont_keep_activities" data-adb-dev-val="0">关</button>
-                    <strong class="mono" id="adb-dev-dont-keep">—</strong>
-                  </div>
-                </div>
-                <div class="meta-row">
-                  <span>强制 GPU 渲染</span>
-                  <div class="adb-fs-actions">
-                    <button type="button" class="secondary-btn" data-adb-dev="force_gpu" data-adb-dev-val="1">开</button>
-                    <button type="button" class="ghost-btn" data-adb-dev="force_gpu" data-adb-dev-val="0">关</button>
-                    <strong class="mono" id="adb-dev-force-gpu">—</strong>
-                  </div>
-                </div>
-                <div class="meta-row">
-                  <span>HWUI 分析</span>
-                  <div class="adb-fs-actions">
-                    <button type="button" class="secondary-btn" data-adb-dev="hardware_ui" data-adb-dev-val="1">开</button>
-                    <button type="button" class="ghost-btn" data-adb-dev="hardware_ui" data-adb-dev-val="0">关</button>
-                    <strong class="mono" id="adb-dev-hardware-ui">—</strong>
-                  </div>
-                </div>
-                <div class="meta-row">
-                  <span>USB 调试通知</span>
-                  <div class="adb-fs-actions">
-                    <button type="button" class="secondary-btn" data-adb-dev="usb_debugging_notify" data-adb-dev-val="1">开</button>
-                    <button type="button" class="ghost-btn" data-adb-dev="usb_debugging_notify" data-adb-dev-val="0">关</button>
-                    <strong class="mono" id="adb-dev-usb-notify">—</strong>
-                  </div>
-                </div>
-                <div class="meta-row">
-                  <span>GPU 过度绘制</span>
-                  <div class="adb-fs-actions">
-                    <button type="button" class="secondary-btn" data-adb-dev="gpu_overdraw" data-adb-dev-val="1">开</button>
-                    <button type="button" class="ghost-btn" data-adb-dev="gpu_overdraw" data-adb-dev-val="0">关</button>
-                    <strong class="mono" id="adb-dev-gpu-overdraw">—</strong>
-                  </div>
-                </div>
-                <div class="meta-row">
-                  <span>严格模式</span>
-                  <div class="adb-fs-actions">
-                    <button type="button" class="secondary-btn" data-adb-dev="strict_mode" data-adb-dev-val="1">开</button>
-                    <button type="button" class="ghost-btn" data-adb-dev="strict_mode" data-adb-dev-val="0">关</button>
-                    <strong class="mono" id="adb-dev-strict-mode">—</strong>
-                  </div>
-                </div>
-                <div class="meta-row">
-                  <span>显示所有 ANR</span>
-                  <div class="adb-fs-actions">
-                    <button type="button" class="secondary-btn" data-adb-dev="show_all_anrs" data-adb-dev-val="1">开</button>
-                    <button type="button" class="ghost-btn" data-adb-dev="show_all_anrs" data-adb-dev-val="0">关</button>
-                    <strong class="mono" id="adb-dev-show-anrs">—</strong>
                   </div>
                 </div>
               </div>
-              <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
-                <label for="adb-anim-scale">动画倍率</label>
+
+              <h3 class="adb-dev-section">绘制与性能</h3>
+              <div class="adb-dev-list">
+                <div class="adb-dev-row">
+                  <div class="adb-dev-label">
+                    <strong>GPU 过度绘制</strong>
+                    <span>用颜色标出多层绘制区域</span>
+                  </div>
+                  <div class="adb-dev-controls">
+                    <span class="adb-dev-state mono" id="adb-dev-gpu-overdraw">—</span>
+                    <button type="button" class="secondary-btn" data-adb-dev="gpu_overdraw" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="gpu_overdraw" data-adb-dev-val="0">关</button>
+                  </div>
+                </div>
+                <div class="adb-dev-row">
+                  <div class="adb-dev-label">
+                    <strong>HWUI 分析条</strong>
+                    <span>Profile GPU rendering（柱状图）</span>
+                  </div>
+                  <div class="adb-dev-controls">
+                    <span class="adb-dev-state mono" id="adb-dev-hardware-ui">—</span>
+                    <button type="button" class="secondary-btn" data-adb-dev="hardware_ui" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="hardware_ui" data-adb-dev-val="0">关</button>
+                  </div>
+                </div>
+                <div class="adb-dev-row">
+                  <div class="adb-dev-label">
+                    <strong>强制 GPU 渲染</strong>
+                    <span>强制使用 GPU 进行 2D 绘制</span>
+                  </div>
+                  <div class="adb-dev-controls">
+                    <span class="adb-dev-state mono" id="adb-dev-force-gpu">—</span>
+                    <button type="button" class="secondary-btn" data-adb-dev="force_gpu" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="force_gpu" data-adb-dev-val="0">关</button>
+                  </div>
+                </div>
+                <div class="adb-dev-row">
+                  <div class="adb-dev-label">
+                    <strong>严格模式</strong>
+                    <span>主线程耗时操作闪烁提示</span>
+                  </div>
+                  <div class="adb-dev-controls">
+                    <span class="adb-dev-state mono" id="adb-dev-strict-mode">—</span>
+                    <button type="button" class="secondary-btn" data-adb-dev="strict_mode" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="strict_mode" data-adb-dev-val="0">关</button>
+                  </div>
+                </div>
+                <div class="adb-dev-row">
+                  <div class="adb-dev-label">
+                    <strong>不保留活动</strong>
+                    <span>离开即销毁 Activity（测生命周期）</span>
+                  </div>
+                  <div class="adb-dev-controls">
+                    <span class="adb-dev-state mono" id="adb-dev-dont-keep">—</span>
+                    <button type="button" class="secondary-btn" data-adb-dev="dont_keep_activities" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="dont_keep_activities" data-adb-dev-val="0">关</button>
+                  </div>
+                </div>
+                <div class="adb-dev-row">
+                  <div class="adb-dev-label">
+                    <strong>显示后台 ANR</strong>
+                    <span>后台应用无响应也弹窗</span>
+                  </div>
+                  <div class="adb-dev-controls">
+                    <span class="adb-dev-state mono" id="adb-dev-show-anrs">—</span>
+                    <button type="button" class="secondary-btn" data-adb-dev="show_all_anrs" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="show_all_anrs" data-adb-dev-val="0">关</button>
+                  </div>
+                </div>
+              </div>
+
+              <h3 class="adb-dev-section">系统与安装</h3>
+              <div class="adb-dev-list">
+                <div class="adb-dev-row">
+                  <div class="adb-dev-label">
+                    <strong>充电时保持唤醒</strong>
+                    <span>USB/充电接入时屏幕常亮</span>
+                  </div>
+                  <div class="adb-dev-controls">
+                    <span class="adb-dev-state mono" id="adb-dev-stay-on">—</span>
+                    <button type="button" class="secondary-btn" data-adb-dev="stay_on" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="stay_on" data-adb-dev-val="0">关</button>
+                  </div>
+                </div>
+                <div class="adb-dev-row">
+                  <div class="adb-dev-label">
+                    <strong>USB 调试通知</strong>
+                    <span>连接调试时显示通知</span>
+                  </div>
+                  <div class="adb-dev-controls">
+                    <span class="adb-dev-state mono" id="adb-dev-usb-notify">—</span>
+                    <button type="button" class="secondary-btn" data-adb-dev="usb_debugging_notify" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="usb_debugging_notify" data-adb-dev-val="0">关</button>
+                  </div>
+                </div>
+                <div class="adb-dev-row">
+                  <div class="adb-dev-label">
+                    <strong>USB 安装验证</strong>
+                    <span>关闭可加快 adb install（verifier）</span>
+                  </div>
+                  <div class="adb-dev-controls">
+                    <span class="adb-dev-state mono" id="adb-dev-verify-adb">—</span>
+                    <button type="button" class="secondary-btn" data-adb-dev="verify_adb_installs" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="verify_adb_installs" data-adb-dev-val="0">关</button>
+                  </div>
+                </div>
+                <div class="adb-dev-row">
+                  <div class="adb-dev-label">
+                    <strong>强制深色模式</strong>
+                    <span>调试夜间主题（机型差异大）</span>
+                  </div>
+                  <div class="adb-dev-controls">
+                    <span class="adb-dev-state mono" id="adb-dev-force-dark">—</span>
+                    <button type="button" class="secondary-btn" data-adb-dev="force_dark" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="force_dark" data-adb-dev-val="0">关</button>
+                  </div>
+                </div>
+                <div class="adb-dev-row">
+                  <div class="adb-dev-label">
+                    <strong>自动旋转</strong>
+                    <span>加速度传感器旋转屏幕</span>
+                  </div>
+                  <div class="adb-dev-controls">
+                    <span class="adb-dev-state mono" id="adb-dev-auto-rotate">—</span>
+                    <button type="button" class="secondary-btn" data-adb-dev="auto_rotate" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="auto_rotate" data-adb-dev-val="0">关</button>
+                  </div>
+                </div>
+                <div class="adb-dev-row">
+                  <div class="adb-dev-label">
+                    <strong>移动数据始终开启</strong>
+                    <span>即使 Wi‑Fi 连接也保持蜂窝数据</span>
+                  </div>
+                  <div class="adb-dev-controls">
+                    <span class="adb-dev-state mono" id="adb-dev-mobile-always">—</span>
+                    <button type="button" class="secondary-btn" data-adb-dev="mobile_data_always_on" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="mobile_data_always_on" data-adb-dev-val="0">关</button>
+                  </div>
+                </div>
+              </div>
+
+              <h3 class="adb-dev-section">快捷操作</h3>
+              <div class="btn-row tool-actions adb-dev-quick">
+                <button type="button" class="ghost-btn" data-adb-dev-quick="expand_noti">展开通知栏</button>
+                <button type="button" class="ghost-btn" data-adb-dev-quick="collapse_noti">收起通知栏</button>
+                <button type="button" class="ghost-btn" data-adb-dev-quick="expand_settings">展开快捷设置</button>
+                <button type="button" class="ghost-btn" data-adb-dev-quick="show_ime">显示输入法选择器</button>
+                <button type="button" class="ghost-btn" data-adb-dev-quick="kill_launcher">重启桌面 Launcher</button>
+              </div>
+
+              <h3 class="adb-dev-section">动画倍率</h3>
+              <div class="field-row adb-dev-anim" style="flex-wrap:wrap;margin-top:0.35rem">
+                <label for="adb-anim-scale">统一倍率</label>
                 <select id="adb-anim-scale" class="mono select-input">
                   <option value="0">0（关闭动画）</option>
                   <option value="0.5">0.5x</option>
@@ -2273,7 +2374,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260815w"></script>
+  <script src="./extra.js?v=20260815x"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>

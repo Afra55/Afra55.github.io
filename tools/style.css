@@ -2731,6 +2731,96 @@ body.vsplit-fs-open {
   word-break: break-all;
 }
 
+.adb-dev-section {
+  margin: 1.1rem 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+  text-transform: none;
+}
+
+.adb-dev-list {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(8, 14, 26, 0.35);
+  overflow: hidden;
+}
+
+.adb-dev-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem 1rem;
+  align-items: center;
+  padding: 0.7rem 0.85rem;
+  border-top: 1px solid var(--line);
+}
+
+.adb-dev-row:first-child {
+  border-top: 0;
+}
+
+.adb-dev-label {
+  min-width: 0;
+}
+
+.adb-dev-label strong {
+  display: block;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.adb-dev-label span {
+  display: block;
+  margin-top: 0.15rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.adb-dev-controls {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.adb-dev-state {
+  min-width: 2.6rem;
+  text-align: right;
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.adb-dev-controls .secondary-btn,
+.adb-dev-controls .ghost-btn {
+  min-width: 2.4rem;
+  padding: 0.28rem 0.55rem;
+}
+
+.adb-dev-quick {
+  margin-top: 0.35rem;
+}
+
+.adb-dev-anim {
+  margin-top: 0.35rem;
+}
+
+@media (max-width: 640px) {
+  .adb-dev-row {
+    grid-template-columns: 1fr;
+    align-items: start;
+  }
+
+  .adb-dev-controls {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
 .adb-path-row {
   display: flex;
   gap: 0.45rem;

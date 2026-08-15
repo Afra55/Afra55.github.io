@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.15-w";
+  const TOOLS_VERSION = "2026.08.15-x";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -10374,6 +10374,10 @@
       if ($("#adb-dev-gpu-overdraw")) $("#adb-dev-gpu-overdraw").textContent = onOff(data.gpu_overdraw);
       if ($("#adb-dev-strict-mode")) $("#adb-dev-strict-mode").textContent = onOff(data.strict_mode);
       if ($("#adb-dev-show-anrs")) $("#adb-dev-show-anrs").textContent = onOff(data.show_all_anrs);
+      if ($("#adb-dev-verify-adb")) $("#adb-dev-verify-adb").textContent = onOff(data.verify_adb_installs);
+      if ($("#adb-dev-force-dark")) $("#adb-dev-force-dark").textContent = onOff(data.force_dark);
+      if ($("#adb-dev-auto-rotate")) $("#adb-dev-auto-rotate").textContent = onOff(data.auto_rotate);
+      if ($("#adb-dev-mobile-always")) $("#adb-dev-mobile-always").textContent = onOff(data.mobile_data_always_on);
       if ($("#adb-dev-scales")) {
         $("#adb-dev-scales").textContent = `window ${data.windowAnimationScale} / transition ${data.transitionAnimationScale} / animator ${data.animatorDurationScale}`;
       }
@@ -11222,6 +11226,21 @@
           });
           toast(data.message || "已更新");
           await refreshDeveloper({ silent: true });
+        } catch (err) {
+          setError(adbError, err.message || String(err));
+        }
+      });
+    });
+    $$("[data-adb-dev-quick]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          const action = btn.dataset.adbDevQuick;
+          const data = await adbFetch("/device/control", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ serial: requireCurrentSerial(), action }),
+          });
+          toast(data.message || "已执行");
         } catch (err) {
           setError(adbError, err.message || String(err));
         }

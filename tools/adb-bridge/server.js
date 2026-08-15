@@ -35,7 +35,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.6.8";
+const BRIDGE_VERSION = "0.6.9";
 
 /** Preferred quick roots shown in UI (reads are not limited to these) */
 const ROOTS = [
@@ -2048,6 +2048,20 @@ async function getDeveloperOptions(serial) {
     (await readProp("debug.hwui.overdraw")) || (await read("global", "debug.hwui.overdraw"));
   const strictMode = await read("global", "strict_mode");
   const showAnrs = await read("secure", "anr_show_background");
+  const verifyAdb =
+    (await read("global", "verifier_verify_adb_installs")) ||
+    (await read("global", "package_verifier_enable"));
+  const forceDark =
+    (await readProp("debug.hwui.force_dark")) ||
+    (await read("secure", "ui_night_mode"));
+  const autoRotate = await read("system", "accelerometer_rotation");
+  const mobileAlways = await read("global", "mobile_data_always_on");
+
+  const forceDarkOn =
+    forceDark === "true" ||
+    forceDark === "1" ||
+    forceDark === "2" || // ui_night_mode night
+    forceDark === "yes";
 
   return {
     ok: true,
@@ -2073,6 +2087,10 @@ async function getDeveloperOptions(serial) {
     ),
     strict_mode: asBool(strictMode),
     show_all_anrs: asBool(showAnrs),
+    verify_adb_installs: verifyAdb === "null" || verifyAdb === "" ? true : asBool(verifyAdb),
+    force_dark: forceDarkOn,
+    auto_rotate: asBool(autoRotate),
+    mobile_data_always_on: asBool(mobileAlways),
     windowAnimationScale: windowAnim === "null" ? "1.0" : windowAnim || "1.0",
     transitionAnimationScale: transitionAnim === "null" ? "1.0" : transitionAnim || "1.0",
     animatorDurationScale: animatorAnim === "null" ? "1.0" : animatorAnim || "1.0",
@@ -2092,6 +2110,10 @@ async function getDeveloperOptions(serial) {
       gpuOverdraw,
       strictMode,
       showAnrs,
+      verifyAdb,
+      forceDark,
+      autoRotate,
+      mobileAlways,
     },
   };
 }
@@ -2156,6 +2178,15 @@ async function setDeveloperOption(serial, key, value) {
     await tryPut("global", "strict_mode", value ? "1" : "0");
   } else if (k === "show_all_anrs") {
     await tryPut("secure", "anr_show_background", value ? "1" : "0");
+  } else if (k === "verify_adb_installs") {
+    await tryPut("global", "verifier_verify_adb_installs", value ? "1" : "0");
+  } else if (k === "force_dark") {
+    await tryProp("debug.hwui.force_dark", value ? "true" : "false");
+    await tryPut("secure", "ui_night_mode", value ? "2" : "1");
+  } else if (k === "auto_rotate") {
+    await tryPut("system", "accelerometer_rotation", value ? "1" : "0");
+  } else if (k === "mobile_data_always_on") {
+    await tryPut("global", "mobile_data_always_on", value ? "1" : "0");
   } else if (k === "window_animation_scale") {
     await put("global", "window_animation_scale", value);
   } else if (k === "transition_animation_scale") {
@@ -2623,6 +2654,38 @@ async function deviceControl(serial, action) {
       message:
         "已尝试开启 USB 安装（含 settings put system adb_install_enabled 1）并打开开发者选项。部分品牌仍需在手机上再确认一次。",
     };
+  }
+  if (act === "expand_noti") {
+    await run("cmd statusbar expand-notifications", ["shell", "cmd", "statusbar", "expand-notifications"]);
+    await run("service call statusbar 1", ["shell", "service", "call", "statusbar", "1"]);
+    return { ok: true, action: act, results, message: "已尝试展开通知栏" };
+  }
+  if (act === "collapse_noti") {
+    await run("cmd statusbar collapse", ["shell", "cmd", "statusbar", "collapse"]);
+    await run("service call statusbar 2", ["shell", "service", "call", "statusbar", "2"]);
+    return { ok: true, action: act, results, message: "已尝试收起通知栏" };
+  }
+  if (act === "expand_settings") {
+    await run("cmd statusbar expand-settings", ["shell", "cmd", "statusbar", "expand-settings"]);
+    return { ok: true, action: act, results, message: "已尝试展开快捷设置" };
+  }
+  if (act === "show_ime") {
+    await run("ime picker", ["shell", "ime", "list", "-s"]);
+    await run("input KEYCODE_LANGUAGE_SWITCH", ["shell", "input", "keyevent", "204"]);
+    await run("settings input method", [
+      "shell",
+      "am",
+      "start",
+      "-a",
+      "android.settings.INPUT_METHOD_SETTINGS",
+    ]);
+    return { ok: true, action: act, results, message: "已尝试打开输入法相关界面" };
+  }
+  if (act === "kill_launcher") {
+    await run("am force-stop launcher3", ["shell", "am", "force-stop", "com.android.launcher3"]);
+    await run("am force-stop nexuslauncher", ["shell", "am", "force-stop", "com.google.android.apps.nexuslauncher"]);
+    await run("am start HOME", ["shell", "input", "keyevent", "3"]);
+    return { ok: true, action: act, results, message: "已尝试重启常见桌面（因机型而异）" };
   }
   throw new Error("不支持的设备控制操作");
 }
