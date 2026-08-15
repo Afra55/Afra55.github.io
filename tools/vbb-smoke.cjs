@@ -820,7 +820,7 @@ async function main() {
   }
   if (
     !(fsMark.afterUndoEnd.marks.length === fsMark.beforeUndo - 1) ||
-    !(Number(fsMark.afterUndoEnd.draft) >= 0) ||
+    fsMark.afterUndoEnd.draft == null ||
     fsMark.afterUndoEnd.markLabel !== "打终点" ||
     fsMark.afterUndoEnd.undoLabel !== "取消起点"
   ) {
