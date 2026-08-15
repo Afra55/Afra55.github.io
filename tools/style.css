@@ -3320,25 +3320,47 @@ body.vsplit-fs-open {
   margin-top: 0.25rem;
 }
 
+.adb-input-shot-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.65rem;
+  align-items: center;
+}
+
+.adb-input-shot-size-label {
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.adb-input-shot-size {
+  flex: 1 1 10rem;
+  min-width: 8rem;
+  max-width: 18rem;
+  accent-color: var(--accent, #2ec4b6);
+}
+
 .adb-input-shot-wrap {
+  --adb-input-shot-vh: 56;
   position: relative;
   display: flex;
   justify-content: center;
   align-items: center;
   width: 100%;
   max-width: 100%;
-  max-height: min(36vh, 320px);
+  max-height: calc(var(--adb-input-shot-vh) * 1vh);
   border: 1px solid var(--line);
   border-radius: 12px;
-  overflow: hidden;
+  overflow: auto;
   background: rgba(8, 14, 26, 0.45);
   min-height: 2.5rem;
+  margin-top: 0.4rem;
 }
 
 .adb-input-shot-wrap img {
   display: block;
   max-width: 100%;
-  max-height: min(36vh, 320px);
+  max-height: calc(var(--adb-input-shot-vh) * 1vh);
   width: auto;
   height: auto;
   object-fit: contain;
