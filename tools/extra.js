@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.15-pick3";
+  const TOOLS_VERSION = "2026.08.15-clip";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -4644,6 +4644,72 @@
       }
     }
 
+    function buildClipProgressDom() {
+      const box = document.createElement("div");
+      box.className = "vsplit-clip-progress";
+      box.hidden = true;
+      box.innerHTML =
+        '<div class="vsplit-clip-progress-head">' +
+        '<span class="hint tight vsplit-clip-progress-text">等待中…</span>' +
+        '<span class="mono vsplit-clip-progress-pct">—</span>' +
+        "</div>" +
+        '<div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill"></span></div>';
+      return box;
+    }
+
+    function syncClipProgressDom(box, job) {
+      if (!box) return;
+      const status = job?.jobStatus || "";
+      const show = status === "pending" || status === "running" || status === "done" || status === "error";
+      box.hidden = !show;
+      if (!show) return;
+      box.dataset.status = status;
+      const ratio = Math.max(0, Math.min(1, Number(job.jobProgress) || 0));
+      const pct = Math.round(ratio * 100);
+      const fill = box.querySelector(".gif-progress-fill");
+      const textEl = box.querySelector(".vsplit-clip-progress-text");
+      const pctEl = box.querySelector(".vsplit-clip-progress-pct");
+      const running = status === "running";
+      if (fill) {
+        const width = status === "pending" ? 0 : Math.max(pct, running && pct < 6 ? 6 : pct);
+        fill.style.width = `${width}%`;
+        fill.classList.toggle("is-active", running);
+        fill.classList.toggle("is-busy", running);
+      }
+      if (textEl) {
+        textEl.textContent =
+          job.jobText ||
+          (status === "pending"
+            ? "等待中…"
+            : status === "running"
+              ? "处理中…"
+              : status === "done"
+                ? "完成"
+                : status === "error"
+                  ? "失败"
+                  : "");
+      }
+      if (pctEl) pctEl.textContent = status === "pending" ? "—" : `${pct}%`;
+    }
+
+    function setVsplitClipJob(idx, patch = {}) {
+      const c = vsplitClips[idx];
+      if (!c) return;
+      if (patch.status != null) c.jobStatus = patch.status;
+      if (patch.progress != null) c.jobProgress = Math.max(0, Math.min(1, Number(patch.progress) || 0));
+      if (patch.text != null) c.jobText = String(patch.text || "");
+      const row = vsplitList?.querySelector(`[data-vsplit-clip="${idx}"]`);
+      if (row) syncClipProgressDom(row.querySelector(".vsplit-clip-progress"), c);
+    }
+
+    function clearVsplitClipJobs() {
+      vsplitClips.forEach((c) => {
+        c.jobStatus = "";
+        c.jobProgress = 0;
+        c.jobText = "";
+      });
+    }
+
     function formatClock(sec) {
       const s = Math.max(0, Number(sec) || 0);
       const h = Math.floor(s / 3600);
@@ -6053,6 +6119,9 @@
         gifUrl: "",
         gifNote: "",
         error: "",
+        jobStatus: "",
+        jobProgress: 0,
+        jobText: "",
       }));
       renderVsplitList();
     }
@@ -6110,13 +6179,14 @@
       vsplitClips.forEach((c, idx) => {
         const row = document.createElement("div");
         row.className = "gif-frame vsplit-clip";
+        row.dataset.vsplitClip = String(idx);
         const top = document.createElement("div");
         top.className = "vsplit-clip-top";
         const title = document.createElement("strong");
-        title.textContent = `#${String(idx + 1).padStart(2, "0")}  ${formatClock(c.start)}–${formatClock(c.start + c.span)}`;
+        title.textContent = `#${String(idx + 1).padStart(2, "0")}  ${formatClock(c.start)}–${formatClock(c.start + c.span)} · 共${formatVsplitSpanSec(c.span)}`;
         const meta = document.createElement("span");
         meta.className = "hint tight";
-        const bits = [`${c.span.toFixed(1)}s`];
+        const bits = [];
         if (c.videoBlob) bits.push(`视频 ${formatKb(c.videoBlob.size)}`);
         if (c.gifBlob) bits.push(`GIF ${formatKb(c.gifBlob.size)}`);
         if (c.gifNote) bits.push(c.gifNote);
@@ -6142,6 +6212,9 @@
         }
         top.append(title, meta, actions);
         row.appendChild(top);
+        const progressBox = buildClipProgressDom();
+        row.appendChild(progressBox);
+        syncClipProgressDom(progressBox, c);
         if (c.gifUrl) {
           const img = document.createElement("img");
           img.className = "vsplit-clip-gif";
@@ -6285,26 +6358,41 @@
           })
         );
         try {
+          vsplitClips = ranges.map((r) => ({
+            start: r.start,
+            span: r.span,
+            videoBlob: null,
+            videoUrl: "",
+            copied: false,
+            gifBlob: null,
+            gifUrl: "",
+            gifNote: "",
+            error: "",
+            jobStatus: "pending",
+            jobProgress: 0,
+            jobText: "等待切分",
+          }));
+          renderVsplitList();
           for (let i = 0; i < ranges.length; i++) {
             if (abortVsplit) throw new Error("已取消");
             const r = ranges[i];
             const outName = `clip-${i}.mp4`;
+            setVsplitClipJob(i, { status: "running", progress: 0.08, text: "切分视频…" });
             setVsplitProgress(true, (i + 0.05) / ranges.length, `切分视频 · ${i + 1}/${ranges.length}`, {
-              sub: `${formatClock(r.start)}–${formatClock(r.start + r.span)}`,
+              sub: `${formatClock(r.start)}–${formatClock(r.start + r.span)} · 共${formatVsplitSpanSec(r.span)}`,
               busy: true,
             });
             const { bytes, copied } = await cutOneClip(ffmpeg, inName, r.start, r.span, outName);
             const blob = bytes ? new Blob([bytes], { type: "video/mp4" }) : null;
-            vsplitClips.push({
-              start: r.start,
-              span: r.span,
-              videoBlob: blob,
-              videoUrl: blob ? URL.createObjectURL(blob) : "",
-              copied,
-              gifBlob: null,
-              gifUrl: "",
-              gifNote: "",
-              error: blob ? "" : "视频切片失败（仍可转 GIF）",
+            const c = vsplitClips[i];
+            c.videoBlob = blob;
+            c.videoUrl = blob ? URL.createObjectURL(blob) : "";
+            c.copied = copied;
+            c.error = blob ? "" : "视频切片失败（仍可转 GIF）";
+            setVsplitClipJob(i, {
+              status: blob ? "done" : "error",
+              progress: 1,
+              text: blob ? "切分完成" : "切分失败",
             });
             try {
               await ffmpeg.deleteFile(outName);
@@ -6331,10 +6419,14 @@
         const failN = vsplitClips.filter((c) => !c.videoBlob).length;
         setVsplitProgress(true, 1, `切分完成 · ${vsplitClips.length} 段`);
         toast(failN ? `已切 ${vsplitClips.length} 段，${failN} 段视频失败（仍可转 GIF）` : `已切成 ${vsplitClips.length} 段`);
+        clearVsplitClipJobs();
+        renderVsplitList();
       } catch (err) {
         if (String(err && err.message) !== "已取消") setError(vsplitError, err.message || String(err));
         else toast("已取消切分");
         if (String(err && err.message) === "已取消") setVsplitProgress(false, 0, "");
+        clearVsplitClipJobs();
+        renderVsplitList();
       } finally {
         vsplitBusy = false;
         resetVsplitAbort();
@@ -6361,6 +6453,10 @@
       const isAborted = () => abortVsplit;
       try {
         await prewarmFfmpegEngine().catch(() => {});
+        vsplitClips.forEach((c, idx) => {
+          setVsplitClipJob(idx, { status: "pending", progress: 0, text: "等待转 GIF" });
+        });
+        renderVsplitList();
         for (let i = 0; i < vsplitClips.length; i++) {
           if (abortVsplit) throw new Error("已取消");
           const c = vsplitClips[i];
@@ -6374,8 +6470,9 @@
           c.gifNote = "";
           c.error = "";
           const label = mode === "blackbox" ? "黑盒 GIF" : "高清 GIF";
+          setVsplitClipJob(i, { status: "running", progress: 0.02, text: `${label}…` });
           setVsplitProgress(true, i / vsplitClips.length, `${label} · ${i + 1}/${vsplitClips.length}`, {
-            sub: `${formatClock(c.start)}–${formatClock(c.start + c.span)}`,
+            sub: `${formatClock(c.start)}–${formatClock(c.start + c.span)} · 共${formatVsplitSpanSec(c.span)}`,
             busy: true,
           });
           try {
@@ -6388,11 +6485,14 @@
                     srcW,
                     srcH,
                     isAborted,
-                    onProgress: (local, text) =>
-                      setVsplitProgress(true, (i + Math.min(0.98, local)) / vsplitClips.length, `${label} · ${i + 1}/${vsplitClips.length}`, {
+                    onProgress: (local, text) => {
+                      const p = Math.min(0.98, Number(local) || 0);
+                      setVsplitClipJob(i, { status: "running", progress: p, text: text || `${label}…` });
+                      setVsplitProgress(true, (i + p) / vsplitClips.length, `${label} · ${i + 1}/${vsplitClips.length}`, {
                         sub: text,
                         busy: true,
-                      }),
+                      });
+                    },
                   })
                 : await encodeV2gGifFfmpeg({
                     file: vsplitSourceFile,
@@ -6408,19 +6508,24 @@
                     brightness: 0,
                     isAborted,
                     stageLabel: `#${i + 1}`,
-                    onProgress: (local, text) =>
-                      setVsplitProgress(true, (i + Math.min(0.98, local)) / vsplitClips.length, `${label} · ${i + 1}/${vsplitClips.length}`, {
+                    onProgress: (local, text) => {
+                      const p = Math.min(0.98, Number(local) || 0);
+                      setVsplitClipJob(i, { status: "running", progress: p, text: text || `${label}…` });
+                      setVsplitProgress(true, (i + p) / vsplitClips.length, `${label} · ${i + 1}/${vsplitClips.length}`, {
                         sub: text,
                         busy: true,
-                      }),
+                      });
+                    },
                   });
             if (!encoded?.blob) throw new Error("未产出 GIF");
             c.gifBlob = encoded.blob;
             c.gifUrl = URL.createObjectURL(encoded.blob);
             c.gifNote = encoded.framesCapped ? `已抽稀 ${encoded.frameCount} 帧` : `${encoded.outW}×${encoded.outH}`;
+            setVsplitClipJob(i, { status: "done", progress: 1, text: "GIF 完成" });
           } catch (err) {
             if (String(err && err.message) === "已取消") throw err;
             c.error = err.message || String(err);
+            setVsplitClipJob(i, { status: "error", progress: 1, text: "GIF 失败" });
           }
           renderVsplitList();
         }
@@ -6439,9 +6544,13 @@
         const failN = vsplitClips.filter((c) => c.error).length;
         setVsplitProgress(true, 1, `GIF 完成 · 成功 ${gifs.length}/${vsplitClips.length}`);
         toast(failN ? `完成，${failN} 段失败` : `已生成 ${gifs.length} 个 GIF`);
+        clearVsplitClipJobs();
+        renderVsplitList();
       } catch (err) {
         if (String(err && err.message) !== "已取消") setError(vsplitError, err.message || String(err));
         else toast("已取消");
+        clearVsplitClipJobs();
+        renderVsplitList();
       } finally {
         vsplitBusy = false;
         resetVsplitAbort();
@@ -6739,6 +6848,24 @@
         vbbProgressSub.textContent = opts.sub || "";
         vbbProgressSub.hidden = !opts.sub;
       }
+    }
+
+    function setVbbClipJob(idx, patch = {}) {
+      const c = vbbClips[idx];
+      if (!c) return;
+      if (patch.status != null) c.jobStatus = patch.status;
+      if (patch.progress != null) c.jobProgress = Math.max(0, Math.min(1, Number(patch.progress) || 0));
+      if (patch.text != null) c.jobText = String(patch.text || "");
+      const row = vbbList?.querySelector(`[data-vbb-clip="${idx}"]`);
+      if (row) syncClipProgressDom(row.querySelector(".vsplit-clip-progress"), c);
+    }
+
+    function clearVbbClipJobs() {
+      vbbClips.forEach((c) => {
+        c.jobStatus = "";
+        c.jobProgress = 0;
+        c.jobText = "";
+      });
     }
 
     function resetVbbAbort() {
@@ -7293,13 +7420,14 @@
       vbbClips.forEach((c, idx) => {
         const row = document.createElement("div");
         row.className = "gif-frame vsplit-clip";
+        row.dataset.vbbClip = String(idx);
         const top = document.createElement("div");
         top.className = "vsplit-clip-top";
         const title = document.createElement("strong");
-        title.textContent = `#${String(idx + 1).padStart(2, "0")}  ${formatVbbClock(c.start)}–${formatVbbClock(c.start + c.span)}`;
+        title.textContent = `#${String(idx + 1).padStart(2, "0")}  ${formatVbbClock(c.start)}–${formatVbbClock(c.start + c.span)} · 共${formatVsplitSpanSec(c.span)}`;
         const meta = document.createElement("span");
         meta.className = "hint tight";
-        const bits = [`${c.span.toFixed(1)}s`];
+        const bits = [];
         if (c.gifBlob) bits.push(formatKb(c.gifBlob.size));
         if (c.gifNote) bits.push(c.gifNote);
         if (c.error) bits.push(c.error);
@@ -7326,6 +7454,9 @@
         }
         top.append(title, meta, actions);
         row.appendChild(top);
+        const progressBox = buildClipProgressDom();
+        row.appendChild(progressBox);
+        syncClipProgressDom(progressBox, c);
         // 默认不挂载全部 <img>，避免手机同时解码多个大 GIF 导致白屏/杀进程
         if (c.gifBlob && vbbPreviewIdx === idx) {
           if (!c.gifUrl) c.gifUrl = URL.createObjectURL(c.gifBlob);
@@ -7544,25 +7675,31 @@
           } catch (_) {}
         }
         let firstSeed = null;
+        vbbClips = plan.ranges.map((r) => ({
+          start: r.start,
+          span: r.span,
+          gifBlob: null,
+          gifUrl: "",
+          gifNote: "",
+          error: "",
+          jobStatus: "pending",
+          jobProgress: 0,
+          jobText: "等待中…",
+        }));
+        renderVbbResults();
         for (let i = 0; i < plan.ranges.length; i++) {
           if (abortVbb) throw new Error("已取消");
           const r = plan.ranges[i];
+          const clip = vbbClips[i];
           const isWide = plan.encode === "clarity" || plan.encode === "sharp";
           const reuseSeed = firstSeed && shouldReuseVbbFirstPlan(plan.ranges, i);
           const label = plan.encode === "sharp" ? "锐度 GIF" : plan.encode === "clarity" ? "清晰 GIF" : "时长黑盒";
           const followTip = reuseSeed ? " · 沿用#01" : "";
+          setVbbClipJob(i, { status: "running", progress: 0.02, text: `${label}…` });
           setVbbProgress(true, i / plan.ranges.length, `${label} · ${i + 1}/${plan.ranges.length}${followTip}`, {
             sub: `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)}${isWide ? ` · 宽${(reuseSeed ? firstSeed.maxW : plan.maxW) || V2G_BLACKBOX_BASE_W}` : ""}`,
             busy: true,
           });
-          const clip = {
-            start: r.start,
-            span: r.span,
-            gifBlob: null,
-            gifUrl: "",
-            gifNote: "",
-            error: "",
-          };
           try {
             let encoded;
             let usedFallback = false;
@@ -7585,11 +7722,14 @@
                   brightness: 0,
                   isAborted,
                   stageLabel: `#${i + 1}`,
-                  onProgress: (local, text) =>
-                    setVbbProgress(true, (i + localBase + Math.min(1, local) * localSpan) / plan.ranges.length, `${phaseLabel} · ${i + 1}/${plan.ranges.length}`, {
+                  onProgress: (local, text) => {
+                    const p = localBase + Math.min(1, local) * localSpan;
+                    setVbbClipJob(i, { status: "running", progress: Math.min(0.98, p), text: `${text} · 宽${maxW}` });
+                    setVbbProgress(true, (i + p) / plan.ranges.length, `${phaseLabel} · ${i + 1}/${plan.ranges.length}`, {
                       sub: `${text} · 宽${maxW}`,
                       busy: true,
-                    }),
+                    });
+                  },
                 });
 
               encoded = await tryEncodeWide(usedWidth, reuseSeed ? "沿用#01" : label, 0, 0.55);
@@ -7601,6 +7741,7 @@
                   sub: formatKb(encoded.blob.size),
                   busy: true,
                 });
+                setVbbClipJob(i, { status: "running", progress: 0.55, text: `超限降宽 → ${usedWidth}` });
                 encoded = await tryEncodeWide(usedWidth, "降宽重编", 0.55, 0.25);
                 encoded = { ...encoded, compressRounds: 0, maxW: usedWidth };
               }
@@ -7622,6 +7763,7 @@
                   sub: formatKb(encoded.blob.size),
                   busy: true,
                 });
+                setVbbClipJob(i, { status: "running", progress: 0.8, text: "仍超限，改走黑盒…" });
                 encoded = await encodeBlackboxClip({
                   file: vbbSourceFile,
                   startSec: r.start,
@@ -7630,11 +7772,14 @@
                   srcH,
                   isAborted,
                   seed: reuseSeed ? firstSeed : null,
-                  onProgress: (local, text) =>
-                    setVbbProgress(true, (i + 0.8 + Math.min(0.18, local) * 0.18) / plan.ranges.length, `黑盒回退 · ${i + 1}/${plan.ranges.length}`, {
+                  onProgress: (local, text) => {
+                    const p = 0.8 + Math.min(0.18, local) * 0.18;
+                    setVbbClipJob(i, { status: "running", progress: Math.min(0.98, p), text });
+                    setVbbProgress(true, (i + p) / plan.ranges.length, `黑盒回退 · ${i + 1}/${plan.ranges.length}`, {
                       sub: text,
                       busy: true,
-                    }),
+                    });
+                  },
                 });
                 usedFallback = true;
               }
@@ -7647,11 +7792,14 @@
                 srcH,
                 isAborted,
                 seed: reuseSeed ? firstSeed : null,
-                onProgress: (local, text) =>
-                  setVbbProgress(true, (i + Math.min(0.98, local)) / plan.ranges.length, `${label} · ${i + 1}/${plan.ranges.length}${followTip}`, {
+                onProgress: (local, text) => {
+                  const p = Math.min(0.98, Number(local) || 0);
+                  setVbbClipJob(i, { status: "running", progress: p, text: text || `${label}…` });
+                  setVbbProgress(true, (i + p) / plan.ranges.length, `${label} · ${i + 1}/${plan.ranges.length}${followTip}`, {
                     sub: text,
                     busy: true,
-                  }),
+                  });
+                },
               });
               if (reuseSeed && firstSeed.usedFallback) usedFallback = true;
               if (encoded?.maxW) usedWidth = encoded.maxW;
@@ -7675,11 +7823,16 @@
               clip.error = `仍超 6MB（${formatKb(encoded.blob.size)}）`;
             }
             if (i === 0) firstSeed = snapshotVbbEncodeSeed(encoded, { usedWidth, usedFallback });
+            setVbbClipJob(i, {
+              status: clip.error ? "error" : "done",
+              progress: 1,
+              text: clip.error ? "完成（超限）" : "完成",
+            });
           } catch (err) {
             if (String(err && err.message) === "已取消") throw err;
             clip.error = err.message || String(err);
+            setVbbClipJob(i, { status: "error", progress: 1, text: "失败" });
           }
-          vbbClips.push(clip);
           // 只刷新列表元数据，不自动展开全部预览
           renderVbbResults();
           // 让出主线程，便于 Safari 回收临时内存
@@ -7712,10 +7865,14 @@
         }
         const failN = vbbClips.filter((c) => c.error || !c.gifBlob).length;
         setVbbProgress(true, 1, `完成 · 成功 ${gifs.length}/${vbbClips.length}`);
+        clearVbbClipJobs();
+        renderVbbResults();
         toast(failN ? `完成，${failN} 段有问题` : `已生成 ${gifs.length} 个 GIF（点「预览」查看，避免占内存）`);
       } catch (err) {
         if (String(err && err.message) !== "已取消") setError(vbbError, err.message || String(err));
         else toast("已取消");
+        clearVbbClipJobs();
+        renderVbbResults();
       } finally {
         vbbBusy = false;
         resetVbbAbort();
