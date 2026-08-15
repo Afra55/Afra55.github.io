@@ -52,6 +52,7 @@ node server.js
 | GET | `/fs/roots?serial=` | 探测常用根目录是否可读 |
 | GET | `/local/roots` | 本机可浏览根目录（Home / Temp；Windows 含盘符） |
 | GET | `/local/list?path=` | 列本机目录（仅允许 `/local/roots` 下路径） |
+| POST | `/local/push` | 本机路径 `adb push` 到设备目录 `{ serial, paths[], remoteDir }` |
 | POST | `/fs/mkdir` `/fs/delete` `/fs/rename` `/fs/move` `/fs/copy` | 文件操作（默认可写：sdcard / tmp） |
 | POST | `/fs/upload?serial=&path=&name=&forcePush=` | 上传到设备；`forcePush=1` 才可写系统 APK 路径 |
 | GET | `/fs/download?serial=&path=` | 从设备下载（pull 失败时尝试 run-as / su） |
