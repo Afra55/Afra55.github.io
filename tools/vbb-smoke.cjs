@@ -595,6 +595,9 @@ async function main() {
   if (!manualUi.hasScrubMarks || !manualUi.hasQuickExport) {
     throw new Error(`scrub marks / quick export missing: ${JSON.stringify(manualUi)}`);
   }
+  if (!manualUi.hasMarkChips || !manualUi.hasMarkPicker) {
+    throw new Error(`mark chips / dense picker missing: ${JSON.stringify(manualUi)}`);
+  }
   if (!manualUi.editOutsideSticky) {
     throw new Error(`edit bar should be outside sticky core: ${JSON.stringify(manualUi)}`);
   }
