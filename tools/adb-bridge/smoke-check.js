@@ -85,10 +85,13 @@ async function main() {
       throw new Error("devices payload invalid");
     }
 
-    const badPath = await req("GET", "/fs/list?serial=demo&path=/data/data", {
+    // /data/data is browsable (virtual package list when no root) — must not be path-guard rejected
+    const dataData = await req("GET", "/fs/list?serial=demo&path=/data/data", {
       headers: { "X-Adb-Token": TOKEN },
     });
-    if (badPath.status === 200) throw new Error("expected path guard to reject /data/data");
+    if (String(dataData.json?.error || "").includes("仅允许访问")) {
+      throw new Error("/data/data should be browsable (virtual or device-permission)");
+    }
 
     const health2 = await req("GET", "/health");
     const features = health2.json?.features || [];
@@ -107,15 +110,25 @@ async function main() {
       "developer",
       "screencap",
       "install-push-system",
+      "fs-roots",
+      "fs-run-as",
+      "fs-data-virtual",
+      "host-tools",
     ]) {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
     }
 
-    if (health2.json?.version !== "0.6.2") {
-      throw new Error(`expected bridge version 0.6.2, got ${health2.json?.version}`);
+    if (health2.json?.version !== "0.6.3") {
+      throw new Error(`expected bridge version 0.6.3, got ${health2.json?.version}`);
+    }
+    if (!health2.json?.tools || typeof health2.json.tools !== "object") {
+      throw new Error("health missing tools probe");
+    }
+    if (!health2.json?.setup || typeof health2.json.setup !== "object") {
+      throw new Error("health missing setup hints");
     }
     const roots = health2.json?.roots || [];
-    for (const root of ["/", "/data/local/tmp", "/system/app", "/system/priv-app"]) {
+    for (const root of ["/", "/data/local/tmp", "/data/data", "/system/app", "/system/priv-app"]) {
       if (!roots.includes(root)) throw new Error(`health missing root: ${root}`);
     }
 

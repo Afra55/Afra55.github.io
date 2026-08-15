@@ -91,7 +91,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.15-c";
+  const GIF_TOOL_VERSION = "2026.08.15-d";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -7825,7 +7825,7 @@
     const ADB_STORE_BASE = "devtools-adb-base";
     const ADB_STORE_TOKEN = "devtools-adb-token";
     const ADB_FS_ROOTS_HINT =
-      "类似 Android Studio Device File Explorer：可从 / 浏览全盘（无权限目录会提示失败）。支持上传、下载、新建、重命名、剪切/复制后粘贴到当前目录、删除。写入受手机权限限制。";
+      "类似 Android Studio Device File Explorer / Adbrowser：默认从 / 浏览。无权限时尝试 su / run-as；/data/data 无 root 时按包名虚拟列出（仅 debuggable 可读）。支持上传、下载、新建、重命名、剪切/复制后粘贴、删除。";
     const adbBaseInput = $("#adb-base");
     const adbTokenInput = $("#adb-token");
     const adbDot = $("#adb-dot");
@@ -7913,7 +7913,7 @@
     }
 
     function joinRemote(dir, name) {
-      const baseRaw = String(dir || "/sdcard");
+      const baseRaw = String(dir || "/");
       const base = baseRaw === "/" ? "" : baseRaw.replace(/\/+$/, "");
       return `${base}/${String(name || "").replace(/^\/+/, "")}` || "/";
     }
@@ -8114,18 +8114,22 @@
         .map((item) => {
           const full = joinRemote(pathValue, item.name);
           const isDir = item.type === "dir";
-          const meta = [isDir ? "文件夹" : formatBytes(item.size), item.date].filter(Boolean).join(" · ");
+          const virtual = Boolean(item.virtual || item.mode === "virtual");
+          const meta = [
+            virtual ? "包名（虚拟）" : isDir ? "文件夹" : formatBytes(item.size),
+            !virtual && item.date,
+          ]
+            .filter(Boolean)
+            .join(" · ");
           const nameHtml = isDir
             ? `<span class="adb-fs-name">${escapeHtml(item.name)}/</span>`
             : `<span class="adb-fs-name mono">${escapeHtml(item.name)}</span>`;
           const rowAttr = isDir
             ? `data-adb-open="${escapeHtml(full)}"`
             : `data-adb-file="${escapeHtml(full)}" data-adb-file-name="${escapeHtml(item.name)}"`;
-          return `<div class="adb-fs-row${isDir ? " is-dir" : " is-file"}" ${rowAttr}>
-            ${nameHtml}
-            <span class="adb-fs-meta">${escapeHtml(meta)}</span>
-            <div class="adb-fs-actions">
-              ${
+          const actions = virtual
+            ? `<button type="button" class="ghost-btn" data-adb-open="${escapeHtml(full)}">打开</button>`
+            : `${
                 isDir
                   ? `<button type="button" class="ghost-btn" data-adb-open="${escapeHtml(full)}">打开</button>`
                   : `<button type="button" class="secondary-btn" data-adb-dl="${escapeHtml(full)}" data-adb-dl-name="${escapeHtml(item.name)}">下载</button>`
@@ -8133,7 +8137,12 @@
               <button type="button" class="ghost-btn" data-adb-rename="${escapeHtml(full)}" data-adb-rename-name="${escapeHtml(item.name)}">重命名</button>
               <button type="button" class="ghost-btn" data-adb-cut="${escapeHtml(full)}" data-adb-cut-name="${escapeHtml(item.name)}">剪切</button>
               <button type="button" class="ghost-btn" data-adb-copyclip="${escapeHtml(full)}" data-adb-copyclip-name="${escapeHtml(item.name)}">复制</button>
-              <button type="button" class="ghost-btn" data-adb-del="${escapeHtml(full)}" data-adb-del-name="${escapeHtml(item.name)}">删除</button>
+              <button type="button" class="ghost-btn" data-adb-del="${escapeHtml(full)}" data-adb-del-name="${escapeHtml(item.name)}">删除</button>`;
+          return `<div class="adb-fs-row${isDir ? " is-dir" : " is-file"}${virtual ? " is-virtual" : ""}" ${rowAttr}>
+            ${nameHtml}
+            <span class="adb-fs-meta">${escapeHtml(meta)}</span>
+            <div class="adb-fs-actions">
+              ${actions}
             </div>
           </div>`;
         })
@@ -8333,12 +8342,51 @@
       }
     }
 
+    function updateHostToolsProbe(health) {
+      const el = $("#adb-tools-probe");
+      if (!el) return;
+      const tools = health?.tools || {};
+      const bits = ["adb", "keytool", "apksigner", "openssl", "aapt"]
+        .map((name) => {
+          const t = tools[name];
+          if (!t) return null;
+          return `${name}${t.ok ? "✓" : "✗"}`;
+        })
+        .filter(Boolean);
+      const ver = health?.version ? `桥 ${health.version}` : "";
+      const setupBits = [];
+      if (health?.setup?.adb) setupBits.push(health.setup.adb);
+      if (health?.setup?.signing) setupBits.push(health.setup.signing);
+      el.textContent = [
+        bits.length ? `本机工具：${bits.join(" · ")}` : "连接桥后显示本机工具探测",
+        ver,
+        setupBits.length ? setupBits.join(" ") : "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      const signGuide = $("#adb-signing-guide");
+      if (signGuide) {
+        const signingOk =
+          health?.signingOk === true ||
+          tools.keytool?.ok ||
+          tools.apksigner?.ok ||
+          tools.openssl?.ok;
+        // Show guide when connected and signing tools missing; keep hidden until we know
+        if (health?.tools) signGuide.hidden = Boolean(signingOk);
+      }
+    }
+
     async function loadFs(pathValue) {
       if (!adbSelected) return;
-      const pathText = pathValue || adbFsPath?.value || "/sdcard";
+      const pathText = pathValue || adbFsPath?.value || "/";
       if (adbFsPath) adbFsPath.value = pathText;
       renderFsCrumbs(pathText);
       if (adbFsMeta) adbFsMeta.textContent = "加载中…";
+      const accessEl = $("#adb-fs-access");
+      if (accessEl) {
+        accessEl.hidden = true;
+        accessEl.textContent = "";
+      }
       try {
         const data = await adbFetch(
           `/fs/list?serial=${encodeURIComponent(adbSelected)}&path=${encodeURIComponent(pathText)}`
@@ -8348,6 +8396,12 @@
         if (adbFsPath) adbFsPath.value = resolved;
         renderFsCrumbs(resolved);
         if (adbFsMeta) adbFsMeta.textContent = `${(data.entries || []).length} 项 · ${resolved}`;
+        if (accessEl && (data.access || data.note)) {
+          accessEl.hidden = false;
+          accessEl.textContent = [data.access && `访问方式：${data.access}`, data.note]
+            .filter(Boolean)
+            .join(" · ");
+        }
         setError(adbError, "");
       } catch (err) {
         if (adbFsList) adbFsList.innerHTML = `<div class="adb-fs-empty">${escapeHtml(err.message || String(err))}</div>`;
@@ -8460,7 +8514,7 @@
       adbSelected = serial;
       renderAdbDevices();
       await loadAdbInfo(serial);
-      await loadFs(adbFsPath?.value || "/sdcard");
+      await loadFs(adbFsPath?.value || "/");
       if (adbTab === "apps") await loadApps();
       if (adbTab === "info") await loadSnapshot({ silent: true }).catch(() => {});
     }
@@ -8478,7 +8532,7 @@
       renderAdbDevices();
       if (adbSelected) {
         await loadAdbInfo(adbSelected);
-        await loadFs(adbFsPath?.value || "/sdcard");
+        await loadFs(adbFsPath?.value || "/");
       } else {
         fillAdbInfo(null);
         if (adbFsList) adbFsList.innerHTML = `<div class="adb-fs-empty">请选择设备</div>`;
@@ -8497,12 +8551,17 @@
       setError(adbError, "");
       try {
         const health = await adbFetch("/health", { auth: false });
+        updateHostToolsProbe(health);
         if (!health.adb?.ok) {
           adbConnected = true;
           if (adbWorkspace) adbWorkspace.hidden = true;
           if ($("#adb-refresh")) $("#adb-refresh").disabled = true;
-          setAdbStatus("is-err", "桥已启动，但未找到 adb", health.adb?.error || "请安装 platform-tools 并确保 adb 在 PATH 中");
-          setError(adbError, health.adb?.error || "本机未找到 adb 命令");
+          const setupMsg =
+            health.setup?.adb ||
+            health.adb?.setup ||
+            "请安装 platform-tools 并确保 adb 在 PATH 中，然后重启桥";
+          setAdbStatus("is-err", "桥已启动，但未找到 adb", setupMsg);
+          setError(adbError, health.adb?.error || "本机未找到 adb 命令。见上方「本机依赖怎么配？」");
           return false;
         }
         adbConnected = true;
@@ -8514,12 +8573,13 @@
         adbConnected = false;
         if (adbWorkspace) adbWorkspace.hidden = true;
         if ($("#adb-refresh")) $("#adb-refresh").disabled = true;
+        updateHostToolsProbe(null);
         setAdbStatus(
           "is-err",
           "未连接本机桥",
           fromPoll
             ? "已下载完整包的话，请解压并运行启动脚本（同目录需有 server.js），保持窗口打开；正在等待桥启动…"
-            : "请先下载完整 ZIP 并运行启动脚本，再点连接。需本机已安装 adb。"
+            : "请先下载完整 ZIP 并运行启动脚本，再点连接。需本机已安装 adb（见上方配置说明）。"
         );
         if (!fromPoll) setError(adbError, err.message || "无法连接本机桥");
         return false;
@@ -8669,7 +8729,7 @@
       if (!adbSelected) return;
       const files = [...fileList];
       if (!files.length) return;
-      const dir = adbFsPath?.value || "/sdcard";
+      const dir = adbFsPath?.value || "/";
       setError(adbError, "");
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
@@ -8891,7 +8951,10 @@
       }
       if (signing.note) lines.push(signing.note);
       if (!signers.length) {
-        lines.push("签名: 未能解析（需本机 JDK keytool，或 Android build-tools 的 apksigner）");
+        lines.push("签名: 未能解析");
+        lines.push("配置：安装 JDK（keytool）或 Android build-tools（apksigner），可选 openssl；配好后重启 ADB 桥再分析。");
+        const signGuide = $("#adb-signing-guide");
+        if (signGuide) signGuide.hidden = false;
         return lines;
       }
       signers.forEach((s, idx) => {
@@ -9152,15 +9215,15 @@
       updateSelectedMeta();
     });
 
-    $("#adb-fs-go")?.addEventListener("click", () => loadFs(adbFsPath?.value || "/sdcard"));
-    $("#adb-fs-refresh")?.addEventListener("click", () => loadFs(adbFsPath?.value || "/sdcard"));
+    $("#adb-fs-go")?.addEventListener("click", () => loadFs(adbFsPath?.value || "/"));
+    $("#adb-fs-refresh")?.addEventListener("click", () => loadFs(adbFsPath?.value || "/"));
     $("#adb-fs-home")?.addEventListener("click", () => loadFs("/sdcard"));
     $("#adb-fs-download-dir")?.addEventListener("click", () => loadFs("/sdcard/Download"));
     adbFsPath?.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") loadFs(adbFsPath.value || "/sdcard");
+      if (e.key === "Enter") loadFs(adbFsPath.value || "/");
     });
     $("#adb-fs-up")?.addEventListener("click", () => {
-      const cur = adbFsPath?.value || "/sdcard";
+      const cur = adbFsPath?.value || "/";
       if (cur === "/" || cur === "") {
         loadFs("/");
         return;
@@ -9177,7 +9240,7 @@
       if (!adbSelected) return;
       const name = window.prompt("新建文件夹名称");
       if (!name || !name.trim()) return;
-      const target = joinRemote(adbFsPath?.value || "/sdcard", name.trim());
+      const target = joinRemote(adbFsPath?.value || "/", name.trim());
       try {
         await adbFetch("/fs/mkdir", {
           method: "POST",
@@ -9185,7 +9248,7 @@
           body: JSON.stringify({ serial: adbSelected, path: target }),
         });
         toast("已创建文件夹");
-        await loadFs(adbFsPath?.value || "/sdcard");
+        await loadFs(adbFsPath?.value || "/");
       } catch (err) {
         setError(adbError, err.message || String(err));
       }
@@ -9227,7 +9290,7 @@
             body: JSON.stringify({ serial: adbSelected, path: renameBtn.dataset.adbRename, name: next.trim() }),
           });
           toast("已重命名");
-          await loadFs(adbFsPath?.value || "/sdcard");
+          await loadFs(adbFsPath?.value || "/");
         } catch (err) {
           setError(adbError, err.message || String(err));
         }
@@ -9266,7 +9329,7 @@
             body: JSON.stringify({ serial: adbSelected, path: delBtn.dataset.adbDel }),
           });
           toast("已删除");
-          await loadFs(adbFsPath?.value || "/sdcard");
+          await loadFs(adbFsPath?.value || "/");
         } catch (err) {
           setError(adbError, err.message || String(err));
         }
@@ -9282,7 +9345,7 @@
     });
     $("#adb-fs-paste")?.addEventListener("click", async () => {
       if (!adbFsClipboard || !adbSelected) return;
-      const dir = adbFsPath?.value || "/sdcard";
+      const dir = adbFsPath?.value || "/";
       const destName = adbFsClipboard.name || basenameRemote(adbFsClipboard.path);
       const to = joinRemote(dir, destName);
       try {
