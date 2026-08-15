@@ -41,7 +41,7 @@ node server.js
 1. 打开 Tools →「ADB 工具」
 2. 下载对应系统的完整 ZIP，解压后运行启动脚本（勿只保留脚本、删掉 server.js）
 3. 回到网页点击「连接本机桥」
-## 接口（P0–P3，bridge 0.6.6）
+## 接口（P0–P3，bridge 0.6.7）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -70,7 +70,7 @@ node server.js
 | POST | `/media/record` | 录屏任务；`seconds: 0` 无时限，需 `/jobs/:id/cancel` |
 | GET | `/logcat?serial=&lines=&package=&query=&tag=&since=` | 拉取 logcat（无流式接口，请轮询） |
 | POST | `/logcat/clear` | 清空 logcat 缓冲 |
-| POST | `/input` | 点击 / 滑动 / 按键 / 文本 |
+| POST | `/input` | 点击 / 长按 / 双击 / 滑动 / 按键 / 文本 |
 | POST | `/clipboard` | 推送剪贴板（机型相关） |
 | GET | `/device/snapshot?serial=` | 状态快照 |
 | POST | `/device/control` | 常亮 / 开发者选项 / USB 安装等 |

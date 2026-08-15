@@ -35,7 +35,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.6.6";
+const BRIDGE_VERSION = "0.6.7";
 
 /** Preferred quick roots shown in UI (reads are not limited to these) */
 const ROOTS = [
@@ -2166,6 +2166,39 @@ async function runInput(serial, body = {}) {
       ],
       { timeout: 20000 }
     );
+    return { ok: true, action };
+  }
+  if (action === "longpress") {
+    const x = Number(body.x);
+    const y = Number(body.y);
+    const duration = Math.max(300, Math.min(5000, Number(body.duration) || 1000));
+    if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error("坐标无效");
+    // Android: same-point swipe with duration ≈ long-press
+    await adbSerial(
+      serial,
+      [
+        "shell",
+        "input",
+        "swipe",
+        String(Math.round(x)),
+        String(Math.round(y)),
+        String(Math.round(x)),
+        String(Math.round(y)),
+        String(duration),
+      ],
+      { timeout: 20000 }
+    );
+    return { ok: true, action, duration };
+  }
+  if (action === "doubletap") {
+    const x = Number(body.x);
+    const y = Number(body.y);
+    if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error("坐标无效");
+    const sx = String(Math.round(x));
+    const sy = String(Math.round(y));
+    await adbSerial(serial, ["shell", "input", "tap", sx, sy], { timeout: 15000 });
+    await new Promise((r) => setTimeout(r, 80));
+    await adbSerial(serial, ["shell", "input", "tap", sx, sy], { timeout: 15000 });
     return { ok: true, action };
   }
   if (action === "key") {

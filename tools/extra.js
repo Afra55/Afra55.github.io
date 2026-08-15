@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.15-u";
+  const TOOLS_VERSION = "2026.08.15-v";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -10965,60 +10965,137 @@
     );
     {
       const canvas = $("#adb-input-canvas");
+      const LONG_MS = 520;
+      const DOUBLE_MS = 320;
+      const MOVE_THRESH = 10;
       let drag = null;
+      let longTimer = 0;
+      let pendingTap = null; // { x, y, timer }
+
+      const clearLongTimer = () => {
+        if (longTimer) {
+          clearTimeout(longTimer);
+          longTimer = 0;
+        }
+      };
+      const clearPendingTap = () => {
+        if (pendingTap?.timer) clearTimeout(pendingTap.timer);
+        pendingTap = null;
+      };
+      const sendInput = (body) =>
+        adbFetch("/input", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serial: requireCurrentSerial(), ...body }),
+        });
+
       canvas?.addEventListener("pointerdown", (e) => {
         if (!canvas.naturalWidth) return;
         canvas.setPointerCapture?.(e.pointerId);
         const pt = adbCanvasCoords(canvas, e.clientX, e.clientY);
-        drag = { ...pt, moved: false, pointerId: e.pointerId };
+        const now = Date.now();
+        let asDouble = false;
+        if (
+          pendingTap &&
+          now - pendingTap.at < DOUBLE_MS &&
+          Math.abs(pt.x - pendingTap.x) + Math.abs(pt.y - pendingTap.y) <= 36
+        ) {
+          clearPendingTap();
+          asDouble = true;
+        }
+        drag = {
+          ...pt,
+          moved: false,
+          pointerId: e.pointerId,
+          at: now,
+          asDouble,
+          fired: "",
+        };
+        clearLongTimer();
+        if (!asDouble) {
+          longTimer = setTimeout(async () => {
+            longTimer = 0;
+            if (!drag || drag.moved || drag.fired || drag.asDouble) return;
+            drag.fired = "longpress";
+            try {
+              await sendInput({
+                action: "longpress",
+                x: drag.x,
+                y: drag.y,
+                duration: 1000,
+              });
+              if ($("#adb-tap-x")) $("#adb-tap-x").value = String(drag.x);
+              if ($("#adb-tap-y")) $("#adb-tap-y").value = String(drag.y);
+              toast(`已长按 ${drag.x},${drag.y}`);
+              if ($("#adb-input-meta")) {
+                $("#adb-input-meta").textContent = `长按 ${drag.x},${drag.y} · 单指手势：单击 / 长按 / 双击 / 拖拽`;
+              }
+            } catch (err) {
+              setError(adbError, err.message || String(err));
+            }
+          }, LONG_MS);
+        }
         e.preventDefault();
       });
       canvas?.addEventListener("pointermove", (e) => {
         if (!drag || drag.pointerId !== e.pointerId) return;
         const pt = adbCanvasCoords(canvas, e.clientX, e.clientY);
-        if (Math.abs(pt.x - drag.x) + Math.abs(pt.y - drag.y) > 8) drag.moved = true;
+        if (Math.abs(pt.x - drag.x) + Math.abs(pt.y - drag.y) > MOVE_THRESH) {
+          drag.moved = true;
+          clearLongTimer();
+        }
       });
       canvas?.addEventListener("pointerup", async (e) => {
         if (!drag || drag.pointerId !== e.pointerId) return;
         const start = drag;
         drag = null;
+        clearLongTimer();
+        if (start.fired === "longpress") return;
         try {
           const end = adbCanvasCoords(canvas, e.clientX, e.clientY);
           if (start.moved) {
-            await adbFetch("/input", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                serial: requireCurrentSerial(),
-                action: "swipe",
-                x1: start.x,
-                y1: start.y,
-                x2: end.x,
-                y2: end.y,
-                duration: Number($("#adb-swipe-ms")?.value || 300),
-              }),
+            clearPendingTap();
+            await sendInput({
+              action: "swipe",
+              x1: start.x,
+              y1: start.y,
+              x2: end.x,
+              y2: end.y,
+              duration: Number($("#adb-swipe-ms")?.value || 300),
             });
             toast("已滑动");
-          } else {
-            await adbFetch("/input", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                serial: requireCurrentSerial(),
-                action: "tap",
-                x: start.x,
-                y: start.y,
-              }),
-            });
+            return;
+          }
+          if (start.asDouble) {
+            await sendInput({ action: "doubletap", x: start.x, y: start.y });
             if ($("#adb-tap-x")) $("#adb-tap-x").value = String(start.x);
             if ($("#adb-tap-y")) $("#adb-tap-y").value = String(start.y);
-            toast(`已点击 ${start.x},${start.y}`);
+            toast(`已双击 ${start.x},${start.y}`);
+            return;
           }
+          clearPendingTap();
+          pendingTap = {
+            x: start.x,
+            y: start.y,
+            at: Date.now(),
+            timer: setTimeout(async () => {
+              pendingTap = null;
+              try {
+                await sendInput({ action: "tap", x: start.x, y: start.y });
+                if ($("#adb-tap-x")) $("#adb-tap-x").value = String(start.x);
+                if ($("#adb-tap-y")) $("#adb-tap-y").value = String(start.y);
+                toast(`已点击 ${start.x},${start.y}`);
+              } catch (err) {
+                setError(adbError, err.message || String(err));
+              }
+            }, DOUBLE_MS),
+          };
         } catch (err) {
           setError(adbError, err.message || String(err));
         }
       });
       canvas?.addEventListener("pointercancel", () => {
+        clearLongTimer();
         drag = null;
       });
     }

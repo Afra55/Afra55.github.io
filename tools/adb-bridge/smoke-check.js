@@ -118,8 +118,8 @@ async function main() {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
     }
 
-    if (health2.json?.version !== "0.6.6") {
-      throw new Error(`expected bridge version 0.6.6, got ${health2.json?.version}`);
+    if (health2.json?.version !== "0.6.7") {
+      throw new Error(`expected bridge version 0.6.7, got ${health2.json?.version}`);
     }
 
     // Path alias expansion (mirrors server expandFsPathCandidates)
