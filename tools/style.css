@@ -1852,6 +1852,10 @@ a.secondary-btn {
   margin-bottom: 0;
 }
 
+.vsplit-sticky-core {
+  margin: 0;
+}
+
 .vsplit-stage.is-manual #vsplit-video {
   max-height: min(36vh, 280px);
   width: auto;
@@ -1859,9 +1863,17 @@ a.secondary-btn {
   margin-right: auto;
 }
 
+.vsplit-manual-transport {
+  margin-top: 0.45rem;
+  padding: 0.55rem 0.65rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(11, 18, 32, 0.92);
+}
+
 .vsplit-manual {
   margin-top: 0.45rem;
-  padding: 0.65rem 0.7rem 0.7rem;
+  padding: 0.55rem 0.65rem 0.6rem;
   border: 1px solid var(--line);
   border-radius: 14px;
   background: rgba(11, 18, 32, 0.92);
@@ -2052,11 +2064,13 @@ a.secondary-btn {
 }
 
 .vsplit-edit-focus {
+  display: flex;
   width: 100%;
 }
 
 .vsplit-edit-focus .seg-btn {
   flex: 1 1 0;
+  min-height: 2.25rem;
 }
 
 .vsplit-edit-actions {
@@ -2125,7 +2139,7 @@ a.secondary-btn {
 }
 
 @media (max-width: 900px) {
-  .vsplit-stage.is-manual {
+  .vsplit-stage.is-manual .vsplit-sticky-core {
     position: sticky;
     top: 3.85rem;
     z-index: 3;
@@ -2140,9 +2154,14 @@ a.secondary-btn {
     max-height: min(22vh, 168px);
   }
 
-  .vsplit-manual {
+  .vsplit-manual-transport {
     border-radius: 12px;
     padding: 0.4rem 0.5rem 0.45rem;
+  }
+
+  .vsplit-manual {
+    border-radius: 12px;
+    padding: 0.45rem 0.5rem 0.5rem;
   }
 
   .vsplit-transport {
@@ -2153,6 +2172,22 @@ a.secondary-btn {
   .vsplit-transport #vsplit-play {
     min-height: 2.15rem;
     min-width: 3.8rem;
+  }
+
+  .vsplit-edit-bar {
+    position: relative;
+    z-index: 4;
+  }
+
+  .vsplit-edit-focus {
+    display: flex;
+    width: 100%;
+  }
+
+  .vsplit-edit-focus .seg-btn {
+    flex: 1 1 0;
+    min-height: 2.35rem;
+    pointer-events: auto;
   }
 
   .vsplit-mark-btns,

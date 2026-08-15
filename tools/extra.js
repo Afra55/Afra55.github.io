@@ -91,7 +91,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.14-j";
+  const GIF_TOOL_VERSION = "2026.08.14-k";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -4493,6 +4493,7 @@
     const vsplitCountRow = $("#vsplit-count-row");
     const vsplitDurationRow = $("#vsplit-duration-row");
     const vsplitManualRow = $("#vsplit-manual-row");
+    const vsplitManualTransport = $("#vsplit-manual-transport");
     const vsplitStage = $("#vsplit-stage");
     const vsplitScrub = $("#vsplit-scrub");
     const vsplitScrubHit = $("#vsplit-scrub-hit");
@@ -4756,6 +4757,7 @@
       if (vsplitCountRow) vsplitCountRow.hidden = !isCount;
       if (vsplitDurationRow) vsplitDurationRow.hidden = !isDuration;
       if (vsplitManualRow) vsplitManualRow.hidden = !isManual;
+      if (vsplitManualTransport) vsplitManualTransport.hidden = !isManual;
       if (vsplitMarksEl) vsplitMarksEl.hidden = !isManual;
       vsplitStage?.classList.toggle("is-manual", isManual);
       if (!isManual) {
@@ -5166,9 +5168,9 @@
         actions.className = "vsplit-mark-actions btn-row";
         const editBtn = document.createElement("button");
         editBtn.type = "button";
-        editBtn.className = "secondary-btn";
-        editBtn.textContent = vsplitEditIdx === idx ? "编辑中" : "编辑";
-        editBtn.disabled = vsplitEditIdx === idx;
+        editBtn.className = vsplitEditIdx === idx ? "ghost-btn" : "secondary-btn";
+        editBtn.textContent = vsplitEditIdx === idx ? "取消编辑" : "编辑";
+        editBtn.disabled = false;
         const jumpStart = document.createElement("button");
         jumpStart.type = "button";
         jumpStart.className = "ghost-btn";
@@ -5185,7 +5187,14 @@
         del.textContent = "删除";
         actions.append(editBtn, jumpStart, jumpEnd, del);
 
-        editBtn.addEventListener("click", () => enterVsplitEdit(idx));
+        editBtn.addEventListener("click", () => {
+          if (vsplitEditIdx === idx) {
+            exitVsplitEdit();
+            paintVsplitNow();
+            return;
+          }
+          enterVsplitEdit(idx);
+        });
         jumpStart.addEventListener("click", () => {
           if (mark.start != null) seekVsplitPreview(mark.start);
         });
@@ -5218,7 +5227,7 @@
         return;
       }
       if (vsplitEditIdx >= 0) return;
-      pauseVsplitPreview();
+      // 打点不打断播放，便于边播边标
       const t = currentMarkTime();
       if (vsplitDraftStart == null) {
         vsplitDraftStart = t;
@@ -5739,15 +5748,20 @@
     });
     $("#vsplit-edit-focus")?.addEventListener("click", (e) => {
       const btn = e.target?.closest?.("[data-edit-focus]");
-      if (!btn) return;
-      vsplitEditFocus = btn.dataset.editFocus === "end" ? "end" : "start";
+      if (!btn || vsplitEditIdx < 0) return;
+      e.preventDefault();
+      const nextFocus = btn.dataset.editFocus === "end" ? "end" : "start";
+      if (nextFocus === vsplitEditFocus) return;
+      vsplitEditFocus = nextFocus;
       const mark = vsplitMarks[vsplitEditIdx];
       if (mark) {
         const jump = vsplitEditFocus === "end" ? mark.end : mark.start;
-        if (jump != null) seekVsplitPreview(jump);
+        // 切换端点时仅预览跳转，不自动写入；保留播放状态
+        if (jump != null) seekVsplitPreview(jump, { keepPlaying: true });
       }
       setVsplitButtons();
       paintVsplitDraft();
+      paintVsplitScrubMarks();
     });
     vsplitNudgeM1?.addEventListener("click", () => nudgeVsplitPreview(-1));
     vsplitNudgeM01?.addEventListener("click", () => nudgeVsplitPreview(-0.1));

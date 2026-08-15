@@ -536,12 +536,15 @@ async function main() {
   await pageMarks.click("#vsplit-mode-m");
   const manualUi = await pageMarks.evaluate(() => {
     const row = document.getElementById("vsplit-manual-row");
+    const transport = document.getElementById("vsplit-manual-transport");
     const stage = document.getElementById("vsplit-stage");
     const scrub = document.getElementById("vsplit-scrub");
     const video = document.getElementById("vsplit-video");
+    const sticky = document.getElementById("vsplit-sticky-core");
     return {
       mode: window.DevToolsVsplit?.getMode?.(),
       rowVisible: row ? !row.hidden : false,
+      transportVisible: transport ? !transport.hidden : false,
       stageManual: stage?.classList.contains("is-manual"),
       scrubExists: Boolean(scrub),
       scrubDisabled: scrub?.disabled,
@@ -552,11 +555,19 @@ async function main() {
       hasNudge: Boolean(document.getElementById("vsplit-nudge-m01")),
       hasScrubMarks: Boolean(document.getElementById("vsplit-scrub-marks")),
       hasQuickExport: Boolean(document.getElementById("vsplit-quick-export")),
+      editOutsideSticky: Boolean(
+        sticky &&
+          document.getElementById("vsplit-edit-bar") &&
+          !sticky.contains(document.getElementById("vsplit-edit-bar"))
+      ),
       scrubUnderVideo: Boolean(stage?.contains(scrub) && stage?.contains(video)),
     };
   });
   if (manualUi.mode !== "manual" || !manualUi.rowVisible || !manualUi.stageManual) {
     throw new Error(`manual mode UI failed: ${JSON.stringify(manualUi)}`);
+  }
+  if (!manualUi.transportVisible) {
+    throw new Error(`manual transport should show: ${JSON.stringify(manualUi)}`);
   }
   if (!manualUi.scrubExists || manualUi.scrubDisabled || !manualUi.scrubUnderVideo) {
     throw new Error(`scrub UI missing/disabled: ${JSON.stringify(manualUi)}`);
@@ -566,6 +577,9 @@ async function main() {
   }
   if (!manualUi.hasScrubMarks || !manualUi.hasQuickExport) {
     throw new Error(`scrub marks / quick export missing: ${JSON.stringify(manualUi)}`);
+  }
+  if (!manualUi.editOutsideSticky) {
+    throw new Error(`edit bar should be outside sticky core: ${JSON.stringify(manualUi)}`);
   }
   if (manualUi.videoControls) {
     throw new Error("manual mode should hide native video controls");
@@ -583,11 +597,18 @@ async function main() {
       scrub.dispatchEvent(new Event("change", { bubbles: true }));
       await new Promise((r) => setTimeout(r, 80));
     };
+    // 边播边打点：打点不应暂停
+    await video.play().catch(() => {});
     await seekByScrub(0.12);
+    await video.play().catch(() => {});
+    const playingBeforeTap = !video.paused;
     document.getElementById("vsplit-mark-tap")?.click();
     const afterStart = (document.getElementById("vsplit-mark-tap")?.textContent || "").trim();
+    const stillPlayingAfterStart = !video.paused;
     await seekByScrub(0.55);
+    await video.play().catch(() => {});
     document.getElementById("vsplit-mark-tap")?.click();
+    const stillPlayingAfterEnd = !video.paused;
     await seekByScrub(0.62);
     document.getElementById("vsplit-mark-tap")?.click();
     await seekByScrub(0.9);
@@ -599,8 +620,16 @@ async function main() {
     const gifDisabled = document.getElementById("vsplit-gif-bb")?.disabled;
     const quickHidden = document.getElementById("vsplit-quick-export")?.hidden;
     const scrubDotCount = document.querySelectorAll("#vsplit-scrub-marks .vsplit-scrub-mark").length;
-    // 编辑第一段：删终点 → 不完整 → 拖滑块松手即补终点（无需再点「设为」）
+    // 编辑第一段：切换起终点、取消编辑
     window.DevToolsVsplit.enterEdit(0);
+    document.querySelector('#vsplit-edit-focus [data-edit-focus="end"]')?.click();
+    const focusEndActive = document
+      .querySelector('#vsplit-edit-focus [data-edit-focus="end"]')
+      ?.classList.contains("is-active");
+    document.querySelector('#vsplit-edit-focus [data-edit-focus="start"]')?.click();
+    const focusStartActive = document
+      .querySelector('#vsplit-edit-focus [data-edit-focus="start"]')
+      ?.classList.contains("is-active");
     document.getElementById("vsplit-edit-del-end")?.click();
     const incomplete = window.DevToolsVsplit.getMarks()?.[0] || null;
     // 未完成段不应挡住完整段的 range 计算
@@ -616,11 +645,17 @@ async function main() {
     })();
     document.querySelector('#vsplit-edit-focus [data-edit-focus="end"]')?.click();
     await seekByScrub(0.45);
-    // 拖完即生效：不再强制点 apply
     const afterAuto = window.DevToolsVsplit?.getMarks?.() || [];
+    // 列表「取消编辑」应能退出
+    const cancelBtn = [...document.querySelectorAll("#vsplit-marks .vsplit-mark button")].find(
+      (b) => (b.textContent || "").trim() === "取消编辑"
+    );
+    cancelBtn?.click();
+    const editIdxAfterCancel = window.DevToolsVsplit?.getEditIdx?.();
+    // 再进编辑并用「退出编辑」
+    window.DevToolsVsplit.enterEdit(0);
     document.getElementById("vsplit-edit-done")?.click();
     const afterEdit = window.DevToolsVsplit?.getMarks?.() || [];
-    // 微调按钮
     const beforeNudge = Number(video.currentTime) || 0;
     document.getElementById("vsplit-nudge-p01")?.click();
     await new Promise((r) => setTimeout(r, 40));
@@ -634,19 +669,34 @@ async function main() {
       quickHidden,
       scrubDotCount,
       afterStart,
+      playingBeforeTap,
+      stillPlayingAfterStart,
+      stillPlayingAfterEnd,
+      focusEndActive,
+      focusStartActive,
       incomplete,
       rangesWithIncomplete,
       afterAuto,
+      editIdxAfterCancel,
       afterEdit,
       draft: window.DevToolsVsplit?.getDraftStart?.(),
       editIdx: window.DevToolsVsplit?.getEditIdx?.(),
       scrubbedTime: Number(video.currentTime) || 0,
       nudgeDelta: afterNudge - beforeNudge,
-      applyLabel: (document.getElementById("vsplit-edit-apply")?.textContent || "").trim(),
+      doneLabel: (document.getElementById("vsplit-edit-done")?.textContent || "").trim(),
     };
   });
   if (manualMarks.afterStart !== "打终点") {
     throw new Error(`tap should switch to 打终点, got ${manualMarks.afterStart}`);
+  }
+  if (!manualMarks.stillPlayingAfterStart || !manualMarks.stillPlayingAfterEnd) {
+    throw new Error(`mark tap should not pause video: ${JSON.stringify(manualMarks)}`);
+  }
+  if (!manualMarks.focusEndActive || !manualMarks.focusStartActive) {
+    throw new Error(`edit focus toggle failed: ${JSON.stringify(manualMarks)}`);
+  }
+  if (manualMarks.editIdxAfterCancel !== -1) {
+    throw new Error(`cancel edit from list failed: ${JSON.stringify(manualMarks)}`);
   }
   if (manualMarks.marks.length !== 2 || manualMarks.rows !== 2) {
     throw new Error(`expected 2 marks, got ${JSON.stringify(manualMarks)}`);
