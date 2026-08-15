@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260814g" />
+  <link rel="stylesheet" href="./style.css?v=20260814h" />
   <link rel="stylesheet" href="./workspace-nav.css?v=20260814f" />
 </head>
 <body>
@@ -1205,9 +1205,6 @@ hello@world.org</textarea>
           <button type="button" class="ghost-btn" id="vsplit-clear">清空</button>
         </div>
         <p class="hint" id="vsplit-meta">支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。可等分、按时长或手动选段；关闭页面会释放本次视频和 GIF。</p>
-        <div class="gif-preview-wrap">
-          <video id="vsplit-video" class="img-preview gif-preview" controls playsinline muted preload="metadata" hidden></video>
-        </div>
         <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem;align-items:center">
           <span class="seg" role="group" aria-label="切分方式">
             <button type="button" class="seg-btn is-active" id="vsplit-mode-n" data-vsplit-mode="count">等分成 n 份</button>
@@ -1227,16 +1224,29 @@ hello@world.org</textarea>
           <label for="vsplit-s">秒</label>
           <input id="vsplit-s" class="mono meta-input" type="number" min="0" max="59.9" step="0.1" value="15" />
         </div>
-        <div class="vsplit-manual" id="vsplit-manual-row" hidden>
-          <p class="hint" id="vsplit-manual-now">拖动进度条定位后，点「设为起点 / 终点」打点；可改秒数或删除。</p>
-          <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
-            <button type="button" class="secondary-btn" id="vsplit-mark-start" disabled>设为起点</button>
-            <button type="button" class="secondary-btn" id="vsplit-mark-end" disabled>设为终点</button>
-            <button type="button" class="ghost-btn" id="vsplit-mark-clear" disabled>清空标记</button>
+
+        <div class="vsplit-stage" id="vsplit-stage">
+          <div class="gif-preview-wrap vsplit-preview-wrap">
+            <video id="vsplit-video" class="img-preview gif-preview" controls playsinline muted preload="metadata" hidden></video>
           </div>
-          <p class="hint tight" id="vsplit-manual-draft" hidden></p>
-          <div class="vsplit-marks" id="vsplit-marks" aria-live="polite"></div>
+          <div class="vsplit-manual" id="vsplit-manual-row" hidden>
+            <div class="vsplit-scrub-block">
+              <label class="visually-hidden" for="vsplit-scrub">拖动预览进度</label>
+              <input id="vsplit-scrub" class="vsplit-scrub" type="range" min="0" max="1000" value="0" step="1" disabled />
+              <div class="vsplit-scrub-meta">
+                <span class="mono" id="vsplit-manual-now">0:00 / 0:00</span>
+                <span class="hint tight" id="vsplit-manual-count">0 段</span>
+              </div>
+            </div>
+            <div class="btn-row tool-actions vsplit-mark-btns">
+              <button type="button" class="secondary-btn" id="vsplit-mark-start" disabled>设为起点</button>
+              <button type="button" class="secondary-btn" id="vsplit-mark-end" disabled>设为终点</button>
+              <button type="button" class="ghost-btn" id="vsplit-mark-clear" disabled>清空</button>
+            </div>
+            <p class="hint tight" id="vsplit-manual-draft" hidden></p>
+          </div>
         </div>
+        <div class="vsplit-marks" id="vsplit-marks" aria-live="polite"></div>
         <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
           <label for="vsplit-fps">高清 GIF 帧率</label>
           <input id="vsplit-fps" class="mono meta-input" type="number" min="2" max="15" step="1" value="15" />
@@ -1973,7 +1983,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260814g"></script>
+  <script src="./extra.js?v=20260814h"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>

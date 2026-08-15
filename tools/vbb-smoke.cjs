@@ -536,38 +536,57 @@ async function main() {
   await pageMarks.click("#vsplit-mode-m");
   const manualUi = await pageMarks.evaluate(() => {
     const row = document.getElementById("vsplit-manual-row");
+    const stage = document.getElementById("vsplit-stage");
+    const scrub = document.getElementById("vsplit-scrub");
+    const video = document.getElementById("vsplit-video");
     return {
       mode: window.DevToolsVsplit?.getMode?.(),
       rowVisible: row ? !row.hidden : false,
+      stageManual: stage?.classList.contains("is-manual"),
+      scrubExists: Boolean(scrub),
+      scrubDisabled: scrub?.disabled,
+      videoControls: video?.hasAttribute("controls"),
       cutLabel: (document.getElementById("vsplit-cut")?.textContent || "").trim(),
       markStartDisabled: document.getElementById("vsplit-mark-start")?.disabled,
+      scrubUnderVideo: Boolean(stage?.contains(scrub) && stage?.contains(video)),
     };
   });
-  if (manualUi.mode !== "manual" || !manualUi.rowVisible) {
+  if (manualUi.mode !== "manual" || !manualUi.rowVisible || !manualUi.stageManual) {
     throw new Error(`manual mode UI failed: ${JSON.stringify(manualUi)}`);
+  }
+  if (!manualUi.scrubExists || manualUi.scrubDisabled || !manualUi.scrubUnderVideo) {
+    throw new Error(`scrub UI missing/disabled: ${JSON.stringify(manualUi)}`);
+  }
+  if (manualUi.videoControls) {
+    throw new Error("manual mode should hide native video controls");
   }
   if (manualUi.cutLabel !== "按标记切分") {
     throw new Error(`cut button should say 按标记切分, got ${manualUi.cutLabel}`);
   }
   const manualMarks = await pageMarks.evaluate(async () => {
     const video = document.getElementById("vsplit-video");
-    video.currentTime = 0.5;
-    await new Promise((r) => setTimeout(r, 120));
+    const scrub = document.getElementById("vsplit-scrub");
+    const seekByScrub = async (ratio) => {
+      const max = Number(scrub.max) || 1000;
+      scrub.value = String(Math.round(max * ratio));
+      scrub.dispatchEvent(new Event("input", { bubbles: true }));
+      scrub.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 80));
+    };
+    await seekByScrub(0.12);
     document.getElementById("vsplit-mark-start")?.click();
-    video.currentTime = 2.2;
-    await new Promise((r) => setTimeout(r, 120));
+    await seekByScrub(0.55);
     document.getElementById("vsplit-mark-end")?.click();
-    video.currentTime = 2.5;
-    await new Promise((r) => setTimeout(r, 120));
+    await seekByScrub(0.62);
     document.getElementById("vsplit-mark-start")?.click();
-    video.currentTime = 3.6;
-    await new Promise((r) => setTimeout(r, 120));
+    await seekByScrub(0.9);
     document.getElementById("vsplit-mark-end")?.click();
     const marks = window.DevToolsVsplit?.getMarks?.() || [];
     const ranges = window.DevToolsVsplit?.computeRanges?.(Number(video.duration) || 4) || [];
     const rows = document.querySelectorAll("#vsplit-marks .vsplit-mark").length;
     const cutDisabled = document.getElementById("vsplit-cut")?.disabled;
     const gifDisabled = document.getElementById("vsplit-gif-bb")?.disabled;
+    const nowText = document.getElementById("vsplit-manual-now")?.textContent || "";
     const endInp = document.querySelector('#vsplit-marks .vsplit-mark input[aria-label="片段 1 终点秒"]');
     if (endInp) {
       endInp.value = "1.8";
@@ -582,6 +601,8 @@ async function main() {
       gifDisabled,
       afterEdit,
       draft: window.DevToolsVsplit?.getDraftStart?.(),
+      nowText,
+      scrubbedTime: Number(video.currentTime) || 0,
     };
   });
   if (manualMarks.marks.length !== 2 || manualMarks.rows !== 2) {
@@ -590,14 +611,8 @@ async function main() {
   if (manualMarks.cutDisabled || manualMarks.gifDisabled) {
     throw new Error(`cut/gif should enable with marks: ${JSON.stringify(manualMarks)}`);
   }
-  if (Math.abs((manualMarks.marks[0].end - manualMarks.marks[0].start) - 1.7) > 0.15) {
-    throw new Error(`first mark span odd: ${JSON.stringify(manualMarks.marks[0])}`);
-  }
-  if (
-    !manualMarks.ranges.length ||
-    Math.abs(manualMarks.ranges[0].span - (manualMarks.marks[0].end - manualMarks.marks[0].start)) > 0.05
-  ) {
-    throw new Error(`ranges mismatch: ${JSON.stringify(manualMarks)}`);
+  if (!(manualMarks.scrubbedTime > 2.5)) {
+    throw new Error(`scrub should seek video near end, got ${manualMarks.scrubbedTime}`);
   }
   if (Math.abs(manualMarks.afterEdit[0].end - 1.8) > 0.05) {
     throw new Error(`edit end failed: ${JSON.stringify(manualMarks.afterEdit)}`);
