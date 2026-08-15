@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.15-q";
+  const TOOLS_VERSION = "2026.08.15-r";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -8078,7 +8078,7 @@
     const ADB_STORE_BASE = "devtools-adb-base";
     const ADB_STORE_TOKEN = "devtools-adb-token";
     const ADB_FS_ROOTS_HINT_HTML =
-      "默认从 / 浏览全盘。「内部存储」= /storage/emulated/0（兼容 /sdcard）。勾选可批量下载、删除、移动。单击可预览图片 / 文本 / 音视频。";
+      "单击文件夹打开、单击文件预览。右侧 ⋯ 或右键可下载 / 移动 / 复制 / 删除；勾选可批量操作。「内部存储」= /storage/emulated/0。";
     const adbBaseInput = $("#adb-base");
     const adbTokenInput = $("#adb-token");
     const adbDot = $("#adb-dot");
@@ -8556,11 +8556,128 @@
       };
     }
 
+    function hideFsCtxMenu() {
+      const menu = $("#adb-fs-ctx");
+      if (menu) menu.hidden = true;
+    }
+
+    function ensureFsCtxMenu() {
+      let menu = $("#adb-fs-ctx");
+      if (menu) return menu;
+      menu = document.createElement("div");
+      menu.id = "adb-fs-ctx";
+      menu.className = "adb-fs-ctx";
+      menu.hidden = true;
+      menu.setAttribute("role", "menu");
+      document.body.appendChild(menu);
+      menu.addEventListener("click", async (e) => {
+        const btn = e.target.closest("[data-adb-fs-act]");
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const action = btn.dataset.adbFsAct || "";
+        const entry = {
+          path: menu.dataset.path || "",
+          name: menu.dataset.name || "",
+          isDir: menu.dataset.isDir === "1",
+          virtual: menu.dataset.virtual === "1",
+          size: menu.dataset.size || "",
+        };
+        hideFsCtxMenu();
+        await runFsEntryAction(action, entry);
+      });
+      return menu;
+    }
+
+    function showFsCtxMenu(entry, clientX, clientY) {
+      if (!entry || entry.virtual) return;
+      const menu = ensureFsCtxMenu();
+      menu.dataset.path = entry.path;
+      menu.dataset.name = entry.name || "";
+      menu.dataset.isDir = entry.isDir ? "1" : "0";
+      menu.dataset.virtual = entry.virtual ? "1" : "0";
+      menu.dataset.size = entry.size || "";
+      const bits = [];
+      if (!entry.isDir) {
+        bits.push(`<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-fs-act="preview">预览</button>`);
+        bits.push(`<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-fs-act="download">下载</button>`);
+      }
+      bits.push(`<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-fs-act="rename">重命名</button>`);
+      bits.push(`<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-fs-act="cut">移动</button>`);
+      bits.push(`<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-fs-act="copy">复制</button>`);
+      bits.push(`<button type="button" class="adb-fs-ctx-item is-danger" role="menuitem" data-adb-fs-act="delete">删除</button>`);
+      menu.innerHTML = bits.join("");
+      menu.hidden = false;
+      const pad = 8;
+      const mw = menu.offsetWidth || 160;
+      const mh = menu.offsetHeight || 200;
+      let left = Number(clientX) || pad;
+      let top = Number(clientY) || pad;
+      left = Math.max(pad, Math.min(left, window.innerWidth - mw - pad));
+      top = Math.max(pad, Math.min(top, window.innerHeight - mh - pad));
+      menu.style.left = `${left}px`;
+      menu.style.top = `${top}px`;
+    }
+
+    async function runFsEntryAction(action, entry) {
+      if (!entry?.path || !adbSelected) return;
+      try {
+        if (action === "open") {
+          await loadFs(entry.path);
+          return;
+        }
+        if (action === "preview") {
+          adbFsSelected = entry.path;
+          await previewAdbFile(entry.path, entry.name, entry.size);
+          return;
+        }
+        if (action === "download") {
+          await downloadAdbFile(entry.path, entry.name);
+          return;
+        }
+        if (action === "rename") {
+          const next = window.prompt("新名称", entry.name || "");
+          if (!next || !next.trim()) return;
+          await adbFetch("/fs/rename", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ serial: adbSelected, path: entry.path, name: next.trim() }),
+          });
+          toast("已重命名");
+          await loadFs(adbFsPath?.value || "/");
+          return;
+        }
+        if (action === "cut") {
+          setFsClipboard("cut", [{ path: entry.path, name: entry.name }]);
+          toast("已准备移动，请打开目标目录后点「粘贴到此处」");
+          return;
+        }
+        if (action === "copy") {
+          setFsClipboard("copy", [{ path: entry.path, name: entry.name }]);
+          toast("已复制，请打开目标目录后点「粘贴到此处」");
+          return;
+        }
+        if (action === "delete") {
+          if (!window.confirm(`确认删除「${entry.name || entry.path}」？此操作不可恢复。`)) return;
+          await adbFetch("/fs/delete", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ serial: adbSelected, path: entry.path }),
+          });
+          toast("已删除");
+          await loadFs(adbFsPath?.value || "/");
+        }
+      } catch (err) {
+        setError(adbError, err.message || String(err));
+      }
+    }
+
     function renderFsEntries(pathValue, entries) {
       if (!adbFsList) return;
       adbFsSelected = "";
       clearFsChecked();
       clearAdbFsPreview();
+      hideFsCtxMenu();
       if (!entries?.length) {
         adbFsList.innerHTML = `<div class="adb-fs-empty">目录为空或无权读取</div>`;
         return;
@@ -8590,18 +8707,9 @@
           const checkHtml = virtual
             ? ""
             : `<input type="checkbox" class="adb-fs-check" data-adb-check-path="${escapeHtml(full)}" aria-label="选择 ${escapeHtml(item.name)}" />`;
-          const actions = virtual
-            ? `<button type="button" class="ghost-btn" data-adb-open="${escapeHtml(full)}">打开</button>`
-            : `${
-                isDir
-                  ? `<button type="button" class="ghost-btn" data-adb-open="${escapeHtml(full)}">打开</button>`
-                  : `<button type="button" class="secondary-btn" data-adb-preview="${escapeHtml(full)}" data-adb-preview-name="${escapeHtml(item.name)}" data-adb-preview-size="${escapeHtml(String(item.size ?? ""))}">预览</button>
-              <button type="button" class="ghost-btn" data-adb-dl="${escapeHtml(full)}" data-adb-dl-name="${escapeHtml(item.name)}">下载</button>`
-              }
-              <button type="button" class="ghost-btn" data-adb-rename="${escapeHtml(full)}" data-adb-rename-name="${escapeHtml(item.name)}">重命名</button>
-              <button type="button" class="ghost-btn" data-adb-cut="${escapeHtml(full)}" data-adb-cut-name="${escapeHtml(item.name)}">移动</button>
-              <button type="button" class="ghost-btn" data-adb-copyclip="${escapeHtml(full)}" data-adb-copyclip-name="${escapeHtml(item.name)}">复制</button>
-              <button type="button" class="ghost-btn" data-adb-del="${escapeHtml(full)}" data-adb-del-name="${escapeHtml(item.name)}">删除</button>`;
+          const moreHtml = virtual
+            ? ""
+            : `<button type="button" class="adb-fs-more" data-adb-fs-more aria-label="更多操作" title="更多操作">⋯</button>`;
           return `<div class="adb-fs-row${isDir ? " is-dir" : " is-file"}${virtual ? " is-virtual" : ""}" ${rowAttr}>
             <div class="adb-fs-row-main">
               ${checkHtml}
@@ -8609,9 +8717,7 @@
                 ${nameHtml}
                 <span class="adb-fs-meta">${escapeHtml(meta)}</span>
               </div>
-            </div>
-            <div class="adb-fs-actions">
-              ${actions}
+              ${moreHtml}
             </div>
           </div>`;
         })
@@ -9788,88 +9894,20 @@
     });
 
     adbFsList?.addEventListener("click", async (e) => {
-      const inActions = Boolean(e.target.closest(".adb-fs-actions"));
-      const openBtn = e.target.closest("[data-adb-open]");
-      if (openBtn && (!inActions || e.target.closest("button[data-adb-open]"))) {
-        loadFs(openBtn.dataset.adbOpen);
+      const moreBtn = e.target.closest("[data-adb-fs-more]");
+      if (moreBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const row = moreBtn.closest(".adb-fs-row");
+        const entry = collectFsEntrySelection(row);
+        const rect = moreBtn.getBoundingClientRect();
+        showFsCtxMenu(entry, rect.left, rect.bottom + 4);
         return;
       }
-      const dlBtn = e.target.closest("[data-adb-dl]");
-      if (dlBtn) {
-        try {
-          await downloadAdbFile(dlBtn.dataset.adbDl, dlBtn.dataset.adbDlName);
-        } catch (err) {
-          setError(adbError, err.message || String(err));
-        }
-        return;
-      }
-      const previewBtn = e.target.closest("[data-adb-preview]");
-      if (previewBtn) {
-        const row = previewBtn.closest(".adb-fs-row");
-        adbFsList.querySelectorAll(".adb-fs-row.is-selected").forEach((r) => r.classList.remove("is-selected"));
-        if (row) row.classList.add("is-selected");
-        adbFsSelected = previewBtn.dataset.adbPreview || "";
-        previewAdbFile(
-          previewBtn.dataset.adbPreview,
-          previewBtn.dataset.adbPreviewName,
-          previewBtn.dataset.adbPreviewSize
-        ).catch((err) => setError(adbError, err.message || String(err)));
-        return;
-      }
-      const renameBtn = e.target.closest("[data-adb-rename]");
-      if (renameBtn) {
-        const next = window.prompt("新名称", renameBtn.dataset.adbRenameName || "");
-        if (!next || !next.trim()) return;
-        try {
-          await adbFetch("/fs/rename", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ serial: adbSelected, path: renameBtn.dataset.adbRename, name: next.trim() }),
-          });
-          toast("已重命名");
-          await loadFs(adbFsPath?.value || "/");
-        } catch (err) {
-          setError(adbError, err.message || String(err));
-        }
-        return;
-      }
-      const cutBtn = e.target.closest("[data-adb-cut]");
-      if (cutBtn) {
-        setFsClipboard("cut", [
-          { path: cutBtn.dataset.adbCut, name: cutBtn.dataset.adbCutName || "" },
-        ]);
-        toast("已准备移动，请打开目标目录后点「粘贴到此处」");
-        return;
-      }
-      const copyClipBtn = e.target.closest("[data-adb-copyclip]");
-      if (copyClipBtn) {
-        setFsClipboard("copy", [
-          { path: copyClipBtn.dataset.adbCopyclip, name: copyClipBtn.dataset.adbCopyclipName || "" },
-        ]);
-        toast("已复制，请打开目标目录后点「粘贴到此处」");
-        return;
-      }
-      const delBtn = e.target.closest("[data-adb-del]");
-      if (delBtn) {
-        const name = delBtn.dataset.adbDelName || delBtn.dataset.adbDel;
-        if (!window.confirm(`确认删除「${name}」？此操作不可恢复。`)) return;
-        try {
-          await adbFetch("/fs/delete", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ serial: adbSelected, path: delBtn.dataset.adbDel }),
-          });
-          toast("已删除");
-          await loadFs(adbFsPath?.value || "/");
-        } catch (err) {
-          setError(adbError, err.message || String(err));
-        }
-        return;
-      }
-      if (inActions) return;
       const check = e.target.closest(".adb-fs-check");
       if (check) {
         e.stopPropagation();
+        hideFsCtxMenu();
         const row = check.closest(".adb-fs-row");
         const entry = collectFsEntrySelection(row);
         if (!entry || entry.virtual) return;
@@ -9878,18 +9916,39 @@
         syncFsBatchBar();
         return;
       }
-      const fileRow = e.target.closest(".adb-fs-row[data-adb-file]");
-      if (fileRow) {
-        adbFsList.querySelectorAll(".adb-fs-row.is-selected").forEach((row) => row.classList.remove("is-selected"));
-        fileRow.classList.add("is-selected");
-        adbFsSelected = fileRow.dataset.adbFile || "";
-        previewAdbFile(
-          fileRow.dataset.adbFile,
-          fileRow.dataset.adbFileName,
-          fileRow.dataset.adbFileSize
-        ).catch((err) => setError(adbError, err.message || String(err)));
+      hideFsCtxMenu();
+      const row = e.target.closest(".adb-fs-row[data-adb-entry]");
+      if (!row) return;
+      // 单击：目录/虚拟包打开，文件预览
+      if (row.dataset.adbOpen) {
+        loadFs(row.dataset.adbOpen);
+        return;
+      }
+      if (row.dataset.adbFile) {
+        adbFsList.querySelectorAll(".adb-fs-row.is-selected").forEach((r) => r.classList.remove("is-selected"));
+        row.classList.add("is-selected");
+        adbFsSelected = row.dataset.adbFile || "";
+        previewAdbFile(row.dataset.adbFile, row.dataset.adbFileName, row.dataset.adbFileSize).catch((err) =>
+          setError(adbError, err.message || String(err))
+        );
       }
     });
+    adbFsList?.addEventListener("contextmenu", (e) => {
+      const row = e.target.closest(".adb-fs-row[data-adb-entry]");
+      if (!row || row.classList.contains("is-virtual")) return;
+      if (e.target.closest(".adb-fs-check")) return;
+      e.preventDefault();
+      const entry = collectFsEntrySelection(row);
+      showFsCtxMenu(entry, e.clientX, e.clientY);
+    });
+    document.addEventListener("click", (e) => {
+      if (e.target.closest("#adb-fs-ctx") || e.target.closest("[data-adb-fs-more]")) return;
+      hideFsCtxMenu();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") hideFsCtxMenu();
+    });
+    window.addEventListener("scroll", hideFsCtxMenu, true);
     $("#adb-fs-preview-close")?.addEventListener("click", () => clearAdbFsPreview());
     $("#adb-fs-select-all")?.addEventListener("click", () => {
       adbFsList?.querySelectorAll(".adb-fs-row[data-adb-entry]:not(.is-virtual)").forEach((row) => {
@@ -9982,18 +10041,22 @@
       }
     });
     adbFsList?.addEventListener("dblclick", (e) => {
-      if (e.target.closest(".adb-fs-actions")) return;
-      const fileRow = e.target.closest(".adb-fs-row[data-adb-file]");
-      if (!fileRow) return;
+      if (e.target.closest(".adb-fs-check, .adb-fs-more, #adb-fs-ctx")) return;
+      const row = e.target.closest(".adb-fs-row[data-adb-entry]");
+      if (!row) return;
       e.preventDefault();
-      adbFsList.querySelectorAll(".adb-fs-row.is-selected").forEach((row) => row.classList.remove("is-selected"));
-      fileRow.classList.add("is-selected");
-      adbFsSelected = fileRow.dataset.adbFile || "";
-      previewAdbFile(
-        fileRow.dataset.adbFile,
-        fileRow.dataset.adbFileName,
-        fileRow.dataset.adbFileSize
-      ).catch((err) => setError(adbError, err.message || String(err)));
+      if (row.dataset.adbOpen) {
+        loadFs(row.dataset.adbOpen);
+        return;
+      }
+      if (row.dataset.adbFile) {
+        adbFsList.querySelectorAll(".adb-fs-row.is-selected").forEach((r) => r.classList.remove("is-selected"));
+        row.classList.add("is-selected");
+        adbFsSelected = row.dataset.adbFile || "";
+        previewAdbFile(row.dataset.adbFile, row.dataset.adbFileName, row.dataset.adbFileSize).catch((err) =>
+          setError(adbError, err.message || String(err))
+        );
+      }
     });
     $("#adb-fs-crumbs")?.addEventListener("click", (e) => {
       const openBtn = e.target.closest("[data-adb-open]");
