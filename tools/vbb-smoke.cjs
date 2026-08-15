@@ -554,6 +554,8 @@ async function main() {
       tapLabel: (document.getElementById("vsplit-mark-tap")?.textContent || "").trim(),
       hasNudge: Boolean(document.getElementById("vsplit-nudge-m01")),
       hasScrubMarks: Boolean(document.getElementById("vsplit-scrub-marks")),
+      hasMarkChips: Boolean(document.getElementById("vsplit-mark-chips")),
+      hasMarkPicker: Boolean(document.getElementById("vsplit-mark-picker")),
       hasQuickExport: Boolean(document.getElementById("vsplit-quick-export")),
       hasFsOpen: Boolean(document.getElementById("vsplit-fs-open")),
       hasFsLayer: Boolean(document.getElementById("vsplit-fs")),
@@ -592,6 +594,9 @@ async function main() {
   }
   if (!manualUi.hasScrubMarks || !manualUi.hasQuickExport) {
     throw new Error(`scrub marks / quick export missing: ${JSON.stringify(manualUi)}`);
+  }
+  if (!manualUi.hasMarkChips || !manualUi.hasMarkPicker) {
+    throw new Error(`mark chips / dense picker missing: ${JSON.stringify(manualUi)}`);
   }
   if (!manualUi.editOutsideSticky) {
     throw new Error(`edit bar should be outside sticky core: ${JSON.stringify(manualUi)}`);

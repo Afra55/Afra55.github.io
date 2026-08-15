@@ -91,7 +91,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.15-b";
+  const GIF_TOOL_VERSION = "2026.08.15-c";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -4498,6 +4498,8 @@
     const vsplitScrub = $("#vsplit-scrub");
     const vsplitScrubHit = $("#vsplit-scrub-hit");
     const vsplitScrubMarks = $("#vsplit-scrub-marks");
+    const vsplitMarkPicker = $("#vsplit-mark-picker");
+    const vsplitMarkChips = $("#vsplit-mark-chips");
     const vsplitScrubHint = $("#vsplit-scrub-hint");
     const vsplitPlay = $("#vsplit-play");
     const vsplitFs = $("#vsplit-fs");
@@ -5087,7 +5089,7 @@
         vsplitScrubHint.textContent = `微调中 · 窗口 ±${half}s（松手回粗调）`;
         return;
       }
-      vsplitScrubHint.textContent = "绿/橙点为已标起止 · 上下滑可微调";
+      vsplitScrubHint.textContent = "绿上/橙下为起止 · 点轨道选最近标记 · 密集时弹出列表 · 上下滑可微调";
     }
 
     function onVsplitScrubInput() {
@@ -5217,12 +5219,145 @@
       vsplitManualDraft.textContent = `已设起点 ${formatClock(vsplitDraftStart)} · 拖到终点后点「打终点」`;
     }
 
+    function collectVsplitScrubEndpoints() {
+      const list = [];
+      if (vsplitDraftStart != null) {
+        list.push({ t: Number(vsplitDraftStart), kind: "start", idx: -1, draft: true });
+      }
+      vsplitMarks.forEach((mark, idx) => {
+        if (mark.start != null) list.push({ t: Number(mark.start), kind: "start", idx, draft: false });
+        if (mark.end != null) list.push({ t: Number(mark.end), kind: "end", idx, draft: false });
+      });
+      return list;
+    }
+
+    function hideVsplitMarkPicker() {
+      if (!vsplitMarkPicker) return;
+      vsplitMarkPicker.hidden = true;
+      vsplitMarkPicker.innerHTML = "";
+    }
+
+    function showVsplitMarkPicker(near, clientX) {
+      if (!vsplitMarkPicker || !vsplitScrubHit) return;
+      const hitRect = vsplitScrubHit.getBoundingClientRect();
+      const items = near.filter((ep) => !ep.draft && ep.idx >= 0);
+      if (!items.length) {
+        hideVsplitMarkPicker();
+        return;
+      }
+      vsplitMarkPicker.innerHTML = "";
+      const title = document.createElement("p");
+      title.className = "vsplit-mark-picker-title";
+      title.textContent = `附近 ${items.length} 个标记，点选：`;
+      vsplitMarkPicker.appendChild(title);
+      items.forEach((ep) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.setAttribute("role", "option");
+        const kindLabel = ep.kind === "end" ? "终点" : "起点";
+        btn.innerHTML = `<strong>#${String(ep.idx + 1).padStart(2, "0")} ${kindLabel}</strong> <span class="mono">${formatClock(ep.t)}</span>`;
+        btn.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          hideVsplitMarkPicker();
+          selectVsplitEditEndpoint(ep.idx, ep.kind);
+        });
+        vsplitMarkPicker.appendChild(btn);
+      });
+      const left = Math.max(8, Math.min(clientX - hitRect.left - 40, hitRect.width - 160));
+      vsplitMarkPicker.style.left = `${left}px`;
+      vsplitMarkPicker.style.top = `1.55rem`;
+      vsplitMarkPicker.hidden = false;
+    }
+
+    function resolveVsplitMarkTap(clientX) {
+      if (!vsplitScrubMarks) return null;
+      const rect = vsplitScrubMarks.getBoundingClientRect();
+      if (!(rect.width > 0)) return null;
+      const dur = vsplitVideoDuration();
+      if (!(dur > 0)) return null;
+      const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+      const t = pct * dur;
+      const pxThresh = 32;
+      const timeThresh = Math.max((pxThresh / rect.width) * dur, 0.12);
+      const near = collectVsplitScrubEndpoints()
+        .map((ep) => ({ ...ep, dist: Math.abs(ep.t - t) }))
+        .filter((ep) => ep.dist <= timeThresh)
+        .sort((a, b) => a.dist - b.dist || a.idx - b.idx);
+      return { t, near, timeThresh };
+    }
+
+    function paintVsplitMarkChips() {
+      if (!vsplitMarkChips) return;
+      vsplitMarkChips.innerHTML = "";
+      if (vsplitMode !== "manual" || !vsplitMarks.length) {
+        vsplitMarkChips.hidden = true;
+        return;
+      }
+      vsplitMarkChips.hidden = false;
+      vsplitMarks.forEach((mark, idx) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className =
+          "vsplit-mark-chip" +
+          (vsplitEditIdx === idx ? " is-active" : "") +
+          (isMarkComplete(mark) ? "" : " is-incomplete");
+        const s = mark.start == null ? "—" : formatClock(mark.start);
+        const e = mark.end == null ? "—" : formatClock(mark.end);
+        chip.textContent = `#${String(idx + 1).padStart(2, "0")} ${s}→${e}`;
+        chip.title = `编辑第 ${idx + 1} 段`;
+        chip.addEventListener("click", () => {
+          hideVsplitMarkPicker();
+          if (vsplitEditIdx === idx) {
+            const next = vsplitEditFocus === "start" && mark.end != null ? "end" : "start";
+            if (next === "start" && mark.start == null && mark.end != null) selectVsplitEditEndpoint(idx, "end");
+            else selectVsplitEditEndpoint(idx, next);
+            return;
+          }
+          enterVsplitEdit(idx);
+        });
+        vsplitMarkChips.appendChild(chip);
+      });
+      const active = vsplitMarkChips.querySelector(".vsplit-mark-chip.is-active");
+      if (active && typeof active.scrollIntoView === "function") {
+        active.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+      }
+    }
+
+    function onVsplitMarksTrackPointer(e) {
+      if (vsplitMode !== "manual" || vsplitBusy) return;
+      if (e.target.closest(".vsplit-scrub-mark")) return;
+      if (e.target.closest(".vsplit-mark-picker")) return;
+      const resolved = resolveVsplitMarkTap(e.clientX);
+      if (!resolved || !resolved.near.length) {
+        hideVsplitMarkPicker();
+        return;
+      }
+      e.preventDefault();
+      e.stopPropagation();
+      const actionable = resolved.near.filter((ep) => !ep.draft && ep.idx >= 0);
+      if (!actionable.length) return;
+      if (actionable.length === 1) {
+        hideVsplitMarkPicker();
+        selectVsplitEditEndpoint(actionable[0].idx, actionable[0].kind);
+        return;
+      }
+      showVsplitMarkPicker(actionable, e.clientX);
+    }
+
     function paintVsplitScrubMarks() {
       if (!vsplitScrubMarks) return;
+      hideVsplitMarkPicker();
       vsplitScrubMarks.innerHTML = "";
-      if (vsplitMode !== "manual") return;
+      if (vsplitMode !== "manual") {
+        paintVsplitMarkChips();
+        return;
+      }
       const dur = vsplitVideoDuration();
-      if (!(dur > 0)) return;
+      if (!(dur > 0)) {
+        paintVsplitMarkChips();
+        return;
+      }
       const addDot = (t, kind, opts = {}) => {
         if (t == null || !Number.isFinite(t)) return;
         const { active = false, idx = -1, editable = false } = opts;
@@ -5234,16 +5369,24 @@
           (editable ? " is-editable" : "");
         const pct = Math.max(0, Math.min(100, (Number(t) / dur) * 100));
         dot.style.left = `${pct}%`;
+        if (active) dot.style.zIndex = "5";
         const label = kind === "start" ? "起点" : "终点";
         dot.setAttribute("aria-label", idx >= 0 ? `选中第 ${idx + 1} 段${label}` : label);
         if (editable && idx >= 0) {
           dot.addEventListener("pointerdown", (e) => {
-            // 避免滑块抢走触摸
             e.stopPropagation();
           });
           dot.addEventListener("click", (e) => {
             e.preventDefault();
             e.stopPropagation();
+            const resolved = resolveVsplitMarkTap(e.clientX);
+            const actionable = resolved
+              ? resolved.near.filter((ep) => !ep.draft && ep.idx >= 0)
+              : [];
+            if (actionable.length > 1) {
+              showVsplitMarkPicker(actionable, e.clientX);
+              return;
+            }
             selectVsplitEditEndpoint(idx, kind);
           });
         } else {
@@ -5255,7 +5398,6 @@
       if (vsplitDraftStart != null) addDot(vsplitDraftStart, "start", { editable: false });
       vsplitMarks.forEach((mark, idx) => {
         const editing = vsplitEditIdx === idx;
-        // 编辑中可点圆点切换；未编辑时点击圆点进入编辑并选中该端点
         const editable = !vsplitBusy;
         addDot(mark.start, "start", {
           active: editing && vsplitEditFocus === "start",
@@ -5268,6 +5410,7 @@
           editable,
         });
       });
+      paintVsplitMarkChips();
     }
 
     function selectVsplitEditEndpoint(idx, kind) {
@@ -6083,6 +6226,12 @@
     vsplitScrub?.addEventListener("pointerup", () => onVsplitScrubCommit());
     vsplitScrub?.addEventListener("pointercancel", () => onVsplitScrubCommit());
     vsplitScrub?.addEventListener("touchend", () => onVsplitScrubCommit(), { passive: true });
+    vsplitScrubMarks?.addEventListener("pointerdown", (ev) => onVsplitMarksTrackPointer(ev));
+    document.addEventListener("pointerdown", (ev) => {
+      if (!vsplitMarkPicker || vsplitMarkPicker.hidden) return;
+      if (ev.target.closest("#vsplit-mark-picker, #vsplit-scrub-marks, #vsplit-mark-chips")) return;
+      hideVsplitMarkPicker();
+    });
     const onVsplitTime = () => {
       if (vsplitMode !== "manual" || vsplitScrubbing) return;
       vsplitPlaying = Boolean(vsplitVideo && !vsplitVideo.paused);

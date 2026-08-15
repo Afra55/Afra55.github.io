@@ -1906,7 +1906,7 @@ a.secondary-btn {
 
 .vsplit-scrub-hit {
   position: relative;
-  padding: 1.05rem 0 0.1rem;
+  padding: 1.55rem 0 0.1rem;
 }
 
 .vsplit-scrub-marks {
@@ -1914,19 +1914,19 @@ a.secondary-btn {
   left: 0.15rem;
   right: 0.15rem;
   top: 0;
-  height: 1rem;
-  pointer-events: none;
+  height: 1.45rem;
+  pointer-events: auto;
   z-index: 3;
+  touch-action: manipulation;
 }
 
 .vsplit-scrub-mark {
   appearance: none;
   -webkit-appearance: none;
   position: absolute;
-  top: 0.12rem;
-  width: 0.72rem;
-  height: 0.72rem;
-  margin-left: -0.36rem;
+  width: 0.78rem;
+  height: 0.78rem;
+  margin-left: -0.39rem;
   padding: 0;
   border-radius: 50%;
   border: 1.5px solid rgba(11, 18, 32, 0.92);
@@ -1936,33 +1936,128 @@ a.secondary-btn {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   background-clip: padding-box;
+  z-index: 1;
 }
 
 .vsplit-scrub-mark::before {
   content: "";
   position: absolute;
-  inset: -0.55rem;
-  border-radius: 50%;
+  inset: -0.7rem -0.55rem;
+  border-radius: 999px;
 }
 
 .vsplit-scrub-mark.is-start {
+  top: 0.02rem;
   background: #34d399;
 }
 
 .vsplit-scrub-mark.is-end {
+  top: 0.62rem;
   background: #fb923c;
 }
 
 .vsplit-scrub-mark.is-active {
-  width: 0.88rem;
-  height: 0.88rem;
-  margin-left: -0.44rem;
-  top: 0.04rem;
+  width: 0.94rem;
+  height: 0.94rem;
+  margin-left: -0.47rem;
+  z-index: 4;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.vsplit-scrub-mark.is-start.is-active {
+  top: -0.02rem;
+}
+
+.vsplit-scrub-mark.is-end.is-active {
+  top: 0.52rem;
 }
 
 .vsplit-scrub-mark.is-editable:active {
   transform: scale(1.12);
+}
+
+.vsplit-mark-chips {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.15rem 0.05rem 0.35rem;
+  scrollbar-width: thin;
+}
+
+.vsplit-mark-chip {
+  appearance: none;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  background: rgba(8, 14, 26, 0.45);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.28rem 0.7rem;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.vsplit-mark-chip.is-active {
+  border-color: rgba(46, 196, 182, 0.65);
+  background: rgba(46, 196, 182, 0.16);
+  color: var(--ink);
+}
+
+.vsplit-mark-chip.is-incomplete {
+  opacity: 0.72;
+}
+
+.vsplit-mark-picker {
+  position: absolute;
+  z-index: 8;
+  min-width: 9.5rem;
+  max-width: min(92vw, 16rem);
+  max-height: 12rem;
+  overflow: auto;
+  padding: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(10, 16, 28, 0.96);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.vsplit-mark-picker[hidden] {
+  display: none !important;
+}
+
+.vsplit-mark-picker-title {
+  margin: 0.1rem 0.35rem 0.2rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.vsplit-mark-picker button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+
+.vsplit-mark-picker button:hover,
+.vsplit-mark-picker button:focus-visible {
+  background: rgba(46, 196, 182, 0.14);
+}
+
+.vsplit-mark-picker button .mono {
+  color: var(--muted);
+  font-size: 0.78rem;
 }
 
 .vsplit-scrub {
