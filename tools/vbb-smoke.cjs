@@ -636,6 +636,15 @@ async function main() {
     const focusEndActive = document
       .querySelector('#vsplit-edit-focus [data-edit-focus="end"]')
       ?.classList.contains("is-active");
+    // 圆点可选终点
+    document.querySelector("#vsplit-scrub-marks .vsplit-scrub-mark.is-end.is-editable")?.click();
+    const focusEndByDot = document
+      .querySelector('#vsplit-edit-focus [data-edit-focus="end"]')
+      ?.classList.contains("is-active");
+    document.querySelector("#vsplit-scrub-marks .vsplit-scrub-mark.is-start.is-editable")?.click();
+    const focusStartByDot = document
+      .querySelector('#vsplit-edit-focus [data-edit-focus="start"]')
+      ?.classList.contains("is-active");
     document.querySelector('#vsplit-edit-focus [data-edit-focus="start"]')?.click();
     const focusStartActive = document
       .querySelector('#vsplit-edit-focus [data-edit-focus="start"]')
@@ -684,6 +693,8 @@ async function main() {
       stillPlayingAfterEnd,
       focusEndActive,
       focusStartActive,
+      focusEndByDot,
+      focusStartByDot,
       incomplete,
       rangesWithIncomplete,
       afterAuto,
@@ -704,6 +715,9 @@ async function main() {
   }
   if (!manualMarks.focusEndActive || !manualMarks.focusStartActive) {
     throw new Error(`edit focus toggle failed: ${JSON.stringify(manualMarks)}`);
+  }
+  if (!manualMarks.focusEndByDot || !manualMarks.focusStartByDot) {
+    throw new Error(`scrub mark dots should select endpoints: ${JSON.stringify(manualMarks)}`);
   }
   if (manualMarks.editIdxAfterCancel !== -1) {
     throw new Error(`cancel edit from list failed: ${JSON.stringify(manualMarks)}`);
@@ -766,8 +780,18 @@ async function main() {
     const marks = window.DevToolsVsplit.getMarks?.() || [];
     const beforeUndo = marks.length;
     document.getElementById("vsplit-fs-undo")?.click();
-    const afterUndo = window.DevToolsVsplit.getMarks?.() || [];
-    const undoLabel = (document.getElementById("vsplit-fs-undo")?.textContent || "").trim();
+    const afterUndoEnd = {
+      marks: window.DevToolsVsplit.getMarks?.() || [],
+      draft: window.DevToolsVsplit.getDraftStart?.(),
+      undoLabel: (document.getElementById("vsplit-fs-undo")?.textContent || "").trim(),
+      markLabel: (document.getElementById("vsplit-fs-mark")?.textContent || "").trim(),
+    };
+    document.getElementById("vsplit-fs-undo")?.click();
+    const afterUndoStart = {
+      marks: window.DevToolsVsplit.getMarks?.() || [],
+      draft: window.DevToolsVsplit.getDraftStart?.(),
+      undoLabel: (document.getElementById("vsplit-fs-undo")?.textContent || "").trim(),
+    };
     document.getElementById("vsplit-fs-close")?.click();
     const closed = !window.DevToolsVsplit.isFullscreen();
     const backInWrap = wrap?.contains(video);
@@ -779,8 +803,8 @@ async function main() {
       afterFsStart,
       markCount: marks.length,
       beforeUndo,
-      afterUndoCount: afterUndo.length,
-      undoLabel,
+      afterUndoEnd,
+      afterUndoStart,
       closed,
       backInWrap,
     };
@@ -794,8 +818,19 @@ async function main() {
   if (!(fsMark.markCount >= 3)) {
     throw new Error(`fullscreen should add a mark pair: ${JSON.stringify(fsMark)}`);
   }
-  if (!(fsMark.afterUndoCount === fsMark.beforeUndo - 1)) {
-    throw new Error(`fullscreen undo last mark failed: ${JSON.stringify(fsMark)}`);
+  if (
+    !(fsMark.afterUndoEnd.marks.length === fsMark.beforeUndo - 1) ||
+    fsMark.afterUndoEnd.draft == null ||
+    fsMark.afterUndoEnd.markLabel !== "打终点" ||
+    fsMark.afterUndoEnd.undoLabel !== "取消起点"
+  ) {
+    throw new Error(`undo should cancel end only first: ${JSON.stringify(fsMark.afterUndoEnd)}`);
+  }
+  if (
+    !(fsMark.afterUndoStart.marks.length === fsMark.beforeUndo - 1) ||
+    fsMark.afterUndoStart.draft != null
+  ) {
+    throw new Error(`second undo should cancel start draft: ${JSON.stringify(fsMark.afterUndoStart)}`);
   }
   if (!fsMark.closed || !fsMark.backInWrap) {
     throw new Error(`fullscreen exit failed: ${JSON.stringify(fsMark)}`);

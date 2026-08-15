@@ -1906,28 +1906,43 @@ a.secondary-btn {
 
 .vsplit-scrub-hit {
   position: relative;
-  padding: 0.55rem 0 0.1rem;
+  padding: 1.05rem 0 0.1rem;
 }
 
 .vsplit-scrub-marks {
   position: absolute;
   left: 0.15rem;
   right: 0.15rem;
-  top: 0.05rem;
-  height: 0.5rem;
+  top: 0;
+  height: 1rem;
   pointer-events: none;
-  z-index: 1;
+  z-index: 3;
 }
 
 .vsplit-scrub-mark {
+  appearance: none;
+  -webkit-appearance: none;
   position: absolute;
-  top: 0;
-  width: 0.5rem;
-  height: 0.5rem;
-  margin-left: -0.25rem;
+  top: 0.12rem;
+  width: 0.72rem;
+  height: 0.72rem;
+  margin-left: -0.36rem;
+  padding: 0;
   border-radius: 50%;
   border: 1.5px solid rgba(11, 18, 32, 0.92);
   box-shadow: 0 0 0 1px rgba(232, 238, 248, 0.28);
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  background-clip: padding-box;
+}
+
+.vsplit-scrub-mark::before {
+  content: "";
+  position: absolute;
+  inset: -0.55rem;
+  border-radius: 50%;
 }
 
 .vsplit-scrub-mark.is-start {
@@ -1939,11 +1954,15 @@ a.secondary-btn {
 }
 
 .vsplit-scrub-mark.is-active {
-  width: 0.62rem;
-  height: 0.62rem;
-  margin-left: -0.31rem;
-  top: -0.05rem;
+  width: 0.88rem;
+  height: 0.88rem;
+  margin-left: -0.44rem;
+  top: 0.04rem;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.vsplit-scrub-mark.is-editable:active {
+  transform: scale(1.12);
 }
 
 .vsplit-scrub {
@@ -2072,7 +2091,9 @@ a.secondary-btn {
 
 .vsplit-edit-focus .seg-btn {
   flex: 1 1 0;
-  min-height: 2.25rem;
+  min-height: 2.55rem;
+  font-size: 0.92rem;
+  touch-action: manipulation;
 }
 
 .vsplit-edit-actions {

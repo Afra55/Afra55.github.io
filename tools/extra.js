@@ -91,7 +91,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.14-m";
+  const GIF_TOOL_VERSION = "2026.08.14-n";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -5123,21 +5123,72 @@
       if (vsplitMode !== "manual") return;
       const dur = vsplitVideoDuration();
       if (!(dur > 0)) return;
-      const addDot = (t, kind, active) => {
+      const addDot = (t, kind, opts = {}) => {
         if (t == null || !Number.isFinite(t)) return;
-        const dot = document.createElement("span");
+        const { active = false, idx = -1, editable = false } = opts;
+        const dot = document.createElement("button");
+        dot.type = "button";
         dot.className =
-          `vsplit-scrub-mark is-${kind}` + (active ? " is-active" : "");
+          `vsplit-scrub-mark is-${kind}` +
+          (active ? " is-active" : "") +
+          (editable ? " is-editable" : "");
         const pct = Math.max(0, Math.min(100, (Number(t) / dur) * 100));
         dot.style.left = `${pct}%`;
+        const label = kind === "start" ? "起点" : "终点";
+        dot.setAttribute("aria-label", idx >= 0 ? `选中第 ${idx + 1} 段${label}` : label);
+        if (editable && idx >= 0) {
+          dot.addEventListener("pointerdown", (e) => {
+            // 避免滑块抢走触摸
+            e.stopPropagation();
+          });
+          dot.addEventListener("click", (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            selectVsplitEditEndpoint(idx, kind);
+          });
+        } else {
+          dot.tabIndex = -1;
+          dot.setAttribute("aria-hidden", "true");
+        }
         vsplitScrubMarks.appendChild(dot);
       };
-      if (vsplitDraftStart != null) addDot(vsplitDraftStart, "start", false);
+      if (vsplitDraftStart != null) addDot(vsplitDraftStart, "start", { editable: false });
       vsplitMarks.forEach((mark, idx) => {
-        const active = vsplitEditIdx === idx;
-        addDot(mark.start, "start", active && vsplitEditFocus === "start");
-        addDot(mark.end, "end", active && vsplitEditFocus === "end");
+        const editing = vsplitEditIdx === idx;
+        // 编辑中可点圆点切换；未编辑时点击圆点进入编辑并选中该端点
+        const editable = !vsplitBusy;
+        addDot(mark.start, "start", {
+          active: editing && vsplitEditFocus === "start",
+          idx,
+          editable,
+        });
+        addDot(mark.end, "end", {
+          active: editing && vsplitEditFocus === "end",
+          idx,
+          editable,
+        });
       });
+    }
+
+    function selectVsplitEditEndpoint(idx, kind) {
+      if (idx < 0 || idx >= vsplitMarks.length) return;
+      const focus = kind === "end" ? "end" : "start";
+      const mark = vsplitMarks[idx];
+      if (!mark) return;
+      if (focus === "start" && mark.start == null) return;
+      if (focus === "end" && mark.end == null) return;
+      if (vsplitEditIdx !== idx) {
+        vsplitDraftStart = null;
+        vsplitEditIdx = idx;
+        pauseVsplitPreview();
+      }
+      vsplitEditFocus = focus;
+      const jump = focus === "end" ? mark.end : mark.start;
+      if (jump != null) seekVsplitPreview(jump, { keepPlaying: true });
+      setVsplitButtons();
+      paintVsplitDraft();
+      paintVsplitMarks();
+      paintVsplitScrubMarks();
     }
 
     function sortVsplitMarks() {
@@ -5376,6 +5427,7 @@
         toast("请先退出编辑");
         return;
       }
+      // 1) 有未完成起点草稿 → 只取消起点
       if (vsplitDraftStart != null) {
         undoVsplitDraft();
         return;
@@ -5384,14 +5436,27 @@
         toast("没有可取消的标记");
         return;
       }
-      // 列表按时长排序后，末项即时间上最新的一段（快速打点时即上一段）
-      const removed = vsplitMarks.pop();
+      const lastIdx = vsplitMarks.length - 1;
+      const last = vsplitMarks[lastIdx];
+      // 2) 上一段已有终点 → 只取消终点，起点回到「待打终点」
+      if (last && last.end != null && last.start != null) {
+        const start = last.start;
+        vsplitMarks.splice(lastIdx, 1);
+        vsplitDraftStart = start;
+        invalidateVsplitOutputsFromMarks();
+        paintVsplitMarks();
+        paintVsplitNow();
+        setVsplitButtons();
+        toast(`已取消终点 · 起点保留 ${formatClock(start)}`);
+        return;
+      }
+      // 3) 仅剩起点（或不完整段）→ 取消该起点
+      vsplitMarks.splice(lastIdx, 1);
       invalidateVsplitOutputsFromMarks();
       paintVsplitMarks();
       paintVsplitNow();
-      const s = removed?.start == null ? "—" : formatClock(removed.start);
-      const e = removed?.end == null ? "—" : formatClock(removed.end);
-      toast(`已取消上一段 ${s}–${e}`);
+      setVsplitButtons();
+      toast("已取消起点");
     }
 
     function ensureVsplitClipsFromMarks() {
