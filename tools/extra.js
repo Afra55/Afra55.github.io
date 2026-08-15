@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.15-fs";
+  const TOOLS_VERSION = "2026.08.15-ip";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -8151,6 +8151,8 @@
     let adbInputLiveTimer = 0;
     let adbInputRefreshBusy = false;
     let adbInputRefreshAfter = false;
+    const ADB_STORE_INPUT_SHOT_VH = "devtools-adb-input-shot-vh";
+    const ADB_INPUT_SHOT_VH_DEFAULT = 56;
     let adbTab = "info";
     let adbPermPackage = "";
     let adbLogLive = false;
@@ -10577,6 +10579,42 @@
       }
     }
 
+    function clampInputShotVh(raw) {
+      const n = Number(raw);
+      if (!Number.isFinite(n)) return ADB_INPUT_SHOT_VH_DEFAULT;
+      return Math.max(32, Math.min(88, Math.round(n / 2) * 2));
+    }
+
+    function applyInputShotSize(vh, { persist = true } = {}) {
+      const value = clampInputShotVh(vh);
+      const wrap = $("#adb-input-shot-wrap");
+      const slider = $("#adb-input-shot-size");
+      const label = $("#adb-input-shot-size-val");
+      if (wrap) wrap.style.setProperty("--adb-input-shot-vh", String(value));
+      if (slider && String(slider.value) !== String(value)) slider.value = String(value);
+      if (slider) slider.setAttribute("aria-valuetext", `${value}`);
+      if (label) label.textContent = `${value}%`;
+      if (persist) {
+        try {
+          localStorage.setItem(ADB_STORE_INPUT_SHOT_VH, String(value));
+        } catch (_) {
+          /* ignore */
+        }
+      }
+      return value;
+    }
+
+    function restoreInputShotSize() {
+      let saved = ADB_INPUT_SHOT_VH_DEFAULT;
+      try {
+        const raw = localStorage.getItem(ADB_STORE_INPUT_SHOT_VH);
+        if (raw != null && raw !== "") saved = clampInputShotVh(raw);
+      } catch (_) {
+        saved = ADB_INPUT_SHOT_VH_DEFAULT;
+      }
+      applyInputShotSize(saved, { persist: false });
+    }
+
     function updateInputLiveUi() {
       const stopBtn = $("#adb-input-live-stop");
       const meta = $("#adb-input-live-meta");
@@ -11831,6 +11869,16 @@
       stopInputLivePreview();
       toast("已停止实时预览");
     });
+    {
+      const sizeEl = $("#adb-input-shot-size");
+      sizeEl?.addEventListener("input", () => applyInputShotSize(sizeEl.value));
+      sizeEl?.addEventListener("change", () => applyInputShotSize(sizeEl.value));
+      $("#adb-input-shot-size-reset")?.addEventListener("click", () => {
+        applyInputShotSize(ADB_INPUT_SHOT_VH_DEFAULT);
+        toast("已恢复默认预览大小");
+      });
+      restoreInputShotSize();
+    }
     {
       const canvas = $("#adb-input-canvas");
       const LONG_MS = 520;
