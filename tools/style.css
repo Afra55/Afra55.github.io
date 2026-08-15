@@ -2707,13 +2707,29 @@ body.vsplit-fs-open {
   border-top: 1px solid var(--line);
 }
 
-.adb-apps-list .adb-fs-row {
-  grid-template-columns: minmax(0, 1fr);
-  gap: 0.45rem;
+.adb-inline-jobs {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
 }
 
-.adb-apps-list .adb-fs-row > span:empty {
-  display: none;
+.adb-app-row {
+  grid-template-columns: minmax(0, 1fr) !important;
+  gap: 0.55rem;
+}
+
+.adb-app-select {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.55rem;
+  align-items: start;
+  cursor: pointer;
+}
+
+.adb-app-select input {
+  margin-top: 0.35rem;
+  accent-color: var(--accent, #2ec4b6);
 }
 
 .adb-apps-list .adb-fs-actions {
@@ -2721,7 +2737,6 @@ body.vsplit-fs-open {
   flex-wrap: wrap;
   gap: 0.35rem;
   width: 100%;
-  max-width: 100%;
 }
 
 .adb-media-preview img {

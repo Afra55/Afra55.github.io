@@ -59,7 +59,7 @@ node server.js
 | GET | `/apps/info?serial=&package=` | 已安装应用详情 |
 | POST | `/apps/action` | 打开 / 强停 / 清数据 / 卸载 / 停用 / 启用 |
 | POST | `/apps/permission` | 授予 / 撤销权限 |
-| POST | `/apk/info` | 分析已上传 APK（aapt/aapt2 解析包信息；keytool/apksigner 解析签名：别名/CN/SHA1/SHA256 等） |
+| POST | `/apk/info` | 分析已上传 APK（aapt/aapt2 解析包信息；keytool/openssl/apksigner 解析签名：别名/CN/SHA1/SHA256 等） |
 | POST | `/apps/backup` | 备份 APK（可 `async` 任务） |
 | GET/POST | `/network/proxy` | HTTP 代理查询/设置/清除 |
 | GET/POST | `/network/forward` | forward/reverse 端口转发 |
@@ -78,4 +78,4 @@ node server.js
 
 除 `/health` 外均需请求头：`X-Adb-Token: devtools-adb`  
 
-**路径策略：** 可读 `ROOTS` = `/sdcard`、`/storage/emulated/0`、`/data/local/tmp`、`/data/app`、`/system/app`、`/system/priv-app`、`/product/app`、`/vendor/app`。推送/建目录/删除默认仅限前三个；系统路径写入需 `forcePush` 或 `/install/push-system`。
+**路径策略：** 类似 Android Studio Device File Explorer——可读任意绝对路径（受设备权限限制）。写入同样透传 `adb`；系统 APK 覆盖请用 `/install/push-system`。快捷根目录提示：`/`、`/sdcard`、`/data`、`/system` 等。

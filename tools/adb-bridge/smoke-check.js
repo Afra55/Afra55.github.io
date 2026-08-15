@@ -111,11 +111,11 @@ async function main() {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
     }
 
-    if (health2.json?.version !== "0.6.1") {
-      throw new Error(`expected bridge version 0.6.1, got ${health2.json?.version}`);
+    if (health2.json?.version !== "0.6.2") {
+      throw new Error(`expected bridge version 0.6.2, got ${health2.json?.version}`);
     }
     const roots = health2.json?.roots || [];
-    for (const root of ["/data/local/tmp", "/system/app", "/system/priv-app"]) {
+    for (const root of ["/", "/data/local/tmp", "/system/app", "/system/priv-app"]) {
       if (!roots.includes(root)) throw new Error(`health missing root: ${root}`);
     }
 
@@ -125,16 +125,14 @@ async function main() {
     // Path is allowed; may fail on missing adb/device with 400, but must not be "仅允许访问" reject
     if (sysList.status === 200) throw new Error("unexpected success without device");
     if (String(sysList.json?.error || "").includes("仅允许访问")) {
-      throw new Error("system/app should be in readable ROOTS");
+      throw new Error("system/app should be browsable (Device Explorer mode)");
     }
 
-    const writeDenied = await req("POST", "/fs/mkdir", {
-      headers: { "X-Adb-Token": TOKEN, "Content-Type": "application/json" },
-      body: JSON.stringify({ serial: "demo", path: "/system/app/Evil" }),
+    const rootList = await req("GET", "/fs/list?serial=demo&path=/", {
+      headers: { "X-Adb-Token": TOKEN },
     });
-    if (writeDenied.status === 200) throw new Error("mkdir under /system/app should require forcePush");
-    if (!String(writeDenied.json?.error || "").includes("写入仅允许")) {
-      throw new Error(`expected write guard for /system/app, got: ${writeDenied.text}`);
+    if (String(rootList.json?.error || "").includes("仅允许访问")) {
+      throw new Error("root / should be browsable");
     }
 
     const jobs = await req("GET", "/jobs", { headers: { "X-Adb-Token": TOKEN } });
