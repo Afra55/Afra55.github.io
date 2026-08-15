@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.15-nav2";
+  const TOOLS_VERSION = "2026.08.15-pack";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -4537,6 +4537,7 @@
     const vsplitEditDelEnd = $("#vsplit-edit-del-end");
     const vsplitEditDone = $("#vsplit-edit-done");
     const vsplitQuickExport = $("#vsplit-quick-export");
+    const vsplitQuickCut = $("#vsplit-quick-cut");
     const vsplitQuickBb = $("#vsplit-quick-bb");
     const vsplitQuickHq = $("#vsplit-quick-hq");
     const vsplitNudgeM1 = $("#vsplit-nudge-m1");
@@ -4756,7 +4757,7 @@
       revokeUrl(vsplitMergedUrl);
       vsplitZipGifUrl = "";
       vsplitMergedUrl = "";
-      hideDownloadLink(vsplitZipGif);
+      if (vsplitZipGif) vsplitZipGif.disabled = true;
       hideDownloadLink(vsplitMergedDl);
       if (vsplitMergedPreview) {
         vsplitMergedPreview.hidden = true;
@@ -4767,7 +4768,7 @@
     function revokeVsplitDownloads() {
       revokeUrl(vsplitZipVideoUrl);
       vsplitZipVideoUrl = "";
-      hideDownloadLink(vsplitZipVideo);
+      if (vsplitZipVideo) vsplitZipVideo.disabled = true;
       revokeVsplitGifOutputs();
     }
 
@@ -4810,17 +4811,20 @@
       const hasClips = vsplitClips.length > 0;
       const completeMarks = completeVsplitMarks();
       const hasComplete = completeMarks.length > 0;
+      const videoCount = vsplitClips.filter((c) => c.videoBlob).length;
       const gifCount = vsplitClips.filter((c) => c.gifBlob).length;
       const editing = vsplitEditIdx >= 0;
       const canManualCut = vsplitMode !== "manual" || hasComplete;
       if (vsplitCut) {
         vsplitCut.disabled = !hasVideo || vsplitBusy || !canManualCut;
-        vsplitCut.textContent = vsplitMode === "manual" ? "按标记切分" : "开始切分";
+        vsplitCut.textContent = vsplitMode === "manual" ? "按标记切成视频" : "切成视频";
       }
       const canGif = hasClips || (vsplitMode === "manual" && hasComplete);
       if (vsplitGifHq) vsplitGifHq.disabled = !canGif || vsplitBusy;
       if (vsplitGifBb) vsplitGifBb.disabled = !canGif || vsplitBusy;
       if (vsplitMerge) vsplitMerge.disabled = gifCount < 2 || vsplitBusy;
+      if (vsplitZipVideo) vsplitZipVideo.disabled = videoCount < 1 || vsplitBusy;
+      if (vsplitZipGif) vsplitZipGif.disabled = gifCount < 1 || vsplitBusy;
       if (vsplitPlay) {
         vsplitPlay.disabled = !hasVideo || vsplitBusy || vsplitMode !== "manual";
         vsplitPlay.textContent = vsplitPlaying ? "暂停" : "播放";
@@ -4868,6 +4872,7 @@
       if (vsplitQuickExport) {
         vsplitQuickExport.hidden = !(vsplitMode === "manual" && hasComplete);
       }
+      if (vsplitQuickCut) vsplitQuickCut.disabled = !hasVideo || vsplitBusy || !canManualCut;
       if (vsplitQuickBb) vsplitQuickBb.disabled = !canGif || vsplitBusy;
       if (vsplitQuickHq) vsplitQuickHq.disabled = !canGif || vsplitBusy;
       if (editing) {
@@ -6270,6 +6275,57 @@
       return { blob, url, name: zipName };
     }
 
+    function triggerLocalDownload(blob, filename) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch (_) {}
+      }, 2000);
+    }
+
+    async function packDownloadVsplitVideos({ auto = false } = {}) {
+      const videos = vsplitClips.map((c, i) => ({ c, i })).filter((x) => x.c.videoBlob);
+      if (!videos.length) {
+        if (!auto) toast("请先点「切成视频」");
+        return false;
+      }
+      const packed = await zipBlobs(
+        videos.map((x) => ({ name: `clip-${String(x.i + 1).padStart(2, "0")}.mp4`, blob: x.c.videoBlob })),
+        "clips-video.zip"
+      );
+      revokeUrl(vsplitZipVideoUrl);
+      vsplitZipVideoUrl = packed.url;
+      triggerLocalDownload(packed.blob, packed.name);
+      if (!auto) toast(`已打包 ${videos.length} 个视频`);
+      setVsplitButtons();
+      return true;
+    }
+
+    async function packDownloadVsplitGifs({ auto = false } = {}) {
+      const gifs = vsplitClips.map((c, i) => ({ c, i })).filter((x) => x.c.gifBlob);
+      if (!gifs.length) {
+        if (!auto) toast("请先生成 GIF");
+        return false;
+      }
+      const packed = await zipBlobs(
+        gifs.map((x) => ({ name: `clip-${String(x.i + 1).padStart(2, "0")}.gif`, blob: x.c.gifBlob })),
+        "clips-gif.zip"
+      );
+      revokeUrl(vsplitZipGifUrl);
+      vsplitZipGifUrl = packed.url;
+      triggerLocalDownload(packed.blob, packed.name);
+      if (!auto) toast(`已打包 ${gifs.length} 个 GIF`);
+      setVsplitButtons();
+      return true;
+    }
+
     function clearVsplit() {
       if (vsplitBusy) {
         abortVsplit = true;
@@ -6405,20 +6461,19 @@
           } catch (_) {}
         }
         const videos = vsplitClips.map((c, i) => ({ c, i })).filter((x) => x.c.videoBlob);
-        if (videos.length) {
-          const packed = await zipBlobs(
-            videos.map((x) => ({ name: `clip-${String(x.i + 1).padStart(2, "0")}.mp4`, blob: x.c.videoBlob })),
-            "clips-video.zip"
-          );
-          vsplitZipVideoUrl = packed.url;
-          if (vsplitZipVideo) {
-            vsplitZipVideo.href = packed.url;
-            vsplitZipVideo.hidden = false;
-          }
-        }
         const failN = vsplitClips.filter((c) => !c.videoBlob).length;
         setVsplitProgress(true, 1, `切分完成 · ${vsplitClips.length} 段`);
-        toast(failN ? `已切 ${vsplitClips.length} 段，${failN} 段视频失败（仍可转 GIF）` : `已切成 ${vsplitClips.length} 段`);
+        setVsplitButtons();
+        if (videos.length) {
+          await packDownloadVsplitVideos({ auto: true });
+          toast(
+            failN
+              ? `已切 ${vsplitClips.length} 段（${failN} 段失败）· 已打包下载视频`
+              : `已切成 ${vsplitClips.length} 段 · 已打包下载全部视频`
+          );
+        } else {
+          toast(failN ? `切分失败 ${failN} 段` : `已切成 ${vsplitClips.length} 段`);
+        }
         clearVsplitClipJobs();
         renderVsplitList();
       } catch (err) {
@@ -6530,20 +6585,15 @@
           renderVsplitList();
         }
         const gifs = vsplitClips.map((c, i) => ({ c, i })).filter((x) => x.c.gifBlob);
-        if (gifs.length) {
-          const packed = await zipBlobs(
-            gifs.map((x) => ({ name: `clip-${String(x.i + 1).padStart(2, "0")}.gif`, blob: x.c.gifBlob })),
-            "clips-gif.zip"
-          );
-          vsplitZipGifUrl = packed.url;
-          if (vsplitZipGif) {
-            vsplitZipGif.href = packed.url;
-            vsplitZipGif.hidden = false;
-          }
-        }
         const failN = vsplitClips.filter((c) => c.error).length;
         setVsplitProgress(true, 1, `GIF 完成 · 成功 ${gifs.length}/${vsplitClips.length}`);
-        toast(failN ? `完成，${failN} 段失败` : `已生成 ${gifs.length} 个 GIF`);
+        setVsplitButtons();
+        if (gifs.length) {
+          await packDownloadVsplitGifs({ auto: true });
+          toast(failN ? `完成，${failN} 段失败 · 已打包下载 GIF` : `已生成 ${gifs.length} 个 GIF · 已打包下载`);
+        } else {
+          toast(failN ? `完成，${failN} 段失败` : "未生成 GIF");
+        }
         clearVsplitClipJobs();
         renderVsplitList();
       } catch (err) {
@@ -6642,11 +6692,18 @@
       exitVsplitEdit();
       paintVsplitNow();
     });
+    vsplitQuickCut?.addEventListener("click", () => runVsplitCut().catch((err) => setError(vsplitError, err.message || String(err))));
     vsplitQuickBb?.addEventListener("click", () => {
       runVsplitGifs("blackbox").catch((err) => setError(vsplitError, err.message || String(err)));
     });
     vsplitQuickHq?.addEventListener("click", () => {
       runVsplitGifs("hq").catch((err) => setError(vsplitError, err.message || String(err)));
+    });
+    vsplitZipVideo?.addEventListener("click", () => {
+      packDownloadVsplitVideos().catch((err) => setError(vsplitError, err.message || String(err)));
+    });
+    vsplitZipGif?.addEventListener("click", () => {
+      packDownloadVsplitGifs().catch((err) => setError(vsplitError, err.message || String(err)));
     });
     $("#vsplit-edit-focus")?.addEventListener("click", (e) => {
       const btn = e.target?.closest?.("[data-edit-focus]");
@@ -6903,10 +6960,7 @@
         } catch (_) {}
       }
       vbbMergedUrl = "";
-      if (vbbZip) {
-        vbbZip.hidden = true;
-        vbbZip.removeAttribute("href");
-      }
+      if (vbbZip) vbbZip.disabled = true;
       if (vbbMergedDl) {
         vbbMergedDl.hidden = true;
         vbbMergedDl.removeAttribute("href");
@@ -6925,6 +6979,29 @@
       if (vbbAnalyze) vbbAnalyze.disabled = !hasVideo || vbbBusy;
       if (vbbRun) vbbRun.disabled = !hasPlan || vbbBusy;
       if (vbbMerge) vbbMerge.disabled = gifCount < 2 || vbbBusy;
+      if (vbbZip) vbbZip.disabled = gifCount < 1 || vbbBusy;
+    }
+
+    async function packDownloadVbbGifs({ auto = false } = {}) {
+      const gifs = vbbClips.map((c, i) => ({ c, i })).filter((x) => x.c.gifBlob);
+      if (!gifs.length) {
+        if (!auto) toast("请先生成 GIF");
+        return false;
+      }
+      const packed = await zipBlobs(
+        gifs.map((x) => ({ name: `bb-${String(x.i + 1).padStart(2, "0")}.gif`, blob: x.c.gifBlob })),
+        "blackbox-clips.zip"
+      );
+      if (vbbZipUrl) {
+        try {
+          URL.revokeObjectURL(vbbZipUrl);
+        } catch (_) {}
+      }
+      vbbZipUrl = packed.url;
+      triggerLocalDownload(packed.blob, packed.name);
+      if (!auto) toast(`已打包 ${gifs.length} 个 GIF`);
+      setVbbButtons();
+      return true;
     }
 
     function syncVbbModeUi() {
@@ -7852,22 +7929,21 @@
           }
         }
         const gifs = vbbClips.map((c, i) => ({ c, i })).filter((x) => x.c.gifBlob);
-        if (gifs.length) {
-          const packed = await zipBlobs(
-            gifs.map((x) => ({ name: `bb-${String(x.i + 1).padStart(2, "0")}.gif`, blob: x.c.gifBlob })),
-            "blackbox-clips.zip"
-          );
-          vbbZipUrl = packed.url;
-          if (vbbZip) {
-            vbbZip.href = packed.url;
-            vbbZip.hidden = false;
-          }
-        }
         const failN = vbbClips.filter((c) => c.error || !c.gifBlob).length;
         setVbbProgress(true, 1, `完成 · 成功 ${gifs.length}/${vbbClips.length}`);
         clearVbbClipJobs();
         renderVbbResults();
-        toast(failN ? `完成，${failN} 段有问题` : `已生成 ${gifs.length} 个 GIF（点「预览」查看，避免占内存）`);
+        setVbbButtons();
+        if (gifs.length) {
+          await packDownloadVbbGifs({ auto: true });
+          toast(
+            failN
+              ? `完成，${failN} 段有问题 · 已打包下载 GIF`
+              : `已生成 ${gifs.length} 个 GIF · 已打包下载（可点「预览」查看）`
+          );
+        } else {
+          toast(failN ? `完成，${failN} 段有问题` : "未生成 GIF");
+        }
       } catch (err) {
         if (String(err && err.message) !== "已取消") setError(vbbError, err.message || String(err));
         else toast("已取消");
@@ -7969,6 +8045,9 @@
     vbbAnalyze?.addEventListener("click", () => runVbbAnalyze().catch((err) => setError(vbbError, err.message || String(err))));
     vbbRun?.addEventListener("click", () => runVbbExecute().catch((err) => setError(vbbError, err.message || String(err))));
     vbbMerge?.addEventListener("click", () => runVbbMerge().catch((err) => setError(vbbError, err.message || String(err))));
+    vbbZip?.addEventListener("click", () => {
+      packDownloadVbbGifs().catch((err) => setError(vbbError, err.message || String(err)));
+    });
     vbbAbort?.addEventListener("click", () => {
       abortVbb = true;
       abortV2g = true;
