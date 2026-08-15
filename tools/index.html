@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260814h" />
+  <link rel="stylesheet" href="./style.css?v=20260814i" />
   <link rel="stylesheet" href="./workspace-nav.css?v=20260814f" />
 </head>
 <body>
@@ -1230,18 +1230,43 @@ hello@world.org</textarea>
             <video id="vsplit-video" class="img-preview gif-preview" controls playsinline muted preload="metadata" hidden></video>
           </div>
           <div class="vsplit-manual" id="vsplit-manual-row" hidden>
-            <div class="vsplit-scrub-block">
-              <label class="visually-hidden" for="vsplit-scrub">拖动预览进度</label>
-              <input id="vsplit-scrub" class="vsplit-scrub" type="range" min="0" max="1000" value="0" step="1" disabled />
+            <div class="vsplit-transport">
+              <button type="button" class="secondary-btn" id="vsplit-play" disabled>播放</button>
               <div class="vsplit-scrub-meta">
                 <span class="mono" id="vsplit-manual-now">0:00 / 0:00</span>
                 <span class="hint tight" id="vsplit-manual-count">0 段</span>
               </div>
             </div>
-            <div class="btn-row tool-actions vsplit-mark-btns">
-              <button type="button" class="secondary-btn" id="vsplit-mark-start" disabled>设为起点</button>
-              <button type="button" class="secondary-btn" id="vsplit-mark-end" disabled>设为终点</button>
+            <div class="vsplit-scrub-block">
+              <label class="visually-hidden" for="vsplit-scrub">拖动预览进度</label>
+              <div class="vsplit-scrub-hit" id="vsplit-scrub-hit">
+                <input id="vsplit-scrub" class="vsplit-scrub" type="range" min="0" max="1000" value="0" step="1" disabled />
+              </div>
+              <p class="hint tight" id="vsplit-scrub-hint">拖滑块粗调；按住上下滑进入微调；也可用下方 ± 按钮</p>
+            </div>
+            <div class="btn-row tool-actions vsplit-nudge-btns">
+              <button type="button" class="ghost-btn" id="vsplit-nudge-m1" disabled>−1s</button>
+              <button type="button" class="ghost-btn" id="vsplit-nudge-m01" disabled>−0.1s</button>
+              <button type="button" class="ghost-btn" id="vsplit-nudge-p01" disabled>+0.1s</button>
+              <button type="button" class="ghost-btn" id="vsplit-nudge-p1" disabled>+1s</button>
+            </div>
+            <div class="btn-row tool-actions vsplit-mark-btns" id="vsplit-add-btns">
+              <button type="button" class="primary-btn" id="vsplit-mark-tap" disabled>打起点</button>
+              <button type="button" class="ghost-btn" id="vsplit-mark-undo" disabled hidden>取消起点</button>
               <button type="button" class="ghost-btn" id="vsplit-mark-clear" disabled>清空</button>
+            </div>
+            <div class="vsplit-edit-bar" id="vsplit-edit-bar" hidden>
+              <p class="hint tight" id="vsplit-edit-title">编辑片段</p>
+              <div class="seg vsplit-edit-focus" id="vsplit-edit-focus" role="group" aria-label="编辑端点">
+                <button type="button" class="seg-btn is-active" data-edit-focus="start">调起点</button>
+                <button type="button" class="seg-btn" data-edit-focus="end">调终点</button>
+              </div>
+              <div class="btn-row tool-actions vsplit-edit-actions">
+                <button type="button" class="secondary-btn" id="vsplit-edit-apply" disabled>用滑块位置</button>
+                <button type="button" class="ghost-btn" id="vsplit-edit-del-start" disabled>删起点</button>
+                <button type="button" class="ghost-btn" id="vsplit-edit-del-end" disabled>删终点</button>
+                <button type="button" class="ghost-btn" id="vsplit-edit-done">完成</button>
+              </div>
             </div>
             <p class="hint tight" id="vsplit-manual-draft" hidden></p>
           </div>
@@ -1983,7 +2008,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260814h"></script>
+  <script src="./extra.js?v=20260814i"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>
