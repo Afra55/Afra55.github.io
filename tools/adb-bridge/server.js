@@ -5,12 +5,12 @@
  * DevTools local ADB bridge (P0–P3)
  * - Bind 127.0.0.1 only
  * - Zero npm dependencies
- * - File ops limited to /sdcard and /storage/emulated/0
+ * - Read roots: sdcard + system/app paths; writes default to sdcard/tmp unless forcePush
  */
 
 const http = require("http");
 const { URL } = require("url");
-const { execFile } = require("child_process");
+const { execFile, spawn } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -35,11 +35,31 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const ROOTS = ["/sdcard", "/storage/emulated/0"];
+/** Paths allowed for list / stat / pull */
+const ROOTS = [
+  "/sdcard",
+  "/storage/emulated/0",
+  "/data/local/tmp",
+  "/data/app",
+  "/system/app",
+  "/system/priv-app",
+  "/product/app",
+  "/vendor/app",
+];
+/** Paths allowed for push / mkdir / rm / move / copy / rename without forcePush */
+const WRITE_ROOTS = ["/sdcard", "/storage/emulated/0", "/data/local/tmp"];
+/** System/product APK dirs used by /install/push-system overwrite detection */
+const SYSTEM_APP_ROOTS = [
+  "/data/app",
+  "/system/app",
+  "/system/priv-app",
+  "/product/app",
+  "/vendor/app",
+];
 const TMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "adb-bridge-"));
 const JOBS = new Map();
 const UPLOADS = new Map();
-const BRIDGE_VERSION = "0.5.2";
+const BRIDGE_VERSION = "0.6.0";
 
 function sendJson(res, status, data, origin) {
   const body = JSON.stringify(data);
@@ -89,14 +109,16 @@ function parseJsonBody(buf) {
 
 function execFileAsync(file, args, opts = {}) {
   return new Promise((resolve, reject) => {
+    const encoding = opts.encoding === "buffer" ? null : opts.encoding || "utf8";
     execFile(
       file,
       args,
       {
-        encoding: opts.encoding || "utf8",
+        encoding,
         maxBuffer: opts.maxBuffer || 20 * 1024 * 1024,
         timeout: opts.timeout || 120000,
         ...opts,
+        encoding,
       },
       (err, stdout, stderr) => {
         if (err) {
@@ -108,7 +130,7 @@ function execFileAsync(file, args, opts = {}) {
           reject(wrapped);
           return;
         }
-        resolve({ stdout: stdout || "", stderr: stderr || "" });
+        resolve({ stdout: stdout || (encoding === null ? Buffer.alloc(0) : ""), stderr: stderr || (encoding === null ? Buffer.alloc(0) : "") });
       }
     );
   });
@@ -127,7 +149,19 @@ function shellQuote(value) {
   return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }
 
-function normalizeRemotePath(input) {
+function isUnderRoots(normalized, roots) {
+  return roots.some((root) => normalized === root || normalized.startsWith(`${root}/`));
+}
+
+/**
+ * Normalize and guard a remote path.
+ * @param {string} input
+ * @param {{ write?: boolean, force?: boolean }} [opts]
+ *   - write: push/mkdir/rm/move/copy/rename — defaults to WRITE_ROOTS only
+ *   - force: allow write under any ROOTS (system APK deploy via forcePush / push-system)
+ *   - read (default): list/stat/pull under all ROOTS
+ */
+function normalizeRemotePath(input, opts = {}) {
   let p = String(input || "").trim().replace(/\\/g, "/");
   if (!p) p = "/sdcard";
   if (!p.startsWith("/")) p = `/${p}`;
@@ -143,8 +177,18 @@ function normalizeRemotePath(input) {
     parts.push(seg);
   }
   const normalized = `/${parts.join("/")}`;
-  const allowed = ROOTS.some((root) => normalized === root || normalized.startsWith(`${root}/`));
-  if (!allowed) throw new Error(`仅允许访问：${ROOTS.join("、")}`);
+  const write = Boolean(opts.write);
+  const force = Boolean(opts.force);
+  const allowedRoots = write && !force ? WRITE_ROOTS : ROOTS;
+  const allowed = isUnderRoots(normalized, allowedRoots);
+  if (!allowed) {
+    if (write && !force && isUnderRoots(normalized, ROOTS)) {
+      throw new Error(
+        `写入仅允许：${WRITE_ROOTS.join("、")}；系统路径需 forcePush=true 或 POST /install/push-system`
+      );
+    }
+    throw new Error(`仅允许访问：${ROOTS.join("、")}`);
+  }
   return normalized === "/" ? "/sdcard" : normalized;
 }
 
@@ -175,6 +219,9 @@ function createJob(type, meta = {}) {
     artifacts: [],
     meta,
     error: "",
+    child: null,
+    pid: null,
+    cancelRequested: false,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -203,6 +250,8 @@ function publicJob(job) {
     })),
     meta: job.meta,
     error: job.error,
+    cancelRequested: Boolean(job.cancelRequested),
+    pid: job.pid || null,
     createdAt: job.createdAt,
     updatedAt: job.updatedAt,
   };
@@ -391,29 +440,29 @@ async function listDir(serial, remotePath) {
 }
 
 async function deletePath(serial, remotePath) {
-  const target = normalizeRemotePath(remotePath);
-  if (ROOTS.includes(target)) throw new Error("不能删除根目录");
+  const target = normalizeRemotePath(remotePath, { write: true });
+  if (WRITE_ROOTS.includes(target) || ROOTS.includes(target)) throw new Error("不能删除根目录");
   await adbSerial(serial, ["shell", `rm -rf -- ${shellQuote(target)}`], { timeout: 60000 });
   return { ok: true, path: target };
 }
 
 async function mkdirPath(serial, remotePath) {
-  const target = normalizeRemotePath(remotePath);
+  const target = normalizeRemotePath(remotePath, { write: true });
   await adbSerial(serial, ["shell", `mkdir -p -- ${shellQuote(target)}`], { timeout: 20000 });
   return { ok: true, path: target };
 }
 
 async function movePath(serial, fromPath, toPath) {
-  const from = normalizeRemotePath(fromPath);
-  const to = normalizeRemotePath(toPath);
-  if (ROOTS.includes(from)) throw new Error("不能移动根目录");
+  const from = normalizeRemotePath(fromPath, { write: true });
+  const to = normalizeRemotePath(toPath, { write: true });
+  if (WRITE_ROOTS.includes(from) || ROOTS.includes(from)) throw new Error("不能移动根目录");
   await adbSerial(serial, ["shell", `mv -- ${shellQuote(from)} ${shellQuote(to)}`], { timeout: 60000 });
   return { ok: true, from, to };
 }
 
 async function copyPath(serial, fromPath, toPath) {
-  const from = normalizeRemotePath(fromPath);
-  const to = normalizeRemotePath(toPath);
+  const from = normalizeRemotePath(fromPath, { write: true });
+  const to = normalizeRemotePath(toPath, { write: true });
   await adbSerial(serial, ["shell", `cp -a -- ${shellQuote(from)} ${shellQuote(to)}`], {
     timeout: 180000,
   });
@@ -421,20 +470,23 @@ async function copyPath(serial, fromPath, toPath) {
 }
 
 async function renamePath(serial, fromPath, newName) {
-  const from = normalizeRemotePath(fromPath);
-  if (ROOTS.includes(from)) throw new Error("不能重命名根目录");
+  const from = normalizeRemotePath(fromPath, { write: true });
+  if (WRITE_ROOTS.includes(from) || ROOTS.includes(from)) throw new Error("不能重命名根目录");
   const base = from.slice(0, from.lastIndexOf("/")) || "/sdcard";
   const name = path.basename(String(newName || "").trim()).replace(/[\\/]/g, "");
   if (!name) throw new Error("新名称无效");
-  const to = normalizeRemotePath(`${base}/${name}`);
+  const to = normalizeRemotePath(`${base}/${name}`, { write: true });
   return movePath(serial, from, to);
 }
 
-async function uploadFile(serial, dir, filename, buffer) {
-  const safeDir = normalizeRemotePath(dir);
+async function uploadFile(serial, dir, filename, buffer, forcePush = false) {
+  const safeDir = normalizeRemotePath(dir, { write: true, force: Boolean(forcePush) });
   const safeName = path.basename(String(filename || "upload.bin")).replace(/[\\/]/g, "_");
   if (!safeName) throw new Error("文件名无效");
-  const remote = normalizeRemotePath(`${safeDir}/${safeName}`);
+  const remote = normalizeRemotePath(`${safeDir}/${safeName}`, {
+    write: true,
+    force: Boolean(forcePush),
+  });
   const local = tempName("up", safeName);
   fs.writeFileSync(local, buffer);
   try {
@@ -446,7 +498,7 @@ async function uploadFile(serial, dir, filename, buffer) {
       /* ignore */
     }
   }
-  return { ok: true, path: remote, size: buffer.length };
+  return { ok: true, path: remote, size: buffer.length, forcePush: Boolean(forcePush) };
 }
 
 async function downloadFile(serial, remotePath) {
@@ -820,23 +872,61 @@ async function removeForward(serial, local, direction = "forward", removeAll = f
 
 async function getDeveloperOptions(serial) {
   const read = async (ns, key) => shellCapture(serial, `settings get ${ns} ${key}`, 8000);
+  const readProp = async (key) => shellCapture(serial, `getprop ${key}`, 8000);
+  const asBool = (v) => v === "1" || v === "true";
+
   const showTouches = await read("system", "show_touches");
   const pointerLocation = await read("system", "pointer_location");
   const windowAnim = await read("global", "window_animation_scale");
   const transitionAnim = await read("global", "transition_animation_scale");
   const animatorAnim = await read("global", "animator_duration_scale");
-  const layout = await shellCapture(serial, "getprop debug.layout", 8000);
+  const layout = await readProp("debug.layout");
   const stayOn = await read("global", "stay_on_while_plugged_in");
+
+  // Best-effort extras — empty/fail ignored per key
+  const forceRtl =
+    (await read("global", "debug.force_rtl")) || (await readProp("debug.force_rtl"));
+  const dontKeep = await read("global", "always_finish_activities");
+  const forceGpu = await read("global", "force_gpu_rendering");
+  const hardwareUi =
+    (await read("global", "debug.hwui.profile")) || (await readProp("debug.hwui.profile"));
+  const usbNotify =
+    (await read("global", "adb_notify")) ||
+    (await read("secure", "adb_notify")) ||
+    (await read("global", "adb_wifi_enabled"));
+
   return {
     ok: true,
-    showTouches: showTouches === "1" || showTouches === "true",
-    pointerLocation: pointerLocation === "1" || pointerLocation === "true",
-    layoutBounds: layout === "true" || layout === "1",
+    stay_on: stayOn === "null" ? "0" : stayOn || "0",
+    stayOnWhilePluggedIn: stayOn === "null" ? "0" : stayOn || "0",
+    show_touches: asBool(showTouches),
+    showTouches: asBool(showTouches),
+    pointer_location: asBool(pointerLocation),
+    pointerLocation: asBool(pointerLocation),
+    show_layout: asBool(layout) || layout === "true",
+    layoutBounds: asBool(layout) || layout === "true",
+    force_rtl: asBool(forceRtl),
+    dont_keep_activities: asBool(dontKeep),
+    force_gpu: asBool(forceGpu),
+    hardware_ui: Boolean(hardwareUi && hardwareUi !== "null" && hardwareUi !== "false" && hardwareUi !== "0"),
+    usb_debugging_notify: asBool(usbNotify),
     windowAnimationScale: windowAnim === "null" ? "1.0" : windowAnim || "1.0",
     transitionAnimationScale: transitionAnim === "null" ? "1.0" : transitionAnim || "1.0",
     animatorDurationScale: animatorAnim === "null" ? "1.0" : animatorAnim || "1.0",
-    stayOnWhilePluggedIn: stayOn === "null" ? "0" : stayOn || "0",
-    raw: { showTouches, pointerLocation, layout, windowAnim, transitionAnim, animatorAnim, stayOn },
+    raw: {
+      showTouches,
+      pointerLocation,
+      layout,
+      windowAnim,
+      transitionAnim,
+      animatorAnim,
+      stayOn,
+      forceRtl,
+      dontKeep,
+      forceGpu,
+      hardwareUi,
+      usbNotify,
+    },
   };
 }
 
@@ -845,15 +935,31 @@ async function setDeveloperOption(serial, key, value) {
   async function put(ns, name, val) {
     await adbSerial(serial, ["shell", "settings", "put", ns, name, String(val)], { timeout: 10000 });
   }
+  async function tryPut(ns, name, val) {
+    try {
+      await put(ns, name, val);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  async function tryProp(name, val) {
+    try {
+      await adbSerial(serial, ["shell", "setprop", name, String(val)], { timeout: 10000 });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   if (k === "show_touches") {
     await put("system", "show_touches", value ? "1" : "0");
   } else if (k === "pointer_location") {
     await put("system", "pointer_location", value ? "1" : "0");
-  } else if (k === "layout_bounds") {
+  } else if (k === "layout_bounds" || k === "show_layout") {
     await adbSerial(serial, ["shell", "setprop", "debug.layout", value ? "true" : "false"], {
       timeout: 10000,
     });
-    // Refresh UI hierarchy overlay
     try {
       await adbSerial(serial, ["shell", "service", "call", "activity", "1599295570"], {
         timeout: 10000,
@@ -861,6 +967,22 @@ async function setDeveloperOption(serial, key, value) {
     } catch {
       /* ignore refresh failure */
     }
+  } else if (k === "stay_on" || k === "stay_on_while_plugged_in") {
+    const v = value === true || value === "on" ? "7" : value === false || value === "off" ? "0" : String(value);
+    await put("global", "stay_on_while_plugged_in", v);
+  } else if (k === "force_rtl") {
+    await tryPut("global", "debug.force_rtl", value ? "1" : "0");
+    await tryProp("debug.force_rtl", value ? "1" : "0");
+  } else if (k === "dont_keep_activities") {
+    await tryPut("global", "always_finish_activities", value ? "1" : "0");
+  } else if (k === "force_gpu") {
+    await tryPut("global", "force_gpu_rendering", value ? "1" : "0");
+  } else if (k === "hardware_ui") {
+    await tryPut("global", "debug.hwui.profile", value ? "visual_bars" : "false");
+    await tryProp("debug.hwui.profile", value ? "visual_bars" : "false");
+  } else if (k === "usb_debugging_notify") {
+    await tryPut("global", "adb_notify", value ? "1" : "0");
+    await tryPut("secure", "adb_notify", value ? "1" : "0");
   } else if (k === "window_animation_scale") {
     await put("global", "window_animation_scale", value);
   } else if (k === "transition_animation_scale") {
@@ -882,6 +1004,8 @@ async function dumpLogcat(serial, opts = {}) {
   const lines = Math.max(20, Math.min(5000, Number(opts.lines) || 500));
   const query = String(opts.query || "").trim();
   const packageName = String(opts.packageName || "").trim();
+  const tag = String(opts.tag || "").trim();
+  const since = String(opts.since || "").trim();
   const args = ["logcat", "-d", "-v", "time", "-t", String(lines)];
   if (packageName) {
     try {
@@ -894,8 +1018,28 @@ async function dumpLogcat(serial, opts = {}) {
       /* ignore pid filter */
     }
   }
+  // Safe tag filter syntax: TagName:V *:S (alphanumeric / . _ $ / - only)
+  let usedTagFilter = false;
+  if (tag && /^[A-Za-z0-9._$/-]+$/.test(tag) && tag.length <= 128) {
+    args.push(`${tag}:V`, "*:S");
+    usedTagFilter = true;
+  }
   const { stdout } = await adbSerial(serial, args, { timeout: 60000, maxBuffer: 30 * 1024 * 1024 });
   let text = stdout || "";
+  if (tag && !usedTagFilter) {
+    const t = tag.toLowerCase();
+    text = text
+      .split(/\r?\n/)
+      .filter((line) => {
+        const lower = line.toLowerCase();
+        if (lower.includes(`${t}:`)) return true;
+        // time format columns: date time pid tid level tag:
+        const m = line.match(/\s([VDIWEF])\s+([^\s:]+):/);
+        if (m && m[2].toLowerCase() === t) return true;
+        return false;
+      })
+      .join("\n");
+  }
   if (query) {
     const q = query.toLowerCase();
     text = text
@@ -903,7 +1047,24 @@ async function dumpLogcat(serial, opts = {}) {
       .filter((line) => line.toLowerCase().includes(q))
       .join("\n");
   }
-  return { ok: true, text, lines: text ? text.split(/\r?\n/).filter(Boolean).length : 0 };
+  if (since) {
+    // Best-effort: keep lines whose leading timestamp string is >= since (lexical if same format)
+    text = text
+      .split(/\r?\n/)
+      .filter((line) => {
+        const m = line.match(/^(\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\.\d+)/);
+        if (!m) return true;
+        return m[1] >= since;
+      })
+      .join("\n");
+  }
+  return {
+    ok: true,
+    text,
+    lines: text ? text.split(/\r?\n/).filter(Boolean).length : 0,
+    note:
+      "流式 /logcat/stream 暂未提供；请轮询本接口，可用 tag、query、package、since 组合过滤。",
+  };
 }
 
 async function clearLogcat(serial) {
@@ -1278,7 +1439,83 @@ async function backupApp(serial, packageName) {
   return { filename: `${pkg}.apk`, data, remote };
 }
 
-async function runInstallJob(job, upload, serials, replace) {
+async function resolvePackageApkPath(serial, packageName) {
+  const pkg = String(packageName || "").trim();
+  if (!pkg || !/^[A-Za-z0-9._]+$/.test(pkg)) throw new Error("包名无效");
+  let stdout = "";
+  try {
+    ({ stdout } = await adbSerial(serial, ["shell", "pm", "path", pkg], { timeout: 30000 }));
+  } catch {
+    try {
+      ({ stdout } = await adbSerial(serial, ["shell", "cmd", "package", "path", pkg], {
+        timeout: 30000,
+      }));
+    } catch (err) {
+      throw new Error(err.message || "无法查询包路径");
+    }
+  }
+  const m = String(stdout || "").match(/package:(.+)/);
+  return m ? m[1].trim() : "";
+}
+
+/**
+ * Push an uploaded APK onto the device for system/tmp deploy.
+ * - If packageName resolves to a path under SYSTEM_APP_ROOTS, overwrite that path.
+ * - Else use remoteDir/<name> or /data/local/tmp/<pkg|file>.apk
+ * Uses force write for system paths (equivalent to forcePush).
+ */
+async function pushSystemApk(serial, uploadId, packageName, remoteDir) {
+  const upload = UPLOADS.get(uploadId);
+  if (!upload) throw new Error("找不到已上传的 APK，请先上传");
+  if (!serial) throw new Error("缺少设备 serial");
+
+  const pkg = String(packageName || "").trim();
+  let remotePath = "";
+  let replaced = false;
+
+  if (pkg) {
+    try {
+      const existing = await resolvePackageApkPath(serial, pkg);
+      if (existing && isUnderRoots(existing.replace(/\\/g, "/"), SYSTEM_APP_ROOTS)) {
+        remotePath = normalizeRemotePath(existing, { write: true, force: true });
+        replaced = true;
+      }
+    } catch {
+      /* package may not be installed yet */
+    }
+  }
+
+  if (!remotePath) {
+    const dir = String(remoteDir || "").trim();
+    const fileName = pkg ? `${pkg}.apk` : path.basename(upload.filename || "app.apk");
+    if (dir) {
+      const safeDir = normalizeRemotePath(dir, { write: true, force: true });
+      remotePath = normalizeRemotePath(`${safeDir}/${fileName}`, { write: true, force: true });
+    } else {
+      remotePath = normalizeRemotePath(`/data/local/tmp/${fileName}`, { write: true });
+    }
+  }
+
+  if (!replaced) {
+    try {
+      const { stdout } = await adbSerial(serial, ["shell", `ls ${shellQuote(remotePath)}`], {
+        timeout: 10000,
+      });
+      if (stdout.trim() && !/No such file|Not found|No such/i.test(stdout)) replaced = true;
+    } catch {
+      /* treat as new */
+    }
+  }
+
+  await adbSerial(serial, ["push", upload.path, remotePath], { timeout: 300000 });
+  return { ok: true, remotePath, replaced };
+}
+
+async function runInstallJob(job, upload, serials, opts = {}) {
+  const replace = opts.replace !== false;
+  // allowDowngrade: explicit true enables -d; if omitted, keep legacy (-d with replace)
+  const allowDowngrade =
+    opts.allowDowngrade != null ? Boolean(opts.allowDowngrade) : replace;
   touchJob(job, { status: "running", message: "开始安装", progress: 0, items: [] });
   const total = serials.length || 1;
   for (let i = 0; i < serials.length; i++) {
@@ -1290,7 +1527,10 @@ async function runInstallJob(job, upload, serials, replace) {
       message: `安装到 ${serial}（${i + 1}/${total}）`,
     });
     try {
-      const args = replace ? ["install", "-r", "-d", upload.path] : ["install", upload.path];
+      const args = ["install"];
+      if (replace) args.push("-r");
+      if (allowDowngrade) args.push("-d");
+      args.push(upload.path);
       const { stdout, stderr } = await adbSerial(serial, args, { timeout: 600000 });
       const text = `${stdout}\n${stderr}`;
       if (/Failure|Error/i.test(text) && !/Success/i.test(text)) throw new Error(text.trim() || "安装失败");
@@ -1365,53 +1605,177 @@ async function runScreenshotJob(job, serials) {
   });
 }
 
+async function screencapPng(serial) {
+  if (!serial) throw new Error("缺少设备 serial");
+  const result = await adbSerial(serial, ["exec-out", "screencap", "-p"], {
+    encoding: "buffer",
+    maxBuffer: 50 * 1024 * 1024,
+    timeout: 60000,
+  });
+  const data = Buffer.isBuffer(result.stdout) ? result.stdout : Buffer.from(result.stdout || "");
+  if (!data.length) throw new Error("截图为空");
+  return data;
+}
+
+async function pullRecordArtifact(job, serial, remote) {
+  const local = tempName("rec", `${serial}.mp4`);
+  await adbSerial(serial, ["pull", remote, local], { timeout: 300000 });
+  try {
+    await adbSerial(serial, ["shell", `rm -f -- ${shellQuote(remote)}`], { timeout: 10000 });
+  } catch {
+    /* ignore */
+  }
+  if (!fs.existsSync(local)) return null;
+  const stat = fs.statSync(local);
+  if (!stat.size) {
+    try {
+      fs.unlinkSync(local);
+    } catch {
+      /* ignore */
+    }
+    return null;
+  }
+  const art = {
+    name: `${serial}-screenrecord.mp4`,
+    path: local,
+    size: stat.size,
+    serial,
+    mime: "video/mp4",
+  };
+  job.artifacts.push(art);
+  return art;
+}
+
 async function runRecordJob(job, serial, seconds) {
-  const limit = Math.max(1, Math.min(180, Number(seconds) || 30));
+  // seconds === 0 or null → no --time-limit (until cancel / device default)
+  const unlimited = seconds === 0 || seconds === null;
+  const limit = unlimited ? null : Math.max(1, Math.min(180, Number(seconds) || 30));
   const remote = `/sdcard/Download/devtools-rec-${Date.now()}.mp4`;
+  job.meta = { ...(job.meta || {}), serial, seconds: unlimited ? 0 : limit, remote, unlimited };
+
   touchJob(job, {
     status: "running",
-    message: `录屏中 0/${limit}s`,
+    message: unlimited ? "录屏中 0s（无时限，POST /jobs/:id/cancel 结束）" : `录屏中 0/${limit}s`,
     progress: 0,
     items: [{ serial, status: "running", message: "recording" }],
   });
 
   const started = Date.now();
   const timer = setInterval(() => {
-    const elapsed = Math.min(limit, Math.round((Date.now() - started) / 1000));
-    touchJob(job, {
-      progress: Math.round((elapsed / limit) * 90),
-      message: `录屏中 ${elapsed}/${limit}s`,
-    });
+    const elapsed = Math.round((Date.now() - started) / 1000);
+    if (unlimited) {
+      touchJob(job, {
+        progress: Math.min(90, 5 + (elapsed % 85)),
+        message: `录屏中 ${elapsed}s`,
+      });
+    } else {
+      const capped = Math.min(limit, elapsed);
+      touchJob(job, {
+        progress: Math.round((capped / limit) * 90),
+        message: `录屏中 ${capped}/${limit}s`,
+      });
+    }
   }, 1000);
 
+  const shellCmd = unlimited
+    ? `screenrecord ${shellQuote(remote)}`
+    : `screenrecord --time-limit ${limit} ${shellQuote(remote)}`;
+
+  const child = spawn("adb", ["-s", serial, "shell", shellCmd], {
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  job.child = child;
+  job.pid = child.pid;
+
+  let stderr = "";
+  child.stderr.on("data", (d) => {
+    stderr += d.toString("utf8");
+  });
+  child.stdout.on("data", () => {
+    /* drain */
+  });
+
   try {
-    await adbSerial(serial, ["shell", `screenrecord --time-limit ${limit} ${shellQuote(remote)}`], {
-      timeout: (limit + 30) * 1000,
+    await new Promise((resolve, reject) => {
+      child.on("error", reject);
+      child.on("close", (code, signal) => {
+        if (job.cancelRequested) {
+          resolve({ cancelled: true });
+          return;
+        }
+        if (code === 0 || signal === "SIGINT" || signal === "SIGTERM") {
+          resolve({ cancelled: false });
+          return;
+        }
+        // screenrecord may exit non-zero after SIGINT on some devices
+        if (signal) {
+          resolve({ cancelled: Boolean(job.cancelRequested) });
+          return;
+        }
+        reject(new Error(stderr.trim() || `screenrecord 退出码 ${code}`));
+      });
     });
+
     clearInterval(timer);
-    touchJob(job, { progress: 92, message: "拉取录屏文件…" });
-    const local = tempName("rec", `${serial}.mp4`);
-    await adbSerial(serial, ["pull", remote, local], { timeout: 300000 });
-    try {
-      await adbSerial(serial, ["shell", `rm -f -- ${shellQuote(remote)}`], { timeout: 10000 });
-    } catch {
-      /* ignore */
+    job.child = null;
+
+    if (job.cancelRequested) {
+      touchJob(job, { progress: 92, message: "取消中，尝试拉取部分录屏…" });
+      // brief settle so screenrecord flushes
+      await new Promise((r) => setTimeout(r, 800));
+      try {
+        const art = await pullRecordArtifact(job, serial, remote);
+        if (job.items[0]) {
+          job.items[0].status = "cancelled";
+          job.items[0].message = art ? "cancelled (partial)" : "cancelled";
+        }
+        touchJob(job, {
+          status: "cancelled",
+          progress: 100,
+          message: art ? "已取消，已保存部分录屏" : "已取消（无可用片段）",
+        });
+      } catch (err) {
+        if (job.items[0]) {
+          job.items[0].status = "cancelled";
+          job.items[0].message = err.message || String(err);
+        }
+        touchJob(job, {
+          status: "cancelled",
+          progress: 100,
+          message: "已取消",
+          error: err.message || String(err),
+        });
+      }
+      return;
     }
-    const stat = fs.statSync(local);
-    job.artifacts.push({
-      name: `${serial}-screenrecord.mp4`,
-      path: local,
-      size: stat.size,
-      serial,
-      mime: "video/mp4",
-    });
-    job.items[0].status = "ok";
-    job.items[0].message = "done";
+
+    touchJob(job, { progress: 92, message: "拉取录屏文件…" });
+    await pullRecordArtifact(job, serial, remote);
+    if (job.items[0]) {
+      job.items[0].status = "ok";
+      job.items[0].message = "done";
+    }
     touchJob(job, { status: "done", progress: 100, message: "录屏完成" });
   } catch (err) {
     clearInterval(timer);
-    job.items[0].status = "error";
-    job.items[0].message = err.message || String(err);
+    job.child = null;
+    if (job.cancelRequested) {
+      try {
+        await pullRecordArtifact(job, serial, remote);
+      } catch {
+        /* ignore */
+      }
+      if (job.items[0]) {
+        job.items[0].status = "cancelled";
+        job.items[0].message = "cancelled";
+      }
+      touchJob(job, { status: "cancelled", progress: 100, message: "已取消" });
+      return;
+    }
+    if (job.items[0]) {
+      job.items[0].status = "error";
+      job.items[0].message = err.message || String(err);
+    }
     touchJob(job, {
       status: "error",
       progress: 100,
@@ -1419,6 +1783,40 @@ async function runRecordJob(job, serial, seconds) {
       error: err.message || String(err),
     });
   }
+}
+
+async function cancelJob(jobId) {
+  const job = JOBS.get(jobId);
+  if (!job) throw new Error("任务不存在");
+  if (job.status !== "running" && job.status !== "queued") {
+    return { ok: false, job: publicJob(job), error: "任务已结束，无法取消" };
+  }
+  job.cancelRequested = true;
+  touchJob(job, { message: job.message || "正在取消…" });
+
+  const serial = job.meta?.serial || (job.items[0] && job.items[0].serial) || "";
+  if (job.type === "record" && serial) {
+    try {
+      await adbSerial(serial, ["shell", "pkill", "-2", "screenrecord"], { timeout: 10000 });
+    } catch {
+      try {
+        await adbSerial(serial, ["shell", "killall", "-2", "screenrecord"], { timeout: 10000 });
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  if (job.child && !job.child.killed) {
+    try {
+      job.child.kill("SIGINT");
+    } catch {
+      /* ignore */
+    }
+  }
+  if (job.status === "queued") {
+    touchJob(job, { status: "cancelled", progress: 100, message: "已取消" });
+  }
+  return { ok: true, job: publicJob(job), message: "已请求取消" };
 }
 
 async function runBackupJob(job, serial, packageName) {
@@ -1487,10 +1885,13 @@ async function handleApi(req, res, url) {
           features: [
             "fs",
             "install",
+            "install-push-system",
             "apps",
             "screenshot",
+            "screencap",
             "record",
             "jobs",
+            "job-cancel",
             "logcat",
             "input",
             "clipboard",
@@ -1504,6 +1905,9 @@ async function handleApi(req, res, url) {
           adb: adbInfo,
           deviceCount: devices.length,
           roots: ROOTS,
+          writeRoots: WRITE_ROOTS,
+          note:
+            "写入默认限于 writeRoots；系统 APK 路径推送请用 forcePush 或 POST /install/push-system",
         },
         origin
       );
@@ -1574,9 +1978,12 @@ async function handleApi(req, res, url) {
       const filename =
         decodeURIComponent(url.searchParams.get("name") || "") ||
         decodeURIComponent(String(req.headers["x-filename"] || "upload.bin"));
+      const forcePush =
+        url.searchParams.get("forcePush") === "1" ||
+        url.searchParams.get("forcePush") === "true";
       const buffer = await readBody(req);
       if (!buffer.length) throw new Error("空文件");
-      sendJson(res, 200, await uploadFile(serial, dir, filename, buffer), origin);
+      sendJson(res, 200, await uploadFile(serial, dir, filename, buffer, forcePush), origin);
       return;
     }
 
@@ -1614,17 +2021,33 @@ async function handleApi(req, res, url) {
       if (!upload) throw new Error("找不到已上传的 APK，请先上传");
       const serials = parseSerials(body.serials || body.serial);
       if (!serials.length) throw new Error("请选择至少一台设备");
+      const replace = body.replace !== false;
+      const allowDowngrade =
+        body.allowDowngrade != null ? Boolean(body.allowDowngrade) : replace;
       const job = createJob("install", {
         filename: upload.filename,
         serials,
-        replace: body.replace !== false,
+        replace,
+        allowDowngrade,
       });
       setImmediate(() => {
-        runInstallJob(job, upload, serials, body.replace !== false).catch((err) => {
+        runInstallJob(job, upload, serials, { replace, allowDowngrade }).catch((err) => {
           touchJob(job, { status: "error", error: err.message || String(err), message: "安装异常" });
         });
       });
       sendJson(res, 200, { ok: true, job: publicJob(job) }, origin);
+      return;
+    }
+
+    if (url.pathname === "/install/push-system" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req, 1024 * 1024));
+      const result = await pushSystemApk(
+        body.serial,
+        body.uploadId,
+        body.packageName,
+        body.remoteDir
+      );
+      sendJson(res, 200, result, origin);
       return;
     }
 
@@ -1702,6 +2125,8 @@ async function handleApi(req, res, url) {
         lines: url.searchParams.get("lines"),
         query: url.searchParams.get("query"),
         packageName: url.searchParams.get("package"),
+        tag: url.searchParams.get("tag"),
+        since: url.searchParams.get("since"),
       });
       sendJson(res, 200, result, origin);
       return;
@@ -1791,6 +2216,20 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    if (url.pathname === "/media/screencap" && req.method === "GET") {
+      const serial = url.searchParams.get("serial") || "";
+      const data = await screencapPng(serial);
+      const headers = {
+        "Content-Type": "image/png",
+        "Content-Length": data.length,
+        "Cache-Control": "no-store",
+      };
+      applyCors(headers, origin);
+      res.writeHead(200, headers);
+      res.end(data);
+      return;
+    }
+
     if (url.pathname === "/media/screenshot" && req.method === "POST") {
       const body = parseJsonBody(await readBody(req, 1024 * 1024));
       const serials = parseSerials(body.serials || body.serial);
@@ -1809,8 +2248,17 @@ async function handleApi(req, res, url) {
       const body = parseJsonBody(await readBody(req, 1024 * 1024));
       const serial = String(body.serial || "").trim();
       if (!serial) throw new Error("请选择设备");
-      const seconds = Number(body.seconds || 30);
-      const job = createJob("record", { serial, seconds });
+      // seconds: omit → 30; 0/null → unlimited until cancel
+      let seconds;
+      if (body.seconds === 0 || body.seconds === null) {
+        seconds = body.seconds === null ? null : 0;
+      } else if (body.seconds === undefined || body.seconds === "") {
+        seconds = 30;
+      } else {
+        seconds = Number(body.seconds);
+        if (!Number.isFinite(seconds)) seconds = 30;
+      }
+      const job = createJob("record", { serial, seconds: seconds == null ? 0 : seconds });
       setImmediate(() => {
         runRecordJob(job, serial, seconds).catch((err) => {
           touchJob(job, { status: "error", error: err.message || String(err), message: "录屏异常" });
@@ -1826,6 +2274,12 @@ async function handleApi(req, res, url) {
         .slice(0, 40)
         .map(publicJob);
       sendJson(res, 200, { ok: true, jobs: list }, origin);
+      return;
+    }
+
+    const cancelMatch = url.pathname.match(/^\/jobs\/([^/]+)\/cancel$/);
+    if (cancelMatch && req.method === "POST") {
+      sendJson(res, 200, await cancelJob(decodeURIComponent(cancelMatch[1])), origin);
       return;
     }
 
