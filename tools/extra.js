@@ -4921,11 +4921,7 @@
     function flashVsplitFsFrame(kind) {
       if (!vsplitFsFlash || !vsplitFsHost) return;
       // 确保闪层在视频之上（部分 WebKit 会把后插入的 video 盖住绝对定位层）
-      if (vsplitFsFlash.parentElement !== vsplitFsHost) {
-        vsplitFsHost.appendChild(vsplitFsFlash);
-      } else {
-        vsplitFsHost.appendChild(vsplitFsFlash);
-      }
+      vsplitFsHost.appendChild(vsplitFsFlash);
       vsplitFsFlash.classList.remove("is-pop", "is-start", "is-end");
       void vsplitFsFlash.offsetWidth;
       vsplitFsFlash.classList.add("is-pop", kind === "end" ? "is-end" : "is-start");
