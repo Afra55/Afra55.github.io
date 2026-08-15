@@ -744,6 +744,47 @@ async function main() {
   if (!(manualMarks.scrubDotCount >= 4)) {
     throw new Error(`scrub marks should paint start/end dots: ${JSON.stringify(manualMarks)}`);
   }
+  // 重叠打点应收成数字簇，点开可选
+  const denseCluster = await pageMarks.evaluate(() => {
+    const dur = Number(document.getElementById("vsplit-video")?.duration) || 4;
+    const base = Math.max(0.4, dur * 0.4);
+    window.DevToolsVsplit.setMarks([
+      { start: base, end: base + 0.55 },
+      { start: base + 0.04, end: base + 0.6 },
+      { start: base + 0.08, end: base + 0.65 },
+      { start: base + 0.12, end: base + 0.7 },
+      { start: base + 0.16, end: base + 0.75 },
+    ]);
+    const clusters = [...document.querySelectorAll("#vsplit-scrub-marks .vsplit-scrub-mark.is-cluster")];
+    const clusterCount = clusters.length;
+    const clusterLabel = (clusters[0]?.textContent || "").trim();
+    clusters[0]?.click();
+    const pickerOpen = !document.getElementById("vsplit-mark-picker")?.hidden;
+    const pickerBtns = document.querySelectorAll("#vsplit-mark-picker button").length;
+    return {
+      clusterCount,
+      clusterLabel,
+      pickerOpen,
+      pickerBtns,
+      chips: document.querySelectorAll("#vsplit-mark-chips .vsplit-mark-chip").length,
+      dots: document.querySelectorAll("#vsplit-scrub-marks .vsplit-scrub-mark").length,
+    };
+  });
+  if (!(denseCluster.clusterCount >= 1)) {
+    throw new Error(`dense marks should cluster: ${JSON.stringify(denseCluster)}`);
+  }
+  if (!(Number(denseCluster.clusterLabel) >= 2)) {
+    throw new Error(`cluster badge should show count: ${JSON.stringify(denseCluster)}`);
+  }
+  if (!denseCluster.pickerOpen || !(denseCluster.pickerBtns >= 2)) {
+    throw new Error(`cluster tap should open picker: ${JSON.stringify(denseCluster)}`);
+  }
+  if (denseCluster.chips !== 5) {
+    throw new Error(`expected 5 mark chips after dense setMarks: ${JSON.stringify(denseCluster)}`);
+  }
+  if (!(denseCluster.dots < 10)) {
+    throw new Error(`clustered paint should reduce raw dots (<10), got ${JSON.stringify(denseCluster)}`);
+  }
   if (manualMarks.incomplete?.end != null) {
     throw new Error(`delete end failed: ${JSON.stringify(manualMarks.incomplete)}`);
   }
@@ -893,7 +934,7 @@ async function main() {
   if (!result.mediaSubnavVisible) problems.push("media subnav should show");
   if (!result.orderHasMedia) problems.push("nav missing media entry");
   if (result.noLegacyMediaNav === false) problems.push("legacy gifmaker/vsplit/vbb nav links should be gone");
-  if (!/2026\.08\.14/.test(result.version)) problems.push(`bad version ${result.version}`);
+  if (!/2026\.08\.15/.test(result.version)) problems.push(`bad version ${result.version}`);
   if (result.analyzeDisabled !== true) problems.push("analyze should start disabled");
   if (result.runDisabled !== true) problems.push("run should start disabled");
   if (!result.ids.every((x) => x.ok)) problems.push("missing ids");
