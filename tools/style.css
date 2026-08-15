@@ -1970,6 +1970,39 @@ a.secondary-btn {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
+.vsplit-scrub-mark.is-picked {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-left: -0.525rem;
+  top: -0.08rem;
+  z-index: 6;
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px color-mix(in srgb, var(--accent) 75%, transparent);
+  transform: scale(1.08);
+  animation: vsplit-mark-pulse 1s ease-in-out infinite;
+}
+
+@keyframes vsplit-mark-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 2px #fff,
+      0 0 0 4px color-mix(in srgb, var(--accent) 75%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px #fff,
+      0 0 0 6px color-mix(in srgb, var(--accent) 35%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .vsplit-scrub-mark.is-picked {
+    animation: none;
+  }
+}
+
 .vsplit-scrub-mark.is-editable:active {
   transform: scale(1.12);
 }
@@ -2051,6 +2084,29 @@ a.secondary-btn {
 .vsplit-mark-picker button:hover,
 .vsplit-mark-picker button:focus-visible {
   background: rgba(46, 196, 182, 0.14);
+}
+
+.vsplit-mark-picker button.is-nearest {
+  background: rgba(46, 196, 182, 0.2);
+  box-shadow: inset 0 0 0 1px rgba(46, 196, 182, 0.55);
+}
+
+.vsplit-mark-picker button.is-nearest:hover,
+.vsplit-mark-picker button.is-nearest:focus-visible {
+  background: rgba(46, 196, 182, 0.28);
+}
+
+.vsplit-mark-picker-badge {
+  display: inline-block;
+  margin-right: 0.35rem;
+  padding: 0.08rem 0.35rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: #0b1220;
+  background: var(--accent, #2ec4b6);
+  vertical-align: 0.05em;
 }
 
 .vsplit-mark-picker button .mono {

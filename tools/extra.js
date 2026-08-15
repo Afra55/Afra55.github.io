@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.15-nav";
+  const TOOLS_VERSION = "2026.08.15-pick";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -4582,6 +4582,8 @@
     /** @type {number|null} */
     let vsplitDraftStart = null;
     let vsplitEditIdx = -1;
+    /** 附近标记弹层里高亮的端点（你刚点到的） */
+    let vsplitPickerHighlight = null;
     /** @type {"start"|"end"} */
     let vsplitEditFocus = "start";
     let vsplitScrubbing = false;
@@ -5354,12 +5356,17 @@
     }
 
     function hideVsplitMarkPicker() {
-      if (!vsplitMarkPicker) return;
-      vsplitMarkPicker.hidden = true;
-      vsplitMarkPicker.innerHTML = "";
+      const hadHighlight = !!vsplitPickerHighlight;
+      const wasOpen = Boolean(vsplitMarkPicker && !vsplitMarkPicker.hidden);
+      if (vsplitMarkPicker) {
+        vsplitMarkPicker.hidden = true;
+        vsplitMarkPicker.innerHTML = "";
+      }
+      vsplitPickerHighlight = null;
+      if (hadHighlight || wasOpen) paintVsplitScrubMarks();
     }
 
-    function showVsplitMarkPicker(near, clientX) {
+    function showVsplitMarkPicker(near, clientX, preferred) {
       if (!vsplitMarkPicker || !vsplitScrubHit) return;
       const hitRect = vsplitScrubHit.getBoundingClientRect();
       const items = near.filter((ep) => !ep.draft && ep.idx >= 0);
@@ -5367,17 +5374,31 @@
         hideVsplitMarkPicker();
         return;
       }
+      const prefer =
+        (preferred &&
+          items.find((ep) => ep.idx === preferred.idx && ep.kind === preferred.kind)) ||
+        items[0];
+      vsplitPickerHighlight = prefer ? { idx: prefer.idx, kind: prefer.kind } : null;
       vsplitMarkPicker.innerHTML = "";
       const title = document.createElement("p");
       title.className = "vsplit-mark-picker-title";
-      title.textContent = `附近 ${items.length} 个标记，点选：`;
+      title.textContent = `附近 ${items.length} 个标记 · 高亮为你点到的：`;
       vsplitMarkPicker.appendChild(title);
       items.forEach((ep) => {
         const btn = document.createElement("button");
         btn.type = "button";
         btn.setAttribute("role", "option");
+        const isNearest =
+          prefer && ep.idx === prefer.idx && ep.kind === prefer.kind;
+        if (isNearest) {
+          btn.className = "is-nearest";
+          btn.setAttribute("aria-selected", "true");
+        } else {
+          btn.setAttribute("aria-selected", "false");
+        }
         const kindLabel = ep.kind === "end" ? "终点" : "起点";
-        btn.innerHTML = `<strong>#${String(ep.idx + 1).padStart(2, "0")} ${kindLabel}</strong> <span class="mono">${formatClock(ep.t)}</span>`;
+        const badge = isNearest ? `<span class="vsplit-mark-picker-badge">当前</span>` : "";
+        btn.innerHTML = `${badge}<strong>#${String(ep.idx + 1).padStart(2, "0")} ${kindLabel}</strong> <span class="mono">${formatClock(ep.t)}</span>`;
         btn.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -5390,6 +5411,15 @@
       vsplitMarkPicker.style.left = `${left}px`;
       vsplitMarkPicker.style.top = `1.1rem`;
       vsplitMarkPicker.hidden = false;
+      paintVsplitScrubMarks();
+      const nearestBtn = vsplitMarkPicker.querySelector("button.is-nearest");
+      if (nearestBtn?.scrollIntoView) {
+        try {
+          nearestBtn.scrollIntoView({ block: "nearest", behavior: "auto" });
+        } catch (_) {
+          /* ignore */
+        }
+      }
     }
 
     function resolveVsplitMarkTap(clientX) {
@@ -5502,7 +5532,7 @@
         selectVsplitEditEndpoint(actionable[0].idx, actionable[0].kind);
         return;
       }
-      showVsplitMarkPicker(actionable, e.clientX);
+      showVsplitMarkPicker(actionable, e.clientX, actionable[0]);
     }
 
     function paintVsplitScrubMarks() {
@@ -5519,18 +5549,24 @@
       }
       const addDot = (t, kind, opts = {}) => {
         if (t == null || !Number.isFinite(t)) return;
-        const { active = false, idx = -1, editable = false } = opts;
+        const { active = false, idx = -1, editable = false, picked = false } = opts;
         const dot = document.createElement("button");
         dot.type = "button";
         dot.className =
           `vsplit-scrub-mark is-${kind}` +
           (active ? " is-active" : "") +
+          (picked ? " is-picked" : "") +
           (editable ? " is-editable" : "");
         const pct = Math.max(0, Math.min(100, (Number(t) / dur) * 100));
         dot.style.left = `${pct}%`;
-        if (active) dot.style.zIndex = "5";
+        if (active || picked) dot.style.zIndex = "5";
         const label = kind === "start" ? "起点" : "终点";
-        dot.setAttribute("aria-label", idx >= 0 ? `选中第 ${idx + 1} 段${label}` : label);
+        dot.setAttribute(
+          "aria-label",
+          idx >= 0
+            ? `${picked ? "当前点到 · " : ""}选中第 ${idx + 1} 段${label}`
+            : label
+        );
         if (editable && idx >= 0) {
           dot.addEventListener("pointerdown", (e) => {
             e.stopPropagation();
@@ -5545,7 +5581,7 @@
                 ? resolved.near.filter((ep) => !ep.draft && ep.idx >= 0)
                 : [];
               if (actionable.length > 1) {
-                showVsplitMarkPicker(actionable, e.clientX);
+                showVsplitMarkPicker(actionable, e.clientX, { idx, kind });
                 return;
               }
             }
@@ -5577,8 +5613,26 @@
       } else {
         if (vsplitDraftStart != null) addDot(vsplitDraftStart, "start", { editable: false });
         vsplitMarks.forEach((mark, idx) => {
-          addDot(mark.start, "start", { idx, editable: canEditDots });
-          addDot(mark.end, "end", { idx, editable: canEditDots });
+          const pickStart =
+            vsplitPickerHighlight &&
+            vsplitPickerHighlight.idx === idx &&
+            vsplitPickerHighlight.kind === "start";
+          const pickEnd =
+            vsplitPickerHighlight &&
+            vsplitPickerHighlight.idx === idx &&
+            vsplitPickerHighlight.kind === "end";
+          addDot(mark.start, "start", {
+            idx,
+            editable: canEditDots,
+            active: !!pickStart,
+            picked: !!pickStart,
+          });
+          addDot(mark.end, "end", {
+            idx,
+            editable: canEditDots,
+            active: !!pickEnd,
+            picked: !!pickEnd,
+          });
         });
       }
       paintVsplitMarkChips();
