@@ -8657,6 +8657,7 @@
 
     function showFsCtxMenu(entry, clientX, clientY) {
       if (!entry) return;
+      hideAppCtxMenu();
       const menu = ensureFsCtxMenu();
       menu.dataset.path = entry.path;
       menu.dataset.name = entry.name || "";
