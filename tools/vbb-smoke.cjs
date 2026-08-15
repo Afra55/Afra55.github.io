@@ -884,6 +884,7 @@ async function main() {
       cacheUi,
       manualUi,
       manualMarks,
+      fsMark,
       analyze,
       todayTools,
       mobileShell,
@@ -904,6 +905,7 @@ async function main() {
     cacheUi,
     manualUi,
     manualMarks,
+    fsMark,
     mobile: mobileShell.hashVbb,
     shellFixes,
   });
