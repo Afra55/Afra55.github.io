@@ -92,7 +92,9 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.15-o";
+  const TOOLS_VERSION = "2026.08.15-p";
+  /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
+  const GIF_TOOL_VERSION = TOOLS_VERSION;
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -781,21 +783,21 @@
     return new Blob([new Uint8Array(out.take())], { type: "image/webp" });
   }
 
-  function paintGifToolVersion() {
-    const label = `v${GIF_TOOL_VERSION}`;
-    ["#gif-tool-version", "#gif-tool-version-inline"].forEach((sel) => {
-      const el = $(sel);
-      if (!el) return;
+  function paintToolsVersion() {
+    const label = `v${TOOLS_VERSION}`;
+    const el = $("#site-tools-version");
+    if (el) {
       el.textContent = label;
-      el.title = `GIF 工具逻辑版本 ${GIF_TOOL_VERSION}（更新后应看到此号变化）`;
-    });
+      el.title = `工具页逻辑版本 ${TOOLS_VERSION}（更新后应看到此号变化）`;
+    }
     try {
-      window.GIF_TOOL_VERSION = GIF_TOOL_VERSION;
+      window.TOOLS_VERSION = TOOLS_VERSION;
+      window.GIF_TOOL_VERSION = TOOLS_VERSION;
     } catch (_) {}
   }
 
-  paintGifToolVersion();
-  document.addEventListener("DOMContentLoaded", paintGifToolVersion);
+  paintToolsVersion();
+  document.addEventListener("DOMContentLoaded", paintToolsVersion);
 
   let gifsicleModulePromise = null;
 

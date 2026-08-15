@@ -81,7 +81,7 @@ async function main() {
       vbbActive: document.getElementById("vbb")?.classList.contains("is-workspace-active"),
       hash: location.hash,
       mediaSubnavVisible: !document.getElementById("media-subnav")?.hidden,
-      version: document.getElementById("gif-tool-version")?.textContent || "",
+      version: document.getElementById("site-tools-version")?.textContent || "",
       analyzeDisabled: document.getElementById("vbb-analyze")?.disabled,
       runDisabled: document.getElementById("vbb-run")?.disabled,
       mergeDisabled: document.getElementById("vbb-merge")?.disabled,
@@ -130,8 +130,8 @@ async function main() {
   const analyze = await page.evaluate(async (fileUrl) => {
     // Can't easily set file input from URL without puppeteer upload; return readiness only.
     return {
-      ready: typeof window.GIF_TOOL_VERSION === "string",
-      gifVersion: window.GIF_TOOL_VERSION || "",
+      ready: typeof window.TOOLS_VERSION === "string" || typeof window.GIF_TOOL_VERSION === "string",
+      gifVersion: window.TOOLS_VERSION || window.GIF_TOOL_VERSION || "",
     };
   }, pathToFileURL(tmpMp4).href);
 
@@ -1087,7 +1087,7 @@ async function main() {
   if (!/宽\s*(?:480|540|600|660|720)|宽(?:480|540|600|660|720)/.test(sharpMode.summary + sharpMode.cardText)) {
     problems.push(`sharp mode should widen above 420 for 1280 source: ${sharpMode.summary}`);
   }
-  if (!analyze.ready) problems.push("GIF_TOOL_VERSION missing");
+  if (!analyze.ready) problems.push("TOOLS_VERSION missing");
   if (!afterRun.clips || !afterRun.downloads) problems.push(`execute clips/download missing: ${JSON.stringify(afterRun)}`);
   if (afterRun.errorVisible) problems.push(`execute error: ${afterRun.errorText}`);
   if (!todayTools.vsplit) problems.push("missing video split tool");
