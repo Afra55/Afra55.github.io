@@ -91,7 +91,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.14-o";
+  const GIF_TOOL_VERSION = "2026.08.14-p";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -4919,7 +4919,9 @@
     }
 
     function flashVsplitFsFrame(kind) {
-      if (!vsplitFsFlash) return;
+      if (!vsplitFsFlash || !vsplitFsHost) return;
+      // 确保闪层在视频之上（部分 WebKit 会把后插入的 video 盖住绝对定位层）
+      vsplitFsHost.appendChild(vsplitFsFlash);
       vsplitFsFlash.classList.remove("is-pop", "is-start", "is-end");
       void vsplitFsFlash.offsetWidth;
       vsplitFsFlash.classList.add("is-pop", kind === "end" ? "is-end" : "is-start");
@@ -4927,7 +4929,7 @@
       vsplitFsFlashTimer = window.setTimeout(() => {
         vsplitFsFlash.classList.remove("is-pop", "is-start", "is-end");
         vsplitFsFlashTimer = 0;
-      }, 300);
+      }, 450);
     }
 
     function showVsplitFsNote(text, kind) {
@@ -4976,6 +4978,7 @@
       if (vsplitVideo.parentElement !== vsplitFsHost) {
         vsplitFsHost.appendChild(vsplitVideo);
       }
+      if (vsplitFsFlash) vsplitFsHost.appendChild(vsplitFsFlash);
       vsplitVideo.hidden = false;
       vsplitVideo.classList.add("is-fs");
       paintVsplitFsChrome();
