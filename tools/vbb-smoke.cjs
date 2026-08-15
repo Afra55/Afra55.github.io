@@ -744,46 +744,55 @@ async function main() {
   if (!(manualMarks.scrubDotCount >= 4)) {
     throw new Error(`scrub marks should paint start/end dots: ${JSON.stringify(manualMarks)}`);
   }
-  // 重叠打点应收成数字簇，点开可选
-  const denseCluster = await pageMarks.evaluate(() => {
+  // 编辑某段时只显示该段圆点；退出后再显示全部
+  const editFocusMarks = await pageMarks.evaluate(() => {
     const dur = Number(document.getElementById("vsplit-video")?.duration) || 4;
-    const base = Math.max(0.4, dur * 0.4);
     window.DevToolsVsplit.setMarks([
-      { start: base, end: base + 0.55 },
-      { start: base + 0.04, end: base + 0.6 },
-      { start: base + 0.08, end: base + 0.65 },
-      { start: base + 0.12, end: base + 0.7 },
-      { start: base + 0.16, end: base + 0.75 },
+      { start: 0.3, end: 0.9 },
+      { start: 1.2, end: 1.8 },
+      { start: Math.min(2.2, dur - 0.8), end: Math.min(2.9, dur - 0.1) },
     ]);
-    const clusters = [...document.querySelectorAll("#vsplit-scrub-marks .vsplit-scrub-mark.is-cluster")];
-    const clusterCount = clusters.length;
-    const clusterLabel = (clusters[0]?.textContent || "").trim();
-    clusters[0]?.click();
-    const pickerOpen = !document.getElementById("vsplit-mark-picker")?.hidden;
-    const pickerBtns = document.querySelectorAll("#vsplit-mark-picker button").length;
+    const allDots = document.querySelectorAll("#vsplit-scrub-marks .vsplit-scrub-mark").length;
+    const clusterLeft = document.querySelectorAll("#vsplit-scrub-marks .vsplit-scrub-mark.is-cluster").length;
+    window.DevToolsVsplit.enterEdit(1);
+    const editDots = [...document.querySelectorAll("#vsplit-scrub-marks .vsplit-scrub-mark")].map((el) => ({
+      start: el.classList.contains("is-start"),
+      end: el.classList.contains("is-end"),
+      active: el.classList.contains("is-active"),
+    }));
+    document.getElementById("vsplit-edit-done")?.click();
+    const afterDots = document.querySelectorAll("#vsplit-scrub-marks .vsplit-scrub-mark").length;
+    const sameTop = (() => {
+      const dots = [...document.querySelectorAll("#vsplit-scrub-marks .vsplit-scrub-mark")];
+      if (dots.length < 2) return true;
+      const tops = new Set(dots.map((d) => getComputedStyle(d).top));
+      return tops.size === 1;
+    })();
     return {
-      clusterCount,
-      clusterLabel,
-      pickerOpen,
-      pickerBtns,
-      chips: document.querySelectorAll("#vsplit-mark-chips .vsplit-mark-chip").length,
-      dots: document.querySelectorAll("#vsplit-scrub-marks .vsplit-scrub-mark").length,
+      allDots,
+      clusterLeft,
+      editDotCount: editDots.length,
+      editHasStart: editDots.some((d) => d.start),
+      editHasEnd: editDots.some((d) => d.end),
+      afterDots,
+      sameTop,
+      editIdx: window.DevToolsVsplit.getEditIdx?.(),
     };
   });
-  if (!(denseCluster.clusterCount >= 1)) {
-    throw new Error(`dense marks should cluster: ${JSON.stringify(denseCluster)}`);
+  if (editFocusMarks.clusterLeft) {
+    throw new Error(`cluster badges should be removed: ${JSON.stringify(editFocusMarks)}`);
   }
-  if (!(Number(denseCluster.clusterLabel) >= 2)) {
-    throw new Error(`cluster badge should show count: ${JSON.stringify(denseCluster)}`);
+  if (editFocusMarks.allDots !== 6) {
+    throw new Error(`expected 6 dots for 3 segments: ${JSON.stringify(editFocusMarks)}`);
   }
-  if (!denseCluster.pickerOpen || !(denseCluster.pickerBtns >= 2)) {
-    throw new Error(`cluster tap should open picker: ${JSON.stringify(denseCluster)}`);
+  if (editFocusMarks.editDotCount !== 2 || !editFocusMarks.editHasStart || !editFocusMarks.editHasEnd) {
+    throw new Error(`edit mode should show only current segment dots: ${JSON.stringify(editFocusMarks)}`);
   }
-  if (denseCluster.chips !== 5) {
-    throw new Error(`expected 5 mark chips after dense setMarks: ${JSON.stringify(denseCluster)}`);
+  if (editFocusMarks.afterDots !== 6 || editFocusMarks.editIdx !== -1) {
+    throw new Error(`exit edit should restore all dots: ${JSON.stringify(editFocusMarks)}`);
   }
-  if (!(denseCluster.dots < 10)) {
-    throw new Error(`clustered paint should reduce raw dots (<10), got ${JSON.stringify(denseCluster)}`);
+  if (!editFocusMarks.sameTop) {
+    throw new Error(`scrub marks should share one row: ${JSON.stringify(editFocusMarks)}`);
   }
   if (manualMarks.incomplete?.end != null) {
     throw new Error(`delete end failed: ${JSON.stringify(manualMarks.incomplete)}`);

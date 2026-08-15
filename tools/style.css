@@ -1906,15 +1906,15 @@ a.secondary-btn {
 
 .vsplit-scrub-hit {
   position: relative;
-  padding: 1.55rem 0 0.1rem;
+  padding: 1.05rem 0 0.1rem;
 }
 
 .vsplit-scrub-marks {
   position: absolute;
   left: 0.15rem;
   right: 0.15rem;
-  top: 0;
-  height: 1.45rem;
+  top: 0.12rem;
+  height: 0.9rem;
   pointer-events: auto;
   z-index: 3;
   touch-action: manipulation;
@@ -1924,6 +1924,7 @@ a.secondary-btn {
   appearance: none;
   -webkit-appearance: none;
   position: absolute;
+  top: 0.06rem;
   width: 0.78rem;
   height: 0.78rem;
   margin-left: -0.39rem;
@@ -1947,12 +1948,10 @@ a.secondary-btn {
 }
 
 .vsplit-scrub-mark.is-start {
-  top: 0.02rem;
   background: #34d399;
 }
 
 .vsplit-scrub-mark.is-end {
-  top: 0.62rem;
   background: #fb923c;
 }
 
@@ -1960,50 +1959,13 @@ a.secondary-btn {
   width: 0.94rem;
   height: 0.94rem;
   margin-left: -0.47rem;
+  top: -0.02rem;
   z-index: 4;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
-.vsplit-scrub-mark.is-start.is-active {
-  top: -0.02rem;
-}
-
-.vsplit-scrub-mark.is-end.is-active {
-  top: 0.52rem;
-}
-
 .vsplit-scrub-mark.is-editable:active {
   transform: scale(1.12);
-}
-
-.vsplit-scrub-mark.is-cluster {
-  width: auto;
-  min-width: 1.05rem;
-  height: 1.05rem;
-  margin-left: -0.52rem;
-  padding: 0 0.28rem;
-  border-radius: 999px;
-  font-size: 0.62rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  line-height: 1;
-  color: rgba(11, 18, 32, 0.92);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 0 0 1px rgba(232, 238, 248, 0.35);
-}
-
-.vsplit-scrub-mark.is-cluster.is-start {
-  top: -0.06rem;
-}
-
-.vsplit-scrub-mark.is-cluster.is-end {
-  top: 0.5rem;
-}
-
-.vsplit-scrub-mark.is-cluster::before {
-  inset: -0.55rem -0.45rem;
 }
 
 .vsplit-mark-chips {
