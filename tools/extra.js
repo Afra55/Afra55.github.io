@@ -91,7 +91,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.14-i";
+  const GIF_TOOL_VERSION = "2026.08.14-j";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -4496,6 +4496,7 @@
     const vsplitStage = $("#vsplit-stage");
     const vsplitScrub = $("#vsplit-scrub");
     const vsplitScrubHit = $("#vsplit-scrub-hit");
+    const vsplitScrubMarks = $("#vsplit-scrub-marks");
     const vsplitScrubHint = $("#vsplit-scrub-hint");
     const vsplitPlay = $("#vsplit-play");
     const vsplitManualNow = $("#vsplit-manual-now");
@@ -4512,6 +4513,9 @@
     const vsplitEditDelStart = $("#vsplit-edit-del-start");
     const vsplitEditDelEnd = $("#vsplit-edit-del-end");
     const vsplitEditDone = $("#vsplit-edit-done");
+    const vsplitQuickExport = $("#vsplit-quick-export");
+    const vsplitQuickBb = $("#vsplit-quick-bb");
+    const vsplitQuickHq = $("#vsplit-quick-hq");
     const vsplitNudgeM1 = $("#vsplit-nudge-m1");
     const vsplitNudgeM01 = $("#vsplit-nudge-m01");
     const vsplitNudgeP01 = $("#vsplit-nudge-p01");
@@ -4718,9 +4722,17 @@
       });
       if (vsplitAddBtns) vsplitAddBtns.hidden = editing;
       if (vsplitEditBar) vsplitEditBar.hidden = !editing;
+      if (vsplitQuickExport) {
+        vsplitQuickExport.hidden = !(vsplitMode === "manual" && hasComplete);
+      }
+      if (vsplitQuickBb) vsplitQuickBb.disabled = !canGif || vsplitBusy;
+      if (vsplitQuickHq) vsplitQuickHq.disabled = !canGif || vsplitBusy;
       if (editing) {
         const mark = vsplitMarks[vsplitEditIdx];
-        if (vsplitEditApply) vsplitEditApply.disabled = !hasVideo || vsplitBusy;
+        if (vsplitEditApply) {
+          vsplitEditApply.disabled = !hasVideo || vsplitBusy;
+          vsplitEditApply.textContent = vsplitEditFocus === "start" ? "设为起点" : "设为终点";
+        }
         if (vsplitEditDelStart) vsplitEditDelStart.disabled = !mark || mark.start == null || vsplitBusy;
         if (vsplitEditDelEnd) vsplitEditDelEnd.disabled = !mark || mark.end == null || vsplitBusy;
         $$("#vsplit-edit-focus [data-edit-focus]").forEach((btn) => {
@@ -4729,7 +4741,7 @@
         if (vsplitEditTitle) {
           const n = String(vsplitEditIdx + 1).padStart(2, "0");
           const focusLabel = vsplitEditFocus === "start" ? "起点" : "终点";
-          vsplitEditTitle.textContent = `编辑 #${n} · 当前调${focusLabel}`;
+          vsplitEditTitle.textContent = `编辑 #${n} · 拖滑块即调${focusLabel}`;
         }
       }
     }
@@ -4860,6 +4872,7 @@
     function nudgeVsplitPreview(delta) {
       const now = vsplitScrubbing ? scrubValueToTime(vsplitScrub?.value) : vsplitVideoNow();
       seekVsplitPreview(now + delta);
+      if (vsplitEditIdx >= 0) applyScrubToEditFocus({ silent: true });
     }
 
     function paintScrubHint() {
@@ -4869,7 +4882,7 @@
         vsplitScrubHint.textContent = `微调中 · 窗口 ±${half}s（松手回粗调）`;
         return;
       }
-      vsplitScrubHint.textContent = "拖滑块粗调；按住上下滑进入微调；也可用下方 ± 按钮";
+      vsplitScrubHint.textContent = "绿/橙点为已标起止 · 上下滑可微调";
     }
 
     function onVsplitScrubInput() {
@@ -4892,6 +4905,7 @@
       scrubGesture.fine = false;
       scrubGesture.pointerId = null;
       syncVsplitScrubFromVideo();
+      if (vsplitEditIdx >= 0) applyScrubToEditFocus({ silent: true });
       paintVsplitNow();
       paintScrubHint();
     }
@@ -4973,6 +4987,7 @@
         vsplitManualCount.textContent = total ? `${done}/${total} 段` : "0 段";
       }
       if (!vsplitScrubbing) syncVsplitScrubFromVideo();
+      paintVsplitScrubMarks();
       paintScrubHint();
     }
 
@@ -4982,8 +4997,9 @@
         const mark = vsplitMarks[vsplitEditIdx];
         const s = mark?.start == null ? "—" : formatClock(mark.start);
         const e = mark?.end == null ? "—" : formatClock(mark.end);
+        const focusLabel = vsplitEditFocus === "start" ? "起点" : "终点";
         vsplitManualDraft.hidden = false;
-        vsplitManualDraft.textContent = `编辑中 ${s} → ${e} · 拖滑块后点「用滑块位置」`;
+        vsplitManualDraft.textContent = `编辑中 ${s} → ${e} · 拖滑块松手即更新${focusLabel}`;
         return;
       }
       if (vsplitDraftStart == null) {
@@ -4993,6 +5009,29 @@
       }
       vsplitManualDraft.hidden = false;
       vsplitManualDraft.textContent = `已设起点 ${formatClock(vsplitDraftStart)} · 拖到终点后点「打终点」`;
+    }
+
+    function paintVsplitScrubMarks() {
+      if (!vsplitScrubMarks) return;
+      vsplitScrubMarks.innerHTML = "";
+      if (vsplitMode !== "manual") return;
+      const dur = vsplitVideoDuration();
+      if (!(dur > 0)) return;
+      const addDot = (t, kind, active) => {
+        if (t == null || !Number.isFinite(t)) return;
+        const dot = document.createElement("span");
+        dot.className =
+          `vsplit-scrub-mark is-${kind}` + (active ? " is-active" : "");
+        const pct = Math.max(0, Math.min(100, (Number(t) / dur) * 100));
+        dot.style.left = `${pct}%`;
+        vsplitScrubMarks.appendChild(dot);
+      };
+      if (vsplitDraftStart != null) addDot(vsplitDraftStart, "start", false);
+      vsplitMarks.forEach((mark, idx) => {
+        const active = vsplitEditIdx === idx;
+        addDot(mark.start, "start", active && vsplitEditFocus === "start");
+        addDot(mark.end, "end", active && vsplitEditFocus === "end");
+      });
     }
 
     function sortVsplitMarks() {
@@ -5041,7 +5080,7 @@
       return true;
     }
 
-    function applyScrubToEditFocus() {
+    function applyScrubToEditFocus(opts = {}) {
       if (vsplitEditIdx < 0) return;
       const mark = vsplitMarks[vsplitEditIdx];
       if (!mark) return;
@@ -5049,18 +5088,18 @@
       pauseVsplitPreview();
       if (vsplitEditFocus === "start") {
         if (mark.end != null && t >= mark.end) {
-          toast("起点需早于终点");
+          if (!opts.silent) toast("起点需早于终点");
           return;
         }
         updateVsplitMark(vsplitEditIdx, t, mark.end, { skipSort: true });
-        toast(`起点 ${formatClock(t)}`);
+        if (!opts.silent) toast(`起点 ${formatClock(t)}`);
       } else {
         if (mark.start != null && t <= mark.start) {
-          toast("终点需晚于起点");
+          if (!opts.silent) toast("终点需晚于起点");
           return;
         }
         updateVsplitMark(vsplitEditIdx, mark.start, t, { skipSort: true });
-        toast(`终点 ${formatClock(t)}`);
+        if (!opts.silent) toast(`终点 ${formatClock(t)}`);
       }
       setVsplitButtons();
     }
@@ -5090,6 +5129,7 @@
 
     function paintVsplitMarks() {
       paintVsplitDraft();
+      paintVsplitScrubMarks();
       if (!vsplitMarksEl) return;
       vsplitMarksEl.innerHTML = "";
       if (!vsplitMarks.length) {
@@ -5242,9 +5282,8 @@
       if (vsplitMode === "manual") {
         const marks = completeVsplitMarks();
         if (!marks.length) throw new Error("请先标记至少一段完整的起点和终点");
-        if (marks.length < vsplitMarks.length) {
-          throw new Error("有未完成片段，请编辑补全或删除后再切");
-        }
+        const skipped = vsplitMarks.length - marks.length;
+        if (skipped > 0) toast(`已跳过 ${skipped} 段未完成`);
         marks.forEach((m) => {
           const start = Math.max(0, Math.min(m.start, d));
           const end = Math.max(start + VSPLIT_MIN_SPAN, Math.min(m.end, d));
@@ -5691,7 +5730,12 @@
     vsplitEditDone?.addEventListener("click", () => {
       exitVsplitEdit();
       paintVsplitNow();
-      toast("已退出编辑");
+    });
+    vsplitQuickBb?.addEventListener("click", () => {
+      runVsplitGifs("blackbox").catch((err) => setError(vsplitError, err.message || String(err)));
+    });
+    vsplitQuickHq?.addEventListener("click", () => {
+      runVsplitGifs("hq").catch((err) => setError(vsplitError, err.message || String(err)));
     });
     $("#vsplit-edit-focus")?.addEventListener("click", (e) => {
       const btn = e.target?.closest?.("[data-edit-focus]");
