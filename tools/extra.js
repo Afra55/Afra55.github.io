@@ -91,7 +91,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.15-f";
+  const GIF_TOOL_VERSION = "2026.08.15-g";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -5201,7 +5201,7 @@
         vsplitManualCount.textContent = total ? `${done}/${total} 段` : "0 段";
       }
       if (!vsplitScrubbing) syncVsplitScrubFromVideo();
-      paintVsplitScrubMarks();
+      // 播放 timeupdate 很频繁：不在这里重绘圆点/芯片，避免布局抖动导致打点按钮点不中
       paintScrubHint();
       paintVsplitFsChrome();
     }
@@ -5306,14 +5306,38 @@
       return { t, near, timeThresh };
     }
 
+    let vsplitChipPaintSig = "";
+    let vsplitChipScrollIdx = -2;
+
     function paintVsplitMarkChips() {
       if (!vsplitMarkChips) return;
-      vsplitMarkChips.innerHTML = "";
       if (vsplitMode !== "manual" || !vsplitMarks.length) {
         vsplitMarkChips.hidden = true;
+        vsplitMarkChips.innerHTML = "";
+        vsplitChipPaintSig = "";
+        vsplitChipScrollIdx = -2;
         return;
       }
+      const sig = `${vsplitEditIdx}|${vsplitMarks
+        .map((m) => `${m.start ?? "x"}:${m.end ?? "x"}`)
+        .join(",")}`;
+      if (sig === vsplitChipPaintSig && vsplitMarkChips.childElementCount === vsplitMarks.length) {
+        $$("#vsplit-mark-chips .vsplit-mark-chip").forEach((chip, idx) => {
+          chip.classList.toggle("is-active", vsplitEditIdx === idx);
+        });
+        if (vsplitEditIdx >= 0 && vsplitEditIdx !== vsplitChipScrollIdx) {
+          const active = vsplitMarkChips.querySelector(".vsplit-mark-chip.is-active");
+          if (active?.scrollIntoView) {
+            active.scrollIntoView({ inline: "center", block: "nearest", behavior: "auto" });
+          }
+          vsplitChipScrollIdx = vsplitEditIdx;
+        }
+        if (vsplitEditIdx < 0) vsplitChipScrollIdx = -2;
+        return;
+      }
+      vsplitChipPaintSig = sig;
       vsplitMarkChips.hidden = false;
+      vsplitMarkChips.innerHTML = "";
       vsplitMarks.forEach((mark, idx) => {
         const chip = document.createElement("button");
         chip.type = "button";
@@ -5337,10 +5361,14 @@
         });
         vsplitMarkChips.appendChild(chip);
       });
-      const active = vsplitMarkChips.querySelector(".vsplit-mark-chip.is-active");
-      if (active && typeof active.scrollIntoView === "function") {
-        active.scrollIntoView({ inline: "center", block: "nearest", behavior: "smooth" });
+      if (vsplitEditIdx >= 0 && vsplitEditIdx !== vsplitChipScrollIdx) {
+        const active = vsplitMarkChips.querySelector(".vsplit-mark-chip.is-active");
+        if (active?.scrollIntoView) {
+          active.scrollIntoView({ inline: "center", block: "nearest", behavior: "auto" });
+        }
+        vsplitChipScrollIdx = vsplitEditIdx;
       }
+      if (vsplitEditIdx < 0) vsplitChipScrollIdx = -2;
     }
 
     function onVsplitMarksTrackPointer(e) {
@@ -5655,14 +5683,18 @@
         toast("请先选择视频");
         return;
       }
-      if (vsplitEditIdx >= 0) return;
+      if (vsplitEditIdx >= 0) {
+        toast("请先退出编辑再打点");
+        return;
+      }
       // 打点不打断播放，便于边播边标
       const t = currentMarkTime();
       if (vsplitDraftStart == null) {
         vsplitDraftStart = t;
         paintVsplitDraft();
-        paintVsplitNow();
+        paintVsplitScrubMarks();
         setVsplitButtons();
+        paintVsplitNow();
         notifyVsplitMarkFeedback(`起点 ${formatClock(t)}`, "start");
         return;
       }
@@ -5673,11 +5705,14 @@
       let start = vsplitDraftStart;
       let end = t;
       if (Math.abs(end - start) < 0.05) {
-        toast("终点需与起点不同");
+        toast("终点需与起点不同，请先拖动进度");
         return;
       }
       const next = normalizeMarkPair(start, end);
-      if (!next || !isMarkComplete(next)) return;
+      if (!next || !isMarkComplete(next)) {
+        toast(`每段至少 ${VSPLIT_MIN_SPAN} 秒`);
+        return;
+      }
       vsplitMarks.push(next);
       sortVsplitMarks();
       vsplitDraftStart = null;
@@ -5685,6 +5720,26 @@
       paintVsplitMarks();
       paintVsplitNow();
       notifyVsplitMarkFeedback(`已添加 · ${(next.end - next.start).toFixed(1)}s`, "end");
+    }
+
+    let vsplitMarkTapArmed = false;
+    function fireVsplitMarkTap(e) {
+      if (vsplitMarkTap?.disabled && e?.currentTarget === vsplitMarkTap) return;
+      if (vsplitFsMark?.disabled && e?.currentTarget === vsplitFsMark) return;
+      if (e?.type === "pointerup") {
+        if (e.button != null && e.button !== 0) return;
+        // 仅触摸/手写笔走 pointerup；鼠标仍用 click，避免桌面双触发
+        if (!e.pointerType || e.pointerType === "mouse") return;
+        e.preventDefault();
+        vsplitMarkTapArmed = true;
+        window.setTimeout(() => {
+          vsplitMarkTapArmed = false;
+        }, 450);
+        tapVsplitMark();
+        return;
+      }
+      if (e?.type === "click" && vsplitMarkTapArmed) return;
+      tapVsplitMark();
     }
 
     function undoVsplitDraft() {
@@ -6199,7 +6254,8 @@
     vsplitFsPlay?.addEventListener("click", () => {
       toggleVsplitPlay().catch(() => {});
     });
-    vsplitFsMark?.addEventListener("click", () => tapVsplitMark());
+    vsplitFsMark?.addEventListener("pointerup", (e) => fireVsplitMarkTap(e));
+    vsplitFsMark?.addEventListener("click", (e) => fireVsplitMarkTap(e));
     vsplitFsUndo?.addEventListener("click", () => undoVsplitLastMark());
     document.addEventListener("keydown", (e) => {
       if (!vsplitFsOpen) return;
@@ -6208,7 +6264,8 @@
         exitVsplitFullscreen();
       }
     });
-    vsplitMarkTap?.addEventListener("click", () => tapVsplitMark());
+    vsplitMarkTap?.addEventListener("pointerup", (e) => fireVsplitMarkTap(e));
+    vsplitMarkTap?.addEventListener("click", (e) => fireVsplitMarkTap(e));
     vsplitMarkUndo?.addEventListener("click", () => undoVsplitLastMark());
     vsplitMarkClear?.addEventListener("click", () => {
       clearVsplitMarks();

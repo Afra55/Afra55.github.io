@@ -2129,6 +2129,9 @@ a.secondary-btn {
 .vsplit-mark-btns {
   margin-top: 0.35rem;
   flex-wrap: nowrap;
+  position: relative;
+  z-index: 5;
+  touch-action: manipulation;
 }
 
 .vsplit-mark-btns .primary-btn,
@@ -2138,6 +2141,8 @@ a.secondary-btn {
   min-height: 2.4rem;
   justify-content: center;
   text-align: center;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .vsplit-mark-btns .primary-btn {
