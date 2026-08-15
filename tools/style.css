@@ -2637,6 +2637,69 @@ body.vsplit-fs-open {
   border-top: 0;
 }
 
+.adb-fs-row.is-selected {
+  background: rgba(46, 196, 182, 0.1);
+}
+
+.adb-fs-row.is-dir,
+.adb-fs-row.is-file {
+  cursor: pointer;
+}
+
+.adb-fs-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.35rem;
+  align-items: center;
+  margin: 0.35rem 0 0.55rem;
+  font-size: 0.86rem;
+}
+
+.adb-fs-crumbs .linkish {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.adb-crumb-sep {
+  color: var(--muted);
+}
+
+.adb-more {
+  position: relative;
+}
+
+.adb-more > summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--muted);
+  font-size: 0.82rem;
+  padding: 0.2rem 0.45rem;
+}
+
+.adb-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.adb-more[open] {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.adb-media-preview img {
+  max-width: min(100%, 28rem);
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: block;
+}
+
 .adb-fs-row button.linkish {
   appearance: none;
   border: 0;
@@ -2698,7 +2761,7 @@ body.vsplit-fs-open {
 
 .adb-device {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto auto 1fr;
   gap: 0.55rem;
   align-items: start;
   text-align: left;
@@ -2708,6 +2771,16 @@ body.vsplit-fs-open {
   color: var(--ink);
   border-radius: 12px;
   padding: 0.7rem 0.8rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.adb-device-stripe {
+  width: 0.28rem;
+  align-self: stretch;
+  min-height: 2.2rem;
+  border-radius: 999px;
+  background: var(--adb-accent, rgba(46, 196, 182, 0.85));
 }
 
 .adb-device:hover {
@@ -2727,6 +2800,7 @@ body.vsplit-fs-open {
   min-width: 0;
   text-align: left;
   width: 100%;
+  background: transparent;
 }
 
 .adb-device-body strong {
