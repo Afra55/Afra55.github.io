@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260815nav2" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260815nav2" />
+  <link rel="stylesheet" href="./style.css?v=20260815pack" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260815pack" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-nav2</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-pack</span>
       </div>
       <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
@@ -1197,7 +1197,7 @@ hello@world.org</textarea>
 <section id="vsplit" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-vsplit">
       <div class="panel-head">
         <h1>视频切分</h1>
-        <p>选择视频后可等分、按固定时长，或手动标记多段起止点；全程本地处理，不会上传。可下载片段，并批量转高清 / 黑盒 GIF。</p>
+        <p>选择视频后可等分、按固定时长，或手动标记多段起止点；全程本地处理，不会上传。支持<strong>切成视频片段</strong>、批量转高清/黑盒 GIF，并一键打包下载。</p>
       </div>
       <div class="panel-body">
         <div class="btn-row tool-actions">
@@ -1283,6 +1283,7 @@ hello@world.org</textarea>
           </div>
           <div class="vsplit-manual" id="vsplit-manual-row" hidden>
             <div class="vsplit-quick-export" id="vsplit-quick-export" hidden>
+              <button type="button" class="primary-btn" id="vsplit-quick-cut" disabled title="按已标记片段切成多个视频">切成视频</button>
               <button type="button" class="secondary-btn" id="vsplit-quick-bb" disabled>转黑盒 GIF</button>
               <button type="button" class="ghost-btn" id="vsplit-quick-hq" disabled>转高清 GIF</button>
             </div>
@@ -1299,13 +1300,13 @@ hello@world.org</textarea>
           <input id="vsplit-quality" class="mono meta-input" type="number" min="1" max="30" step="1" value="5" />
         </div>
         <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
-          <button type="button" class="primary-btn" id="vsplit-cut" disabled>开始切分</button>
+          <button type="button" class="primary-btn" id="vsplit-cut" disabled title="把视频切成多个片段文件">切成视频</button>
           <button type="button" class="secondary-btn" id="vsplit-gif-hq" disabled>全部转高清 GIF</button>
           <button type="button" class="secondary-btn" id="vsplit-gif-bb" disabled>全部转黑盒 GIF</button>
           <button type="button" class="secondary-btn" id="vsplit-merge" disabled title="用 gifsicle 拼接各段 GIF，不重新调色板；宽高需一致">合并 GIF</button>
           <button type="button" class="ghost-btn" id="vsplit-abort" hidden>取消</button>
-          <a class="secondary-btn" id="vsplit-zip-video" href="#" download="clips-video.zip" hidden>下载全部视频</a>
-          <a class="secondary-btn" id="vsplit-zip-gif" href="#" download="clips-gif.zip" hidden>下载全部 GIF</a>
+          <button type="button" class="secondary-btn" id="vsplit-zip-video" disabled title="把已切好的视频片段打成一个 zip">打包下载全部视频</button>
+          <button type="button" class="secondary-btn" id="vsplit-zip-gif" disabled title="把已生成的 GIF 打成一个 zip">打包下载全部 GIF</button>
           <a class="secondary-btn" id="vsplit-merged-dl" href="#" download="clips-merged.gif" hidden>下载合并 GIF</a>
         </div>
         <div class="gif-progress" id="vsplit-progress" hidden>
@@ -1327,7 +1328,7 @@ hello@world.org</textarea>
 <section id="vbb" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-vbb">
       <div class="panel-head">
         <h1>一键黑盒切片</h1>
-        <p>选择视频后先分析切分方案：清晰优先、锐度优先（缩短加宽）、时长优先（可压缩）。全程本地处理，不会上传。确认后再转 GIF。</p>
+        <p>选择视频后先分析切分方案：清晰优先、锐度优先（缩短加宽）、时长优先（可压缩）。全程本地处理，不会上传。确认后转 GIF，并可一键打包下载。</p>
       </div>
       <div class="panel-body">
         <div class="btn-row tool-actions">
@@ -1344,7 +1345,7 @@ hello@world.org</textarea>
           <button type="button" class="secondary-btn" id="vbb-run" disabled>确认执行转 GIF</button>
           <button type="button" class="secondary-btn" id="vbb-merge" disabled title="合并各段 GIF，不重新调色板">合并 GIF</button>
           <button type="button" class="ghost-btn" id="vbb-abort" hidden>取消</button>
-          <a class="secondary-btn" id="vbb-zip" href="#" download="blackbox-clips.zip" hidden>下载全部 GIF</a>
+          <button type="button" class="secondary-btn" id="vbb-zip" disabled title="把已生成的 GIF 打成一个 zip">打包下载全部 GIF</button>
           <a class="secondary-btn" id="vbb-merged-dl" href="#" download="blackbox-merged.gif" hidden>下载合并 GIF</a>
         </div>
         <div class="gif-progress" id="vbb-progress" hidden>
@@ -2408,8 +2409,8 @@ hello@world.org</textarea>
   <script src="./vendor/jszip.min.js"></script>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260815nav2"></script>
-  <script src="./extra.js?v=20260815nav2"></script>
+  <script src="./app.js?v=20260815pack"></script>
+  <script src="./extra.js?v=20260815pack"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>
