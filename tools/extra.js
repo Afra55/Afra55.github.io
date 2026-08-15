@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.15-q";
+  const TOOLS_VERSION = "2026.08.15-s";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -8126,6 +8126,10 @@
     const ADB_PREVIEW_TEXT_MAX = 1.5 * 1024 * 1024;
     const ADB_PREVIEW_MEDIA_MAX = 28 * 1024 * 1024;
     let adbInputShotUrl = "";
+    let adbInputLive = false;
+    let adbInputLiveTimer = 0;
+    let adbInputRefreshBusy = false;
+    let adbInputRefreshAfter = 0;
     let adbTab = "info";
     let adbPermPackage = "";
     let adbLogLive = false;
@@ -8258,6 +8262,7 @@
         panel.hidden = panel.dataset.adbPanel !== tab;
       });
       if (prev === "logcat" && tab !== "logcat") stopAdbLogLive();
+      if (prev === "input" && tab !== "input") stopInputLivePreview();
       if (tab === "apps" && adbSelected && !adbApps.length) loadApps().catch(() => {});
       if (tab === "jobs") refreshJobs().catch(() => {});
       if (tab === "info" && adbSelected) loadSnapshot({ silent: true }).catch(() => {});
@@ -9660,18 +9665,81 @@
       };
     }
 
-    async function refreshInputScreencap() {
+    async function refreshInputScreencap({ quiet = false } = {}) {
+      if (adbInputRefreshBusy) return;
       const serial = requireCurrentSerial();
       const img = $("#adb-input-canvas");
       if (!img) throw new Error("缺少预览元素 #adb-input-canvas");
-      const res = await adbFetch(`/media/screencap?serial=${encodeURIComponent(serial)}`);
-      const blob = await res.blob();
-      if (adbInputShotUrl) URL.revokeObjectURL(adbInputShotUrl);
-      adbInputShotUrl = URL.createObjectURL(blob);
-      img.src = adbInputShotUrl;
-      img.hidden = false;
-      if ($("#adb-input-meta")) $("#adb-input-meta").textContent = "点击预览图点击；拖拽滑动。坐标按设备像素换算。";
-      toast("已刷新屏幕预览");
+      adbInputRefreshBusy = true;
+      try {
+        const res = await adbFetch(`/media/screencap?serial=${encodeURIComponent(serial)}`);
+        const blob = await res.blob();
+        if (adbInputShotUrl) URL.revokeObjectURL(adbInputShotUrl);
+        adbInputShotUrl = URL.createObjectURL(blob);
+        img.src = adbInputShotUrl;
+        img.hidden = false;
+        updateInputLiveUi();
+        if ($("#adb-input-meta")) {
+          $("#adb-input-meta").textContent = adbInputLive
+            ? "实时预览中：点击/拖拽操作后画面会自动刷新。可用「停止实时预览」关掉。"
+            : "点击预览图点击；拖拽滑动。在预览上操作后会自动开启实时预览。";
+        }
+        if (!quiet) toast("已刷新屏幕预览");
+      } finally {
+        adbInputRefreshBusy = false;
+      }
+    }
+
+    function updateInputLiveUi() {
+      const stopBtn = $("#adb-input-live-stop");
+      const liveMeta = $("#adb-input-live-meta");
+      if (stopBtn) stopBtn.hidden = !adbInputLive;
+      if (liveMeta) {
+        liveMeta.hidden = !adbInputLive;
+        if (adbInputLive) liveMeta.textContent = "实时预览中（约每 1.2 秒刷新）…";
+      }
+    }
+
+    function stopInputLivePreview({ toastMsg = false } = {}) {
+      adbInputLive = false;
+      clearInterval(adbInputLiveTimer);
+      adbInputLiveTimer = 0;
+      if (adbInputRefreshAfter) {
+        clearTimeout(adbInputRefreshAfter);
+        adbInputRefreshAfter = 0;
+      }
+      updateInputLiveUi();
+      if ($("#adb-input-meta") && $("#adb-input-canvas") && !$("#adb-input-canvas").hidden) {
+        $("#adb-input-meta").textContent =
+          "点击预览图点击；拖拽滑动。在预览上操作后会自动开启实时预览。";
+      }
+      if (toastMsg) toast("已停止实时预览");
+    }
+
+    function startInputLivePreview() {
+      if (adbInputLive) {
+        updateInputLiveUi();
+        return;
+      }
+      adbInputLive = true;
+      clearInterval(adbInputLiveTimer);
+      updateInputLiveUi();
+      adbInputLiveTimer = setInterval(() => {
+        if (!adbInputLive || adbTab !== "input") {
+          stopInputLivePreview();
+          return;
+        }
+        refreshInputScreencap({ quiet: true }).catch((err) => setError(adbError, err.message || String(err)));
+      }, 1200);
+    }
+
+    function afterInputPreviewAction() {
+      startInputLivePreview();
+      if (adbInputRefreshAfter) clearTimeout(adbInputRefreshAfter);
+      adbInputRefreshAfter = setTimeout(() => {
+        adbInputRefreshAfter = 0;
+        refreshInputScreencap({ quiet: true }).catch((err) => setError(adbError, err.message || String(err)));
+      }, 350);
     }
 
     function updateRecordTip() {
@@ -10523,6 +10591,12 @@
       URL.revokeObjectURL(url);
     });
 
+    function maybeRefreshAfterInputAction() {
+      const img = $("#adb-input-canvas");
+      if (!img || img.hidden || !img.naturalWidth) return;
+      afterInputPreviewAction();
+    }
+
     $("#adb-tap-run")?.addEventListener("click", async () => {
       try {
         await adbFetch("/input", {
@@ -10536,6 +10610,7 @@
           }),
         });
         toast("已点击");
+        maybeRefreshAfterInputAction();
       } catch (err) {
         setError(adbError, err.message || String(err));
       }
@@ -10556,6 +10631,7 @@
           }),
         });
         toast("已滑动");
+        maybeRefreshAfterInputAction();
       } catch (err) {
         setError(adbError, err.message || String(err));
       }
@@ -10573,6 +10649,7 @@
             }),
           });
           toast(`按键 ${btn.dataset.adbKey}`);
+          maybeRefreshAfterInputAction();
         } catch (err) {
           setError(adbError, err.message || String(err));
         }
@@ -10590,6 +10667,7 @@
           }),
         });
         toast("已输入文本");
+        maybeRefreshAfterInputAction();
       } catch (err) {
         setError(adbError, err.message || String(err));
       }
@@ -10597,6 +10675,7 @@
     $("#adb-input-refresh-shot")?.addEventListener("click", () =>
       refreshInputScreencap().catch((err) => setError(adbError, err.message || String(err)))
     );
+    $("#adb-input-live-stop")?.addEventListener("click", () => stopInputLivePreview({ toastMsg: true }));
     {
       const canvas = $("#adb-input-canvas");
       let drag = null;
@@ -10648,6 +10727,7 @@
             if ($("#adb-tap-y")) $("#adb-tap-y").value = String(start.y);
             toast(`已点击 ${start.x},${start.y}`);
           }
+          afterInputPreviewAction();
         } catch (err) {
           setError(adbError, err.message || String(err));
         }

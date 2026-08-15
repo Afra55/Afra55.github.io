@@ -3046,8 +3046,12 @@ body.vsplit-fs-open {
 
 .adb-input-shot-wrap {
   position: relative;
-  display: inline-block;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
   max-width: 100%;
+  max-height: min(42vh, 380px);
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;
@@ -3058,7 +3062,10 @@ body.vsplit-fs-open {
 .adb-input-shot-wrap img {
   display: block;
   max-width: 100%;
+  max-height: min(42vh, 380px);
+  width: auto;
   height: auto;
+  object-fit: contain;
   touch-action: none;
   cursor: crosshair;
 }
