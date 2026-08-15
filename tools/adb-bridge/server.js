@@ -780,7 +780,7 @@ async function analyzeLocalApk(filePath, filename) {
       filename,
       tool: "",
       note:
-        "本机未找到 aapt/aapt2，包名/权限可能缺失；签名信息仍尽量解析（需 keytool 或 apksigner）。安装 Android build-tools 后可解析包名/权限。",
+        "本机未找到 aapt/aapt2，包名/权限可能缺失；签名仍会尽量用 keytool/openssl/apksigner 解析。安装 Android build-tools 后可解析包名/权限。",
       size,
       signing,
       signatures: signing.signers || [],
