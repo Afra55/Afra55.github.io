@@ -60,6 +60,25 @@ if errorlevel 1 (
   exit /b 1
 )
 
+rem Prepend Android SDK build-tools (apksigner.bat) when missing from PATH
+where apksigner >nul 2>&1
+if errorlevel 1 (
+  if not defined ANDROID_HOME if defined ANDROID_SDK_ROOT set "ANDROID_HOME=%ANDROID_SDK_ROOT%"
+  if not defined ANDROID_HOME if exist "%LOCALAPPDATA%\Android\Sdk" set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
+  if not defined ANDROID_HOME if exist "%USERPROFILE%\AppData\Local\Android\Sdk" set "ANDROID_HOME=%USERPROFILE%\AppData\Local\Android\Sdk"
+  if defined ANDROID_HOME if exist "%ANDROID_HOME%\build-tools" (
+    for /f "delims=" %%V in ('dir /b /ad /o-n "%ANDROID_HOME%\build-tools" 2^>nul') do (
+      if exist "%ANDROID_HOME%\build-tools\%%V\apksigner.bat" (
+        set "PATH=%ANDROID_HOME%\build-tools\%%V;%PATH%"
+        echo [OK] Prepended build-tools %%V>> "%LOG_FILE%"
+        goto :apksigner_path_done
+      )
+    )
+  )
+)
+:apksigner_path_done
+where apksigner >> "%LOG_FILE%" 2>&1
+
 rem GUI / short PATH often misses JDK. Prepend common keytool locations when missing.
 where keytool >nul 2>&1
 if errorlevel 1 (

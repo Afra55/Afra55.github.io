@@ -35,7 +35,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.6.9";
+const BRIDGE_VERSION = "0.6.10";
 
 /** Preferred quick roots shown in UI (reads are not limited to these) */
 const ROOTS = [
@@ -112,9 +112,15 @@ function parseJsonBody(buf) {
   return JSON.parse(text);
 }
 
+function needsShellForBin(file) {
+  // Node execFile cannot run .bat/.cmd without a shell on Windows.
+  return process.platform === "win32" && /\.(bat|cmd)$/i.test(String(file || ""));
+}
+
 function execFileAsync(file, args, opts = {}) {
   return new Promise((resolve, reject) => {
     const encoding = opts.encoding === "buffer" ? null : opts.encoding || "utf8";
+    const shell = opts.shell != null ? opts.shell : needsShellForBin(file);
     execFile(
       file,
       args,
@@ -123,6 +129,7 @@ function execFileAsync(file, args, opts = {}) {
         maxBuffer: opts.maxBuffer || 20 * 1024 * 1024,
         timeout: opts.timeout || 120000,
         ...opts,
+        shell,
         encoding,
       },
       (err, stdout, stderr) => {
@@ -139,6 +146,35 @@ function execFileAsync(file, args, opts = {}) {
       }
     );
   });
+}
+
+/** Prefer JAVA_HOME derived from resolved keytool so apksigner/jar scripts find Java. */
+function toolProcessEnv() {
+  const env = { ...process.env };
+  if (!env.JAVA_HOME && !env.JDK_HOME) {
+    const kt = resolveTool("keytool");
+    if (kt && kt !== "keytool" && fs.existsSync(kt)) {
+      const binDir = path.dirname(kt);
+      if (path.basename(binDir).toLowerCase() === "bin") {
+        env.JAVA_HOME = path.dirname(binDir);
+      }
+    }
+  }
+  const home = env.JAVA_HOME || env.JDK_HOME || "";
+  if (home) {
+    const javaBin = path.join(home, "bin");
+    const sep = process.platform === "win32" ? ";" : ":";
+    env.PATH = `${javaBin}${sep}${env.PATH || ""}`;
+  }
+  return env;
+}
+
+function clipDiag(text, max = 240) {
+  const s = String(text || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!s) return "";
+  return s.length > max ? `${s.slice(0, max)}…` : s;
 }
 
 async function adb(args, opts) {
@@ -1559,15 +1595,30 @@ function parseApksignerCertText(text) {
 }
 
 async function listApkMetaInfSignerEntries(filePath) {
+  const filterEntries = (stdout) =>
+    String(stdout || "")
+      .split(/\r?\n/)
+      .map((s) => s.trim().replace(/\\/g, "/"))
+      .filter((s) => /^META-INF\/[^/]+\.(RSA|DSA|EC)$/i.test(s));
+
   try {
     const { stdout } = await execFileAsync("unzip", ["-Z1", filePath], {
       timeout: 20000,
       maxBuffer: 8 * 1024 * 1024,
     });
-    return String(stdout || "")
-      .split(/\r?\n/)
-      .map((s) => s.trim())
-      .filter((s) => /^META-INF\/[^/]+\.(RSA|DSA|EC)$/i.test(s));
+    const list = filterEntries(stdout);
+    if (list.length) return list;
+  } catch {
+    /* try jar — Windows often lacks unzip */
+  }
+  try {
+    const jar = resolveTool("jar");
+    const { stdout } = await execFileAsync(jar, ["tf", filePath], {
+      timeout: 45000,
+      maxBuffer: 8 * 1024 * 1024,
+      env: toolProcessEnv(),
+    });
+    return filterEntries(stdout);
   } catch {
     return [];
   }
@@ -1675,24 +1726,37 @@ function resolveJavaHomeBin(name) {
 function resolveTool(name) {
   const direct = whichSync(name);
   if (direct) return direct;
-  if (name === "keytool" || name === "jarsigner") {
+  if (name === "keytool" || name === "jarsigner" || name === "jar" || name === "java") {
     const fromJava = resolveJavaHomeBin(name);
     if (fromJava) return fromJava;
   }
-  if (name === "apksigner") {
+  if (name === "apksigner" || name === "aapt" || name === "aapt2") {
     const sdk =
-      process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT || process.env.ANDROID_SDK || "";
-    const roots = [sdk, path.join(os.homedir(), "Library/Android/sdk"), path.join(os.homedir(), "Android/Sdk")].filter(
-      Boolean
-    );
+      process.env.ANDROID_HOME ||
+      process.env.ANDROID_SDK_ROOT ||
+      process.env.ANDROID_SDK ||
+      "";
+    const roots = [
+      sdk,
+      path.join(os.homedir(), "Library/Android/sdk"),
+      path.join(os.homedir(), "Android/Sdk"),
+      process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Android", "Sdk") : "",
+      path.join(os.homedir(), "AppData", "Local", "Android", "Sdk"),
+    ].filter(Boolean);
     for (const root of roots) {
       const bt = path.join(root, "build-tools");
       try {
         if (!fs.existsSync(bt)) continue;
         const versions = fs.readdirSync(bt).sort().reverse();
         for (const ver of versions) {
-          const cand = path.join(bt, ver, process.platform === "win32" ? "apksigner.bat" : "apksigner");
-          if (fs.existsSync(cand)) return cand;
+          const base = path.join(bt, ver);
+          if (name === "apksigner") {
+            const cand = path.join(base, process.platform === "win32" ? "apksigner.bat" : "apksigner");
+            if (fs.existsSync(cand)) return cand;
+          } else {
+            const cand = path.join(base, process.platform === "win32" ? `${name}.exe` : name);
+            if (fs.existsSync(cand)) return cand;
+          }
         }
       } catch {
         /* ignore */
@@ -1756,11 +1820,22 @@ async function analyzeApkSigning(filePath) {
     signers: [],
     note: "",
     toolsFound: {},
+    resolvedPaths: {},
+    errors: [],
   };
 
   const apksigner = resolveTool("apksigner");
   const keytool = resolveTool("keytool");
   const openssl = resolveTool("openssl");
+  const jar = resolveTool("jar");
+  const env = toolProcessEnv();
+  result.resolvedPaths = {
+    apksigner: apksigner !== "apksigner" ? apksigner : whichSync("apksigner") || "",
+    keytool: keytool !== "keytool" ? keytool : whichSync("keytool") || "",
+    openssl: openssl !== "openssl" ? openssl : whichSync("openssl") || "",
+    jar: jar !== "jar" ? jar : whichSync("jar") || "",
+    JAVA_HOME: env.JAVA_HOME || "",
+  };
   result.toolsFound = {
     apksigner: Boolean(whichSync("apksigner") || (apksigner && apksigner !== "apksigner" && fs.existsSync(apksigner))),
     keytool: Boolean(whichSync("keytool") || (keytool && keytool !== "keytool" && fs.existsSync(keytool))),
@@ -1774,7 +1849,7 @@ async function analyzeApkSigning(filePath) {
   ]) {
     if (result.toolsFound[name]) continue;
     try {
-      await execFileAsync(bin, name === "openssl" ? ["version"] : ["-help"], { timeout: 5000 });
+      await execFileAsync(bin, name === "openssl" ? ["version"] : ["-help"], { timeout: 5000, env });
       result.toolsFound[name] = true;
     } catch (err) {
       // keytool -help exits 0 usually; apksigner may exit non-zero but still exists
@@ -1784,21 +1859,33 @@ async function analyzeApkSigning(filePath) {
     }
   }
 
-  // Prefer apksigner (v1–v4)
+  const applyApksignerParse = (blob, viaError) => {
+    const parsed = parseApksignerCertText(blob);
+    if (!parsed.signers.length) return false;
+    // Require at least one digest/DN so empty "Signer #1" noise doesn't count
+    const useful = parsed.signers.filter((s) => s.sha1 || s.sha256 || s.owner);
+    if (!useful.length) return false;
+    result.tool = viaError ? "apksigner(verify≠0)" : "apksigner";
+    result.schemes = parsed.schemes;
+    result.signers = useful;
+    result.toolsFound.apksigner = true;
+    return true;
+  };
+
+  // Prefer apksigner (v1–v4). verify may exit non-zero yet still print cert digests.
   try {
     const { stdout, stderr } = await execFileAsync(apksigner, ["verify", "--print-certs", filePath], {
       timeout: 45000,
       maxBuffer: 4 * 1024 * 1024,
+      env,
     });
-    const parsed = parseApksignerCertText(`${stdout || ""}\n${stderr || ""}`);
-    if (parsed.signers.length) {
-      result.tool = "apksigner";
-      result.schemes = parsed.schemes;
-      result.signers = parsed.signers;
-      result.toolsFound.apksigner = true;
+    applyApksignerParse(`${stdout || ""}\n${stderr || ""}`, false);
+  } catch (err) {
+    const blob = `${err?.stdout || ""}\n${err?.stderr || ""}\n${err?.message || ""}`;
+    if (!applyApksignerParse(blob, true)) {
+      const msg = clipDiag(blob || err?.message);
+      if (msg) result.errors.push({ tool: "apksigner", message: msg });
     }
-  } catch {
-    /* optional */
   }
 
   // keytool -jarfile (v1 / jarsigner)
@@ -1807,6 +1894,7 @@ async function analyzeApkSigning(filePath) {
       const { stdout } = await execFileAsync(keytool, ["-printcert", "-jarfile", filePath], {
         timeout: 45000,
         maxBuffer: 4 * 1024 * 1024,
+        env,
       });
       const parsed = parseKeytoolCertText(stdout || "");
       if (parsed.owner || parsed.sha1 || parsed.sha256) {
@@ -1822,8 +1910,9 @@ async function analyzeApkSigning(filePath) {
           },
         ];
       }
-    } catch {
-      /* optional */
+    } catch (err) {
+      const msg = clipDiag(`${err?.stderr || ""}\n${err?.message || ""}`);
+      if (msg) result.errors.push({ tool: "keytool", message: msg });
     }
   }
 
@@ -1840,14 +1929,34 @@ async function analyzeApkSigning(filePath) {
           const certPath = path.join(tmpDir, path.basename(entry));
           let parsed = null;
           try {
-            await execFileAsync("unzip", ["-o", "-j", "-d", tmpDir, filePath, entry], {
-              timeout: 20000,
-              maxBuffer: 4 * 1024 * 1024,
-            });
+            let extracted = false;
+            try {
+              await execFileAsync("unzip", ["-o", "-j", "-d", tmpDir, filePath, entry], {
+                timeout: 20000,
+                maxBuffer: 4 * 1024 * 1024,
+              });
+              extracted = fs.existsSync(certPath);
+            } catch {
+              extracted = false;
+            }
+            if (!extracted) {
+              // jar xf extracts preserving META-INF/… relative path
+              await execFileAsync(jar, ["xf", filePath, entry], {
+                timeout: 30000,
+                maxBuffer: 4 * 1024 * 1024,
+                cwd: tmpDir,
+                env,
+              });
+              const nested = path.join(tmpDir, entry.replace(/\//g, path.sep));
+              if (fs.existsSync(nested)) {
+                fs.copyFileSync(nested, certPath);
+              }
+            }
             try {
               const { stdout } = await execFileAsync(keytool, ["-printcert", "-file", certPath], {
                 timeout: 20000,
                 maxBuffer: 2 * 1024 * 1024,
+                env,
               });
               parsed = parseKeytoolCertText(stdout || "");
               result.toolsFound.keytool = true;
@@ -1855,7 +1964,9 @@ async function analyzeApkSigning(filePath) {
               parsed = await analyzeCertWithOpenssl(certPath);
               result.toolsFound.openssl = true;
             }
-          } catch {
+          } catch (err) {
+            const msg = clipDiag(err?.message);
+            if (msg) result.errors.push({ tool: "meta-inf", message: msg });
             parsed = null;
           }
           result.signers.push({
@@ -1896,6 +2007,11 @@ async function analyzeApkSigning(filePath) {
         if (alias) result.signers[i].v1Entry = alias;
       }
     }
+  } else if (!result.signers.length) {
+    result.errors.push({
+      tool: "meta-inf",
+      message: "未找到 META-INF/*.RSA|DSA|EC（可能无 v1 签名，或本机缺少 unzip/jar 列出 ZIP 条目）",
+    });
   }
 
   if (!result.signers.length) {
@@ -1903,9 +2019,17 @@ async function analyzeApkSigning(filePath) {
     const found = Object.entries(result.toolsFound)
       .filter(([, v]) => v)
       .map(([k]) => k);
-    result.note = found.length
-      ? `未能解析签名（已检测到 ${found.join("/")}）。该 APK 可能只有 v2/v3 签名且无 v1 块，请安装 Android build-tools 中的 apksigner。`
-      : "未能解析签名：本机未找到 keytool / openssl / apksigner。请安装 JDK，或把 Android SDK build-tools 加入 PATH。";
+    const errHint = result.errors.length ? ` 详情: ${result.errors.map((e) => `${e.tool}: ${e.message}`).join(" | ")}` : "";
+    if (!found.length) {
+      result.note =
+        "未能解析签名：本机未找到 keytool / openssl / apksigner。请安装 JDK，或把 Android SDK build-tools 加入 PATH。配好后请重启 ADB 桥。";
+    } else if (!found.includes("apksigner")) {
+      result.note =
+        `未能解析签名（已检测到 ${found.join("/")}）。该 APK 可能只有 v2/v3 签名且无 v1 块，仅 keytool/openssl 无法解析；请安装 Android build-tools 中的 apksigner 并重启桥。${errHint}`;
+    } else {
+      result.note =
+        `未能解析签名（已检测到 ${found.join("/")}）。apksigner 可能缺少 Java、输出无法识别，或 APK 损坏/未签名。请确认终端能运行: apksigner verify --print-certs <apk>，并重启桥。${errHint}`;
+    }
   } else {
     result.note =
       "别名优先取自 META-INF 签名块文件名（jarsigner 别名）；Android 常见为 CERT。证书主体见 CN/Owner。";

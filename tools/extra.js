@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.15-x";
+  const TOOLS_VERSION = "2026.08.15-y";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -10234,7 +10234,19 @@
       if (signing.toolsFound) {
         lines.push(`本机工具: ${found.length ? found.join(", ") : "未检测到 keytool/openssl/apksigner"}`);
       }
+      const paths = signing.resolvedPaths || {};
+      const pathBits = ["apksigner", "keytool", "openssl"]
+        .map((k) => (paths[k] ? `${k}=${paths[k]}` : ""))
+        .filter(Boolean);
+      if (pathBits.length) lines.push(`工具路径: ${pathBits.join(" · ")}`);
+      if (paths.JAVA_HOME) lines.push(`JAVA_HOME: ${paths.JAVA_HOME}`);
       if (signing.note) lines.push(signing.note);
+      const errs = Array.isArray(signing.errors) ? signing.errors : [];
+      if (errs.length && !signers.length) {
+        errs.slice(0, 3).forEach((e) => {
+          lines.push(`错误(${e.tool || "?"}): ${e.message || ""}`);
+        });
+      }
       const signGuide = $("#adb-signing-guide");
       if (!signers.length) {
         lines.push("签名: 未能解析");
@@ -10244,7 +10256,9 @@
               "说明：已检测到本机签名工具，但该 APK 可能只有 v2/v3 签名。请安装 Android build-tools 的 apksigner（不必重装 JDK/keytool），然后重启 ADB 桥再分析。"
             );
           } else {
-            lines.push("说明：工具已就绪仍无法解析，请确认 APK 完整未损坏。");
+            lines.push(
+              "说明：探测到 apksigner 仍失败时，请看上方「错误」行（常见：缺 Java、Windows 未重启桥、APK 损坏）。也可在终端手动: apksigner verify --print-certs 你的.apk"
+            );
           }
           // 工具已在，不误导展示「未安装 keytool」引导
           if (signGuide) signGuide.hidden = true;
