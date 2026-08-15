@@ -8073,6 +8073,15 @@
     }
 
     function updateMediaPreviewFromJobs(jobs) {
+      if ($("#adb-media-meta")) {
+        const arts = (jobs || []).reduce((n, j) => n + ((j.artifacts || []).length || 0), 0);
+        const running = (jobs || []).filter((j) => j.status === "running" || j.status === "pending").length;
+        $("#adb-media-meta").textContent = running
+          ? `${running} 个任务进行中 · 产物 ${arts}`
+          : arts
+            ? `可预览/打包 · 产物 ${arts}`
+            : "截图支持多设备；录屏针对当前设备";
+      }
       const preview = $("#adb-media-preview");
       if (!preview) return;
       const shot = (jobs || []).find(
@@ -8736,7 +8745,9 @@
       if ($("#adb-dev-pointer")) $("#adb-dev-pointer").textContent = onOff(data.pointerLocation ?? data.pointer_location);
       if ($("#adb-dev-layout")) $("#adb-dev-layout").textContent = onOff(data.layoutBounds ?? data.show_layout);
       if ($("#adb-dev-stay-on")) {
-        $("#adb-dev-stay-on").textContent = String(data.stay_on ?? data.stayOnWhilePluggedIn ?? "—");
+        const stayRaw = String(data.stay_on ?? data.stayOnWhilePluggedIn ?? "");
+        const stayOn = stayRaw && stayRaw !== "0" && stayRaw !== "null" && stayRaw !== "—";
+        $("#adb-dev-stay-on").textContent = stayOn ? `开(${stayRaw})` : stayRaw === "0" ? "关" : "—";
       }
       if ($("#adb-dev-force-rtl")) $("#adb-dev-force-rtl").textContent = onOff(data.force_rtl);
       if ($("#adb-dev-dont-keep")) $("#adb-dev-dont-keep").textContent = onOff(data.dont_keep_activities);
