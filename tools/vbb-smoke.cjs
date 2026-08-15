@@ -555,6 +555,8 @@ async function main() {
       hasNudge: Boolean(document.getElementById("vsplit-nudge-m01")),
       hasScrubMarks: Boolean(document.getElementById("vsplit-scrub-marks")),
       hasQuickExport: Boolean(document.getElementById("vsplit-quick-export")),
+      hasFsOpen: Boolean(document.getElementById("vsplit-fs-open")),
+      hasFsLayer: Boolean(document.getElementById("vsplit-fs")),
       editOutsideSticky: Boolean(
         sticky &&
           document.getElementById("vsplit-edit-bar") &&
@@ -574,6 +576,9 @@ async function main() {
   }
   if (!manualUi.hasPlay || !manualUi.hasNudge || manualUi.tapLabel !== "打起点") {
     throw new Error(`play/nudge/tap missing: ${JSON.stringify(manualUi)}`);
+  }
+  if (!manualUi.hasFsOpen || !manualUi.hasFsLayer) {
+    throw new Error(`fullscreen mark UI missing: ${JSON.stringify(manualUi)}`);
   }
   if (!manualUi.hasScrubMarks || !manualUi.hasQuickExport) {
     throw new Error(`scrub marks / quick export missing: ${JSON.stringify(manualUi)}`);
@@ -727,6 +732,58 @@ async function main() {
   }
   if (!(manualMarks.nudgeDelta > 0.05)) {
     throw new Error(`nudge +0.1s failed, delta=${manualMarks.nudgeDelta}`);
+  }
+  // 全屏打点：视频进全屏层、可打点、退出后回到预览区
+  const fsMark = await pageMarks.evaluate(async () => {
+    const video = document.getElementById("vsplit-video");
+    const wrap = document.getElementById("vsplit-preview-wrap");
+    const host = document.getElementById("vsplit-fs-host");
+    const scrub = document.getElementById("vsplit-scrub");
+    const seekByScrub = async (ratio) => {
+      const max = Number(scrub.max) || 1000;
+      scrub.value = String(Math.round(max * ratio));
+      scrub.dispatchEvent(new Event("input", { bubbles: true }));
+      scrub.dispatchEvent(new Event("change", { bubbles: true }));
+      await new Promise((r) => setTimeout(r, 60));
+    };
+    const beforeParent = video?.parentElement?.id || "";
+    window.DevToolsVsplit.enterFullscreen();
+    const open = window.DevToolsVsplit.isFullscreen();
+    const inHost = host?.contains(video);
+    const fsHidden = document.getElementById("vsplit-fs")?.hidden;
+    await seekByScrub(0.2);
+    await video.play().catch(() => {});
+    document.getElementById("vsplit-fs-mark")?.click();
+    const afterFsStart = (document.getElementById("vsplit-fs-mark")?.textContent || "").trim();
+    await seekByScrub(0.35);
+    await video.play().catch(() => {});
+    document.getElementById("vsplit-fs-mark")?.click();
+    const marks = window.DevToolsVsplit.getMarks?.() || [];
+    document.getElementById("vsplit-fs-close")?.click();
+    const closed = !window.DevToolsVsplit.isFullscreen();
+    const backInWrap = wrap?.contains(video);
+    return {
+      beforeParent,
+      open,
+      inHost,
+      fsHidden,
+      afterFsStart,
+      markCount: marks.length,
+      closed,
+      backInWrap,
+    };
+  });
+  if (!fsMark.open || !fsMark.inHost || fsMark.fsHidden) {
+    throw new Error(`fullscreen open failed: ${JSON.stringify(fsMark)}`);
+  }
+  if (fsMark.afterFsStart !== "打终点") {
+    throw new Error(`fullscreen mark should arm end: ${JSON.stringify(fsMark)}`);
+  }
+  if (!(fsMark.markCount >= 3)) {
+    throw new Error(`fullscreen should add a mark pair: ${JSON.stringify(fsMark)}`);
+  }
+  if (!fsMark.closed || !fsMark.backInWrap) {
+    throw new Error(`fullscreen exit failed: ${JSON.stringify(fsMark)}`);
   }
   await pageMarks.close();
 

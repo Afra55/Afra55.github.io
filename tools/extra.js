@@ -91,7 +91,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.14-k";
+  const GIF_TOOL_VERSION = "2026.08.14-l";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -4500,6 +4500,15 @@
     const vsplitScrubMarks = $("#vsplit-scrub-marks");
     const vsplitScrubHint = $("#vsplit-scrub-hint");
     const vsplitPlay = $("#vsplit-play");
+    const vsplitFs = $("#vsplit-fs");
+    const vsplitFsHost = $("#vsplit-fs-host");
+    const vsplitFsOpenBtn = $("#vsplit-fs-open");
+    const vsplitFsClose = $("#vsplit-fs-close");
+    const vsplitFsPlay = $("#vsplit-fs-play");
+    const vsplitFsMark = $("#vsplit-fs-mark");
+    const vsplitFsNow = $("#vsplit-fs-now");
+    const vsplitFsCount = $("#vsplit-fs-count");
+    const vsplitPreviewWrap = $("#vsplit-preview-wrap");
     const vsplitManualNow = $("#vsplit-manual-now");
     const vsplitManualCount = $("#vsplit-manual-count");
     const vsplitManualDraft = $("#vsplit-manual-draft");
@@ -4564,6 +4573,7 @@
     let vsplitEditFocus = "start";
     let vsplitScrubbing = false;
     let vsplitPlaying = false;
+    let vsplitFsOpen = false;
     const VSPLIT_SCRUB_STEPS = 1000;
     /** 按住滑块上下滑：微调窗口（秒） */
     const VSPLIT_FINE_WINDOW = 4;
@@ -4704,9 +4714,22 @@
         vsplitPlay.disabled = !hasVideo || vsplitBusy || vsplitMode !== "manual";
         vsplitPlay.textContent = vsplitPlaying ? "暂停" : "播放";
       }
+      const markLabel = vsplitDraftStart == null ? "打起点" : "打终点";
       if (vsplitMarkTap) {
         vsplitMarkTap.disabled = !hasVideo || vsplitBusy || editing;
-        vsplitMarkTap.textContent = vsplitDraftStart == null ? "打起点" : "打终点";
+        vsplitMarkTap.textContent = markLabel;
+      }
+      if (vsplitFsOpenBtn) {
+        vsplitFsOpenBtn.disabled = !hasVideo || vsplitBusy || vsplitMode !== "manual";
+        vsplitFsOpenBtn.hidden = vsplitMode !== "manual";
+      }
+      if (vsplitFsPlay) {
+        vsplitFsPlay.disabled = !hasVideo || vsplitBusy;
+        vsplitFsPlay.textContent = vsplitPlaying ? "暂停" : "播放";
+      }
+      if (vsplitFsMark) {
+        vsplitFsMark.disabled = !hasVideo || vsplitBusy || editing;
+        vsplitFsMark.textContent = markLabel;
       }
       if (vsplitMarkUndo) {
         const showUndo = !editing && vsplitDraftStart != null;
@@ -4763,6 +4786,7 @@
       if (!isManual) {
         pauseVsplitPreview();
         exitVsplitEdit();
+        exitVsplitFullscreen({ restoreVideo: true });
       }
       if (vsplitVideo) {
         if (isManual) vsplitVideo.removeAttribute("controls");
@@ -4797,6 +4821,7 @@
       } catch (_) {}
       vsplitPlaying = false;
       if (vsplitPlay) vsplitPlay.textContent = "播放";
+      if (vsplitFsPlay) vsplitFsPlay.textContent = "播放";
     }
 
     async function toggleVsplitPlay() {
@@ -4809,10 +4834,72 @@
         await vsplitVideo.play();
         vsplitPlaying = true;
         if (vsplitPlay) vsplitPlay.textContent = "暂停";
+        if (vsplitFsPlay) vsplitFsPlay.textContent = "暂停";
       } catch (err) {
         vsplitPlaying = false;
         toast(err?.message || "无法播放");
       }
+      setVsplitButtons();
+    }
+
+    function paintVsplitFsChrome() {
+      if (!vsplitFsOpen) return;
+      const now = vsplitScrubbing ? scrubValueToTime(vsplitScrub?.value) : vsplitVideoNow();
+      const dur = vsplitVideoDuration();
+      if (vsplitFsNow) {
+        if (!vsplitSourceFile || !(dur > 0)) vsplitFsNow.textContent = "0:00 / 0:00";
+        else vsplitFsNow.textContent = `${formatClock(now)} / ${formatClock(dur)}`;
+      }
+      if (vsplitFsCount) {
+        const done = completeVsplitMarks().length;
+        const total = vsplitMarks.length;
+        const draft = vsplitDraftStart == null ? "" : " · 已设起点";
+        vsplitFsCount.textContent = total ? `${done}/${total} 段${draft}` : draft ? `0 段${draft}` : "0 段";
+      }
+      if (vsplitFsPlay) vsplitFsPlay.textContent = vsplitPlaying ? "暂停" : "播放";
+      if (vsplitFsMark) {
+        vsplitFsMark.textContent = vsplitDraftStart == null ? "打起点" : "打终点";
+      }
+    }
+
+    function enterVsplitFullscreen() {
+      if (!vsplitVideo || !vsplitSourceFile || vsplitMode !== "manual" || !vsplitFs || !vsplitFsHost) return;
+      if (vsplitFsOpen) return;
+      if (vsplitEditIdx >= 0) exitVsplitEdit();
+      vsplitFsOpen = true;
+      vsplitFs.hidden = false;
+      document.body.classList.add("vsplit-fs-open");
+      if (vsplitVideo.parentElement !== vsplitFsHost) {
+        vsplitFsHost.appendChild(vsplitVideo);
+      }
+      vsplitVideo.hidden = false;
+      vsplitVideo.classList.add("is-fs");
+      paintVsplitFsChrome();
+      setVsplitButtons();
+      // 进入后尽量继续播，便于边看边打点
+      if (vsplitVideo.paused) {
+        toggleVsplitPlay().catch(() => {});
+      }
+    }
+
+    function exitVsplitFullscreen(opts = {}) {
+      if (!vsplitFsOpen && !opts.force) {
+        // 仍确保视频回到预览区
+        if (opts.restoreVideo !== false && vsplitVideo && vsplitPreviewWrap && vsplitVideo.parentElement !== vsplitPreviewWrap) {
+          vsplitPreviewWrap.appendChild(vsplitVideo);
+        }
+        return;
+      }
+      vsplitFsOpen = false;
+      if (vsplitFs) vsplitFs.hidden = true;
+      document.body.classList.remove("vsplit-fs-open");
+      if (vsplitVideo) {
+        vsplitVideo.classList.remove("is-fs");
+        if (opts.restoreVideo !== false && vsplitPreviewWrap && vsplitVideo.parentElement !== vsplitPreviewWrap) {
+          vsplitPreviewWrap.appendChild(vsplitVideo);
+        }
+      }
+      paintVsplitNow();
       setVsplitButtons();
     }
 
@@ -4991,6 +5078,7 @@
       if (!vsplitScrubbing) syncVsplitScrubFromVideo();
       paintVsplitScrubMarks();
       paintScrubHint();
+      paintVsplitFsChrome();
     }
 
     function paintVsplitDraft() {
@@ -5434,6 +5522,7 @@
       vsplitBusy = false;
       vsplitSourceFile = null;
       pauseVsplitPreview();
+      exitVsplitFullscreen({ force: true });
       clearVsplitMarks();
       clearVsplitClips();
       if (vsplitObjectUrl) {
@@ -5725,6 +5814,19 @@
     vsplitPlay?.addEventListener("click", () => {
       toggleVsplitPlay().catch(() => {});
     });
+    vsplitFsOpenBtn?.addEventListener("click", () => enterVsplitFullscreen());
+    vsplitFsClose?.addEventListener("click", () => exitVsplitFullscreen());
+    vsplitFsPlay?.addEventListener("click", () => {
+      toggleVsplitPlay().catch(() => {});
+    });
+    vsplitFsMark?.addEventListener("click", () => tapVsplitMark());
+    document.addEventListener("keydown", (e) => {
+      if (!vsplitFsOpen) return;
+      if (e.key === "Escape") {
+        e.preventDefault();
+        exitVsplitFullscreen();
+      }
+    });
     vsplitMarkTap?.addEventListener("click", () => tapVsplitMark());
     vsplitMarkUndo?.addEventListener("click", () => undoVsplitDraft());
     vsplitMarkClear?.addEventListener("click", () => {
@@ -5779,20 +5881,24 @@
       vsplitPlaying = Boolean(vsplitVideo && !vsplitVideo.paused);
       paintVsplitNow();
       if (vsplitPlay) vsplitPlay.textContent = vsplitPlaying ? "暂停" : "播放";
+      if (vsplitFsPlay) vsplitFsPlay.textContent = vsplitPlaying ? "暂停" : "播放";
     };
     vsplitVideo?.addEventListener("timeupdate", onVsplitTime);
     vsplitVideo?.addEventListener("seeked", onVsplitTime);
     vsplitVideo?.addEventListener("play", () => {
       vsplitPlaying = true;
       if (vsplitPlay) vsplitPlay.textContent = "暂停";
+      if (vsplitFsPlay) vsplitFsPlay.textContent = "暂停";
     });
     vsplitVideo?.addEventListener("pause", () => {
       vsplitPlaying = false;
       if (vsplitPlay) vsplitPlay.textContent = "播放";
+      if (vsplitFsPlay) vsplitFsPlay.textContent = "播放";
     });
     vsplitVideo?.addEventListener("ended", () => {
       vsplitPlaying = false;
       if (vsplitPlay) vsplitPlay.textContent = "播放";
+      if (vsplitFsPlay) vsplitFsPlay.textContent = "播放";
     });
     vsplitVideo?.addEventListener("loadedmetadata", () => {
       syncVsplitScrubFromVideo();
@@ -5811,6 +5917,9 @@
       getMarks: () => vsplitMarks.map((m) => ({ ...m })),
       getDraftStart: () => vsplitDraftStart,
       getEditIdx: () => vsplitEditIdx,
+      isFullscreen: () => vsplitFsOpen,
+      enterFullscreen: () => enterVsplitFullscreen(),
+      exitFullscreen: () => exitVsplitFullscreen(),
       enterEdit: (idx) => enterVsplitEdit(idx),
       setMarks: (marks) => {
         vsplitMarks = (Array.isArray(marks) ? marks : [])
