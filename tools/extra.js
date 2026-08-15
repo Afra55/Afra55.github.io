@@ -91,7 +91,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.14-n";
+  const GIF_TOOL_VERSION = "2026.08.14-o";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -4508,7 +4508,9 @@
     const vsplitFsMark = $("#vsplit-fs-mark");
     const vsplitFsUndo = $("#vsplit-fs-undo");
     const vsplitFsNow = $("#vsplit-fs-now");
-    const vsplitFsCount = $("#vsplit-fs-count");
+    const vsplitFsStatus = $("#vsplit-fs-status");
+    const vsplitFsNote = $("#vsplit-fs-note");
+    const vsplitFsFlash = $("#vsplit-fs-flash");
     const vsplitPreviewWrap = $("#vsplit-preview-wrap");
     const vsplitManualNow = $("#vsplit-manual-now");
     const vsplitManualCount = $("#vsplit-manual-count");
@@ -4575,6 +4577,10 @@
     let vsplitScrubbing = false;
     let vsplitPlaying = false;
     let vsplitFsOpen = false;
+    let vsplitFsNoteTimer = 0;
+    let vsplitFsPulseTimer = 0;
+    let vsplitFsFlashTimer = 0;
+    let vsplitFsStatusTimer = 0;
     const VSPLIT_SCRUB_STEPS = 1000;
     /** 按住滑块上下滑：微调窗口（秒） */
     const VSPLIT_FINE_WINDOW = 4;
@@ -4858,11 +4864,10 @@
         if (!vsplitSourceFile || !(dur > 0)) vsplitFsNow.textContent = "0:00 / 0:00";
         else vsplitFsNow.textContent = `${formatClock(now)} / ${formatClock(dur)}`;
       }
-      if (vsplitFsCount) {
+      if (vsplitFsStatus) {
         const done = completeVsplitMarks().length;
-        const total = vsplitMarks.length;
-        const draft = vsplitDraftStart == null ? "" : " · 已设起点";
-        vsplitFsCount.textContent = total ? `${done}/${total} 段${draft}` : draft ? `0 段${draft}` : "0 段";
+        const phase = vsplitDraftStart == null ? "等待打起点" : "正在打终点";
+        vsplitFsStatus.textContent = `已完成 ${done} 段 · ${phase}`;
       }
       if (vsplitFsPlay) vsplitFsPlay.textContent = vsplitPlaying ? "暂停" : "播放";
       if (vsplitFsMark) {
@@ -4876,6 +4881,89 @@
         vsplitFsUndo.disabled = !canUndo || vsplitBusy;
         vsplitFsUndo.textContent = vsplitDraftStart != null ? "取消起点" : "取消上一段";
       }
+    }
+
+    function clearVsplitFsFeedbackTimers() {
+      if (vsplitFsNoteTimer) window.clearTimeout(vsplitFsNoteTimer);
+      if (vsplitFsPulseTimer) window.clearTimeout(vsplitFsPulseTimer);
+      if (vsplitFsFlashTimer) window.clearTimeout(vsplitFsFlashTimer);
+      if (vsplitFsStatusTimer) window.clearTimeout(vsplitFsStatusTimer);
+      vsplitFsNoteTimer = 0;
+      vsplitFsPulseTimer = 0;
+      vsplitFsFlashTimer = 0;
+      vsplitFsStatusTimer = 0;
+    }
+
+    function bumpVsplitFsStatus() {
+      if (!vsplitFsStatus) return;
+      vsplitFsStatus.classList.remove("is-bump");
+      void vsplitFsStatus.offsetWidth;
+      vsplitFsStatus.classList.add("is-bump");
+      if (vsplitFsStatusTimer) window.clearTimeout(vsplitFsStatusTimer);
+      vsplitFsStatusTimer = window.setTimeout(() => {
+        vsplitFsStatus.classList.remove("is-bump");
+        vsplitFsStatusTimer = 0;
+      }, 280);
+    }
+
+    function pulseVsplitFsMarkBtn(kind) {
+      if (!vsplitFsMark) return;
+      vsplitFsMark.classList.remove("is-pulse", "is-pulse-start", "is-pulse-end");
+      void vsplitFsMark.offsetWidth;
+      vsplitFsMark.classList.add("is-pulse", kind === "end" ? "is-pulse-end" : "is-pulse-start");
+      if (vsplitFsPulseTimer) window.clearTimeout(vsplitFsPulseTimer);
+      vsplitFsPulseTimer = window.setTimeout(() => {
+        vsplitFsMark.classList.remove("is-pulse", "is-pulse-start", "is-pulse-end");
+        vsplitFsPulseTimer = 0;
+      }, 200);
+    }
+
+    function flashVsplitFsFrame(kind) {
+      if (!vsplitFsFlash) return;
+      vsplitFsFlash.classList.remove("is-pop", "is-start", "is-end");
+      void vsplitFsFlash.offsetWidth;
+      vsplitFsFlash.classList.add("is-pop", kind === "end" ? "is-end" : "is-start");
+      if (vsplitFsFlashTimer) window.clearTimeout(vsplitFsFlashTimer);
+      vsplitFsFlashTimer = window.setTimeout(() => {
+        vsplitFsFlash.classList.remove("is-pop", "is-start", "is-end");
+        vsplitFsFlashTimer = 0;
+      }, 300);
+    }
+
+    function showVsplitFsNote(text, kind) {
+      if (!vsplitFsNote) return;
+      vsplitFsNote.hidden = false;
+      vsplitFsNote.textContent = text || "";
+      vsplitFsNote.classList.remove("is-on", "is-start", "is-end");
+      void vsplitFsNote.offsetWidth;
+      vsplitFsNote.classList.add("is-on", kind === "end" ? "is-end" : "is-start");
+      if (vsplitFsNoteTimer) window.clearTimeout(vsplitFsNoteTimer);
+      vsplitFsNoteTimer = window.setTimeout(() => {
+        vsplitFsNote.classList.remove("is-on");
+        vsplitFsNoteTimer = 0;
+      }, 900);
+    }
+
+    function buzzVsplitFs() {
+      try {
+        if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+          navigator.vibrate(12);
+        }
+      } catch (_) {}
+    }
+
+    /** 全屏打点节奏反馈；非全屏仍走 toast */
+    function notifyVsplitMarkFeedback(message, kind) {
+      if (!vsplitFsOpen) {
+        toast(message);
+        return;
+      }
+      paintVsplitFsChrome();
+      pulseVsplitFsMarkBtn(kind);
+      flashVsplitFsFrame(kind);
+      bumpVsplitFsStatus();
+      showVsplitFsNote(message, kind);
+      buzzVsplitFs();
     }
 
     function enterVsplitFullscreen() {
@@ -4907,6 +4995,15 @@
         return;
       }
       vsplitFsOpen = false;
+      clearVsplitFsFeedbackTimers();
+      if (vsplitFsNote) {
+        vsplitFsNote.hidden = true;
+        vsplitFsNote.classList.remove("is-on", "is-start", "is-end");
+        vsplitFsNote.textContent = "";
+      }
+      vsplitFsMark?.classList.remove("is-pulse", "is-pulse-start", "is-pulse-end");
+      vsplitFsStatus?.classList.remove("is-bump");
+      vsplitFsFlash?.classList.remove("is-pop", "is-start", "is-end");
       if (vsplitFs) vsplitFs.hidden = true;
       document.body.classList.remove("vsplit-fs-open");
       if (vsplitVideo) {
@@ -5389,7 +5486,7 @@
         paintVsplitDraft();
         paintVsplitNow();
         setVsplitButtons();
-        toast(`起点 ${formatClock(t)}`);
+        notifyVsplitMarkFeedback(`起点 ${formatClock(t)}`, "start");
         return;
       }
       if (vsplitMarks.length >= VSPLIT_MAX_CLIPS) {
@@ -5410,7 +5507,7 @@
       invalidateVsplitOutputsFromMarks();
       paintVsplitMarks();
       paintVsplitNow();
-      toast(`已添加 · ${(next.end - next.start).toFixed(1)}s`);
+      notifyVsplitMarkFeedback(`已添加 · ${(next.end - next.start).toFixed(1)}s`, "end");
     }
 
     function undoVsplitDraft() {
@@ -5419,7 +5516,7 @@
       paintVsplitScrubMarks();
       paintVsplitNow();
       setVsplitButtons();
-      toast("已取消起点");
+      notifyVsplitMarkFeedback("已取消起点", "start");
     }
 
     function undoVsplitLastMark() {
@@ -5447,7 +5544,7 @@
         paintVsplitMarks();
         paintVsplitNow();
         setVsplitButtons();
-        toast(`已取消终点 · 起点保留 ${formatClock(start)}`);
+        notifyVsplitMarkFeedback(`已取消终点 · 起点保留 ${formatClock(start)}`, "start");
         return;
       }
       // 3) 仅剩起点（或不完整段）→ 取消该起点
@@ -5456,7 +5553,7 @@
       paintVsplitMarks();
       paintVsplitNow();
       setVsplitButtons();
-      toast("已取消起点");
+      notifyVsplitMarkFeedback("已取消起点", "start");
     }
 
     function ensureVsplitClipsFromMarks() {

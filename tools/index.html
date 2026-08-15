@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260814n" />
+  <link rel="stylesheet" href="./style.css?v=20260814o" />
   <link rel="stylesheet" href="./workspace-nav.css?v=20260814f" />
 </head>
 <body>
@@ -2013,11 +2013,14 @@ hello@world.org</textarea>
     <div class="vsplit-fs-top">
       <button type="button" class="ghost-btn vsplit-fs-close" id="vsplit-fs-close">退出</button>
       <div class="vsplit-fs-meta">
-        <span class="mono" id="vsplit-fs-now">0:00 / 0:00</span>
-        <span class="hint tight" id="vsplit-fs-count">0 段</span>
+        <strong class="vsplit-fs-status" id="vsplit-fs-status">已完成 0 段</strong>
+        <span class="mono vsplit-fs-now" id="vsplit-fs-now">0:00 / 0:00</span>
       </div>
     </div>
-    <div class="vsplit-fs-host" id="vsplit-fs-host"></div>
+    <div class="vsplit-fs-host" id="vsplit-fs-host">
+      <div class="vsplit-fs-flash" id="vsplit-fs-flash" aria-hidden="true"></div>
+    </div>
+    <p class="vsplit-fs-note" id="vsplit-fs-note" hidden></p>
     <div class="vsplit-fs-bottom">
       <button type="button" class="secondary-btn" id="vsplit-fs-play">播放</button>
       <button type="button" class="ghost-btn" id="vsplit-fs-undo" disabled>取消上一段</button>
@@ -2035,7 +2038,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260814n"></script>
+  <script src="./extra.js?v=20260814o"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>
