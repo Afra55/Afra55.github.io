@@ -461,7 +461,7 @@ async function movePath(serial, fromPath, toPath) {
 }
 
 async function copyPath(serial, fromPath, toPath) {
-  const from = normalizeRemotePath(fromPath, { write: true });
+  const from = normalizeRemotePath(fromPath);
   const to = normalizeRemotePath(toPath, { write: true });
   await adbSerial(serial, ["shell", `cp -a -- ${shellQuote(from)} ${shellQuote(to)}`], {
     timeout: 180000,
