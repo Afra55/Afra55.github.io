@@ -982,7 +982,7 @@
   function renderNav(order) {
     if (!navEl) return;
     const list = order || loadOrder();
-    const allowDrag = canDesktopDrag();
+    const allowHtml5Drag = canDesktopDrag();
     navEl.innerHTML = "";
     groupsInOrder().forEach((group) => {
       const tools = list.filter((id) => group.tools.includes(id));
@@ -991,18 +991,20 @@
       wrap.className = "nav-group";
       wrap.dataset.group = group.id;
       const title = document.createElement("p");
-      title.className = "nav-group-title";
+      title.className = "nav-group-title is-sortable";
       title.textContent = group.label;
-      title.draggable = allowDrag;
-      if (allowDrag) title.title = "拖动分类可调整整组顺序";
+      title.draggable = allowHtml5Drag;
+      title.title = allowHtml5Drag
+        ? "拖动分类可调整整组顺序"
+        : "长按分类标题后拖动，可调整整组顺序";
       wrap.appendChild(title);
       tools.forEach((id) => {
         const a = document.createElement("a");
         a.className = "tool-nav-link";
         a.href = id === "media" ? "#media/gifmaker" : `#${id}`;
         a.dataset.tool = id;
-        a.draggable = allowDrag;
-        if (allowDrag) a.title = "拖动可调整工具顺序";
+        a.draggable = allowHtml5Drag;
+        if (allowHtml5Drag) a.title = "拖动可调整工具顺序";
         a.textContent = toolName(id);
         wrap.appendChild(a);
       });
@@ -1236,10 +1238,44 @@
 
   let dragPayload = null;
   let didDrag = false;
+  /** 手机侧栏：长按分类标题后的 Pointer 排序状态（HTML5 DnD 在触控上不可靠） */
+  let pointerSort = null;
 
   function clearNavDragStyles() {
     getNavLinks().forEach((l) => l.classList.remove("drag-over", "is-dragging"));
     $$(".nav-group", navEl).forEach((g) => g.classList.remove("drag-over", "is-dragging"));
+  }
+
+  function navGroupAtPoint(x, y) {
+    const stack = typeof document.elementsFromPoint === "function" ? document.elementsFromPoint(x, y) : [document.elementFromPoint(x, y)];
+    for (const el of stack) {
+      const group = el?.closest?.(".nav-group");
+      if (group && navEl?.contains(group) && !group.classList.contains("is-filtered-out")) return group;
+    }
+    return null;
+  }
+
+  function cancelPointerSort({ keepDidDrag = false } = {}) {
+    if (pointerSort?.timer) clearTimeout(pointerSort.timer);
+    pointerSort = null;
+    document.body.classList.remove("nav-sorting");
+    clearNavDragStyles();
+    dragPayload = null;
+    if (!keepDidDrag) {
+      setTimeout(() => {
+        didDrag = false;
+      }, 0);
+    }
+  }
+
+  function commitGroupReorder(fromId, toId) {
+    if (!fromId || !toId || fromId === toId) return false;
+    const next = moveGroupOrder(fromId, toId);
+    saveGroupOrder(next);
+    renderNav(loadOrder());
+    applyRoute({ skipRecent: true });
+    showToast("已保存分类排序");
+    return true;
   }
 
   function readDragPayload(e) {
@@ -1375,14 +1411,96 @@
         const payload = readDragPayload(e);
         const toGroup = wrap.dataset.group;
         if (!payload || payload.kind !== "group" || !toGroup || payload.id === toGroup) return;
-        const next = moveGroupOrder(payload.id, toGroup);
-        saveGroupOrder(next);
-        renderNav(loadOrder());
-        applyRoute({ skipRecent: true });
-        showToast("已保存分类排序");
+        commitGroupReorder(payload.id, toGroup);
       };
       title.addEventListener("drop", onGroupDrop);
       wrap.addEventListener("drop", onGroupDrop);
+
+      // 手机抽屉：HTML5 DnD 不可用，长按分类标题再拖动
+      const LONG_MS = 420;
+      const CANCEL_PX = 14;
+      title.addEventListener("pointerdown", (e) => {
+        if (canDesktopDrag()) return;
+        if (e.pointerType === "mouse" && e.button !== 0) return;
+        if (pointerSort?.timer) clearTimeout(pointerSort.timer);
+        pointerSort = {
+          kind: "group",
+          id: wrap.dataset.group,
+          wrap,
+          title,
+          pointerId: e.pointerId,
+          startX: e.clientX,
+          startY: e.clientY,
+          active: false,
+          timer: window.setTimeout(() => {
+            if (!pointerSort || pointerSort.pointerId !== e.pointerId) return;
+            pointerSort.active = true;
+            didDrag = true;
+            dragPayload = { kind: "group", id: wrap.dataset.group };
+            wrap.classList.add("is-dragging");
+            document.body.classList.add("nav-sorting");
+            try {
+              title.setPointerCapture(e.pointerId);
+            } catch (_) {
+              /* ignore */
+            }
+            try {
+              navigator.vibrate?.(12);
+            } catch (_) {
+              /* ignore */
+            }
+            showToast("拖动到目标分类处松开");
+          }, LONG_MS),
+        };
+      });
+      title.addEventListener(
+        "pointermove",
+        (e) => {
+          if (!pointerSort || pointerSort.pointerId !== e.pointerId) return;
+          const dx = Math.abs(e.clientX - pointerSort.startX);
+          const dy = Math.abs(e.clientY - pointerSort.startY);
+          if (!pointerSort.active) {
+            if (dx + dy > CANCEL_PX) cancelPointerSort();
+            return;
+          }
+          e.preventDefault();
+          clearNavDragStyles();
+          pointerSort.wrap.classList.add("is-dragging");
+          const target = navGroupAtPoint(e.clientX, e.clientY);
+          if (target && target !== pointerSort.wrap) target.classList.add("drag-over");
+        },
+        { passive: false }
+      );
+      const endPointer = (e) => {
+        if (!pointerSort || pointerSort.pointerId !== e.pointerId) return;
+        const state = pointerSort;
+        const wasActive = state.active;
+        const fromId = state.id;
+        const x = e.clientX;
+        const y = e.clientY;
+        try {
+          state.title.releasePointerCapture(e.pointerId);
+        } catch (_) {
+          /* ignore */
+        }
+        cancelPointerSort({ keepDidDrag: wasActive });
+        if (!wasActive) return;
+        const target = navGroupAtPoint(x, y);
+        commitGroupReorder(fromId, target?.dataset?.group);
+        setTimeout(() => {
+          didDrag = false;
+        }, 0);
+      };
+      title.addEventListener("pointerup", endPointer);
+      title.addEventListener("pointercancel", (e) => {
+        if (!pointerSort || pointerSort.pointerId !== e.pointerId) return;
+        try {
+          title.releasePointerCapture(e.pointerId);
+        } catch (_) {
+          /* ignore */
+        }
+        cancelPointerSort();
+      });
     });
   }
 
