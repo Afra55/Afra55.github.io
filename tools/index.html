@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260815x" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260815x" />
+  <link rel="stylesheet" href="./style.css?v=20260815fs" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260815fs" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-x</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-fs</span>
       </div>
       <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
@@ -1418,7 +1418,7 @@ hello@world.org</textarea>
           <label for="adb-token">Token</label>
           <input id="adb-token" class="mono" type="text" value="devtools-adb" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Android Studio Device File Explorer）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.9），请解压到同一文件夹后运行启动脚本。</p>
+        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Android Studio Device File Explorer）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.11），请解压到同一文件夹后运行启动脚本。</p>
         <div class="adb-guide" id="adb-setup-guide">
           <strong>本机依赖怎么配？</strong>
           <ol>
@@ -1568,37 +1568,40 @@ hello@world.org</textarea>
                   </div>
                 </div>
               </div>
-              <div class="adb-fs-dual">
-                <aside class="adb-fs-local" id="adb-fs-local">
-                  <div class="adb-fs-local-head">
-                    <strong>本机</strong>
-                    <span class="hint tight" id="adb-fs-local-meta">浏览电脑文件后推送到右侧设备</span>
+              <div class="adb-fs-savebar" id="adb-fs-savebar">
+                <div class="adb-fs-savebar-main">
+                  <strong>本机保存目录</strong>
+                  <span class="hint tight" id="adb-fs-local-meta">下载将保存到此目录（需桥 ≥0.6.11）</span>
+                </div>
+                <div class="adb-path-row adb-fs-local-path">
+                  <button type="button" class="ghost-btn" id="adb-fs-local-up" title="上级">上级</button>
+                  <input id="adb-fs-local-path" class="mono" type="text" value="" spellcheck="false" autocomplete="off" placeholder="本机目录路径" />
+                  <button type="button" class="secondary-btn" id="adb-fs-local-go">打开</button>
+                </div>
+                <div class="btn-row tool-actions adb-fs-local-roots" id="adb-fs-local-roots" style="margin-top:0.35rem"></div>
+              </div>
+              <div class="adb-fs-workspace" id="adb-fs-workspace" data-adb-fs-drop>
+                <div class="adb-fs-list" id="adb-fs-list" aria-live="polite" tabindex="0"></div>
+                <aside class="adb-fs-preview" id="adb-fs-preview" hidden>
+                  <div class="adb-fs-preview-head">
+                    <strong id="adb-fs-preview-title">详情 / 预览</strong>
+                    <button type="button" class="ghost-btn" id="adb-fs-preview-close">关闭</button>
                   </div>
-                  <div class="adb-path-row adb-fs-local-path">
-                    <button type="button" class="ghost-btn" id="adb-fs-local-up" title="上级">上级</button>
-                    <input id="adb-fs-local-path" class="mono" type="text" value="" spellcheck="false" autocomplete="off" />
-                    <button type="button" class="secondary-btn" id="adb-fs-local-go">打开</button>
-                  </div>
-                  <div class="btn-row tool-actions adb-fs-local-roots" id="adb-fs-local-roots" style="margin-top:0.35rem"></div>
+                  <p class="hint tight" id="adb-fs-preview-meta"></p>
+                  <div class="adb-fs-props mono" id="adb-fs-props" hidden></div>
+                  <div class="adb-fs-preview-body" id="adb-fs-preview-body"></div>
+                </aside>
+              </div>
+              <details class="adb-fs-local-panel" id="adb-fs-local-panel">
+                <summary>本机文件浏览（可选：勾选后推送到上方设备当前目录）</summary>
+                <div class="adb-fs-local" id="adb-fs-local">
                   <div class="adb-fs-local-list" id="adb-fs-local-list"></div>
                   <div class="btn-row tool-actions" style="margin-top:0.45rem">
                     <button type="button" class="primary-btn" id="adb-fs-local-push" disabled>推送到设备当前目录</button>
                   </div>
-                </aside>
-                <div class="adb-fs-workspace">
-                  <div class="adb-fs-list" id="adb-fs-list" aria-live="polite" data-adb-fs-drop tabindex="0"></div>
-                  <aside class="adb-fs-preview" id="adb-fs-preview" hidden>
-                    <div class="adb-fs-preview-head">
-                      <strong id="adb-fs-preview-title">详情 / 预览</strong>
-                      <button type="button" class="ghost-btn" id="adb-fs-preview-close">关闭</button>
-                    </div>
-                    <p class="hint tight" id="adb-fs-preview-meta"></p>
-                    <div class="adb-fs-props mono" id="adb-fs-props" hidden></div>
-                    <div class="adb-fs-preview-body" id="adb-fs-preview-body"></div>
-                  </aside>
                 </div>
-              </div>
-              <p class="hint" id="adb-fs-hint">列表/网格、前进后退、本机双栏推送；上传可看字节进度并可取消。只读路径会禁用写入操作。Delete / F2 / Ctrl+A / Esc 可用。</p>
+              </details>
+              <p class="hint" id="adb-fs-hint">手机文件为主：可拖入上传到当前目录。下载默认落到上方「本机保存目录」。本机列表默认折叠，需要推送时再展开。Delete / F2 / Ctrl+A / Esc 可用。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="install" hidden>
@@ -2374,7 +2377,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260815x"></script>
+  <script src="./extra.js?v=20260815fs"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>

@@ -2834,11 +2834,34 @@ body.vsplit-fs-open {
 }
 
 .adb-fs-workspace {
-  margin-top: 0.75rem;
+  margin-top: 0.55rem;
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(14rem, 0.9fr);
   gap: 0.75rem;
   align-items: stretch;
+  position: relative;
+}
+
+.adb-fs-workspace.is-drop .adb-fs-list,
+.adb-fs-list.is-drop {
+  outline: 2px dashed rgba(46, 196, 182, 0.75);
+  outline-offset: -4px;
+  background: rgba(46, 196, 182, 0.08);
+}
+
+.adb-fs-workspace.is-drop::after {
+  content: "松开以上传到设备当前目录";
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  z-index: 3;
+  color: var(--accent, #2ec4b6);
+  font-size: 0.95rem;
+  font-weight: 600;
+  background: rgba(8, 14, 26, 0.55);
+  border-radius: 12px;
 }
 
 .adb-fs-list {
@@ -2847,28 +2870,14 @@ body.vsplit-fs-open {
   border-radius: 12px;
   overflow: hidden;
   background: rgba(8, 14, 26, 0.35);
-  max-height: 28rem;
+  max-height: min(52vh, 36rem);
   overflow-y: auto;
-  min-height: 12rem;
+  min-height: 14rem;
   position: relative;
 }
 
-.adb-fs-list.is-drop {
-  outline: 2px dashed rgba(46, 196, 182, 0.75);
-  outline-offset: -4px;
-  background: rgba(46, 196, 182, 0.08);
-}
-
 .adb-fs-list.is-drop::after {
-  content: "松开以上传到当前目录";
-  position: sticky;
-  top: 40%;
-  display: block;
-  text-align: center;
-  color: var(--accent, #2ec4b6);
-  font-size: 0.9rem;
-  pointer-events: none;
-  z-index: 2;
+  content: none;
 }
 
 .adb-fs-toolbar {
@@ -3348,21 +3357,56 @@ body.vsplit-fs-open {
 
 .adb-fs-dual {
   margin-top: 0.75rem;
-  display: grid;
-  grid-template-columns: minmax(12rem, 0.85fr) minmax(0, 1.35fr);
-  gap: 0.75rem;
-  align-items: stretch;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.adb-fs-savebar {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(8, 14, 26, 0.35);
+  padding: 0.55rem 0.7rem 0.65rem;
+}
+
+.adb-fs-savebar-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 0.4rem;
+}
+
+.adb-fs-local-panel {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(8, 14, 26, 0.28);
+  padding: 0.35rem 0.7rem 0.55rem;
+}
+
+.adb-fs-local-panel > summary {
+  cursor: pointer;
+  user-select: none;
+  color: var(--muted);
+  font-size: 0.86rem;
+  padding: 0.25rem 0;
+}
+
+.adb-fs-local-panel[open] > summary {
+  color: var(--ink);
+  margin-bottom: 0.4rem;
 }
 
 .adb-fs-local {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: rgba(8, 14, 26, 0.4);
-  padding: 0.55rem 0.65rem 0.7rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  min-height: 12rem;
-  max-height: 28rem;
+  min-height: 0;
+  max-height: none;
 }
 
 .adb-fs-local-head {
@@ -3374,9 +3418,10 @@ body.vsplit-fs-open {
 }
 
 .adb-fs-local-list {
-  margin-top: 0.45rem;
+  margin-top: 0.2rem;
   flex: 1 1 auto;
   min-height: 0;
+  max-height: 14rem;
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -3478,12 +3523,12 @@ body.vsplit-fs-open {
 }
 
 @media (max-width: 960px) {
-  .adb-fs-dual {
+  .adb-fs-workspace {
     grid-template-columns: 1fr;
   }
 
-  .adb-fs-local {
-    max-height: 14rem;
+  .adb-fs-list {
+    max-height: min(48vh, 28rem);
   }
 }
 

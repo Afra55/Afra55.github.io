@@ -118,9 +118,10 @@ async function main() {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
     }
 
-    if (health2.json?.version !== "0.6.9") {
-      throw new Error(`expected bridge version 0.6.9, got ${health2.json?.version}`);
+    if (health2.json?.version !== "0.6.11") {
+      throw new Error(`expected bridge version 0.6.11, got ${health2.json?.version}`);
     }
+    if (!features.includes("local-pull")) throw new Error("health missing feature: local-pull");
 
     // Path alias expansion (mirrors server expandFsPathCandidates)
     const expand = (input) => {

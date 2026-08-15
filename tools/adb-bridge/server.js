@@ -35,7 +35,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.6.9";
+const BRIDGE_VERSION = "0.6.11";
 
 /** Preferred quick roots shown in UI (reads are not limited to these) */
 const ROOTS = [
@@ -809,6 +809,61 @@ async function pushLocalPaths(serial, paths, remoteDir) {
   }
   const pushed = results.filter((r) => r.ok).length;
   return { ok: true, results, pushed, total: list.length, remoteDir: targetDir };
+}
+
+function safeLocalBasename(name, fallback = "download.bin") {
+  const base = path.basename(String(name || "").replace(/[\\/]+$/, "")) || fallback;
+  const cleaned = base.replace(/[\u0000-\u001f<>:"|?*]/g, "_").trim();
+  return cleaned || fallback;
+}
+
+/**
+ * POST /local/pull: adb-pull a remote file/dir into an allowed host directory.
+ * Body: { serial, remotePath, localDir, name? }
+ */
+async function pullRemoteToLocal(serial, remotePath, localDir, name) {
+  if (!serial) throw new Error("缺少设备 serial");
+  const target = normalizeRemotePath(remotePath);
+  const dirReal = await resolveLocalListPath(localDir);
+  const st = await fs.promises.stat(dirReal);
+  if (!st.isDirectory()) throw new Error("本机落点不是目录");
+  try {
+    await fs.promises.access(dirReal, fs.constants.W_OK);
+  } catch {
+    throw new Error("本机目录不可写");
+  }
+  const fileName = safeLocalBasename(name || basenameRemote(target));
+  const dest = path.join(dirReal, fileName);
+  // Prefer direct pull into destination (works for files and directories)
+  try {
+    await adbSerial(serial, ["pull", target, dest], { timeout: 600000 });
+  } catch (pullErr) {
+    // Fallback: pull via downloadFile buffer for single files (run-as / su paths)
+    try {
+      const dl = await downloadFile(serial, target);
+      await fs.promises.writeFile(dest, dl.data);
+    } catch {
+      throw pullErr;
+    }
+  }
+  let size = 0;
+  let isDir = false;
+  try {
+    const outSt = await fs.promises.stat(dest);
+    size = outSt.isFile() ? outSt.size : 0;
+    isDir = outSt.isDirectory();
+  } catch {
+    /* ignore */
+  }
+  return {
+    ok: true,
+    remotePath: target,
+    localDir: dirReal,
+    localPath: dest,
+    name: fileName,
+    size,
+    isDir,
+  };
 }
 
 function mimeFromFilename(filename) {
@@ -3189,6 +3244,7 @@ async function handleApi(req, res, url) {
             "developer",
             "local-fs",
             "local-push",
+            "local-pull",
           ],
           adb: adbInfo,
           tools: hostTools.tools,
@@ -3253,6 +3309,17 @@ async function handleApi(req, res, url) {
     if (url.pathname === "/local/push" && req.method === "POST") {
       const body = parseJsonBody(await readBody(req, 1024 * 1024));
       sendJson(res, 200, await pushLocalPaths(body.serial, body.paths, body.remoteDir), origin);
+      return;
+    }
+
+    if (url.pathname === "/local/pull" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req, 1024 * 1024));
+      sendJson(
+        res,
+        200,
+        await pullRemoteToLocal(body.serial, body.remotePath || body.path, body.localDir, body.name),
+        origin
+      );
       return;
     }
 
