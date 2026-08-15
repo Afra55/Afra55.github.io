@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260814j" />
+  <link rel="stylesheet" href="./style.css?v=20260814k" />
   <link rel="stylesheet" href="./workspace-nav.css?v=20260814f" />
 </head>
 <body>
@@ -1226,31 +1226,35 @@ hello@world.org</textarea>
         </div>
 
         <div class="vsplit-stage" id="vsplit-stage">
-          <div class="gif-preview-wrap vsplit-preview-wrap">
-            <video id="vsplit-video" class="img-preview gif-preview" controls playsinline muted preload="metadata" hidden></video>
+          <div class="vsplit-sticky-core" id="vsplit-sticky-core">
+            <div class="gif-preview-wrap vsplit-preview-wrap">
+              <video id="vsplit-video" class="img-preview gif-preview" controls playsinline muted preload="metadata" hidden></video>
+            </div>
+            <div class="vsplit-manual-transport" id="vsplit-manual-transport" hidden>
+              <div class="vsplit-transport">
+                <button type="button" class="secondary-btn" id="vsplit-play" disabled>播放</button>
+                <div class="vsplit-scrub-meta">
+                  <span class="mono" id="vsplit-manual-now">0:00 / 0:00</span>
+                  <span class="hint tight" id="vsplit-manual-count">0 段</span>
+                </div>
+              </div>
+              <div class="vsplit-scrub-block">
+                <label class="visually-hidden" for="vsplit-scrub">拖动预览进度</label>
+                <div class="vsplit-scrub-hit" id="vsplit-scrub-hit">
+                  <div class="vsplit-scrub-marks" id="vsplit-scrub-marks" aria-hidden="true"></div>
+                  <input id="vsplit-scrub" class="vsplit-scrub" type="range" min="0" max="1000" value="0" step="1" disabled />
+                </div>
+                <div class="btn-row tool-actions vsplit-nudge-btns" aria-label="微调">
+                  <button type="button" class="ghost-btn" id="vsplit-nudge-m1" disabled title="后退 1 秒">−1s</button>
+                  <button type="button" class="ghost-btn" id="vsplit-nudge-m01" disabled title="后退 0.1 秒">−0.1</button>
+                  <button type="button" class="ghost-btn" id="vsplit-nudge-p01" disabled title="前进 0.1 秒">+0.1</button>
+                  <button type="button" class="ghost-btn" id="vsplit-nudge-p1" disabled title="前进 1 秒">+1s</button>
+                </div>
+                <p class="hint tight" id="vsplit-scrub-hint">绿/橙点为已标起止 · 上下滑可微调</p>
+              </div>
+            </div>
           </div>
           <div class="vsplit-manual" id="vsplit-manual-row" hidden>
-            <div class="vsplit-transport">
-              <button type="button" class="secondary-btn" id="vsplit-play" disabled>播放</button>
-              <div class="vsplit-scrub-meta">
-                <span class="mono" id="vsplit-manual-now">0:00 / 0:00</span>
-                <span class="hint tight" id="vsplit-manual-count">0 段</span>
-              </div>
-            </div>
-            <div class="vsplit-scrub-block">
-              <label class="visually-hidden" for="vsplit-scrub">拖动预览进度</label>
-              <div class="vsplit-scrub-hit" id="vsplit-scrub-hit">
-                <div class="vsplit-scrub-marks" id="vsplit-scrub-marks" aria-hidden="true"></div>
-                <input id="vsplit-scrub" class="vsplit-scrub" type="range" min="0" max="1000" value="0" step="1" disabled />
-              </div>
-              <div class="btn-row tool-actions vsplit-nudge-btns" aria-label="微调">
-                <button type="button" class="ghost-btn" id="vsplit-nudge-m1" disabled title="后退 1 秒">−1s</button>
-                <button type="button" class="ghost-btn" id="vsplit-nudge-m01" disabled title="后退 0.1 秒">−0.1</button>
-                <button type="button" class="ghost-btn" id="vsplit-nudge-p01" disabled title="前进 0.1 秒">+0.1</button>
-                <button type="button" class="ghost-btn" id="vsplit-nudge-p1" disabled title="前进 1 秒">+1s</button>
-              </div>
-              <p class="hint tight" id="vsplit-scrub-hint">绿/橙点为已标起止 · 上下滑可微调</p>
-            </div>
             <div class="btn-row tool-actions vsplit-mark-btns" id="vsplit-add-btns">
               <button type="button" class="primary-btn" id="vsplit-mark-tap" disabled>打起点</button>
               <button type="button" class="ghost-btn" id="vsplit-mark-undo" disabled hidden>取消起点</button>
@@ -1259,7 +1263,7 @@ hello@world.org</textarea>
             <div class="vsplit-edit-bar" id="vsplit-edit-bar" hidden>
               <div class="vsplit-edit-head">
                 <p class="hint tight" id="vsplit-edit-title">编辑片段</p>
-                <button type="button" class="ghost-btn" id="vsplit-edit-done">完成</button>
+                <button type="button" class="ghost-btn" id="vsplit-edit-done">退出编辑</button>
               </div>
               <div class="seg vsplit-edit-focus" id="vsplit-edit-focus" role="group" aria-label="编辑端点">
                 <button type="button" class="seg-btn is-active" data-edit-focus="start">调起点</button>
@@ -2015,7 +2019,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260814j"></script>
+  <script src="./extra.js?v=20260814k"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>
