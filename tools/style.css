@@ -2638,6 +2638,46 @@ body.vsplit-fs-open {
   justify-content: space-between;
 }
 
+.vsplit-clip-progress {
+  margin-top: 0.45rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(8, 14, 26, 0.45);
+}
+
+.vsplit-clip-progress[hidden] {
+  display: none !important;
+}
+
+.vsplit-clip-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.vsplit-clip-progress-head .hint {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.vsplit-clip-progress-pct {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.vsplit-clip-progress[data-status="done"] .gif-progress-fill {
+  background: linear-gradient(90deg, #34d399, #1b9e93);
+}
+
+.vsplit-clip-progress[data-status="error"] .gif-progress-fill {
+  background: linear-gradient(90deg, #f87171, #dc2626);
+}
+
 .vsplit-clip-gif {
   display: block;
   max-height: 180px;
