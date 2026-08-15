@@ -1976,6 +1976,36 @@ a.secondary-btn {
   transform: scale(1.12);
 }
 
+.vsplit-scrub-mark.is-cluster {
+  width: auto;
+  min-width: 1.05rem;
+  height: 1.05rem;
+  margin-left: -0.52rem;
+  padding: 0 0.28rem;
+  border-radius: 999px;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: rgba(11, 18, 32, 0.92);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 0 1px rgba(232, 238, 248, 0.35);
+}
+
+.vsplit-scrub-mark.is-cluster.is-start {
+  top: -0.06rem;
+}
+
+.vsplit-scrub-mark.is-cluster.is-end {
+  top: 0.5rem;
+}
+
+.vsplit-scrub-mark.is-cluster::before {
+  inset: -0.55rem -0.45rem;
+}
+
 .vsplit-mark-chips {
   display: flex;
   flex-wrap: nowrap;
