@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260815m" />
+  <link rel="stylesheet" href="./style.css?v=20260815n" />
   <link rel="stylesheet" href="./workspace-nav.css?v=20260814f" />
 </head>
 <body>
@@ -1418,7 +1418,7 @@ hello@world.org</textarea>
           <label for="adb-token">Token</label>
           <input id="adb-token" class="mono" type="text" value="devtools-adb" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Device File Explorer / Adbrowser）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.4），请解压到同一文件夹后运行启动脚本。</p>
+        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Device File Explorer / Adbrowser）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.5），请解压到同一文件夹后运行启动脚本。</p>
         <div class="adb-guide" id="adb-setup-guide">
           <strong>本机依赖怎么配？</strong>
           <ol>
@@ -1602,8 +1602,9 @@ hello@world.org</textarea>
                 <button type="button" class="ghost-btn" id="adb-perm-revoke">撤销权限</button>
               </div>
               <div class="adb-fs-list adb-apps-list" id="adb-apps-list" aria-live="polite"></div>
+              <p class="hint tight" id="adb-apps-label-tip" hidden></p>
               <pre class="mono adb-pre" id="adb-app-detail" hidden></pre>
-              <p class="hint">左侧勾选用于权限操作；应用名来自 dumpsys（部分机型可能为空）。系统应用操作可能失败。</p>
+              <p class="hint">左侧勾选用于权限操作。应用名优先用 aapt 解析 APK 标签（需本机 build-tools）；首次刷新会拉取 APK 解析并缓存，之后会快很多。系统应用操作可能失败。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="network" hidden>
@@ -2209,7 +2210,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260815m"></script>
+  <script src="./extra.js?v=20260815n"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>

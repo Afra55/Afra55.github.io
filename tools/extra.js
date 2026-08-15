@@ -92,7 +92,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.15-l";
+  const GIF_TOOL_VERSION = "2026.08.15-n";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -8566,7 +8566,12 @@
             .includes(q)
         );
       });
-      if (adbAppsMeta) adbAppsMeta.textContent = `${list.length}/${adbApps.length} · ${adbSelected || "未选择"}`;
+      if (adbAppsMeta) {
+        const resolved = adbApps.filter((a) => a.label && a.label !== a.packageName).length;
+        adbAppsMeta.textContent = `${list.length}/${adbApps.length} · 应用名 ${resolved}/${adbApps.length} · ${
+          adbSelected || "未选择"
+        }`;
+      }
       if (!list.length) {
         adbAppsList.innerHTML = `<div class="adb-fs-empty">无匹配应用</div>`;
         return;
@@ -8576,15 +8581,18 @@
         .map((app) => {
           const kind = app.isSystem ? "系统" : "三方";
           const pkg = escapeHtml(app.packageName);
-          const label = escapeHtml(app.label || app.packageName);
+          const hasLabel = Boolean(app.label && app.label !== app.packageName);
+          const title = escapeHtml(hasLabel ? app.label : app.packageName);
           const checked = adbPermPackage === app.packageName ? "checked" : "";
           return `<div class="adb-fs-row adb-app-row">
             <label class="adb-app-select">
               <input type="checkbox" data-adb-app-check="${pkg}" ${checked} />
               <span>
-                <strong>${label}</strong>
+                <strong>${title}</strong>
                 <div class="adb-fs-meta mono">${pkg}</div>
-                <div class="adb-fs-meta">${kind}${app.apkPath ? ` · ${escapeHtml(app.apkPath)}` : ""}</div>
+                <div class="adb-fs-meta">${kind}${
+                  hasLabel ? "" : " · 未解析应用名"
+                }${app.apkPath ? ` · ${escapeHtml(app.apkPath)}` : ""}</div>
               </span>
             </label>
             <div class="adb-fs-actions">
@@ -8816,13 +8824,34 @@
 
     async function loadApps() {
       if (!adbSelected) return;
-      if (adbAppsMeta) adbAppsMeta.textContent = "加载中…";
+      if (adbAppsMeta) adbAppsMeta.textContent = "加载应用名中…（首次可能较慢）";
       const kind = $("#adb-apps-kind")?.value || "third";
       const data = await adbFetch(
         `/apps?serial=${encodeURIComponent(adbSelected)}&kind=${encodeURIComponent(kind)}`
       );
       adbApps = data.apps || [];
+      const resolved =
+        data.labelResolved != null
+          ? Number(data.labelResolved)
+          : adbApps.filter((a) => a.label && a.label !== a.packageName).length;
+      if (adbAppsMeta) {
+        adbAppsMeta.textContent = `${adbApps.length} 个 · 应用名 ${resolved}/${adbApps.length} · ${
+          adbSelected || "未选择"
+        }`;
+      }
       renderApps();
+      if (data.labelNote) {
+        const tip = $("#adb-apps-label-tip");
+        if (tip) {
+          tip.hidden = false;
+          tip.textContent = data.labelNote;
+        } else if (resolved < Math.min(3, adbApps.length)) {
+          toast(data.labelNote);
+        }
+      } else {
+        const tip = $("#adb-apps-label-tip");
+        if (tip) tip.hidden = true;
+      }
     }
 
     async function loadSnapshot({ silent = false } = {}) {

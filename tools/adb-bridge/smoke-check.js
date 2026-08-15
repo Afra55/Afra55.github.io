@@ -118,14 +118,54 @@ async function main() {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
     }
 
-    if (health2.json?.version !== "0.6.4") {
-      throw new Error(`expected bridge version 0.6.4, got ${health2.json?.version}`);
+    if (health2.json?.version !== "0.6.5") {
+      throw new Error(`expected bridge version 0.6.5, got ${health2.json?.version}`);
     }
     if (!health2.json?.tools || typeof health2.json.tools.keytool !== "object") {
       throw new Error("health should expose tools.keytool probe");
     }
     if (!features.includes("fs-preview")) throw new Error("health missing feature: fs-preview");
     if (!features.includes("host-tools-probe")) throw new Error("health missing feature: host-tools-probe");
+    if (!features.includes("app-labels-aapt")) throw new Error("health missing feature: app-labels-aapt");
+
+    // Label parser smoke (mirrors server parseLabelFromBadging / dumpsys rules)
+    const badging = [
+      "application-label-zh-CN:'微信'",
+      "application-label:'WeChat'",
+      "application: label='Demo' icon='res/xxx.png'",
+    ].join("\n");
+    const zh =
+      (badging.match(/application-label-zh-CN:'([^']*)'/) ||
+        badging.match(/application-label:'([^']*)'/) ||
+        badging.match(/application:\s*label='([^']*)'/) ||
+        [])[1] || "";
+    if (zh !== "微信") throw new Error(`badging label parse failed: ${zh}`);
+    const dump = `
+Package [com.demo.app] (abc):
+    applicationLabel=演示应用
+Package [com.other] (def):
+    nonLocalizedLabel=null
+`;
+    const dumpLabels = new Map();
+    let cur = "";
+    for (const line of dump.split(/\r?\n/)) {
+      const pkg = line.match(/^\s*Package\s+\[([^\]]+)\]/);
+      if (pkg) {
+        cur = pkg[1].trim();
+        continue;
+      }
+      const raw =
+        (line.match(/applicationLabel=(.+)$/) || line.match(/nonLocalizedLabel=(.+)$/) || [])[1];
+      if (!cur || !raw) continue;
+      const cleaned = String(raw).trim();
+      if (!cleaned || /^null$/i.test(cleaned)) continue;
+      if (!dumpLabels.has(cur)) dumpLabels.set(cur, cleaned);
+    }
+    if (dumpLabels.get("com.demo.app") !== "演示应用") {
+      throw new Error("dumpsys label parse failed");
+    }
+    if (dumpLabels.has("com.other")) throw new Error("dumpsys should ignore null nonLocalizedLabel");
+
     if (!health2.json?.tools || typeof health2.json.tools !== "object") {
       throw new Error("health missing tools probe");
     }

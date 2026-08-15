@@ -35,7 +35,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.6.4";
+const BRIDGE_VERSION = "0.6.5";
 
 /** Preferred quick roots shown in UI (reads are not limited to these) */
 const ROOTS = [
@@ -820,47 +820,247 @@ async function listApps(serial, kind = "all") {
       kind: isSystem ? "system" : "third",
     });
   }
-  const labels = await loadAppLabels(serial);
+  const labelInfo = await loadAppLabels(serial, apps);
   for (const app of apps) {
-    app.label = labels.get(app.packageName) || "";
+    app.label = labelInfo.map.get(app.packageName) || "";
   }
   apps.sort((a, b) => {
     const la = (a.label || a.packageName).toLowerCase();
     const lb = (b.label || b.packageName).toLowerCase();
     return la.localeCompare(lb, "zh");
   });
-  return apps;
+  return {
+    apps,
+    labelResolved: apps.filter((a) => a.label).length,
+    labelNote: labelInfo.note || "",
+    labelSource: labelInfo.source || "",
+  };
 }
 
-async function loadAppLabels(serial) {
+function parseLabelFromBadging(text) {
+  const s = String(text || "");
+  return (
+    (
+      s.match(/application-label-zh-CN:'([^']*)'/) ||
+      s.match(/application-label-zh:'([^']*)'/) ||
+      s.match(/application-label:'([^']*)'/) ||
+      s.match(/application:\s*label='([^']*)'/) ||
+      []
+    )[1] || ""
+  ).trim();
+}
+
+function parseDumpsysPackageLabels(stdout) {
   const map = new Map();
+  let current = "";
+  for (const line of String(stdout || "").split(/\r?\n/)) {
+    const pkg = line.match(/^\s*Package\s+\[([^\]]+)\]/);
+    if (pkg) {
+      current = pkg[1].trim();
+      continue;
+    }
+    if (!current) continue;
+    const raw =
+      (line.match(/applicationLabel=(.+)$/) ||
+        line.match(/nonLocalizedLabel=(.+)$/) ||
+        line.match(/appLabel=(.+)$/) ||
+        line.match(/Application label:\s*(.+)$/i) ||
+        line.match(/应用程序标签[：:=]\s*(.+)$/) ||
+        [])[1];
+    if (!raw) continue;
+    let cleaned = String(raw).trim().replace(/^"|"$/g, "");
+    if (/^null$/i.test(cleaned) || cleaned === "null") continue;
+    // dumpsys often prints "null" after nonLocalizedLabel= when unset
+    if (!cleaned || cleaned === "0") continue;
+    if (!map.has(current)) map.set(current, cleaned);
+  }
+  return map;
+}
+
+function labelCachePath() {
+  return path.join(os.homedir(), ".devtools-adb-bridge", "app-labels-cache.json");
+}
+
+function readLabelCache() {
+  try {
+    const raw = JSON.parse(fs.readFileSync(labelCachePath(), "utf8"));
+    return raw && typeof raw === "object" ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+function writeLabelCache(cache) {
+  try {
+    const dir = path.dirname(labelCachePath());
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(labelCachePath(), JSON.stringify(cache));
+  } catch {
+    /* ignore */
+  }
+}
+
+function resolveAaptBin() {
+  const aapt2 = resolveTool("aapt2");
+  if (whichSync("aapt2") || (aapt2 && aapt2 !== "aapt2" && fs.existsSync(aapt2))) return aapt2;
+  const aapt = resolveTool("aapt");
+  if (whichSync("aapt") || (aapt && aapt !== "aapt" && fs.existsSync(aapt))) return aapt;
+  return "";
+}
+
+async function dumpBadgingLabel(localApk) {
+  const bin = resolveAaptBin();
+  if (!bin) return "";
+  try {
+    const { stdout, stderr } = await execFileAsync(bin, ["dump", "badging", localApk], {
+      timeout: 45000,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    return parseLabelFromBadging(`${stdout || ""}\n${stderr || ""}`);
+  } catch (err) {
+    return parseLabelFromBadging(`${err?.stdout || ""}\n${err?.stderr || ""}`);
+  }
+}
+
+async function mapPool(items, concurrency, worker) {
+  const list = Array.from(items);
+  let idx = 0;
+  const runners = Array.from({ length: Math.max(1, concurrency) }, async () => {
+    while (idx < list.length) {
+      const cur = list[idx++];
+      await worker(cur);
+    }
+  });
+  await Promise.all(runners);
+}
+
+async function enrichLabelsWithAapt(serial, apps, map, cache) {
+  const bin = resolveAaptBin();
+  if (!bin) {
+    return {
+      enriched: 0,
+      note: "本机未找到 aapt/aapt2：应用名可能显示为包名。安装 Android SDK build-tools 并加入 PATH 后重启桥，即可解析中文应用名。",
+    };
+  }
+  const missing = apps.filter((a) => a.apkPath && !map.get(a.packageName));
+  // 三方优先（用户最关心），再补系统
+  missing.sort((a, b) => Number(a.isSystem) - Number(b.isSystem));
+  const budget = missing.slice(0, 100);
+  let enriched = 0;
+  let failed = 0;
+  const started = Date.now();
+  const deadlineMs = 75000;
+  await mapPool(budget, 3, async (app) => {
+    if (Date.now() - started > deadlineMs) return;
+    const cacheKey = `${app.packageName}@@${app.apkPath}`;
+    const hit = cache[cacheKey];
+    if (hit?.label) {
+      map.set(app.packageName, hit.label);
+      enriched += 1;
+      return;
+    }
+    const local = tempName("label", `${app.packageName.replace(/[^\w.-]+/g, "_")}.apk`);
+    try {
+      await adbSerial(serial, ["pull", app.apkPath, local], { timeout: 90000 });
+      const label = await dumpBadgingLabel(local);
+      if (label) {
+        map.set(app.packageName, label);
+        cache[cacheKey] = { label, at: Date.now() };
+        enriched += 1;
+      } else {
+        failed += 1;
+      }
+    } catch {
+      failed += 1;
+    } finally {
+      try {
+        fs.unlinkSync(local);
+      } catch {
+        /* ignore */
+      }
+    }
+  });
+  writeLabelCache(cache);
+  const stillMissing = apps.filter((a) => !map.get(a.packageName)).length;
+  let note = `应用名已用 aapt 解析 ${enriched} 个`;
+  if (stillMissing) note += `，仍有 ${stillMissing} 个显示包名`;
+  if (failed && !enriched) note += "（拉取/解析失败较多，请确认 build-tools 可用）";
+  return { enriched, note };
+}
+
+async function loadAppLabels(serial, apps = []) {
+  const map = new Map();
+  const sources = [];
   try {
     const { stdout } = await adbSerial(serial, ["shell", "dumpsys", "package"], {
       timeout: 120000,
-      maxBuffer: 48 * 1024 * 1024,
+      maxBuffer: 64 * 1024 * 1024,
     });
-    let current = "";
+    const fromDump = parseDumpsysPackageLabels(stdout);
+    for (const [k, v] of fromDump) map.set(k, v);
+    if (fromDump.size) sources.push("dumpsys");
+  } catch {
+    /* optional */
+  }
+
+  // 启动器 Activity 里偶尔有 nonLocalizedLabel（覆盖桌面可见应用）
+  try {
+    const beforeLauncher = map.size;
+    const { stdout } = await adbSerial(
+      serial,
+      [
+        "shell",
+        "cmd",
+        "package",
+        "query-activities",
+        "-a",
+        "android.intent.action.MAIN",
+        "-c",
+        "android.intent.category.LAUNCHER",
+      ],
+      { timeout: 45000, maxBuffer: 20 * 1024 * 1024 }
+    );
+    let pkg = "";
     for (const line of String(stdout || "").split(/\r?\n/)) {
-      const pkg = line.match(/^\s*Package\s+\[([^\]]+)\]/);
-      if (pkg) {
-        current = pkg[1].trim();
-        continue;
-      }
-      if (!current) continue;
-      const label =
-        (line.match(/applicationLabel=(.+)$/) ||
-          line.match(/nonLocalizedLabel=(.+)$/) ||
-          line.match(/appLabel=(.+)$/) ||
+      const p = line.match(/packageName=(\S+)/);
+      if (p) pkg = p[1].trim();
+      const lab =
+        (line.match(/nonLocalizedLabel=([^\s]+(?:\s+[^\s=]+)*)/) ||
+          line.match(/applicationLabel=([^\s]+)/) ||
           [])[1];
-      if (label) {
-        const cleaned = String(label).trim().replace(/^"|"$/g, "");
-        if (cleaned && cleaned !== "null" && !map.has(current)) map.set(current, cleaned);
+      if (pkg && lab && !/^null$/i.test(lab) && !map.has(pkg)) {
+        map.set(pkg, lab.trim());
       }
     }
+    if (map.size > beforeLauncher) sources.push("launcher");
   } catch {
-    /* labels optional */
+    /* optional */
   }
-  return map;
+
+  const cache = readLabelCache();
+  let usedCache = false;
+  for (const app of apps) {
+    if (map.has(app.packageName)) continue;
+    const hit = cache[`${app.packageName}@@${app.apkPath}`];
+    if (hit?.label) {
+      map.set(app.packageName, hit.label);
+      usedCache = true;
+    }
+  }
+  if (usedCache) sources.push("cache");
+
+  const before = map.size;
+  const aaptInfo = await enrichLabelsWithAapt(serial, apps, map, cache);
+  if (map.size > before) sources.push("aapt");
+
+  const resolved = map.size;
+  let note = aaptInfo.note || "";
+  if (!resolved) {
+    note =
+      aaptInfo.note ||
+      "未能解析应用名。请安装 Android SDK build-tools（提供 aapt/aapt2），重启 ADB 桥后再刷新应用列表。";
+  }
+  return { map, note, source: sources.join("+") || "none" };
 }
 
 async function appAction(serial, packageName, action) {
@@ -2692,6 +2892,7 @@ async function handleApi(req, res, url) {
             "host-tools",
             "fs-preview",
             "host-tools-probe",
+            "app-labels-aapt",
             "proxy",
             "forward",
             "developer",
@@ -2858,8 +3059,20 @@ async function handleApi(req, res, url) {
     if (url.pathname === "/apps" && req.method === "GET") {
       const serial = url.searchParams.get("serial") || "";
       const kind = url.searchParams.get("kind") || "all";
-      const apps = await listApps(serial, kind);
-      sendJson(res, 200, { ok: true, apps, count: apps.length }, origin);
+      const result = await listApps(serial, kind);
+      sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          apps: result.apps,
+          count: result.apps.length,
+          labelResolved: result.labelResolved,
+          labelNote: result.labelNote,
+          labelSource: result.labelSource,
+        },
+        origin
+      );
       return;
     }
 
