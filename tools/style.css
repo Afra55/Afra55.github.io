@@ -2637,6 +2637,146 @@ body.vsplit-fs-open {
   border-top: 0;
 }
 
+.adb-fs-row.is-selected {
+  background: rgba(46, 196, 182, 0.1);
+}
+
+.adb-fs-row.is-dir,
+.adb-fs-row.is-file {
+  cursor: pointer;
+}
+
+.adb-fs-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.35rem;
+  align-items: center;
+  margin: 0.35rem 0 0.55rem;
+  font-size: 0.86rem;
+}
+
+.adb-fs-crumbs .linkish {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+}
+
+.adb-crumb-sep {
+  color: var(--muted);
+}
+
+.adb-more {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.adb-more > summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--muted);
+  font-size: 0.82rem;
+  padding: 0.2rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: inline-block;
+  user-select: none;
+}
+
+.adb-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.adb-more[open] > summary {
+  color: var(--ink);
+  border-color: rgba(46, 196, 182, 0.45);
+}
+
+.adb-more[open] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  width: 100%;
+  padding-top: 0.35rem;
+  margin-top: 0.15rem;
+  border-top: 1px solid var(--line);
+}
+
+.adb-apps-list .adb-fs-row {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.45rem;
+}
+
+.adb-apps-list .adb-fs-row > span:empty {
+  display: none;
+}
+
+.adb-apps-list .adb-fs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  width: 100%;
+  max-width: 100%;
+}
+
+.adb-media-preview img {
+  max-width: min(100%, 28rem);
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  display: block;
+}
+
+.adb-guide {
+  margin: 0.35rem 0 0.85rem;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(8, 14, 26, 0.4);
+  color: var(--muted);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+
+.adb-guide strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.adb-guide ol,
+.adb-guide ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.adb-guide li + li {
+  margin-top: 0.25rem;
+}
+
+.adb-input-shot-wrap {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(8, 14, 26, 0.45);
+  min-height: 2.5rem;
+}
+
+.adb-input-shot-wrap img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  touch-action: none;
+  cursor: crosshair;
+}
+
 .adb-fs-row button.linkish {
   appearance: none;
   border: 0;
@@ -2698,16 +2838,27 @@ body.vsplit-fs-open {
 
 .adb-device {
   display: grid;
-  grid-template-columns: auto 1fr;
+  grid-template-columns: auto auto 1fr;
   gap: 0.55rem;
   align-items: start;
   text-align: left;
   width: 100%;
-  border: 1px solid var(--line);
-  background: rgba(8, 14, 26, 0.35);
+  border: 1px solid rgba(120, 150, 190, 0.28);
+  background: linear-gradient(135deg, rgba(14, 24, 42, 0.95), rgba(10, 18, 32, 0.88));
   color: var(--ink);
   border-radius: 12px;
   padding: 0.7rem 0.8rem;
+  position: relative;
+  overflow: hidden;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.adb-device-stripe {
+  width: 0.28rem;
+  align-self: stretch;
+  min-height: 2.2rem;
+  border-radius: 999px;
+  background: var(--adb-accent, rgba(46, 196, 182, 0.85));
 }
 
 .adb-device:hover {
@@ -2715,30 +2866,46 @@ body.vsplit-fs-open {
 }
 
 .adb-device.is-active {
-  border-color: rgba(46, 196, 182, 0.7);
-  background: rgba(46, 196, 182, 0.1);
+  border-color: rgba(46, 196, 182, 0.75);
+  background: linear-gradient(135deg, rgba(20, 48, 52, 0.95), rgba(12, 28, 40, 0.9));
 }
 
 .adb-device-check {
   margin-top: 0.2rem;
+  accent-color: var(--adb-accent, #2ec4b6);
 }
 
-.adb-device-body {
+.adb-device-body,
+button.adb-device-body,
+button.adb-device-body.linkish {
+  appearance: none;
+  -webkit-appearance: none;
   min-width: 0;
   text-align: left;
   width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent !important;
+  background-color: transparent !important;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  box-shadow: none;
 }
 
 .adb-device-body strong {
   display: block;
   font-size: 0.92rem;
-  color: var(--ink);
+  color: #f2f6fc;
+  font-weight: 650;
 }
 
 .adb-device-body span {
   display: block;
   margin-top: 0.2rem;
-  color: var(--muted);
+  color: #9db0c9;
   font-size: 0.78rem;
   font-family: var(--mono);
   word-break: break-all;

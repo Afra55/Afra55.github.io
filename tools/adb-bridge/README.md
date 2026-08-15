@@ -41,19 +41,20 @@ node server.js
 1. 打开 Tools →「ADB 工具」
 2. 下载对应系统的完整 ZIP，解压后运行启动脚本（勿只保留脚本、删掉 server.js）
 3. 回到网页点击「连接本机桥」
-## 接口（P0–P3）
+## 接口（P0–P3，bridge 0.6.0）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/health` | 健康检查（可不带 token） |
 | GET | `/devices` | 设备列表 |
 | GET | `/device/info?serial=` | 设备信息 |
-| GET | `/fs/list?serial=&path=` | 列目录 |
-| POST | `/fs/mkdir` `/fs/delete` `/fs/rename` `/fs/move` `/fs/copy` | 文件操作 |
-| POST | `/fs/upload?serial=&path=&name=` | 上传到设备 |
+| GET | `/fs/list?serial=&path=` | 列目录（可读 roots 含 system/app 等） |
+| POST | `/fs/mkdir` `/fs/delete` `/fs/rename` `/fs/move` `/fs/copy` | 文件操作（默认可写：sdcard / tmp） |
+| POST | `/fs/upload?serial=&path=&name=&forcePush=` | 上传到设备；`forcePush=1` 才可写系统 APK 路径 |
 | GET | `/fs/download?serial=&path=` | 从设备下载 |
 | POST | `/upload?name=` | 上传 APK 到桥临时区 |
-| POST | `/install` | 批量/单设备安装（任务） |
+| POST | `/install` | 批量/单设备安装（任务；`allowDowngrade` → `adb install -d`） |
+| POST | `/install/push-system` | 系统/临时区 APK 推送覆盖 `{ serial, uploadId, packageName?, remoteDir? }` |
 | GET | `/apps?serial=&kind=` | 应用列表 `all/system/third` |
 | GET | `/apps/info?serial=&package=` | 已安装应用详情 |
 | POST | `/apps/action` | 打开 / 强停 / 清数据 / 卸载 / 停用 / 启用 |
@@ -62,16 +63,19 @@ node server.js
 | POST | `/apps/backup` | 备份 APK（可 `async` 任务） |
 | GET/POST | `/network/proxy` | HTTP 代理查询/设置/清除 |
 | GET/POST | `/network/forward` | forward/reverse 端口转发 |
-| GET/POST | `/developer` | 开发者选项状态与开关 |
+| GET/POST | `/developer` | 开发者选项（含 stay_on / show_touches / force_rtl 等） |
 | POST | `/media/screenshot` | 多设备截图任务 |
-| POST | `/media/record` | 当前设备录屏任务 |
-| GET | `/logcat?serial=&lines=&package=&query=` | 拉取 logcat |
+| GET | `/media/screencap?serial=` | 同步 PNG 截图（`image/png`） |
+| POST | `/media/record` | 录屏任务；`seconds: 0` 无时限，需 `/jobs/:id/cancel` |
+| GET | `/logcat?serial=&lines=&package=&query=&tag=&since=` | 拉取 logcat（无流式接口，请轮询） |
 | POST | `/logcat/clear` | 清空 logcat 缓冲 |
 | POST | `/input` | 点击 / 滑动 / 按键 / 文本 |
 | POST | `/clipboard` | 推送剪贴板（机型相关） |
 | GET | `/device/snapshot?serial=` | 状态快照 |
 | POST | `/device/control` | 常亮 / 开发者选项 / USB 安装等 |
 | GET | `/jobs` `/jobs/:id` `/jobs/:id/artifact/:name` | 任务与产物下载 |
+| POST | `/jobs/:id/cancel` | 取消任务（录屏：SIGINT screenrecord 并尝试拉取片段） |
 
 除 `/health` 外均需请求头：`X-Adb-Token: devtools-adb`  
-文件访问范围仅限 `/sdcard` 与 `/storage/emulated/0`。
+
+**路径策略：** 可读 `ROOTS` = `/sdcard`、`/storage/emulated/0`、`/data/local/tmp`、`/data/app`、`/system/app`、`/system/priv-app`、`/product/app`、`/vendor/app`。推送/建目录/删除默认仅限前三个；系统路径写入需 `forcePush` 或 `/install/push-system`。

@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260814p" />
+  <link rel="stylesheet" href="./style.css?v=20260814q" />
   <link rel="stylesheet" href="./workspace-nav.css?v=20260814f" />
 </head>
 <body>
@@ -1413,7 +1413,7 @@ hello@world.org</textarea>
           <label for="adb-token">Token</label>
           <input id="adb-token" class="mono" type="text" value="devtools-adb" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机；文件范围限于 <span class="mono">/sdcard</span> 与 <span class="mono">/storage/emulated/0</span>。完整包内含 <span class="mono">server.js</span>，请解压到同一文件夹后再运行启动脚本（勿只保留脚本）。</p>
+        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。可读 <span class="mono">/sdcard</span>、<span class="mono">/data/app</span>、<span class="mono">/system/app</span> 等；写入默认限于 sdcard 与 tmp。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.0），请解压到同一文件夹后运行启动脚本。</p>
         <p class="error" id="adb-error" hidden></p>
 
         <div class="adb-layout" id="adb-workspace" hidden>
@@ -1488,6 +1488,7 @@ hello@world.org</textarea>
                 <h2 class="subhead">文件管理</h2>
                 <span class="hint tight" id="adb-fs-meta">选择设备后浏览文件</span>
               </div>
+              <nav class="adb-fs-crumbs" id="adb-fs-crumbs" aria-label="路径面包屑"></nav>
               <div class="adb-path-row">
                 <button type="button" class="ghost-btn" id="adb-fs-up" title="上级目录">上级</button>
                 <input id="adb-fs-path" class="mono" type="text" value="/sdcard" spellcheck="false" autocomplete="off" />
@@ -1500,6 +1501,8 @@ hello@world.org</textarea>
                 <button type="button" class="secondary-btn" id="adb-fs-mkdir">新建文件夹</button>
                 <button type="button" class="ghost-btn" id="adb-fs-home">/sdcard</button>
                 <button type="button" class="ghost-btn" id="adb-fs-download-dir">Download</button>
+                <button type="button" class="ghost-btn" data-adb-open="/system/app">/system/app</button>
+                <button type="button" class="ghost-btn" data-adb-open="/data/app">/data/app</button>
               </div>
               <div class="adb-fs-list" id="adb-fs-list" aria-live="polite"></div>
               <p class="hint" id="adb-fs-hint">支持打开、下载、删除、重命名、移动、复制。删除前会确认。</p>
@@ -1514,12 +1517,19 @@ hello@world.org</textarea>
                 <label class="file-btn" for="adb-apk-file">选择 APK</label>
                 <input id="adb-apk-file" type="file" accept=".apk,application/vnd.android.package-archive" hidden />
                 <label class="flag"><input type="checkbox" id="adb-apk-replace" checked /> 覆盖安装 (-r)</label>
+                <label class="flag"><input type="checkbox" id="adb-apk-downgrade" /> 允许降级 (-d)</label>
               </div>
+              <p class="hint" id="adb-apk-debug-hint">普通/调试包：勾选覆盖；装更低版本再勾「允许降级」。签名不一致通常要先卸载。系统预装应用：分析后填包名，点「推送到系统路径」会按包名查找现有 APK 路径并同名覆盖。</p>
               <p class="hint" id="adb-apk-name">尚未选择 APK</p>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+                <label for="adb-apk-pkg">包名</label>
+                <input id="adb-apk-pkg" class="mono" type="text" placeholder="分析后自动填入，系统推送必填" autocomplete="off" spellcheck="false" />
+              </div>
               <div class="btn-row tool-actions" style="margin-top:0.75rem">
                 <button type="button" class="secondary-btn" id="adb-apk-analyze" disabled>分析 APK 信息</button>
                 <button type="button" class="primary-btn" id="adb-apk-install-selected" disabled>安装到勾选设备</button>
                 <button type="button" class="secondary-btn" id="adb-apk-install-current" disabled>仅安装到当前设备</button>
+                <button type="button" class="ghost-btn" id="adb-apk-push-system" disabled>推送到系统路径</button>
               </div>
               <pre class="mono adb-pre" id="adb-apk-info" hidden></pre>
             </div>
@@ -1551,13 +1561,28 @@ hello@world.org</textarea>
               </div>
               <div class="adb-fs-list adb-apps-list" id="adb-apps-list" aria-live="polite"></div>
               <pre class="mono adb-pre" id="adb-app-detail" hidden></pre>
-              <p class="hint">支持打开 / 详情 / 强停 / 清数据 / 权限；系统应用操作可能失败。</p>
+              <p class="hint">每行保留打开 / 详情；更多操作在「更多」里。系统应用操作可能失败。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="network" hidden>
               <div class="label-row">
-                <h2 class="subhead">HTTP 代理</h2>
+                <h2 class="subhead">网络（抓包 / 端口）</h2>
                 <span class="hint tight" id="adb-proxy-meta">当前设备全局代理</span>
+              </div>
+              <div class="adb-guide" id="adb-proxy-guide">
+                <strong>这是干什么的？</strong>
+                把手机的 HTTP/HTTPS 流量转到电脑上的 Charles、mitmproxy、Fiddler 等工具，方便看接口。端口转发则是让电脑和手机上的本地服务互相「打通」，不必改应用里的 IP。
+                <ol>
+                  <li>电脑与手机连同一 Wi‑Fi；电脑打开抓包软件，记下监听端口（常见 8888 / 8080）。</li>
+                  <li>Host 填电脑的局域网 IP（本页若用局域网地址打开会尝试预填）；Port 填抓包端口。</li>
+                  <li>点「设置代理」。手机浏览器访问一次抓包工具的证书页并安装证书（HTTPS 才看得见内容）。</li>
+                  <li>抓完务必点「清除代理」，否则手机会一直走电脑，断网或打不开网页。</li>
+                </ol>
+                <p style="margin:0.55rem 0 0"><strong>端口转发怎么选？</strong></p>
+                <ul>
+                  <li><strong>forward（电脑→手机）</strong>：本机访问 <span class="mono">localhost:本地端口</span> 实际连到手机上的服务（例如调试手机里起的 HTTP）。</li>
+                  <li><strong>reverse（手机→电脑）</strong>：手机访问 <span class="mono">localhost:远端端口</span> 实际连到电脑上的服务（常见：手机 App 调你电脑上的后端）。</li>
+                </ul>
               </div>
               <div class="field-row" style="flex-wrap:wrap">
                 <label for="adb-proxy-host">Host</label>
@@ -1627,6 +1652,78 @@ hello@world.org</textarea>
                     <strong class="mono" id="adb-dev-layout">—</strong>
                   </div>
                 </div>
+                <div class="meta-row">
+                  <span>充电时保持唤醒</span>
+                  <div class="adb-fs-actions">
+                    <button type="button" class="secondary-btn" data-adb-dev="stay_on" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="stay_on" data-adb-dev-val="0">关</button>
+                    <strong class="mono" id="adb-dev-stay-on">—</strong>
+                  </div>
+                </div>
+                <div class="meta-row">
+                  <span>强制 RTL</span>
+                  <div class="adb-fs-actions">
+                    <button type="button" class="secondary-btn" data-adb-dev="force_rtl" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="force_rtl" data-adb-dev-val="0">关</button>
+                    <strong class="mono" id="adb-dev-force-rtl">—</strong>
+                  </div>
+                </div>
+                <div class="meta-row">
+                  <span>不保留活动</span>
+                  <div class="adb-fs-actions">
+                    <button type="button" class="secondary-btn" data-adb-dev="dont_keep_activities" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="dont_keep_activities" data-adb-dev-val="0">关</button>
+                    <strong class="mono" id="adb-dev-dont-keep">—</strong>
+                  </div>
+                </div>
+                <div class="meta-row">
+                  <span>强制 GPU 渲染</span>
+                  <div class="adb-fs-actions">
+                    <button type="button" class="secondary-btn" data-adb-dev="force_gpu" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="force_gpu" data-adb-dev-val="0">关</button>
+                    <strong class="mono" id="adb-dev-force-gpu">—</strong>
+                  </div>
+                </div>
+                <div class="meta-row">
+                  <span>HWUI 分析</span>
+                  <div class="adb-fs-actions">
+                    <button type="button" class="secondary-btn" data-adb-dev="hardware_ui" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="hardware_ui" data-adb-dev-val="0">关</button>
+                    <strong class="mono" id="adb-dev-hardware-ui">—</strong>
+                  </div>
+                </div>
+                <div class="meta-row">
+                  <span>USB 调试通知</span>
+                  <div class="adb-fs-actions">
+                    <button type="button" class="secondary-btn" data-adb-dev="usb_debugging_notify" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="usb_debugging_notify" data-adb-dev-val="0">关</button>
+                    <strong class="mono" id="adb-dev-usb-notify">—</strong>
+                  </div>
+                </div>
+                <div class="meta-row">
+                  <span>GPU 过度绘制</span>
+                  <div class="adb-fs-actions">
+                    <button type="button" class="secondary-btn" data-adb-dev="gpu_overdraw" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="gpu_overdraw" data-adb-dev-val="0">关</button>
+                    <strong class="mono" id="adb-dev-gpu-overdraw">—</strong>
+                  </div>
+                </div>
+                <div class="meta-row">
+                  <span>严格模式</span>
+                  <div class="adb-fs-actions">
+                    <button type="button" class="secondary-btn" data-adb-dev="strict_mode" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="strict_mode" data-adb-dev-val="0">关</button>
+                    <strong class="mono" id="adb-dev-strict-mode">—</strong>
+                  </div>
+                </div>
+                <div class="meta-row">
+                  <span>显示所有 ANR</span>
+                  <div class="adb-fs-actions">
+                    <button type="button" class="secondary-btn" data-adb-dev="show_all_anrs" data-adb-dev-val="1">开</button>
+                    <button type="button" class="ghost-btn" data-adb-dev="show_all_anrs" data-adb-dev-val="0">关</button>
+                    <strong class="mono" id="adb-dev-show-anrs">—</strong>
+                  </div>
+                </div>
               </div>
               <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
                 <label for="adb-anim-scale">动画倍率</label>
@@ -1642,6 +1739,7 @@ hello@world.org</textarea>
                 <button type="button" class="primary-btn" id="adb-anim-apply">应用到全部动画</button>
               </div>
               <p class="hint" id="adb-dev-scales">window / transition / animator：—</p>
+              <p class="hint">部分开关因机型/系统版本可能无效；改完可回设置页核对。调试完记得关过度绘制与严格模式。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="logcat" hidden>
@@ -1649,45 +1747,49 @@ hello@world.org</textarea>
                 <h2 class="subhead">Logcat</h2>
                 <span class="hint tight" id="adb-log-meta">拉取当前设备最近日志</span>
               </div>
+              <div class="adb-guide" id="adb-log-guide">
+                <strong>怎么填过滤？</strong>
+                <ul>
+                  <li><strong>Tag</strong>：日志标签，对应代码里的 <span class="mono">Log.d("MyTag", …)</span>，只填标签名，如 <span class="mono">ActivityManager</span>、<span class="mono">OkHttp</span>。</li>
+                  <li><strong>包名</strong>：只看某个 App，填完整包名如 <span class="mono">com.example.app</span>（桥会尽量按进程过滤）。</li>
+                  <li><strong>关键字</strong>：对已拉取的文本再做包含匹配，可填错误码、URL 片段、Exception 名。</li>
+                  <li>可组合使用；勾选「实时刷新」每 2 秒按当前条件重拉。先缩小 Tag/包名再开实时，避免刷屏。</li>
+                </ul>
+              </div>
               <div class="field-row" style="flex-wrap:wrap">
                 <label for="adb-log-lines">行数</label>
                 <input id="adb-log-lines" class="mono meta-input" type="number" min="50" max="5000" value="400" />
+                <label for="adb-log-tag">Tag</label>
+                <input id="adb-log-tag" class="mono" type="text" placeholder="如 ActivityManager" autocomplete="off" spellcheck="false" />
                 <label for="adb-log-package">包名过滤</label>
-                <input id="adb-log-package" class="mono" type="text" placeholder="可选，如 com.example.app" autocomplete="off" spellcheck="false" />
+                <input id="adb-log-package" class="mono" type="text" placeholder="如 com.example.app" autocomplete="off" spellcheck="false" />
                 <label for="adb-log-query">关键字</label>
-                <input id="adb-log-query" class="mono" type="search" placeholder="可选" autocomplete="off" />
+                <input id="adb-log-query" class="mono" type="search" placeholder="如 Exception 或 error" autocomplete="off" />
               </div>
               <div class="btn-row tool-actions" style="margin-top:0.65rem">
                 <button type="button" class="primary-btn" id="adb-log-fetch">拉取日志</button>
+                <label class="flag"><input type="checkbox" id="adb-log-live" /> 实时刷新（2s）</label>
                 <button type="button" class="secondary-btn" id="adb-log-clear">清空设备日志缓冲</button>
                 <button type="button" class="ghost-btn" id="adb-log-copy">复制</button>
                 <button type="button" class="ghost-btn" id="adb-log-download">下载</button>
               </div>
+              <p class="hint tight" id="adb-log-note"></p>
               <pre class="mono adb-pre adb-log-pre" id="adb-log-out" aria-live="polite">尚未拉取</pre>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="input" hidden>
               <div class="label-row">
                 <h2 class="subhead">输入自动化</h2>
-                <span class="hint tight">对当前设备模拟点击、滑动、按键与文本</span>
+                <span class="hint tight">预览图上点选 / 拖拽，或用下方按键与文本</span>
               </div>
-              <div class="field-row" style="flex-wrap:wrap">
-                <label for="adb-tap-x">点击 X</label>
-                <input id="adb-tap-x" class="mono meta-input" type="number" value="500" />
-                <label for="adb-tap-y">Y</label>
-                <input id="adb-tap-y" class="mono meta-input" type="number" value="1000" />
-                <button type="button" class="secondary-btn" id="adb-tap-run">点击</button>
+              <div class="adb-guide">
+                <strong>怎么用：</strong>先点「刷新屏幕预览」拿到当前画面 → 在图上<strong>单击</strong>等于点击该位置，<strong>按住拖拽</strong>等于滑动。下方快捷键可模拟返回 / Home 等。坐标手填仅作高级备用。
               </div>
-              <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
-                <label for="adb-swipe-x1">滑动</label>
-                <input id="adb-swipe-x1" class="mono meta-input" type="number" value="500" title="x1" />
-                <input id="adb-swipe-y1" class="mono meta-input" type="number" value="1400" title="y1" />
-                <span class="hint tight">→</span>
-                <input id="adb-swipe-x2" class="mono meta-input" type="number" value="500" title="x2" />
-                <input id="adb-swipe-y2" class="mono meta-input" type="number" value="400" title="y2" />
-                <label for="adb-swipe-ms">ms</label>
-                <input id="adb-swipe-ms" class="mono meta-input" type="number" min="50" max="5000" value="300" />
-                <button type="button" class="secondary-btn" id="adb-swipe-run">滑动</button>
+              <div class="btn-row tool-actions">
+                <button type="button" class="primary-btn" id="adb-input-refresh-shot">刷新屏幕预览</button>
+              </div>
+              <div class="adb-input-shot-wrap" style="margin-top:0.65rem">
+                <img id="adb-input-canvas" alt="设备屏幕预览" hidden />
               </div>
               <div class="btn-row tool-actions" style="margin-top:0.75rem">
                 <button type="button" class="ghost-btn" data-adb-key="BACK">返回</button>
@@ -1699,6 +1801,27 @@ hello@world.org</textarea>
                 <button type="button" class="ghost-btn" data-adb-key="VOLUME_DOWN">音量-</button>
                 <button type="button" class="ghost-btn" data-adb-key="POWER">电源</button>
               </div>
+              <details class="adb-advanced" style="margin-top:0.85rem">
+                <summary>高级：坐标点击 / 滑动</summary>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+                  <label for="adb-tap-x">点击 X</label>
+                  <input id="adb-tap-x" class="mono meta-input" type="number" value="500" />
+                  <label for="adb-tap-y">Y</label>
+                  <input id="adb-tap-y" class="mono meta-input" type="number" value="1000" />
+                  <button type="button" class="secondary-btn" id="adb-tap-run">点击</button>
+                </div>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+                  <label for="adb-swipe-x1">滑动</label>
+                  <input id="adb-swipe-x1" class="mono meta-input" type="number" value="500" title="x1" />
+                  <input id="adb-swipe-y1" class="mono meta-input" type="number" value="1400" title="y1" />
+                  <span class="hint tight">→</span>
+                  <input id="adb-swipe-x2" class="mono meta-input" type="number" value="500" title="x2" />
+                  <input id="adb-swipe-y2" class="mono meta-input" type="number" value="400" title="y2" />
+                  <label for="adb-swipe-ms">ms</label>
+                  <input id="adb-swipe-ms" class="mono meta-input" type="number" min="50" max="5000" value="300" />
+                  <button type="button" class="secondary-btn" id="adb-swipe-run">滑动</button>
+                </div>
+              </details>
               <div class="field-block" style="margin-top:0.9rem">
                 <label for="adb-input-text">输入文本到当前焦点</label>
                 <textarea id="adb-input-text" class="mono area" rows="3" placeholder="先点到手机输入框，再发送" spellcheck="false"></textarea>
@@ -1713,7 +1836,7 @@ hello@world.org</textarea>
                   <button type="button" class="secondary-btn" id="adb-clip-run">推送到剪贴板</button>
                 </div>
               </div>
-              <p class="hint" id="adb-input-meta">坐标原点在屏幕左上角。中文输入依赖设备 IME，部分机型对 `input text` 支持有限。</p>
+              <p class="hint" id="adb-input-meta">坐标原点在屏幕左上角。可先刷新屏幕预览后点击/拖拽操作。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="media" hidden>
@@ -1724,13 +1847,16 @@ hello@world.org</textarea>
               <div class="btn-row tool-actions">
                 <button type="button" class="primary-btn" id="adb-shot-selected">截图勾选设备</button>
                 <button type="button" class="secondary-btn" id="adb-shot-current">截图当前设备</button>
+                <button type="button" class="ghost-btn" id="adb-media-zip">打包下载全部</button>
               </div>
+              <div id="adb-media-preview" class="adb-media-preview" hidden style="margin-top:0.75rem"></div>
               <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
-                <label for="adb-record-sec">录屏秒数</label>
-                <input id="adb-record-sec" class="mono meta-input" type="number" min="1" max="180" value="30" />
-                <button type="button" class="secondary-btn" id="adb-record-current">录屏当前设备</button>
+                <label for="adb-record-sec">录屏秒数（0=不限）</label>
+                <input id="adb-record-sec" class="mono meta-input" type="number" min="0" value="0" />
+                <button type="button" class="secondary-btn" id="adb-record-current">开始录屏</button>
+                <button type="button" class="ghost-btn" id="adb-record-cancel">取消录屏</button>
               </div>
-              <p class="hint">完成后可在「任务」页下载图片/视频。Android 录屏最长约 180 秒。</p>
+              <p class="hint" id="adb-record-tip">默认 0 = 一直录到点「取消录屏」或任务里取消。若填正数则按时长结束（部分系统约 180 秒上限）。多设备截图完成后可用「打包下载全部」。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="jobs" hidden>
@@ -2038,7 +2164,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260814p"></script>
+  <script src="./extra.js?v=20260814q"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>

@@ -94,6 +94,7 @@ async function main() {
     const features = health2.json?.features || [];
     for (const need of [
       "jobs",
+      "job-cancel",
       "logcat",
       "input",
       "clipboard",
@@ -103,14 +104,48 @@ async function main() {
       "proxy",
       "forward",
       "developer",
+      "screencap",
+      "install-push-system",
     ]) {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
+    }
+
+    if (health2.json?.version !== "0.6.0") {
+      throw new Error(`expected bridge version 0.6.0, got ${health2.json?.version}`);
+    }
+    const roots = health2.json?.roots || [];
+    for (const root of ["/data/local/tmp", "/system/app", "/system/priv-app"]) {
+      if (!roots.includes(root)) throw new Error(`health missing root: ${root}`);
+    }
+
+    const sysList = await req("GET", "/fs/list?serial=demo&path=/system/app", {
+      headers: { "X-Adb-Token": TOKEN },
+    });
+    // Path is allowed; may fail on missing adb/device with 400, but must not be "仅允许访问" reject
+    if (sysList.status === 200) throw new Error("unexpected success without device");
+    if (String(sysList.json?.error || "").includes("仅允许访问")) {
+      throw new Error("system/app should be in readable ROOTS");
+    }
+
+    const writeDenied = await req("POST", "/fs/mkdir", {
+      headers: { "X-Adb-Token": TOKEN, "Content-Type": "application/json" },
+      body: JSON.stringify({ serial: "demo", path: "/system/app/Evil" }),
+    });
+    if (writeDenied.status === 200) throw new Error("mkdir under /system/app should require forcePush");
+    if (!String(writeDenied.json?.error || "").includes("写入仅允许")) {
+      throw new Error(`expected write guard for /system/app, got: ${writeDenied.text}`);
     }
 
     const jobs = await req("GET", "/jobs", { headers: { "X-Adb-Token": TOKEN } });
     if (jobs.status !== 200 || !Array.isArray(jobs.json?.jobs)) {
       throw new Error("jobs endpoint failed");
     }
+
+    const cancel404 = await req("POST", "/jobs/deadbeef/cancel", {
+      headers: { "X-Adb-Token": TOKEN, "Content-Type": "application/json" },
+      body: "{}",
+    });
+    if (cancel404.status === 200) throw new Error("cancel unknown job should fail");
 
     const badInput = await req("POST", "/input", {
       headers: { "X-Adb-Token": TOKEN, "Content-Type": "application/json" },
