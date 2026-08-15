@@ -7,6 +7,16 @@ echo "使用本工具需要本机已安装 adb，并可用：adb devices"
 echo ""
 
 export PATH="$HOME/Android/Sdk/platform-tools:/usr/local/bin:/usr/bin:$PATH"
+# Debian/Ubuntu OpenJDK 与常见自装路径
+for jdk in /usr/lib/jvm/default-java /usr/lib/jvm/java-21-openjdk-amd64 /usr/lib/jvm/java-17-openjdk-amd64; do
+  if [ -d "${jdk}/bin" ]; then
+    export JAVA_HOME="${JAVA_HOME:-$jdk}"
+    export PATH="${jdk}/bin:$PATH"
+  fi
+done
+if [ -n "${JAVA_HOME}" ] && [ -d "${JAVA_HOME}/bin" ]; then
+  export PATH="${JAVA_HOME}/bin:$PATH"
+fi
 if [ -s "$HOME/.nvm/nvm.sh" ]; then
   # shellcheck disable=SC1090
   . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1 || true

@@ -118,9 +118,14 @@ async function main() {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
     }
 
-    if (health2.json?.version !== "0.6.3") {
-      throw new Error(`expected bridge version 0.6.3, got ${health2.json?.version}`);
+    if (health2.json?.version !== "0.6.4") {
+      throw new Error(`expected bridge version 0.6.4, got ${health2.json?.version}`);
     }
+    if (!health2.json?.tools || typeof health2.json.tools.keytool !== "object") {
+      throw new Error("health should expose tools.keytool probe");
+    }
+    if (!features.includes("fs-preview")) throw new Error("health missing feature: fs-preview");
+    if (!features.includes("host-tools-probe")) throw new Error("health missing feature: host-tools-probe");
     if (!health2.json?.tools || typeof health2.json.tools !== "object") {
       throw new Error("health missing tools probe");
     }

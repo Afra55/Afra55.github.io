@@ -60,6 +60,27 @@ if errorlevel 1 (
   exit /b 1
 )
 
+rem GUI / short PATH often misses JDK. Prepend common keytool locations when missing.
+where keytool >nul 2>&1
+if errorlevel 1 (
+  if defined JAVA_HOME if exist "%JAVA_HOME%\bin\keytool.exe" set "PATH=%JAVA_HOME%\bin;%PATH%"
+  if defined JDK_HOME if exist "%JDK_HOME%\bin\keytool.exe" set "PATH=%JDK_HOME%\bin;%PATH%"
+  for %%D in (
+    "%ProgramFiles%\Eclipse Adoptium"
+    "%ProgramFiles%\Java"
+    "%ProgramFiles%\Microsoft"
+    "%ProgramFiles%\Amazon Corretto"
+    "%LOCALAPPDATA%\Programs\Eclipse Adoptium"
+  ) do (
+    if exist %%~D (
+      for /d %%J in ("%%~D\*") do (
+        if exist "%%~J\bin\keytool.exe" set "PATH=%%~J\bin;%PATH%"
+      )
+    )
+  )
+)
+where keytool >> "%LOG_FILE%" 2>&1
+
 set "TARGET=%BRIDGE_DIR%\server.js"
 set "LOCAL_SERVER=%SCRIPT_DIR%server.js"
 set "HAVE_SERVER=0"

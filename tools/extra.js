@@ -8075,8 +8075,10 @@
   try {
     const ADB_STORE_BASE = "devtools-adb-base";
     const ADB_STORE_TOKEN = "devtools-adb-token";
-    const ADB_FS_ROOTS_HINT =
-      "类似 Android Studio Device File Explorer / Adbrowser：默认从 / 浏览。无权限时尝试 su / run-as；/data/data 无 root 时按包名虚拟列出（仅 debuggable 可读）。支持上传、下载、新建、重命名、剪切/复制后粘贴、删除。";
+    const ADB_FS_ROOTS_HINT_HTML =
+      "类似 Android Studio Device File Explorer / Adbrowser：默认从 / 浏览。单击文件可预览图片 / 文本 / 音视频（过大则提示下载）；双击同样预览。无权限时尝试 su / run-as；/data/data 无 root 时按包名虚拟列出。开源参考：" +
+      '<a href="https://github.com/rajivm1991/DroidDock" target="_blank" rel="noopener">DroidDock</a>（预览）、' +
+      '<a href="https://github.com/BetterAndroid/Adbrowser" target="_blank" rel="noopener">Adbrowser</a>（全盘浏览）。';
     const adbBaseInput = $("#adb-base");
     const adbTokenInput = $("#adb-token");
     const adbDot = $("#adb-dot");
@@ -8111,6 +8113,15 @@
     let adbApkInfo = null;
     let adbFsSelected = "";
     let adbFsClipboard = null; // { mode: 'cut'|'copy', path, name }
+    let adbFsPreviewUrl = "";
+    let adbFsPreviewToken = 0;
+    const adbFsPreview = $("#adb-fs-preview");
+    const adbFsPreviewTitle = $("#adb-fs-preview-title");
+    const adbFsPreviewMeta = $("#adb-fs-preview-meta");
+    const adbFsPreviewBody = $("#adb-fs-preview-body");
+    const ADB_PREVIEW_IMAGE_MAX = 12 * 1024 * 1024;
+    const ADB_PREVIEW_TEXT_MAX = 1.5 * 1024 * 1024;
+    const ADB_PREVIEW_MEDIA_MAX = 28 * 1024 * 1024;
     let adbInputShotUrl = "";
     let adbTab = "info";
     let adbPermPackage = "";
@@ -8340,6 +8351,141 @@
       el.innerHTML = bits.join(`<span class="adb-crumb-sep" aria-hidden="true">/</span>`);
     }
 
+    function classifyAdbPreview(name) {
+      const n = String(name || "");
+      if (/\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(n)) return "image";
+      if (/\.(mp4|webm|mkv|3gp)$/i.test(n)) return "video";
+      if (/\.(mp3|m4a|aac|ogg|wav)$/i.test(n)) return "audio";
+      if (
+        /\.(txt|log|md|csv|tsv|ini|conf|cfg|properties|prop|gradle|smali|java|kt|kts|xml|html?|css|js|mjs|cjs|ts|json|ya?ml|toml|sh|bat|cmd|rc|gitignore|pro)$/i.test(
+          n
+        )
+      ) {
+        return "text";
+      }
+      return "other";
+    }
+
+    function clearAdbFsPreview({ keepOpen = false } = {}) {
+      if (adbFsPreviewUrl) {
+        try {
+          URL.revokeObjectURL(adbFsPreviewUrl);
+        } catch (_) {
+          /* ignore */
+        }
+        adbFsPreviewUrl = "";
+      }
+      if (adbFsPreviewBody) adbFsPreviewBody.innerHTML = "";
+      if (adbFsPreviewMeta) adbFsPreviewMeta.textContent = "";
+      if (adbFsPreviewTitle) adbFsPreviewTitle.textContent = "文件预览";
+      if (adbFsPreview && !keepOpen) adbFsPreview.hidden = true;
+    }
+
+    function showAdbFsPreviewShell(name, metaText) {
+      if (adbFsPreview) adbFsPreview.hidden = false;
+      if (adbFsPreviewTitle) adbFsPreviewTitle.textContent = name || "文件预览";
+      if (adbFsPreviewMeta) adbFsPreviewMeta.textContent = metaText || "";
+    }
+
+    async function previewAdbFile(remotePath, name, sizeHint) {
+      if (!adbSelected || !remotePath) return;
+      const kind = classifyAdbPreview(name);
+      const size = Number(sizeHint);
+      const knownSize = Number.isFinite(size) && size >= 0;
+      clearAdbFsPreview({ keepOpen: true });
+      showAdbFsPreviewShell(name || basenameRemote(remotePath), "加载预览…");
+      if (kind === "other") {
+        if (adbFsPreviewBody) {
+          adbFsPreviewBody.innerHTML = `<p class="adb-fs-preview-empty">此类型暂不支持在线预览，请用「下载」到电脑查看。</p>`;
+        }
+        if (adbFsPreviewMeta) {
+          adbFsPreviewMeta.textContent = knownSize ? formatBytes(size) : "未知大小";
+        }
+        return;
+      }
+      const limit =
+        kind === "text" ? ADB_PREVIEW_TEXT_MAX : kind === "image" ? ADB_PREVIEW_IMAGE_MAX : ADB_PREVIEW_MEDIA_MAX;
+      if (knownSize && size > limit) {
+        if (adbFsPreviewBody) {
+          adbFsPreviewBody.innerHTML = `<p class="adb-fs-preview-empty">文件约 ${formatBytes(
+            size
+          )}，超过预览上限（${formatBytes(limit)}）。请下载后本地打开。</p>`;
+        }
+        if (adbFsPreviewMeta) adbFsPreviewMeta.textContent = `${kind} · ${formatBytes(size)}`;
+        return;
+      }
+      const token = ++adbFsPreviewToken;
+      try {
+        const res = await adbFetch(
+          `/fs/download?serial=${encodeURIComponent(adbSelected)}&path=${encodeURIComponent(remotePath)}`
+        );
+        if (token !== adbFsPreviewToken) return;
+        const blob = await res.blob();
+        if (token !== adbFsPreviewToken) return;
+        if (blob.size > limit) {
+          if (adbFsPreviewBody) {
+            adbFsPreviewBody.innerHTML = `<p class="adb-fs-preview-empty">已拉取 ${formatBytes(
+              blob.size
+            )}，超过预览上限。请下载后本地打开。</p>`;
+          }
+          return;
+        }
+        if (kind === "text") {
+          const text = await blob.text();
+          if (token !== adbFsPreviewToken) return;
+          const pre = document.createElement("pre");
+          pre.className = "mono";
+          pre.textContent = text.slice(0, 200_000);
+          if (adbFsPreviewBody) {
+            adbFsPreviewBody.innerHTML = "";
+            adbFsPreviewBody.appendChild(pre);
+          }
+          if (adbFsPreviewMeta) {
+            adbFsPreviewMeta.textContent = `文本 · ${formatBytes(blob.size)}${
+              text.length > 200_000 ? " · 已截断显示" : ""
+            }`;
+          }
+          return;
+        }
+        adbFsPreviewUrl = URL.createObjectURL(blob);
+        if (kind === "image") {
+          const img = document.createElement("img");
+          img.alt = name || "预览图";
+          img.src = adbFsPreviewUrl;
+          if (adbFsPreviewBody) {
+            adbFsPreviewBody.innerHTML = "";
+            adbFsPreviewBody.appendChild(img);
+          }
+        } else if (kind === "video") {
+          const video = document.createElement("video");
+          video.controls = true;
+          video.playsInline = true;
+          video.src = adbFsPreviewUrl;
+          if (adbFsPreviewBody) {
+            adbFsPreviewBody.innerHTML = "";
+            adbFsPreviewBody.appendChild(video);
+          }
+        } else if (kind === "audio") {
+          const audio = document.createElement("audio");
+          audio.controls = true;
+          audio.src = adbFsPreviewUrl;
+          if (adbFsPreviewBody) {
+            adbFsPreviewBody.innerHTML = "";
+            adbFsPreviewBody.appendChild(audio);
+          }
+        }
+        if (adbFsPreviewMeta) adbFsPreviewMeta.textContent = `${kind} · ${formatBytes(blob.size)}`;
+      } catch (err) {
+        if (token !== adbFsPreviewToken) return;
+        if (adbFsPreviewBody) {
+          adbFsPreviewBody.innerHTML = `<p class="adb-fs-preview-empty">${escapeHtml(
+            err.message || String(err)
+          )}</p>`;
+        }
+        if (adbFsPreviewMeta) adbFsPreviewMeta.textContent = "预览失败";
+      }
+    }
+
     function updateFsClipboardMeta() {
       const meta = $("#adb-fs-clip-meta");
       const pasteBtn = $("#adb-fs-paste");
@@ -8357,6 +8503,7 @@
     function renderFsEntries(pathValue, entries) {
       if (!adbFsList) return;
       adbFsSelected = "";
+      clearAdbFsPreview();
       if (!entries?.length) {
         adbFsList.innerHTML = `<div class="adb-fs-empty">目录为空或无权读取</div>`;
         return;
@@ -8375,15 +8522,20 @@
           const nameHtml = isDir
             ? `<span class="adb-fs-name">${escapeHtml(item.name)}/</span>`
             : `<span class="adb-fs-name mono">${escapeHtml(item.name)}</span>`;
+          const sizeAttr =
+            !isDir && item.size != null && Number.isFinite(Number(item.size))
+              ? ` data-adb-file-size="${escapeHtml(String(item.size))}"`
+              : "";
           const rowAttr = isDir
             ? `data-adb-open="${escapeHtml(full)}"`
-            : `data-adb-file="${escapeHtml(full)}" data-adb-file-name="${escapeHtml(item.name)}"`;
+            : `data-adb-file="${escapeHtml(full)}" data-adb-file-name="${escapeHtml(item.name)}"${sizeAttr}`;
           const actions = virtual
             ? `<button type="button" class="ghost-btn" data-adb-open="${escapeHtml(full)}">打开</button>`
             : `${
                 isDir
                   ? `<button type="button" class="ghost-btn" data-adb-open="${escapeHtml(full)}">打开</button>`
-                  : `<button type="button" class="secondary-btn" data-adb-dl="${escapeHtml(full)}" data-adb-dl-name="${escapeHtml(item.name)}">下载</button>`
+                  : `<button type="button" class="secondary-btn" data-adb-preview="${escapeHtml(full)}" data-adb-preview-name="${escapeHtml(item.name)}" data-adb-preview-size="${escapeHtml(String(item.size ?? ""))}">预览</button>
+              <button type="button" class="ghost-btn" data-adb-dl="${escapeHtml(full)}" data-adb-dl-name="${escapeHtml(item.name)}">下载</button>`
               }
               <button type="button" class="ghost-btn" data-adb-rename="${escapeHtml(full)}" data-adb-rename-name="${escapeHtml(item.name)}">重命名</button>
               <button type="button" class="ghost-btn" data-adb-cut="${escapeHtml(full)}" data-adb-cut-name="${escapeHtml(item.name)}">剪切</button>
@@ -9194,20 +9346,37 @@
         `签名工具: ${signing.tool || "无"}`,
         `签名方案: ${(signing.schemes || []).length ? signing.schemes.join(" / ") : "—"}`,
       ];
+      const found = signing.toolsFound
+        ? Object.entries(signing.toolsFound)
+            .filter(([, v]) => v)
+            .map(([k]) => k)
+        : [];
       if (signing.toolsFound) {
-        const found = Object.entries(signing.toolsFound)
-          .filter(([, v]) => v)
-          .map(([k]) => k);
         lines.push(`本机工具: ${found.length ? found.join(", ") : "未检测到 keytool/openssl/apksigner"}`);
       }
       if (signing.note) lines.push(signing.note);
+      const signGuide = $("#adb-signing-guide");
       if (!signers.length) {
         lines.push("签名: 未能解析");
-        lines.push("配置：安装 JDK（keytool）或 Android build-tools（apksigner），可选 openssl；配好后重启 ADB 桥再分析。");
-        const signGuide = $("#adb-signing-guide");
-        if (signGuide) signGuide.hidden = false;
+        if (found.length) {
+          if (!found.includes("apksigner")) {
+            lines.push(
+              "说明：已检测到本机签名工具，但该 APK 可能只有 v2/v3 签名。请安装 Android build-tools 的 apksigner（不必重装 JDK/keytool），然后重启 ADB 桥再分析。"
+            );
+          } else {
+            lines.push("说明：工具已就绪仍无法解析，请确认 APK 完整未损坏。");
+          }
+          // 工具已在，不误导展示「未安装 keytool」引导
+          if (signGuide) signGuide.hidden = true;
+        } else {
+          lines.push(
+            "配置：安装 JDK（keytool）或 Android build-tools（apksigner），可选 openssl；配好后重启 ADB 桥再分析。"
+          );
+          if (signGuide) signGuide.hidden = false;
+        }
         return lines;
       }
+      if (signGuide) signGuide.hidden = true;
       signers.forEach((s, idx) => {
         const n = s.index || idx + 1;
         lines.push(`签名 #${n}:`);
@@ -9334,7 +9503,7 @@
 
     restoreAdbSettings();
     setAdbStatus("is-err", "未连接本机桥", "使用本工具需要本机已安装 adb。请下载完整 ZIP（含 server.js）并运行后连接。");
-    if ($("#adb-fs-hint")) $("#adb-fs-hint").textContent = ADB_FS_ROOTS_HINT;
+    if ($("#adb-fs-hint")) $("#adb-fs-hint").innerHTML = ADB_FS_ROOTS_HINT_HTML;
     {
       const hostEl = $("#adb-proxy-host");
       if (hostEl && !hostEl.value) {
@@ -9530,6 +9699,19 @@
         }
         return;
       }
+      const previewBtn = e.target.closest("[data-adb-preview]");
+      if (previewBtn) {
+        const row = previewBtn.closest(".adb-fs-row");
+        adbFsList.querySelectorAll(".adb-fs-row.is-selected").forEach((r) => r.classList.remove("is-selected"));
+        if (row) row.classList.add("is-selected");
+        adbFsSelected = previewBtn.dataset.adbPreview || "";
+        previewAdbFile(
+          previewBtn.dataset.adbPreview,
+          previewBtn.dataset.adbPreviewName,
+          previewBtn.dataset.adbPreviewSize
+        ).catch((err) => setError(adbError, err.message || String(err)));
+        return;
+      }
       const renameBtn = e.target.closest("[data-adb-rename]");
       if (renameBtn) {
         const next = window.prompt("新名称", renameBtn.dataset.adbRenameName || "");
@@ -9592,8 +9774,14 @@
         adbFsList.querySelectorAll(".adb-fs-row.is-selected").forEach((row) => row.classList.remove("is-selected"));
         fileRow.classList.add("is-selected");
         adbFsSelected = fileRow.dataset.adbFile || "";
+        previewAdbFile(
+          fileRow.dataset.adbFile,
+          fileRow.dataset.adbFileName,
+          fileRow.dataset.adbFileSize
+        ).catch((err) => setError(adbError, err.message || String(err)));
       }
     });
+    $("#adb-fs-preview-close")?.addEventListener("click", () => clearAdbFsPreview());
     $("#adb-fs-paste")?.addEventListener("click", async () => {
       if (!adbFsClipboard || !adbSelected) return;
       const dir = adbFsPath?.value || "/";
@@ -9626,9 +9814,15 @@
       if (e.target.closest(".adb-fs-actions")) return;
       const fileRow = e.target.closest(".adb-fs-row[data-adb-file]");
       if (!fileRow) return;
-      downloadAdbFile(fileRow.dataset.adbFile, fileRow.dataset.adbFileName).catch((err) =>
-        setError(adbError, err.message || String(err))
-      );
+      e.preventDefault();
+      adbFsList.querySelectorAll(".adb-fs-row.is-selected").forEach((row) => row.classList.remove("is-selected"));
+      fileRow.classList.add("is-selected");
+      adbFsSelected = fileRow.dataset.adbFile || "";
+      previewAdbFile(
+        fileRow.dataset.adbFile,
+        fileRow.dataset.adbFileName,
+        fileRow.dataset.adbFileSize
+      ).catch((err) => setError(adbError, err.message || String(err)));
     });
     $("#adb-fs-crumbs")?.addEventListener("click", (e) => {
       const openBtn = e.target.closest("[data-adb-open]");

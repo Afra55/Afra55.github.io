@@ -2743,14 +2743,91 @@ body.vsplit-fs-open {
   min-width: 0;
 }
 
-.adb-fs-list {
+.adb-fs-workspace {
   margin-top: 0.75rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(14rem, 0.9fr);
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.adb-fs-list {
+  margin-top: 0;
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;
   background: rgba(8, 14, 26, 0.35);
   max-height: 26rem;
   overflow-y: auto;
+  min-height: 12rem;
+}
+
+.adb-fs-preview {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(8, 14, 26, 0.45);
+  padding: 0.65rem 0.75rem 0.8rem;
+  max-height: 26rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 12rem;
+}
+
+.adb-fs-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.adb-fs-preview-body {
+  margin-top: 0.45rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.adb-fs-preview-body img,
+.adb-fs-preview-body video {
+  display: block;
+  max-width: 100%;
+  max-height: 18rem;
+  margin: 0 auto;
+  border-radius: 8px;
+  background: #0b1220;
+}
+
+.adb-fs-preview-body audio {
+  width: 100%;
+  margin-top: 0.35rem;
+}
+
+.adb-fs-preview-body pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  max-height: 18rem;
+  overflow: auto;
+}
+
+.adb-fs-preview-empty {
+  color: var(--muted, #9aa4b2);
+  font-size: 0.85rem;
+  margin: 0.4rem 0 0;
+}
+
+@media (max-width: 860px) {
+  .adb-fs-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .adb-fs-list,
+  .adb-fs-preview {
+    max-height: 18rem;
+  }
 }
 
 .adb-fs-row {

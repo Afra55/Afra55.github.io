@@ -35,7 +35,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.6.3";
+const BRIDGE_VERSION = "0.6.4";
 
 /** Preferred quick roots shown in UI (reads are not limited to these) */
 const ROOTS = [
@@ -268,17 +268,35 @@ async function checkAdb() {
   }
 }
 
-function probeHostTools() {
+async function probeOneTool(name) {
+  const resolved = resolveTool(name);
+  const which = whichSync(name);
+  let ok = Boolean(which || (resolved && resolved !== name && fs.existsSync(resolved)));
+  let binPath = which || (ok ? resolved : "") || "";
+  if (!ok) {
+    const bin = resolved || name;
+    try {
+      await execFileAsync(bin, name === "openssl" ? ["version"] : name === "adb" ? ["version"] : ["-help"], {
+        timeout: 5000,
+      });
+      ok = true;
+      binPath = binPath || bin;
+    } catch (err) {
+      const blob = `${err?.stdout || ""}${err?.stderr || ""}`;
+      if (/Usage|Key and Certificate|Android Debug Bridge|apk file|OpenSSL/i.test(blob)) {
+        ok = true;
+        binPath = binPath || bin;
+      }
+    }
+  }
+  return { ok, path: binPath };
+}
+
+async function probeHostTools() {
   const names = ["adb", "keytool", "openssl", "apksigner", "aapt", "aapt2", "jarsigner"];
   const tools = {};
   for (const name of names) {
-    const resolved = resolveTool(name);
-    const which = whichSync(name);
-    const ok = Boolean(which || (resolved && resolved !== name && fs.existsSync(resolved)));
-    tools[name] = {
-      ok,
-      path: which || (ok ? resolved : "") || "",
-    };
+    tools[name] = await probeOneTool(name);
   }
   const signingOk = tools.keytool.ok || tools.apksigner.ok || tools.openssl.ok;
   return {
@@ -291,7 +309,7 @@ function probeHostTools() {
         : "未找到 adb：安装 Android SDK Platform-Tools，并把 platform-tools 目录加入 PATH。macOS 可用 brew install android-platform-tools。",
       signing: signingOk
         ? ""
-        : "未找到签名工具：安装 JDK（提供 keytool），或安装 Android build-tools（提供 apksigner）并加入 PATH。也可安装 openssl 作为证书解析回退。",
+        : "未找到签名工具：安装 JDK（提供 keytool），或安装 Android build-tools（提供 apksigner）并加入 PATH。也可安装 openssl 作为证书解析回退。配好后请重启 ADB 桥。",
     },
   };
 }
@@ -598,6 +616,29 @@ async function probeFsRoots(serial) {
   return { ok: true, roots };
 }
 
+function mimeFromFilename(filename) {
+  const n = String(filename || "").toLowerCase();
+  if (/\.png$/i.test(n)) return "image/png";
+  if (/\.jpe?g$/i.test(n)) return "image/jpeg";
+  if (/\.gif$/i.test(n)) return "image/gif";
+  if (/\.webp$/i.test(n)) return "image/webp";
+  if (/\.bmp$/i.test(n)) return "image/bmp";
+  if (/\.svg$/i.test(n)) return "image/svg+xml";
+  if (/\.mp4$/i.test(n)) return "video/mp4";
+  if (/\.webm$/i.test(n)) return "video/webm";
+  if (/\.mkv$/i.test(n)) return "video/x-matroska";
+  if (/\.3gp$/i.test(n)) return "video/3gpp";
+  if (/\.mp3$/i.test(n)) return "audio/mpeg";
+  if (/\.m4a$/i.test(n)) return "audio/mp4";
+  if (/\.aac$/i.test(n)) return "audio/aac";
+  if (/\.ogg$/i.test(n)) return "audio/ogg";
+  if (/\.wav$/i.test(n)) return "audio/wav";
+  if (/\.(txt|log|md|csv|tsv|ini|conf|cfg|properties|prop|gradle|smali|java|kt|kts|xml|html?|css|js|mjs|cjs|ts|json|ya?ml|toml|sh|bat|cmd|rc)$/i.test(n)) {
+    return "text/plain; charset=utf-8";
+  }
+  return "application/octet-stream";
+}
+
 async function downloadFile(serial, remotePath) {
   const target = normalizeRemotePath(remotePath);
   const local = tempName("dl", basenameRemote(target));
@@ -644,7 +685,8 @@ async function downloadFile(serial, remotePath) {
   } catch {
     /* ignore */
   }
-  return { filename: basenameRemote(target), data };
+  const filename = basenameRemote(target);
+  return { filename, data, mime: mimeFromFilename(filename) };
 }
 
 async function deletePath(serial, remotePath) {
@@ -1154,28 +1196,93 @@ function whichSync(bin) {
   return "";
 }
 
+function resolveJavaHomeBin(name) {
+  const exe = process.platform === "win32" ? `${name}.exe` : name;
+  const homes = [];
+  const envHome = process.env.JAVA_HOME || process.env.JDK_HOME || "";
+  if (envHome) homes.push(envHome);
+  if (process.platform === "darwin") {
+    try {
+      const { execFileSync } = require("child_process");
+      const jh = String(execFileSync("/usr/libexec/java_home", [], { encoding: "utf8", timeout: 3000 })).trim();
+      if (jh) homes.push(jh);
+    } catch {
+      /* ignore */
+    }
+  }
+  for (const home of homes) {
+    const cand = path.join(home, "bin", exe);
+    if (fs.existsSync(cand)) return cand;
+  }
+  const brewBins = [
+    `/opt/homebrew/opt/openjdk/bin/${name}`,
+    `/opt/homebrew/opt/openjdk@21/bin/${name}`,
+    `/opt/homebrew/opt/openjdk@17/bin/${name}`,
+    `/usr/local/opt/openjdk/bin/${name}`,
+    `/usr/local/opt/openjdk@21/bin/${name}`,
+    `/usr/local/opt/openjdk@17/bin/${name}`,
+  ];
+  for (const cand of brewBins) {
+    if (fs.existsSync(cand)) return cand;
+  }
+  for (const root of ["/usr/lib/jvm", "/Library/Java/JavaVirtualMachines"]) {
+    try {
+      if (!fs.existsSync(root)) continue;
+      for (const ent of fs.readdirSync(root)) {
+        const cand = path.join(root, ent, "bin", name);
+        const candHome = path.join(root, ent, "Contents", "Home", "bin", name);
+        if (fs.existsSync(cand)) return cand;
+        if (fs.existsSync(candHome)) return candHome;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  if (process.platform === "win32") {
+    const programFiles = [
+      process.env["ProgramFiles"] || "C:\\Program Files",
+      process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)",
+      path.join(os.homedir(), "AppData", "Local", "Programs"),
+    ];
+    const vendors = ["Java", "Eclipse Adoptium", "Microsoft", "Amazon Corretto", "Zulu", "Semeru", "BellSoft"];
+    for (const pf of programFiles) {
+      for (const vendor of vendors) {
+        const root = path.join(pf, vendor);
+        try {
+          if (!fs.existsSync(root)) continue;
+          const walk = (dir, depth) => {
+            if (depth > 3) return "";
+            let ents = [];
+            try {
+              ents = fs.readdirSync(dir);
+            } catch {
+              return "";
+            }
+            const direct = path.join(dir, "bin", exe);
+            if (fs.existsSync(direct)) return direct;
+            for (const ent of ents.sort().reverse()) {
+              const hit = walk(path.join(dir, ent), depth + 1);
+              if (hit) return hit;
+            }
+            return "";
+          };
+          const hit = walk(root, 0);
+          if (hit) return hit;
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+  return "";
+}
+
 function resolveTool(name) {
   const direct = whichSync(name);
   if (direct) return direct;
   if (name === "keytool" || name === "jarsigner") {
-    const home = process.env.JAVA_HOME || process.env.JDK_HOME || "";
-    if (home) {
-      const cand = path.join(home, "bin", process.platform === "win32" ? `${name}.exe` : name);
-      if (fs.existsSync(cand)) return cand;
-    }
-    for (const root of ["/usr/lib/jvm", "/Library/Java/JavaVirtualMachines"]) {
-      try {
-        if (!fs.existsSync(root)) continue;
-        for (const ent of fs.readdirSync(root)) {
-          const cand = path.join(root, ent, "bin", name);
-          const candHome = path.join(root, ent, "Contents", "Home", "bin", name);
-          if (fs.existsSync(cand)) return cand;
-          if (fs.existsSync(candHome)) return candHome;
-        }
-      } catch {
-        /* ignore */
-      }
-    }
+    const fromJava = resolveJavaHomeBin(name);
+    if (fromJava) return fromJava;
   }
   if (name === "apksigner") {
     const sdk =
@@ -2542,7 +2649,7 @@ async function handleApi(req, res, url) {
   try {
     if (url.pathname === "/health" && req.method === "GET") {
       const adbInfo = await checkAdb();
-      const hostTools = probeHostTools();
+      const hostTools = await probeHostTools();
       let devices = [];
       if (adbInfo.ok) {
         try {
@@ -2583,6 +2690,8 @@ async function handleApi(req, res, url) {
             "apk-info",
             "apk-signing",
             "host-tools",
+            "fs-preview",
+            "host-tools-probe",
             "proxy",
             "forward",
             "developer",
@@ -2686,10 +2795,11 @@ async function handleApi(req, res, url) {
       const remotePath = url.searchParams.get("path") || "";
       const file = await downloadFile(serial, remotePath);
       const headers = {
-        "Content-Type": "application/octet-stream",
+        "Content-Type": file.mime || "application/octet-stream",
         "Content-Length": file.data.length,
-        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
+        "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
         "X-Adb-Filename": encodeURIComponent(file.filename),
+        "X-Adb-Mime": file.mime || "application/octet-stream",
         "Cache-Control": "no-store",
       };
       applyCors(headers, origin);

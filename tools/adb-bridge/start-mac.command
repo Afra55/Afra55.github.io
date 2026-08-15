@@ -8,6 +8,26 @@ echo ""
 
 # Finder 双击时 PATH 很短，补上常见安装位置
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$HOME/Library/Android/sdk/platform-tools:$HOME/Android/Sdk/platform-tools:$PATH"
+# Homebrew OpenJDK 常为 keg-only，不会进 /opt/homebrew/bin
+for jdk in \
+  /opt/homebrew/opt/openjdk \
+  /opt/homebrew/opt/openjdk@21 \
+  /opt/homebrew/opt/openjdk@17 \
+  /usr/local/opt/openjdk \
+  /usr/local/opt/openjdk@21 \
+  /usr/local/opt/openjdk@17
+do
+  if [ -d "${jdk}/bin" ]; then
+    export PATH="${jdk}/bin:$PATH"
+  fi
+done
+if [ -x /usr/libexec/java_home ]; then
+  JH="$(/usr/libexec/java_home 2>/dev/null || true)"
+  if [ -n "${JH}" ] && [ -d "${JH}/bin" ]; then
+    export JAVA_HOME="${JH}"
+    export PATH="${JAVA_HOME}/bin:$PATH"
+  fi
+fi
 if [ -s "$HOME/.nvm/nvm.sh" ]; then
   # shellcheck disable=SC1090
   . "$HOME/.nvm/nvm.sh" >/dev/null 2>&1 || true
