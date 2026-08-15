@@ -2830,11 +2830,27 @@ body.vsplit-fs-open {
   }
 }
 
-.adb-fs-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 0.55rem;
+.adb-fs-batch {
+  margin-top: 0.55rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(46, 196, 182, 0.06);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.75rem;
   align-items: center;
+}
+
+.adb-fs-batch-actions {
+  margin: 0;
+}
+
+.adb-fs-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: stretch;
   padding: 0.55rem 0.75rem;
   border-top: 1px solid var(--line);
   font-size: 0.88rem;
@@ -2844,13 +2860,61 @@ body.vsplit-fs-open {
   border-top: 0;
 }
 
-.adb-fs-row.is-selected {
+.adb-fs-row.is-selected,
+.adb-fs-row.is-checked {
   background: rgba(46, 196, 182, 0.1);
 }
 
 .adb-fs-row.is-dir,
 .adb-fs-row.is-file {
   cursor: pointer;
+}
+
+.adb-fs-row-main {
+  display: flex;
+  gap: 0.55rem;
+  align-items: flex-start;
+  min-width: 0;
+}
+
+.adb-fs-check {
+  margin-top: 0.2rem;
+  flex: 0 0 auto;
+  accent-color: var(--accent, #2ec4b6);
+}
+
+.adb-fs-row-info {
+  min-width: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.adb-fs-name {
+  word-break: break-all;
+  line-height: 1.35;
+}
+
+.adb-fs-row .adb-fs-meta {
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  white-space: normal;
+  word-break: break-all;
+}
+
+.adb-fs-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+.adb-fs-actions .ghost-btn,
+.adb-fs-actions .secondary-btn,
+.adb-fs-actions .primary-btn {
+  flex: 0 0 auto;
 }
 
 .adb-fs-crumbs {
@@ -2922,8 +2986,7 @@ body.vsplit-fs-open {
 }
 
 .adb-app-row {
-  grid-template-columns: minmax(0, 1fr) !important;
-  gap: 0.55rem;
+  /* inherits stacked flex row layout from .adb-fs-row */
 }
 
 .adb-app-select {
@@ -2932,6 +2995,7 @@ body.vsplit-fs-open {
   gap: 0.55rem;
   align-items: start;
   cursor: pointer;
+  width: 100%;
 }
 
 .adb-app-select input {
@@ -3019,12 +3083,15 @@ body.vsplit-fs-open {
   color: var(--muted);
   font-family: var(--mono);
   font-size: 0.75rem;
-  white-space: nowrap;
+  white-space: normal;
+  word-break: break-all;
 }
 
 .adb-fs-actions {
-  display: inline-flex;
+  display: flex;
+  flex-wrap: wrap;
   gap: 0.35rem;
+  width: 100%;
 }
 
 .adb-fs-empty {

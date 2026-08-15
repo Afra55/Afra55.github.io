@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260815n" />
+  <link rel="stylesheet" href="./style.css?v=20260815o" />
   <link rel="stylesheet" href="./workspace-nav.css?v=20260814f" />
 </head>
 <body>
@@ -1418,7 +1418,7 @@ hello@world.org</textarea>
           <label for="adb-token">Token</label>
           <input id="adb-token" class="mono" type="text" value="devtools-adb" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Device File Explorer / Adbrowser）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.5），请解压到同一文件夹后运行启动脚本。</p>
+        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Android Studio Device File Explorer）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.5），请解压到同一文件夹后运行启动脚本。</p>
         <div class="adb-guide" id="adb-setup-guide">
           <strong>本机依赖怎么配？</strong>
           <ol>
@@ -1526,6 +1526,17 @@ hello@world.org</textarea>
               </div>
               <p class="hint tight" id="adb-fs-clip-meta" hidden></p>
               <p class="hint tight" id="adb-fs-access" hidden></p>
+              <div class="adb-fs-batch" id="adb-fs-batch" hidden>
+                <span class="hint tight" id="adb-fs-batch-meta">已选 0 项</span>
+                <div class="btn-row tool-actions adb-fs-batch-actions">
+                  <button type="button" class="ghost-btn" id="adb-fs-select-all">全选</button>
+                  <button type="button" class="ghost-btn" id="adb-fs-select-none">取消选择</button>
+                  <button type="button" class="secondary-btn" id="adb-fs-batch-dl">批量下载</button>
+                  <button type="button" class="secondary-btn" id="adb-fs-batch-cut">批量移动</button>
+                  <button type="button" class="ghost-btn" id="adb-fs-batch-copy">批量复制</button>
+                  <button type="button" class="ghost-btn" id="adb-fs-batch-del">批量删除</button>
+                </div>
+              </div>
               <div class="adb-fs-workspace">
                 <div class="adb-fs-list" id="adb-fs-list" aria-live="polite"></div>
                 <aside class="adb-fs-preview" id="adb-fs-preview" hidden>
@@ -1537,7 +1548,7 @@ hello@world.org</textarea>
                   <div class="adb-fs-preview-body" id="adb-fs-preview-body"></div>
                 </aside>
               </div>
-              <p class="hint" id="adb-fs-hint">默认从 / 浏览全盘。单击文件可预览图片 / 文本 / 音视频（过大则提示下载）。双击同样预览。参考开源：<a href="https://github.com/rajivm1991/DroidDock" target="_blank" rel="noopener">DroidDock</a>（预览体验）、<a href="https://github.com/BetterAndroid/Adbrowser" target="_blank" rel="noopener">Adbrowser</a>（全盘浏览）。</p>
+              <p class="hint" id="adb-fs-hint">默认从 / 浏览全盘。勾选可批量下载 / 删除 / 移动（剪切后到目标目录粘贴）。单击文件可预览图片、文本、音视频；过大则请下载。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="install" hidden>
@@ -2210,7 +2221,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260815n"></script>
+  <script src="./extra.js?v=20260815o"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>

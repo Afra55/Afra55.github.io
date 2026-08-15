@@ -507,7 +507,7 @@ async function listDir(serial, remotePath) {
   const hint =
     dir.startsWith("/data/data")
       ? "无 root 时 /data/data 仅能进入 debuggable 应用（run-as）。可先打开 /data/data 查看包名列表。"
-      : "该目录受系统权限保护。可尝试 /sdcard、/data/local/tmp，或使用已 root 设备 / 模拟器。参考开源方案 Adbrowser（run-as/su 回退）。";
+      : "该目录受系统权限保护。可尝试 /sdcard、/data/local/tmp，或使用已 root 设备 / 模拟器。";
   throw new Error(`无法列出 ${dir}。${hint}\n尝试：${attempts.join(" | ")}`);
 }
 
@@ -573,7 +573,7 @@ async function listDataDataVirtual(serial, dir) {
     path: dir,
     entries,
     access: "packages-virtual",
-    note: "无 root：按已安装包名虚拟列出。进入后会尝试 run-as（仅 debug 包可读，与 Adbrowser / Android Studio 相同）。",
+    note: "无 root：按已安装包名虚拟列出。进入后会尝试 run-as（仅 debug 包可读，与 Android Studio Device File Explorer 相同）。",
   };
 }
 
@@ -2905,7 +2905,7 @@ async function handleApi(req, res, url) {
           roots: ROOTS,
           writeRoots: WRITE_ROOTS,
           note:
-            "文件浏览类似 Device File Explorer / Adbrowser：默认从 / 浏览；无权限时尝试 su / run-as；/data/data 无 root 时按包名虚拟列出。写入同样透传 adb；系统 APK 覆盖请用 POST /install/push-system",
+            "文件浏览类似 Device File Explorer：默认从 / 浏览；无权限时尝试 su / run-as；/data/data 无 root 时按包名虚拟列出。写入同样透传 adb；系统 APK 覆盖请用 POST /install/push-system",
         },
         origin
       );
