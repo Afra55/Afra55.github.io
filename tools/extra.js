@@ -7873,7 +7873,7 @@
           return `<div class="adb-device${active}" data-serial-wrap="${escapeHtml(d.serial)}" style="--adb-accent: hsl(${hue} 58% 46%)">
             <span class="adb-device-stripe" aria-hidden="true"></span>
             <input class="adb-device-check" type="checkbox" data-adb-check="${escapeHtml(d.serial)}" ${checked} aria-label="勾选 ${escapeHtml(d.serial)}" />
-            <button type="button" class="adb-device-body linkish" style="background:transparent" data-serial="${escapeHtml(d.serial)}">
+            <button type="button" class="adb-device-body" data-serial="${escapeHtml(d.serial)}">
               <strong>${escapeHtml(title)}</strong>
               <span>${escapeHtml(d.serial)} · ${escapeHtml(d.state)}</span>
             </button>
@@ -8646,6 +8646,7 @@
       ]
         .filter((line) => line !== "")
         .join("\n");
+      if ($("#adb-apk-pkg") && data.packageName) $("#adb-apk-pkg").value = data.packageName;
       toast("APK 信息已解析");
     }
 
@@ -8653,7 +8654,7 @@
       if (!adbApkFile) throw new Error("请先选择 APK");
       const serial = requireCurrentSerial();
       let uploadId = adbApkUploadId;
-      let packageName = adbApkInfo?.packageName || "";
+      let packageName = String($("#adb-apk-pkg")?.value || adbApkInfo?.packageName || "").trim();
       if (!uploadId) {
         const buffer = new Uint8Array(await adbApkFile.arrayBuffer());
         const uploaded = await adbFetch(`/upload?name=${encodeURIComponent(adbApkFile.name)}`, {
@@ -8675,14 +8676,20 @@
         });
         adbApkInfo = data;
         packageName = data.packageName || "";
+        if ($("#adb-apk-pkg") && packageName) $("#adb-apk-pkg").value = packageName;
       }
-      if (!packageName) throw new Error("无法解析包名，请先分析 APK");
+      if (!packageName) throw new Error("无法解析包名，请填写包名或先分析 APK");
       const data = await adbFetch("/install/push-system", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ serial, uploadId, packageName }),
       });
-      toast(data.message || `已推送至 ${data.remotePath || "系统路径"}`);
+      toast(
+        data.message ||
+          (data.replaced
+            ? `已覆盖推送 ${data.remotePath || ""}`
+            : `已推送至 ${data.remotePath || "系统/临时路径"}`)
+      );
       return data;
     }
 
@@ -8738,6 +8745,9 @@
       if ($("#adb-dev-usb-notify")) {
         $("#adb-dev-usb-notify").textContent = onOff(data.usb_debugging_notify);
       }
+      if ($("#adb-dev-gpu-overdraw")) $("#adb-dev-gpu-overdraw").textContent = onOff(data.gpu_overdraw);
+      if ($("#adb-dev-strict-mode")) $("#adb-dev-strict-mode").textContent = onOff(data.strict_mode);
+      if ($("#adb-dev-show-anrs")) $("#adb-dev-show-anrs").textContent = onOff(data.show_all_anrs);
       if ($("#adb-dev-scales")) {
         $("#adb-dev-scales").textContent = `window ${data.windowAnimationScale} / transition ${data.transitionAnimationScale} / animator ${data.animatorDurationScale}`;
       }
@@ -8827,7 +8837,7 @@
       tip.textContent =
         sec === 0
           ? "0 秒 = 无时限录屏，请用「取消录屏」或任务中的取消结束。"
-          : "完成后可在「任务」页下载。Android 录屏常见上限约 180 秒。";
+          : `将录制约 ${sec} 秒后结束（部分系统硬上限约 180 秒）。也可随时取消。`;
     }
 
     $("#adb-connect")?.addEventListener("click", () => connectAdbBridge());
@@ -9039,12 +9049,18 @@
       adbApkFile = e.target.files?.[0] || null;
       adbApkUploadId = "";
       adbApkInfo = null;
+      if ($("#adb-apk-pkg")) $("#adb-apk-pkg").value = "";
       if (adbApkName) {
         adbApkName.textContent = adbApkFile
           ? `${adbApkFile.name}（${formatBytes(adbApkFile.size)}）`
           : "尚未选择 APK";
       }
       setApkButtonsEnabled(Boolean(adbApkFile));
+      const infoEl = $("#adb-apk-info");
+      if (infoEl) {
+        infoEl.hidden = true;
+        infoEl.textContent = "";
+      }
     });
     $("#adb-apk-analyze")?.addEventListener("click", () =>
       analyzeSelectedApk().catch((err) => setError(adbError, err.message || String(err)))
@@ -9413,8 +9429,14 @@
     });
     $("#adb-media-zip")?.addEventListener("click", async () => {
       try {
-        const job = adbJobs.find((j) => (j.artifacts || []).length);
-        if (!job) throw new Error("没有可打包的任务产物");
+        const done = (j) =>
+          j.status === "done" || j.status === "completed" || j.status === "success" || j.status === "cancelled";
+        const withArts = (adbJobs || []).filter((j) => (j.artifacts || []).length && done(j));
+        const job =
+          withArts.find((j) => j.type === "screenshot") ||
+          withArts.find((j) => j.type === "record") ||
+          withArts[0];
+        if (!job) throw new Error("没有可打包的任务产物，请先截图/录屏并等待完成");
         await zipJobArtifacts(job.id);
       } catch (err) {
         setError(adbError, err.message || String(err));

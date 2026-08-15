@@ -894,6 +894,10 @@ async function getDeveloperOptions(serial) {
     (await read("global", "adb_notify")) ||
     (await read("secure", "adb_notify")) ||
     (await read("global", "adb_wifi_enabled"));
+  const gpuOverdraw =
+    (await readProp("debug.hwui.overdraw")) || (await read("global", "debug.hwui.overdraw"));
+  const strictMode = await read("global", "strict_mode");
+  const showAnrs = await read("secure", "anr_show_background");
 
   return {
     ok: true,
@@ -910,6 +914,15 @@ async function getDeveloperOptions(serial) {
     force_gpu: asBool(forceGpu),
     hardware_ui: Boolean(hardwareUi && hardwareUi !== "null" && hardwareUi !== "false" && hardwareUi !== "0"),
     usb_debugging_notify: asBool(usbNotify),
+    gpu_overdraw: Boolean(
+      gpuOverdraw &&
+        gpuOverdraw !== "null" &&
+        gpuOverdraw !== "false" &&
+        gpuOverdraw !== "0" &&
+        gpuOverdraw !== ""
+    ),
+    strict_mode: asBool(strictMode),
+    show_all_anrs: asBool(showAnrs),
     windowAnimationScale: windowAnim === "null" ? "1.0" : windowAnim || "1.0",
     transitionAnimationScale: transitionAnim === "null" ? "1.0" : transitionAnim || "1.0",
     animatorDurationScale: animatorAnim === "null" ? "1.0" : animatorAnim || "1.0",
@@ -926,6 +939,9 @@ async function getDeveloperOptions(serial) {
       forceGpu,
       hardwareUi,
       usbNotify,
+      gpuOverdraw,
+      strictMode,
+      showAnrs,
     },
   };
 }
@@ -983,6 +999,13 @@ async function setDeveloperOption(serial, key, value) {
   } else if (k === "usb_debugging_notify") {
     await tryPut("global", "adb_notify", value ? "1" : "0");
     await tryPut("secure", "adb_notify", value ? "1" : "0");
+  } else if (k === "gpu_overdraw") {
+    await tryProp("debug.hwui.overdraw", value ? "show" : "false");
+    await tryPut("global", "debug.hwui.overdraw", value ? "show" : "false");
+  } else if (k === "strict_mode") {
+    await tryPut("global", "strict_mode", value ? "1" : "0");
+  } else if (k === "show_all_anrs") {
+    await tryPut("secure", "anr_show_background", value ? "1" : "0");
   } else if (k === "window_animation_scale") {
     await put("global", "window_animation_scale", value);
   } else if (k === "transition_animation_scale") {
@@ -1508,7 +1531,14 @@ async function pushSystemApk(serial, uploadId, packageName, remoteDir) {
   }
 
   await adbSerial(serial, ["push", upload.path, remotePath], { timeout: 300000 });
-  return { ok: true, remotePath, replaced };
+  return {
+    ok: true,
+    remotePath,
+    replaced,
+    message: replaced
+      ? `已覆盖推送到 ${remotePath}`
+      : `已推送到 ${remotePath}（未找到同名系统包时写入此路径）`,
+  };
 }
 
 async function runInstallJob(job, upload, serials, opts = {}) {
