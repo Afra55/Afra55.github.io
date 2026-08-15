@@ -550,6 +550,8 @@ async function main() {
       hasPlay: Boolean(document.getElementById("vsplit-play")),
       tapLabel: (document.getElementById("vsplit-mark-tap")?.textContent || "").trim(),
       hasNudge: Boolean(document.getElementById("vsplit-nudge-m01")),
+      hasScrubMarks: Boolean(document.getElementById("vsplit-scrub-marks")),
+      hasQuickExport: Boolean(document.getElementById("vsplit-quick-export")),
       scrubUnderVideo: Boolean(stage?.contains(scrub) && stage?.contains(video)),
     };
   });
@@ -561,6 +563,9 @@ async function main() {
   }
   if (!manualUi.hasPlay || !manualUi.hasNudge || manualUi.tapLabel !== "打起点") {
     throw new Error(`play/nudge/tap missing: ${JSON.stringify(manualUi)}`);
+  }
+  if (!manualUi.hasScrubMarks || !manualUi.hasQuickExport) {
+    throw new Error(`scrub marks / quick export missing: ${JSON.stringify(manualUi)}`);
   }
   if (manualUi.videoControls) {
     throw new Error("manual mode should hide native video controls");
@@ -592,13 +597,27 @@ async function main() {
     const rows = document.querySelectorAll("#vsplit-marks .vsplit-mark").length;
     const cutDisabled = document.getElementById("vsplit-cut")?.disabled;
     const gifDisabled = document.getElementById("vsplit-gif-bb")?.disabled;
-    // 编辑第一段：删终点 → 不完整 → 用滑块补终点
+    const quickHidden = document.getElementById("vsplit-quick-export")?.hidden;
+    const scrubDotCount = document.querySelectorAll("#vsplit-scrub-marks .vsplit-scrub-mark").length;
+    // 编辑第一段：删终点 → 不完整 → 拖滑块松手即补终点（无需再点「设为」）
     window.DevToolsVsplit.enterEdit(0);
     document.getElementById("vsplit-edit-del-end")?.click();
     const incomplete = window.DevToolsVsplit.getMarks()?.[0] || null;
+    // 未完成段不应挡住完整段的 range 计算
+    const rangesWithIncomplete = (() => {
+      try {
+        return {
+          ok: true,
+          ranges: window.DevToolsVsplit.computeRanges(Number(video.duration) || 4),
+        };
+      } catch (err) {
+        return { ok: false, message: String(err?.message || err) };
+      }
+    })();
     document.querySelector('#vsplit-edit-focus [data-edit-focus="end"]')?.click();
     await seekByScrub(0.45);
-    document.getElementById("vsplit-edit-apply")?.click();
+    // 拖完即生效：不再强制点 apply
+    const afterAuto = window.DevToolsVsplit?.getMarks?.() || [];
     document.getElementById("vsplit-edit-done")?.click();
     const afterEdit = window.DevToolsVsplit?.getMarks?.() || [];
     // 微调按钮
@@ -612,13 +631,18 @@ async function main() {
       rows,
       cutDisabled,
       gifDisabled,
+      quickHidden,
+      scrubDotCount,
       afterStart,
       incomplete,
+      rangesWithIncomplete,
+      afterAuto,
       afterEdit,
       draft: window.DevToolsVsplit?.getDraftStart?.(),
       editIdx: window.DevToolsVsplit?.getEditIdx?.(),
       scrubbedTime: Number(video.currentTime) || 0,
       nudgeDelta: afterNudge - beforeNudge,
+      applyLabel: (document.getElementById("vsplit-edit-apply")?.textContent || "").trim(),
     };
   });
   if (manualMarks.afterStart !== "打终点") {
@@ -630,8 +654,20 @@ async function main() {
   if (manualMarks.cutDisabled || manualMarks.gifDisabled) {
     throw new Error(`cut/gif should enable with marks: ${JSON.stringify(manualMarks)}`);
   }
+  if (manualMarks.quickHidden) {
+    throw new Error(`quick export should show with complete marks: ${JSON.stringify(manualMarks)}`);
+  }
+  if (!(manualMarks.scrubDotCount >= 4)) {
+    throw new Error(`scrub marks should paint start/end dots: ${JSON.stringify(manualMarks)}`);
+  }
   if (manualMarks.incomplete?.end != null) {
     throw new Error(`delete end failed: ${JSON.stringify(manualMarks.incomplete)}`);
+  }
+  if (!manualMarks.rangesWithIncomplete?.ok || !(manualMarks.rangesWithIncomplete.ranges?.length >= 1)) {
+    throw new Error(`incomplete marks should not block ranges: ${JSON.stringify(manualMarks.rangesWithIncomplete)}`);
+  }
+  if (!(manualMarks.afterAuto[0]?.end > manualMarks.afterAuto[0]?.start)) {
+    throw new Error(`scrub commit should auto-apply end: ${JSON.stringify(manualMarks.afterAuto)}`);
   }
   if (!(manualMarks.afterEdit[0]?.end > manualMarks.afterEdit[0]?.start)) {
     throw new Error(`re-apply end failed: ${JSON.stringify(manualMarks.afterEdit)}`);

@@ -1853,7 +1853,7 @@ a.secondary-btn {
 }
 
 .vsplit-stage.is-manual #vsplit-video {
-  max-height: min(42vh, 320px);
+  max-height: min(36vh, 280px);
   width: auto;
   margin-left: auto;
   margin-right: auto;
@@ -1891,12 +1891,52 @@ a.secondary-btn {
 }
 
 .vsplit-scrub-hit {
-  padding: 0.15rem 0;
+  position: relative;
+  padding: 0.55rem 0 0.1rem;
+}
+
+.vsplit-scrub-marks {
+  position: absolute;
+  left: 0.15rem;
+  right: 0.15rem;
+  top: 0.05rem;
+  height: 0.5rem;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.vsplit-scrub-mark {
+  position: absolute;
+  top: 0;
+  width: 0.5rem;
+  height: 0.5rem;
+  margin-left: -0.25rem;
+  border-radius: 50%;
+  border: 1.5px solid rgba(11, 18, 32, 0.92);
+  box-shadow: 0 0 0 1px rgba(232, 238, 248, 0.28);
+}
+
+.vsplit-scrub-mark.is-start {
+  background: #34d399;
+}
+
+.vsplit-scrub-mark.is-end {
+  background: #fb923c;
+}
+
+.vsplit-scrub-mark.is-active {
+  width: 0.62rem;
+  height: 0.62rem;
+  margin-left: -0.31rem;
+  top: -0.05rem;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .vsplit-scrub {
   -webkit-appearance: none;
   appearance: none;
+  position: relative;
+  z-index: 2;
   width: 100%;
   height: 1.65rem;
   margin: 0;
@@ -1952,21 +1992,22 @@ a.secondary-btn {
 }
 
 .vsplit-nudge-btns {
-  margin-top: 0.35rem;
+  margin-top: 0.15rem;
   flex-wrap: nowrap;
-  gap: 0.3rem;
+  gap: 0.25rem;
 }
 
 .vsplit-nudge-btns .ghost-btn {
   flex: 1 1 0;
-  min-height: 2.2rem;
-  padding-left: 0.35rem;
-  padding-right: 0.35rem;
-  font-size: 0.86rem;
+  min-height: 2.05rem;
+  padding-left: 0.28rem;
+  padding-right: 0.28rem;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .vsplit-mark-btns {
-  margin-top: 0.45rem;
+  margin-top: 0.35rem;
   flex-wrap: nowrap;
 }
 
@@ -1974,7 +2015,7 @@ a.secondary-btn {
 .vsplit-mark-btns .secondary-btn,
 .vsplit-mark-btns .ghost-btn {
   flex: 1 1 0;
-  min-height: 2.55rem;
+  min-height: 2.4rem;
   justify-content: center;
   text-align: center;
 }
@@ -1984,11 +2025,30 @@ a.secondary-btn {
 }
 
 .vsplit-edit-bar {
-  margin-top: 0.5rem;
-  padding-top: 0.45rem;
+  margin-top: 0.4rem;
+  padding-top: 0.4rem;
   border-top: 1px solid var(--line);
   display: grid;
+  gap: 0.35rem;
+}
+
+.vsplit-edit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 0.45rem;
+}
+
+.vsplit-edit-head .hint {
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+.vsplit-edit-head .ghost-btn {
+  flex: 0 0 auto;
+  min-height: 2rem;
+  padding: 0.25rem 0.65rem;
+  font-size: 0.82rem;
 }
 
 .vsplit-edit-focus {
@@ -2001,13 +2061,28 @@ a.secondary-btn {
 
 .vsplit-edit-actions {
   flex-wrap: wrap;
-  gap: 0.35rem;
+  gap: 0.3rem;
 }
 
+.vsplit-edit-actions .primary-btn,
 .vsplit-edit-actions .secondary-btn,
 .vsplit-edit-actions .ghost-btn {
   flex: 1 1 auto;
+  min-height: 2.25rem;
+}
+
+.vsplit-quick-export {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.vsplit-quick-export .secondary-btn,
+.vsplit-quick-export .ghost-btn {
   min-height: 2.35rem;
+  justify-content: center;
+  text-align: center;
 }
 
 .vsplit-marks {
@@ -2056,31 +2131,41 @@ a.secondary-btn {
     z-index: 3;
     margin-left: -0.15rem;
     margin-right: -0.15rem;
-    padding: 0.35rem 0.15rem 0.45rem;
+    padding: 0.28rem 0.15rem 0.35rem;
     background: linear-gradient(180deg, rgba(11, 18, 32, 0.98) 55%, rgba(11, 18, 32, 0.88) 100%);
     backdrop-filter: blur(10px);
   }
 
   .vsplit-stage.is-manual #vsplit-video {
-    max-height: min(30vh, 220px);
+    max-height: min(22vh, 168px);
   }
 
   .vsplit-manual {
     border-radius: 12px;
-    padding: 0.5rem 0.55rem 0.55rem;
+    padding: 0.4rem 0.5rem 0.45rem;
+  }
+
+  .vsplit-transport {
+    margin-bottom: 0.2rem;
+    gap: 0.45rem;
+  }
+
+  .vsplit-transport #vsplit-play {
+    min-height: 2.15rem;
+    min-width: 3.8rem;
   }
 
   .vsplit-mark-btns,
   .vsplit-nudge-btns {
-    gap: 0.3rem;
+    gap: 0.25rem;
   }
 
   .vsplit-mark-btns .primary-btn,
   .vsplit-mark-btns .ghost-btn,
   .vsplit-nudge-btns .ghost-btn {
-    padding-left: 0.4rem;
-    padding-right: 0.4rem;
-    font-size: 0.88rem;
+    padding-left: 0.32rem;
+    padding-right: 0.32rem;
+    font-size: 0.84rem;
   }
 }
 
