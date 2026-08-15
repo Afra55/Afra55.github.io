@@ -788,6 +788,29 @@ async function listLocalDir(inputPath) {
   return { ok: true, path: real, entries };
 }
 
+/** POST /local/push: adb-push a set of host-local paths (validated against local roots) to a remote dir. */
+async function pushLocalPaths(serial, paths, remoteDir) {
+  if (!serial) throw new Error("缺少设备 serial");
+  const list = Array.isArray(paths) ? paths : [];
+  if (!list.length) throw new Error("缺少 paths");
+  const targetDir = normalizeRemotePath(remoteDir || "/sdcard/Download", { write: true });
+  const results = [];
+  for (const raw of list) {
+    const rawName = path.basename(String(raw || "").replace(/[\\/]+$/, "")) || "file";
+    try {
+      const real = await resolveLocalListPath(raw);
+      const st = await fs.promises.stat(real);
+      const remote = normalizeRemotePath(`${targetDir}/${rawName}`, { write: true });
+      await adbSerial(serial, ["push", real, remote], { timeout: 600000 });
+      results.push({ path: raw, ok: true, remote, isDir: st.isDirectory() });
+    } catch (err) {
+      results.push({ path: raw, ok: false, error: err.message || String(err) });
+    }
+  }
+  const pushed = results.filter((r) => r.ok).length;
+  return { ok: true, results, pushed, total: list.length, remoteDir: targetDir };
+}
+
 function mimeFromFilename(filename) {
   const n = String(filename || "").toLowerCase();
   if (/\.png$/i.test(n)) return "image/png";
@@ -3101,6 +3124,8 @@ async function handleApi(req, res, url) {
             "proxy",
             "forward",
             "developer",
+            "local-fs",
+            "local-push",
           ],
           adb: adbInfo,
           tools: hostTools.tools,
@@ -3159,6 +3184,12 @@ async function handleApi(req, res, url) {
     if (url.pathname === "/local/list" && req.method === "GET") {
       const localPath = url.searchParams.get("path") || "";
       sendJson(res, 200, await listLocalDir(localPath), origin);
+      return;
+    }
+
+    if (url.pathname === "/local/push" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req, 1024 * 1024));
+      sendJson(res, 200, await pushLocalPaths(body.serial, body.paths, body.remoteDir), origin);
       return;
     }
 

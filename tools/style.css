@@ -3232,8 +3232,12 @@ body.vsplit-fs-open {
 
 .adb-input-shot-wrap {
   position: relative;
-  display: inline-block;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
   max-width: 100%;
+  max-height: min(36vh, 320px);
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;
@@ -3244,9 +3248,153 @@ body.vsplit-fs-open {
 .adb-input-shot-wrap img {
   display: block;
   max-width: 100%;
+  max-height: min(36vh, 320px);
+  width: auto;
   height: auto;
+  object-fit: contain;
   touch-action: none;
   cursor: crosshair;
+}
+
+.adb-fs-dual {
+  margin-top: 0.75rem;
+  display: grid;
+  grid-template-columns: minmax(12rem, 0.85fr) minmax(0, 1.35fr);
+  gap: 0.75rem;
+  align-items: stretch;
+}
+
+.adb-fs-local {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(8, 14, 26, 0.4);
+  padding: 0.55rem 0.65rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 12rem;
+  max-height: 28rem;
+}
+
+.adb-fs-local-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.65rem;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.adb-fs-local-list {
+  margin-top: 0.45rem;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(8, 14, 26, 0.35);
+}
+
+.adb-fs-local-row {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  padding: 0.35rem 0.5rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.adb-fs-local-row:first-child {
+  border-top: 0;
+}
+
+.adb-fs-local-row.is-checked,
+.adb-fs-local-row.is-selected {
+  background: rgba(46, 196, 182, 0.1);
+}
+
+.adb-fs-local-row .adb-fs-check {
+  margin: 0;
+}
+
+.adb-fs-props {
+  margin: 0.35rem 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.adb-fs-list.is-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  gap: 0.45rem;
+  padding: 0.55rem;
+  align-content: start;
+}
+
+.adb-fs-list.is-grid .adb-fs-head {
+  display: none;
+}
+
+.adb-fs-list.is-grid .adb-fs-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.3rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.45rem;
+  min-height: 7rem;
+}
+
+.adb-fs-list.is-grid .adb-fs-col-size,
+.adb-fs-list.is-grid .adb-fs-col-date,
+.adb-fs-list.is-grid .adb-fs-col-more {
+  display: none;
+}
+
+.adb-fs-list.is-grid .adb-fs-col-name {
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.adb-fs-list.is-grid .adb-fs-thumb {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border-radius: 8px;
+  background: #0b1220;
+}
+
+.adb-fs-list.is-grid .adb-fs-thumb-ph {
+  width: 100%;
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  background: rgba(232, 238, 248, 0.06);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.adb-fs-view-list.is-active,
+.adb-fs-view-grid.is-active,
+#adb-fs-view-list.is-active,
+#adb-fs-view-grid.is-active {
+  border-color: rgba(46, 196, 182, 0.55);
+  color: var(--ink);
+  background: rgba(46, 196, 182, 0.12);
+}
+
+@media (max-width: 960px) {
+  .adb-fs-dual {
+    grid-template-columns: 1fr;
+  }
+
+  .adb-fs-local {
+    max-height: 14rem;
+  }
 }
 
 .adb-fs-row button.linkish {

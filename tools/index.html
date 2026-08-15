@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260815v" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260815v" />
+  <link rel="stylesheet" href="./style.css?v=20260815w" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260815w" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-v</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-w</span>
       </div>
       <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
@@ -1418,7 +1418,7 @@ hello@world.org</textarea>
           <label for="adb-token">Token</label>
           <input id="adb-token" class="mono" type="text" value="devtools-adb" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Android Studio Device File Explorer）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.7），请解压到同一文件夹后运行启动脚本。</p>
+        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Android Studio Device File Explorer）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.8），请解压到同一文件夹后运行启动脚本。</p>
         <div class="adb-guide" id="adb-setup-guide">
           <strong>本机依赖怎么配？</strong>
           <ol>
@@ -1504,16 +1504,22 @@ hello@world.org</textarea>
               </div>
               <nav class="adb-fs-crumbs" id="adb-fs-crumbs" aria-label="路径面包屑"></nav>
               <div class="adb-path-row">
+                <button type="button" class="ghost-btn" id="adb-fs-back" title="后退" disabled>←</button>
+                <button type="button" class="ghost-btn" id="adb-fs-forward" title="前进" disabled>→</button>
                 <button type="button" class="ghost-btn" id="adb-fs-up" title="上级目录">上级</button>
                 <input id="adb-fs-path" class="mono" type="text" value="/" spellcheck="false" autocomplete="off" />
                 <button type="button" class="secondary-btn" id="adb-fs-go">打开</button>
                 <button type="button" class="ghost-btn" id="adb-fs-refresh">刷新</button>
               </div>
               <div class="btn-row tool-actions" style="margin-top:0.65rem">
-                <label class="file-btn" for="adb-fs-upload">上传到当前目录</label>
+                <label class="file-btn" for="adb-fs-upload">上传文件</label>
                 <input id="adb-fs-upload" type="file" multiple hidden />
+                <label class="file-btn" for="adb-fs-upload-dir">上传文件夹</label>
+                <input id="adb-fs-upload-dir" type="file" webkitdirectory multiple hidden />
                 <button type="button" class="secondary-btn" id="adb-fs-mkdir">新建文件夹</button>
                 <button type="button" class="ghost-btn" id="adb-fs-paste" disabled>粘贴到此处</button>
+                <button type="button" class="ghost-btn" id="adb-fs-view-list" title="列表视图">列表</button>
+                <button type="button" class="ghost-btn" id="adb-fs-view-grid" title="缩略图网格">网格</button>
               </div>
               <div class="adb-fs-toolbar" style="margin-top:0.55rem">
                 <label class="adb-fs-filter-label" for="adb-fs-filter">筛选</label>
@@ -1554,6 +1560,7 @@ hello@world.org</textarea>
                 <div class="adb-fs-xfer-head">
                   <strong id="adb-fs-xfer-title">传输中</strong>
                   <span class="hint tight mono" id="adb-fs-xfer-meta"></span>
+                  <button type="button" class="ghost-btn" id="adb-fs-xfer-cancel">取消</button>
                 </div>
                 <div class="gif-progress" style="margin-top:0.4rem">
                   <div class="gif-progress-track">
@@ -1561,18 +1568,37 @@ hello@world.org</textarea>
                   </div>
                 </div>
               </div>
-              <div class="adb-fs-workspace">
-                <div class="adb-fs-list" id="adb-fs-list" aria-live="polite" data-adb-fs-drop tabindex="0"></div>
-                <aside class="adb-fs-preview" id="adb-fs-preview" hidden>
-                  <div class="adb-fs-preview-head">
-                    <strong id="adb-fs-preview-title">文件预览</strong>
-                    <button type="button" class="ghost-btn" id="adb-fs-preview-close">关闭</button>
+              <div class="adb-fs-dual">
+                <aside class="adb-fs-local" id="adb-fs-local">
+                  <div class="adb-fs-local-head">
+                    <strong>本机</strong>
+                    <span class="hint tight" id="adb-fs-local-meta">浏览电脑文件后推送到右侧设备</span>
                   </div>
-                  <p class="hint tight" id="adb-fs-preview-meta"></p>
-                  <div class="adb-fs-preview-body" id="adb-fs-preview-body"></div>
+                  <div class="adb-path-row adb-fs-local-path">
+                    <button type="button" class="ghost-btn" id="adb-fs-local-up" title="上级">上级</button>
+                    <input id="adb-fs-local-path" class="mono" type="text" value="" spellcheck="false" autocomplete="off" />
+                    <button type="button" class="secondary-btn" id="adb-fs-local-go">打开</button>
+                  </div>
+                  <div class="btn-row tool-actions adb-fs-local-roots" id="adb-fs-local-roots" style="margin-top:0.35rem"></div>
+                  <div class="adb-fs-local-list" id="adb-fs-local-list"></div>
+                  <div class="btn-row tool-actions" style="margin-top:0.45rem">
+                    <button type="button" class="primary-btn" id="adb-fs-local-push" disabled>推送到设备当前目录</button>
+                  </div>
                 </aside>
+                <div class="adb-fs-workspace">
+                  <div class="adb-fs-list" id="adb-fs-list" aria-live="polite" data-adb-fs-drop tabindex="0"></div>
+                  <aside class="adb-fs-preview" id="adb-fs-preview" hidden>
+                    <div class="adb-fs-preview-head">
+                      <strong id="adb-fs-preview-title">详情 / 预览</strong>
+                      <button type="button" class="ghost-btn" id="adb-fs-preview-close">关闭</button>
+                    </div>
+                    <p class="hint tight" id="adb-fs-preview-meta"></p>
+                    <div class="adb-fs-props mono" id="adb-fs-props" hidden></div>
+                    <div class="adb-fs-preview-body" id="adb-fs-preview-body"></div>
+                  </aside>
+                </div>
               </div>
-              <p class="hint" id="adb-fs-hint">对标桌面文件管理器：单击打开/预览，⋯ 或右键操作；可筛选排序、拖入上传。快捷键：Delete 删除、F2 重命名、Ctrl+A 全选、Esc 取消。</p>
+              <p class="hint" id="adb-fs-hint">列表/网格、前进后退、本机双栏推送；上传可看字节进度并可取消。只读路径会禁用写入操作。Delete / F2 / Ctrl+A / Esc 可用。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="install" hidden>
@@ -1861,15 +1887,13 @@ hello@world.org</textarea>
                 <span class="hint tight">预览图：单击 / 长按 / 双击 / 拖拽（单指）</span>
               </div>
               <div class="adb-guide">
-                <strong>怎么用：</strong>先点「刷新屏幕预览」→ 在图上<strong>单击</strong>点击、<strong>长按</strong>（约 0.5s）、<strong>双击</strong>、<strong>拖拽</strong>滑动。均为单指手势。下方快捷键可模拟返回 / Home。需桥 ≥0.6.7。
+                <strong>怎么用：</strong>先点「刷新屏幕预览」→ 在图上<strong>单击 / 长按 / 双击 / 拖拽</strong>。操作后会自动开启实时预览；可点「停止实时预览」。快捷键在预览上方。需桥 ≥0.6.8。
               </div>
               <div class="btn-row tool-actions">
                 <button type="button" class="primary-btn" id="adb-input-refresh-shot">刷新屏幕预览</button>
+                <button type="button" class="ghost-btn" id="adb-input-live-stop" hidden>停止实时预览</button>
               </div>
-              <div class="adb-input-shot-wrap" style="margin-top:0.65rem">
-                <img id="adb-input-canvas" alt="设备屏幕预览" hidden />
-              </div>
-              <div class="btn-row tool-actions" style="margin-top:0.75rem">
+              <div class="btn-row tool-actions" style="margin-top:0.55rem">
                 <button type="button" class="ghost-btn" data-adb-key="BACK">返回</button>
                 <button type="button" class="ghost-btn" data-adb-key="HOME">Home</button>
                 <button type="button" class="ghost-btn" data-adb-key="RECENTS">多任务</button>
@@ -1879,6 +1903,10 @@ hello@world.org</textarea>
                 <button type="button" class="ghost-btn" data-adb-key="VOLUME_DOWN">音量-</button>
                 <button type="button" class="ghost-btn" data-adb-key="POWER">电源</button>
               </div>
+              <div class="adb-input-shot-wrap" style="margin-top:0.65rem">
+                <img id="adb-input-canvas" alt="设备屏幕预览" hidden />
+              </div>
+              <p class="hint tight" id="adb-input-live-meta" hidden style="margin-top:0.35rem">实时预览中…</p>
               <details class="adb-advanced" style="margin-top:0.85rem">
                 <summary>高级：坐标点击 / 滑动</summary>
                 <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
@@ -1914,7 +1942,7 @@ hello@world.org</textarea>
                   <button type="button" class="secondary-btn" id="adb-clip-run">推送到剪贴板</button>
                 </div>
               </div>
-              <p class="hint" id="adb-input-meta">单指：单击 / 长按 / 双击 / 拖拽滑动。坐标原点在屏幕左上角。</p>
+              <p class="hint" id="adb-input-meta">单指：单击 / 长按 / 双击 / 拖拽。操作后自动实时预览。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="media" hidden>
@@ -2245,7 +2273,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260815v"></script>
+  <script src="./extra.js?v=20260815w"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>
