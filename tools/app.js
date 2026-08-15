@@ -765,6 +765,7 @@
 
   // ---- Workspace shell: groups, search, single-tool route ----
   const ORDER_KEY = "devtools-tool-order-v3";
+  const GROUP_ORDER_KEY = "devtools-group-order-v1";
   const RECENT_KEY = "devtools-tool-recent-v1";
   const MEDIA_TABS = ["gifmaker", "vsplit", "vbb"];
   const HASH_ALIASES = {
@@ -786,6 +787,11 @@
     { id: "convert", label: "换算", tools: ["units", "coord", "numbase"] },
     { id: "device", label: "设备", tools: ["adb"] },
   ];
+  const DEFAULT_GROUP_ORDER = TOOL_GROUPS.map((g) => g.id);
+  const GROUP_BY_ID = Object.fromEntries(TOOL_GROUPS.map((g) => [g.id, g]));
+  const TOOL_TO_GROUP = Object.fromEntries(
+    TOOL_GROUPS.flatMap((g) => g.tools.map((id) => [id, g.id]))
+  );
   const TOOL_META = {
     timestamp: { name: "时间戳", aliases: ["时间", "timestamp", "date"] },
     timediff: { name: "时间差", aliases: ["时差", "diff time"] },
@@ -899,6 +905,53 @@
     localStorage.setItem(ORDER_KEY, JSON.stringify(order));
   }
 
+  function normalizeGroupOrder(raw) {
+    const out = [];
+    const seen = new Set();
+    (Array.isArray(raw) ? raw : []).forEach((id) => {
+      if (!GROUP_BY_ID[id] || seen.has(id)) return;
+      seen.add(id);
+      out.push(id);
+    });
+    DEFAULT_GROUP_ORDER.forEach((id) => {
+      if (seen.has(id)) return;
+      seen.add(id);
+      out.push(id);
+    });
+    return out;
+  }
+
+  function loadGroupOrder() {
+    try {
+      const raw = localStorage.getItem(GROUP_ORDER_KEY);
+      if (!raw) return DEFAULT_GROUP_ORDER.slice();
+      return normalizeGroupOrder(JSON.parse(raw));
+    } catch (_) {
+      return DEFAULT_GROUP_ORDER.slice();
+    }
+  }
+
+  function saveGroupOrder(order) {
+    localStorage.setItem(GROUP_ORDER_KEY, JSON.stringify(normalizeGroupOrder(order)));
+  }
+
+  function groupsInOrder() {
+    return loadGroupOrder()
+      .map((id) => GROUP_BY_ID[id])
+      .filter(Boolean);
+  }
+
+  function moveGroupOrder(fromId, toId) {
+    if (!fromId || !toId || fromId === toId) return loadGroupOrder();
+    const order = loadGroupOrder();
+    const fromIdx = order.indexOf(fromId);
+    const toIdx = order.indexOf(toId);
+    if (fromIdx < 0 || toIdx < 0) return order;
+    order.splice(fromIdx, 1);
+    order.splice(toIdx, 0, fromId);
+    return order;
+  }
+
   function loadRecent() {
     try {
       const parsed = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
@@ -931,7 +984,7 @@
     const list = order || loadOrder();
     const allowDrag = canDesktopDrag();
     navEl.innerHTML = "";
-    TOOL_GROUPS.forEach((group) => {
+    groupsInOrder().forEach((group) => {
       const tools = list.filter((id) => group.tools.includes(id));
       if (!tools.length) return;
       const wrap = document.createElement("div");
@@ -940,6 +993,8 @@
       const title = document.createElement("p");
       title.className = "nav-group-title";
       title.textContent = group.label;
+      title.draggable = allowDrag;
+      if (allowDrag) title.title = "拖动分类可调整整组顺序";
       wrap.appendChild(title);
       tools.forEach((id) => {
         const a = document.createElement("a");
@@ -947,6 +1002,7 @@
         a.href = id === "media" ? "#media/gifmaker" : `#${id}`;
         a.dataset.tool = id;
         a.draggable = allowDrag;
+        if (allowDrag) a.title = "拖动可调整工具顺序";
         a.textContent = toolName(id);
         wrap.appendChild(a);
       });
@@ -1178,8 +1234,27 @@
     });
   }
 
-  let dragId = null;
+  let dragPayload = null;
   let didDrag = false;
+
+  function clearNavDragStyles() {
+    getNavLinks().forEach((l) => l.classList.remove("drag-over", "is-dragging"));
+    $$(".nav-group", navEl).forEach((g) => g.classList.remove("drag-over", "is-dragging"));
+  }
+
+  function readDragPayload(e) {
+    try {
+      const raw = e.dataTransfer?.getData("application/x-devtools-nav") || "";
+      if (raw) return JSON.parse(raw);
+    } catch (_) {
+      /* ignore */
+    }
+    if (dragPayload) return dragPayload;
+    const plain = e.dataTransfer?.getData("text/plain") || "";
+    if (plain && DEFAULT_ORDER.includes(plain)) return { kind: "tool", id: plain };
+    return null;
+  }
+
   function bindNavInteractions() {
     getNavLinks().forEach((link) => {
       if (link.dataset.boundNav === "1") return;
@@ -1189,16 +1264,16 @@
           e.preventDefault();
           return;
         }
-        dragId = link.dataset.tool;
+        dragPayload = { kind: "tool", id: link.dataset.tool };
         didDrag = true;
         link.classList.add("is-dragging");
         e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", dragId);
+        e.dataTransfer.setData("application/x-devtools-nav", JSON.stringify(dragPayload));
+        e.dataTransfer.setData("text/plain", dragPayload.id);
       });
       link.addEventListener("dragend", () => {
-        link.classList.remove("is-dragging");
-        getNavLinks().forEach((l) => l.classList.remove("drag-over"));
-        dragId = null;
+        clearNavDragStyles();
+        dragPayload = null;
         setTimeout(() => {
           didDrag = false;
         }, 0);
@@ -1210,21 +1285,40 @@
       });
       link.addEventListener("dragover", (e) => {
         if (!canDesktopDrag()) return;
+        const payload = dragPayload || readDragPayload(e);
+        if (!payload) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        link.classList.add("drag-over");
+        if (payload.kind === "tool") link.classList.add("drag-over");
+        else link.closest(".nav-group")?.classList.add("drag-over");
       });
-      link.addEventListener("dragleave", () => link.classList.remove("drag-over"));
+      link.addEventListener("dragleave", () => {
+        link.classList.remove("drag-over");
+        link.closest(".nav-group")?.classList.remove("drag-over");
+      });
       link.addEventListener("drop", (e) => {
         e.preventDefault();
-        link.classList.remove("drag-over");
+        e.stopPropagation();
+        clearNavDragStyles();
         if (!canDesktopDrag()) return;
-        const from = e.dataTransfer.getData("text/plain") || dragId;
-        const to = link.dataset.tool;
-        if (!from || !to || from === to) return;
+        const payload = readDragPayload(e);
+        const toTool = link.dataset.tool;
+        if (!payload || !toTool) return;
+        if (payload.kind === "group") {
+          const toGroup = TOOL_TO_GROUP[toTool];
+          if (!toGroup || payload.id === toGroup) return;
+          const next = moveGroupOrder(payload.id, toGroup);
+          saveGroupOrder(next);
+          renderNav(loadOrder());
+          applyRoute({ skipRecent: true });
+          showToast("已保存分类排序");
+          return;
+        }
+        const from = payload.id;
+        if (!from || from === toTool) return;
         const order = loadOrder();
         const fromIdx = order.indexOf(from);
-        const toIdx = order.indexOf(to);
+        const toIdx = order.indexOf(toTool);
         if (fromIdx < 0 || toIdx < 0) return;
         order.splice(fromIdx, 1);
         order.splice(toIdx, 0, from);
@@ -1234,11 +1328,68 @@
         showToast("已保存排序");
       });
     });
+
+    $$(".nav-group", navEl).forEach((wrap) => {
+      const title = wrap.querySelector(".nav-group-title");
+      if (!title || title.dataset.boundNavGroup === "1") return;
+      title.dataset.boundNavGroup = "1";
+      title.addEventListener("dragstart", (e) => {
+        if (!title.draggable) {
+          e.preventDefault();
+          return;
+        }
+        dragPayload = { kind: "group", id: wrap.dataset.group };
+        didDrag = true;
+        wrap.classList.add("is-dragging");
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("application/x-devtools-nav", JSON.stringify(dragPayload));
+        e.dataTransfer.setData("text/plain", `group:${dragPayload.id}`);
+      });
+      title.addEventListener("dragend", () => {
+        clearNavDragStyles();
+        dragPayload = null;
+        setTimeout(() => {
+          didDrag = false;
+        }, 0);
+      });
+      const onGroupDragOver = (e) => {
+        if (!canDesktopDrag()) return;
+        const payload = dragPayload || readDragPayload(e);
+        if (!payload || payload.kind !== "group") return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        wrap.classList.add("drag-over");
+      };
+      title.addEventListener("dragover", onGroupDragOver);
+      wrap.addEventListener("dragover", onGroupDragOver);
+      title.addEventListener("dragleave", () => wrap.classList.remove("drag-over"));
+      wrap.addEventListener("dragleave", (e) => {
+        if (wrap.contains(e.relatedTarget)) return;
+        wrap.classList.remove("drag-over");
+      });
+      const onGroupDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        clearNavDragStyles();
+        if (!canDesktopDrag()) return;
+        const payload = readDragPayload(e);
+        const toGroup = wrap.dataset.group;
+        if (!payload || payload.kind !== "group" || !toGroup || payload.id === toGroup) return;
+        const next = moveGroupOrder(payload.id, toGroup);
+        saveGroupOrder(next);
+        renderNav(loadOrder());
+        applyRoute({ skipRecent: true });
+        showToast("已保存分类排序");
+      };
+      title.addEventListener("drop", onGroupDrop);
+      wrap.addEventListener("drop", onGroupDrop);
+    });
   }
 
   $("#nav-reset")?.addEventListener("click", () => {
     localStorage.removeItem(ORDER_KEY);
     localStorage.removeItem("devtools-tool-order-v2");
+    localStorage.removeItem(GROUP_ORDER_KEY);
     renderNav(DEFAULT_ORDER.slice());
     applyRoute({ skipRecent: true });
     showToast("已恢复默认排序");

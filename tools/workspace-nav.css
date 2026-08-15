@@ -99,6 +99,39 @@
   text-transform: uppercase;
 }
 
+.nav-group-title[draggable="true"] {
+  cursor: grab;
+  user-select: none;
+  display: inline-block;
+  max-width: 100%;
+  padding: 0.12rem 0.28rem;
+  margin-left: -0.28rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.nav-group-title[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.nav-group.is-dragging {
+  opacity: 0.45;
+}
+
+.nav-group.drag-over {
+  outline: 1px dashed rgba(46, 196, 182, 0.55);
+  outline-offset: 2px;
+  border-radius: 8px;
+  background: rgba(46, 196, 182, 0.06);
+}
+
+.nav-group.drag-over > .nav-group-title {
+  color: var(--ink);
+  border-color: rgba(46, 196, 182, 0.4);
+  background: rgba(46, 196, 182, 0.1);
+}
+
 .nav-recent-list {
   display: flex;
   flex-wrap: wrap;
