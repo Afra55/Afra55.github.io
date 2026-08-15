@@ -101,6 +101,7 @@ async function main() {
       "snapshot",
       "device-control",
       "apk-info",
+      "apk-signing",
       "proxy",
       "forward",
       "developer",
@@ -110,8 +111,8 @@ async function main() {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
     }
 
-    if (health2.json?.version !== "0.6.0") {
-      throw new Error(`expected bridge version 0.6.0, got ${health2.json?.version}`);
+    if (health2.json?.version !== "0.6.1") {
+      throw new Error(`expected bridge version 0.6.1, got ${health2.json?.version}`);
     }
     const roots = health2.json?.roots || [];
     for (const root of ["/data/local/tmp", "/system/app", "/system/priv-app"]) {
@@ -152,6 +153,39 @@ async function main() {
       body: JSON.stringify({ serial: "demo", action: "nope" }),
     });
     if (badInput.status === 200) throw new Error("input should reject unknown action");
+
+    // APK signing: upload sample jarsigner APK and expect alias/SHA1
+    const sampleApk = "/tmp/adb-apk-sign-test/sample.apk";
+    const fs = require("fs");
+    if (fs.existsSync(sampleApk)) {
+      const buf = fs.readFileSync(sampleApk);
+      const up = await req("POST", "/upload?name=sample.apk", {
+        headers: {
+          "X-Adb-Token": TOKEN,
+          "Content-Type": "application/octet-stream",
+          "X-Filename": encodeURIComponent("sample.apk"),
+          "Content-Length": Buffer.byteLength(buf),
+        },
+        body: buf,
+      });
+      if (up.status !== 200 || !up.json?.uploadId) {
+        throw new Error(`upload sample apk failed: ${up.text}`);
+      }
+      const info = await req("POST", "/apk/info", {
+        headers: { "X-Adb-Token": TOKEN, "Content-Type": "application/json" },
+        body: JSON.stringify({ uploadId: up.json.uploadId }),
+      });
+      if (info.status !== 200) throw new Error(`apk/info failed: ${info.text}`);
+      const signers = info.json?.signatures || info.json?.signing?.signers || [];
+      if (!signers.length) throw new Error("apk/info missing signatures");
+      const s0 = signers[0];
+      const alias = String(s0.alias || s0.v1Entry || "");
+      if (!/mad/i.test(alias)) throw new Error(`expected alias mad, got ${alias}`);
+      if (!s0.sha1 || s0.sha1.length < 10) throw new Error("missing sha1");
+      if (!/Mad Test/i.test(String(s0.cn || s0.owner || ""))) {
+        throw new Error(`expected CN Mad Test, got ${s0.cn || s0.owner}`);
+      }
+    }
 
     console.log("adb-bridge smoke-check: ok");
   } finally {

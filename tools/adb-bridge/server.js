@@ -59,7 +59,7 @@ const SYSTEM_APP_ROOTS = [
 const TMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "adb-bridge-"));
 const JOBS = new Map();
 const UPLOADS = new Map();
-const BRIDGE_VERSION = "0.6.0";
+const BRIDGE_VERSION = "0.6.1";
 
 function sendJson(res, status, data, origin) {
   const body = JSON.stringify(data);
@@ -728,13 +728,20 @@ async function analyzeLocalApk(filePath, filename) {
       /* try next */
     }
   }
+
+  const signing = await analyzeApkSigning(filePath);
+  const size = fs.statSync(filePath).size;
+
   if (!badging) {
     return {
       ok: true,
       filename,
       tool: "",
-      note: "本机未找到 aapt/aapt2，仅返回文件大小。安装 Android build-tools 后可解析包名/权限。",
-      size: fs.statSync(filePath).size,
+      note:
+        "本机未找到 aapt/aapt2，包名/权限可能缺失；签名信息仍尽量解析（需 keytool 或 apksigner）。安装 Android build-tools 后可解析包名/权限。",
+      size,
+      signing,
+      signatures: signing.signers || [],
     };
   }
   const packageName = (badging.match(/package: name='([^']+)'/) || [])[1] || "";
@@ -744,8 +751,10 @@ async function analyzeLocalApk(filePath, filename) {
   const targetSdk = (badging.match(/targetSdkVersion:'([^']+)'/) || [])[1] || "";
   const launchActivity = (badging.match(/launchable-activity: name='([^']+)'/) || [])[1] || "";
   const permissions = [...badging.matchAll(/uses-permission: name='([^']+)'/g)].map((m) => m[1]);
-  const label = (badging.match(/application-label(?:-zh(?:-CN)?)?:'([^']+)'/) ||
-    badging.match(/application-label:'([^']+)'/) || [])[1] || "";
+  const label =
+    (badging.match(/application-label(?:-zh(?:-CN)?)?:'([^']+)'/) ||
+      badging.match(/application-label:'([^']+)'/) ||
+      [])[1] || "";
   return {
     ok: true,
     filename,
@@ -758,9 +767,257 @@ async function analyzeLocalApk(filePath, filename) {
     targetSdk,
     launchActivity: packageName && launchActivity ? `${packageName}/${launchActivity}` : launchActivity,
     permissions: permissions.slice(0, 100),
-    size: fs.statSync(filePath).size,
+    size,
+    signing,
+    signatures: signing.signers || [],
     rawPreview: badging.split(/\r?\n/).slice(0, 80).join("\n"),
   };
+}
+
+function normalizeFingerprint(value) {
+  return String(value || "")
+    .replace(/\s+/g, "")
+    .replace(/:/g, "")
+    .toUpperCase();
+}
+
+function formatFingerprint(value) {
+  const hex = normalizeFingerprint(value);
+  if (!hex || hex.length % 2) return String(value || "").trim();
+  return hex.match(/.{1,2}/g).join(":");
+}
+
+function parseDnField(dn, field) {
+  const re = new RegExp(`(?:^|,)\\s*${field}\\s*=\\s*([^,]+)`, "i");
+  const m = String(dn || "").match(re);
+  return m ? m[1].trim() : "";
+}
+
+function parseKeytoolCertText(text) {
+  const owner =
+    (String(text).match(/Owner:\s*(.+)/i) || String(text).match(/所有者:\s*(.+)/) || [])[1]?.trim() || "";
+  const issuer =
+    (String(text).match(/Issuer:\s*(.+)/i) || String(text).match(/发布者:\s*(.+)/) || [])[1]?.trim() || "";
+  const serial =
+    (String(text).match(/Serial number:\s*([^\s]+)/i) ||
+      String(text).match(/序列号:\s*([^\s]+)/) ||
+      [])[1] || "";
+  const valid =
+    (String(text).match(/Valid from:\s*(.+)/i) || String(text).match(/有效期自:\s*(.+)/) || [])[1]?.trim() ||
+    "";
+  const sha1Raw =
+    (String(text).match(/SHA1:\s*([0-9A-Fa-f:]+)/i) ||
+      String(text).match(/SHA-1:\s*([0-9A-Fa-f:]+)/i) ||
+      [])[1] || "";
+  const sha256Raw =
+    (String(text).match(/SHA256:\s*([0-9A-Fa-f:]+)/i) ||
+      String(text).match(/SHA-256:\s*([0-9A-Fa-f:]+)/i) ||
+      [])[1] || "";
+  const md5Raw = (String(text).match(/MD5:\s*([0-9A-Fa-f:]+)/i) || [])[1] || "";
+  const sigAlg =
+    (String(text).match(/Signature algorithm name:\s*(.+)/i) ||
+      String(text).match(/签名算法名称:\s*(.+)/) ||
+      [])[1]?.trim() || "";
+  const cn = parseDnField(owner, "CN");
+  return {
+    owner,
+    cn,
+    issuer,
+    serial,
+    valid,
+    sha1: formatFingerprint(sha1Raw),
+    sha256: formatFingerprint(sha256Raw),
+    md5: formatFingerprint(md5Raw),
+    sigAlg,
+  };
+}
+
+function parseApksignerCertText(text) {
+  const blocks = String(text || "").split(/Signer #\d+/i).slice(1);
+  const signers = [];
+  const schemes = [];
+  if (/Verified using v1 scheme/i.test(text)) schemes.push("v1");
+  if (/Verified using v2 scheme/i.test(text)) schemes.push("v2");
+  if (/Verified using v3 scheme/i.test(text)) schemes.push("v3");
+  if (/Verified using v3\.1 scheme/i.test(text)) schemes.push("v3.1");
+  if (/Verified using v4 scheme/i.test(text)) schemes.push("v4");
+  for (let i = 0; i < blocks.length; i++) {
+    const block = blocks[i];
+    const dn =
+      (block.match(/certificate DN:\s*(.+)/i) || [])[1]?.trim() ||
+      (block.match(/Signer certificate DN:\s*(.+)/i) || [])[1]?.trim() ||
+      "";
+    const sha256 =
+      (block.match(/SHA-256 digest:\s*([0-9A-Fa-f:]+)/i) || [])[1] ||
+      (block.match(/SHA256 digest:\s*([0-9A-Fa-f:]+)/i) || [])[1] ||
+      "";
+    const sha1 =
+      (block.match(/SHA-1 digest:\s*([0-9A-Fa-f:]+)/i) || [])[1] ||
+      (block.match(/SHA1 digest:\s*([0-9A-Fa-f:]+)/i) || [])[1] ||
+      "";
+    const md5 = (block.match(/MD5 digest:\s*([0-9A-Fa-f:]+)/i) || [])[1] || "";
+    signers.push({
+      index: i + 1,
+      alias: "",
+      owner: dn,
+      cn: parseDnField(dn, "CN"),
+      issuer: "",
+      serial: "",
+      valid: "",
+      sha1: formatFingerprint(sha1),
+      sha256: formatFingerprint(sha256),
+      md5: formatFingerprint(md5),
+      sigAlg: "",
+      source: "apksigner",
+    });
+  }
+  return { schemes, signers };
+}
+
+async function listApkMetaInfSignerEntries(filePath) {
+  try {
+    const { stdout } = await execFileAsync("unzip", ["-Z1", filePath], {
+      timeout: 20000,
+      maxBuffer: 8 * 1024 * 1024,
+    });
+    return String(stdout || "")
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter((s) => /^META-INF\/[^/]+\.(RSA|DSA|EC)$/i.test(s));
+  } catch {
+    return [];
+  }
+}
+
+async function analyzeApkSigning(filePath) {
+  const result = {
+    ok: true,
+    tool: "",
+    schemes: [],
+    signers: [],
+    note: "",
+  };
+
+  // Prefer apksigner (v1–v4)
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      "apksigner",
+      ["verify", "--print-certs", filePath],
+      { timeout: 45000, maxBuffer: 4 * 1024 * 1024 }
+    );
+    const parsed = parseApksignerCertText(`${stdout || ""}\n${stderr || ""}`);
+    if (parsed.signers.length) {
+      result.tool = "apksigner";
+      result.schemes = parsed.schemes;
+      result.signers = parsed.signers;
+    }
+  } catch {
+    /* optional */
+  }
+
+  // keytool -jarfile (v1 / jarsigner)
+  if (!result.signers.length) {
+    try {
+      const { stdout } = await execFileAsync("keytool", ["-printcert", "-jarfile", filePath], {
+        timeout: 45000,
+        maxBuffer: 4 * 1024 * 1024,
+      });
+      const parsed = parseKeytoolCertText(stdout || "");
+      if (parsed.owner || parsed.sha1 || parsed.sha256) {
+        result.tool = "keytool";
+        result.schemes = result.schemes.length ? result.schemes : ["v1"];
+        result.signers = [
+          {
+            index: 1,
+            alias: "",
+            ...parsed,
+            source: "keytool",
+          },
+        ];
+      }
+    } catch {
+      /* optional */
+    }
+  }
+
+  // Enrich / fallback via META-INF/*.RSA (alias often equals entry basename)
+  const entries = await listApkMetaInfSignerEntries(filePath);
+  if (entries.length) {
+    const aliases = entries.map((e) => path.basename(e).replace(/\.(RSA|DSA|EC)$/i, ""));
+    if (!result.signers.length) {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "adb-apk-cert-"));
+      try {
+        for (let i = 0; i < entries.length; i++) {
+          const entry = entries[i];
+          const alias = aliases[i];
+          const certPath = path.join(tmpDir, path.basename(entry));
+          try {
+            await execFileAsync("unzip", ["-o", "-j", "-d", tmpDir, filePath, entry], {
+              timeout: 20000,
+              maxBuffer: 4 * 1024 * 1024,
+            });
+            const { stdout } = await execFileAsync("keytool", ["-printcert", "-file", certPath], {
+              timeout: 20000,
+              maxBuffer: 2 * 1024 * 1024,
+            });
+            const parsed = parseKeytoolCertText(stdout || "");
+            result.signers.push({
+              index: i + 1,
+              alias: alias && alias.toUpperCase() !== "CERT" ? alias : "",
+              v1Entry: alias,
+              ...parsed,
+              source: "meta-inf",
+            });
+          } catch {
+            result.signers.push({
+              index: i + 1,
+              alias: alias && alias.toUpperCase() !== "CERT" ? alias : "",
+              v1Entry: alias,
+              owner: "",
+              cn: "",
+              issuer: "",
+              serial: "",
+              valid: "",
+              sha1: "",
+              sha256: "",
+              md5: "",
+              sigAlg: "",
+              source: "meta-inf",
+            });
+          }
+        }
+        if (result.signers.length) {
+          result.tool = result.tool || "meta-inf+keytool";
+          if (!result.schemes.length) result.schemes = ["v1"];
+        }
+      } finally {
+        try {
+          fs.rmSync(tmpDir, { recursive: true, force: true });
+        } catch {
+          /* ignore */
+        }
+      }
+    } else {
+      // Attach alias hints from META-INF names when useful
+      for (let i = 0; i < result.signers.length; i++) {
+        const alias = aliases[i] || aliases[0] || "";
+        if (!result.signers[i].alias && alias && alias.toUpperCase() !== "CERT") {
+          result.signers[i].alias = alias;
+        }
+        if (alias) result.signers[i].v1Entry = alias;
+      }
+    }
+  }
+
+  if (!result.signers.length) {
+    result.ok = false;
+    result.note =
+      "未能解析签名。请确认本机有 keytool（JDK）或 Android build-tools 的 apksigner；仅 v2/v3 签名且无 v1 时需要 apksigner。";
+  } else {
+    result.note =
+      "别名优先取自 META-INF 签名块文件名（jarsigner 别名）；Android 常见为 CERT。证书主体见 CN/Owner。";
+  }
+  return result;
 }
 
 async function getProxy(serial) {
@@ -1928,6 +2185,7 @@ async function handleApi(req, res, url) {
             "snapshot",
             "device-control",
             "apk-info",
+            "apk-signing",
             "proxy",
             "forward",
             "developer",

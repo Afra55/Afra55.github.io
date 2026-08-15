@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260814q" />
+  <link rel="stylesheet" href="./style.css?v=20260815a" />
   <link rel="stylesheet" href="./workspace-nav.css?v=20260814f" />
 </head>
 <body>
@@ -1519,7 +1519,7 @@ hello@world.org</textarea>
                 <label class="flag"><input type="checkbox" id="adb-apk-replace" checked /> 覆盖安装 (-r)</label>
                 <label class="flag"><input type="checkbox" id="adb-apk-downgrade" /> 允许降级 (-d)</label>
               </div>
-              <p class="hint" id="adb-apk-debug-hint">普通/调试包：勾选覆盖；装更低版本再勾「允许降级」。签名不一致通常要先卸载。系统预装应用：分析后填包名，点「推送到系统路径」会按包名查找现有 APK 路径并同名覆盖。</p>
+              <p class="hint" id="adb-apk-debug-hint">普通/调试包：勾选覆盖；装更低版本再勾「允许降级」。签名不一致通常要先卸载。分析会尽量给出别名/CN/SHA1/SHA256（需本机 keytool 或 apksigner）。系统预装应用：分析后填包名，点「推送到系统路径」会按包名查找现有 APK 路径并同名覆盖。</p>
               <p class="hint" id="adb-apk-name">尚未选择 APK</p>
               <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
                 <label for="adb-apk-pkg">包名</label>
@@ -2164,7 +2164,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260814q"></script>
+  <script src="./extra.js?v=20260815a"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>

@@ -59,7 +59,7 @@ node server.js
 | GET | `/apps/info?serial=&package=` | 已安装应用详情 |
 | POST | `/apps/action` | 打开 / 强停 / 清数据 / 卸载 / 停用 / 启用 |
 | POST | `/apps/permission` | 授予 / 撤销权限 |
-| POST | `/apk/info` | 分析已上传 APK（需本机 aapt/aapt2） |
+| POST | `/apk/info` | 分析已上传 APK（aapt/aapt2 解析包信息；keytool/apksigner 解析签名：别名/CN/SHA1/SHA256 等） |
 | POST | `/apps/backup` | 备份 APK（可 `async` 任务） |
 | GET/POST | `/network/proxy` | HTTP 代理查询/设置/清除 |
 | GET/POST | `/network/forward` | forward/reverse 端口转发 |
