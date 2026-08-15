@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260815a" />
+  <link rel="stylesheet" href="./style.css?v=20260815b" />
   <link rel="stylesheet" href="./workspace-nav.css?v=20260814f" />
 </head>
 <body>
@@ -1413,7 +1413,7 @@ hello@world.org</textarea>
           <label for="adb-token">Token</label>
           <input id="adb-token" class="mono" type="text" value="devtools-adb" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。可读 <span class="mono">/sdcard</span>、<span class="mono">/data/app</span>、<span class="mono">/system/app</span> 等；写入默认限于 sdcard 与 tmp。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.0），请解压到同一文件夹后运行启动脚本。</p>
+        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件浏览类似 Device File Explorer，可读任意路径（受设备权限限制）。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.2），请解压到同一文件夹后运行启动脚本。</p>
         <p class="error" id="adb-error" hidden></p>
 
         <div class="adb-layout" id="adb-workspace" hidden>
@@ -1499,13 +1499,19 @@ hello@world.org</textarea>
                 <label class="file-btn" for="adb-fs-upload">上传到当前目录</label>
                 <input id="adb-fs-upload" type="file" multiple hidden />
                 <button type="button" class="secondary-btn" id="adb-fs-mkdir">新建文件夹</button>
+                <button type="button" class="ghost-btn" id="adb-fs-paste" disabled>粘贴到此处</button>
+                <button type="button" class="ghost-btn" id="adb-fs-root" data-adb-open="/">/</button>
                 <button type="button" class="ghost-btn" id="adb-fs-home">/sdcard</button>
                 <button type="button" class="ghost-btn" id="adb-fs-download-dir">Download</button>
+                <button type="button" class="ghost-btn" data-adb-open="/data">/data</button>
+                <button type="button" class="ghost-btn" data-adb-open="/data/local/tmp">/data/local/tmp</button>
+                <button type="button" class="ghost-btn" data-adb-open="/system">/system</button>
                 <button type="button" class="ghost-btn" data-adb-open="/system/app">/system/app</button>
                 <button type="button" class="ghost-btn" data-adb-open="/data/app">/data/app</button>
               </div>
+              <p class="hint tight" id="adb-fs-clip-meta" hidden></p>
               <div class="adb-fs-list" id="adb-fs-list" aria-live="polite"></div>
-              <p class="hint" id="adb-fs-hint">支持打开、下载、删除、重命名、移动、复制。删除前会确认。</p>
+              <p class="hint" id="adb-fs-hint">支持打开、下载、删除、重命名、剪切/复制后粘贴。删除前会确认。无权限目录会提示失败。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="install" hidden>
@@ -1531,6 +1537,7 @@ hello@world.org</textarea>
                 <button type="button" class="secondary-btn" id="adb-apk-install-current" disabled>仅安装到当前设备</button>
                 <button type="button" class="ghost-btn" id="adb-apk-push-system" disabled>推送到系统路径</button>
               </div>
+              <div id="adb-install-jobs" class="adb-inline-jobs" aria-live="polite"></div>
               <pre class="mono adb-pre" id="adb-apk-info" hidden></pre>
             </div>
 
@@ -1547,13 +1554,13 @@ hello@world.org</textarea>
                   <option value="all">全部</option>
                 </select>
                 <label for="adb-apps-filter">过滤</label>
-                <input id="adb-apps-filter" class="mono" type="search" placeholder="包名关键字" autocomplete="off" />
+                <input id="adb-apps-filter" class="mono" type="search" placeholder="应用名 / 包名" autocomplete="off" />
                 <button type="button" class="secondary-btn" id="adb-apps-refresh">刷新列表</button>
               </div>
               <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
                 <label for="adb-perm-name">权限</label>
                 <input id="adb-perm-name" class="mono" type="text" placeholder="android.permission.CAMERA" spellcheck="false" autocomplete="off" />
-                <span class="hint tight" id="adb-perm-target">先点某个应用的「选中」再授予/撤销</span>
+                <span class="hint tight" id="adb-perm-target">勾选应用后可授予/撤销权限</span>
               </div>
               <div class="btn-row tool-actions" style="margin-top:0.45rem">
                 <button type="button" class="secondary-btn" id="adb-perm-grant">授予权限</button>
@@ -1561,7 +1568,7 @@ hello@world.org</textarea>
               </div>
               <div class="adb-fs-list adb-apps-list" id="adb-apps-list" aria-live="polite"></div>
               <pre class="mono adb-pre" id="adb-app-detail" hidden></pre>
-              <p class="hint">每行保留打开 / 详情；更多操作在「更多」里。系统应用操作可能失败。</p>
+              <p class="hint">左侧勾选用于权限操作；应用名来自 dumpsys（部分机型可能为空）。系统应用操作可能失败。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="network" hidden>
@@ -1850,13 +1857,14 @@ hello@world.org</textarea>
                 <button type="button" class="ghost-btn" id="adb-media-zip">打包下载全部</button>
               </div>
               <div id="adb-media-preview" class="adb-media-preview" hidden style="margin-top:0.75rem"></div>
+              <div id="adb-media-jobs" class="adb-inline-jobs" aria-live="polite"></div>
               <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
                 <label for="adb-record-sec">录屏秒数（0=不限）</label>
                 <input id="adb-record-sec" class="mono meta-input" type="number" min="0" value="0" />
                 <button type="button" class="secondary-btn" id="adb-record-current">开始录屏</button>
                 <button type="button" class="ghost-btn" id="adb-record-cancel">取消录屏</button>
               </div>
-              <p class="hint" id="adb-record-tip">默认 0 = 一直录到点「取消录屏」或任务里取消。若填正数则按时长结束（部分系统约 180 秒上限）。多设备截图完成后可用「打包下载全部」。</p>
+              <p class="hint" id="adb-record-tip">截图/录屏完成后留在本页预览与下载，不必跳到任务中心。默认 0 = 一直录到取消。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="jobs" hidden>
@@ -2164,7 +2172,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260815a"></script>
+  <script src="./extra.js?v=20260815b"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>

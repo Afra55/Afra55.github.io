@@ -35,18 +35,23 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-/** Paths allowed for list / stat / pull */
+const BRIDGE_VERSION = "0.6.2";
+
+/** Preferred quick roots shown in UI (reads are not limited to these) */
 const ROOTS = [
+  "/",
   "/sdcard",
   "/storage/emulated/0",
+  "/data",
   "/data/local/tmp",
   "/data/app",
+  "/system",
   "/system/app",
   "/system/priv-app",
   "/product/app",
   "/vendor/app",
 ];
-/** Paths allowed for push / mkdir / rm / move / copy / rename without forcePush */
+/** Soft hint for safer writes; Device Explorer mode still allows any path (device enforces) */
 const WRITE_ROOTS = ["/sdcard", "/storage/emulated/0", "/data/local/tmp"];
 /** System/product APK dirs used by /install/push-system overwrite detection */
 const SYSTEM_APP_ROOTS = [
@@ -59,7 +64,6 @@ const SYSTEM_APP_ROOTS = [
 const TMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "adb-bridge-"));
 const JOBS = new Map();
 const UPLOADS = new Map();
-const BRIDGE_VERSION = "0.6.1";
 
 function sendJson(res, status, data, origin) {
   const body = JSON.stringify(data);
@@ -154,14 +158,13 @@ function isUnderRoots(normalized, roots) {
 }
 
 /**
- * Normalize and guard a remote path.
+ * Normalize a remote path. Like Android Studio Device File Explorer:
+ * any absolute path is allowed; the device enforces permissions.
  * @param {string} input
- * @param {{ write?: boolean, force?: boolean }} [opts]
- *   - write: push/mkdir/rm/move/copy/rename — defaults to WRITE_ROOTS only
- *   - force: allow write under any ROOTS (system APK deploy via forcePush / push-system)
- *   - read (default): list/stat/pull under all ROOTS
+ * @param {{ write?: boolean, force?: boolean }} [opts]  force kept for API compat
  */
 function normalizeRemotePath(input, opts = {}) {
+  void opts;
   let p = String(input || "").trim().replace(/\\/g, "/");
   if (!p) p = "/sdcard";
   if (!p.startsWith("/")) p = `/${p}`;
@@ -176,20 +179,7 @@ function normalizeRemotePath(input, opts = {}) {
     if (seg.includes("\0")) throw new Error("非法路径");
     parts.push(seg);
   }
-  const normalized = `/${parts.join("/")}`;
-  const write = Boolean(opts.write);
-  const force = Boolean(opts.force);
-  const allowedRoots = write && !force ? WRITE_ROOTS : ROOTS;
-  const allowed = isUnderRoots(normalized, allowedRoots);
-  if (!allowed) {
-    if (write && !force && isUnderRoots(normalized, ROOTS)) {
-      throw new Error(
-        `写入仅允许：${WRITE_ROOTS.join("、")}；系统路径需 forcePush=true 或 POST /install/push-system`
-      );
-    }
-    throw new Error(`仅允许访问：${ROOTS.join("、")}`);
-  }
-  return normalized === "/" ? "/sdcard" : normalized;
+  return parts.length ? `/${parts.join("/")}` : "/";
 }
 
 function basenameRemote(remotePath) {
@@ -441,7 +431,15 @@ async function listDir(serial, remotePath) {
 
 async function deletePath(serial, remotePath) {
   const target = normalizeRemotePath(remotePath, { write: true });
-  if (WRITE_ROOTS.includes(target) || ROOTS.includes(target)) throw new Error("不能删除根目录");
+  if (
+    target === "/" ||
+    target === "/sdcard" ||
+    target === "/storage/emulated/0" ||
+    target === "/data" ||
+    target === "/system"
+  ) {
+    throw new Error("不能删除根目录");
+  }
   await adbSerial(serial, ["shell", `rm -rf -- ${shellQuote(target)}`], { timeout: 60000 });
   return { ok: true, path: target };
 }
@@ -455,7 +453,9 @@ async function mkdirPath(serial, remotePath) {
 async function movePath(serial, fromPath, toPath) {
   const from = normalizeRemotePath(fromPath, { write: true });
   const to = normalizeRemotePath(toPath, { write: true });
-  if (WRITE_ROOTS.includes(from) || ROOTS.includes(from)) throw new Error("不能移动根目录");
+  if (from === "/" || from === "/sdcard" || from === "/data" || from === "/system") {
+    throw new Error("不能移动根目录");
+  }
   await adbSerial(serial, ["shell", `mv -- ${shellQuote(from)} ${shellQuote(to)}`], { timeout: 60000 });
   return { ok: true, from, to };
 }
@@ -471,11 +471,13 @@ async function copyPath(serial, fromPath, toPath) {
 
 async function renamePath(serial, fromPath, newName) {
   const from = normalizeRemotePath(fromPath, { write: true });
-  if (WRITE_ROOTS.includes(from) || ROOTS.includes(from)) throw new Error("不能重命名根目录");
-  const base = from.slice(0, from.lastIndexOf("/")) || "/sdcard";
+  if (from === "/" || from === "/sdcard" || from === "/data" || from === "/system") {
+    throw new Error("不能重命名根目录");
+  }
+  const base = from === "/" ? "/" : from.slice(0, from.lastIndexOf("/")) || "/";
   const name = path.basename(String(newName || "").trim()).replace(/[\\/]/g, "");
   if (!name) throw new Error("新名称无效");
-  const to = normalizeRemotePath(`${base}/${name}`, { write: true });
+  const to = normalizeRemotePath(base === "/" ? `/${name}` : `${base}/${name}`, { write: true });
   return movePath(serial, from, to);
 }
 
@@ -565,13 +567,53 @@ async function listApps(serial, kind = "all") {
     if (kind === "all") isSystem = !thirdSet.has(packageName);
     apps.push({
       packageName,
+      label: "",
       apkPath,
       isSystem,
       kind: isSystem ? "system" : "third",
     });
   }
-  apps.sort((a, b) => a.packageName.localeCompare(b.packageName));
+  const labels = await loadAppLabels(serial);
+  for (const app of apps) {
+    app.label = labels.get(app.packageName) || "";
+  }
+  apps.sort((a, b) => {
+    const la = (a.label || a.packageName).toLowerCase();
+    const lb = (b.label || b.packageName).toLowerCase();
+    return la.localeCompare(lb, "zh");
+  });
   return apps;
+}
+
+async function loadAppLabels(serial) {
+  const map = new Map();
+  try {
+    const { stdout } = await adbSerial(serial, ["shell", "dumpsys", "package"], {
+      timeout: 120000,
+      maxBuffer: 48 * 1024 * 1024,
+    });
+    let current = "";
+    for (const line of String(stdout || "").split(/\r?\n/)) {
+      const pkg = line.match(/^\s*Package\s+\[([^\]]+)\]/);
+      if (pkg) {
+        current = pkg[1].trim();
+        continue;
+      }
+      if (!current) continue;
+      const label =
+        (line.match(/applicationLabel=(.+)$/) ||
+          line.match(/nonLocalizedLabel=(.+)$/) ||
+          line.match(/appLabel=(.+)$/) ||
+          [])[1];
+      if (label) {
+        const cleaned = String(label).trim().replace(/^"|"$/g, "");
+        if (cleaned && cleaned !== "null" && !map.has(current)) map.set(current, cleaned);
+      }
+    }
+  } catch {
+    /* labels optional */
+  }
+  return map;
 }
 
 async function appAction(serial, packageName, action) {
@@ -738,7 +780,7 @@ async function analyzeLocalApk(filePath, filename) {
       filename,
       tool: "",
       note:
-        "本机未找到 aapt/aapt2，包名/权限可能缺失；签名信息仍尽量解析（需 keytool 或 apksigner）。安装 Android build-tools 后可解析包名/权限。",
+        "本机未找到 aapt/aapt2，包名/权限可能缺失；签名仍会尽量用 keytool/openssl/apksigner 解析。安装 Android build-tools 后可解析包名/权限。",
       size,
       signing,
       signatures: signing.signers || [],
@@ -889,6 +931,116 @@ async function listApkMetaInfSignerEntries(filePath) {
   }
 }
 
+function whichSync(bin) {
+  const pathEnv = String(process.env.PATH || "");
+  const sep = process.platform === "win32" ? ";" : ":";
+  const exts = process.platform === "win32" ? [".exe", ".bat", ".cmd", ""] : [""];
+  for (const dir of pathEnv.split(sep)) {
+    if (!dir) continue;
+    for (const ext of exts) {
+      const full = path.join(dir, bin + ext);
+      try {
+        if (fs.existsSync(full)) return full;
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return "";
+}
+
+function resolveTool(name) {
+  const direct = whichSync(name);
+  if (direct) return direct;
+  if (name === "keytool" || name === "jarsigner") {
+    const home = process.env.JAVA_HOME || process.env.JDK_HOME || "";
+    if (home) {
+      const cand = path.join(home, "bin", process.platform === "win32" ? `${name}.exe` : name);
+      if (fs.existsSync(cand)) return cand;
+    }
+    for (const root of ["/usr/lib/jvm", "/Library/Java/JavaVirtualMachines"]) {
+      try {
+        if (!fs.existsSync(root)) continue;
+        for (const ent of fs.readdirSync(root)) {
+          const cand = path.join(root, ent, "bin", name);
+          const candHome = path.join(root, ent, "Contents", "Home", "bin", name);
+          if (fs.existsSync(cand)) return cand;
+          if (fs.existsSync(candHome)) return candHome;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  if (name === "apksigner") {
+    const sdk =
+      process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT || process.env.ANDROID_SDK || "";
+    const roots = [sdk, path.join(os.homedir(), "Library/Android/sdk"), path.join(os.homedir(), "Android/Sdk")].filter(
+      Boolean
+    );
+    for (const root of roots) {
+      const bt = path.join(root, "build-tools");
+      try {
+        if (!fs.existsSync(bt)) continue;
+        const versions = fs.readdirSync(bt).sort().reverse();
+        for (const ver of versions) {
+          const cand = path.join(bt, ver, process.platform === "win32" ? "apksigner.bat" : "apksigner");
+          if (fs.existsSync(cand)) return cand;
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }
+  return name; // fall back to PATH resolution by execFile
+}
+
+function parseOpensslCertText(text) {
+  const subject = (String(text).match(/subject\s*=\s*(.+)/i) || [])[1]?.trim() || "";
+  const issuer = (String(text).match(/issuer\s*=\s*(.+)/i) || [])[1]?.trim() || "";
+  const sha1 = (String(text).match(/sha1\s+Fingerprint\s*=\s*([0-9A-Fa-f:]+)/i) || [])[1] || "";
+  const sha256 = (String(text).match(/sha256\s+Fingerprint\s*=\s*([0-9A-Fa-f:]+)/i) || [])[1] || "";
+  const notBefore = (String(text).match(/notBefore\s*=\s*(.+)/i) || [])[1]?.trim() || "";
+  const notAfter = (String(text).match(/notAfter\s*=\s*(.+)/i) || [])[1]?.trim() || "";
+  const owner = subject.replace(/,\s*/g, ", ");
+  return {
+    owner,
+    cn: parseDnField(owner, "CN") || parseDnField(subject.replace(/\s*=\s*/g, "="), "CN"),
+    issuer: issuer.replace(/,\s*/g, ", "),
+    serial: "",
+    valid: [notBefore, notAfter].filter(Boolean).join(" → "),
+    sha1: formatFingerprint(sha1),
+    sha256: formatFingerprint(sha256),
+    md5: "",
+    sigAlg: "",
+  };
+}
+
+async function analyzeCertWithOpenssl(certPath) {
+  const openssl = resolveTool("openssl");
+  const { stdout: pem } = await execFileAsync(
+    openssl,
+    ["pkcs7", "-inform", "DER", "-in", certPath, "-print_certs"],
+    { timeout: 20000, maxBuffer: 2 * 1024 * 1024 }
+  );
+  const tmpPem = `${certPath}.pem`;
+  fs.writeFileSync(tmpPem, pem || "");
+  try {
+    const { stdout } = await execFileAsync(
+      openssl,
+      ["x509", "-in", tmpPem, "-noout", "-subject", "-issuer", "-dates", "-fingerprint", "-sha1", "-fingerprint", "-sha256"],
+      { timeout: 20000, maxBuffer: 2 * 1024 * 1024 }
+    );
+    return parseOpensslCertText(stdout || "");
+  } finally {
+    try {
+      fs.unlinkSync(tmpPem);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 async function analyzeApkSigning(filePath) {
   const result = {
     ok: true,
@@ -896,20 +1048,47 @@ async function analyzeApkSigning(filePath) {
     schemes: [],
     signers: [],
     note: "",
+    toolsFound: {},
   };
+
+  const apksigner = resolveTool("apksigner");
+  const keytool = resolveTool("keytool");
+  const openssl = resolveTool("openssl");
+  result.toolsFound = {
+    apksigner: Boolean(whichSync("apksigner") || (apksigner && apksigner !== "apksigner" && fs.existsSync(apksigner))),
+    keytool: Boolean(whichSync("keytool") || (keytool && keytool !== "keytool" && fs.existsSync(keytool))),
+    openssl: Boolean(whichSync("openssl") || (openssl && openssl !== "openssl" && fs.existsSync(openssl))),
+  };
+  // also mark true if bare name works via PATH in this environment
+  for (const [name, bin] of [
+    ["apksigner", apksigner],
+    ["keytool", keytool],
+    ["openssl", openssl],
+  ]) {
+    if (result.toolsFound[name]) continue;
+    try {
+      await execFileAsync(bin, name === "openssl" ? ["version"] : ["-help"], { timeout: 5000 });
+      result.toolsFound[name] = true;
+    } catch (err) {
+      // keytool -help exits 0 usually; apksigner may exit non-zero but still exists
+      if (err && (err.stdout || err.stderr) && /Usage|Key and Certificate|apk file/i.test(`${err.stdout}${err.stderr}`)) {
+        result.toolsFound[name] = true;
+      }
+    }
+  }
 
   // Prefer apksigner (v1–v4)
   try {
-    const { stdout, stderr } = await execFileAsync(
-      "apksigner",
-      ["verify", "--print-certs", filePath],
-      { timeout: 45000, maxBuffer: 4 * 1024 * 1024 }
-    );
+    const { stdout, stderr } = await execFileAsync(apksigner, ["verify", "--print-certs", filePath], {
+      timeout: 45000,
+      maxBuffer: 4 * 1024 * 1024,
+    });
     const parsed = parseApksignerCertText(`${stdout || ""}\n${stderr || ""}`);
     if (parsed.signers.length) {
       result.tool = "apksigner";
       result.schemes = parsed.schemes;
       result.signers = parsed.signers;
+      result.toolsFound.apksigner = true;
     }
   } catch {
     /* optional */
@@ -918,13 +1097,14 @@ async function analyzeApkSigning(filePath) {
   // keytool -jarfile (v1 / jarsigner)
   if (!result.signers.length) {
     try {
-      const { stdout } = await execFileAsync("keytool", ["-printcert", "-jarfile", filePath], {
+      const { stdout } = await execFileAsync(keytool, ["-printcert", "-jarfile", filePath], {
         timeout: 45000,
         maxBuffer: 4 * 1024 * 1024,
       });
       const parsed = parseKeytoolCertText(stdout || "");
       if (parsed.owner || parsed.sha1 || parsed.sha256) {
         result.tool = "keytool";
+        result.toolsFound.keytool = true;
         result.schemes = result.schemes.length ? result.schemes : ["v1"];
         result.signers = [
           {
@@ -951,44 +1131,47 @@ async function analyzeApkSigning(filePath) {
           const entry = entries[i];
           const alias = aliases[i];
           const certPath = path.join(tmpDir, path.basename(entry));
+          let parsed = null;
           try {
             await execFileAsync("unzip", ["-o", "-j", "-d", tmpDir, filePath, entry], {
               timeout: 20000,
               maxBuffer: 4 * 1024 * 1024,
             });
-            const { stdout } = await execFileAsync("keytool", ["-printcert", "-file", certPath], {
-              timeout: 20000,
-              maxBuffer: 2 * 1024 * 1024,
-            });
-            const parsed = parseKeytoolCertText(stdout || "");
-            result.signers.push({
-              index: i + 1,
-              alias: alias && alias.toUpperCase() !== "CERT" ? alias : "",
-              v1Entry: alias,
-              ...parsed,
-              source: "meta-inf",
-            });
+            try {
+              const { stdout } = await execFileAsync(keytool, ["-printcert", "-file", certPath], {
+                timeout: 20000,
+                maxBuffer: 2 * 1024 * 1024,
+              });
+              parsed = parseKeytoolCertText(stdout || "");
+              result.toolsFound.keytool = true;
+            } catch {
+              parsed = await analyzeCertWithOpenssl(certPath);
+              result.toolsFound.openssl = true;
+            }
           } catch {
-            result.signers.push({
-              index: i + 1,
-              alias: alias && alias.toUpperCase() !== "CERT" ? alias : "",
-              v1Entry: alias,
-              owner: "",
-              cn: "",
-              issuer: "",
-              serial: "",
-              valid: "",
-              sha1: "",
-              sha256: "",
-              md5: "",
-              sigAlg: "",
-              source: "meta-inf",
-            });
+            parsed = null;
           }
+          result.signers.push({
+            index: i + 1,
+            alias: alias && alias.toUpperCase() !== "CERT" ? alias : "",
+            v1Entry: alias,
+            owner: parsed?.owner || "",
+            cn: parsed?.cn || "",
+            issuer: parsed?.issuer || "",
+            serial: parsed?.serial || "",
+            valid: parsed?.valid || "",
+            sha1: parsed?.sha1 || "",
+            sha256: parsed?.sha256 || "",
+            md5: parsed?.md5 || "",
+            sigAlg: parsed?.sigAlg || "",
+            source: parsed ? "meta-inf" : "meta-inf-empty",
+          });
         }
-        if (result.signers.length) {
-          result.tool = result.tool || "meta-inf+keytool";
+        if (result.signers.some((s) => s.sha1 || s.sha256 || s.owner)) {
+          result.tool = result.tool || (result.toolsFound.keytool ? "meta-inf+keytool" : "meta-inf+openssl");
           if (!result.schemes.length) result.schemes = ["v1"];
+        } else {
+          result.signers = [];
         }
       } finally {
         try {
@@ -998,7 +1181,6 @@ async function analyzeApkSigning(filePath) {
         }
       }
     } else {
-      // Attach alias hints from META-INF names when useful
       for (let i = 0; i < result.signers.length; i++) {
         const alias = aliases[i] || aliases[0] || "";
         if (!result.signers[i].alias && alias && alias.toUpperCase() !== "CERT") {
@@ -1011,8 +1193,12 @@ async function analyzeApkSigning(filePath) {
 
   if (!result.signers.length) {
     result.ok = false;
-    result.note =
-      "未能解析签名。请确认本机有 keytool（JDK）或 Android build-tools 的 apksigner；仅 v2/v3 签名且无 v1 时需要 apksigner。";
+    const found = Object.entries(result.toolsFound)
+      .filter(([, v]) => v)
+      .map(([k]) => k);
+    result.note = found.length
+      ? `未能解析签名（已检测到 ${found.join("/")}）。该 APK 可能只有 v2/v3 签名且无 v1 块，请安装 Android build-tools 中的 apksigner。`
+      : "未能解析签名：本机未找到 keytool / openssl / apksigner。请安装 JDK，或把 Android SDK build-tools 加入 PATH。";
   } else {
     result.note =
       "别名优先取自 META-INF 签名块文件名（jarsigner 别名）；Android 常见为 CERT。证书主体见 CN/Owner。";
@@ -2195,7 +2381,7 @@ async function handleApi(req, res, url) {
           roots: ROOTS,
           writeRoots: WRITE_ROOTS,
           note:
-            "写入默认限于 writeRoots；系统 APK 路径推送请用 forcePush 或 POST /install/push-system",
+            "文件浏览类似 Device File Explorer：可读任意路径（受设备权限限制）。写入同样透传 adb；系统 APK 覆盖请用 POST /install/push-system",
         },
         origin
       );
