@@ -35,7 +35,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.6.2";
+const BRIDGE_VERSION = "0.6.3";
 
 /** Preferred quick roots shown in UI (reads are not limited to these) */
 const ROOTS = [
@@ -44,6 +44,7 @@ const ROOTS = [
   "/storage/emulated/0",
   "/data",
   "/data/local/tmp",
+  "/data/data",
   "/data/app",
   "/system",
   "/system/app",
@@ -166,7 +167,7 @@ function isUnderRoots(normalized, roots) {
 function normalizeRemotePath(input, opts = {}) {
   void opts;
   let p = String(input || "").trim().replace(/\\/g, "/");
-  if (!p) p = "/sdcard";
+  if (!p) p = "/";
   if (!p.startsWith("/")) p = `/${p}`;
   const parts = [];
   for (const seg of p.split("/")) {
@@ -256,10 +257,43 @@ async function checkAdb() {
   try {
     const { stdout } = await adb(["version"], { timeout: 8000 });
     const line = stdout.split(/\r?\n/).find(Boolean) || stdout.trim();
-    return { ok: true, version: line.trim() };
+    return { ok: true, version: line.trim(), path: whichSync("adb") || "adb" };
   } catch (err) {
-    return { ok: false, error: err.message || String(err) };
+    return {
+      ok: false,
+      error: err.message || String(err),
+      setup:
+        "请安装 Android platform-tools，确保终端可执行 adb。macOS: brew install android-platform-tools；Windows: 安装 SDK Platform-Tools 并加入 PATH；Linux: 发行版包或官网 zip。",
+    };
   }
+}
+
+function probeHostTools() {
+  const names = ["adb", "keytool", "openssl", "apksigner", "aapt", "aapt2", "jarsigner"];
+  const tools = {};
+  for (const name of names) {
+    const resolved = resolveTool(name);
+    const which = whichSync(name);
+    const ok = Boolean(which || (resolved && resolved !== name && fs.existsSync(resolved)));
+    tools[name] = {
+      ok,
+      path: which || (ok ? resolved : "") || "",
+    };
+  }
+  const signingOk = tools.keytool.ok || tools.apksigner.ok || tools.openssl.ok;
+  return {
+    tools,
+    signingOk,
+    adbOk: tools.adb.ok,
+    setup: {
+      adb: tools.adb.ok
+        ? ""
+        : "未找到 adb：安装 Android SDK Platform-Tools，并把 platform-tools 目录加入 PATH。macOS 可用 brew install android-platform-tools。",
+      signing: signingOk
+        ? ""
+        : "未找到签名工具：安装 JDK（提供 keytool），或安装 Android build-tools（提供 apksigner）并加入 PATH。也可安装 openssl 作为证书解析回退。",
+    },
+  };
 }
 
 async function listDevices() {
@@ -408,25 +442,209 @@ function parseLsLine(line) {
 
 async function listDir(serial, remotePath) {
   const dir = normalizeRemotePath(remotePath);
-  const { stdout, stderr } = await adbSerial(serial, ["shell", `ls -la ${shellQuote(dir)}`], {
-    timeout: 20000,
-  });
-  const text = stdout || stderr || "";
-  if (/No such file|Permission denied|Not a directory/i.test(text) && !text.includes("\n")) {
-    throw new Error(text.trim());
+
+  // Like Android Studio / Adbrowser: /data/data without root → virtual package list
+  if (dir === "/data/data" || dir === "/data/user/0") {
+    try {
+      const normal = await tryListDirShell(serial, dir);
+      if (normal.entries.length) {
+        return { path: dir, entries: normal.entries, access: "shell" };
+      }
+    } catch {
+      /* fall through to virtual */
+    }
+    return listDataDataVirtual(serial, dir);
+  }
+
+  const attempts = [];
+  try {
+    const normal = await tryListDirShell(serial, dir);
+    return { path: dir, entries: normal.entries, access: "shell" };
+  } catch (err) {
+    attempts.push(`shell: ${err.message || err}`);
+  }
+
+  try {
+    const rooted = await tryListDirShell(serial, dir, { su: true });
+    return { path: dir, entries: rooted.entries, access: "su", note: "已通过 su 读取（设备已 root）" };
+  } catch (err) {
+    attempts.push(`su: ${err.message || err}`);
+  }
+
+  const pkg = dataDataPackage(dir);
+  if (pkg) {
+    try {
+      const runAs = await tryListDirShell(serial, dir, { runAs: pkg });
+      return {
+        path: dir,
+        entries: runAs.entries,
+        access: `run-as:${pkg}`,
+        note: `已通过 run-as ${pkg} 读取（仅 debuggable 应用）`,
+      };
+    } catch (err) {
+      attempts.push(`run-as: ${err.message || err}`);
+    }
+  }
+
+  const hint =
+    dir.startsWith("/data/data")
+      ? "无 root 时 /data/data 仅能进入 debuggable 应用（run-as）。可先打开 /data/data 查看包名列表。"
+      : "该目录受系统权限保护。可尝试 /sdcard、/data/local/tmp，或使用已 root 设备 / 模拟器。参考开源方案 Adbrowser（run-as/su 回退）。";
+  throw new Error(`无法列出 ${dir}。${hint}\n尝试：${attempts.join(" | ")}`);
+}
+
+function dataDataPackage(remotePath) {
+  const m = String(remotePath || "").match(/^\/data\/(?:data|user\/\d+)\/([^/]+)/);
+  return m ? m[1] : "";
+}
+
+async function tryListDirShell(serial, dir, { su = false, runAs = "" } = {}) {
+  let cmd = `ls -la ${shellQuote(dir)}`;
+  if (runAs) {
+    cmd = `run-as ${shellQuote(runAs)} ls -la ${shellQuote(dir)}`;
+  } else if (su) {
+    cmd = `su -c ${shellQuote(`ls -la ${dir}`)}`;
+  }
+  const { stdout, stderr } = await adbSerial(serial, ["shell", cmd], { timeout: 25000 });
+  const text = `${stdout || ""}\n${stderr || ""}`;
+  if (/Permission denied|Permission Denied/i.test(text) && !/\n[-dl]/m.test(text)) {
+    throw new Error("Permission denied");
+  }
+  if (/No such file|Not a directory/i.test(text) && !/\n[-dl]/m.test(text)) {
+    throw new Error(text.trim().split(/\r?\n/)[0] || "No such file");
+  }
+  if (/run-as:\s*package not debuggable|not debuggable|unknown package/i.test(text)) {
+    throw new Error(text.trim().split(/\r?\n/)[0] || "run-as failed");
+  }
+  if (/su:\s*not found|su: inaccessible|Can't find/i.test(text) && su && !/\n[-dl]/m.test(text)) {
+    throw new Error("su unavailable");
   }
   const entries = [];
   for (const line of text.split(/\r?\n/)) {
     if (!line || /^total\s+/i.test(line)) continue;
+    if (/Permission denied|run-as:|su:/i.test(line) && !/^[-dlcbps]/.test(line.trim())) continue;
     const item = parseLsLine(line);
     if (item) entries.push(item);
   }
+  if (!entries.length && /Permission denied/i.test(text)) throw new Error("Permission denied");
   entries.sort((a, b) => {
     if (a.type === "dir" && b.type !== "dir") return -1;
     if (a.type !== "dir" && b.type === "dir") return 1;
     return a.name.localeCompare(b.name);
   });
-  return { path: dir, entries };
+  return { entries };
+}
+
+async function listDataDataVirtual(serial, dir) {
+  const { stdout } = await adbSerial(serial, ["shell", "pm", "list", "packages"], { timeout: 60000 });
+  const entries = [];
+  for (const line of stdout.split(/\r?\n/)) {
+    const m = line.match(/^package:(.+)$/);
+    if (!m) continue;
+    entries.push({
+      name: m[1].trim(),
+      type: "dir",
+      mode: "virtual",
+      size: 0,
+      date: "",
+      virtual: true,
+    });
+  }
+  entries.sort((a, b) => a.name.localeCompare(b.name));
+  return {
+    path: dir,
+    entries,
+    access: "packages-virtual",
+    note: "无 root：按已安装包名虚拟列出。进入后会尝试 run-as（仅 debug 包可读，与 Adbrowser / Android Studio 相同）。",
+  };
+}
+
+async function probeFsRoots(serial) {
+  const candidates = [
+    "/",
+    "/sdcard",
+    "/storage/emulated/0",
+    "/data",
+    "/data/local/tmp",
+    "/data/data",
+    "/data/app",
+    "/system",
+    "/system/app",
+    "/product",
+    "/vendor",
+    "/mnt",
+  ];
+  const roots = [];
+  for (const pathValue of candidates) {
+    try {
+      const result = await listDir(serial, pathValue);
+      roots.push({
+        path: pathValue,
+        ok: true,
+        count: (result.entries || []).length,
+        access: result.access || "shell",
+        note: result.note || "",
+      });
+    } catch (err) {
+      roots.push({
+        path: pathValue,
+        ok: false,
+        count: 0,
+        access: "",
+        note: String(err.message || err).split(/\r?\n/)[0],
+      });
+    }
+  }
+  return { ok: true, roots };
+}
+
+async function downloadFile(serial, remotePath) {
+  const target = normalizeRemotePath(remotePath);
+  const local = tempName("dl", basenameRemote(target));
+  try {
+    await adbSerial(serial, ["pull", target, local], { timeout: 300000 });
+  } catch (pullErr) {
+    const pkg = dataDataPackage(target);
+    let recovered = false;
+    if (pkg) {
+      try {
+        // exec-out keeps binary intact (shell can mangle bytes)
+        const { stdout } = await adbSerial(
+          serial,
+          ["exec-out", "run-as", pkg, "cat", target],
+          { timeout: 180000, encoding: "buffer", maxBuffer: 64 * 1024 * 1024 }
+        );
+        fs.writeFileSync(local, stdout || Buffer.alloc(0));
+        recovered = true;
+      } catch {
+        /* try su */
+      }
+    }
+    if (!recovered) {
+      try {
+        const tmpRemote = "/data/local/tmp/.adb-bridge-dl";
+        await adbSerial(serial, ["shell", `su -c ${shellQuote(`cp ${target} ${tmpRemote}`)}`], {
+          timeout: 60000,
+        });
+        await adbSerial(serial, ["pull", tmpRemote, local], { timeout: 300000 });
+        try {
+          await adbSerial(serial, ["shell", `rm -f -- ${shellQuote(tmpRemote)}`], { timeout: 10000 });
+        } catch {
+          /* ignore */
+        }
+        recovered = true;
+      } catch {
+        throw pullErr;
+      }
+    }
+  }
+  const data = fs.readFileSync(local);
+  try {
+    fs.unlinkSync(local);
+  } catch {
+    /* ignore */
+  }
+  return { filename: basenameRemote(target), data };
 }
 
 async function deletePath(serial, remotePath) {
@@ -501,19 +719,6 @@ async function uploadFile(serial, dir, filename, buffer, forcePush = false) {
     }
   }
   return { ok: true, path: remote, size: buffer.length, forcePush: Boolean(forcePush) };
-}
-
-async function downloadFile(serial, remotePath) {
-  const target = normalizeRemotePath(remotePath);
-  const local = tempName("dl", basenameRemote(target));
-  await adbSerial(serial, ["pull", target, local], { timeout: 300000 });
-  const data = fs.readFileSync(local);
-  try {
-    fs.unlinkSync(local);
-  } catch {
-    /* ignore */
-  }
-  return { filename: basenameRemote(target), data };
 }
 
 function storeUpload(filename, buffer) {
@@ -2337,6 +2542,7 @@ async function handleApi(req, res, url) {
   try {
     if (url.pathname === "/health" && req.method === "GET") {
       const adbInfo = await checkAdb();
+      const hostTools = probeHostTools();
       let devices = [];
       if (adbInfo.ok) {
         try {
@@ -2357,6 +2563,10 @@ async function handleApi(req, res, url) {
           defaultTokenHint: "devtools-adb",
           features: [
             "fs",
+            "fs-roots",
+            "fs-run-as",
+            "fs-su",
+            "fs-data-virtual",
             "install",
             "install-push-system",
             "apps",
@@ -2372,16 +2582,20 @@ async function handleApi(req, res, url) {
             "device-control",
             "apk-info",
             "apk-signing",
+            "host-tools",
             "proxy",
             "forward",
             "developer",
           ],
           adb: adbInfo,
+          tools: hostTools.tools,
+          signingOk: hostTools.signingOk,
+          setup: hostTools.setup,
           deviceCount: devices.length,
           roots: ROOTS,
           writeRoots: WRITE_ROOTS,
           note:
-            "文件浏览类似 Device File Explorer：可读任意路径（受设备权限限制）。写入同样透传 adb；系统 APK 覆盖请用 POST /install/push-system",
+            "文件浏览类似 Device File Explorer / Adbrowser：默认从 / 浏览；无权限时尝试 su / run-as；/data/data 无 root 时按包名虚拟列出。写入同样透传 adb；系统 APK 覆盖请用 POST /install/push-system",
         },
         origin
       );
@@ -2408,9 +2622,15 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    if (url.pathname === "/fs/roots" && req.method === "GET") {
+      const serial = url.searchParams.get("serial") || "";
+      sendJson(res, 200, await probeFsRoots(serial), origin);
+      return;
+    }
+
     if (url.pathname === "/fs/list" && req.method === "GET") {
       const serial = url.searchParams.get("serial") || "";
-      const remotePath = url.searchParams.get("path") || "/sdcard";
+      const remotePath = url.searchParams.get("path") || "/";
       const result = await listDir(serial, remotePath);
       sendJson(res, 200, { ok: true, ...result }, origin);
       return;

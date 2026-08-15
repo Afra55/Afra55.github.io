@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260815c" />
+  <link rel="stylesheet" href="./style.css?v=20260815d" />
   <link rel="stylesheet" href="./workspace-nav.css?v=20260814f" />
 </head>
 <body>
@@ -1415,7 +1415,16 @@ hello@world.org</textarea>
           <label for="adb-token">Token</label>
           <input id="adb-token" class="mono" type="text" value="devtools-adb" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件浏览类似 Device File Explorer，可读任意路径（受设备权限限制）。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.2），请解压到同一文件夹后运行启动脚本。</p>
+        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Device File Explorer / Adbrowser）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.3），请解压到同一文件夹后运行启动脚本。</p>
+        <div class="adb-guide" id="adb-setup-guide">
+          <strong>本机依赖怎么配？</strong>
+          <ol>
+            <li><strong>ADB（必装）</strong>：安装 Android SDK <span class="mono">platform-tools</span>，终端能跑 <span class="mono">adb devices</span>。macOS：<span class="mono">brew install android-platform-tools</span>；Windows：从 Google 下载 Platform-Tools 并把目录加入 PATH；Linux：发行版包或官网 zip。</li>
+            <li><strong>本机桥</strong>：下载上方完整 ZIP → 解压（同目录保留 <span class="mono">server.js</span>）→ 运行启动脚本 → 点「连接本机桥」。桥已启动但提示找不到 adb 时，先修好 PATH 再重启桥。</li>
+            <li><strong>APK 签名分析（可选）</strong>：装 JDK（提供 <span class="mono">keytool</span>），或装 Android <span class="mono">build-tools</span>（提供 <span class="mono">apksigner</span>）并加入 PATH；也可装 <span class="mono">openssl</span> 作证书回退。</li>
+          </ol>
+          <p class="hint tight" id="adb-tools-probe" style="margin:0.55rem 0 0">连接桥后会显示本机工具探测结果。</p>
+        </div>
         <p class="error" id="adb-error" hidden></p>
 
         <div class="adb-layout" id="adb-workspace" hidden>
@@ -1493,7 +1502,7 @@ hello@world.org</textarea>
               <nav class="adb-fs-crumbs" id="adb-fs-crumbs" aria-label="路径面包屑"></nav>
               <div class="adb-path-row">
                 <button type="button" class="ghost-btn" id="adb-fs-up" title="上级目录">上级</button>
-                <input id="adb-fs-path" class="mono" type="text" value="/sdcard" spellcheck="false" autocomplete="off" />
+                <input id="adb-fs-path" class="mono" type="text" value="/" spellcheck="false" autocomplete="off" />
                 <button type="button" class="secondary-btn" id="adb-fs-go">打开</button>
                 <button type="button" class="ghost-btn" id="adb-fs-refresh">刷新</button>
               </div>
@@ -1506,14 +1515,16 @@ hello@world.org</textarea>
                 <button type="button" class="ghost-btn" id="adb-fs-home">/sdcard</button>
                 <button type="button" class="ghost-btn" id="adb-fs-download-dir">Download</button>
                 <button type="button" class="ghost-btn" data-adb-open="/data">/data</button>
+                <button type="button" class="ghost-btn" data-adb-open="/data/data">/data/data</button>
                 <button type="button" class="ghost-btn" data-adb-open="/data/local/tmp">/data/local/tmp</button>
                 <button type="button" class="ghost-btn" data-adb-open="/system">/system</button>
                 <button type="button" class="ghost-btn" data-adb-open="/system/app">/system/app</button>
                 <button type="button" class="ghost-btn" data-adb-open="/data/app">/data/app</button>
               </div>
               <p class="hint tight" id="adb-fs-clip-meta" hidden></p>
+              <p class="hint tight" id="adb-fs-access" hidden></p>
               <div class="adb-fs-list" id="adb-fs-list" aria-live="polite"></div>
-              <p class="hint" id="adb-fs-hint">支持打开、下载、删除、重命名、剪切/复制后粘贴。删除前会确认。无权限目录会提示失败。</p>
+              <p class="hint" id="adb-fs-hint">默认从 / 浏览全盘。无权限目录会尝试 su / run-as；/data/data 无 root 时按已安装包名虚拟列出（仅 debuggable 包可读内部文件）。支持打开、下载、删除、重命名、剪切/复制后粘贴。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="install" hidden>
@@ -1528,6 +1539,15 @@ hello@world.org</textarea>
                 <label class="flag"><input type="checkbox" id="adb-apk-downgrade" /> 允许降级 (-d)</label>
               </div>
               <p class="hint" id="adb-apk-debug-hint">普通/调试包：勾选覆盖；装更低版本再勾「允许降级」。签名不一致通常要先卸载。分析会尽量给出别名/CN/SHA1/SHA256（需本机 keytool 或 apksigner）。系统预装应用：分析后填包名，点「推送到系统路径」会按包名查找现有 APK 路径并同名覆盖。</p>
+              <div class="adb-guide" id="adb-signing-guide" hidden>
+                <strong>签名工具未就绪？</strong>
+                <ul>
+                  <li>安装 JDK 17+，确认 <span class="mono">keytool -help</span> 可用（或设置 <span class="mono">JAVA_HOME</span>）。</li>
+                  <li>或安装 Android SDK build-tools，把含 <span class="mono">apksigner</span> 的目录加入 PATH。</li>
+                  <li>可选：安装 <span class="mono">openssl</span>，用于解析 META-INF 证书。</li>
+                  <li>配好后<strong>重启本机 ADB 桥</strong>再点「分析 APK 信息」。</li>
+                </ul>
+              </div>
               <p class="hint" id="adb-apk-name">尚未选择 APK</p>
               <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
                 <label for="adb-apk-pkg">包名</label>
@@ -2174,7 +2194,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260815c"></script>
+  <script src="./extra.js?v=20260815d"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>

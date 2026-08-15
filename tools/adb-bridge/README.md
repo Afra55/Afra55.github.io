@@ -41,17 +41,18 @@ node server.js
 1. 打开 Tools →「ADB 工具」
 2. 下载对应系统的完整 ZIP，解压后运行启动脚本（勿只保留脚本、删掉 server.js）
 3. 回到网页点击「连接本机桥」
-## 接口（P0–P3，bridge 0.6.0）
+## 接口（P0–P3，bridge 0.6.3）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/health` | 健康检查（可不带 token） |
+| GET | `/health` | 健康检查（可不带 token；含本机 adb/keytool/apksigner 探测与配置提示） |
 | GET | `/devices` | 设备列表 |
 | GET | `/device/info?serial=` | 设备信息 |
-| GET | `/fs/list?serial=&path=` | 列目录（可读 roots 含 system/app 等） |
+| GET | `/fs/list?serial=&path=` | 列目录（默认 `/`；无权限时 su / run-as；`/data/data` 可虚拟列包名） |
+| GET | `/fs/roots?serial=` | 探测常用根目录是否可读 |
 | POST | `/fs/mkdir` `/fs/delete` `/fs/rename` `/fs/move` `/fs/copy` | 文件操作（默认可写：sdcard / tmp） |
 | POST | `/fs/upload?serial=&path=&name=&forcePush=` | 上传到设备；`forcePush=1` 才可写系统 APK 路径 |
-| GET | `/fs/download?serial=&path=` | 从设备下载 |
+| GET | `/fs/download?serial=&path=` | 从设备下载（pull 失败时尝试 run-as / su） |
 | POST | `/upload?name=` | 上传 APK 到桥临时区 |
 | POST | `/install` | 批量/单设备安装（任务；`allowDowngrade` → `adb install -d`） |
 | POST | `/install/push-system` | 系统/临时区 APK 推送覆盖 `{ serial, uploadId, packageName?, remoteDir? }` |
@@ -78,4 +79,4 @@ node server.js
 
 除 `/health` 外均需请求头：`X-Adb-Token: devtools-adb`  
 
-**路径策略：** 类似 Android Studio Device File Explorer——可读任意绝对路径（受设备权限限制）。写入同样透传 `adb`；系统 APK 覆盖请用 `/install/push-system`。快捷根目录提示：`/`、`/sdcard`、`/data`、`/system` 等。
+**路径策略：** 类似 Android Studio Device File Explorer / [Adbrowser](https://github.com/BetterAndroid/Adbrowser)——默认从 `/` 浏览；无权限时回退 `su` / `run-as`；`/data/data` 无 root 时按已安装包名虚拟列出。写入同样透传 `adb`；系统 APK 覆盖请用 `/install/push-system`。
