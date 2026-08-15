@@ -91,7 +91,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.14-q";
+  const GIF_TOOL_VERSION = "2026.08.15-a";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -8648,6 +8648,9 @@
         installedLine,
         `SDK: min ${data.minSdk || "—"} / target ${data.targetSdk || "—"}`,
         `启动: ${data.launchActivity || "—"}`,
+        "",
+        ...formatApkSigningLines(data),
+        "",
         `权限 (${(data.permissions || []).length}):`,
         ...(data.permissions || []).slice(0, 60),
         "",
@@ -8657,6 +8660,35 @@
         .join("\n");
       if ($("#adb-apk-pkg") && data.packageName) $("#adb-apk-pkg").value = data.packageName;
       toast("APK 信息已解析");
+    }
+
+    function formatApkSigningLines(data) {
+      const signing = data?.signing || {};
+      const signers = data?.signatures || signing.signers || [];
+      const lines = [
+        `签名工具: ${signing.tool || "无"}`,
+        `签名方案: ${(signing.schemes || []).length ? signing.schemes.join(" / ") : "—"}`,
+      ];
+      if (signing.note) lines.push(signing.note);
+      if (!signers.length) {
+        lines.push("签名: 未能解析（需本机 JDK keytool，或 Android build-tools 的 apksigner）");
+        return lines;
+      }
+      signers.forEach((s, idx) => {
+        const n = s.index || idx + 1;
+        lines.push(`签名 #${n}:`);
+        lines.push(`  别名: ${s.alias || s.v1Entry || "—"}`);
+        lines.push(`  CN: ${s.cn || "—"}`);
+        lines.push(`  Owner: ${s.owner || "—"}`);
+        if (s.issuer) lines.push(`  Issuer: ${s.issuer}`);
+        if (s.serial) lines.push(`  Serial: ${s.serial}`);
+        if (s.valid) lines.push(`  Valid: ${s.valid}`);
+        lines.push(`  SHA1: ${s.sha1 || "—"}`);
+        lines.push(`  SHA256: ${s.sha256 || "—"}`);
+        if (s.md5) lines.push(`  MD5: ${s.md5}`);
+        if (s.sigAlg) lines.push(`  算法: ${s.sigAlg}`);
+      });
+      return lines;
     }
 
     async function pushSystemApk() {
