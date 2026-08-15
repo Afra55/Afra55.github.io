@@ -91,7 +91,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.15-e";
+  const GIF_TOOL_VERSION = "2026.08.15-f";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -5089,8 +5089,11 @@
         vsplitScrubHint.textContent = `微调中 · 窗口 ±${half}s（松手回粗调）`;
         return;
       }
-      vsplitScrubHint.textContent =
-        "绿上/橙下 · 重叠收成数字点开选 · 下方芯片可选段 · 上下滑微调";
+      if (vsplitEditIdx >= 0) {
+        vsplitScrubHint.textContent = "编辑中只显示本段绿/橙点 · 退出编辑后恢复全部 · 上下滑微调";
+        return;
+      }
+      vsplitScrubHint.textContent = "绿起点 / 橙终点同行 · 点圆点或芯片进入编辑 · 上下滑微调";
     }
 
     function onVsplitScrubInput() {
@@ -5225,6 +5228,18 @@
 
     function collectVsplitScrubEndpoints() {
       const list = [];
+      // 编辑某段时只暴露该段端点，避免点到被隐藏的其它标记
+      if (vsplitEditIdx >= 0) {
+        const mark = vsplitMarks[vsplitEditIdx];
+        if (!mark) return list;
+        if (mark.start != null) {
+          list.push({ t: Number(mark.start), kind: "start", idx: vsplitEditIdx, draft: false });
+        }
+        if (mark.end != null) {
+          list.push({ t: Number(mark.end), kind: "end", idx: vsplitEditIdx, draft: false });
+        }
+        return list;
+      }
       if (vsplitDraftStart != null) {
         list.push({ t: Number(vsplitDraftStart), kind: "start", idx: -1, draft: true });
       }
@@ -5270,7 +5285,7 @@
       });
       const left = Math.max(8, Math.min(clientX - hitRect.left - 40, hitRect.width - 160));
       vsplitMarkPicker.style.left = `${left}px`;
-      vsplitMarkPicker.style.top = `1.55rem`;
+      vsplitMarkPicker.style.top = `1.1rem`;
       vsplitMarkPicker.hidden = false;
     }
 
@@ -5349,23 +5364,6 @@
       showVsplitMarkPicker(actionable, e.clientX);
     }
 
-    function clusterVsplitScrubEndpoints(endpoints, dur, widthPx, gapPx) {
-      const sorted = [...endpoints].sort((a, b) => a.t - b.t || a.idx - b.idx);
-      const clusters = [];
-      for (const ep of sorted) {
-        const x = (Number(ep.t) / dur) * widthPx;
-        const last = clusters[clusters.length - 1];
-        if (last && Math.abs(x - last.x) < gapPx) {
-          last.items.push(ep);
-          last.x = last.items.reduce((sum, item) => sum + (Number(item.t) / dur) * widthPx, 0) / last.items.length;
-          last.t = last.items.reduce((sum, item) => sum + Number(item.t), 0) / last.items.length;
-        } else {
-          clusters.push({ kind: ep.kind, items: [ep], x, t: Number(ep.t) });
-        }
-      }
-      return clusters;
-    }
-
     function paintVsplitScrubMarks() {
       if (!vsplitScrubMarks) return;
       vsplitScrubMarks.innerHTML = "";
@@ -5378,96 +5376,70 @@
         paintVsplitMarkChips();
         return;
       }
-      const trackW = Math.max(1, vsplitScrubMarks.getBoundingClientRect().width || 1);
-      // ~半个圆点直径：再近就收成簇，避免叠成一团
-      const clusterGapPx = Math.max(12, Math.min(22, trackW * 0.045));
-
       const addDot = (t, kind, opts = {}) => {
         if (t == null || !Number.isFinite(t)) return;
-        const { active = false, idx = -1, editable = false, cluster = null } = opts;
+        const { active = false, idx = -1, editable = false } = opts;
         const dot = document.createElement("button");
         dot.type = "button";
-        const isCluster = Boolean(cluster && cluster.length > 1);
         dot.className =
           `vsplit-scrub-mark is-${kind}` +
           (active ? " is-active" : "") +
-          (editable ? " is-editable" : "") +
-          (isCluster ? " is-cluster" : "");
+          (editable ? " is-editable" : "");
         const pct = Math.max(0, Math.min(100, (Number(t) / dur) * 100));
         dot.style.left = `${pct}%`;
-        if (active) dot.style.zIndex = "6";
-        else if (isCluster) dot.style.zIndex = "3";
-        if (isCluster) {
-          dot.textContent = String(cluster.length);
-          dot.setAttribute(
-            "aria-label",
-            `${kind === "start" ? "起点" : "终点"}重叠 ${cluster.length} 个，点开选择`
-          );
-          dot.title = `重叠 ${cluster.length} 个，点开选择`;
-        } else {
-          const label = kind === "start" ? "起点" : "终点";
-          dot.setAttribute("aria-label", idx >= 0 ? `选中第 ${idx + 1} 段${label}` : label);
-        }
-        if (editable) {
+        if (active) dot.style.zIndex = "5";
+        const label = kind === "start" ? "起点" : "终点";
+        dot.setAttribute("aria-label", idx >= 0 ? `选中第 ${idx + 1} 段${label}` : label);
+        if (editable && idx >= 0) {
           dot.addEventListener("pointerdown", (e) => {
             e.stopPropagation();
           });
           dot.addEventListener("click", (e) => {
             e.preventDefault();
             e.stopPropagation();
-            if (isCluster) {
-              showVsplitMarkPicker(cluster, e.clientX);
-              return;
-            }
-            const resolved = resolveVsplitMarkTap(e.clientX);
-            const actionable = resolved
-              ? resolved.near.filter((ep) => !ep.draft && ep.idx >= 0)
-              : [];
-            if (actionable.length > 1) {
-              showVsplitMarkPicker(actionable, e.clientX);
-              return;
+            // 非编辑态：附近多个时弹出列表；编辑态只有本段点，直接切换端点
+            if (vsplitEditIdx < 0) {
+              const resolved = resolveVsplitMarkTap(e.clientX);
+              const actionable = resolved
+                ? resolved.near.filter((ep) => !ep.draft && ep.idx >= 0)
+                : [];
+              if (actionable.length > 1) {
+                showVsplitMarkPicker(actionable, e.clientX);
+                return;
+              }
             }
             selectVsplitEditEndpoint(idx, kind);
           });
         } else {
           dot.tabIndex = -1;
-          if (!isCluster) dot.setAttribute("aria-hidden", "true");
+          dot.setAttribute("aria-hidden", "true");
         }
         vsplitScrubMarks.appendChild(dot);
       };
 
-      const all = collectVsplitScrubEndpoints();
-      const pinned = [];
-      const rest = [];
-      all.forEach((ep) => {
-        const isActive =
-          !ep.draft && ep.idx >= 0 && vsplitEditIdx === ep.idx && vsplitEditFocus === ep.kind;
-        if (ep.draft || isActive) pinned.push({ ...ep, active: isActive });
-        else rest.push(ep);
-      });
-
-      ["start", "end"].forEach((kind) => {
-        const lane = rest.filter((ep) => ep.kind === kind);
-        const clusters = clusterVsplitScrubEndpoints(lane, dur, trackW, clusterGapPx);
-        clusters.forEach((cl) => {
-          const editable = !vsplitBusy && cl.items.some((ep) => !ep.draft && ep.idx >= 0);
-          if (cl.items.length === 1) {
-            const ep = cl.items[0];
-            addDot(ep.t, kind, { idx: ep.idx, editable: editable && !ep.draft });
-            return;
-          }
-          addDot(cl.t, kind, { editable, cluster: cl.items.filter((ep) => !ep.draft && ep.idx >= 0) });
+      if (vsplitEditIdx >= 0) {
+        const mark = vsplitMarks[vsplitEditIdx];
+        if (mark) {
+          const editable = !vsplitBusy;
+          addDot(mark.start, "start", {
+            active: vsplitEditFocus === "start",
+            idx: vsplitEditIdx,
+            editable,
+          });
+          addDot(mark.end, "end", {
+            active: vsplitEditFocus === "end",
+            idx: vsplitEditIdx,
+            editable,
+          });
+        }
+      } else {
+        if (vsplitDraftStart != null) addDot(vsplitDraftStart, "start", { editable: false });
+        vsplitMarks.forEach((mark, idx) => {
+          const editable = !vsplitBusy;
+          addDot(mark.start, "start", { idx, editable });
+          addDot(mark.end, "end", { idx, editable });
         });
-      });
-
-      pinned.forEach((ep) => {
-        addDot(ep.t, ep.kind, {
-          active: Boolean(ep.active),
-          idx: ep.idx,
-          editable: !ep.draft && !vsplitBusy && ep.idx >= 0,
-        });
-      });
-
+      }
       paintVsplitMarkChips();
     }
 
