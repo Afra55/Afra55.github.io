@@ -558,6 +558,8 @@ async function main() {
       hasFsOpen: Boolean(document.getElementById("vsplit-fs-open")),
       hasFsLayer: Boolean(document.getElementById("vsplit-fs")),
       hasFsUndo: Boolean(document.getElementById("vsplit-fs-undo")),
+      hasFsStatus: Boolean(document.getElementById("vsplit-fs-status")),
+      hasFsNote: Boolean(document.getElementById("vsplit-fs-note")),
       hasMarkUndo: Boolean(document.getElementById("vsplit-mark-undo")),
       editOutsideSticky: Boolean(
         sticky &&
@@ -584,6 +586,9 @@ async function main() {
   }
   if (!manualUi.hasFsOpen || !manualUi.hasFsLayer || !manualUi.hasFsUndo) {
     throw new Error(`fullscreen mark UI missing: ${JSON.stringify(manualUi)}`);
+  }
+  if (!manualUi.hasFsStatus || !manualUi.hasFsNote) {
+    throw new Error(`fullscreen feedback UI missing: ${JSON.stringify(manualUi)}`);
   }
   if (!manualUi.hasScrubMarks || !manualUi.hasQuickExport) {
     throw new Error(`scrub marks / quick export missing: ${JSON.stringify(manualUi)}`);
@@ -774,10 +779,15 @@ async function main() {
     await video.play().catch(() => {});
     document.getElementById("vsplit-fs-mark")?.click();
     const afterFsStart = (document.getElementById("vsplit-fs-mark")?.textContent || "").trim();
+    const statusAfterStart = (document.getElementById("vsplit-fs-status")?.textContent || "").trim();
+    const noteAfterStart = (document.getElementById("vsplit-fs-note")?.textContent || "").trim();
+    const noteOn = document.getElementById("vsplit-fs-note")?.classList.contains("is-on");
     await seekByScrub(0.35);
     await video.play().catch(() => {});
     document.getElementById("vsplit-fs-mark")?.click();
     const marks = window.DevToolsVsplit.getMarks?.() || [];
+    const statusAfterEnd = (document.getElementById("vsplit-fs-status")?.textContent || "").trim();
+    const noteAfterEnd = (document.getElementById("vsplit-fs-note")?.textContent || "").trim();
     const beforeUndo = marks.length;
     document.getElementById("vsplit-fs-undo")?.click();
     const afterUndoEnd = {
@@ -801,6 +811,11 @@ async function main() {
       inHost,
       fsHidden,
       afterFsStart,
+      statusAfterStart,
+      noteAfterStart,
+      noteOn,
+      statusAfterEnd,
+      noteAfterEnd,
       markCount: marks.length,
       beforeUndo,
       afterUndoEnd,
@@ -814,6 +829,12 @@ async function main() {
   }
   if (fsMark.afterFsStart !== "打终点") {
     throw new Error(`fullscreen mark should arm end: ${JSON.stringify(fsMark)}`);
+  }
+  if (!/正在打终点/.test(fsMark.statusAfterStart || "") || !fsMark.noteOn || !/起点/.test(fsMark.noteAfterStart || "")) {
+    throw new Error(`fullscreen start feedback missing: ${JSON.stringify(fsMark)}`);
+  }
+  if (!/已完成/.test(fsMark.statusAfterEnd || "") || !/已添加/.test(fsMark.noteAfterEnd || "")) {
+    throw new Error(`fullscreen end feedback missing: ${JSON.stringify(fsMark)}`);
   }
   if (!(fsMark.markCount >= 3)) {
     throw new Error(`fullscreen should add a mark pair: ${JSON.stringify(fsMark)}`);
