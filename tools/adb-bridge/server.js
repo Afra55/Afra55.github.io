@@ -35,7 +35,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.6.11";
+const BRIDGE_VERSION = "0.6.12";
 
 /** Preferred quick roots shown in UI (reads are not limited to these) */
 const ROOTS = [
@@ -2389,6 +2389,9 @@ async function dumpLogcat(serial, opts = {}) {
   const packageName = String(opts.packageName || "").trim();
   const tag = String(opts.tag || "").trim();
   const since = String(opts.since || "").trim();
+  const levelRaw = String(opts.level || "").trim().toUpperCase();
+  const LEVEL_ORDER = { V: 0, D: 1, I: 2, W: 3, E: 4, F: 5 };
+  const minLevel = Object.prototype.hasOwnProperty.call(LEVEL_ORDER, levelRaw) ? LEVEL_ORDER[levelRaw] : null;
   const args = ["logcat", "-d", "-v", "time", "-t", String(lines)];
   if (packageName) {
     try {
@@ -2404,7 +2407,8 @@ async function dumpLogcat(serial, opts = {}) {
   // Safe tag filter syntax: TagName:V *:S (alphanumeric / . _ $ / - only)
   let usedTagFilter = false;
   if (tag && /^[A-Za-z0-9._$/-]+$/.test(tag) && tag.length <= 128) {
-    args.push(`${tag}:V`, "*:S");
+    const pri = minLevel != null ? levelRaw : "V";
+    args.push(`${tag}:${pri}`, "*:S");
     usedTagFilter = true;
   }
   const { stdout } = await adbSerial(serial, args, { timeout: 60000, maxBuffer: 30 * 1024 * 1024 });
@@ -2420,6 +2424,16 @@ async function dumpLogcat(serial, opts = {}) {
         const m = line.match(/\s([VDIWEF])\s+([^\s:]+):/);
         if (m && m[2].toLowerCase() === t) return true;
         return false;
+      })
+      .join("\n");
+  }
+  if (minLevel != null) {
+    text = text
+      .split(/\r?\n/)
+      .filter((line) => {
+        const m = line.match(/\s([VDIWEF])\s+[^\s:]+:/);
+        if (!m) return true;
+        return (LEVEL_ORDER[m[1]] ?? 0) >= minLevel;
       })
       .join("\n");
   }
@@ -2445,8 +2459,9 @@ async function dumpLogcat(serial, opts = {}) {
     ok: true,
     text,
     lines: text ? text.split(/\r?\n/).filter(Boolean).length : 0,
+    level: minLevel != null ? levelRaw : "",
     note:
-      "流式 /logcat/stream 暂未提供；请轮询本接口，可用 tag、query、package、since 组合过滤。",
+      "流式 /logcat/stream 暂未提供；请轮询本接口，可用 tag、level、query、package、since 组合过滤。",
   };
 }
 
@@ -2873,18 +2888,133 @@ async function backupApp(serial, packageName) {
   const pkg = String(packageName || "").trim();
   if (!pkg) throw new Error("包名无效");
   const { stdout } = await adbSerial(serial, ["shell", "pm", "path", pkg], { timeout: 30000 });
-  const m = stdout.match(/package:(.+)/);
-  if (!m) throw new Error("找不到应用 APK 路径");
-  const remote = m[1].trim();
-  const local = tempName("backup", `${pkg}.apk`);
-  await adbSerial(serial, ["pull", remote, local], { timeout: 300000 });
-  const data = fs.readFileSync(local);
-  try {
-    fs.unlinkSync(local);
-  } catch {
-    /* ignore */
+  const remotes = [...String(stdout || "").matchAll(/package:(.+)/g)].map((m) => m[1].trim()).filter(Boolean);
+  if (!remotes.length) throw new Error("找不到应用 APK 路径");
+
+  // Single APK: keep legacy .apk download
+  if (remotes.length === 1) {
+    const remote = remotes[0];
+    const local = tempName("backup", `${pkg}.apk`);
+    await adbSerial(serial, ["pull", remote, local], { timeout: 300000 });
+    const data = fs.readFileSync(local);
+    try {
+      fs.unlinkSync(local);
+    } catch {
+      /* ignore */
+    }
+    return { filename: `${pkg}.apk`, data, remote, splits: 1 };
   }
-  return { filename: `${pkg}.apk`, data, remote };
+
+  // Split APKs: pull all into a temp dir and zip
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "adb-backup-"));
+  try {
+    const pulled = [];
+    for (let i = 0; i < remotes.length; i++) {
+      const remote = remotes[i];
+      const base = path.basename(remote) || `split-${i}.apk`;
+      const local = path.join(tmpDir, base);
+      await adbSerial(serial, ["pull", remote, local], { timeout: 300000 });
+      pulled.push(base);
+    }
+    const zipName = `${pkg}-splits.zip`;
+    const zipPath = path.join(tmpDir, zipName);
+    await createZipFromFiles(tmpDir, pulled, zipPath);
+    const data = fs.readFileSync(zipPath);
+    return {
+      filename: zipName,
+      data,
+      remote: remotes.join("\n"),
+      splits: remotes.length,
+    };
+  } finally {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** Create a zip archive of files under cwd (zero npm deps; uses zip/tar). */
+async function createZipFromFiles(cwd, relativeFiles, outZipPath) {
+  const files = (relativeFiles || []).filter(Boolean);
+  if (!files.length) throw new Error("没有可打包的文件");
+  try {
+    await execFileAsync("zip", ["-q", "-r", outZipPath, ...files], {
+      cwd,
+      timeout: 600000,
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    if (fs.existsSync(outZipPath)) return outZipPath;
+  } catch {
+    /* try tar */
+  }
+  try {
+    await execFileAsync("tar", ["-a", "-cf", outZipPath, ...files], {
+      cwd,
+      timeout: 600000,
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    if (fs.existsSync(outZipPath)) return outZipPath;
+  } catch {
+    /* try PowerShell on Windows */
+  }
+  if (process.platform === "win32") {
+    const psFiles = files.map((f) => `'${String(f).replace(/'/g, "''")}'`).join(",");
+    const script = `Compress-Archive -Path @(${psFiles}) -DestinationPath '${String(outZipPath).replace(
+      /'/g,
+      "''"
+    )}' -Force`;
+    await execFileAsync("powershell", ["-NoProfile", "-Command", script], {
+      cwd,
+      timeout: 600000,
+      maxBuffer: 4 * 1024 * 1024,
+    });
+    if (fs.existsSync(outZipPath)) return outZipPath;
+  }
+  throw new Error("本机无法打包 zip（需要 zip、tar 或 PowerShell Compress-Archive）");
+}
+
+/**
+ * Pull a remote directory (or file) and return a zip of its contents.
+ * GET/POST helper for /fs/zip
+ */
+async function zipRemotePath(serial, remotePath) {
+  if (!serial) throw new Error("缺少设备 serial");
+  const target = normalizeRemotePath(remotePath);
+  const base = basenameRemote(target) || "folder";
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "adb-fs-zip-"));
+  try {
+    const pullDest = path.join(tmpDir, base);
+    await adbSerial(serial, ["pull", target, pullDest], { timeout: 600000 });
+    let st;
+    try {
+      st = fs.statSync(pullDest);
+    } catch {
+      throw new Error("拉取后未找到本地文件");
+    }
+    const zipName = `${base}.zip`;
+    const zipPath = path.join(tmpDir, zipName);
+    if (st.isDirectory()) {
+      await createZipFromFiles(tmpDir, [base], zipPath);
+    } else {
+      await createZipFromFiles(tmpDir, [base], zipPath);
+    }
+    const data = fs.readFileSync(zipPath);
+    return {
+      filename: zipName,
+      data,
+      mime: "application/zip",
+      remotePath: target,
+      size: data.length,
+    };
+  } finally {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 async function resolvePackageApkPath(serial, packageName) {
@@ -3369,6 +3499,9 @@ async function handleApi(req, res, url) {
             "local-fs",
             "local-push",
             "local-pull",
+            "fs-zip",
+            "app-backup-splits",
+            "logcat-level",
           ],
           adb: adbInfo,
           tools: hostTools.tools,
@@ -3502,6 +3635,31 @@ async function handleApi(req, res, url) {
         "Content-Disposition": `inline; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
         "X-Adb-Filename": encodeURIComponent(file.filename),
         "X-Adb-Mime": file.mime || "application/octet-stream",
+        "Cache-Control": "no-store",
+      };
+      applyCors(headers, origin);
+      res.writeHead(200, headers);
+      res.end(file.data);
+      return;
+    }
+
+    if (url.pathname === "/fs/zip" && (req.method === "GET" || req.method === "POST")) {
+      let serial = "";
+      let remotePath = "";
+      if (req.method === "POST") {
+        const body = parseJsonBody(await readBody(req, 1024 * 1024));
+        serial = body.serial || "";
+        remotePath = body.path || body.remotePath || "";
+      } else {
+        serial = url.searchParams.get("serial") || "";
+        remotePath = url.searchParams.get("path") || "";
+      }
+      const file = await zipRemotePath(serial, remotePath);
+      const headers = {
+        "Content-Type": file.mime || "application/zip",
+        "Content-Length": file.data.length,
+        "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(file.filename)}`,
+        "X-Adb-Filename": encodeURIComponent(file.filename),
         "Cache-Control": "no-store",
       };
       applyCors(headers, origin);
@@ -3645,6 +3803,7 @@ async function handleApi(req, res, url) {
         packageName: url.searchParams.get("package"),
         tag: url.searchParams.get("tag"),
         since: url.searchParams.get("since"),
+        level: url.searchParams.get("level"),
       });
       sendJson(res, 200, result, origin);
       return;

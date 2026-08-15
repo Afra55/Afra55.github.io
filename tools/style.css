@@ -3272,6 +3272,7 @@ body.vsplit-fs-open {
   padding: 0.55rem 0.75rem;
   border-top: 1px solid var(--line);
   font-size: 0.88rem;
+  cursor: context-menu;
 }
 
 .adb-app-select {
@@ -3378,46 +3379,91 @@ body.vsplit-fs-open {
 }
 
 .adb-fs-dual {
-  margin-top: 0.75rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.65rem;
+  margin-top: 0.65rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(14rem, 0.9fr);
+  gap: 0.75rem;
+  align-items: stretch;
 }
 
-.adb-fs-savebar {
+.adb-fs-pane {
   border: 1px solid var(--line);
   border-radius: 12px;
   background: rgba(8, 14, 26, 0.35);
-  padding: 0.55rem 0.7rem 0.65rem;
+  padding: 0.55rem 0.65rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
-.adb-fs-savebar-main {
+.adb-fs-pane-head {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.35rem 0.75rem;
+  gap: 0.35rem 0.65rem;
   align-items: baseline;
   justify-content: space-between;
   margin-bottom: 0.4rem;
 }
 
+.adb-fs-pane-device .adb-fs-workspace {
+  margin-top: 0;
+  flex: 1 1 auto;
+  min-height: 16rem;
+}
+
+.adb-fs-pane-local .adb-fs-local {
+  margin-top: 0.35rem;
+  flex: 1 1 auto;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  max-height: none;
+  min-height: 12rem;
+}
+
+.adb-fs-pane-local .adb-fs-local-list {
+  max-height: min(48vh, 28rem);
+}
+
+.adb-fs-local.is-drop,
+.adb-fs-pane-local.is-drop {
+  outline: 2px dashed rgba(46, 196, 182, 0.75);
+  outline-offset: -2px;
+  background: rgba(46, 196, 182, 0.08);
+}
+
+.adb-fs-local-row[draggable="true"] {
+  cursor: grab;
+}
+
+.adb-dl-bundle.is-hidden {
+  display: none !important;
+}
+
+.adb-app-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.adb-fs-savebar {
+  display: none;
+}
+
 .adb-fs-local-panel {
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: rgba(8, 14, 26, 0.28);
-  padding: 0.35rem 0.7rem 0.55rem;
+  display: none;
 }
 
-.adb-fs-local-panel > summary {
-  cursor: pointer;
-  user-select: none;
-  color: var(--muted);
-  font-size: 0.86rem;
-  padding: 0.25rem 0;
-}
+@media (max-width: 960px) {
+  .adb-fs-dual {
+    grid-template-columns: 1fr;
+  }
 
-.adb-fs-local-panel[open] > summary {
-  color: var(--ink);
-  margin-bottom: 0.4rem;
+  .adb-fs-pane-local .adb-fs-local-list {
+    max-height: 12rem;
+  }
 }
 
 .adb-fs-local {
