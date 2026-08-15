@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260815q" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260815q" />
+  <link rel="stylesheet" href="./style.css?v=20260815s" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260815s" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-q</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-s</span>
       </div>
       <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
@@ -1842,15 +1842,13 @@ hello@world.org</textarea>
                 <span class="hint tight">预览图上点选 / 拖拽，或用下方按键与文本</span>
               </div>
               <div class="adb-guide">
-                <strong>怎么用：</strong>先点「刷新屏幕预览」拿到当前画面 → 在图上<strong>单击</strong>等于点击该位置，<strong>按住拖拽</strong>等于滑动。下方快捷键可模拟返回 / Home 等。坐标手填仅作高级备用。
+                <strong>怎么用：</strong>先点「刷新屏幕预览」拿到当前画面 → 在图上<strong>单击</strong>等于点击，<strong>按住拖拽</strong>等于滑动。在预览上操作后会自动开启实时预览以便查看效果；可用「停止实时预览」关掉。快捷键在预览上方。
               </div>
               <div class="btn-row tool-actions">
                 <button type="button" class="primary-btn" id="adb-input-refresh-shot">刷新屏幕预览</button>
+                <button type="button" class="ghost-btn" id="adb-input-live-stop" hidden>停止实时预览</button>
               </div>
-              <div class="adb-input-shot-wrap" style="margin-top:0.65rem">
-                <img id="adb-input-canvas" alt="设备屏幕预览" hidden />
-              </div>
-              <div class="btn-row tool-actions" style="margin-top:0.75rem">
+              <div class="btn-row tool-actions" style="margin-top:0.55rem">
                 <button type="button" class="ghost-btn" data-adb-key="BACK">返回</button>
                 <button type="button" class="ghost-btn" data-adb-key="HOME">Home</button>
                 <button type="button" class="ghost-btn" data-adb-key="RECENTS">多任务</button>
@@ -1860,6 +1858,10 @@ hello@world.org</textarea>
                 <button type="button" class="ghost-btn" data-adb-key="VOLUME_DOWN">音量-</button>
                 <button type="button" class="ghost-btn" data-adb-key="POWER">电源</button>
               </div>
+              <div class="adb-input-shot-wrap" style="margin-top:0.65rem">
+                <img id="adb-input-canvas" alt="设备屏幕预览" hidden />
+              </div>
+              <p class="hint tight" id="adb-input-live-meta" hidden style="margin-top:0.35rem">实时预览中…</p>
               <details class="adb-advanced" style="margin-top:0.85rem">
                 <summary>高级：坐标点击 / 滑动</summary>
                 <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
@@ -1895,7 +1897,7 @@ hello@world.org</textarea>
                   <button type="button" class="secondary-btn" id="adb-clip-run">推送到剪贴板</button>
                 </div>
               </div>
-              <p class="hint" id="adb-input-meta">坐标原点在屏幕左上角。可先刷新屏幕预览后点击/拖拽操作。</p>
+              <p class="hint" id="adb-input-meta">坐标原点在屏幕左上角。可先刷新屏幕预览后点击/拖拽；操作后会自动实时刷新。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="media" hidden>
@@ -2226,7 +2228,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260815q"></script>
+  <script src="./extra.js?v=20260815s"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>
