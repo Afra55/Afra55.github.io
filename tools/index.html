@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260815p" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260815p" />
+  <link rel="stylesheet" href="./style.css?v=20260815q" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260815q" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-p</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-q</span>
       </div>
       <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
@@ -1418,7 +1418,7 @@ hello@world.org</textarea>
           <label for="adb-token">Token</label>
           <input id="adb-token" class="mono" type="text" value="devtools-adb" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Android Studio Device File Explorer）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.5），请解压到同一文件夹后运行启动脚本。</p>
+        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Android Studio Device File Explorer）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.6），请解压到同一文件夹后运行启动脚本。</p>
         <div class="adb-guide" id="adb-setup-guide">
           <strong>本机依赖怎么配？</strong>
           <ol>
@@ -1514,15 +1514,20 @@ hello@world.org</textarea>
                 <input id="adb-fs-upload" type="file" multiple hidden />
                 <button type="button" class="secondary-btn" id="adb-fs-mkdir">新建文件夹</button>
                 <button type="button" class="ghost-btn" id="adb-fs-paste" disabled>粘贴到此处</button>
-                <button type="button" class="ghost-btn" id="adb-fs-root" data-adb-open="/">/</button>
-                <button type="button" class="ghost-btn" id="adb-fs-home">/sdcard</button>
-                <button type="button" class="ghost-btn" id="adb-fs-download-dir">Download</button>
-                <button type="button" class="ghost-btn" data-adb-open="/data">/data</button>
-                <button type="button" class="ghost-btn" data-adb-open="/data/data">/data/data</button>
-                <button type="button" class="ghost-btn" data-adb-open="/data/local/tmp">/data/local/tmp</button>
-                <button type="button" class="ghost-btn" data-adb-open="/system">/system</button>
-                <button type="button" class="ghost-btn" data-adb-open="/system/app">/system/app</button>
-                <button type="button" class="ghost-btn" data-adb-open="/data/app">/data/app</button>
+              </div>
+              <div class="btn-row tool-actions adb-fs-shortcuts" id="adb-fs-shortcuts" style="margin-top:0.45rem">
+                <button type="button" class="ghost-btn" data-adb-fs-jump="/">/</button>
+                <button type="button" class="ghost-btn" data-adb-fs-jump="/storage/emulated/0" title="等同 /sdcard">内部存储</button>
+                <button type="button" class="ghost-btn" data-adb-fs-jump="/storage/emulated/0/Download" title="下载目录">Download</button>
+                <button type="button" class="ghost-btn" data-adb-fs-jump="/storage/emulated/0/DCIM">DCIM</button>
+                <button type="button" class="ghost-btn" data-adb-fs-jump="/storage/emulated/0/Pictures">Pictures</button>
+                <button type="button" class="ghost-btn" data-adb-fs-jump="/storage/emulated/0/Movies">Movies</button>
+                <button type="button" class="ghost-btn" data-adb-fs-jump="/storage/emulated/0/Documents">Documents</button>
+                <button type="button" class="ghost-btn" data-adb-fs-jump="/data/local/tmp">/data/local/tmp</button>
+                <button type="button" class="ghost-btn" data-adb-fs-jump="/data/data">/data/data</button>
+                <button type="button" class="ghost-btn" data-adb-fs-jump="/data/app">/data/app</button>
+                <button type="button" class="ghost-btn" data-adb-fs-jump="/system">/system</button>
+                <button type="button" class="ghost-btn" data-adb-fs-jump="/system/app">/system/app</button>
               </div>
               <p class="hint tight" id="adb-fs-clip-meta" hidden></p>
               <p class="hint tight" id="adb-fs-access" hidden></p>
@@ -1548,7 +1553,7 @@ hello@world.org</textarea>
                   <div class="adb-fs-preview-body" id="adb-fs-preview-body"></div>
                 </aside>
               </div>
-              <p class="hint" id="adb-fs-hint">默认从 / 浏览全盘。勾选可批量下载 / 删除 / 移动（剪切后到目标目录粘贴）。单击文件可预览图片、文本、音视频；过大则请下载。</p>
+              <p class="hint" id="adb-fs-hint">默认从 / 浏览全盘。点「内部存储」进入手机文件（/storage/emulated/0，兼容 /sdcard）。勾选可批量下载 / 删除 / 移动。单击文件可预览。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="install" hidden>
@@ -2221,7 +2226,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260815p"></script>
+  <script src="./extra.js?v=20260815q"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>

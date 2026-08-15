@@ -118,8 +118,44 @@ async function main() {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
     }
 
-    if (health2.json?.version !== "0.6.5") {
-      throw new Error(`expected bridge version 0.6.5, got ${health2.json?.version}`);
+    if (health2.json?.version !== "0.6.6") {
+      throw new Error(`expected bridge version 0.6.6, got ${health2.json?.version}`);
+    }
+
+    // Path alias expansion (mirrors server expandFsPathCandidates)
+    const expand = (input) => {
+      let p = String(input || "").trim().replace(/\\/g, "/");
+      if (!p.startsWith("/")) p = `/${p}`;
+      const parts = [];
+      for (const seg of p.split("/")) {
+        if (!seg || seg === ".") continue;
+        if (seg === "..") {
+          parts.pop();
+          continue;
+        }
+        parts.push(seg);
+      }
+      const dir = parts.length ? `/${parts.join("/")}` : "/";
+      const out = [];
+      const push = (x) => {
+        if (!out.includes(x)) out.push(x);
+      };
+      push(dir);
+      const rewrite = (fromPrefix, toPrefix) => {
+        if (dir === fromPrefix) push(toPrefix);
+        else if (dir.startsWith(`${fromPrefix}/`)) push(`${toPrefix}${dir.slice(fromPrefix.length)}`);
+      };
+      rewrite("/sdcard", "/storage/emulated/0");
+      rewrite("/storage/emulated/0", "/sdcard");
+      return out;
+    };
+    const sd = expand("/sdcard");
+    if (!sd.includes("/storage/emulated/0") || !sd.includes("/sdcard")) {
+      throw new Error(`sdcard alias expand failed: ${JSON.stringify(sd)}`);
+    }
+    const dl = expand("/sdcard/Download");
+    if (!dl.includes("/storage/emulated/0/Download")) {
+      throw new Error(`Download alias expand failed: ${JSON.stringify(dl)}`);
     }
     if (!health2.json?.tools || typeof health2.json.tools.keytool !== "object") {
       throw new Error("health should expose tools.keytool probe");

@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.15-p";
+  const TOOLS_VERSION = "2026.08.15-q";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -8078,7 +8078,7 @@
     const ADB_STORE_BASE = "devtools-adb-base";
     const ADB_STORE_TOKEN = "devtools-adb-token";
     const ADB_FS_ROOTS_HINT_HTML =
-      "默认从 / 浏览全盘。勾选文件可批量下载、删除、移动（剪切后到目标目录粘贴）。单击预览图片 / 文本 / 音视频；过大请下载。无权限目录会尝试 su / run-as；/data/data 无 root 时按包名虚拟列出。";
+      "默认从 / 浏览全盘。「内部存储」= /storage/emulated/0（兼容 /sdcard）。勾选可批量下载、删除、移动。单击可预览图片 / 文本 / 音视频。";
     const adbBaseInput = $("#adb-base");
     const adbTokenInput = $("#adb-token");
     const adbDot = $("#adb-dot");
@@ -8855,7 +8855,10 @@
     }
 
     async function loadFs(pathValue) {
-      if (!adbSelected) return;
+      if (!adbSelected) {
+        toast("请先选择设备");
+        return;
+      }
       const pathText = pathValue || adbFsPath?.value || "/";
       if (adbFsPath) adbFsPath.value = pathText;
       renderFsCrumbs(pathText);
@@ -9733,8 +9736,13 @@
 
     $("#adb-fs-go")?.addEventListener("click", () => loadFs(adbFsPath?.value || "/"));
     $("#adb-fs-refresh")?.addEventListener("click", () => loadFs(adbFsPath?.value || "/"));
-    $("#adb-fs-home")?.addEventListener("click", () => loadFs("/sdcard"));
-    $("#adb-fs-download-dir")?.addEventListener("click", () => loadFs("/sdcard/Download"));
+    $("#adb-fs-shortcuts")?.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-adb-fs-jump]");
+      if (!btn) return;
+      e.preventDefault();
+      const target = btn.getAttribute("data-adb-fs-jump") || "/";
+      loadFs(target);
+    });
     adbFsPath?.addEventListener("keydown", (e) => {
       if (e.key === "Enter") loadFs(adbFsPath.value || "/");
     });

@@ -35,7 +35,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.6.5";
+const BRIDGE_VERSION = "0.6.6";
 
 /** Preferred quick roots shown in UI (reads are not limited to these) */
 const ROOTS = [
@@ -181,6 +181,63 @@ function normalizeRemotePath(input, opts = {}) {
     parts.push(seg);
   }
   return parts.length ? `/${parts.join("/")}` : "/";
+}
+
+/** 常用存储别名：/sdcard ↔ /storage/emulated/0 */
+function expandFsPathCandidates(remotePath) {
+  const dir = normalizeRemotePath(remotePath);
+  const out = [];
+  const push = (p) => {
+    const n = normalizeRemotePath(p);
+    if (!out.includes(n)) out.push(n);
+  };
+  push(dir);
+
+  const rewrite = (fromPrefix, toPrefix) => {
+    if (dir === fromPrefix) push(toPrefix);
+    else if (dir.startsWith(`${fromPrefix}/`)) push(`${toPrefix}${dir.slice(fromPrefix.length)}`);
+  };
+  rewrite("/sdcard", "/storage/emulated/0");
+  rewrite("/storage/emulated/0", "/sdcard");
+  rewrite("/storage/self/primary", "/storage/emulated/0");
+  rewrite("/mnt/sdcard", "/storage/emulated/0");
+
+  // Download 大小写差异（部分机型）
+  if (/\/download$/i.test(dir) && !dir.endsWith("/Download")) {
+    push(dir.replace(/\/download$/i, "/Download"));
+  }
+  if (dir.endsWith("/Download")) {
+    push(dir.replace(/\/Download$/, "/download"));
+  }
+  return out;
+}
+
+async function resolveFsListPath(serial, remotePath) {
+  const candidates = expandFsPathCandidates(remotePath);
+  // 优先 readlink/realpath 解析符号链接（/sdcard → /storage/emulated/0）
+  const primary = candidates[0];
+  try {
+    const { stdout } = await adbSerial(
+      serial,
+      ["shell", `readlink -f -- ${shellQuote(primary)} 2>/dev/null || realpath -- ${shellQuote(primary)} 2>/dev/null || echo`],
+      { timeout: 8000 }
+    );
+    const resolved = String(stdout || "")
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .find((l) => l.startsWith("/"));
+    if (resolved) {
+      const n = normalizeRemotePath(resolved);
+      if (!candidates.includes(n)) candidates.unshift(n);
+      else {
+        candidates.splice(candidates.indexOf(n), 1);
+        candidates.unshift(n);
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return candidates;
 }
 
 function basenameRemote(remotePath) {
@@ -459,56 +516,59 @@ function parseLsLine(line) {
 }
 
 async function listDir(serial, remotePath) {
-  const dir = normalizeRemotePath(remotePath);
+  const candidates = await resolveFsListPath(serial, remotePath);
+  const errors = [];
 
-  // Like Android Studio / Adbrowser: /data/data without root → virtual package list
-  if (dir === "/data/data" || dir === "/data/user/0") {
+  for (const dir of candidates) {
+    // Like Android Studio: /data/data without root → virtual package list
+    if (dir === "/data/data" || dir === "/data/user/0") {
+      try {
+        const normal = await tryListDirShell(serial, dir);
+        if (normal.entries.length) {
+          return { path: dir, entries: normal.entries, access: "shell" };
+        }
+      } catch (err) {
+        errors.push(`${dir} shell: ${err.message || err}`);
+      }
+      return listDataDataVirtual(serial, dir);
+    }
+
     try {
       const normal = await tryListDirShell(serial, dir);
-      if (normal.entries.length) {
-        return { path: dir, entries: normal.entries, access: "shell" };
-      }
-    } catch {
-      /* fall through to virtual */
-    }
-    return listDataDataVirtual(serial, dir);
-  }
-
-  const attempts = [];
-  try {
-    const normal = await tryListDirShell(serial, dir);
-    return { path: dir, entries: normal.entries, access: "shell" };
-  } catch (err) {
-    attempts.push(`shell: ${err.message || err}`);
-  }
-
-  try {
-    const rooted = await tryListDirShell(serial, dir, { su: true });
-    return { path: dir, entries: rooted.entries, access: "su", note: "已通过 su 读取（设备已 root）" };
-  } catch (err) {
-    attempts.push(`su: ${err.message || err}`);
-  }
-
-  const pkg = dataDataPackage(dir);
-  if (pkg) {
-    try {
-      const runAs = await tryListDirShell(serial, dir, { runAs: pkg });
-      return {
-        path: dir,
-        entries: runAs.entries,
-        access: `run-as:${pkg}`,
-        note: `已通过 run-as ${pkg} 读取（仅 debuggable 应用）`,
-      };
+      return { path: dir, entries: normal.entries, access: "shell" };
     } catch (err) {
-      attempts.push(`run-as: ${err.message || err}`);
+      errors.push(`${dir} shell: ${err.message || err}`);
+    }
+
+    try {
+      const rooted = await tryListDirShell(serial, dir, { su: true });
+      return { path: dir, entries: rooted.entries, access: "su", note: "已通过 su 读取（设备已 root）" };
+    } catch (err) {
+      errors.push(`${dir} su: ${err.message || err}`);
+    }
+
+    const pkg = dataDataPackage(dir);
+    if (pkg) {
+      try {
+        const runAs = await tryListDirShell(serial, dir, { runAs: pkg });
+        return {
+          path: dir,
+          entries: runAs.entries,
+          access: `run-as:${pkg}`,
+          note: `已通过 run-as ${pkg} 读取（仅 debuggable 应用）`,
+        };
+      } catch (err) {
+        errors.push(`${dir} run-as: ${err.message || err}`);
+      }
     }
   }
 
+  const shown = candidates[0] || normalizeRemotePath(remotePath);
   const hint =
-    dir.startsWith("/data/data")
+    String(shown).startsWith("/data/data")
       ? "无 root 时 /data/data 仅能进入 debuggable 应用（run-as）。可先打开 /data/data 查看包名列表。"
-      : "该目录受系统权限保护。可尝试 /sdcard、/data/local/tmp，或使用已 root 设备 / 模拟器。";
-  throw new Error(`无法列出 ${dir}。${hint}\n尝试：${attempts.join(" | ")}`);
+      : "该目录受系统权限保护。可尝试内部存储 /storage/emulated/0、/data/local/tmp，或使用已 root 设备 / 模拟器。";
+  throw new Error(`无法列出 ${shown}。${hint}\n尝试：${errors.join(" | ")}`);
 }
 
 function dataDataPackage(remotePath) {
@@ -517,11 +577,13 @@ function dataDataPackage(remotePath) {
 }
 
 async function tryListDirShell(serial, dir, { su = false, runAs = "" } = {}) {
-  let cmd = `ls -la ${shellQuote(dir)}`;
+  // 末尾加 / 避免部分机型把 /sdcard 当符号链接文件列出
+  const listTarget = dir === "/" ? "/" : `${dir}/`;
+  let cmd = `ls -la ${shellQuote(listTarget)}`;
   if (runAs) {
-    cmd = `run-as ${shellQuote(runAs)} ls -la ${shellQuote(dir)}`;
+    cmd = `run-as ${shellQuote(runAs)} ls -la ${shellQuote(listTarget)}`;
   } else if (su) {
-    cmd = `su -c ${shellQuote(`ls -la ${dir}`)}`;
+    cmd = `su -c ${shellQuote(`ls -la ${listTarget}`)}`;
   }
   const { stdout, stderr } = await adbSerial(serial, ["shell", cmd], { timeout: 25000 });
   const text = `${stdout || ""}\n${stderr || ""}`;
