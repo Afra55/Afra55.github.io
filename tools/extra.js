@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.15-r";
+  const TOOLS_VERSION = "2026.08.15-t";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -8078,7 +8078,7 @@
     const ADB_STORE_BASE = "devtools-adb-base";
     const ADB_STORE_TOKEN = "devtools-adb-token";
     const ADB_FS_ROOTS_HINT_HTML =
-      "单击文件夹打开、单击文件预览。右侧 ⋯ 或右键可下载 / 移动 / 复制 / 删除；勾选可批量操作。「内部存储」= /storage/emulated/0。";
+      "对标桌面文件管理器：单击打开/预览，⋯ 或右键操作；可筛选、排序；拖文件到列表即可上传。「内部存储」= /storage/emulated/0。";
     const adbBaseInput = $("#adb-base");
     const adbTokenInput = $("#adb-token");
     const adbDot = $("#adb-dot");
@@ -8116,6 +8116,10 @@
     let adbFsClipboard = null; // { mode: 'cut'|'copy', items: [{path, name}] }
     let adbFsPreviewUrl = "";
     let adbFsPreviewToken = 0;
+    let adbFsEntriesCache = [];
+    let adbFsPathCache = "/";
+    let adbFsSortKey = "name"; // name | size | date
+    let adbFsSortDir = 1; // 1 asc, -1 desc
     const adbFsPreview = $("#adb-fs-preview");
     const adbFsPreviewTitle = $("#adb-fs-preview-title");
     const adbFsPreviewMeta = $("#adb-fs-preview-meta");
@@ -8598,7 +8602,9 @@
       menu.dataset.virtual = entry.virtual ? "1" : "0";
       menu.dataset.size = entry.size || "";
       const bits = [];
-      if (!entry.isDir) {
+      if (entry.isDir) {
+        bits.push(`<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-fs-act="open">打开</button>`);
+      } else {
         bits.push(`<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-fs-act="preview">预览</button>`);
         bits.push(`<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-fs-act="download">下载</button>`);
       }
@@ -8672,30 +8678,76 @@
       }
     }
 
-    function renderFsEntries(pathValue, entries) {
+    function updateFsSortMeta() {
+      const el = $("#adb-fs-sort-meta");
+      if (!el) return;
+      const labels = { name: "名称", size: "大小", date: "修改时间" };
+      const arrow = adbFsSortDir > 0 ? "↑" : "↓";
+      el.textContent = `排序：${labels[adbFsSortKey] || "名称"} ${arrow}`;
+    }
+
+    function sortFsEntries(entries) {
+      const key = adbFsSortKey;
+      const dir = adbFsSortDir;
+      return [...entries].sort((a, b) => {
+        const aDir = a.type === "dir" || a.virtual || a.mode === "virtual";
+        const bDir = b.type === "dir" || b.virtual || b.mode === "virtual";
+        if (aDir !== bDir) return aDir ? -1 : 1;
+        let cmp = 0;
+        if (key === "size") {
+          cmp = (Number(a.size) || 0) - (Number(b.size) || 0);
+        } else if (key === "date") {
+          cmp = String(a.date || "").localeCompare(String(b.date || ""));
+        } else {
+          cmp = String(a.name || "").localeCompare(String(b.name || ""), undefined, {
+            sensitivity: "base",
+            numeric: true,
+          });
+        }
+        return cmp * dir;
+      });
+    }
+
+    function paintFsList() {
       if (!adbFsList) return;
-      adbFsSelected = "";
-      clearFsChecked();
-      clearAdbFsPreview();
       hideFsCtxMenu();
-      if (!entries?.length) {
+      const pathValue = adbFsPathCache || "/";
+      const q = String($("#adb-fs-filter")?.value || "")
+        .trim()
+        .toLowerCase();
+      let entries = adbFsEntriesCache || [];
+      if (q) {
+        entries = entries.filter((item) => String(item.name || "").toLowerCase().includes(q));
+      }
+      entries = sortFsEntries(entries);
+      updateFsSortMeta();
+      if (!(adbFsEntriesCache || []).length) {
         adbFsList.innerHTML = `<div class="adb-fs-empty">目录为空或无权读取</div>`;
         return;
       }
-      adbFsList.innerHTML = entries
+      if (!entries.length) {
+        adbFsList.innerHTML = `<div class="adb-fs-empty">无匹配项（可清空筛选）</div>`;
+        return;
+      }
+      const sortMark = (key) =>
+        adbFsSortKey === key ? (adbFsSortDir > 0 ? " ↑" : " ↓") : "";
+      const head = `<div class="adb-fs-head" role="row">
+        <span class="adb-fs-col-check" aria-hidden="true"></span>
+        <button type="button" class="adb-fs-sort" data-adb-fs-sort="name">名称${sortMark("name")}</button>
+        <button type="button" class="adb-fs-sort adb-fs-col-size" data-adb-fs-sort="size">大小${sortMark("size")}</button>
+        <button type="button" class="adb-fs-sort adb-fs-col-date" data-adb-fs-sort="date">修改时间${sortMark("date")}</button>
+        <span class="adb-fs-col-more" aria-hidden="true"></span>
+      </div>`;
+      const rows = entries
         .map((item) => {
           const full = joinRemote(pathValue, item.name);
           const isDir = item.type === "dir";
           const virtual = Boolean(item.virtual || item.mode === "virtual");
-          const meta = [
-            virtual ? "包名（虚拟）" : isDir ? "文件夹" : formatBytes(item.size),
-            !virtual && item.date,
-          ]
-            .filter(Boolean)
-            .join(" · ");
-          const nameHtml = isDir
-            ? `<span class="adb-fs-name">${escapeHtml(item.name)}/</span>`
-            : `<span class="adb-fs-name mono">${escapeHtml(item.name)}</span>`;
+          const sizeText = virtual ? "虚拟" : isDir ? "—" : formatBytes(item.size) || "—";
+          const dateText = virtual ? "—" : item.date || "—";
+          const checked = !virtual && adbFsChecked.has(full) ? "checked" : "";
+          const selected = adbFsSelected && adbFsSelected === full ? " is-selected" : "";
+          const checkedCls = !virtual && adbFsChecked.has(full) ? " is-checked" : "";
           const sizeAttr =
             !isDir && item.size != null && Number.isFinite(Number(item.size))
               ? ` data-adb-file-size="${escapeHtml(String(item.size))}"`
@@ -8705,23 +8757,36 @@
             ? `data-adb-open="${escapeHtml(full)}" ${entryAttr}`
             : `data-adb-file="${escapeHtml(full)}" data-adb-file-name="${escapeHtml(item.name)}"${sizeAttr} ${entryAttr}`;
           const checkHtml = virtual
-            ? ""
-            : `<input type="checkbox" class="adb-fs-check" data-adb-check-path="${escapeHtml(full)}" aria-label="选择 ${escapeHtml(item.name)}" />`;
+            ? `<span class="adb-fs-col-check"></span>`
+            : `<input type="checkbox" class="adb-fs-check" data-adb-check-path="${escapeHtml(full)}" aria-label="选择 ${escapeHtml(item.name)}" ${checked} />`;
           const moreHtml = virtual
-            ? ""
+            ? `<span class="adb-fs-col-more"></span>`
             : `<button type="button" class="adb-fs-more" data-adb-fs-more aria-label="更多操作" title="更多操作">⋯</button>`;
-          return `<div class="adb-fs-row${isDir ? " is-dir" : " is-file"}${virtual ? " is-virtual" : ""}" ${rowAttr}>
-            <div class="adb-fs-row-main">
-              ${checkHtml}
-              <div class="adb-fs-row-info">
-                ${nameHtml}
-                <span class="adb-fs-meta">${escapeHtml(meta)}</span>
-              </div>
-              ${moreHtml}
-            </div>
+          const nameHtml = isDir
+            ? `<span class="adb-fs-name">${escapeHtml(item.name)}/</span>`
+            : `<span class="adb-fs-name mono">${escapeHtml(item.name)}</span>`;
+          return `<div class="adb-fs-row${isDir ? " is-dir" : " is-file"}${virtual ? " is-virtual" : ""}${selected}${checkedCls}" ${rowAttr}>
+            ${checkHtml}
+            <div class="adb-fs-col-name">${nameHtml}</div>
+            <span class="adb-fs-col-size mono">${escapeHtml(sizeText)}</span>
+            <span class="adb-fs-col-date mono">${escapeHtml(dateText)}</span>
+            ${moreHtml}
           </div>`;
         })
         .join("");
+      adbFsList.innerHTML = head + rows;
+      syncFsBatchBar();
+    }
+
+    function renderFsEntries(pathValue, entries) {
+      if (!adbFsList) return;
+      adbFsSelected = "";
+      clearFsChecked();
+      clearAdbFsPreview();
+      hideFsCtxMenu();
+      adbFsPathCache = pathValue || "/";
+      adbFsEntriesCache = Array.isArray(entries) ? entries : [];
+      paintFsList();
     }
 
     function renderApps() {
@@ -8967,6 +9032,8 @@
       }
       const pathText = pathValue || adbFsPath?.value || "/";
       if (adbFsPath) adbFsPath.value = pathText;
+      const filterEl = $("#adb-fs-filter");
+      if (filterEl && filterEl.value) filterEl.value = "";
       renderFsCrumbs(pathText);
       if (adbFsMeta) adbFsMeta.textContent = "加载中…";
       const accessEl = $("#adb-fs-access");
@@ -8982,7 +9049,10 @@
         renderFsEntries(resolved, data.entries || []);
         if (adbFsPath) adbFsPath.value = resolved;
         renderFsCrumbs(resolved);
-        if (adbFsMeta) adbFsMeta.textContent = `${(data.entries || []).length} 项 · ${resolved}`;
+        if (adbFsMeta) {
+          const total = (data.entries || []).length;
+          adbFsMeta.textContent = `${total} 项 · ${resolved}`;
+        }
         if (accessEl && (data.access || data.note)) {
           accessEl.hidden = false;
           accessEl.textContent = [data.access && `访问方式：${data.access}`, data.note]
@@ -8991,6 +9061,8 @@
         }
         setError(adbError, "");
       } catch (err) {
+        adbFsEntriesCache = [];
+        adbFsPathCache = pathText;
         if (adbFsList) adbFsList.innerHTML = `<div class="adb-fs-empty">${escapeHtml(err.message || String(err))}</div>`;
         if (adbFsMeta) adbFsMeta.textContent = "读取失败";
         setError(adbError, err.message || String(err));
@@ -9894,6 +9966,19 @@
     });
 
     adbFsList?.addEventListener("click", async (e) => {
+      const sortBtn = e.target.closest("[data-adb-fs-sort]");
+      if (sortBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const key = sortBtn.dataset.adbFsSort || "name";
+        if (adbFsSortKey === key) adbFsSortDir *= -1;
+        else {
+          adbFsSortKey = key;
+          adbFsSortDir = 1;
+        }
+        paintFsList();
+        return;
+      }
       const moreBtn = e.target.closest("[data-adb-fs-more]");
       if (moreBtn) {
         e.preventDefault();
@@ -9933,6 +10018,43 @@
         );
       }
     });
+    $("#adb-fs-filter")?.addEventListener("input", () => {
+      paintFsList();
+      if (adbFsMeta && adbFsPathCache) {
+        const total = (adbFsEntriesCache || []).length;
+        const q = String($("#adb-fs-filter")?.value || "").trim();
+        adbFsMeta.textContent = q
+          ? `筛选中 · 共 ${total} 项 · ${adbFsPathCache}`
+          : `${total} 项 · ${adbFsPathCache}`;
+      }
+    });
+    {
+      const dropEl = adbFsList;
+      const hasFiles = (dt) => dt && [...(dt.types || [])].includes("Files");
+      dropEl?.addEventListener("dragenter", (e) => {
+        if (!hasFiles(e.dataTransfer)) return;
+        e.preventDefault();
+        dropEl.classList.add("is-drop");
+      });
+      dropEl?.addEventListener("dragover", (e) => {
+        if (!hasFiles(e.dataTransfer)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        dropEl.classList.add("is-drop");
+      });
+      dropEl?.addEventListener("dragleave", (e) => {
+        if (e.target !== dropEl && !dropEl.contains(e.relatedTarget)) dropEl.classList.remove("is-drop");
+        if (e.target === dropEl) dropEl.classList.remove("is-drop");
+      });
+      dropEl?.addEventListener("drop", (e) => {
+        if (!hasFiles(e.dataTransfer)) return;
+        e.preventDefault();
+        dropEl.classList.remove("is-drop");
+        const files = e.dataTransfer?.files;
+        if (!files?.length) return;
+        uploadAdbFiles(files).catch((err) => setError(adbError, err.message || String(err)));
+      });
+    }
     adbFsList?.addEventListener("contextmenu", (e) => {
       const row = e.target.closest(".adb-fs-row[data-adb-entry]");
       if (!row || row.classList.contains("is-virtual")) return;
