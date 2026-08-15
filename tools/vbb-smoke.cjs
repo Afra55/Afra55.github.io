@@ -557,6 +557,8 @@ async function main() {
       hasQuickExport: Boolean(document.getElementById("vsplit-quick-export")),
       hasFsOpen: Boolean(document.getElementById("vsplit-fs-open")),
       hasFsLayer: Boolean(document.getElementById("vsplit-fs")),
+      hasFsUndo: Boolean(document.getElementById("vsplit-fs-undo")),
+      hasMarkUndo: Boolean(document.getElementById("vsplit-mark-undo")),
       editOutsideSticky: Boolean(
         sticky &&
           document.getElementById("vsplit-edit-bar") &&
@@ -577,7 +579,10 @@ async function main() {
   if (!manualUi.hasPlay || !manualUi.hasNudge || manualUi.tapLabel !== "打起点") {
     throw new Error(`play/nudge/tap missing: ${JSON.stringify(manualUi)}`);
   }
-  if (!manualUi.hasFsOpen || !manualUi.hasFsLayer) {
+  if (!manualUi.hasMarkUndo) {
+    throw new Error(`undo last mark button missing: ${JSON.stringify(manualUi)}`);
+  }
+  if (!manualUi.hasFsOpen || !manualUi.hasFsLayer || !manualUi.hasFsUndo) {
     throw new Error(`fullscreen mark UI missing: ${JSON.stringify(manualUi)}`);
   }
   if (!manualUi.hasScrubMarks || !manualUi.hasQuickExport) {
@@ -759,6 +764,10 @@ async function main() {
     await video.play().catch(() => {});
     document.getElementById("vsplit-fs-mark")?.click();
     const marks = window.DevToolsVsplit.getMarks?.() || [];
+    const beforeUndo = marks.length;
+    document.getElementById("vsplit-fs-undo")?.click();
+    const afterUndo = window.DevToolsVsplit.getMarks?.() || [];
+    const undoLabel = (document.getElementById("vsplit-fs-undo")?.textContent || "").trim();
     document.getElementById("vsplit-fs-close")?.click();
     const closed = !window.DevToolsVsplit.isFullscreen();
     const backInWrap = wrap?.contains(video);
@@ -769,6 +778,9 @@ async function main() {
       fsHidden,
       afterFsStart,
       markCount: marks.length,
+      beforeUndo,
+      afterUndoCount: afterUndo.length,
+      undoLabel,
       closed,
       backInWrap,
     };
@@ -781,6 +793,9 @@ async function main() {
   }
   if (!(fsMark.markCount >= 3)) {
     throw new Error(`fullscreen should add a mark pair: ${JSON.stringify(fsMark)}`);
+  }
+  if (!(fsMark.afterUndoCount === fsMark.beforeUndo - 1)) {
+    throw new Error(`fullscreen undo last mark failed: ${JSON.stringify(fsMark)}`);
   }
   if (!fsMark.closed || !fsMark.backInWrap) {
     throw new Error(`fullscreen exit failed: ${JSON.stringify(fsMark)}`);
