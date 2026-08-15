@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.15-t";
+  const TOOLS_VERSION = "2026.08.15-u";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -8078,7 +8078,7 @@
     const ADB_STORE_BASE = "devtools-adb-base";
     const ADB_STORE_TOKEN = "devtools-adb-token";
     const ADB_FS_ROOTS_HINT_HTML =
-      "对标桌面文件管理器：单击打开/预览，⋯ 或右键操作；可筛选、排序；拖文件到列表即可上传。「内部存储」= /storage/emulated/0。";
+      "对标桌面文件管理器：单击打开/预览，⋯/右键操作；筛选排序、拖入上传。Delete 删除 · F2 重命名 · Ctrl+A 全选。「内部存储」= /storage/emulated/0。";
     const adbBaseInput = $("#adb-base");
     const adbTokenInput = $("#adb-token");
     const adbDot = $("#adb-dot");
@@ -8120,6 +8120,7 @@
     let adbFsPathCache = "/";
     let adbFsSortKey = "name"; // name | size | date
     let adbFsSortDir = 1; // 1 asc, -1 desc
+    let adbFsXferBusy = false;
     const adbFsPreview = $("#adb-fs-preview");
     const adbFsPreviewTitle = $("#adb-fs-preview-title");
     const adbFsPreviewMeta = $("#adb-fs-preview-meta");
@@ -8608,6 +8609,7 @@
         bits.push(`<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-fs-act="preview">预览</button>`);
         bits.push(`<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-fs-act="download">下载</button>`);
       }
+      bits.push(`<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-fs-act="copypath">复制路径</button>`);
       bits.push(`<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-fs-act="rename">重命名</button>`);
       bits.push(`<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-fs-act="cut">移动</button>`);
       bits.push(`<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-fs-act="copy">复制</button>`);
@@ -8639,6 +8641,15 @@
         }
         if (action === "download") {
           await downloadAdbFile(entry.path, entry.name);
+          return;
+        }
+        if (action === "copypath") {
+          try {
+            await navigator.clipboard.writeText(entry.path);
+            toast("已复制路径");
+          } catch (_) {
+            toast("复制失败");
+          }
           return;
         }
         if (action === "rename") {
@@ -9409,45 +9420,150 @@
       if (!adbSelected) return;
       const files = [...fileList];
       if (!files.length) return;
+      if (adbFsXferBusy) {
+        toast("已有传输进行中");
+        return;
+      }
       const dir = adbFsPath?.value || "/";
       setError(adbError, "");
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if (adbFsMeta) adbFsMeta.textContent = `上传中 ${i + 1}/${files.length}：${file.name}`;
-        const buffer = new Uint8Array(await file.arrayBuffer());
-        await adbFetch(
-          `/fs/upload?serial=${encodeURIComponent(adbSelected)}&path=${encodeURIComponent(dir)}&name=${encodeURIComponent(file.name)}`,
-          {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/octet-stream",
-              "X-Filename": encodeURIComponent(file.name),
-            },
-            body: buffer,
-          }
-        );
+      const totalBytes = files.reduce((sum, f) => sum + (Number(f.size) || 0), 0) || files.length;
+      let doneBytes = 0;
+      const started = performance.now();
+      adbFsXferBusy = true;
+      try {
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          const fileSize = Number(file.size) || 0;
+          updateFsXfer({
+            title: `上传 ${i + 1}/${files.length}`,
+            name: file.name,
+            loaded: doneBytes,
+            total: totalBytes,
+            started,
+          });
+          const buffer = new Uint8Array(await file.arrayBuffer());
+          await adbFetch(
+            `/fs/upload?serial=${encodeURIComponent(adbSelected)}&path=${encodeURIComponent(dir)}&name=${encodeURIComponent(file.name)}`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/octet-stream",
+                "X-Filename": encodeURIComponent(file.name),
+              },
+              body: buffer,
+            }
+          );
+          doneBytes += fileSize || Math.floor(totalBytes / files.length);
+          updateFsXfer({
+            title: `上传 ${i + 1}/${files.length}`,
+            name: file.name,
+            loaded: Math.min(doneBytes, totalBytes),
+            total: totalBytes,
+            started,
+          });
+        }
+        toast(`已上传 ${files.length} 个文件`);
+        await loadFs(dir);
+      } finally {
+        adbFsXferBusy = false;
+        hideFsXfer();
       }
-      toast(`已上传 ${files.length} 个文件`);
-      await loadFs(dir);
     }
 
-    async function downloadAdbFile(remotePath, name) {
+    async function downloadAdbFile(remotePath, name, { nested = false } = {}) {
       if (!adbSelected) return;
-      if (adbFsMeta) adbFsMeta.textContent = `下载中：${name || remotePath}`;
-      const res = await adbFetch(
-        `/fs/download?serial=${encodeURIComponent(adbSelected)}&path=${encodeURIComponent(remotePath)}`
-      );
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = name || "download.bin";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      toast("已开始下载到电脑");
-      if (adbFsMeta) adbFsMeta.textContent = `已下载 ${name || ""}`;
+      if (!nested) {
+        if (adbFsXferBusy) {
+          toast("已有传输进行中");
+          return;
+        }
+        adbFsXferBusy = true;
+      }
+      const started = performance.now();
+      try {
+        updateFsXfer({ title: nested ? "批量下载" : "下载中", name: name || remotePath, loaded: 0, total: 0, started });
+        if (adbFsMeta) adbFsMeta.textContent = `下载中：${name || remotePath}`;
+        const res = await adbFetch(
+          `/fs/download?serial=${encodeURIComponent(adbSelected)}&path=${encodeURIComponent(remotePath)}`
+        );
+        const total = Number(res.headers.get("content-length")) || 0;
+        let blob;
+        if (res.body && typeof res.body.getReader === "function") {
+          const reader = res.body.getReader();
+          const chunks = [];
+          let loaded = 0;
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+            loaded += value.byteLength || 0;
+            updateFsXfer({
+              title: nested ? "批量下载" : "下载中",
+              name: name || remotePath,
+              loaded,
+              total: total || loaded,
+              started,
+            });
+          }
+          blob = new Blob(chunks);
+        } else {
+          blob = await res.blob();
+          updateFsXfer({
+            title: nested ? "批量下载" : "下载中",
+            name: name || remotePath,
+            loaded: blob.size,
+            total: blob.size,
+            started,
+          });
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = name || "download.bin";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+        if (!nested) toast("已开始下载到电脑");
+        if (adbFsMeta) adbFsMeta.textContent = `已下载 ${name || ""}`;
+      } finally {
+        if (!nested) {
+          adbFsXferBusy = false;
+          hideFsXfer();
+        }
+      }
+    }
+
+    function formatFsSpeed(bytesPerSec) {
+      if (!Number.isFinite(bytesPerSec) || bytesPerSec <= 0) return "";
+      return `${formatBytes(bytesPerSec)}/s`;
+    }
+
+    function updateFsXfer({ title, name, loaded, total, started }) {
+      const box = $("#adb-fs-xfer");
+      if (!box) return;
+      box.hidden = false;
+      const titleEl = $("#adb-fs-xfer-title");
+      const metaEl = $("#adb-fs-xfer-meta");
+      const fill = $("#adb-fs-xfer-fill");
+      if (titleEl) titleEl.textContent = title || "传输中";
+      const pct = total > 0 ? Math.max(0, Math.min(100, Math.round((loaded / total) * 100))) : 0;
+      const elapsed = Math.max(0.001, (performance.now() - (started || performance.now())) / 1000);
+      const speed = loaded > 0 ? formatFsSpeed(loaded / elapsed) : "";
+      const sizeBit =
+        total > 0 ? `${formatBytes(loaded)} / ${formatBytes(total)}` : loaded > 0 ? formatBytes(loaded) : "…";
+      if (metaEl) {
+        metaEl.textContent = [name, sizeBit, speed && `· ${speed}`, total > 0 && `${pct}%`].filter(Boolean).join(" ");
+      }
+      if (fill) fill.style.width = `${total > 0 ? pct : Math.min(95, 12 + (loaded ? 40 : 0))}%`;
+      if (adbFsMeta && name) adbFsMeta.textContent = `${title || "传输"}：${name}`;
+    }
+
+    function hideFsXfer() {
+      const box = $("#adb-fs-xfer");
+      if (box) box.hidden = true;
+      const fill = $("#adb-fs-xfer-fill");
+      if (fill) fill.style.width = "0%";
     }
 
     async function downloadArtifact(jobId, name) {
@@ -10070,6 +10186,57 @@
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") hideFsCtxMenu();
     });
+    document.addEventListener("keydown", (e) => {
+      if (adbTab !== "files") return;
+      const tag = (e.target && e.target.tagName) || "";
+      const typing =
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        (e.target && e.target.isContentEditable);
+      if (typing) return;
+      const mod = e.ctrlKey || e.metaKey;
+      if (mod && e.key.toLowerCase() === "a") {
+        e.preventDefault();
+        $("#adb-fs-select-all")?.click();
+        return;
+      }
+      if (e.key === "Escape") {
+        hideFsCtxMenu();
+        clearFsChecked();
+        clearAdbFsPreview();
+        return;
+      }
+      const selectedRow =
+        adbFsList?.querySelector(".adb-fs-row.is-selected[data-adb-entry]") ||
+        adbFsList?.querySelector(".adb-fs-row.is-checked[data-adb-entry]");
+      if (e.key === "F2") {
+        e.preventDefault();
+        const entry = collectFsEntrySelection(selectedRow);
+        if (entry && !entry.virtual) runFsEntryAction("rename", entry);
+        return;
+      }
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (adbFsChecked.size) {
+          e.preventDefault();
+          $("#adb-fs-batch-del")?.click();
+          return;
+        }
+        const entry = collectFsEntrySelection(selectedRow);
+        if (entry && !entry.virtual) {
+          e.preventDefault();
+          runFsEntryAction("delete", entry);
+        }
+        return;
+      }
+      if (e.key === "Enter") {
+        const entry = collectFsEntrySelection(selectedRow);
+        if (!entry) return;
+        e.preventDefault();
+        if (entry.isDir || entry.virtual) runFsEntryAction("open", entry);
+        else runFsEntryAction("preview", entry);
+      }
+    });
     window.addEventListener("scroll", hideFsCtxMenu, true);
     $("#adb-fs-preview-close")?.addEventListener("click", () => clearAdbFsPreview());
     $("#adb-fs-select-all")?.addEventListener("click", () => {
@@ -10086,14 +10253,28 @@
         toast("请勾选要下载的文件（文件夹请逐个打开后下载）");
         return;
       }
+      if (adbFsXferBusy) {
+        toast("已有传输进行中");
+        return;
+      }
+      adbFsXferBusy = true;
       try {
         for (let i = 0; i < items.length; i++) {
-          if (adbFsMeta) adbFsMeta.textContent = `批量下载 ${i + 1}/${items.length}：${items[i].name}`;
-          await downloadAdbFile(items[i].path, items[i].name);
+          updateFsXfer({
+            title: `批量下载 ${i + 1}/${items.length}`,
+            name: items[i].name,
+            loaded: i,
+            total: items.length,
+            started: performance.now(),
+          });
+          await downloadAdbFile(items[i].path, items[i].name, { nested: true });
         }
         toast(`已开始下载 ${items.length} 个文件`);
       } catch (err) {
         setError(adbError, err.message || String(err));
+      } finally {
+        adbFsXferBusy = false;
+        hideFsXfer();
       }
     });
     $("#adb-fs-batch-cut")?.addEventListener("click", () => {

@@ -3019,6 +3019,31 @@ body.vsplit-fs-open {
   margin: 0;
 }
 
+.adb-fs-xfer {
+  margin-top: 0.55rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(8, 14, 26, 0.45);
+}
+
+.adb-fs-xfer-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.adb-fs-xfer-head strong {
+  font-size: 0.88rem;
+}
+
+.adb-fs-list:focus-visible {
+  outline: 2px solid rgba(46, 196, 182, 0.45);
+  outline-offset: 1px;
+}
+
 .adb-fs-ctx {
   position: fixed;
   z-index: 80;
@@ -3141,7 +3166,13 @@ body.vsplit-fs-open {
 }
 
 .adb-app-row {
-  /* inherits stacked flex row layout from .adb-fs-row */
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  align-items: stretch;
+  padding: 0.55rem 0.75rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.88rem;
 }
 
 .adb-app-select {

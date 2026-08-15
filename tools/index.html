@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260815t" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260815t" />
+  <link rel="stylesheet" href="./style.css?v=20260815u" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260815u" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-t</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-u</span>
       </div>
       <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
@@ -1550,8 +1550,19 @@ hello@world.org</textarea>
                   <button type="button" class="ghost-btn" id="adb-fs-batch-del">批量删除</button>
                 </div>
               </div>
+              <div class="adb-fs-xfer" id="adb-fs-xfer" hidden>
+                <div class="adb-fs-xfer-head">
+                  <strong id="adb-fs-xfer-title">传输中</strong>
+                  <span class="hint tight mono" id="adb-fs-xfer-meta"></span>
+                </div>
+                <div class="gif-progress" style="margin-top:0.4rem">
+                  <div class="gif-progress-track">
+                    <span class="gif-progress-fill" id="adb-fs-xfer-fill" style="width:0%"></span>
+                  </div>
+                </div>
+              </div>
               <div class="adb-fs-workspace">
-                <div class="adb-fs-list" id="adb-fs-list" aria-live="polite" data-adb-fs-drop></div>
+                <div class="adb-fs-list" id="adb-fs-list" aria-live="polite" data-adb-fs-drop tabindex="0"></div>
                 <aside class="adb-fs-preview" id="adb-fs-preview" hidden>
                   <div class="adb-fs-preview-head">
                     <strong id="adb-fs-preview-title">文件预览</strong>
@@ -1561,7 +1572,7 @@ hello@world.org</textarea>
                   <div class="adb-fs-preview-body" id="adb-fs-preview-body"></div>
                 </aside>
               </div>
-              <p class="hint" id="adb-fs-hint">对标桌面文件管理器：单击打开/预览，⋯ 或右键操作，可筛选排序；文件可拖入列表上传。路径策略类似 Android Studio Device File Explorer。</p>
+              <p class="hint" id="adb-fs-hint">对标桌面文件管理器：单击打开/预览，⋯ 或右键操作；可筛选排序、拖入上传。快捷键：Delete 删除、F2 重命名、Ctrl+A 全选、Esc 取消。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="install" hidden>
@@ -2234,7 +2245,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260815t"></script>
+  <script src="./extra.js?v=20260815u"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>
