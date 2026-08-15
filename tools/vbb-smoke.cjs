@@ -391,6 +391,8 @@ async function main() {
     gifm: Boolean(document.getElementById("gifm-merge") && document.getElementById("gifm-file")),
     vbbSharp: Boolean(document.getElementById("vbb-mode-sharp")),
     mediaTabs: document.querySelectorAll("#media-subnav [data-media-tab]").length,
+    vsplitManualMode: Boolean(document.getElementById("vsplit-mode-m")),
+    vsplitMarks: Boolean(document.getElementById("vsplit-marks")),
   }));
 
   // Mobile drawer + media tab switch
@@ -571,6 +573,8 @@ async function main() {
   if (!todayTools.vsplit) problems.push("missing video split tool");
   if (!todayTools.gifm) problems.push("missing gif merge UI");
   if (!todayTools.vbbSharp) problems.push("missing sharp mode");
+  if (!todayTools.vsplitManualMode) problems.push("missing vsplit manual mode button");
+  if (!todayTools.vsplitMarks) problems.push("missing vsplit marks list");
   if (todayTools.mediaTabs !== 3) problems.push("media subnav should have 3 tabs");
   if (!mobileShell.drawerOpen) problems.push("mobile drawer failed to open");
   if (!mobileShell.closedByBtn) problems.push("nav-close should close drawer");
@@ -596,6 +600,85 @@ async function main() {
   if (!shellFixes.comingGone) problems.push("#coming placeholder should be removed");
   if (!shellFixes.noDragOnMobile) problems.push("mobile nav links should not be draggable");
 
+  // 手动选段：打点、改时长、按标记算 range
+  await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#media/vsplit`, {
+    waitUntil: "networkidle0",
+    timeout: 60000,
+  });
+  const vsplitInput = await page.$("#vsplit-file");
+  await vsplitInput.uploadFile(tmpMp4);
+  await page.waitForFunction(() => {
+    const b = document.getElementById("vsplit-cut");
+    return b && !b.disabled;
+  }, { timeout: 15000 });
+  await page.click("#vsplit-mode-m");
+  const manualUi = await page.evaluate(() => {
+    const row = document.getElementById("vsplit-manual-row");
+    return {
+      mode: window.DevToolsVsplit?.getMode?.(),
+      rowVisible: row ? !row.hidden : false,
+      cutLabel: (document.getElementById("vsplit-cut")?.textContent || "").trim(),
+      markStartDisabled: document.getElementById("vsplit-mark-start")?.disabled,
+    };
+  });
+  if (manualUi.mode !== "manual" || !manualUi.rowVisible) {
+    throw new Error(`manual mode UI failed: ${JSON.stringify(manualUi)}`);
+  }
+  if (manualUi.cutLabel !== "按标记切分") {
+    throw new Error(`cut button should say 按标记切分, got ${manualUi.cutLabel}`);
+  }
+  const manualMarks = await page.evaluate(async () => {
+    const video = document.getElementById("vsplit-video");
+    video.currentTime = 0.5;
+    await new Promise((r) => setTimeout(r, 80));
+    document.getElementById("vsplit-mark-start")?.click();
+    video.currentTime = 2.2;
+    await new Promise((r) => setTimeout(r, 80));
+    document.getElementById("vsplit-mark-end")?.click();
+    video.currentTime = 2.5;
+    await new Promise((r) => setTimeout(r, 80));
+    document.getElementById("vsplit-mark-start")?.click();
+    video.currentTime = 3.6;
+    await new Promise((r) => setTimeout(r, 80));
+    document.getElementById("vsplit-mark-end")?.click();
+    const marks = window.DevToolsVsplit?.getMarks?.() || [];
+    const ranges = window.DevToolsVsplit?.computeRanges?.(Number(video.duration) || 4) || [];
+    const rows = document.querySelectorAll("#vsplit-marks .vsplit-mark").length;
+    const cutDisabled = document.getElementById("vsplit-cut")?.disabled;
+    const gifDisabled = document.getElementById("vsplit-gif-bb")?.disabled;
+    // 编辑第一段终点
+    const endInp = document.querySelector('#vsplit-marks .vsplit-mark input[aria-label="片段 1 终点秒"]');
+    if (endInp) {
+      endInp.value = "1.8";
+      endInp.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    const afterEdit = window.DevToolsVsplit?.getMarks?.() || [];
+    return {
+      marks,
+      ranges,
+      rows,
+      cutDisabled,
+      gifDisabled,
+      afterEdit,
+      draft: window.DevToolsVsplit?.getDraftStart?.(),
+    };
+  });
+  if (manualMarks.marks.length !== 2 || manualMarks.rows !== 2) {
+    throw new Error(`expected 2 marks, got ${JSON.stringify(manualMarks)}`);
+  }
+  if (manualMarks.cutDisabled || manualMarks.gifDisabled) {
+    throw new Error(`cut/gif should enable with marks: ${JSON.stringify(manualMarks)}`);
+  }
+  if (Math.abs((manualMarks.marks[0].end - manualMarks.marks[0].start) - 1.7) > 0.15) {
+    throw new Error(`first mark span odd: ${JSON.stringify(manualMarks.marks[0])}`);
+  }
+  if (!manualMarks.ranges.length || Math.abs(manualMarks.ranges[0].span - (manualMarks.marks[0].end - manualMarks.marks[0].start)) > 0.05) {
+    throw new Error(`ranges mismatch: ${JSON.stringify(manualMarks)}`);
+  }
+  if (Math.abs(manualMarks.afterEdit[0].end - 1.8) > 0.05) {
+    throw new Error(`edit end failed: ${JSON.stringify(manualMarks.afterEdit)}`);
+  }
+
   if (problems.length) {
     console.error("FAIL", {
       problems,
@@ -611,6 +694,8 @@ async function main() {
       localPick,
       cleanup,
       cacheUi,
+      manualUi,
+      manualMarks,
       analyze,
       todayTools,
       mobileShell,
@@ -629,6 +714,8 @@ async function main() {
     localPick,
     cleanup,
     cacheUi,
+    manualUi,
+    manualMarks,
     mobile: mobileShell.hashVbb,
     shellFixes,
   });
