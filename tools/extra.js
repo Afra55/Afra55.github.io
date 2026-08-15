@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.15-pick";
+  const TOOLS_VERSION = "2026.08.15-pick2";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -5369,6 +5369,7 @@
     function showVsplitMarkPicker(near, clientX, preferred) {
       if (!vsplitMarkPicker || !vsplitScrubHit) return;
       const hitRect = vsplitScrubHit.getBoundingClientRect();
+      // near 可能已按距离排序；先记下最近点，再按时间排列表
       const items = near.filter((ep) => !ep.draft && ep.idx >= 0);
       if (!items.length) {
         hideVsplitMarkPicker();
@@ -5378,11 +5379,17 @@
         (preferred &&
           items.find((ep) => ep.idx === preferred.idx && ep.kind === preferred.kind)) ||
         items[0];
+      items.sort(
+        (a, b) =>
+          a.t - b.t ||
+          a.idx - b.idx ||
+          (a.kind === b.kind ? 0 : a.kind === "start" ? -1 : 1)
+      );
       vsplitPickerHighlight = prefer ? { idx: prefer.idx, kind: prefer.kind } : null;
       vsplitMarkPicker.innerHTML = "";
       const title = document.createElement("p");
       title.className = "vsplit-mark-picker-title";
-      title.textContent = `附近 ${items.length} 个标记 · 高亮为你点到的：`;
+      title.textContent = `附近 ${items.length} 个标记（按时间）· 高亮为你点到的：`;
       vsplitMarkPicker.appendChild(title);
       items.forEach((ep) => {
         const btn = document.createElement("button");
