@@ -91,7 +91,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.14-l";
+  const GIF_TOOL_VERSION = "2026.08.14-m";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -4506,6 +4506,7 @@
     const vsplitFsClose = $("#vsplit-fs-close");
     const vsplitFsPlay = $("#vsplit-fs-play");
     const vsplitFsMark = $("#vsplit-fs-mark");
+    const vsplitFsUndo = $("#vsplit-fs-undo");
     const vsplitFsNow = $("#vsplit-fs-now");
     const vsplitFsCount = $("#vsplit-fs-count");
     const vsplitPreviewWrap = $("#vsplit-preview-wrap");
@@ -4731,10 +4732,17 @@
         vsplitFsMark.disabled = !hasVideo || vsplitBusy || editing;
         vsplitFsMark.textContent = markLabel;
       }
+      const canUndoLast =
+        !editing && hasVideo && !vsplitBusy && (vsplitDraftStart != null || vsplitMarks.length > 0);
+      const undoLabel = vsplitDraftStart != null ? "取消起点" : "取消上一段";
       if (vsplitMarkUndo) {
-        const showUndo = !editing && vsplitDraftStart != null;
-        vsplitMarkUndo.hidden = !showUndo;
-        vsplitMarkUndo.disabled = !showUndo || vsplitBusy;
+        vsplitMarkUndo.hidden = false;
+        vsplitMarkUndo.disabled = !canUndoLast;
+        vsplitMarkUndo.textContent = undoLabel;
+      }
+      if (vsplitFsUndo) {
+        vsplitFsUndo.disabled = !canUndoLast;
+        vsplitFsUndo.textContent = undoLabel;
       }
       if (vsplitMarkClear) {
         vsplitMarkClear.disabled =
@@ -4859,6 +4867,14 @@
       if (vsplitFsPlay) vsplitFsPlay.textContent = vsplitPlaying ? "暂停" : "播放";
       if (vsplitFsMark) {
         vsplitFsMark.textContent = vsplitDraftStart == null ? "打起点" : "打终点";
+      }
+      if (vsplitFsUndo) {
+        const canUndo =
+          vsplitEditIdx < 0 &&
+          Boolean(vsplitSourceFile) &&
+          (vsplitDraftStart != null || vsplitMarks.length > 0);
+        vsplitFsUndo.disabled = !canUndo || vsplitBusy;
+        vsplitFsUndo.textContent = vsplitDraftStart != null ? "取消起点" : "取消上一段";
       }
     }
 
@@ -5349,8 +5365,33 @@
     function undoVsplitDraft() {
       vsplitDraftStart = null;
       paintVsplitDraft();
+      paintVsplitScrubMarks();
+      paintVsplitNow();
       setVsplitButtons();
       toast("已取消起点");
+    }
+
+    function undoVsplitLastMark() {
+      if (vsplitEditIdx >= 0) {
+        toast("请先退出编辑");
+        return;
+      }
+      if (vsplitDraftStart != null) {
+        undoVsplitDraft();
+        return;
+      }
+      if (!vsplitMarks.length) {
+        toast("没有可取消的标记");
+        return;
+      }
+      // 列表按时长排序后，末项即时间上最新的一段（快速打点时即上一段）
+      const removed = vsplitMarks.pop();
+      invalidateVsplitOutputsFromMarks();
+      paintVsplitMarks();
+      paintVsplitNow();
+      const s = removed?.start == null ? "—" : formatClock(removed.start);
+      const e = removed?.end == null ? "—" : formatClock(removed.end);
+      toast(`已取消上一段 ${s}–${e}`);
     }
 
     function ensureVsplitClipsFromMarks() {
@@ -5820,6 +5861,7 @@
       toggleVsplitPlay().catch(() => {});
     });
     vsplitFsMark?.addEventListener("click", () => tapVsplitMark());
+    vsplitFsUndo?.addEventListener("click", () => undoVsplitLastMark());
     document.addEventListener("keydown", (e) => {
       if (!vsplitFsOpen) return;
       if (e.key === "Escape") {
@@ -5828,7 +5870,7 @@
       }
     });
     vsplitMarkTap?.addEventListener("click", () => tapVsplitMark());
-    vsplitMarkUndo?.addEventListener("click", () => undoVsplitDraft());
+    vsplitMarkUndo?.addEventListener("click", () => undoVsplitLastMark());
     vsplitMarkClear?.addEventListener("click", () => {
       clearVsplitMarks();
       invalidateVsplitOutputsFromMarks();
@@ -5920,6 +5962,7 @@
       isFullscreen: () => vsplitFsOpen,
       enterFullscreen: () => enterVsplitFullscreen(),
       exitFullscreen: () => exitVsplitFullscreen(),
+      undoLast: () => undoVsplitLastMark(),
       enterEdit: (idx) => enterVsplitEdit(idx),
       setMarks: (marks) => {
         vsplitMarks = (Array.isArray(marks) ? marks : [])
