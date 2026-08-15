@@ -41,7 +41,7 @@ node server.js
 1. 打开 Tools →「ADB 工具」
 2. 下载对应系统的完整 ZIP，解压后运行启动脚本（勿只保留脚本、删掉 server.js）
 3. 回到网页点击「连接本机桥」
-## 接口（P0–P3，bridge 0.6.11）
+## 接口（P0–P3，bridge 0.6.12）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -54,6 +54,7 @@ node server.js
 | GET | `/local/list?path=` | 列本机目录（仅允许 `/local/roots` 下路径） |
 | POST | `/local/push` | 本机路径 `adb push` 到设备目录 `{ serial, paths[], remoteDir }` |
 | POST | `/local/pull` | 设备路径 `adb pull` 到本机目录 `{ serial, remotePath, localDir, name? }` |
+| GET/POST | `/fs/zip` | 服务端拉取远程目录/文件并打包 zip 下载 |
 | POST | `/fs/mkdir` `/fs/delete` `/fs/rename` `/fs/move` `/fs/copy` | 文件操作（默认可写：sdcard / tmp） |
 | POST | `/fs/upload?serial=&path=&name=&forcePush=` | 上传到设备；`forcePush=1` 才可写系统 APK 路径 |
 | GET | `/fs/download?serial=&path=` | 从设备下载（pull 失败时尝试 run-as / su） |

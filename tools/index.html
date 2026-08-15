@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260815ip" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260815ip" />
+  <link rel="stylesheet" href="./style.css?v=20260815p1" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260815p1" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-ip</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-p1</span>
       </div>
       <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
@@ -1406,9 +1406,11 @@ hello@world.org</textarea>
           <div class="btn-row tool-actions adb-status-actions">
             <button type="button" class="primary-btn" id="adb-connect">连接本机桥</button>
             <button type="button" class="secondary-btn" id="adb-refresh" disabled>刷新设备</button>
-            <button type="button" class="secondary-btn" id="adb-dl-mac" data-adb-bundle="mac">下载 macOS 完整包</button>
-            <button type="button" class="secondary-btn" id="adb-dl-win" data-adb-bundle="win">下载 Windows 完整包</button>
-            <button type="button" class="secondary-btn" id="adb-dl-linux" data-adb-bundle="linux">下载 Linux 完整包</button>
+            <span class="adb-dl-bundle" id="adb-dl-bundle">
+              <button type="button" class="secondary-btn" id="adb-dl-mac" data-adb-bundle="mac">下载 macOS 完整包</button>
+              <button type="button" class="secondary-btn" id="adb-dl-win" data-adb-bundle="win">下载 Windows 完整包</button>
+              <button type="button" class="secondary-btn" id="adb-dl-linux" data-adb-bundle="linux">下载 Linux 完整包</button>
+            </span>
           </div>
         </div>
 
@@ -1418,7 +1420,7 @@ hello@world.org</textarea>
           <label for="adb-token">Token</label>
           <input id="adb-token" class="mono" type="text" value="devtools-adb" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Android Studio Device File Explorer）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.11），请解压到同一文件夹后运行启动脚本。</p>
+        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Android Studio Device File Explorer）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.12），请解压到同一文件夹后运行启动脚本。</p>
         <div class="adb-guide" id="adb-setup-guide">
           <strong>本机依赖怎么配？</strong>
           <ol>
@@ -1511,19 +1513,17 @@ hello@world.org</textarea>
                 <button type="button" class="secondary-btn" id="adb-fs-go">打开</button>
                 <button type="button" class="ghost-btn" id="adb-fs-refresh">刷新</button>
               </div>
-              <div class="btn-row tool-actions" style="margin-top:0.65rem">
-                <label class="file-btn" for="adb-fs-upload">上传文件</label>
+              <div class="adb-fs-toolbar" style="margin-top:0.55rem">
+                <label class="file-btn" for="adb-fs-upload">上传</label>
                 <input id="adb-fs-upload" type="file" multiple hidden />
                 <label class="file-btn" for="adb-fs-upload-dir">上传文件夹</label>
                 <input id="adb-fs-upload-dir" type="file" webkitdirectory multiple hidden />
-                <button type="button" class="secondary-btn" id="adb-fs-mkdir">新建文件夹</button>
-                <button type="button" class="ghost-btn" id="adb-fs-paste" disabled>粘贴到此处</button>
+                <button type="button" class="secondary-btn" id="adb-fs-mkdir">新建</button>
+                <button type="button" class="ghost-btn" id="adb-fs-paste" disabled>粘贴</button>
                 <button type="button" class="ghost-btn" id="adb-fs-view-list" title="列表视图">列表</button>
                 <button type="button" class="ghost-btn" id="adb-fs-view-grid" title="缩略图网格">网格</button>
-              </div>
-              <div class="adb-fs-toolbar" style="margin-top:0.55rem">
                 <label class="adb-fs-filter-label" for="adb-fs-filter">筛选</label>
-                <input id="adb-fs-filter" class="mono" type="search" placeholder="当前目录按名称筛选" autocomplete="off" spellcheck="false" />
+                <input id="adb-fs-filter" class="mono" type="search" placeholder="当前目录筛选" autocomplete="off" spellcheck="false" />
                 <span class="hint tight" id="adb-fs-sort-meta">排序：名称</span>
               </div>
               <details class="adb-fs-shortcuts-wrap" style="margin-top:0.45rem">
@@ -1568,40 +1568,45 @@ hello@world.org</textarea>
                   </div>
                 </div>
               </div>
-              <div class="adb-fs-savebar" id="adb-fs-savebar">
-                <div class="adb-fs-savebar-main">
-                  <strong>本机保存目录</strong>
-                  <span class="hint tight" id="adb-fs-local-meta">下载将保存到此目录（需桥 ≥0.6.11）</span>
-                </div>
-                <div class="adb-path-row adb-fs-local-path">
-                  <button type="button" class="ghost-btn" id="adb-fs-local-up" title="上级">上级</button>
-                  <input id="adb-fs-local-path" class="mono" type="text" value="" spellcheck="false" autocomplete="off" placeholder="本机目录路径" />
-                  <button type="button" class="secondary-btn" id="adb-fs-local-go">打开</button>
-                </div>
-                <div class="btn-row tool-actions adb-fs-local-roots" id="adb-fs-local-roots" style="margin-top:0.35rem"></div>
-              </div>
-              <div class="adb-fs-workspace" id="adb-fs-workspace" data-adb-fs-drop>
-                <div class="adb-fs-list" id="adb-fs-list" aria-live="polite" tabindex="0"></div>
-                <aside class="adb-fs-preview" id="adb-fs-preview" hidden>
-                  <div class="adb-fs-preview-head">
-                    <strong id="adb-fs-preview-title">详情 / 预览</strong>
-                    <button type="button" class="ghost-btn" id="adb-fs-preview-close">关闭</button>
+              <div class="adb-fs-dual" id="adb-fs-dual">
+                <section class="adb-fs-pane adb-fs-pane-device" aria-label="设备文件">
+                  <div class="adb-fs-pane-head">
+                    <strong>设备</strong>
+                    <span class="hint tight">拖入上传 · 可拖到右侧本机</span>
                   </div>
-                  <p class="hint tight" id="adb-fs-preview-meta"></p>
-                  <div class="adb-fs-props mono" id="adb-fs-props" hidden></div>
-                  <div class="adb-fs-preview-body" id="adb-fs-preview-body"></div>
-                </aside>
-              </div>
-              <details class="adb-fs-local-panel" id="adb-fs-local-panel">
-                <summary>本机文件浏览（可选：勾选后推送到上方设备当前目录）</summary>
-                <div class="adb-fs-local" id="adb-fs-local">
-                  <div class="adb-fs-local-list" id="adb-fs-local-list"></div>
-                  <div class="btn-row tool-actions" style="margin-top:0.45rem">
-                    <button type="button" class="primary-btn" id="adb-fs-local-push" disabled>推送到设备当前目录</button>
+                  <div class="adb-fs-workspace" id="adb-fs-workspace" data-adb-fs-drop>
+                    <div class="adb-fs-list" id="adb-fs-list" aria-live="polite" tabindex="0"></div>
+                    <aside class="adb-fs-preview" id="adb-fs-preview" hidden>
+                      <div class="adb-fs-preview-head">
+                        <strong id="adb-fs-preview-title">详情 / 预览</strong>
+                        <button type="button" class="ghost-btn" id="adb-fs-preview-close">关闭</button>
+                      </div>
+                      <p class="hint tight" id="adb-fs-preview-meta"></p>
+                      <div class="adb-fs-props mono" id="adb-fs-props" hidden></div>
+                      <div class="adb-fs-preview-body" id="adb-fs-preview-body"></div>
+                    </aside>
                   </div>
-                </div>
-              </details>
-              <p class="hint" id="adb-fs-hint">手机文件为主：可拖入上传到当前目录。下载默认落到上方「本机保存目录」。本机列表默认折叠，需要推送时再展开。Delete / F2 / Ctrl+A / Esc 可用。</p>
+                </section>
+                <section class="adb-fs-pane adb-fs-pane-local" aria-label="本机文件">
+                  <div class="adb-fs-pane-head">
+                    <strong>本机</strong>
+                    <span class="hint tight" id="adb-fs-local-meta">下载落点 · 可拖到左侧设备</span>
+                  </div>
+                  <div class="adb-path-row adb-fs-local-path">
+                    <button type="button" class="ghost-btn" id="adb-fs-local-up" title="上级">上级</button>
+                    <input id="adb-fs-local-path" class="mono" type="text" value="" spellcheck="false" autocomplete="off" placeholder="本机目录" />
+                    <button type="button" class="secondary-btn" id="adb-fs-local-go">打开</button>
+                  </div>
+                  <div class="btn-row tool-actions adb-fs-local-roots" id="adb-fs-local-roots" style="margin-top:0.35rem"></div>
+                  <div class="adb-fs-local" id="adb-fs-local" data-adb-local-drop>
+                    <div class="adb-fs-local-list" id="adb-fs-local-list"></div>
+                    <div class="btn-row tool-actions" style="margin-top:0.45rem">
+                      <button type="button" class="primary-btn" id="adb-fs-local-push" disabled>推送到设备当前目录</button>
+                    </div>
+                  </div>
+                </section>
+              </div>
+              <p class="hint" id="adb-fs-hint">左右双栏：设备 ↔ 本机可互拖。文件夹下载优先由桥端打包 zip（≥0.6.12）。Delete / F2 / Ctrl+A / Esc 可用。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="install" hidden>
@@ -1967,6 +1972,16 @@ hello@world.org</textarea>
               <div class="field-row" style="flex-wrap:wrap">
                 <label for="adb-log-lines">行数</label>
                 <input id="adb-log-lines" class="mono meta-input" type="number" min="50" max="5000" value="400" />
+                <label for="adb-log-level">级别</label>
+                <select id="adb-log-level" class="mono select-input">
+                  <option value="" selected>全部</option>
+                  <option value="V">Verbose+</option>
+                  <option value="D">Debug+</option>
+                  <option value="I">Info+</option>
+                  <option value="W">Warn+</option>
+                  <option value="E">Error+</option>
+                  <option value="F">Fatal</option>
+                </select>
                 <label for="adb-log-tag">Tag</label>
                 <input id="adb-log-tag" class="mono" type="text" placeholder="如 ActivityManager" autocomplete="off" spellcheck="false" />
                 <label for="adb-log-package">包名过滤</label>
@@ -1991,7 +2006,7 @@ hello@world.org</textarea>
                 <span class="hint tight">预览图：单击 / 长按 / 双击 / 拖拽（单指）</span>
               </div>
               <div class="adb-guide">
-                <strong>怎么用：</strong>先点「刷新屏幕预览」→ 在图上<strong>单击 / 长按 / 双击 / 拖拽</strong>。操作后会自动开启实时预览；可点「停止实时预览」。快捷键在预览上方。需桥 ≥0.6.8。
+                <strong>怎么用：</strong>先点「刷新屏幕预览」→ 在图上<strong>单击 / 长按 / 双击 / 拖拽</strong>。操作后会自动开启实时预览；可点「停止实时预览」。快捷键在预览上方。
               </div>
               <div class="btn-row tool-actions">
                 <button type="button" class="primary-btn" id="adb-input-refresh-shot">刷新屏幕预览</button>
@@ -2392,7 +2407,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260815z"></script>
-  <script src="./extra.js?v=20260815ip"></script>
+  <script src="./extra.js?v=20260815p1"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>

@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.15-ip";
+  const TOOLS_VERSION = "2026.08.15-p1";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -8078,7 +8078,7 @@
     const ADB_STORE_BASE = "devtools-adb-base";
     const ADB_STORE_TOKEN = "devtools-adb-token";
     const ADB_FS_ROOTS_HINT_HTML =
-      "对标桌面文件管理器：单击打开/预览，⋯/右键操作；筛选排序、拖入上传到设备。下载默认落到「本机保存目录」。Delete 删除 · F2 重命名 · Ctrl+A 全选。「内部存储」= /storage/emulated/0。";
+      "对标桌面文件管理器：双栏互拖、拖入上传；文件夹优先桥端打包。Delete / F2 / Ctrl+A。「内部存储」= /storage/emulated/0。";
     const adbBaseInput = $("#adb-base");
     const adbTokenInput = $("#adb-token");
     const adbDot = $("#adb-dot");
@@ -8918,8 +8918,8 @@
               : "";
           const entryAttr = `data-adb-entry="${escapeHtml(full)}" data-adb-entry-name="${escapeHtml(item.name)}" data-adb-entry-writable="${writable ? "1" : "0"}" data-adb-entry-mode="${escapeHtml(String(item.mode || ""))}" data-adb-entry-date="${escapeHtml(String(item.date || ""))}"`;
           const rowAttr = isDir
-            ? `data-adb-open="${escapeHtml(full)}" ${entryAttr}`
-            : `data-adb-file="${escapeHtml(full)}" data-adb-file-name="${escapeHtml(item.name)}"${sizeAttr} ${entryAttr}`;
+            ? `data-adb-open="${escapeHtml(full)}" ${entryAttr}${virtual ? "" : ' draggable="true"'}`
+            : `data-adb-file="${escapeHtml(full)}" data-adb-file-name="${escapeHtml(item.name)}"${sizeAttr} ${entryAttr}${virtual ? "" : ' draggable="true"'}`;
           const checkHtml = virtual
             ? `<span class="adb-fs-col-check"></span>`
             : `<input type="checkbox" class="adb-fs-check" data-adb-check-path="${escapeHtml(full)}" aria-label="选择 ${escapeHtml(item.name)}" ${checked} />`;
@@ -9022,7 +9022,7 @@
           const checkedCls = adbLocalChecked.has(full) ? " is-checked" : "";
           const label = isDir ? `${item.name}/` : item.name;
           const sizeText = isDir ? "" : formatBytes(item.size) || "";
-          return `<div class="adb-fs-local-row${checkedCls}" data-adb-local-path="${escapeHtml(full)}" data-adb-local-name="${escapeHtml(item.name)}" data-adb-local-dir="${isDir ? "1" : "0"}">
+          return `<div class="adb-fs-local-row${checkedCls}" data-adb-local-path="${escapeHtml(full)}" data-adb-local-name="${escapeHtml(item.name)}" data-adb-local-dir="${isDir ? "1" : "0"}" draggable="true">
             <input type="checkbox" class="adb-fs-check" data-adb-local-check="${escapeHtml(full)}" aria-label="选择 ${escapeHtml(item.name)}" ${checked} />
             <span class="adb-fs-name${isDir ? "" : " mono"}"${isDir ? ` data-adb-local-open="${escapeHtml(full)}"` : ""}>${escapeHtml(label)}</span>
             <span class="hint tight mono">${escapeHtml(sizeText)}</span>
@@ -9129,15 +9129,20 @@
                 }${app.apkPath ? ` · ${escapeHtml(app.apkPath)}` : ""}</div>
               </span>
             </label>
-            <div class="adb-fs-actions">
+            <div class="adb-app-actions">
               <button type="button" class="primary-btn" data-adb-app-open="${pkg}">打开</button>
               <button type="button" class="secondary-btn" data-adb-app-info="${pkg}">详情</button>
-              <button type="button" class="ghost-btn" data-adb-app-stop="${pkg}">强停</button>
-              <button type="button" class="ghost-btn" data-adb-app-clear="${pkg}">清数据</button>
-              <button type="button" class="secondary-btn" data-adb-app-backup="${pkg}">备份</button>
-              <button type="button" class="ghost-btn" data-adb-app-disable="${pkg}">停用</button>
-              <button type="button" class="ghost-btn" data-adb-app-enable="${pkg}">启用</button>
               <button type="button" class="ghost-btn" data-adb-app-uninstall="${pkg}">卸载</button>
+              <details class="adb-app-more">
+                <summary>⋯</summary>
+                <div class="adb-app-more-menu" role="menu">
+                  <button type="button" class="ghost-btn" data-adb-app-stop="${pkg}">强停</button>
+                  <button type="button" class="ghost-btn" data-adb-app-clear="${pkg}">清数据</button>
+                  <button type="button" class="ghost-btn" data-adb-app-backup="${pkg}">备份</button>
+                  <button type="button" class="ghost-btn" data-adb-app-disable="${pkg}">停用</button>
+                  <button type="button" class="ghost-btn" data-adb-app-enable="${pkg}">启用</button>
+                </div>
+              </details>
             </div>
           </div>`;
         })
@@ -9323,30 +9328,83 @@
         if (health?.tools) signGuide.hidden = Boolean(signingOk);
       }
       syncLocalSaveMeta();
+      applyAdbFeatureGates(health);
+    }
+
+    function bridgeHas(feature) {
+      return adbBridgeFeatures.includes(feature);
+    }
+
+    function bridgeAtLeast(ver) {
+      const cur = String(adbBridgeVersion || "")
+        .split(".")
+        .map((n) => Number(n) || 0);
+      const need = String(ver || "")
+        .split(".")
+        .map((n) => Number(n) || 0);
+      for (let i = 0; i < Math.max(cur.length, need.length); i++) {
+        const a = cur[i] || 0;
+        const b = need[i] || 0;
+        if (a > b) return true;
+        if (a < b) return false;
+      }
+      return true;
+    }
+
+    function applyAdbFeatureGates(health) {
+      const connected = Boolean(health?.version);
+      const bundle = $("#adb-dl-bundle");
+      if (bundle) bundle.classList.toggle("is-hidden", connected);
+
+      const inputRefresh = $("#adb-input-refresh-shot");
+      const inputLive = $("#adb-input-live-stop");
+      const canInput = !health || bridgeHas("screencap") || bridgeHas("input") || bridgeAtLeast("0.6.8");
+      if (inputRefresh) {
+        inputRefresh.disabled = Boolean(health) && !canInput;
+        inputRefresh.title = canInput ? "" : "当前桥版本过旧，请更新到 ≥0.6.8";
+      }
+      if (inputLive && !canInput) inputLive.hidden = true;
+
+      const analyzeBtn = $("#adb-apk-analyze");
+      const canSign = !health || bridgeHas("apk-signing") || bridgeHas("apk-info") || bridgeAtLeast("0.6.10");
+      if (analyzeBtn) {
+        analyzeBtn.title = canSign ? "" : "签名分析需桥 ≥0.6.10";
+      }
+
+      const logLevel = $("#adb-log-level");
+      if (logLevel) {
+        const ok = !health || bridgeHas("logcat-level") || bridgeAtLeast("0.6.12");
+        logLevel.disabled = Boolean(health) && !ok;
+        logLevel.title = ok ? "" : "级别过滤需桥 ≥0.6.12";
+      }
     }
 
     function canLocalPull() {
-      return Boolean(adbLocalPath) && adbBridgeFeatures.includes("local-pull");
+      return Boolean(adbLocalPath) && (bridgeHas("local-pull") || bridgeAtLeast("0.6.11"));
+    }
+
+    function canFsZip() {
+      return bridgeHas("fs-zip") || bridgeAtLeast("0.6.12");
     }
 
     function syncLocalSaveMeta() {
       const meta = $("#adb-fs-local-meta");
       if (!meta) return;
       if (!adbConnected) {
-        meta.textContent = "连接桥后可设置本机保存目录";
+        meta.textContent = "连接桥后可设置本机目录";
         return;
       }
-      if (!adbBridgeFeatures.includes("local-pull")) {
+      if (!canLocalPull()) {
         meta.textContent = adbBridgeVersion
-          ? `当前桥 ${adbBridgeVersion} 不支持直存本机，请更新到 ≥0.6.11；下载仍走浏览器`
-          : "下载将保存到此目录（需桥 ≥0.6.11）";
+          ? `桥 ${adbBridgeVersion} 无本机直存，请更新 ≥0.6.11`
+          : "下载落点（需桥 ≥0.6.11）";
         return;
       }
       if (!adbLocalPath) {
-        meta.textContent = "请选择本机目录：下载将保存到这里";
+        meta.textContent = "请选择本机目录作为下载落点";
         return;
       }
-      meta.textContent = `下载保存到：${adbLocalPath}`;
+      meta.textContent = `落点：${adbLocalPath}`;
     }
 
     function updateFsHistButtons() {
@@ -9518,6 +9576,7 @@
       const packageName = String($("#adb-log-package")?.value || "").trim();
       const query = String($("#adb-log-query")?.value || "").trim();
       const tag = String($("#adb-log-tag")?.value || "").trim();
+      const level = String($("#adb-log-level")?.value || "").trim();
       const params = new URLSearchParams({
         serial,
         lines: String(lines),
@@ -9525,6 +9584,7 @@
       if (packageName) params.set("package", packageName);
       if (query) params.set("query", query);
       if (tag) params.set("tag", tag);
+      if (level) params.set("level", level);
       if (!silent && $("#adb-log-meta")) $("#adb-log-meta").textContent = "拉取中…";
       const data = await adbFetch(`/logcat?${params.toString()}`);
       if ($("#adb-log-out")) $("#adb-log-out").textContent = data.text || "(无日志)";
@@ -9954,9 +10014,7 @@
           });
           if (!nested) toast(`已保存到 ${data.localPath || adbLocalPath}`);
           if (adbFsMeta) adbFsMeta.textContent = `已保存 ${name || ""} → ${adbLocalPath}`;
-          if ($("#adb-fs-local-panel")?.open) {
-            loadLocalPath(adbLocalPath).catch(() => {});
-          }
+          loadLocalPath(adbLocalPath).catch(() => {});
           return data;
         }
         const res = await adbFetch(
@@ -10083,9 +10141,18 @@
           updateFsXfer({ title: "拉取文件夹到本机", name: name || remotePath, loaded: 0, total: 0, started });
           const data = await pullRemoteToLocalDir(remotePath, name, { signal: controller.signal });
           toast(`文件夹已保存到 ${data.localPath || adbLocalPath}`);
-          if ($("#adb-fs-local-panel")?.open) {
-            loadLocalPath(adbLocalPath).catch(() => {});
-          }
+          loadLocalPath(adbLocalPath).catch(() => {});
+          return;
+        }
+        if (canFsZip()) {
+          updateFsXfer({ title: "桥端打包文件夹", name: name || remotePath, loaded: 0, total: 0, started });
+          const res = await adbFetch(
+            `/fs/zip?serial=${encodeURIComponent(adbSelected)}&path=${encodeURIComponent(remotePath)}`,
+            { signal: controller.signal }
+          );
+          const blob = await res.blob();
+          downloadBlobFile(blob, `${name || basenameRemote(remotePath) || "folder"}.zip`);
+          toast(`已下载 ${formatBytes(blob.size)}（桥端打包）`);
           return;
         }
         updateFsXfer({ title: "打包文件夹", name: name || remotePath, loaded: 0, total: 0, started });
@@ -10929,7 +10996,12 @@
     });
     {
       const dropEl = $("#adb-fs-workspace") || adbFsList;
+      const localDrop = $("#adb-fs-local") || $(".adb-fs-pane-local");
       const hasFiles = (dt) => dt && [...(dt.types || [])].includes("Files");
+      const hasLocalPaths = (dt) =>
+        dt && ([...(dt.types || [])].includes("application/x-adb-local-paths") || dt.getData?.("application/x-adb-local-paths"));
+      const hasDevicePaths = (dt) =>
+        dt && ([...(dt.types || [])].includes("application/x-adb-device-paths") || dt.getData?.("application/x-adb-device-paths"));
       const readEntryFile = (fileEntry) =>
         new Promise((resolve, reject) => {
           fileEntry.file(resolve, reject);
@@ -10982,14 +11054,46 @@
         }
         return [...(dt?.files || [])];
       }
+      async function pushLocalPathsToDevice(paths) {
+        if (!paths?.length || !adbSelected) return;
+        if (!adbFsDirWritable) {
+          toast("当前设备目录只读，无法接收");
+          return;
+        }
+        const remoteDir = adbFsPath?.value || "/";
+        const data = await adbFetch("/local/push", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serial: adbSelected, paths, remoteDir }),
+        });
+        const results = data.results || [];
+        const ok = results.filter((r) => r.ok).length;
+        const fail = results.length - ok;
+        toast(fail ? `已推送 ${ok} 项，失败 ${fail} 项` : `已推送 ${ok} 项`);
+        await loadFs(remoteDir, { history: "replace" });
+      }
+      async function pullDevicePathsToLocal(items) {
+        if (!items?.length || !canLocalPull()) {
+          toast(canLocalPull() ? "无项目" : "本机直存不可用，请更新桥 ≥0.6.11");
+          return;
+        }
+        for (const it of items) {
+          if (it.isDir) await pullRemoteToLocalDir(it.path, it.name);
+          else await pullRemoteToLocalDir(it.path, it.name);
+        }
+        toast(`已保存 ${items.length} 项到本机`);
+        loadLocalPath(adbLocalPath).catch(() => {});
+      }
+
+      // OS files → device
       dropEl?.addEventListener("dragenter", (e) => {
-        if (!hasFiles(e.dataTransfer)) return;
+        if (!hasFiles(e.dataTransfer) && !hasLocalPaths(e.dataTransfer)) return;
         e.preventDefault();
         dropEl.classList.add("is-drop");
         adbFsList?.classList.add("is-drop");
       });
       dropEl?.addEventListener("dragover", (e) => {
-        if (!hasFiles(e.dataTransfer)) return;
+        if (!hasFiles(e.dataTransfer) && !hasLocalPaths(e.dataTransfer)) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "copy";
         dropEl.classList.add("is-drop");
@@ -11001,10 +11105,20 @@
         adbFsList?.classList.remove("is-drop");
       });
       dropEl?.addEventListener("drop", (e) => {
-        if (!hasFiles(e.dataTransfer)) return;
         e.preventDefault();
         dropEl.classList.remove("is-drop");
         adbFsList?.classList.remove("is-drop");
+        try {
+          const rawLocal = e.dataTransfer.getData("application/x-adb-local-paths");
+          if (rawLocal) {
+            const paths = JSON.parse(rawLocal);
+            pushLocalPathsToDevice(paths).catch((err) => setError(adbError, err.message || String(err)));
+            return;
+          }
+        } catch (_) {
+          /* fall through */
+        }
+        if (!hasFiles(e.dataTransfer)) return;
         collectDroppedFiles(e.dataTransfer)
           .then((files) => {
             if (!files.length) return;
@@ -11012,6 +11126,72 @@
             return uploadAdbFiles(files, { relativePaths: hasRel });
           })
           .catch((err) => setError(adbError, err.message || String(err)));
+      });
+
+      // device → local
+      localDrop?.addEventListener("dragenter", (e) => {
+        if (!hasDevicePaths(e.dataTransfer)) return;
+        e.preventDefault();
+        localDrop.classList.add("is-drop");
+      });
+      localDrop?.addEventListener("dragover", (e) => {
+        if (!hasDevicePaths(e.dataTransfer)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        localDrop.classList.add("is-drop");
+      });
+      localDrop?.addEventListener("dragleave", (e) => {
+        if (e.relatedTarget && localDrop.contains(e.relatedTarget)) return;
+        localDrop.classList.remove("is-drop");
+      });
+      localDrop?.addEventListener("drop", (e) => {
+        e.preventDefault();
+        localDrop.classList.remove("is-drop");
+        try {
+          const raw = e.dataTransfer.getData("application/x-adb-device-paths");
+          if (!raw) return;
+          const items = JSON.parse(raw);
+          pullDevicePathsToLocal(items).catch((err) => setError(adbError, err.message || String(err)));
+        } catch (err) {
+          setError(adbError, err.message || String(err));
+        }
+      });
+
+      // dragstart: local rows → device
+      $("#adb-fs-local-list")?.addEventListener("dragstart", (e) => {
+        const row = e.target.closest(".adb-fs-local-row[data-adb-local-path]");
+        if (!row) return;
+        const path = row.dataset.adbLocalPath;
+        if (!path) return;
+        const paths =
+          adbLocalChecked.size && adbLocalChecked.has(path)
+            ? [...adbLocalChecked.keys()]
+            : [path];
+        e.dataTransfer.effectAllowed = "copy";
+        e.dataTransfer.setData("application/x-adb-local-paths", JSON.stringify(paths));
+        e.dataTransfer.setData("text/plain", paths.join("\n"));
+      });
+
+      // dragstart: device rows → local
+      adbFsList?.addEventListener("dragstart", (e) => {
+        const row = e.target.closest(".adb-fs-row[data-adb-entry]");
+        if (!row || row.classList.contains("is-virtual")) return;
+        if (e.target.closest(".adb-fs-check") || e.target.closest("[data-adb-fs-more]")) {
+          e.preventDefault();
+          return;
+        }
+        const entry = collectFsEntrySelection(row);
+        if (!entry) return;
+        const items =
+          adbFsChecked.size && adbFsChecked.has(entry.path)
+            ? [...adbFsChecked.values()]
+            : [entry];
+        e.dataTransfer.effectAllowed = "copy";
+        e.dataTransfer.setData(
+          "application/x-adb-device-paths",
+          JSON.stringify(items.map((it) => ({ path: it.path, name: it.name, isDir: !!it.isDir })))
+        );
+        e.dataTransfer.setData("text/plain", items.map((it) => it.path).join("\n"));
       });
     }
     adbFsList?.addEventListener("contextmenu", (e) => {
@@ -11025,6 +11205,11 @@
     document.addEventListener("click", (e) => {
       if (e.target.closest("#adb-fs-ctx") || e.target.closest("[data-adb-fs-more]")) return;
       hideFsCtxMenu();
+      if (!e.target.closest(".adb-app-more")) {
+        $$(".adb-app-more[open]").forEach((d) => {
+          d.open = false;
+        });
+      }
     });
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") hideFsCtxMenu();
@@ -11119,6 +11304,14 @@
             if (canLocalPull()) {
               await pullRemoteToLocalDir(it.path, it.name, { signal: controller.signal });
               toast(`「${it.name}」已保存到本机目录`);
+            } else if (canFsZip()) {
+              const res = await adbFetch(
+                `/fs/zip?serial=${encodeURIComponent(adbSelected)}&path=${encodeURIComponent(it.path)}`,
+                { signal: controller.signal }
+              );
+              const blob = await res.blob();
+              downloadBlobFile(blob, `${it.name || basenameRemote(it.path) || "folder"}.zip`);
+              toast(`「${it.name}」已桥端打包下载`);
             } else {
               const { blob, count, skipped } = await downloadFolderBlob(it.path, {
                 signal: controller.signal,
@@ -11147,7 +11340,7 @@
           }
         }
         toast(canLocalPull() ? `已保存 ${items.length} 项到本机目录` : `已开始下载 ${items.length} 项`);
-        if (canLocalPull() && $("#adb-fs-local-panel")?.open) {
+        if (canLocalPull()) {
           loadLocalPath(adbLocalPath).catch(() => {});
         }
       } catch (err) {
