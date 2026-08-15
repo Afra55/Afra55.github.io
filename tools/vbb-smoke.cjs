@@ -572,7 +572,9 @@ async function main() {
           document.getElementById("vsplit-edit-bar") &&
           !sticky.contains(document.getElementById("vsplit-edit-bar"))
       ),
+      editInsideSticky: Boolean(sticky?.contains(document.getElementById("vsplit-edit-bar"))),
       markInsideSticky: Boolean(sticky?.contains(document.getElementById("vsplit-add-btns"))),
+      hasFsScrubSlot: Boolean(document.getElementById("vsplit-fs-scrub-slot")),
       scrubUnderVideo: Boolean(stage?.contains(scrub) && stage?.contains(video)),
     };
   });
@@ -628,11 +630,14 @@ async function main() {
   if (!manualUi.hasMarkChips || !manualUi.hasMarkPicker) {
     throw new Error(`mark chips / dense picker missing: ${JSON.stringify(manualUi)}`);
   }
-  if (!manualUi.editOutsideSticky) {
-    throw new Error(`edit bar should be outside sticky core: ${JSON.stringify(manualUi)}`);
+  if (manualUi.editOutsideSticky || !manualUi.editInsideSticky) {
+    throw new Error(`edit bar should stay inside sticky core: ${JSON.stringify(manualUi)}`);
   }
   if (!manualUi.markInsideSticky) {
     throw new Error(`mark buttons should stay inside sticky core: ${JSON.stringify(manualUi)}`);
+  }
+  if (!manualUi.hasFsScrubSlot) {
+    throw new Error(`fullscreen scrub slot missing: ${JSON.stringify(manualUi)}`);
   }
   if (manualUi.videoControls) {
     throw new Error("manual mode should hide native video controls");
@@ -892,6 +897,10 @@ async function main() {
     const open = window.DevToolsVsplit.isFullscreen();
     const inHost = host?.contains(video);
     const fsHidden = document.getElementById("vsplit-fs")?.hidden;
+    const scrubSlot = document.getElementById("vsplit-fs-scrub-slot");
+    const scrubInFs = Boolean(scrubSlot?.contains(document.getElementById("vsplit-scrub-block")));
+    const marksInFs = Boolean(scrubSlot?.contains(document.getElementById("vsplit-scrub-marks")));
+    const fsDotCount = document.querySelectorAll("#vsplit-fs-scrub-slot .vsplit-scrub-mark").length;
     await seekByScrub(0.2);
     await video.play().catch(() => {});
     document.getElementById("vsplit-fs-mark")?.click();
@@ -931,11 +940,16 @@ async function main() {
     document.getElementById("vsplit-fs-close")?.click();
     const closed = !window.DevToolsVsplit.isFullscreen();
     const backInWrap = wrap?.contains(video);
+    const scrubHome = document.getElementById("vsplit-scrub-home");
+    const scrubBack = Boolean(scrubHome?.contains(document.getElementById("vsplit-scrub-block")));
     return {
       beforeParent,
       open,
       inHost,
       fsHidden,
+      scrubInFs,
+      marksInFs,
+      fsDotCount,
       afterFsStart,
       statusAfterStart,
       noteAfterStart,
@@ -953,10 +967,17 @@ async function main() {
       afterUndoStart,
       closed,
       backInWrap,
+      scrubBack,
     };
   });
   if (!fsMark.open || !fsMark.inHost || fsMark.fsHidden) {
     throw new Error(`fullscreen open failed: ${JSON.stringify(fsMark)}`);
+  }
+  if (!fsMark.scrubInFs || !fsMark.marksInFs) {
+    throw new Error(`fullscreen should host scrub+marks: ${JSON.stringify(fsMark)}`);
+  }
+  if (!(fsMark.fsDotCount >= 1)) {
+    throw new Error(`fullscreen should show scrub mark dots: ${JSON.stringify(fsMark)}`);
   }
   if (fsMark.afterFsStart !== "打终点") {
     throw new Error(`fullscreen mark should arm end: ${JSON.stringify(fsMark)}`);
@@ -989,6 +1010,9 @@ async function main() {
   }
   if (!fsMark.closed || !fsMark.backInWrap) {
     throw new Error(`fullscreen exit failed: ${JSON.stringify(fsMark)}`);
+  }
+  if (!fsMark.scrubBack) {
+    throw new Error(`scrub block should return home after fullscreen: ${JSON.stringify(fsMark)}`);
   }
   await pageMarks.close();
 
