@@ -92,7 +92,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.15-k";
+  const GIF_TOOL_VERSION = "2026.08.15-l";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -5103,7 +5103,13 @@
       if (vsplitScrubBlock && vsplitScrubHome && vsplitScrubBlock.parentElement !== vsplitScrubHome) {
         vsplitScrubHome.appendChild(vsplitScrubBlock);
       }
-      paintVsplitScrubMarks();
+      /* 全屏期间只刷了 scrub；退出后补一次完整列表 */
+      try {
+        paintVsplitMarks();
+      } catch (err) {
+        console.error(err);
+        paintVsplitScrubMarks();
+      }
       syncVsplitScrubFromVideo();
       paintVsplitNow();
       setVsplitButtons();
@@ -5262,11 +5268,18 @@
 
     function enterVsplitEdit(idx) {
       if (idx < 0 || idx >= vsplitMarks.length) return;
+      const mark = vsplitMarks[idx];
+      if (!mark) return;
+      /* 全屏编辑栏被隐藏；进编辑还会重绘下方长列表，手机易白屏 */
+      if (vsplitFsOpen) {
+        const jump = mark.start != null ? mark.start : mark.end;
+        if (jump != null) seekVsplitPreview(jump, { keepPlaying: true });
+        return;
+      }
       pauseVsplitPreview();
       vsplitDraftStart = null;
       vsplitEditIdx = idx;
       hideVsplitMarkPicker();
-      const mark = vsplitMarks[idx];
       vsplitEditFocus = mark.start == null && mark.end != null ? "end" : "start";
       const jump = vsplitEditFocus === "end" ? mark.end : mark.start;
       if (jump != null) seekVsplitPreview(jump);
@@ -5413,6 +5426,8 @@
 
     function paintVsplitMarkChips() {
       if (!vsplitMarkChips) return;
+      /* 全屏芯片已 CSS 隐藏，跳过重建减轻 DOM 抖动 */
+      if (vsplitFsOpen) return;
       if (vsplitMode !== "manual" || !vsplitMarks.length) {
         vsplitMarkChips.hidden = true;
         vsplitMarkChips.innerHTML = "";
@@ -5541,27 +5556,27 @@
         vsplitScrubMarks.appendChild(dot);
       };
 
+      /* 全屏圆点只作预览，禁止点选进编辑 */
+      const canEditDots = !vsplitBusy && !vsplitFsOpen;
       if (vsplitEditIdx >= 0) {
         const mark = vsplitMarks[vsplitEditIdx];
         if (mark) {
-          const editable = !vsplitBusy;
           addDot(mark.start, "start", {
             active: vsplitEditFocus === "start",
             idx: vsplitEditIdx,
-            editable,
+            editable: canEditDots,
           });
           addDot(mark.end, "end", {
             active: vsplitEditFocus === "end",
             idx: vsplitEditIdx,
-            editable,
+            editable: canEditDots,
           });
         }
       } else {
         if (vsplitDraftStart != null) addDot(vsplitDraftStart, "start", { editable: false });
         vsplitMarks.forEach((mark, idx) => {
-          const editable = !vsplitBusy;
-          addDot(mark.start, "start", { idx, editable });
-          addDot(mark.end, "end", { idx, editable });
+          addDot(mark.start, "start", { idx, editable: canEditDots });
+          addDot(mark.end, "end", { idx, editable: canEditDots });
         });
       }
       paintVsplitMarkChips();
@@ -5574,6 +5589,12 @@
       if (!mark) return;
       if (focus === "start" && mark.start == null) return;
       if (focus === "end" && mark.end == null) return;
+      const jump = focus === "end" ? mark.end : mark.start;
+      /* 全屏禁止进编辑：会 paintVsplitMarks 重绘下方列表导致白屏/闪退 */
+      if (vsplitFsOpen) {
+        if (jump != null) seekVsplitPreview(jump, { keepPlaying: true });
+        return;
+      }
       hideVsplitMarkPicker();
       if (vsplitEditIdx !== idx) {
         vsplitDraftStart = null;
@@ -5581,7 +5602,6 @@
         pauseVsplitPreview();
       }
       vsplitEditFocus = focus;
-      const jump = focus === "end" ? mark.end : mark.start;
       if (jump != null) seekVsplitPreview(jump, { keepPlaying: true });
       setVsplitButtons();
       paintVsplitDraft();
@@ -5795,63 +5815,70 @@
 
     let vsplitMarkTapCooldownUntil = 0;
     function tapVsplitMark() {
-      if (!vsplitSourceFile || !vsplitVideo?.src) {
-        toast("请先选择视频");
-        return;
-      }
-      if (vsplitEditIdx >= 0) {
-        toast("请先退出编辑再打点");
-        return;
-      }
-      const nowMs = performance.now();
-      const t = currentMarkTime();
-      if (vsplitDraftStart == null) {
-        vsplitDraftStart = t;
-        vsplitMarkTapCooldownUntil = 0;
-        paintVsplitDraft();
-        paintVsplitScrubMarks();
-        setVsplitButtons();
-        paintVsplitNow();
-        notifyVsplitMarkFeedback(`起点 ${formatClock(t)}`, "start");
-        return;
-      }
-      // 同一段内防连点误触终点（新起点会清冷却）
-      if (nowMs < vsplitMarkTapCooldownUntil) return;
-      if (vsplitMarks.length >= VSPLIT_MAX_CLIPS) {
-        toast(`最多 ${VSPLIT_MAX_CLIPS} 段`);
-        return;
-      }
-      const start = vsplitDraftStart;
-      const end = t;
-      // 必须真实拉开最短时长；勿靠 normalize 自动拉长，否则播放中连点会狂造段
-      if (Math.abs(end - start) < VSPLIT_MIN_SPAN - 0.001) {
-        toast(`终点至少距起点 ${VSPLIT_MIN_SPAN} 秒，请继续播放或拖动`);
-        return;
-      }
-      const next = normalizeMarkPair(start, end);
-      if (!next || !isMarkComplete(next)) {
-        toast(`每段至少 ${VSPLIT_MIN_SPAN} 秒`);
-        return;
-      }
-      // 与最近一段几乎重合则忽略，防止同位置连点重复入库
-      const last = vsplitMarks[vsplitMarks.length - 1];
-      if (
-        last &&
-        Math.abs((last.start ?? -1) - next.start) < 0.08 &&
-        Math.abs((last.end ?? -1) - next.end) < 0.08
-      ) {
-        toast("与上一段重复，已忽略");
+      try {
+        if (!vsplitSourceFile || !vsplitVideo?.src) {
+          toast("请先选择视频");
+          return;
+        }
+        if (vsplitEditIdx >= 0) {
+          toast("请先退出编辑再打点");
+          return;
+        }
+        const nowMs = performance.now();
+        const t = currentMarkTime();
+        if (vsplitDraftStart == null) {
+          vsplitDraftStart = t;
+          vsplitMarkTapCooldownUntil = 0;
+          paintVsplitDraft();
+          paintVsplitScrubMarks();
+          setVsplitButtons();
+          paintVsplitNow();
+          notifyVsplitMarkFeedback(`起点 ${formatClock(t)}`, "start");
+          return;
+        }
+        // 同一段内防连点误触终点（新起点会清冷却）
+        if (nowMs < vsplitMarkTapCooldownUntil) return;
+        if (vsplitMarks.length >= VSPLIT_MAX_CLIPS) {
+          toast(`最多 ${VSPLIT_MAX_CLIPS} 段`);
+          return;
+        }
+        const start = vsplitDraftStart;
+        const end = t;
+        // 必须真实拉开最短时长；勿靠 normalize 自动拉长，否则播放中连点会狂造段
+        if (Math.abs(end - start) < VSPLIT_MIN_SPAN - 0.001) {
+          toast(`终点至少距起点 ${VSPLIT_MIN_SPAN} 秒，请继续播放或拖动`);
+          return;
+        }
+        const next = normalizeMarkPair(start, end);
+        if (!next || !isMarkComplete(next)) {
+          toast(`每段至少 ${VSPLIT_MIN_SPAN} 秒`);
+          return;
+        }
+        // 与最近一段几乎重合则忽略，防止同位置连点重复入库
+        const last = vsplitMarks[vsplitMarks.length - 1];
+        if (
+          last &&
+          Math.abs((last.start ?? -1) - next.start) < 0.08 &&
+          Math.abs((last.end ?? -1) - next.end) < 0.08
+        ) {
+          toast("与上一段重复，已忽略");
+          vsplitDraftStart = null;
+          flushVsplitMarkPaint();
+          return;
+        }
+        vsplitMarks.push(next);
+        sortVsplitMarks();
         vsplitDraftStart = null;
+        vsplitMarkTapCooldownUntil = nowMs + 300;
+        invalidateVsplitOutputsFromMarks();
         flushVsplitMarkPaint();
-        return;
+        notifyVsplitMarkFeedback(`已添加 · ${(next.end - next.start).toFixed(1)}s`, "end");
+      } catch (err) {
+        console.error(err);
+        try {
+          toast(err?.message || "打点失败，请重试");
+        } catch (_) {}
       }
-      vsplitMarks.push(next);
-      sortVsplitMarks();
-      vsplitDraftStart = null;
-      vsplitMarkTapCooldownUntil = nowMs + 300;
-      invalidateVsplitOutputsFromMarks();
-      flushVsplitMarkPaint();
-      notifyVsplitMarkFeedback(`已添加 · ${(next.end - next.start).toFixed(1)}s`, "end");
     }
 
     let vsplitMarkTapArmed = false;

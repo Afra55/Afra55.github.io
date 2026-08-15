@@ -2434,7 +2434,9 @@ a.secondary-btn {
 .vsplit-fs-scrub .vsplit-nudge-btns,
 .vsplit-fs-scrub .vsplit-mark-btns,
 .vsplit-fs-scrub .vsplit-edit-bar,
-.vsplit-fs-scrub #vsplit-scrub-hint {
+.vsplit-fs-scrub #vsplit-scrub-hint,
+.vsplit-fs-scrub .vsplit-mark-chips {
+  /* 芯片易误触进编辑且全屏重建会拖垮页面 */
   display: none !important;
 }
 

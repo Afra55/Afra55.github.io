@@ -923,6 +923,13 @@ async function main() {
       const flash = document.getElementById("vsplit-fs-flash");
       return Boolean(host && flash && host.lastElementChild === flash);
     })();
+    // 全屏点圆点不应进入编辑（否则会重绘下方列表导致白屏）
+    const editableDotsInFs = document.querySelectorAll(
+      "#vsplit-fs-scrub-slot .vsplit-scrub-mark.is-editable"
+    ).length;
+    const firstDot = document.querySelector("#vsplit-fs-scrub-slot .vsplit-scrub-mark");
+    firstDot?.click();
+    const editAfterDotTap = window.DevToolsVsplit.getEditIdx?.() ?? -1;
     const beforeUndo = marks.length;
     document.getElementById("vsplit-fs-undo")?.click();
     const afterUndoEnd = {
@@ -942,6 +949,10 @@ async function main() {
     const backInWrap = wrap?.contains(video);
     const scrubHome = document.getElementById("vsplit-scrub-home");
     const scrubBack = Boolean(scrubHome?.contains(document.getElementById("vsplit-scrub-block")));
+    const listRowsAfterExit = document.querySelectorAll("#vsplit-marks .vsplit-mark").length;
+    const editableDotsAfterExit = document.querySelectorAll(
+      "#vsplit-scrub-home .vsplit-scrub-mark.is-editable"
+    ).length;
     return {
       beforeParent,
       open,
@@ -961,6 +972,8 @@ async function main() {
       flashAfterEnd,
       flashEndColor,
       flashOnTop,
+      editableDotsInFs,
+      editAfterDotTap,
       markCount: marks.length,
       beforeUndo,
       afterUndoEnd,
@@ -968,6 +981,8 @@ async function main() {
       closed,
       backInWrap,
       scrubBack,
+      listRowsAfterExit,
+      editableDotsAfterExit,
     };
   });
   if (!fsMark.open || !fsMark.inHost || fsMark.fsHidden) {
@@ -1013,6 +1028,15 @@ async function main() {
   }
   if (!fsMark.scrubBack) {
     throw new Error(`scrub block should return home after fullscreen: ${JSON.stringify(fsMark)}`);
+  }
+  if (fsMark.editableDotsInFs !== 0) {
+    throw new Error(`fullscreen scrub dots must not be editable: ${JSON.stringify(fsMark)}`);
+  }
+  if (fsMark.editAfterDotTap !== -1) {
+    throw new Error(`tapping fullscreen scrub dots must not enter edit: ${JSON.stringify(fsMark)}`);
+  }
+  if (!(fsMark.listRowsAfterExit >= 1) || !(fsMark.editableDotsAfterExit >= 1)) {
+    throw new Error(`exit fullscreen should restore mark list+editable dots: ${JSON.stringify(fsMark)}`);
   }
   await pageMarks.close();
 
