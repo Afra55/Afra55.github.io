@@ -5429,7 +5429,10 @@
       setVsplitButtons();
       paintVsplitNow();
       syncVsplitScrubFromVideo();
-      if (vsplitMode === "manual") paintVsplitMarks();
+      if (vsplitMode === "manual") {
+        vsplitVideo?.removeAttribute("controls");
+        paintVsplitMarks();
+      }
       toast("视频已就绪");
     }
 
