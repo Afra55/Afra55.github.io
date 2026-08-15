@@ -92,7 +92,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.15-i";
+  const GIF_TOOL_VERSION = "2026.08.15-j";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -4497,6 +4497,9 @@
     const vsplitManualTransport = $("#vsplit-manual-transport");
     const vsplitStage = $("#vsplit-stage");
     const vsplitScrub = $("#vsplit-scrub");
+    const vsplitScrubHome = $("#vsplit-scrub-home");
+    const vsplitScrubBlock = $("#vsplit-scrub-block");
+    const vsplitFsScrubSlot = $("#vsplit-fs-scrub-slot");
     const vsplitScrubHit = $("#vsplit-scrub-hit");
     const vsplitScrubMarks = $("#vsplit-scrub-marks");
     const vsplitMarkPicker = $("#vsplit-mark-picker");
@@ -5052,9 +5055,15 @@
         vsplitFsHost.appendChild(vsplitVideo);
       }
       if (vsplitFsFlash) vsplitFsHost.appendChild(vsplitFsFlash);
+      // 进度条 + 打点圆点一并带进全屏，避免无法拖进度
+      if (vsplitScrubBlock && vsplitFsScrubSlot && vsplitScrubBlock.parentElement !== vsplitFsScrubSlot) {
+        vsplitFsScrubSlot.appendChild(vsplitScrubBlock);
+      }
       vsplitVideo.hidden = false;
       vsplitVideo.classList.add("is-fs");
       paintVsplitFsChrome();
+      paintVsplitScrubMarks();
+      syncVsplitScrubFromVideo();
       setVsplitButtons();
       // 进入后尽量继续播，便于边看边打点
       if (vsplitVideo.paused) {
@@ -5067,6 +5076,9 @@
         // 仍确保视频回到预览区
         if (opts.restoreVideo !== false && vsplitVideo && vsplitPreviewWrap && vsplitVideo.parentElement !== vsplitPreviewWrap) {
           vsplitPreviewWrap.appendChild(vsplitVideo);
+        }
+        if (vsplitScrubBlock && vsplitScrubHome && vsplitScrubBlock.parentElement !== vsplitScrubHome) {
+          vsplitScrubHome.appendChild(vsplitScrubBlock);
         }
         return;
       }
@@ -5088,6 +5100,11 @@
           vsplitPreviewWrap.appendChild(vsplitVideo);
         }
       }
+      if (vsplitScrubBlock && vsplitScrubHome && vsplitScrubBlock.parentElement !== vsplitScrubHome) {
+        vsplitScrubHome.appendChild(vsplitScrubBlock);
+      }
+      paintVsplitScrubMarks();
+      syncVsplitScrubFromVideo();
       paintVsplitNow();
       setVsplitButtons();
     }
@@ -5161,7 +5178,7 @@
         return;
       }
       if (vsplitEditIdx >= 0) {
-        vsplitScrubHint.textContent = "编辑中只显示本段绿/橙点 · 退出编辑后恢复全部 · 上下滑微调";
+        vsplitScrubHint.textContent = "编辑中只显示本段绿/橙点 · 上方可点「退出编辑」· 上下滑微调";
         return;
       }
       vsplitScrubHint.textContent = "绿起点 / 橙终点同行 · 点圆点或芯片进入编辑 · 上下滑微调";
