@@ -8753,7 +8753,8 @@
         .map((name) => {
           const t = tools[name];
           if (!t) return null;
-          return `${name}${t.ok ? "✓" : "✗"}`;
+          const pathHint = t.ok && t.path ? `（${String(t.path).split(/[/\\]/).slice(-2).join("/")}）` : "";
+          return `${name}${t.ok ? "✓" : "✗"}${name === "keytool" && t.ok ? pathHint : ""}`;
         })
         .filter(Boolean);
       const ver = health?.version ? `桥 ${health.version}` : "";
