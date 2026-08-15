@@ -568,6 +568,7 @@ async function main() {
           document.getElementById("vsplit-edit-bar") &&
           !sticky.contains(document.getElementById("vsplit-edit-bar"))
       ),
+      markInsideSticky: Boolean(sticky?.contains(document.getElementById("vsplit-add-btns"))),
       scrubUnderVideo: Boolean(stage?.contains(scrub) && stage?.contains(video)),
     };
   });
@@ -600,6 +601,9 @@ async function main() {
   }
   if (!manualUi.editOutsideSticky) {
     throw new Error(`edit bar should be outside sticky core: ${JSON.stringify(manualUi)}`);
+  }
+  if (!manualUi.markInsideSticky) {
+    throw new Error(`mark buttons should stay inside sticky core: ${JSON.stringify(manualUi)}`);
   }
   if (manualUi.videoControls) {
     throw new Error("manual mode should hide native video controls");
