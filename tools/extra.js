@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.15-pick2";
+  const TOOLS_VERSION = "2026.08.15-pick3";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -4655,6 +4655,23 @@
       return `${m}:${String(r).padStart(2, "0")}${tail}`;
     }
 
+    /** 片段时长文案，如 7.0秒 */
+    function formatVsplitSpanSec(sec) {
+      const s = Math.max(0, Number(sec) || 0);
+      const rounded = Math.round(s * 10) / 10;
+      return `${rounded.toFixed(1)}秒`;
+    }
+
+    function formatVsplitMarkRangeLabel(mark, idx) {
+      const n = `#${String(idx + 1).padStart(2, "0")}`;
+      const s = mark?.start == null ? "—" : formatClock(mark.start);
+      const e = mark?.end == null ? "—" : formatClock(mark.end);
+      if (mark && isMarkComplete(mark)) {
+        return `${n} ${s}→${e} · 共${formatVsplitSpanSec(mark.end - mark.start)}`;
+      }
+      return `${n} ${s}→${e}`;
+    }
+
     function revokeUrl(url) {
       if (!url) return;
       try {
@@ -5405,7 +5422,16 @@
         }
         const kindLabel = ep.kind === "end" ? "终点" : "起点";
         const badge = isNearest ? `<span class="vsplit-mark-picker-badge">当前</span>` : "";
-        btn.innerHTML = `${badge}<strong>#${String(ep.idx + 1).padStart(2, "0")} ${kindLabel}</strong> <span class="mono">${formatClock(ep.t)}</span>`;
+        const mark = vsplitMarks[ep.idx];
+        let rangeHtml = "";
+        if (mark && isMarkComplete(mark)) {
+          rangeHtml = ` <span class="mono vsplit-mark-picker-range">${formatClock(mark.start)}→${formatClock(mark.end)} · 共${formatVsplitSpanSec(mark.end - mark.start)}</span>`;
+        } else if (mark) {
+          const s = mark.start == null ? "—" : formatClock(mark.start);
+          const e = mark.end == null ? "—" : formatClock(mark.end);
+          rangeHtml = ` <span class="mono vsplit-mark-picker-range">${s}→${e}</span>`;
+        }
+        btn.innerHTML = `${badge}<strong>#${String(ep.idx + 1).padStart(2, "0")} ${kindLabel}</strong> <span class="mono">${formatClock(ep.t)}</span>${rangeHtml}`;
         btn.addEventListener("click", (e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -5497,8 +5523,10 @@
           (isMarkComplete(mark) ? "" : " is-incomplete");
         const s = mark.start == null ? "—" : formatClock(mark.start);
         const e = mark.end == null ? "—" : formatClock(mark.end);
-        chip.textContent = `#${String(idx + 1).padStart(2, "0")} ${s}→${e}`;
-        chip.title = `编辑第 ${idx + 1} 段`;
+        chip.textContent = formatVsplitMarkRangeLabel(mark, idx);
+        chip.title = isMarkComplete(mark)
+          ? `编辑第 ${idx + 1} 段 · ${s}→${e} · 共${formatVsplitSpanSec(mark.end - mark.start)}`
+          : `编辑第 ${idx + 1} 段 · ${s}→${e}`;
         chip.addEventListener("click", () => {
           // 全屏打点时芯片只作跳转预览，禁止进入编辑（编辑栏在全屏被隐藏）
           if (vsplitFsOpen) {
@@ -5796,8 +5824,8 @@
         const sTxt = mark.start == null ? "—" : formatClock(mark.start);
         const eTxt = mark.end == null ? "—" : formatClock(mark.end);
         durHint.textContent = complete
-          ? `时长 ${span.toFixed(1)}s · ${sTxt}–${eTxt}`
-          : `未完成 · ${sTxt}–${eTxt}`;
+          ? `${sTxt}→${eTxt} · 共${formatVsplitSpanSec(span)}`
+          : `未完成 · ${sTxt}→${eTxt}`;
         head.append(title, durHint);
 
         const actions = document.createElement("div");

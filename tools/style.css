@@ -2114,6 +2114,13 @@ a.secondary-btn {
   font-size: 0.78rem;
 }
 
+.vsplit-mark-picker-range {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
 .vsplit-scrub {
   -webkit-appearance: none;
   appearance: none;
