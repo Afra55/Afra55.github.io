@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260815p1" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260815p1" />
+  <link rel="stylesheet" href="./style.css?v=20260815p1b" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260815p1b" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-p1</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-p1b</span>
       </div>
       <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
@@ -1671,6 +1671,7 @@ hello@world.org</textarea>
                 <button type="button" class="ghost-btn" id="adb-perm-revoke">撤销权限</button>
               </div>
               <div class="adb-fs-list adb-apps-list" id="adb-apps-list" aria-live="polite"></div>
+              <p class="hint tight">行内可快速打开 / 详情 / 卸载；其余操作请<strong>右键</strong>应用行。</p>
               <p class="hint tight" id="adb-apps-label-tip" hidden></p>
               <pre class="mono adb-pre" id="adb-app-detail" hidden></pre>
               <p class="hint">左侧勾选用于权限操作。应用名优先用 aapt 解析 APK 标签（需本机 build-tools）；首次刷新会拉取 APK 解析并缓存，之后会快很多。系统应用操作可能失败。</p>
@@ -2407,7 +2408,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260815z"></script>
-  <script src="./extra.js?v=20260815p1"></script>
+  <script src="./extra.js?v=20260815p1b"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>

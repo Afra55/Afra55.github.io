@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.15-p1";
+  const TOOLS_VERSION = "2026.08.15-p1b";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -9118,7 +9118,7 @@
           const hasLabel = Boolean(app.label && app.label !== app.packageName);
           const title = escapeHtml(hasLabel ? app.label : app.packageName);
           const checked = adbPermPackage === app.packageName ? "checked" : "";
-          return `<div class="adb-fs-row adb-app-row">
+          return `<div class="adb-fs-row adb-app-row" data-adb-app-pkg="${pkg}">
             <label class="adb-app-select">
               <input type="checkbox" data-adb-app-check="${pkg}" ${checked} />
               <span>
@@ -9133,16 +9133,6 @@
               <button type="button" class="primary-btn" data-adb-app-open="${pkg}">打开</button>
               <button type="button" class="secondary-btn" data-adb-app-info="${pkg}">详情</button>
               <button type="button" class="ghost-btn" data-adb-app-uninstall="${pkg}">卸载</button>
-              <details class="adb-app-more">
-                <summary>⋯</summary>
-                <div class="adb-app-more-menu" role="menu">
-                  <button type="button" class="ghost-btn" data-adb-app-stop="${pkg}">强停</button>
-                  <button type="button" class="ghost-btn" data-adb-app-clear="${pkg}">清数据</button>
-                  <button type="button" class="ghost-btn" data-adb-app-backup="${pkg}">备份</button>
-                  <button type="button" class="ghost-btn" data-adb-app-disable="${pkg}">停用</button>
-                  <button type="button" class="ghost-btn" data-adb-app-enable="${pkg}">启用</button>
-                </div>
-              </details>
             </div>
           </div>`;
         })
@@ -9152,6 +9142,132 @@
           "beforeend",
           `<div class="adb-fs-empty">仅显示前 400 条，请用过滤缩小范围</div>`
         );
+      }
+    }
+
+    function hideAppCtxMenu() {
+      const menu = $("#adb-app-ctx");
+      if (menu) menu.hidden = true;
+    }
+
+    function ensureAppCtxMenu() {
+      let menu = $("#adb-app-ctx");
+      if (menu) return menu;
+      menu = document.createElement("div");
+      menu.id = "adb-app-ctx";
+      menu.className = "adb-fs-ctx adb-app-ctx";
+      menu.hidden = true;
+      menu.setAttribute("role", "menu");
+      document.body.appendChild(menu);
+      menu.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-adb-app-act]");
+        if (!btn) return;
+        e.preventDefault();
+        const pkg = menu.dataset.pkg || "";
+        const act = btn.dataset.adbAppAct || "";
+        hideAppCtxMenu();
+        if (pkg && act) runAppRowAction(act, pkg).catch((err) => setError(adbError, err.message || String(err)));
+      });
+      return menu;
+    }
+
+    function showAppCtxMenu(pkg, clientX, clientY) {
+      if (!pkg) return;
+      const menu = ensureAppCtxMenu();
+      menu.dataset.pkg = pkg;
+      menu.innerHTML = [
+        `<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-app-act="open">打开</button>`,
+        `<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-app-act="info">详情</button>`,
+        `<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-app-act="stop">强停</button>`,
+        `<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-app-act="clear">清数据</button>`,
+        `<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-app-act="backup">备份</button>`,
+        `<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-app-act="disable">停用</button>`,
+        `<button type="button" class="adb-fs-ctx-item" role="menuitem" data-adb-app-act="enable">启用</button>`,
+        `<button type="button" class="adb-fs-ctx-item is-danger" role="menuitem" data-adb-app-act="uninstall">卸载</button>`,
+      ].join("");
+      menu.hidden = false;
+      const pad = 8;
+      const rect = menu.getBoundingClientRect();
+      let left = clientX;
+      let top = clientY;
+      if (left + rect.width > window.innerWidth - pad) left = Math.max(pad, window.innerWidth - rect.width - pad);
+      if (top + rect.height > window.innerHeight - pad) top = Math.max(pad, window.innerHeight - rect.height - pad);
+      menu.style.left = `${left}px`;
+      menu.style.top = `${top}px`;
+    }
+
+    async function runAppRowAction(act, pkg) {
+      const packageName = String(pkg || "").trim();
+      if (!packageName || !adbSelected) return;
+      if (act === "open") {
+        await adbFetch("/apps/action", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serial: adbSelected, packageName, action: "open" }),
+        });
+        toast("已尝试打开应用");
+        return;
+      }
+      if (act === "info") {
+        await showAppInfo(packageName);
+        return;
+      }
+      if (act === "stop") {
+        await adbFetch("/apps/action", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serial: adbSelected, packageName, action: "force-stop" }),
+        });
+        toast("已强制停止");
+        return;
+      }
+      if (act === "clear") {
+        if (!window.confirm(`确认清除 ${packageName} 的数据？`)) return;
+        await adbFetch("/apps/action", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serial: adbSelected, packageName, action: "clear" }),
+        });
+        toast("已清除数据");
+        return;
+      }
+      if (act === "backup") {
+        const data = await adbFetch("/apps/backup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serial: adbSelected, packageName, async: true }),
+        });
+        await trackJob(data.job);
+        return;
+      }
+      if (act === "disable") {
+        if (!window.confirm(`确认停用 ${packageName}？`)) return;
+        await adbFetch("/apps/action", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serial: adbSelected, packageName, action: "disable" }),
+        });
+        toast("已请求停用");
+        return;
+      }
+      if (act === "enable") {
+        await adbFetch("/apps/action", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serial: adbSelected, packageName, action: "enable" }),
+        });
+        toast("已请求启用");
+        return;
+      }
+      if (act === "uninstall") {
+        if (!window.confirm(`确认卸载 ${packageName}？此操作不可恢复。`)) return;
+        await adbFetch("/apps/action", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serial: adbSelected, packageName, action: "uninstall" }),
+        });
+        toast("已请求卸载");
+        await loadApps();
       }
     }
 
@@ -11205,14 +11321,13 @@
     document.addEventListener("click", (e) => {
       if (e.target.closest("#adb-fs-ctx") || e.target.closest("[data-adb-fs-more]")) return;
       hideFsCtxMenu();
-      if (!e.target.closest(".adb-app-more")) {
-        $$(".adb-app-more[open]").forEach((d) => {
-          d.open = false;
-        });
-      }
+      if (!e.target.closest("#adb-app-ctx")) hideAppCtxMenu();
     });
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") hideFsCtxMenu();
+      if (e.key === "Escape") {
+        hideFsCtxMenu();
+        hideAppCtxMenu();
+      }
     });
     document.addEventListener("keydown", (e) => {
       if (adbTab !== "files") return;
@@ -11686,114 +11801,30 @@
       }
       const openBtn = e.target.closest("[data-adb-app-open]");
       const infoBtn = e.target.closest("[data-adb-app-info]");
-      const stopBtn = e.target.closest("[data-adb-app-stop]");
-      const clearBtn = e.target.closest("[data-adb-app-clear]");
-      const backupBtn = e.target.closest("[data-adb-app-backup]");
-      const disableBtn = e.target.closest("[data-adb-app-disable]");
-      const enableBtn = e.target.closest("[data-adb-app-enable]");
       const uninstallBtn = e.target.closest("[data-adb-app-uninstall]");
       try {
         if (openBtn) {
-          await adbFetch("/apps/action", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              serial: adbSelected,
-              packageName: openBtn.dataset.adbAppOpen,
-              action: "open",
-            }),
-          });
-          toast("已尝试打开应用");
+          await runAppRowAction("open", openBtn.dataset.adbAppOpen);
           return;
         }
         if (infoBtn) {
-          await showAppInfo(infoBtn.dataset.adbAppInfo);
-          return;
-        }
-        if (stopBtn) {
-          await adbFetch("/apps/action", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              serial: adbSelected,
-              packageName: stopBtn.dataset.adbAppStop,
-              action: "force-stop",
-            }),
-          });
-          toast("已强制停止");
-          return;
-        }
-        if (clearBtn) {
-          if (!window.confirm(`确认清除 ${clearBtn.dataset.adbAppClear} 的数据？`)) return;
-          await adbFetch("/apps/action", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              serial: adbSelected,
-              packageName: clearBtn.dataset.adbAppClear,
-              action: "clear",
-            }),
-          });
-          toast("已清除数据");
-          return;
-        }
-        if (backupBtn) {
-          const data = await adbFetch("/apps/backup", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              serial: adbSelected,
-              packageName: backupBtn.dataset.adbAppBackup,
-              async: true,
-            }),
-          });
-          await trackJob(data.job);
-          return;
-        }
-        if (disableBtn) {
-          if (!window.confirm(`确认停用 ${disableBtn.dataset.adbAppDisable}？`)) return;
-          await adbFetch("/apps/action", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              serial: adbSelected,
-              packageName: disableBtn.dataset.adbAppDisable,
-              action: "disable",
-            }),
-          });
-          toast("已请求停用");
-          return;
-        }
-        if (enableBtn) {
-          await adbFetch("/apps/action", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              serial: adbSelected,
-              packageName: enableBtn.dataset.adbAppEnable,
-              action: "enable",
-            }),
-          });
-          toast("已请求启用");
+          await runAppRowAction("info", infoBtn.dataset.adbAppInfo);
           return;
         }
         if (uninstallBtn) {
-          if (!window.confirm(`确认卸载 ${uninstallBtn.dataset.adbAppUninstall}？此操作不可恢复。`)) return;
-          await adbFetch("/apps/action", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              serial: adbSelected,
-              packageName: uninstallBtn.dataset.adbAppUninstall,
-              action: "uninstall",
-            }),
-          });
-          toast("已卸载");
-          await loadApps();
+          await runAppRowAction("uninstall", uninstallBtn.dataset.adbAppUninstall);
         }
       } catch (err) {
         setError(adbError, err.message || String(err));
       }
+    });
+    adbAppsList?.addEventListener("contextmenu", (e) => {
+      const row = e.target.closest(".adb-app-row[data-adb-app-pkg]");
+      if (!row) return;
+      if (e.target.closest("button") || e.target.closest("input")) return;
+      e.preventDefault();
+      hideFsCtxMenu();
+      showAppCtxMenu(row.dataset.adbAppPkg, e.clientX, e.clientY);
     });
 
     $("#adb-shot-selected")?.addEventListener("click", async () => {
