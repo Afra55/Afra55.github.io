@@ -2244,33 +2244,41 @@ a.secondary-btn {
 .vsplit-fs-flash {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 6;
   pointer-events: none;
   opacity: 0;
   border-radius: inherit;
+  will-change: opacity;
 }
 
 .vsplit-fs-flash.is-start {
-  box-shadow: inset 0 0 0 3px rgba(52, 211, 153, 0.95);
-  background: rgba(52, 211, 153, 0.12);
+  box-shadow:
+    inset 0 0 0 4px #34d399,
+    inset 0 0 28px rgba(52, 211, 153, 0.45);
+  background: rgba(52, 211, 153, 0.16);
 }
 
 .vsplit-fs-flash.is-end {
-  box-shadow: inset 0 0 0 3px rgba(251, 146, 60, 0.95);
-  background: rgba(251, 146, 60, 0.12);
+  box-shadow:
+    inset 0 0 0 4px #fb923c,
+    inset 0 0 28px rgba(251, 146, 60, 0.42);
+  background: rgba(251, 146, 60, 0.16);
 }
 
 .vsplit-fs-flash.is-pop {
-  animation: vsplit-fs-flash-pop 0.28s ease-out;
+  animation: vsplit-fs-flash-pop 0.42s ease-out;
 }
 
 @keyframes vsplit-fs-flash-pop {
   0% { opacity: 0; }
-  25% { opacity: 1; }
+  12% { opacity: 1; }
+  55% { opacity: 1; }
   100% { opacity: 0; }
 }
 
 .vsplit-fs-host #vsplit-video {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   max-height: none;

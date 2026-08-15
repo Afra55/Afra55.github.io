@@ -782,12 +782,21 @@ async function main() {
     const statusAfterStart = (document.getElementById("vsplit-fs-status")?.textContent || "").trim();
     const noteAfterStart = (document.getElementById("vsplit-fs-note")?.textContent || "").trim();
     const noteOn = document.getElementById("vsplit-fs-note")?.classList.contains("is-on");
+    const flashAfterStart = document.getElementById("vsplit-fs-flash")?.classList.contains("is-pop");
+    const flashStartColor = document.getElementById("vsplit-fs-flash")?.classList.contains("is-start");
     await seekByScrub(0.35);
     await video.play().catch(() => {});
     document.getElementById("vsplit-fs-mark")?.click();
     const marks = window.DevToolsVsplit.getMarks?.() || [];
     const statusAfterEnd = (document.getElementById("vsplit-fs-status")?.textContent || "").trim();
     const noteAfterEnd = (document.getElementById("vsplit-fs-note")?.textContent || "").trim();
+    const flashAfterEnd = document.getElementById("vsplit-fs-flash")?.classList.contains("is-pop");
+    const flashEndColor = document.getElementById("vsplit-fs-flash")?.classList.contains("is-end");
+    const flashOnTop = (() => {
+      const host = document.getElementById("vsplit-fs-host");
+      const flash = document.getElementById("vsplit-fs-flash");
+      return Boolean(host && flash && host.lastElementChild === flash);
+    })();
     const beforeUndo = marks.length;
     document.getElementById("vsplit-fs-undo")?.click();
     const afterUndoEnd = {
@@ -814,8 +823,13 @@ async function main() {
       statusAfterStart,
       noteAfterStart,
       noteOn,
+      flashAfterStart,
+      flashStartColor,
       statusAfterEnd,
       noteAfterEnd,
+      flashAfterEnd,
+      flashEndColor,
+      flashOnTop,
       markCount: marks.length,
       beforeUndo,
       afterUndoEnd,
@@ -835,6 +849,9 @@ async function main() {
   }
   if (!/已完成/.test(fsMark.statusAfterEnd || "") || !/已添加/.test(fsMark.noteAfterEnd || "")) {
     throw new Error(`fullscreen end feedback missing: ${JSON.stringify(fsMark)}`);
+  }
+  if (!fsMark.flashAfterStart || !fsMark.flashStartColor || !fsMark.flashAfterEnd || !fsMark.flashEndColor || !fsMark.flashOnTop) {
+    throw new Error(`fullscreen edge flash missing: ${JSON.stringify(fsMark)}`);
   }
   if (!(fsMark.markCount >= 3)) {
     throw new Error(`fullscreen should add a mark pair: ${JSON.stringify(fsMark)}`);
