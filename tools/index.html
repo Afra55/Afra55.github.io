@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260814f" />
+  <link rel="stylesheet" href="./style.css?v=20260814g" />
   <link rel="stylesheet" href="./workspace-nav.css?v=20260814f" />
 </head>
 <body>
@@ -1196,7 +1196,7 @@ hello@world.org</textarea>
 <section id="vsplit" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-vsplit">
       <div class="panel-head">
         <h1>视频切分</h1>
-        <p>选择视频后按份数等分，或按固定时长切片；全程本地处理，不会上传。可下载片段，并批量转高清 / 黑盒 GIF。</p>
+        <p>选择视频后可等分、按固定时长，或手动标记多段起止点；全程本地处理，不会上传。可下载片段，并批量转高清 / 黑盒 GIF。</p>
       </div>
       <div class="panel-body">
         <div class="btn-row tool-actions">
@@ -1204,7 +1204,7 @@ hello@world.org</textarea>
           <input id="vsplit-file" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" hidden />
           <button type="button" class="ghost-btn" id="vsplit-clear">清空</button>
         </div>
-        <p class="hint" id="vsplit-meta">支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。切分优先复制编码（快）；失败则重编码该段。关闭页面会释放本次视频和 GIF。</p>
+        <p class="hint" id="vsplit-meta">支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。可等分、按时长或手动选段；关闭页面会释放本次视频和 GIF。</p>
         <div class="gif-preview-wrap">
           <video id="vsplit-video" class="img-preview gif-preview" controls playsinline muted preload="metadata" hidden></video>
         </div>
@@ -1212,6 +1212,7 @@ hello@world.org</textarea>
           <span class="seg" role="group" aria-label="切分方式">
             <button type="button" class="seg-btn is-active" id="vsplit-mode-n" data-vsplit-mode="count">等分成 n 份</button>
             <button type="button" class="seg-btn" id="vsplit-mode-t" data-vsplit-mode="duration">按每段时长</button>
+            <button type="button" class="seg-btn" id="vsplit-mode-m" data-vsplit-mode="manual">手动选段</button>
           </span>
         </div>
         <div class="field-row" id="vsplit-count-row" style="flex-wrap:wrap;margin-top:0.55rem">
@@ -1225,6 +1226,16 @@ hello@world.org</textarea>
           <input id="vsplit-m" class="mono meta-input" type="number" min="0" max="59" step="1" value="0" />
           <label for="vsplit-s">秒</label>
           <input id="vsplit-s" class="mono meta-input" type="number" min="0" max="59.9" step="0.1" value="15" />
+        </div>
+        <div class="vsplit-manual" id="vsplit-manual-row" hidden>
+          <p class="hint" id="vsplit-manual-now">拖动进度条定位后，点「设为起点 / 终点」打点；可改秒数或删除。</p>
+          <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
+            <button type="button" class="secondary-btn" id="vsplit-mark-start" disabled>设为起点</button>
+            <button type="button" class="secondary-btn" id="vsplit-mark-end" disabled>设为终点</button>
+            <button type="button" class="ghost-btn" id="vsplit-mark-clear" disabled>清空标记</button>
+          </div>
+          <p class="hint tight" id="vsplit-manual-draft" hidden></p>
+          <div class="vsplit-marks" id="vsplit-marks" aria-live="polite"></div>
         </div>
         <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
           <label for="vsplit-fps">高清 GIF 帧率</label>
@@ -1962,7 +1973,7 @@ hello@world.org</textarea>
   <script src="./temp.js?v=20260814f"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./app.js?v=20260814f"></script>
-  <script src="./extra.js?v=20260814f"></script>
+  <script src="./extra.js?v=20260814g"></script>
   <script src="./imgkit.js?v=20260810l"></script>
 </body>
 </html>

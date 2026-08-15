@@ -91,7 +91,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.14-f";
+  const GIF_TOOL_VERSION = "2026.08.14-g";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -4492,6 +4492,13 @@
     const vsplitCount = $("#vsplit-count");
     const vsplitCountRow = $("#vsplit-count-row");
     const vsplitDurationRow = $("#vsplit-duration-row");
+    const vsplitManualRow = $("#vsplit-manual-row");
+    const vsplitManualNow = $("#vsplit-manual-now");
+    const vsplitManualDraft = $("#vsplit-manual-draft");
+    const vsplitMarksEl = $("#vsplit-marks");
+    const vsplitMarkStart = $("#vsplit-mark-start");
+    const vsplitMarkEnd = $("#vsplit-mark-end");
+    const vsplitMarkClear = $("#vsplit-mark-clear");
     const vsplitH = $("#vsplit-h");
     const vsplitM = $("#vsplit-m");
     const vsplitS = $("#vsplit-s");
@@ -4515,6 +4522,8 @@
     const vsplitProgressPct = $("#vsplit-progress-pct");
     const VSPLIT_MAX_CLIPS = 50;
     const VSPLIT_MIN_SPAN = 0.5;
+    const VSPLIT_DEFAULT_META =
+      "支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。可等分、按时长或手动选段；关闭页面会释放本次视频和 GIF。";
     let vsplitSourceFile = null;
     let vsplitObjectUrl = "";
     let vsplitClips = [];
@@ -4524,6 +4533,10 @@
     let vsplitZipGifUrl = "";
     let vsplitMergedUrl = "";
     let vsplitMode = "count";
+    /** @type {{start:number,end:number}[]} */
+    let vsplitMarks = [];
+    /** @type {number|null} */
+    let vsplitDraftStart = null;
 
     function setVsplitProgress(visible, ratio, text, opts = {}) {
       if (!vsplitProgress) return;
@@ -4619,27 +4632,306 @@
     }
 
     function setVsplitButtons() {
-      const hasVideo = Boolean(vsplitVideo?.src);
+      const hasVideo = Boolean(vsplitSourceFile && vsplitVideo?.src);
       const hasClips = vsplitClips.length > 0;
+      const hasMarks = vsplitMarks.length > 0;
       const gifCount = vsplitClips.filter((c) => c.gifBlob).length;
-      if (vsplitCut) vsplitCut.disabled = !hasVideo || vsplitBusy;
-      if (vsplitGifHq) vsplitGifHq.disabled = !hasClips || vsplitBusy;
-      if (vsplitGifBb) vsplitGifBb.disabled = !hasClips || vsplitBusy;
+      const canManualCut = vsplitMode !== "manual" || hasMarks;
+      if (vsplitCut) {
+        vsplitCut.disabled = !hasVideo || vsplitBusy || !canManualCut;
+        vsplitCut.textContent = vsplitMode === "manual" ? "按标记切分" : "开始切分";
+      }
+      // 手动选段：有标记即可直接转 GIF（不必先切视频）
+      const canGif = hasClips || (vsplitMode === "manual" && hasMarks);
+      if (vsplitGifHq) vsplitGifHq.disabled = !canGif || vsplitBusy;
+      if (vsplitGifBb) vsplitGifBb.disabled = !canGif || vsplitBusy;
       if (vsplitMerge) vsplitMerge.disabled = gifCount < 2 || vsplitBusy;
+      if (vsplitMarkStart) vsplitMarkStart.disabled = !hasVideo || vsplitBusy;
+      if (vsplitMarkEnd) vsplitMarkEnd.disabled = !hasVideo || vsplitBusy;
+      if (vsplitMarkClear) vsplitMarkClear.disabled = (!hasMarks && vsplitDraftStart == null) || vsplitBusy;
     }
 
     function syncVsplitMode() {
       const isCount = vsplitMode === "count";
+      const isDuration = vsplitMode === "duration";
+      const isManual = vsplitMode === "manual";
       $("#vsplit-mode-n")?.classList.toggle("is-active", isCount);
-      $("#vsplit-mode-t")?.classList.toggle("is-active", !isCount);
+      $("#vsplit-mode-t")?.classList.toggle("is-active", isDuration);
+      $("#vsplit-mode-m")?.classList.toggle("is-active", isManual);
       if (vsplitCountRow) vsplitCountRow.hidden = !isCount;
-      if (vsplitDurationRow) vsplitDurationRow.hidden = isCount;
+      if (vsplitDurationRow) vsplitDurationRow.hidden = !isDuration;
+      if (vsplitManualRow) vsplitManualRow.hidden = !isManual;
+      if (isManual) {
+        paintVsplitNow();
+        paintVsplitMarks();
+      }
+      setVsplitButtons();
+    }
+
+    function roundVsplitTime(sec) {
+      const n = Number(sec);
+      if (!Number.isFinite(n)) return 0;
+      return Math.round(Math.max(0, n) * 10) / 10;
+    }
+
+    function vsplitVideoNow() {
+      return roundVsplitTime(vsplitVideo?.currentTime || 0);
+    }
+
+    function vsplitVideoDuration() {
+      const d = Number(vsplitVideo?.duration);
+      return Number.isFinite(d) && d > 0 ? d : 0;
+    }
+
+    function clearVsplitMarks() {
+      vsplitMarks = [];
+      vsplitDraftStart = null;
+      paintVsplitMarks();
+      setVsplitButtons();
+    }
+
+    function invalidateVsplitOutputsFromMarks() {
+      if (vsplitClips.length) clearVsplitClips();
+      setVsplitButtons();
+    }
+
+    function paintVsplitNow() {
+      if (!vsplitManualNow) return;
+      const now = vsplitVideoNow();
+      const dur = vsplitVideoDuration();
+      if (!vsplitSourceFile || !(dur > 0)) {
+        vsplitManualNow.textContent = "拖动进度条定位后，点「设为起点 / 终点」打点；可改秒数或删除。";
+        return;
+      }
+      vsplitManualNow.textContent = `当前 ${formatClock(now)} / ${formatClock(dur)} · 已标记 ${vsplitMarks.length} 段`;
+    }
+
+    function paintVsplitDraft() {
+      if (!vsplitManualDraft) return;
+      if (vsplitDraftStart == null) {
+        vsplitManualDraft.hidden = true;
+        vsplitManualDraft.textContent = "";
+        return;
+      }
+      vsplitManualDraft.hidden = false;
+      vsplitManualDraft.textContent = `待确认起点 ${formatClock(vsplitDraftStart)} · 拖到终点后点「设为终点」`;
+    }
+
+    function sortVsplitMarks() {
+      vsplitMarks.sort((a, b) => a.start - b.start || a.end - b.end);
+    }
+
+    function updateVsplitMark(idx, nextStart, nextEnd, opts = {}) {
+      const dur = vsplitVideoDuration();
+      let start = roundVsplitTime(nextStart);
+      let end = roundVsplitTime(nextEnd);
+      if (end < start) {
+        const tmp = start;
+        start = end;
+        end = tmp;
+      }
+      if (dur > 0) {
+        start = Math.min(start, Math.max(0, dur - VSPLIT_MIN_SPAN));
+        end = Math.min(Math.max(end, start + VSPLIT_MIN_SPAN), dur);
+      }
+      const span = end - start;
+      if (span < VSPLIT_MIN_SPAN - 0.001) {
+        if (!opts.silent) toast(`每段至少 ${VSPLIT_MIN_SPAN} 秒`);
+        return false;
+      }
+      vsplitMarks[idx] = { start, end };
+      if (!opts.skipSort) sortVsplitMarks();
+      invalidateVsplitOutputsFromMarks();
+      paintVsplitMarks();
+      paintVsplitNow();
+      return true;
+    }
+
+    function paintVsplitMarks() {
+      paintVsplitDraft();
+      if (!vsplitMarksEl) return;
+      vsplitMarksEl.innerHTML = "";
+      if (!vsplitMarks.length) {
+        if (vsplitMode === "manual" && vsplitSourceFile) {
+          const empty = document.createElement("p");
+          empty.className = "hint tight";
+          empty.textContent = "还没有片段。拖动进度条后设起点、再设终点。";
+          vsplitMarksEl.appendChild(empty);
+        }
+        setVsplitButtons();
+        return;
+      }
+      vsplitMarks.forEach((mark, idx) => {
+        const span = Math.max(0, mark.end - mark.start);
+        const row = document.createElement("div");
+        row.className = "vsplit-mark";
+        row.dataset.idx = String(idx);
+
+        const head = document.createElement("div");
+        head.className = "vsplit-mark-head";
+        const title = document.createElement("strong");
+        title.textContent = `#${String(idx + 1).padStart(2, "0")}`;
+        const durHint = document.createElement("span");
+        durHint.className = "hint tight mono";
+        durHint.textContent = `时长 ${span.toFixed(1)}s · ${formatClock(mark.start)}–${formatClock(mark.end)}`;
+        head.append(title, durHint);
+
+        const fields = document.createElement("div");
+        fields.className = "vsplit-mark-fields";
+        const startLab = document.createElement("label");
+        startLab.textContent = "起点";
+        const startInp = document.createElement("input");
+        startInp.className = "mono meta-input";
+        startInp.type = "number";
+        startInp.min = "0";
+        startInp.step = "0.1";
+        startInp.value = String(mark.start);
+        startInp.setAttribute("aria-label", `片段 ${idx + 1} 起点秒`);
+        const endLab = document.createElement("label");
+        endLab.textContent = "终点";
+        const endInp = document.createElement("input");
+        endInp.className = "mono meta-input";
+        endInp.type = "number";
+        endInp.min = "0";
+        endInp.step = "0.1";
+        endInp.value = String(mark.end);
+        endInp.setAttribute("aria-label", `片段 ${idx + 1} 终点秒`);
+        fields.append(startLab, startInp, endLab, endInp);
+
+        const actions = document.createElement("div");
+        actions.className = "vsplit-mark-actions btn-row";
+        const jumpStart = document.createElement("button");
+        jumpStart.type = "button";
+        jumpStart.className = "ghost-btn";
+        jumpStart.textContent = "跳到起点";
+        const jumpEnd = document.createElement("button");
+        jumpEnd.type = "button";
+        jumpEnd.className = "ghost-btn";
+        jumpEnd.textContent = "跳到终点";
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "ghost-btn";
+        del.textContent = "删除";
+        actions.append(jumpStart, jumpEnd, del);
+
+        const applyEdit = () => {
+          updateVsplitMark(idx, startInp.value, endInp.value);
+        };
+        startInp.addEventListener("change", applyEdit);
+        endInp.addEventListener("change", applyEdit);
+        jumpStart.addEventListener("click", () => {
+          if (!vsplitVideo) return;
+          try {
+            vsplitVideo.currentTime = mark.start;
+          } catch (_) {}
+          paintVsplitNow();
+        });
+        jumpEnd.addEventListener("click", () => {
+          if (!vsplitVideo) return;
+          try {
+            vsplitVideo.currentTime = mark.end;
+          } catch (_) {}
+          paintVsplitNow();
+        });
+        del.addEventListener("click", () => {
+          vsplitMarks.splice(idx, 1);
+          invalidateVsplitOutputsFromMarks();
+          paintVsplitMarks();
+          paintVsplitNow();
+          toast("已删除片段");
+        });
+
+        row.append(head, fields, actions);
+        vsplitMarksEl.appendChild(row);
+      });
+      setVsplitButtons();
+    }
+
+    function markVsplitStart() {
+      if (!vsplitSourceFile || !vsplitVideo?.src) {
+        toast("请先选择视频");
+        return;
+      }
+      const t = vsplitVideoNow();
+      vsplitDraftStart = t;
+      paintVsplitDraft();
+      paintVsplitNow();
+      setVsplitButtons();
+      toast(`起点 ${formatClock(t)}`);
+    }
+
+    function markVsplitEnd() {
+      if (!vsplitSourceFile || !vsplitVideo?.src) {
+        toast("请先选择视频");
+        return;
+      }
+      if (vsplitDraftStart == null) {
+        toast("请先设起点");
+        return;
+      }
+      if (vsplitMarks.length >= VSPLIT_MAX_CLIPS) {
+        toast(`最多 ${VSPLIT_MAX_CLIPS} 段`);
+        return;
+      }
+      let start = vsplitDraftStart;
+      let end = vsplitVideoNow();
+      if (Math.abs(end - start) < 0.05) {
+        toast("终点需与起点不同");
+        return;
+      }
+      if (end < start) {
+        const tmp = start;
+        start = end;
+        end = tmp;
+      }
+      const span = end - start;
+      if (span < VSPLIT_MIN_SPAN) {
+        toast(`每段至少 ${VSPLIT_MIN_SPAN} 秒`);
+        return;
+      }
+      const dur = vsplitVideoDuration();
+      if (dur > 0 && end > dur + 0.05) end = dur;
+      vsplitMarks.push({ start: roundVsplitTime(start), end: roundVsplitTime(end) });
+      sortVsplitMarks();
+      vsplitDraftStart = null;
+      invalidateVsplitOutputsFromMarks();
+      paintVsplitMarks();
+      paintVsplitNow();
+      toast(`已添加片段 · ${span.toFixed(1)}s`);
+    }
+
+    function ensureVsplitClipsFromMarks() {
+      if (vsplitClips.length) return;
+      if (vsplitMode !== "manual" || !vsplitMarks.length) return;
+      vsplitClips = vsplitMarks.map((m) => ({
+        start: m.start,
+        span: Math.max(VSPLIT_MIN_SPAN, m.end - m.start),
+        videoBlob: null,
+        videoUrl: "",
+        copied: false,
+        gifBlob: null,
+        gifUrl: "",
+        gifNote: "",
+        error: "",
+      }));
+      renderVsplitList();
     }
 
     function computeVsplitRanges(duration) {
       const d = Number(duration) || 0;
       if (!(d > 0)) throw new Error("无法读取视频时长");
       const ranges = [];
+      if (vsplitMode === "manual") {
+        if (!vsplitMarks.length) throw new Error("请先标记至少一段起点和终点");
+        vsplitMarks.forEach((m) => {
+          const start = Math.max(0, Math.min(m.start, d));
+          const end = Math.max(start + VSPLIT_MIN_SPAN, Math.min(m.end, d));
+          const span = end - start;
+          if (span < VSPLIT_MIN_SPAN - 0.001) throw new Error("存在过短片段，请调整后再切");
+          ranges.push({ start, span });
+        });
+        return ranges;
+      }
       if (vsplitMode === "count") {
         const n = Math.min(VSPLIT_MAX_CLIPS, Math.max(2, Math.round(Number(vsplitCount?.value) || 2)));
         const part = d / n;
@@ -4771,6 +5063,7 @@
       }
       vsplitBusy = false;
       vsplitSourceFile = null;
+      clearVsplitMarks();
       clearVsplitClips();
       if (vsplitObjectUrl) {
         URL.revokeObjectURL(vsplitObjectUrl);
@@ -4786,10 +5079,8 @@
       if (vsplitAbort) vsplitAbort.hidden = true;
       setVsplitProgress(false, 0, "");
       setError(vsplitError, "");
-      if (vsplitMeta) {
-        vsplitMeta.textContent =
-          "支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。切分优先复制编码（快）；失败则重编码该段。关闭页面会释放本次视频和 GIF。";
-      }
+      if (vsplitMeta) vsplitMeta.textContent = VSPLIT_DEFAULT_META;
+      paintVsplitNow();
       resetVsplitAbort();
       setVsplitButtons();
     }
@@ -4813,6 +5104,8 @@
         );
       }
       setVsplitButtons();
+      paintVsplitNow();
+      if (vsplitMode === "manual") paintVsplitMarks();
       toast("视频已就绪");
     }
 
@@ -4901,7 +5194,9 @@
     }
 
     async function runVsplitGifs(mode) {
-      if (!vsplitSourceFile || !vsplitClips.length || vsplitBusy) return;
+      if (!vsplitSourceFile || vsplitBusy) return;
+      if (vsplitMode === "manual") ensureVsplitClipsFromMarks();
+      if (!vsplitClips.length) return;
       abortVsplit = false;
       vsplitBusy = true;
       setVsplitButtons();
@@ -5038,12 +5333,31 @@
 
     $("#vsplit-mode-n")?.addEventListener("click", () => {
       vsplitMode = "count";
+      vsplitDraftStart = null;
       syncVsplitMode();
     });
     $("#vsplit-mode-t")?.addEventListener("click", () => {
       vsplitMode = "duration";
+      vsplitDraftStart = null;
       syncVsplitMode();
     });
+    $("#vsplit-mode-m")?.addEventListener("click", () => {
+      vsplitMode = "manual";
+      syncVsplitMode();
+    });
+    vsplitMarkStart?.addEventListener("click", () => markVsplitStart());
+    vsplitMarkEnd?.addEventListener("click", () => markVsplitEnd());
+    vsplitMarkClear?.addEventListener("click", () => {
+      clearVsplitMarks();
+      invalidateVsplitOutputsFromMarks();
+      paintVsplitNow();
+      toast("已清空标记");
+    });
+    const onVsplitTime = () => {
+      if (vsplitMode === "manual") paintVsplitNow();
+    };
+    vsplitVideo?.addEventListener("timeupdate", onVsplitTime);
+    vsplitVideo?.addEventListener("seeked", onVsplitTime);
     vsplitFile?.addEventListener("change", (e) => {
       loadVsplitFile(e.target.files?.[0]).catch((err) => {
         clearVsplit();
@@ -5052,6 +5366,26 @@
     });
     $("#vsplit-clear")?.addEventListener("click", clearVsplit);
     window.DevToolsTemp?.registerCleanup(clearVsplit);
+    window.DevToolsVsplit = {
+      getMode: () => vsplitMode,
+      getMarks: () => vsplitMarks.map((m) => ({ ...m })),
+      getDraftStart: () => vsplitDraftStart,
+      setMarks: (marks) => {
+        vsplitMarks = (Array.isArray(marks) ? marks : [])
+          .map((m) => ({
+            start: roundVsplitTime(m.start),
+            end: roundVsplitTime(m.end),
+          }))
+          .filter((m) => m.end - m.start >= VSPLIT_MIN_SPAN - 0.001)
+          .slice(0, VSPLIT_MAX_CLIPS);
+        sortVsplitMarks();
+        vsplitDraftStart = null;
+        invalidateVsplitOutputsFromMarks();
+        paintVsplitMarks();
+        paintVsplitNow();
+      },
+      computeRanges: (duration) => computeVsplitRanges(duration),
+    };
     vsplitCut?.addEventListener("click", () => runVsplitCut().catch((err) => setError(vsplitError, err.message || String(err))));
     vsplitGifHq?.addEventListener("click", () => runVsplitGifs("hq").catch((err) => setError(vsplitError, err.message || String(err))));
     vsplitGifBb?.addEventListener("click", () =>
