@@ -92,7 +92,7 @@
     });
   }
 
-  const GIF_TOOL_VERSION = "2026.08.15-h";
+  const GIF_TOOL_VERSION = "2026.08.15-i";
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -4503,11 +4503,13 @@
     const vsplitMarkChips = $("#vsplit-mark-chips");
     const vsplitScrubHint = $("#vsplit-scrub-hint");
     const vsplitPlay = $("#vsplit-play");
+    const vsplitMute = $("#vsplit-mute");
     const vsplitFs = $("#vsplit-fs");
     const vsplitFsHost = $("#vsplit-fs-host");
     const vsplitFsOpenBtn = $("#vsplit-fs-open");
     const vsplitFsClose = $("#vsplit-fs-close");
     const vsplitFsPlay = $("#vsplit-fs-play");
+    const vsplitFsMute = $("#vsplit-fs-mute");
     const vsplitFsMark = $("#vsplit-fs-mark");
     const vsplitFsUndo = $("#vsplit-fs-undo");
     const vsplitFsNow = $("#vsplit-fs-now");
@@ -4579,6 +4581,15 @@
     let vsplitEditFocus = "start";
     let vsplitScrubbing = false;
     let vsplitPlaying = false;
+    const VSPLIT_MUTE_KEY = "devtools-vsplit-muted";
+    let vsplitMuted = true;
+    try {
+      const savedMute = localStorage.getItem(VSPLIT_MUTE_KEY);
+      if (savedMute === "0") vsplitMuted = false;
+      if (savedMute === "1") vsplitMuted = true;
+    } catch (_) {
+      /* ignore */
+    }
     let vsplitFsOpen = false;
     let vsplitFsNoteTimer = 0;
     let vsplitFsPulseTimer = 0;
@@ -4724,6 +4735,7 @@
         vsplitPlay.disabled = !hasVideo || vsplitBusy || vsplitMode !== "manual";
         vsplitPlay.textContent = vsplitPlaying ? "暂停" : "播放";
       }
+      paintVsplitMuteButtons(hasVideo && !vsplitBusy && vsplitMode === "manual");
       const markLabel = vsplitDraftStart == null ? "打起点" : "打终点";
       if (vsplitMarkTap) {
         vsplitMarkTap.disabled = !hasVideo || vsplitBusy || editing;
@@ -4841,18 +4853,75 @@
       if (vsplitFsPlay) vsplitFsPlay.textContent = "播放";
     }
 
+    function paintVsplitMuteButtons(enabled) {
+      const label = vsplitMuted ? "开声音" : "静音";
+      const title = vsplitMuted ? "当前静音，点此开声音" : "当前有声，点此静音";
+      [vsplitMute, vsplitFsMute].forEach((btn) => {
+        if (!btn) return;
+        if (enabled != null) btn.disabled = !enabled;
+        btn.textContent = label;
+        btn.title = title;
+        btn.setAttribute("aria-pressed", vsplitMuted ? "true" : "false");
+        btn.classList.toggle("is-muted", vsplitMuted);
+      });
+    }
+
+    function applyVsplitMute() {
+      if (!vsplitVideo) return;
+      vsplitVideo.muted = Boolean(vsplitMuted);
+      if (!vsplitMuted) {
+        try {
+          vsplitVideo.volume = 1;
+        } catch (_) {
+          /* ignore */
+        }
+        vsplitVideo.removeAttribute("muted");
+      } else {
+        vsplitVideo.setAttribute("muted", "");
+      }
+      paintVsplitMuteButtons();
+    }
+
+    function toggleVsplitMute() {
+      vsplitMuted = !vsplitMuted;
+      try {
+        localStorage.setItem(VSPLIT_MUTE_KEY, vsplitMuted ? "1" : "0");
+      } catch (_) {
+        /* ignore */
+      }
+      applyVsplitMute();
+      toast(vsplitMuted ? "已静音" : "已开声音");
+    }
+
     async function toggleVsplitPlay() {
       if (!vsplitVideo || !vsplitSourceFile || vsplitMode !== "manual") return;
       if (vsplitPlaying || !vsplitVideo.paused) {
         pauseVsplitPreview();
         return;
       }
+      applyVsplitMute();
       try {
         await vsplitVideo.play();
         vsplitPlaying = true;
         if (vsplitPlay) vsplitPlay.textContent = "暂停";
         if (vsplitFsPlay) vsplitFsPlay.textContent = "暂停";
       } catch (err) {
+        // 部分浏览器禁止带声音自动播：回退静音再试一次
+        if (!vsplitMuted) {
+          vsplitMuted = true;
+          applyVsplitMute();
+          try {
+            await vsplitVideo.play();
+            vsplitPlaying = true;
+            if (vsplitPlay) vsplitPlay.textContent = "暂停";
+            if (vsplitFsPlay) vsplitFsPlay.textContent = "暂停";
+            toast("浏览器限制有声播放，已改为静音；可再点「开声音」");
+            setVsplitButtons();
+            return;
+          } catch (_) {
+            /* fall through */
+          }
+        }
         vsplitPlaying = false;
         toast(err?.message || "无法播放");
       }
@@ -4873,6 +4942,7 @@
         vsplitFsStatus.textContent = `已完成 ${done} 段 · ${phase}`;
       }
       if (vsplitFsPlay) vsplitFsPlay.textContent = vsplitPlaying ? "暂停" : "播放";
+      paintVsplitMuteButtons();
       if (vsplitFsMark) {
         vsplitFsMark.textContent = vsplitDraftStart == null ? "打起点" : "打终点";
       }
@@ -6013,6 +6083,7 @@
       toast("已选择，仅本机处理，不会上传");
       vsplitObjectUrl = URL.createObjectURL(file);
       attachLocalVideoPreview(vsplitVideo, vsplitObjectUrl);
+      applyVsplitMute();
       await waitVideoMetadata(vsplitVideo);
       const duration = Number(vsplitVideo.duration) || 0;
       if (!(duration > 0) || !vsplitVideo.videoWidth) throw new Error("视频时长或尺寸无效");
@@ -6273,11 +6344,13 @@
     vsplitPlay?.addEventListener("click", () => {
       toggleVsplitPlay().catch(() => {});
     });
+    vsplitMute?.addEventListener("click", () => toggleVsplitMute());
     vsplitFsOpenBtn?.addEventListener("click", () => enterVsplitFullscreen());
     vsplitFsClose?.addEventListener("click", () => exitVsplitFullscreen());
     vsplitFsPlay?.addEventListener("click", () => {
       toggleVsplitPlay().catch(() => {});
     });
+    vsplitFsMute?.addEventListener("click", () => toggleVsplitMute());
     vsplitFsMark?.addEventListener("pointerup", (e) => fireVsplitMarkTap(e));
     vsplitFsMark?.addEventListener("click", (e) => fireVsplitMarkTap(e));
     vsplitFsUndo?.addEventListener("click", () => undoVsplitLastMark());
@@ -6418,6 +6491,7 @@
       scheduleFfmpegPrewarm();
     });
     syncVsplitMode();
+    applyVsplitMute();
     setVsplitButtons();
 
     // ---- One-click blackbox split planner (vbb) ----
