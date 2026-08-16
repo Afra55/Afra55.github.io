@@ -413,7 +413,8 @@
   const progressFill = $("#memo-progress-fill");
   const progressText = $("#memo-progress-text");
   const progressPct = $("#memo-progress-pct");
-  const shareBtn = $("#memo-share");
+  const exportBtn = $("#memo-export");
+  const exportOkBtn = $("#memo-export-ok");
   const reconnectBtn = $("#memo-reconnect");
   const exportDlg = $("#memo-export-dlg");
   const exportTags = $("#memo-export-tags");
@@ -447,9 +448,25 @@
     return typeof navigator.share === "function" && typeof navigator.canShare === "function";
   }
 
+  /** 手机端优先分享；桌面端下载。是否具备文件分享能力再二次确认。 */
+  function preferShareExport() {
+    return isLikelyMobile() && canShareFiles();
+  }
+
+  function syncExportButtonLabels() {
+    const share = preferShareExport();
+    if (exportBtn) {
+      exportBtn.textContent = share ? "导出并分享" : "导出";
+      exportBtn.title = share
+        ? "打包后调起系统分享（可发到其它 App / 存到文件）"
+        : "打包下载到本地";
+    }
+    if (exportOkBtn) exportOkBtn.textContent = share ? "导出并分享" : "导出";
+  }
+
   function updateStoreMeta() {
     if (!storeMeta) return;
-    if (shareBtn) shareBtn.hidden = !(isLikelyMobile() || canShareFiles());
+    syncExportButtonLabels();
     const pickBtn = $("#memo-pick-dir");
     const connected = Boolean(state.dirHandle) && (state.mode === "dir" || state.dirPending);
     if (pickBtn) {
@@ -469,7 +486,7 @@
     } else {
       storeMeta.textContent = canDirPicker()
         ? "存储：应用内数据（IndexedDB）。建议选择目录以便清缓存后文件仍在磁盘上。清理缓存前仍建议导出备份。"
-        : "存储：应用内数据（手机端）。清理缓存前请先「导出」或「分享导出包」备份到文件/其它 App。";
+        : "存储：应用内数据（手机端）。清理缓存前请先「导出」备份（会优先调起系统分享）。";
     }
     window.DevToolsTemp?.refresh?.();
   }
@@ -955,11 +972,42 @@
   // ---- export / import / share ----
   function openExportDialog() {
     if (!exportDlg || !exportTags) return;
+    syncExportButtonLabels();
     exportTags.innerHTML = state.index.tags
       .map((t) => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`)
       .join("");
     $("#memo-export-pass").value = "";
     exportDlg.showModal();
+  }
+
+  async function doExport({ share = preferShareExport() } = {}) {
+    await withBusy(async () => {
+      const kinds = $$('#memo-export-dlg input[name="kind"]:checked').map((el) => el.value);
+      if (!kinds.length) throw new Error("请至少选择一种类型");
+      const tagIds = [...(exportTags?.selectedOptions || [])].map((o) => o.value);
+      const password = String($("#memo-export-pass")?.value || "");
+      const packed = await buildExportZip({ kinds, tagIds, password });
+      if (share) {
+        try {
+          const file = new File([packed.blob], packed.filename, { type: packed.blob.type || "application/zip" });
+          if (canShareFiles() && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], title: "备忘录导出" });
+            toast(`已分享 ${packed.count} 条`);
+            return;
+          }
+          toast("当前环境无法分享文件，已改为下载");
+        } catch (err) {
+          // 用户取消分享：不再强制下载
+          if (err && (err.name === "AbortError" || /abort|cancel|取消/i.test(String(err.message || "")))) {
+            toast("已取消分享");
+            return;
+          }
+          toast("分享失败，已改为下载");
+        }
+      }
+      downloadBlob(packed.blob, packed.filename);
+      toast(`已导出 ${packed.count} 条`);
+    });
   }
 
   async function buildExportZip({ kinds, tagIds, password }) {
@@ -1185,27 +1233,6 @@
       document.exitFullscreen?.().catch(() => {});
     }
     lightbox?.close?.();
-  }
-
-  async function doExport({ share = false } = {}) {
-    await withBusy(async () => {
-      const kinds = $$('#memo-export-dlg input[name="kind"]:checked').map((el) => el.value);
-      if (!kinds.length) throw new Error("请至少选择一种类型");
-      const tagIds = [...(exportTags?.selectedOptions || [])].map((o) => o.value);
-      const password = String($("#memo-export-pass")?.value || "");
-      const packed = await buildExportZip({ kinds, tagIds, password });
-      if (share && canShareFiles()) {
-        const file = new File([packed.blob], packed.filename, { type: packed.blob.type || "application/zip" });
-        if (navigator.canShare({ files: [file] })) {
-          await navigator.share({ files: [file], title: "备忘录导出" });
-          toast(`已分享 ${packed.count} 条`);
-          return;
-        }
-        toast("系统不支持直接分享文件，已改为下载");
-      }
-      downloadBlob(packed.blob, packed.filename);
-      toast(`已导出 ${packed.count} 条`);
-    });
   }
 
   async function doImport(file) {
@@ -1820,25 +1847,14 @@
     }
   });
 
-  $("#memo-export")?.addEventListener("click", () => {
-    if (shareBtn) shareBtn.dataset.shareAfter = "";
-    openExportDialog();
-  });
-  shareBtn?.addEventListener("click", () => {
-    if (shareBtn) shareBtn.dataset.shareAfter = "1";
-    openExportDialog();
-  });
+  $("#memo-export")?.addEventListener("click", () => openExportDialog());
   exportDlg?.addEventListener("close", () => {
-    if (exportDlg.returnValue !== "ok") {
-      if (shareBtn) shareBtn.dataset.shareAfter = "";
-      return;
-    }
-    const share = shareBtn?.dataset.shareAfter === "1";
-    if (shareBtn) shareBtn.dataset.shareAfter = "";
-    doExport({ share })
+    if (exportDlg.returnValue !== "ok") return;
+    doExport()
       .catch((err) => setError(memoError, err.message || String(err)))
       .finally(() => setProgress(false, 0, ""));
   });
+  window.addEventListener("resize", () => syncExportButtonLabels());
   $("#memo-import")?.addEventListener("change", (e) => {
     const f = e.target.files?.[0];
     doImport(f)
