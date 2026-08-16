@@ -4695,6 +4695,74 @@ button.adb-device-body.linkish {
   cursor: pointer;
   font: inherit;
   font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.memo-tag-count {
+  opacity: 0.72;
+  font-size: 0.78em;
+  flex: 0 0 auto;
+}
+
+.memo-type-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.15rem 0 0.55rem;
+}
+
+.memo-type-chip {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: rgba(14, 22, 38, 0.55);
+  color: var(--ink);
+  padding: 0.32rem 0.62rem;
+  border-radius: 999px;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.memo-type-chip .mono {
+  opacity: 0.72;
+  font-size: 0.9em;
+}
+
+.memo-type-chip:hover {
+  border-color: rgba(46, 196, 182, 0.4);
+  background: rgba(46, 196, 182, 0.1);
+}
+
+.memo-type-chip.is-active {
+  border-color: rgba(46, 196, 182, 0.55);
+  background: rgba(46, 196, 182, 0.18);
+  color: #dffcf7;
+}
+
+.memo-type-group {
+  display: grid;
+  gap: 0.55rem;
+}
+
+.memo-type-group-title {
+  margin: 0.15rem 0 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  font-size: 0.86rem;
+  font-weight: 650;
+  color: rgba(210, 224, 242, 0.88);
+}
+
+.memo-type-group-list {
+  display: grid;
+  gap: 0.7rem;
 }
 
 .memo-tag-item:hover {

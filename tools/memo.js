@@ -114,7 +114,10 @@
     nextTags.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     const items = Array.isArray(raw.items) ? raw.items : [];
     items.forEach((it, i) => {
-      if (!Array.isArray(it.tagIds) || !it.tagIds.length) it.tagIds = [DEFAULT_TAG_ID];
+      if (!Array.isArray(it.tagIds)) it.tagIds = [];
+      const custom = it.tagIds.filter((id) => id && id !== DEFAULT_TAG_ID);
+      // 有自定义标签则不属于默认；无标签才归默认
+      it.tagIds = custom.length ? custom : [DEFAULT_TAG_ID];
       if (it.order == null) it.order = i;
     });
     items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -258,6 +261,7 @@
     dirPending: false,
     index: emptyIndex(),
     activeTagId: "all",
+    activeType: "all", // all | text | image | video | audio | file
     selected: new Set(),
     bgImageUrl: "",
     bgImageBlob: null,
@@ -491,10 +495,76 @@
     window.DevToolsTemp?.refresh?.();
   }
 
+  function customTagIds(item) {
+    return (item?.tagIds || []).filter((id) => id && id !== DEFAULT_TAG_ID);
+  }
+
+  function isUntagged(item) {
+    return customTagIds(item).length === 0;
+  }
+
+  function ensureTagMembership(item) {
+    if (!item) return;
+    const custom = customTagIds(item);
+    item.tagIds = custom.length ? custom : [DEFAULT_TAG_ID];
+  }
+
   function visibleItems() {
-    const items = [...state.index.items].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    if (state.activeTagId === "all") return items;
-    return items.filter((it) => (it.tagIds || []).includes(state.activeTagId));
+    let items = [...state.index.items].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    if (state.activeTagId === DEFAULT_TAG_ID || state.activeTagId === "default") {
+      items = items.filter(isUntagged);
+    } else if (state.activeTagId !== "all") {
+      items = items.filter((it) => customTagIds(it).includes(state.activeTagId));
+    }
+    if (state.activeType !== "all") {
+      items = items.filter((it) => it.type === state.activeType);
+    }
+    return items;
+  }
+
+  const TYPE_LABELS = {
+    text: "文本",
+    image: "图片",
+    video: "视频",
+    audio: "音频",
+    file: "文件",
+  };
+
+  function countByType(items) {
+    const counts = { text: 0, image: 0, video: 0, audio: 0, file: 0 };
+    items.forEach((it) => {
+      const k = counts[it.type] != null ? it.type : "file";
+      counts[k] += 1;
+    });
+    return counts;
+  }
+
+  function itemsForTagFilter() {
+    let items = [...state.index.items];
+    if (state.activeTagId === DEFAULT_TAG_ID || state.activeTagId === "default") {
+      items = items.filter(isUntagged);
+    } else if (state.activeTagId !== "all") {
+      items = items.filter((it) => customTagIds(it).includes(state.activeTagId));
+    }
+    return items;
+  }
+
+  function renderTypeFilter() {
+    const host = $("#memo-type-filter");
+    if (!host) return;
+    const pool = itemsForTagFilter();
+    const counts = countByType(pool);
+    const total = pool.length;
+    const mk = (type, label, n) =>
+      `<button type="button" class="memo-type-chip${state.activeType === type ? " is-active" : ""}" data-memo-type="${type}">${label}<span class="mono">${n}</span></button>`;
+    host.innerHTML = [
+      mk("all", "全部", total),
+      mk("text", "文本", counts.text),
+      mk("image", "图片", counts.image),
+      mk("video", "视频", counts.video),
+      mk("audio", "音频", counts.audio),
+      mk("file", "文件", counts.file),
+    ].join("");
   }
 
   function tagById(id) {
@@ -504,12 +574,18 @@
   function renderTags() {
     if (!tagList) return;
     const tags = [...state.index.tags].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const untaggedCount = state.index.items.filter(isUntagged).length;
     const bits = [
-      `<button type="button" class="memo-tag-item${state.activeTagId === "all" ? " is-active" : ""}" data-memo-tag="all" draggable="false">全部</button>`,
+      `<button type="button" class="memo-tag-item${state.activeTagId === "all" ? " is-active" : ""}" data-memo-tag="all" draggable="false">全部<span class="mono memo-tag-count">${state.index.items.length}</span></button>`,
     ];
     tags.forEach((t) => {
+      const count =
+        t.id === DEFAULT_TAG_ID
+          ? untaggedCount
+          : state.index.items.filter((it) => customTagIds(it).includes(t.id)).length;
+      const label = t.id === DEFAULT_TAG_ID ? "默认（未分类）" : t.name;
       bits.push(
-        `<button type="button" class="memo-tag-item${state.activeTagId === t.id ? " is-active" : ""}" data-memo-tag="${escapeHtml(t.id)}" draggable="${t.id !== DEFAULT_TAG_ID ? "true" : "false"}">${escapeHtml(t.name)}</button>`
+        `<button type="button" class="memo-tag-item${state.activeTagId === t.id ? " is-active" : ""}" data-memo-tag="${escapeHtml(t.id)}" draggable="${t.id !== DEFAULT_TAG_ID ? "true" : "false"}">${escapeHtml(label)}<span class="mono memo-tag-count">${count}</span></button>`
       );
     });
     tagList.innerHTML = bits.join("");
@@ -606,21 +682,50 @@
     }
   }
 
+  function tagsForNewItem() {
+    if (state.activeTagId && state.activeTagId !== "all" && state.activeTagId !== DEFAULT_TAG_ID) {
+      return [state.activeTagId];
+    }
+    return [DEFAULT_TAG_ID];
+  }
+
   function renderItems() {
     if (!itemList) return;
     revokeTrackedUrls();
     const items = visibleItems();
     if (!items.length) {
-      const emptyTip =
-        state.activeTagId === "all"
-          ? "暂无条目。可粘贴、拖入文件或保存文本。"
-          : "当前标签下暂无条目。可在此标签下新建，或切回「全部」。";
+      let emptyTip = "暂无条目。可粘贴、拖入文件或保存文本。";
+      if (state.activeType !== "all" && state.activeTagId !== "all") {
+        emptyTip = "当前标签与类型筛选下暂无条目。";
+      } else if (state.activeType !== "all") {
+        emptyTip = `当前没有「${TYPE_LABELS[state.activeType] || state.activeType}」类型条目。`;
+      } else if (state.activeTagId === DEFAULT_TAG_ID) {
+        emptyTip = "暂无未分类条目。已加自定义标签的内容会离开「默认」。";
+      } else if (state.activeTagId !== "all") {
+        emptyTip = "当前标签下暂无条目。可在此标签下新建，或切回「全部」。";
+      }
       itemList.innerHTML = `<p class="hint">${emptyTip}</p>`;
       const batch = $("#memo-batch-del");
       if (batch) batch.disabled = state.selected.size === 0;
       return;
     }
-    itemList.innerHTML = items.map(itemCardHtml).join("");
+    if (state.activeType === "all") {
+      const order = ["text", "image", "video", "audio", "file"];
+      const groups = order
+        .map((type) => ({ type, items: items.filter((it) => it.type === type) }))
+        .filter((g) => g.items.length);
+      itemList.innerHTML = groups
+        .map(
+          (g) =>
+            `<section class="memo-type-group" data-memo-type-group="${g.type}">
+              <h3 class="memo-type-group-title">${TYPE_LABELS[g.type] || g.type}<span class="mono memo-tag-count">${g.items.length}</span></h3>
+              <div class="memo-type-group-list">${g.items.map(itemCardHtml).join("")}</div>
+            </section>`
+        )
+        .join("");
+    } else {
+      itemList.innerHTML = items.map(itemCardHtml).join("");
+    }
     hydrateMedia().catch(() => {});
     const batch = $("#memo-batch-del");
     if (batch) batch.disabled = state.selected.size === 0;
@@ -628,6 +733,7 @@
 
   function renderAll() {
     renderTags();
+    renderTypeFilter();
     renderItems();
     updateStoreMeta();
   }
@@ -676,7 +782,7 @@
       createdAt: Date.now(),
       updatedAt: Date.now(),
       order: -1,
-      tagIds: opts.tagIds || (state.activeTagId !== "all" ? [DEFAULT_TAG_ID, state.activeTagId].filter((id, i, arr) => arr.indexOf(id) === i) : [DEFAULT_TAG_ID]),
+      tagIds: opts.tagIds || tagsForNewItem(),
       mime: blob.type || "",
       size: blob.size || 0,
       fileName,
@@ -974,7 +1080,10 @@
     if (!exportDlg || !exportTags) return;
     syncExportButtonLabels();
     exportTags.innerHTML = state.index.tags
-      .map((t) => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`)
+      .map((t) => {
+        const label = t.id === DEFAULT_TAG_ID ? "默认（未分类）" : t.name;
+        return `<option value="${escapeHtml(t.id)}">${escapeHtml(label)}</option>`;
+      })
       .join("");
     $("#memo-export-pass").value = "";
     exportDlg.showModal();
@@ -1456,8 +1565,9 @@
 
   async function applyTagToTarget(tag) {
     const item = state.index.items.find((x) => x.id === state.tagTargetId);
-    if (!item || !tag) return;
+    if (!item || !tag || tag.id === DEFAULT_TAG_ID) return;
     if (!item.tagIds.includes(tag.id)) item.tagIds.push(tag.id);
+    ensureTagMembership(item);
     item.updatedAt = Date.now();
     await persistIndex();
     state.tagTargetId = "";
@@ -1604,8 +1714,9 @@
       }
       return;
     }
-    dlg?.close?.("cancel");
+    // 先应用标签，再关对话框，避免 close 事件清空 tagTargetId
     await applyTagToTarget(tag).catch((err) => setError(memoError, err.message || String(err)));
+    dlg?.close?.("cancel");
   });
   $("#memo-tag-dlg")?.addEventListener("close", () => {
     const dlg = $("#memo-tag-dlg");
@@ -1622,6 +1733,13 @@
     const btn = e.target.closest("[data-memo-tag]");
     if (!btn) return;
     state.activeTagId = btn.dataset.memoTag;
+    renderAll();
+  });
+
+  $("#memo-type-filter")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-memo-type]");
+    if (!btn) return;
+    state.activeType = btn.dataset.memoType || "all";
     renderAll();
   });
 

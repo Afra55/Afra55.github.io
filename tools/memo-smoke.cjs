@@ -186,6 +186,46 @@ async function main() {
       await sleep(100);
       out.preview.closed = !document.getElementById("memo-lightbox")?.open;
     }
+
+    // type filter + grouped sections
+    out.typeFilter = {
+      host: Boolean(document.getElementById("memo-type-filter")),
+      chips: document.querySelectorAll("#memo-type-filter [data-memo-type]").length,
+      groups: document.querySelectorAll(".memo-type-group").length,
+    };
+    document.querySelector('#memo-type-filter [data-memo-type="image"]')?.click();
+    await sleep(80);
+    out.typeFilter.imageOnly =
+      [...document.querySelectorAll(".memo-card")].every((c) => {
+        const id = c.dataset.memoId;
+        const it = (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === id);
+        return it?.type === "image";
+      }) && document.querySelectorAll(".memo-card").length >= 1;
+    document.querySelector('#memo-type-filter [data-memo-type="all"]')?.click();
+    await sleep(80);
+
+    // tagged item leaves default (untagged) bucket
+    const firstId = (window.DevToolsMemo.getIndex().items || [])[0]?.id;
+    const workTag = (window.DevToolsMemo.getIndex().tags || []).find((t) => t.name === "工作");
+    if (firstId && workTag) {
+      document.querySelector(`[data-memo-tag-add="${firstId}"]`)?.click();
+      await sleep(80);
+      document.querySelector(`[data-memo-tag-pick="${workTag.id}"]`)?.click();
+      await sleep(250);
+      const tagged = (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === firstId);
+      out.tagLeavesDefault = {
+        hasWork: Boolean(tagged?.tagIds?.includes(workTag.id)),
+        noDefault: !(tagged?.tagIds || []).includes("default"),
+      };
+      document.querySelector('.memo-tag-item[data-memo-tag="default"]')?.click();
+      await sleep(80);
+      out.tagLeavesDefault.defaultViewHidesTagged = !document.querySelector(`.memo-card[data-memo-id="${firstId}"]`);
+      document.querySelector('.memo-tag-item[data-memo-tag="all"]')?.click();
+      await sleep(80);
+    } else {
+      out.tagLeavesDefault = { hasWork: false, noDefault: false, defaultViewHidesTagged: false };
+    }
+
     return out;
   });
 
@@ -217,6 +257,17 @@ async function main() {
   }
   if (!result.toImgDialog?.isDialog || !result.toImgDialog?.closed) {
     failed.push("text-to-image should be a closed dialog by default");
+  }
+  if (!result.typeFilter?.host || (result.typeFilter?.chips || 0) < 6) {
+    failed.push("type filter chips missing");
+  }
+  if ((result.typeFilter?.groups || 0) < 1) failed.push("type groups missing in all view");
+  if (!result.typeFilter?.imageOnly) failed.push("image type filter failed");
+  if (!result.tagLeavesDefault?.hasWork || !result.tagLeavesDefault?.noDefault) {
+    failed.push("tagged item should leave default tag");
+  }
+  if (!result.tagLeavesDefault?.defaultViewHidesTagged) {
+    failed.push("default tag view should hide tagged items");
   }
 
   console.log(JSON.stringify({ ok: failed.length === 0, result, failed }, null, 2));
