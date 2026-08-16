@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260816memo22" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo22" />
+  <link rel="stylesheet" href="./style.css?v=20260816memo23" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo23" />
   <script>
     /* 尽早应用主题，减少闪烁 */
     (function () {
@@ -38,7 +38,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo22</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo23</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="theme-open" title="切换站点主题">主题</button>
@@ -1153,6 +1153,13 @@ hello@world.org</textarea>
             <label class="flag memo-autoclip-flag" style="margin-top:0.45rem" title="需浏览器剪贴板权限；相同内容不会重复添加">
               <input type="checkbox" id="memo-autoclip" /> 回到本页时自动读剪贴板
             </label>
+            <div class="memo-quick-text" id="memo-editor-fold">
+              <label class="memo-quick-text-lab" for="memo-editor">直接写一段文字</label>
+              <textarea id="memo-editor" class="area memo-quick-text-area" rows="3" placeholder="在此输入后点「保存文字」，或按 Ctrl/⌘+Enter"></textarea>
+              <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
+                <button type="button" class="secondary-btn" id="memo-save-text">保存文字</button>
+              </div>
+            </div>
           </div>
 
           <details class="memo-storage-fold">
@@ -1191,15 +1198,6 @@ hello@world.org</textarea>
           </aside>
 
           <div class="memo-main">
-            <details class="memo-editor panel-card" id="memo-editor-fold">
-              <summary class="memo-editor-sum">手写一条文字（可选）</summary>
-              <label class="visually-hidden" for="memo-editor">写一段文字</label>
-              <textarea id="memo-editor" class="area" rows="4" placeholder="在此输入后点保存。日常更推荐直接粘贴或读取剪贴板。"></textarea>
-              <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.55rem">
-                <button type="button" class="secondary-btn" id="memo-save-text">保存文本</button>
-              </div>
-            </details>
-
             <dialog class="memo-dialog memo-text-edit-dlg" id="memo-text-edit" aria-label="编辑文本">
               <div class="memo-dialog-body">
                 <div class="label-row">
@@ -2868,15 +2866,15 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./theme.js?v=20260816memo22"></script>
-  <script src="./temp.js?v=20260816memo22"></script>
+  <script src="./theme.js?v=20260816memo23"></script>
+  <script src="./temp.js?v=20260816memo23"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260816memo22"></script>
-  <script src="./about.js?v=20260816memo22"></script>
-  <script src="./extra.js?v=20260816memo22"></script>
+  <script src="./app.js?v=20260816memo23"></script>
+  <script src="./about.js?v=20260816memo23"></script>
+  <script src="./extra.js?v=20260816memo23"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./textimg.js?v=20260816memo22"></script>
-  <script src="./imgtext.js?v=20260816memo22"></script>
-  <script src="./memo.js?v=20260816memo22"></script>
+  <script src="./textimg.js?v=20260816memo23"></script>
+  <script src="./imgtext.js?v=20260816memo23"></script>
+  <script src="./memo.js?v=20260816memo23"></script>
 </body>
 </html>

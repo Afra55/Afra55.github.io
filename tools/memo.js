@@ -2630,6 +2630,11 @@
   $("#memo-save-text")?.addEventListener("click", () => {
     addText(editor?.value || "").catch((err) => setError(memoError, err.message || String(err)));
   });
+  editor?.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    addText(editor.value || "").catch((err) => setError(memoError, err.message || String(err)));
+  });
   $("#memo-text-edit-save")?.addEventListener("click", () => {
     saveEditedTextFromPanel().catch((err) => {
       const el = $("#memo-text-edit-error");

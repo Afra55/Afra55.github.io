@@ -183,6 +183,8 @@ async function main() {
       primaryReadClip: document.getElementById("memo-read-clip")?.classList.contains("primary-btn"),
       copyOnCard: Boolean(document.querySelector(".memo-card-actions [data-memo-copy]")),
       captureBar: Boolean(document.querySelector(".memo-capture-bar")),
+      quickText: Boolean(document.querySelector(".memo-capture-bar .memo-quick-text #memo-editor")),
+      quickTextNotDetails: !document.querySelector("details#memo-editor-fold, details.memo-editor"),
       storageFold: Boolean(document.querySelector(".memo-storage-fold")),
       clearFilters: Boolean(document.getElementById("memo-clear-filters")),
       friendlySearch: /标签名/.test(document.getElementById("memo-search")?.placeholder || ""),
@@ -452,7 +454,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260816memo22/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260816memo23/.test(s.src)),
     };
 
     return out;
@@ -495,6 +497,9 @@ async function main() {
   }
   if (!result.modules?.captureBar || !result.modules?.storageFold || !result.modules?.clearFilters || !result.modules?.friendlySearch) {
     failed.push("memo capture/search beginner UX missing");
+  }
+  if (!result.modules?.quickText || !result.modules?.quickTextNotDetails) {
+    failed.push("quick text box should be always visible in capture bar");
   }
   if (!result.modules?.hasUndoBar || !result.modules?.hasProgressCancel || !result.modules?.hasTagsToggle || !result.modules?.hasTagsPanel) {
     failed.push("memo hardening UI missing (undo/cancel/tags drawer)");
@@ -554,8 +559,8 @@ async function main() {
   if (!result.tagDelete?.hasDelBtn || !result.tagDelete?.tagGone || !result.tagDelete?.itemKept || !result.tagDelete?.backToDefault) {
     failed.push("tag delete should unbind items back to default without removing files");
   }
-  if (!/memo22/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memo22");
+  if (!/memo23/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memo23");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");
