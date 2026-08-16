@@ -114,7 +114,10 @@
     nextTags.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     const items = Array.isArray(raw.items) ? raw.items : [];
     items.forEach((it, i) => {
-      if (!Array.isArray(it.tagIds) || !it.tagIds.length) it.tagIds = [DEFAULT_TAG_ID];
+      if (!Array.isArray(it.tagIds)) it.tagIds = [];
+      const custom = it.tagIds.filter((id) => id && id !== DEFAULT_TAG_ID);
+      // 有自定义标签则不属于默认；无标签才归默认
+      it.tagIds = custom.length ? custom : [DEFAULT_TAG_ID];
       if (it.order == null) it.order = i;
     });
     items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
@@ -258,6 +261,7 @@
     dirPending: false,
     index: emptyIndex(),
     activeTagId: "all",
+    activeType: "all", // all | text | image | video | audio | file
     selected: new Set(),
     bgImageUrl: "",
     bgImageBlob: null,
@@ -491,10 +495,76 @@
     window.DevToolsTemp?.refresh?.();
   }
 
+  function customTagIds(item) {
+    return (item?.tagIds || []).filter((id) => id && id !== DEFAULT_TAG_ID);
+  }
+
+  function isUntagged(item) {
+    return customTagIds(item).length === 0;
+  }
+
+  function ensureTagMembership(item) {
+    if (!item) return;
+    const custom = customTagIds(item);
+    item.tagIds = custom.length ? custom : [DEFAULT_TAG_ID];
+  }
+
   function visibleItems() {
-    const items = [...state.index.items].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    if (state.activeTagId === "all") return items;
-    return items.filter((it) => (it.tagIds || []).includes(state.activeTagId));
+    let items = [...state.index.items].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    if (state.activeTagId === DEFAULT_TAG_ID || state.activeTagId === "default") {
+      items = items.filter(isUntagged);
+    } else if (state.activeTagId !== "all") {
+      items = items.filter((it) => customTagIds(it).includes(state.activeTagId));
+    }
+    if (state.activeType !== "all") {
+      items = items.filter((it) => it.type === state.activeType);
+    }
+    return items;
+  }
+
+  const TYPE_LABELS = {
+    text: "文本",
+    image: "图片",
+    video: "视频",
+    audio: "音频",
+    file: "文件",
+  };
+
+  function countByType(items) {
+    const counts = { text: 0, image: 0, video: 0, audio: 0, file: 0 };
+    items.forEach((it) => {
+      const k = counts[it.type] != null ? it.type : "file";
+      counts[k] += 1;
+    });
+    return counts;
+  }
+
+  function itemsForTagFilter() {
+    let items = [...state.index.items];
+    if (state.activeTagId === DEFAULT_TAG_ID || state.activeTagId === "default") {
+      items = items.filter(isUntagged);
+    } else if (state.activeTagId !== "all") {
+      items = items.filter((it) => customTagIds(it).includes(state.activeTagId));
+    }
+    return items;
+  }
+
+  function renderTypeFilter() {
+    const host = $("#memo-type-filter");
+    if (!host) return;
+    const pool = itemsForTagFilter();
+    const counts = countByType(pool);
+    const total = pool.length;
+    const mk = (type, label, n) =>
+      `<button type="button" class="memo-type-chip${state.activeType === type ? " is-active" : ""}" data-memo-type="${type}">${label}<span class="mono">${n}</span></button>`;
+    host.innerHTML = [
+      mk("all", "全部", total),
+      mk("text", "文本", counts.text),
+      mk("image", "图片", counts.image),
+      mk("video", "视频", counts.video),
+      mk("audio", "音频", counts.audio),
+      mk("file", "文件", counts.file),
+    ].join("");
   }
 
   function tagById(id) {
@@ -504,12 +574,18 @@
   function renderTags() {
     if (!tagList) return;
     const tags = [...state.index.tags].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const untaggedCount = state.index.items.filter(isUntagged).length;
     const bits = [
-      `<button type="button" class="memo-tag-item${state.activeTagId === "all" ? " is-active" : ""}" data-memo-tag="all" draggable="false">全部</button>`,
+      `<button type="button" class="memo-tag-item${state.activeTagId === "all" ? " is-active" : ""}" data-memo-tag="all" draggable="false">全部<span class="mono memo-tag-count">${state.index.items.length}</span></button>`,
     ];
     tags.forEach((t) => {
+      const count =
+        t.id === DEFAULT_TAG_ID
+          ? untaggedCount
+          : state.index.items.filter((it) => customTagIds(it).includes(t.id)).length;
+      const label = t.id === DEFAULT_TAG_ID ? "默认（未分类）" : t.name;
       bits.push(
-        `<button type="button" class="memo-tag-item${state.activeTagId === t.id ? " is-active" : ""}" data-memo-tag="${escapeHtml(t.id)}" draggable="${t.id !== DEFAULT_TAG_ID ? "true" : "false"}">${escapeHtml(t.name)}</button>`
+        `<button type="button" class="memo-tag-item${state.activeTagId === t.id ? " is-active" : ""}" data-memo-tag="${escapeHtml(t.id)}" draggable="${t.id !== DEFAULT_TAG_ID ? "true" : "false"}">${escapeHtml(label)}<span class="mono memo-tag-count">${count}</span></button>`
       );
     });
     tagList.innerHTML = bits.join("");
@@ -606,21 +682,50 @@
     }
   }
 
+  function tagsForNewItem() {
+    if (state.activeTagId && state.activeTagId !== "all" && state.activeTagId !== DEFAULT_TAG_ID) {
+      return [state.activeTagId];
+    }
+    return [DEFAULT_TAG_ID];
+  }
+
   function renderItems() {
     if (!itemList) return;
     revokeTrackedUrls();
     const items = visibleItems();
     if (!items.length) {
-      const emptyTip =
-        state.activeTagId === "all"
-          ? "暂无条目。可粘贴、拖入文件或保存文本。"
-          : "当前标签下暂无条目。可在此标签下新建，或切回「全部」。";
+      let emptyTip = "暂无条目。可粘贴、拖入文件或保存文本。";
+      if (state.activeType !== "all" && state.activeTagId !== "all") {
+        emptyTip = "当前标签与类型筛选下暂无条目。";
+      } else if (state.activeType !== "all") {
+        emptyTip = `当前没有「${TYPE_LABELS[state.activeType] || state.activeType}」类型条目。`;
+      } else if (state.activeTagId === DEFAULT_TAG_ID) {
+        emptyTip = "暂无未分类条目。已加自定义标签的内容会离开「默认」。";
+      } else if (state.activeTagId !== "all") {
+        emptyTip = "当前标签下暂无条目。可在此标签下新建，或切回「全部」。";
+      }
       itemList.innerHTML = `<p class="hint">${emptyTip}</p>`;
       const batch = $("#memo-batch-del");
       if (batch) batch.disabled = state.selected.size === 0;
       return;
     }
-    itemList.innerHTML = items.map(itemCardHtml).join("");
+    if (state.activeType === "all") {
+      const order = ["text", "image", "video", "audio", "file"];
+      const groups = order
+        .map((type) => ({ type, items: items.filter((it) => it.type === type) }))
+        .filter((g) => g.items.length);
+      itemList.innerHTML = groups
+        .map(
+          (g) =>
+            `<section class="memo-type-group" data-memo-type-group="${g.type}">
+              <h3 class="memo-type-group-title">${TYPE_LABELS[g.type] || g.type}<span class="mono memo-tag-count">${g.items.length}</span></h3>
+              <div class="memo-type-group-list">${g.items.map(itemCardHtml).join("")}</div>
+            </section>`
+        )
+        .join("");
+    } else {
+      itemList.innerHTML = items.map(itemCardHtml).join("");
+    }
     hydrateMedia().catch(() => {});
     const batch = $("#memo-batch-del");
     if (batch) batch.disabled = state.selected.size === 0;
@@ -628,6 +733,7 @@
 
   function renderAll() {
     renderTags();
+    renderTypeFilter();
     renderItems();
     updateStoreMeta();
   }
@@ -676,7 +782,7 @@
       createdAt: Date.now(),
       updatedAt: Date.now(),
       order: -1,
-      tagIds: opts.tagIds || (state.activeTagId !== "all" ? [DEFAULT_TAG_ID, state.activeTagId].filter((id, i, arr) => arr.indexOf(id) === i) : [DEFAULT_TAG_ID]),
+      tagIds: opts.tagIds || tagsForNewItem(),
       mime: blob.type || "",
       size: blob.size || 0,
       fileName,
@@ -974,7 +1080,10 @@
     if (!exportDlg || !exportTags) return;
     syncExportButtonLabels();
     exportTags.innerHTML = state.index.tags
-      .map((t) => `<option value="${escapeHtml(t.id)}">${escapeHtml(t.name)}</option>`)
+      .map((t) => {
+        const label = t.id === DEFAULT_TAG_ID ? "默认（未分类）" : t.name;
+        return `<option value="${escapeHtml(t.id)}">${escapeHtml(label)}</option>`;
+      })
       .join("");
     $("#memo-export-pass").value = "";
     exportDlg.showModal();
@@ -1301,7 +1410,7 @@
     });
   }
 
-  // ---- text to image (inspired by text-to-card / poster card UIs) ----
+  // ---- text to image (carbon / ray.so / markdown-to-image inspired) ----
   const TI_THEMES = {
     solid: null,
     sunset: "linear-gradient(135deg, #ff7e5f 0%, #feb47b 45%, #ff6a88 100%)",
@@ -1311,7 +1420,18 @@
     ink: "linear-gradient(160deg, #0b1220 0%, #1a2338 55%, #2a354f 100%)",
     paper: "linear-gradient(180deg, #f7f1e5 0%, #efe2cb 100%)",
     mesh: "radial-gradient(circle at 20% 20%, rgba(46,196,182,.55), transparent 40%), radial-gradient(circle at 80% 10%, rgba(244,162,97,.45), transparent 42%), radial-gradient(circle at 50% 80%, rgba(99,102,241,.4), transparent 45%), linear-gradient(160deg, #10182a, #0b1220)",
+    spring: "linear-gradient(135deg, #5ee7df 0%, #b490ca 50%, #fbc2eb 100%)",
+    ray: "radial-gradient(120% 80% at 10% 10%, #3b82f6 0%, transparent 45%), radial-gradient(100% 70% at 90% 20%, #ec4899 0%, transparent 40%), linear-gradient(160deg, #0b1020, #111827)",
     image: null,
+  };
+
+  const TI_CODE_THEME = {
+    carbon: { bg: "#151718", fg: "#e6edf3", muted: "#8b949e" },
+    dracula: { bg: "#282a36", fg: "#f8f8f2", muted: "#6272a4" },
+    monokai: { bg: "#272822", fg: "#f8f8f2", muted: "#75715e" },
+    nord: { bg: "#2e3440", fg: "#eceff4", muted: "#81a1c1" },
+    github: { bg: "#ffffff", fg: "#24292f", muted: "#656d76" },
+    "one-dark": { bg: "#282c34", fg: "#abb2bf", muted: "#5c6370" },
   };
 
   const TI_RATIO = {
@@ -1401,18 +1521,114 @@
     return editor?.value || "";
   }
 
+  function inlineMd(s) {
+    let t = escapeHtml(s);
+    t = t.replace(/`([^`]+)`/g, "<code>$1</code>");
+    t = t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+    t = t.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+    t = t.replace(/~~([^~]+)~~/g, "<del>$1</del>");
+    return t;
+  }
+
+  /** Lightweight Markdown → HTML (markdown-to-image inspired) */
+  function renderLiteMarkdown(src) {
+    const lines = String(src || "").replace(/\r\n/g, "\n").split("\n");
+    const out = [];
+    let i = 0;
+    let inCode = false;
+    let codeBuf = [];
+    let listType = "";
+    const flushList = () => {
+      if (!listType) return;
+      out.push(listType === "ol" ? "</ol>" : "</ul>");
+      listType = "";
+    };
+    while (i < lines.length) {
+      const line = lines[i];
+      if (/^```/.test(line)) {
+        if (inCode) {
+          out.push(`<pre class="memo-ti-md-code"><code>${escapeHtml(codeBuf.join("\n"))}</code></pre>`);
+          codeBuf = [];
+          inCode = false;
+        } else {
+          flushList();
+          inCode = true;
+        }
+        i += 1;
+        continue;
+      }
+      if (inCode) {
+        codeBuf.push(line);
+        i += 1;
+        continue;
+      }
+      if (/^\s*$/.test(line)) {
+        flushList();
+        i += 1;
+        continue;
+      }
+      const h = /^(#{1,3})\s+(.+)$/.exec(line);
+      if (h) {
+        flushList();
+        const lv = h[1].length;
+        out.push(`<h${lv} class="memo-ti-md-h">${inlineMd(h[2])}</h${lv}>`);
+        i += 1;
+        continue;
+      }
+      if (/^>\s?/.test(line)) {
+        flushList();
+        out.push(`<blockquote class="memo-ti-md-quote">${inlineMd(line.replace(/^>\s?/, ""))}</blockquote>`);
+        i += 1;
+        continue;
+      }
+      if (/^[-*]\s+/.test(line)) {
+        if (listType !== "ul") {
+          flushList();
+          listType = "ul";
+          out.push('<ul class="memo-ti-md-list">');
+        }
+        out.push(`<li>${inlineMd(line.replace(/^[-*]\s+/, ""))}</li>`);
+        i += 1;
+        continue;
+      }
+      if (/^\d+\.\s+/.test(line)) {
+        if (listType !== "ol") {
+          flushList();
+          listType = "ol";
+          out.push('<ol class="memo-ti-md-list">');
+        }
+        out.push(`<li>${inlineMd(line.replace(/^\d+\.\s+/, ""))}</li>`);
+        i += 1;
+        continue;
+      }
+      if (/^---+$/.test(line.trim())) {
+        flushList();
+        out.push('<hr class="memo-ti-md-hr" />');
+        i += 1;
+        continue;
+      }
+      flushList();
+      out.push(`<p class="memo-ti-md-p">${inlineMd(line)}</p>`);
+      i += 1;
+    }
+    if (inCode) out.push(`<pre class="memo-ti-md-code"><code>${escapeHtml(codeBuf.join("\n"))}</code></pre>`);
+    flushList();
+    return out.join("");
+  }
+
   function paintTextImageCard() {
     const card = $("#memo-ti-card");
     if (!card) return;
     const raw = tiSourceText();
     const text = raw.trim() ? raw : "在此输入文字…";
     const mode = $("#memo-ti-mode")?.value || "quote";
-    const tpl = $("#memo-ti-tpl")?.value || "default";
+    let tpl = $("#memo-ti-tpl")?.value || "default";
     const theme = $("#memo-ti-theme")?.value || "sunset";
     const align = $("#memo-ti-align")?.value || "center";
     const size = Number($("#memo-ti-size")?.value) || 30;
     const lh = Number($("#memo-ti-lh")?.value) || 1.45;
     const pad = Number($("#memo-ti-pad")?.value) || 40;
+    const winPad = Math.max(0, Number($("#memo-ti-winpad")?.value) || 0);
     const radius = Number($("#memo-ti-radius")?.value) || 20;
     const cols = Number($("#memo-ti-cols")?.value) || 0;
     const bg = $("#memo-ti-bg")?.value || "#0f172a";
@@ -1420,22 +1636,30 @@
     const overlay = Math.max(0, Math.min(85, Number($("#memo-ti-overlay")?.value) || 0));
     const wm = $("#memo-ti-wm")?.value || "";
     const sign = $("#memo-ti-sign")?.value || "";
+    const header = String($("#memo-ti-header")?.value || "").trim();
+    const footer = String($("#memo-ti-footer")?.value || "").trim();
+    const fname = String($("#memo-ti-fname")?.value || "").trim() || (mode === "code" ? "snippet.js" : "note");
+    const showLines = Boolean($("#memo-ti-lines")?.checked);
+    const wantWindow = Boolean($("#memo-ti-window")?.checked) || mode === "code" || tpl === "carbon" || tpl === "terminal";
+    const codeThemeKey = $("#memo-ti-code-theme")?.value || "carbon";
+    const codeTheme = TI_CODE_THEME[codeThemeKey] || TI_CODE_THEME.carbon;
     const { w, h } = readTiSize();
     const lines = wrapText(text, cols);
     const paperFg = theme === "paper" ? "#2a2118" : fg;
     const useImg = theme === "image" && state.bgImageUrl;
     const grad = TI_THEMES[theme];
+    if (mode === "code" && tpl === "default") tpl = "carbon";
 
     syncTiDimLabel(w, h);
-    card.className = `memo-ti-card memo-ti-tpl-${tpl} memo-ti-mode-${mode}`;
+    card.className = `memo-ti-card memo-ti-tpl-${tpl} memo-ti-mode-${mode}${wantWindow ? " is-windowed" : ""}`;
     card.style.width = `${w}px`;
     card.style.height = `${h}px`;
-    card.style.padding = `${pad}px`;
+    card.style.padding = `${Math.max(winPad, mode === "code" || wantWindow ? winPad || 48 : pad)}px`;
     card.style.borderRadius = `${radius}px`;
     card.style.color = paperFg;
     card.style.fontSize = `${size}px`;
     card.style.lineHeight = String(lh);
-    card.style.textAlign = align;
+    card.style.textAlign = mode === "code" || mode === "markdown" ? (mode === "code" ? "left" : align) : align;
     card.style.backgroundColor = theme === "solid" || !grad ? bg : "transparent";
     card.style.backgroundImage = useImg
       ? `linear-gradient(rgba(8,12,20,${overlay / 100}), rgba(8,12,20,${overlay / 100})), url(${state.bgImageUrl})`
@@ -1449,68 +1673,114 @@
           ? '"Noto Serif SC", "Songti SC", serif'
           : "var(--font)";
 
-    const bodyHtml =
+    let bodyInner = "";
+    if (mode === "code") {
+      const codeLines = String(text).replace(/\r\n/g, "\n").split("\n");
+      bodyInner = `<pre class="memo-ti-code ${showLines ? "has-lines" : ""}">${codeLines
+        .map((l, idx) => {
+          const num = showLines ? `<span class="memo-ti-ln" aria-hidden="true">${idx + 1}</span>` : "";
+          return `<div class="memo-ti-code-line">${num}<span class="memo-ti-code-text">${escapeHtml(l || " ")}</span></div>`;
+        })
+        .join("")}</pre>`;
+    } else if (mode === "markdown") {
+      bodyInner = `<div class="memo-ti-md">${renderLiteMarkdown(text)}</div>`;
+    } else {
+      bodyInner = `<div class="memo-ti-lines">${lines.map((l) => `<div>${escapeHtml(l || " ")}</div>`).join("")}</div>`;
+    }
+
+    const chrome =
+      wantWindow
+        ? `<div class="memo-ti-chrome">
+            <div class="memo-ti-traffic" aria-hidden="true"><span></span><span></span><span></span></div>
+            <div class="memo-ti-fname mono">${escapeHtml(fname)}</div>
+          </div>`
+        : tpl === "quote"
+          ? `<div class="memo-ti-quote-mark" aria-hidden="true">“</div>`
+          : "";
+
+    const winStyle =
       mode === "code"
-        ? `<pre class="memo-ti-code">${escapeHtml(text || " ")}</pre>`
-        : `<div class="memo-ti-lines">${lines.map((l) => `<div>${escapeHtml(l || " ")}</div>`).join("")}</div>`;
+        ? `background:${codeTheme.bg};color:${codeTheme.fg};--memo-ti-muted:${codeTheme.muted}`
+        : "";
 
     card.innerHTML = `
-      ${tpl === "terminal" ? `<div class="memo-ti-traffic" aria-hidden="true"><span></span><span></span><span></span></div>` : ""}
-      ${tpl === "quote" ? `<div class="memo-ti-quote-mark" aria-hidden="true">“</div>` : ""}
-      <div class="memo-ti-body">${bodyHtml}</div>
-      ${sign ? `<div class="memo-ti-sign">${escapeHtml(sign)}</div>` : ""}
+      ${header || tpl === "poster" ? `<div class="memo-ti-header">${escapeHtml(header || "Markdown Poster")}</div>` : ""}
+      <div class="memo-ti-window" style="${winStyle}">
+        ${chrome}
+        <div class="memo-ti-body" style="padding:${wantWindow ? Math.max(12, Math.round(pad * 0.55)) : pad}px">${bodyInner}</div>
+        ${sign ? `<div class="memo-ti-sign">${escapeHtml(sign)}</div>` : ""}
+      </div>
+      ${footer || tpl === "poster" ? `<div class="memo-ti-footer">${escapeHtml(footer || "Powered by DevTools Memo")}</div>` : ""}
       ${wm ? `<div class="memo-ti-wm">${escapeHtml(wm)}</div>` : ""}
     `;
     requestAnimationFrame(fitTiPreview);
   }
 
+  async function renderTiBlob() {
+    const card = $("#memo-ti-card");
+    if (!card) throw new Error("预览未就绪");
+    paintTextImageCard();
+    if (typeof html2canvas !== "function") throw new Error("html2canvas 未加载");
+    const scale = Math.max(1, Math.min(3, Number($("#memo-ti-scale")?.value) || 2));
+    const box = $("#memo-ti-scale-box");
+    const stage = $("#memo-ti-stage");
+    const prevTransform = box?.style.transform || "";
+    const prevStageW = stage?.style.width || "";
+    const prevStageH = stage?.style.height || "";
+    const { w, h } = readTiSize();
+    if (box) {
+      box.style.transform = "none";
+      box.style.width = `${w}px`;
+      box.style.height = `${h}px`;
+    }
+    if (stage) {
+      stage.style.width = `${w}px`;
+      stage.style.height = `${h}px`;
+    }
+    try {
+      const canvas = await html2canvas(card, {
+        backgroundColor: null,
+        scale,
+        useCORS: true,
+        width: w,
+        height: h,
+      });
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("导出失败"))), "image/png");
+      });
+      return { blob, w, h, scale };
+    } finally {
+      if (box) box.style.transform = prevTransform;
+      if (stage) {
+        stage.style.width = prevStageW;
+        stage.style.height = prevStageH;
+      }
+      fitTiPreview();
+    }
+  }
+
   async function saveTextImage() {
     await withBusy(async () => {
-      const card = $("#memo-ti-card");
-      if (!card) return;
-      paintTextImageCard();
-      if (typeof html2canvas !== "function") throw new Error("html2canvas 未加载");
-      const scale = Math.max(1, Math.min(3, Number($("#memo-ti-scale")?.value) || 2));
-      const box = $("#memo-ti-scale-box");
-      const stage = $("#memo-ti-stage");
-      const prevTransform = box?.style.transform || "";
-      const prevStageW = stage?.style.width || "";
-      const prevStageH = stage?.style.height || "";
-      const { w, h } = readTiSize();
-      if (box) {
-        box.style.transform = "none";
-        box.style.width = `${w}px`;
-        box.style.height = `${h}px`;
-      }
-      if (stage) {
-        stage.style.width = `${w}px`;
-        stage.style.height = `${h}px`;
-      }
       setProgress(true, 0.3, "渲染图片…");
-      try {
-        const canvas = await html2canvas(card, {
-          backgroundColor: null,
-          scale,
-          useCORS: true,
-          width: w,
-          height: h,
-        });
-        const blob = await new Promise((resolve, reject) => {
-          canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("导出失败"))), "image/png");
-        });
-        await addItemFromBlob(blob, `文字图-${Date.now()}.png`, { type: "image", quiet: true });
-        setProgress(false, 0, "");
-        renderAll();
-        toast(`已生成图片（${w}×${h} · ${scale}×）`);
-        closeToImgPanel();
-      } finally {
-        if (box) box.style.transform = prevTransform;
-        if (stage) {
-          stage.style.width = prevStageW;
-          stage.style.height = prevStageH;
-        }
-        fitTiPreview();
+      const { blob, w, h, scale } = await renderTiBlob();
+      await addItemFromBlob(blob, `文字图-${Date.now()}.png`, { type: "image", quiet: true });
+      setProgress(false, 0, "");
+      renderAll();
+      toast(`已生成图片（${w}×${h} · ${scale}×）`);
+      closeToImgPanel();
+    });
+  }
+
+  async function copyTextImage() {
+    await withBusy(async () => {
+      setProgress(true, 0.3, "复制图片…");
+      const { blob, w, h } = await renderTiBlob();
+      if (!navigator.clipboard || typeof ClipboardItem === "undefined") {
+        throw new Error("当前环境不支持复制图片，请改用「生成并保存」");
       }
+      await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+      setProgress(false, 0, "");
+      toast(`已复制图片（${w}×${h}）`);
     });
   }
 
@@ -1544,8 +1814,9 @@
 
   async function applyTagToTarget(tag) {
     const item = state.index.items.find((x) => x.id === state.tagTargetId);
-    if (!item || !tag) return;
+    if (!item || !tag || tag.id === DEFAULT_TAG_ID) return;
     if (!item.tagIds.includes(tag.id)) item.tagIds.push(tag.id);
+    ensureTagMembership(item);
     item.updatedAt = Date.now();
     await persistIndex();
     state.tagTargetId = "";
@@ -1631,10 +1902,12 @@
     "memo-ti-mode",
     "memo-ti-tpl",
     "memo-ti-theme",
+    "memo-ti-code-theme",
     "memo-ti-align",
     "memo-ti-size",
     "memo-ti-lh",
     "memo-ti-pad",
+    "memo-ti-winpad",
     "memo-ti-radius",
     "memo-ti-cols",
     "memo-ti-bg",
@@ -1642,11 +1915,16 @@
     "memo-ti-overlay",
     "memo-ti-wm",
     "memo-ti-sign",
+    "memo-ti-header",
+    "memo-ti-footer",
+    "memo-ti-fname",
     "memo-ti-scale",
   ].forEach((id) => {
     $(`#${id}`)?.addEventListener("input", paintTextImageCard);
     $(`#${id}`)?.addEventListener("change", paintTextImageCard);
   });
+  $("#memo-ti-lines")?.addEventListener("change", paintTextImageCard);
+  $("#memo-ti-window")?.addEventListener("change", paintTextImageCard);
   $("#memo-ti-src")?.addEventListener("input", paintTextImageCard);
   $("#memo-ti-ratio")?.addEventListener("change", () => {
     const ratio = $("#memo-ti-ratio")?.value || "1:1";
@@ -1762,6 +2040,9 @@
   $("#memo-ti-save")?.addEventListener("click", () => {
     saveTextImage().catch((err) => setError(memoError, err.message || String(err)));
   });
+  $("#memo-ti-copy")?.addEventListener("click", () => {
+    copyTextImage().catch((err) => setError(memoError, err.message || String(err)));
+  });
 
   $("#memo-tag-new")?.addEventListener("click", () => {
     state.tagTargetId = "";
@@ -1791,8 +2072,9 @@
       }
       return;
     }
-    dlg?.close?.("cancel");
+    // 先应用标签，再关对话框，避免 close 事件清空 tagTargetId
     await applyTagToTarget(tag).catch((err) => setError(memoError, err.message || String(err)));
+    dlg?.close?.("cancel");
   });
   $("#memo-tag-dlg")?.addEventListener("close", () => {
     const dlg = $("#memo-tag-dlg");
@@ -1809,6 +2091,13 @@
     const btn = e.target.closest("[data-memo-tag]");
     if (!btn) return;
     state.activeTagId = btn.dataset.memoTag;
+    renderAll();
+  });
+
+  $("#memo-type-filter")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("[data-memo-type]");
+    if (!btn) return;
+    state.activeType = btn.dataset.memoType || "all";
     renderAll();
   });
 

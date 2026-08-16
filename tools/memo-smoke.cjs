@@ -213,6 +213,37 @@ async function main() {
     await sleep(80);
     out.toImgLive.closed = !toimg?.open;
 
+    // absorb carbon / markdown features
+    document.getElementById("memo-to-image")?.click();
+    await sleep(100);
+    const modeEl = document.getElementById("memo-ti-mode");
+    if (modeEl) {
+      modeEl.value = "markdown";
+      modeEl.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    const src2 = document.getElementById("memo-ti-src");
+    if (src2) {
+      src2.value = "# 标题\n> 引用\n- 列表 **粗体**";
+      src2.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    await sleep(80);
+    out.toImgAbsorb = {
+      hasCopy: Boolean(document.getElementById("memo-ti-copy")),
+      hasMarkdownMode: [...(modeEl?.options || [])].some((o) => o.value === "markdown"),
+      hasCodeTheme: Boolean(document.getElementById("memo-ti-code-theme")),
+      hasWindowPad: Boolean(document.getElementById("memo-ti-winpad")),
+      mdRendered: Boolean(document.querySelector("#memo-ti-card .memo-ti-md-h, #memo-ti-card .memo-ti-md-quote")),
+    };
+    if (modeEl) {
+      modeEl.value = "code";
+      modeEl.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    await sleep(60);
+    out.toImgAbsorb.hasChrome = Boolean(document.querySelector("#memo-ti-card .memo-ti-chrome"));
+    out.toImgAbsorb.hasLines = Boolean(document.querySelector("#memo-ti-card .memo-ti-ln"));
+    document.getElementById("memo-ti-close")?.click();
+    await sleep(60);
+
     // open image preview
     const openBtn = document.querySelector('[data-memo-open]');
     if (openBtn) {
@@ -223,6 +254,46 @@ async function main() {
       await sleep(100);
       out.preview.closed = !document.getElementById("memo-lightbox")?.open;
     }
+
+    // type filter + grouped sections
+    out.typeFilter = {
+      host: Boolean(document.getElementById("memo-type-filter")),
+      chips: document.querySelectorAll("#memo-type-filter [data-memo-type]").length,
+      groups: document.querySelectorAll(".memo-type-group").length,
+    };
+    document.querySelector('#memo-type-filter [data-memo-type="image"]')?.click();
+    await sleep(80);
+    out.typeFilter.imageOnly =
+      [...document.querySelectorAll(".memo-card")].every((c) => {
+        const id = c.dataset.memoId;
+        const it = (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === id);
+        return it?.type === "image";
+      }) && document.querySelectorAll(".memo-card").length >= 1;
+    document.querySelector('#memo-type-filter [data-memo-type="all"]')?.click();
+    await sleep(80);
+
+    // tagged item leaves default (untagged) bucket
+    const firstId = (window.DevToolsMemo.getIndex().items || [])[0]?.id;
+    const workTag = (window.DevToolsMemo.getIndex().tags || []).find((t) => t.name === "工作");
+    if (firstId && workTag) {
+      document.querySelector(`[data-memo-tag-add="${firstId}"]`)?.click();
+      await sleep(80);
+      document.querySelector(`[data-memo-tag-pick="${workTag.id}"]`)?.click();
+      await sleep(250);
+      const tagged = (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === firstId);
+      out.tagLeavesDefault = {
+        hasWork: Boolean(tagged?.tagIds?.includes(workTag.id)),
+        noDefault: !(tagged?.tagIds || []).includes("default"),
+      };
+      document.querySelector('.memo-tag-item[data-memo-tag="default"]')?.click();
+      await sleep(80);
+      out.tagLeavesDefault.defaultViewHidesTagged = !document.querySelector(`.memo-card[data-memo-id="${firstId}"]`);
+      document.querySelector('.memo-tag-item[data-memo-tag="all"]')?.click();
+      await sleep(80);
+    } else {
+      out.tagLeavesDefault = { hasWork: false, noDefault: false, defaultViewHidesTagged: false };
+    }
+
     return out;
   });
 
@@ -262,6 +333,24 @@ async function main() {
   if (!result.toImgLive?.customRatio) failed.push("custom size should switch ratio to custom");
   if (!/^800/.test(result.toImgLive?.cardW || "")) failed.push(`unexpected card width ${result.toImgLive?.cardW}`);
   if (!result.toImgLive?.closed) failed.push("toimg dialog should close");
+  if (!result.toImgAbsorb?.hasCopy || !result.toImgAbsorb?.hasMarkdownMode || !result.toImgAbsorb?.hasCodeTheme) {
+    failed.push("toimg absorb controls missing");
+  }
+  if (!result.toImgAbsorb?.mdRendered) failed.push("markdown mode render missing");
+  if (!result.toImgAbsorb?.hasChrome || !result.toImgAbsorb?.hasLines) {
+    failed.push("carbon window/line-number missing");
+  }
+  if (!result.typeFilter?.host || (result.typeFilter?.chips || 0) < 6) {
+    failed.push("type filter chips missing");
+  }
+  if ((result.typeFilter?.groups || 0) < 1) failed.push("type groups missing in all view");
+  if (!result.typeFilter?.imageOnly) failed.push("image type filter failed");
+  if (!result.tagLeavesDefault?.hasWork || !result.tagLeavesDefault?.noDefault) {
+    failed.push("tagged item should leave default tag");
+  }
+  if (!result.tagLeavesDefault?.defaultViewHidesTagged) {
+    failed.push("default tag view should hide tagged items");
+  }
 
   console.log(JSON.stringify({ ok: failed.length === 0, result, failed }, null, 2));
   if (failed.length) process.exit(1);
