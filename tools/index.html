@@ -7,9 +7,9 @@
   <title>DevTools · 实用小工具</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260816memo3" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo3" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./style.css?v=20260816memo4" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo4" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo3</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo4</span>
       </div>
       <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
@@ -963,6 +963,11 @@ hello@world.org</textarea>
             <button type="button" class="ghost-btn" id="memo-batch-del" disabled>批量删除</button>
           </div>
           <p class="hint tight" id="memo-store-meta">正在检测存储能力…</p>
+          <div class="memo-reconnect-banner" id="memo-reconnect-banner" hidden>
+            <strong>目录连接已失效</strong>
+            <p class="hint tight">磁盘文件通常还在。请点「重新连接目录」并选回同一路径以恢复预览与写入。清站点缓存不会删除这些文件；清理前仍建议先导出备份。</p>
+            <button type="button" class="primary-btn" id="memo-reconnect-banner-btn">重新连接目录</button>
+          </div>
           <p class="hint tight memo-backup-tip">提示：清理浏览器缓存前，请先「导出」备份。手机请用「分享导出包」。粘贴用 Ctrl/⌘+V 或右键；文件也可拖入。</p>
         </div>
 
@@ -978,35 +983,115 @@ hello@world.org</textarea>
           <div class="memo-main">
             <div class="memo-editor panel-card">
               <label for="memo-editor">写一段文字</label>
+              <p class="hint tight" id="memo-edit-hint" hidden>正在编辑已有条目，保存后会覆盖原文。</p>
               <textarea id="memo-editor" class="area" rows="5" placeholder="在此输入；也可 Ctrl/⌘+V 或右键粘贴图片与文字"></textarea>
               <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.55rem">
                 <button type="button" class="primary-btn" id="memo-save-text">保存文本</button>
+                <button type="button" class="ghost-btn" id="memo-cancel-edit" hidden>取消编辑</button>
                 <button type="button" class="secondary-btn" id="memo-to-image">文字转图片…</button>
                 <button type="button" class="ghost-btn" id="memo-read-clip">读取剪贴板</button>
               </div>
             </div>
 
             <div class="memo-toimg" id="memo-toimg" hidden>
-              <h2 class="subhead">文字转图片</h2>
-              <div class="field-row" style="flex-wrap:wrap">
-                <label for="memo-ti-cols">每行字数</label>
-                <input id="memo-ti-cols" class="mono meta-input" type="number" min="4" max="80" value="16" />
-                <label for="memo-ti-size">字号</label>
-                <input id="memo-ti-size" class="mono meta-input" type="number" min="12" max="72" value="28" />
-                <label for="memo-ti-bg">背景色</label>
-                <input id="memo-ti-bg" type="color" value="#0f172a" />
-                <label for="memo-ti-fg">文字色</label>
-                <input id="memo-ti-fg" type="color" value="#e8eef8" />
+              <div class="label-row">
+                <h2 class="subhead">文字转图片</h2>
+                <p class="hint tight">参考 text-to-card / 海报卡片：模板 · 渐变 · 比例 · 高清导出</p>
               </div>
-              <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem">
-                <label class="file-btn" for="memo-ti-bgimg">背景图</label>
+              <div class="memo-ti-controls">
+                <label for="memo-ti-mode">模式
+                  <select id="memo-ti-mode" class="select-input">
+                    <option value="quote" selected>金句</option>
+                    <option value="note">短文</option>
+                    <option value="title">标题</option>
+                    <option value="code">代码</option>
+                  </select>
+                </label>
+                <label for="memo-ti-tpl">模板
+                  <select id="memo-ti-tpl" class="select-input">
+                    <option value="default" selected>默认</option>
+                    <option value="quote">大引号</option>
+                    <option value="paper">纸张</option>
+                    <option value="terminal">终端</option>
+                    <option value="neon">霓虹</option>
+                    <option value="glass">磨砂</option>
+                    <option value="minimal">极简</option>
+                  </select>
+                </label>
+                <label for="memo-ti-theme">背景主题
+                  <select id="memo-ti-theme" class="select-input">
+                    <option value="solid">纯色</option>
+                    <option value="sunset" selected>日落渐变</option>
+                    <option value="ocean">海洋</option>
+                    <option value="aurora">极光</option>
+                    <option value="neon">霓虹</option>
+                    <option value="ink">墨色</option>
+                    <option value="paper">暖纸</option>
+                    <option value="mesh">网格渐变</option>
+                    <option value="image">背景图</option>
+                  </select>
+                </label>
+                <label for="memo-ti-ratio">比例
+                  <select id="memo-ti-ratio" class="select-input">
+                    <option value="1:1" selected>1:1</option>
+                    <option value="3:4">3:4 竖版</option>
+                    <option value="4:3">4:3</option>
+                    <option value="16:9">16:9</option>
+                    <option value="9:16">9:16 故事</option>
+                  </select>
+                </label>
+                <label for="memo-ti-align">对齐
+                  <select id="memo-ti-align" class="select-input">
+                    <option value="left">左</option>
+                    <option value="center" selected>中</option>
+                    <option value="right">右</option>
+                  </select>
+                </label>
+                <label for="memo-ti-size">字号
+                  <input id="memo-ti-size" class="mono meta-input" type="number" min="14" max="72" value="30" />
+                </label>
+                <label for="memo-ti-lh">行高
+                  <input id="memo-ti-lh" class="mono meta-input" type="number" min="1.1" max="2.2" step="0.05" value="1.45" />
+                </label>
+                <label for="memo-ti-pad">边距
+                  <input id="memo-ti-pad" class="mono meta-input" type="number" min="16" max="96" value="40" />
+                </label>
+                <label for="memo-ti-radius">圆角
+                  <input id="memo-ti-radius" class="mono meta-input" type="number" min="0" max="48" value="20" />
+                </label>
+                <label for="memo-ti-cols">每行字数
+                  <input id="memo-ti-cols" class="mono meta-input" type="number" min="0" max="80" value="0" title="0=自动按宽度换行" />
+                </label>
+                <label for="memo-ti-bg">底色
+                  <input id="memo-ti-bg" type="color" value="#0f172a" />
+                </label>
+                <label for="memo-ti-fg">文字色
+                  <input id="memo-ti-fg" type="color" value="#e8eef8" />
+                </label>
+                <label for="memo-ti-overlay">图遮罩
+                  <input id="memo-ti-overlay" class="mono meta-input" type="number" min="0" max="85" value="35" />
+                </label>
+                <label for="memo-ti-scale">导出倍率
+                  <select id="memo-ti-scale" class="select-input">
+                    <option value="2" selected>2×</option>
+                    <option value="3">3×</option>
+                    <option value="1">1×</option>
+                  </select>
+                </label>
+              </div>
+              <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
+                <label class="file-btn" for="memo-ti-bgimg">上传背景图</label>
                 <input id="memo-ti-bgimg" type="file" accept="image/*" hidden />
                 <button type="button" class="ghost-btn" id="memo-ti-bgimg-clear">清除背景图</button>
-                <label for="memo-ti-wm">水印</label>
-                <input id="memo-ti-wm" class="mono meta-input" type="text" placeholder="可选水印文字" maxlength="40" />
+                <label for="memo-ti-sign">署名
+                  <input id="memo-ti-sign" class="mono meta-input" type="text" placeholder="可选署名" maxlength="40" />
+                </label>
+                <label for="memo-ti-wm">水印
+                  <input id="memo-ti-wm" class="mono meta-input" type="text" placeholder="可选水印" maxlength="40" />
+                </label>
               </div>
               <div class="memo-ti-preview-wrap">
-                <div id="memo-ti-card" class="memo-ti-card" aria-hidden="true"></div>
+                <div id="memo-ti-card" class="memo-ti-card memo-ti-tpl-default" aria-hidden="true"></div>
               </div>
               <div class="btn-row tool-actions" style="margin-top:0.55rem">
                 <button type="button" class="primary-btn" id="memo-ti-save">生成并保存图片</button>
@@ -1051,6 +1136,19 @@ hello@world.org</textarea>
             <input id="memo-export-pass" class="mono" type="password" autocomplete="new-password" placeholder="留空则不加密" />
             <div class="btn-row tool-actions" style="margin-top:0.75rem">
               <button type="submit" class="primary-btn" value="ok" id="memo-export-ok">导出</button>
+              <button type="submit" class="ghost-btn" value="cancel">取消</button>
+            </div>
+          </form>
+        </dialog>
+
+        <dialog class="memo-dialog" id="memo-tag-dlg" aria-label="选择标签">
+          <form method="dialog" class="memo-dialog-body">
+            <h2 class="subhead">添加标签</h2>
+            <p class="hint tight">输入可搜索已有标签；没有则新建。</p>
+            <input id="memo-tag-search" class="mono" type="search" placeholder="搜索或新建标签…" autocomplete="off" />
+            <div class="memo-tag-suggest" id="memo-tag-suggest"></div>
+            <div class="btn-row tool-actions" style="margin-top:0.55rem">
+              <button type="submit" class="primary-btn" value="ok" id="memo-tag-ok">使用输入创建/添加</button>
               <button type="submit" class="ghost-btn" value="cancel">取消</button>
             </div>
           </form>
@@ -2555,11 +2653,11 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./temp.js?v=20260816memo3"></script>
+  <script src="./temp.js?v=20260816memo4"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260816memo3"></script>
-  <script src="./extra.js?v=20260816memo3"></script>
+  <script src="./app.js?v=20260816memo4"></script>
+  <script src="./extra.js?v=20260816memo4"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./memo.js?v=20260816memo3"></script>
+  <script src="./memo.js?v=20260816memo4"></script>
 </body>
 </html>

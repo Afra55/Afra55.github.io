@@ -264,6 +264,8 @@
     lastClipSig: "",
     busy: false,
     objectUrls: new Set(),
+    editingId: "",
+    tagTargetId: "",
   };
 
   function trackUrl(url) {
@@ -458,8 +460,10 @@
       reconnectBtn.hidden = !canDirPicker() || !connected;
       reconnectBtn.textContent = state.dirPending ? "重新连接目录" : "更换目录";
     }
+    const banner = $("#memo-reconnect-banner");
+    if (banner) banner.hidden = !state.dirPending;
     if (state.dirPending && state.dirHandle) {
-      storeMeta.textContent = `曾绑定目录「${state.dirHandle.name}」，连接已失效。请点「重新连接目录」并选回同一路径以恢复磁盘文件（清站点缓存不会删这些文件）。`;
+      storeMeta.textContent = `曾绑定目录「${state.dirHandle.name}」，连接已失效。请重新连接同一路径以恢复。`;
     } else if (state.mode === "dir" && state.dirHandle) {
       storeMeta.textContent = `存储：磁盘目录「${state.dirHandle.name}」· 清缓存不会删目录内文件；若连接丢失请重新选择同一目录即可恢复。`;
     } else {
@@ -538,11 +542,18 @@
       <div class="memo-card-body">${body}</div>
       <div class="memo-card-tags">${tagHtml}<button type="button" class="ghost-btn memo-tag-add" data-memo-tag-add="${item.id}">+ 标签</button></div>
       <div class="btn-row memo-card-actions">
-        <button type="button" class="ghost-btn" data-memo-copy="${item.id}">复制</button>
-        <button type="button" class="ghost-btn" data-memo-open="${item.id}">完整预览</button>
-        <button type="button" class="ghost-btn" data-memo-dl="${item.id}">下载</button>
-        ${state.mode === "dir" && !state.dirPending ? `<button type="button" class="ghost-btn" data-memo-path="${item.id}">路径</button>` : ""}
+        <button type="button" class="ghost-btn" data-memo-open="${item.id}">预览</button>
+        ${item.type === "text" ? `<button type="button" class="ghost-btn" data-memo-edit="${item.id}">编辑</button>` : ""}
         <button type="button" class="ghost-btn" data-memo-del="${item.id}">删除</button>
+        <details class="memo-more">
+          <summary class="ghost-btn memo-more-sum">更多</summary>
+          <div class="memo-more-menu" role="menu">
+            <button type="button" class="ghost-btn" data-memo-copy="${item.id}">复制</button>
+            <button type="button" class="ghost-btn" data-memo-dl="${item.id}">下载</button>
+            ${state.mode === "dir" && !state.dirPending ? `<button type="button" class="ghost-btn" data-memo-path="${item.id}">路径</button>` : ""}
+            <button type="button" class="ghost-btn" data-memo-toimg-item="${item.id}">转图片</button>
+          </div>
+        </details>
       </div>
     </article>`;
   }
@@ -671,10 +682,71 @@
       toast("内容为空");
       return;
     }
+    if (state.editingId) {
+      await saveEditedText(body);
+      return;
+    }
     await withBusy(async () => {
       const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
       await addItemFromBlob(blob, `文本-${formatTime(Date.now())}.txt`, { type: "text", textPreview: body });
       if (editor) editor.value = "";
+    });
+  }
+
+  function setEditingUi(on) {
+    const hint = $("#memo-edit-hint");
+    const cancel = $("#memo-cancel-edit");
+    const saveBtn = $("#memo-save-text");
+    if (hint) hint.hidden = !on;
+    if (cancel) cancel.hidden = !on;
+    if (saveBtn) saveBtn.textContent = on ? "保存修改" : "保存文本";
+  }
+
+  function clearEditing() {
+    state.editingId = "";
+    setEditingUi(false);
+  }
+
+  async function beginEditText(item) {
+    if (!item || item.type !== "text") return;
+    let text = item.textPreview || "";
+    if (!text) {
+      try {
+        text = await (await loadBlob(item)).text();
+      } catch (_) {
+        text = "";
+      }
+    }
+    state.editingId = item.id;
+    if (editor) {
+      editor.value = text;
+      editor.focus();
+      editor.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+    setEditingUi(true);
+    toast("已载入到编辑框");
+  }
+
+  async function saveEditedText(body) {
+    const id = state.editingId;
+    const item = state.index.items.find((x) => x.id === id);
+    if (!item) {
+      clearEditing();
+      await addText(body);
+      return;
+    }
+    await withBusy(async () => {
+      const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
+      item.textPreview = body;
+      item.updatedAt = Date.now();
+      item.size = blob.size;
+      item.mime = "text/plain;charset=utf-8";
+      item.fileName = await saveBlob(item.id, blob, item.fileName || `${item.id}_text.txt`);
+      await persistIndex();
+      clearEditing();
+      if (editor) editor.value = "";
+      renderAll();
+      toast("已保存修改");
     });
   }
 
@@ -1202,13 +1274,37 @@
     });
   }
 
-  // ---- text to image ----
+  // ---- text to image (inspired by text-to-card / poster card UIs) ----
+  const TI_THEMES = {
+    solid: null,
+    sunset: "linear-gradient(135deg, #ff7e5f 0%, #feb47b 45%, #ff6a88 100%)",
+    ocean: "linear-gradient(145deg, #0b3d5c 0%, #1b6ca8 45%, #2ec4b6 100%)",
+    aurora: "linear-gradient(135deg, #0f2027 0%, #203a43 35%, #2c5364 60%, #00d2ff 100%)",
+    neon: "linear-gradient(135deg, #1a0533 0%, #6a11cb 50%, #2575fc 100%)",
+    ink: "linear-gradient(160deg, #0b1220 0%, #1a2338 55%, #2a354f 100%)",
+    paper: "linear-gradient(180deg, #f7f1e5 0%, #efe2cb 100%)",
+    mesh: "radial-gradient(circle at 20% 20%, rgba(46,196,182,.55), transparent 40%), radial-gradient(circle at 80% 10%, rgba(244,162,97,.45), transparent 42%), radial-gradient(circle at 50% 80%, rgba(99,102,241,.4), transparent 45%), linear-gradient(160deg, #10182a, #0b1220)",
+    image: null,
+  };
+
+  const TI_RATIO = {
+    "1:1": { w: 720, h: 720 },
+    "3:4": { w: 720, h: 960 },
+    "4:3": { w: 840, h: 630 },
+    "16:9": { w: 960, h: 540 },
+    "9:16": { w: 540, h: 960 },
+  };
+
   function wrapText(text, cols) {
-    const c = Math.max(4, Number(cols) || 16);
+    const c = Math.max(0, Number(cols) || 0);
     const lines = [];
     String(text || "")
       .split(/\n/)
       .forEach((line) => {
+        if (!c) {
+          lines.push(line);
+          return;
+        }
         if (!line) {
           lines.push("");
           return;
@@ -1221,20 +1317,62 @@
   function paintTextImageCard() {
     const card = $("#memo-ti-card");
     if (!card) return;
-    const text = editor?.value || "";
-    const cols = Number($("#memo-ti-cols")?.value) || 16;
-    const size = Number($("#memo-ti-size")?.value) || 28;
+    const text = editor?.value || "在此输入文字…";
+    const mode = $("#memo-ti-mode")?.value || "quote";
+    const tpl = $("#memo-ti-tpl")?.value || "default";
+    const theme = $("#memo-ti-theme")?.value || "sunset";
+    const ratio = $("#memo-ti-ratio")?.value || "1:1";
+    const align = $("#memo-ti-align")?.value || "center";
+    const size = Number($("#memo-ti-size")?.value) || 30;
+    const lh = Number($("#memo-ti-lh")?.value) || 1.45;
+    const pad = Number($("#memo-ti-pad")?.value) || 40;
+    const radius = Number($("#memo-ti-radius")?.value) || 20;
+    const cols = Number($("#memo-ti-cols")?.value) || 0;
     const bg = $("#memo-ti-bg")?.value || "#0f172a";
     const fg = $("#memo-ti-fg")?.value || "#e8eef8";
+    const overlay = Math.max(0, Math.min(85, Number($("#memo-ti-overlay")?.value) || 0));
     const wm = $("#memo-ti-wm")?.value || "";
+    const sign = $("#memo-ti-sign")?.value || "";
+    const dim = TI_RATIO[ratio] || TI_RATIO["1:1"];
     const lines = wrapText(text, cols);
-    card.style.backgroundColor = bg;
-    card.style.color = fg;
+    const paperFg = theme === "paper" ? "#2a2118" : fg;
+    const useImg = theme === "image" && state.bgImageUrl;
+    const grad = TI_THEMES[theme];
+
+    card.className = `memo-ti-card memo-ti-tpl-${tpl} memo-ti-mode-${mode}`;
+    card.style.width = `${dim.w}px`;
+    card.style.height = `${dim.h}px`;
+    card.style.padding = `${pad}px`;
+    card.style.borderRadius = `${radius}px`;
+    card.style.color = paperFg;
     card.style.fontSize = `${size}px`;
-    card.style.backgroundImage = state.bgImageUrl ? `url(${state.bgImageUrl})` : "none";
-    card.innerHTML = `<div class="memo-ti-lines">${lines.map((l) => `<div>${escapeHtml(l || " ")}</div>`).join("")}</div>${
-      wm ? `<div class="memo-ti-wm">${escapeHtml(wm)}</div>` : ""
-    }`;
+    card.style.lineHeight = String(lh);
+    card.style.textAlign = align;
+    card.style.backgroundColor = theme === "solid" || !grad ? bg : "transparent";
+    card.style.backgroundImage = useImg
+      ? `linear-gradient(rgba(8,12,20,${overlay / 100}), rgba(8,12,20,${overlay / 100})), url(${state.bgImageUrl})`
+      : grad || "none";
+    card.style.backgroundSize = "cover";
+    card.style.backgroundPosition = "center";
+    card.style.fontFamily =
+      mode === "code"
+        ? 'var(--mono)'
+        : mode === "quote" || mode === "title"
+          ? '"Noto Serif SC", "Songti SC", serif'
+          : "var(--font)";
+
+    const bodyHtml =
+      mode === "code"
+        ? `<pre class="memo-ti-code">${escapeHtml(text || " ")}</pre>`
+        : `<div class="memo-ti-lines">${lines.map((l) => `<div>${escapeHtml(l || " ")}</div>`).join("")}</div>`;
+
+    card.innerHTML = `
+      ${tpl === "terminal" ? `<div class="memo-ti-traffic" aria-hidden="true"><span></span><span></span><span></span></div>` : ""}
+      ${tpl === "quote" ? `<div class="memo-ti-quote-mark" aria-hidden="true">“</div>` : ""}
+      <div class="memo-ti-body">${bodyHtml}</div>
+      ${sign ? `<div class="memo-ti-sign">${escapeHtml(sign)}</div>` : ""}
+      ${wm ? `<div class="memo-ti-wm">${escapeHtml(wm)}</div>` : ""}
+    `;
   }
 
   async function saveTextImage() {
@@ -1243,10 +1381,11 @@
       if (!card) return;
       paintTextImageCard();
       if (typeof html2canvas !== "function") throw new Error("html2canvas 未加载");
+      const scale = Math.max(1, Math.min(3, Number($("#memo-ti-scale")?.value) || 2));
       setProgress(true, 0.3, "渲染图片…");
       const canvas = await html2canvas(card, {
         backgroundColor: null,
-        scale: 2,
+        scale,
         useCORS: true,
       });
       const blob = await new Promise((resolve, reject) => {
@@ -1255,9 +1394,65 @@
       await addItemFromBlob(blob, `文字图-${Date.now()}.png`, { type: "image", quiet: true });
       setProgress(false, 0, "");
       renderAll();
-      toast("已生成图片");
-      $("#memo-toimg").hidden = true;
+      toast(`已生成图片（${scale}×）`);
     });
+  }
+
+  function openTagDialog(itemId) {
+    state.tagTargetId = itemId;
+    const dlg = $("#memo-tag-dlg");
+    const input = $("#memo-tag-search");
+    if (input) input.value = "";
+    renderTagSuggest("");
+    dlg?.showModal?.();
+    setTimeout(() => input?.focus(), 30);
+  }
+
+  function renderTagSuggest(q) {
+    const box = $("#memo-tag-suggest");
+    if (!box) return;
+    const query = String(q || "").trim().toLowerCase();
+    const tags = state.index.tags.filter((t) => t.id !== DEFAULT_TAG_ID);
+    const filtered = query ? tags.filter((t) => t.name.toLowerCase().includes(query)) : tags;
+    if (!filtered.length) {
+      box.innerHTML = `<p class="hint tight">${query ? `没有「${escapeHtml(query)}」，可点下方创建` : "暂无自定义标签"}</p>`;
+      return;
+    }
+    box.innerHTML = filtered
+      .map(
+        (t) =>
+          `<button type="button" class="memo-tag-suggest-item" data-memo-tag-pick="${escapeHtml(t.id)}">${escapeHtml(t.name)}</button>`
+      )
+      .join("");
+  }
+
+  async function applyTagToTarget(tag) {
+    const item = state.index.items.find((x) => x.id === state.tagTargetId);
+    if (!item || !tag) return;
+    if (!item.tagIds.includes(tag.id)) item.tagIds.push(tag.id);
+    item.updatedAt = Date.now();
+    await persistIndex();
+    state.tagTargetId = "";
+    renderAll();
+    toast(`已添加标签「${tag.name}」`);
+  }
+
+  async function commitTagFromInput() {
+    const name = String($("#memo-tag-search")?.value || "").trim();
+    if (!name) return;
+    let tag = state.index.tags.find((x) => x.name === name);
+    if (!tag) {
+      tag = { id: uid(), name, order: -1 };
+      state.index.tags.unshift(tag);
+      reindexOrders();
+      await persistIndex();
+    }
+    if (!state.tagTargetId) {
+      renderAll();
+      toast(`已就绪标签「${tag.name}」`);
+      return;
+    }
+    await applyTagToTarget(tag);
   }
 
   // ---- events ----
@@ -1267,12 +1462,20 @@
   reconnectBtn?.addEventListener("click", () => {
     pickDirectory().catch((err) => setError(memoError, err.message || String(err)));
   });
+  $("#memo-reconnect-banner-btn")?.addEventListener("click", () => {
+    pickDirectory().catch((err) => setError(memoError, err.message || String(err)));
+  });
   $("#memo-file")?.addEventListener("change", (e) => {
     ingestFiles(e.target.files).catch((err) => setError(memoError, err.message || String(err)));
     e.target.value = "";
   });
   $("#memo-save-text")?.addEventListener("click", () => {
     addText(editor?.value || "").catch((err) => setError(memoError, err.message || String(err)));
+  });
+  $("#memo-cancel-edit")?.addEventListener("click", () => {
+    clearEditing();
+    if (editor) editor.value = "";
+    toast("已取消编辑");
   });
   $("#memo-read-clip")?.addEventListener("click", () => {
     readClipboard({ force: true }).catch((err) => setError(memoError, err.message || String(err)));
@@ -1284,8 +1487,26 @@
   $("#memo-ti-close")?.addEventListener("click", () => {
     $("#memo-toimg").hidden = true;
   });
-  ["memo-ti-cols", "memo-ti-size", "memo-ti-bg", "memo-ti-fg", "memo-ti-wm"].forEach((id) => {
+  [
+    "memo-ti-mode",
+    "memo-ti-tpl",
+    "memo-ti-theme",
+    "memo-ti-ratio",
+    "memo-ti-align",
+    "memo-ti-size",
+    "memo-ti-lh",
+    "memo-ti-pad",
+    "memo-ti-radius",
+    "memo-ti-cols",
+    "memo-ti-bg",
+    "memo-ti-fg",
+    "memo-ti-overlay",
+    "memo-ti-wm",
+    "memo-ti-sign",
+    "memo-ti-scale",
+  ].forEach((id) => {
     $(`#${id}`)?.addEventListener("input", paintTextImageCard);
+    $(`#${id}`)?.addEventListener("change", paintTextImageCard);
   });
   editor?.addEventListener("input", () => {
     if (!$("#memo-toimg")?.hidden) paintTextImageCard();
@@ -1296,6 +1517,8 @@
     if (state.bgImageUrl) URL.revokeObjectURL(state.bgImageUrl);
     state.bgImageBlob = f;
     state.bgImageUrl = URL.createObjectURL(f);
+    const theme = $("#memo-ti-theme");
+    if (theme) theme.value = "image";
     paintTextImageCard();
     e.target.value = "";
   });
@@ -1309,20 +1532,46 @@
     saveTextImage().catch((err) => setError(memoError, err.message || String(err)));
   });
 
-  $("#memo-tag-new")?.addEventListener("click", async () => {
-    const name = (window.prompt("新标签名称") || "").trim();
-    if (!name) return;
-    const exist = state.index.tags.find((t) => t.name === name);
-    if (exist) {
-      toast(`标签「${name}」已存在`);
+  $("#memo-tag-new")?.addEventListener("click", () => {
+    state.tagTargetId = "";
+    const dlg = $("#memo-tag-dlg");
+    const title = dlg?.querySelector(".subhead");
+    if (title) title.textContent = "新建标签";
+    const input = $("#memo-tag-search");
+    if (input) input.value = "";
+    renderTagSuggest("");
+    dlg?.showModal?.();
+    setTimeout(() => input?.focus(), 30);
+  });
+
+  $("#memo-tag-search")?.addEventListener("input", (e) => {
+    renderTagSuggest(e.target.value);
+  });
+  $("#memo-tag-suggest")?.addEventListener("click", async (e) => {
+    const id = e.target.closest?.("[data-memo-tag-pick]")?.dataset?.memoTagPick;
+    if (!id) return;
+    const tag = state.index.tags.find((t) => t.id === id);
+    const dlg = $("#memo-tag-dlg");
+    if (!state.tagTargetId) {
+      if (tag) {
+        state.activeTagId = tag.id;
+        dlg?.close?.("cancel");
+        renderAll();
+      }
       return;
     }
-    const id = uid();
-    state.index.tags.unshift({ id, name, order: -1 });
-    reindexOrders();
-    await persistIndex();
-    renderAll();
-    toast(`已创建标签「${name}」`);
+    dlg?.close?.("cancel");
+    await applyTagToTarget(tag).catch((err) => setError(memoError, err.message || String(err)));
+  });
+  $("#memo-tag-dlg")?.addEventListener("close", () => {
+    const dlg = $("#memo-tag-dlg");
+    const title = dlg?.querySelector(".subhead");
+    if (title) title.textContent = "添加标签";
+    if (dlg?.returnValue !== "ok") {
+      state.tagTargetId = "";
+      return;
+    }
+    commitTagFromInput().catch((err) => setError(memoError, err.message || String(err)));
   });
 
   tagList?.addEventListener("click", (e) => {
@@ -1377,15 +1626,35 @@
         $("#memo-batch-del").disabled = state.selected.size === 0;
         return;
       }
+      const delId = t.closest?.("[data-memo-del]")?.dataset?.memoDel;
+      if (delId) {
+        await deleteItems([delId]);
+        return;
+      }
+      const editId = t.closest?.("[data-memo-edit]")?.dataset?.memoEdit;
+      if (editId) {
+        const item = state.index.items.find((x) => x.id === editId);
+        if (item) await beginEditText(item);
+        return;
+      }
+      const toImgId = t.closest?.("[data-memo-toimg-item]")?.dataset?.memoToimgItem;
+      if (toImgId) {
+        const item = state.index.items.find((x) => x.id === toImgId);
+        if (item?.type === "text") await beginEditText(item);
+        else if (item && editor) {
+          clearEditing();
+          editor.value = item.name || "";
+        }
+        $("#memo-toimg").hidden = false;
+        paintTextImageCard();
+        t.closest("details")?.removeAttribute("open");
+        return;
+      }
       const copyId = t.closest?.("[data-memo-copy]")?.dataset?.memoCopy;
       if (copyId) {
         const item = state.index.items.find((x) => x.id === copyId);
         if (item) await copyItem(item);
-        return;
-      }
-      const delId = t.closest?.("[data-memo-del]")?.dataset?.memoDel;
-      if (delId) {
-        await deleteItems([delId]);
+        t.closest("details")?.removeAttribute("open");
         return;
       }
       const dlId = t.closest?.("[data-memo-dl]")?.dataset?.memoDl;
@@ -1450,30 +1719,8 @@
       }
       const tagAddId = t.closest?.("[data-memo-tag-add]")?.dataset?.memoTagAdd;
       if (tagAddId) {
-        const item = state.index.items.find((x) => x.id === tagAddId);
-        if (!item) return;
-        const names = state.index.tags
-          .filter((x) => x.id !== DEFAULT_TAG_ID)
-          .map((x) => x.name)
-          .join(" / ");
-        const raw = window.prompt(`输入标签名（已有：${names || "无"}）。已有同名则复用，否则新建。`, "");
-        if (raw == null) return;
-        const name = raw.trim();
-        if (!name) return;
-        let tag = state.index.tags.find((x) => x.name === name);
-        if (!tag) {
-          const fuzzy = state.index.tags.filter((x) => x.id !== DEFAULT_TAG_ID && x.name.includes(name));
-          if (fuzzy.length === 1) tag = fuzzy[0];
-        }
-        if (!tag) {
-          tag = { id: uid(), name, order: -1 };
-          state.index.tags.unshift(tag);
-          reindexOrders();
-        }
-        if (!item.tagIds.includes(tag.id)) item.tagIds.push(tag.id);
-        item.updatedAt = Date.now();
-        await persistIndex();
-        renderAll();
+        openTagDialog(tagAddId);
+        return;
       }
     } catch (err) {
       setError(memoError, err.message || String(err));

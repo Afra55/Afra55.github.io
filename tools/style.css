@@ -4453,6 +4453,204 @@ button.adb-device-body.linkish {
   color: var(--accent-2);
 }
 
+.memo-reconnect-banner {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid rgba(244, 162, 97, 0.45);
+  border-radius: 12px;
+  background: rgba(244, 162, 97, 0.1);
+}
+
+.memo-reconnect-banner[hidden] {
+  display: none !important;
+}
+
+.memo-more {
+  position: relative;
+}
+
+.memo-more-sum {
+  list-style: none;
+  cursor: pointer;
+}
+
+.memo-more-sum::-webkit-details-marker {
+  display: none;
+}
+
+.memo-more-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 0.35rem);
+  z-index: 5;
+  display: grid;
+  gap: 0.25rem;
+  min-width: 7.5rem;
+  padding: 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel-strong);
+  box-shadow: var(--shadow);
+}
+
+.memo-tag-suggest {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  max-height: 10rem;
+  overflow: auto;
+  margin-top: 0.45rem;
+}
+
+.memo-tag-suggest-item {
+  appearance: none;
+  border: 1px solid rgba(46, 196, 182, 0.35);
+  background: rgba(46, 196, 182, 0.12);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.28rem 0.65rem;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.memo-ti-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.55rem 0.7rem;
+}
+
+.memo-ti-controls label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.memo-ti-preview-wrap {
+  overflow: auto;
+  max-width: 100%;
+  margin-top: 0.65rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.2);
+  padding: 0.75rem;
+}
+
+.memo-ti-card {
+  position: relative;
+  margin: 0 auto;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background-repeat: no-repeat;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+}
+
+.memo-ti-body {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 0;
+}
+
+.memo-ti-lines {
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.memo-ti-code {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.78em;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: left;
+}
+
+.memo-ti-sign {
+  margin-top: 1rem;
+  opacity: 0.78;
+  font-size: 0.72em;
+  z-index: 2;
+}
+
+.memo-ti-wm {
+  position: absolute;
+  right: 0.9rem;
+  bottom: 0.7rem;
+  opacity: 0.32;
+  font-size: 0.62em;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.memo-ti-quote-mark {
+  position: absolute;
+  top: 0.2rem;
+  left: 0.6rem;
+  font-size: 4.5rem;
+  line-height: 1;
+  opacity: 0.22;
+  pointer-events: none;
+}
+
+.memo-ti-traffic {
+  display: flex;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.memo-ti-traffic span {
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  background: #ff5f57;
+}
+.memo-ti-traffic span:nth-child(2) { background: #febc2e; }
+.memo-ti-traffic span:nth-child(3) { background: #28c840; }
+
+.memo-ti-tpl-paper {
+  box-shadow: 0 10px 28px rgba(90, 60, 20, 0.18);
+}
+
+.memo-ti-tpl-terminal {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background-color: #0b1220 !important;
+  font-family: var(--mono) !important;
+}
+
+.memo-ti-tpl-neon {
+  box-shadow: 0 0 0 1px rgba(120, 220, 255, 0.35), 0 0 28px rgba(80, 160, 255, 0.35);
+}
+
+.memo-ti-tpl-glass .memo-ti-body {
+  padding: 0.75rem;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.memo-ti-tpl-minimal {
+  box-shadow: none;
+}
+
+.memo-ti-mode-title .memo-ti-lines {
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.memo-ti-mode-quote .memo-ti-lines {
+  font-weight: 600;
+}
+
 .memo-layout {
   display: grid;
   grid-template-columns: minmax(7.5rem, 11rem) minmax(0, 1fr);
@@ -4550,41 +4748,6 @@ button.adb-device-body.linkish {
   align-items: center;
   font-size: 0.85rem;
   color: var(--muted);
-}
-
-.memo-ti-preview-wrap {
-  overflow: auto;
-  max-width: 100%;
-  border-radius: 12px;
-  border: 1px solid var(--line);
-}
-
-.memo-ti-card {
-  position: relative;
-  min-width: 240px;
-  max-width: 720px;
-  padding: 1.25rem 1.4rem 1.6rem;
-  background-size: cover;
-  background-position: center;
-  font-family: var(--font);
-  line-height: 1.45;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.memo-ti-lines {
-  position: relative;
-  z-index: 1;
-}
-
-.memo-ti-wm {
-  position: absolute;
-  right: 0.75rem;
-  bottom: 0.55rem;
-  opacity: 0.35;
-  font-size: 0.75em;
-  z-index: 2;
-  pointer-events: none;
 }
 
 .memo-progress {

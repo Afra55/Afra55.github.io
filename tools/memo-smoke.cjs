@@ -124,15 +124,17 @@ async function main() {
       count: items.length,
     });
 
-    // tag create
-    const realPrompt = window.prompt;
-    window.prompt = () => "工作";
+    // tag create via searchable dialog
     document.getElementById("memo-tag-new").click();
-    await sleep(200);
-    window.prompt = realPrompt;
+    await sleep(80);
+    const tagInput = document.getElementById("memo-tag-search");
+    tagInput.value = "工作";
+    tagInput.dispatchEvent(new Event("input", { bubbles: true }));
+    document.getElementById("memo-tag-ok").click();
+    await sleep(250);
     out.steps.push({
       tagCreated: (window.DevToolsMemo.getIndex().tags || []).some((t) => t.name === "工作"),
-      stillOnAll: !document.querySelector('.memo-tag-item.is-active[data-memo-tag]:not([data-memo-tag="all"])'),
+      stillOnAll: Boolean(document.querySelector('.memo-tag-item.is-active[data-memo-tag="all"]')),
     });
 
     // export zip
