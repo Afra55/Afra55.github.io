@@ -321,6 +321,25 @@ async function main() {
       out.hardening.undoHidden = Boolean(document.getElementById("memo-undo-bar")?.hidden);
     }
 
+    // non-image/text: primary action should be download, not copy
+    await window.DevToolsMemo.ingestBlob(new Blob(["smoke-file"], { type: "application/pdf" }), "smoke.pdf");
+    await sleep(400);
+    const fileItem = (window.DevToolsMemo.getIndex().items || []).find((it) => it.type === "file" || /\.pdf$/i.test(it.name || ""));
+    const fileCard = fileItem ? document.querySelector(`.memo-card[data-memo-id="${fileItem.id}"]`) : null;
+    out.takeout = {
+      hasFile: Boolean(fileItem),
+      primaryDownload: Boolean(fileCard?.querySelector(".memo-card-actions > .secondary-btn[data-memo-dl]")),
+      noPrimaryCopy: !fileCard?.querySelector(".memo-card-actions > .secondary-btn[data-memo-copy]"),
+      textStillCopy: Boolean(document.querySelector('.memo-card [data-memo-copy]')),
+      imageStillCopy: Boolean(
+        [...document.querySelectorAll(".memo-card")].some((card) => {
+          const id = card.dataset.memoId;
+          const it = (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === id);
+          return (it?.type === "image" || it?.type === "gif") && card.querySelector(".memo-card-actions > .secondary-btn[data-memo-copy]");
+        })
+      ),
+    };
+
     // tagged item leaves default (untagged) bucket
     const firstId = (window.DevToolsMemo.getIndex().items || [])[0]?.id;
     const workTag = (window.DevToolsMemo.getIndex().tags || []).find((t) => t.name === "工作");
@@ -390,6 +409,12 @@ async function main() {
   if ((result.hardening?.contentHashCount || 0) < 1) failed.push("contentHash missing on new items");
   if (!result.hardening?.deleted || !result.hardening?.undoVisible || !result.hardening?.undone || !result.hardening?.undoHidden) {
     failed.push("delete undo flow failed");
+  }
+  if (!result.takeout?.hasFile || !result.takeout?.primaryDownload || !result.takeout?.noPrimaryCopy) {
+    failed.push("file/video-like items should primary-download instead of copy");
+  }
+  if (!result.takeout?.textStillCopy || !result.takeout?.imageStillCopy) {
+    failed.push("text/image items should keep primary copy");
   }
   if (!result.textEdit?.hasDlg || !result.textEdit?.hasEditBtn || !result.textEdit?.hasPreviewEdit) {
     failed.push("text edit UI missing");

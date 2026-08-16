@@ -908,6 +908,13 @@
       </button>`;
     }
     const editing = state.editingId === item.id ? " is-editing" : "";
+    const canCopy = canClipboardCopy(item);
+    const primaryAction = canCopy
+      ? `<button type="button" class="secondary-btn" data-memo-copy="${item.id}">复制</button>`
+      : `<button type="button" class="secondary-btn" data-memo-dl="${item.id}">下载</button>`;
+    const moreDownload = canCopy
+      ? `<button type="button" class="ghost-btn" data-memo-dl="${item.id}">下载</button>`
+      : "";
     return `<article class="memo-card${editing}" data-memo-id="${item.id}" draggable="true">
       <div class="memo-card-head">
         <label class="memo-check"><input type="checkbox" data-memo-check="${item.id}" ${checked} /></label>
@@ -919,14 +926,14 @@
       <div class="memo-card-body">${body}</div>
       <div class="memo-card-tags">${tagHtml}<button type="button" class="ghost-btn memo-tag-add" data-memo-tag-add="${item.id}">+ 标签</button></div>
       <div class="btn-row memo-card-actions">
-        <button type="button" class="secondary-btn" data-memo-copy="${item.id}">复制</button>
+        ${primaryAction}
         <button type="button" class="ghost-btn" data-memo-open="${item.id}">预览</button>
         ${item.type === "text" ? `<button type="button" class="ghost-btn" data-memo-edit="${item.id}">编辑</button>` : ""}
         <button type="button" class="ghost-btn" data-memo-del="${item.id}">删除</button>
         <details class="memo-more">
           <summary class="ghost-btn memo-more-sum">更多</summary>
           <div class="memo-more-menu" role="menu">
-            <button type="button" class="ghost-btn" data-memo-dl="${item.id}">下载</button>
+            ${moreDownload}
             ${state.mode === "dir" && !state.dirPending ? `<button type="button" class="ghost-btn" data-memo-path="${item.id}">路径</button>` : ""}
           </div>
         </details>
@@ -1688,6 +1695,27 @@
     showUndoBar(removed.length);
   }
 
+  function canClipboardCopy(item) {
+    return item?.type === "text" || item?.type === "image" || item?.type === "gif";
+  }
+
+  function clipboardTypeSupported(mime) {
+    const type = String(mime || "").toLowerCase();
+    if (!type) return false;
+    if (type === "text/plain" || type === "text/html" || type === "image/png") return true;
+    try {
+      if (typeof ClipboardItem?.supports === "function") return ClipboardItem.supports(type);
+    } catch (_) {}
+    // 常见静态图：不少环境可写；写失败时再回退下载
+    return type === "image/jpeg" || type === "image/gif" || type === "image/webp";
+  }
+
+  async function downloadItem(item, { toastMsg } = {}) {
+    const blob = await loadBlob(item);
+    downloadBlob(blob, item.name || item.fileName || item.id);
+    toast(toastMsg || "已开始下载");
+  }
+
   async function copyItem(item) {
     try {
       if (item.type === "text") {
@@ -1699,20 +1727,49 @@
       if ((item.type === "image" || item.type === "gif") && navigator.clipboard?.write && window.ClipboardItem) {
         const blob = await loadBlob(item);
         const type = blob.type || (item.type === "gif" ? "image/gif" : "image/png");
-        await navigator.clipboard.write([new ClipboardItem({ [type]: blob })]);
-        toast(item.type === "gif" ? "已复制动图" : "已复制图片");
-        return;
+        try {
+          if (!clipboardTypeSupported(type) && item.type === "image") {
+            // 尝试转成 PNG 再写（静态图）
+            const png = await imageBlobToPng(blob);
+            await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
+            toast("已复制图片");
+            return;
+          }
+          await navigator.clipboard.write([new ClipboardItem({ [type]: blob })]);
+          toast(item.type === "gif" ? "已复制动图" : "已复制图片");
+          return;
+        } catch (_) {
+          await downloadItem(item, { toastMsg: "无法写入剪贴板，已改为下载" });
+          return;
+        }
       }
-      const blob = await loadBlob(item);
-      const text = item.type === "text" ? await blob.text() : "";
-      if (text) {
-        await navigator.clipboard.writeText(text);
-        toast("已复制");
-      } else {
-        toast("此类内容请用下载");
-      }
+      // 视频 / 音频 / 普通文件：系统剪贴板通常不支持
+      await downloadItem(item, { toastMsg: "此类型无法写入系统剪贴板，已改为下载" });
     } catch (err) {
       setError(memoError, err.message || "复制失败");
+    }
+  }
+
+  async function imageBlobToPng(blob) {
+    const url = URL.createObjectURL(blob);
+    try {
+      const img = await new Promise((resolve, reject) => {
+        const el = new Image();
+        el.onload = () => resolve(el);
+        el.onerror = () => reject(new Error("图片解码失败"));
+        el.src = url;
+      });
+      const canvas = document.createElement("canvas");
+      canvas.width = img.naturalWidth || img.width || 1;
+      canvas.height = img.naturalHeight || img.height || 1;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      const png = await new Promise((resolve, reject) => {
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("转 PNG 失败"))), "image/png");
+      });
+      return png;
+    } finally {
+      URL.revokeObjectURL(url);
     }
   }
 
@@ -2032,6 +2089,7 @@
         }
       });
       let importedCount = 0;
+      let skipped = 0;
       for (let i = 0; i < imported.items.length; i++) {
         const it = imported.items[i];
         setProgress(true, i / Math.max(1, imported.items.length), `导入 ${it.name}`);
@@ -2039,12 +2097,29 @@
         if (!entry) continue;
         const blob = await entry.async("blob");
         const typed = blob.type ? blob : new Blob([blob], { type: it.mime || "application/octet-stream" });
+        let contentHash = it.contentHash || "";
+        if (!contentHash) {
+          try {
+            contentHash = await hashBlobPartial(typed);
+          } catch (_) {
+            contentHash = "";
+          }
+        }
+        const coarse =
+          it.type === "text"
+            ? textContentSig(it.textPreview || "")
+            : `bin:${it.type || detectKind(typed.type, it.name)}:${typed.size || it.size || 0}:${typed.type || it.mime || ""}`;
+        if (findDuplicateBySig(coarse, contentHash)) {
+          skipped += 1;
+          continue;
+        }
         const newId = uid();
         const fileName = await saveBlob(newId, typed, `${newId}_${safeFileName(it.fileName || it.name || "file")}`);
         state.index.items.unshift({
           ...it,
           id: newId,
           fileName,
+          contentHash: contentHash || it.contentHash || undefined,
           createdAt: it.createdAt || Date.now(),
           updatedAt: Date.now(),
           order: -1,
@@ -2055,7 +2130,10 @@
       await persistIndex();
       setProgress(false, 0, "");
       renderAll();
-      toast(importedCount ? `导入完成（${importedCount} 条）` : "导入完成，但未找到可写入的文件");
+      if (importedCount && skipped) toast(`导入完成：新增 ${importedCount} 条，跳过重复 ${skipped} 条`);
+      else if (importedCount) toast(`导入完成（${importedCount} 条）`);
+      else if (skipped) toast(`全部为重复内容，已跳过 ${skipped} 条`);
+      else toast("导入完成，但未找到可写入的文件");
     });
   }
 
@@ -2329,8 +2407,8 @@
       if (dlId) {
         const item = state.index.items.find((x) => x.id === dlId);
         if (!item) return;
-        const blob = await loadBlob(item);
-        downloadBlob(blob, item.name || item.fileName || item.id);
+        await downloadItem(item);
+        t.closest("details")?.removeAttribute("open");
         return;
       }
       const pathId = t.closest?.("[data-memo-path]")?.dataset?.memoPath;
