@@ -170,91 +170,19 @@ async function main() {
       noShareBtn: !document.getElementById("memo-share"),
       exportLabel: document.getElementById("memo-export")?.textContent || "",
     };
-    const toimg = document.getElementById("memo-toimg");
-    out.toImgDialog = {
-      isDialog: toimg?.tagName === "DIALOG",
-      closed: !toimg?.open,
-    };
 
-    // inline text-to-image dialog (stay in memo)
-    document.getElementById("memo-to-image")?.click();
-    await sleep(150);
-    const toimgDlg = document.getElementById("memo-toimg");
-    const src = document.getElementById("memo-ti-src");
-    if (src) {
-      src.value = "实时预览测试\n第二行";
-      src.dispatchEvent(new Event("input", { bubbles: true }));
-    }
-    await sleep(80);
-    const card = document.getElementById("memo-ti-card");
-    const wEl = document.getElementById("memo-ti-w");
-    const hEl = document.getElementById("memo-ti-h");
-    const ratioEl = document.getElementById("memo-ti-ratio");
-    if (wEl && hEl && ratioEl) {
-      ratioEl.value = "16:9";
-      ratioEl.dispatchEvent(new Event("change", { bubbles: true }));
-      await sleep(60);
-      wEl.value = "800";
-      hEl.value = "500";
-      wEl.dispatchEvent(new Event("input", { bubbles: true }));
-      hEl.dispatchEvent(new Event("input", { bubbles: true }));
-      await sleep(60);
-    }
+    // memo focuses on store/retrieve; heavy tools stay standalone
     out.modules = {
-      textimgActive: Boolean(document.getElementById("textimg")),
       hasTextimg: Boolean(document.getElementById("textimg")),
       hasImgtext: Boolean(document.getElementById("imgtext")),
       hasTiSrc: Boolean(document.getElementById("ti-src")),
       hasSentinel: Boolean(document.getElementById("memo-scroll-sentinel")),
       memoStillActive: document.getElementById("memo")?.classList.contains("is-workspace-active"),
-      toimgOpen: Boolean(toimgDlg?.open),
-      hasOcrDlg: Boolean(document.getElementById("memo-ocr")),
+      noMemoToimg: !document.getElementById("memo-toimg") && !document.getElementById("memo-to-image"),
+      noMemoOcr: !document.getElementById("memo-ocr") && !document.getElementById("memo-to-ocr"),
+      primaryReadClip: document.getElementById("memo-read-clip")?.classList.contains("primary-btn"),
+      copyOnCard: Boolean(document.querySelector(".memo-card-actions [data-memo-copy]")),
     };
-    out.toImgLive = {
-      open: Boolean(toimgDlg?.open),
-      hasSrc: Boolean(src),
-      hasWH: Boolean(wEl && hEl),
-      hasResize: Boolean(document.getElementById("memo-ti-resize")),
-      previewText: (card?.textContent || "").includes("实时预览测试"),
-      customRatio: ratioEl?.value === "custom",
-      dimLabel: document.getElementById("memo-ti-dim")?.textContent || "",
-      cardW: card?.style?.width || "",
-    };
-    const modeEl = document.getElementById("memo-ti-mode");
-    if (modeEl) {
-      modeEl.value = "markdown";
-      modeEl.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-    if (src) {
-      src.value = "# 标题\n> 引用\n- 列表 **粗体**";
-      src.dispatchEvent(new Event("input", { bubbles: true }));
-    }
-    await sleep(80);
-    out.toImgAbsorb = {
-      hasCopy: Boolean(document.getElementById("memo-ti-copy")),
-      hasMarkdownMode: [...(modeEl?.options || [])].some((o) => o.value === "markdown"),
-      hasCodeTheme: Boolean(document.getElementById("memo-ti-code-theme")),
-      hasWindowPad: Boolean(document.getElementById("memo-ti-winpad")),
-      mdRendered: Boolean(document.querySelector("#memo-ti-card .memo-ti-md-h, #memo-ti-card .memo-ti-md-quote")),
-    };
-    if (modeEl) {
-      modeEl.value = "code";
-      modeEl.dispatchEvent(new Event("change", { bubbles: true }));
-    }
-    await sleep(60);
-    out.toImgAbsorb.hasChrome = Boolean(document.querySelector("#memo-ti-card .memo-ti-chrome"));
-    out.toImgAbsorb.hasLines = Boolean(document.querySelector("#memo-ti-card .memo-ti-ln"));
-    document.getElementById("memo-ti-close")?.click();
-    await sleep(80);
-    out.toImgLive.closed = !toimgDlg?.open;
-
-    // inline OCR dialog
-    document.getElementById("memo-to-ocr")?.click();
-    await sleep(100);
-    out.modules.ocrOpen = Boolean(document.getElementById("memo-ocr")?.open);
-    document.getElementById("memo-ocr-close")?.click();
-    await sleep(60);
-    out.modules.ocrClosed = !document.getElementById("memo-ocr")?.open;
 
     // inline text edit dialog
     const textItem = (window.DevToolsMemo.getIndex().items || []).find((it) => it.type === "text");
@@ -411,17 +339,14 @@ async function main() {
   if (!/^导出/.test(result.exportMerged?.exportLabel || "")) {
     failed.push(`unexpected export label: ${result.exportMerged?.exportLabel}`);
   }
-  if (!result.toImgDialog?.isDialog || !result.toImgDialog?.closed) {
-    failed.push("text-to-image should be a closed dialog by default");
-  }
-  if (!result.modules?.hasTextimg || !result.modules?.hasImgtext) {
+  if (!result.modules?.hasTextimg || !result.modules?.hasImgtext || !result.modules?.hasTiSrc) {
     failed.push("standalone textimg/imgtext modules missing");
   }
-  if (!result.modules?.memoStillActive || !result.modules?.toimgOpen) {
-    failed.push("text-to-image should open inline without leaving memo");
+  if (!result.modules?.noMemoToimg || !result.modules?.noMemoOcr) {
+    failed.push("memo should not embed toimg/ocr dialogs");
   }
-  if (!result.modules?.hasOcrDlg || !result.modules?.ocrOpen || !result.modules?.ocrClosed) {
-    failed.push("ocr dialog open/close inline failed");
+  if (!result.modules?.memoStillActive || !result.modules?.primaryReadClip || !result.modules?.copyOnCard) {
+    failed.push("memo store/retrieve primary actions missing");
   }
   if (!result.textEdit?.hasDlg || !result.textEdit?.hasEditBtn || !result.textEdit?.hasPreviewEdit) {
     failed.push("text edit UI missing");
@@ -433,20 +358,6 @@ async function main() {
     failed.push("text edit save/close failed");
   }
   if (!result.modules?.hasSentinel) failed.push("infinite scroll sentinel missing");
-  if (!result.toImgLive?.hasSrc || !result.toImgLive?.hasWH || !result.toImgLive?.hasResize) {
-    failed.push("toimg live preview size controls missing");
-  }
-  if (!result.toImgLive?.previewText) failed.push("toimg live preview text missing");
-  if (!result.toImgLive?.customRatio) failed.push("custom size should switch ratio to custom");
-  if (!/^800/.test(result.toImgLive?.cardW || "")) failed.push(`unexpected card width ${result.toImgLive?.cardW}`);
-  if (!result.toImgLive?.closed) failed.push("toimg dialog should close");
-  if (!result.toImgAbsorb?.hasCopy || !result.toImgAbsorb?.hasMarkdownMode || !result.toImgAbsorb?.hasCodeTheme) {
-    failed.push("toimg absorb controls missing");
-  }
-  if (!result.toImgAbsorb?.mdRendered) failed.push("markdown mode render missing");
-  if (!result.toImgAbsorb?.hasChrome || !result.toImgAbsorb?.hasLines) {
-    failed.push("carbon window/line-number missing");
-  }
   if (!result.typeFilter?.host || (result.typeFilter?.chips || 0) < 7) {
     failed.push("type filter chips missing");
   }
