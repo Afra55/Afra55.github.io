@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.16-vsplit1";
+  const TOOLS_VERSION = "2026.08.16-vsplit2";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -6418,11 +6418,10 @@
         setVsplitProgress(true, 1, `切分完成 · ${vsplitClips.length} 段`);
         setVsplitButtons();
         if (videos.length) {
-          await packDownloadVsplitVideos({ auto: true });
           toast(
             failN
-              ? `已切 ${vsplitClips.length} 段（${failN} 段失败）· 已打包下载视频`
-              : `已切成 ${vsplitClips.length} 段 · 已打包下载全部视频`
+              ? `已切 ${vsplitClips.length} 段（${failN} 段失败）· 可点「打包下载全部视频」`
+              : `已切成 ${vsplitClips.length} 段 · 可点「打包下载全部视频」`
           );
         } else {
           toast(failN ? `切分失败 ${failN} 段` : `已切成 ${vsplitClips.length} 段`);
@@ -7891,11 +7890,10 @@
         renderVbbResults();
         setVbbButtons();
         if (gifs.length) {
-          await packDownloadVbbGifs({ auto: true });
           toast(
             failN
-              ? `完成，${failN} 段有问题 · 已打包下载 GIF`
-              : `已生成 ${gifs.length} 个 GIF · 已打包下载（可点「预览」查看）`
+              ? `完成，${failN} 段有问题 · 可点「打包下载全部 GIF」`
+              : `已生成 ${gifs.length} 个 GIF · 可点「打包下载全部 GIF」预览后自行打包`
           );
         } else {
           toast(failN ? `完成，${failN} 段有问题` : "未生成 GIF");
