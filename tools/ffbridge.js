@@ -175,7 +175,7 @@
         if (workspace) workspace.hidden = true;
       } else if (connected) {
         modeTitle.textContent = "已走更优路径：本机 FFmpeg 桥";
-        modeText.textContent = `已加载 ${opsCatalog.length} 项批量操作。勾选文件后选操作即可。`;
+        modeText.textContent = `已加载 ${opsCatalog.length} 项批量操作（音频/画面/切片/合成等）。勾选文件后选操作即可。`;
         modeActions.innerHTML = `
           <a class="ghost-btn" href="#media/audio">网页保底·音频</a>
           <a class="ghost-btn" href="#media/vtrim">网页保底·修剪</a>
@@ -408,7 +408,7 @@
       const full = joinPath(cwd, ent.name);
       const checked = selected.has(full);
       const kind =
-        ent.type === "dir" ? "📁" : ent.kind === "video" ? "🎬" : ent.kind === "audio" ? "🎵" : "📄";
+        ent.type === "dir" ? "📁" : ent.kind === "video" ? "🎬" : ent.kind === "audio" ? "🎵" : ent.kind === "image" ? "🖼" : "📄";
       row.innerHTML = `
         <label class="ff-fs-check"><input type="checkbox" data-ff-path="${escapeAttr(full)}" ${checked ? "checked" : ""} /></label>
         <button type="button" class="ghost-btn ff-fs-name" data-ff-open="${escapeAttr(full)}" data-ff-type="${ent.type}">${kind} ${escapeHtml(ent.name)}</button>
@@ -772,9 +772,11 @@
       const ok =
         accept === "audio"
           ? ent.kind === "audio"
-          : accept === "media"
-            ? ent.kind === "video" || ent.kind === "audio"
-            : ent.kind === "video";
+          : accept === "image"
+            ? ent.kind === "image"
+            : accept === "media" || accept === "av"
+              ? ent.kind === "video" || ent.kind === "audio"
+              : ent.kind === "video";
       if (ok) selected.add(joinPath(cwd, ent.name));
     });
     syncSelMeta();
