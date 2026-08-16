@@ -1005,7 +1005,7 @@
         a.href = id === "media" ? "#media/gifmaker" : `#${id}`;
         a.dataset.tool = id;
         a.draggable = allowHtml5Drag;
-        if (allowHtml5Drag) a.title = "拖动可调整工具顺序";
+        a.title = allowHtml5Drag ? "拖动可调整工具顺序" : "长按工具名后拖动，可调整顺序";
         a.textContent = toolName(id);
         wrap.appendChild(a);
       });
@@ -1282,9 +1282,15 @@
     // 滚动后按当前手指位置刷新高亮目标
     if (pointerSort.lastX != null && pointerSort.lastY != null) {
       clearNavDragStyles();
-      pointerSort.wrap?.classList.add("is-dragging");
-      const target = navGroupAtPoint(pointerSort.lastX, pointerSort.lastY);
-      if (target && target !== pointerSort.wrap) target.classList.add("drag-over");
+      if (pointerSort.kind === "tool") {
+        pointerSort.handle?.classList.add("is-dragging");
+        const target = navToolAtPoint(pointerSort.lastX, pointerSort.lastY);
+        if (target && target !== pointerSort.handle) target.classList.add("drag-over");
+      } else {
+        pointerSort.wrap?.classList.add("is-dragging");
+        const target = navGroupAtPoint(pointerSort.lastX, pointerSort.lastY);
+        if (target && target !== pointerSort.wrap) target.classList.add("drag-over");
+      }
     }
     pointerSortScrollRaf = requestAnimationFrame(tickPointerSortAutoScroll);
   }
@@ -1318,8 +1324,13 @@
   function cancelPointerSort({ keepDidDrag = false } = {}) {
     if (pointerSort?.timer) clearTimeout(pointerSort.timer);
     stopPointerSortAutoScroll();
+    if (pointerSort?.onMove) {
+      document.removeEventListener("pointermove", pointerSort.onMove);
+      document.removeEventListener("pointerup", pointerSort.onUp);
+      document.removeEventListener("pointercancel", pointerSort.onCancel);
+    }
     pointerSort = null;
-    document.body.classList.remove("nav-sorting");
+    document.body.classList.remove("nav-sorting", "nav-sorting-tools", "nav-press-pending");
     clearNavDragStyles();
     dragPayload = null;
     if (!keepDidDrag) {
@@ -1339,6 +1350,30 @@
     return true;
   }
 
+  function commitToolReorder(fromId, toId, { keepDrawer = true } = {}) {
+    if (!fromId || !toId || fromId === toId) return false;
+    const order = loadOrder();
+    const fromIdx = order.indexOf(fromId);
+    const toIdx = order.indexOf(toId);
+    if (fromIdx < 0 || toIdx < 0) return false;
+    order.splice(fromIdx, 1);
+    order.splice(toIdx, 0, fromId);
+    saveOrder(order);
+    renderNav(order);
+    applyRoute({ skipRecent: true, keepDrawer });
+    showToast("已保存工具排序");
+    return true;
+  }
+
+  function navToolAtPoint(x, y) {
+    const stack = typeof document.elementsFromPoint === "function" ? document.elementsFromPoint(x, y) : [document.elementFromPoint(x, y)];
+    for (const el of stack) {
+      const link = el?.closest?.(".tool-nav-link");
+      if (link && navEl?.contains(link) && !link.classList.contains("is-filtered-out")) return link;
+    }
+    return null;
+  }
+
   function readDragPayload(e) {
     try {
       const raw = e.dataTransfer?.getData("application/x-devtools-nav") || "";
@@ -1350,6 +1385,117 @@
     const plain = e.dataTransfer?.getData("text/plain") || "";
     if (plain && DEFAULT_ORDER.includes(plain)) return { kind: "tool", id: plain };
     return null;
+  }
+
+  /** 手机长按排序：分类标题 / 工具项；用 document 级指针事件兼容 iOS */
+  function beginMobilePointerSort(e, opts) {
+    if (canDesktopDrag()) return;
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (pointerSort?.timer) clearTimeout(pointerSort.timer);
+    stopPointerSortAutoScroll();
+
+    const LONG_MS = 360;
+    // iOS 长按期间手指微抖较大，阈值过小会提前取消
+    const CANCEL_PX = 28;
+    const handle = opts.handle;
+    const kind = opts.kind; // group | tool
+
+    const onMove = (ev) => {
+      if (!pointerSort || pointerSort.pointerId !== ev.pointerId) return;
+      const dx = Math.abs(ev.clientX - pointerSort.startX);
+      const dy = Math.abs(ev.clientY - pointerSort.startY);
+      if (!pointerSort.active) {
+        if (dx + dy > CANCEL_PX) cancelPointerSort();
+        return;
+      }
+      ev.preventDefault();
+      pointerSort.lastX = ev.clientX;
+      pointerSort.lastY = ev.clientY;
+      clearNavDragStyles();
+      if (kind === "group") {
+        pointerSort.wrap?.classList.add("is-dragging");
+        const target = navGroupAtPoint(ev.clientX, ev.clientY);
+        if (target && target !== pointerSort.wrap) target.classList.add("drag-over");
+      } else {
+        pointerSort.handle?.classList.add("is-dragging");
+        const target = navToolAtPoint(ev.clientX, ev.clientY);
+        if (target && target !== pointerSort.handle) target.classList.add("drag-over");
+      }
+      updatePointerSortAutoScroll(ev.clientY);
+    };
+
+    const finish = (ev, cancelled) => {
+      if (!pointerSort || pointerSort.pointerId !== ev.pointerId) return;
+      const state = pointerSort;
+      const wasActive = state.active;
+      const fromId = state.id;
+      const x = ev.clientX;
+      const y = ev.clientY;
+      try {
+        state.handle?.releasePointerCapture?.(ev.pointerId);
+      } catch (_) {
+        /* ignore */
+      }
+      cancelPointerSort({ keepDidDrag: wasActive });
+      if (cancelled || !wasActive) return;
+      if (kind === "group") {
+        const target = navGroupAtPoint(x, y);
+        commitGroupReorder(fromId, target?.dataset?.group, { keepDrawer: true });
+      } else {
+        const target = navToolAtPoint(x, y);
+        commitToolReorder(fromId, target?.dataset?.tool, { keepDrawer: true });
+      }
+      setTimeout(() => {
+        didDrag = false;
+      }, 0);
+    };
+
+    const onUp = (ev) => finish(ev, false);
+    const onCancel = (ev) => finish(ev, true);
+
+    document.body.classList.add("nav-press-pending");
+    pointerSort = {
+      kind,
+      id: opts.id,
+      wrap: opts.wrap || null,
+      handle,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      lastX: e.clientX,
+      lastY: e.clientY,
+      active: false,
+      scrollDir: 0,
+      scrollSpeed: 0,
+      onMove,
+      onUp,
+      onCancel,
+      timer: window.setTimeout(() => {
+        if (!pointerSort || pointerSort.pointerId !== e.pointerId) return;
+        pointerSort.active = true;
+        didDrag = true;
+        dragPayload = { kind, id: opts.id };
+        document.body.classList.remove("nav-press-pending");
+        document.body.classList.add(kind === "group" ? "nav-sorting" : "nav-sorting-tools");
+        if (kind === "group") pointerSort.wrap?.classList.add("is-dragging");
+        else pointerSort.handle?.classList.add("is-dragging");
+        try {
+          handle.setPointerCapture(e.pointerId);
+        } catch (_) {
+          /* ignore */
+        }
+        try {
+          navigator.vibrate?.(12);
+        } catch (_) {
+          /* ignore */
+        }
+        showToast(kind === "group" ? "拖到目标分类后松手" : "拖到目标工具后松手");
+      }, LONG_MS),
+    };
+
+    document.addEventListener("pointermove", onMove, { passive: false });
+    document.addEventListener("pointerup", onUp);
+    document.addEventListener("pointercancel", onCancel);
   }
 
   function bindNavInteractions() {
@@ -1379,6 +1525,9 @@
         e.preventDefault();
         if (didDrag) return;
         navigateTo(link.dataset.tool, link.dataset.tool === "media" ? currentMediaTab : null);
+      });
+      link.addEventListener("contextmenu", (e) => {
+        if (!canDesktopDrag()) e.preventDefault();
       });
       link.addEventListener("dragover", (e) => {
         if (!canDesktopDrag()) return;
@@ -1411,18 +1560,16 @@
           showToast("已保存分类排序");
           return;
         }
-        const from = payload.id;
-        if (!from || from === toTool) return;
-        const order = loadOrder();
-        const fromIdx = order.indexOf(from);
-        const toIdx = order.indexOf(toTool);
-        if (fromIdx < 0 || toIdx < 0) return;
-        order.splice(fromIdx, 1);
-        order.splice(toIdx, 0, from);
-        saveOrder(order);
-        renderNav(order);
-        applyRoute({ skipRecent: true });
-        showToast("已保存排序");
+        commitToolReorder(payload.id, toTool, { keepDrawer: false });
+      });
+      // 手机：长按工具名排序
+      link.addEventListener("pointerdown", (e) => {
+        beginMobilePointerSort(e, {
+          kind: "tool",
+          id: link.dataset.tool,
+          handle: link,
+          wrap: link.closest(".nav-group"),
+        });
       });
     });
 
@@ -1476,99 +1623,16 @@
       };
       title.addEventListener("drop", onGroupDrop);
       wrap.addEventListener("drop", onGroupDrop);
-
-      // 手机抽屉：HTML5 DnD 不可用，长按分类标题再拖动
-      const LONG_MS = 420;
-      const CANCEL_PX = 14;
+      title.addEventListener("contextmenu", (e) => {
+        if (!canDesktopDrag()) e.preventDefault();
+      });
       title.addEventListener("pointerdown", (e) => {
-        if (canDesktopDrag()) return;
-        if (e.pointerType === "mouse" && e.button !== 0) return;
-        if (pointerSort?.timer) clearTimeout(pointerSort.timer);
-        stopPointerSortAutoScroll();
-        pointerSort = {
+        beginMobilePointerSort(e, {
           kind: "group",
           id: wrap.dataset.group,
+          handle: title,
           wrap,
-          title,
-          pointerId: e.pointerId,
-          startX: e.clientX,
-          startY: e.clientY,
-          lastX: e.clientX,
-          lastY: e.clientY,
-          active: false,
-          scrollDir: 0,
-          scrollSpeed: 0,
-          timer: window.setTimeout(() => {
-            if (!pointerSort || pointerSort.pointerId !== e.pointerId) return;
-            pointerSort.active = true;
-            didDrag = true;
-            dragPayload = { kind: "group", id: wrap.dataset.group };
-            wrap.classList.add("is-dragging");
-            document.body.classList.add("nav-sorting");
-            try {
-              title.setPointerCapture(e.pointerId);
-            } catch (_) {
-              /* ignore */
-            }
-            try {
-              navigator.vibrate?.(12);
-            } catch (_) {
-              /* ignore */
-            }
-            showToast("拖到边缘可滚动 · 松手放到目标分类");
-          }, LONG_MS),
-        };
-      });
-      title.addEventListener(
-        "pointermove",
-        (e) => {
-          if (!pointerSort || pointerSort.pointerId !== e.pointerId) return;
-          const dx = Math.abs(e.clientX - pointerSort.startX);
-          const dy = Math.abs(e.clientY - pointerSort.startY);
-          if (!pointerSort.active) {
-            if (dx + dy > CANCEL_PX) cancelPointerSort();
-            return;
-          }
-          e.preventDefault();
-          pointerSort.lastX = e.clientX;
-          pointerSort.lastY = e.clientY;
-          clearNavDragStyles();
-          pointerSort.wrap.classList.add("is-dragging");
-          const target = navGroupAtPoint(e.clientX, e.clientY);
-          if (target && target !== pointerSort.wrap) target.classList.add("drag-over");
-          updatePointerSortAutoScroll(e.clientY);
-        },
-        { passive: false }
-      );
-      const endPointer = (e) => {
-        if (!pointerSort || pointerSort.pointerId !== e.pointerId) return;
-        const state = pointerSort;
-        const wasActive = state.active;
-        const fromId = state.id;
-        const x = e.clientX;
-        const y = e.clientY;
-        try {
-          state.title.releasePointerCapture(e.pointerId);
-        } catch (_) {
-          /* ignore */
-        }
-        cancelPointerSort({ keepDidDrag: wasActive });
-        if (!wasActive) return;
-        const target = navGroupAtPoint(x, y);
-        commitGroupReorder(fromId, target?.dataset?.group, { keepDrawer: true });
-        setTimeout(() => {
-          didDrag = false;
-        }, 0);
-      };
-      title.addEventListener("pointerup", endPointer);
-      title.addEventListener("pointercancel", (e) => {
-        if (!pointerSort || pointerSort.pointerId !== e.pointerId) return;
-        try {
-          title.releasePointerCapture(e.pointerId);
-        } catch (_) {
-          /* ignore */
-        }
-        cancelPointerSort();
+        });
       });
     });
   }

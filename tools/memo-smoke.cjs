@@ -170,6 +170,11 @@ async function main() {
       noShareBtn: !document.getElementById("memo-share"),
       exportLabel: document.getElementById("memo-export")?.textContent || "",
     };
+    const toimg = document.getElementById("memo-toimg");
+    out.toImgDialog = {
+      isDialog: toimg?.tagName === "DIALOG",
+      closed: !toimg?.open,
+    };
 
     // open image preview
     const openBtn = document.querySelector('[data-memo-open]');
@@ -209,6 +214,9 @@ async function main() {
   }
   if (!/^导出/.test(result.exportMerged?.exportLabel || "")) {
     failed.push(`unexpected export label: ${result.exportMerged?.exportLabel}`);
+  }
+  if (!result.toImgDialog?.isDialog || !result.toImgDialog?.closed) {
+    failed.push("text-to-image should be a closed dialog by default");
   }
 
   console.log(JSON.stringify({ ok: failed.length === 0, result, failed }, null, 2));
