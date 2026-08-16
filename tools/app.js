@@ -826,7 +826,7 @@
     coord: "WGS84 / GCJ-02 / BD-09 等坐标系互转。",
     numbase: "二、八、十、十六进制互转。",
     adb: "网页侧 ADB 调试辅助：设备、文件、输入、安装等。",
-    about: "站点总览：全部工具能力说明与快捷入口；主题换色也在此相关入口。",
+    about: "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
   };
   const TOOL_META = {
     timestamp: { name: "时间戳", aliases: ["时间", "timestamp", "date"] },

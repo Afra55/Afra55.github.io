@@ -35,6 +35,129 @@
       .replace(/"/g, "&quot;");
   }
 
+  function toast(msg) {
+    const el = $("#toast");
+    if (!el) return;
+    el.textContent = msg;
+    el.hidden = false;
+    el.classList.add("is-show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => {
+      el.classList.remove("is-show");
+      setTimeout(() => {
+        el.hidden = true;
+      }, 200);
+    }, 2000);
+  }
+
+  function isLikelyMobile() {
+    return window.matchMedia("(max-width: 900px), (pointer: coarse)").matches;
+  }
+
+  /** 分享落地到关于总览，便于对方一眼看到全部工具 */
+  function shareUrl() {
+    try {
+      const u = new URL(location.href);
+      u.hash = "about";
+      u.search = "";
+      return u.toString();
+    } catch (_) {
+      return `${location.origin}${location.pathname || "/"}#about`;
+    }
+  }
+
+  function sharePayload() {
+    const url = shareUrl();
+    return {
+      title: "DevTools · 实用小工具",
+      text: "本地开发小工具合集：时间戳、颜色、JSON、备忘录、媒体、ADB 等，数据不上传。",
+      url,
+    };
+  }
+
+  async function copyShareLink() {
+    const url = shareUrl();
+    const urlEl = $("#about-share-url");
+    if (urlEl) {
+      urlEl.hidden = false;
+      urlEl.textContent = url;
+    }
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        toast("链接已复制");
+        return true;
+      }
+    } catch (_) {}
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = url;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      if (ok) {
+        toast("链接已复制");
+        return true;
+      }
+    } catch (_) {}
+    toast("复制失败，请手动长按链接");
+    return false;
+  }
+
+  async function shareSite() {
+    const data = sharePayload();
+    const urlEl = $("#about-share-url");
+    if (urlEl) {
+      urlEl.hidden = false;
+      urlEl.textContent = data.url;
+    }
+
+    if (typeof navigator.share === "function") {
+      try {
+        // 优先带 url；部分 WebView 只接受 text
+        if (!navigator.canShare || navigator.canShare(data)) {
+          await navigator.share(data);
+          toast("已打开系统分享");
+          return;
+        }
+      } catch (err) {
+        if (err && (err.name === "AbortError" || /abort|cancel|取消/i.test(String(err.message || "")))) {
+          toast("已取消分享");
+          return;
+        }
+        try {
+          await navigator.share({ title: data.title, text: `${data.text}\n${data.url}` });
+          toast("已打开系统分享");
+          return;
+        } catch (err2) {
+          if (err2 && (err2.name === "AbortError" || /abort|cancel|取消/i.test(String(err2.message || "")))) {
+            toast("已取消分享");
+            return;
+          }
+        }
+      }
+    }
+
+    await copyShareLink();
+    if (!isLikelyMobile()) toast("当前环境不支持系统分享，已复制链接");
+  }
+
+  function syncShareHint() {
+    const hint = $(".about-share-hint");
+    if (!hint) return;
+    if (typeof navigator.share === "function") {
+      hint.textContent = isLikelyMobile()
+        ? "点「分享本站」可调起微信 / 系统分享；也可复制链接。"
+        : "可复制链接发送给他人；若系统支持也会调起分享面板。";
+    } else {
+      hint.textContent = "当前浏览器不支持系统分享，请用「复制链接」发给朋友。";
+    }
+  }
+
   function renderAbout() {
     const host = $("#about-catalog");
     if (!host) return;
@@ -50,6 +173,10 @@
 
     const verEl = $("#about-version");
     if (verEl) verEl.textContent = version ? `当前版本 ${version}` : "";
+
+    const urlEl = $("#about-share-url");
+    if (urlEl && !urlEl.textContent) urlEl.textContent = shareUrl();
+    syncShareHint();
 
     host.innerHTML = catalog.groups
       .map((g) => {
@@ -86,9 +213,19 @@
       .join("");
   }
 
+  function bindShare() {
+    $("#about-share")?.addEventListener("click", () => {
+      shareSite().catch(() => copyShareLink());
+    });
+    $("#about-copy-link")?.addEventListener("click", () => {
+      copyShareLink().catch(() => {});
+    });
+    syncShareHint();
+  }
+
   function boot() {
+    bindShare();
     renderAbout();
-    // catalog may init slightly later
     if (!window.DevToolsCatalog) {
       let n = 0;
       const t = setInterval(() => {
@@ -105,5 +242,5 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();
 
-  window.DevToolsAbout = { render: renderAbout };
+  window.DevToolsAbout = { render: renderAbout, share: shareSite, copyLink: copyShareLink };
 })();

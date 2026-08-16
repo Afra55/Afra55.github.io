@@ -2742,9 +2742,17 @@ hello@world.org</textarea>
         <div class="about-lead panel-card">
           <p class="hint tight" id="about-version"></p>
           <p>适合开发与日常：时间、颜色、编码、JSON/文本、图片与媒体、备忘录剪贴板、ADB 等。侧栏可搜索与排序；顶栏可换主题。</p>
+          <div class="about-share-bar" aria-label="分享本站">
+            <p class="hint tight about-share-hint">手机可一键分享给朋友；桌面可复制链接。</p>
+            <div class="btn-row tool-actions" style="flex-wrap:wrap">
+              <button type="button" class="primary-btn" id="about-share">分享本站</button>
+              <button type="button" class="secondary-btn" id="about-copy-link">复制链接</button>
+            </div>
+            <p class="hint tight mono" id="about-share-url" hidden></p>
+          </div>
           <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.55rem">
-            <button type="button" class="primary-btn" id="theme-about-open">打开主题设置</button>
-            <a class="secondary-btn" href="#memo">备忘录</a>
+            <button type="button" class="ghost-btn" id="theme-about-open">打开主题设置</button>
+            <a class="ghost-btn" href="#memo">备忘录</a>
             <a class="ghost-btn" href="#media/gifmaker">媒体工具</a>
             <a class="ghost-btn" href="#timestamp">时间戳</a>
           </div>

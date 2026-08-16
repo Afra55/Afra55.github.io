@@ -5774,6 +5774,26 @@ button.adb-device-body.linkish {
   margin-bottom: 1rem;
 }
 
+.about-share-bar {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+
+.about-share-hint {
+  margin: 0;
+}
+
+#about-share-url {
+  word-break: break-all;
+  margin: 0;
+  opacity: 0.9;
+}
+
 .about-catalog {
   display: grid;
   gap: 1.15rem;
