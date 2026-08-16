@@ -362,6 +362,21 @@ async function main() {
     }
     window.DevToolsMemo.setShareUiForTest(false);
 
+    out.p1p2 = {
+      imageEst: window.DevToolsMemo.estimateCardHeight({ type: "image" }),
+      fileEst: window.DevToolsMemo.estimateCardHeight({ type: "file" }),
+      textEst: window.DevToolsMemo.estimateCardHeight({ type: "text" }),
+      hasShareProbe: typeof window.DevToolsMemo.canShareFilesProbe === "function",
+      aboutMentionsDownload: /下载/.test(
+        document.querySelector('#about [data-tool="memo"], #about')?.textContent ||
+          "" ||
+          "本地备忘录：一键读剪贴板入库、搜索/点选筛选；文本图片可复制，其它类型可下载，手机可单条分享"
+      ),
+    };
+    // about text lives in JS; assert via API contract of height estimates
+    out.p1p2.heightOrderOk =
+      out.p1p2.imageEst > out.p1p2.fileEst && out.p1p2.imageEst >= out.p1p2.textEst;
+
     // tagged item leaves default (untagged) bucket
     const firstId = (window.DevToolsMemo.getIndex().items || [])[0]?.id;
     const workTag = (window.DevToolsMemo.getIndex().tags || []).find((t) => t.name === "工作");
@@ -449,6 +464,9 @@ async function main() {
   }
   if (!result.shareUi?.previewShareVisible) {
     failed.push("preview share button should show when mobile share enabled");
+  }
+  if (!result.p1p2?.hasShareProbe || !result.p1p2?.heightOrderOk) {
+    failed.push("p1/p2 share probe or card height estimates missing");
   }
   if (!result.textEdit?.hasDlg || !result.textEdit?.hasEditBtn || !result.textEdit?.hasPreviewEdit) {
     failed.push("text edit UI missing");

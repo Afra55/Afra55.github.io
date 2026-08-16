@@ -18,7 +18,15 @@
   const SAVE_CHUNK = 1024 * 1024;
   const UNDO_MS = 8000;
   const VIRTUAL_MIN = 64;
-  const CARD_EST_H = 210;
+  const CARD_EST_DEFAULT = 210;
+  const CARD_EST_BY_TYPE = {
+    text: 200,
+    image: 268,
+    gif: 268,
+    video: 292,
+    audio: 196,
+    file: 176,
+  };
 
   class SaveAbortedError extends Error {
     constructor(msg = "已取消保存") {
@@ -303,6 +311,8 @@
     virtualMode: false,
     virtualRaf: 0,
     testShareUi: false,
+    cardHeightCache: new Map(),
+    shareFilesCapable: null, // null=未探测, true/false
   };
 
   function trackUrl(url) {
@@ -739,7 +749,7 @@
       if (byHash) return byHash;
     }
     if (!coarseSig || coarseSig === "text:" || /^bin:\w+:0:/.test(coarseSig)) return null;
-    for (const it of state.index.items.slice(0, 300)) {
+    for (const it of state.index.items) {
       if (it.contentHash && contentHash && it.contentHash === contentHash) return it;
       if (itemContentSig(it) === coarseSig) return it;
       if (!it.contentHash) {
@@ -751,6 +761,49 @@
       }
     }
     return null;
+  }
+
+  function estimateCardHeight(item) {
+    if (item?.id && state.cardHeightCache.has(item.id)) {
+      return state.cardHeightCache.get(item.id);
+    }
+    return CARD_EST_BY_TYPE[item?.type] || CARD_EST_DEFAULT;
+  }
+
+  function buildHeightPrefix(items) {
+    const prefix = new Array(items.length + 1);
+    prefix[0] = 0;
+    for (let i = 0; i < items.length; i++) {
+      prefix[i + 1] = prefix[i] + estimateCardHeight(items[i]);
+    }
+    return prefix;
+  }
+
+  function indexAtOffset(prefix, offset) {
+    let lo = 0;
+    let hi = Math.max(0, prefix.length - 2);
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (prefix[mid] <= offset) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo;
+  }
+
+  function measureVisibleCardHeights() {
+    if (!itemList) return false;
+    let changed = false;
+    $$(".memo-card", itemList).forEach((card) => {
+      const id = card.dataset.memoId;
+      if (!id) return;
+      const h = Math.round(card.getBoundingClientRect().height);
+      if (h < 48) return;
+      if (state.cardHeightCache.get(id) !== h) {
+        state.cardHeightCache.set(id, h);
+        changed = true;
+      }
+    });
+    return changed;
   }
 
   function flashItem(id, msg) {
@@ -765,13 +818,26 @@
     resetListPaging();
     renderAll();
     requestAnimationFrame(() => {
-      const card =
-        itemList?.querySelector?.(`.memo-card[data-memo-id="${id}"]`) || null;
-      if (!card) return;
-      card.classList.add("is-just-saved");
-      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      setTimeout(() => card.classList.remove("is-just-saved"), 1800);
-      state.flashItemId = "";
+      const items = visibleItems();
+      const idx = items.findIndex((x) => x.id === id);
+      if (idx >= 0 && items.length >= VIRTUAL_MIN) {
+        paintVirtualWindow(items, { force: true, preferId: id });
+        const prefix = buildHeightPrefix(items);
+        const listTop = itemList.getBoundingClientRect().top + window.scrollY;
+        const targetY = Math.max(0, listTop + prefix[idx] - 72);
+        window.scrollTo({ top: targetY, behavior: "smooth" });
+      }
+      requestAnimationFrame(() => {
+        const card = itemList?.querySelector?.(`.memo-card[data-memo-id="${id}"]`) || null;
+        if (!card) {
+          state.flashItemId = "";
+          return;
+        }
+        card.classList.add("is-just-saved");
+        card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        setTimeout(() => card.classList.remove("is-just-saved"), 1800);
+        state.flashItemId = "";
+      });
     });
   }
 
@@ -911,7 +977,7 @@
     }
     const editing = state.editingId === item.id ? " is-editing" : "";
     const canCopy = canClipboardCopy(item);
-    const offerShare = canOfferItemShare();
+    const offerShare = canOfferItemShare(item);
     let primaryAction = "";
     let secondaryShare = "";
     let moreDownload = "";
@@ -1049,34 +1115,52 @@
     window.addEventListener("resize", onVirtualScroll);
   }
 
-  function paintVirtualWindow(items) {
+  function paintVirtualWindow(items, { force = false, preferId = "", skipMeasure = false } = {}) {
     if (!itemList) return;
-    const est = CARD_EST_H;
+    const prefix = buildHeightPrefix(items);
+    const totalH = prefix[items.length] || 0;
     const listTop = itemList.getBoundingClientRect().top + window.scrollY;
     const viewTop = Math.max(0, window.scrollY + 8 - listTop);
     const viewH = window.innerHeight || 800;
-    let start = Math.max(0, Math.floor(viewTop / est) - 5);
-    let end = Math.min(items.length, Math.ceil((viewTop + viewH) / est) + 8);
+    let start;
+    let end;
+    const preferIdx = preferId ? items.findIndex((x) => x.id === preferId) : -1;
+    if (force && preferIdx >= 0) {
+      start = Math.max(0, preferIdx - 8);
+      end = Math.min(items.length, preferIdx + 12);
+    } else {
+      start = Math.max(0, indexAtOffset(prefix, viewTop) - 4);
+      end = Math.min(items.length, indexAtOffset(prefix, viewTop + viewH) + 6);
+    }
     if (end - start < 16) end = Math.min(items.length, start + 16);
-    const topPad = start * est;
-    const bottomPad = Math.max(0, (items.length - end) * est);
+    const topPad = prefix[start] || 0;
+    const bottomPad = Math.max(0, totalH - (prefix[end] || 0));
     const slice = items.slice(start, end);
     const prevStart = itemList.dataset.virtStart || "";
     const prevEnd = itemList.dataset.virtEnd || "";
-    if (prevStart === String(start) && prevEnd === String(end) && itemList.querySelector(".memo-card")) {
+    if (!force && prevStart === String(start) && prevEnd === String(end) && itemList.querySelector(".memo-card")) {
       return;
     }
     stopMediaObserver();
     revokeTrackedUrls();
     itemList.dataset.virtStart = String(start);
     itemList.dataset.virtEnd = String(end);
-    itemList.innerHTML = `<div class="memo-virt-spacer" style="height:${topPad}px" aria-hidden="true"></div>${slice
+    itemList.innerHTML = `<div class="memo-virt-spacer" data-memo-virt-top style="height:${topPad}px" aria-hidden="true"></div>${slice
       .map(itemCardHtml)
-      .join("")}<div class="memo-virt-spacer" style="height:${bottomPad}px" aria-hidden="true"></div>`;
+      .join("")}<div class="memo-virt-spacer" data-memo-virt-bottom style="height:${bottomPad}px" aria-hidden="true"></div>`;
     renderListMeta(items.length, slice.length);
     hydrateMedia();
     const batch = $("#memo-batch-del");
     if (batch) batch.disabled = state.selected.size === 0;
+    if (skipMeasure) return;
+    requestAnimationFrame(() => {
+      if (!state.virtualMode) return;
+      if (!measureVisibleCardHeights()) return;
+      const next = visibleItems();
+      if (next.length < VIRTUAL_MIN) return;
+      const keepId = preferId || itemList.querySelector(".memo-card")?.dataset?.memoId || "";
+      paintVirtualWindow(next, { force: true, preferId: keepId, skipMeasure: true });
+    });
   }
 
   function renderItems() {
@@ -1658,7 +1742,21 @@
       try {
         await removeBlob(it);
       } catch (_) {}
+      if (it?.id) state.cardHeightCache.delete(it.id);
     }
+  }
+
+  function flushPendingUndoOnLeave() {
+    const pending = state.pendingUndo;
+    if (!pending?.items?.length) return;
+    if (pending.timer) clearTimeout(pending.timer);
+    state.pendingUndo = null;
+    hideUndoBar();
+    // 关页时尽量提交硬删除，避免留下无索引 blob
+    pending.items.forEach((it) => {
+      removeBlob(it).catch(() => {});
+      if (it?.id) state.cardHeightCache.delete(it.id);
+    });
   }
 
   async function undoDelete() {
@@ -1712,9 +1810,35 @@
     return item?.type === "text" || item?.type === "image" || item?.type === "gif";
   }
 
-  function canOfferItemShare() {
+  function probeCanShareFiles() {
     if (state.testShareUi) return true;
-    return isLikelyMobile() && typeof navigator.share === "function";
+    if (!isLikelyMobile() || typeof navigator.share !== "function" || !canShareFiles()) return false;
+    if (state.shareFilesCapable != null) return state.shareFilesCapable;
+    try {
+      const probe = new File([new Uint8Array([1])], "memo-share-probe.bin", {
+        type: "application/octet-stream",
+      });
+      state.shareFilesCapable = navigator.canShare({ files: [probe] });
+    } catch (_) {
+      state.shareFilesCapable = false;
+    }
+    return state.shareFilesCapable;
+  }
+
+  function canOfferItemShare(item) {
+    if (state.testShareUi) return true;
+    if (!isLikelyMobile() || typeof navigator.share !== "function") return false;
+    if (!item) return probeCanShareFiles();
+    if (item.type === "text") {
+      try {
+        if (typeof navigator.canShare === "function") {
+          return navigator.canShare({ title: "备忘录", text: "x" });
+        }
+      } catch (_) {}
+      return true;
+    }
+    // 图片/视频/音频/文件依赖系统文件分享能力；不具备则卡片直接显示下载
+    return probeCanShareFiles();
   }
 
   function itemShareFileName(item) {
@@ -1988,7 +2112,7 @@
     }
     if (previewNewTabBtn) previewNewTabBtn.hidden = !canNewTab;
     if (previewDlBtn) previewDlBtn.hidden = !canDl;
-    if (previewShareBtn) previewShareBtn.hidden = !item || !canOfferItemShare();
+    if (previewShareBtn) previewShareBtn.hidden = !item || !canOfferItemShare(item);
     if (previewEditBtn) previewEditBtn.hidden = !canEdit;
   }
 
@@ -2690,14 +2814,16 @@
       .catch((err) => setError(memoError, err.message || String(err)))
       .finally(() => setProgress(false, 0, ""));
   });
-  let lastShareOffer = canOfferItemShare();
+  let lastShareOffer = canOfferItemShare({ type: "file" }) || canOfferItemShare({ type: "text" });
   window.addEventListener("resize", () => {
     syncExportButtonLabels();
-    const next = canOfferItemShare();
+    const next = canOfferItemShare({ type: "file" }) || canOfferItemShare({ type: "text" });
     if (next === lastShareOffer) return;
     lastShareOffer = next;
     if (isMemoActive()) renderItems();
   });
+  window.addEventListener("pagehide", () => flushPendingUndoOnLeave());
+  window.addEventListener("beforeunload", () => flushPendingUndoOnLeave());
   $("#memo-import")?.addEventListener("change", (e) => {
     const f = e.target.files?.[0];
     doImport(f)
@@ -2755,7 +2881,9 @@
     getIndex: () => state.index,
     ingestBlob: (blob, name) => addItemFromBlob(blob, name || `import-${Date.now()}`, { quiet: false }),
     ingestText: (text) => addText(text),
-    canOfferShare: () => canOfferItemShare(),
+    canOfferShare: (item) => canOfferItemShare(item),
+    canShareFilesProbe: () => probeCanShareFiles(),
+    estimateCardHeight: (item) => estimateCardHeight(item || {}),
     setShareUiForTest: (on) => {
       state.testShareUi = Boolean(on);
       renderItems();
