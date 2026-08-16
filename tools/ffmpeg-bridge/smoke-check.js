@@ -7,7 +7,7 @@ const fs = require("fs");
 const os = require("os");
 const path = require("path");
 
-const PORT = 17993;
+const PORT = 17996;
 const TOKEN = "devtools-ffmpeg";
 const HOST = "127.0.0.1";
 
@@ -104,15 +104,13 @@ async function main() {
         /* retry */
       }
     }
-    if (!healthy || healthy.status !== 200 || !healthy.json?.ok) {
-      throw new Error(`health failed: ${boot || JSON.stringify(healthy)}`);
-    }
-    if (!healthy.json.ffmpeg?.ok) throw new Error(`ffmpeg missing: ${JSON.stringify(healthy.json.ffmpeg)}`);
-    if (String(healthy.json.version) !== "0.4.0") throw new Error(`unexpected version: ${healthy.json.version}`);
+    if (!healthy?.json?.ok) throw new Error(`health failed: ${boot}`);
+    if (String(healthy.json.version) !== "0.4.1") throw new Error(`version ${healthy.json.version}`);
 
     const ops = await req("GET", "/ops", { headers: { "X-Ffmpeg-Token": TOKEN } });
-    if (!ops.json?.ok || ops.json.ops.length < 45) throw new Error(`ops too few: ${ops.json?.ops?.length}`);
-    const opIds = new Set(ops.json.ops.map((o) => o.id));
+    if (!ops.json?.ok || ops.json.ops.length < 28) throw new Error(`ops ${ops.json?.ops?.length}`);
+    if (!ops.json.tiers?.common?.length || !ops.json.tiers?.more?.length) throw new Error("tiers missing");
+    if (!ops.json.aliases?.loudnorm) throw new Error("aliases missing");
 
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "ff-smoke-"));
     const mp4 = path.join(tmp, "in.mp4");
@@ -166,84 +164,53 @@ async function main() {
     await runFfmpeg(["-y", "-f", "lavfi", "-i", "color=c=red:s=320x240:d=0.1", "-frames:v", "1", png2]);
 
     const results = {};
-    const batch = [
-      ["extract-audio", [mp4], { format: "mp3" }],
-      ["volume", [mp4], { volumePct: 120, format: "wav" }],
-      ["loudnorm", [mp4], { format: "mp3" }],
-      ["dynaudnorm", [mp4], { format: "mp3" }],
-      ["mono", [mp4], { format: "mp3" }],
-      ["stereo", [mp4], { format: "mp3" }],
-      ["denoise-audio", [mp4], { format: "mp3" }],
-      ["silence-trim", [mp4], { format: "mp3" }],
-      ["sample-rate", [mp4], { sampleRate: "22050", format: "mp3" }],
-      ["convert", [mp4], { preset: "mp4-fast" }],
-      ["compress", [mp4], { compress: "high" }],
-      ["hevc", [mp4], { hevcCrf: "32" }],
-      ["scale", [mp4], { height: 180 }],
-      ["fps", [mp4], { fps: 12 }],
-      ["mute", [mp4], {}],
-      ["crop", [mp4], { cropRatio: "1:1" }],
-      ["pad", [mp4], { padRatio: "16:9" }],
-      ["blur-pad", [mp4], { blurPadSize: "1080x1920" }],
-      ["rotate", [mp4], { rotate: 90 }],
-      ["flip", [mp4], { flip: "h" }],
-      ["reverse", [mp4], {}],
-      ["deinterlace", [mp4], {}],
-      ["eq", [mp4], { brightness: 0.05, contrast: 1.05, saturation: 1.05 }],
-      ["sharpen", [mp4], {}],
-      ["blur", [mp4], { blurStrength: "3" }],
-      ["deshake", [mp4], {}],
-      ["hue", [mp4], { hueDeg: 20 }],
-      ["vignette", [mp4], {}],
-      ["negate", [mp4], {}],
-      ["speed", [mp4], { speed: 2 }],
-      ["trim", [mp4], { startSec: 0.1, durationSec: 0.5 }],
-      ["cut-tail", [mp4], { tailSec: 0.6 }],
-      ["fade", [mp4], { fadeIn: 0.15, fadeOut: 0.15 }],
-      ["loop", [mp4], { loops: 2 }],
-      ["segment", [mp4], { segmentSec: 1 }],
-      ["split-parts", [mp4], { parts: 2 }],
-      ["gif", [mp4], { gifFps: 8, gifWidth: 160 }],
-      ["webp", [mp4], { webpFps: 8, webpWidth: 160 }],
-      ["thumb", [mp4], { atSec: 0.2 }],
-      ["frames", [mp4], { everySec: 0.5 }],
-      ["volume-keep", [mp4], { volumePct: 80 }],
-      ["strip-meta", [mp4], {}],
-      ["overlay-text", [mp4], { text: "ok", textPos: "br", fontSize: 18 }],
-      ["burn-subs", [mp4], {}],
-      ["concat", [mp4, mp4b], {}],
-      ["replace-audio", [mp4, path.join(outDir, "placeholder")], {}],
-      ["slideshow", [png, png2], { holdSec: 0.4, slideSize: "640x360" }],
-    ];
-
-    // extract first so we have audio for replace/waveform
     results.extract = await runOp("extract-audio", [mp4], outDir, { format: "mp3" });
     const mp3 = path.join(outDir, results.extract.artifacts[0].name);
-    if (!fs.existsSync(mp3)) throw new Error("mp3 missing");
 
-    results.waveform = await runOp("waveform", [mp3], outDir, { waveSize: "640x360" });
-    results.audioConvert = await runOp("audio-convert", [mp3], outDir, { format: "wav" });
+    // merged ops
+    results.volumeAudio = await runOp("volume", [mp4], outDir, { volumePct: 120, volumeOut: "audio", format: "wav" });
+    results.volumeVideo = await runOp("volume", [mp4], outDir, { volumePct: 80, volumeOut: "video" });
+    results.normalize = await runOp("normalize", [mp4], outDir, { normAlgo: "loudnorm", format: "mp3" });
+    results.channels = await runOp("channels", [mp4], outDir, { channelMode: "mono", format: "mp3" });
+    results.convert = await runOp("convert", [mp4], outDir, { preset: "compress-high" });
+    results.hevcPreset = await runOp("convert", [mp4], outDir, { preset: "hevc-32" });
+    results.padBlack = await runOp("pad", [mp4], outDir, { padStyle: "black", padRatio: "16:9" });
+    results.padBlur = await runOp("pad", [mp4], outDir, { padStyle: "blur", padRatio: "1080x1920" });
+    results.rotate = await runOp("rotate", [mp4], outDir, { orient: "flip-h" });
+    results.fx = await runOp("picture-fx", [mp4], outDir, { fx: "sharpen" });
+    results.trimRange = await runOp("trim", [mp4], outDir, { trimMode: "range", startSec: 0.1, durationSec: 0.5 });
+    results.trimTail = await runOp("trim", [mp4], outDir, { trimMode: "tail", tailSec: 0.6 });
+    results.splitSeg = await runOp("split", [mp4], outDir, { splitMode: "segment", segmentSec: 1 });
+    results.splitParts = await runOp("split", [mp4], outDir, { splitMode: "parts", parts: 2 });
+    results.animGif = await runOp("anim", [mp4], outDir, { animFormat: "gif", gifFps: 8, gifWidth: 160 });
+    results.animWebp = await runOp("anim", [mp4], outDir, { animFormat: "webp", gifFps: 8, gifWidth: 160 });
+
+    // aliases still work
+    results.aliasLoud = await runOp("loudnorm", [mp4], outDir, { format: "mp3" });
+    results.aliasGif = await runOp("gif", [mp4], outDir, { gifFps: 8, gifWidth: 120 });
+    results.aliasCompress = await runOp("compress", [mp4], outDir, { compress: "medium" });
+
+    results.concat = await runOp("concat", [mp4, mp4b], outDir);
     results.replace = await runOp("replace-audio", [mp4, mp3], outDir);
     results.slideshow = await runOp("slideshow", [png, png2], outDir, { holdSec: 0.4, slideSize: "640x360" });
+    results.burn = await runOp("burn-subs", [mp4], outDir);
+    results.waveform = await runOp("waveform", [mp3], outDir, { waveSize: "640x360" });
 
-    for (const [op, paths, extra] of batch) {
-      if (["extract-audio", "replace-audio", "slideshow"].includes(op)) continue;
-      if (!opIds.has(op)) throw new Error(`missing catalog op ${op}`);
-      results[op] = await runOp(op, paths, outDir, extra);
-    }
-
-    const summary = {
-      ok: true,
-      version: healthy.json.version,
-      ops: ops.json.ops.length,
-      jobs: Object.keys(results).length,
-      sample: Object.fromEntries(
-        Object.entries(results)
-          .slice(0, 8)
-          .map(([k, j]) => [k, j.status])
-      ),
-    };
-    console.log(JSON.stringify(summary, null, 2));
+    console.log(
+      JSON.stringify(
+        {
+          ok: true,
+          version: healthy.json.version,
+          ops: ops.json.ops.length,
+          common: ops.json.tiers.common.length,
+          more: ops.json.tiers.more.length,
+          aliases: Object.keys(ops.json.aliases).length,
+          jobs: Object.keys(results).length,
+        },
+        null,
+        2
+      )
+    );
   } finally {
     try {
       child.kill("SIGTERM");

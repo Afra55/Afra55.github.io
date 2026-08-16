@@ -37,7 +37,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.4.0";
+const BRIDGE_VERSION = "0.4.1";
 const FEATURES = [
   "local-fs",
   "probe",
@@ -633,25 +633,17 @@ const BITRATE_OPTS = [
   { value: "320k", label: "320k" },
 ];
 
-/** 用户可见操作目录（网页按此渲染 fields） */
+/** 用户可见操作目录（网页按此渲染；hidden 别名不展示但 API 仍可用） */
 const OPS_CATALOG = [
   {
     id: "extract-audio",
-    label: "抽音频",
+    label: "导出/转码音频",
     group: "音频",
-    desc: "从视频/音频抽出或转出音轨",
+    tier: "common",
+    desc: "从视频抽出或音频互转（含原「音频转码」）",
     accept: "media",
-    fields: [
-      { key: "format", type: "select", label: "格式", options: AUDIO_FMT_OPTS, default: "mp3" },
-      { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "192k" },
-    ],
-  },
-  {
-    id: "audio-convert",
-    label: "音频转码",
-    group: "音频",
-    desc: "音频互转格式 / 码率",
-    accept: "audio",
+    webHint: "少量文件也可用网页「音频处理」",
+    webHref: "#media/audio",
     fields: [
       { key: "format", type: "select", label: "格式", options: AUDIO_FMT_OPTS, default: "mp3" },
       { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "192k" },
@@ -661,32 +653,67 @@ const OPS_CATALOG = [
     id: "volume",
     label: "音量调节",
     group: "音频",
-    desc: "放大 / 缩小音量后导出音频",
+    tier: "common",
+    desc: "放大/缩小音量；可选只导出音频或保留视频",
     accept: "media",
+    webHint: "单文件预览调音量可用网页「音频处理」",
+    webHref: "#media/audio",
     fields: [
       { key: "volumePct", type: "number", label: "音量%", min: 5, max: 400, step: 5, default: 100 },
+      {
+        key: "volumeOut",
+        type: "select",
+        label: "输出",
+        options: [
+          { value: "audio", label: "仅音频" },
+          { value: "video", label: "保留视频" },
+        ],
+        default: "audio",
+      },
+      { key: "format", type: "select", label: "音频格式", options: AUDIO_FMT_OPTS, default: "mp3" },
+      { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "192k" },
+    ],
+  },
+  {
+    id: "normalize",
+    label: "响度对齐",
+    group: "音频",
+    tier: "common",
+    desc: "统一响度（EBU loudnorm 或动态 dynaudnorm）",
+    accept: "media",
+    fields: [
+      {
+        key: "normAlgo",
+        type: "select",
+        label: "算法",
+        options: [
+          { value: "loudnorm", label: "EBU R128（推荐播客/成片）" },
+          { value: "dynaudnorm", label: "动态平滑（口语波动大）" },
+        ],
+        default: "loudnorm",
+      },
       { key: "format", type: "select", label: "格式", options: AUDIO_FMT_OPTS, default: "mp3" },
       { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "192k" },
     ],
   },
   {
-    id: "loudnorm",
-    label: "响度标准化",
+    id: "channels",
+    label: "声道转换",
     group: "音频",
-    desc: "EBU R128 响度对齐",
+    tier: "more",
+    desc: "转单声道或强制立体声",
     accept: "media",
     fields: [
-      { key: "format", type: "select", label: "格式", options: AUDIO_FMT_OPTS, default: "mp3" },
-      { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "192k" },
-    ],
-  },
-  {
-    id: "mono",
-    label: "转单声道",
-    group: "音频",
-    desc: "立体声压成单声道",
-    accept: "media",
-    fields: [
+      {
+        key: "channelMode",
+        type: "select",
+        label: "声道",
+        options: [
+          { value: "mono", label: "单声道" },
+          { value: "stereo", label: "立体声" },
+        ],
+        default: "mono",
+      },
       { key: "format", type: "select", label: "格式", options: AUDIO_FMT_OPTS, default: "mp3" },
       { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "128k" },
     ],
@@ -695,6 +722,7 @@ const OPS_CATALOG = [
     id: "denoise-audio",
     label: "音频降噪",
     group: "音频",
+    tier: "more",
     desc: "轻量 FFT 降噪（afftdn）",
     accept: "media",
     fields: [
@@ -703,10 +731,46 @@ const OPS_CATALOG = [
     ],
   },
   {
+    id: "silence-trim",
+    label: "掐头去尾静音",
+    group: "音频",
+    tier: "more",
+    desc: "去掉开头结尾静音段",
+    accept: "media",
+    fields: [
+      { key: "format", type: "select", label: "格式", options: AUDIO_FMT_OPTS, default: "mp3" },
+      { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "192k" },
+    ],
+  },
+  {
+    id: "sample-rate",
+    label: "改采样率",
+    group: "音频",
+    tier: "more",
+    desc: "重采样到指定 Hz",
+    accept: "media",
+    fields: [
+      {
+        key: "sampleRate",
+        type: "select",
+        label: "采样率",
+        options: [
+          { value: "22050", label: "22050" },
+          { value: "44100", label: "44100" },
+          { value: "48000", label: "48000" },
+        ],
+        default: "44100",
+      },
+      { key: "format", type: "select", label: "格式", options: AUDIO_FMT_OPTS, default: "mp3" },
+      { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "192k" },
+    ],
+  },
+  {
     id: "convert",
-    label: "转封装/转码",
+    label: "转码 / 压体积",
     group: "视频",
-    desc: "MP4 / WebM / MKV / MOV / 流拷贝",
+    tier: "common",
+    desc: "封装转换、压体积、H.265（合并原转码/压缩/HEVC）",
     accept: "video",
     fields: [
       {
@@ -717,6 +781,11 @@ const OPS_CATALOG = [
           { value: "mp4-fast", label: "MP4 快速" },
           { value: "mp4-hq", label: "MP4 高清" },
           { value: "mp4-copy", label: "MP4 流拷贝" },
+          { value: "compress-low", label: "压体积·轻度" },
+          { value: "compress-medium", label: "压体积·均衡" },
+          { value: "compress-high", label: "压体积·强压" },
+          { value: "hevc-28", label: "H.265 均衡" },
+          { value: "hevc-32", label: "H.265 更小" },
           { value: "webm", label: "WebM VP9" },
           { value: "mkv", label: "MKV" },
           { value: "mov", label: "MOV" },
@@ -726,49 +795,10 @@ const OPS_CATALOG = [
     ],
   },
   {
-    id: "compress",
-    label: "压缩体积",
-    group: "视频",
-    desc: "按清晰度档位压体积（H.264）",
-    accept: "video",
-    fields: [
-      {
-        key: "compress",
-        type: "select",
-        label: "档位",
-        options: [
-          { value: "low", label: "轻度（更清晰）" },
-          { value: "medium", label: "均衡" },
-          { value: "high", label: "强压（更小）" },
-        ],
-        default: "medium",
-      },
-    ],
-  },
-  {
-    id: "hevc",
-    label: "转 H.265",
-    group: "视频",
-    desc: "HEVC 更小体积（兼容性略差）",
-    accept: "video",
-    fields: [
-      {
-        key: "hevcCrf",
-        type: "select",
-        label: "质量 CRF",
-        options: [
-          { value: "24", label: "24 较清晰" },
-          { value: "28", label: "28 均衡" },
-          { value: "32", label: "32 更小" },
-        ],
-        default: "28",
-      },
-    ],
-  },
-  {
     id: "scale",
     label: "改分辨率",
     group: "视频",
+    tier: "common",
     desc: "按高度等比缩放",
     accept: "video",
     fields: [
@@ -792,6 +822,7 @@ const OPS_CATALOG = [
     id: "fps",
     label: "改帧率",
     group: "视频",
+    tier: "more",
     desc: "统一输出帧率",
     accept: "video",
     fields: [
@@ -814,16 +845,29 @@ const OPS_CATALOG = [
     id: "mute",
     label: "去音轨",
     group: "视频",
+    tier: "common",
     desc: "导出无声视频",
     accept: "video",
+    fields: [],
+  },
+  {
+    id: "strip-meta",
+    label: "清除元数据",
+    group: "视频",
+    tier: "more",
+    desc: "去掉标题/作者等元信息（流拷贝）",
+    accept: "media",
     fields: [],
   },
   {
     id: "crop",
     label: "裁剪画面",
     group: "画面",
+    tier: "common",
     desc: "按宽高比中心裁剪",
     accept: "video",
+    webHint: "交互式裁边框可用网页「视频修剪」",
+    webHref: "#media/vtrim",
     fields: [
       {
         key: "cropRatio",
@@ -842,20 +886,34 @@ const OPS_CATALOG = [
   },
   {
     id: "pad",
-    label: "补黑边",
+    label: "补边适配比例",
     group: "画面",
-    desc: "加黑边贴合目标比例",
+    tier: "common",
+    desc: "黑边或模糊铺底贴合目标比例（合并原补黑边/模糊铺底）",
     accept: "video",
     fields: [
       {
+        key: "padStyle",
+        type: "select",
+        label: "样式",
+        options: [
+          { value: "black", label: "黑边" },
+          { value: "blur", label: "模糊铺底" },
+        ],
+        default: "black",
+      },
+      {
         key: "padRatio",
         type: "select",
-        label: "目标比例",
+        label: "目标比例/画幅",
         options: [
           { value: "16:9", label: "16:9" },
           { value: "9:16", label: "9:16" },
           { value: "1:1", label: "1:1" },
           { value: "4:3", label: "4:3" },
+          { value: "1080x1920", label: "模糊·1080×1920" },
+          { value: "1080x1080", label: "模糊·1080×1080" },
+          { value: "1920x1080", label: "模糊·1920×1080" },
         ],
         default: "16:9",
       },
@@ -863,47 +921,72 @@ const OPS_CATALOG = [
   },
   {
     id: "rotate",
-    label: "旋转",
+    label: "旋转 / 翻转",
     group: "画面",
-    desc: "90° / 180° / 270°",
+    tier: "common",
+    desc: "旋转或镜像（合并原旋转/翻转）",
     accept: "video",
     fields: [
       {
-        key: "rotate",
+        key: "orient",
         type: "select",
-        label: "角度",
+        label: "变换",
         options: [
-          { value: "90", label: "顺时针 90°" },
-          { value: "180", label: "180°" },
-          { value: "270", label: "逆时针 90°" },
+          { value: "rot90", label: "顺时针 90°" },
+          { value: "rot180", label: "180°" },
+          { value: "rot270", label: "逆时针 90°" },
+          { value: "flip-h", label: "水平翻转" },
+          { value: "flip-v", label: "垂直翻转" },
         ],
-        default: "90",
+        default: "rot90",
       },
     ],
   },
   {
-    id: "flip",
-    label: "翻转",
+    id: "picture-fx",
+    label: "画面效果",
     group: "画面",
-    desc: "水平 / 垂直镜像",
+    tier: "more",
+    desc: "亮度/锐化/模糊/防抖/色相/暗角/负片（合并多项滤镜）",
     accept: "video",
     fields: [
       {
-        key: "flip",
+        key: "fx",
         type: "select",
-        label: "方向",
+        label: "效果",
         options: [
-          { value: "h", label: "水平" },
-          { value: "v", label: "垂直" },
+          { value: "eq", label: "亮度对比度" },
+          { value: "sharpen", label: "锐化" },
+          { value: "blur", label: "模糊" },
+          { value: "deshake", label: "防抖" },
+          { value: "hue", label: "色相偏移" },
+          { value: "vignette", label: "暗角" },
+          { value: "negate", label: "负片" },
         ],
-        default: "h",
+        default: "eq",
       },
+      { key: "brightness", type: "number", label: "亮度(-1~1)", min: -1, max: 1, step: 0.05, default: 0 },
+      { key: "contrast", type: "number", label: "对比度", min: 0.5, max: 2, step: 0.05, default: 1 },
+      { key: "saturation", type: "number", label: "饱和度", min: 0, max: 3, step: 0.1, default: 1 },
+      {
+        key: "blurStrength",
+        type: "select",
+        label: "模糊强度",
+        options: [
+          { value: "3", label: "轻" },
+          { value: "8", label: "中" },
+          { value: "15", label: "重" },
+        ],
+        default: "8",
+      },
+      { key: "hueDeg", type: "number", label: "色相°", min: -180, max: 180, step: 5, default: 30 },
     ],
   },
   {
     id: "reverse",
     label: "倒放",
     group: "画面",
+    tier: "more",
     desc: "画面与音轨倒序（短片更合适）",
     accept: "video",
     fields: [],
@@ -912,26 +995,64 @@ const OPS_CATALOG = [
     id: "deinterlace",
     label: "去隔行",
     group: "画面",
+    tier: "more",
     desc: "yadif 去隔行",
     accept: "video",
     fields: [],
   },
   {
-    id: "eq",
-    label: "亮度对比度",
-    group: "画面",
-    desc: "简单色彩/亮度调节",
+    id: "trim",
+    label: "裁剪时长",
+    group: "时间",
+    tier: "common",
+    desc: "截取区间或保留片尾（合并原裁剪/保留片尾）",
+    accept: "media",
+    webHint: "交互式修剪片头片尾可用网页「视频修剪 / 音频处理」",
+    webHref: "#media/vtrim",
+    fields: [
+      {
+        key: "trimMode",
+        type: "select",
+        label: "方式",
+        options: [
+          { value: "range", label: "起点+时长" },
+          { value: "tail", label: "保留最后 N 秒" },
+          { value: "audio", label: "起点+时长·仅音频" },
+        ],
+        default: "range",
+      },
+      { key: "startSec", type: "number", label: "起点(秒)", min: 0, max: 86400, step: 0.1, default: 0 },
+      { key: "durationSec", type: "number", label: "时长(秒)", min: 0.2, max: 86400, step: 0.1, default: 10 },
+      { key: "tailSec", type: "number", label: "片尾秒数", min: 0.5, max: 3600, step: 0.5, default: 10 },
+    ],
+  },
+  {
+    id: "split",
+    label: "切片 / 均分",
+    group: "时间",
+    tier: "common",
+    desc: "按固定秒数切片，或均分成 N 段",
     accept: "video",
     fields: [
-      { key: "brightness", type: "number", label: "亮度(-1~1)", min: -1, max: 1, step: 0.05, default: 0 },
-      { key: "contrast", type: "number", label: "对比度", min: 0.5, max: 2, step: 0.05, default: 1 },
-      { key: "saturation", type: "number", label: "饱和度", min: 0, max: 3, step: 0.1, default: 1 },
+      {
+        key: "splitMode",
+        type: "select",
+        label: "方式",
+        options: [
+          { value: "segment", label: "每 N 秒一段" },
+          { value: "parts", label: "均分 N 段" },
+        ],
+        default: "segment",
+      },
+      { key: "segmentSec", type: "number", label: "每段秒数", min: 1, max: 3600, step: 1, default: 60 },
+      { key: "parts", type: "number", label: "段数", min: 2, max: 30, step: 1, default: 3 },
     ],
   },
   {
     id: "speed",
     label: "变速",
     group: "时间",
+    tier: "common",
     desc: "快放 / 慢放（音画同步）",
     accept: "video",
     fields: [
@@ -953,30 +1074,10 @@ const OPS_CATALOG = [
     ],
   },
   {
-    id: "trim",
-    label: "裁剪时长",
-    group: "时间",
-    desc: "统一截取起点 + 时长",
-    accept: "media",
-    fields: [
-      { key: "startSec", type: "number", label: "起点(秒)", min: 0, max: 86400, step: 0.1, default: 0 },
-      { key: "durationSec", type: "number", label: "时长(秒)", min: 0.2, max: 86400, step: 0.1, default: 10 },
-      {
-        key: "trimMode",
-        type: "select",
-        label: "输出",
-        options: [
-          { value: "video", label: "视频" },
-          { value: "audio", label: "仅音频 MP3" },
-        ],
-        default: "video",
-      },
-    ],
-  },
-  {
     id: "fade",
     label: "淡入淡出",
     group: "时间",
+    tier: "more",
     desc: "开头结尾淡化",
     accept: "video",
     fields: [
@@ -988,25 +1089,61 @@ const OPS_CATALOG = [
     id: "loop",
     label: "循环成片",
     group: "时间",
+    tier: "more",
     desc: "把短片循环 N 次合成",
     accept: "video",
     fields: [{ key: "loops", type: "number", label: "循环次数", min: 2, max: 50, step: 1, default: 3 }],
   },
   {
-    id: "gif",
-    label: "转 GIF",
+    id: "anim",
+    label: "转动图",
     group: "动图",
-    desc: "调色板高质量动图",
+    tier: "common",
+    desc: "导出 GIF 或动态 WebP（合并原转 GIF/WebP）",
     accept: "video",
+    webHint: "多图合成/压缩 GIF 请用网页「GIF 工具」",
+    webHref: "#media/gifmaker",
     fields: [
+      {
+        key: "animFormat",
+        type: "select",
+        label: "格式",
+        options: [
+          { value: "gif", label: "GIF" },
+          { value: "webp", label: "动态 WebP" },
+        ],
+        default: "gif",
+      },
       { key: "gifFps", type: "number", label: "帧率", min: 5, max: 30, step: 1, default: 10 },
       { key: "gifWidth", type: "number", label: "宽度", min: 120, max: 1280, step: 10, default: 480 },
+    ],
+  },
+  {
+    id: "waveform",
+    label: "音频波形视频",
+    group: "动图",
+    tier: "more",
+    desc: "把音频做成波形可视化视频",
+    accept: "audio",
+    fields: [
+      {
+        key: "waveSize",
+        type: "select",
+        label: "分辨率",
+        options: [
+          { value: "1280x720", label: "1280×720" },
+          { value: "1920x1080", label: "1920×1080" },
+          { value: "1080x1080", label: "1080×1080" },
+        ],
+        default: "1280x720",
+      },
     ],
   },
   {
     id: "thumb",
     label: "截封面",
     group: "截取",
+    tier: "common",
     desc: "导出单张封面图",
     accept: "video",
     fields: [{ key: "atSec", type: "number", label: "时间点(秒)", min: 0, max: 86400, step: 0.1, default: 1 }],
@@ -1015,6 +1152,7 @@ const OPS_CATALOG = [
     id: "frames",
     label: "按间隔截帧",
     group: "截取",
+    tier: "more",
     desc: "每隔 N 秒存一张图到子文件夹",
     accept: "video",
     fields: [{ key: "everySec", type: "number", label: "间隔(秒)", min: 0.5, max: 600, step: 0.5, default: 5 }],
@@ -1023,6 +1161,7 @@ const OPS_CATALOG = [
     id: "concat",
     label: "拼接成片",
     group: "合成",
+    tier: "common",
     desc: "按勾选顺序合成一个视频",
     accept: "video",
     fields: [],
@@ -1031,6 +1170,7 @@ const OPS_CATALOG = [
     id: "replace-audio",
     label: "替换音轨",
     group: "合成",
+    tier: "common",
     desc: "用所选音频替换视频音轨（勾选：多个视频 + 1 个音频）",
     accept: "av",
     fields: [],
@@ -1039,8 +1179,11 @@ const OPS_CATALOG = [
     id: "slideshow",
     label: "图片幻灯片",
     group: "合成",
+    tier: "more",
     desc: "多张图片合成视频",
     accept: "image",
+    webHint: "多图合成 GIF 请用网页「GIF 工具」",
+    webHref: "#media/gifmaker",
     fields: [
       { key: "holdSec", type: "number", label: "每张秒数", min: 0.3, max: 30, step: 0.1, default: 2 },
       {
@@ -1061,6 +1204,7 @@ const OPS_CATALOG = [
     id: "burn-subs",
     label: "烧录字幕",
     group: "合成",
+    tier: "more",
     desc: "烧录同名 .srt/.ass（需放在视频旁）",
     accept: "video",
     fields: [],
@@ -1069,6 +1213,7 @@ const OPS_CATALOG = [
     id: "overlay-text",
     label: "文字水印",
     group: "合成",
+    tier: "more",
     desc: "烧录简单文字（需系统字体）",
     accept: "video",
     fields: [
@@ -1089,215 +1234,73 @@ const OPS_CATALOG = [
       { key: "fontSize", type: "number", label: "字号", min: 12, max: 96, step: 1, default: 28 },
     ],
   },
-  {
-    id: "strip-meta",
-    label: "清除元数据",
-    group: "工具",
-    desc: "去掉标题/作者等元信息（流拷贝）",
-    accept: "media",
-    fields: [],
-  },
-  {
-    id: "volume-keep",
-    label: "视频音量",
-    group: "音频",
-    desc: "调音量但保留画面",
-    accept: "video",
-    fields: [{ key: "volumePct", type: "number", label: "音量%", min: 5, max: 400, step: 5, default: 100 }],
-  },
-  {
-    id: "dynaudnorm",
-    label: "动态响度",
-    group: "音频",
-    desc: "dynaudnorm 平滑响度",
-    accept: "media",
-    fields: [
-      { key: "format", type: "select", label: "格式", options: AUDIO_FMT_OPTS, default: "mp3" },
-      { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "192k" },
-    ],
-  },
-  {
-    id: "stereo",
-    label: "转立体声",
-    group: "音频",
-    desc: "强制双声道输出",
-    accept: "media",
-    fields: [
-      { key: "format", type: "select", label: "格式", options: AUDIO_FMT_OPTS, default: "mp3" },
-      { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "192k" },
-    ],
-  },
-  {
-    id: "silence-trim",
-    label: "掐头去尾静音",
-    group: "音频",
-    desc: "去掉开头结尾静音段",
-    accept: "media",
-    fields: [
-      { key: "format", type: "select", label: "格式", options: AUDIO_FMT_OPTS, default: "mp3" },
-      { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "192k" },
-    ],
-  },
-  {
-    id: "sample-rate",
-    label: "改采样率",
-    group: "音频",
-    desc: "重采样到指定 Hz",
-    accept: "media",
-    fields: [
-      {
-        key: "sampleRate",
-        type: "select",
-        label: "采样率",
-        options: [
-          { value: "22050", label: "22050" },
-          { value: "44100", label: "44100" },
-          { value: "48000", label: "48000" },
-        ],
-        default: "44100",
-      },
-      { key: "format", type: "select", label: "格式", options: AUDIO_FMT_OPTS, default: "mp3" },
-      { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "192k" },
-    ],
-  },
-  {
-    id: "sharpen",
-    label: "锐化",
-    group: "画面",
-    desc: "unsharp 轻度锐化",
-    accept: "video",
-    fields: [],
-  },
-  {
-    id: "blur",
-    label: "模糊",
-    group: "画面",
-    desc: "整幅高斯模糊",
-    accept: "video",
-    fields: [
-      {
-        key: "blurStrength",
-        type: "select",
-        label: "强度",
-        options: [
-          { value: "3", label: "轻" },
-          { value: "8", label: "中" },
-          { value: "15", label: "重" },
-        ],
-        default: "8",
-      },
-    ],
-  },
-  {
-    id: "deshake",
-    label: "防抖",
-    group: "画面",
-    desc: "deshake 简易防抖",
-    accept: "video",
-    fields: [],
-  },
-  {
-    id: "hue",
-    label: "色相偏移",
-    group: "画面",
-    desc: "整体色相旋转",
-    accept: "video",
-    fields: [{ key: "hueDeg", type: "number", label: "色相°", min: -180, max: 180, step: 5, default: 30 }],
-  },
-  {
-    id: "vignette",
-    label: "暗角",
-    group: "画面",
-    desc: "添加 vignette 暗角",
-    accept: "video",
-    fields: [],
-  },
-  {
-    id: "negate",
-    label: "负片",
-    group: "画面",
-    desc: "颜色反相",
-    accept: "video",
-    fields: [],
-  },
-  {
-    id: "blur-pad",
-    label: "模糊铺底",
-    group: "画面",
-    desc: "竖屏/方屏：中间原片 + 模糊背景（短视频常用）",
-    accept: "video",
-    fields: [
-      {
-        key: "blurPadSize",
-        type: "select",
-        label: "目标画幅",
-        options: [
-          { value: "1080x1920", label: "9:16 1080×1920" },
-          { value: "1080x1080", label: "1:1 1080×1080" },
-          { value: "1920x1080", label: "16:9 1920×1080" },
-        ],
-        default: "1080x1920",
-      },
-    ],
-  },
-  {
-    id: "cut-tail",
-    label: "保留片尾",
-    group: "时间",
-    desc: "只保留最后 N 秒",
-    accept: "video",
-    fields: [{ key: "tailSec", type: "number", label: "秒数", min: 0.5, max: 3600, step: 0.5, default: 10 }],
-  },
-  {
-    id: "segment",
-    label: "按时长切片",
-    group: "时间",
-    desc: "每 N 秒切成一段（流拷贝优先）",
-    accept: "video",
-    fields: [{ key: "segmentSec", type: "number", label: "每段秒数", min: 1, max: 3600, step: 1, default: 60 }],
-  },
-  {
-    id: "split-parts",
-    label: "均分 N 段",
-    group: "时间",
-    desc: "按总时长均分成 N 个文件",
-    accept: "video",
-    fields: [{ key: "parts", type: "number", label: "段数", min: 2, max: 30, step: 1, default: 3 }],
-  },
-  {
-    id: "webp",
-    label: "转动态 WebP",
-    group: "动图",
-    desc: "导出动画 WebP",
-    accept: "video",
-    fields: [
-      { key: "webpFps", type: "number", label: "帧率", min: 5, max: 30, step: 1, default: 10 },
-      { key: "webpWidth", type: "number", label: "宽度", min: 120, max: 1280, step: 10, default: 480 },
-    ],
-  },
-  {
-    id: "waveform",
-    label: "音频波形视频",
-    group: "动图",
-    desc: "把音频做成波形可视化视频",
-    accept: "audio",
-    fields: [
-      {
-        key: "waveSize",
-        type: "select",
-        label: "分辨率",
-        options: [
-          { value: "1280x720", label: "1280×720" },
-          { value: "1920x1080", label: "1920×1080" },
-          { value: "1080x1080", label: "1080×1080" },
-        ],
-        default: "1280x720",
-      },
-    ],
-  },
 ];
 
-// NOTE: catalog ends above; legacy concat/overlay already redefined — remove duplicates below if any
+/** 旧 op id → 新 id（兼容已保存任务/旧客户端） */
+const OP_ALIASES = {
+  "audio-convert": "extract-audio",
+  "volume-keep": "volume",
+  loudnorm: "normalize",
+  dynaudnorm: "normalize",
+  mono: "channels",
+  stereo: "channels",
+  compress: "convert",
+  hevc: "convert",
+  flip: "rotate",
+  "blur-pad": "pad",
+  "cut-tail": "trim",
+  segment: "split",
+  "split-parts": "split",
+  gif: "anim",
+  webp: "anim",
+  eq: "picture-fx",
+  sharpen: "picture-fx",
+  blur: "picture-fx",
+  deshake: "picture-fx",
+  hue: "picture-fx",
+  vignette: "picture-fx",
+  negate: "picture-fx",
+};
+
+function resolveOpRequest(rawOp, body = {}) {
+  const incoming = String(rawOp || "").toLowerCase();
+  const op = OP_ALIASES[incoming] || incoming;
+  const opts = { ...body, op };
+  // map legacy field defaults
+  if (incoming === "volume-keep") opts.volumeOut = "video";
+  if (incoming === "loudnorm") opts.normAlgo = "loudnorm";
+  if (incoming === "dynaudnorm") opts.normAlgo = "dynaudnorm";
+  if (incoming === "mono") opts.channelMode = "mono";
+  if (incoming === "stereo") opts.channelMode = "stereo";
+  if (incoming === "compress") {
+    const level = String(body.compress || "medium");
+    opts.preset = level === "high" ? "compress-high" : level === "low" ? "compress-low" : "compress-medium";
+  }
+  if (incoming === "hevc") opts.preset = `hevc-${body.hevcCrf || "28"}`;
+  if (incoming === "flip") opts.orient = body.flip === "v" ? "flip-v" : "flip-h";
+  if (incoming === "rotate" && body.rotate != null && !opts.orient) {
+    const d = Number(body.rotate) || 90;
+    opts.orient = d === 180 ? "rot180" : d === 270 ? "rot270" : "rot90";
+  }
+  if (incoming === "blur-pad") {
+    opts.padStyle = "blur";
+    opts.padRatio = body.blurPadSize || "1080x1920";
+  }
+  if (incoming === "cut-tail") opts.trimMode = "tail";
+  if (incoming === "segment") opts.splitMode = "segment";
+  if (incoming === "split-parts") opts.splitMode = "parts";
+  if (incoming === "gif") opts.animFormat = "gif";
+  if (incoming === "webp") {
+    opts.animFormat = "webp";
+    if (body.webpFps != null) opts.gifFps = body.webpFps;
+    if (body.webpWidth != null) opts.gifWidth = body.webpWidth;
+  }
+  if (["eq", "sharpen", "blur", "deshake", "hue", "vignette", "negate"].includes(incoming)) {
+    opts.fx = incoming;
+  }
+  return { op, opts };
+}
+
 
 function audioArgsForFormat(fmt, bitrate) {
   const f = String(fmt || "mp3").toLowerCase();
@@ -1374,8 +1377,10 @@ function escapeDrawtext(text) {
  * @returns {{ ext: string, mime: string, suffix: string, buildArgs: (src: string, dest: string) => string[][] }}
  * buildArgs returns one or more attempt arg lists (fallback chain)
  */
-function planOp(op, opts = {}) {
-  const id = String(op || "").toLowerCase();
+function planOp(op, optsIn = {}) {
+  const resolved = resolveOpRequest(op, optsIn);
+  const id = resolved.op;
+  const opts = resolved.opts;
 
   if (id === "extract-audio" || id === "audio-convert") {
     const fmt = audioArgsForFormat(opts.format, opts.bitrate);
@@ -1395,6 +1400,37 @@ function planOp(op, opts = {}) {
   if (id === "volume") {
     const pct = Math.max(5, Math.min(400, Number(opts.volumePct) || 100));
     const vol = (pct / 100).toFixed(3);
+    const keepVideo = String(opts.volumeOut || "audio") === "video";
+    if (keepVideo) {
+      return {
+        ext: "mp4",
+        mime: "video/mp4",
+        suffix: `-vvol${pct}`,
+        buildArgs: (src, dest) => [
+          ["-y", "-i", src, "-af", `volume=${vol}`, "-c:v", "copy", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", dest],
+          [
+            "-y",
+            "-i",
+            src,
+            "-af",
+            `volume=${vol}`,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            dest,
+          ],
+        ],
+      };
+    }
     const fmt = audioArgsForFormat(opts.format || "mp3", opts.bitrate);
     const af = Math.abs(pct - 100) < 0.05 ? [] : ["-af", `volume=${vol}`];
     return {
@@ -1405,25 +1441,27 @@ function planOp(op, opts = {}) {
     };
   }
 
-  if (id === "loudnorm") {
+  if (id === "normalize" || id === "loudnorm" || id === "dynaudnorm") {
+    const algo = String(opts.normAlgo || (id === "dynaudnorm" ? "dynaudnorm" : "loudnorm"));
     const fmt = audioArgsForFormat(opts.format || "mp3", opts.bitrate || "192k");
+    const af = algo === "dynaudnorm" ? "dynaudnorm" : "loudnorm=I=-16:TP=-1.5:LRA=11";
     return {
       ext: fmt.ext,
       mime: fmt.mime,
-      suffix: "-loudnorm",
-      buildArgs: (src, dest) => [
-        ["-y", "-i", src, "-vn", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", ...fmt.args.filter((a) => a !== "-vn"), dest],
-      ],
+      suffix: algo === "dynaudnorm" ? "-dynnorm" : "-loudnorm",
+      buildArgs: (src, dest) => [["-y", "-i", src, "-vn", "-af", af, ...fmt.args.filter((a) => a !== "-vn"), dest]],
     };
   }
 
-  if (id === "mono") {
+  if (id === "channels" || id === "mono" || id === "stereo") {
+    const mode = String(opts.channelMode || (id === "stereo" ? "stereo" : "mono"));
     const fmt = audioArgsForFormat(opts.format || "mp3", opts.bitrate || "128k");
+    const ac = mode === "stereo" ? "2" : "1";
     return {
       ext: fmt.ext,
       mime: fmt.mime,
-      suffix: "-mono",
-      buildArgs: (src, dest) => [["-y", "-i", src, "-vn", "-ac", "1", ...fmt.args.filter((a) => a !== "-vn"), dest]],
+      suffix: mode === "stereo" ? "-stereo" : "-mono",
+      buildArgs: (src, dest) => [["-y", "-i", src, "-vn", "-ac", ac, ...fmt.args.filter((a) => a !== "-vn"), dest]],
     };
   }
 
@@ -1440,45 +1478,55 @@ function planOp(op, opts = {}) {
     };
   }
 
-  if (id === "convert") {
-    const p = String(opts.preset || "mp4-fast").toLowerCase();
+  if (id === "convert" || id === "compress" || id === "hevc") {
+    let p = String(opts.preset || "mp4-fast").toLowerCase();
+    if (id === "compress" && !String(opts.preset || "").startsWith("compress")) {
+      const level = String(opts.compress || "medium").toLowerCase();
+      p = level === "high" ? "compress-high" : level === "low" ? "compress-low" : "compress-medium";
+    }
+    if (id === "hevc" && !String(opts.preset || "").startsWith("hevc")) {
+      p = `hevc-${opts.hevcCrf || "28"}`;
+    }
     let ext = "mp4";
     let mime = "video/mp4";
-    let args = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"];
+    let suffix = "-out";
+    let attemptsBuilder = null;
+
     if (p === "mp4-hq") {
-      args = ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart"];
+      suffix = "-hq";
+      attemptsBuilder = (src, dest) => [
+        ["-y", "-i", src, "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", dest],
+      ];
     } else if (p === "mp4-copy") {
-      args = ["-c", "copy", "-movflags", "+faststart"];
+      suffix = "-copy";
+      attemptsBuilder = (src, dest) => [["-y", "-i", src, "-c", "copy", "-movflags", "+faststart", dest]];
     } else if (p === "webm") {
       ext = "webm";
       mime = "video/webm";
-      args = ["-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "32", "-c:a", "libopus", "-b:a", "128k"];
+      suffix = "-webm";
+      attemptsBuilder = (src, dest) => [
+        ["-y", "-i", src, "-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "32", "-c:a", "libopus", "-b:a", "128k", dest],
+      ];
     } else if (p === "mkv") {
       ext = "mkv";
       mime = "video/x-matroska";
-      args = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "128k"];
+      suffix = "-mkv";
+      attemptsBuilder = (src, dest) => [
+        ["-y", "-i", src, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", dest],
+      ];
     } else if (p === "mov") {
       ext = "mov";
       mime = "video/quicktime";
-      args = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "128k"];
-    }
-    return {
-      ext,
-      mime,
-      suffix: `-out`,
-      buildArgs: (src, dest) => [["-y", "-i", src, ...args, dest]],
-    };
-  }
-
-  if (id === "compress") {
-    const level = String(opts.compress || "medium").toLowerCase();
-    const crf = level === "high" ? "28" : level === "low" ? "20" : "23";
-    const preset = level === "high" ? "veryfast" : "fast";
-    return {
-      ext: "mp4",
-      mime: "video/mp4",
-      suffix: `-cmp-${level}`,
-      buildArgs: (src, dest) => [
+      suffix = "-mov";
+      attemptsBuilder = (src, dest) => [
+        ["-y", "-i", src, "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", dest],
+      ];
+    } else if (p.startsWith("compress-")) {
+      const level = p.replace("compress-", "");
+      const crf = level === "high" ? "28" : level === "low" ? "20" : "23";
+      const preset = level === "high" ? "veryfast" : "fast";
+      suffix = `-cmp-${level}`;
+      attemptsBuilder = (src, dest) => [
         [
           "-y",
           "-i",
@@ -1497,17 +1545,11 @@ function planOp(op, opts = {}) {
           "+faststart",
           dest,
         ],
-      ],
-    };
-  }
-
-  if (id === "hevc") {
-    const crf = String(opts.hevcCrf || "28");
-    return {
-      ext: "mp4",
-      mime: "video/mp4",
-      suffix: `-hevc${crf}`,
-      buildArgs: (src, dest) => [
+      ];
+    } else if (p.startsWith("hevc-")) {
+      const crf = p.replace("hevc-", "") || "28";
+      suffix = `-hevc${crf}`;
+      attemptsBuilder = (src, dest) => [
         [
           "-y",
           "-i",
@@ -1528,7 +1570,6 @@ function planOp(op, opts = {}) {
           "+faststart",
           dest,
         ],
-        // fallback if libx265 missing
         [
           "-y",
           "-i",
@@ -1547,7 +1588,36 @@ function planOp(op, opts = {}) {
           "+faststart",
           dest,
         ],
-      ],
+      ];
+    } else {
+      // mp4-fast default
+      attemptsBuilder = (src, dest) => [
+        [
+          "-y",
+          "-i",
+          src,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+      ];
+    }
+
+    return {
+      ext,
+      mime,
+      suffix,
+      buildArgs: attemptsBuilder,
     };
   }
 
@@ -1657,7 +1727,45 @@ function planOp(op, opts = {}) {
     };
   }
 
-  if (id === "pad") {
+  if (id === "pad" || id === "blur-pad") {
+    const style = String(opts.padStyle || (id === "blur-pad" ? "blur" : "black"));
+    if (style === "blur" || /^\d+x\d+$/i.test(String(opts.padRatio || ""))) {
+      const size = String(opts.padRatio || opts.blurPadSize || "1080x1920");
+      const [W, H] = size.includes("x")
+        ? size.split("x").map((n) => even(Number(n) || 1080))
+        : (() => {
+            const { w, h } = parseRatio(size, 9, 16);
+            return [even(1080), even(Math.round((1080 * h) / w))];
+          })();
+      const fc = `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},gblur=sigma=20[bg];[0:v]scale=${W}:${H}:force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2`;
+      return {
+        ext: "mp4",
+        mime: "video/mp4",
+        suffix: `-blurpad${W}x${H}`,
+        buildArgs: (src, dest) => [
+          [
+            "-y",
+            "-i",
+            src,
+            "-filter_complex",
+            fc,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "23",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "128k",
+            "-movflags",
+            "+faststart",
+            dest,
+          ],
+        ],
+      };
+    }
     const { w, h } = parseRatio(opts.padRatio || "16:9", 16, 9);
     const vf = `setsar=1,pad=max(iw\\,ih*${w}/${h}):max(ih\\,iw*${h}/${w}):(ow-iw)/2:(oh-ih)/2:black`;
     return {
@@ -1689,104 +1797,35 @@ function planOp(op, opts = {}) {
     };
   }
 
-  if (id === "rotate") {
-    const deg = Number(opts.rotate) || 90;
-    const transpose =
-      deg === 180 ? "transpose=1,transpose=1" : deg === 270 ? "transpose=2" : "transpose=1";
+  if (id === "rotate" || id === "flip") {
+    let orient = String(opts.orient || "");
+    if (!orient) {
+      if (id === "flip") orient = opts.flip === "v" ? "flip-v" : "flip-h";
+      else {
+        const deg = Number(opts.rotate) || 90;
+        orient = deg === 180 ? "rot180" : deg === 270 ? "rot270" : "rot90";
+      }
+    }
+    let vf = "transpose=1";
+    let suffix = "-rot90";
+    if (orient === "rot180") {
+      vf = "transpose=1,transpose=1";
+      suffix = "-rot180";
+    } else if (orient === "rot270") {
+      vf = "transpose=2";
+      suffix = "-rot270";
+    } else if (orient === "flip-h") {
+      vf = "hflip";
+      suffix = "-fliph";
+    } else if (orient === "flip-v") {
+      vf = "vflip";
+      suffix = "-flipv";
+    }
     return {
       ext: "mp4",
       mime: "video/mp4",
-      suffix: `-rot${deg}`,
-      buildArgs: (src, dest) => [
-        [
-          "-y",
-          "-i",
-          src,
-          "-vf",
-          transpose,
-          "-c:v",
-          "libx264",
-          "-preset",
-          "veryfast",
-          "-crf",
-          "23",
-          "-c:a",
-          "copy",
-          "-movflags",
-          "+faststart",
-          dest,
-        ],
-        [
-          "-y",
-          "-i",
-          src,
-          "-vf",
-          transpose,
-          "-c:v",
-          "libx264",
-          "-preset",
-          "veryfast",
-          "-crf",
-          "23",
-          "-c:a",
-          "aac",
-          "-b:a",
-          "128k",
-          "-movflags",
-          "+faststart",
-          dest,
-        ],
-      ],
-    };
-  }
-
-  if (id === "flip") {
-    const mode = String(opts.flip || "h").toLowerCase();
-    const vf = mode === "v" ? "vflip" : "hflip";
-    return {
-      ext: "mp4",
-      mime: "video/mp4",
-      suffix: `-flip${mode}`,
-      buildArgs: (src, dest) => [
-        [
-          "-y",
-          "-i",
-          src,
-          "-vf",
-          vf,
-          "-c:v",
-          "libx264",
-          "-preset",
-          "veryfast",
-          "-crf",
-          "23",
-          "-c:a",
-          "copy",
-          "-movflags",
-          "+faststart",
-          dest,
-        ],
-        [
-          "-y",
-          "-i",
-          src,
-          "-vf",
-          vf,
-          "-c:v",
-          "libx264",
-          "-preset",
-          "veryfast",
-          "-crf",
-          "23",
-          "-c:a",
-          "aac",
-          "-b:a",
-          "128k",
-          "-movflags",
-          "+faststart",
-          dest,
-        ],
-      ],
+      suffix,
+      buildArgs: (src, dest) => [x264Args(src, dest, vf), x264Args(src, dest, vf, true)],
     };
   }
 
@@ -1994,10 +2033,46 @@ function planOp(op, opts = {}) {
     };
   }
 
-  if (id === "trim") {
+  if (id === "trim" || id === "cut-tail") {
+    const mode = String(opts.trimMode || (id === "cut-tail" ? "tail" : "range")).toLowerCase();
+    if (mode === "tail") {
+      const tail = Math.max(0.5, Number(opts.tailSec) || 10);
+      return {
+        ext: "mp4",
+        mime: "video/mp4",
+        suffix: `-tail${Math.round(tail)}`,
+        needsDuration: true,
+        buildArgs: (src, dest, meta = {}) => {
+          const dur = Number(meta.duration) || 0;
+          const start = Math.max(0, dur - tail);
+          return [
+            ["-y", "-ss", String(start), "-i", src, "-c", "copy", "-avoid_negative_ts", "make_zero", "-movflags", "+faststart", dest],
+            [
+              "-y",
+              "-ss",
+              String(start),
+              "-i",
+              src,
+              "-c:v",
+              "libx264",
+              "-preset",
+              "veryfast",
+              "-crf",
+              "23",
+              "-c:a",
+              "aac",
+              "-b:a",
+              "128k",
+              "-movflags",
+              "+faststart",
+              dest,
+            ],
+          ];
+        },
+      };
+    }
     const start = Math.max(0, Number(opts.startSec) || 0);
     const dur = Math.max(0.2, Number(opts.durationSec) || 10);
-    const mode = String(opts.trimMode || "video").toLowerCase();
     if (mode === "audio") {
       const fmt = audioArgsForFormat("mp3", "192k");
       return {
@@ -2086,9 +2161,20 @@ function planOp(op, opts = {}) {
     };
   }
 
-  if (id === "gif") {
-    const fps = Math.max(5, Math.min(30, Number(opts.gifFps) || 10));
-    const width = even(Math.max(120, Math.min(1280, Number(opts.gifWidth) || 480)));
+  if (id === "gif" || id === "webp" || id === "anim") {
+    const fmt = String(opts.animFormat || (id === "webp" ? "webp" : "gif")).toLowerCase();
+    const fps = Math.max(5, Math.min(30, Number(opts.gifFps || opts.webpFps) || 10));
+    const width = even(Math.max(120, Math.min(1280, Number(opts.gifWidth || opts.webpWidth) || 480)));
+    if (fmt === "webp") {
+      return {
+        ext: "webp",
+        mime: "image/webp",
+        suffix: "",
+        buildArgs: (src, dest) => [
+          ["-y", "-i", src, "-vf", `fps=${fps},scale=${width}:-1:flags=lanczos`, "-loop", "0", "-an", dest],
+        ],
+      };
+    }
     return {
       ext: "gif",
       mime: "image/gif",
@@ -2107,6 +2193,95 @@ function planOp(op, opts = {}) {
       ],
     };
   }
+
+  if (id === "picture-fx" || ["eq", "sharpen", "blur", "deshake", "hue", "vignette", "negate"].includes(id)) {
+    const fx = String(opts.fx || (id === "picture-fx" ? "eq" : id));
+    if (fx === "eq") {
+      const br = Math.max(-1, Math.min(1, Number(opts.brightness) || 0));
+      const ct = Math.max(0.5, Math.min(2, Number(opts.contrast) || 1));
+      const sat = Math.max(0, Math.min(3, Number(opts.saturation) || 1));
+      const vf = `eq=brightness=${br}:contrast=${ct}:saturation=${sat}`;
+      return { ext: "mp4", mime: "video/mp4", suffix: "-eq", buildArgs: (src, dest) => [x264Args(src, dest, vf), x264Args(src, dest, vf, true)] };
+    }
+    if (fx === "sharpen") {
+      return {
+        ext: "mp4",
+        mime: "video/mp4",
+        suffix: "-sharp",
+        buildArgs: (src, dest) => [x264Args(src, dest, "unsharp=5:5:1.0:5:5:0.0"), x264Args(src, dest, "unsharp=5:5:1.0:5:5:0.0", true)],
+      };
+    }
+    if (fx === "blur") {
+      const s = Math.max(1, Math.min(30, Number(opts.blurStrength) || 8));
+      return {
+        ext: "mp4",
+        mime: "video/mp4",
+        suffix: `-blur${s}`,
+        buildArgs: (src, dest) => [x264Args(src, dest, `gblur=sigma=${s}`), x264Args(src, dest, `gblur=sigma=${s}`, true)],
+      };
+    }
+    if (fx === "deshake") {
+      return { ext: "mp4", mime: "video/mp4", suffix: "-deshake", buildArgs: (src, dest) => [x264Args(src, dest, "deshake"), x264Args(src, dest, "deshake", true)] };
+    }
+    if (fx === "hue") {
+      const deg = Math.max(-180, Math.min(180, Number(opts.hueDeg) || 30));
+      return {
+        ext: "mp4",
+        mime: "video/mp4",
+        suffix: `-hue${deg}`,
+        buildArgs: (src, dest) => [x264Args(src, dest, `hue=h=${deg}`), x264Args(src, dest, `hue=h=${deg}`, true)],
+      };
+    }
+    if (fx === "vignette") {
+      return { ext: "mp4", mime: "video/mp4", suffix: "-vig", buildArgs: (src, dest) => [x264Args(src, dest, "vignette"), x264Args(src, dest, "vignette", true)] };
+    }
+    if (fx === "negate") {
+      return { ext: "mp4", mime: "video/mp4", suffix: "-neg", buildArgs: (src, dest) => [x264Args(src, dest, "negate"), x264Args(src, dest, "negate", true)] };
+    }
+  }
+
+  if (id === "split" || id === "segment" || id === "split-parts") {
+    const mode =
+      id === "split-parts" ? "parts" : id === "segment" ? "segment" : String(opts.splitMode || "segment");
+    if (mode === "parts") {
+      return { ext: "mp4", mime: "video/mp4", suffix: "", buildArgs: () => [], special: "split-parts" };
+    }
+    const sec = Math.max(1, Math.min(3600, Number(opts.segmentSec) || 60));
+    return {
+      ext: "mp4",
+      mime: "video/mp4",
+      suffix: `-seg${sec}`,
+      multiPattern: true,
+      multiName: "part-%03d.mp4",
+      artifactRe: /\.mp4$/i,
+      buildArgs: (src, destPattern) => [
+        ["-y", "-i", src, "-c", "copy", "-map", "0", "-f", "segment", "-segment_time", String(sec), "-reset_timestamps", "1", destPattern],
+        [
+          "-y",
+          "-i",
+          src,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-f",
+          "segment",
+          "-segment_time",
+          String(sec),
+          "-reset_timestamps",
+          "1",
+          destPattern,
+        ],
+      ],
+    };
+  }
+
 
   if (id === "thumb") {
     const at = Math.max(0, Number(opts.atSec) || 1);
@@ -2478,43 +2653,6 @@ function planOp(op, opts = {}) {
           ],
         ];
       },
-    };
-  }
-
-  if (id === "segment") {
-    const sec = Math.max(1, Math.min(3600, Number(opts.segmentSec) || 60));
-    return {
-      ext: "mp4",
-      mime: "video/mp4",
-      suffix: `-seg${sec}`,
-      multiPattern: true,
-      multiName: "part-%03d.mp4",
-      artifactRe: /\.mp4$/i,
-      buildArgs: (src, destPattern) => [
-        ["-y", "-i", src, "-c", "copy", "-map", "0", "-f", "segment", "-segment_time", String(sec), "-reset_timestamps", "1", destPattern],
-        [
-          "-y",
-          "-i",
-          src,
-          "-c:v",
-          "libx264",
-          "-preset",
-          "veryfast",
-          "-crf",
-          "23",
-          "-c:a",
-          "aac",
-          "-b:a",
-          "128k",
-          "-f",
-          "segment",
-          "-segment_time",
-          String(sec),
-          "-reset_timestamps",
-          "1",
-          destPattern,
-        ],
-      ],
     };
   }
 
@@ -3075,16 +3213,15 @@ function cancelJob(job) {
 }
 
 async function startJobFromBody(body) {
-  const op = String(body.op || body.type || "").toLowerCase();
-  if (!op) throw new Error("缺少 op");
+  const rawOp = String(body.op || body.type || "").toLowerCase();
+  if (!rawOp) throw new Error("缺少 op");
+  const { op, opts: resolvedOpts } = resolveOpRequest(rawOp, body);
   const catalog = OPS_CATALOG.find((o) => o.id === op);
-  if (!catalog && !["concat", "extract-audio", "convert"].includes(op)) {
-    planOp(op, body);
-  } else if (op !== "concat" && op !== "replace-audio" && op !== "slideshow" && op !== "split-parts") {
-    planOp(op, body);
+  if (!catalog && !OP_ALIASES[rawOp] && !["concat", "replace-audio", "slideshow", "split", "split-parts"].includes(op)) {
+    planOp(op, resolvedOpts); // validate
   }
 
-  const accept = catalog?.accept || "video";
+  const accept = catalog?.accept || (op === "slideshow" ? "image" : op === "replace-audio" ? "av" : "video");
   const files = await collectInputFiles(body.paths || [], {
     recursive: Boolean(body.recursive),
     accept,
@@ -3128,20 +3265,24 @@ async function startJobFromBody(body) {
     return job;
   }
 
-  if (op === "split-parts") {
-    const job = createJob("split-parts", {
-      op,
-      opLabel: catalog?.label || "均分 N 段",
-      overwrite: Boolean(body.overwrite),
-      outDir,
-      count: files.length,
-      parts: Number(body.parts) || 3,
-    });
-    job._files = files;
-    job._outDir = outDir;
-    job._parts = Number(body.parts) || 3;
-    runJobAsync(job, runSplitPartsJob);
-    return job;
+  if (op === "split" || op === "split-parts") {
+    const mode = op === "split-parts" ? "parts" : String(resolvedOpts.splitMode || "segment");
+    if (mode === "parts") {
+      const job = createJob("split", {
+        op: "split",
+        opLabel: catalog?.label || "切片 / 均分",
+        overwrite: Boolean(body.overwrite),
+        outDir,
+        count: files.length,
+        parts: Number(resolvedOpts.parts) || 3,
+      });
+      job._files = files;
+      job._outDir = outDir;
+      job._parts = Number(resolvedOpts.parts) || 3;
+      runJobAsync(job, runSplitPartsJob);
+      return job;
+    }
+    // fall through to batch segment via planOp
   }
 
   if (op === "slideshow") {
@@ -3154,18 +3295,34 @@ async function startJobFromBody(body) {
     });
     job._files = files;
     job._outDir = outDir;
-    job._holdSec = Number(body.holdSec) || 2;
-    job._slideSize = body.slideSize || "1280x720";
+    job._holdSec = Number(resolvedOpts.holdSec) || 2;
+    job._slideSize = resolvedOpts.slideSize || "1280x720";
     runJobAsync(job, runSlideshowJob);
     return job;
   }
 
-  const opts = { ...body };
-  if (op === "extract-audio" || op === "audio-convert") opts.format = body.format || "mp3";
-  if (op === "convert") opts.preset = body.preset || "mp4-fast";
+  const opts = { ...resolvedOpts };
+  if (op === "extract-audio") opts.format = opts.format || "mp3";
+  if (op === "convert") opts.preset = opts.preset || "mp4-fast";
 
   const plan = planOp(op, opts);
+  if (plan.special === "split-parts") {
+    const job = createJob("split", {
+      op: "split",
+      opLabel: catalog?.label || "切片 / 均分",
+      overwrite: Boolean(body.overwrite),
+      outDir,
+      count: files.length,
+      parts: Number(opts.parts) || 3,
+    });
+    job._files = files;
+    job._outDir = outDir;
+    job._parts = Number(opts.parts) || 3;
+    runJobAsync(job, runSplitPartsJob);
+    return job;
+  }
   if (plan.special) throw new Error(`操作 ${op} 需要专用任务入口`);
+
   const job = createJob(op, {
     op,
     opLabel: catalog?.label || op,
@@ -3323,7 +3480,22 @@ async function handleRequest(req, res) {
     }
 
     if (req.method === "GET" && pathname === "/ops") {
-      sendJson(res, 200, { ok: true, ops: OPS_CATALOG, version: BRIDGE_VERSION }, origin);
+      const includeAll = url.searchParams.get("all") === "1";
+      const ops = includeAll ? OPS_CATALOG : OPS_CATALOG;
+      const common = OPS_CATALOG.filter((o) => o.tier !== "more");
+      const more = OPS_CATALOG.filter((o) => o.tier === "more");
+      sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          version: BRIDGE_VERSION,
+          ops,
+          tiers: { common: common.map((o) => o.id), more: more.map((o) => o.id) },
+          aliases: OP_ALIASES,
+        },
+        origin
+      );
       return;
     }
 

@@ -100,6 +100,8 @@
   const opSelect = $("#ff-op");
   const opOptsEl = $("#ff-op-opts");
   const opDescEl = $("#ff-op-desc");
+  const opWebHint = $("#ff-op-webhint");
+  const opMoreChk = $("#ff-op-more");
   const probeOut = $("#ff-probe-out");
 
   let connected = false;
@@ -109,6 +111,8 @@
   const selected = new Set();
   /** @type {any[]} */
   let opsCatalog = FALLBACK_OPS.slice();
+  let opsTiers = { common: [], more: [] };
+  let showMoreOps = false;
   let currentOpId = "extract-audio";
   let pollTimer = 0;
   let waitPollTimer = 0;
@@ -175,7 +179,7 @@
         if (workspace) workspace.hidden = true;
       } else if (connected) {
         modeTitle.textContent = "已走更优路径：本机 FFmpeg 桥";
-        modeText.textContent = `已加载 ${opsCatalog.length} 项批量操作（音频/画面/切片/合成等）。勾选文件后选操作即可。`;
+        modeText.textContent = `已整理为常用 ${opsTiers.common?.length || "…"} 项（可展开更多）。与网页音频/修剪/GIF 互补：桥擅长批量，网页擅长少量交互。`;
         modeActions.innerHTML = `
           <a class="ghost-btn" href="#media/audio">网页保底·音频</a>
           <a class="ghost-btn" href="#media/vtrim">网页保底·修剪</a>
@@ -293,35 +297,61 @@
     return m > 0 ? `${m}:${String(Math.floor(s % 60)).padStart(2, "0")}.${String(r).split(".")[1] || "0"}` : `${s.toFixed(1)}s`;
   }
 
+  function visibleOps() {
+    if (showMoreOps) return opsCatalog;
+    const commonIds = new Set(opsTiers.common?.length ? opsTiers.common : opsCatalog.filter((o) => o.tier !== "more").map((o) => o.id));
+    const filtered = opsCatalog.filter((o) => commonIds.has(o.id) || o.tier === "common" || !o.tier);
+    return filtered.length ? filtered : opsCatalog;
+  }
+
   function currentOp() {
-    return opsCatalog.find((o) => o.id === currentOpId) || opsCatalog[0] || FALLBACK_OPS[0];
+    return opsCatalog.find((o) => o.id === currentOpId) || visibleOps()[0] || FALLBACK_OPS[0];
   }
 
   function renderOpSelect() {
     if (!opSelect) return;
+    const list = visibleOps();
     const groups = new Map();
-    opsCatalog.forEach((op) => {
+    list.forEach((op) => {
       const g = op.group || "其他";
       if (!groups.has(g)) groups.set(g, []);
       groups.get(g).push(op);
     });
     const parts = [];
-    for (const [g, list] of groups) {
+    for (const [g, ops] of groups) {
       parts.push(`<optgroup label="${escapeAttr(g)}">`);
-      list.forEach((op) => {
+      ops.forEach((op) => {
         parts.push(`<option value="${escapeAttr(op.id)}">${escapeHtml(op.label)}</option>`);
       });
       parts.push(`</optgroup>`);
     }
     opSelect.innerHTML = parts.join("");
-    if (!opsCatalog.some((o) => o.id === currentOpId)) currentOpId = opsCatalog[0]?.id || "extract-audio";
+    if (!list.some((o) => o.id === currentOpId)) currentOpId = list[0]?.id || "extract-audio";
     opSelect.value = currentOpId;
     renderOpOpts();
   }
 
   function renderOpOpts() {
     const op = currentOp();
-    if (opDescEl) opDescEl.textContent = op?.desc || "选择操作后填写参数";
+    if (opDescEl) {
+      const nCommon = opsTiers.common?.length || opsCatalog.filter((o) => o.tier !== "more").length;
+      const nAll = opsCatalog.length;
+      opDescEl.textContent = op?.desc || "选择操作后填写参数";
+      if (nAll) {
+        opDescEl.textContent += showMoreOps ? ` · 全部 ${nAll} 项` : ` · 常用 ${nCommon} 项（可展开更多）`;
+      }
+    }
+    if (opWebHint) {
+      if (op?.webHint) {
+        opWebHint.hidden = false;
+        opWebHint.innerHTML = op.webHref
+          ? `${escapeHtml(op.webHint)} → <a href="${escapeAttr(op.webHref)}">打开</a>`
+          : escapeHtml(op.webHint);
+      } else {
+        opWebHint.hidden = true;
+        opWebHint.textContent = "";
+      }
+    }
     if (!opOptsEl) return;
     const fields = Array.isArray(op?.fields) ? op.fields : [];
     if (!fields.length) {
@@ -545,6 +575,7 @@
       const data = await ffFetch("/ops");
       if (Array.isArray(data.ops) && data.ops.length) {
         opsCatalog = data.ops;
+        opsTiers = data.tiers || { common: [], more: [] };
         renderOpSelect();
       }
     } catch (_) {
@@ -792,6 +823,10 @@
     currentOpId = opSelect.value;
     savePrefs();
     renderOpOpts();
+  });
+  opMoreChk?.addEventListener("change", () => {
+    showMoreOps = Boolean(opMoreChk.checked);
+    renderOpSelect();
   });
 
   connectBtn?.addEventListener("click", () => connectBridge());

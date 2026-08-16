@@ -560,7 +560,7 @@ async function main() {
     out.cacheBust = {
 
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260816fffull2/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260816ffdedupe1/.test(s.src)),
     };
 
     return out;
