@@ -314,6 +314,10 @@
     cardHeightCache: new Map(),
     shareFilesCapable: null, // null=未探测, true/false
     hashIndex: new Map(), // contentHash -> itemId
+    tagMap: new Map(), // tagId -> tag
+    countCache: null, // { total, untagged, byTag:Map, byType }
+    persistTimer: 0,
+    persistWaiters: [],
   };
 
   function trackUrl(url) {
@@ -353,7 +357,8 @@
     if (!ok) throw new Error("没有目录写入权限，请重新选择存储目录");
     const file = await state.dirHandle.getFileHandle(INDEX_NAME, { create: true });
     const writable = await file.createWritable();
-    await writable.write(JSON.stringify(state.index, null, 2));
+    const pretty = (state.index.items?.length || 0) < 400;
+    await writable.write(JSON.stringify(state.index, null, pretty ? 2 : 0));
     await writable.close();
   }
 
@@ -368,9 +373,44 @@
     }
   }
 
-  async function persistIndex() {
+  async function persistIndexNow() {
     await idbSet("index", "main", state.index);
     if (state.mode === "dir") await writeIndexToDir();
+  }
+
+  async function persistIndex({ immediate = false } = {}) {
+    const large = (state.index.items?.length || 0) >= 800;
+    if (immediate || !large) {
+      if (state.persistTimer) {
+        clearTimeout(state.persistTimer);
+        state.persistTimer = 0;
+      }
+      await persistIndexNow();
+      const waiters = state.persistWaiters.splice(0);
+      waiters.forEach((w) => w.resolve());
+      return;
+    }
+    return new Promise((resolve, reject) => {
+      state.persistWaiters.push({ resolve, reject });
+      clearTimeout(state.persistTimer);
+      state.persistTimer = setTimeout(() => {
+        state.persistTimer = 0;
+        const waiters = state.persistWaiters.splice(0);
+        persistIndexNow()
+          .then(() => waiters.forEach((w) => w.resolve()))
+          .catch((err) => waiters.forEach((w) => w.reject(err)));
+      }, 360);
+    });
+  }
+
+  function flushPersistSync() {
+    if (!state.persistTimer && !state.persistWaiters.length) return;
+    clearTimeout(state.persistTimer);
+    state.persistTimer = 0;
+    // 关页时尽量落盘；异步交易可能来不及完成，但比丢 debounce 强
+    persistIndexNow().catch(() => {});
+    const waiters = state.persistWaiters.splice(0);
+    waiters.forEach((w) => w.resolve());
   }
 
   function concatArrayBuffers(parts) {
@@ -480,37 +520,24 @@
   }
 
   async function estimateStorageBytes() {
+    // 万级体量：用索引里的 size 汇总，避免逐条读 IDB/目录文件
     let total = 0;
+    const n = state.index.items?.length || 0;
     try {
-      const idx = JSON.stringify(state.index || {});
-      total += new TextEncoder().encode(idx).length;
-    } catch (_) {}
-    if (state.mode === "dir" && state.dirHandle) {
-      try {
-        const ok = await ensureDirPermission(state.dirHandle, "read");
-        if (!ok) return total;
-        const dir = await getBlobsDir(false);
-        // eslint-disable-next-line no-restricted-syntax
-        for await (const [, handle] of dir.entries()) {
-          if (handle.kind !== "file") continue;
-          const f = await handle.getFile();
-          total += f.size || 0;
+      if (n < 500) {
+        total += new TextEncoder().encode(JSON.stringify(state.index || {})).length;
+      } else {
+        // 粗估索引体积，避免大 JSON.stringify 卡住主线程
+        total += n * 220 + (state.index.tags?.length || 0) * 48 + 2048;
+        for (const it of state.index.items) {
+          const prev = it.textPreview;
+          if (prev) total += Math.min(String(prev).length, 4000);
         }
-        try {
-          const ih = await state.dirHandle.getFileHandle(INDEX_NAME);
-          const f = await ih.getFile();
-          total += f.size || 0;
-        } catch (_) {}
-      } catch (_) {}
-      return total;
-    }
-    try {
-      const keys = await idbKeys("blobs");
-      for (const key of keys) {
-        const row = await idbGet("blobs", key);
-        total += row?.buf?.byteLength || 0;
       }
     } catch (_) {}
+    for (const it of state.index.items || []) {
+      total += Number(it.size) || 0;
+    }
     return total;
   }
 
@@ -644,6 +671,42 @@
     item.tagIds = custom.length ? custom : [DEFAULT_TAG_ID];
   }
 
+  function rebuildTagMap() {
+    state.tagMap = new Map((state.index.tags || []).map((t) => [t.id, t]));
+  }
+
+  function invalidateCountCache() {
+    state.countCache = null;
+  }
+
+  function ensureCountCache() {
+    if (state.countCache) return state.countCache;
+    const byTag = new Map();
+    const byType = { text: 0, image: 0, gif: 0, video: 0, audio: 0, file: 0 };
+    let untagged = 0;
+    const items = state.index.items || [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      const tk = byType[it.type] != null ? it.type : "file";
+      byType[tk] += 1;
+      const custom = customTagIds(it);
+      if (!custom.length) untagged += 1;
+      else {
+        for (let j = 0; j < custom.length; j++) {
+          const id = custom[j];
+          byTag.set(id, (byTag.get(id) || 0) + 1);
+        }
+      }
+    }
+    state.countCache = {
+      total: items.length,
+      untagged,
+      byTag,
+      byType,
+    };
+    return state.countCache;
+  }
+
   const TYPE_LABELS = {
     text: "文本",
     image: "图片",
@@ -655,21 +718,46 @@
 
   function itemMatchesSearch(item, q) {
     if (!q) return true;
-    // 小白友好：直接搜关键词即可（含标签名），无需 tag:/type: 语法
-    const hay = [
-      item.name,
-      item.fileName,
-      item.mime,
-      item.note,
-      item.textPreview,
-      TYPE_LABELS[item.type] || item.type,
-      item.type,
-      ...(item.tagIds || []).map((id) => tagById(id)?.name || id),
-    ]
+    // 限制正文参与长度，避免万级长文本搜索卡顿
+    const preview = item.textPreview ? String(item.textPreview).slice(0, 1200) : "";
+    const tagNames = (item.tagIds || [])
+      .map((id) => state.tagMap.get(id)?.name || id)
       .filter(Boolean)
-      .join("\n")
-      .toLowerCase();
+      .join("\n");
+    const hay = `${item.name || ""}\n${item.fileName || ""}\n${item.mime || ""}\n${item.note || ""}\n${preview}\n${
+      TYPE_LABELS[item.type] || ""
+    }\n${item.type || ""}\n${tagNames}`.toLowerCase();
     return hay.includes(q);
+  }
+
+  function filterItems({ type = state.activeType, tagId = state.activeTagId, query = state.searchQuery } = {}) {
+    // items 数组本身按 order 排列，不再每次 sort
+    const src = state.index.items || [];
+    const q = String(query || "").trim().toLowerCase();
+    const out = [];
+    const tagAll = !tagId || tagId === "all";
+    const tagDefault = tagId === DEFAULT_TAG_ID || tagId === "default";
+    for (let i = 0; i < src.length; i++) {
+      const it = src[i];
+      if (tagDefault) {
+        if (!isUntagged(it)) continue;
+      } else if (!tagAll) {
+        if (!customTagIds(it).includes(tagId)) continue;
+      }
+      if (q && !itemMatchesSearch(it, q)) continue;
+      if (type !== "all" && it.type !== type) continue;
+      out.push(it);
+    }
+    return out;
+  }
+
+  function visibleItems() {
+    return filterItems();
+  }
+
+  function canDragReorder() {
+    // 虚拟列表下远距离拖拽不可靠；量大时关闭卡片拖拽
+    return (state.index.items?.length || 0) < VIRTUAL_MIN;
   }
 
   function hasActiveFilters() {
@@ -885,58 +973,36 @@
     });
   }
 
-  function visibleItems() {
-    let items = [...state.index.items].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    if (state.activeTagId === DEFAULT_TAG_ID || state.activeTagId === "default") {
-      items = items.filter(isUntagged);
-    } else if (state.activeTagId !== "all") {
-      items = items.filter((it) => customTagIds(it).includes(state.activeTagId));
-    }
-    if (state.activeType !== "all") {
-      items = items.filter((it) => it.type === state.activeType);
-    }
-    const q = String(state.searchQuery || "").trim().toLowerCase();
-    if (q) items = items.filter((it) => itemMatchesSearch(it, q));
-    return items;
-  }
-
-  function countByType(items) {
-    const counts = { text: 0, image: 0, gif: 0, video: 0, audio: 0, file: 0 };
-    items.forEach((it) => {
-      const k = counts[it.type] != null ? it.type : "file";
-      counts[k] += 1;
-    });
-    return counts;
-  }
-
-  function itemsForTagFilter() {
-    let items = [...state.index.items];
-    if (state.activeTagId === DEFAULT_TAG_ID || state.activeTagId === "default") {
-      items = items.filter(isUntagged);
-    } else if (state.activeTagId !== "all") {
-      items = items.filter((it) => customTagIds(it).includes(state.activeTagId));
-    }
-    const q = String(state.searchQuery || "").trim().toLowerCase();
-    if (q) items = items.filter((it) => itemMatchesSearch(it, q));
-    return items;
-  }
-
   function renderTypeFilter() {
     const host = $("#memo-type-filter");
     if (!host) return;
-    const pool = itemsForTagFilter();
-    const counts = countByType(pool);
-    const total = pool.length;
+    const q = String(state.searchQuery || "").trim();
+    const tagAll = !state.activeTagId || state.activeTagId === "all";
+    let total;
+    let counts;
+    if (tagAll && !q) {
+      const cache = ensureCountCache();
+      total = cache.total;
+      counts = cache.byType;
+    } else {
+      counts = { text: 0, image: 0, gif: 0, video: 0, audio: 0, file: 0 };
+      const pool = filterItems({ type: "all" });
+      total = pool.length;
+      for (let i = 0; i < pool.length; i++) {
+        const k = counts[pool[i].type] != null ? pool[i].type : "file";
+        counts[k] += 1;
+      }
+    }
     const mk = (type, label, n) =>
       `<button type="button" class="memo-type-chip${state.activeType === type ? " is-active" : ""}" data-memo-type="${type}">${label}<span class="mono">${n}</span></button>`;
     host.innerHTML = [
       mk("all", "全部", total),
-      mk("text", "文本", counts.text),
-      mk("image", "图片", counts.image),
-      mk("gif", "动图", counts.gif),
-      mk("video", "视频", counts.video),
-      mk("audio", "音频", counts.audio),
-      mk("file", "文件", counts.file),
+      mk("text", "文本", counts.text || 0),
+      mk("image", "图片", counts.image || 0),
+      mk("gif", "动图", counts.gif || 0),
+      mk("video", "视频", counts.video || 0),
+      mk("audio", "音频", counts.audio || 0),
+      mk("file", "文件", counts.file || 0),
     ].join("");
   }
 
@@ -945,26 +1011,24 @@
   }
 
   function tagById(id) {
-    return state.index.tags.find((t) => t.id === id);
+    return state.tagMap.get(id) || state.index.tags.find((t) => t.id === id);
   }
 
   function renderTags() {
     if (!tagList) return;
-    const tags = [...state.index.tags].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    const untaggedCount = state.index.items.filter(isUntagged).length;
+    const cache = ensureCountCache();
+    const tags = state.index.tags || [];
     const bits = [
-      `<button type="button" class="memo-tag-item${state.activeTagId === "all" ? " is-active" : ""}" data-memo-tag="all" draggable="false">全部<span class="mono memo-tag-count">${state.index.items.length}</span></button>`,
+      `<button type="button" class="memo-tag-item${state.activeTagId === "all" ? " is-active" : ""}" data-memo-tag="all" draggable="false">全部<span class="mono memo-tag-count">${cache.total}</span></button>`,
     ];
-    tags.forEach((t) => {
-      const count =
-        t.id === DEFAULT_TAG_ID
-          ? untaggedCount
-          : state.index.items.filter((it) => customTagIds(it).includes(t.id)).length;
+    for (let i = 0; i < tags.length; i++) {
+      const t = tags[i];
+      const count = t.id === DEFAULT_TAG_ID ? cache.untagged : cache.byTag.get(t.id) || 0;
       const label = t.id === DEFAULT_TAG_ID ? "默认（未分类）" : t.name;
       bits.push(
         `<button type="button" class="memo-tag-item${state.activeTagId === t.id ? " is-active" : ""}" data-memo-tag="${escapeHtml(t.id)}" draggable="${t.id !== DEFAULT_TAG_ID ? "true" : "false"}">${escapeHtml(label)}<span class="mono memo-tag-count">${count}</span></button>`
       );
-    });
+    }
     tagList.innerHTML = bits.join("");
     syncTagsToggle();
   }
@@ -1037,7 +1101,7 @@
       }
       moreDownload = `<button type="button" class="ghost-btn" data-memo-dl="${item.id}">下载</button>`;
     }
-    return `<article class="memo-card${editing}" data-memo-id="${item.id}" draggable="true">
+    return `<article class="memo-card${editing}" data-memo-id="${item.id}" draggable="${canDragReorder() ? "true" : "false"}">
       <div class="memo-card-head">
         <label class="memo-check"><input type="checkbox" data-memo-check="${item.id}" ${checked} /></label>
         <div class="memo-card-meta">
@@ -1207,6 +1271,14 @@
     });
   }
 
+  function syncDropHint() {
+    const dropHint = $("#memo-drop > p.hint");
+    if (!dropHint) return;
+    dropHint.textContent = canDragReorder()
+      ? "拖拽文件到此处添加 · 最新在上 · 可拖拽排序 · 滑到底部自动加载更多"
+      : "拖拽文件到此处添加 · 最新在上 · 条目较多已关闭拖拽排序，可用筛选/搜索定位";
+  }
+
   function renderItems() {
     if (!itemList) return;
     stopMediaObserver();
@@ -1216,6 +1288,7 @@
     const loadMoreBtn = $("#memo-load-more");
     const sentinel = $("#memo-scroll-sentinel");
     const loadingTip = $("#memo-loading-more");
+    syncDropHint();
     if (!items.length) {
       stopVirtualScroll();
       itemList.dataset.virtStart = "";
@@ -1343,6 +1416,7 @@
     state.index.tags.forEach((t, i) => {
       t.order = i;
     });
+    invalidateCountCache();
   }
 
   async function withBusy(fn) {
@@ -1729,6 +1803,8 @@
     }
     await idbSet("index", "main", state.index);
     rebuildHashIndex();
+    rebuildTagMap();
+    invalidateCountCache();
     renderAll();
   }
 
@@ -1778,6 +1854,8 @@
     const restored = await tryRestoreDirHandle();
     if (!restored && !state.dirPending) state.mode = "idb";
     rebuildHashIndex();
+    rebuildTagMap();
+    invalidateCountCache();
     renderAll();
   }
 
@@ -1825,7 +1903,7 @@
     state.index.items = [...restored, ...state.index.items];
     restored.forEach(rememberHash);
     reindexOrders();
-    await persistIndex();
+    await persistIndex({ immediate: true });
     renderAll();
     toast(restored.length > 1 ? `已撤销删除 ${restored.length} 条` : "已撤销删除");
   }
@@ -1853,7 +1931,7 @@
     if (!removed.length) return;
     removed.forEach(forgetHash);
     reindexOrders();
-    await persistIndex();
+    await persistIndex({ immediate: true });
     renderAll();
     state.pendingUndo = {
       items: removed,
@@ -2389,7 +2467,8 @@
         importedCount += 1;
       }
       reindexOrders();
-      await persistIndex();
+      rebuildTagMap();
+      await persistIndex({ immediate: true });
       setProgress(false, 0, "");
       renderAll();
       if (importedCount && skipped) toast(`导入完成：新增 ${importedCount} 条，重复置顶 ${skipped} 条`);
@@ -2433,7 +2512,8 @@
     if (!item.tagIds.includes(tag.id)) item.tagIds.push(tag.id);
     ensureTagMembership(item);
     item.updatedAt = Date.now();
-    await persistIndex();
+    invalidateCountCache();
+    await persistIndex({ immediate: true });
     state.tagTargetId = "";
     renderAll();
     toast(`已添加标签「${tag.name}」`);
@@ -2447,7 +2527,8 @@
       tag = { id: uid(), name, order: -1 };
       state.index.tags.unshift(tag);
       reindexOrders();
-      await persistIndex();
+      rebuildTagMap();
+      await persistIndex({ immediate: true });
     }
     if (!state.tagTargetId) {
       renderAll();
@@ -2568,11 +2649,13 @@
   $("#memo-search")?.addEventListener("input", (e) => {
     const val = String(e.target.value || "");
     clearTimeout(searchTimer);
+    const n = state.index.items?.length || 0;
+    const delay = n > 5000 ? 450 : n > 1200 ? 300 : 180;
     searchTimer = setTimeout(() => {
       state.searchQuery = val;
       resetListPaging();
       renderAll();
-    }, 180);
+    }, delay);
   });
   $("#memo-clear-filters")?.addEventListener("click", () => clearAllFilters());
   $("#memo-load-more")?.addEventListener("click", () => {
@@ -2884,8 +2967,14 @@
     lastShareOffer = next;
     if (isMemoActive()) renderItems();
   });
-  window.addEventListener("pagehide", () => flushPendingUndoOnLeave());
-  window.addEventListener("beforeunload", () => flushPendingUndoOnLeave());
+  window.addEventListener("pagehide", () => {
+    flushPersistSync();
+    flushPendingUndoOnLeave();
+  });
+  window.addEventListener("beforeunload", () => {
+    flushPersistSync();
+    flushPendingUndoOnLeave();
+  });
   $("#memo-import")?.addEventListener("change", (e) => {
     const f = e.target.files?.[0];
     doImport(f)
@@ -2946,6 +3035,9 @@
     canOfferShare: (item) => canOfferItemShare(item),
     canShareFilesProbe: () => probeCanShareFiles(),
     estimateCardHeight: (item) => estimateCardHeight(item || {}),
+    isOrdered: () => (state.index.items || []).every((it, i) => (it.order ?? i) === i),
+    getCountCache: () => ensureCountCache(),
+    canDragReorder: () => canDragReorder(),
     setShareUiForTest: (on) => {
       state.testShareUi = Boolean(on);
       renderItems();

@@ -397,6 +397,19 @@ async function main() {
     out.dedupeBump.movedFront = after[0]?.id === buried?.id;
     out.dedupeBump.noExtraCopy = after.filter((it) => (it.textPreview || "").includes("UNIQUE_BUMP_TEXT_991")).length === 1;
 
+    const t0 = performance.now();
+    const estBytes = await window.DevToolsMemo.getStorageBytes();
+    const t1 = performance.now();
+    const cache = window.DevToolsMemo.getCountCache?.() || {};
+    out.scale = {
+      ordered: window.DevToolsMemo.isOrdered?.() === true,
+      countMatches: cache.total === (window.DevToolsMemo.getIndex().items || []).length,
+      estimateMs: Math.round(t1 - t0),
+      estimateFast: t1 - t0 < 80,
+      estimateBytes: Number(estBytes) > 0,
+      hasDragApi: typeof window.DevToolsMemo.canDragReorder === "function",
+    };
+
     // tagged item leaves default (untagged) bucket
     const firstId = (window.DevToolsMemo.getIndex().items || [])[0]?.id;
     const workTag = (window.DevToolsMemo.getIndex().tags || []).find((t) => t.name === "工作");
@@ -490,6 +503,9 @@ async function main() {
   }
   if (!result.dedupeBump?.buried || !result.dedupeBump?.movedFront || !result.dedupeBump?.noExtraCopy) {
     failed.push("duplicate paste should bump existing item to front without cloning");
+  }
+  if (!result.scale?.ordered || !result.scale?.countMatches || !result.scale?.estimateFast || !result.scale?.estimateBytes) {
+    failed.push("scale adaptations missing or slow storage estimate");
   }
   if (!result.textEdit?.hasDlg || !result.textEdit?.hasEditBtn || !result.textEdit?.hasPreviewEdit) {
     failed.push("text edit UI missing");
