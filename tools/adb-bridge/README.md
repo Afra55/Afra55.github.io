@@ -41,7 +41,7 @@ node server.js
 1. 打开 Tools →「ADB 工具」
 2. 下载对应系统的完整 ZIP，解压后运行启动脚本（勿只保留脚本、删掉 server.js）
 3. 回到网页点击「连接本机桥」
-## 接口（P0–P3，bridge 0.6.12）
+## 接口（P0–P3，bridge 0.7.0）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
@@ -79,6 +79,10 @@ node server.js
 | POST | `/clipboard` | 推送剪贴板（机型相关） |
 | GET | `/device/snapshot?serial=` | 状态快照 |
 | POST | `/device/control` | 常亮 / 开发者选项 / USB 安装等 |
+| GET | `/mirror/status?serial=` | scrcpy-server 镜像状态（jar / 会话） |
+| POST | `/mirror/prepare` | 确保本机已缓存 scrcpy-server（可首次联网下载） |
+| POST | `/mirror/stop` | 停止某设备镜像 `{ serial }` |
+| WS | `/mirror/ws?serial=&token=` | H.264 镜像流（WebCodecs）；完整包含 `scrcpy-mirror.js` + `vendor/scrcpy-server-v3.1` |
 | GET | `/jobs` `/jobs/:id` `/jobs/:id/artifact/:name` | 任务与产物下载 |
 | POST | `/jobs/:id/cancel` | 取消任务（录屏：SIGINT screenrecord 并尝试拉取片段） |
 

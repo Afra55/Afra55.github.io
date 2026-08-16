@@ -35,7 +35,8 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.6.12";
+const BRIDGE_VERSION = "0.7.0";
+const scrcpyMirror = require("./scrcpy-mirror");
 
 /** Preferred quick roots shown in UI (reads are not limited to these) */
 const ROOTS = [
@@ -3502,7 +3503,10 @@ async function handleApi(req, res, url) {
             "fs-zip",
             "app-backup-splits",
             "logcat-level",
+            "mirror",
+            "scrcpy-mirror",
           ],
+          mirror: scrcpyMirror.jarStatus(),
           adb: adbInfo,
           tools: hostTools.tools,
           signingOk: hostTools.signingOk,
@@ -3945,6 +3949,29 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    if (url.pathname === "/mirror/status" && req.method === "GET") {
+      const serial = url.searchParams.get("serial") || "";
+      const jar = scrcpyMirror.jarStatus();
+      const active = serial ? scrcpyMirror.sessions.has(serial) : [...scrcpyMirror.sessions.keys()];
+      sendJson(res, 200, { ok: true, jar, active, version: scrcpyMirror.SCRCPY_VERSION }, origin);
+      return;
+    }
+
+    if (url.pathname === "/mirror/prepare" && req.method === "POST") {
+      const jarPath = await scrcpyMirror.ensureServerJar();
+      sendJson(res, 200, { ok: true, jar: scrcpyMirror.jarStatus(), path: jarPath }, origin);
+      return;
+    }
+
+    if (url.pathname === "/mirror/stop" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req, 1024 * 1024));
+      const serial = String(body.serial || url.searchParams.get("serial") || "").trim();
+      if (!serial) throw new Error("缺少 serial");
+      const stopped = scrcpyMirror.stopSession(serial);
+      sendJson(res, 200, { ok: true, stopped }, origin);
+      return;
+    }
+
     if (url.pathname === "/jobs" && req.method === "GET") {
       const list = [...JOBS.values()]
         .sort((a, b) => b.createdAt - a.createdAt)
@@ -3998,6 +4025,21 @@ const server = http.createServer((req, res) => {
   handleApi(req, res, url);
 });
 
+server.on("upgrade", (req, socket, head) => {
+  const handled = scrcpyMirror.handleUpgrade(req, socket, head, {
+    host: HOST,
+    port: PORT,
+    token: TOKEN,
+    allowedOrigins: ALLOWED_ORIGINS,
+    adbPath: "adb",
+    adbSerial,
+  });
+  if (!handled) {
+    socket.write("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
+    socket.destroy();
+  }
+});
+
 function printBanner(activePort) {
   console.log("");
   console.log("========================================");
@@ -4005,7 +4047,7 @@ function printBanner(activePort) {
   console.log(` 版本: ${BRIDGE_VERSION}`);
   console.log(` 地址: http://${HOST}:${activePort}`);
   console.log(` Token: ${TOKEN}`);
-  console.log(" 能力: 文件 / 安装 / 应用 / 网络代理转发 / 开发者选项 / Logcat / 任务");
+  console.log(" 能力: 文件 / 安装 / 应用 / 镜像(scrcpy-server) / 网络代理转发 / 开发者选项 / Logcat / 任务");
   console.log(" 请保持此窗口打开，然后回到网页点击「连接」");
   if (activePort !== PORT) {
     console.log(` 注意: 默认端口 ${PORT} 被占用，已改用 ${activePort}`);
@@ -4056,6 +4098,11 @@ function listenWithFallback(startPort, maxTries = 12) {
 listenWithFallback(PORT);
 
 function cleanup() {
+  try {
+    scrcpyMirror.stopAll();
+  } catch {
+    /* ignore */
+  }
   try {
     fs.rmSync(TMP_ROOT, { recursive: true, force: true });
   } catch {

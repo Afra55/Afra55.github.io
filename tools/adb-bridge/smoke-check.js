@@ -118,12 +118,30 @@ async function main() {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
     }
 
-    if (health2.json?.version !== "0.6.12") {
-      throw new Error(`expected bridge version 0.6.12, got ${health2.json?.version}`);
+    if (health2.json?.version !== "0.7.0") {
+      throw new Error(`expected bridge version 0.7.0, got ${health2.json?.version}`);
     }
     if (!features.includes("local-pull")) throw new Error("health missing feature: local-pull");
-    for (const need of ["fs-zip", "app-backup-splits", "logcat-level"]) {
+    for (const need of ["fs-zip", "app-backup-splits", "logcat-level", "mirror", "scrcpy-mirror"]) {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
+    }
+
+    const mirrorStatus = await req("GET", "/mirror/status", { headers: { "X-Adb-Token": TOKEN } });
+    if (mirrorStatus.status !== 200 || !mirrorStatus.json?.ok) {
+      throw new Error(`mirror/status failed: ${mirrorStatus.status}`);
+    }
+    if (mirrorStatus.json?.version !== "3.1") {
+      throw new Error(`expected scrcpy server pin 3.1, got ${mirrorStatus.json?.version}`);
+    }
+    const prepared = await req("POST", "/mirror/prepare", {
+      headers: { "X-Adb-Token": TOKEN, "Content-Type": "application/json" },
+      body: "{}",
+    });
+    if (prepared.status !== 200 || !prepared.json?.ok) {
+      throw new Error(`mirror/prepare failed: ${prepared.text || prepared.status}`);
+    }
+    if (!prepared.json?.jar?.vendor && !prepared.json?.jar?.cached) {
+      throw new Error("mirror prepare did not locate scrcpy-server jar");
     }
 
     // Path alias expansion (mirrors server expandFsPathCandidates)

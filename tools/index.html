@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260816setuplink1" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260816setuplink1" />
+  <link rel="stylesheet" href="./style.css?v=20260816scrcpy1" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816scrcpy1" />
   <script>
     /* 尽早应用主题，减少闪烁 */
     (function () {
@@ -38,7 +38,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-setuplink1</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-scrcpy1</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="theme-open" title="切换站点主题">主题</button>
@@ -2083,7 +2083,7 @@ hello@world.org</textarea>
           <label for="adb-token">Token</label>
           <input id="adb-token" class="mono" type="text" value="devtools-adb" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Android Studio Device File Explorer）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.6.12），请解压到同一文件夹后运行启动脚本。</p>
+        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Android Studio Device File Explorer）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.7.0），请解压到同一文件夹后运行启动脚本。</p>
         <div class="adb-guide" id="adb-setup-guide">
           <strong>本机依赖怎么配？</strong>
           <ol>
@@ -2667,14 +2667,17 @@ hello@world.org</textarea>
             <div class="adb-tab-panel" data-adb-panel="input" hidden>
               <div class="label-row">
                 <h2 class="subhead">输入自动化</h2>
-                <span class="hint tight">预览图：单击 / 长按 / 双击 / 拖拽（单指）</span>
+                <span class="hint tight">镜像预览：单击 / 长按 / 双击 / 拖拽；可拖文件进手机</span>
               </div>
               <div class="adb-guide">
-                <strong>怎么用：</strong>先点「刷新屏幕预览」→ 在图上<strong>单击 / 长按 / 双击 / 拖拽</strong>。操作后会自动开启实时预览；可点「停止实时预览」。快捷键在预览上方。
+                <strong>怎么用：</strong>点「开始镜像」用本机桥内置 scrcpy-server 低延迟投屏（无需安装 Scrcpy 桌面端）。在画面上单击 / 长按 / 双击 / 拖拽遥控；可直接把文件拖到预览区推到手机 Download；预览内可录屏与推送剪贴板。
               </div>
               <div class="btn-row tool-actions">
-                <button type="button" class="primary-btn" id="adb-input-refresh-shot">刷新屏幕预览</button>
-                <button type="button" class="ghost-btn" id="adb-input-live-stop" hidden>停止实时预览</button>
+                <button type="button" class="primary-btn" id="adb-input-mirror-start">开始镜像</button>
+                <button type="button" class="ghost-btn" id="adb-input-live-stop" hidden>停止预览</button>
+                <button type="button" class="secondary-btn" id="adb-input-refresh-shot">截图刷新</button>
+                <button type="button" class="ghost-btn" id="adb-input-record-toggle">开始录屏</button>
+                <button type="button" class="ghost-btn" id="adb-input-clip-pc">推送电脑剪贴板</button>
               </div>
               <div class="btn-row tool-actions" style="margin-top:0.55rem">
                 <button type="button" class="ghost-btn" data-adb-key="BACK">返回</button>
@@ -2702,7 +2705,9 @@ hello@world.org</textarea>
                 <button type="button" class="ghost-btn" id="adb-input-shot-size-reset" title="恢复默认大小">默认</button>
               </div>
               <div class="adb-input-shot-wrap" id="adb-input-shot-wrap">
+                <canvas id="adb-input-mirror" class="adb-input-mirror" hidden aria-label="设备镜像预览"></canvas>
                 <img id="adb-input-canvas" alt="设备屏幕预览" hidden />
+                <div class="adb-input-drop-hint" id="adb-input-drop-hint" hidden>松开以推送到手机 Download</div>
               </div>
               <p class="hint tight" id="adb-input-live-meta" hidden style="margin-top:0.35rem">实时预览中…</p>
               <details class="adb-advanced" style="margin-top:0.85rem">
@@ -2740,7 +2745,7 @@ hello@world.org</textarea>
                   <button type="button" class="secondary-btn" id="adb-clip-run">推送到剪贴板</button>
                 </div>
               </div>
-              <p class="hint" id="adb-input-meta">单指：单击 / 长按 / 双击 / 拖拽。操作后自动实时预览。</p>
+              <p class="hint" id="adb-input-meta">镜像优先；不支持时回退截图轮询。拖文件到预览区 → /sdcard/Download。</p>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="media" hidden>
@@ -3472,19 +3477,19 @@ adb devices</pre>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./theme.js?v=20260816setuplink1"></script>
-  <script src="./temp.js?v=20260816setuplink1"></script>
+  <script src="./theme.js?v=20260816scrcpy1"></script>
+  <script src="./temp.js?v=20260816scrcpy1"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260816setuplink1"></script>
-  <script src="./about.js?v=20260816setuplink1"></script>
-  <script src="./extra.js?v=20260816setuplink1"></script>
-  <script src="./vtrim.js?v=20260816setuplink1"></script>
-  <script src="./audio.js?v=20260816setuplink1"></script>
-  <script src="./ffbridge.js?v=20260816setuplink1"></script>
-  <script src="./setup.js?v=20260816setuplink1"></script>
+  <script src="./app.js?v=20260816scrcpy1"></script>
+  <script src="./about.js?v=20260816scrcpy1"></script>
+  <script src="./extra.js?v=20260816scrcpy1"></script>
+  <script src="./vtrim.js?v=20260816scrcpy1"></script>
+  <script src="./audio.js?v=20260816scrcpy1"></script>
+  <script src="./ffbridge.js?v=20260816scrcpy1"></script>
+  <script src="./setup.js?v=20260816scrcpy1"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./textimg.js?v=20260816setuplink1"></script>
-  <script src="./imgtext.js?v=20260816setuplink1"></script>
-  <script src="./memo.js?v=20260816setuplink1"></script>
+  <script src="./textimg.js?v=20260816scrcpy1"></script>
+  <script src="./imgtext.js?v=20260816scrcpy1"></script>
+  <script src="./memo.js?v=20260816scrcpy1"></script>
 </body>
 </html>

@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.16-setuplink1";
+  const TOOLS_VERSION = "2026.08.16-scrcpy1";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -8443,6 +8443,13 @@
     let adbInputLiveTimer = 0;
     let adbInputRefreshBusy = false;
     let adbInputRefreshAfter = false;
+    let adbMirrorWs = null;
+    let adbMirrorDecoder = null;
+    let adbMirrorMeta = null;
+    let adbMirrorPendingConfig = null;
+    let adbMirrorStarting = false;
+    let adbInputRecordJobId = "";
+    let adbInputRecordPoll = 0;
     const ADB_STORE_INPUT_SHOT_VH = "devtools-adb-input-shot-vh";
     const ADB_INPUT_SHOT_VH_DEFAULT = 56;
     let adbTab = "info";
@@ -9768,6 +9775,12 @@
       const inputRefresh = $("#adb-input-refresh-shot");
       const inputLive = $("#adb-input-live-stop");
       const canInput = !health || bridgeHas("screencap") || bridgeHas("input") || bridgeAtLeast("0.6.8");
+      const canMirror = !health || bridgeHas("mirror") || bridgeHas("scrcpy-mirror") || bridgeAtLeast("0.7.0");
+      const mirrorBtn = $("#adb-input-mirror-start");
+      if (mirrorBtn) {
+        mirrorBtn.disabled = !canMirror && Boolean(health);
+        mirrorBtn.title = canMirror ? "" : "镜像需桥 ≥0.7.0（含 scrcpy-server）";
+      }
       if (inputRefresh) {
         inputRefresh.disabled = Boolean(health) && !canInput;
         inputRefresh.title = canInput ? "" : "当前桥版本过旧，请更新到 ≥0.6.8";
@@ -10171,9 +10184,13 @@
       };
       const cfg = map[platform];
       if (!cfg) throw new Error("未知平台");
-      const [serverJs, scriptRaw] = await Promise.all([
+      const [serverJs, mirrorJs, scriptRaw, serverJar] = await Promise.all([
         fetchTextAsset("./adb-bridge/server.js"),
+        fetchTextAsset("./adb-bridge/scrcpy-mirror.js").catch(() => ""),
         fetchTextAsset(cfg.scriptPath),
+        fetch("./adb-bridge/vendor/scrcpy-server-v3.1", { cache: "no-cache" })
+          .then(async (res) => (res.ok ? new Uint8Array(await res.arrayBuffer()) : null))
+          .catch(() => null),
       ]);
       // Windows cmd.exe is fragile with LF-only / UTF-8 Chinese .bat files.
       const scriptText =
@@ -10186,10 +10203,12 @@
         "",
         "本压缩包必须同时保留：",
         "  - server.js          （桥接服务，缺它会提示找不到 server.js）",
+        "  - scrcpy-mirror.js   （镜像模块，≥0.7.0）",
+        "  - vendor/scrcpy-server-v3.1  （可选；缺则首次镜像时自动下载）",
         "  - " + cfg.scriptName + "  （启动脚本）",
         "",
         "使用步骤：",
-        "1. 解压到任意文件夹（两个文件放在同一目录）",
+        "1. 解压到任意文件夹（保留 vendor 子目录）",
         "2. 本机已安装 Node.js 与 adb，并可用 adb devices",
         "3. " + cfg.runHint.replace(/\n/g, "\n   "),
         "4. 回到网页点击「连接本机桥」",
@@ -10202,10 +10221,13 @@
         "- 确认未重复打开多个桥（端口占用会自动换端口并提示）",
         "",
         "默认地址 http://127.0.0.1:17888  Token: devtools-adb",
+        "镜像：网页「输入自动化」→ 开始镜像（无需安装 Scrcpy 桌面端）",
         "",
       ].join("\n");
       const zip = new JSZip();
       zip.file("server.js", serverJs);
+      if (mirrorJs) zip.file("scrcpy-mirror.js", mirrorJs);
+      if (serverJar) zip.file("vendor/scrcpy-server-v3.1", serverJar);
       zip.file(cfg.scriptName, scriptText, {
         unixPermissions: platform === "win" ? undefined : 0o755,
       });
@@ -11014,16 +11036,262 @@
       toast(`已打包 ${arts.length} 个文件`);
     }
 
-    function adbCanvasCoords(img, clientX, clientY) {
-      const rect = img.getBoundingClientRect();
-      const nw = img.naturalWidth || 1;
-      const nh = img.naturalHeight || 1;
+    function adbCanvasCoords(el, clientX, clientY) {
+      const rect = el.getBoundingClientRect();
+      const nw =
+        Number(el.dataset?.deviceW) ||
+        el.naturalWidth ||
+        el.width ||
+        adbMirrorMeta?.width ||
+        1;
+      const nh =
+        Number(el.dataset?.deviceH) ||
+        el.naturalHeight ||
+        el.height ||
+        adbMirrorMeta?.height ||
+        1;
       const x = Math.round(((clientX - rect.left) / Math.max(rect.width, 1)) * nw);
       const y = Math.round(((clientY - rect.top) / Math.max(rect.height, 1)) * nh);
       return {
         x: Math.max(0, Math.min(nw - 1, x)),
         y: Math.max(0, Math.min(nh - 1, y)),
       };
+    }
+
+    function adbPreviewSurface() {
+      const mirror = $("#adb-input-mirror");
+      if (mirror && !mirror.hidden && mirror.width > 0) return mirror;
+      const img = $("#adb-input-canvas");
+      if (img && !img.hidden && img.naturalWidth) return img;
+      return mirror || img || null;
+    }
+
+    function codecStringFromConfig(bytes, codecName) {
+      if (codecName === "h265") return "hev1.1.6.L93.B0";
+      if (codecName === "av1") return "av01.0.04M.08";
+      const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+      if (u.length >= 4 && u[0] === 1) {
+        const p = u[1].toString(16).padStart(2, "0");
+        const c = u[2].toString(16).padStart(2, "0");
+        const l = u[3].toString(16).padStart(2, "0");
+        return `avc1.${p}${c}${l}`.toUpperCase().replace("AVC1", "avc1");
+      }
+      return "avc1.42E01E";
+    }
+
+    function concatBytes(a, b) {
+      const aa = a instanceof Uint8Array ? a : new Uint8Array(a);
+      const bb = b instanceof Uint8Array ? b : new Uint8Array(b);
+      const out = new Uint8Array(aa.length + bb.length);
+      out.set(aa, 0);
+      out.set(bb, aa.length);
+      return out;
+    }
+
+    function stopMirrorPreview({ notifyBridge = true } = {}) {
+      const serial = adbSelected;
+      if (adbMirrorWs) {
+        try {
+          adbMirrorWs.onclose = null;
+          adbMirrorWs.close();
+        } catch {
+          /* ignore */
+        }
+        adbMirrorWs = null;
+      }
+      if (adbMirrorDecoder) {
+        try {
+          adbMirrorDecoder.close();
+        } catch {
+          /* ignore */
+        }
+        adbMirrorDecoder = null;
+      }
+      adbMirrorPendingConfig = null;
+      const canvas = $("#adb-input-mirror");
+      if (canvas) canvas.hidden = true;
+      if (notifyBridge && serial) {
+        adbFetch("/mirror/stop", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ serial }),
+        }).catch(() => {});
+      }
+    }
+
+    function ensureMirrorDecoder(meta) {
+      const canvas = $("#adb-input-mirror");
+      if (!canvas) throw new Error("缺少镜像画布");
+      if (typeof VideoDecoder === "undefined") throw new Error("当前浏览器不支持 WebCodecs（请用较新的 Chrome / Edge）");
+      const ctx = canvas.getContext("2d", { alpha: false });
+      if (adbMirrorDecoder) {
+        try {
+          adbMirrorDecoder.close();
+        } catch {
+          /* ignore */
+        }
+      }
+      adbMirrorDecoder = new VideoDecoder({
+        output: (frame) => {
+          try {
+            if (canvas.width !== frame.displayWidth || canvas.height !== frame.displayHeight) {
+              canvas.width = frame.displayWidth;
+              canvas.height = frame.displayHeight;
+            }
+            ctx.drawImage(frame, 0, 0);
+          } finally {
+            frame.close();
+          }
+        },
+        error: (err) => {
+          const msg = err?.message || String(err);
+          if ($("#adb-input-meta")) $("#adb-input-meta").textContent = `解码错误：${msg}`;
+        },
+      });
+      canvas.dataset.deviceW = String(meta.width || 0);
+      canvas.dataset.deviceH = String(meta.height || 0);
+      canvas.width = meta.width || 720;
+      canvas.height = meta.height || 1280;
+      canvas.hidden = false;
+      const img = $("#adb-input-canvas");
+      if (img) img.hidden = true;
+      return adbMirrorDecoder;
+    }
+
+    async function startMirrorPreview() {
+      if (adbMirrorStarting) return;
+      if (adbMirrorWs && adbMirrorWs.readyState <= 1) return;
+      const serial = requireCurrentSerial();
+      if (typeof VideoDecoder === "undefined") {
+        toast("浏览器不支持 WebCodecs，已回退截图预览");
+        startInputLivePreview({ forceShot: true });
+        return;
+      }
+      adbMirrorStarting = true;
+      stopInputLivePreview({ keepMirror: true });
+      try {
+        try {
+          await adbFetch("/mirror/prepare", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+        } catch {
+          /* jar may already be vendored */
+        }
+        const base = adbBase().replace(/\/$/, "");
+        const wsUrl = `${base.replace(/^http/, "ws")}/mirror/ws?serial=${encodeURIComponent(serial)}&token=${encodeURIComponent(adbToken())}`;
+        await new Promise((resolve, reject) => {
+          let settled = false;
+          const ws = new WebSocket(wsUrl);
+          ws.binaryType = "arraybuffer";
+          adbMirrorWs = ws;
+          const fail = (msg) => {
+            if (settled) return;
+            settled = true;
+            stopMirrorPreview({ notifyBridge: true });
+            reject(new Error(msg));
+          };
+          ws.onopen = () => {
+            adbInputLive = true;
+            updateInputLiveUi();
+          };
+          ws.onerror = () => fail("镜像 WebSocket 连接失败");
+          ws.onclose = () => {
+            if (!settled) fail("镜像连接已关闭");
+            else {
+              adbMirrorWs = null;
+              if (adbInputLive) {
+                adbInputLive = false;
+                updateInputLiveUi();
+              }
+            }
+          };
+          ws.onmessage = (ev) => {
+            if (typeof ev.data === "string") {
+              let msg = null;
+              try {
+                msg = JSON.parse(ev.data);
+              } catch {
+                return;
+              }
+              if (msg.type === "error") {
+                fail(msg.error || "镜像错误");
+                return;
+              }
+              if (msg.type === "bye") {
+                if (!settled) fail(msg.reason || "镜像结束");
+                return;
+              }
+              if (msg.type === "hello") {
+                adbMirrorMeta = msg;
+                try {
+                  ensureMirrorDecoder(msg);
+                  if (!settled) {
+                    settled = true;
+                    resolve();
+                  }
+                  const meta = $("#adb-input-live-meta");
+                  if (meta) {
+                    meta.hidden = false;
+                    meta.textContent = `镜像中 · ${msg.codec || "h264"} · ${msg.width}×${msg.height} · ${msg.deviceName || serial}`;
+                  }
+                  if ($("#adb-input-meta")) {
+                    $("#adb-input-meta").textContent =
+                      "镜像预览中：单击 / 长按 / 双击 / 拖拽；拖文件到画面可 push 到 Download。";
+                  }
+                } catch (err) {
+                  fail(err.message || String(err));
+                }
+                return;
+              }
+              return;
+            }
+            const buf = new Uint8Array(ev.data);
+            if (buf.length < 5 || !adbMirrorDecoder || !adbMirrorMeta) return;
+            const flags = buf[0];
+            const pts = new DataView(buf.buffer, buf.byteOffset + 1, 4).getUint32(0);
+            const payload = buf.subarray(5);
+            const isConfig = (flags & 1) !== 0;
+            const isKey = (flags & 2) !== 0;
+            try {
+              if (isConfig) {
+                adbMirrorPendingConfig = payload.slice();
+                const codec = codecStringFromConfig(payload, adbMirrorMeta.codec);
+                const desc = payload[0] === 1 ? payload : undefined;
+                if (adbMirrorDecoder.state === "configured") {
+                  try {
+                    adbMirrorDecoder.reset();
+                  } catch {
+                    ensureMirrorDecoder(adbMirrorMeta);
+                  }
+                }
+                adbMirrorDecoder.configure({
+                  codec,
+                  codedWidth: adbMirrorMeta.width,
+                  codedHeight: adbMirrorMeta.height,
+                  optimizeForLatency: true,
+                  ...(desc ? { description: desc } : {}),
+                });
+                return;
+              }
+              if (adbMirrorDecoder.state !== "configured") return;
+              let data = payload;
+              if (isKey && adbMirrorPendingConfig && adbMirrorPendingConfig[0] !== 1) {
+                data = concatBytes(adbMirrorPendingConfig, payload);
+              }
+              if (adbMirrorDecoder.decodeQueueSize > 8) return;
+              adbMirrorDecoder.decode(
+                new EncodedVideoChunk({
+                  type: isKey ? "key" : "delta",
+                  timestamp: pts,
+                  data,
+                })
+              );
+            } catch (err) {
+              if ($("#adb-input-meta")) $("#adb-input-meta").textContent = `解码失败：${err.message || err}`;
+            }
+          };
+        });
+      } finally {
+        adbMirrorStarting = false;
+      }
     }
 
     async function refreshInputScreencap({ quiet = false } = {}) {
@@ -11042,8 +11310,14 @@
         adbInputShotUrl = URL.createObjectURL(blob);
         img.src = adbInputShotUrl;
         img.hidden = false;
+        const mirror = $("#adb-input-mirror");
+        if (mirror && adbMirrorWs) {
+          /* keep mirror on top while streaming */
+        } else if (mirror) {
+          mirror.hidden = true;
+        }
         if (!quiet && $("#adb-input-meta")) {
-          $("#adb-input-meta").textContent = "单指：单击 / 长按 / 双击 / 拖拽。操作后自动实时预览。";
+          $("#adb-input-meta").textContent = "截图预览：单击 / 长按 / 双击 / 拖拽。可点「开始镜像」低延迟投屏。";
         }
         if (!quiet) toast("已刷新屏幕预览");
       } finally {
@@ -11094,14 +11368,29 @@
     function updateInputLiveUi() {
       const stopBtn = $("#adb-input-live-stop");
       const meta = $("#adb-input-live-meta");
-      if (stopBtn) stopBtn.hidden = !adbInputLive;
-      if (meta) meta.hidden = !adbInputLive;
+      const mirroring = Boolean(adbMirrorWs && adbMirrorWs.readyState <= 1);
+      if (stopBtn) stopBtn.hidden = !adbInputLive && !mirroring;
+      if (meta) meta.hidden = !adbInputLive && !mirroring;
+      const recBtn = $("#adb-input-record-toggle");
+      if (recBtn) recBtn.textContent = adbInputRecordJobId ? "停止录屏" : "开始录屏";
     }
 
-    function startInputLivePreview() {
+    function startInputLivePreview({ forceShot = false } = {}) {
+      if (!forceShot && (bridgeHas("mirror") || bridgeHas("scrcpy-mirror") || bridgeAtLeast("0.7.0"))) {
+        startMirrorPreview().catch((err) => {
+          toast(err.message || "镜像失败，回退截图预览");
+          startInputLivePreview({ forceShot: true });
+        });
+        return;
+      }
       if (adbInputLiveTimer) return;
       adbInputLive = true;
       updateInputLiveUi();
+      const meta = $("#adb-input-live-meta");
+      if (meta) {
+        meta.hidden = false;
+        meta.textContent = "截图轮询预览中…";
+      }
       adbInputLiveTimer = setInterval(() => {
         if (adbTab !== "input" || !adbSelected) {
           stopInputLivePreview();
@@ -11111,25 +11400,127 @@
       }, 1200);
     }
 
-    function stopInputLivePreview() {
+    function stopInputLivePreview({ keepMirror = false } = {}) {
       if (adbInputLiveTimer) {
         clearInterval(adbInputLiveTimer);
         adbInputLiveTimer = 0;
       }
+      if (!keepMirror) stopMirrorPreview({ notifyBridge: true });
       adbInputLive = false;
       updateInputLiveUi();
     }
 
     function afterInputPreviewAction() {
       if (!adbSelected) return;
+      if (adbMirrorWs && adbMirrorWs.readyState === 1) return;
       setTimeout(() => {
         if (adbTab !== "input") return;
         refreshInputScreencap({ quiet: true })
           .catch(() => {})
           .finally(() => {
-            if (adbTab === "input") startInputLivePreview();
+            if (adbTab !== "input") return;
+            if (adbMirrorWs && adbMirrorWs.readyState <= 1) return;
+            if (!adbInputLiveTimer) startInputLivePreview({ forceShot: true });
           });
       }, 350);
+    }
+
+    function updateInputRecordUi() {
+      updateInputLiveUi();
+    }
+
+    async function toggleInputRecord() {
+      const serial = requireCurrentSerial();
+      if (adbInputRecordJobId) {
+        try {
+          await cancelAdbJob(adbInputRecordJobId);
+        } catch (err) {
+          setError(adbError, err.message || String(err));
+        }
+        adbInputRecordJobId = "";
+        if (adbInputRecordPoll) {
+          clearInterval(adbInputRecordPoll);
+          adbInputRecordPoll = 0;
+        }
+        updateInputRecordUi();
+        toast("已请求停止录屏");
+        return;
+      }
+      const data = await adbFetch("/media/record", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serial, seconds: 0 }),
+      });
+      const job = data.job;
+      adbInputRecordJobId = job?.id || "";
+      updateInputRecordUi();
+      toast("预览内录屏已开始，再点一次停止");
+      if (job) await trackJob(job);
+      adbInputRecordPoll = setInterval(async () => {
+        try {
+          await refreshJobs({ silent: true });
+          const j = adbJobs.find((x) => x.id === adbInputRecordJobId);
+          if (!j || ["done", "completed", "success", "error", "cancelled"].includes(j.status)) {
+            adbInputRecordJobId = "";
+            clearInterval(adbInputRecordPoll);
+            adbInputRecordPoll = 0;
+            updateInputRecordUi();
+          }
+        } catch {
+          /* ignore */
+        }
+      }, 2000);
+    }
+
+    async function pushPcClipboard() {
+      const serial = requireCurrentSerial();
+      let text = "";
+      try {
+        text = await navigator.clipboard.readText();
+      } catch {
+        throw new Error("无法读取电脑剪贴板（请允许站点剪贴板权限）");
+      }
+      if (!String(text || "").trim()) throw new Error("电脑剪贴板为空");
+      if ($("#adb-clip-text")) $("#adb-clip-text").value = text;
+      await adbFetch("/clipboard", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ serial, text }),
+      });
+      toast("已推送电脑剪贴板到手机");
+    }
+
+    async function pushFilesToDeviceDownload(files) {
+      const serial = requireCurrentSerial();
+      const list = [...(files || [])].filter(Boolean);
+      if (!list.length) return;
+      const remoteDir = "/sdcard/Download";
+      let ok = 0;
+      let fail = 0;
+      for (const file of list) {
+        const name = file.name || `file-${Date.now()}`;
+        try {
+          const url = `${adbBase()}/fs/upload?serial=${encodeURIComponent(serial)}&path=${encodeURIComponent(remoteDir)}&name=${encodeURIComponent(name)}`;
+          const res = await fetch(url, {
+            method: "POST",
+            headers: {
+              "X-Adb-Token": adbToken(),
+              "Content-Type": "application/octet-stream",
+              "X-Filename": encodeURIComponent(name),
+            },
+            body: file,
+          });
+          if (!res.ok) {
+            const text = await res.text();
+            throw new Error(text || `HTTP ${res.status}`);
+          }
+          ok += 1;
+        } catch (err) {
+          fail += 1;
+          console.warn("push drop failed", name, err);
+        }
+      }
+      toast(fail ? `已推送 ${ok} 个到 Download，失败 ${fail}` : `已推送 ${ok} 个到 /sdcard/Download`);
     }
 
     function updateRecordTip() {
@@ -12382,9 +12773,20 @@
     $("#adb-input-refresh-shot")?.addEventListener("click", () =>
       refreshInputScreencap().catch((err) => setError(adbError, err.message || String(err)))
     );
+    $("#adb-input-mirror-start")?.addEventListener("click", () => {
+      startMirrorPreview()
+        .then(() => toast("镜像已开始"))
+        .catch((err) => setError(adbError, err.message || String(err)));
+    });
     $("#adb-input-live-stop")?.addEventListener("click", () => {
       stopInputLivePreview();
-      toast("已停止实时预览");
+      toast("已停止预览");
+    });
+    $("#adb-input-record-toggle")?.addEventListener("click", () => {
+      toggleInputRecord().catch((err) => setError(adbError, err.message || String(err)));
+    });
+    $("#adb-input-clip-pc")?.addEventListener("click", () => {
+      pushPcClipboard().catch((err) => setError(adbError, err.message || String(err)));
     });
     {
       const sizeEl = $("#adb-input-shot-size");
@@ -12397,7 +12799,7 @@
       restoreInputShotSize();
     }
     {
-      const canvas = $("#adb-input-canvas");
+      const wrap = $("#adb-input-shot-wrap");
       const LONG_MS = 520;
       const DOUBLE_MS = 320;
       const MOVE_THRESH = 10;
@@ -12421,11 +12823,18 @@
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ serial: requireCurrentSerial(), ...body }),
         });
+      const surfaceReady = (el) => {
+        if (!el) return false;
+        if (el.tagName === "CANVAS") return el.width > 0 && !el.hidden;
+        return Boolean(el.naturalWidth) && !el.hidden;
+      };
 
-      canvas?.addEventListener("pointerdown", (e) => {
-        if (!canvas.naturalWidth) return;
-        canvas.setPointerCapture?.(e.pointerId);
-        const pt = adbCanvasCoords(canvas, e.clientX, e.clientY);
+      wrap?.addEventListener("pointerdown", (e) => {
+        if (e.target?.closest?.(".adb-input-drop-hint")) return;
+        const surface = adbPreviewSurface();
+        if (!surfaceReady(surface)) return;
+        surface.setPointerCapture?.(e.pointerId);
+        const pt = adbCanvasCoords(surface, e.clientX, e.clientY);
         const now = Date.now();
         let asDouble = false;
         if (
@@ -12471,22 +12880,26 @@
         }
         e.preventDefault();
       });
-      canvas?.addEventListener("pointermove", (e) => {
+      wrap?.addEventListener("pointermove", (e) => {
         if (!drag || drag.pointerId !== e.pointerId) return;
-        const pt = adbCanvasCoords(canvas, e.clientX, e.clientY);
+        const surface = adbPreviewSurface();
+        if (!surfaceReady(surface)) return;
+        const pt = adbCanvasCoords(surface, e.clientX, e.clientY);
         if (Math.abs(pt.x - drag.x) + Math.abs(pt.y - drag.y) > MOVE_THRESH) {
           drag.moved = true;
           clearLongTimer();
         }
       });
-      canvas?.addEventListener("pointerup", async (e) => {
+      wrap?.addEventListener("pointerup", async (e) => {
         if (!drag || drag.pointerId !== e.pointerId) return;
         const start = drag;
         drag = null;
         clearLongTimer();
         if (start.fired === "longpress") return;
+        const surface = adbPreviewSurface();
+        if (!surfaceReady(surface)) return;
         try {
-          const end = adbCanvasCoords(canvas, e.clientX, e.clientY);
+          const end = adbCanvasCoords(surface, e.clientX, e.clientY);
           if (start.moved) {
             clearPendingTap();
             await sendInput({
@@ -12531,9 +12944,37 @@
           setError(adbError, err.message || String(err));
         }
       });
-      canvas?.addEventListener("pointercancel", () => {
+      wrap?.addEventListener("pointercancel", () => {
         clearLongTimer();
         drag = null;
+      });
+
+      const dropHint = $("#adb-input-drop-hint");
+      const hasFiles = (dt) => dt && [...(dt.types || [])].includes("Files");
+      wrap?.addEventListener("dragenter", (e) => {
+        if (!hasFiles(e.dataTransfer)) return;
+        e.preventDefault();
+        wrap.classList.add("is-drop-target");
+        if (dropHint) dropHint.hidden = false;
+      });
+      wrap?.addEventListener("dragover", (e) => {
+        if (!hasFiles(e.dataTransfer)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        wrap.classList.add("is-drop-target");
+        if (dropHint) dropHint.hidden = false;
+      });
+      wrap?.addEventListener("dragleave", (e) => {
+        if (e.target !== wrap && wrap.contains(e.relatedTarget)) return;
+        wrap.classList.remove("is-drop-target");
+        if (dropHint) dropHint.hidden = true;
+      });
+      wrap?.addEventListener("drop", (e) => {
+        e.preventDefault();
+        wrap.classList.remove("is-drop-target");
+        if (dropHint) dropHint.hidden = true;
+        const files = e.dataTransfer?.files;
+        pushFilesToDeviceDownload(files).catch((err) => setError(adbError, err.message || String(err)));
       });
     }
     updateRecordTip();

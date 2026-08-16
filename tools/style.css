@@ -3570,7 +3570,13 @@ body.vsplit-fs-open {
   margin-top: 0.4rem;
 }
 
-.adb-input-shot-wrap img {
+.adb-input-shot-wrap.is-drop-target {
+  outline: 2px dashed var(--accent, #2ec4b6);
+  outline-offset: 2px;
+}
+
+.adb-input-shot-wrap img,
+.adb-input-shot-wrap canvas.adb-input-mirror {
   display: block;
   max-width: 100%;
   max-height: calc(var(--adb-input-shot-vh) * 1vh);
@@ -3579,6 +3585,22 @@ body.vsplit-fs-open {
   object-fit: contain;
   touch-action: none;
   cursor: crosshair;
+  user-select: none;
+}
+
+.adb-input-drop-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.75rem;
+  text-align: center;
+  font-size: 0.92rem;
+  color: #fff;
+  background: rgba(12, 24, 40, 0.72);
+  pointer-events: none;
+  z-index: 2;
 }
 
 .adb-fs-dual {
