@@ -18,6 +18,7 @@
   const SAVE_CHUNK = 1024 * 1024;
   const UNDO_MS = 8000;
   const VIRTUAL_MIN = 64;
+  const TEXT_PREVIEW_MAX = 4000;
   const CARD_EST_DEFAULT = 210;
   const CARD_EST_BY_TYPE = {
     text: 200,
@@ -313,9 +314,10 @@
     testShareUi: false,
     cardHeightCache: new Map(),
     shareFilesCapable: null, // null=未探测, true/false
-    hashIndex: new Map(), // contentHash -> itemId
+    hashIndex: new Map(), // contentHash -> item ref
     tagMap: new Map(), // tagId -> tag
     countCache: null, // { total, untagged, byTag:Map, byType }
+    filterCache: { key: "", items: null },
     persistTimer: 0,
     persistWaiters: [],
   };
@@ -677,6 +679,15 @@
 
   function invalidateCountCache() {
     state.countCache = null;
+    invalidateFilterCache();
+  }
+
+  function invalidateFilterCache() {
+    state.filterCache = { key: "", items: null };
+  }
+
+  function filterCacheKey(type, tagId, query) {
+    return `${type || "all"}|${tagId || "all"}|${String(query || "").trim().toLowerCase()}`;
   }
 
   function ensureCountCache() {
@@ -752,7 +763,13 @@
   }
 
   function visibleItems() {
-    return filterItems();
+    const key = filterCacheKey(state.activeType, state.activeTagId, state.searchQuery);
+    if (state.filterCache.key === key && Array.isArray(state.filterCache.items)) {
+      return state.filterCache.items;
+    }
+    const items = filterItems();
+    state.filterCache = { key, items };
+    return items;
   }
 
   function canDragReorder() {
@@ -833,12 +850,12 @@
   }
 
   function rememberHash(item) {
-    if (item?.contentHash && item?.id) state.hashIndex.set(item.contentHash, item.id);
+    if (item?.contentHash) state.hashIndex.set(item.contentHash, item);
   }
 
   function forgetHash(item) {
     if (!item?.contentHash) return;
-    if (state.hashIndex.get(item.contentHash) === item.id) state.hashIndex.delete(item.contentHash);
+    if (state.hashIndex.get(item.contentHash) === item) state.hashIndex.delete(item.contentHash);
   }
 
   function rebuildHashIndex() {
@@ -847,18 +864,10 @@
   }
 
   function findDuplicateBySig(coarseSig, contentHash) {
-    // contentHash：Map O(1)；无 hash 的旧条目才走线性粗匹配
+    // contentHash：Map O(1) 存条目引用；无 hash 的旧条目才走线性粗匹配
     if (contentHash) {
-      const id = state.hashIndex.get(contentHash);
-      if (id) {
-        const byMap = state.index.items.find((it) => it.id === id);
-        if (byMap) return byMap;
-      }
-      const byHash = state.index.items.find((it) => it.contentHash && it.contentHash === contentHash);
-      if (byHash) {
-        rememberHash(byHash);
-        return byHash;
-      }
+      const byMap = state.hashIndex.get(contentHash);
+      if (byMap) return byMap;
     }
     if (!coarseSig || coarseSig === "text:" || /^bin:\w+:0:/.test(coarseSig)) return null;
     for (const it of state.index.items) {
@@ -872,6 +881,12 @@
       }
     }
     return null;
+  }
+
+  function clipTextPreview(text) {
+    const s = String(text || "");
+    if (s.length <= TEXT_PREVIEW_MAX) return s;
+    return `${s.slice(0, TEXT_PREVIEW_MAX)}…`;
   }
 
   async function bumpItemToFront(item) {
@@ -1019,18 +1034,73 @@
     const cache = ensureCountCache();
     const tags = state.index.tags || [];
     const bits = [
-      `<button type="button" class="memo-tag-item${state.activeTagId === "all" ? " is-active" : ""}" data-memo-tag="all" draggable="false">全部<span class="mono memo-tag-count">${cache.total}</span></button>`,
+      `<div class="memo-tag-row"><button type="button" class="memo-tag-item${state.activeTagId === "all" ? " is-active" : ""}" data-memo-tag="all" draggable="false">全部<span class="mono memo-tag-count">${cache.total}</span></button></div>`,
     ];
     for (let i = 0; i < tags.length; i++) {
       const t = tags[i];
       const count = t.id === DEFAULT_TAG_ID ? cache.untagged : cache.byTag.get(t.id) || 0;
       const label = t.id === DEFAULT_TAG_ID ? "默认（未分类）" : t.name;
+      const canDel = t.id !== DEFAULT_TAG_ID;
+      const delBtn = canDel
+        ? `<button type="button" class="ghost-btn memo-tag-del" data-memo-tag-del="${escapeHtml(t.id)}" title="删除标签（不删条目）" aria-label="删除标签 ${escapeHtml(label)}">删除</button>`
+        : "";
       bits.push(
-        `<button type="button" class="memo-tag-item${state.activeTagId === t.id ? " is-active" : ""}" data-memo-tag="${escapeHtml(t.id)}" draggable="${t.id !== DEFAULT_TAG_ID ? "true" : "false"}">${escapeHtml(label)}<span class="mono memo-tag-count">${count}</span></button>`
+        `<div class="memo-tag-row${state.activeTagId === t.id ? " is-active-row" : ""}">
+          <button type="button" class="memo-tag-item${state.activeTagId === t.id ? " is-active" : ""}" data-memo-tag="${escapeHtml(t.id)}" draggable="${canDel ? "true" : "false"}">${escapeHtml(label)}<span class="mono memo-tag-count">${count}</span></button>
+          ${delBtn}
+        </div>`
       );
     }
     tagList.innerHTML = bits.join("");
     syncTagsToggle();
+  }
+
+  async function deleteTag(tagId) {
+    if (!tagId || tagId === DEFAULT_TAG_ID || tagId === "all") {
+      toast("默认标签不能删除");
+      return;
+    }
+    const tag = tagById(tagId);
+    if (!tag) {
+      toast("标签不存在");
+      return;
+    }
+    const linked = state.index.items.filter((it) => customTagIds(it).includes(tagId)).length;
+    const ok = window.confirm(
+      linked
+        ? `删除标签「${tag.name}」？\n不会删除任何条目，只会去掉该标签。\n若条目因此没有其它自定义标签，会回到「默认」。\n当前约有 ${linked} 条关联。`
+        : `删除标签「${tag.name}」？\n不会删除任何条目。`
+    );
+    if (!ok) return;
+
+    for (const it of state.index.items) {
+      if (!Array.isArray(it.tagIds) || !it.tagIds.includes(tagId)) continue;
+      it.tagIds = it.tagIds.filter((id) => id !== tagId);
+      ensureTagMembership(it);
+      it.updatedAt = Date.now();
+    }
+    state.index.tags = state.index.tags.filter((t) => t.id !== tagId);
+    if (state.activeTagId === tagId) state.activeTagId = "all";
+    reindexOrders();
+    rebuildTagMap();
+    invalidateCountCache();
+    await persistIndex({ immediate: true });
+    renderAll();
+    toast(`已删除标签「${tag.name}」`);
+  }
+
+  async function removeTagFromItem(itemId, tagId) {
+    const item = state.index.items.find((x) => x.id === itemId);
+    if (!item || !tagId || tagId === DEFAULT_TAG_ID) return;
+    if (!item.tagIds?.includes(tagId)) return;
+    item.tagIds = item.tagIds.filter((id) => id !== tagId);
+    ensureTagMembership(item);
+    item.updatedAt = Date.now();
+    invalidateCountCache();
+    await persistIndex({ immediate: true });
+    renderAll();
+    const name = tagById(tagId)?.name || "标签";
+    toast(`已从条目移除「${name}」`);
   }
 
   function syncTagsToggle() {
@@ -1052,9 +1122,14 @@
     const checked = state.selected.has(item.id) ? "checked" : "";
     const tags = (item.tagIds || [])
       .filter((id) => id !== DEFAULT_TAG_ID)
-      .map((id) => tagById(id)?.name || id)
-      .filter(Boolean);
-    const tagHtml = tags.map((n) => `<span class="memo-chip">${escapeHtml(n)}</span>`).join("");
+      .map((id) => ({ id, name: tagById(id)?.name || id }))
+      .filter((t) => t.name);
+    const tagHtml = tags
+      .map(
+        (t) =>
+          `<button type="button" class="memo-chip" data-memo-chip-rm="${item.id}" data-memo-chip-tag="${escapeHtml(t.id)}" title="点此移除标签">${escapeHtml(t.name)} ×</button>`
+      )
+      .join("");
     const title = escapeHtml(item.name || item.type || "条目");
     const time = formatTime(item.createdAt);
     const size = formatBytes(item.size || 0);
@@ -1500,7 +1575,7 @@
         mime: blob.type || "",
         size: blob.size || 0,
         fileName,
-        textPreview: type === "text" ? textPreview : "",
+        textPreview: type === "text" ? clipTextPreview(textPreview) : "",
         contentHash: contentHash || undefined,
       };
       state.index.items.unshift(item);
@@ -1617,7 +1692,7 @@
     }
     await withBusy(async () => {
       const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
-      item.textPreview = body;
+      item.textPreview = clipTextPreview(body);
       item.updatedAt = Date.now();
       item.size = blob.size;
       item.mime = "text/plain;charset=utf-8";
@@ -2627,10 +2702,19 @@
   });
 
   tagList?.addEventListener("click", (e) => {
+    const delBtn = e.target.closest?.("[data-memo-tag-del]");
+    if (delBtn) {
+      e.preventDefault();
+      e.stopPropagation();
+      const id = delBtn.dataset.memoTagDel;
+      deleteTag(id).catch((err) => setError(memoError, err.message || String(err)));
+      return;
+    }
     const btn = e.target.closest("[data-memo-tag]");
     if (!btn) return;
     state.activeTagId = btn.dataset.memoTag;
     resetListPaging();
+    invalidateFilterCache();
     if (window.matchMedia("(max-width: 900px)").matches) {
       $("#memo-tags-aside")?.classList.remove("is-open");
     }
@@ -2820,6 +2904,13 @@
       const tagAddId = t.closest?.("[data-memo-tag-add]")?.dataset?.memoTagAdd;
       if (tagAddId) {
         openTagDialog(tagAddId);
+        return;
+      }
+      const chipRm = t.closest?.("[data-memo-chip-rm]");
+      if (chipRm) {
+        const itemId = chipRm.dataset.memoChipRm;
+        const tagId = chipRm.dataset.memoChipTag;
+        await removeTagFromItem(itemId, tagId);
         return;
       }
     } catch (err) {

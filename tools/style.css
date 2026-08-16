@@ -5048,6 +5048,29 @@ button.adb-device-body.linkish {
   overflow: auto;
 }
 
+.memo-tag-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.memo-tag-row .memo-tag-item {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.memo-tag-del {
+  flex: 0 0 auto;
+  padding: 0.28rem 0.45rem;
+  font-size: 0.78rem;
+  opacity: 0.72;
+}
+
+.memo-tag-del:hover {
+  opacity: 1;
+}
+
 .memo-tag-item {
   appearance: none;
   border: 1px solid transparent;
@@ -5424,14 +5447,23 @@ button.adb-device-body.linkish {
 }
 
 .memo-chip {
+  appearance: none;
   display: inline-flex;
   align-items: center;
+  gap: 0.2rem;
   padding: 0.12rem 0.45rem;
   border-radius: 999px;
   border: 1px solid rgba(46, 196, 182, 0.28);
   background: rgba(46, 196, 182, 0.1);
+  font: inherit;
   font-size: 0.75rem;
   color: #c9f7f1;
+  cursor: pointer;
+}
+
+.memo-chip:hover {
+  border-color: rgba(46, 196, 182, 0.55);
+  background: rgba(46, 196, 182, 0.18);
 }
 
 .memo-card-actions {
@@ -5751,6 +5783,10 @@ button.adb-device-body.linkish {
     gap: 0.3rem;
   }
 
+  .memo-tag-row {
+    flex: 0 0 auto;
+  }
+
   .memo-tag-item {
     flex: 0 0 auto;
     padding: 0.32rem 0.5rem;
@@ -5758,6 +5794,10 @@ button.adb-device-body.linkish {
     border-radius: 10px;
     border-color: var(--line);
     background: rgba(8, 14, 26, 0.35);
+  }
+
+  .memo-tag-del {
+    padding: 0.28rem 0.4rem;
   }
 
   .memo-tag-item .memo-tag-count {

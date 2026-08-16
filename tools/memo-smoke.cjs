@@ -428,9 +428,32 @@ async function main() {
       out.tagLeavesDefault.defaultViewHidesTagged = !document.querySelector(`.memo-card[data-memo-id="${firstId}"]`);
       document.querySelector('.memo-tag-item[data-memo-tag="all"]')?.click();
       await sleep(80);
+
+      // delete tag without deleting items; item returns to default
+      out.tagDelete = {
+        hasDelBtn: Boolean(document.querySelector(`[data-memo-tag-del="${workTag.id}"]`)),
+      };
+      const prevConfirm = window.confirm;
+      window.confirm = () => true;
+      document.querySelector(`[data-memo-tag-del="${workTag.id}"]`)?.click();
+      await sleep(250);
+      window.confirm = prevConfirm;
+      const afterDel = (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === firstId);
+      out.tagDelete.tagGone = !(window.DevToolsMemo.getIndex().tags || []).some((t) => t.id === workTag.id);
+      out.tagDelete.itemKept = Boolean(afterDel);
+      out.tagDelete.backToDefault =
+        Boolean(afterDel) &&
+        (afterDel.tagIds || []).includes("default") &&
+        !(afterDel.tagIds || []).includes(workTag.id);
     } else {
       out.tagLeavesDefault = { hasWork: false, noDefault: false, defaultViewHidesTagged: false };
+      out.tagDelete = { hasDelBtn: false, tagGone: false, itemKept: false, backToDefault: false };
     }
+
+    out.cacheBust = {
+      version: document.getElementById("site-tools-version")?.textContent || "",
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260816memo22/.test(s.src)),
+    };
 
     return out;
   });
@@ -527,6 +550,12 @@ async function main() {
   }
   if (!result.tagLeavesDefault?.defaultViewHidesTagged) {
     failed.push("default tag view should hide tagged items");
+  }
+  if (!result.tagDelete?.hasDelBtn || !result.tagDelete?.tagGone || !result.tagDelete?.itemKept || !result.tagDelete?.backToDefault) {
+    failed.push("tag delete should unbind items back to default without removing files");
+  }
+  if (!/memo22/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memo22");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");
