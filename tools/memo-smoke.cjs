@@ -165,6 +165,11 @@ async function main() {
       hasFs: Boolean(document.getElementById("memo-preview-fs")),
       hasFrame: Boolean(document.getElementById("memo-lightbox-frame")),
     };
+    out.exportMerged = {
+      hasExport: Boolean(document.getElementById("memo-export")),
+      noShareBtn: !document.getElementById("memo-share"),
+      exportLabel: document.getElementById("memo-export")?.textContent || "",
+    };
 
     // open image preview
     const openBtn = document.querySelector('[data-memo-open]');
@@ -199,6 +204,12 @@ async function main() {
     failed.push("preview media controls missing");
   }
   if (!result.preview?.opened || !result.preview?.closed) failed.push("preview open/close failed");
+  if (!result.exportMerged?.hasExport || !result.exportMerged?.noShareBtn) {
+    failed.push("export/share should be a single button");
+  }
+  if (!/^导出/.test(result.exportMerged?.exportLabel || "")) {
+    failed.push(`unexpected export label: ${result.exportMerged?.exportLabel}`);
+  }
 
   console.log(JSON.stringify({ ok: failed.length === 0, result, failed }, null, 2));
   if (failed.length) process.exit(1);
