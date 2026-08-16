@@ -54,7 +54,11 @@
     return window.matchMedia("(max-width: 900px), (pointer: coarse)").matches;
   }
 
-  /** 分享落地到关于总览，便于对方一眼看到全部工具 */
+  /** 分享落地到关于页；标题要让对方一眼知道这是什么站 */
+  const SHARE_SITE_TITLE = "DevTools · 本地实用小工具合集";
+  const SHARE_SITE_TEXT =
+    "时间戳、颜色、JSON、备忘录、GIF/视频、ADB 等 · 浏览器本地处理，数据不上传。打开即可用：";
+
   function shareUrl() {
     try {
       const u = new URL(location.href);
@@ -69,8 +73,8 @@
   function sharePayload() {
     const url = shareUrl();
     return {
-      title: "DevTools · 实用小工具",
-      text: "本地开发小工具合集：时间戳、颜色、JSON、备忘录、媒体、ADB 等，数据不上传。",
+      title: SHARE_SITE_TITLE,
+      text: SHARE_SITE_TEXT,
       url,
     };
   }
@@ -116,25 +120,38 @@
       urlEl.textContent = data.url;
     }
 
+    // 微信等会抓取当前 document.title，而不一定用 share() 的 title
+    const prevTitle = document.title;
+    document.title = data.title;
+    const restoreTitle = () => {
+      try {
+        document.title = prevTitle;
+      } catch (_) {}
+    };
+
     if (typeof navigator.share === "function") {
       try {
         // 优先带 url；部分 WebView 只接受 text
         if (!navigator.canShare || navigator.canShare(data)) {
           await navigator.share(data);
+          restoreTitle();
           toast("已打开系统分享");
           return;
         }
       } catch (err) {
         if (err && (err.name === "AbortError" || /abort|cancel|取消/i.test(String(err.message || "")))) {
+          restoreTitle();
           toast("已取消分享");
           return;
         }
         try {
           await navigator.share({ title: data.title, text: `${data.text}\n${data.url}` });
+          restoreTitle();
           toast("已打开系统分享");
           return;
         } catch (err2) {
           if (err2 && (err2.name === "AbortError" || /abort|cancel|取消/i.test(String(err2.message || "")))) {
+            restoreTitle();
             toast("已取消分享");
             return;
           }
@@ -142,6 +159,7 @@
       }
     }
 
+    restoreTitle();
     await copyShareLink();
     if (!isLikelyMobile()) toast("当前环境不支持系统分享，已复制链接");
   }

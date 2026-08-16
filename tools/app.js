@@ -876,7 +876,7 @@
     markdown: { name: "Markdown", aliases: ["md", "预览"] },
     memo: { name: "备忘录", aliases: ["笔记", "剪贴板", "memo", "note", "便签"] },
     adb: { name: "ADB 工具", aliases: ["安卓", "android", "设备"] },
-    about: { name: "关于 / 总览", aliases: ["about", "介绍", "目录", "主题", "帮助"] },
+    about: { name: "实用小工具合集", aliases: ["about", "介绍", "目录", "主题", "帮助", "总览", "关于"] },
   };
   const DEFAULT_ORDER = TOOL_GROUPS.flatMap((g) => g.tools);
 
@@ -1225,13 +1225,16 @@
     }
 
     const title =
-      currentTool === "media"
-        ? `${toolName("media")} · ${
-            currentMediaTab === "vsplit" ? "视频切分" : currentMediaTab === "vbb" ? "一键黑盒" : "GIF"
-          }`
-        : toolName(currentTool);
+      currentTool === "about"
+        ? "实用小工具合集"
+        : currentTool === "media"
+          ? `${toolName("media")} · ${
+              currentMediaTab === "vsplit" ? "视频切分" : currentMediaTab === "vbb" ? "一键黑盒" : "GIF"
+            }`
+          : toolName(currentTool);
     if (workspaceTitle) workspaceTitle.textContent = title;
-    document.title = `${title} · DevTools`;
+    document.title =
+      currentTool === "about" ? "DevTools · 本地实用小工具合集" : `${title} · DevTools`;
 
     getNavLinks().forEach((link) => {
       link.classList.toggle("is-active", link.dataset.tool === currentTool);
