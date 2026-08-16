@@ -6,8 +6,70 @@
 
   const BASE_KEY = "devtools-ffmpeg-base";
   const TOKEN_KEY = "devtools-ffmpeg-token";
+  const OP_KEY = "devtools-ffmpeg-op";
   const DEFAULT_BASE = "http://127.0.0.1:17889";
   const DEFAULT_TOKEN = "devtools-ffmpeg";
+
+  /** 离线兜底目录（桥未连上时仍可渲染表单） */
+  const FALLBACK_OPS = [
+    {
+      id: "extract-audio",
+      label: "抽音频",
+      group: "音频",
+      desc: "从视频/音频抽出或转出音轨",
+      accept: "media",
+      fields: [
+        {
+          key: "format",
+          type: "select",
+          label: "格式",
+          options: [
+            { value: "mp3", label: "MP3" },
+            { value: "m4a", label: "M4A/AAC" },
+            { value: "wav", label: "WAV" },
+            { value: "flac", label: "FLAC" },
+            { value: "ogg", label: "OGG" },
+          ],
+          default: "mp3",
+        },
+        {
+          key: "bitrate",
+          type: "select",
+          label: "码率",
+          options: [
+            { value: "128k", label: "128k" },
+            { value: "192k", label: "192k" },
+            { value: "256k", label: "256k" },
+            { value: "320k", label: "320k" },
+          ],
+          default: "192k",
+        },
+      ],
+    },
+    {
+      id: "convert",
+      label: "转封装/转码",
+      group: "视频",
+      desc: "MP4 / WebM / MKV / MOV",
+      accept: "video",
+      fields: [
+        {
+          key: "preset",
+          type: "select",
+          label: "预设",
+          options: [
+            { value: "mp4-fast", label: "MP4 快速" },
+            { value: "mp4-hq", label: "MP4 高清" },
+            { value: "mp4-copy", label: "MP4 流拷贝" },
+            { value: "webm", label: "WebM VP9" },
+            { value: "mkv", label: "MKV" },
+            { value: "mov", label: "MOV" },
+          ],
+          default: "mp4-fast",
+        },
+      ],
+    },
+  ];
 
   const panel = $("#ffbridge");
   if (!panel) return;
@@ -35,28 +97,30 @@
   const modeActions = $("#ff-mode-actions");
   const bridgePanel = $("#ff-bridge-panel");
   const headDesc = $("#ff-head-desc");
+  const opSelect = $("#ff-op");
+  const opOptsEl = $("#ff-op-opts");
+  const opDescEl = $("#ff-op-desc");
+  const probeOut = $("#ff-probe-out");
 
   let connected = false;
   let cwd = "";
   let entries = [];
   /** @type {Set<string>} */
   const selected = new Set();
-  let taskType = "extract-audio";
-  let audioFmt = "mp3";
-  let convertPreset = "mp4-fast";
+  /** @type {any[]} */
+  let opsCatalog = FALLBACK_OPS.slice();
+  let currentOpId = "extract-audio";
   let pollTimer = 0;
   let waitPollTimer = 0;
 
-  /** 手机/平板通常无法跑本机 Node 桥；电脑才是桥的更优场景 */
   function isLikelyBridgeHost() {
     const ua = navigator.userAgent || "";
     if (/Android|iPhone|iPod|Mobile/i.test(ua)) return false;
-    // iPadOS 13+ 可能伪装成 Mac，再用触控+窄屏辅助判断
     const coarse = window.matchMedia("(pointer: coarse)").matches;
     const narrow = window.matchMedia("(max-width: 900px)").matches;
     if (/iPad|tablet/i.test(ua) || (coarse && narrow && !/Windows|Macintosh|Linux/i.test(ua))) return false;
     if (/Macintosh/i.test(ua) && coarse && typeof navigator.maxTouchPoints === "number" && navigator.maxTouchPoints > 1) {
-      return false; // iPad 桌面模式
+      return false;
     }
     return true;
   }
@@ -97,7 +161,7 @@
 
     if (headDesc) {
       headDesc.innerHTML = host
-        ? `电脑更优：连本机桥用系统 FFmpeg 批量处理。没连上时，用网页 <a href="#media/audio">音频处理</a> / <a href="#media/vtrim">视频修剪</a> 保底。<a href="#setup">安装指南</a>`
+        ? `电脑更优：连本机桥用系统 FFmpeg 批量处理（抽音频、转码、压缩、GIF、拼接等）。没连上时，用网页 <a href="#media/audio">音频处理</a> / <a href="#media/vtrim">视频修剪</a> 保底。<a href="#setup">安装指南</a>`
         : `手机无法运行本机桥，请直接用网页内 FFmpeg：<a href="#media/audio">音频处理</a>、<a href="#media/vtrim">视频修剪</a>。电脑批量再回来用桥。`;
     }
 
@@ -111,7 +175,7 @@
         if (workspace) workspace.hidden = true;
       } else if (connected) {
         modeTitle.textContent = "已走更优路径：本机 FFmpeg 桥";
-        modeText.textContent = "批量抽音频 / 转码请在下方选择文件。若只想随手剪一段，仍可用网页工具。";
+        modeText.textContent = `已加载 ${opsCatalog.length} 项批量操作。勾选文件后选操作即可。`;
         modeActions.innerHTML = `
           <a class="ghost-btn" href="#media/audio">网页保底·音频</a>
           <a class="ghost-btn" href="#media/vtrim">网页保底·修剪</a>
@@ -121,9 +185,7 @@
         modeTitle.textContent = "电脑推荐：本机桥（未连接）";
         modeText.textContent =
           "批量、大文件优先下载并连接本机桥。若暂时没装或连不上，先用网页 FFmpeg 保底处理少量文件。";
-        modeActions.innerHTML = `
-          ${webFallbackLinksHtml()}
-        `;
+        modeActions.innerHTML = `${webFallbackLinksHtml()}`;
         if (bridgePanel) bridgePanel.hidden = false;
       }
     }
@@ -161,8 +223,10 @@
     try {
       const b = localStorage.getItem(BASE_KEY);
       const t = localStorage.getItem(TOKEN_KEY);
+      const op = localStorage.getItem(OP_KEY);
       if (b && baseInput) baseInput.value = b;
       if (t && tokenInput) tokenInput.value = t;
+      if (op) currentOpId = op;
     } catch (_) {}
   }
 
@@ -170,6 +234,7 @@
     try {
       localStorage.setItem(BASE_KEY, baseInput?.value?.trim() || DEFAULT_BASE);
       localStorage.setItem(TOKEN_KEY, tokenInput?.value?.trim() || DEFAULT_TOKEN);
+      localStorage.setItem(OP_KEY, currentOpId);
     } catch (_) {}
   }
 
@@ -221,12 +286,94 @@
     return `${(x / (1024 * 1024)).toFixed(2)} MB`;
   }
 
-  function syncTaskUi() {
-    $$("[data-ff-task]").forEach((b) => b.classList.toggle("is-active", b.dataset.ffTask === taskType));
-    const audioSeg = $("#ff-audio-fmt-seg");
-    const convSeg = $("#ff-convert-preset-seg");
-    if (audioSeg) audioSeg.hidden = taskType !== "extract-audio";
-    if (convSeg) convSeg.hidden = taskType !== "convert";
+  function formatDur(sec) {
+    const s = Math.max(0, Number(sec) || 0);
+    const m = Math.floor(s / 60);
+    const r = (s % 60).toFixed(1);
+    return m > 0 ? `${m}:${String(Math.floor(s % 60)).padStart(2, "0")}.${String(r).split(".")[1] || "0"}` : `${s.toFixed(1)}s`;
+  }
+
+  function currentOp() {
+    return opsCatalog.find((o) => o.id === currentOpId) || opsCatalog[0] || FALLBACK_OPS[0];
+  }
+
+  function renderOpSelect() {
+    if (!opSelect) return;
+    const groups = new Map();
+    opsCatalog.forEach((op) => {
+      const g = op.group || "其他";
+      if (!groups.has(g)) groups.set(g, []);
+      groups.get(g).push(op);
+    });
+    const parts = [];
+    for (const [g, list] of groups) {
+      parts.push(`<optgroup label="${escapeAttr(g)}">`);
+      list.forEach((op) => {
+        parts.push(`<option value="${escapeAttr(op.id)}">${escapeHtml(op.label)}</option>`);
+      });
+      parts.push(`</optgroup>`);
+    }
+    opSelect.innerHTML = parts.join("");
+    if (!opsCatalog.some((o) => o.id === currentOpId)) currentOpId = opsCatalog[0]?.id || "extract-audio";
+    opSelect.value = currentOpId;
+    renderOpOpts();
+  }
+
+  function renderOpOpts() {
+    const op = currentOp();
+    if (opDescEl) opDescEl.textContent = op?.desc || "选择操作后填写参数";
+    if (!opOptsEl) return;
+    const fields = Array.isArray(op?.fields) ? op.fields : [];
+    if (!fields.length) {
+      opOptsEl.innerHTML = `<p class="hint tight">此操作无需额外参数</p>`;
+      return;
+    }
+    opOptsEl.innerHTML = fields
+      .map((f) => {
+        const id = `ff-opt-${escapeAttr(f.key)}`;
+        const label = `<label for="${id}">${escapeHtml(f.label || f.key)}</label>`;
+        if (f.type === "select") {
+          const opts = (f.options || [])
+            .map((o) => {
+              const v = typeof o === "string" ? o : o.value;
+              const lab = typeof o === "string" ? o : o.label || o.value;
+              const sel = String(v) === String(f.default) ? " selected" : "";
+              return `<option value="${escapeAttr(v)}"${sel}>${escapeHtml(lab)}</option>`;
+            })
+            .join("");
+          return `<div class="ff-opt-field">${label}<select id="${id}" class="mono select-input" data-ff-opt="${escapeAttr(
+            f.key
+          )}">${opts}</select></div>`;
+        }
+        if (f.type === "text") {
+          return `<div class="ff-opt-field ff-opt-wide">${label}<input id="${id}" class="mono" type="text" data-ff-opt="${escapeAttr(
+            f.key
+          )}" value="${escapeAttr(f.default ?? "")}" spellcheck="false" /></div>`;
+        }
+        const min = f.min != null ? ` min="${f.min}"` : "";
+        const max = f.max != null ? ` max="${f.max}"` : "";
+        const step = f.step != null ? ` step="${f.step}"` : "";
+        return `<div class="ff-opt-field">${label}<input id="${id}" class="mono" type="number" data-ff-opt="${escapeAttr(
+          f.key
+        )}" value="${escapeAttr(f.default ?? 0)}"${min}${max}${step} /></div>`;
+      })
+      .join("");
+  }
+
+  function readOpOptions() {
+    const out = {};
+    if (!opOptsEl) return out;
+    opOptsEl.querySelectorAll("[data-ff-opt]").forEach((el) => {
+      const key = el.getAttribute("data-ff-opt");
+      if (!key) return;
+      if (el.type === "number") {
+        const n = Number(el.value);
+        out[key] = Number.isFinite(n) ? n : el.value;
+      } else {
+        out[key] = el.value;
+      }
+    });
+    return out;
   }
 
   function syncSelMeta() {
@@ -347,6 +494,7 @@
       .map((job) => {
         const pct = Math.round((Number(job.progress) || 0) * 100);
         const canCancel = job.status === "queued" || job.status === "running";
+        const label = job.meta?.opLabel || job.type;
         const out = job.meta?.outDir ? `<div class="hint tight mono">输出：${escapeHtml(job.meta.outDir)}</div>` : "";
         const arts = (job.artifacts || [])
           .slice(0, 5)
@@ -354,7 +502,7 @@
           .join("、");
         return `<div class="adb-job">
           <div class="label-row">
-            <strong class="mono">${escapeHtml(job.type)} · ${escapeHtml(job.id)}</strong>
+            <strong class="mono">${escapeHtml(label)} · ${escapeHtml(job.id)}</strong>
             <span class="hint tight">${escapeHtml(job.status)} · ${pct}%</span>
           </div>
           <p class="hint tight">${escapeHtml(job.message || "")}</p>
@@ -392,6 +540,18 @@
     }, 1500);
   }
 
+  async function loadOpsCatalog() {
+    try {
+      const data = await ffFetch("/ops");
+      if (Array.isArray(data.ops) && data.ops.length) {
+        opsCatalog = data.ops;
+        renderOpSelect();
+      }
+    } catch (_) {
+      /* keep fallback */
+    }
+  }
+
   async function connectBridge({ fromPoll = false } = {}) {
     savePrefs();
     setError("");
@@ -402,7 +562,7 @@
         toolsProbe.hidden = false;
         toolsProbe.textContent = `桥 v${health.version || "?"} · ffmpeg ${
           ffOk ? health.ffmpeg.version || "ok" : "未找到"
-        } · ffprobe ${health.ffprobe?.ok ? "ok" : "缺"}`;
+        } · ffprobe ${health.ffprobe?.ok ? "ok" : "缺"} · ops ${Array.isArray(health.features) ? health.features.length : "?"}`;
       }
       if (!ffOk) {
         connected = false;
@@ -417,6 +577,7 @@
       if (refreshBtn) refreshBtn.disabled = false;
       setStatus("is-ok", "已连接本机 FFmpeg 桥", `更优路径已就绪 · Token 已配置`);
       renderRoots(health.roots || []);
+      await loadOpsCatalog();
       const home = health.roots?.[0]?.path || "";
       if (home) await openPath(home);
       await refreshJobs();
@@ -517,7 +678,6 @@
         "",
       ].join("\r\n");
       zip.file("start-ffmpeg-bridge.cmd", wrapper);
-      // also include original start-win.cmd pattern name used by readme
     }
     zip.file(platform === "win" ? "README.txt" : "使用说明.txt", readme);
     const blob = await zip.generateAsync({ type: "blob" });
@@ -533,10 +693,26 @@
     startWaitPoll();
   }
 
+  function outDirHintForOp(opId) {
+    const map = {
+      "extract-audio": "audio_out",
+      "audio-convert": "audio_out",
+      volume: "audio_out",
+      loudnorm: "audio_out",
+      mono: "audio_out",
+      "denoise-audio": "audio_out",
+      gif: "gif_out",
+      thumb: "thumbs_out",
+      frames: "frames_out",
+      concat: "merge_out",
+    };
+    return map[opId] || "ff_out";
+  }
+
   async function runTask() {
     setError("");
     if (!selected.size) {
-      setError("请先勾选视频文件或文件夹");
+      setError("请先勾选文件或文件夹");
       return;
     }
     const outDir = String(outdirInput?.value || "").trim();
@@ -544,40 +720,84 @@
       setError("请填写输出目录");
       return;
     }
+    const op = currentOp();
     const body = {
+      op: op.id,
       paths: [...selected],
       outDir,
       recursive: Boolean($("#ff-recursive")?.checked),
       createOutDir: Boolean($("#ff-mkdir")?.checked),
       overwrite: Boolean($("#ff-overwrite")?.checked),
+      ...readOpOptions(),
     };
-    let path = "/jobs/extract-audio";
-    if (taskType === "extract-audio") {
-      body.format = audioFmt;
-      body.bitrate = "192k";
-    } else {
-      path = "/jobs/convert";
-      body.preset = convertPreset;
-    }
     try {
-      const data = await ffFetch(path, { method: "POST", body });
-      toast(`任务已排队 · ${data.job?.meta?.count || selected.size} 个输入`);
+      const data = await ffFetch("/jobs/run", { method: "POST", body });
+      toast(`任务已排队 · ${data.job?.meta?.count || selected.size} 个输入 · ${op.label}`);
       await refreshJobs();
     } catch (err) {
       setError(err.message || String(err));
     }
   }
 
+  async function probeSelected() {
+    setError("");
+    if (!selected.size) {
+      setError("请先勾选要探测的文件");
+      return;
+    }
+    const paths = [...selected].slice(0, 20);
+    try {
+      const data = await ffFetch("/probe/batch", { method: "POST", body: { paths } });
+      const lines = (data.items || []).map((it) => {
+        if (!it.ok) return `${it.path || "?"} · 失败：${it.error || "?"}`;
+        const v = it.video ? `${it.video.width}x${it.video.height} ${it.video.codec || ""}` : "无视频";
+        const a = it.audio ? `${it.audio.codec || ""} ${it.audio.sampleRate || ""}Hz` : "无音频";
+        return `${it.name} · ${formatDur(it.duration)} · ${formatSize(it.size)} · ${v} · ${a}`;
+      });
+      if (probeOut) {
+        probeOut.hidden = false;
+        probeOut.textContent = lines.join("\n");
+      }
+      toast(`已探测 ${lines.length} 项`);
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  }
+
+  function selectCurrentPageMedia() {
+    const op = currentOp();
+    const accept = op?.accept || "video";
+    entries.forEach((ent) => {
+      if (ent.type !== "file") return;
+      const ok =
+        accept === "audio"
+          ? ent.kind === "audio"
+          : accept === "media"
+            ? ent.kind === "video" || ent.kind === "audio"
+            : ent.kind === "video";
+      if (ok) selected.add(joinPath(cwd, ent.name));
+    });
+    syncSelMeta();
+    renderList();
+  }
+
   // events
   loadPrefs();
-  syncTaskUi();
+  renderOpSelect();
   syncSelMeta();
+
+  opSelect?.addEventListener("change", () => {
+    currentOpId = opSelect.value;
+    savePrefs();
+    renderOpOpts();
+  });
 
   connectBtn?.addEventListener("click", () => connectBridge());
   refreshBtn?.addEventListener("click", async () => {
     try {
       await openPath(cwd || pathInput?.value || "");
       await refreshJobs();
+      await loadOpsCatalog();
     } catch (err) {
       setError(err.message || String(err));
     }
@@ -598,13 +818,9 @@
       openPath(pathInput.value).catch((err) => setError(err.message || String(err)));
     }
   });
-  $("#ff-select-videos")?.addEventListener("click", () => {
-    entries.forEach((ent) => {
-      if (ent.type === "file" && ent.kind === "video") selected.add(joinPath(cwd, ent.name));
-    });
-    syncSelMeta();
-    renderList();
-  });
+  $("#ff-select-videos")?.addEventListener("click", () => selectCurrentPageMedia());
+  const selBtn = $("#ff-select-videos");
+  if (selBtn) selBtn.textContent = "勾选当前页媒体";
   $("#ff-clear-sel")?.addEventListener("click", () => {
     selected.clear();
     syncSelMeta();
@@ -612,31 +828,11 @@
   });
   $("#ff-outdir-here")?.addEventListener("click", () => {
     if (!cwd || !outdirInput) return;
-    const sub = taskType === "convert" ? "convert_out" : "audio_out";
-    outdirInput.value = joinPath(cwd, sub);
+    outdirInput.value = joinPath(cwd, outDirHintForOp(currentOpId));
   });
   $("#ff-run")?.addEventListener("click", () => runTask());
+  $("#ff-probe-sel")?.addEventListener("click", () => probeSelected());
   $("#ff-jobs-refresh")?.addEventListener("click", () => refreshJobs().catch((err) => setError(err.message || String(err))));
-
-  $$("[data-ff-task]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      taskType = btn.dataset.ffTask === "convert" ? "convert" : "extract-audio";
-      syncTaskUi();
-    });
-  });
-  $$("[data-ff-audio-fmt]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const f = btn.dataset.ffAudioFmt;
-      audioFmt = f === "m4a" || f === "wav" ? f : "mp3";
-      $$("[data-ff-audio-fmt]").forEach((b) => b.classList.toggle("is-active", b.dataset.ffAudioFmt === audioFmt));
-    });
-  });
-  $$("[data-ff-preset]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      convertPreset = btn.dataset.ffPreset || "mp4-fast";
-      $$("[data-ff-preset]").forEach((b) => b.classList.toggle("is-active", b.dataset.ffPreset === convertPreset));
-    });
-  });
 
   ["mac", "win", "linux"].forEach((platform) => {
     $(`#ff-dl-${platform}`)?.addEventListener("click", () => {
@@ -647,7 +843,6 @@
     });
   });
 
-  // highlight download for current OS
   const ua = navigator.userAgent || "";
   if (/Windows/i.test(ua)) {
     $("#ff-dl-win")?.classList.add("primary-btn");

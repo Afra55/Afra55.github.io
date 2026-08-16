@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260816ffadapt1" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260816ffadapt1" />
+  <link rel="stylesheet" href="./style.css?v=20260816fffull1" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816fffull1" />
   <script>
     /* 尽早应用主题，减少闪烁 */
     (function () {
@@ -38,7 +38,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-ffadapt1</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-fffull1</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="theme-open" title="切换站点主题">主题</button>
@@ -2835,36 +2835,25 @@ hello@world.org</textarea>
           </div>
           <div class="ff-fs-list adb-fs-list" id="ff-fs-list" role="list"></div>
           <div class="btn-row tool-actions" style="margin-top:0.55rem;flex-wrap:wrap">
-            <button type="button" class="secondary-btn" id="ff-select-videos">勾选当前页视频</button>
+            <button type="button" class="secondary-btn" id="ff-select-videos">勾选当前页媒体</button>
             <button type="button" class="ghost-btn" id="ff-clear-sel">清空已选</button>
             <span class="hint tight mono" id="ff-sel-meta">已选 0</span>
           </div>
-          <p class="hint tight">也可勾选文件夹：任务会扫描其中的视频（可开「含子目录」）。</p>
+          <p class="hint tight">也可勾选文件夹：任务会按当前操作扫描其中的视频/音频（可开「含子目录」）。</p>
 
           <div class="label-row" style="margin-top:1.1rem">
             <h2 class="subhead">批量任务</h2>
-            <span class="hint tight">输出到本机目录</span>
+            <span class="hint tight" id="ff-op-desc">选择操作后填写参数</span>
           </div>
           <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.45rem">
-            <span class="seg" role="group" aria-label="任务类型">
-              <button type="button" class="seg-btn is-active" data-ff-task="extract-audio">抽音频</button>
-              <button type="button" class="seg-btn" data-ff-task="convert">转视频</button>
-            </span>
-            <span class="seg" id="ff-audio-fmt-seg" role="group" aria-label="音频格式">
-              <button type="button" class="seg-btn is-active" data-ff-audio-fmt="mp3">MP3</button>
-              <button type="button" class="seg-btn" data-ff-audio-fmt="m4a">M4A</button>
-              <button type="button" class="seg-btn" data-ff-audio-fmt="wav">WAV</button>
-            </span>
-            <span class="seg" id="ff-convert-preset-seg" role="group" aria-label="转码预设" hidden>
-              <button type="button" class="seg-btn is-active" data-ff-preset="mp4-fast">MP4 快速</button>
-              <button type="button" class="seg-btn" data-ff-preset="mp4-hq">MP4 清晰</button>
-              <button type="button" class="seg-btn" data-ff-preset="webm">WebM</button>
-            </span>
+            <label for="ff-op">操作</label>
+            <select id="ff-op" class="mono select-input" style="min-width:12rem"></select>
           </div>
+          <div id="ff-op-opts" class="ff-op-opts" style="margin-top:0.55rem"></div>
           <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
             <label for="ff-outdir">输出目录</label>
-            <input id="ff-outdir" class="mono" type="text" placeholder="例如 /Users/你/Movies/audio_out" spellcheck="false" autocomplete="off" style="flex:1;min-width:12rem" />
-            <button type="button" class="ghost-btn" id="ff-outdir-here" title="用当前浏览目录下的 audio_out / convert_out">用当前目录子文件夹</button>
+            <input id="ff-outdir" class="mono" type="text" placeholder="例如 /Users/你/Movies/ff_out" spellcheck="false" autocomplete="off" style="flex:1;min-width:12rem" />
+            <button type="button" class="ghost-btn" id="ff-outdir-here" title="用当前浏览目录下的子文件夹">用当前目录子文件夹</button>
           </div>
           <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.75rem">
             <label class="flag"><input type="checkbox" id="ff-recursive" /> 含子目录</label>
@@ -2873,8 +2862,10 @@ hello@world.org</textarea>
           </div>
           <div class="btn-row tool-actions" style="margin-top:0.65rem">
             <button type="button" class="primary-btn" id="ff-run">开始任务</button>
+            <button type="button" class="ghost-btn" id="ff-probe-sel">探测已选</button>
             <button type="button" class="ghost-btn" id="ff-jobs-refresh">刷新任务</button>
           </div>
+          <pre class="mono adb-pre" id="ff-probe-out" hidden style="margin-top:0.55rem;max-height:10rem;overflow:auto"></pre>
           <div class="adb-jobs-list" id="ff-jobs-list" aria-live="polite" style="margin-top:0.75rem"></div>
           <p class="error" id="ff-error" hidden></p>
         </div>
@@ -3479,19 +3470,19 @@ adb devices</pre>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./theme.js?v=20260816ffadapt1"></script>
-  <script src="./temp.js?v=20260816ffadapt1"></script>
+  <script src="./theme.js?v=20260816fffull1"></script>
+  <script src="./temp.js?v=20260816fffull1"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260816ffadapt1"></script>
-  <script src="./about.js?v=20260816ffadapt1"></script>
-  <script src="./extra.js?v=20260816ffadapt1"></script>
-  <script src="./vtrim.js?v=20260816ffadapt1"></script>
-  <script src="./audio.js?v=20260816ffadapt1"></script>
-  <script src="./ffbridge.js?v=20260816ffadapt1"></script>
-  <script src="./setup.js?v=20260816ffadapt1"></script>
+  <script src="./app.js?v=20260816fffull1"></script>
+  <script src="./about.js?v=20260816fffull1"></script>
+  <script src="./extra.js?v=20260816fffull1"></script>
+  <script src="./vtrim.js?v=20260816fffull1"></script>
+  <script src="./audio.js?v=20260816fffull1"></script>
+  <script src="./ffbridge.js?v=20260816fffull1"></script>
+  <script src="./setup.js?v=20260816fffull1"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./textimg.js?v=20260816ffadapt1"></script>
-  <script src="./imgtext.js?v=20260816ffadapt1"></script>
-  <script src="./memo.js?v=20260816ffadapt1"></script>
+  <script src="./textimg.js?v=20260816fffull1"></script>
+  <script src="./imgtext.js?v=20260816fffull1"></script>
+  <script src="./memo.js?v=20260816fffull1"></script>
 </body>
 </html>
