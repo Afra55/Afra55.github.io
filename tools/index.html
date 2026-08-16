@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260816memo9" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo9" />
+  <link rel="stylesheet" href="./style.css?v=20260816memo10" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo10" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo9</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo10</span>
       </div>
       <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
@@ -990,6 +990,7 @@ hello@world.org</textarea>
                 <button type="button" class="secondary-btn" id="memo-to-image">文字转图片…</button>
                 <button type="button" class="ghost-btn" id="memo-read-clip">读取剪贴板</button>
               </div>
+              <p class="hint tight">获焦自动读取可在条目区右侧开关（默认关）。GIF 动图会单独归类。</p>
             </div>
 
             <dialog class="memo-dialog memo-toimg-dlg" id="memo-toimg" aria-label="文字转图片">
@@ -1169,10 +1170,23 @@ hello@world.org</textarea>
               <h2 class="subhead">条目</h2>
               <label class="flag"><input type="checkbox" id="memo-select-all" /> 全选</label>
             </div>
+            <div class="memo-list-tools">
+              <label class="memo-search-lab" for="memo-search">
+                <span class="visually-hidden">搜索备忘录</span>
+                <input id="memo-search" class="mono memo-search" type="search" placeholder="搜索文件名 / 正文…" autocomplete="off" enterkeyhint="search" />
+              </label>
+              <label class="flag memo-autoclip-flag" title="需浏览器剪贴板权限；相同内容不会重复添加">
+                <input type="checkbox" id="memo-autoclip" /> 获焦自动读剪贴板
+              </label>
+            </div>
             <div class="memo-type-filter" id="memo-type-filter" aria-label="按类型筛选"></div>
+            <p class="hint tight mono" id="memo-list-meta" hidden></p>
             <div class="memo-drop" id="memo-drop">
-              <p class="hint tight">拖拽文件到此处添加 · 最新在上 · 按类型分组 · 可拖拽排序</p>
+              <p class="hint tight">拖拽文件到此处添加 · 最新在上 · 可拖拽排序 · 大量条目会分页加载</p>
               <div class="memo-list" id="memo-list"></div>
+              <div class="btn-row tool-actions memo-more-row" id="memo-more-row" hidden>
+                <button type="button" class="secondary-btn" id="memo-load-more">加载更多</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1185,6 +1199,7 @@ hello@world.org</textarea>
               <legend>类型</legend>
               <label class="flag"><input type="checkbox" name="kind" value="text" checked /> 文本</label>
               <label class="flag"><input type="checkbox" name="kind" value="image" checked /> 图片</label>
+              <label class="flag"><input type="checkbox" name="kind" value="gif" checked /> 动图</label>
               <label class="flag"><input type="checkbox" name="kind" value="video" checked /> 视频</label>
               <label class="flag"><input type="checkbox" name="kind" value="audio" checked /> 音频</label>
               <label class="flag"><input type="checkbox" name="kind" value="file" checked /> 其它文件</label>
@@ -2712,11 +2727,11 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./temp.js?v=20260816memo9"></script>
+  <script src="./temp.js?v=20260816memo10"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260816memo9"></script>
-  <script src="./extra.js?v=20260816memo9"></script>
+  <script src="./app.js?v=20260816memo10"></script>
+  <script src="./extra.js?v=20260816memo10"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./memo.js?v=20260816memo9"></script>
+  <script src="./memo.js?v=20260816memo10"></script>
 </body>
 </html>

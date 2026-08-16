@@ -272,6 +272,52 @@ async function main() {
     document.querySelector('#memo-type-filter [data-memo-type="all"]')?.click();
     await sleep(80);
 
+    // search + autoclip + gif type
+    const search = document.getElementById("memo-search");
+    out.searchUi = {
+      hasSearch: Boolean(search),
+      hasAutoclip: Boolean(document.getElementById("memo-autoclip")),
+      autoclipDefaultOff: document.getElementById("memo-autoclip") ? !document.getElementById("memo-autoclip").checked : false,
+      hasGifChip: Boolean(document.querySelector('#memo-type-filter [data-memo-type="gif"]')),
+      hasLoadMore: Boolean(document.getElementById("memo-load-more")),
+    };
+    if (search) {
+      search.value = "冒烟测试文本";
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+      await sleep(250);
+      out.searchUi.hitText = [...document.querySelectorAll(".memo-card")].length >= 1;
+      out.searchUi.onlyTextish = [...document.querySelectorAll(".memo-card")].every((c) => {
+        const id = c.dataset.memoId;
+        const it = (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === id);
+        return it && (it.type === "text" || (it.name || "").includes("冒烟") || (it.textPreview || "").includes("冒烟"));
+      });
+      search.value = "";
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+      await sleep(250);
+    }
+    // add gif file
+    const gifBytes = Uint8Array.from(atob("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"), (c) => c.charCodeAt(0));
+    const gifFile = new File([gifBytes], "smoke.gif", { type: "image/gif" });
+    const dt2 = new DataTransfer();
+    dt2.items.add(gifFile);
+    const input2 = document.getElementById("memo-file");
+    input2.files = dt2.files;
+    input2.dispatchEvent(new Event("change", { bubbles: true }));
+    await sleep(500);
+    out.searchUi.gifTyped = (window.DevToolsMemo.getIndex().items || []).some((it) => it.type === "gif");
+    document.querySelector('#memo-type-filter [data-memo-type="gif"]')?.click();
+    await sleep(80);
+    out.searchUi.gifFilter =
+      [...document.querySelectorAll(".memo-card")].length >= 1 &&
+      [...document.querySelectorAll(".memo-card")].every((c) => {
+        const id = c.dataset.memoId;
+        const it = (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === id);
+        return it?.type === "gif";
+      });
+    out.searchUi.gifBadge = Boolean(document.querySelector(".memo-anim-badge"));
+    document.querySelector('#memo-type-filter [data-memo-type="all"]')?.click();
+    await sleep(80);
+
     // tagged item leaves default (untagged) bucket
     const firstId = (window.DevToolsMemo.getIndex().items || [])[0]?.id;
     const workTag = (window.DevToolsMemo.getIndex().tags || []).find((t) => t.name === "工作");
@@ -340,7 +386,7 @@ async function main() {
   if (!result.toImgAbsorb?.hasChrome || !result.toImgAbsorb?.hasLines) {
     failed.push("carbon window/line-number missing");
   }
-  if (!result.typeFilter?.host || (result.typeFilter?.chips || 0) < 6) {
+  if (!result.typeFilter?.host || (result.typeFilter?.chips || 0) < 7) {
     failed.push("type filter chips missing");
   }
   if ((result.typeFilter?.groups || 0) < 1) failed.push("type groups missing in all view");
@@ -350,6 +396,14 @@ async function main() {
   }
   if (!result.tagLeavesDefault?.defaultViewHidesTagged) {
     failed.push("default tag view should hide tagged items");
+  }
+  if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
+    failed.push("search/autoclip UI missing or autoclip not default-off");
+  }
+  if (!result.searchUi?.hasGifChip) failed.push("gif type chip missing");
+  if (!result.searchUi?.hitText || !result.searchUi?.onlyTextish) failed.push("content search failed");
+  if (!result.searchUi?.gifTyped || !result.searchUi?.gifFilter || !result.searchUi?.gifBadge) {
+    failed.push("gif typing/filter/badge failed");
   }
 
   console.log(JSON.stringify({ ok: failed.length === 0, result, failed }, null, 2));

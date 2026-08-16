@@ -12,6 +12,16 @@
   const BLOBS_DIR = "blobs";
   const DEFAULT_TAG_ID = "default";
   const META_KEY = "meta";
+  const PAGE_SIZE = 36;
+  const AUTOCLIP_KEY = "devtools-memo-autoclip-v1";
+
+  function isGifLike(mime, name) {
+    const m = String(mime || "").toLowerCase();
+    const n = String(name || "").toLowerCase();
+    if (m === "image/gif" || m === "image/apng") return true;
+    if (/\.(gif|apng)$/.test(n)) return true;
+    return false;
+  }
 
   function toast(msg) {
     const el = $("#toast");
@@ -119,6 +129,9 @@
       // 有自定义标签则不属于默认；无标签才归默认
       it.tagIds = custom.length ? custom : [DEFAULT_TAG_ID];
       if (it.order == null) it.order = i;
+      // 历史图片中的 GIF/APNG 归入动图
+      if (it.type === "image" && isGifLike(it.mime, it.name || it.fileName)) it.type = "gif";
+      if (!it.type) it.type = detectKind(it.mime, it.name || it.fileName);
     });
     items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     return {
@@ -132,8 +145,9 @@
   function detectKind(mime, name) {
     const m = String(mime || "").toLowerCase();
     const n = String(name || "").toLowerCase();
-    if (m.startsWith("image/") || /\.(png|jpe?g|gif|webp|bmp|svg)$/.test(n)) return "image";
-    if (m.startsWith("video/") || /\.(mp4|webm|mov|m4v|mkv)$/.test(n)) return "video";
+    if (isGifLike(m, n)) return "gif";
+    if (m.startsWith("image/") || /\.(png|jpe?g|webp|bmp|svg|heic|avif)$/.test(n)) return "image";
+    if (m.startsWith("video/") || /\.(mp4|webm|mov|m4v|mkv|avi)$/.test(n)) return "video";
     if (m.startsWith("audio/") || /\.(mp3|wav|ogg|m4a|aac|flac)$/.test(n)) return "audio";
     if (m.startsWith("text/") || m === "application/json" || /\.(txt|md|json|csv|log)$/.test(n)) return "text";
     return "file";
@@ -261,7 +275,10 @@
     dirPending: false,
     index: emptyIndex(),
     activeTagId: "all",
-    activeType: "all", // all | text | image | video | audio | file
+    activeType: "all", // all | text | image | gif | video | audio | file
+    searchQuery: "",
+    listLimit: PAGE_SIZE,
+    autoClip: false,
     selected: new Set(),
     bgImageUrl: "",
     bgImageBlob: null,
@@ -509,6 +526,23 @@
     item.tagIds = custom.length ? custom : [DEFAULT_TAG_ID];
   }
 
+  function itemMatchesSearch(item, q) {
+    if (!q) return true;
+    const hay = [
+      item.name,
+      item.fileName,
+      item.mime,
+      item.note,
+      item.textPreview,
+      item.type,
+      ...(item.tagIds || []).map((id) => tagById(id)?.name || id),
+    ]
+      .filter(Boolean)
+      .join("\n")
+      .toLowerCase();
+    return hay.includes(q);
+  }
+
   function visibleItems() {
     let items = [...state.index.items].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     if (state.activeTagId === DEFAULT_TAG_ID || state.activeTagId === "default") {
@@ -519,19 +553,22 @@
     if (state.activeType !== "all") {
       items = items.filter((it) => it.type === state.activeType);
     }
+    const q = String(state.searchQuery || "").trim().toLowerCase();
+    if (q) items = items.filter((it) => itemMatchesSearch(it, q));
     return items;
   }
 
   const TYPE_LABELS = {
     text: "文本",
     image: "图片",
+    gif: "动图",
     video: "视频",
     audio: "音频",
     file: "文件",
   };
 
   function countByType(items) {
-    const counts = { text: 0, image: 0, video: 0, audio: 0, file: 0 };
+    const counts = { text: 0, image: 0, gif: 0, video: 0, audio: 0, file: 0 };
     items.forEach((it) => {
       const k = counts[it.type] != null ? it.type : "file";
       counts[k] += 1;
@@ -546,6 +583,8 @@
     } else if (state.activeTagId !== "all") {
       items = items.filter((it) => customTagIds(it).includes(state.activeTagId));
     }
+    const q = String(state.searchQuery || "").trim().toLowerCase();
+    if (q) items = items.filter((it) => itemMatchesSearch(it, q));
     return items;
   }
 
@@ -561,10 +600,15 @@
       mk("all", "全部", total),
       mk("text", "文本", counts.text),
       mk("image", "图片", counts.image),
+      mk("gif", "动图", counts.gif),
       mk("video", "视频", counts.video),
       mk("audio", "音频", counts.audio),
       mk("file", "文件", counts.file),
     ].join("");
+  }
+
+  function resetListPaging() {
+    state.listLimit = PAGE_SIZE;
   }
 
   function tagById(id) {
@@ -601,15 +645,17 @@
     const title = escapeHtml(item.name || item.type || "条目");
     const time = formatTime(item.createdAt);
     const size = formatBytes(item.size || 0);
+    const typeLabel = TYPE_LABELS[item.type] || item.type || "文件";
     let body = "";
     if (item.type === "text") {
       const full = item.textPreview || "";
       const short = full.length > 160 ? `${full.slice(0, 160)}…` : full;
       body = `<pre class="memo-text mono" data-memo-expand="${item.id}">${escapeHtml(short)}</pre>`;
-    } else if (item.type === "image") {
-      body = `<div class="memo-thumb-wrap memo-media-hit" data-memo-preview="${item.id}"><img class="memo-thumb" data-memo-thumb="${item.id}" alt="" loading="lazy" /></div>`;
+    } else if (item.type === "image" || item.type === "gif") {
+      const badge = item.type === "gif" ? `<span class="memo-anim-badge">动图</span>` : "";
+      body = `<div class="memo-thumb-wrap memo-media-hit" data-memo-preview="${item.id}">${badge}<img class="memo-thumb" data-memo-thumb="${item.id}" alt="" loading="lazy" decoding="async" /></div>`;
     } else if (item.type === "video") {
-      body = `<div class="memo-media-hit" data-memo-preview="${item.id}"><video class="memo-media" data-memo-media="${item.id}" muted playsinline preload="metadata"></video></div>`;
+      body = `<div class="memo-media-hit" data-memo-preview="${item.id}"><video class="memo-media" data-memo-media="${item.id}" muted playsinline preload="none"></video></div>`;
     } else if (item.type === "audio") {
       body = `<button type="button" class="memo-audio-hit" data-memo-preview="${item.id}">
         <span class="memo-audio-hit-icon" aria-hidden="true">♪</span>
@@ -629,7 +675,7 @@
         <label class="memo-check"><input type="checkbox" data-memo-check="${item.id}" ${checked} /></label>
         <div class="memo-card-meta">
           <strong title="${title}">${title}</strong>
-          <span class="hint tight mono">${time} · ${size}</span>
+          <span class="hint tight mono"><span class="memo-type-pill">${escapeHtml(typeLabel)}</span> · ${time} · ${size}</span>
         </div>
       </div>
       <div class="memo-card-body">${body}</div>
@@ -651,51 +697,82 @@
     </article>`;
   }
 
-  async function hydrateMedia() {
-    for (const img of $$("[data-memo-thumb]", itemList)) {
-      const id = img.dataset.memoThumb;
-      const item = state.index.items.find((x) => x.id === id);
-      if (!item) continue;
-      try {
-        const blob = await loadBlob(item);
-        img.src = trackUrl(URL.createObjectURL(blob));
-      } catch (_) {
-        const tip = state.dirPending ? "需重新连接目录后才能预览" : "预览失败";
-        img.replaceWith(Object.assign(document.createElement("p"), { className: "hint tight", textContent: tip }));
-      }
-    }
-    for (const media of $$("[data-memo-media]", itemList)) {
-      const id = media.dataset.memoMedia;
-      const item = state.index.items.find((x) => x.id === id);
-      if (!item) continue;
-      try {
-        const blob = await loadBlob(item);
-        media.src = trackUrl(URL.createObjectURL(blob));
-      } catch (_) {
-        media.replaceWith(
-          Object.assign(document.createElement("p"), {
-            className: "hint tight",
-            textContent: state.dirPending ? "需重新连接目录后才能播放" : "无法加载媒体",
-          })
-        );
-      }
+  let mediaObserver = null;
+  function stopMediaObserver() {
+    if (mediaObserver) {
+      mediaObserver.disconnect();
+      mediaObserver = null;
     }
   }
 
-  function tagsForNewItem() {
-    if (state.activeTagId && state.activeTagId !== "all" && state.activeTagId !== DEFAULT_TAG_ID) {
-      return [state.activeTagId];
+  async function hydrateOneMedia(el) {
+    if (!el || el.dataset.hydrated === "1") return;
+    el.dataset.hydrated = "1";
+    const isImg = el.hasAttribute("data-memo-thumb");
+    const id = isImg ? el.dataset.memoThumb : el.dataset.memoMedia;
+    const item = state.index.items.find((x) => x.id === id);
+    if (!item) return;
+    try {
+      const blob = await loadBlob(item);
+      el.src = trackUrl(URL.createObjectURL(blob));
+    } catch (_) {
+      const tip = state.dirPending ? "需重新连接目录后才能预览" : isImg ? "预览失败" : "无法加载媒体";
+      el.replaceWith(Object.assign(document.createElement("p"), { className: "hint tight", textContent: tip }));
     }
-    return [DEFAULT_TAG_ID];
+  }
+
+  function hydrateMedia() {
+    stopMediaObserver();
+    const nodes = [...$$("[data-memo-thumb], [data-memo-media]", itemList)];
+    if (!nodes.length) return;
+    if (typeof IntersectionObserver !== "function") {
+      nodes.forEach((el) => {
+        hydrateOneMedia(el).catch(() => {});
+      });
+      return;
+    }
+    mediaObserver = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          const el = entry.target;
+          mediaObserver?.unobserve(el);
+          hydrateOneMedia(el).catch(() => {});
+        });
+      },
+      { root: null, rootMargin: "160px 0px", threshold: 0.01 }
+    );
+    nodes.forEach((el) => mediaObserver.observe(el));
+  }
+
+  function renderListMeta(total, shown) {
+    const meta = $("#memo-list-meta");
+    if (!meta) return;
+    const q = String(state.searchQuery || "").trim();
+    if (!total && !q) {
+      meta.hidden = true;
+      meta.textContent = "";
+      return;
+    }
+    meta.hidden = false;
+    const parts = [`共 ${total} 条`];
+    if (shown < total) parts.push(`已显示 ${shown}`);
+    if (q) parts.push(`搜索「${q}」`);
+    meta.textContent = parts.join(" · ");
   }
 
   function renderItems() {
     if (!itemList) return;
+    stopMediaObserver();
     revokeTrackedUrls();
     const items = visibleItems();
+    const moreRow = $("#memo-more-row");
+    const loadMoreBtn = $("#memo-load-more");
     if (!items.length) {
       let emptyTip = "暂无条目。可粘贴、拖入文件或保存文本。";
-      if (state.activeType !== "all" && state.activeTagId !== "all") {
+      if (state.searchQuery.trim()) {
+        emptyTip = `没有匹配「${state.searchQuery.trim()}」的条目。`;
+      } else if (state.activeType !== "all" && state.activeTagId !== "all") {
         emptyTip = "当前标签与类型筛选下暂无条目。";
       } else if (state.activeType !== "all") {
         emptyTip = `当前没有「${TYPE_LABELS[state.activeType] || state.activeType}」类型条目。`;
@@ -705,14 +782,20 @@
         emptyTip = "当前标签下暂无条目。可在此标签下新建，或切回「全部」。";
       }
       itemList.innerHTML = `<p class="hint">${emptyTip}</p>`;
+      renderListMeta(0, 0);
+      if (moreRow) moreRow.hidden = true;
       const batch = $("#memo-batch-del");
       if (batch) batch.disabled = state.selected.size === 0;
       return;
     }
-    if (state.activeType === "all") {
-      const order = ["text", "image", "video", "audio", "file"];
+    const limit = Math.max(PAGE_SIZE, state.listLimit || PAGE_SIZE);
+    const page = items.slice(0, limit);
+    const useGroups =
+      state.activeType === "all" && !String(state.searchQuery || "").trim() && items.length <= PAGE_SIZE;
+    if (useGroups) {
+      const order = ["text", "image", "gif", "video", "audio", "file"];
       const groups = order
-        .map((type) => ({ type, items: items.filter((it) => it.type === type) }))
+        .map((type) => ({ type, items: page.filter((it) => it.type === type) }))
         .filter((g) => g.items.length);
       itemList.innerHTML = groups
         .map(
@@ -724,11 +807,23 @@
         )
         .join("");
     } else {
-      itemList.innerHTML = items.map(itemCardHtml).join("");
+      itemList.innerHTML = page.map(itemCardHtml).join("");
     }
-    hydrateMedia().catch(() => {});
+    renderListMeta(items.length, page.length);
+    if (moreRow) {
+      moreRow.hidden = page.length >= items.length;
+      if (loadMoreBtn) loadMoreBtn.textContent = `加载更多（还剩 ${Math.max(0, items.length - page.length)}）`;
+    }
+    hydrateMedia();
     const batch = $("#memo-batch-del");
     if (batch) batch.disabled = state.selected.size === 0;
+  }
+
+  function tagsForNewItem() {
+    if (state.activeTagId && state.activeTagId !== "all" && state.activeTagId !== DEFAULT_TAG_ID) {
+      return [state.activeTagId];
+    }
+    return [DEFAULT_TAG_ID];
   }
 
   function renderAll() {
@@ -1014,6 +1109,13 @@
   async function boot() {
     setError(memoError, "");
     try {
+      state.autoClip = localStorage.getItem(AUTOCLIP_KEY) === "1";
+    } catch (_) {
+      state.autoClip = false;
+    }
+    const autoclipEl = $("#memo-autoclip");
+    if (autoclipEl) autoclipEl.checked = state.autoClip;
+    try {
       const saved = await idbGet("index", "main");
       if (saved) state.index = normalizeIndex(saved);
     } catch (_) {
@@ -1048,11 +1150,11 @@
         toast("已复制文本");
         return;
       }
-      if (item.type === "image" && navigator.clipboard?.write && window.ClipboardItem) {
+      if ((item.type === "image" || item.type === "gif") && navigator.clipboard?.write && window.ClipboardItem) {
         const blob = await loadBlob(item);
-        const type = blob.type || "image/png";
+        const type = blob.type || (item.type === "gif" ? "image/gif" : "image/png");
         await navigator.clipboard.write([new ClipboardItem({ [type]: blob })]);
-        toast("已复制图片");
+        toast(item.type === "gif" ? "已复制动图" : "已复制图片");
         return;
       }
       const blob = await loadBlob(item);
@@ -1238,7 +1340,7 @@
     previewObjectUrl = URL.createObjectURL(blob);
     const url = previewObjectUrl;
 
-    if (item.type === "image" || String(blob.type || "").startsWith("image/")) {
+    if (item.type === "image" || item.type === "gif" || String(blob.type || "").startsWith("image/")) {
       setPreviewChrome(item, { canFs: true, canNewTab: true, canDl: true });
       lightboxImg.hidden = false;
       lightboxImg.src = url;
@@ -2091,6 +2193,7 @@
     const btn = e.target.closest("[data-memo-tag]");
     if (!btn) return;
     state.activeTagId = btn.dataset.memoTag;
+    resetListPaging();
     renderAll();
   });
 
@@ -2098,7 +2201,45 @@
     const btn = e.target.closest("[data-memo-type]");
     if (!btn) return;
     state.activeType = btn.dataset.memoType || "all";
+    resetListPaging();
     renderAll();
+  });
+
+  let searchTimer = 0;
+  $("#memo-search")?.addEventListener("input", (e) => {
+    const val = String(e.target.value || "");
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      state.searchQuery = val;
+      resetListPaging();
+      renderAll();
+    }, 180);
+  });
+  $("#memo-load-more")?.addEventListener("click", () => {
+    state.listLimit = (state.listLimit || PAGE_SIZE) + PAGE_SIZE;
+    renderItems();
+  });
+  $("#memo-autoclip")?.addEventListener("change", (e) => {
+    state.autoClip = Boolean(e.target.checked);
+    try {
+      localStorage.setItem(AUTOCLIP_KEY, state.autoClip ? "1" : "0");
+    } catch (_) {}
+    toast(state.autoClip ? "已开启获焦自动读剪贴板" : "已关闭获焦自动读剪贴板");
+    if (state.autoClip) {
+      readClipboard({ force: false }).catch(() => {});
+    }
+  });
+
+  function maybeAutoClip() {
+    if (!state.autoClip) return;
+    if (!isMemoActive()) return;
+    if (document.visibilityState && document.visibilityState !== "visible") return;
+    if (isToImgOpen()) return;
+    readClipboard({ force: false }).catch(() => {});
+  }
+  window.addEventListener("focus", () => maybeAutoClip());
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") maybeAutoClip();
   });
 
   // tag drag reorder
