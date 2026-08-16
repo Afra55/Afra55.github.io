@@ -786,12 +786,48 @@
     { id: "image", label: "图片", tools: ["imgkit", "textimg", "imgtext"] },
     { id: "convert", label: "换算", tools: ["units", "coord", "numbase"] },
     { id: "device", label: "设备", tools: ["adb"] },
+    { id: "site", label: "站点", tools: ["about"] },
   ];
   const DEFAULT_GROUP_ORDER = TOOL_GROUPS.map((g) => g.id);
   const GROUP_BY_ID = Object.fromEntries(TOOL_GROUPS.map((g) => [g.id, g]));
   const TOOL_TO_GROUP = Object.fromEntries(
     TOOL_GROUPS.flatMap((g) => g.tools.map((id) => [id, g.id]))
   );
+  /** 关于页说明：新增工具时请同步 TOOL_GROUPS、TOOL_META、ABOUT_DESC */
+  const ABOUT_DESC = {
+    timestamp: "秒/毫秒时间戳与日期互转，支持本地时区与 UTC。",
+    timediff: "计算两个时间点的差值，支持时间戳或日期字符串。",
+    cron: "解析 Cron 表达式并预览接下来的触发时间。",
+    ahex: "Android AARRGGBB 颜色与通道滑块互转。",
+    color: "HEX / RGB / HSL 颜色格式互转与预览。",
+    eyedropper: "屏幕取色（需浏览器 EyeDropper 支持）。",
+    password: "可配置字符集与长度的本地随机密码。",
+    base64: "文本 Base64 编码与解码。",
+    imgb64: "图片与 Base64 Data URL 互转。",
+    url: "URL 编码 / 解码。",
+    hash: "本地计算 MD5、SHA-256。",
+    uuid: "生成 UUID / GUID。",
+    json: "JSON 校验、美化与压缩。",
+    yaml: "YAML 与 JSON 互转、校验。",
+    sharecard: "代码/JSON 生成分享卡片图。",
+    query: "Query 字符串与 JWT 解析查看。",
+    text: "文本统计、去重、大小写等处理。",
+    caseconv: "驼峰 / snake / kebab 等命名风格转换。",
+    regex: "正则匹配测试与分组查看。",
+    diff: "两段文本差异对比。",
+    qrcode: "生成与识别二维码。",
+    markdown: "Markdown 预览。",
+    memo: "本地备忘录：剪贴板收集、标签筛选、文转图/OCR、导出分享。",
+    media: "GIF/动图、视频切分、一键黑盒等本地媒体工具合集。",
+    imgkit: "图片压缩、裁剪、水印、拼接。",
+    textimg: "文字/Markdown/代码生成分享图。",
+    imgtext: "本地 OCR 图片转文字（Tesseract）。",
+    units: "长度、质量等常用单位换算。",
+    coord: "WGS84 / GCJ-02 / BD-09 等坐标系互转。",
+    numbase: "二、八、十、十六进制互转。",
+    adb: "网页侧 ADB 调试辅助：设备、文件、输入、安装等。",
+    about: "站点总览：全部工具能力说明与快捷入口；主题换色也在此相关入口。",
+  };
   const TOOL_META = {
     timestamp: { name: "时间戳", aliases: ["时间", "timestamp", "date"] },
     timediff: { name: "时间差", aliases: ["时差", "diff time"] },
@@ -840,6 +876,7 @@
     markdown: { name: "Markdown", aliases: ["md", "预览"] },
     memo: { name: "备忘录", aliases: ["笔记", "剪贴板", "memo", "note", "便签"] },
     adb: { name: "ADB 工具", aliases: ["安卓", "android", "设备"] },
+    about: { name: "关于 / 总览", aliases: ["about", "介绍", "目录", "主题", "帮助"] },
   };
   const DEFAULT_ORDER = TOOL_GROUPS.flatMap((g) => g.tools);
 
@@ -1797,6 +1834,13 @@
 
   renderNav(loadOrder());
   renderRecent();
+  window.DevToolsCatalog = {
+    groups: TOOL_GROUPS,
+    meta: TOOL_META,
+    about: ABOUT_DESC,
+    mediaTabs: MEDIA_TABS,
+  };
+  window.dispatchEvent(new CustomEvent("devtools:catalog"));
   if (!location.hash) history.replaceState(null, "", "#timestamp");
   applyRoute();
   // 默认关闭；防止 Safari 恢复残留开态

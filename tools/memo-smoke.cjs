@@ -392,7 +392,7 @@ async function main() {
   if (errors.length) failed.push(...errors.map((e) => `page: ${e}`));
   if (!result.panelActive) failed.push("memo panel not active");
   if (!result.hasEditor || !result.hasList) failed.push("missing editor/list");
-  if (!/memo/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memo|theme/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;

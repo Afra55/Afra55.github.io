@@ -8,8 +8,21 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260816memo13" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo13" />
+  <link rel="stylesheet" href="./style.css?v=20260816theme1" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816theme1" />
+  <script>
+    /* 尽早应用主题，减少闪烁 */
+    (function () {
+      try {
+        var raw = localStorage.getItem("devtools-theme-v1");
+        if (!raw) return;
+        var s = JSON.parse(raw);
+        var root = document.documentElement;
+        if (s && s.preset) root.dataset.theme = s.useCustom ? "custom" : s.preset;
+        if (s && s.bgImage) root.dataset.themeBg = "pending";
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,9 +38,13 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo13</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-theme1</span>
       </div>
-      <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
+      <div class="header-actions">
+        <button type="button" class="ghost-btn" id="theme-open" title="切换站点主题">主题</button>
+        <a class="ghost-btn header-about-link" href="#about">关于</a>
+        <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
+      </div>
     </div>
     <p class="tagline">常用开发小工具合集 · 本地处理不上传 · 单工具工作台</p>
   </header>
@@ -2924,8 +2941,71 @@ hello@world.org</textarea>
       </div>
     </section>
 
+    <section id="about" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>关于 / 工具总览</h1>
+        <p>本站工具均在浏览器本地处理，不上传你的内容。下面是能力目录与快捷入口；新增功能会同步写进本页。</p>
+      </div>
+      <div class="panel-body about-body">
+        <div class="about-lead panel-card">
+          <p class="hint tight" id="about-version"></p>
+          <p>适合开发与日常：时间、颜色、编码、JSON/文本、图片与媒体、备忘录剪贴板、ADB 等。侧栏可搜索与排序；顶栏可换主题。</p>
+          <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.55rem">
+            <button type="button" class="primary-btn" id="theme-about-open">打开主题设置</button>
+            <a class="secondary-btn" href="#memo">备忘录</a>
+            <a class="ghost-btn" href="#media/gifmaker">媒体工具</a>
+            <a class="ghost-btn" href="#timestamp">时间戳</a>
+          </div>
+          <p class="hint tight" style="margin-top:0.55rem">维护说明：新增工具时请同步更新 <code class="mono">TOOL_GROUPS</code>、<code class="mono">TOOL_META</code>、<code class="mono">ABOUT_DESC</code>（见 <code class="mono">app.js</code>）。</p>
+        </div>
+        <div id="about-catalog" class="about-catalog" aria-label="工具能力目录"></div>
+      </div>
+    </section>
+
     </main>
   </div>
+
+  <dialog class="memo-dialog theme-dlg" id="theme-dlg" aria-label="主题设置">
+    <div class="memo-dialog-body theme-dlg-body">
+      <div class="label-row">
+        <h2 class="subhead">站点主题</h2>
+        <p class="hint tight">预设偏护眼 · 可自定义颜色与背景图 · 仅保存在本机</p>
+      </div>
+      <div class="theme-presets" id="theme-presets" role="group" aria-label="预设主题"></div>
+      <label class="flag" for="theme-use-custom"><input type="checkbox" id="theme-use-custom" /> 使用自定义颜色</label>
+      <div class="theme-custom-box" id="theme-custom-box" hidden>
+        <div class="theme-color-grid">
+          <label>背景 <input type="color" id="theme-color-bg0" value="#0b1220" /></label>
+          <label>文字 <input type="color" id="theme-color-ink" value="#e8eef8" /></label>
+          <label>次要文字 <input type="color" id="theme-color-muted" value="#93a0b8" /></label>
+          <label>强调色 <input type="color" id="theme-color-accent" value="#2ec4b6" /></label>
+          <label>辅助强调 <input type="color" id="theme-color-accent2" value="#f4a261" /></label>
+          <label>面板底 <input type="color" id="theme-color-panel" value="#0e1626" /></label>
+        </div>
+      </div>
+      <div class="theme-bg-box">
+        <div class="label-row">
+          <strong>背景图</strong>
+          <span class="hint tight mono" id="theme-bg-status">未设置背景图</span>
+        </div>
+        <div class="btn-row tool-actions" style="flex-wrap:wrap">
+          <label class="file-btn" for="theme-bg-file">上传背景图</label>
+          <input id="theme-bg-file" type="file" accept="image/*" hidden />
+          <button type="button" class="ghost-btn" id="theme-bg-clear">清除背景图</button>
+        </div>
+        <label class="theme-overlay-lab" for="theme-bg-overlay">遮罩强度
+          <input id="theme-bg-overlay" type="range" min="15" max="90" value="55" />
+          <span class="mono" id="theme-bg-overlay-val">55%</span>
+        </label>
+        <p class="hint tight">有背景图时提高遮罩可保证文字可读；图片存 IndexedDB，不会上传。</p>
+      </div>
+      <label class="flag" for="theme-reduce-glow"><input type="checkbox" id="theme-reduce-glow" /> 减弱背景光晕动画</label>
+      <div class="btn-row tool-actions" style="flex-wrap:wrap">
+        <button type="button" class="ghost-btn" id="theme-reset">恢复默认</button>
+        <button type="button" class="primary-btn" id="theme-close">完成</button>
+      </div>
+    </div>
+  </dialog>
 
   <footer class="site-footer">
     <span>本地处理，数据不上传 · 关闭页面会释放本次视频和 GIF · 侧栏可清理站点缓存</span>
@@ -2960,13 +3040,15 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./temp.js?v=20260816memo13"></script>
+  <script src="./theme.js?v=20260816theme1"></script>
+  <script src="./temp.js?v=20260816theme1"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260816memo13"></script>
-  <script src="./extra.js?v=20260816memo13"></script>
+  <script src="./app.js?v=20260816theme1"></script>
+  <script src="./about.js?v=20260816theme1"></script>
+  <script src="./extra.js?v=20260816theme1"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./textimg.js?v=20260816memo13"></script>
-  <script src="./imgtext.js?v=20260816memo13"></script>
-  <script src="./memo.js?v=20260816memo13"></script>
+  <script src="./textimg.js?v=20260816theme1"></script>
+  <script src="./imgtext.js?v=20260816theme1"></script>
+  <script src="./memo.js?v=20260816theme1"></script>
 </body>
 </html>
