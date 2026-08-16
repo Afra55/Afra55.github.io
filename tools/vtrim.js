@@ -79,10 +79,15 @@
   const previewWrap = $("#vtrim-preview-wrap");
   const video = $("#vtrim-video");
   const cropBox = $("#vtrim-crop-box");
+  const tapPlay = $("#vtrim-tap-play");
+  const filmLoading = $("#vtrim-film-loading");
   const playBtn = $("#vtrim-play");
   const muteBtn = $("#vtrim-mute");
   const clockEl = $("#vtrim-clock");
   const rangeLabel = $("#vtrim-range-label");
+  const modeHint = $("#vtrim-mode-hint");
+  const trimTools = $("#vtrim-trim-tools");
+  const cropPanel = $("#vtrim-crop-panel");
   const timeline = $("#vtrim-timeline");
   const filmstrip = $("#vtrim-filmstrip");
   const selEl = $("#vtrim-sel");
@@ -95,6 +100,7 @@
   const nudgeEndM = $("#vtrim-nudge-end-m");
   const nudgeEndP = $("#vtrim-nudge-end-p");
   const cropEnable = $("#vtrim-crop-enable");
+  const cropResetBtn = $("#vtrim-crop-reset");
   const rotL = $("#vtrim-rot-l");
   const rotR = $("#vtrim-rot-r");
   const flipHBtn = $("#vtrim-flip-h");
@@ -130,6 +136,11 @@
   let filmReady = false;
   let filmGen = 0;
   let activeHandle = "start";
+  let editMode = "trim"; // trim | crop
+  let lastSeekAt = 0;
+  let pendingSeek = null;
+  let playheadRaf = 0;
+  let previewScrub = null;
 
   const DEFAULT_META =
     "支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。关闭页面会释放本次视频。";
@@ -200,6 +211,9 @@
     aspect = "free";
     filmReady = false;
     playing = false;
+    editMode = "trim";
+    if (filmLoading) filmLoading.hidden = true;
+    previewWrap?.classList.remove("is-film-loading", "is-playing");
     revokeResult();
     video.removeAttribute("src");
     try {
@@ -244,16 +258,37 @@
     if (rotL) rotL.disabled = !has || busy;
     if (rotR) rotR.disabled = !has || busy;
     if (flipHBtn) flipHBtn.disabled = !has || busy;
+    if (cropResetBtn) cropResetBtn.disabled = !has || busy;
     if (abortBtn) abortBtn.hidden = !busy;
+    if (tapPlay) tapPlay.hidden = !has;
     [nudgeStartM, nudgeStartP, nudgeEndM, nudgeEndP].forEach((btn) => {
       if (btn) btn.disabled = !has || busy;
     });
     syncActiveHandleUi();
+    syncModeUi();
   }
 
   function syncActiveHandleUi() {
     handleStart?.classList.toggle("is-active", activeHandle === "start");
     handleEnd?.classList.toggle("is-active", activeHandle === "end");
+  }
+
+  function syncModeUi() {
+    document.querySelectorAll("[data-vtrim-mode]").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.dataset.vtrimMode === editMode);
+    });
+    if (trimTools) trimTools.hidden = editMode !== "trim";
+    if (cropPanel) cropPanel.hidden = editMode !== "crop";
+    if (modeHint) {
+      modeHint.textContent =
+        editMode === "crop"
+          ? "拖绿框裁边框 · 双击重置 · 预览区左右滑 scrub"
+          : "拖黄框两端 · 预览区点按播放 · 左右滑 scrub";
+    }
+    // crop overlay only in crop mode (and when enabled)
+    syncCropBoxVisibility();
+    stage?.classList.toggle("is-mode-crop", editMode === "crop");
+    stage?.classList.toggle("is-mode-trim", editMode === "trim");
   }
 
   function syncMuteUi() {
@@ -271,7 +306,7 @@
   }
 
   function syncCropBoxVisibility() {
-    const on = Boolean(cropEnable?.checked) && Boolean(sourceFile);
+    const on = editMode === "crop" && Boolean(cropEnable?.checked) && Boolean(sourceFile);
     if (cropBox) cropBox.hidden = !on;
     if (previewWrap) previewWrap.classList.toggle("is-cropping", on);
   }
@@ -474,6 +509,8 @@
     if (!filmstrip || !video.videoWidth || !duration) return;
     const gen = ++filmGen;
     filmReady = false;
+    if (filmLoading) filmLoading.hidden = false;
+    previewWrap?.classList.add("is-film-loading");
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const cssW = timeline?.clientWidth || 640;
     const cssH = Math.max(56, timeline?.clientHeight || 64);
@@ -518,24 +555,41 @@
     } catch (_) {}
     if (gen !== filmGen) return;
     filmReady = true;
+    if (filmLoading) filmLoading.hidden = true;
+    previewWrap?.classList.remove("is-film-loading");
     paintTimeline();
   }
 
-  function seekTo(t, { force = false } = {}) {
+  function seekTo(t, { force = false, immediate = false } = {}) {
     const next = force
       ? clamp(t, 0, Math.max(0, duration - 0.04))
       : clamp(t, startSec, Math.max(startSec, endSec - 0.04));
-    try {
-      video.currentTime = next;
-    } catch (_) {}
-    paintTimeline();
-    updateLabels();
+    const apply = () => {
+      try {
+        video.currentTime = next;
+      } catch (_) {}
+      lastSeekAt = performance.now();
+      pendingSeek = null;
+      paintTimeline();
+      updateLabels();
+    };
+    if (immediate || performance.now() - lastSeekAt > 40) {
+      apply();
+      return;
+    }
+    pendingSeek = next;
+    clearTimeout(seekTo._t);
+    seekTo._t = setTimeout(apply, 42);
   }
 
   function setStart(t, { preview = true } = {}) {
+    const prev = startSec;
     startSec = clamp(t, 0, endSec - MIN_SPAN);
     activeHandle = "start";
     syncActiveHandleUi();
+    const atMin = Math.abs(endSec - startSec - MIN_SPAN) < 0.02;
+    timeline?.classList.toggle("is-min-span", atMin);
+    if (atMin && Math.abs(prev - startSec) > 0.001) timeline?.classList.add("is-pulse");
     if (preview) seekTo(startSec, { force: true });
     else if (video.currentTime < startSec) seekTo(startSec);
     paintTimeline();
@@ -543,13 +597,35 @@
   }
 
   function setEnd(t, { preview = true } = {}) {
+    const prev = endSec;
     endSec = clamp(t, startSec + MIN_SPAN, duration);
     activeHandle = "end";
     syncActiveHandleUi();
+    const atMin = Math.abs(endSec - startSec - MIN_SPAN) < 0.02;
+    timeline?.classList.toggle("is-min-span", atMin);
+    if (atMin && Math.abs(prev - endSec) > 0.001) timeline?.classList.add("is-pulse");
     if (preview) seekTo(Math.max(startSec, endSec - 0.04), { force: true });
     else if (video.currentTime > endSec) seekTo(endSec - 0.04);
     paintTimeline();
     updateLabels();
+  }
+
+  function rotateBy(delta) {
+    if (!video.videoWidth) return;
+    const d = cropToDisplayRect();
+    const xPct = d.x / d.dw;
+    const yPct = d.y / d.dh;
+    const wPct = d.w / d.dw;
+    const hPct = d.h / d.dh;
+    rotate = (rotate + delta + 360) % 360;
+    applyVideoTransform();
+    const { w: dw, h: dh } = displaySize();
+    if (aspect !== "free") {
+      fitCropToAspect();
+    } else {
+      displayRectToCrop(xPct * dw, yPct * dh, Math.max(2, wPct * dw), Math.max(2, hPct * dh));
+      layoutCropBox();
+    }
   }
 
   function shiftWindow(deltaSec) {
@@ -760,7 +836,7 @@
       a.click();
       a.remove();
       setProgress(true, 1, "导出完成");
-      toast("已导出修剪后的视频");
+      toast(`已导出 · 保留 ${formatClock(span)}${reencode ? "（已裁切重编码）" : "（快速剪切）"}`);
     } catch (err) {
       if (String(err?.message) === "已取消") toast("已取消导出");
       else setError(errorEl, err?.message || String(err));
@@ -840,22 +916,23 @@
     muted = !muted;
     syncMuteUi();
   });
-  rotL?.addEventListener("click", () => {
-    rotate = (rotate + 270) % 360;
-    applyVideoTransform();
-    fitCropToAspect();
-    layoutCropBox();
+  document.querySelectorAll("[data-vtrim-mode]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      editMode = btn.dataset.vtrimMode === "crop" ? "crop" : "trim";
+      syncModeUi();
+      layoutCropBox();
+    });
   });
-  rotR?.addEventListener("click", () => {
-    rotate = (rotate + 90) % 360;
-    applyVideoTransform();
-    fitCropToAspect();
-    layoutCropBox();
-  });
+  rotL?.addEventListener("click", () => rotateBy(-90));
+  rotR?.addEventListener("click", () => rotateBy(90));
   flipHBtn?.addEventListener("click", () => {
     flipH = !flipH;
     applyVideoTransform();
     layoutCropBox();
+  });
+  cropResetBtn?.addEventListener("click", () => {
+    fitCropToAspect();
+    toast("已重置裁剪框");
   });
   cropEnable?.addEventListener("change", () => {
     syncCropBoxVisibility();
@@ -866,6 +943,10 @@
       aspect = btn.dataset.vtrimAspect || "free";
       syncAspectUi();
       if (cropEnable && !cropEnable.checked) cropEnable.checked = true;
+      if (editMode !== "crop") {
+        editMode = "crop";
+        syncModeUi();
+      }
       syncCropBoxVisibility();
       fitCropToAspect();
     });
@@ -878,24 +959,46 @@
     } catch (_) {}
   });
 
-  video.addEventListener("timeupdate", () => {
-    if (!sourceFile) return;
-    if (!video.paused && video.currentTime >= endSec - 0.05) {
-      seekTo(startSec);
-      // loop within selection
-      video.play().catch(() => {});
+  function tickPlayhead() {
+    if (!sourceFile) {
+      playheadRaf = 0;
+      return;
     }
     paintTimeline();
     updateLabels();
+    if (!video.paused) playheadRaf = requestAnimationFrame(tickPlayhead);
+    else playheadRaf = 0;
+  }
+
+  video.addEventListener("timeupdate", () => {
+    if (!sourceFile) return;
+    if (!video.paused && video.currentTime >= endSec - 0.05) {
+      seekTo(startSec, { immediate: true });
+      video.play().catch(() => {});
+    }
+    if (!playheadRaf) {
+      paintTimeline();
+      updateLabels();
+    }
   });
   video.addEventListener("pause", () => {
     playing = false;
     if (playBtn) playBtn.textContent = "播放";
+    previewWrap?.classList.remove("is-playing");
+    if (playheadRaf) {
+      cancelAnimationFrame(playheadRaf);
+      playheadRaf = 0;
+    }
+    paintTimeline();
   });
   video.addEventListener("play", () => {
     playing = true;
     if (playBtn) playBtn.textContent = "暂停";
+    previewWrap?.classList.add("is-playing");
+    if (!playheadRaf) playheadRaf = requestAnimationFrame(tickPlayhead);
   });
+
+  timeline?.addEventListener("animationend", () => timeline.classList.remove("is-pulse"));
 
   // timeline drag
   function hitKind(ratio, target) {
@@ -1088,9 +1191,49 @@
     previewWrap?.classList.remove("is-dragging");
   }
   cropBox?.addEventListener("pointerdown", onCropPointerDown);
+  cropBox?.addEventListener("dblclick", (e) => {
+    e.preventDefault();
+    fitCropToAspect();
+    toast("已重置裁剪框");
+  });
   window.addEventListener("pointermove", onCropPointerMove);
   window.addEventListener("pointerup", onCropPointerUp);
   window.addEventListener("pointercancel", onCropPointerUp);
+
+  // preview area: horizontal scrub; short tap toggles play
+  previewWrap?.addEventListener("pointerdown", (e) => {
+    if (!sourceFile || busy || e.target?.closest?.(".vtrim-crop-box")) return;
+    previewScrub = {
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startT: video.currentTime || startSec,
+      moved: false,
+    };
+    try {
+      video.pause();
+    } catch (_) {}
+    previewWrap.setPointerCapture?.(e.pointerId);
+  });
+  previewWrap?.addEventListener("pointermove", (e) => {
+    if (!previewScrub || previewScrub.pointerId !== e.pointerId) return;
+    const dx = e.clientX - previewScrub.startX;
+    if (Math.abs(dx) > 8) previewScrub.moved = true;
+    if (!previewScrub.moved) return;
+    const geom = previewWrap.getBoundingClientRect();
+    const span = Math.max(MIN_SPAN, endSec - startSec);
+    const delta = (dx / Math.max(1, geom.width)) * span;
+    seekTo(previewScrub.startT + delta, { immediate: true });
+  });
+  previewWrap?.addEventListener("pointerup", (e) => {
+    if (!previewScrub || previewScrub.pointerId !== e.pointerId) return;
+    const wasMove = previewScrub.moved;
+    previewScrub = null;
+    if (!wasMove) togglePlay().catch(() => {});
+  });
+  previewWrap?.addEventListener("pointercancel", () => {
+    previewScrub = null;
+  });
+
   let resizeFilmTimer = 0;
   window.addEventListener("resize", () => {
     layoutCropBox();
@@ -1105,13 +1248,19 @@
   window.DevToolsVtrim = {
     getRange: () => ({ start: startSec, end: endSec, duration }),
     getCrop: () => ({ ...crop, rotate, flipH, aspect }),
+    getMode: () => editMode,
+    setMode: (mode) => {
+      editMode = mode === "crop" ? "crop" : "trim";
+      syncModeUi();
+      layoutCropBox();
+    },
     setRange: (start, end) => {
       if (!duration) return false;
       const s = clamp(Number(start) || 0, 0, duration - MIN_SPAN);
       const e = clamp(Number(end) || duration, s + MIN_SPAN, duration);
       startSec = s;
       endSec = e;
-      seekTo(s);
+      seekTo(s, { immediate: true });
       paintTimeline();
       updateLabels();
       return true;
@@ -1122,4 +1271,5 @@
   setButtons();
   syncMuteUi();
   syncAspectUi();
+  syncModeUi();
 })();

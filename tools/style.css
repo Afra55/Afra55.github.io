@@ -6433,3 +6433,75 @@ html[data-theme-scheme="light"] .bg-grid {
     margin-left: -16px;
   }
 }
+
+.vtrim-tap-play {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 64px;
+  height: 64px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(8, 14, 26, 0.45);
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55);
+  pointer-events: none;
+  opacity: 1;
+  transition: opacity 0.18s ease;
+  z-index: 1;
+}
+
+.vtrim-tap-play::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 54%;
+  width: 0;
+  height: 0;
+  margin: -10px 0 0 -6px;
+  border-style: solid;
+  border-width: 10px 0 10px 16px;
+  border-color: transparent transparent transparent #fff;
+}
+
+.vtrim-preview-wrap.is-playing .vtrim-tap-play {
+  opacity: 0;
+}
+
+.vtrim-film-loading {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.65rem;
+  z-index: 4;
+  margin: 0;
+  padding: 0.25rem 0.5rem;
+  border-radius: 8px;
+  background: rgba(8, 14, 26, 0.72);
+  color: #e8eef8;
+  pointer-events: none;
+}
+
+.vtrim-preview-wrap.is-film-loading .vtrim-film-loading {
+  display: block;
+}
+
+.vtrim-timeline.is-min-span .vtrim-window {
+  border-color: #ff8f6b;
+}
+
+.vtrim-timeline.is-pulse {
+  animation: vtrim-pulse 0.35s ease;
+}
+
+@keyframes vtrim-pulse {
+  0% { transform: scale(1); }
+  40% { transform: scale(1.01); }
+  100% { transform: scale(1); }
+}
+
+.vtrim-stage.is-mode-crop .vtrim-preview-wrap {
+  cursor: default;
+}
+
+.vtrim-stage.is-mode-trim .vtrim-preview-wrap {
+  cursor: grab;
+}
