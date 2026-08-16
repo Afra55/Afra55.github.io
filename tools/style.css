@@ -6745,6 +6745,34 @@ html[data-theme-scheme="light"] .bg-grid {
   background: color-mix(in srgb, var(--accent, #2ec4b6) 16%, var(--panel, #121826));
 }
 
+.ff-op-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem 0.85rem;
+  align-items: flex-end;
+}
+
+.ff-opt-field {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 7.5rem;
+}
+
+.ff-opt-field.ff-opt-wide {
+  flex: 1 1 14rem;
+  min-width: 12rem;
+}
+
+.ff-opt-field label {
+  font-size: 0.82rem;
+  opacity: 0.85;
+}
+
+.ff-opt-field input,
+.ff-opt-field select {
+  min-height: 2.15rem;
+}
+
 .setup-body {
   display: grid;
   gap: 0.85rem;

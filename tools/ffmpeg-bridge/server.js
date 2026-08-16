@@ -37,14 +37,43 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.1.0";
+const BRIDGE_VERSION = "0.3.0";
 const FEATURES = [
   "local-fs",
   "probe",
+  "probe-batch",
+  "ops-catalog",
   "extract-audio",
+  "audio-convert",
+  "volume",
+  "loudnorm",
+  "mono",
+  "denoise-audio",
   "convert",
+  "compress",
+  "hevc",
+  "scale",
+  "fps",
+  "mute",
+  "crop",
+  "pad",
+  "rotate",
+  "flip",
+  "reverse",
+  "deinterlace",
+  "eq",
+  "speed",
+  "trim",
+  "fade",
+  "loop",
+  "gif",
+  "thumb",
+  "frames",
+  "concat",
+  "overlay-text",
   "jobs",
   "job-cancel",
+  "jobs-run",
 ];
 
 const VIDEO_EXTS = new Set([
@@ -451,7 +480,18 @@ function isVideoFile(filePath) {
   return VIDEO_EXTS.has(path.extname(filePath).toLowerCase());
 }
 
-async function collectInputFiles(paths, { recursive = false, maxFiles = 2000 } = {}) {
+function isAudioFile(filePath) {
+  return AUDIO_EXTS.has(path.extname(filePath).toLowerCase());
+}
+
+function acceptsMedia(filePath, accept) {
+  const a = String(accept || "video").toLowerCase();
+  if (a === "audio") return isAudioFile(filePath);
+  if (a === "media") return isVideoFile(filePath) || isAudioFile(filePath);
+  return isVideoFile(filePath);
+}
+
+async function collectInputFiles(paths, { recursive = false, maxFiles = 2000, accept = "video" } = {}) {
   const list = Array.isArray(paths) ? paths : [];
   if (!list.length) throw new Error("请选择至少一个文件或文件夹");
   const out = [];
@@ -468,7 +508,7 @@ async function collectInputFiles(paths, { recursive = false, maxFiles = 2000 } =
         if (recursive && depth < 8) await walkDir(full, depth + 1);
         continue;
       }
-      if (d.isFile() && isVideoFile(full)) {
+      if (d.isFile() && acceptsMedia(full, accept)) {
         const real = await resolveLocalPath(full);
         if (!seen.has(real)) {
           seen.add(real);
@@ -485,13 +525,18 @@ async function collectInputFiles(paths, { recursive = false, maxFiles = 2000 } =
     if (st.isDirectory()) {
       await walkDir(real, 0);
     } else if (st.isFile()) {
+      if (!acceptsMedia(real, accept)) continue;
       if (!seen.has(real)) {
         seen.add(real);
         out.push(real);
       }
     }
   }
-  if (!out.length) throw new Error("未找到可处理的视频文件");
+  if (!out.length) {
+    const tip =
+      accept === "audio" ? "未找到可处理的音频文件" : accept === "media" ? "未找到可处理的音视频文件" : "未找到可处理的视频文件";
+    throw new Error(tip);
+  }
   if (out.length > maxFiles) throw new Error(`文件过多（>${maxFiles}），请缩小范围`);
   return out;
 }
@@ -530,36 +575,1371 @@ function clip(text, max = 400) {
   return s.length > max ? `${s.slice(0, max)}…` : s;
 }
 
+const AUDIO_FMT_OPTS = [
+  { value: "mp3", label: "MP3" },
+  { value: "m4a", label: "M4A/AAC" },
+  { value: "wav", label: "WAV" },
+  { value: "flac", label: "FLAC" },
+  { value: "ogg", label: "OGG" },
+];
+const BITRATE_OPTS = [
+  { value: "128k", label: "128k" },
+  { value: "192k", label: "192k" },
+  { value: "256k", label: "256k" },
+  { value: "320k", label: "320k" },
+];
+
+/** 用户可见操作目录（网页按此渲染 fields） */
+const OPS_CATALOG = [
+  {
+    id: "extract-audio",
+    label: "抽音频",
+    group: "音频",
+    desc: "从视频/音频抽出或转出音轨",
+    accept: "media",
+    fields: [
+      { key: "format", type: "select", label: "格式", options: AUDIO_FMT_OPTS, default: "mp3" },
+      { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "192k" },
+    ],
+  },
+  {
+    id: "audio-convert",
+    label: "音频转码",
+    group: "音频",
+    desc: "音频互转格式 / 码率",
+    accept: "audio",
+    fields: [
+      { key: "format", type: "select", label: "格式", options: AUDIO_FMT_OPTS, default: "mp3" },
+      { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "192k" },
+    ],
+  },
+  {
+    id: "volume",
+    label: "音量调节",
+    group: "音频",
+    desc: "放大 / 缩小音量后导出音频",
+    accept: "media",
+    fields: [
+      { key: "volumePct", type: "number", label: "音量%", min: 5, max: 400, step: 5, default: 100 },
+      { key: "format", type: "select", label: "格式", options: AUDIO_FMT_OPTS, default: "mp3" },
+      { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "192k" },
+    ],
+  },
+  {
+    id: "loudnorm",
+    label: "响度标准化",
+    group: "音频",
+    desc: "EBU R128 响度对齐",
+    accept: "media",
+    fields: [
+      { key: "format", type: "select", label: "格式", options: AUDIO_FMT_OPTS, default: "mp3" },
+      { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "192k" },
+    ],
+  },
+  {
+    id: "mono",
+    label: "转单声道",
+    group: "音频",
+    desc: "立体声压成单声道",
+    accept: "media",
+    fields: [
+      { key: "format", type: "select", label: "格式", options: AUDIO_FMT_OPTS, default: "mp3" },
+      { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "128k" },
+    ],
+  },
+  {
+    id: "denoise-audio",
+    label: "音频降噪",
+    group: "音频",
+    desc: "轻量 FFT 降噪（afftdn）",
+    accept: "media",
+    fields: [
+      { key: "format", type: "select", label: "格式", options: AUDIO_FMT_OPTS, default: "mp3" },
+      { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "192k" },
+    ],
+  },
+  {
+    id: "convert",
+    label: "转封装/转码",
+    group: "视频",
+    desc: "MP4 / WebM / MKV / MOV / 流拷贝",
+    accept: "video",
+    fields: [
+      {
+        key: "preset",
+        type: "select",
+        label: "预设",
+        options: [
+          { value: "mp4-fast", label: "MP4 快速" },
+          { value: "mp4-hq", label: "MP4 高清" },
+          { value: "mp4-copy", label: "MP4 流拷贝" },
+          { value: "webm", label: "WebM VP9" },
+          { value: "mkv", label: "MKV" },
+          { value: "mov", label: "MOV" },
+        ],
+        default: "mp4-fast",
+      },
+    ],
+  },
+  {
+    id: "compress",
+    label: "压缩体积",
+    group: "视频",
+    desc: "按清晰度档位压体积（H.264）",
+    accept: "video",
+    fields: [
+      {
+        key: "compress",
+        type: "select",
+        label: "档位",
+        options: [
+          { value: "low", label: "轻度（更清晰）" },
+          { value: "medium", label: "均衡" },
+          { value: "high", label: "强压（更小）" },
+        ],
+        default: "medium",
+      },
+    ],
+  },
+  {
+    id: "hevc",
+    label: "转 H.265",
+    group: "视频",
+    desc: "HEVC 更小体积（兼容性略差）",
+    accept: "video",
+    fields: [
+      {
+        key: "hevcCrf",
+        type: "select",
+        label: "质量 CRF",
+        options: [
+          { value: "24", label: "24 较清晰" },
+          { value: "28", label: "28 均衡" },
+          { value: "32", label: "32 更小" },
+        ],
+        default: "28",
+      },
+    ],
+  },
+  {
+    id: "scale",
+    label: "改分辨率",
+    group: "视频",
+    desc: "按高度等比缩放",
+    accept: "video",
+    fields: [
+      {
+        key: "height",
+        type: "select",
+        label: "高度",
+        options: [
+          { value: "360", label: "360p" },
+          { value: "480", label: "480p" },
+          { value: "720", label: "720p" },
+          { value: "1080", label: "1080p" },
+          { value: "1440", label: "1440p" },
+          { value: "2160", label: "2160p" },
+        ],
+        default: "720",
+      },
+    ],
+  },
+  {
+    id: "fps",
+    label: "改帧率",
+    group: "视频",
+    desc: "统一输出帧率",
+    accept: "video",
+    fields: [
+      {
+        key: "fps",
+        type: "select",
+        label: "帧率",
+        options: [
+          { value: "24", label: "24" },
+          { value: "25", label: "25" },
+          { value: "30", label: "30" },
+          { value: "50", label: "50" },
+          { value: "60", label: "60" },
+        ],
+        default: "30",
+      },
+    ],
+  },
+  {
+    id: "mute",
+    label: "去音轨",
+    group: "视频",
+    desc: "导出无声视频",
+    accept: "video",
+    fields: [],
+  },
+  {
+    id: "crop",
+    label: "裁剪画面",
+    group: "画面",
+    desc: "按宽高比中心裁剪",
+    accept: "video",
+    fields: [
+      {
+        key: "cropRatio",
+        type: "select",
+        label: "比例",
+        options: [
+          { value: "1:1", label: "1:1" },
+          { value: "4:3", label: "4:3" },
+          { value: "16:9", label: "16:9" },
+          { value: "9:16", label: "9:16" },
+          { value: "4:5", label: "4:5" },
+        ],
+        default: "1:1",
+      },
+    ],
+  },
+  {
+    id: "pad",
+    label: "补黑边",
+    group: "画面",
+    desc: "加黑边贴合目标比例",
+    accept: "video",
+    fields: [
+      {
+        key: "padRatio",
+        type: "select",
+        label: "目标比例",
+        options: [
+          { value: "16:9", label: "16:9" },
+          { value: "9:16", label: "9:16" },
+          { value: "1:1", label: "1:1" },
+          { value: "4:3", label: "4:3" },
+        ],
+        default: "16:9",
+      },
+    ],
+  },
+  {
+    id: "rotate",
+    label: "旋转",
+    group: "画面",
+    desc: "90° / 180° / 270°",
+    accept: "video",
+    fields: [
+      {
+        key: "rotate",
+        type: "select",
+        label: "角度",
+        options: [
+          { value: "90", label: "顺时针 90°" },
+          { value: "180", label: "180°" },
+          { value: "270", label: "逆时针 90°" },
+        ],
+        default: "90",
+      },
+    ],
+  },
+  {
+    id: "flip",
+    label: "翻转",
+    group: "画面",
+    desc: "水平 / 垂直镜像",
+    accept: "video",
+    fields: [
+      {
+        key: "flip",
+        type: "select",
+        label: "方向",
+        options: [
+          { value: "h", label: "水平" },
+          { value: "v", label: "垂直" },
+        ],
+        default: "h",
+      },
+    ],
+  },
+  {
+    id: "reverse",
+    label: "倒放",
+    group: "画面",
+    desc: "画面与音轨倒序（短片更合适）",
+    accept: "video",
+    fields: [],
+  },
+  {
+    id: "deinterlace",
+    label: "去隔行",
+    group: "画面",
+    desc: "yadif 去隔行",
+    accept: "video",
+    fields: [],
+  },
+  {
+    id: "eq",
+    label: "亮度对比度",
+    group: "画面",
+    desc: "简单色彩/亮度调节",
+    accept: "video",
+    fields: [
+      { key: "brightness", type: "number", label: "亮度(-1~1)", min: -1, max: 1, step: 0.05, default: 0 },
+      { key: "contrast", type: "number", label: "对比度", min: 0.5, max: 2, step: 0.05, default: 1 },
+      { key: "saturation", type: "number", label: "饱和度", min: 0, max: 3, step: 0.1, default: 1 },
+    ],
+  },
+  {
+    id: "speed",
+    label: "变速",
+    group: "时间",
+    desc: "快放 / 慢放（音画同步）",
+    accept: "video",
+    fields: [
+      {
+        key: "speed",
+        type: "select",
+        label: "倍速",
+        options: [
+          { value: "0.5", label: "0.5×" },
+          { value: "0.75", label: "0.75×" },
+          { value: "1.25", label: "1.25×" },
+          { value: "1.5", label: "1.5×" },
+          { value: "2", label: "2×" },
+          { value: "3", label: "3×" },
+          { value: "4", label: "4×" },
+        ],
+        default: "1.5",
+      },
+    ],
+  },
+  {
+    id: "trim",
+    label: "裁剪时长",
+    group: "时间",
+    desc: "统一截取起点 + 时长",
+    accept: "media",
+    fields: [
+      { key: "startSec", type: "number", label: "起点(秒)", min: 0, max: 86400, step: 0.1, default: 0 },
+      { key: "durationSec", type: "number", label: "时长(秒)", min: 0.2, max: 86400, step: 0.1, default: 10 },
+      {
+        key: "trimMode",
+        type: "select",
+        label: "输出",
+        options: [
+          { value: "video", label: "视频" },
+          { value: "audio", label: "仅音频 MP3" },
+        ],
+        default: "video",
+      },
+    ],
+  },
+  {
+    id: "fade",
+    label: "淡入淡出",
+    group: "时间",
+    desc: "开头结尾淡化",
+    accept: "video",
+    fields: [
+      { key: "fadeIn", type: "number", label: "淡入(秒)", min: 0, max: 30, step: 0.1, default: 1 },
+      { key: "fadeOut", type: "number", label: "淡出(秒)", min: 0, max: 30, step: 0.1, default: 1 },
+    ],
+  },
+  {
+    id: "loop",
+    label: "循环成片",
+    group: "时间",
+    desc: "把短片循环 N 次合成",
+    accept: "video",
+    fields: [{ key: "loops", type: "number", label: "循环次数", min: 2, max: 50, step: 1, default: 3 }],
+  },
+  {
+    id: "gif",
+    label: "转 GIF",
+    group: "动图",
+    desc: "调色板高质量动图",
+    accept: "video",
+    fields: [
+      { key: "gifFps", type: "number", label: "帧率", min: 5, max: 30, step: 1, default: 10 },
+      { key: "gifWidth", type: "number", label: "宽度", min: 120, max: 1280, step: 10, default: 480 },
+    ],
+  },
+  {
+    id: "thumb",
+    label: "截封面",
+    group: "截取",
+    desc: "导出单张封面图",
+    accept: "video",
+    fields: [{ key: "atSec", type: "number", label: "时间点(秒)", min: 0, max: 86400, step: 0.1, default: 1 }],
+  },
+  {
+    id: "frames",
+    label: "按间隔截帧",
+    group: "截取",
+    desc: "每隔 N 秒存一张图到子文件夹",
+    accept: "video",
+    fields: [{ key: "everySec", type: "number", label: "间隔(秒)", min: 0.5, max: 600, step: 0.5, default: 5 }],
+  },
+  {
+    id: "concat",
+    label: "拼接成片",
+    group: "合成",
+    desc: "按勾选顺序合成一个视频",
+    accept: "video",
+    fields: [],
+  },
+  {
+    id: "overlay-text",
+    label: "文字水印",
+    group: "合成",
+    desc: "烧录简单文字（需系统字体）",
+    accept: "video",
+    fields: [
+      { key: "text", type: "text", label: "文字", default: "DevTools" },
+      {
+        key: "textPos",
+        type: "select",
+        label: "位置",
+        options: [
+          { value: "br", label: "右下" },
+          { value: "bl", label: "左下" },
+          { value: "tr", label: "右上" },
+          { value: "tl", label: "左上" },
+          { value: "c", label: "居中" },
+        ],
+        default: "br",
+      },
+      { key: "fontSize", type: "number", label: "字号", min: 12, max: 96, step: 1, default: 28 },
+    ],
+  },
+];
+
 function audioArgsForFormat(fmt, bitrate) {
   const f = String(fmt || "mp3").toLowerCase();
   const br = String(bitrate || "192k");
-  if (f === "wav") return { ext: "wav", args: ["-vn", "-c:a", "pcm_s16le", "-ar", "44100", "-ac", "2"] };
-  if (f === "m4a") return { ext: "m4a", args: ["-vn", "-c:a", "aac", "-b:a", br] };
-  return { ext: "mp3", args: ["-vn", "-c:a", "libmp3lame", "-b:a", br] };
+  if (f === "wav") return { ext: "wav", mime: "audio/wav", args: ["-vn", "-c:a", "pcm_s16le", "-ar", "44100", "-ac", "2"] };
+  if (f === "flac") return { ext: "flac", mime: "audio/flac", args: ["-vn", "-c:a", "flac"] };
+  if (f === "ogg") return { ext: "ogg", mime: "audio/ogg", args: ["-vn", "-c:a", "libvorbis", "-q:a", "5"] };
+  if (f === "m4a") return { ext: "m4a", mime: "audio/mp4", args: ["-vn", "-c:a", "aac", "-b:a", br] };
+  return { ext: "mp3", mime: "audio/mpeg", args: ["-vn", "-c:a", "libmp3lame", "-b:a", br] };
 }
 
-function convertPresetArgs(preset) {
-  const p = String(preset || "mp4-fast").toLowerCase();
-  if (p === "mp4-hq") {
+function atempoChain(speed) {
+  let s = Number(speed) || 1;
+  if (!(s > 0)) s = 1;
+  const filters = [];
+  // atempo 仅支持 0.5–2.0，链式拼接
+  while (s > 2.0001) {
+    filters.push("atempo=2.0");
+    s /= 2;
+  }
+  while (s < 0.5 - 1e-9) {
+    filters.push("atempo=0.5");
+    s /= 0.5;
+  }
+  filters.push(`atempo=${Math.max(0.5, Math.min(2, s)).toFixed(4)}`);
+  return filters.join(",");
+}
+
+function even(n) {
+  const x = Math.max(2, Math.round(Number(n) || 2));
+  return x % 2 === 0 ? x : x - 1;
+}
+
+function defaultFontPath() {
+  const candidates = [
+    "/System/Library/Fonts/PingFang.ttc",
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    "/Library/Fonts/Arial Unicode.ttf",
+    "C:\\Windows\\Fonts\\msyh.ttc",
+    "C:\\Windows\\Fonts\\msyh.ttf",
+    "C:\\Windows\\Fonts\\arial.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+    "/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc",
+    "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
+  ];
+  for (const f of candidates) {
+    try {
+      if (fs.existsSync(f)) return f;
+    } catch {
+      /* ignore */
+    }
+  }
+  return "";
+}
+
+function parseRatio(s, fallbackW = 16, fallbackH = 9) {
+  const m = String(s || "").match(/^(\d+(?:\.\d+)?)\s*[:/]\s*(\d+(?:\.\d+)?)$/);
+  if (!m) return { w: fallbackW, h: fallbackH };
+  return { w: Number(m[1]), h: Number(m[2]) };
+}
+
+function escapeDrawtext(text) {
+  return String(text || "")
+    .replace(/\\/g, "\\\\")
+    .replace(/:/g, "\\:")
+    .replace(/'/g, "\\'")
+    .replace(/%/g, "\\%")
+    .replace(/\n/g, " ");
+}
+
+/**
+ * @returns {{ ext: string, mime: string, suffix: string, buildArgs: (src: string, dest: string) => string[][] }}
+ * buildArgs returns one or more attempt arg lists (fallback chain)
+ */
+function planOp(op, opts = {}) {
+  const id = String(op || "").toLowerCase();
+
+  if (id === "extract-audio" || id === "audio-convert") {
+    const fmt = audioArgsForFormat(opts.format, opts.bitrate);
+    return {
+      ext: fmt.ext,
+      mime: fmt.mime,
+      suffix: id === "audio-convert" ? `-a${fmt.ext}` : "",
+      buildArgs: (src, dest) => {
+        const attempts = [];
+        if (fmt.ext === "m4a") attempts.push(["-y", "-i", src, "-vn", "-c:a", "copy", dest]);
+        attempts.push(["-y", "-i", src, ...fmt.args, dest]);
+        return attempts;
+      },
+    };
+  }
+
+  if (id === "volume") {
+    const pct = Math.max(5, Math.min(400, Number(opts.volumePct) || 100));
+    const vol = (pct / 100).toFixed(3);
+    const fmt = audioArgsForFormat(opts.format || "mp3", opts.bitrate);
+    const af = Math.abs(pct - 100) < 0.05 ? [] : ["-af", `volume=${vol}`];
+    return {
+      ext: fmt.ext,
+      mime: fmt.mime,
+      suffix: `-vol${pct}`,
+      buildArgs: (src, dest) => [["-y", "-i", src, "-vn", ...af, ...fmt.args.filter((a) => a !== "-vn"), dest]],
+    };
+  }
+
+  if (id === "loudnorm") {
+    const fmt = audioArgsForFormat(opts.format || "mp3", opts.bitrate || "192k");
+    return {
+      ext: fmt.ext,
+      mime: fmt.mime,
+      suffix: "-loudnorm",
+      buildArgs: (src, dest) => [
+        ["-y", "-i", src, "-vn", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", ...fmt.args.filter((a) => a !== "-vn"), dest],
+      ],
+    };
+  }
+
+  if (id === "mono") {
+    const fmt = audioArgsForFormat(opts.format || "mp3", opts.bitrate || "128k");
+    return {
+      ext: fmt.ext,
+      mime: fmt.mime,
+      suffix: "-mono",
+      buildArgs: (src, dest) => [["-y", "-i", src, "-vn", "-ac", "1", ...fmt.args.filter((a) => a !== "-vn"), dest]],
+    };
+  }
+
+  if (id === "denoise-audio") {
+    const fmt = audioArgsForFormat(opts.format || "mp3", opts.bitrate || "192k");
+    return {
+      ext: fmt.ext,
+      mime: fmt.mime,
+      suffix: "-denoise",
+      buildArgs: (src, dest) => [
+        ["-y", "-i", src, "-vn", "-af", "afftdn=nf=-25", ...fmt.args.filter((a) => a !== "-vn"), dest],
+        ["-y", "-i", src, "-vn", "-af", "highpass=f=80,lowpass=f=12000", ...fmt.args.filter((a) => a !== "-vn"), dest],
+      ],
+    };
+  }
+
+  if (id === "convert") {
+    const p = String(opts.preset || "mp4-fast").toLowerCase();
+    let ext = "mp4";
+    let mime = "video/mp4";
+    let args = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"];
+    if (p === "mp4-hq") {
+      args = ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart"];
+    } else if (p === "mp4-copy") {
+      args = ["-c", "copy", "-movflags", "+faststart"];
+    } else if (p === "webm") {
+      ext = "webm";
+      mime = "video/webm";
+      args = ["-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "32", "-c:a", "libopus", "-b:a", "128k"];
+    } else if (p === "mkv") {
+      ext = "mkv";
+      mime = "video/x-matroska";
+      args = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "128k"];
+    } else if (p === "mov") {
+      ext = "mov";
+      mime = "video/quicktime";
+      args = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "128k"];
+    }
+    return {
+      ext,
+      mime,
+      suffix: `-out`,
+      buildArgs: (src, dest) => [["-y", "-i", src, ...args, dest]],
+    };
+  }
+
+  if (id === "compress") {
+    const level = String(opts.compress || "medium").toLowerCase();
+    const crf = level === "high" ? "28" : level === "low" ? "20" : "23";
+    const preset = level === "high" ? "veryfast" : "fast";
     return {
       ext: "mp4",
-      args: ["-c:v", "libx264", "-preset", "medium", "-crf", "20", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart"],
+      mime: "video/mp4",
+      suffix: `-cmp-${level}`,
+      buildArgs: (src, dest) => [
+        [
+          "-y",
+          "-i",
+          src,
+          "-c:v",
+          "libx264",
+          "-preset",
+          preset,
+          "-crf",
+          crf,
+          "-c:a",
+          "aac",
+          "-b:a",
+          level === "high" ? "96k" : "128k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+      ],
     };
   }
-  if (p === "webm") {
+
+  if (id === "hevc") {
+    const crf = String(opts.hevcCrf || "28");
     return {
-      ext: "webm",
-      args: ["-c:v", "libvpx-vp9", "-b:v", "0", "-crf", "32", "-c:a", "libopus", "-b:a", "128k"],
+      ext: "mp4",
+      mime: "video/mp4",
+      suffix: `-hevc${crf}`,
+      buildArgs: (src, dest) => [
+        [
+          "-y",
+          "-i",
+          src,
+          "-c:v",
+          "libx265",
+          "-preset",
+          "medium",
+          "-crf",
+          crf,
+          "-tag:v",
+          "hvc1",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+        // fallback if libx265 missing
+        [
+          "-y",
+          "-i",
+          src,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "medium",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+      ],
     };
   }
-  if (p === "audio-copy-mp4") {
-    return { ext: "mp4", args: ["-c", "copy", "-movflags", "+faststart"] };
+
+  if (id === "scale") {
+    const h = even(Math.max(144, Math.min(4320, Number(opts.height) || 720)));
+    return {
+      ext: "mp4",
+      mime: "video/mp4",
+      suffix: `-${h}p`,
+      buildArgs: (src, dest) => [
+        [
+          "-y",
+          "-i",
+          src,
+          "-vf",
+          `scale=-2:${h}`,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+      ],
+    };
   }
-  // default fast mp4
-  return {
-    ext: "mp4",
-    args: ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart"],
-  };
+
+  if (id === "fps") {
+    const fps = Math.max(1, Math.min(120, Number(opts.fps) || 30));
+    return {
+      ext: "mp4",
+      mime: "video/mp4",
+      suffix: `-${fps}fps`,
+      buildArgs: (src, dest) => [
+        [
+          "-y",
+          "-i",
+          src,
+          "-r",
+          String(fps),
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+      ],
+    };
+  }
+
+  if (id === "mute") {
+    return {
+      ext: "mp4",
+      mime: "video/mp4",
+      suffix: "-mute",
+      buildArgs: (src, dest) => [
+        ["-y", "-i", src, "-an", "-c:v", "copy", "-movflags", "+faststart", dest],
+        ["-y", "-i", src, "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-movflags", "+faststart", dest],
+      ],
+    };
+  }
+
+  if (id === "crop") {
+    const { w, h } = parseRatio(opts.cropRatio || "1:1", 1, 1);
+    const vf = `crop=min(iw\\,ih*${w}/${h}):min(ih\\,iw*${h}/${w})`;
+    return {
+      ext: "mp4",
+      mime: "video/mp4",
+      suffix: `-crop${String(opts.cropRatio || "1x1").replace(":", "x")}`,
+      buildArgs: (src, dest) => [
+        [
+          "-y",
+          "-i",
+          src,
+          "-vf",
+          vf,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+      ],
+    };
+  }
+
+  if (id === "pad") {
+    const { w, h } = parseRatio(opts.padRatio || "16:9", 16, 9);
+    const vf = `setsar=1,pad=max(iw\\,ih*${w}/${h}):max(ih\\,iw*${h}/${w}):(ow-iw)/2:(oh-ih)/2:black`;
+    return {
+      ext: "mp4",
+      mime: "video/mp4",
+      suffix: `-pad${String(opts.padRatio || "16x9").replace(":", "x")}`,
+      buildArgs: (src, dest) => [
+        [
+          "-y",
+          "-i",
+          src,
+          "-vf",
+          vf,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+      ],
+    };
+  }
+
+  if (id === "rotate") {
+    const deg = Number(opts.rotate) || 90;
+    const transpose =
+      deg === 180 ? "transpose=1,transpose=1" : deg === 270 ? "transpose=2" : "transpose=1";
+    return {
+      ext: "mp4",
+      mime: "video/mp4",
+      suffix: `-rot${deg}`,
+      buildArgs: (src, dest) => [
+        [
+          "-y",
+          "-i",
+          src,
+          "-vf",
+          transpose,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "copy",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+        [
+          "-y",
+          "-i",
+          src,
+          "-vf",
+          transpose,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+      ],
+    };
+  }
+
+  if (id === "flip") {
+    const mode = String(opts.flip || "h").toLowerCase();
+    const vf = mode === "v" ? "vflip" : "hflip";
+    return {
+      ext: "mp4",
+      mime: "video/mp4",
+      suffix: `-flip${mode}`,
+      buildArgs: (src, dest) => [
+        [
+          "-y",
+          "-i",
+          src,
+          "-vf",
+          vf,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "copy",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+        [
+          "-y",
+          "-i",
+          src,
+          "-vf",
+          vf,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+      ],
+    };
+  }
+
+  if (id === "reverse") {
+    return {
+      ext: "mp4",
+      mime: "video/mp4",
+      suffix: "-rev",
+      buildArgs: (src, dest) => [
+        [
+          "-y",
+          "-i",
+          src,
+          "-vf",
+          "reverse",
+          "-af",
+          "areverse",
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+        [
+          "-y",
+          "-i",
+          src,
+          "-an",
+          "-vf",
+          "reverse",
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+      ],
+    };
+  }
+
+  if (id === "deinterlace") {
+    return {
+      ext: "mp4",
+      mime: "video/mp4",
+      suffix: "-deint",
+      buildArgs: (src, dest) => [
+        [
+          "-y",
+          "-i",
+          src,
+          "-vf",
+          "yadif=0:-1:0",
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "copy",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+        [
+          "-y",
+          "-i",
+          src,
+          "-vf",
+          "yadif=0:-1:0",
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+      ],
+    };
+  }
+
+  if (id === "eq") {
+    const br = Math.max(-1, Math.min(1, Number(opts.brightness) || 0));
+    const ct = Math.max(0.5, Math.min(2, Number(opts.contrast) || 1));
+    const sat = Math.max(0, Math.min(3, Number(opts.saturation) || 1));
+    const vf = `eq=brightness=${br}:contrast=${ct}:saturation=${sat}`;
+    return {
+      ext: "mp4",
+      mime: "video/mp4",
+      suffix: "-eq",
+      buildArgs: (src, dest) => [
+        [
+          "-y",
+          "-i",
+          src,
+          "-vf",
+          vf,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "copy",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+        [
+          "-y",
+          "-i",
+          src,
+          "-vf",
+          vf,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+      ],
+    };
+  }
+
+  if (id === "speed") {
+    const speed = Math.max(0.25, Math.min(4, Number(opts.speed) || 1.5));
+    const setpts = (1 / speed).toFixed(6);
+    const atempo = atempoChain(speed);
+    return {
+      ext: "mp4",
+      mime: "video/mp4",
+      suffix: `-spd${String(speed).replace(".", "_")}`,
+      buildArgs: (src, dest) => [
+        [
+          "-y",
+          "-i",
+          src,
+          "-filter_complex",
+          `[0:v]setpts=${setpts}*PTS[v];[0:a]${atempo}[a]`,
+          "-map",
+          "[v]",
+          "-map",
+          "[a]",
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+        // no audio fallback
+        [
+          "-y",
+          "-i",
+          src,
+          "-an",
+          "-filter:v",
+          `setpts=${setpts}*PTS`,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+      ],
+    };
+  }
+
+  if (id === "trim") {
+    const start = Math.max(0, Number(opts.startSec) || 0);
+    const dur = Math.max(0.2, Number(opts.durationSec) || 10);
+    const mode = String(opts.trimMode || "video").toLowerCase();
+    if (mode === "audio") {
+      const fmt = audioArgsForFormat("mp3", "192k");
+      return {
+        ext: fmt.ext,
+        mime: fmt.mime,
+        suffix: "-cut",
+        buildArgs: (src, dest) => [["-y", "-ss", String(start), "-t", String(dur), "-i", src, ...fmt.args, dest]],
+      };
+    }
+    return {
+      ext: "mp4",
+      mime: "video/mp4",
+      suffix: `-cut`,
+      buildArgs: (src, dest) => [
+        ["-y", "-ss", String(start), "-t", String(dur), "-i", src, "-c", "copy", "-avoid_negative_ts", "make_zero", "-movflags", "+faststart", dest],
+        [
+          "-y",
+          "-ss",
+          String(start),
+          "-t",
+          String(dur),
+          "-i",
+          src,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+      ],
+    };
+  }
+
+  if (id === "fade") {
+    const fin = Math.max(0, Number(opts.fadeIn) || 1);
+    const fout = Math.max(0, Number(opts.fadeOut) || 1);
+    // st for fade out needs duration; use approximate via fade=t=out:st=999999 workaround — better probe per file in runner
+    return {
+      ext: "mp4",
+      mime: "video/mp4",
+      suffix: "-fade",
+      needsDuration: true,
+      fadeIn: fin,
+      fadeOut: fout,
+      buildArgs: (src, dest, meta = {}) => {
+        const dur = Number(meta.duration) || 0;
+        const foStart = Math.max(0, dur - fout);
+        const vf = [];
+        const af = [];
+        if (fin > 0) {
+          vf.push(`fade=t=in:st=0:d=${fin}`);
+          af.push(`afade=t=in:st=0:d=${fin}`);
+        }
+        if (fout > 0 && dur > fout) {
+          vf.push(`fade=t=out:st=${foStart}:d=${fout}`);
+          af.push(`afade=t=out:st=${foStart}:d=${fout}`);
+        }
+        const args = ["-y", "-i", src];
+        if (vf.length) args.push("-vf", vf.join(","));
+        if (af.length) args.push("-af", af.join(","));
+        args.push(
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          dest
+        );
+        return [args];
+      },
+    };
+  }
+
+  if (id === "gif") {
+    const fps = Math.max(5, Math.min(30, Number(opts.gifFps) || 10));
+    const width = even(Math.max(120, Math.min(1280, Number(opts.gifWidth) || 480)));
+    return {
+      ext: "gif",
+      mime: "image/gif",
+      suffix: "",
+      buildArgs: (src, dest) => [
+        [
+          "-y",
+          "-i",
+          src,
+          "-vf",
+          `fps=${fps},scale=${width}:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse`,
+          "-loop",
+          "0",
+          dest,
+        ],
+      ],
+    };
+  }
+
+  if (id === "thumb") {
+    const at = Math.max(0, Number(opts.atSec) || 1);
+    return {
+      ext: "jpg",
+      mime: "image/jpeg",
+      suffix: "-cover",
+      buildArgs: (src, dest) => [["-y", "-ss", String(at), "-i", src, "-frames:v", "1", "-q:v", "2", dest]],
+    };
+  }
+
+  if (id === "frames") {
+    const every = Math.max(0.5, Math.min(600, Number(opts.everySec) || 5));
+    return {
+      ext: "jpg",
+      mime: "image/jpeg",
+      suffix: "-frames",
+      multiPattern: true,
+      buildArgs: (src, destPattern) => [
+        ["-y", "-i", src, "-vf", `fps=1/${every}`, "-q:v", "3", destPattern],
+      ],
+    };
+  }
+
+  if (id === "loop") {
+    const loops = Math.max(2, Math.min(50, Math.round(Number(opts.loops) || 3)));
+    return {
+      ext: "mp4",
+      mime: "video/mp4",
+      suffix: `-loop${loops}`,
+      buildArgs: (src, dest) => [
+        [
+          "-y",
+          "-stream_loop",
+          String(loops - 1),
+          "-i",
+          src,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+      ],
+    };
+  }
+
+  if (id === "overlay-text") {
+    const text = escapeDrawtext(opts.text || "DevTools");
+    const font = defaultFontPath();
+    const size = Math.max(12, Math.min(96, Number(opts.fontSize) || 28));
+    const pos = String(opts.textPos || "br").toLowerCase();
+    let xy = "x=w-tw-24:y=h-th-24";
+    if (pos === "bl") xy = "x=24:y=h-th-24";
+    else if (pos === "tr") xy = "x=w-tw-24:y=24";
+    else if (pos === "tl") xy = "x=24:y=24";
+    else if (pos === "c") xy = "x=(w-tw)/2:y=(h-th)/2";
+    const fontPart = font ? `:fontfile=${font.replace(/\\/g, "/").replace(/:/g, "\\:")}` : "";
+    const vf = `drawtext=text='${text}'${fontPart}:fontsize=${size}:fontcolor=white:borderw=2:bordercolor=black@0.6:${xy}`;
+    return {
+      ext: "mp4",
+      mime: "video/mp4",
+      suffix: "-text",
+      buildArgs: (src, dest) => [
+        [
+          "-y",
+          "-i",
+          src,
+          "-vf",
+          vf,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "copy",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+        [
+          "-y",
+          "-i",
+          src,
+          "-vf",
+          vf,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "veryfast",
+          "-crf",
+          "23",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "128k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+      ],
+    };
+  }
+
+  throw new Error(`未知操作: ${id}`);
+}
+
+async function probeDuration(filePath) {
+  try {
+    const info = await probeMedia(filePath);
+    return Number(info.duration) || 0;
+  } catch {
+    return 0;
+  }
 }
 
 async function uniqueOutPath(dir, base, ext, overwrite) {
@@ -599,121 +1979,118 @@ function runJobAsync(job, runner) {
   });
 }
 
-async function runExtractAudioJob(job) {
-  const files = job._files;
-  const outDir = job._outDir;
-  const fmt = audioArgsForFormat(job.meta.format, job.meta.bitrate);
-  const overwrite = Boolean(job.meta.overwrite);
-  const total = files.length;
-  let okCount = 0;
-  let failCount = 0;
-
-  for (let i = 0; i < files.length; i++) {
-    if (job.cancelRequested) break;
-    const src = files[i];
-    const base = path.basename(src, path.extname(src));
-    const dest = await uniqueOutPath(outDir, base, fmt.ext, overwrite);
-    touchJob(job, {
-      progress: i / total,
-      message: `抽音频 ${i + 1}/${total} · ${path.basename(src)}`,
-    });
-    const item = { src, dest, ok: false, error: "" };
-    try {
-      // Prefer stream copy into m4a when source audio is already aac and no forced reencode needed
-      const attempts = [];
-      if (fmt.ext === "m4a" && !overwrite) {
-        attempts.push(["-y", "-i", src, "-vn", "-c:a", "copy", dest]);
-      }
-      attempts.push(["-y", "-i", src, ...fmt.args, dest]);
-
-      let lastErr = null;
-      for (const args of attempts) {
-        if (job.cancelRequested) break;
-        try {
-          const { child, done } = spawnFfmpeg(args);
-          job.child = child;
-          job.pid = child.pid || null;
-          await done;
-          lastErr = null;
-          break;
-        } catch (err) {
-          lastErr = err;
-          try {
-            if (fs.existsSync(dest)) await fs.promises.unlink(dest);
-          } catch {
-            /* ignore */
-          }
-        }
-      }
-      if (job.cancelRequested) break;
-      if (lastErr) throw lastErr;
-      const st = await fs.promises.stat(dest);
-      item.ok = true;
-      item.size = st.size;
-      okCount += 1;
-      job.artifacts.push({
-        name: path.basename(dest),
-        size: st.size,
-        path: dest,
-        mime: fmt.ext === "mp3" ? "audio/mpeg" : fmt.ext === "wav" ? "audio/wav" : "audio/mp4",
-      });
-    } catch (err) {
-      item.error = err.message || String(err);
-      failCount += 1;
-    }
-    job.items.push(item);
-  }
-
-  touchJob(job, {
-    progress: job.cancelRequested ? iSafe(job.items.length, total) : 1,
-    message: job.cancelRequested
-      ? `已取消 · 成功 ${okCount} · 失败 ${failCount}`
-      : `完成 · 成功 ${okCount} · 失败 ${failCount}`,
-    meta: { ...job.meta, okCount, failCount, outDir },
-  });
-  if (!okCount && failCount) throw new Error(job.items.find((x) => x.error)?.error || "全部失败");
-}
-
 function iSafe(n, total) {
   return total ? Math.min(0.99, n / total) : 0;
 }
 
-async function runConvertJob(job) {
-  const files = job._files;
-  const outDir = job._outDir;
-  const preset = convertPresetArgs(job.meta.preset);
-  const overwrite = Boolean(job.meta.overwrite);
-  const total = files.length;
-  let okCount = 0;
-  let failCount = 0;
-
-  for (let i = 0; i < files.length; i++) {
+async function runOneAttempt(job, attempts) {
+  let lastErr = null;
+  for (const args of attempts) {
     if (job.cancelRequested) break;
-    const src = files[i];
-    const base = path.basename(src, path.extname(src));
-    const dest = await uniqueOutPath(outDir, `${base}-out`, preset.ext, overwrite);
-    touchJob(job, {
-      progress: i / total,
-      message: `转换 ${i + 1}/${total} · ${path.basename(src)}`,
-    });
-    const item = { src, dest, ok: false, error: "" };
     try {
-      const args = ["-y", "-i", src, ...preset.args, dest];
       const { child, done } = spawnFfmpeg(args);
       job.child = child;
       job.pid = child.pid || null;
       await done;
+      return;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  if (lastErr) throw lastErr;
+  throw new Error("已取消");
+}
+
+async function runBatchOpJob(job) {
+  const files = job._files;
+  const outDir = job._outDir;
+  const plan = job._plan;
+  const overwrite = Boolean(job.meta.overwrite);
+  const total = files.length;
+  let okCount = 0;
+  let failCount = 0;
+  const label = job.meta.opLabel || job.type;
+
+  for (let i = 0; i < files.length; i++) {
+    if (job.cancelRequested) break;
+    const src = files[i];
+    const base = path.basename(src, path.extname(src)) + (plan.suffix || "");
+    touchJob(job, {
+      progress: i / total,
+      message: `${label} ${i + 1}/${total} · ${path.basename(src)}`,
+    });
+    const item = { src, dest: "", ok: false, error: "" };
+    try {
+      let dest;
+      let attempts;
+      if (plan.multiPattern) {
+        const dirName = await uniqueOutPath(outDir, base, "dir", true);
+        // uniqueOutPath adds .dir — use folder without ext
+        const folder = path.join(outDir, `${base}-imgs`);
+        await fs.promises.mkdir(folder, { recursive: true });
+        dest = path.join(folder, "frame-%04d.jpg");
+        item.dest = folder;
+        const meta = plan.needsDuration ? { duration: await probeDuration(src) } : {};
+        attempts = plan.buildArgs(src, dest, meta);
+      } else {
+        dest = await uniqueOutPath(outDir, base.replace(/\.$/, "") || "out", plan.ext, overwrite);
+        item.dest = dest;
+        const meta = plan.needsDuration ? { duration: await probeDuration(src) } : {};
+        attempts = plan.buildArgs(src, dest, meta);
+      }
+
+      // clean failed partials between attempts
+      let succeeded = false;
+      for (let a = 0; a < attempts.length; a++) {
+        if (job.cancelRequested) break;
+        try {
+          const { child, done } = spawnFfmpeg(attempts[a]);
+          job.child = child;
+          job.pid = child.pid || null;
+          await done;
+          succeeded = true;
+          break;
+        } catch (err) {
+          if (!plan.multiPattern) {
+            try {
+              if (item.dest && fs.existsSync(item.dest)) await fs.promises.unlink(item.dest);
+            } catch {
+              /* ignore */
+            }
+          }
+          if (a === attempts.length - 1) throw err;
+        }
+      }
       if (job.cancelRequested) break;
-      const st = await fs.promises.stat(dest);
-      item.ok = true;
-      item.size = st.size;
-      okCount += 1;
-      job.artifacts.push({
-        name: path.basename(dest),
-        size: st.size,
-        path: dest,
-        mime: preset.ext === "webm" ? "video/webm" : "video/mp4",
-      });
+      if (!succeeded) throw new Error("导出失败");
+
+      if (plan.multiPattern) {
+        const folder = item.dest;
+        const names = (await fs.promises.readdir(folder)).filter((n) => /\.jpe?g$/i.test(n));
+        let size = 0;
+        for (const n of names) {
+          try {
+            size += (await fs.promises.stat(path.join(folder, n))).size;
+          } catch {
+            /* ignore */
+          }
+        }
+        item.ok = true;
+        item.size = size;
+        okCount += 1;
+        job.artifacts.push({ name: path.basename(folder), size, path: folder, mime: "inode/directory" });
+      } else {
+        const st = await fs.promises.stat(item.dest);
+        item.ok = true;
+        item.size = st.size;
+        okCount += 1;
+        job.artifacts.push({
+          name: path.basename(item.dest),
+          size: st.size,
+          path: item.dest,
+          mime: plan.mime,
+        });
+      }
     } catch (err) {
       item.error = err.message || String(err);
       failCount += 1;
@@ -729,6 +2106,62 @@ async function runConvertJob(job) {
     meta: { ...job.meta, okCount, failCount, outDir },
   });
   if (!okCount && failCount) throw new Error(job.items.find((x) => x.error)?.error || "全部失败");
+}
+
+// (batch runner above)
+
+async function runConcatJob(job) {
+  const files = job._files;
+  const outDir = job._outDir;
+  const overwrite = Boolean(job.meta.overwrite);
+  if (files.length < 2) throw new Error("拼接至少需要 2 个文件");
+  const listFile = path.join(TMP_ROOT, `concat-${job.id}.txt`);
+  const lines = files.map((f) => `file '${String(f).replace(/'/g, `'\\''`)}'`);
+  await fs.promises.writeFile(listFile, lines.join("\n"), "utf8");
+  const dest = await uniqueOutPath(outDir, `merged-${Date.now()}`, "mp4", overwrite);
+  touchJob(job, { progress: 0.1, message: `拼接 ${files.length} 个文件…` });
+  const attempts = [
+    ["-y", "-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", "-movflags", "+faststart", dest],
+    [
+      "-y",
+      "-f",
+      "concat",
+      "-safe",
+      "0",
+      "-i",
+      listFile,
+      "-c:v",
+      "libx264",
+      "-preset",
+      "veryfast",
+      "-crf",
+      "23",
+      "-c:a",
+      "aac",
+      "-b:a",
+      "128k",
+      "-movflags",
+      "+faststart",
+      dest,
+    ],
+  ];
+  try {
+    await runOneAttempt(job, attempts);
+    const st = await fs.promises.stat(dest);
+    job.items.push({ src: files.join(" + "), dest, ok: true, size: st.size });
+    job.artifacts.push({ name: path.basename(dest), size: st.size, path: dest, mime: "video/mp4" });
+    touchJob(job, {
+      progress: 1,
+      message: `拼接完成 · ${path.basename(dest)}`,
+      meta: { ...job.meta, okCount: 1, failCount: 0, outDir },
+    });
+  } finally {
+    try {
+      await fs.promises.unlink(listFile);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 function cancelJob(job) {
@@ -742,6 +2175,59 @@ function cancelJob(job) {
   }
   touchJob(job, { message: "正在取消…" });
   return publicJob(job);
+}
+
+async function startJobFromBody(body) {
+  const op = String(body.op || body.type || "").toLowerCase();
+  if (!op) throw new Error("缺少 op");
+  const catalog = OPS_CATALOG.find((o) => o.id === op);
+  if (op !== "concat") {
+    planOp(op, body); // validate early
+  }
+
+  const accept = catalog?.accept || (op === "concat" ? "video" : "video");
+  const files = await collectInputFiles(body.paths || [], {
+    recursive: Boolean(body.recursive),
+    accept,
+  });
+  let outDir;
+  if (body.createOutDir) outDir = await mkdirpAllowed(body.outDir || "");
+  else outDir = await ensureWritableDir(body.outDir || "");
+
+  if (op === "concat") {
+    const job = createJob("concat", {
+      op,
+      opLabel: catalog?.label || "拼接",
+      overwrite: Boolean(body.overwrite),
+      recursive: Boolean(body.recursive),
+      outDir,
+      count: files.length,
+    });
+    job._files = files;
+    job._outDir = outDir;
+    runJobAsync(job, runConcatJob);
+    return job;
+  }
+
+  const opts = { ...body };
+  if (op === "extract-audio" || op === "audio-convert") opts.format = body.format || "mp3";
+  if (op === "convert") opts.preset = body.preset || "mp4-fast";
+
+  const plan = planOp(op, opts);
+  const job = createJob(op, {
+    op,
+    opLabel: catalog?.label || op,
+    overwrite: Boolean(body.overwrite),
+    recursive: Boolean(body.recursive),
+    outDir,
+    count: files.length,
+    options: opts,
+  });
+  job._files = files;
+  job._outDir = outDir;
+  job._plan = plan;
+  runJobAsync(job, runBatchOpJob);
+  return job;
 }
 
 function listenWithFallback(startPort, maxTries = 12) {
@@ -837,6 +2323,22 @@ async function handleRequest(req, res) {
       return;
     }
 
+    if (req.method === "POST" && pathname === "/probe/batch") {
+      const body = parseJsonBody(await readBody(req));
+      const paths = Array.isArray(body.paths) ? body.paths.slice(0, 30) : [];
+      if (!paths.length) throw new Error("请选择要探测的文件");
+      const items = [];
+      for (const p of paths) {
+        try {
+          items.push(await probeMedia(p));
+        } catch (err) {
+          items.push({ ok: false, path: p, error: err.message || String(err) });
+        }
+      }
+      sendJson(res, 200, { ok: true, items }, origin);
+      return;
+    }
+
     if (req.method === "GET" && pathname === "/jobs") {
       const jobs = [...JOBS.values()]
         .sort((a, b) => b.createdAt - a.createdAt)
@@ -868,56 +2370,30 @@ async function handleRequest(req, res) {
       return;
     }
 
+    if (req.method === "GET" && pathname === "/ops") {
+      sendJson(res, 200, { ok: true, ops: OPS_CATALOG, version: BRIDGE_VERSION }, origin);
+      return;
+    }
+
+    if (req.method === "POST" && pathname === "/jobs/run") {
+      const body = parseJsonBody(await readBody(req));
+      const job = await startJobFromBody(body);
+      sendJson(res, 200, { ok: true, job: publicJob(job) }, origin);
+      return;
+    }
+
     if (req.method === "POST" && pathname === "/jobs/extract-audio") {
       const body = parseJsonBody(await readBody(req));
-      const files = await collectInputFiles(body.paths || [], {
-        recursive: Boolean(body.recursive),
-      });
-      let outDir;
-      if (body.createOutDir) {
-        outDir = await mkdirpAllowed(body.outDir || "");
-      } else {
-        outDir = await ensureWritableDir(body.outDir || "");
-      }
-      const format = String(body.format || "mp3").toLowerCase();
-      if (!["mp3", "m4a", "wav"].includes(format)) throw new Error("格式仅支持 mp3 / m4a / wav");
-      const job = createJob("extract-audio", {
-        format,
-        bitrate: String(body.bitrate || "192k"),
-        overwrite: Boolean(body.overwrite),
-        recursive: Boolean(body.recursive),
-        outDir,
-        count: files.length,
-      });
-      job._files = files;
-      job._outDir = outDir;
-      runJobAsync(job, runExtractAudioJob);
+      body.op = "extract-audio";
+      const job = await startJobFromBody(body);
       sendJson(res, 200, { ok: true, job: publicJob(job) }, origin);
       return;
     }
 
     if (req.method === "POST" && pathname === "/jobs/convert") {
       const body = parseJsonBody(await readBody(req));
-      const files = await collectInputFiles(body.paths || [], {
-        recursive: Boolean(body.recursive),
-      });
-      let outDir;
-      if (body.createOutDir) {
-        outDir = await mkdirpAllowed(body.outDir || "");
-      } else {
-        outDir = await ensureWritableDir(body.outDir || "");
-      }
-      const preset = String(body.preset || "mp4-fast");
-      const job = createJob("convert", {
-        preset,
-        overwrite: Boolean(body.overwrite),
-        recursive: Boolean(body.recursive),
-        outDir,
-        count: files.length,
-      });
-      job._files = files;
-      job._outDir = outDir;
-      runJobAsync(job, runConvertJob);
+      body.op = "convert";
+      const job = await startJobFromBody(body);
       sendJson(res, 200, { ok: true, job: publicJob(job) }, origin);
       return;
     }
