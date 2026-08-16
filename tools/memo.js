@@ -136,8 +136,10 @@
     return "file";
   }
 
+  let dbPromise = null;
   function openDb() {
-    return new Promise((resolve, reject) => {
+    if (dbPromise) return dbPromise;
+    dbPromise = new Promise((resolve, reject) => {
       const req = indexedDB.open(DB_NAME, DB_VER);
       req.onupgradeneeded = () => {
         const db = req.result;
@@ -145,9 +147,33 @@
         if (!db.objectStoreNames.contains("blobs")) db.createObjectStore("blobs");
         if (!db.objectStoreNames.contains("index")) db.createObjectStore("index");
       };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error || new Error("打开备忘录数据库失败"));
+      req.onsuccess = () => {
+        const db = req.result;
+        db.onclose = () => {
+          dbPromise = null;
+        };
+        db.onversionchange = () => {
+          try {
+            db.close();
+          } catch (_) {}
+          dbPromise = null;
+        };
+        resolve(db);
+      };
+      req.onerror = () => {
+        dbPromise = null;
+        reject(req.error || new Error("打开备忘录数据库失败"));
+      };
     });
+    return dbPromise;
+  }
+
+  function safeFileName(name, fallback = "file") {
+    const base = String(name || fallback).trim() || fallback;
+    return base
+      .replace(/[\\/:*?"<>|\u0000-\u001f]+/g, "_")
+      .replace(/\s+/g, " ")
+      .slice(0, 120);
   }
 
   async function idbGet(store, key) {
@@ -237,7 +263,22 @@
     bgImageBlob: null,
     lastClipSig: "",
     busy: false,
+    objectUrls: new Set(),
   };
+
+  function trackUrl(url) {
+    if (url) state.objectUrls.add(url);
+    return url;
+  }
+
+  function revokeTrackedUrls() {
+    for (const url of state.objectUrls) {
+      try {
+        URL.revokeObjectURL(url);
+      } catch (_) {}
+    }
+    state.objectUrls.clear();
+  }
 
   async function ensureDirPermission(handle, mode = "readwrite") {
     if (!handle) return false;
@@ -283,25 +324,20 @@
   }
 
   async function saveBlob(id, blob, fileName) {
+    const safe = safeFileName(fileName || id, id);
     if (state.mode === "dir" && state.dirHandle) {
       const ok = await ensureDirPermission(state.dirHandle);
-      if (!ok) throw new Error("没有目录写入权限");
+      if (!ok) throw new Error("没有目录写入权限，请重新连接目录");
       const dir = await getBlobsDir(true);
-      const safe = String(fileName || id).replace(/[^\w.\-()+@]+/g, "_");
       const handle = await dir.getFileHandle(safe, { create: true });
       const writable = await handle.createWritable();
-      if (blob.stream && writable.write.length) {
-        // progressive write when possible
-        await writable.write(blob);
-      } else {
-        await writable.write(blob);
-      }
+      await writable.write(blob);
       await writable.close();
       return safe;
     }
     const buf = await blob.arrayBuffer();
-    await idbSet("blobs", id, { name: fileName || id, mime: blob.type || "", buf });
-    return id;
+    await idbSet("blobs", id, { name: safe, mime: blob.type || "", buf });
+    return safe;
   }
 
   async function loadBlob(item) {
@@ -392,20 +428,31 @@
     if (progressText) progressText.textContent = text || `${pct}%`;
   }
 
+  function canShareFiles() {
+    return typeof navigator.share === "function" && typeof navigator.canShare === "function";
+  }
+
   function updateStoreMeta() {
     if (!storeMeta) return;
-    if (shareBtn) shareBtn.hidden = !isLikelyMobile();
+    if (shareBtn) shareBtn.hidden = !(isLikelyMobile() || canShareFiles());
+    const pickBtn = $("#memo-pick-dir");
+    const connected = Boolean(state.dirHandle) && (state.mode === "dir" || state.dirPending);
+    if (pickBtn) {
+      pickBtn.hidden = !canDirPicker() || connected;
+      pickBtn.textContent = "选择存储目录";
+    }
+    if (reconnectBtn) {
+      reconnectBtn.hidden = !canDirPicker() || !connected;
+      reconnectBtn.textContent = state.dirPending ? "重新连接目录" : "更换目录";
+    }
     if (state.dirPending && state.dirHandle) {
       storeMeta.textContent = `曾绑定目录「${state.dirHandle.name}」，连接已失效。请点「重新连接目录」并选回同一路径以恢复磁盘文件（清站点缓存不会删这些文件）。`;
-      if (reconnectBtn) reconnectBtn.hidden = false;
     } else if (state.mode === "dir" && state.dirHandle) {
       storeMeta.textContent = `存储：磁盘目录「${state.dirHandle.name}」· 清缓存不会删目录内文件；若连接丢失请重新选择同一目录即可恢复。`;
-      if (reconnectBtn) reconnectBtn.hidden = false;
     } else {
       storeMeta.textContent = canDirPicker()
         ? "存储：应用内数据（IndexedDB）。建议选择目录以便清缓存后文件仍在磁盘上。清理缓存前仍建议导出备份。"
         : "存储：应用内数据（手机端）。清理缓存前请先「导出」或「分享导出包」备份到文件/其它 App。";
-      if (reconnectBtn) reconnectBtn.hidden = true;
     }
     window.DevToolsTemp?.refresh?.();
   }
@@ -462,7 +509,7 @@
       <div class="memo-card-head">
         <label class="memo-check"><input type="checkbox" data-memo-check="${item.id}" ${checked} /></label>
         <div class="memo-card-meta">
-          <strong>${title}</strong>
+          <strong title="${title}">${title}</strong>
           <span class="hint tight mono">${time} · ${size}</span>
         </div>
       </div>
@@ -472,7 +519,7 @@
         <button type="button" class="ghost-btn" data-memo-copy="${item.id}">复制</button>
         <button type="button" class="ghost-btn" data-memo-open="${item.id}">打开/预览</button>
         <button type="button" class="ghost-btn" data-memo-dl="${item.id}">下载</button>
-        <button type="button" class="ghost-btn" data-memo-path="${item.id}">路径</button>
+        ${state.mode === "dir" && !state.dirPending ? `<button type="button" class="ghost-btn" data-memo-path="${item.id}">路径</button>` : ""}
         <button type="button" class="ghost-btn" data-memo-del="${item.id}">删除</button>
       </div>
     </article>`;
@@ -485,9 +532,10 @@
       if (!item) continue;
       try {
         const blob = await loadBlob(item);
-        img.src = URL.createObjectURL(blob);
+        img.src = trackUrl(URL.createObjectURL(blob));
       } catch (_) {
-        img.replaceWith(Object.assign(document.createElement("p"), { className: "hint tight", textContent: "预览失败" }));
+        const tip = state.dirPending ? "需重新连接目录后才能预览" : "预览失败";
+        img.replaceWith(Object.assign(document.createElement("p"), { className: "hint tight", textContent: tip }));
       }
     }
     for (const media of $$("[data-memo-media]", itemList)) {
@@ -496,18 +544,30 @@
       if (!item) continue;
       try {
         const blob = await loadBlob(item);
-        media.src = URL.createObjectURL(blob);
+        media.src = trackUrl(URL.createObjectURL(blob));
       } catch (_) {
-        /* ignore */
+        media.replaceWith(
+          Object.assign(document.createElement("p"), {
+            className: "hint tight",
+            textContent: state.dirPending ? "需重新连接目录后才能播放" : "无法加载媒体",
+          })
+        );
       }
     }
   }
 
   function renderItems() {
     if (!itemList) return;
+    revokeTrackedUrls();
     const items = visibleItems();
     if (!items.length) {
-      itemList.innerHTML = `<p class="hint">暂无条目。可粘贴、拖入文件或保存文本。</p>`;
+      const emptyTip =
+        state.activeTagId === "all"
+          ? "暂无条目。可粘贴、拖入文件或保存文本。"
+          : "当前标签下暂无条目。可在此标签下新建，或切回「全部」。";
+      itemList.innerHTML = `<p class="hint">${emptyTip}</p>`;
+      const batch = $("#memo-batch-del");
+      if (batch) batch.disabled = state.selected.size === 0;
       return;
     }
     itemList.innerHTML = items.map(itemCardHtml).join("");
@@ -531,6 +591,19 @@
     });
   }
 
+  async function withBusy(fn) {
+    if (state.busy) {
+      toast("正在处理中，请稍候");
+      return null;
+    }
+    state.busy = true;
+    try {
+      return await fn();
+    } finally {
+      state.busy = false;
+    }
+  }
+
   async function addItemFromBlob(blob, name, opts = {}) {
     const id = uid();
     const type = opts.type || detectKind(blob.type, name);
@@ -542,9 +615,10 @@
         textPreview = "";
       }
     }
-    setProgress(true, 0.15, `保存 ${name || type}…`);
-    const fileName = await saveBlob(id, blob, `${id}_${(name || type).replace(/[^\w.\-]+/g, "_")}`);
-    setProgress(true, 0.85, "写入索引…");
+    const quiet = Boolean(opts.quiet);
+    if (!quiet) setProgress(true, 0.15, `保存 ${name || type}…`);
+    const fileName = await saveBlob(id, blob, `${id}_${safeFileName(name || type)}`);
+    if (!quiet) setProgress(true, 0.85, "写入索引…");
     const item = {
       id,
       type,
@@ -552,7 +626,7 @@
       createdAt: Date.now(),
       updatedAt: Date.now(),
       order: -1,
-      tagIds: [DEFAULT_TAG_ID],
+      tagIds: opts.tagIds || (state.activeTagId !== "all" ? [DEFAULT_TAG_ID, state.activeTagId].filter((id, i, arr) => arr.indexOf(id) === i) : [DEFAULT_TAG_ID]),
       mime: blob.type || "",
       size: blob.size || 0,
       fileName,
@@ -561,9 +635,11 @@
     state.index.items.unshift(item);
     reindexOrders();
     await persistIndex();
-    setProgress(false, 0, "");
-    renderAll();
-    toast("已添加");
+    if (!quiet) {
+      setProgress(false, 0, "");
+      renderAll();
+      toast("已添加");
+    }
     return item;
   }
 
@@ -573,18 +649,26 @@
       toast("内容为空");
       return;
     }
-    const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
-    await addItemFromBlob(blob, `文本-${formatTime(Date.now())}.txt`, { type: "text", textPreview: body });
+    await withBusy(async () => {
+      const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
+      await addItemFromBlob(blob, `文本-${formatTime(Date.now())}.txt`, { type: "text", textPreview: body });
+      if (editor) editor.value = "";
+    });
   }
 
   async function ingestFiles(fileList) {
-    const files = [...(fileList || [])];
-    for (let i = 0; i < files.length; i++) {
-      const f = files[i];
-      setProgress(true, i / Math.max(1, files.length), `导入 ${f.name}`);
-      await addItemFromBlob(f, f.name);
-    }
-    setProgress(false, 0, "");
+    const files = [...(fileList || [])].filter(Boolean);
+    if (!files.length) return;
+    await withBusy(async () => {
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i];
+        setProgress(true, i / Math.max(1, files.length), `导入 ${f.name}`);
+        await addItemFromBlob(f, f.name, { quiet: true });
+      }
+      setProgress(false, 0, "");
+      renderAll();
+      toast(files.length > 1 ? `已添加 ${files.length} 个文件` : "已添加");
+    });
   }
 
   async function readClipboard({ force = false } = {}) {
@@ -593,6 +677,8 @@
       if (navigator.clipboard?.read) {
         const items = await navigator.clipboard.read();
         let got = false;
+        const files = [];
+        let textBody = "";
         for (const item of items) {
           const types = item.types || [];
           const imgType = types.find((t) => t.startsWith("image/"));
@@ -601,7 +687,7 @@
             const sig = `img:${blob.size}:${imgType}`;
             if (!force && sig === state.lastClipSig) return;
             state.lastClipSig = sig;
-            await addItemFromBlob(blob, `剪贴板.${imgType.split("/")[1] || "png"}`, { type: "image" });
+            files.push(new File([blob], `剪贴板.${imgType.split("/")[1] || "png"}`, { type: imgType }));
             got = true;
             continue;
           }
@@ -612,11 +698,13 @@
             const sig = `text:${text.slice(0, 80)}:${text.length}`;
             if (!force && sig === state.lastClipSig) return;
             state.lastClipSig = sig;
-            await addText(text);
+            textBody = text;
             got = true;
           }
         }
-        if (!got && force) toast("剪贴板无可识别内容（文件请拖拽添加）");
+        if (files.length) await ingestFiles(files);
+        else if (textBody) await addText(textBody);
+        else if (force) toast("剪贴板无可识别内容（文件请拖拽添加）");
         return;
       }
       if (navigator.clipboard?.readText) {
@@ -820,76 +908,117 @@
     return { blob: outBlob, filename, count: picked.length };
   }
 
-  async function doExport({ share = false } = {}) {
-    const kinds = $$('#memo-export-dlg input[name="kind"]:checked').map((el) => el.value);
-    const tagIds = [...(exportTags?.selectedOptions || [])].map((o) => o.value);
-    const password = String($("#memo-export-pass")?.value || "");
-    const packed = await buildExportZip({ kinds, tagIds, password });
-    if (share && navigator.share && navigator.canShare) {
-      const file = new File([packed.blob], packed.filename, { type: packed.blob.type || "application/zip" });
-      if (navigator.canShare({ files: [file] })) {
-        await navigator.share({ files: [file], title: "备忘录导出" });
-        toast(`已分享 ${packed.count} 条`);
-        return;
+  async function openItemPreview(item) {
+    if (!item) return;
+    if (item.type === "image") {
+      const blob = await loadBlob(item);
+      if (lightboxImg?.src?.startsWith("blob:")) {
+        try {
+          URL.revokeObjectURL(lightboxImg.src);
+        } catch (_) {}
       }
+      lightboxImg.hidden = false;
+      lightboxText.hidden = true;
+      lightboxImg.src = trackUrl(URL.createObjectURL(blob));
+      lightbox?.showModal?.();
+      return;
     }
-    downloadBlob(packed.blob, packed.filename);
-    toast(`已导出 ${packed.count} 条`);
+    if (item.type === "text") {
+      lightboxImg.hidden = true;
+      lightboxText.hidden = false;
+      lightboxText.textContent = item.textPreview || (await (await loadBlob(item)).text());
+      lightbox?.showModal?.();
+      return;
+    }
+    const blob = await loadBlob(item);
+    downloadBlob(blob, item.name || item.id);
+  }
+
+  async function doExport({ share = false } = {}) {
+    await withBusy(async () => {
+      const kinds = $$('#memo-export-dlg input[name="kind"]:checked').map((el) => el.value);
+      if (!kinds.length) throw new Error("请至少选择一种类型");
+      const tagIds = [...(exportTags?.selectedOptions || [])].map((o) => o.value);
+      const password = String($("#memo-export-pass")?.value || "");
+      const packed = await buildExportZip({ kinds, tagIds, password });
+      if (share && canShareFiles()) {
+        const file = new File([packed.blob], packed.filename, { type: packed.blob.type || "application/zip" });
+        if (navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: "备忘录导出" });
+          toast(`已分享 ${packed.count} 条`);
+          return;
+        }
+        toast("系统不支持直接分享文件，已改为下载");
+      }
+      downloadBlob(packed.blob, packed.filename);
+      toast(`已导出 ${packed.count} 条`);
+    });
   }
 
   async function doImport(file) {
     if (!file) return;
-    let pass = "";
-    let zipBlob = file;
-    const name = file.name || "";
-    if (/\.memo$/i.test(name) || file.type === "application/octet-stream") {
-      pass = window.prompt("该文件可能已加密，请输入口令（未加密可留空）") || "";
-      if (pass) {
+    await withBusy(async () => {
+      let zipBlob = file;
+      const name = file.name || "";
+      const looksEncrypted = /\.memo$/i.test(name);
+      const tryLoadZip = async (blob) => {
+        if (typeof JSZip !== "function") throw new Error("JSZip 未加载");
+        return JSZip.loadAsync(blob);
+      };
+
+      let zip;
+      try {
+        zip = await tryLoadZip(zipBlob);
+      } catch (err) {
+        if (!looksEncrypted && file.type !== "application/octet-stream") throw err;
+        const pass = window.prompt("该文件可能已加密，请输入口令") || "";
+        if (!pass) throw new Error("需要口令才能导入加密包");
         try {
           const dec = await decryptBytes(new Uint8Array(await file.arrayBuffer()), pass);
           zipBlob = new Blob([dec], { type: "application/zip" });
+          zip = await tryLoadZip(zipBlob);
         } catch (_) {
           throw new Error("解密失败，口令可能不正确");
         }
       }
-    }
-    if (typeof JSZip !== "function") throw new Error("JSZip 未加载");
-    const zip = await JSZip.loadAsync(zipBlob);
-    const indexFile = zip.file(INDEX_NAME);
-    if (!indexFile) throw new Error("不是有效的备忘录导出包");
-    const imported = normalizeIndex(JSON.parse(await indexFile.async("string")));
-    // merge tags
-    const tagMap = new Map(state.index.tags.map((t) => [t.id, t]));
-    imported.tags.forEach((t) => {
-      if (t.id === DEFAULT_TAG_ID) return;
-      if (!tagMap.has(t.id)) {
-        state.index.tags.unshift({ ...t, order: -1 });
-        tagMap.set(t.id, t);
-      }
-    });
-    for (let i = 0; i < imported.items.length; i++) {
-      const it = imported.items[i];
-      setProgress(true, i / Math.max(1, imported.items.length), `导入 ${it.name}`);
-      const entry = zip.file(`${BLOBS_DIR}/${it.fileName}`) || zip.file(`${BLOBS_DIR}/${it.id}`);
-      if (!entry) continue;
-      const blob = await entry.async("blob");
-      const typed = blob.type ? blob : new Blob([blob], { type: it.mime || "application/octet-stream" });
-      const newId = uid();
-      const fileName = await saveBlob(newId, typed, it.fileName || `${newId}`);
-      state.index.items.unshift({
-        ...it,
-        id: newId,
-        fileName,
-        createdAt: it.createdAt || Date.now(),
-        updatedAt: Date.now(),
-        order: -1,
+
+      const indexFile = zip.file(INDEX_NAME);
+      if (!indexFile) throw new Error("不是有效的备忘录导出包");
+      const imported = normalizeIndex(JSON.parse(await indexFile.async("string")));
+      const tagMap = new Map(state.index.tags.map((t) => [t.id, t]));
+      imported.tags.forEach((t) => {
+        if (t.id === DEFAULT_TAG_ID) return;
+        if (!tagMap.has(t.id)) {
+          state.index.tags.unshift({ ...t, order: -1 });
+          tagMap.set(t.id, t);
+        }
       });
-    }
-    reindexOrders();
-    await persistIndex();
-    setProgress(false, 0, "");
-    renderAll();
-    toast("导入完成");
+      let importedCount = 0;
+      for (let i = 0; i < imported.items.length; i++) {
+        const it = imported.items[i];
+        setProgress(true, i / Math.max(1, imported.items.length), `导入 ${it.name}`);
+        const entry = zip.file(`${BLOBS_DIR}/${it.fileName}`) || zip.file(`${BLOBS_DIR}/${it.id}`);
+        if (!entry) continue;
+        const blob = await entry.async("blob");
+        const typed = blob.type ? blob : new Blob([blob], { type: it.mime || "application/octet-stream" });
+        const newId = uid();
+        const fileName = await saveBlob(newId, typed, `${newId}_${safeFileName(it.fileName || it.name || "file")}`);
+        state.index.items.unshift({
+          ...it,
+          id: newId,
+          fileName,
+          createdAt: it.createdAt || Date.now(),
+          updatedAt: Date.now(),
+          order: -1,
+        });
+        importedCount += 1;
+      }
+      reindexOrders();
+      await persistIndex();
+      setProgress(false, 0, "");
+      renderAll();
+      toast(importedCount ? `导入完成（${importedCount} 条）` : "导入完成，但未找到可写入的文件");
+    });
   }
 
   // ---- text to image ----
@@ -928,21 +1057,26 @@
   }
 
   async function saveTextImage() {
-    const card = $("#memo-ti-card");
-    if (!card) return;
-    paintTextImageCard();
-    if (typeof html2canvas !== "function") throw new Error("html2canvas 未加载");
-    setProgress(true, 0.3, "渲染图片…");
-    const canvas = await html2canvas(card, {
-      backgroundColor: null,
-      scale: 2,
-      useCORS: true,
+    await withBusy(async () => {
+      const card = $("#memo-ti-card");
+      if (!card) return;
+      paintTextImageCard();
+      if (typeof html2canvas !== "function") throw new Error("html2canvas 未加载");
+      setProgress(true, 0.3, "渲染图片…");
+      const canvas = await html2canvas(card, {
+        backgroundColor: null,
+        scale: 2,
+        useCORS: true,
+      });
+      const blob = await new Promise((resolve, reject) => {
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("导出失败"))), "image/png");
+      });
+      await addItemFromBlob(blob, `文字图-${Date.now()}.png`, { type: "image", quiet: true });
+      setProgress(false, 0, "");
+      renderAll();
+      toast("已生成图片");
+      $("#memo-toimg").hidden = true;
     });
-    const blob = await new Promise((resolve, reject) => {
-      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("导出失败"))), "image/png");
-    });
-    await addItemFromBlob(blob, `文字图-${Date.now()}.png`, { type: "image" });
-    $("#memo-toimg").hidden = true;
   }
 
   // ---- events ----
@@ -999,16 +1133,15 @@
     if (!name) return;
     const exist = state.index.tags.find((t) => t.name === name);
     if (exist) {
-      state.activeTagId = exist.id;
-      renderAll();
+      toast(`标签「${name}」已存在`);
       return;
     }
     const id = uid();
     state.index.tags.unshift({ id, name, order: -1 });
     reindexOrders();
     await persistIndex();
-    state.activeTagId = id;
     renderAll();
+    toast(`已创建标签「${name}」`);
   });
 
   tagList?.addEventListener("click", (e) => {
@@ -1098,22 +1231,13 @@
       const openId = t.closest?.("[data-memo-open]")?.dataset?.memoOpen;
       if (openId) {
         const item = state.index.items.find((x) => x.id === openId);
-        if (!item) return;
-        if (item.type === "image") {
-          const blob = await loadBlob(item);
-          lightboxImg.hidden = false;
-          lightboxText.hidden = true;
-          lightboxImg.src = URL.createObjectURL(blob);
-          lightbox?.showModal?.();
-        } else if (item.type === "text") {
-          lightboxImg.hidden = true;
-          lightboxText.hidden = false;
-          lightboxText.textContent = item.textPreview || (await (await loadBlob(item)).text());
-          lightbox?.showModal?.();
-        } else {
-          const blob = await loadBlob(item);
-          downloadBlob(blob, item.name || item.id);
-        }
+        if (item) await openItemPreview(item);
+        return;
+      }
+      const thumbId = t.closest?.("[data-memo-thumb]")?.dataset?.memoThumb;
+      if (thumbId) {
+        const item = state.index.items.find((x) => x.id === thumbId);
+        if (item) await openItemPreview(item);
         return;
       }
       const expandId = t.closest?.("[data-memo-expand]")?.dataset?.memoExpand;
@@ -1139,19 +1263,19 @@
           .filter((x) => x.id !== DEFAULT_TAG_ID)
           .map((x) => x.name)
           .join(" / ");
-        const raw = window.prompt(`输入标签名（已有：${names || "无"}）。可搜索已有名；不存在则新建。`, "");
+        const raw = window.prompt(`输入标签名（已有：${names || "无"}）。已有同名则复用，否则新建。`, "");
         if (raw == null) return;
         const name = raw.trim();
         if (!name) return;
-        let tag = state.index.tags.find((x) => x.name === name || x.name.includes(name));
-        if (!tag || tag.name !== name) {
-          const exact = state.index.tags.find((x) => x.name === name);
-          if (exact) tag = exact;
-          else {
-            tag = { id: uid(), name, order: -1 };
-            state.index.tags.unshift(tag);
-            reindexOrders();
-          }
+        let tag = state.index.tags.find((x) => x.name === name);
+        if (!tag) {
+          const fuzzy = state.index.tags.filter((x) => x.id !== DEFAULT_TAG_ID && x.name.includes(name));
+          if (fuzzy.length === 1) tag = fuzzy[0];
+        }
+        if (!tag) {
+          tag = { id: uid(), name, order: -1 };
+          state.index.tags.unshift(tag);
+          reindexOrders();
         }
         if (!item.tagIds.includes(tag.id)) item.tagIds.push(tag.id);
         item.updatedAt = Date.now();
@@ -1178,6 +1302,10 @@
   // item drag reorder
   let dragItemId = null;
   itemList?.addEventListener("dragstart", (e) => {
+    if (e.target.closest("input, button, a, textarea, video, audio, label")) {
+      e.preventDefault();
+      return;
+    }
     const card = e.target.closest(".memo-card");
     if (!card) return;
     dragItemId = card.dataset.memoId;
@@ -1225,7 +1353,7 @@
     ingestFiles(e.dataTransfer.files).catch((err) => setError(memoError, err.message || String(err)));
   });
 
-  // Ctrl/⌘+V 与右键粘贴：在备忘录工具激活时识别图片/文件；文本在编辑框内走默认粘贴
+  // Ctrl/⌘+V 与右键粘贴：备忘录激活时识别图片/文件；编辑框内文本走默认粘贴
   document.addEventListener("paste", (e) => {
     if (!isMemoActive()) return;
     const cd = e.clipboardData;
@@ -1252,19 +1380,13 @@
     }
   });
 
-  window.addEventListener("focus", () => {
-    if (!isMemoActive()) return;
-    readClipboard({ force: false }).catch(() => {});
-  });
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState !== "visible" || !isMemoActive()) return;
-    readClipboard({ force: false }).catch(() => {});
-  });
-
-  $("#memo-export")?.addEventListener("click", () => openExportDialog());
-  shareBtn?.addEventListener("click", () => {
+  $("#memo-export")?.addEventListener("click", () => {
+    if (shareBtn) shareBtn.dataset.shareAfter = "";
     openExportDialog();
-    shareBtn.dataset.shareAfter = "1";
+  });
+  shareBtn?.addEventListener("click", () => {
+    if (shareBtn) shareBtn.dataset.shareAfter = "1";
+    openExportDialog();
   });
   exportDlg?.addEventListener("close", () => {
     if (exportDlg.returnValue !== "ok") {
@@ -1286,9 +1408,26 @@
         setProgress(false, 0, "");
       });
   });
-  $("#memo-lightbox-close")?.addEventListener("click", () => lightbox?.close?.());
+  const closeLightbox = () => {
+    if (lightboxImg?.src?.startsWith("blob:")) {
+      try {
+        URL.revokeObjectURL(lightboxImg.src);
+      } catch (_) {}
+      lightboxImg.removeAttribute("src");
+    }
+    lightbox?.close?.();
+  };
+  $("#memo-lightbox-close")?.addEventListener("click", closeLightbox);
   lightbox?.addEventListener("click", (e) => {
-    if (e.target === lightbox) lightbox.close?.();
+    if (e.target === lightbox) closeLightbox();
+  });
+  lightbox?.addEventListener("close", () => {
+    if (lightboxImg?.src?.startsWith("blob:")) {
+      try {
+        URL.revokeObjectURL(lightboxImg.src);
+      } catch (_) {}
+      lightboxImg.removeAttribute("src");
+    }
   });
 
   window.DevToolsMemo = {
