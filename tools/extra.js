@@ -95,6 +95,57 @@
   const TOOLS_VERSION = "2026.08.17-theme1";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
+  /** 切片/批量 GIF 产出后是否自动打 zip 下载；默认关，开启后记住 */
+  const AUTO_PACK_ZIP_KEY = "devtools-auto-pack-zip-v1";
+
+  function isAutoPackZipEnabled() {
+    try {
+      return localStorage.getItem(AUTO_PACK_ZIP_KEY) === "1";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function setAutoPackZipEnabled(on) {
+    try {
+      localStorage.setItem(AUTO_PACK_ZIP_KEY, on ? "1" : "0");
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function syncAutoPackZipToggles(checked) {
+    document.querySelectorAll("[data-auto-pack-zip]").forEach((el) => {
+      if (el instanceof HTMLInputElement) el.checked = checked;
+    });
+  }
+
+  function bindAutoPackZipToggles() {
+    const boxes = [...document.querySelectorAll("[data-auto-pack-zip]")].filter(
+      (el) => el instanceof HTMLInputElement
+    );
+    const initial = isAutoPackZipEnabled();
+    syncAutoPackZipToggles(initial);
+    boxes.forEach((el) => {
+      el.addEventListener("change", () => {
+        const on = Boolean(el.checked);
+        setAutoPackZipEnabled(on);
+        syncAutoPackZipToggles(on);
+        toast(on ? "已开启：产出后自动打包下载" : "已关闭：产出后需手动打包");
+      });
+    });
+    try {
+      window.DevToolsAutoPackZip = {
+        isEnabled: isAutoPackZipEnabled,
+        setEnabled: (on) => {
+          setAutoPackZipEnabled(on);
+          syncAutoPackZipToggles(Boolean(on));
+        },
+      };
+    } catch (_) {
+      /* ignore */
+    }
+  }
 
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
@@ -798,7 +849,11 @@
   }
 
   paintToolsVersion();
-  document.addEventListener("DOMContentLoaded", paintToolsVersion);
+  document.addEventListener("DOMContentLoaded", () => {
+    paintToolsVersion();
+    bindAutoPackZipToggles();
+  });
+  if (document.readyState !== "loading") bindAutoPackZipToggles();
 
   try {
     window.DevToolsFfmpeg = {
@@ -6719,11 +6774,20 @@
         setVsplitProgress(true, 1, `切分完成 · ${vsplitClips.length} 段`);
         setVsplitButtons();
         if (videos.length) {
-          toast(
-            failN
-              ? `已切 ${vsplitClips.length} 段（${failN} 段失败）· 可点「打包下载全部视频」`
-              : `已切成 ${vsplitClips.length} 段 · 可点「打包下载全部视频」`
-          );
+          if (isAutoPackZipEnabled()) {
+            await packDownloadVsplitVideos({ auto: true });
+            toast(
+              failN
+                ? `已切 ${vsplitClips.length} 段（${failN} 段失败）· 已打包下载视频`
+                : `已切成 ${vsplitClips.length} 段 · 已打包下载全部视频`
+            );
+          } else {
+            toast(
+              failN
+                ? `已切 ${vsplitClips.length} 段（${failN} 段失败）· 可点「打包下载全部视频」`
+                : `已切成 ${vsplitClips.length} 段 · 可点「打包下载全部视频」`
+            );
+          }
         } else {
           toast(failN ? `切分失败 ${failN} 段` : `已切成 ${vsplitClips.length} 段`);
         }
@@ -6842,11 +6906,16 @@
         setVsplitProgress(true, 1, `GIF 完成 · 成功 ${gifs.length}/${vsplitClips.length}`);
         setVsplitButtons();
         if (gifs.length) {
-          toast(
-            failN
-              ? `完成，${failN} 段失败 · 可点「打包下载全部 GIF」`
-              : `已生成 ${gifs.length} 个 GIF · 可点「打包下载全部 GIF」`
-          );
+          if (isAutoPackZipEnabled()) {
+            await packDownloadVsplitGifs({ auto: true });
+            toast(failN ? `完成，${failN} 段失败 · 已打包下载 GIF` : `已生成 ${gifs.length} 个 GIF · 已打包下载`);
+          } else {
+            toast(
+              failN
+                ? `完成，${failN} 段失败 · 可点「打包下载全部 GIF」`
+                : `已生成 ${gifs.length} 个 GIF · 可点「打包下载全部 GIF」`
+            );
+          }
         } else {
           toast(failN ? `完成，${failN} 段失败` : "未生成 GIF");
         }
@@ -8981,11 +9050,20 @@
         renderVbbResults();
         setVbbButtons();
         if (gifs.length) {
-          toast(
-            failN
-              ? `完成，${failN} 段有问题 · 可点「打包下载全部 GIF」`
-              : `已生成 ${gifs.length} 个 GIF · 可点「打包下载全部 GIF」预览后自行打包`
-          );
+          if (isAutoPackZipEnabled()) {
+            await packDownloadVbbGifs({ auto: true });
+            toast(
+              failN
+                ? `完成，${failN} 段有问题 · 已打包下载 GIF`
+                : `已生成 ${gifs.length} 个 GIF · 已打包下载（可点「预览」查看）`
+            );
+          } else {
+            toast(
+              failN
+                ? `完成，${failN} 段有问题 · 可点「打包下载全部 GIF」`
+                : `已生成 ${gifs.length} 个 GIF · 可点「打包下载全部 GIF」预览后自行打包`
+            );
+          }
         } else {
           toast(failN ? `完成，${failN} 段有问题` : "未生成 GIF");
         }

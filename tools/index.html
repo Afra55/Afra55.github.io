@@ -1992,6 +1992,9 @@ hello@world.org</textarea>
           <button type="button" class="secondary-btn" id="vsplit-zip-video" disabled title="把已切好的视频片段打成一个 zip">打包下载全部视频</button>
           <button type="button" class="secondary-btn" id="vsplit-zip-gif" disabled title="把已生成的 GIF 打成一个 zip">打包下载全部 GIF</button>
           <a class="secondary-btn" id="vsplit-merged-dl" href="#" download="clips-merged.gif" hidden>下载合并 GIF</a>
+          <label class="flag" style="margin-left:0.15rem" title="默认关闭。开启后切视频/转 GIF 成功时自动打 zip 并下载；与黑盒切片共用，会记住选择">
+            <input type="checkbox" id="vsplit-auto-pack" data-auto-pack-zip /> 产出后自动打包下载
+          </label>
         </div>
         <div class="gif-progress" id="vsplit-progress" hidden>
           <div class="gif-progress-head">
@@ -2074,6 +2077,9 @@ hello@world.org</textarea>
           <button type="button" class="ghost-btn" id="vbb-abort" hidden>取消</button>
           <button type="button" class="secondary-btn" id="vbb-zip" disabled title="把已生成的 GIF 打成一个 zip">打包下载</button>
           <a class="secondary-btn" id="vbb-merged-dl" href="#" download="blackbox-merged.gif" hidden>下载合并 GIF</a>
+          <label class="flag" style="margin-left:0.15rem" title="默认关闭。开启后转 GIF 成功时自动打 zip 并下载；与视频切片共用，会记住选择">
+            <input type="checkbox" id="vbb-auto-pack" data-auto-pack-zip /> 产出后自动打包下载
+          </label>
         </div>
         <div class="gif-progress" id="vbb-progress" hidden>
           <div class="gif-progress-head">

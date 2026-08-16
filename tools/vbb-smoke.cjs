@@ -116,6 +116,10 @@ async function main() {
       hasCacheBtn: Boolean(document.getElementById("nav-cache-clear")),
       hasCacheMeta: Boolean(document.getElementById("nav-cache-meta")),
       hasPurge: typeof window.DevToolsTemp?.purgeSiteCache === "function",
+      autoPackVsplit: Boolean(document.getElementById("vsplit-auto-pack")),
+      autoPackVbb: Boolean(document.getElementById("vbb-auto-pack")),
+      autoPackDefaultOff: ![...document.querySelectorAll("[data-auto-pack-zip]")].some((el) => el.checked),
+      autoPackApi: typeof window.DevToolsAutoPackZip?.isEnabled === "function" && !window.DevToolsAutoPackZip.isEnabled(),
     };
     try {
       const mediaIds = ["gifmaker", "vsplit", "vtrim", "audio", "vplay"];
@@ -1277,6 +1281,8 @@ async function main() {
   if (!result.hasCacheBtn) problems.push("missing #nav-cache-clear in sidebar");
   if (!result.hasCacheMeta) problems.push("missing #nav-cache-meta in sidebar");
   if (!result.hasPurge) problems.push("DevToolsTemp.purgeSiteCache missing");
+  if (!result.autoPackVsplit || !result.autoPackVbb) problems.push("missing auto-pack zip toggles on vsplit/vbb");
+  if (!result.autoPackDefaultOff || !result.autoPackApi) problems.push("auto-pack zip should default off");
   if (!/侧栏/.test(result.footerText || "")) problems.push("footer should mention sidebar cache cleanup");
   if (!afterAnalyze.summary) problems.push("plan summary missing after analyze");
   if (afterAnalyze.rows) problems.push("per-clip estimate preview should be removed");
