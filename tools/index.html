@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260815pack" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260815pack" />
+  <link rel="stylesheet" href="./style.css?v=20260816memo" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.15-pack</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo</span>
       </div>
       <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
@@ -50,8 +50,8 @@
       <p class="hint tight nav-sort-hint">分类可排序：桌面拖标题；手机请<strong>长按</strong>分类标题再拖（拖时只显示分类，拖到边缘可滚动）。</p>
       <nav class="tool-nav" id="tool-nav" aria-label="工具分组"></nav>
       <div class="nav-footer-actions">
-        <p class="nav-cache-meta" id="nav-cache-meta">本站缓存（视频 / GIF / 编码器）可在此清理</p>
-        <button type="button" class="nav-reset nav-cache-clear" id="nav-cache-clear" title="清掉本站临时视频、GIF 和编码器缓存；不会删除系统相册或文件里已下载的内容">一键清理缓存</button>
+        <p class="nav-cache-meta" id="nav-cache-meta">本站缓存可清理；备忘录数据单独统计、不会被清掉</p>
+        <button type="button" class="nav-reset nav-cache-clear" id="nav-cache-clear" title="清掉本站临时视频、GIF 和编码器缓存；不会删除备忘录数据与系统相册/已下载文件。清理前请先在备忘录里导出备份。">一键清理缓存</button>
         <button type="button" class="nav-reset" id="nav-reset" title="恢复工具与分类的默认排序">恢复默认排序</button>
       </div>
     </aside>
@@ -941,6 +941,130 @@ hello@world.org</textarea>
             <div class="md-preview" id="md-preview"></div>
           </div>
         </div>
+      </div>
+    </section>
+
+<section id="memo" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>备忘录</h1>
+        <p>本地收集剪贴板与拖入文件。桌面可选目录持久保存；手机用应用内数据，清理缓存前请先导出备份。清站点缓存不会删除备忘录数据。</p>
+      </div>
+      <div class="panel-body memo-body">
+        <div class="memo-toolbar">
+          <div class="btn-row tool-actions" style="flex-wrap:wrap">
+            <button type="button" class="primary-btn" id="memo-pick-dir">选择存储目录</button>
+            <button type="button" class="ghost-btn" id="memo-reconnect" hidden>重新连接目录</button>
+            <label class="file-btn" for="memo-file">添加文件</label>
+            <input id="memo-file" type="file" multiple hidden />
+            <button type="button" class="secondary-btn" id="memo-export">导出</button>
+            <button type="button" class="secondary-btn" id="memo-share" hidden>分享导出包</button>
+            <label class="file-btn" for="memo-import">导入</label>
+            <input id="memo-import" type="file" accept=".zip,.memo,.bin,application/zip" hidden />
+            <button type="button" class="ghost-btn" id="memo-batch-del" disabled>批量删除</button>
+          </div>
+          <p class="hint tight" id="memo-store-meta">正在检测存储能力…</p>
+          <p class="hint tight memo-backup-tip">提示：清理浏览器缓存前，请先「导出」备份。手机端请用导出/分享保存到文件或其它 App。</p>
+        </div>
+
+        <div class="memo-layout">
+          <aside class="memo-tags" aria-label="标签">
+            <div class="label-row">
+              <h2 class="subhead">标签</h2>
+              <button type="button" class="ghost-btn" id="memo-tag-new">新建</button>
+            </div>
+            <div class="memo-tag-list" id="memo-tag-list"></div>
+          </aside>
+
+          <div class="memo-main">
+            <div class="memo-editor panel-card">
+              <label for="memo-editor">写一段文字</label>
+              <textarea id="memo-editor" class="area" rows="5" placeholder="在此输入；也可 Ctrl/⌘+V 或右键粘贴图片与文字"></textarea>
+              <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.55rem">
+                <button type="button" class="primary-btn" id="memo-save-text">保存文本</button>
+                <button type="button" class="secondary-btn" id="memo-to-image">文字转图片…</button>
+                <button type="button" class="ghost-btn" id="memo-read-clip">读取剪贴板</button>
+              </div>
+            </div>
+
+            <div class="memo-toimg" id="memo-toimg" hidden>
+              <h2 class="subhead">文字转图片</h2>
+              <div class="field-row" style="flex-wrap:wrap">
+                <label for="memo-ti-cols">每行字数</label>
+                <input id="memo-ti-cols" class="mono meta-input" type="number" min="4" max="80" value="16" />
+                <label for="memo-ti-size">字号</label>
+                <input id="memo-ti-size" class="mono meta-input" type="number" min="12" max="72" value="28" />
+                <label for="memo-ti-bg">背景色</label>
+                <input id="memo-ti-bg" type="color" value="#0f172a" />
+                <label for="memo-ti-fg">文字色</label>
+                <input id="memo-ti-fg" type="color" value="#e8eef8" />
+              </div>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem">
+                <label class="file-btn" for="memo-ti-bgimg">背景图</label>
+                <input id="memo-ti-bgimg" type="file" accept="image/*" hidden />
+                <button type="button" class="ghost-btn" id="memo-ti-bgimg-clear">清除背景图</button>
+                <label for="memo-ti-wm">水印</label>
+                <input id="memo-ti-wm" class="mono meta-input" type="text" placeholder="可选水印文字" maxlength="40" />
+              </div>
+              <div class="memo-ti-preview-wrap">
+                <div id="memo-ti-card" class="memo-ti-card" aria-hidden="true"></div>
+              </div>
+              <div class="btn-row tool-actions" style="margin-top:0.55rem">
+                <button type="button" class="primary-btn" id="memo-ti-save">生成并保存图片</button>
+                <button type="button" class="ghost-btn" id="memo-ti-close">收起</button>
+              </div>
+            </div>
+
+            <div class="memo-progress" id="memo-progress" hidden>
+              <div class="gif-progress-head">
+                <p class="hint gif-progress-title" id="memo-progress-text">处理中…</p>
+                <span class="mono gif-progress-pct" id="memo-progress-pct">0%</span>
+              </div>
+              <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="memo-progress-fill"></span></div>
+            </div>
+
+            <div class="label-row" style="margin-top:0.85rem">
+              <h2 class="subhead">条目</h2>
+              <label class="flag"><input type="checkbox" id="memo-select-all" /> 全选</label>
+            </div>
+            <div class="memo-drop" id="memo-drop">
+              <p class="hint tight">拖拽文件到此处添加 · 最新在上 · 可拖拽排序</p>
+              <div class="memo-list" id="memo-list"></div>
+            </div>
+          </div>
+        </div>
+
+        <dialog class="memo-dialog" id="memo-export-dlg">
+          <form method="dialog" class="memo-dialog-body">
+            <h2 class="subhead">导出备忘录</h2>
+            <p class="hint tight">可选内容与可选口令。有口令时压缩包内容会加密，导入需同一口令。</p>
+            <fieldset class="memo-export-kinds">
+              <legend>类型</legend>
+              <label class="flag"><input type="checkbox" name="kind" value="text" checked /> 文本</label>
+              <label class="flag"><input type="checkbox" name="kind" value="image" checked /> 图片</label>
+              <label class="flag"><input type="checkbox" name="kind" value="video" checked /> 视频</label>
+              <label class="flag"><input type="checkbox" name="kind" value="audio" checked /> 音频</label>
+              <label class="flag"><input type="checkbox" name="kind" value="file" checked /> 其它文件</label>
+            </fieldset>
+            <label for="memo-export-tags">按标签（可多选，空=全部）</label>
+            <select id="memo-export-tags" class="select-input" multiple size="5"></select>
+            <label for="memo-export-pass">加密口令（可选）</label>
+            <input id="memo-export-pass" class="mono" type="password" autocomplete="new-password" placeholder="留空则不加密" />
+            <div class="btn-row tool-actions" style="margin-top:0.75rem">
+              <button type="submit" class="primary-btn" value="ok" id="memo-export-ok">导出</button>
+              <button type="submit" class="ghost-btn" value="cancel">取消</button>
+            </div>
+          </form>
+        </dialog>
+
+        <dialog class="memo-dialog" id="memo-lightbox" aria-label="预览">
+          <div class="memo-lightbox-inner">
+            <button type="button" class="ghost-btn memo-lightbox-close" id="memo-lightbox-close">关闭</button>
+            <img id="memo-lightbox-img" alt="放大预览" hidden />
+            <pre id="memo-lightbox-text" class="mono" hidden></pre>
+          </div>
+        </dialog>
+
+        <p class="error" id="memo-error" hidden></p>
       </div>
     </section>
 
@@ -2407,10 +2531,11 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./temp.js?v=20260814f"></script>
+  <script src="./temp.js?v=20260816memo"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260815pack"></script>
-  <script src="./extra.js?v=20260815pack"></script>
+  <script src="./app.js?v=20260816memo"></script>
+  <script src="./extra.js?v=20260816memo"></script>
   <script src="./imgkit.js?v=20260810l"></script>
+  <script src="./memo.js?v=20260816memo"></script>
 </body>
 </html>
