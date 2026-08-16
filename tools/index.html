@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260816memo24" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo24" />
+  <link rel="stylesheet" href="./style.css?v=20260816memo25" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo25" />
   <script>
     /* 尽早应用主题，减少闪烁 */
     (function () {
@@ -38,7 +38,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo24</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo25</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="theme-open" title="切换站点主题">主题</button>
@@ -1224,6 +1224,7 @@ hello@world.org</textarea>
                 <label class="memo-ti-src-lab" for="memo-note-edit-src">备注内容
                   <textarea id="memo-note-edit-src" class="area" rows="4" maxlength="500" placeholder="例如：登录页截图、周一要用的合同…"></textarea>
                 </label>
+                <p class="hint tight mono memo-note-edit-count" id="memo-note-edit-count" aria-live="polite">0 / 500</p>
                 <div class="btn-row tool-actions" style="flex-wrap:wrap">
                   <button type="button" class="primary-btn" id="memo-note-edit-save">保存备注</button>
                   <button type="button" class="ghost-btn" id="memo-note-edit-clear">清空</button>
@@ -1279,6 +1280,7 @@ hello@world.org</textarea>
           <form method="dialog" class="memo-dialog-body">
             <h2 class="subhead">导出备忘录</h2>
             <p class="hint tight">可选内容与可选口令。有口令时压缩包内容会加密，导入需同一口令。</p>
+            <p class="hint tight">备注会随条目一起导出，导入后仍可搜索与编辑。</p>
             <fieldset class="memo-export-kinds">
               <legend>类型</legend>
               <label class="flag"><input type="checkbox" name="kind" value="text" checked /> 文本</label>
@@ -1318,11 +1320,10 @@ hello@world.org</textarea>
               <div class="memo-preview-meta">
                 <strong id="memo-preview-title">预览</strong>
                 <span class="hint tight mono" id="memo-preview-sub"></span>
-                <p class="hint tight memo-preview-note-line" id="memo-preview-note-line" hidden></p>
+                <button type="button" class="memo-preview-note-block" id="memo-preview-note" hidden></button>
               </div>
               <div class="btn-row memo-preview-actions">
                 <button type="button" class="secondary-btn" id="memo-preview-edit" hidden>编辑</button>
-                <button type="button" class="ghost-btn" id="memo-preview-note" hidden>备注</button>
                 <button type="button" class="ghost-btn" id="memo-preview-share" hidden>分享</button>
                 <button type="button" class="ghost-btn" id="memo-preview-fs" hidden>全屏</button>
                 <button type="button" class="ghost-btn" id="memo-preview-newtab" hidden>新标签打开</button>
@@ -2886,15 +2887,15 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./theme.js?v=20260816memo24"></script>
-  <script src="./temp.js?v=20260816memo24"></script>
+  <script src="./theme.js?v=20260816memo25"></script>
+  <script src="./temp.js?v=20260816memo25"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260816memo24"></script>
-  <script src="./about.js?v=20260816memo24"></script>
-  <script src="./extra.js?v=20260816memo24"></script>
+  <script src="./app.js?v=20260816memo25"></script>
+  <script src="./about.js?v=20260816memo25"></script>
+  <script src="./extra.js?v=20260816memo25"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./textimg.js?v=20260816memo24"></script>
-  <script src="./imgtext.js?v=20260816memo24"></script>
-  <script src="./memo.js?v=20260816memo24"></script>
+  <script src="./textimg.js?v=20260816memo25"></script>
+  <script src="./imgtext.js?v=20260816memo25"></script>
+  <script src="./memo.js?v=20260816memo25"></script>
 </body>
 </html>

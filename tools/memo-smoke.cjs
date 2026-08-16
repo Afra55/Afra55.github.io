@@ -452,7 +452,7 @@ async function main() {
       out.tagDelete = { hasDelBtn: false, tagGone: false, itemKept: false, backToDefault: false };
     }
 
-    // item notes: edit / search / clear
+    // item notes: edit / search / clear + UX polish
     const noteTarget =
       (window.DevToolsMemo.getIndex().items || []).find((x) => x.type === "file") ||
       (window.DevToolsMemo.getIndex().items || [])[0];
@@ -460,23 +460,47 @@ async function main() {
       hasDlg: Boolean(document.getElementById("memo-note-edit")),
       hasPreviewBtn: Boolean(document.getElementById("memo-preview-note")),
       hasCardBtn: Boolean(document.querySelector("[data-memo-note]")),
+      hasCount: Boolean(document.getElementById("memo-note-edit-count")),
       searchMentionsNote: /备注/.test(document.getElementById("memo-search")?.placeholder || ""),
+      exportMentionsNote: /备注会随条目一起导出/.test(document.getElementById("memo-export-dlg")?.textContent || ""),
+      delInMore: Boolean(document.querySelector(".memo-more [data-memo-del]")),
       itemId: noteTarget?.id || "",
     };
     if (noteTarget) {
-      document.querySelector(`[data-memo-note="${noteTarget.id}"]`)?.click();
+      const cardBefore = document.querySelector(`.memo-card[data-memo-id="${noteTarget.id}"]`);
+      out.noteUi.emptyHint = Boolean(cardBefore?.querySelector(".memo-card-note.is-empty"));
+      document.querySelector(`.memo-card[data-memo-id="${noteTarget.id}"] .memo-card-note`)?.click();
       await sleep(80);
       const noteDlg = document.getElementById("memo-note-edit");
       const noteSrc = document.getElementById("memo-note-edit-src");
       out.noteUi.opened = Boolean(noteDlg?.open);
-      if (noteSrc) noteSrc.value = "冒烟备注 UNIQUE_NOTE_MARK_772";
+      out.noteUi.countBefore = document.getElementById("memo-note-edit-count")?.textContent || "";
+      const longNote = `冒烟备注 UNIQUE_NOTE_MARK_772 ${"长".repeat(90)}`;
+      if (noteSrc) {
+        noteSrc.value = longNote;
+        noteSrc.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      out.noteUi.countAfterInput = document.getElementById("memo-note-edit-count")?.textContent || "";
       document.getElementById("memo-note-edit-save")?.click();
       await sleep(220);
       const afterNote = (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === noteTarget.id);
-      out.noteUi.saved = afterNote?.note === "冒烟备注 UNIQUE_NOTE_MARK_772";
-      out.noteUi.cardShows = Boolean(
-        document.querySelector(`.memo-card[data-memo-id="${noteTarget.id}"] .memo-card-note`)
+      out.noteUi.saved = String(afterNote?.note || "").includes("UNIQUE_NOTE_MARK_772");
+      const noteBtn = document.querySelector(`.memo-card[data-memo-id="${noteTarget.id}"] .memo-card-note`);
+      out.noteUi.cardShows = Boolean(noteBtn) && !noteBtn.classList.contains("is-empty");
+      out.noteUi.hasExpand = Boolean(
+        document.querySelector(`.memo-card[data-memo-id="${noteTarget.id}"] [data-memo-note-expand]`)
       );
+      document.querySelector(`[data-memo-note-expand="${noteTarget.id}"]`)?.click();
+      await sleep(80);
+      out.noteUi.expanded = /长{10,}/.test(
+        document.querySelector(`.memo-card[data-memo-id="${noteTarget.id}"] .memo-card-note`)?.textContent || ""
+      );
+      document.querySelector(`[data-memo-open="${noteTarget.id}"]`)?.click();
+      await sleep(120);
+      const previewNote = document.getElementById("memo-preview-note");
+      out.noteUi.previewBlock = Boolean(previewNote) && !previewNote.hidden && /备注：/.test(previewNote.textContent || "");
+      document.getElementById("memo-lightbox-close")?.click();
+      await sleep(60);
       const search = document.getElementById("memo-search");
       if (search) {
         search.value = "UNIQUE_NOTE_MARK_772";
@@ -486,7 +510,7 @@ async function main() {
       out.noteUi.searchHit = [...document.querySelectorAll(".memo-card")].some(
         (c) => c.dataset.memoId === noteTarget.id
       );
-      document.querySelector(`[data-memo-note="${noteTarget.id}"]`)?.click();
+      document.querySelector(`.memo-card[data-memo-id="${noteTarget.id}"] .memo-card-actions [data-memo-note]`)?.click();
       await sleep(80);
       document.getElementById("memo-note-edit-clear")?.click();
       await sleep(220);
@@ -496,12 +520,15 @@ async function main() {
         search.value = "";
         search.dispatchEvent(new Event("input", { bubbles: true }));
       }
-      await sleep(200);
+      await sleep(350);
+      out.noteUi.emptyHintAfterClear = Boolean(
+        document.querySelector(`.memo-card[data-memo-id="${noteTarget.id}"] .memo-card-note.is-empty`)
+      );
     }
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260816memo24/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260816memo25/.test(s.src)),
     };
 
     return out;
@@ -609,11 +636,23 @@ async function main() {
   if (!result.noteUi?.hasDlg || !result.noteUi?.hasCardBtn || !result.noteUi?.hasPreviewBtn || !result.noteUi?.searchMentionsNote) {
     failed.push("note UI missing");
   }
-  if (!result.noteUi?.opened || !result.noteUi?.saved || !result.noteUi?.cardShows || !result.noteUi?.searchHit || !result.noteUi?.cleared) {
-    failed.push("note save/search/clear failed");
+  if (!result.noteUi?.hasCount || !result.noteUi?.exportMentionsNote || !result.noteUi?.delInMore) {
+    failed.push("note UX polish missing (count/export hint/delete-in-more)");
   }
-  if (!/memo24/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memo24");
+  if (!result.noteUi?.emptyHint || !result.noteUi?.opened || !result.noteUi?.saved || !result.noteUi?.cardShows) {
+    failed.push("note empty-hint/open/save/card failed");
+  }
+  if (!result.noteUi?.hasExpand || !result.noteUi?.expanded || !result.noteUi?.previewBlock) {
+    failed.push("note expand/preview block failed");
+  }
+  if (!result.noteUi?.searchHit || !result.noteUi?.cleared || !result.noteUi?.emptyHintAfterClear) {
+    failed.push("note search/clear failed");
+  }
+  if (!/\d+\s*\/\s*500/.test(result.noteUi?.countAfterInput || "")) {
+    failed.push("note char count should update while typing");
+  }
+  if (!/memo25/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memo25");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");

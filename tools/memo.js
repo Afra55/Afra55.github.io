@@ -20,6 +20,7 @@
   const VIRTUAL_MIN = 64;
   const TEXT_PREVIEW_MAX = 4000;
   const NOTE_MAX = 500;
+  const NOTE_CARD_CLIP = 80;
   const CARD_EST_DEFAULT = 210;
   const CARD_EST_NOTE = 28;
   const CARD_EST_BY_TYPE = {
@@ -311,6 +312,7 @@
     objectUrls: new Set(),
     editingId: "",
     noteEditingId: "",
+    expandedNotes: new Set(),
     tagTargetId: "",
     flashItemId: "",
     saveAbort: null,
@@ -580,7 +582,6 @@
   const previewShareBtn = $("#memo-preview-share");
   const previewEditBtn = $("#memo-preview-edit");
   const previewNoteBtn = $("#memo-preview-note");
-  const previewNoteLine = $("#memo-preview-note-line");
   let previewObjectUrl = "";
   let previewBlob = null;
   let previewItem = null;
@@ -930,7 +931,8 @@
       return state.cardHeightCache.get(item.id);
     }
     let h = CARD_EST_BY_TYPE[item?.type] || CARD_EST_DEFAULT;
-    if (String(item?.note || "").trim()) h += CARD_EST_NOTE;
+    const hasNote = String(item?.note || "").trim();
+    if (hasNote || (item?.type && item.type !== "text")) h += CARD_EST_NOTE;
     return h;
   }
 
@@ -1152,9 +1154,25 @@
     const size = formatBytes(item.size || 0);
     const typeLabel = TYPE_LABELS[item.type] || item.type || "文件";
     const noteRaw = String(item.note || "").trim();
-    const noteHtml = noteRaw
-      ? `<p class="memo-card-note" title="${escapeHtml(noteRaw)}">${escapeHtml(noteRaw.length > 80 ? `${noteRaw.slice(0, 80)}…` : noteRaw)}</p>`
-      : "";
+    const wantsNoteHint = !noteRaw && item.type !== "text";
+    let noteHtml = "";
+    if (noteRaw) {
+      const expanded = state.expandedNotes.has(item.id);
+      const long = noteRaw.length > NOTE_CARD_CLIP;
+      const shown = !long || expanded ? noteRaw : `${noteRaw.slice(0, NOTE_CARD_CLIP)}…`;
+      noteHtml = `<div class="memo-card-note-wrap">
+        <button type="button" class="memo-card-note" data-memo-note="${item.id}" title="点击编辑备注">${escapeHtml(shown)}</button>
+        ${
+          long
+            ? `<button type="button" class="ghost-btn memo-note-expand" data-memo-note-expand="${item.id}">${
+                expanded ? "收起" : "展开"
+              }</button>`
+            : ""
+        }
+      </div>`;
+    } else if (wantsNoteHint) {
+      noteHtml = `<button type="button" class="memo-card-note is-empty" data-memo-note="${item.id}">添加备注…</button>`;
+    }
     let body = "";
     if (item.type === "text") {
       const full = item.textPreview || "";
@@ -1213,13 +1231,13 @@
         ${secondaryShare}
         <button type="button" class="ghost-btn" data-memo-open="${item.id}">预览</button>
         ${item.type === "text" ? `<button type="button" class="ghost-btn" data-memo-edit="${item.id}">编辑</button>` : ""}
-        <button type="button" class="ghost-btn" data-memo-note="${item.id}">${noteRaw ? "改备注" : "备注"}</button>
-        <button type="button" class="ghost-btn" data-memo-del="${item.id}">删除</button>
+        <button type="button" class="secondary-btn" data-memo-note="${item.id}">${noteRaw ? "改备注" : "备注"}</button>
         <details class="memo-more">
           <summary class="ghost-btn memo-more-sum">更多</summary>
           <div class="memo-more-menu" role="menu">
             ${moreDownload}
             ${state.mode === "dir" && !state.dirPending ? `<button type="button" class="ghost-btn" data-memo-path="${item.id}">路径</button>` : ""}
+            <button type="button" class="ghost-btn" data-memo-del="${item.id}">删除</button>
           </div>
         </details>
       </div>
@@ -1636,8 +1654,16 @@
   }
 
   function isTextEditOpen() {
-    const dlg = $("#memo-text-edit");
-    return Boolean(dlg?.open);
+    return Boolean($("#memo-text-edit")?.open || $("#memo-note-edit")?.open);
+  }
+
+  function syncNoteEditCount() {
+    const src = $("#memo-note-edit-src");
+    const el = $("#memo-note-edit-count");
+    if (!el) return;
+    const n = String(src?.value || "").length;
+    el.textContent = `${n} / ${NOTE_MAX}`;
+    el.classList.toggle("is-near-limit", n >= NOTE_MAX - 40);
   }
 
   function clearEditing({ keepHighlight = false } = {}) {
@@ -1692,6 +1718,7 @@
         : "说明这条用来干什么，可搜索";
     }
     if (src) src.value = String(item.note || "");
+    syncNoteEditCount();
     const err = $("#memo-note-edit-error");
     if (err) {
       err.hidden = true;
@@ -1718,10 +1745,14 @@
       return;
     }
     if (body) item.note = body;
-    else delete item.note;
+    else {
+      delete item.note;
+      state.expandedNotes.delete(id);
+    }
     item.updatedAt = Date.now();
     state.cardHeightCache.delete(item.id);
     state.filterCache = { key: "", items: null };
+    state.countCache = null;
     await persistIndex({ immediate: true });
     const savedId = id;
     state.noteEditingId = "";
@@ -2409,20 +2440,17 @@
   }
 
   function syncPreviewNoteLine(item) {
-    const note = String(item?.note || "").trim();
-    if (previewNoteLine) {
-      if (note) {
-        previewNoteLine.hidden = false;
-        previewNoteLine.textContent = `备注：${note}`;
-      } else {
-        previewNoteLine.hidden = true;
-        previewNoteLine.textContent = "";
-      }
+    if (!previewNoteBtn) return;
+    if (!item) {
+      previewNoteBtn.hidden = true;
+      previewNoteBtn.textContent = "";
+      return;
     }
-    if (previewNoteBtn) {
-      previewNoteBtn.hidden = !item;
-      previewNoteBtn.textContent = note ? "改备注" : "备注";
-    }
+    const note = String(item.note || "").trim();
+    previewNoteBtn.hidden = false;
+    previewNoteBtn.classList.toggle("is-empty", !note);
+    previewNoteBtn.textContent = note ? `备注：${note}` : "添加备注…";
+    previewNoteBtn.title = note ? "点击编辑备注" : "点击添加备注";
   }
 
   function setPreviewChrome(item, { canFs = false, canNewTab = false, canDl = true, canEdit = false } = {}) {
@@ -2619,6 +2647,7 @@
       });
       let importedCount = 0;
       let skipped = 0;
+      let notedImport = 0;
       for (let i = 0; i < imported.items.length; i++) {
         const it = imported.items[i];
         setProgress(true, i / Math.max(1, imported.items.length), `导入 ${it.name}`);
@@ -2655,6 +2684,11 @@
           updatedAt: Date.now(),
           order: -1,
         };
+        const note = clipNote(row.note || "");
+        if (note) {
+          row.note = note;
+          notedImport += 1;
+        } else delete row.note;
         state.index.items.unshift(row);
         rememberHash(row);
         importedCount += 1;
@@ -2664,8 +2698,9 @@
       await persistIndex({ immediate: true });
       setProgress(false, 0, "");
       renderAll();
-      if (importedCount && skipped) toast(`导入完成：新增 ${importedCount} 条，重复置顶 ${skipped} 条`);
-      else if (importedCount) toast(`导入完成（${importedCount} 条）`);
+      const noteBit = notedImport ? `，其中 ${notedImport} 条含备注` : "";
+      if (importedCount && skipped) toast(`导入完成：新增 ${importedCount} 条${noteBit}，重复置顶 ${skipped} 条`);
+      else if (importedCount) toast(`导入完成（${importedCount} 条${noteBit}）`);
       else if (skipped) toast(`全部为重复内容，已置顶 ${skipped} 条`);
       else toast("导入完成，但未找到可写入的文件");
     });
@@ -2802,6 +2837,7 @@
     e.preventDefault();
     saveNoteFromPanel().catch((err) => setError(memoError, err.message || String(err)));
   });
+  $("#memo-note-edit-src")?.addEventListener("input", () => syncNoteEditCount());
   $("#memo-read-clip")?.addEventListener("click", () => {
     readClipboard({ force: true }).catch((err) => setError(memoError, err.message || String(err)));
   });
@@ -2990,6 +3026,14 @@
       if (noteId) {
         const item = state.index.items.find((x) => x.id === noteId);
         if (item) await beginEditNote(item);
+        return;
+      }
+      const noteExpandId = t.closest?.("[data-memo-note-expand]")?.dataset?.memoNoteExpand;
+      if (noteExpandId) {
+        if (state.expandedNotes.has(noteExpandId)) state.expandedNotes.delete(noteExpandId);
+        else state.expandedNotes.add(noteExpandId);
+        state.cardHeightCache.delete(noteExpandId);
+        renderItems();
         return;
       }
       const copyId = t.closest?.("[data-memo-copy]")?.dataset?.memoCopy;
