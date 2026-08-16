@@ -313,6 +313,7 @@
     testShareUi: false,
     cardHeightCache: new Map(),
     shareFilesCapable: null, // null=未探测, true/false
+    hashIndex: new Map(), // contentHash -> itemId
   };
 
   function trackUrl(url) {
@@ -743,14 +744,36 @@
     return `bin:${item.type}:${item.size || 0}:${item.mime || ""}`;
   }
 
+  function rememberHash(item) {
+    if (item?.contentHash && item?.id) state.hashIndex.set(item.contentHash, item.id);
+  }
+
+  function forgetHash(item) {
+    if (!item?.contentHash) return;
+    if (state.hashIndex.get(item.contentHash) === item.id) state.hashIndex.delete(item.contentHash);
+  }
+
+  function rebuildHashIndex() {
+    state.hashIndex = new Map();
+    for (const it of state.index.items) rememberHash(it);
+  }
+
   function findDuplicateBySig(coarseSig, contentHash) {
+    // contentHash：Map O(1)；无 hash 的旧条目才走线性粗匹配
     if (contentHash) {
+      const id = state.hashIndex.get(contentHash);
+      if (id) {
+        const byMap = state.index.items.find((it) => it.id === id);
+        if (byMap) return byMap;
+      }
       const byHash = state.index.items.find((it) => it.contentHash && it.contentHash === contentHash);
-      if (byHash) return byHash;
+      if (byHash) {
+        rememberHash(byHash);
+        return byHash;
+      }
     }
     if (!coarseSig || coarseSig === "text:" || /^bin:\w+:0:/.test(coarseSig)) return null;
     for (const it of state.index.items) {
-      if (it.contentHash && contentHash && it.contentHash === contentHash) return it;
       if (itemContentSig(it) === coarseSig) return it;
       if (!it.contentHash) {
         const legacy =
@@ -761,6 +784,27 @@
       }
     }
     return null;
+  }
+
+  async function bumpItemToFront(item) {
+    if (!item?.id) return { item: null, moved: false };
+    const idx = state.index.items.findIndex((x) => x.id === item.id);
+    if (idx < 0) return { item: null, moved: false };
+    let moved = false;
+    if (idx > 0) {
+      const [row] = state.index.items.splice(idx, 1);
+      state.index.items.unshift(row);
+      moved = true;
+    }
+    const row = state.index.items[0];
+    row.updatedAt = Date.now();
+    if (item.contentHash && !row.contentHash) {
+      row.contentHash = item.contentHash;
+      rememberHash(row);
+    }
+    reindexOrders();
+    await persistIndex();
+    return { item: row, moved };
   }
 
   function estimateCardHeight(item) {
@@ -1342,11 +1386,17 @@
     const sig = type === "text" ? textContentSig(textPreview) : blobContentSig(blob, type);
     const dup = findDuplicateBySig(sig, contentHash);
     if (dup) {
+      if (contentHash && !dup.contentHash) {
+        dup.contentHash = contentHash;
+        rememberHash(dup);
+      }
+      const { item: bumped, moved } = await bumpItemToFront(dup);
+      const tip = moved ? "已有相同内容，已移到最前" : "已有相同内容，已在最前";
       if (!quiet) {
         setProgress(false, 0, "");
-        flashItem(dup.id, "已有相同内容，未重复添加");
+        flashItem(bumped?.id || dup.id, tip);
       }
-      return dup;
+      return bumped || dup;
     }
     const id = uid();
     const signal = opts.signal || beginSaveAbort();
@@ -1380,6 +1430,7 @@
         contentHash: contentHash || undefined,
       };
       state.index.items.unshift(item);
+      rememberHash(item);
       reindexOrders();
       await persistIndex();
       if (!quiet) {
@@ -1500,6 +1551,7 @@
       try {
         item.contentHash = await hashBlobPartial(blob);
       } catch (_) {}
+      rememberHash(item);
       await persistIndex();
       const savedId = id;
       state.editingId = "";
@@ -1559,7 +1611,7 @@
       if (lastId) {
         const parts = [];
         if (added) parts.push(`已添加 ${added} 个`);
-        if (skipped) parts.push(`跳过重复 ${skipped} 个`);
+        if (skipped) parts.push(`重复置顶 ${skipped} 个`);
         if (cancelled) parts.push(`取消 ${cancelled} 个`);
         flashItem(lastId, parts.join("，") || "完成");
       } else if (cancelled && !added) {
@@ -1676,6 +1728,7 @@
       /* structured clone may fail on some browsers */
     }
     await idbSet("index", "main", state.index);
+    rebuildHashIndex();
     renderAll();
   }
 
@@ -1724,6 +1777,7 @@
     }
     const restored = await tryRestoreDirHandle();
     if (!restored && !state.dirPending) state.mode = "idb";
+    rebuildHashIndex();
     renderAll();
   }
 
@@ -1742,6 +1796,7 @@
       try {
         await removeBlob(it);
       } catch (_) {}
+      forgetHash(it);
       if (it?.id) state.cardHeightCache.delete(it.id);
     }
   }
@@ -1755,6 +1810,7 @@
     // 关页时尽量提交硬删除，避免留下无索引 blob
     pending.items.forEach((it) => {
       removeBlob(it).catch(() => {});
+      forgetHash(it);
       if (it?.id) state.cardHeightCache.delete(it.id);
     });
   }
@@ -1767,6 +1823,7 @@
     hideUndoBar();
     const restored = pending.items;
     state.index.items = [...restored, ...state.index.items];
+    restored.forEach(rememberHash);
     reindexOrders();
     await persistIndex();
     renderAll();
@@ -1794,6 +1851,7 @@
       state.selected.delete(id);
     }
     if (!removed.length) return;
+    removed.forEach(forgetHash);
     reindexOrders();
     await persistIndex();
     renderAll();
@@ -2309,13 +2367,15 @@
           it.type === "text"
             ? textContentSig(it.textPreview || "")
             : `bin:${it.type || detectKind(typed.type, it.name)}:${typed.size || it.size || 0}:${typed.type || it.mime || ""}`;
-        if (findDuplicateBySig(coarse, contentHash)) {
+        const dup = findDuplicateBySig(coarse, contentHash);
+        if (dup) {
+          await bumpItemToFront(dup);
           skipped += 1;
           continue;
         }
         const newId = uid();
         const fileName = await saveBlob(newId, typed, `${newId}_${safeFileName(it.fileName || it.name || "file")}`);
-        state.index.items.unshift({
+        const row = {
           ...it,
           id: newId,
           fileName,
@@ -2323,16 +2383,18 @@
           createdAt: it.createdAt || Date.now(),
           updatedAt: Date.now(),
           order: -1,
-        });
+        };
+        state.index.items.unshift(row);
+        rememberHash(row);
         importedCount += 1;
       }
       reindexOrders();
       await persistIndex();
       setProgress(false, 0, "");
       renderAll();
-      if (importedCount && skipped) toast(`导入完成：新增 ${importedCount} 条，跳过重复 ${skipped} 条`);
+      if (importedCount && skipped) toast(`导入完成：新增 ${importedCount} 条，重复置顶 ${skipped} 条`);
       else if (importedCount) toast(`导入完成（${importedCount} 条）`);
-      else if (skipped) toast(`全部为重复内容，已跳过 ${skipped} 条`);
+      else if (skipped) toast(`全部为重复内容，已置顶 ${skipped} 条`);
       else toast("导入完成，但未找到可写入的文件");
     });
   }

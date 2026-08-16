@@ -377,6 +377,26 @@ async function main() {
     out.p1p2.heightOrderOk =
       out.p1p2.imageEst > out.p1p2.fileEst && out.p1p2.imageEst >= out.p1p2.textEst;
 
+    // duplicate paste should bump existing item to front
+    const bumpText = "冒烟去重置顶 UNIQUE_BUMP_TEXT_991";
+    await window.DevToolsMemo.ingestText(bumpText);
+    await sleep(350);
+    // bury it under a newer item
+    await window.DevToolsMemo.ingestText("冒烟去重垫底另一条");
+    await sleep(350);
+    const beforeIds = (window.DevToolsMemo.getIndex().items || []).map((x) => x.id);
+    const buried = (window.DevToolsMemo.getIndex().items || []).find((it) => (it.textPreview || "").includes("UNIQUE_BUMP_TEXT_991"));
+    out.dedupeBump = {
+      buried: Boolean(buried) && beforeIds[0] !== buried?.id,
+      buriedId: buried?.id || "",
+    };
+    await window.DevToolsMemo.ingestText(bumpText);
+    await sleep(400);
+    const after = window.DevToolsMemo.getIndex().items || [];
+    out.dedupeBump.frontId = after[0]?.id || "";
+    out.dedupeBump.movedFront = after[0]?.id === buried?.id;
+    out.dedupeBump.noExtraCopy = after.filter((it) => (it.textPreview || "").includes("UNIQUE_BUMP_TEXT_991")).length === 1;
+
     // tagged item leaves default (untagged) bucket
     const firstId = (window.DevToolsMemo.getIndex().items || [])[0]?.id;
     const workTag = (window.DevToolsMemo.getIndex().tags || []).find((t) => t.name === "工作");
@@ -467,6 +487,9 @@ async function main() {
   }
   if (!result.p1p2?.hasShareProbe || !result.p1p2?.heightOrderOk) {
     failed.push("p1/p2 share probe or card height estimates missing");
+  }
+  if (!result.dedupeBump?.buried || !result.dedupeBump?.movedFront || !result.dedupeBump?.noExtraCopy) {
+    failed.push("duplicate paste should bump existing item to front without cloning");
   }
   if (!result.textEdit?.hasDlg || !result.textEdit?.hasEditBtn || !result.textEdit?.hasPreviewEdit) {
     failed.push("text edit UI missing");
