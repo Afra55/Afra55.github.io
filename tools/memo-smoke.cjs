@@ -186,6 +186,10 @@ async function main() {
       storageFold: Boolean(document.querySelector(".memo-storage-fold")),
       clearFilters: Boolean(document.getElementById("memo-clear-filters")),
       friendlySearch: /标签名/.test(document.getElementById("memo-search")?.placeholder || ""),
+      hasUndoBar: Boolean(document.getElementById("memo-undo-bar")),
+      hasProgressCancel: Boolean(document.getElementById("memo-progress-cancel")),
+      hasTagsToggle: Boolean(document.getElementById("memo-tags-toggle")),
+      hasTagsPanel: Boolean(document.getElementById("memo-tags-panel")),
     };
 
     // inline text edit dialog
@@ -292,6 +296,31 @@ async function main() {
     document.querySelector('#memo-type-filter [data-memo-type="all"]')?.click();
     await sleep(80);
 
+    // content hash + undo delete
+    const hashed = (window.DevToolsMemo.getIndex().items || []).filter((it) => it.contentHash);
+    out.hardening = {
+      contentHashCount: hashed.length,
+      hasUndoBar: Boolean(document.getElementById("memo-undo-bar")),
+      hasProgressCancel: Boolean(document.getElementById("memo-progress-cancel")),
+      hasTagsToggle: Boolean(document.getElementById("memo-tags-toggle")),
+    };
+    const undoTarget = (window.DevToolsMemo.getIndex().items || []).find((it) => it.type === "gif") ||
+      (window.DevToolsMemo.getIndex().items || [])[0];
+    if (undoTarget) {
+      const before = (window.DevToolsMemo.getIndex().items || []).length;
+      const prevConfirm = window.confirm;
+      window.confirm = () => true;
+      document.querySelector(`[data-memo-del="${undoTarget.id}"]`)?.click();
+      await sleep(120);
+      out.hardening.deleted = (window.DevToolsMemo.getIndex().items || []).length === before - 1;
+      out.hardening.undoVisible = !document.getElementById("memo-undo-bar")?.hidden;
+      document.getElementById("memo-undo-btn")?.click();
+      await sleep(200);
+      window.confirm = prevConfirm;
+      out.hardening.undone = (window.DevToolsMemo.getIndex().items || []).some((it) => it.id === undoTarget.id);
+      out.hardening.undoHidden = Boolean(document.getElementById("memo-undo-bar")?.hidden);
+    }
+
     // tagged item leaves default (untagged) bucket
     const firstId = (window.DevToolsMemo.getIndex().items || [])[0]?.id;
     const workTag = (window.DevToolsMemo.getIndex().tags || []).find((t) => t.name === "工作");
@@ -354,6 +383,13 @@ async function main() {
   }
   if (!result.modules?.captureBar || !result.modules?.storageFold || !result.modules?.clearFilters || !result.modules?.friendlySearch) {
     failed.push("memo capture/search beginner UX missing");
+  }
+  if (!result.modules?.hasUndoBar || !result.modules?.hasProgressCancel || !result.modules?.hasTagsToggle || !result.modules?.hasTagsPanel) {
+    failed.push("memo hardening UI missing (undo/cancel/tags drawer)");
+  }
+  if ((result.hardening?.contentHashCount || 0) < 1) failed.push("contentHash missing on new items");
+  if (!result.hardening?.deleted || !result.hardening?.undoVisible || !result.hardening?.undone || !result.hardening?.undoHidden) {
+    failed.push("delete undo flow failed");
   }
   if (!result.textEdit?.hasDlg || !result.textEdit?.hasEditBtn || !result.textEdit?.hasPreviewEdit) {
     failed.push("text edit UI missing");

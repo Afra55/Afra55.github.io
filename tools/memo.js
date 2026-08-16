@@ -14,6 +14,18 @@
   const META_KEY = "meta";
   const PAGE_SIZE = 36;
   const AUTOCLIP_KEY = "devtools-memo-autoclip-v1";
+  const LARGE_WARN_BYTES = 25 * 1024 * 1024;
+  const SAVE_CHUNK = 1024 * 1024;
+  const UNDO_MS = 8000;
+  const VIRTUAL_MIN = 64;
+  const CARD_EST_H = 210;
+
+  class SaveAbortedError extends Error {
+    constructor(msg = "已取消保存") {
+      super(msg);
+      this.name = "SaveAbortedError";
+    }
+  }
 
   function isGifLike(mime, name) {
     const m = String(mime || "").toLowerCase();
@@ -286,6 +298,10 @@
     editingId: "",
     tagTargetId: "",
     flashItemId: "",
+    saveAbort: null,
+    pendingUndo: null,
+    virtualMode: false,
+    virtualRaf: 0,
   };
 
   function trackUrl(url) {
@@ -345,7 +361,46 @@
     if (state.mode === "dir") await writeIndexToDir();
   }
 
-  async function saveBlob(id, blob, fileName) {
+  function concatArrayBuffers(parts) {
+    const total = parts.reduce((n, p) => n + (p?.byteLength || 0), 0);
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const part of parts) {
+      out.set(new Uint8Array(part), offset);
+      offset += part.byteLength;
+    }
+    return out.buffer;
+  }
+
+  async function writeBlobChunked(blob, writeChunk, { onProgress, signal } = {}) {
+    const total = blob.size || 0;
+    let written = 0;
+    const report = () => {
+      if (typeof onProgress === "function") onProgress(written, total);
+    };
+    const check = () => {
+      if (signal?.aborted) throw new SaveAbortedError();
+    };
+    check();
+    report();
+    if (!total) {
+      await writeChunk(new Blob([]));
+      report();
+      return;
+    }
+    let offset = 0;
+    while (offset < total) {
+      check();
+      const end = Math.min(offset + SAVE_CHUNK, total);
+      await writeChunk(blob.slice(offset, end));
+      offset = end;
+      written = offset;
+      report();
+    }
+    check();
+  }
+
+  async function saveBlob(id, blob, fileName, { onProgress, signal } = {}) {
     const safe = safeFileName(fileName || id, id);
     if (state.mode === "dir" && state.dirHandle) {
       const ok = await ensureDirPermission(state.dirHandle);
@@ -353,11 +408,35 @@
       const dir = await getBlobsDir(true);
       const handle = await dir.getFileHandle(safe, { create: true });
       const writable = await handle.createWritable();
-      await writable.write(blob);
-      await writable.close();
+      try {
+        await writeBlobChunked(
+          blob,
+          async (chunk) => {
+            await writable.write(chunk);
+          },
+          { onProgress, signal }
+        );
+        await writable.close();
+      } catch (err) {
+        try {
+          await writable.abort?.();
+        } catch (_) {}
+        try {
+          await dir.removeEntry(safe);
+        } catch (_) {}
+        throw err;
+      }
       return safe;
     }
-    const buf = await blob.arrayBuffer();
+    const chunks = [];
+    await writeBlobChunked(
+      blob,
+      async (chunk) => {
+        chunks.push(await chunk.arrayBuffer());
+      },
+      { onProgress, signal }
+    );
+    const buf = chunks.length === 1 ? chunks[0] : concatArrayBuffers(chunks);
     await idbSet("blobs", id, { name: safe, mime: blob.type || "", buf });
     return safe;
   }
@@ -456,13 +535,39 @@
   let previewBlob = null;
   let previewItem = null;
 
-  function setProgress(visible, ratio, text) {
+  function setProgress(visible, ratio, text, { cancellable = false } = {}) {
     if (!progressEl) return;
     progressEl.hidden = !visible;
     const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)));
     if (progressFill) progressFill.style.width = `${pct}%`;
     if (progressPct) progressPct.textContent = `${pct}%`;
     if (progressText) progressText.textContent = text || `${pct}%`;
+    const cancelBtn = $("#memo-progress-cancel");
+    if (cancelBtn) cancelBtn.hidden = !visible || !cancellable;
+  }
+
+  function beginSaveAbort() {
+    try {
+      state.saveAbort?.abort?.();
+    } catch (_) {}
+    state.saveAbort = typeof AbortController === "function" ? new AbortController() : null;
+    return state.saveAbort?.signal || null;
+  }
+
+  function endSaveAbort() {
+    state.saveAbort = null;
+    const cancelBtn = $("#memo-progress-cancel");
+    if (cancelBtn) cancelBtn.hidden = true;
+  }
+
+  function confirmLargeBlob(blob, name) {
+    const size = blob?.size || 0;
+    if (size < LARGE_WARN_BYTES) return true;
+    const storeTip =
+      state.mode === "dir"
+        ? "写入可能较慢，可随时点取消。"
+        : "应用内存储空间有限，大文件更建议先「选择存储目录」。";
+    return window.confirm(`「${name || "文件"}」约 ${formatBytes(size)}，体积较大。\n${storeTip}\n是否继续？`);
   }
 
   function canShareFiles() {
@@ -597,16 +702,51 @@
     return `bin:${t}:${blob?.size || 0}:${blob?.type || ""}`;
   }
 
+  function bytesToHex(buf) {
+    return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join("");
+  }
+
+  async function hashBlobPartial(blob) {
+    if (!blob || !crypto?.subtle?.digest) return "";
+    const size = blob.size || 0;
+    const headLen = Math.min(65536, size);
+    const tailStart = Math.max(headLen, size - Math.min(65536, size));
+    const parts = [new TextEncoder().encode(`${size}|${blob.type || ""}|`)];
+    if (headLen > 0) parts.push(new Uint8Array(await blob.slice(0, headLen).arrayBuffer()));
+    if (tailStart < size) parts.push(new Uint8Array(await blob.slice(tailStart, size).arrayBuffer()));
+    const total = parts.reduce((n, p) => n + p.length, 0);
+    const merged = new Uint8Array(total);
+    let o = 0;
+    for (const p of parts) {
+      merged.set(p, o);
+      o += p.length;
+    }
+    return bytesToHex(await crypto.subtle.digest("SHA-256", merged));
+  }
+
   function itemContentSig(item) {
     if (!item) return "";
+    if (item.contentHash) return `hash:${item.contentHash}`;
     if (item.type === "text") return textContentSig(item.textPreview || "");
     return `bin:${item.type}:${item.size || 0}:${item.mime || ""}`;
   }
 
-  function findDuplicateBySig(sig) {
-    if (!sig || sig === "text:" || /^bin:\w+:0:/.test(sig)) return null;
-    for (const it of state.index.items.slice(0, 150)) {
-      if (itemContentSig(it) === sig) return it;
+  function findDuplicateBySig(coarseSig, contentHash) {
+    if (contentHash) {
+      const byHash = state.index.items.find((it) => it.contentHash && it.contentHash === contentHash);
+      if (byHash) return byHash;
+    }
+    if (!coarseSig || coarseSig === "text:" || /^bin:\w+:0:/.test(coarseSig)) return null;
+    for (const it of state.index.items.slice(0, 300)) {
+      if (it.contentHash && contentHash && it.contentHash === contentHash) return it;
+      if (itemContentSig(it) === coarseSig) return it;
+      if (!it.contentHash) {
+        const legacy =
+          it.type === "text"
+            ? textContentSig(it.textPreview || "")
+            : `bin:${it.type}:${it.size || 0}:${it.mime || ""}`;
+        if (legacy === coarseSig) return it;
+      }
     }
     return null;
   }
@@ -714,6 +854,22 @@
       );
     });
     tagList.innerHTML = bits.join("");
+    syncTagsToggle();
+  }
+
+  function syncTagsToggle() {
+    const aside = $("#memo-tags-aside");
+    const toggle = $("#memo-tags-toggle");
+    if (!toggle) return;
+    let label = "标签筛选";
+    if (state.activeTagId === DEFAULT_TAG_ID) label = "标签：默认";
+    else if (state.activeTagId && state.activeTagId !== "all") {
+      const name = tagById(state.activeTagId)?.name;
+      if (name) label = `标签：${name}`;
+    }
+    const open = aside?.classList.contains("is-open");
+    toggle.textContent = open ? `${label} · 收起` : label;
+    toggle.setAttribute("aria-expanded", open ? "true" : "false");
   }
 
   function itemCardHtml(item) {
@@ -842,6 +998,67 @@
     meta.textContent = parts.join(" · ");
   }
 
+  function stopVirtualScroll() {
+    if (state.virtualRaf) {
+      cancelAnimationFrame(state.virtualRaf);
+      state.virtualRaf = 0;
+    }
+    state.virtualMode = false;
+    window.removeEventListener("scroll", onVirtualScroll);
+    window.removeEventListener("resize", onVirtualScroll);
+  }
+
+  function onVirtualScroll() {
+    if (!state.virtualMode) return;
+    if (state.virtualRaf) return;
+    state.virtualRaf = requestAnimationFrame(() => {
+      state.virtualRaf = 0;
+      const items = visibleItems();
+      if (items.length < VIRTUAL_MIN) {
+        renderItems();
+        return;
+      }
+      paintVirtualWindow(items);
+    });
+  }
+
+  function setupVirtualScroll() {
+    stopVirtualScroll();
+    state.virtualMode = true;
+    window.addEventListener("scroll", onVirtualScroll, { passive: true });
+    window.addEventListener("resize", onVirtualScroll);
+  }
+
+  function paintVirtualWindow(items) {
+    if (!itemList) return;
+    const est = CARD_EST_H;
+    const listTop = itemList.getBoundingClientRect().top + window.scrollY;
+    const viewTop = Math.max(0, window.scrollY + 8 - listTop);
+    const viewH = window.innerHeight || 800;
+    let start = Math.max(0, Math.floor(viewTop / est) - 5);
+    let end = Math.min(items.length, Math.ceil((viewTop + viewH) / est) + 8);
+    if (end - start < 16) end = Math.min(items.length, start + 16);
+    const topPad = start * est;
+    const bottomPad = Math.max(0, (items.length - end) * est);
+    const slice = items.slice(start, end);
+    const prevStart = itemList.dataset.virtStart || "";
+    const prevEnd = itemList.dataset.virtEnd || "";
+    if (prevStart === String(start) && prevEnd === String(end) && itemList.querySelector(".memo-card")) {
+      return;
+    }
+    stopMediaObserver();
+    revokeTrackedUrls();
+    itemList.dataset.virtStart = String(start);
+    itemList.dataset.virtEnd = String(end);
+    itemList.innerHTML = `<div class="memo-virt-spacer" style="height:${topPad}px" aria-hidden="true"></div>${slice
+      .map(itemCardHtml)
+      .join("")}<div class="memo-virt-spacer" style="height:${bottomPad}px" aria-hidden="true"></div>`;
+    renderListMeta(items.length, slice.length);
+    hydrateMedia();
+    const batch = $("#memo-batch-del");
+    if (batch) batch.disabled = state.selected.size === 0;
+  }
+
   function renderItems() {
     if (!itemList) return;
     stopMediaObserver();
@@ -849,7 +1066,12 @@
     const items = visibleItems();
     const moreRow = $("#memo-more-row");
     const loadMoreBtn = $("#memo-load-more");
+    const sentinel = $("#memo-scroll-sentinel");
+    const loadingTip = $("#memo-loading-more");
     if (!items.length) {
+      stopVirtualScroll();
+      itemList.dataset.virtStart = "";
+      itemList.dataset.virtEnd = "";
       let emptyTip = "暂无条目。可粘贴、拖入文件或保存文本。";
       if (state.searchQuery.trim()) {
         emptyTip = `没有匹配「${state.searchQuery.trim()}」的条目。`;
@@ -865,10 +1087,27 @@
       itemList.innerHTML = `<p class="hint">${emptyTip}</p>`;
       renderListMeta(0, 0);
       if (moreRow) moreRow.hidden = true;
+      if (sentinel) sentinel.hidden = true;
+      if (loadingTip) loadingTip.hidden = true;
       const batch = $("#memo-batch-del");
       if (batch) batch.disabled = state.selected.size === 0;
       return;
     }
+
+    if (items.length >= VIRTUAL_MIN) {
+      if (moreRow) moreRow.hidden = true;
+      if (sentinel) sentinel.hidden = true;
+      if (loadingTip) loadingTip.hidden = true;
+      itemList.dataset.virtStart = "";
+      itemList.dataset.virtEnd = "";
+      setupVirtualScroll();
+      paintVirtualWindow(items);
+      return;
+    }
+
+    stopVirtualScroll();
+    itemList.dataset.virtStart = "";
+    itemList.dataset.virtEnd = "";
     const limit = Math.max(PAGE_SIZE, state.listLimit || PAGE_SIZE);
     const page = items.slice(0, limit);
     const useGroups =
@@ -895,9 +1134,7 @@
       const hasMore = page.length < items.length;
       moreRow.hidden = !hasMore;
       if (loadMoreBtn) loadMoreBtn.textContent = `手动加载更多（还剩 ${Math.max(0, items.length - page.length)}）`;
-      const sentinel = $("#memo-scroll-sentinel");
       if (sentinel) sentinel.hidden = !hasMore;
-      const loadingTip = $("#memo-loading-more");
       if (loadingTip && !hasMore) loadingTip.hidden = true;
     }
     hydrateMedia();
@@ -984,8 +1221,22 @@
       }
     }
     const quiet = Boolean(opts.quiet);
+    if (!opts.skipLargeConfirm && !confirmLargeBlob(blob, name || type)) {
+      toast("已取消添加");
+      return null;
+    }
+    let contentHash = "";
+    try {
+      if (type === "text") {
+        contentHash = await hashBlobPartial(new Blob([String(textPreview || "").trim()], { type: "text/plain" }));
+      } else {
+        contentHash = await hashBlobPartial(blob);
+      }
+    } catch (_) {
+      contentHash = "";
+    }
     const sig = type === "text" ? textContentSig(textPreview) : blobContentSig(blob, type);
-    const dup = findDuplicateBySig(sig);
+    const dup = findDuplicateBySig(sig, contentHash);
     if (dup) {
       if (!quiet) {
         setProgress(false, 0, "");
@@ -994,30 +1245,54 @@
       return dup;
     }
     const id = uid();
-    if (!quiet) setProgress(true, 0.15, `保存 ${name || type}…`);
-    const fileName = await saveBlob(id, blob, `${id}_${safeFileName(name || type)}`);
-    if (!quiet) setProgress(true, 0.85, "写入索引…");
-    const item = {
-      id,
-      type,
-      name: name || `${type}-${formatTime(Date.now())}`,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      order: -1,
-      tagIds: opts.tagIds || tagsForNewItem(),
-      mime: blob.type || "",
-      size: blob.size || 0,
-      fileName,
-      textPreview: type === "text" ? textPreview : "",
-    };
-    state.index.items.unshift(item);
-    reindexOrders();
-    await persistIndex();
-    if (!quiet) {
-      setProgress(false, 0, "");
-      flashItem(item.id, "已添加");
+    const signal = opts.signal || beginSaveAbort();
+    const total = blob.size || 0;
+    const cancellable = total >= SAVE_CHUNK;
+    try {
+      if (!quiet) setProgress(true, 0.02, `保存 ${name || type}…`, { cancellable });
+      const fileName = await saveBlob(id, blob, `${id}_${safeFileName(name || type)}`, {
+        signal,
+        onProgress: (done, all) => {
+          if (quiet && all < LARGE_WARN_BYTES) return;
+          const ratio = all ? Math.min(0.92, done / all) : 0.5;
+          setProgress(true, ratio, `写入 ${name || type}（${formatBytes(done)} / ${formatBytes(all)}）`, {
+            cancellable,
+          });
+        },
+      });
+      if (!quiet) setProgress(true, 0.96, "写入索引…", { cancellable: false });
+      const item = {
+        id,
+        type,
+        name: name || `${type}-${formatTime(Date.now())}`,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        order: -1,
+        tagIds: opts.tagIds || tagsForNewItem(),
+        mime: blob.type || "",
+        size: blob.size || 0,
+        fileName,
+        textPreview: type === "text" ? textPreview : "",
+        contentHash: contentHash || undefined,
+      };
+      state.index.items.unshift(item);
+      reindexOrders();
+      await persistIndex();
+      if (!quiet) {
+        setProgress(false, 0, "");
+        flashItem(item.id, "已添加");
+      }
+      return item;
+    } catch (err) {
+      if (err?.name === "SaveAbortedError" || err instanceof SaveAbortedError) {
+        setProgress(false, 0, "");
+        toast("已取消保存");
+        return null;
+      }
+      throw err;
+    } finally {
+      if (!opts.signal) endSaveAbort();
     }
-    return item;
   }
 
   async function addText(text) {
@@ -1118,6 +1393,9 @@
       item.size = blob.size;
       item.mime = "text/plain;charset=utf-8";
       item.fileName = await saveBlob(item.id, blob, item.fileName || `${item.id}_text.txt`);
+      try {
+        item.contentHash = await hashBlobPartial(blob);
+      } catch (_) {}
       await persistIndex();
       const savedId = id;
       state.editingId = "";
@@ -1141,27 +1419,47 @@
     await withBusy(async () => {
       let added = 0;
       let skipped = 0;
+      let cancelled = 0;
       let lastId = "";
-      for (let i = 0; i < files.length; i++) {
-        const f = files[i];
-        setProgress(true, i / Math.max(1, files.length), `导入 ${f.name}`);
-        const before = state.index.items.length;
-        const item = await addItemFromBlob(f, f.name, { quiet: true });
-        if (item?.id) lastId = item.id;
-        if (state.index.items.length > before) added += 1;
-        else skipped += 1;
+      const signal = beginSaveAbort();
+      try {
+        for (let i = 0; i < files.length; i++) {
+          if (signal?.aborted) break;
+          const f = files[i];
+          if (!confirmLargeBlob(f, f.name)) {
+            cancelled += 1;
+            continue;
+          }
+          setProgress(true, i / Math.max(1, files.length), `导入 ${f.name}（${i + 1}/${files.length}）`, {
+            cancellable: true,
+          });
+          const before = state.index.items.length;
+          const item = await addItemFromBlob(f, f.name, {
+            quiet: true,
+            skipLargeConfirm: true,
+            signal,
+          });
+          if (signal?.aborted || item === null && signal?.aborted) {
+            cancelled += 1;
+            break;
+          }
+          if (item?.id) lastId = item.id;
+          if (state.index.items.length > before) added += 1;
+          else if (item) skipped += 1;
+          else cancelled += 1;
+        }
+      } finally {
+        endSaveAbort();
+        setProgress(false, 0, "");
       }
-      setProgress(false, 0, "");
       if (lastId) {
-        const msg =
-          added && skipped
-            ? `已添加 ${added} 个，跳过重复 ${skipped} 个`
-            : added
-              ? files.length > 1
-                ? `已添加 ${added} 个文件`
-                : "已添加"
-              : "已有相同内容，未重复添加";
-        flashItem(lastId, msg);
+        const parts = [];
+        if (added) parts.push(`已添加 ${added} 个`);
+        if (skipped) parts.push(`跳过重复 ${skipped} 个`);
+        if (cancelled) parts.push(`取消 ${cancelled} 个`);
+        flashItem(lastId, parts.join("，") || "完成");
+      } else if (cancelled && !added) {
+        toast("已取消");
       } else {
         toast("没有可添加的文件");
       }
@@ -1325,20 +1623,69 @@
     renderAll();
   }
 
-  async function deleteItems(ids) {
-    const list = [...ids];
-    if (!list.length) return;
-    if (!window.confirm(`确认删除 ${list.length} 条？此操作不可恢复。`)) return;
-    for (const id of list) {
-      const item = state.index.items.find((x) => x.id === id);
-      if (item) await removeBlob(item);
-      state.index.items = state.index.items.filter((x) => x.id !== id);
-      state.selected.delete(id);
+  function hideUndoBar() {
+    const bar = $("#memo-undo-bar");
+    if (bar) bar.hidden = true;
+  }
+
+  async function commitPendingUndo() {
+    const pending = state.pendingUndo;
+    state.pendingUndo = null;
+    if (pending?.timer) clearTimeout(pending.timer);
+    hideUndoBar();
+    const items = pending?.items || [];
+    for (const it of items) {
+      try {
+        await removeBlob(it);
+      } catch (_) {}
     }
+  }
+
+  async function undoDelete() {
+    const pending = state.pendingUndo;
+    if (!pending?.items?.length) return;
+    if (pending.timer) clearTimeout(pending.timer);
+    state.pendingUndo = null;
+    hideUndoBar();
+    const restored = pending.items;
+    state.index.items = [...restored, ...state.index.items];
     reindexOrders();
     await persistIndex();
     renderAll();
-    toast("已删除");
+    toast(restored.length > 1 ? `已撤销删除 ${restored.length} 条` : "已撤销删除");
+  }
+
+  function showUndoBar(count) {
+    const bar = $("#memo-undo-bar");
+    const text = $("#memo-undo-text");
+    if (text) text.textContent = count > 1 ? `已删除 ${count} 条` : "已删除 1 条";
+    if (bar) bar.hidden = false;
+  }
+
+  async function deleteItems(ids) {
+    const list = [...ids];
+    if (!list.length) return;
+    if (!window.confirm(`删除 ${list.length} 条？删除后约 ${Math.round(UNDO_MS / 1000)} 秒内可撤销。`)) return;
+    await commitPendingUndo();
+    const removed = [];
+    for (const id of list) {
+      const idx = state.index.items.findIndex((x) => x.id === id);
+      if (idx < 0) continue;
+      removed.push(state.index.items[idx]);
+      state.index.items.splice(idx, 1);
+      state.selected.delete(id);
+    }
+    if (!removed.length) return;
+    reindexOrders();
+    await persistIndex();
+    renderAll();
+    state.pendingUndo = {
+      items: removed,
+      timer: setTimeout(() => {
+        commitPendingUndo().catch(() => {});
+      }, UNDO_MS),
+    };
+    showUndoBar(removed.length);
   }
 
   async function copyItem(item) {
@@ -1863,6 +2210,9 @@
     if (!btn) return;
     state.activeTagId = btn.dataset.memoTag;
     resetListPaging();
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      $("#memo-tags-aside")?.classList.remove("is-open");
+    }
     renderAll();
   });
 
@@ -2056,6 +2406,21 @@
   });
   $("#memo-batch-del")?.addEventListener("click", () => {
     deleteItems([...state.selected]).catch((err) => setError(memoError, err.message || String(err)));
+  });
+  $("#memo-progress-cancel")?.addEventListener("click", () => {
+    try {
+      state.saveAbort?.abort?.();
+    } catch (_) {}
+    toast("正在取消…");
+  });
+  $("#memo-undo-btn")?.addEventListener("click", () => {
+    undoDelete().catch((err) => setError(memoError, err.message || String(err)));
+  });
+  $("#memo-tags-toggle")?.addEventListener("click", () => {
+    const aside = $("#memo-tags-aside");
+    if (!aside) return;
+    aside.classList.toggle("is-open");
+    syncTagsToggle();
   });
 
   // item drag reorder

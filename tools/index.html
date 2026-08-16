@@ -38,7 +38,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo14</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo16</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="theme-open" title="切换站点主题">主题</button>
@@ -1176,13 +1176,18 @@ hello@world.org</textarea>
         </div>
 
         <div class="memo-layout">
-          <aside class="memo-tags" aria-label="标签">
-            <div class="memo-tags-head label-row">
-              <h2 class="subhead">标签</h2>
-              <button type="button" class="ghost-btn" id="memo-tag-new">新建</button>
+          <aside class="memo-tags" id="memo-tags-aside" aria-label="标签">
+            <button type="button" class="memo-tags-toggle secondary-btn" id="memo-tags-toggle" aria-expanded="false" aria-controls="memo-tags-panel">
+              标签筛选
+            </button>
+            <div class="memo-tags-panel" id="memo-tags-panel">
+              <div class="memo-tags-head label-row">
+                <h2 class="subhead">标签</h2>
+                <button type="button" class="ghost-btn" id="memo-tag-new">新建</button>
+              </div>
+              <p class="hint tight memo-tag-tip">点标签名即可筛选，不用记搜索语法。</p>
+              <div class="memo-tag-list" id="memo-tag-list"></div>
             </div>
-            <p class="hint tight memo-tag-tip">点标签名即可筛选，不用记搜索语法。</p>
-            <div class="memo-tag-list" id="memo-tag-list"></div>
           </aside>
 
           <div class="memo-main">
@@ -1218,6 +1223,14 @@ hello@world.org</textarea>
                 <span class="mono gif-progress-pct" id="memo-progress-pct">0%</span>
               </div>
               <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="memo-progress-fill"></span></div>
+              <div class="btn-row tool-actions" style="margin-top:0.35rem">
+                <button type="button" class="ghost-btn" id="memo-progress-cancel" hidden>取消</button>
+              </div>
+            </div>
+
+            <div class="memo-undo-bar" id="memo-undo-bar" hidden>
+              <span id="memo-undo-text">已删除</span>
+              <button type="button" class="secondary-btn" id="memo-undo-btn">撤销</button>
             </div>
 
             <div class="label-row" style="margin-top:0.85rem">
