@@ -6729,6 +6729,22 @@ html[data-theme-scheme="light"] .bg-grid {
   gap: 0.35rem;
 }
 
+.ff-mode-banner {
+  margin-bottom: 0.85rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent, #2ec4b6) 10%, var(--panel, #121826));
+}
+
+#ffbridge.is-mobile-fallback .ff-mode-banner {
+  background: color-mix(in srgb, #f5d76e 12%, var(--panel, #121826));
+}
+
+#ffbridge.is-bridge-connected .ff-mode-banner {
+  background: color-mix(in srgb, var(--accent, #2ec4b6) 16%, var(--panel, #121826));
+}
+
 .setup-body {
   display: grid;
   gap: 0.85rem;

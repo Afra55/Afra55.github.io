@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260816setup1" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260816setup1" />
+  <link rel="stylesheet" href="./style.css?v=20260816ffadapt1" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816ffadapt1" />
   <script>
     /* 尽早应用主题，减少闪烁 */
     (function () {
@@ -38,7 +38,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-setup1</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-ffadapt1</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="theme-open" title="切换站点主题">主题</button>
@@ -1845,7 +1845,7 @@ hello@world.org</textarea>
 <section id="vtrim" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-vtrim">
       <div class="panel-head">
         <h1>视频修剪</h1>
-        <p>类似系统相册：拖两端调整保留时长，拖绿框裁掉多余边框；可旋转。全程本机处理，导出前可预览。</p>
+        <p>浏览器内 FFmpeg：修剪片头片尾、裁边框。手机可直接用；电脑批量大量文件更推荐 <a href="#ffbridge">本机桥</a>。<span id="vtrim-adapt-tip" class="hint tight"></span></p>
       </div>
       <div class="panel-body">
         <div class="btn-row tool-actions">
@@ -1980,7 +1980,7 @@ hello@world.org</textarea>
 <section id="audio" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-audio">
       <div class="panel-head">
         <h1>音频处理</h1>
-        <p>本地修剪时长、调节音量，并从视频抽出音轨。全程本机处理，不会上传。人声/伴奏智能分离需大型模型，本页暂不内置。</p>
+        <p>浏览器内 FFmpeg：修剪时长、调节音量、从视频抽音轨。手机可直接用；电脑批量更推荐 <a href="#ffbridge">本机桥</a>。<span id="audio-adapt-tip" class="hint tight"></span></p>
       </div>
       <div class="panel-body">
         <div class="btn-row tool-actions">
@@ -2782,15 +2782,22 @@ hello@world.org</textarea>
 <section id="ffbridge" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>FFmpeg 本机桥</h1>
-        <p>仿照 ADB 桥：本机启动桥接服务后，在网页里浏览文件夹、批量抽音频 / 转码。文件全程留在本机，适合几百个视频批量处理。<a href="#setup">不会装 Node / FFmpeg？看小白指南</a></p>
+        <p id="ff-head-desc">电脑上更优：用系统 FFmpeg 批量处理。手机请用网页内 FFmpeg（音频处理 / 视频修剪）保底。<a href="#setup">安装指南</a></p>
       </div>
       <div class="panel-body">
+        <div class="ff-mode-banner panel-card" id="ff-mode-banner" aria-live="polite">
+          <strong id="ff-mode-title">正在识别设备…</strong>
+          <p class="hint tight" id="ff-mode-text"></p>
+          <div class="btn-row tool-actions" id="ff-mode-actions" style="flex-wrap:wrap;margin-top:0.45rem"></div>
+        </div>
+
+        <div id="ff-bridge-panel">
         <div class="adb-status" id="ff-status">
           <div class="adb-status-main">
             <span class="adb-dot" id="ff-dot" aria-hidden="true"></span>
             <div>
               <strong id="ff-status-title">未连接本机桥</strong>
-              <p class="hint tight" id="ff-status-text">请下载完整 ZIP（含 server.js 与启动脚本），解压后运行，再点「连接本机桥」。需已安装 Node.js 与 ffmpeg。</p>
+              <p class="hint tight" id="ff-status-text">电脑推荐先连本机桥。未连接时，少量文件可用下方「网页保底」入口。</p>
             </div>
           </div>
           <div class="btn-row tool-actions adb-status-actions">
@@ -2812,6 +2819,7 @@ hello@world.org</textarea>
         </div>
         <p class="hint">默认 Token 为 <span class="mono">devtools-ffmpeg</span>。桥仅监听本机。端口默认 17889（与 ADB 的 17888 分开）。</p>
         <p class="hint tight mono" id="ff-tools-probe" hidden></p>
+        </div><!-- /ff-bridge-panel -->
 
         <div id="ff-workspace" hidden>
           <div class="label-row" style="margin-top:1rem">
@@ -3166,6 +3174,7 @@ hello@world.org</textarea>
       <div class="panel-body setup-body">
         <div class="setup-callout panel-card">
           <h2 class="subhead">你需要装什么？</h2>
+          <p class="hint tight"><strong>手机</strong>：不用装这些，直接用网页里的音频处理 / 视频修剪即可。<strong>电脑</strong>：批量任务优先装本机桥；没装或连不上时，网页 FFmpeg 仍可当保底。</p>
           <div class="setup-need-table" role="table" aria-label="依赖对照">
             <div class="setup-need-row setup-need-head" role="row">
               <span role="columnheader">要用的网页功能</span>
@@ -3376,10 +3385,12 @@ adb devices</pre>
             <dd>确认启动窗口还在跑；地址端口别填错；浏览器要用 https 本站或本机预览，不要用 <span class="mono">file://</span> 直接打开 HTML。</dd>
             <dt>手机 adb devices 是空的</dt>
             <dd>检查线材、USB 调试、手机上的授权弹窗；换口 / 换线；部分机型要开「仅充电」以外的文件传输模式。</dd>
+            <dt>手机上怎么用 FFmpeg？</dt>
+            <dd>手机装不了本机桥。请用媒体里的 <a href="#media/audio">音频处理</a> / <a href="#media/vtrim">视频修剪</a>（网页内 FFmpeg）。电脑批量再用本机桥。</dd>
             <dt>只想批量抽音频，要不要装 ADB？</dt>
             <dd>不用。装 Node.js + FFmpeg，用 <a href="#ffbridge">FFmpeg 本机桥</a> 即可。</dd>
             <dt>偶尔处理一两个视频，要不要装本机桥？</dt>
-            <dd>不必。用媒体里的「音频处理 / 视频修剪」等浏览器内工具就够；几百个文件再上本机桥。</dd>
+            <dd>不必。用媒体里的「音频处理 / 视频修剪」等浏览器内工具就够（也是保底方案）；几百个文件再上本机桥。</dd>
           </dl>
           <p class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.75rem">
             <a class="ghost-btn" href="#about">返回关于</a>
@@ -3468,19 +3479,19 @@ adb devices</pre>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./theme.js?v=20260816setup1"></script>
-  <script src="./temp.js?v=20260816setup1"></script>
+  <script src="./theme.js?v=20260816ffadapt1"></script>
+  <script src="./temp.js?v=20260816ffadapt1"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260816setup1"></script>
-  <script src="./about.js?v=20260816setup1"></script>
-  <script src="./extra.js?v=20260816setup1"></script>
-  <script src="./vtrim.js?v=20260816setup1"></script>
-  <script src="./audio.js?v=20260816setup1"></script>
-  <script src="./ffbridge.js?v=20260816setup1"></script>
-  <script src="./setup.js?v=20260816setup1"></script>
+  <script src="./app.js?v=20260816ffadapt1"></script>
+  <script src="./about.js?v=20260816ffadapt1"></script>
+  <script src="./extra.js?v=20260816ffadapt1"></script>
+  <script src="./vtrim.js?v=20260816ffadapt1"></script>
+  <script src="./audio.js?v=20260816ffadapt1"></script>
+  <script src="./ffbridge.js?v=20260816ffadapt1"></script>
+  <script src="./setup.js?v=20260816ffadapt1"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./textimg.js?v=20260816setup1"></script>
-  <script src="./imgtext.js?v=20260816setup1"></script>
-  <script src="./memo.js?v=20260816setup1"></script>
+  <script src="./textimg.js?v=20260816ffadapt1"></script>
+  <script src="./imgtext.js?v=20260816ffadapt1"></script>
+  <script src="./memo.js?v=20260816ffadapt1"></script>
 </body>
 </html>

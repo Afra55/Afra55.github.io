@@ -29,6 +29,12 @@
   const outdirInput = $("#ff-outdir");
   const jobsList = $("#ff-jobs-list");
   const errorEl = $("#ff-error");
+  const modeBanner = $("#ff-mode-banner");
+  const modeTitle = $("#ff-mode-title");
+  const modeText = $("#ff-mode-text");
+  const modeActions = $("#ff-mode-actions");
+  const bridgePanel = $("#ff-bridge-panel");
+  const headDesc = $("#ff-head-desc");
 
   let connected = false;
   let cwd = "";
@@ -40,6 +46,90 @@
   let convertPreset = "mp4-fast";
   let pollTimer = 0;
   let waitPollTimer = 0;
+
+  /** 手机/平板通常无法跑本机 Node 桥；电脑才是桥的更优场景 */
+  function isLikelyBridgeHost() {
+    const ua = navigator.userAgent || "";
+    if (/Android|iPhone|iPod|Mobile/i.test(ua)) return false;
+    // iPadOS 13+ 可能伪装成 Mac，再用触控+窄屏辅助判断
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    const narrow = window.matchMedia("(max-width: 900px)").matches;
+    if (/iPad|tablet/i.test(ua) || (coarse && narrow && !/Windows|Macintosh|Linux/i.test(ua))) return false;
+    if (/Macintosh/i.test(ua) && coarse && typeof navigator.maxTouchPoints === "number" && navigator.maxTouchPoints > 1) {
+      return false; // iPad 桌面模式
+    }
+    return true;
+  }
+
+  function webFallbackLinksHtml() {
+    return `
+      <a class="primary-btn" href="#media/audio">网页·音频处理</a>
+      <a class="secondary-btn" href="#media/vtrim">网页·视频修剪</a>
+      <a class="ghost-btn" href="#setup">安装指南</a>
+    `;
+  }
+
+  function paintAdaptTips() {
+    const host = isLikelyBridgeHost();
+    const audioTip = $("#audio-adapt-tip");
+    const vtrimTip = $("#vtrim-adapt-tip");
+    if (audioTip) {
+      audioTip.textContent = host
+        ? connected
+          ? "本机桥已连接时，大量文件请到「FFmpeg 本机桥」批量处理。"
+          : "当前为网页保底。电脑批量请连接本机桥。"
+        : "当前为手机场景，使用网页内 FFmpeg。";
+    }
+    if (vtrimTip) {
+      vtrimTip.textContent = host
+        ? connected
+          ? "批量导出请优先用本机桥。"
+          : "未连桥时用本页保底；批量请连本机桥。"
+        : "手机请用本页（网页 FFmpeg）。";
+    }
+  }
+
+  function applyDeviceMode() {
+    const host = isLikelyBridgeHost();
+    panel?.classList.toggle("is-mobile-fallback", !host);
+    panel?.classList.toggle("is-desktop-bridge", host);
+    panel?.classList.toggle("is-bridge-connected", connected);
+
+    if (headDesc) {
+      headDesc.innerHTML = host
+        ? `电脑更优：连本机桥用系统 FFmpeg 批量处理。没连上时，用网页 <a href="#media/audio">音频处理</a> / <a href="#media/vtrim">视频修剪</a> 保底。<a href="#setup">安装指南</a>`
+        : `手机无法运行本机桥，请直接用网页内 FFmpeg：<a href="#media/audio">音频处理</a>、<a href="#media/vtrim">视频修剪</a>。电脑批量再回来用桥。`;
+    }
+
+    if (modeTitle && modeText && modeActions) {
+      if (!host) {
+        modeTitle.textContent = "手机场景：请用网页 FFmpeg";
+        modeText.textContent =
+          "本机桥需要电脑上的 Node.js + 系统 ffmpeg，手机浏览器跑不了。少量文件用下面入口即可（网页内编码器）。";
+        modeActions.innerHTML = webFallbackLinksHtml();
+        if (bridgePanel) bridgePanel.hidden = true;
+        if (workspace) workspace.hidden = true;
+      } else if (connected) {
+        modeTitle.textContent = "已走更优路径：本机 FFmpeg 桥";
+        modeText.textContent = "批量抽音频 / 转码请在下方选择文件。若只想随手剪一段，仍可用网页工具。";
+        modeActions.innerHTML = `
+          <a class="ghost-btn" href="#media/audio">网页保底·音频</a>
+          <a class="ghost-btn" href="#media/vtrim">网页保底·修剪</a>
+        `;
+        if (bridgePanel) bridgePanel.hidden = false;
+      } else {
+        modeTitle.textContent = "电脑推荐：本机桥（未连接）";
+        modeText.textContent =
+          "批量、大文件优先下载并连接本机桥。若暂时没装或连不上，先用网页 FFmpeg 保底处理少量文件。";
+        modeActions.innerHTML = `
+          ${webFallbackLinksHtml()}
+        `;
+        if (bridgePanel) bridgePanel.hidden = false;
+      }
+    }
+    if (modeBanner) modeBanner.hidden = false;
+    paintAdaptTips();
+  }
 
   function toast(msg) {
     const el = $("#toast");
@@ -319,17 +409,19 @@
         if (workspace) workspace.hidden = true;
         if (refreshBtn) refreshBtn.disabled = true;
         setStatus("is-warn", "桥已启动但未找到 ffmpeg", health.setup?.ffmpeg || health.ffmpeg?.error || "请安装 ffmpeg");
+        applyDeviceMode();
         return false;
       }
       connected = true;
       if (workspace) workspace.hidden = false;
       if (refreshBtn) refreshBtn.disabled = false;
-      setStatus("is-ok", "已连接本机 FFmpeg 桥", `http://127.0.0.1 端口已通 · Token 已配置`);
+      setStatus("is-ok", "已连接本机 FFmpeg 桥", `更优路径已就绪 · Token 已配置`);
       renderRoots(health.roots || []);
       const home = health.roots?.[0]?.path || "";
       if (home) await openPath(home);
       await refreshJobs();
       startJobPoll();
+      applyDeviceMode();
       if (!fromPoll) toast("已连接 FFmpeg 桥");
       return true;
     } catch (err) {
@@ -339,8 +431,11 @@
       setStatus(
         "is-err",
         "未连接本机桥",
-        fromPoll ? "等待本机桥启动…" : err.message || "连接失败，请先运行启动脚本"
+        fromPoll
+          ? "等待本机桥启动…未连接时可用网页音频/修剪保底"
+          : err.message || "连接失败；可先用网页保底，或按指南安装后重试"
       );
+      applyDeviceMode();
       return false;
     }
   }
@@ -565,10 +660,16 @@
     $("#ff-dl-linux")?.classList.remove("secondary-btn");
   }
 
+  applyDeviceMode();
+  window.addEventListener("resize", () => applyDeviceMode());
+  window.addEventListener("devtools:route", () => paintAdaptTips());
+
   connectBridge({ fromPoll: true }).catch(() => {});
 
   window.DevToolsFfmpegBridge = {
     connect: connectBridge,
     isConnected: () => connected,
+    isLikelyBridgeHost,
+    applyDeviceMode,
   };
 })();

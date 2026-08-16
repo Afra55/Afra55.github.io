@@ -828,9 +828,9 @@
     coord: "WGS84 / GCJ-02 / BD-09 等坐标系互转。",
     numbase: "二、八、十、十六进制互转。",
     adb: "网页侧 ADB 调试辅助：设备、文件、输入、安装等。",
-    ffbridge: "本机 FFmpeg 桥：网页浏览文件夹、批量抽音频 / 转码（适合大量视频）。",
+    ffbridge: "电脑优先本机 FFmpeg 桥批量处理；手机与未连桥时用网页内音频/修剪保底。",
     about: "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
-    setup: "小白向：如何下载安装 Node.js、ADB、FFmpeg，并配置本机桥。",
+    setup: "小白向：如何下载安装 Node.js、ADB、FFmpeg；手机用网页保底、电脑用桥更优。",
   };
   const TOOL_META = {
     timestamp: { name: "时间戳", aliases: ["时间", "timestamp", "date"] },
