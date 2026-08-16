@@ -113,7 +113,7 @@ async function main() {
     try {
       out.orderHasMedia = [...document.querySelectorAll(".tool-nav-link")].some((a) => a.dataset.tool === "media");
       out.noLegacyMediaNav = ![...document.querySelectorAll(".tool-nav-link")].some((a) =>
-        ["gifmaker", "vsplit", "vbb"].includes(a.dataset.tool)
+        ["gifmaker", "vsplit", "vbb", "vtrim"].includes(a.dataset.tool)
       );
     } catch (_) {}
     return out;
@@ -393,6 +393,9 @@ async function main() {
     mediaTabs: document.querySelectorAll("#media-subnav [data-media-tab]").length,
     vsplitManualMode: Boolean(document.getElementById("vsplit-mode-m")),
     vsplitMarks: Boolean(document.getElementById("vsplit-marks")),
+    vtrim: Boolean(document.getElementById("vtrim") && document.getElementById("vtrim-timeline")),
+    vtrimApi: typeof window.DevToolsVtrim?.getRange === "function",
+    ffmpegApi: typeof window.DevToolsFfmpeg?.getInstance === "function",
   }));
 
   // Mobile drawer + media tab switch
@@ -1111,7 +1114,9 @@ async function main() {
   if (!todayTools.vbbSharp) problems.push("missing sharp mode");
   if (!todayTools.vsplitManualMode) problems.push("missing vsplit manual mode button");
   if (!todayTools.vsplitMarks) problems.push("missing vsplit marks list");
-  if (todayTools.mediaTabs !== 3) problems.push("media subnav should have 3 tabs");
+  if (todayTools.mediaTabs !== 4) problems.push("media subnav should have 4 tabs");
+  if (!todayTools.vtrim || !todayTools.vtrimApi) problems.push("missing video trim module");
+  if (!todayTools.ffmpegApi) problems.push("DevToolsFfmpeg missing");
   if (!mobileShell.drawerOpen) problems.push("mobile drawer failed to open");
   if (!mobileShell.closedByBtn) problems.push("nav-close should close drawer");
   if (!mobileShell.stayedClosedAfterGhostOpen) {

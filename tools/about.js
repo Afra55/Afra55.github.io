@@ -20,6 +20,12 @@
       name: "一键黑盒",
       desc: "按估算快速切出可用视频段，偏批量效率。",
     },
+    {
+      id: "vtrim",
+      href: "#media/vtrim",
+      name: "视频修剪",
+      desc: "调整片头片尾时长，并裁掉多余边框后导出。",
+    },
   ];
 
   /** 新增工具时：在 app.js 的 TOOL_GROUPS / TOOL_META / ABOUT_DESC 同步更新 */
