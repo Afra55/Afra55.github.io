@@ -642,8 +642,8 @@ async function main() {
   if (manualUi.videoControls) {
     throw new Error("manual mode should hide native video controls");
   }
-  if (manualUi.cutLabel !== "按标记切分") {
-    throw new Error(`cut button should say 按标记切分, got ${manualUi.cutLabel}`);
+  if (manualUi.cutLabel !== "按标记切成视频") {
+    throw new Error(`cut button should say 按标记切成视频, got ${manualUi.cutLabel}`);
   }
   const manualMarks = await pageMarks.evaluate(async () => {
     const video = document.getElementById("vsplit-video");
@@ -673,7 +673,7 @@ async function main() {
     document.getElementById("vsplit-mark-tap")?.click();
     const marks = window.DevToolsVsplit?.getMarks?.() || [];
     const ranges = window.DevToolsVsplit?.computeRanges?.(Number(video.duration) || 4) || [];
-    const rows = document.querySelectorAll("#vsplit-marks .vsplit-mark").length;
+    const rows = document.querySelectorAll("#vsplit-mark-chips .vsplit-mark-chip-wrap").length;
     const cutDisabled = document.getElementById("vsplit-cut")?.disabled;
     const gifDisabled = document.getElementById("vsplit-gif-bb")?.disabled;
     const quickHidden = document.getElementById("vsplit-quick-export")?.hidden;
@@ -713,16 +713,28 @@ async function main() {
     document.querySelector('#vsplit-edit-focus [data-edit-focus="end"]')?.click();
     await seekByScrub(0.45);
     const afterAuto = window.DevToolsVsplit?.getMarks?.() || [];
-    // 列表「取消编辑」应能退出
-    const cancelBtn = [...document.querySelectorAll("#vsplit-marks .vsplit-mark button")].find(
-      (b) => (b.textContent || "").trim() === "取消编辑"
-    );
-    cancelBtn?.click();
+    // 「退出编辑」应能退出
+    document.getElementById("vsplit-edit-done")?.click();
     const editIdxAfterCancel = window.DevToolsVsplit?.getEditIdx?.();
     // 再进编辑并用「退出编辑」
     window.DevToolsVsplit.enterEdit(0);
     document.getElementById("vsplit-edit-done")?.click();
     const afterEdit = window.DevToolsVsplit?.getMarks?.() || [];
+    // 横向分段删除（确认）
+    const prevConfirm = window.confirm;
+    window.confirm = () => true;
+    const beforeDel = (window.DevToolsVsplit?.getMarks?.() || []).length;
+    document.querySelector("#vsplit-mark-chips .vsplit-mark-chip-del")?.click();
+    const afterDel = (window.DevToolsVsplit?.getMarks?.() || []).length;
+    const chipDelOk = beforeDel >= 1 && afterDel === beforeDel - 1;
+    window.confirm = prevConfirm;
+    // 若删后不足 1 段，补打一段方便后续全屏冒烟
+    if ((window.DevToolsVsplit?.getMarks?.() || []).length < 1) {
+      await seekByScrub(0.1);
+      document.getElementById("vsplit-mark-tap")?.click();
+      await seekByScrub(0.4);
+      document.getElementById("vsplit-mark-tap")?.click();
+    }
     const beforeNudge = Number(video.currentTime) || 0;
     document.getElementById("vsplit-nudge-p01")?.click();
     await new Promise((r) => setTimeout(r, 40));
@@ -748,6 +760,7 @@ async function main() {
       afterAuto,
       editIdxAfterCancel,
       afterEdit,
+      chipDelOk,
       draft: window.DevToolsVsplit?.getDraftStart?.(),
       editIdx: window.DevToolsVsplit?.getEditIdx?.(),
       scrubbedTime: Number(video.currentTime) || 0,
@@ -772,6 +785,9 @@ async function main() {
   }
   if (manualMarks.marks.length !== 2 || manualMarks.rows !== 2) {
     throw new Error(`expected 2 marks, got ${JSON.stringify(manualMarks)}`);
+  }
+  if (!manualMarks.chipDelOk) {
+    throw new Error(`chip delete should remove one mark: ${JSON.stringify(manualMarks)}`);
   }
   if (manualMarks.cutDisabled || manualMarks.gifDisabled) {
     throw new Error(`cut/gif should enable with marks: ${JSON.stringify(manualMarks)}`);
@@ -949,7 +965,7 @@ async function main() {
     const backInWrap = wrap?.contains(video);
     const scrubHome = document.getElementById("vsplit-scrub-home");
     const scrubBack = Boolean(scrubHome?.contains(document.getElementById("vsplit-scrub-block")));
-    const listRowsAfterExit = document.querySelectorAll("#vsplit-marks .vsplit-mark").length;
+    const listRowsAfterExit = document.querySelectorAll("#vsplit-mark-chips .vsplit-mark-chip-wrap").length;
     const editableDotsAfterExit = document.querySelectorAll(
       "#vsplit-scrub-home .vsplit-scrub-mark.is-editable"
     ).length;
@@ -1036,7 +1052,7 @@ async function main() {
     throw new Error(`tapping fullscreen scrub dots must not enter edit: ${JSON.stringify(fsMark)}`);
   }
   if (!(fsMark.listRowsAfterExit >= 1) || !(fsMark.editableDotsAfterExit >= 1)) {
-    throw new Error(`exit fullscreen should restore mark list+editable dots: ${JSON.stringify(fsMark)}`);
+    throw new Error(`exit fullscreen should restore mark chips+editable dots: ${JSON.stringify(fsMark)}`);
   }
   await pageMarks.close();
 
@@ -1053,7 +1069,7 @@ async function main() {
   if (!result.mediaSubnavVisible) problems.push("media subnav should show");
   if (!result.orderHasMedia) problems.push("nav missing media entry");
   if (result.noLegacyMediaNav === false) problems.push("legacy gifmaker/vsplit/vbb nav links should be gone");
-  if (!/2026\.08\.15/.test(result.version)) problems.push(`bad version ${result.version}`);
+  if (!/2026\.08\.1[56]/.test(result.version)) problems.push(`bad version ${result.version}`);
   if (result.analyzeDisabled !== true) problems.push("analyze should start disabled");
   if (result.runDisabled !== true) problems.push("run should start disabled");
   if (!result.ids.every((x) => x.ok)) problems.push("missing ids");

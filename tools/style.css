@@ -2081,6 +2081,13 @@ a.secondary-btn {
   scrollbar-width: thin;
 }
 
+.vsplit-mark-chip-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+}
+
 .vsplit-mark-chip {
   appearance: none;
   flex: 0 0 auto;
@@ -2088,19 +2095,46 @@ a.secondary-btn {
   background: rgba(8, 14, 26, 0.45);
   color: var(--ink);
   border-radius: 999px;
-  padding: 0.28rem 0.7rem;
+  padding: 0.28rem 1.55rem 0.28rem 0.7rem;
   font: inherit;
   font-size: 0.8rem;
   cursor: pointer;
   white-space: nowrap;
 }
 
+.vsplit-mark-chip-del {
+  appearance: none;
+  position: absolute;
+  top: 50%;
+  right: 0.2rem;
+  transform: translateY(-50%);
+  width: 1.15rem;
+  height: 1.15rem;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  margin: 0;
+  background: color-mix(in srgb, #c45c5c 78%, transparent);
+  color: #fff;
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.vsplit-mark-chip-del:hover,
+.vsplit-mark-chip-del:focus-visible {
+  background: #c45c5c;
+}
+
+.vsplit-mark-chip-wrap.is-active .vsplit-mark-chip,
 .vsplit-mark-chip.is-active {
   border-color: rgba(46, 196, 182, 0.65);
   background: rgba(46, 196, 182, 0.16);
   color: var(--ink);
 }
 
+.vsplit-mark-chip-wrap.is-incomplete .vsplit-mark-chip,
 .vsplit-mark-chip.is-incomplete {
   opacity: 0.72;
 }

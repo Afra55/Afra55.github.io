@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.16-memo27";
+  const TOOLS_VERSION = "2026.08.16-vsplit1";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -4905,7 +4905,7 @@
       if (vsplitDurationRow) vsplitDurationRow.hidden = !isDuration;
       if (vsplitManualRow) vsplitManualRow.hidden = !isManual;
       if (vsplitManualTransport) vsplitManualTransport.hidden = !isManual;
-      if (vsplitMarksEl) vsplitMarksEl.hidden = !isManual;
+      if (vsplitMarksEl) vsplitMarksEl.hidden = true;
       vsplitStage?.classList.toggle("is-manual", isManual);
       if (!isManual) {
         pauseVsplitPreview();
@@ -5549,7 +5549,9 @@
     function scrollVsplitActiveChipIntoView() {
       if (vsplitFsOpen || vsplitEditIdx < 0) return;
       if (vsplitEditIdx === vsplitChipScrollIdx) return;
-      const active = vsplitMarkChips?.querySelector(".vsplit-mark-chip.is-active");
+      const active =
+        vsplitMarkChips?.querySelector(".vsplit-mark-chip-wrap.is-active") ||
+        vsplitMarkChips?.querySelector(".vsplit-mark-chip.is-active");
       if (active?.scrollIntoView) {
         try {
           active.scrollIntoView({ inline: "center", block: "nearest", behavior: "auto" });
@@ -5575,8 +5577,10 @@
         .map((m) => `${m.start ?? "x"}:${m.end ?? "x"}`)
         .join(",")}`;
       if (sig === vsplitChipPaintSig && vsplitMarkChips.childElementCount === vsplitMarks.length) {
-        $$("#vsplit-mark-chips .vsplit-mark-chip").forEach((chip, idx) => {
-          chip.classList.toggle("is-active", vsplitEditIdx === idx);
+        $$("#vsplit-mark-chips .vsplit-mark-chip-wrap").forEach((wrap, idx) => {
+          const on = vsplitEditIdx === idx;
+          wrap.classList.toggle("is-active", on);
+          wrap.querySelector(".vsplit-mark-chip")?.classList.toggle("is-active", on);
         });
         scrollVsplitActiveChipIntoView();
         if (vsplitEditIdx < 0) vsplitChipScrollIdx = -2;
@@ -5586,6 +5590,11 @@
       vsplitMarkChips.hidden = false;
       vsplitMarkChips.innerHTML = "";
       vsplitMarks.forEach((mark, idx) => {
+        const wrap = document.createElement("div");
+        wrap.className =
+          "vsplit-mark-chip-wrap" +
+          (vsplitEditIdx === idx ? " is-active" : "") +
+          (isMarkComplete(mark) ? "" : " is-incomplete");
         const chip = document.createElement("button");
         chip.type = "button";
         chip.className =
@@ -5614,7 +5623,28 @@
           }
           enterVsplitEdit(idx);
         });
-        vsplitMarkChips.appendChild(chip);
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "vsplit-mark-chip-del";
+        del.setAttribute("aria-label", `删除第 ${idx + 1} 段`);
+        del.title = `删除第 ${idx + 1} 段`;
+        del.textContent = "×";
+        del.addEventListener("click", (ev) => {
+          ev.preventDefault();
+          ev.stopPropagation();
+          if (vsplitFsOpen || vsplitBusy) return;
+          const label = formatVsplitMarkRangeLabel(mark, idx);
+          if (!window.confirm(`删除第 ${idx + 1} 段？\n${label}`)) return;
+          if (vsplitEditIdx === idx) exitVsplitEdit();
+          else if (vsplitEditIdx > idx) vsplitEditIdx -= 1;
+          vsplitMarks.splice(idx, 1);
+          invalidateVsplitOutputsFromMarks();
+          paintVsplitMarks();
+          paintVsplitNow();
+          toast("已删除片段");
+        });
+        wrap.append(chip, del);
+        vsplitMarkChips.appendChild(wrap);
       });
       scrollVsplitActiveChipIntoView();
       if (vsplitEditIdx < 0) vsplitChipScrollIdx = -2;
@@ -5867,88 +5897,11 @@
     function paintVsplitMarks() {
       paintVsplitDraft();
       paintVsplitScrubMarks();
-      if (!vsplitMarksEl) return;
-      vsplitMarksEl.innerHTML = "";
-      if (!vsplitMarks.length) {
-        if (vsplitMode === "manual" && vsplitSourceFile) {
-          const empty = document.createElement("p");
-          empty.className = "hint tight";
-          empty.textContent = "还没有片段。播放或拖滑块后点「打起点」，再点「打终点」。";
-          vsplitMarksEl.appendChild(empty);
-        }
-        setVsplitButtons();
-        return;
+      // 大块分段列表已去掉：横向芯片 + 进度条圆点即可编辑/切换/删除
+      if (vsplitMarksEl) {
+        vsplitMarksEl.innerHTML = "";
+        vsplitMarksEl.hidden = true;
       }
-      vsplitMarks.forEach((mark, idx) => {
-        const complete = isMarkComplete(mark);
-        const span = complete ? mark.end - mark.start : 0;
-        const row = document.createElement("div");
-        row.className = "vsplit-mark" + (vsplitEditIdx === idx ? " is-editing" : "") + (complete ? "" : " is-incomplete");
-        row.dataset.idx = String(idx);
-
-        const head = document.createElement("div");
-        head.className = "vsplit-mark-head";
-        const title = document.createElement("strong");
-        title.textContent = `#${String(idx + 1).padStart(2, "0")}`;
-        const durHint = document.createElement("span");
-        durHint.className = "hint tight mono";
-        const sTxt = mark.start == null ? "—" : formatClock(mark.start);
-        const eTxt = mark.end == null ? "—" : formatClock(mark.end);
-        durHint.textContent = complete
-          ? `${sTxt}→${eTxt} · 共${formatVsplitSpanSec(span)}`
-          : `未完成 · ${sTxt}→${eTxt}`;
-        head.append(title, durHint);
-
-        const actions = document.createElement("div");
-        actions.className = "vsplit-mark-actions btn-row";
-        const editBtn = document.createElement("button");
-        editBtn.type = "button";
-        editBtn.className = vsplitEditIdx === idx ? "ghost-btn" : "secondary-btn";
-        editBtn.textContent = vsplitEditIdx === idx ? "取消编辑" : "编辑";
-        editBtn.disabled = false;
-        const jumpStart = document.createElement("button");
-        jumpStart.type = "button";
-        jumpStart.className = "ghost-btn";
-        jumpStart.textContent = "跳起点";
-        jumpStart.disabled = mark.start == null;
-        const jumpEnd = document.createElement("button");
-        jumpEnd.type = "button";
-        jumpEnd.className = "ghost-btn";
-        jumpEnd.textContent = "跳终点";
-        jumpEnd.disabled = mark.end == null;
-        const del = document.createElement("button");
-        del.type = "button";
-        del.className = "ghost-btn";
-        del.textContent = "删除";
-        actions.append(editBtn, jumpStart, jumpEnd, del);
-
-        editBtn.addEventListener("click", () => {
-          if (vsplitEditIdx === idx) {
-            exitVsplitEdit();
-            paintVsplitNow();
-            return;
-          }
-          enterVsplitEdit(idx);
-        });
-        jumpStart.addEventListener("click", () => {
-          if (mark.start != null) seekVsplitPreview(mark.start);
-        });
-        jumpEnd.addEventListener("click", () => {
-          if (mark.end != null) seekVsplitPreview(mark.end);
-        });
-        del.addEventListener("click", () => {
-          if (vsplitEditIdx === idx) exitVsplitEdit();
-          else if (vsplitEditIdx > idx) vsplitEditIdx -= 1;
-          vsplitMarks.splice(idx, 1);
-          invalidateVsplitOutputsFromMarks();
-          paintVsplitMarks();
-          paintVsplitNow();
-          toast("已删除片段");
-        });
-
-        row.append(head, actions);
-        vsplitMarksEl.appendChild(row);
-      });
       setVsplitButtons();
     }
 
@@ -6589,8 +6542,11 @@
         setVsplitProgress(true, 1, `GIF 完成 · 成功 ${gifs.length}/${vsplitClips.length}`);
         setVsplitButtons();
         if (gifs.length) {
-          await packDownloadVsplitGifs({ auto: true });
-          toast(failN ? `完成，${failN} 段失败 · 已打包下载 GIF` : `已生成 ${gifs.length} 个 GIF · 已打包下载`);
+          toast(
+            failN
+              ? `完成，${failN} 段失败 · 可点「打包下载全部 GIF」`
+              : `已生成 ${gifs.length} 个 GIF · 可点「打包下载全部 GIF」`
+          );
         } else {
           toast(failN ? `完成，${failN} 段失败` : "未生成 GIF");
         }
