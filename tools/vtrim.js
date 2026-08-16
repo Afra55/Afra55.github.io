@@ -73,6 +73,7 @@
 
   const fileInput = $("#vtrim-file");
   const clearBtn = $("#vtrim-clear");
+  const undoBtn = $("#vtrim-undo");
   const resetBtn = $("#vtrim-reset");
   const meta = $("#vtrim-meta");
   const stage = $("#vtrim-stage");
@@ -104,6 +105,8 @@
   const rotL = $("#vtrim-rot-l");
   const rotR = $("#vtrim-rot-r");
   const flipHBtn = $("#vtrim-flip-h");
+  const exportBar = $("#vtrim-export-bar");
+  const summaryEl = $("#vtrim-summary");
   const exportBtn = $("#vtrim-export");
   const abortBtn = $("#vtrim-abort");
   const downloadA = $("#vtrim-download");
@@ -112,6 +115,8 @@
   const progressText = $("#vtrim-progress-text");
   const progressPct = $("#vtrim-progress-pct");
   const progressSub = $("#vtrim-progress-sub");
+  const resultBlock = $("#vtrim-result-block");
+  const resultMeta = $("#vtrim-result-meta");
   const resultVideo = $("#vtrim-result");
   const errorEl = $("#vtrim-error");
 
@@ -141,6 +146,12 @@
   let pendingSeek = null;
   let playheadRaf = 0;
   let previewScrub = null;
+  let exportQuality = "fast"; // fast | hq
+  /** @type {object[]} */
+  let history = [];
+  let applyingHistory = false;
+  const SNAP_SEC = 0.12;
+  const HISTORY_MAX = 30;
 
   const DEFAULT_META =
     "支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。关闭页面会释放本次视频。";
@@ -188,6 +199,65 @@
       downloadA.hidden = true;
       downloadA.removeAttribute("href");
     }
+    if (resultBlock) resultBlock.hidden = true;
+    if (resultMeta) resultMeta.textContent = "";
+  }
+
+  function snapshotState() {
+    return {
+      startSec,
+      endSec,
+      crop: { ...crop },
+      rotate,
+      flipH,
+      aspect,
+      cropOn: Boolean(cropEnable?.checked),
+      editMode,
+    };
+  }
+
+  function pushHistory() {
+    if (applyingHistory || !sourceFile) return;
+    const snap = snapshotState();
+    const last = history[history.length - 1];
+    if (last && JSON.stringify(last) === JSON.stringify(snap)) return;
+    history.push(snap);
+    if (history.length > HISTORY_MAX) history.shift();
+    setButtons();
+  }
+
+  function applySnapshot(snap) {
+    if (!snap) return;
+    applyingHistory = true;
+    startSec = snap.startSec;
+    endSec = snap.endSec;
+    crop = { ...snap.crop };
+    rotate = snap.rotate;
+    flipH = snap.flipH;
+    aspect = snap.aspect || "free";
+    if (cropEnable) cropEnable.checked = snap.cropOn !== false;
+    editMode = snap.editMode === "crop" ? "crop" : "trim";
+    syncAspectUi();
+    syncModeUi();
+    applyVideoTransform();
+    layoutCropBox();
+    seekTo(startSec, { immediate: true });
+    paintTimeline();
+    updateLabels();
+    updateSummary();
+    applyingHistory = false;
+    setButtons();
+  }
+
+  function undoEdit() {
+    if (history.length < 2) {
+      toast("没有可撤销的步骤");
+      return;
+    }
+    history.pop(); // drop current
+    const prev = history[history.length - 1];
+    applySnapshot(prev);
+    toast("已撤销");
   }
 
   function clearAll() {
@@ -212,8 +282,14 @@
     filmReady = false;
     playing = false;
     editMode = "trim";
+    history = [];
+    exportQuality = "fast";
+    document.querySelectorAll("[data-vtrim-quality]").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.dataset.vtrimQuality === "fast");
+    });
     if (filmLoading) filmLoading.hidden = true;
     previewWrap?.classList.remove("is-film-loading", "is-playing");
+    if (exportBar) exportBar.hidden = true;
     revokeResult();
     video.removeAttribute("src");
     try {
@@ -232,6 +308,7 @@
 
   function resetEdit() {
     if (!duration) return;
+    pushHistory();
     startSec = 0;
     endSec = duration;
     crop = { x: 0, y: 0, w: video.videoWidth || 1, h: video.videoHeight || 1 };
@@ -245,6 +322,8 @@
     seekTo(startSec);
     paintTimeline();
     updateLabels();
+    updateSummary();
+    pushHistory();
     setButtons();
     toast("已重置为全长、未裁剪");
   }
@@ -254,6 +333,7 @@
     if (playBtn) playBtn.disabled = !has || busy;
     if (muteBtn) muteBtn.disabled = !has;
     if (resetBtn) resetBtn.disabled = !has || busy;
+    if (undoBtn) undoBtn.disabled = !has || busy || history.length < 2;
     if (exportBtn) exportBtn.disabled = !has || busy;
     if (rotL) rotL.disabled = !has || busy;
     if (rotR) rotR.disabled = !has || busy;
@@ -261,6 +341,7 @@
     if (cropResetBtn) cropResetBtn.disabled = !has || busy;
     if (abortBtn) abortBtn.hidden = !busy;
     if (tapPlay) tapPlay.hidden = !has;
+    if (exportBar) exportBar.hidden = !has;
     [nudgeStartM, nudgeStartP, nudgeEndM, nudgeEndP].forEach((btn) => {
       if (btn) btn.disabled = !has || busy;
     });
@@ -476,6 +557,44 @@
     if (rangeLabel) {
       rangeLabel.textContent = `保留 ${formatClock(span)}（${formatClock(startSec)}–${formatClock(endSec)}）`;
     }
+    updateSummary();
+  }
+
+  function estimateOutSize() {
+    const d = cropToDisplayRect();
+    const cropOn = editMode === "crop" ? Boolean(cropEnable?.checked) : Boolean(cropEnable?.checked);
+    const full =
+      Math.abs(crop.x) < 1 &&
+      Math.abs(crop.y) < 1 &&
+      Math.abs(crop.w - (video.videoWidth || 0)) < 2 &&
+      Math.abs(crop.h - (video.videoHeight || 0)) < 2;
+    const useCrop = Boolean(cropEnable?.checked) && !full;
+    let w = video.videoWidth || 0;
+    let h = video.videoHeight || 0;
+    if (rotate === 90 || rotate === 270) {
+      const t = w;
+      w = h;
+      h = t;
+    }
+    if (useCrop) {
+      w = Math.round(d.w);
+      h = Math.round(d.h);
+    }
+    return { w: even(w), h: even(h), useCrop, reencode: useCrop || rotate !== 0 || flipH };
+  }
+
+  function updateSummary() {
+    if (!summaryEl) return;
+    if (!sourceFile || !duration) {
+      summaryEl.textContent = "—";
+      return;
+    }
+    const span = endSec - startSec;
+    const est = estimateOutSize();
+    const mode = est.reencode
+      ? `重编码 · ${exportQuality === "hq" ? "清晰" : "快速"}`
+      : "快速剪切";
+    summaryEl.textContent = `将导出 ${formatClock(span)} · ${est.w}×${est.h} · ${mode}`;
   }
 
   function paintTimeline() {
@@ -523,7 +642,7 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = "#0a101c";
     ctx.fillRect(0, 0, cssW, cssH);
-    const n = FILM_THUMBS;
+    const n = Math.min(36, Math.max(12, Math.round(cssW / 36)));
     const tw = cssW / n;
     const wasTime = video.currentTime;
     const wasPaused = video.paused;
@@ -582,7 +701,16 @@
     seekTo._t = setTimeout(apply, 42);
   }
 
-  function setStart(t, { preview = true } = {}) {
+  function snapTime(t, which) {
+    if (which === "start") {
+      if (t <= SNAP_SEC) return 0;
+      return t;
+    }
+    if (t >= duration - SNAP_SEC) return duration;
+    return t;
+  }
+
+  function setStart(t, { preview = true, record = false } = {}) {
     const prev = startSec;
     startSec = clamp(t, 0, endSec - MIN_SPAN);
     activeHandle = "start";
@@ -594,9 +722,10 @@
     else if (video.currentTime < startSec) seekTo(startSec);
     paintTimeline();
     updateLabels();
+    if (record) pushHistory();
   }
 
-  function setEnd(t, { preview = true } = {}) {
+  function setEnd(t, { preview = true, record = false } = {}) {
     const prev = endSec;
     endSec = clamp(t, startSec + MIN_SPAN, duration);
     activeHandle = "end";
@@ -608,10 +737,27 @@
     else if (video.currentTime > endSec) seekTo(endSec - 0.04);
     paintTimeline();
     updateLabels();
+    if (record) pushHistory();
+  }
+
+  function finishTrimDrag() {
+    if (!drag) return;
+    if (drag.kind === "start") {
+      const snapped = snapTime(startSec, "start");
+      if (snapped !== startSec) setStart(snapped, { preview: true });
+      pushHistory();
+    } else if (drag.kind === "end") {
+      const snapped = snapTime(endSec, "end");
+      if (snapped !== endSec) setEnd(snapped, { preview: true });
+      pushHistory();
+    } else if (drag.kind === "window") {
+      pushHistory();
+    }
   }
 
   function rotateBy(delta) {
     if (!video.videoWidth) return;
+    pushHistory();
     const d = cropToDisplayRect();
     const xPct = d.x / d.dw;
     const yPct = d.y / d.dh;
@@ -626,6 +772,8 @@
       displayRectToCrop(xPct * dw, yPct * dh, Math.max(2, wPct * dw), Math.max(2, hPct * dh));
       layoutCropBox();
     }
+    updateSummary();
+    pushHistory();
   }
 
   function shiftWindow(deltaSec) {
@@ -757,6 +905,8 @@
       const ss = String(Math.max(0, startSec));
       const tt = String(Math.max(MIN_SPAN, span));
       const reencode = needsReencode();
+      const crf = exportQuality === "hq" ? "20" : "23";
+      const preset = exportQuality === "hq" ? "veryfast" : "ultrafast";
       const attempts = [];
       if (!reencode) {
         attempts.push({
@@ -771,15 +921,15 @@
         "-c:v",
         "libx264",
         "-preset",
-        "ultrafast",
+        preset,
         "-crf",
-        "23",
+        crf,
         "-pix_fmt",
         "yuv420p",
         "-c:a",
         "aac",
         "-b:a",
-        "128k",
+        exportQuality === "hq" ? "160k" : "128k",
         "-movflags",
         "+faststart",
         "-y",
@@ -789,7 +939,7 @@
       // fallback without audio if aac fails
       const encNoA = ["-ss", ss, "-t", tt, "-i", inName];
       if (vf) encNoA.push("-vf", vf);
-      encNoA.push("-an", "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-y", outName);
+      encNoA.push("-an", "-c:v", "libx264", "-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-y", outName);
       attempts.push({ label: "无音轨重编码", args: encNoA });
 
       let outBlob = null;
@@ -819,9 +969,14 @@
       } catch (_) {}
       if (!outBlob) throw new Error("导出失败，可尝试缩短时长或关闭裁剪后重试");
       resultUrl = URL.createObjectURL(outBlob);
+      if (resultBlock) resultBlock.hidden = false;
       if (resultVideo) {
         resultVideo.src = resultUrl;
         resultVideo.hidden = false;
+      }
+      if (resultMeta) {
+        const mb = (outBlob.size / (1024 * 1024)).toFixed(2);
+        resultMeta.textContent = `约 ${mb} MB · ${formatClock(span)} · ${reencode ? (exportQuality === "hq" ? "清晰重编码" : "快速重编码") : "快速剪切"}`;
       }
       if (downloadA) {
         downloadA.href = resultUrl;
@@ -837,6 +992,9 @@
       a.remove();
       setProgress(true, 1, "导出完成");
       toast(`已导出 · 保留 ${formatClock(span)}${reencode ? "（已裁切重编码）" : "（快速剪切）"}`);
+      try {
+        resultBlock?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      } catch (_) {}
     } catch (err) {
       if (String(err?.message) === "已取消") toast("已取消导出");
       else setError(errorEl, err?.message || String(err));
@@ -891,6 +1049,8 @@
       layoutCropBox();
       paintTimeline();
       updateLabels();
+      history = [];
+      pushHistory();
       setButtons();
       toast("已选择，仅本机处理，不会上传");
       engine()?.prewarm?.().catch(() => {});
@@ -910,6 +1070,7 @@
     });
   });
   clearBtn?.addEventListener("click", () => clearAll());
+  undoBtn?.addEventListener("click", () => undoEdit());
   resetBtn?.addEventListener("click", () => resetEdit());
   playBtn?.addEventListener("click", () => togglePlay().catch(() => {}));
   muteBtn?.addEventListener("click", () => {
@@ -921,25 +1082,45 @@
       editMode = btn.dataset.vtrimMode === "crop" ? "crop" : "trim";
       syncModeUi();
       layoutCropBox();
+      updateSummary();
+    });
+  });
+  document.querySelectorAll("[data-vtrim-quality]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      exportQuality = btn.dataset.vtrimQuality === "hq" ? "hq" : "fast";
+      document.querySelectorAll("[data-vtrim-quality]").forEach((b) => {
+        b.classList.toggle("is-active", b.dataset.vtrimQuality === exportQuality);
+      });
+      updateSummary();
     });
   });
   rotL?.addEventListener("click", () => rotateBy(-90));
   rotR?.addEventListener("click", () => rotateBy(90));
   flipHBtn?.addEventListener("click", () => {
+    pushHistory();
     flipH = !flipH;
     applyVideoTransform();
     layoutCropBox();
+    updateSummary();
+    pushHistory();
   });
   cropResetBtn?.addEventListener("click", () => {
+    pushHistory();
     fitCropToAspect();
+    updateSummary();
+    pushHistory();
     toast("已重置裁剪框");
   });
   cropEnable?.addEventListener("change", () => {
+    pushHistory();
     syncCropBoxVisibility();
     layoutCropBox();
+    updateSummary();
+    pushHistory();
   });
   document.querySelectorAll("[data-vtrim-aspect]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      pushHistory();
       aspect = btn.dataset.vtrimAspect || "free";
       syncAspectUi();
       if (cropEnable && !cropEnable.checked) cropEnable.checked = true;
@@ -949,6 +1130,8 @@
       }
       syncCropBoxVisibility();
       fitCropToAspect();
+      updateSummary();
+      pushHistory();
     });
   });
   exportBtn?.addEventListener("click", () => exportVideo().catch((err) => setError(errorEl, err.message || String(err))));
@@ -1064,6 +1247,7 @@
   }
   function onTimelinePointerUp(e) {
     if (!drag || drag.pointerId !== e.pointerId) return;
+    finishTrimDrag();
     timeline?.classList.remove("is-dragging-window");
     drag = null;
   }
@@ -1096,10 +1280,10 @@
     syncActiveHandleUi();
   });
 
-  nudgeStartM?.addEventListener("click", () => setStart(startSec - 0.1));
-  nudgeStartP?.addEventListener("click", () => setStart(startSec + 0.1));
-  nudgeEndM?.addEventListener("click", () => setEnd(endSec - 0.1));
-  nudgeEndP?.addEventListener("click", () => setEnd(endSec + 0.1));
+  nudgeStartM?.addEventListener("click", () => setStart(startSec - 0.1, { record: true }));
+  nudgeStartP?.addEventListener("click", () => setStart(startSec + 0.1, { record: true }));
+  nudgeEndM?.addEventListener("click", () => setEnd(endSec - 0.1, { record: true }));
+  nudgeEndP?.addEventListener("click", () => setEnd(endSec + 0.1, { record: true }));
 
   // crop box drag
   let cropDrag = null;
@@ -1189,11 +1373,19 @@
     if (!cropDrag || cropDrag.pointerId !== e.pointerId) return;
     cropDrag = null;
     previewWrap?.classList.remove("is-dragging");
+    pushHistory();
+    updateSummary();
   }
-  cropBox?.addEventListener("pointerdown", onCropPointerDown);
+  cropBox?.addEventListener("pointerdown", (e) => {
+    pushHistory();
+    onCropPointerDown(e);
+  });
   cropBox?.addEventListener("dblclick", (e) => {
     e.preventDefault();
+    pushHistory();
     fitCropToAspect();
+    updateSummary();
+    pushHistory();
     toast("已重置裁剪框");
   });
   window.addEventListener("pointermove", onCropPointerMove);
@@ -1263,8 +1455,10 @@
       seekTo(s, { immediate: true });
       paintTimeline();
       updateLabels();
+      pushHistory();
       return true;
     },
+    undo: undoEdit,
     clear: clearAll,
   };
 
