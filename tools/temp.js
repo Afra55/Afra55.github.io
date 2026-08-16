@@ -132,12 +132,13 @@
 
   async function deleteSiteIndexedDbs() {
     const names = new Set(["devtools-persist-ffmpeg"]);
+    const preserve = new Set(["devtools-memo-v1"]);
     try {
       if (typeof indexedDB.databases === "function") {
         const list = await indexedDB.databases();
         (list || []).forEach((d) => {
           const name = String(d?.name || "");
-          if (name.startsWith("devtools")) names.add(name);
+          if (name.startsWith("devtools") && !preserve.has(name)) names.add(name);
         });
       }
     } catch (_) {
@@ -145,6 +146,7 @@
     }
     let deleted = 0;
     for (const name of names) {
+      if (preserve.has(name)) continue;
       if (await deleteIndexedDb(name)) deleted += 1;
     }
     return deleted;
@@ -155,15 +157,24 @@
     if (!el) return;
     const blobs = blobStats();
     const est = await storageStats();
+    let memoBytes = 0;
+    try {
+      memoBytes = Number(await window.DevToolsMemo?.getStorageBytes?.()) || 0;
+    } catch (_) {
+      memoBytes = 0;
+    }
     const parts = [];
-    if (est && est.usage > 0) parts.push(`站点约 ${formatBytes(est.usage)}`);
+    // 站点占用里尽量不把备忘录数据说成「缓存」
+    const cacheish = Math.max(0, (Number(est?.usage) || 0) - memoBytes);
+    if (cacheish > 0) parts.push(`缓存约 ${formatBytes(cacheish)}`);
+    if (memoBytes > 0) parts.push(`备忘录数据 ${formatBytes(memoBytes)}`);
     if (blobs.bytes > 0) parts.push(`本次临时 ${formatBytes(blobs.bytes)}`);
     el.textContent = parts.length
-      ? `${parts.join(" · ")} · 可一键清理`
+      ? `${parts.join(" · ")} · 缓存可一键清理（备忘录数据不会清）`
       : "暂无本站缓存占用";
   }
 
-  /** 一键清掉本站临时视频/GIF 和编码器磁盘缓存（不动系统相册里已下载的文件） */
+  /** 一键清掉本站临时视频/GIF 和编码器磁盘缓存（不动备忘录数据；系统相册已下载文件也不动） */
   async function purgeSiteCache() {
     const before = await storageStats();
     await clearAll();
@@ -182,8 +193,8 @@
     const freed = Math.max(0, (Number(before?.usage) || 0) - (Number(after?.usage) || 0));
     const message =
       freed >= 1024 * 1024
-        ? `已清理约 ${formatBytes(freed)}`
-        : "已清理本站临时文件和编码器缓存";
+        ? `已清理约 ${formatBytes(freed)}（备忘录数据已保留；清理前仍建议导出备份）`
+        : "已清理本站临时文件和编码器缓存（备忘录数据已保留）";
     return { before, after, freed, idbCount, cacheCount, message };
   }
 

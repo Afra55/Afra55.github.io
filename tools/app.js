@@ -780,7 +780,7 @@
     {
       id: "data",
       label: "数据与文本",
-      tools: ["json", "yaml", "sharecard", "query", "text", "caseconv", "regex", "diff", "qrcode", "markdown"],
+      tools: ["json", "yaml", "sharecard", "query", "text", "caseconv", "regex", "diff", "qrcode", "markdown", "memo"],
     },
     { id: "media", label: "媒体", tools: ["media"] },
     { id: "image", label: "图片", tools: ["imgkit"] },
@@ -836,6 +836,7 @@
     coord: { name: "坐标系互转", aliases: ["gps", "坐标", "gcj", "wgs"] },
     numbase: { name: "进制转换", aliases: ["二进制", "十六进制"] },
     markdown: { name: "Markdown", aliases: ["md", "预览"] },
+    memo: { name: "备忘录", aliases: ["笔记", "剪贴板", "memo", "note", "便签"] },
     adb: { name: "ADB 工具", aliases: ["安卓", "android", "设备"] },
   };
   const DEFAULT_ORDER = TOOL_GROUPS.flatMap((g) => g.tools);
