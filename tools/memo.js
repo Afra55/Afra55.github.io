@@ -19,7 +19,9 @@
   const UNDO_MS = 8000;
   const VIRTUAL_MIN = 64;
   const TEXT_PREVIEW_MAX = 4000;
+  const NOTE_MAX = 500;
   const CARD_EST_DEFAULT = 210;
+  const CARD_EST_NOTE = 28;
   const CARD_EST_BY_TYPE = {
     text: 200,
     image: 268,
@@ -153,6 +155,9 @@
       // 历史图片中的 GIF/APNG 归入动图
       if (it.type === "image" && isGifLike(it.mime, it.name || it.fileName)) it.type = "gif";
       if (!it.type) it.type = detectKind(it.mime, it.name || it.fileName);
+      const note = String(it.note || "").trim();
+      if (note) it.note = note.length > NOTE_MAX ? `${note.slice(0, NOTE_MAX)}…` : note;
+      else delete it.note;
     });
     items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     return {
@@ -305,6 +310,7 @@
     busy: false,
     objectUrls: new Set(),
     editingId: "",
+    noteEditingId: "",
     tagTargetId: "",
     flashItemId: "",
     saveAbort: null,
@@ -573,6 +579,8 @@
   const previewDlBtn = $("#memo-preview-dl");
   const previewShareBtn = $("#memo-preview-share");
   const previewEditBtn = $("#memo-preview-edit");
+  const previewNoteBtn = $("#memo-preview-note");
+  const previewNoteLine = $("#memo-preview-note-line");
   let previewObjectUrl = "";
   let previewBlob = null;
   let previewItem = null;
@@ -889,6 +897,13 @@
     return `${s.slice(0, TEXT_PREVIEW_MAX)}…`;
   }
 
+  function clipNote(text) {
+    const s = String(text || "").trim();
+    if (!s) return "";
+    if (s.length <= NOTE_MAX) return s;
+    return `${s.slice(0, NOTE_MAX)}…`;
+  }
+
   async function bumpItemToFront(item) {
     if (!item?.id) return { item: null, moved: false };
     const idx = state.index.items.findIndex((x) => x.id === item.id);
@@ -914,7 +929,9 @@
     if (item?.id && state.cardHeightCache.has(item.id)) {
       return state.cardHeightCache.get(item.id);
     }
-    return CARD_EST_BY_TYPE[item?.type] || CARD_EST_DEFAULT;
+    let h = CARD_EST_BY_TYPE[item?.type] || CARD_EST_DEFAULT;
+    if (String(item?.note || "").trim()) h += CARD_EST_NOTE;
+    return h;
   }
 
   function buildHeightPrefix(items) {
@@ -1134,6 +1151,10 @@
     const time = formatTime(item.createdAt);
     const size = formatBytes(item.size || 0);
     const typeLabel = TYPE_LABELS[item.type] || item.type || "文件";
+    const noteRaw = String(item.note || "").trim();
+    const noteHtml = noteRaw
+      ? `<p class="memo-card-note" title="${escapeHtml(noteRaw)}">${escapeHtml(noteRaw.length > 80 ? `${noteRaw.slice(0, 80)}…` : noteRaw)}</p>`
+      : "";
     let body = "";
     if (item.type === "text") {
       const full = item.textPreview || "";
@@ -1185,12 +1206,14 @@
         </div>
       </div>
       <div class="memo-card-body">${body}</div>
+      ${noteHtml}
       <div class="memo-card-tags">${tagHtml}<button type="button" class="ghost-btn memo-tag-add" data-memo-tag-add="${item.id}">+ 标签</button></div>
       <div class="btn-row memo-card-actions">
         ${primaryAction}
         ${secondaryShare}
         <button type="button" class="ghost-btn" data-memo-open="${item.id}">预览</button>
         ${item.type === "text" ? `<button type="button" class="ghost-btn" data-memo-edit="${item.id}">编辑</button>` : ""}
+        <button type="button" class="ghost-btn" data-memo-note="${item.id}">${noteRaw ? "改备注" : "备注"}</button>
         <button type="button" class="ghost-btn" data-memo-del="${item.id}">删除</button>
         <details class="memo-more">
           <summary class="ghost-btn memo-more-sum">更多</summary>
@@ -1641,6 +1664,81 @@
     if (discard) clearEditing();
   }
 
+  function clearNoteEditing() {
+    state.noteEditingId = "";
+    const err = $("#memo-note-edit-error");
+    if (err) {
+      err.hidden = true;
+      err.textContent = "";
+    }
+  }
+
+  function closeNoteEditPanel({ discard = true } = {}) {
+    const dlg = $("#memo-note-edit");
+    if (dlg?.open) dlg.close();
+    if (discard) clearNoteEditing();
+  }
+
+  async function beginEditNote(item) {
+    if (!item?.id) return;
+    closeTextEditPanel({ discard: true });
+    state.noteEditingId = item.id;
+    const dlg = $("#memo-note-edit");
+    const src = $("#memo-note-edit-src");
+    const sub = $("#memo-note-edit-sub");
+    if (sub) {
+      sub.textContent = item.name
+        ? `给「${item.name}」加一句说明，方便以后搜索`
+        : "说明这条用来干什么，可搜索";
+    }
+    if (src) src.value = String(item.note || "");
+    const err = $("#memo-note-edit-error");
+    if (err) {
+      err.hidden = true;
+      err.textContent = "";
+    }
+    if (dlg && typeof dlg.showModal === "function" && !dlg.open) dlg.showModal();
+    setTimeout(() => {
+      src?.focus?.();
+      try {
+        const len = src?.value?.length || 0;
+        src?.setSelectionRange?.(len, len);
+      } catch (_) {}
+    }, 40);
+  }
+
+  async function saveNoteFromPanel({ clear = false } = {}) {
+    const id = state.noteEditingId;
+    const src = $("#memo-note-edit-src");
+    const body = clear ? "" : clipNote(src?.value || "");
+    const item = state.index.items.find((x) => x.id === id);
+    if (!item) {
+      closeNoteEditPanel({ discard: true });
+      toast("原条目已不存在");
+      return;
+    }
+    if (body) item.note = body;
+    else delete item.note;
+    item.updatedAt = Date.now();
+    state.cardHeightCache.delete(item.id);
+    state.filterCache = { key: "", items: null };
+    await persistIndex({ immediate: true });
+    const savedId = id;
+    state.noteEditingId = "";
+    const dlg = $("#memo-note-edit");
+    if (dlg?.open) dlg.close();
+    if (previewItem?.id === savedId) syncPreviewNoteLine(item);
+    renderAll();
+    requestAnimationFrame(() => {
+      const card = itemList?.querySelector?.(`.memo-card[data-memo-id="${savedId}"]`);
+      if (!card) return;
+      card.classList.add("is-just-saved");
+      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      setTimeout(() => card.classList.remove("is-just-saved"), 1600);
+    });
+    toast(body ? "已保存备注" : "已清空备注");
+  }
+
   async function beginEditText(item) {
     if (!item || item.type !== "text") {
       toast("仅文本条目可编辑");
@@ -1655,6 +1753,7 @@
       }
     }
     closeLightbox();
+    closeNoteEditPanel({ discard: true });
     state.editingId = item.id;
     const dlg = $("#memo-text-edit");
     const src = $("#memo-text-edit-src");
@@ -2309,6 +2408,23 @@
     previewBlob = null;
   }
 
+  function syncPreviewNoteLine(item) {
+    const note = String(item?.note || "").trim();
+    if (previewNoteLine) {
+      if (note) {
+        previewNoteLine.hidden = false;
+        previewNoteLine.textContent = `备注：${note}`;
+      } else {
+        previewNoteLine.hidden = true;
+        previewNoteLine.textContent = "";
+      }
+    }
+    if (previewNoteBtn) {
+      previewNoteBtn.hidden = !item;
+      previewNoteBtn.textContent = note ? "改备注" : "备注";
+    }
+  }
+
   function setPreviewChrome(item, { canFs = false, canNewTab = false, canDl = true, canEdit = false } = {}) {
     previewItem = item;
     if (previewTitle) previewTitle.textContent = item?.name || "预览";
@@ -2317,6 +2433,7 @@
         ? `${item.type || "file"} · ${formatBytes(item.size || 0)} · ${formatTime(item.createdAt)}`
         : "";
     }
+    syncPreviewNoteLine(item);
     if (previewFsBtn) {
       previewFsBtn.hidden = !canFs;
       previewFsBtn.textContent = lightbox?.classList.contains("is-fs") ? "退出全屏" : "全屏";
@@ -2454,6 +2571,7 @@
     hidePreviewParts();
     revokePreviewUrl();
     previewItem = null;
+    syncPreviewNoteLine(null);
     lightbox?.classList.remove("is-fs");
     if (document.fullscreenElement) {
       document.exitFullscreen?.().catch(() => {});
@@ -2652,6 +2770,38 @@
     if (state.editingId) clearEditing();
     renderItems();
   });
+  $("#memo-note-edit-save")?.addEventListener("click", () => {
+    saveNoteFromPanel().catch((err) => {
+      const el = $("#memo-note-edit-error");
+      if (el) {
+        el.hidden = false;
+        el.textContent = err.message || String(err);
+      } else setError(memoError, err.message || String(err));
+    });
+  });
+  $("#memo-note-edit-clear")?.addEventListener("click", () => {
+    const src = $("#memo-note-edit-src");
+    if (src) src.value = "";
+    saveNoteFromPanel({ clear: true }).catch((err) => {
+      const el = $("#memo-note-edit-error");
+      if (el) {
+        el.hidden = false;
+        el.textContent = err.message || String(err);
+      } else setError(memoError, err.message || String(err));
+    });
+  });
+  $("#memo-note-edit-cancel")?.addEventListener("click", () => {
+    closeNoteEditPanel({ discard: true });
+    toast("已取消备注");
+  });
+  $("#memo-note-edit")?.addEventListener("close", () => {
+    if (state.noteEditingId) clearNoteEditing();
+  });
+  $("#memo-note-edit-src")?.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey)) return;
+    e.preventDefault();
+    saveNoteFromPanel().catch((err) => setError(memoError, err.message || String(err)));
+  });
   $("#memo-read-clip")?.addEventListener("click", () => {
     readClipboard({ force: true }).catch((err) => setError(memoError, err.message || String(err)));
   });
@@ -2662,6 +2812,11 @@
       return;
     }
     beginEditText(item).catch((err) => setError(memoError, err.message || String(err)));
+  });
+  previewNoteBtn?.addEventListener("click", () => {
+    const item = previewItem;
+    if (!item) return;
+    beginEditNote(item).catch((err) => setError(memoError, err.message || String(err)));
   });
   $("#memo-tag-new")?.addEventListener("click", () => {
     state.tagTargetId = "";
@@ -2829,6 +2984,12 @@
       if (editId) {
         const item = state.index.items.find((x) => x.id === editId);
         if (item) await beginEditText(item);
+        return;
+      }
+      const noteId = t.closest?.("[data-memo-note]")?.dataset?.memoNote;
+      if (noteId) {
+        const item = state.index.items.find((x) => x.id === noteId);
+        if (item) await beginEditNote(item);
         return;
       }
       const copyId = t.closest?.("[data-memo-copy]")?.dataset?.memoCopy;

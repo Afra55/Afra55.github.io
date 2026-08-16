@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260816memo23" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo23" />
+  <link rel="stylesheet" href="./style.css?v=20260816memo24" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo24" />
   <script>
     /* 尽早应用主题，减少闪烁 */
     (function () {
@@ -38,7 +38,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo23</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo24</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="theme-open" title="切换站点主题">主题</button>
@@ -1215,6 +1215,24 @@ hello@world.org</textarea>
               </div>
             </dialog>
 
+            <dialog class="memo-dialog memo-note-edit-dlg" id="memo-note-edit" aria-label="编辑备注">
+              <div class="memo-dialog-body">
+                <div class="label-row">
+                  <h2 class="subhead">备注</h2>
+                  <p class="hint tight" id="memo-note-edit-sub">说明这条用来干什么，可搜索</p>
+                </div>
+                <label class="memo-ti-src-lab" for="memo-note-edit-src">备注内容
+                  <textarea id="memo-note-edit-src" class="area" rows="4" maxlength="500" placeholder="例如：登录页截图、周一要用的合同…"></textarea>
+                </label>
+                <div class="btn-row tool-actions" style="flex-wrap:wrap">
+                  <button type="button" class="primary-btn" id="memo-note-edit-save">保存备注</button>
+                  <button type="button" class="ghost-btn" id="memo-note-edit-clear">清空</button>
+                  <button type="button" class="ghost-btn" id="memo-note-edit-cancel">取消</button>
+                </div>
+                <p class="error" id="memo-note-edit-error" hidden></p>
+              </div>
+            </dialog>
+
             <div class="memo-progress" id="memo-progress" hidden>
               <div class="gif-progress-head">
                 <p class="hint gif-progress-title" id="memo-progress-text">处理中…</p>
@@ -1238,7 +1256,7 @@ hello@world.org</textarea>
             <div class="memo-list-tools">
               <label class="memo-search-lab" for="memo-search">
                 <span class="visually-hidden">搜索备忘录</span>
-                <input id="memo-search" class="mono memo-search" type="search" placeholder="输入关键词（文件名、正文、标签名都行）" autocomplete="off" enterkeyhint="search" />
+                <input id="memo-search" class="mono memo-search" type="search" placeholder="输入关键词（文件名、正文、备注、标签名都行）" autocomplete="off" enterkeyhint="search" />
               </label>
               <button type="button" class="ghost-btn" id="memo-clear-filters" hidden>清除筛选</button>
             </div>
@@ -1300,9 +1318,11 @@ hello@world.org</textarea>
               <div class="memo-preview-meta">
                 <strong id="memo-preview-title">预览</strong>
                 <span class="hint tight mono" id="memo-preview-sub"></span>
+                <p class="hint tight memo-preview-note-line" id="memo-preview-note-line" hidden></p>
               </div>
               <div class="btn-row memo-preview-actions">
                 <button type="button" class="secondary-btn" id="memo-preview-edit" hidden>编辑</button>
+                <button type="button" class="ghost-btn" id="memo-preview-note" hidden>备注</button>
                 <button type="button" class="ghost-btn" id="memo-preview-share" hidden>分享</button>
                 <button type="button" class="ghost-btn" id="memo-preview-fs" hidden>全屏</button>
                 <button type="button" class="ghost-btn" id="memo-preview-newtab" hidden>新标签打开</button>
@@ -2866,15 +2886,15 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./theme.js?v=20260816memo23"></script>
-  <script src="./temp.js?v=20260816memo23"></script>
+  <script src="./theme.js?v=20260816memo24"></script>
+  <script src="./temp.js?v=20260816memo24"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260816memo23"></script>
-  <script src="./about.js?v=20260816memo23"></script>
-  <script src="./extra.js?v=20260816memo23"></script>
+  <script src="./app.js?v=20260816memo24"></script>
+  <script src="./about.js?v=20260816memo24"></script>
+  <script src="./extra.js?v=20260816memo24"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./textimg.js?v=20260816memo23"></script>
-  <script src="./imgtext.js?v=20260816memo23"></script>
-  <script src="./memo.js?v=20260816memo23"></script>
+  <script src="./textimg.js?v=20260816memo24"></script>
+  <script src="./imgtext.js?v=20260816memo24"></script>
+  <script src="./memo.js?v=20260816memo24"></script>
 </body>
 </html>

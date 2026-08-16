@@ -5376,6 +5376,33 @@ button.adb-device-body.linkish {
   min-height: 12rem;
 }
 
+.memo-note-edit-dlg {
+  max-width: min(94vw, 420px);
+  width: min(94vw, 420px);
+}
+
+.memo-note-edit-dlg .area {
+  min-height: 5.5rem;
+  resize: vertical;
+}
+
+.memo-card-note {
+  margin: 0;
+  padding: 0.35rem 0.55rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--line) 35%, transparent);
+  color: color-mix(in srgb, var(--ink) 82%, transparent);
+  font-size: 0.84rem;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.memo-preview-note-line {
+  margin: 0.2rem 0 0;
+  color: color-mix(in srgb, var(--ink) 78%, transparent);
+  word-break: break-word;
+}
+
 .memo-card.is-dragging {
   opacity: 0.55;
 }

@@ -452,9 +452,56 @@ async function main() {
       out.tagDelete = { hasDelBtn: false, tagGone: false, itemKept: false, backToDefault: false };
     }
 
+    // item notes: edit / search / clear
+    const noteTarget =
+      (window.DevToolsMemo.getIndex().items || []).find((x) => x.type === "file") ||
+      (window.DevToolsMemo.getIndex().items || [])[0];
+    out.noteUi = {
+      hasDlg: Boolean(document.getElementById("memo-note-edit")),
+      hasPreviewBtn: Boolean(document.getElementById("memo-preview-note")),
+      hasCardBtn: Boolean(document.querySelector("[data-memo-note]")),
+      searchMentionsNote: /备注/.test(document.getElementById("memo-search")?.placeholder || ""),
+      itemId: noteTarget?.id || "",
+    };
+    if (noteTarget) {
+      document.querySelector(`[data-memo-note="${noteTarget.id}"]`)?.click();
+      await sleep(80);
+      const noteDlg = document.getElementById("memo-note-edit");
+      const noteSrc = document.getElementById("memo-note-edit-src");
+      out.noteUi.opened = Boolean(noteDlg?.open);
+      if (noteSrc) noteSrc.value = "冒烟备注 UNIQUE_NOTE_MARK_772";
+      document.getElementById("memo-note-edit-save")?.click();
+      await sleep(220);
+      const afterNote = (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === noteTarget.id);
+      out.noteUi.saved = afterNote?.note === "冒烟备注 UNIQUE_NOTE_MARK_772";
+      out.noteUi.cardShows = Boolean(
+        document.querySelector(`.memo-card[data-memo-id="${noteTarget.id}"] .memo-card-note`)
+      );
+      const search = document.getElementById("memo-search");
+      if (search) {
+        search.value = "UNIQUE_NOTE_MARK_772";
+        search.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      await sleep(500);
+      out.noteUi.searchHit = [...document.querySelectorAll(".memo-card")].some(
+        (c) => c.dataset.memoId === noteTarget.id
+      );
+      document.querySelector(`[data-memo-note="${noteTarget.id}"]`)?.click();
+      await sleep(80);
+      document.getElementById("memo-note-edit-clear")?.click();
+      await sleep(220);
+      const cleared = (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === noteTarget.id);
+      out.noteUi.cleared = !cleared?.note;
+      if (search) {
+        search.value = "";
+        search.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      await sleep(200);
+    }
+
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260816memo23/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260816memo24/.test(s.src)),
     };
 
     return out;
@@ -559,8 +606,14 @@ async function main() {
   if (!result.tagDelete?.hasDelBtn || !result.tagDelete?.tagGone || !result.tagDelete?.itemKept || !result.tagDelete?.backToDefault) {
     failed.push("tag delete should unbind items back to default without removing files");
   }
-  if (!/memo23/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memo23");
+  if (!result.noteUi?.hasDlg || !result.noteUi?.hasCardBtn || !result.noteUi?.hasPreviewBtn || !result.noteUi?.searchMentionsNote) {
+    failed.push("note UI missing");
+  }
+  if (!result.noteUi?.opened || !result.noteUi?.saved || !result.noteUi?.cardShows || !result.noteUi?.searchHit || !result.noteUi?.cleared) {
+    failed.push("note save/search/clear failed");
+  }
+  if (!/memo24/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memo24");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");
