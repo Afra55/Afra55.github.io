@@ -2715,8 +2715,9 @@
     tags.splice(to, 0, row);
     state.index.tags = def ? [def, ...tags] : tags;
     reindexOrders();
+    rebuildTagMap();
     dragTagId = null;
-    await persistIndex();
+    await persistIndex({ immediate: true });
     renderAll();
   });
 
