@@ -767,12 +767,13 @@
   const ORDER_KEY = "devtools-tool-order-v3";
   const GROUP_ORDER_KEY = "devtools-group-order-v1";
   const RECENT_KEY = "devtools-tool-recent-v1";
-  const MEDIA_TABS = ["gifmaker", "vsplit", "vbb", "vtrim"];
+  const MEDIA_TABS = ["gifmaker", "vsplit", "vbb", "vtrim", "audio"];
   const HASH_ALIASES = {
     gifmaker: { tool: "media", tab: "gifmaker" },
     vsplit: { tool: "media", tab: "vsplit" },
     vbb: { tool: "media", tab: "vbb" },
     vtrim: { tool: "media", tab: "vtrim" },
+    audio: { tool: "media", tab: "audio" },
   };
   const TOOL_GROUPS = [
     { id: "time", label: "时间", tools: ["timestamp", "timediff", "cron"] },
@@ -819,7 +820,7 @@
     qrcode: "生成与识别二维码。",
     markdown: "Markdown 预览。",
     memo: "本地备忘录：一键读剪贴板入库、搜索/点选筛选；文本图片可复制，其它类型可下载，手机可单条分享（文转图/OCR 见独立工具）。",
-    media: "GIF/动图、视频切分、一键黑盒、视频修剪等本地媒体工具合集。",
+    media: "GIF/动图、视频切分、一键黑盒、视频修剪、音频处理等本地媒体工具合集。",
     imgkit: "图片压缩、裁剪、水印、拼接。",
     textimg: "文字/Markdown/代码生成分享图。",
     imgtext: "本地 OCR 图片转文字（Tesseract）。",
@@ -867,6 +868,9 @@
         "裁剪",
         "视频修剪",
         "vtrim",
+        "音频",
+        "音量",
+        "audio",
         "webp",
         "ffmpeg",
         "动图",
@@ -913,7 +917,7 @@
   }
 
   function sanitizeToolIds(raw) {
-    const legacyMap = { gifmaker: "media", vsplit: "media", vbb: "media", vtrim: "media" };
+    const legacyMap = { gifmaker: "media", vsplit: "media", vbb: "media", vtrim: "media", audio: "media" };
     const seen = new Set();
     const out = [];
     (Array.isArray(raw) ? raw : []).forEach((id) => {
@@ -1240,7 +1244,9 @@
                   ? "一键黑盒"
                   : currentMediaTab === "vtrim"
                     ? "视频修剪"
-                    : "GIF"
+                    : currentMediaTab === "audio"
+                      ? "音频处理"
+                      : "GIF"
             }`
           : toolName(currentTool);
     if (workspaceTitle) workspaceTitle.textContent = title;

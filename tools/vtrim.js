@@ -118,6 +118,8 @@
   const resultBlock = $("#vtrim-result-block");
   const resultMeta = $("#vtrim-result-meta");
   const resultVideo = $("#vtrim-result");
+  const resultAudio = $("#vtrim-result-audio");
+  const cropLive = $("#vtrim-crop-live");
   const errorEl = $("#vtrim-error");
 
   if (!fileInput || !video) return;
@@ -147,6 +149,8 @@
   let playheadRaf = 0;
   let previewScrub = null;
   let exportQuality = "fast"; // fast | hq
+  let exportTrack = "av"; // av | video | audio
+  let cropLiveRaf = 0;
   /** @type {object[]} */
   let history = [];
   let applyingHistory = false;
@@ -193,6 +197,13 @@
       resultVideo.hidden = true;
       try {
         resultVideo.load();
+      } catch (_) {}
+    }
+    if (resultAudio) {
+      resultAudio.removeAttribute("src");
+      resultAudio.hidden = true;
+      try {
+        resultAudio.load();
       } catch (_) {}
     }
     if (downloadA) {
@@ -284,9 +295,14 @@
     editMode = "trim";
     history = [];
     exportQuality = "fast";
+    exportTrack = "av";
     document.querySelectorAll("[data-vtrim-quality]").forEach((btn) => {
       btn.classList.toggle("is-active", btn.dataset.vtrimQuality === "fast");
     });
+    document.querySelectorAll("[data-vtrim-track]").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.dataset.vtrimTrack === "av");
+    });
+    if (cropLive) cropLive.hidden = true;
     if (filmLoading) filmLoading.hidden = true;
     previewWrap?.classList.remove("is-film-loading", "is-playing");
     if (exportBar) exportBar.hidden = true;
@@ -334,7 +350,11 @@
     if (muteBtn) muteBtn.disabled = !has;
     if (resetBtn) resetBtn.disabled = !has || busy;
     if (undoBtn) undoBtn.disabled = !has || busy || history.length < 2;
-    if (exportBtn) exportBtn.disabled = !has || busy;
+    if (exportBtn) {
+      exportBtn.disabled = !has || busy;
+      exportBtn.textContent =
+        exportTrack === "audio" ? "导出音频" : exportTrack === "video" ? "导出无声视频" : "导出视频";
+    }
     if (rotL) rotL.disabled = !has || busy;
     if (rotR) rotR.disabled = !has || busy;
     if (flipHBtn) flipHBtn.disabled = !has || busy;
@@ -370,6 +390,7 @@
     syncCropBoxVisibility();
     stage?.classList.toggle("is-mode-crop", editMode === "crop");
     stage?.classList.toggle("is-mode-trim", editMode === "trim");
+    scheduleCropLive();
   }
 
   function syncMuteUi() {
@@ -502,7 +523,10 @@
   }
 
   function layoutCropBox() {
-    if (!cropBox || cropBox.hidden || !video.videoWidth) return;
+    if (!cropBox || cropBox.hidden || !video.videoWidth) {
+      scheduleCropLive();
+      return;
+    }
     const geom = videoContentRect();
     const d = cropToDisplayRect();
     const left = geom.left + (d.x / d.dw) * geom.width;
@@ -513,6 +537,7 @@
     cropBox.style.top = `${top}px`;
     cropBox.style.width = `${width}px`;
     cropBox.style.height = `${height}px`;
+    scheduleCropLive();
   }
 
   function fitCropToAspect() {
@@ -590,11 +615,68 @@
       return;
     }
     const span = endSec - startSec;
+    const trackLabel =
+      exportTrack === "audio" ? "仅音频" : exportTrack === "video" ? "仅视频" : "音视频";
+    if (exportTrack === "audio") {
+      summaryEl.textContent = `将导出 ${formatClock(span)} · ${trackLabel} · M4A`;
+      return;
+    }
     const est = estimateOutSize();
     const mode = est.reencode
       ? `重编码 · ${exportQuality === "hq" ? "清晰" : "快速"}`
       : "快速剪切";
-    summaryEl.textContent = `将导出 ${formatClock(span)} · ${est.w}×${est.h} · ${mode}`;
+    summaryEl.textContent = `将导出 ${formatClock(span)} · ${est.w}×${est.h} · ${trackLabel} · ${mode}`;
+  }
+
+  function paintCropLive() {
+    if (!cropLive || !video?.videoWidth || !sourceFile) {
+      if (cropLive) cropLive.hidden = true;
+      return;
+    }
+    const show = editMode === "crop" && Boolean(cropEnable?.checked);
+    cropLive.hidden = !show;
+    if (!show) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    const maxW = 160;
+    const maxH = 90;
+    const sx = Math.max(0, crop.x);
+    const sy = Math.max(0, crop.y);
+    const sw = Math.max(2, crop.w);
+    const sh = Math.max(2, crop.h);
+    let outW = sw;
+    let outH = sh;
+    if (rotate === 90 || rotate === 270) {
+      outW = sh;
+      outH = sw;
+    }
+    const scale = Math.min(maxW / outW, maxH / outH, 1);
+    const cssW = Math.max(48, Math.round(outW * scale));
+    const cssH = Math.max(28, Math.round(outH * scale));
+    cropLive.width = Math.round(cssW * dpr);
+    cropLive.height = Math.round(cssH * dpr);
+    cropLive.style.width = `${cssW}px`;
+    cropLive.style.height = `${cssH}px`;
+    const ctx = cropLive.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, cssW, cssH);
+    ctx.fillStyle = "#0a101c";
+    ctx.fillRect(0, 0, cssW, cssH);
+    ctx.save();
+    ctx.translate(cssW / 2, cssH / 2);
+    if (rotate) ctx.rotate((rotate * Math.PI) / 180);
+    if (flipH) ctx.scale(-1, 1);
+    const drawW = rotate === 90 || rotate === 270 ? cssH : cssW;
+    const drawH = rotate === 90 || rotate === 270 ? cssW : cssH;
+    try {
+      ctx.drawImage(video, sx, sy, sw, sh, -drawW / 2, -drawH / 2, drawW, drawH);
+    } catch (_) {}
+    ctx.restore();
+  }
+
+  function scheduleCropLive() {
+    cancelAnimationFrame(cropLiveRaf);
+    cropLiveRaf = requestAnimationFrame(() => paintCropLive());
   }
 
   function paintTimeline() {
@@ -642,7 +724,10 @@
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.fillStyle = "#0a101c";
     ctx.fillRect(0, 0, cssW, cssH);
-    const n = Math.min(36, Math.max(12, Math.round(cssW / 36)));
+    const nBase = Math.min(36, Math.max(12, Math.round(cssW / 36)));
+    // 长视频少抽帧，减轻手机/长片卡顿
+    const n =
+      duration > 900 ? Math.min(nBase, 10) : duration > 300 ? Math.min(nBase, 14) : duration > 120 ? Math.min(nBase, 20) : nBase;
     const tw = cssW / n;
     const wasTime = video.currentTime;
     const wasPaused = video.paused;
@@ -901,51 +986,122 @@
       const inName = await eng.ensureInputWritten(ffmpeg, sourceFile, (r, t) =>
         setProgress(true, 0.25 + r * 0.15, t || "写入视频…", { busy: true })
       );
-      const outName = `vtrim-out-${Date.now()}.mp4`;
       const ss = String(Math.max(0, startSec));
       const tt = String(Math.max(MIN_SPAN, span));
-      const reencode = needsReencode();
+      const track = exportTrack === "audio" || exportTrack === "video" ? exportTrack : "av";
+      const audioOnly = track === "audio";
+      const videoOnly = track === "video";
+      const outName = audioOnly ? `vtrim-out-${Date.now()}.m4a` : `vtrim-out-${Date.now()}.mp4`;
+      const reencode = audioOnly ? false : needsReencode();
       const crf = exportQuality === "hq" ? "20" : "23";
       const preset = exportQuality === "hq" ? "veryfast" : "ultrafast";
       const attempts = [];
-      if (!reencode) {
+
+      if (audioOnly) {
         attempts.push({
-          label: "快速剪切",
-          args: ["-ss", ss, "-t", tt, "-i", inName, "-c", "copy", "-avoid_negative_ts", "make_zero", "-movflags", "+faststart", "-y", outName],
+          label: "抽取音轨",
+          args: ["-ss", ss, "-t", tt, "-i", inName, "-vn", "-c:a", "copy", "-y", outName],
         });
+        attempts.push({
+          label: "AAC 重编码",
+          args: ["-ss", ss, "-t", tt, "-i", inName, "-vn", "-c:a", "aac", "-b:a", "192k", "-y", outName],
+        });
+      } else {
+        if (!reencode && !videoOnly) {
+          attempts.push({
+            label: "快速剪切",
+            args: [
+              "-ss",
+              ss,
+              "-t",
+              tt,
+              "-i",
+              inName,
+              "-c",
+              "copy",
+              "-avoid_negative_ts",
+              "make_zero",
+              "-movflags",
+              "+faststart",
+              "-y",
+              outName,
+            ],
+          });
+        }
+        if (!reencode && videoOnly) {
+          attempts.push({
+            label: "快速无声剪切",
+            args: [
+              "-ss",
+              ss,
+              "-t",
+              tt,
+              "-i",
+              inName,
+              "-an",
+              "-c:v",
+              "copy",
+              "-avoid_negative_ts",
+              "make_zero",
+              "-movflags",
+              "+faststart",
+              "-y",
+              outName,
+            ],
+          });
+        }
+        const vf = buildVf();
+        if (!videoOnly) {
+          const encArgs = ["-ss", ss, "-t", tt, "-i", inName];
+          if (vf) encArgs.push("-vf", vf);
+          encArgs.push(
+            "-c:v",
+            "libx264",
+            "-preset",
+            preset,
+            "-crf",
+            crf,
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            exportQuality === "hq" ? "160k" : "128k",
+            "-movflags",
+            "+faststart",
+            "-y",
+            outName
+          );
+          attempts.push({ label: reencode ? "裁剪重编码" : "重编码", args: encArgs });
+        }
+        const encNoA = ["-ss", ss, "-t", tt, "-i", inName];
+        if (vf) encNoA.push("-vf", vf);
+        encNoA.push(
+          "-an",
+          "-c:v",
+          "libx264",
+          "-preset",
+          preset,
+          "-crf",
+          crf,
+          "-pix_fmt",
+          "yuv420p",
+          "-movflags",
+          "+faststart",
+          "-y",
+          outName
+        );
+        attempts.push({ label: videoOnly ? "无声重编码" : "无音轨重编码", args: encNoA });
       }
-      const vf = buildVf();
-      const encArgs = ["-ss", ss, "-t", tt, "-i", inName];
-      if (vf) encArgs.push("-vf", vf);
-      encArgs.push(
-        "-c:v",
-        "libx264",
-        "-preset",
-        preset,
-        "-crf",
-        crf,
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "aac",
-        "-b:a",
-        exportQuality === "hq" ? "160k" : "128k",
-        "-movflags",
-        "+faststart",
-        "-y",
-        outName
-      );
-      attempts.push({ label: reencode ? "裁剪重编码" : "重编码", args: encArgs });
-      // fallback without audio if aac fails
-      const encNoA = ["-ss", ss, "-t", tt, "-i", inName];
-      if (vf) encNoA.push("-vf", vf);
-      encNoA.push("-an", "-c:v", "libx264", "-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-y", outName);
-      attempts.push({ label: "无音轨重编码", args: encNoA });
 
       let outBlob = null;
+      const mime = audioOnly ? "audio/mp4" : "video/mp4";
       for (const attempt of attempts) {
         if (abortFlag) throw new Error("已取消");
-        setProgress(true, 0.45, `${attempt.label}…`, { busy: true, sub: `${formatClock(startSec)}–${formatClock(endSec)}` });
+        setProgress(true, 0.45, `${attempt.label}…`, {
+          busy: true,
+          sub: `${formatClock(startSec)}–${formatClock(endSec)}`,
+        });
         try {
           await ffmpeg.deleteFile(outName);
         } catch (_) {}
@@ -957,7 +1113,7 @@
           if (raw.byteLength > 32) {
             const bytes = new Uint8Array(raw.byteLength);
             bytes.set(raw);
-            outBlob = new Blob([bytes], { type: "video/mp4" });
+            outBlob = new Blob([bytes], { type: mime });
             break;
           }
         } catch (err) {
@@ -970,28 +1126,43 @@
       if (!outBlob) throw new Error("导出失败，可尝试缩短时长或关闭裁剪后重试");
       resultUrl = URL.createObjectURL(outBlob);
       if (resultBlock) resultBlock.hidden = false;
-      if (resultVideo) {
+      if (audioOnly) {
+        if (resultAudio) {
+          resultAudio.src = resultUrl;
+          resultAudio.hidden = false;
+        }
+        if (resultVideo) resultVideo.hidden = true;
+      } else if (resultVideo) {
         resultVideo.src = resultUrl;
         resultVideo.hidden = false;
+        if (resultAudio) resultAudio.hidden = true;
       }
+      const trackLabel = audioOnly ? "仅音频" : videoOnly ? "仅视频" : "音视频";
+      const modeLabel = audioOnly
+        ? "M4A"
+        : reencode
+          ? exportQuality === "hq"
+            ? "清晰重编码"
+            : "快速重编码"
+          : "快速剪切";
       if (resultMeta) {
         const mb = (outBlob.size / (1024 * 1024)).toFixed(2);
-        resultMeta.textContent = `约 ${mb} MB · ${formatClock(span)} · ${reencode ? (exportQuality === "hq" ? "清晰重编码" : "快速重编码") : "快速剪切"}`;
+        resultMeta.textContent = `约 ${mb} MB · ${formatClock(span)} · ${trackLabel} · ${modeLabel}`;
       }
+      const fname = audioOnly ? `trimmed-${Date.now()}.m4a` : `trimmed-${Date.now()}.mp4`;
       if (downloadA) {
         downloadA.href = resultUrl;
-        downloadA.download = `trimmed-${Date.now()}.mp4`;
+        downloadA.download = fname;
         downloadA.hidden = false;
       }
-      // auto download
       const a = document.createElement("a");
       a.href = resultUrl;
-      a.download = downloadA?.download || "trimmed.mp4";
+      a.download = fname;
       document.body.appendChild(a);
       a.click();
       a.remove();
       setProgress(true, 1, "导出完成");
-      toast(`已导出 · 保留 ${formatClock(span)}${reencode ? "（已裁切重编码）" : "（快速剪切）"}`);
+      toast(`已导出 · ${trackLabel} · 保留 ${formatClock(span)}`);
       try {
         resultBlock?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       } catch (_) {}
@@ -1094,6 +1265,17 @@
       updateSummary();
     });
   });
+  document.querySelectorAll("[data-vtrim-track]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const t = btn.dataset.vtrimTrack;
+      exportTrack = t === "video" || t === "audio" ? t : "av";
+      document.querySelectorAll("[data-vtrim-track]").forEach((b) => {
+        b.classList.toggle("is-active", b.dataset.vtrimTrack === exportTrack);
+      });
+      setButtons();
+      updateSummary();
+    });
+  });
   rotL?.addEventListener("click", () => rotateBy(-90));
   rotR?.addEventListener("click", () => rotateBy(90));
   flipHBtn?.addEventListener("click", () => {
@@ -1163,6 +1345,7 @@
       paintTimeline();
       updateLabels();
     }
+    scheduleCropLive();
   });
   video.addEventListener("pause", () => {
     playing = false;
@@ -1441,6 +1624,7 @@
     getRange: () => ({ start: startSec, end: endSec, duration }),
     getCrop: () => ({ ...crop, rotate, flipH, aspect }),
     getMode: () => editMode,
+    getTrack: () => exportTrack,
     setMode: (mode) => {
       editMode = mode === "crop" ? "crop" : "trim";
       syncModeUi();

@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.16-vtrim4";
+  const TOOLS_VERSION = "2026.08.16-audio1";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -575,7 +575,7 @@
     }
     const mediaLink = document.querySelector('.tool-nav-link[data-tool="media"]');
     if (mediaLink?.classList.contains("is-active")) return true;
-    return ["gifmaker", "vsplit", "vbb", "vtrim"].some((id) => {
+    return ["gifmaker", "vsplit", "vbb", "vtrim", "audio"].some((id) => {
       const panel = document.getElementById(id);
       return !!(panel && panel.classList.contains("is-workspace-active") && !panel.hidden);
     });
@@ -638,7 +638,7 @@
       if (!document.hidden) scheduleFfmpegPrewarm();
     });
     if (typeof MutationObserver === "function") {
-      ["gifmaker", "vsplit", "vbb", "vtrim"].forEach((id) => {
+      ["gifmaker", "vsplit", "vbb", "vtrim", "audio"].forEach((id) => {
         const panel = document.getElementById(id);
         if (!panel) return;
         new MutationObserver(scheduleFfmpegPrewarm).observe(panel, {
@@ -649,7 +649,7 @@
     }
     document.addEventListener("click", (e) => {
       const t = e.target?.closest?.(
-        '.tool-nav-link[data-tool="media"], [data-media-tab], .tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"], .tool-nav-link[data-tool="vtrim"]'
+        '.tool-nav-link[data-tool="media"], [data-media-tab], .tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"], .tool-nav-link[data-tool="vtrim"], .tool-nav-link[data-tool="audio"]'
       );
       if (t) setTimeout(scheduleFfmpegPrewarm, 0);
     });

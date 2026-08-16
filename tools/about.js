@@ -24,7 +24,13 @@
       id: "vtrim",
       href: "#media/vtrim",
       name: "视频修剪",
-      desc: "调整片头片尾时长，并裁掉多余边框后导出。",
+      desc: "调整片头片尾时长，裁边框，并可只导出音轨或无声视频。",
+    },
+    {
+      id: "audio",
+      href: "#media/audio",
+      name: "音频处理",
+      desc: "修剪时长、调节音量，从视频抽音轨；导出 M4A / WAV。",
     },
   ];
 
