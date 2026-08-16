@@ -6505,3 +6505,21 @@ html[data-theme-scheme="light"] .bg-grid {
 .vtrim-stage.is-mode-trim .vtrim-preview-wrap {
   cursor: grab;
 }
+
+.vtrim-export-bar {
+  margin-top: 0.85rem;
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel, #121826) 88%, #1e2a3d);
+}
+
+.vtrim-result-block {
+  margin-top: 1rem;
+}
+
+.vtrim-result-block .subhead {
+  margin-bottom: 0.25rem;
+}
