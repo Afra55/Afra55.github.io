@@ -111,7 +111,7 @@
   border-radius: 6px;
   border: 1px solid transparent;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
-  touch-action: pan-y;
+  touch-action: none;
 }
 
 .nav-group-title.is-sortable:active,
@@ -136,10 +136,20 @@
   background: rgba(46, 196, 182, 0.1);
 }
 
-body.nav-sorting {
+body.nav-sorting,
+body.nav-sorting-tools,
+body.nav-press-pending {
   user-select: none;
   -webkit-user-select: none;
+  -webkit-touch-callout: none;
   cursor: grabbing;
+}
+
+body.nav-press-pending .nav-group-title,
+body.nav-press-pending .tool-nav-link,
+.nav-group-title.is-sortable,
+.tool-nav-link {
+  -webkit-touch-callout: none;
 }
 
 /* 拖拽分类时收起子工具，只留分类标题，更好对准 */
@@ -168,12 +178,20 @@ body.nav-sorting .nav-group-title.is-sortable {
   background: rgba(232, 238, 248, 0.07);
 }
 
-body.nav-sorting .nav-group.is-dragging > .nav-group-title {
+body.nav-sorting .nav-group.is-dragging > .nav-group-title,
+body.nav-sorting-tools .tool-nav-link.is-dragging {
   opacity: 0.55;
   border-style: dashed;
 }
 
-body.nav-sorting .nav-bar {
+body.nav-sorting-tools .tool-nav-link.drag-over {
+  outline: 1px dashed rgba(46, 196, 182, 0.7);
+  outline-offset: 1px;
+  background: rgba(46, 196, 182, 0.12);
+}
+
+body.nav-sorting .nav-bar,
+body.nav-sorting-tools .nav-bar {
   overflow-y: auto !important;
   overscroll-behavior: contain;
   touch-action: none;

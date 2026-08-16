@@ -1422,6 +1422,7 @@
       setProgress(false, 0, "");
       renderAll();
       toast(`已生成图片（${scale}×）`);
+      closeToImgPanel();
     });
   }
 
@@ -1507,12 +1508,28 @@
   $("#memo-read-clip")?.addEventListener("click", () => {
     readClipboard({ force: true }).catch((err) => setError(memoError, err.message || String(err)));
   });
-  $("#memo-to-image")?.addEventListener("click", () => {
-    $("#memo-toimg").hidden = false;
+  function isToImgOpen() {
+    const dlg = $("#memo-toimg");
+    return Boolean(dlg?.open);
+  }
+
+  function openToImgPanel() {
+    const dlg = $("#memo-toimg");
     paintTextImageCard();
-  });
-  $("#memo-ti-close")?.addEventListener("click", () => {
-    $("#memo-toimg").hidden = true;
+    if (dlg?.showModal) dlg.showModal();
+    else if (dlg) dlg.hidden = false;
+  }
+
+  function closeToImgPanel() {
+    const dlg = $("#memo-toimg");
+    if (dlg?.open) dlg.close();
+    else if (dlg) dlg.hidden = true;
+  }
+
+  $("#memo-to-image")?.addEventListener("click", () => openToImgPanel());
+  $("#memo-ti-close")?.addEventListener("click", () => closeToImgPanel());
+  $("#memo-toimg")?.addEventListener("click", (e) => {
+    if (e.target?.id === "memo-toimg") closeToImgPanel();
   });
   [
     "memo-ti-mode",
@@ -1536,7 +1553,7 @@
     $(`#${id}`)?.addEventListener("change", paintTextImageCard);
   });
   editor?.addEventListener("input", () => {
-    if (!$("#memo-toimg")?.hidden) paintTextImageCard();
+    if (isToImgOpen()) paintTextImageCard();
   });
   $("#memo-ti-bgimg")?.addEventListener("change", (e) => {
     const f = e.target.files?.[0];
@@ -1672,8 +1689,7 @@
           clearEditing();
           editor.value = item.name || "";
         }
-        $("#memo-toimg").hidden = false;
-        paintTextImageCard();
+        openToImgPanel();
         t.closest("details")?.removeAttribute("open");
         return;
       }
@@ -1820,32 +1836,50 @@
     ingestFiles(e.dataTransfer.files).catch((err) => setError(memoError, err.message || String(err)));
   });
 
-  // Ctrl/⌘+V 与右键粘贴：备忘录激活时识别图片/文件；编辑框内文本走默认粘贴
-  document.addEventListener("paste", (e) => {
-    if (!isMemoActive()) return;
-    const cd = e.clipboardData;
-    if (!cd) return;
-    const files = [...(cd.files || [])];
-    if (files.length) {
-      e.preventDefault();
-      ingestFiles(files).catch((err) => setError(memoError, err.message || String(err)));
-      return;
+  // 整页 Ctrl/⌘+V 与右键粘贴：备忘录激活时识别类型并添加（编辑框内文本仍走默认粘贴）
+  function isEditableTarget(el) {
+    if (!el || el === document.body) return false;
+    const tag = String(el.tagName || "").toLowerCase();
+    if (tag === "textarea" || tag === "select") return true;
+    if (tag === "input") {
+      const type = String(el.type || "text").toLowerCase();
+      return !["button", "submit", "checkbox", "radio", "file", "range", "color"].includes(type);
     }
-    const items = [...(cd.items || [])];
-    const img = items.find((it) => it.kind === "file" && it.type.startsWith("image/"));
-    if (img) {
-      e.preventDefault();
-      const f = img.getAsFile();
-      if (f) ingestFiles([f]).catch((err) => setError(memoError, err.message || String(err)));
-      return;
-    }
-    if (document.activeElement === editor) return;
-    const text = cd.getData("text/plain");
-    if (text && text.trim()) {
-      e.preventDefault();
-      addText(text).catch((err) => setError(memoError, err.message || String(err)));
-    }
-  });
+    return Boolean(el.isContentEditable);
+  }
+
+  document.addEventListener(
+    "paste",
+    (e) => {
+      if (!isMemoActive()) return;
+      if (isToImgOpen()) return; // 弹层内输入不拦截
+      const cd = e.clipboardData;
+      if (!cd) return;
+      const files = [...(cd.files || [])];
+      if (files.length) {
+        e.preventDefault();
+        ingestFiles(files).catch((err) => setError(memoError, err.message || String(err)));
+        return;
+      }
+      const items = [...(cd.items || [])];
+      const img = items.find((it) => it.kind === "file" && String(it.type || "").startsWith("image/"));
+      if (img) {
+        e.preventDefault();
+        const f = img.getAsFile();
+        if (f) ingestFiles([f]).catch((err) => setError(memoError, err.message || String(err)));
+        return;
+      }
+      const active = document.activeElement;
+      // 编辑框 / 其它可编辑控件内：文本交给默认粘贴
+      if (active === editor || isEditableTarget(active)) return;
+      const text = cd.getData("text/plain");
+      if (text && text.trim()) {
+        e.preventDefault();
+        addText(text).catch((err) => setError(memoError, err.message || String(err)));
+      }
+    },
+    true
+  );
 
   $("#memo-export")?.addEventListener("click", () => openExportDialog());
   exportDlg?.addEventListener("close", () => {

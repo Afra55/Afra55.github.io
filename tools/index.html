@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260816memo5" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo5" />
+  <link rel="stylesheet" href="./style.css?v=20260816memo6" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo6" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo5</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo6</span>
       </div>
       <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
@@ -47,7 +47,7 @@
         <p class="nav-recent-label">最近使用</p>
         <div class="nav-recent-list" id="tool-recent-list"></div>
       </div>
-      <p class="hint tight nav-sort-hint">分类可排序：桌面拖标题；手机请<strong>长按</strong>分类标题再拖（拖时只显示分类，拖到边缘可滚动）。</p>
+      <p class="hint tight nav-sort-hint">分类与工具可排序：桌面直接拖；手机请<strong>长按</strong>分类标题或工具名再拖（松手前拖到边缘可滚动）。</p>
       <nav class="tool-nav" id="tool-nav" aria-label="工具分组"></nav>
       <div class="nav-footer-actions">
         <p class="nav-cache-meta" id="nav-cache-meta">本站缓存可清理；备忘录数据单独统计、不会被清掉</p>
@@ -983,7 +983,7 @@ hello@world.org</textarea>
             <div class="memo-editor panel-card">
               <label for="memo-editor">写一段文字</label>
               <p class="hint tight" id="memo-edit-hint" hidden>正在编辑已有条目，保存后会覆盖原文。</p>
-              <textarea id="memo-editor" class="area" rows="5" placeholder="在此输入；也可 Ctrl/⌘+V 或右键粘贴图片与文字"></textarea>
+              <textarea id="memo-editor" class="area" rows="5" placeholder="在此输入文字。在备忘录页任意位置 Ctrl/⌘+V 或右键粘贴，可识别图片/文字并添加"></textarea>
               <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.55rem">
                 <button type="button" class="primary-btn" id="memo-save-text">保存文本</button>
                 <button type="button" class="ghost-btn" id="memo-cancel-edit" hidden>取消编辑</button>
@@ -992,10 +992,11 @@ hello@world.org</textarea>
               </div>
             </div>
 
-            <div class="memo-toimg" id="memo-toimg" hidden>
+            <dialog class="memo-dialog memo-toimg-dlg" id="memo-toimg" aria-label="文字转图片">
+              <div class="memo-dialog-body memo-toimg">
               <div class="label-row">
                 <h2 class="subhead">文字转图片</h2>
-                <p class="hint tight">参考 text-to-card / 海报卡片：模板 · 渐变 · 比例 · 高清导出</p>
+                <p class="hint tight">仅在此弹层编辑样式；关闭后不影响备忘录主界面</p>
               </div>
               <div class="memo-ti-controls">
                 <label for="memo-ti-mode">模式
@@ -1094,9 +1095,10 @@ hello@world.org</textarea>
               </div>
               <div class="btn-row tool-actions" style="margin-top:0.55rem">
                 <button type="button" class="primary-btn" id="memo-ti-save">生成并保存图片</button>
-                <button type="button" class="ghost-btn" id="memo-ti-close">收起</button>
+                <button type="button" class="ghost-btn" id="memo-ti-close">关闭</button>
               </div>
-            </div>
+              </div>
+            </dialog>
 
             <div class="memo-progress" id="memo-progress" hidden>
               <div class="gif-progress-head">
@@ -2652,11 +2654,11 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./temp.js?v=20260816memo5"></script>
+  <script src="./temp.js?v=20260816memo6"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260816memo5"></script>
-  <script src="./extra.js?v=20260816memo5"></script>
+  <script src="./app.js?v=20260816memo6"></script>
+  <script src="./extra.js?v=20260816memo6"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./memo.js?v=20260816memo5"></script>
+  <script src="./memo.js?v=20260816memo6"></script>
 </body>
 </html>
