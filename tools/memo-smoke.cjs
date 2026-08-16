@@ -696,8 +696,8 @@ async function main() {
   if (!result.switchDir?.dlgOpen || !result.switchDir?.migrateVisible || !result.switchDir?.emptyVisible || result.switchDir?.choice !== "cancel") {
     failed.push("switch directory dialog choices failed");
   }
-  if (!/fffull2/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to fffull2");
+  if (!/ffdedupe1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to ffdedupe1");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");
