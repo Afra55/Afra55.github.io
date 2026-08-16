@@ -6179,3 +6179,194 @@ html[data-theme-scheme="light"] .bg-grid {
     padding-inline: 0.55rem;
   }
 }
+
+/* ---- Video trim / crop (vtrim) ---- */
+.vtrim-stage {
+  margin-top: 0.85rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.vtrim-preview-wrap {
+  position: relative;
+  width: 100%;
+  min-height: 220px;
+  height: min(62vw, 420px);
+  border-radius: 12px;
+  overflow: hidden;
+  background: #0a101c;
+  border: 1px solid var(--line);
+  display: grid;
+  place-items: center;
+  touch-action: none;
+  user-select: none;
+}
+
+.vtrim-preview-wrap.is-dragging {
+  cursor: grabbing;
+}
+
+.vtrim-video {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  display: block;
+  background: #000;
+  pointer-events: none;
+}
+
+.vtrim-crop-box {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid rgba(46, 196, 182, 0.95);
+  box-shadow: 0 0 0 9999px rgba(8, 14, 26, 0.48);
+  cursor: grab;
+  touch-action: none;
+  z-index: 2;
+}
+
+.vtrim-preview-wrap.is-dragging .vtrim-crop-box {
+  cursor: grabbing;
+}
+
+.vtrim-crop-handle {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  margin: -8px 0 0 -8px;
+  border: 2px solid #fff;
+  border-radius: 4px;
+  background: rgba(46, 196, 182, 0.95);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  z-index: 3;
+}
+
+.vtrim-crop-handle[data-vtrim-handle="nw"] { left: 0; top: 0; cursor: nwse-resize; }
+.vtrim-crop-handle[data-vtrim-handle="n"]  { left: 50%; top: 0; cursor: ns-resize; }
+.vtrim-crop-handle[data-vtrim-handle="ne"] { left: 100%; top: 0; cursor: nesw-resize; }
+.vtrim-crop-handle[data-vtrim-handle="e"]  { left: 100%; top: 50%; cursor: ew-resize; }
+.vtrim-crop-handle[data-vtrim-handle="se"] { left: 100%; top: 100%; cursor: nwse-resize; }
+.vtrim-crop-handle[data-vtrim-handle="s"]  { left: 50%; top: 100%; cursor: ns-resize; }
+.vtrim-crop-handle[data-vtrim-handle="sw"] { left: 0; top: 100%; cursor: nesw-resize; }
+.vtrim-crop-handle[data-vtrim-handle="w"]  { left: 0; top: 50%; cursor: ew-resize; }
+
+.vtrim-transport {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.75rem;
+}
+
+.vtrim-clock {
+  font-size: 0.92rem;
+}
+
+.vtrim-timeline {
+  position: relative;
+  width: 100%;
+  height: 56px;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: #0a101c;
+  touch-action: none;
+  user-select: none;
+  cursor: ew-resize;
+}
+
+.vtrim-filmstrip {
+  display: block;
+  width: 100%;
+  height: 56px;
+  pointer-events: none;
+}
+
+.vtrim-sel {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.vtrim-sel::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: var(--vtrim-start, 0%);
+  background: rgba(8, 14, 26, 0.58);
+}
+
+.vtrim-sel::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--vtrim-end, 100%);
+  right: 0;
+  background: rgba(8, 14, 26, 0.58);
+}
+
+.vtrim-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 18px;
+  margin-left: -9px;
+  background: linear-gradient(90deg, transparent 6px, #f5c542 6px, #f5c542 12px, transparent 12px);
+  pointer-events: auto;
+  cursor: ew-resize;
+  z-index: 3;
+  touch-action: none;
+}
+
+.vtrim-handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 22px;
+  margin: -11px 0 0 -2px;
+  border-radius: 2px;
+  background: #1a1408;
+  box-shadow: 0 0 0 1px rgba(245, 197, 66, 0.85);
+}
+
+.vtrim-handle-start {
+  left: var(--vtrim-start, 0%);
+}
+
+.vtrim-handle-end {
+  left: var(--vtrim-end, 100%);
+}
+
+.vtrim-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--vtrim-play, 0%);
+  width: 2px;
+  margin-left: -1px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.vtrim-crop-tools .seg {
+  margin-right: 0.25rem;
+}
+
+@media (max-width: 640px) {
+  .vtrim-preview-wrap {
+    height: min(72vw, 360px);
+    min-height: 200px;
+  }
+
+  .vtrim-handle {
+    width: 24px;
+    margin-left: -12px;
+  }
+}

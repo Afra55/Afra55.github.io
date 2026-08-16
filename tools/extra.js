@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.16-vsplit2";
+  const TOOLS_VERSION = "2026.08.16-vtrim1";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -575,7 +575,7 @@
     }
     const mediaLink = document.querySelector('.tool-nav-link[data-tool="media"]');
     if (mediaLink?.classList.contains("is-active")) return true;
-    return ["gifmaker", "vsplit", "vbb"].some((id) => {
+    return ["gifmaker", "vsplit", "vbb", "vtrim"].some((id) => {
       const panel = document.getElementById(id);
       return !!(panel && panel.classList.contains("is-workspace-active") && !panel.hidden);
     });
@@ -638,7 +638,7 @@
       if (!document.hidden) scheduleFfmpegPrewarm();
     });
     if (typeof MutationObserver === "function") {
-      ["gifmaker", "vsplit", "vbb"].forEach((id) => {
+      ["gifmaker", "vsplit", "vbb", "vtrim"].forEach((id) => {
         const panel = document.getElementById(id);
         if (!panel) return;
         new MutationObserver(scheduleFfmpegPrewarm).observe(panel, {
@@ -649,7 +649,7 @@
     }
     document.addEventListener("click", (e) => {
       const t = e.target?.closest?.(
-        '.tool-nav-link[data-tool="media"], [data-media-tab], .tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"]'
+        '.tool-nav-link[data-tool="media"], [data-media-tab], .tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"], .tool-nav-link[data-tool="vtrim"]'
       );
       if (t) setTimeout(scheduleFfmpegPrewarm, 0);
     });
@@ -798,6 +798,19 @@
 
   paintToolsVersion();
   document.addEventListener("DOMContentLoaded", paintToolsVersion);
+
+  try {
+    window.DevToolsFfmpeg = {
+      getInstance: getFfmpegInstance,
+      ensureInputWritten: ensureFfmpegInputWritten,
+      terminate: (opts) => terminateFfmpegInstance(opts || { revokeAssets: false }),
+      prewarm: prewarmFfmpegEngine,
+      inputKey: ffmpegInputKey,
+      guessExt: guessVideoExt,
+    };
+  } catch (_) {
+    /* ignore */
+  }
 
   let gifsicleModulePromise = null;
 
