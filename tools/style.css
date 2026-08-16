@@ -5184,6 +5184,34 @@ button.adb-device-body.linkish {
   background: rgba(14, 22, 38, 0.72);
 }
 
+.memo-card.is-editing {
+  border-color: color-mix(in srgb, #2ec4b6 55%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, #2ec4b6 28%, transparent);
+}
+
+.memo-card.is-just-saved {
+  animation: memo-card-saved 1.4s ease;
+}
+
+@keyframes memo-card-saved {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+  30% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, #2ec4b6 40%, transparent);
+  }
+}
+
+.memo-text-edit-dlg {
+  max-width: min(94vw, 640px);
+  width: min(94vw, 640px);
+}
+
+.memo-text-edit-dlg .area {
+  min-height: 12rem;
+}
+
 .memo-card.is-dragging {
   opacity: 0.55;
 }

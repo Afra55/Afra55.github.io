@@ -256,6 +256,35 @@ async function main() {
     await sleep(60);
     out.modules.ocrClosed = !document.getElementById("memo-ocr")?.open;
 
+    // inline text edit dialog
+    const textItem = (window.DevToolsMemo.getIndex().items || []).find((it) => it.type === "text");
+    out.textEdit = {
+      hasDlg: Boolean(document.getElementById("memo-text-edit")),
+      hasPreviewEdit: Boolean(document.getElementById("memo-preview-edit")),
+      hasEditBtn: Boolean(document.querySelector("[data-memo-edit]")),
+      itemId: textItem?.id || "",
+    };
+    if (textItem) {
+      document.querySelector(`[data-memo-edit="${textItem.id}"]`)?.click();
+      await sleep(120);
+      const editDlg = document.getElementById("memo-text-edit");
+      const editSrc = document.getElementById("memo-text-edit-src");
+      out.textEdit.opened = Boolean(editDlg?.open);
+      out.textEdit.memoStillActive = document.getElementById("memo")?.classList.contains("is-workspace-active");
+      out.textEdit.loaded = (editSrc?.value || "").includes("冒烟测试文本");
+      out.textEdit.cardEditing = Boolean(document.querySelector(`.memo-card.is-editing[data-memo-id="${textItem.id}"]`));
+      if (editSrc) {
+        editSrc.value = "冒烟测试文本 ABC 你好（已编辑）";
+        editSrc.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      document.getElementById("memo-text-edit-save")?.click();
+      await sleep(400);
+      const updated = (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === textItem.id);
+      out.textEdit.saved = (updated?.textPreview || "").includes("已编辑");
+      out.textEdit.closed = !editDlg?.open;
+      out.textEdit.editingCleared = !document.querySelector(".memo-card.is-editing");
+    }
+
     // open image preview
     const openBtn = document.querySelector("[data-memo-open]");
     if (openBtn) {
@@ -393,6 +422,15 @@ async function main() {
   }
   if (!result.modules?.hasOcrDlg || !result.modules?.ocrOpen || !result.modules?.ocrClosed) {
     failed.push("ocr dialog open/close inline failed");
+  }
+  if (!result.textEdit?.hasDlg || !result.textEdit?.hasEditBtn || !result.textEdit?.hasPreviewEdit) {
+    failed.push("text edit UI missing");
+  }
+  if (!result.textEdit?.opened || !result.textEdit?.memoStillActive || !result.textEdit?.loaded) {
+    failed.push("text edit dialog should open inline with content");
+  }
+  if (!result.textEdit?.saved || !result.textEdit?.closed || !result.textEdit?.editingCleared) {
+    failed.push("text edit save/close failed");
   }
   if (!result.modules?.hasSentinel) failed.push("infinite scroll sentinel missing");
   if (!result.toImgLive?.hasSrc || !result.toImgLive?.hasWH || !result.toImgLive?.hasResize) {

@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260816memo12" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo12" />
+  <link rel="stylesheet" href="./style.css?v=20260816memo13" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo13" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo12</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo13</span>
       </div>
       <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
@@ -1155,16 +1155,14 @@ hello@world.org</textarea>
           <div class="memo-main">
             <div class="memo-editor panel-card">
               <label for="memo-editor">写一段文字</label>
-              <p class="hint tight" id="memo-edit-hint" hidden>正在编辑已有条目，保存后会覆盖原文。</p>
               <textarea id="memo-editor" class="area" rows="5" placeholder="在此输入文字。在备忘录页任意位置 Ctrl/⌘+V 或右键粘贴，可识别图片/文字并添加"></textarea>
               <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.55rem">
                 <button type="button" class="primary-btn" id="memo-save-text">保存文本</button>
-                <button type="button" class="ghost-btn" id="memo-cancel-edit" hidden>取消编辑</button>
                 <button type="button" class="secondary-btn" id="memo-to-image">文字转图片</button>
                 <button type="button" class="ghost-btn" id="memo-to-ocr">图片转文字</button>
                 <button type="button" class="ghost-btn" id="memo-read-clip">读取剪贴板</button>
               </div>
-              <p class="hint tight">文字转图片 / 图片转文字在备忘录内弹层完成，不离开当前页；独立工具仍可在「图片」分类使用。获焦自动读剪贴板默认关。</p>
+              <p class="hint tight">已存文本点条目「编辑」或预览里「编辑」即可改，页内弹层保存，不跳页。获焦自动读剪贴板默认关。</p>
             </div>
 
             <dialog class="memo-dialog memo-toimg-dlg" id="memo-toimg" aria-label="文字转图片">
@@ -1332,6 +1330,23 @@ hello@world.org</textarea>
               </div>
             </dialog>
 
+            <dialog class="memo-dialog memo-text-edit-dlg" id="memo-text-edit" aria-label="编辑文本">
+              <div class="memo-dialog-body">
+                <div class="label-row">
+                  <h2 class="subhead">编辑文本</h2>
+                  <p class="hint tight" id="memo-text-edit-sub">修改后点保存，覆盖原条目</p>
+                </div>
+                <label class="memo-ti-src-lab" for="memo-text-edit-src">内容
+                  <textarea id="memo-text-edit-src" class="area mono" rows="12" placeholder="编辑备忘录文本…"></textarea>
+                </label>
+                <div class="btn-row tool-actions" style="flex-wrap:wrap">
+                  <button type="button" class="primary-btn" id="memo-text-edit-save">保存修改</button>
+                  <button type="button" class="ghost-btn" id="memo-text-edit-cancel">取消</button>
+                </div>
+                <p class="error" id="memo-text-edit-error" hidden></p>
+              </div>
+            </dialog>
+
             <dialog class="memo-dialog memo-ocr-dlg" id="memo-ocr" aria-label="图片转文字">
               <div class="memo-dialog-body">
                 <div class="label-row">
@@ -1453,6 +1468,7 @@ hello@world.org</textarea>
                 <span class="hint tight mono" id="memo-preview-sub"></span>
               </div>
               <div class="btn-row memo-preview-actions">
+                <button type="button" class="secondary-btn" id="memo-preview-edit" hidden>编辑</button>
                 <button type="button" class="ghost-btn" id="memo-preview-fs" hidden>全屏</button>
                 <button type="button" class="ghost-btn" id="memo-preview-newtab" hidden>新标签打开</button>
                 <button type="button" class="ghost-btn" id="memo-preview-dl" hidden>下载</button>
@@ -2944,13 +2960,13 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./temp.js?v=20260816memo12"></script>
+  <script src="./temp.js?v=20260816memo13"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260816memo12"></script>
-  <script src="./extra.js?v=20260816memo12"></script>
+  <script src="./app.js?v=20260816memo13"></script>
+  <script src="./extra.js?v=20260816memo13"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./textimg.js?v=20260816memo12"></script>
-  <script src="./imgtext.js?v=20260816memo12"></script>
-  <script src="./memo.js?v=20260816memo12"></script>
+  <script src="./textimg.js?v=20260816memo13"></script>
+  <script src="./imgtext.js?v=20260816memo13"></script>
+  <script src="./memo.js?v=20260816memo13"></script>
 </body>
 </html>

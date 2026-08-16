@@ -452,6 +452,7 @@
   const previewFsBtn = $("#memo-preview-fs");
   const previewNewTabBtn = $("#memo-preview-newtab");
   const previewDlBtn = $("#memo-preview-dl");
+  const previewEditBtn = $("#memo-preview-edit");
   let previewObjectUrl = "";
   let previewBlob = null;
   let previewItem = null;
@@ -670,7 +671,8 @@
         <span class="hint tight">点击预览或下载</span>
       </button>`;
     }
-    return `<article class="memo-card" data-memo-id="${item.id}" draggable="true">
+    const editing = state.editingId === item.id ? " is-editing" : "";
+    return `<article class="memo-card${editing}" data-memo-id="${item.id}" draggable="true">
       <div class="memo-card-head">
         <label class="memo-check"><input type="checkbox" data-memo-check="${item.id}" ${checked} /></label>
         <div class="memo-card-meta">
@@ -682,7 +684,7 @@
       <div class="memo-card-tags">${tagHtml}<button type="button" class="ghost-btn memo-tag-add" data-memo-tag-add="${item.id}">+ 标签</button></div>
       <div class="btn-row memo-card-actions">
         <button type="button" class="ghost-btn" data-memo-open="${item.id}">预览</button>
-        ${item.type === "text" ? `<button type="button" class="ghost-btn" data-memo-edit="${item.id}">编辑</button>` : ""}
+        ${item.type === "text" ? `<button type="button" class="secondary-btn" data-memo-edit="${item.id}">编辑</button>` : ""}
         <button type="button" class="ghost-btn" data-memo-del="${item.id}">删除</button>
         <details class="memo-more">
           <summary class="ghost-btn memo-more-sum">更多</summary>
@@ -937,10 +939,6 @@
       toast("内容为空");
       return;
     }
-    if (state.editingId) {
-      await saveEditedText(body);
-      return;
-    }
     await withBusy(async () => {
       const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
       await addItemFromBlob(blob, `文本-${formatTime(Date.now())}.txt`, { type: "text", textPreview: body });
@@ -948,22 +946,40 @@
     });
   }
 
-  function setEditingUi(on) {
-    const hint = $("#memo-edit-hint");
-    const cancel = $("#memo-cancel-edit");
-    const saveBtn = $("#memo-save-text");
-    if (hint) hint.hidden = !on;
-    if (cancel) cancel.hidden = !on;
-    if (saveBtn) saveBtn.textContent = on ? "保存修改" : "保存文本";
+  function isTextEditOpen() {
+    const dlg = $("#memo-text-edit");
+    return Boolean(dlg?.open);
   }
 
-  function clearEditing() {
+  function clearEditing({ keepHighlight = false } = {}) {
+    const id = state.editingId;
     state.editingId = "";
-    setEditingUi(false);
+    const err = $("#memo-text-edit-error");
+    if (err) {
+      err.hidden = true;
+      err.textContent = "";
+    }
+    if (!keepHighlight || !id) return;
+    requestAnimationFrame(() => {
+      const card = itemList?.querySelector?.(`.memo-card[data-memo-id="${id}"]`);
+      if (!card) return;
+      card.classList.add("is-just-saved");
+      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      setTimeout(() => card.classList.remove("is-just-saved"), 1600);
+    });
+  }
+
+  function closeTextEditPanel({ discard = true } = {}) {
+    const dlg = $("#memo-text-edit");
+    if (dlg?.open) dlg.close();
+    if (discard) clearEditing();
   }
 
   async function beginEditText(item) {
-    if (!item || item.type !== "text") return;
+    if (!item || item.type !== "text") {
+      toast("仅文本条目可编辑");
+      return;
+    }
     let text = item.textPreview || "";
     if (!text) {
       try {
@@ -972,22 +988,42 @@
         text = "";
       }
     }
+    closeLightbox();
+    closeToImgPanel();
+    if (isOcrOpen()) $("#memo-ocr")?.close?.();
     state.editingId = item.id;
-    if (editor) {
-      editor.value = text;
-      editor.focus();
-      editor.scrollIntoView({ behavior: "smooth", block: "center" });
-    }
-    setEditingUi(true);
-    toast("已载入到编辑框");
+    const dlg = $("#memo-text-edit");
+    const src = $("#memo-text-edit-src");
+    const sub = $("#memo-text-edit-sub");
+    if (sub) sub.textContent = item.name ? `正在编辑：${item.name}` : "修改后点保存，覆盖原条目";
+    if (src) src.value = text;
+    if (dlg && typeof dlg.showModal === "function" && !dlg.open) dlg.showModal();
+    renderItems();
+    setTimeout(() => {
+      src?.focus?.();
+      try {
+        const len = src?.value?.length || 0;
+        src?.setSelectionRange?.(len, len);
+      } catch (_) {}
+    }, 40);
   }
 
-  async function saveEditedText(body) {
+  async function saveEditedTextFromPanel() {
     const id = state.editingId;
+    const src = $("#memo-text-edit-src");
+    const body = String(src?.value || "").trim();
+    const err = $("#memo-text-edit-error");
+    if (!body) {
+      if (err) {
+        err.hidden = false;
+        err.textContent = "内容不能为空";
+      } else toast("内容不能为空");
+      return;
+    }
     const item = state.index.items.find((x) => x.id === id);
     if (!item) {
-      clearEditing();
-      await addText(body);
+      closeTextEditPanel({ discard: true });
+      toast("原条目已不存在");
       return;
     }
     await withBusy(async () => {
@@ -998,9 +1034,18 @@
       item.mime = "text/plain;charset=utf-8";
       item.fileName = await saveBlob(item.id, blob, item.fileName || `${item.id}_text.txt`);
       await persistIndex();
-      clearEditing();
-      if (editor) editor.value = "";
+      const savedId = id;
+      state.editingId = "";
+      const dlg = $("#memo-text-edit");
+      if (dlg?.open) dlg.close();
       renderAll();
+      requestAnimationFrame(() => {
+        const card = itemList?.querySelector?.(`.memo-card[data-memo-id="${savedId}"]`);
+        if (!card) return;
+        card.classList.add("is-just-saved");
+        card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        setTimeout(() => card.classList.remove("is-just-saved"), 1600);
+      });
       toast("已保存修改");
     });
   }
@@ -1333,7 +1378,7 @@
     previewBlob = null;
   }
 
-  function setPreviewChrome(item, { canFs = false, canNewTab = false, canDl = true } = {}) {
+  function setPreviewChrome(item, { canFs = false, canNewTab = false, canDl = true, canEdit = false } = {}) {
     previewItem = item;
     if (previewTitle) previewTitle.textContent = item?.name || "预览";
     if (previewSub) {
@@ -1347,6 +1392,7 @@
     }
     if (previewNewTabBtn) previewNewTabBtn.hidden = !canNewTab;
     if (previewDlBtn) previewDlBtn.hidden = !canDl;
+    if (previewEditBtn) previewEditBtn.hidden = !canEdit;
   }
 
   function isPdfItem(item, blob) {
@@ -1418,7 +1464,7 @@
     }
 
     if (isTextLikeItem(item, blob)) {
-      setPreviewChrome(item, { canFs: true, canNewTab: true, canDl: true });
+      setPreviewChrome(item, { canFs: true, canNewTab: true, canDl: true, canEdit: item.type === "text" });
       let text = item.textPreview || "";
       if (!text) {
         text = await blob.text();
@@ -1998,13 +2044,33 @@
   $("#memo-save-text")?.addEventListener("click", () => {
     addText(editor?.value || "").catch((err) => setError(memoError, err.message || String(err)));
   });
-  $("#memo-cancel-edit")?.addEventListener("click", () => {
-    clearEditing();
-    if (editor) editor.value = "";
+  $("#memo-text-edit-save")?.addEventListener("click", () => {
+    saveEditedTextFromPanel().catch((err) => {
+      const el = $("#memo-text-edit-error");
+      if (el) {
+        el.hidden = false;
+        el.textContent = err.message || String(err);
+      } else setError(memoError, err.message || String(err));
+    });
+  });
+  $("#memo-text-edit-cancel")?.addEventListener("click", () => {
+    closeTextEditPanel({ discard: true });
     toast("已取消编辑");
+  });
+  $("#memo-text-edit")?.addEventListener("close", () => {
+    if (state.editingId) clearEditing();
+    renderItems();
   });
   $("#memo-read-clip")?.addEventListener("click", () => {
     readClipboard({ force: true }).catch((err) => setError(memoError, err.message || String(err)));
+  });
+  previewEditBtn?.addEventListener("click", () => {
+    const item = previewItem;
+    if (!item || item.type !== "text") {
+      toast("仅文本条目可编辑");
+      return;
+    }
+    beginEditText(item).catch((err) => setError(memoError, err.message || String(err)));
   });
   function isToImgOpen() {
     const dlg = $("#memo-toimg");
@@ -2444,6 +2510,7 @@
     if (document.visibilityState && document.visibilityState !== "visible") return;
     if (isToImgOpen()) return;
     if (isOcrOpen()) return;
+    if (isTextEditOpen()) return;
     readClipboard({ force: false }).catch(() => {});
   }
   window.addEventListener("focus", () => maybeAutoClip());
@@ -2579,10 +2646,11 @@
       }
       const expandId = t.closest?.("[data-memo-expand]")?.dataset?.memoExpand;
       if (expandId) {
-        // 单击展开/收起；双击进完整预览
+        // 单击展开/收起；双击编辑文本
         if (e.detail >= 2) {
           const item = state.index.items.find((x) => x.id === expandId);
-          if (item) await openItemPreview(item);
+          if (item?.type === "text") await beginEditText(item);
+          else if (item) await openItemPreview(item);
           return;
         }
         const item = state.index.items.find((x) => x.id === expandId);
@@ -2692,6 +2760,7 @@
       if (!isMemoActive()) return;
       if (isToImgOpen()) return; // 弹层内输入不拦截
       if (isOcrOpen()) return;
+      if (isTextEditOpen()) return;
       const cd = e.clipboardData;
       if (!cd) return;
       const files = [...(cd.files || [])];
