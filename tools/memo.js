@@ -2007,37 +2007,206 @@
     readClipboard({ force: true }).catch((err) => setError(memoError, err.message || String(err)));
   });
   function isToImgOpen() {
-    return false;
+    const dlg = $("#memo-toimg");
+    return Boolean(dlg?.open);
   }
 
-  function closeToImgPanel() {}
+  function isOcrOpen() {
+    const dlg = $("#memo-ocr");
+    return Boolean(dlg?.open);
+  }
+
+  function closeToImgPanel() {
+    const dlg = $("#memo-toimg");
+    if (dlg?.open) dlg.close();
+  }
 
   function openToImgPanel(text) {
+    const dlg = $("#memo-toimg");
+    const src = $("#memo-ti-src");
     const body = text != null ? String(text) : editor?.value || "";
-    if (window.DevToolsTextImg?.prefillAndGo) {
-      window.DevToolsTextImg.prefillAndGo(body);
-      return;
-    }
-    try {
-      sessionStorage.setItem("devtools-textimg-prefill", body);
-    } catch (_) {}
-    location.hash = "textimg";
+    if (src) src.value = body;
+    const ratio = $("#memo-ti-ratio")?.value || "1:1";
+    if (ratio !== "custom") applyRatioToInputs(ratio);
+    paintTextImageCard();
+    if (dlg?.showModal) dlg.showModal();
+    setTimeout(() => {
+      fitTiPreview();
+      src?.focus?.();
+    }, 40);
   }
 
-  function openOcrWithItem(item) {
-    return loadBlob(item).then((blob) => {
-      if (window.DevToolsImgText?.openWithBlob) {
-        window.DevToolsImgText.openWithBlob(blob, item.name || "memo-image");
-        return;
+  const ocrState = { blob: null, url: "" };
+  function revokeOcrUrl() {
+    if (ocrState.url) {
+      try {
+        URL.revokeObjectURL(ocrState.url);
+      } catch (_) {}
+    }
+    ocrState.url = "";
+  }
+
+  function setOcrImage(blob, name) {
+    if (!blob) return;
+    revokeOcrUrl();
+    ocrState.blob = blob;
+    ocrState.url = URL.createObjectURL(blob);
+    const img = $("#memo-ocr-preview");
+    const meta = $("#memo-ocr-meta");
+    if (img) {
+      img.hidden = false;
+      img.src = ocrState.url;
+    }
+    if (meta) meta.textContent = `${name || "image"} · ${formatBytes(blob.size || 0)} · ${blob.type || "image/*"}`;
+    const err = $("#memo-ocr-error");
+    if (err) {
+      err.hidden = true;
+      err.textContent = "";
+    }
+  }
+
+  function openOcrPanel(blob, name) {
+    const dlg = $("#memo-ocr");
+    const out = $("#memo-ocr-out");
+    if (out) out.value = "";
+    if (blob) setOcrImage(blob, name);
+    else if (!ocrState.blob) {
+      const img = $("#memo-ocr-preview");
+      if (img) {
+        img.hidden = true;
+        img.removeAttribute("src");
       }
-      window.__devtoolsImgtextHandoff = { blob, name: item.name || "memo-image" };
-      location.hash = "imgtext";
+      const meta = $("#memo-ocr-meta");
+      if (meta) meta.textContent = "未选择图片";
+    }
+    dlg?.showModal?.();
+  }
+
+  async function openOcrWithItem(item) {
+    const blob = await loadBlob(item);
+    openOcrPanel(blob, item.name || "memo-image");
+  }
+
+  async function loadTesseract() {
+    if (window.Tesseract) return window.Tesseract;
+    await new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+      s.async = true;
+      s.onload = resolve;
+      s.onerror = () => reject(new Error("无法加载识别引擎（需网络）"));
+      document.head.appendChild(s);
     });
+    if (!window.Tesseract) throw new Error("Tesseract 加载失败");
+    return window.Tesseract;
+  }
+
+  async function runMemoOcr() {
+    const err = $("#memo-ocr-error");
+    if (!ocrState.blob) {
+      if (err) {
+        err.hidden = false;
+        err.textContent = "请先选择图片";
+      }
+      return;
+    }
+    const prog = $("#memo-ocr-progress");
+    const fill = $("#memo-ocr-progress-fill");
+    const pct = $("#memo-ocr-progress-pct");
+    const title = $("#memo-ocr-progress-text");
+    const setP = (v, r, t) => {
+      if (prog) prog.hidden = !v;
+      const p = Math.max(0, Math.min(100, Math.round((r || 0) * 100)));
+      if (fill) fill.style.width = `${p}%`;
+      if (pct) pct.textContent = `${p}%`;
+      if (title) title.textContent = t || `${p}%`;
+    };
+    setP(true, 0.08, "加载识别引擎…");
+    try {
+      const Tesseract = await loadTesseract();
+      const lang = $("#memo-ocr-lang")?.value || "chi_sim+eng";
+      const result = await Tesseract.recognize(ocrState.blob, lang, {
+        logger: (m) => {
+          if (m.status === "recognizing text") setP(true, 0.2 + (m.progress || 0) * 0.75, `识别中… ${Math.round((m.progress || 0) * 100)}%`);
+          else if (m.status) setP(true, 0.12, m.status);
+        },
+      });
+      const text = String(result?.data?.text || "").trim();
+      const out = $("#memo-ocr-out");
+      if (out) out.value = text;
+      setP(false, 0, "");
+      toast(text ? "识别完成" : "未识别到文字");
+    } catch (e) {
+      setP(false, 0, "");
+      if (err) {
+        err.hidden = false;
+        err.textContent = e.message || String(e);
+      }
+    }
   }
 
   $("#memo-to-image")?.addEventListener("click", () => openToImgPanel());
   $("#memo-to-ocr")?.addEventListener("click", () => {
-    location.hash = "imgtext";
+    const selected = [...state.selected]
+      .map((id) => state.index.items.find((x) => x.id === id))
+      .filter((it) => it && (it.type === "image" || it.type === "gif"));
+    if (selected[0]) {
+      openOcrWithItem(selected[0]).catch((e) => setError(memoError, e.message || String(e)));
+      return;
+    }
+    openOcrPanel();
+  });
+  $("#memo-ti-close")?.addEventListener("click", () => closeToImgPanel());
+  $("#memo-toimg")?.addEventListener("click", (e) => {
+    if (e.target?.id === "memo-toimg") closeToImgPanel();
+  });
+  $("#memo-ocr-close")?.addEventListener("click", () => $("#memo-ocr")?.close?.());
+  $("#memo-ocr")?.addEventListener("click", (e) => {
+    if (e.target?.id === "memo-ocr") $("#memo-ocr")?.close?.();
+  });
+  $("#memo-ocr")?.addEventListener("close", () => {
+    /* keep blob for reopen convenience */
+  });
+  $("#memo-ocr-file")?.addEventListener("change", (e) => {
+    const f = e.target.files?.[0];
+    if (f) setOcrImage(f, f.name);
+    e.target.value = "";
+  });
+  $("#memo-ocr-run")?.addEventListener("click", () => runMemoOcr());
+  $("#memo-ocr-copy")?.addEventListener("click", async () => {
+    const text = $("#memo-ocr-out")?.value || "";
+    if (!text.trim()) return toast("没有可复制的文字");
+    await navigator.clipboard.writeText(text);
+    toast("已复制");
+  });
+  $("#memo-ocr-save")?.addEventListener("click", () => {
+    const text = String($("#memo-ocr-out")?.value || "").trim();
+    if (!text) {
+      const err = $("#memo-ocr-error");
+      if (err) {
+        err.hidden = false;
+        err.textContent = "没有可保存的文字";
+      }
+      return;
+    }
+    addText(text)
+      .then(() => {
+        $("#memo-ocr")?.close?.();
+        toast("已保存为文本条目");
+      })
+      .catch((e) => setError(memoError, e.message || String(e)));
+  });
+  const ocrDrop = $("#memo-ocr-drop");
+  ocrDrop?.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    ocrDrop.classList.add("is-drag");
+  });
+  ocrDrop?.addEventListener("dragleave", () => ocrDrop.classList.remove("is-drag"));
+  ocrDrop?.addEventListener("drop", (e) => {
+    e.preventDefault();
+    ocrDrop.classList.remove("is-drag");
+    const f = e.dataTransfer?.files?.[0];
+    if (f && String(f.type || "").startsWith("image/")) setOcrImage(f, f.name);
   });
   [
     "memo-ti-mode",
@@ -2274,6 +2443,7 @@
     if (!isMemoActive()) return;
     if (document.visibilityState && document.visibilityState !== "visible") return;
     if (isToImgOpen()) return;
+    if (isOcrOpen()) return;
     readClipboard({ force: false }).catch(() => {});
   }
   window.addEventListener("focus", () => maybeAutoClip());
@@ -2521,6 +2691,7 @@
     (e) => {
       if (!isMemoActive()) return;
       if (isToImgOpen()) return; // 弹层内输入不拦截
+      if (isOcrOpen()) return;
       const cd = e.clipboardData;
       if (!cd) return;
       const files = [...(cd.files || [])];

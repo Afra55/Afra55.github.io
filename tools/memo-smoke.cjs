@@ -176,26 +176,20 @@ async function main() {
       closed: !toimg?.open,
     };
 
-    // standalone textimg module
+    // inline text-to-image dialog (stay in memo)
     document.getElementById("memo-to-image")?.click();
-    await sleep(200);
-    out.modules = {
-      textimgActive: document.getElementById("textimg")?.classList.contains("is-workspace-active"),
-      hasTextimg: Boolean(document.getElementById("textimg")),
-      hasImgtext: Boolean(document.getElementById("imgtext")),
-      hasTiSrc: Boolean(document.getElementById("ti-src")),
-      hasSentinel: Boolean(document.getElementById("memo-scroll-sentinel")),
-    };
-    const src = document.getElementById("ti-src");
+    await sleep(150);
+    const toimgDlg = document.getElementById("memo-toimg");
+    const src = document.getElementById("memo-ti-src");
     if (src) {
       src.value = "实时预览测试\n第二行";
       src.dispatchEvent(new Event("input", { bubbles: true }));
     }
     await sleep(80);
-    const card = document.getElementById("ti-card");
-    const wEl = document.getElementById("ti-w");
-    const hEl = document.getElementById("ti-h");
-    const ratioEl = document.getElementById("ti-ratio");
+    const card = document.getElementById("memo-ti-card");
+    const wEl = document.getElementById("memo-ti-w");
+    const hEl = document.getElementById("memo-ti-h");
+    const ratioEl = document.getElementById("memo-ti-ratio");
     if (wEl && hEl && ratioEl) {
       ratioEl.value = "16:9";
       ratioEl.dispatchEvent(new Event("change", { bubbles: true }));
@@ -206,19 +200,27 @@ async function main() {
       hEl.dispatchEvent(new Event("input", { bubbles: true }));
       await sleep(60);
     }
+    out.modules = {
+      textimgActive: Boolean(document.getElementById("textimg")),
+      hasTextimg: Boolean(document.getElementById("textimg")),
+      hasImgtext: Boolean(document.getElementById("imgtext")),
+      hasTiSrc: Boolean(document.getElementById("ti-src")),
+      hasSentinel: Boolean(document.getElementById("memo-scroll-sentinel")),
+      memoStillActive: document.getElementById("memo")?.classList.contains("is-workspace-active"),
+      toimgOpen: Boolean(toimgDlg?.open),
+      hasOcrDlg: Boolean(document.getElementById("memo-ocr")),
+    };
     out.toImgLive = {
-      open: out.modules.textimgActive,
+      open: Boolean(toimgDlg?.open),
       hasSrc: Boolean(src),
       hasWH: Boolean(wEl && hEl),
-      hasResize: true,
+      hasResize: Boolean(document.getElementById("memo-ti-resize")),
       previewText: (card?.textContent || "").includes("实时预览测试"),
       customRatio: ratioEl?.value === "custom",
-      dimLabel: document.getElementById("ti-dim")?.textContent || "",
+      dimLabel: document.getElementById("memo-ti-dim")?.textContent || "",
       cardW: card?.style?.width || "",
-      closed: true,
     };
-
-    const modeEl = document.getElementById("ti-mode");
+    const modeEl = document.getElementById("memo-ti-mode");
     if (modeEl) {
       modeEl.value = "markdown";
       modeEl.dispatchEvent(new Event("change", { bubbles: true }));
@@ -229,23 +231,30 @@ async function main() {
     }
     await sleep(80);
     out.toImgAbsorb = {
-      hasCopy: Boolean(document.getElementById("ti-copy")),
+      hasCopy: Boolean(document.getElementById("memo-ti-copy")),
       hasMarkdownMode: [...(modeEl?.options || [])].some((o) => o.value === "markdown"),
-      hasCodeTheme: Boolean(document.getElementById("ti-code-theme")),
-      hasWindowPad: Boolean(document.getElementById("ti-winpad")),
-      mdRendered: Boolean(document.querySelector("#ti-card .memo-ti-md-h, #ti-card .memo-ti-md-quote")),
+      hasCodeTheme: Boolean(document.getElementById("memo-ti-code-theme")),
+      hasWindowPad: Boolean(document.getElementById("memo-ti-winpad")),
+      mdRendered: Boolean(document.querySelector("#memo-ti-card .memo-ti-md-h, #memo-ti-card .memo-ti-md-quote")),
     };
     if (modeEl) {
       modeEl.value = "code";
       modeEl.dispatchEvent(new Event("change", { bubbles: true }));
     }
     await sleep(60);
-    out.toImgAbsorb.hasChrome = Boolean(document.querySelector("#ti-card .memo-ti-chrome"));
-    out.toImgAbsorb.hasLines = Boolean(document.querySelector("#ti-card .memo-ti-ln"));
+    out.toImgAbsorb.hasChrome = Boolean(document.querySelector("#memo-ti-card .memo-ti-chrome"));
+    out.toImgAbsorb.hasLines = Boolean(document.querySelector("#memo-ti-card .memo-ti-ln"));
+    document.getElementById("memo-ti-close")?.click();
+    await sleep(80);
+    out.toImgLive.closed = !toimgDlg?.open;
 
-    // back to memo
-    location.hash = "memo";
-    await sleep(200);
+    // inline OCR dialog
+    document.getElementById("memo-to-ocr")?.click();
+    await sleep(100);
+    out.modules.ocrOpen = Boolean(document.getElementById("memo-ocr")?.open);
+    document.getElementById("memo-ocr-close")?.click();
+    await sleep(60);
+    out.modules.ocrClosed = !document.getElementById("memo-ocr")?.open;
 
     // open image preview
     const openBtn = document.querySelector("[data-memo-open]");
@@ -376,8 +385,14 @@ async function main() {
   if (!result.toImgDialog?.isDialog || !result.toImgDialog?.closed) {
     failed.push("text-to-image should be a closed dialog by default");
   }
-  if (!result.modules?.hasTextimg || !result.modules?.hasImgtext || !result.modules?.textimgActive) {
-    failed.push("standalone textimg/imgtext modules missing or inactive");
+  if (!result.modules?.hasTextimg || !result.modules?.hasImgtext) {
+    failed.push("standalone textimg/imgtext modules missing");
+  }
+  if (!result.modules?.memoStillActive || !result.modules?.toimgOpen) {
+    failed.push("text-to-image should open inline without leaving memo");
+  }
+  if (!result.modules?.hasOcrDlg || !result.modules?.ocrOpen || !result.modules?.ocrClosed) {
+    failed.push("ocr dialog open/close inline failed");
   }
   if (!result.modules?.hasSentinel) failed.push("infinite scroll sentinel missing");
   if (!result.toImgLive?.hasSrc || !result.toImgLive?.hasWH || !result.toImgLive?.hasResize) {

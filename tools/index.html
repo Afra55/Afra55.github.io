@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260816memo11" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo11" />
+  <link rel="stylesheet" href="./style.css?v=20260816memo12" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo12" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo11</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo12</span>
       </div>
       <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
@@ -1164,14 +1164,14 @@ hello@world.org</textarea>
                 <button type="button" class="ghost-btn" id="memo-to-ocr">图片转文字</button>
                 <button type="button" class="ghost-btn" id="memo-read-clip">读取剪贴板</button>
               </div>
-              <p class="hint tight">文字转图片 / 图片转文字已拆成独立工具；备忘录内可一键跳转。获焦自动读取可在条目区开关（默认关）。</p>
+              <p class="hint tight">文字转图片 / 图片转文字在备忘录内弹层完成，不离开当前页；独立工具仍可在「图片」分类使用。获焦自动读剪贴板默认关。</p>
             </div>
 
-            <dialog class="memo-dialog memo-toimg-dlg" id="memo-toimg" aria-label="文字转图片" hidden>
+            <dialog class="memo-dialog memo-toimg-dlg" id="memo-toimg" aria-label="文字转图片">
               <div class="memo-dialog-body memo-toimg">
               <div class="label-row">
                 <h2 class="subhead">文字转图片</h2>
-                <p class="hint tight">改文字与样式即时预览；可在预览区自调宽高与比例</p>
+                <p class="hint tight">在备忘录内完成 · 改字即时预览 · 可调宽高比例</p>
               </div>
               <label class="memo-ti-src-lab" for="memo-ti-src">内容
                 <textarea id="memo-ti-src" class="area" rows="4" placeholder="支持纯文本 / Markdown（标题、列表、引用、粗斜体、行内代码）…"></textarea>
@@ -1325,10 +1325,51 @@ hello@world.org</textarea>
               </div>
 
               <div class="btn-row tool-actions" style="margin-top:0.55rem">
-                <button type="button" class="primary-btn" id="memo-ti-save">生成并保存图片</button>
+                <button type="button" class="primary-btn" id="memo-ti-save">生成并保存到备忘录</button>
                 <button type="button" class="secondary-btn" id="memo-ti-copy">复制图片</button>
                 <button type="button" class="ghost-btn" id="memo-ti-close">关闭</button>
               </div>
+              </div>
+            </dialog>
+
+            <dialog class="memo-dialog memo-ocr-dlg" id="memo-ocr" aria-label="图片转文字">
+              <div class="memo-dialog-body">
+                <div class="label-row">
+                  <h2 class="subhead">图片转文字</h2>
+                  <p class="hint tight">在备忘录内识别 · 首次可能下载语言包</p>
+                </div>
+                <div class="btn-row tool-actions" style="flex-wrap:wrap">
+                  <label class="file-btn" for="memo-ocr-file">选择图片</label>
+                  <input id="memo-ocr-file" type="file" accept="image/*" hidden />
+                  <label for="memo-ocr-lang">语言
+                    <select id="memo-ocr-lang" class="select-input">
+                      <option value="chi_sim+eng" selected>中文+英文</option>
+                      <option value="chi_sim">仅中文</option>
+                      <option value="eng">仅英文</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="memo-drop" id="memo-ocr-drop" style="margin-top:0.55rem">
+                  <p class="hint tight">也可把图片拖到此处</p>
+                  <img id="memo-ocr-preview" class="imgtext-preview" alt="OCR 预览" hidden />
+                  <p class="hint tight mono" id="memo-ocr-meta">未选择图片</p>
+                </div>
+                <div class="memo-progress" id="memo-ocr-progress" hidden style="margin-top:0.55rem">
+                  <div class="gif-progress-head">
+                    <p class="hint gif-progress-title" id="memo-ocr-progress-text">识别中…</p>
+                    <span class="mono gif-progress-pct" id="memo-ocr-progress-pct">0%</span>
+                  </div>
+                  <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="memo-ocr-progress-fill"></span></div>
+                </div>
+                <label for="memo-ocr-out" style="margin-top:0.55rem;display:block">识别结果</label>
+                <textarea id="memo-ocr-out" class="area mono" rows="8" placeholder="识别文字会显示在这里…"></textarea>
+                <div class="btn-row tool-actions" style="margin-top:0.55rem;flex-wrap:wrap">
+                  <button type="button" class="primary-btn" id="memo-ocr-run">开始识别</button>
+                  <button type="button" class="secondary-btn" id="memo-ocr-save">保存为文本条目</button>
+                  <button type="button" class="ghost-btn" id="memo-ocr-copy">复制</button>
+                  <button type="button" class="ghost-btn" id="memo-ocr-close">关闭</button>
+                </div>
+                <p class="error" id="memo-ocr-error" hidden></p>
               </div>
             </dialog>
 
@@ -2903,13 +2944,13 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./temp.js?v=20260816memo11"></script>
+  <script src="./temp.js?v=20260816memo12"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260816memo11"></script>
-  <script src="./extra.js?v=20260816memo11"></script>
+  <script src="./app.js?v=20260816memo12"></script>
+  <script src="./extra.js?v=20260816memo12"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./textimg.js?v=20260816memo11"></script>
-  <script src="./imgtext.js?v=20260816memo11"></script>
-  <script src="./memo.js?v=20260816memo11"></script>
+  <script src="./textimg.js?v=20260816memo12"></script>
+  <script src="./imgtext.js?v=20260816memo12"></script>
+  <script src="./memo.js?v=20260816memo12"></script>
 </body>
 </html>
