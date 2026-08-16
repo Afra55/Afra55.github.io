@@ -560,7 +560,7 @@ async function main() {
     out.cacheBust = {
 
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260816vtrim1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260816vtrim2/.test(s.src)),
     };
 
     return out;
@@ -696,8 +696,8 @@ async function main() {
   if (!result.switchDir?.dlgOpen || !result.switchDir?.migrateVisible || !result.switchDir?.emptyVisible || result.switchDir?.choice !== "cancel") {
     failed.push("switch directory dialog choices failed");
   }
-  if (!/vtrim1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to vtrim1");
+  if (!/vtrim2/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to vtrim2");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");

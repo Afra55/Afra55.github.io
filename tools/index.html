@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260816vtrim1" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260816vtrim1" />
+  <link rel="stylesheet" href="./style.css?v=20260816vtrim2" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816vtrim2" />
   <script>
     /* 尽早应用主题，减少闪烁 */
     (function () {
@@ -38,7 +38,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-vtrim1</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-vtrim2</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="theme-open" title="切换站点主题">主题</button>
@@ -1858,6 +1858,7 @@ hello@world.org</textarea>
           <div class="vtrim-preview-wrap" id="vtrim-preview-wrap">
             <video id="vtrim-video" class="vtrim-video" playsinline muted preload="metadata"></video>
             <div class="vtrim-crop-box" id="vtrim-crop-box" hidden>
+              <span class="vtrim-crop-grid" aria-hidden="true"></span>
               <span class="vtrim-crop-handle" data-vtrim-handle="nw"></span>
               <span class="vtrim-crop-handle" data-vtrim-handle="n"></span>
               <span class="vtrim-crop-handle" data-vtrim-handle="ne"></span>
@@ -1876,15 +1877,23 @@ hello@world.org</textarea>
             <span class="hint tight" id="vtrim-range-label">保留全程</span>
           </div>
 
+          <div class="btn-row tool-actions vtrim-nudge" aria-label="微调时长">
+            <button type="button" class="ghost-btn" id="vtrim-nudge-start-m" disabled title="片头 −0.1s">片头 −0.1</button>
+            <button type="button" class="ghost-btn" id="vtrim-nudge-start-p" disabled title="片头 +0.1s">片头 +0.1</button>
+            <button type="button" class="ghost-btn" id="vtrim-nudge-end-m" disabled title="片尾 −0.1s">片尾 −0.1</button>
+            <button type="button" class="ghost-btn" id="vtrim-nudge-end-p" disabled title="片尾 +0.1s">片尾 +0.1</button>
+          </div>
+
           <div class="vtrim-timeline" id="vtrim-timeline" aria-label="修剪片头片尾">
             <canvas id="vtrim-filmstrip" class="vtrim-filmstrip" width="640" height="56" aria-hidden="true"></canvas>
             <div class="vtrim-sel" id="vtrim-sel">
+              <span class="vtrim-window" id="vtrim-window" aria-hidden="true"></span>
               <span class="vtrim-handle vtrim-handle-start" id="vtrim-handle-start" role="slider" aria-label="片头" tabindex="0"></span>
               <span class="vtrim-handle vtrim-handle-end" id="vtrim-handle-end" role="slider" aria-label="片尾" tabindex="0"></span>
               <span class="vtrim-playhead" id="vtrim-playhead" aria-hidden="true"></span>
             </div>
           </div>
-          <p class="hint tight">黄柄拖片头 / 片尾 · 点胶片条跳转预览 · 播放只在保留区间内循环</p>
+          <p class="hint tight">黄框两端拖片头/片尾 · 拖中间整体平移 · 点胶片跳转 · 播放只在保留区间循环</p>
 
           <div class="field-row vtrim-crop-tools" style="flex-wrap:wrap;margin-top:0.75rem;align-items:center">
             <span class="seg" role="group" aria-label="裁剪比例">
@@ -3009,16 +3018,16 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./theme.js?v=20260816vtrim1"></script>
-  <script src="./temp.js?v=20260816vtrim1"></script>
+  <script src="./theme.js?v=20260816vtrim2"></script>
+  <script src="./temp.js?v=20260816vtrim2"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260816vtrim1"></script>
-  <script src="./about.js?v=20260816vtrim1"></script>
-  <script src="./extra.js?v=20260816vtrim1"></script>
-  <script src="./vtrim.js?v=20260816vtrim1"></script>
+  <script src="./app.js?v=20260816vtrim2"></script>
+  <script src="./about.js?v=20260816vtrim2"></script>
+  <script src="./extra.js?v=20260816vtrim2"></script>
+  <script src="./vtrim.js?v=20260816vtrim2"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./textimg.js?v=20260816vtrim1"></script>
-  <script src="./imgtext.js?v=20260816vtrim1"></script>
-  <script src="./memo.js?v=20260816vtrim1"></script>
+  <script src="./textimg.js?v=20260816vtrim2"></script>
+  <script src="./imgtext.js?v=20260816vtrim2"></script>
+  <script src="./memo.js?v=20260816vtrim2"></script>
 </body>
 </html>

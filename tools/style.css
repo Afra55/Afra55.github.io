@@ -6226,15 +6226,26 @@ html[data-theme-scheme="light"] .bg-grid {
   z-index: 2;
 }
 
+.vtrim-crop-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(to right, transparent calc(33.333% - 0.5px), rgba(255, 255, 255, 0.35) calc(33.333% - 0.5px), rgba(255, 255, 255, 0.35) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px)),
+    linear-gradient(to right, transparent calc(66.666% - 0.5px), rgba(255, 255, 255, 0.35) calc(66.666% - 0.5px), rgba(255, 255, 255, 0.35) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px)),
+    linear-gradient(to bottom, transparent calc(33.333% - 0.5px), rgba(255, 255, 255, 0.35) calc(33.333% - 0.5px), rgba(255, 255, 255, 0.35) calc(33.333% + 0.5px), transparent calc(33.333% + 0.5px)),
+    linear-gradient(to bottom, transparent calc(66.666% - 0.5px), rgba(255, 255, 255, 0.35) calc(66.666% - 0.5px), rgba(255, 255, 255, 0.35) calc(66.666% + 0.5px), transparent calc(66.666% + 0.5px));
+}
+
 .vtrim-preview-wrap.is-dragging .vtrim-crop-box {
   cursor: grabbing;
 }
 
 .vtrim-crop-handle {
   position: absolute;
-  width: 16px;
-  height: 16px;
-  margin: -8px 0 0 -8px;
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
   border: 2px solid #fff;
   border-radius: 4px;
   background: rgba(46, 196, 182, 0.95);
@@ -6262,10 +6273,15 @@ html[data-theme-scheme="light"] .bg-grid {
   font-size: 0.92rem;
 }
 
+.vtrim-nudge {
+  margin: 0;
+  gap: 0.4rem;
+}
+
 .vtrim-timeline {
   position: relative;
   width: 100%;
-  height: 56px;
+  height: 64px;
   border-radius: 10px;
   overflow: hidden;
   border: 1px solid var(--line);
@@ -6278,7 +6294,7 @@ html[data-theme-scheme="light"] .bg-grid {
 .vtrim-filmstrip {
   display: block;
   width: 100%;
-  height: 56px;
+  height: 64px;
   pointer-events: none;
 }
 
@@ -6295,7 +6311,8 @@ html[data-theme-scheme="light"] .bg-grid {
   bottom: 0;
   left: 0;
   width: var(--vtrim-start, 0%);
-  background: rgba(8, 14, 26, 0.58);
+  background: rgba(8, 14, 26, 0.62);
+  z-index: 1;
 }
 
 .vtrim-sel::after {
@@ -6305,20 +6322,50 @@ html[data-theme-scheme="light"] .bg-grid {
   bottom: 0;
   left: var(--vtrim-end, 100%);
   right: 0;
-  background: rgba(8, 14, 26, 0.58);
+  background: rgba(8, 14, 26, 0.62);
+  z-index: 1;
+}
+
+.vtrim-window {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--vtrim-start, 0%);
+  width: calc(var(--vtrim-end, 100%) - var(--vtrim-start, 0%));
+  box-sizing: border-box;
+  border: 2px solid #f5c542;
+  border-left: none;
+  border-right: none;
+  box-shadow: inset 0 0 0 1px rgba(245, 197, 66, 0.35);
+  pointer-events: auto;
+  cursor: grab;
+  z-index: 2;
+  touch-action: none;
+}
+
+.vtrim-timeline.is-dragging-window .vtrim-window {
+  cursor: grabbing;
 }
 
 .vtrim-handle {
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 18px;
-  margin-left: -9px;
-  background: linear-gradient(90deg, transparent 6px, #f5c542 6px, #f5c542 12px, transparent 12px);
+  width: 28px;
+  margin-left: -14px;
+  background: #f5c542;
   pointer-events: auto;
   cursor: ew-resize;
-  z-index: 3;
+  z-index: 4;
   touch-action: none;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.25);
+}
+
+.vtrim-handle::before {
+  content: "";
+  position: absolute;
+  inset: -8px -4px;
 }
 
 .vtrim-handle::after {
@@ -6326,20 +6373,28 @@ html[data-theme-scheme="light"] .bg-grid {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: 4px;
+  width: 3px;
   height: 22px;
-  margin: -11px 0 0 -2px;
+  margin: -11px 0 0 -1.5px;
   border-radius: 2px;
-  background: #1a1408;
-  box-shadow: 0 0 0 1px rgba(245, 197, 66, 0.85);
+  background: rgba(26, 20, 8, 0.75);
+  box-shadow: 5px 0 0 rgba(26, 20, 8, 0.75), -5px 0 0 rgba(26, 20, 8, 0.75);
 }
 
 .vtrim-handle-start {
   left: var(--vtrim-start, 0%);
+  border-radius: 6px 2px 2px 6px;
 }
 
 .vtrim-handle-end {
   left: var(--vtrim-end, 100%);
+  border-radius: 2px 6px 6px 2px;
+}
+
+.vtrim-handle.is-active {
+  filter: brightness(1.08);
+  outline: 2px solid rgba(255, 255, 255, 0.55);
+  outline-offset: 1px;
 }
 
 .vtrim-playhead {
@@ -6349,10 +6404,10 @@ html[data-theme-scheme="light"] .bg-grid {
   left: var(--vtrim-play, 0%);
   width: 2px;
   margin-left: -1px;
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255, 255, 255, 0.95);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
   pointer-events: none;
-  z-index: 2;
+  z-index: 3;
 }
 
 .vtrim-crop-tools .seg {
@@ -6365,8 +6420,16 @@ html[data-theme-scheme="light"] .bg-grid {
     min-height: 200px;
   }
 
+  .vtrim-timeline {
+    height: 72px;
+  }
+
+  .vtrim-filmstrip {
+    height: 72px;
+  }
+
   .vtrim-handle {
-    width: 24px;
-    margin-left: -12px;
+    width: 32px;
+    margin-left: -16px;
   }
 }

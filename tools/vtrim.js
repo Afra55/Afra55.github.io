@@ -89,6 +89,11 @@
   const handleStart = $("#vtrim-handle-start");
   const handleEnd = $("#vtrim-handle-end");
   const playhead = $("#vtrim-playhead");
+  const windowEl = $("#vtrim-window");
+  const nudgeStartM = $("#vtrim-nudge-start-m");
+  const nudgeStartP = $("#vtrim-nudge-start-p");
+  const nudgeEndM = $("#vtrim-nudge-end-m");
+  const nudgeEndP = $("#vtrim-nudge-end-p");
   const cropEnable = $("#vtrim-crop-enable");
   const rotL = $("#vtrim-rot-l");
   const rotR = $("#vtrim-rot-r");
@@ -123,6 +128,8 @@
   let resultUrl = "";
   let drag = null;
   let filmReady = false;
+  let filmGen = 0;
+  let activeHandle = "start";
 
   const DEFAULT_META =
     "支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。关闭页面会释放本次视频。";
@@ -238,6 +245,15 @@
     if (rotR) rotR.disabled = !has || busy;
     if (flipHBtn) flipHBtn.disabled = !has || busy;
     if (abortBtn) abortBtn.hidden = !busy;
+    [nudgeStartM, nudgeStartP, nudgeEndM, nudgeEndP].forEach((btn) => {
+      if (btn) btn.disabled = !has || busy;
+    });
+    syncActiveHandleUi();
+  }
+
+  function syncActiveHandleUi() {
+    handleStart?.classList.toggle("is-active", activeHandle === "start");
+    handleEnd?.classList.toggle("is-active", activeHandle === "end");
   }
 
   function syncMuteUi() {
@@ -385,26 +401,36 @@
 
   function fitCropToAspect() {
     if (!video.videoWidth) return;
-    const { srcW, srcH } = displaySize();
-    // Fit aspect in source space (export crop is before rotate in ffmpeg pipeline we'll do rotate then crop on rotated dims)
-    // Keep crop in source pixel space: fit aspect to source
-    if (P?.calcCropRect) {
-      const rect = P.calcCropRect(srcW, srcH, { aspect, center: true });
-      crop = { x: rect.x, y: rect.y, w: rect.width, h: rect.height };
-    } else {
-      const ratio = parseAspect(aspect);
-      if (!ratio) {
-        crop = { x: 0, y: 0, w: srcW, h: srcH };
-      } else if (srcW / srcH > ratio) {
-        const h = srcH;
-        const w = h * ratio;
-        crop = { x: (srcW - w) / 2, y: 0, w, h };
+    const { w: dw, h: dh, srcW, srcH } = displaySize();
+    // Fit aspect in *display* space, then map back to source crop.
+    let x = 0;
+    let y = 0;
+    let w = dw;
+    let h = dh;
+    const ratio = parseAspect(aspect);
+    if (ratio) {
+      if (dw / dh > ratio) {
+        h = dh;
+        w = h * ratio;
+        x = (dw - w) / 2;
+        y = 0;
       } else {
-        const w = srcW;
-        const h = w / ratio;
-        crop = { x: 0, y: (srcH - h) / 2, w, h };
+        w = dw;
+        h = w / ratio;
+        x = 0;
+        y = (dh - h) / 2;
       }
+    } else if (P?.calcCropRect) {
+      const rect = P.calcCropRect(srcW, srcH, { aspect: "free", center: true });
+      crop = { x: rect.x, y: rect.y, w: rect.width, h: rect.height };
+      layoutCropBox();
+      return;
+    } else {
+      crop = { x: 0, y: 0, w: srcW, h: srcH };
+      layoutCropBox();
+      return;
     }
+    displayRectToCrop(x, y, w, h);
     layoutCropBox();
   }
 
@@ -446,10 +472,11 @@
 
   async function buildFilmstrip() {
     if (!filmstrip || !video.videoWidth || !duration) return;
+    const gen = ++filmGen;
     filmReady = false;
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const cssW = timeline?.clientWidth || 640;
-    const cssH = 56;
+    const cssH = Math.max(56, timeline?.clientHeight || 64);
     filmstrip.width = Math.round(cssW * dpr);
     filmstrip.height = Math.round(cssH * dpr);
     filmstrip.style.width = "100%";
@@ -467,10 +494,12 @@
       video.pause();
     } catch (_) {}
     for (let i = 0; i < n; i++) {
+      if (gen !== filmGen) return;
       const t = (duration * i) / Math.max(1, n - 1);
       try {
         video.currentTime = Math.min(duration - 0.05, Math.max(0, t));
         await waitSeek(video);
+        if (gen !== filmGen) return;
         const vw = video.videoWidth;
         const vh = video.videoHeight;
         const scale = Math.max(tw / vw, cssH / vh);
@@ -483,16 +512,19 @@
       }
     }
     try {
-      video.currentTime = wasTime;
+      video.currentTime = clamp(wasTime, startSec, Math.max(startSec, endSec - 0.04));
       await waitSeek(video);
       if (!wasPaused) video.play().catch(() => {});
     } catch (_) {}
+    if (gen !== filmGen) return;
     filmReady = true;
     paintTimeline();
   }
 
-  function seekTo(t) {
-    const next = clamp(t, startSec, Math.max(startSec, endSec - 0.04));
+  function seekTo(t, { force = false } = {}) {
+    const next = force
+      ? clamp(t, 0, Math.max(0, duration - 0.04))
+      : clamp(t, startSec, Math.max(startSec, endSec - 0.04));
     try {
       video.currentTime = next;
     } catch (_) {}
@@ -500,16 +532,41 @@
     updateLabels();
   }
 
-  function setStart(t) {
+  function setStart(t, { preview = true } = {}) {
     startSec = clamp(t, 0, endSec - MIN_SPAN);
-    if (video.currentTime < startSec) seekTo(startSec);
+    activeHandle = "start";
+    syncActiveHandleUi();
+    if (preview) seekTo(startSec, { force: true });
+    else if (video.currentTime < startSec) seekTo(startSec);
     paintTimeline();
     updateLabels();
   }
 
-  function setEnd(t) {
+  function setEnd(t, { preview = true } = {}) {
     endSec = clamp(t, startSec + MIN_SPAN, duration);
-    if (video.currentTime > endSec) seekTo(endSec - 0.04);
+    activeHandle = "end";
+    syncActiveHandleUi();
+    if (preview) seekTo(Math.max(startSec, endSec - 0.04), { force: true });
+    else if (video.currentTime > endSec) seekTo(endSec - 0.04);
+    paintTimeline();
+    updateLabels();
+  }
+
+  function shiftWindow(deltaSec) {
+    const span = endSec - startSec;
+    let nextStart = startSec + deltaSec;
+    let nextEnd = endSec + deltaSec;
+    if (nextStart < 0) {
+      nextStart = 0;
+      nextEnd = span;
+    }
+    if (nextEnd > duration) {
+      nextEnd = duration;
+      nextStart = Math.max(0, duration - span);
+    }
+    startSec = nextStart;
+    endSec = nextEnd;
+    seekTo(clamp(video.currentTime || startSec, startSec, Math.max(startSec, endSec - 0.04)));
     paintTimeline();
     updateLabels();
   }
@@ -841,44 +898,62 @@
   });
 
   // timeline drag
+  function hitKind(ratio, target) {
+    if (target === handleStart || target?.classList?.contains("vtrim-handle-start")) return "start";
+    if (target === handleEnd || target?.classList?.contains("vtrim-handle-end")) return "end";
+    if (target === windowEl || target?.classList?.contains("vtrim-window")) return "window";
+    const startR = startSec / duration;
+    const endR = endSec / duration;
+    const pxPad = 0.045; // ~ handle hit slop
+    if (Math.abs(ratio - startR) <= pxPad) return "start";
+    if (Math.abs(ratio - endR) <= pxPad) return "end";
+    if (ratio < startR) return "start";
+    if (ratio > endR) return "end";
+    return "seek";
+  }
+
   function onTimelinePointerDown(e) {
     if (!duration || busy) return;
-    const target = e.target;
+    try {
+      video.pause();
+    } catch (_) {}
     const ratio = ratioFromClientX(e.clientX);
     const t = ratio * duration;
-    if (target === handleStart || target?.classList?.contains("vtrim-handle-start")) {
+    const kind = hitKind(ratio, e.target);
+    if (kind === "start") {
       drag = { kind: "start", pointerId: e.pointerId };
       handleStart?.setPointerCapture?.(e.pointerId);
       setStart(t);
-    } else if (target === handleEnd || target?.classList?.contains("vtrim-handle-end")) {
+    } else if (kind === "end") {
       drag = { kind: "end", pointerId: e.pointerId };
       handleEnd?.setPointerCapture?.(e.pointerId);
       setEnd(t);
+    } else if (kind === "window") {
+      drag = {
+        kind: "window",
+        pointerId: e.pointerId,
+        originX: e.clientX,
+        originStart: startSec,
+        originEnd: endSec,
+      };
+      timeline?.classList.add("is-dragging-window");
+      windowEl?.setPointerCapture?.(e.pointerId);
     } else {
-      // prefer nearer handle if close, else seek
-      const distStart = Math.abs(ratio - startSec / duration);
-      const distEnd = Math.abs(ratio - endSec / duration);
-      if (distStart < 0.03) {
-        drag = { kind: "start", pointerId: e.pointerId };
-        setStart(t);
-      } else if (distEnd < 0.03) {
-        drag = { kind: "end", pointerId: e.pointerId };
-        setEnd(t);
-      } else if (t < startSec) {
-        drag = { kind: "start", pointerId: e.pointerId };
-        setStart(t);
-      } else if (t > endSec) {
-        drag = { kind: "end", pointerId: e.pointerId };
-        setEnd(t);
-      } else {
-        seekTo(t);
-        drag = { kind: "seek", pointerId: e.pointerId };
-      }
+      seekTo(t);
+      drag = { kind: "seek", pointerId: e.pointerId };
     }
     e.preventDefault();
   }
   function onTimelinePointerMove(e) {
     if (!drag || drag.pointerId !== e.pointerId) return;
+    if (drag.kind === "window") {
+      const rect = timeline.getBoundingClientRect();
+      const deltaSec = ((e.clientX - drag.originX) / Math.max(1, rect.width)) * duration;
+      startSec = drag.originStart;
+      endSec = drag.originEnd;
+      shiftWindow(deltaSec);
+      return;
+    }
     const t = ratioFromClientX(e.clientX) * duration;
     if (drag.kind === "start") setStart(t);
     else if (drag.kind === "end") setEnd(t);
@@ -886,12 +961,42 @@
   }
   function onTimelinePointerUp(e) {
     if (!drag || drag.pointerId !== e.pointerId) return;
+    timeline?.classList.remove("is-dragging-window");
     drag = null;
   }
   timeline?.addEventListener("pointerdown", onTimelinePointerDown);
   timeline?.addEventListener("pointermove", onTimelinePointerMove);
   timeline?.addEventListener("pointerup", onTimelinePointerUp);
   timeline?.addEventListener("pointercancel", onTimelinePointerUp);
+
+  function onHandleKey(which, e) {
+    if (!duration || busy) return;
+    const step = e.shiftKey ? 1 : 0.1;
+    if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
+      e.preventDefault();
+      if (which === "start") setStart(startSec - step);
+      else setEnd(endSec - step);
+    } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (which === "start") setStart(startSec + step);
+      else setEnd(endSec + step);
+    }
+  }
+  handleStart?.addEventListener("keydown", (e) => onHandleKey("start", e));
+  handleEnd?.addEventListener("keydown", (e) => onHandleKey("end", e));
+  handleStart?.addEventListener("focus", () => {
+    activeHandle = "start";
+    syncActiveHandleUi();
+  });
+  handleEnd?.addEventListener("focus", () => {
+    activeHandle = "end";
+    syncActiveHandleUi();
+  });
+
+  nudgeStartM?.addEventListener("click", () => setStart(startSec - 0.1));
+  nudgeStartP?.addEventListener("click", () => setStart(startSec + 0.1));
+  nudgeEndM?.addEventListener("click", () => setEnd(endSec - 0.1));
+  nudgeEndP?.addEventListener("click", () => setEnd(endSec + 0.1));
 
   // crop box drag
   let cropDrag = null;
@@ -986,13 +1091,31 @@
   window.addEventListener("pointermove", onCropPointerMove);
   window.addEventListener("pointerup", onCropPointerUp);
   window.addEventListener("pointercancel", onCropPointerUp);
-  window.addEventListener("resize", () => layoutCropBox());
+  let resizeFilmTimer = 0;
+  window.addEventListener("resize", () => {
+    layoutCropBox();
+    if (sourceFile && duration) {
+      clearTimeout(resizeFilmTimer);
+      resizeFilmTimer = setTimeout(() => buildFilmstrip().catch(() => {}), 180);
+    }
+  });
 
   window.DevToolsTemp?.registerCleanup?.(clearAll);
 
   window.DevToolsVtrim = {
     getRange: () => ({ start: startSec, end: endSec, duration }),
     getCrop: () => ({ ...crop, rotate, flipH, aspect }),
+    setRange: (start, end) => {
+      if (!duration) return false;
+      const s = clamp(Number(start) || 0, 0, duration - MIN_SPAN);
+      const e = clamp(Number(end) || duration, s + MIN_SPAN, duration);
+      startSec = s;
+      endSec = e;
+      seekTo(s);
+      paintTimeline();
+      updateLabels();
+      return true;
+    },
     clear: clearAll,
   };
 
