@@ -6,6 +6,8 @@
   --line: rgba(232, 238, 248, 0.12);
   --accent: #2ec4b6;
   --accent-2: #f4a261;
+  --link: #6ef0e2;
+  --link-hover: #a8fff6;
   --danger: #ff6b7a;
   --panel: rgba(18, 26, 43, 0.78);
   --panel-strong: rgba(14, 22, 38, 0.92);
@@ -6785,9 +6787,39 @@ html[data-theme-scheme="light"] .bg-grid {
   min-height: 2.15rem;
 }
 
+html[data-theme-scheme="light"] {
+  --link: #0d7377;
+  --link-hover: #095c5f;
+}
+
 .setup-body {
   display: grid;
   gap: 0.85rem;
+}
+
+/* 安装帮助：可点链接不要继承灰色 hint，提高对比与下划线可见度 */
+#setup a:not([class*="btn"]) {
+  color: var(--link, #6ef0e2);
+  font-weight: 650;
+  text-decoration: underline;
+  text-decoration-thickness: 0.12em;
+  text-underline-offset: 0.2em;
+  text-decoration-color: color-mix(in srgb, var(--link, #6ef0e2) 85%, transparent);
+}
+
+#setup a:not([class*="btn"]):hover,
+#setup a:not([class*="btn"]):focus-visible {
+  color: var(--link-hover, #a8fff6);
+  text-decoration-thickness: 0.14em;
+  text-decoration-color: currentColor;
+}
+
+#setup .panel-head p a,
+#setup .hint a,
+#setup .setup-faq a,
+#setup .setup-steps a,
+#setup .setup-need-row a {
+  color: var(--link, #6ef0e2);
 }
 
 .setup-callout,
