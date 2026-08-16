@@ -1141,23 +1141,38 @@ hello@world.org</textarea>
       </div>
       <div class="panel-body memo-body">
         <div class="memo-toolbar">
-          <div class="btn-row tool-actions" style="flex-wrap:wrap">
-            <button type="button" class="primary-btn" id="memo-pick-dir">选择存储目录</button>
-            <button type="button" class="ghost-btn" id="memo-reconnect" hidden>重新连接目录</button>
-            <label class="file-btn" for="memo-file">添加文件</label>
-            <input id="memo-file" type="file" multiple hidden />
-            <button type="button" class="secondary-btn" id="memo-export">导出</button>
-            <label class="file-btn" for="memo-import">导入</label>
-            <input id="memo-import" type="file" accept=".zip,.memo,.bin,application/zip" hidden />
-            <button type="button" class="ghost-btn" id="memo-batch-del" disabled>批量删除</button>
+          <div class="memo-capture-bar panel-card">
+            <p class="memo-capture-title">存进来</p>
+            <p class="hint tight">复制别处内容后，点下方按钮或直接 Ctrl/⌘+V / 拖入文件。</p>
+            <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
+              <button type="button" class="primary-btn" id="memo-read-clip">读取剪贴板</button>
+              <label class="file-btn" for="memo-file">添加文件</label>
+              <input id="memo-file" type="file" multiple hidden />
+              <button type="button" class="ghost-btn" id="memo-batch-del" disabled>批量删除</button>
+            </div>
+            <label class="flag memo-autoclip-flag" style="margin-top:0.45rem" title="需浏览器剪贴板权限；相同内容不会重复添加">
+              <input type="checkbox" id="memo-autoclip" /> 回到本页时自动读剪贴板
+            </label>
           </div>
-          <p class="hint tight" id="memo-store-meta">正在检测存储能力…</p>
+
+          <details class="memo-storage-fold">
+            <summary>存储与备份（选目录 / 导出导入）</summary>
+            <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
+              <button type="button" class="secondary-btn" id="memo-pick-dir">选择存储目录</button>
+              <button type="button" class="ghost-btn" id="memo-reconnect" hidden>重新连接目录</button>
+              <button type="button" class="secondary-btn" id="memo-export">导出</button>
+              <label class="file-btn" for="memo-import">导入</label>
+              <input id="memo-import" type="file" accept=".zip,.memo,.bin,application/zip" hidden />
+            </div>
+            <p class="hint tight" id="memo-store-meta">正在检测存储能力…</p>
+            <p class="hint tight memo-backup-tip">清理浏览器缓存前请先导出备份（手机优先系统分享）。清站点缓存不会删备忘录数据。</p>
+          </details>
+
           <div class="memo-reconnect-banner" id="memo-reconnect-banner" hidden>
             <strong>目录连接已失效</strong>
-            <p class="hint tight">磁盘文件通常还在。请点「重新连接目录」并选回同一路径以恢复预览与写入。清站点缓存不会删除这些文件；清理前仍建议先导出备份。</p>
+            <p class="hint tight">磁盘文件通常还在。请点「重新连接目录」并选回同一路径以恢复预览与写入。</p>
             <button type="button" class="primary-btn" id="memo-reconnect-banner-btn">重新连接目录</button>
           </div>
-          <p class="hint tight memo-backup-tip">提示：清理浏览器缓存前，请先「导出」备份（手机端会优先调起系统分享）。粘贴用 Ctrl/⌘+V 或右键；文件也可拖入。</p>
         </div>
 
         <div class="memo-layout">
@@ -1166,19 +1181,19 @@ hello@world.org</textarea>
               <h2 class="subhead">标签</h2>
               <button type="button" class="ghost-btn" id="memo-tag-new">新建</button>
             </div>
+            <p class="hint tight memo-tag-tip">点标签名即可筛选，不用记搜索语法。</p>
             <div class="memo-tag-list" id="memo-tag-list"></div>
           </aside>
 
           <div class="memo-main">
-            <div class="memo-editor panel-card">
-              <label for="memo-editor">写一段文字</label>
-              <textarea id="memo-editor" class="area" rows="5" placeholder="在此输入文字。在备忘录页任意位置 Ctrl/⌘+V 或右键粘贴，可识别图片/文字并添加"></textarea>
+            <details class="memo-editor panel-card" id="memo-editor-fold">
+              <summary class="memo-editor-sum">手写一条文字（可选）</summary>
+              <label class="visually-hidden" for="memo-editor">写一段文字</label>
+              <textarea id="memo-editor" class="area" rows="4" placeholder="在此输入后点保存。日常更推荐直接粘贴或读取剪贴板。"></textarea>
               <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.55rem">
-                <button type="button" class="primary-btn" id="memo-read-clip">读取剪贴板</button>
                 <button type="button" class="secondary-btn" id="memo-save-text">保存文本</button>
               </div>
-              <p class="hint tight">专注存取：粘贴或点「读取剪贴板」入库；已存文本可编辑。文转图 / OCR 请用独立工具。获焦自动读默认关。</p>
-            </div>
+            </details>
 
             <dialog class="memo-dialog memo-text-edit-dlg" id="memo-text-edit" aria-label="编辑文本">
               <div class="memo-dialog-body">
@@ -1212,12 +1227,11 @@ hello@world.org</textarea>
             <div class="memo-list-tools">
               <label class="memo-search-lab" for="memo-search">
                 <span class="visually-hidden">搜索备忘录</span>
-                <input id="memo-search" class="mono memo-search" type="search" placeholder="搜索文件名 / 正文…" autocomplete="off" enterkeyhint="search" />
+                <input id="memo-search" class="mono memo-search" type="search" placeholder="输入关键词（文件名、正文、标签名都行）" autocomplete="off" enterkeyhint="search" />
               </label>
-              <label class="flag memo-autoclip-flag" title="需浏览器剪贴板权限；相同内容不会重复添加">
-                <input type="checkbox" id="memo-autoclip" /> 获焦自动读剪贴板
-              </label>
+              <button type="button" class="ghost-btn" id="memo-clear-filters" hidden>清除筛选</button>
             </div>
+            <p class="hint tight" id="memo-filter-hint">下方点类型筛选；左侧点标签。直接搜「工作」也能找到带该标签的条目。</p>
             <div class="memo-type-filter" id="memo-type-filter" aria-label="按类型筛选"></div>
             <p class="hint tight mono" id="memo-list-meta" hidden></p>
             <div class="memo-drop" id="memo-drop">

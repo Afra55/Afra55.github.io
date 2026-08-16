@@ -4510,7 +4510,39 @@ button.adb-device-body.linkish {
 
 .memo-toolbar {
   display: grid;
-  gap: 0.45rem;
+  gap: 0.55rem;
+}
+
+.memo-capture-bar {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+
+.memo-capture-title {
+  margin: 0;
+  font-weight: 650;
+  font-size: 1.02rem;
+}
+
+.memo-storage-fold {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.55rem 0.75rem 0.7rem;
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+}
+
+.memo-storage-fold > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.memo-tag-tip {
+  margin: 0 0 0.35rem;
 }
 
 .memo-backup-tip {
@@ -5113,6 +5145,25 @@ button.adb-device-body.linkish {
   border: 1px solid var(--line);
   border-radius: 14px;
   background: rgba(14, 22, 38, 0.55);
+}
+
+.memo-editor > summary.memo-editor-sum {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink);
+  list-style: none;
+}
+
+.memo-editor > summary.memo-editor-sum::-webkit-details-marker {
+  display: none;
+}
+
+.memo-editor[open] > summary.memo-editor-sum {
+  margin-bottom: 0.35rem;
+}
+
+#memo-filter-hint {
+  margin: 0 0 0.35rem;
 }
 
 .memo-toimg-dlg {

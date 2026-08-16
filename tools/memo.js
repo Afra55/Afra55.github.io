@@ -285,6 +285,7 @@
     objectUrls: new Set(),
     editingId: "",
     tagTargetId: "",
+    flashItemId: "",
   };
 
   function trackUrl(url) {
@@ -525,14 +526,25 @@
     item.tagIds = custom.length ? custom : [DEFAULT_TAG_ID];
   }
 
+  const TYPE_LABELS = {
+    text: "文本",
+    image: "图片",
+    gif: "动图",
+    video: "视频",
+    audio: "音频",
+    file: "文件",
+  };
+
   function itemMatchesSearch(item, q) {
     if (!q) return true;
+    // 小白友好：直接搜关键词即可（含标签名），无需 tag:/type: 语法
     const hay = [
       item.name,
       item.fileName,
       item.mime,
       item.note,
       item.textPreview,
+      TYPE_LABELS[item.type] || item.type,
       item.type,
       ...(item.tagIds || []).map((id) => tagById(id)?.name || id),
     ]
@@ -540,6 +552,85 @@
       .join("\n")
       .toLowerCase();
     return hay.includes(q);
+  }
+
+  function hasActiveFilters() {
+    return Boolean(
+      String(state.searchQuery || "").trim() ||
+        state.activeType !== "all" ||
+        (state.activeTagId && state.activeTagId !== "all")
+    );
+  }
+
+  function syncFilterChrome() {
+    const clearBtn = $("#memo-clear-filters");
+    if (clearBtn) clearBtn.hidden = !hasActiveFilters();
+    const hint = $("#memo-filter-hint");
+    if (!hint) return;
+    const parts = [];
+    if (state.activeTagId === "all") parts.push("标签：全部");
+    else if (state.activeTagId === DEFAULT_TAG_ID || state.activeTagId === "default") parts.push("标签：未分类");
+    else parts.push(`标签：${tagById(state.activeTagId)?.name || "已选"}`);
+    parts.push(`类型：${state.activeType === "all" ? "全部" : TYPE_LABELS[state.activeType] || state.activeType}`);
+    const q = String(state.searchQuery || "").trim();
+    if (q) parts.push(`关键词：「${q}」`);
+    hint.textContent = `${parts.join(" · ")}。点左侧标签、下方类型即可筛选；直接搜标签名也行。`;
+  }
+
+  function clearAllFilters() {
+    state.searchQuery = "";
+    state.activeType = "all";
+    state.activeTagId = "all";
+    const search = $("#memo-search");
+    if (search) search.value = "";
+    resetListPaging();
+    renderAll();
+    toast("已清除筛选");
+  }
+
+  function textContentSig(text) {
+    return `text:${String(text || "").trim()}`;
+  }
+
+  function blobContentSig(blob, type) {
+    const t = type || detectKind(blob?.type, blob?.name);
+    return `bin:${t}:${blob?.size || 0}:${blob?.type || ""}`;
+  }
+
+  function itemContentSig(item) {
+    if (!item) return "";
+    if (item.type === "text") return textContentSig(item.textPreview || "");
+    return `bin:${item.type}:${item.size || 0}:${item.mime || ""}`;
+  }
+
+  function findDuplicateBySig(sig) {
+    if (!sig || sig === "text:" || /^bin:\w+:0:/.test(sig)) return null;
+    for (const it of state.index.items.slice(0, 150)) {
+      if (itemContentSig(it) === sig) return it;
+    }
+    return null;
+  }
+
+  function flashItem(id, msg) {
+    if (msg) toast(msg);
+    state.flashItemId = id || "";
+    // 入库后回到「全能看见」的视图，避免被筛选挡住
+    state.searchQuery = "";
+    state.activeType = "all";
+    state.activeTagId = "all";
+    const search = $("#memo-search");
+    if (search) search.value = "";
+    resetListPaging();
+    renderAll();
+    requestAnimationFrame(() => {
+      const card =
+        itemList?.querySelector?.(`.memo-card[data-memo-id="${id}"]`) || null;
+      if (!card) return;
+      card.classList.add("is-just-saved");
+      card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      setTimeout(() => card.classList.remove("is-just-saved"), 1800);
+      state.flashItemId = "";
+    });
   }
 
   function visibleItems() {
@@ -556,15 +647,6 @@
     if (q) items = items.filter((it) => itemMatchesSearch(it, q));
     return items;
   }
-
-  const TYPE_LABELS = {
-    text: "文本",
-    image: "图片",
-    gif: "动图",
-    video: "视频",
-    audio: "音频",
-    file: "文件",
-  };
 
   function countByType(items) {
     const counts = { text: 0, image: 0, gif: 0, video: 0, audio: 0, file: 0 };
@@ -866,6 +948,7 @@
     renderTypeFilter();
     renderItems();
     updateStoreMeta();
+    syncFilterChrome();
   }
 
   function reindexOrders() {
@@ -891,7 +974,6 @@
   }
 
   async function addItemFromBlob(blob, name, opts = {}) {
-    const id = uid();
     const type = opts.type || detectKind(blob.type, name);
     let textPreview = opts.textPreview || "";
     if (type === "text" && !textPreview) {
@@ -902,6 +984,16 @@
       }
     }
     const quiet = Boolean(opts.quiet);
+    const sig = type === "text" ? textContentSig(textPreview) : blobContentSig(blob, type);
+    const dup = findDuplicateBySig(sig);
+    if (dup) {
+      if (!quiet) {
+        setProgress(false, 0, "");
+        flashItem(dup.id, "已有相同内容，未重复添加");
+      }
+      return dup;
+    }
+    const id = uid();
     if (!quiet) setProgress(true, 0.15, `保存 ${name || type}…`);
     const fileName = await saveBlob(id, blob, `${id}_${safeFileName(name || type)}`);
     if (!quiet) setProgress(true, 0.85, "写入索引…");
@@ -923,8 +1015,7 @@
     await persistIndex();
     if (!quiet) {
       setProgress(false, 0, "");
-      renderAll();
-      toast("已添加");
+      flashItem(item.id, "已添加");
     }
     return item;
   }
@@ -1048,15 +1139,47 @@
     const files = [...(fileList || [])].filter(Boolean);
     if (!files.length) return;
     await withBusy(async () => {
+      let added = 0;
+      let skipped = 0;
+      let lastId = "";
       for (let i = 0; i < files.length; i++) {
         const f = files[i];
         setProgress(true, i / Math.max(1, files.length), `导入 ${f.name}`);
-        await addItemFromBlob(f, f.name, { quiet: true });
+        const before = state.index.items.length;
+        const item = await addItemFromBlob(f, f.name, { quiet: true });
+        if (item?.id) lastId = item.id;
+        if (state.index.items.length > before) added += 1;
+        else skipped += 1;
       }
       setProgress(false, 0, "");
-      renderAll();
-      toast(files.length > 1 ? `已添加 ${files.length} 个文件` : "已添加");
+      if (lastId) {
+        const msg =
+          added && skipped
+            ? `已添加 ${added} 个，跳过重复 ${skipped} 个`
+            : added
+              ? files.length > 1
+                ? `已添加 ${added} 个文件`
+                : "已添加"
+              : "已有相同内容，未重复添加";
+        flashItem(lastId, msg);
+      } else {
+        toast("没有可添加的文件");
+      }
     });
+  }
+
+  function clipPermissionHint(err) {
+    const name = err?.name || "";
+    const msg = String(err?.message || err || "");
+    if (name === "NotAllowedError" || /notallowed|permission|denied|权限/i.test(msg)) {
+      return isLikelyMobile()
+        ? "没有剪贴板权限。请在弹出提示里点允许，或改用长按粘贴到本页。"
+        : "没有剪贴板权限。请允许访问后重试，或改用 Ctrl/⌘+V 粘贴。";
+    }
+    if (/secure|https|issecurecontext/i.test(msg)) {
+      return "当前环境无法读剪贴板，请用 HTTPS 打开，或直接粘贴到本页。";
+    }
+    return msg || "读取剪贴板失败，可改用粘贴";
   }
 
   async function readClipboard({ force = false } = {}) {
@@ -1109,7 +1232,7 @@
       }
       if (force) toast("当前浏览器不支持读取剪贴板，请用 Ctrl/⌘+V 或右键粘贴");
     } catch (err) {
-      if (force) setError(memoError, err.message || "读取剪贴板失败（可改用粘贴快捷键）");
+      if (force) setError(memoError, clipPermissionHint(err));
     }
   }
 
@@ -1761,6 +1884,7 @@
       renderAll();
     }, 180);
   });
+  $("#memo-clear-filters")?.addEventListener("click", () => clearAllFilters());
   $("#memo-load-more")?.addEventListener("click", () => {
     state.listLimit = (state.listLimit || PAGE_SIZE) + PAGE_SIZE;
     renderItems();
@@ -1770,7 +1894,7 @@
     try {
       localStorage.setItem(AUTOCLIP_KEY, state.autoClip ? "1" : "0");
     } catch (_) {}
-    toast(state.autoClip ? "已开启获焦自动读剪贴板" : "已关闭获焦自动读剪贴板");
+    toast(state.autoClip ? "已开启：回到本页自动读剪贴板" : "已关闭自动读剪贴板");
     if (state.autoClip) {
       readClipboard({ force: false }).catch(() => {});
     }

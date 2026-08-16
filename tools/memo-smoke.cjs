@@ -182,6 +182,10 @@ async function main() {
       noMemoOcr: !document.getElementById("memo-ocr") && !document.getElementById("memo-to-ocr"),
       primaryReadClip: document.getElementById("memo-read-clip")?.classList.contains("primary-btn"),
       copyOnCard: Boolean(document.querySelector(".memo-card-actions [data-memo-copy]")),
+      captureBar: Boolean(document.querySelector(".memo-capture-bar")),
+      storageFold: Boolean(document.querySelector(".memo-storage-fold")),
+      clearFilters: Boolean(document.getElementById("memo-clear-filters")),
+      friendlySearch: /标签名/.test(document.getElementById("memo-search")?.placeholder || ""),
     };
 
     // inline text edit dialog
@@ -347,6 +351,9 @@ async function main() {
   }
   if (!result.modules?.memoStillActive || !result.modules?.primaryReadClip || !result.modules?.copyOnCard) {
     failed.push("memo store/retrieve primary actions missing");
+  }
+  if (!result.modules?.captureBar || !result.modules?.storageFold || !result.modules?.clearFilters || !result.modules?.friendlySearch) {
+    failed.push("memo capture/search beginner UX missing");
   }
   if (!result.textEdit?.hasDlg || !result.textEdit?.hasEditBtn || !result.textEdit?.hasPreviewEdit) {
     failed.push("text edit UI missing");
