@@ -144,16 +144,16 @@
     if (audioTip) {
       audioTip.textContent = host
         ? connected
-          ? "本机桥已连接时，大量文件请到「FFmpeg 本机桥」批量处理。"
-          : "当前为网页保底。电脑批量请连接本机桥。"
-        : "当前为手机场景，使用网页内 FFmpeg。";
+          ? "本机桥已连接时，大量文件可到「FFmpeg 本机桥」批量处理。"
+          : "本页可直接用。电脑批量可选本机桥。"
+        : "手机可直接在本页处理，无需安装。";
     }
     if (vtrimTip) {
       vtrimTip.textContent = host
         ? connected
-          ? "批量导出请优先用本机桥。"
-          : "未连桥时用本页保底；批量请连本机桥。"
-        : "手机请用本页（网页 FFmpeg）。";
+          ? "批量导出可选用本机桥。"
+          : "本页可直接用。电脑批量可选本机桥。"
+        : "手机可直接在本页处理，无需安装。";
     }
   }
 
@@ -165,30 +165,34 @@
 
     if (headDesc) {
       headDesc.innerHTML = host
-        ? `电脑更优：连本机桥用系统 FFmpeg 批量处理（抽音频、转码、压缩、GIF、拼接等）。没连上时，用网页 <a href="#media/audio">音频处理</a> / <a href="#media/vtrim">视频修剪</a> 保底。<a href="#setup">安装指南</a>`
-        : `手机无法运行本机桥，请直接用网页内 FFmpeg：<a href="#media/audio">音频处理</a>、<a href="#media/vtrim">视频修剪</a>。电脑批量再回来用桥。`;
+        ? `电脑批量：连本机桥用系统 FFmpeg。没连上时，用网页 <a href="#media/audio">音频处理</a> / <a href="#media/vtrim">视频修剪</a> 保底。<a href="#setup">安装指南</a>`
+        : `手机请直接用网页内工具（无需安装本机桥）：<a href="#media/audio">音频处理</a>、<a href="#media/vtrim">视频修剪</a>、<a href="#media/gifmaker">GIF</a>。`;
     }
 
     if (modeTitle && modeText && modeActions) {
       if (!host) {
-        modeTitle.textContent = "手机场景：请用网页 FFmpeg";
+        modeTitle.textContent = "手机：请用网页内 FFmpeg";
         modeText.textContent =
-          "本机桥需要电脑上的 Node.js + 系统 ffmpeg，手机浏览器跑不了。少量文件用下面入口即可（网页内编码器）。";
-        modeActions.innerHTML = webFallbackLinksHtml();
+          "本机桥只适合电脑。手机上请用下面入口，文件在浏览器本地处理，不上传。";
+        modeActions.innerHTML = `
+          <a class="primary-btn" href="#media/audio">音频处理</a>
+          <a class="secondary-btn" href="#media/vtrim">视频修剪</a>
+          <a class="secondary-btn" href="#media/gifmaker">GIF 工具</a>
+        `;
         if (bridgePanel) bridgePanel.hidden = true;
         if (workspace) workspace.hidden = true;
       } else if (connected) {
         modeTitle.textContent = "已走更优路径：本机 FFmpeg 桥";
-        modeText.textContent = `已整理为常用 ${opsTiers.common?.length || "…"} 项（可展开更多）。与网页音频/修剪/GIF 互补：桥擅长批量，网页擅长少量交互。`;
+        modeText.textContent = `已整理为常用 ${opsTiers.common?.length || "…"} 项（可展开更多）。桥擅长批量；网页擅长少量交互预览。`;
         modeActions.innerHTML = `
-          <a class="ghost-btn" href="#media/audio">网页保底·音频</a>
-          <a class="ghost-btn" href="#media/vtrim">网页保底·修剪</a>
+          <a class="ghost-btn" href="#media/audio">网页·音频</a>
+          <a class="ghost-btn" href="#media/vtrim">网页·修剪</a>
         `;
         if (bridgePanel) bridgePanel.hidden = false;
       } else {
         modeTitle.textContent = "电脑推荐：本机桥（未连接）";
         modeText.textContent =
-          "批量、大文件优先下载并连接本机桥。若暂时没装或连不上，先用网页 FFmpeg 保底处理少量文件。";
+          "批量、大文件优先连接本机桥。暂时没装时，先用网页工具处理少量文件。";
         modeActions.innerHTML = `${webFallbackLinksHtml()}`;
         if (bridgePanel) bridgePanel.hidden = false;
       }
@@ -893,10 +897,18 @@
   }
 
   applyDeviceMode();
-  window.addEventListener("resize", () => applyDeviceMode());
+  window.addEventListener("resize", () => {
+    applyDeviceMode();
+    // 尺寸变化可能导致桌面/手机判定切换，重绘导航由 app 侧监听
+  });
   window.addEventListener("devtools:route", () => paintAdaptTips());
 
-  connectBridge({ fromPoll: true }).catch(() => {});
+  // 手机不发起本机桥探测，避免无用请求与失败提示
+  if (isLikelyBridgeHost()) {
+    connectBridge({ fromPoll: true }).catch(() => {});
+  } else {
+    applyDeviceMode();
+  }
 
   window.DevToolsFfmpegBridge = {
     connect: connectBridge,
