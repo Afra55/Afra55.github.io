@@ -155,6 +155,25 @@ async function main() {
     out.cardCount = document.querySelectorAll(".memo-card").length;
     // editor should be cleared after save (if UX applied)
     out.editorCleared = editor.value === "";
+
+    // preview dialog plumbing
+    out.preview = {
+      hasVideo: Boolean(document.getElementById("memo-lightbox-video")),
+      hasAudio: Boolean(document.getElementById("memo-lightbox-audio")),
+      hasFs: Boolean(document.getElementById("memo-preview-fs")),
+      hasFrame: Boolean(document.getElementById("memo-lightbox-frame")),
+    };
+
+    // open image preview
+    const openBtn = document.querySelector('[data-memo-open]');
+    if (openBtn) {
+      openBtn.click();
+      await sleep(300);
+      out.preview.opened = Boolean(document.getElementById("memo-lightbox")?.open);
+      document.getElementById("memo-lightbox-close")?.click();
+      await sleep(100);
+      out.preview.closed = !document.getElementById("memo-lightbox")?.open;
+    }
     return out;
   });
 
@@ -174,6 +193,10 @@ async function main() {
   }
   if (result.itemCount < 2) failed.push(`expected >=2 items, got ${result.itemCount}`);
   if (result.cardCount < 1) failed.push("no cards rendered");
+  if (!result.preview?.hasVideo || !result.preview?.hasAudio || !result.preview?.hasFs) {
+    failed.push("preview media controls missing");
+  }
+  if (!result.preview?.opened || !result.preview?.closed) failed.push("preview open/close failed");
 
   console.log(JSON.stringify({ ok: failed.length === 0, result, failed }, null, 2));
   if (failed.length) process.exit(1);

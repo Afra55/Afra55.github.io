@@ -418,6 +418,19 @@
   const lightbox = $("#memo-lightbox");
   const lightboxImg = $("#memo-lightbox-img");
   const lightboxText = $("#memo-lightbox-text");
+  const lightboxVideo = $("#memo-lightbox-video");
+  const lightboxAudio = $("#memo-lightbox-audio");
+  const lightboxAudioWrap = $("#memo-preview-audio-wrap");
+  const lightboxFrame = $("#memo-lightbox-frame");
+  const lightboxFile = $("#memo-preview-file");
+  const previewTitle = $("#memo-preview-title");
+  const previewSub = $("#memo-preview-sub");
+  const previewFsBtn = $("#memo-preview-fs");
+  const previewNewTabBtn = $("#memo-preview-newtab");
+  const previewDlBtn = $("#memo-preview-dl");
+  let previewObjectUrl = "";
+  let previewBlob = null;
+  let previewItem = null;
 
   function setProgress(visible, ratio, text) {
     if (!progressEl) return;
@@ -497,13 +510,22 @@
       const short = full.length > 160 ? `${full.slice(0, 160)}…` : full;
       body = `<pre class="memo-text mono" data-memo-expand="${item.id}">${escapeHtml(short)}</pre>`;
     } else if (item.type === "image") {
-      body = `<div class="memo-thumb-wrap"><img class="memo-thumb" data-memo-thumb="${item.id}" alt="" loading="lazy" /></div>`;
+      body = `<div class="memo-thumb-wrap memo-media-hit" data-memo-preview="${item.id}"><img class="memo-thumb" data-memo-thumb="${item.id}" alt="" loading="lazy" /></div>`;
     } else if (item.type === "video") {
-      body = `<video class="memo-media" data-memo-media="${item.id}" controls preload="metadata"></video>`;
+      body = `<div class="memo-media-hit" data-memo-preview="${item.id}"><video class="memo-media" data-memo-media="${item.id}" muted playsinline preload="metadata"></video></div>`;
     } else if (item.type === "audio") {
-      body = `<audio class="memo-media" data-memo-media="${item.id}" controls preload="metadata"></audio>`;
+      body = `<button type="button" class="memo-audio-hit" data-memo-preview="${item.id}">
+        <span class="memo-audio-hit-icon" aria-hidden="true">♪</span>
+        <span class="memo-audio-hit-meta">
+          <strong>${title}</strong>
+          <span class="hint tight">点击完整预览 / 播放</span>
+        </span>
+      </button>`;
     } else {
-      body = `<p class="hint tight">文件 · ${escapeHtml(item.mime || "unknown")}</p>`;
+      body = `<button type="button" class="memo-file-hit" data-memo-preview="${item.id}">
+        <strong class="mono">${escapeHtml(item.mime || "文件")}</strong>
+        <span class="hint tight">点击预览或下载</span>
+      </button>`;
     }
     return `<article class="memo-card" data-memo-id="${item.id}" draggable="true">
       <div class="memo-card-head">
@@ -517,7 +539,7 @@
       <div class="memo-card-tags">${tagHtml}<button type="button" class="ghost-btn memo-tag-add" data-memo-tag-add="${item.id}">+ 标签</button></div>
       <div class="btn-row memo-card-actions">
         <button type="button" class="ghost-btn" data-memo-copy="${item.id}">复制</button>
-        <button type="button" class="ghost-btn" data-memo-open="${item.id}">打开/预览</button>
+        <button type="button" class="ghost-btn" data-memo-open="${item.id}">完整预览</button>
         <button type="button" class="ghost-btn" data-memo-dl="${item.id}">下载</button>
         ${state.mode === "dir" && !state.dirPending ? `<button type="button" class="ghost-btn" data-memo-path="${item.id}">路径</button>` : ""}
         <button type="button" class="ghost-btn" data-memo-del="${item.id}">删除</button>
@@ -908,30 +930,189 @@
     return { blob: outBlob, filename, count: picked.length };
   }
 
+  function hidePreviewParts() {
+    [lightboxImg, lightboxVideo, lightboxAudioWrap, lightboxText, lightboxFrame, lightboxFile].forEach((el) => {
+      if (el) el.hidden = true;
+    });
+    if (lightboxVideo) {
+      try {
+        lightboxVideo.pause();
+      } catch (_) {}
+      lightboxVideo.removeAttribute("src");
+      lightboxVideo.load?.();
+    }
+    if (lightboxAudio) {
+      try {
+        lightboxAudio.pause();
+      } catch (_) {}
+      lightboxAudio.removeAttribute("src");
+      lightboxAudio.load?.();
+    }
+    if (lightboxFrame) {
+      lightboxFrame.removeAttribute("src");
+    }
+    if (lightboxImg) lightboxImg.removeAttribute("src");
+    if (lightboxText) lightboxText.textContent = "";
+  }
+
+  function revokePreviewUrl() {
+    if (previewObjectUrl) {
+      try {
+        URL.revokeObjectURL(previewObjectUrl);
+      } catch (_) {}
+    }
+    previewObjectUrl = "";
+    previewBlob = null;
+  }
+
+  function setPreviewChrome(item, { canFs = false, canNewTab = false, canDl = true } = {}) {
+    previewItem = item;
+    if (previewTitle) previewTitle.textContent = item?.name || "预览";
+    if (previewSub) {
+      previewSub.textContent = item
+        ? `${item.type || "file"} · ${formatBytes(item.size || 0)} · ${formatTime(item.createdAt)}`
+        : "";
+    }
+    if (previewFsBtn) {
+      previewFsBtn.hidden = !canFs;
+      previewFsBtn.textContent = lightbox?.classList.contains("is-fs") ? "退出全屏" : "全屏";
+    }
+    if (previewNewTabBtn) previewNewTabBtn.hidden = !canNewTab;
+    if (previewDlBtn) previewDlBtn.hidden = !canDl;
+  }
+
+  function isPdfItem(item, blob) {
+    const mime = String(blob?.type || item?.mime || "").toLowerCase();
+    const name = String(item?.name || item?.fileName || "").toLowerCase();
+    return mime === "application/pdf" || name.endsWith(".pdf");
+  }
+
+  function isTextLikeItem(item, blob) {
+    if (item?.type === "text") return true;
+    const mime = String(blob?.type || item?.mime || "").toLowerCase();
+    const name = String(item?.name || item?.fileName || "").toLowerCase();
+    if (mime.startsWith("text/")) return true;
+    if (mime === "application/json" || mime === "application/xml" || mime.endsWith("+json") || mime.endsWith("+xml")) {
+      return true;
+    }
+    return /\.(txt|md|markdown|json|csv|log|xml|html?|css|js|ts|yml|yaml|ini|conf)$/i.test(name);
+  }
+
   async function openItemPreview(item) {
-    if (!item) return;
-    if (item.type === "image") {
-      const blob = await loadBlob(item);
-      if (lightboxImg?.src?.startsWith("blob:")) {
-        try {
-          URL.revokeObjectURL(lightboxImg.src);
-        } catch (_) {}
-      }
-      lightboxImg.hidden = false;
-      lightboxText.hidden = true;
-      lightboxImg.src = trackUrl(URL.createObjectURL(blob));
-      lightbox?.showModal?.();
-      return;
-    }
-    if (item.type === "text") {
-      lightboxImg.hidden = true;
-      lightboxText.hidden = false;
-      lightboxText.textContent = item.textPreview || (await (await loadBlob(item)).text());
-      lightbox?.showModal?.();
-      return;
-    }
+    if (!item || !lightbox) return;
+    setError(memoError, "");
+    hidePreviewParts();
+    revokePreviewUrl();
+    lightbox.classList.remove("is-fs");
     const blob = await loadBlob(item);
-    downloadBlob(blob, item.name || item.id);
+    previewBlob = blob;
+    previewObjectUrl = URL.createObjectURL(blob);
+    const url = previewObjectUrl;
+
+    if (item.type === "image" || String(blob.type || "").startsWith("image/")) {
+      setPreviewChrome(item, { canFs: true, canNewTab: true, canDl: true });
+      lightboxImg.hidden = false;
+      lightboxImg.src = url;
+      lightbox.showModal();
+      return;
+    }
+
+    if (item.type === "video" || String(blob.type || "").startsWith("video/")) {
+      setPreviewChrome(item, { canFs: true, canNewTab: true, canDl: true });
+      lightboxVideo.hidden = false;
+      lightboxVideo.src = url;
+      lightbox.showModal();
+      try {
+        await lightboxVideo.play();
+      } catch (_) {
+        /* autoplay may be blocked; controls remain */
+      }
+      return;
+    }
+
+    if (item.type === "audio" || String(blob.type || "").startsWith("audio/")) {
+      setPreviewChrome(item, { canFs: true, canNewTab: false, canDl: true });
+      lightboxAudioWrap.hidden = false;
+      lightboxAudio.src = url;
+      lightbox.showModal();
+      try {
+        await lightboxAudio.play();
+      } catch (_) {}
+      return;
+    }
+
+    if (isPdfItem(item, blob)) {
+      setPreviewChrome(item, { canFs: true, canNewTab: true, canDl: true });
+      lightboxFrame.hidden = false;
+      lightboxFrame.src = url;
+      lightbox.showModal();
+      return;
+    }
+
+    if (isTextLikeItem(item, blob)) {
+      setPreviewChrome(item, { canFs: true, canNewTab: true, canDl: true });
+      let text = item.textPreview || "";
+      if (!text) {
+        text = await blob.text();
+        if (text.length > 400000) text = `${text.slice(0, 400000)}\n\n…（内容过长，已截断预览）`;
+      }
+      lightboxText.hidden = false;
+      lightboxText.textContent = text;
+      lightbox.showModal();
+      return;
+    }
+
+    setPreviewChrome(item, { canFs: false, canNewTab: true, canDl: true });
+    lightboxFile.hidden = false;
+    const nameEl = $("#memo-preview-file-name");
+    const metaEl = $("#memo-preview-file-meta");
+    if (nameEl) nameEl.textContent = item.name || item.fileName || item.id;
+    if (metaEl) metaEl.textContent = `${item.mime || blob.type || "unknown"} · ${formatBytes(blob.size || item.size || 0)}`;
+    lightbox.showModal();
+  }
+
+  async function togglePreviewFullscreen() {
+    // Prefer native media fullscreen for video when available (含 iOS webkit)
+    if (lightboxVideo && !lightboxVideo.hidden) {
+      try {
+        if (document.fullscreenElement === lightboxVideo) {
+          await document.exitFullscreen();
+          return;
+        }
+        if (typeof lightboxVideo.webkitDisplayingFullscreen === "boolean" && lightboxVideo.webkitDisplayingFullscreen) {
+          lightboxVideo.webkitExitFullscreen?.();
+          return;
+        }
+        if (lightboxVideo.requestFullscreen) {
+          await lightboxVideo.requestFullscreen();
+          return;
+        }
+        if (lightboxVideo.webkitEnterFullscreen) {
+          lightboxVideo.webkitEnterFullscreen();
+          return;
+        }
+        if (lightboxVideo.webkitRequestFullscreen) {
+          lightboxVideo.webkitRequestFullscreen();
+          return;
+        }
+      } catch (_) {
+        /* fall through to dialog fullscreen */
+      }
+    }
+    if (!lightbox) return;
+    const on = lightbox.classList.toggle("is-fs");
+    if (previewFsBtn) previewFsBtn.textContent = on ? "退出全屏" : "全屏";
+  }
+
+  function closeLightbox() {
+    hidePreviewParts();
+    revokePreviewUrl();
+    previewItem = null;
+    lightbox?.classList.remove("is-fs");
+    if (document.fullscreenElement) {
+      document.exitFullscreen?.().catch(() => {});
+    }
+    lightbox?.close?.();
   }
 
   async function doExport({ share = false } = {}) {
@@ -1234,6 +1415,12 @@
         if (item) await openItemPreview(item);
         return;
       }
+      const previewId = t.closest?.("[data-memo-preview]")?.dataset?.memoPreview;
+      if (previewId) {
+        const item = state.index.items.find((x) => x.id === previewId);
+        if (item) await openItemPreview(item);
+        return;
+      }
       const thumbId = t.closest?.("[data-memo-thumb]")?.dataset?.memoThumb;
       if (thumbId) {
         const item = state.index.items.find((x) => x.id === thumbId);
@@ -1242,6 +1429,12 @@
       }
       const expandId = t.closest?.("[data-memo-expand]")?.dataset?.memoExpand;
       if (expandId) {
+        // 单击展开/收起；双击进完整预览
+        if (e.detail >= 2) {
+          const item = state.index.items.find((x) => x.id === expandId);
+          if (item) await openItemPreview(item);
+          return;
+        }
         const item = state.index.items.find((x) => x.id === expandId);
         if (!item) return;
         const el = t.closest("[data-memo-expand]");
@@ -1408,25 +1601,40 @@
         setProgress(false, 0, "");
       });
   });
-  const closeLightbox = () => {
-    if (lightboxImg?.src?.startsWith("blob:")) {
-      try {
-        URL.revokeObjectURL(lightboxImg.src);
-      } catch (_) {}
-      lightboxImg.removeAttribute("src");
-    }
-    lightbox?.close?.();
-  };
   $("#memo-lightbox-close")?.addEventListener("click", closeLightbox);
+  previewFsBtn?.addEventListener("click", () => {
+    togglePreviewFullscreen().catch((err) => setError(memoError, err.message || String(err)));
+  });
+  previewDlBtn?.addEventListener("click", () => {
+    if (!previewItem || !previewBlob) return;
+    downloadBlob(previewBlob, previewItem.name || previewItem.fileName || previewItem.id);
+  });
+  previewNewTabBtn?.addEventListener("click", () => {
+    if (!previewObjectUrl) return;
+    window.open(previewObjectUrl, "_blank", "noopener");
+  });
   lightbox?.addEventListener("click", (e) => {
     if (e.target === lightbox) closeLightbox();
   });
   lightbox?.addEventListener("close", () => {
-    if (lightboxImg?.src?.startsWith("blob:")) {
-      try {
-        URL.revokeObjectURL(lightboxImg.src);
-      } catch (_) {}
-      lightboxImg.removeAttribute("src");
+    hidePreviewParts();
+    revokePreviewUrl();
+    previewItem = null;
+    lightbox?.classList.remove("is-fs");
+  });
+  document.addEventListener("fullscreenchange", () => {
+    if (previewFsBtn && !previewFsBtn.hidden) {
+      previewFsBtn.textContent =
+        document.fullscreenElement || lightbox?.classList.contains("is-fs") ? "退出全屏" : "全屏";
+    }
+  });
+  document.addEventListener("keydown", (e) => {
+    if (!lightbox?.open) return;
+    if (e.key === "Escape" && lightbox.classList.contains("is-fs") && !document.fullscreenElement) {
+      lightbox.classList.remove("is-fs");
+      if (previewFsBtn) previewFsBtn.textContent = "全屏";
+      e.preventDefault();
+      e.stopPropagation();
     }
   });
 
