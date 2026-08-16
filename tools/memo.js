@@ -14,6 +14,10 @@
   const META_KEY = "meta";
   const PAGE_SIZE = 36;
   const AUTOCLIP_KEY = "devtools-memo-autoclip-v1";
+  const LAST_EXPORT_KEY = "devtools-memo-last-export-v1";
+  const DIR_HINT_KEY = "devtools-memo-dir-hint-dismiss-v1";
+  const BACKUP_NUDGE_DAYS = 7;
+  const BACKUP_NUDGE_MIN_ITEMS = 3;
   const LARGE_WARN_BYTES = 25 * 1024 * 1024;
   const SAVE_CHUNK = 1024 * 1024;
   const UNDO_MS = 8000;
@@ -582,6 +586,7 @@
   const previewShareBtn = $("#memo-preview-share");
   const previewEditBtn = $("#memo-preview-edit");
   const previewNoteBtn = $("#memo-preview-note");
+  const previewCopyBtn = $("#memo-preview-copy");
   let previewObjectUrl = "";
   let previewBlob = null;
   let previewItem = null;
@@ -645,6 +650,7 @@
     if (!storeMeta) return;
     syncExportButtonLabels();
     const pickBtn = $("#memo-pick-dir");
+    const exportToDirBtn = $("#memo-export-to-dir");
     const connected = Boolean(state.dirHandle) && (state.mode === "dir" || state.dirPending);
     if (pickBtn) {
       pickBtn.hidden = !canDirPicker() || connected;
@@ -654,18 +660,84 @@
       reconnectBtn.hidden = !canDirPicker() || !connected;
       reconnectBtn.textContent = state.dirPending ? "重新连接目录" : "更换目录";
     }
+    if (exportToDirBtn) {
+      exportToDirBtn.hidden = !(state.mode === "dir" && state.dirHandle && !state.dirPending);
+    }
     const banner = $("#memo-reconnect-banner");
     if (banner) banner.hidden = !state.dirPending;
     if (state.dirPending && state.dirHandle) {
       storeMeta.textContent = `曾绑定目录「${state.dirHandle.name}」，连接已失效。请重新连接同一路径以恢复。`;
     } else if (state.mode === "dir" && state.dirHandle) {
-      storeMeta.textContent = `存储：磁盘目录「${state.dirHandle.name}」· 清缓存不会删目录内文件；若连接丢失请重新选择同一目录即可恢复。`;
+      storeMeta.textContent = `存储：磁盘目录「${state.dirHandle.name}」· 可点「更换目录」并选择是否带走当前内容；原目录文件不会被删除。`;
     } else {
       storeMeta.textContent = canDirPicker()
-        ? "存储：应用内数据（IndexedDB）。建议选择目录以便清缓存后文件仍在磁盘上。清理缓存前仍建议导出备份。"
-        : "存储：应用内数据（手机端）。清理缓存前请先「导出」备份（会优先调起系统分享）。";
+        ? "存储：应用内数据（IndexedDB）。建议选择目录，清缓存后文件仍在磁盘。更换目录时可把当前内容一并带过去。"
+        : "存储：应用内数据（手机端）。换机前请先「导出」备份（会优先调起系统分享）。";
     }
+    updateBackupNudge();
+    updateDirHint();
     window.DevToolsTemp?.refresh?.();
+  }
+
+  function getLastExportAt() {
+    try {
+      const n = Number(localStorage.getItem(LAST_EXPORT_KEY) || 0);
+      return Number.isFinite(n) ? n : 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  function markLastExport() {
+    try {
+      localStorage.setItem(LAST_EXPORT_KEY, String(Date.now()));
+    } catch (_) {}
+    updateBackupNudge();
+  }
+
+  function updateBackupNudge() {
+    const el = $("#memo-backup-nudge");
+    if (!el) return;
+    const n = state.index.items?.length || 0;
+    if (n < BACKUP_NUDGE_MIN_ITEMS) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    const last = getLastExportAt();
+    const days = last ? (Date.now() - last) / 86400000 : Infinity;
+    if (last && days < BACKUP_NUDGE_DAYS) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    el.textContent = last
+      ? `已有一段时间未导出（约 ${Math.floor(days)} 天）。换机前建议先点「导出」。`
+      : `当前有 ${n} 条，尚未导出过备份。换机或清数据前建议先「导出」。`;
+  }
+
+  function updateDirHint() {
+    const el = $("#memo-dir-hint");
+    if (!el) return;
+    let dismissed = false;
+    try {
+      dismissed = localStorage.getItem(DIR_HINT_KEY) === "1";
+    } catch (_) {}
+    const show =
+      canDirPicker() &&
+      !dismissed &&
+      state.mode !== "dir" &&
+      !state.dirPending &&
+      (state.index.items?.length || 0) >= 1;
+    el.hidden = !show;
+  }
+
+  function dismissDirHint() {
+    try {
+      localStorage.setItem(DIR_HINT_KEY, "1");
+    } catch (_) {}
+    updateDirHint();
   }
 
   function customTagIds(item) {
@@ -1215,6 +1287,9 @@
       }
       moreDownload = `<button type="button" class="ghost-btn" data-memo-dl="${item.id}">下载</button>`;
     }
+    const takeoutHint = !canCopy
+      ? `<p class="hint tight memo-takeout-hint">无法放回系统剪贴板 · 请下载或分享</p>`
+      : "";
     return `<article class="memo-card${editing}" data-memo-id="${item.id}" draggable="${canDragReorder() ? "true" : "false"}">
       <div class="memo-card-head">
         <label class="memo-check"><input type="checkbox" data-memo-check="${item.id}" ${checked} /></label>
@@ -1224,6 +1299,7 @@
         </div>
       </div>
       <div class="memo-card-body">${body}</div>
+      ${takeoutHint}
       ${noteHtml}
       <div class="memo-card-tags">${tagHtml}<button type="button" class="ghost-btn memo-tag-add" data-memo-tag-add="${item.id}">+ 标签</button></div>
       <div class="btn-row memo-card-actions">
@@ -1965,11 +2041,15 @@
       }
       if (force) toast("当前浏览器不支持读取剪贴板，请用 Ctrl/⌘+V 或右键粘贴");
     } catch (err) {
-      if (force) setError(memoError, clipPermissionHint(err));
+      if (force) {
+        const hint = clipPermissionHint(err);
+        setError(memoError, hint);
+        toast(hint);
+      }
     }
   }
 
-  async function connectDirectory(handle, { isNew = false } = {}) {
+  async function connectDirectory(handle, { isNew = false, migrateSnapshot = null } = {}) {
     const ok = await ensureDirPermission(handle);
     if (!ok) throw new Error("未获得目录权限");
     const existing = await readIndexFromDir(handle);
@@ -1978,11 +2058,29 @@
     state.dirPending = false;
     if (existing) {
       state.index = existing;
-      toast(isNew ? `已恢复目录「${handle.name}」中的备忘录` : `已连接「${handle.name}」`);
-    } else if (state.index.items.length) {
-      // 空目录：把当前应用内条目写入磁盘
+      toast(isNew ? `已切换到目录「${handle.name}」` : `已连接「${handle.name}」`);
+    } else if (migrateSnapshot && migrateSnapshot.length) {
+      state.index = {
+        version: 1,
+        folderId: state.index.folderId || uid(),
+        tags: state.index.tags || emptyIndex().tags,
+        items: migrateSnapshot.map((s) => s.item),
+      };
+      for (let i = 0; i < migrateSnapshot.length; i++) {
+        const { item, blob } = migrateSnapshot[i];
+        if (!blob) continue;
+        setProgress(true, i / migrateSnapshot.length, `写入 ${item.name || item.id}`);
+        try {
+          item.fileName = await saveBlob(item.id, blob, item.fileName || `${item.id}_${item.name || "file"}`);
+        } catch (_) {
+          /* keep meta even if one blob fails */
+        }
+      }
+      setProgress(false, 0, "");
       await writeIndexToDir();
-      // 把已有 blob 从 IDB 拷到目录（若有）
+      toast(`已绑定「${handle.name}」，并带上 ${migrateSnapshot.length} 条（原位置数据未删）`);
+    } else if (state.index.items.length) {
+      await writeIndexToDir();
       for (const it of state.index.items) {
         try {
           const row = await idbGet("blobs", it.id);
@@ -2013,12 +2111,60 @@
     renderAll();
   }
 
+  async function snapshotCurrentBlobs() {
+    const items = state.index.items || [];
+    const out = [];
+    for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      setProgress(true, i / Math.max(1, items.length), `准备迁移 ${it.name || it.id}`);
+      let blob = null;
+      try {
+        blob = await loadBlob(it);
+      } catch (_) {
+        blob = null;
+      }
+      out.push({ item: { ...it }, blob });
+    }
+    setProgress(false, 0, "");
+    return out;
+  }
+
   async function pickDirectory() {
     if (!canDirPicker()) {
       toast("当前环境不支持选择目录，已使用应用内存储");
       return;
     }
     const handle = await window.showDirectoryPicker({ mode: "readwrite" });
+    const existing = await readIndexFromDir(handle);
+    const count = state.index.items?.length || 0;
+
+    if (existing) {
+      if (count > 0) {
+        const ok = window.confirm(
+          `目录「${handle.name}」里已有备忘录。\n切换后将显示该目录内容。\n\n当前列表不会自动搬进去；原目录/应用内数据仍保留在原位置。\n确定切换？`
+        );
+        if (!ok) {
+          toast("已取消更换目录");
+          return;
+        }
+      }
+      await connectDirectory(handle, { isNew: true });
+      return;
+    }
+
+    if (count > 0) {
+      const migrate = window.confirm(
+        `把当前 ${count} 条一并写入新目录「${handle.name}」？\n\n会复制过去，原目录/应用内数据不会删除。`
+      );
+      if (!migrate) {
+        toast("已取消更换目录");
+        return;
+      }
+      const migrateSnapshot = await snapshotCurrentBlobs();
+      await connectDirectory(handle, { isNew: true, migrateSnapshot });
+      return;
+    }
+
     await connectDirectory(handle, { isNew: true });
   }
 
@@ -2267,16 +2413,21 @@
       if ((item.type === "image" || item.type === "gif") && navigator.clipboard?.write && window.ClipboardItem) {
         const blob = await loadBlob(item);
         const type = blob.type || (item.type === "gif" ? "image/gif" : "image/png");
+        const tryWrite = async (b, mime, label) => {
+          await navigator.clipboard.write([new ClipboardItem({ [mime]: b })]);
+          toast(label);
+        };
         try {
-          if (!clipboardTypeSupported(type) && item.type === "image") {
-            // 尝试转成 PNG 再写（静态图）
-            const png = await imageBlobToPng(blob);
-            await navigator.clipboard.write([new ClipboardItem({ "image/png": png })]);
-            toast("已复制图片");
+          if (clipboardTypeSupported(type)) {
+            await tryWrite(blob, type, item.type === "gif" ? "已复制动图" : "已复制图片");
             return;
           }
-          await navigator.clipboard.write([new ClipboardItem({ [type]: blob })]);
-          toast(item.type === "gif" ? "已复制动图" : "已复制图片");
+        } catch (_) {
+          /* fall through to PNG */
+        }
+        try {
+          const png = await imageBlobToPng(blob);
+          await tryWrite(png, "image/png", item.type === "gif" ? "已复制为 PNG" : "已复制图片");
           return;
         } catch (_) {
           await downloadItem(item, { toastMsg: "无法写入剪贴板，已改为下载" });
@@ -2346,6 +2497,7 @@
           const file = new File([packed.blob], packed.filename, { type: packed.blob.type || "application/zip" });
           if (canShareFiles() && navigator.canShare({ files: [file] })) {
             await navigator.share({ files: [file], title: "备忘录导出" });
+            markLastExport();
             toast(`已分享 ${packed.count} 条`);
             return;
           }
@@ -2360,7 +2512,27 @@
         }
       }
       downloadBlob(packed.blob, packed.filename);
+      markLastExport();
       toast(`已导出 ${packed.count} 条`);
+    });
+  }
+
+  async function exportToDirBackups() {
+    if (state.mode !== "dir" || !state.dirHandle || state.dirPending) {
+      throw new Error("请先选择并连接存储目录");
+    }
+    await withBusy(async () => {
+      const kinds = ["text", "image", "gif", "video", "audio", "file"];
+      const packed = await buildExportZip({ kinds, tagIds: [], password: "" });
+      const ok = await ensureDirPermission(state.dirHandle);
+      if (!ok) throw new Error("没有目录写入权限，请重新连接目录");
+      const backups = await state.dirHandle.getDirectoryHandle("backups", { create: true });
+      const file = await backups.getFileHandle(packed.filename, { create: true });
+      const writable = await file.createWritable();
+      await writable.write(packed.blob);
+      await writable.close();
+      markLastExport();
+      toast(`已写入 ${state.dirHandle.name}/backups/${packed.filename}（${packed.count} 条）`);
     });
   }
 
@@ -2470,6 +2642,7 @@
     if (previewDlBtn) previewDlBtn.hidden = !canDl;
     if (previewShareBtn) previewShareBtn.hidden = !item || !canOfferItemShare(item);
     if (previewEditBtn) previewEditBtn.hidden = !canEdit;
+    if (previewCopyBtn) previewCopyBtn.hidden = !item || !canClipboardCopy(item);
   }
 
   function isPdfItem(item, blob) {
@@ -2770,6 +2943,10 @@
   $("#memo-pick-dir")?.addEventListener("click", () => {
     pickDirectory().catch((err) => setError(memoError, err.message || String(err)));
   });
+  $("#memo-dir-hint-pick")?.addEventListener("click", () => {
+    pickDirectory().catch((err) => setError(memoError, err.message || String(err)));
+  });
+  $("#memo-dir-hint-dismiss")?.addEventListener("click", () => dismissDirHint());
   reconnectBtn?.addEventListener("click", () => {
     pickDirectory().catch((err) => setError(memoError, err.message || String(err)));
   });
@@ -2848,6 +3025,11 @@
       return;
     }
     beginEditText(item).catch((err) => setError(memoError, err.message || String(err)));
+  });
+  previewCopyBtn?.addEventListener("click", () => {
+    const item = previewItem;
+    if (!item) return;
+    copyItem(item).catch((err) => setError(memoError, err.message || String(err)));
   });
   previewNoteBtn?.addEventListener("click", () => {
     const item = previewItem;
@@ -2947,13 +3129,14 @@
     try {
       localStorage.setItem(AUTOCLIP_KEY, state.autoClip ? "1" : "0");
     } catch (_) {}
-    toast(state.autoClip ? "已开启：回到本页自动读剪贴板" : "已关闭自动读剪贴板");
+    toast(state.autoClip ? "已开启并记住：下次仍会自动读剪贴板" : "已关闭自动读剪贴板");
     if (state.autoClip) {
       readClipboard({ force: false }).catch(() => {});
     }
   });
 
   function maybeAutoClip() {
+    // 静默尝试：失败不弹错，避免打扰（force:false）
     if (!state.autoClip) return;
     if (!isMemoActive()) return;
     if (document.visibilityState && document.visibilityState !== "visible") return;
@@ -3255,6 +3438,11 @@
   );
 
   $("#memo-export")?.addEventListener("click", () => openExportDialog());
+  $("#memo-export-to-dir")?.addEventListener("click", () => {
+    exportToDirBackups()
+      .catch((err) => setError(memoError, err.message || String(err)))
+      .finally(() => setProgress(false, 0, ""));
+  });
   exportDlg?.addEventListener("close", () => {
     if (exportDlg.returnValue !== "ok") return;
     doExport()

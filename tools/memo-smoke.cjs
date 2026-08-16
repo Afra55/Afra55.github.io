@@ -186,6 +186,13 @@ async function main() {
       quickText: Boolean(document.querySelector(".memo-capture-bar .memo-quick-text #memo-editor")),
       quickTextNotDetails: !document.querySelector("details#memo-editor-fold, details.memo-editor"),
       storageFold: Boolean(document.querySelector(".memo-storage-fold")),
+      backupBar: Boolean(document.querySelector(".memo-backup-bar")),
+      exportOutsideFold: Boolean(document.querySelector(".memo-backup-bar #memo-export")),
+      exportToDirBtn: Boolean(document.getElementById("memo-export-to-dir")),
+      dirHint: Boolean(document.getElementById("memo-dir-hint")),
+      previewCopy: Boolean(document.getElementById("memo-preview-copy")),
+      autoclipRemember: /记住/.test(document.querySelector(".memo-autoclip-flag")?.textContent || ""),
+      mobilePasteHint: Boolean(document.querySelector(".memo-hint-narrow")),
       clearFilters: Boolean(document.getElementById("memo-clear-filters")),
       friendlySearch: /标签名/.test(document.getElementById("memo-search")?.placeholder || ""),
       hasUndoBar: Boolean(document.getElementById("memo-undo-bar")),
@@ -332,6 +339,7 @@ async function main() {
       hasFile: Boolean(fileItem),
       primaryDownload: Boolean(fileCard?.querySelector(".memo-card-actions > .secondary-btn[data-memo-dl]")),
       noPrimaryCopy: !fileCard?.querySelector(".memo-card-actions > .secondary-btn[data-memo-copy]"),
+      takeoutHint: Boolean(fileCard?.querySelector(".memo-takeout-hint")),
       textStillCopy: Boolean(document.querySelector('.memo-card [data-memo-copy]')),
       imageStillCopy: Boolean(
         [...document.querySelectorAll(".memo-card")].some((card) => {
@@ -528,7 +536,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260816memo25/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260816memo26/.test(s.src)),
     };
 
     return out;
@@ -572,6 +580,12 @@ async function main() {
   if (!result.modules?.captureBar || !result.modules?.storageFold || !result.modules?.clearFilters || !result.modules?.friendlySearch) {
     failed.push("memo capture/search beginner UX missing");
   }
+  if (!result.modules?.backupBar || !result.modules?.exportOutsideFold || !result.modules?.exportToDirBtn || !result.modules?.dirHint) {
+    failed.push("memo backup bar / dir hint missing");
+  }
+  if (!result.modules?.previewCopy || !result.modules?.autoclipRemember || !result.modules?.mobilePasteHint) {
+    failed.push("memo clipboard takeout / autoclip / paste hint missing");
+  }
   if (!result.modules?.quickText || !result.modules?.quickTextNotDetails) {
     failed.push("quick text box should be always visible in capture bar");
   }
@@ -585,6 +599,7 @@ async function main() {
   if (!result.takeout?.hasFile || !result.takeout?.primaryDownload || !result.takeout?.noPrimaryCopy) {
     failed.push("file/video-like items should primary-download instead of copy");
   }
+  if (!result.takeout?.takeoutHint) failed.push("file items should show takeout hint");
   if (!result.takeout?.textStillCopy || !result.takeout?.imageStillCopy) {
     failed.push("text/image items should keep primary copy");
   }
@@ -651,8 +666,8 @@ async function main() {
   if (!/\d+\s*\/\s*500/.test(result.noteUi?.countAfterInput || "")) {
     failed.push("note char count should update while typing");
   }
-  if (!/memo25/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memo25");
+  if (!/memo26/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memo26");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");

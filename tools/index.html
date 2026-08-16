@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260816memo25" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo25" />
+  <link rel="stylesheet" href="./style.css?v=20260816memo26" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo26" />
   <script>
     /* 尽早应用主题，减少闪烁 */
     (function () {
@@ -38,7 +38,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo25</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo26</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="theme-open" title="切换站点主题">主题</button>
@@ -1137,21 +1137,24 @@ hello@world.org</textarea>
 <section id="memo" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>备忘录</h1>
-        <p>本地收集剪贴板与拖入文件，专注存取。桌面可选目录持久保存；手机用应用内数据。文转图 / OCR 请用侧栏独立工具。</p>
+        <p>本地轻量剪贴板备份：拷进来、收着、找得回。桌面可选目录持久保存；换机前请导出。文转图 / OCR 请用侧栏独立工具。</p>
       </div>
       <div class="panel-body memo-body">
         <div class="memo-toolbar">
           <div class="memo-capture-bar panel-card">
             <p class="memo-capture-title">存进来</p>
-            <p class="hint tight">复制别处内容后，点下方按钮或直接 Ctrl/⌘+V / 拖入文件。</p>
+            <p class="hint tight memo-capture-hint">
+              <span class="memo-hint-wide">复制别处内容后，点下方按钮，或直接 Ctrl/⌘+V / 拖入文件。</span>
+              <span class="memo-hint-narrow">手机可直接长按粘贴到本页入库；也可点「读取剪贴板」（需允许权限）。</span>
+            </p>
             <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
               <button type="button" class="primary-btn" id="memo-read-clip">读取剪贴板</button>
               <label class="file-btn" for="memo-file">添加文件</label>
               <input id="memo-file" type="file" multiple hidden />
               <button type="button" class="ghost-btn" id="memo-batch-del" disabled>批量删除</button>
             </div>
-            <label class="flag memo-autoclip-flag" style="margin-top:0.45rem" title="需浏览器剪贴板权限；相同内容不会重复添加">
-              <input type="checkbox" id="memo-autoclip" /> 回到本页时自动读剪贴板
+            <label class="flag memo-autoclip-flag" style="margin-top:0.45rem" title="开启后会记住选择，下次打开仍自动开。需剪贴板权限；相同内容不会重复添加">
+              <input type="checkbox" id="memo-autoclip" /> 回到本页时自动读剪贴板（开启后会记住）
             </label>
             <div class="memo-quick-text" id="memo-editor-fold">
               <label class="memo-quick-text-lab" for="memo-editor">直接写一段文字</label>
@@ -1162,17 +1165,35 @@ hello@world.org</textarea>
             </div>
           </div>
 
-          <details class="memo-storage-fold">
-            <summary>存储与备份（选目录 / 导出导入）</summary>
+          <div class="memo-dir-hint" id="memo-dir-hint" hidden>
+            <strong>建议选择存储目录</strong>
+            <p class="hint tight">桌面可选文件夹保存，清浏览器缓存后文件仍在磁盘。更换目录时可把当前内容一并带过去（原目录不删）。</p>
+            <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.35rem">
+              <button type="button" class="primary-btn" id="memo-dir-hint-pick">选择目录</button>
+              <button type="button" class="ghost-btn" id="memo-dir-hint-dismiss">暂不</button>
+            </div>
+          </div>
+
+          <div class="memo-backup-bar panel-card">
+            <p class="memo-capture-title">备份带走</p>
+            <p class="hint tight memo-backup-tip">这是浏览器内的本地备份。换机、重装或清理站点数据前请先导出；选了磁盘目录后文件更耐清缓存。</p>
             <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
-              <button type="button" class="secondary-btn" id="memo-pick-dir">选择存储目录</button>
-              <button type="button" class="ghost-btn" id="memo-reconnect" hidden>重新连接目录</button>
               <button type="button" class="secondary-btn" id="memo-export">导出</button>
+              <button type="button" class="ghost-btn" id="memo-export-to-dir" hidden title="写入当前存储目录下的 backups/ 文件夹">备份到目录</button>
               <label class="file-btn" for="memo-import">导入</label>
               <input id="memo-import" type="file" accept=".zip,.memo,.bin,application/zip" hidden />
             </div>
+            <p class="hint tight memo-backup-nudge" id="memo-backup-nudge" hidden></p>
+          </div>
+
+          <details class="memo-storage-fold">
+            <summary>存储目录（选择 / 更换）</summary>
+            <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
+              <button type="button" class="secondary-btn" id="memo-pick-dir">选择存储目录</button>
+              <button type="button" class="ghost-btn" id="memo-reconnect" hidden>重新连接目录</button>
+            </div>
             <p class="hint tight" id="memo-store-meta">正在检测存储能力…</p>
-            <p class="hint tight memo-backup-tip">清理浏览器缓存前请先导出备份（手机优先系统分享）。清站点缓存不会删备忘录数据。</p>
+            <p class="hint tight">更换到空目录时可把当前条目复制过去；原目录内容仍留在原位置。若新目录已有备忘录，则切换显示该目录内容。</p>
           </details>
 
           <div class="memo-reconnect-banner" id="memo-reconnect-banner" hidden>
@@ -1323,6 +1344,7 @@ hello@world.org</textarea>
                 <button type="button" class="memo-preview-note-block" id="memo-preview-note" hidden></button>
               </div>
               <div class="btn-row memo-preview-actions">
+                <button type="button" class="secondary-btn" id="memo-preview-copy" hidden>复制</button>
                 <button type="button" class="secondary-btn" id="memo-preview-edit" hidden>编辑</button>
                 <button type="button" class="ghost-btn" id="memo-preview-share" hidden>分享</button>
                 <button type="button" class="ghost-btn" id="memo-preview-fs" hidden>全屏</button>
@@ -1343,7 +1365,8 @@ hello@world.org</textarea>
               <div class="memo-preview-file" id="memo-preview-file" hidden>
                 <p class="memo-preview-file-name mono" id="memo-preview-file-name"></p>
                 <p class="hint tight" id="memo-preview-file-meta"></p>
-                <p class="hint tight">此类型无法在页内完整预览，可下载或新标签打开尝试查看。</p>
+                <p class="hint tight">此类型无法写入系统剪贴板，请下载或分享带走。</p>
+                <p class="hint tight">页内无法完整预览时，可下载或新标签打开尝试查看。</p>
               </div>
             </div>
           </div>
@@ -2887,15 +2910,15 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./theme.js?v=20260816memo25"></script>
-  <script src="./temp.js?v=20260816memo25"></script>
+  <script src="./theme.js?v=20260816memo26"></script>
+  <script src="./temp.js?v=20260816memo26"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260816memo25"></script>
-  <script src="./about.js?v=20260816memo25"></script>
-  <script src="./extra.js?v=20260816memo25"></script>
+  <script src="./app.js?v=20260816memo26"></script>
+  <script src="./about.js?v=20260816memo26"></script>
+  <script src="./extra.js?v=20260816memo26"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./textimg.js?v=20260816memo25"></script>
-  <script src="./imgtext.js?v=20260816memo25"></script>
-  <script src="./memo.js?v=20260816memo25"></script>
+  <script src="./textimg.js?v=20260816memo26"></script>
+  <script src="./imgtext.js?v=20260816memo26"></script>
+  <script src="./memo.js?v=20260816memo26"></script>
 </body>
 </html>

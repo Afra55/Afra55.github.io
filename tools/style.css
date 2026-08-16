@@ -4528,6 +4528,49 @@ button.adb-device-body.linkish {
   font-size: 1.02rem;
 }
 
+.memo-hint-narrow {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .memo-hint-wide {
+    display: none;
+  }
+  .memo-hint-narrow {
+    display: inline;
+  }
+}
+
+.memo-backup-bar {
+  display: grid;
+  gap: 0.25rem;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+.memo-backup-nudge:not([hidden]) {
+  color: color-mix(in srgb, #e8a317 75%, var(--ink));
+}
+
+.memo-dir-hint {
+  padding: 0.75rem 0.85rem;
+  border: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 6%, var(--panel));
+}
+
+.memo-dir-hint strong {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+.memo-takeout-hint {
+  margin: 0;
+  color: color-mix(in srgb, var(--ink) 62%, transparent);
+}
+
 .memo-storage-fold {
   border: 1px solid var(--line);
   border-radius: 12px;
