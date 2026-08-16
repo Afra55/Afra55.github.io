@@ -788,7 +788,7 @@
     { id: "image", label: "图片", tools: ["imgkit", "textimg", "imgtext"] },
     { id: "convert", label: "换算", tools: ["units", "coord", "numbase"] },
     { id: "device", label: "设备", tools: ["adb", "ffbridge"] },
-    { id: "site", label: "站点", tools: ["about"] },
+    { id: "site", label: "站点", tools: ["about", "setup"] },
   ];
   const DEFAULT_GROUP_ORDER = TOOL_GROUPS.map((g) => g.id);
   const GROUP_BY_ID = Object.fromEntries(TOOL_GROUPS.map((g) => [g.id, g]));
@@ -830,6 +830,7 @@
     adb: "网页侧 ADB 调试辅助：设备、文件、输入、安装等。",
     ffbridge: "本机 FFmpeg 桥：网页浏览文件夹、批量抽音频 / 转码（适合大量视频）。",
     about: "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
+    setup: "小白向：如何下载安装 Node.js、ADB、FFmpeg，并配置本机桥。",
   };
   const TOOL_META = {
     timestamp: { name: "时间戳", aliases: ["时间", "timestamp", "date"] },
@@ -891,6 +892,10 @@
       aliases: ["ffmpeg", "批量", "抽音频", "转码", "本机桥", "ffbridge"],
     },
     about: { name: "实用小工具合集", aliases: ["about", "介绍", "目录", "主题", "帮助", "总览", "关于"] },
+    setup: {
+      name: "安装本机工具",
+      aliases: ["帮助", "安装", "nodejs", "node", "adb", "ffmpeg", "配置", "小白", "setup", "教程"],
+    },
   };
   const DEFAULT_ORDER = TOOL_GROUPS.flatMap((g) => g.tools);
 

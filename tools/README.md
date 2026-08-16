@@ -58,6 +58,10 @@ node tools/ffmpeg-bridge/server.js
 
 适合几百个视频批量抽 MP3/M4A/WAV。浏览器内 WASM 工具仍适合少量文件的在线处理。
 
+## 本机桥依赖（小白）
+
+网页内有独立指南：打开工具页 → **安装本机工具**（`#setup`），含 Node.js / ADB / FFmpeg 下载链接与分系统步骤。
+
 ## 本地预览
 
 ```bash
