@@ -848,11 +848,18 @@
   }
 
   paintToolsVersion();
-  document.addEventListener("DOMContentLoaded", () => {
+  let autoPackZipBound = false;
+  function initAutoPackZipOnce() {
     paintToolsVersion();
+    if (autoPackZipBound) return;
+    autoPackZipBound = true;
     bindAutoPackZipToggles();
-  });
-  if (document.readyState !== "loading") bindAutoPackZipToggles();
+  }
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initAutoPackZipOnce);
+  } else {
+    initAutoPackZipOnce();
+  }
 
   let gifsicleModulePromise = null;
 
