@@ -6741,6 +6741,18 @@ html[data-theme-scheme="light"] .bg-grid {
   background: color-mix(in srgb, #f5d76e 12%, var(--panel, #121826));
 }
 
+#ffbridge.is-mobile-fallback #ff-bridge-panel,
+#ffbridge.is-mobile-fallback #ff-workspace {
+  display: none !important;
+}
+
+/* 手机端弱化「本机桥」文案，避免误以为必须安装 */
+@media (max-width: 900px), (pointer: coarse) {
+  .ff-desktop-only-hint {
+    display: none;
+  }
+}
+
 #ffbridge.is-bridge-connected .ff-mode-banner {
   background: color-mix(in srgb, var(--accent, #2ec4b6) 16%, var(--panel, #121826));
 }

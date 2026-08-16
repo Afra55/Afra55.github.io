@@ -828,7 +828,7 @@
     coord: "WGS84 / GCJ-02 / BD-09 等坐标系互转。",
     numbase: "二、八、十、十六进制互转。",
     adb: "网页侧 ADB 调试辅助：设备、文件、输入、安装等。",
-    ffbridge: "电脑优先本机 FFmpeg 桥批量处理（常用能力已去重分层）；与网页音频/修剪/GIF 互补。手机与未连桥时用网页保底。",
+    ffbridge: "电脑批量用本机 FFmpeg 桥；手机请直接用媒体里的音频/修剪/GIF（网页内处理）。",
     about: "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
     setup: "小白向：如何下载安装 Node.js、ADB、FFmpeg；手机用网页保底、电脑用桥更优。",
   };
@@ -886,10 +886,11 @@
     numbase: { name: "进制转换", aliases: ["二进制", "十六进制"] },
     markdown: { name: "Markdown", aliases: ["md", "预览"] },
     memo: { name: "备忘录", aliases: ["笔记", "剪贴板", "memo", "note", "便签"] },
-    adb: { name: "ADB 工具", aliases: ["安卓", "android", "设备"] },
+    adb: { name: "ADB 工具", aliases: ["安卓", "android", "设备", "adb"], desktopOnly: true },
     ffbridge: {
       name: "FFmpeg 本机桥",
-      aliases: ["ffmpeg", "批量", "抽音频", "转码", "本机桥", "ffbridge"],
+      aliases: ["本机桥", "ffbridge", "批量转码"],
+      desktopOnly: true,
     },
     about: { name: "实用小工具合集", aliases: ["about", "介绍", "目录", "主题", "帮助", "总览", "关于"] },
     setup: {
@@ -911,6 +912,25 @@
   const recentWrap = $("#tool-recent");
   const recentList = $("#tool-recent-list");
   const canDesktopDrag = () => window.matchMedia("(min-width: 901px)").matches;
+
+  /** 手机/平板不适合本机桥与 ADB，导航中隐藏，避免误入 */
+  function isPhoneLikeClient() {
+    const ua = navigator.userAgent || "";
+    if (/Android|iPhone|iPod|Mobile/i.test(ua)) return true;
+    const coarse = window.matchMedia("(pointer: coarse)").matches;
+    const narrow = window.matchMedia("(max-width: 900px)").matches;
+    if (/iPad|tablet/i.test(ua) || (coarse && narrow && !/Windows|Macintosh|Linux/i.test(ua))) return true;
+    if (/Macintosh/i.test(ua) && coarse && typeof navigator.maxTouchPoints === "number" && navigator.maxTouchPoints > 1) {
+      return true;
+    }
+    return false;
+  }
+
+  function isNavToolVisible(id) {
+    const meta = TOOL_META[id];
+    if (meta?.desktopOnly && isPhoneLikeClient()) return false;
+    return true;
+  }
 
   let currentTool = "timestamp";
   let currentMediaTab = "gifmaker";
@@ -1058,6 +1078,7 @@
         : "长按分类标题后拖动，可调整整组顺序";
       wrap.appendChild(title);
       tools.forEach((id) => {
+        if (!isNavToolVisible(id)) return;
         const a = document.createElement("a");
         a.className = "tool-nav-link";
         a.href = id === "media" ? "#media/gifmaker" : `#${id}`;
@@ -1067,6 +1088,7 @@
         a.textContent = toolName(id);
         wrap.appendChild(a);
       });
+      if (![...wrap.querySelectorAll(".tool-nav-link")].length) return;
       navEl.appendChild(wrap);
     });
     bindNavInteractions();
@@ -1083,6 +1105,7 @@
     }
     recentWrap.hidden = false;
     items.forEach((id) => {
+      if (!isNavToolVisible(id)) return;
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "nav-recent-chip";
@@ -1090,6 +1113,9 @@
       btn.addEventListener("click", () => navigateTo(id, id === "media" ? currentMediaTab : null));
       recentList.appendChild(btn);
     });
+    if (!recentList.children.length) {
+      recentWrap.hidden = true;
+    }
   }
 
   function drawerFocusables() {
@@ -1205,7 +1231,15 @@
   }
 
   function applyRoute({ skipRecent, keepDrawer } = {}) {
-    const route = parseRoute();
+    let route = parseRoute();
+    // 手机深链 #ffbridge / #adb → 网页媒体，避免无用桥页面
+    if (isPhoneLikeClient() && (route.tool === "ffbridge" || route.tool === "adb")) {
+      route = { tool: "media", tab: route.tool === "ffbridge" ? "audio" : currentMediaTab || "gifmaker" };
+      const canonicalMobile = routeHash(route.tool, route.tab);
+      if (`#${String(location.hash || "").replace(/^#/, "")}` !== canonicalMobile) {
+        history.replaceState(null, "", canonicalMobile);
+      }
+    }
     currentTool = route.tool;
     currentMediaTab = route.tab || "gifmaker";
 
@@ -1282,13 +1316,20 @@
   }
 
   function navigateTo(tool, tab, { replace = false } = {}) {
-    const nextTab = tab || (tool === "media" ? currentMediaTab : null);
-    const hash = routeHash(tool, nextTab);
+    // 手机打开本机桥/ADB：引导到网页媒体能力，避免空白桥面板
+    let nextTool = tool;
+    let nextTabArg = tab;
+    if (isPhoneLikeClient() && (tool === "ffbridge" || tool === "adb")) {
+      nextTool = "media";
+      nextTabArg = tool === "ffbridge" ? "audio" : currentMediaTab || "gifmaker";
+    }
+    const nextTab = nextTabArg || (nextTool === "media" ? currentMediaTab : null);
+    const hash = routeHash(nextTool, nextTab);
     const current = `#${String(location.hash || "").replace(/^#/, "")}`;
     // 媒体内切 Tab 用 replace，避免系统返回在子功能间来回跳
     const mediaTabOnly =
-      tool === "media" && currentTool === "media" && nextTab && nextTab !== currentMediaTab;
-    const shouldReplace = replace || mediaTabOnly;
+      nextTool === "media" && currentTool === "media" && nextTab && nextTab !== currentMediaTab;
+    const shouldReplace = replace || mediaTabOnly || (isPhoneLikeClient() && (tool === "ffbridge" || tool === "adb"));
     if (shouldReplace) history.replaceState(null, "", hash);
     else if (current !== hash) history.pushState(null, "", hash);
     applyRoute();
