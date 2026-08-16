@@ -534,9 +534,33 @@ async function main() {
       );
     }
 
+    // switch directory dialog UX
+    out.switchDir = {
+      hasDlg: Boolean(document.getElementById("memo-switch-dir-dlg")),
+      hasSwitchBtn: Boolean(document.getElementById("memo-switch-dir")),
+      hasPickQuick: Boolean(document.getElementById("memo-pick-dir-quick")),
+      api: typeof window.DevToolsMemo.pickDirectory === "function" &&
+        typeof window.DevToolsMemo.askSwitchDirectoryChoice === "function",
+    };
+    if (out.switchDir.api) {
+      const pending = window.DevToolsMemo.askSwitchDirectoryChoice({
+        existing: false,
+        count: 3,
+        folderName: "smoke-switch-dir",
+      });
+      await sleep(60);
+      const dlg = document.getElementById("memo-switch-dir-dlg");
+      out.switchDir.dlgOpen = Boolean(dlg?.open);
+      out.switchDir.migrateVisible = !document.getElementById("memo-switch-migrate")?.hidden;
+      out.switchDir.emptyVisible = !document.getElementById("memo-switch-empty")?.hidden;
+      document.getElementById("memo-switch-cancel")?.click();
+      out.switchDir.choice = await pending;
+    }
+
     out.cacheBust = {
+
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260816memo26/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260816memo27/.test(s.src)),
     };
 
     return out;
@@ -666,8 +690,14 @@ async function main() {
   if (!/\d+\s*\/\s*500/.test(result.noteUi?.countAfterInput || "")) {
     failed.push("note char count should update while typing");
   }
-  if (!/memo26/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memo26");
+  if (!result.switchDir?.hasDlg || !result.switchDir?.hasSwitchBtn || !result.switchDir?.hasPickQuick || !result.switchDir?.api) {
+    failed.push("switch directory UI/API missing");
+  }
+  if (!result.switchDir?.dlgOpen || !result.switchDir?.migrateVisible || !result.switchDir?.emptyVisible || result.switchDir?.choice !== "cancel") {
+    failed.push("switch directory dialog choices failed");
+  }
+  if (!/memo27/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memo27");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");

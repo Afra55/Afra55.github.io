@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260816memo26" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo26" />
+  <link rel="stylesheet" href="./style.css?v=20260816memo27" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo27" />
   <script>
     /* 尽早应用主题，减少闪烁 */
     (function () {
@@ -38,7 +38,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo26</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo27</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="theme-open" title="切换站点主题">主题</button>
@@ -1180,11 +1180,26 @@ hello@world.org</textarea>
             <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
               <button type="button" class="secondary-btn" id="memo-export">导出</button>
               <button type="button" class="ghost-btn" id="memo-export-to-dir" hidden title="写入当前存储目录下的 backups/ 文件夹">备份到目录</button>
+              <button type="button" class="secondary-btn" id="memo-switch-dir" hidden title="更换磁盘存储目录，可选带走当前内容">更换目录</button>
+              <button type="button" class="secondary-btn" id="memo-pick-dir-quick" hidden title="选择磁盘目录保存">选择目录</button>
               <label class="file-btn" for="memo-import">导入</label>
               <input id="memo-import" type="file" accept=".zip,.memo,.bin,application/zip" hidden />
             </div>
             <p class="hint tight memo-backup-nudge" id="memo-backup-nudge" hidden></p>
           </div>
+
+          <dialog class="memo-dialog" id="memo-switch-dir-dlg" aria-label="更换存储目录">
+            <div class="memo-dialog-body">
+              <h2 class="subhead" id="memo-switch-dir-title">更换存储目录</h2>
+              <p class="hint tight" id="memo-switch-dir-sub"></p>
+              <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.75rem">
+                <button type="button" class="primary-btn" id="memo-switch-migrate" hidden>带走当前内容并切换</button>
+                <button type="button" class="secondary-btn" id="memo-switch-open" hidden>打开该目录</button>
+                <button type="button" class="ghost-btn" id="memo-switch-empty" hidden>绑定空目录（不带走）</button>
+                <button type="button" class="ghost-btn" id="memo-switch-cancel">取消</button>
+              </div>
+            </div>
+          </dialog>
 
           <details class="memo-storage-fold">
             <summary>存储目录（选择 / 更换）</summary>
@@ -2910,15 +2925,15 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./theme.js?v=20260816memo26"></script>
-  <script src="./temp.js?v=20260816memo26"></script>
+  <script src="./theme.js?v=20260816memo27"></script>
+  <script src="./temp.js?v=20260816memo27"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260816memo26"></script>
-  <script src="./about.js?v=20260816memo26"></script>
-  <script src="./extra.js?v=20260816memo26"></script>
+  <script src="./app.js?v=20260816memo27"></script>
+  <script src="./about.js?v=20260816memo27"></script>
+  <script src="./extra.js?v=20260816memo27"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./textimg.js?v=20260816memo26"></script>
-  <script src="./imgtext.js?v=20260816memo26"></script>
-  <script src="./memo.js?v=20260816memo26"></script>
+  <script src="./textimg.js?v=20260816memo27"></script>
+  <script src="./imgtext.js?v=20260816memo27"></script>
+  <script src="./memo.js?v=20260816memo27"></script>
 </body>
 </html>

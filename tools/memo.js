@@ -650,14 +650,25 @@
     if (!storeMeta) return;
     syncExportButtonLabels();
     const pickBtn = $("#memo-pick-dir");
+    const pickQuickBtn = $("#memo-pick-dir-quick");
+    const switchDirBtn = $("#memo-switch-dir");
     const exportToDirBtn = $("#memo-export-to-dir");
     const connected = Boolean(state.dirHandle) && (state.mode === "dir" || state.dirPending);
+    const dirOk = canDirPicker();
     if (pickBtn) {
-      pickBtn.hidden = !canDirPicker() || connected;
+      pickBtn.hidden = !dirOk || connected;
       pickBtn.textContent = "选择存储目录";
     }
+    if (pickQuickBtn) {
+      pickQuickBtn.hidden = !dirOk || connected;
+    }
+    if (switchDirBtn) {
+      // 已连接或曾连接：常显更换；纯应用内且无 handle 时用「选择目录」
+      switchDirBtn.hidden = !dirOk || (!connected && !state.dirHandle);
+      switchDirBtn.textContent = state.dirPending ? "重新连接 / 更换目录" : "更换目录";
+    }
     if (reconnectBtn) {
-      reconnectBtn.hidden = !canDirPicker() || !connected;
+      reconnectBtn.hidden = !dirOk || !connected;
       reconnectBtn.textContent = state.dirPending ? "重新连接目录" : "更换目录";
     }
     if (exportToDirBtn) {
@@ -2049,7 +2060,7 @@
     }
   }
 
-  async function connectDirectory(handle, { isNew = false, migrateSnapshot = null } = {}) {
+  async function connectDirectory(handle, { isNew = false, migrateSnapshot = null, forceEmpty = false } = {}) {
     const ok = await ensureDirPermission(handle);
     if (!ok) throw new Error("未获得目录权限");
     const existing = await readIndexFromDir(handle);
@@ -2079,6 +2090,10 @@
       setProgress(false, 0, "");
       await writeIndexToDir();
       toast(`已绑定「${handle.name}」，并带上 ${migrateSnapshot.length} 条（原位置数据未删）`);
+    } else if (forceEmpty) {
+      state.index = emptyIndex();
+      await writeIndexToDir();
+      toast(`已绑定空目录「${handle.name}」（未迁入旧条目，原位置仍保留）`);
     } else if (state.index.items.length) {
       await writeIndexToDir();
       for (const it of state.index.items) {
@@ -2129,6 +2144,68 @@
     return out;
   }
 
+  function askSwitchDirectoryChoice({ existing, count, folderName }) {
+    const dlg = $("#memo-switch-dir-dlg");
+    const title = $("#memo-switch-dir-title");
+    const sub = $("#memo-switch-dir-sub");
+    const btnMigrate = $("#memo-switch-migrate");
+    const btnOpen = $("#memo-switch-open");
+    const btnEmpty = $("#memo-switch-empty");
+    const btnCancel = $("#memo-switch-cancel");
+    if (!dlg || typeof dlg.showModal !== "function") {
+      // fallback: empty target migrates; existing opens
+      if (existing) return Promise.resolve(count ? (window.confirm(`打开目录「${folderName}」？当前列表不搬走。`) ? "open" : "cancel") : "open");
+      if (count) return Promise.resolve(window.confirm(`把当前 ${count} 条带到「${folderName}」？`) ? "migrate" : "cancel");
+      return Promise.resolve("open");
+    }
+    return new Promise((resolve) => {
+      const finish = (value) => {
+        btnMigrate?.removeEventListener("click", onMigrate);
+        btnOpen?.removeEventListener("click", onOpen);
+        btnEmpty?.removeEventListener("click", onEmpty);
+        btnCancel?.removeEventListener("click", onCancel);
+        dlg.removeEventListener("cancel", onDlgCancel);
+        if (dlg.open) dlg.close();
+        resolve(value);
+      };
+      const onMigrate = () => finish("migrate");
+      const onOpen = () => finish("open");
+      const onEmpty = () => finish("empty");
+      const onCancel = () => finish("cancel");
+      const onDlgCancel = (e) => {
+        e.preventDefault();
+        finish("cancel");
+      };
+      if (title) title.textContent = existing ? "打开已有备忘录目录" : "绑定存储目录";
+      if (sub) {
+        if (existing) {
+          sub.textContent = count
+            ? `目录「${folderName}」里已有备忘录。打开后将显示该目录内容；当前 ${count} 条不会自动搬进去，仍留在原位置。`
+            : `目录「${folderName}」里已有备忘录，将打开并显示其中内容。`;
+        } else if (count) {
+          sub.textContent = `新目录「${folderName}」是空的。可以把当前 ${count} 条复制过去（原位置不删），也可以只绑定空目录。`;
+        } else {
+          sub.textContent = `将绑定空目录「${folderName}」作为存储位置。`;
+        }
+      }
+      if (btnMigrate) btnMigrate.hidden = !( !existing && count > 0 );
+      if (btnOpen) btnOpen.hidden = !existing;
+      if (btnEmpty) btnEmpty.hidden = !(!existing && count > 0);
+      if (!existing && !count && btnOpen) {
+        btnOpen.hidden = false;
+        btnOpen.textContent = "绑定此目录";
+      } else if (btnOpen && existing) {
+        btnOpen.textContent = "打开该目录";
+      }
+      btnMigrate?.addEventListener("click", onMigrate);
+      btnOpen?.addEventListener("click", onOpen);
+      btnEmpty?.addEventListener("click", onEmpty);
+      btnCancel?.addEventListener("click", onCancel);
+      dlg.addEventListener("cancel", onDlgCancel);
+      if (!dlg.open) dlg.showModal();
+    });
+  }
+
   async function pickDirectory() {
     if (!canDirPicker()) {
       toast("当前环境不支持选择目录，已使用应用内存储");
@@ -2137,34 +2214,21 @@
     const handle = await window.showDirectoryPicker({ mode: "readwrite" });
     const existing = await readIndexFromDir(handle);
     const count = state.index.items?.length || 0;
-
-    if (existing) {
-      if (count > 0) {
-        const ok = window.confirm(
-          `目录「${handle.name}」里已有备忘录。\n切换后将显示该目录内容。\n\n当前列表不会自动搬进去；原目录/应用内数据仍保留在原位置。\n确定切换？`
-        );
-        if (!ok) {
-          toast("已取消更换目录");
-          return;
-        }
-      }
-      await connectDirectory(handle, { isNew: true });
+    const choice = await askSwitchDirectoryChoice({ existing: Boolean(existing), count, folderName: handle.name });
+    if (choice === "cancel") {
+      toast("已取消更换目录");
       return;
     }
-
-    if (count > 0) {
-      const migrate = window.confirm(
-        `把当前 ${count} 条一并写入新目录「${handle.name}」？\n\n会复制过去，原目录/应用内数据不会删除。`
-      );
-      if (!migrate) {
-        toast("已取消更换目录");
-        return;
-      }
+    if (choice === "migrate") {
       const migrateSnapshot = await snapshotCurrentBlobs();
       await connectDirectory(handle, { isNew: true, migrateSnapshot });
       return;
     }
-
+    if (choice === "empty") {
+      await connectDirectory(handle, { isNew: true, forceEmpty: true });
+      return;
+    }
+    // open / bind
     await connectDirectory(handle, { isNew: true });
   }
 
@@ -2943,6 +3007,12 @@
   $("#memo-pick-dir")?.addEventListener("click", () => {
     pickDirectory().catch((err) => setError(memoError, err.message || String(err)));
   });
+  $("#memo-pick-dir-quick")?.addEventListener("click", () => {
+    pickDirectory().catch((err) => setError(memoError, err.message || String(err)));
+  });
+  $("#memo-switch-dir")?.addEventListener("click", () => {
+    pickDirectory().catch((err) => setError(memoError, err.message || String(err)));
+  });
   $("#memo-dir-hint-pick")?.addEventListener("click", () => {
     pickDirectory().catch((err) => setError(memoError, err.message || String(err)));
   });
@@ -3528,6 +3598,9 @@
     isOrdered: () => (state.index.items || []).every((it, i) => (it.order ?? i) === i),
     getCountCache: () => ensureCountCache(),
     canDragReorder: () => canDragReorder(),
+    canPickDirectory: () => canDirPicker(),
+    pickDirectory: () => pickDirectory(),
+    askSwitchDirectoryChoice: (opts) => askSwitchDirectoryChoice(opts || {}),
     setShareUiForTest: (on) => {
       state.testShareUi = Boolean(on);
       renderItems();
