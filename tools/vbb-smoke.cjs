@@ -398,6 +398,7 @@ async function main() {
     vtrimTrack: Boolean(document.querySelector("[data-vtrim-track]")),
     audio: Boolean(document.getElementById("audio") && document.getElementById("audio-wave")),
     audioApi: typeof window.DevToolsAudio?.getRange === "function",
+    audioMp3: Boolean(document.querySelector('[data-audio-fmt="mp3"]')),
     ffmpegApi: typeof window.DevToolsFfmpeg?.getInstance === "function",
   }));
 
@@ -1121,6 +1122,7 @@ async function main() {
   if (!todayTools.vtrim || !todayTools.vtrimApi) problems.push("missing video trim module");
   if (!todayTools.vtrimTrack) problems.push("missing vtrim track export controls");
   if (!todayTools.audio || !todayTools.audioApi) problems.push("missing audio module");
+  if (!todayTools.audioMp3) problems.push("missing audio MP3 export option");
   if (!todayTools.ffmpegApi) problems.push("DevToolsFfmpeg missing");
   if (!mobileShell.drawerOpen) problems.push("mobile drawer failed to open");
   if (!mobileShell.closedByBtn) problems.push("nav-close should close drawer");

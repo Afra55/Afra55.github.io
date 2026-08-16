@@ -302,8 +302,8 @@
       return;
     }
     const span = endSec - startSec;
-    const fmt = exportFmt === "wav" ? "WAV" : "M4A";
-    summaryEl.textContent = `将导出 ${formatClock(span)} · 音量 ${Math.round(gainPct)}% · ${fmt}`;
+    const fmtLabel = exportFmt === "wav" ? "WAV" : exportFmt === "mp3" ? "MP3" : "M4A";
+    summaryEl.textContent = `将导出 ${formatClock(span)} · 音量 ${Math.round(gainPct)}% · ${fmtLabel}`;
   }
 
   function paintTimeline() {
@@ -510,7 +510,9 @@
       const ss = String(Math.max(0, startSec));
       const tt = String(Math.max(MIN_SPAN, span));
       const isWav = exportFmt === "wav";
-      const outName = `audio-out-${Date.now()}.${isWav ? "wav" : "m4a"}`;
+      const isMp3 = exportFmt === "mp3";
+      const ext = isWav ? "wav" : isMp3 ? "mp3" : "m4a";
+      const outName = `audio-out-${Date.now()}.${ext}`;
       const attempts = [];
 
       if (isWav) {
@@ -518,6 +520,17 @@
         if (needVol) args.push("-af", `volume=${vol}`);
         args.push("-c:a", "pcm_s16le", "-ar", "44100", "-ac", "2", "-y", outName);
         attempts.push({ label: "导出 WAV", args });
+      } else if (isMp3) {
+        if (!needVol) {
+          attempts.push({
+            label: "快速抽取 MP3",
+            args: ["-ss", ss, "-t", tt, "-i", inName, "-vn", "-c:a", "copy", "-f", "mp3", "-y", outName],
+          });
+        }
+        const enc = ["-ss", ss, "-t", tt, "-i", inName, "-vn"];
+        if (needVol) enc.push("-af", `volume=${vol}`);
+        enc.push("-c:a", "libmp3lame", "-b:a", "192k", "-y", outName);
+        attempts.push({ label: needVol ? "MP3 音量重编码" : "MP3 重编码", args: enc });
       } else {
         if (!needVol) {
           attempts.push({
@@ -532,7 +545,7 @@
       }
 
       let outBlob = null;
-      const mime = isWav ? "audio/wav" : "audio/mp4";
+      const mime = isWav ? "audio/wav" : isMp3 ? "audio/mpeg" : "audio/mp4";
       for (const attempt of attempts) {
         if (abortFlag) throw new Error("已取消");
         setProgress(true, 0.5, `${attempt.label}…`, { busy: true });
@@ -564,7 +577,6 @@
         resultAudio.src = resultUrl;
         resultAudio.hidden = false;
       }
-      const ext = isWav ? "wav" : "m4a";
       const name = `audio-${Date.now()}.${ext}`;
       if (downloadA) {
         downloadA.href = resultUrl;
@@ -673,7 +685,8 @@
   });
   document.querySelectorAll("[data-audio-fmt]").forEach((btn) => {
     btn.addEventListener("click", () => {
-      exportFmt = btn.dataset.audioFmt === "wav" ? "wav" : "m4a";
+      const f = btn.dataset.audioFmt;
+      exportFmt = f === "wav" || f === "mp3" ? f : "m4a";
       document.querySelectorAll("[data-audio-fmt]").forEach((b) => {
         b.classList.toggle("is-active", b.dataset.audioFmt === exportFmt);
       });

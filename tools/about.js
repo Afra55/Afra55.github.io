@@ -30,7 +30,7 @@
       id: "audio",
       href: "#media/audio",
       name: "音频处理",
-      desc: "修剪时长、调节音量，从视频抽音轨；导出 M4A / WAV。",
+      desc: "修剪时长、调节音量，从视频抽音轨；导出 M4A / MP3 / WAV。",
     },
   ];
 

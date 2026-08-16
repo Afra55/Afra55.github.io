@@ -150,6 +150,7 @@
   let previewScrub = null;
   let exportQuality = "fast"; // fast | hq
   let exportTrack = "av"; // av | video | audio
+  let exportAudioFmt = "m4a"; // m4a | mp3 (仅音频时)
   let cropLiveRaf = 0;
   /** @type {object[]} */
   let history = [];
@@ -296,12 +297,18 @@
     history = [];
     exportQuality = "fast";
     exportTrack = "av";
+    exportAudioFmt = "m4a";
     document.querySelectorAll("[data-vtrim-quality]").forEach((btn) => {
       btn.classList.toggle("is-active", btn.dataset.vtrimQuality === "fast");
     });
     document.querySelectorAll("[data-vtrim-track]").forEach((btn) => {
       btn.classList.toggle("is-active", btn.dataset.vtrimTrack === "av");
     });
+    document.querySelectorAll("[data-vtrim-audio-fmt]").forEach((btn) => {
+      btn.classList.toggle("is-active", btn.dataset.vtrimAudioFmt === "m4a");
+    });
+    const audioFmtSeg = $("#vtrim-audio-fmt-seg");
+    if (audioFmtSeg) audioFmtSeg.hidden = true;
     if (cropLive) cropLive.hidden = true;
     if (filmLoading) filmLoading.hidden = true;
     previewWrap?.classList.remove("is-film-loading", "is-playing");
@@ -355,6 +362,8 @@
       exportBtn.textContent =
         exportTrack === "audio" ? "导出音频" : exportTrack === "video" ? "导出无声视频" : "导出视频";
     }
+    const audioFmtSeg = $("#vtrim-audio-fmt-seg");
+    if (audioFmtSeg) audioFmtSeg.hidden = exportTrack !== "audio" || !has;
     if (rotL) rotL.disabled = !has || busy;
     if (rotR) rotR.disabled = !has || busy;
     if (flipHBtn) flipHBtn.disabled = !has || busy;
@@ -618,7 +627,8 @@
     const trackLabel =
       exportTrack === "audio" ? "仅音频" : exportTrack === "video" ? "仅视频" : "音视频";
     if (exportTrack === "audio") {
-      summaryEl.textContent = `将导出 ${formatClock(span)} · ${trackLabel} · M4A`;
+      const af = exportAudioFmt === "mp3" ? "MP3" : "M4A";
+      summaryEl.textContent = `将导出 ${formatClock(span)} · ${trackLabel} · ${af}`;
       return;
     }
     const est = estimateOutSize();
@@ -991,21 +1001,34 @@
       const track = exportTrack === "audio" || exportTrack === "video" ? exportTrack : "av";
       const audioOnly = track === "audio";
       const videoOnly = track === "video";
-      const outName = audioOnly ? `vtrim-out-${Date.now()}.m4a` : `vtrim-out-${Date.now()}.mp4`;
+      const audioMp3 = audioOnly && exportAudioFmt === "mp3";
+      const outExt = audioOnly ? (audioMp3 ? "mp3" : "m4a") : "mp4";
+      const outName = `vtrim-out-${Date.now()}.${outExt}`;
       const reencode = audioOnly ? false : needsReencode();
       const crf = exportQuality === "hq" ? "20" : "23";
       const preset = exportQuality === "hq" ? "veryfast" : "ultrafast";
       const attempts = [];
 
       if (audioOnly) {
-        attempts.push({
-          label: "抽取音轨",
-          args: ["-ss", ss, "-t", tt, "-i", inName, "-vn", "-c:a", "copy", "-y", outName],
-        });
-        attempts.push({
-          label: "AAC 重编码",
-          args: ["-ss", ss, "-t", tt, "-i", inName, "-vn", "-c:a", "aac", "-b:a", "192k", "-y", outName],
-        });
+        if (audioMp3) {
+          attempts.push({
+            label: "抽取 MP3",
+            args: ["-ss", ss, "-t", tt, "-i", inName, "-vn", "-c:a", "copy", "-f", "mp3", "-y", outName],
+          });
+          attempts.push({
+            label: "MP3 重编码",
+            args: ["-ss", ss, "-t", tt, "-i", inName, "-vn", "-c:a", "libmp3lame", "-b:a", "192k", "-y", outName],
+          });
+        } else {
+          attempts.push({
+            label: "抽取音轨",
+            args: ["-ss", ss, "-t", tt, "-i", inName, "-vn", "-c:a", "copy", "-y", outName],
+          });
+          attempts.push({
+            label: "AAC 重编码",
+            args: ["-ss", ss, "-t", tt, "-i", inName, "-vn", "-c:a", "aac", "-b:a", "192k", "-y", outName],
+          });
+        }
       } else {
         if (!reencode && !videoOnly) {
           attempts.push({
@@ -1095,7 +1118,7 @@
       }
 
       let outBlob = null;
-      const mime = audioOnly ? "audio/mp4" : "video/mp4";
+      const mime = audioOnly ? (audioMp3 ? "audio/mpeg" : "audio/mp4") : "video/mp4";
       for (const attempt of attempts) {
         if (abortFlag) throw new Error("已取消");
         setProgress(true, 0.45, `${attempt.label}…`, {
@@ -1139,7 +1162,9 @@
       }
       const trackLabel = audioOnly ? "仅音频" : videoOnly ? "仅视频" : "音视频";
       const modeLabel = audioOnly
-        ? "M4A"
+        ? audioMp3
+          ? "MP3"
+          : "M4A"
         : reencode
           ? exportQuality === "hq"
             ? "清晰重编码"
@@ -1149,7 +1174,9 @@
         const mb = (outBlob.size / (1024 * 1024)).toFixed(2);
         resultMeta.textContent = `约 ${mb} MB · ${formatClock(span)} · ${trackLabel} · ${modeLabel}`;
       }
-      const fname = audioOnly ? `trimmed-${Date.now()}.m4a` : `trimmed-${Date.now()}.mp4`;
+      const fname = audioOnly
+        ? `trimmed-${Date.now()}.${audioMp3 ? "mp3" : "m4a"}`
+        : `trimmed-${Date.now()}.mp4`;
       if (downloadA) {
         downloadA.href = resultUrl;
         downloadA.download = fname;
@@ -1273,6 +1300,15 @@
         b.classList.toggle("is-active", b.dataset.vtrimTrack === exportTrack);
       });
       setButtons();
+      updateSummary();
+    });
+  });
+  document.querySelectorAll("[data-vtrim-audio-fmt]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      exportAudioFmt = btn.dataset.vtrimAudioFmt === "mp3" ? "mp3" : "m4a";
+      document.querySelectorAll("[data-vtrim-audio-fmt]").forEach((b) => {
+        b.classList.toggle("is-active", b.dataset.vtrimAudioFmt === exportAudioFmt);
+      });
       updateSummary();
     });
   });

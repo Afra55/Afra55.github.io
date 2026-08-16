@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260816audio1" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260816audio1" />
+  <link rel="stylesheet" href="./style.css?v=20260816audio2" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816audio2" />
   <script>
     /* 尽早应用主题，减少闪烁 */
     (function () {
@@ -38,7 +38,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-audio1</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-audio2</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="theme-open" title="切换站点主题">主题</button>
@@ -1934,6 +1934,10 @@ hello@world.org</textarea>
               <button type="button" class="seg-btn" data-vtrim-track="video">仅视频</button>
               <button type="button" class="seg-btn" data-vtrim-track="audio">仅音频</button>
             </span>
+            <span class="seg" id="vtrim-audio-fmt-seg" role="group" aria-label="音频格式" hidden>
+              <button type="button" class="seg-btn is-active" data-vtrim-audio-fmt="m4a">M4A</button>
+              <button type="button" class="seg-btn" data-vtrim-audio-fmt="mp3">MP3</button>
+            </span>
             <canvas id="vtrim-crop-live" class="vtrim-crop-live" width="160" height="90" hidden aria-label="裁剪成片预览"></canvas>
           </div>
         <div class="vtrim-export-bar" id="vtrim-export-bar" hidden>
@@ -2025,6 +2029,7 @@ hello@world.org</textarea>
           <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.45rem">
             <span class="seg" role="group" aria-label="导出格式">
               <button type="button" class="seg-btn is-active" data-audio-fmt="m4a">M4A</button>
+              <button type="button" class="seg-btn" data-audio-fmt="mp3">MP3</button>
               <button type="button" class="seg-btn" data-audio-fmt="wav">WAV</button>
             </span>
           </div>
@@ -3133,17 +3138,17 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./theme.js?v=20260816audio1"></script>
-  <script src="./temp.js?v=20260816audio1"></script>
+  <script src="./theme.js?v=20260816audio2"></script>
+  <script src="./temp.js?v=20260816audio2"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260816audio1"></script>
-  <script src="./about.js?v=20260816audio1"></script>
-  <script src="./extra.js?v=20260816audio1"></script>
-  <script src="./vtrim.js?v=20260816audio1"></script>
-  <script src="./audio.js?v=20260816audio1"></script>
+  <script src="./app.js?v=20260816audio2"></script>
+  <script src="./about.js?v=20260816audio2"></script>
+  <script src="./extra.js?v=20260816audio2"></script>
+  <script src="./vtrim.js?v=20260816audio2"></script>
+  <script src="./audio.js?v=20260816audio2"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./textimg.js?v=20260816audio1"></script>
-  <script src="./imgtext.js?v=20260816audio1"></script>
-  <script src="./memo.js?v=20260816audio1"></script>
+  <script src="./textimg.js?v=20260816audio2"></script>
+  <script src="./imgtext.js?v=20260816audio2"></script>
+  <script src="./memo.js?v=20260816audio2"></script>
 </body>
 </html>
