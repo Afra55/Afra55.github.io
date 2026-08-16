@@ -1322,6 +1322,60 @@
     "9:16": { w: 540, h: 960 },
   };
 
+  function clampTiSize(n, min, max, fallback) {
+    const v = Number(n);
+    if (!Number.isFinite(v)) return fallback;
+    return Math.max(min, Math.min(max, Math.round(v)));
+  }
+
+  function applyRatioToInputs(ratio) {
+    const dim = TI_RATIO[ratio];
+    if (!dim) return;
+    const wEl = $("#memo-ti-w");
+    const hEl = $("#memo-ti-h");
+    if (wEl) wEl.value = String(dim.w);
+    if (hEl) hEl.value = String(dim.h);
+  }
+
+  function matchRatioKey(w, h) {
+    const key = Object.keys(TI_RATIO).find((k) => TI_RATIO[k].w === w && TI_RATIO[k].h === h);
+    return key || "custom";
+  }
+
+  function readTiSize() {
+    const ratio = $("#memo-ti-ratio")?.value || "1:1";
+    if (ratio !== "custom" && TI_RATIO[ratio]) {
+      const dim = TI_RATIO[ratio];
+      return { w: dim.w, h: dim.h, ratio };
+    }
+    const w = clampTiSize($("#memo-ti-w")?.value, 240, 2000, 720);
+    const h = clampTiSize($("#memo-ti-h")?.value, 240, 2400, 720);
+    return { w, h, ratio: "custom" };
+  }
+
+  function syncTiDimLabel(w, h) {
+    const el = $("#memo-ti-dim");
+    if (el) el.textContent = `${w}×${h}`;
+  }
+
+  function fitTiPreview() {
+    const wrap = $("#memo-ti-preview-wrap");
+    const stage = $("#memo-ti-stage");
+    const box = $("#memo-ti-scale-box");
+    const card = $("#memo-ti-card");
+    if (!wrap || !stage || !box || !card) return;
+    const { w, h } = readTiSize();
+    const pad = 16;
+    const availW = Math.max(120, wrap.clientWidth - pad * 2);
+    const availH = Math.max(120, Math.min(520, window.innerHeight * 0.42));
+    const scale = Math.min(1, availW / w, availH / h);
+    box.style.width = `${w}px`;
+    box.style.height = `${h}px`;
+    box.style.transform = `scale(${scale})`;
+    stage.style.width = `${Math.round(w * scale)}px`;
+    stage.style.height = `${Math.round(h * scale)}px`;
+  }
+
   function wrapText(text, cols) {
     const c = Math.max(0, Number(cols) || 0);
     const lines = [];
@@ -1341,14 +1395,20 @@
     return lines;
   }
 
+  function tiSourceText() {
+    const src = $("#memo-ti-src");
+    if (src) return String(src.value || "");
+    return editor?.value || "";
+  }
+
   function paintTextImageCard() {
     const card = $("#memo-ti-card");
     if (!card) return;
-    const text = editor?.value || "在此输入文字…";
+    const raw = tiSourceText();
+    const text = raw.trim() ? raw : "在此输入文字…";
     const mode = $("#memo-ti-mode")?.value || "quote";
     const tpl = $("#memo-ti-tpl")?.value || "default";
     const theme = $("#memo-ti-theme")?.value || "sunset";
-    const ratio = $("#memo-ti-ratio")?.value || "1:1";
     const align = $("#memo-ti-align")?.value || "center";
     const size = Number($("#memo-ti-size")?.value) || 30;
     const lh = Number($("#memo-ti-lh")?.value) || 1.45;
@@ -1360,15 +1420,16 @@
     const overlay = Math.max(0, Math.min(85, Number($("#memo-ti-overlay")?.value) || 0));
     const wm = $("#memo-ti-wm")?.value || "";
     const sign = $("#memo-ti-sign")?.value || "";
-    const dim = TI_RATIO[ratio] || TI_RATIO["1:1"];
+    const { w, h } = readTiSize();
     const lines = wrapText(text, cols);
     const paperFg = theme === "paper" ? "#2a2118" : fg;
     const useImg = theme === "image" && state.bgImageUrl;
     const grad = TI_THEMES[theme];
 
+    syncTiDimLabel(w, h);
     card.className = `memo-ti-card memo-ti-tpl-${tpl} memo-ti-mode-${mode}`;
-    card.style.width = `${dim.w}px`;
-    card.style.height = `${dim.h}px`;
+    card.style.width = `${w}px`;
+    card.style.height = `${h}px`;
     card.style.padding = `${pad}px`;
     card.style.borderRadius = `${radius}px`;
     card.style.color = paperFg;
@@ -1383,7 +1444,7 @@
     card.style.backgroundPosition = "center";
     card.style.fontFamily =
       mode === "code"
-        ? 'var(--mono)'
+        ? "var(--mono)"
         : mode === "quote" || mode === "title"
           ? '"Noto Serif SC", "Songti SC", serif'
           : "var(--font)";
@@ -1400,6 +1461,7 @@
       ${sign ? `<div class="memo-ti-sign">${escapeHtml(sign)}</div>` : ""}
       ${wm ? `<div class="memo-ti-wm">${escapeHtml(wm)}</div>` : ""}
     `;
+    requestAnimationFrame(fitTiPreview);
   }
 
   async function saveTextImage() {
@@ -1409,20 +1471,46 @@
       paintTextImageCard();
       if (typeof html2canvas !== "function") throw new Error("html2canvas 未加载");
       const scale = Math.max(1, Math.min(3, Number($("#memo-ti-scale")?.value) || 2));
+      const box = $("#memo-ti-scale-box");
+      const stage = $("#memo-ti-stage");
+      const prevTransform = box?.style.transform || "";
+      const prevStageW = stage?.style.width || "";
+      const prevStageH = stage?.style.height || "";
+      const { w, h } = readTiSize();
+      if (box) {
+        box.style.transform = "none";
+        box.style.width = `${w}px`;
+        box.style.height = `${h}px`;
+      }
+      if (stage) {
+        stage.style.width = `${w}px`;
+        stage.style.height = `${h}px`;
+      }
       setProgress(true, 0.3, "渲染图片…");
-      const canvas = await html2canvas(card, {
-        backgroundColor: null,
-        scale,
-        useCORS: true,
-      });
-      const blob = await new Promise((resolve, reject) => {
-        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("导出失败"))), "image/png");
-      });
-      await addItemFromBlob(blob, `文字图-${Date.now()}.png`, { type: "image", quiet: true });
-      setProgress(false, 0, "");
-      renderAll();
-      toast(`已生成图片（${scale}×）`);
-      closeToImgPanel();
+      try {
+        const canvas = await html2canvas(card, {
+          backgroundColor: null,
+          scale,
+          useCORS: true,
+          width: w,
+          height: h,
+        });
+        const blob = await new Promise((resolve, reject) => {
+          canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("导出失败"))), "image/png");
+        });
+        await addItemFromBlob(blob, `文字图-${Date.now()}.png`, { type: "image", quiet: true });
+        setProgress(false, 0, "");
+        renderAll();
+        toast(`已生成图片（${w}×${h} · ${scale}×）`);
+        closeToImgPanel();
+      } finally {
+        if (box) box.style.transform = prevTransform;
+        if (stage) {
+          stage.style.width = prevStageW;
+          stage.style.height = prevStageH;
+        }
+        fitTiPreview();
+      }
     });
   }
 
@@ -1515,9 +1603,17 @@
 
   function openToImgPanel() {
     const dlg = $("#memo-toimg");
+    const src = $("#memo-ti-src");
+    if (src) src.value = editor?.value || "";
+    const ratio = $("#memo-ti-ratio")?.value || "1:1";
+    if (ratio !== "custom") applyRatioToInputs(ratio);
     paintTextImageCard();
     if (dlg?.showModal) dlg.showModal();
     else if (dlg) dlg.hidden = false;
+    setTimeout(() => {
+      fitTiPreview();
+      src?.focus?.();
+    }, 40);
   }
 
   function closeToImgPanel() {
@@ -1535,7 +1631,6 @@
     "memo-ti-mode",
     "memo-ti-tpl",
     "memo-ti-theme",
-    "memo-ti-ratio",
     "memo-ti-align",
     "memo-ti-size",
     "memo-ti-lh",
@@ -1552,9 +1647,101 @@
     $(`#${id}`)?.addEventListener("input", paintTextImageCard);
     $(`#${id}`)?.addEventListener("change", paintTextImageCard);
   });
-  editor?.addEventListener("input", () => {
-    if (isToImgOpen()) paintTextImageCard();
+  $("#memo-ti-src")?.addEventListener("input", paintTextImageCard);
+  $("#memo-ti-ratio")?.addEventListener("change", () => {
+    const ratio = $("#memo-ti-ratio")?.value || "1:1";
+    if (ratio !== "custom") applyRatioToInputs(ratio);
+    paintTextImageCard();
   });
+  const onCustomSize = () => {
+    const w = clampTiSize($("#memo-ti-w")?.value, 240, 2000, 720);
+    const h = clampTiSize($("#memo-ti-h")?.value, 240, 2400, 720);
+    const ratioEl = $("#memo-ti-ratio");
+    if (ratioEl) ratioEl.value = matchRatioKey(w, h);
+    const wEl = $("#memo-ti-w");
+    const hEl = $("#memo-ti-h");
+    if (wEl) wEl.value = String(w);
+    if (hEl) hEl.value = String(h);
+    paintTextImageCard();
+  };
+  $("#memo-ti-w")?.addEventListener("change", onCustomSize);
+  $("#memo-ti-h")?.addEventListener("change", onCustomSize);
+  $("#memo-ti-w")?.addEventListener("input", () => {
+    const ratioEl = $("#memo-ti-ratio");
+    if (ratioEl) ratioEl.value = "custom";
+    paintTextImageCard();
+  });
+  $("#memo-ti-h")?.addEventListener("input", () => {
+    const ratioEl = $("#memo-ti-ratio");
+    if (ratioEl) ratioEl.value = "custom";
+    paintTextImageCard();
+  });
+  editor?.addEventListener("input", () => {
+    if (!isToImgOpen()) return;
+    const src = $("#memo-ti-src");
+    if (src && document.activeElement !== src) src.value = editor.value;
+    paintTextImageCard();
+  });
+  window.addEventListener("resize", () => {
+    if (isToImgOpen()) fitTiPreview();
+  });
+
+  // drag resize on preview corner
+  (() => {
+    const handle = $("#memo-ti-resize");
+    if (!handle) return;
+    let dragging = false;
+    let startX = 0;
+    let startY = 0;
+    let startW = 720;
+    let startH = 720;
+    let startScale = 1;
+    const onMove = (e) => {
+      if (!dragging) return;
+      const pt = e.touches ? e.touches[0] : e;
+      const dx = (pt.clientX - startX) / startScale;
+      const dy = (pt.clientY - startY) / startScale;
+      const w = clampTiSize(startW + dx, 240, 2000, startW);
+      const h = clampTiSize(startH + dy, 240, 2400, startH);
+      const wEl = $("#memo-ti-w");
+      const hEl = $("#memo-ti-h");
+      const ratioEl = $("#memo-ti-ratio");
+      if (wEl) wEl.value = String(w);
+      if (hEl) hEl.value = String(h);
+      if (ratioEl) ratioEl.value = matchRatioKey(w, h);
+      paintTextImageCard();
+      if (e.cancelable) e.preventDefault();
+    };
+    const onUp = () => {
+      if (!dragging) return;
+      dragging = false;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("touchmove", onMove);
+      window.removeEventListener("touchend", onUp);
+    };
+    const onDown = (e) => {
+      const pt = e.touches ? e.touches[0] : e;
+      const { w, h } = readTiSize();
+      const box = $("#memo-ti-scale-box");
+      const transform = box?.style?.transform || "";
+      const m = /scale\(([\d.]+)\)/.exec(transform);
+      startScale = m ? Number(m[1]) || 1 : 1;
+      dragging = true;
+      startX = pt.clientX;
+      startY = pt.clientY;
+      startW = w;
+      startH = h;
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onUp);
+      window.addEventListener("touchmove", onMove, { passive: false });
+      window.addEventListener("touchend", onUp);
+      e.preventDefault();
+    };
+    handle.addEventListener("pointerdown", onDown);
+    handle.addEventListener("touchstart", onDown, { passive: false });
+  })();
+
   $("#memo-ti-bgimg")?.addEventListener("change", (e) => {
     const f = e.target.files?.[0];
     if (!f) return;

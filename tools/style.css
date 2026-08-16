@@ -4528,20 +4528,98 @@ button.adb-device-body.linkish {
   color: var(--muted);
 }
 
+.memo-ti-src-lab {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.35rem 0 0.55rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.memo-ti-src-lab .area {
+  min-height: 5.5rem;
+  resize: vertical;
+}
+
+.memo-ti-preview-panel {
+  margin-top: 0.7rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+.memo-ti-sizebar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.45rem 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(14, 22, 38, 0.55);
+}
+
+.memo-ti-sizebar label {
+  display: grid;
+  gap: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.memo-ti-sizebar .meta-input,
+.memo-ti-sizebar .select-input {
+  min-width: 5.5rem;
+}
+
+.memo-ti-dim {
+  align-self: center;
+  padding: 0.28rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid rgba(46, 196, 182, 0.35);
+  background: rgba(46, 196, 182, 0.12);
+  color: #dffcf7;
+  font-size: 0.8rem;
+}
+
+.memo-ti-size-hint {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
 .memo-ti-preview-wrap {
   overflow: auto;
   max-width: 100%;
-  margin-top: 0.65rem;
   border-radius: 12px;
   border: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.2);
-  padding: 0.75rem;
+  background:
+    linear-gradient(45deg, rgba(255,255,255,0.03) 25%, transparent 25%),
+    linear-gradient(-45deg, rgba(255,255,255,0.03) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, rgba(255,255,255,0.03) 75%),
+    linear-gradient(-45deg, transparent 75%, rgba(255,255,255,0.03) 75%),
+    rgba(0, 0, 0, 0.28);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  padding: 0.85rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 12rem;
+}
+
+.memo-ti-stage {
+  position: relative;
+  margin: 0 auto;
+}
+
+.memo-ti-scale-box {
+  position: relative;
+  transform-origin: top left;
+  will-change: transform;
 }
 
 .memo-ti-card {
   position: relative;
-  margin: 0 auto;
-  max-width: 100%;
+  margin: 0;
+  max-width: none;
   box-sizing: border-box;
   overflow: hidden;
   display: flex;
@@ -4549,6 +4627,28 @@ button.adb-device-body.linkish {
   justify-content: center;
   background-repeat: no-repeat;
   box-shadow: 0 18px 40px rgba(0, 0, 0, 0.28);
+}
+
+.memo-ti-resize {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 2px solid #dffcf7;
+  border-radius: 4px;
+  background: #2ec4b6;
+  cursor: nwse-resize;
+  z-index: 5;
+  touch-action: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.memo-ti-resize:hover,
+.memo-ti-resize:focus-visible {
+  background: #5eead4;
+  outline: none;
 }
 
 .memo-ti-body {
@@ -4727,8 +4827,13 @@ button.adb-device-body.linkish {
 }
 
 .memo-toimg-dlg {
-  max-width: min(96vw, 920px);
-  width: min(96vw, 920px);
+  max-width: min(96vw, 980px);
+  width: min(96vw, 980px);
+}
+
+.memo-toimg-dlg .memo-toimg {
+  max-height: min(92vh, 920px);
+  overflow: auto;
 }
 
 .memo-toimg-dlg .memo-toimg {

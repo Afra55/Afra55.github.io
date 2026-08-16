@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260816memo6" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo6" />
+  <link rel="stylesheet" href="./style.css?v=20260816memo8" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo8" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo6</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo8</span>
       </div>
       <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
@@ -996,8 +996,11 @@ hello@world.org</textarea>
               <div class="memo-dialog-body memo-toimg">
               <div class="label-row">
                 <h2 class="subhead">文字转图片</h2>
-                <p class="hint tight">仅在此弹层编辑样式；关闭后不影响备忘录主界面</p>
+                <p class="hint tight">改文字与样式即时预览；可在预览区自调宽高与比例</p>
               </div>
+              <label class="memo-ti-src-lab" for="memo-ti-src">内容
+                <textarea id="memo-ti-src" class="area" rows="4" placeholder="输入要转成图片的文字…"></textarea>
+              </label>
               <div class="memo-ti-controls">
                 <label for="memo-ti-mode">模式
                   <select id="memo-ti-mode" class="select-input">
@@ -1029,15 +1032,6 @@ hello@world.org</textarea>
                     <option value="paper">暖纸</option>
                     <option value="mesh">网格渐变</option>
                     <option value="image">背景图</option>
-                  </select>
-                </label>
-                <label for="memo-ti-ratio">比例
-                  <select id="memo-ti-ratio" class="select-input">
-                    <option value="1:1" selected>1:1</option>
-                    <option value="3:4">3:4 竖版</option>
-                    <option value="4:3">4:3</option>
-                    <option value="16:9">16:9</option>
-                    <option value="9:16">9:16 故事</option>
                   </select>
                 </label>
                 <label for="memo-ti-align">对齐
@@ -1090,9 +1084,38 @@ hello@world.org</textarea>
                   <input id="memo-ti-wm" class="mono meta-input" type="text" placeholder="可选水印" maxlength="40" />
                 </label>
               </div>
-              <div class="memo-ti-preview-wrap">
-                <div id="memo-ti-card" class="memo-ti-card memo-ti-tpl-default" aria-hidden="true"></div>
+
+              <div class="memo-ti-preview-panel">
+                <div class="memo-ti-sizebar" aria-label="预览尺寸">
+                  <label for="memo-ti-ratio">比例
+                    <select id="memo-ti-ratio" class="select-input">
+                      <option value="1:1" selected>1:1</option>
+                      <option value="3:4">3:4 竖版</option>
+                      <option value="4:3">4:3</option>
+                      <option value="16:9">16:9</option>
+                      <option value="9:16">9:16 故事</option>
+                      <option value="custom">自定义</option>
+                    </select>
+                  </label>
+                  <label for="memo-ti-w">宽
+                    <input id="memo-ti-w" class="mono meta-input" type="number" min="240" max="2000" step="10" value="720" />
+                  </label>
+                  <label for="memo-ti-h">高
+                    <input id="memo-ti-h" class="mono meta-input" type="number" min="240" max="2400" step="10" value="720" />
+                  </label>
+                  <span class="mono memo-ti-dim" id="memo-ti-dim">720×720</span>
+                  <p class="hint tight memo-ti-size-hint">拖预览右下角也可改尺寸 · 预览等比缩放，导出按真实像素</p>
+                </div>
+                <div class="memo-ti-preview-wrap" id="memo-ti-preview-wrap">
+                  <div class="memo-ti-stage" id="memo-ti-stage">
+                    <div class="memo-ti-scale-box" id="memo-ti-scale-box">
+                      <div id="memo-ti-card" class="memo-ti-card memo-ti-tpl-default" aria-hidden="true"></div>
+                      <button type="button" class="memo-ti-resize" id="memo-ti-resize" title="拖拽调整宽高" aria-label="拖拽调整宽高"></button>
+                    </div>
+                  </div>
+                </div>
               </div>
+
               <div class="btn-row tool-actions" style="margin-top:0.55rem">
                 <button type="button" class="primary-btn" id="memo-ti-save">生成并保存图片</button>
                 <button type="button" class="ghost-btn" id="memo-ti-close">关闭</button>
@@ -2654,11 +2677,11 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./temp.js?v=20260816memo6"></script>
+  <script src="./temp.js?v=20260816memo8"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260816memo6"></script>
-  <script src="./extra.js?v=20260816memo6"></script>
+  <script src="./app.js?v=20260816memo8"></script>
+  <script src="./extra.js?v=20260816memo8"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./memo.js?v=20260816memo6"></script>
+  <script src="./memo.js?v=20260816memo8"></script>
 </body>
 </html>

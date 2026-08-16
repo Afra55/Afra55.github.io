@@ -176,6 +176,43 @@ async function main() {
       closed: !toimg?.open,
     };
 
+    // live preview + size controls
+    document.getElementById("memo-to-image")?.click();
+    await sleep(120);
+    const src = document.getElementById("memo-ti-src");
+    if (src) {
+      src.value = "实时预览测试\n第二行";
+      src.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    await sleep(80);
+    const card = document.getElementById("memo-ti-card");
+    const wEl = document.getElementById("memo-ti-w");
+    const hEl = document.getElementById("memo-ti-h");
+    const ratioEl = document.getElementById("memo-ti-ratio");
+    if (wEl && hEl && ratioEl) {
+      ratioEl.value = "16:9";
+      ratioEl.dispatchEvent(new Event("change", { bubbles: true }));
+      await sleep(60);
+      wEl.value = "800";
+      hEl.value = "500";
+      wEl.dispatchEvent(new Event("input", { bubbles: true }));
+      hEl.dispatchEvent(new Event("input", { bubbles: true }));
+      await sleep(60);
+    }
+    out.toImgLive = {
+      open: Boolean(toimg?.open),
+      hasSrc: Boolean(src),
+      hasWH: Boolean(wEl && hEl),
+      hasResize: Boolean(document.getElementById("memo-ti-resize")),
+      previewText: (card?.textContent || "").includes("实时预览测试"),
+      customRatio: ratioEl?.value === "custom",
+      dimLabel: document.getElementById("memo-ti-dim")?.textContent || "",
+      cardW: card?.style?.width || "",
+    };
+    document.getElementById("memo-ti-close")?.click();
+    await sleep(80);
+    out.toImgLive.closed = !toimg?.open;
+
     // open image preview
     const openBtn = document.querySelector('[data-memo-open]');
     if (openBtn) {
@@ -218,6 +255,13 @@ async function main() {
   if (!result.toImgDialog?.isDialog || !result.toImgDialog?.closed) {
     failed.push("text-to-image should be a closed dialog by default");
   }
+  if (!result.toImgLive?.hasSrc || !result.toImgLive?.hasWH || !result.toImgLive?.hasResize) {
+    failed.push("toimg live preview size controls missing");
+  }
+  if (!result.toImgLive?.previewText) failed.push("toimg live preview text missing");
+  if (!result.toImgLive?.customRatio) failed.push("custom size should switch ratio to custom");
+  if (!/^800/.test(result.toImgLive?.cardW || "")) failed.push(`unexpected card width ${result.toImgLive?.cardW}`);
+  if (!result.toImgLive?.closed) failed.push("toimg dialog should close");
 
   console.log(JSON.stringify({ ok: failed.length === 0, result, failed }, null, 2));
   if (failed.length) process.exit(1);
