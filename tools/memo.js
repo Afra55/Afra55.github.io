@@ -302,6 +302,7 @@
     pendingUndo: null,
     virtualMode: false,
     virtualRaf: 0,
+    testShareUi: false,
   };
 
   function trackUrl(url) {
@@ -530,6 +531,7 @@
   const previewFsBtn = $("#memo-preview-fs");
   const previewNewTabBtn = $("#memo-preview-newtab");
   const previewDlBtn = $("#memo-preview-dl");
+  const previewShareBtn = $("#memo-preview-share");
   const previewEditBtn = $("#memo-preview-edit");
   let previewObjectUrl = "";
   let previewBlob = null;
@@ -909,12 +911,22 @@
     }
     const editing = state.editingId === item.id ? " is-editing" : "";
     const canCopy = canClipboardCopy(item);
-    const primaryAction = canCopy
-      ? `<button type="button" class="secondary-btn" data-memo-copy="${item.id}">复制</button>`
-      : `<button type="button" class="secondary-btn" data-memo-dl="${item.id}">下载</button>`;
-    const moreDownload = canCopy
-      ? `<button type="button" class="ghost-btn" data-memo-dl="${item.id}">下载</button>`
-      : "";
+    const offerShare = canOfferItemShare();
+    let primaryAction = "";
+    let secondaryShare = "";
+    let moreDownload = "";
+    if (!canCopy && offerShare) {
+      primaryAction = `<button type="button" class="secondary-btn" data-memo-share="${item.id}">分享</button>`;
+      moreDownload = `<button type="button" class="ghost-btn" data-memo-dl="${item.id}">下载</button>`;
+    } else if (!canCopy) {
+      primaryAction = `<button type="button" class="secondary-btn" data-memo-dl="${item.id}">下载</button>`;
+    } else {
+      primaryAction = `<button type="button" class="secondary-btn" data-memo-copy="${item.id}">复制</button>`;
+      if (offerShare) {
+        secondaryShare = `<button type="button" class="ghost-btn" data-memo-share="${item.id}">分享</button>`;
+      }
+      moreDownload = `<button type="button" class="ghost-btn" data-memo-dl="${item.id}">下载</button>`;
+    }
     return `<article class="memo-card${editing}" data-memo-id="${item.id}" draggable="true">
       <div class="memo-card-head">
         <label class="memo-check"><input type="checkbox" data-memo-check="${item.id}" ${checked} /></label>
@@ -927,6 +939,7 @@
       <div class="memo-card-tags">${tagHtml}<button type="button" class="ghost-btn memo-tag-add" data-memo-tag-add="${item.id}">+ 标签</button></div>
       <div class="btn-row memo-card-actions">
         ${primaryAction}
+        ${secondaryShare}
         <button type="button" class="ghost-btn" data-memo-open="${item.id}">预览</button>
         ${item.type === "text" ? `<button type="button" class="ghost-btn" data-memo-edit="${item.id}">编辑</button>` : ""}
         <button type="button" class="ghost-btn" data-memo-del="${item.id}">删除</button>
@@ -1699,6 +1712,68 @@
     return item?.type === "text" || item?.type === "image" || item?.type === "gif";
   }
 
+  function canOfferItemShare() {
+    if (state.testShareUi) return true;
+    return isLikelyMobile() && typeof navigator.share === "function";
+  }
+
+  function itemShareFileName(item) {
+    const raw = String(item?.name || item?.fileName || item?.id || "memo-item").trim() || "memo-item";
+    return safeFileName(raw, "memo-item");
+  }
+
+  async function shareItem(item) {
+    if (!item) return;
+    if (!canOfferItemShare()) {
+      await downloadItem(item, { toastMsg: "当前环境不支持分享，已改为下载" });
+      return;
+    }
+    try {
+      if (item.type === "text") {
+        const text = item.textPreview || (await (await loadBlob(item)).text());
+        const payload = { title: item.name || "备忘录文本", text };
+        if (typeof navigator.canShare === "function" && !navigator.canShare(payload)) {
+          await downloadItem(item, { toastMsg: "无法分享该文本，已改为下载" });
+          return;
+        }
+        await navigator.share(payload);
+        toast("已调起分享");
+        return;
+      }
+
+      const blob = await loadBlob(item);
+      const mime = blob.type || item.mime || "application/octet-stream";
+      const file = new File([blob], itemShareFileName(item), { type: mime });
+      const filePayload = { files: [file], title: item.name || "备忘录文件" };
+      if (canShareFiles() && navigator.canShare(filePayload)) {
+        await navigator.share(filePayload);
+        toast("已调起分享");
+        return;
+      }
+      // 部分环境不能分享文件，文本类可退回纯文字
+      if (isTextLikeItem(item, blob)) {
+        const text = await blob.text();
+        const textPayload = { title: item.name || "备忘录", text };
+        if (typeof navigator.canShare !== "function" || navigator.canShare(textPayload)) {
+          await navigator.share(textPayload);
+          toast("已调起分享");
+          return;
+        }
+      }
+      await downloadItem(item, { toastMsg: "当前环境无法分享该文件，已改为下载" });
+    } catch (err) {
+      if (err && (err.name === "AbortError" || /abort|cancel|取消/i.test(String(err.message || "")))) {
+        toast("已取消分享");
+        return;
+      }
+      try {
+        await downloadItem(item, { toastMsg: "分享失败，已改为下载" });
+      } catch (dlErr) {
+        setError(memoError, dlErr.message || err.message || "分享失败");
+      }
+    }
+  }
+
   function clipboardTypeSupported(mime) {
     const type = String(mime || "").toLowerCase();
     if (!type) return false;
@@ -1913,6 +1988,7 @@
     }
     if (previewNewTabBtn) previewNewTabBtn.hidden = !canNewTab;
     if (previewDlBtn) previewDlBtn.hidden = !canDl;
+    if (previewShareBtn) previewShareBtn.hidden = !item || !canOfferItemShare();
     if (previewEditBtn) previewEditBtn.hidden = !canEdit;
   }
 
@@ -2403,6 +2479,13 @@
         t.closest("details")?.removeAttribute("open");
         return;
       }
+      const shareId = t.closest?.("[data-memo-share]")?.dataset?.memoShare;
+      if (shareId) {
+        const item = state.index.items.find((x) => x.id === shareId);
+        if (item) await shareItem(item);
+        t.closest("details")?.removeAttribute("open");
+        return;
+      }
       const dlId = t.closest?.("[data-memo-dl]")?.dataset?.memoDl;
       if (dlId) {
         const item = state.index.items.find((x) => x.id === dlId);
@@ -2607,7 +2690,14 @@
       .catch((err) => setError(memoError, err.message || String(err)))
       .finally(() => setProgress(false, 0, ""));
   });
-  window.addEventListener("resize", () => syncExportButtonLabels());
+  let lastShareOffer = canOfferItemShare();
+  window.addEventListener("resize", () => {
+    syncExportButtonLabels();
+    const next = canOfferItemShare();
+    if (next === lastShareOffer) return;
+    lastShareOffer = next;
+    if (isMemoActive()) renderItems();
+  });
   $("#memo-import")?.addEventListener("change", (e) => {
     const f = e.target.files?.[0];
     doImport(f)
@@ -2624,6 +2714,11 @@
   previewDlBtn?.addEventListener("click", () => {
     if (!previewItem || !previewBlob) return;
     downloadBlob(previewBlob, previewItem.name || previewItem.fileName || previewItem.id);
+  });
+  previewShareBtn?.addEventListener("click", () => {
+    const item = previewItem;
+    if (!item) return;
+    shareItem(item).catch((err) => setError(memoError, err.message || String(err)));
   });
   previewNewTabBtn?.addEventListener("click", () => {
     if (!previewObjectUrl) return;
@@ -2660,6 +2755,16 @@
     getIndex: () => state.index,
     ingestBlob: (blob, name) => addItemFromBlob(blob, name || `import-${Date.now()}`, { quiet: false }),
     ingestText: (text) => addText(text),
+    canOfferShare: () => canOfferItemShare(),
+    setShareUiForTest: (on) => {
+      state.testShareUi = Boolean(on);
+      renderItems();
+      if (previewItem) setPreviewChrome(previewItem, { canDl: true, canEdit: previewItem.type === "text" });
+    },
+    shareItem: (id) => {
+      const item = state.index.items.find((x) => x.id === id) || previewItem;
+      return shareItem(item);
+    },
   };
 
   boot().catch((err) => setError(memoError, err.message || String(err)));

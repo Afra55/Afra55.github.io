@@ -340,6 +340,28 @@ async function main() {
       ),
     };
 
+    out.shareUi = {
+      hasPreviewShare: Boolean(document.getElementById("memo-preview-share")),
+      api: typeof window.DevToolsMemo.setShareUiForTest === "function",
+    };
+    window.DevToolsMemo.setShareUiForTest(true);
+    await sleep(80);
+    const fileCardShare = fileItem ? document.querySelector(`.memo-card[data-memo-id="${fileItem.id}"]`) : null;
+    const textCardShare = document.querySelector(".memo-card [data-memo-copy]")?.closest(".memo-card");
+    out.shareUi.filePrimaryShare = Boolean(fileCardShare?.querySelector(".memo-card-actions > .secondary-btn[data-memo-share]"));
+    out.shareUi.fileDownloadInMore = Boolean(fileCardShare?.querySelector(".memo-more [data-memo-dl]"));
+    out.shareUi.textHasShare = Boolean(textCardShare?.querySelector("[data-memo-share]"));
+    out.shareUi.textKeepsCopy = Boolean(textCardShare?.querySelector(".memo-card-actions > .secondary-btn[data-memo-copy]"));
+    // open preview to ensure share chrome shows
+    if (fileItem) {
+      document.querySelector(`[data-memo-open="${fileItem.id}"]`)?.click();
+      await sleep(120);
+      out.shareUi.previewShareVisible = !document.getElementById("memo-preview-share")?.hidden;
+      document.getElementById("memo-lightbox-close")?.click();
+      await sleep(60);
+    }
+    window.DevToolsMemo.setShareUiForTest(false);
+
     // tagged item leaves default (untagged) bucket
     const firstId = (window.DevToolsMemo.getIndex().items || [])[0]?.id;
     const workTag = (window.DevToolsMemo.getIndex().tags || []).find((t) => t.name === "工作");
@@ -415,6 +437,18 @@ async function main() {
   }
   if (!result.takeout?.textStillCopy || !result.takeout?.imageStillCopy) {
     failed.push("text/image items should keep primary copy");
+  }
+  if (!result.shareUi?.hasPreviewShare || !result.shareUi?.api) {
+    failed.push("mobile share UI plumbing missing");
+  }
+  if (!result.shareUi?.filePrimaryShare || !result.shareUi?.fileDownloadInMore) {
+    failed.push("file items should primary-share on mobile with download in more");
+  }
+  if (!result.shareUi?.textHasShare || !result.shareUi?.textKeepsCopy) {
+    failed.push("text items should keep copy and also offer share on mobile");
+  }
+  if (!result.shareUi?.previewShareVisible) {
+    failed.push("preview share button should show when mobile share enabled");
   }
   if (!result.textEdit?.hasDlg || !result.textEdit?.hasEditBtn || !result.textEdit?.hasPreviewEdit) {
     failed.push("text edit UI missing");
