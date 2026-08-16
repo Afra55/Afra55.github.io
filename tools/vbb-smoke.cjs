@@ -400,6 +400,8 @@ async function main() {
     audioApi: typeof window.DevToolsAudio?.getRange === "function",
     audioMp3: Boolean(document.querySelector('[data-audio-fmt="mp3"]')),
     ffmpegApi: typeof window.DevToolsFfmpeg?.getInstance === "function",
+    ffbridge: Boolean(document.getElementById("ffbridge") && document.getElementById("ff-connect")),
+    ffbridgeApi: typeof window.DevToolsFfmpegBridge?.connect === "function",
   }));
 
   // Mobile drawer + media tab switch
@@ -1124,6 +1126,7 @@ async function main() {
   if (!todayTools.audio || !todayTools.audioApi) problems.push("missing audio module");
   if (!todayTools.audioMp3) problems.push("missing audio MP3 export option");
   if (!todayTools.ffmpegApi) problems.push("DevToolsFfmpeg missing");
+  if (!todayTools.ffbridge || !todayTools.ffbridgeApi) problems.push("missing FFmpeg bridge tool");
   if (!mobileShell.drawerOpen) problems.push("mobile drawer failed to open");
   if (!mobileShell.closedByBtn) problems.push("nav-close should close drawer");
   if (!mobileShell.stayedClosedAfterGhostOpen) {

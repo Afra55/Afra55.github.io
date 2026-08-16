@@ -787,7 +787,7 @@
     { id: "media", label: "媒体", tools: ["media"] },
     { id: "image", label: "图片", tools: ["imgkit", "textimg", "imgtext"] },
     { id: "convert", label: "换算", tools: ["units", "coord", "numbase"] },
-    { id: "device", label: "设备", tools: ["adb"] },
+    { id: "device", label: "设备", tools: ["adb", "ffbridge"] },
     { id: "site", label: "站点", tools: ["about"] },
   ];
   const DEFAULT_GROUP_ORDER = TOOL_GROUPS.map((g) => g.id);
@@ -828,6 +828,7 @@
     coord: "WGS84 / GCJ-02 / BD-09 等坐标系互转。",
     numbase: "二、八、十、十六进制互转。",
     adb: "网页侧 ADB 调试辅助：设备、文件、输入、安装等。",
+    ffbridge: "本机 FFmpeg 桥：网页浏览文件夹、批量抽音频 / 转码（适合大量视频）。",
     about: "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
   };
   const TOOL_META = {
@@ -885,6 +886,10 @@
     markdown: { name: "Markdown", aliases: ["md", "预览"] },
     memo: { name: "备忘录", aliases: ["笔记", "剪贴板", "memo", "note", "便签"] },
     adb: { name: "ADB 工具", aliases: ["安卓", "android", "设备"] },
+    ffbridge: {
+      name: "FFmpeg 本机桥",
+      aliases: ["ffmpeg", "批量", "抽音频", "转码", "本机桥", "ffbridge"],
+    },
     about: { name: "实用小工具合集", aliases: ["about", "介绍", "目录", "主题", "帮助", "总览", "关于"] },
   };
   const DEFAULT_ORDER = TOOL_GROUPS.flatMap((g) => g.tools);

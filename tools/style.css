@@ -6691,3 +6691,41 @@ html[data-theme-scheme="light"] .bg-grid {
   }
 }
 
+#ff-fs-list.adb-fs-list,
+.ff-fs-list {
+  margin-top: 0.55rem;
+}
+
+#ff-fs-list .adb-fs-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.45rem 0.65rem;
+  align-items: center;
+  padding: 0.4rem 0.65rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+#ff-fs-list .adb-fs-row:last-child {
+  border-bottom: 0;
+}
+
+#ff-fs-list .ff-fs-name {
+  justify-self: start;
+  text-align: left;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#ff-fs-list .ff-fs-check {
+  display: inline-flex;
+  align-items: center;
+}
+
+#ff-roots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
