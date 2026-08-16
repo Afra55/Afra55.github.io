@@ -690,6 +690,7 @@
             <button type="button" class="ghost-btn" data-memo-copy="${item.id}">复制</button>
             <button type="button" class="ghost-btn" data-memo-dl="${item.id}">下载</button>
             ${state.mode === "dir" && !state.dirPending ? `<button type="button" class="ghost-btn" data-memo-path="${item.id}">路径</button>` : ""}
+            <button type="button" class="ghost-btn" data-memo-ocr="${item.id}">转文字</button>
             <button type="button" class="ghost-btn" data-memo-toimg-item="${item.id}">转图片</button>
           </div>
         </details>
@@ -811,12 +812,48 @@
     }
     renderListMeta(items.length, page.length);
     if (moreRow) {
-      moreRow.hidden = page.length >= items.length;
-      if (loadMoreBtn) loadMoreBtn.textContent = `加载更多（还剩 ${Math.max(0, items.length - page.length)}）`;
+      const hasMore = page.length < items.length;
+      moreRow.hidden = !hasMore;
+      if (loadMoreBtn) loadMoreBtn.textContent = `手动加载更多（还剩 ${Math.max(0, items.length - page.length)}）`;
+      const sentinel = $("#memo-scroll-sentinel");
+      if (sentinel) sentinel.hidden = !hasMore;
+      const loadingTip = $("#memo-loading-more");
+      if (loadingTip && !hasMore) loadingTip.hidden = true;
     }
     hydrateMedia();
+    setupInfiniteScroll();
     const batch = $("#memo-batch-del");
     if (batch) batch.disabled = state.selected.size === 0;
+  }
+
+  let infiniteObserver = null;
+  let infiniteBusy = false;
+  function setupInfiniteScroll() {
+    const sentinel = $("#memo-scroll-sentinel");
+    if (!sentinel) return;
+    if (infiniteObserver) {
+      infiniteObserver.disconnect();
+      infiniteObserver = null;
+    }
+    if (sentinel.hidden) return;
+    if (typeof IntersectionObserver !== "function") return;
+    infiniteObserver = new IntersectionObserver(
+      (entries) => {
+        const hit = entries.some((e) => e.isIntersecting);
+        if (!hit || infiniteBusy) return;
+        const items = visibleItems();
+        const limit = Math.max(PAGE_SIZE, state.listLimit || PAGE_SIZE);
+        if (limit >= items.length) return;
+        infiniteBusy = true;
+        const tip = $("#memo-loading-more");
+        if (tip) tip.hidden = false;
+        state.listLimit = limit + PAGE_SIZE;
+        renderItems();
+        infiniteBusy = false;
+      },
+      { root: null, rootMargin: "240px 0px", threshold: 0 }
+    );
+    infiniteObserver.observe(sentinel);
   }
 
   function tagsForNewItem() {
@@ -1970,35 +2007,37 @@
     readClipboard({ force: true }).catch((err) => setError(memoError, err.message || String(err)));
   });
   function isToImgOpen() {
-    const dlg = $("#memo-toimg");
-    return Boolean(dlg?.open);
+    return false;
   }
 
-  function openToImgPanel() {
-    const dlg = $("#memo-toimg");
-    const src = $("#memo-ti-src");
-    if (src) src.value = editor?.value || "";
-    const ratio = $("#memo-ti-ratio")?.value || "1:1";
-    if (ratio !== "custom") applyRatioToInputs(ratio);
-    paintTextImageCard();
-    if (dlg?.showModal) dlg.showModal();
-    else if (dlg) dlg.hidden = false;
-    setTimeout(() => {
-      fitTiPreview();
-      src?.focus?.();
-    }, 40);
+  function closeToImgPanel() {}
+
+  function openToImgPanel(text) {
+    const body = text != null ? String(text) : editor?.value || "";
+    if (window.DevToolsTextImg?.prefillAndGo) {
+      window.DevToolsTextImg.prefillAndGo(body);
+      return;
+    }
+    try {
+      sessionStorage.setItem("devtools-textimg-prefill", body);
+    } catch (_) {}
+    location.hash = "textimg";
   }
 
-  function closeToImgPanel() {
-    const dlg = $("#memo-toimg");
-    if (dlg?.open) dlg.close();
-    else if (dlg) dlg.hidden = true;
+  function openOcrWithItem(item) {
+    return loadBlob(item).then((blob) => {
+      if (window.DevToolsImgText?.openWithBlob) {
+        window.DevToolsImgText.openWithBlob(blob, item.name || "memo-image");
+        return;
+      }
+      window.__devtoolsImgtextHandoff = { blob, name: item.name || "memo-image" };
+      location.hash = "imgtext";
+    });
   }
 
   $("#memo-to-image")?.addEventListener("click", () => openToImgPanel());
-  $("#memo-ti-close")?.addEventListener("click", () => closeToImgPanel());
-  $("#memo-toimg")?.addEventListener("click", (e) => {
-    if (e.target?.id === "memo-toimg") closeToImgPanel();
+  $("#memo-to-ocr")?.addEventListener("click", () => {
+    location.hash = "imgtext";
   });
   [
     "memo-ti-mode",
@@ -2301,12 +2340,24 @@
       const toImgId = t.closest?.("[data-memo-toimg-item]")?.dataset?.memoToimgItem;
       if (toImgId) {
         const item = state.index.items.find((x) => x.id === toImgId);
-        if (item?.type === "text") await beginEditText(item);
-        else if (item && editor) {
-          clearEditing();
-          editor.value = item.name || "";
+        if (item?.type === "text") {
+          openToImgPanel(item.textPreview || item.name || "");
+        } else if (item) {
+          openToImgPanel(item.name || "");
+        } else {
+          openToImgPanel();
         }
-        openToImgPanel();
+        t.closest("details")?.removeAttribute("open");
+        return;
+      }
+      const ocrId = t.closest?.("[data-memo-ocr]")?.dataset?.memoOcr;
+      if (ocrId) {
+        const item = state.index.items.find((x) => x.id === ocrId);
+        if (item && (item.type === "image" || item.type === "gif")) {
+          await openOcrWithItem(item);
+        } else {
+          toast("请选择图片或动图条目");
+        }
         t.closest("details")?.removeAttribute("open");
         return;
       }
@@ -2556,6 +2607,8 @@
     getStorageBytes: estimateStorageBytes,
     getMode: () => state.mode,
     getIndex: () => state.index,
+    ingestBlob: (blob, name) => addItemFromBlob(blob, name || `import-${Date.now()}`, { quiet: false }),
+    ingestText: (text) => addText(text),
   };
 
   boot().catch((err) => setError(memoError, err.message || String(err)));

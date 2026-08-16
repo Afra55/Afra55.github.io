@@ -783,7 +783,7 @@
       tools: ["json", "yaml", "sharecard", "query", "text", "caseconv", "regex", "diff", "qrcode", "markdown", "memo"],
     },
     { id: "media", label: "媒体", tools: ["media"] },
-    { id: "image", label: "图片", tools: ["imgkit"] },
+    { id: "image", label: "图片", tools: ["imgkit", "textimg", "imgtext"] },
     { id: "convert", label: "换算", tools: ["units", "coord", "numbase"] },
     { id: "device", label: "设备", tools: ["adb"] },
   ];
@@ -832,6 +832,8 @@
       ],
     },
     imgkit: { name: "图片工具", aliases: ["裁剪", "压缩", "水印", "拼接"] },
+    textimg: { name: "文字转图片", aliases: ["文转图", "海报", "卡片", "carbon", "text to image"] },
+    imgtext: { name: "图片转文字", aliases: ["ocr", "识字", "图转文", "tesseract"] },
     units: { name: "单位换算", aliases: ["长度", "质量"] },
     coord: { name: "坐标系互转", aliases: ["gps", "坐标", "gcj", "wgs"] },
     numbase: { name: "进制转换", aliases: ["二进制", "十六进制"] },

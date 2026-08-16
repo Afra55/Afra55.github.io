@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260816memo10" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo10" />
+  <link rel="stylesheet" href="./style.css?v=20260816memo11" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260816memo11" />
 </head>
 <body>
   <div class="bg" aria-hidden="true">
@@ -25,7 +25,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo10</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.16-memo11</span>
       </div>
       <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
     </div>
@@ -944,6 +944,179 @@ hello@world.org</textarea>
       </div>
     </section>
 
+<section id="textimg" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>文字转图片</h1>
+        <p>把文字 / Markdown / 代码生成分享图。支持实时预览、自定义宽高比例、Carbon 窗口框；可下载、复制或存入备忘录。</p>
+      </div>
+      <div class="panel-body">
+        <label class="memo-ti-src-lab" for="ti-src">内容
+          <textarea id="ti-src" class="area" rows="5" placeholder="支持纯文本 / Markdown / 代码…"></textarea>
+        </label>
+        <div class="memo-ti-controls">
+          <label for="ti-mode">模式
+            <select id="ti-mode" class="select-input">
+              <option value="quote" selected>金句</option>
+              <option value="note">短文</option>
+              <option value="title">标题</option>
+              <option value="markdown">Markdown</option>
+              <option value="code">代码</option>
+            </select>
+          </label>
+          <label for="ti-tpl">模板
+            <select id="ti-tpl" class="select-input">
+              <option value="default" selected>默认</option>
+              <option value="quote">大引号</option>
+              <option value="paper">纸张</option>
+              <option value="terminal">终端</option>
+              <option value="carbon">Carbon 窗</option>
+              <option value="neon">霓虹</option>
+              <option value="glass">磨砂</option>
+              <option value="minimal">极简</option>
+              <option value="poster">海报页眉</option>
+            </select>
+          </label>
+          <label for="ti-theme">背景
+            <select id="ti-theme" class="select-input">
+              <option value="solid">纯色</option>
+              <option value="sunset" selected>日落</option>
+              <option value="ocean">海洋</option>
+              <option value="aurora">极光</option>
+              <option value="neon">霓虹</option>
+              <option value="ink">墨色</option>
+              <option value="paper">暖纸</option>
+              <option value="mesh">网格</option>
+              <option value="spring">春浪</option>
+              <option value="ray">Ray 暗夜</option>
+              <option value="image">背景图</option>
+            </select>
+          </label>
+          <label for="ti-code-theme">代码主题
+            <select id="ti-code-theme" class="select-input">
+              <option value="carbon" selected>Carbon</option>
+              <option value="dracula">Dracula</option>
+              <option value="monokai">Monokai</option>
+              <option value="nord">Nord</option>
+              <option value="github">GitHub</option>
+              <option value="one-dark">One Dark</option>
+            </select>
+          </label>
+          <label for="ti-align">对齐
+            <select id="ti-align" class="select-input">
+              <option value="left">左</option>
+              <option value="center" selected>中</option>
+              <option value="right">右</option>
+            </select>
+          </label>
+          <label for="ti-size">字号<input id="ti-size" class="mono meta-input" type="number" min="14" max="72" value="30" /></label>
+          <label for="ti-lh">行高<input id="ti-lh" class="mono meta-input" type="number" min="1.1" max="2.2" step="0.05" value="1.45" /></label>
+          <label for="ti-pad">内边距<input id="ti-pad" class="mono meta-input" type="number" min="16" max="96" value="40" /></label>
+          <label for="ti-winpad">窗外边距<input id="ti-winpad" class="mono meta-input" type="number" min="0" max="120" value="48" /></label>
+          <label for="ti-radius">圆角<input id="ti-radius" class="mono meta-input" type="number" min="0" max="48" value="20" /></label>
+          <label for="ti-bg">底色<input id="ti-bg" type="color" value="#0f172a" /></label>
+          <label for="ti-fg">文字色<input id="ti-fg" type="color" value="#e8eef8" /></label>
+          <label for="ti-overlay">图遮罩<input id="ti-overlay" class="mono meta-input" type="number" min="0" max="85" value="35" /></label>
+          <label for="ti-scale">倍率
+            <select id="ti-scale" class="select-input">
+              <option value="2" selected>2×</option>
+              <option value="3">3×</option>
+              <option value="1">1×</option>
+            </select>
+          </label>
+          <label class="flag memo-ti-flag" for="ti-lines"><input id="ti-lines" type="checkbox" checked /> 行号</label>
+          <label class="flag memo-ti-flag" for="ti-window"><input id="ti-window" type="checkbox" checked /> 窗口框</label>
+        </div>
+        <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
+          <label class="file-btn" for="ti-bgimg">上传背景图</label>
+          <input id="ti-bgimg" type="file" accept="image/*" hidden />
+          <button type="button" class="ghost-btn" id="ti-bgimg-clear">清除背景图</button>
+          <label for="ti-header">页眉<input id="ti-header" class="mono meta-input" type="text" maxlength="60" /></label>
+          <label for="ti-footer">页脚<input id="ti-footer" class="mono meta-input" type="text" maxlength="60" /></label>
+          <label for="ti-fname">窗口标题<input id="ti-fname" class="mono meta-input" type="text" placeholder="snippet.js" maxlength="40" /></label>
+          <label for="ti-sign">署名<input id="ti-sign" class="mono meta-input" type="text" maxlength="40" /></label>
+          <label for="ti-wm">水印<input id="ti-wm" class="mono meta-input" type="text" maxlength="40" /></label>
+        </div>
+        <div class="memo-ti-preview-panel">
+          <div class="memo-ti-sizebar">
+            <label for="ti-ratio">比例
+              <select id="ti-ratio" class="select-input">
+                <option value="1:1" selected>1:1</option>
+                <option value="3:4">3:4</option>
+                <option value="4:3">4:3</option>
+                <option value="16:9">16:9</option>
+                <option value="9:16">9:16</option>
+                <option value="custom">自定义</option>
+              </select>
+            </label>
+            <label for="ti-w">宽<input id="ti-w" class="mono meta-input" type="number" min="240" max="2000" step="10" value="720" /></label>
+            <label for="ti-h">高<input id="ti-h" class="mono meta-input" type="number" min="240" max="2400" step="10" value="720" /></label>
+            <span class="mono memo-ti-dim" id="ti-dim">720×720</span>
+            <p class="hint tight memo-ti-size-hint">预览实时更新 · 导出按真实像素</p>
+          </div>
+          <div class="memo-ti-preview-wrap" id="ti-preview-wrap">
+            <div class="memo-ti-stage" id="ti-stage">
+              <div class="memo-ti-scale-box" id="ti-scale-box">
+                <div id="ti-card" class="memo-ti-card memo-ti-tpl-default" aria-hidden="true"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="btn-row tool-actions" style="margin-top:0.55rem;flex-wrap:wrap">
+          <button type="button" class="primary-btn" id="ti-export">下载 PNG</button>
+          <button type="button" class="secondary-btn" id="ti-copy">复制图片</button>
+          <button type="button" class="ghost-btn" id="ti-to-memo">保存到备忘录</button>
+        </div>
+        <p class="error" id="ti-error" hidden></p>
+      </div>
+    </section>
+
+<section id="imgtext" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>图片转文字</h1>
+        <p>本地 OCR（Tesseract.js）。首次识别会下载语言包；图片不上传到我们的服务器。支持中英混合。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid">
+          <div class="field-block">
+            <div class="btn-row tool-actions" style="flex-wrap:wrap">
+              <label class="file-btn" for="imgtext-file">选择图片</label>
+              <input id="imgtext-file" type="file" accept="image/*" hidden />
+              <button type="button" class="ghost-btn" id="imgtext-clear">清除</button>
+              <label for="imgtext-lang">语言
+                <select id="imgtext-lang" class="select-input">
+                  <option value="chi_sim+eng" selected>中文+英文</option>
+                  <option value="chi_sim">仅中文</option>
+                  <option value="eng">仅英文</option>
+                </select>
+              </label>
+            </div>
+            <div class="memo-drop imgtext-drop" id="imgtext-drop" style="margin-top:0.65rem">
+              <p class="hint tight">拖拽图片到此处，或在本页 Ctrl/⌘+V 粘贴</p>
+              <img id="imgtext-preview" class="imgtext-preview" alt="待识别图片" hidden />
+              <p class="hint tight mono" id="imgtext-meta">未选择图片</p>
+            </div>
+            <div class="memo-progress" id="imgtext-progress" hidden style="margin-top:0.65rem">
+              <div class="gif-progress-head">
+                <p class="hint gif-progress-title" id="imgtext-progress-text">识别中…</p>
+                <span class="mono gif-progress-pct" id="imgtext-progress-pct">0%</span>
+              </div>
+              <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="imgtext-progress-fill"></span></div>
+            </div>
+            <div class="btn-row tool-actions" style="margin-top:0.65rem;flex-wrap:wrap">
+              <button type="button" class="primary-btn" id="imgtext-run">开始识别</button>
+              <button type="button" class="secondary-btn" id="imgtext-copy">复制文字</button>
+              <button type="button" class="ghost-btn" id="imgtext-to-memo">保存到备忘录</button>
+            </div>
+            <p class="error" id="imgtext-error" hidden></p>
+          </div>
+          <div class="field-block">
+            <label for="imgtext-out">识别结果</label>
+            <textarea id="imgtext-out" class="area mono" rows="16" placeholder="识别出的文字会显示在这里…"></textarea>
+          </div>
+        </div>
+      </div>
+    </section>
+
 <section id="memo" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>备忘录</h1>
@@ -987,13 +1160,14 @@ hello@world.org</textarea>
               <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.55rem">
                 <button type="button" class="primary-btn" id="memo-save-text">保存文本</button>
                 <button type="button" class="ghost-btn" id="memo-cancel-edit" hidden>取消编辑</button>
-                <button type="button" class="secondary-btn" id="memo-to-image">文字转图片…</button>
+                <button type="button" class="secondary-btn" id="memo-to-image">文字转图片</button>
+                <button type="button" class="ghost-btn" id="memo-to-ocr">图片转文字</button>
                 <button type="button" class="ghost-btn" id="memo-read-clip">读取剪贴板</button>
               </div>
-              <p class="hint tight">获焦自动读取可在条目区右侧开关（默认关）。GIF 动图会单独归类。</p>
+              <p class="hint tight">文字转图片 / 图片转文字已拆成独立工具；备忘录内可一键跳转。获焦自动读取可在条目区开关（默认关）。</p>
             </div>
 
-            <dialog class="memo-dialog memo-toimg-dlg" id="memo-toimg" aria-label="文字转图片">
+            <dialog class="memo-dialog memo-toimg-dlg" id="memo-toimg" aria-label="文字转图片" hidden>
               <div class="memo-dialog-body memo-toimg">
               <div class="label-row">
                 <h2 class="subhead">文字转图片</h2>
@@ -1182,10 +1356,12 @@ hello@world.org</textarea>
             <div class="memo-type-filter" id="memo-type-filter" aria-label="按类型筛选"></div>
             <p class="hint tight mono" id="memo-list-meta" hidden></p>
             <div class="memo-drop" id="memo-drop">
-              <p class="hint tight">拖拽文件到此处添加 · 最新在上 · 可拖拽排序 · 大量条目会分页加载</p>
+              <p class="hint tight">拖拽文件到此处添加 · 最新在上 · 可拖拽排序 · 滑到底部自动加载更多</p>
               <div class="memo-list" id="memo-list"></div>
+              <div class="memo-scroll-sentinel" id="memo-scroll-sentinel" hidden aria-hidden="true"></div>
+              <p class="hint tight mono memo-loading-more" id="memo-loading-more" hidden>正在加载更多…</p>
               <div class="btn-row tool-actions memo-more-row" id="memo-more-row" hidden>
-                <button type="button" class="secondary-btn" id="memo-load-more">加载更多</button>
+                <button type="button" class="ghost-btn" id="memo-load-more">手动加载更多</button>
               </div>
             </div>
           </div>
@@ -2727,11 +2903,13 @@ hello@world.org</textarea>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./temp.js?v=20260816memo10"></script>
+  <script src="./temp.js?v=20260816memo11"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260816memo10"></script>
-  <script src="./extra.js?v=20260816memo10"></script>
+  <script src="./app.js?v=20260816memo11"></script>
+  <script src="./extra.js?v=20260816memo11"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./memo.js?v=20260816memo10"></script>
+  <script src="./textimg.js?v=20260816memo11"></script>
+  <script src="./imgtext.js?v=20260816memo11"></script>
+  <script src="./memo.js?v=20260816memo11"></script>
 </body>
 </html>
