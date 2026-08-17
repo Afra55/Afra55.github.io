@@ -2039,7 +2039,7 @@ a.secondary-btn {
   margin: 0;
 }
 
-.vsplit-stage.is-manual #vsplit-video {
+.vsplit-stage.is-manual #vsplit-video:not(.is-fs) {
   max-height: min(36vh, 280px);
   width: auto;
   margin-left: auto;
@@ -2567,6 +2567,9 @@ a.secondary-btn {
   align-items: center;
   gap: 0.55rem;
   flex: 0 0 auto;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 3;
 }
 
 .vsplit-fs-top {
@@ -2613,15 +2616,14 @@ a.secondary-btn {
 .vsplit-fs-host {
   position: relative;
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: min(38vh, 280px);
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 14px;
   overflow: hidden;
   background: #000;
-  contain: layout paint;
-  isolation: isolate;
+  z-index: 1;
 }
 
 .vsplit-fs-flash {
@@ -2658,16 +2660,21 @@ a.secondary-btn {
   100% { opacity: 0; }
 }
 
-.vsplit-fs-host #vsplit-video {
+.vsplit-fs-host #vsplit-video,
+.vsplit-fs-host #vsplit-video.is-fs {
   position: relative;
   z-index: 1;
   width: 100%;
   height: 100%;
   max-height: none;
+  max-width: 100%;
   object-fit: contain;
   margin: 0;
   border-radius: 0;
+  border: 0;
   background: #000;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
 }
 
 .vsplit-fs-note {
@@ -2699,8 +2706,11 @@ a.secondary-btn {
 
 .vsplit-fs-scrub {
   flex: 0 0 auto;
+  flex-shrink: 0;
   margin-top: 0.35rem;
   padding: 0.35rem 0.15rem 0.15rem;
+  position: relative;
+  z-index: 3;
 }
 
 .vsplit-fs-scrub .vsplit-scrub-block {
@@ -2712,7 +2722,13 @@ a.secondary-btn {
 }
 
 /* 全屏底部已有播放/打点，隐藏进度条块里的重复操作行 */
-.vsplit-fs-scrub .vsplit-nudge-btns,
+.vsplit-fs-scrub .vsplit-nudge-btns {
+  display: flex !important;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
 .vsplit-fs-scrub .vsplit-mark-btns,
 .vsplit-fs-scrub .vsplit-edit-bar,
 .vsplit-fs-scrub #vsplit-scrub-hint,
@@ -2725,7 +2741,6 @@ a.secondary-btn {
   margin-top: 0.45rem;
   gap: 0.45rem;
   flex-wrap: nowrap;
-  contain: layout;
 }
 
 .vsplit-fs-bottom #vsplit-fs-play,
@@ -2789,8 +2804,25 @@ body.vsplit-fs-open {
     backdrop-filter: blur(10px);
   }
 
-  .vsplit-stage.is-manual #vsplit-video {
+  .vsplit-stage.is-manual #vsplit-video:not(.is-fs) {
     max-height: min(22vh, 168px);
+  }
+
+  .vsplit-fs-host {
+    min-height: min(34vh, 240px);
+  }
+
+  .vsplit-fs-host #vsplit-video.is-fs {
+    max-height: none !important;
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+  .vsplit-fs-bottom #vsplit-fs-play,
+  .vsplit-fs-bottom #vsplit-fs-undo,
+  .vsplit-fs-bottom #vsplit-fs-mark,
+  .vsplit-fs-bottom #vsplit-fs-mute {
+    min-height: 2.75rem;
   }
 
   .vsplit-manual-transport {
