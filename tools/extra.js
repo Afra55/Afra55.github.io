@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-imgzoom1";
+  const TOOLS_VERSION = "2026.08.17-vsfsjank1";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -4616,6 +4616,8 @@
     let vsplitFsPulseTimer = 0;
     let vsplitFsFlashTimer = 0;
     let vsplitFsStatusTimer = 0;
+    let vsplitFsFeedbackRaf = 0;
+    let vsplitFsScrubPaintRaf = 0;
     const VSPLIT_SCRUB_STEPS = 1000;
     /** 按住滑块上下滑：微调窗口（秒） */
     const VSPLIT_FINE_WINDOW = 4;
@@ -5069,16 +5071,19 @@
       if (vsplitFsPulseTimer) window.clearTimeout(vsplitFsPulseTimer);
       if (vsplitFsFlashTimer) window.clearTimeout(vsplitFsFlashTimer);
       if (vsplitFsStatusTimer) window.clearTimeout(vsplitFsStatusTimer);
+      if (vsplitFsFeedbackRaf) window.cancelAnimationFrame(vsplitFsFeedbackRaf);
+      if (vsplitFsScrubPaintRaf) window.cancelAnimationFrame(vsplitFsScrubPaintRaf);
       vsplitFsNoteTimer = 0;
       vsplitFsPulseTimer = 0;
       vsplitFsFlashTimer = 0;
       vsplitFsStatusTimer = 0;
+      vsplitFsFeedbackRaf = 0;
+      vsplitFsScrubPaintRaf = 0;
     }
 
     function bumpVsplitFsStatus() {
       if (!vsplitFsStatus) return;
       vsplitFsStatus.classList.remove("is-bump");
-      void vsplitFsStatus.offsetWidth;
       vsplitFsStatus.classList.add("is-bump");
       if (vsplitFsStatusTimer) window.clearTimeout(vsplitFsStatusTimer);
       vsplitFsStatusTimer = window.setTimeout(() => {
@@ -5090,7 +5095,6 @@
     function pulseVsplitFsMarkBtn(kind) {
       if (!vsplitFsMark) return;
       vsplitFsMark.classList.remove("is-pulse", "is-pulse-start", "is-pulse-end");
-      void vsplitFsMark.offsetWidth;
       vsplitFsMark.classList.add("is-pulse", kind === "end" ? "is-pulse-end" : "is-pulse-start");
       if (vsplitFsPulseTimer) window.clearTimeout(vsplitFsPulseTimer);
       vsplitFsPulseTimer = window.setTimeout(() => {
@@ -5099,16 +5103,32 @@
       }, 200);
     }
 
+    function ensureVsplitFsFlashOnTop() {
+      if (!vsplitFsFlash || !vsplitFsHost) return;
+      // 仅在需要时挪闪层，避免每次打点 appendChild 触发合成重建
+      if (vsplitFsHost.lastElementChild !== vsplitFsFlash) {
+        vsplitFsHost.appendChild(vsplitFsFlash);
+      }
+    }
+
     function flashVsplitFsFrame(kind) {
       if (!vsplitFsFlash || !vsplitFsHost) return;
-      // 确保闪层在视频之上（部分 WebKit 会把后插入的 video 盖住绝对定位层）
-      vsplitFsHost.appendChild(vsplitFsFlash);
+      ensureVsplitFsFlashOnTop();
+      const endClass = kind === "end" ? "is-end" : "is-start";
+      // 不用 offsetWidth 强制回流；用 animation 重启
       vsplitFsFlash.classList.remove("is-pop", "is-start", "is-end");
-      void vsplitFsFlash.offsetWidth;
-      vsplitFsFlash.classList.add("is-pop", kind === "end" ? "is-end" : "is-start");
+      vsplitFsFlash.style.animation = "none";
+      vsplitFsFlash.classList.add(endClass);
+      // 下一帧再开动画，避免与打点 DOM 重绘抢同一帧
+      requestAnimationFrame(() => {
+        if (!vsplitFsOpen || !vsplitFsFlash) return;
+        vsplitFsFlash.style.animation = "";
+        vsplitFsFlash.classList.add("is-pop");
+      });
       if (vsplitFsFlashTimer) window.clearTimeout(vsplitFsFlashTimer);
       vsplitFsFlashTimer = window.setTimeout(() => {
         vsplitFsFlash.classList.remove("is-pop", "is-start", "is-end");
+        vsplitFsFlash.style.animation = "";
         vsplitFsFlashTimer = 0;
       }, 450);
     }
@@ -5118,7 +5138,6 @@
       vsplitFsNote.hidden = false;
       vsplitFsNote.textContent = text || "";
       vsplitFsNote.classList.remove("is-on", "is-start", "is-end");
-      void vsplitFsNote.offsetWidth;
       vsplitFsNote.classList.add("is-on", kind === "end" ? "is-end" : "is-start");
       if (vsplitFsNoteTimer) window.clearTimeout(vsplitFsNoteTimer);
       vsplitFsNoteTimer = window.setTimeout(() => {
@@ -5135,18 +5154,23 @@
       } catch (_) {}
     }
 
-    /** 全屏打点节奏反馈；非全屏仍走 toast */
+    /** 全屏打点节奏反馈；非全屏仍走 toast。视觉反馈延后一帧，避免与圆点重绘同帧卡死。 */
     function notifyVsplitMarkFeedback(message, kind) {
       if (!vsplitFsOpen) {
         toast(message);
         return;
       }
       paintVsplitFsChrome();
-      pulseVsplitFsMarkBtn(kind);
-      flashVsplitFsFrame(kind);
-      bumpVsplitFsStatus();
-      showVsplitFsNote(message, kind);
       buzzVsplitFs();
+      if (vsplitFsFeedbackRaf) window.cancelAnimationFrame(vsplitFsFeedbackRaf);
+      vsplitFsFeedbackRaf = requestAnimationFrame(() => {
+        vsplitFsFeedbackRaf = 0;
+        if (!vsplitFsOpen) return;
+        pulseVsplitFsMarkBtn(kind);
+        flashVsplitFsFrame(kind);
+        bumpVsplitFsStatus();
+        showVsplitFsNote(message, kind);
+      });
     }
 
     function enterVsplitFullscreen() {
@@ -5156,10 +5180,15 @@
       vsplitFsOpen = true;
       vsplitFs.hidden = false;
       document.body.classList.add("vsplit-fs-open");
+      // 只挪一次 video；先放视频再保证闪层在上，减少解码表面重建次数
       if (vsplitVideo.parentElement !== vsplitFsHost) {
-        vsplitFsHost.appendChild(vsplitVideo);
+        if (vsplitFsFlash && vsplitFsFlash.parentElement === vsplitFsHost) {
+          vsplitFsHost.insertBefore(vsplitVideo, vsplitFsFlash);
+        } else {
+          vsplitFsHost.appendChild(vsplitVideo);
+        }
       }
-      if (vsplitFsFlash) vsplitFsHost.appendChild(vsplitFsFlash);
+      ensureVsplitFsFlashOnTop();
       // 进度条 + 打点圆点一并带进全屏，避免无法拖进度
       if (vsplitScrubBlock && vsplitFsScrubSlot && vsplitScrubBlock.parentElement !== vsplitFsScrubSlot) {
         vsplitFsScrubSlot.appendChild(vsplitScrubBlock);
@@ -5189,6 +5218,7 @@
       }
       vsplitFsOpen = false;
       clearVsplitFsFeedbackTimers();
+      if (vsplitFsFlash) vsplitFsFlash.style.animation = "";
       if (vsplitFsNote) {
         vsplitFsNote.hidden = true;
         vsplitFsNote.classList.remove("is-on", "is-start", "is-end");
@@ -5686,16 +5716,18 @@
 
     function paintVsplitScrubMarks() {
       if (!vsplitScrubMarks) return;
-      vsplitScrubMarks.innerHTML = "";
       if (vsplitMode !== "manual") {
+        vsplitScrubMarks.innerHTML = "";
         paintVsplitMarkChips();
         return;
       }
       const dur = vsplitVideoDuration();
       if (!(dur > 0)) {
-        paintVsplitMarkChips();
+        vsplitScrubMarks.innerHTML = "";
+        if (!vsplitFsOpen) paintVsplitMarkChips();
         return;
       }
+      const frag = document.createDocumentFragment();
       const addDot = (t, kind, opts = {}) => {
         if (t == null || !Number.isFinite(t)) return;
         const { active = false, idx = -1, editable = false, picked = false } = opts;
@@ -5740,7 +5772,7 @@
           dot.tabIndex = -1;
           dot.setAttribute("aria-hidden", "true");
         }
-        vsplitScrubMarks.appendChild(dot);
+        frag.appendChild(dot);
       };
 
       /* 全屏圆点只作预览，禁止点选进编辑 */
@@ -5784,7 +5816,8 @@
           });
         });
       }
-      paintVsplitMarkChips();
+      vsplitScrubMarks.replaceChildren(frag);
+      if (!vsplitFsOpen) paintVsplitMarkChips();
     }
 
     function selectVsplitEditEndpoint(idx, kind) {
@@ -5925,11 +5958,17 @@
     function flushVsplitMarkPaint() {
       try {
         if (vsplitFsOpen) {
-          // 全屏时只刷进度条圆点，避免重绘下方长列表把手机内存打爆（白屏/闪退）
+          // 全屏：文案立刻更新；圆点合并到下一帧，避开与闪层反馈抢主线程
           paintVsplitDraft();
-          paintVsplitScrubMarks();
           paintVsplitNow();
           setVsplitButtons();
+          if (!vsplitFsScrubPaintRaf) {
+            vsplitFsScrubPaintRaf = requestAnimationFrame(() => {
+              vsplitFsScrubPaintRaf = 0;
+              if (!vsplitFsOpen) return;
+              paintVsplitScrubMarks();
+            });
+          }
           return;
         }
         paintVsplitMarks();
@@ -5957,10 +5996,7 @@
         if (vsplitDraftStart == null) {
           vsplitDraftStart = t;
           vsplitMarkTapCooldownUntil = 0;
-          paintVsplitDraft();
-          paintVsplitScrubMarks();
-          setVsplitButtons();
-          paintVsplitNow();
+          flushVsplitMarkPaint();
           notifyVsplitMarkFeedback(`起点 ${formatClock(t)}`, "start");
           return;
         }
@@ -6031,10 +6067,7 @@
 
     function undoVsplitDraft() {
       vsplitDraftStart = null;
-      paintVsplitDraft();
-      paintVsplitScrubMarks();
-      paintVsplitNow();
-      setVsplitButtons();
+      flushVsplitMarkPaint();
       notifyVsplitMarkFeedback("已取消起点", "start");
     }
 
@@ -6060,18 +6093,14 @@
         vsplitMarks.splice(lastIdx, 1);
         vsplitDraftStart = start;
         invalidateVsplitOutputsFromMarks();
-        paintVsplitMarks();
-        paintVsplitNow();
-        setVsplitButtons();
+        flushVsplitMarkPaint();
         notifyVsplitMarkFeedback(`已取消终点 · 起点保留 ${formatClock(start)}`, "start");
         return;
       }
       // 3) 仅剩起点（或不完整段）→ 取消该起点
       vsplitMarks.splice(lastIdx, 1);
       invalidateVsplitOutputsFromMarks();
-      paintVsplitMarks();
-      paintVsplitNow();
-      setVsplitButtons();
+      flushVsplitMarkPaint();
       notifyVsplitMarkFeedback("已取消起点", "start");
     }
 
