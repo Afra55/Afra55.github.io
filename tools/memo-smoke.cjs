@@ -206,11 +206,11 @@ async function main() {
     out.textEdit = {
       hasDlg: Boolean(document.getElementById("memo-text-edit")),
       hasPreviewEdit: Boolean(document.getElementById("memo-preview-edit")),
-      hasEditBtn: Boolean(document.querySelector("[data-memo-edit]")),
+      hasEditBtn: Boolean(document.querySelector(".memo-more [data-memo-edit], [data-memo-edit]")),
       itemId: textItem?.id || "",
     };
     if (textItem) {
-      document.querySelector(`[data-memo-edit="${textItem.id}"]`)?.click();
+      document.querySelector(`.memo-more [data-memo-edit="${textItem.id}"], [data-memo-edit="${textItem.id}"]`)?.click();
       await sleep(120);
       const editDlg = document.getElementById("memo-text-edit");
       const editSrc = document.getElementById("memo-text-edit-src");
@@ -230,15 +230,34 @@ async function main() {
       out.textEdit.editingCleared = !document.querySelector(".memo-card.is-editing");
     }
 
-    // open image preview
-    const openBtn = document.querySelector("[data-memo-open]");
+    // open image preview via more menu (primary row keeps copy/download only)
+    const openBtn = document.querySelector(".memo-more [data-memo-open], [data-memo-open]");
     if (openBtn) {
       openBtn.click();
       await sleep(300);
       out.preview.opened = Boolean(document.getElementById("memo-lightbox")?.open);
+      out.preview.videoHiddenWhenTextOrImg = Boolean(
+        document.getElementById("memo-lightbox-video")?.hidden ||
+          getComputedStyle(document.getElementById("memo-lightbox-video")).display === "none"
+      );
       document.getElementById("memo-lightbox-close")?.click();
       await sleep(100);
       out.preview.closed = !document.getElementById("memo-lightbox")?.open;
+    }
+
+    // text content: single click opens preview
+    const textPre = document.querySelector(".memo-text[data-memo-expand]");
+    out.textClick = { hasPre: Boolean(textPre) };
+    if (textPre) {
+      textPre.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+      await sleep(350);
+      out.textClick.previewOpened = Boolean(document.getElementById("memo-lightbox")?.open);
+      const vid = document.getElementById("memo-lightbox-video");
+      out.textClick.noVideoAbove = Boolean(vid?.hidden) && getComputedStyle(vid).display === "none";
+      const txt = document.getElementById("memo-lightbox-text");
+      out.textClick.textShown = Boolean(txt) && !txt.hidden && getComputedStyle(txt).display !== "none";
+      document.getElementById("memo-lightbox-close")?.click();
+      await sleep(80);
     }
 
     // type filter + grouped sections
@@ -339,8 +358,8 @@ async function main() {
       hasFile: Boolean(fileItem),
       primaryDownload: Boolean(fileCard?.querySelector(".memo-card-actions > .secondary-btn[data-memo-dl]")),
       noPrimaryCopy: !fileCard?.querySelector(".memo-card-actions > .secondary-btn[data-memo-copy]"),
-      takeoutHint: Boolean(fileCard?.querySelector(".memo-takeout-hint")),
-      textStillCopy: Boolean(document.querySelector('.memo-card [data-memo-copy]')),
+      leanActions: Boolean(fileCard) && fileCard.querySelectorAll(".memo-card-actions > button, .memo-card-actions > details").length <= 2,
+      textStillCopy: Boolean(document.querySelector('.memo-card-actions > .secondary-btn[data-memo-copy]')),
       imageStillCopy: Boolean(
         [...document.querySelectorAll(".memo-card")].some((card) => {
           const id = card.dataset.memoId;
@@ -348,6 +367,8 @@ async function main() {
           return (it?.type === "image" || it?.type === "gif") && card.querySelector(".memo-card-actions > .secondary-btn[data-memo-copy]");
         })
       ),
+      previewInMore: Boolean(fileCard?.querySelector(".memo-more [data-memo-open]")),
+      noteInMore: Boolean(fileCard?.querySelector(".memo-more [data-memo-note]")),
     };
 
     out.shareUi = {
@@ -357,14 +378,14 @@ async function main() {
     window.DevToolsMemo.setShareUiForTest(true);
     await sleep(80);
     const fileCardShare = fileItem ? document.querySelector(`.memo-card[data-memo-id="${fileItem.id}"]`) : null;
-    const textCardShare = document.querySelector(".memo-card [data-memo-copy]")?.closest(".memo-card");
-    out.shareUi.filePrimaryShare = Boolean(fileCardShare?.querySelector(".memo-card-actions > .secondary-btn[data-memo-share]"));
-    out.shareUi.fileDownloadInMore = Boolean(fileCardShare?.querySelector(".memo-more [data-memo-dl]"));
-    out.shareUi.textHasShare = Boolean(textCardShare?.querySelector("[data-memo-share]"));
+    const textCardShare = document.querySelector(".memo-card-actions > .secondary-btn[data-memo-copy]")?.closest(".memo-card");
+    out.shareUi.filePrimaryDownload = Boolean(fileCardShare?.querySelector(".memo-card-actions > .secondary-btn[data-memo-dl]"));
+    out.shareUi.fileShareInMore = Boolean(fileCardShare?.querySelector(".memo-more [data-memo-share]"));
+    out.shareUi.textHasShare = Boolean(textCardShare?.querySelector(".memo-more [data-memo-share], [data-memo-share]"));
     out.shareUi.textKeepsCopy = Boolean(textCardShare?.querySelector(".memo-card-actions > .secondary-btn[data-memo-copy]"));
     // open preview to ensure share chrome shows
     if (fileItem) {
-      document.querySelector(`[data-memo-open="${fileItem.id}"]`)?.click();
+      document.querySelector(`.memo-more [data-memo-open="${fileItem.id}"], [data-memo-open="${fileItem.id}"]`)?.click();
       await sleep(120);
       out.shareUi.previewShareVisible = !document.getElementById("memo-preview-share")?.hidden;
       document.getElementById("memo-lightbox-close")?.click();
@@ -518,7 +539,7 @@ async function main() {
       out.noteUi.searchHit = [...document.querySelectorAll(".memo-card")].some(
         (c) => c.dataset.memoId === noteTarget.id
       );
-      document.querySelector(`.memo-card[data-memo-id="${noteTarget.id}"] .memo-card-actions [data-memo-note]`)?.click();
+      document.querySelector(`.memo-card[data-memo-id="${noteTarget.id}"] .memo-more [data-memo-note], .memo-card[data-memo-id="${noteTarget.id}"] [data-memo-note]`)?.click();
       await sleep(80);
       document.getElementById("memo-note-edit-clear")?.click();
       await sleep(220);
@@ -560,7 +581,7 @@ async function main() {
     out.cacheBust = {
 
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817themefix1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memoux1/.test(s.src)),
     };
 
     return out;
@@ -586,6 +607,9 @@ async function main() {
     failed.push("preview media controls missing");
   }
   if (!result.preview?.opened || !result.preview?.closed) failed.push("preview open/close failed");
+  if (result.textClick?.hasPre && (!result.textClick?.previewOpened || !result.textClick?.noVideoAbove || !result.textClick?.textShown)) {
+    failed.push("text single-click should preview text without video chrome");
+  }
   if (!result.exportMerged?.hasExport || !result.exportMerged?.noShareBtn) {
     failed.push("export/share should be a single button");
   }
@@ -623,15 +647,17 @@ async function main() {
   if (!result.takeout?.hasFile || !result.takeout?.primaryDownload || !result.takeout?.noPrimaryCopy) {
     failed.push("file/video-like items should primary-download instead of copy");
   }
-  if (!result.takeout?.takeoutHint) failed.push("file items should show takeout hint");
+  if (!result.takeout?.leanActions || !result.takeout?.previewInMore || !result.takeout?.noteInMore) {
+    failed.push("card actions should be lean: primary + more (preview/note inside more)");
+  }
   if (!result.takeout?.textStillCopy || !result.takeout?.imageStillCopy) {
     failed.push("text/image items should keep primary copy");
   }
   if (!result.shareUi?.hasPreviewShare || !result.shareUi?.api) {
     failed.push("mobile share UI plumbing missing");
   }
-  if (!result.shareUi?.filePrimaryShare || !result.shareUi?.fileDownloadInMore) {
-    failed.push("file items should primary-share on mobile with download in more");
+  if (!result.shareUi?.filePrimaryDownload || !result.shareUi?.fileShareInMore) {
+    failed.push("file items should primary-download with share in more on mobile");
   }
   if (!result.shareUi?.textHasShare || !result.shareUi?.textKeepsCopy) {
     failed.push("text items should keep copy and also offer share on mobile");
@@ -696,8 +722,8 @@ async function main() {
   if (!result.switchDir?.dlgOpen || !result.switchDir?.migrateVisible || !result.switchDir?.emptyVisible || result.switchDir?.choice !== "cancel") {
     failed.push("switch directory dialog choices failed");
   }
-  if (!/themefix1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to themefix1");
+  if (!/memoux1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memoux1");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");

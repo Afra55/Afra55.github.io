@@ -1260,7 +1260,7 @@
     if (item.type === "text") {
       const full = item.textPreview || "";
       const short = full.length > 160 ? `${full.slice(0, 160)}…` : full;
-      body = `<pre class="memo-text mono" data-memo-expand="${item.id}">${escapeHtml(short)}</pre>`;
+      body = `<pre class="memo-text mono" data-memo-expand="${item.id}" title="单击预览 · 双击编辑">${escapeHtml(short)}</pre>`;
     } else if (item.type === "image" || item.type === "gif") {
       const badge = item.type === "gif" ? `<span class="memo-anim-badge">动图</span>` : "";
       body = `<div class="memo-thumb-wrap memo-media-hit" data-memo-preview="${item.id}">${badge}<img class="memo-thumb" data-memo-thumb="${item.id}" alt="" loading="lazy" decoding="async" /></div>`;
@@ -1283,24 +1283,20 @@
     const editing = state.editingId === item.id ? " is-editing" : "";
     const canCopy = canClipboardCopy(item);
     const offerShare = canOfferItemShare(item);
-    let primaryAction = "";
-    let secondaryShare = "";
-    let moreDownload = "";
-    if (!canCopy && offerShare) {
-      primaryAction = `<button type="button" class="secondary-btn" data-memo-share="${item.id}">分享</button>`;
-      moreDownload = `<button type="button" class="ghost-btn" data-memo-dl="${item.id}">下载</button>`;
-    } else if (!canCopy) {
-      primaryAction = `<button type="button" class="secondary-btn" data-memo-dl="${item.id}">下载</button>`;
-    } else {
-      primaryAction = `<button type="button" class="secondary-btn" data-memo-copy="${item.id}">复制</button>`;
-      if (offerShare) {
-        secondaryShare = `<button type="button" class="ghost-btn" data-memo-share="${item.id}">分享</button>`;
-      }
-      moreDownload = `<button type="button" class="ghost-btn" data-memo-dl="${item.id}">下载</button>`;
-    }
-    const takeoutHint = !canCopy
-      ? `<p class="hint tight memo-takeout-hint">无法放回系统剪贴板 · 请下载或分享</p>`
-      : "";
+    const primaryAction = canCopy
+      ? `<button type="button" class="secondary-btn" data-memo-copy="${item.id}">复制</button>`
+      : `<button type="button" class="secondary-btn" data-memo-dl="${item.id}">下载</button>`;
+    const moreBits = [
+      `<button type="button" class="ghost-btn" data-memo-open="${item.id}">预览</button>`,
+      item.type === "text" ? `<button type="button" class="ghost-btn" data-memo-edit="${item.id}">编辑</button>` : "",
+      `<button type="button" class="ghost-btn" data-memo-note="${item.id}">${noteRaw ? "改备注" : "备注"}</button>`,
+      offerShare ? `<button type="button" class="ghost-btn" data-memo-share="${item.id}">分享</button>` : "",
+      canCopy ? `<button type="button" class="ghost-btn" data-memo-dl="${item.id}">下载</button>` : "",
+      state.mode === "dir" && !state.dirPending
+        ? `<button type="button" class="ghost-btn" data-memo-path="${item.id}">打开路径</button>`
+        : "",
+      `<button type="button" class="ghost-btn memo-more-danger" data-memo-del="${item.id}">删除</button>`,
+    ].filter(Boolean);
     return `<article class="memo-card${editing}" data-memo-id="${item.id}" draggable="${canDragReorder() ? "true" : "false"}">
       <div class="memo-card-head">
         <label class="memo-check"><input type="checkbox" data-memo-check="${item.id}" ${checked} /></label>
@@ -1310,23 +1306,16 @@
         </div>
       </div>
       <div class="memo-card-body">${body}</div>
-      ${takeoutHint}
       ${noteHtml}
-      <div class="memo-card-tags">${tagHtml}<button type="button" class="ghost-btn memo-tag-add" data-memo-tag-add="${item.id}">+ 标签</button></div>
-      <div class="btn-row memo-card-actions">
-        ${primaryAction}
-        ${secondaryShare}
-        <button type="button" class="ghost-btn" data-memo-open="${item.id}">预览</button>
-        ${item.type === "text" ? `<button type="button" class="ghost-btn" data-memo-edit="${item.id}">编辑</button>` : ""}
-        <button type="button" class="secondary-btn" data-memo-note="${item.id}">${noteRaw ? "改备注" : "备注"}</button>
-        <details class="memo-more">
-          <summary class="ghost-btn memo-more-sum">更多</summary>
-          <div class="memo-more-menu" role="menu">
-            ${moreDownload}
-            ${state.mode === "dir" && !state.dirPending ? `<button type="button" class="ghost-btn" data-memo-path="${item.id}">路径</button>` : ""}
-            <button type="button" class="ghost-btn" data-memo-del="${item.id}">删除</button>
-          </div>
-        </details>
+      <div class="memo-card-foot">
+        <div class="memo-card-tags">${tagHtml}<button type="button" class="ghost-btn memo-tag-add" data-memo-tag-add="${item.id}">+ 标签</button></div>
+        <div class="btn-row memo-card-actions">
+          ${primaryAction}
+          <details class="memo-more">
+            <summary class="ghost-btn memo-more-sum" title="更多操作">更多</summary>
+            <div class="memo-more-menu" role="menu">${moreBits.join("")}</div>
+          </details>
+        </div>
       </div>
     </article>`;
   }
@@ -1478,7 +1467,7 @@
     const dropHint = $("#memo-drop > p.hint");
     if (!dropHint) return;
     dropHint.textContent = canDragReorder()
-      ? "拖拽文件到此处添加 · 最新在上 · 可拖拽排序 · 滑到底部自动加载更多"
+      ? "拖拽文件到此处添加 · 最新在上 · 可拖拽排序 · 滑到底部自动加载"
       : "拖拽文件到此处添加 · 最新在上 · 条目较多已关闭拖拽排序，可用筛选/搜索定位";
   }
 
@@ -1556,8 +1545,12 @@
     renderListMeta(items.length, page.length);
     if (moreRow) {
       const hasMore = page.length < items.length;
-      moreRow.hidden = !hasMore;
-      if (loadMoreBtn) loadMoreBtn.textContent = `手动加载更多（还剩 ${Math.max(0, items.length - page.length)}）`;
+      // 有 IntersectionObserver 时靠哨兵自动加载；仅无 API 时露出按钮兜底
+      const needManual = typeof IntersectionObserver !== "function";
+      moreRow.hidden = !(hasMore && needManual);
+      if (loadMoreBtn) {
+        loadMoreBtn.textContent = `加载更多（还剩 ${Math.max(0, items.length - page.length)}）`;
+      }
       if (sentinel) sentinel.hidden = !hasMore;
       if (loadingTip && !hasMore) loadingTip.hidden = true;
     }
@@ -1569,6 +1562,19 @@
 
   let infiniteObserver = null;
   let infiniteBusy = false;
+  function bumpListLimitFromScroll() {
+    if (infiniteBusy) return;
+    const items = visibleItems();
+    const limit = Math.max(PAGE_SIZE, state.listLimit || PAGE_SIZE);
+    if (limit >= items.length) return;
+    infiniteBusy = true;
+    const tip = $("#memo-loading-more");
+    if (tip) tip.hidden = false;
+    state.listLimit = limit + PAGE_SIZE;
+    renderItems();
+    infiniteBusy = false;
+  }
+
   function setupInfiniteScroll() {
     const sentinel = $("#memo-scroll-sentinel");
     if (!sentinel) return;
@@ -1581,20 +1587,18 @@
     infiniteObserver = new IntersectionObserver(
       (entries) => {
         const hit = entries.some((e) => e.isIntersecting);
-        if (!hit || infiniteBusy) return;
-        const items = visibleItems();
-        const limit = Math.max(PAGE_SIZE, state.listLimit || PAGE_SIZE);
-        if (limit >= items.length) return;
-        infiniteBusy = true;
-        const tip = $("#memo-loading-more");
-        if (tip) tip.hidden = false;
-        state.listLimit = limit + PAGE_SIZE;
-        renderItems();
-        infiniteBusy = false;
+        if (!hit) return;
+        bumpListLimitFromScroll();
       },
-      { root: null, rootMargin: "240px 0px", threshold: 0 }
+      { root: null, rootMargin: "320px 0px", threshold: 0 }
     );
     infiniteObserver.observe(sentinel);
+    // 首屏已露出哨兵时立刻补一页，避免只看到「手动/加载」暗示
+    requestAnimationFrame(() => {
+      const rect = sentinel.getBoundingClientRect();
+      const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+      if (rect.top <= vh + 320) bumpListLimitFromScroll();
+    });
   }
 
   function tagsForNewItem() {
@@ -2535,6 +2539,32 @@
     return `应用内存储 / ${item.id}`;
   }
 
+  /** 打开条目对应文件（新标签）；目录模式下不再只复制路径字符串 */
+  async function openItemPath(item) {
+    if (!item) return;
+    const tip = pathHint(item);
+    try {
+      const blob = await loadBlob(item);
+      const url = URL.createObjectURL(blob);
+      const win = window.open(url, "_blank", "noopener,noreferrer");
+      if (!win) {
+        URL.revokeObjectURL(url);
+        await openItemPreview(item);
+        toast(`弹窗被拦截，已打开预览 · ${tip}`);
+        return;
+      }
+      setTimeout(() => {
+        try {
+          URL.revokeObjectURL(url);
+        } catch (_) {}
+      }, 120000);
+      toast(`已打开：${tip}`);
+    } catch (err) {
+      setError(memoError, err.message || String(err));
+      toast(tip);
+    }
+  }
+
   // ---- export / import / share ----
   function openExportDialog() {
     if (!exportDlg || !exportTags) return;
@@ -2642,7 +2672,10 @@
 
   function hidePreviewParts() {
     [lightboxImg, lightboxVideo, lightboxAudioWrap, lightboxText, lightboxFrame, lightboxFile].forEach((el) => {
-      if (el) el.hidden = true;
+      if (!el) return;
+      el.hidden = true;
+      el.setAttribute("hidden", "");
+      el.style.display = "none";
     });
     if (lightboxVideo) {
       try {
@@ -2740,6 +2773,8 @@
     if (item.type === "image" || item.type === "gif" || String(blob.type || "").startsWith("image/")) {
       setPreviewChrome(item, { canFs: true, canNewTab: true, canDl: true });
       lightboxImg.hidden = false;
+      lightboxImg.style.display = "";
+      lightboxImg.removeAttribute("hidden");
       lightboxImg.src = url;
       lightbox.showModal();
       return;
@@ -2748,6 +2783,8 @@
     if (item.type === "video" || String(blob.type || "").startsWith("video/")) {
       setPreviewChrome(item, { canFs: true, canNewTab: true, canDl: true });
       lightboxVideo.hidden = false;
+      lightboxVideo.style.display = "";
+      lightboxVideo.removeAttribute("hidden");
       lightboxVideo.src = url;
       lightbox.showModal();
       try {
@@ -2761,6 +2798,8 @@
     if (item.type === "audio" || String(blob.type || "").startsWith("audio/")) {
       setPreviewChrome(item, { canFs: true, canNewTab: false, canDl: true });
       lightboxAudioWrap.hidden = false;
+      lightboxAudioWrap.style.display = "";
+      lightboxAudioWrap.removeAttribute("hidden");
       lightboxAudio.src = url;
       lightbox.showModal();
       try {
@@ -2772,6 +2811,8 @@
     if (isPdfItem(item, blob)) {
       setPreviewChrome(item, { canFs: true, canNewTab: true, canDl: true });
       lightboxFrame.hidden = false;
+      lightboxFrame.style.display = "";
+      lightboxFrame.removeAttribute("hidden");
       lightboxFrame.src = url;
       lightbox.showModal();
       return;
@@ -2785,6 +2826,8 @@
         if (text.length > 400000) text = `${text.slice(0, 400000)}\n\n…（内容过长，已截断预览）`;
       }
       lightboxText.hidden = false;
+      lightboxText.style.display = "";
+      lightboxText.removeAttribute("hidden");
       lightboxText.textContent = text;
       lightbox.showModal();
       return;
@@ -2792,6 +2835,8 @@
 
     setPreviewChrome(item, { canFs: false, canNewTab: true, canDl: true });
     lightboxFile.hidden = false;
+    lightboxFile.style.display = "";
+    lightboxFile.removeAttribute("hidden");
     const nameEl = $("#memo-preview-file-name");
     const metaEl = $("#memo-preview-file-meta");
     if (nameEl) nameEl.textContent = item.name || item.fileName || item.id;
@@ -3178,6 +3223,80 @@
   });
 
   let searchTimer = 0;
+  let textClickTimer = 0;
+  let memoCtxItemId = "";
+
+  function ensureMemoCtx() {
+    let el = $("#memo-ctx");
+    if (el) return el;
+    el = document.createElement("div");
+    el.id = "memo-ctx";
+    el.className = "memo-ctx";
+    el.hidden = true;
+    el.setAttribute("role", "menu");
+    document.body.appendChild(el);
+    el.addEventListener("click", async (e) => {
+      const btn = e.target.closest("[data-memo-ctx-act]");
+      if (!btn || !memoCtxItemId) return;
+      const act = btn.dataset.memoCtxAct;
+      const item = state.index.items.find((x) => x.id === memoCtxItemId);
+      hideMemoCtx();
+      if (!item) return;
+      try {
+        if (act === "copy") await copyItem(item);
+        else if (act === "dl") await downloadItem(item);
+        else if (act === "share") await shareItem(item);
+        else if (act === "open") await openItemPreview(item);
+        else if (act === "edit") await beginEditText(item);
+        else if (act === "note") await beginEditNote(item);
+        else if (act === "path") await openItemPath(item);
+        else if (act === "del") await deleteItems([item.id]);
+      } catch (err) {
+        setError(memoError, err.message || String(err));
+      }
+    });
+    return el;
+  }
+
+  function hideMemoCtx() {
+    const el = $("#memo-ctx");
+    if (el) el.hidden = true;
+    memoCtxItemId = "";
+  }
+
+  function showMemoCtx(item, clientX, clientY) {
+    if (!item) return;
+    const el = ensureMemoCtx();
+    memoCtxItemId = item.id;
+    const canCopy = canClipboardCopy(item);
+    const bits = [];
+    if (canCopy) bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="copy">复制</button>`);
+    else bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="dl">下载</button>`);
+    bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="open">预览</button>`);
+    if (item.type === "text") bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="edit">编辑</button>`);
+    bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="note">备注</button>`);
+    if (canOfferItemShare(item)) bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="share">分享</button>`);
+    if (canCopy) bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="dl">下载</button>`);
+    if (state.mode === "dir" && !state.dirPending) {
+      bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="path">打开路径</button>`);
+    }
+    bits.push(`<button type="button" class="memo-ctx-item is-danger" role="menuitem" data-memo-ctx-act="del">删除</button>`);
+    el.innerHTML = bits.join("");
+    el.hidden = false;
+    const pad = 8;
+    const vw = window.innerWidth || 800;
+    const vh = window.innerHeight || 600;
+    el.style.left = "0px";
+    el.style.top = "0px";
+    const rect = el.getBoundingClientRect();
+    let x = clientX;
+    let y = clientY;
+    if (x + rect.width + pad > vw) x = Math.max(pad, vw - rect.width - pad);
+    if (y + rect.height + pad > vh) y = Math.max(pad, vh - rect.height - pad);
+    el.style.left = `${Math.max(pad, x)}px`;
+    el.style.top = `${Math.max(pad, y)}px`;
+  }
+
   $("#memo-search")?.addEventListener("input", (e) => {
     const val = String(e.target.value || "");
     clearTimeout(searchTimer);
@@ -3256,6 +3375,7 @@
 
   itemList?.addEventListener("click", async (e) => {
     const t = e.target;
+    hideMemoCtx();
     try {
       if (t.matches?.("[data-memo-check]")) {
         const id = t.dataset.memoCheck;
@@ -3314,14 +3434,9 @@
       const pathId = t.closest?.("[data-memo-path]")?.dataset?.memoPath;
       if (pathId) {
         const item = state.index.items.find((x) => x.id === pathId);
-        if (!item) return;
-        const tip = pathHint(item);
-        try {
-          await navigator.clipboard.writeText(tip);
-          toast(`路径已复制：${tip}`);
-        } catch (_) {
-          window.alert(tip);
-        }
+        if (item) await openItemPath(item);
+        t.closest("details")?.removeAttribute("open");
+        hideMemoCtx();
         return;
       }
       const openId = t.closest?.("[data-memo-open]")?.dataset?.memoOpen;
@@ -3344,24 +3459,21 @@
       }
       const expandId = t.closest?.("[data-memo-expand]")?.dataset?.memoExpand;
       if (expandId) {
-        // 单击展开/收起；双击编辑文本
-        if (e.detail >= 2) {
-          const item = state.index.items.find((x) => x.id === expandId);
-          if (item?.type === "text") await beginEditText(item);
-          else if (item) await openItemPreview(item);
-          return;
-        }
+        // 单击预览；双击编辑文本
         const item = state.index.items.find((x) => x.id === expandId);
         if (!item) return;
-        const el = t.closest("[data-memo-expand]");
-        const full = item.textPreview || "";
-        if (el.dataset.full === "1") {
-          el.textContent = full.length > 160 ? `${full.slice(0, 160)}…` : full;
-          el.dataset.full = "0";
-        } else {
-          el.textContent = full;
-          el.dataset.full = "1";
+        if (e.detail >= 2) {
+          clearTimeout(textClickTimer);
+          textClickTimer = 0;
+          if (item.type === "text") await beginEditText(item);
+          else await openItemPreview(item);
+          return;
         }
+        clearTimeout(textClickTimer);
+        textClickTimer = setTimeout(() => {
+          textClickTimer = 0;
+          openItemPreview(item).catch((err) => setError(memoError, err.message || String(err)));
+        }, 240);
         return;
       }
       const tagAddId = t.closest?.("[data-memo-tag-add]")?.dataset?.memoTagAdd;
@@ -3407,6 +3519,28 @@
     aside.classList.toggle("is-open");
     syncTagsToggle();
   });
+
+  itemList?.addEventListener("contextmenu", (e) => {
+    const card = e.target.closest?.(".memo-card");
+    if (!card || !itemList.contains(card)) return;
+    if (e.target.closest("input, textarea, a")) return;
+    const item = state.index.items.find((x) => x.id === card.dataset.memoId);
+    if (!item) return;
+    e.preventDefault();
+    $$("details.memo-more[open]", itemList).forEach((d) => d.removeAttribute("open"));
+    showMemoCtx(item, e.clientX, e.clientY);
+  });
+  document.addEventListener("pointerdown", (e) => {
+    const ctx = $("#memo-ctx");
+    if (!ctx || ctx.hidden) return;
+    if (ctx.contains(e.target)) return;
+    hideMemoCtx();
+  });
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") hideMemoCtx();
+  });
+  window.addEventListener("scroll", hideMemoCtx, true);
+  window.addEventListener("resize", hideMemoCtx);
 
   // item drag reorder
   let dragItemId = null;
