@@ -314,7 +314,37 @@ async function main() {
       const rows = window.DevToolsMemo.getIndex().items || [];
       const pinTarget = rows.find((x) => x.type === "image") || rows[rows.length - 1];
       const moveTarget = rows.find((x) => x.id !== pinTarget?.id) || pinTarget;
-      if (pinTarget) {
+      if (pinTarget && moveTarget) {
+        const unpinnedCard = document.querySelector(`.memo-card[data-memo-id="${moveTarget.id}"]`);
+        unpinnedCard?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 24, clientY: 24 }));
+        await sleep(60);
+        const ctxUnpinned = document.getElementById("memo-ctx");
+        const ctxText = ctxUnpinned?.textContent || "";
+        out.pinMove.hasTopAct = /移动到顶部/.test(ctxText);
+        out.pinMove.hasPinAct = /一直置顶/.test(ctxText);
+        out.pinMove.twoMenuActs = Boolean(
+          ctxUnpinned?.querySelector('[data-memo-ctx-act="top"]') && ctxUnpinned?.querySelector('[data-memo-ctx-act="pin"]')
+        );
+        if (ctxUnpinned) ctxUnpinned.hidden = true;
+
+        await window.DevToolsMemo.moveItemToTop(moveTarget.id);
+        await sleep(180);
+        const afterMoveOnly = window.DevToolsMemo.getIndex().items || [];
+        const movedRow = afterMoveOnly.find((x) => x.id === moveTarget.id);
+        const firstUnpinnedAfterMove = afterMoveOnly.findIndex((x) => !x.pinned);
+        out.pinMove.moveIsNotPin = Boolean(movedRow) && movedRow.pinned !== true;
+        out.pinMove.moveToUnpinnedTop = firstUnpinnedAfterMove >= 0 && afterMoveOnly[firstUnpinnedAfterMove]?.id === moveTarget.id;
+        const movedCard = document.querySelector(`.memo-card[data-memo-id="${moveTarget.id}"]`);
+        out.pinMove.moveHasNoPinMark = !movedCard?.querySelector(".memo-pin-mark") && !movedCard?.classList.contains("is-pinned");
+
+        await window.DevToolsMemo.ingestText("NEW_AFTER_MOVE_ONLY_773");
+        await sleep(280);
+        const afterNewMove = window.DevToolsMemo.getIndex().items || [];
+        const newMoveItem = afterNewMove.find((x) => /NEW_AFTER_MOVE_ONLY_773/.test(x.textPreview || ""));
+        const newMoveIdx = afterNewMove.findIndex((x) => x.id === newMoveItem?.id);
+        const movedIdx = afterNewMove.findIndex((x) => x.id === moveTarget.id);
+        out.pinMove.newBeatsMove = newMoveIdx >= 0 && movedIdx >= 0 && newMoveIdx < movedIdx && !newMoveItem?.pinned;
+
         await window.DevToolsMemo.setItemPinned(pinTarget.id, true);
         await sleep(180);
         const afterPin = window.DevToolsMemo.getIndex().items || [];
@@ -322,21 +352,29 @@ async function main() {
         const pinCard = document.querySelector(`.memo-card[data-memo-id="${pinTarget.id}"]`);
         out.pinMove.cardClass = Boolean(pinCard?.classList.contains("is-pinned"));
         out.pinMove.pinMark = Boolean(pinCard?.querySelector(".memo-pin-mark"));
-        pinCard?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 24, clientY: 24 }));
+        pinCard?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 28, clientY: 28 }));
         await sleep(60);
-        const ctx = document.getElementById("memo-ctx");
-        out.pinMove.hasTopAct = /移动到顶部/.test(ctx?.textContent || "");
-        out.pinMove.hasUnpinAct = /取消置顶/.test(ctx?.textContent || "");
-        if (ctx) ctx.hidden = true;
-        if (moveTarget && moveTarget.id !== pinTarget.id) {
-          await window.DevToolsMemo.moveItemToTop(moveTarget.id);
-          await sleep(180);
-          const afterMove = window.DevToolsMemo.getIndex().items || [];
-          const firstUnpinned = afterMove.findIndex((x) => !x.pinned);
-          out.pinMove.unpinnedAfterPins = firstUnpinned >= 0 && afterMove[firstUnpinned]?.id === moveTarget.id;
-          const pins = afterMove.filter((x) => x.pinned);
-          out.pinMove.pinsStayTop = pins.every((x, i) => afterMove[i]?.id === x.id);
-        }
+        const ctxPinned = document.getElementById("memo-ctx");
+        out.pinMove.hasUnpinAct = /取消置顶/.test(ctxPinned?.textContent || "");
+        out.pinMove.pinKeepsTopAct = Boolean(ctxPinned?.querySelector('[data-memo-ctx-act="top"]'));
+        if (ctxPinned) ctxPinned.hidden = true;
+
+        await window.DevToolsMemo.moveItemToTop(moveTarget.id);
+        await sleep(180);
+        const afterMove = window.DevToolsMemo.getIndex().items || [];
+        const firstUnpinned = afterMove.findIndex((x) => !x.pinned);
+        out.pinMove.unpinnedAfterPins = firstUnpinned >= 0 && afterMove[firstUnpinned]?.id === moveTarget.id;
+        const pins = afterMove.filter((x) => x.pinned);
+        out.pinMove.pinsStayTop = pins.every((x, i) => afterMove[i]?.id === x.id);
+        out.pinMove.moveStillUnpinned = afterMove.find((x) => x.id === moveTarget.id)?.pinned !== true;
+
+        await window.DevToolsMemo.ingestText("NEW_AFTER_PIN_STAY_773");
+        await sleep(280);
+        const afterNewPin = window.DevToolsMemo.getIndex().items || [];
+        const newPinItem = afterNewPin.find((x) => /NEW_AFTER_PIN_STAY_773/.test(x.textPreview || ""));
+        out.pinMove.pinBeatsNew = afterNewPin[0]?.id === pinTarget.id && afterNewPin[0]?.pinned === true;
+        out.pinMove.newBelowPin = Boolean(newPinItem) && !newPinItem.pinned && afterNewPin.findIndex((x) => x.id === newPinItem.id) > 0;
+
         await window.DevToolsMemo.setItemPinned(pinTarget.id, false);
         await sleep(160);
         const afterUnpin = window.DevToolsMemo.getIndex().items || [];
@@ -1013,17 +1051,27 @@ async function main() {
   }
   if (
     !result.pinMove?.api ||
+    !result.pinMove?.twoMenuActs ||
+    !result.pinMove?.hasTopAct ||
+    !result.pinMove?.hasPinAct ||
+    !result.pinMove?.moveIsNotPin ||
+    !result.pinMove?.moveToUnpinnedTop ||
+    !result.pinMove?.moveHasNoPinMark ||
+    !result.pinMove?.newBeatsMove ||
     !result.pinMove?.pinnedFirst ||
     !result.pinMove?.cardClass ||
     !result.pinMove?.pinMark ||
-    !result.pinMove?.hasTopAct ||
     !result.pinMove?.hasUnpinAct ||
+    !result.pinMove?.pinKeepsTopAct ||
     !result.pinMove?.unpinnedAfterPins ||
     !result.pinMove?.pinsStayTop ||
+    !result.pinMove?.moveStillUnpinned ||
+    !result.pinMove?.pinBeatsNew ||
+    !result.pinMove?.newBelowPin ||
     !result.pinMove?.unpinnedCleared ||
     result.pinMove?.unpinClassGone === false
   ) {
-    failed.push("memo pin / move-to-top should keep pinned items first");
+    failed.push("pin and move-to-top must be independent (sticky pin vs one-shot reorder)");
   }
   if (!result.previewUi?.hasDel || !result.previewUi?.delVisible || !result.previewUi?.wideEnough) {
     failed.push("preview should expose delete and be list-wide");
