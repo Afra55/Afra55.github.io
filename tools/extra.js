@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-vsplitfs2";
+  const TOOLS_VERSION = "2026.08.17-vsplitnudge";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -6758,11 +6758,17 @@
       if (!btn) return;
       let holdTimer = 0;
       let repeatTimer = 0;
+      let holding = false;
+      let lastStartAt = 0;
+      btn.style.webkitUserSelect = "none";
+      btn.style.userSelect = "none";
+      btn.style.webkitTouchCallout = "none";
       const stop = () => {
         if (holdTimer) window.clearTimeout(holdTimer);
         if (repeatTimer) window.clearInterval(repeatTimer);
         holdTimer = 0;
         repeatTimer = 0;
+        holding = false;
       };
       const tick = () => {
         if (btn.disabled) {
@@ -6771,25 +6777,69 @@
         }
         nudgeVsplitPreview(delta);
       };
-      btn.addEventListener("pointerdown", (e) => {
-        if (btn.disabled) return;
-        if (e.button != null && e.button !== 0) return;
-        e.preventDefault();
+      const start = () => {
+        if (holding || btn.disabled) return;
+        holding = true;
+        lastStartAt = Date.now();
+        window.getSelection?.()?.removeAllRanges?.();
         tick();
         holdTimer = window.setTimeout(() => {
           holdTimer = 0;
-          repeatTimer = window.setInterval(tick, 110);
-        }, 320);
-      });
+          if (!holding || btn.disabled) return;
+          repeatTimer = window.setInterval(tick, 100);
+        }, 280);
+      };
+      const onPointerDown = (e) => {
+        if (e.pointerType === "mouse" && e.button != null && e.button !== 0) return;
+        e.preventDefault();
+        start();
+      };
+      const onTouchStart = (e) => {
+        // iOS Safari 长按选字/呼出菜单走 touch 默认行为，仅 pointerdown.preventDefault 拦不住
+        e.preventDefault();
+        start();
+      };
+      btn.addEventListener("pointerdown", onPointerDown, { passive: false });
       btn.addEventListener("pointerup", stop);
-      btn.addEventListener("pointerleave", stop);
       btn.addEventListener("pointercancel", stop);
+      btn.addEventListener("touchstart", onTouchStart, { passive: false });
+      btn.addEventListener("touchend", stop);
+      btn.addEventListener("touchcancel", stop);
+      btn.addEventListener(
+        "touchmove",
+        (e) => {
+          if (!holding) return;
+          e.preventDefault();
+        },
+        { passive: false }
+      );
+      btn.addEventListener("contextmenu", (e) => e.preventDefault());
+      btn.addEventListener("selectstart", (e) => e.preventDefault());
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (Date.now() - lastStartAt < 700) return;
+        if (btn.disabled) return;
+        tick();
+      });
+      document.addEventListener("pointerup", () => {
+        if (holding) stop();
+      });
+      document.addEventListener("pointercancel", () => {
+        if (holding) stop();
+      });
+      document.addEventListener(
+        "touchend",
+        () => {
+          if (holding) stop();
+        },
+        { passive: true }
+      );
     }
 
     bindVsplitNudgeRepeat(vsplitNudgeM1, -1);
+    bindVsplitNudgeRepeat(vsplitNudgeM01, -0.1);
+    bindVsplitNudgeRepeat(vsplitNudgeP01, 0.1);
     bindVsplitNudgeRepeat(vsplitNudgeP1, 1);
-    vsplitNudgeM01?.addEventListener("click", () => nudgeVsplitPreview(-0.1));
-    vsplitNudgeP01?.addEventListener("click", () => nudgeVsplitPreview(0.1));
     vsplitScrub?.addEventListener("pointerdown", (ev) => beginScrubGesture(ev));
     vsplitScrub?.addEventListener("pointermove", (ev) => moveScrubGesture(ev));
     vsplitScrub?.addEventListener("input", () => onVsplitScrubInput());

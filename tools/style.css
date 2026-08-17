@@ -2401,6 +2401,9 @@ a.secondary-btn {
   margin-top: 0.15rem;
   flex-wrap: nowrap;
   gap: 0.25rem;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .vsplit-nudge-btns .ghost-btn {
@@ -2410,6 +2413,12 @@ a.secondary-btn {
   padding-right: 0.28rem;
   font-size: 0.82rem;
   font-variant-numeric: tabular-nums;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  caret-color: transparent;
 }
 
 .vsplit-mark-btns {
