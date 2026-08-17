@@ -7,8 +7,10 @@
   const BASE_KEY = "devtools-ffmpeg-base";
   const TOKEN_KEY = "devtools-ffmpeg-token";
   const OP_KEY = "devtools-ffmpeg-op";
-  const DEFAULT_BASE = "http://127.0.0.1:17889";
-  const DEFAULT_TOKEN = "devtools-ffmpeg";
+  const DEFAULT_BASE = "http://127.0.0.1:17888";
+  const DEFAULT_TOKEN = "devtools-bridge";
+  /** 统一桥上 FFmpeg 挂载前缀；独立旧桥为空 */
+  let apiPrefix = "/ff";
 
   /** 离线兜底目录（桥未连上时仍可渲染表单） */
   const FALLBACK_OPS = [
@@ -265,9 +267,18 @@
 
   async function ffFetch(pathname, opts = {}) {
     const headers = { ...(opts.headers || {}) };
-    if (opts.auth !== false) headers["X-Ffmpeg-Token"] = token();
+    if (opts.auth !== false) {
+      headers["X-Ffmpeg-Token"] = token();
+      headers["X-Adb-Token"] = token();
+    }
     if (opts.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
-    const res = await fetch(`${baseUrl()}${pathname}`, {
+    const rawPath = String(pathname || "/");
+    const usePrefix = opts.noPrefix ? "" : apiPrefix;
+    const fullPath =
+      rawPath.startsWith("/ff/") || rawPath === "/ff"
+        ? rawPath
+        : `${usePrefix}${rawPath.startsWith("/") ? rawPath : `/${rawPath}`}`;
+    const res = await fetch(`${baseUrl()}${fullPath}`, {
       method: opts.method || "GET",
       headers,
       body: opts.body ? (typeof opts.body === "string" ? opts.body : JSON.stringify(opts.body)) : undefined,
@@ -591,13 +602,36 @@
     savePrefs();
     setError("");
     try {
-      const health = await ffFetch("/health", { auth: false });
+      let rootHealth = null;
+      try {
+        rootHealth = await ffFetch("/health", { auth: false, noPrefix: true });
+      } catch (_) {
+        rootHealth = null;
+      }
+      if (
+        rootHealth?.unified ||
+        rootHealth?.service === "devtools-bridge" ||
+        rootHealth?.ffmpegMount === "/ff" ||
+        rootHealth?.capabilities?.ffmpeg
+      ) {
+        apiPrefix = "/ff";
+      } else if (rootHealth?.service === "devtools-ffmpeg-bridge") {
+        apiPrefix = "";
+      } else {
+        apiPrefix = "/ff";
+      }
+
+      const health =
+        rootHealth?.ffmpeg != null
+          ? rootHealth
+          : await ffFetch("/health", { auth: false });
       const ffOk = Boolean(health.ffmpeg?.ok);
       if (toolsProbe) {
         toolsProbe.hidden = false;
-        toolsProbe.textContent = `桥 v${health.version || "?"} · ffmpeg ${
+        const mode = apiPrefix === "/ff" ? "统一桥" : "独立 FFmpeg 桥";
+        toolsProbe.textContent = `${mode} v${health.version || "?"} · ffmpeg ${
           ffOk ? health.ffmpeg.version || "ok" : "未找到"
-        } · ffprobe ${health.ffprobe?.ok ? "ok" : "缺"} · ops ${Array.isArray(health.features) ? health.features.length : "?"}`;
+        } · ffprobe ${health.ffprobe?.ok ? "ok" : "缺"}`;
       }
       if (!ffOk) {
         connected = false;
@@ -610,15 +644,29 @@
       connected = true;
       if (workspace) workspace.hidden = false;
       if (refreshBtn) refreshBtn.disabled = false;
-      setStatus("is-ok", "已连接本机 FFmpeg 桥", `更优路径已就绪 · Token 已配置`);
-      renderRoots(health.roots || []);
+      setStatus(
+        "is-ok",
+        apiPrefix === "/ff" ? "已连接统一本机桥 · FFmpeg" : "已连接本机 FFmpeg 桥",
+        `更优路径已就绪 · Token 已配置`
+      );
+      // 本机目录：统一桥用 /ff/local/roots
+      let roots = health.roots || [];
+      if (apiPrefix === "/ff") {
+        try {
+          const rr = await ffFetch("/local/roots");
+          if (rr?.roots?.length) roots = rr.roots;
+        } catch (_) {
+          /* keep health.roots if any */
+        }
+      }
+      renderRoots(roots);
       await loadOpsCatalog();
-      const home = health.roots?.[0]?.path || "";
+      const home = roots?.[0]?.path || "";
       if (home) await openPath(home);
       await refreshJobs();
       startJobPoll();
       applyDeviceMode();
-      if (!fromPoll) toast("已连接 FFmpeg 桥");
+      if (!fromPoll) toast(apiPrefix === "/ff" ? "已连接统一本机桥（FFmpeg）" : "已连接 FFmpeg 桥");
       return true;
     } catch (err) {
       connected = false;

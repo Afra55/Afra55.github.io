@@ -41,7 +41,10 @@ node server.js
 1. 打开 Tools →「ADB 工具」
 2. 下载对应系统的完整 ZIP，解压后运行启动脚本（勿只保留脚本、删掉 server.js）
 3. 回到网页点击「连接本机桥」
-## 接口（P0–P3，bridge 0.7.0）
+## 接口（统一本机桥 0.8.0 · ADB + 镜像 + FFmpeg）
+
+默认 Token：`devtools-bridge`（兼容 `devtools-adb` / `devtools-ffmpeg`）  
+FFmpeg 接口前缀：`/ff/*`（例如 `GET /ff/ops`、`POST /ff/jobs/run`）
 
 | 方法 | 路径 | 说明 |
 |---|---|---|

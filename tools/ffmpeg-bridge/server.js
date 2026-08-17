@@ -215,9 +215,10 @@ function whichSync(bin) {
 }
 
 function requireToken(req) {
-  const token = req.headers["x-ffmpeg-token"];
-  if (!token || token !== TOKEN) {
-    const err = new Error("未授权：缺少或错误的 X-Ffmpeg-Token");
+  const token = String(req.headers["x-ffmpeg-token"] || req.headers["x-adb-token"] || "");
+  const accepted = new Set([TOKEN, "devtools-bridge", "devtools-ffmpeg", "devtools-adb"]);
+  if (!token || !accepted.has(token)) {
+    const err = new Error("未授权：缺少或错误的 Token（X-Ffmpeg-Token / X-Adb-Token）");
     err.status = 401;
     throw err;
   }
@@ -3360,11 +3361,13 @@ function listenWithFallback(startPort, maxTries = 12) {
   });
 }
 
-async function handleRequest(req, res) {
+async function handleRequest(req, res, opts = {}) {
   const origin = req.headers.origin || "";
   if (req.method === "OPTIONS") {
     const headers = {};
     applyCors(headers, origin);
+    headers["Access-Control-Allow-Headers"] =
+      "Content-Type, X-Ffmpeg-Token, X-Adb-Token, X-Filename";
     headers["Content-Length"] = 0;
     res.writeHead(204, headers);
     res.end();
@@ -3373,7 +3376,8 @@ async function handleRequest(req, res) {
 
   try {
     const url = new URL(req.url || "/", `http://${HOST}`);
-    const pathname = url.pathname;
+    let pathname = opts.pathname || url.pathname;
+    if (pathname.length > 1 && pathname.endsWith("/")) pathname = pathname.replace(/\/+$/, "");
 
     if (req.method === "GET" && pathname === "/health") {
       const [ffmpeg, ffprobe] = await Promise.all([
@@ -3385,11 +3389,11 @@ async function handleRequest(req, res) {
         200,
         {
           ok: true,
-          service: "devtools-ffmpeg-bridge",
+          service: opts.embedded ? "devtools-bridge-ffmpeg" : "devtools-ffmpeg-bridge",
           version: BRIDGE_VERSION,
           port: Number(process.env.__FF_ACTUAL_PORT || PORT),
           tokenRequired: true,
-          defaultTokenHint: "devtools-ffmpeg",
+          defaultTokenHint: opts.embedded ? "devtools-bridge" : "devtools-ffmpeg",
           features: FEATURES,
           ffmpeg,
           ffprobe,
@@ -3399,13 +3403,14 @@ async function handleRequest(req, res) {
             ffprobe: ffprobe.ok ? "" : ffprobe.setup || "",
           },
           roots: localFsRoots(),
+          embedded: Boolean(opts.embedded),
         },
         origin
       );
       return;
     }
 
-    requireToken(req);
+    if (!opts.alreadyAuthed) requireToken(req);
 
     if (req.method === "GET" && pathname === "/local/roots") {
       sendJson(res, 200, { ok: true, roots: localFsRoots() }, origin);
@@ -3480,8 +3485,7 @@ async function handleRequest(req, res) {
     }
 
     if (req.method === "GET" && pathname === "/ops") {
-      const includeAll = url.searchParams.get("all") === "1";
-      const ops = includeAll ? OPS_CATALOG : OPS_CATALOG;
+      const ops = OPS_CATALOG;
       const common = OPS_CATALOG.filter((o) => o.tier !== "more");
       const more = OPS_CATALOG.filter((o) => o.tier === "more");
       sendJson(
@@ -3524,7 +3528,7 @@ async function handleRequest(req, res) {
 
     sendJson(res, 404, { ok: false, error: "未找到接口" }, origin);
   } catch (err) {
-    const status = err.status || ( /未授权/.test(String(err.message)) ? 401 : 400);
+    const status = err.status || (/未授权/.test(String(err.message)) ? 401 : 400);
     sendJson(res, status, { ok: false, error: err.message || String(err) }, origin);
   }
 }
@@ -3538,6 +3542,7 @@ async function main() {
   console.log(`Token: ${TOKEN}`);
   console.log(`ffmpeg: ${ffmpeg.ok ? ffmpeg.version : "NOT FOUND — " + (ffmpeg.error || "")}`);
   console.log(`Temp: ${TMP_ROOT}`);
+  console.log("提示：也可使用统一本机桥（ADB+FFmpeg+镜像，单端口 17888）。");
   if (!ffmpeg.ok) {
     console.log("提示：桥已启动，但未找到 ffmpeg。安装后无需重启即可在网页探测。");
   }
@@ -3559,7 +3564,16 @@ async function main() {
   process.on("SIGTERM", cleanup);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+module.exports = {
+  handleRequest,
+  BRIDGE_VERSION,
+  FEATURES,
+  checkBinary,
+};
+
+if (require.main === module) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}

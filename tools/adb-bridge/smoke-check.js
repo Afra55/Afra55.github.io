@@ -6,7 +6,7 @@ const { spawn } = require("child_process");
 const path = require("path");
 
 const PORT = 17991;
-const TOKEN = "devtools-adb";
+const TOKEN = "devtools-bridge";
 const HOST = "127.0.0.1";
 
 function req(method, urlPath, { headers = {}, body } = {}) {
@@ -118,12 +118,21 @@ async function main() {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
     }
 
-    if (health2.json?.version !== "0.7.0") {
-      throw new Error(`expected bridge version 0.7.0, got ${health2.json?.version}`);
+    if (health2.json?.version !== "0.8.0") {
+      throw new Error(`expected bridge version 0.8.0, got ${health2.json?.version}`);
     }
     if (!features.includes("local-pull")) throw new Error("health missing feature: local-pull");
-    for (const need of ["fs-zip", "app-backup-splits", "logcat-level", "mirror", "scrcpy-mirror"]) {
+    for (const need of ["fs-zip", "app-backup-splits", "logcat-level", "mirror", "scrcpy-mirror", "unified-bridge", "ffmpeg-mount"]) {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
+    }
+    if (!health2.json?.unified) throw new Error("expected unified bridge flag");
+    if (health2.json?.ffmpegMount !== "/ff") throw new Error("expected ffmpegMount /ff");
+
+    const ffHealth = await req("GET", "/ff/health", { headers: { "X-Adb-Token": TOKEN } });
+    // /ff/health should work without token actually - test without
+    const ffHealthOpen = await req("GET", "/ff/health");
+    if (ffHealthOpen.status !== 200 || !ffHealthOpen.json?.ok) {
+      throw new Error(`ff/health failed: ${ffHealthOpen.status}`);
     }
 
     const mirrorStatus = await req("GET", "/mirror/status", { headers: { "X-Adb-Token": TOKEN } });
@@ -143,6 +152,11 @@ async function main() {
     if (!prepared.json?.jar?.vendor && !prepared.json?.jar?.cached) {
       throw new Error("mirror prepare did not locate scrcpy-server jar");
     }
+
+    // Token compat
+    const ops = await req("GET", "/ff/ops", { headers: { "X-Adb-Token": "devtools-bridge" } });
+    if (ops.status !== 200 || !ops.json?.ok) throw new Error("ff/ops with unified token failed");
+    void ffHealth;
 
     // Path alias expansion (mirrors server expandFsPathCandidates)
     const expand = (input) => {

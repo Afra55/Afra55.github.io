@@ -8,8 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260817medianav1" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260817medianav1" />
+  <link rel="stylesheet" href="./style.css?v=20260817unified1" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260817unified1" />
   <script>
     /* 尽早应用主题，减少闪烁 */
     (function () {
@@ -38,7 +38,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.17-medianav1</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.17-unified1</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="theme-open" title="切换站点主题">主题</button>
@@ -2081,9 +2081,9 @@ hello@world.org</textarea>
           <label for="adb-base">桥地址</label>
           <input id="adb-base" class="mono" type="text" value="http://127.0.0.1:17888" autocomplete="off" spellcheck="false" />
           <label for="adb-token">Token</label>
-          <input id="adb-token" class="mono" type="text" value="devtools-adb" autocomplete="off" spellcheck="false" />
+          <input id="adb-token" class="mono" type="text" value="devtools-bridge" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint">默认 Token 为 <span class="mono">devtools-adb</span>。桥仅监听本机。文件默认从 <span class="mono">/</span> 浏览（类似 Android Studio Device File Explorer）；无权限时会尝试 su / run-as，<span class="mono">/data/data</span> 无 root 时按包名虚拟列出。完整包需含 <span class="mono">server.js</span>（桥 ≥0.7.0），请解压到同一文件夹后运行启动脚本。</p>
+        <p class="hint">默认 Token 为 <span class="mono">devtools-bridge</span>（兼容旧 <span class="mono">devtools-adb</span>）。<strong>一座桥</strong>同时提供 ADB、Scrcpy 镜像与 FFmpeg（<span class="mono">/ff</span>）。完整包需含 <span class="mono">server.js</span> + <span class="mono">ffmpeg-bridge/</span>（桥 ≥0.8.0）。</p>
         <div class="adb-guide" id="adb-setup-guide">
           <strong>本机依赖怎么配？</strong>
           <ol>
@@ -2818,11 +2818,11 @@ hello@world.org</textarea>
 
         <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
           <label for="ff-base">桥地址</label>
-          <input id="ff-base" class="mono" type="text" value="http://127.0.0.1:17889" autocomplete="off" spellcheck="false" />
+          <input id="ff-base" class="mono" type="text" value="http://127.0.0.1:17888" autocomplete="off" spellcheck="false" />
           <label for="ff-token">Token</label>
-          <input id="ff-token" class="mono" type="text" value="devtools-ffmpeg" autocomplete="off" spellcheck="false" />
+          <input id="ff-token" class="mono" type="text" value="devtools-bridge" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint">默认 Token 为 <span class="mono">devtools-ffmpeg</span>。桥仅监听本机。端口默认 17889（与 ADB 的 17888 分开）。</p>
+        <p class="hint">与 ADB <strong>共用一座本机桥</strong>：地址 <span class="mono">17888</span>、Token <span class="mono">devtools-bridge</span>。FFmpeg 接口在 <span class="mono">/ff/*</span>。只需启动一次桥即可。</p>
         <p class="hint tight mono" id="ff-tools-probe" hidden></p>
         </div><!-- /ff-bridge-panel -->
 
@@ -3167,7 +3167,7 @@ hello@world.org</textarea>
 <section id="setup" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>安装本机工具（小白指南）</h1>
-        <p>本站大部分功能在浏览器里就能用。只有 <a href="#adb">ADB 工具</a> 和 <a href="#ffbridge">FFmpeg 本机桥</a> 需要在你电脑上安装几个免费工具，再下载我们提供的「桥」启动包。下面按步骤来，尽量少术语。</p>
+        <p>本站大部分功能在浏览器里就能用。只有电脑上的 <a href="#adb">ADB</a> / <a href="#ffbridge">FFmpeg 批量</a> / 镜像需要启动<strong>一座本机桥</strong>（同一端口）。下面按步骤来，尽量少术语。</p>
       </div>
       <div class="panel-body setup-body">
         <div class="setup-callout panel-card">
@@ -3366,8 +3366,8 @@ adb devices</pre>
             </li>
             <li>回到网页点「连接本机桥」。默认地址：
               <ul>
-                <li>ADB：<span class="mono">http://127.0.0.1:17888</span>，Token <span class="mono">devtools-adb</span></li>
-                <li>FFmpeg：<span class="mono">http://127.0.0.1:17889</span>，Token <span class="mono">devtools-ffmpeg</span></li>
+                <li>统一本机桥：<span class="mono">http://127.0.0.1:17888</span>，Token <span class="mono">devtools-bridge</span>（ADB + 镜像 + FFmpeg）</li>
+                <li>FFmpeg 接口前缀：<span class="mono">/ff</span>（例如 <span class="mono">/ff/ops</span>）</li>
               </ul>
             </li>
           </ol>
@@ -3477,19 +3477,19 @@ adb devices</pre>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./theme.js?v=20260817medianav1"></script>
-  <script src="./temp.js?v=20260817medianav1"></script>
+  <script src="./theme.js?v=20260817unified1"></script>
+  <script src="./temp.js?v=20260817unified1"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260817medianav1"></script>
-  <script src="./about.js?v=20260817medianav1"></script>
-  <script src="./extra.js?v=20260817medianav1"></script>
-  <script src="./vtrim.js?v=20260817medianav1"></script>
-  <script src="./audio.js?v=20260817medianav1"></script>
-  <script src="./ffbridge.js?v=20260817medianav1"></script>
-  <script src="./setup.js?v=20260817medianav1"></script>
+  <script src="./app.js?v=20260817unified1"></script>
+  <script src="./about.js?v=20260817unified1"></script>
+  <script src="./extra.js?v=20260817unified1"></script>
+  <script src="./vtrim.js?v=20260817unified1"></script>
+  <script src="./audio.js?v=20260817unified1"></script>
+  <script src="./ffbridge.js?v=20260817unified1"></script>
+  <script src="./setup.js?v=20260817unified1"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./textimg.js?v=20260817medianav1"></script>
-  <script src="./imgtext.js?v=20260817medianav1"></script>
-  <script src="./memo.js?v=20260817medianav1"></script>
+  <script src="./textimg.js?v=20260817unified1"></script>
+  <script src="./imgtext.js?v=20260817unified1"></script>
+  <script src="./memo.js?v=20260817unified1"></script>
 </body>
 </html>

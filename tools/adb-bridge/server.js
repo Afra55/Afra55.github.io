@@ -17,8 +17,11 @@ const path = require("path");
 const crypto = require("crypto");
 
 const HOST = "127.0.0.1";
-const PORT = Number(process.env.ADB_BRIDGE_PORT || 17888);
-const TOKEN = String(process.env.ADB_BRIDGE_TOKEN || "devtools-adb");
+const PORT = Number(process.env.ADB_BRIDGE_PORT || process.env.DEVTOOLS_BRIDGE_PORT || 17888);
+const TOKEN = String(process.env.ADB_BRIDGE_TOKEN || process.env.DEVTOOLS_BRIDGE_TOKEN || "devtools-bridge");
+const ACCEPTED_TOKENS = new Set(
+  [TOKEN, "devtools-bridge", "devtools-adb", "devtools-ffmpeg"].map(String).filter(Boolean)
+);
 const ALLOWED_ORIGINS = new Set(
   String(
     process.env.ADB_BRIDGE_ORIGINS ||
@@ -35,8 +38,27 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.7.0";
+const BRIDGE_VERSION = "0.8.0";
 const scrcpyMirror = require("./scrcpy-mirror");
+function loadFfmpegBridge() {
+  const candidates = [
+    path.join(__dirname, "ffmpeg-bridge", "server.js"),
+    path.join(__dirname, "..", "ffmpeg-bridge", "server.js"),
+    path.join(__dirname, "ffmpeg-server.js"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return require(candidate);
+    } catch (err) {
+      console.warn("加载 FFmpeg 模块失败:", candidate, err.message || err);
+    }
+  }
+  return null;
+}
+const ffmpegBridge = loadFfmpegBridge();
+if (!ffmpegBridge) {
+  console.warn("未找到 FFmpeg 模块：统一桥仍可提供 ADB/镜像；完整 ZIP 请包含 ffmpeg-bridge/server.js");
+}
 
 /** Preferred quick roots shown in UI (reads are not limited to these) */
 const ROOTS = [
@@ -83,7 +105,7 @@ function applyCors(headers, origin) {
   if (origin && ALLOWED_ORIGINS.has(origin)) {
     headers["Access-Control-Allow-Origin"] = origin;
     headers["Vary"] = "Origin";
-    headers["Access-Control-Allow-Headers"] = "Content-Type, X-Adb-Token, X-Filename";
+    headers["Access-Control-Allow-Headers"] = "Content-Type, X-Adb-Token, X-Ffmpeg-Token, X-Filename";
     headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
     headers["Access-Control-Expose-Headers"] = "Content-Disposition, X-Adb-Filename";
   }
@@ -284,9 +306,9 @@ function basenameRemote(remotePath) {
 }
 
 function requireToken(req) {
-  const token = req.headers["x-adb-token"];
-  if (!token || token !== TOKEN) {
-    const err = new Error("未授权：缺少或错误的 X-Adb-Token");
+  const token = String(req.headers["x-adb-token"] || req.headers["x-ffmpeg-token"] || "");
+  if (!token || !ACCEPTED_TOKENS.has(token)) {
+    const err = new Error("未授权：缺少或错误的 Token（X-Adb-Token / X-Ffmpeg-Token）");
     err.status = 401;
     throw err;
   }
@@ -3448,6 +3470,23 @@ async function handleApi(req, res, url) {
   }
 
   try {
+    // 统一桥：FFmpeg API 挂在 /ff/*，避免与 ADB /jobs 冲突
+    if (url.pathname === "/ff" || url.pathname.startsWith("/ff/")) {
+      if (!ffmpegBridge?.handleRequest) {
+        sendJson(res, 503, { ok: false, error: "未找到 FFmpeg 模块（请用完整 ZIP，含 ffmpeg-bridge）" }, origin);
+        return;
+      }
+      const stripped = url.pathname === "/ff" ? "/" : url.pathname.slice(3) || "/";
+      const isFfHealth = stripped === "/health" && req.method === "GET";
+      if (!isFfHealth && req.method !== "OPTIONS") requireToken(req);
+      await ffmpegBridge.handleRequest(req, res, {
+        pathname: stripped,
+        alreadyAuthed: !isFfHealth,
+        embedded: true,
+      });
+      return;
+    }
+
     if (url.pathname === "/health" && req.method === "GET") {
       const adbInfo = await checkAdb();
       const hostTools = await probeHostTools();
@@ -3459,17 +3498,37 @@ async function handleApi(req, res, url) {
           devices = [];
         }
       }
+      let ffmpeg = { ok: false, error: "模块未加载" };
+      let ffprobe = { ok: false, error: "模块未加载" };
+      if (ffmpegBridge?.checkBinary) {
+        try {
+          [ffmpeg, ffprobe] = await Promise.all([
+            ffmpegBridge.checkBinary("ffmpeg", ["-version"]),
+            ffmpegBridge.checkBinary("ffprobe", ["-version"]),
+          ]);
+        } catch (err) {
+          ffmpeg = { ok: false, error: err.message || String(err) };
+          ffprobe = ffmpeg;
+        }
+      }
       sendJson(
         res,
         200,
         {
           ok: true,
-          service: "devtools-adb-bridge",
+          service: "devtools-bridge",
           version: BRIDGE_VERSION,
           port: PORT,
           tokenRequired: true,
-          defaultTokenHint: "devtools-adb",
+          defaultTokenHint: "devtools-bridge",
+          unified: true,
+          capabilities: {
+            adb: true,
+            ffmpeg: Boolean(ffmpegBridge),
+            mirror: true,
+          },
           features: [
+            "unified-bridge",
             "fs",
             "fs-roots",
             "fs-run-as",
@@ -3505,17 +3564,26 @@ async function handleApi(req, res, url) {
             "logcat-level",
             "mirror",
             "scrcpy-mirror",
+            "ffmpeg-ops",
+            "ffmpeg-mount",
           ],
           mirror: scrcpyMirror.jarStatus(),
           adb: adbInfo,
-          tools: hostTools.tools,
+          ffmpeg,
+          ffprobe,
+          tools: { ...hostTools.tools, ffmpeg, ffprobe },
           signingOk: hostTools.signingOk,
-          setup: hostTools.setup,
+          setup: {
+            ...hostTools.setup,
+            ffmpeg: ffmpeg.ok ? "" : ffmpeg.setup || ffmpeg.error || "",
+            ffprobe: ffprobe.ok ? "" : ffprobe.setup || ffprobe.error || "",
+          },
           deviceCount: devices.length,
           roots: ROOTS,
           writeRoots: WRITE_ROOTS,
+          ffmpegMount: "/ff",
           note:
-            "文件浏览类似 Device File Explorer：默认从 / 浏览；无权限时尝试 su / run-as；/data/data 无 root 时按包名虚拟列出。写入同样透传 adb；系统 APK 覆盖请用 POST /install/push-system",
+            "统一本机桥：ADB + Scrcpy 镜像 + FFmpeg（/ff/*）。Token 默认 devtools-bridge（兼容旧 Token）。",
         },
         origin
       );
@@ -4043,12 +4111,12 @@ server.on("upgrade", (req, socket, head) => {
 function printBanner(activePort) {
   console.log("");
   console.log("========================================");
-  console.log(" DevTools ADB Bridge 已启动");
+  console.log(" DevTools 本机桥 已启动（ADB + 镜像 + FFmpeg）");
   console.log(` 版本: ${BRIDGE_VERSION}`);
   console.log(` 地址: http://${HOST}:${activePort}`);
-  console.log(` Token: ${TOKEN}`);
-  console.log(" 能力: 文件 / 安装 / 应用 / 镜像(scrcpy-server) / 网络代理转发 / 开发者选项 / Logcat / 任务");
-  console.log(" 请保持此窗口打开，然后回到网页点击「连接」");
+  console.log(` Token: ${TOKEN}（兼容旧 Token: devtools-adb / devtools-ffmpeg）`);
+  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / 代理转发 / Logcat / 任务");
+  console.log(" 请保持此窗口打开，然后回到网页点「连接」——ADB 与 FFmpeg 共用这一座桥");
   if (activePort !== PORT) {
     console.log(` 注意: 默认端口 ${PORT} 被占用，已改用 ${activePort}`);
     console.log(" 请在网页把桥地址改成上述端口后再连接");

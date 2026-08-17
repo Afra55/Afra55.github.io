@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-medianav1";
+  const TOOLS_VERSION = "2026.08.17-unified1";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -8462,7 +8462,7 @@
     }
 
     function adbToken() {
-      return String(adbTokenInput?.value || "devtools-adb");
+      return String(adbTokenInput?.value || "devtools-bridge");
     }
 
     function persistAdbSettings() {
@@ -10184,9 +10184,10 @@
       };
       const cfg = map[platform];
       if (!cfg) throw new Error("未知平台");
-      const [serverJs, mirrorJs, scriptRaw, serverJar] = await Promise.all([
+      const [serverJs, mirrorJs, ffmpegJs, scriptRaw, serverJar] = await Promise.all([
         fetchTextAsset("./adb-bridge/server.js"),
         fetchTextAsset("./adb-bridge/scrcpy-mirror.js").catch(() => ""),
+        fetchTextAsset("./ffmpeg-bridge/server.js").catch(() => ""),
         fetchTextAsset(cfg.scriptPath),
         fetch("./adb-bridge/vendor/scrcpy-server-v3.1", { cache: "no-cache" })
           .then(async (res) => (res.ok ? new Uint8Array(await res.arrayBuffer()) : null))
@@ -10195,38 +10196,34 @@
       // Windows cmd.exe is fragile with LF-only / UTF-8 Chinese .bat files.
       const scriptText =
         platform === "win" ? String(scriptRaw).replace(/\r?\n/g, "\r\n") : scriptRaw;
-      if (!/ADB_BRIDGE_TOKEN|devtools-adb-bridge|DevTools local ADB bridge/.test(serverJs)) {
+      if (!/ADB_BRIDGE_TOKEN|devtools-adb-bridge|devtools-bridge|DevTools local ADB bridge|统一本机桥/.test(serverJs)) {
         throw new Error("server.js 内容异常，请刷新页面后重试");
       }
       const readme = [
-        "DevTools ADB Bridge 完整包",
+        "DevTools 统一本机桥（ADB + Scrcpy 镜像 + FFmpeg）",
         "",
         "本压缩包必须同时保留：",
-        "  - server.js          （桥接服务，缺它会提示找不到 server.js）",
-        "  - scrcpy-mirror.js   （镜像模块，≥0.7.0）",
+        "  - server.js",
+        "  - scrcpy-mirror.js",
+        "  - ffmpeg-bridge/server.js",
         "  - vendor/scrcpy-server-v3.1  （可选；缺则首次镜像时自动下载）",
-        "  - " + cfg.scriptName + "  （启动脚本）",
+        "  - " + cfg.scriptName,
         "",
         "使用步骤：",
-        "1. 解压到任意文件夹（保留 vendor 子目录）",
-        "2. 本机已安装 Node.js 与 adb，并可用 adb devices",
+        "1. 解压到任意文件夹（保留 ffmpeg-bridge、vendor 子目录）",
+        "2. 本机已安装 Node.js；按需安装 adb / ffmpeg",
         "3. " + cfg.runHint.replace(/\n/g, "\n   "),
-        "4. 回到网页点击「连接本机桥」",
+        "4. 回到网页：ADB 与 FFmpeg 本机桥都连 http://127.0.0.1:17888",
         "",
-        "若窗口一闪而过：",
-        "- Windows：请重新下载本完整包（已修复编码闪退）；窗口结束时会 pause",
-        "- Windows 日志：%USERPROFILE%\\.devtools-adb-bridge\\last-start.log",
-        "- Windows 也会复制到桌面：devtools-adb-bridge-last-start.log",
-        "- macOS：chmod +x " + cfg.scriptName + " 后运行；或 bash " + cfg.scriptName,
-        "- 确认未重复打开多个桥（端口占用会自动换端口并提示）",
-        "",
-        "默认地址 http://127.0.0.1:17888  Token: devtools-adb",
-        "镜像：网页「输入自动化」→ 开始镜像（无需安装 Scrcpy 桌面端）",
+        "默认 Token: devtools-bridge（兼容旧 Token）",
+        "FFmpeg API 前缀: /ff",
+        "只需启动这一座桥，不必再开第二个服务。",
         "",
       ].join("\n");
       const zip = new JSZip();
       zip.file("server.js", serverJs);
       if (mirrorJs) zip.file("scrcpy-mirror.js", mirrorJs);
+      if (ffmpegJs) zip.file("ffmpeg-bridge/server.js", ffmpegJs);
       if (serverJar) zip.file("vendor/scrcpy-server-v3.1", serverJar);
       zip.file(cfg.scriptName, scriptText, {
         unixPermissions: platform === "win" ? undefined : 0o755,

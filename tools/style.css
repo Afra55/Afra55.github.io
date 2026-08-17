@@ -6814,6 +6814,36 @@ html[data-theme-scheme="light"] {
   --link-hover: #095c5f;
 }
 
+/* 正文/说明里的下划线链接：不要继承 --muted 灰字，全站可读 */
+.tool-panel a:not([class*="btn"]):not(.media-tab):not(.adb-tab):not(.seg-btn):not(.copy-btn):not(.brand),
+.panel-head a:not([class*="btn"]),
+.hint a:not([class*="btn"]),
+.panel-body a:not([class*="btn"]),
+.setup-body a:not([class*="btn"]),
+.about-card a:not([class*="btn"]),
+.ff-mode-banner a:not([class*="btn"]),
+.adb-guide a:not([class*="btn"]),
+dd a:not([class*="btn"]),
+li a:not([class*="btn"]) {
+  color: var(--link, #6ef0e2);
+  font-weight: 650;
+  text-decoration: underline;
+  text-decoration-thickness: max(1px, 0.12em);
+  text-underline-offset: 0.22em;
+  text-decoration-color: color-mix(in srgb, var(--link, #6ef0e2) 88%, transparent);
+}
+
+.tool-panel a:not([class*="btn"]):not(.media-tab):not(.adb-tab):not(.seg-btn):not(.copy-btn):hover,
+.tool-panel a:not([class*="btn"]):not(.media-tab):not(.adb-tab):not(.seg-btn):not(.copy-btn):focus-visible,
+.hint a:not([class*="btn"]):hover,
+.hint a:not([class*="btn"]):focus-visible,
+.panel-head a:not([class*="btn"]):hover,
+.panel-head a:not([class*="btn"]):focus-visible {
+  color: var(--link-hover, #a8fff6);
+  text-decoration-thickness: max(1px, 0.14em);
+  text-decoration-color: currentColor;
+}
+
 .setup-body {
   display: grid;
   gap: 0.85rem;
