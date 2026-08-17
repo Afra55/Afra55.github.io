@@ -767,6 +767,8 @@
   const ORDER_KEY = "devtools-tool-order-v3";
   const GROUP_ORDER_KEY = "devtools-group-order-v1";
   const RECENT_KEY = "devtools-tool-recent-v1";
+  const SORT_HINT_KEY = "devtools-nav-sort-hint-seen-v1";
+  const RECENT_SHOW = 4;
   const MEDIA_TABS = ["gifmaker", "vsplit", "vbb", "vtrim", "audio"];
   const HASH_ALIASES = {
     gifmaker: { tool: "media", tab: "gifmaker" },
@@ -1078,6 +1080,33 @@
     renderRecent();
   }
 
+  function lastToolHash() {
+    const last = loadRecent().find((id) => isNavToolVisible(id));
+    if (!last) return "#timestamp";
+    if (MEDIA_TABS.includes(last)) return `#media/${last}`;
+    return `#${last}`;
+  }
+
+  function syncSortHint() {
+    const el = document.querySelector(".nav-sort-hint");
+    if (!el) return false;
+    let seen = false;
+    try {
+      seen = localStorage.getItem(SORT_HINT_KEY) === "1";
+    } catch (_) {
+      seen = false;
+    }
+    if (seen) {
+      el.hidden = true;
+      return false;
+    }
+    el.hidden = false;
+    try {
+      localStorage.setItem(SORT_HINT_KEY, "1");
+    } catch (_) {}
+    return true;
+  }
+
   function getNavLinks() {
     return $$(".tool-nav-link", navEl);
   }
@@ -1129,7 +1158,7 @@
       return;
     }
     recentWrap.hidden = false;
-    items.forEach((id) => {
+    items.slice(0, RECENT_SHOW).forEach((id) => {
       if (!isNavToolVisible(id)) return;
       const btn = document.createElement("button");
       btn.type = "button";
@@ -1950,9 +1979,12 @@
   window.DevToolsNav = {
     isCompact: () => navCompact,
     setCompact: (on) => setNavCompact(on),
+    lastToolHash,
+    syncSortHint,
   };
   window.dispatchEvent(new CustomEvent("devtools:catalog"));
-  if (!location.hash) history.replaceState(null, "", "#timestamp");
+  syncSortHint();
+  if (!location.hash) history.replaceState(null, "", lastToolHash());
   applyRoute();
   // 默认关闭；防止 Safari 恢复残留开态
   forceDrawerClosed();

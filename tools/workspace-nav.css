@@ -1,5 +1,15 @@
 /* Workspace shell: single-tool viewport + mobile drawer */
 
+html.is-pwa-standalone #pwa-install {
+  display: none !important;
+}
+
+@media (display-mode: standalone), (display-mode: window-controls-overlay) {
+  #pwa-install {
+    display: none !important;
+  }
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -96,7 +106,7 @@
 
 .nav-recent {
   width: 100%;
-  margin-bottom: 0.65rem;
+  margin-bottom: 0.3rem;
 }
 
 .nav-recent-label,
@@ -210,19 +220,26 @@ body.nav-sorting-tools .nav-bar {
 
 .nav-recent-list {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.35rem;
+  flex-wrap: nowrap;
+  gap: 0.28rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.nav-recent-list::-webkit-scrollbar {
+  display: none;
 }
 
 .nav-recent-chip {
   appearance: none;
+  flex: 0 0 auto;
   border: 1px solid var(--line);
   background: rgba(232, 238, 248, 0.06);
   color: var(--ink);
   border-radius: 999px;
-  padding: 0.28rem 0.65rem;
+  padding: 0.12rem 0.5rem;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   cursor: pointer;
 }
 
@@ -259,6 +276,10 @@ body.nav-sorting-tools .nav-bar {
   font-size: 0.72rem;
   line-height: 1.35;
   color: var(--muted);
+}
+
+.nav-sort-hint[hidden] {
+  display: none !important;
 }
 
 .nav-group.is-filtered-out,
