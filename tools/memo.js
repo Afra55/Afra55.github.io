@@ -588,6 +588,8 @@
   const previewEditBtn = $("#memo-preview-edit");
   const previewNoteBtn = $("#memo-preview-note");
   const previewCopyBtn = $("#memo-preview-copy");
+  const previewPathBtn = $("#memo-preview-path");
+  const previewDelBtn = $("#memo-preview-del");
   let previewObjectUrl = "";
   let previewBlob = null;
   let previewItem = null;
@@ -1754,11 +1756,49 @@
       toast("内容为空");
       return;
     }
+    // 剪贴板有时把图片写成 data:image/...;base64 文本，入库前转成真正图片
+    const dataImg = await dataUrlToImageFile(body);
+    if (dataImg) {
+      await withBusy(async () => {
+        await ingestFiles([dataImg]);
+        if (editor) editor.value = "";
+      });
+      return;
+    }
     await withBusy(async () => {
       const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
       await addItemFromBlob(blob, `文本-${formatTime(Date.now())}.txt`, { type: "text", textPreview: body });
       if (editor) editor.value = "";
     });
+  }
+
+  function looksLikeDataUrlImage(text) {
+    return /^\s*data:image\/[a-z0-9+.-]+;base64,/i.test(String(text || ""));
+  }
+
+  async function dataUrlToImageFile(text) {
+    const raw = String(text || "").trim();
+    const m = raw.match(/^data:image\/([a-z0-9+.-]+);base64,([a-z0-9+/=\s]+)$/i);
+    if (!m) return null;
+    const sub = String(m[1] || "png").toLowerCase();
+    const ext = sub === "jpeg" ? "jpg" : sub;
+    const b64 = m[2].replace(/\s+/g, "");
+    if (b64.length < 32) return null;
+    try {
+      const bin = atob(b64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const mime = `image/${sub === "jpg" ? "jpeg" : sub}`;
+      return new File([bytes], `剪贴板.${ext}`, { type: mime });
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function extractDataUrlFromHtml(html) {
+    const s = String(html || "");
+    const m = s.match(/data:image\/[a-z0-9+.-]+;base64,[a-z0-9+/=\s]+/i);
+    return m ? m[0].replace(/\s+/g, "") : "";
   }
 
   function isTextEditOpen() {
@@ -2047,11 +2087,34 @@
             const blob = await item.getType("text/plain");
             const text = (await blob.text()).trim();
             if (!text) continue;
+            const asImg = await dataUrlToImageFile(text);
+            if (asImg) {
+              const sig = `img:${asImg.size}:${asImg.type}`;
+              if (!force && sig === state.lastClipSig) return;
+              state.lastClipSig = sig;
+              files.push(asImg);
+              got = true;
+              continue;
+            }
             const sig = `text:${text.slice(0, 80)}:${text.length}`;
             if (!force && sig === state.lastClipSig) return;
             state.lastClipSig = sig;
             textBody = text;
             got = true;
+          }
+          if (!files.length && types.includes("text/html")) {
+            try {
+              const html = await (await item.getType("text/html")).text();
+              const dataUrl = extractDataUrlFromHtml(html);
+              const asImg = dataUrl ? await dataUrlToImageFile(dataUrl) : null;
+              if (asImg) {
+                const sig = `img:${asImg.size}:${asImg.type}`;
+                if (!force && sig === state.lastClipSig) return;
+                state.lastClipSig = sig;
+                files.push(asImg);
+                got = true;
+              }
+            } catch (_) {}
           }
         }
         if (files.length) await ingestFiles(files);
@@ -2351,10 +2414,12 @@
     if (bar) bar.hidden = false;
   }
 
-  async function deleteItems(ids) {
+  async function deleteItems(ids, { confirm = true } = {}) {
     const list = [...ids];
     if (!list.length) return;
-    if (!window.confirm(`删除 ${list.length} 条？删除后约 ${Math.round(UNDO_MS / 1000)} 秒内可撤销。`)) return;
+    if (confirm) {
+      if (!window.confirm(`删除 ${list.length} 条？删除后约 ${Math.round(UNDO_MS / 1000)} 秒内可撤销。`)) return;
+    }
     await commitPendingUndo();
     const removed = [];
     for (const id of list) {
@@ -2491,6 +2556,15 @@
     try {
       if (item.type === "text") {
         const text = item.textPreview || (await (await loadBlob(item)).text());
+        // 历史误存成 data URL 文本时，复制成真正图片
+        if (looksLikeDataUrlImage(text)) {
+          const file = await dataUrlToImageFile(text);
+          if (file && navigator.clipboard?.write && window.ClipboardItem) {
+            await navigator.clipboard.write([new ClipboardItem({ [file.type || "image/png"]: file })]);
+            toast("已复制图片");
+            return;
+          }
+        }
         await navigator.clipboard.writeText(text);
         toast("已复制文本");
         return;
@@ -2746,6 +2820,21 @@
     if (stage) stage.dataset.previewKind = k;
   }
 
+  function syncPreviewDialogWidth(kind) {
+    if (!lightbox) return;
+    lightbox.style.width = "";
+    lightbox.style.maxWidth = "";
+    const main = $(".memo-main") || itemList?.closest?.(".shell") || itemList;
+    const lw = Math.round(main?.getBoundingClientRect?.().width || 0);
+    const vw = Math.round((window.innerWidth || 800) * 0.96);
+    // 文本/图文类至少与列表同宽，阅读更舒服
+    if (lw > 240 && ["text", "image", "gif", "video", "pdf"].includes(kind)) {
+      const w = Math.min(vw, Math.max(lw, kind === "text" ? lw : Math.min(lw + 40, 1100)));
+      lightbox.style.width = `${w}px`;
+      lightbox.style.maxWidth = `${Math.min(vw, 1100)}px`;
+    }
+  }
+
   function previewTypeLabel(item, kind) {
     if (kind === "gif") return "动图";
     if (kind === "image") return "图片";
@@ -2758,10 +2847,12 @@
 
   function setPreviewChrome(item, { kind = "", canFs = false, canNewTab = false, canDl = true, canEdit = false } = {}) {
     previewItem = item;
-    setPreviewKind(kind || item?.type || "file");
+    const k = kind || item?.type || "file";
+    setPreviewKind(k);
+    syncPreviewDialogWidth(k);
     if (previewTitle) previewTitle.textContent = item?.name || "预览";
     if (previewSub) {
-      const typeLab = previewTypeLabel(item, kind || item?.type);
+      const typeLab = previewTypeLabel(item, k);
       previewSub.textContent = item
         ? `${typeLab} · ${formatBytes(item.size || 0)} · ${formatTime(item.createdAt)}`
         : "";
@@ -2776,6 +2867,10 @@
     if (previewShareBtn) previewShareBtn.hidden = !item || !canOfferItemShare(item);
     if (previewEditBtn) previewEditBtn.hidden = !canEdit;
     if (previewCopyBtn) previewCopyBtn.hidden = !item || !canClipboardCopy(item);
+    if (previewPathBtn) {
+      previewPathBtn.hidden = !(item && state.mode === "dir" && !state.dirPending);
+    }
+    if (previewDelBtn) previewDelBtn.hidden = !item;
   }
 
   function isPdfItem(item, blob) {
@@ -2864,11 +2959,14 @@
         canDl: true,
         canEdit: item.type === "text",
       });
-      let text = item.textPreview || "";
-      if (!text) {
+      // 预览必须读完整 blob；textPreview 仅为卡片摘要，可能被截断
+      let text = "";
+      try {
         text = await blob.text();
-        if (text.length > 400000) text = `${text.slice(0, 400000)}\n\n…（内容过长，已截断预览）`;
+      } catch (_) {
+        text = "";
       }
+      if (!text) text = item.textPreview || "";
       showEl(lightboxText);
       lightboxText.textContent = text;
       lightbox.showModal();
@@ -2923,6 +3021,10 @@
     previewItem = null;
     syncPreviewNoteLine(null);
     setPreviewKind("");
+    if (lightbox) {
+      lightbox.style.width = "";
+      lightbox.style.maxWidth = "";
+    }
     lightbox?.classList.remove("is-fs");
     if (document.fullscreenElement) {
       document.exitFullscreen?.().catch(() => {});
@@ -3291,7 +3393,7 @@
         else if (act === "edit") await beginEditText(item);
         else if (act === "note") await beginEditNote(item);
         else if (act === "path") await openItemPath(item);
-        else if (act === "del") await deleteItems([item.id]);
+        else if (act === "del") await deleteItems([item.id], { confirm: false });
       } catch (err) {
         setError(memoError, err.message || String(err));
       }
@@ -3427,7 +3529,9 @@
       }
       const delId = t.closest?.("[data-memo-del]")?.dataset?.memoDel;
       if (delId) {
-        await deleteItems([delId]);
+        // 列表「更多」与操作按钮：直接删（仍可撤销）；预览内删除另走确认
+        await deleteItems([delId], { confirm: false });
+        t.closest("details")?.removeAttribute("open");
         return;
       }
       const editId = t.closest?.("[data-memo-edit]")?.dataset?.memoEdit;
@@ -3573,15 +3677,26 @@
   });
   document.addEventListener("pointerdown", (e) => {
     const ctx = $("#memo-ctx");
-    if (!ctx || ctx.hidden) return;
-    if (ctx.contains(e.target)) return;
-    hideMemoCtx();
+    if (ctx && !ctx.hidden && !ctx.contains(e.target)) hideMemoCtx();
+    // 点外侧关闭「更多」
+    if (itemList && !e.target.closest?.("details.memo-more")) {
+      $$("details.memo-more[open]", itemList).forEach((d) => d.removeAttribute("open"));
+    }
   });
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape") hideMemoCtx();
+    if (e.key === "Escape") {
+      hideMemoCtx();
+      $$("details.memo-more[open]", itemList || document).forEach((d) => d.removeAttribute("open"));
+    }
   });
-  window.addEventListener("scroll", hideMemoCtx, true);
-  window.addEventListener("resize", hideMemoCtx);
+  window.addEventListener("scroll", () => {
+    hideMemoCtx();
+    $$("details.memo-more[open]", itemList || document).forEach((d) => d.removeAttribute("open"));
+  }, true);
+  window.addEventListener("resize", () => {
+    hideMemoCtx();
+    $$("details.memo-more[open]", itemList || document).forEach((d) => d.removeAttribute("open"));
+  });
 
   // item drag reorder
   let dragItemId = null;
@@ -3677,6 +3792,13 @@
       if (text && text.trim()) {
         e.preventDefault();
         addText(text).catch((err) => setError(memoError, err.message || String(err)));
+        return;
+      }
+      const html = cd.getData("text/html");
+      const dataUrl = extractDataUrlFromHtml(html);
+      if (dataUrl) {
+        e.preventDefault();
+        addText(dataUrl).catch((err) => setError(memoError, err.message || String(err)));
       }
     },
     true
@@ -3731,6 +3853,18 @@
     const item = previewItem;
     if (!item) return;
     shareItem(item).catch((err) => setError(memoError, err.message || String(err)));
+  });
+  previewPathBtn?.addEventListener("click", () => {
+    const item = previewItem;
+    if (!item) return;
+    openItemPath(item).catch((err) => setError(memoError, err.message || String(err)));
+  });
+  previewDelBtn?.addEventListener("click", async () => {
+    const item = previewItem;
+    if (!item) return;
+    const id = item.id;
+    await deleteItems([id], { confirm: true });
+    if (!state.index.items.some((x) => x.id === id)) closeLightbox();
   });
   previewNewTabBtn?.addEventListener("click", () => {
     if (!previewObjectUrl) return;

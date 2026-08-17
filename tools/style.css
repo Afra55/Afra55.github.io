@@ -5811,8 +5811,8 @@ button.adb-device-body.linkish {
 }
 
 .memo-preview-dlg[data-preview-kind="text"] {
-  width: min(94vw, 720px);
-  max-width: min(94vw, 720px);
+  width: min(96vw, 980px);
+  max-width: min(96vw, 980px);
 }
 
 .memo-preview-dlg[data-preview-kind="audio"],
@@ -5989,10 +5989,14 @@ button.adb-device-body.linkish {
   width: 100%;
 }
 
+.memo-preview-del {
+  color: color-mix(in srgb, var(--danger, #ff6b7a) 80%, var(--ink));
+}
+
 .memo-preview-text {
   margin: 0;
   width: 100%;
-  max-height: min(70vh, 640px);
+  max-height: min(78vh, 860px);
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
