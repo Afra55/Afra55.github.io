@@ -20,7 +20,7 @@
   const BACKUP_NUDGE_MIN_ITEMS = 3;
   const LARGE_WARN_BYTES = 25 * 1024 * 1024;
   const SAVE_CHUNK = 1024 * 1024;
-  const UNDO_MS = 8000;
+  const UNDO_MS = 12000;
   const VIRTUAL_MIN = 64;
   const TEXT_PREVIEW_MAX = 4000;
   const TEXT_CARD_LINES = 50;
@@ -743,7 +743,7 @@
     const storeTip =
       state.mode === "dir"
         ? "写入可能较慢，可随时点取消。"
-        : "应用内存储空间有限，大文件更建议先「选择存储目录」。";
+        : "应用内存储空间有限，大文件更建议先「用文件夹保存」。";
     return window.confirm(`「${name || "文件"}」约 ${formatBytes(size)}，体积较大。\n${storeTip}\n是否继续？`);
   }
 
@@ -778,19 +778,18 @@
     const dirOk = canDirPicker();
     if (pickBtn) {
       pickBtn.hidden = !dirOk || connected;
-      pickBtn.textContent = "选择存储目录";
+      pickBtn.textContent = "用文件夹保存";
     }
     if (pickQuickBtn) {
-      pickQuickBtn.hidden = !dirOk || connected;
+      pickQuickBtn.hidden = true;
     }
     if (switchDirBtn) {
-      // 已连接或曾连接：常显更换；纯应用内且无 handle 时用「选择目录」
       switchDirBtn.hidden = !dirOk || (!connected && !state.dirHandle);
-      switchDirBtn.textContent = state.dirPending ? "重新连接 / 更换目录" : "更换目录";
+      switchDirBtn.textContent = state.dirPending ? "重新连接" : "更换文件夹";
     }
     if (reconnectBtn) {
-      reconnectBtn.hidden = !dirOk || !connected;
-      reconnectBtn.textContent = state.dirPending ? "重新连接目录" : "更换目录";
+      reconnectBtn.hidden = !dirOk || !state.dirPending;
+      reconnectBtn.textContent = "重新连接";
     }
     if (exportToDirBtn) {
       exportToDirBtn.hidden = !(state.mode === "dir" && state.dirHandle && !state.dirPending);
@@ -798,13 +797,13 @@
     const banner = $("#memo-reconnect-banner");
     if (banner) banner.hidden = !state.dirPending;
     if (state.dirPending && state.dirHandle) {
-      storeMeta.textContent = `曾绑定目录「${state.dirHandle.name}」，连接已失效。请重新连接同一路径以恢复。`;
+      storeMeta.textContent = `曾绑定文件夹「${state.dirHandle.name}」，连接已失效。请重新连接同一路径以恢复。`;
     } else if (state.mode === "dir" && state.dirHandle) {
-      storeMeta.textContent = `存储：磁盘目录「${state.dirHandle.name}」· 可点「更换目录」并选择是否带走当前内容；原目录文件不会被删除。`;
+      storeMeta.textContent = `存储：文件夹「${state.dirHandle.name}」· 可更换并选择是否带走当前内容；原文件夹文件不会被删除。`;
     } else {
       storeMeta.textContent = canDirPicker()
-        ? "存储：应用内数据（IndexedDB）。建议选择目录，清缓存后文件仍在磁盘。更换目录时可把当前内容一并带过去。"
-        : "存储：应用内数据（手机端）。换机前请先「导出」备份（会优先调起系统分享）。";
+        ? "存储：应用内数据。建议「用文件夹保存」，清缓存后文件仍在磁盘。"
+        : "存储：应用内数据（手机端）。换机前请先「导出」备份。";
     }
     updateBackupNudge();
     updateDirHint();
@@ -845,8 +844,8 @@
     }
     el.hidden = false;
     el.textContent = last
-      ? `已有一段时间未导出（约 ${Math.floor(days)} 天）。换机前建议先点「导出」。`
-      : `当前有 ${n} 条，尚未导出过备份。换机或清数据前建议先「导出」。`;
+      ? `已约 ${Math.floor(days)} 天未导出。换机前建议先点「导出」。`
+      : `已有 ${n} 条尚未导出。换机或清数据前建议先「导出」。`;
   }
 
   function updateDirHint() {
@@ -943,12 +942,13 @@
   function itemMatchesSearch(item, q) {
     if (!q) return true;
     // 限制正文参与长度，避免万级长文本搜索卡顿
-    const preview = item.textPreview ? String(item.textPreview).slice(0, 1200) : "";
+    const preview = item.textPreview ? String(item.textPreview) : "";
+    const note = item.note ? String(item.note) : "";
     const tagNames = (item.tagIds || [])
       .map((id) => state.tagMap.get(id)?.name || id)
       .filter(Boolean)
       .join("\n");
-    const hay = `${item.name || ""}\n${item.fileName || ""}\n${item.mime || ""}\n${item.note || ""}\n${preview}\n${
+    const hay = `${item.name || ""}\n${item.fileName || ""}\n${item.mime || ""}\n${note}\n${preview}\n${
       TYPE_LABELS[item.type] || ""
     }\n${item.type || ""}\n${tagNames}`.toLowerCase();
     return hay.includes(q);
@@ -986,7 +986,7 @@
   }
 
   function canDragReorder() {
-    // 虚拟列表下远距离拖拽不可靠；量大时关闭卡片拖拽
+    if (isLikelyMobile()) return false;
     return (state.index.items?.length || 0) < VIRTUAL_MIN;
   }
 
@@ -1010,7 +1010,7 @@
     parts.push(`类型：${state.activeType === "all" ? "全部" : TYPE_LABELS[state.activeType] || state.activeType}`);
     const q = String(state.searchQuery || "").trim();
     if (q) parts.push(`关键词：「${q}」`);
-    hint.textContent = `${parts.join(" · ")}。点左侧标签、下方类型即可筛选；直接搜标签名也行。`;
+    hint.textContent = `${parts.join(" · ")}。点标签或类型即可筛选；直接搜标签名也行。`;
   }
 
   function clearAllFilters() {
@@ -1210,14 +1210,21 @@
   }
 
   function flashItem(id, msg) {
-    if (msg) toast(msg);
+    state.filterCache = { key: "", items: null };
+    const item = (state.index.items || []).find((x) => x.id === id);
+    const inView = Boolean(item) && visibleItems().some((x) => x.id === id);
+    if (msg) {
+      if (!inView && hasActiveFilters()) {
+        toast(`${msg}。当前筛选下未显示，可点「清除筛选」查看`);
+      } else {
+        toast(msg);
+      }
+    }
     state.flashItemId = id || "";
-    // 入库后回到「全能看见」的视图，避免被筛选挡住
-    state.searchQuery = "";
-    state.activeType = "all";
-    state.activeTagId = "all";
-    const search = $("#memo-search");
-    if (search) search.value = "";
+    if (!inView) {
+      renderAll();
+      return;
+    }
     resetListPaging();
     renderAll();
     requestAnimationFrame(() => {
@@ -1364,7 +1371,7 @@
     const toggle = $("#memo-tags-toggle");
     if (!toggle) return;
     let label = "标签筛选";
-    if (state.activeTagId === DEFAULT_TAG_ID) label = "标签：默认";
+    if (state.activeTagId === DEFAULT_TAG_ID) label = "标签：未分类";
     else if (state.activeTagId && state.activeTagId !== "all") {
       const name = tagById(state.activeTagId)?.name;
       if (name) label = `标签：${name}`;
@@ -1383,7 +1390,7 @@
     const tagHtml = tags
       .map(
         (t) =>
-          `<button type="button" class="memo-chip" data-memo-chip-rm="${item.id}" data-memo-chip-tag="${escapeHtml(t.id)}" title="点此移除标签">${escapeHtml(t.name)} ×</button>`
+          `<span class="memo-chip"><button type="button" class="memo-chip-name" data-memo-chip-filter="${escapeHtml(t.id)}" title="筛选此标签">${escapeHtml(t.name)}</button><button type="button" class="memo-chip-x" data-memo-chip-rm="${item.id}" data-memo-chip-tag="${escapeHtml(t.id)}" title="移除此标签" aria-label="移除标签 ${escapeHtml(t.name)}">×</button></span>`
       )
       .join("");
     const title = escapeHtml(item.name || item.type || "条目");
@@ -1391,7 +1398,7 @@
     const size = formatBytes(item.size || 0);
     const typeLabel = TYPE_LABELS[item.type] || item.type || "文件";
     const noteRaw = String(item.note || "").trim();
-    const wantsNoteHint = !noteRaw && item.type !== "text";
+    const wantsNoteHint = !noteRaw;
     let noteHtml = "";
     if (noteRaw) {
       const expanded = state.expandedNotes.has(item.id);
@@ -1442,12 +1449,12 @@
       : `<button type="button" class="secondary-btn" data-memo-dl="${item.id}">下载</button>`;
     const moreBits = [
       `<button type="button" class="ghost-btn" data-memo-open="${item.id}">预览</button>`,
-      item.type === "text" ? `<button type="button" class="ghost-btn" data-memo-edit="${item.id}">编辑</button>` : "",
-      `<button type="button" class="ghost-btn" data-memo-note="${item.id}">${noteRaw ? "改备注" : "备注"}</button>`,
       offerShare ? `<button type="button" class="ghost-btn" data-memo-share="${item.id}">分享</button>` : "",
       canCopy ? `<button type="button" class="ghost-btn" data-memo-dl="${item.id}">下载</button>` : "",
+      item.type === "text" ? `<button type="button" class="ghost-btn" data-memo-edit="${item.id}">编辑</button>` : "",
+      `<button type="button" class="ghost-btn" data-memo-note="${item.id}">${noteRaw ? "改备注" : "备注"}</button>`,
       state.mode === "dir" && !state.dirPending
-        ? `<button type="button" class="ghost-btn" data-memo-path="${item.id}">打开路径</button>`
+        ? `<button type="button" class="ghost-btn" data-memo-path="${item.id}">新标签查看</button>`
         : "",
       `<button type="button" class="ghost-btn memo-more-danger" data-memo-del="${item.id}">删除</button>`,
     ].filter(Boolean);
@@ -1455,7 +1462,7 @@
       <div class="memo-card-head">
         <label class="memo-check"><input type="checkbox" data-memo-check="${item.id}" ${checked} /></label>
         <div class="memo-card-meta">
-          <button type="button" class="memo-card-title" data-memo-rename="${item.id}" title="双击修改名称">${title}</button>
+          <button type="button" class="memo-card-title" data-memo-rename="${item.id}" title="单击或双击修改名称">${title}</button>
           <span class="hint tight mono"><span class="memo-type-pill">${escapeHtml(typeLabel)}</span> · ${time} · ${size}</span>
         </div>
       </div>
@@ -1604,8 +1611,7 @@
       .join("")}<div class="memo-virt-spacer" data-memo-virt-bottom style="height:${bottomPad}px" aria-hidden="true"></div>`;
     renderListMeta(items.length, slice.length);
     hydrateMedia();
-    const batch = $("#memo-batch-del");
-    if (batch) batch.disabled = state.selected.size === 0;
+    syncSelectAllChrome();
     if (skipMeasure) return;
     requestAnimationFrame(() => {
       if (!state.virtualMode) return;
@@ -1621,8 +1627,10 @@
     const dropHint = $("#memo-drop > p.hint");
     if (!dropHint) return;
     dropHint.textContent = canDragReorder()
-      ? "拖拽文件到此处添加 · 最新在上 · 可拖拽排序 · 滑到底部自动加载"
-      : "拖拽文件到此处添加 · 最新在上 · 条目较多已关闭拖拽排序，可用筛选/搜索定位";
+      ? "拖拽文件到此处添加 · 最新在上 · 可拖拽卡片排序 · 滑到底部自动加载"
+      : isLikelyMobile()
+        ? "拖拽文件到此处添加 · 最新在上 · 请用搜索或标签定位 · 滑到底部自动加载"
+        : "拖拽文件到此处添加 · 最新在上 · 条目较多已关闭拖拽排序，请用筛选/搜索定位";
   }
 
   function renderItems() {
@@ -1639,7 +1647,7 @@
       stopVirtualScroll();
       itemList.dataset.virtStart = "";
       itemList.dataset.virtEnd = "";
-      let emptyTip = "暂无条目。可粘贴、拖入文件或保存文本。";
+      let emptyTip = "还没有条目。先读剪贴板、写一段文字，或添加文件。";
       if (state.searchQuery.trim()) {
         emptyTip = `没有匹配「${state.searchQuery.trim()}」的条目。`;
       } else if (state.activeType !== "all" && state.activeTagId !== "all") {
@@ -1647,17 +1655,26 @@
       } else if (state.activeType !== "all") {
         emptyTip = `当前没有「${TYPE_LABELS[state.activeType] || state.activeType}」类型条目。`;
       } else if (state.activeTagId === DEFAULT_TAG_ID) {
-        emptyTip = "暂无未分类条目。已加自定义标签的内容会离开「默认」。";
+        emptyTip = "暂无未分类条目。已加自定义标签的内容会离开「未分类」。";
       } else if (state.activeTagId !== "all") {
         emptyTip = "当前标签下暂无条目。可在此标签下新建，或切回「全部」。";
       }
-      itemList.innerHTML = `<p class="hint">${emptyTip}</p>`;
+      const showEmptyActions = !hasActiveFilters();
+      itemList.innerHTML = showEmptyActions
+        ? `<div class="memo-empty">
+            <p class="hint">${emptyTip}</p>
+            <div class="btn-row tool-actions">
+              <button type="button" class="primary-btn" data-memo-empty="clip">读取剪贴板</button>
+              <button type="button" class="secondary-btn" data-memo-empty="text">保存文字</button>
+              <label class="file-btn" for="memo-file">添加文件</label>
+            </div>
+          </div>`
+        : `<p class="hint">${emptyTip}</p>`;
       renderListMeta(0, 0);
+      syncSelectAllChrome();
       if (moreRow) moreRow.hidden = true;
       if (sentinel) sentinel.hidden = true;
       if (loadingTip) loadingTip.hidden = true;
-      const batch = $("#memo-batch-del");
-      if (batch) batch.disabled = state.selected.size === 0;
       return;
     }
 
@@ -1693,6 +1710,19 @@
     }
     hydrateMedia();
     setupInfiniteScroll();
+    syncSelectAllChrome();
+  }
+
+  function syncSelectAllChrome() {
+    const vis = visibleItems();
+    const n = vis.length;
+    const box = $("#memo-select-all");
+    const text = document.querySelector("#memo-select-all-lab .memo-select-all-text");
+    if (text) text.textContent = n ? `全选筛选结果（${n}）` : "全选筛选结果";
+    if (box) {
+      box.disabled = n === 0;
+      box.checked = n > 0 && vis.every((it) => state.selected.has(it.id));
+    }
     const batch = $("#memo-batch-del");
     if (batch) batch.disabled = state.selected.size === 0;
   }
@@ -1809,7 +1839,7 @@
         rememberHash(dup);
       }
       const { item: bumped, moved } = await bumpItemToFront(dup);
-      const tip = moved ? "已有相同内容，已移到最前" : "已有相同内容，已在最前";
+      const tip = moved ? "未新建：已有相同内容，已把原条目移到最前" : "未新建：已有相同内容，原条目已在最前";
       if (!quiet) {
         setProgress(false, 0, "");
         flashItem(bumped?.id || dup.id, tip);
@@ -2155,7 +2185,7 @@
       if (lastId) {
         const parts = [];
         if (added) parts.push(`已添加 ${added} 个`);
-        if (skipped) parts.push(`重复置顶 ${skipped} 个`);
+        if (skipped) parts.push(`未新建，已把 ${skipped} 个重复项置顶`);
         if (cancelled) parts.push(`取消 ${cancelled} 个`);
         flashItem(lastId, parts.join("，") || "完成");
       } else if (cancelled && !added) {
@@ -2164,6 +2194,20 @@
         toast("没有可添加的文件");
       }
     });
+  }
+
+  function setAutoclipStatus(msg, { isError = false } = {}) {
+    const el = $("#memo-autoclip-status");
+    if (!el) return;
+    if (!msg) {
+      el.hidden = true;
+      el.textContent = "";
+      el.classList.remove("is-error");
+      return;
+    }
+    el.hidden = false;
+    el.textContent = msg;
+    el.classList.toggle("is-error", isError);
   }
 
   function clipPermissionHint(err) {
@@ -2182,6 +2226,7 @@
 
   async function readClipboard({ force = false } = {}) {
     setError(memoError, "");
+    if (force) setAutoclipStatus("");
     try {
       if (navigator.clipboard?.read) {
         const items = await navigator.clipboard.read();
@@ -2253,11 +2298,12 @@
       }
       if (force) toast("当前浏览器不支持读取剪贴板，请用 Ctrl/⌘+V 或右键粘贴");
     } catch (err) {
+      const hint = clipPermissionHint(err);
       if (force) {
-        const hint = clipPermissionHint(err);
         setError(memoError, hint);
         toast(hint);
       }
+      if (state.autoClip) setAutoclipStatus(hint, { isError: true });
     }
   }
 
@@ -2477,7 +2523,10 @@
 
   function hideUndoBar() {
     const bar = $("#memo-undo-bar");
-    if (bar) bar.hidden = true;
+    if (bar) {
+      bar.hidden = true;
+      bar.classList.remove("is-urgent");
+    }
   }
 
   async function commitPendingUndo() {
@@ -2527,8 +2576,12 @@
   function showUndoBar(count) {
     const bar = $("#memo-undo-bar");
     const text = $("#memo-undo-text");
-    if (text) text.textContent = count > 1 ? `已删除 ${count} 条` : "已删除 1 条";
-    if (bar) bar.hidden = false;
+    const sec = Math.round(UNDO_MS / 1000);
+    if (text) text.textContent = count > 1 ? `已删除 ${count} 条，${sec} 秒内可撤销` : `已删除 1 条，${sec} 秒内可撤销`;
+    if (bar) {
+      bar.hidden = false;
+      bar.classList.add("is-urgent");
+    }
   }
 
   async function deleteItems(ids, { confirm = true } = {}) {
@@ -2766,7 +2819,7 @@
           URL.revokeObjectURL(url);
         } catch (_) {}
       }, 120000);
-      toast(`已打开：${tip}`);
+      toast(`已在新标签打开：${tip}`);
     } catch (err) {
       setError(memoError, err.message || String(err));
       toast(tip);
@@ -3149,6 +3202,25 @@
     lightbox?.close?.();
   }
 
+  function askImportPassword() {
+    const dlg = $("#memo-import-pass-dlg");
+    const input = $("#memo-import-pass");
+    if (!dlg || typeof dlg.showModal !== "function") {
+      return Promise.resolve("");
+    }
+    if (input) input.value = "";
+    return new Promise((resolve) => {
+      const onClose = () => {
+        dlg.removeEventListener("close", onClose);
+        const ok = dlg.returnValue === "ok";
+        resolve(ok ? String(input?.value || "") : "");
+      };
+      dlg.addEventListener("close", onClose, { once: true });
+      dlg.showModal();
+      setTimeout(() => input?.focus?.(), 40);
+    });
+  }
+
   async function doImport(file) {
     if (!file) return;
     await withBusy(async () => {
@@ -3165,7 +3237,7 @@
         zip = await tryLoadZip(zipBlob);
       } catch (err) {
         if (!looksEncrypted && file.type !== "application/octet-stream") throw err;
-        const pass = window.prompt("该文件可能已加密，请输入口令") || "";
+        const pass = await askImportPassword();
         if (!pass) throw new Error("需要口令才能导入加密包");
         try {
           const dec = await decryptBytes(new Uint8Array(await file.arrayBuffer()), pass);
@@ -3533,12 +3605,12 @@
     if (canCopy) bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="copy">复制</button>`);
     else bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="dl">下载</button>`);
     bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="open">预览</button>`);
+    if (canOfferItemShare(item)) bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="share">分享</button>`);
     if (item.type === "text") bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="edit">编辑</button>`);
     bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="note">备注</button>`);
-    if (canOfferItemShare(item)) bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="share">分享</button>`);
     if (canCopy) bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="dl">下载</button>`);
     if (state.mode === "dir" && !state.dirPending) {
-      bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="path">打开路径</button>`);
+      bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="path">新标签查看</button>`);
     }
     bits.push(`<button type="button" class="memo-ctx-item is-danger" role="menuitem" data-memo-ctx-act="del">删除</button>`);
     el.innerHTML = bits.join("");
@@ -3579,6 +3651,7 @@
       localStorage.setItem(AUTOCLIP_KEY, state.autoClip ? "1" : "0");
     } catch (_) {}
     toast(state.autoClip ? "已开启并记住：下次仍会自动读剪贴板" : "已关闭自动读剪贴板");
+    if (!state.autoClip) setAutoclipStatus("");
     if (state.autoClip) {
       readClipboard({ force: false }).catch(() => {});
     }
@@ -3633,11 +3706,14 @@
     renderAll();
   });
 
+  let renameClickTimer = 0;
   itemList?.addEventListener("dblclick", (e) => {
     const titleBtn = e.target.closest?.("[data-memo-rename]");
     if (!titleBtn || !itemList.contains(titleBtn)) return;
     e.preventDefault();
     e.stopPropagation();
+    clearTimeout(renameClickTimer);
+    renameClickTimer = 0;
     const item = state.index.items.find((x) => x.id === titleBtn.dataset.memoRename);
     if (item) beginInlineRename(item, titleBtn);
   });
@@ -3645,14 +3721,35 @@
   itemList?.addEventListener("click", async (e) => {
     const t = e.target;
     hideMemoCtx();
-    // 标题单击不触发其它操作；双击才重命名
-    if (t.closest?.("[data-memo-rename]") || t.closest?.(".memo-card-title-input")) return;
+    const emptyAct = t.closest?.("[data-memo-empty]")?.dataset?.memoEmpty;
+    if (emptyAct === "clip") {
+      readClipboard({ force: true }).catch((err) => setError(memoError, err.message || String(err)));
+      return;
+    }
+    if (emptyAct === "text") {
+      editor?.focus?.();
+      editor?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+      return;
+    }
+    const titleBtn = t.closest?.("[data-memo-rename]");
+    if (titleBtn && itemList.contains(titleBtn)) {
+      e.preventDefault();
+      clearTimeout(renameClickTimer);
+      renameClickTimer = setTimeout(() => {
+        renameClickTimer = 0;
+        const item = state.index.items.find((x) => x.id === titleBtn.dataset.memoRename);
+        if (item) beginInlineRename(item, titleBtn);
+      }, 220);
+      return;
+    }
+    if (t.closest?.(".memo-card-title-input")) return;
     try {
       if (t.matches?.("[data-memo-check]")) {
         const id = t.dataset.memoCheck;
         if (t.checked) state.selected.add(id);
         else state.selected.delete(id);
         $("#memo-batch-del").disabled = state.selected.size === 0;
+        syncSelectAllChrome();
         return;
       }
       const delId = t.closest?.("[data-memo-del]")?.dataset?.memoDel;
@@ -3752,6 +3849,16 @@
       const tagAddId = t.closest?.("[data-memo-tag-add]")?.dataset?.memoTagAdd;
       if (tagAddId) {
         openTagDialog(tagAddId);
+        return;
+      }
+      const chipFilter = t.closest?.("[data-memo-chip-filter]");
+      if (chipFilter) {
+        const tagId = chipFilter.dataset.memoChipFilter;
+        if (tagId) {
+          state.activeTagId = tagId;
+          resetListPaging();
+          renderAll();
+        }
         return;
       }
       const chipRm = t.closest?.("[data-memo-chip-rm]");
@@ -3991,7 +4098,7 @@
     const item = previewItem;
     if (!item) return;
     const id = item.id;
-    await deleteItems([id], { confirm: true });
+    await deleteItems([id], { confirm: false });
     if (!state.index.items.some((x) => x.id === id)) closeLightbox();
   });
   previewNewTabBtn?.addEventListener("click", () => {

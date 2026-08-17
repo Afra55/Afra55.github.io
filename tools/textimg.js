@@ -342,9 +342,9 @@
   async function saveToMemo() {
     const err = $("#ti-error");
     try {
-      if (!window.DevToolsMemo?.ingestBlob) throw new Error("备忘录未就绪，请先打开过备忘录工具");
+      const memo = await ensureMemoApi("ingestBlob");
       const { blob, w, h } = await renderBlob();
-      await window.DevToolsMemo.ingestBlob(blob, `文字图-${w}x${h}.png`);
+      await memo.ingestBlob(blob, `文字图-${w}x${h}.png`);
       toast("已保存到备忘录");
     } catch (e) {
       if (err) {
@@ -352,6 +352,15 @@
         err.textContent = e.message || String(e);
       }
     }
+  }
+
+  async function ensureMemoApi(fn) {
+    for (let i = 0; i < 40; i++) {
+      const api = window.DevToolsMemo;
+      if (api && typeof api[fn] === "function") return api;
+      await new Promise((r) => setTimeout(r, 50));
+    }
+    throw new Error("备忘录未就绪，请稍后重试");
   }
 
   function consumePrefill() {
