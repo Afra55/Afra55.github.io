@@ -5621,14 +5621,35 @@ button.adb-device-body.linkish {
   white-space: pre-wrap;
   word-break: break-word;
   font-size: 0.86rem;
-  line-height: 1.45;
-  max-height: 7.5rem;
-  overflow: auto;
+  line-height: 1.5;
+  max-height: none;
+  overflow: hidden;
   cursor: pointer;
   padding: 0.55rem 0.65rem;
   border-radius: 10px;
   border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
   background: color-mix(in srgb, var(--bg-0) 35%, transparent);
+  scrollbar-width: none;
+}
+
+.memo-text::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.memo-text.is-truncated {
+  position: relative;
+}
+
+.memo-text-more {
+  display: block;
+  margin-top: 0.4rem;
+  color: var(--accent);
+  font-family: var(--font);
+  font-size: 0.82rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .memo-text:hover {
@@ -5776,8 +5797,9 @@ button.adb-device-body.linkish {
   display: grid;
   gap: 0.55rem;
   padding: 0.75rem 0.85rem 0.9rem;
-  width: min(96vw, 1080px);
-  max-width: 96vw;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .memo-preview-dlg {
@@ -5786,6 +5808,29 @@ button.adb-device-body.linkish {
   padding: 0;
   border: 1px solid var(--line);
   background: var(--panel-strong);
+}
+
+.memo-preview-dlg[data-preview-kind="text"] {
+  width: min(94vw, 720px);
+  max-width: min(94vw, 720px);
+}
+
+.memo-preview-dlg[data-preview-kind="audio"],
+.memo-preview-dlg[data-preview-kind="file"] {
+  width: min(92vw, 440px);
+  max-width: min(92vw, 440px);
+}
+
+.memo-preview-dlg[data-preview-kind="image"],
+.memo-preview-dlg[data-preview-kind="gif"] {
+  width: min(96vw, 960px);
+  max-width: min(96vw, 960px);
+}
+
+.memo-preview-dlg[data-preview-kind="video"],
+.memo-preview-dlg[data-preview-kind="pdf"] {
+  width: min(96vw, 1080px);
+  max-width: min(96vw, 1080px);
 }
 
 .memo-preview-dlg[open] {
@@ -5848,6 +5893,50 @@ button.adb-device-body.linkish {
   display: none !important;
 }
 
+.memo-preview-dlg[data-preview-kind="text"] .memo-preview-stage {
+  place-items: stretch;
+  align-content: start;
+  min-height: min(58vh, 520px);
+  background:
+    linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel) 88%, #fff) 0%,
+      color-mix(in srgb, var(--bg-0) 18%, var(--panel)) 100%
+    );
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+}
+
+.memo-preview-dlg[data-preview-kind="image"] .memo-preview-stage,
+.memo-preview-dlg[data-preview-kind="gif"] .memo-preview-stage {
+  background: #07090e;
+  min-height: min(58vh, 520px);
+}
+
+.memo-preview-dlg[data-preview-kind="video"] .memo-preview-stage {
+  background: #000;
+  min-height: min(56vh, 480px);
+  border-radius: 14px;
+}
+
+.memo-preview-dlg[data-preview-kind="audio"] .memo-preview-stage {
+  min-height: 240px;
+  background:
+    radial-gradient(420px 180px at 50% 20%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 70%),
+    color-mix(in srgb, var(--bg-0) 45%, var(--panel-strong));
+}
+
+.memo-preview-dlg[data-preview-kind="pdf"] .memo-preview-stage {
+  place-items: stretch;
+  min-height: min(78vh, 740px);
+  background: #11151c;
+}
+
+.memo-preview-dlg[data-preview-kind="file"] .memo-preview-stage {
+  min-height: 220px;
+  place-items: stretch;
+  background: color-mix(in srgb, var(--panel) 70%, var(--bg-0));
+}
+
 .memo-preview-dlg.is-fs .memo-preview-stage {
   min-height: 0;
   height: 100%;
@@ -5889,11 +5978,11 @@ button.adb-device-body.linkish {
 .memo-preview-audio-art {
   width: 7.5rem;
   height: 7.5rem;
-  border-radius: 18px;
+  border-radius: 22px;
   background:
-    radial-gradient(circle at 30% 30%, rgba(46, 196, 182, 0.55), transparent 55%),
-    linear-gradient(145deg, #1a2740, #0d1422);
-  box-shadow: inset 0 0 0 1px rgba(232, 238, 248, 0.08);
+    radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--accent) 55%, transparent), transparent 55%),
+    linear-gradient(145deg, color-mix(in srgb, var(--bg-1) 70%, #1a2740), color-mix(in srgb, var(--bg-0) 80%, #0d1422));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 10%, transparent);
 }
 
 .memo-preview-audio {
@@ -5907,12 +5996,31 @@ button.adb-device-body.linkish {
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
-  font-size: 0.9rem;
-  padding: 0.85rem 1rem;
+  font-size: 0.95rem;
+  line-height: 1.65;
+  padding: 1rem 1.15rem 1.2rem;
   box-sizing: border-box;
   align-self: stretch;
   justify-self: stretch;
   text-align: left;
+  background: transparent;
+  border: 0;
+  color: var(--ink);
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 45%, transparent) transparent;
+}
+
+.memo-preview-text::-webkit-scrollbar {
+  width: 8px;
+}
+
+.memo-preview-text::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted) 40%, transparent);
+  border-radius: 999px;
+}
+
+.memo-preview-text::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .memo-preview-dlg.is-fs .memo-preview-text {
@@ -5927,6 +6035,10 @@ button.adb-device-body.linkish {
   border-radius: 10px;
 }
 
+.memo-preview-dlg[data-preview-kind="pdf"] .memo-preview-frame {
+  height: min(78vh, 740px);
+}
+
 .memo-preview-dlg.is-fs .memo-preview-frame {
   height: calc(100vh - 5.5rem);
   border-radius: 0;
@@ -5935,15 +6047,28 @@ button.adb-device-body.linkish {
 .memo-preview-file {
   display: grid;
   gap: 0.45rem;
-  padding: 1.2rem;
-  text-align: center;
-  justify-items: center;
+  padding: 1.25rem 1.15rem;
+  text-align: left;
+  justify-items: start;
+}
+
+.memo-preview-file-kicker {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 0.72rem;
+  opacity: 0.8;
 }
 
 .memo-preview-file-name {
   margin: 0;
-  font-size: 1rem;
-  word-break: break-all;
+  font-size: 1.05rem;
+  font-weight: 650;
+  word-break: break-word;
+}
+
+.memo-preview-file .hint {
+  margin: 0;
 }
 
 .memo-media-hit {

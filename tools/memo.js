@@ -23,6 +23,7 @@
   const UNDO_MS = 8000;
   const VIRTUAL_MIN = 64;
   const TEXT_PREVIEW_MAX = 4000;
+  const TEXT_CARD_LINES = 50;
   const NOTE_MAX = 500;
   const NOTE_CARD_CLIP = 80;
   const CARD_EST_DEFAULT = 210;
@@ -981,6 +982,35 @@
     return `${s.slice(0, TEXT_PREVIEW_MAX)}…`;
   }
 
+  function splitTextLines(text) {
+    return String(text || "")
+      .replace(/\r\n/g, "\n")
+      .replace(/\r/g, "\n")
+      .split("\n");
+  }
+
+  /** 卡片内文本：≤50 行完整展示；超过则截断，点预览看全文（无滚动条） */
+  function formatCardTextBody(full) {
+    const raw = String(full || "");
+    const lines = splitTextLines(raw);
+    const lineCount = lines.length;
+    if (lineCount <= TEXT_CARD_LINES) {
+      return {
+        html: escapeHtml(raw),
+        truncated: false,
+        lineCount,
+        title: "单击预览 · 双击编辑",
+      };
+    }
+    const shown = lines.slice(0, TEXT_CARD_LINES).join("\n");
+    return {
+      html: `${escapeHtml(shown)}\n<span class="memo-text-more">…共 ${lineCount} 行，点此预览全文</span>`,
+      truncated: true,
+      lineCount,
+      title: `已截断前 ${TEXT_CARD_LINES} 行 · 单击预览全文 · 双击编辑`,
+    };
+  }
+
   function clipNote(text) {
     const s = String(text || "").trim();
     if (!s) return "";
@@ -1014,6 +1044,10 @@
       return state.cardHeightCache.get(item.id);
     }
     let h = CARD_EST_BY_TYPE[item?.type] || CARD_EST_DEFAULT;
+    if (item?.type === "text") {
+      const lines = Math.min(TEXT_CARD_LINES, splitTextLines(item.textPreview || "").length || 1);
+      h = 118 + Math.min(420, Math.round(lines * 18.5));
+    }
     const hasNote = String(item?.note || "").trim();
     if (hasNote || (item?.type && item.type !== "text")) h += CARD_EST_NOTE;
     return h;
@@ -1259,8 +1293,8 @@
     let body = "";
     if (item.type === "text") {
       const full = item.textPreview || "";
-      const short = full.length > 160 ? `${full.slice(0, 160)}…` : full;
-      body = `<pre class="memo-text mono" data-memo-expand="${item.id}" title="单击预览 · 双击编辑">${escapeHtml(short)}</pre>`;
+      const formatted = formatCardTextBody(full);
+      body = `<pre class="memo-text mono${formatted.truncated ? " is-truncated" : ""}" data-memo-expand="${item.id}" title="${escapeHtml(formatted.title)}">${formatted.html}</pre>`;
     } else if (item.type === "image" || item.type === "gif") {
       const badge = item.type === "gif" ? `<span class="memo-anim-badge">动图</span>` : "";
       body = `<div class="memo-thumb-wrap memo-media-hit" data-memo-preview="${item.id}">${badge}<img class="memo-thumb" data-memo-thumb="${item.id}" alt="" loading="lazy" decoding="async" /></div>`;
@@ -2722,12 +2756,31 @@
     previewNoteBtn.title = note ? "点击编辑备注" : "点击添加备注";
   }
 
-  function setPreviewChrome(item, { canFs = false, canNewTab = false, canDl = true, canEdit = false } = {}) {
+  function setPreviewKind(kind) {
+    const k = String(kind || "");
+    if (lightbox) lightbox.dataset.previewKind = k;
+    const stage = $("#memo-preview-stage");
+    if (stage) stage.dataset.previewKind = k;
+  }
+
+  function previewTypeLabel(item, kind) {
+    if (kind === "gif") return "动图";
+    if (kind === "image") return "图片";
+    if (kind === "video") return "视频";
+    if (kind === "audio") return "音频";
+    if (kind === "pdf") return "PDF";
+    if (kind === "text") return "文本";
+    return TYPE_LABELS[item?.type] || item?.type || "文件";
+  }
+
+  function setPreviewChrome(item, { kind = "", canFs = false, canNewTab = false, canDl = true, canEdit = false } = {}) {
     previewItem = item;
+    setPreviewKind(kind || item?.type || "file");
     if (previewTitle) previewTitle.textContent = item?.name || "预览";
     if (previewSub) {
+      const typeLab = previewTypeLabel(item, kind || item?.type);
       previewSub.textContent = item
-        ? `${item.type || "file"} · ${formatBytes(item.size || 0)} · ${formatTime(item.createdAt)}`
+        ? `${typeLab} · ${formatBytes(item.size || 0)} · ${formatTime(item.createdAt)}`
         : "";
     }
     syncPreviewNoteLine(item);
@@ -2770,21 +2823,27 @@
     previewObjectUrl = URL.createObjectURL(blob);
     const url = previewObjectUrl;
 
+    const showEl = (el) => {
+      if (!el) return;
+      el.hidden = false;
+      el.style.display = "";
+      el.removeAttribute("hidden");
+    };
+
     if (item.type === "image" || item.type === "gif" || String(blob.type || "").startsWith("image/")) {
-      setPreviewChrome(item, { canFs: true, canNewTab: true, canDl: true });
-      lightboxImg.hidden = false;
-      lightboxImg.style.display = "";
-      lightboxImg.removeAttribute("hidden");
+      const kind =
+        item.type === "gif" || /gif/i.test(blob.type || "") || /\.gif$/i.test(item.name || "") ? "gif" : "image";
+      setPreviewChrome(item, { kind, canFs: true, canNewTab: true, canDl: true });
+      showEl(lightboxImg);
+      lightboxImg.alt = kind === "gif" ? "动图预览" : "图片预览";
       lightboxImg.src = url;
       lightbox.showModal();
       return;
     }
 
     if (item.type === "video" || String(blob.type || "").startsWith("video/")) {
-      setPreviewChrome(item, { canFs: true, canNewTab: true, canDl: true });
-      lightboxVideo.hidden = false;
-      lightboxVideo.style.display = "";
-      lightboxVideo.removeAttribute("hidden");
+      setPreviewChrome(item, { kind: "video", canFs: true, canNewTab: true, canDl: true });
+      showEl(lightboxVideo);
       lightboxVideo.src = url;
       lightbox.showModal();
       try {
@@ -2796,10 +2855,8 @@
     }
 
     if (item.type === "audio" || String(blob.type || "").startsWith("audio/")) {
-      setPreviewChrome(item, { canFs: true, canNewTab: false, canDl: true });
-      lightboxAudioWrap.hidden = false;
-      lightboxAudioWrap.style.display = "";
-      lightboxAudioWrap.removeAttribute("hidden");
+      setPreviewChrome(item, { kind: "audio", canFs: true, canNewTab: false, canDl: true });
+      showEl(lightboxAudioWrap);
       lightboxAudio.src = url;
       lightbox.showModal();
       try {
@@ -2809,34 +2866,34 @@
     }
 
     if (isPdfItem(item, blob)) {
-      setPreviewChrome(item, { canFs: true, canNewTab: true, canDl: true });
-      lightboxFrame.hidden = false;
-      lightboxFrame.style.display = "";
-      lightboxFrame.removeAttribute("hidden");
+      setPreviewChrome(item, { kind: "pdf", canFs: true, canNewTab: true, canDl: true });
+      showEl(lightboxFrame);
       lightboxFrame.src = url;
       lightbox.showModal();
       return;
     }
 
     if (isTextLikeItem(item, blob)) {
-      setPreviewChrome(item, { canFs: true, canNewTab: true, canDl: true, canEdit: item.type === "text" });
+      setPreviewChrome(item, {
+        kind: "text",
+        canFs: true,
+        canNewTab: true,
+        canDl: true,
+        canEdit: item.type === "text",
+      });
       let text = item.textPreview || "";
       if (!text) {
         text = await blob.text();
         if (text.length > 400000) text = `${text.slice(0, 400000)}\n\n…（内容过长，已截断预览）`;
       }
-      lightboxText.hidden = false;
-      lightboxText.style.display = "";
-      lightboxText.removeAttribute("hidden");
+      showEl(lightboxText);
       lightboxText.textContent = text;
       lightbox.showModal();
       return;
     }
 
-    setPreviewChrome(item, { canFs: false, canNewTab: true, canDl: true });
-    lightboxFile.hidden = false;
-    lightboxFile.style.display = "";
-    lightboxFile.removeAttribute("hidden");
+    setPreviewChrome(item, { kind: "file", canFs: false, canNewTab: true, canDl: true });
+    showEl(lightboxFile);
     const nameEl = $("#memo-preview-file-name");
     const metaEl = $("#memo-preview-file-meta");
     if (nameEl) nameEl.textContent = item.name || item.fileName || item.id;
@@ -2882,6 +2939,7 @@
     revokePreviewUrl();
     previewItem = null;
     syncPreviewNoteLine(null);
+    setPreviewKind("");
     lightbox?.classList.remove("is-fs");
     if (document.fullscreenElement) {
       document.exitFullscreen?.().catch(() => {});

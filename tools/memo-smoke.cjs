@@ -245,9 +245,12 @@ async function main() {
       out.preview.closed = !document.getElementById("memo-lightbox")?.open;
     }
 
-    // text content: single click opens preview
+    // text content: single click opens preview + line truncation rules
     const textPre = document.querySelector(".memo-text[data-memo-expand]");
-    out.textClick = { hasPre: Boolean(textPre) };
+    out.textClick = {
+      hasPre: Boolean(textPre),
+      noCardScroll: textPre ? getComputedStyle(textPre).overflow.includes("hidden") || getComputedStyle(textPre).overflowY === "hidden" : false,
+    };
     if (textPre) {
       textPre.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
       await sleep(350);
@@ -256,9 +259,24 @@ async function main() {
       out.textClick.noVideoAbove = Boolean(vid?.hidden) && getComputedStyle(vid).display === "none";
       const txt = document.getElementById("memo-lightbox-text");
       out.textClick.textShown = Boolean(txt) && !txt.hidden && getComputedStyle(txt).display !== "none";
+      out.textClick.previewKindText = document.getElementById("memo-lightbox")?.dataset?.previewKind === "text";
       document.getElementById("memo-lightbox-close")?.click();
       await sleep(80);
     }
+
+    // long text (>50 lines) should truncate on card; short text shows fully
+    const longBody = Array.from({ length: 60 }, (_, i) => `行${i + 1} 长文本冒烟`).join("\n");
+    await window.DevToolsMemo.ingestBlob(new Blob([longBody], { type: "text/plain" }), "long-60.txt");
+    await sleep(350);
+    const longItem = (window.DevToolsMemo.getIndex().items || []).find((it) => it.type === "text" && /行1 长文本冒烟/.test(it.textPreview || ""));
+    const longCard = longItem ? document.querySelector(`.memo-card[data-memo-id="${longItem.id}"] .memo-text`) : null;
+    out.textLines = {
+      hasLong: Boolean(longItem),
+      truncatedClass: Boolean(longCard?.classList.contains("is-truncated")),
+      moreHint: /共\s*60\s*行/.test(longCard?.textContent || ""),
+      noLine60: !/行60/.test(longCard?.textContent || ""),
+      shortFull: Boolean(textPre) && !textPre.classList.contains("is-truncated"),
+    };
 
     // type filter + grouped sections
     out.typeFilter = {
@@ -581,7 +599,7 @@ async function main() {
     out.cacheBust = {
 
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memoux1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memoprev1/.test(s.src)),
     };
 
     return out;
@@ -609,6 +627,18 @@ async function main() {
   if (!result.preview?.opened || !result.preview?.closed) failed.push("preview open/close failed");
   if (result.textClick?.hasPre && (!result.textClick?.previewOpened || !result.textClick?.noVideoAbove || !result.textClick?.textShown)) {
     failed.push("text single-click should preview text without video chrome");
+  }
+  if (result.textClick?.hasPre && !result.textClick?.noCardScroll) {
+    failed.push("card text should not use visible scrollbars");
+  }
+  if (result.textClick?.hasPre && !result.textClick?.previewKindText) {
+    failed.push("text preview should set data-preview-kind=text");
+  }
+  if (!result.textLines?.hasLong || !result.textLines?.truncatedClass || !result.textLines?.moreHint || !result.textLines?.noLine60) {
+    failed.push("text over 50 lines should truncate on card with preview hint");
+  }
+  if (result.textLines && result.textLines.shortFull === false) {
+    failed.push("short text should render fully without truncate class");
   }
   if (!result.exportMerged?.hasExport || !result.exportMerged?.noShareBtn) {
     failed.push("export/share should be a single button");
@@ -722,8 +752,8 @@ async function main() {
   if (!result.switchDir?.dlgOpen || !result.switchDir?.migrateVisible || !result.switchDir?.emptyVisible || result.switchDir?.choice !== "cancel") {
     failed.push("switch directory dialog choices failed");
   }
-  if (!/memoux1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memoux1");
+  if (!/memoprev1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memoprev1");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");
