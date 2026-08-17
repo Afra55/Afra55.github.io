@@ -1997,6 +1997,16 @@
       }
       const result = await window.DevToolsTemp.purgeSiteCache();
       showToast(result?.message || "已清理本站缓存");
+      try {
+        if (navigator.serviceWorker?.getRegistrations) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map((r) => r.unregister()));
+        }
+      } catch (_) {}
+      const url = new URL(location.href);
+      url.searchParams.set("_r", String(Date.now()).slice(-8));
+      location.replace(`${url.pathname}${url.search}${url.hash}`);
+      return;
     } catch (err) {
       showToast(err?.message || "清理失败");
     } finally {

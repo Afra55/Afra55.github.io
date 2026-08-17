@@ -70,8 +70,9 @@
 
   if (!("serviceWorker" in navigator)) return;
   const ready = () => {
+    const ver = window.TOOLS_VERSION || document.getElementById("site-tools-version")?.textContent || "1";
     navigator.serviceWorker
-      .register("./sw.js", { scope: "./" })
+      .register(`./sw.js?v=${encodeURIComponent(String(ver).replace(/^v/, ""))}`, { scope: "./" })
       .then((reg) => {
         try {
           reg.update();
