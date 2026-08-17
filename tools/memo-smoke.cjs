@@ -187,9 +187,14 @@ async function main() {
       quickTextNotDetails: !document.querySelector("details#memo-editor-fold, details.memo-editor"),
       storageFold: Boolean(document.querySelector(".memo-storage-fold")),
       backupBar: Boolean(document.querySelector(".memo-backup-bar")),
+      backupIsFold: document.querySelector(".memo-backup-bar")?.tagName === "DETAILS",
       exportOutsideFold: Boolean(document.querySelector(".memo-backup-bar #memo-export")),
       exportToDirBtn: Boolean(document.getElementById("memo-export-to-dir")),
       dirHint: Boolean(document.getElementById("memo-dir-hint")),
+      batchInList: Boolean(document.querySelector(".memo-list-head-actions #memo-batch-del")),
+      importPassDlg: Boolean(document.getElementById("memo-import-pass-dlg")),
+      pathRelabel: /新标签/.test(document.getElementById("memo-preview-path")?.textContent || ""),
+      selectAllScope: /筛选结果/.test(document.querySelector(".memo-select-all-text")?.textContent || ""),
       previewCopy: Boolean(document.getElementById("memo-preview-copy")),
       autoclipRemember: /记住/.test(document.querySelector(".memo-autoclip-flag")?.textContent || ""),
       mobilePasteHint: Boolean(document.querySelector(".memo-hint-narrow")),
@@ -713,6 +718,35 @@ async function main() {
       await sleep(40);
     }
 
+    out.uxOverhaul = {
+      backupFold: document.querySelector(".memo-backup-bar")?.tagName === "DETAILS",
+      emptyTpl: /data-memo-empty/.test(document.querySelector("#memo-list")?.innerHTML || "") ||
+        (window.DevToolsMemo.getIndex().items || []).length > 0,
+      chipName: Boolean(document.querySelector(".memo-chip-name")),
+      chipX: Boolean(document.querySelector(".memo-chip-x")),
+      autoclipStatus: Boolean(document.getElementById("memo-autoclip-status")),
+      memoBeforeTextimg: (() => {
+        const srcs = [...document.scripts].map((s) => s.src || "");
+        const mi = srcs.findIndex((s) => /memo\.js/.test(s));
+        const ti = srcs.findIndex((s) => /textimg\.js/.test(s));
+        return mi >= 0 && ti >= 0 && mi < ti;
+      })(),
+    };
+    const taggedCard = [...document.querySelectorAll(".memo-card")].find((c) => c.querySelector(".memo-chip"));
+    if (!taggedCard) {
+      const anyCard = document.querySelector(".memo-card [data-memo-tag-add]");
+      anyCard?.click();
+      await sleep(80);
+      const tagSearch = document.getElementById("memo-tag-search");
+      if (tagSearch) {
+        tagSearch.value = "冒烟标签UX";
+        document.getElementById("memo-tag-ok")?.click();
+        await sleep(280);
+      }
+    }
+    out.uxOverhaul.chipName = Boolean(document.querySelector(".memo-chip-name"));
+    out.uxOverhaul.chipX = Boolean(document.querySelector(".memo-chip-x"));
+
     // grouped action buttons should share the same height
     out.btnSize = { ok: false };
     const actionRow =
@@ -741,7 +775,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817btnsize1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memoux2/.test(s.src)),
     };
 
     return out;
@@ -754,7 +788,7 @@ async function main() {
   if (errors.length) failed.push(...errors.map((e) => `page: ${e}`));
   if (!result.panelActive) failed.push("memo panel not active");
   if (!result.hasEditor || !result.hasList) failed.push("missing editor/list");
-  if (!/memo|theme|vsplit|vtrim|audio|ffb|ffadapt|setup|btnsize/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memo|theme|vsplit|vtrim|audio|ffb|ffadapt|setup|btnsize|memoux/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -814,6 +848,12 @@ async function main() {
   }
   if (!result.modules?.backupBar || !result.modules?.exportOutsideFold || !result.modules?.exportToDirBtn || !result.modules?.dirHint) {
     failed.push("memo backup bar / dir hint missing");
+  }
+  if (!result.modules?.backupIsFold || !result.modules?.batchInList || !result.modules?.importPassDlg || !result.modules?.pathRelabel || !result.modules?.selectAllScope) {
+    failed.push("memo UX overhaul chrome missing (backup fold/batch/import pass/path/select-all)");
+  }
+  if (!result.uxOverhaul?.backupFold || !result.uxOverhaul?.chipName || !result.uxOverhaul?.chipX || !result.uxOverhaul?.memoBeforeTextimg || !result.uxOverhaul?.autoclipStatus) {
+    failed.push("memo UX overhaul: backup fold / chip split / memo load order / autoclip status");
   }
   if (!result.modules?.previewCopy || !result.modules?.autoclipRemember || !result.modules?.mobilePasteHint) {
     failed.push("memo clipboard takeout / autoclip / paste hint missing");
@@ -926,8 +966,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/btnsize1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to btnsize1");
+  if (!/memoux2/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memoux2");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");

@@ -144,11 +144,18 @@
       setError("没有可保存的文字");
       return;
     }
-    if (!window.DevToolsMemo?.ingestText) {
-      setError("备忘录未就绪，请先打开过备忘录工具");
+    let api = window.DevToolsMemo;
+    if (!api?.ingestText) {
+      for (let i = 0; i < 40 && !api?.ingestText; i++) {
+        await new Promise((r) => setTimeout(r, 50));
+        api = window.DevToolsMemo;
+      }
+    }
+    if (!api?.ingestText) {
+      setError("备忘录未就绪，请稍后重试");
       return;
     }
-    await window.DevToolsMemo.ingestText(text);
+    await api.ingestText(text);
     toast("已保存到备忘录");
   }
 

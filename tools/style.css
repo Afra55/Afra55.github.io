@@ -4678,6 +4678,37 @@ button.adb-device-body.linkish {
   background: color-mix(in srgb, var(--panel) 92%, transparent);
 }
 
+.memo-backup-sum {
+  cursor: pointer;
+  font-weight: 650;
+  font-size: 1.02rem;
+  color: var(--ink);
+}
+
+.memo-backup-bar[open] .memo-backup-sum {
+  margin-bottom: 0.35rem;
+}
+
+.memo-list-head-actions {
+  align-items: center;
+  gap: 0.45rem;
+  margin: 0;
+}
+
+.memo-empty {
+  display: grid;
+  gap: 0.65rem;
+  padding: 0.85rem 0.2rem 0.35rem;
+}
+
+.memo-autoclip-status {
+  color: var(--muted);
+}
+
+.memo-autoclip-status.is-error {
+  color: color-mix(in srgb, var(--danger, #ff6b7a) 75%, var(--ink));
+}
+
 .memo-backup-nudge:not([hidden]) {
   color: color-mix(in srgb, #e8a317 75%, var(--ink));
 }
@@ -5429,6 +5460,11 @@ button.adb-device-body.linkish {
   background: var(--control-bg-strong, color-mix(in srgb, var(--bg-0) 70%, var(--panel-strong)));
 }
 
+.memo-undo-bar.is-urgent {
+  border-color: color-mix(in srgb, var(--accent-2) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent-2) 14%, var(--panel-strong));
+}
+
 .memo-undo-bar[hidden] {
   display: none !important;
 }
@@ -5784,16 +5820,38 @@ button.adb-device-body.linkish {
 .memo-chip {
   appearance: none;
   display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  padding: 0.12rem 0.45rem;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
   background: color-mix(in srgb, var(--accent) 10%, transparent);
   font: inherit;
   font-size: 0.75rem;
   color: var(--ink);
+  overflow: hidden;
+}
+
+.memo-chip-name,
+.memo-chip-x {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
   cursor: pointer;
+  padding: 0.12rem 0.45rem;
+}
+
+.memo-chip-x {
+  padding-left: 0.2rem;
+  padding-right: 0.4rem;
+  opacity: 0.72;
+}
+
+.memo-chip-name:hover,
+.memo-chip-x:hover {
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
 .memo-chip:hover {
