@@ -1091,8 +1091,7 @@
     navFlyoutTimer = 0;
     $$(".nav-group", navEl).forEach((g) => {
       if (g === wrap) return;
-      g.classList.remove("is-flyout-open", "is-flyout-up");
-      if (pin) g.classList.remove("is-pinned");
+      g.classList.remove("is-flyout-open", "is-flyout-up", "is-pinned");
       g.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
     });
     if (pin) wrap.classList.add("is-pinned");

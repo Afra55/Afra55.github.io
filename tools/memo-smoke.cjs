@@ -986,7 +986,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817vsplitfsnudge/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navfly3/.test(s.src)),
     };
 
     out.pwa = {
@@ -1045,6 +1045,20 @@ async function main() {
         const hoverPanel = other.querySelector(".nav-group-tools");
         out.navCompact.hoverShows = Boolean(hoverPanel) && getComputedStyle(hoverPanel).display !== "none";
         other.classList.remove("is-flyout-open");
+      }
+      if (current && other && window.DevToolsNav.openFlyout) {
+        current.classList.add("is-pinned");
+        window.DevToolsNav.openFlyout(other);
+        const aPanel = current.querySelector(".nav-group-tools");
+        const bPanel = other.querySelector(".nav-group-tools");
+        out.navCompact.exclusiveFlyout =
+          Boolean(aPanel) &&
+          Boolean(bPanel) &&
+          getComputedStyle(aPanel).display === "none" &&
+          getComputedStyle(bPanel).display !== "none" &&
+          !current.classList.contains("is-pinned");
+        other.classList.remove("is-flyout-open", "is-pinned");
+        current.classList.remove("is-flyout-open", "is-pinned");
       }
       window.DevToolsNav.setCompact(false);
       out.navCompact.restored = !document.getElementById("nav-bar")?.classList.contains("is-compact");
@@ -1196,6 +1210,20 @@ async function main() {
       const hoverPanel = other.querySelector(".nav-group-tools");
       out.hoverShows = Boolean(hoverPanel) && getComputedStyle(hoverPanel).display !== "none";
       other.classList.remove("is-flyout-open");
+    }
+    if (current && other && window.DevToolsNav.openFlyout) {
+      current.classList.add("is-pinned");
+      window.DevToolsNav.openFlyout(other);
+      const aPanel = current.querySelector(".nav-group-tools");
+      const bPanel = other.querySelector(".nav-group-tools");
+      out.exclusiveFlyout =
+        Boolean(aPanel) &&
+        Boolean(bPanel) &&
+        getComputedStyle(aPanel).display === "none" &&
+        getComputedStyle(bPanel).display !== "none" &&
+        !current.classList.contains("is-pinned");
+      other.classList.remove("is-flyout-open", "is-pinned");
+      current.classList.remove("is-flyout-open", "is-pinned");
     }
     window.DevToolsNav.setCompact(false);
     out.restored = !document.getElementById("nav-bar")?.classList.contains("is-compact");
@@ -1454,8 +1482,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/vsplitfsnudge/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to vsplitfsnudge");
+  if (!/navfly3/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to navfly3");
   }
   if (!result.pwa?.hasManifestLink || !/manifest\.webmanifest/.test(result.pwa?.manifestHref || "")) {
     failed.push("PWA manifest link missing");
@@ -1492,6 +1520,7 @@ async function main() {
     !result.navCompact?.pinShows ||
     !result.navCompact?.mobileExpandsInFlow ||
     !result.navCompact?.hoverShows ||
+    !result.navCompact?.exclusiveFlyout ||
     !result.navCompact?.restored
   ) {
     failed.push("mobile nav compact should expand as an in-drawer accordion");
@@ -1504,6 +1533,7 @@ async function main() {
     !result.navCompactDesktop?.pinShows ||
     !result.navCompactDesktop?.flyoutNoGrow ||
     !result.navCompactDesktop?.hoverShows ||
+    !result.navCompactDesktop?.exclusiveFlyout ||
     !result.navCompactDesktop?.restored
   ) {
     failed.push("desktop nav compact should keep using hover/pin flyouts");
