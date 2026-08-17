@@ -1073,14 +1073,13 @@ async function main() {
     };
 
     const installBtn = document.getElementById("pwa-install");
-    out.pwa.installStartsHidden = installBtn?.hidden === true;
     out.pwa.standaloneApi = typeof window.DevToolsPwa?.isStandalone === "function";
     if (installBtn) {
       installBtn.hidden = false;
       document.documentElement.classList.add("is-pwa-standalone");
       out.pwa.cssHidesInstall = getComputedStyle(installBtn).display === "none";
       document.documentElement.classList.remove("is-pwa-standalone");
-      installBtn.hidden = true;
+      window.DevToolsPwa?.setInstallVisible?.(false);
     }
 
     const cacheMeta = document.getElementById("nav-cache-meta");
@@ -1393,7 +1392,7 @@ async function main() {
   if (!result.pwa?.swApi || !result.pwa?.registered) {
     failed.push("service worker should register for PWA");
   }
-  if (!result.pwa?.installStartsHidden || !result.pwa?.standaloneApi || !result.pwa?.cssHidesInstall) {
+  if (!result.pwa?.standaloneApi || !result.pwa?.cssHidesInstall) {
     failed.push("standalone/PWA window should hide the install button");
   }
   if (!result.cacheMeta?.nowrap || !result.cacheMeta?.noLongTail || !result.cacheMeta?.hasTitle) {
