@@ -222,12 +222,23 @@ body.nav-sorting-tools .nav-bar {
   display: flex;
   flex-wrap: nowrap;
   gap: 0.28rem;
+  max-width: 100%;
   overflow-x: auto;
-  scrollbar-width: none;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  touch-action: pan-x;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
 }
 
 .nav-recent-list::-webkit-scrollbar {
-  display: none;
+  height: 4px;
+  display: block;
+}
+
+.nav-recent-list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ink) 32%, transparent);
+  border-radius: 999px;
 }
 
 .nav-recent-chip {

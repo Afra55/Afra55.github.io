@@ -986,7 +986,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navfly3/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navfly4/.test(s.src)),
     };
 
     out.pwa = {
@@ -1147,9 +1147,24 @@ async function main() {
     const recentListEl = document.getElementById("tool-recent-list");
     out.recentUi = {
       noLabel: !document.querySelector(".nav-recent-label"),
-      chipMax: document.querySelectorAll(".nav-recent-chip").length <= 4,
+      chipMax: document.querySelectorAll(".nav-recent-chip").length <= 8,
       nowrap: Boolean(recentListEl) && getComputedStyle(recentListEl).flexWrap === "nowrap",
+      overflowX: recentListEl ? getComputedStyle(recentListEl).overflowX : "",
+      wheelMoved: false,
     };
+    try {
+      const ids = ["json", "base64", "uuid", "hash", "regex", "color", "url", "cron"];
+      localStorage.setItem("devtools-tool-recent-v1", JSON.stringify(ids));
+      window.DevToolsNav?.renderRecent?.();
+      if (recentListEl) {
+        recentListEl.style.width = "72px";
+        const before = recentListEl.scrollLeft;
+        recentListEl.dispatchEvent(new WheelEvent("wheel", { deltaY: 120, bubbles: true, cancelable: true }));
+        out.recentUi.chipMax = document.querySelectorAll(".nav-recent-chip").length <= 8;
+        out.recentUi.wheelMoved = recentListEl.scrollLeft > before;
+        recentListEl.style.width = "";
+      }
+    } catch (_) {}
 
     const sortHint = document.querySelector(".nav-sort-hint");
     out.sortHint = {
@@ -1482,8 +1497,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/navfly3/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to navfly3");
+  if (!/navfly4/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to navfly4");
   }
   if (!result.pwa?.hasManifestLink || !/manifest\.webmanifest/.test(result.pwa?.manifestHref || "")) {
     failed.push("PWA manifest link missing");
@@ -1500,8 +1515,8 @@ async function main() {
   if (!result.cacheMeta?.nowrap || !result.cacheMeta?.noLongTail || !result.cacheMeta?.hasTitle) {
     failed.push("nav cache hint should be a single short line with details in title");
   }
-  if (!result.recentUi?.noLabel || !result.recentUi?.chipMax || !result.recentUi?.nowrap) {
-    failed.push("recent tools should be a compact single row without a section title");
+  if (!result.recentUi?.noLabel || !result.recentUi?.chipMax || !result.recentUi?.nowrap || result.recentUi?.overflowX !== "auto" || !result.recentUi?.wheelMoved) {
+    failed.push("recent tools should be a compact single row that wheel-scrolls horizontally");
   }
   if (!result.sortHint?.hasEl || !result.sortHint?.api || !result.sortHint?.marked || !result.sortHint?.visibleFirst || !result.sortHint?.hiddenSecond) {
     failed.push("sort hint should show once then hide on later visits");
