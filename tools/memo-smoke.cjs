@@ -257,14 +257,14 @@ async function main() {
       noCardScroll: textPre ? getComputedStyle(textPre).overflow.includes("hidden") || getComputedStyle(textPre).overflowY === "hidden" : false,
     };
     if (textPre) {
+      const cs = getComputedStyle(textPre);
       textPre.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
       await sleep(350);
       out.textClick.previewOpened = Boolean(document.getElementById("memo-lightbox")?.open);
-      const vid = document.getElementById("memo-lightbox-video");
-      out.textClick.noVideoAbove = Boolean(vid?.hidden) && getComputedStyle(vid).display === "none";
-      const txt = document.getElementById("memo-lightbox-text");
-      out.textClick.textShown = Boolean(txt) && !txt.hidden && getComputedStyle(txt).display !== "none";
-      out.textClick.previewKindText = document.getElementById("memo-lightbox")?.dataset?.previewKind === "text";
+      out.textClick.userSelect = cs.userSelect || cs.webkitUserSelect || "";
+      out.textClick.cursor = cs.cursor || "";
+      out.textClick.shortFull = !textPre.classList.contains("is-truncated");
+      out.textClick.selectHint = /拖选复制/.test(textPre.getAttribute("title") || "");
       document.getElementById("memo-lightbox-close")?.click();
       await sleep(80);
     }
@@ -297,6 +297,53 @@ async function main() {
       };
       document.getElementById("memo-lightbox-close")?.click();
       await sleep(60);
+      longCard?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true, detail: 1 }));
+      await sleep(350);
+      out.textLines.truncatedClickPreview = Boolean(document.getElementById("memo-lightbox")?.open);
+      out.textLines.truncatedClickKind = document.getElementById("memo-lightbox")?.dataset?.previewKind === "text";
+      const vid = document.getElementById("memo-lightbox-video");
+      out.textLines.truncatedNoVideo = Boolean(vid?.hidden) && getComputedStyle(vid).display === "none";
+      document.getElementById("memo-lightbox-close")?.click();
+      await sleep(60);
+    }
+
+    out.pinMove = {
+      api: typeof window.DevToolsMemo.moveItemToTop === "function" && typeof window.DevToolsMemo.setItemPinned === "function",
+    };
+    if (out.pinMove.api) {
+      const rows = window.DevToolsMemo.getIndex().items || [];
+      const pinTarget = rows.find((x) => x.type === "image") || rows[rows.length - 1];
+      const moveTarget = rows.find((x) => x.id !== pinTarget?.id) || pinTarget;
+      if (pinTarget) {
+        await window.DevToolsMemo.setItemPinned(pinTarget.id, true);
+        await sleep(180);
+        const afterPin = window.DevToolsMemo.getIndex().items || [];
+        out.pinMove.pinnedFirst = afterPin[0]?.id === pinTarget.id && afterPin[0]?.pinned === true;
+        const pinCard = document.querySelector(`.memo-card[data-memo-id="${pinTarget.id}"]`);
+        out.pinMove.cardClass = Boolean(pinCard?.classList.contains("is-pinned"));
+        out.pinMove.pinMark = Boolean(pinCard?.querySelector(".memo-pin-mark"));
+        pinCard?.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 24, clientY: 24 }));
+        await sleep(60);
+        const ctx = document.getElementById("memo-ctx");
+        out.pinMove.hasTopAct = /移动到顶部/.test(ctx?.textContent || "");
+        out.pinMove.hasUnpinAct = /取消置顶/.test(ctx?.textContent || "");
+        if (ctx) ctx.hidden = true;
+        if (moveTarget && moveTarget.id !== pinTarget.id) {
+          await window.DevToolsMemo.moveItemToTop(moveTarget.id);
+          await sleep(180);
+          const afterMove = window.DevToolsMemo.getIndex().items || [];
+          const firstUnpinned = afterMove.findIndex((x) => !x.pinned);
+          out.pinMove.unpinnedAfterPins = firstUnpinned >= 0 && afterMove[firstUnpinned]?.id === moveTarget.id;
+          const pins = afterMove.filter((x) => x.pinned);
+          out.pinMove.pinsStayTop = pins.every((x, i) => afterMove[i]?.id === x.id);
+        }
+        await window.DevToolsMemo.setItemPinned(pinTarget.id, false);
+        await sleep(160);
+        const afterUnpin = window.DevToolsMemo.getIndex().items || [];
+        out.pinMove.unpinnedCleared = !afterUnpin.find((x) => x.id === pinTarget.id)?.pinned;
+        const unpinCard = document.querySelector(`.memo-card[data-memo-id="${pinTarget.id}"]`);
+        out.pinMove.unpinClassGone = !unpinCard?.classList.contains("is-pinned");
+      }
     }
 
     // data:image URL text should ingest as image, not text
@@ -860,7 +907,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navpwa1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memopin1/.test(s.src)),
     };
 
     out.pwa = {
@@ -924,7 +971,7 @@ async function main() {
   if (errors.length) failed.push(...errors.map((e) => `page: ${e}`));
   if (!result.panelActive) failed.push("memo panel not active");
   if (!result.hasEditor || !result.hasList) failed.push("missing editor/list");
-  if (!/memo|theme|vsplit|vtrim|audio|ffb|ffadapt|setup|btnsize|memoux|imgzoom|vsfsjank|pwa|navpwa/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memo|theme|vsplit|vtrim|audio|ffb|ffadapt|setup|btnsize|memoux|imgzoom|vsfsjank|pwa|navpwa|memopin/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -937,14 +984,20 @@ async function main() {
     failed.push("preview media controls missing");
   }
   if (!result.preview?.opened || !result.preview?.closed) failed.push("preview open/close failed");
-  if (result.textClick?.hasPre && (!result.textClick?.previewOpened || !result.textClick?.noVideoAbove || !result.textClick?.textShown)) {
-    failed.push("text single-click should preview text without video chrome");
+  if (result.textClick?.hasPre && result.textClick?.previewOpened) {
+    failed.push("full short text should not open preview on single click");
   }
   if (result.textClick?.hasPre && !result.textClick?.noCardScroll) {
     failed.push("card text should not use visible scrollbars");
   }
-  if (result.textClick?.hasPre && !result.textClick?.previewKindText) {
-    failed.push("text preview should set data-preview-kind=text");
+  if (result.textClick?.hasPre && (!result.textClick?.shortFull || !result.textClick?.selectHint)) {
+    failed.push("short text should render fully with drag-select hint");
+  }
+  if (result.textClick?.hasPre && !/text/i.test(result.textClick?.userSelect || "")) {
+    failed.push("full short text should allow user-select for copying");
+  }
+  if (result.textClick?.hasPre && result.textClick?.cursor && result.textClick.cursor !== "text") {
+    failed.push("full short text should use text cursor");
   }
   if (!result.textLines?.hasLong || !result.textLines?.truncatedClass || !result.textLines?.moreHint || !result.textLines?.noLine60) {
     failed.push("text over 50 lines should truncate on card with preview hint");
@@ -954,6 +1007,23 @@ async function main() {
   }
   if (result.textLines && !result.textLines.previewFull) {
     failed.push("text preview should show full content from blob");
+  }
+  if (!result.textLines?.truncatedClickPreview || !result.textLines?.truncatedClickKind || result.textLines?.truncatedNoVideo === false) {
+    failed.push("truncated long text should still preview on single click");
+  }
+  if (
+    !result.pinMove?.api ||
+    !result.pinMove?.pinnedFirst ||
+    !result.pinMove?.cardClass ||
+    !result.pinMove?.pinMark ||
+    !result.pinMove?.hasTopAct ||
+    !result.pinMove?.hasUnpinAct ||
+    !result.pinMove?.unpinnedAfterPins ||
+    !result.pinMove?.pinsStayTop ||
+    !result.pinMove?.unpinnedCleared ||
+    result.pinMove?.unpinClassGone === false
+  ) {
+    failed.push("memo pin / move-to-top should keep pinned items first");
   }
   if (!result.previewUi?.hasDel || !result.previewUi?.delVisible || !result.previewUi?.wideEnough) {
     failed.push("preview should expose delete and be list-wide");
@@ -1117,8 +1187,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/navpwa1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to navpwa1");
+  if (!/memopin1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memopin1");
   }
   if (!result.pwa?.hasManifestLink || !/manifest\.webmanifest/.test(result.pwa?.manifestHref || "")) {
     failed.push("PWA manifest link missing");

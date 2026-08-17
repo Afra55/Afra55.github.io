@@ -5613,6 +5613,24 @@ button.adb-device-body.linkish {
   animation: memo-card-saved 1.4s ease;
 }
 
+.memo-card.is-pinned {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
+.memo-pin-mark {
+  display: inline-block;
+  margin-right: 0.35rem;
+  padding: 0.05rem 0.38rem;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: 1px;
+  color: color-mix(in srgb, var(--accent) 75%, var(--ink));
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+}
+
 @keyframes memo-card-saved {
   0%,
   100% {
@@ -5797,6 +5815,13 @@ button.adb-device-body.linkish {
   scrollbar-width: none;
 }
 
+.memo-text:not(.is-truncated) {
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+  -webkit-user-drag: none;
+}
+
 .memo-text::-webkit-scrollbar {
   display: none;
   width: 0;
@@ -5805,6 +5830,9 @@ button.adb-device-body.linkish {
 
 .memo-text.is-truncated {
   position: relative;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .memo-text-more {
