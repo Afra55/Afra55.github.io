@@ -62,6 +62,7 @@ async function main() {
   });
 
   const page = await browser.newPage();
+  await page.setViewport({ width: 800, height: 600, isMobile: false });
   const errors = [];
   page.on("pageerror", (err) => errors.push(String(err.message || err)));
   page.on("console", (msg) => {
@@ -985,7 +986,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navfly1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navfly2/.test(s.src)),
     };
 
     out.pwa = {
@@ -1036,7 +1037,7 @@ async function main() {
         const pinnedPanel = current.querySelector(".nav-group-tools");
         out.navCompact.pinShows = Boolean(pinnedPanel) && getComputedStyle(pinnedPanel).display !== "none";
         const h1 = current.getBoundingClientRect().height;
-        out.navCompact.flyoutNoGrow = Math.abs(h1 - h0) < 4;
+        out.navCompact.mobileExpandsInFlow = h1 > h0 + 8;
         current.classList.remove("is-pinned");
       }
       if (other) {
@@ -1164,6 +1165,40 @@ async function main() {
       out.lastTool.err = String((err && err.message) || err);
     }
 
+    return out;
+  });
+
+  await page.setViewport({ width: 1280, height: 900, isMobile: false });
+  await new Promise((r) => setTimeout(r, 150));
+  result.navCompactDesktop = await page.evaluate(() => {
+    const out = { api: typeof window.DevToolsNav?.setCompact === "function" };
+    if (!out.api) return out;
+    window.DevToolsNav.setCompact(true);
+    const groups = [...document.querySelectorAll("#tool-nav .nav-group")];
+    const current = groups.find((g) => g.classList.contains("is-current"));
+    const other = groups.find((g) => !g.classList.contains("is-current"));
+    const curPanel = current?.querySelector(".nav-group-tools");
+    const othPanel = other?.querySelector(".nav-group-tools");
+    out.barCompact = document.getElementById("nav-bar")?.classList.contains("is-compact");
+    out.currentCollapsed = Boolean(curPanel) && getComputedStyle(curPanel).display === "none";
+    out.otherHidden = Boolean(othPanel) && getComputedStyle(othPanel).display === "none";
+    const h0 = current ? current.getBoundingClientRect().height : 0;
+    if (current) {
+      current.classList.add("is-pinned");
+      const pinnedPanel = current.querySelector(".nav-group-tools");
+      out.pinShows = Boolean(pinnedPanel) && getComputedStyle(pinnedPanel).display !== "none";
+      const h1 = current.getBoundingClientRect().height;
+      out.flyoutNoGrow = Math.abs(h1 - h0) < 4;
+      current.classList.remove("is-pinned");
+    }
+    if (other) {
+      other.classList.add("is-flyout-open");
+      const hoverPanel = other.querySelector(".nav-group-tools");
+      out.hoverShows = Boolean(hoverPanel) && getComputedStyle(hoverPanel).display !== "none";
+      other.classList.remove("is-flyout-open");
+    }
+    window.DevToolsNav.setCompact(false);
+    out.restored = !document.getElementById("nav-bar")?.classList.contains("is-compact");
     return out;
   });
 
@@ -1419,8 +1454,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/navfly1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to navfly1");
+  if (!/navfly2/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to navfly2");
   }
   if (!result.pwa?.hasManifestLink || !/manifest\.webmanifest/.test(result.pwa?.manifestHref || "")) {
     failed.push("PWA manifest link missing");
@@ -1455,11 +1490,23 @@ async function main() {
     !result.navCompact?.currentMarked ||
     !result.navCompact?.otherHidden ||
     !result.navCompact?.pinShows ||
-    !result.navCompact?.flyoutNoGrow ||
+    !result.navCompact?.mobileExpandsInFlow ||
     !result.navCompact?.hoverShows ||
     !result.navCompact?.restored
   ) {
-    failed.push("nav compact should mark current group without expanding until hover/pin");
+    failed.push("mobile nav compact should expand as an in-drawer accordion");
+  }
+  if (
+    !result.navCompactDesktop?.api ||
+    !result.navCompactDesktop?.barCompact ||
+    !result.navCompactDesktop?.currentCollapsed ||
+    !result.navCompactDesktop?.otherHidden ||
+    !result.navCompactDesktop?.pinShows ||
+    !result.navCompactDesktop?.flyoutNoGrow ||
+    !result.navCompactDesktop?.hoverShows ||
+    !result.navCompactDesktop?.restored
+  ) {
+    failed.push("desktop nav compact should keep using hover/pin flyouts");
   }
   if (
     !result.timeSelect?.has1 ||

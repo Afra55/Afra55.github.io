@@ -327,6 +327,41 @@ body.nav-sorting-tools .nav-bar {
   display: flex;
 }
 
+@media (max-width: 900px) {
+  .nav-bar.is-compact:not(.is-searching) .nav-group {
+    margin-bottom: 0.45rem;
+  }
+
+  .nav-bar.is-compact:not(.is-searching) .nav-group-tools {
+    position: static;
+    left: auto;
+    right: auto;
+    top: auto;
+    bottom: auto;
+    z-index: auto;
+    margin-top: 0.32rem;
+    padding: 0.24rem;
+    border-radius: 10px;
+    box-shadow: none;
+    background: color-mix(in srgb, var(--accent) 5%, var(--panel-strong));
+    max-height: none !important;
+  }
+
+  .nav-bar.is-compact:not(.is-searching) .nav-group.is-current > .nav-group-title::after,
+  .nav-bar.is-compact:not(.is-searching) .nav-group-title.is-sortable::after {
+    content: "展开";
+    float: right;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: var(--muted);
+  }
+
+  .nav-bar.is-compact:not(.is-searching) .nav-group.is-flyout-open > .nav-group-title::after,
+  .nav-bar.is-compact:not(.is-searching) .nav-group.is-pinned > .nav-group-title::after {
+    content: "收起";
+  }
+}
+
 .nav-sort-hint {
   margin: 0 0 0.55rem;
   font-size: 0.72rem;

@@ -1026,6 +1026,14 @@
     return Boolean(String(toolSearch?.value || "").trim());
   }
 
+  function compactNavOnMobile() {
+    try {
+      return window.matchMedia("(max-width: 900px)").matches;
+    } catch (_) {
+      return false;
+    }
+  }
+
   function canHoverNavFlyout(e) {
     if (!navCompact || compactNavSearching()) return false;
     if (document.body.classList.contains("nav-sorting") || document.body.classList.contains("nav-sorting-tools")) {
@@ -1042,6 +1050,15 @@
     const panel = wrap?.querySelector?.(".nav-group-tools");
     const title = wrap?.querySelector?.(".nav-group-title");
     if (!panel || !title || !navCompact || compactNavSearching()) return;
+    if (compactNavOnMobile()) {
+      wrap.classList.remove("is-flyout-up");
+      panel.style.maxHeight = "";
+      panel.style.width = "";
+      panel.style.left = "";
+      panel.style.top = "";
+      panel.style.bottom = "";
+      return;
+    }
     const scroller = navEl;
     const scrollerRect = scroller.getBoundingClientRect();
     const titleRect = title.getBoundingClientRect();
@@ -1064,6 +1081,7 @@
     $$(".nav-group", navEl).forEach((g) => {
       g.classList.remove("is-flyout-open", "is-flyout-up");
       if (!keepPinned) g.classList.remove("is-pinned");
+      g.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
     });
   }
 
@@ -1073,8 +1091,9 @@
     navFlyoutTimer = 0;
     $$(".nav-group", navEl).forEach((g) => {
       if (g === wrap) return;
-      g.classList.remove("is-flyout-open");
+      g.classList.remove("is-flyout-open", "is-flyout-up");
       if (pin) g.classList.remove("is-pinned");
+      g.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
     });
     if (pin) wrap.classList.add("is-pinned");
     wrap.classList.add("is-flyout-open");
