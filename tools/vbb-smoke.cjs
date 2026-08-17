@@ -753,6 +753,15 @@ async function main() {
     document.getElementById("vsplit-nudge-p01")?.click();
     await new Promise((r) => setTimeout(r, 40));
     const afterNudge = Number(video.currentTime) || 0;
+    const p1 = document.getElementById("vsplit-nudge-p1");
+    const beforeHold = Number(video.currentTime) || 0;
+    p1?.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, pointerId: 11, pointerType: "mouse", button: 0 })
+    );
+    await new Promise((r) => setTimeout(r, 520));
+    p1?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 11, pointerType: "mouse", button: 0 }));
+    await new Promise((r) => setTimeout(r, 40));
+    const nudgeHoldDelta = (Number(video.currentTime) || 0) - beforeHold;
     return {
       marks,
       ranges,
@@ -779,6 +788,7 @@ async function main() {
       editIdx: window.DevToolsVsplit?.getEditIdx?.(),
       scrubbedTime: Number(video.currentTime) || 0,
       nudgeDelta: afterNudge - beforeNudge,
+      nudgeHoldDelta,
       doneLabel: (document.getElementById("vsplit-edit-done")?.textContent || "").trim(),
     };
   });
@@ -909,6 +919,9 @@ async function main() {
   if (!(manualMarks.nudgeDelta > 0.05)) {
     throw new Error(`nudge +0.1s failed, delta=${manualMarks.nudgeDelta}`);
   }
+  if (!(manualMarks.nudgeHoldDelta > 0.9)) {
+    throw new Error(`nudge +1s hold repeat failed, delta=${manualMarks.nudgeHoldDelta}`);
+  }
   // 全屏打点：视频进全屏层、可打点、退出后回到预览区
   const fsMark = await pageMarks.evaluate(async () => {
     const video = document.getElementById("vsplit-video");
@@ -944,6 +957,25 @@ async function main() {
     document.getElementById("vsplit-fs-mark")?.click();
     await waitFrames(3);
     const afterFsStart = (document.getElementById("vsplit-fs-mark")?.textContent || "").trim();
+    const videoAfterMark = {
+      inHost: host?.contains(video),
+      visible: Boolean(video && video.offsetWidth > 8 && video.offsetHeight > 8),
+      hasFsClass: video?.classList.contains("is-fs"),
+    };
+    const bottomVisible = (() => {
+      const bottom = document.querySelector(".vsplit-fs-bottom");
+      const markBtn = document.getElementById("vsplit-fs-mark");
+      return Boolean(bottom && markBtn && bottom.offsetHeight > 8 && markBtn.offsetHeight > 8);
+    })();
+    await seekByScrub(0.55);
+    const videoAfterScrub = {
+      inHost: host?.contains(video),
+      visible: Boolean(video && video.offsetWidth > 8 && video.offsetHeight > 8),
+      hostHeight: host?.offsetHeight || 0,
+    };
+    const nudgeVisibleInFs = Boolean(
+      document.querySelector("#vsplit-fs-scrub-slot .vsplit-nudge-btns")?.offsetHeight
+    );
     const statusAfterStart = (document.getElementById("vsplit-fs-status")?.textContent || "").trim();
     const noteAfterStart = (document.getElementById("vsplit-fs-note")?.textContent || "").trim();
     const noteOn = document.getElementById("vsplit-fs-note")?.classList.contains("is-on");
@@ -1014,6 +1046,10 @@ async function main() {
       flashAfterEnd,
       flashEndColor,
       flashOnTop,
+      videoAfterMark,
+      bottomVisible,
+      videoAfterScrub,
+      nudgeVisibleInFs,
       editableDotsInFs,
       editAfterDotTap,
       markCount: marks.length,
@@ -1047,6 +1083,18 @@ async function main() {
   }
   if (!fsMark.flashAfterStart || !fsMark.flashStartColor || !fsMark.flashAfterEnd || !fsMark.flashEndColor || !fsMark.flashOnTop) {
     throw new Error(`fullscreen edge flash missing: ${JSON.stringify(fsMark)}`);
+  }
+  if (!fsMark.videoAfterMark?.visible || !fsMark.videoAfterMark?.inHost || !fsMark.videoAfterMark?.hasFsClass) {
+    throw new Error(`fullscreen video should stay visible after mark: ${JSON.stringify(fsMark.videoAfterMark)}`);
+  }
+  if (!fsMark.videoAfterScrub?.visible || !fsMark.videoAfterScrub?.inHost || !(fsMark.videoAfterScrub?.hostHeight > 40)) {
+    throw new Error(`scrub in fullscreen should not collapse video: ${JSON.stringify(fsMark.videoAfterScrub)}`);
+  }
+  if (!fsMark.bottomVisible) {
+    throw new Error(`fullscreen bottom controls should stay visible: ${JSON.stringify(fsMark)}`);
+  }
+  if (!fsMark.nudgeVisibleInFs) {
+    throw new Error(`fullscreen should show ±1 nudge buttons: ${JSON.stringify(fsMark)}`);
   }
   if (!(fsMark.markCount >= 3)) {
     throw new Error(`fullscreen should add a mark pair: ${JSON.stringify(fsMark)}`);

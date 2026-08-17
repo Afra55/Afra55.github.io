@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-navfly2";
+  const TOOLS_VERSION = "2026.08.17-vsplitfs2";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -5160,6 +5160,7 @@
         toast(message);
         return;
       }
+      ensureVsplitFsChromeVisible();
       paintVsplitFsChrome();
       buzzVsplitFs();
       if (vsplitFsFeedbackRaf) window.cancelAnimationFrame(vsplitFsFeedbackRaf);
@@ -5171,6 +5172,29 @@
         bumpVsplitFsStatus();
         showVsplitFsNote(message, kind);
       });
+    }
+
+    function ensureVsplitFsVideoSurface() {
+      if (!vsplitFsOpen || !vsplitVideo || !vsplitFsHost) return;
+      if (vsplitVideo.parentElement !== vsplitFsHost) {
+        if (vsplitFsFlash && vsplitFsFlash.parentElement === vsplitFsHost) {
+          vsplitFsHost.insertBefore(vsplitVideo, vsplitFsFlash);
+        } else {
+          vsplitFsHost.appendChild(vsplitVideo);
+        }
+      }
+      vsplitVideo.hidden = false;
+      vsplitVideo.classList.add("is-fs");
+      ensureVsplitFsFlashOnTop();
+    }
+
+    function ensureVsplitFsChromeVisible() {
+      if (!vsplitFsOpen || !vsplitFs) return;
+      vsplitFs.hidden = false;
+      vsplitFs.querySelector(".vsplit-fs-top")?.style && (vsplitFs.querySelector(".vsplit-fs-top").style.visibility = "");
+      vsplitFs.querySelector(".vsplit-fs-bottom")?.style &&
+        (vsplitFs.querySelector(".vsplit-fs-bottom").style.visibility = "");
+      ensureVsplitFsVideoSurface();
     }
 
     function enterVsplitFullscreen() {
@@ -5193,6 +5217,7 @@
       if (vsplitScrubBlock && vsplitFsScrubSlot && vsplitScrubBlock.parentElement !== vsplitFsScrubSlot) {
         vsplitFsScrubSlot.appendChild(vsplitScrubBlock);
       }
+      ensureVsplitFsVideoSurface();
       vsplitVideo.hidden = false;
       vsplitVideo.classList.add("is-fs");
       paintVsplitFsChrome();
@@ -5299,8 +5324,10 @@
       if (dur > 0) t = Math.max(0, Math.min(t, Math.max(0, dur - 0.001)));
       if (!opts.keepPlaying) pauseVsplitPreview();
       try {
-        vsplitVideo.currentTime = t;
+        if (typeof vsplitVideo.fastSeek === "function") vsplitVideo.fastSeek(t);
+        else vsplitVideo.currentTime = t;
       } catch (_) {}
+      if (vsplitFsOpen) ensureVsplitFsVideoSurface();
       if (!opts.fromScrub) syncVsplitScrubFromVideo();
       paintVsplitNow();
     }
@@ -5331,6 +5358,7 @@
       pauseVsplitPreview();
       const t = scrubValueToTime(vsplitScrub.value);
       seekVsplitPreview(t, { fromScrub: true });
+      if (vsplitFsOpen) ensureVsplitFsChromeVisible();
       if (vsplitManualNow) {
         const dur = vsplitVideoDuration();
         vsplitManualNow.textContent = `${formatClock(t)} / ${formatClock(dur)}`;
@@ -5346,6 +5374,10 @@
       scrubGesture.pointerId = null;
       syncVsplitScrubFromVideo();
       if (vsplitEditIdx >= 0) applyScrubToEditFocus({ silent: true });
+      if (vsplitFsOpen) {
+        ensureVsplitFsChromeVisible();
+        paintVsplitScrubMarks();
+      }
       paintVsplitNow();
       paintScrubHint();
     }
@@ -5716,6 +5748,7 @@
 
     function paintVsplitScrubMarks() {
       if (!vsplitScrubMarks) return;
+      if (vsplitFsOpen && vsplitScrubbing) return;
       if (vsplitMode !== "manual") {
         vsplitScrubMarks.innerHTML = "";
         paintVsplitMarkChips();
@@ -5958,14 +5991,16 @@
     function flushVsplitMarkPaint() {
       try {
         if (vsplitFsOpen) {
+          ensureVsplitFsChromeVisible();
           // 全屏：文案立刻更新；圆点合并到下一帧，避开与闪层反馈抢主线程
           paintVsplitDraft();
           paintVsplitNow();
           setVsplitButtons();
+          if (vsplitScrubbing) return;
           if (!vsplitFsScrubPaintRaf) {
             vsplitFsScrubPaintRaf = requestAnimationFrame(() => {
               vsplitFsScrubPaintRaf = 0;
-              if (!vsplitFsOpen) return;
+              if (!vsplitFsOpen || vsplitScrubbing) return;
               paintVsplitScrubMarks();
             });
           }
@@ -6719,10 +6754,42 @@
       paintVsplitDraft();
       paintVsplitScrubMarks();
     });
-    vsplitNudgeM1?.addEventListener("click", () => nudgeVsplitPreview(-1));
+    function bindVsplitNudgeRepeat(btn, delta) {
+      if (!btn) return;
+      let holdTimer = 0;
+      let repeatTimer = 0;
+      const stop = () => {
+        if (holdTimer) window.clearTimeout(holdTimer);
+        if (repeatTimer) window.clearInterval(repeatTimer);
+        holdTimer = 0;
+        repeatTimer = 0;
+      };
+      const tick = () => {
+        if (btn.disabled) {
+          stop();
+          return;
+        }
+        nudgeVsplitPreview(delta);
+      };
+      btn.addEventListener("pointerdown", (e) => {
+        if (btn.disabled) return;
+        if (e.button != null && e.button !== 0) return;
+        e.preventDefault();
+        tick();
+        holdTimer = window.setTimeout(() => {
+          holdTimer = 0;
+          repeatTimer = window.setInterval(tick, 110);
+        }, 320);
+      });
+      btn.addEventListener("pointerup", stop);
+      btn.addEventListener("pointerleave", stop);
+      btn.addEventListener("pointercancel", stop);
+    }
+
+    bindVsplitNudgeRepeat(vsplitNudgeM1, -1);
+    bindVsplitNudgeRepeat(vsplitNudgeP1, 1);
     vsplitNudgeM01?.addEventListener("click", () => nudgeVsplitPreview(-0.1));
     vsplitNudgeP01?.addEventListener("click", () => nudgeVsplitPreview(0.1));
-    vsplitNudgeP1?.addEventListener("click", () => nudgeVsplitPreview(1));
     vsplitScrub?.addEventListener("pointerdown", (ev) => beginScrubGesture(ev));
     vsplitScrub?.addEventListener("pointermove", (ev) => moveScrubGesture(ev));
     vsplitScrub?.addEventListener("input", () => onVsplitScrubInput());
