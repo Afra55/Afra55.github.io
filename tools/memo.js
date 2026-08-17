@@ -1557,25 +1557,8 @@
     itemList.dataset.virtEnd = "";
     const limit = Math.max(PAGE_SIZE, state.listLimit || PAGE_SIZE);
     const page = items.slice(0, limit);
-    const useGroups =
-      state.activeType === "all" && !String(state.searchQuery || "").trim() && items.length <= PAGE_SIZE;
-    if (useGroups) {
-      const order = ["text", "image", "gif", "video", "audio", "file"];
-      const groups = order
-        .map((type) => ({ type, items: page.filter((it) => it.type === type) }))
-        .filter((g) => g.items.length);
-      itemList.innerHTML = groups
-        .map(
-          (g) =>
-            `<section class="memo-type-group" data-memo-type-group="${g.type}">
-              <h3 class="memo-type-group-title">${TYPE_LABELS[g.type] || g.type}<span class="mono memo-tag-count">${g.items.length}</span></h3>
-              <div class="memo-type-group-list">${g.items.map(itemCardHtml).join("")}</div>
-            </section>`
-        )
-        .join("");
-    } else {
-      itemList.innerHTML = page.map(itemCardHtml).join("");
-    }
+    // 统一按入库顺序平铺：最新在上，不再按文本/图片等分类分组
+    itemList.innerHTML = page.map(itemCardHtml).join("");
     renderListMeta(items.length, page.length);
     if (moreRow) {
       const hasMore = page.length < items.length;
