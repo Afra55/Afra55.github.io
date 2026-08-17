@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-vsplitfsdot";
+  const TOOLS_VERSION = "2026.08.17-vsplitfsnudge";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -6786,40 +6786,87 @@
     });
     function bindVsplitNudgeRepeat(btn, delta) {
       if (!btn) return;
+      const step = Math.abs(Number(delta) || 0);
+      const isFine = step > 0 && step <= 0.15;
+      const holdDelay = isFine ? 560 : 500;
+      const repeatMs = isFine ? 220 : 130;
       let holdTimer = 0;
       let repeatTimer = 0;
+      let holding = false;
+      let lastStartAt = 0;
+      let lastTickAt = 0;
+      btn.style.webkitUserSelect = "none";
+      btn.style.userSelect = "none";
+      btn.style.webkitTouchCallout = "none";
       const stop = () => {
         if (holdTimer) window.clearTimeout(holdTimer);
         if (repeatTimer) window.clearInterval(repeatTimer);
         holdTimer = 0;
         repeatTimer = 0;
+        holding = false;
       };
       const tick = () => {
         if (btn.disabled) {
           stop();
           return;
         }
+        const now = Date.now();
+        // iOS 上 touchstart + pointerdown 会各来一次，合并成一步
+        if (lastTickAt && now - lastTickAt < 90) return;
+        lastTickAt = now;
         nudgeVsplitPreview(delta);
       };
-      btn.addEventListener("pointerdown", (e) => {
-        if (btn.disabled) return;
-        if (e.button != null && e.button !== 0) return;
-        e.preventDefault();
+      const start = () => {
+        if (holding || btn.disabled) return;
+        holding = true;
+        lastStartAt = Date.now();
+        window.getSelection?.()?.removeAllRanges?.();
         tick();
         holdTimer = window.setTimeout(() => {
           holdTimer = 0;
-          repeatTimer = window.setInterval(tick, 110);
-        }, 320);
-      });
+          if (!holding || btn.disabled) return;
+          repeatTimer = window.setInterval(tick, repeatMs);
+        }, holdDelay);
+      };
+      const onPointerDown = (e) => {
+        if (e.pointerType === "mouse" && e.button != null && e.button !== 0) return;
+        e.preventDefault();
+        start();
+      };
+      const onTouchStart = (e) => {
+        // 拦 iOS 选字。pointer 可能随后才到，这里也允许起步；holding/合并计步保证只走一次
+        e.preventDefault();
+        start();
+      };
+      btn.addEventListener("pointerdown", onPointerDown, { passive: false });
       btn.addEventListener("pointerup", stop);
-      btn.addEventListener("pointerleave", stop);
       btn.addEventListener("pointercancel", stop);
+      btn.addEventListener("touchstart", onTouchStart, { passive: false });
+      btn.addEventListener("touchend", stop);
+      btn.addEventListener("touchcancel", stop);
+      btn.addEventListener(
+        "touchmove",
+        (e) => {
+          if (!holding) return;
+          e.preventDefault();
+        },
+        { passive: false }
+      );
+      btn.addEventListener("contextmenu", (e) => e.preventDefault());
+      btn.addEventListener("selectstart", (e) => e.preventDefault());
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (holding) return;
+        if (lastStartAt && Date.now() - lastStartAt < 800) return;
+        if (btn.disabled) return;
+        tick();
+      });
     }
 
     bindVsplitNudgeRepeat(vsplitNudgeM1, -1);
+    bindVsplitNudgeRepeat(vsplitNudgeM01, -0.1);
+    bindVsplitNudgeRepeat(vsplitNudgeP01, 0.1);
     bindVsplitNudgeRepeat(vsplitNudgeP1, 1);
-    vsplitNudgeM01?.addEventListener("click", () => nudgeVsplitPreview(-0.1));
-    vsplitNudgeP01?.addEventListener("click", () => nudgeVsplitPreview(0.1));
     vsplitScrub?.addEventListener("pointerdown", (ev) => beginScrubGesture(ev));
     vsplitScrub?.addEventListener("pointermove", (ev) => moveScrubGesture(ev));
     vsplitScrub?.addEventListener("input", () => onVsplitScrubInput());

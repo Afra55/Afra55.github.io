@@ -571,6 +571,15 @@ async function main() {
       videoMuted: Boolean(document.getElementById("vsplit-video")?.muted),
       tapLabel: (document.getElementById("vsplit-mark-tap")?.textContent || "").trim(),
       hasNudge: Boolean(document.getElementById("vsplit-nudge-m01")),
+      nudgeNoSelect: (() => {
+        const btn = document.getElementById("vsplit-nudge-p1");
+        if (!btn) return false;
+        const cs = getComputedStyle(btn);
+        const select = String(cs.userSelect || cs.webkitUserSelect || "").toLowerCase();
+        const callout = String(cs.webkitTouchCallout || "").toLowerCase();
+        const touch = String(cs.touchAction || "").toLowerCase();
+        return select.includes("none") && touch.includes("none") && (callout === "none" || callout === "");
+      })(),
       hasScrubMarks: Boolean(document.getElementById("vsplit-scrub-marks")),
       hasMarkChips: Boolean(document.getElementById("vsplit-mark-chips")),
       hasMarkPicker: Boolean(document.getElementById("vsplit-mark-picker")),
@@ -603,6 +612,9 @@ async function main() {
   }
   if (!manualUi.hasPlay || !manualUi.hasNudge || manualUi.tapLabel !== "打起点") {
     throw new Error(`play/nudge/tap missing: ${JSON.stringify(manualUi)}`);
+  }
+  if (!manualUi.nudgeNoSelect) {
+    throw new Error(`nudge buttons should disable iOS text select: ${JSON.stringify(manualUi)}`);
   }
   if (!manualUi.hasMute || !manualUi.hasFsMute) {
     throw new Error(`mute toggle missing: ${JSON.stringify(manualUi)}`);
@@ -753,15 +765,49 @@ async function main() {
     document.getElementById("vsplit-nudge-p01")?.click();
     await new Promise((r) => setTimeout(r, 40));
     const afterNudge = Number(video.currentTime) || 0;
+    await seekByScrub(0.5);
+    const m01 = document.getElementById("vsplit-nudge-m01");
+    const beforeTap01 = Number(video.currentTime) || 0;
+    m01?.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, pointerId: 9, pointerType: "touch", button: 0 })
+    );
+    m01?.dispatchEvent(new Event("touchstart", { bubbles: true, cancelable: true }));
+    await new Promise((r) => setTimeout(r, 180));
+    m01?.dispatchEvent(new Event("touchend", { bubbles: true, cancelable: true }));
+    m01?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 9, pointerType: "touch", button: 0 }));
+    await new Promise((r) => setTimeout(r, 40));
+    const nudgeTap01Delta = (Number(video.currentTime) || 0) - beforeTap01;
     const p1 = document.getElementById("vsplit-nudge-p1");
     const beforeHold = Number(video.currentTime) || 0;
     p1?.dispatchEvent(
       new PointerEvent("pointerdown", { bubbles: true, pointerId: 11, pointerType: "mouse", button: 0 })
     );
-    await new Promise((r) => setTimeout(r, 520));
+    await new Promise((r) => setTimeout(r, 780));
     p1?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 11, pointerType: "mouse", button: 0 }));
     await new Promise((r) => setTimeout(r, 40));
     const nudgeHoldDelta = (Number(video.currentTime) || 0) - beforeHold;
+    await seekByScrub(0.35);
+    const p01 = document.getElementById("vsplit-nudge-p01");
+    const beforeHold01 = Number(video.currentTime) || 0;
+    p01?.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, pointerId: 12, pointerType: "mouse", button: 0 })
+    );
+    await new Promise((r) => setTimeout(r, 980));
+    p01?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 12, pointerType: "mouse", button: 0 }));
+    await new Promise((r) => setTimeout(r, 40));
+    const nudgeHold01Delta = (Number(video.currentTime) || 0) - beforeHold01;
+    let touchPrevented = false;
+    try {
+      const te = new TouchEvent("touchstart", { bubbles: true, cancelable: true });
+      m01?.dispatchEvent(te);
+      touchPrevented = Boolean(te.defaultPrevented);
+      m01?.dispatchEvent(new TouchEvent("touchend", { bubbles: true, cancelable: true }));
+    } catch (_) {
+      const ev = new Event("touchstart", { bubbles: true, cancelable: true });
+      m01?.dispatchEvent(ev);
+      touchPrevented = Boolean(ev.defaultPrevented);
+      m01?.dispatchEvent(new Event("touchend", { bubbles: true, cancelable: true }));
+    }
     return {
       marks,
       ranges,
@@ -788,7 +834,10 @@ async function main() {
       editIdx: window.DevToolsVsplit?.getEditIdx?.(),
       scrubbedTime: Number(video.currentTime) || 0,
       nudgeDelta: afterNudge - beforeNudge,
+      nudgeTap01Delta,
       nudgeHoldDelta,
+      nudgeHold01Delta,
+      touchPrevented,
       doneLabel: (document.getElementById("vsplit-edit-done")?.textContent || "").trim(),
     };
   });
@@ -919,8 +968,17 @@ async function main() {
   if (!(manualMarks.nudgeDelta > 0.05)) {
     throw new Error(`nudge +0.1s failed, delta=${manualMarks.nudgeDelta}`);
   }
+  if (!(manualMarks.nudgeTap01Delta < -0.05) || !(manualMarks.nudgeTap01Delta > -0.18)) {
+    throw new Error(`nudge -0.1s tap should be one step, delta=${manualMarks.nudgeTap01Delta}`);
+  }
   if (!(manualMarks.nudgeHoldDelta > 0.9)) {
     throw new Error(`nudge +1s hold repeat failed, delta=${manualMarks.nudgeHoldDelta}`);
+  }
+  if (!(manualMarks.nudgeHold01Delta > 0.15)) {
+    throw new Error(`nudge +0.1s hold repeat failed, delta=${manualMarks.nudgeHold01Delta}`);
+  }
+  if (!manualMarks.touchPrevented) {
+    throw new Error(`nudge touchstart should preventDefault to block iOS selection: ${JSON.stringify(manualMarks)}`);
   }
   // 全屏打点：视频进全屏层、可打点、退出后回到预览区
   const fsMark = await pageMarks.evaluate(async () => {
