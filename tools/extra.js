@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-vsplitnudge2";
+  const TOOLS_VERSION = "2026.08.17-vsplitfsnudge";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -5773,15 +5773,32 @@
           (editable ? " is-editable" : "");
         const pct = Math.max(0, Math.min(100, (Number(t) / dur) * 100));
         dot.style.left = `${pct}%`;
+        dot.dataset.t = String(t);
+        if (idx >= 0) dot.dataset.idx = String(idx);
         if (active || picked) dot.style.zIndex = "5";
         const label = kind === "start" ? "起点" : "终点";
-        dot.setAttribute(
-          "aria-label",
-          idx >= 0
-            ? `${picked ? "当前点到 · " : ""}选中第 ${idx + 1} 段${label}`
-            : label
-        );
-        if (editable && idx >= 0) {
+        const jumpToDot = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          seekVsplitPreview(t, { keepPlaying: true });
+        };
+        if (vsplitFsOpen) {
+          dot.classList.add("is-jump");
+          dot.setAttribute(
+            "aria-label",
+            idx >= 0 ? `跳到第 ${idx + 1} 段${label}` : `跳到${label}`
+          );
+          dot.addEventListener("pointerdown", (e) => {
+            if (e.button != null && e.button !== 0) return;
+            e.stopPropagation();
+            seekVsplitPreview(t, { keepPlaying: true });
+          });
+          dot.addEventListener("click", jumpToDot);
+        } else if (editable && idx >= 0) {
+          dot.setAttribute(
+            "aria-label",
+            `${picked ? "当前点到 · " : ""}选中第 ${idx + 1} 段${label}`
+          );
           dot.addEventListener("pointerdown", (e) => {
             e.stopPropagation();
           });
@@ -5808,7 +5825,7 @@
         frag.appendChild(dot);
       };
 
-      /* 全屏圆点只作预览，禁止点选进编辑 */
+      /* 全屏圆点只跳进度，不进编辑 */
       const canEditDots = !vsplitBusy && !vsplitFsOpen;
       if (vsplitEditIdx >= 0) {
         const mark = vsplitMarks[vsplitEditIdx];
@@ -6100,9 +6117,20 @@
       tapVsplitMark();
     }
 
+    function seekToLatestVsplitMark() {
+      let t = 0;
+      if (vsplitDraftStart != null) t = vsplitDraftStart;
+      else {
+        const last = vsplitMarks[vsplitMarks.length - 1];
+        if (last) t = last.end != null ? last.end : last.start != null ? last.start : 0;
+      }
+      seekVsplitPreview(t, { keepPlaying: true });
+    }
+
     function undoVsplitDraft() {
       vsplitDraftStart = null;
       flushVsplitMarkPaint();
+      seekToLatestVsplitMark();
       notifyVsplitMarkFeedback("已取消起点", "start");
     }
 
@@ -6129,6 +6157,7 @@
         vsplitDraftStart = start;
         invalidateVsplitOutputsFromMarks();
         flushVsplitMarkPaint();
+        seekToLatestVsplitMark();
         notifyVsplitMarkFeedback(`已取消终点 · 起点保留 ${formatClock(start)}`, "start");
         return;
       }
@@ -6136,6 +6165,7 @@
       vsplitMarks.splice(lastIdx, 1);
       invalidateVsplitOutputsFromMarks();
       flushVsplitMarkPaint();
+      seekToLatestVsplitMark();
       notifyVsplitMarkFeedback("已取消起点", "start");
     }
 
