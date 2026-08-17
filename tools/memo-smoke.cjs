@@ -62,6 +62,7 @@ async function main() {
   });
 
   const page = await browser.newPage();
+  await page.setViewport({ width: 800, height: 600, isMobile: false });
   const errors = [];
   page.on("pageerror", (err) => errors.push(String(err.message || err)));
   page.on("console", (msg) => {
@@ -985,7 +986,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navlast1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navfly2/.test(s.src)),
     };
 
     out.pwa = {
@@ -1024,16 +1025,26 @@ async function main() {
       const groups = [...document.querySelectorAll("#tool-nav .nav-group")];
       const current = groups.find((g) => g.classList.contains("is-current"));
       const other = groups.find((g) => !g.classList.contains("is-current"));
-      const curLink = current?.querySelector(".tool-nav-link");
-      const othLink = other?.querySelector(".tool-nav-link");
+      const curPanel = current?.querySelector(".nav-group-tools");
+      const othPanel = other?.querySelector(".nav-group-tools");
       out.navCompact.barCompact = document.getElementById("nav-bar")?.classList.contains("is-compact");
-      out.navCompact.currentOpen = Boolean(curLink) && getComputedStyle(curLink).display !== "none";
-      out.navCompact.otherHidden = Boolean(othLink) && getComputedStyle(othLink).display === "none";
+      out.navCompact.currentCollapsed = Boolean(curPanel) && getComputedStyle(curPanel).display === "none";
+      out.navCompact.currentMarked = Boolean(current);
+      out.navCompact.otherHidden = Boolean(othPanel) && getComputedStyle(othPanel).display === "none";
+      const h0 = current ? current.getBoundingClientRect().height : 0;
+      if (current) {
+        current.classList.add("is-pinned");
+        const pinnedPanel = current.querySelector(".nav-group-tools");
+        out.navCompact.pinShows = Boolean(pinnedPanel) && getComputedStyle(pinnedPanel).display !== "none";
+        const h1 = current.getBoundingClientRect().height;
+        out.navCompact.mobileExpandsInFlow = h1 > h0 + 8;
+        current.classList.remove("is-pinned");
+      }
       if (other) {
-        other.classList.add("is-pinned");
-        const pinnedLink = other.querySelector(".tool-nav-link");
-        out.navCompact.pinShows = Boolean(pinnedLink) && getComputedStyle(pinnedLink).display !== "none";
-        other.classList.remove("is-pinned");
+        other.classList.add("is-flyout-open");
+        const hoverPanel = other.querySelector(".nav-group-tools");
+        out.navCompact.hoverShows = Boolean(hoverPanel) && getComputedStyle(hoverPanel).display !== "none";
+        other.classList.remove("is-flyout-open");
       }
       window.DevToolsNav.setCompact(false);
       out.navCompact.restored = !document.getElementById("nav-bar")?.classList.contains("is-compact");
@@ -1071,6 +1082,35 @@ async function main() {
       top: Boolean(moreCard?.querySelector(".memo-more [data-memo-top]")),
       pin: Boolean(moreCard?.querySelector(".memo-more [data-memo-pin]")),
     };
+
+    out.timeSelect = {
+      has1: Boolean(document.querySelector('[data-memo-sel-hours="1"]')),
+      has3: Boolean(document.querySelector('[data-memo-sel-hours="3"]')),
+      has5: Boolean(document.querySelector('[data-memo-sel-hours="5"]')),
+      hasToday: Boolean(document.querySelector("[data-memo-sel-today]")),
+      hasRange: Boolean(document.getElementById("memo-sel-range") && document.getElementById("memo-sel-range-btn")),
+      api: typeof window.DevToolsMemo.selectVisibleLastHours === "function",
+    };
+    if (out.timeSelect.api) {
+      const n = window.DevToolsMemo.selectVisibleLastHours(1);
+      out.timeSelect.picked = n > 0;
+      window.DevToolsMemo.selectVisibleByCreatedRange(0, -1);
+    }
+
+    out.batchPinWarn = { api: typeof window.DevToolsMemo.batchDeleteConfirmMessage === "function" };
+    if (out.batchPinWarn.api) {
+      const rows = window.DevToolsMemo.getIndex().items || [];
+      const a = rows[0];
+      const b = rows[1];
+      if (a && b) {
+        await window.DevToolsMemo.setItemPinned(a.id, true);
+        const msg = window.DevToolsMemo.batchDeleteConfirmMessage([a.id, b.id]);
+        out.batchPinWarn.hasPinned = /已置顶/.test(msg) && /2 条/.test(msg);
+        const single = window.DevToolsMemo.batchDeleteConfirmMessage([a.id]);
+        out.batchPinWarn.singlePlain = !/已置顶/.test(single);
+        await window.DevToolsMemo.setItemPinned(a.id, false);
+      }
+    }
 
     const installBtn = document.getElementById("pwa-install");
     out.pwa.standaloneApi = typeof window.DevToolsPwa?.isStandalone === "function";
@@ -1128,6 +1168,40 @@ async function main() {
     return out;
   });
 
+  await page.setViewport({ width: 1280, height: 900, isMobile: false });
+  await new Promise((r) => setTimeout(r, 150));
+  result.navCompactDesktop = await page.evaluate(() => {
+    const out = { api: typeof window.DevToolsNav?.setCompact === "function" };
+    if (!out.api) return out;
+    window.DevToolsNav.setCompact(true);
+    const groups = [...document.querySelectorAll("#tool-nav .nav-group")];
+    const current = groups.find((g) => g.classList.contains("is-current"));
+    const other = groups.find((g) => !g.classList.contains("is-current"));
+    const curPanel = current?.querySelector(".nav-group-tools");
+    const othPanel = other?.querySelector(".nav-group-tools");
+    out.barCompact = document.getElementById("nav-bar")?.classList.contains("is-compact");
+    out.currentCollapsed = Boolean(curPanel) && getComputedStyle(curPanel).display === "none";
+    out.otherHidden = Boolean(othPanel) && getComputedStyle(othPanel).display === "none";
+    const h0 = current ? current.getBoundingClientRect().height : 0;
+    if (current) {
+      current.classList.add("is-pinned");
+      const pinnedPanel = current.querySelector(".nav-group-tools");
+      out.pinShows = Boolean(pinnedPanel) && getComputedStyle(pinnedPanel).display !== "none";
+      const h1 = current.getBoundingClientRect().height;
+      out.flyoutNoGrow = Math.abs(h1 - h0) < 4;
+      current.classList.remove("is-pinned");
+    }
+    if (other) {
+      other.classList.add("is-flyout-open");
+      const hoverPanel = other.querySelector(".nav-group-tools");
+      out.hoverShows = Boolean(hoverPanel) && getComputedStyle(hoverPanel).display !== "none";
+      other.classList.remove("is-flyout-open");
+    }
+    window.DevToolsNav.setCompact(false);
+    out.restored = !document.getElementById("nav-bar")?.classList.contains("is-compact");
+    return out;
+  });
+
   await browser.close();
   await new Promise((r) => server.close(r));
 
@@ -1135,7 +1209,7 @@ async function main() {
   if (errors.length) failed.push(...errors.map((e) => `page: ${e}`));
   if (!result.panelActive) failed.push("memo panel not active");
   if (!result.hasEditor || !result.hasList) failed.push("missing editor/list");
-  if (!/memo|theme|vsplit|vtrim|audio|ffb|ffadapt|setup|btnsize|memoux|imgzoom|vsfsjank|pwa|navpwa|memopin|navfoot|navlast/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memo|theme|vsplit|vtrim|audio|ffb|ffadapt|setup|btnsize|memoux|imgzoom|vsfsjank|pwa|navpwa|memopin|navfoot|navlast|navfly/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1380,8 +1454,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/navlast1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to navlast1");
+  if (!/navfly2/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to navfly2");
   }
   if (!result.pwa?.hasManifestLink || !/manifest\.webmanifest/.test(result.pwa?.manifestHref || "")) {
     failed.push("PWA manifest link missing");
@@ -1412,12 +1486,41 @@ async function main() {
     !result.navCompact?.defaultOff ||
     !result.navCompact?.api ||
     !result.navCompact?.barCompact ||
-    !result.navCompact?.currentOpen ||
+    !result.navCompact?.currentCollapsed ||
+    !result.navCompact?.currentMarked ||
     !result.navCompact?.otherHidden ||
     !result.navCompact?.pinShows ||
+    !result.navCompact?.mobileExpandsInFlow ||
+    !result.navCompact?.hoverShows ||
     !result.navCompact?.restored
   ) {
-    failed.push("nav compact setting should hide other groups until hover/pin");
+    failed.push("mobile nav compact should expand as an in-drawer accordion");
+  }
+  if (
+    !result.navCompactDesktop?.api ||
+    !result.navCompactDesktop?.barCompact ||
+    !result.navCompactDesktop?.currentCollapsed ||
+    !result.navCompactDesktop?.otherHidden ||
+    !result.navCompactDesktop?.pinShows ||
+    !result.navCompactDesktop?.flyoutNoGrow ||
+    !result.navCompactDesktop?.hoverShows ||
+    !result.navCompactDesktop?.restored
+  ) {
+    failed.push("desktop nav compact should keep using hover/pin flyouts");
+  }
+  if (
+    !result.timeSelect?.has1 ||
+    !result.timeSelect?.has3 ||
+    !result.timeSelect?.has5 ||
+    !result.timeSelect?.hasToday ||
+    !result.timeSelect?.hasRange ||
+    !result.timeSelect?.api ||
+    !result.timeSelect?.picked
+  ) {
+    failed.push("memo time-range select chips should check visible items without deleting");
+  }
+  if (!result.batchPinWarn?.api || !result.batchPinWarn?.hasPinned || !result.batchPinWarn?.singlePlain) {
+    failed.push("batch delete should mention pinned items when the selection includes them");
   }
   if (
     !result.navFooter?.hasClear ||

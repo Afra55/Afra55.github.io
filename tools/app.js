@@ -1020,20 +1020,116 @@
     return currentTool === "media" ? currentMediaTab : currentTool;
   }
 
+  let navFlyoutTimer = 0;
+
+  function compactNavSearching() {
+    return Boolean(String(toolSearch?.value || "").trim());
+  }
+
+  function compactNavOnMobile() {
+    try {
+      return window.matchMedia("(max-width: 900px)").matches;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function canHoverNavFlyout(e) {
+    if (!navCompact || compactNavSearching()) return false;
+    if (document.body.classList.contains("nav-sorting") || document.body.classList.contains("nav-sorting-tools")) {
+      return false;
+    }
+    if (e?.pointerType && e.pointerType !== "mouse") return false;
+    try {
+      if (window.matchMedia && !window.matchMedia("(hover: hover) and (pointer: fine)").matches) return false;
+    } catch (_) {}
+    return true;
+  }
+
+  function positionNavFlyout(wrap) {
+    const panel = wrap?.querySelector?.(".nav-group-tools");
+    const title = wrap?.querySelector?.(".nav-group-title");
+    if (!panel || !title || !navCompact || compactNavSearching()) return;
+    if (compactNavOnMobile()) {
+      wrap.classList.remove("is-flyout-up");
+      panel.style.maxHeight = "";
+      panel.style.width = "";
+      panel.style.left = "";
+      panel.style.top = "";
+      panel.style.bottom = "";
+      return;
+    }
+    const scroller = navEl;
+    const scrollerRect = scroller.getBoundingClientRect();
+    const titleRect = title.getBoundingClientRect();
+    const gap = 8;
+    const spaceBelow = scrollerRect.bottom - titleRect.bottom - gap;
+    const spaceAbove = titleRect.top - scrollerRect.top - gap;
+    const openUp = spaceBelow < 132 && spaceAbove > spaceBelow;
+    wrap.classList.toggle("is-flyout-up", openUp);
+    panel.style.maxHeight = `${Math.round(Math.min(280, Math.max(96, openUp ? spaceAbove : spaceBelow)))}px`;
+    panel.style.width = "";
+    panel.style.left = "";
+    panel.style.top = "";
+    panel.style.bottom = "";
+  }
+
+  function closeNavFlyouts({ keepPinned = false } = {}) {
+    window.clearTimeout(navFlyoutTimer);
+    navFlyoutTimer = 0;
+    if (!navEl) return;
+    $$(".nav-group", navEl).forEach((g) => {
+      g.classList.remove("is-flyout-open", "is-flyout-up");
+      if (!keepPinned) g.classList.remove("is-pinned");
+      g.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
+    });
+  }
+
+  function openNavFlyout(wrap, { pin = false } = {}) {
+    if (!wrap || !navCompact || compactNavSearching()) return;
+    window.clearTimeout(navFlyoutTimer);
+    navFlyoutTimer = 0;
+    $$(".nav-group", navEl).forEach((g) => {
+      if (g === wrap) return;
+      g.classList.remove("is-flyout-open", "is-flyout-up");
+      if (pin) g.classList.remove("is-pinned");
+      g.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
+    });
+    if (pin) wrap.classList.add("is-pinned");
+    wrap.classList.add("is-flyout-open");
+    wrap.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "true");
+    positionNavFlyout(wrap);
+  }
+
+  function scheduleCloseNavFlyout(wrap) {
+    window.clearTimeout(navFlyoutTimer);
+    navFlyoutTimer = window.setTimeout(() => {
+      navFlyoutTimer = 0;
+      if (!wrap || wrap.classList.contains("is-pinned")) return;
+      wrap.classList.remove("is-flyout-open");
+      wrap.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
+    }, 200);
+  }
+
   function syncNavCompactUi() {
     if (!navBar) return;
     navBar.classList.toggle("is-compact", navCompact);
-    const searching = Boolean(String(toolSearch?.value || "").trim());
+    const searching = compactNavSearching();
     navBar.classList.toggle("is-searching", searching);
     const compactToggle = $("#nav-compact");
     if (compactToggle) compactToggle.checked = navCompact;
     if (!navEl) return;
+    if (!navCompact || searching) closeNavFlyouts();
     const currentId = currentNavToolId();
     $$(".nav-group", navEl).forEach((g) => {
       const ids = [...g.querySelectorAll(".tool-nav-link")].map((a) => a.dataset.tool);
       const isCurrent = ids.includes(currentId);
       g.classList.toggle("is-current", isCurrent);
-      if (isCurrent) g.classList.remove("is-pinned");
+      const title = g.querySelector(".nav-group-title");
+      if (title) {
+        const open = g.classList.contains("is-pinned") || g.classList.contains("is-flyout-open");
+        title.setAttribute("aria-expanded", navCompact && !searching ? (open ? "true" : "false") : "true");
+      }
     });
   }
 
@@ -1125,11 +1221,14 @@
       const title = document.createElement("p");
       title.className = "nav-group-title is-sortable";
       title.textContent = group.label;
+      title.setAttribute("aria-expanded", "true");
       title.draggable = allowHtml5Drag;
       title.title = allowHtml5Drag
         ? "拖动分类可调整整组顺序"
         : "长按分类标题后拖动，可调整整组顺序";
       wrap.appendChild(title);
+      const toolsWrap = document.createElement("div");
+      toolsWrap.className = "nav-group-tools";
       tools.forEach((id) => {
         if (!isNavToolVisible(id)) return;
         const a = document.createElement("a");
@@ -1139,8 +1238,9 @@
         a.draggable = allowHtml5Drag;
         a.title = allowHtml5Drag ? "拖动可调整工具顺序" : "长按工具名后拖动，可调整顺序";
         a.textContent = toolName(id);
-        wrap.appendChild(a);
+        toolsWrap.appendChild(a);
       });
+      wrap.appendChild(toolsWrap);
       if (![...wrap.querySelectorAll(".tool-nav-link")].length) return;
       navEl.appendChild(wrap);
     });
@@ -1342,11 +1442,11 @@
       currentTool === "about" ? "DevTools · 本地实用小工具合集" : `${title} · DevTools`;
 
     getNavLinks().forEach((link) => {
-      const id = link.dataset.tool;
-      const on = currentTool === "media" ? id === currentMediaTab : id === currentTool;
+      const on = currentTool === "media" ? link.dataset.tool === currentMediaTab : link.dataset.tool === currentTool;
       link.classList.toggle("is-active", on);
       link.setAttribute("aria-current", on ? "page" : "false");
     });
+    closeNavFlyouts();
     syncNavCompactUi();
 
     if (!skipRecent) pushRecent(currentTool === "media" ? currentMediaTab : currentTool);
@@ -1641,6 +1741,7 @@
         dragPayload = { kind, id: opts.id };
         document.body.classList.remove("nav-press-pending");
         document.body.classList.add(kind === "group" ? "nav-sorting" : "nav-sorting-tools");
+        closeNavFlyouts();
         if (kind === "group") pointerSort.wrap?.classList.add("is-dragging");
         else pointerSort.handle?.classList.add("is-dragging");
         try {
@@ -1799,11 +1900,35 @@
         });
       });
       title.addEventListener("click", (e) => {
-        if (!navCompact || didDrag) return;
+        if (!navCompact || didDrag || compactNavSearching()) return;
         e.preventDefault();
-        const willPin = !wrap.classList.contains("is-pinned") && !wrap.classList.contains("is-current");
-        $$(".nav-group", navEl).forEach((g) => g.classList.remove("is-pinned"));
-        if (willPin) wrap.classList.add("is-pinned");
+        const willPin = !wrap.classList.contains("is-pinned");
+        if (willPin) openNavFlyout(wrap, { pin: true });
+        else {
+          wrap.classList.remove("is-pinned", "is-flyout-open");
+          title.setAttribute("aria-expanded", "false");
+        }
+      });
+      wrap.addEventListener("pointerenter", (e) => {
+        if (!canHoverNavFlyout(e)) return;
+        openNavFlyout(wrap);
+      });
+      wrap.addEventListener("pointerleave", (e) => {
+        if (!navCompact || compactNavSearching()) return;
+        if (wrap.classList.contains("is-pinned")) return;
+        if (e?.pointerType && e.pointerType !== "mouse") return;
+        scheduleCloseNavFlyout(wrap);
+      });
+      wrap.addEventListener("focusin", () => {
+        if (!navCompact || compactNavSearching()) return;
+        openNavFlyout(wrap);
+      });
+      wrap.addEventListener("focusout", (e) => {
+        if (!navCompact || compactNavSearching()) return;
+        if (wrap.classList.contains("is-pinned")) return;
+        const next = e.relatedTarget;
+        if (next && wrap.contains(next)) return;
+        scheduleCloseNavFlyout(wrap);
       });
     });
   }
@@ -1811,6 +1936,26 @@
   $("#nav-compact")?.addEventListener("change", (e) => {
     setNavCompact(Boolean(e.target?.checked));
   });
+
+  navEl?.addEventListener(
+    "scroll",
+    () => {
+      if (!navCompact || compactNavSearching()) return;
+      const open = $(".nav-group.is-pinned, .nav-group.is-flyout-open", navEl);
+      if (open?.classList.contains("is-pinned")) positionNavFlyout(open);
+      else if (open) closeNavFlyouts();
+    },
+    { passive: true }
+  );
+  window.addEventListener(
+    "resize",
+    () => {
+      if (!navCompact) return;
+      const open = navEl && $(".nav-group.is-pinned, .nav-group.is-flyout-open", navEl);
+      if (open) positionNavFlyout(open);
+    },
+    { passive: true }
+  );
 
   $("#nav-reset")?.addEventListener("click", () => {
     localStorage.removeItem(ORDER_KEY);
@@ -1981,6 +2126,8 @@
     setCompact: (on) => setNavCompact(on),
     lastToolHash,
     syncSortHint,
+    openFlyout: (el) => openNavFlyout(el?.closest?.(".nav-group") || el),
+    closeFlyouts: () => closeNavFlyouts(),
   };
   window.dispatchEvent(new CustomEvent("devtools:catalog"));
   syncSortHint();
