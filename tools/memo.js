@@ -158,6 +158,7 @@
       // 有自定义标签则不属于默认；无标签才归默认
       it.tagIds = custom.length ? custom : [DEFAULT_TAG_ID];
       if (it.order == null) it.order = i;
+      it.pinned = Boolean(it.pinned);
       // 历史图片中的 GIF/APNG 归入动图
       if (it.type === "image" && isGifLike(it.mime, it.name || it.fileName)) it.type = "gif";
       if (!it.type) it.type = detectKind(it.mime, it.name || it.fileName);
@@ -165,7 +166,12 @@
       if (note) it.note = note.length > NOTE_MAX ? `${note.slice(0, NOTE_MAX)}…` : note;
       else delete it.note;
     });
-    items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    items.sort((a, b) => {
+      const ap = a.pinned ? 0 : 1;
+      const bp = b.pinned ? 0 : 1;
+      if (ap !== bp) return ap - bp;
+      return (a.order ?? 0) - (b.order ?? 0);
+    });
     return {
       version: 1,
       folderId: raw.folderId || base.folderId,
@@ -1121,7 +1127,7 @@
         html: escapeHtml(raw),
         truncated: false,
         lineCount,
-        title: "单击预览 · 双击编辑",
+        title: "拖选复制 · 双击编辑",
       };
     }
     const shown = lines.slice(0, TEXT_CARD_LINES).join("\n");
@@ -1140,24 +1146,50 @@
     return `${s.slice(0, NOTE_MAX)}…`;
   }
 
+  function firstUnpinnedIndex() {
+    const idx = state.index.items.findIndex((x) => !x.pinned);
+    return idx < 0 ? state.index.items.length : idx;
+  }
+
+  async function moveItemToTop(item) {
+    if (!item?.id) return { item: null, moved: false };
+    const items = state.index.items;
+    const idx = items.findIndex((x) => x.id === item.id);
+    if (idx < 0) return { item: null, moved: false };
+    const [row] = items.splice(idx, 1);
+    const at = row.pinned ? 0 : firstUnpinnedIndex();
+    items.splice(at, 0, row);
+    row.updatedAt = Date.now();
+    reindexOrders();
+    await persistIndex();
+    return { item: row, moved: idx !== at };
+  }
+
+  async function setItemPinned(item, pinned) {
+    if (!item?.id) return item;
+    const items = state.index.items;
+    const idx = items.findIndex((x) => x.id === item.id);
+    if (idx < 0) return item;
+    const [row] = items.splice(idx, 1);
+    row.pinned = Boolean(pinned);
+    row.updatedAt = Date.now();
+    if (row.pinned) items.unshift(row);
+    else items.splice(firstUnpinnedIndex(), 0, row);
+    reindexOrders();
+    await persistIndex();
+    return row;
+  }
+
   async function bumpItemToFront(item) {
     if (!item?.id) return { item: null, moved: false };
     const idx = state.index.items.findIndex((x) => x.id === item.id);
     if (idx < 0) return { item: null, moved: false };
-    let moved = false;
-    if (idx > 0) {
-      const [row] = state.index.items.splice(idx, 1);
-      state.index.items.unshift(row);
-      moved = true;
-    }
-    const row = state.index.items[0];
-    row.updatedAt = Date.now();
-    if (item.contentHash && !row.contentHash) {
+    const { item: row, moved } = await moveItemToTop(state.index.items[idx]);
+    if (item.contentHash && row && !row.contentHash) {
       row.contentHash = item.contentHash;
       rememberHash(row);
+      await persistIndex();
     }
-    reindexOrders();
-    await persistIndex();
     return { item: row, moved };
   }
 
@@ -1423,7 +1455,7 @@
     if (item.type === "text") {
       const full = item.textPreview || "";
       const formatted = formatCardTextBody(full);
-      body = `<pre class="memo-text mono${formatted.truncated ? " is-truncated" : ""}" data-memo-expand="${item.id}" title="${escapeHtml(formatted.title)}">${formatted.html}</pre>`;
+      body = `<pre class="memo-text mono${formatted.truncated ? " is-truncated" : ""}" data-memo-expand="${item.id}" draggable="false" title="${escapeHtml(formatted.title)}">${formatted.html}</pre>`;
     } else if (item.type === "image" || item.type === "gif") {
       const badge = item.type === "gif" ? `<span class="memo-anim-badge">动图</span>` : "";
       body = `<div class="memo-thumb-wrap memo-media-hit" data-memo-preview="${item.id}">${badge}<img class="memo-thumb" data-memo-thumb="${item.id}" alt="" loading="lazy" decoding="async" /></div>`;
@@ -1444,6 +1476,7 @@
       </button>`;
     }
     const editing = state.editingId === item.id ? " is-editing" : "";
+    const pinnedCls = item.pinned ? " is-pinned" : "";
     const canCopy = canClipboardCopy(item);
     const offerShare = canOfferItemShare(item);
     const primaryAction = canCopy
@@ -1460,11 +1493,11 @@
         : "",
       `<button type="button" class="ghost-btn memo-more-danger" data-memo-del="${item.id}">删除</button>`,
     ].filter(Boolean);
-    return `<article class="memo-card${editing}" data-memo-id="${item.id}" draggable="${canDragReorder() ? "true" : "false"}">
+    return `<article class="memo-card${editing}${pinnedCls}" data-memo-id="${item.id}" draggable="${canDragReorder() ? "true" : "false"}">
       <div class="memo-card-head">
         <label class="memo-check"><input type="checkbox" data-memo-check="${item.id}" ${checked} /></label>
         <div class="memo-card-meta">
-          <button type="button" class="memo-card-title" data-memo-rename="${item.id}" title="单击或双击修改名称">${title}</button>
+          <button type="button" class="memo-card-title" data-memo-rename="${item.id}" title="单击或双击修改名称">${item.pinned ? `<span class="memo-pin-mark" title="已置顶">置顶</span>` : ""}${title}</button>
           <span class="hint tight mono"><span class="memo-type-pill">${escapeHtml(typeLabel)}</span> · ${time} · ${size}</span>
         </div>
       </div>
@@ -1879,7 +1912,7 @@
         textPreview: type === "text" ? clipTextPreview(textPreview) : "",
         contentHash: contentHash || undefined,
       };
-      state.index.items.unshift(item);
+      state.index.items.splice(firstUnpinnedIndex(), 0, item);
       rememberHash(item);
       reindexOrders();
       await persistIndex();
@@ -3774,7 +3807,16 @@
         else if (act === "dl") await downloadItem(item);
         else if (act === "share") await shareItem(item);
         else if (act === "open") await openItemPreview(item);
-        else if (act === "edit") await beginEditText(item);
+        else if (act === "top") {
+          await moveItemToTop(item);
+          renderAll();
+          flashItem(item.id, "已移到顶部");
+        } else if (act === "pin") {
+          const next = !item.pinned;
+          await setItemPinned(item, next);
+          renderAll();
+          flashItem(item.id, next ? "已置顶" : "已取消置顶");
+        } else if (act === "edit") await beginEditText(item);
         else if (act === "note") await beginEditNote(item);
         else if (act === "path") await openItemPath(item);
         else if (act === "del") await deleteItems([item.id], { confirm: false });
@@ -3800,6 +3842,12 @@
     if (canCopy) bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="copy">复制</button>`);
     else bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="dl">下载</button>`);
     bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="open">预览</button>`);
+    bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="top">移动到顶部</button>`);
+    bits.push(
+      `<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="pin">${
+        item.pinned ? "取消置顶" : "一直置顶"
+      }</button>`
+    );
     if (canOfferItemShare(item)) bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="share">分享</button>`);
     if (item.type === "text") bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="edit">编辑</button>`);
     bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="note">备注</button>`);
@@ -4024,9 +4072,9 @@
       }
       const expandId = t.closest?.("[data-memo-expand]")?.dataset?.memoExpand;
       if (expandId) {
-        // 单击预览；双击编辑文本
         const item = state.index.items.find((x) => x.id === expandId);
         if (!item) return;
+        const truncated = Boolean(t.closest?.(".memo-text.is-truncated"));
         if (e.detail >= 2) {
           clearTimeout(textClickTimer);
           textClickTimer = 0;
@@ -4034,6 +4082,8 @@
           else await openItemPreview(item);
           return;
         }
+        // 全文已在卡片里：单击不预览，方便拖选复制
+        if (!truncated) return;
         clearTimeout(textClickTimer);
         textClickTimer = setTimeout(() => {
           textClickTimer = 0;
@@ -4096,9 +4146,15 @@
   });
 
   itemList?.addEventListener("contextmenu", (e) => {
-    const card = e.target.closest?.(".memo-card");
+    const hit = e.target?.nodeType === 1 ? e.target : e.target?.parentElement;
+    const card = hit?.closest?.(".memo-card");
     if (!card || !itemList.contains(card)) return;
-    if (e.target.closest("input, textarea, a")) return;
+    if (hit.closest("input, textarea, a")) return;
+    const sel = window.getSelection?.();
+    const selected = String(sel?.toString() || "");
+    if (selected && hit.closest(".memo-text:not(.is-truncated)") && sel.anchorNode && card.contains(sel.anchorNode)) {
+      return;
+    }
     const item = state.index.items.find((x) => x.id === card.dataset.memoId);
     if (!item) return;
     e.preventDefault();
@@ -4131,11 +4187,12 @@
   // item drag reorder
   let dragItemId = null;
   itemList?.addEventListener("dragstart", (e) => {
-    if (e.target.closest("input, button, a, textarea, video, audio, label, .memo-card-title, .memo-card-title-input")) {
+    const hit = e.target?.nodeType === 1 ? e.target : e.target?.parentElement;
+    if (hit?.closest("input, button, a, textarea, video, audio, label, .memo-card-title, .memo-card-title-input, .memo-text:not(.is-truncated)")) {
       e.preventDefault();
       return;
     }
-    const card = e.target.closest(".memo-card");
+    const card = hit?.closest(".memo-card");
     if (!card) return;
     dragItemId = card.dataset.memoId;
     e.dataTransfer.effectAllowed = "move";
@@ -4161,6 +4218,9 @@
     if (from < 0 || to < 0) return;
     const [row] = items.splice(from, 1);
     items.splice(to, 0, row);
+    const pins = items.filter((x) => x.pinned);
+    const rest = items.filter((x) => !x.pinned);
+    state.index.items = pins.concat(rest);
     reindexOrders();
     await persistIndex();
     renderAll();
@@ -4364,6 +4424,20 @@
     pickDirectory: () => pickDirectory(),
     askSwitchDirectoryChoice: (opts) => askSwitchDirectoryChoice(opts || {}),
     getPreviewZoom,
+    moveItemToTop: async (id) => {
+      const item = state.index.items.find((x) => x.id === id);
+      if (!item) return null;
+      const r = await moveItemToTop(item);
+      renderAll();
+      return r.item;
+    },
+    setItemPinned: async (id, on) => {
+      const item = state.index.items.find((x) => x.id === id);
+      if (!item) return null;
+      const row = await setItemPinned(item, Boolean(on));
+      renderAll();
+      return row;
+    },
     setShareUiForTest: (on) => {
       state.testShareUi = Boolean(on);
       renderItems();
