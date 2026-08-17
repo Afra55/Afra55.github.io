@@ -765,12 +765,24 @@ async function main() {
     document.getElementById("vsplit-nudge-p01")?.click();
     await new Promise((r) => setTimeout(r, 40));
     const afterNudge = Number(video.currentTime) || 0;
+    await seekByScrub(0.5);
+    const m01 = document.getElementById("vsplit-nudge-m01");
+    const beforeTap01 = Number(video.currentTime) || 0;
+    m01?.dispatchEvent(
+      new PointerEvent("pointerdown", { bubbles: true, pointerId: 9, pointerType: "touch", button: 0 })
+    );
+    m01?.dispatchEvent(new Event("touchstart", { bubbles: true, cancelable: true }));
+    await new Promise((r) => setTimeout(r, 180));
+    m01?.dispatchEvent(new Event("touchend", { bubbles: true, cancelable: true }));
+    m01?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 9, pointerType: "touch", button: 0 }));
+    await new Promise((r) => setTimeout(r, 40));
+    const nudgeTap01Delta = (Number(video.currentTime) || 0) - beforeTap01;
     const p1 = document.getElementById("vsplit-nudge-p1");
     const beforeHold = Number(video.currentTime) || 0;
     p1?.dispatchEvent(
       new PointerEvent("pointerdown", { bubbles: true, pointerId: 11, pointerType: "mouse", button: 0 })
     );
-    await new Promise((r) => setTimeout(r, 520));
+    await new Promise((r) => setTimeout(r, 780));
     p1?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 11, pointerType: "mouse", button: 0 }));
     await new Promise((r) => setTimeout(r, 40));
     const nudgeHoldDelta = (Number(video.currentTime) || 0) - beforeHold;
@@ -780,12 +792,11 @@ async function main() {
     p01?.dispatchEvent(
       new PointerEvent("pointerdown", { bubbles: true, pointerId: 12, pointerType: "mouse", button: 0 })
     );
-    await new Promise((r) => setTimeout(r, 520));
+    await new Promise((r) => setTimeout(r, 980));
     p01?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 12, pointerType: "mouse", button: 0 }));
     await new Promise((r) => setTimeout(r, 40));
     const nudgeHold01Delta = (Number(video.currentTime) || 0) - beforeHold01;
     let touchPrevented = false;
-    const m01 = document.getElementById("vsplit-nudge-m01");
     try {
       const te = new TouchEvent("touchstart", { bubbles: true, cancelable: true });
       m01?.dispatchEvent(te);
@@ -823,6 +834,7 @@ async function main() {
       editIdx: window.DevToolsVsplit?.getEditIdx?.(),
       scrubbedTime: Number(video.currentTime) || 0,
       nudgeDelta: afterNudge - beforeNudge,
+      nudgeTap01Delta,
       nudgeHoldDelta,
       nudgeHold01Delta,
       touchPrevented,
@@ -955,6 +967,9 @@ async function main() {
   }
   if (!(manualMarks.nudgeDelta > 0.05)) {
     throw new Error(`nudge +0.1s failed, delta=${manualMarks.nudgeDelta}`);
+  }
+  if (!(manualMarks.nudgeTap01Delta < -0.05) || !(manualMarks.nudgeTap01Delta > -0.18)) {
+    throw new Error(`nudge -0.1s tap should be one step, delta=${manualMarks.nudgeTap01Delta}`);
   }
   if (!(manualMarks.nudgeHoldDelta > 0.9)) {
     throw new Error(`nudge +1s hold repeat failed, delta=${manualMarks.nudgeHoldDelta}`);

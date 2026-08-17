@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-vsplitnudge";
+  const TOOLS_VERSION = "2026.08.17-vsplitnudge2";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -6756,10 +6756,15 @@
     });
     function bindVsplitNudgeRepeat(btn, delta) {
       if (!btn) return;
+      const step = Math.abs(Number(delta) || 0);
+      const isFine = step > 0 && step <= 0.15;
+      const holdDelay = isFine ? 560 : 500;
+      const repeatMs = isFine ? 220 : 130;
       let holdTimer = 0;
       let repeatTimer = 0;
       let holding = false;
       let lastStartAt = 0;
+      let lastTickAt = 0;
       btn.style.webkitUserSelect = "none";
       btn.style.userSelect = "none";
       btn.style.webkitTouchCallout = "none";
@@ -6775,6 +6780,10 @@
           stop();
           return;
         }
+        const now = Date.now();
+        // iOS 上 touchstart + pointerdown 会各来一次，合并成一步
+        if (lastTickAt && now - lastTickAt < 90) return;
+        lastTickAt = now;
         nudgeVsplitPreview(delta);
       };
       const start = () => {
@@ -6786,8 +6795,8 @@
         holdTimer = window.setTimeout(() => {
           holdTimer = 0;
           if (!holding || btn.disabled) return;
-          repeatTimer = window.setInterval(tick, 100);
-        }, 280);
+          repeatTimer = window.setInterval(tick, repeatMs);
+        }, holdDelay);
       };
       const onPointerDown = (e) => {
         if (e.pointerType === "mouse" && e.button != null && e.button !== 0) return;
@@ -6795,7 +6804,7 @@
         start();
       };
       const onTouchStart = (e) => {
-        // iOS Safari 长按选字/呼出菜单走 touch 默认行为，仅 pointerdown.preventDefault 拦不住
+        // 拦 iOS 选字。pointer 可能随后才到，这里也允许起步；holding/合并计步保证只走一次
         e.preventDefault();
         start();
       };
@@ -6817,23 +6826,11 @@
       btn.addEventListener("selectstart", (e) => e.preventDefault());
       btn.addEventListener("click", (e) => {
         e.preventDefault();
-        if (Date.now() - lastStartAt < 700) return;
+        if (holding) return;
+        if (lastStartAt && Date.now() - lastStartAt < 800) return;
         if (btn.disabled) return;
         tick();
       });
-      document.addEventListener("pointerup", () => {
-        if (holding) stop();
-      });
-      document.addEventListener("pointercancel", () => {
-        if (holding) stop();
-      });
-      document.addEventListener(
-        "touchend",
-        () => {
-          if (holding) stop();
-        },
-        { passive: true }
-      );
     }
 
     bindVsplitNudgeRepeat(vsplitNudgeM1, -1);
