@@ -5598,6 +5598,42 @@ button.adb-device-body.linkish {
   min-width: 0;
 }
 
+.memo-card-title {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  padding: 0;
+  margin: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: text;
+}
+
+.memo-card-title:hover,
+.memo-card-title:focus-visible {
+  color: color-mix(in srgb, var(--accent) 55%, var(--ink));
+  outline: none;
+}
+
+.memo-card-title-input {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-0) 40%, var(--panel-strong));
+  color: var(--ink);
+  font: inherit;
+  font-weight: 650;
+  padding: 0.2rem 0.45rem;
+}
+
 .memo-card-meta strong {
   overflow: hidden;
   text-overflow: ellipsis;

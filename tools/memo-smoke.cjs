@@ -642,10 +642,48 @@ async function main() {
       out.switchDir.choice = await pending;
     }
 
-    out.cacheBust = {
+    // title dblclick rename syncs display name + fileName
+    out.renameUi = {
+      hasTitleBtn: Boolean(document.querySelector(".memo-card-title[data-memo-rename]")),
+      api: typeof window.DevToolsMemo.renameItem === "function",
+    };
+    const renameTarget =
+      (window.DevToolsMemo.getIndex().items || []).find((x) => x.type === "text") ||
+      (window.DevToolsMemo.getIndex().items || [])[0];
+    if (renameTarget) {
+      const titleBtn = document.querySelector(
+        `.memo-card-title[data-memo-rename="${renameTarget.id}"]`
+      );
+      out.renameUi.foundCard = Boolean(titleBtn);
+      if (titleBtn) {
+        titleBtn.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, cancelable: true }));
+        await sleep(60);
+        const input = document.querySelector(".memo-card-title-input");
+        out.renameUi.inputShown = Boolean(input);
+        if (input) {
+          const newName = `冒烟重命名_${Date.now().toString(36)}`;
+          input.value = newName;
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.blur();
+          await sleep(350);
+          const after = (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === renameTarget.id);
+          out.renameUi.savedName = after?.name === newName;
+          out.renameUi.fileSynced =
+            Boolean(after?.fileName) &&
+            (after.fileName === newName ||
+              after.fileName.startsWith(newName) ||
+              after.fileName.includes(newName));
+          out.renameUi.titleUpdated = Boolean(
+            document.querySelector(`.memo-card-title[data-memo-rename="${renameTarget.id}"]`)?.textContent ===
+              newName
+          );
+        }
+      }
+    }
 
+    out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memocopy1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memorename1/.test(s.src)),
     };
 
     return out;
@@ -812,8 +850,14 @@ async function main() {
   if (!result.switchDir?.dlgOpen || !result.switchDir?.migrateVisible || !result.switchDir?.emptyVisible || result.switchDir?.choice !== "cancel") {
     failed.push("switch directory dialog choices failed");
   }
-  if (!/memocopy1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memocopy1");
+  if (!result.renameUi?.hasTitleBtn || !result.renameUi?.api || !result.renameUi?.foundCard) {
+    failed.push("rename title button / API missing");
+  }
+  if (!result.renameUi?.inputShown || !result.renameUi?.savedName || !result.renameUi?.fileSynced || !result.renameUi?.titleUpdated) {
+    failed.push("title dblclick rename should update name and fileName");
+  }
+  if (!/memorename1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memorename1");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");
