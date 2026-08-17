@@ -713,9 +713,35 @@ async function main() {
       await sleep(40);
     }
 
+    // grouped action buttons should share the same height
+    out.btnSize = { ok: false };
+    const actionRow =
+      document.querySelector("#memo .btn-row.tool-actions") ||
+      document.querySelector(".btn-row.tool-actions");
+    if (actionRow) {
+      const btns = [...actionRow.querySelectorAll(".primary-btn, .secondary-btn, .ghost-btn, .file-btn, .copy-btn")].filter(
+        (el) => el.offsetParent !== null
+      );
+      const heights = btns.map((el) => el.getBoundingClientRect().height);
+      out.btnSize = {
+        count: heights.length,
+        heights: heights.map((h) => Math.round(h * 10) / 10),
+        ok: heights.length >= 2 && Math.max(...heights) - Math.min(...heights) <= 2,
+      };
+      const cardPrimary = document.querySelector(".memo-card-actions > .secondary-btn");
+      const cardMore = document.querySelector(".memo-card-actions .memo-more-sum");
+      if (cardPrimary && cardMore) {
+        const a = cardPrimary.getBoundingClientRect().height;
+        const b = cardMore.getBoundingClientRect().height;
+        out.btnSize.cardAligned = Math.abs(a - b) <= 2;
+      } else {
+        out.btnSize.cardAligned = true;
+      }
+    }
+
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memotheme1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817btnsize1/.test(s.src)),
     };
 
     return out;
@@ -728,7 +754,7 @@ async function main() {
   if (errors.length) failed.push(...errors.map((e) => `page: ${e}`));
   if (!result.panelActive) failed.push("memo panel not active");
   if (!result.hasEditor || !result.hasList) failed.push("missing editor/list");
-  if (!/memo|theme|vsplit|vtrim|audio|ffb|ffadapt|setup/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memo|theme|vsplit|vtrim|audio|ffb|ffadapt|setup|btnsize/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -897,8 +923,11 @@ async function main() {
   if (!result.themeMemo?.searchFollows || !result.themeMemo?.chipFollows || !result.themeMemo?.tagsOpaque) {
     failed.push("memo search/type chip/tags should use themed backgrounds");
   }
-  if (!/memotheme1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memotheme1");
+  if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
+    failed.push("grouped action buttons should share the same height");
+  }
+  if (!/btnsize1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to btnsize1");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");
