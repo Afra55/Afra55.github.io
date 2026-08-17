@@ -2,7 +2,7 @@
 /* eslint-disable no-restricted-globals */
 "use strict";
 
-const SHELL_CACHE = "devtools-shell-20260817pwa1";
+const SHELL_CACHE = "devtools-shell-20260817navpwa1";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -58,31 +58,22 @@ self.addEventListener("fetch", (event) => {
   }
   if (shouldBypass(url)) return;
 
-  if (req.mode === "navigate") {
-    event.respondWith(
-      fetch(req)
-        .then((res) => {
+  // 在线优先拉新，离线再回退缓存——这样网页更新后 PWA 下次打开会同步
+  event.respondWith(
+    fetch(req)
+      .then((res) => {
+        if (res && res.ok && res.type !== "opaque") {
           const copy = res.clone();
           caches.open(SHELL_CACHE).then((c) => c.put(req, copy)).catch(() => {});
-          return res;
+        }
+        return res;
+      })
+      .catch(() =>
+        caches.match(req).then((cached) => {
+          if (cached) return cached;
+          if (req.mode === "navigate") return caches.match("./index.html").then((r) => r || caches.match("./"));
+          return undefined;
         })
-        .catch(() => caches.match("./index.html").then((r) => r || caches.match("./")))
-    );
-    return;
-  }
-
-  event.respondWith(
-    caches.match(req).then((cached) => {
-      const network = fetch(req)
-        .then((res) => {
-          if (res && res.ok) {
-            const copy = res.clone();
-            caches.open(SHELL_CACHE).then((c) => c.put(req, copy)).catch(() => {});
-          }
-          return res;
-        })
-        .catch(() => cached);
-      return cached || network;
-    })
+      )
   );
 });

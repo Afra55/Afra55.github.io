@@ -16,8 +16,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260817pwa1" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260817pwa1" />
+  <link rel="stylesheet" href="./style.css?v=20260817navpwa1" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260817navpwa1" />
   <script>
     /* 尽早应用主题变量，减少闪烁；侧栏也依赖这些 CSS 变量 */
     (function () {
@@ -86,7 +86,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.17-pwa1</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.17-navpwa1</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="pwa-install" hidden aria-hidden="true" title="安装到桌面/开始菜单">安装应用</button>
@@ -118,6 +118,10 @@
       <nav class="tool-nav" id="tool-nav" aria-label="工具分组"></nav>
       <div class="nav-footer-actions">
         <p class="nav-cache-meta" id="nav-cache-meta">本站缓存可清理；备忘录数据单独统计、不会被清掉</p>
+        <label class="nav-setting" for="nav-compact" title="开启后侧栏默认只显示大分类，悬停或点击才展开工具">
+          <input type="checkbox" id="nav-compact" />
+          <span>仅显示分类</span>
+        </label>
         <button type="button" class="nav-reset nav-cache-clear" id="nav-cache-clear" title="清掉本站临时视频、GIF 和编码器缓存；不会删除备忘录数据与系统相册/已下载文件。清理前请先在备忘录里导出备份。">一键清理缓存</button>
         <button type="button" class="nav-reset" id="nav-reset" title="恢复工具与分类的默认排序">恢复默认排序</button>
       </div>
@@ -1438,7 +1442,7 @@ hello@world.org</textarea>
                   <button type="button" class="ghost-btn memo-zoom-btn" id="memo-zoom-out" title="缩小">－</button>
                   <span class="mono memo-zoom-pct" id="memo-zoom-pct">100%</span>
                   <button type="button" class="ghost-btn memo-zoom-btn" id="memo-zoom-in" title="放大">＋</button>
-                  <button type="button" class="ghost-btn memo-zoom-btn" id="memo-zoom-reset" title="适应窗口">适应</button>
+                  <button type="button" class="ghost-btn memo-zoom-btn" id="memo-zoom-reset" title="还原到适应窗口">还原</button>
                 </div>
               </div>
               <video id="memo-lightbox-video" class="memo-preview-video" controls playsinline hidden></video>
@@ -3545,20 +3549,20 @@ adb devices</pre>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./theme.js?v=20260817pwa1"></script>
-  <script src="./temp.js?v=20260817pwa1"></script>
+  <script src="./theme.js?v=20260817navpwa1"></script>
+  <script src="./temp.js?v=20260817navpwa1"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260817pwa1"></script>
-  <script src="./about.js?v=20260817pwa1"></script>
-  <script src="./extra.js?v=20260817pwa1"></script>
-  <script src="./vtrim.js?v=20260817pwa1"></script>
-  <script src="./audio.js?v=20260817pwa1"></script>
-  <script src="./ffbridge.js?v=20260817pwa1"></script>
-  <script src="./setup.js?v=20260817pwa1"></script>
+  <script src="./app.js?v=20260817navpwa1"></script>
+  <script src="./about.js?v=20260817navpwa1"></script>
+  <script src="./extra.js?v=20260817navpwa1"></script>
+  <script src="./vtrim.js?v=20260817navpwa1"></script>
+  <script src="./audio.js?v=20260817navpwa1"></script>
+  <script src="./ffbridge.js?v=20260817navpwa1"></script>
+  <script src="./setup.js?v=20260817navpwa1"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./memo.js?v=20260817pwa1"></script>
-  <script src="./textimg.js?v=20260817pwa1"></script>
-  <script src="./imgtext.js?v=20260817pwa1"></script>
-  <script src="./pwa.js?v=20260817pwa1"></script>
+  <script src="./memo.js?v=20260817navpwa1"></script>
+  <script src="./textimg.js?v=20260817navpwa1"></script>
+  <script src="./imgtext.js?v=20260817navpwa1"></script>
+  <script src="./pwa.js?v=20260817navpwa1"></script>
 </body>
 </html>

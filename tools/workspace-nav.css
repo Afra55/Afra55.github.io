@@ -231,6 +231,29 @@ body.nav-sorting-tools .nav-bar {
   margin-bottom: 0.7rem;
 }
 
+.nav-bar.is-compact .nav-group-title.is-sortable {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  cursor: pointer;
+  padding: 0.42rem 0.5rem;
+  margin-left: 0;
+  border-radius: 8px;
+}
+
+.nav-bar.is-compact .nav-group.is-current > .nav-group-title,
+.nav-bar.is-compact .nav-group.is-pinned > .nav-group-title,
+.nav-bar.is-compact .nav-group:hover > .nav-group-title,
+.nav-bar.is-compact .nav-group:focus-within > .nav-group-title {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+}
+
+.nav-bar.is-compact:not(.is-searching) .nav-group:not(.is-current):not(.is-pinned):not(:hover):not(:focus-within) .tool-nav-link {
+  display: none;
+}
+
 .nav-sort-hint {
   margin: 0 0 0.55rem;
   font-size: 0.72rem;

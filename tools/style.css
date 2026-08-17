@@ -310,6 +310,28 @@ body.theme-reduce-glow .bg-grid {
   line-height: 1.4;
 }
 
+.nav-setting {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.35rem 0.15rem;
+  color: var(--muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.nav-setting input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.nav-setting:hover {
+  color: var(--ink);
+}
+
 .nav-cache-clear {
   color: var(--ink);
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
@@ -1242,7 +1264,7 @@ a.secondary-btn {
     display: grid;
     grid-template-columns: 13.5rem minmax(0, 1fr);
     gap: 0 1.25rem;
-    align-items: start;
+    align-items: stretch;
     width: 100%;
     max-width: none;
     padding: 0 1.5rem 1.5rem;
@@ -1253,18 +1275,21 @@ a.secondary-btn {
     position: sticky;
     top: 0.65rem;
     z-index: 5;
-    align-self: start;
+    align-self: stretch;
     flex-direction: column;
     flex-wrap: nowrap;
     align-items: stretch;
     gap: 0.55rem;
     margin-bottom: 0;
-    /* JS 按 header/视口动态写入；回退值预留顶栏，避免页顶时底部菜单够不着 */
+    /* JS 按 header/视口动态写入；侧栏铺满剩余视口，避免高屏底下空一截 */
+    height: var(--nav-max-height, calc(100dvh - 7rem));
+    min-height: var(--nav-max-height, calc(100dvh - 7rem));
     max-height: var(--nav-max-height, calc(100dvh - 7rem));
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
     padding: 0.65rem;
+    box-sizing: border-box;
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* legacy Edge */
   }
@@ -1282,6 +1307,8 @@ a.secondary-btn {
   }
 
   .tool-nav {
+    flex: 1 1 auto;
+    min-height: 0;
     flex-direction: column;
     flex-wrap: nowrap;
     gap: 0.28rem;
@@ -1301,6 +1328,8 @@ a.secondary-btn {
 
   .nav-footer-actions {
     width: 100%;
+    margin-top: auto;
+    padding-top: 0.35rem;
   }
 
   .shell {
@@ -6122,13 +6151,15 @@ button.adb-device-body.linkish {
   pointer-events: none;
   border-radius: 0;
   will-change: transform;
+  z-index: 1;
 }
 
 .memo-zoom-hud {
   position: absolute;
   right: 0.55rem;
-  bottom: 0.55rem;
-  z-index: 2;
+  top: 0.55rem;
+  bottom: auto;
+  z-index: 8;
   display: flex;
   align-items: center;
   gap: 0.28rem;
