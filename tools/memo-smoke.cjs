@@ -278,6 +278,51 @@ async function main() {
       shortFull: Boolean(textPre) && !textPre.classList.contains("is-truncated"),
     };
 
+    // long text preview must show full blob content (not clipped textPreview)
+    if (longItem) {
+      document.querySelector(`.memo-more [data-memo-open="${longItem.id}"], [data-memo-open="${longItem.id}"]`)?.click();
+      await sleep(250);
+      const fullTxt = document.getElementById("memo-lightbox-text")?.textContent || "";
+      out.textLines.previewFull = /行60 长文本冒烟/.test(fullTxt) && fullTxt.split("\n").length >= 60;
+      out.previewUi = {
+        hasDel: Boolean(document.getElementById("memo-preview-del")),
+        delVisible: !document.getElementById("memo-preview-del")?.hidden,
+        hasPath: Boolean(document.getElementById("memo-preview-path")),
+        wideEnough: (document.getElementById("memo-lightbox")?.getBoundingClientRect?.().width || 0) >= 480,
+      };
+      document.getElementById("memo-lightbox-close")?.click();
+      await sleep(60);
+    }
+
+    // data:image URL text should ingest as image, not text
+    const tinyPng =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const beforeCnt = (window.DevToolsMemo.getIndex().items || []).length;
+    await window.DevToolsMemo.ingestBlob(new Blob([tinyPng], { type: "text/plain" }), "should-not-stay-text.txt");
+    // also exercise addText path via paste-like API: use ingest after converting through internal by saving via editor flow
+    // Prefer calling through clipboard-like text add: expose not available, so create via temporary textarea save is heavy.
+    // Instead verify helper path: paste simulation
+    const beforeTypes = (window.DevToolsMemo.getIndex().items || []).map((it) => it.type);
+    document.getElementById("memo-editor").value = tinyPng;
+    document.getElementById("memo-save-text")?.click();
+    await sleep(500);
+    const afterItems = window.DevToolsMemo.getIndex().items || [];
+    out.dataUrlImg = {
+      grew: afterItems.length >= beforeCnt,
+      newestIsImage: afterItems[0]?.type === "image" || afterItems[0]?.type === "gif",
+      notPlainDataText: !(afterItems[0]?.type === "text" && String(afterItems[0]?.textPreview || "").startsWith("data:image")),
+    };
+
+    // more menu closes when clicking outside
+    const more = document.querySelector("details.memo-more");
+    out.moreMenu = { has: Boolean(more) };
+    if (more) {
+      more.open = true;
+      document.body.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true }));
+      await sleep(40);
+      out.moreMenu.closesOutside = !more.open;
+    }
+
     // type filter (flat list: no type groups)
     out.typeFilter = {
       host: Boolean(document.getElementById("memo-type-filter")),
@@ -600,7 +645,7 @@ async function main() {
     out.cacheBust = {
 
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memoflat1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memocopy1/.test(s.src)),
     };
 
     return out;
@@ -640,6 +685,18 @@ async function main() {
   }
   if (result.textLines && result.textLines.shortFull === false) {
     failed.push("short text should render fully without truncate class");
+  }
+  if (result.textLines && !result.textLines.previewFull) {
+    failed.push("text preview should show full content from blob");
+  }
+  if (!result.previewUi?.hasDel || !result.previewUi?.delVisible || !result.previewUi?.wideEnough) {
+    failed.push("preview should expose delete and be list-wide");
+  }
+  if (!result.dataUrlImg?.newestIsImage || !result.dataUrlImg?.notPlainDataText) {
+    failed.push("data:image base64 text should ingest as image");
+  }
+  if (!result.moreMenu?.has || !result.moreMenu?.closesOutside) {
+    failed.push("more menu should close on outside click");
   }
   if (!result.exportMerged?.hasExport || !result.exportMerged?.noShareBtn) {
     failed.push("export/share should be a single button");
@@ -755,8 +812,8 @@ async function main() {
   if (!result.switchDir?.dlgOpen || !result.switchDir?.migrateVisible || !result.switchDir?.emptyVisible || result.switchDir?.choice !== "cancel") {
     failed.push("switch directory dialog choices failed");
   }
-  if (!/memoflat1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memoflat1");
+  if (!/memocopy1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memocopy1");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");
