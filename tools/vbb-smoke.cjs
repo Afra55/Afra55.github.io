@@ -1010,7 +1010,6 @@ async function main() {
     const jumpedToDot =
       Number.isFinite(firstDotT) && Math.abs(timeAfterDot - firstDotT) < 0.08;
     const editAfterDotTap = window.DevToolsVsplit.getEditIdx?.() ?? -1;
-    const lastMark = marks[marks.length - 1];
     const beforeUndo = marks.length;
     document.getElementById("vsplit-fs-undo")?.click();
     await waitFrames(2);
