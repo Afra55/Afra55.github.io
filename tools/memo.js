@@ -225,6 +225,124 @@
       .slice(0, 120);
   }
 
+  function fileExtOf(name) {
+    const m = String(name || "").match(/(\.[A-Za-z0-9]{1,8})$/);
+    return m ? m[1] : "";
+  }
+
+  function defaultExtForItem(item) {
+    const fromFile = fileExtOf(item?.fileName) || fileExtOf(item?.name);
+    if (fromFile) return fromFile;
+    const mime = String(item?.mime || "").toLowerCase();
+    if (mime.includes("png")) return ".png";
+    if (mime.includes("jpeg") || mime.includes("jpg")) return ".jpg";
+    if (mime.includes("gif")) return ".gif";
+    if (mime.includes("webp")) return ".webp";
+    if (mime.includes("mp4")) return ".mp4";
+    if (mime.includes("webm")) return ".webm";
+    if (mime.includes("audio")) return ".mp3";
+    if (mime.includes("pdf")) return ".pdf";
+    if (item?.type === "text") return ".txt";
+    return "";
+  }
+
+  async function renameItem(item, rawName) {
+    if (!item?.id) return;
+    const next = String(rawName || "").trim();
+    if (!next) throw new Error("名称不能为空");
+    if (next === String(item.name || "")) {
+      toast("名称未改");
+      renderItems();
+      return;
+    }
+    const keepExt = defaultExtForItem(item);
+    let fileBase = next;
+    if (keepExt && !fileExtOf(fileBase)) fileBase = `${fileBase}${keepExt}`;
+    const oldFileName = item.fileName || "";
+    let safe = safeFileName(fileBase, item.id);
+    if (!safe) safe = safeFileName(item.id, "memo");
+    const clash = (state.index.items || []).find((x) => x.id !== item.id && (x.fileName || "") === safe);
+    if (clash) throw new Error("已有同名文件，请换一个名称");
+
+    if (state.mode === "dir" && state.dirHandle) {
+      const ok = await ensureDirPermission(state.dirHandle);
+      if (!ok) throw new Error("没有目录写入权限，请重新连接目录");
+      const dir = await getBlobsDir(true);
+      let renamed = false;
+      if (oldFileName && oldFileName !== safe) {
+        try {
+          const handle = await dir.getFileHandle(oldFileName);
+          if (typeof handle.move === "function") {
+            await handle.move(safe);
+            renamed = true;
+          }
+        } catch (_) {}
+        if (!renamed) {
+          const blob = await loadBlob(item);
+          await saveBlob(item.id, blob, safe);
+          try {
+            await dir.removeEntry(oldFileName);
+          } catch (_) {}
+        }
+      } else if (!oldFileName) {
+        const blob = await loadBlob(item);
+        await saveBlob(item.id, blob, safe);
+      }
+      item.fileName = safe;
+    } else {
+      const row = await idbGet("blobs", item.id);
+      if (row?.buf != null) {
+        await idbSet("blobs", item.id, { ...row, name: safe });
+      }
+      item.fileName = safe;
+    }
+
+    item.name = next;
+    item.updatedAt = Date.now();
+    await persistIndex({ immediate: true });
+    if (previewItem?.id === item.id && previewTitle) {
+      previewTitle.textContent = next;
+    }
+    renderItems();
+    toast("已重命名");
+  }
+
+  function beginInlineRename(item, titleBtn) {
+    if (!item || !titleBtn || titleBtn.dataset.editing === "1") return;
+    titleBtn.dataset.editing = "1";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "memo-card-title-input mono";
+    input.value = item.name || "";
+    input.setAttribute("aria-label", "修改名称");
+    titleBtn.replaceWith(input);
+    input.focus();
+    input.select();
+    let done = false;
+    const finish = async (save) => {
+      if (done) return;
+      done = true;
+      const val = input.value;
+      try {
+        if (save) await renameItem(item, val);
+        else renderItems();
+      } catch (err) {
+        setError(memoError, err.message || String(err));
+        renderItems();
+      }
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        finish(true);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        finish(false);
+      }
+    });
+    input.addEventListener("blur", () => finish(true));
+  }
+
   async function idbGet(store, key) {
     const db = await openDb();
     return new Promise((resolve, reject) => {
@@ -1337,7 +1455,7 @@
       <div class="memo-card-head">
         <label class="memo-check"><input type="checkbox" data-memo-check="${item.id}" ${checked} /></label>
         <div class="memo-card-meta">
-          <strong title="${title}">${title}</strong>
+          <button type="button" class="memo-card-title" data-memo-rename="${item.id}" title="双击修改名称">${title}</button>
           <span class="hint tight mono"><span class="memo-type-pill">${escapeHtml(typeLabel)}</span> · ${time} · ${size}</span>
         </div>
       </div>
@@ -1759,10 +1877,9 @@
     // 剪贴板有时把图片写成 data:image/...;base64 文本，入库前转成真正图片
     const dataImg = await dataUrlToImageFile(body);
     if (dataImg) {
-      await withBusy(async () => {
-        await ingestFiles([dataImg]);
-        if (editor) editor.value = "";
-      });
+      // ingestFiles 自身已 withBusy，此处不可再包一层（会直接被 busy 挡掉）
+      await ingestFiles([dataImg]);
+      if (editor) editor.value = "";
       return;
     }
     await withBusy(async () => {
@@ -3516,9 +3633,20 @@
     renderAll();
   });
 
+  itemList?.addEventListener("dblclick", (e) => {
+    const titleBtn = e.target.closest?.("[data-memo-rename]");
+    if (!titleBtn || !itemList.contains(titleBtn)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const item = state.index.items.find((x) => x.id === titleBtn.dataset.memoRename);
+    if (item) beginInlineRename(item, titleBtn);
+  });
+
   itemList?.addEventListener("click", async (e) => {
     const t = e.target;
     hideMemoCtx();
+    // 标题单击不触发其它操作；双击才重命名
+    if (t.closest?.("[data-memo-rename]") || t.closest?.(".memo-card-title-input")) return;
     try {
       if (t.matches?.("[data-memo-check]")) {
         const id = t.dataset.memoCheck;
@@ -3701,7 +3829,7 @@
   // item drag reorder
   let dragItemId = null;
   itemList?.addEventListener("dragstart", (e) => {
-    if (e.target.closest("input, button, a, textarea, video, audio, label")) {
+    if (e.target.closest("input, button, a, textarea, video, audio, label, .memo-card-title, .memo-card-title-input")) {
       e.preventDefault();
       return;
     }
@@ -3901,6 +4029,12 @@
     getIndex: () => state.index,
     ingestBlob: (blob, name) => addItemFromBlob(blob, name || `import-${Date.now()}`, { quiet: false }),
     ingestText: (text) => addText(text),
+    renameItem: async (id, name) => {
+      const item = state.index.items.find((x) => x.id === id);
+      if (!item) throw new Error("条目不存在");
+      await renameItem(item, name);
+      return state.index.items.find((x) => x.id === id) || item;
+    },
     canOfferShare: (item) => canOfferItemShare(item),
     canShareFilesProbe: () => probeCanShareFiles(),
     estimateCardHeight: (item) => estimateCardHeight(item || {}),
