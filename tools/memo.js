@@ -2291,24 +2291,42 @@
     el.classList.toggle("is-error", isError);
   }
 
-  function clipPermissionHint(err) {
+  async function queryClipboardReadPermission() {
+    if (!navigator.permissions?.query) return "unknown";
+    try {
+      const st = await navigator.permissions.query({ name: "clipboard-read" });
+      return st?.state || "unknown";
+    } catch (_) {
+      return "unknown";
+    }
+  }
+
+  function clipDeniedHint() {
+    return isLikelyMobile()
+      ? "没有剪贴板权限。请在弹出提示里点允许，或改用长按粘贴到本页。"
+      : "没有剪贴板权限。请允许访问后重试，或改用 Ctrl/⌘+V 粘贴。";
+  }
+
+  function clipReadFailHint(err) {
     const name = err?.name || "";
     const msg = String(err?.message || err || "");
-    if (name === "NotAllowedError" || /notallowed|permission|denied|权限/i.test(msg)) {
-      return isLikelyMobile()
-        ? "没有剪贴板权限。请在弹出提示里点允许，或改用长按粘贴到本页。"
-        : "没有剪贴板权限。请允许访问后重试，或改用 Ctrl/⌘+V 粘贴。";
-    }
-    if (/secure|https|issecurecontext/i.test(msg)) {
+    if (/secure|https|issecurecontext/i.test(msg) || name === "SecurityError") {
       return "当前环境无法读剪贴板，请用 HTTPS 打开，或直接粘贴到本页。";
     }
+    if (name === "NotAllowedError") return clipDeniedHint();
     return msg || "读取剪贴板失败，可改用粘贴";
+  }
+
+  function isClipboardGestureBlock(err) {
+    const name = err?.name || "";
+    return name === "NotAllowedError" || name === "SecurityError";
   }
 
   async function readClipboard({ force = false } = {}) {
     setError(memoError, "");
     if (force) setAutoclipStatus("");
     try {
+      await (async () => {
       if (navigator.clipboard?.read) {
         const items = await navigator.clipboard.read();
         let got = false;
@@ -2378,13 +2396,28 @@
         return;
       }
       if (force) toast("当前浏览器不支持读取剪贴板，请用 Ctrl/⌘+V 或右键粘贴");
+      })();
+      setError(memoError, "");
+      setAutoclipStatus("");
     } catch (err) {
-      const hint = clipPermissionHint(err);
+      const perm = await queryClipboardReadPermission();
+      const denied = perm === "denied";
+      const blocked = isClipboardGestureBlock(err);
+      if (!force && !denied && blocked) {
+        if (perm === "granted" && state.autoClip) {
+          setAutoclipStatus("自动读取被浏览器拦住，点「读取剪贴板」即可", { isError: false });
+        }
+        return;
+      }
+      const hint = denied ? clipDeniedHint() : clipReadFailHint(err);
+      const asError = denied || (force && blocked);
       if (force) {
         setError(memoError, hint);
         toast(hint);
       }
-      if (state.autoClip) setAutoclipStatus(hint, { isError: true });
+      if (state.autoClip && (asError || force)) {
+        setAutoclipStatus(hint, { isError: asError });
+      }
     }
   }
 
@@ -2665,11 +2698,91 @@
     }
   }
 
+  function batchDeleteConfirmMessage(ids) {
+    const list = [...ids];
+    const sec = Math.round(UNDO_MS / 1000);
+    const pinnedCount = list.reduce((n, id) => {
+      const it = state.index.items.find((x) => x.id === id);
+      return n + (it?.pinned ? 1 : 0);
+    }, 0);
+    if (list.length > 1 && pinnedCount > 0) {
+      return `删除 ${list.length} 条，其中 ${pinnedCount} 条已置顶。删除后约 ${sec} 秒可撤销。`;
+    }
+    return `删除 ${list.length} 条？删除后约 ${sec} 秒内可撤销。`;
+  }
+
+  function startOfLocalDay(ms) {
+    const d = new Date(ms);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  }
+
+  function endOfLocalDay(ms) {
+    const d = new Date(ms);
+    d.setHours(23, 59, 59, 999);
+    return d.getTime();
+  }
+
+  function selectVisibleByCreatedRange(fromMs, toMs) {
+    const lo = Math.min(Number(fromMs) || 0, Number(toMs) || 0);
+    const hi = Math.max(Number(fromMs) || 0, Number(toMs) || 0);
+    const vis = visibleItems();
+    vis.forEach((it) => state.selected.delete(it.id));
+    vis.forEach((it) => {
+      const t = Number(it.createdAt) || 0;
+      if (t >= lo && t <= hi) state.selected.add(it.id);
+    });
+    renderItems();
+    const n = vis.filter((it) => state.selected.has(it.id)).length;
+    toast(n ? `已勾选 ${n} 条（未删除）` : "这段时间没有可勾选的条目");
+    return n;
+  }
+
+  function selectVisibleLastHours(hours) {
+    const now = Date.now();
+    const h = Math.max(0, Number(hours) || 0);
+    return selectVisibleByCreatedRange(now - h * 3600000, now);
+  }
+
+  function selectVisibleToday() {
+    const now = Date.now();
+    return selectVisibleByCreatedRange(startOfLocalDay(now), endOfLocalDay(now));
+  }
+
+  function parseMemoDateInput(el) {
+    const v = String(el?.value || "").trim();
+    if (!v) return null;
+    const d = new Date(`${v}T00:00:00`);
+    const t = d.getTime();
+    return Number.isNaN(t) ? null : t;
+  }
+
+  function selectVisibleDateRangeFromInputs() {
+    const fromDay = parseMemoDateInput($("#memo-sel-from"));
+    const toDay = parseMemoDateInput($("#memo-sel-to"));
+    const today = Date.now();
+    if (fromDay == null && toDay == null) {
+      toast("请先选日期");
+      return 0;
+    }
+    let lo;
+    let hi;
+    if (fromDay != null && toDay != null) {
+      lo = startOfLocalDay(fromDay);
+      hi = endOfLocalDay(toDay);
+    } else {
+      const day = fromDay != null ? fromDay : toDay;
+      lo = Math.min(startOfLocalDay(day), startOfLocalDay(today));
+      hi = Math.max(endOfLocalDay(day), endOfLocalDay(today));
+    }
+    return selectVisibleByCreatedRange(lo, hi);
+  }
+
   async function deleteItems(ids, { confirm = true } = {}) {
     const list = [...ids];
     if (!list.length) return;
     if (confirm) {
-      if (!window.confirm(`删除 ${list.length} 条？删除后约 ${Math.round(UNDO_MS / 1000)} 秒内可撤销。`)) return;
+      if (!window.confirm(batchDeleteConfirmMessage(list))) return;
     }
     await commitPendingUndo();
     const removed = [];
@@ -4172,6 +4285,36 @@
     });
     renderItems();
   });
+  $("#memo-time-select")?.addEventListener("click", (e) => {
+    const hoursBtn = e.target.closest?.("[data-memo-sel-hours]");
+    if (hoursBtn) {
+      selectVisibleLastHours(hoursBtn.dataset.memoSelHours);
+      return;
+    }
+    if (e.target.closest?.("[data-memo-sel-today]")) {
+      selectVisibleToday();
+    }
+  });
+  $("#memo-sel-range-btn")?.addEventListener("click", () => {
+    const panel = $("#memo-sel-range");
+    const btn = $("#memo-sel-range-btn");
+    if (!panel) return;
+    const open = panel.hidden;
+    panel.hidden = !open;
+    if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) {
+      const to = $("#memo-sel-to");
+      if (to && !to.value) {
+        const d = new Date();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        to.value = `${d.getFullYear()}-${m}-${day}`;
+      }
+    }
+  });
+  $("#memo-sel-range-ok")?.addEventListener("click", () => {
+    selectVisibleDateRangeFromInputs();
+  });
   $("#memo-batch-del")?.addEventListener("click", () => {
     deleteItems([...state.selected]).catch((err) => setError(memoError, err.message || String(err)));
   });
@@ -4503,6 +4646,10 @@
       const item = state.index.items.find((x) => x.id === id) || previewItem;
       return shareItem(item);
     },
+    batchDeleteConfirmMessage,
+    selectVisibleByCreatedRange,
+    selectVisibleLastHours,
+    selectVisibleToday,
   };
 
   boot().catch((err) => setError(memoError, err.message || String(err)));

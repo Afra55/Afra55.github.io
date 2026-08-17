@@ -4747,6 +4747,60 @@ button.adb-device-body.linkish {
   align-items: center;
   gap: 0.45rem;
   margin: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+#memo .label-row {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.memo-time-select {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.memo-time-select .ghost-btn {
+  min-height: 2.15rem;
+  padding: 0.28rem 0.65rem;
+  font-size: 0.82rem;
+}
+
+.memo-sel-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.7rem;
+  margin: 0.45rem 0 0;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+}
+
+.memo-sel-range[hidden] {
+  display: none !important;
+}
+
+.memo-sel-range label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.memo-sel-range input[type="date"] {
+  font: inherit;
+  color: var(--ink);
+  background: var(--control-bg-strong, color-mix(in srgb, var(--bg-0) 70%, var(--panel-strong)));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 0.28rem 0.45rem;
+  min-height: 2.15rem;
 }
 
 .memo-empty {
