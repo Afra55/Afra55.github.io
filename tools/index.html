@@ -4,12 +4,20 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <meta name="description" content="实用小工具：时间戳、颜色、Base64、JSON、正则、URL、UUID、Hash、文本、命名转换、坐标系互转、图片压缩裁剪水印拼接、ADB、GIF、JWT、YAML、二维码等" />
+  <meta name="theme-color" content="#0b1320" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="DevTools" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="./icons/icon-180.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css?v=20260817vsfsjank1" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260817vsfsjank1" />
+  <link rel="stylesheet" href="./style.css?v=20260817pwa1" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260817pwa1" />
   <script>
     /* 尽早应用主题变量，减少闪烁；侧栏也依赖这些 CSS 变量 */
     (function () {
@@ -78,9 +86,10 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.17-vsfsjank1</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.17-pwa1</span>
       </div>
       <div class="header-actions">
+        <button type="button" class="ghost-btn" id="pwa-install" hidden aria-hidden="true" title="安装到桌面/开始菜单">安装应用</button>
         <button type="button" class="ghost-btn" id="theme-open" title="切换站点主题">主题</button>
         <a class="ghost-btn header-about-link" href="#about">关于</a>
         <a class="ghost-btn header-about-link" href="#setup" title="安装 Node / ADB / FFmpeg">安装帮助</a>
@@ -3536,19 +3545,20 @@ adb devices</pre>
   <script src="./vendor/gif.js"></script>
   <script src="./vendor/omggif.js"></script>
   <script src="./vendor/jszip.min.js"></script>
-  <script src="./theme.js?v=20260817vsfsjank1"></script>
-  <script src="./temp.js?v=20260817vsfsjank1"></script>
+  <script src="./theme.js?v=20260817pwa1"></script>
+  <script src="./temp.js?v=20260817pwa1"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260817vsfsjank1"></script>
-  <script src="./about.js?v=20260817vsfsjank1"></script>
-  <script src="./extra.js?v=20260817vsfsjank1"></script>
-  <script src="./vtrim.js?v=20260817vsfsjank1"></script>
-  <script src="./audio.js?v=20260817vsfsjank1"></script>
-  <script src="./ffbridge.js?v=20260817vsfsjank1"></script>
-  <script src="./setup.js?v=20260817vsfsjank1"></script>
+  <script src="./app.js?v=20260817pwa1"></script>
+  <script src="./about.js?v=20260817pwa1"></script>
+  <script src="./extra.js?v=20260817pwa1"></script>
+  <script src="./vtrim.js?v=20260817pwa1"></script>
+  <script src="./audio.js?v=20260817pwa1"></script>
+  <script src="./ffbridge.js?v=20260817pwa1"></script>
+  <script src="./setup.js?v=20260817pwa1"></script>
   <script src="./imgkit.js?v=20260810l"></script>
-  <script src="./memo.js?v=20260817vsfsjank1"></script>
-  <script src="./textimg.js?v=20260817vsfsjank1"></script>
-  <script src="./imgtext.js?v=20260817vsfsjank1"></script>
+  <script src="./memo.js?v=20260817pwa1"></script>
+  <script src="./textimg.js?v=20260817pwa1"></script>
+  <script src="./imgtext.js?v=20260817pwa1"></script>
+  <script src="./pwa.js?v=20260817pwa1"></script>
 </body>
 </html>

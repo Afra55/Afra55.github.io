@@ -853,8 +853,34 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817vsfsjank1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817pwa1/.test(s.src)),
     };
+
+    out.pwa = {
+      hasManifestLink: Boolean(document.querySelector('link[rel="manifest"]')),
+      manifestHref: document.querySelector('link[rel="manifest"]')?.getAttribute("href") || "",
+      hasInstallBtn: Boolean(document.getElementById("pwa-install")),
+      hasPwaScript: [...document.scripts].some((s) => /pwa\.js/.test(s.src)),
+      hasAppleIcon: Boolean(document.querySelector('link[rel="apple-touch-icon"]')),
+      hasThemeColor: Boolean(document.querySelector('meta[name="theme-color"]')),
+      swApi: "serviceWorker" in navigator,
+      registered: false,
+    };
+    try {
+      if (navigator.serviceWorker) {
+        const waitReg = async () => {
+          for (let i = 0; i < 20; i += 1) {
+            const reg = await navigator.serviceWorker.getRegistration("./");
+            if (reg) return reg;
+            await new Promise((r) => setTimeout(r, 100));
+          }
+          return null;
+        };
+        out.pwa.registered = Boolean(await waitReg());
+      }
+    } catch (err) {
+      out.pwa.swError = String((err && err.message) || err);
+    }
 
     return out;
   });
@@ -866,7 +892,7 @@ async function main() {
   if (errors.length) failed.push(...errors.map((e) => `page: ${e}`));
   if (!result.panelActive) failed.push("memo panel not active");
   if (!result.hasEditor || !result.hasList) failed.push("missing editor/list");
-  if (!/memo|theme|vsplit|vtrim|audio|ffb|ffadapt|setup|btnsize|memoux|imgzoom/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memo|theme|vsplit|vtrim|audio|ffb|ffadapt|setup|btnsize|memoux|imgzoom|vsfsjank|pwa/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1056,8 +1082,17 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/imgzoom1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to imgzoom1");
+  if (!/pwa1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to pwa1");
+  }
+  if (!result.pwa?.hasManifestLink || !/manifest\.webmanifest/.test(result.pwa?.manifestHref || "")) {
+    failed.push("PWA manifest link missing");
+  }
+  if (!result.pwa?.hasInstallBtn || !result.pwa?.hasPwaScript || !result.pwa?.hasAppleIcon || !result.pwa?.hasThemeColor) {
+    failed.push("PWA install UI / icons / theme-color missing");
+  }
+  if (!result.pwa?.swApi || !result.pwa?.registered) {
+    failed.push("service worker should register for PWA");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");

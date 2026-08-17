@@ -38,7 +38,7 @@
   /** 分享落地到关于页；标题要让对方一眼知道这是什么站 */
   const SHARE_SITE_TITLE = "DevTools · 本地实用小工具合集";
   const SHARE_SITE_TEXT =
-    "时间戳、颜色、JSON、备忘录、GIF/视频、ADB 等 · 浏览器本地处理，数据不上传。打开即可用：";
+    "时间戳、颜色、JSON、备忘录、GIF/视频、ADB 等 · 浏览器本地处理，数据不上传。可用 Chrome/Edge 安装到桌面。打开即可用：";
 
   function shareUrl() {
     try {
