@@ -853,7 +853,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817imgzoom1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817vsfsjank1/.test(s.src)),
     };
 
     return out;

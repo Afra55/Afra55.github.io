@@ -915,6 +915,14 @@ async function main() {
     const wrap = document.getElementById("vsplit-preview-wrap");
     const host = document.getElementById("vsplit-fs-host");
     const scrub = document.getElementById("vsplit-scrub");
+    const waitFrames = (n = 2) =>
+      new Promise((resolve) => {
+        const step = (left) => {
+          if (left <= 0) resolve();
+          else requestAnimationFrame(() => step(left - 1));
+        };
+        step(n);
+      });
     const seekByScrub = async (ratio) => {
       const max = Number(scrub.max) || 1000;
       scrub.value = String(Math.round(max * ratio));
@@ -934,6 +942,7 @@ async function main() {
     await seekByScrub(0.2);
     await video.play().catch(() => {});
     document.getElementById("vsplit-fs-mark")?.click();
+    await waitFrames(3);
     const afterFsStart = (document.getElementById("vsplit-fs-mark")?.textContent || "").trim();
     const statusAfterStart = (document.getElementById("vsplit-fs-status")?.textContent || "").trim();
     const noteAfterStart = (document.getElementById("vsplit-fs-note")?.textContent || "").trim();
@@ -943,6 +952,7 @@ async function main() {
     await seekByScrub(0.35);
     await video.play().catch(() => {});
     document.getElementById("vsplit-fs-mark")?.click();
+    await waitFrames(3);
     const marks = window.DevToolsVsplit.getMarks?.() || [];
     const statusAfterEnd = (document.getElementById("vsplit-fs-status")?.textContent || "").trim();
     const noteAfterEnd = (document.getElementById("vsplit-fs-note")?.textContent || "").trim();
@@ -962,6 +972,7 @@ async function main() {
     const editAfterDotTap = window.DevToolsVsplit.getEditIdx?.() ?? -1;
     const beforeUndo = marks.length;
     document.getElementById("vsplit-fs-undo")?.click();
+    await waitFrames(2);
     const afterUndoEnd = {
       marks: window.DevToolsVsplit.getMarks?.() || [],
       draft: window.DevToolsVsplit.getDraftStart?.(),
@@ -969,6 +980,7 @@ async function main() {
       markLabel: (document.getElementById("vsplit-fs-mark")?.textContent || "").trim(),
     };
     document.getElementById("vsplit-fs-undo")?.click();
+    await waitFrames(2);
     const afterUndoStart = {
       marks: window.DevToolsVsplit.getMarks?.() || [],
       draft: window.DevToolsVsplit.getDraftStart?.(),
