@@ -716,6 +716,8 @@
   const previewCopyBtn = $("#memo-preview-copy");
   const previewPathBtn = $("#memo-preview-path");
   const previewDelBtn = $("#memo-preview-del");
+  const previewTopBtn = $("#memo-preview-top");
+  const previewPinBtn = $("#memo-preview-pin");
   let previewObjectUrl = "";
   let previewBlob = null;
   let previewItem = null;
@@ -1180,6 +1182,58 @@
     return row;
   }
 
+  function pinActionLabel(item) {
+    return item?.pinned ? "取消置顶" : "一直置顶";
+  }
+
+  function itemSecondaryActions(item) {
+    const canCopy = canClipboardCopy(item);
+    const noteRaw = String(item?.note || "").trim();
+    const acts = [
+      { id: "open", label: "预览" },
+      { id: "top", label: "移动到顶部" },
+      { id: "pin", label: pinActionLabel(item) },
+    ];
+    if (canOfferItemShare(item)) acts.push({ id: "share", label: "分享" });
+    if (item?.type === "text") acts.push({ id: "edit", label: "编辑" });
+    acts.push({ id: "note", label: noteRaw ? "改备注" : "备注" });
+    if (canCopy) acts.push({ id: "dl", label: "下载" });
+    if (state.mode === "dir" && !state.dirPending) acts.push({ id: "path", label: "新标签查看" });
+    acts.push({ id: "del", label: "删除", danger: true });
+    return acts;
+  }
+
+  function refreshPreviewOrderChrome(item) {
+    if (item?.id && previewItem?.id === item.id) {
+      previewItem = state.index.items.find((x) => x.id === item.id) || previewItem;
+    }
+    const row = previewItem;
+    if (previewTopBtn) previewTopBtn.hidden = !row;
+    if (previewPinBtn) {
+      previewPinBtn.hidden = !row;
+      previewPinBtn.textContent = pinActionLabel(row);
+    }
+  }
+
+  async function applyItemMoveToTop(item) {
+    if (!item?.id) return;
+    await moveItemToTop(item);
+    const row = state.index.items.find((x) => x.id === item.id) || item;
+    renderAll();
+    flashItem(row.id, "已移到顶部");
+    refreshPreviewOrderChrome(row);
+  }
+
+  async function applyItemPinToggle(item) {
+    if (!item?.id) return;
+    const next = !item.pinned;
+    await setItemPinned(item, next);
+    const row = state.index.items.find((x) => x.id === item.id) || item;
+    renderAll();
+    flashItem(row.id, next ? "已置顶" : "已取消置顶");
+    refreshPreviewOrderChrome(row);
+  }
+
   async function bumpItemToFront(item) {
     if (!item?.id) return { item: null, moved: false };
     const idx = state.index.items.findIndex((x) => x.id === item.id);
@@ -1478,21 +1532,13 @@
     const editing = state.editingId === item.id ? " is-editing" : "";
     const pinnedCls = item.pinned ? " is-pinned" : "";
     const canCopy = canClipboardCopy(item);
-    const offerShare = canOfferItemShare(item);
     const primaryAction = canCopy
       ? `<button type="button" class="secondary-btn" data-memo-copy="${item.id}">复制</button>`
       : `<button type="button" class="secondary-btn" data-memo-dl="${item.id}">下载</button>`;
-    const moreBits = [
-      `<button type="button" class="ghost-btn" data-memo-open="${item.id}">预览</button>`,
-      offerShare ? `<button type="button" class="ghost-btn" data-memo-share="${item.id}">分享</button>` : "",
-      canCopy ? `<button type="button" class="ghost-btn" data-memo-dl="${item.id}">下载</button>` : "",
-      item.type === "text" ? `<button type="button" class="ghost-btn" data-memo-edit="${item.id}">编辑</button>` : "",
-      `<button type="button" class="ghost-btn" data-memo-note="${item.id}">${noteRaw ? "改备注" : "备注"}</button>`,
-      state.mode === "dir" && !state.dirPending
-        ? `<button type="button" class="ghost-btn" data-memo-path="${item.id}">新标签查看</button>`
-        : "",
-      `<button type="button" class="ghost-btn memo-more-danger" data-memo-del="${item.id}">删除</button>`,
-    ].filter(Boolean);
+    const moreBits = itemSecondaryActions(item).map((act) => {
+      const danger = act.danger ? " memo-more-danger" : "";
+      return `<button type="button" class="ghost-btn${danger}" data-memo-${act.id}="${item.id}">${act.label}</button>`;
+    });
     return `<article class="memo-card${editing}${pinnedCls}" data-memo-id="${item.id}" draggable="${canDragReorder() ? "true" : "false"}">
       <div class="memo-card-head">
         <label class="memo-check"><input type="checkbox" data-memo-check="${item.id}" ${checked} /></label>
@@ -3251,6 +3297,7 @@
       previewPathBtn.hidden = !(item && state.mode === "dir" && !state.dirPending);
     }
     if (previewDelBtn) previewDelBtn.hidden = !item;
+    refreshPreviewOrderChrome(item);
   }
 
   function isPdfItem(item, blob) {
@@ -3807,16 +3854,9 @@
         else if (act === "dl") await downloadItem(item);
         else if (act === "share") await shareItem(item);
         else if (act === "open") await openItemPreview(item);
-        else if (act === "top") {
-          await moveItemToTop(item);
-          renderAll();
-          flashItem(item.id, "已移到顶部");
-        } else if (act === "pin") {
-          const next = !item.pinned;
-          await setItemPinned(item, next);
-          renderAll();
-          flashItem(item.id, next ? "已置顶" : "已取消置顶");
-        } else if (act === "edit") await beginEditText(item);
+        else if (act === "top") await applyItemMoveToTop(item);
+        else if (act === "pin") await applyItemPinToggle(item);
+        else if (act === "edit") await beginEditText(item);
         else if (act === "note") await beginEditNote(item);
         else if (act === "path") await openItemPath(item);
         else if (act === "del") await deleteItems([item.id], { confirm: false });
@@ -3841,21 +3881,13 @@
     const bits = [];
     if (canCopy) bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="copy">复制</button>`);
     else bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="dl">下载</button>`);
-    bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="open">预览</button>`);
-    bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="top">移动到顶部</button>`);
-    bits.push(
-      `<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="pin">${
-        item.pinned ? "取消置顶" : "一直置顶"
-      }</button>`
-    );
-    if (canOfferItemShare(item)) bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="share">分享</button>`);
-    if (item.type === "text") bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="edit">编辑</button>`);
-    bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="note">备注</button>`);
-    if (canCopy) bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="dl">下载</button>`);
-    if (state.mode === "dir" && !state.dirPending) {
-      bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="path">新标签查看</button>`);
-    }
-    bits.push(`<button type="button" class="memo-ctx-item is-danger" role="menuitem" data-memo-ctx-act="del">删除</button>`);
+    itemSecondaryActions(item).forEach((act) => {
+      if (!canCopy && act.id === "dl") return;
+      const danger = act.danger ? " is-danger" : "";
+      bits.push(
+        `<button type="button" class="memo-ctx-item${danger}" role="menuitem" data-memo-ctx-act="${act.id}">${act.label}</button>`
+      );
+    });
     el.innerHTML = bits.join("");
     el.hidden = false;
     const pad = 8;
@@ -3999,6 +4031,20 @@
       if (delId) {
         // 列表「更多」与操作按钮：直接删（仍可撤销）；预览内删除另走确认
         await deleteItems([delId], { confirm: false });
+        t.closest("details")?.removeAttribute("open");
+        return;
+      }
+      const topId = t.closest?.("[data-memo-top]")?.dataset?.memoTop;
+      if (topId) {
+        const item = state.index.items.find((x) => x.id === topId);
+        if (item) await applyItemMoveToTop(item);
+        t.closest("details")?.removeAttribute("open");
+        return;
+      }
+      const pinId = t.closest?.("[data-memo-pin]")?.dataset?.memoPin;
+      if (pinId) {
+        const item = state.index.items.find((x) => x.id === pinId);
+        if (item) await applyItemPinToggle(item);
         t.closest("details")?.removeAttribute("open");
         return;
       }
@@ -4348,6 +4394,16 @@
     const item = previewItem;
     if (!item) return;
     openItemPath(item).catch((err) => setError(memoError, err.message || String(err)));
+  });
+  previewTopBtn?.addEventListener("click", () => {
+    const item = previewItem;
+    if (!item) return;
+    applyItemMoveToTop(item).catch((err) => setError(memoError, err.message || String(err)));
+  });
+  previewPinBtn?.addEventListener("click", () => {
+    const item = previewItem;
+    if (!item) return;
+    applyItemPinToggle(item).catch((err) => setError(memoError, err.message || String(err)));
   });
   previewDelBtn?.addEventListener("click", async () => {
     const item = previewItem;

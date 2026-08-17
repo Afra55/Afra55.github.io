@@ -293,6 +293,11 @@ async function main() {
         hasDel: Boolean(document.getElementById("memo-preview-del")),
         delVisible: !document.getElementById("memo-preview-del")?.hidden,
         hasPath: Boolean(document.getElementById("memo-preview-path")),
+        hasTop: Boolean(document.getElementById("memo-preview-top")),
+        topVisible: !document.getElementById("memo-preview-top")?.hidden,
+        hasPin: Boolean(document.getElementById("memo-preview-pin")),
+        pinVisible: !document.getElementById("memo-preview-pin")?.hidden,
+        pinLabel: document.getElementById("memo-preview-pin")?.textContent || "",
         wideEnough: (document.getElementById("memo-lightbox")?.getBoundingClientRect?.().width || 0) >= 480,
       };
       document.getElementById("memo-lightbox-close")?.click();
@@ -325,7 +330,42 @@ async function main() {
         out.pinMove.twoMenuActs = Boolean(
           ctxUnpinned?.querySelector('[data-memo-ctx-act="top"]') && ctxUnpinned?.querySelector('[data-memo-ctx-act="pin"]')
         );
+        const ctxActs = [...(ctxUnpinned?.querySelectorAll("[data-memo-ctx-act]") || [])].map((b) => b.dataset.memoCtxAct);
+        out.pinMove.ctxOrderOk =
+          ctxActs.indexOf("open") >= 0 &&
+          ctxActs.indexOf("top") === ctxActs.indexOf("open") + 1 &&
+          ctxActs.indexOf("pin") === ctxActs.indexOf("top") + 1;
+        const moreBtns = [...(unpinnedCard?.querySelectorAll(".memo-more-menu button") || [])];
+        const moreLabels = moreBtns.map((b) => (b.textContent || "").trim());
+        out.pinMove.moreHasTop = Boolean(unpinnedCard?.querySelector("[data-memo-top]"));
+        out.pinMove.moreHasPin = Boolean(unpinnedCard?.querySelector("[data-memo-pin]"));
+        out.pinMove.moreOrderOk = moreLabels[0] === "预览" && moreLabels[1] === "移动到顶部" && moreLabels[2] === "一直置顶";
         if (ctxUnpinned) ctxUnpinned.hidden = true;
+
+        document.querySelector(`[data-memo-open="${moveTarget.id}"]`)?.click();
+        await sleep(250);
+        const pTop = document.getElementById("memo-preview-top");
+        const pPin = document.getElementById("memo-preview-pin");
+        out.pinMove.previewHasTop = Boolean(pTop) && !pTop.hidden;
+        out.pinMove.previewHasPin = Boolean(pPin) && !pPin.hidden;
+        out.pinMove.previewPinLabel = /一直置顶/.test(pPin?.textContent || "");
+        pPin?.click();
+        await sleep(220);
+        out.pinMove.previewPinToggles = /取消置顶/.test(document.getElementById("memo-preview-pin")?.textContent || "");
+        out.pinMove.previewPinnedItem =
+          (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === moveTarget.id)?.pinned === true;
+        await window.DevToolsMemo.setItemPinned(moveTarget.id, false);
+        document.getElementById("memo-lightbox-close")?.click();
+        await sleep(80);
+
+        const morePinBtn = document.querySelector(`.memo-card[data-memo-id="${moveTarget.id}"] [data-memo-pin]`);
+        out.pinMove.morePinReady = /一直置顶/.test(morePinBtn?.textContent || "");
+        morePinBtn?.click();
+        await sleep(220);
+        out.pinMove.morePinWorks =
+          (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === moveTarget.id)?.pinned === true;
+        await window.DevToolsMemo.setItemPinned(moveTarget.id, false);
+        await sleep(120);
 
         await window.DevToolsMemo.moveItemToTop(moveTarget.id);
         await sleep(180);
@@ -945,7 +985,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memopin1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navfoot1/.test(s.src)),
     };
 
     out.pwa = {
@@ -999,6 +1039,39 @@ async function main() {
       out.navCompact.restored = !document.getElementById("nav-bar")?.classList.contains("is-compact");
     }
 
+    const navBarEl = document.getElementById("nav-bar");
+    const navFooter = navBarEl?.querySelector(".nav-footer-actions");
+    const toolNavEl = document.getElementById("tool-nav");
+    const moreCard = document.querySelector(".memo-card");
+    out.navFooter = {
+      hasClear: Boolean(document.getElementById("nav-cache-clear")),
+      hasReset: Boolean(document.getElementById("nav-reset")),
+      hasCompact: Boolean(document.getElementById("nav-compact")),
+      hasMeta: Boolean(document.getElementById("nav-cache-meta")),
+      belowList: Boolean(
+        navFooter &&
+          toolNavEl &&
+          navFooter.offsetTop + 1 >= toolNavEl.offsetTop + Math.min(toolNavEl.offsetHeight, toolNavEl.clientHeight)
+      ),
+      noOverlap: Boolean(
+        navFooter &&
+          toolNavEl &&
+          navFooter.offsetTop + 1 >= toolNavEl.offsetTop + toolNavEl.clientHeight
+      ),
+      atBottom: Boolean(
+        navBarEl &&
+          navFooter &&
+          navFooter.offsetTop + navFooter.offsetHeight <= navBarEl.clientHeight + 2
+      ),
+    };
+    out.moreKeep = {
+      preview: Boolean(moreCard?.querySelector(".memo-more [data-memo-open]")),
+      note: Boolean(moreCard?.querySelector(".memo-more [data-memo-note]")),
+      del: Boolean(moreCard?.querySelector(".memo-more [data-memo-del]")),
+      top: Boolean(moreCard?.querySelector(".memo-more [data-memo-top]")),
+      pin: Boolean(moreCard?.querySelector(".memo-more [data-memo-pin]")),
+    };
+
     return out;
   });
 
@@ -1009,7 +1082,7 @@ async function main() {
   if (errors.length) failed.push(...errors.map((e) => `page: ${e}`));
   if (!result.panelActive) failed.push("memo panel not active");
   if (!result.hasEditor || !result.hasList) failed.push("missing editor/list");
-  if (!/memo|theme|vsplit|vtrim|audio|ffb|ffadapt|setup|btnsize|memoux|imgzoom|vsfsjank|pwa|navpwa|memopin/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memo|theme|vsplit|vtrim|audio|ffb|ffadapt|setup|btnsize|memoux|imgzoom|vsfsjank|pwa|navpwa|memopin|navfoot/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1054,6 +1127,17 @@ async function main() {
     !result.pinMove?.twoMenuActs ||
     !result.pinMove?.hasTopAct ||
     !result.pinMove?.hasPinAct ||
+    !result.pinMove?.ctxOrderOk ||
+    !result.pinMove?.moreHasTop ||
+    !result.pinMove?.moreHasPin ||
+    !result.pinMove?.moreOrderOk ||
+    !result.pinMove?.previewHasTop ||
+    !result.pinMove?.previewHasPin ||
+    !result.pinMove?.previewPinLabel ||
+    !result.pinMove?.previewPinToggles ||
+    !result.pinMove?.previewPinnedItem ||
+    !result.pinMove?.morePinReady ||
+    !result.pinMove?.morePinWorks ||
     !result.pinMove?.moveIsNotPin ||
     !result.pinMove?.moveToUnpinnedTop ||
     !result.pinMove?.moveHasNoPinMark ||
@@ -1073,8 +1157,16 @@ async function main() {
   ) {
     failed.push("pin and move-to-top must be independent (sticky pin vs one-shot reorder)");
   }
-  if (!result.previewUi?.hasDel || !result.previewUi?.delVisible || !result.previewUi?.wideEnough) {
-    failed.push("preview should expose delete and be list-wide");
+  if (
+    !result.previewUi?.hasDel ||
+    !result.previewUi?.delVisible ||
+    !result.previewUi?.wideEnough ||
+    !result.previewUi?.hasTop ||
+    !result.previewUi?.topVisible ||
+    !result.previewUi?.hasPin ||
+    !result.previewUi?.pinVisible
+  ) {
+    failed.push("preview should expose delete, pin, move-to-top and be list-wide");
   }
   if (!result.dataUrlImg?.newestIsImage || !result.dataUrlImg?.notPlainDataText) {
     failed.push("data:image base64 text should ingest as image");
@@ -1235,8 +1327,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/memopin1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memopin1");
+  if (!/navfoot1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to navfoot1");
   }
   if (!result.pwa?.hasManifestLink || !/manifest\.webmanifest/.test(result.pwa?.manifestHref || "")) {
     failed.push("PWA manifest link missing");
@@ -1258,6 +1350,20 @@ async function main() {
     !result.navCompact?.restored
   ) {
     failed.push("nav compact setting should hide other groups until hover/pin");
+  }
+  if (
+    !result.navFooter?.hasClear ||
+    !result.navFooter?.hasReset ||
+    !result.navFooter?.hasCompact ||
+    !result.navFooter?.hasMeta ||
+    !result.navFooter?.belowList ||
+    !result.navFooter?.noOverlap ||
+    !result.navFooter?.atBottom
+  ) {
+    failed.push("nav footer (cache clear / compact / reset) should stay at the bottom, not overlap the tool list");
+  }
+  if (!result.moreKeep?.preview || !result.moreKeep?.note || !result.moreKeep?.del || !result.moreKeep?.top || !result.moreKeep?.pin) {
+    failed.push("memo more menu should keep preview/note/delete plus pin/move-to-top");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");

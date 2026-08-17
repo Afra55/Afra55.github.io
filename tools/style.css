@@ -1286,7 +1286,7 @@ a.secondary-btn {
     min-height: var(--nav-max-height, calc(100dvh - 7rem));
     max-height: var(--nav-max-height, calc(100dvh - 7rem));
     overflow-x: hidden;
-    overflow-y: auto;
+    overflow-y: hidden;
     overscroll-behavior: contain;
     padding: 0.65rem;
     box-sizing: border-box;
@@ -1306,12 +1306,29 @@ a.secondary-btn {
     pointer-events: auto;
   }
 
+  .nav-search-wrap,
+  .nav-recent,
+  .nav-sort-hint,
+  .nav-drawer-head {
+    flex-shrink: 0;
+  }
+
   .tool-nav {
     flex: 1 1 auto;
     min-height: 0;
     flex-direction: column;
     flex-wrap: nowrap;
     gap: 0.28rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+  }
+
+  .tool-nav::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
   }
 
   .tool-nav-link {
@@ -1327,9 +1344,13 @@ a.secondary-btn {
   }
 
   .nav-footer-actions {
+    flex: 0 0 auto;
     width: 100%;
     margin-top: auto;
-    padding-top: 0.35rem;
+    padding-top: 0.45rem;
+    position: relative;
+    z-index: 2;
+    background: var(--nav-bg);
   }
 
   .shell {
@@ -4814,7 +4835,7 @@ button.adb-device-body.linkish {
   z-index: 5;
   display: grid;
   gap: 0.2rem;
-  min-width: 8.5rem;
+  min-width: 9.5rem;
   padding: 0.4rem;
   border: 1px solid var(--line);
   border-radius: 12px;

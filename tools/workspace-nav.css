@@ -203,7 +203,7 @@ body.nav-sorting-tools .tool-nav-link.drag-over {
 
 body.nav-sorting .nav-bar,
 body.nav-sorting-tools .nav-bar {
-  overflow-y: auto !important;
+  overflow-y: hidden !important;
   overscroll-behavior: contain;
   touch-action: none;
 }
@@ -422,7 +422,7 @@ body.nav-open {
     opacity: 1 !important;
     pointer-events: none !important;
     overflow-x: hidden !important;
-    overflow-y: auto !important;
+    overflow-y: hidden !important;
     overscroll-behavior: contain;
     padding: 0.85rem 0.85rem 1.25rem !important;
     box-shadow: 12px 0 40px color-mix(in srgb, var(--bg-0) 45%, transparent);
@@ -437,11 +437,22 @@ body.nav-open {
     pointer-events: auto !important;
   }
 
+  .nav-search-wrap,
+  .nav-recent,
+  .nav-sort-hint,
+  .nav-drawer-head {
+    flex-shrink: 0;
+  }
+
   .tool-nav {
     display: block !important;
+    flex: 1 1 auto !important;
+    min-height: 0 !important;
     flex-direction: column;
     flex-wrap: nowrap !important;
-    overflow: visible !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior: contain;
     mask-image: none !important;
     width: 100%;
   }
@@ -463,8 +474,12 @@ body.nav-open {
   }
 
   .nav-footer-actions {
+    flex: 0 0 auto;
     margin-top: auto;
     padding-top: 0.75rem;
+    position: relative;
+    z-index: 2;
+    background: var(--nav-bg-solid, var(--panel-strong));
   }
 
   .nav-cache-clear,
@@ -519,6 +534,10 @@ body.nav-open {
   .tool-nav {
     display: block;
     width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   .tool-nav-link {
