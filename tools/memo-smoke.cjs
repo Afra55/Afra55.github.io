@@ -985,7 +985,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navfoot1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navlast1/.test(s.src)),
     };
 
     out.pwa = {
@@ -1072,6 +1072,59 @@ async function main() {
       pin: Boolean(moreCard?.querySelector(".memo-more [data-memo-pin]")),
     };
 
+    const installBtn = document.getElementById("pwa-install");
+    out.pwa.standaloneApi = typeof window.DevToolsPwa?.isStandalone === "function";
+    if (installBtn) {
+      installBtn.hidden = false;
+      document.documentElement.classList.add("is-pwa-standalone");
+      out.pwa.cssHidesInstall = getComputedStyle(installBtn).display === "none";
+      document.documentElement.classList.remove("is-pwa-standalone");
+      window.DevToolsPwa?.setInstallVisible?.(false);
+    }
+
+    const cacheMeta = document.getElementById("nav-cache-meta");
+    const cacheCs = cacheMeta ? getComputedStyle(cacheMeta) : null;
+    out.cacheMeta = {
+      nowrap: cacheCs?.whiteSpace === "nowrap",
+      noLongTail: !/可一键清理/.test(cacheMeta?.textContent || ""),
+      hasTitle: /备忘录/.test(cacheMeta?.getAttribute("title") || ""),
+    };
+
+    const recentListEl = document.getElementById("tool-recent-list");
+    out.recentUi = {
+      noLabel: !document.querySelector(".nav-recent-label"),
+      chipMax: document.querySelectorAll(".nav-recent-chip").length <= 4,
+      nowrap: Boolean(recentListEl) && getComputedStyle(recentListEl).flexWrap === "nowrap",
+    };
+
+    const sortHint = document.querySelector(".nav-sort-hint");
+    out.sortHint = {
+      hasEl: Boolean(sortHint),
+      api: typeof window.DevToolsNav?.syncSortHint === "function",
+      marked: (() => {
+        try {
+          return localStorage.getItem("devtools-nav-sort-hint-seen-v1") === "1";
+        } catch (_) {
+          return false;
+        }
+      })(),
+      visibleFirst: Boolean(sortHint) && !sortHint.hidden && getComputedStyle(sortHint).display !== "none",
+    };
+    window.DevToolsNav?.syncSortHint?.();
+    out.sortHint.hiddenSecond = Boolean(sortHint?.hidden) || getComputedStyle(sortHint).display === "none";
+
+    out.lastTool = {
+      api: typeof window.DevToolsNav?.lastToolHash === "function",
+    };
+    try {
+      localStorage.setItem("devtools-tool-recent-v1", JSON.stringify(["json", "memo"]));
+      out.lastTool.json = window.DevToolsNav.lastToolHash() === "#json";
+      localStorage.setItem("devtools-tool-recent-v1", JSON.stringify(["vsplit"]));
+      out.lastTool.media = window.DevToolsNav.lastToolHash() === "#media/vsplit";
+    } catch (err) {
+      out.lastTool.err = String((err && err.message) || err);
+    }
+
     return out;
   });
 
@@ -1082,7 +1135,7 @@ async function main() {
   if (errors.length) failed.push(...errors.map((e) => `page: ${e}`));
   if (!result.panelActive) failed.push("memo panel not active");
   if (!result.hasEditor || !result.hasList) failed.push("missing editor/list");
-  if (!/memo|theme|vsplit|vtrim|audio|ffb|ffadapt|setup|btnsize|memoux|imgzoom|vsfsjank|pwa|navpwa|memopin|navfoot/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memo|theme|vsplit|vtrim|audio|ffb|ffadapt|setup|btnsize|memoux|imgzoom|vsfsjank|pwa|navpwa|memopin|navfoot|navlast/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1327,8 +1380,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/navfoot1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to navfoot1");
+  if (!/navlast1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to navlast1");
   }
   if (!result.pwa?.hasManifestLink || !/manifest\.webmanifest/.test(result.pwa?.manifestHref || "")) {
     failed.push("PWA manifest link missing");
@@ -1338,6 +1391,21 @@ async function main() {
   }
   if (!result.pwa?.swApi || !result.pwa?.registered) {
     failed.push("service worker should register for PWA");
+  }
+  if (!result.pwa?.standaloneApi || !result.pwa?.cssHidesInstall) {
+    failed.push("standalone/PWA window should hide the install button");
+  }
+  if (!result.cacheMeta?.nowrap || !result.cacheMeta?.noLongTail || !result.cacheMeta?.hasTitle) {
+    failed.push("nav cache hint should be a single short line with details in title");
+  }
+  if (!result.recentUi?.noLabel || !result.recentUi?.chipMax || !result.recentUi?.nowrap) {
+    failed.push("recent tools should be a compact single row without a section title");
+  }
+  if (!result.sortHint?.hasEl || !result.sortHint?.api || !result.sortHint?.marked || !result.sortHint?.visibleFirst || !result.sortHint?.hiddenSecond) {
+    failed.push("sort hint should show once then hide on later visits");
+  }
+  if (!result.lastTool?.api || !result.lastTool?.json || !result.lastTool?.media) {
+    failed.push("empty hash should restore last used tool including media tabs");
   }
   if (
     !result.navCompact?.hasToggle ||

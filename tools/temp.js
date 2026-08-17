@@ -166,12 +166,11 @@
     const parts = [];
     // 站点占用里尽量不把备忘录数据说成「缓存」
     const cacheish = Math.max(0, (Number(est?.usage) || 0) - memoBytes);
-    if (cacheish > 0) parts.push(`缓存约 ${formatBytes(cacheish)}`);
-    if (memoBytes > 0) parts.push(`备忘录数据 ${formatBytes(memoBytes)}`);
-    if (blobs.bytes > 0) parts.push(`本次临时 ${formatBytes(blobs.bytes)}`);
-    el.textContent = parts.length
-      ? `${parts.join(" · ")} · 缓存可一键清理（备忘录数据不会清）`
-      : "暂无本站缓存占用";
+    if (cacheish > 0) parts.push(`缓存 ${formatBytes(cacheish)}`);
+    if (memoBytes > 0) parts.push(`备忘录 ${formatBytes(memoBytes)}`);
+    if (blobs.bytes > 0) parts.push(`临时 ${formatBytes(blobs.bytes)}`);
+    el.title = "缓存可一键清理；备忘录数据不会被清掉";
+    el.textContent = parts.length ? parts.join(" · ") : "暂无缓存";
   }
 
   /** 一键清掉本站临时视频/GIF 和编码器磁盘缓存（不动备忘录数据；系统相册已下载文件也不动） */
