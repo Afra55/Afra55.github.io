@@ -995,29 +995,55 @@ async function main() {
       const flash = document.getElementById("vsplit-fs-flash");
       return Boolean(host && flash && host.lastElementChild === flash);
     })();
-    // 全屏点圆点不应进入编辑（否则会重绘下方列表导致白屏）
+    // 全屏点圆点只跳进度，不进编辑
     const editableDotsInFs = document.querySelectorAll(
       "#vsplit-fs-scrub-slot .vsplit-scrub-mark.is-editable"
     ).length;
+    const jumpDotsInFs = document.querySelectorAll(
+      "#vsplit-fs-scrub-slot .vsplit-scrub-mark.is-jump"
+    ).length;
     const firstDot = document.querySelector("#vsplit-fs-scrub-slot .vsplit-scrub-mark");
+    const firstDotT = Number(firstDot?.dataset?.t);
     firstDot?.click();
+    await waitFrames(2);
+    const timeAfterDot = Number(video.currentTime) || 0;
+    const jumpedToDot =
+      Number.isFinite(firstDotT) && Math.abs(timeAfterDot - firstDotT) < 0.08;
     const editAfterDotTap = window.DevToolsVsplit.getEditIdx?.() ?? -1;
+    const lastMark = marks[marks.length - 1];
     const beforeUndo = marks.length;
     document.getElementById("vsplit-fs-undo")?.click();
     await waitFrames(2);
+    const timeAfterUndoEnd = Number(video.currentTime) || 0;
     const afterUndoEnd = {
       marks: window.DevToolsVsplit.getMarks?.() || [],
       draft: window.DevToolsVsplit.getDraftStart?.(),
       undoLabel: (document.getElementById("vsplit-fs-undo")?.textContent || "").trim(),
       markLabel: (document.getElementById("vsplit-fs-mark")?.textContent || "").trim(),
+      jumpedToStart: false,
     };
+    afterUndoEnd.jumpedToStart =
+      afterUndoEnd.draft != null && Math.abs(timeAfterUndoEnd - afterUndoEnd.draft) < 0.08;
     document.getElementById("vsplit-fs-undo")?.click();
     await waitFrames(2);
+    const timeAfterUndoStart = Number(video.currentTime) || 0;
     const afterUndoStart = {
       marks: window.DevToolsVsplit.getMarks?.() || [],
       draft: window.DevToolsVsplit.getDraftStart?.(),
       undoLabel: (document.getElementById("vsplit-fs-undo")?.textContent || "").trim(),
+      jumpedToPrev: false,
     };
+    const remain = afterUndoStart.marks;
+    const remainLast = remain[remain.length - 1];
+    const expectPrev =
+      afterUndoStart.draft != null
+        ? afterUndoStart.draft
+        : remainLast
+          ? remainLast.end != null
+            ? remainLast.end
+            : remainLast.start
+          : 0;
+    afterUndoStart.jumpedToPrev = Math.abs(timeAfterUndoStart - (Number(expectPrev) || 0)) < 0.08;
     document.getElementById("vsplit-fs-close")?.click();
     const closed = !window.DevToolsVsplit.isFullscreen();
     const backInWrap = wrap?.contains(video);
@@ -1051,6 +1077,8 @@ async function main() {
       videoAfterScrub,
       nudgeVisibleInFs,
       editableDotsInFs,
+      jumpDotsInFs,
+      jumpedToDot,
       editAfterDotTap,
       markCount: marks.length,
       beforeUndo,
@@ -1122,8 +1150,17 @@ async function main() {
   if (fsMark.editableDotsInFs !== 0) {
     throw new Error(`fullscreen scrub dots must not be editable: ${JSON.stringify(fsMark)}`);
   }
+  if (!(fsMark.jumpDotsInFs >= 1) || !fsMark.jumpedToDot) {
+    throw new Error(`fullscreen scrub dots should jump playhead: ${JSON.stringify(fsMark)}`);
+  }
   if (fsMark.editAfterDotTap !== -1) {
     throw new Error(`tapping fullscreen scrub dots must not enter edit: ${JSON.stringify(fsMark)}`);
+  }
+  if (!fsMark.afterUndoEnd?.jumpedToStart) {
+    throw new Error(`undo end should seek to remaining start: ${JSON.stringify(fsMark.afterUndoEnd)}`);
+  }
+  if (!fsMark.afterUndoStart?.jumpedToPrev) {
+    throw new Error(`undo start should seek to previous mark: ${JSON.stringify(fsMark.afterUndoStart)}`);
   }
   if (!(fsMark.listRowsAfterExit >= 1) || !(fsMark.editableDotsAfterExit >= 1)) {
     throw new Error(`exit fullscreen should restore mark chips+editable dots: ${JSON.stringify(fsMark)}`);
