@@ -36,7 +36,21 @@
 
   if (!("serviceWorker" in navigator)) return;
   const ready = () => {
-    navigator.serviceWorker.register("./sw.js", { scope: "./" }).catch(() => {});
+    navigator.serviceWorker
+      .register("./sw.js", { scope: "./" })
+      .then((reg) => {
+        try {
+          reg.update();
+        } catch (_) {}
+        document.addEventListener("visibilitychange", () => {
+          if (document.visibilityState === "visible") {
+            try {
+              reg.update();
+            } catch (_) {}
+          }
+        });
+      })
+      .catch(() => {});
   };
   if (document.readyState === "complete") ready();
   else window.addEventListener("load", ready, { once: true });

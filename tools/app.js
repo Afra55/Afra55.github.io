@@ -1006,6 +1006,44 @@
       .filter(Boolean);
   }
 
+  const NAV_COMPACT_KEY = "devtools-nav-compact-v1";
+  let navCompact = false;
+  try {
+    navCompact = localStorage.getItem(NAV_COMPACT_KEY) === "1";
+  } catch (_) {
+    navCompact = false;
+  }
+
+  function currentNavToolId() {
+    return currentTool === "media" ? currentMediaTab : currentTool;
+  }
+
+  function syncNavCompactUi() {
+    if (!navBar) return;
+    navBar.classList.toggle("is-compact", navCompact);
+    const searching = Boolean(String(toolSearch?.value || "").trim());
+    navBar.classList.toggle("is-searching", searching);
+    const compactToggle = $("#nav-compact");
+    if (compactToggle) compactToggle.checked = navCompact;
+    if (!navEl) return;
+    const currentId = currentNavToolId();
+    $$(".nav-group", navEl).forEach((g) => {
+      const ids = [...g.querySelectorAll(".tool-nav-link")].map((a) => a.dataset.tool);
+      const isCurrent = ids.includes(currentId);
+      g.classList.toggle("is-current", isCurrent);
+      if (isCurrent) g.classList.remove("is-pinned");
+    });
+  }
+
+  function setNavCompact(on) {
+    navCompact = Boolean(on);
+    try {
+      localStorage.setItem(NAV_COMPACT_KEY, navCompact ? "1" : "0");
+    } catch (_) {}
+    if (navEl) $$(".nav-group", navEl).forEach((g) => g.classList.remove("is-pinned"));
+    syncNavCompactUi();
+  }
+
   function moveGroupOrder(fromId, toId) {
     if (!fromId || !toId || fromId === toId) return loadGroupOrder();
     const order = loadGroupOrder();
@@ -1079,6 +1117,7 @@
     });
     bindNavInteractions();
     applySearchFilter(toolSearch?.value || "");
+    syncNavCompactUi();
   }
 
   function renderRecent() {
@@ -1279,6 +1318,7 @@
       link.classList.toggle("is-active", on);
       link.setAttribute("aria-current", on ? "page" : "false");
     });
+    syncNavCompactUi();
 
     if (!skipRecent) pushRecent(currentTool === "media" ? currentMediaTab : currentTool);
     // 手机分类拖拽排序后需保持抽屉打开
@@ -1333,6 +1373,7 @@
       });
       group.classList.toggle("is-filtered-out", !any);
     });
+    syncNavCompactUi();
   }
 
   let dragPayload = null;
@@ -1728,8 +1769,19 @@
           wrap,
         });
       });
+      title.addEventListener("click", (e) => {
+        if (!navCompact || didDrag) return;
+        e.preventDefault();
+        const willPin = !wrap.classList.contains("is-pinned") && !wrap.classList.contains("is-current");
+        $$(".nav-group", navEl).forEach((g) => g.classList.remove("is-pinned"));
+        if (willPin) wrap.classList.add("is-pinned");
+      });
     });
   }
+
+  $("#nav-compact")?.addEventListener("change", (e) => {
+    setNavCompact(Boolean(e.target?.checked));
+  });
 
   $("#nav-reset")?.addEventListener("click", () => {
     localStorage.removeItem(ORDER_KEY);
@@ -1894,6 +1946,10 @@
     meta: TOOL_META,
     about: ABOUT_DESC,
     mediaTabs: MEDIA_TABS,
+  };
+  window.DevToolsNav = {
+    isCompact: () => navCompact,
+    setCompact: (on) => setNavCompact(on),
   };
   window.dispatchEvent(new CustomEvent("devtools:catalog"));
   if (!location.hash) history.replaceState(null, "", "#timestamp");

@@ -2961,20 +2961,6 @@
     }
   }
 
-  function clampImagePan() {
-    if (!zoomWrap || !lightboxImg) return;
-    const rw = zoomWrap.clientWidth || 1;
-    const rh = zoomWrap.clientHeight || 1;
-    const nw = lightboxImg.naturalWidth || 1;
-    const nh = lightboxImg.naturalHeight || 1;
-    const iw = nw * imgZoom.scale;
-    const ih = nh * imgZoom.scale;
-    if (iw <= rw) imgZoom.x = (rw - iw) / 2;
-    else imgZoom.x = Math.min(0, Math.max(rw - iw, imgZoom.x));
-    if (ih <= rh) imgZoom.y = (rh - ih) / 2;
-    else imgZoom.y = Math.min(0, Math.max(rh - ih, imgZoom.y));
-  }
-
   function fitImageZoom() {
     if (!zoomWrap || !lightboxImg) return;
     const nw = lightboxImg.naturalWidth || 1;
@@ -3014,7 +3000,6 @@
     imgZoom.scale = scale;
     imgZoom.x = px - wx * scale;
     imgZoom.y = py - wy * scale;
-    clampImagePan();
     applyImageZoom();
   }
 
@@ -3078,7 +3063,6 @@
       imgZoom.y += e.clientY - imgZoom.lastY;
       imgZoom.lastX = e.clientX;
       imgZoom.lastY = e.clientY;
-      clampImagePan();
       applyImageZoom();
     });
     const endPtr = (e) => {
@@ -3108,7 +3092,6 @@
       const rh = zoomWrap.clientHeight || 1;
       imgZoom.fit = Math.min(rw / nw, rh / nh) || 1;
       imgZoom.scale = imgZoom.fit * rel;
-      clampImagePan();
       applyImageZoom();
     });
   }

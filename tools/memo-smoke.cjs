@@ -381,15 +381,22 @@ async function main() {
       const z2 = window.DevToolsMemo.getPreviewZoom?.() || {};
       document.getElementById("memo-zoom-in")?.click();
       const z3 = window.DevToolsMemo.getPreviewZoom?.() || {};
+      document.getElementById("memo-zoom-reset")?.click();
+      const z4 = window.DevToolsMemo.getPreviewZoom?.() || {};
+      const hud = document.querySelector(".memo-zoom-hud");
+      const hudCs = hud ? getComputedStyle(hud) : null;
       out.imgZoom = {
         ...out.imgZoom,
         opened: Boolean(document.getElementById("memo-lightbox")?.open),
         wrapShown: Boolean(wrap) && !wrap.hidden,
         hud: Boolean(document.getElementById("memo-zoom-in") && document.getElementById("memo-zoom-out")),
+        resetLabel: (document.getElementById("memo-zoom-reset")?.textContent || "").trim(),
+        hudTop: Boolean(hudCs && parseFloat(hudCs.top) >= 0 && hudCs.bottom === "auto"),
         fitOk: Number(z0.fit) > 0 && Math.abs((z0.rel || 1) - 1) < 0.12,
         wheeled: Number(z1.scale) > Number(z0.scale) + 0.0001,
         panned: Math.abs((z2.x || 0) - (z1.x || 0)) > 0.5 || Math.abs((z2.y || 0) - (z1.y || 0)) > 0.5,
         btnZoom: Number(z3.scale) > Number(z2.scale) + 0.0001,
+        resetOk: Math.abs((z4.rel || 1) - 1) < 0.12,
         pct: document.getElementById("memo-zoom-pct")?.textContent || "",
       };
       document.getElementById("memo-lightbox-close")?.click();
@@ -853,7 +860,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817pwa1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navpwa1/.test(s.src)),
     };
 
     out.pwa = {
@@ -882,6 +889,31 @@ async function main() {
       out.pwa.swError = String((err && err.message) || err);
     }
 
+    out.navCompact = {
+      hasToggle: Boolean(document.getElementById("nav-compact")),
+      defaultOff: document.getElementById("nav-compact")?.checked === false,
+      api: typeof window.DevToolsNav?.setCompact === "function",
+    };
+    if (window.DevToolsNav?.setCompact) {
+      window.DevToolsNav.setCompact(true);
+      const groups = [...document.querySelectorAll("#tool-nav .nav-group")];
+      const current = groups.find((g) => g.classList.contains("is-current"));
+      const other = groups.find((g) => !g.classList.contains("is-current"));
+      const curLink = current?.querySelector(".tool-nav-link");
+      const othLink = other?.querySelector(".tool-nav-link");
+      out.navCompact.barCompact = document.getElementById("nav-bar")?.classList.contains("is-compact");
+      out.navCompact.currentOpen = Boolean(curLink) && getComputedStyle(curLink).display !== "none";
+      out.navCompact.otherHidden = Boolean(othLink) && getComputedStyle(othLink).display === "none";
+      if (other) {
+        other.classList.add("is-pinned");
+        const pinnedLink = other.querySelector(".tool-nav-link");
+        out.navCompact.pinShows = Boolean(pinnedLink) && getComputedStyle(pinnedLink).display !== "none";
+        other.classList.remove("is-pinned");
+      }
+      window.DevToolsNav.setCompact(false);
+      out.navCompact.restored = !document.getElementById("nav-bar")?.classList.contains("is-compact");
+    }
+
     return out;
   });
 
@@ -892,7 +924,7 @@ async function main() {
   if (errors.length) failed.push(...errors.map((e) => `page: ${e}`));
   if (!result.panelActive) failed.push("memo panel not active");
   if (!result.hasEditor || !result.hasList) failed.push("missing editor/list");
-  if (!/memo|theme|vsplit|vtrim|audio|ffb|ffadapt|setup|btnsize|memoux|imgzoom|vsfsjank|pwa/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memo|theme|vsplit|vtrim|audio|ffb|ffadapt|setup|btnsize|memoux|imgzoom|vsfsjank|pwa|navpwa/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -937,7 +969,10 @@ async function main() {
     !result.imgZoom?.fitOk ||
     !result.imgZoom?.wheeled ||
     !result.imgZoom?.panned ||
-    !result.imgZoom?.btnZoom
+    !result.imgZoom?.btnZoom ||
+    !result.imgZoom?.resetOk ||
+    result.imgZoom?.resetLabel !== "还原" ||
+    !result.imgZoom?.hudTop
   ) {
     failed.push("image preview should zoom with wheel/buttons and pan by drag");
   }
@@ -1082,8 +1117,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/pwa1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to pwa1");
+  if (!/navpwa1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to navpwa1");
   }
   if (!result.pwa?.hasManifestLink || !/manifest\.webmanifest/.test(result.pwa?.manifestHref || "")) {
     failed.push("PWA manifest link missing");
@@ -1093,6 +1128,18 @@ async function main() {
   }
   if (!result.pwa?.swApi || !result.pwa?.registered) {
     failed.push("service worker should register for PWA");
+  }
+  if (
+    !result.navCompact?.hasToggle ||
+    !result.navCompact?.defaultOff ||
+    !result.navCompact?.api ||
+    !result.navCompact?.barCompact ||
+    !result.navCompact?.currentOpen ||
+    !result.navCompact?.otherHidden ||
+    !result.navCompact?.pinShows ||
+    !result.navCompact?.restored
+  ) {
+    failed.push("nav compact setting should hide other groups until hover/pin");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");
