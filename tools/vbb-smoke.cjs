@@ -774,6 +774,7 @@ async function main() {
     p1?.dispatchEvent(new PointerEvent("pointerup", { bubbles: true, pointerId: 11, pointerType: "mouse", button: 0 }));
     await new Promise((r) => setTimeout(r, 40));
     const nudgeHoldDelta = (Number(video.currentTime) || 0) - beforeHold;
+    await seekByScrub(0.35);
     const p01 = document.getElementById("vsplit-nudge-p01");
     const beforeHold01 = Number(video.currentTime) || 0;
     p01?.dispatchEvent(
