@@ -6080,6 +6080,80 @@ button.adb-device-body.linkish {
 .memo-preview-dlg[data-preview-kind="gif"] .memo-preview-stage {
   background: #07090e;
   min-height: min(58vh, 520px);
+  place-items: stretch;
+}
+
+.memo-zoom-wrap {
+  position: relative;
+  width: 100%;
+  min-height: min(58vh, 520px);
+  height: 100%;
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: none;
+  cursor: grab;
+  user-select: none;
+  border-radius: 12px;
+}
+
+.memo-preview-dlg.is-fs .memo-zoom-wrap {
+  min-height: 0;
+  border-radius: 0;
+}
+
+.memo-zoom-wrap.is-panning {
+  cursor: grabbing;
+}
+
+.memo-zoom-wrap.is-zoomed {
+  cursor: grab;
+}
+
+#memo-lightbox-img {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: none;
+  max-height: none;
+  width: auto;
+  height: auto;
+  transform-origin: 0 0;
+  pointer-events: none;
+  border-radius: 0;
+  will-change: transform;
+}
+
+.memo-zoom-hud {
+  position: absolute;
+  right: 0.55rem;
+  bottom: 0.55rem;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 0.28rem;
+  padding: 0.22rem 0.28rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  background: color-mix(in srgb, var(--panel-strong) 82%, transparent);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.memo-zoom-btn {
+  min-height: 1.85rem;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.92rem;
+}
+
+.memo-zoom-pct {
+  min-width: 3.2rem;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--ink);
+}
+
+.memo-preview-dlg.is-fs #memo-lightbox-img {
+  max-height: none;
 }
 
 .memo-preview-dlg[data-preview-kind="video"] .memo-preview-stage {
@@ -6111,17 +6185,6 @@ button.adb-device-body.linkish {
   min-height: 0;
   height: 100%;
   border-radius: 0;
-}
-
-#memo-lightbox-img {
-  max-width: 100%;
-  max-height: min(78vh, 780px);
-  object-fit: contain;
-  border-radius: 10px;
-}
-
-.memo-preview-dlg.is-fs #memo-lightbox-img {
-  max-height: calc(100vh - 5.5rem);
 }
 
 .memo-preview-video {
