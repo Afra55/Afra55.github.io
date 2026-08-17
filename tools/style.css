@@ -493,7 +493,9 @@ body.theme-reduce-glow .bg-grid {
   min-width: 0;
 }
 
-input[type="text"] {
+input[type="text"],
+input[type="search"],
+input[type="password"] {
   width: 100%;
   appearance: none;
   border: 1px solid var(--line);
@@ -506,9 +508,17 @@ input[type="text"] {
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
-input[type="text"]:focus {
-  border-color: rgba(46, 196, 182, 0.55);
-  box-shadow: 0 0 0 3px rgba(46, 196, 182, 0.15);
+input[type="text"]::placeholder,
+input[type="search"]::placeholder,
+input[type="password"]::placeholder {
+  color: var(--muted);
+}
+
+input[type="text"]:focus,
+input[type="search"]:focus,
+input[type="password"]:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .input-with-action {
@@ -698,8 +708,8 @@ a.secondary-btn {
 
 .channel-num:focus,
 .meta-input:focus {
-  border-color: rgba(46, 196, 182, 0.55);
-  box-shadow: 0 0 0 3px rgba(46, 196, 182, 0.15);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .channel-slider {
@@ -893,8 +903,8 @@ a.secondary-btn {
 }
 
 .area:focus {
-  border-color: rgba(46, 196, 182, 0.55);
-  box-shadow: 0 0 0 3px rgba(46, 196, 182, 0.15);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .area[readonly] {
@@ -1017,7 +1027,7 @@ a.secondary-btn {
 }
 
 .re-mark:nth-of-type(odd) {
-  background: rgba(46, 196, 182, 0.32);
+  background: color-mix(in srgb, var(--accent) 32%, transparent);
   color: #e8fffb;
 }
 
@@ -1162,7 +1172,7 @@ a.secondary-btn {
   transform: translateX(-50%) translateY(12px);
   background: #18312e;
   color: #d7fff8;
-  border: 1px solid rgba(46, 196, 182, 0.45);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--line));
   padding: 0.65rem 1rem;
   border-radius: 999px;
   font-size: 0.88rem;
@@ -1321,6 +1331,13 @@ a.secondary-btn {
   padding: 0.65rem 0.8rem;
   font: inherit;
   min-width: 5.5rem;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.select-input:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
 }
 
 .img-preview {
@@ -1646,7 +1663,7 @@ a.secondary-btn {
   padding: 0.65rem;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(14, 22, 38, 0.55);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
 }
 
 .gif-frame-thumb {
@@ -2110,7 +2127,7 @@ a.secondary-btn {
   appearance: none;
   flex: 0 0 auto;
   border: 1px solid var(--line);
-  background: rgba(8, 14, 26, 0.45);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
   color: var(--ink);
   border-radius: 999px;
   padding: 0.28rem 1.55rem 0.28rem 0.7rem;
@@ -2147,8 +2164,8 @@ a.secondary-btn {
 
 .vsplit-mark-chip-wrap.is-active .vsplit-mark-chip,
 .vsplit-mark-chip.is-active {
-  border-color: rgba(46, 196, 182, 0.65);
-  background: rgba(46, 196, 182, 0.16);
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--line));
+  background: var(--accent-soft-strong, color-mix(in srgb, var(--accent) 16%, transparent));
   color: var(--ink);
 }
 
@@ -2199,17 +2216,17 @@ a.secondary-btn {
 
 .vsplit-mark-picker button:hover,
 .vsplit-mark-picker button:focus-visible {
-  background: rgba(46, 196, 182, 0.14);
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
 }
 
 .vsplit-mark-picker button.is-nearest {
-  background: rgba(46, 196, 182, 0.2);
-  box-shadow: inset 0 0 0 1px rgba(46, 196, 182, 0.55);
+  background: var(--accent-soft-strong, color-mix(in srgb, var(--accent) 20%, transparent));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
 .vsplit-mark-picker button.is-nearest:hover,
 .vsplit-mark-picker button.is-nearest:focus-visible {
-  background: rgba(46, 196, 182, 0.28);
+  background: var(--accent-soft-strong, color-mix(in srgb, var(--accent) 28%, transparent));
 }
 
 .vsplit-mark-picker-badge {
@@ -2337,9 +2354,9 @@ a.secondary-btn {
 .vsplit-edit-bar {
   margin-top: 0.4rem;
   padding: 0.45rem 0.5rem 0.5rem;
-  border: 1px solid rgba(46, 196, 182, 0.35);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
   border-radius: 12px;
-  background: rgba(46, 196, 182, 0.08);
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 8%, transparent));
   display: grid;
   gap: 0.35rem;
 }
@@ -2415,12 +2432,12 @@ a.secondary-btn {
   padding: 0.65rem 0.7rem;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(8, 14, 26, 0.35);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
 }
 
 .vsplit-mark.is-editing {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-  background: color-mix(in srgb, var(--accent) 12%, rgba(8, 14, 26, 0.4));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
 }
 
 .vsplit-mark.is-incomplete {
@@ -2606,7 +2623,7 @@ a.secondary-btn {
   padding: 0.35rem 0.45rem 0.4rem;
   border: 1px solid rgba(232, 238, 248, 0.14);
   border-radius: 12px;
-  background: rgba(8, 14, 26, 0.72);
+  background: var(--control-bg-strong, color-mix(in srgb, var(--bg-0) 70%, var(--panel-strong)));
 }
 
 /* 全屏底部已有播放/打点，隐藏进度条块里的重复操作行 */
@@ -2763,7 +2780,7 @@ body.vsplit-fs-open {
   padding: 0.4rem 0.5rem;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(8, 14, 26, 0.45);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
 }
 
 .vsplit-clip-progress[hidden] {
@@ -2821,7 +2838,7 @@ body.vsplit-fs-open {
   padding: 0.95rem 1rem;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(8, 14, 26, 0.4);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
 }
 
 .vbb-plan-compare {
@@ -2834,12 +2851,12 @@ body.vsplit-fs-open {
   padding: 0.7rem 0.8rem;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(14, 22, 38, 0.55);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
 }
 
 .vbb-plan-card.is-selected {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-  background: color-mix(in srgb, var(--accent) 12%, rgba(14, 22, 38, 0.55));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
 }
 
 .vbb-plan-card strong {
@@ -2855,7 +2872,7 @@ body.vsplit-fs-open {
   padding: 0.55rem 0.65rem;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(14, 22, 38, 0.45);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
 }
 
 .vbb-plan-row .hint {
@@ -2885,7 +2902,7 @@ body.vsplit-fs-open {
   padding: 0.95rem 1rem;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(8, 14, 26, 0.45);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
 }
 
 .adb-status-main {
@@ -2915,7 +2932,7 @@ body.vsplit-fs-open {
 
 .adb-dot.is-ok {
   background: var(--accent);
-  box-shadow: 0 0 0 3px rgba(46, 196, 182, 0.2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
 .adb-dot.is-warn {
@@ -2966,7 +2983,7 @@ body.vsplit-fs-open {
 .adb-dev-list {
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(8, 14, 26, 0.35);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
   overflow: hidden;
 }
 
@@ -3067,9 +3084,9 @@ body.vsplit-fs-open {
 
 .adb-fs-workspace.is-drop .adb-fs-list,
 .adb-fs-list.is-drop {
-  outline: 2px dashed rgba(46, 196, 182, 0.75);
+  outline: 2px dashed color-mix(in srgb, var(--accent) 75%, transparent);
   outline-offset: -4px;
-  background: rgba(46, 196, 182, 0.08);
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 8%, transparent));
 }
 
 .adb-fs-workspace.is-drop::after {
@@ -3080,10 +3097,10 @@ body.vsplit-fs-open {
   place-items: center;
   pointer-events: none;
   z-index: 3;
-  color: var(--accent, #2ec4b6);
+  color: var(--accent);
   font-size: 0.95rem;
   font-weight: 600;
-  background: rgba(8, 14, 26, 0.55);
+  background: var(--control-bg-strong, color-mix(in srgb, var(--bg-0) 70%, var(--panel-strong)));
   border-radius: 12px;
 }
 
@@ -3092,7 +3109,7 @@ body.vsplit-fs-open {
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: hidden;
-  background: rgba(8, 14, 26, 0.35);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
   max-height: min(52vh, 36rem);
   overflow-y: auto;
   min-height: 14rem;
@@ -3125,7 +3142,7 @@ body.vsplit-fs-open {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 0.35rem 0.65rem 0.45rem;
-  background: rgba(8, 14, 26, 0.28);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
 }
 
 .adb-fs-shortcuts-wrap > summary {
@@ -3198,7 +3215,7 @@ body.vsplit-fs-open {
 
 #adb-fs-list .adb-fs-row.is-selected,
 #adb-fs-list .adb-fs-row.is-checked {
-  background: rgba(46, 196, 182, 0.1);
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 10%, transparent));
 }
 
 #adb-fs-list .adb-fs-row.is-dir,
@@ -3209,7 +3226,7 @@ body.vsplit-fs-open {
 #adb-fs-list .adb-fs-check {
   margin: 0;
   flex: 0 0 auto;
-  accent-color: var(--accent, #2ec4b6);
+  accent-color: var(--accent);
   justify-self: center;
 }
 
@@ -3260,7 +3277,7 @@ body.vsplit-fs-open {
 .adb-fs-preview {
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(8, 14, 26, 0.45);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
   padding: 0.65rem 0.75rem 0.8rem;
   max-height: 26rem;
   display: flex;
@@ -3330,7 +3347,7 @@ body.vsplit-fs-open {
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(46, 196, 182, 0.06);
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 6%, transparent));
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem 0.75rem;
@@ -3346,7 +3363,7 @@ body.vsplit-fs-open {
   padding: 0.55rem 0.7rem;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(8, 14, 26, 0.45);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
 }
 
 .adb-fs-xfer-head {
@@ -3362,7 +3379,7 @@ body.vsplit-fs-open {
 }
 
 .adb-fs-list:focus-visible {
-  outline: 2px solid rgba(46, 196, 182, 0.45);
+  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
   outline-offset: 1px;
 }
 
@@ -3399,7 +3416,7 @@ body.vsplit-fs-open {
 
 .adb-fs-ctx-item:hover,
 .adb-fs-ctx-item:focus-visible {
-  background: rgba(46, 196, 182, 0.14);
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
 }
 
 .adb-fs-ctx-item.is-danger {
@@ -3466,7 +3483,7 @@ body.vsplit-fs-open {
 
 .adb-more[open] > summary {
   color: var(--ink);
-  border-color: rgba(46, 196, 182, 0.45);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
 }
 
 .adb-more[open] {
@@ -3509,7 +3526,7 @@ body.vsplit-fs-open {
 
 .adb-app-select input {
   margin-top: 0.35rem;
-  accent-color: var(--accent, #2ec4b6);
+  accent-color: var(--accent);
 }
 
 .adb-apps-list .adb-fs-actions {
@@ -3532,7 +3549,7 @@ body.vsplit-fs-open {
   padding: 0.75rem 0.9rem;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(8, 14, 26, 0.4);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
   color: var(--muted);
   font-size: 0.86rem;
   line-height: 1.55;
@@ -3570,7 +3587,7 @@ body.vsplit-fs-open {
   flex: 1 1 10rem;
   min-width: 8rem;
   max-width: 18rem;
-  accent-color: var(--accent, #2ec4b6);
+  accent-color: var(--accent);
 }
 
 .adb-input-shot-wrap {
@@ -3585,13 +3602,13 @@ body.vsplit-fs-open {
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: auto;
-  background: rgba(8, 14, 26, 0.45);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
   min-height: 2.5rem;
   margin-top: 0.4rem;
 }
 
 .adb-input-shot-wrap.is-drop-target {
-  outline: 2px dashed var(--accent, #2ec4b6);
+  outline: 2px dashed var(--accent);
   outline-offset: 2px;
 }
 
@@ -3634,7 +3651,7 @@ body.vsplit-fs-open {
 .adb-fs-pane {
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(8, 14, 26, 0.35);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
   padding: 0.55rem 0.65rem 0.7rem;
   display: flex;
   flex-direction: column;
@@ -3672,9 +3689,9 @@ body.vsplit-fs-open {
 
 .adb-fs-local.is-drop,
 .adb-fs-pane-local.is-drop {
-  outline: 2px dashed rgba(46, 196, 182, 0.75);
+  outline: 2px dashed color-mix(in srgb, var(--accent) 75%, transparent);
   outline-offset: -2px;
-  background: rgba(46, 196, 182, 0.08);
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 8%, transparent));
 }
 
 .adb-fs-local-row[draggable="true"] {
@@ -3738,7 +3755,7 @@ body.vsplit-fs-open {
   overflow: auto;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(8, 14, 26, 0.35);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
 }
 
 .adb-fs-local-row {
@@ -3757,7 +3774,7 @@ body.vsplit-fs-open {
 
 .adb-fs-local-row.is-checked,
 .adb-fs-local-row.is-selected {
-  background: rgba(46, 196, 182, 0.1);
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 10%, transparent));
 }
 
 .adb-fs-local-row .adb-fs-check {
@@ -3830,9 +3847,9 @@ body.vsplit-fs-open {
 .adb-fs-view-grid.is-active,
 #adb-fs-view-list.is-active,
 #adb-fs-view-grid.is-active {
-  border-color: rgba(46, 196, 182, 0.55);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
   color: var(--ink);
-  background: rgba(46, 196, 182, 0.12);
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
 }
 
 @media (max-width: 960px) {
@@ -3892,7 +3909,7 @@ body.vsplit-fs-open {
 .adb-tab {
   appearance: none;
   border: 1px solid var(--line);
-  background: rgba(8, 14, 26, 0.35);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
   color: var(--muted);
   border-radius: 999px;
   padding: 0.35rem 0.8rem;
@@ -3903,8 +3920,8 @@ body.vsplit-fs-open {
 
 .adb-tab.is-active {
   color: var(--ink);
-  border-color: rgba(46, 196, 182, 0.55);
-  background: rgba(46, 196, 182, 0.12);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
 }
 
 .adb-device {
@@ -3933,11 +3950,11 @@ body.vsplit-fs-open {
 }
 
 .adb-device:hover {
-  border-color: rgba(46, 196, 182, 0.45);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
 }
 
 .adb-device.is-active {
-  border-color: rgba(46, 196, 182, 0.75);
+  border-color: color-mix(in srgb, var(--accent) 75%, var(--line));
   background: linear-gradient(135deg, rgba(20, 48, 52, 0.95), rgba(12, 28, 40, 0.9));
 }
 
@@ -3992,7 +4009,7 @@ button.adb-device-body.linkish {
   padding: 0.85rem 0.95rem;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(8, 14, 26, 0.45);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
   color: var(--ink);
   white-space: pre-wrap;
   word-break: break-word;
@@ -4017,7 +4034,7 @@ button.adb-device-body.linkish {
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 0.75rem 0.85rem;
-  background: rgba(8, 14, 26, 0.35);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
 }
 
 .adb-job-head {
@@ -4077,15 +4094,15 @@ button.adb-device-body.linkish {
 
 .imgkit-drop {
   padding: 0.95rem 1rem;
-  border: 1px dashed rgba(46, 196, 182, 0.35);
+  border: 1px dashed color-mix(in srgb, var(--accent) 35%, var(--line));
   border-radius: 14px;
-  background: rgba(8, 14, 26, 0.35);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .imgkit-drop.is-drag {
-  border-color: rgba(46, 196, 182, 0.8);
-  background: rgba(46, 196, 182, 0.08);
+  border-color: color-mix(in srgb, var(--accent) 80%, var(--line));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 8%, transparent));
 }
 
 .imgkit-layout {
@@ -4117,7 +4134,7 @@ button.adb-device-body.linkish {
   width: 100%;
   text-align: left;
   border: 1px solid var(--line);
-  background: rgba(8, 14, 26, 0.35);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
   color: var(--ink);
   border-radius: 12px;
   padding: 0.4rem;
@@ -4125,8 +4142,8 @@ button.adb-device-body.linkish {
 }
 
 .imgkit-thumb.is-active {
-  border-color: rgba(46, 196, 182, 0.7);
-  background: rgba(46, 196, 182, 0.1);
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 10%, transparent));
 }
 
 .imgkit-thumb img {
@@ -4172,7 +4189,7 @@ button.adb-device-body.linkish {
   margin-top: 0.85rem;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(8, 14, 26, 0.22);
+  background: var(--ink-faint, color-mix(in srgb, var(--ink) 5%, transparent));
   overflow: hidden;
 }
 
@@ -4182,7 +4199,7 @@ button.adb-device-body.linkish {
   gap: 0.25rem;
   padding: 0.45rem;
   border-bottom: 1px solid var(--line);
-  background: rgba(8, 14, 26, 0.35);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
 }
 
 .imgkit-tab {
@@ -4204,8 +4221,8 @@ button.adb-device-body.linkish {
 
 .imgkit-tab.is-active {
   color: var(--ink);
-  border-color: rgba(46, 196, 182, 0.45);
-  background: rgba(46, 196, 182, 0.12);
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
 }
 
 .imgkit-tab-panels {
@@ -4227,7 +4244,7 @@ button.adb-device-body.linkish {
   display: grid;
   gap: 0.45rem;
   padding: 0.7rem 0.8rem;
-  border: 1px solid rgba(46, 196, 182, 0.35);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
   border-radius: 14px;
   background: rgba(10, 16, 28, 0.92);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
@@ -4244,13 +4261,13 @@ button.adb-device-body.linkish {
 
 .imgkit-action-btns .primary-btn,
 .imgkit-action-btns .secondary-btn.is-emphasized {
-  box-shadow: 0 0 0 1px rgba(46, 196, 182, 0.35);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
 }
 
 .imgkit-action-btns .secondary-btn.is-emphasized {
-  border-color: rgba(46, 196, 182, 0.55);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
   color: var(--ink);
-  background: rgba(46, 196, 182, 0.14);
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
 }
 
 .imgkit-crop-editor {
@@ -4286,7 +4303,7 @@ button.adb-device-body.linkish {
 .imgkit-crop-box {
   position: absolute;
   box-sizing: border-box;
-  border: 2px solid rgba(46, 196, 182, 0.95);
+  border: 2px solid color-mix(in srgb, var(--accent) 95%, var(--line));
   box-shadow: 0 0 0 9999px rgba(8, 14, 26, 0.48);
   cursor: grab;
   touch-action: none;
@@ -4303,7 +4320,7 @@ button.adb-device-body.linkish {
   margin: -8px 0 0 -8px;
   border: 2px solid #fff;
   border-radius: 4px;
-  background: rgba(46, 196, 182, 0.95);
+  background: var(--accent);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   z-index: 2;
 }
@@ -4454,7 +4471,7 @@ button.adb-device-body.linkish {
   padding: 0.75rem 0.85rem;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(8, 14, 26, 0.28);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
 }
 
 .imgkit-stitch-crop-head {
@@ -4495,7 +4512,7 @@ button.adb-device-body.linkish {
 .imgkit-stitch-crop-box {
   position: absolute;
   box-sizing: border-box;
-  border: 2px solid rgba(46, 196, 182, 0.95);
+  border: 2px solid color-mix(in srgb, var(--accent) 95%, var(--line));
   box-shadow: 0 0 0 9999px rgba(8, 14, 26, 0.48);
   cursor: grab;
   touch-action: none;
@@ -4512,7 +4529,7 @@ button.adb-device-body.linkish {
   margin: -8px 0 0 -8px;
   border: 2px solid #fff;
   border-radius: 4px;
-  background: rgba(46, 196, 182, 0.95);
+  background: var(--accent);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   z-index: 2;
 }
@@ -4674,9 +4691,9 @@ button.adb-device-body.linkish {
   display: grid;
   gap: 0.45rem;
   padding: 0.75rem 0.85rem;
-  border: 1px solid rgba(244, 162, 97, 0.45);
+  border: 1px solid color-mix(in srgb, var(--accent-2) 45%, var(--line));
   border-radius: 12px;
-  background: rgba(244, 162, 97, 0.1);
+  background: color-mix(in srgb, var(--accent-2) 10%, transparent);
 }
 
 .memo-reconnect-banner[hidden] {
@@ -4728,8 +4745,8 @@ button.adb-device-body.linkish {
 
 .memo-tag-suggest-item {
   appearance: none;
-  border: 1px solid rgba(46, 196, 182, 0.35);
-  background: rgba(46, 196, 182, 0.12);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
   color: var(--ink);
   border-radius: 999px;
   padding: 0.28rem 0.65rem;
@@ -4778,7 +4795,7 @@ button.adb-device-body.linkish {
   padding: 0.55rem 0.65rem;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(14, 22, 38, 0.55);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
 }
 
 .memo-ti-sizebar label {
@@ -4797,9 +4814,9 @@ button.adb-device-body.linkish {
   align-self: center;
   padding: 0.28rem 0.55rem;
   border-radius: 999px;
-  border: 1px solid rgba(46, 196, 182, 0.35);
-  background: rgba(46, 196, 182, 0.12);
-  color: #dffcf7;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
+  color: var(--ink);
   font-size: 0.8rem;
 }
 
@@ -5111,9 +5128,9 @@ button.adb-device-body.linkish {
   width: 18px;
   height: 18px;
   padding: 0;
-  border: 2px solid #dffcf7;
+  border: 2px solid color-mix(in srgb, var(--accent) 35%, #fff);
   border-radius: 4px;
-  background: #2ec4b6;
+  background: var(--accent);
   cursor: nwse-resize;
   z-index: 5;
   touch-action: none;
@@ -5122,7 +5139,7 @@ button.adb-device-body.linkish {
 
 .memo-ti-resize:hover,
 .memo-ti-resize:focus-visible {
-  background: #5eead4;
+  background: color-mix(in srgb, var(--accent) 72%, #fff);
   outline: none;
 }
 
@@ -5146,7 +5163,7 @@ button.adb-device-body.linkish {
   padding: 0.65rem;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(14, 22, 38, 0.55);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
 }
 
 .memo-tags-toggle {
@@ -5231,7 +5248,7 @@ button.adb-device-body.linkish {
 .memo-type-chip {
   appearance: none;
   border: 1px solid var(--line);
-  background: rgba(14, 22, 38, 0.55);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
   color: var(--ink);
   padding: 0.32rem 0.62rem;
   border-radius: 999px;
@@ -5249,14 +5266,14 @@ button.adb-device-body.linkish {
 }
 
 .memo-type-chip:hover {
-  border-color: rgba(46, 196, 182, 0.4);
-  background: rgba(46, 196, 182, 0.1);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
 }
 
 .memo-type-chip.is-active {
-  border-color: rgba(46, 196, 182, 0.55);
-  background: rgba(46, 196, 182, 0.18);
-  color: #dffcf7;
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: var(--accent-soft-strong, color-mix(in srgb, var(--accent) 22%, transparent));
+  color: var(--ink);
 }
 
 .memo-type-group {
@@ -5271,7 +5288,7 @@ button.adb-device-body.linkish {
   gap: 0.45rem;
   font-size: 0.86rem;
   font-weight: 650;
-  color: rgba(210, 224, 242, 0.88);
+  color: var(--muted);
 }
 
 .memo-type-group-list {
@@ -5280,13 +5297,13 @@ button.adb-device-body.linkish {
 }
 
 .memo-tag-item:hover {
-  background: rgba(46, 196, 182, 0.1);
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
 }
 
 .memo-tag-item.is-active {
-  border-color: rgba(46, 196, 182, 0.45);
-  background: rgba(46, 196, 182, 0.16);
-  color: #dffcf7;
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: var(--accent-soft-strong, color-mix(in srgb, var(--accent) 22%, transparent));
+  color: var(--ink);
 }
 
 .memo-tag-item[draggable="true"] {
@@ -5373,7 +5390,7 @@ button.adb-device-body.linkish {
   padding: 0.55rem 0.75rem;
   border: 1px solid var(--line);
   border-radius: 12px;
-  background: rgba(18, 28, 46, 0.88);
+  background: var(--control-bg-strong, color-mix(in srgb, var(--bg-0) 70%, var(--panel-strong)));
 }
 
 .memo-undo-bar[hidden] {
@@ -5403,9 +5420,19 @@ button.adb-device-body.linkish {
   padding: 0.42rem 0.7rem;
   border-radius: 10px;
   border: 1px solid var(--line);
-  background: rgba(14, 22, 38, 0.7);
+  background: var(--control-bg-strong, color-mix(in srgb, var(--bg-0) 70%, var(--panel-strong)));
   color: var(--ink);
   font: inherit;
+}
+
+.memo-search::placeholder {
+  color: var(--muted);
+}
+
+.memo-search:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+  outline: none;
 }
 
 .memo-autoclip-flag {
@@ -5422,9 +5449,9 @@ button.adb-device-body.linkish {
   display: inline-block;
   padding: 0.05rem 0.35rem;
   border-radius: 999px;
-  border: 1px solid rgba(46, 196, 182, 0.28);
-  background: rgba(46, 196, 182, 0.1);
-  color: #c9f7f0;
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 10%, transparent));
+  color: var(--ink);
   font-size: 0.78em;
 }
 
@@ -5451,14 +5478,14 @@ button.adb-device-body.linkish {
 .memo-drop {
   min-height: 12rem;
   padding: 0.55rem;
-  border: 1px dashed rgba(147, 160, 184, 0.35);
+  border: 1px dashed color-mix(in srgb, var(--muted) 45%, var(--line));
   border-radius: 14px;
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
 .memo-drop.is-drag {
-  border-color: rgba(46, 196, 182, 0.7);
-  background: rgba(46, 196, 182, 0.08);
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 8%, transparent));
 }
 
 .memo-list {
@@ -5490,7 +5517,7 @@ button.adb-device-body.linkish {
     box-shadow: 0 0 0 0 transparent;
   }
   30% {
-    box-shadow: 0 0 0 3px color-mix(in srgb, #2ec4b6 40%, transparent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 40%, transparent);
   }
 }
 
@@ -6147,8 +6174,8 @@ button.adb-device-body.linkish {
   border-radius: 10px;
   display: grid;
   place-items: center;
-  background: rgba(46, 196, 182, 0.18);
-  color: #9ff0e6;
+  background: var(--accent-soft-strong, color-mix(in srgb, var(--accent) 18%, transparent));
+  color: var(--accent);
   font-size: 0.95rem;
   flex: 0 0 auto;
 }
@@ -6231,7 +6258,7 @@ button.adb-device-body.linkish {
     font-size: 0.84rem;
     border-radius: 10px;
     border-color: var(--line);
-    background: rgba(8, 14, 26, 0.35);
+    background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
   }
 
   .memo-tag-del {
@@ -6262,8 +6289,8 @@ button.adb-device-body.linkish {
 }
 
 .imgtext-drop.is-drag {
-  border-color: rgba(46, 196, 182, 0.7);
-  background: rgba(46, 196, 182, 0.08);
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 8%, transparent));
 }
 
 .memo-scroll-sentinel {
@@ -6510,7 +6537,7 @@ html[data-theme-scheme="light"] .bg-grid {
 .vtrim-crop-box {
   position: absolute;
   box-sizing: border-box;
-  border: 2px solid rgba(46, 196, 182, 0.95);
+  border: 2px solid color-mix(in srgb, var(--accent) 95%, var(--line));
   box-shadow: 0 0 0 9999px rgba(8, 14, 26, 0.48);
   cursor: grab;
   touch-action: none;
@@ -6539,7 +6566,7 @@ html[data-theme-scheme="light"] .bg-grid {
   margin: -9px 0 0 -9px;
   border: 2px solid #fff;
   border-radius: 4px;
-  background: rgba(46, 196, 182, 0.95);
+  background: var(--accent);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   z-index: 3;
 }
@@ -6602,7 +6629,7 @@ html[data-theme-scheme="light"] .bg-grid {
   bottom: 0;
   left: 0;
   width: var(--vtrim-start, 0%);
-  background: rgba(8, 14, 26, 0.62);
+  background: var(--control-bg-strong, color-mix(in srgb, var(--bg-0) 70%, var(--panel-strong)));
   z-index: 1;
 }
 
@@ -6613,7 +6640,7 @@ html[data-theme-scheme="light"] .bg-grid {
   bottom: 0;
   left: var(--vtrim-end, 100%);
   right: 0;
-  background: rgba(8, 14, 26, 0.62);
+  background: var(--control-bg-strong, color-mix(in srgb, var(--bg-0) 70%, var(--panel-strong)));
   z-index: 1;
 }
 
@@ -6733,7 +6760,7 @@ html[data-theme-scheme="light"] .bg-grid {
   height: 64px;
   border: 0;
   border-radius: 999px;
-  background: rgba(8, 14, 26, 0.45);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55);
   pointer-events: none;
   opacity: 1;
@@ -6766,7 +6793,7 @@ html[data-theme-scheme="light"] .bg-grid {
   margin: 0;
   padding: 0.25rem 0.5rem;
   border-radius: 8px;
-  background: rgba(8, 14, 26, 0.72);
+  background: var(--control-bg-strong, color-mix(in srgb, var(--bg-0) 70%, var(--panel-strong)));
   color: #e8eef8;
   pointer-events: none;
 }

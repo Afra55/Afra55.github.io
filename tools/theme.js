@@ -616,6 +616,13 @@
     presets: PRESETS,
     getState: () => ({ ...state, custom: { ...state.custom } }),
     apply: applyTheme,
+    setPreset(id) {
+      const preset = presetById(id);
+      state.useCustom = false;
+      state.preset = preset.id;
+      saveState(state);
+      return applyTheme().then(() => preset.id);
+    },
     open() {
       const dlg = $("#theme-dlg");
       if (dlg && typeof dlg.showModal === "function") dlg.showModal();
