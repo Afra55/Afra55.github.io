@@ -225,8 +225,15 @@
       mode === "code"
         ? "var(--mono)"
         : mode === "quote" || mode === "title"
-          ? '"Noto Serif SC", "Songti SC", serif'
+          ? '"Noto Serif SC", "Songti SC", "Noto Serif CJK SC", serif'
           : "var(--font)";
+    if ((mode === "quote" || mode === "title") && !document.getElementById("font-noto-serif-sc")) {
+      const link = document.createElement("link");
+      link.id = "font-noto-serif-sc";
+      link.rel = "stylesheet";
+      link.href = "https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;600;700&display=swap";
+      document.head.appendChild(link);
+    }
 
     let bodyInner = "";
     if (mode === "code") {

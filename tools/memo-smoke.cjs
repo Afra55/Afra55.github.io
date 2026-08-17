@@ -986,7 +986,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817vsplitfsnudge/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navfly5/.test(s.src)),
     };
 
     out.pwa = {
@@ -1045,6 +1045,20 @@ async function main() {
         const hoverPanel = other.querySelector(".nav-group-tools");
         out.navCompact.hoverShows = Boolean(hoverPanel) && getComputedStyle(hoverPanel).display !== "none";
         other.classList.remove("is-flyout-open");
+      }
+      if (current && other && window.DevToolsNav.openFlyout) {
+        current.classList.add("is-pinned");
+        window.DevToolsNav.openFlyout(other);
+        const aPanel = current.querySelector(".nav-group-tools");
+        const bPanel = other.querySelector(".nav-group-tools");
+        out.navCompact.exclusiveFlyout =
+          Boolean(aPanel) &&
+          Boolean(bPanel) &&
+          getComputedStyle(aPanel).display === "none" &&
+          getComputedStyle(bPanel).display !== "none" &&
+          !current.classList.contains("is-pinned");
+        other.classList.remove("is-flyout-open", "is-pinned");
+        current.classList.remove("is-flyout-open", "is-pinned");
       }
       window.DevToolsNav.setCompact(false);
       out.navCompact.restored = !document.getElementById("nav-bar")?.classList.contains("is-compact");
@@ -1133,9 +1147,24 @@ async function main() {
     const recentListEl = document.getElementById("tool-recent-list");
     out.recentUi = {
       noLabel: !document.querySelector(".nav-recent-label"),
-      chipMax: document.querySelectorAll(".nav-recent-chip").length <= 4,
+      chipMax: document.querySelectorAll(".nav-recent-chip").length <= 8,
       nowrap: Boolean(recentListEl) && getComputedStyle(recentListEl).flexWrap === "nowrap",
+      overflowX: recentListEl ? getComputedStyle(recentListEl).overflowX : "",
+      wheelMoved: false,
     };
+    try {
+      const ids = ["json", "base64", "uuid", "hash", "regex", "color", "url", "cron"];
+      localStorage.setItem("devtools-tool-recent-v1", JSON.stringify(ids));
+      window.DevToolsNav?.renderRecent?.();
+      if (recentListEl) {
+        recentListEl.style.width = "72px";
+        const before = recentListEl.scrollLeft;
+        recentListEl.dispatchEvent(new WheelEvent("wheel", { deltaY: 120, bubbles: true, cancelable: true }));
+        out.recentUi.chipMax = document.querySelectorAll(".nav-recent-chip").length <= 8;
+        out.recentUi.wheelMoved = recentListEl.scrollLeft > before;
+        recentListEl.style.width = "";
+      }
+    } catch (_) {}
 
     const sortHint = document.querySelector(".nav-sort-hint");
     out.sortHint = {
@@ -1196,6 +1225,20 @@ async function main() {
       const hoverPanel = other.querySelector(".nav-group-tools");
       out.hoverShows = Boolean(hoverPanel) && getComputedStyle(hoverPanel).display !== "none";
       other.classList.remove("is-flyout-open");
+    }
+    if (current && other && window.DevToolsNav.openFlyout) {
+      current.classList.add("is-pinned");
+      window.DevToolsNav.openFlyout(other);
+      const aPanel = current.querySelector(".nav-group-tools");
+      const bPanel = other.querySelector(".nav-group-tools");
+      out.exclusiveFlyout =
+        Boolean(aPanel) &&
+        Boolean(bPanel) &&
+        getComputedStyle(aPanel).display === "none" &&
+        getComputedStyle(bPanel).display !== "none" &&
+        !current.classList.contains("is-pinned");
+      other.classList.remove("is-flyout-open", "is-pinned");
+      current.classList.remove("is-flyout-open", "is-pinned");
     }
     window.DevToolsNav.setCompact(false);
     out.restored = !document.getElementById("nav-bar")?.classList.contains("is-compact");
@@ -1454,8 +1497,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/vsplitfsnudge/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to vsplitfsnudge");
+  if (!/navfly5/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to navfly5");
   }
   if (!result.pwa?.hasManifestLink || !/manifest\.webmanifest/.test(result.pwa?.manifestHref || "")) {
     failed.push("PWA manifest link missing");
@@ -1472,8 +1515,8 @@ async function main() {
   if (!result.cacheMeta?.nowrap || !result.cacheMeta?.noLongTail || !result.cacheMeta?.hasTitle) {
     failed.push("nav cache hint should be a single short line with details in title");
   }
-  if (!result.recentUi?.noLabel || !result.recentUi?.chipMax || !result.recentUi?.nowrap) {
-    failed.push("recent tools should be a compact single row without a section title");
+  if (!result.recentUi?.noLabel || !result.recentUi?.chipMax || !result.recentUi?.nowrap || result.recentUi?.overflowX !== "auto" || !result.recentUi?.wheelMoved) {
+    failed.push("recent tools should be a compact single row that wheel-scrolls horizontally");
   }
   if (!result.sortHint?.hasEl || !result.sortHint?.api || !result.sortHint?.marked || !result.sortHint?.visibleFirst || !result.sortHint?.hiddenSecond) {
     failed.push("sort hint should show once then hide on later visits");
@@ -1492,6 +1535,7 @@ async function main() {
     !result.navCompact?.pinShows ||
     !result.navCompact?.mobileExpandsInFlow ||
     !result.navCompact?.hoverShows ||
+    !result.navCompact?.exclusiveFlyout ||
     !result.navCompact?.restored
   ) {
     failed.push("mobile nav compact should expand as an in-drawer accordion");
@@ -1504,6 +1548,7 @@ async function main() {
     !result.navCompactDesktop?.pinShows ||
     !result.navCompactDesktop?.flyoutNoGrow ||
     !result.navCompactDesktop?.hoverShows ||
+    !result.navCompactDesktop?.exclusiveFlyout ||
     !result.navCompactDesktop?.restored
   ) {
     failed.push("desktop nav compact should keep using hover/pin flyouts");

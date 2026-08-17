@@ -768,7 +768,7 @@
   const GROUP_ORDER_KEY = "devtools-group-order-v1";
   const RECENT_KEY = "devtools-tool-recent-v1";
   const SORT_HINT_KEY = "devtools-nav-sort-hint-seen-v1";
-  const RECENT_SHOW = 4;
+  const RECENT_SHOW = 8;
   const MEDIA_TABS = ["gifmaker", "vsplit", "vbb", "vtrim", "audio"];
   const HASH_ALIASES = {
     gifmaker: { tool: "media", tab: "gifmaker" },
@@ -1091,8 +1091,7 @@
     navFlyoutTimer = 0;
     $$(".nav-group", navEl).forEach((g) => {
       if (g === wrap) return;
-      g.classList.remove("is-flyout-open", "is-flyout-up");
-      if (pin) g.classList.remove("is-pinned");
+      g.classList.remove("is-flyout-open", "is-flyout-up", "is-pinned");
       g.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
     });
     if (pin) wrap.classList.add("is-pinned");
@@ -1270,6 +1269,27 @@
     if (!recentList.children.length) {
       recentWrap.hidden = true;
     }
+    bindRecentWheel();
+  }
+
+  function bindRecentWheel() {
+    if (!recentList || recentList.dataset.wheelBound === "1") return;
+    recentList.dataset.wheelBound = "1";
+    recentList.addEventListener(
+      "wheel",
+      (e) => {
+        if (recentList.scrollWidth <= recentList.clientWidth + 1) return;
+        const dx = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        if (!dx) return;
+        const max = recentList.scrollWidth - recentList.clientWidth;
+        const next = Math.max(0, Math.min(max, recentList.scrollLeft + dx));
+        if (next === recentList.scrollLeft) return;
+        e.preventDefault();
+        e.stopPropagation();
+        recentList.scrollLeft = next;
+      },
+      { passive: false }
+    );
   }
 
   function drawerFocusables() {
@@ -1977,6 +1997,16 @@
       }
       const result = await window.DevToolsTemp.purgeSiteCache();
       showToast(result?.message || "已清理本站缓存");
+      try {
+        if (navigator.serviceWorker?.getRegistrations) {
+          const regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map((r) => r.unregister()));
+        }
+      } catch (_) {}
+      const url = new URL(location.href);
+      url.searchParams.set("_r", String(Date.now()).slice(-8));
+      location.replace(`${url.pathname}${url.search}${url.hash}`);
+      return;
     } catch (err) {
       showToast(err?.message || "清理失败");
     } finally {
@@ -2128,6 +2158,7 @@
     syncSortHint,
     openFlyout: (el) => openNavFlyout(el?.closest?.(".nav-group") || el),
     closeFlyouts: () => closeNavFlyouts(),
+    renderRecent,
   };
   window.dispatchEvent(new CustomEvent("devtools:catalog"));
   syncSortHint();
