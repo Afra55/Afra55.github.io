@@ -318,6 +318,84 @@ async function main() {
       notPlainDataText: !(afterItems[0]?.type === "text" && String(afterItems[0]?.textPreview || "").startsWith("data:image")),
     };
 
+    // image preview: wheel zoom + drag pan
+    const imgItem = (window.DevToolsMemo.getIndex().items || []).find((it) => it.type === "image" || it.type === "gif");
+    out.imgZoom = { hasApi: typeof window.DevToolsMemo.getPreviewZoom === "function" };
+    if (imgItem) {
+      document.querySelector(`[data-memo-preview="${imgItem.id}"], [data-memo-open="${imgItem.id}"]`)?.click();
+      await sleep(250);
+      const wrap = document.getElementById("memo-zoom-wrap");
+      const imgEl = document.getElementById("memo-lightbox-img");
+      if (imgEl && !imgEl.complete) {
+        await new Promise((resolve) => {
+          imgEl.addEventListener("load", resolve, { once: true });
+          setTimeout(resolve, 1500);
+        });
+      }
+      await sleep(80);
+      const z0 = window.DevToolsMemo.getPreviewZoom?.() || {};
+      const rect = wrap?.getBoundingClientRect?.() || { left: 200, top: 200, width: 400, height: 400 };
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+      for (let i = 0; i < 8; i += 1) {
+        wrap?.dispatchEvent(
+          new WheelEvent("wheel", {
+            deltaY: -120,
+            clientX: cx,
+            clientY: cy,
+            bubbles: true,
+            cancelable: true,
+          })
+        );
+      }
+      const z1 = window.DevToolsMemo.getPreviewZoom?.() || {};
+      wrap?.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          pointerId: 1,
+          pointerType: "mouse",
+          isPrimary: true,
+          clientX: cx,
+          clientY: cy,
+          bubbles: true,
+          buttons: 1,
+        })
+      );
+      wrap?.dispatchEvent(
+        new PointerEvent("pointermove", {
+          pointerId: 1,
+          pointerType: "mouse",
+          isPrimary: true,
+          clientX: cx + 48,
+          clientY: cy + 36,
+          bubbles: true,
+          buttons: 1,
+        })
+      );
+      wrap?.dispatchEvent(
+        new PointerEvent("pointerup", {
+          pointerId: 1,
+          pointerType: "mouse",
+          bubbles: true,
+        })
+      );
+      const z2 = window.DevToolsMemo.getPreviewZoom?.() || {};
+      document.getElementById("memo-zoom-in")?.click();
+      const z3 = window.DevToolsMemo.getPreviewZoom?.() || {};
+      out.imgZoom = {
+        ...out.imgZoom,
+        opened: Boolean(document.getElementById("memo-lightbox")?.open),
+        wrapShown: Boolean(wrap) && !wrap.hidden,
+        hud: Boolean(document.getElementById("memo-zoom-in") && document.getElementById("memo-zoom-out")),
+        fitOk: Number(z0.fit) > 0 && Math.abs((z0.rel || 1) - 1) < 0.12,
+        wheeled: Number(z1.scale) > Number(z0.scale) + 0.0001,
+        panned: Math.abs((z2.x || 0) - (z1.x || 0)) > 0.5 || Math.abs((z2.y || 0) - (z1.y || 0)) > 0.5,
+        btnZoom: Number(z3.scale) > Number(z2.scale) + 0.0001,
+        pct: document.getElementById("memo-zoom-pct")?.textContent || "",
+      };
+      document.getElementById("memo-lightbox-close")?.click();
+      await sleep(80);
+    }
+
     // more menu closes when clicking outside
     const more = document.querySelector("details.memo-more");
     out.moreMenu = { has: Boolean(more) };
@@ -775,7 +853,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memoux2/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817imgzoom1/.test(s.src)),
     };
 
     return out;
@@ -788,7 +866,7 @@ async function main() {
   if (errors.length) failed.push(...errors.map((e) => `page: ${e}`));
   if (!result.panelActive) failed.push("memo panel not active");
   if (!result.hasEditor || !result.hasList) failed.push("missing editor/list");
-  if (!/memo|theme|vsplit|vtrim|audio|ffb|ffadapt|setup|btnsize|memoux/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memo|theme|vsplit|vtrim|audio|ffb|ffadapt|setup|btnsize|memoux|imgzoom/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -824,6 +902,18 @@ async function main() {
   }
   if (!result.dataUrlImg?.newestIsImage || !result.dataUrlImg?.notPlainDataText) {
     failed.push("data:image base64 text should ingest as image");
+  }
+  if (
+    !result.imgZoom?.hasApi ||
+    !result.imgZoom?.opened ||
+    !result.imgZoom?.wrapShown ||
+    !result.imgZoom?.hud ||
+    !result.imgZoom?.fitOk ||
+    !result.imgZoom?.wheeled ||
+    !result.imgZoom?.panned ||
+    !result.imgZoom?.btnZoom
+  ) {
+    failed.push("image preview should zoom with wheel/buttons and pan by drag");
   }
   if (!result.moreMenu?.has || !result.moreMenu?.closesOutside) {
     failed.push("more menu should close on outside click");
@@ -966,8 +1056,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/memoux2/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memoux2");
+  if (!/imgzoom1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to imgzoom1");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");

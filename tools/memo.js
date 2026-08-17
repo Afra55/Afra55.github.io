@@ -691,6 +691,8 @@
   const exportTags = $("#memo-export-tags");
   const lightbox = $("#memo-lightbox");
   const lightboxImg = $("#memo-lightbox-img");
+  const zoomWrap = $("#memo-zoom-wrap");
+  const zoomPct = $("#memo-zoom-pct");
   const lightboxText = $("#memo-lightbox-text");
   const lightboxVideo = $("#memo-lightbox-video");
   const lightboxAudio = $("#memo-lightbox-audio");
@@ -2931,8 +2933,199 @@
     return { blob: outBlob, filename, count: picked.length };
   }
 
+  const imgZoom = {
+    scale: 1,
+    x: 0,
+    y: 0,
+    fit: 1,
+    dragging: false,
+    lastX: 0,
+    lastY: 0,
+    pointers: new Map(),
+    pinchStartDist: 0,
+    pinchStartScale: 1,
+  };
+
+  function isImagePreviewOpen() {
+    return Boolean(lightbox?.open && zoomWrap && !zoomWrap.hidden);
+  }
+
+  function applyImageZoom() {
+    if (!lightboxImg) return;
+    lightboxImg.style.transform = `translate(${imgZoom.x}px, ${imgZoom.y}px) scale(${imgZoom.scale})`;
+    zoomWrap?.classList.toggle("is-zoomed", imgZoom.scale > imgZoom.fit + 0.01);
+    zoomWrap?.classList.toggle("is-panning", imgZoom.dragging);
+    if (zoomPct) {
+      const pct = imgZoom.fit ? Math.round((imgZoom.scale / imgZoom.fit) * 100) : 100;
+      zoomPct.textContent = `${pct}%`;
+    }
+  }
+
+  function clampImagePan() {
+    if (!zoomWrap || !lightboxImg) return;
+    const rw = zoomWrap.clientWidth || 1;
+    const rh = zoomWrap.clientHeight || 1;
+    const nw = lightboxImg.naturalWidth || 1;
+    const nh = lightboxImg.naturalHeight || 1;
+    const iw = nw * imgZoom.scale;
+    const ih = nh * imgZoom.scale;
+    if (iw <= rw) imgZoom.x = (rw - iw) / 2;
+    else imgZoom.x = Math.min(0, Math.max(rw - iw, imgZoom.x));
+    if (ih <= rh) imgZoom.y = (rh - ih) / 2;
+    else imgZoom.y = Math.min(0, Math.max(rh - ih, imgZoom.y));
+  }
+
+  function fitImageZoom() {
+    if (!zoomWrap || !lightboxImg) return;
+    const nw = lightboxImg.naturalWidth || 1;
+    const nh = lightboxImg.naturalHeight || 1;
+    const rw = zoomWrap.clientWidth || 1;
+    const rh = zoomWrap.clientHeight || 1;
+    const fit = Math.min(rw / nw, rh / nh) || 1;
+    imgZoom.fit = fit;
+    imgZoom.scale = fit;
+    imgZoom.x = (rw - nw * fit) / 2;
+    imgZoom.y = (rh - nh * fit) / 2;
+    applyImageZoom();
+  }
+
+  function resetImageZoom() {
+    imgZoom.scale = 1;
+    imgZoom.x = 0;
+    imgZoom.y = 0;
+    imgZoom.fit = 1;
+    imgZoom.dragging = false;
+    imgZoom.pointers.clear();
+    if (lightboxImg) lightboxImg.style.transform = "";
+    zoomWrap?.classList.remove("is-zoomed", "is-panning");
+    if (zoomPct) zoomPct.textContent = "100%";
+  }
+
+  function zoomImageAt(clientX, clientY, nextScale) {
+    if (!zoomWrap || !lightboxImg) return;
+    const rect = zoomWrap.getBoundingClientRect();
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+    const min = imgZoom.fit * 0.5;
+    const max = Math.max(imgZoom.fit * 12, 4);
+    const scale = Math.min(max, Math.max(min, nextScale));
+    const wx = (px - imgZoom.x) / (imgZoom.scale || 1);
+    const wy = (py - imgZoom.y) / (imgZoom.scale || 1);
+    imgZoom.scale = scale;
+    imgZoom.x = px - wx * scale;
+    imgZoom.y = py - wy * scale;
+    clampImagePan();
+    applyImageZoom();
+  }
+
+  function bumpImageZoom(factor, clientX, clientY) {
+    if (!zoomWrap) return;
+    const rect = zoomWrap.getBoundingClientRect();
+    const cx = clientX ?? rect.left + rect.width / 2;
+    const cy = clientY ?? rect.top + rect.height / 2;
+    zoomImageAt(cx, cy, imgZoom.scale * factor);
+  }
+
+  function bindImageZoom() {
+    if (!zoomWrap || zoomWrap.dataset.zoomBound === "1") return;
+    zoomWrap.dataset.zoomBound = "1";
+    zoomWrap.addEventListener(
+      "wheel",
+      (e) => {
+        if (!isImagePreviewOpen()) return;
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+        bumpImageZoom(factor, e.clientX, e.clientY);
+      },
+      { passive: false }
+    );
+    zoomWrap.addEventListener("pointerdown", (e) => {
+      if (!isImagePreviewOpen()) return;
+      if (e.target.closest?.(".memo-zoom-hud")) return;
+      try {
+        zoomWrap.setPointerCapture?.(e.pointerId);
+      } catch (_) {}
+      imgZoom.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (imgZoom.pointers.size === 1) {
+        imgZoom.dragging = true;
+        imgZoom.lastX = e.clientX;
+        imgZoom.lastY = e.clientY;
+        zoomWrap.classList.add("is-panning");
+      } else if (imgZoom.pointers.size === 2) {
+        const pts = [...imgZoom.pointers.values()];
+        const dx = pts[0].x - pts[1].x;
+        const dy = pts[0].y - pts[1].y;
+        imgZoom.pinchStartDist = Math.hypot(dx, dy) || 1;
+        imgZoom.pinchStartScale = imgZoom.scale;
+        imgZoom.dragging = false;
+      }
+    });
+    zoomWrap.addEventListener("pointermove", (e) => {
+      if (!isImagePreviewOpen() || !imgZoom.pointers.has(e.pointerId)) return;
+      imgZoom.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (imgZoom.pointers.size >= 2) {
+        const pts = [...imgZoom.pointers.values()];
+        const dx = pts[0].x - pts[1].x;
+        const dy = pts[0].y - pts[1].y;
+        const dist = Math.hypot(dx, dy) || 1;
+        const midX = (pts[0].x + pts[1].x) / 2;
+        const midY = (pts[0].y + pts[1].y) / 2;
+        zoomImageAt(midX, midY, imgZoom.pinchStartScale * (dist / imgZoom.pinchStartDist));
+        return;
+      }
+      if (!imgZoom.dragging) return;
+      imgZoom.x += e.clientX - imgZoom.lastX;
+      imgZoom.y += e.clientY - imgZoom.lastY;
+      imgZoom.lastX = e.clientX;
+      imgZoom.lastY = e.clientY;
+      clampImagePan();
+      applyImageZoom();
+    });
+    const endPtr = (e) => {
+      imgZoom.pointers.delete(e.pointerId);
+      if (imgZoom.pointers.size === 0) {
+        imgZoom.dragging = false;
+        zoomWrap.classList.remove("is-panning");
+      }
+    };
+    zoomWrap.addEventListener("pointerup", endPtr);
+    zoomWrap.addEventListener("pointercancel", endPtr);
+    zoomWrap.addEventListener("dblclick", (e) => {
+      if (!isImagePreviewOpen()) return;
+      if (e.target.closest?.(".memo-zoom-hud")) return;
+      if (imgZoom.scale > imgZoom.fit * 1.15) fitImageZoom();
+      else zoomImageAt(e.clientX, e.clientY, imgZoom.fit * 2.4);
+    });
+    $("#memo-zoom-in")?.addEventListener("click", () => bumpImageZoom(1.25));
+    $("#memo-zoom-out")?.addEventListener("click", () => bumpImageZoom(1 / 1.25));
+    $("#memo-zoom-reset")?.addEventListener("click", () => fitImageZoom());
+    window.addEventListener("resize", () => {
+      if (!isImagePreviewOpen() || !lightboxImg?.naturalWidth) return;
+      const rel = imgZoom.fit > 0 ? imgZoom.scale / imgZoom.fit : 1;
+      const nw = lightboxImg.naturalWidth;
+      const nh = lightboxImg.naturalHeight || 1;
+      const rw = zoomWrap.clientWidth || 1;
+      const rh = zoomWrap.clientHeight || 1;
+      imgZoom.fit = Math.min(rw / nw, rh / nh) || 1;
+      imgZoom.scale = imgZoom.fit * rel;
+      clampImagePan();
+      applyImageZoom();
+    });
+  }
+
+  function getPreviewZoom() {
+    return {
+      open: isImagePreviewOpen(),
+      scale: imgZoom.scale,
+      x: imgZoom.x,
+      y: imgZoom.y,
+      fit: imgZoom.fit,
+      rel: imgZoom.fit ? imgZoom.scale / imgZoom.fit : 1,
+    };
+  }
+
   function hidePreviewParts() {
-    [lightboxImg, lightboxVideo, lightboxAudioWrap, lightboxText, lightboxFrame, lightboxFile].forEach((el) => {
+    [zoomWrap, lightboxImg, lightboxVideo, lightboxAudioWrap, lightboxText, lightboxFrame, lightboxFile].forEach((el) => {
       if (!el) return;
       el.hidden = true;
       el.setAttribute("hidden", "");
@@ -2956,6 +3149,7 @@
       lightboxFrame.removeAttribute("src");
     }
     if (lightboxImg) lightboxImg.removeAttribute("src");
+    resetImageZoom();
     if (lightboxText) lightboxText.textContent = "";
   }
 
@@ -3082,10 +3276,18 @@
       const kind =
         item.type === "gif" || /gif/i.test(blob.type || "") || /\.gif$/i.test(item.name || "") ? "gif" : "image";
       setPreviewChrome(item, { kind, canFs: true, canNewTab: true, canDl: true });
+      bindImageZoom();
+      showEl(zoomWrap);
       showEl(lightboxImg);
       lightboxImg.alt = kind === "gif" ? "动图预览" : "图片预览";
+      const afterLoad = () => {
+        requestAnimationFrame(() => requestAnimationFrame(() => fitImageZoom()));
+      };
+      if (lightboxImg.complete && lightboxImg.naturalWidth) afterLoad();
+      else lightboxImg.addEventListener("load", afterLoad, { once: true });
       lightboxImg.src = url;
       lightbox.showModal();
+      if (lightboxImg.complete && lightboxImg.naturalWidth) afterLoad();
       return;
     }
 
@@ -3183,6 +3385,16 @@
     if (!lightbox) return;
     const on = lightbox.classList.toggle("is-fs");
     if (previewFsBtn) previewFsBtn.textContent = on ? "退出全屏" : "全屏";
+    if (isImagePreviewOpen()) {
+      requestAnimationFrame(() => {
+        const rel = imgZoom.fit ? imgZoom.scale / imgZoom.fit : 1;
+        fitImageZoom();
+        if (Math.abs(rel - 1) > 0.04) {
+          const rect = zoomWrap.getBoundingClientRect();
+          zoomImageAt(rect.left + rect.width / 2, rect.top + rect.height / 2, imgZoom.fit * rel);
+        }
+      });
+    }
   }
 
   function closeLightbox() {
@@ -4122,6 +4334,23 @@
   });
   document.addEventListener("keydown", (e) => {
     if (!lightbox?.open) return;
+    if (isImagePreviewOpen() && !isEditableTarget(e.target)) {
+      if (e.key === "+" || e.key === "=") {
+        e.preventDefault();
+        bumpImageZoom(1.2);
+        return;
+      }
+      if (e.key === "-" || e.key === "_") {
+        e.preventDefault();
+        bumpImageZoom(1 / 1.2);
+        return;
+      }
+      if (e.key === "0") {
+        e.preventDefault();
+        fitImageZoom();
+        return;
+      }
+    }
     if (e.key === "Escape" && lightbox.classList.contains("is-fs") && !document.fullscreenElement) {
       lightbox.classList.remove("is-fs");
       if (previewFsBtn) previewFsBtn.textContent = "全屏";
@@ -4151,6 +4380,7 @@
     canPickDirectory: () => canDirPicker(),
     pickDirectory: () => pickDirectory(),
     askSwitchDirectoryChoice: (opts) => askSwitchDirectoryChoice(opts || {}),
+    getPreviewZoom,
     setShareUiForTest: (on) => {
       state.testShareUi = Boolean(on);
       renderItems();
