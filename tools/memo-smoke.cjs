@@ -681,9 +681,41 @@ async function main() {
       }
     }
 
+    // theme tokens should drive memo tags / search / type chips
+    out.themeMemo = {
+      api: typeof window.DevToolsTheme?.setPreset === "function",
+      hasSearch: Boolean(document.querySelector(".memo-search")),
+      hasTypeChip: Boolean(document.querySelector(".memo-type-chip")),
+      hasTags: Boolean(document.querySelector(".memo-tags")),
+    };
+    if (out.themeMemo.api) {
+      const accentBefore = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+      const searchBefore = getComputedStyle(document.querySelector(".memo-search")).backgroundColor;
+      const chip = document.querySelector(".memo-type-chip");
+      chip?.classList.add("is-active");
+      const chipBefore = chip ? getComputedStyle(chip).backgroundColor : "";
+      await window.DevToolsTheme.setPreset("paper");
+      await sleep(80);
+      const accentAfter = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+      const searchAfter = getComputedStyle(document.querySelector(".memo-search")).backgroundColor;
+      const chipAfter = chip ? getComputedStyle(chip).backgroundColor : "";
+      const tagsAfter = getComputedStyle(document.querySelector(".memo-tags")).backgroundColor;
+      out.themeMemo.accentChanged = Boolean(accentAfter) && accentAfter !== accentBefore;
+      out.themeMemo.searchFollows = searchAfter !== searchBefore || /255|rgb\(/.test(searchAfter);
+      out.themeMemo.chipFollows = Boolean(chipAfter) && chipAfter !== "rgba(0, 0, 0, 0)";
+      out.themeMemo.tagsOpaque = Boolean(tagsAfter) && tagsAfter !== "rgba(0, 0, 0, 0)";
+      // paper is light — control fills should not stay navy (rgb ~14,22,38)
+      out.themeMemo.notStuckNavy =
+        !/rgba?\(\s*14\s*,\s*22\s*,\s*38/i.test(searchAfter) &&
+        !/rgba?\(\s*14\s*,\s*22\s*,\s*38/i.test(tagsAfter);
+      out.themeMemo.schemeLight = document.documentElement.dataset.themeScheme === "light";
+      await window.DevToolsTheme.setPreset("default");
+      await sleep(40);
+    }
+
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memorename1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memotheme1/.test(s.src)),
     };
 
     return out;
@@ -856,8 +888,17 @@ async function main() {
   if (!result.renameUi?.inputShown || !result.renameUi?.savedName || !result.renameUi?.fileSynced || !result.renameUi?.titleUpdated) {
     failed.push("title dblclick rename should update name and fileName");
   }
-  if (!/memorename1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memorename1");
+  if (!result.themeMemo?.api || !result.themeMemo?.hasSearch || !result.themeMemo?.hasTypeChip || !result.themeMemo?.hasTags) {
+    failed.push("memo theme chrome / DevToolsTheme.setPreset missing");
+  }
+  if (!result.themeMemo?.accentChanged || !result.themeMemo?.schemeLight || !result.themeMemo?.notStuckNavy) {
+    failed.push("memo tags/search/chips should follow theme tokens (not stuck navy)");
+  }
+  if (!result.themeMemo?.searchFollows || !result.themeMemo?.chipFollows || !result.themeMemo?.tagsOpaque) {
+    failed.push("memo search/type chip/tags should use themed backgrounds");
+  }
+  if (!/memotheme1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memotheme1");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");
