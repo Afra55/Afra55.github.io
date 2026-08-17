@@ -278,7 +278,7 @@ async function main() {
       shortFull: Boolean(textPre) && !textPre.classList.contains("is-truncated"),
     };
 
-    // type filter + grouped sections
+    // type filter (flat list: no type groups)
     out.typeFilter = {
       host: Boolean(document.getElementById("memo-type-filter")),
       chips: document.querySelectorAll("#memo-type-filter [data-memo-type]").length,
@@ -294,6 +294,7 @@ async function main() {
       }) && document.querySelectorAll(".memo-card").length >= 1;
     document.querySelector('#memo-type-filter [data-memo-type="all"]')?.click();
     await sleep(80);
+    out.typeFilter.flatAll = document.querySelectorAll(".memo-type-group").length === 0;
 
     // search + autoclip + gif type
     const search = document.getElementById("memo-search");
@@ -599,7 +600,7 @@ async function main() {
     out.cacheBust = {
 
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memoprev1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memoflat1/.test(s.src)),
     };
 
     return out;
@@ -717,7 +718,9 @@ async function main() {
   if (!result.typeFilter?.host || (result.typeFilter?.chips || 0) < 7) {
     failed.push("type filter chips missing");
   }
-  if ((result.typeFilter?.groups || 0) < 1) failed.push("type groups missing in all view");
+  if ((result.typeFilter?.groups || 0) !== 0 || !result.typeFilter?.flatAll) {
+    failed.push("all view should be a flat newest-first list without type groups");
+  }
   if (!result.typeFilter?.imageOnly) failed.push("image type filter failed");
   if (!result.tagLeavesDefault?.hasWork || !result.tagLeavesDefault?.noDefault) {
     failed.push("tagged item should leave default tag");
@@ -752,8 +755,8 @@ async function main() {
   if (!result.switchDir?.dlgOpen || !result.switchDir?.migrateVisible || !result.switchDir?.emptyVisible || result.switchDir?.choice !== "cancel") {
     failed.push("switch directory dialog choices failed");
   }
-  if (!/memoprev1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memoprev1");
+  if (!/memoflat1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memoflat1");
   }
   if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
     failed.push("search/autoclip UI missing or autoclip not default-off");
