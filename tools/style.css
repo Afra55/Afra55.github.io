@@ -25,6 +25,15 @@
   --bg-image: none;
   --bg-image-overlay: 0.55;
   --theme-scheme: dark;
+  /* 壳层/导航派生色：随主题变，避免写死深青绿底 */
+  --nav-bg: color-mix(in srgb, var(--panel-strong) 90%, transparent);
+  --nav-bg-solid: color-mix(in srgb, var(--bg-0) 72%, var(--panel-strong));
+  --control-bg: color-mix(in srgb, var(--bg-0) 58%, transparent);
+  --control-bg-strong: color-mix(in srgb, var(--bg-0) 70%, var(--panel-strong));
+  --ink-faint: color-mix(in srgb, var(--ink) 5%, transparent);
+  --ink-soft: color-mix(in srgb, var(--ink) 8%, transparent);
+  --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
+  --accent-soft-strong: color-mix(in srgb, var(--accent) 22%, transparent);
 }
 
 *,
@@ -240,9 +249,10 @@ body.theme-reduce-glow .bg-grid {
   padding: 0.55rem;
   border: 1px solid var(--line);
   border-radius: 14px;
-  background: rgba(11, 18, 32, 0.82);
+  background: var(--nav-bg);
+  color: var(--ink);
   backdrop-filter: blur(12px);
-  transition: transform 0.28s ease, opacity 0.28s ease, box-shadow 0.28s ease;
+  transition: transform 0.28s ease, opacity 0.28s ease, box-shadow 0.28s ease, background 0.2s ease, border-color 0.2s ease;
   will-change: transform;
 }
 
@@ -262,7 +272,7 @@ body.theme-reduce-glow .bg-grid {
 .nav-reset {
   appearance: none;
   border: 1px solid var(--line);
-  background: rgba(232, 238, 248, 0.05);
+  background: var(--ink-faint);
   color: var(--muted);
   font: inherit;
   font-size: 0.8rem;
@@ -275,7 +285,8 @@ body.theme-reduce-glow .bg-grid {
 
 .nav-reset:hover {
   color: var(--ink);
-  border-color: rgba(46, 196, 182, 0.35);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: var(--accent-soft);
 }
 
 .nav-footer-actions {
@@ -331,16 +342,16 @@ body.theme-reduce-glow .bg-grid {
 }
 
 .tool-nav-link.drag-over {
-  border-color: rgba(46, 196, 182, 0.55);
-  background: rgba(46, 196, 182, 0.12);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: var(--accent-soft);
   color: var(--ink);
 }
 
 .tool-nav-link:hover,
 .tool-nav-link.is-active {
   color: var(--ink);
-  border-color: var(--line);
-  background: rgba(232, 238, 248, 0.04);
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: var(--accent-soft);
 }
 
 .tool-nav-link.is-soon {
@@ -443,7 +454,7 @@ body.theme-reduce-glow .bg-grid {
   padding: 3px;
   border: 1px solid var(--line);
   border-radius: 999px;
-  background: rgba(0, 0, 0, 0.2);
+  background: color-mix(in srgb, var(--bg-0) 45%, transparent);
 }
 
 .seg-btn {
@@ -460,7 +471,7 @@ body.theme-reduce-glow .bg-grid {
 }
 
 .seg-btn.is-active {
-  background: rgba(46, 196, 182, 0.18);
+  background: var(--accent-soft-strong, color-mix(in srgb, var(--accent) 18%, transparent));
   color: var(--ink);
 }
 
@@ -541,14 +552,19 @@ input[type="text"]:focus {
 }
 
 .primary-btn {
-  background: linear-gradient(135deg, #2ec4b6, #1fa89c);
-  color: #06221f;
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 72%, #000));
+  color: color-mix(in srgb, var(--bg-0) 18%, #041512);
   font-weight: 650;
   padding: 0.7rem 1rem;
 }
 
+html[data-theme-scheme="light"] .primary-btn {
+  color: #fff;
+  background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 78%, #000));
+}
+
 .secondary-btn {
-  background: rgba(232, 238, 248, 0.06);
+  background: var(--ink-faint, color-mix(in srgb, var(--ink) 5%, transparent));
   color: var(--ink);
   border-color: var(--line);
   padding: 0.7rem 1rem;
@@ -562,9 +578,9 @@ a.secondary-btn {
 }
 
 .ghost-btn {
-  background: rgba(244, 162, 97, 0.12);
-  color: #ffd7b0;
-  border-color: rgba(244, 162, 97, 0.28);
+  background: color-mix(in srgb, var(--accent-2) 14%, transparent);
+  color: color-mix(in srgb, var(--accent-2) 35%, var(--ink));
+  border-color: color-mix(in srgb, var(--accent-2) 35%, var(--line));
   padding: 0 0.9rem;
   white-space: nowrap;
 }
@@ -572,7 +588,7 @@ a.secondary-btn {
 .copy-btn {
   background: transparent;
   color: var(--accent);
-  border-color: rgba(46, 196, 182, 0.3);
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
   padding: 0.25rem 0.55rem;
   font-size: 0.78rem;
 }
@@ -585,8 +601,8 @@ a.secondary-btn {
   gap: 0.55rem;
   padding: 0.75rem 0.85rem;
   border-radius: 12px;
-  background: rgba(46, 196, 182, 0.08);
-  border: 1px solid rgba(46, 196, 182, 0.2);
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 8%, transparent));
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
 }
 
 .result-label {
@@ -2663,7 +2679,11 @@ body.vsplit-fs-open {
     margin-left: -0.15rem;
     margin-right: -0.15rem;
     padding: 0.28rem 0.15rem 0.35rem;
-    background: linear-gradient(180deg, rgba(11, 18, 32, 0.98) 55%, rgba(11, 18, 32, 0.88) 100%);
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-0) 98%, transparent) 55%,
+      color-mix(in srgb, var(--bg-0) 88%, transparent) 100%
+    );
     backdrop-filter: blur(10px);
   }
 
@@ -6810,8 +6830,21 @@ html[data-theme-scheme="light"] .bg-grid {
 }
 
 html[data-theme-scheme="light"] {
-  --link: #0d7377;
-  --link-hover: #095c5f;
+  --link: #0f6e64;
+  --link-hover: #0a524b;
+  --nav-bg: color-mix(in srgb, var(--panel-strong) 94%, transparent);
+  --nav-bg-solid: color-mix(in srgb, #ffffff 88%, var(--bg-0));
+  --control-bg: color-mix(in srgb, var(--bg-1) 55%, #ffffff);
+  --control-bg-strong: color-mix(in srgb, #ffffff 82%, var(--bg-1));
+  --ink-faint: color-mix(in srgb, var(--ink) 4%, transparent);
+  --ink-soft: color-mix(in srgb, var(--ink) 7%, transparent);
+  --accent-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+  --accent-soft-strong: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+html[data-theme-scheme="light"] .setup-pre {
+  background: color-mix(in srgb, var(--bg-1) 75%, var(--panel-strong));
+  color: var(--ink);
 }
 
 /* 正文/说明里的下划线链接：不要继承 --muted 灰字，全站可读 */
