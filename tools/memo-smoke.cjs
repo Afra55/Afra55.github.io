@@ -391,7 +391,7 @@ async function main() {
         wrapShown: Boolean(wrap) && !wrap.hidden,
         hud: Boolean(document.getElementById("memo-zoom-in") && document.getElementById("memo-zoom-out")),
         resetLabel: (document.getElementById("memo-zoom-reset")?.textContent || "").trim(),
-        hudTop: Boolean(hudCs && parseFloat(hudCs.top) >= 0 && hudCs.bottom === "auto"),
+        hudTop: Boolean(hudCs && hudCs.top !== "auto" && parseFloat(hudCs.top) < 48),
         fitOk: Number(z0.fit) > 0 && Math.abs((z0.rel || 1) - 1) < 0.12,
         wheeled: Number(z1.scale) > Number(z0.scale) + 0.0001,
         panned: Math.abs((z2.x || 0) - (z1.x || 0)) > 0.5 || Math.abs((z2.y || 0) - (z1.y || 0)) > 0.5,
