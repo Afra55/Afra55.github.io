@@ -784,7 +784,7 @@
       label: "数据与文本",
       tools: ["json", "yaml", "sharecard", "query", "text", "caseconv", "regex", "diff", "qrcode", "markdown", "memo"],
     },
-    { id: "media", label: "媒体", tools: ["media"] },
+    { id: "media", label: "媒体", tools: ["gifmaker", "vsplit", "vbb", "vtrim", "audio"] },
     { id: "image", label: "图片", tools: ["imgkit", "textimg", "imgtext"] },
     { id: "convert", label: "换算", tools: ["units", "coord", "numbase"] },
     { id: "device", label: "设备", tools: ["adb", "ffbridge"] },
@@ -820,7 +820,11 @@
     qrcode: "生成与识别二维码。",
     markdown: "Markdown 预览。",
     memo: "本地备忘录：一键读剪贴板入库、搜索/点选筛选；文本图片可复制，其它类型可下载，手机可单条分享（文转图/OCR 见独立工具）。",
-    media: "GIF/动图、视频切分、一键黑盒、视频修剪、音频处理等本地媒体工具合集。",
+    gifmaker: "视频转 GIF/WebP、压缩、拼接、亮度等本地动图处理。",
+    vsplit: "预览打点切分视频片段，支持全屏标记与打包下载。",
+    vbb: "按估算快速切出可用视频段，偏批量效率。",
+    vtrim: "调整片头片尾时长、裁边框；网页 FFmpeg，手机可用。",
+    audio: "修剪、音量、抽音轨；网页 FFmpeg 保底，电脑批量请用本机桥。",
     imgkit: "图片压缩、裁剪、水印、拼接。",
     textimg: "文字/Markdown/代码生成分享图。",
     imgtext: "本地 OCR 图片转文字（Tesseract）。",
@@ -854,30 +858,11 @@
     regex: { name: "正则", aliases: ["regexp", "正则表达式"] },
     diff: { name: "Diff", aliases: ["对比", "差异"] },
     qrcode: { name: "二维码", aliases: ["qr", "扫码"] },
-    media: {
-      name: "媒体 / 动图",
-      aliases: [
-        "gif",
-        "gifmaker",
-        "视频",
-        "视频切分",
-        "vsplit",
-        "黑盒",
-        "一键黑盒",
-        "vbb",
-        "切分",
-        "修剪",
-        "裁剪",
-        "视频修剪",
-        "vtrim",
-        "音频",
-        "音量",
-        "audio",
-        "webp",
-        "ffmpeg",
-        "动图",
-      ],
-    },
+    gifmaker: { name: "GIF / 动图", aliases: ["gif", "动图", "webp", "ffmpeg"] },
+    vsplit: { name: "视频切分", aliases: ["切分", "vsplit", "视频"] },
+    vbb: { name: "一键黑盒", aliases: ["黑盒", "vbb", "批量切分"] },
+    vtrim: { name: "视频修剪", aliases: ["修剪", "裁剪", "vtrim"] },
+    audio: { name: "音频处理", aliases: ["音频", "音量", "抽音轨", "audio"] },
     imgkit: { name: "图片工具", aliases: ["裁剪", "压缩", "水印", "拼接"] },
     textimg: { name: "文字转图片", aliases: ["文转图", "海报", "卡片", "carbon", "text to image"] },
     imgtext: { name: "图片转文字", aliases: ["ocr", "识字", "图转文", "tesseract"] },
@@ -947,14 +932,15 @@
   }
 
   function sanitizeToolIds(raw) {
-    const legacyMap = { gifmaker: "media", vsplit: "media", vbb: "media", vtrim: "media", audio: "media" };
     const seen = new Set();
     const out = [];
     (Array.isArray(raw) ? raw : []).forEach((id) => {
-      const next = legacyMap[id] || id;
-      if (!DEFAULT_ORDER.includes(next) || seen.has(next)) return;
-      seen.add(next);
-      out.push(next);
+      const expanded = id === "media" ? MEDIA_TABS.slice() : [id];
+      expanded.forEach((next) => {
+        if (!DEFAULT_ORDER.includes(next) || seen.has(next)) return;
+        seen.add(next);
+        out.push(next);
+      });
     });
     return out;
   }
@@ -1081,7 +1067,7 @@
         if (!isNavToolVisible(id)) return;
         const a = document.createElement("a");
         a.className = "tool-nav-link";
-        a.href = id === "media" ? "#media/gifmaker" : `#${id}`;
+        a.href = MEDIA_TABS.includes(id) ? `#media/${id}` : `#${id}`;
         a.dataset.tool = id;
         a.draggable = allowHtml5Drag;
         a.title = allowHtml5Drag ? "拖动可调整工具顺序" : "长按工具名后拖动，可调整顺序";
@@ -1110,7 +1096,7 @@
       btn.type = "button";
       btn.className = "nav-recent-chip";
       btn.textContent = toolName(id);
-      btn.addEventListener("click", () => navigateTo(id, id === "media" ? currentMediaTab : null));
+      btn.addEventListener("click", () => navigateTo(id));
       recentList.appendChild(btn);
     });
     if (!recentList.children.length) {
@@ -1281,28 +1267,20 @@
       currentTool === "about"
         ? "实用小工具合集"
         : currentTool === "media"
-          ? `${toolName("media")} · ${
-              currentMediaTab === "vsplit"
-                ? "视频切分"
-                : currentMediaTab === "vbb"
-                  ? "一键黑盒"
-                  : currentMediaTab === "vtrim"
-                    ? "视频修剪"
-                    : currentMediaTab === "audio"
-                      ? "音频处理"
-                      : "GIF"
-            }`
+          ? toolName(currentMediaTab)
           : toolName(currentTool);
     if (workspaceTitle) workspaceTitle.textContent = title;
     document.title =
       currentTool === "about" ? "DevTools · 本地实用小工具合集" : `${title} · DevTools`;
 
     getNavLinks().forEach((link) => {
-      link.classList.toggle("is-active", link.dataset.tool === currentTool);
-      link.setAttribute("aria-current", link.dataset.tool === currentTool ? "page" : "false");
+      const id = link.dataset.tool;
+      const on = currentTool === "media" ? id === currentMediaTab : id === currentTool;
+      link.classList.toggle("is-active", on);
+      link.setAttribute("aria-current", on ? "page" : "false");
     });
 
-    if (!skipRecent) pushRecent(currentTool);
+    if (!skipRecent) pushRecent(currentTool === "media" ? currentMediaTab : currentTool);
     // 手机分类拖拽排序后需保持抽屉打开
     if (!keepDrawer) {
       setDrawerOpen(false);
@@ -1316,9 +1294,14 @@
   }
 
   function navigateTo(tool, tab, { replace = false } = {}) {
-    // 手机打开本机桥/ADB：引导到网页媒体能力，避免空白桥面板
     let nextTool = tool;
     let nextTabArg = tab;
+    // 侧栏媒体子项 → 统一走 #media/<tab>
+    if (MEDIA_TABS.includes(tool)) {
+      nextTool = "media";
+      nextTabArg = tool;
+    }
+    // 手机打开本机桥/ADB：引导到网页媒体能力，避免空白桥面板
     if (isPhoneLikeClient() && (tool === "ffbridge" || tool === "adb")) {
       nextTool = "media";
       nextTabArg = tool === "ffbridge" ? "audio" : currentMediaTab || "gifmaker";
@@ -1329,7 +1312,8 @@
     // 媒体内切 Tab 用 replace，避免系统返回在子功能间来回跳
     const mediaTabOnly =
       nextTool === "media" && currentTool === "media" && nextTab && nextTab !== currentMediaTab;
-    const shouldReplace = replace || mediaTabOnly || (isPhoneLikeClient() && (tool === "ffbridge" || tool === "adb"));
+    const shouldReplace =
+      replace || mediaTabOnly || (isPhoneLikeClient() && (tool === "ffbridge" || tool === "adb"));
     if (shouldReplace) history.replaceState(null, "", hash);
     else if (current !== hash) history.pushState(null, "", hash);
     applyRoute();
@@ -1634,7 +1618,7 @@
       link.addEventListener("click", (e) => {
         e.preventDefault();
         if (didDrag) return;
-        navigateTo(link.dataset.tool, link.dataset.tool === "media" ? currentMediaTab : null);
+        navigateTo(link.dataset.tool);
       });
       link.addEventListener("contextmenu", (e) => {
         if (!canDesktopDrag()) e.preventDefault();

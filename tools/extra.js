@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.16-scrcpy1";
+  const TOOLS_VERSION = "2026.08.17-medianav1";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -573,7 +573,7 @@
     ) {
       return true;
     }
-    const mediaLink = document.querySelector('.tool-nav-link[data-tool="media"]');
+    const mediaLink = document.querySelector('.tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"], .tool-nav-link[data-tool="vtrim"], .tool-nav-link[data-tool="audio"]');
     if (mediaLink?.classList.contains("is-active")) return true;
     return ["gifmaker", "vsplit", "vbb", "vtrim", "audio"].some((id) => {
       const panel = document.getElementById(id);

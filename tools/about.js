@@ -1,38 +1,7 @@
 (() => {
   "use strict";
 
-  const MEDIA_EXTRA = [
-    {
-      id: "gifmaker",
-      href: "#media/gifmaker",
-      name: "GIF / 动图",
-      desc: "视频转 GIF/WebP、压缩、拼接、亮度等本地处理。",
-    },
-    {
-      id: "vsplit",
-      href: "#media/vsplit",
-      name: "视频切分",
-      desc: "预览打点切分片段，支持全屏标记与打包下载。",
-    },
-    {
-      id: "vbb",
-      href: "#media/vbb",
-      name: "一键黑盒",
-      desc: "按估算快速切出可用视频段，偏批量效率。",
-    },
-    {
-      id: "vtrim",
-      href: "#media/vtrim",
-      name: "视频修剪",
-      desc: "调整片头片尾时长，裁边框；网页 FFmpeg，手机可用。",
-    },
-    {
-      id: "audio",
-      href: "#media/audio",
-      name: "音频处理",
-      desc: "修剪、音量、抽音轨；网页 FFmpeg 保底，电脑批量请用本机桥。",
-    },
-  ];
+  const MEDIA_IDS = new Set(["gifmaker", "vsplit", "vbb", "vtrim", "audio"]);
 
   /** 新增工具时：在 app.js 的 TOOL_GROUPS / TOOL_META / ABOUT_DESC 同步更新 */
   function $(sel, root = document) {
@@ -214,24 +183,13 @@
           .map((id) => {
             const name = meta[id]?.name || id;
             const desc = about[id] || meta[id]?.aliases?.slice(0, 4).join(" · ") || "本地实用工具";
-            const href = id === "media" ? "#media/gifmaker" : `#${id}`;
-            let extra = "";
-            if (id === "media") {
-              extra = `<div class="about-sublinks">${MEDIA_EXTRA.map(
-                (m) =>
-                  `<a class="about-sublink" href="${m.href}">${escapeHtml(m.name)}</a>`
-              ).join("")}</div>
-              <ul class="about-subdesc hint tight">${MEDIA_EXTRA.map(
-                (m) => `<li><strong>${escapeHtml(m.name)}</strong> — ${escapeHtml(m.desc)}</li>`
-              ).join("")}</ul>`;
-            }
+            const href = MEDIA_IDS.has(id) ? `#media/${id}` : `#${id}`;
             return `<article class="about-card">
               <div class="about-card-head">
                 <h3>${escapeHtml(name)}</h3>
                 <a class="secondary-btn about-go" href="${href}">打开</a>
               </div>
               <p class="hint tight">${escapeHtml(desc)}</p>
-              ${extra}
             </article>`;
           })
           .join("");

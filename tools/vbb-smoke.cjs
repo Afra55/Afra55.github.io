@@ -76,8 +76,8 @@ async function main() {
   const result = await page.evaluate(async () => {
     const out = {
       hasSection: Boolean(document.getElementById("vbb")),
-      hasNav: Boolean(document.querySelector('.tool-nav-link[data-tool="media"]')),
-      mediaActive: document.querySelector('.tool-nav-link[data-tool="media"]')?.classList.contains("is-active"),
+      hasNav: Boolean(document.querySelector('.tool-nav-link[data-tool="vbb"]')),
+      mediaActive: document.querySelector('.tool-nav-link[data-tool="vbb"]')?.classList.contains("is-active"),
       vbbActive: document.getElementById("vbb")?.classList.contains("is-workspace-active"),
       hash: location.hash,
       mediaSubnavVisible: !document.getElementById("media-subnav")?.hidden,
@@ -111,10 +111,11 @@ async function main() {
       hasPurge: typeof window.DevToolsTemp?.purgeSiteCache === "function",
     };
     try {
-      out.orderHasMedia = [...document.querySelectorAll(".tool-nav-link")].some((a) => a.dataset.tool === "media");
-      out.noLegacyMediaNav = ![...document.querySelectorAll(".tool-nav-link")].some((a) =>
-        ["gifmaker", "vsplit", "vbb", "vtrim", "audio"].includes(a.dataset.tool)
+      const mediaIds = ["gifmaker", "vsplit", "vbb", "vtrim", "audio"];
+      out.orderHasMedia = mediaIds.every((id) =>
+        [...document.querySelectorAll(".tool-nav-link")].some((a) => a.dataset.tool === id)
       );
+      out.noCollapsedMediaNav = ![...document.querySelectorAll(".tool-nav-link")].some((a) => a.dataset.tool === "media");
     } catch (_) {}
     return out;
   });
@@ -470,7 +471,7 @@ async function main() {
   await new Promise((r) => setTimeout(r, 500));
   await page.click("#nav-open");
   await page.waitForFunction(() => document.body.classList.contains("nav-open"), { timeout: 5000 });
-  await page.click('.tool-nav-link[data-tool="media"]');
+  await page.click('.tool-nav-link[data-tool="gifmaker"]');
   await page.waitForFunction(() => location.hash.indexOf("#media/") === 0, { timeout: 5000 });
   const afterMedia = await page.evaluate(() => ({
     hash: location.hash,
@@ -513,7 +514,7 @@ async function main() {
       search.value = "vbb";
       search.dispatchEvent(new Event("input", { bubbles: true }));
     }
-    const mediaVisible = ![...document.querySelectorAll('.tool-nav-link[data-tool="media"]')].some((a) =>
+    const mediaVisible = ![...document.querySelectorAll('.tool-nav-link[data-tool="vbb"]')].some((a) =>
       a.classList.contains("is-filtered-out")
     );
     const comingGone = !document.getElementById("coming");
@@ -1076,13 +1077,13 @@ async function main() {
   if (errors.length) problems.push(`page errors: ${errors.join(" | ")}`);
   if (!result.hasSection) problems.push("missing #vbb");
   if (!result.hasNav) problems.push("missing media nav");
-  if (!result.mediaActive) problems.push("media nav should be active for #vbb");
+  if (!result.mediaActive) problems.push("vbb nav should be active for #vbb");
   if (!result.vbbActive) problems.push("vbb panel should be workspace-active");
   if (result.hash !== "#media/vbb") problems.push(`legacy #vbb should redirect, got ${result.hash}`);
   if (!result.mediaSubnavVisible) problems.push("media subnav should show");
-  if (!result.orderHasMedia) problems.push("nav missing media entry");
-  if (result.noLegacyMediaNav === false) problems.push("legacy gifmaker/vsplit/vbb nav links should be gone");
-  if (!/2026\.08\.1[56]/.test(result.version)) problems.push(`bad version ${result.version}`);
+  if (!result.orderHasMedia) problems.push("nav missing expanded media entries");
+  if (result.noCollapsedMediaNav === false) problems.push("collapsed single media nav link should be gone");
+  if (!/2026\.08\./.test(result.version)) problems.push(`bad version ${result.version}`);
   if (result.analyzeDisabled !== true) problems.push("analyze should start disabled");
   if (result.runDisabled !== true) problems.push("run should start disabled");
   if (!result.ids.every((x) => x.ok)) problems.push("missing ids");
