@@ -34,6 +34,10 @@
   --ink-soft: color-mix(in srgb, var(--ink) 8%, transparent);
   --accent-soft: color-mix(in srgb, var(--accent) 14%, transparent);
   --accent-soft-strong: color-mix(in srgb, var(--accent) 22%, transparent);
+  /* 成组主操作按钮统一高度 */
+  --btn-min-h: 2.5rem;
+  --btn-pad-y: 0.7rem;
+  --btn-pad-x: 1rem;
 }
 
 *,
@@ -536,6 +540,7 @@ input[type="password"]:focus {
 .btn-row {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 0.55rem;
 }
 
@@ -543,7 +548,8 @@ input[type="password"]:focus {
 .secondary-btn,
 .ghost-btn,
 .copy-btn,
-.preset {
+.preset,
+.file-btn {
   appearance: none;
   border: 1px solid transparent;
   font: inherit;
@@ -552,11 +558,25 @@ input[type="password"]:focus {
   transition: transform 0.15s, background 0.2s, border-color 0.2s, opacity 0.2s;
 }
 
+.primary-btn,
+.secondary-btn,
+.ghost-btn,
+.file-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: var(--btn-min-h, 2.5rem);
+  font-size: 0.95rem;
+  line-height: 1.25;
+}
+
 .primary-btn:hover,
 .secondary-btn:hover,
 .ghost-btn:hover,
 .copy-btn:hover,
 .preset:hover,
+.file-btn:hover,
 .seg-btn:hover {
   transform: translateY(-1px);
 }
@@ -565,7 +585,7 @@ input[type="password"]:focus {
   background: linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 72%, #000));
   color: color-mix(in srgb, var(--bg-0) 18%, #041512);
   font-weight: 650;
-  padding: 0.7rem 1rem;
+  padding: var(--btn-pad-y, 0.7rem) var(--btn-pad-x, 1rem);
 }
 
 html[data-theme-scheme="light"] .primary-btn {
@@ -577,7 +597,7 @@ html[data-theme-scheme="light"] .primary-btn {
   background: var(--ink-faint, color-mix(in srgb, var(--ink) 5%, transparent));
   color: var(--ink);
   border-color: var(--line);
-  padding: 0.7rem 1rem;
+  padding: var(--btn-pad-y, 0.7rem) var(--btn-pad-x, 1rem);
 }
 
 a.secondary-btn {
@@ -591,8 +611,18 @@ a.secondary-btn {
   background: color-mix(in srgb, var(--accent-2) 14%, transparent);
   color: color-mix(in srgb, var(--accent-2) 35%, var(--ink));
   border-color: color-mix(in srgb, var(--accent-2) 35%, var(--line));
-  padding: 0 0.9rem;
+  padding: var(--btn-pad-y, 0.7rem) 0.9rem;
   white-space: nowrap;
+}
+
+/* 输入框旁的 ghost：拉齐输入高度，避免整组被撑高 */
+.input-with-action > .ghost-btn,
+.input-with-action > .secondary-btn,
+.input-with-action > .primary-btn {
+  min-height: 0;
+  align-self: stretch;
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 .copy-btn {
@@ -601,6 +631,19 @@ a.secondary-btn {
   border-color: color-mix(in srgb, var(--accent) 30%, var(--line));
   padding: 0.25rem 0.55rem;
   font-size: 0.78rem;
+}
+
+/* 与主操作并排时，复制按钮同高同字号 */
+.btn-row > .copy-btn,
+.tool-actions > .copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-height: var(--btn-min-h, 2.5rem);
+  padding: var(--btn-pad-y, 0.7rem) 0.85rem;
+  font-size: 0.95rem;
+  line-height: 1.25;
 }
 
 .result {
@@ -942,21 +985,13 @@ a.secondary-btn {
 }
 
 .file-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
   background: rgba(232, 238, 248, 0.06);
   color: var(--ink);
-  border: 1px solid var(--line);
-  border-radius: 11px;
-  padding: 0.65rem 0.9rem;
-  cursor: pointer;
-  font-size: 0.92rem;
-  transition: transform 0.15s, background 0.2s;
+  border-color: var(--line);
+  padding: var(--btn-pad-y, 0.7rem) var(--btn-pad-x, 1rem);
 }
 
 .file-btn:hover {
-  transform: translateY(-1px);
   background: rgba(232, 238, 248, 0.1);
 }
 
@@ -1315,10 +1350,6 @@ a.secondary-btn {
 
   .input-with-action {
     grid-template-columns: 1fr;
-  }
-
-  .ghost-btn {
-    padding: 0.65rem 0.9rem;
   }
 }
 
@@ -3038,7 +3069,9 @@ body.vsplit-fs-open {
 .adb-dev-controls .secondary-btn,
 .adb-dev-controls .ghost-btn {
   min-width: 2.4rem;
+  min-height: 2.05rem;
   padding: 0.28rem 0.55rem;
+  font-size: 0.86rem;
 }
 
 .adb-dev-quick {
@@ -4732,6 +4765,9 @@ button.adb-device-body.linkish {
   justify-content: flex-start;
   width: 100%;
   text-align: left;
+  min-height: 0;
+  padding: 0.42rem 0.65rem;
+  font-size: 0.88rem;
 }
 
 .memo-tag-suggest {
@@ -5771,11 +5807,22 @@ button.adb-device-body.linkish {
   margin: 0;
   flex: 0 0 auto;
   justify-content: flex-end;
+  align-items: center;
 }
 
 .memo-card-actions > .secondary-btn,
-.memo-card-actions > .memo-more {
+.memo-card-actions > .memo-more,
+.memo-card-actions .memo-more-sum {
   flex: 0 0 auto;
+  min-height: var(--btn-min-h, 2.5rem);
+  box-sizing: border-box;
+}
+
+.memo-card-actions .memo-more-sum {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--btn-pad-y, 0.7rem) 0.85rem;
 }
 
 .memo-more-danger {
@@ -5826,6 +5873,8 @@ button.adb-device-body.linkish {
 .memo-tag-add {
   font-size: 0.8rem;
   padding: 0.15rem 0.45rem;
+  min-height: 0;
+  line-height: 1.2;
 }
 
 .memo-dialog {
@@ -6269,8 +6318,9 @@ button.adb-device-body.linkish {
     margin-left: 0.2rem;
   }
 
-  .memo-card-actions .ghost-btn {
-    padding: 0.35rem 0.55rem;
+  .memo-card-actions .ghost-btn,
+  .memo-card-actions .memo-more-sum {
+    padding-inline: 0.65rem;
   }
 
   .memo-preview-meta strong {
