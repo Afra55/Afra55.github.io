@@ -14,6 +14,11 @@
   const META_KEY = "meta";
   const PAGE_SIZE = 36;
   const AUTOCLIP_KEY = "devtools-memo-autoclip-v1";
+  const TEMP_DAYS_KEY = "devtools-memo-temp-days-v1";
+  const TEMP_FILTER_ID = "__temp__";
+  const TEMP_DEFAULT_DAYS = 7;
+  const TEMP_PROMPT_SEC = 5;
+  const AUTOCLIP_POLL_MS = 2500;
   const LAST_EXPORT_KEY = "devtools-memo-last-export-v1";
   const DIR_HINT_KEY = "devtools-memo-dir-hint-dismiss-v1";
   const BACKUP_NUDGE_DAYS = 7;
@@ -165,6 +170,11 @@
       const note = String(it.note || "").trim();
       if (note) it.note = note.length > NOTE_MAX ? `${note.slice(0, NOTE_MAX)}…` : note;
       else delete it.note;
+      if (it.tempUntil != null) {
+        const tu = Number(it.tempUntil);
+        if (Number.isFinite(tu) && tu > 0) it.tempUntil = tu;
+        else delete it.tempUntil;
+      }
     });
     items.sort((a, b) => {
       const ap = a.pinned ? 0 : 1;
@@ -435,6 +445,9 @@
     searchQuery: "",
     listLimit: PAGE_SIZE,
     autoClip: false,
+    tempDays: TEMP_DEFAULT_DAYS,
+    tempPrompt: null,
+    autoclipPollTimer: 0,
     selected: new Set(),
     lastClipSig: "",
     busy: false,
@@ -881,6 +894,138 @@
     updateDirHint();
   }
 
+  function isTempItem(item) {
+    return Number(item?.tempUntil) > Date.now();
+  }
+
+  function formatTempRemain(item) {
+    const left = Number(item?.tempUntil) - Date.now();
+    if (!Number.isFinite(left) || left <= 0) return "即将清理";
+    const days = Math.ceil(left / 86400000);
+    if (days > 1) return `${days} 天后清理`;
+    const hours = Math.ceil(left / 3600000);
+    return hours > 1 ? `${hours} 小时后清理` : "1 小时内清理";
+  }
+
+  function loadTempDays() {
+    try {
+      const n = Number(localStorage.getItem(TEMP_DAYS_KEY));
+      if (Number.isFinite(n) && n >= 1 && n <= 365) state.tempDays = Math.round(n);
+    } catch (_) {}
+  }
+
+  function saveTempDays(n) {
+    const v = Math.max(1, Math.min(365, Math.round(Number(n) || TEMP_DEFAULT_DAYS)));
+    state.tempDays = v;
+    try {
+      localStorage.setItem(TEMP_DAYS_KEY, String(v));
+    } catch (_) {}
+    const input = $("#memo-temp-days");
+    if (input && String(input.value) !== String(v)) input.value = String(v);
+  }
+
+  function markItemTemp(item, days) {
+    if (!item) return;
+    const d = Number(days) > 0 ? Number(days) : state.tempDays;
+    item.tempUntil = Date.now() + d * 86400000;
+    item.updatedAt = Date.now();
+  }
+
+  function clearItemTemp(item) {
+    if (!item) return;
+    delete item.tempUntil;
+    item.updatedAt = Date.now();
+  }
+
+  async function purgeExpiredTempItems() {
+    const now = Date.now();
+    const removed = [];
+    const keep = [];
+    for (const it of state.index.items || []) {
+      if (it.tempUntil && it.tempUntil <= now) removed.push(it);
+      else keep.push(it);
+    }
+    if (!removed.length) return 0;
+    state.index.items = keep;
+    removed.forEach((it) => {
+      forgetHash(it);
+      if (it?.id) state.cardHeightCache.delete(it.id);
+      state.selected.delete(it.id);
+    });
+    reindexOrders();
+    await persistIndex({ immediate: true });
+    renderAll();
+    return removed.length;
+  }
+
+  function syncTempChrome() {
+    const cache = ensureCountCache();
+    const countEl = $("#memo-temp-count");
+    if (countEl) countEl.textContent = String(cache.temp || 0);
+    const filterBtn = $("#memo-temp-filter");
+    if (filterBtn) filterBtn.classList.toggle("is-active", state.activeTagId === TEMP_FILTER_ID);
+    const daysInput = $("#memo-temp-days");
+    if (daysInput && document.activeElement !== daysInput) daysInput.value = String(state.tempDays);
+  }
+
+  function hideTempPromptUi() {
+    const el = $("#memo-temp-prompt");
+    if (el) el.hidden = true;
+  }
+
+  function finishTempPrompt({ markTemp = false } = {}) {
+    const p = state.tempPrompt;
+    if (!p) return;
+    if (p.tickTimer) clearInterval(p.tickTimer);
+    if (p.doneTimer) clearTimeout(p.doneTimer);
+    state.tempPrompt = null;
+    hideTempPromptUi();
+    const item = state.index.items.find((x) => x.id === p.itemId);
+    if (markTemp && item && !p.cancelled) {
+      markItemTemp(item, state.tempDays);
+      persistIndex().then(() => {
+        renderAll();
+        toast(`已标为临时（${state.tempDays} 天后清理）`);
+      });
+    }
+  }
+
+  function scheduleTempPrompt(itemId) {
+    if (!itemId) return;
+    finishTempPrompt({ markTemp: false });
+    const secEl = $("#memo-temp-prompt-sec");
+    const panel = $("#memo-temp-prompt");
+    if (!panel) return;
+    let remaining = TEMP_PROMPT_SEC;
+    if (secEl) secEl.textContent = String(remaining);
+    panel.hidden = false;
+    const prompt = {
+      itemId,
+      cancelled: false,
+      tickTimer: setInterval(() => {
+        remaining -= 1;
+        if (secEl) secEl.textContent = String(Math.max(0, remaining));
+      }, 1000),
+      doneTimer: setTimeout(() => finishTempPrompt({ markTemp: true }), TEMP_PROMPT_SEC * 1000),
+    };
+    state.tempPrompt = prompt;
+  }
+
+  function startAutoclipPoll() {
+    stopAutoclipPoll();
+    if (!state.autoClip) return;
+    state.autoclipPollTimer = setInterval(() => {
+      maybeAutoClip();
+    }, AUTOCLIP_POLL_MS);
+  }
+
+  function stopAutoclipPoll() {
+    if (state.autoclipPollTimer) {
+      clearInterval(state.autoclipPollTimer);
+      state.autoclipPollTimer = 0;
+    }
+  }
+
   function customTagIds(item) {
     return (item?.tagIds || []).filter((id) => id && id !== DEFAULT_TAG_ID);
   }
@@ -917,11 +1062,13 @@
     const byTag = new Map();
     const byType = { text: 0, image: 0, gif: 0, video: 0, audio: 0, file: 0 };
     let untagged = 0;
+    let temp = 0;
     const items = state.index.items || [];
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
       const tk = byType[it.type] != null ? it.type : "file";
       byType[tk] += 1;
+      if (isTempItem(it)) temp += 1;
       const custom = customTagIds(it);
       if (!custom.length) untagged += 1;
       else {
@@ -934,6 +1081,7 @@
     state.countCache = {
       total: items.length,
       untagged,
+      temp,
       byTag,
       byType,
     };
@@ -971,9 +1119,12 @@
     const out = [];
     const tagAll = !tagId || tagId === "all";
     const tagDefault = tagId === DEFAULT_TAG_ID || tagId === "default";
+    const tagTemp = tagId === TEMP_FILTER_ID;
     for (let i = 0; i < src.length; i++) {
       const it = src[i];
-      if (tagDefault) {
+      if (tagTemp) {
+        if (!isTempItem(it)) continue;
+      } else if (tagDefault) {
         if (!isUntagged(it)) continue;
       } else if (!tagAll) {
         if (!customTagIds(it).includes(tagId)) continue;
@@ -1014,7 +1165,8 @@
     const hint = $("#memo-filter-hint");
     if (!hint) return;
     const parts = [];
-    if (state.activeTagId === "all") parts.push("标签：全部");
+    if (state.activeTagId === TEMP_FILTER_ID) parts.push("临时条目");
+    else if (state.activeTagId === "all") parts.push("标签：全部");
     else if (state.activeTagId === DEFAULT_TAG_ID || state.activeTagId === "default") parts.push("标签：未分类");
     else parts.push(`标签：${tagById(state.activeTagId)?.name || "已选"}`);
     parts.push(`类型：${state.activeType === "all" ? "全部" : TYPE_LABELS[state.activeType] || state.activeType}`);
@@ -1032,6 +1184,13 @@
     resetListPaging();
     renderAll();
     toast("已清除筛选");
+  }
+
+  function toggleTempFilter() {
+    state.activeTagId = state.activeTagId === TEMP_FILTER_ID ? "all" : TEMP_FILTER_ID;
+    resetListPaging();
+    renderAll();
+    toast(state.activeTagId === TEMP_FILTER_ID ? "仅显示临时条目" : "已显示全部条目");
   }
 
   function textContentSig(text) {
@@ -1197,6 +1356,7 @@
     if (canOfferItemShare(item)) acts.push({ id: "share", label: "分享" });
     if (item?.type === "text") acts.push({ id: "edit", label: "编辑" });
     acts.push({ id: "note", label: noteRaw ? "改备注" : "备注" });
+    acts.push({ id: isTempItem(item) ? "untemp" : "temp", label: isTempItem(item) ? "取消临时" : "标为临时" });
     if (canCopy) acts.push({ id: "dl", label: "下载" });
     if (state.mode === "dir" && !state.dirPending) acts.push({ id: "path", label: "新标签查看" });
     acts.push({ id: "del", label: "删除", danger: true });
@@ -1297,7 +1457,8 @@
     return changed;
   }
 
-  function flashItem(id, msg) {
+  function flashItem(id, msg, opts = {}) {
+    const noScroll = Boolean(opts.noScroll);
     state.filterCache = { key: "", items: null };
     const item = (state.index.items || []).find((x) => x.id === id);
     const inView = Boolean(item) && visibleItems().some((x) => x.id === id);
@@ -1318,7 +1479,7 @@
     requestAnimationFrame(() => {
       const items = visibleItems();
       const idx = items.findIndex((x) => x.id === id);
-      if (idx >= 0 && items.length >= VIRTUAL_MIN) {
+      if (!noScroll && idx >= 0 && items.length >= VIRTUAL_MIN) {
         paintVirtualWindow(items, { force: true, preferId: id });
         const prefix = buildHeightPrefix(items);
         const listTop = itemList.getBoundingClientRect().top + window.scrollY;
@@ -1332,7 +1493,7 @@
           return;
         }
         card.classList.add("is-just-saved");
-        card.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        if (!noScroll) card.scrollIntoView({ behavior: "smooth", block: "nearest" });
         setTimeout(() => card.classList.remove("is-just-saved"), 1800);
         state.flashItemId = "";
       });
@@ -1531,6 +1692,13 @@
     }
     const editing = state.editingId === item.id ? " is-editing" : "";
     const pinnedCls = item.pinned ? " is-pinned" : "";
+    const tempCls = isTempItem(item) ? " is-temp" : "";
+    const dragHandle = canDragReorder()
+      ? `<button type="button" class="memo-drag-handle" draggable="true" data-memo-drag="${item.id}" title="拖拽排序" aria-label="拖拽排序">⠿</button>`
+      : "";
+    const tempBadge = isTempItem(item)
+      ? `<span class="memo-temp-badge" title="${escapeHtml(formatTempRemain(item))}">临时</span>`
+      : "";
     const canCopy = canClipboardCopy(item);
     const primaryAction = canCopy
       ? `<button type="button" class="secondary-btn" data-memo-copy="${item.id}">复制</button>`
@@ -1539,11 +1707,12 @@
       const danger = act.danger ? " memo-more-danger" : "";
       return `<button type="button" class="ghost-btn${danger}" data-memo-${act.id}="${item.id}">${act.label}</button>`;
     });
-    return `<article class="memo-card${editing}${pinnedCls}" data-memo-id="${item.id}" draggable="${canDragReorder() ? "true" : "false"}">
+    return `<article class="memo-card${editing}${pinnedCls}${tempCls}" data-memo-id="${item.id}" draggable="false">
       <div class="memo-card-head">
+        ${dragHandle}
         <label class="memo-check"><input type="checkbox" data-memo-check="${item.id}" ${checked} /></label>
         <div class="memo-card-meta">
-          <button type="button" class="memo-card-title" data-memo-rename="${item.id}" title="单击或双击修改名称">${item.pinned ? `<span class="memo-pin-mark" title="已置顶">置顶</span>` : ""}${title}</button>
+          <button type="button" class="memo-card-title" data-memo-rename="${item.id}" title="单击或双击修改名称">${item.pinned ? `<span class="memo-pin-mark" title="已置顶">置顶</span>` : ""}${tempBadge}${title}</button>
           <span class="hint tight mono"><span class="memo-type-pill">${escapeHtml(typeLabel)}</span> · ${time} · ${size}</span>
         </div>
       </div>
@@ -1708,10 +1877,10 @@
     const dropHint = $("#memo-drop > p.hint");
     if (!dropHint) return;
     dropHint.textContent = canDragReorder()
-      ? "拖拽文件到此处添加 · 最新在上 · 可拖拽卡片排序 · 滑到底部自动加载"
+      ? "拖拽文件到本页任意区域添加 · 最新在上 · 拖卡片左侧把手排序 · 滑到底部自动加载"
       : isLikelyMobile()
-        ? "拖拽文件到此处添加 · 最新在上 · 请用搜索或标签定位 · 滑到底部自动加载"
-        : "拖拽文件到此处添加 · 最新在上 · 条目较多已关闭拖拽排序，请用筛选/搜索定位";
+        ? "拖拽文件到本页任意区域添加 · 最新在上 · 请用搜索或标签定位 · 滑到底部自动加载"
+        : "拖拽文件到本页任意区域添加 · 最新在上 · 条目较多已关闭拖拽排序，请用筛选/搜索定位";
   }
 
   function renderItems() {
@@ -1806,6 +1975,8 @@
     }
     const batch = $("#memo-batch-del");
     if (batch) batch.disabled = state.selected.size === 0;
+    const clearSel = $("#memo-batch-clear");
+    if (clearSel) clearSel.disabled = state.selected.size === 0;
   }
 
   let infiniteObserver = null;
@@ -1862,6 +2033,7 @@
     renderItems();
     updateStoreMeta();
     syncFilterChrome();
+    syncTempChrome();
   }
 
   function reindexOrders() {
@@ -1979,25 +2151,35 @@
     }
   }
 
-  async function addText(text) {
+  async function addText(text, opts = {}) {
     const body = String(text || "").trim();
     if (!body) {
       toast("内容为空");
-      return;
+      return null;
     }
     // 剪贴板有时把图片写成 data:image/...;base64 文本，入库前转成真正图片
     const dataImg = await dataUrlToImageFile(body);
     if (dataImg) {
       // ingestFiles 自身已 withBusy，此处不可再包一层（会直接被 busy 挡掉）
-      await ingestFiles([dataImg]);
+      await ingestFiles([dataImg], opts);
       if (editor) editor.value = "";
-      return;
+      return null;
     }
+    let added = null;
     await withBusy(async () => {
       const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
-      await addItemFromBlob(blob, `文本-${formatTime(Date.now())}.txt`, { type: "text", textPreview: body });
+      added = await addItemFromBlob(blob, `文本-${formatTime(Date.now())}.txt`, {
+        type: "text",
+        textPreview: body,
+        quiet: Boolean(opts.quiet),
+      });
       if (editor) editor.value = "";
     });
+    if (added?.id && !opts.quiet) {
+      flashItem(added.id, "已添加", { noScroll: opts.noScroll });
+      if (opts.offerTemp) scheduleTempPrompt(added.id);
+    }
+    return added;
   }
 
   function looksLikeDataUrlImage(text) {
@@ -2224,7 +2406,7 @@
     });
   }
 
-  async function ingestFiles(fileList) {
+  async function ingestFiles(fileList, opts = {}) {
     const files = [...(fileList || [])].filter(Boolean);
     if (!files.length) return;
     await withBusy(async () => {
@@ -2232,6 +2414,7 @@
       let skipped = 0;
       let cancelled = 0;
       let lastId = "";
+      let lastNew = false;
       const signal = beginSaveAbort();
       try {
         for (let i = 0; i < files.length; i++) {
@@ -2250,11 +2433,14 @@
             skipLargeConfirm: true,
             signal,
           });
-          if (signal?.aborted || item === null && signal?.aborted) {
+          if (signal?.aborted || (item === null && signal?.aborted)) {
             cancelled += 1;
             break;
           }
-          if (item?.id) lastId = item.id;
+          if (item?.id) {
+            lastId = item.id;
+            lastNew = state.index.items.length > before;
+          }
           if (state.index.items.length > before) added += 1;
           else if (item) skipped += 1;
           else cancelled += 1;
@@ -2268,7 +2454,8 @@
         if (added) parts.push(`已添加 ${added} 个`);
         if (skipped) parts.push(`未新建，已把 ${skipped} 个重复项置顶`);
         if (cancelled) parts.push(`取消 ${cancelled} 个`);
-        flashItem(lastId, parts.join("，") || "完成");
+        flashItem(lastId, parts.join("，") || "完成", { noScroll: opts.noScroll });
+        if (opts.offerTemp && lastNew) scheduleTempPrompt(lastId);
       } else if (cancelled && !added) {
         toast("已取消");
       } else {
@@ -2322,83 +2509,137 @@
     return name === "NotAllowedError" || name === "SecurityError";
   }
 
-  async function readClipboard({ force = false } = {}) {
-    setError(memoError, "");
-    if (force) setAutoclipStatus("");
-    try {
-      await (async () => {
-      if (navigator.clipboard?.read) {
+  async function readClipboardItemsReliable() {
+    if (!navigator.clipboard?.read) return null;
+    let lastErr = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
         const items = await navigator.clipboard.read();
-        let got = false;
-        const files = [];
-        let textBody = "";
-        for (const item of items) {
-          const types = item.types || [];
-          const imgType = types.find((t) => t.startsWith("image/"));
-          if (imgType) {
-            const blob = await item.getType(imgType);
-            const sig = `img:${blob.size}:${imgType}`;
-            if (!force && sig === state.lastClipSig) return;
+        if (items?.length) return items;
+      } catch (err) {
+        lastErr = err;
+        await new Promise((r) => setTimeout(r, 70 * (attempt + 1)));
+      }
+    }
+    if (lastErr) throw lastErr;
+    return [];
+  }
+
+  async function parseClipboardPayload(items, { force = false } = {}) {
+    const files = [];
+    let textBody = "";
+    let got = false;
+    for (const item of items || []) {
+      const types = [...(item.types || [])];
+      const imgTypes = types.filter((t) => String(t).startsWith("image/"));
+      for (const imgType of imgTypes) {
+        try {
+          const blob = await item.getType(imgType);
+          if (!blob?.size) continue;
+          const sig = `img:${blob.size}:${imgType}`;
+          if (!force && sig === state.lastClipSig) return { duplicate: true };
+          state.lastClipSig = sig;
+          files.push(new File([blob], `剪贴板.${imgType.split("/")[1] || "png"}`, { type: imgType }));
+          got = true;
+        } catch (_) {}
+      }
+      if (files.length) continue;
+      if (types.includes("text/plain")) {
+        try {
+          const blob = await item.getType("text/plain");
+          const text = (await blob.text()).trim();
+          if (!text) continue;
+          const asImg = await dataUrlToImageFile(text);
+          if (asImg) {
+            const sig = `img:${asImg.size}:${asImg.type}`;
+            if (!force && sig === state.lastClipSig) return { duplicate: true };
             state.lastClipSig = sig;
-            files.push(new File([blob], `剪贴板.${imgType.split("/")[1] || "png"}`, { type: imgType }));
+            files.push(asImg);
             got = true;
             continue;
           }
-          if (types.includes("text/plain")) {
-            const blob = await item.getType("text/plain");
-            const text = (await blob.text()).trim();
-            if (!text) continue;
-            const asImg = await dataUrlToImageFile(text);
-            if (asImg) {
-              const sig = `img:${asImg.size}:${asImg.type}`;
-              if (!force && sig === state.lastClipSig) return;
-              state.lastClipSig = sig;
-              files.push(asImg);
-              got = true;
-              continue;
-            }
-            const sig = `text:${text.slice(0, 80)}:${text.length}`;
-            if (!force && sig === state.lastClipSig) return;
+          const sig = `text:${text.slice(0, 80)}:${text.length}`;
+          if (!force && sig === state.lastClipSig) return { duplicate: true };
+          state.lastClipSig = sig;
+          textBody = text;
+          got = true;
+        } catch (_) {}
+      }
+      if (!files.length && types.includes("text/html")) {
+        try {
+          const html = await (await item.getType("text/html")).text();
+          const dataUrl = extractDataUrlFromHtml(html);
+          const asImg = dataUrl ? await dataUrlToImageFile(dataUrl) : null;
+          if (asImg) {
+            const sig = `img:${asImg.size}:${asImg.type}`;
+            if (!force && sig === state.lastClipSig) return { duplicate: true };
             state.lastClipSig = sig;
-            textBody = text;
+            files.push(asImg);
             got = true;
           }
-          if (!files.length && types.includes("text/html")) {
-            try {
-              const html = await (await item.getType("text/html")).text();
-              const dataUrl = extractDataUrlFromHtml(html);
-              const asImg = dataUrl ? await dataUrlToImageFile(dataUrl) : null;
-              if (asImg) {
-                const sig = `img:${asImg.size}:${asImg.type}`;
-                if (!force && sig === state.lastClipSig) return;
-                state.lastClipSig = sig;
-                files.push(asImg);
-                got = true;
-              }
-            } catch (_) {}
-          }
-        }
-        if (files.length) await ingestFiles(files);
-        else if (textBody) await addText(textBody);
-        else if (force) toast("剪贴板无可识别内容（文件请拖拽添加）");
-        return;
+        } catch (_) {}
       }
-      if (navigator.clipboard?.readText) {
-        const text = (await navigator.clipboard.readText()).trim();
-        if (!text) {
-          if (force) toast("剪贴板为空");
+      if (!files.length) {
+        for (const type of types) {
+          if (type === "text/plain" || type === "text/html" || String(type).startsWith("image/")) continue;
+          try {
+            const blob = await item.getType(type);
+            if (!blob?.size) continue;
+            const ext = type.split("/")[1] || "bin";
+            const sig = `bin:${blob.size}:${type}`;
+            if (!force && sig === state.lastClipSig) return { duplicate: true };
+            state.lastClipSig = sig;
+            files.push(new File([blob], `剪贴板.${ext}`, { type: type || "application/octet-stream" }));
+            got = true;
+            break;
+          } catch (_) {}
+        }
+      }
+    }
+    return { files, textBody, got };
+  }
+
+  async function readClipboard({ force = false, fromAuto = false } = {}) {
+    setError(memoError, "");
+    if (force) setAutoclipStatus("");
+    const clipOpts = { noScroll: true, offerTemp: true };
+    try {
+      await (async () => {
+        if (navigator.clipboard?.read) {
+          const items = await readClipboardItemsReliable();
+          if (!items?.length) {
+            if (force) toast("剪贴板为空");
+            return;
+          }
+          const parsed = await parseClipboardPayload(items, { force });
+          if (parsed?.duplicate) return;
+          if (parsed?.files?.length) {
+            await ingestFiles(parsed.files, clipOpts);
+            return;
+          }
+          if (parsed?.textBody) {
+            await addText(parsed.textBody, clipOpts);
+            return;
+          }
+          if (force) toast("剪贴板无可识别内容（文件请拖拽添加）");
           return;
         }
-        const sig = `text:${text.slice(0, 80)}:${text.length}`;
-        if (!force && sig === state.lastClipSig) return;
-        state.lastClipSig = sig;
-        await addText(text);
-        return;
-      }
-      if (force) toast("当前浏览器不支持读取剪贴板，请用 Ctrl/⌘+V 或右键粘贴");
+        if (navigator.clipboard?.readText) {
+          const text = (await navigator.clipboard.readText()).trim();
+          if (!text) {
+            if (force) toast("剪贴板为空");
+            return;
+          }
+          const sig = `text:${text.slice(0, 80)}:${text.length}`;
+          if (!force && sig === state.lastClipSig) return;
+          state.lastClipSig = sig;
+          await addText(text, clipOpts);
+          return;
+        }
+        if (force) toast("当前浏览器不支持读取剪贴板，请用 Ctrl/⌘+V 或右键粘贴");
       })();
       setError(memoError, "");
-      setAutoclipStatus("");
+      if (!fromAuto) setAutoclipStatus("");
     } catch (err) {
       const perm = await queryClipboardReadPermission();
       const denied = perm === "denied";
@@ -2614,6 +2855,7 @@
 
   async function boot() {
     setError(memoError, "");
+    loadTempDays();
     try {
       state.autoClip = localStorage.getItem(AUTOCLIP_KEY) === "1";
     } catch (_) {
@@ -2632,7 +2874,15 @@
     rebuildHashIndex();
     rebuildTagMap();
     invalidateCountCache();
+    await purgeExpiredTempItems();
     renderAll();
+    if (state.autoClip) {
+      startAutoclipPoll();
+      maybeAutoClip();
+    }
+    setInterval(() => {
+      purgeExpiredTempItems().catch(() => {});
+    }, 3600000);
   }
 
   function hideUndoBar() {
@@ -4038,20 +4288,22 @@
     try {
       localStorage.setItem(AUTOCLIP_KEY, state.autoClip ? "1" : "0");
     } catch (_) {}
-    toast(state.autoClip ? "已开启并记住：下次仍会自动读剪贴板" : "已关闭自动读剪贴板");
-    if (!state.autoClip) setAutoclipStatus("");
-    if (state.autoClip) {
-      readClipboard({ force: false }).catch(() => {});
+    toast(state.autoClip ? "已开启并记住：全站后台自动读剪贴板" : "已关闭自动读剪贴板");
+    if (!state.autoClip) {
+      setAutoclipStatus("");
+      stopAutoclipPoll();
+    } else {
+      startAutoclipPoll();
+      readClipboard({ force: false, fromAuto: true }).catch(() => {});
     }
   });
 
   function maybeAutoClip() {
-    // 静默尝试：失败不弹错，避免打扰（force:false）
+    // 静默尝试：失败不弹错（force:false）；全站有效，不限于备忘录页
     if (!state.autoClip) return;
-    if (!isMemoActive()) return;
     if (document.visibilityState && document.visibilityState !== "visible") return;
     if (isTextEditOpen()) return;
-    readClipboard({ force: false }).catch(() => {});
+    readClipboard({ force: false, fromAuto: true }).catch(() => {});
   }
   window.addEventListener("focus", () => maybeAutoClip());
   document.addEventListener("visibilitychange", () => {
@@ -4137,6 +4389,7 @@
         if (t.checked) state.selected.add(id);
         else state.selected.delete(id);
         $("#memo-batch-del").disabled = state.selected.size === 0;
+        $("#memo-batch-clear").disabled = state.selected.size === 0;
         syncSelectAllChrome();
         return;
       }
@@ -4158,6 +4411,30 @@
       if (pinId) {
         const item = state.index.items.find((x) => x.id === pinId);
         if (item) await applyItemPinToggle(item);
+        t.closest("details")?.removeAttribute("open");
+        return;
+      }
+      const tempId = t.closest?.("[data-memo-temp]")?.dataset?.memoTemp;
+      if (tempId) {
+        const item = state.index.items.find((x) => x.id === tempId);
+        if (item) {
+          markItemTemp(item, state.tempDays);
+          await persistIndex();
+          renderAll();
+          toast(`已标为临时（${state.tempDays} 天后清理）`);
+        }
+        t.closest("details")?.removeAttribute("open");
+        return;
+      }
+      const untempId = t.closest?.("[data-memo-untemp]")?.dataset?.memoUntemp;
+      if (untempId) {
+        const item = state.index.items.find((x) => x.id === untempId);
+        if (item) {
+          clearItemTemp(item);
+          await persistIndex();
+          renderAll();
+          toast("已取消临时标记");
+        }
         t.closest("details")?.removeAttribute("open");
         return;
       }
@@ -4318,6 +4595,23 @@
   $("#memo-batch-del")?.addEventListener("click", () => {
     deleteItems([...state.selected]).catch((err) => setError(memoError, err.message || String(err)));
   });
+  $("#memo-batch-clear")?.addEventListener("click", () => {
+    if (!state.selected.size) return;
+    state.selected.clear();
+    syncSelectAllChrome();
+    renderItems();
+    toast("已取消全部选中");
+  });
+  $("#memo-temp-filter")?.addEventListener("click", () => toggleTempFilter());
+  $("#memo-temp-days")?.addEventListener("change", (e) => {
+    saveTempDays(e.target.value);
+    toast(`临时条目默认保留 ${state.tempDays} 天`);
+  });
+  $("#memo-temp-prompt-skip")?.addEventListener("click", () => {
+    if (state.tempPrompt) state.tempPrompt.cancelled = true;
+    finishTempPrompt({ markTemp: false });
+    toast("未标记为临时");
+  });
   $("#memo-progress-cancel")?.addEventListener("click", () => {
     try {
       state.saveAbort?.abort?.();
@@ -4373,16 +4667,25 @@
     $$("details.memo-more[open]", itemList || document).forEach((d) => d.removeAttribute("open"));
   });
 
-  // item drag reorder
+  // item drag reorder (仅拖左侧把手，避免与文本框选冲突)
   let dragItemId = null;
   itemList?.addEventListener("dragstart", (e) => {
     const hit = e.target?.nodeType === 1 ? e.target : e.target?.parentElement;
-    if (hit?.closest("input, button, a, textarea, video, audio, label, .memo-card-title, .memo-card-title-input, .memo-text:not(.is-truncated)")) {
+    const handle = hit?.closest(".memo-drag-handle");
+    if (!handle) {
       e.preventDefault();
       return;
     }
-    const card = hit?.closest(".memo-card");
-    if (!card) return;
+    const sel = window.getSelection?.();
+    if (sel && String(sel.toString() || "").trim()) {
+      e.preventDefault();
+      return;
+    }
+    const card = handle.closest(".memo-card");
+    if (!card) {
+      e.preventDefault();
+      return;
+    }
     dragItemId = card.dataset.memoId;
     e.dataTransfer.effectAllowed = "move";
     card.classList.add("is-dragging");
@@ -4415,21 +4718,37 @@
     renderAll();
   });
 
-  // drop files
+  // drop files — 列表区 + 整页备忘录面板
   const drop = $("#memo-drop");
-  drop?.addEventListener("dragover", (e) => {
-    if ([...e.dataTransfer.types].includes("Files")) {
+  const memoPanel = $("#memo");
+
+  function bindMemoFileDrop(el) {
+    if (!el || el.dataset.memoDropBound === "1") return;
+    el.dataset.memoDropBound = "1";
+    let dropLock = 0;
+    el.addEventListener("dragover", (e) => {
+      if ([...e.dataTransfer.types].includes("Files")) {
+        e.preventDefault();
+        memoPanel?.classList.add("is-memo-file-drag");
+        drop?.classList.add("is-drag");
+      }
+    });
+    el.addEventListener("dragleave", (e) => {
+      if (el.contains(e.relatedTarget)) return;
+      memoPanel?.classList.remove("is-memo-file-drag");
+      drop?.classList.remove("is-drag");
+    });
+    el.addEventListener("drop", (e) => {
+      memoPanel?.classList.remove("is-memo-file-drag");
+      drop?.classList.remove("is-drag");
+      if (!e.dataTransfer?.files?.length) return;
       e.preventDefault();
-      drop.classList.add("is-drag");
-    }
-  });
-  drop?.addEventListener("dragleave", () => drop.classList.remove("is-drag"));
-  drop?.addEventListener("drop", (e) => {
-    drop.classList.remove("is-drag");
-    if (!e.dataTransfer?.files?.length) return;
-    e.preventDefault();
-    ingestFiles(e.dataTransfer.files).catch((err) => setError(memoError, err.message || String(err)));
-  });
+      if (Date.now() - dropLock < 80) return;
+      dropLock = Date.now();
+      ingestFiles(e.dataTransfer.files).catch((err) => setError(memoError, err.message || String(err)));
+    });
+  }
+  bindMemoFileDrop(memoPanel);
 
   // 整页 Ctrl/⌘+V 与右键粘贴：备忘录激活时识别类型并添加（编辑框内文本仍走默认粘贴）
   function isEditableTarget(el) {
@@ -4650,6 +4969,26 @@
     selectVisibleByCreatedRange,
     selectVisibleLastHours,
     selectVisibleToday,
+    isTempItem: (item) => isTempItem(item),
+    markItemTemp: async (id, days) => {
+      const item = state.index.items.find((x) => x.id === id);
+      if (!item) throw new Error("条目不存在");
+      markItemTemp(item, days);
+      await persistIndex();
+      renderAll();
+      return item;
+    },
+    clearItemTemp: async (id) => {
+      const item = state.index.items.find((x) => x.id === id);
+      if (!item) throw new Error("条目不存在");
+      clearItemTemp(item);
+      await persistIndex();
+      renderAll();
+      return item;
+    },
+    getTempDays: () => state.tempDays,
+    scheduleTempPrompt: (id) => scheduleTempPrompt(id),
+    finishTempPrompt: (opts) => finishTempPrompt(opts || {}),
   };
 
   boot().catch((err) => setError(memoError, err.message || String(err)));
