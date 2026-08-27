@@ -18,8 +18,8 @@
   <!-- 不阻塞首屏：Noto Serif SC 只给文转图用，避免每次拉取中文字体；Google 字体 CSS 在国内常卡住数秒 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" /></noscript>
-  <link rel="stylesheet" href="./style.css?v=20260817memoux1" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260817memoux1" />
+  <link rel="stylesheet" href="./style.css?v=20260817bridgebb1" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260817bridgebb1" />
   <script>
     /* 尽早应用主题变量，减少闪烁；侧栏也依赖这些 CSS 变量 */
     (function () {
@@ -88,7 +88,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.17-memoux1</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.17-bridgebb1</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="pwa-install" hidden aria-hidden="true" title="安装到桌面/开始菜单">安装应用</button>
@@ -137,7 +137,6 @@
         <div class="media-subnav" id="media-subnav" hidden role="tablist" aria-label="媒体子功能">
           <button type="button" class="media-tab is-active" role="tab" id="media-tab-gifmaker" data-media-tab="gifmaker" aria-controls="gifmaker" aria-selected="true">GIF</button>
           <button type="button" class="media-tab" role="tab" id="media-tab-vsplit" data-media-tab="vsplit" aria-controls="vsplit" aria-selected="false" tabindex="-1">视频切分</button>
-          <button type="button" class="media-tab" role="tab" id="media-tab-vbb" data-media-tab="vbb" aria-controls="vbb" aria-selected="false" tabindex="-1">一键黑盒</button>
           <button type="button" class="media-tab" role="tab" id="media-tab-vtrim" data-media-tab="vtrim" aria-controls="vtrim" aria-selected="false" tabindex="-1">视频修剪</button>
           <button type="button" class="media-tab" role="tab" id="media-tab-audio" data-media-tab="audio" aria-controls="audio" aria-selected="false" tabindex="-1">音频处理</button>
         </div>
@@ -1712,7 +1711,7 @@ hello@world.org</textarea>
           <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
             <button type="button" class="primary-btn" id="v2g-generate" disabled title="使用 FFmpeg 双通道调色板编码 GIF">转为 GIF</button>
             <button type="button" class="secondary-btn" id="v2g-generate-webp" disabled title="浏览器原生编码各帧再封装为动画 WebP；通常比 GIF 更清晰更小">转为动画 WebP</button>
-            <button type="button" class="secondary-btn" id="v2g-blackbox" disabled title="起点宽 420，按 15→12→10 尝试；≤6MB 且 &lt;5MB 时逐步加宽，超 6MB 回退上一档">黑盒 GIF（≤6MB）</button>
+            <a class="ghost-btn" href="#vbb" title="预制参数 ≤6MB 黑盒 GIF">黑盒 GIF →</a>
             <button type="button" class="ghost-btn" id="v2g-abort" hidden>取消</button>
             <label for="v2g-compress-level" class="hint tight" style="margin:0">压缩</label>
             <select id="v2g-compress-level" class="mono select-input" title="压缩档位（仅 GIF）">
@@ -1750,7 +1749,7 @@ hello@world.org</textarea>
 <section id="vsplit" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-vsplit">
       <div class="panel-head">
         <h1>视频切分</h1>
-        <p>选择视频后可等分、按固定时长，或手动标记多段起止点；全程本地处理，不会上传。支持<strong>切成视频片段</strong>、批量转高清/黑盒 GIF，并一键打包下载。</p>
+        <p>选择视频后可等分、按固定时长，或手动标记多段起止点；全程本地处理，不会上传。支持<strong>切成视频片段</strong>、批量转高清 GIF，并一键打包下载。<a href="#vbb">≤6MB 黑盒 GIF</a> 请用侧栏「黑盒」。</p>
       </div>
       <div class="panel-body">
         <div class="btn-row tool-actions">
@@ -1837,8 +1836,8 @@ hello@world.org</textarea>
           <div class="vsplit-manual" id="vsplit-manual-row" hidden>
             <div class="vsplit-quick-export" id="vsplit-quick-export" hidden>
               <button type="button" class="primary-btn" id="vsplit-quick-cut" disabled title="按已标记片段切成多个视频">切成视频</button>
-              <button type="button" class="secondary-btn" id="vsplit-quick-bb" disabled>转黑盒 GIF</button>
               <button type="button" class="ghost-btn" id="vsplit-quick-hq" disabled>转高清 GIF</button>
+              <a class="ghost-btn" href="#vbb">黑盒 GIF →</a>
             </div>
             <p class="hint tight" id="vsplit-manual-draft" hidden></p>
           </div>
@@ -1855,7 +1854,7 @@ hello@world.org</textarea>
         <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
           <button type="button" class="primary-btn" id="vsplit-cut" disabled title="把视频切成多个片段文件">切成视频</button>
           <button type="button" class="secondary-btn" id="vsplit-gif-hq" disabled>全部转高清 GIF</button>
-          <button type="button" class="secondary-btn" id="vsplit-gif-bb" disabled>全部转黑盒 GIF</button>
+          <a class="ghost-btn" href="#vbb" title="预制参数 ≤6MB 黑盒">黑盒 GIF →</a>
           <button type="button" class="secondary-btn" id="vsplit-merge" disabled title="用 gifsicle 拼接各段 GIF，不重新调色板；宽高需一致">合并 GIF</button>
           <button type="button" class="ghost-btn" id="vsplit-abort" hidden>取消</button>
           <button type="button" class="secondary-btn" id="vsplit-zip-video" disabled title="把已切好的视频片段打成一个 zip">打包下载全部视频</button>
@@ -1878,10 +1877,10 @@ hello@world.org</textarea>
       </div>
     </section>
 
-<section id="vbb" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-vbb">
+<section id="vbb" class="panel tool-panel" data-reveal>
       <div class="panel-head">
-        <h1>一键黑盒切片</h1>
-        <p>选择视频后先分析切分方案：清晰优先、锐度优先（缩短加宽）、时长优先（可压缩）。全程本地处理，不会上传。确认后转 GIF，并可一键打包下载。</p>
+        <h1>黑盒 GIF</h1>
+        <p>预制参数（宽 420 · ≤6MB · 自动压帧/加宽），全程本地处理。选视频后点<strong>一键黑盒</strong>即可；长视频会自动切片。</p>
       </div>
       <div class="panel-body">
         <div class="btn-row tool-actions">
@@ -1889,16 +1888,21 @@ hello@world.org</textarea>
           <input id="vbb-file" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" hidden />
           <button type="button" class="ghost-btn" id="vbb-clear">清空</button>
         </div>
-        <p class="hint" id="vbb-meta">支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。分析阶段抽 2–3 秒样片估体积；关闭页面会释放本次视频和 GIF。</p>
+        <p class="hint" id="vbb-meta">支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。</p>
+        <div class="field-row blackbox-workflow-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
+          <span class="seg" role="group" aria-label="黑盒模式">
+            <button type="button" class="seg-btn is-active" id="vbb-workflow-single" data-vbb-workflow="single">整段视频</button>
+            <button type="button" class="seg-btn" id="vbb-workflow-split" data-vbb-workflow="split">长视频切片</button>
+          </span>
+        </div>
         <div class="gif-preview-wrap">
           <video id="vbb-video" class="img-preview gif-preview" controls playsinline muted preload="metadata" hidden></video>
         </div>
         <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
-          <button type="button" class="primary-btn" id="vbb-analyze" disabled>分析切分方案</button>
-          <button type="button" class="secondary-btn" id="vbb-run" disabled>确认执行转 GIF</button>
+          <button type="button" class="primary-btn" id="vbb-oneclick" disabled>一键黑盒</button>
           <button type="button" class="secondary-btn" id="vbb-merge" disabled title="合并各段 GIF，不重新调色板">合并 GIF</button>
           <button type="button" class="ghost-btn" id="vbb-abort" hidden>取消</button>
-          <button type="button" class="secondary-btn" id="vbb-zip" disabled title="把已生成的 GIF 打成一个 zip">打包下载全部 GIF</button>
+          <button type="button" class="secondary-btn" id="vbb-zip" disabled title="把已生成的 GIF 打成一个 zip">打包下载</button>
           <a class="secondary-btn" id="vbb-merged-dl" href="#" download="blackbox-merged.gif" hidden>下载合并 GIF</a>
         </div>
         <div class="gif-progress" id="vbb-progress" hidden>
@@ -1910,6 +1914,12 @@ hello@world.org</textarea>
           <p class="hint tight gif-progress-sub" id="vbb-progress-sub" hidden></p>
         </div>
 
+        <details class="blackbox-advanced" id="vbb-advanced">
+          <summary class="hint tight">高级选项（手动分析 / 换方案）</summary>
+          <div class="btn-row tool-actions" style="margin-top:0.65rem;flex-wrap:wrap">
+            <button type="button" class="secondary-btn" id="vbb-analyze" disabled>分析切分方案</button>
+            <button type="button" class="secondary-btn" id="vbb-run" disabled>按当前方案执行</button>
+          </div>
         <div class="vbb-plan" id="vbb-plan" hidden>
           <h2 class="subhead">切分方案</h2>
           <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
@@ -1932,6 +1942,7 @@ hello@world.org</textarea>
           <p class="hint" id="vbb-plan-summary">分析完成后显示段数、时长与预估体积。</p>
           <div class="vbb-plan-compare" id="vbb-plan-compare"></div>
         </div>
+        </details>
 
         <div class="field-block" style="margin-top:1.25rem" id="vbb-result-block" hidden>
           <h2 class="subhead">生成结果</h2>
@@ -3577,21 +3588,21 @@ adb devices</pre>
       <button type="button" class="primary-btn vsplit-fs-mark" id="vsplit-fs-mark">打起点</button>
     </div>
   </div>
-  <script src="./theme.js?v=20260817memoux1"></script>
-  <script src="./temp.js?v=20260817memoux1"></script>
+  <script src="./theme.js?v=20260817bridgebb1"></script>
+  <script src="./temp.js?v=20260817bridgebb1"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260817memoux1"></script>
-  <script src="./about.js?v=20260817memoux1" defer></script>
-  <script src="./extra.js?v=20260817memoux1" defer></script>
-  <script src="./vtrim.js?v=20260817memoux1" defer></script>
-  <script src="./audio.js?v=20260817memoux1" defer></script>
-  <script src="./ffbridge.js?v=20260817memoux1" defer></script>
-  <script src="./setup.js?v=20260817memoux1" defer></script>
+  <script src="./app.js?v=20260817bridgebb1"></script>
+  <script src="./about.js?v=20260817bridgebb1" defer></script>
+  <script src="./extra.js?v=20260817bridgebb1" defer></script>
+  <script src="./vtrim.js?v=20260817bridgebb1" defer></script>
+  <script src="./audio.js?v=20260817bridgebb1" defer></script>
+  <script src="./ffbridge.js?v=20260817bridgebb1" defer></script>
+  <script src="./setup.js?v=20260817bridgebb1" defer></script>
   <script src="./imgkit.js?v=20260810l" defer></script>
-  <script src="./memo.js?v=20260817memoux1" defer></script>
-  <script src="./textimg.js?v=20260817memoux1" defer></script>
-  <script src="./imgtext.js?v=20260817memoux1" defer></script>
-  <script src="./pwa.js?v=20260817memoux1" defer></script>
+  <script src="./memo.js?v=20260817bridgebb1" defer></script>
+  <script src="./textimg.js?v=20260817bridgebb1" defer></script>
+  <script src="./imgtext.js?v=20260817bridgebb1" defer></script>
+  <script src="./pwa.js?v=20260817bridgebb1" defer></script>
   <script src="./vendor/js-yaml.min.js" defer></script>
   <script src="./vendor/spark-md5.min.js" defer></script>
   <script src="./vendor/qrcode.min.js" defer></script>

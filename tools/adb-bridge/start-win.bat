@@ -141,7 +141,7 @@ if "!HAVE_SERVER!"=="0" (
     exit /b 1
   )
 
-  findstr /I /C:"ADB_BRIDGE_TOKEN" /C:"devtools-adb-bridge" /C:"DevTools local ADB bridge" "%TARGET%.tmp" >nul 2>&1
+  findstr /I /C:"ADB_BRIDGE_TOKEN" /C:"devtools-adb-bridge" /C:"devtools-bridge" /C:"DevTools local ADB bridge" /C:"统一本机桥" "%TARGET%.tmp" >nul 2>&1
   if errorlevel 1 (
     echo [ERROR] Downloaded file is invalid.
     del /f /q "%TARGET%.tmp" >nul 2>&1
@@ -160,8 +160,49 @@ if not exist "%TARGET%" (
   exit /b 1
 )
 
+rem Unified bridge also needs scrcpy-mirror.js (and optional ffmpeg module) beside server.js
+set "MIRROR_LOCAL=%SCRIPT_DIR%scrcpy-mirror.js"
+set "MIRROR_TARGET=%BRIDGE_DIR%\scrcpy-mirror.js"
+if exist "%MIRROR_LOCAL%" (
+  copy /Y "%MIRROR_LOCAL%" "%MIRROR_TARGET%" >nul
+  echo [OK] scrcpy-mirror.js synced>> "%LOG_FILE%"
+)
+if exist "%SCRIPT_DIR%ffmpeg-bridge\server.js" (
+  if not exist "%BRIDGE_DIR%\ffmpeg-bridge" mkdir "%BRIDGE_DIR%\ffmpeg-bridge" 2>nul
+  copy /Y "%SCRIPT_DIR%ffmpeg-bridge\server.js" "%BRIDGE_DIR%\ffmpeg-bridge\server.js" >nul
+  echo [OK] ffmpeg-bridge synced>> "%LOG_FILE%"
+)
+if exist "%SCRIPT_DIR%vendor\scrcpy-server-v3.1" (
+  if not exist "%BRIDGE_DIR%\vendor" mkdir "%BRIDGE_DIR%\vendor" 2>nul
+  copy /Y "%SCRIPT_DIR%vendor\scrcpy-server-v3.1" "%BRIDGE_DIR%\vendor\scrcpy-server-v3.1" >nul
+  echo [OK] scrcpy vendor synced>> "%LOG_FILE%"
+)
+if not exist "%MIRROR_TARGET%" (
+  echo [..] Downloading scrcpy-mirror.js ...
+  echo downloading scrcpy-mirror.js>> "%LOG_FILE%"
+  if exist "%MIRROR_TARGET%.tmp" del /f /q "%MIRROR_TARGET%.tmp" >nul 2>&1
+  where curl >nul 2>&1
+  if not errorlevel 1 (
+    curl.exe -fsSL --connect-timeout 15 --max-time 120 "https://afra55.github.io/tools/adb-bridge/scrcpy-mirror.js" -o "%MIRROR_TARGET%.tmp" >> "%LOG_FILE%" 2>&1
+    if errorlevel 1 curl.exe -fsSL --connect-timeout 15 --max-time 120 "https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/tools/adb-bridge/scrcpy-mirror.js" -o "%MIRROR_TARGET%.tmp" >> "%LOG_FILE%" 2>&1
+  ) else (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-WebRequest -UseBasicParsing 'https://afra55.github.io/tools/adb-bridge/scrcpy-mirror.js' -OutFile '%MIRROR_TARGET%.tmp'; exit 0 } catch { try { Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/tools/adb-bridge/scrcpy-mirror.js' -OutFile '%MIRROR_TARGET%.tmp'; exit 0 } catch { exit 1 } }" >> "%LOG_FILE%" 2>&1
+  )
+  if exist "%MIRROR_TARGET%.tmp" move /Y "%MIRROR_TARGET%.tmp" "%MIRROR_TARGET%" >nul
+)
+if not exist "%MIRROR_TARGET%" (
+  echo [ERROR] Missing scrcpy-mirror.js next to server.js
+  echo Re-download the full ZIP and keep scrcpy-mirror.js in the same folder.
+  echo [ERROR] missing scrcpy-mirror.js>> "%LOG_FILE%"
+  exit /b 1
+)
+if not exist "%BRIDGE_DIR%\ffmpeg-bridge\server.js" (
+  echo [WARN] ffmpeg-bridge/server.js not found - FFmpeg API disabled until full ZIP is used.
+  echo [WARN] missing ffmpeg-bridge>> "%LOG_FILE%"
+)
+
 cd /d "%BRIDGE_DIR%"
-if "%ADB_BRIDGE_TOKEN%"=="" set "ADB_BRIDGE_TOKEN=devtools-adb"
+if "%ADB_BRIDGE_TOKEN%"=="" set "ADB_BRIDGE_TOKEN=devtools-bridge"
 if "%ADB_BRIDGE_PORT%"=="" set "ADB_BRIDGE_PORT=17888"
 
 echo [OK] adb:

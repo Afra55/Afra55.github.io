@@ -769,13 +769,14 @@
   const RECENT_KEY = "devtools-tool-recent-v1";
   const SORT_HINT_KEY = "devtools-nav-sort-hint-seen-v1";
   const RECENT_SHOW = 8;
-  const MEDIA_TABS = ["gifmaker", "vsplit", "vbb", "vtrim", "audio"];
+  const MEDIA_TABS = ["gifmaker", "vsplit", "vtrim", "audio"];
   const HASH_ALIASES = {
     gifmaker: { tool: "media", tab: "gifmaker" },
     vsplit: { tool: "media", tab: "vsplit" },
-    vbb: { tool: "media", tab: "vbb" },
     vtrim: { tool: "media", tab: "vtrim" },
     audio: { tool: "media", tab: "audio" },
+    vbb: { tool: "vbb" },
+    blackbox: { tool: "vbb" },
   };
   const TOOL_GROUPS = [
     { id: "time", label: "时间", tools: ["timestamp", "timediff", "cron"] },
@@ -786,7 +787,8 @@
       label: "数据与文本",
       tools: ["json", "yaml", "sharecard", "query", "text", "caseconv", "regex", "diff", "qrcode", "markdown", "memo"],
     },
-    { id: "media", label: "媒体", tools: ["gifmaker", "vsplit", "vbb", "vtrim", "audio"] },
+    { id: "blackbox", label: "黑盒", tools: ["vbb"] },
+    { id: "media", label: "媒体", tools: ["gifmaker", "vsplit", "vtrim", "audio"] },
     { id: "image", label: "图片", tools: ["imgkit", "textimg", "imgtext"] },
     { id: "convert", label: "换算", tools: ["units", "coord", "numbase"] },
     { id: "device", label: "设备", tools: ["adb", "ffbridge"] },
@@ -822,9 +824,9 @@
     qrcode: "生成与识别二维码。",
     markdown: "Markdown 预览。",
     memo: "本地备忘录：一键读剪贴板入库、搜索/点选筛选；文本图片可复制，其它类型可下载，手机可单条分享（文转图/OCR 见独立工具）。",
-    gifmaker: "视频转 GIF/WebP、压缩、拼接、亮度等本地动图处理。",
-    vsplit: "预览打点切分视频片段，支持全屏标记与打包下载。",
-    vbb: "按估算快速切出可用视频段，偏批量效率。",
+    gifmaker: "视频转 GIF/WebP、压缩、拼接、亮度等本地动图处理（≤6MB 黑盒见「黑盒」分类）。",
+    vsplit: "预览打点切分视频片段，支持全屏标记与打包下载（黑盒 GIF 见「黑盒」分类）。",
+    vbb: "预制参数一键出 ≤6MB 黑盒 GIF：整段或长视频自动切片，全程本地处理。",
     vtrim: "调整片头片尾时长、裁边框；网页 FFmpeg，手机可用。",
     audio: "修剪、音量、抽音轨；网页 FFmpeg 保底，电脑批量请用本机桥。",
     imgkit: "图片压缩、裁剪、水印、拼接。",
@@ -862,7 +864,7 @@
     qrcode: { name: "二维码", aliases: ["qr", "扫码"] },
     gifmaker: { name: "GIF / 动图", aliases: ["gif", "动图", "webp", "ffmpeg"] },
     vsplit: { name: "视频切分", aliases: ["切分", "vsplit", "视频"] },
-    vbb: { name: "一键黑盒", aliases: ["黑盒", "vbb", "批量切分"] },
+    vbb: { name: "黑盒 GIF", aliases: ["黑盒", "vbb", "批量切分", "blackbox", "6mb"] },
     vtrim: { name: "视频修剪", aliases: ["修剪", "裁剪", "vtrim"] },
     audio: { name: "音频处理", aliases: ["音频", "音量", "抽音轨", "audio"] },
     imgkit: { name: "图片工具", aliases: ["裁剪", "压缩", "水印", "拼接"] },
@@ -1392,6 +1394,7 @@
     const head = parts[0] || "timestamp";
     if (HASH_ALIASES[head]) return { ...HASH_ALIASES[head] };
     if (head === "media") {
+      if (parts[1] === "vbb") return { tool: "vbb", tab: "gifmaker" };
       const tab = MEDIA_TABS.includes(parts[1]) ? parts[1] : "gifmaker";
       return { tool: "media", tab };
     }
@@ -1417,14 +1420,16 @@
     currentTool = route.tool;
     currentMediaTab = route.tab || "gifmaker";
 
-    // 旧深链 #gifmaker / #vsplit / #vbb → 规范为 #media/...
-    const rawHead = String(location.hash || "")
+    // 旧深链 #gifmaker / #vsplit → #media/...；#media/vbb / #vbb → #vbb
+    const rawHash = String(location.hash || "")
       .replace(/^#/, "")
-      .trim()
-      .split(/[/?]/)[0];
+      .trim();
+    const rawHead = rawHash.split(/[/?]/)[0];
     const canonical = routeHash(currentTool, currentMediaTab);
-    if (HASH_ALIASES[rawHead] || (rawHead === "media" && !String(location.hash || "").includes("/"))) {
-      if (`#${String(location.hash || "").replace(/^#/, "")}` !== canonical) {
+    if (/^media\/vbb\b/i.test(rawHash)) {
+      if (rawHash !== "vbb") history.replaceState(null, "", "#vbb");
+    } else if (HASH_ALIASES[rawHead] || (rawHead === "media" && !rawHash.includes("/"))) {
+      if (rawHash !== canonical.replace(/^#/, "")) {
         history.replaceState(null, "", canonical);
       }
     }
