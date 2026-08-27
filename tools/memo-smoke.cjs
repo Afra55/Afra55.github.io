@@ -205,7 +205,35 @@ async function main() {
       hasProgressCancel: Boolean(document.getElementById("memo-progress-cancel")),
       hasTagsToggle: Boolean(document.getElementById("memo-tags-toggle")),
       hasTagsPanel: Boolean(document.getElementById("memo-tags-panel")),
+      batchClear: Boolean(document.getElementById("memo-batch-clear")),
+      tempZone: Boolean(document.getElementById("memo-temp-zone")),
+      tempFilter: Boolean(document.getElementById("memo-temp-filter")),
+      tempPrompt: Boolean(document.getElementById("memo-temp-prompt")),
+      autoclipGlobal: /全站/.test(document.querySelector(".memo-autoclip-flag")?.textContent || ""),
+      pageDropHint: /任意区域/.test(document.querySelector("#memo-drop .hint")?.textContent || ""),
     };
+
+    out.dragSelect = {
+      cardNotDraggable: document.querySelector(".memo-card")?.getAttribute("draggable") === "false",
+      canReorder: window.DevToolsMemo.canDragReorder?.(),
+      hasDragHandle: Boolean(document.querySelector(".memo-drag-handle")),
+    };
+
+    out.tempUx = {
+      api: typeof window.DevToolsMemo.markItemTemp === "function" && typeof window.DevToolsMemo.isTempItem === "function",
+      daysDefault: window.DevToolsMemo.getTempDays?.() === 7,
+    };
+    const anyItem = (window.DevToolsMemo.getIndex().items || [])[0];
+    if (anyItem && out.tempUx.api) {
+      await window.DevToolsMemo.markItemTemp(anyItem.id, 3);
+      await sleep(120);
+      const row = (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === anyItem.id);
+      out.tempUx.marked = window.DevToolsMemo.isTempItem(row);
+      out.tempUx.badge = Boolean(document.querySelector(`.memo-card[data-memo-id="${anyItem.id}"] .memo-temp-badge`));
+      await window.DevToolsMemo.clearItemTemp(anyItem.id);
+      await sleep(80);
+      out.tempUx.cleared = !window.DevToolsMemo.isTempItem((window.DevToolsMemo.getIndex().items || []).find((x) => x.id === anyItem.id));
+    }
 
     // inline text edit dialog
     const textItem = (window.DevToolsMemo.getIndex().items || []).find((it) => it.type === "text");
@@ -221,6 +249,7 @@ async function main() {
       const editDlg = document.getElementById("memo-text-edit");
       const editSrc = document.getElementById("memo-text-edit-src");
       out.textEdit.opened = Boolean(editDlg?.open);
+      out.textEdit.widthMax = editDlg ? getComputedStyle(editDlg).maxWidth : "";
       out.textEdit.memoStillActive = document.getElementById("memo")?.classList.contains("is-workspace-active");
       out.textEdit.loaded = (editSrc?.value || "").includes("冒烟测试文本");
       out.textEdit.cardEditing = Boolean(document.querySelector(`.memo-card.is-editing[data-memo-id="${textItem.id}"]`));
@@ -986,7 +1015,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navfly5/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memoux1/.test(s.src)),
     };
 
     out.pwa = {
@@ -1497,8 +1526,23 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/navfly5/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to navfly5");
+  if (!/memoux1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memoux1");
+  }
+  if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
+    failed.push("memo batch-clear / temp zone / temp prompt UI missing");
+  }
+  if (!result.modules?.autoclipGlobal || !result.modules?.pageDropHint) {
+    failed.push("memo autoclip should be global and page-wide drop hint");
+  }
+  if (!result.dragSelect?.cardNotDraggable || (result.dragSelect?.canReorder && !result.dragSelect?.hasDragHandle)) {
+    failed.push("memo cards should use drag handle instead of whole-card drag");
+  }
+  if (!result.tempUx?.api || !result.tempUx?.daysDefault || !result.tempUx?.marked || !result.tempUx?.badge || !result.tempUx?.cleared) {
+    failed.push("memo temp mark API/UI failed");
+  }
+  if (!result.textEdit?.widthMax || !/56rem|768px|min\(96vw/.test(result.textEdit.widthMax)) {
+    failed.push("memo text edit dialog should be wider");
   }
   if (!result.pwa?.hasManifestLink || !/manifest\.webmanifest/.test(result.pwa?.manifestHref || "")) {
     failed.push("PWA manifest link missing");

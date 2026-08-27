@@ -5423,6 +5423,97 @@ button.adb-device-body.linkish {
   overflow: auto;
 }
 
+.memo-temp-zone {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.55rem;
+  padding-top: 0.55rem;
+  border-top: 1px dashed color-mix(in srgb, #e8a317 45%, var(--line));
+}
+
+.memo-temp-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+}
+
+.memo-temp-days-lab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.memo-temp-days-lab .meta-input {
+  width: 3.2rem;
+  padding: 0.2rem 0.35rem;
+  text-align: center;
+}
+
+.memo-temp-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid color-mix(in srgb, #e8a317 55%, var(--line));
+  border-radius: 10px;
+  background: color-mix(in srgb, #e8a317 12%, transparent);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.memo-temp-filter.is-active {
+  border-color: color-mix(in srgb, #e8a317 80%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, #e8a317 28%, transparent);
+}
+
+.memo-temp-count {
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, #e8a317 70%, #000);
+  color: #1a1200;
+  font-size: 0.78rem;
+}
+
+.memo-temp-tip {
+  color: color-mix(in srgb, #e8a317 55%, var(--muted));
+}
+
+.memo-temp-prompt {
+  position: fixed;
+  right: max(0.75rem, env(safe-area-inset-right, 0px));
+  bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+  z-index: 12050;
+  display: grid;
+  gap: 0.45rem;
+  width: min(92vw, 18rem);
+  padding: 0.75rem 0.85rem;
+  border: 1px solid color-mix(in srgb, #e8a317 60%, var(--line));
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel-strong, #fff) 92%, #e8a317 8%);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+}
+
+.memo-temp-prompt[hidden] {
+  display: none !important;
+}
+
+.memo-temp-prompt-title {
+  margin: 0;
+  font-weight: 700;
+  color: color-mix(in srgb, #c88400 70%, var(--ink));
+}
+
+.memo-temp-prompt-sub {
+  margin: 0;
+}
+
 .memo-tag-row {
   display: flex;
   align-items: center;
@@ -5719,6 +5810,15 @@ button.adb-device-body.linkish {
   transition: border-color 0.15s ease, background 0.15s ease;
 }
 
+#memo.is-memo-file-drag .memo-body,
+#memo.is-memo-file-drag .memo-drop {
+  border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+}
+
+#memo.is-memo-file-drag .memo-drop {
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 8%, transparent));
+}
+
 .memo-drop.is-drag {
   border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
   background: var(--accent-soft, color-mix(in srgb, var(--accent) 8%, transparent));
@@ -5752,6 +5852,43 @@ button.adb-device-body.linkish {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent);
 }
 
+.memo-card.is-temp {
+  border-color: color-mix(in srgb, #e8a317 55%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, #e8a317 22%, transparent);
+  background: color-mix(in srgb, #e8a317 6%, var(--panel-strong, #fff));
+}
+
+.memo-temp-badge {
+  display: inline-block;
+  margin-right: 0.35rem;
+  padding: 0.05rem 0.42rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, #e8a317 82%, #000);
+  color: #1a1200;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.memo-drag-handle {
+  flex: 0 0 auto;
+  align-self: start;
+  margin-top: 0.1rem;
+  padding: 0.15rem 0.35rem;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-0) 40%, transparent);
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+}
+
+.memo-drag-handle:active {
+  cursor: grabbing;
+}
+
 .memo-pin-mark {
   display: inline-block;
   margin-right: 0.35rem;
@@ -5776,12 +5913,14 @@ button.adb-device-body.linkish {
 }
 
 .memo-text-edit-dlg {
-  max-width: min(94vw, 640px);
-  width: min(94vw, 640px);
+  max-width: min(96vw, 56rem) !important;
+  width: min(96vw, 56rem);
 }
 
 .memo-text-edit-dlg .area {
-  min-height: 12rem;
+  min-height: 14rem;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .memo-note-edit-dlg {
