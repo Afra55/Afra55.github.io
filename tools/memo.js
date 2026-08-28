@@ -446,6 +446,9 @@
     tempPrompts: new Map(),
     selected: new Set(),
     lastClipSig: "",
+    clipOfferEl: null,
+    clipCaptureBusy: false,
+    clipCaptureLastAt: 0,
     busy: false,
     objectUrls: new Set(),
     editingId: "",
@@ -2552,21 +2555,24 @@
     });
   }
 
-  async function readClipboard() {
-    setError(memoError, "");
+  async function readClipboard({ force = false, fromAuto = false } = {}) {
+    if (!fromAuto) setError(memoError, "");
     const clipOpts = { noScroll: true, offerTemp: true };
     try {
       if (navigator.clipboard?.read) {
         const items = await readClipboardItemsReliable();
         if (!items?.length) {
-          toast("剪贴板为空");
+          if (force) toast("剪贴板为空");
+          else dismissClipOffer();
           return;
         }
-        const parsed = await parseClipboardPayload(items, { force: true });
+        const parsed = await parseClipboardPayload(items, { force });
         if (parsed?.duplicate) {
-          toast("剪贴板内容与上次相同");
+          if (force) toast("剪贴板内容与上次相同");
+          dismissClipOffer();
           return;
         }
+        dismissClipOffer();
         if (parsed?.files?.length) {
           await ingestFiles(parsed.files, clipOpts);
           return;
@@ -2575,24 +2581,78 @@
           await addText(parsed.textBody, clipOpts);
           return;
         }
-        toast("剪贴板无可识别内容（文件请拖拽添加）");
+        if (force) toast("剪贴板无可识别内容（文件请拖拽添加）");
         return;
       }
       if (navigator.clipboard?.readText) {
         const text = (await navigator.clipboard.readText()).trim();
         if (!text) {
-          toast("剪贴板为空");
+          if (force) toast("剪贴板为空");
+          else dismissClipOffer();
           return;
         }
+        const sig = `text:${text.slice(0, 80)}:${text.length}`;
+        if (sig === state.lastClipSig) {
+          if (force) toast("剪贴板内容与上次相同");
+          dismissClipOffer();
+          return;
+        }
+        state.lastClipSig = sig;
+        dismissClipOffer();
         await addText(text, clipOpts);
         return;
       }
-      toast("当前浏览器不支持读取剪贴板，请用 Ctrl/⌘+V 或右键粘贴");
+      if (force) toast("当前浏览器不支持读取剪贴板，请用 Ctrl/⌘+V 或右键粘贴");
     } catch (err) {
-      const hint = clipReadFailHint(err);
-      setError(memoError, hint);
-      toast(hint);
+      if (force) {
+        const hint = clipReadFailHint(err);
+        setError(memoError, hint);
+        toast(hint);
+        return;
+      }
+      if (isClipboardGestureBlock(err)) showClipOffer();
     }
+  }
+
+  function isClipboardGestureBlock(err) {
+    const name = err?.name || "";
+    return name === "NotAllowedError" || name === "SecurityError";
+  }
+
+  function showClipOffer() {
+    if (state.clipOfferEl || !isMemoActive()) return;
+    const stack = $("#memo-temp-prompt-stack");
+    if (!stack) return;
+    const el = document.createElement("div");
+    el.className = "memo-temp-prompt memo-clip-offer";
+    el.dataset.memoClipOffer = "1";
+    el.innerHTML = `<p class="memo-temp-prompt-title">剪贴板有新内容</p>
+      <p class="hint tight">可读取并入库到备忘录</p>
+      <div class="btn-row tool-actions">
+        <button type="button" class="primary-btn" data-memo-clip-offer-read>读取</button>
+        <button type="button" class="ghost-btn" data-memo-clip-offer-dismiss>忽略</button>
+      </div>`;
+    stack.appendChild(el);
+    state.clipOfferEl = el;
+  }
+
+  function dismissClipOffer() {
+    state.clipOfferEl?.remove();
+    state.clipOfferEl = null;
+  }
+
+  function maybeCaptureClipboard() {
+    if (state.busy || state.clipCaptureBusy || !isMemoActive()) return;
+    if (isTextEditOpen()) return;
+    const now = Date.now();
+    if (now - state.clipCaptureLastAt < 700) return;
+    state.clipCaptureLastAt = now;
+    state.clipCaptureBusy = true;
+    readClipboard({ fromAuto: true })
+      .catch(() => {})
+      .finally(() => {
+        state.clipCaptureBusy = false;
+      });
   }
 
   function clipDeniedHint() {
@@ -2908,6 +2968,7 @@
     invalidateCountCache();
     await purgeExpiredTempItems();
     renderAll();
+    if (isMemoActive()) maybeCaptureClipboard();
     setInterval(() => {
       purgeExpiredTempItems().catch(() => {});
     }, 3600000);
@@ -4402,7 +4463,7 @@
   });
   $("#memo-note-edit-src")?.addEventListener("input", () => syncNoteEditCount());
   $("#memo-read-clip")?.addEventListener("click", () => {
-    readClipboard().catch((err) => setError(memoError, err.message || String(err)));
+    readClipboard({ force: true }).catch((err) => setError(memoError, err.message || String(err)));
   });
   previewEditBtn?.addEventListener("click", () => {
     const item = previewItem;
@@ -4644,7 +4705,7 @@
     }
     const emptyAct = t.closest?.("[data-memo-empty]")?.dataset?.memoEmpty;
     if (emptyAct === "clip") {
-      readClipboard().catch((err) => setError(memoError, err.message || String(err)));
+      readClipboard({ force: true }).catch((err) => setError(memoError, err.message || String(err)));
       return;
     }
     if (emptyAct === "text") {
@@ -4869,6 +4930,17 @@
     toast(`临时条目默认保留 ${state.tempDays} 天`);
   });
   $("#memo-temp-prompt-stack")?.addEventListener("click", (e) => {
+    const readBtn = e.target.closest?.("[data-memo-clip-offer-read]");
+    if (readBtn) {
+      dismissClipOffer();
+      readClipboard({ force: true }).catch((err) => setError(memoError, err.message || String(err)));
+      return;
+    }
+    const dismissBtn = e.target.closest?.("[data-memo-clip-offer-dismiss]");
+    if (dismissBtn) {
+      dismissClipOffer();
+      return;
+    }
     const btn = e.target.closest?.("[data-memo-temp-prompt-skip]");
     if (!btn) return;
     const panel = btn.closest("[data-memo-temp-prompt]");
@@ -5184,6 +5256,42 @@
     }
   });
 
+  document.addEventListener(
+    "copy",
+    () => {
+      if (!isMemoActive()) return;
+      window.setTimeout(() => maybeCaptureClipboard(), 80);
+    },
+    true
+  );
+  document.addEventListener(
+    "cut",
+    () => {
+      if (!isMemoActive()) return;
+      window.setTimeout(() => maybeCaptureClipboard(), 80);
+    },
+    true
+  );
+
+  window.addEventListener("devtools:route", (e) => {
+    if (e.detail?.tool === "memo") maybeCaptureClipboard();
+    else dismissClipOffer();
+  });
+  window.addEventListener("focus", () => {
+    if (document.visibilityState === "visible") maybeCaptureClipboard();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") maybeCaptureClipboard();
+  });
+  document.addEventListener(
+    "click",
+    (e) => {
+      if (!e.target.closest?.(".tool-nav-link[data-tool='memo']")) return;
+      queueMicrotask(() => maybeCaptureClipboard());
+    },
+    true
+  );
+
   window.DevToolsMemo = {
     getStorageBytes: estimateStorageBytes,
     getMode: () => state.mode,
@@ -5254,6 +5362,8 @@
     getTempDays: () => state.tempDays,
     scheduleTempPrompt: (id) => scheduleTempPrompt(id),
     finishTempPrompt: (id, opts) => finishTempPrompt(id, opts),
+    maybeCaptureClipboard: () => maybeCaptureClipboard(),
+    dismissClipOffer: () => dismissClipOffer(),
   };
 
   boot().catch((err) => setError(memoError, err.message || String(err)));
