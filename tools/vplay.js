@@ -30,6 +30,9 @@
   let objectUrl = "";
   let scrubbing = false;
   let muted = true;
+  let seekReady = false;
+  let primePromise = null;
+  let seekGen = 0;
 
   const zoom = {
     scale: 1,
@@ -188,6 +191,52 @@
     });
   }
 
+  function resetSeekReady() {
+    seekReady = false;
+    primePromise = null;
+  }
+
+  function primeVideoForSeek() {
+    if (!video?.src) return Promise.resolve();
+    if (seekReady && video.readyState >= 2) return Promise.resolve();
+    if (primePromise) return primePromise;
+    video.preload = "auto";
+    primePromise = new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        video.removeEventListener("loadeddata", finish);
+        video.removeEventListener("seeked", finish);
+        video.removeEventListener("canplay", finish);
+        window.clearTimeout(timer);
+        seekReady = true;
+        primePromise = null;
+        resolve();
+      };
+      const timer = window.setTimeout(finish, 1500);
+      video.addEventListener("loadeddata", finish, { once: true });
+      video.addEventListener("seeked", finish, { once: true });
+      video.addEventListener("canplay", finish, { once: true });
+      try {
+        if (video.readyState >= 1) {
+          const d = duration();
+          video.currentTime = d > 0 ? Math.min(0.001, Math.max(0, d - 0.001)) : 0;
+        } else {
+          video.load();
+        }
+      } catch (_) {
+        finish();
+      }
+      if (video.readyState >= 2) finish();
+    });
+    return primePromise;
+  }
+
+  function ensureSeekReady() {
+    return primeVideoForSeek();
+  }
+
   function syncEmptyState() {
     const has = Boolean(sourceFile && video?.src);
     if (emptyHint) emptyHint.hidden = has;
@@ -308,13 +357,23 @@
     if (!video?.src) return;
     const t = Math.max(0, Math.min(duration(), Number(sec) || 0));
     if (!video.paused) video.pause();
-    try {
-      if (typeof video.fastSeek === "function") video.fastSeek(t);
-      else video.currentTime = t;
-    } catch (_) {}
-    if (!opts.fromScrub) syncScrubFromVideo();
-    syncClock();
-    syncPlayUi();
+    const gen = ++seekGen;
+    const doSeek = () => {
+      if (gen !== seekGen) return;
+      try {
+        if (opts.fromScrub || video.readyState < 3) video.currentTime = t;
+        else if (typeof video.fastSeek === "function") video.fastSeek(t);
+        else video.currentTime = t;
+      } catch (_) {}
+      if (!opts.fromScrub) syncScrubFromVideo();
+      syncClock();
+      syncPlayUi();
+    };
+    if (seekReady && video.readyState >= 2) {
+      doSeek();
+      return;
+    }
+    ensureSeekReady().then(doSeek);
   }
 
   function beginScrub() {
@@ -324,6 +383,14 @@
       video.pause();
       syncPlayUi();
     }
+    ensureSeekReady();
+  }
+
+  function scrubToValue() {
+    if (!video?.src || !scrub) return;
+    const t = (Number(scrub.value) / SCRUB_STEPS) * duration();
+    syncClock();
+    applySeek(t, { fromScrub: true });
   }
 
   function togglePlay() {
@@ -484,6 +551,7 @@
     }
     if (fileInput) fileInput.value = "";
     resetZoom();
+    resetSeekReady();
     setError("");
     if (meta) meta.textContent = "支持 MP4 / WebM / MOV。点「选择视频」、拖入下方黑色区域，或点击黑色区域选择。滚轮缩放 · 拖拽移动 · 双击暂停/播放。";
     syncEmptyState();
@@ -510,13 +578,14 @@
       video.hidden = false;
       if (emptyHint) emptyHint.hidden = true;
       video.playsInline = true;
-      video.preload = "metadata";
+      video.preload = "auto";
       video.muted = muted;
       video.src = objectUrl;
       video.load();
     }
     try {
       await waitVideoMetadata(video);
+      await primeVideoForSeek();
       const d = duration();
       if (!(d > 0) || !video.videoWidth) throw new Error("视频时长或尺寸无效");
       syncEmptyState();
@@ -531,6 +600,7 @@
       }
       if (d >= LONG_VIDEO_SEC) toast("长视频：滚轮/拖拽定位，双击播放/暂停");
       else toast(opts.autoplay ? "已加载并开始播放" : "视频已加载");
+      if (!opts.autoplay) applySeek(0, { fromScrub: true });
       if (opts.autoplay) {
         video.play().catch(() => toast("无法自动播放，请点播放"));
       }
@@ -573,13 +643,14 @@
     fitZoom();
   });
   fsBtn?.addEventListener("click", toggleFullscreen);
-  scrub?.addEventListener("pointerdown", beginScrub);
+  scrub?.addEventListener("pointerdown", () => {
+    beginScrub();
+    scrubToValue();
+  });
   scrub?.addEventListener("input", () => {
     if (!video?.src) return;
     beginScrub();
-    const t = (Number(scrub.value) / SCRUB_STEPS) * duration();
-    syncClock();
-    applySeek(t, { fromScrub: true });
+    scrubToValue();
   });
   scrub?.addEventListener("change", () => {
     scrubbing = false;
