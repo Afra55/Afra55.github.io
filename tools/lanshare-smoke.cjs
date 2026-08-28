@@ -15,7 +15,7 @@ const fs = require("fs");
 
 const baseUrl = process.argv[2] || "http://127.0.0.1:4173/tools/";
 const root = path.join(__dirname);
-const VER = "lanshare5";
+const VER = "allin1";
 
 function fetchText(url) {
   return new Promise((resolve, reject) => {

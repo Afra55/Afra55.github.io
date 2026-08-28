@@ -18,8 +18,8 @@
   <!-- 不阻塞首屏：Noto Serif SC 只给文转图用，避免每次拉取中文字体；Google 字体 CSS 在国内常卡住数秒 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" /></noscript>
-  <link rel="stylesheet" href="./style.css?v=20260817lanshare5" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260817lanshare5" />
+  <link rel="stylesheet" href="./style.css?v=20260817allin1" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260817allin1" />
   <script>
     /* 尽早应用主题变量，减少闪烁；侧栏也依赖这些 CSS 变量 */
     (function () {
@@ -113,6 +113,10 @@
         <input id="tool-search" class="nav-search" type="search" placeholder="搜索工具…" autocomplete="off" enterkeyhint="search" />
       </label>
       <div class="nav-recent" id="tool-recent" hidden>
+        <div class="nav-recent-axis" aria-hidden="true">
+          <span>顶端</span>
+          <span>尾端</span>
+        </div>
         <div class="nav-recent-list" id="tool-recent-list"></div>
       </div>
       <p class="hint tight nav-sort-hint">分类与工具可排序：桌面直接拖；手机请<strong>长按</strong>分类标题或工具名再拖（松手前拖到边缘可滚动）。</p>
@@ -3852,23 +3856,23 @@ adb devices</pre>
       <button type="button" class="primary-btn vsplit-fs-mark" id="vsplit-fs-mark">打起点</button>
     </div>
   </div>
-  <script src="./theme.js?v=20260817lanshare5"></script>
-  <script src="./temp.js?v=20260817lanshare5"></script>
+  <script src="./theme.js?v=20260817allin1"></script>
+  <script src="./temp.js?v=20260817allin1"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260817lanshare5"></script>
-  <script src="./about.js?v=20260817lanshare5" defer></script>
-  <script src="./extra.js?v=20260817lanshare5" defer></script>
-  <script src="./vtrim.js?v=20260817lanshare5" defer></script>
-  <script src="./vplay.js?v=20260817lanshare5" defer></script>
-  <script src="./audio.js?v=20260817lanshare5" defer></script>
-  <script src="./ffbridge.js?v=20260817lanshare5" defer></script>
-  <script src="./lanshare.js?v=20260817lanshare5" defer></script>
-  <script src="./setup.js?v=20260817lanshare5" defer></script>
+  <script src="./app.js?v=20260817allin1"></script>
+  <script src="./about.js?v=20260817allin1" defer></script>
+  <script src="./extra.js?v=20260817allin1" defer></script>
+  <script src="./vtrim.js?v=20260817allin1" defer></script>
+  <script src="./vplay.js?v=20260817allin1" defer></script>
+  <script src="./audio.js?v=20260817allin1" defer></script>
+  <script src="./ffbridge.js?v=20260817allin1" defer></script>
+  <script src="./lanshare.js?v=20260817allin1" defer></script>
+  <script src="./setup.js?v=20260817allin1" defer></script>
   <script src="./imgkit.js?v=20260810l" defer></script>
-  <script src="./memo.js?v=20260817lanshare5" defer></script>
-  <script src="./textimg.js?v=20260817lanshare5" defer></script>
-  <script src="./imgtext.js?v=20260817lanshare5" defer></script>
-  <script src="./pwa.js?v=20260817lanshare5" defer></script>
+  <script src="./memo.js?v=20260817allin1" defer></script>
+  <script src="./textimg.js?v=20260817allin1" defer></script>
+  <script src="./imgtext.js?v=20260817allin1" defer></script>
+  <script src="./pwa.js?v=20260817allin1" defer></script>
   <script src="./vendor/js-yaml.min.js" defer></script>
   <script src="./vendor/spark-md5.min.js" defer></script>
   <script src="./vendor/qrcode.min.js" defer></script>
