@@ -5696,25 +5696,6 @@ button.adb-device-body.linkish {
   flex: 0 0 auto;
 }
 
-.vplay-height-row {
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  margin-top: 0.55rem;
-}
-
-.vplay-height-slider {
-  flex: 1;
-  min-width: 6rem;
-}
-
-.vplay-height-label {
-  min-width: 3.4rem;
-  text-align: right;
-  font-size: 0.82rem;
-  color: var(--muted);
-}
-
 .vplay-height-resize {
   position: absolute;
   left: 0;

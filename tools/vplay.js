@@ -3,7 +3,6 @@
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const SCRUB_STEPS = 1000;
-  const SEEK_DEBOUNCE_MS = 100;
   const LONG_VIDEO_SEC = 180;
 
   const fileInput = $("#vplay-file");
@@ -21,8 +20,6 @@
   const fsBtn = $("#vplay-fs");
   const emptyHint = $("#vplay-empty-hint");
   const zoomHud = $(".vplay-zoom-hud", zoomWrap || document);
-  const heightSlider = $("#vplay-height");
-  const heightLabel = $("#vplay-height-label");
   const heightResize = $("#vplay-height-resize");
 
   const HEIGHT_MIN = 280;
@@ -32,8 +29,6 @@
   let sourceFile = null;
   let objectUrl = "";
   let scrubbing = false;
-  let seekTimer = 0;
-  let pendingSeek = null;
   let muted = true;
 
   const zoom = {
@@ -150,21 +145,9 @@
     return clampHeight(HEIGHT_DEFAULT);
   }
 
-  function syncHeightUi(px) {
-    const h = clampHeight(px);
-    if (heightSlider) {
-      heightSlider.min = String(HEIGHT_MIN);
-      heightSlider.max = String(heightMax());
-      heightSlider.value = String(h);
-      heightSlider.setAttribute("aria-valuetext", `${h} 像素`);
-    }
-    if (heightLabel) heightLabel.textContent = `${h}px`;
-    return h;
-  }
-
   function applyWrapHeight(px, opts = {}) {
     if (!zoomWrap) return HEIGHT_DEFAULT;
-    const h = syncHeightUi(px);
+    const h = clampHeight(px);
     zoomWrap.style.setProperty("--vplay-wrap-height", `${h}px`);
     zoomWrap.style.height = `${h}px`;
     if (opts.persist !== false) {
@@ -178,9 +161,6 @@
 
   function bindHeightControls() {
     applyWrapHeight(readStoredHeight(), { persist: false, refit: false });
-    heightSlider?.addEventListener("input", () => {
-      applyWrapHeight(Number(heightSlider.value), { persist: true, refit: true });
-    });
     if (!heightResize || heightResize.dataset.bound === "1") return;
     heightResize.dataset.bound = "1";
     let startY = 0;
@@ -327,7 +307,7 @@
   function applySeek(sec, opts = {}) {
     if (!video?.src) return;
     const t = Math.max(0, Math.min(duration(), Number(sec) || 0));
-    if (!opts.keepPlaying && !video.paused) video.pause();
+    if (!video.paused) video.pause();
     try {
       if (typeof video.fastSeek === "function") video.fastSeek(t);
       else video.currentTime = t;
@@ -337,24 +317,12 @@
     syncPlayUi();
   }
 
-  function scheduleSeek(sec, opts = {}) {
-    pendingSeek = { sec, opts };
-    clearTimeout(seekTimer);
-    seekTimer = window.setTimeout(() => {
-      seekTimer = 0;
-      if (pendingSeek) {
-        applySeek(pendingSeek.sec, pendingSeek.opts);
-        pendingSeek = null;
-      }
-    }, SEEK_DEBOUNCE_MS);
-  }
-
-  function flushSeek() {
-    clearTimeout(seekTimer);
-    seekTimer = 0;
-    if (pendingSeek) {
-      applySeek(pendingSeek.sec, pendingSeek.opts);
-      pendingSeek = null;
+  function beginScrub() {
+    if (!video?.src) return;
+    scrubbing = true;
+    if (!video.paused) {
+      video.pause();
+      syncPlayUi();
     }
   }
 
@@ -509,7 +477,6 @@
       URL.revokeObjectURL(objectUrl);
       objectUrl = "";
     }
-    flushSeek();
     if (video) {
       video.pause();
       video.removeAttribute("src");
@@ -606,16 +573,16 @@
     fitZoom();
   });
   fsBtn?.addEventListener("click", toggleFullscreen);
+  scrub?.addEventListener("pointerdown", beginScrub);
   scrub?.addEventListener("input", () => {
     if (!video?.src) return;
-    scrubbing = true;
+    beginScrub();
     const t = (Number(scrub.value) / SCRUB_STEPS) * duration();
     syncClock();
-    scheduleSeek(t, { fromScrub: true, keepPlaying: !video.paused });
+    applySeek(t, { fromScrub: true });
   });
   scrub?.addEventListener("change", () => {
     scrubbing = false;
-    flushSeek();
     syncScrubFromVideo();
   });
   video?.addEventListener("timeupdate", () => {
@@ -627,7 +594,6 @@
   video?.addEventListener("pause", syncPlayUi);
   video?.addEventListener("loadedmetadata", () => fitZoomAfterLayout());
   window.addEventListener("resize", () => {
-    if (heightSlider) syncHeightUi(Number(heightSlider.value) || readStoredHeight());
     if (!sourceFile || !video?.videoWidth) return;
     const rel = zoom.fit > 0 ? zoom.scale / zoom.fit : 1;
     fitZoom();
