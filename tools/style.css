@@ -1441,6 +1441,23 @@ a.secondary-btn {
   background-color: #ddd;
 }
 
+.qr-box-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.qr-piece {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.qr-piece-label {
+  margin: 0;
+  text-align: center;
+}
+
 .qr-box {
   display: inline-flex;
   align-items: center;

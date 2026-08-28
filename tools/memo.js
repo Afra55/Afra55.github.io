@@ -2215,13 +2215,13 @@
       added = await addItemFromBlob(blob, `文本-${formatTime(Date.now())}.txt`, {
         type: "text",
         textPreview: body,
-        quiet: Boolean(opts.quiet),
+        quiet: Boolean(opts.quiet || opts.offerTemp),
       });
       if (editor) editor.value = "";
     });
     if (added?.id && !opts.quiet) {
-      flashItem(added.id, "已添加", { noScroll: opts.noScroll });
       if (opts.offerTemp) scheduleTempPrompt(added.id);
+      else flashItem(added.id, "已添加", { noScroll: opts.noScroll });
     }
     return added;
   }
@@ -2542,12 +2542,15 @@
         setProgress(false, 0, "");
       }
       if (lastId) {
-        const parts = [];
-        if (added) parts.push(`已添加 ${added} 个`);
-        if (skipped) parts.push(`未新建，已把 ${skipped} 个重复项置顶`);
-        if (cancelled) parts.push(`取消 ${cancelled} 个`);
-        flashItem(lastId, parts.join("，") || "完成", { noScroll: opts.noScroll });
-        if (opts.offerTemp && lastNew) scheduleTempPrompt(lastId);
+        if (opts.offerTemp) {
+          if (lastNew) scheduleTempPrompt(lastId);
+        } else {
+          const parts = [];
+          if (added) parts.push(`已添加 ${added} 个`);
+          if (skipped) parts.push(`未新建，已把 ${skipped} 个重复项置顶`);
+          if (cancelled) parts.push(`取消 ${cancelled} 个`);
+          flashItem(lastId, parts.join("，") || "完成", { noScroll: opts.noScroll });
+        }
       } else if (cancelled && !added) {
         toast("已取消");
       } else {

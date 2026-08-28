@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-memo8";
+  const TOOLS_VERSION = "2026.08.17-memo9";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -1412,25 +1412,99 @@
   });
 
   // ---- QR generate + decode ----
+  const QR_CAP_L40 = 2953;
+
+  function qrPayloadBytes(text) {
+    const s = String(text);
+    const encoded = encodeURI(s).replace(/%[0-9a-fA-F]{2}/g, "a");
+    return encoded.length + (encoded.length !== s.length ? 3 : 0);
+  }
+
+  function renderQrBox(text, level) {
+    const el = document.createElement("div");
+    el.className = "qr-box";
+    // eslint-disable-next-line no-new
+    new QRCode(el, {
+      text,
+      width: 180,
+      height: 180,
+      colorDark: "#0b1220",
+      colorLight: "#ffffff",
+      correctLevel: level,
+    });
+    return el;
+  }
+
+  function splitQrChunks(text) {
+    const total = String(text);
+    let n = Math.max(2, Math.ceil(qrPayloadBytes(total) / (QR_CAP_L40 - 16)));
+    for (; n < 99; n += 1) {
+      const chunks = [];
+      let pos = 0;
+      let ok = true;
+      for (let i = 0; i < n; i += 1) {
+        const prefix = `[${i + 1}/${n}]`;
+        const budget = QR_CAP_L40 - qrPayloadBytes(prefix);
+        if (budget < 8) {
+          ok = false;
+          break;
+        }
+        let take = Math.min(total.length - pos, budget);
+        while (take > 0 && qrPayloadBytes(prefix + total.slice(pos, pos + take)) > QR_CAP_L40) take -= 1;
+        if (take <= 0) {
+          ok = false;
+          break;
+        }
+        chunks.push(prefix + total.slice(pos, pos + take));
+        pos += take;
+      }
+      if (ok && pos >= total.length) return chunks;
+    }
+    return [];
+  }
+
   function generateQr() {
-    const box = $("#qr-box");
-    const text = $("#qr-text").value.trim();
-    box.innerHTML = "";
+    const wrap = $("#qr-box-wrap");
+    const meta = $("#qr-meta");
+    const text = $("#qr-text")?.value.trim() || "";
+    if (!wrap) return;
+    wrap.innerHTML = "";
+    if (meta) meta.textContent = "";
     if (!text) {
       setError($("#qr-error"), "请输入内容");
       return;
     }
     try {
       if (typeof QRCode === "undefined") throw new Error("QRCode 库未加载");
-      // eslint-disable-next-line no-new
-      new QRCode(box, {
-        text,
-        width: 180,
-        height: 180,
-        colorDark: "#0b1220",
-        colorLight: "#ffffff",
-        correctLevel: QRCode.CorrectLevel.M,
+      const tries = [
+        { level: QRCode.CorrectLevel.M, label: "标准纠错" },
+        { level: QRCode.CorrectLevel.L, label: "低纠错（容量更大）" },
+      ];
+      for (const { level, label } of tries) {
+        try {
+          wrap.appendChild(renderQrBox(text, level));
+          if (meta) meta.textContent = `已生成 · ${label} · 约 ${text.length} 字`;
+          setError($("#qr-error"), "");
+          return;
+        } catch (err) {
+          if (!/Too long|overflow/i.test(String(err.message || err))) throw err;
+        }
+      }
+      const chunks = splitQrChunks(text);
+      if (!chunks.length) throw new Error("内容过长，无法生成二维码");
+      chunks.forEach((payload, i) => {
+        const piece = document.createElement("div");
+        piece.className = "qr-piece";
+        const lab = document.createElement("p");
+        lab.className = "hint tight qr-piece-label";
+        lab.textContent = `第 ${i + 1}/${chunks.length} 张`;
+        piece.appendChild(lab);
+        piece.appendChild(renderQrBox(payload, QRCode.CorrectLevel.L));
+        wrap.appendChild(piece);
       });
+      if (meta) {
+        meta.textContent = `内容较长，已拆成 ${chunks.length} 张二维码。扫描后去掉 [n/m] 前缀并按顺序拼接。`;
+      }
       setError($("#qr-error"), "");
     } catch (err) {
       setError($("#qr-error"), err.message || String(err));
