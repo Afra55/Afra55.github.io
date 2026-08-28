@@ -8138,6 +8138,9 @@
       if (vbbPlanCompare) vbbPlanCompare.innerHTML = "";
       if (vbbPlanList) vbbPlanList.innerHTML = "";
       clearVbbMarks();
+      clearTimeout(vbbSeekTimer);
+      vbbSeekTimer = 0;
+      vbbPendingSeek = null;
       setVbbProgress(false, 0, "");
       setError(vbbError, "");
       if (vbbMeta) vbbMeta.textContent = VBB_DEFAULT_META;
