@@ -125,6 +125,16 @@ async function main() {
       count: items.length,
     });
 
+    const jsonFile = new File(['{"smoke":true,"n":1}'], "smoke.json", { type: "application/json" });
+    const dtJson = new DataTransfer();
+    dtJson.items.add(jsonFile);
+    input.files = dtJson.files;
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    await sleep(500);
+    out.steps.push({
+      addJson: (window.DevToolsMemo.getIndex().items || []).some((it) => /\.json$/i.test(it.fileName || it.name || "")),
+    });
+
     // tag create via searchable dialog
     document.getElementById("memo-tag-new").click();
     await sleep(80);
@@ -248,12 +258,15 @@ async function main() {
     }
 
     // inline text edit dialog
-    const textItem = (window.DevToolsMemo.getIndex().items || []).find((it) => it.type === "text");
+    const textItem = (window.DevToolsMemo.getIndex().items || []).find((it) => it.type === "text" && !/\.json$/i.test(it.fileName || it.name || ""));
+    const jsonItem = (window.DevToolsMemo.getIndex().items || []).find((it) => /\.json$/i.test(it.fileName || it.name || ""));
     out.textEdit = {
       hasDlg: Boolean(document.getElementById("memo-text-edit")),
       hasPreviewEdit: Boolean(document.getElementById("memo-preview-edit")),
       hasEditBtn: Boolean(document.querySelector(".memo-more [data-memo-edit], [data-memo-edit]")),
       itemId: textItem?.id || "",
+      jsonItemId: jsonItem?.id || "",
+      noQuickJsonActions: document.getElementById("memo-editor-json") == null,
     };
     if (textItem) {
       document.querySelector(`.memo-more [data-memo-edit="${textItem.id}"], [data-memo-edit="${textItem.id}"]`)?.click();
@@ -275,11 +288,7 @@ async function main() {
         editSrc.value = '{"a":1,"b":[2,3]}';
         editSrc.dispatchEvent(new Event("input", { bubbles: true }));
       }
-      out.textEdit.jsonActions = !document.getElementById("memo-text-edit-json")?.hidden;
-      document.getElementById("memo-text-edit-json-pretty")?.click();
-      out.textEdit.jsonPretty = (editSrc?.value || "").includes("\n");
-      document.getElementById("memo-text-edit-json-minify")?.click();
-      out.textEdit.jsonMinify = !(editSrc?.value || "").includes("\n");
+      out.textEdit.jsonHiddenForTxt = document.getElementById("memo-text-edit-json")?.hidden !== false;
       if (editSrc) {
         editSrc.value = "冒烟测试文本 ABC 你好（已编辑）";
         editSrc.dispatchEvent(new Event("input", { bubbles: true }));
@@ -290,6 +299,27 @@ async function main() {
       out.textEdit.saved = (updated?.textPreview || "").includes("已编辑");
       out.textEdit.closed = !editDlg?.open;
       out.textEdit.editingCleared = !document.querySelector(".memo-card.is-editing");
+    }
+    if (jsonItem) {
+      document.querySelector(`.memo-more [data-memo-edit="${jsonItem.id}"], [data-memo-edit="${jsonItem.id}"]`)?.click();
+      await sleep(120);
+      const editSrc = document.getElementById("memo-text-edit-src");
+      if (editSrc) {
+        editSrc.value = '{"a":1,"b":[2,3]}';
+        editSrc.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      out.textEdit.jsonActions = !document.getElementById("memo-text-edit-json")?.hidden;
+      document.getElementById("memo-text-edit-json-pretty")?.click();
+      out.textEdit.jsonPretty = (editSrc?.value || "").includes("\n");
+      document.getElementById("memo-text-edit-json-minify")?.click();
+      out.textEdit.jsonMinify = !(editSrc?.value || "").includes("\n");
+      if (editSrc) {
+        editSrc.value = "{bad json";
+        editSrc.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      out.textEdit.jsonHiddenWhenInvalid = document.getElementById("memo-text-edit-json")?.hidden !== false;
+      document.getElementById("memo-text-edit-cancel")?.click();
+      await sleep(120);
     }
 
     // open image preview via more menu (primary row keeps copy/download only)
@@ -1621,8 +1651,11 @@ async function main() {
   if (!result.textEdit?.opened || !result.textEdit?.memoStillActive || !result.textEdit?.loaded) {
     failed.push("text edit dialog should open inline with content");
   }
-  if (!result.textEdit?.saved || !result.textEdit?.closed || !result.textEdit?.editingCleared || !result.textEdit?.jsonActions || !result.textEdit?.jsonPretty || !result.textEdit?.jsonMinify) {
+  if (!result.textEdit?.saved || !result.textEdit?.closed || !result.textEdit?.editingCleared || !result.textEdit?.noQuickJsonActions || !result.textEdit?.jsonHiddenForTxt) {
     failed.push("text edit save/close failed");
+  }
+  if (!result.textEdit?.jsonItemId || !result.textEdit?.jsonActions || !result.textEdit?.jsonPretty || !result.textEdit?.jsonMinify || !result.textEdit?.jsonHiddenWhenInvalid) {
+    failed.push("json edit actions should only appear for valid json files");
   }
   if (!result.modules?.hasSentinel) failed.push("infinite scroll sentinel missing");
   if (!result.typeFilter?.host || (result.typeFilter?.chips || 0) < 7) {

@@ -2267,24 +2267,42 @@
     }
   }
 
+  function isMemoJsonItem(item) {
+    if (!item) return false;
+    const mime = String(item.mime || "").toLowerCase();
+    const name = String(item.name || item.fileName || "").toLowerCase();
+    if (mime === "application/json" || mime.endsWith("+json")) return true;
+    return name.endsWith(".json");
+  }
+
+  function getEditingItem() {
+    const id = state.editingId;
+    if (!id) return null;
+    return state.index.items.find((x) => x.id === id) || null;
+  }
+
   function formatMemoJsonText(text, mode) {
     const data = JSON.parse(String(text || "").trim());
     return mode === "minify" ? JSON.stringify(data) : JSON.stringify(data, null, 2);
   }
 
-  function syncMemoJsonActions(textarea, actionsEl) {
+  function syncMemoJsonActions(textarea, actionsEl, item) {
     if (!actionsEl) return;
-    const show = isLikelyJsonText(textarea?.value || "");
+    const show = isMemoJsonItem(item) && isLikelyJsonText(textarea?.value || "");
     actionsEl.hidden = !show;
     if (show) actionsEl.style.display = "";
     else actionsEl.style.display = "none";
+  }
+
+  function syncTextEditJsonActions() {
+    syncMemoJsonActions($("#memo-text-edit-src"), $("#memo-text-edit-json"), getEditingItem());
   }
 
   function applyMemoJsonFormat(textarea, mode) {
     if (!textarea) return false;
     try {
       textarea.value = formatMemoJsonText(textarea.value, mode);
-      syncMemoJsonActions(textarea, textarea.id === "memo-editor" ? $("#memo-editor-json") : $("#memo-text-edit-json"));
+      syncTextEditJsonActions();
       toast(mode === "minify" ? "已压缩 JSON" : "已美化 JSON");
       return true;
     } catch (err) {
@@ -2300,7 +2318,7 @@
       if (typeof dlg.show === "function") dlg.show();
       else dlg.showModal?.();
     }
-    syncMemoJsonActions($("#memo-text-edit-src"), $("#memo-text-edit-json"));
+    syncTextEditJsonActions();
   }
 
   function isTextEditOpen() {
@@ -4423,17 +4441,8 @@
     ingestFiles(e.target.files, { offerTemp: false }).catch((err) => setError(memoError, err.message || String(err)));
     e.target.value = "";
   });
-  editor?.addEventListener("input", () => {
-    syncMemoJsonActions(editor, $("#memo-editor-json"));
-  });
-  $("#memo-editor-json-pretty")?.addEventListener("click", () => {
-    applyMemoJsonFormat(editor, "pretty");
-  });
-  $("#memo-editor-json-minify")?.addEventListener("click", () => {
-    applyMemoJsonFormat(editor, "minify");
-  });
   $("#memo-text-edit-src")?.addEventListener("input", () => {
-    syncMemoJsonActions($("#memo-text-edit-src"), $("#memo-text-edit-json"));
+    syncTextEditJsonActions();
   });
   $("#memo-text-edit-json-pretty")?.addEventListener("click", () => {
     applyMemoJsonFormat($("#memo-text-edit-src"), "pretty");
