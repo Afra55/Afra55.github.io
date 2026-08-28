@@ -771,7 +771,6 @@
   const SORT_HINT_KEY = "devtools-nav-sort-hint-seen-v1";
   /** 站点页不算「上次工具」，避免 about/setup 盖掉真实工具 */
   const SITE_NAV_IDS = new Set(["about", "setup"]);
-  const RECENT_SHOW = 8;
   const MEDIA_TABS = ["gifmaker", "vsplit", "vtrim", "audio"];
   const HASH_ALIASES = {
     gifmaker: { tool: "media", tab: "gifmaker" },
@@ -1168,7 +1167,7 @@
   function loadRecent() {
     try {
       const parsed = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
-      const cleaned = sanitizeToolIds(parsed).slice(0, 8);
+      const cleaned = sanitizeToolIds(parsed);
       // 曾误把默认排序整表写入「最近」：若与默认前缀完全一致则清空
       const defPrefix = DEFAULT_ORDER.slice(0, cleaned.length);
       if (cleaned.length >= 6 && cleaned.every((id, i) => id === defPrefix[i])) {
@@ -1207,7 +1206,7 @@
 
   function pushRecent(id) {
     if (!DEFAULT_ORDER.includes(id)) return;
-    const next = [id, ...loadRecent().filter((x) => x !== id)].slice(0, 8);
+    const next = [id, ...loadRecent().filter((x) => x !== id)];
     localStorage.setItem(RECENT_KEY, JSON.stringify(next));
     saveLastTool(id);
     renderRecent();
@@ -1328,7 +1327,7 @@
       return;
     }
     recentWrap.hidden = false;
-    items.slice(0, RECENT_SHOW).forEach((id) => {
+    items.forEach((id) => {
       if (!isNavToolVisible(id)) return;
       const btn = document.createElement("button");
       btn.type = "button";
