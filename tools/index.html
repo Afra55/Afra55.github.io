@@ -18,8 +18,8 @@
   <!-- 不阻塞首屏：Noto Serif SC 只给文转图用，避免每次拉取中文字体；Google 字体 CSS 在国内常卡住数秒 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" /></noscript>
-  <link rel="stylesheet" href="./style.css?v=20260817memo12" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260817memo12" />
+  <link rel="stylesheet" href="./style.css?v=20260817lanshare3" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260817lanshare3" />
   <script>
     /* 尽早应用主题变量，减少闪烁；侧栏也依赖这些 CSS 变量 */
     (function () {
@@ -3092,8 +3092,8 @@ hello@world.org</textarea>
             <video id="ls-cam-video" class="qr-video" playsinline webkit-playsinline muted hidden></video>
             <button type="button" class="ghost-btn" id="ls-cam-stop" hidden>关闭摄像头</button>
           </div>
-          <label for="ls-join-paste" style="margin-top:0.65rem">或手动粘贴邀请文本</label>
-          <textarea id="ls-join-paste" class="mono area" rows="3" placeholder="devtools-lanshare:v1|..." spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+          <label for="ls-join-paste" style="margin-top:0.65rem">或粘贴邀请链接</label>
+          <textarea id="ls-join-paste" class="mono area" rows="3" placeholder="https://…/tools/#lanshare?j=…" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
           <div class="btn-row tool-actions" style="margin-top:0.35rem">
             <button type="button" class="secondary-btn" id="ls-join-confirm">确认加入</button>
           </div>
@@ -3102,9 +3102,9 @@ hello@world.org</textarea>
 
         <div id="ls-invite-area" hidden style="margin-top:0.85rem">
           <h2 class="subhead">邀请加入</h2>
-          <p class="hint tight">每加入一人后二维码会自动刷新，供下一位成员扫码。</p>
+          <p class="hint tight">二维码为网页链接，可用相机 / 微信等扫码打开并自动加入；也可复制链接分享。每新加入一人后自动刷新。</p>
           <div id="ls-invite-qr" class="qr-box-wrap" style="margin:0.5rem 0"></div>
-          <label for="ls-invite-text">邀请文本（可复制分享）</label>
+          <label for="ls-invite-text">邀请链接（可复制分享）</label>
           <textarea id="ls-invite-text" class="mono area" rows="3" readonly spellcheck="false"></textarea>
           <div class="btn-row tool-actions" style="margin-top:0.35rem">
             <button type="button" class="secondary-btn" id="ls-copy-invite">复制邀请</button>
@@ -3825,23 +3825,23 @@ adb devices</pre>
       <button type="button" class="primary-btn vsplit-fs-mark" id="vsplit-fs-mark">打起点</button>
     </div>
   </div>
-  <script src="./theme.js?v=20260817memo12"></script>
-  <script src="./temp.js?v=20260817memo12"></script>
+  <script src="./theme.js?v=20260817lanshare3"></script>
+  <script src="./temp.js?v=20260817lanshare3"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260817memo12"></script>
-  <script src="./about.js?v=20260817memo12" defer></script>
-  <script src="./extra.js?v=20260817memo12" defer></script>
-  <script src="./vtrim.js?v=20260817memo12" defer></script>
-  <script src="./vplay.js?v=20260817memo12" defer></script>
-  <script src="./audio.js?v=20260817memo12" defer></script>
-  <script src="./ffbridge.js?v=20260817memo12" defer></script>
-  <script src="./lanshare.js?v=20260817memo12" defer></script>
-  <script src="./setup.js?v=20260817memo12" defer></script>
+  <script src="./app.js?v=20260817lanshare3"></script>
+  <script src="./about.js?v=20260817lanshare3" defer></script>
+  <script src="./extra.js?v=20260817lanshare3" defer></script>
+  <script src="./vtrim.js?v=20260817lanshare3" defer></script>
+  <script src="./vplay.js?v=20260817lanshare3" defer></script>
+  <script src="./audio.js?v=20260817lanshare3" defer></script>
+  <script src="./ffbridge.js?v=20260817lanshare3" defer></script>
+  <script src="./lanshare.js?v=20260817lanshare3" defer></script>
+  <script src="./setup.js?v=20260817lanshare3" defer></script>
   <script src="./imgkit.js?v=20260810l" defer></script>
-  <script src="./memo.js?v=20260817memo12" defer></script>
-  <script src="./textimg.js?v=20260817memo12" defer></script>
-  <script src="./imgtext.js?v=20260817memo12" defer></script>
-  <script src="./pwa.js?v=20260817memo12" defer></script>
+  <script src="./memo.js?v=20260817lanshare3" defer></script>
+  <script src="./textimg.js?v=20260817lanshare3" defer></script>
+  <script src="./imgtext.js?v=20260817lanshare3" defer></script>
+  <script src="./pwa.js?v=20260817lanshare3" defer></script>
   <script src="./vendor/js-yaml.min.js" defer></script>
   <script src="./vendor/spark-md5.min.js" defer></script>
   <script src="./vendor/qrcode.min.js" defer></script>

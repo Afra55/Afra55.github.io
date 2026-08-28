@@ -52,13 +52,13 @@ async function main() {
   assert(/id="ls-copy-invite"/.test(html), "缺少复制邀请按钮");
   assert(/id="ls-scan-file-input"/.test(html), "缺少图片识别邀请码入口");
   assert(/lanshare\.js/.test(html), "index.html 未引用 lanshare.js");
-  assert(/20260817lanshare2/.test(html), "index.html 版本 query 未 bump");
+  assert(/20260817lanshare3/.test(html), "index.html 版本 query 未 bump");
 
   const js = fs.readFileSync(path.join(root, "lanshare.js"), "utf8");
-  assert(/navigator\.share/.test(js), "缺少移动端分享保存逻辑");
-  assert(/whenDcOpen/.test(js), "缺少 DataChannel open 竞态处理");
-  assert(/waitDcDrain/.test(js), "缺少发送背压控制");
-  assert(/isIOS/.test(js) && /isAndroid/.test(js), "缺少 iOS/Android 检测");
+  assert(/inviteLinkBase/.test(js), "缺少 inviteLinkBase");
+  assert(/buildInviteUrl/.test(js), "缺少 buildInviteUrl");
+  assert(/parseInviteAsync/.test(js), "缺少 parseInviteAsync");
+  assert(/tryAutoJoinFromHash/.test(js), "缺少扫码深链自动加入");
 
   const appJs = fs.readFileSync(path.join(root, "app.js"), "utf8");
   assert(/lanshare/.test(appJs), "app.js 未注册 lanshare");
@@ -96,25 +96,24 @@ async function main() {
         const page = await browser.newPage();
         await page.setUserAgent(p.ua);
         await page.goto(new URL("#lanshare", baseUrl).href, { waitUntil: "networkidle2", timeout: 60000 });
-        const result = await page.evaluate(() => {
+        const result = await page.evaluate(async () => {
           const api = window.LanShareSelfTest;
           if (!api) return { ok: false, err: "LanShareSelfTest missing" };
           const fakeSdp = "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n";
           const room = "TEST01";
-          const enc =
-            `devtools-lanshare:v1|${room}|` +
-            btoa(JSON.stringify({ hostId: "host1", hostName: "H", sdp: fakeSdp }))
-              .replace(/\+/g, "-")
-              .replace(/\//g, "_")
-              .replace(/=+$/, "");
+          const token = await api.packInvitePayload({ v: 1, r: room, h: "host1", n: "H", s: fakeSdp });
+          const url = `${api.inviteLinkBase()}#lanshare?j=${token}`;
           let parsed;
           try {
-            parsed = api.parseInvite(enc);
+            parsed = await api.parseInviteAsync(url);
           } catch (e) {
             return { ok: false, err: e.message };
           }
+          const urlOk = /^https?:\/\//.test(url) && url.includes("#lanshare?j=");
           return {
-            ok: api.webrtcSupported() && parsed.roomId === room,
+            ok: api.webrtcSupported() && parsed.roomId === room && urlOk,
+            urlLen: url.length,
+            urlOk,
             webrtc: api.webrtcSupported(),
             ios: api.isIOS(),
             android: api.isAndroid(),

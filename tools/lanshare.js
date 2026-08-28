@@ -69,6 +69,7 @@
     controlDc: null,
     pendingJoin: null,
     pageHiddenWarn: false,
+    autoJoinTried: false,
   };
 
   function isIOS() {
@@ -107,8 +108,12 @@
   }
 
   function b64enc(obj) {
-    const json = JSON.stringify(obj);
+    const json = typeof obj === "string" ? obj : JSON.stringify(obj);
     const bytes = new TextEncoder().encode(json);
+    return b64urlFromBytes(bytes);
+  }
+
+  function b64urlFromBytes(bytes) {
     let bin = "";
     bytes.forEach((b) => {
       bin += String.fromCharCode(b);
@@ -116,12 +121,142 @@
     return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
 
-  function b64dec(str) {
+  function b64urlToBytes(str) {
     const pad = str.length % 4 ? "=".repeat(4 - (str.length % 4)) : "";
     const b64 = str.replace(/-/g, "+").replace(/_/g, "/") + pad;
     const bin = atob(b64);
-    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
-    return JSON.parse(new TextDecoder().decode(bytes));
+    return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+  }
+
+  function b64dec(str) {
+    return JSON.parse(new TextDecoder().decode(b64urlToBytes(str)));
+  }
+
+  function inviteLinkBase() {
+    try {
+      const u = new URL(location.href);
+      u.search = "";
+      u.hash = "";
+      let p = u.pathname.replace(/\/index\.html$/i, "");
+      if (!p.endsWith("/")) p += "/";
+      return `${u.origin}${p}`;
+    } catch {
+      return "https://afra55.github.io/tools/";
+    }
+  }
+
+  function trimSdpForLan(sdp) {
+    if (!sdp) return sdp;
+    let host = 0;
+    const keep = [];
+    for (const line of sdp.split(/\r?\n/)) {
+      if (!line) continue;
+      if (line.startsWith("a=candidate:")) {
+        if (!/ typ host /.test(line)) continue;
+        host += 1;
+        if (host > 6) continue;
+      }
+      if (line.startsWith("a=end-of-candidates")) continue;
+      keep.push(line);
+    }
+    return `${keep.join("\r\n")}\r\n`;
+  }
+
+  function toInviteRecord({ roomId, hostId, hostName, sdp }) {
+    return { v: 1, r: roomId, h: hostId, n: hostName, s: trimSdpForLan(sdp) };
+  }
+
+  function fromInviteRecord(rec) {
+    return {
+      roomId: rec.r || rec.roomId,
+      hostId: rec.h || rec.hostId,
+      hostName: rec.n || rec.hostName,
+      sdp: rec.s || rec.sdp,
+    };
+  }
+
+  async function packInvitePayload(obj) {
+    const json = JSON.stringify(obj);
+    const raw = new TextEncoder().encode(json);
+    if (typeof CompressionStream !== "undefined") {
+      try {
+        const buf = await new Response(new Blob([raw]).stream().pipeThrough(new CompressionStream("deflate"))).arrayBuffer();
+        return `z${b64urlFromBytes(new Uint8Array(buf))}`;
+      } catch {
+        /* fall through */
+      }
+    }
+    return `r${b64urlFromBytes(raw)}`;
+  }
+
+  async function unpackInvitePayload(token) {
+    const t = String(token || "").trim();
+    if (!t) throw new Error("邀请数据为空");
+    if (t.startsWith("z")) {
+      if (typeof DecompressionStream === "undefined") throw new Error("当前浏览器无法解压邀请链接");
+      const bytes = b64urlToBytes(t.slice(1));
+      const out = await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream("deflate"))).arrayBuffer();
+      return JSON.parse(new TextDecoder().decode(out));
+    }
+    if (t.startsWith("r")) return JSON.parse(new TextDecoder().decode(b64urlToBytes(t.slice(1))));
+    return b64dec(t);
+  }
+
+  async function buildInviteUrl(sdp) {
+    const token = await packInvitePayload(
+      toInviteRecord({ roomId: state.roomId, hostId: state.peerId, hostName: state.peerName, sdp })
+    );
+    return `${inviteLinkBase()}#lanshare?j=${token}`;
+  }
+
+  async function parseInviteAsync(text) {
+    const raw = normalizeInviteText(text);
+    if (/^https?:\/\//i.test(raw)) {
+      let u;
+      try {
+        u = new URL(raw);
+      } catch {
+        throw new Error("无效的邀请链接");
+      }
+      const frag = u.hash.replace(/^#/, "");
+      if (frag.includes("lanshare")) return parseInviteAsync(frag);
+      throw new Error("链接不是互传邀请");
+    }
+    if (raw.startsWith("lanshare")) {
+      const q = raw.indexOf("?");
+      if (q >= 0) {
+        const j = new URLSearchParams(raw.slice(q + 1)).get("j");
+        if (j) {
+          const inv = fromInviteRecord(await unpackInvitePayload(j));
+          if (!inv.sdp) throw new Error("邀请缺少连接信息");
+          return inv;
+        }
+      }
+    }
+    if (raw.startsWith(`${PROTO}|`)) {
+      const i = raw.indexOf("|", PROTO.length + 1);
+      if (i < 0) throw new Error("邀请码格式错误");
+      const roomId = raw.slice(PROTO.length + 1, i);
+      const data = b64dec(raw.slice(i + 1));
+      if (!data.sdp && !data.s) throw new Error("邀请码缺少连接信息");
+      return fromInviteRecord({ roomId, ...data, sdp: data.sdp || data.s });
+    }
+    if (/^[zr][A-Za-z0-9_-]+$/.test(raw)) {
+      const inv = fromInviteRecord(await unpackInvitePayload(raw));
+      if (!inv.sdp) throw new Error("邀请缺少连接信息");
+      return inv;
+    }
+    throw new Error("无效的邀请链接");
+  }
+
+  function isInviteScanData(data) {
+    const s = normalizeInviteText(data);
+    if (!s) return false;
+    if (s.startsWith(PROTO)) return true;
+    if (/^https?:\/\//i.test(s) && /lanshare/i.test(s)) return true;
+    if (s.startsWith("lanshare?")) return true;
+    if (/^[zr][A-Za-z0-9_-]{24,}$/.test(s)) return true;
+    return false;
   }
 
   function fmtSize(n) {
@@ -314,18 +449,7 @@
   }
 
   function makeInvitePayload(sdp) {
-    return `${PROTO}|${state.roomId}|${b64enc({ hostId: state.peerId, hostName: state.peerName, sdp })}`;
-  }
-
-  function parseInvite(text) {
-    const raw = normalizeInviteText(text);
-    if (!raw.startsWith(`${PROTO}|`)) throw new Error("无效的邀请码");
-    const i = raw.indexOf("|", PROTO.length + 1);
-    if (i < 0) throw new Error("邀请码格式错误");
-    const roomId = raw.slice(PROTO.length + 1, i);
-    const data = b64dec(raw.slice(i + 1));
-    if (!data.sdp) throw new Error("邀请码缺少连接信息");
-    return { roomId, hostId: data.hostId, hostName: data.hostName, sdp: data.sdp };
+    return buildInviteUrl(sdp);
   }
 
   function renderQrBox(el, text, level) {
@@ -356,9 +480,10 @@
     els.inviteQr.innerHTML = '<p class="hint tight">邀请文本较长，二维码无法生成，请复制下方文本分享（或使用电脑加入）。</p>';
   }
 
-  function updateInviteDisplay(payload) {
-    if (els.inviteText) els.inviteText.value = payload;
-    renderInviteQr(payload);
+  async function updateInviteDisplay(sdp) {
+    const url = await buildInviteUrl(sdp);
+    if (els.inviteText) els.inviteText.value = url;
+    renderInviteQr(url);
   }
 
   function exportRoomState() {
@@ -551,7 +676,7 @@
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
     await waitIce(pc);
-    updateInviteDisplay(makeInvitePayload(pc.localDescription.sdp));
+    await updateInviteDisplay(pc.localDescription.sdp);
   }
 
   async function createRoom() {
@@ -580,7 +705,7 @@
     }
     setError("");
     saveName();
-    const inv = parseInvite(inviteText);
+    const inv = await parseInviteAsync(inviteText);
     cleanupRoom(false);
     state.peerId = uid();
     state.peerName = peerName();
@@ -1072,8 +1197,24 @@
   }
 
   async function joinFromScanData(data) {
-    if (!normalizeInviteText(data).startsWith(PROTO)) throw new Error("不是有效的互传邀请码");
+    if (!isInviteScanData(data)) throw new Error("不是有效的互传邀请");
     await joinRoom(data);
+  }
+
+  async function tryAutoJoinFromHash() {
+    if (state.roomId || state.autoJoinTried) return;
+    const full = String(location.hash || "").replace(/^#/, "");
+    if (!full.startsWith("lanshare?")) return;
+    const j = new URLSearchParams(full.slice(full.indexOf("?") + 1)).get("j");
+    if (!j) return;
+    state.autoJoinTried = true;
+    try {
+      setError("");
+      await joinRoom(`lanshare?j=${j}`);
+      history.replaceState(null, "", "#lanshare");
+    } catch (e) {
+      setError(e.message || "自动加入失败，请粘贴链接后点「确认加入」");
+    }
   }
 
   async function startScan() {
@@ -1115,7 +1256,7 @@
             const code = jsQR(canvas.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, {
               inversionAttempts: "attemptBoth",
             });
-            if (code?.data?.startsWith(PROTO)) {
+            if (code?.data && isInviteScanData(code.data)) {
               stopScan();
               joinFromScanData(code.data).catch((err) => setError(err.message));
               return;
@@ -1196,17 +1337,24 @@
   paintPlatformHint();
   disableIfUnsupported();
   paintStatus();
+  tryAutoJoinFromHash().catch(() => {});
 
   window.LanShareSelfTest = {
     webrtcSupported,
     isIOS,
     isAndroid,
     isMobileClient,
-    parseInvite,
-    makeInvitePayload,
+    parseInviteAsync,
+    buildInviteUrl,
+    packInvitePayload,
+    unpackInvitePayload,
+    inviteLinkBase,
+    isInviteScanData,
   };
 
   window.addEventListener("devtools:route", () => {
-    if (location.hash.replace("#", "").split("/")[0] !== "lanshare") stopScan();
+    const head = location.hash.replace("#", "").split(/[/?]/)[0];
+    if (head !== "lanshare") stopScan();
+    else tryAutoJoinFromHash().catch(() => {});
   });
 })();
