@@ -18,8 +18,8 @@
   <!-- 不阻塞首屏：Noto Serif SC 只给文转图用，避免每次拉取中文字体；Google 字体 CSS 在国内常卡住数秒 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" /></noscript>
-  <link rel="stylesheet" href="./style.css?v=20260817memo11" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260817memo11" />
+  <link rel="stylesheet" href="./style.css?v=20260817adbfs1" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260817adbfs1" />
   <script>
     /* 尽早应用主题变量，减少闪烁；侧栏也依赖这些 CSS 变量 */
     (function () {
@@ -2503,24 +2503,29 @@ hello@world.org</textarea>
                     </aside>
                   </div>
                 </section>
-                <section class="adb-fs-pane adb-fs-pane-local" aria-label="本机文件">
-                  <div class="adb-fs-pane-head">
-                    <strong>本机</strong>
-                    <span class="hint tight" id="adb-fs-local-meta">下载落点 · 可拖到左侧设备</span>
-                  </div>
-                  <div class="adb-path-row adb-fs-local-path">
-                    <button type="button" class="ghost-btn" id="adb-fs-local-up" title="上级">上级</button>
-                    <input id="adb-fs-local-path" class="mono" type="text" value="" spellcheck="false" autocomplete="off" placeholder="本机目录" />
-                    <button type="button" class="secondary-btn" id="adb-fs-local-go">打开</button>
-                  </div>
-                  <div class="btn-row tool-actions adb-fs-local-roots" id="adb-fs-local-roots" style="margin-top:0.35rem"></div>
-                  <div class="adb-fs-local" id="adb-fs-local" data-adb-local-drop>
-                    <div class="adb-fs-local-list" id="adb-fs-local-list"></div>
-                    <div class="btn-row tool-actions" style="margin-top:0.45rem">
-                      <button type="button" class="primary-btn" id="adb-fs-local-push" disabled>推送到设备当前目录</button>
+                <details class="adb-fs-pane adb-fs-pane-local" id="adb-fs-local-fold" aria-label="本机文件">
+                  <summary class="adb-fs-pane-head adb-fs-local-summary">
+                    <span class="adb-fs-local-summary-main">
+                      <strong>本机</strong>
+                      <span class="hint tight" id="adb-fs-local-meta">下载落点 · 点击展开</span>
+                    </span>
+                    <span class="hint tight adb-fs-local-summary-chevron" aria-hidden="true"></span>
+                  </summary>
+                  <div class="adb-fs-local-body">
+                    <div class="adb-path-row adb-fs-local-path">
+                      <button type="button" class="ghost-btn" id="adb-fs-local-up" title="上级">上级</button>
+                      <input id="adb-fs-local-path" class="mono" type="text" value="" spellcheck="false" autocomplete="off" placeholder="本机目录" />
+                      <button type="button" class="secondary-btn" id="adb-fs-local-go">打开</button>
+                    </div>
+                    <div class="btn-row tool-actions adb-fs-local-roots" id="adb-fs-local-roots" style="margin-top:0.35rem"></div>
+                    <div class="adb-fs-local" id="adb-fs-local" data-adb-local-drop>
+                      <div class="adb-fs-local-list" id="adb-fs-local-list"></div>
+                      <div class="btn-row tool-actions" style="margin-top:0.45rem">
+                        <button type="button" class="primary-btn" id="adb-fs-local-push" disabled>推送到设备当前目录</button>
+                      </div>
                     </div>
                   </div>
-                </section>
+                </details>
               </div>
               <p class="hint" id="adb-fs-hint">左右双栏：设备 ↔ 本机可互拖。文件夹下载优先由桥端打包 zip（≥0.6.12）。Delete / F2 / Ctrl+A / Esc 可用。</p>
             </div>
@@ -3723,22 +3728,22 @@ adb devices</pre>
       <button type="button" class="primary-btn vsplit-fs-mark" id="vsplit-fs-mark">打起点</button>
     </div>
   </div>
-  <script src="./theme.js?v=20260817memo11"></script>
-  <script src="./temp.js?v=20260817memo11"></script>
+  <script src="./theme.js?v=20260817adbfs1"></script>
+  <script src="./temp.js?v=20260817adbfs1"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260817memo11"></script>
-  <script src="./about.js?v=20260817memo11" defer></script>
-  <script src="./extra.js?v=20260817memo11" defer></script>
-  <script src="./vtrim.js?v=20260817memo11" defer></script>
-  <script src="./vplay.js?v=20260817memo11" defer></script>
-  <script src="./audio.js?v=20260817memo11" defer></script>
-  <script src="./ffbridge.js?v=20260817memo11" defer></script>
-  <script src="./setup.js?v=20260817memo11" defer></script>
+  <script src="./app.js?v=20260817adbfs1"></script>
+  <script src="./about.js?v=20260817adbfs1" defer></script>
+  <script src="./extra.js?v=20260817adbfs1" defer></script>
+  <script src="./vtrim.js?v=20260817adbfs1" defer></script>
+  <script src="./vplay.js?v=20260817adbfs1" defer></script>
+  <script src="./audio.js?v=20260817adbfs1" defer></script>
+  <script src="./ffbridge.js?v=20260817adbfs1" defer></script>
+  <script src="./setup.js?v=20260817adbfs1" defer></script>
   <script src="./imgkit.js?v=20260810l" defer></script>
-  <script src="./memo.js?v=20260817memo11" defer></script>
-  <script src="./textimg.js?v=20260817memo11" defer></script>
-  <script src="./imgtext.js?v=20260817memo11" defer></script>
-  <script src="./pwa.js?v=20260817memo11" defer></script>
+  <script src="./memo.js?v=20260817adbfs1" defer></script>
+  <script src="./textimg.js?v=20260817adbfs1" defer></script>
+  <script src="./imgtext.js?v=20260817adbfs1" defer></script>
+  <script src="./pwa.js?v=20260817adbfs1" defer></script>
   <script src="./vendor/js-yaml.min.js" defer></script>
   <script src="./vendor/spark-md5.min.js" defer></script>
   <script src="./vendor/qrcode.min.js" defer></script>

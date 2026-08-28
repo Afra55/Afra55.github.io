@@ -3803,9 +3803,17 @@ body.vsplit-fs-open {
 .adb-fs-dual {
   margin-top: 0.65rem;
   display: grid;
-  grid-template-columns: minmax(0, 1.35fr) minmax(14rem, 0.9fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.75rem;
   align-items: stretch;
+}
+
+.adb-fs-dual:has(.adb-fs-pane-local[open]) {
+  grid-template-columns: minmax(0, 1.35fr) minmax(14rem, 0.9fr);
+}
+
+#adb-fs-access:not([hidden]) {
+  min-height: 1.35em;
 }
 
 .adb-fs-pane {
@@ -3831,6 +3839,45 @@ body.vsplit-fs-open {
   margin-top: 0;
   flex: 1 1 auto;
   min-height: 16rem;
+}
+
+.adb-fs-pane-local .adb-fs-local-summary {
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+}
+
+.adb-fs-pane-local .adb-fs-local-summary::-webkit-details-marker {
+  display: none;
+}
+
+.adb-fs-local-summary-main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.65rem;
+  align-items: baseline;
+}
+
+.adb-fs-local-summary-chevron {
+  opacity: 0.72;
+  flex-shrink: 0;
+  font-size: 0;
+}
+
+.adb-fs-local-summary-chevron::before {
+  font-size: 0.82rem;
+}
+
+.adb-fs-pane-local[open] .adb-fs-local-summary-chevron::before {
+  content: "收起";
+}
+
+.adb-fs-pane-local:not([open]) .adb-fs-local-summary-chevron::before {
+  content: "展开";
+}
+
+.adb-fs-local-body {
+  margin-top: 0.35rem;
 }
 
 .adb-fs-pane-local .adb-fs-local {
@@ -3879,7 +3926,8 @@ body.vsplit-fs-open {
 }
 
 @media (max-width: 960px) {
-  .adb-fs-dual {
+  .adb-fs-dual,
+  .adb-fs-dual:has(.adb-fs-pane-local[open]) {
     grid-template-columns: 1fr;
   }
 

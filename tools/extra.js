@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-memo11";
+  const TOOLS_VERSION = "2026.08.17-adbfs1";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -11439,10 +11439,6 @@
       renderFsCrumbs(pathText);
       if (adbFsMeta) adbFsMeta.textContent = "加载中…";
       const accessEl = $("#adb-fs-access");
-      if (accessEl) {
-        accessEl.hidden = true;
-        accessEl.textContent = "";
-      }
       try {
         const data = await adbFetch(
           `/fs/list?serial=${encodeURIComponent(adbSelected)}&path=${encodeURIComponent(pathText)}`
@@ -11657,7 +11653,6 @@
         if (adbWorkspace) adbWorkspace.hidden = false;
         if ($("#adb-refresh")) $("#adb-refresh").disabled = false;
         await refreshAdbDevices({ silent: fromPoll });
-        if (!adbLocalRoots.length) loadLocalRoots().catch(() => {});
         return true;
       } catch (err) {
         adbConnected = false;
@@ -13097,6 +13092,18 @@
 
     $$(".adb-tab").forEach((btn) => {
       btn.addEventListener("click", () => switchAdbTab(btn.dataset.adbTab));
+    });
+
+    function ensureLocalPaneLoaded() {
+      if (!adbLocalRoots.length) return loadLocalRoots();
+      if (!adbLocalPath && adbLocalRoots.length) return loadLocalPath(adbLocalRoots[0].path);
+      syncLocalSaveMeta();
+      return Promise.resolve();
+    }
+
+    $("#adb-fs-local-fold")?.addEventListener("toggle", (e) => {
+      const open = Boolean(e.currentTarget?.open);
+      if (open) ensureLocalPaneLoaded().catch((err) => setError(adbError, err.message || String(err)));
     });
 
     $("#adb-select-all")?.addEventListener("click", () => {
