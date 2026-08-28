@@ -197,7 +197,7 @@ async function main() {
       pathRelabel: /新标签/.test(document.getElementById("memo-preview-path")?.textContent || ""),
       selectAllScope: /筛选结果/.test(document.querySelector(".memo-select-all-text")?.textContent || ""),
       previewCopy: Boolean(document.getElementById("memo-preview-copy")),
-      autoclipRemember: /记住/.test(document.querySelector(".memo-autoclip-flag")?.textContent || ""),
+      noAutoclip: !document.getElementById("memo-autoclip"),
       mobilePasteHint: Boolean(document.querySelector(".memo-hint-narrow")),
       clearFilters: Boolean(document.getElementById("memo-clear-filters")),
       friendlySearch: /标签名/.test(document.getElementById("memo-search")?.placeholder || ""),
@@ -209,7 +209,6 @@ async function main() {
       tempZone: Boolean(document.getElementById("memo-temp-zone")),
       tempFilter: Boolean(document.getElementById("memo-temp-filter")),
       tempPrompt: Boolean(document.getElementById("memo-temp-prompt")),
-      autoclipGlobal: /全站/.test(document.querySelector(".memo-autoclip-flag")?.textContent || ""),
       pageDropHint: /任意区域/.test(document.querySelector("#memo-drop .hint")?.textContent || ""),
     };
 
@@ -586,12 +585,11 @@ async function main() {
     await sleep(80);
     out.typeFilter.flatAll = document.querySelectorAll(".memo-type-group").length === 0;
 
-    // search + autoclip + gif type
+    // search + gif type
     const search = document.getElementById("memo-search");
     out.searchUi = {
       hasSearch: Boolean(search),
-      hasAutoclip: Boolean(document.getElementById("memo-autoclip")),
-      autoclipDefaultOff: document.getElementById("memo-autoclip") ? !document.getElementById("memo-autoclip").checked : false,
+      noAutoclip: !document.getElementById("memo-autoclip"),
       hasGifChip: Boolean(document.querySelector('#memo-type-filter [data-memo-type="gif"]')),
       hasLoadMore: Boolean(document.getElementById("memo-load-more")),
       hasSentinel: Boolean(document.getElementById("memo-scroll-sentinel")),
@@ -679,6 +677,26 @@ async function main() {
       previewInMore: Boolean(fileCard?.querySelector(".memo-more [data-memo-open]")),
       noteInMore: Boolean(fileCard?.querySelector(".memo-more [data-memo-note]")),
     };
+
+    await window.DevToolsMemo.ingestBlob(new Blob([new Uint8Array(16)], { type: "video/mp4" }), "smoke-clip.mp4");
+    await sleep(350);
+    const videoItem = (window.DevToolsMemo.getIndex().items || []).find((it) => it.type === "video");
+    const videoCard = videoItem ? document.querySelector(`.memo-card[data-memo-id="${videoItem.id}"]`) : null;
+    out.ctxTemp = { hasVideo: Boolean(videoItem) };
+    if (videoCard && videoItem) {
+      videoCard.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 48, clientY: 48 }));
+      await sleep(100);
+      const ctx = document.getElementById("memo-ctx");
+      const tempBtn = ctx?.querySelector('[data-memo-ctx-act="temp"]');
+      out.ctxTemp.ctxShown = Boolean(ctx && !ctx.hidden);
+      out.ctxTemp.hasTempAct = Boolean(tempBtn);
+      tempBtn?.click();
+      await sleep(220);
+      const row = (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === videoItem.id);
+      out.ctxTemp.marked = window.DevToolsMemo.isTempItem(row);
+      if (ctx) ctx.hidden = true;
+      await window.DevToolsMemo.clearItemTemp(videoItem.id);
+    }
 
     out.shareUi = {
       hasPreviewShare: Boolean(document.getElementById("memo-preview-share")),
@@ -964,7 +982,6 @@ async function main() {
         (window.DevToolsMemo.getIndex().items || []).length > 0,
       chipName: Boolean(document.querySelector(".memo-chip-name")),
       chipX: Boolean(document.querySelector(".memo-chip-x")),
-      autoclipStatus: Boolean(document.getElementById("memo-autoclip-status")),
       memoBeforeTextimg: (() => {
         const srcs = [...document.scripts].map((s) => s.src || "");
         const mi = srcs.findIndex((s) => /memo\.js/.test(s));
@@ -1015,7 +1032,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817vbbnodl2/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memoclip3/.test(s.src)),
     };
 
     out.pwa = {
@@ -1127,17 +1144,53 @@ async function main() {
     };
 
     out.timeSelect = {
-      has1: Boolean(document.querySelector('[data-memo-sel-hours="1"]')),
-      has3: Boolean(document.querySelector('[data-memo-sel-hours="3"]')),
-      has5: Boolean(document.querySelector('[data-memo-sel-hours="5"]')),
       hasToday: Boolean(document.querySelector("[data-memo-sel-today]")),
+      hasTemp: Boolean(document.querySelector("[data-memo-sel-temp]")),
       hasRange: Boolean(document.getElementById("memo-sel-range") && document.getElementById("memo-sel-range-btn")),
-      api: typeof window.DevToolsMemo.selectVisibleLastHours === "function",
+      api: typeof window.DevToolsMemo.selectVisibleToday === "function" && typeof window.DevToolsMemo.selectVisibleTemp === "function",
     };
     if (out.timeSelect.api) {
-      const n = window.DevToolsMemo.selectVisibleLastHours(1);
-      out.timeSelect.picked = n > 0;
+      const n = window.DevToolsMemo.selectVisibleToday();
+      out.timeSelect.pickedToday = n > 0;
       window.DevToolsMemo.selectVisibleByCreatedRange(0, -1);
+      const rows = window.DevToolsMemo.getIndex().items || [];
+      const tempRow = rows.find((it) => window.DevToolsMemo.isTempItem(it));
+      if (tempRow) {
+        const nt = window.DevToolsMemo.selectVisibleTemp();
+        out.timeSelect.pickedTemp = nt > 0;
+        window.DevToolsMemo.selectVisibleByCreatedRange(0, -1);
+      } else {
+        out.timeSelect.pickedTemp = true;
+      }
+      const fromEl = document.getElementById("memo-sel-from");
+      const toEl = document.getElementById("memo-sel-to");
+      const isChecked = (id) => Boolean(document.querySelector(`[data-memo-check="${id}"]`)?.checked);
+      if (fromEl && toEl && rows.length >= 2) {
+        const sorted = [...rows].sort((a, b) => (Number(a.createdAt) || 0) - (Number(b.createdAt) || 0));
+        const older = sorted[0];
+        const newer = sorted[sorted.length - 1];
+        const fmt = (ms) => {
+          const d = new Date(ms);
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          return `${d.getFullYear()}-${m}-${day}`;
+        };
+        fromEl.value = fmt(Number(older.createdAt) || 0);
+        toEl.value = "";
+        window.DevToolsMemo.selectVisibleDateRangeFromInputs();
+        out.timeSelect.fromOpen = isChecked(older.id);
+        window.DevToolsMemo.selectVisibleByCreatedRange(0, -1);
+        fromEl.value = "";
+        toEl.value = fmt(Number(newer.createdAt) || 0);
+        window.DevToolsMemo.selectVisibleDateRangeFromInputs();
+        out.timeSelect.toToday = isChecked(newer.id);
+        fromEl.value = "";
+        toEl.value = "";
+        window.DevToolsMemo.selectVisibleByCreatedRange(0, -1);
+      } else {
+        out.timeSelect.fromOpen = true;
+        out.timeSelect.toToday = true;
+      }
     }
 
     out.batchPinWarn = { api: typeof window.DevToolsMemo.batchDeleteConfirmMessage === "function" };
@@ -1281,7 +1334,10 @@ async function main() {
   if (errors.length) failed.push(...errors.map((e) => `page: ${e}`));
   if (!result.panelActive) failed.push("memo panel not active");
   if (!result.hasEditor || !result.hasList) failed.push("missing editor/list");
-  if (!/vbbnodl|vbbbatch|bridgebb|imgzoom|vsfsjank|vsplitfs|pwa|navpwa|memopin|navfoot|navlast|navfly/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
+    failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
+  }
+  if (!/memoclip3/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1412,11 +1468,11 @@ async function main() {
   if (!result.modules?.backupIsFold || !result.modules?.batchInList || !result.modules?.importPassDlg || !result.modules?.pathRelabel || !result.modules?.selectAllScope) {
     failed.push("memo UX overhaul chrome missing (backup fold/batch/import pass/path/select-all)");
   }
-  if (!result.uxOverhaul?.backupFold || !result.uxOverhaul?.chipName || !result.uxOverhaul?.chipX || !result.uxOverhaul?.memoBeforeTextimg || !result.uxOverhaul?.autoclipStatus) {
-    failed.push("memo UX overhaul: backup fold / chip split / memo load order / autoclip status");
+  if (!result.uxOverhaul?.backupFold || !result.uxOverhaul?.chipName || !result.uxOverhaul?.chipX || !result.uxOverhaul?.memoBeforeTextimg) {
+    failed.push("memo UX overhaul: backup fold / chip split / memo load order");
   }
-  if (!result.modules?.previewCopy || !result.modules?.autoclipRemember || !result.modules?.mobilePasteHint) {
-    failed.push("memo clipboard takeout / autoclip / paste hint missing");
+  if (!result.modules?.previewCopy || !result.modules?.noAutoclip || !result.modules?.mobilePasteHint) {
+    failed.push("memo clipboard takeout / no-autoclip / paste hint missing");
   }
   if (!result.modules?.quickText || !result.modules?.quickTextNotDetails) {
     failed.push("quick text box should be always visible in capture bar");
@@ -1526,14 +1582,14 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/vbbnodl2/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to vbbnodl2");
+  if (!/memoclip3/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memoclip3");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
   }
-  if (!result.modules?.autoclipGlobal || !result.modules?.pageDropHint) {
-    failed.push("memo autoclip should be global and page-wide drop hint");
+  if (!result.modules?.pageDropHint) {
+    failed.push("memo page-wide drop hint missing");
   }
   if (!result.dragSelect?.cardNotDraggable || (result.dragSelect?.canReorder && !result.dragSelect?.hasDragHandle)) {
     failed.push("memo cards should use drag handle instead of whole-card drag");
@@ -1598,13 +1654,14 @@ async function main() {
     failed.push("desktop nav compact should keep using hover/pin flyouts");
   }
   if (
-    !result.timeSelect?.has1 ||
-    !result.timeSelect?.has3 ||
-    !result.timeSelect?.has5 ||
     !result.timeSelect?.hasToday ||
+    !result.timeSelect?.hasTemp ||
     !result.timeSelect?.hasRange ||
     !result.timeSelect?.api ||
-    !result.timeSelect?.picked
+    !result.timeSelect?.pickedToday ||
+    result.timeSelect?.pickedTemp !== true ||
+    result.timeSelect?.fromOpen !== true ||
+    result.timeSelect?.toToday !== true
   ) {
     failed.push("memo time-range select chips should check visible items without deleting");
   }
@@ -1625,8 +1682,8 @@ async function main() {
   if (!result.moreKeep?.preview || !result.moreKeep?.note || !result.moreKeep?.del || !result.moreKeep?.top || !result.moreKeep?.pin) {
     failed.push("memo more menu should keep preview/note/delete plus pin/move-to-top");
   }
-  if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
-    failed.push("search/autoclip UI missing or autoclip not default-off");
+  if (!result.searchUi?.hasSearch || !result.searchUi?.noAutoclip) {
+    failed.push("search UI missing or autoclip checkbox should be removed");
   }
   if (!result.searchUi?.hasGifChip) failed.push("gif type chip missing");
   if (!result.searchUi?.hitText || !result.searchUi?.onlyTextish) failed.push("content search failed");
