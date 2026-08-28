@@ -18,8 +18,8 @@
   <!-- 不阻塞首屏：Noto Serif SC 只给文转图用，避免每次拉取中文字体；Google 字体 CSS 在国内常卡住数秒 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" /></noscript>
-  <link rel="stylesheet" href="./style.css?v=20260817vplay3" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260817vplay3" />
+  <link rel="stylesheet" href="./style.css?v=20260817vplay4" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260817vplay4" />
   <script>
     /* 尽早应用主题变量，减少闪烁；侧栏也依赖这些 CSS 变量 */
     (function () {
@@ -2209,23 +2209,29 @@ hello@world.org</textarea>
           <div class="vplay-zoom-wrap" id="vplay-zoom-wrap" title="可拖入视频文件；滚轮缩放，拖拽移动，双击暂停/播放">
             <p class="vplay-empty-hint hint" id="vplay-empty-hint">拖入视频文件到此处<br /><span class="hint tight">或点击选择 · MP4 / WebM / MOV</span></p>
             <video id="vplay-video" playsinline preload="metadata" hidden></video>
-            <div class="vplay-zoom-hud">
-              <button type="button" class="ghost-btn vplay-zoom-btn" id="vplay-play" disabled>播放</button>
-              <button type="button" class="ghost-btn vplay-zoom-btn" id="vplay-mute" disabled aria-pressed="true">开声音</button>
+            <div class="vplay-zoom-hud" aria-label="缩放控制" hidden>
               <button type="button" class="ghost-btn vplay-zoom-btn" id="vplay-zoom-out" disabled title="缩小">－</button>
               <span class="mono vplay-zoom-pct" id="vplay-zoom-pct">100%</span>
               <button type="button" class="ghost-btn vplay-zoom-btn" id="vplay-zoom-in" disabled title="放大">＋</button>
               <button type="button" class="ghost-btn vplay-zoom-btn" id="vplay-zoom-reset" disabled title="还原">还原</button>
               <button type="button" class="ghost-btn vplay-zoom-btn" id="vplay-zoom-rotate" disabled title="旋转 90°">↻</button>
-              <button type="button" class="ghost-btn vplay-zoom-btn" id="vplay-fs" disabled title="全屏">全屏</button>
             </div>
+            <div class="vplay-height-resize" id="vplay-height-resize" role="separator" aria-orientation="horizontal" aria-label="拖动调整预览高度" title="拖动调整高度"></div>
           </div>
           <div class="vplay-transport">
+            <button type="button" class="ghost-btn vplay-transport-btn" id="vplay-play" disabled>播放</button>
+            <button type="button" class="ghost-btn vplay-transport-btn" id="vplay-mute" disabled aria-pressed="true">开声音</button>
             <label class="visually-hidden" for="vplay-scrub">播放进度</label>
             <input id="vplay-scrub" class="vsplit-scrub vplay-scrub" type="range" min="0" max="1000" value="0" step="1" disabled />
             <span class="mono vplay-clock" id="vplay-clock">0:00 / 0:00</span>
+            <button type="button" class="ghost-btn vplay-transport-btn" id="vplay-fs" disabled title="全屏">全屏</button>
           </div>
-          <p class="hint tight">拖入视频即可播放 · 滚轮缩放 · 按住拖拽画面 · 双击暂停/播放</p>
+          <div class="vplay-height-row">
+            <label class="hint tight" for="vplay-height">预览高度</label>
+            <input id="vplay-height" class="vplay-height-slider" type="range" min="280" max="900" value="480" step="10" aria-valuetext="480 像素" />
+            <span class="mono vplay-height-label" id="vplay-height-label">480px</span>
+          </div>
+          <p class="hint tight">拖入视频即可播放 · 滚轮缩放 · 按住拖拽画面 · 双击暂停/播放 · 底边可拉高预览区</p>
         </div>
         <p class="error" id="vplay-error" hidden></p>
       </div>
@@ -3725,22 +3731,22 @@ adb devices</pre>
       <button type="button" class="primary-btn vsplit-fs-mark" id="vsplit-fs-mark">打起点</button>
     </div>
   </div>
-  <script src="./theme.js?v=20260817vplay3"></script>
-  <script src="./temp.js?v=20260817vplay3"></script>
+  <script src="./theme.js?v=20260817vplay4"></script>
+  <script src="./temp.js?v=20260817vplay4"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260817vplay3"></script>
-  <script src="./about.js?v=20260817vplay3" defer></script>
-  <script src="./extra.js?v=20260817vplay3" defer></script>
-  <script src="./vtrim.js?v=20260817vplay3" defer></script>
-  <script src="./vplay.js?v=20260817vplay3" defer></script>
-  <script src="./audio.js?v=20260817vplay3" defer></script>
-  <script src="./ffbridge.js?v=20260817vplay3" defer></script>
-  <script src="./setup.js?v=20260817vplay3" defer></script>
+  <script src="./app.js?v=20260817vplay4"></script>
+  <script src="./about.js?v=20260817vplay4" defer></script>
+  <script src="./extra.js?v=20260817vplay4" defer></script>
+  <script src="./vtrim.js?v=20260817vplay4" defer></script>
+  <script src="./vplay.js?v=20260817vplay4" defer></script>
+  <script src="./audio.js?v=20260817vplay4" defer></script>
+  <script src="./ffbridge.js?v=20260817vplay4" defer></script>
+  <script src="./setup.js?v=20260817vplay4" defer></script>
   <script src="./imgkit.js?v=20260810l" defer></script>
-  <script src="./memo.js?v=20260817vplay3" defer></script>
-  <script src="./textimg.js?v=20260817vplay3" defer></script>
-  <script src="./imgtext.js?v=20260817vplay3" defer></script>
-  <script src="./pwa.js?v=20260817vplay3" defer></script>
+  <script src="./memo.js?v=20260817vplay4" defer></script>
+  <script src="./textimg.js?v=20260817vplay4" defer></script>
+  <script src="./imgtext.js?v=20260817vplay4" defer></script>
+  <script src="./pwa.js?v=20260817vplay4" defer></script>
   <script src="./vendor/js-yaml.min.js" defer></script>
   <script src="./vendor/spark-md5.min.js" defer></script>
   <script src="./vendor/qrcode.min.js" defer></script>

@@ -20,6 +20,14 @@
   const clock = $("#vplay-clock");
   const fsBtn = $("#vplay-fs");
   const emptyHint = $("#vplay-empty-hint");
+  const zoomHud = $(".vplay-zoom-hud", zoomWrap || document);
+  const heightSlider = $("#vplay-height");
+  const heightLabel = $("#vplay-height-label");
+  const heightResize = $("#vplay-height-resize");
+
+  const HEIGHT_MIN = 280;
+  const HEIGHT_DEFAULT = 480;
+  const HEIGHT_STORAGE = "vplay-wrap-height-v1";
 
   let sourceFile = null;
   let objectUrl = "";
@@ -125,10 +133,86 @@
     });
   }
 
+  function heightMax() {
+    return Math.max(HEIGHT_MIN, Math.min(Math.round(window.innerHeight * 0.92), 960));
+  }
+
+  function clampHeight(px) {
+    return Math.max(HEIGHT_MIN, Math.min(heightMax(), Math.round(Number(px) || HEIGHT_DEFAULT)));
+  }
+
+  function readStoredHeight() {
+    try {
+      const raw = localStorage.getItem(HEIGHT_STORAGE);
+      const n = Number(raw);
+      if (Number.isFinite(n) && n >= HEIGHT_MIN) return clampHeight(n);
+    } catch (_) {}
+    return clampHeight(HEIGHT_DEFAULT);
+  }
+
+  function syncHeightUi(px) {
+    const h = clampHeight(px);
+    if (heightSlider) {
+      heightSlider.min = String(HEIGHT_MIN);
+      heightSlider.max = String(heightMax());
+      heightSlider.value = String(h);
+      heightSlider.setAttribute("aria-valuetext", `${h} 像素`);
+    }
+    if (heightLabel) heightLabel.textContent = `${h}px`;
+    return h;
+  }
+
+  function applyWrapHeight(px, opts = {}) {
+    if (!zoomWrap) return HEIGHT_DEFAULT;
+    const h = syncHeightUi(px);
+    zoomWrap.style.setProperty("--vplay-wrap-height", `${h}px`);
+    zoomWrap.style.height = `${h}px`;
+    if (opts.persist !== false) {
+      try {
+        localStorage.setItem(HEIGHT_STORAGE, String(h));
+      } catch (_) {}
+    }
+    if (opts.refit !== false && sourceFile && video?.videoWidth) fitZoomAfterLayout();
+    return h;
+  }
+
+  function bindHeightControls() {
+    applyWrapHeight(readStoredHeight(), { persist: false, refit: false });
+    heightSlider?.addEventListener("input", () => {
+      applyWrapHeight(Number(heightSlider.value), { persist: true, refit: true });
+    });
+    if (!heightResize || heightResize.dataset.bound === "1") return;
+    heightResize.dataset.bound = "1";
+    let startY = 0;
+    let startH = HEIGHT_DEFAULT;
+    const onMove = (e) => {
+      const dy = e.clientY - startY;
+      applyWrapHeight(startH + dy, { persist: true, refit: true });
+    };
+    const onEnd = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onEnd);
+      window.removeEventListener("pointercancel", onEnd);
+    };
+    heightResize.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      startY = e.clientY;
+      startH = zoomWrap?.getBoundingClientRect().height || readStoredHeight();
+      try {
+        heightResize.setPointerCapture?.(e.pointerId);
+      } catch (_) {}
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onEnd);
+      window.addEventListener("pointercancel", onEnd);
+    });
+  }
+
   function syncEmptyState() {
     const has = Boolean(sourceFile && video?.src);
     if (emptyHint) emptyHint.hidden = has;
     if (video) video.hidden = !has;
+    if (zoomHud) zoomHud.hidden = !has;
     if (zoomWrap) zoomWrap.classList.toggle("is-empty", !has);
   }
 
@@ -350,7 +434,7 @@
     if (!zoomWrap || zoomWrap.dataset.bound === "1") return;
     zoomWrap.dataset.bound = "1";
     zoomWrap.addEventListener("click", (e) => {
-      if (sourceFile || e.target.closest?.(".vplay-zoom-hud")) return;
+      if (sourceFile || e.target.closest?.(".vplay-zoom-hud, .vplay-height-resize")) return;
       fileInput?.click();
     });
     zoomWrap.addEventListener(
@@ -364,7 +448,7 @@
     );
     zoomWrap.addEventListener("pointerdown", (e) => {
       if (!sourceFile) return;
-      if (e.target.closest?.(".vplay-zoom-hud")) return;
+      if (e.target.closest?.(".vplay-zoom-hud, .vplay-height-resize")) return;
       try {
         zoomWrap.setPointerCapture?.(e.pointerId);
       } catch (_) {}
@@ -414,7 +498,7 @@
     zoomWrap.addEventListener("pointercancel", endPtr);
     zoomWrap.addEventListener("dblclick", (e) => {
       if (!sourceFile) return;
-      if (e.target.closest?.(".vplay-zoom-hud")) return;
+      if (e.target.closest?.(".vplay-zoom-hud, .vplay-height-resize")) return;
       togglePlay();
     });
   }
@@ -500,6 +584,7 @@
 
   bindFileDrop();
   bindZoom();
+  bindHeightControls();
   fileInput?.addEventListener("change", (e) => {
     loadFile(e.target.files?.[0]).catch((err) => setError(err.message || String(err)));
   });
@@ -542,6 +627,7 @@
   video?.addEventListener("pause", syncPlayUi);
   video?.addEventListener("loadedmetadata", () => fitZoomAfterLayout());
   window.addEventListener("resize", () => {
+    if (heightSlider) syncHeightUi(Number(heightSlider.value) || readStoredHeight());
     if (!sourceFile || !video?.videoWidth) return;
     const rel = zoom.fit > 0 ? zoom.scale / zoom.fit : 1;
     fitZoom();
