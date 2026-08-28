@@ -1279,27 +1279,6 @@
     if (!recentList.children.length) {
       recentWrap.hidden = true;
     }
-    bindRecentWheel();
-  }
-
-  function bindRecentWheel() {
-    if (!recentList || recentList.dataset.wheelBound === "1") return;
-    recentList.dataset.wheelBound = "1";
-    recentList.addEventListener(
-      "wheel",
-      (e) => {
-        if (recentList.scrollWidth <= recentList.clientWidth + 1) return;
-        const dx = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-        if (!dx) return;
-        const max = recentList.scrollWidth - recentList.clientWidth;
-        const next = Math.max(0, Math.min(max, recentList.scrollLeft + dx));
-        if (next === recentList.scrollLeft) return;
-        e.preventDefault();
-        e.stopPropagation();
-        recentList.scrollLeft = next;
-      },
-      { passive: false }
-    );
   }
 
   function drawerFocusables() {

@@ -1158,7 +1158,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navscroll1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navrecent2/.test(s.src)),
     };
 
     out.pwa = {
@@ -1362,22 +1362,21 @@ async function main() {
     const recentListEl = document.getElementById("tool-recent-list");
     out.recentUi = {
       noLabel: !document.querySelector(".nav-recent-label"),
+      hasAxis: Boolean(document.querySelector(".nav-recent-axis")),
       chipMax: document.querySelectorAll(".nav-recent-chip").length <= 8,
-      nowrap: Boolean(recentListEl) && getComputedStyle(recentListEl).flexWrap === "nowrap",
-      overflowX: recentListEl ? getComputedStyle(recentListEl).overflowX : "",
-      wheelMoved: false,
+      twoRowGrid: Boolean(recentListEl) && getComputedStyle(recentListEl).display === "grid",
+      noHorizontalScroll: recentListEl
+        ? getComputedStyle(recentListEl).overflowX !== "auto" && getComputedStyle(recentListEl).overflowX !== "scroll"
+        : false,
     };
     try {
       const ids = ["json", "base64", "uuid", "hash", "regex", "color", "url", "cron"];
       localStorage.setItem("devtools-tool-recent-v1", JSON.stringify(ids));
       window.DevToolsNav?.renderRecent?.();
       if (recentListEl) {
-        recentListEl.style.width = "72px";
-        const before = recentListEl.scrollLeft;
-        recentListEl.dispatchEvent(new WheelEvent("wheel", { deltaY: 120, bubbles: true, cancelable: true }));
         out.recentUi.chipMax = document.querySelectorAll(".nav-recent-chip").length <= 8;
-        out.recentUi.wheelMoved = recentListEl.scrollLeft > before;
-        recentListEl.style.width = "";
+        const gridCols = getComputedStyle(recentListEl).gridTemplateColumns.split(" ").filter(Boolean).length;
+        out.recentUi.gridCols = gridCols;
       }
     } catch (_) {}
 
@@ -1470,7 +1469,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/navscroll1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/navrecent2/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1730,8 +1729,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/navscroll1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to navscroll1");
+  if (!/navrecent2/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to navrecent2");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
@@ -1763,8 +1762,15 @@ async function main() {
   if (!result.cacheMeta?.nowrap || !result.cacheMeta?.noLongTail || !result.cacheMeta?.hasTitle) {
     failed.push("nav cache hint should be a single short line with details in title");
   }
-  if (!result.recentUi?.noLabel || !result.recentUi?.chipMax || !result.recentUi?.nowrap || result.recentUi?.overflowX !== "auto" || !result.recentUi?.wheelMoved) {
-    failed.push("recent tools should be a compact single row that wheel-scrolls horizontally");
+  if (
+    !result.recentUi?.noLabel ||
+    !result.recentUi?.hasAxis ||
+    !result.recentUi?.chipMax ||
+    !result.recentUi?.twoRowGrid ||
+    !result.recentUi?.noHorizontalScroll ||
+    (result.recentUi?.gridCols || 0) < 2
+  ) {
+    failed.push("recent tools should use a two-row grid without horizontal scrollbar overlap");
   }
   if (!result.sortHint?.hasEl || !result.sortHint?.api || !result.sortHint?.marked || !result.sortHint?.visibleFirst || !result.sortHint?.hiddenSecond) {
     failed.push("sort hint should show once then hide on later visits");
