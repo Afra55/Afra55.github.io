@@ -769,6 +769,7 @@
   const RECENT_KEY = "devtools-tool-recent-v1";
   const FAVORITES_KEY = "devtools-tool-favorites-v1";
   const LAST_TOOL_KEY = "devtools-tool-last-v1";
+  const LAST_TOOL_SESSION_KEY = "devtools-tool-last-session-v1";
   const SORT_HINT_KEY = "devtools-nav-sort-hint-seen-v1";
   /** 站点页不算「上次工具」，避免 about/setup 盖掉真实工具 */
   const SITE_NAV_IDS = new Set(["about", "setup"]);
@@ -1223,11 +1224,19 @@
     try {
       localStorage.setItem(LAST_TOOL_KEY, id);
     } catch (_) {}
+    try {
+      sessionStorage.setItem(LAST_TOOL_SESSION_KEY, id);
+    } catch (_) {}
   }
 
   function loadLastToolId() {
     try {
-      const saved = localStorage.getItem(LAST_TOOL_KEY);
+      let saved = localStorage.getItem(LAST_TOOL_KEY);
+      if (!saved) {
+        try {
+          saved = sessionStorage.getItem(LAST_TOOL_SESSION_KEY);
+        } catch (_) {}
+      }
       if (saved && DEFAULT_ORDER.includes(saved) && !SITE_NAV_IDS.has(saved) && isNavToolVisible(saved)) {
         return saved;
       }
@@ -1267,9 +1276,18 @@
     return route.tool === "media" ? route.tab || "gifmaker" : route.tool;
   }
 
-  function persistLastToolFromRoute(route = { tool: currentTool, tab: currentMediaTab }) {
-    const id = activeToolIdFromRoute(route);
-    if (id && id !== "timestamp") saveLastTool(id);
+  function navToolIdForSave(tool, tab, nextTool, nextTab) {
+    if (nextTool === "media") return nextTab || tab || currentMediaTab || "gifmaker";
+    return nextTool || tool;
+  }
+
+  function persistActiveTool(route) {
+    const id = activeToolIdFromRoute(route || { tool: currentTool, tab: currentMediaTab });
+    if (!id || id === "timestamp") {
+      if (!shouldRestoreLastTool()) saveLastTool("timestamp");
+      return;
+    }
+    saveLastTool(id);
   }
 
   /** iOS PWA / Safari 冷启动常带 #timestamp 或空 hash，需在此类「占位路由」上恢复上次工具 */
@@ -1751,6 +1769,7 @@
     syncNavCompactUi();
 
     if (!skipRecent) pushRecent(currentTool === "media" ? currentMediaTab : currentTool);
+    persistActiveTool({ tool: currentTool, tab: currentMediaTab });
     // 手机分类拖拽排序后需保持抽屉打开
     if (!keepDrawer) {
       setDrawerOpen(false);
@@ -1778,6 +1797,8 @@
     }
     const nextTab = nextTabArg || (nextTool === "media" ? currentMediaTab : null);
     const hash = routeHash(nextTool, nextTab);
+    const persistId = navToolIdForSave(tool, tab, nextTool, nextTab);
+    if (persistId && persistId !== "timestamp") saveLastTool(persistId);
     const current = `#${String(location.hash || "").replace(/^#/, "")}`;
     // 媒体内切 Tab 用 replace，避免系统返回在子功能间来回跳
     const mediaTabOnly =
@@ -2440,7 +2461,7 @@
   });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
-      persistLastToolFromRoute();
+      persistActiveTool();
       return;
     }
     forceDrawerClosed();
@@ -2448,8 +2469,11 @@
     applyRoute({ skipRecent: true });
   });
   window.addEventListener("pagehide", () => {
-    persistLastToolFromRoute();
+    persistActiveTool();
     forceDrawerClosed();
+  });
+  document.addEventListener("freeze", () => {
+    persistActiveTool();
   });
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && document.body.classList.contains("nav-open")) {

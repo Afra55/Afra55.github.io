@@ -1162,7 +1162,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memobkp1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navlast3/.test(s.src)),
     };
 
     out.pwa = {
@@ -1441,6 +1441,14 @@ async function main() {
       window.dispatchEvent(new HashChangeEvent("hashchange"));
       out.lastTool.preserveLastKey = localStorage.getItem("devtools-tool-last-v1") === "memo";
       out.lastTool.memoPanelAfterRestore = document.getElementById("memo")?.classList.contains("is-workspace-active");
+      localStorage.setItem("devtools-tool-last-v1", "vbb");
+      history.replaceState(null, "", "#timestamp");
+      window.DevToolsNav.restoreLastToolOnStartup();
+      window.dispatchEvent(new HashChangeEvent("hashchange"));
+      out.lastTool.vbbRestore =
+        localStorage.getItem("devtools-tool-last-v1") === "vbb" &&
+        location.hash === "#vbb" &&
+        document.getElementById("vbb")?.classList.contains("is-workspace-active");
       history.replaceState(null, "", "#lanshare?j=abc");
       out.lastTool.keepLanshareJoin = !window.DevToolsNav.shouldRestoreLastTool();
       history.replaceState(null, "", "#memo");
@@ -1535,7 +1543,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/memobkp1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/navlast3/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1803,8 +1811,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/memobkp1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memobkp1");
+  if (!/navlast3/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to navlast3");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
@@ -1871,6 +1879,7 @@ async function main() {
     !result.lastTool?.restoreTimestamp ||
     !result.lastTool?.preserveLastKey ||
     !result.lastTool?.memoPanelAfterRestore ||
+    !result.lastTool?.vbbRestore ||
     !result.lastTool?.keepLanshareJoin ||
     !result.lastTool?.keepExplicit
   ) {
