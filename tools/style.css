@@ -5478,23 +5478,34 @@ button.adb-device-body.linkish {
   color: color-mix(in srgb, #e8a317 55%, var(--muted));
 }
 
-.memo-temp-prompt {
+.memo-temp-prompt-stack {
   position: fixed;
   right: max(0.75rem, env(safe-area-inset-right, 0px));
   bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
   z-index: 12050;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-end;
+  pointer-events: none;
+  max-height: min(70vh, 28rem);
+  overflow-y: auto;
+}
+
+.memo-temp-prompt-stack .memo-temp-prompt {
+  position: static;
+  width: min(92vw, 18rem);
+  pointer-events: auto;
+}
+
+.memo-temp-prompt {
   display: grid;
   gap: 0.45rem;
-  width: min(92vw, 18rem);
   padding: 0.75rem 0.85rem;
   border: 1px solid color-mix(in srgb, #e8a317 60%, var(--line));
   border-radius: 14px;
   background: color-mix(in srgb, var(--panel-strong, #fff) 92%, #e8a317 8%);
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
-}
-
-.memo-temp-prompt[hidden] {
-  display: none !important;
 }
 
 .memo-temp-prompt-title {
@@ -5721,6 +5732,23 @@ button.adb-device-body.linkish {
 
 .memo-progress {
   padding: 0.35rem 0;
+}
+
+.memo-undo-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.35rem 0;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--control-bg-strong, color-mix(in srgb, var(--bg-0) 70%, var(--panel-strong)));
+}
+
+.memo-undo-inline.is-urgent {
+  border-color: color-mix(in srgb, var(--accent-2) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent-2) 14%, var(--panel-strong));
 }
 
 .memo-undo-bar {
