@@ -3753,18 +3753,19 @@ body.vsplit-fs-open {
 .adb-input-shot-wrap {
   --adb-input-shot-vh: 56;
   position: relative;
-  display: flex;
-  justify-content: center;
-  align-items: center;
+  display: grid;
+  place-items: center;
   width: 100%;
   max-width: 100%;
+  min-height: calc(var(--adb-input-shot-vh) * 0.42vh);
   max-height: calc(var(--adb-input-shot-vh) * 1vh);
   border: 1px solid var(--line);
   border-radius: 12px;
   overflow: auto;
   background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
-  min-height: 2.5rem;
   margin-top: 0.4rem;
+  padding: 0.35rem;
+  box-sizing: border-box;
 }
 
 .adb-input-shot-wrap.is-drop-target {
@@ -3776,13 +3777,16 @@ body.vsplit-fs-open {
 .adb-input-shot-wrap canvas.adb-input-mirror {
   display: block;
   max-width: 100%;
-  max-height: calc(var(--adb-input-shot-vh) * 1vh);
+  max-height: calc(var(--adb-input-shot-vh) * 1vh - 0.7rem);
   width: auto;
   height: auto;
   object-fit: contain;
   touch-action: none;
   cursor: crosshair;
   user-select: none;
+  margin: 0 auto;
+  justify-self: center;
+  align-self: center;
 }
 
 .adb-input-drop-hint[hidden] {

@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-adbfs2";
+  const TOOLS_VERSION = "2026.08.17-adbfs3";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -9985,6 +9985,8 @@
     let adbInputShotUrl = "";
     let adbInputLive = false;
     let adbInputLiveTimer = 0;
+    /** @type {"" | "shot" | "live" | "mirror"} */
+    let adbInputPreviewMode = "";
     let adbInputRefreshBusy = false;
     let adbInputRefreshAfter = false;
     let adbMirrorWs = null;
@@ -12654,6 +12656,25 @@
       return out;
     }
 
+    function clearInputPreviewSurface() {
+      const img = $("#adb-input-canvas");
+      const mirror = $("#adb-input-mirror");
+      if (img) {
+        img.hidden = true;
+        img.removeAttribute("src");
+      }
+      if (mirror) mirror.hidden = true;
+      if (adbInputShotUrl) {
+        try {
+          URL.revokeObjectURL(adbInputShotUrl);
+        } catch {
+          /* ignore */
+        }
+        adbInputShotUrl = "";
+      }
+      setInputDropHintVisible(false);
+    }
+
     function stopMirrorPreview({ notifyBridge = true } = {}) {
       const serial = adbSelected;
       if (adbMirrorWs) {
@@ -12812,12 +12833,14 @@
                   errTimer = 0;
                 }
                 adbMirrorMeta = msg;
+                adbInputPreviewMode = "mirror";
                 try {
                   ensureMirrorDecoder(msg);
                   if (!settled) {
                     settled = true;
                     resolve();
                   }
+                  updateInputLiveUi();
                   const meta = $("#adb-input-live-meta");
                   if (meta) {
                     meta.hidden = false;
@@ -12907,6 +12930,10 @@
         } else if (mirror) {
           mirror.hidden = true;
         }
+        if (!quiet) {
+          adbInputPreviewMode = "shot";
+          updateInputLiveUi();
+        }
         if (!quiet && $("#adb-input-meta")) {
           $("#adb-input-meta").textContent = "截图预览：单击 / 长按 / 双击 / 拖拽。可点「开始镜像」低延迟投屏。";
         }
@@ -12960,8 +12987,11 @@
       const stopBtn = $("#adb-input-live-stop");
       const meta = $("#adb-input-live-meta");
       const mirroring = Boolean(adbMirrorWs && adbMirrorWs.readyState <= 1);
-      if (stopBtn) stopBtn.hidden = !adbInputLive && !mirroring;
-      if (meta) meta.hidden = !adbInputLive && !mirroring;
+      const previewing =
+        Boolean(adbInputPreviewMode) || adbInputLive || mirroring || Boolean(adbInputLiveTimer);
+      if (stopBtn) stopBtn.hidden = !previewing;
+      const liveMeta = adbInputPreviewMode === "live" || adbInputPreviewMode === "mirror" || adbInputLive || mirroring;
+      if (meta) meta.hidden = !liveMeta;
       const recBtn = $("#adb-input-record-toggle");
       if (recBtn) recBtn.textContent = adbInputRecordJobId ? "停止录屏" : "开始录屏";
     }
@@ -12976,6 +13006,7 @@
       }
       if (adbInputLiveTimer) return;
       adbInputLive = true;
+      adbInputPreviewMode = "live";
       updateInputLiveUi();
       const meta = $("#adb-input-live-meta");
       if (meta) {
@@ -12996,23 +13027,27 @@
         clearInterval(adbInputLiveTimer);
         adbInputLiveTimer = 0;
       }
-      if (!keepMirror) stopMirrorPreview({ notifyBridge: true });
+      if (!keepMirror) {
+        stopMirrorPreview({ notifyBridge: true });
+        adbInputPreviewMode = "";
+        clearInputPreviewSurface();
+        const meta = $("#adb-input-live-meta");
+        if (meta) {
+          meta.hidden = true;
+          meta.textContent = "";
+        }
+      }
       adbInputLive = false;
       updateInputLiveUi();
     }
 
     function afterInputPreviewAction() {
       if (!adbSelected) return;
-      if (adbMirrorWs && adbMirrorWs.readyState === 1) return;
+      if (adbInputPreviewMode === "mirror" || (adbMirrorWs && adbMirrorWs.readyState === 1)) return;
+      if (adbInputPreviewMode !== "live" && !adbInputLiveTimer) return;
       setTimeout(() => {
-        if (adbTab !== "input") return;
-        refreshInputScreencap({ quiet: true })
-          .catch(() => {})
-          .finally(() => {
-            if (adbTab !== "input") return;
-            if (adbMirrorWs && adbMirrorWs.readyState <= 1) return;
-            if (!adbInputLiveTimer) startInputLivePreview({ forceShot: true });
-          });
+        if (adbTab !== "input" || adbInputPreviewMode !== "live") return;
+        refreshInputScreencap({ quiet: true }).catch(() => {});
       }, 350);
     }
 
@@ -14373,9 +14408,15 @@
         setError(adbError, err.message || String(err));
       }
     });
-    $("#adb-input-refresh-shot")?.addEventListener("click", () =>
-      refreshInputScreencap().catch((err) => setError(adbError, err.message || String(err)))
-    );
+    $("#adb-input-refresh-shot")?.addEventListener("click", () => {
+      if (adbInputLiveTimer) {
+        clearInterval(adbInputLiveTimer);
+        adbInputLiveTimer = 0;
+        adbInputLive = false;
+      }
+      stopMirrorPreview({ notifyBridge: true });
+      refreshInputScreencap().catch((err) => setError(adbError, err.message || String(err)));
+    });
     $("#adb-input-mirror-start")?.addEventListener("click", () => {
       startMirrorPreview()
         .then(() => toast("镜像已开始"))
