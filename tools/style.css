@@ -5526,6 +5526,21 @@ button.adb-device-body.linkish {
   min-width: 6.5rem;
 }
 
+.vbb-batch-list {
+  margin-top: 0.55rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  max-height: 12rem;
+  overflow: auto;
+}
+
+.vbb-batch-row {
+  padding: 0.2rem 0;
+  line-height: 1.45;
+}
+
 .memo-tag-row {
   display: flex;
   align-items: center;
