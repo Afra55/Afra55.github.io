@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-vbbnodl1";
+  const TOOLS_VERSION = "2026.08.17-vbbnodl2";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -7729,12 +7729,15 @@
         actions.className = "btn-row";
         if (c.gifBlob) {
           if (!c.gifUrl) c.gifUrl = URL.createObjectURL(c.gifBlob);
-          const a = document.createElement("a");
-          a.className = "secondary-btn";
-          a.href = c.gifUrl;
-          a.download = vbbGifDownloadName(c, idx);
-          a.textContent = "下载 GIF";
-          actions.appendChild(a);
+          const dlBtn = document.createElement("button");
+          dlBtn.type = "button";
+          dlBtn.className = "secondary-btn";
+          dlBtn.textContent = "下载 GIF";
+          dlBtn.addEventListener("click", () => {
+            if (!c.gifBlob) return;
+            triggerLocalDownload(c.gifBlob, vbbGifDownloadName(c, idx));
+          });
+          actions.appendChild(dlBtn);
           const previewBtn = document.createElement("button");
           previewBtn.type = "button";
           previewBtn.className = "ghost-btn";
@@ -7983,7 +7986,7 @@
         setVbbClipJob(0, { status: "done", progress: 1, text: "完成" });
         renderVbbResults();
         setVbbProgress(true, 1, `黑盒完成 · ${formatKb(encoded.blob.size)}`);
-        toast(`黑盒 GIF 已生成 · ${formatKb(encoded.blob.size)}`);
+        toast(`黑盒完成 · ${formatKb(encoded.blob.size)} · 可点下方「下载 GIF」`);
       } catch (err) {
         if (String(err?.message) !== "已取消") setError(vbbError, err.message || String(err));
         else toast("已取消");
