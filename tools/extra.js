@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-vbbmanual-gifedit1";
+  const TOOLS_VERSION = "2026.08.17-vbbmanual2";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -6987,6 +6987,13 @@
     const vbbNudgeM01 = $("#vbb-nudge-m01");
     const vbbNudgeP01 = $("#vbb-nudge-p01");
     const vbbNudgeP1 = $("#vbb-nudge-p1");
+    const vbbScrubMarks = $("#vbb-scrub-marks");
+    const vbbMarkChips = $("#vbb-mark-chips");
+    const vbbJumpTime = $("#vbb-jump-time");
+    const vbbJumpGo = $("#vbb-jump-go");
+    const vbbLongHint = $("#vbb-long-hint");
+    const VBB_LONG_VIDEO_SEC = 180;
+    const VBB_MANUAL_SEEK_DEBOUNCE_MS = 120;
     const VBB_SAMPLE_SPAN = 2.5;
     const VBB_SAFETY = 0.85;
     /** 清晰优先：按接近 6MB 规划段长（略留余量，避免实测偶发超限） */
@@ -7023,6 +7030,192 @@
     let vbbPlaying = false;
     let vbbScrubbing = false;
     const VBB_SCRUB_STEPS = 1000;
+    let vbbSeekTimer = 0;
+    let vbbPendingSeek = null;
+
+    function parseVbbJumpTime(raw) {
+      const text = String(raw || "").trim();
+      if (!text) return null;
+      if (/^\d+(\.\d+)?$/.test(text)) return Number(text);
+      const m = text.match(/^(\d+):(\d+(?:\.\d+)?)$/);
+      if (m) return Number(m[1]) * 60 + Number(m[2]);
+      const h = text.match(/^(\d+):(\d+):(\d+(?:\.\d+)?)$/);
+      if (h) return Number(h[1]) * 3600 + Number(h[2]) * 60 + Number(h[3]);
+      return null;
+    }
+
+    function pauseVbbPreview() {
+      try {
+        vbbVideo?.pause?.();
+      } catch (_) {}
+      vbbPlaying = false;
+    }
+
+    function vbbScrubValueToTime(value) {
+      const d = vbbVideoDuration();
+      if (!(d > 0)) return 0;
+      return (Number(value) / VBB_SCRUB_STEPS) * d;
+    }
+
+    function vbbTimeToScrubValue(sec) {
+      const d = vbbVideoDuration();
+      if (!(d > 0)) return 0;
+      return Math.round((Math.max(0, Math.min(sec, d)) / d) * VBB_SCRUB_STEPS);
+    }
+
+    function syncVbbScrubFromVideo() {
+      if (!vbbScrub || vbbScrubbing) return;
+      const d = vbbVideoDuration();
+      const has = Boolean(vbbSourceFile && d > 0);
+      vbbScrub.disabled = !has || vbbBusy || !isVbbManualMode();
+      if (!has) {
+        vbbScrub.value = "0";
+        return;
+      }
+      vbbScrub.max = String(VBB_SCRUB_STEPS);
+      vbbScrub.value = String(vbbTimeToScrubValue(vbbMarkTime()));
+    }
+
+    function applyVbbSeek(sec, opts = {}) {
+      if (!vbbVideo?.src) return;
+      const d = vbbVideoDuration();
+      const t = Math.max(0, Math.min(d || 0, Number(sec) || 0));
+      if (!opts.keepPlaying) pauseVbbPreview();
+      try {
+        if (typeof vbbVideo.fastSeek === "function") vbbVideo.fastSeek(t);
+        else vbbVideo.currentTime = t;
+      } catch (_) {}
+      if (!opts.fromScrub) syncVbbScrubFromVideo();
+      paintVbbNow();
+    }
+
+    function scheduleVbbSeek(sec, opts = {}) {
+      vbbPendingSeek = { sec, opts };
+      clearTimeout(vbbSeekTimer);
+      vbbSeekTimer = window.setTimeout(() => {
+        vbbSeekTimer = 0;
+        if (vbbPendingSeek) {
+          applyVbbSeek(vbbPendingSeek.sec, vbbPendingSeek.opts);
+          vbbPendingSeek = null;
+        }
+      }, opts.immediate ? 0 : VBB_MANUAL_SEEK_DEBOUNCE_MS);
+    }
+
+    function flushVbbSeek() {
+      clearTimeout(vbbSeekTimer);
+      vbbSeekTimer = 0;
+      if (vbbPendingSeek) {
+        applyVbbSeek(vbbPendingSeek.sec, { ...vbbPendingSeek.opts, immediate: true });
+        vbbPendingSeek = null;
+      }
+    }
+
+    function paintVbbNow() {
+      const hasVideo = Boolean(vbbSourceFile && vbbVideo?.src);
+      const d = vbbVideoDuration();
+      const t = vbbScrubbing ? vbbScrubValueToTime(vbbScrub?.value) : vbbMarkTime();
+      if (vbbManualNow) {
+        vbbManualNow.textContent = hasVideo ? `${formatVbbClock(t)} / ${formatVbbClock(d)}` : "0:00 / 0:00";
+      }
+      const count = completeVbbMarks().length;
+      if (vbbManualCount) {
+        vbbManualCount.textContent = vbbMarks.length ? `${count}/${vbbMarks.length} 段` : "0 段";
+      }
+      if (vbbManualDraft) {
+        if (vbbDraftStart != null) {
+          vbbManualDraft.hidden = false;
+          vbbManualDraft.textContent = `已设起点 ${formatVbbClock(vbbDraftStart)} · 拖到终点后点「打终点」`;
+        } else {
+          vbbManualDraft.hidden = true;
+          vbbManualDraft.textContent = "";
+        }
+      }
+      if (vbbMarkTap) vbbMarkTap.textContent = vbbDraftStart == null ? "打起点" : "打终点";
+      if (vbbPlay) vbbPlay.textContent = vbbPlaying ? "暂停" : "播放";
+      if (!vbbScrubbing) syncVbbScrubFromVideo();
+    }
+
+    function paintVbbScrubMarks() {
+      if (!vbbScrubMarks) return;
+      const d = vbbVideoDuration();
+      vbbScrubMarks.innerHTML = "";
+      if (!(d > 0) || !isVbbManualMode()) return;
+      const addDot = (t, kind) => {
+        const dot = document.createElement("button");
+        dot.type = "button";
+        dot.className = `vsplit-scrub-mark is-${kind} is-jump`;
+        dot.style.left = `${(t / d) * 100}%`;
+        dot.title = `${kind === "start" ? "起点" : "终点"} ${formatVbbClock(t)}`;
+        dot.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          seekVbbPreview(t, { keepPlaying: true });
+        });
+        vbbScrubMarks.appendChild(dot);
+      };
+      if (vbbDraftStart != null) addDot(vbbDraftStart, "start");
+      vbbMarks.forEach((mark) => {
+        if (mark.start != null) addDot(mark.start, "start");
+        if (mark.end != null) addDot(mark.end, "end");
+      });
+    }
+
+    function paintVbbMarkChips() {
+      if (!vbbMarkChips) return;
+      const marks = completeVbbMarks();
+      vbbMarkChips.innerHTML = "";
+      vbbMarkChips.hidden = !marks.length;
+      marks.forEach((mark, idx) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "vsplit-mark-chip";
+        chip.textContent = `#${String(idx + 1).padStart(2, "0")} ${formatVbbClock(mark.start)}→${formatVbbClock(mark.end)}`;
+        chip.addEventListener("click", () => seekVbbPreview(mark.start, { keepPlaying: true }));
+        vbbMarkChips.appendChild(chip);
+      });
+    }
+
+    function syncVbbLongHint() {
+      const d = vbbVideoDuration();
+      const show = isVbbManualMode() && d >= VBB_LONG_VIDEO_SEC;
+      if (vbbLongHint) vbbLongHint.hidden = !show;
+    }
+
+    function paintVbbManualControls() {
+      const manual = isVbbManualMode();
+      if (vbbManualPanel) vbbManualPanel.hidden = !manual;
+      if (vbbAdvanced) vbbAdvanced.hidden = manual || isVbbBatchMode();
+      if (vbbVideo) {
+        if (manual && vbbVideo.src) {
+          vbbVideo.controls = false;
+          vbbVideo.hidden = false;
+          vbbVideo.preload = "metadata";
+        } else if (vbbVideo.src) {
+          vbbVideo.controls = true;
+        }
+      }
+      syncVbbLongHint();
+      const canMark = manual && Boolean(vbbSourceFile && vbbVideo?.src) && !vbbBusy;
+      if (vbbScrub) vbbScrub.disabled = !canMark;
+      if (vbbPlay) vbbPlay.disabled = !canMark;
+      [vbbNudgeM1, vbbNudgeM01, vbbNudgeP01, vbbNudgeP1, vbbJumpGo].forEach((btn) => {
+        if (btn) btn.disabled = !canMark;
+      });
+      if (vbbJumpTime) vbbJumpTime.disabled = !canMark;
+      if (vbbMarkTap) vbbMarkTap.disabled = !canMark;
+      if (vbbMarkUndo) {
+        vbbMarkUndo.disabled = !canMark || (vbbDraftStart == null && !vbbMarks.length);
+        vbbMarkUndo.textContent = vbbDraftStart != null ? "取消起点" : "取消上一段";
+      }
+      if (vbbMarkClear) vbbMarkClear.disabled = !canMark || (!vbbMarks.length && vbbDraftStart == null);
+      if (vbbOneclick && isVbbManualMode()) {
+        const count = completeVbbMarks().length;
+        vbbOneclick.textContent = count > 0 ? `一键黑盒（${count} 段）` : "一键黑盒";
+      }
+      paintVbbNow();
+      paintVbbScrubMarks();
+      paintVbbMarkChips();
+    }
 
     function isVbbManualMode() {
       return vbbWorkflow === "manual" && !isVbbBatchMode();
@@ -7064,60 +7257,17 @@
 
     function seekVbbPreview(sec, opts = {}) {
       if (!vbbVideo?.src) return;
-      const d = vbbVideoDuration();
-      const t = Math.max(0, Math.min(d, Number(sec) || 0));
-      vbbVideo.currentTime = t;
-      if (vbbScrub) vbbScrub.value = String(Math.round((t / Math.max(d, 0.001)) * VBB_SCRUB_STEPS));
-      if (!opts.silent) paintVbbManualUi();
+      if (opts.debounced) {
+        scheduleVbbSeek(sec, opts);
+        return;
+      }
+      flushVbbSeek();
+      applyVbbSeek(sec, opts);
+      if (!opts.silent) paintVbbManualControls();
     }
 
     function paintVbbManualUi() {
-      const manual = isVbbManualMode();
-      if (vbbManualPanel) vbbManualPanel.hidden = !manual;
-      if (vbbAdvanced) vbbAdvanced.hidden = manual || isVbbBatchMode();
-      if (vbbVideo) {
-        if (manual && vbbVideo.src) {
-          vbbVideo.controls = false;
-          vbbVideo.hidden = false;
-        } else if (vbbVideo.src) {
-          vbbVideo.controls = true;
-        }
-      }
-      const hasVideo = Boolean(vbbSourceFile && vbbVideo?.src);
-      const d = vbbVideoDuration();
-      const t = vbbMarkTime();
-      if (vbbManualNow) {
-        vbbManualNow.textContent = hasVideo ? `${formatVbbClock(t)} / ${formatVbbClock(d)}` : "0:00 / 0:00";
-      }
-      const count = completeVbbMarks().length;
-      if (vbbManualCount) vbbManualCount.textContent = `${count} 段`;
-      if (vbbManualDraft) {
-        if (vbbDraftStart != null) {
-          vbbManualDraft.hidden = false;
-          vbbManualDraft.textContent = `已设起点 ${formatVbbClock(vbbDraftStart)} · 拖到终点后点「打终点」`;
-        } else {
-          vbbManualDraft.hidden = true;
-          vbbManualDraft.textContent = "";
-        }
-      }
-      if (vbbMarkTap) vbbMarkTap.textContent = vbbDraftStart == null ? "打起点" : "打终点";
-      const canMark = manual && hasVideo && !vbbBusy;
-      if (vbbScrub) vbbScrub.disabled = !canMark;
-      if (vbbPlay) {
-        vbbPlay.disabled = !canMark;
-        vbbPlay.textContent = vbbPlaying ? "暂停" : "播放";
-      }
-      [vbbNudgeM1, vbbNudgeM01, vbbNudgeP01, vbbNudgeP1].forEach((btn) => {
-        if (btn) btn.disabled = !canMark;
-      });
-      if (vbbMarkTap) vbbMarkTap.disabled = !canMark;
-      if (vbbMarkUndo) {
-        vbbMarkUndo.disabled = !canMark || (vbbDraftStart == null && !vbbMarks.length);
-      }
-      if (vbbMarkClear) vbbMarkClear.disabled = !canMark || (!vbbMarks.length && vbbDraftStart == null);
-      if (vbbOneclick && isVbbManualMode()) {
-        vbbOneclick.textContent = count > 0 ? `一键黑盒（${count} 段）` : "一键黑盒";
-      }
+      paintVbbManualControls();
     }
 
     function clearVbbMarks() {
@@ -7373,7 +7523,7 @@
       if (vbbRun) vbbRun.disabled = !hasPlan || vbbBusy || isVbbBatchMode() || isVbbManualMode();
       if (vbbMerge) vbbMerge.disabled = gifCount < 2 || vbbBusy || isVbbBatchMode();
       if (vbbZip) vbbZip.disabled = gifCount < 1 || vbbBusy;
-      paintVbbManualUi();
+      if (isVbbManualMode()) paintVbbManualControls();
     }
 
     function syncVbbWorkflowUi() {
@@ -8041,9 +8191,12 @@
           `${duration.toFixed(1)}s · ${vbbVideo.videoWidth}×${vbbVideo.videoHeight}`
         );
       }
-      setVbbButtons();
+      if (isVbbManualMode() && duration >= VBB_LONG_VIDEO_SEC) {
+        toast("长视频手动打点：拖动时自动暂停，建议少播放；也可先在「视频切分」打点");
+      }
+      syncVbbScrubFromVideo();
       syncVbbWorkflowUi();
-      paintVbbManualUi();
+      setVbbButtons();
       toast("视频已就绪，点「一键黑盒」即可");
     }
 
@@ -8072,6 +8225,18 @@
       renderVbbResults();
       try {
         await prewarmFfmpegEngine().catch(() => {});
+        const fileBytes = vbbSourceFile?.size || 0;
+        const hugeFile = fileBytes >= 120 * 1024 * 1024;
+        const mobile = isLikelyMobileBrowser();
+        if (mobile && (hugeFile || ranges.some((r) => r.span >= 90))) {
+          toast("长片段在手机上易内存不足，建议每段控制在 30s 内或用电脑");
+        }
+        if (hugeFile || ranges.length >= 4) {
+          try {
+            const ff = await getFfmpegInstance();
+            await ensureFfmpegInputWritten(ff, vbbSourceFile, () => {});
+          } catch (_) {}
+        }
         for (let i = 0; i < ranges.length; i++) {
           if (abortVbb) throw new Error("已取消");
           const r = ranges[i];
@@ -8098,6 +8263,9 @@
           vbbClips[i].gifNote = `${encoded.fps || 15} FPS · ${formatKb(encoded.blob.size)}`;
           setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
           renderVbbResults();
+          if (mobile && i < ranges.length - 1) {
+            await new Promise((r) => setTimeout(r, hugeFile ? 180 : 80));
+          }
         }
         setVbbProgress(true, 1, `黑盒完成 · ${ranges.length} 段`);
         toast(`黑盒完成 · ${ranges.length} 段 · 可逐条下载或打包`);
@@ -8742,41 +8910,62 @@
     });
     $("#vbb-workflow-manual")?.addEventListener("click", () => {
       vbbWorkflow = "manual";
+      pauseVbbPreview();
       syncVbbWorkflowUi();
+      const d = vbbVideoDuration();
+      if (d >= VBB_LONG_VIDEO_SEC) {
+        toast("长视频：拖动定位即可，播放会占用更多内存");
+      }
+    });
+    vbbJumpGo?.addEventListener("click", () => {
+      const t = parseVbbJumpTime(vbbJumpTime?.value);
+      if (t == null) {
+        toast("时间格式无效，如 2:30 或 150");
+        return;
+      }
+      seekVbbPreview(t);
+    });
+    vbbJumpTime?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") vbbJumpGo?.click();
     });
     vbbPlay?.addEventListener("click", () => {
       if (!vbbVideo?.src) return;
       if (vbbVideo.paused) {
+        const d = vbbVideoDuration();
+        if (d >= VBB_LONG_VIDEO_SEC) toast("长视频播放较耗内存，建议拖动定位");
         vbbVideo.play().catch(() => {});
       } else {
-        vbbVideo.pause();
+        pauseVbbPreview();
       }
     });
     vbbVideo?.addEventListener("play", () => {
       vbbPlaying = true;
-      paintVbbManualUi();
+      if (vbbPlay) vbbPlay.textContent = "暂停";
     });
     vbbVideo?.addEventListener("pause", () => {
       vbbPlaying = false;
-      paintVbbManualUi();
+      if (vbbPlay) vbbPlay.textContent = "播放";
     });
     vbbVideo?.addEventListener("timeupdate", () => {
       if (!isVbbManualMode() || vbbScrubbing) return;
-      const d = vbbVideoDuration();
-      if (vbbScrub && d > 0) vbbScrub.value = String(Math.round((vbbMarkTime() / d) * VBB_SCRUB_STEPS));
-      if (vbbManualNow) vbbManualNow.textContent = `${formatVbbClock(vbbMarkTime())} / ${formatVbbClock(d)}`;
+      paintVbbNow();
+    });
+    vbbVideo?.addEventListener("seeked", () => {
+      if (!isVbbManualMode()) return;
+      paintVbbNow();
     });
     vbbScrub?.addEventListener("input", () => {
       if (!vbbVideo?.src) return;
       vbbScrubbing = true;
-      const d = vbbVideoDuration();
-      const t = (Number(vbbScrub.value) / VBB_SCRUB_STEPS) * d;
-      vbbVideo.currentTime = t;
-      paintVbbManualUi();
+      pauseVbbPreview();
+      const t = vbbScrubValueToTime(vbbScrub.value);
+      paintVbbNow();
+      scheduleVbbSeek(t, { fromScrub: true, keepPlaying: false });
     });
     vbbScrub?.addEventListener("change", () => {
       vbbScrubbing = false;
-      paintVbbManualUi();
+      flushVbbSeek();
+      paintVbbManualControls();
     });
     vbbMarkTap?.addEventListener("click", tapVbbMark);
     vbbMarkUndo?.addEventListener("click", undoVbbMark);
