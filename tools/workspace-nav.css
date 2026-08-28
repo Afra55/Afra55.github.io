@@ -131,6 +131,12 @@ html.is-pwa-standalone #pwa-install {
   border-radius: 6px;
   border: 1px solid transparent;
   transition: color 0.15s, border-color 0.15s, background 0.15s;
+  /* 默认允许侧栏纵向滑动；仅拖拽排序时禁用（紧凑模式手机几乎只能摸到分类标题） */
+  touch-action: pan-y;
+}
+
+body.nav-sorting .nav-group-title.is-sortable,
+body.nav-sorting-tools .nav-group-title.is-sortable {
   touch-action: none;
 }
 
@@ -535,6 +541,7 @@ body.nav-open {
     border-color: var(--line);
     background: var(--nav-bg-solid, var(--panel-strong)) !important;
     color: var(--ink);
+    display: flex !important;
     flex-direction: column !important;
     flex-wrap: nowrap !important;
     align-items: stretch !important;
@@ -576,6 +583,8 @@ body.nav-open {
     overflow-x: hidden !important;
     overflow-y: auto !important;
     overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
     mask-image: none !important;
     width: 100%;
   }

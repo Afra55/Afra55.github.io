@@ -1158,7 +1158,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817textcmp1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navscroll1/.test(s.src)),
     };
 
     out.pwa = {
@@ -1234,6 +1234,13 @@ async function main() {
       }
       window.DevToolsNav.setCompact(false);
       out.navCompact.restored = !document.getElementById("nav-bar")?.classList.contains("is-compact");
+      const sortTitle = document.querySelector("#tool-nav .nav-group-title.is-sortable");
+      const toolNav = document.getElementById("tool-nav");
+      out.navCompact.titlePanY = sortTitle ? getComputedStyle(sortTitle).touchAction.includes("pan-y") : false;
+      out.navCompact.toolNavScrollable =
+        Boolean(toolNav) &&
+        (getComputedStyle(toolNav).overflowY === "auto" || getComputedStyle(toolNav).overflowY === "scroll") &&
+        getComputedStyle(toolNav).touchAction.includes("pan-y");
     }
 
     const navBarEl = document.getElementById("nav-bar");
@@ -1463,7 +1470,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/textcmp1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/navscroll1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1723,8 +1730,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/textcmp1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to textcmp1");
+  if (!/navscroll1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to navscroll1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
@@ -1777,9 +1784,11 @@ async function main() {
     !result.navCompact?.mobileExpandsInFlow ||
     !result.navCompact?.hoverShows ||
     !result.navCompact?.exclusiveFlyout ||
-    !result.navCompact?.restored
+    !result.navCompact?.restored ||
+    !result.navCompact?.titlePanY ||
+    !result.navCompact?.toolNavScrollable
   ) {
-    failed.push("mobile nav compact should expand as an in-drawer accordion");
+    failed.push("mobile nav compact should expand as an in-drawer accordion and allow vertical scroll");
   }
   if (
     !result.navCompactDesktop?.api ||
