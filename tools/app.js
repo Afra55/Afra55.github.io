@@ -1395,7 +1395,9 @@
   }
 
   function parseRoute() {
-    const raw = String(location.hash || "").replace(/^#/, "").trim();
+    let raw = String(location.hash || "").replace(/^#/, "").trim();
+    const q = raw.indexOf("?");
+    if (q >= 0) raw = raw.slice(0, q);
     if (!raw) return { tool: "timestamp", tab: "gifmaker" };
     const parts = raw.split(/[/?]/).filter(Boolean);
     const head = parts[0] || "timestamp";
