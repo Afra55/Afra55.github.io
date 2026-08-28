@@ -13,12 +13,10 @@
   const DEFAULT_TAG_ID = "default";
   const META_KEY = "meta";
   const PAGE_SIZE = 36;
-  const AUTOCLIP_KEY = "devtools-memo-autoclip-v1";
   const TEMP_DAYS_KEY = "devtools-memo-temp-days-v1";
   const TEMP_FILTER_ID = "__temp__";
   const TEMP_DEFAULT_DAYS = 7;
   const TEMP_PROMPT_SEC = 5;
-  const AUTOCLIP_POLL_MS = 2500;
   const LAST_EXPORT_KEY = "devtools-memo-last-export-v1";
   const DIR_HINT_KEY = "devtools-memo-dir-hint-dismiss-v1";
   const BACKUP_NUDGE_DAYS = 7;
@@ -444,10 +442,8 @@
     activeType: "all", // all | text | image | gif | video | audio | file
     searchQuery: "",
     listLimit: PAGE_SIZE,
-    autoClip: false,
     tempDays: TEMP_DEFAULT_DAYS,
     tempPrompt: null,
-    autoclipPollTimer: 0,
     selected: new Set(),
     lastClipSig: "",
     busy: false,
@@ -1009,21 +1005,6 @@
       doneTimer: setTimeout(() => finishTempPrompt({ markTemp: true }), TEMP_PROMPT_SEC * 1000),
     };
     state.tempPrompt = prompt;
-  }
-
-  function startAutoclipPoll() {
-    stopAutoclipPoll();
-    if (!state.autoClip) return;
-    state.autoclipPollTimer = setInterval(() => {
-      maybeAutoClip();
-    }, AUTOCLIP_POLL_MS);
-  }
-
-  function stopAutoclipPoll() {
-    if (state.autoclipPollTimer) {
-      clearInterval(state.autoclipPollTimer);
-      state.autoclipPollTimer = 0;
-    }
   }
 
   function customTagIds(item) {
@@ -1692,7 +1673,6 @@
     }
     const editing = state.editingId === item.id ? " is-editing" : "";
     const pinnedCls = item.pinned ? " is-pinned" : "";
-    const tempCls = isTempItem(item) ? " is-temp" : "";
     const dragHandle = canDragReorder()
       ? `<button type="button" class="memo-drag-handle" draggable="true" data-memo-drag="${item.id}" title="拖拽排序" aria-label="拖拽排序">⠿</button>`
       : "";
@@ -1707,7 +1687,7 @@
       const danger = act.danger ? " memo-more-danger" : "";
       return `<button type="button" class="ghost-btn${danger}" data-memo-${act.id}="${item.id}">${act.label}</button>`;
     });
-    return `<article class="memo-card${editing}${pinnedCls}${tempCls}" data-memo-id="${item.id}" draggable="false">
+    return `<article class="memo-card${editing}${pinnedCls}" data-memo-id="${item.id}" draggable="false">
       <div class="memo-card-head">
         ${dragHandle}
         <label class="memo-check"><input type="checkbox" data-memo-check="${item.id}" ${checked} /></label>
@@ -2464,27 +2444,46 @@
     });
   }
 
-  function setAutoclipStatus(msg, { isError = false } = {}) {
-    const el = $("#memo-autoclip-status");
-    if (!el) return;
-    if (!msg) {
-      el.hidden = true;
-      el.textContent = "";
-      el.classList.remove("is-error");
-      return;
-    }
-    el.hidden = false;
-    el.textContent = msg;
-    el.classList.toggle("is-error", isError);
-  }
-
-  async function queryClipboardReadPermission() {
-    if (!navigator.permissions?.query) return "unknown";
+  async function readClipboard() {
+    setError(memoError, "");
+    const clipOpts = { noScroll: true, offerTemp: true };
     try {
-      const st = await navigator.permissions.query({ name: "clipboard-read" });
-      return st?.state || "unknown";
-    } catch (_) {
-      return "unknown";
+      if (navigator.clipboard?.read) {
+        const items = await readClipboardItemsReliable();
+        if (!items?.length) {
+          toast("剪贴板为空");
+          return;
+        }
+        const parsed = await parseClipboardPayload(items, { force: true });
+        if (parsed?.duplicate) {
+          toast("剪贴板内容与上次相同");
+          return;
+        }
+        if (parsed?.files?.length) {
+          await ingestFiles(parsed.files, clipOpts);
+          return;
+        }
+        if (parsed?.textBody) {
+          await addText(parsed.textBody, clipOpts);
+          return;
+        }
+        toast("剪贴板无可识别内容（文件请拖拽添加）");
+        return;
+      }
+      if (navigator.clipboard?.readText) {
+        const text = (await navigator.clipboard.readText()).trim();
+        if (!text) {
+          toast("剪贴板为空");
+          return;
+        }
+        await addText(text, clipOpts);
+        return;
+      }
+      toast("当前浏览器不支持读取剪贴板，请用 Ctrl/⌘+V 或右键粘贴");
+    } catch (err) {
+      const hint = clipReadFailHint(err);
+      setError(memoError, hint);
+      toast(hint);
     }
   }
 
@@ -2502,11 +2501,6 @@
     }
     if (name === "NotAllowedError") return clipDeniedHint();
     return msg || "读取剪贴板失败，可改用粘贴";
-  }
-
-  function isClipboardGestureBlock(err) {
-    const name = err?.name || "";
-    return name === "NotAllowedError" || name === "SecurityError";
   }
 
   async function readClipboardItemsReliable() {
@@ -2597,69 +2591,6 @@
       }
     }
     return { files, textBody, got };
-  }
-
-  async function readClipboard({ force = false, fromAuto = false } = {}) {
-    setError(memoError, "");
-    if (force) setAutoclipStatus("");
-    const clipOpts = { noScroll: true, offerTemp: true };
-    try {
-      await (async () => {
-        if (navigator.clipboard?.read) {
-          const items = await readClipboardItemsReliable();
-          if (!items?.length) {
-            if (force) toast("剪贴板为空");
-            return;
-          }
-          const parsed = await parseClipboardPayload(items, { force });
-          if (parsed?.duplicate) return;
-          if (parsed?.files?.length) {
-            await ingestFiles(parsed.files, clipOpts);
-            return;
-          }
-          if (parsed?.textBody) {
-            await addText(parsed.textBody, clipOpts);
-            return;
-          }
-          if (force) toast("剪贴板无可识别内容（文件请拖拽添加）");
-          return;
-        }
-        if (navigator.clipboard?.readText) {
-          const text = (await navigator.clipboard.readText()).trim();
-          if (!text) {
-            if (force) toast("剪贴板为空");
-            return;
-          }
-          const sig = `text:${text.slice(0, 80)}:${text.length}`;
-          if (!force && sig === state.lastClipSig) return;
-          state.lastClipSig = sig;
-          await addText(text, clipOpts);
-          return;
-        }
-        if (force) toast("当前浏览器不支持读取剪贴板，请用 Ctrl/⌘+V 或右键粘贴");
-      })();
-      setError(memoError, "");
-      if (!fromAuto) setAutoclipStatus("");
-    } catch (err) {
-      const perm = await queryClipboardReadPermission();
-      const denied = perm === "denied";
-      const blocked = isClipboardGestureBlock(err);
-      if (!force && !denied && blocked) {
-        if (perm === "granted" && state.autoClip) {
-          setAutoclipStatus("自动读取被浏览器拦住，点「读取剪贴板」即可", { isError: false });
-        }
-        return;
-      }
-      const hint = denied ? clipDeniedHint() : clipReadFailHint(err);
-      const asError = denied || (force && blocked);
-      if (force) {
-        setError(memoError, hint);
-        toast(hint);
-      }
-      if (state.autoClip && (asError || force)) {
-        setAutoclipStatus(hint, { isError: asError });
-      }
-    }
   }
 
   async function connectDirectory(handle, { isNew = false, migrateSnapshot = null, forceEmpty = false } = {}) {
@@ -2857,13 +2788,6 @@
     setError(memoError, "");
     loadTempDays();
     try {
-      state.autoClip = localStorage.getItem(AUTOCLIP_KEY) === "1";
-    } catch (_) {
-      state.autoClip = false;
-    }
-    const autoclipEl = $("#memo-autoclip");
-    if (autoclipEl) autoclipEl.checked = state.autoClip;
-    try {
       const saved = await idbGet("index", "main");
       if (saved) state.index = normalizeIndex(saved);
     } catch (_) {
@@ -2876,10 +2800,6 @@
     invalidateCountCache();
     await purgeExpiredTempItems();
     renderAll();
-    if (state.autoClip) {
-      startAutoclipPoll();
-      maybeAutoClip();
-    }
     setInterval(() => {
       purgeExpiredTempItems().catch(() => {});
     }, 3600000);
@@ -4101,7 +4021,7 @@
   });
   $("#memo-note-edit-src")?.addEventListener("input", () => syncNoteEditCount());
   $("#memo-read-clip")?.addEventListener("click", () => {
-    readClipboard({ force: true }).catch((err) => setError(memoError, err.message || String(err)));
+    readClipboard().catch((err) => setError(memoError, err.message || String(err)));
   });
   previewEditBtn?.addEventListener("click", () => {
     const item = previewItem;
@@ -4283,32 +4203,6 @@
     state.listLimit = (state.listLimit || PAGE_SIZE) + PAGE_SIZE;
     renderItems();
   });
-  $("#memo-autoclip")?.addEventListener("change", (e) => {
-    state.autoClip = Boolean(e.target.checked);
-    try {
-      localStorage.setItem(AUTOCLIP_KEY, state.autoClip ? "1" : "0");
-    } catch (_) {}
-    toast(state.autoClip ? "已开启并记住：全站后台自动读剪贴板" : "已关闭自动读剪贴板");
-    if (!state.autoClip) {
-      setAutoclipStatus("");
-      stopAutoclipPoll();
-    } else {
-      startAutoclipPoll();
-      readClipboard({ force: false, fromAuto: true }).catch(() => {});
-    }
-  });
-
-  function maybeAutoClip() {
-    // 静默尝试：失败不弹错（force:false）；全站有效，不限于备忘录页
-    if (!state.autoClip) return;
-    if (document.visibilityState && document.visibilityState !== "visible") return;
-    if (isTextEditOpen()) return;
-    readClipboard({ force: false, fromAuto: true }).catch(() => {});
-  }
-  window.addEventListener("focus", () => maybeAutoClip());
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") maybeAutoClip();
-  });
 
   // tag drag reorder
   let dragTagId = null;
@@ -4363,7 +4257,7 @@
     hideMemoCtx();
     const emptyAct = t.closest?.("[data-memo-empty]")?.dataset?.memoEmpty;
     if (emptyAct === "clip") {
-      readClipboard({ force: true }).catch((err) => setError(memoError, err.message || String(err)));
+      readClipboard().catch((err) => setError(memoError, err.message || String(err)));
       return;
     }
     if (emptyAct === "text") {

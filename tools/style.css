@@ -4865,13 +4865,6 @@ button.adb-device-body.linkish {
   padding: 0.85rem 0.2rem 0.35rem;
 }
 
-.memo-autoclip-status {
-  color: var(--muted);
-}
-
-.memo-autoclip-status.is-error {
-  color: color-mix(in srgb, var(--danger, #ff6b7a) 75%, var(--ink));
-}
 
 .memo-backup-nudge:not([hidden]) {
   color: color-mix(in srgb, #e8a317 75%, var(--ink));
@@ -5789,10 +5782,6 @@ button.adb-device-body.linkish {
   outline: none;
 }
 
-.memo-autoclip-flag {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
 
 .memo-more-row {
   margin-top: 0.65rem;
@@ -5875,14 +5864,9 @@ button.adb-device-body.linkish {
 }
 
 .memo-card.is-pinned {
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 16%, transparent);
-}
-
-.memo-card.is-temp {
-  border-color: color-mix(in srgb, #e8a317 55%, var(--line));
-  box-shadow: 0 0 0 1px color-mix(in srgb, #e8a317 22%, transparent);
-  background: color-mix(in srgb, #e8a317 6%, var(--panel-strong, #fff));
+  border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent);
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel-strong, #fff));
 }
 
 .memo-temp-badge {
@@ -5890,11 +5874,12 @@ button.adb-device-body.linkish {
   margin-right: 0.35rem;
   padding: 0.05rem 0.42rem;
   border-radius: 6px;
-  background: color-mix(in srgb, #e8a317 82%, #000);
-  color: #1a1200;
+  border: 1px solid color-mix(in srgb, var(--line) 90%, transparent);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  color: var(--muted);
   font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.03em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .memo-drag-handle {

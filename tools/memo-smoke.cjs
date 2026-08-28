@@ -197,7 +197,7 @@ async function main() {
       pathRelabel: /新标签/.test(document.getElementById("memo-preview-path")?.textContent || ""),
       selectAllScope: /筛选结果/.test(document.querySelector(".memo-select-all-text")?.textContent || ""),
       previewCopy: Boolean(document.getElementById("memo-preview-copy")),
-      autoclipRemember: /记住/.test(document.querySelector(".memo-autoclip-flag")?.textContent || ""),
+      noAutoclip: !document.getElementById("memo-autoclip"),
       mobilePasteHint: Boolean(document.querySelector(".memo-hint-narrow")),
       clearFilters: Boolean(document.getElementById("memo-clear-filters")),
       friendlySearch: /标签名/.test(document.getElementById("memo-search")?.placeholder || ""),
@@ -209,7 +209,6 @@ async function main() {
       tempZone: Boolean(document.getElementById("memo-temp-zone")),
       tempFilter: Boolean(document.getElementById("memo-temp-filter")),
       tempPrompt: Boolean(document.getElementById("memo-temp-prompt")),
-      autoclipGlobal: /全站/.test(document.querySelector(".memo-autoclip-flag")?.textContent || ""),
       pageDropHint: /任意区域/.test(document.querySelector("#memo-drop .hint")?.textContent || ""),
     };
 
@@ -586,12 +585,11 @@ async function main() {
     await sleep(80);
     out.typeFilter.flatAll = document.querySelectorAll(".memo-type-group").length === 0;
 
-    // search + autoclip + gif type
+    // search + gif type
     const search = document.getElementById("memo-search");
     out.searchUi = {
       hasSearch: Boolean(search),
-      hasAutoclip: Boolean(document.getElementById("memo-autoclip")),
-      autoclipDefaultOff: document.getElementById("memo-autoclip") ? !document.getElementById("memo-autoclip").checked : false,
+      noAutoclip: !document.getElementById("memo-autoclip"),
       hasGifChip: Boolean(document.querySelector('#memo-type-filter [data-memo-type="gif"]')),
       hasLoadMore: Boolean(document.getElementById("memo-load-more")),
       hasSentinel: Boolean(document.getElementById("memo-scroll-sentinel")),
@@ -964,7 +962,6 @@ async function main() {
         (window.DevToolsMemo.getIndex().items || []).length > 0,
       chipName: Boolean(document.querySelector(".memo-chip-name")),
       chipX: Boolean(document.querySelector(".memo-chip-x")),
-      autoclipStatus: Boolean(document.getElementById("memo-autoclip-status")),
       memoBeforeTextimg: (() => {
         const srcs = [...document.scripts].map((s) => s.src || "");
         const mi = srcs.findIndex((s) => /memo\.js/.test(s));
@@ -1015,7 +1012,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817vbbnodl2/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memoclip1/.test(s.src)),
     };
 
     out.pwa = {
@@ -1281,7 +1278,7 @@ async function main() {
   if (errors.length) failed.push(...errors.map((e) => `page: ${e}`));
   if (!result.panelActive) failed.push("memo panel not active");
   if (!result.hasEditor || !result.hasList) failed.push("missing editor/list");
-  if (!/vbbnodl|vbbbatch|bridgebb|imgzoom|vsfsjank|vsplitfs|pwa|navpwa|memopin|navfoot|navlast|navfly/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memoclip1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1412,11 +1409,11 @@ async function main() {
   if (!result.modules?.backupIsFold || !result.modules?.batchInList || !result.modules?.importPassDlg || !result.modules?.pathRelabel || !result.modules?.selectAllScope) {
     failed.push("memo UX overhaul chrome missing (backup fold/batch/import pass/path/select-all)");
   }
-  if (!result.uxOverhaul?.backupFold || !result.uxOverhaul?.chipName || !result.uxOverhaul?.chipX || !result.uxOverhaul?.memoBeforeTextimg || !result.uxOverhaul?.autoclipStatus) {
-    failed.push("memo UX overhaul: backup fold / chip split / memo load order / autoclip status");
+  if (!result.uxOverhaul?.backupFold || !result.uxOverhaul?.chipName || !result.uxOverhaul?.chipX || !result.uxOverhaul?.memoBeforeTextimg) {
+    failed.push("memo UX overhaul: backup fold / chip split / memo load order");
   }
-  if (!result.modules?.previewCopy || !result.modules?.autoclipRemember || !result.modules?.mobilePasteHint) {
-    failed.push("memo clipboard takeout / autoclip / paste hint missing");
+  if (!result.modules?.previewCopy || !result.modules?.noAutoclip || !result.modules?.mobilePasteHint) {
+    failed.push("memo clipboard takeout / no-autoclip / paste hint missing");
   }
   if (!result.modules?.quickText || !result.modules?.quickTextNotDetails) {
     failed.push("quick text box should be always visible in capture bar");
@@ -1526,14 +1523,14 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/vbbnodl2/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to vbbnodl2");
+  if (!/memoclip1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memoclip1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
   }
-  if (!result.modules?.autoclipGlobal || !result.modules?.pageDropHint) {
-    failed.push("memo autoclip should be global and page-wide drop hint");
+  if (!result.modules?.pageDropHint) {
+    failed.push("memo page-wide drop hint missing");
   }
   if (!result.dragSelect?.cardNotDraggable || (result.dragSelect?.canReorder && !result.dragSelect?.hasDragHandle)) {
     failed.push("memo cards should use drag handle instead of whole-card drag");
@@ -1625,8 +1622,8 @@ async function main() {
   if (!result.moreKeep?.preview || !result.moreKeep?.note || !result.moreKeep?.del || !result.moreKeep?.top || !result.moreKeep?.pin) {
     failed.push("memo more menu should keep preview/note/delete plus pin/move-to-top");
   }
-  if (!result.searchUi?.hasSearch || !result.searchUi?.hasAutoclip || !result.searchUi?.autoclipDefaultOff) {
-    failed.push("search/autoclip UI missing or autoclip not default-off");
+  if (!result.searchUi?.hasSearch || !result.searchUi?.noAutoclip) {
+    failed.push("search UI missing or autoclip checkbox should be removed");
   }
   if (!result.searchUi?.hasGifChip) failed.push("gif type chip missing");
   if (!result.searchUi?.hitText || !result.searchUi?.onlyTextish) failed.push("content search failed");
