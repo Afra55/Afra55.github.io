@@ -1015,7 +1015,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817vbbbatch1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817vbbnodl1/.test(s.src)),
     };
 
     out.pwa = {
@@ -1281,7 +1281,7 @@ async function main() {
   if (errors.length) failed.push(...errors.map((e) => `page: ${e}`));
   if (!result.panelActive) failed.push("memo panel not active");
   if (!result.hasEditor || !result.hasList) failed.push("missing editor/list");
-  if (!/vbbbatch|bridgebb|imgzoom|vsfsjank|vsplitfs|pwa|navpwa|memopin|navfoot|navlast|navfly/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/vbbnodl|vbbbatch|bridgebb|imgzoom|vsfsjank|vsplitfs|pwa|navpwa|memopin|navfoot|navlast|navfly/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1526,8 +1526,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/vbbbatch1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to vbbbatch1");
+  if (!/vbbnodl1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to vbbnodl1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");

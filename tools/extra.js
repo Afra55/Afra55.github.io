@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-vbbbatch1";
+  const TOOLS_VERSION = "2026.08.17-vbbnodl1";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -7916,13 +7916,12 @@
         if (abortVbb) throw new Error("已取消");
         renderVbbResults();
         setVbbProgress(true, 1, `批量完成 · ${ok}/${total}`);
-        if (ok >= 2) {
-          await packDownloadVbbGifs({ auto: true });
-          toast(`批量黑盒完成 · ${ok}/${total} · 已打包下载`);
-        } else if (ok === 1) {
-          const clip = vbbClips.find((c) => c.gifBlob);
-          if (clip?.gifBlob) triggerLocalDownload(clip.gifBlob, vbbGifDownloadName(clip, 0));
-          toast(`黑盒 GIF 已生成 · ${formatKb(clip.gifBlob.size)}`);
+        if (ok > 0) {
+          toast(
+            ok === total
+              ? `批量黑盒完成 · ${ok} 个 · 可在下方逐条下载或点「打包下载」`
+              : `批量黑盒完成 · 成功 ${ok}/${total} · 可在下方逐条下载或点「打包下载」`
+          );
         } else {
           throw new Error("全部转换失败，请查看各条错误信息");
         }
