@@ -5508,6 +5508,16 @@ button.adb-device-body.linkish {
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
 }
 
+.memo-clip-offer .tool-actions {
+  margin-top: 0.15rem;
+}
+
+.memo-clip-offer .tool-actions .primary-btn,
+.memo-clip-offer .tool-actions .ghost-btn {
+  min-height: 2rem;
+  padding: 0.22rem 0.7rem;
+}
+
 .memo-temp-prompt-title {
   margin: 0;
   font-weight: 700;
