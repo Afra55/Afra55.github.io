@@ -18,8 +18,8 @@
   <!-- 不阻塞首屏：Noto Serif SC 只给文转图用，避免每次拉取中文字体；Google 字体 CSS 在国内常卡住数秒 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" /></noscript>
-  <link rel="stylesheet" href="./style.css?v=20260817memotext1" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260817memotext1" />
+  <link rel="stylesheet" href="./style.css?v=20260817vplay2" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260817vplay2" />
   <script>
     /* 尽早应用主题变量，减少闪烁；侧栏也依赖这些 CSS 变量 */
     (function () {
@@ -138,7 +138,6 @@
           <button type="button" class="media-tab is-active" role="tab" id="media-tab-gifmaker" data-media-tab="gifmaker" aria-controls="gifmaker" aria-selected="true">GIF</button>
           <button type="button" class="media-tab" role="tab" id="media-tab-vsplit" data-media-tab="vsplit" aria-controls="vsplit" aria-selected="false" tabindex="-1">视频切分</button>
           <button type="button" class="media-tab" role="tab" id="media-tab-vtrim" data-media-tab="vtrim" aria-controls="vtrim" aria-selected="false" tabindex="-1">视频修剪</button>
-          <button type="button" class="media-tab" role="tab" id="media-tab-vplay" data-media-tab="vplay" aria-controls="vplay" aria-selected="false" tabindex="-1">视频播放</button>
           <button type="button" class="media-tab" role="tab" id="media-tab-audio" data-media-tab="audio" aria-controls="audio" aria-selected="false" tabindex="-1">音频处理</button>
         </div>
       </div>
@@ -2194,7 +2193,7 @@ hello@world.org</textarea>
     </section>
 
 
-<section id="vplay" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-vplay">
+<section id="vplay" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>视频播放</h1>
         <p>本地选视频后预览：<strong>滚轮缩放</strong>、<strong>拖拽移动</strong>、<strong>双击暂停/播放</strong>。双指可捏合缩放。仅本机读取，不会上传。</p>
@@ -2205,10 +2204,11 @@ hello@world.org</textarea>
           <input id="vplay-file" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" hidden />
           <button type="button" class="ghost-btn" id="vplay-clear">清空</button>
         </div>
-        <p class="hint" id="vplay-meta">支持 MP4 / WebM / MOV。仅本机读取，不会上传。滚轮缩放 · 拖拽移动 · 双击暂停/播放。</p>
-        <div class="vplay-stage" id="vplay-stage" hidden>
+        <p class="hint" id="vplay-meta">支持 MP4 / WebM / MOV。点「选择视频」或点击下方黑色区域。滚轮缩放 · 拖拽移动 · 双击暂停/播放。</p>
+        <div class="vplay-stage" id="vplay-stage">
           <div class="vplay-zoom-wrap" id="vplay-zoom-wrap" title="滚轮缩放，拖拽移动，双击暂停/播放">
-            <video id="vplay-video" playsinline preload="metadata"></video>
+            <p class="vplay-empty-hint hint" id="vplay-empty-hint">请选择视频文件<br /><span class="hint tight">支持 MP4 / WebM / MOV</span></p>
+            <video id="vplay-video" playsinline preload="metadata" hidden></video>
             <div class="vplay-zoom-hud">
               <button type="button" class="ghost-btn vplay-zoom-btn" id="vplay-play" disabled>播放</button>
               <button type="button" class="ghost-btn vplay-zoom-btn" id="vplay-mute" disabled aria-pressed="true">开声音</button>
@@ -3725,22 +3725,22 @@ adb devices</pre>
       <button type="button" class="primary-btn vsplit-fs-mark" id="vsplit-fs-mark">打起点</button>
     </div>
   </div>
-  <script src="./theme.js?v=20260817memotext1"></script>
-  <script src="./temp.js?v=20260817memotext1"></script>
+  <script src="./theme.js?v=20260817vplay2"></script>
+  <script src="./temp.js?v=20260817vplay2"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260817vplay1"></script>
-  <script src="./about.js?v=20260817vplay1" defer></script>
-  <script src="./extra.js?v=20260817vplay1" defer></script>
-  <script src="./vtrim.js?v=20260817vplay1" defer></script>
-  <script src="./vplay.js?v=20260817vplay1" defer></script>
-  <script src="./audio.js?v=20260817vplay1" defer></script>
-  <script src="./ffbridge.js?v=20260817memotext1" defer></script>
-  <script src="./setup.js?v=20260817memotext1" defer></script>
+  <script src="./app.js?v=20260817vplay2"></script>
+  <script src="./about.js?v=20260817vplay2" defer></script>
+  <script src="./extra.js?v=20260817vplay2" defer></script>
+  <script src="./vtrim.js?v=20260817vplay2" defer></script>
+  <script src="./vplay.js?v=20260817vplay2" defer></script>
+  <script src="./audio.js?v=20260817vplay2" defer></script>
+  <script src="./ffbridge.js?v=20260817vplay2" defer></script>
+  <script src="./setup.js?v=20260817vplay2" defer></script>
   <script src="./imgkit.js?v=20260810l" defer></script>
-  <script src="./memo.js?v=20260817memotext1" defer></script>
-  <script src="./textimg.js?v=20260817memotext1" defer></script>
-  <script src="./imgtext.js?v=20260817memotext1" defer></script>
-  <script src="./pwa.js?v=20260817memotext1" defer></script>
+  <script src="./memo.js?v=20260817vplay2" defer></script>
+  <script src="./textimg.js?v=20260817vplay2" defer></script>
+  <script src="./imgtext.js?v=20260817vplay2" defer></script>
+  <script src="./pwa.js?v=20260817vplay2" defer></script>
   <script src="./vendor/js-yaml.min.js" defer></script>
   <script src="./vendor/spark-md5.min.js" defer></script>
   <script src="./vendor/qrcode.min.js" defer></script>

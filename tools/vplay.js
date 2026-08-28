@@ -19,6 +19,7 @@
   const scrub = $("#vplay-scrub");
   const clock = $("#vplay-clock");
   const fsBtn = $("#vplay-fs");
+  const emptyHint = $("#vplay-empty-hint");
 
   let sourceFile = null;
   let objectUrl = "";
@@ -116,6 +117,19 @@
       videoEl.addEventListener("error", onErr);
       if (videoEl.readyState >= 1 && videoEl.videoWidth) finish(true);
     });
+  }
+
+  function fitZoomAfterLayout() {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => fitZoom());
+    });
+  }
+
+  function syncEmptyState() {
+    const has = Boolean(sourceFile && video?.src);
+    if (emptyHint) emptyHint.hidden = has;
+    if (video) video.hidden = !has;
+    if (zoomWrap) zoomWrap.classList.toggle("is-empty", !has);
   }
 
   function displayBox() {
@@ -273,6 +287,10 @@
   function bindZoom() {
     if (!zoomWrap || zoomWrap.dataset.bound === "1") return;
     zoomWrap.dataset.bound = "1";
+    zoomWrap.addEventListener("click", (e) => {
+      if (sourceFile || e.target.closest?.(".vplay-zoom-hud")) return;
+      fileInput?.click();
+    });
     zoomWrap.addEventListener(
       "wheel",
       (e) => {
@@ -352,10 +370,10 @@
       video.load();
     }
     if (fileInput) fileInput.value = "";
-    if (stage) stage.hidden = true;
     resetZoom();
     setError("");
-    if (meta) meta.textContent = "支持 MP4 / WebM / MOV。仅本机读取，不会上传。滚轮缩放 · 拖拽移动 · 双击暂停/播放。";
+    if (meta) meta.textContent = "支持 MP4 / WebM / MOV。点「选择视频」或点击下方黑色区域。滚轮缩放 · 拖拽移动 · 双击暂停/播放。";
+    syncEmptyState();
     syncPlayUi();
     syncClock();
     syncScrubFromVideo();
@@ -375,8 +393,9 @@
     sourceFile = file;
     objectUrl = URL.createObjectURL(file);
     if (meta) meta.textContent = `${name} · ${formatKb(file.size)} · 正在读取…`;
-    if (stage) stage.hidden = false;
     if (video) {
+      video.hidden = false;
+      if (emptyHint) emptyHint.hidden = true;
       video.playsInline = true;
       video.preload = "metadata";
       video.muted = muted;
@@ -387,7 +406,8 @@
       await waitVideoMetadata(video);
       const d = duration();
       if (!(d > 0) || !video.videoWidth) throw new Error("视频时长或尺寸无效");
-      fitZoom();
+      syncEmptyState();
+      fitZoomAfterLayout();
       syncMuteUi();
       syncPlayUi();
       syncClock();
@@ -454,7 +474,7 @@
   });
   video?.addEventListener("play", syncPlayUi);
   video?.addEventListener("pause", syncPlayUi);
-  video?.addEventListener("loadedmetadata", () => fitZoom());
+  video?.addEventListener("loadedmetadata", () => fitZoomAfterLayout());
   window.addEventListener("resize", () => {
     if (!sourceFile || !video?.videoWidth) return;
     const rel = zoom.fit > 0 ? zoom.scale / zoom.fit : 1;
@@ -462,9 +482,18 @@
     zoom.scale = zoom.fit * rel;
     applyZoom();
   });
+  window.addEventListener("devtools:route", () => {
+    if (!sourceFile || !video?.videoWidth) return;
+    const panel = document.getElementById("vplay");
+    if (panel?.classList.contains("is-workspace-active") && !panel.hidden) {
+      fitZoomAfterLayout();
+    }
+  });
   document.addEventListener("fullscreenchange", () => {
     if (!sourceFile) return;
-    window.setTimeout(() => fitZoom(), 80);
+    window.setTimeout(() => fitZoomAfterLayout(), 80);
   });
   syncMuteUi();
+  syncEmptyState();
+  setControlsEnabled(false);
 })();
