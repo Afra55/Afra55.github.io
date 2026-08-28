@@ -15,7 +15,7 @@ const fs = require("fs");
 
 const baseUrl = process.argv[2] || "http://127.0.0.1:4173/tools/";
 const root = path.join(__dirname);
-const VER = "navscroll1";
+const VER = "lanshare5";
 
 function fetchText(url) {
   return new Promise((resolve, reject) => {
@@ -95,6 +95,10 @@ async function main() {
 
   const js = fs.readFileSync(path.join(root, "lanshare.js"), "utf8");
   assert(/encodeURIComponent\(token\)/.test(js), "邀请 token 应 URL 编码");
+  assert(/broadcastExcept/.test(js), "房主应转发成员事件给其他成员");
+  assert(/controlLinked/.test(js), "缺少 controlLinked 连接就绪状态");
+  assert(/relayMemberEvent/.test(js), "缺少成员事件转发");
+  assert(/canUploadFiles/.test(js), "缺少上传前连接校验");
   assert(/sessionStorage/.test(js) && /PENDING_JOIN_KEY/.test(js), "缺少 join token 缓存");
   assert(/preserveLanshareJoin/.test(fs.readFileSync(path.join(root, "app.js"), "utf8")), "app.js 应保护 lanshare 深链");
 
