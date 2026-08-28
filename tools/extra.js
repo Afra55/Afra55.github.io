@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-memoux1";
+  const TOOLS_VERSION = "2026.08.17-bridgebb1";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -4444,9 +4444,6 @@
     v2gGenerateWebp?.addEventListener("click", () => {
       convertVideoToWebp().catch((err) => setError(v2gError, err.message || String(err)));
     });
-    v2gBlackbox?.addEventListener("click", () => {
-      convertVideoToGifBlackBox().catch((err) => setError(v2gError, err.message || String(err)));
-    });
     v2gCompress?.addEventListener("click", () => {
       compressV2gGif({ again: false }).catch((err) => setError(v2gError, err.message || String(err)));
     });
@@ -4551,7 +4548,6 @@
     const vsplitEditDone = $("#vsplit-edit-done");
     const vsplitQuickExport = $("#vsplit-quick-export");
     const vsplitQuickCut = $("#vsplit-quick-cut");
-    const vsplitQuickBb = $("#vsplit-quick-bb");
     const vsplitQuickHq = $("#vsplit-quick-hq");
     const vsplitNudgeM1 = $("#vsplit-nudge-m1");
     const vsplitNudgeM01 = $("#vsplit-nudge-m01");
@@ -4565,7 +4561,6 @@
     const vsplitQuality = $("#vsplit-quality");
     const vsplitCut = $("#vsplit-cut");
     const vsplitGifHq = $("#vsplit-gif-hq");
-    const vsplitGifBb = $("#vsplit-gif-bb");
     const vsplitMerge = $("#vsplit-merge");
     const vsplitAbort = $("#vsplit-abort");
     const vsplitList = $("#vsplit-list");
@@ -4836,7 +4831,6 @@
       }
       const canGif = hasClips || (vsplitMode === "manual" && hasComplete);
       if (vsplitGifHq) vsplitGifHq.disabled = !canGif || vsplitBusy;
-      if (vsplitGifBb) vsplitGifBb.disabled = !canGif || vsplitBusy;
       if (vsplitMerge) vsplitMerge.disabled = gifCount < 2 || vsplitBusy;
       if (vsplitZipVideo) vsplitZipVideo.disabled = videoCount < 1 || vsplitBusy;
       if (vsplitZipGif) vsplitZipGif.disabled = gifCount < 1 || vsplitBusy;
@@ -4888,7 +4882,6 @@
         vsplitQuickExport.hidden = !(vsplitMode === "manual" && hasComplete);
       }
       if (vsplitQuickCut) vsplitQuickCut.disabled = !hasVideo || vsplitBusy || !canManualCut;
-      if (vsplitQuickBb) vsplitQuickBb.disabled = !canGif || vsplitBusy;
       if (vsplitQuickHq) vsplitQuickHq.disabled = !canGif || vsplitBusy;
       if (editing) {
         const mark = vsplitMarks[vsplitEditIdx];
@@ -6755,9 +6748,6 @@
       paintVsplitNow();
     });
     vsplitQuickCut?.addEventListener("click", () => runVsplitCut().catch((err) => setError(vsplitError, err.message || String(err))));
-    vsplitQuickBb?.addEventListener("click", () => {
-      runVsplitGifs("blackbox").catch((err) => setError(vsplitError, err.message || String(err)));
-    });
     vsplitQuickHq?.addEventListener("click", () => {
       runVsplitGifs("hq").catch((err) => setError(vsplitError, err.message || String(err)));
     });
@@ -6943,9 +6933,6 @@
     };
     vsplitCut?.addEventListener("click", () => runVsplitCut().catch((err) => setError(vsplitError, err.message || String(err))));
     vsplitGifHq?.addEventListener("click", () => runVsplitGifs("hq").catch((err) => setError(vsplitError, err.message || String(err))));
-    vsplitGifBb?.addEventListener("click", () =>
-      runVsplitGifs("blackbox").catch((err) => setError(vsplitError, err.message || String(err)))
-    );
     vsplitMerge?.addEventListener("click", () => runVsplitMerge().catch((err) => setError(vsplitError, err.message || String(err))));
     vsplitAbort?.addEventListener("click", () => {
       abortVsplit = true;
@@ -6964,6 +6951,8 @@
     const vbbError = $("#vbb-error");
     const vbbAnalyze = $("#vbb-analyze");
     const vbbRun = $("#vbb-run");
+    const vbbOneclick = $("#vbb-oneclick");
+    const vbbAdvanced = $("#vbb-advanced");
     const vbbMerge = $("#vbb-merge");
     const vbbAbort = $("#vbb-abort");
     const vbbZip = $("#vbb-zip");
@@ -6997,13 +6986,14 @@
     /** Soft keep≈0.72 对应约 1–2 轮 --lossy 轻压 */
     const VBB_SOFT_COMPRESS_KEEP = 0.72;
     const VBB_DEFAULT_META =
-      "支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。分析阶段抽 2–3 秒样片估体积；关闭页面会释放本次视频和 GIF。";
+      "支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。点「一键黑盒」即可。";
 
     let vbbSourceFile = null;
     let vbbObjectUrl = "";
     let vbbBusy = false;
     let abortVbb = false;
-    let vbbMode = "clarity";
+    let vbbMode = "duration";
+    let vbbWorkflow = "single";
     let vbbAnalysis = null;
     let vbbClips = [];
     let vbbZipUrl = "";
@@ -7117,10 +7107,16 @@
       const hasVideo = Boolean(vbbVideo?.src && vbbSourceFile);
       const hasPlan = Boolean(vbbAnalysis?.active?.ranges?.length);
       const gifCount = vbbClips.filter((c) => c.gifBlob).length;
+      if (vbbOneclick) vbbOneclick.disabled = !hasVideo || vbbBusy;
       if (vbbAnalyze) vbbAnalyze.disabled = !hasVideo || vbbBusy;
       if (vbbRun) vbbRun.disabled = !hasPlan || vbbBusy;
       if (vbbMerge) vbbMerge.disabled = gifCount < 2 || vbbBusy;
       if (vbbZip) vbbZip.disabled = gifCount < 1 || vbbBusy;
+    }
+
+    function syncVbbWorkflowUi() {
+      $("#vbb-workflow-single")?.classList.toggle("is-active", vbbWorkflow === "single");
+      $("#vbb-workflow-split")?.classList.toggle("is-active", vbbWorkflow === "split");
     }
 
     async function packDownloadVbbGifs({ auto = false } = {}) {
@@ -7572,6 +7568,7 @@
       const active = resolveActiveVbbPlan();
       vbbAnalysis.active = active;
       if (vbbPlan) vbbPlan.hidden = false;
+      if (vbbAdvanced) vbbAdvanced.open = true;
       syncVbbModeUi();
 
       if (vbbPlanCompare) {
@@ -7744,7 +7741,79 @@
         );
       }
       setVbbButtons();
-      toast("视频已就绪，可分析切分方案");
+      toast("视频已就绪，点「一键黑盒」即可");
+    }
+
+    async function runVbbSingleBlackbox() {
+      if (!vbbSourceFile || !vbbVideo?.src || vbbBusy) return;
+      const duration = Number(vbbVideo.duration) || 0;
+      if (!(duration >= VBB_MIN_SPAN)) throw new Error(`视频太短，至少约 ${VBB_MIN_SPAN} 秒`);
+      const srcW = vbbVideo.videoWidth || 0;
+      const srcH = vbbVideo.videoHeight || 0;
+      abortVbb = false;
+      vbbBusy = true;
+      setVbbButtons();
+      if (vbbAbort) vbbAbort.hidden = false;
+      setError(vbbError, "");
+      clearVbbResults();
+      vbbClips = [
+        {
+          start: 0,
+          span: duration,
+          gifBlob: null,
+          gifUrl: "",
+          gifNote: "",
+          error: "",
+          jobStatus: "pending",
+          jobProgress: 0,
+          jobText: "等待中…",
+        },
+      ];
+      renderVbbResults();
+      try {
+        await prewarmFfmpegEngine().catch(() => {});
+        setVbbClipJob(0, { status: "running", progress: 0.02, text: "黑盒编码…" });
+        setVbbProgress(true, 0.05, "黑盒编码…", { sub: `整段 ${duration.toFixed(1)}s`, busy: true });
+        const encoded = await encodeBlackboxClip({
+          file: vbbSourceFile,
+          startSec: 0,
+          span: duration,
+          srcW,
+          srcH,
+          isAborted: () => abortVbb,
+          onProgress: (local, text) =>
+            setVbbProgress(true, 0.08 + Math.min(0.9, local) * 0.9, "黑盒编码…", { sub: text, busy: true }),
+        });
+        if (abortVbb) throw new Error("已取消");
+        vbbClips[0].gifBlob = encoded.blob;
+        vbbClips[0].gifNote = `${encoded.fps || 15} FPS · ${formatKb(encoded.blob.size)}`;
+        setVbbClipJob(0, { status: "done", progress: 1, text: "完成" });
+        renderVbbResults();
+        setVbbProgress(true, 1, `黑盒完成 · ${formatKb(encoded.blob.size)}`);
+        toast(`黑盒 GIF 已生成 · ${formatKb(encoded.blob.size)}`);
+      } catch (err) {
+        if (String(err?.message) !== "已取消") setError(vbbError, err.message || String(err));
+        else toast("已取消");
+        setVbbProgress(false, 0, "");
+      } finally {
+        vbbBusy = false;
+        resetVbbAbort();
+        if (vbbAbort) vbbAbort.hidden = true;
+        setVbbButtons();
+      }
+    }
+
+    async function runVbbOneClick() {
+      if (!vbbSourceFile || vbbBusy) return;
+      if (vbbWorkflow === "single") {
+        await runVbbSingleBlackbox().catch((err) => setError(vbbError, err.message || String(err)));
+        return;
+      }
+      await runVbbAnalyze().catch((err) => setError(vbbError, err.message || String(err)));
+      if (!vbbAnalysis?.duration || vbbBusy) return;
+      vbbMode = "duration";
+      paintVbbPlan();
+      await runVbbExecute().catch((err) => setError(vbbError, err.message || String(err)));
     }
 
     async function runVbbAnalyze() {
@@ -7836,7 +7905,7 @@
         };
         if (vbbTargetSpan) vbbTargetSpan.value = String(Number(clarity.maxSpan.toFixed(1)));
         if (vbbTargetRange) vbbTargetRange.value = vbbTargetSpan.value;
-        vbbMode = "clarity";
+        vbbMode = "duration";
         paintVbbPlan();
         setVbbProgress(
           true,
@@ -8183,6 +8252,7 @@
       isEqualize: () => isVbbEqualize(),
     };
     vbbAnalyze?.addEventListener("click", () => runVbbAnalyze().catch((err) => setError(vbbError, err.message || String(err))));
+    vbbOneclick?.addEventListener("click", () => runVbbOneClick().catch((err) => setError(vbbError, err.message || String(err))));
     vbbRun?.addEventListener("click", () => runVbbExecute().catch((err) => setError(vbbError, err.message || String(err))));
     vbbMerge?.addEventListener("click", () => runVbbMerge().catch((err) => setError(vbbError, err.message || String(err))));
     vbbZip?.addEventListener("click", () => {
@@ -8194,6 +8264,15 @@
       terminateFfmpegInstance({ revokeAssets: false });
       scheduleFfmpegPrewarm();
     });
+    $("#vbb-workflow-single")?.addEventListener("click", () => {
+      vbbWorkflow = "single";
+      syncVbbWorkflowUi();
+    });
+    $("#vbb-workflow-split")?.addEventListener("click", () => {
+      vbbWorkflow = "split";
+      syncVbbWorkflowUi();
+    });
+    syncVbbWorkflowUi();
     syncVbbModeUi();
     setVbbButtons();
   } catch (err) {

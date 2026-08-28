@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.8.0";
+const BRIDGE_VERSION = "0.8.1";
 const scrcpyMirror = require("./scrcpy-mirror");
 function loadFfmpegBridge() {
   const candidates = [

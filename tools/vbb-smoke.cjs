@@ -86,8 +86,13 @@ async function main() {
       runDisabled: document.getElementById("vbb-run")?.disabled,
       mergeDisabled: document.getElementById("vbb-merge")?.disabled,
       planHidden: document.getElementById("vbb-plan")?.hidden,
+      hasOneclick: Boolean(document.getElementById("vbb-oneclick")),
+      hasAdvanced: Boolean(document.getElementById("vbb-advanced")),
+      noV2gBlackboxBtn: !document.getElementById("v2g-blackbox"),
+      noVsplitBbBtn: !document.getElementById("vsplit-gif-bb"),
       ids: [
         "vbb-file",
+        "vbb-oneclick",
         "vbb-analyze",
         "vbb-run",
         "vbb-merge",
@@ -111,10 +116,12 @@ async function main() {
       hasPurge: typeof window.DevToolsTemp?.purgeSiteCache === "function",
     };
     try {
-      const mediaIds = ["gifmaker", "vsplit", "vbb", "vtrim", "audio"];
+      const mediaIds = ["gifmaker", "vsplit", "vtrim", "audio"];
       out.orderHasMedia = mediaIds.every((id) =>
         [...document.querySelectorAll(".tool-nav-link")].some((a) => a.dataset.tool === id)
       );
+      out.hasBlackboxNav = [...document.querySelectorAll(".tool-nav-link")].some((a) => a.dataset.tool === "vbb");
+      out.noVbbInMediaTabs = ![...document.querySelectorAll("[data-media-tab]")].some((b) => b.dataset.mediaTab === "vbb");
       out.noCollapsedMediaNav = ![...document.querySelectorAll(".tool-nav-link")].some((a) => a.dataset.tool === "media");
     } catch (_) {}
     return out;
@@ -155,6 +162,9 @@ async function main() {
     throw new Error(`vbb video preload should be metadata, got ${localPick.preload}`);
   }
 
+  await page.evaluate(() => {
+    document.getElementById("vbb-advanced")?.setAttribute("open", "");
+  });
   await page.click("#vbb-analyze");
   await page.waitForFunction(() => {
     const plan = document.getElementById("vbb-plan");
@@ -283,6 +293,9 @@ async function main() {
   });
 
   await page.click("#vbb-mode-clarity");
+  await page.evaluate(() => {
+    document.getElementById("vbb-advanced")?.setAttribute("open", "");
+  });
   await page.click("#vbb-run");
   await page.waitForFunction(() => {
     const list = document.getElementById("vbb-list");
@@ -314,6 +327,9 @@ async function main() {
     const b = document.getElementById("vbb-analyze");
     return b && !b.disabled;
   }, { timeout: 15000 });
+  await page.evaluate(() => {
+    document.getElementById("vbb-advanced")?.setAttribute("open", "");
+  });
   await page.click("#vbb-analyze");
   await page.waitForFunction(() => {
     const plan = document.getElementById("vbb-plan");
@@ -1230,13 +1246,17 @@ async function main() {
   const problems = [];
   if (errors.length) problems.push(`page errors: ${errors.join(" | ")}`);
   if (!result.hasSection) problems.push("missing #vbb");
-  if (!result.hasNav) problems.push("missing media nav");
+  if (!result.hasNav) problems.push("missing blackbox nav");
   if (!result.mediaActive) problems.push("vbb nav should be active for #vbb");
   if (!result.vbbActive) problems.push("vbb panel should be workspace-active");
-  if (result.hash !== "#media/vbb") problems.push(`legacy #vbb should redirect, got ${result.hash}`);
-  if (!result.mediaSubnavVisible) problems.push("media subnav should show");
-  if (!result.orderHasMedia) problems.push("nav missing expanded media entries");
-  if (result.noCollapsedMediaNav === false) problems.push("collapsed single media nav link should be gone");
+  if (result.hash !== "#vbb") problems.push(`#vbb route expected, got ${result.hash}`);
+  if (result.mediaSubnavVisible) problems.push("media subnav should be hidden on standalone blackbox");
+  if (!result.orderHasMedia) problems.push("nav missing media entries");
+  if (!result.hasBlackboxNav) problems.push("nav missing standalone blackbox entry");
+  if (!result.noVbbInMediaTabs) problems.push("vbb should not remain in media tabs");
+  if (!result.hasOneclick) problems.push("missing vbb-oneclick");
+  if (!result.noV2gBlackboxBtn) problems.push("v2g blackbox button should be removed");
+  if (!result.noVsplitBbBtn) problems.push("vsplit blackbox button should be removed");
   if (!/2026\.08\./.test(result.version)) problems.push(`bad version ${result.version}`);
   if (result.analyzeDisabled !== true) problems.push("analyze should start disabled");
   if (result.runDisabled !== true) problems.push("run should start disabled");

@@ -5510,8 +5510,20 @@ button.adb-device-body.linkish {
   color: color-mix(in srgb, #c88400 70%, var(--ink));
 }
 
-.memo-temp-prompt-sub {
-  margin: 0;
+.blackbox-advanced {
+  margin-top: 0.85rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px dashed color-mix(in srgb, var(--line) 70%, transparent);
+  border-radius: 12px;
+}
+
+.blackbox-advanced > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.blackbox-workflow-row .seg-btn {
+  min-width: 6.5rem;
 }
 
 .memo-tag-row {

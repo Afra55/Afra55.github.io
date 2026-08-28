@@ -71,11 +71,46 @@ TARGET="${BRIDGE_DIR}/server.js"
 
 is_valid_server() {
   local f="$1"
-  [ -f "$f" ] && [ -s "$f" ] && grep -q "devtools-adb-bridge\|ADB_BRIDGE_TOKEN\|DevTools local ADB bridge" "$f" 2>/dev/null
+  [ -f "$f" ] && [ -s "$f" ] && grep -q "devtools-adb-bridge\|ADB_BRIDGE_TOKEN\|DevTools local ADB bridge\|devtools-bridge\|统一本机桥" "$f" 2>/dev/null
+}
+
+sync_bridge_bundle() {
+  local src="$1"
+  local dst="$2"
+  [ -f "${src}/scrcpy-mirror.js" ] && cp -f "${src}/scrcpy-mirror.js" "${dst}/scrcpy-mirror.js"
+  if [ -f "${src}/ffmpeg-bridge/server.js" ]; then
+    mkdir -p "${dst}/ffmpeg-bridge"
+    cp -f "${src}/ffmpeg-bridge/server.js" "${dst}/ffmpeg-bridge/server.js"
+  fi
+  if [ -f "${src}/vendor/scrcpy-server-v3.1" ]; then
+    mkdir -p "${dst}/vendor"
+    cp -f "${src}/vendor/scrcpy-server-v3.1" "${dst}/vendor/scrcpy-server-v3.1"
+  fi
+}
+
+download_mirror_js() {
+  local out="$1"
+  local urls=(
+    "${ADB_BRIDGE_BASE_URL:-https://afra55.github.io/tools/adb-bridge}/scrcpy-mirror.js"
+    "https://afra55.github.io/tools/adb-bridge/scrcpy-mirror.js"
+    "https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/tools/adb-bridge/scrcpy-mirror.js"
+  )
+  for url in "${urls[@]}"; do
+    echo "正在下载 scrcpy-mirror.js：${url}"
+    if curl -fsSL --connect-timeout 15 --max-time 120 "$url" -o "${out}.tmp"; then
+      if [ -s "${out}.tmp" ] && grep -q "module.exports\|scrcpy" "${out}.tmp" 2>/dev/null; then
+        mv -f "${out}.tmp" "$out"
+        return 0
+      fi
+      rm -f "${out}.tmp"
+    fi
+  done
+  return 1
 }
 
 if is_valid_server "${SCRIPT_DIR}/server.js"; then
   cp -f "${SCRIPT_DIR}/server.js" "${TARGET}"
+  sync_bridge_bundle "${SCRIPT_DIR}" "${BRIDGE_DIR}"
   echo "已使用同目录 server.js"
 elif is_valid_server "${TARGET}"; then
   echo "已使用本地缓存：${TARGET}"
@@ -120,8 +155,20 @@ if ! is_valid_server "${TARGET}"; then
   pause_exit 1
 fi
 
+if [ ! -f "${BRIDGE_DIR}/scrcpy-mirror.js" ]; then
+  if [ -f "${SCRIPT_DIR}/scrcpy-mirror.js" ]; then
+    cp -f "${SCRIPT_DIR}/scrcpy-mirror.js" "${BRIDGE_DIR}/scrcpy-mirror.js"
+  else
+    download_mirror_js "${BRIDGE_DIR}/scrcpy-mirror.js" || {
+      echo "无法获取 scrcpy-mirror.js。请重新下载完整 ZIP 包。"
+      pause_exit 1
+    }
+  fi
+fi
+sync_bridge_bundle "${SCRIPT_DIR}" "${BRIDGE_DIR}"
+
 cd "${BRIDGE_DIR}" || pause_exit 1
-export ADB_BRIDGE_TOKEN="${ADB_BRIDGE_TOKEN:-devtools-adb}"
+export ADB_BRIDGE_TOKEN="${ADB_BRIDGE_TOKEN:-devtools-bridge}"
 export ADB_BRIDGE_PORT="${ADB_BRIDGE_PORT:-17888}"
 echo "node: $(command -v node)"
 echo "adb 版本："
