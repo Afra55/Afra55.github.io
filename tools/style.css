@@ -5635,6 +5635,29 @@ button.adb-device-body.linkish {
   color: var(--ink);
 }
 
+.vplay-zoom-wrap.is-empty {
+  cursor: pointer;
+}
+
+.vplay-empty-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  margin: 0;
+  text-align: center;
+  color: color-mix(in srgb, var(--ink) 72%, #fff);
+  pointer-events: none;
+}
+
+.vplay-zoom-wrap.is-empty .vplay-empty-hint {
+  pointer-events: auto;
+}
+
 .vplay-transport {
   display: flex;
   align-items: center;

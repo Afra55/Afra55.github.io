@@ -769,12 +769,13 @@
   const RECENT_KEY = "devtools-tool-recent-v1";
   const SORT_HINT_KEY = "devtools-nav-sort-hint-seen-v1";
   const RECENT_SHOW = 8;
-  const MEDIA_TABS = ["gifmaker", "vsplit", "vtrim", "vplay", "audio"];
+  const MEDIA_TABS = ["gifmaker", "vsplit", "vtrim", "audio"];
   const HASH_ALIASES = {
     gifmaker: { tool: "media", tab: "gifmaker" },
     vsplit: { tool: "media", tab: "vsplit" },
     vtrim: { tool: "media", tab: "vtrim" },
     audio: { tool: "media", tab: "audio" },
+    vplay: { tool: "vplay", tab: "gifmaker" },
     vbb: { tool: "vbb" },
     blackbox: { tool: "vbb" },
   };
@@ -788,7 +789,8 @@
       tools: ["json", "yaml", "sharecard", "query", "text", "caseconv", "regex", "diff", "qrcode", "markdown", "memo"],
     },
     { id: "blackbox", label: "黑盒", tools: ["vbb"] },
-    { id: "media", label: "媒体", tools: ["gifmaker", "vsplit", "vtrim", "vplay", "audio"] },
+    { id: "play", label: "播放", tools: ["vplay"] },
+    { id: "media", label: "媒体", tools: ["gifmaker", "vsplit", "vtrim", "audio"] },
     { id: "image", label: "图片", tools: ["imgkit", "textimg", "imgtext"] },
     { id: "convert", label: "换算", tools: ["units", "coord", "numbase"] },
     { id: "device", label: "设备", tools: ["adb", "ffbridge"] },
@@ -1397,6 +1399,7 @@
     if (HASH_ALIASES[head]) return { ...HASH_ALIASES[head] };
     if (head === "media") {
       if (parts[1] === "vbb") return { tool: "vbb", tab: "gifmaker" };
+      if (parts[1] === "vplay") return { tool: "vplay", tab: "gifmaker" };
       const tab = MEDIA_TABS.includes(parts[1]) ? parts[1] : "gifmaker";
       return { tool: "media", tab };
     }
