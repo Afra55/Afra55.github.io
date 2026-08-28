@@ -1436,9 +1436,13 @@
       .trim();
     const rawHead = rawHash.split(/[/?]/)[0];
     const canonical = routeHash(currentTool, currentMediaTab);
+    const preserveLanshareJoin = rawHead === "lanshare" && rawHash.includes("?");
     if (/^media\/vbb\b/i.test(rawHash)) {
       if (rawHash !== "vbb") history.replaceState(null, "", "#vbb");
-    } else if (HASH_ALIASES[rawHead] || (rawHead === "media" && !rawHash.includes("/"))) {
+    } else if (
+      !preserveLanshareJoin &&
+      (HASH_ALIASES[rawHead] || (rawHead === "media" && !rawHash.includes("/")))
+    ) {
       if (rawHash !== canonical.replace(/^#/, "")) {
         history.replaceState(null, "", canonical);
       }

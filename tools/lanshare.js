@@ -12,6 +12,7 @@
   const CHUNK_SIZE = 32 * 1024;
   const DC_BUFFER_LIMIT = 512 * 1024;
   const NAME_KEY = "devtools-lanshare-name";
+  const PENDING_JOIN_KEY = "devtools-lanshare-pending-j";
 
   const els = {
     statusDot: $("#ls-dot"),
@@ -69,8 +70,46 @@
     controlDc: null,
     pendingJoin: null,
     pageHiddenWarn: false,
-    autoJoinTried: false,
+    autoJoinBusy: false,
   };
+
+  function stashPendingJoinToken(token) {
+    if (!token) return;
+    try {
+      sessionStorage.setItem(PENDING_JOIN_KEY, token);
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function takePendingJoinToken() {
+    const fromHash = readJoinTokenFromHash();
+    if (fromHash) {
+      stashPendingJoinToken(fromHash);
+      return fromHash;
+    }
+    try {
+      return sessionStorage.getItem(PENDING_JOIN_KEY) || "";
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function clearPendingJoinToken() {
+    try {
+      sessionStorage.removeItem(PENDING_JOIN_KEY);
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function readJoinTokenFromHash() {
+    const full = String(location.hash || "").replace(/^#/, "");
+    if (!full.startsWith("lanshare?")) return "";
+    return new URLSearchParams(full.slice(full.indexOf("?") + 1)).get("j") || "";
+  }
+
+  stashPendingJoinToken(readJoinTokenFromHash());
 
   function isIOS() {
     return /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
@@ -206,7 +245,7 @@
     const token = await packInvitePayload(
       toInviteRecord({ roomId: state.roomId, hostId: state.peerId, hostName: state.peerName, sdp })
     );
-    return `${inviteLinkBase()}#lanshare?j=${token}`;
+    return `${inviteLinkBase()}#lanshare?j=${encodeURIComponent(token)}`;
   }
 
   async function parseInviteAsync(text) {
@@ -714,6 +753,7 @@
     state.isHost = false;
     state.joinedAt = Date.now();
     state.members.set(state.peerId, { id: state.peerId, name: state.peerName, joinedAt: state.joinedAt });
+    paintStatus();
 
     const pc = createPeer();
     state.controlPc = pc;
@@ -728,10 +768,20 @@
       if (pc.connectionState === "failed") setError("加入房间失败，请确认邀请码未过期并重试");
     };
 
-    await pc.setRemoteDescription({ type: "offer", sdp: inv.sdp });
-    const ans = await pc.createAnswer();
-    await pc.setLocalDescription(ans);
-    await waitIce(pc);
+    try {
+      await pc.setRemoteDescription({ type: "offer", sdp: inv.sdp });
+      const ans = await pc.createAnswer();
+      await pc.setLocalDescription(ans);
+      await waitIce(pc);
+    } catch (e) {
+      closeMemberControl();
+      state.roomId = "";
+      state.isHost = false;
+      state.hostId = "";
+      state.members.clear();
+      paintStatus();
+      throw new Error(e?.message || "无法建立连接，请让房主刷新邀请二维码");
+    }
     paintStatus();
   }
 
@@ -1101,6 +1151,7 @@
     state.localFiles.clear();
     state.transferring = false;
     state.pageHiddenWarn = false;
+    state.autoJoinBusy = false;
     if (els.inviteText) els.inviteText.value = "";
     if (els.inviteQr) els.inviteQr.innerHTML = "";
     setProgress(null);
@@ -1202,18 +1253,19 @@
   }
 
   async function tryAutoJoinFromHash() {
-    if (state.roomId || state.autoJoinTried) return;
-    const full = String(location.hash || "").replace(/^#/, "");
-    if (!full.startsWith("lanshare?")) return;
-    const j = new URLSearchParams(full.slice(full.indexOf("?") + 1)).get("j");
+    if (state.roomId || state.autoJoinBusy) return;
+    const j = takePendingJoinToken();
     if (!j) return;
-    state.autoJoinTried = true;
+    state.autoJoinBusy = true;
     try {
       setError("");
       await joinRoom(`lanshare?j=${j}`);
+      clearPendingJoinToken();
       history.replaceState(null, "", "#lanshare");
     } catch (e) {
       setError(e.message || "自动加入失败，请粘贴链接后点「确认加入」");
+    } finally {
+      state.autoJoinBusy = false;
     }
   }
 
@@ -1350,6 +1402,9 @@
     unpackInvitePayload,
     inviteLinkBase,
     isInviteScanData,
+    readJoinTokenFromHash,
+    takePendingJoinToken,
+    getRoomId: () => state.roomId,
   };
 
   window.addEventListener("devtools:route", () => {
