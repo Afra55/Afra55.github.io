@@ -5658,6 +5658,18 @@ button.adb-device-body.linkish {
   pointer-events: auto;
 }
 
+.vplay-zoom-wrap.is-file-drag,
+.vplay-stage.is-file-drag .vplay-zoom-wrap {
+  outline: 2px dashed color-mix(in srgb, var(--accent) 75%, #fff);
+  outline-offset: -3px;
+  background: color-mix(in srgb, var(--accent) 12%, #000);
+}
+
+.vplay-zoom-wrap.is-file-drag .vplay-empty-hint,
+.vplay-stage.is-file-drag .vplay-empty-hint {
+  color: var(--accent);
+}
+
 .vplay-transport {
   display: flex;
   align-items: center;

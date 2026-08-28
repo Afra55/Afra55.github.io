@@ -284,6 +284,68 @@
     }
   }
 
+  function isVideoFile(file) {
+    if (!file) return false;
+    if (String(file.type || "").startsWith("video/")) return true;
+    return /\.(mp4|webm|mov|m4v|mkv|avi)$/i.test(String(file.name || ""));
+  }
+
+  function pickVideoFromDataTransfer(dt) {
+    const files = [...(dt?.files || [])];
+    return files.find(isVideoFile) || null;
+  }
+
+  function hasFileDrop(dt) {
+    return [...(dt?.types || [])].includes("Files");
+  }
+
+  let fileDragDepth = 0;
+
+  function setFileDrag(on) {
+    zoomWrap?.classList.toggle("is-file-drag", on);
+    stage?.classList.toggle("is-file-drag", on);
+  }
+
+  function bindFileDrop() {
+    const targets = [zoomWrap, stage].filter(Boolean);
+    if (!targets.length) return;
+    const onEnter = (e) => {
+      if (!hasFileDrop(e.dataTransfer)) return;
+      e.preventDefault();
+      fileDragDepth += 1;
+      setFileDrag(true);
+    };
+    const onLeave = (e) => {
+      if (!hasFileDrop(e.dataTransfer)) return;
+      fileDragDepth = Math.max(0, fileDragDepth - 1);
+      if (fileDragDepth === 0) setFileDrag(false);
+    };
+    const onOver = (e) => {
+      if (!hasFileDrop(e.dataTransfer)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      setFileDrag(true);
+    };
+    const onDrop = (e) => {
+      if (!hasFileDrop(e.dataTransfer)) return;
+      e.preventDefault();
+      fileDragDepth = 0;
+      setFileDrag(false);
+      const file = pickVideoFromDataTransfer(e.dataTransfer);
+      if (!file) {
+        toast("请拖入视频文件");
+        return;
+      }
+      loadFile(file, { autoplay: true }).catch((err) => setError(err.message || String(err)));
+    };
+    targets.forEach((el) => {
+      el.addEventListener("dragenter", onEnter);
+      el.addEventListener("dragleave", onLeave);
+      el.addEventListener("dragover", onOver);
+      el.addEventListener("drop", onDrop);
+    });
+  }
+
   function bindZoom() {
     if (!zoomWrap || zoomWrap.dataset.bound === "1") return;
     zoomWrap.dataset.bound = "1";
@@ -372,7 +434,7 @@
     if (fileInput) fileInput.value = "";
     resetZoom();
     setError("");
-    if (meta) meta.textContent = "支持 MP4 / WebM / MOV。点「选择视频」或点击下方黑色区域。滚轮缩放 · 拖拽移动 · 双击暂停/播放。";
+    if (meta) meta.textContent = "支持 MP4 / WebM / MOV。点「选择视频」、拖入下方黑色区域，或点击黑色区域选择。滚轮缩放 · 拖拽移动 · 双击暂停/播放。";
     syncEmptyState();
     syncPlayUi();
     syncClock();
@@ -380,13 +442,13 @@
     setControlsEnabled(false);
   }
 
-  async function loadFile(file) {
+  async function loadFile(file, opts = {}) {
     if (!file) return;
     clearVplay();
     setError("");
-    const type = String(file.type || "");
+    const type = String(file.type || "").toLowerCase();
     const name = String(file.name || "");
-    if (type && !type.startsWith("video/") && !/\.(mp4|webm|mov|m4v)$/i.test(name)) {
+    if (type && !type.startsWith("video/") && !/\.(mp4|webm|mov|m4v|mkv|avi)$/i.test(name)) {
       setError("请选择视频文件");
       return;
     }
@@ -417,7 +479,10 @@
         meta.textContent = `${name} · ${formatKb(file.size)} · ${d.toFixed(1)}s · ${video.videoWidth}×${video.videoHeight}`;
       }
       if (d >= LONG_VIDEO_SEC) toast("长视频：滚轮/拖拽定位，双击播放/暂停");
-      else toast("视频已加载");
+      else toast(opts.autoplay ? "已加载并开始播放" : "视频已加载");
+      if (opts.autoplay) {
+        video.play().catch(() => toast("无法自动播放，请点播放"));
+      }
     } catch (err) {
       clearVplay();
       setError(err.message || String(err));
@@ -433,6 +498,7 @@
     stage.requestFullscreen?.().catch(() => toast("无法进入全屏"));
   }
 
+  bindFileDrop();
   bindZoom();
   fileInput?.addEventListener("change", (e) => {
     loadFile(e.target.files?.[0]).catch((err) => setError(err.message || String(err)));
