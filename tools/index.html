@@ -1633,6 +1633,63 @@ hello@world.org</textarea>
         </div>
 
         <div class="field-block" style="margin-top:1.5rem">
+          <h2 class="subhead">编辑已有 GIF</h2>
+          <div class="btn-row tool-actions">
+            <label class="file-btn" for="gife-file">选择 GIF</label>
+            <input id="gife-file" type="file" accept="image/gif,.gif" hidden />
+            <button type="button" class="ghost-btn" id="gife-clear">清空</button>
+          </div>
+          <p class="hint" id="gife-meta">裁剪画面（去黑边或裁掉一部分）、去掉前几帧或后几帧，再导出为新 GIF。</p>
+          <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem;align-items:center">
+            <label for="gife-trim-head">去掉前</label>
+            <input id="gife-trim-head" class="mono meta-input" type="number" min="0" max="999" step="1" value="0" title="去掉前几帧" />
+            <span class="hint tight">帧</span>
+            <label for="gife-trim-tail">去掉后</label>
+            <input id="gife-trim-tail" class="mono meta-input" type="number" min="0" max="999" step="1" value="0" title="去掉后几帧" />
+            <span class="hint tight">帧</span>
+          </div>
+          <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
+            <label for="gife-crop-x">裁剪 X%</label>
+            <input id="gife-crop-x" class="mono meta-input" type="number" min="0" max="99" value="0" />
+            <label for="gife-crop-y">Y%</label>
+            <input id="gife-crop-y" class="mono meta-input" type="number" min="0" max="99" value="0" />
+            <label for="gife-crop-w">W%</label>
+            <input id="gife-crop-w" class="mono meta-input" type="number" min="1" max="100" value="100" />
+            <label for="gife-crop-h">H%</label>
+            <input id="gife-crop-h" class="mono meta-input" type="number" min="1" max="100" value="100" />
+            <button type="button" class="ghost-btn" id="gife-auto-crop" disabled title="自动检测黑边并填入裁剪区域">自动去黑边</button>
+            <button type="button" class="ghost-btn" id="gife-reset-crop" disabled>重置裁剪</button>
+          </div>
+          <div class="imgkit-crop-editor gife-crop-editor" id="gife-crop-editor" hidden>
+            <div class="imgkit-crop-stage" id="gife-crop-stage">
+              <canvas id="gife-crop-canvas" width="1" height="1"></canvas>
+              <div class="imgkit-crop-box" id="gife-crop-box" hidden>
+                <span class="imgkit-crop-handle" data-gife-handle="nw"></span>
+                <span class="imgkit-crop-handle" data-gife-handle="n"></span>
+                <span class="imgkit-crop-handle" data-gife-handle="ne"></span>
+                <span class="imgkit-crop-handle" data-gife-handle="e"></span>
+                <span class="imgkit-crop-handle" data-gife-handle="se"></span>
+                <span class="imgkit-crop-handle" data-gife-handle="s"></span>
+                <span class="imgkit-crop-handle" data-gife-handle="sw"></span>
+                <span class="imgkit-crop-handle" data-gife-handle="w"></span>
+              </div>
+            </div>
+          </div>
+          <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
+            <button type="button" class="primary-btn" id="gife-apply" disabled>应用并导出</button>
+            <a class="secondary-btn" id="gife-download" href="#" download="edited.gif" hidden>下载编辑后 GIF</a>
+          </div>
+          <div class="gif-progress" id="gife-progress" hidden>
+            <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="gife-progress-fill"></span></div>
+            <p class="hint" id="gife-progress-text">准备中…</p>
+          </div>
+          <div class="gif-preview-wrap">
+            <img id="gife-preview" class="img-preview gif-preview" alt="编辑后 GIF 预览" hidden />
+          </div>
+          <p class="error" id="gife-error" hidden></p>
+        </div>
+
+        <div class="field-block" style="margin-top:1.5rem">
           <h2 class="subhead">合并 GIF</h2>
           <div class="btn-row tool-actions">
             <label class="file-btn" for="gifm-file">添加 GIF</label>
@@ -1887,7 +1944,7 @@ hello@world.org</textarea>
 <section id="vbb" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>黑盒 GIF</h1>
-        <p>预制参数（宽 420 · ≤6MB · 自动压帧/加宽），全程本地处理。选视频后点<strong>一键黑盒</strong>即可；已裁好的多个短片可多选一次性转换；长视频会自动切片。</p>
+        <p>预制参数（宽 420 · ≤6MB · 自动压帧/加宽），全程本地处理。选视频后点<strong>一键黑盒</strong>即可；已裁好的多个短片可多选一次性转换；长视频可自动切片，也可<strong>手动打点</strong>自选片段。</p>
       </div>
       <div class="panel-body">
         <div class="btn-row tool-actions">
@@ -1901,10 +1958,37 @@ hello@world.org</textarea>
           <span class="seg" role="group" aria-label="黑盒模式">
             <button type="button" class="seg-btn is-active" id="vbb-workflow-single" data-vbb-workflow="single">整段视频</button>
             <button type="button" class="seg-btn" id="vbb-workflow-split" data-vbb-workflow="split">长视频切片</button>
+            <button type="button" class="seg-btn" id="vbb-workflow-manual" data-vbb-workflow="manual">手动打点</button>
           </span>
         </div>
-        <div class="gif-preview-wrap">
+        <div class="gif-preview-wrap vbb-preview-wrap" id="vbb-preview-wrap">
           <video id="vbb-video" class="img-preview gif-preview" controls playsinline muted preload="metadata" hidden></video>
+        </div>
+        <div class="vsplit-manual-transport vbb-manual-transport" id="vbb-manual-panel" hidden>
+          <div class="vsplit-transport">
+            <button type="button" class="secondary-btn" id="vbb-play" disabled>播放</button>
+            <div class="vsplit-scrub-meta">
+              <span class="mono" id="vbb-manual-now">0:00 / 0:00</span>
+              <span class="hint tight" id="vbb-manual-count">0 段</span>
+            </div>
+          </div>
+          <div class="vsplit-scrub-block">
+            <label class="visually-hidden" for="vbb-scrub">拖动预览进度</label>
+            <input id="vbb-scrub" class="vsplit-scrub" type="range" min="0" max="1000" value="0" step="1" disabled />
+            <div class="btn-row tool-actions vsplit-nudge-btns" aria-label="微调">
+              <button type="button" class="ghost-btn" id="vbb-nudge-m1" disabled>−1s</button>
+              <button type="button" class="ghost-btn" id="vbb-nudge-m01" disabled>−0.1</button>
+              <button type="button" class="ghost-btn" id="vbb-nudge-p01" disabled>+0.1</button>
+              <button type="button" class="ghost-btn" id="vbb-nudge-p1" disabled>+1s</button>
+            </div>
+            <div class="btn-row tool-actions vsplit-mark-btns">
+              <button type="button" class="primary-btn" id="vbb-mark-tap" disabled>打起点</button>
+              <button type="button" class="ghost-btn" id="vbb-mark-undo" disabled>取消上一段</button>
+              <button type="button" class="ghost-btn" id="vbb-mark-clear" disabled>清空</button>
+            </div>
+            <p class="hint tight" id="vbb-manual-draft" hidden></p>
+            <p class="hint tight">拖到起点后点「打起点」，再拖到终点点「打终点」；可标记多段，点「一键黑盒」按段转换。</p>
+          </div>
         </div>
         <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
           <button type="button" class="primary-btn" id="vbb-oneclick" disabled>一键黑盒</button>
