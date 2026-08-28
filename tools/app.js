@@ -767,7 +767,10 @@
   const ORDER_KEY = "devtools-tool-order-v3";
   const GROUP_ORDER_KEY = "devtools-group-order-v1";
   const RECENT_KEY = "devtools-tool-recent-v1";
+  const LAST_TOOL_KEY = "devtools-tool-last-v1";
   const SORT_HINT_KEY = "devtools-nav-sort-hint-seen-v1";
+  /** 站点页不算「上次工具」，避免 about/setup 盖掉真实工具 */
+  const SITE_NAV_IDS = new Set(["about", "setup"]);
   const RECENT_SHOW = 8;
   const MEDIA_TABS = ["gifmaker", "vsplit", "vtrim", "audio"];
   const HASH_ALIASES = {
@@ -1178,18 +1181,76 @@
     }
   }
 
+  function saveLastTool(id) {
+    if (!DEFAULT_ORDER.includes(id) || SITE_NAV_IDS.has(id)) return;
+    if (!isNavToolVisible(id)) return;
+    try {
+      localStorage.setItem(LAST_TOOL_KEY, id);
+    } catch (_) {}
+  }
+
+  function loadLastToolId() {
+    try {
+      const saved = localStorage.getItem(LAST_TOOL_KEY);
+      if (saved && DEFAULT_ORDER.includes(saved) && !SITE_NAV_IDS.has(saved) && isNavToolVisible(saved)) {
+        return saved;
+      }
+    } catch (_) {}
+    return loadRecent().find((id) => !SITE_NAV_IDS.has(id) && isNavToolVisible(id)) || null;
+  }
+
+  function toolIdToHash(id) {
+    if (!id) return "#timestamp";
+    if (MEDIA_TABS.includes(id)) return `#media/${id}`;
+    return `#${id}`;
+  }
+
   function pushRecent(id) {
     if (!DEFAULT_ORDER.includes(id)) return;
     const next = [id, ...loadRecent().filter((x) => x !== id)].slice(0, 8);
     localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+    saveLastTool(id);
     renderRecent();
   }
 
   function lastToolHash() {
-    const last = loadRecent().find((id) => isNavToolVisible(id));
-    if (!last) return "#timestamp";
-    if (MEDIA_TABS.includes(last)) return `#media/${last}`;
-    return `#${last}`;
+    return toolIdToHash(loadLastToolId());
+  }
+
+  /** iOS PWA / Safari 冷启动常带 #timestamp 或空 hash，需在此类「占位路由」上恢复上次工具 */
+  function shouldRestoreLastTool() {
+    const raw0 = String(location.hash || "").replace(/^#/, "").trim();
+    if (!raw0) return true;
+    const q = raw0.indexOf("?");
+    const path = q >= 0 ? raw0.slice(0, q) : raw0;
+    if (q >= 0 && path === "lanshare") return false;
+    if (!path) return true;
+    const head = path.split(/[/?]/)[0];
+    if (head === "timestamp") return true;
+    if (head === "media" && !path.includes("/")) return true;
+    return false;
+  }
+
+  function restoreLastToolOnStartup() {
+    if (!shouldRestoreLastTool()) return;
+    const saved = loadLastToolId();
+    if (!saved || saved === "timestamp") return;
+    const target = toolIdToHash(saved);
+    const current = `#${rawHashHead()}`;
+    if (current !== target) history.replaceState(null, "", target);
+  }
+
+  function bootRoute() {
+    restoreLastToolOnStartup();
+    applyRoute();
+    forceDrawerClosed();
+  }
+
+  function rawHashHead() {
+    const raw0 = String(location.hash || "").replace(/^#/, "").trim();
+    const q = raw0.indexOf("?");
+    const path = q >= 0 ? raw0.slice(0, q) : raw0;
+    return path.split(/[/?]/).filter(Boolean)[0] || "";
   }
 
   function syncSortHint() {
@@ -2086,8 +2147,14 @@
     tabs[next].focus();
     navigateTo("media", tabs[next].dataset.mediaTab);
   });
-  window.addEventListener("hashchange", () => applyRoute());
-  window.addEventListener("popstate", () => applyRoute());
+  window.addEventListener("hashchange", () => {
+    if (shouldRestoreLastTool()) restoreLastToolOnStartup();
+    applyRoute();
+  });
+  window.addEventListener("popstate", () => {
+    if (shouldRestoreLastTool()) restoreLastToolOnStartup();
+    applyRoute();
+  });
   // Safari：bfcache / 后台回收后恢复时强制关闭菜单
   window.addEventListener("pageshow", () => {
     forceDrawerClosed();
@@ -2154,6 +2221,8 @@
     isCompact: () => navCompact,
     setCompact: (on) => setNavCompact(on),
     lastToolHash,
+    shouldRestoreLastTool,
+    restoreLastToolOnStartup,
     syncSortHint,
     openFlyout: (el) => openNavFlyout(el?.closest?.(".nav-group") || el),
     closeFlyouts: () => closeNavFlyouts(),
@@ -2161,10 +2230,17 @@
   };
   window.dispatchEvent(new CustomEvent("devtools:catalog"));
   syncSortHint();
-  if (!location.hash) history.replaceState(null, "", lastToolHash());
-  applyRoute();
-  // 默认关闭；防止 Safari 恢复残留开态
-  forceDrawerClosed();
+  // Safari / iOS：导航后 hash 可能短暂停留在上一页，延后 boot 并在 hashchange 时再次尝试恢复
+  const scheduleBootRoute = () => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(bootRoute);
+    });
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", scheduleBootRoute, { once: true });
+  } else {
+    scheduleBootRoute();
+  }
 
   // Init
   const now = Date.now();
