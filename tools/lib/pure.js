@@ -399,9 +399,134 @@
     };
   }
 
-  function diffLines(aText, bText) {
+  function diffLines(aText, bText, opts = {}) {
+    const norm = (line) => {
+      let s = String(line);
+      if (opts.trimTrailing) s = s.replace(/\s+$/, "");
+      if (opts.ignoreWhitespace) s = s.replace(/\s+/g, " ").trim();
+      return s;
+    };
     const a = String(aText).split(/\r\n|\n|\r/);
     const b = String(bText).split(/\r\n|\n|\r/);
+    const n = a.length;
+    const m = b.length;
+    const dp = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
+    for (let i = n - 1; i >= 0; i--) {
+      for (let j = m - 1; j >= 0; j--) {
+        dp[i][j] =
+          norm(a[i]) === norm(b[j]) ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+    const out = [];
+    let i = 0;
+    let j = 0;
+    while (i < n && j < m) {
+      if (norm(a[i]) === norm(b[j])) {
+        out.push({ type: "same", text: a[i], left: a[i], right: b[j] });
+        i++;
+        j++;
+      } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+        out.push({ type: "del", text: a[i], left: a[i], right: "" });
+        i++;
+      } else {
+        out.push({ type: "add", text: b[j], left: "", right: b[j] });
+        j++;
+      }
+    }
+    while (i < n) out.push({ type: "del", text: a[i], left: a[i], right: "" });
+    while (j < m) out.push({ type: "add", text: b[j], left: "", right: b[j] });
+    return out;
+  }
+
+  /** 并排比对：返回左右对齐行，含行号 */
+  function diffAlign(aText, bText, opts = {}) {
+    const norm = (line) => {
+      let s = String(line);
+      if (opts.trimTrailing) s = s.replace(/\s+$/, "");
+      if (opts.ignoreWhitespace) s = s.replace(/\s+/g, " ").trim();
+      return s;
+    };
+    const a = String(aText).split(/\r\n|\n|\r/);
+    const b = String(bText).split(/\r\n|\n|\r/);
+    const n = a.length;
+    const m = b.length;
+    const dp = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
+    for (let i = n - 1; i >= 0; i--) {
+      for (let j = m - 1; j >= 0; j--) {
+        dp[i][j] =
+          norm(a[i]) === norm(b[j]) ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
+      }
+    }
+    const ops = [];
+    let i = 0;
+    let j = 0;
+    while (i < n && j < m) {
+      if (norm(a[i]) === norm(b[j])) {
+        ops.push({ kind: "same", ai: i, bj: j });
+        i++;
+        j++;
+      } else if (dp[i + 1][j] >= dp[i][j + 1]) {
+        ops.push({ kind: "del", ai: i });
+        i++;
+      } else {
+        ops.push({ kind: "add", bj: j });
+        j++;
+      }
+    }
+    while (i < n) {
+      ops.push({ kind: "del", ai: i++ });
+    }
+    while (j < m) {
+      ops.push({ kind: "add", bj: j++ });
+    }
+
+    const rows = [];
+    let ln = 0;
+    let rn = 0;
+    for (const op of ops) {
+      if (op.kind === "same") {
+        ln++;
+        rn++;
+        rows.push({
+          kind: "same",
+          left: { num: ln, text: a[op.ai] },
+          right: { num: rn, text: b[op.bj] },
+        });
+      } else if (op.kind === "del") {
+        ln++;
+        rows.push({
+          kind: "del",
+          left: { num: ln, text: a[op.ai] },
+          right: { num: null, text: "" },
+        });
+      } else {
+        rn++;
+        rows.push({
+          kind: "add",
+          left: { num: null, text: "" },
+          right: { num: rn, text: b[op.bj] },
+        });
+      }
+    }
+    return rows;
+  }
+
+  function diffStats(rows) {
+    const stats = { same: 0, add: 0, del: 0, change: 0 };
+    (Array.isArray(rows) ? rows : []).forEach((row) => {
+      const t = row.type || row.kind;
+      if (t === "same") stats.same += 1;
+      else if (t === "add") stats.add += 1;
+      else if (t === "del") stats.del += 1;
+      else if (t === "change") stats.change += 1;
+    });
+    return stats;
+  }
+
+  /** 字符级 diff，用于行内高亮 */
+  function diffChars(aText, bText) {
+    const a = String(aText);
+    const b = String(bText);
     const n = a.length;
     const m = b.length;
     const dp = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
@@ -410,21 +535,25 @@
         dp[i][j] = a[i] === b[j] ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
       }
     }
-    const out = [];
-    let i = 0, j = 0;
+    const left = [];
+    const right = [];
+    let i = 0;
+    let j = 0;
     while (i < n && j < m) {
       if (a[i] === b[j]) {
-        out.push({ type: "same", text: a[i] });
-        i++; j++;
+        left.push({ type: "same", ch: a[i] });
+        right.push({ type: "same", ch: b[j] });
+        i++;
+        j++;
       } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-        out.push({ type: "del", text: a[i++] });
+        left.push({ type: "del", ch: a[i++] });
       } else {
-        out.push({ type: "add", text: b[j++] });
+        right.push({ type: "add", ch: b[j++] });
       }
     }
-    while (i < n) out.push({ type: "del", text: a[i++] });
-    while (j < m) out.push({ type: "add", text: b[j++] });
-    return out;
+    while (i < n) left.push({ type: "del", ch: a[i++] });
+    while (j < m) right.push({ type: "add", ch: b[j++] });
+    return { left, right };
   }
 
   function parseCronField(field, min, max) {
@@ -1552,6 +1681,9 @@
     convertIdentifier,
     convertCaseLines,
     diffLines,
+    diffAlign,
+    diffStats,
+    diffChars,
     describeCron,
     nextCronTimes,
     UNIT_TABLES,

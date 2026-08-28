@@ -1506,6 +1506,118 @@ a.secondary-btn {
   padding: 0.1rem 0.35rem;
 }
 
+.diff-toolbar {
+  flex-wrap: wrap;
+  gap: 0.45rem 0.75rem;
+  align-items: center;
+}
+
+.diff-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin: 0.35rem 0 0.5rem;
+}
+
+.diff-split-wrap {
+  margin-top: 0.35rem;
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.08));
+  border-radius: 10px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.18);
+}
+
+.diff-split-head {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.diff-split-title {
+  padding: 0.35rem 0.65rem;
+  font-size: 0.78rem;
+  color: #9fb0cc;
+  letter-spacing: 0.04em;
+}
+
+.diff-split-body {
+  max-height: min(62vh, 520px);
+  overflow: auto;
+}
+
+.diff-split-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.diff-split-cell {
+  display: grid;
+  grid-template-columns: 2.4rem 1fr;
+  gap: 0.35rem;
+  align-items: start;
+  padding: 0.12rem 0.35rem 0.12rem 0;
+  min-height: 1.45rem;
+}
+
+.diff-ln {
+  text-align: right;
+  color: #6f819e;
+  user-select: none;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.diff-txt {
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.diff-row-same .diff-side-left,
+.diff-row-same .diff-side-right {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.diff-row-del .diff-side-left {
+  background: rgba(255, 107, 122, 0.12);
+}
+
+.diff-row-add .diff-side-right {
+  background: rgba(81, 207, 102, 0.12);
+}
+
+.diff-line-del,
+.diff-line-add,
+.diff-line-empty {
+  display: inline;
+}
+
+.diff-line-del {
+  background: rgba(255, 107, 122, 0.18);
+  color: #ffd0d6;
+  border-radius: 4px;
+}
+
+.diff-line-add {
+  background: rgba(81, 207, 102, 0.18);
+  color: #d7ffe0;
+  border-radius: 4px;
+}
+
+.diff-ch-del {
+  background: rgba(255, 107, 122, 0.35);
+  border-radius: 2px;
+}
+
+.diff-ch-add {
+  background: rgba(81, 207, 102, 0.35);
+  border-radius: 2px;
+}
+
 .meta-row .copy-btn {
   margin-left: 0.4rem;
 }
