@@ -2943,6 +2943,18 @@
     return Number.isNaN(t) ? null : t;
   }
 
+  function selectVisibleTemp() {
+    const vis = visibleItems();
+    vis.forEach((it) => state.selected.delete(it.id));
+    vis.forEach((it) => {
+      if (isTempItem(it)) state.selected.add(it.id);
+    });
+    renderItems();
+    const n = vis.filter((it) => state.selected.has(it.id)).length;
+    toast(n ? `已勾选 ${n} 条临时条目` : "没有可勾选的临时条目");
+    return n;
+  }
+
   function selectVisibleDateRangeFromInputs() {
     const fromDay = parseMemoDateInput($("#memo-sel-from"));
     const toDay = parseMemoDateInput($("#memo-sel-to"));
@@ -2956,10 +2968,16 @@
     if (fromDay != null && toDay != null) {
       lo = startOfLocalDay(fromDay);
       hi = endOfLocalDay(toDay);
+    } else if (fromDay != null) {
+      lo = startOfLocalDay(fromDay);
+      hi = Infinity;
     } else {
-      const day = fromDay != null ? fromDay : toDay;
-      lo = Math.min(startOfLocalDay(day), startOfLocalDay(today));
-      hi = Math.max(endOfLocalDay(day), endOfLocalDay(today));
+      lo = startOfLocalDay(today);
+      hi = endOfLocalDay(toDay);
+    }
+    if (lo > hi) {
+      toast("开始日期不能晚于结束日期");
+      return 0;
     }
     return selectVisibleByCreatedRange(lo, hi);
   }
@@ -4465,13 +4483,12 @@
     renderItems();
   });
   $("#memo-time-select")?.addEventListener("click", (e) => {
-    const hoursBtn = e.target.closest?.("[data-memo-sel-hours]");
-    if (hoursBtn) {
-      selectVisibleLastHours(hoursBtn.dataset.memoSelHours);
-      return;
-    }
     if (e.target.closest?.("[data-memo-sel-today]")) {
       selectVisibleToday();
+      return;
+    }
+    if (e.target.closest?.("[data-memo-sel-temp]")) {
+      selectVisibleTemp();
     }
   });
   $("#memo-sel-range-btn")?.addEventListener("click", () => {
@@ -4481,15 +4498,6 @@
     const open = panel.hidden;
     panel.hidden = !open;
     if (btn) btn.setAttribute("aria-expanded", open ? "true" : "false");
-    if (open) {
-      const to = $("#memo-sel-to");
-      if (to && !to.value) {
-        const d = new Date();
-        const m = String(d.getMonth() + 1).padStart(2, "0");
-        const day = String(d.getDate()).padStart(2, "0");
-        to.value = `${d.getFullYear()}-${m}-${day}`;
-      }
-    }
   });
   $("#memo-sel-range-ok")?.addEventListener("click", () => {
     selectVisibleDateRangeFromInputs();
@@ -4869,8 +4877,9 @@
     },
     batchDeleteConfirmMessage,
     selectVisibleByCreatedRange,
-    selectVisibleLastHours,
     selectVisibleToday,
+    selectVisibleTemp,
+    selectVisibleDateRangeFromInputs,
     isTempItem: (item) => isTempItem(item),
     markItemTemp: async (id, days) => {
       const item = state.index.items.find((x) => x.id === id);

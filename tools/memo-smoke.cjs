@@ -1032,7 +1032,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memoclip2/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memoclip3/.test(s.src)),
     };
 
     out.pwa = {
@@ -1144,17 +1144,53 @@ async function main() {
     };
 
     out.timeSelect = {
-      has1: Boolean(document.querySelector('[data-memo-sel-hours="1"]')),
-      has3: Boolean(document.querySelector('[data-memo-sel-hours="3"]')),
-      has5: Boolean(document.querySelector('[data-memo-sel-hours="5"]')),
       hasToday: Boolean(document.querySelector("[data-memo-sel-today]")),
+      hasTemp: Boolean(document.querySelector("[data-memo-sel-temp]")),
       hasRange: Boolean(document.getElementById("memo-sel-range") && document.getElementById("memo-sel-range-btn")),
-      api: typeof window.DevToolsMemo.selectVisibleLastHours === "function",
+      api: typeof window.DevToolsMemo.selectVisibleToday === "function" && typeof window.DevToolsMemo.selectVisibleTemp === "function",
     };
     if (out.timeSelect.api) {
-      const n = window.DevToolsMemo.selectVisibleLastHours(1);
-      out.timeSelect.picked = n > 0;
+      const n = window.DevToolsMemo.selectVisibleToday();
+      out.timeSelect.pickedToday = n > 0;
       window.DevToolsMemo.selectVisibleByCreatedRange(0, -1);
+      const rows = window.DevToolsMemo.getIndex().items || [];
+      const tempRow = rows.find((it) => window.DevToolsMemo.isTempItem(it));
+      if (tempRow) {
+        const nt = window.DevToolsMemo.selectVisibleTemp();
+        out.timeSelect.pickedTemp = nt > 0;
+        window.DevToolsMemo.selectVisibleByCreatedRange(0, -1);
+      } else {
+        out.timeSelect.pickedTemp = true;
+      }
+      const fromEl = document.getElementById("memo-sel-from");
+      const toEl = document.getElementById("memo-sel-to");
+      const isChecked = (id) => Boolean(document.querySelector(`[data-memo-check="${id}"]`)?.checked);
+      if (fromEl && toEl && rows.length >= 2) {
+        const sorted = [...rows].sort((a, b) => (Number(a.createdAt) || 0) - (Number(b.createdAt) || 0));
+        const older = sorted[0];
+        const newer = sorted[sorted.length - 1];
+        const fmt = (ms) => {
+          const d = new Date(ms);
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          return `${d.getFullYear()}-${m}-${day}`;
+        };
+        fromEl.value = fmt(Number(older.createdAt) || 0);
+        toEl.value = "";
+        window.DevToolsMemo.selectVisibleDateRangeFromInputs();
+        out.timeSelect.fromOpen = isChecked(older.id);
+        window.DevToolsMemo.selectVisibleByCreatedRange(0, -1);
+        fromEl.value = "";
+        toEl.value = fmt(Number(newer.createdAt) || 0);
+        window.DevToolsMemo.selectVisibleDateRangeFromInputs();
+        out.timeSelect.toToday = isChecked(newer.id);
+        fromEl.value = "";
+        toEl.value = "";
+        window.DevToolsMemo.selectVisibleByCreatedRange(0, -1);
+      } else {
+        out.timeSelect.fromOpen = true;
+        out.timeSelect.toToday = true;
+      }
     }
 
     out.batchPinWarn = { api: typeof window.DevToolsMemo.batchDeleteConfirmMessage === "function" };
@@ -1301,7 +1337,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/memoclip2/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memoclip3/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1546,8 +1582,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/memoclip2/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memoclip2");
+  if (!/memoclip3/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memoclip3");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
@@ -1618,13 +1654,14 @@ async function main() {
     failed.push("desktop nav compact should keep using hover/pin flyouts");
   }
   if (
-    !result.timeSelect?.has1 ||
-    !result.timeSelect?.has3 ||
-    !result.timeSelect?.has5 ||
     !result.timeSelect?.hasToday ||
+    !result.timeSelect?.hasTemp ||
     !result.timeSelect?.hasRange ||
     !result.timeSelect?.api ||
-    !result.timeSelect?.picked
+    !result.timeSelect?.pickedToday ||
+    result.timeSelect?.pickedTemp !== true ||
+    result.timeSelect?.fromOpen !== true ||
+    result.timeSelect?.toToday !== true
   ) {
     failed.push("memo time-range select chips should check visible items without deleting");
   }
