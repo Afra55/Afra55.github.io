@@ -18,7 +18,6 @@
   const TEMP_DEFAULT_DAYS = 7;
   const TEMP_PROMPT_SEC = 5;
   const LAST_EXPORT_KEY = "devtools-memo-last-export-v1";
-  const DIR_HINT_KEY = "devtools-memo-dir-hint-dismiss-v1";
   const BACKUP_NUDGE_DAYS = 7;
   const BACKUP_NUDGE_MIN_ITEMS = 3;
   const LARGE_WARN_BYTES = 25 * 1024 * 1024;
@@ -840,7 +839,7 @@
     const storeTip =
       state.mode === "dir"
         ? "写入可能较慢，可随时点取消。"
-        : "应用内存储空间有限，大文件更建议先「用文件夹保存」。";
+        : "应用内存储空间有限，大文件更建议先在「备份与存储」里选择磁盘文件夹。";
     return window.confirm(`「${name || "文件"}」约 ${formatBytes(size)}，体积较大。\n${storeTip}\n是否继续？`);
   }
 
@@ -868,17 +867,13 @@
     if (!storeMeta) return;
     syncExportButtonLabels();
     const pickBtn = $("#memo-pick-dir");
-    const pickQuickBtn = $("#memo-pick-dir-quick");
     const switchDirBtn = $("#memo-switch-dir");
     const exportToDirBtn = $("#memo-export-to-dir");
     const connected = Boolean(state.dirHandle) && (state.mode === "dir" || state.dirPending);
     const dirOk = canDirPicker();
     if (pickBtn) {
       pickBtn.hidden = !dirOk || connected;
-      pickBtn.textContent = "用文件夹保存";
-    }
-    if (pickQuickBtn) {
-      pickQuickBtn.hidden = true;
+      pickBtn.textContent = "选择存储文件夹";
     }
     if (switchDirBtn) {
       switchDirBtn.hidden = !dirOk || (!connected && !state.dirHandle);
@@ -890,6 +885,7 @@
     }
     if (exportToDirBtn) {
       exportToDirBtn.hidden = !(state.mode === "dir" && state.dirHandle && !state.dirPending);
+      exportToDirBtn.textContent = "写入 backups 快照";
     }
     const banner = $("#memo-reconnect-banner");
     if (banner) banner.hidden = !state.dirPending;
@@ -899,11 +895,11 @@
       storeMeta.textContent = `存储：文件夹「${state.dirHandle.name}」· 可更换并选择是否带走当前内容；原文件夹文件不会被删除。`;
     } else {
       storeMeta.textContent = canDirPicker()
-        ? "存储：应用内数据。建议「用文件夹保存」，清缓存后文件仍在磁盘。"
+        ? "存储：应用内数据。可在上方选择磁盘文件夹，清缓存后文件仍在。"
         : "存储：应用内数据（手机端）。换机前请先「导出」备份。";
     }
+    updateStorageTip();
     updateBackupNudge();
-    updateDirHint();
     window.DevToolsTemp?.refresh?.();
   }
 
@@ -945,27 +941,17 @@
       : `已有 ${n} 条尚未导出。换机或清数据前建议先「导出」。`;
   }
 
-  function updateDirHint() {
-    const el = $("#memo-dir-hint");
-    if (!el) return;
-    let dismissed = false;
-    try {
-      dismissed = localStorage.getItem(DIR_HINT_KEY) === "1";
-    } catch (_) {}
+  function updateStorageTip() {
+    const tip = $("#memo-storage-tip");
+    const fold = $("#memo-backup-fold");
+    if (!tip) return;
     const show =
       canDirPicker() &&
-      !dismissed &&
       state.mode !== "dir" &&
       !state.dirPending &&
       (state.index.items?.length || 0) >= 1;
-    el.hidden = !show;
-  }
-
-  function dismissDirHint() {
-    try {
-      localStorage.setItem(DIR_HINT_KEY, "1");
-    } catch (_) {}
-    updateDirHint();
+    tip.hidden = !show;
+    if (show && fold && !fold.open) fold.open = true;
   }
 
   function isTempItem(item) {
@@ -4551,16 +4537,9 @@
   $("#memo-pick-dir")?.addEventListener("click", () => {
     pickDirectory().catch((err) => setError(memoError, err.message || String(err)));
   });
-  $("#memo-pick-dir-quick")?.addEventListener("click", () => {
-    pickDirectory().catch((err) => setError(memoError, err.message || String(err)));
-  });
   $("#memo-switch-dir")?.addEventListener("click", () => {
     pickDirectory().catch((err) => setError(memoError, err.message || String(err)));
   });
-  $("#memo-dir-hint-pick")?.addEventListener("click", () => {
-    pickDirectory().catch((err) => setError(memoError, err.message || String(err)));
-  });
-  $("#memo-dir-hint-dismiss")?.addEventListener("click", () => dismissDirHint());
   reconnectBtn?.addEventListener("click", () => {
     pickDirectory().catch((err) => setError(memoError, err.message || String(err)));
   });

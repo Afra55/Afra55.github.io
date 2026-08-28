@@ -4990,6 +4990,37 @@ button.adb-device-body.linkish {
   margin-bottom: 0.35rem;
 }
 
+.memo-backup-group {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.65rem;
+}
+
+.memo-backup-group:first-of-type {
+  margin-top: 0.15rem;
+}
+
+.memo-backup-group-title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 650;
+  color: var(--muted);
+  letter-spacing: 0.03em;
+}
+
+.memo-backup-actions {
+  flex-wrap: wrap;
+  margin-top: 0;
+}
+
+.memo-storage-tip:not([hidden]) {
+  margin: 0.15rem 0 0.35rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+}
+
 .memo-list-head-actions {
   align-items: center;
   gap: 0.45rem;
@@ -5059,18 +5090,6 @@ button.adb-device-body.linkish {
 
 .memo-backup-nudge:not([hidden]) {
   color: color-mix(in srgb, #e8a317 75%, var(--ink));
-}
-
-.memo-dir-hint {
-  padding: 0.75rem 0.85rem;
-  border: 1px dashed color-mix(in srgb, var(--accent) 45%, var(--line));
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--accent) 6%, var(--panel));
-}
-
-.memo-dir-hint strong {
-  display: block;
-  margin-bottom: 0.2rem;
 }
 
 .memo-takeout-hint {
