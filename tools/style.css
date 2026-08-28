@@ -5545,6 +5545,14 @@ button.adb-device-body.linkish {
   line-height: 1.45;
 }
 
+.vbb-manual-transport {
+  margin-top: 0.65rem;
+}
+
+.gife-crop-editor {
+  margin-top: 0.75rem;
+}
+
 .memo-tag-row {
   display: flex;
   align-items: center;

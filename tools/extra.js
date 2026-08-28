@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-memotext1";
+  const TOOLS_VERSION = "2026.08.17-vbbmanual2";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -6974,6 +6974,26 @@
     const vbbTargetSpan = $("#vbb-target-span");
     const vbbTargetRange = $("#vbb-target-range");
     const vbbEqualize = $("#vbb-equalize");
+    const vbbManualPanel = $("#vbb-manual-panel");
+    const vbbScrub = $("#vbb-scrub");
+    const vbbPlay = $("#vbb-play");
+    const vbbManualNow = $("#vbb-manual-now");
+    const vbbManualCount = $("#vbb-manual-count");
+    const vbbManualDraft = $("#vbb-manual-draft");
+    const vbbMarkTap = $("#vbb-mark-tap");
+    const vbbMarkUndo = $("#vbb-mark-undo");
+    const vbbMarkClear = $("#vbb-mark-clear");
+    const vbbNudgeM1 = $("#vbb-nudge-m1");
+    const vbbNudgeM01 = $("#vbb-nudge-m01");
+    const vbbNudgeP01 = $("#vbb-nudge-p01");
+    const vbbNudgeP1 = $("#vbb-nudge-p1");
+    const vbbScrubMarks = $("#vbb-scrub-marks");
+    const vbbMarkChips = $("#vbb-mark-chips");
+    const vbbJumpTime = $("#vbb-jump-time");
+    const vbbJumpGo = $("#vbb-jump-go");
+    const vbbLongHint = $("#vbb-long-hint");
+    const VBB_LONG_VIDEO_SEC = 180;
+    const VBB_MANUAL_SEEK_DEBOUNCE_MS = 120;
     const VBB_SAMPLE_SPAN = 2.5;
     const VBB_SAFETY = 0.85;
     /** 清晰优先：按接近 6MB 规划段长（略留余量，避免实测偶发超限） */
@@ -7003,6 +7023,315 @@
     let vbbMergedUrl = "";
     /** 仅预览当前选中片段，避免手机同时解码多个大 GIF 白屏 */
     let vbbPreviewIdx = -1;
+    /** @type {{start:number,end:number}[]} */
+    let vbbMarks = [];
+    /** @type {number|null} */
+    let vbbDraftStart = null;
+    let vbbPlaying = false;
+    let vbbScrubbing = false;
+    const VBB_SCRUB_STEPS = 1000;
+    let vbbSeekTimer = 0;
+    let vbbPendingSeek = null;
+
+    function parseVbbJumpTime(raw) {
+      const text = String(raw || "").trim();
+      if (!text) return null;
+      if (/^\d+(\.\d+)?$/.test(text)) return Number(text);
+      const m = text.match(/^(\d+):(\d+(?:\.\d+)?)$/);
+      if (m) return Number(m[1]) * 60 + Number(m[2]);
+      const h = text.match(/^(\d+):(\d+):(\d+(?:\.\d+)?)$/);
+      if (h) return Number(h[1]) * 3600 + Number(h[2]) * 60 + Number(h[3]);
+      return null;
+    }
+
+    function pauseVbbPreview() {
+      try {
+        vbbVideo?.pause?.();
+      } catch (_) {}
+      vbbPlaying = false;
+    }
+
+    function vbbScrubValueToTime(value) {
+      const d = vbbVideoDuration();
+      if (!(d > 0)) return 0;
+      return (Number(value) / VBB_SCRUB_STEPS) * d;
+    }
+
+    function vbbTimeToScrubValue(sec) {
+      const d = vbbVideoDuration();
+      if (!(d > 0)) return 0;
+      return Math.round((Math.max(0, Math.min(sec, d)) / d) * VBB_SCRUB_STEPS);
+    }
+
+    function syncVbbScrubFromVideo() {
+      if (!vbbScrub || vbbScrubbing) return;
+      const d = vbbVideoDuration();
+      const has = Boolean(vbbSourceFile && d > 0);
+      vbbScrub.disabled = !has || vbbBusy || !isVbbManualMode();
+      if (!has) {
+        vbbScrub.value = "0";
+        return;
+      }
+      vbbScrub.max = String(VBB_SCRUB_STEPS);
+      vbbScrub.value = String(vbbTimeToScrubValue(vbbMarkTime()));
+    }
+
+    function applyVbbSeek(sec, opts = {}) {
+      if (!vbbVideo?.src) return;
+      const d = vbbVideoDuration();
+      const t = Math.max(0, Math.min(d || 0, Number(sec) || 0));
+      if (!opts.keepPlaying) pauseVbbPreview();
+      try {
+        if (typeof vbbVideo.fastSeek === "function") vbbVideo.fastSeek(t);
+        else vbbVideo.currentTime = t;
+      } catch (_) {}
+      if (!opts.fromScrub) syncVbbScrubFromVideo();
+      paintVbbNow();
+    }
+
+    function scheduleVbbSeek(sec, opts = {}) {
+      vbbPendingSeek = { sec, opts };
+      clearTimeout(vbbSeekTimer);
+      vbbSeekTimer = window.setTimeout(() => {
+        vbbSeekTimer = 0;
+        if (vbbPendingSeek) {
+          applyVbbSeek(vbbPendingSeek.sec, vbbPendingSeek.opts);
+          vbbPendingSeek = null;
+        }
+      }, opts.immediate ? 0 : VBB_MANUAL_SEEK_DEBOUNCE_MS);
+    }
+
+    function flushVbbSeek() {
+      clearTimeout(vbbSeekTimer);
+      vbbSeekTimer = 0;
+      if (vbbPendingSeek) {
+        applyVbbSeek(vbbPendingSeek.sec, { ...vbbPendingSeek.opts, immediate: true });
+        vbbPendingSeek = null;
+      }
+    }
+
+    function paintVbbNow() {
+      const hasVideo = Boolean(vbbSourceFile && vbbVideo?.src);
+      const d = vbbVideoDuration();
+      const t = vbbScrubbing ? vbbScrubValueToTime(vbbScrub?.value) : vbbMarkTime();
+      if (vbbManualNow) {
+        vbbManualNow.textContent = hasVideo ? `${formatVbbClock(t)} / ${formatVbbClock(d)}` : "0:00 / 0:00";
+      }
+      const count = completeVbbMarks().length;
+      if (vbbManualCount) {
+        vbbManualCount.textContent = vbbMarks.length ? `${count}/${vbbMarks.length} 段` : "0 段";
+      }
+      if (vbbManualDraft) {
+        if (vbbDraftStart != null) {
+          vbbManualDraft.hidden = false;
+          vbbManualDraft.textContent = `已设起点 ${formatVbbClock(vbbDraftStart)} · 拖到终点后点「打终点」`;
+        } else {
+          vbbManualDraft.hidden = true;
+          vbbManualDraft.textContent = "";
+        }
+      }
+      if (vbbMarkTap) vbbMarkTap.textContent = vbbDraftStart == null ? "打起点" : "打终点";
+      if (vbbPlay) vbbPlay.textContent = vbbPlaying ? "暂停" : "播放";
+      if (!vbbScrubbing) syncVbbScrubFromVideo();
+    }
+
+    function paintVbbScrubMarks() {
+      if (!vbbScrubMarks) return;
+      const d = vbbVideoDuration();
+      vbbScrubMarks.innerHTML = "";
+      if (!(d > 0) || !isVbbManualMode()) return;
+      const addDot = (t, kind) => {
+        const dot = document.createElement("button");
+        dot.type = "button";
+        dot.className = `vsplit-scrub-mark is-${kind} is-jump`;
+        dot.style.left = `${(t / d) * 100}%`;
+        dot.title = `${kind === "start" ? "起点" : "终点"} ${formatVbbClock(t)}`;
+        dot.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          seekVbbPreview(t, { keepPlaying: true });
+        });
+        vbbScrubMarks.appendChild(dot);
+      };
+      if (vbbDraftStart != null) addDot(vbbDraftStart, "start");
+      vbbMarks.forEach((mark) => {
+        if (mark.start != null) addDot(mark.start, "start");
+        if (mark.end != null) addDot(mark.end, "end");
+      });
+    }
+
+    function paintVbbMarkChips() {
+      if (!vbbMarkChips) return;
+      const marks = completeVbbMarks();
+      vbbMarkChips.innerHTML = "";
+      vbbMarkChips.hidden = !marks.length;
+      marks.forEach((mark, idx) => {
+        const chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "vsplit-mark-chip";
+        chip.textContent = `#${String(idx + 1).padStart(2, "0")} ${formatVbbClock(mark.start)}→${formatVbbClock(mark.end)}`;
+        chip.addEventListener("click", () => seekVbbPreview(mark.start, { keepPlaying: true }));
+        vbbMarkChips.appendChild(chip);
+      });
+    }
+
+    function syncVbbLongHint() {
+      const d = vbbVideoDuration();
+      const show = isVbbManualMode() && d >= VBB_LONG_VIDEO_SEC;
+      if (vbbLongHint) vbbLongHint.hidden = !show;
+    }
+
+    function paintVbbManualControls() {
+      const manual = isVbbManualMode();
+      if (vbbManualPanel) vbbManualPanel.hidden = !manual;
+      if (vbbAdvanced) vbbAdvanced.hidden = manual || isVbbBatchMode();
+      if (vbbVideo) {
+        if (manual && vbbVideo.src) {
+          vbbVideo.controls = false;
+          vbbVideo.hidden = false;
+          vbbVideo.preload = "metadata";
+        } else if (vbbVideo.src) {
+          vbbVideo.controls = true;
+        }
+      }
+      syncVbbLongHint();
+      const canMark = manual && Boolean(vbbSourceFile && vbbVideo?.src) && !vbbBusy;
+      if (vbbScrub) vbbScrub.disabled = !canMark;
+      if (vbbPlay) vbbPlay.disabled = !canMark;
+      [vbbNudgeM1, vbbNudgeM01, vbbNudgeP01, vbbNudgeP1, vbbJumpGo].forEach((btn) => {
+        if (btn) btn.disabled = !canMark;
+      });
+      if (vbbJumpTime) vbbJumpTime.disabled = !canMark;
+      if (vbbMarkTap) vbbMarkTap.disabled = !canMark;
+      if (vbbMarkUndo) {
+        vbbMarkUndo.disabled = !canMark || (vbbDraftStart == null && !vbbMarks.length);
+        vbbMarkUndo.textContent = vbbDraftStart != null ? "取消起点" : "取消上一段";
+      }
+      if (vbbMarkClear) vbbMarkClear.disabled = !canMark || (!vbbMarks.length && vbbDraftStart == null);
+      if (vbbOneclick && isVbbManualMode()) {
+        const count = completeVbbMarks().length;
+        vbbOneclick.textContent = count > 0 ? `一键黑盒（${count} 段）` : "一键黑盒";
+      }
+      paintVbbNow();
+      paintVbbScrubMarks();
+      paintVbbMarkChips();
+    }
+
+    function isVbbManualMode() {
+      return vbbWorkflow === "manual" && !isVbbBatchMode();
+    }
+
+    function vbbVideoDuration() {
+      return Math.max(0, Number(vbbVideo?.duration) || 0);
+    }
+
+    function vbbMarkTime() {
+      if (!vbbVideo?.src) return 0;
+      return Math.max(0, Math.min(vbbVideoDuration(), Number(vbbVideo.currentTime) || 0));
+    }
+
+    function normalizeVbbMark(start, end) {
+      const d = vbbVideoDuration();
+      let s = Math.max(0, Math.min(Number(start) || 0, d));
+      let e = Math.max(0, Math.min(Number(end) || 0, d));
+      if (e < s) [s, e] = [e, s];
+      if (e - s < VBB_MIN_SPAN - 0.001) return null;
+      return { start: s, end: e };
+    }
+
+    function completeVbbMarks() {
+      return vbbMarks.filter((m) => m && m.start != null && m.end != null && m.end - m.start >= VBB_MIN_SPAN - 0.001);
+    }
+
+    function computeVbbManualRanges() {
+      const d = vbbVideoDuration();
+      if (!(d > 0)) throw new Error("无法读取视频时长");
+      const marks = completeVbbMarks();
+      if (!marks.length) throw new Error("请先标记至少一段完整的起点和终点");
+      return marks.map((m) => {
+        const start = Math.max(0, Math.min(m.start, d));
+        const end = Math.max(start + VBB_MIN_SPAN, Math.min(m.end, d));
+        return { start, span: end - start };
+      });
+    }
+
+    function seekVbbPreview(sec, opts = {}) {
+      if (!vbbVideo?.src) return;
+      if (opts.debounced) {
+        scheduleVbbSeek(sec, opts);
+        return;
+      }
+      flushVbbSeek();
+      applyVbbSeek(sec, opts);
+      if (!opts.silent) paintVbbManualControls();
+    }
+
+    function paintVbbManualUi() {
+      paintVbbManualControls();
+    }
+
+    function clearVbbMarks() {
+      vbbMarks = [];
+      vbbDraftStart = null;
+      paintVbbManualUi();
+    }
+
+    function tapVbbMark() {
+      if (!isVbbManualMode() || !vbbSourceFile || !vbbVideo?.src) {
+        toast("请先选择视频");
+        return;
+      }
+      const t = vbbMarkTime();
+      if (vbbDraftStart == null) {
+        vbbDraftStart = t;
+        paintVbbManualUi();
+        toast(`起点 ${formatVbbClock(t)}`);
+        return;
+      }
+      if (vbbMarks.length >= VBB_MAX_CLIPS) {
+        toast(`最多 ${VBB_MAX_CLIPS} 段`);
+        return;
+      }
+      const next = normalizeVbbMark(vbbDraftStart, t);
+      if (!next) {
+        toast(`终点至少距起点 ${VBB_MIN_SPAN} 秒`);
+        return;
+      }
+      vbbMarks.push(next);
+      vbbMarks.sort((a, b) => a.start - b.start);
+      vbbDraftStart = null;
+      paintVbbManualUi();
+      toast(`已添加 · ${(next.end - next.start).toFixed(1)}s`);
+    }
+
+    function undoVbbMark() {
+      if (vbbDraftStart != null) {
+        vbbDraftStart = null;
+        paintVbbManualUi();
+        toast("已取消起点");
+        return;
+      }
+      if (!vbbMarks.length) {
+        toast("没有可取消的标记");
+        return;
+      }
+      const last = vbbMarks[vbbMarks.length - 1];
+      if (last?.end != null && last?.start != null) {
+        vbbMarks.pop();
+        vbbDraftStart = last.start;
+        paintVbbManualUi();
+        toast("已取消上一段终点");
+        return;
+      }
+      vbbMarks.pop();
+      paintVbbManualUi();
+      toast("已删除上一段");
+    }
+
+    function nudgeVbbPreview(delta) {
+      if (!vbbVideo?.src) return;
+      seekVbbPreview(vbbMarkTime() + Number(delta || 0));
+    }
 
     function isVbbBatchMode() {
       return vbbBatchFiles.length > 1;
@@ -7177,15 +7506,24 @@
         ? vbbBatchFiles.length > 0
         : Boolean(vbbVideo?.src && vbbSourceFile);
       const hasPlan = Boolean(vbbAnalysis?.active?.ranges?.length);
+      const manualCount = completeVbbMarks().length;
       const gifCount = vbbClips.filter((c) => c.gifBlob).length;
       if (vbbOneclick) {
-        vbbOneclick.disabled = !hasVideo || vbbBusy;
-        vbbOneclick.textContent = isVbbBatchMode() ? `一键黑盒（${vbbBatchFiles.length} 个）` : "一键黑盒";
+        const manualNeedMarks = isVbbManualMode() && manualCount < 1;
+        vbbOneclick.disabled = !hasVideo || vbbBusy || manualNeedMarks;
+        if (isVbbBatchMode()) {
+          vbbOneclick.textContent = `一键黑盒（${vbbBatchFiles.length} 个）`;
+        } else if (isVbbManualMode()) {
+          vbbOneclick.textContent = manualCount > 0 ? `一键黑盒（${manualCount} 段）` : "一键黑盒";
+        } else {
+          vbbOneclick.textContent = "一键黑盒";
+        }
       }
-      if (vbbAnalyze) vbbAnalyze.disabled = !hasVideo || vbbBusy || isVbbBatchMode();
-      if (vbbRun) vbbRun.disabled = !hasPlan || vbbBusy || isVbbBatchMode();
+      if (vbbAnalyze) vbbAnalyze.disabled = !hasVideo || vbbBusy || isVbbBatchMode() || isVbbManualMode();
+      if (vbbRun) vbbRun.disabled = !hasPlan || vbbBusy || isVbbBatchMode() || isVbbManualMode();
       if (vbbMerge) vbbMerge.disabled = gifCount < 2 || vbbBusy || isVbbBatchMode();
       if (vbbZip) vbbZip.disabled = gifCount < 1 || vbbBusy;
+      if (isVbbManualMode()) paintVbbManualControls();
     }
 
     function syncVbbWorkflowUi() {
@@ -7193,6 +7531,9 @@
       if (workflowRow) workflowRow.hidden = isVbbBatchMode();
       $("#vbb-workflow-single")?.classList.toggle("is-active", vbbWorkflow === "single");
       $("#vbb-workflow-split")?.classList.toggle("is-active", vbbWorkflow === "split");
+      $("#vbb-workflow-manual")?.classList.toggle("is-active", vbbWorkflow === "manual");
+      if (vbbAdvanced) vbbAdvanced.hidden = isVbbManualMode() || isVbbBatchMode();
+      paintVbbManualUi();
     }
 
     async function packDownloadVbbGifs({ auto = false } = {}) {
@@ -7796,6 +8137,10 @@
       if (vbbPlan) vbbPlan.hidden = true;
       if (vbbPlanCompare) vbbPlanCompare.innerHTML = "";
       if (vbbPlanList) vbbPlanList.innerHTML = "";
+      clearVbbMarks();
+      clearTimeout(vbbSeekTimer);
+      vbbSeekTimer = 0;
+      vbbPendingSeek = null;
       setVbbProgress(false, 0, "");
       setError(vbbError, "");
       if (vbbMeta) vbbMeta.textContent = VBB_DEFAULT_META;
@@ -7849,9 +8194,94 @@
           `${duration.toFixed(1)}s · ${vbbVideo.videoWidth}×${vbbVideo.videoHeight}`
         );
       }
-      setVbbButtons();
+      if (isVbbManualMode() && duration >= VBB_LONG_VIDEO_SEC) {
+        toast("长视频手动打点：拖动时自动暂停，建议少播放；也可先在「视频切分」打点");
+      }
+      syncVbbScrubFromVideo();
       syncVbbWorkflowUi();
+      setVbbButtons();
       toast("视频已就绪，点「一键黑盒」即可");
+    }
+
+    async function runVbbManualBlackbox() {
+      if (!vbbSourceFile || !vbbVideo?.src || vbbBusy) return;
+      const ranges = computeVbbManualRanges();
+      const srcW = vbbVideo.videoWidth || 0;
+      const srcH = vbbVideo.videoHeight || 0;
+      abortVbb = false;
+      vbbBusy = true;
+      setVbbButtons();
+      if (vbbAbort) vbbAbort.hidden = false;
+      setError(vbbError, "");
+      clearVbbResults();
+      vbbClips = ranges.map((r) => ({
+        start: r.start,
+        span: r.span,
+        gifBlob: null,
+        gifUrl: "",
+        gifNote: "",
+        error: "",
+        jobStatus: "pending",
+        jobProgress: 0,
+        jobText: "等待中…",
+      }));
+      renderVbbResults();
+      try {
+        await prewarmFfmpegEngine().catch(() => {});
+        const fileBytes = vbbSourceFile?.size || 0;
+        const hugeFile = fileBytes >= 120 * 1024 * 1024;
+        const mobile = isLikelyMobileBrowser();
+        if (mobile && (hugeFile || ranges.some((r) => r.span >= 90))) {
+          toast("长片段在手机上易内存不足，建议每段控制在 30s 内或用电脑");
+        }
+        if (hugeFile || ranges.length >= 4) {
+          try {
+            const ff = await getFfmpegInstance();
+            await ensureFfmpegInputWritten(ff, vbbSourceFile, () => {});
+          } catch (_) {}
+        }
+        for (let i = 0; i < ranges.length; i++) {
+          if (abortVbb) throw new Error("已取消");
+          const r = ranges[i];
+          setVbbClipJob(i, { status: "running", progress: 0.02, text: "黑盒编码…" });
+          setVbbProgress(true, i / ranges.length, `手动黑盒 · ${i + 1}/${ranges.length}`, {
+            sub: `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)}`,
+            busy: true,
+          });
+          const encoded = await encodeBlackboxClip({
+            file: vbbSourceFile,
+            startSec: r.start,
+            span: r.span,
+            srcW,
+            srcH,
+            isAborted: () => abortVbb,
+            onProgress: (local, text) => {
+              const p = i + Math.min(0.98, local);
+              setVbbClipJob(i, { status: "running", progress: Math.min(0.98, local), text });
+              setVbbProgress(true, p / ranges.length, `手动黑盒 · ${i + 1}/${ranges.length}`, { sub: text, busy: true });
+            },
+          });
+          if (abortVbb) throw new Error("已取消");
+          vbbClips[i].gifBlob = encoded.blob;
+          vbbClips[i].gifNote = `${encoded.fps || 15} FPS · ${formatKb(encoded.blob.size)}`;
+          setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
+          renderVbbResults();
+          if (mobile && i < ranges.length - 1) {
+            await new Promise((r) => setTimeout(r, hugeFile ? 180 : 80));
+          }
+        }
+        setVbbProgress(true, 1, `黑盒完成 · ${ranges.length} 段`);
+        toast(`黑盒完成 · ${ranges.length} 段 · 可逐条下载或打包`);
+      } catch (err) {
+        if (String(err?.message) !== "已取消") setError(vbbError, err.message || String(err));
+        else toast("已取消");
+        setVbbProgress(false, 0, "");
+      } finally {
+        vbbBusy = false;
+        resetVbbAbort();
+        if (vbbAbort) vbbAbort.hidden = true;
+        setVbbButtons();
+      }
     }
 
     async function runVbbBatchBlackbox() {
@@ -8008,6 +8438,10 @@
       if (!vbbSourceFile) return;
       if (vbbWorkflow === "single") {
         await runVbbSingleBlackbox().catch((err) => setError(vbbError, err.message || String(err)));
+        return;
+      }
+      if (vbbWorkflow === "manual") {
+        await runVbbManualBlackbox().catch((err) => setError(vbbError, err.message || String(err)));
         return;
       }
       await runVbbAnalyze().catch((err) => setError(vbbError, err.message || String(err)));
@@ -8451,6 +8885,10 @@
         return estimateVbbBlackboxPlan(vbbAnalysis.bps15, span, vbbAnalysis.srcW);
       },
       isEqualize: () => isVbbEqualize(),
+      getWorkflow: () => vbbWorkflow,
+      getMarks: () => vbbMarks.map((m) => ({ ...m })),
+      getDraftStart: () => vbbDraftStart,
+      computeManualRanges: () => computeVbbManualRanges(),
     };
     vbbAnalyze?.addEventListener("click", () => runVbbAnalyze().catch((err) => setError(vbbError, err.message || String(err))));
     vbbOneclick?.addEventListener("click", () => runVbbOneClick().catch((err) => setError(vbbError, err.message || String(err))));
@@ -8473,6 +8911,75 @@
       vbbWorkflow = "split";
       syncVbbWorkflowUi();
     });
+    $("#vbb-workflow-manual")?.addEventListener("click", () => {
+      vbbWorkflow = "manual";
+      pauseVbbPreview();
+      syncVbbWorkflowUi();
+      const d = vbbVideoDuration();
+      if (d >= VBB_LONG_VIDEO_SEC) {
+        toast("长视频：拖动定位即可，播放会占用更多内存");
+      }
+    });
+    vbbJumpGo?.addEventListener("click", () => {
+      const t = parseVbbJumpTime(vbbJumpTime?.value);
+      if (t == null) {
+        toast("时间格式无效，如 2:30 或 150");
+        return;
+      }
+      seekVbbPreview(t);
+    });
+    vbbJumpTime?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") vbbJumpGo?.click();
+    });
+    vbbPlay?.addEventListener("click", () => {
+      if (!vbbVideo?.src) return;
+      if (vbbVideo.paused) {
+        const d = vbbVideoDuration();
+        if (d >= VBB_LONG_VIDEO_SEC) toast("长视频播放较耗内存，建议拖动定位");
+        vbbVideo.play().catch(() => {});
+      } else {
+        pauseVbbPreview();
+      }
+    });
+    vbbVideo?.addEventListener("play", () => {
+      vbbPlaying = true;
+      if (vbbPlay) vbbPlay.textContent = "暂停";
+    });
+    vbbVideo?.addEventListener("pause", () => {
+      vbbPlaying = false;
+      if (vbbPlay) vbbPlay.textContent = "播放";
+    });
+    vbbVideo?.addEventListener("timeupdate", () => {
+      if (!isVbbManualMode() || vbbScrubbing) return;
+      paintVbbNow();
+    });
+    vbbVideo?.addEventListener("seeked", () => {
+      if (!isVbbManualMode()) return;
+      paintVbbNow();
+    });
+    vbbScrub?.addEventListener("input", () => {
+      if (!vbbVideo?.src) return;
+      vbbScrubbing = true;
+      pauseVbbPreview();
+      const t = vbbScrubValueToTime(vbbScrub.value);
+      paintVbbNow();
+      scheduleVbbSeek(t, { fromScrub: true, keepPlaying: false });
+    });
+    vbbScrub?.addEventListener("change", () => {
+      vbbScrubbing = false;
+      flushVbbSeek();
+      paintVbbManualControls();
+    });
+    vbbMarkTap?.addEventListener("click", tapVbbMark);
+    vbbMarkUndo?.addEventListener("click", undoVbbMark);
+    vbbMarkClear?.addEventListener("click", () => {
+      clearVbbMarks();
+      toast("已清空标记");
+    });
+    vbbNudgeM1?.addEventListener("click", () => nudgeVbbPreview(-1));
+    vbbNudgeM01?.addEventListener("click", () => nudgeVbbPreview(-0.1));
+    vbbNudgeP01?.addEventListener("click", () => nudgeVbbPreview(0.1));
+    vbbNudgeP1?.addEventListener("click", () => nudgeVbbPreview(1));
     syncVbbWorkflowUi();
     syncVbbModeUi();
     setVbbButtons();
@@ -8650,6 +9157,516 @@
     });
   } catch (err) {
     console.error("gif compress existing init failed", err);
+  }
+
+  // ---- Edit existing GIF (crop / trim frames) ----
+  try {
+    const gifeFile = $("#gife-file");
+    const gifeMeta = $("#gife-meta");
+    const gifeError = $("#gife-error");
+    const gifeTrimHead = $("#gife-trim-head");
+    const gifeTrimTail = $("#gife-trim-tail");
+    const gifeCropX = $("#gife-crop-x");
+    const gifeCropY = $("#gife-crop-y");
+    const gifeCropW = $("#gife-crop-w");
+    const gifeCropH = $("#gife-crop-h");
+    const gifeAutoCrop = $("#gife-auto-crop");
+    const gifeResetCrop = $("#gife-reset-crop");
+    const gifeCropEditor = $("#gife-crop-editor");
+    const gifeCropStage = $("#gife-crop-stage");
+    const gifeCropCanvas = $("#gife-crop-canvas");
+    const gifeCropBox = $("#gife-crop-box");
+    const gifeApply = $("#gife-apply");
+    const gifeDownload = $("#gife-download");
+    const gifePreview = $("#gife-preview");
+    const gifeProgress = $("#gife-progress");
+    const gifeProgressFill = $("#gife-progress-fill");
+    const gifeProgressText = $("#gife-progress-text");
+    const GIFE_DEFAULT_META =
+      "裁剪画面（去黑边或裁掉一部分）、去掉前几帧或后几帧，再导出为新 GIF。";
+    /** @type {{ canvas: HTMLCanvasElement, delay: number }[]} */
+    let gifeFrames = [];
+    let gifeSrcW = 0;
+    let gifeSrcH = 0;
+    let gifeSourceName = "edited.gif";
+    let gifeOutUrl = "";
+    let gifeBusy = false;
+    let gifeCropDrag = null;
+
+    function setGifeProgress(visible, ratio, text) {
+      if (!gifeProgress) return;
+      gifeProgress.hidden = !visible;
+      const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)));
+      if (gifeProgressFill) gifeProgressFill.style.width = `${pct}%`;
+      if (gifeProgressText) gifeProgressText.textContent = text || `${pct}%`;
+    }
+
+    function readGifeCropPct() {
+      const x = Math.max(0, Math.min(99, Number(gifeCropX?.value) || 0));
+      const y = Math.max(0, Math.min(99, Number(gifeCropY?.value) || 0));
+      let w = Math.max(1, Math.min(100, Number(gifeCropW?.value) || 100));
+      let h = Math.max(1, Math.min(100, Number(gifeCropH?.value) || 100));
+      w = Math.min(w, 100 - x);
+      h = Math.min(h, 100 - y);
+      return { x, y, w, h };
+    }
+
+    function setGifeCropPct(x, y, w, h) {
+      if (gifeCropX) gifeCropX.value = String(Math.round(x * 10) / 10);
+      if (gifeCropY) gifeCropY.value = String(Math.round(y * 10) / 10);
+      if (gifeCropW) gifeCropW.value = String(Math.round(w * 10) / 10);
+      if (gifeCropH) gifeCropH.value = String(Math.round(h * 10) / 10);
+      paintGifeCropEditor();
+    }
+
+    function gifeCropRectPx() {
+      const p = readGifeCropPct();
+      return {
+        x: Math.round((p.x / 100) * gifeSrcW),
+        y: Math.round((p.y / 100) * gifeSrcH),
+        w: Math.max(1, Math.round((p.w / 100) * gifeSrcW)),
+        h: Math.max(1, Math.round((p.h / 100) * gifeSrcH)),
+      };
+    }
+
+    function paintGifeCropEditor() {
+      if (!gifeCropStage || !gifeCropCanvas || !gifeCropBox || !gifeFrames.length) {
+        if (gifeCropEditor) gifeCropEditor.hidden = true;
+        return;
+      }
+      if (gifeCropEditor) gifeCropEditor.hidden = false;
+      const src = gifeFrames[0].canvas;
+      const stageW = Math.max(160, Math.round(gifeCropStage.clientWidth || 320));
+      const stageH = Math.max(160, Math.round(stageHFromWidth(stageW, gifeSrcW, gifeSrcH)));
+      const fit = Math.min(stageW / gifeSrcW, stageH / gifeSrcH);
+      const dw = gifeSrcW * fit;
+      const dh = gifeSrcH * fit;
+      const ox = (stageW - dw) / 2;
+      const oy = (stageH - dh) / 2;
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      gifeCropCanvas.width = Math.round(stageW * dpr);
+      gifeCropCanvas.height = Math.round(stageH * dpr);
+      const ctx = gifeCropCanvas.getContext("2d");
+      if (!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, stageW, stageH);
+      ctx.fillStyle = "#0a101c";
+      ctx.fillRect(0, 0, stageW, stageH);
+      ctx.drawImage(src, ox, oy, dw, dh);
+      const p = readGifeCropPct();
+      const box = {
+        x: ox + (p.x / 100) * dw,
+        y: oy + (p.y / 100) * dh,
+        w: (p.w / 100) * dw,
+        h: (p.h / 100) * dh,
+      };
+      gifeCropBox.hidden = false;
+      gifeCropBox.style.left = `${box.x}px`;
+      gifeCropBox.style.top = `${box.y}px`;
+      gifeCropBox.style.width = `${box.w}px`;
+      gifeCropBox.style.height = `${box.h}px`;
+      gifeCropStage.classList.add("has-image");
+      gifeCropStage._gifeGeom = { ox, oy, dw, dh, fit, sw: gifeSrcW, sh: gifeSrcH, box };
+    }
+
+    function stageHFromWidth(stageW, srcW, srcH) {
+      if (!(srcW > 0 && srcH > 0)) return 280;
+      return Math.max(160, Math.min(360, Math.round((stageW * srcH) / srcW)));
+    }
+
+    function detectGifContentBounds(canvas) {
+      const w = canvas.width;
+      const h = canvas.height;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      const data = ctx.getImageData(0, 0, w, h).data;
+      const isContent = (x, y) => {
+        const i = (y * w + x) * 4;
+        const a = data[i + 3];
+        if (a < 12) return false;
+        const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        return lum > 18;
+      };
+      let top = 0;
+      let bottom = h - 1;
+      let left = 0;
+      let right = w - 1;
+      outer: for (; top < h; top++) {
+        for (let x = 0; x < w; x++) if (isContent(x, top)) break outer;
+      }
+      outer: for (; bottom > top; bottom--) {
+        for (let x = 0; x < w; x++) if (isContent(x, bottom)) break outer;
+      }
+      outer: for (; left < w; left++) {
+        for (let y = top; y <= bottom; y++) if (isContent(left, y)) break outer;
+      }
+      outer: for (; right > left; right--) {
+        for (let y = top; y <= bottom; y++) if (isContent(right, y)) break outer;
+      }
+      if (right <= left || bottom <= top) return { x: 0, y: 0, w, h };
+      return { x: left, y: top, w: right - left + 1, h: bottom - top + 1 };
+    }
+
+    function gifeCanvasToBlob(canvas, type, quality) {
+      return new Promise((resolve, reject) => {
+        canvas.toBlob((blob) => {
+          if (!blob) reject(new Error("导出图片失败"));
+          else resolve(blob);
+        }, type, quality);
+      });
+    }
+
+    async function decodeGifeGifWithImageDecoder(buffer) {
+      if (typeof ImageDecoder !== "function") return null;
+      try {
+        const decoder = new ImageDecoder({ data: buffer, type: "image/gif" });
+        await decoder.tracks.ready;
+        const track = decoder.tracks.selectedTrack;
+        if (!track || !track.frameCount) return null;
+        const frames = [];
+        for (let i = 0; i < track.frameCount; i++) {
+          const result = await decoder.decode({ frameIndex: i });
+          const frame = result.image;
+          const canvas = document.createElement("canvas");
+          canvas.width = frame.displayWidth || frame.codedWidth;
+          canvas.height = frame.displayHeight || frame.codedHeight;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(frame, 0, 0);
+          const delayUs = frame.duration || result.duration || 100000;
+          const delay = Math.max(20, Math.round(delayUs / 1000));
+          frame.close();
+          frames.push({ canvas, delay });
+        }
+        decoder.close?.();
+        return frames;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function decodeGifeGifWithOmggif(buffer) {
+      if (typeof GifReader !== "function") throw new Error("GIF 解码库未加载");
+      const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+      const reader = new GifReader(bytes);
+      const width = reader.width;
+      const height = reader.height;
+      const count = reader.numFrames();
+      const frames = [];
+      const full = document.createElement("canvas");
+      full.width = width;
+      full.height = height;
+      const fullCtx = full.getContext("2d", { willReadFrequently: true });
+      fullCtx.clearRect(0, 0, width, height);
+      let saved = null;
+      for (let i = 0; i < count; i++) {
+        const info = reader.frameInfo(i);
+        if (i > 0) {
+          const prev = reader.frameInfo(i - 1);
+          if (prev.disposal === 2) fullCtx.clearRect(prev.x, prev.y, prev.width, prev.height);
+          else if (prev.disposal === 3 && saved) fullCtx.putImageData(saved, 0, 0);
+        }
+        if (info.disposal === 3) saved = fullCtx.getImageData(0, 0, width, height);
+        else saved = null;
+        const imageData = fullCtx.getImageData(0, 0, width, height);
+        reader.decodeAndBlitFrameRGBA(i, imageData.data);
+        fullCtx.putImageData(imageData, 0, 0);
+        const snap = document.createElement("canvas");
+        snap.width = width;
+        snap.height = height;
+        snap.getContext("2d").drawImage(full, 0, 0);
+        const delay = Math.max(20, (info.delay || 10) * 10);
+        frames.push({ canvas: snap, delay });
+      }
+      return frames;
+    }
+
+    function setGifeButtons() {
+      const ready = gifeFrames.length > 0 && !gifeBusy;
+      if (gifeApply) gifeApply.disabled = !ready;
+      if (gifeAutoCrop) gifeAutoCrop.disabled = !ready;
+      if (gifeResetCrop) gifeResetCrop.disabled = !ready;
+    }
+
+    function revokeGifeOut() {
+      if (gifeOutUrl) {
+        URL.revokeObjectURL(gifeOutUrl);
+        gifeOutUrl = "";
+      }
+      if (gifePreview) {
+        gifePreview.hidden = true;
+        gifePreview.removeAttribute("src");
+      }
+      if (gifeDownload) {
+        gifeDownload.hidden = true;
+        gifeDownload.removeAttribute("href");
+      }
+    }
+
+    function clearGife() {
+      gifeFrames = [];
+      gifeSrcW = 0;
+      gifeSrcH = 0;
+      revokeGifeOut();
+      if (gifeFile) gifeFile.value = "";
+      if (gifeTrimHead) gifeTrimHead.value = "0";
+      if (gifeTrimTail) gifeTrimTail.value = "0";
+      setGifeCropPct(0, 0, 100, 100);
+      if (gifeCropEditor) gifeCropEditor.hidden = true;
+      if (gifeCropStage) gifeCropStage.classList.remove("has-image", "is-dragging");
+      setGifeProgress(false, 0, "");
+      setError(gifeError, "");
+      if (gifeMeta) gifeMeta.textContent = GIFE_DEFAULT_META;
+      gifeBusy = false;
+      setGifeButtons();
+    }
+
+    function syncGifeMeta() {
+      if (!gifeMeta || !gifeFrames.length) return;
+      const head = Math.max(0, Number(gifeTrimHead?.value) || 0);
+      const tail = Math.max(0, Number(gifeTrimTail?.value) || 0);
+      const remain = Math.max(0, gifeFrames.length - head - tail);
+      const totalMs = gifeFrames.reduce((s, f) => s + f.delay, 0);
+      gifeMeta.textContent = `${gifeSourceName.replace(/\.gif$/i, "")} · ${gifeSrcW}×${gifeSrcH} · ${gifeFrames.length} 帧 · 约 ${(totalMs / 1000).toFixed(2)}s · 导出约 ${remain} 帧`;
+    }
+
+    async function loadGifeFile(file) {
+      if (!file) return;
+      clearGife();
+      const type = String(file.type || "").toLowerCase();
+      const name = String(file.name || "");
+      if (type && type !== "image/gif" && !/\.gif$/i.test(name)) {
+        setError(gifeError, "请选择 GIF 文件");
+        return;
+      }
+      setError(gifeError, "");
+      setGifeProgress(true, 0.02, "读取 GIF…");
+      try {
+        const buffer = await file.arrayBuffer();
+        let frames = await decodeGifeGifWithImageDecoder(buffer);
+        if (!frames?.length) frames = decodeGifeGifWithOmggif(buffer);
+        if (!frames.length) throw new Error("未解析到帧");
+        gifeFrames = frames;
+        gifeSrcW = frames[0].canvas.width;
+        gifeSrcH = frames[0].canvas.height;
+        gifeSourceName = `${(name.replace(/\.gif$/i, "") || "edited")}-edited.gif`;
+        setGifeCropPct(0, 0, 100, 100);
+        paintGifeCropEditor();
+        syncGifeMeta();
+        setGifeButtons();
+        setGifeProgress(true, 1, `已加载 ${frames.length} 帧`);
+        toast(`GIF 已加载 · ${frames.length} 帧`);
+      } catch (err) {
+        clearGife();
+        setError(gifeError, err.message || String(err));
+        setGifeProgress(false, 0, "");
+      }
+    }
+
+    function applyGifeCropToCanvas(srcCanvas, rect) {
+      const out = document.createElement("canvas");
+      out.width = rect.w;
+      out.height = rect.h;
+      out.getContext("2d").drawImage(srcCanvas, rect.x, rect.y, rect.w, rect.h, 0, 0, rect.w, rect.h);
+      return out;
+    }
+
+    function getGifeProcessedFrames() {
+      const head = Math.max(0, Math.min(gifeFrames.length, Number(gifeTrimHead?.value) || 0));
+      const tail = Math.max(0, Math.min(gifeFrames.length - head, Number(gifeTrimTail?.value) || 0));
+      const sliced = gifeFrames.slice(head, gifeFrames.length - tail);
+      if (sliced.length < 1) throw new Error("删帧后至少需要保留 1 帧");
+      const rect = gifeCropRectPx();
+      if (rect.w < 2 || rect.h < 2) throw new Error("裁剪区域过小");
+      return sliced.map((f) => ({
+        canvas: applyGifeCropToCanvas(f.canvas, rect),
+        delay: f.delay,
+      }));
+    }
+
+    async function encodeGifeGif(frames, onProgress) {
+      if (typeof GIF !== "function") throw new Error("gif.js 未加载");
+      const outW = frames[0].canvas.width;
+      const outH = frames[0].canvas.height;
+      const workerSource = await fetch(new URL("./vendor/gif.worker.js", document.baseURI || window.location.href)).then((r) => {
+        if (!r.ok) throw new Error("无法加载 gif.worker.js");
+        return r.text();
+      });
+      const workerScript = URL.createObjectURL(new Blob([workerSource], { type: "application/javascript" }));
+      try {
+        const gif = new GIF({
+          workers: 2,
+          quality: 10,
+          width: outW,
+          height: outH,
+          workerScript,
+          repeat: 0,
+          background: "#000000",
+        });
+        frames.forEach((frame, idx) => {
+          gif.addFrame(frame.canvas, { delay: frame.delay, copy: true });
+          onProgress?.(0.1 + (idx / frames.length) * 0.2, `准备帧 ${idx + 1}/${frames.length}`);
+        });
+        return await new Promise((resolve, reject) => {
+          gif.on("progress", (p) => onProgress?.(0.3 + p * 0.7, `编码中… ${Math.round(p * 100)}%`));
+          gif.on("finished", (b) => resolve(b));
+          gif.on("abort", () => reject(new Error("已取消")));
+          try {
+            gif.render();
+          } catch (err) {
+            reject(err);
+          }
+        });
+      } finally {
+        try {
+          URL.revokeObjectURL(workerScript);
+        } catch (_) {}
+      }
+    }
+
+    async function applyGifeEdit() {
+      if (!gifeFrames.length || gifeBusy) return;
+      gifeBusy = true;
+      setGifeButtons();
+      setError(gifeError, "");
+      revokeGifeOut();
+      try {
+        const processed = getGifeProcessedFrames();
+        setGifeProgress(true, 0.05, `处理 ${processed.length} 帧…`);
+        const blob = await encodeGifeGif(processed, (ratio, text) => setGifeProgress(true, ratio, text));
+        gifeOutUrl = URL.createObjectURL(blob);
+        if (gifePreview) {
+          gifePreview.src = gifeOutUrl;
+          gifePreview.hidden = false;
+        }
+        if (gifeDownload) {
+          gifeDownload.href = gifeOutUrl;
+          gifeDownload.download = gifeSourceName;
+          gifeDownload.hidden = false;
+        }
+        setGifeProgress(true, 1, `完成 · ${processed[0].canvas.width}×${processed[0].canvas.height} · ${formatKb(blob.size)}`);
+        toast(`已导出 · ${formatKb(blob.size)}`);
+      } catch (err) {
+        setError(gifeError, err.message || String(err));
+        setGifeProgress(false, 0, "");
+      } finally {
+        gifeBusy = false;
+        setGifeButtons();
+      }
+    }
+
+    function autoGifeCrop() {
+      if (!gifeFrames.length) return;
+      const bounds = detectGifContentBounds(gifeFrames[0].canvas);
+      setGifeCropPct(
+        (bounds.x / gifeSrcW) * 100,
+        (bounds.y / gifeSrcH) * 100,
+        (bounds.w / gifeSrcW) * 100,
+        (bounds.h / gifeSrcH) * 100
+      );
+      syncGifeMeta();
+      toast("已按首帧检测黑边");
+    }
+
+    function applyGifeBoxToInputs(box, geom) {
+      const x = Math.max(0, Math.min(geom.sw, (box.x - geom.ox) / geom.fit));
+      const y = Math.max(0, Math.min(geom.sh, (box.y - geom.oy) / geom.fit));
+      const w = Math.max(1, Math.min(geom.sw - x, box.w / geom.fit));
+      const h = Math.max(1, Math.min(geom.sh - y, box.h / geom.fit));
+      setGifeCropPct((x / geom.sw) * 100, (y / geom.sh) * 100, (w / geom.sw) * 100, (h / geom.sh) * 100);
+      syncGifeMeta();
+    }
+
+    gifeFile?.addEventListener("change", (e) => {
+      loadGifeFile(e.target.files?.[0]).catch((err) => setError(gifeError, err.message || String(err)));
+    });
+    $("#gife-clear")?.addEventListener("click", clearGife);
+    window.DevToolsTemp?.registerCleanup(clearGife);
+    gifeApply?.addEventListener("click", () => {
+      applyGifeEdit().catch((err) => setError(gifeError, err.message || String(err)));
+    });
+    gifeAutoCrop?.addEventListener("click", autoGifeCrop);
+    gifeResetCrop?.addEventListener("click", () => {
+      setGifeCropPct(0, 0, 100, 100);
+      syncGifeMeta();
+    });
+    [gifeTrimHead, gifeTrimTail, gifeCropX, gifeCropY, gifeCropW, gifeCropH].forEach((el) => {
+      el?.addEventListener("input", () => {
+        syncGifeMeta();
+        paintGifeCropEditor();
+      });
+    });
+    gifeCropStage?.addEventListener("pointerdown", (e) => {
+      const box = e.target.closest("#gife-crop-box");
+      if (!box || box.hidden || !gifeFrames.length) return;
+      const geom = gifeCropStage._gifeGeom;
+      if (!geom) return;
+      const handle = e.target.closest("[data-gife-handle]")?.dataset?.gifeHandle || "";
+      gifeCropStage.setPointerCapture(e.pointerId);
+      gifeCropStage.classList.add("is-dragging");
+      gifeCropDrag = {
+        handle,
+        kind: handle ? "resize" : "pan",
+        x0: e.clientX,
+        y0: e.clientY,
+        box0: { ...geom.box },
+        geom,
+      };
+      e.preventDefault();
+    });
+    gifeCropStage?.addEventListener("pointermove", (e) => {
+      if (!gifeCropDrag) return;
+      const dx = e.clientX - gifeCropDrag.x0;
+      const dy = e.clientY - gifeCropDrag.y0;
+      const geom = gifeCropDrag.geom;
+      const img = { x: geom.ox, y: geom.oy, w: geom.dw, h: geom.dh };
+      let next = { ...gifeCropDrag.box0 };
+      if (gifeCropDrag.kind === "pan") {
+        next.x = gifeCropDrag.box0.x + dx;
+        next.y = gifeCropDrag.box0.y + dy;
+        next.x = Math.max(img.x, Math.min(img.x + img.w - next.w, next.x));
+        next.y = Math.max(img.y, Math.min(img.y + img.h - next.h, next.y));
+      } else {
+        const h = gifeCropDrag.handle;
+        if (h.includes("e")) next.w = gifeCropDrag.box0.w + dx;
+        if (h.includes("w")) {
+          next.w = gifeCropDrag.box0.w - dx;
+          next.x = gifeCropDrag.box0.x + dx;
+        }
+        if (h.includes("s")) next.h = gifeCropDrag.box0.h + dy;
+        if (h.includes("n")) {
+          next.h = gifeCropDrag.box0.h - dy;
+          next.y = gifeCropDrag.box0.y + dy;
+        }
+        next.w = Math.max(24, next.w);
+        next.h = Math.max(24, next.h);
+        if (h.includes("w")) next.x = gifeCropDrag.box0.x + gifeCropDrag.box0.w - next.w;
+        if (h.includes("n")) next.y = gifeCropDrag.box0.y + gifeCropDrag.box0.h - next.h;
+        next.x = Math.max(img.x, Math.min(img.x + img.w - next.w, next.x));
+        next.y = Math.max(img.y, Math.min(img.y + img.h - next.h, next.y));
+        next.w = Math.min(next.w, img.x + img.w - next.x);
+        next.h = Math.min(next.h, img.y + img.h - next.y);
+      }
+      gifeCropBox.style.left = `${next.x}px`;
+      gifeCropBox.style.top = `${next.y}px`;
+      gifeCropBox.style.width = `${next.w}px`;
+      gifeCropBox.style.height = `${next.h}px`;
+      applyGifeBoxToInputs(next, geom);
+    });
+    const endGifeCropDrag = (e) => {
+      if (!gifeCropDrag) return;
+      gifeCropStage?.classList.remove("is-dragging");
+      try {
+        gifeCropStage?.releasePointerCapture?.(e.pointerId);
+      } catch (_) {}
+      gifeCropDrag = null;
+      paintGifeCropEditor();
+    };
+    gifeCropStage?.addEventListener("pointerup", endGifeCropDrag);
+    gifeCropStage?.addEventListener("pointercancel", endGifeCropDrag);
+    window.addEventListener("resize", () => {
+      if (gifeFrames.length) paintGifeCropEditor();
+    });
+  } catch (err) {
+    console.error("gif edit init failed", err);
   }
 
   // ---- Merge GIFs ----
