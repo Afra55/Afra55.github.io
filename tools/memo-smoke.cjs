@@ -1158,7 +1158,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817lanshare4/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navlast1/.test(s.src)),
     };
 
     out.pwa = {
@@ -1392,12 +1392,23 @@ async function main() {
 
     out.lastTool = {
       api: typeof window.DevToolsNav?.lastToolHash === "function",
+      restoreApi: typeof window.DevToolsNav?.shouldRestoreLastTool === "function",
     };
     try {
+      localStorage.setItem("devtools-tool-last-v1", "json");
       localStorage.setItem("devtools-tool-recent-v1", JSON.stringify(["json", "memo"]));
       out.lastTool.json = window.DevToolsNav.lastToolHash() === "#json";
+      localStorage.setItem("devtools-tool-last-v1", "vsplit");
       localStorage.setItem("devtools-tool-recent-v1", JSON.stringify(["vsplit"]));
       out.lastTool.media = window.DevToolsNav.lastToolHash() === "#media/vsplit";
+      localStorage.setItem("devtools-tool-last-v1", "memo");
+      history.replaceState(null, "", "#timestamp");
+      out.lastTool.restoreTimestamp =
+        window.DevToolsNav.shouldRestoreLastTool() && window.DevToolsNav.lastToolHash() === "#memo";
+      history.replaceState(null, "", "#lanshare?j=abc");
+      out.lastTool.keepLanshareJoin = !window.DevToolsNav.shouldRestoreLastTool();
+      history.replaceState(null, "", "#memo");
+      out.lastTool.keepExplicit = !window.DevToolsNav.shouldRestoreLastTool();
     } catch (err) {
       out.lastTool.err = String((err && err.message) || err);
     }
@@ -1453,6 +1464,31 @@ async function main() {
     return out;
   });
 
+  await page.setUserAgent(
+    "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
+  );
+  await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
+  await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#memo`, {
+    waitUntil: "networkidle0",
+    timeout: 60000,
+  });
+  await page.waitForFunction(() => document.getElementById("memo")?.classList.contains("is-workspace-active"), {
+    timeout: 15000,
+  });
+  await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#timestamp`, {
+    waitUntil: "networkidle0",
+    timeout: 60000,
+  });
+  await page.waitForFunction(
+    () => location.hash === "#memo" && document.getElementById("memo")?.classList.contains("is-workspace-active"),
+    { timeout: 15000 }
+  );
+  result.lastToolIosCold = await page.evaluate(() => ({
+    hash: location.hash,
+    memoActive: Boolean(document.getElementById("memo")?.classList.contains("is-workspace-active")),
+    lastKey: localStorage.getItem("devtools-tool-last-v1"),
+  }));
+
   await browser.close();
   await new Promise((r) => server.close(r));
 
@@ -1463,7 +1499,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/lanshare4/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/navlast1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1723,8 +1759,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/lanshare4/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to lanshare4");
+  if (!/navlast1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to navlast1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
@@ -1764,6 +1800,17 @@ async function main() {
   }
   if (!result.lastTool?.api || !result.lastTool?.json || !result.lastTool?.media) {
     failed.push("empty hash should restore last used tool including media tabs");
+  }
+  if (
+    !result.lastTool?.restoreApi ||
+    !result.lastTool?.restoreTimestamp ||
+    !result.lastTool?.keepLanshareJoin ||
+    !result.lastTool?.keepExplicit
+  ) {
+    failed.push("startup should restore last tool on default #timestamp but keep explicit/deep links");
+  }
+  if (!result.lastToolIosCold?.memoActive || result.lastToolIosCold?.hash !== "#memo") {
+    failed.push(`iOS cold #timestamp should restore memo: ${JSON.stringify(result.lastToolIosCold)}`);
   }
   if (
     !result.navCompact?.hasToggle ||
