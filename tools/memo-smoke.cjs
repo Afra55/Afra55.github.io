@@ -101,6 +101,13 @@ async function main() {
     await sleep(400);
     out.steps.push({ saveText: (window.DevToolsMemo.getIndex().items || []).length >= 1 });
 
+    await window.DevToolsMemo.ingestText('{"clip":true,"items":[1,2]}');
+    await sleep(300);
+    const clipJson = (window.DevToolsMemo.getIndex().items || []).find(
+      (it) => /\.json$/i.test(it.name || it.fileName || "") && (it.textPreview || "").includes('"clip"')
+    );
+    out.steps.push({ clipJsonSaved: Boolean(clipJson) });
+
     // paste image via ClipboardEvent is hard; ingest via file input DataTransfer simulation
     const png = await (async () => {
       const canvas = document.createElement("canvas");

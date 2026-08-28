@@ -256,7 +256,12 @@
     if (mime.includes("webm")) return ".webm";
     if (mime.includes("audio")) return ".mp3";
     if (mime.includes("pdf")) return ".pdf";
-    if (item?.type === "text") return ".txt";
+    if (mime === "application/json" || mime.endsWith("+json")) return ".json";
+    if (item?.type === "text") {
+      const name = String(item.name || item.fileName || "").toLowerCase();
+      if (name.endsWith(".json")) return ".json";
+      return ".txt";
+    }
     return "";
   }
 
@@ -2195,6 +2200,22 @@
     }
   }
 
+  function memoTextBlobMeta(text) {
+    const body = String(text || "").trim();
+    if (isLikelyJsonText(body)) {
+      return {
+        body,
+        fileName: `JSON-${formatTime(Date.now())}.json`,
+        mime: "application/json;charset=utf-8",
+      };
+    }
+    return {
+      body,
+      fileName: `文本-${formatTime(Date.now())}.txt`,
+      mime: "text/plain;charset=utf-8",
+    };
+  }
+
   async function addText(text, opts = {}) {
     const body = String(text || "").trim();
     if (!body) {
@@ -2209,12 +2230,13 @@
       if (editor) editor.value = "";
       return null;
     }
+    const meta = memoTextBlobMeta(body);
     let added = null;
     await withBusy(async () => {
-      const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
-      added = await addItemFromBlob(blob, `文本-${formatTime(Date.now())}.txt`, {
+      const blob = new Blob([meta.body], { type: meta.mime });
+      added = await addItemFromBlob(blob, meta.fileName, {
         type: "text",
-        textPreview: body,
+        textPreview: meta.body,
         quiet: Boolean(opts.quiet || opts.offerTemp),
       });
       if (editor) editor.value = "";
@@ -2489,12 +2511,15 @@
       return;
     }
     await withBusy(async () => {
-      const blob = new Blob([body], { type: "text/plain;charset=utf-8" });
+      const isJson = isMemoJsonItem(item);
+      const mime = isJson ? "application/json;charset=utf-8" : "text/plain;charset=utf-8";
+      const blob = new Blob([body], { type: mime });
       item.textPreview = clipTextPreview(body);
       item.updatedAt = Date.now();
       item.size = blob.size;
-      item.mime = "text/plain;charset=utf-8";
-      item.fileName = await saveBlob(item.id, blob, item.fileName || `${item.id}_text.txt`);
+      item.mime = mime;
+      const fallback = isJson ? `${item.id}_text.json` : `${item.id}_text.txt`;
+      item.fileName = await saveBlob(item.id, blob, item.fileName || fallback);
       try {
         item.contentHash = await hashBlobPartial(blob);
       } catch (_) {}
