@@ -793,6 +793,7 @@
     { id: "media", label: "媒体", tools: ["gifmaker", "vsplit", "vtrim", "audio"] },
     { id: "image", label: "图片", tools: ["imgkit", "textimg", "imgtext"] },
     { id: "convert", label: "换算", tools: ["units", "coord", "numbase"] },
+    { id: "share", label: "互传", tools: ["lanshare"] },
     { id: "device", label: "设备", tools: ["adb", "ffbridge"] },
     { id: "site", label: "站点", tools: ["about", "setup"] },
   ];
@@ -839,6 +840,7 @@
     coord: "WGS84 / GCJ-02 / BD-09 等坐标系互转。",
     numbase: "二、八、十、十六进制互转。",
     adb: "网页侧 ADB 调试辅助：设备、文件、输入、安装等。",
+    lanshare: "局域网互传：多机同房间共享文件列表，下载时从上传者手机 WebRTC 直传，不经房主中转；房主可退出或解散，退出时最近加入者接任。",
     ffbridge: "电脑批量用本机 FFmpeg 桥；手机请直接用媒体里的音频/修剪/GIF（网页内处理）。",
     about: "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
     setup: "小白向：如何下载安装 Node.js、ADB、FFmpeg；手机用网页保底、电脑用桥更优。",
@@ -880,6 +882,7 @@
     markdown: { name: "Markdown", aliases: ["md", "预览"] },
     memo: { name: "备忘录", aliases: ["笔记", "剪贴板", "memo", "note", "便签"] },
     adb: { name: "ADB 工具", aliases: ["安卓", "android", "设备", "adb"], desktopOnly: true },
+    lanshare: { name: "局域网互传", aliases: ["互传", "传文件", "lan", "share", "webrtc", "局域网"] },
     ffbridge: {
       name: "FFmpeg 本机桥",
       aliases: ["本机桥", "ffbridge", "批量转码"],

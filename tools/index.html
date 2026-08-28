@@ -18,8 +18,8 @@
   <!-- 不阻塞首屏：Noto Serif SC 只给文转图用，避免每次拉取中文字体；Google 字体 CSS 在国内常卡住数秒 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" /></noscript>
-  <link rel="stylesheet" href="./style.css?v=20260817adbfs3" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260817adbfs3" />
+  <link rel="stylesheet" href="./style.css?v=20260817lanshare1" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260817lanshare1" />
   <script>
     /* 尽早应用主题变量，减少闪烁；侧栏也依赖这些 CSS 变量 */
     (function () {
@@ -3042,6 +3042,76 @@ hello@world.org</textarea>
       </div>
     </section>
 
+<section id="lanshare" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>局域网互传</h1>
+        <p>多设备同房间共享文件；下载时与上传者 WebRTC 直连，房主只做协调，不经手文件数据。</p>
+      </div>
+      <div class="panel-body">
+        <div class="adb-status panel-card" id="ls-status">
+          <div class="adb-status-main">
+            <span class="adb-dot" id="ls-dot" aria-hidden="true"></span>
+            <div>
+              <strong id="ls-status-title">未加入房间</strong>
+              <p class="hint tight" id="ls-status-text">创建或加入房间；文件不经房主中转，下载时与上传者 WebRTC 直连。</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem;align-items:center">
+          <label for="ls-name">设备名</label>
+          <input id="ls-name" type="text" maxlength="24" placeholder="例如：小明的手机" autocomplete="off" spellcheck="false" style="min-width:10rem" />
+        </div>
+
+        <div id="ls-join-area" style="margin-top:0.85rem">
+          <div class="btn-row tool-actions" style="flex-wrap:wrap">
+            <button type="button" class="primary-btn" id="ls-create">创建房间</button>
+            <button type="button" class="secondary-btn" id="ls-scan">扫码加入</button>
+            <button type="button" class="ghost-btn" id="ls-paste-join">粘贴邀请加入</button>
+          </div>
+          <div id="ls-cam-wrap" class="qr-scan-wrap" hidden style="margin-top:0.65rem">
+            <video id="ls-cam-video" class="qr-video" playsinline muted hidden></video>
+            <button type="button" class="ghost-btn" id="ls-cam-stop" hidden>关闭摄像头</button>
+          </div>
+          <p class="hint tight">需在同一局域网；首次加入请扫房主二维码或粘贴邀请文本。请保持页面在前台。</p>
+        </div>
+
+        <div id="ls-invite-area" hidden style="margin-top:0.85rem">
+          <h2 class="subhead">邀请加入</h2>
+          <p class="hint tight">每加入一人后二维码会自动刷新，供下一位成员扫码。</p>
+          <div id="ls-invite-qr" class="qr-box-wrap" style="margin:0.5rem 0"></div>
+          <label for="ls-invite-text">邀请文本（可复制分享）</label>
+          <textarea id="ls-invite-text" class="mono area" rows="3" readonly spellcheck="false"></textarea>
+        </div>
+
+        <p class="hint mono" id="ls-room-meta" hidden style="margin-top:0.65rem"></p>
+
+        <div class="btn-row tool-actions" style="margin-top:0.65rem;flex-wrap:wrap">
+          <button type="button" class="secondary-btn" id="ls-pick" disabled>选择文件</button>
+          <input id="ls-file-input" type="file" multiple hidden />
+          <button type="button" class="ghost-btn" id="ls-leave" hidden>退出房间</button>
+          <button type="button" class="ghost-btn" id="ls-dissolve" hidden>解散房间</button>
+        </div>
+
+        <div class="label-row" style="margin-top:1rem">
+          <h2 class="subhead">在线成员</h2>
+        </div>
+        <div class="ls-list panel-card" id="ls-members"></div>
+
+        <div class="label-row" style="margin-top:1rem">
+          <h2 class="subhead">文件列表</h2>
+        </div>
+        <div class="ls-list panel-card" id="ls-files"></div>
+
+        <div id="ls-progress" class="panel-card" hidden style="margin-top:0.85rem">
+          <div class="ls-progress-bar-wrap"><div id="ls-progress-bar" class="ls-progress-bar"></div></div>
+          <p class="hint tight" id="ls-progress-text"></p>
+        </div>
+
+        <p class="error" id="ls-error" hidden></p>
+      </div>
+    </section>
+
 <section id="ffbridge" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>FFmpeg 本机桥</h1>
@@ -3728,22 +3798,23 @@ adb devices</pre>
       <button type="button" class="primary-btn vsplit-fs-mark" id="vsplit-fs-mark">打起点</button>
     </div>
   </div>
-  <script src="./theme.js?v=20260817adbfs3"></script>
-  <script src="./temp.js?v=20260817adbfs3"></script>
+  <script src="./theme.js?v=20260817lanshare1"></script>
+  <script src="./temp.js?v=20260817lanshare1"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260817adbfs3"></script>
-  <script src="./about.js?v=20260817adbfs3" defer></script>
-  <script src="./extra.js?v=20260817adbfs3" defer></script>
-  <script src="./vtrim.js?v=20260817adbfs3" defer></script>
-  <script src="./vplay.js?v=20260817adbfs3" defer></script>
-  <script src="./audio.js?v=20260817adbfs3" defer></script>
-  <script src="./ffbridge.js?v=20260817adbfs3" defer></script>
-  <script src="./setup.js?v=20260817adbfs3" defer></script>
+  <script src="./app.js?v=20260817lanshare1"></script>
+  <script src="./about.js?v=20260817lanshare1" defer></script>
+  <script src="./extra.js?v=20260817lanshare1" defer></script>
+  <script src="./vtrim.js?v=20260817lanshare1" defer></script>
+  <script src="./vplay.js?v=20260817lanshare1" defer></script>
+  <script src="./audio.js?v=20260817lanshare1" defer></script>
+  <script src="./ffbridge.js?v=20260817lanshare1" defer></script>
+  <script src="./lanshare.js?v=20260817lanshare1" defer></script>
+  <script src="./setup.js?v=20260817lanshare1" defer></script>
   <script src="./imgkit.js?v=20260810l" defer></script>
-  <script src="./memo.js?v=20260817adbfs3" defer></script>
-  <script src="./textimg.js?v=20260817adbfs3" defer></script>
-  <script src="./imgtext.js?v=20260817adbfs3" defer></script>
-  <script src="./pwa.js?v=20260817adbfs3" defer></script>
+  <script src="./memo.js?v=20260817lanshare1" defer></script>
+  <script src="./textimg.js?v=20260817lanshare1" defer></script>
+  <script src="./imgtext.js?v=20260817lanshare1" defer></script>
+  <script src="./pwa.js?v=20260817lanshare1" defer></script>
   <script src="./vendor/js-yaml.min.js" defer></script>
   <script src="./vendor/spark-md5.min.js" defer></script>
   <script src="./vendor/qrcode.min.js" defer></script>
