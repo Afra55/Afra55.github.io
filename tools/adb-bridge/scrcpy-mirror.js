@@ -487,9 +487,19 @@ function handleUpgrade(req, socket, head, deps) {
 
   const origin = req.headers.origin || "";
   if (origin && deps.allowedOrigins && !deps.allowedOrigins.has(origin)) {
-    socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
-    socket.destroy();
-    return true;
+    try {
+      const u = new URL(origin);
+      const localHost = u.hostname === "127.0.0.1" || u.hostname === "localhost";
+      if (!localHost) {
+        socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+        socket.destroy();
+        return true;
+      }
+    } catch {
+      socket.write("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n");
+      socket.destroy();
+      return true;
+    }
   }
 
   const token = url.searchParams.get("token") || req.headers["x-adb-token"] || "";

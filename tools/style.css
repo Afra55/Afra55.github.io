@@ -3785,6 +3785,14 @@ body.vsplit-fs-open {
   user-select: none;
 }
 
+.adb-input-drop-hint[hidden] {
+  display: none !important;
+}
+
+.adb-input-shot-wrap:not(.is-drop-target) .adb-input-drop-hint {
+  display: none !important;
+}
+
 .adb-input-drop-hint {
   position: absolute;
   inset: 0;

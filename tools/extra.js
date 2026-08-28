@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-adbfs1";
+  const TOOLS_VERSION = "2026.08.17-adbfs2";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -10009,6 +10009,36 @@
       return String(adbTokenInput?.value || "devtools-bridge");
     }
 
+    function sanitizeAppLabel(label) {
+      const t = String(label || "").trim();
+      if (!t || /^null$/i.test(t) || /^undefined$/i.test(t)) return "";
+      return t;
+    }
+
+    function appDisplayLabel(app) {
+      const label = sanitizeAppLabel(app?.label);
+      const pkg = String(app?.packageName || "").trim();
+      return label && label !== pkg ? label : pkg;
+    }
+
+    function adbMirrorWsUrl(serial) {
+      let base = adbBase().replace(/\/$/, "");
+      if (/^https:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(base)) {
+        base = base.replace(/^https:/i, "http:");
+      }
+      const wsBase = base.startsWith("https://")
+        ? base.replace(/^https:\/\//i, "wss://")
+        : base.replace(/^http:\/\//i, "ws://");
+      return `${wsBase}/mirror/ws?serial=${encodeURIComponent(serial)}&token=${encodeURIComponent(adbToken())}`;
+    }
+
+    function setInputDropHintVisible(visible) {
+      const wrap = $("#adb-input-shot-wrap");
+      const dropHint = $("#adb-input-drop-hint");
+      if (wrap) wrap.classList.toggle("is-drop-target", Boolean(visible));
+      if (dropHint) dropHint.hidden = !visible;
+    }
+
     function persistAdbSettings() {
       try {
         localStorage.setItem(ADB_STORE_BASE, adbBase());
@@ -10939,13 +10969,12 @@
         if (!q) return true;
         return (
           app.packageName.toLowerCase().includes(q) ||
-          String(app.label || "")
-            .toLowerCase()
-            .includes(q)
+          appDisplayLabel(app).toLowerCase().includes(q)
         );
       });
       if (adbAppsMeta) {
-        const resolved = adbApps.filter((a) => a.label && a.label !== a.packageName).length;
+        const resolved = adbApps.filter((a) => sanitizeAppLabel(a.label) && sanitizeAppLabel(a.label) !== a.packageName)
+          .length;
         adbAppsMeta.textContent = `${list.length}/${adbApps.length} · 应用名 ${resolved}/${adbApps.length} · ${
           adbSelected || "未选择"
         }`;
@@ -10959,8 +10988,9 @@
         .map((app) => {
           const kind = app.isSystem ? "系统" : "三方";
           const pkg = escapeHtml(app.packageName);
-          const hasLabel = Boolean(app.label && app.label !== app.packageName);
-          const title = escapeHtml(hasLabel ? app.label : app.packageName);
+          const label = sanitizeAppLabel(app.label);
+          const hasLabel = Boolean(label && label !== app.packageName);
+          const title = escapeHtml(appDisplayLabel(app));
           const checked = adbPermPackage === app.packageName ? "checked" : "";
           return `<div class="adb-fs-row adb-app-row" data-adb-app-pkg="${pkg}">
             <label class="adb-app-select">
@@ -11481,7 +11511,7 @@
       const resolved =
         data.labelResolved != null
           ? Number(data.labelResolved)
-          : adbApps.filter((a) => a.label && a.label !== a.packageName).length;
+          : adbApps.filter((a) => sanitizeAppLabel(a.label) && sanitizeAppLabel(a.label) !== a.packageName).length;
       if (adbAppsMeta) {
         adbAppsMeta.textContent = `${adbApps.length} 个 · 应用名 ${resolved}/${adbApps.length} · ${
           adbSelected || "未选择"
@@ -12644,6 +12674,7 @@
         adbMirrorDecoder = null;
       }
       adbMirrorPendingConfig = null;
+      setInputDropHintVisible(false);
       const canvas = $("#adb-input-mirror");
       if (canvas) canvas.hidden = true;
       if (notifyBridge && serial) {
@@ -12705,31 +12736,51 @@
       }
       adbMirrorStarting = true;
       stopInputLivePreview({ keepMirror: true });
+      setInputDropHintVisible(false);
       try {
+        if (!bridgeHas("mirror") && !bridgeHas("scrcpy-mirror") && !bridgeAtLeast("0.7.0")) {
+          throw new Error("本机桥版本过旧，不支持镜像。请重新下载完整 ZIP 并重启桥（≥0.7.0）");
+        }
         try {
           await adbFetch("/mirror/prepare", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
-        } catch {
-          /* jar may already be vendored */
+        } catch (err) {
+          const prep = await adbFetch("/mirror/status").catch(() => null);
+          if (!prep?.ok) throw err;
         }
-        const base = adbBase().replace(/\/$/, "");
-        const wsUrl = `${base.replace(/^http/, "ws")}/mirror/ws?serial=${encodeURIComponent(serial)}&token=${encodeURIComponent(adbToken())}`;
+        const wsUrl = adbMirrorWsUrl(serial);
         await new Promise((resolve, reject) => {
           let settled = false;
+          let errTimer = 0;
           const ws = new WebSocket(wsUrl);
           ws.binaryType = "arraybuffer";
           adbMirrorWs = ws;
           const fail = (msg) => {
             if (settled) return;
             settled = true;
+            if (errTimer) clearTimeout(errTimer);
             stopMirrorPreview({ notifyBridge: true });
             reject(new Error(msg));
+          };
+          const scheduleGenericFail = (msg) => {
+            if (settled || errTimer) return;
+            errTimer = setTimeout(() => {
+              errTimer = 0;
+              fail(msg);
+            }, 500);
           };
           ws.onopen = () => {
             adbInputLive = true;
             updateInputLiveUi();
           };
-          ws.onerror = () => fail("镜像 WebSocket 连接失败");
+          ws.onerror = () =>
+            scheduleGenericFail(
+              "镜像 WebSocket 连接失败（请确认本机桥已启动、地址为 http://127.0.0.1:17888，且已重启到最新版）"
+            );
           ws.onclose = () => {
+            if (errTimer) {
+              clearTimeout(errTimer);
+              errTimer = 0;
+            }
             if (!settled) fail("镜像连接已关闭");
             else {
               adbMirrorWs = null;
@@ -12756,6 +12807,10 @@
                 return;
               }
               if (msg.type === "hello") {
+                if (errTimer) {
+                  clearTimeout(errTimer);
+                  errTimer = 0;
+                }
                 adbMirrorMeta = msg;
                 try {
                   ensureMirrorDecoder(msg);
@@ -14498,32 +14553,37 @@
       });
 
       const dropHint = $("#adb-input-drop-hint");
+      let inputDropDepth = 0;
       const hasFiles = (dt) => dt && [...(dt.types || [])].includes("Files");
+      const resetInputDropUi = () => {
+        inputDropDepth = 0;
+        setInputDropHintVisible(false);
+      };
       wrap?.addEventListener("dragenter", (e) => {
         if (!hasFiles(e.dataTransfer)) return;
         e.preventDefault();
-        wrap.classList.add("is-drop-target");
-        if (dropHint) dropHint.hidden = false;
+        inputDropDepth += 1;
+        setInputDropHintVisible(true);
       });
       wrap?.addEventListener("dragover", (e) => {
         if (!hasFiles(e.dataTransfer)) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "copy";
-        wrap.classList.add("is-drop-target");
-        if (dropHint) dropHint.hidden = false;
+        setInputDropHintVisible(true);
       });
       wrap?.addEventListener("dragleave", (e) => {
-        if (e.target !== wrap && wrap.contains(e.relatedTarget)) return;
-        wrap.classList.remove("is-drop-target");
-        if (dropHint) dropHint.hidden = true;
+        if (!hasFiles(e.dataTransfer)) return;
+        inputDropDepth = Math.max(0, inputDropDepth - 1);
+        if (inputDropDepth > 0) return;
+        resetInputDropUi();
       });
       wrap?.addEventListener("drop", (e) => {
         e.preventDefault();
-        wrap.classList.remove("is-drop-target");
-        if (dropHint) dropHint.hidden = true;
+        resetInputDropUi();
         const files = e.dataTransfer?.files;
         pushFilesToDeviceDownload(files).catch((err) => setError(adbError, err.message || String(err)));
       });
+      document.addEventListener("dragend", resetInputDropUi);
     }
     updateRecordTip();
 

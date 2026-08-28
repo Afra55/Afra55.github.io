@@ -1131,7 +1131,7 @@ async function listApps(serial, kind = "all") {
   }
   const labelInfo = await loadAppLabels(serial, apps);
   for (const app of apps) {
-    app.label = labelInfo.map.get(app.packageName) || "";
+    app.label = sanitizeAppLabel(labelInfo.map.get(app.packageName) || "");
   }
   apps.sort((a, b) => {
     const la = (a.label || a.packageName).toLowerCase();
@@ -1148,15 +1148,21 @@ async function listApps(serial, kind = "all") {
 
 function parseLabelFromBadging(text) {
   const s = String(text || "");
-  return (
+  const raw =
     (
       s.match(/application-label-zh-CN:'([^']*)'/) ||
       s.match(/application-label-zh:'([^']*)'/) ||
       s.match(/application-label:'([^']*)'/) ||
       s.match(/application:\s*label='([^']*)'/) ||
       []
-    )[1] || ""
-  ).trim();
+    )[1] || "";
+  return sanitizeAppLabel(raw);
+}
+
+function sanitizeAppLabel(label) {
+  const t = String(label || "").trim();
+  if (!t || /^null$/i.test(t) || /^undefined$/i.test(t)) return "";
+  return t;
 }
 
 function parseDumpsysPackageLabels(stdout) {
@@ -1181,6 +1187,8 @@ function parseDumpsysPackageLabels(stdout) {
     if (/^null$/i.test(cleaned) || cleaned === "null") continue;
     // dumpsys often prints "null" after nonLocalizedLabel= when unset
     if (!cleaned || cleaned === "0") continue;
+    cleaned = sanitizeAppLabel(cleaned);
+    if (!cleaned) continue;
     if (!map.has(current)) map.set(current, cleaned);
   }
   return map;
@@ -1264,7 +1272,7 @@ async function enrichLabelsWithAapt(serial, apps, map, cache) {
     const cacheKey = `${app.packageName}@@${app.apkPath}`;
     const hit = cache[cacheKey];
     if (hit?.label) {
-      map.set(app.packageName, hit.label);
+      map.set(app.packageName, sanitizeAppLabel(hit.label));
       enriched += 1;
       return;
     }
@@ -1273,8 +1281,8 @@ async function enrichLabelsWithAapt(serial, apps, map, cache) {
       await adbSerial(serial, ["pull", app.apkPath, local], { timeout: 90000 });
       const label = await dumpBadgingLabel(local);
       if (label) {
-        map.set(app.packageName, label);
-        cache[cacheKey] = { label, at: Date.now() };
+        map.set(app.packageName, sanitizeAppLabel(label));
+        cache[cacheKey] = { label: sanitizeAppLabel(label), at: Date.now() };
         enriched += 1;
       } else {
         failed += 1;
@@ -1334,11 +1342,12 @@ async function loadAppLabels(serial, apps = []) {
       const p = line.match(/packageName=(\S+)/);
       if (p) pkg = p[1].trim();
       const lab =
-        (line.match(/nonLocalizedLabel=([^\s]+(?:\s+[^\s=]+)*)/) ||
+        (line.match(/nonLocalizedLabel=([^\s]+)/) ||
           line.match(/applicationLabel=([^\s]+)/) ||
           [])[1];
-      if (pkg && lab && !/^null$/i.test(lab) && !map.has(pkg)) {
-        map.set(pkg, lab.trim());
+      const cleaned = sanitizeAppLabel(lab);
+      if (pkg && cleaned && !map.has(pkg)) {
+        map.set(pkg, cleaned);
       }
     }
     if (map.size > beforeLauncher) sources.push("launcher");
@@ -1352,7 +1361,7 @@ async function loadAppLabels(serial, apps = []) {
     if (map.has(app.packageName)) continue;
     const hit = cache[`${app.packageName}@@${app.apkPath}`];
     if (hit?.label) {
-      map.set(app.packageName, hit.label);
+      map.set(app.packageName, sanitizeAppLabel(hit.label));
       usedCache = true;
     }
   }
