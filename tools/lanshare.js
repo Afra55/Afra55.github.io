@@ -8,22 +8,29 @@
   if (!panel) return;
 
   const PROTO = "devtools-lanshare:v1";
-  const STUN = [{ urls: "stun:stun.l.google.com:19302" }];
-  const CHUNK_SIZE = 64 * 1024;
+  const STUN = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
+  const CHUNK_SIZE = 32 * 1024;
+  const DC_BUFFER_LIMIT = 512 * 1024;
   const NAME_KEY = "devtools-lanshare-name";
 
   const els = {
     statusDot: $("#ls-dot"),
     statusTitle: $("#ls-status-title"),
     statusText: $("#ls-status-text"),
+    platformHint: $("#ls-platform-hint"),
     nameInput: $("#ls-name"),
     createBtn: $("#ls-create"),
     joinArea: $("#ls-join-area"),
     inviteArea: $("#ls-invite-area"),
     inviteText: $("#ls-invite-text"),
     inviteQr: $("#ls-invite-qr"),
+    copyInviteBtn: $("#ls-copy-invite"),
     scanBtn: $("#ls-scan"),
+    scanFileBtn: $("#ls-scan-file"),
+    scanFileInput: $("#ls-scan-file-input"),
     pasteJoinBtn: $("#ls-paste-join"),
+    joinPaste: $("#ls-join-paste"),
+    joinConfirmBtn: $("#ls-join-confirm"),
     roomMeta: $("#ls-room-meta"),
     membersEl: $("#ls-members"),
     filesEl: $("#ls-files"),
@@ -45,7 +52,6 @@
   /** @type {number|null} */
   let scanRaf = null;
 
-  /** @type {{ peerId: string, peerName: string, roomId: string, isHost: boolean, hostId: string, joinedAt: number, members: Map<string, any>, files: Map<string, any>, localFiles: Map<string, File>, memberLinks: Map<string, { pc: RTCPeerConnection, dc: RTCDataChannel|null }>, transferPcs: Map<string, RTCPeerConnection>, transferring: boolean, controlPc: RTCPeerConnection|null, controlDc: RTCDataChannel|null, pendingJoin: { pc: RTCPeerConnection, dc: RTCDataChannel|null }|null }} */
   const state = {
     peerId: "",
     peerName: "",
@@ -62,7 +68,29 @@
     controlPc: null,
     controlDc: null,
     pendingJoin: null,
+    pageHiddenWarn: false,
   };
+
+  function isIOS() {
+    return /iPhone|iPad|iPod/i.test(navigator.userAgent || "");
+  }
+
+  function isAndroid() {
+    return /Android/i.test(navigator.userAgent || "");
+  }
+
+  function isMobileClient() {
+    return (
+      isIOS() ||
+      isAndroid() ||
+      window.matchMedia("(max-width: 900px)").matches ||
+      (window.matchMedia("(pointer: coarse)").matches && window.matchMedia("(max-width: 900px)").matches)
+    );
+  }
+
+  function webrtcSupported() {
+    return typeof RTCPeerConnection !== "undefined" && typeof RTCDataChannel !== "undefined";
+  }
 
   function uid(n = 8) {
     const a = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -148,6 +176,34 @@
     }
   }
 
+  function paintPlatformHint() {
+    if (!els.platformHint) return;
+    if (!webrtcSupported()) {
+      els.platformHint.hidden = false;
+      els.platformHint.textContent = "当前浏览器不支持 WebRTC，请换用 Chrome / Safari / Edge 最新版。";
+      return;
+    }
+    const parts = [];
+    if (isIOS()) {
+      parts.push("iOS：请用 Safari 并保持本页在前台；下载完成后可用「分享」保存到文件；若无法读剪贴板，请在下框手动粘贴邀请文本。");
+    } else if (isAndroid()) {
+      parts.push("Android：推荐 Chrome；扫码需授予相机权限；传大文件时请保持屏幕常亮。");
+    } else {
+      parts.push("电脑：可直接下载文件；也可扫码或复制邀请文本与手机互联。");
+    }
+    parts.push("所有设备需在同一局域网。");
+    els.platformHint.hidden = false;
+    els.platformHint.textContent = parts.join(" ");
+  }
+
+  function disableIfUnsupported() {
+    const ok = webrtcSupported();
+    if (els.createBtn) els.createBtn.disabled = !ok;
+    if (els.scanBtn) els.scanBtn.disabled = !ok;
+    if (els.pasteJoinBtn) els.pasteJoinBtn.disabled = !ok;
+    if (els.joinConfirmBtn) els.joinConfirmBtn.disabled = !ok;
+  }
+
   function memberLabel(id) {
     return state.members.get(id)?.name || id.slice(0, 6);
   }
@@ -169,10 +225,12 @@
       else if (state.isHost) els.statusTitle.textContent = `房主 · 房间 ${state.roomId}`;
       else els.statusTitle.textContent = `成员 · 房间 ${state.roomId}`;
     }
+    let statusExtra = "";
+    if (state.pageHiddenWarn) statusExtra = " · 页面在后台，连接可能中断";
     if (els.statusText) {
       els.statusText.textContent = inRoom
-        ? `${state.members.size} 人在线 · 协调者只同步列表与牵线，文件从上传者直传`
-        : "创建或加入房间；文件不经房主中转，下载时与上传者 WebRTC 直连。";
+        ? `${state.members.size} 人在线 · 文件从上传者直传${statusExtra}`
+        : "创建或加入房间；文件不经房主中转。";
     }
     if (els.inviteArea) els.inviteArea.hidden = !inRoom || !state.isHost;
     if (els.joinArea) els.joinArea.hidden = inRoom;
@@ -224,13 +282,22 @@
   }
 
   function createPeer() {
-    return new RTCPeerConnection({ iceServers: STUN });
+    return new RTCPeerConnection({
+      iceServers: STUN,
+      bundlePolicy: "max-bundle",
+      rtcpMuxPolicy: "require",
+    });
+  }
+
+  function iceWaitMs() {
+    return isMobileClient() ? 6500 : 3500;
   }
 
   async function waitIce(pc) {
     if (pc.iceGatheringState === "complete") return;
     await new Promise((resolve) => {
-      const to = setTimeout(resolve, 3000);
+      const ms = iceWaitMs();
+      const to = setTimeout(resolve, ms);
       pc.addEventListener("icegatheringstatechange", () => {
         if (pc.iceGatheringState === "complete") {
           clearTimeout(to);
@@ -240,12 +307,18 @@
     });
   }
 
+  function normalizeInviteText(text) {
+    return String(text || "")
+      .trim()
+      .replace(/^[\u201c\u201d\u2018\u2019]+|[\u201c\u201d\u2018\u2019]+$/g, "");
+  }
+
   function makeInvitePayload(sdp) {
     return `${PROTO}|${state.roomId}|${b64enc({ hostId: state.peerId, hostName: state.peerName, sdp })}`;
   }
 
   function parseInvite(text) {
-    const raw = String(text || "").trim();
+    const raw = normalizeInviteText(text);
     if (!raw.startsWith(`${PROTO}|`)) throw new Error("无效的邀请码");
     const i = raw.indexOf("|", PROTO.length + 1);
     if (i < 0) throw new Error("邀请码格式错误");
@@ -255,19 +328,32 @@
     return { roomId, hostId: data.hostId, hostName: data.hostName, sdp: data.sdp };
   }
 
+  function renderQrBox(el, text, level) {
+    el.innerHTML = "";
+    // eslint-disable-next-line no-new
+    new QRCode(el, { text, width: 168, height: 168, correctLevel: level });
+  }
+
   function renderInviteQr(payload) {
     if (!els.inviteQr) return;
     els.inviteQr.innerHTML = "";
     if (typeof QRCode === "undefined") {
-      els.inviteQr.textContent = "二维码库未加载";
+      els.inviteQr.textContent = "二维码库未加载，请复制下方邀请文本";
       return;
     }
-    try {
-      // eslint-disable-next-line no-new
-      new QRCode(els.inviteQr, { text: payload, width: 168, height: 168, correctLevel: QRCode.CorrectLevel.L });
-    } catch (_) {
-      els.inviteQr.innerHTML = '<p class="hint tight">邀请文本较长，请复制下方文本分享</p>';
+    const tries = [
+      QRCode.CorrectLevel.L,
+      QRCode.CorrectLevel.M,
+    ];
+    for (const level of tries) {
+      try {
+        renderQrBox(els.inviteQr, payload, level);
+        return;
+      } catch (err) {
+        if (!/Too long|overflow|code length overflow/i.test(String(err.message || err))) break;
+      }
     }
+    els.inviteQr.innerHTML = '<p class="hint tight">邀请文本较长，二维码无法生成，请复制下方文本分享（或使用电脑加入）。</p>';
   }
 
   function updateInviteDisplay(payload) {
@@ -318,6 +404,35 @@
     }
   }
 
+  function sendHello(dc) {
+    if (!dc || dc.readyState !== "open") return;
+    dc.send(
+      JSON.stringify({
+        type: "hello",
+        from: state.peerId,
+        name: state.peerName,
+        joinedAt: state.joinedAt,
+      })
+    );
+  }
+
+  function whenDcOpen(dc, fn) {
+    if (!dc) return;
+    let done = false;
+    const run = () => {
+      if (done || dc.readyState !== "open") return;
+      done = true;
+      fn();
+    };
+    if (dc.readyState === "open") {
+      run();
+      return;
+    }
+    dc.addEventListener("open", run, { once: true });
+    setTimeout(run, isIOS() ? 1200 : 600);
+    setTimeout(run, 2500);
+  }
+
   function onControlMessage(msg, remoteId) {
     switch (msg.type) {
       case "hello":
@@ -325,10 +440,7 @@
         {
           const member = { id: msg.from, name: msg.name || "成员", joinedAt: msg.joinedAt || Date.now() };
           state.members.set(member.id, member);
-          sendToMember(remoteId, {
-            type: "welcome",
-            ...exportRoomState(),
-          });
+          sendToMember(remoteId, { type: "welcome", ...exportRoomState() });
           broadcast({ type: "member-joined", member });
           paintStatus();
           refreshJoinSlot().catch(() => {});
@@ -369,7 +481,7 @@
         if (state.isHost && msg.to && msg.to !== state.peerId) {
           sendToMember(msg.to, { type: "relay", payload: msg.payload });
         } else {
-          handleRelay(msg.payload, msg.from);
+          handleRelay(msg.payload);
         }
         break;
       case "room-closed":
@@ -396,6 +508,14 @@
         /* ignore */
       }
     };
+    dc.onclose = () => {
+      if (state.isHost && remoteId && remoteId !== state.peerId) {
+        state.members.delete(remoteId);
+        state.memberLinks.delete(remoteId);
+        broadcast({ type: "member-left", memberId: remoteId });
+        paintStatus();
+      }
+    };
   }
 
   async function refreshJoinSlot() {
@@ -406,7 +526,7 @@
     let settled = false;
     state.pendingJoin = { pc, dc };
 
-    dc.onmessage = (e) => {
+    const onHelloChannel = (e) => {
       if (settled) return;
       try {
         const msg = JSON.parse(String(e.data));
@@ -422,6 +542,11 @@
         /* ignore */
       }
     };
+    dc.onmessage = onHelloChannel;
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "failed") setError("有新成员连接失败，请刷新邀请码重试");
+    };
 
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
@@ -430,6 +555,10 @@
   }
 
   async function createRoom() {
+    if (!webrtcSupported()) {
+      setError("当前浏览器不支持 WebRTC");
+      return;
+    }
     setError("");
     saveName();
     cleanupRoom(false);
@@ -445,6 +574,10 @@
   }
 
   async function joinRoom(inviteText) {
+    if (!webrtcSupported()) {
+      setError("当前浏览器不支持 WebRTC");
+      return;
+    }
     setError("");
     saveName();
     const inv = parseInvite(inviteText);
@@ -459,21 +592,15 @@
 
     const pc = createPeer();
     state.controlPc = pc;
-    pc.onicecandidate = () => {};
 
     pc.ondatachannel = (ev) => {
       state.controlDc = ev.channel;
       bindControlDc(state.controlDc, inv.hostId);
-      state.controlDc.onopen = () => {
-        state.controlDc.send(
-          JSON.stringify({
-            type: "hello",
-            from: state.peerId,
-            name: state.peerName,
-            joinedAt: state.joinedAt,
-          })
-        );
-      };
+      whenDcOpen(state.controlDc, () => sendHello(state.controlDc));
+    };
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "failed") setError("加入房间失败，请确认邀请码未过期并重试");
     };
 
     await pc.setRemoteDescription({ type: "offer", sdp: inv.sdp });
@@ -483,7 +610,7 @@
     paintStatus();
   }
 
-  function handleRelay(payload, from) {
+  function handleRelay(payload) {
     if (!payload) return;
     if (payload.type === "webrtc-offer" && payload.to === state.peerId) {
       acceptFileOffer(payload.from, payload.fileId, payload.sdp);
@@ -515,7 +642,7 @@
     pc.ondatachannel = (ev) => {
       state.controlDc = ev.channel;
       bindControlDc(state.controlDc, payload.from);
-      state.controlDc.onopen = () => paintStatus();
+      whenDcOpen(state.controlDc, () => paintStatus());
     };
     await pc.setRemoteDescription({ type: "offer", sdp: payload.sdp });
     const ans = await pc.createAnswer();
@@ -561,6 +688,30 @@
     else if (state.controlDc?.readyState === "open") state.controlDc.send(JSON.stringify(msg));
   }
 
+  function waitDcDrain(dc) {
+    return new Promise((resolve) => {
+      if (dc.bufferedAmount <= DC_BUFFER_LIMIT) {
+        resolve(null);
+        return;
+      }
+      const tick = () => {
+        if (dc.bufferedAmount <= DC_BUFFER_LIMIT) resolve(null);
+        else setTimeout(tick, 30);
+      };
+      tick();
+    });
+  }
+
+  async function sendFileChunks(dc, file) {
+    let offset = 0;
+    while (offset < file.size) {
+      await waitDcDrain(dc);
+      const buf = await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer();
+      dc.send(buf);
+      offset += buf.byteLength;
+    }
+  }
+
   async function startUpload(fileId, requesterId) {
     const file = state.localFiles.get(fileId);
     const meta = state.files.get(fileId);
@@ -586,14 +737,13 @@
     };
 
     dc.onopen = async () => {
-      dc.send(JSON.stringify({ type: "meta", name: meta.name, size: meta.size, mime: meta.mime, fileId }));
-      let offset = 0;
-      while (offset < file.size) {
-        const buf = await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer();
-        dc.send(buf);
-        offset += buf.byteLength;
+      try {
+        dc.send(JSON.stringify({ type: "meta", name: meta.name, size: meta.size, mime: meta.mime, fileId }));
+        await sendFileChunks(dc, file);
+        dc.send(JSON.stringify({ type: "done", fileId }));
+      } catch (_) {
+        dc.send(JSON.stringify({ type: "error", fileId, message: "发送中断" }));
       }
-      dc.send(JSON.stringify({ type: "done", fileId }));
     };
 
     const offer = await pc.createOffer();
@@ -608,6 +758,39 @@
     });
   }
 
+  async function saveReceivedBlob(blob, filename) {
+    const name = filename || "download";
+    if (isMobileClient() && typeof navigator.share === "function" && typeof File !== "undefined") {
+      try {
+        const file = new File([blob], name, { type: blob.type || "application/octet-stream" });
+        if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: name });
+          return;
+        }
+      } catch (err) {
+        if (err?.name === "AbortError") return;
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = name;
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    if (isIOS()) {
+      setTimeout(() => {
+        try {
+          window.open(url, "_blank");
+        } catch (_) {
+          /* ignore */
+        }
+      }, 300);
+    }
+    setTimeout(() => URL.revokeObjectURL(url), 15000);
+  }
+
   async function acceptFileOffer(from, fileId, sdp) {
     if (state.transferring) return;
     state.transferring = true;
@@ -620,7 +803,7 @@
       let meta = null;
       const chunks = [];
       let total = 0;
-      const timer = setTimeout(() => reject(new Error("连接超时")), 90000);
+      const timer = setTimeout(() => reject(new Error("连接超时")), 120000);
 
       pc.ondatachannel = (ev) => {
         const dc = ev.channel;
@@ -634,6 +817,9 @@
             } else if (msg.type === "done") {
               clearTimeout(timer);
               resolve({ meta, chunks });
+            } else if (msg.type === "error") {
+              clearTimeout(timer);
+              reject(new Error(msg.message || "传输失败"));
             }
           } else {
             chunks.push(new Uint8Array(e.data));
@@ -666,12 +852,9 @@
       });
       const { meta, chunks } = await received;
       const blob = new Blob(chunks, { type: meta?.mime || "application/octet-stream" });
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = meta?.name || "download";
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      await saveReceivedBlob(blob, meta?.name || "download");
       setProgress(null);
+      if (isIOS()) setError("");
     } catch (e) {
       setError(e.message || "下载失败");
       setProgress(null);
@@ -701,7 +884,6 @@
     state.isHost = true;
     state.hostId = state.peerId;
     const others = [...state.members.values()].filter((m) => m.id !== state.peerId);
-    /** @type {Map<string, { pc: RTCPeerConnection, dc: RTCDataChannel|null }>} */
     const handshakes = new Map();
     for (const m of others) {
       const pc = createPeer();
@@ -721,19 +903,15 @@
       };
       if (state.controlDc?.readyState === "open") {
         state.controlDc.send(JSON.stringify({ type: "relay", to: m.id, payload }));
-      } else {
-        sendToMember(m.id, { type: "relay", payload });
       }
     }
-    await new Promise((r) => setTimeout(r, 1500));
+    await new Promise((r) => setTimeout(r, isMobileClient() ? 2200 : 1500));
     closeMemberControl();
     closeHostControl(true);
     handshakes.forEach((link, id) => state.memberLinks.set(id, link));
     await refreshJoinSlot();
     state.memberLinks.forEach((link, id) => {
-      if (link.dc?.readyState === "open") {
-        sendToMember(id, { type: "host-transfer-done", hostId: state.peerId });
-      }
+      if (link.dc?.readyState === "open") sendToMember(id, { type: "host-transfer-done", hostId: state.peerId });
     });
     paintStatus();
   }
@@ -746,7 +924,7 @@
         const snapshot = exportRoomState();
         snapshot.hostId = next.id;
         broadcast({ type: "host-transfer-start", nextHostId: next.id, state: snapshot });
-        await new Promise((r) => setTimeout(r, 1200));
+        await new Promise((r) => setTimeout(r, isMobileClient() ? 1800 : 1200));
       } else {
         broadcast({ type: "room-closed" });
       }
@@ -797,6 +975,7 @@
     state.files.clear();
     state.localFiles.clear();
     state.transferring = false;
+    state.pageHiddenWarn = false;
     if (els.inviteText) els.inviteText.value = "";
     if (els.inviteQr) els.inviteQr.innerHTML = "";
     setProgress(null);
@@ -804,14 +983,97 @@
     paintStatus();
   }
 
+  async function copyText(text) {
+    const v = String(text || "").trim();
+    if (!v) throw new Error("无内容可复制");
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(v);
+      return;
+    }
+    const ta = document.createElement("textarea");
+    ta.value = v;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.left = "-9999px";
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand("copy");
+    ta.remove();
+  }
+
+  async function copyInvite() {
+    try {
+      await copyText(els.inviteText?.value || "");
+      setError("");
+      if (els.copyInviteBtn) {
+        const prev = els.copyInviteBtn.textContent;
+        els.copyInviteBtn.textContent = "已复制";
+        setTimeout(() => {
+          if (els.copyInviteBtn) els.copyInviteBtn.textContent = prev;
+        }, 1500);
+      }
+    } catch (e) {
+      setError(e.message || "复制失败，请长按邀请文本手动复制");
+    }
+  }
+
   async function pasteJoin() {
     try {
-      const text = await navigator.clipboard.readText();
-      if (!text.trim()) throw new Error("剪贴板为空");
-      await joinRoom(text.trim());
-    } catch (e) {
-      setError(e.message || "无法从剪贴板加入");
+      if (navigator.clipboard?.readText) {
+        const text = await navigator.clipboard.readText();
+        if (text.trim()) {
+          await joinRoom(text);
+          return;
+        }
+      }
+      throw new Error("无法读取剪贴板");
+    } catch (_) {
+      if (els.joinPaste) {
+        els.joinPaste.focus();
+        setError("请在下方输入框粘贴邀请文本后点「确认加入」（iOS 常需手动粘贴）");
+      } else {
+        setError("无法从剪贴板加入，请手动粘贴邀请文本");
+      }
     }
+  }
+
+  async function confirmPasteJoin() {
+    const text = els.joinPaste?.value || els.inviteText?.value || "";
+    if (!normalizeInviteText(text)) {
+      setError("请先粘贴完整邀请文本");
+      return;
+    }
+    try {
+      await joinRoom(text);
+      if (els.joinPaste) els.joinPaste.value = "";
+      setError("");
+    } catch (e) {
+      setError(e.message || "加入失败");
+    }
+  }
+
+  function decodeQrFromImage(img) {
+    if (typeof jsQR !== "function") throw new Error("扫码库未加载");
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    const maxSide = 1400;
+    let w = img.naturalWidth || img.videoWidth || img.width;
+    let h = img.naturalHeight || img.videoHeight || img.height;
+    if (!w || !h) throw new Error("无法读取图片尺寸");
+    const scale = Math.min(1, maxSide / Math.max(w, h));
+    w = Math.max(1, Math.round(w * scale));
+    h = Math.max(1, Math.round(h * scale));
+    canvas.width = w;
+    canvas.height = h;
+    ctx.drawImage(img, 0, 0, w, h);
+    const code = jsQR(canvas.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: "attemptBoth" });
+    if (!code?.data) throw new Error("未识别到二维码");
+    return code.data;
+  }
+
+  async function joinFromScanData(data) {
+    if (!normalizeInviteText(data).startsWith(PROTO)) throw new Error("不是有效的互传邀请码");
+    await joinRoom(data);
   }
 
   async function startScan() {
@@ -820,9 +1082,20 @@
       return;
     }
     stopScan();
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError("当前环境无法打开摄像头，请用「图片识别邀请码」或手动粘贴");
+      return;
+    }
     try {
-      camStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: "environment" } }, audio: false });
+      const videoOpts = isIOS()
+        ? { facingMode: "environment" }
+        : { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } };
+      camStream = await navigator.mediaDevices.getUserMedia({ video: videoOpts, audio: false });
       if (els.camVideo) {
+        els.camVideo.setAttribute("playsinline", "");
+        els.camVideo.setAttribute("webkit-playsinline", "");
+        els.camVideo.playsInline = true;
+        els.camVideo.muted = true;
         els.camVideo.srcObject = camStream;
         els.camVideo.hidden = false;
         await els.camVideo.play();
@@ -838,19 +1111,44 @@
           canvas.width = v.videoWidth;
           canvas.height = v.videoHeight;
           ctx.drawImage(v, 0, 0);
-          const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
-          const code = jsQR(img.data, img.width, img.height, { inversionAttempts: "dontInvert" });
-          if (code?.data?.startsWith(PROTO)) {
-            stopScan();
-            joinRoom(code.data).catch((err) => setError(err.message));
-            return;
+          try {
+            const code = jsQR(canvas.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, {
+              inversionAttempts: "attemptBoth",
+            });
+            if (code?.data?.startsWith(PROTO)) {
+              stopScan();
+              joinFromScanData(code.data).catch((err) => setError(err.message));
+              return;
+            }
+          } catch (_) {
+            /* ignore frame errors */
           }
         }
         scanRaf = requestAnimationFrame(tick);
       };
       scanRaf = requestAnimationFrame(tick);
-    } catch (_) {
-      setError("无法打开摄像头，请粘贴邀请文本加入");
+    } catch (e) {
+      setError(isIOS() ? "无法打开摄像头：请在 Safari 设置中允许相机，或改用「图片识别邀请码」" : "无法打开摄像头，请用图片识别或粘贴邀请文本");
+    }
+  }
+
+  async function scanFromFile(file) {
+    if (!file) return;
+    stopScan();
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = () => reject(new Error("图片加载失败"));
+        img.src = url;
+      });
+      const data = decodeQrFromImage(img);
+      await joinFromScanData(data);
+    } catch (e) {
+      setError(e.message || "识别失败");
+    } finally {
+      URL.revokeObjectURL(url);
     }
   }
 
@@ -869,19 +1167,44 @@
 
   els.createBtn?.addEventListener("click", () => createRoom().catch((e) => setError(e.message)));
   els.pasteJoinBtn?.addEventListener("click", () => pasteJoin());
+  els.joinConfirmBtn?.addEventListener("click", () => confirmPasteJoin().catch((e) => setError(e.message)));
+  els.copyInviteBtn?.addEventListener("click", () => copyInvite());
   els.scanBtn?.addEventListener("click", () => startScan());
+  els.scanFileBtn?.addEventListener("click", () => els.scanFileInput?.click());
+  els.scanFileInput?.addEventListener("change", () => {
+    const f = els.scanFileInput?.files?.[0];
+    if (f) scanFromFile(f).catch((e) => setError(e.message));
+    if (els.scanFileInput) els.scanFileInput.value = "";
+  });
   els.camStop?.addEventListener("click", () => stopScan());
   els.leaveBtn?.addEventListener("click", () => leaveRoom());
   els.dissolveBtn?.addEventListener("click", () => dissolveRoom());
   els.pickBtn?.addEventListener("click", () => els.fileInput?.click());
   els.fileInput?.addEventListener("change", () => {
     if (els.fileInput?.files?.length) onFilesPicked(els.fileInput.files);
-    els.fileInput.value = "";
+    if (els.fileInput) els.fileInput.value = "";
   });
   els.nameInput?.addEventListener("change", saveName);
 
+  document.addEventListener("visibilitychange", () => {
+    if (!state.roomId) return;
+    state.pageHiddenWarn = document.hidden;
+    paintStatus();
+  });
+
   loadName();
+  paintPlatformHint();
+  disableIfUnsupported();
   paintStatus();
+
+  window.LanShareSelfTest = {
+    webrtcSupported,
+    isIOS,
+    isAndroid,
+    isMobileClient,
+    parseInvite,
+    makeInvitePayload,
+  };
 
   window.addEventListener("devtools:route", () => {
     if (location.hash.replace("#", "").split("/")[0] !== "lanshare") stopScan();
