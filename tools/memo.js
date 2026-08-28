@@ -2251,6 +2251,54 @@
     return m ? m[0].replace(/\s+/g, "") : "";
   }
 
+  function isLikelyJsonText(text) {
+    const t = String(text || "").trim();
+    if (!t) return false;
+    if (!(t.startsWith("{") || t.startsWith("["))) return false;
+    try {
+      JSON.parse(t);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function formatMemoJsonText(text, mode) {
+    const data = JSON.parse(String(text || "").trim());
+    return mode === "minify" ? JSON.stringify(data) : JSON.stringify(data, null, 2);
+  }
+
+  function syncMemoJsonActions(textarea, actionsEl) {
+    if (!actionsEl) return;
+    const show = isLikelyJsonText(textarea?.value || "");
+    actionsEl.hidden = !show;
+    if (show) actionsEl.style.display = "";
+    else actionsEl.style.display = "none";
+  }
+
+  function applyMemoJsonFormat(textarea, mode) {
+    if (!textarea) return false;
+    try {
+      textarea.value = formatMemoJsonText(textarea.value, mode);
+      syncMemoJsonActions(textarea, textarea.id === "memo-editor" ? $("#memo-editor-json") : $("#memo-text-edit-json"));
+      toast(mode === "minify" ? "已压缩 JSON" : "已美化 JSON");
+      return true;
+    } catch (err) {
+      toast(`JSON 无效：${err.message || err}`);
+      return false;
+    }
+  }
+
+  function openTextEditPanel() {
+    const dlg = $("#memo-text-edit");
+    if (!dlg) return;
+    if (!dlg.open) {
+      if (typeof dlg.show === "function") dlg.show();
+      else dlg.showModal?.();
+    }
+    syncMemoJsonActions($("#memo-text-edit-src"), $("#memo-text-edit-json"));
+  }
+
   function isTextEditOpen() {
     return Boolean($("#memo-text-edit")?.open || $("#memo-note-edit")?.open);
   }
@@ -2389,7 +2437,7 @@
     const sub = $("#memo-text-edit-sub");
     if (sub) sub.textContent = item.name ? `正在编辑：${item.name}` : "修改后点保存，覆盖原条目";
     if (src) src.value = text;
-    if (dlg && typeof dlg.showModal === "function" && !dlg.open) dlg.showModal();
+    openTextEditPanel();
     renderItems();
     setTimeout(() => {
       src?.focus?.();
@@ -4276,6 +4324,24 @@
   $("#memo-file")?.addEventListener("change", (e) => {
     ingestFiles(e.target.files, { offerTemp: false }).catch((err) => setError(memoError, err.message || String(err)));
     e.target.value = "";
+  });
+  editor?.addEventListener("input", () => {
+    syncMemoJsonActions(editor, $("#memo-editor-json"));
+  });
+  $("#memo-editor-json-pretty")?.addEventListener("click", () => {
+    applyMemoJsonFormat(editor, "pretty");
+  });
+  $("#memo-editor-json-minify")?.addEventListener("click", () => {
+    applyMemoJsonFormat(editor, "minify");
+  });
+  $("#memo-text-edit-src")?.addEventListener("input", () => {
+    syncMemoJsonActions($("#memo-text-edit-src"), $("#memo-text-edit-json"));
+  });
+  $("#memo-text-edit-json-pretty")?.addEventListener("click", () => {
+    applyMemoJsonFormat($("#memo-text-edit-src"), "pretty");
+  });
+  $("#memo-text-edit-json-minify")?.addEventListener("click", () => {
+    applyMemoJsonFormat($("#memo-text-edit-src"), "minify");
   });
   $("#memo-save-text")?.addEventListener("click", () => {
     addText(editor?.value || "").catch((err) => setError(memoError, err.message || String(err)));
