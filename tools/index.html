@@ -18,8 +18,8 @@
   <!-- 不阻塞首屏：Noto Serif SC 只给文转图用，避免每次拉取中文字体；Google 字体 CSS 在国内常卡住数秒 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" /></noscript>
-  <link rel="stylesheet" href="./style.css?v=20260817memoundo1" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260817memoundo1" />
+  <link rel="stylesheet" href="./style.css?v=20260817memovid1" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260817memovid1" />
   <script>
     /* 尽早应用主题变量，减少闪烁；侧栏也依赖这些 CSS 变量 */
     (function () {
@@ -88,7 +88,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.17-memoundo1</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.17-memovid1</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="pwa-install" hidden aria-hidden="true" title="安装到桌面/开始菜单">安装应用</button>
@@ -1464,7 +1464,16 @@ hello@world.org</textarea>
                   <button type="button" class="ghost-btn memo-zoom-btn" id="memo-zoom-reset" title="还原到适应窗口">还原</button>
                 </div>
               </div>
-              <video id="memo-lightbox-video" class="memo-preview-video" controls playsinline hidden></video>
+              <div class="memo-zoom-wrap memo-video-zoom-wrap" id="memo-video-zoom-wrap" hidden title="滚轮缩放，拖拽移动，双击暂停/播放">
+                <video id="memo-lightbox-video" class="memo-preview-video" playsinline hidden></video>
+                <div class="memo-zoom-hud memo-video-zoom-hud">
+                  <button type="button" class="ghost-btn memo-zoom-btn" id="memo-video-zoom-out" title="缩小">－</button>
+                  <span class="mono memo-zoom-pct" id="memo-video-zoom-pct">100%</span>
+                  <button type="button" class="ghost-btn memo-zoom-btn" id="memo-video-zoom-in" title="放大">＋</button>
+                  <button type="button" class="ghost-btn memo-zoom-btn" id="memo-video-zoom-reset" title="还原到适应窗口">还原</button>
+                  <button type="button" class="ghost-btn memo-zoom-btn" id="memo-video-zoom-rotate" title="顺时针旋转 90°">↻</button>
+                </div>
+              </div>
               <div class="memo-preview-audio-wrap" id="memo-preview-audio-wrap" hidden>
                 <div class="memo-preview-audio-art" aria-hidden="true"></div>
                 <audio id="memo-lightbox-audio" class="memo-preview-audio" controls></audio>
@@ -3574,21 +3583,21 @@ adb devices</pre>
       <button type="button" class="primary-btn vsplit-fs-mark" id="vsplit-fs-mark">打起点</button>
     </div>
   </div>
-  <script src="./theme.js?v=20260817memoundo1"></script>
-  <script src="./temp.js?v=20260817memoundo1"></script>
+  <script src="./theme.js?v=20260817memovid1"></script>
+  <script src="./temp.js?v=20260817memovid1"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260817memoundo1"></script>
-  <script src="./about.js?v=20260817memoundo1" defer></script>
-  <script src="./extra.js?v=20260817memoundo1" defer></script>
-  <script src="./vtrim.js?v=20260817memoundo1" defer></script>
-  <script src="./audio.js?v=20260817memoundo1" defer></script>
-  <script src="./ffbridge.js?v=20260817memoundo1" defer></script>
-  <script src="./setup.js?v=20260817memoundo1" defer></script>
+  <script src="./app.js?v=20260817memovid1"></script>
+  <script src="./about.js?v=20260817memovid1" defer></script>
+  <script src="./extra.js?v=20260817memovid1" defer></script>
+  <script src="./vtrim.js?v=20260817memovid1" defer></script>
+  <script src="./audio.js?v=20260817memovid1" defer></script>
+  <script src="./ffbridge.js?v=20260817memovid1" defer></script>
+  <script src="./setup.js?v=20260817memovid1" defer></script>
   <script src="./imgkit.js?v=20260810l" defer></script>
-  <script src="./memo.js?v=20260817memoundo1" defer></script>
-  <script src="./textimg.js?v=20260817memoundo1" defer></script>
-  <script src="./imgtext.js?v=20260817memoundo1" defer></script>
-  <script src="./pwa.js?v=20260817memoundo1" defer></script>
+  <script src="./memo.js?v=20260817memovid1" defer></script>
+  <script src="./textimg.js?v=20260817memovid1" defer></script>
+  <script src="./imgtext.js?v=20260817memovid1" defer></script>
+  <script src="./pwa.js?v=20260817memovid1" defer></script>
   <script src="./vendor/js-yaml.min.js" defer></script>
   <script src="./vendor/spark-md5.min.js" defer></script>
   <script src="./vendor/qrcode.min.js" defer></script>

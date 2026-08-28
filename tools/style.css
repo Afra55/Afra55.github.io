@@ -5900,14 +5900,15 @@ button.adb-device-body.linkish {
 .memo-temp-badge {
   display: inline-block;
   margin-right: 0.35rem;
-  padding: 0.05rem 0.42rem;
+  padding: 0.08rem 0.48rem;
   border-radius: 6px;
-  border: 1px solid color-mix(in srgb, var(--line) 90%, transparent);
-  background: color-mix(in srgb, var(--panel) 70%, transparent);
-  color: var(--muted);
+  border: 1px solid color-mix(in srgb, #e8a317 72%, var(--line));
+  background: color-mix(in srgb, #e8a317 48%, var(--panel-strong, #fff));
+  color: color-mix(in srgb, #8a5a00 88%, var(--ink));
   font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.02em;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  box-shadow: 0 0 0 1px color-mix(in srgb, #e8a317 22%, transparent);
 }
 
 .memo-drag-handle {
@@ -6533,6 +6534,36 @@ button.adb-device-body.linkish {
   background: #000;
   min-height: min(56vh, 480px);
   border-radius: 14px;
+  place-items: stretch;
+}
+
+.memo-video-zoom-wrap {
+  background: #000;
+  min-height: min(56vh, 480px);
+}
+
+.memo-preview-dlg.is-fs .memo-video-zoom-wrap {
+  min-height: 0;
+}
+
+#memo-lightbox-video {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: none;
+  max-height: none;
+  width: auto;
+  height: auto;
+  transform-origin: 0 0;
+  pointer-events: none;
+  border-radius: 0;
+  will-change: transform;
+  z-index: 1;
+  background: #000;
+}
+
+.memo-preview-video {
+  display: block;
 }
 
 .memo-preview-dlg[data-preview-kind="audio"] .memo-preview-stage {
@@ -6561,16 +6592,19 @@ button.adb-device-body.linkish {
 }
 
 .memo-preview-video {
-  width: 100%;
-  max-height: min(78vh, 780px);
+  width: auto;
+  max-height: none;
   background: #000;
-  border-radius: 10px;
+  border-radius: 0;
 }
 
-.memo-preview-dlg.is-fs .memo-preview-video {
-  max-height: calc(100vh - 5.5rem);
-  height: calc(100vh - 5.5rem);
-  border-radius: 0;
+.memo-preview-dlg.is-fs .memo-video-zoom-wrap {
+  min-height: 0;
+  height: 100%;
+}
+
+.memo-preview-dlg.is-fs #memo-lightbox-video {
+  max-height: none;
 }
 
 .memo-preview-audio-wrap {

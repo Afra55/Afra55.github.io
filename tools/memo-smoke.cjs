@@ -229,6 +229,9 @@ async function main() {
       const row = (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === anyItem.id);
       out.tempUx.marked = window.DevToolsMemo.isTempItem(row);
       out.tempUx.badge = Boolean(document.querySelector(`.memo-card[data-memo-id="${anyItem.id}"] .memo-temp-badge`));
+      const badgeEl = document.querySelector(`.memo-card[data-memo-id="${anyItem.id}"] .memo-temp-badge`);
+      const badgeBg = badgeEl ? getComputedStyle(badgeEl).backgroundColor : "";
+      out.tempUx.badgeProminent = /rgb/.test(badgeBg) && badgeBg !== "rgba(0, 0, 0, 0)";
       await window.DevToolsMemo.clearItemTemp(anyItem.id);
       await sleep(80);
       out.tempUx.cleared = !window.DevToolsMemo.isTempItem((window.DevToolsMemo.getIndex().items || []).find((x) => x.id === anyItem.id));
@@ -709,6 +712,65 @@ async function main() {
       await window.DevToolsMemo.clearItemTemp(videoItem.id);
     }
 
+    out.videoZoom = { hasApi: typeof window.DevToolsMemo.getPreviewZoom === "function" };
+    if (videoItem) {
+      document.querySelector(`[data-memo-preview="${videoItem.id}"]`)?.click();
+      await sleep(250);
+      const vwrap = document.getElementById("memo-video-zoom-wrap");
+      const vzOpen = window.DevToolsMemo.getPreviewZoom?.() || {};
+      const vrect = vwrap?.getBoundingClientRect?.() || { left: 200, top: 200, width: 400, height: 400 };
+      const vcx = vrect.left + vrect.width / 2;
+      const vcy = vrect.top + vrect.height / 2;
+      for (let i = 0; i < 6; i += 1) {
+        vwrap?.dispatchEvent(
+          new WheelEvent("wheel", { deltaY: -120, clientX: vcx, clientY: vcy, bubbles: true, cancelable: true })
+        );
+      }
+      const vzWheel = window.DevToolsMemo.getPreviewZoom?.() || {};
+      vwrap?.dispatchEvent(
+        new PointerEvent("pointerdown", {
+          pointerId: 11,
+          pointerType: "mouse",
+          isPrimary: true,
+          clientX: vcx,
+          clientY: vcy,
+          bubbles: true,
+          buttons: 1,
+        })
+      );
+      vwrap?.dispatchEvent(
+        new PointerEvent("pointermove", {
+          pointerId: 11,
+          pointerType: "mouse",
+          isPrimary: true,
+          clientX: vcx + 40,
+          clientY: vcy + 28,
+          bubbles: true,
+          buttons: 1,
+        })
+      );
+      vwrap?.dispatchEvent(new PointerEvent("pointerup", { pointerId: 11, pointerType: "mouse", bubbles: true }));
+      const vz1 = window.DevToolsMemo.getPreviewZoom?.() || {};
+      document.getElementById("memo-video-zoom-rotate")?.click();
+      const vz2 = window.DevToolsMemo.getPreviewZoom?.() || {};
+      const vid = document.getElementById("memo-lightbox-video");
+      const wasPaused = Boolean(vid?.paused);
+      vwrap?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, clientX: vcx, clientY: vcy }));
+      await sleep(60);
+      const toggled = Boolean(vid) && vid.paused !== wasPaused;
+      document.getElementById("memo-lightbox-close")?.click();
+      out.videoZoom = {
+        ...out.videoZoom,
+        opened: vzOpen.kind === "video",
+        wrapShown: Boolean(vwrap) && !vwrap.hidden,
+        hud: Boolean(document.getElementById("memo-video-zoom-in") && document.getElementById("memo-video-zoom-rotate")),
+        wheeled: (vzWheel.rel || 1) > 1.02 || (vzWheel.scale || 0) > (vzOpen.scale || 0),
+        panned: Math.abs((vz1.x || 0) - (vzWheel.x || 0)) > 4 || Math.abs((vz1.y || 0) - (vzWheel.y || 0)) > 4,
+        rotated: Number(vz2.rotate || 0) === 90,
+        dblToggle: toggled,
+      };
+    }
+
     out.shareUi = {
       hasPreviewShare: Boolean(document.getElementById("memo-preview-share")),
       api: typeof window.DevToolsMemo.setShareUiForTest === "function",
@@ -1043,7 +1105,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memoundo1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memovid1/.test(s.src)),
     };
 
     out.pwa = {
@@ -1348,7 +1410,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/memoundo1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memovid1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1451,6 +1513,18 @@ async function main() {
     !result.imgZoom?.hudTop
   ) {
     failed.push("image preview should zoom with wheel/buttons and pan by drag");
+  }
+  if (
+    !result.videoZoom?.hasApi ||
+    !result.videoZoom?.opened ||
+    !result.videoZoom?.wrapShown ||
+    !result.videoZoom?.hud ||
+    !result.videoZoom?.wheeled ||
+    !result.videoZoom?.panned ||
+    !result.videoZoom?.rotated ||
+    !result.videoZoom?.dblToggle
+  ) {
+    failed.push("video preview should zoom/pan/rotate and toggle play on double-click");
   }
   if (!result.moreMenu?.has || !result.moreMenu?.closesOutside) {
     failed.push("more menu should close on outside click");
@@ -1593,8 +1667,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/memoundo1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memoundo1");
+  if (!/memovid1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memovid1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
@@ -1605,7 +1679,7 @@ async function main() {
   if (!result.dragSelect?.cardNotDraggable || (result.dragSelect?.canReorder && !result.dragSelect?.hasDragHandle)) {
     failed.push("memo cards should use drag handle instead of whole-card drag");
   }
-  if (!result.tempUx?.api || !result.tempUx?.daysDefault || !result.tempUx?.marked || !result.tempUx?.badge || !result.tempUx?.cleared || !result.tempUx?.stackMulti || !result.tempUx?.stackCleared) {
+  if (!result.tempUx?.api || !result.tempUx?.daysDefault || !result.tempUx?.marked || !result.tempUx?.badge || !result.tempUx?.badgeProminent || !result.tempUx?.cleared || !result.tempUx?.stackMulti || !result.tempUx?.stackCleared) {
     failed.push("memo temp mark API/UI failed");
   }
   if (!result.textEdit?.widthMax || !/56rem|768px|min\(96vw/.test(result.textEdit.widthMax)) {

@@ -707,6 +707,8 @@
   const lightbox = $("#memo-lightbox");
   const lightboxImg = $("#memo-lightbox-img");
   const zoomWrap = $("#memo-zoom-wrap");
+  const videoZoomWrap = $("#memo-video-zoom-wrap");
+  const videoZoomPct = $("#memo-video-zoom-pct");
   const zoomPct = $("#memo-zoom-pct");
   const lightboxText = $("#memo-lightbox-text");
   const lightboxVideo = $("#memo-lightbox-video");
@@ -3556,9 +3558,206 @@
     });
   }
 
+  const vidZoom = {
+    scale: 1,
+    x: 0,
+    y: 0,
+    fit: 1,
+    rotate: 0,
+    dragging: false,
+    lastX: 0,
+    lastY: 0,
+    pointers: new Map(),
+    pinchStartDist: 0,
+    pinchStartScale: 1,
+  };
+
+  function isVideoPreviewOpen() {
+    return Boolean(lightbox?.open && videoZoomWrap && !videoZoomWrap.hidden);
+  }
+
+  function videoDisplayBox() {
+    const nw = lightboxVideo?.videoWidth || 640;
+    const nh = lightboxVideo?.videoHeight || 360;
+    const rot = ((vidZoom.rotate % 360) + 360) % 360;
+    if (rot === 90 || rot === 270) return { w: nh, h: nw };
+    return { w: nw, h: nh };
+  }
+
+  function applyVideoZoom() {
+    if (!lightboxVideo) return;
+    const nw = lightboxVideo.videoWidth || 1;
+    const nh = lightboxVideo.videoHeight || 1;
+    lightboxVideo.style.width = `${nw}px`;
+    lightboxVideo.style.height = `${nh}px`;
+    lightboxVideo.style.transform = `translate(${vidZoom.x}px, ${vidZoom.y}px) rotate(${vidZoom.rotate}deg) scale(${vidZoom.scale})`;
+    videoZoomWrap?.classList.toggle("is-zoomed", vidZoom.scale > vidZoom.fit + 0.01);
+    videoZoomWrap?.classList.toggle("is-panning", vidZoom.dragging);
+    if (videoZoomPct) {
+      const pct = vidZoom.fit ? Math.round((vidZoom.scale / vidZoom.fit) * 100) : 100;
+      videoZoomPct.textContent = `${pct}%`;
+    }
+  }
+
+  function fitVideoZoom() {
+    if (!videoZoomWrap || !lightboxVideo?.videoWidth) return;
+    const { w, h } = videoDisplayBox();
+    const rw = videoZoomWrap.clientWidth || 1;
+    const rh = videoZoomWrap.clientHeight || 1;
+    const fit = Math.min(rw / w, rh / h) || 1;
+    vidZoom.fit = fit;
+    vidZoom.scale = fit;
+    vidZoom.x = (rw - w * fit) / 2;
+    vidZoom.y = (rh - h * fit) / 2;
+    applyVideoZoom();
+  }
+
+  function resetVideoZoom() {
+    vidZoom.scale = 1;
+    vidZoom.x = 0;
+    vidZoom.y = 0;
+    vidZoom.fit = 1;
+    vidZoom.rotate = 0;
+    vidZoom.dragging = false;
+    vidZoom.pointers.clear();
+    if (lightboxVideo) lightboxVideo.style.transform = "";
+    videoZoomWrap?.classList.remove("is-zoomed", "is-panning");
+    if (videoZoomPct) videoZoomPct.textContent = "100%";
+  }
+
+  function zoomVideoAt(clientX, clientY, nextScale) {
+    if (!videoZoomWrap || !lightboxVideo) return;
+    const rect = videoZoomWrap.getBoundingClientRect();
+    const px = clientX - rect.left;
+    const py = clientY - rect.top;
+    const min = vidZoom.fit * 0.5;
+    const max = Math.max(vidZoom.fit * 12, 4);
+    const scale = Math.min(max, Math.max(min, nextScale));
+    const wx = (px - vidZoom.x) / (vidZoom.scale || 1);
+    const wy = (py - vidZoom.y) / (vidZoom.scale || 1);
+    vidZoom.scale = scale;
+    vidZoom.x = px - wx * scale;
+    vidZoom.y = py - wy * scale;
+    applyVideoZoom();
+  }
+
+  function bumpVideoZoom(factor, clientX, clientY) {
+    if (!videoZoomWrap) return;
+    const rect = videoZoomWrap.getBoundingClientRect();
+    const cx = clientX ?? rect.left + rect.width / 2;
+    const cy = clientY ?? rect.top + rect.height / 2;
+    zoomVideoAt(cx, cy, vidZoom.scale * factor);
+  }
+
+  function bindVideoZoom() {
+    if (!videoZoomWrap || videoZoomWrap.dataset.zoomBound === "1") return;
+    videoZoomWrap.dataset.zoomBound = "1";
+    videoZoomWrap.addEventListener(
+      "wheel",
+      (e) => {
+        if (!isVideoPreviewOpen()) return;
+        e.preventDefault();
+        const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+        bumpVideoZoom(factor, e.clientX, e.clientY);
+      },
+      { passive: false }
+    );
+    videoZoomWrap.addEventListener("pointerdown", (e) => {
+      if (!isVideoPreviewOpen()) return;
+      if (e.target.closest?.(".memo-zoom-hud")) return;
+      try {
+        videoZoomWrap.setPointerCapture?.(e.pointerId);
+      } catch (_) {}
+      vidZoom.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (vidZoom.pointers.size === 1) {
+        vidZoom.dragging = true;
+        vidZoom.lastX = e.clientX;
+        vidZoom.lastY = e.clientY;
+        videoZoomWrap.classList.add("is-panning");
+      } else if (vidZoom.pointers.size === 2) {
+        const pts = [...vidZoom.pointers.values()];
+        const dx = pts[0].x - pts[1].x;
+        const dy = pts[0].y - pts[1].y;
+        vidZoom.pinchStartDist = Math.hypot(dx, dy) || 1;
+        vidZoom.pinchStartScale = vidZoom.scale;
+        vidZoom.dragging = false;
+      }
+    });
+    videoZoomWrap.addEventListener("pointermove", (e) => {
+      if (!isVideoPreviewOpen() || !vidZoom.pointers.has(e.pointerId)) return;
+      vidZoom.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (vidZoom.pointers.size >= 2) {
+        const pts = [...vidZoom.pointers.values()];
+        const dx = pts[0].x - pts[1].x;
+        const dy = pts[0].y - pts[1].y;
+        const dist = Math.hypot(dx, dy) || 1;
+        const midX = (pts[0].x + pts[1].x) / 2;
+        const midY = (pts[0].y + pts[1].y) / 2;
+        zoomVideoAt(midX, midY, vidZoom.pinchStartScale * (dist / vidZoom.pinchStartDist));
+        return;
+      }
+      if (!vidZoom.dragging) return;
+      vidZoom.x += e.clientX - vidZoom.lastX;
+      vidZoom.y += e.clientY - vidZoom.lastY;
+      vidZoom.lastX = e.clientX;
+      vidZoom.lastY = e.clientY;
+      applyVideoZoom();
+    });
+    const endPtr = (e) => {
+      vidZoom.pointers.delete(e.pointerId);
+      if (vidZoom.pointers.size === 0) {
+        vidZoom.dragging = false;
+        videoZoomWrap.classList.remove("is-panning");
+      }
+    };
+    videoZoomWrap.addEventListener("pointerup", endPtr);
+    videoZoomWrap.addEventListener("pointercancel", endPtr);
+    videoZoomWrap.addEventListener("dblclick", (e) => {
+      if (!isVideoPreviewOpen()) return;
+      if (e.target.closest?.(".memo-zoom-hud")) return;
+      if (!lightboxVideo) return;
+      if (lightboxVideo.paused) lightboxVideo.play().catch(() => {});
+      else lightboxVideo.pause();
+    });
+    $("#memo-video-zoom-in")?.addEventListener("click", () => bumpVideoZoom(1.25));
+    $("#memo-video-zoom-out")?.addEventListener("click", () => bumpVideoZoom(1 / 1.25));
+    $("#memo-video-zoom-reset")?.addEventListener("click", () => {
+      vidZoom.rotate = 0;
+      fitVideoZoom();
+    });
+    $("#memo-video-zoom-rotate")?.addEventListener("click", () => {
+      vidZoom.rotate = (vidZoom.rotate + 90) % 360;
+      fitVideoZoom();
+    });
+    window.addEventListener("resize", () => {
+      if (!isVideoPreviewOpen() || !lightboxVideo?.videoWidth) return;
+      const rel = vidZoom.fit > 0 ? vidZoom.scale / vidZoom.fit : 1;
+      const { w, h } = videoDisplayBox();
+      const rw = videoZoomWrap.clientWidth || 1;
+      const rh = videoZoomWrap.clientHeight || 1;
+      vidZoom.fit = Math.min(rw / w, rh / h) || 1;
+      vidZoom.scale = vidZoom.fit * rel;
+      applyVideoZoom();
+    });
+  }
+
   function getPreviewZoom() {
+    if (isVideoPreviewOpen()) {
+      return {
+        open: true,
+        kind: "video",
+        scale: vidZoom.scale,
+        x: vidZoom.x,
+        y: vidZoom.y,
+        fit: vidZoom.fit,
+        rotate: vidZoom.rotate,
+        rel: vidZoom.fit ? vidZoom.scale / vidZoom.fit : 1,
+        paused: Boolean(lightboxVideo?.paused),
+      };
+    }
     return {
       open: isImagePreviewOpen(),
+      kind: "image",
       scale: imgZoom.scale,
       x: imgZoom.x,
       y: imgZoom.y,
@@ -3568,7 +3767,7 @@
   }
 
   function hidePreviewParts() {
-    [zoomWrap, lightboxImg, lightboxVideo, lightboxAudioWrap, lightboxText, lightboxFrame, lightboxFile].forEach((el) => {
+    [zoomWrap, lightboxImg, videoZoomWrap, lightboxVideo, lightboxAudioWrap, lightboxText, lightboxFrame, lightboxFile].forEach((el) => {
       if (!el) return;
       el.hidden = true;
       el.setAttribute("hidden", "");
@@ -3593,6 +3792,7 @@
     }
     if (lightboxImg) lightboxImg.removeAttribute("src");
     resetImageZoom();
+    resetVideoZoom();
     if (lightboxText) lightboxText.textContent = "";
   }
 
@@ -3737,13 +3937,21 @@
 
     if (item.type === "video" || String(blob.type || "").startsWith("video/")) {
       setPreviewChrome(item, { kind: "video", canFs: true, canNewTab: true, canDl: true });
+      bindVideoZoom();
+      resetVideoZoom();
+      showEl(videoZoomWrap);
       showEl(lightboxVideo);
+      const afterMeta = () => {
+        requestAnimationFrame(() => requestAnimationFrame(() => fitVideoZoom()));
+      };
+      lightboxVideo.addEventListener("loadedmetadata", afterMeta, { once: true });
       lightboxVideo.src = url;
       lightbox.showModal();
+      if (lightboxVideo.readyState >= 1) afterMeta();
       try {
         await lightboxVideo.play();
       } catch (_) {
-        /* autoplay may be blocked; controls remain */
+        /* autoplay may be blocked; double-click to play */
       }
       return;
     }
@@ -3836,6 +4044,15 @@
         if (Math.abs(rel - 1) > 0.04) {
           const rect = zoomWrap.getBoundingClientRect();
           zoomImageAt(rect.left + rect.width / 2, rect.top + rect.height / 2, imgZoom.fit * rel);
+        }
+      });
+    } else if (isVideoPreviewOpen()) {
+      requestAnimationFrame(() => {
+        const rel = vidZoom.fit ? vidZoom.scale / vidZoom.fit : 1;
+        fitVideoZoom();
+        if (Math.abs(rel - 1) > 0.04) {
+          const rect = videoZoomWrap.getBoundingClientRect();
+          zoomVideoAt(rect.left + rect.width / 2, rect.top + rect.height / 2, vidZoom.fit * rel);
         }
       });
     }
