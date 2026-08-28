@@ -1375,6 +1375,22 @@
     refreshPreviewOrderChrome(row);
   }
 
+  async function applyItemTempMark(item) {
+    if (!item?.id) return;
+    markItemTemp(item, state.tempDays);
+    await persistIndex();
+    renderAll();
+    toast(`已标为临时（${state.tempDays} 天后清理）`);
+  }
+
+  async function applyItemTempClear(item) {
+    if (!item?.id) return;
+    clearItemTemp(item);
+    await persistIndex();
+    renderAll();
+    toast("已取消临时标记");
+  }
+
   async function bumpItemToFront(item) {
     if (!item?.id) return { item: null, moved: false };
     const idx = state.index.items.findIndex((x) => x.id === item.id);
@@ -3959,7 +3975,7 @@
     pickDirectory().catch((err) => setError(memoError, err.message || String(err)));
   });
   $("#memo-file")?.addEventListener("change", (e) => {
-    ingestFiles(e.target.files).catch((err) => setError(memoError, err.message || String(err)));
+    ingestFiles(e.target.files, { offerTemp: false }).catch((err) => setError(memoError, err.message || String(err)));
     e.target.value = "";
   });
   $("#memo-save-text")?.addEventListener("click", () => {
@@ -4141,6 +4157,8 @@
         else if (act === "pin") await applyItemPinToggle(item);
         else if (act === "edit") await beginEditText(item);
         else if (act === "note") await beginEditNote(item);
+        else if (act === "temp") await applyItemTempMark(item);
+        else if (act === "untemp") await applyItemTempClear(item);
         else if (act === "path") await openItemPath(item);
         else if (act === "del") await deleteItems([item.id], { confirm: false });
       } catch (err) {
@@ -4311,24 +4329,14 @@
       const tempId = t.closest?.("[data-memo-temp]")?.dataset?.memoTemp;
       if (tempId) {
         const item = state.index.items.find((x) => x.id === tempId);
-        if (item) {
-          markItemTemp(item, state.tempDays);
-          await persistIndex();
-          renderAll();
-          toast(`已标为临时（${state.tempDays} 天后清理）`);
-        }
+        if (item) await applyItemTempMark(item);
         t.closest("details")?.removeAttribute("open");
         return;
       }
       const untempId = t.closest?.("[data-memo-untemp]")?.dataset?.memoUntemp;
       if (untempId) {
         const item = state.index.items.find((x) => x.id === untempId);
-        if (item) {
-          clearItemTemp(item);
-          await persistIndex();
-          renderAll();
-          toast("已取消临时标记");
-        }
+        if (item) await applyItemTempClear(item);
         t.closest("details")?.removeAttribute("open");
         return;
       }
@@ -4639,7 +4647,7 @@
       e.preventDefault();
       if (Date.now() - dropLock < 80) return;
       dropLock = Date.now();
-      ingestFiles(e.dataTransfer.files).catch((err) => setError(memoError, err.message || String(err)));
+      ingestFiles(e.dataTransfer.files, { offerTemp: false }).catch((err) => setError(memoError, err.message || String(err)));
     });
   }
   bindMemoFileDrop(memoPanel);
@@ -4666,7 +4674,7 @@
       const files = [...(cd.files || [])];
       if (files.length) {
         e.preventDefault();
-        ingestFiles(files).catch((err) => setError(memoError, err.message || String(err)));
+        ingestFiles(files, { offerTemp: false }).catch((err) => setError(memoError, err.message || String(err)));
         return;
       }
       const items = [...(cd.items || [])];
@@ -4674,7 +4682,7 @@
       if (img) {
         e.preventDefault();
         const f = img.getAsFile();
-        if (f) ingestFiles([f]).catch((err) => setError(memoError, err.message || String(err)));
+        if (f) ingestFiles([f], { offerTemp: false }).catch((err) => setError(memoError, err.message || String(err)));
         return;
       }
       const active = document.activeElement;

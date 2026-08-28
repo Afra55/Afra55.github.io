@@ -678,6 +678,26 @@ async function main() {
       noteInMore: Boolean(fileCard?.querySelector(".memo-more [data-memo-note]")),
     };
 
+    await window.DevToolsMemo.ingestBlob(new Blob([new Uint8Array(16)], { type: "video/mp4" }), "smoke-clip.mp4");
+    await sleep(350);
+    const videoItem = (window.DevToolsMemo.getIndex().items || []).find((it) => it.type === "video");
+    const videoCard = videoItem ? document.querySelector(`.memo-card[data-memo-id="${videoItem.id}"]`) : null;
+    out.ctxTemp = { hasVideo: Boolean(videoItem) };
+    if (videoCard && videoItem) {
+      videoCard.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 48, clientY: 48 }));
+      await sleep(100);
+      const ctx = document.getElementById("memo-ctx");
+      const tempBtn = ctx?.querySelector('[data-memo-ctx-act="temp"]');
+      out.ctxTemp.ctxShown = Boolean(ctx && !ctx.hidden);
+      out.ctxTemp.hasTempAct = Boolean(tempBtn);
+      tempBtn?.click();
+      await sleep(220);
+      const row = (window.DevToolsMemo.getIndex().items || []).find((x) => x.id === videoItem.id);
+      out.ctxTemp.marked = window.DevToolsMemo.isTempItem(row);
+      if (ctx) ctx.hidden = true;
+      await window.DevToolsMemo.clearItemTemp(videoItem.id);
+    }
+
     out.shareUi = {
       hasPreviewShare: Boolean(document.getElementById("memo-preview-share")),
       api: typeof window.DevToolsMemo.setShareUiForTest === "function",
@@ -1012,7 +1032,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memoclip1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memoclip2/.test(s.src)),
     };
 
     out.pwa = {
@@ -1278,7 +1298,10 @@ async function main() {
   if (errors.length) failed.push(...errors.map((e) => `page: ${e}`));
   if (!result.panelActive) failed.push("memo panel not active");
   if (!result.hasEditor || !result.hasList) failed.push("missing editor/list");
-  if (!/memoclip1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
+    failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
+  }
+  if (!/memoclip2/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1523,8 +1546,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/memoclip1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memoclip1");
+  if (!/memoclip2/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memoclip2");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
