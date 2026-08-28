@@ -1245,7 +1245,8 @@
     if (!DEFAULT_ORDER.includes(id)) return;
     const next = [id, ...loadRecent().filter((x) => x !== id)];
     localStorage.setItem(RECENT_KEY, JSON.stringify(next));
-    saveLastTool(id);
+    // 占位路由上的默认 timestamp 不应覆盖已保存的上次工具（手机冷启动常见）
+    if (!(id === "timestamp" && shouldRestoreLastTool())) saveLastTool(id);
     renderRecent();
   }
 
@@ -1253,33 +1254,57 @@
     return toolIdToHash(loadLastToolId());
   }
 
+  function routeFromToolId(id) {
+    if (!id) return { tool: "timestamp", tab: "gifmaker" };
+    if (HASH_ALIASES[id]) return { ...HASH_ALIASES[id] };
+    if (MEDIA_TABS.includes(id)) return { tool: "media", tab: id };
+    if (DEFAULT_ORDER.includes(id)) return { tool: id, tab: "gifmaker" };
+    return { tool: "timestamp", tab: "gifmaker" };
+  }
+
+  function activeToolIdFromRoute(route) {
+    if (!route) return "timestamp";
+    return route.tool === "media" ? route.tab || "gifmaker" : route.tool;
+  }
+
+  function persistLastToolFromRoute(route = { tool: currentTool, tab: currentMediaTab }) {
+    const id = activeToolIdFromRoute(route);
+    if (id && id !== "timestamp") saveLastTool(id);
+  }
+
   /** iOS PWA / Safari 冷启动常带 #timestamp 或空 hash，需在此类「占位路由」上恢复上次工具 */
   function shouldRestoreLastTool() {
     const raw0 = String(location.hash || "").replace(/^#/, "").trim();
-    if (!raw0) return true;
+    if (!raw0 || raw0 === "/") return true;
     const q = raw0.indexOf("?");
     const path = q >= 0 ? raw0.slice(0, q) : raw0;
     if (q >= 0 && path === "lanshare") return false;
-    if (!path) return true;
-    const head = path.split(/[/?]/)[0];
+    if (!path || path === "/") return true;
+    const head = path.split(/[/?]/).filter(Boolean)[0] || "";
+    if (!head) return true;
     if (head === "timestamp") return true;
     if (head === "media" && !path.includes("/")) return true;
     return false;
   }
 
   function restoreLastToolOnStartup() {
-    if (!shouldRestoreLastTool()) return;
+    if (!shouldRestoreLastTool()) return false;
     const saved = loadLastToolId();
-    if (!saved || saved === "timestamp") return;
-    const target = toolIdToHash(saved);
-    const current = `#${rawHashHead()}`;
-    if (current !== target) history.replaceState(null, "", target);
+    if (!saved || saved === "timestamp") return false;
+    const route = routeFromToolId(saved);
+    const target = routeHash(route.tool, route.tab);
+    const raw = String(location.hash || "").replace(/^#/, "").trim();
+    const q = raw.indexOf("?");
+    const path = q >= 0 ? raw.slice(0, q) : raw;
+    if (`#${path}` !== target) history.replaceState(null, "", target);
+    return true;
   }
 
   function bootRoute() {
     restoreLastToolOnStartup();
-    applyRoute();
+    applyRoute({ skipRecent: bootPasses > 0 });
     forceDrawerClosed();
+    bootPasses += 1;
   }
 
   function rawHashHead() {
@@ -1645,6 +1670,17 @@
 
   function applyRoute({ skipRecent, keepDrawer } = {}) {
     let route = parseRoute();
+    if (shouldRestoreLastTool()) {
+      const saved = loadLastToolId();
+      if (saved && saved !== "timestamp") {
+        route = routeFromToolId(saved);
+        const target = routeHash(route.tool, route.tab);
+        const raw = String(location.hash || "").replace(/^#/, "").trim();
+        const q = raw.indexOf("?");
+        const path = q >= 0 ? raw.slice(0, q) : raw;
+        if (`#${path}` !== target) history.replaceState(null, "", target);
+      }
+    }
     // 手机深链 #ffbridge / #adb → 网页媒体，避免无用桥页面
     if (isPhoneLikeClient() && (route.tool === "ffbridge" || route.tool === "adb")) {
       route = { tool: "media", tab: route.tool === "ffbridge" ? "audio" : currentMediaTab || "gifmaker" };
@@ -2396,14 +2432,23 @@
     if (shouldRestoreLastTool()) restoreLastToolOnStartup();
     applyRoute();
   });
-  // Safari：bfcache / 后台回收后恢复时强制关闭菜单
+  // Safari：bfcache / 后台回收后恢复时强制关闭菜单，并重新套用路由（手机常回到 start_url）
   window.addEventListener("pageshow", () => {
     forceDrawerClosed();
+    if (shouldRestoreLastTool()) restoreLastToolOnStartup();
+    applyRoute({ skipRecent: true });
   });
   document.addEventListener("visibilitychange", () => {
-    if (!document.hidden) forceDrawerClosed();
+    if (document.hidden) {
+      persistLastToolFromRoute();
+      return;
+    }
+    forceDrawerClosed();
+    if (shouldRestoreLastTool()) restoreLastToolOnStartup();
+    applyRoute({ skipRecent: true });
   });
   window.addEventListener("pagehide", () => {
+    persistLastToolFromRoute();
     forceDrawerClosed();
   });
   document.addEventListener("keydown", (e) => {
@@ -2477,10 +2522,15 @@
   window.dispatchEvent(new CustomEvent("devtools:catalog"));
   syncSortHint();
   // Safari / iOS：导航后 hash 可能短暂停留在上一页，延后 boot 并在 hashchange 时再次尝试恢复
+  let bootPasses = 0;
   const scheduleBootRoute = () => {
     requestAnimationFrame(() => {
       requestAnimationFrame(bootRoute);
     });
+    if (isPhoneLikeClient()) {
+      setTimeout(bootRoute, 60);
+      setTimeout(bootRoute, 280);
+    }
   };
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", scheduleBootRoute, { once: true });
