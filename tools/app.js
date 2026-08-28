@@ -767,6 +767,7 @@
   const ORDER_KEY = "devtools-tool-order-v3";
   const GROUP_ORDER_KEY = "devtools-group-order-v1";
   const RECENT_KEY = "devtools-tool-recent-v1";
+  const FAVORITES_KEY = "devtools-tool-favorites-v1";
   const LAST_TOOL_KEY = "devtools-tool-last-v1";
   const SORT_HINT_KEY = "devtools-nav-sort-hint-seen-v1";
   /** 站点页不算「上次工具」，避免 about/setup 盖掉真实工具 */
@@ -910,6 +911,10 @@
   const toolSearch = $("#tool-search");
   const recentWrap = $("#tool-recent");
   const recentList = $("#tool-recent-list");
+  const favoritesWrap = $("#tool-favorites");
+  const favoritesList = $("#tool-fav-list");
+  const favAddBtn = $("#tool-fav-add");
+  const favPicker = $("#tool-fav-picker");
   const canDesktopDrag = () => window.matchMedia("(min-width: 901px)").matches;
 
   /** 手机/平板不适合本机桥与 ADB，导航中隐藏，避免误入 */
@@ -1048,7 +1053,11 @@
 
   function canHoverNavFlyout(e) {
     if (!navCompact || compactNavSearching()) return false;
-    if (document.body.classList.contains("nav-sorting") || document.body.classList.contains("nav-sorting-tools")) {
+    if (
+      document.body.classList.contains("nav-sorting") ||
+      document.body.classList.contains("nav-sorting-tools") ||
+      document.body.classList.contains("nav-sorting-favorites")
+    ) {
       return false;
     }
     if (e?.pointerType && e.pointerType !== "mouse") return false;
@@ -1162,6 +1171,34 @@
     order.splice(fromIdx, 1);
     order.splice(toIdx, 0, fromId);
     return order;
+  }
+
+  function loadFavorites() {
+    try {
+      return sanitizeToolIds(JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]"));
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function saveFavorites(ids) {
+    localStorage.setItem(FAVORITES_KEY, JSON.stringify(sanitizeToolIds(ids)));
+    renderFavorites();
+  }
+
+  function addFavorite(id) {
+    if (!DEFAULT_ORDER.includes(id) || !isNavToolVisible(id)) return false;
+    const next = loadFavorites().filter((x) => x !== id);
+    next.push(id);
+    saveFavorites(next);
+    showToast(`已加入常用：${toolName(id)}`);
+    return true;
+  }
+
+  function removeFavorite(id) {
+    const next = loadFavorites().filter((x) => x !== id);
+    saveFavorites(next);
+    showToast(`已从常用移除：${toolName(id)}`);
   }
 
   function loadRecent() {
@@ -1339,6 +1376,155 @@
     if (!recentList.children.length) {
       recentWrap.hidden = true;
     }
+  }
+
+  let favPickerOpen = false;
+
+  function setFavPickerOpen(open) {
+    favPickerOpen = !!open;
+    if (favAddBtn) favAddBtn.setAttribute("aria-expanded", favPickerOpen ? "true" : "false");
+    if (favPicker) {
+      if (favPickerOpen) {
+        favPicker.removeAttribute("hidden");
+        renderFavPicker();
+      } else favPicker.setAttribute("hidden", "");
+    }
+  }
+
+  function renderFavPicker() {
+    if (!favPicker) return;
+    favPicker.innerHTML = "";
+    const current = new Set(loadFavorites());
+    const candidates = DEFAULT_ORDER.filter((id) => isNavToolVisible(id) && !current.has(id));
+    if (!candidates.length) {
+      const empty = document.createElement("p");
+      empty.className = "nav-fav-picker-empty";
+      empty.textContent = current.size ? "可添加的工具已全部加入常用" : "暂无可添加的工具";
+      favPicker.appendChild(empty);
+      return;
+    }
+    candidates.forEach((id) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "nav-fav-picker-item";
+      btn.textContent = toolName(id);
+      btn.addEventListener("click", () => {
+        addFavorite(id);
+        renderFavPicker();
+      });
+      favPicker.appendChild(btn);
+    });
+  }
+
+  function renderFavorites() {
+    if (!favoritesList) return;
+    const items = loadFavorites();
+    const allowHtml5Drag = canDesktopDrag();
+    favoritesList.innerHTML = "";
+    items.forEach((id) => {
+      if (!isNavToolVisible(id)) return;
+      const chip = document.createElement("div");
+      chip.className = "nav-fav-chip is-sortable";
+      chip.dataset.tool = id;
+      chip.draggable = allowHtml5Drag;
+      chip.title = allowHtml5Drag ? "拖动排序；点击名称打开" : "长按拖动排序；点击名称打开";
+
+      const label = document.createElement("button");
+      label.type = "button";
+      label.className = "nav-fav-chip-label";
+      label.textContent = toolName(id);
+      label.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (didDrag) return;
+        navigateTo(id);
+      });
+      chip.appendChild(label);
+
+      const rm = document.createElement("button");
+      rm.type = "button";
+      rm.className = "nav-fav-chip-remove";
+      rm.setAttribute("aria-label", `从常用移除 ${toolName(id)}`);
+      rm.textContent = "×";
+      rm.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        removeFavorite(id);
+      });
+      chip.appendChild(rm);
+
+      favoritesList.appendChild(chip);
+    });
+    bindFavoriteInteractions();
+    if (favPickerOpen) renderFavPicker();
+  }
+
+  function commitFavoriteReorder(fromId, toId, { keepDrawer = true } = {}) {
+    if (!fromId || !toId || fromId === toId) return false;
+    const list = loadFavorites();
+    const fromIdx = list.indexOf(fromId);
+    const toIdx = list.indexOf(toId);
+    if (fromIdx < 0 || toIdx < 0) return false;
+    list.splice(fromIdx, 1);
+    list.splice(toIdx, 0, fromId);
+    saveFavorites(list);
+    applyRoute({ skipRecent: true, keepDrawer });
+    showToast("已保存常用排序");
+    return true;
+  }
+
+  function bindFavoriteInteractions() {
+    if (!favoritesList) return;
+    $$(".nav-fav-chip", favoritesList).forEach((chip) => {
+      if (chip.dataset.boundFav === "1") return;
+      chip.dataset.boundFav = "1";
+      chip.addEventListener("dragstart", (e) => {
+        if (!chip.draggable) {
+          e.preventDefault();
+          return;
+        }
+        dragPayload = { kind: "favorite", id: chip.dataset.tool };
+        didDrag = true;
+        chip.classList.add("is-dragging");
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("application/x-devtools-nav", JSON.stringify(dragPayload));
+        e.dataTransfer.setData("text/plain", dragPayload.id);
+      });
+      chip.addEventListener("dragend", () => {
+        clearNavDragStyles();
+        dragPayload = null;
+        setTimeout(() => {
+          didDrag = false;
+        }, 0);
+      });
+      chip.addEventListener("dragover", (e) => {
+        if (!canDesktopDrag()) return;
+        const payload = dragPayload || readDragPayload(e);
+        if (!payload || payload.kind !== "favorite") return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        chip.classList.add("drag-over");
+      });
+      chip.addEventListener("dragleave", () => chip.classList.remove("drag-over"));
+      chip.addEventListener("drop", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        clearNavDragStyles();
+        if (!canDesktopDrag()) return;
+        const payload = readDragPayload(e);
+        const toTool = chip.dataset.tool;
+        if (!payload || payload.kind !== "favorite" || !toTool) return;
+        commitFavoriteReorder(payload.id, toTool, { keepDrawer: false });
+      });
+      chip.addEventListener("pointerdown", (e) => {
+        if (e.target.closest(".nav-fav-chip-remove")) return;
+        beginMobilePointerSort(e, {
+          kind: "favorite",
+          id: chip.dataset.tool,
+          handle: chip,
+          wrap: favoritesList,
+        });
+      });
+    });
   }
 
   function drawerFocusables() {
@@ -1593,6 +1779,16 @@
   function clearNavDragStyles() {
     getNavLinks().forEach((l) => l.classList.remove("drag-over", "is-dragging"));
     $$(".nav-group", navEl).forEach((g) => g.classList.remove("drag-over", "is-dragging"));
+    $$(".nav-fav-chip", favoritesList).forEach((c) => c.classList.remove("drag-over", "is-dragging"));
+  }
+
+  function navFavoriteAtPoint(x, y) {
+    const stack = typeof document.elementsFromPoint === "function" ? document.elementsFromPoint(x, y) : [document.elementFromPoint(x, y)];
+    for (const el of stack) {
+      const chip = el?.closest?.(".nav-fav-chip");
+      if (chip && favoritesList?.contains(chip)) return chip;
+    }
+    return null;
   }
 
   function navGroupAtPoint(x, y) {
@@ -1629,6 +1825,10 @@
         pointerSort.handle?.classList.add("is-dragging");
         const target = navToolAtPoint(pointerSort.lastX, pointerSort.lastY);
         if (target && target !== pointerSort.handle) target.classList.add("drag-over");
+      } else if (pointerSort.kind === "favorite") {
+        pointerSort.handle?.classList.add("is-dragging");
+        const target = navFavoriteAtPoint(pointerSort.lastX, pointerSort.lastY);
+        if (target && target !== pointerSort.handle) target.classList.add("drag-over");
       } else {
         pointerSort.wrap?.classList.add("is-dragging");
         const target = navGroupAtPoint(pointerSort.lastX, pointerSort.lastY);
@@ -1638,7 +1838,28 @@
     pointerSortScrollRaf = requestAnimationFrame(tickPointerSortAutoScroll);
   }
 
-  function updatePointerSortAutoScroll(clientY) {
+  function updatePointerSortAutoScroll(clientY, clientX) {
+    if (pointerSort?.kind === "favorite" && favoritesList && clientX != null) {
+      const rect = favoritesList.getBoundingClientRect();
+      const edge = 40;
+      let dir = 0;
+      let speed = 0;
+      if (clientX < rect.left + edge) {
+        dir = -1;
+        const t = Math.max(0, Math.min(1, (rect.left + edge - clientX) / edge));
+        speed = 6 + t * 18;
+      } else if (clientX > rect.right - edge) {
+        dir = 1;
+        const t = Math.max(0, Math.min(1, (clientX - (rect.right - edge)) / edge));
+        speed = 6 + t * 18;
+      }
+      if (dir) {
+        favoritesList.scrollLeft += dir * speed;
+        if (pointerSortScrollRaf) cancelAnimationFrame(pointerSortScrollRaf);
+        pointerSortScrollRaf = requestAnimationFrame(tickPointerSortAutoScroll);
+      }
+      return;
+    }
     if (!navBar || !pointerSort?.active) {
       stopPointerSortAutoScroll();
       return;
@@ -1673,7 +1894,7 @@
       document.removeEventListener("pointercancel", pointerSort.onCancel);
     }
     pointerSort = null;
-    document.body.classList.remove("nav-sorting", "nav-sorting-tools", "nav-press-pending");
+    document.body.classList.remove("nav-sorting", "nav-sorting-tools", "nav-sorting-favorites", "nav-press-pending");
     clearNavDragStyles();
     dragPayload = null;
     if (!keepDidDrag) {
@@ -1759,12 +1980,16 @@
         pointerSort.wrap?.classList.add("is-dragging");
         const target = navGroupAtPoint(ev.clientX, ev.clientY);
         if (target && target !== pointerSort.wrap) target.classList.add("drag-over");
+      } else if (kind === "favorite") {
+        pointerSort.handle?.classList.add("is-dragging");
+        const target = navFavoriteAtPoint(ev.clientX, ev.clientY);
+        if (target && target !== pointerSort.handle) target.classList.add("drag-over");
       } else {
         pointerSort.handle?.classList.add("is-dragging");
         const target = navToolAtPoint(ev.clientX, ev.clientY);
         if (target && target !== pointerSort.handle) target.classList.add("drag-over");
       }
-      updatePointerSortAutoScroll(ev.clientY);
+      updatePointerSortAutoScroll(ev.clientY, ev.clientX);
     };
 
     const finish = (ev, cancelled) => {
@@ -1784,6 +2009,9 @@
       if (kind === "group") {
         const target = navGroupAtPoint(x, y);
         commitGroupReorder(fromId, target?.dataset?.group, { keepDrawer: true });
+      } else if (kind === "favorite") {
+        const target = navFavoriteAtPoint(x, y);
+        commitFavoriteReorder(fromId, target?.dataset?.tool, { keepDrawer: true });
       } else {
         const target = navToolAtPoint(x, y);
         commitToolReorder(fromId, target?.dataset?.tool, { keepDrawer: true });
@@ -1819,7 +2047,9 @@
         didDrag = true;
         dragPayload = { kind, id: opts.id };
         document.body.classList.remove("nav-press-pending");
-        document.body.classList.add(kind === "group" ? "nav-sorting" : "nav-sorting-tools");
+        document.body.classList.add(
+          kind === "group" ? "nav-sorting" : kind === "favorite" ? "nav-sorting-favorites" : "nav-sorting-tools"
+        );
         closeNavFlyouts();
         if (kind === "group") pointerSort.wrap?.classList.add("is-dragging");
         else pointerSort.handle?.classList.add("is-dragging");
@@ -1833,7 +2063,9 @@
         } catch (_) {
           /* ignore */
         }
-        showToast(kind === "group" ? "拖到目标分类后松手" : "拖到目标工具后松手");
+        showToast(
+          kind === "group" ? "拖到目标分类后松手" : kind === "favorite" ? "拖到目标常用工具后松手" : "拖到目标工具后松手"
+        );
       }, LONG_MS),
     };
 
@@ -2126,6 +2358,16 @@
     setDrawerOpen(true);
   });
   toolSearch?.addEventListener("input", () => applySearchFilter(toolSearch.value));
+  favAddBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setFavPickerOpen(!favPickerOpen);
+  });
+  document.addEventListener("click", (e) => {
+    if (!favPickerOpen) return;
+    if (e.target.closest("#tool-fav-add") || e.target.closest("#tool-fav-picker")) return;
+    setFavPickerOpen(false);
+  });
   mediaSubnav?.addEventListener("click", (e) => {
     const btn = e.target?.closest?.("[data-media-tab]");
     if (!btn) return;
@@ -2204,12 +2446,14 @@
       forceDrawerClosed();
       syncDesktopNavMaxHeight();
       renderNav(loadOrder());
+      renderFavorites();
     });
   }
   syncDesktopNavMaxHeight();
 
   renderNav(loadOrder());
   renderRecent();
+  renderFavorites();
   window.DevToolsCatalog = {
     groups: TOOL_GROUPS,
     meta: TOOL_META,
@@ -2226,6 +2470,9 @@
     openFlyout: (el) => openNavFlyout(el?.closest?.(".nav-group") || el),
     closeFlyouts: () => closeNavFlyouts(),
     renderRecent,
+    renderFavorites,
+    addFavorite,
+    loadFavorites,
   };
   window.dispatchEvent(new CustomEvent("devtools:catalog"));
   syncSortHint();

@@ -1310,7 +1310,9 @@ a.secondary-btn {
   }
 
   .nav-search-wrap,
+  .nav-strip,
   .nav-recent,
+  .nav-favorites,
   .nav-sort-hint,
   .nav-drawer-head {
     flex-shrink: 0;
