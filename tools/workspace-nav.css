@@ -104,6 +104,7 @@ html.is-pwa-standalone #pwa-install {
   color: var(--muted);
 }
 
+.nav-strip,
 .nav-recent {
   width: 100%;
   margin-bottom: 0.45rem;
@@ -113,19 +114,15 @@ html.is-pwa-standalone #pwa-install {
   border: 1px solid color-mix(in srgb, var(--line) 65%, transparent);
 }
 
-.nav-recent-axis {
+.nav-strip-head {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  margin: 0 0 0.3rem;
-  padding: 0 0.08rem;
-  color: var(--muted);
-  font-size: 0.65rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  line-height: 1.2;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.3rem;
 }
 
+.nav-strip-title,
 .nav-recent-label,
 .nav-group-title {
   margin: 0 0 0.35rem;
@@ -197,7 +194,72 @@ body.nav-press-pending .tool-nav-link,
 
 /* 拖拽分类时收起子工具，只留分类标题，更好对准 */
 body.nav-sorting .tool-nav-link,
+.nav-strip-head .nav-strip-title {
+  margin-bottom: 0;
+}
+
+.nav-fav-add {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 1.45rem;
+  height: 1.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(232, 238, 248, 0.06);
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.nav-fav-add[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
+}
+
+.nav-fav-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28rem;
+  max-height: 8.5rem;
+  overflow-y: auto;
+  margin-bottom: 0.32rem;
+  padding: 0.28rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+
+.nav-fav-picker[hidden] {
+  display: none !important;
+}
+
+.nav-fav-picker-item {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: rgba(232, 238, 248, 0.06);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.22rem 0.5rem;
+  font: inherit;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.nav-fav-picker-empty {
+  margin: 0;
+  padding: 0.15rem 0.2rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+body.nav-sorting .nav-strip,
 body.nav-sorting .nav-recent,
+body.nav-sorting .nav-favorites,
 body.nav-sorting .nav-sort-hint,
 body.nav-sorting .nav-search-wrap,
 body.nav-sorting .nav-footer-actions {
@@ -241,12 +303,14 @@ body.nav-sorting-tools .nav-bar {
   touch-action: none;
 }
 
-.nav-recent-list {
-  display: grid;
-  grid-template-rows: repeat(2, minmax(1.65rem, auto));
-  grid-auto-flow: column;
-  grid-auto-columns: minmax(4.5rem, max-content);
-  gap: 0.32rem 0.35rem;
+.nav-strip-list,
+.nav-recent-list,
+.nav-fav-list {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: stretch;
+  gap: 0.32rem;
   max-width: 100%;
   overflow-x: auto;
   overflow-y: hidden;
@@ -257,15 +321,23 @@ body.nav-sorting-tools .nav-bar {
   padding-bottom: 0.05rem;
 }
 
-.nav-recent-list::-webkit-scrollbar {
+.nav-strip-list::-webkit-scrollbar,
+.nav-recent-list::-webkit-scrollbar,
+.nav-fav-list::-webkit-scrollbar {
   display: none;
   width: 0;
   height: 0;
 }
 
-.nav-recent-chip {
+.nav-recent-chip,
+.nav-fav-chip {
   appearance: none;
-  width: 100%;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  width: auto;
+  max-width: none;
   min-width: 0;
   box-sizing: border-box;
   border: 1px solid var(--line);
@@ -278,9 +350,75 @@ body.nav-sorting-tools .nav-bar {
   line-height: 1.2;
   cursor: pointer;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
   text-align: center;
+}
+
+.nav-fav-chip {
+  padding-right: 0.28rem;
+}
+
+.nav-fav-chip[draggable="true"],
+.nav-fav-chip.is-sortable {
+  cursor: grab;
+}
+
+.nav-fav-chip.is-dragging {
+  opacity: 0.55;
+}
+
+.nav-fav-chip.drag-over {
+  outline: 1px dashed color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 1px;
+}
+
+.nav-fav-chip-label {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.nav-fav-chip-remove {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.nav-fav-chip-remove:hover,
+.nav-fav-chip-remove:focus-visible {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+body.nav-sorting-favorites .nav-fav-chip.is-dragging {
+  opacity: 0.55;
+  border-style: dashed;
+}
+
+body.nav-sorting-favorites .nav-strip-list,
+body.nav-sorting-favorites .nav-fav-list {
+  touch-action: none;
 }
 
 .nav-group {
@@ -591,7 +729,9 @@ body.nav-open {
   }
 
   .nav-search-wrap,
+  .nav-strip,
   .nav-recent,
+  .nav-favorites,
   .nav-sort-hint,
   .nav-drawer-head {
     flex-shrink: 0;

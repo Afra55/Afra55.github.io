@@ -1158,7 +1158,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navrecent3/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navfav1/.test(s.src)),
     };
 
     out.pwa = {
@@ -1361,10 +1361,10 @@ async function main() {
 
     const recentListEl = document.getElementById("tool-recent-list");
     out.recentUi = {
-      noLabel: !document.querySelector(".nav-recent-label"),
-      hasAxis: Boolean(document.querySelector(".nav-recent-axis")),
-      twoRowGrid: Boolean(recentListEl) && getComputedStyle(recentListEl).display === "grid",
-      columnFlow: recentListEl ? getComputedStyle(recentListEl).gridAutoFlow.includes("column") : false,
+      hasTitle: /历史记录/.test(document.querySelector("#tool-recent .nav-strip-title")?.textContent || ""),
+      noAxis: !document.querySelector(".nav-recent-axis"),
+      oneRowFlex: Boolean(recentListEl) && getComputedStyle(recentListEl).display === "flex",
+      nowrap: recentListEl ? getComputedStyle(recentListEl).flexWrap === "nowrap" : false,
       overflowX: recentListEl ? getComputedStyle(recentListEl).overflowX : "",
       hiddenScrollbar: recentListEl ? getComputedStyle(recentListEl).scrollbarWidth === "none" : false,
     };
@@ -1376,8 +1376,30 @@ async function main() {
         out.recentUi.chipCount = document.querySelectorAll(".nav-recent-chip").length;
         out.recentUi.showsAll = out.recentUi.chipCount === ids.length;
         out.recentUi.scrollableX = recentListEl.scrollWidth > recentListEl.clientWidth + 1;
-        out.recentUi.gridCols = getComputedStyle(recentListEl).gridTemplateColumns.split(" ").filter(Boolean).length;
+        const chip = document.querySelector(".nav-recent-chip");
+        out.recentUi.fullText = chip
+          ? getComputedStyle(chip).textOverflow !== "ellipsis" && getComputedStyle(chip).overflow !== "hidden"
+          : false;
       }
+    } catch (_) {}
+
+    const favListEl = document.getElementById("tool-fav-list");
+    out.favoritesUi = {
+      hasSection: Boolean(document.getElementById("tool-favorites")),
+      hasTitle: /常用工具/.test(document.querySelector("#tool-favorites .nav-strip-title")?.textContent || ""),
+      hasAddBtn: Boolean(document.getElementById("tool-fav-add")),
+      api: typeof window.DevToolsNav?.addFavorite === "function",
+      renderApi: typeof window.DevToolsNav?.renderFavorites === "function",
+      oneRowFlex: Boolean(favListEl) && getComputedStyle(favListEl).display === "flex",
+    };
+    try {
+      localStorage.setItem("devtools-tool-favorites-v1", JSON.stringify(["json", "memo", "regex"]));
+      window.DevToolsNav?.renderFavorites?.();
+      out.favoritesUi.chipCount = document.querySelectorAll(".nav-fav-chip").length;
+      out.favoritesUi.showsAll = out.favoritesUi.chipCount === 3;
+      out.favoritesUi.sortable = document.querySelector(".nav-fav-chip.is-sortable") != null;
+      window.DevToolsNav?.addFavorite?.("yaml");
+      out.favoritesUi.afterAdd = document.querySelectorAll(".nav-fav-chip").length;
     } catch (_) {}
 
     const sortHint = document.querySelector(".nav-sort-hint");
@@ -1505,7 +1527,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/navrecent3/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/navfav1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1765,8 +1787,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/navrecent3/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to navrecent3");
+  if (!/navfav1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to navfav1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
@@ -1799,15 +1821,28 @@ async function main() {
     failed.push("nav cache hint should be a single short line with details in title");
   }
   if (
-    !result.recentUi?.noLabel ||
-    !result.recentUi?.hasAxis ||
-    !result.recentUi?.twoRowGrid ||
-    !result.recentUi?.columnFlow ||
+    !result.recentUi?.hasTitle ||
+    !result.recentUi?.noAxis ||
+    !result.recentUi?.oneRowFlex ||
+    !result.recentUi?.nowrap ||
     !result.recentUi?.showsAll ||
     result.recentUi?.overflowX !== "auto" ||
-    !result.recentUi?.scrollableX
+    !result.recentUi?.scrollableX ||
+    !result.recentUi?.fullText
   ) {
-    failed.push("recent tools should use a two-row horizontally scrollable grid without item cap");
+    failed.push("recent tools should use a single-row horizontally scrollable strip with full labels");
+  }
+  if (
+    !result.favoritesUi?.hasSection ||
+    !result.favoritesUi?.hasTitle ||
+    !result.favoritesUi?.hasAddBtn ||
+    !result.favoritesUi?.api ||
+    !result.favoritesUi?.showsAll ||
+    !result.favoritesUi?.sortable ||
+    !result.favoritesUi?.oneRowFlex ||
+    (result.favoritesUi?.afterAdd || 0) < 4
+  ) {
+    failed.push("favorites strip should allow unlimited add and draggable sort");
   }
   if (!result.sortHint?.hasEl || !result.sortHint?.api || !result.sortHint?.marked || !result.sortHint?.visibleFirst || !result.sortHint?.hiddenSecond) {
     failed.push("sort hint should show once then hide on later visits");
