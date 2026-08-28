@@ -71,6 +71,9 @@
     pendingJoin: null,
     pageHiddenWarn: false,
     autoJoinBusy: false,
+    /** 成员侧：收到 welcome 后为 true；房主创建房间后为 true */
+    controlLinked: false,
+    pendingOutbound: [],
   };
 
   function stashPendingJoinToken(token) {
@@ -401,6 +404,8 @@
     }
     let statusExtra = "";
     if (state.pageHiddenWarn) statusExtra = " · 页面在后台，连接可能中断";
+    else if (inRoom && !state.controlLinked) statusExtra = " · 正在连接…";
+    else if (inRoom && !state.isHost && state.controlDc?.readyState !== "open") statusExtra = " · 信令连接中…";
     if (els.statusText) {
       els.statusText.textContent = inRoom
         ? `${state.members.size} 人在线 · 文件从上传者直传${statusExtra}`
@@ -410,7 +415,10 @@
     if (els.joinArea) els.joinArea.hidden = inRoom;
     if (els.leaveBtn) els.leaveBtn.hidden = !inRoom;
     if (els.dissolveBtn) els.dissolveBtn.hidden = !inRoom || !state.isHost;
-    if (els.pickBtn) els.pickBtn.disabled = !inRoom;
+    if (els.pickBtn) {
+      els.pickBtn.disabled = !canUploadFiles();
+      els.pickBtn.title = canUploadFiles() ? "" : "连接就绪后才可上传";
+    }
     if (els.roomMeta) {
       els.roomMeta.hidden = !inRoom;
       els.roomMeta.textContent = state.isHost
@@ -543,6 +551,8 @@
     (snapshot.members || []).forEach((m) => state.members.set(m.id, m));
     state.files.clear();
     (snapshot.files || []).forEach((f) => state.files.set(f.id, f));
+    state.controlLinked = true;
+    flushPendingOutbound();
     paintStatus();
   }
 
@@ -551,13 +561,53 @@
     if (link?.dc?.readyState === "open") link.dc.send(JSON.stringify(msg));
   }
 
+  function broadcastExcept(exceptId, msg) {
+    if (!state.isHost) return;
+    state.memberLinks.forEach((link, id) => {
+      if (exceptId && id === exceptId) return;
+      if (link?.dc?.readyState === "open") link.dc.send(JSON.stringify(msg));
+    });
+  }
+
+  function memberSend(msg) {
+    if (state.isHost) {
+      state.memberLinks.forEach((link) => {
+        if (link?.dc?.readyState === "open") link.dc.send(JSON.stringify(msg));
+      });
+      return;
+    }
+    if (state.controlDc?.readyState === "open") {
+      state.controlDc.send(JSON.stringify(msg));
+    } else {
+      state.pendingOutbound.push(msg);
+    }
+  }
+
+  function flushPendingOutbound() {
+    if (state.isHost || state.controlDc?.readyState !== "open") return;
+    while (state.pendingOutbound.length) {
+      state.controlDc.send(JSON.stringify(state.pendingOutbound.shift()));
+    }
+  }
+
+  function canUploadFiles() {
+    if (!state.roomId) return false;
+    if (state.isHost) return state.controlLinked;
+    return state.controlLinked && state.controlDc?.readyState === "open";
+  }
+
+  function relayMemberEvent(msg, remoteId, types) {
+    if (!state.isHost || !remoteId || !types.includes(msg.type)) return;
+    broadcastExcept(remoteId, msg);
+  }
+
   function broadcast(msg) {
     if (state.isHost) {
       state.memberLinks.forEach((link) => {
-        if (link.dc?.readyState === "open") link.dc.send(JSON.stringify(msg));
+        if (link?.dc?.readyState === "open") link.dc.send(JSON.stringify(msg));
       });
-    } else if (state.controlDc?.readyState === "open") {
-      state.controlDc.send(JSON.stringify(msg));
+    } else {
+      memberSend(msg);
     }
   }
 
@@ -618,12 +668,17 @@
         paintStatus();
         break;
       case "member-left":
-        if (msg.memberId) state.members.delete(msg.memberId);
+        if (msg.memberId) {
+          state.members.delete(msg.memberId);
+          if (state.isHost) state.memberLinks.delete(msg.memberId);
+        }
         paintStatus();
+        relayMemberEvent(msg, remoteId, ["member-left"]);
         break;
       case "file-add":
         if (msg.file) state.files.set(msg.file.id, msg.file);
         paintFiles();
+        relayMemberEvent(msg, remoteId, ["file-add"]);
         break;
       case "file-remove":
         if (msg.fileId) {
@@ -631,6 +686,7 @@
           state.localFiles.delete(msg.fileId);
         }
         paintFiles();
+        relayMemberEvent(msg, remoteId, ["file-remove"]);
         break;
       case "download-request":
         if (msg.fileId && msg.requesterId === state.peerId) return;
@@ -733,6 +789,7 @@
     state.hostId = state.peerId;
     state.joinedAt = Date.now();
     state.members.set(state.peerId, { id: state.peerId, name: state.peerName, joinedAt: state.joinedAt });
+    state.controlLinked = true;
     await refreshJoinSlot();
     paintStatus();
   }
@@ -753,6 +810,8 @@
     state.isHost = false;
     state.joinedAt = Date.now();
     state.members.set(state.peerId, { id: state.peerId, name: state.peerName, joinedAt: state.joinedAt });
+    state.controlLinked = false;
+    state.pendingOutbound = [];
     paintStatus();
 
     const pc = createPeer();
@@ -761,11 +820,16 @@
     pc.ondatachannel = (ev) => {
       state.controlDc = ev.channel;
       bindControlDc(state.controlDc, inv.hostId);
-      whenDcOpen(state.controlDc, () => sendHello(state.controlDc));
+      whenDcOpen(state.controlDc, () => {
+        sendHello(state.controlDc);
+        paintStatus();
+      });
     };
 
     pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "connected") paintStatus();
       if (pc.connectionState === "failed") setError("加入房间失败，请确认邀请码未过期并重试");
+      if (pc.connectionState === "disconnected") setError("与房主连接中断，请重新加入");
     };
 
     try {
@@ -827,7 +891,11 @@
   }
 
   async function onFilesPicked(fileList) {
-    if (!state.roomId) return;
+    if (!canUploadFiles()) {
+      setError(state.controlLinked ? "连接未就绪，请稍候再选文件" : "仍在连接房主，请稍候再上传");
+      return;
+    }
+    setError("");
     for (const file of [...fileList]) {
       const id = uid(10);
       state.localFiles.set(id, file);
@@ -840,7 +908,7 @@
         addedAt: Date.now(),
       };
       state.files.set(id, meta);
-      broadcast({ type: "file-add", file: meta });
+      memberSend({ type: "file-add", file: meta });
     }
     paintFiles();
   }
@@ -850,7 +918,7 @@
     if (!f || f.ownerId !== state.peerId) return;
     state.files.delete(fileId);
     state.localFiles.delete(fileId);
-    broadcast({ type: "file-remove", fileId });
+    memberSend({ type: "file-remove", fileId });
     paintFiles();
   }
 
@@ -1088,6 +1156,7 @@
     state.memberLinks.forEach((link, id) => {
       if (link.dc?.readyState === "open") sendToMember(id, { type: "host-transfer-done", hostId: state.peerId });
     });
+    state.controlLinked = true;
     paintStatus();
   }
 
@@ -1104,7 +1173,7 @@
         broadcast({ type: "room-closed" });
       }
     } else {
-      broadcast({ type: "member-left", memberId: state.peerId });
+      memberSend({ type: "member-left", memberId: state.peerId });
     }
     cleanupRoom(false);
   }
@@ -1152,6 +1221,8 @@
     state.transferring = false;
     state.pageHiddenWarn = false;
     state.autoJoinBusy = false;
+    state.controlLinked = false;
+    state.pendingOutbound = [];
     if (els.inviteText) els.inviteText.value = "";
     if (els.inviteQr) els.inviteQr.innerHTML = "";
     setProgress(null);
