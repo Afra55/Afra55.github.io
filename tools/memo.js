@@ -443,7 +443,7 @@
     searchQuery: "",
     listLimit: PAGE_SIZE,
     tempDays: TEMP_DEFAULT_DAYS,
-    tempPrompt: null,
+    tempPrompts: new Map(),
     selected: new Set(),
     lastClipSig: "",
     busy: false,
@@ -964,19 +964,24 @@
     if (daysInput && document.activeElement !== daysInput) daysInput.value = String(state.tempDays);
   }
 
-  function hideTempPromptUi() {
-    const el = $("#memo-temp-prompt");
-    if (el) el.hidden = true;
+  function createTempPromptEl(itemId) {
+    const el = document.createElement("div");
+    el.className = "memo-temp-prompt";
+    el.dataset.memoTempPrompt = itemId;
+    el.innerHTML = `<p class="memo-temp-prompt-title">已加入备忘录</p>
+      <p class="hint tight memo-temp-prompt-sub"><span data-memo-temp-prompt-sec>${TEMP_PROMPT_SEC}</span> 秒后将标为临时</p>
+      <button type="button" class="ghost-btn" data-memo-temp-prompt-skip>不标记临时</button>`;
+    return el;
   }
 
-  function finishTempPrompt({ markTemp = false } = {}) {
-    const p = state.tempPrompt;
+  function finishTempPrompt(itemId, { markTemp = false } = {}) {
+    const p = state.tempPrompts.get(itemId);
     if (!p) return;
     if (p.tickTimer) clearInterval(p.tickTimer);
     if (p.doneTimer) clearTimeout(p.doneTimer);
-    state.tempPrompt = null;
-    hideTempPromptUi();
-    const item = state.index.items.find((x) => x.id === p.itemId);
+    state.tempPrompts.delete(itemId);
+    p.el?.remove();
+    const item = state.index.items.find((x) => x.id === itemId);
     if (markTemp && item && !p.cancelled) {
       markItemTemp(item, state.tempDays);
       persistIndex().then(() => {
@@ -987,24 +992,24 @@
   }
 
   function scheduleTempPrompt(itemId) {
-    if (!itemId) return;
-    finishTempPrompt({ markTemp: false });
-    const secEl = $("#memo-temp-prompt-sec");
-    const panel = $("#memo-temp-prompt");
-    if (!panel) return;
+    if (!itemId || state.tempPrompts.has(itemId)) return;
+    const stack = $("#memo-temp-prompt-stack");
+    if (!stack) return;
+    const el = createTempPromptEl(itemId);
+    stack.appendChild(el);
     let remaining = TEMP_PROMPT_SEC;
-    if (secEl) secEl.textContent = String(remaining);
-    panel.hidden = false;
+    const secEl = el.querySelector("[data-memo-temp-prompt-sec]");
     const prompt = {
       itemId,
+      el,
       cancelled: false,
       tickTimer: setInterval(() => {
         remaining -= 1;
         if (secEl) secEl.textContent = String(Math.max(0, remaining));
       }, 1000),
-      doneTimer: setTimeout(() => finishTempPrompt({ markTemp: true }), TEMP_PROMPT_SEC * 1000),
+      doneTimer: setTimeout(() => finishTempPrompt(itemId, { markTemp: true }), TEMP_PROMPT_SEC * 1000),
     };
-    state.tempPrompt = prompt;
+    state.tempPrompts.set(itemId, prompt);
   }
 
   function customTagIds(item) {
@@ -1627,6 +1632,30 @@
     toggle.setAttribute("aria-expanded", open ? "true" : "false");
   }
 
+  function undoPlaceholderHtml(sec, count) {
+    const n = Math.max(0, Number(sec) || 0);
+    const label = count > 1 ? `已删除 ${count} 条` : "已删除 1 条";
+    return `<div class="memo-undo-inline is-urgent" data-memo-undo-inline>
+      <span>${label}，<span class="mono" data-memo-undo-sec>${n}</span> 秒内可撤销</span>
+      <button type="button" class="secondary-btn" data-memo-undo-btn>撤销</button>
+    </div>`;
+  }
+
+  function cardsHtmlWithUndo(slice, sliceStart = 0) {
+    const undo = state.pendingUndo;
+    const undoAt = undo ? undo.anchorVisibleIdx : -1;
+    const sec = undo?.remainingSec ?? 0;
+    const count = undo?.items?.length ?? 0;
+    const parts = [];
+    for (let i = 0; i < slice.length; i++) {
+      const globalIdx = sliceStart + i;
+      if (undoAt === globalIdx) parts.push(undoPlaceholderHtml(sec, count));
+      parts.push(itemCardHtml(slice[i]));
+    }
+    if (undoAt === sliceStart + slice.length) parts.push(undoPlaceholderHtml(sec, count));
+    return parts.join("");
+  }
+
   function itemCardHtml(item) {
     const checked = state.selected.has(item.id) ? "checked" : "";
     const tags = (item.tagIds || [])
@@ -1839,6 +1868,12 @@
       start = Math.max(0, indexAtOffset(prefix, viewTop) - 4);
       end = Math.min(items.length, indexAtOffset(prefix, viewTop + viewH) + 6);
     }
+    if (state.pendingUndo) {
+      const a = state.pendingUndo.anchorVisibleIdx;
+      start = Math.min(start, Math.max(0, a - 3));
+      end = Math.max(end, Math.min(items.length, a + 4));
+      if (a >= items.length) end = Math.max(end, Math.min(items.length, start + 16));
+    }
     if (end - start < 16) end = Math.min(items.length, start + 16);
     const topPad = prefix[start] || 0;
     const bottomPad = Math.max(0, totalH - (prefix[end] || 0));
@@ -1852,9 +1887,7 @@
     revokeTrackedUrls();
     itemList.dataset.virtStart = String(start);
     itemList.dataset.virtEnd = String(end);
-    itemList.innerHTML = `<div class="memo-virt-spacer" data-memo-virt-top style="height:${topPad}px" aria-hidden="true"></div>${slice
-      .map(itemCardHtml)
-      .join("")}<div class="memo-virt-spacer" data-memo-virt-bottom style="height:${bottomPad}px" aria-hidden="true"></div>`;
+    itemList.innerHTML = `<div class="memo-virt-spacer" data-memo-virt-top style="height:${topPad}px" aria-hidden="true"></div>${cardsHtmlWithUndo(slice, start)}<div class="memo-virt-spacer" data-memo-virt-bottom style="height:${bottomPad}px" aria-hidden="true"></div>`;
     renderListMeta(items.length, slice.length);
     hydrateMedia();
     syncSelectAllChrome();
@@ -1893,6 +1926,15 @@
       stopVirtualScroll();
       itemList.dataset.virtStart = "";
       itemList.dataset.virtEnd = "";
+      if (state.pendingUndo) {
+        itemList.innerHTML = undoPlaceholderHtml(state.pendingUndo.remainingSec, state.pendingUndo.items.length);
+        renderListMeta(0, 0);
+        syncSelectAllChrome();
+        if (moreRow) moreRow.hidden = true;
+        if (sentinel) sentinel.hidden = true;
+        if (loadingTip) loadingTip.hidden = true;
+        return;
+      }
       let emptyTip = "还没有条目。先读剪贴板、写一段文字，或添加文件。";
       if (state.searchQuery.trim()) {
         emptyTip = `没有匹配「${state.searchQuery.trim()}」的条目。`;
@@ -1941,7 +1983,7 @@
     const limit = Math.max(PAGE_SIZE, state.listLimit || PAGE_SIZE);
     const page = items.slice(0, limit);
     // 统一按入库顺序平铺：最新在上，不再按文本/图片等分类分组
-    itemList.innerHTML = page.map(itemCardHtml).join("");
+    itemList.innerHTML = cardsHtmlWithUndo(page, 0);
     renderListMeta(items.length, page.length);
     if (moreRow) {
       const hasMore = page.length < items.length;
@@ -2821,19 +2863,43 @@
     }, 3600000);
   }
 
-  function hideUndoBar() {
-    const bar = $("#memo-undo-bar");
-    if (bar) {
-      bar.hidden = true;
-      bar.classList.remove("is-urgent");
+  function stopUndoCountdown(pending) {
+    if (pending?.tickTimer) {
+      clearInterval(pending.tickTimer);
+      pending.tickTimer = 0;
     }
+  }
+
+  function syncUndoCountdown() {
+    const sec = state.pendingUndo?.remainingSec;
+    if (sec == null) return;
+    $$("[data-memo-undo-sec]").forEach((el) => {
+      el.textContent = String(Math.max(0, sec));
+    });
+  }
+
+  function startUndoCountdown() {
+    const pending = state.pendingUndo;
+    if (!pending) return;
+    pending.remainingSec = Math.round(UNDO_MS / 1000);
+    stopUndoCountdown(pending);
+    pending.tickTimer = setInterval(() => {
+      if (!state.pendingUndo) return;
+      state.pendingUndo.remainingSec -= 1;
+      syncUndoCountdown();
+    }, 1000);
+  }
+
+  function hideUndoBar() {
+    stopUndoCountdown(state.pendingUndo);
   }
 
   async function commitPendingUndo() {
     const pending = state.pendingUndo;
     state.pendingUndo = null;
     if (pending?.timer) clearTimeout(pending.timer);
-    hideUndoBar();
+    stopUndoCountdown(pending);
+    renderItems();
     const items = pending?.items || [];
     for (const it of items) {
       try {
@@ -2848,8 +2914,8 @@
     const pending = state.pendingUndo;
     if (!pending?.items?.length) return;
     if (pending.timer) clearTimeout(pending.timer);
+    stopUndoCountdown(pending);
     state.pendingUndo = null;
-    hideUndoBar();
     // 关页时尽量提交硬删除，避免留下无索引 blob
     pending.items.forEach((it) => {
       removeBlob(it).catch(() => {});
@@ -2862,8 +2928,8 @@
     const pending = state.pendingUndo;
     if (!pending?.items?.length) return;
     if (pending.timer) clearTimeout(pending.timer);
+    stopUndoCountdown(pending);
     state.pendingUndo = null;
-    hideUndoBar();
     const restored = pending.items;
     state.index.items = [...restored, ...state.index.items];
     restored.forEach(rememberHash);
@@ -2871,17 +2937,6 @@
     await persistIndex({ immediate: true });
     renderAll();
     toast(restored.length > 1 ? `已撤销删除 ${restored.length} 条` : "已撤销删除");
-  }
-
-  function showUndoBar(count) {
-    const bar = $("#memo-undo-bar");
-    const text = $("#memo-undo-text");
-    const sec = Math.round(UNDO_MS / 1000);
-    if (text) text.textContent = count > 1 ? `已删除 ${count} 条，${sec} 秒内可撤销` : `已删除 1 条，${sec} 秒内可撤销`;
-    if (bar) {
-      bar.hidden = false;
-      bar.classList.add("is-urgent");
-    }
   }
 
   function batchDeleteConfirmMessage(ids) {
@@ -2988,6 +3043,9 @@
     if (confirm) {
       if (!window.confirm(batchDeleteConfirmMessage(list))) return;
     }
+    const vis = visibleItems();
+    const visIdx = list.map((id) => vis.findIndex((x) => x.id === id)).filter((i) => i >= 0);
+    const anchorVisibleIdx = visIdx.length ? Math.min(...visIdx) : 0;
     await commitPendingUndo();
     const removed = [];
     for (const id of list) {
@@ -3001,14 +3059,20 @@
     removed.forEach(forgetHash);
     reindexOrders();
     await persistIndex({ immediate: true });
-    renderAll();
+    if (anchorVisibleIdx >= state.listLimit) {
+      state.listLimit = anchorVisibleIdx + PAGE_SIZE;
+    }
     state.pendingUndo = {
       items: removed,
+      anchorVisibleIdx,
+      remainingSec: Math.round(UNDO_MS / 1000),
       timer: setTimeout(() => {
         commitPendingUndo().catch(() => {});
       }, UNDO_MS),
+      tickTimer: 0,
     };
-    showUndoBar(removed.length);
+    startUndoCountdown();
+    renderAll();
   }
 
   function canClipboardCopy(item) {
@@ -4291,6 +4355,10 @@
   itemList?.addEventListener("click", async (e) => {
     const t = e.target;
     hideMemoCtx();
+    if (t.closest?.("[data-memo-undo-btn]")) {
+      undoDelete().catch((err) => setError(memoError, err.message || String(err)));
+      return;
+    }
     const emptyAct = t.closest?.("[data-memo-empty]")?.dataset?.memoEmpty;
     if (emptyAct === "clip") {
       readClipboard().catch((err) => setError(memoError, err.message || String(err)));
@@ -4517,9 +4585,15 @@
     saveTempDays(e.target.value);
     toast(`临时条目默认保留 ${state.tempDays} 天`);
   });
-  $("#memo-temp-prompt-skip")?.addEventListener("click", () => {
-    if (state.tempPrompt) state.tempPrompt.cancelled = true;
-    finishTempPrompt({ markTemp: false });
+  $("#memo-temp-prompt-stack")?.addEventListener("click", (e) => {
+    const btn = e.target.closest?.("[data-memo-temp-prompt-skip]");
+    if (!btn) return;
+    const panel = btn.closest("[data-memo-temp-prompt]");
+    const itemId = panel?.dataset?.memoTempPrompt;
+    if (!itemId) return;
+    const p = state.tempPrompts.get(itemId);
+    if (p) p.cancelled = true;
+    finishTempPrompt(itemId, { markTemp: false });
     toast("未标记为临时");
   });
   $("#memo-progress-cancel")?.addEventListener("click", () => {
@@ -4527,9 +4601,6 @@
       state.saveAbort?.abort?.();
     } catch (_) {}
     toast("正在取消…");
-  });
-  $("#memo-undo-btn")?.addEventListener("click", () => {
-    undoDelete().catch((err) => setError(memoError, err.message || String(err)));
   });
   $("#memo-tags-toggle")?.addEventListener("click", () => {
     const aside = $("#memo-tags-aside");
@@ -4899,7 +4970,7 @@
     },
     getTempDays: () => state.tempDays,
     scheduleTempPrompt: (id) => scheduleTempPrompt(id),
-    finishTempPrompt: (opts) => finishTempPrompt(opts || {}),
+    finishTempPrompt: (id, opts) => finishTempPrompt(id, opts),
   };
 
   boot().catch((err) => setError(memoError, err.message || String(err)));

@@ -201,14 +201,14 @@ async function main() {
       mobilePasteHint: Boolean(document.querySelector(".memo-hint-narrow")),
       clearFilters: Boolean(document.getElementById("memo-clear-filters")),
       friendlySearch: /标签名/.test(document.getElementById("memo-search")?.placeholder || ""),
-      hasUndoBar: Boolean(document.getElementById("memo-undo-bar")),
+      hasUndoBar: Boolean(document.getElementById("memo-list")),
       hasProgressCancel: Boolean(document.getElementById("memo-progress-cancel")),
       hasTagsToggle: Boolean(document.getElementById("memo-tags-toggle")),
       hasTagsPanel: Boolean(document.getElementById("memo-tags-panel")),
       batchClear: Boolean(document.getElementById("memo-batch-clear")),
       tempZone: Boolean(document.getElementById("memo-temp-zone")),
       tempFilter: Boolean(document.getElementById("memo-temp-filter")),
-      tempPrompt: Boolean(document.getElementById("memo-temp-prompt")),
+      tempPrompt: Boolean(document.getElementById("memo-temp-prompt-stack")),
       pageDropHint: /任意区域/.test(document.querySelector("#memo-drop .hint")?.textContent || ""),
     };
 
@@ -232,6 +232,16 @@ async function main() {
       await window.DevToolsMemo.clearItemTemp(anyItem.id);
       await sleep(80);
       out.tempUx.cleared = !window.DevToolsMemo.isTempItem((window.DevToolsMemo.getIndex().items || []).find((x) => x.id === anyItem.id));
+    }
+    if (typeof window.DevToolsMemo.scheduleTempPrompt === "function") {
+      const ids = (window.DevToolsMemo.getIndex().items || []).slice(0, 2).map((x) => x.id);
+      ids.forEach((id) => window.DevToolsMemo.scheduleTempPrompt(id));
+      await sleep(40);
+      out.tempUx.stackCount = document.querySelectorAll("#memo-temp-prompt-stack .memo-temp-prompt").length;
+      out.tempUx.stackMulti = out.tempUx.stackCount >= 2;
+      document.querySelectorAll("[data-memo-temp-prompt-skip]").forEach((btn) => btn.click());
+      await sleep(40);
+      out.tempUx.stackCleared = document.querySelectorAll("#memo-temp-prompt-stack .memo-temp-prompt").length === 0;
     }
 
     // inline text edit dialog
@@ -635,7 +645,7 @@ async function main() {
     const hashed = (window.DevToolsMemo.getIndex().items || []).filter((it) => it.contentHash);
     out.hardening = {
       contentHashCount: hashed.length,
-      hasUndoBar: Boolean(document.getElementById("memo-undo-bar")),
+      hasUndoBar: Boolean(document.getElementById("memo-list")),
       hasProgressCancel: Boolean(document.getElementById("memo-progress-cancel")),
       hasTagsToggle: Boolean(document.getElementById("memo-tags-toggle")),
     };
@@ -648,12 +658,13 @@ async function main() {
       document.querySelector(`[data-memo-del="${undoTarget.id}"]`)?.click();
       await sleep(120);
       out.hardening.deleted = (window.DevToolsMemo.getIndex().items || []).length === before - 1;
-      out.hardening.undoVisible = !document.getElementById("memo-undo-bar")?.hidden;
-      document.getElementById("memo-undo-btn")?.click();
+      out.hardening.undoVisible = Boolean(document.querySelector("[data-memo-undo-inline]"));
+      out.hardening.undoCountdown = Number(document.querySelector("[data-memo-undo-sec]")?.textContent || 0);
+      document.querySelector("[data-memo-undo-btn]")?.click();
       await sleep(200);
       window.confirm = prevConfirm;
       out.hardening.undone = (window.DevToolsMemo.getIndex().items || []).some((it) => it.id === undoTarget.id);
-      out.hardening.undoHidden = Boolean(document.getElementById("memo-undo-bar")?.hidden);
+      out.hardening.undoHidden = !document.querySelector("[data-memo-undo-inline]");
     }
 
     // non-image/text: primary action should be download, not copy
@@ -1032,7 +1043,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memoclip3/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memoundo1/.test(s.src)),
     };
 
     out.pwa = {
@@ -1337,7 +1348,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/memoclip3/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memoundo1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1481,7 +1492,7 @@ async function main() {
     failed.push("memo hardening UI missing (undo/cancel/tags drawer)");
   }
   if ((result.hardening?.contentHashCount || 0) < 1) failed.push("contentHash missing on new items");
-  if (!result.hardening?.deleted || !result.hardening?.undoVisible || !result.hardening?.undone || !result.hardening?.undoHidden) {
+  if (!result.hardening?.deleted || !result.hardening?.undoVisible || !result.hardening?.undoCountdown || result.hardening?.undoCountdown < 10 || !result.hardening?.undone || !result.hardening?.undoHidden) {
     failed.push("delete undo flow failed");
   }
   if (!result.takeout?.hasFile || !result.takeout?.primaryDownload || !result.takeout?.noPrimaryCopy) {
@@ -1582,8 +1593,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/memoclip3/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memoclip3");
+  if (!/memoundo1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memoundo1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
@@ -1594,7 +1605,7 @@ async function main() {
   if (!result.dragSelect?.cardNotDraggable || (result.dragSelect?.canReorder && !result.dragSelect?.hasDragHandle)) {
     failed.push("memo cards should use drag handle instead of whole-card drag");
   }
-  if (!result.tempUx?.api || !result.tempUx?.daysDefault || !result.tempUx?.marked || !result.tempUx?.badge || !result.tempUx?.cleared) {
+  if (!result.tempUx?.api || !result.tempUx?.daysDefault || !result.tempUx?.marked || !result.tempUx?.badge || !result.tempUx?.cleared || !result.tempUx?.stackMulti || !result.tempUx?.stackCleared) {
     failed.push("memo temp mark API/UI failed");
   }
   if (!result.textEdit?.widthMax || !/56rem|768px|min\(96vw/.test(result.textEdit.widthMax)) {
