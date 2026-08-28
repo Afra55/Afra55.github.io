@@ -5553,6 +5553,105 @@ button.adb-device-body.linkish {
   margin-top: 0.75rem;
 }
 
+.vplay-stage {
+  margin-top: 0.85rem;
+}
+
+.vplay-stage:fullscreen {
+  padding: 0.75rem;
+  background: var(--bg-0);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.vplay-zoom-wrap {
+  position: relative;
+  width: 100%;
+  min-height: min(56vh, 480px);
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: none;
+  cursor: grab;
+  user-select: none;
+  border-radius: 12px;
+  background: #000;
+}
+
+.vplay-stage:fullscreen .vplay-zoom-wrap {
+  flex: 1;
+  min-height: 0;
+  border-radius: 8px;
+}
+
+.vplay-zoom-wrap.is-panning {
+  cursor: grabbing;
+}
+
+#vplay-video {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: none;
+  max-height: none;
+  width: auto;
+  height: auto;
+  transform-origin: 0 0;
+  pointer-events: none;
+  will-change: transform;
+  z-index: 1;
+  background: #000;
+}
+
+.vplay-zoom-hud {
+  position: absolute;
+  right: 0.55rem;
+  top: 0.55rem;
+  z-index: 8;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.28rem;
+  max-width: calc(100% - 1rem);
+  padding: 0.22rem 0.28rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  background: color-mix(in srgb, var(--panel-strong) 82%, transparent);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.vplay-zoom-btn {
+  min-height: 1.85rem;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.92rem;
+}
+
+.vplay-zoom-pct {
+  min-width: 3.2rem;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--ink);
+}
+
+.vplay-transport {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.65rem;
+}
+
+.vplay-scrub {
+  flex: 1;
+  min-width: 0;
+}
+
+.vplay-clock {
+  white-space: nowrap;
+  font-size: 0.88rem;
+}
+
 .memo-tag-row {
   display: flex;
   align-items: center;

@@ -138,6 +138,7 @@
           <button type="button" class="media-tab is-active" role="tab" id="media-tab-gifmaker" data-media-tab="gifmaker" aria-controls="gifmaker" aria-selected="true">GIF</button>
           <button type="button" class="media-tab" role="tab" id="media-tab-vsplit" data-media-tab="vsplit" aria-controls="vsplit" aria-selected="false" tabindex="-1">视频切分</button>
           <button type="button" class="media-tab" role="tab" id="media-tab-vtrim" data-media-tab="vtrim" aria-controls="vtrim" aria-selected="false" tabindex="-1">视频修剪</button>
+          <button type="button" class="media-tab" role="tab" id="media-tab-vplay" data-media-tab="vplay" aria-controls="vplay" aria-selected="false" tabindex="-1">视频播放</button>
           <button type="button" class="media-tab" role="tab" id="media-tab-audio" data-media-tab="audio" aria-controls="audio" aria-selected="false" tabindex="-1">音频处理</button>
         </div>
       </div>
@@ -2193,6 +2194,44 @@ hello@world.org</textarea>
     </section>
 
 
+<section id="vplay" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-vplay">
+      <div class="panel-head">
+        <h1>视频播放</h1>
+        <p>本地选视频后预览：<strong>滚轮缩放</strong>、<strong>拖拽移动</strong>、<strong>双击暂停/播放</strong>。双指可捏合缩放。仅本机读取，不会上传。</p>
+      </div>
+      <div class="panel-body">
+        <div class="btn-row tool-actions">
+          <label class="file-btn" for="vplay-file">选择视频</label>
+          <input id="vplay-file" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" hidden />
+          <button type="button" class="ghost-btn" id="vplay-clear">清空</button>
+        </div>
+        <p class="hint" id="vplay-meta">支持 MP4 / WebM / MOV。仅本机读取，不会上传。滚轮缩放 · 拖拽移动 · 双击暂停/播放。</p>
+        <div class="vplay-stage" id="vplay-stage" hidden>
+          <div class="vplay-zoom-wrap" id="vplay-zoom-wrap" title="滚轮缩放，拖拽移动，双击暂停/播放">
+            <video id="vplay-video" playsinline preload="metadata"></video>
+            <div class="vplay-zoom-hud">
+              <button type="button" class="ghost-btn vplay-zoom-btn" id="vplay-play" disabled>播放</button>
+              <button type="button" class="ghost-btn vplay-zoom-btn" id="vplay-mute" disabled aria-pressed="true">开声音</button>
+              <button type="button" class="ghost-btn vplay-zoom-btn" id="vplay-zoom-out" disabled title="缩小">－</button>
+              <span class="mono vplay-zoom-pct" id="vplay-zoom-pct">100%</span>
+              <button type="button" class="ghost-btn vplay-zoom-btn" id="vplay-zoom-in" disabled title="放大">＋</button>
+              <button type="button" class="ghost-btn vplay-zoom-btn" id="vplay-zoom-reset" disabled title="还原">还原</button>
+              <button type="button" class="ghost-btn vplay-zoom-btn" id="vplay-zoom-rotate" disabled title="旋转 90°">↻</button>
+              <button type="button" class="ghost-btn vplay-zoom-btn" id="vplay-fs" disabled title="全屏">全屏</button>
+            </div>
+          </div>
+          <div class="vplay-transport">
+            <label class="visually-hidden" for="vplay-scrub">播放进度</label>
+            <input id="vplay-scrub" class="vsplit-scrub vplay-scrub" type="range" min="0" max="1000" value="0" step="1" disabled />
+            <span class="mono vplay-clock" id="vplay-clock">0:00 / 0:00</span>
+          </div>
+          <p class="hint tight">滚轮缩放 · 按住拖拽 · 双击播放/暂停 · 双指捏合缩放</p>
+        </div>
+        <p class="error" id="vplay-error" hidden></p>
+      </div>
+    </section>
+
+
 <section id="audio" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-audio">
       <div class="panel-head">
         <h1>音频处理</h1>
@@ -3689,11 +3728,12 @@ adb devices</pre>
   <script src="./theme.js?v=20260817memotext1"></script>
   <script src="./temp.js?v=20260817memotext1"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260817memotext1"></script>
-  <script src="./about.js?v=20260817memotext1" defer></script>
-  <script src="./extra.js?v=20260817memotext1" defer></script>
-  <script src="./vtrim.js?v=20260817memotext1" defer></script>
-  <script src="./audio.js?v=20260817memotext1" defer></script>
+  <script src="./app.js?v=20260817vplay1"></script>
+  <script src="./about.js?v=20260817vplay1" defer></script>
+  <script src="./extra.js?v=20260817vplay1" defer></script>
+  <script src="./vtrim.js?v=20260817vplay1" defer></script>
+  <script src="./vplay.js?v=20260817vplay1" defer></script>
+  <script src="./audio.js?v=20260817vplay1" defer></script>
   <script src="./ffbridge.js?v=20260817memotext1" defer></script>
   <script src="./setup.js?v=20260817memotext1" defer></script>
   <script src="./imgkit.js?v=20260810l" defer></script>
