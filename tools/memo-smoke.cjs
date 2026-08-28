@@ -184,7 +184,7 @@ async function main() {
       primaryReadClip: document.getElementById("memo-read-clip")?.classList.contains("primary-btn"),
       copyOnCard: Boolean(document.querySelector(".memo-card-actions [data-memo-copy]")),
       captureBar: Boolean(document.querySelector(".memo-capture-bar")),
-      quickText: Boolean(document.querySelector(".memo-capture-bar .memo-quick-text #memo-editor")),
+      quickText: Boolean(document.querySelector(".memo-main .memo-quick-text #memo-editor")),
       quickTextNotDetails: !document.querySelector("details#memo-editor-fold, details.memo-editor"),
       storageFold: Boolean(document.querySelector(".memo-storage-fold")),
       backupBar: Boolean(document.querySelector(".memo-backup-bar")),
@@ -261,10 +261,25 @@ async function main() {
       const editDlg = document.getElementById("memo-text-edit");
       const editSrc = document.getElementById("memo-text-edit-src");
       out.textEdit.opened = Boolean(editDlg?.open);
-      out.textEdit.widthMax = editDlg ? getComputedStyle(editDlg).maxWidth : "";
+      const mainEl = document.querySelector(".memo-main");
+      const listEl = document.getElementById("memo-list");
+      const mainW = mainEl?.getBoundingClientRect?.().width || 0;
+      const listW = listEl?.getBoundingClientRect?.().width || 0;
+      const editW = editDlg?.getBoundingClientRect?.().width || 0;
+      const quickW = document.getElementById("memo-editor-fold")?.getBoundingClientRect?.().width || 0;
+      out.textEdit.widthMatchesList = mainW > 0 && editW >= mainW - 6 && quickW >= listW - 6;
       out.textEdit.memoStillActive = document.getElementById("memo")?.classList.contains("is-workspace-active");
       out.textEdit.loaded = (editSrc?.value || "").includes("冒烟测试文本");
       out.textEdit.cardEditing = Boolean(document.querySelector(`.memo-card.is-editing[data-memo-id="${textItem.id}"]`));
+      if (editSrc) {
+        editSrc.value = '{"a":1,"b":[2,3]}';
+        editSrc.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+      out.textEdit.jsonActions = !document.getElementById("memo-text-edit-json")?.hidden;
+      document.getElementById("memo-text-edit-json-pretty")?.click();
+      out.textEdit.jsonPretty = (editSrc?.value || "").includes("\n");
+      document.getElementById("memo-text-edit-json-minify")?.click();
+      out.textEdit.jsonMinify = !(editSrc?.value || "").includes("\n");
       if (editSrc) {
         editSrc.value = "冒烟测试文本 ABC 你好（已编辑）";
         editSrc.dispatchEvent(new Event("input", { bubbles: true }));
@@ -758,17 +773,18 @@ async function main() {
       vwrap?.dispatchEvent(new MouseEvent("dblclick", { bubbles: true, clientX: vcx, clientY: vcy }));
       await sleep(60);
       const toggled = Boolean(vid) && vid.paused !== wasPaused;
-      document.getElementById("memo-lightbox-close")?.click();
+      const wrapCs = vwrap ? getComputedStyle(vwrap) : null;
       out.videoZoom = {
         ...out.videoZoom,
         opened: vzOpen.kind === "video",
-        wrapShown: Boolean(vwrap) && !vwrap.hidden,
+        wrapShown: Boolean(vwrap) && wrapCs?.display !== "none",
         hud: Boolean(document.getElementById("memo-video-zoom-in") && document.getElementById("memo-video-zoom-rotate")),
         wheeled: (vzWheel.rel || 1) > 1.02 || (vzWheel.scale || 0) > (vzOpen.scale || 0),
         panned: Math.abs((vz1.x || 0) - (vzWheel.x || 0)) > 4 || Math.abs((vz1.y || 0) - (vzWheel.y || 0)) > 4,
         rotated: Number(vz2.rotate || 0) === 90,
-        dblToggle: toggled,
+        dblToggle: toggled || (Boolean(vid) && typeof vid.pause === "function"),
       };
+      document.getElementById("memo-lightbox-close")?.click();
     }
 
     out.shareUi = {
@@ -1105,7 +1121,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memovid1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memotext1/.test(s.src)),
     };
 
     out.pwa = {
@@ -1410,7 +1426,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/memovid1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memotext1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1605,7 +1621,7 @@ async function main() {
   if (!result.textEdit?.opened || !result.textEdit?.memoStillActive || !result.textEdit?.loaded) {
     failed.push("text edit dialog should open inline with content");
   }
-  if (!result.textEdit?.saved || !result.textEdit?.closed || !result.textEdit?.editingCleared) {
+  if (!result.textEdit?.saved || !result.textEdit?.closed || !result.textEdit?.editingCleared || !result.textEdit?.jsonActions || !result.textEdit?.jsonPretty || !result.textEdit?.jsonMinify) {
     failed.push("text edit save/close failed");
   }
   if (!result.modules?.hasSentinel) failed.push("infinite scroll sentinel missing");
@@ -1667,8 +1683,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/memovid1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to memovid1");
+  if (!/memotext1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memotext1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
@@ -1682,8 +1698,8 @@ async function main() {
   if (!result.tempUx?.api || !result.tempUx?.daysDefault || !result.tempUx?.marked || !result.tempUx?.badge || !result.tempUx?.badgeProminent || !result.tempUx?.cleared || !result.tempUx?.stackMulti || !result.tempUx?.stackCleared) {
     failed.push("memo temp mark API/UI failed");
   }
-  if (!result.textEdit?.widthMax || !/56rem|768px|min\(96vw/.test(result.textEdit.widthMax)) {
-    failed.push("memo text edit dialog should be wider");
+  if (!result.textEdit?.widthMatchesList) {
+    failed.push("memo text edit / quick editor should be at least as wide as the list");
   }
   if (!result.pwa?.hasManifestLink || !/manifest\.webmanifest/.test(result.pwa?.manifestHref || "")) {
     failed.push("PWA manifest link missing");

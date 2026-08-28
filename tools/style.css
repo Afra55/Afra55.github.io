@@ -5671,10 +5671,12 @@ button.adb-device-body.linkish {
 
 .memo-quick-text {
   display: grid;
-  gap: 0.35rem;
-  margin-top: 0.65rem;
-  padding-top: 0.65rem;
-  border-top: 1px dashed color-mix(in srgb, var(--line) 80%, transparent);
+  gap: 0.45rem;
+  width: 100%;
+  padding: 0.85rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
 }
 
 .memo-quick-text-lab {
@@ -5684,8 +5686,15 @@ button.adb-device-body.linkish {
 }
 
 .memo-quick-text-area {
-  min-height: 4.5rem;
+  width: 100%;
+  min-height: 7.5rem;
   resize: vertical;
+  box-sizing: border-box;
+}
+
+.memo-json-actions {
+  flex-wrap: wrap;
+  gap: 0.35rem;
 }
 
 #memo-filter-hint {
@@ -5954,14 +5963,25 @@ button.adb-device-body.linkish {
 }
 
 .memo-text-edit-dlg {
-  max-width: min(96vw, 56rem) !important;
-  width: min(96vw, 56rem);
+  width: 100%;
+  max-width: 100% !important;
+  margin: 0 0 0.75rem;
+  box-sizing: border-box;
+}
+
+.memo-text-edit-dlg:not([open]) {
+  display: none;
+}
+
+.memo-text-edit-dlg[open] {
+  display: block;
 }
 
 .memo-text-edit-dlg .area {
-  min-height: 14rem;
+  min-height: 18rem;
   width: 100%;
   box-sizing: border-box;
+  resize: vertical;
 }
 
 .memo-note-edit-dlg {
