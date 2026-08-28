@@ -785,11 +785,12 @@
   const TOOL_GROUPS = [
     { id: "time", label: "时间", tools: ["timestamp", "timediff", "cron"] },
     { id: "color", label: "颜色", tools: ["ahex", "color", "eyedropper"] },
-    { id: "encode", label: "编码与安全", tools: ["base64", "imgb64", "url", "hash", "password", "uuid"] },
+    { id: "encode", label: "编码与安全", tools: ["base64", "imgb64", "url", "hash", "password", "uuid", "qrcode"] },
+    { id: "data", label: "数据格式", tools: ["json", "yaml", "query", "sharecard"] },
     {
-      id: "data",
-      label: "数据与文本",
-      tools: ["json", "yaml", "sharecard", "query", "text", "caseconv", "regex", "diff", "qrcode", "markdown", "memo"],
+      id: "text",
+      label: "文本工具",
+      tools: ["text", "caseconv", "regex", "diff", "markdown", "memo"],
     },
     { id: "blackbox", label: "黑盒", tools: ["vbb"] },
     { id: "play", label: "播放", tools: ["vplay"] },
@@ -826,7 +827,7 @@
     text: "文本统计、去重、大小写等处理。",
     caseconv: "驼峰 / snake / kebab 等命名风格转换。",
     regex: "正则匹配测试与分组查看。",
-    diff: "两段文本差异对比。",
+    diff: "两段文本并排/合并比对，高亮增删改；可忽略空白、隐藏相同行。",
     qrcode: "生成与识别二维码。",
     markdown: "Markdown 预览。",
     memo: "本地备忘录：一键读剪贴板入库、搜索/点选筛选；文本图片可复制，其它类型可下载，手机可单条分享（文转图/OCR 见独立工具）。",
@@ -868,7 +869,7 @@
     text: { name: "文本", aliases: ["统计", "去重"] },
     caseconv: { name: "命名转换", aliases: ["驼峰", "snake", "case"] },
     regex: { name: "正则", aliases: ["regexp", "正则表达式"] },
-    diff: { name: "Diff", aliases: ["对比", "差异"] },
+    diff: { name: "文本比对", aliases: ["对比", "差异", "diff", "compare", "比对"] },
     qrcode: { name: "二维码", aliases: ["qr", "扫码"] },
     gifmaker: { name: "GIF / 动图", aliases: ["gif", "动图", "webp", "ffmpeg"] },
     vsplit: { name: "视频切分", aliases: ["切分", "vsplit", "视频"] },
@@ -1339,27 +1340,6 @@
     if (!recentList.children.length) {
       recentWrap.hidden = true;
     }
-    bindRecentWheel();
-  }
-
-  function bindRecentWheel() {
-    if (!recentList || recentList.dataset.wheelBound === "1") return;
-    recentList.dataset.wheelBound = "1";
-    recentList.addEventListener(
-      "wheel",
-      (e) => {
-        if (recentList.scrollWidth <= recentList.clientWidth + 1) return;
-        const dx = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
-        if (!dx) return;
-        const max = recentList.scrollWidth - recentList.clientWidth;
-        const next = Math.max(0, Math.min(max, recentList.scrollLeft + dx));
-        if (next === recentList.scrollLeft) return;
-        e.preventDefault();
-        e.stopPropagation();
-        recentList.scrollLeft = next;
-      },
-      { passive: false }
-    );
   }
 
   function drawerFocusables() {

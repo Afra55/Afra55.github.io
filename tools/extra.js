@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-navlast1";
+  const TOOLS_VERSION = "2026.08.17-allin1";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -1347,7 +1347,7 @@
     console.error("coord convert init failed", err);
   }
 
-  // ---- Diff ----
+  // ---- 文本比对 ----
   function escapeHtml(str) {
     return String(str)
       .replace(/&/g, "&amp;")
@@ -1357,16 +1357,142 @@
       .replace(/'/g, "&#39;");
   }
 
-  $("#diff-run")?.addEventListener("click", () => {
-    const rows = P.diffLines($("#diff-a").value, $("#diff-b").value);
-    $("#diff-out").innerHTML = rows
+  function diffOptsFromUi() {
+    return {
+      ignoreWhitespace: Boolean($("#diff-ignore-ws")?.checked),
+      trimTrailing: Boolean($("#diff-trim-trail")?.checked),
+    };
+  }
+
+  function renderDiffLine(text, kind) {
+    if (kind === "empty" || !text) return "&nbsp;";
+    const safe = escapeHtml(text).replace(/ /g, "&nbsp;");
+    if (kind === "same") return safe;
+    return `<span class="diff-line-${kind}">${safe}</span>`;
+  }
+
+  function runTextDiff() {
+    const aEl = $("#diff-a");
+    const bEl = $("#diff-b");
+    const meta = $("#diff-meta");
+    const splitOut = $("#diff-split-out");
+    const unifiedOut = $("#diff-out");
+    const splitWrap = $("#diff-split-wrap");
+    if (!aEl || !bEl || !splitOut || !unifiedOut) return;
+
+    const opts = diffOptsFromUi();
+    const hideSame = Boolean($("#diff-hide-same")?.checked);
+    const mode = $("#diff-mode-unified")?.classList.contains("is-active") ? "unified" : "split";
+    const aText = aEl.value;
+    const bText = bEl.value;
+
+    if (!aText && !bText) {
+      if (meta) meta.textContent = "粘贴或输入两段文本后开始比对";
+      splitOut.innerHTML = "";
+      unifiedOut.innerHTML = "";
+      return;
+    }
+
+    const rows = P.diffLines(aText, bText, opts);
+    const stats = P.diffStats(rows);
+    const changed = stats.add + stats.del;
+    const identical = changed === 0 && stats.same > 0;
+    if (meta) {
+      meta.textContent = identical
+        ? `完全相同 · ${stats.same} 行`
+        : `相同 ${stats.same} · 删除 ${stats.del} · 新增 ${stats.add}${changed ? "" : ""}`;
+    }
+
+    const showRows = hideSame ? rows.filter((r) => r.type !== "same") : rows;
+
+    if (mode === "unified") {
+      splitWrap.hidden = true;
+      unifiedOut.hidden = false;
+      unifiedOut.innerHTML = showRows
+        .map((row) => {
+          const cls = row.type === "add" ? "diff-add" : row.type === "del" ? "diff-del" : "diff-same";
+          const mark = row.type === "add" ? "+" : row.type === "del" ? "-" : " ";
+          return `<div class="${cls}"><span class="diff-mark">${mark}</span>${escapeHtml(row.text)}</div>`;
+        })
+        .join("");
+      return;
+    }
+
+    splitWrap.hidden = false;
+    unifiedOut.hidden = true;
+    const aligned = P.diffAlign(aText, bText, opts);
+    const alignShow = hideSame ? aligned.filter((r) => r.kind !== "same") : aligned;
+    splitOut.innerHTML = alignShow
       .map((row) => {
-        const cls = row.type === "add" ? "diff-add" : row.type === "del" ? "diff-del" : "diff-same";
-        const mark = row.type === "add" ? "+" : row.type === "del" ? "-" : " ";
-        return `<div class="${cls}"><span class="diff-mark">${mark}</span>${escapeHtml(row.text)}</div>`;
+        const lk = row.kind;
+        const leftNum = row.left.num != null ? String(row.left.num) : "";
+        const rightNum = row.right.num != null ? String(row.right.num) : "";
+        const leftHtml = renderDiffLine(row.left.text, lk === "add" ? "empty" : lk);
+        const rightHtml = renderDiffLine(row.right.text, lk === "del" ? "empty" : lk);
+        return `<div class="diff-split-row diff-row-${lk}"><div class="diff-split-cell diff-side-left"><span class="diff-ln">${leftNum}</span><span class="diff-txt">${leftHtml}</span></div><div class="diff-split-cell diff-side-right"><span class="diff-ln">${rightNum}</span><span class="diff-txt">${rightHtml}</span></div></div>`;
       })
       .join("");
+  }
+
+  let diffTimer = 0;
+  function scheduleTextDiff() {
+    clearTimeout(diffTimer);
+    diffTimer = setTimeout(runTextDiff, 120);
+  }
+
+  function setDiffMode(mode) {
+    const splitBtn = $("#diff-mode-split");
+    const unifiedBtn = $("#diff-mode-unified");
+    const onSplit = mode !== "unified";
+    splitBtn?.classList.toggle("is-active", onSplit);
+    unifiedBtn?.classList.toggle("is-active", !onSplit);
+    splitBtn?.setAttribute("aria-selected", onSplit ? "true" : "false");
+    unifiedBtn?.setAttribute("aria-selected", onSplit ? "false" : "true");
+    runTextDiff();
+  }
+
+  $("#diff-run")?.addEventListener("click", runTextDiff);
+  ["diff-a", "diff-b"].forEach((id) => {
+    $("#" + id)?.addEventListener("input", () => {
+      if ($("#diff-auto")?.checked) scheduleTextDiff();
+    });
   });
+  ["diff-ignore-ws", "diff-trim-trail", "diff-hide-same", "diff-auto"].forEach((id) => {
+    $("#" + id)?.addEventListener("change", runTextDiff);
+  });
+  $("#diff-mode-split")?.addEventListener("click", () => setDiffMode("split"));
+  $("#diff-mode-unified")?.addEventListener("click", () => setDiffMode("unified"));
+  $("#diff-swap")?.addEventListener("click", () => {
+    const a = $("#diff-a");
+    const b = $("#diff-b");
+    if (!a || !b) return;
+    const t = a.value;
+    a.value = b.value;
+    b.value = t;
+    runTextDiff();
+  });
+  $("#diff-clear")?.addEventListener("click", () => {
+    const a = $("#diff-a");
+    const b = $("#diff-b");
+    if (a) a.value = "";
+    if (b) b.value = "";
+    runTextDiff();
+  });
+  async function diffPaste(side) {
+    const el = side === "a" ? $("#diff-a") : $("#diff-b");
+    if (!el) return;
+    try {
+      const t = await navigator.clipboard.readText();
+      el.value = t;
+      runTextDiff();
+      toast("已粘贴");
+    } catch (_) {
+      toast("无法读取剪贴板");
+    }
+  }
+  $("#diff-paste-a")?.addEventListener("click", () => diffPaste("a"));
+  $("#diff-paste-b")?.addEventListener("click", () => diffPaste("b"));
+  runTextDiff();
 
   // ---- YAML ----
   $("#yaml-to-json")?.addEventListener("click", () => {

@@ -1158,7 +1158,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navlast1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817allin1/.test(s.src)),
     };
 
     out.pwa = {
@@ -1234,6 +1234,13 @@ async function main() {
       }
       window.DevToolsNav.setCompact(false);
       out.navCompact.restored = !document.getElementById("nav-bar")?.classList.contains("is-compact");
+      const sortTitle = document.querySelector("#tool-nav .nav-group-title.is-sortable");
+      const toolNav = document.getElementById("tool-nav");
+      out.navCompact.titlePanY = sortTitle ? getComputedStyle(sortTitle).touchAction.includes("pan-y") : false;
+      out.navCompact.toolNavScrollable =
+        Boolean(toolNav) &&
+        (getComputedStyle(toolNav).overflowY === "auto" || getComputedStyle(toolNav).overflowY === "scroll") &&
+        getComputedStyle(toolNav).touchAction.includes("pan-y");
     }
 
     const navBarEl = document.getElementById("nav-bar");
@@ -1355,22 +1362,21 @@ async function main() {
     const recentListEl = document.getElementById("tool-recent-list");
     out.recentUi = {
       noLabel: !document.querySelector(".nav-recent-label"),
+      hasAxis: Boolean(document.querySelector(".nav-recent-axis")),
       chipMax: document.querySelectorAll(".nav-recent-chip").length <= 8,
-      nowrap: Boolean(recentListEl) && getComputedStyle(recentListEl).flexWrap === "nowrap",
-      overflowX: recentListEl ? getComputedStyle(recentListEl).overflowX : "",
-      wheelMoved: false,
+      twoRowGrid: Boolean(recentListEl) && getComputedStyle(recentListEl).display === "grid",
+      noHorizontalScroll: recentListEl
+        ? getComputedStyle(recentListEl).overflowX !== "auto" && getComputedStyle(recentListEl).overflowX !== "scroll"
+        : false,
     };
     try {
       const ids = ["json", "base64", "uuid", "hash", "regex", "color", "url", "cron"];
       localStorage.setItem("devtools-tool-recent-v1", JSON.stringify(ids));
       window.DevToolsNav?.renderRecent?.();
       if (recentListEl) {
-        recentListEl.style.width = "72px";
-        const before = recentListEl.scrollLeft;
-        recentListEl.dispatchEvent(new WheelEvent("wheel", { deltaY: 120, bubbles: true, cancelable: true }));
         out.recentUi.chipMax = document.querySelectorAll(".nav-recent-chip").length <= 8;
-        out.recentUi.wheelMoved = recentListEl.scrollLeft > before;
-        recentListEl.style.width = "";
+        const gridCols = getComputedStyle(recentListEl).gridTemplateColumns.split(" ").filter(Boolean).length;
+        out.recentUi.gridCols = gridCols;
       }
     } catch (_) {}
 
@@ -1499,7 +1505,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/navlast1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/allin1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1759,8 +1765,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/navlast1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to navlast1");
+  if (!/allin1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to allin1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
@@ -1792,8 +1798,15 @@ async function main() {
   if (!result.cacheMeta?.nowrap || !result.cacheMeta?.noLongTail || !result.cacheMeta?.hasTitle) {
     failed.push("nav cache hint should be a single short line with details in title");
   }
-  if (!result.recentUi?.noLabel || !result.recentUi?.chipMax || !result.recentUi?.nowrap || result.recentUi?.overflowX !== "auto" || !result.recentUi?.wheelMoved) {
-    failed.push("recent tools should be a compact single row that wheel-scrolls horizontally");
+  if (
+    !result.recentUi?.noLabel ||
+    !result.recentUi?.hasAxis ||
+    !result.recentUi?.chipMax ||
+    !result.recentUi?.twoRowGrid ||
+    !result.recentUi?.noHorizontalScroll ||
+    (result.recentUi?.gridCols || 0) < 2
+  ) {
+    failed.push("recent tools should use a two-row grid without horizontal scrollbar overlap");
   }
   if (!result.sortHint?.hasEl || !result.sortHint?.api || !result.sortHint?.marked || !result.sortHint?.visibleFirst || !result.sortHint?.hiddenSecond) {
     failed.push("sort hint should show once then hide on later visits");
@@ -1824,9 +1837,11 @@ async function main() {
     !result.navCompact?.mobileExpandsInFlow ||
     !result.navCompact?.hoverShows ||
     !result.navCompact?.exclusiveFlyout ||
-    !result.navCompact?.restored
+    !result.navCompact?.restored ||
+    !result.navCompact?.titlePanY ||
+    !result.navCompact?.toolNavScrollable
   ) {
-    failed.push("mobile nav compact should expand as an in-drawer accordion");
+    failed.push("mobile nav compact should expand as an in-drawer accordion and allow vertical scroll");
   }
   if (
     !result.navCompactDesktop?.api ||
