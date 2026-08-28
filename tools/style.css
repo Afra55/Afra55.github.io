@@ -8141,3 +8141,38 @@ li a:not([class*="btn"]) {
   }
 }
 
+.ls-list {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.ls-member-row,
+.ls-file-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+}
+
+.ls-file-main {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+  flex: 1 1 12rem;
+}
+
+.ls-progress-bar-wrap {
+  height: 0.45rem;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.2);
+  overflow: hidden;
+}
+
+.ls-progress-bar {
+  height: 100%;
+  width: 0;
+  background: var(--accent, #3b82f6);
+  transition: width 0.15s ease;
+}
