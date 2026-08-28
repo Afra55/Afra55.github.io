@@ -208,7 +208,11 @@ async function main() {
       backupIsFold: document.querySelector(".memo-backup-bar")?.tagName === "DETAILS",
       exportOutsideFold: Boolean(document.querySelector(".memo-backup-bar #memo-export")),
       exportToDirBtn: Boolean(document.getElementById("memo-export-to-dir")),
-      dirHint: Boolean(document.getElementById("memo-dir-hint")),
+      storageTip: Boolean(document.getElementById("memo-storage-tip")),
+      pickDirLabel: document.getElementById("memo-pick-dir")?.textContent?.includes("选择存储文件夹"),
+      exportToDirLabel: document.getElementById("memo-export-to-dir")?.textContent?.includes("backups"),
+      noDirHint: !document.getElementById("memo-dir-hint"),
+      noPickQuick: !document.getElementById("memo-pick-dir-quick"),
       batchInList: Boolean(document.querySelector(".memo-list-head-actions #memo-batch-del")),
       importPassDlg: Boolean(document.getElementById("memo-import-pass-dlg")),
       pathRelabel: /新标签/.test(document.getElementById("memo-preview-path")?.textContent || ""),
@@ -1012,7 +1016,7 @@ async function main() {
     out.switchDir = {
       hasDlg: Boolean(document.getElementById("memo-switch-dir-dlg")),
       hasSwitchBtn: Boolean(document.getElementById("memo-switch-dir")),
-      hasPickQuick: Boolean(document.getElementById("memo-pick-dir-quick")),
+      noPickQuick: !document.getElementById("memo-pick-dir-quick"),
       api: typeof window.DevToolsMemo.pickDirectory === "function" &&
         typeof window.DevToolsMemo.askSwitchDirectoryChoice === "function",
     };
@@ -1158,7 +1162,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817navrecent4/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817memobkp1/.test(s.src)),
     };
 
     out.pwa = {
@@ -1531,7 +1535,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/navrecent4/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memobkp1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1668,8 +1672,16 @@ async function main() {
   if (!result.modules?.captureBar || !result.modules?.storageFold || !result.modules?.clearFilters || !result.modules?.friendlySearch) {
     failed.push("memo capture/search beginner UX missing");
   }
-  if (!result.modules?.backupBar || !result.modules?.exportOutsideFold || !result.modules?.exportToDirBtn || !result.modules?.dirHint) {
-    failed.push("memo backup bar / dir hint missing");
+  if (
+    !result.modules?.backupBar ||
+    !result.modules?.exportOutsideFold ||
+    !result.modules?.exportToDirBtn ||
+    !result.modules?.storageTip ||
+    !result.modules?.pickDirLabel ||
+    !result.modules?.noDirHint ||
+    !result.modules?.noPickQuick
+  ) {
+    failed.push("memo backup bar / storage groups missing");
   }
   if (!result.modules?.backupIsFold || !result.modules?.batchInList || !result.modules?.importPassDlg || !result.modules?.pathRelabel || !result.modules?.selectAllScope) {
     failed.push("memo UX overhaul chrome missing (backup fold/batch/import pass/path/select-all)");
@@ -1767,7 +1779,7 @@ async function main() {
   if (!/\d+\s*\/\s*500/.test(result.noteUi?.countAfterInput || "")) {
     failed.push("note char count should update while typing");
   }
-  if (!result.switchDir?.hasDlg || !result.switchDir?.hasSwitchBtn || !result.switchDir?.hasPickQuick || !result.switchDir?.api) {
+  if (!result.switchDir?.hasDlg || !result.switchDir?.hasSwitchBtn || !result.switchDir?.noPickQuick || !result.switchDir?.api) {
     failed.push("switch directory UI/API missing");
   }
   if (!result.switchDir?.dlgOpen || !result.switchDir?.migrateVisible || !result.switchDir?.emptyVisible || result.switchDir?.choice !== "cancel") {
@@ -1791,8 +1803,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/navrecent4/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to navrecent4");
+  if (!/memobkp1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memobkp1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");

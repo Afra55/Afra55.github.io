@@ -18,8 +18,8 @@
   <!-- 不阻塞首屏：Noto Serif SC 只给文转图用，避免每次拉取中文字体；Google 字体 CSS 在国内常卡住数秒 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" /></noscript>
-  <link rel="stylesheet" href="./style.css?v=20260817navrecent4" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260817navrecent4" />
+  <link rel="stylesheet" href="./style.css?v=20260817memobkp1" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260817memobkp1" />
   <script>
     /* 尽早应用主题变量，减少闪烁；侧栏也依赖这些 CSS 变量 */
     (function () {
@@ -1246,29 +1246,33 @@ hello@world.org</textarea>
             </div>
           </div>
 
-          <div class="memo-dir-hint" id="memo-dir-hint" hidden>
-            <strong>建议用文件夹保存</strong>
-            <p class="hint tight">桌面可选文件夹，清浏览器缓存后文件仍在磁盘。更换时可把当前内容一并带过去（原目录不删）。</p>
-            <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.35rem">
-              <button type="button" class="primary-btn" id="memo-dir-hint-pick">用文件夹保存</button>
-              <button type="button" class="ghost-btn" id="memo-dir-hint-dismiss">暂不</button>
-            </div>
-          </div>
-
           <details class="memo-backup-bar memo-storage-fold panel-card" id="memo-backup-fold">
             <summary class="memo-backup-sum">备份与存储</summary>
-            <p class="hint tight memo-backup-tip">导出：换机带走，可选类型/标签/加密。备份到当前文件夹：全量写入 backups/，不加密。</p>
-            <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
-              <button type="button" class="secondary-btn" id="memo-export">导出</button>
-              <button type="button" class="ghost-btn" id="memo-export-to-dir" hidden title="写入当前存储目录下的 backups/ 文件夹，全量且不加密">备份到当前文件夹</button>
-              <button type="button" class="secondary-btn" id="memo-pick-dir">用文件夹保存</button>
-              <button type="button" class="secondary-btn" id="memo-switch-dir" hidden title="更换磁盘文件夹，可选带走当前内容">更换文件夹</button>
-              <button type="button" class="ghost-btn" id="memo-reconnect" hidden>重新连接</button>
-              <button type="button" class="secondary-btn" id="memo-pick-dir-quick" hidden title="选择磁盘目录保存">用文件夹保存</button>
-              <label class="file-btn" for="memo-import">导入</label>
-              <input id="memo-import" type="file" accept=".zip,.memo,.bin,application/zip" hidden />
+            <p class="hint tight memo-storage-tip" id="memo-storage-tip" hidden>
+              桌面可将条目存到磁盘文件夹，清浏览器缓存后文件仍在。在下方「存储位置」里点「选择存储文件夹」即可绑定。
+            </p>
+
+            <div class="memo-backup-group">
+              <p class="memo-backup-group-title">存储位置</p>
+              <div class="btn-row tool-actions memo-backup-actions">
+                <button type="button" class="secondary-btn" id="memo-pick-dir">选择存储文件夹</button>
+                <button type="button" class="secondary-btn" id="memo-switch-dir" hidden title="更换磁盘文件夹，可选带走当前内容">更换文件夹</button>
+                <button type="button" class="ghost-btn" id="memo-reconnect" hidden>重新连接</button>
+              </div>
+              <p class="hint tight" id="memo-store-meta">正在检测存储能力…</p>
             </div>
-            <p class="hint tight" id="memo-store-meta">正在检测存储能力…</p>
+
+            <div class="memo-backup-group">
+              <p class="memo-backup-group-title">备份与迁移</p>
+              <p class="hint tight memo-backup-tip">导出可换机带走，可选类型/标签/加密。已绑定文件夹时可写入 backups/ 快照（不加密）。</p>
+              <div class="btn-row tool-actions memo-backup-actions">
+                <button type="button" class="secondary-btn" id="memo-export">导出</button>
+                <label class="file-btn" for="memo-import">导入</label>
+                <input id="memo-import" type="file" accept=".zip,.memo,.bin,application/zip" hidden />
+                <button type="button" class="ghost-btn" id="memo-export-to-dir" hidden title="写入当前存储目录下的 backups/ 文件夹，全量且不加密">写入 backups 快照</button>
+              </div>
+            </div>
+
             <p class="hint tight memo-backup-nudge" id="memo-backup-nudge" hidden></p>
           </details>
 
@@ -3860,23 +3864,23 @@ adb devices</pre>
       <button type="button" class="primary-btn vsplit-fs-mark" id="vsplit-fs-mark">打起点</button>
     </div>
   </div>
-  <script src="./theme.js?v=20260817navrecent4"></script>
-  <script src="./temp.js?v=20260817navrecent4"></script>
+  <script src="./theme.js?v=20260817memobkp1"></script>
+  <script src="./temp.js?v=20260817memobkp1"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./app.js?v=20260817navrecent4"></script>
-  <script src="./about.js?v=20260817navrecent4" defer></script>
-  <script src="./extra.js?v=20260817navrecent4" defer></script>
-  <script src="./vtrim.js?v=20260817navrecent4" defer></script>
-  <script src="./vplay.js?v=20260817navrecent4" defer></script>
-  <script src="./audio.js?v=20260817navrecent4" defer></script>
-  <script src="./ffbridge.js?v=20260817navrecent4" defer></script>
-  <script src="./lanshare.js?v=20260817navrecent4" defer></script>
-  <script src="./setup.js?v=20260817navrecent4" defer></script>
+  <script src="./app.js?v=20260817memobkp1"></script>
+  <script src="./about.js?v=20260817memobkp1" defer></script>
+  <script src="./extra.js?v=20260817memobkp1" defer></script>
+  <script src="./vtrim.js?v=20260817memobkp1" defer></script>
+  <script src="./vplay.js?v=20260817memobkp1" defer></script>
+  <script src="./audio.js?v=20260817memobkp1" defer></script>
+  <script src="./ffbridge.js?v=20260817memobkp1" defer></script>
+  <script src="./lanshare.js?v=20260817memobkp1" defer></script>
+  <script src="./setup.js?v=20260817memobkp1" defer></script>
   <script src="./imgkit.js?v=20260810l" defer></script>
-  <script src="./memo.js?v=20260817navrecent4" defer></script>
-  <script src="./textimg.js?v=20260817navrecent4" defer></script>
-  <script src="./imgtext.js?v=20260817navrecent4" defer></script>
-  <script src="./pwa.js?v=20260817navrecent4" defer></script>
+  <script src="./memo.js?v=20260817memobkp1" defer></script>
+  <script src="./textimg.js?v=20260817memobkp1" defer></script>
+  <script src="./imgtext.js?v=20260817memobkp1" defer></script>
+  <script src="./pwa.js?v=20260817memobkp1" defer></script>
   <script src="./vendor/js-yaml.min.js" defer></script>
   <script src="./vendor/spark-md5.min.js" defer></script>
   <script src="./vendor/qrcode.min.js" defer></script>
