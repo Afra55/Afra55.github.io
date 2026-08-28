@@ -5512,6 +5512,11 @@ button.adb-device-body.linkish {
   margin-top: 0.15rem;
 }
 
+.memo-clip-offer-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .memo-clip-offer .tool-actions .primary-btn,
 .memo-clip-offer .tool-actions .ghost-btn {
   min-height: 2rem;
