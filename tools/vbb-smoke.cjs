@@ -88,6 +88,8 @@ async function main() {
       planHidden: document.getElementById("vbb-plan")?.hidden,
       hasOneclick: Boolean(document.getElementById("vbb-oneclick")),
       hasAdvanced: Boolean(document.getElementById("vbb-advanced")),
+      fileInputMultiple: document.getElementById("vbb-file")?.hasAttribute("multiple"),
+      hasBatchList: Boolean(document.getElementById("vbb-batch-list")),
       noV2gBlackboxBtn: !document.getElementById("v2g-blackbox"),
       noVsplitBbBtn: !document.getElementById("vsplit-gif-bb"),
       ids: [
@@ -1255,6 +1257,8 @@ async function main() {
   if (!result.hasBlackboxNav) problems.push("nav missing standalone blackbox entry");
   if (!result.noVbbInMediaTabs) problems.push("vbb should not remain in media tabs");
   if (!result.hasOneclick) problems.push("missing vbb-oneclick");
+  if (!result.fileInputMultiple) problems.push("vbb file input should allow multiple");
+  if (!result.hasBatchList) problems.push("missing vbb batch list");
   if (!result.noV2gBlackboxBtn) problems.push("v2g blackbox button should be removed");
   if (!result.noVsplitBbBtn) problems.push("vsplit blackbox button should be removed");
   if (!/2026\.08\./.test(result.version)) problems.push(`bad version ${result.version}`);
