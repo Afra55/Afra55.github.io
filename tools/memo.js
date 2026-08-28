@@ -449,6 +449,7 @@
     clipOfferEl: null,
     clipCaptureBusy: false,
     clipCaptureLastAt: 0,
+    clipPendingHint: false,
     busy: false,
     objectUrls: new Set(),
     editingId: "",
@@ -2563,16 +2564,20 @@
         const items = await readClipboardItemsReliable();
         if (!items?.length) {
           if (force) toast("剪贴板为空");
+          else if (state.clipPendingHint) showClipOffer();
           else dismissClipOffer();
+          state.clipPendingHint = false;
           return;
         }
         const parsed = await parseClipboardPayload(items, { force });
         if (parsed?.duplicate) {
           if (force) toast("剪贴板内容与上次相同");
           dismissClipOffer();
+          state.clipPendingHint = false;
           return;
         }
         dismissClipOffer();
+        state.clipPendingHint = false;
         if (parsed?.files?.length) {
           await ingestFiles(parsed.files, clipOpts);
           return;
@@ -2582,23 +2587,28 @@
           return;
         }
         if (force) toast("剪贴板无可识别内容（文件请拖拽添加）");
+        state.clipPendingHint = false;
         return;
       }
       if (navigator.clipboard?.readText) {
         const text = (await navigator.clipboard.readText()).trim();
         if (!text) {
           if (force) toast("剪贴板为空");
+          else if (state.clipPendingHint) showClipOffer();
           else dismissClipOffer();
+          state.clipPendingHint = false;
           return;
         }
         const sig = `text:${text.slice(0, 80)}:${text.length}`;
         if (sig === state.lastClipSig) {
           if (force) toast("剪贴板内容与上次相同");
           dismissClipOffer();
+          state.clipPendingHint = false;
           return;
         }
         state.lastClipSig = sig;
         dismissClipOffer();
+        state.clipPendingHint = false;
         await addText(text, clipOpts);
         return;
       }
@@ -2611,6 +2621,8 @@
         return;
       }
       if (isClipboardGestureBlock(err)) showClipOffer();
+      else if (state.clipPendingHint) showClipOffer();
+      state.clipPendingHint = false;
     }
   }
 
@@ -2620,30 +2632,46 @@
   }
 
   function showClipOffer() {
-    if (state.clipOfferEl || !isMemoActive()) return;
+    if (state.clipOfferEl) return;
     const stack = $("#memo-temp-prompt-stack");
     if (!stack) return;
+    const offMemo = !isMemoActive();
     const el = document.createElement("div");
     el.className = "memo-temp-prompt memo-clip-offer";
     el.dataset.memoClipOffer = "1";
     el.innerHTML = `<p class="memo-temp-prompt-title">剪贴板有新内容</p>
-      <p class="hint tight">可读取并入库到备忘录</p>
-      <div class="btn-row tool-actions">
-        <button type="button" class="primary-btn" data-memo-clip-offer-read>读取</button>
+      <p class="hint tight">${offMemo ? "可在当前页读取并入库到备忘录" : "可读取并入库到备忘录"}</p>
+      <div class="btn-row tool-actions memo-clip-offer-actions">
+        <button type="button" class="primary-btn" data-memo-clip-offer-read>读取入库</button>
+        ${offMemo ? '<button type="button" class="ghost-btn" data-memo-clip-offer-go>打开备忘录</button>' : ""}
         <button type="button" class="ghost-btn" data-memo-clip-offer-dismiss>忽略</button>
       </div>`;
     stack.appendChild(el);
     state.clipOfferEl = el;
   }
 
-  function dismissClipOffer() {
-    state.clipOfferEl?.remove();
-    state.clipOfferEl = null;
+  function goMemoPanel() {
+    if (location.hash.replace(/^#/, "").split(/[/?]/)[0] !== "memo") {
+      location.hash = "memo";
+    }
+  }
+
+  function markClipPendingHint() {
+    state.clipPendingHint = true;
+  }
+
+  function shouldSkipClipCapture() {
+    if (state.busy || state.clipCaptureBusy) return true;
+    if (isTextEditOpen()) return true;
+    const active = document.activeElement;
+    if (active && active !== document.body && isEditableTarget(active) && !$("#memo")?.contains(active)) {
+      return true;
+    }
+    return false;
   }
 
   function maybeCaptureClipboard() {
-    if (state.busy || state.clipCaptureBusy || !isMemoActive()) return;
-    if (isTextEditOpen()) return;
+    if (shouldSkipClipCapture()) return;
     const now = Date.now();
     if (now - state.clipCaptureLastAt < 700) return;
     state.clipCaptureLastAt = now;
@@ -2653,6 +2681,12 @@
       .finally(() => {
         state.clipCaptureBusy = false;
       });
+  }
+
+  function dismissClipOffer() {
+    state.clipOfferEl?.remove();
+    state.clipOfferEl = null;
+    state.clipPendingHint = false;
   }
 
   function clipDeniedHint() {
@@ -2968,7 +3002,7 @@
     invalidateCountCache();
     await purgeExpiredTempItems();
     renderAll();
-    if (isMemoActive()) maybeCaptureClipboard();
+    maybeCaptureClipboard();
     setInterval(() => {
       purgeExpiredTempItems().catch(() => {});
     }, 3600000);
@@ -4936,6 +4970,13 @@
       readClipboard({ force: true }).catch((err) => setError(memoError, err.message || String(err)));
       return;
     }
+    const goBtn = e.target.closest?.("[data-memo-clip-offer-go]");
+    if (goBtn) {
+      dismissClipOffer();
+      goMemoPanel();
+      queueMicrotask(() => readClipboard({ force: true }).catch((err) => setError(memoError, err.message || String(err))));
+      return;
+    }
     const dismissBtn = e.target.closest?.("[data-memo-clip-offer-dismiss]");
     if (dismissBtn) {
       dismissClipOffer();
@@ -5259,7 +5300,7 @@
   document.addEventListener(
     "copy",
     () => {
-      if (!isMemoActive()) return;
+      markClipPendingHint();
       window.setTimeout(() => maybeCaptureClipboard(), 80);
     },
     true
@@ -5267,15 +5308,14 @@
   document.addEventListener(
     "cut",
     () => {
-      if (!isMemoActive()) return;
+      markClipPendingHint();
       window.setTimeout(() => maybeCaptureClipboard(), 80);
     },
     true
   );
 
-  window.addEventListener("devtools:route", (e) => {
-    if (e.detail?.tool === "memo") maybeCaptureClipboard();
-    else dismissClipOffer();
+  window.addEventListener("devtools:route", () => {
+    maybeCaptureClipboard();
   });
   window.addEventListener("focus", () => {
     if (document.visibilityState === "visible") maybeCaptureClipboard();
