@@ -2,7 +2,7 @@
 /* eslint-disable no-restricted-globals */
 "use strict";
 
-const SHELL_CACHE = "devtools-shell-20260817navlast3";
+const SHELL_CACHE = "devtools-shell-20260817ossdeps1";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -19,6 +19,7 @@ function shouldBypass(url) {
   if (/\.wasm$/i.test(path)) return true;
   if (/\/vendor\/(ffmpeg|gifsicle|gif\.worker|omggif)/i.test(path)) return true;
   if (/\/ffmpeg\//i.test(path)) return true;
+  if (/\/excalidraw\//i.test(path)) return true;
   return false;
 }
 

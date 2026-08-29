@@ -157,6 +157,56 @@
     }
   }
 
+  function renderOssDeps() {
+    const host = $("#about-oss-body");
+    if (!host) return;
+    const catalog = window.DevToolsOssDeps;
+    if (!catalog?.groups?.length) {
+      host.innerHTML = `<p class="hint tight">依赖清单加载中…</p>`;
+      return;
+    }
+
+    const updated = catalog.updated ? `<p class="hint tight about-oss-updated">清单更新：${escapeHtml(catalog.updated)}</p>` : "";
+
+    host.innerHTML =
+      updated +
+      catalog.groups
+        .map((g) => {
+          const rows = (g.items || [])
+            .map((item) => {
+              const repo = item.repo
+                ? `<a href="${escapeHtml(item.repo)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.name)}</a>`
+                : escapeHtml(item.name);
+              return `<tr>
+                <th scope="row">${repo}</th>
+                <td class="mono">${escapeHtml(item.version || "—")}</td>
+                <td>${escapeHtml(item.license || "—")}</td>
+                <td class="about-oss-used">${escapeHtml(item.usedIn || "—")}</td>
+                <td class="mono about-oss-path">${escapeHtml(item.path || "—")}</td>
+              </tr>`;
+            })
+            .join("");
+          return `<div class="about-oss-group" data-oss-group="${escapeHtml(g.id)}">
+            <h3 class="about-oss-group-title">${escapeHtml(g.label)}</h3>
+            <div class="about-oss-table-wrap">
+              <table class="about-oss-table">
+                <thead>
+                  <tr>
+                    <th scope="col">项目</th>
+                    <th scope="col">版本</th>
+                    <th scope="col">许可</th>
+                    <th scope="col">用途</th>
+                    <th scope="col">路径 / 来源</th>
+                  </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          </div>`;
+        })
+        .join("");
+  }
+
   function renderAbout() {
     const host = $("#about-catalog");
     if (!host) return;
@@ -199,6 +249,8 @@
         </section>`;
       })
       .join("");
+
+    renderOssDeps();
   }
 
   function bindShare() {
