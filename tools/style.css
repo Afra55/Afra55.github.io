@@ -3378,6 +3378,61 @@ body.vsplit-fs-open {
   word-break: break-all;
 }
 
+.adb-getprop-wrap {
+  margin-top: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
+  padding: 0.55rem 0.75rem;
+}
+
+.adb-getprop-wrap > summary {
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink);
+  list-style: none;
+}
+
+.adb-getprop-wrap > summary::-webkit-details-marker {
+  display: none;
+}
+
+.adb-getprop-wrap > summary .mono {
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.adb-getprop-panel {
+  margin-top: 0.65rem;
+}
+
+.adb-getprop-toolbar {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.55rem;
+}
+
+.adb-getprop-toolbar #adb-getprop-search {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.adb-getprop-list {
+  max-height: 22rem;
+}
+
+.adb-getprop-row .adb-getprop-key {
+  word-break: break-all;
+  color: var(--muted);
+}
+
+.adb-getprop-row .adb-getprop-val {
+  word-break: break-all;
+}
+
 .adb-dev-section {
   margin: 1.1rem 0 0.35rem;
   font-size: 0.82rem;

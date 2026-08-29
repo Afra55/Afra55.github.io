@@ -10351,6 +10351,7 @@
       if (!info) {
         ["#adb-info-serial", "#adb-info-state", "#adb-info-model", "#adb-info-android", "#adb-info-screen", "#adb-info-battery", "#adb-info-storage", "#adb-info-build"].forEach((id) => set(id, "—"));
         if (adbInfoMeta) adbInfoMeta.textContent = "未选择设备";
+        resetGetpropPanel();
         return;
       }
       set("#adb-info-serial", info.serial || info.serialno);
@@ -10368,6 +10369,90 @@
       set("#adb-info-build", [info.abi, info.buildId].filter(Boolean).join(" · "));
       if (adbInfoMeta) {
         adbInfoMeta.textContent = info.ready === false ? info.message || "设备未就绪" : "已加载";
+      }
+    }
+
+    /** @type {{ serial: string, props: Array<{key:string,value:string}> }} */
+    let adbGetpropCache = { serial: "", props: [] };
+    let adbGetpropLoading = false;
+
+    function resetGetpropPanel() {
+      adbGetpropCache = { serial: "", props: [] };
+      const wrap = $("#adb-getprop-wrap");
+      if (wrap) wrap.open = false;
+      const list = $("#adb-getprop-list");
+      if (list) {
+        list.innerHTML = "";
+        list.hidden = true;
+      }
+      const search = $("#adb-getprop-search");
+      if (search) search.value = "";
+      const meta = $("#adb-getprop-meta");
+      if (meta) meta.textContent = "展开后加载";
+      const empty = $("#adb-getprop-empty");
+      if (empty) empty.hidden = true;
+    }
+
+    function filteredGetpropItems() {
+      const q = String($("#adb-getprop-search")?.value || "")
+        .trim()
+        .toLowerCase();
+      if (!q) return adbGetpropCache.props;
+      return adbGetpropCache.props.filter(
+        (p) => p.key.toLowerCase().includes(q) || String(p.value || "").toLowerCase().includes(q)
+      );
+    }
+
+    function renderGetpropList() {
+      const list = $("#adb-getprop-list");
+      const empty = $("#adb-getprop-empty");
+      const meta = $("#adb-getprop-meta");
+      const items = filteredGetpropItems();
+      const q = String($("#adb-getprop-search")?.value || "").trim();
+      if (!list) return;
+      if (!items.length) {
+        list.innerHTML = "";
+        list.hidden = true;
+        if (empty) empty.hidden = !adbGetpropCache.props.length || !q;
+        if (meta && adbGetpropCache.props.length) {
+          meta.textContent = q ? `0 / ${adbGetpropCache.props.length} 项` : `${adbGetpropCache.props.length} 项`;
+        }
+        return;
+      }
+      if (empty) empty.hidden = true;
+      list.hidden = false;
+      list.innerHTML = items
+        .map(
+          (p) =>
+            `<div class="meta-row adb-getprop-row"><span class="mono adb-getprop-key">${escapeHtml(p.key)}</span><strong class="mono adb-getprop-val">${escapeHtml(p.value || "—")}</strong></div>`
+        )
+        .join("");
+      if (meta && adbGetpropCache.props.length) {
+        meta.textContent = q ? `${items.length} / ${adbGetpropCache.props.length} 项` : `${adbGetpropCache.props.length} 项`;
+      }
+    }
+
+    async function loadGetprop({ force = false } = {}) {
+      const serial = requireCurrentSerial();
+      if (adbGetpropLoading) return;
+      if (!force && adbGetpropCache.serial === serial && adbGetpropCache.props.length) {
+        renderGetpropList();
+        return;
+      }
+      adbGetpropLoading = true;
+      const meta = $("#adb-getprop-meta");
+      if (meta) meta.textContent = "加载中…";
+      try {
+        const data = await adbFetch(`/device/getprop?serial=${encodeURIComponent(serial)}`);
+        adbGetpropCache = { serial, props: data.props || [] };
+        renderGetpropList();
+        if (!adbGetpropCache.props.length && meta) meta.textContent = "无属性";
+      } catch (err) {
+        adbGetpropCache = { serial: "", props: [] };
+        if (meta) meta.textContent = "加载失败";
+        throw err;
+      } finally {
+        adbGetpropLoading = false;
       }
     }
 
@@ -11758,6 +11843,7 @@
     }
 
     async function selectAdbDevice(serial) {
+      if (serial !== adbSelected) resetGetpropPanel();
       adbSelected = serial;
       renderAdbDevices();
       resetFsHistory();
@@ -14466,6 +14552,15 @@
     $("#adb-snap-refresh")?.addEventListener("click", () =>
       loadSnapshot().catch((err) => setError(adbError, err.message || String(err)))
     );
+    $("#adb-getprop-wrap")?.addEventListener("toggle", () => {
+      const wrap = $("#adb-getprop-wrap");
+      if (!wrap?.open) return;
+      loadGetprop().catch((err) => setError(adbError, err.message || String(err)));
+    });
+    $("#adb-getprop-search")?.addEventListener("input", () => renderGetpropList());
+    $("#adb-getprop-reload")?.addEventListener("click", () => {
+      loadGetprop({ force: true }).catch((err) => setError(adbError, err.message || String(err)));
+    });
     $("#adb-stay-on")?.addEventListener("click", () =>
       deviceControl("stay_awake_on").catch((err) => setError(adbError, err.message || String(err)))
     );

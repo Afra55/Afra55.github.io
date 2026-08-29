@@ -483,6 +483,28 @@ async function getprop(serial, key) {
   }
 }
 
+function parseGetpropOutput(stdout) {
+  const props = [];
+  for (const line of String(stdout || "").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    let m = trimmed.match(/^\[([^\]]+)\]:\s*\[(.*)\]$/);
+    if (m) {
+      props.push({ key: m[1], value: m[2] });
+      continue;
+    }
+    m = trimmed.match(/^([^:]+):\s*(.*)$/);
+    if (m) props.push({ key: m[1].trim(), value: m[2].trim() });
+  }
+  props.sort((a, b) => a.key.localeCompare(b.key));
+  return props;
+}
+
+async function getAllGetprop(serial) {
+  const { stdout } = await adbSerial(serial, ["shell", "getprop"], { timeout: 90000 });
+  return parseGetpropOutput(stdout);
+}
+
 async function deviceInfo(serial) {
   const devices = await listDevices();
   const base = devices.find((d) => d.serial === serial);
@@ -3632,6 +3654,17 @@ async function handleApi(req, res, url) {
       const serial = url.searchParams.get("serial") || "";
       const info = await deviceInfo(serial);
       sendJson(res, 200, { ok: true, info }, origin);
+      return;
+    }
+
+    if (url.pathname === "/device/getprop" && req.method === "GET") {
+      const serial = url.searchParams.get("serial") || "";
+      if (!serial) {
+        sendJson(res, 400, { ok: false, error: "missing serial" }, origin);
+        return;
+      }
+      const props = await getAllGetprop(serial);
+      sendJson(res, 200, { ok: true, serial, count: props.length, props }, origin);
       return;
     }
 
