@@ -35,6 +35,7 @@
   let knockPools = [[], []];
   let htmlKnockCursor = 0;
   let htmlAudioPrimed = false;
+  let knockAudioReady = false;
   let syncingSound = false;
   let fsBgCanvas = null;
   let fsBgCtx = null;
@@ -78,25 +79,42 @@
     });
   }
 
+  function preloadKnockAudio() {
+    initKnockAudio();
+    if (knockAudioReady) return;
+    const all = knockPools.flat();
+    if (!all.length) return;
+    let pending = all.length;
+    const done = () => {
+      pending -= 1;
+      if (pending <= 0) knockAudioReady = true;
+    };
+    all.forEach((a) => {
+      const finish = () => done();
+      if (a.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA) {
+        finish();
+        return;
+      }
+      a.addEventListener("canplaythrough", finish, { once: true });
+      a.addEventListener("error", finish, { once: true });
+      try {
+        a.load();
+      } catch (_) {
+        finish();
+      }
+    });
+  }
+
   function unlockMuyuAudio() {
     if (!soundOn) return;
     initKnockAudio();
+    preloadKnockAudio();
     if (htmlAudioPrimed) return;
     htmlAudioPrimed = true;
-    const pool = knockPools[soundVariant] || knockPools[0];
-    if (!pool?.length) return;
-    const prime = pool[0];
-    const prevVol = prime.volume;
+    const prime = new Audio(assetUrl(SOUND_FILES[soundVariant] || SOUND_FILES[0]));
     prime.volume = 0.0001;
     const p = prime.play();
     if (p && typeof p.catch === "function") p.catch(() => {});
-    window.setTimeout(() => {
-      try {
-        prime.pause();
-        prime.currentTime = 0;
-      } catch (_) {}
-      prime.volume = prevVol || 0.85;
-    }, 40);
   }
 
   function playKnock() {
@@ -108,6 +126,7 @@
     htmlKnockCursor += 1;
     a.volume = 0.85;
     try {
+      a.pause();
       a.currentTime = 0;
     } catch (_) {}
     const p = a.play();
@@ -675,6 +694,7 @@
     syncSoundToggles();
     renderCount();
     initKnockAudio();
+    preloadKnockAudio();
     bindControls();
     startStageBg();
     return true;
