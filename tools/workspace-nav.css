@@ -198,6 +198,11 @@ body.nav-sorting .tool-nav-link,
   margin-bottom: 0;
 }
 
+.nav-strip-head .nav-fav-add,
+.nav-fav-head .nav-fav-add {
+  flex: 0 0 auto;
+}
+
 .nav-fav-add {
   appearance: none;
   flex: 0 0 auto;
@@ -214,43 +219,36 @@ body.nav-sorting .tool-nav-link,
   padding: 0;
 }
 
-/* 常用工具：置顶固定，样式与下方 tool-nav-link 一致 */
+.nav-fav-add:hover,
+.nav-fav-add:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
+  outline: none;
+}
+
+/* 常用工具：与历史记录同背景，位于其下方 */
 .nav-favorites {
-  position: sticky;
-  top: 0;
-  z-index: 6;
-  flex-shrink: 0;
   width: 100%;
-  box-sizing: border-box;
-  padding: 0 0 0.45rem;
+  margin-bottom: 0.45rem;
+}
+
+.nav-fav-head {
   margin-bottom: 0.35rem;
-  background: var(--nav-bg-solid, var(--panel-strong, var(--panel)));
-  border-bottom: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
 }
 
-.nav-fav-add-link {
-  display: block;
-  width: 100%;
-  box-sizing: border-box;
-  margin: 0 0 0.28rem;
-  text-align: left;
+.nav-fav-head .nav-fav-title {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-size: 0.78rem;
 }
 
-button.tool-nav-link {
-  appearance: none;
-  font: inherit;
-  background: transparent;
-}
-
-.nav-fav-list {
+.nav-fav-tools {
   display: flex;
   flex-direction: column;
   gap: 0.28rem;
-  max-height: min(38vh, 15rem);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
-  -webkit-overflow-scrolling: touch;
 }
 
 .nav-fav-link {
@@ -260,8 +258,7 @@ button.tool-nav-link {
   text-decoration: none;
 }
 
-.nav-fav-add[aria-expanded="true"],
-.nav-fav-add-link[aria-expanded="true"] {
+.nav-fav-add[aria-expanded="true"] {
   border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
   background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
 }
@@ -424,8 +421,14 @@ body.nav-sorting-favorites .nav-fav-link.is-dragging {
   border-style: dashed;
 }
 
-body.nav-sorting-favorites .nav-fav-list {
+body.nav-sorting-favorites .nav-fav-tools {
   touch-action: none;
+}
+
+button.tool-nav-link {
+  appearance: none;
+  font: inherit;
+  background: transparent;
 }
 
 .nav-group {
@@ -465,6 +468,43 @@ body.nav-sorting-favorites .nav-fav-list {
 .nav-bar.is-compact .nav-group.is-current:focus-within > .nav-group-title {
   background: color-mix(in srgb, var(--accent) 18%, transparent);
   border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
+}
+
+.nav-bar.is-compact .nav-fav-title {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  cursor: pointer;
+  padding: 0.42rem 0.5rem;
+  margin-left: 0;
+  border-radius: 8px;
+  border: 1px solid transparent;
+}
+
+.nav-bar.is-compact .nav-favorites.is-current > .nav-fav-title {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--line));
+  font-weight: 700;
+}
+
+.nav-bar.is-compact .nav-favorites.is-pinned > .nav-fav-title,
+.nav-bar.is-compact .nav-favorites.is-flyout-open > .nav-fav-title,
+.nav-bar.is-compact .nav-favorites:hover > .nav-fav-title,
+.nav-bar.is-compact .nav-favorites:focus-within > .nav-fav-title {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--line));
+}
+
+.nav-bar.is-compact:not(.is-searching) .nav-favorites {
+  position: relative;
+  z-index: 1;
+}
+
+.nav-bar.is-compact:not(.is-searching) .nav-favorites.is-flyout-open,
+.nav-bar.is-compact:not(.is-searching) .nav-favorites.is-pinned {
+  z-index: 8;
 }
 
 .nav-group-tools {
@@ -533,7 +573,8 @@ body.nav-sorting-favorites .nav-fav-list {
   }
 
   .nav-bar.is-compact:not(.is-searching) .nav-group.is-current > .nav-group-title::after,
-  .nav-bar.is-compact:not(.is-searching) .nav-group-title.is-sortable::after {
+  .nav-bar.is-compact:not(.is-searching) .nav-group-title.is-sortable::after,
+  .nav-bar.is-compact:not(.is-searching) .nav-fav-title::after {
     content: "展开";
     float: right;
     font-size: 0.7rem;
@@ -542,7 +583,9 @@ body.nav-sorting-favorites .nav-fav-list {
   }
 
   .nav-bar.is-compact:not(.is-searching) .nav-group.is-flyout-open > .nav-group-title::after,
-  .nav-bar.is-compact:not(.is-searching) .nav-group.is-pinned > .nav-group-title::after {
+  .nav-bar.is-compact:not(.is-searching) .nav-group.is-pinned > .nav-group-title::after,
+  .nav-bar.is-compact:not(.is-searching) .nav-favorites.is-flyout-open > .nav-fav-title::after,
+  .nav-bar.is-compact:not(.is-searching) .nav-favorites.is-pinned > .nav-fav-title::after {
     content: "收起";
   }
 }

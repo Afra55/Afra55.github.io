@@ -1413,7 +1413,7 @@ async function main() {
 
     const recentListEl = document.getElementById("tool-recent-list");
     out.recentUi = {
-      noTitle: !document.querySelector("#tool-recent .nav-strip-title"),
+      hasTitle: /历史记录/.test(document.querySelector("#tool-recent .nav-strip-title")?.textContent || ""),
       noAxis: !document.querySelector(".nav-recent-axis"),
       oneRowFlex: Boolean(recentListEl) && getComputedStyle(recentListEl).display === "flex",
       nowrap: recentListEl ? getComputedStyle(recentListEl).flexWrap === "nowrap" : false,
@@ -1438,14 +1438,21 @@ async function main() {
 
     const favListEl = document.getElementById("tool-fav-list");
     const favWrapEl = document.getElementById("tool-favorites");
+    const recentEl = document.getElementById("tool-recent");
     out.favoritesUi = {
       hasSection: Boolean(favWrapEl),
       hasAddBtn: Boolean(document.getElementById("tool-fav-add")),
       addLabel: document.getElementById("tool-fav-add")?.textContent?.trim() || "",
+      addAria: document.getElementById("tool-fav-add")?.getAttribute("aria-label") || "",
+      titleLabel: document.getElementById("tool-fav-title")?.textContent?.trim() || "",
+      afterRecent:
+        Boolean(recentEl && favWrapEl) &&
+        (recentEl.compareDocumentPosition(favWrapEl) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+      stripBg: Boolean(favWrapEl?.classList.contains("nav-strip")),
       api: typeof window.DevToolsNav?.addFavorite === "function",
       renderApi: typeof window.DevToolsNav?.renderFavorites === "function",
       columnList: Boolean(favListEl) && getComputedStyle(favListEl).flexDirection === "column",
-      stickyDock: Boolean(favWrapEl) && getComputedStyle(favWrapEl).position === "sticky",
+      notSticky: Boolean(favWrapEl) && getComputedStyle(favWrapEl).position !== "sticky",
     };
     try {
       localStorage.setItem(
@@ -2012,7 +2019,7 @@ async function main() {
     failed.push("nav cache hint should be a single short line with details in title");
   }
   if (
-    !result.recentUi?.noTitle ||
+    !result.recentUi?.hasTitle ||
     !result.recentUi?.noAxis ||
     !result.recentUi?.oneRowFlex ||
     !result.recentUi?.nowrap ||
@@ -2027,15 +2034,19 @@ async function main() {
   if (
     !result.favoritesUi?.hasSection ||
     !result.favoritesUi?.hasAddBtn ||
-    result.favoritesUi?.addLabel !== "新增工具" ||
+    result.favoritesUi?.addLabel !== "+" ||
+    !/添加常用工具/.test(result.favoritesUi?.addAria || "") ||
+    result.favoritesUi?.titleLabel !== "常用工具" ||
+    !result.favoritesUi?.afterRecent ||
+    !result.favoritesUi?.stripBg ||
     !result.favoritesUi?.api ||
     !result.favoritesUi?.columnList ||
-    !result.favoritesUi?.stickyDock ||
+    !result.favoritesUi?.notSticky ||
     !result.favoritesUi?.usesToolNavLink ||
     !result.favoritesUi?.sortable ||
     (result.favoritesUi?.afterAdd || 0) < 10
   ) {
-    failed.push("favorites should use sticky vertical tool-nav links with 新增工具 button");
+    failed.push("favorites should sit below recent as strip category with + add and vertical tool links");
   }
   if (!result.sortHint?.hasEl || !result.sortHint?.api || !result.sortHint?.marked || !result.sortHint?.visibleFirst || !result.sortHint?.hiddenSecond) {
     failed.push("sort hint should show once then hide on later visits");

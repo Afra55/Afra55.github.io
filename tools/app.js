@@ -934,8 +934,20 @@
   const navToolCtx = $("#nav-tool-ctx");
   let navToolCtxId = "";
   const favAddBtn = $("#tool-fav-add");
+  const favTitle = $("#tool-fav-title");
   const favPicker = $("#tool-fav-picker");
   const canDesktopDrag = () => window.matchMedia("(min-width: 901px)").matches;
+
+  function allNavGroups() {
+    const list = navEl ? [...$$(".nav-group", navEl)] : [];
+    if (favoritesWrap?.classList.contains("nav-group")) list.unshift(favoritesWrap);
+    return list;
+  }
+
+  function navFlyoutScroller(wrap) {
+    if (wrap && navEl?.contains(wrap)) return navEl;
+    return navBar || wrap;
+  }
 
   /** 手机/平板不适合本机桥与 ADB，导航中隐藏，避免误入 */
   function isPhoneLikeClient() {
@@ -1100,7 +1112,7 @@
       panel.style.bottom = "";
       return;
     }
-    const scroller = navEl;
+    const scroller = navFlyoutScroller(wrap);
     const scrollerRect = scroller.getBoundingClientRect();
     const titleRect = title.getBoundingClientRect();
     const gap = 8;
@@ -1118,8 +1130,7 @@
   function closeNavFlyouts({ keepPinned = false } = {}) {
     window.clearTimeout(navFlyoutTimer);
     navFlyoutTimer = 0;
-    if (!navEl) return;
-    $$(".nav-group", navEl).forEach((g) => {
+    allNavGroups().forEach((g) => {
       g.classList.remove("is-flyout-open", "is-flyout-up");
       if (!keepPinned) g.classList.remove("is-pinned");
       g.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
@@ -1130,7 +1141,7 @@
     if (!wrap || !navCompact || compactNavSearching()) return;
     window.clearTimeout(navFlyoutTimer);
     navFlyoutTimer = 0;
-    $$(".nav-group", navEl).forEach((g) => {
+    allNavGroups().forEach((g) => {
       if (g === wrap) return;
       g.classList.remove("is-flyout-open", "is-flyout-up", "is-pinned");
       g.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
@@ -1203,7 +1214,7 @@
     if (!navEl) return;
     if (!navCompact || searching) closeNavFlyouts();
     const currentId = currentNavToolId();
-    $$(".nav-group", navEl).forEach((g) => {
+    allNavGroups().forEach((g) => {
       const ids = [...g.querySelectorAll(".tool-nav-link")].map((a) => a.dataset.tool);
       const isCurrent = ids.includes(currentId);
       g.classList.toggle("is-current", isCurrent);
@@ -1220,7 +1231,7 @@
     try {
       localStorage.setItem(NAV_COMPACT_KEY, navCompact ? "1" : "0");
     } catch (_) {}
-    if (navEl) $$(".nav-group", navEl).forEach((g) => g.classList.remove("is-pinned"));
+    allNavGroups().forEach((g) => g.classList.remove("is-pinned"));
     syncNavCompactUi();
   }
 
@@ -1638,6 +1649,7 @@
       favoritesList.appendChild(link);
     });
     bindFavoriteInteractions();
+    syncNavCompactUi();
     if (favPickerOpen) renderFavPicker();
   }
 
@@ -1653,6 +1665,46 @@
     applyRoute({ skipRecent: true, keepDrawer });
     showToast("已保存常用排序");
     return true;
+  }
+
+  function bindFavoritesGroupInteractions() {
+    if (!favoritesWrap || favoritesWrap.dataset.boundFavGroup === "1") return;
+    favoritesWrap.dataset.boundFavGroup = "1";
+    const title = favTitle;
+    if (!title) return;
+    title.addEventListener("click", (e) => {
+      if (!navCompact || didDrag || compactNavSearching()) return;
+      e.preventDefault();
+      const willPin = !favoritesWrap.classList.contains("is-pinned");
+      if (willPin) openNavFlyout(favoritesWrap, { pin: true });
+      else {
+        favoritesWrap.classList.remove("is-pinned", "is-flyout-open");
+        title.setAttribute("aria-expanded", "false");
+      }
+    });
+    favoritesWrap.addEventListener("pointerenter", (e) => {
+      if (!canHoverNavFlyout(e)) return;
+      openNavFlyout(favoritesWrap);
+    });
+    favoritesWrap.addEventListener("pointerleave", (e) => {
+      if (!navCompact || compactNavSearching()) return;
+      if (favoritesWrap.classList.contains("is-pinned")) return;
+      if (isNavToolSorting()) return;
+      if (e?.pointerType && e.pointerType !== "mouse") return;
+      scheduleCloseNavFlyout(favoritesWrap);
+    });
+    favoritesWrap.addEventListener("focusin", () => {
+      if (!navCompact || compactNavSearching()) return;
+      openNavFlyout(favoritesWrap);
+    });
+    favoritesWrap.addEventListener("focusout", (e) => {
+      if (!navCompact || compactNavSearching()) return;
+      if (favoritesWrap.classList.contains("is-pinned")) return;
+      if (isNavToolSorting()) return;
+      const next = e.relatedTarget;
+      if (next && favoritesWrap.contains(next)) return;
+      scheduleCloseNavFlyout(favoritesWrap);
+    });
   }
 
   function bindFavoriteInteractions() {
@@ -2484,29 +2536,30 @@
     });
   }
 
+  function repositionOpenNavFlyouts() {
+    if (!navCompact || compactNavSearching()) return;
+    if (document.body.classList.contains("nav-sorting-tools")) {
+      allNavGroups()
+        .filter((g) => g.classList.contains("is-sort-flyout"))
+        .forEach((g) => positionNavFlyout(g));
+      return;
+    }
+    const open = allNavGroups().find((g) => g.classList.contains("is-pinned") || g.classList.contains("is-flyout-open"));
+    if (open?.classList.contains("is-pinned")) positionNavFlyout(open);
+    else if (open) closeNavFlyouts();
+  }
+
   $("#nav-compact")?.addEventListener("change", (e) => {
     setNavCompact(Boolean(e.target?.checked));
   });
 
-  navEl?.addEventListener(
-    "scroll",
-    () => {
-      if (!navCompact || compactNavSearching()) return;
-      if (document.body.classList.contains("nav-sorting-tools")) {
-        $$(".nav-group.is-sort-flyout", navEl).forEach((g) => positionNavFlyout(g));
-        return;
-      }
-      const open = $(".nav-group.is-pinned, .nav-group.is-flyout-open", navEl);
-      if (open?.classList.contains("is-pinned")) positionNavFlyout(open);
-      else if (open) closeNavFlyouts();
-    },
-    { passive: true }
-  );
+  navEl?.addEventListener("scroll", repositionOpenNavFlyouts, { passive: true });
+  navBar?.addEventListener("scroll", repositionOpenNavFlyouts, { passive: true });
   window.addEventListener(
     "resize",
     () => {
       if (!navCompact) return;
-      const open = navEl && $(".nav-group.is-pinned, .nav-group.is-flyout-open", navEl);
+      const open = allNavGroups().find((g) => g.classList.contains("is-pinned") || g.classList.contains("is-flyout-open"));
       if (open) positionNavFlyout(open);
     },
     { passive: true }
@@ -2763,6 +2816,7 @@
   renderNav(loadOrder());
   renderRecent();
   renderFavorites();
+  bindFavoritesGroupInteractions();
   bindNavToolCtx();
   bindNavStripWheelScroll(recentList);
   window.DevToolsCatalog = {
