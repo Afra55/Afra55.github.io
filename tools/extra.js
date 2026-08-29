@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.29-031730";
+  const TOOLS_VERSION = "2026.08.29-032433";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
   /** 切片/批量 GIF 产出后是否自动打 zip 下载；默认关，开启后记住 */
@@ -1422,9 +1422,18 @@
 
   function renderDiffLine(text, kind) {
     if (kind === "empty" || !text) return "&nbsp;";
-    const safe = escapeHtml(text).replace(/ /g, "&nbsp;");
+    const raw = String(text);
+    const clipped = raw.length > 6000 ? `${raw.slice(0, 6000)}…` : raw;
+    const safe = escapeHtml(clipped).replace(/ /g, "&nbsp;");
     if (kind === "same") return safe;
     return `<span class="diff-line-${kind}">${safe}</span>`;
+  }
+
+  const DIFF_RENDER_MAX = 4000;
+
+  function isDiffPanelActive() {
+    const panel = $("#diff");
+    return !!(panel && panel.classList.contains("is-workspace-active") && !panel.hidden);
   }
 
   function runTextDiff() {
@@ -1449,51 +1458,68 @@
       return;
     }
 
-    const rows = P.diffLines(aText, bText, opts);
-    const stats = P.diffStats(rows);
-    const changed = stats.add + stats.del;
-    const identical = changed === 0 && stats.same > 0;
-    if (meta) {
-      meta.textContent = identical
-        ? `完全相同 · ${stats.same} 行`
-        : `相同 ${stats.same} · 删除 ${stats.del} · 新增 ${stats.add}${changed ? "" : ""}`;
-    }
+    try {
+      const rows = P.diffLines(aText, bText, opts);
+      const stats = P.diffStats(rows);
+      const changed = stats.add + stats.del;
+      const identical = changed === 0 && stats.same > 0;
+      let showRows = hideSame ? rows.filter((r) => r.type !== "same") : rows;
+      let truncated = false;
+      if (showRows.length > DIFF_RENDER_MAX) {
+        showRows = showRows.slice(0, DIFF_RENDER_MAX);
+        truncated = true;
+      }
+      if (meta) {
+        let summary = identical
+          ? `完全相同 · ${stats.same} 行`
+          : `相同 ${stats.same} · 删除 ${stats.del} · 新增 ${stats.add}`;
+        if (truncated) summary += ` · 仅显示前 ${DIFF_RENDER_MAX} 行`;
+        meta.textContent = summary;
+      }
 
-    const showRows = hideSame ? rows.filter((r) => r.type !== "same") : rows;
+      if (mode === "unified") {
+        splitWrap.hidden = true;
+        unifiedOut.hidden = false;
+        unifiedOut.innerHTML = showRows
+          .map((row) => {
+            const cls = row.type === "add" ? "diff-add" : row.type === "del" ? "diff-del" : "diff-same";
+            const mark = row.type === "add" ? "+" : row.type === "del" ? "-" : " ";
+            return `<div class="${cls}"><span class="diff-mark">${mark}</span>${escapeHtml(row.text)}</div>`;
+          })
+          .join("");
+        return;
+      }
 
-    if (mode === "unified") {
-      splitWrap.hidden = true;
-      unifiedOut.hidden = false;
-      unifiedOut.innerHTML = showRows
+      splitWrap.hidden = false;
+      unifiedOut.hidden = true;
+      const aligned = P.diffAlignFromRows(rows);
+      const alignShow = hideSame ? aligned.filter((r) => r.kind !== "same") : aligned;
+      const alignRender = alignShow.length > DIFF_RENDER_MAX ? alignShow.slice(0, DIFF_RENDER_MAX) : alignShow;
+      splitOut.innerHTML = alignRender
         .map((row) => {
-          const cls = row.type === "add" ? "diff-add" : row.type === "del" ? "diff-del" : "diff-same";
-          const mark = row.type === "add" ? "+" : row.type === "del" ? "-" : " ";
-          return `<div class="${cls}"><span class="diff-mark">${mark}</span>${escapeHtml(row.text)}</div>`;
+          const lk = row.kind;
+          const leftNum = row.left.num != null ? String(row.left.num) : "";
+          const rightNum = row.right.num != null ? String(row.right.num) : "";
+          const leftHtml = renderDiffLine(row.left.text, lk === "add" ? "empty" : lk);
+          const rightHtml = renderDiffLine(row.right.text, lk === "del" ? "empty" : lk);
+          return `<div class="diff-split-row diff-row-${lk}"><div class="diff-split-cell diff-side-left"><span class="diff-ln">${leftNum}</span><span class="diff-txt">${leftHtml}</span></div><div class="diff-split-cell diff-side-right"><span class="diff-ln">${rightNum}</span><span class="diff-txt">${rightHtml}</span></div></div>`;
         })
         .join("");
-      return;
+    } catch (err) {
+      if (meta) {
+        meta.textContent =
+          err?.code === "DIFF_TOO_LARGE" ? err.message : err?.message || String(err) || "比对失败";
+      }
+      splitOut.innerHTML = "";
+      unifiedOut.innerHTML = "";
     }
-
-    splitWrap.hidden = false;
-    unifiedOut.hidden = true;
-    const aligned = P.diffAlign(aText, bText, opts);
-    const alignShow = hideSame ? aligned.filter((r) => r.kind !== "same") : aligned;
-    splitOut.innerHTML = alignShow
-      .map((row) => {
-        const lk = row.kind;
-        const leftNum = row.left.num != null ? String(row.left.num) : "";
-        const rightNum = row.right.num != null ? String(row.right.num) : "";
-        const leftHtml = renderDiffLine(row.left.text, lk === "add" ? "empty" : lk);
-        const rightHtml = renderDiffLine(row.right.text, lk === "del" ? "empty" : lk);
-        return `<div class="diff-split-row diff-row-${lk}"><div class="diff-split-cell diff-side-left"><span class="diff-ln">${leftNum}</span><span class="diff-txt">${leftHtml}</span></div><div class="diff-split-cell diff-side-right"><span class="diff-ln">${rightNum}</span><span class="diff-txt">${rightHtml}</span></div></div>`;
-      })
-      .join("");
   }
 
   let diffTimer = 0;
   function scheduleTextDiff() {
+    if (!isDiffPanelActive()) return;
     clearTimeout(diffTimer);
-    diffTimer = setTimeout(runTextDiff, 120);
+    diffTimer = setTimeout(runTextDiff, 160);
   }
 
   function setDiffMode(mode) {
@@ -1514,7 +1540,9 @@
     });
   });
   ["diff-ignore-ws", "diff-trim-trail", "diff-hide-same", "diff-auto"].forEach((id) => {
-    $("#" + id)?.addEventListener("change", runTextDiff);
+    $("#" + id)?.addEventListener("change", () => {
+      if (isDiffPanelActive()) runTextDiff();
+    });
   });
   $("#diff-mode-split")?.addEventListener("click", () => setDiffMode("split"));
   $("#diff-mode-unified")?.addEventListener("click", () => setDiffMode("unified"));
@@ -1548,7 +1576,10 @@
   }
   $("#diff-paste-a")?.addEventListener("click", () => diffPaste("a"));
   $("#diff-paste-b")?.addEventListener("click", () => diffPaste("b"));
-  runTextDiff();
+  if ($("#diff-meta")) $("#diff-meta").textContent = "粘贴或输入两段文本后开始比对";
+  window.addEventListener("devtools:route", (e) => {
+    if (e.detail?.tool === "diff") scheduleTextDiff();
+  });
 
   // ---- YAML ----
   $("#yaml-to-json")?.addEventListener("click", () => {

@@ -399,17 +399,45 @@
     };
   }
 
+  const DIFF_MAX_LINES = 3500;
+  const DIFF_MAX_CELLS = 1_800_000;
+  const DIFF_MAX_CHARS = 8000;
+
+  function diffLineNorm(line, opts = {}) {
+    let s = String(line);
+    if (opts.trimTrailing) s = s.replace(/\s+$/, "");
+    if (opts.ignoreWhitespace) s = s.replace(/\s+/g, " ").trim();
+    return s;
+  }
+
+  function diffGuard(n, m, { maxLines = DIFF_MAX_LINES, maxCells = DIFF_MAX_CELLS } = {}) {
+    if (n > maxLines || m > maxLines) {
+      return {
+        ok: false,
+        reason: `文本行数过多（A ${n} / B ${m} 行，上限 ${maxLines}）。请分段比对。`,
+      };
+    }
+    if (n * m > maxCells) {
+      return {
+        ok: false,
+        reason: `文本体量过大（${n}×${m} 行），请缩短后重试。`,
+      };
+    }
+    return { ok: true };
+  }
+
   function diffLines(aText, bText, opts = {}) {
-    const norm = (line) => {
-      let s = String(line);
-      if (opts.trimTrailing) s = s.replace(/\s+$/, "");
-      if (opts.ignoreWhitespace) s = s.replace(/\s+/g, " ").trim();
-      return s;
-    };
+    const norm = (line) => diffLineNorm(line, opts);
     const a = String(aText).split(/\r\n|\n|\r/);
     const b = String(bText).split(/\r\n|\n|\r/);
     const n = a.length;
     const m = b.length;
+    const guard = diffGuard(n, m);
+    if (!guard.ok) {
+      const err = new Error(guard.reason);
+      err.code = "DIFF_TOO_LARGE";
+      throw err;
+    }
     const dp = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
     for (let i = n - 1; i >= 0; i--) {
       for (let j = m - 1; j >= 0; j--) {
@@ -433,82 +461,53 @@
         j++;
       }
     }
-    while (i < n) out.push({ type: "del", text: a[i], left: a[i], right: "" });
-    while (j < m) out.push({ type: "add", text: b[j], left: "", right: b[j] });
+    while (i < n) {
+      out.push({ type: "del", text: a[i], left: a[i], right: "" });
+      i++;
+    }
+    while (j < m) {
+      out.push({ type: "add", text: b[j], left: "", right: b[j] });
+      j++;
+    }
+    return out;
+  }
+
+  /** 并排比对：由 diffLines 结果生成左右对齐行，含行号 */
+  function diffAlignFromRows(rows) {
+    const out = [];
+    let ln = 0;
+    let rn = 0;
+    for (const row of rows) {
+      if (row.type === "same") {
+        ln++;
+        rn++;
+        out.push({
+          kind: "same",
+          left: { num: ln, text: row.left ?? row.text },
+          right: { num: rn, text: row.right ?? row.text },
+        });
+      } else if (row.type === "del") {
+        ln++;
+        out.push({
+          kind: "del",
+          left: { num: ln, text: row.left ?? row.text },
+          right: { num: null, text: "" },
+        });
+      } else {
+        rn++;
+        out.push({
+          kind: "add",
+          left: { num: null, text: "" },
+          right: { num: rn, text: row.right ?? row.text },
+        });
+      }
+    }
     return out;
   }
 
   /** 并排比对：返回左右对齐行，含行号 */
   function diffAlign(aText, bText, opts = {}) {
-    const norm = (line) => {
-      let s = String(line);
-      if (opts.trimTrailing) s = s.replace(/\s+$/, "");
-      if (opts.ignoreWhitespace) s = s.replace(/\s+/g, " ").trim();
-      return s;
-    };
-    const a = String(aText).split(/\r\n|\n|\r/);
-    const b = String(bText).split(/\r\n|\n|\r/);
-    const n = a.length;
-    const m = b.length;
-    const dp = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
-    for (let i = n - 1; i >= 0; i--) {
-      for (let j = m - 1; j >= 0; j--) {
-        dp[i][j] =
-          norm(a[i]) === norm(b[j]) ? dp[i + 1][j + 1] + 1 : Math.max(dp[i + 1][j], dp[i][j + 1]);
-      }
-    }
-    const ops = [];
-    let i = 0;
-    let j = 0;
-    while (i < n && j < m) {
-      if (norm(a[i]) === norm(b[j])) {
-        ops.push({ kind: "same", ai: i, bj: j });
-        i++;
-        j++;
-      } else if (dp[i + 1][j] >= dp[i][j + 1]) {
-        ops.push({ kind: "del", ai: i });
-        i++;
-      } else {
-        ops.push({ kind: "add", bj: j });
-        j++;
-      }
-    }
-    while (i < n) {
-      ops.push({ kind: "del", ai: i++ });
-    }
-    while (j < m) {
-      ops.push({ kind: "add", bj: j++ });
-    }
-
-    const rows = [];
-    let ln = 0;
-    let rn = 0;
-    for (const op of ops) {
-      if (op.kind === "same") {
-        ln++;
-        rn++;
-        rows.push({
-          kind: "same",
-          left: { num: ln, text: a[op.ai] },
-          right: { num: rn, text: b[op.bj] },
-        });
-      } else if (op.kind === "del") {
-        ln++;
-        rows.push({
-          kind: "del",
-          left: { num: ln, text: a[op.ai] },
-          right: { num: null, text: "" },
-        });
-      } else {
-        rn++;
-        rows.push({
-          kind: "add",
-          left: { num: null, text: "" },
-          right: { num: rn, text: b[op.bj] },
-        });
-      }
-    }
-    return rows;
+    return diffAlignFromRows(diffLines(aText, bText, opts));
   }
 
   function diffStats(rows) {
@@ -529,6 +528,12 @@
     const b = String(bText);
     const n = a.length;
     const m = b.length;
+    const guard = diffGuard(n, m, { maxLines: DIFF_MAX_CHARS, maxCells: 600_000 });
+    if (!guard.ok) {
+      const err = new Error(guard.reason.replace("行", "字符"));
+      err.code = "DIFF_TOO_LARGE";
+      throw err;
+    }
     const dp = Array.from({ length: n + 1 }, () => Array(m + 1).fill(0));
     for (let i = n - 1; i >= 0; i--) {
       for (let j = m - 1; j >= 0; j--) {
@@ -1682,6 +1687,7 @@
     convertCaseLines,
     diffLines,
     diffAlign,
+    diffAlignFromRows,
     diffStats,
     diffChars,
     describeCron,

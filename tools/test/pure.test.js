@@ -76,8 +76,15 @@ test("diff lines", () => {
 test("diff align and ignore whitespace", () => {
   const rows = P.diffAlign("foo  \nbar", "foo\nbar", { trimTrailing: true });
   assert.ok(rows.every((r) => r.kind === "same"));
-  const d2 = P.diffLines("a  b", "ab", { ignoreWhitespace: true });
+  const d2 = P.diffLines("foo  bar", "foo bar", { ignoreWhitespace: true });
   assert.ok(d2.every((r) => r.type === "same"));
+  const tail = P.diffLines("a\nb\nc", "a\nb");
+  assert.ok(tail.some((x) => x.type === "del" && x.text === "c"));
+});
+
+test("diff too large guard", () => {
+  const big = Array.from({ length: 4000 }, (_, i) => `line-${i}`).join("\n");
+  assert.throws(() => P.diffLines(big, "x"), /行数过多/);
 });
 
 test("diff chars", () => {
