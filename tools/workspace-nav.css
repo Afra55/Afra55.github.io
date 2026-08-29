@@ -846,7 +846,7 @@ body.nav-open {
   }
 
   .nav-reset {
-    width: 100%;
+    width: auto;
     margin-top: 0;
     text-align: center;
   }
@@ -854,17 +854,30 @@ body.nav-open {
   .nav-footer-actions {
     flex: 0 0 auto;
     margin-top: auto;
-    padding-top: 0.75rem;
+    padding-top: 0.45rem;
     position: relative;
     z-index: 2;
     background: var(--nav-bg-solid, var(--panel-strong));
   }
 
+  .nav-footer-toolbar {
+    gap: 0.28rem;
+  }
+
   .nav-cache-clear,
-  .nav-footer-actions .nav-reset {
-    width: 100%;
-    min-height: 2.5rem;
-    border-radius: 12px;
+  .nav-footer-actions .nav-reset,
+  .nav-footer-actions .nav-footer-btn {
+    width: auto;
+    min-height: 0;
+    flex: 1 1 0;
+    border-radius: 10px;
+    padding-top: 0.32rem;
+    padding-bottom: 0.32rem;
+  }
+
+  .nav-setting-inline {
+    flex: 0 0 auto;
+    font-size: 0.7rem;
   }
 
   .site-header {

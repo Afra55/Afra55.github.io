@@ -18,10 +18,10 @@
   <!-- 不阻塞首屏：Noto Serif SC 只给文转图用，避免每次拉取中文字体；Google 字体 CSS 在国内常卡住数秒 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" /></noscript>
-  <link rel="stylesheet" href="./style.css?v=2026.08.29-034230" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.29-034230" />
-  <script src="./lib/bridge-token.js?v=2026.08.29-034230"></script>
-  <script src="./lib/theme-presets.js?v=2026.08.29-034230"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.08.29-034657" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.29-034657" />
+  <script src="./lib/bridge-token.js?v=2026.08.29-034657"></script>
+  <script src="./lib/theme-presets.js?v=2026.08.29-034657"></script>
   <script>
     /* 尽早应用主题变量，减少闪烁；侧栏也依赖这些 CSS 变量 */
     (function () {
@@ -105,7 +105,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.29-034230</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.29-034657</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn site-chrome-toggle" id="site-chrome-toggle" aria-pressed="false" title="隐藏 DevTools 标题栏与左侧工具菜单">隐藏顶栏</button>
@@ -148,12 +148,14 @@
       <nav class="tool-nav" id="tool-nav" aria-label="工具分组"></nav>
       <div class="nav-footer-actions">
         <p class="nav-cache-meta" id="nav-cache-meta" title="缓存可一键清理；备忘录数据不会被清掉">暂无缓存</p>
-        <label class="nav-setting" for="nav-compact" title="开启后侧栏只显示分类名；当前工具所在分类也只高亮分类名，鼠标移上去或点选才展开工具">
-          <input type="checkbox" id="nav-compact" />
-          <span>仅显示分类</span>
-        </label>
-        <button type="button" class="nav-reset nav-cache-clear" id="nav-cache-clear" title="清掉本站临时视频、GIF 和编码器缓存；不会删除备忘录数据与系统相册/已下载文件。清理前请先在备忘录里导出备份。">一键清理缓存</button>
-        <button type="button" class="nav-reset" id="nav-reset" title="恢复工具与分类的默认排序">恢复默认排序</button>
+        <div class="nav-footer-toolbar">
+          <label class="nav-setting nav-setting-inline" for="nav-compact" title="开启后侧栏只显示分类名；当前工具所在分类也只高亮分类名，鼠标移上去或点选才展开工具">
+            <input type="checkbox" id="nav-compact" />
+            <span>仅分类</span>
+          </label>
+          <button type="button" class="nav-reset nav-cache-clear nav-footer-btn" id="nav-cache-clear" title="清掉本站临时视频、GIF 和编码器缓存；不会删除备忘录数据与系统相册/已下载文件。清理前请先在备忘录里导出备份。">清理缓存</button>
+          <button type="button" class="nav-reset nav-footer-btn" id="nav-reset" title="恢复工具与分类的默认排序">默认排序</button>
+        </div>
       </div>
     </aside>
 
@@ -4199,30 +4201,30 @@ adb devices</pre>
       <button type="button" class="primary-btn vsplit-fs-mark" id="vsplit-fs-mark">打起点</button>
     </div>
   </div>
-  <script src="./theme.js?v=2026.08.29-034230"></script>
-  <script src="./temp.js?v=2026.08.29-034230"></script>
-  <script src="./lib/diff-core.js?v=2026.08.29-034230"></script>
-  <script src="./lib/pure.js?v=2026.08.29-034230"></script>
-  <script src="./lib/oss-deps.js?v=2026.08.29-034230"></script>
-  <script src="./app.js?v=2026.08.29-034230"></script>
-  <script src="./about.js?v=2026.08.29-034230" defer></script>
-  <script src="./extra.js?v=2026.08.29-034230" defer></script>
-  <script src="./diff.js?v=2026.08.29-034230" defer></script>
-  <script src="./acupoint.js?v=2026.08.29-034230" defer></script>
-  <script src="./vtrim.js?v=2026.08.29-034230" defer></script>
-  <script src="./vplay.js?v=2026.08.29-034230" defer></script>
-  <script src="./audio.js?v=2026.08.29-034230" defer></script>
-  <script src="./ffbridge.js?v=2026.08.29-034230" defer></script>
-  <script src="./lanshare.js?v=2026.08.29-034230" defer></script>
-  <script src="./setup.js?v=2026.08.29-034230" defer></script>
-  <script src="./imgkit.js?v=2026.08.29-034230" defer></script>
-  <script src="./wheel.js?v=2026.08.29-034230" defer></script>
-  <script src="./memo.js?v=2026.08.29-034230" defer></script>
-  <script src="./textimg.js?v=2026.08.29-034230" defer></script>
-  <script src="./imgtext.js?v=2026.08.29-034230" defer></script>
-  <script src="./imgpreview.js?v=2026.08.29-034230" defer></script>
-  <script src="./whiteboard.js?v=2026.08.29-034230" defer></script>
-  <script src="./pwa.js?v=2026.08.29-034230" defer></script>
+  <script src="./theme.js?v=2026.08.29-034657"></script>
+  <script src="./temp.js?v=2026.08.29-034657"></script>
+  <script src="./lib/diff-core.js?v=2026.08.29-034657"></script>
+  <script src="./lib/pure.js?v=2026.08.29-034657"></script>
+  <script src="./lib/oss-deps.js?v=2026.08.29-034657"></script>
+  <script src="./app.js?v=2026.08.29-034657"></script>
+  <script src="./about.js?v=2026.08.29-034657" defer></script>
+  <script src="./extra.js?v=2026.08.29-034657" defer></script>
+  <script src="./diff.js?v=2026.08.29-034657" defer></script>
+  <script src="./acupoint.js?v=2026.08.29-034657" defer></script>
+  <script src="./vtrim.js?v=2026.08.29-034657" defer></script>
+  <script src="./vplay.js?v=2026.08.29-034657" defer></script>
+  <script src="./audio.js?v=2026.08.29-034657" defer></script>
+  <script src="./ffbridge.js?v=2026.08.29-034657" defer></script>
+  <script src="./lanshare.js?v=2026.08.29-034657" defer></script>
+  <script src="./setup.js?v=2026.08.29-034657" defer></script>
+  <script src="./imgkit.js?v=2026.08.29-034657" defer></script>
+  <script src="./wheel.js?v=2026.08.29-034657" defer></script>
+  <script src="./memo.js?v=2026.08.29-034657" defer></script>
+  <script src="./textimg.js?v=2026.08.29-034657" defer></script>
+  <script src="./imgtext.js?v=2026.08.29-034657" defer></script>
+  <script src="./imgpreview.js?v=2026.08.29-034657" defer></script>
+  <script src="./whiteboard.js?v=2026.08.29-034657" defer></script>
+  <script src="./pwa.js?v=2026.08.29-034657" defer></script>
   <script src="./vendor/js-yaml.min.js" defer></script>
   <script src="./vendor/spark-md5.min.js" defer></script>
   <script src="./vendor/qrcode.min.js" defer></script>
