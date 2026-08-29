@@ -260,9 +260,14 @@ async function main() {
     if (typeof window.DevToolsMemo.scheduleTempPrompt === "function") {
       const ids = (window.DevToolsMemo.getIndex().items || []).slice(0, 2).map((x) => x.id);
       ids.forEach((id) => window.DevToolsMemo.scheduleTempPrompt(id));
-      await sleep(80);
+      await sleep(120);
       out.tempUx.stackCount = document.querySelectorAll("#memo-temp-prompt-stack .memo-temp-prompt").length;
       out.tempUx.stackMulti = out.tempUx.stackCount >= 2;
+      const prompt = document.querySelector("#memo-temp-prompt-stack .memo-temp-prompt:not(.memo-clip-offer)");
+      out.tempUx.promptPreview = Boolean(prompt?.querySelector("[data-memo-temp-prompt-preview]"));
+      out.tempUx.promptHasBody = Boolean(
+        prompt?.querySelector(".memo-temp-prompt-text, .memo-temp-prompt-thumb, .memo-temp-prompt-meta")
+      );
       for (let i = 0; i < 4; i += 1) {
         document.querySelectorAll("[data-memo-temp-prompt-skip]").forEach((btn) => btn.click());
         document.querySelectorAll("[data-memo-clip-offer-dismiss]").forEach((btn) => btn.click());
@@ -1170,7 +1175,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260829memoloc2/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260829memoclip1/.test(s.src)),
     };
 
     out.pwa = {
@@ -1561,7 +1566,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/memoloc2/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memoclip1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1830,8 +1835,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/memoloc2/i.test(result.cacheBust?.version || "")) {
-    failed.push("cache-bust/version should be aligned to memoloc2");
+  if (!/memoclip1/i.test(result.cacheBust?.version || "")) {
+    failed.push("cache-bust/version should be aligned to memoclip1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
@@ -1842,7 +1847,7 @@ async function main() {
   if (!result.dragSelect?.cardNotDraggable || (result.dragSelect?.canReorder && !result.dragSelect?.hasDragHandle)) {
     failed.push("memo cards should use drag handle instead of whole-card drag");
   }
-  if (!result.tempUx?.api || !result.tempUx?.daysDefault || !result.tempUx?.marked || !result.tempUx?.badge || !result.tempUx?.badgeProminent || !result.tempUx?.cleared || !result.tempUx?.stackMulti || !result.tempUx?.stackCleared) {
+  if (!result.tempUx?.api || !result.tempUx?.daysDefault || !result.tempUx?.marked || !result.tempUx?.badge || !result.tempUx?.badgeProminent || !result.tempUx?.cleared || !result.tempUx?.stackMulti || !result.tempUx?.stackCleared || !result.tempUx?.promptPreview || !result.tempUx?.promptHasBody) {
     failed.push("memo temp mark API/UI failed");
   }
   if (!result.textEdit?.isModal || !result.textEdit?.modalWideEnough) {
