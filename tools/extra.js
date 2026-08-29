@@ -7141,11 +7141,6 @@
     const vbbZip = $("#vbb-zip");
     const vbbMergedDl = $("#vbb-merged-dl");
     const vbbMergedPreview = $("#vbb-merged-preview");
-    const vbbProgress = $("#vbb-progress");
-    const vbbProgressFill = $("#vbb-progress-fill");
-    const vbbProgressText = $("#vbb-progress-text");
-    const vbbProgressSub = $("#vbb-progress-sub");
-    const vbbProgressPct = $("#vbb-progress-pct");
     const vbbPlan = $("#vbb-plan");
     const vbbPlanSummary = $("#vbb-plan-summary");
     const vbbPlanCompare = $("#vbb-plan-compare");
@@ -7589,35 +7584,8 @@
       vbbMeta.textContent = `已选 ${vbbBatchFiles.length} 个视频 · 共 ${totalDur.toFixed(1)}s · ${formatKb(totalSize)} · 点「一键黑盒」全部转换`;
     }
 
-    function setVbbProgress(visible, ratio, text, opts = {}) {
-      if (!vbbProgress) return;
-      vbbProgress.hidden = !visible;
-      if (!visible) {
-        if (vbbProgressFill) {
-          vbbProgressFill.style.width = "0%";
-          vbbProgressFill.classList.remove("is-active", "is-busy");
-        }
-        if (vbbProgressPct) vbbProgressPct.hidden = true;
-        if (vbbProgressSub) vbbProgressSub.hidden = true;
-        return;
-      }
-      const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)));
-      const busy = Boolean(opts.busy) || (pct > 0 && pct < 100);
-      if (vbbProgressFill) {
-        vbbProgressFill.style.width = `${Math.max(pct, busy && pct < 8 ? 8 : pct)}%`;
-        vbbProgressFill.classList.toggle("is-active", busy);
-        vbbProgressFill.classList.toggle("is-busy", Boolean(opts.busy));
-      }
-      if (vbbProgressPct) {
-        vbbProgressPct.textContent = `${pct}%`;
-        vbbProgressPct.hidden = false;
-      }
-      if (vbbProgressText) vbbProgressText.textContent = text || `${pct}%`;
-      if (vbbProgressSub) {
-        vbbProgressSub.textContent = opts.sub || "";
-        vbbProgressSub.hidden = !opts.sub;
-      }
-    }
+    /** 总进度条已移除，仅保留各片段进度；保留空函数以免改动所有调用点 */
+    function setVbbProgress() {}
 
     function setVbbClipJob(idx, patch = {}) {
       const c = vbbClips[idx];
@@ -8514,9 +8482,10 @@
               srcH: item.srcH,
               isAborted: () => abortVbb,
               onProgress: (local, text) =>
-                setVbbProgress(true, base + 0.05 + Math.min(0.9, local) * (0.9 / total), `批量黑盒 ${i + 1}/${total}`, {
-                  sub: text || item.file.name,
-                  busy: true,
+                setVbbClipJob(i, {
+                  status: "running",
+                  progress: Math.min(0.98, 0.05 + Math.min(0.9, local) * 0.9),
+                  text: text || item.file.name,
                 }),
             });
             if (abortVbb) throw new Error("已取消");
@@ -8585,7 +8554,6 @@
       try {
         await prewarmFfmpegEngine().catch(() => {});
         setVbbClipJob(0, { status: "running", progress: 0.02, text: "黑盒编码…" });
-        setVbbProgress(true, 0.05, "黑盒编码…", { sub: `整段 ${duration.toFixed(1)}s`, busy: true });
         const encoded = await encodeBlackboxClip({
           file: vbbSourceFile,
           startSec: 0,
@@ -8594,7 +8562,11 @@
           srcH,
           isAborted: () => abortVbb,
           onProgress: (local, text) =>
-            setVbbProgress(true, 0.08 + Math.min(0.9, local) * 0.9, "黑盒编码…", { sub: text, busy: true }),
+            setVbbClipJob(0, {
+              status: "running",
+              progress: Math.min(0.98, 0.08 + Math.min(0.9, local) * 0.9),
+              text: text || "黑盒编码…",
+            }),
         });
         if (abortVbb) throw new Error("已取消");
         vbbClips[0].gifBlob = encoded.blob;
@@ -8656,6 +8628,7 @@
           sub: `${sampleSpan.toFixed(1)}s @ 15FPS / 宽${V2G_BLACKBOX_BASE_W}`,
           busy: true,
         });
+        if (vbbMeta) vbbMeta.textContent = `分析中 · 编码样片 ${sampleSpan.toFixed(1)}s…`;
         await prewarmFfmpegEngine().catch(() => {});
         const sample = await encodeV2gGifFfmpeg({
           file: vbbSourceFile,
@@ -8671,11 +8644,9 @@
           brightness: 0,
           isAborted: () => abortVbb,
           stageLabel: "样片",
-          onProgress: (local, text) =>
-            setVbbProgress(true, 0.08 + Math.min(0.75, local) * 0.75, "分析中 · 编码样片", {
-              sub: text,
-              busy: true,
-            }),
+          onProgress: (local, text) => {
+            if (vbbMeta) vbbMeta.textContent = `分析中 · ${text || "编码样片"}`;
+          },
         });
         if (abortVbb) throw new Error("已取消");
         if (!sample?.blob?.size) throw new Error("样片编码失败");
