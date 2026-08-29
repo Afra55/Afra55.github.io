@@ -341,29 +341,34 @@
     return !!(root && !root.hidden && root.classList.contains("is-workspace-active"));
   }
 
+  function wheelDisplaySize() {
+    if (!canvas) return 0;
+    const rect = canvas.getBoundingClientRect();
+    return Math.max(1, Math.floor(Math.min(rect.width, rect.height)));
+  }
+
   function resizeCanvas() {
-    if (!canvas || !root) return;
-    const box = canvas.parentElement;
-    if (!box) return;
-    const size = Math.floor(Math.min(box.clientWidth, box.clientHeight, window.innerHeight * 0.78));
-    const dpr = Math.min(window.devicePixelRatio || 1, 2);
-    const px = Math.max(280, size);
-    if (canvas.width === px * dpr && canvas.height === px * dpr) {
-      drawWheel();
+    if (!canvas || !ctx || !root) return;
+    const displaySize = wheelDisplaySize();
+    if (displaySize < 40) {
+      requestAnimationFrame(resizeCanvas);
       return;
     }
-    canvas.width = px * dpr;
-    canvas.height = px * dpr;
-    canvas.style.width = `${px}px`;
-    canvas.style.height = `${px}px`;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const buf = Math.round(displaySize * dpr);
+    if (canvas.width !== buf || canvas.height !== buf) {
+      canvas.width = buf;
+      canvas.height = buf;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
     drawWheel();
   }
 
   function drawWheel(highlightIndex = -1) {
     if (!ctx || !canvas) return;
-    const cssW = parseFloat(canvas.style.width) || canvas.width;
-    const cssH = parseFloat(canvas.style.height) || canvas.height;
+    const cssW = wheelDisplaySize();
+    const cssH = cssW;
+    if (cssW < 1) return;
     const cx = cssW / 2;
     const cy = cssH / 2;
     const radius = Math.min(cx, cy) * 0.88;
@@ -436,11 +441,38 @@
     return audioCtx;
   }
 
-  function playTick(intensity = 0.5) {
+  /** 须在用户点击/触摸的同步回调里调用，否则 iOS 会静音 Web Audio */
+  function unlockWheelAudio() {
     if (!soundOn) return;
     const ac = ensureAudio();
     if (!ac) return;
     if (ac.state === "suspended") ac.resume().catch(() => {});
+    try {
+      const osc = ac.createOscillator();
+      const gain = ac.createGain();
+      gain.gain.value = 0.0001;
+      osc.connect(gain);
+      gain.connect(ac.destination);
+      osc.start(0);
+      osc.stop(ac.currentTime + 0.01);
+    } catch (_) {}
+  }
+
+  async function resumeWheelAudio() {
+    const ac = ensureAudio();
+    if (!ac || ac.state !== "suspended") return ac;
+    try {
+      await ac.resume();
+    } catch (_) {
+      return null;
+    }
+    return ac;
+  }
+
+  async function playTick(intensity = 0.5) {
+    if (!soundOn) return;
+    const ac = await resumeWheelAudio();
+    if (!ac) return;
     const osc = ac.createOscillator();
     const gain = ac.createGain();
     osc.type = "triangle";
@@ -453,9 +485,9 @@
     osc.stop(ac.currentTime + 0.07);
   }
 
-  function playWinChime() {
+  async function playWinChime() {
     if (!soundOn) return;
-    const ac = ensureAudio();
+    const ac = await resumeWheelAudio();
     if (!ac) return;
     [523.25, 659.25, 783.99].forEach((freq, i) => {
       const osc = ac.createOscillator();
@@ -549,7 +581,10 @@
       soundOn = Boolean(soundToggle.checked);
       saveState();
     });
-    spinBtn?.addEventListener("click", () => spinWheel().catch(() => {}));
+    spinBtn?.addEventListener("click", () => {
+      unlockWheelAudio();
+      spinWheel().catch(() => {});
+    });
     window.addEventListener("resize", () => {
       if (isWheelVisible()) resizeCanvas();
     }, { passive: true });
