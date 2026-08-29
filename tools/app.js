@@ -2657,6 +2657,26 @@
     showToast("已恢复默认排序");
   });
 
+  async function runForceHardRefresh() {
+    const btns = [$("#site-force-refresh"), $("#nav-force-refresh")].filter(Boolean);
+    btns.forEach((b) => {
+      b.disabled = true;
+    });
+    try {
+      if (navigator.serviceWorker?.getRegistrations) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+      }
+      if (window.caches?.keys) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map((k) => caches.delete(k)));
+      }
+    } catch (_) {}
+    const url = new URL(location.href);
+    url.searchParams.set("_fresh", Date.now().toString(36));
+    location.replace(`${url.pathname}${url.search}${url.hash}`);
+  }
+
   async function runNavCacheClear() {
     const btn = $("#nav-cache-clear");
     if (btn?.disabled) return;
@@ -2690,6 +2710,13 @@
 
   $("#nav-cache-clear")?.addEventListener("click", () => {
     runNavCacheClear();
+  });
+
+  $("#site-force-refresh")?.addEventListener("click", () => {
+    runForceHardRefresh();
+  });
+  $("#nav-force-refresh")?.addEventListener("click", () => {
+    runForceHardRefresh();
   });
 
   navOpenBtn?.addEventListener("click", (e) => {

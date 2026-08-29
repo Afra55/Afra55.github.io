@@ -18,62 +18,41 @@
   const HOLLOW_DELAYS = [0.013, 0.027, 0.041];
   const HOLLOW_GAINS = [0.3, 0.16, 0.08];
 
-  /** 木鱼造型：法器侧视轮廓 + 鳞刻 + 腔口 + 木鱼棒（参考实物与 cyber-merit） */
-  const FISH_ART_VER = "3";
+  /** 木鱼造型参考 ShenpingDD/wooden-fish-dsh docs/fish.svg（圆胖正面、禅眼、开缝、鱼尾） */
+  const FISH_ART_VER = "4";
 
   function renderFishArt(prefix) {
     const p = prefix;
-    return `<svg class="muyu-fish-svg" viewBox="0 0 200 220" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+    return `<svg class="muyu-fish-svg" viewBox="0 0 140 104" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
       <defs>
-        <linearGradient id="${p}-wood" x1="18%" y1="8%" x2="82%" y2="92%">
-          <stop offset="0%" stop-color="#c99852"/>
-          <stop offset="28%" stop-color="#9a6834"/>
-          <stop offset="62%" stop-color="#6f4520"/>
-          <stop offset="100%" stop-color="#3d2410"/>
+        <linearGradient id="${p}-gBody" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#D8A062"/>
+          <stop offset="1" stop-color="#A8622A"/>
         </linearGradient>
-        <linearGradient id="${p}-wood-edge" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#ddb878"/>
-          <stop offset="100%" stop-color="#5a3818"/>
+        <linearGradient id="${p}-gHead" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#EABD85"/>
+          <stop offset="1" stop-color="#C9884A"/>
         </linearGradient>
-        <radialGradient id="${p}-cavity" cx="50%" cy="35%" r="68%">
-          <stop offset="0%" stop-color="#1a0f08"/>
-          <stop offset="55%" stop-color="#0a0604"/>
-          <stop offset="100%" stop-color="#020101"/>
-        </radialGradient>
-        <linearGradient id="${p}-sheen" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="rgba(255,236,200,0.55)"/>
-          <stop offset="100%" stop-color="rgba(255,236,200,0)"/>
-        </linearGradient>
-        <filter id="${p}-soft" x="-8%" y="-8%" width="116%" height="116%">
-          <feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#000" flood-opacity="0.35"/>
+        <filter id="${p}-shadow" x="-10%" y="-10%" width="120%" height="130%">
+          <feDropShadow dx="0" dy="4" stdDeviation="3.5" flood-color="#000" flood-opacity="0.28"/>
         </filter>
       </defs>
-      <ellipse cx="100" cy="204" rx="78" ry="9" fill="rgba(0,0,0,0.22)"/>
-      <rect x="28" y="188" width="144" height="18" rx="9" fill="#5c2d4a" stroke="#3e1e32" stroke-width="1.5"/>
-      <rect x="32" y="190" width="136" height="6" rx="3" fill="#7a3d62" opacity="0.55"/>
-      <path d="M36 188 Q100 181 164 188" stroke="#9a5578" stroke-width="1.2" fill="none" opacity="0.65"/>
-      <g filter="url(#${p}-soft)">
-        <path d="M38 148 Q38 62 100 48 Q162 62 162 148 Q162 172 100 182 Q38 172 38 148 Z" fill="url(#${p}-wood-edge)"/>
-        <path d="M44 145 Q44 68 100 56 Q156 68 156 145 Q156 166 100 174 Q44 166 44 145 Z" fill="url(#${p}-wood)"/>
-        <path d="M44 145 Q44 68 100 56 Q156 68 156 145 Q156 166 100 174 Q44 166 44 145 Z" fill="none" stroke="#4a2c14" stroke-width="1.2" opacity="0.55"/>
+      <ellipse cx="70" cy="98" rx="52" ry="5" fill="rgba(0,0,0,0.18)"/>
+      <rect x="24" y="78" width="92" height="13" rx="6.5" fill="#8A5A2B" stroke="#6B421A" stroke-width="2"/>
+      <rect x="26" y="80" width="88" height="3" rx="1.5" fill="#A07038" opacity="0.7"/>
+      <g filter="url(#${p}-shadow)">
+        <path d="M32 52 C30 32 48 22 70 22 C92 22 112 32 110 52 C108 70 88 76 70 76 C50 76 34 68 32 52 Z"
+          fill="url(#${p}-gBody)" stroke="#7C4A1E" stroke-width="2.5"/>
+        <ellipse cx="46" cy="38" rx="19" ry="12" fill="url(#${p}-gHead)"/>
+        <ellipse cx="42" cy="35" rx="9" ry="5" fill="#F0CE9D" opacity="0.85"/>
+        <path d="M30 52 C46 44 64 44 80 52" fill="none" stroke="#5D3412" stroke-width="4" stroke-linecap="round"/>
+        <path d="M32 56 C48 49 66 49 80 55" fill="none" stroke="#8A5426" stroke-width="1.6" stroke-linecap="round" opacity="0.55"/>
+        <path d="M40 37 Q44 33 48 37" fill="none" stroke="#3A2410" stroke-width="2.8" stroke-linecap="round"/>
+        <path d="M108 50 L122 38 L126 46 L122 50 L126 54 L122 62 Z" fill="#9A5C24" stroke="#6B421A" stroke-width="2" stroke-linejoin="round"/>
       </g>
-      <g fill="none" stroke="#4a3018" stroke-opacity="0.42" stroke-linecap="round">
-        <path d="M52 108 Q100 78 148 108" stroke-width="2.2"/>
-        <path d="M58 122 Q100 98 142 122" stroke-width="1.9"/>
-        <path d="M64 136 Q100 118 136 136" stroke-width="1.6"/>
-        <path d="M70 148 Q100 134 130 148" stroke-width="1.3"/>
-      </g>
-      <path d="M156 88 Q178 96 176 128 Q174 148 160 152" fill="none" stroke="#3d2410" stroke-width="5" stroke-linecap="round" opacity="0.75"/>
-      <path d="M44 118 Q28 124 26 142 Q24 154 36 158" fill="none" stroke="#3d2410" stroke-width="4.5" stroke-linecap="round" opacity="0.65"/>
-      <ellipse cx="100" cy="142" rx="34" ry="26" fill="url(#${p}-cavity)"/>
-      <ellipse cx="100" cy="136" rx="28" ry="18" fill="#070504"/>
-      <path d="M72 128 Q100 152 128 128" stroke="rgba(255,220,170,0.22)" stroke-width="2" fill="none" stroke-linecap="round"/>
-      <ellipse cx="72" cy="78" rx="38" ry="22" fill="url(#${p}-sheen)" opacity="0.85"/>
-      <ellipse cx="58" cy="70" rx="11" ry="6.5" fill="rgba(255,248,230,0.72)"/>
       <g class="muyu-mallet">
-        <path d="M148 8 L154 8 L162 88 L146 88 Z" fill="#7a5230" stroke="#4a3018" stroke-width="1.2"/>
-        <ellipse cx="151" cy="92" rx="13" ry="10" fill="#f5efe6" stroke="#c8b8a8" stroke-width="1.5"/>
-        <ellipse cx="151" cy="90" rx="9" ry="6" fill="#fffdf8" opacity="0.85"/>
+        <rect x="113" y="16" width="6" height="28" rx="3" fill="#8A5A2B" stroke="#6B421A" stroke-width="1.5"/>
+        <ellipse cx="116" cy="13" rx="9" ry="7" fill="#B87A35" stroke="#6B421A" stroke-width="1.5"/>
       </g>
     </svg>`;
   }
