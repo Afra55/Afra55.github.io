@@ -169,7 +169,22 @@ sync_bridge_bundle "${SCRIPT_DIR}" "${BRIDGE_DIR}"
 
 cd "${BRIDGE_DIR}" || pause_exit 1
 export ADB_BRIDGE_TOKEN="${ADB_BRIDGE_TOKEN:-devtools-bridge}"
-export ADB_BRIDGE_PORT="${ADB_BRIDGE_PORT:-17888}"
+
+RESOLVE_SCRIPT="${SCRIPT_DIR}/resolve-port.js"
+if [ -f "${SCRIPT_DIR}/resolve-port.js" ]; then
+  cp -f "${SCRIPT_DIR}/resolve-port.js" "${BRIDGE_DIR}/resolve-port.js" 2>/dev/null || true
+fi
+if [ ! -f "${RESOLVE_SCRIPT}" ] && [ -f "${BRIDGE_DIR}/resolve-port.js" ]; then
+  RESOLVE_SCRIPT="${BRIDGE_DIR}/resolve-port.js"
+fi
+if [ -f "${RESOLVE_SCRIPT}" ]; then
+  echo "检查端口是否可用…"
+  RESOLVED_PORT="$(node "${RESOLVE_SCRIPT}")" || pause_exit $?
+  export ADB_BRIDGE_PORT="${RESOLVED_PORT:-17888}"
+else
+  export ADB_BRIDGE_PORT="${ADB_BRIDGE_PORT:-17888}"
+fi
+echo "桥端口：${ADB_BRIDGE_PORT}"
 echo "node: $(command -v node)"
 echo "adb 版本："
 adb version 2>/dev/null | head -n 1 || echo "(adb version 读取失败)"

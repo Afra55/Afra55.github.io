@@ -201,9 +201,29 @@ if not exist "%BRIDGE_DIR%\ffmpeg-bridge\server.js" (
   echo [WARN] missing ffmpeg-bridge>> "%LOG_FILE%"
 )
 
+if exist "%SCRIPT_DIR%resolve-port.js" (
+  copy /Y "%SCRIPT_DIR%resolve-port.js" "%BRIDGE_DIR%\resolve-port.js" >nul
+  echo [OK] resolve-port.js synced>> "%LOG_FILE%"
+)
+
 cd /d "%BRIDGE_DIR%"
 if "%ADB_BRIDGE_TOKEN%"=="" set "ADB_BRIDGE_TOKEN=devtools-bridge"
-if "%ADB_BRIDGE_PORT%"=="" set "ADB_BRIDGE_PORT=17888"
+
+set "RESOLVE_SCRIPT=%SCRIPT_DIR%resolve-port.js"
+if not exist "%RESOLVE_SCRIPT%" set "RESOLVE_SCRIPT=%BRIDGE_DIR%\resolve-port.js"
+set "ADB_BRIDGE_PORT="
+if exist "%RESOLVE_SCRIPT%" (
+  echo [..] Checking port availability...
+  for /f "usebackq delims=" %%P in (`node "%RESOLVE_SCRIPT%"`) do set "ADB_BRIDGE_PORT=%%P"
+  if errorlevel 1 (
+    echo [ERROR] Port resolve cancelled or failed.
+    echo [ERROR] port resolve failed>> "%LOG_FILE%"
+    exit /b 1
+  )
+)
+if not defined ADB_BRIDGE_PORT set "ADB_BRIDGE_PORT=17888"
+echo [OK] Bridge port: %ADB_BRIDGE_PORT%
+echo bridge port=%ADB_BRIDGE_PORT%>> "%LOG_FILE%"
 
 echo [OK] adb:
 adb version

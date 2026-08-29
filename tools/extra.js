@@ -11877,11 +11877,12 @@
       };
       const cfg = map[platform];
       if (!cfg) throw new Error("未知平台");
-      const [serverJs, mirrorJs, ffmpegJs, scriptRaw, serverJar] = await Promise.all([
+      const [serverJs, mirrorJs, ffmpegJs, scriptRaw, resolvePortJs, serverJar] = await Promise.all([
         fetchTextAsset("./adb-bridge/server.js"),
         fetchTextAsset("./adb-bridge/scrcpy-mirror.js").catch(() => ""),
         fetchTextAsset("./ffmpeg-bridge/server.js").catch(() => ""),
         fetchTextAsset(cfg.scriptPath),
+        fetchTextAsset("./adb-bridge/resolve-port.js").catch(() => ""),
         fetch("./adb-bridge/vendor/scrcpy-server-v3.1", { cache: "no-cache" })
           .then(async (res) => (res.ok ? new Uint8Array(await res.arrayBuffer()) : null))
           .catch(() => null),
@@ -11898,6 +11899,7 @@
         "本压缩包必须同时保留：",
         "  - server.js",
         "  - scrcpy-mirror.js",
+        "  - resolve-port.js",
         "  - ffmpeg-bridge/server.js",
         "  - vendor/scrcpy-server-v3.1  （可选；缺则首次镜像时自动下载）",
         "  - " + cfg.scriptName,
@@ -11916,6 +11918,7 @@
       const zip = new JSZip();
       zip.file("server.js", serverJs);
       if (mirrorJs) zip.file("scrcpy-mirror.js", mirrorJs);
+      if (resolvePortJs) zip.file("resolve-port.js", resolvePortJs);
       if (ffmpegJs) zip.file("ffmpeg-bridge/server.js", ffmpegJs);
       if (serverJar) zip.file("vendor/scrcpy-server-v3.1", serverJar);
       zip.file(cfg.scriptName, scriptText, {
