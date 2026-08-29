@@ -9694,23 +9694,6 @@ body.ruler-fs-active {
   font-size: 0.88rem;
 }
 
-.muyu-picks summary {
-  cursor: pointer;
-  font-weight: 600;
-  color: var(--text);
-}
-
-.muyu-picks-list {
-  margin: 0.65rem 0 0;
-  padding-left: 1.15rem;
-  display: grid;
-  gap: 0.45rem;
-}
-
-.muyu-picks-list a {
-  word-break: break-all;
-}
-
 .muyu-stage {
   position: relative;
   display: grid;
