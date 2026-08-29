@@ -737,7 +737,7 @@
   }
 
   function speakResult(text) {
-    if (!text || !window.speechSynthesis) return;
+    if (!soundOn || !text || !window.speechSynthesis) return;
     const synth = window.speechSynthesis;
     loadZhVoice();
     try {
@@ -757,11 +757,7 @@
   }
 
   function speakResultAfterEffects(text) {
-    if (!text) return;
-    if (!soundOn) {
-      speakResult(text);
-      return;
-    }
+    if (!text || !soundOn) return;
     initHtmlWheelAudio();
     let spoke = false;
     const fire = () => {
