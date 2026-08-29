@@ -1373,6 +1373,7 @@ async function main() {
       nowrap: recentListEl ? getComputedStyle(recentListEl).flexWrap === "nowrap" : false,
       overflowX: recentListEl ? getComputedStyle(recentListEl).overflowX : "",
       hiddenScrollbar: recentListEl ? getComputedStyle(recentListEl).scrollbarWidth === "none" : false,
+      visibleScrollbar: recentListEl ? getComputedStyle(recentListEl).scrollbarWidth !== "none" : false,
     };
     try {
       const ids = ["json", "base64", "uuid", "hash", "regex", "color", "url", "cron", "yaml"];
@@ -1399,13 +1400,21 @@ async function main() {
       oneRowFlex: Boolean(favListEl) && getComputedStyle(favListEl).display === "flex",
     };
     try {
-      localStorage.setItem("devtools-tool-favorites-v1", JSON.stringify(["json", "memo", "regex"]));
+      localStorage.setItem(
+        "devtools-tool-favorites-v1",
+        JSON.stringify(["json", "memo", "regex", "yaml", "base64", "uuid", "hash", "color", "url"])
+      );
       window.DevToolsNav?.renderFavorites?.();
       out.favoritesUi.chipCount = document.querySelectorAll(".nav-fav-chip").length;
-      out.favoritesUi.showsAll = out.favoritesUi.chipCount === 3;
+      out.favoritesUi.showsAll = out.favoritesUi.chipCount === 9;
       out.favoritesUi.sortable = document.querySelector(".nav-fav-chip.is-sortable") != null;
-      window.DevToolsNav?.addFavorite?.("yaml");
+      window.DevToolsNav?.addFavorite?.("cron");
       out.favoritesUi.afterAdd = document.querySelectorAll(".nav-fav-chip").length;
+      if (favListEl) {
+        out.favoritesUi.overflowX = getComputedStyle(favListEl).overflowX;
+        out.favoritesUi.scrollableX = favListEl.scrollWidth > favListEl.clientWidth + 1;
+        out.favoritesUi.visibleScrollbar = getComputedStyle(favListEl).scrollbarWidth !== "none";
+      }
     } catch (_) {}
 
     const sortHint = document.querySelector(".nav-sort-hint");
@@ -1545,7 +1554,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/imgprev2/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/navscroll1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1813,8 +1822,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/imgprev2/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to imgprev2");
+  if (!/navscroll1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to navscroll1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
@@ -1857,6 +1866,7 @@ async function main() {
     !result.recentUi?.showsAll ||
     result.recentUi?.overflowX !== "auto" ||
     !result.recentUi?.scrollableX ||
+    !result.recentUi?.visibleScrollbar ||
     !result.recentUi?.fullText
   ) {
     failed.push("recent tools should use a single-row horizontally scrollable strip with full labels");
@@ -1869,7 +1879,9 @@ async function main() {
     !result.favoritesUi?.showsAll ||
     !result.favoritesUi?.sortable ||
     !result.favoritesUi?.oneRowFlex ||
-    (result.favoritesUi?.afterAdd || 0) < 4
+    !result.favoritesUi?.scrollableX ||
+    !result.favoritesUi?.visibleScrollbar ||
+    (result.favoritesUi?.afterAdd || 0) < 10
   ) {
     failed.push("favorites strip should allow unlimited add and draggable sort");
   }

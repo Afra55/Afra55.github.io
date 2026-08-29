@@ -316,17 +316,30 @@ body.nav-sorting-tools .nav-bar {
   overflow-y: hidden;
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  padding-bottom: 0.05rem;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 55%, transparent) transparent;
+  padding-bottom: 0.42rem;
+  box-sizing: border-box;
 }
 
 .nav-strip-list::-webkit-scrollbar,
 .nav-recent-list::-webkit-scrollbar,
 .nav-fav-list::-webkit-scrollbar {
-  display: none;
-  width: 0;
-  height: 0;
+  height: 6px;
+}
+
+.nav-strip-list::-webkit-scrollbar-track,
+.nav-recent-list::-webkit-scrollbar-track,
+.nav-fav-list::-webkit-scrollbar-track {
+  margin-top: 0.3rem;
+  background: transparent;
+}
+
+.nav-strip-list::-webkit-scrollbar-thumb,
+.nav-recent-list::-webkit-scrollbar-thumb,
+.nav-fav-list::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 52%, var(--line));
 }
 
 .nav-recent-chip,

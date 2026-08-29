@@ -1411,6 +1411,23 @@
     syncNavCompactUi();
   }
 
+  function bindNavStripWheelScroll(el) {
+    if (!el || el.dataset.wheelBound === "1") return;
+    el.dataset.wheelBound = "1";
+    el.addEventListener(
+      "wheel",
+      (e) => {
+        if (el.scrollWidth <= el.clientWidth + 1) return;
+        const delta = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.deltaY;
+        if (!delta) return;
+        el.scrollLeft += delta;
+        e.preventDefault();
+        e.stopPropagation();
+      },
+      { passive: false }
+    );
+  }
+
   function renderRecent() {
     if (!recentWrap || !recentList) return;
     const items = loadRecent();
@@ -2535,6 +2552,8 @@
   renderNav(loadOrder());
   renderRecent();
   renderFavorites();
+  bindNavStripWheelScroll(recentList);
+  bindNavStripWheelScroll(favoritesList);
   window.DevToolsCatalog = {
     groups: TOOL_GROUPS,
     meta: TOOL_META,
