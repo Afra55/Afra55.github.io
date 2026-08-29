@@ -8,6 +8,7 @@
   const MIN_SEGMENTS = 2;
   const MAX_SEGMENTS = 36;
   const MIN_WEIGHT = 1;
+  const MAX_LABEL_LEN = 120;
 
   const WHEEL_COLORS = [
     "#6366f1",
@@ -173,7 +174,7 @@
           <span class="wheel-seg-swatch" style="background:${WHEEL_COLORS[i % WHEEL_COLORS.length]}"></span>
           <label class="wheel-seg-label-wrap">
             <span class="visually-hidden">第 ${i + 1} 块文字</span>
-            <input type="text" class="wheel-seg-text mono" data-field="label" value="${escapeAttr(seg.label)}" maxlength="40" />
+            <textarea rows="1" class="wheel-seg-text mono" data-field="label" maxlength="${MAX_LABEL_LEN}">${escapeHtml(seg.label)}</textarea>
           </label>
           <input type="range" class="wheel-seg-range" data-field="weight" min="${MIN_WEIGHT}" max="${maxW}" step="0.1" value="${pct}" />
           <input type="number" class="wheel-seg-num mono" data-field="weight-num" min="${MIN_WEIGHT}" max="${maxW}" step="0.1" value="${pct}" />
@@ -183,10 +184,12 @@
       .join("");
 
     segmentsList.querySelectorAll(".wheel-seg-text").forEach((input) => {
+      autosizeWheelTextarea(input);
       input.addEventListener("input", () => {
+        autosizeWheelTextarea(input);
         const idx = Number(input.closest(".wheel-seg-row")?.dataset.idx);
         if (Number.isFinite(idx)) {
-          segments[idx].label = input.value.slice(0, 40);
+          segments[idx].label = trimLabel(input.value);
           drawWheel();
           saveState();
         }
@@ -235,6 +238,64 @@
       r.querySelector(".wheel-seg-num").value = String(wi);
       r.querySelector(".wheel-seg-pct").textContent = `${wi}%`;
     });
+  }
+
+  function trimLabel(text) {
+    return String(text || "").slice(0, MAX_LABEL_LEN);
+  }
+
+  function autosizeWheelTextarea(el) {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.max(36, el.scrollHeight)}px`;
+  }
+
+  function wrapWheelLabel(ctx, text, maxWidth) {
+    const raw = String(text || "").trim();
+    if (!raw) return [""];
+    const lines = [];
+    let line = "";
+    for (const ch of raw) {
+      const next = line + ch;
+      if (line && ctx.measureText(next).width > maxWidth) {
+        lines.push(line);
+        line = ch;
+      } else {
+        line = next;
+      }
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  function drawSegmentLabel(ctx, label, arc, radius) {
+    const maxWidth = Math.max(28, arc.sweep * radius * 0.66);
+    const maxLines = Math.max(1, Math.min(5, Math.floor(arc.sweep * radius / 22)));
+    let fontSize = Math.max(10, Math.min(radius * 0.07, 20));
+
+    let lines = [];
+    for (;;) {
+      ctx.font = `bold ${fontSize}px system-ui, sans-serif`;
+      lines = wrapWheelLabel(ctx, label, maxWidth);
+      if (lines.length <= maxLines || fontSize <= 9) break;
+      fontSize -= 1;
+    }
+
+    if (lines.length > maxLines) {
+      lines = lines.slice(0, maxLines);
+      let last = lines[maxLines - 1];
+      while (last.length > 1 && ctx.measureText(`${last}…`).width > maxWidth) {
+        last = last.slice(0, -1);
+      }
+      lines[maxLines - 1] = `${last}…`;
+    }
+
+    const lineHeight = fontSize * 1.12;
+    let y = -((lines.length - 1) * lineHeight) / 2;
+    for (const ln of lines) {
+      ctx.fillText(ln, radius * 0.82, y);
+      y += lineHeight;
+    }
   }
 
   function segmentAngles() {
@@ -304,14 +365,11 @@
       ctx.save();
       ctx.rotate(arc.mid);
       ctx.textAlign = "right";
+      ctx.textBaseline = "middle";
       ctx.fillStyle = "#fff";
-      ctx.font = `bold ${Math.max(12, radius * 0.065)}px system-ui, sans-serif`;
       ctx.shadowColor = "rgba(0,0,0,0.45)";
       ctx.shadowBlur = 4;
-      const label = segments[i]?.label || "";
-      const maxLen = Math.max(4, Math.floor(radius / 14));
-      const text = label.length > maxLen ? `${label.slice(0, maxLen - 1)}…` : label;
-      ctx.fillText(text, radius * 0.82, 4);
+      drawSegmentLabel(ctx, segments[i]?.label || "", arc, radius);
       ctx.restore();
     });
 
@@ -487,7 +545,7 @@
     const saved = loadState();
     if (saved) {
       segments = saved.segments.map((s, i) => ({
-        label: String(s.label || "").slice(0, 40) || defaultLabel(i),
+        label: trimLabel(s.label) || defaultLabel(i),
         weight: roundWeight(Number(s.weight) || MIN_WEIGHT),
       }));
       normalizeWeights();
