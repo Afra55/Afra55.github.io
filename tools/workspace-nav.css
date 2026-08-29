@@ -205,7 +205,7 @@ body.nav-sorting .tool-nav-link,
   height: 1.45rem;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: rgba(232, 238, 248, 0.06);
+  background: var(--ink-6);
   color: var(--ink);
   font: inherit;
   font-size: 1rem;
@@ -239,7 +239,7 @@ body.nav-sorting .tool-nav-link,
 .nav-fav-picker-item {
   appearance: none;
   border: 1px solid var(--line);
-  background: rgba(232, 238, 248, 0.06);
+  background: var(--ink-6);
   color: var(--ink);
   border-radius: 999px;
   padding: 0.22rem 0.5rem;
@@ -341,7 +341,7 @@ body.nav-sorting-tools .nav-bar {
   min-width: 0;
   box-sizing: border-box;
   border: 1px solid var(--line);
-  background: rgba(232, 238, 248, 0.06);
+  background: var(--ink-6);
   color: var(--ink);
   border-radius: 999px;
   padding: 0.28rem 0.42rem;

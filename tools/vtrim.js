@@ -670,7 +670,7 @@
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cssW, cssH);
-    ctx.fillStyle = "#0a101c";
+    ctx.fillStyle = window.DevToolsTheme?.stageBg?.() || "#0a101c";
     ctx.fillRect(0, 0, cssW, cssH);
     ctx.save();
     ctx.translate(cssW / 2, cssH / 2);
@@ -732,7 +732,7 @@
     const ctx = filmstrip.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = "#0a101c";
+    ctx.fillStyle = window.DevToolsTheme?.stageBg?.() || "#0a101c";
     ctx.fillRect(0, 0, cssW, cssH);
     const nBase = Math.min(36, Math.max(12, Math.round(cssW / 36)));
     // 长视频少抽帧，减轻手机/长片卡顿
@@ -758,7 +758,7 @@
         const dh = vh * scale;
         ctx.drawImage(video, i * tw + (tw - dw) / 2, (cssH - dh) / 2, dw, dh);
       } catch (_) {
-        ctx.fillStyle = "#1a2436";
+        ctx.fillStyle = window.DevToolsTheme?.cssVar?.("--bg-1") || window.DevToolsTheme?.stageBg?.() || "#1a2436";
         ctx.fillRect(i * tw, 0, tw, cssH);
       }
     }
