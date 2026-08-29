@@ -5778,6 +5778,29 @@ button.adb-device-body.linkish {
   margin-top: 0.75rem;
 }
 
+.whiteboard-body {
+  padding-top: 0.35rem;
+}
+
+.whiteboard-hint {
+  margin: 0 0 0.55rem;
+}
+
+.whiteboard-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: clamp(420px, calc(100dvh - 11.5rem), 860px);
+}
+
+.whiteboard-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 420px;
+  border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+  border-radius: var(--radius-md, 10px);
+  background: #fff;
+}
+
 .vplay-stage {
   margin-top: 0.85rem;
 }
