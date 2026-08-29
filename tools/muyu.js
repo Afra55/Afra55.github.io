@@ -7,54 +7,13 @@
   const HTML_POOL_SIZE = 4;
   const DEFAULT_FLOAT_PHRASES = ["功德 +1", "善哉", "福生无量", "随喜", "心安", "清净", "平安喜乐"];
   const VALID_THEMES = new Set(["zen", "ocean", "gold", "forest"]);
-  const MODAL_MODES = [
-    [1, 0.34, 0.72],
-    [2.05, 0.24, 0.24],
-    [3.28, 0.16, 0.15],
-    [5.02, 0.1, 0.09],
-    [7.15, 0.06, 0.05],
-  ];
-  const KNOCK_BASE_HZ = 398;
-  const HOLLOW_DELAYS = [0.013, 0.027, 0.041];
-  const HOLLOW_GAINS = [0.3, 0.16, 0.08];
+  const SOUND_FILES = ["sound_1.mp3", "sound_2.mp3"];
+  /** 造型与音效来自 jwenjian/wooden-fish（fork Ares-Chang/wooden-fish，MIT） */
+  const FISH_ART_VER = "jwenjian";
 
-  /** 木鱼造型参考 ShenpingDD/wooden-fish-dsh docs/fish.svg（圆胖正面、禅眼、开缝、鱼尾） */
-  const FISH_ART_VER = "4";
-
-  function renderFishArt(prefix) {
-    const p = prefix;
-    return `<svg class="muyu-fish-svg" viewBox="0 0 140 104" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
-      <defs>
-        <linearGradient id="${p}-gBody" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#D8A062"/>
-          <stop offset="1" stop-color="#A8622A"/>
-        </linearGradient>
-        <linearGradient id="${p}-gHead" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#EABD85"/>
-          <stop offset="1" stop-color="#C9884A"/>
-        </linearGradient>
-        <filter id="${p}-shadow" x="-10%" y="-10%" width="120%" height="130%">
-          <feDropShadow dx="0" dy="4" stdDeviation="3.5" flood-color="#000" flood-opacity="0.28"/>
-        </filter>
-      </defs>
-      <ellipse cx="70" cy="98" rx="52" ry="5" fill="rgba(0,0,0,0.18)"/>
-      <rect x="24" y="78" width="92" height="13" rx="6.5" fill="#8A5A2B" stroke="#6B421A" stroke-width="2"/>
-      <rect x="26" y="80" width="88" height="3" rx="1.5" fill="#A07038" opacity="0.7"/>
-      <g filter="url(#${p}-shadow)">
-        <path d="M32 52 C30 32 48 22 70 22 C92 22 112 32 110 52 C108 70 88 76 70 76 C50 76 34 68 32 52 Z"
-          fill="url(#${p}-gBody)" stroke="#7C4A1E" stroke-width="2.5"/>
-        <ellipse cx="46" cy="38" rx="19" ry="12" fill="url(#${p}-gHead)"/>
-        <ellipse cx="42" cy="35" rx="9" ry="5" fill="#F0CE9D" opacity="0.85"/>
-        <path d="M30 52 C46 44 64 44 80 52" fill="none" stroke="#5D3412" stroke-width="4" stroke-linecap="round"/>
-        <path d="M32 56 C48 49 66 49 80 55" fill="none" stroke="#8A5426" stroke-width="1.6" stroke-linecap="round" opacity="0.55"/>
-        <path d="M40 37 Q44 33 48 37" fill="none" stroke="#3A2410" stroke-width="2.8" stroke-linecap="round"/>
-        <path d="M108 50 L122 38 L126 46 L122 50 L126 54 L122 62 Z" fill="#9A5C24" stroke="#6B421A" stroke-width="2" stroke-linejoin="round"/>
-      </g>
-      <g class="muyu-mallet">
-        <rect x="113" y="16" width="6" height="28" rx="3" fill="#8A5A2B" stroke="#6B421A" stroke-width="1.5"/>
-        <ellipse cx="116" cy="13" rx="9" ry="7" fill="#B87A35" stroke="#6B421A" stroke-width="1.5"/>
-      </g>
-    </svg>`;
+  function assetUrl(name) {
+    const v = window.TOOLS_BUILD || "";
+    return `./assets/muyu/${name}${v ? `?v=${encodeURIComponent(v)}` : ""}`;
   }
 
   let root = null;
@@ -72,10 +31,8 @@
   let fullscreen = false;
   let count = 0;
   let soundOn = true;
-  let audioCtx = null;
-  let webAudioReady = false;
-  let htmlKnockUri = "";
-  let htmlKnockPool = [];
+  let soundVariant = 0;
+  let knockPools = [[], []];
   let htmlKnockCursor = 0;
   let htmlAudioPrimed = false;
   let syncingSound = false;
@@ -94,7 +51,6 @@
   let customPhrasesRaw = "";
   let comboCount = 0;
   let comboTimer = 0;
-  let noiseBuf = null;
   let stageRoot = null;
   let stageBgCanvas = null;
   let stageBgCtx = null;
@@ -108,275 +64,54 @@
   let stageBgT = 0;
   let themeSelect = null;
   let phrasesInput = null;
-
-  function prefersCoarsePointer() {
-    try {
-      return window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
-    } catch (_) {
-      return navigator.maxTouchPoints > 0;
-    }
-  }
-
-  function encodeWavMono16(samples, sampleRate) {
-    const numSamples = samples.length;
-    const buffer = new ArrayBuffer(44 + numSamples * 2);
-    const view = new DataView(buffer);
-    const writeStr = (off, s) => {
-      for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
-    };
-    writeStr(0, "RIFF");
-    view.setUint32(4, 36 + numSamples * 2, true);
-    writeStr(8, "WAVE");
-    writeStr(12, "fmt ");
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, 1, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, sampleRate * 2, true);
-    view.setUint16(32, 2, true);
-    view.setUint16(34, 16, true);
-    writeStr(36, "data");
-    view.setUint32(40, numSamples * 2, true);
-    let offset = 44;
-    for (let i = 0; i < numSamples; i++) {
-      const s = Math.max(-1, Math.min(1, samples[i]));
-      view.setInt16(offset, s * 0x7fff, true);
-      offset += 2;
-    }
-    const bytes = new Uint8Array(buffer);
-    let bin = "";
-    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-    return `data:audio/wav;base64,${btoa(bin)}`;
-  }
-
-  function synthModalKnockSamples(sampleRate, pitch = 1) {
-    const duration = 0.42;
-    const n = Math.max(1, Math.floor(sampleRate * duration));
-    const samples = new Float32Array(n);
-    const base = KNOCK_BASE_HZ * pitch;
-    let rngState = (Math.random() * 0xffffffff) >>> 0;
-    const rnd = () => {
-      rngState = (rngState * 1664525 + 1013904223) >>> 0;
-      return rngState / 0xffffffff - 0.5;
-    };
-
-    for (let i = 0; i < n; i++) {
-      const t = i / sampleRate;
-      let s = 0;
-      const atk = t < 0.004 ? t / 0.004 : 1;
-      for (let m = 0; m < MODAL_MODES.length; m++) {
-        const mult = MODAL_MODES[m][0];
-        const dec = MODAL_MODES[m][1];
-        const amp = MODAL_MODES[m][2];
-        const env = Math.exp(-t / dec) * atk;
-        const w = Math.sin(Math.PI * 2 * base * mult * t);
-        s += w * amp * env;
-        if (m === 0) s += Math.sin(Math.PI * 2 * base * mult * t * 2) * amp * 0.08 * env;
-      }
-      const thump = Math.sin(Math.PI * 2 * base * 0.52 * t) * Math.exp(-t / 0.07) * 0.38 * atk;
-      s += thump;
-      if (t < 0.012) {
-        const click = Math.pow(1 - t / 0.012, 2.2);
-        s += rnd() * 0.55 * click;
-        s += Math.sin(Math.PI * 2 * 1280 * pitch * t) * 0.18 * click;
-      }
-      samples[i] = s;
-    }
-
-    for (let d = 0; d < HOLLOW_DELAYS.length; d++) {
-      const off = Math.max(1, Math.floor(HOLLOW_DELAYS[d] * sampleRate));
-      const g = HOLLOW_GAINS[d];
-      for (let i = n - 1; i >= off; i--) samples[i] += samples[i - off] * g;
-    }
-
-    let peak = 0;
-    for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(samples[i]));
-    const norm = peak > 0 ? 0.82 / peak : 1;
-    for (let i = 0; i < n; i++) {
-      const x = samples[i] * norm;
-      samples[i] = Math.tanh(x * 1.15);
-    }
-    return samples;
-  }
-
-  function synthKnockUri(pitch = 1) {
-    const sampleRate = 22050;
-    return encodeWavMono16(synthModalKnockSamples(sampleRate, pitch), sampleRate);
-  }
+  let soundVariantSelect = null;
 
   function initKnockAudio() {
-    if (htmlKnockUri) return;
-    htmlKnockUri = synthKnockUri(1);
-    htmlKnockPool = Array.from({ length: HTML_POOL_SIZE }, () => {
-      const a = new Audio(htmlKnockUri);
-      a.preload = "auto";
-      return a;
+    SOUND_FILES.forEach((file, idx) => {
+      if (knockPools[idx]?.length) return;
+      const uri = assetUrl(file);
+      knockPools[idx] = Array.from({ length: HTML_POOL_SIZE }, () => {
+        const a = new Audio(uri);
+        a.preload = "auto";
+        return a;
+      });
     });
-  }
-
-  function getNoiseBuffer(ac) {
-    if (noiseBuf) return noiseBuf;
-    const len = Math.floor(ac.sampleRate * 0.035);
-    noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
-    const ch = noiseBuf.getChannelData(0);
-    for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
-    return noiseBuf;
-  }
-
-  function playKnockModal(pitch = 1) {
-    const ac = ensureAudio();
-    if (!ac || ac.state !== "running") return false;
-    const t0 = ac.currentTime;
-    const bus = ac.createGain();
-    bus.gain.value = 1;
-
-    const lp = ac.createBiquadFilter();
-    lp.type = "lowpass";
-    lp.frequency.value = 3200;
-    lp.Q.value = 0.62;
-    const warm = ac.createBiquadFilter();
-    warm.type = "peaking";
-    warm.frequency.value = 920 * pitch;
-    warm.Q.value = 1.1;
-    warm.gain.value = 4.5;
-    const out = ac.createGain();
-    out.gain.value = 0.88;
-    bus.connect(warm).connect(lp).connect(out).connect(ac.destination);
-
-    for (let i = 0; i < HOLLOW_DELAYS.length; i++) {
-      const d = ac.createDelay(0.06);
-      d.delayTime.value = HOLLOW_DELAYS[i];
-      const g = ac.createGain();
-      g.gain.value = HOLLOW_GAINS[i];
-      lp.connect(d).connect(g).connect(out);
-    }
-
-    const ns = ac.createBufferSource();
-    ns.buffer = getNoiseBuffer(ac);
-    const bp = ac.createBiquadFilter();
-    bp.type = "bandpass";
-    bp.frequency.value = 1380 * pitch;
-    bp.Q.value = 1.15;
-    const ng = ac.createGain();
-    ng.gain.setValueAtTime(0.0001, t0);
-    ng.gain.exponentialRampToValueAtTime(0.52, t0 + 0.002);
-    ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.014);
-    ns.connect(bp).connect(ng).connect(bus);
-    ns.start(t0);
-    ns.stop(t0 + 0.016);
-
-    const thump = ac.createOscillator();
-    thump.type = "sine";
-    thump.frequency.value = KNOCK_BASE_HZ * 0.52 * pitch;
-    const tg = ac.createGain();
-    tg.gain.setValueAtTime(0.0001, t0);
-    tg.gain.exponentialRampToValueAtTime(0.42, t0 + 0.003);
-    tg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.09);
-    thump.connect(tg).connect(bus);
-    thump.start(t0);
-    thump.stop(t0 + 0.1);
-
-    const base = KNOCK_BASE_HZ * pitch;
-    for (let i = 0; i < MODAL_MODES.length; i++) {
-      const mult = MODAL_MODES[i][0];
-      const dec = MODAL_MODES[i][1];
-      const amp = MODAL_MODES[i][2];
-      const o = ac.createOscillator();
-      o.type = i === 0 ? "triangle" : "sine";
-      o.frequency.value = base * mult;
-      const g = ac.createGain();
-      g.gain.setValueAtTime(0.0001, t0);
-      g.gain.exponentialRampToValueAtTime(amp, t0 + 0.004);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dec);
-      o.connect(g).connect(bus);
-      o.start(t0);
-      o.stop(t0 + dec + 0.03);
-    }
-    return true;
-  }
-
-  function ensureAudio() {
-    if (!audioCtx) {
-      try {
-        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      } catch (_) {}
-    }
-    return audioCtx;
   }
 
   function unlockMuyuAudio() {
     if (!soundOn) return;
     initKnockAudio();
-    if (!htmlAudioPrimed) {
-      htmlAudioPrimed = true;
-      const prime = new Audio(htmlKnockUri);
-      prime.volume = 0.0001;
-      const p = prime.play();
-      if (p && typeof p.catch === "function") p.catch(() => {});
-    }
-    const ac = ensureAudio();
-    if (!ac) {
-      webAudioReady = false;
-      return;
-    }
-    try {
-      const buf = ac.createBuffer(1, 1, ac.sampleRate);
-      const src = ac.createBufferSource();
-      src.buffer = buf;
-      src.connect(ac.destination);
-      src.start(0);
-    } catch (_) {}
-    if (ac.state === "suspended") {
-      ac.resume()
-        .then(() => {
-          webAudioReady = ac.state === "running";
-        })
-        .catch(() => {
-          webAudioReady = false;
-        });
-    } else {
-      webAudioReady = ac.state === "running";
-    }
-  }
-
-  function playKnockWeb(pitch = 1) {
-    return playKnockModal(pitch);
-  }
-
-  function playKnockHtml(pitch = 1) {
-    if (!htmlKnockPool.length) return;
-    const a = htmlKnockPool[htmlKnockCursor % HTML_POOL_SIZE];
-    htmlKnockCursor += 1;
-    a.volume = 0.72;
-    if (Math.abs(pitch - 1) > 0.02) {
-      a.src = synthKnockUri(pitch);
-    } else if (htmlKnockUri) {
-      a.src = htmlKnockUri;
-    }
-    try {
-      a.currentTime = 0;
-    } catch (_) {}
-    const p = a.play();
+    if (htmlAudioPrimed) return;
+    htmlAudioPrimed = true;
+    const pool = knockPools[soundVariant] || knockPools[0];
+    if (!pool?.length) return;
+    const prime = pool[0];
+    const prevVol = prime.volume;
+    prime.volume = 0.0001;
+    const p = prime.play();
     if (p && typeof p.catch === "function") p.catch(() => {});
-  }
-
-  function registerCombo() {
-    comboCount += 1;
-    window.clearTimeout(comboTimer);
-    comboTimer = window.setTimeout(() => {
-      comboCount = 0;
-    }, 1100);
-    const combo = 1 + Math.min(comboCount, 10) * 0.012;
-    const human = 0.975 + Math.random() * 0.05;
-    return combo * human;
+    window.setTimeout(() => {
+      try {
+        prime.pause();
+        prime.currentTime = 0;
+      } catch (_) {}
+      prime.volume = prevVol || 0.85;
+    }, 40);
   }
 
   function playKnock() {
     if (!soundOn) return;
     initKnockAudio();
-    const pitch = registerCombo();
-    const useHtml = prefersCoarsePointer() && !webAudioReady;
-    if (useHtml || !playKnockWeb(pitch)) playKnockHtml(pitch);
+    const pool = knockPools[soundVariant] || knockPools[0];
+    if (!pool?.length) return;
+    const a = pool[htmlKnockCursor % HTML_POOL_SIZE];
+    htmlKnockCursor += 1;
+    a.volume = 0.85;
+    try {
+      a.currentTime = 0;
+    } catch (_) {}
+    const p = a.play();
+    if (p && typeof p.catch === "function") p.catch(() => {});
   }
 
   function formatCount(n) {
@@ -688,6 +423,9 @@
       if (typeof data.sound === "boolean") soundOn = data.sound;
       if (typeof data.theme === "string") applyTheme(data.theme);
       if (typeof data.phrases === "string") customPhrasesRaw = data.phrases;
+      if (Number.isFinite(data.soundVariant) && data.soundVariant >= 0 && data.soundVariant < SOUND_FILES.length) {
+        soundVariant = Math.floor(data.soundVariant);
+      }
     } catch (_) {}
   }
 
@@ -700,6 +438,7 @@
           sound: soundOn,
           theme: themeId,
           phrases: customPhrasesRaw,
+          soundVariant,
         })
       );
     } catch (_) {}
@@ -719,10 +458,17 @@
     if (soundOn) unlockMuyuAudio();
   }
 
-  function mountFishArt(btn, prefix, withHint) {
+  function mountFishArt(btn, withHint) {
     if (!btn || btn.dataset.art === FISH_ART_VER) return;
     btn.dataset.art = FISH_ART_VER;
-    btn.innerHTML = renderFishArt(prefix);
+    btn.replaceChildren();
+    const img = document.createElement("img");
+    img.className = "muyu-fish-img";
+    img.src = assetUrl("WoodenFish.svg");
+    img.alt = "";
+    img.draggable = false;
+    img.setAttribute("aria-hidden", "true");
+    btn.appendChild(img);
     if (withHint) {
       const hint = document.createElement("span");
       hint.className = "muyu-fish-hint";
@@ -850,7 +596,20 @@
       saveState();
     });
 
+    soundVariantSelect?.addEventListener("change", () => {
+      const n = Number(soundVariantSelect.value);
+      soundVariant = Number.isFinite(n) && n >= 0 && n < SOUND_FILES.length ? Math.floor(n) : 0;
+      saveState();
+    });
+
     document.addEventListener("keydown", (e) => {
+      if (e.key === " " && isMuyuRoute() && !fullscreen) {
+        const tag = String(e.target?.tagName || "").toLowerCase();
+        if (tag === "input" || tag === "textarea" || tag === "select" || e.target?.isContentEditable) return;
+        e.preventDefault();
+        unlockMuyuAudio();
+        knock(fishBtn);
+      }
       if (!fullscreen) return;
       if (e.key === "Escape") {
         e.preventDefault();
@@ -873,8 +632,8 @@
   }
 
   function mountFishArtEarly() {
-    mountFishArt(document.getElementById("muyu-fish"), "muyu", true);
-    mountFishArt(document.getElementById("muyu-fish-fs"), "muyu-fs", false);
+    mountFishArt(document.getElementById("muyu-fish"), true);
+    mountFishArt(document.getElementById("muyu-fish-fs"), false);
   }
 
   function bootMuyuShell() {
@@ -901,16 +660,18 @@
     resetBtn = $("#muyu-reset");
     themeSelect = $("#muyu-theme");
     phrasesInput = $("#muyu-phrases");
+    soundVariantSelect = $("#muyu-sound-variant");
     stageRoot = $("#muyu-stage");
 
-    mountFishArt(fishBtn, "muyu", true);
-    mountFishArt(fishFsBtn, "muyu-fs", false);
+    mountFishArt(fishBtn, true);
+    mountFishArt(fishFsBtn, false);
     bindFsShell();
     initStageBg();
 
     loadState();
     applyTheme(themeId);
     if (phrasesInput) phrasesInput.value = customPhrasesRaw;
+    if (soundVariantSelect) soundVariantSelect.value = String(soundVariant);
     syncSoundToggles();
     renderCount();
     initKnockAudio();

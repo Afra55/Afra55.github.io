@@ -9871,39 +9871,19 @@ body.ruler-fs-active {
   border-radius: 999px;
 }
 
-.muyu-fish-btn.is-knocking .muyu-fish-svg {
-  transform: translateY(3px) scale(0.98);
+.muyu-fish-btn.is-knocking .muyu-fish-img {
+  transform: translateY(3px) scale(0.99);
   transition: transform 0.05s ease;
 }
 
-.muyu-fish-btn.is-knocking .muyu-mallet {
-  animation: muyu-mallet-strike 0.34s cubic-bezier(0.4, 1.4, 0.6, 1);
-}
-
-@keyframes muyu-mallet-strike {
-  0% {
-    transform: rotate(-42deg);
-  }
-  38% {
-    transform: rotate(8deg);
-  }
-  100% {
-    transform: rotate(-42deg);
-  }
-}
-
-.muyu-mallet {
-  transform-box: fill-box;
-  transform-origin: 50% 90%;
-  transform: rotate(-42deg);
-}
-
-.muyu-fish-svg {
+.muyu-fish-img {
   width: min(78vw, 320px);
   height: auto;
   display: block;
   filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.28));
   transition: transform 0.12s ease;
+  user-select: none;
+  -webkit-user-drag: none;
 }
 
 .muyu-fish-hint {
@@ -10219,8 +10199,8 @@ body.ruler-fs-active {
   z-index: 1;
 }
 
-.muyu-fish-btn-fs .muyu-fish-svg {
-  width: min(78vw, 340px);
+.muyu-fish-btn-fs .muyu-fish-img {
+  width: min(82vw, 360px);
   filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.45));
 }
 
