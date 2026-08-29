@@ -1204,7 +1204,12 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260829desktopchrome1/.test(s.src)),
+      toolsVersion: window.TOOLS_VERSION || "",
+      memoScript: (() => {
+        const memo = [...document.scripts].find((s) => /memo\.js/.test(s.src));
+        const v = memo?.src.match(/[?&]v=([^&#]+)/)?.[1] || "";
+        return v === (window.TOOLS_VERSION || "");
+      })(),
     };
 
     out.pwa = {
@@ -1666,7 +1671,9 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/memoclipdedupe1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  const normVer = (v) => String(v || "").replace(/^v/i, "").trim();
+  const tsVerRe = /^\d{4}\.\d{2}\.\d{2}-\d{6}$/;
+  if (!tsVerRe.test(normVer(result.version))) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1943,8 +1950,13 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/memoclipdedupe1/i.test(result.cacheBust?.version || "")) {
-    failed.push("cache-bust/version should be aligned to memoclipdedupe1");
+  if (
+    !tsVerRe.test(normVer(result.cacheBust?.version)) ||
+    !tsVerRe.test(normVer(result.cacheBust?.toolsVersion)) ||
+    normVer(result.cacheBust?.version) !== normVer(result.cacheBust?.toolsVersion) ||
+    !result.cacheBust?.memoScript
+  ) {
+    failed.push("cache-bust/version should use second-level timestamp and align with TOOLS_VERSION");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
