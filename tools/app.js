@@ -1981,6 +1981,12 @@
       else panel.setAttribute("aria-hidden", "true");
     });
 
+    // 首屏 boot CSS 靠 data-boot-panel 显示初始面板；路由就绪后须移除，否则
+    // html[data-boot-panel] .tool-panel { display:none } 特异性高于 .is-workspace-active
+    if (document.documentElement.hasAttribute("data-boot-panel")) {
+      document.documentElement.removeAttribute("data-boot-panel");
+    }
+
     if (mediaSubnav) {
       const showMedia = currentTool === "media";
       mediaSubnav.hidden = !showMedia;
