@@ -8607,3 +8607,274 @@ li a:not([class*="btn"]) {
   background: var(--accent, #3b82f6);
   transition: width 0.15s ease;
 }
+
+/* ---- Acupoint ---- */
+.acu-body {
+  display: grid;
+  gap: 1rem;
+}
+
+.acu-charts {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.acu-chart-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.acu-chart-tab {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.acu-chart-tab.is-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+}
+
+.acu-chart-panels {
+  display: flex;
+  justify-content: center;
+  overflow: auto;
+  padding: 0.25rem;
+}
+
+.acu-chart-panel {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+.acu-chart-img {
+  max-width: min(100%, 320px);
+  height: auto;
+  border-radius: 8px;
+  background: var(--panel-strong);
+}
+
+.acu-chart-wide {
+  max-width: min(100%, 640px);
+}
+
+.acu-chart-tall {
+  max-width: min(100%, 420px);
+}
+
+.acu-type-seg {
+  flex: 0 0 auto;
+}
+
+.acu-type-badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.acu-type-badge[data-kind="extra"] {
+  border-color: color-mix(in srgb, #c9a0ff 50%, var(--line));
+  color: #c9a0ff;
+}
+
+.acu-chart-note {
+  margin: 0;
+}
+
+.acu-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+}
+
+.acu-search-wrap {
+  flex: 1 1 14rem;
+  min-width: 0;
+}
+
+.acu-search-wrap input {
+  width: 100%;
+}
+
+.acu-filter-wrap select {
+  min-width: 11rem;
+}
+
+.acu-count {
+  margin: 0;
+  white-space: nowrap;
+}
+
+.acu-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 0.75rem;
+  align-items: start;
+}
+
+@media (max-width: 820px) {
+  .acu-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.acu-list-wrap {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  max-height: min(52vh, 28rem);
+  overflow: hidden;
+}
+
+.acu-list-head {
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.acu-list {
+  overflow: auto;
+  display: grid;
+  gap: 0.2rem;
+  padding-top: 0.35rem;
+}
+
+.acu-row {
+  display: grid;
+  grid-template-columns: 4.2rem 1fr auto;
+  gap: 0.35rem 0.5rem;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  border-left: 3px solid var(--acu-mer-color, var(--accent));
+  background: transparent;
+  color: inherit;
+  border-radius: 6px;
+  padding: 0.45rem 0.5rem;
+  font: inherit;
+  cursor: pointer;
+}
+
+.acu-row:hover {
+  background: color-mix(in srgb, var(--panel-strong) 70%, transparent);
+}
+
+.acu-row.is-active {
+  border-color: var(--line);
+  background: var(--panel-strong);
+}
+
+.acu-row-code {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.acu-row-name {
+  font-weight: 600;
+}
+
+.acu-row-mer {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-family: var(--font-mono, ui-monospace, monospace);
+}
+
+.acu-list-empty {
+  padding: 0.75rem 0.25rem;
+}
+
+.acu-detail-wrap {
+  min-height: 12rem;
+}
+
+.acu-detail-empty {
+  margin: 0.5rem 0;
+}
+
+.acu-detail-head {
+  margin-bottom: 0.75rem;
+}
+
+.acu-detail-code {
+  display: inline-block;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 0.15rem;
+}
+
+.acu-detail-name {
+  margin: 0;
+  font-size: 1.35rem;
+  line-height: 1.25;
+}
+
+.acu-detail-pinyin {
+  margin: 0.15rem 0 0;
+  color: var(--muted);
+}
+
+.acu-rich-badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  color: var(--accent);
+}
+
+.acu-detail-block {
+  margin-top: 0.75rem;
+}
+
+.acu-detail-block .subhead {
+  margin: 0 0 0.25rem;
+  font-size: 0.92rem;
+}
+
+.acu-detail-list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.acu-detail-list .muted {
+  color: var(--muted);
+  list-style: none;
+  margin-left: -1.1rem;
+}
+
+.acu-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.acu-tag {
+  display: inline-block;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  font-size: 0.82rem;
+}
+
+.acu-mark {
+  background: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: inherit;
+  padding: 0 0.05rem;
+  border-radius: 2px;
+}
+
+.acu-attrib {
+  margin: 0;
+  opacity: 0.85;
+}

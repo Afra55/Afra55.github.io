@@ -1,0 +1,461 @@
+[
+  {
+    "code": "EX-HN1",
+    "nameZh": "四神聪",
+    "namePinyin": "Sì Shén Cōng",
+    "nameEn": "Sishencong",
+    "region": "头颈部",
+    "location": "头顶部，百会前后左右各 1 寸，共四穴。",
+    "indications": ["头痛", "眩晕", "失眠", "健忘", "癫痫", "目疾"]
+  },
+  {
+    "code": "EX-HN2",
+    "nameZh": "当阳",
+    "namePinyin": "Dāng Yáng",
+    "nameEn": "Dangyang",
+    "region": "头颈部",
+    "location": "头前部，瞳孔直上，前发际上 1 寸。",
+    "indications": ["头痛", "眩晕", "目赤肿痛"]
+  },
+  {
+    "code": "EX-HN3",
+    "nameZh": "印堂",
+    "namePinyin": "Yìn Táng",
+    "nameEn": "Yintang",
+    "region": "头颈部",
+    "location": "额部，两眉头之中间。",
+    "indications": ["头痛", "眩晕", "失眠", "鼻塞", "鼻衄", "小儿惊风"]
+  },
+  {
+    "code": "EX-HN4",
+    "nameZh": "鱼腰",
+    "namePinyin": "Yú Yāo",
+    "nameEn": "Yuyao",
+    "region": "头颈部",
+    "location": "额部，瞳孔直上，眉毛中。",
+    "indications": ["目赤肿痛", "眼睑下垂", "眉棱骨痛"]
+  },
+  {
+    "code": "EX-HN5",
+    "nameZh": "太阳",
+    "namePinyin": "Tài Yáng",
+    "nameEn": "Taiyang",
+    "region": "头颈部",
+    "location": "颞部，眉梢与目外眦之间，向后约一横指的凹陷处。",
+    "indications": ["头痛", "目疾", "面瘫", "三叉神经痛"]
+  },
+  {
+    "code": "EX-HN6",
+    "nameZh": "耳尖",
+    "namePinyin": "Ěr Jiān",
+    "nameEn": "Erjian",
+    "region": "头颈部",
+    "location": "耳廓上方，折耳向前时耳廓上方的尖端处。",
+    "indications": ["发热", "目赤", "咽喉肿痛", "麦粒肿"]
+  },
+  {
+    "code": "EX-HN7",
+    "nameZh": "球后",
+    "namePinyin": "Qiú Hòu",
+    "nameEn": "Qiuhou",
+    "region": "头颈部",
+    "location": "面部，眶下缘外 1/4 与内 3/4 交界处。",
+    "indications": ["目疾", "视神经萎缩", "近视"]
+  },
+  {
+    "code": "EX-HN8",
+    "nameZh": "上迎香",
+    "namePinyin": "Shàng Yíng Xiāng",
+    "nameEn": "Shangyingxiang",
+    "region": "头颈部",
+    "location": "面部，鼻翼软骨与鼻甲的交界处，近鼻唇沟上端。",
+    "indications": ["鼻塞", "鼻渊", "鼻衄"]
+  },
+  {
+    "code": "EX-HN9",
+    "nameZh": "内迎香",
+    "namePinyin": "Nèi Yíng Xiāng",
+    "nameEn": "Neiyingxiang",
+    "region": "头颈部",
+    "location": "鼻孔内，鼻翼软骨与鼻甲交界的黏膜处。",
+    "indications": ["鼻塞", "鼻渊", "嗅觉减退"]
+  },
+  {
+    "code": "EX-HN10",
+    "nameZh": "聚泉",
+    "namePinyin": "Jù Quán",
+    "nameEn": "Juquan",
+    "region": "头颈部",
+    "location": "口腔内，舌背正中缝的中点处。",
+    "indications": ["舌强", "失语", "口疮"]
+  },
+  {
+    "code": "EX-HN11",
+    "nameZh": "海泉",
+    "namePinyin": "Hǎi Quán",
+    "nameEn": "Haiquan",
+    "region": "头颈部",
+    "location": "口腔内，舌下系带中点处。",
+    "indications": ["舌强", "失语", "消渴"]
+  },
+  {
+    "code": "EX-HN12",
+    "nameZh": "金津玉液",
+    "namePinyin": "Jīn Jīn Yù Yè",
+    "nameEn": "Jinjin-Yuye",
+    "region": "头颈部",
+    "location": "口腔内，舌下系带两侧静脉上（左为金津，右为玉液）。",
+    "indications": ["舌强", "失语", "消渴", "口疮"]
+  },
+  {
+    "code": "EX-HN14",
+    "nameZh": "翳明",
+    "namePinyin": "Yì Míng",
+    "nameEn": "Yiming",
+    "region": "头颈部",
+    "location": "项部，翳风后 1 寸。",
+    "indications": ["目疾", "耳鸣", "失眠"]
+  },
+  {
+    "code": "EX-HN15",
+    "nameZh": "颈百劳",
+    "namePinyin": "Jǐng Bǎi Láo",
+    "nameEn": "Jingbailao",
+    "region": "头颈部",
+    "location": "项部，大椎直上 2 寸，后正中线旁开 1 寸。",
+    "indications": ["颈项强痛", "咳嗽", "瘰疬"]
+  },
+  {
+    "code": "EX-HN16",
+    "nameZh": "安眠",
+    "namePinyin": "Ān Mián",
+    "nameEn": "Anmian",
+    "region": "头颈部",
+    "location": "项部，翳风与风池连线中点。",
+    "indications": ["失眠", "头痛", "眩晕", "心悸"]
+  },
+  {
+    "code": "EX-HN17",
+    "nameZh": "牵正",
+    "namePinyin": "Qiān Zhèng",
+    "nameEn": "Qianzheng",
+    "region": "头颈部",
+    "location": "面部，口角旁 0.5 寸。",
+    "indications": ["面瘫", "口眼歪斜", "口疮"]
+  },
+  {
+    "code": "EX-CA1",
+    "nameZh": "子宫",
+    "namePinyin": "Zǐ Gōng",
+    "nameEn": "Zigong",
+    "region": "胸腹部",
+    "location": "下腹部，脐中下 4 寸，前正中线旁开 3 寸。",
+    "indications": ["月经不调", "痛经", "崩漏", "不孕", "滞产"]
+  },
+  {
+    "code": "EX-CA2",
+    "nameZh": "三角灸",
+    "namePinyin": "Sān Jiǎo Jiǔ",
+    "nameEn": "Sanjiaojiu",
+    "region": "胸腹部",
+    "location": "以患者两口角之间的长度为一边作等边三角形，顶角置于脐心，两底角处为穴。",
+    "indications": ["腹痛", "疝气"]
+  },
+  {
+    "code": "EX-B1",
+    "nameZh": "定喘",
+    "namePinyin": "Dìng Chuǎn",
+    "nameEn": "Dingchuan",
+    "region": "背部",
+    "location": "背部，第 7 颈椎棘突下，旁开 0.5 寸。",
+    "indications": ["咳嗽", "哮喘", "胸闷", "肩背痛"]
+  },
+  {
+    "code": "EX-B2",
+    "nameZh": "夹脊",
+    "namePinyin": "Jiá Jǐ",
+    "nameEn": "Jiaji",
+    "region": "背部",
+    "location": "第 1 胸椎至第 5 腰椎各棘突下，旁开 0.5 寸，共 17 对。",
+    "indications": ["心肺及胃肠疾患", "强脊痛", "四肢痿痹"]
+  },
+  {
+    "code": "EX-B3",
+    "nameZh": "胃脘下俞",
+    "namePinyin": "Wèi Wǎn Xià Shù",
+    "nameEn": "Weiwanxiashu",
+    "region": "背部",
+    "location": "背部，第 12 胸椎棘突下，旁开 1.5 寸。",
+    "indications": ["胃痛", "腹痛", "消渴"]
+  },
+  {
+    "code": "EX-B4",
+    "nameZh": "痞根",
+    "namePinyin": "Pǐ Gēn",
+    "nameEn": "Pigen",
+    "region": "背部",
+    "location": "背部，第 1 腰椎棘突下，旁开 3.5 寸。",
+    "indications": ["痞块", "腹痛", "腰痛"]
+  },
+  {
+    "code": "EX-B5",
+    "nameZh": "腰眼",
+    "namePinyin": "Yāo Yǎn",
+    "nameEn": "Yaoyan",
+    "region": "背部",
+    "location": "腰部，第 4 腰椎棘突下，旁开约 3.5 寸。",
+    "indications": ["腰痛", "月经不调", "带下"]
+  },
+  {
+    "code": "EX-B6",
+    "nameZh": "十七椎",
+    "namePinyin": "Shí Qī Zhuī",
+    "nameEn": "Shiqizhui",
+    "region": "背部",
+    "location": "腰部，第 5 腰椎棘突下。",
+    "indications": ["腰骶痛", "下肢痿痹", "崩漏", "月经不调"]
+  },
+  {
+    "code": "EX-B7",
+    "nameZh": "接脊",
+    "namePinyin": "Jiē Jǐ",
+    "nameEn": "Jiejie",
+    "region": "背部",
+    "location": "背部，第 12 胸椎与第 1 腰椎棘突连线中点。",
+    "indications": ["腰背痛", "腹痛", "下肢痿痹"]
+  },
+  {
+    "code": "EX-B8",
+    "nameZh": "血压点",
+    "namePinyin": "Xuè Yā Diǎn",
+    "nameEn": "Xueyadian",
+    "region": "背部",
+    "location": "背部，第 6、7 颈椎棘突间旁开 2 寸。",
+    "indications": ["高血压", "头痛", "眩晕"]
+  },
+  {
+    "code": "EX-B9",
+    "nameZh": "提托",
+    "namePinyin": "Tí Tuō",
+    "nameEn": "Tituo",
+    "region": "肩胛部",
+    "location": "前正中线旁开 4 寸，乳头直下 3.5 寸，当乳头与脐中连线之上 1/3 与下 2/3 交界处。",
+    "indications": ["乳房下垂", "乳少", "胸痛"]
+  },
+  {
+    "code": "EX-B10",
+    "nameZh": "肩前",
+    "namePinyin": "Jiān Qián",
+    "nameEn": "Jianqian",
+    "region": "肩胛部",
+    "location": "肩峰前下 1.5 寸。",
+    "indications": ["肩臂痛", "上肢痿痹"]
+  },
+  {
+    "code": "EX-UE1",
+    "nameZh": "肘尖",
+    "namePinyin": "Zhǒu Jiān",
+    "nameEn": "Zhoujian",
+    "region": "上肢",
+    "location": "肘后，屈肘时尺骨鹰嘴上方。",
+    "indications": ["痈疽", "瘰疬"]
+  },
+  {
+    "code": "EX-UE2",
+    "nameZh": "二白",
+    "namePinyin": "Èr Bái",
+    "nameEn": "Erbai",
+    "region": "上肢",
+    "location": "前臂，腕横纹上 4 寸，桡侧腕屈肌与掌长肌之间；另在尺侧腕屈肌桡侧，共两穴。",
+    "indications": ["痔疾", "脱肛", "前臂痛"]
+  },
+  {
+    "code": "EX-UE3",
+    "nameZh": "中泉",
+    "namePinyin": "Zhōng Quán",
+    "nameEn": "Zhongquan",
+    "region": "上肢",
+    "location": "腕背，阳溪与阳池连线中点，陷中。",
+    "indications": ["胸胁胀满", "咳嗽", "胃痛", "腕痛"]
+  },
+  {
+    "code": "EX-UE4",
+    "nameZh": "中魁",
+    "namePinyin": "Zhōng Kuí",
+    "nameEn": "Zhongkui",
+    "region": "上肢",
+    "location": "手背，第 2 掌指关节后中点。",
+    "indications": ["噎膈", "呕吐", "食欲不振"]
+  },
+  {
+    "code": "EX-UE5",
+    "nameZh": "大骨空",
+    "namePinyin": "Dà Gǔ Kōng",
+    "nameEn": "Dagukong",
+    "region": "上肢",
+    "location": "拇指背侧，指间关节的中点。",
+    "indications": ["目痛", "白内障", "鼻衄"]
+  },
+  {
+    "code": "EX-UE6",
+    "nameZh": "小骨空",
+    "namePinyin": "Xiǎo Gǔ Kōng",
+    "nameEn": "Xiaogukong",
+    "region": "上肢",
+    "location": "小指背侧，指间关节的中点。",
+    "indications": ["目痛", "目翳", "指关节痛"]
+  },
+  {
+    "code": "EX-UE7",
+    "nameZh": "腰痛点",
+    "namePinyin": "Yāo Tòng Diǎn",
+    "nameEn": "Yaotongdian",
+    "region": "上肢",
+    "location": "手背，第 2、3 掌骨及第 4、5 掌骨之间，各一穴，共两穴。",
+    "indications": ["急性腰扭伤", "腰痛"]
+  },
+  {
+    "code": "EX-UE8",
+    "nameZh": "外劳宫",
+    "namePinyin": "Wài Láo Gōng",
+    "nameEn": "Wailaogong",
+    "region": "上肢",
+    "location": "手背，第 2、3 掌骨之间，偏于第 2 掌骨，约平第 1 掌指关节前。",
+    "indications": ["落枕", "手指麻木", "手背红肿"]
+  },
+  {
+    "code": "EX-UE9",
+    "nameZh": "八邪",
+    "namePinyin": "Bā Xié",
+    "nameEn": "Baxie",
+    "region": "上肢",
+    "location": "手背，五指缝间，指蹼后方，共八穴。",
+    "indications": ["手指关节痛", "手背肿痛", "毒蛇咬伤"]
+  },
+  {
+    "code": "EX-UE10",
+    "nameZh": "四缝",
+    "namePinyin": "Sì Fèng",
+    "nameEn": "Sifeng",
+    "region": "上肢",
+    "location": "第 2～5 指掌侧，近侧指间关节横纹中点，一手四穴。",
+    "indications": ["疳积", "小儿消化不良", "百日咳"]
+  },
+  {
+    "code": "EX-UE11",
+    "nameZh": "十宣",
+    "namePinyin": "Shí Xuān",
+    "nameEn": "Shixuan",
+    "region": "上肢",
+    "location": "十指尖端，距指甲游离缘 0.1 寸，共十穴。",
+    "indications": ["昏迷", "癫痫", "高热", "咽喉肿痛"]
+  },
+  {
+    "code": "EX-LE1",
+    "nameZh": "髋骨",
+    "namePinyin": "Kuān Gǔ",
+    "nameEn": "Kuangu",
+    "region": "下肢",
+    "location": "大腿前侧，梁丘旁开 1 寸，共两穴。",
+    "indications": ["下肢痿痹", "膝痛", "瘫痪"]
+  },
+  {
+    "code": "EX-LE2",
+    "nameZh": "鹤顶",
+    "namePinyin": "Hè Dǐng",
+    "nameEn": "Heding",
+    "region": "下肢",
+    "location": "膝上部，髌底中点上方凹陷处。",
+    "indications": ["膝痛", "下肢痿痹", "脚气"]
+  },
+  {
+    "code": "EX-LE3",
+    "nameZh": "百虫窝",
+    "namePinyin": "Bǎi Chóng Wō",
+    "nameEn": "Baichongwo",
+    "region": "下肢",
+    "location": "大腿内侧，血海上 6 寸。",
+    "indications": ["虫积", "风疹", "膝股内侧痛"]
+  },
+  {
+    "code": "EX-LE4",
+    "nameZh": "内膝眼",
+    "namePinyin": "Nèi Xī Yǎn",
+    "nameEn": "Neixiyan",
+    "region": "下肢",
+    "location": "膝部，髌韧带内侧凹陷处。",
+    "indications": ["膝痛", "下肢痿痹"]
+  },
+  {
+    "code": "EX-LE5",
+    "nameZh": "膝眼",
+    "namePinyin": "Xī Yǎn",
+    "nameEn": "Xiyan",
+    "region": "下肢",
+    "location": "膝部，髌韧带两侧凹陷处（内、外膝眼）。",
+    "indications": ["膝痛", "脚气", "下肢痿痹"]
+  },
+  {
+    "code": "EX-LE6",
+    "nameZh": "胆囊",
+    "namePinyin": "Dǎn Náng",
+    "nameEn": "Dannang",
+    "region": "下肢",
+    "location": "小腿外侧，腓骨小头前下方凹陷处。",
+    "indications": ["胆绞痛", "黄疸", "蛔虫病"]
+  },
+  {
+    "code": "EX-LE7",
+    "nameZh": "阑尾",
+    "namePinyin": "Lán Wěi",
+    "nameEn": "Lanwei",
+    "region": "下肢",
+    "location": "小腿外侧，当犊鼻下 5 寸，胫骨前缘外一横指。",
+    "indications": ["阑尾炎", "腹痛", "下肢痿痹"]
+  },
+  {
+    "code": "EX-LE8",
+    "nameZh": "内踝尖",
+    "namePinyin": "Nèi Huái Jiān",
+    "nameEn": "Neihuaijian",
+    "region": "下肢",
+    "location": "内踝尖。",
+    "indications": ["牙痛", "风湿痹痛", "小腹痛"]
+  },
+  {
+    "code": "EX-LE9",
+    "nameZh": "外踝尖",
+    "namePinyin": "Wài Huái Jiān",
+    "nameEn": "Waihuaijian",
+    "region": "下肢",
+    "location": "外踝尖。",
+    "indications": ["牙痛", "风湿痹痛", "脚气"]
+  },
+  {
+    "code": "EX-LE10",
+    "nameZh": "八风",
+    "namePinyin": "Bā Fēng",
+    "nameEn": "Bafeng",
+    "region": "下肢",
+    "location": "足背，五趾缝间，趾蹼后方，共八穴。",
+    "indications": ["足跗肿痛", "足趾麻木", "毒蛇咬伤"]
+  },
+  {
+    "code": "EX-LE11",
+    "nameZh": "新设",
+    "namePinyin": "Xīn Shè",
+    "nameEn": "Xinshe",
+    "region": "下肢",
+    "location": "小腿外侧，当腓骨小头后下方 2 寸。",
+    "indications": ["下肢痿痹", "膝痛", "脚气"]
+  },
+  {
+    "code": "EX-LE12",
+    "nameZh": "里内庭",
+    "namePinyin": "Lǐ Nèi Tíng",
+    "nameEn": "Lineiting",
+    "region": "下肢",
+    "location": "足背，第 2 趾与第 3 趾间，趾蹼后方。",
+    "indications": ["足背肿痛", "齿痛", "咽喉肿痛"]
+  }
+]

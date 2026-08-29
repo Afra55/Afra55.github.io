@@ -801,6 +801,7 @@
       tools: ["imgpreview", "whiteboard", "imgkit", "textimg", "imgtext", "sharecard", "imgb64", "qrcode"],
     },
     { id: "convert", label: "换算", tools: ["units", "coord", "numbase"] },
+    { id: "health", label: "健康", tools: ["acupoint"] },
     { id: "device", label: "设备", tools: ["lanshare", "adb", "ffbridge"] },
     { id: "site", label: "站点", tools: ["about", "setup"] },
   ];
@@ -849,6 +850,7 @@
     units: "长度、质量等常用单位换算。",
     coord: "WGS84 / GCJ-02 / BD-09 等坐标系互转。",
     numbase: "二、八、十、十六进制互转。",
+    acupoint: "361 经穴 + 51 奇穴：Wellcome 经络参考图、搜索筛选列表；点条目看定位与主治（无需点图取穴）。",
     adb: "网页侧 ADB 调试辅助：设备、文件、输入、安装等。",
     lanshare: "局域网互传：多机同房间共享文件列表，下载时从上传者手机 WebRTC 直传，不经房主中转；房主可退出或解散，退出时最近加入者接任。",
     ffbridge: "电脑批量用本机 FFmpeg 桥；手机请直接用媒体里的音频/修剪/GIF（网页内处理）。",
@@ -893,6 +895,7 @@
     imgtext: { name: "图片转文字", aliases: ["ocr", "识字", "图转文", "tesseract"] },
     units: { name: "单位换算", aliases: ["长度", "质量"] },
     coord: { name: "坐标系互转", aliases: ["gps", "坐标", "gcj", "wgs"] },
+    acupoint: { name: "穴位图", aliases: ["穴位", "经络", "针灸", "acupoint", "361", "奇穴"] },
     numbase: { name: "进制转换", aliases: ["二进制", "十六进制"] },
     markdown: { name: "Markdown", aliases: ["md", "预览"] },
     memo: { name: "备忘录", aliases: ["笔记", "剪贴板", "memo", "note", "便签"] },

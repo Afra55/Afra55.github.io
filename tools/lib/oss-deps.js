@@ -148,6 +148,44 @@
         ],
       },
       {
+        id: "data",
+        label: "结构化数据（穴位等）",
+        items: [
+          {
+            name: "Bencaodian / 本草典",
+            version: "v1 seed",
+            license: "CC BY-SA 4.0",
+            repo: "https://bencaodian.org/en/about/data/",
+            usedIn: "穴位图 · 经穴定位/功效详情（195/361 条）",
+            path: "tools/lib/acupoints-bundle.json（经 build 脚本合并）",
+          },
+          {
+            name: "AcuKG",
+            version: "—",
+            license: "研究数据集",
+            repo: "https://github.com/yimingli99/AcuKG-Knowledge-graph-for-medical-acupuncture",
+            usedIn: "穴位图 · 361 经穴名录与英文主治补全",
+            path: "tools/scripts/build-acupoints.mjs 输入",
+          },
+          {
+            name: "Wellcome Collection",
+            version: "—",
+            license: "CC BY 4.0",
+            repo: "https://wellcomecollection.org/",
+            usedIn: "穴位图 · 经络参考图（wellcome/*.jpg）",
+            path: "tools/lib/acupoint/wellcome/",
+          },
+          {
+            name: "GB/T 40997-2021",
+            version: "2021",
+            license: "国家标准（名称与定位整理）",
+            repo: "https://ndls.cnis.ac.cn/standard/detail/d3fc1cfbf61f63334b07738ca9b2f4a9",
+            usedIn: "穴位图 · 51 经外奇穴",
+            path: "tools/lib/extra-acupoints-source.json",
+          },
+        ],
+      },
+      {
         id: "bridge",
         label: "本机桥 / 可选下载",
         items: [
