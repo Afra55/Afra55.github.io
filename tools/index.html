@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <link rel="stylesheet" href="./style.css?v=2026.08.29-188000" />
+  <link rel="stylesheet" href="./style.css?v=2026.08.29-194000" />
   <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.29-180000" />
   <script src="./lib/theme-presets.js?v=2026.08.29-180000"></script>
   <script src="./lib/boot-loader.js?v=2026.08.29-180000"></script>
@@ -3287,7 +3287,8 @@ hello@world.org</textarea>
         <details class="muyu-picks panel-card">
           <summary>摸鱼推荐 · 适合接入本站的小项目</summary>
           <ul class="muyu-picks-list hint tight">
-            <li><strong>轻量可自研接入</strong>：俄罗斯方块、2048、贪吃蛇、Flappy、打地鼠（参考 <a href="https://github.com/omdsh-dev/dsh-minigames" target="_blank" rel="noopener noreferrer">dsh-minigames</a>，纯 Canvas 零资源）</li>
+            <li><strong>已接入本站</strong>：见 <a href="#minigames">#minigames 摸鱼小游戏</a>（2048、贪吃蛇、Flappy、打地鼠，纯本地）</li>
+            <li><strong>可继续扩展</strong>：俄罗斯方块等（参考 <a href="https://github.com/omdsh-dev/dsh-minigames" target="_blank" rel="noopener noreferrer">dsh-minigames</a>，纯 Canvas 零资源）</li>
             <li><strong>解压向</strong>：电子木鱼（本站已有）、赛博功德 <a href="https://github.com/heyuan110/cyber-merit" target="_blank" rel="noopener noreferrer">cyber-merit</a>（modal 合成音 + 粒子，可参考）</li>
             <li><strong>体感玩法</strong>：<a href="https://github.com/jwenjian/wooden-fish" target="_blank" rel="noopener noreferrer">wooden-fish</a>（手机甩动敲木鱼，适合单独工具页）</li>
             <li><strong>放置挂机</strong>：<a href="https://github.com/kangketikonlen/after-midnight" target="_blank" rel="noopener noreferrer">After Midnight</a>（深夜加班 idle，Vanilla JS）</li>
@@ -3295,6 +3296,27 @@ hello@world.org</textarea>
             <li><strong>桌面宠物</strong>：<a href="https://github.com/TongY1n/ui-muyu" target="_blank" rel="noopener noreferrer">ui-muyu</a>（可拖拽悬浮木鱼，适合 PWA 小窗）</li>
           </ul>
         </details>
+      </div>
+    </section>
+
+<section id="minigames" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>摸鱼小游戏</h1>
+        <p>纯本地 Canvas 小游戏，<strong>无需服务器</strong>；最高分保存在本机浏览器。</p>
+      </div>
+      <div class="panel-body minigames-body">
+        <div class="btn-row minigames-tabs tool-actions">
+          <button type="button" class="ghost-btn is-active" data-game="2048">2048</button>
+          <button type="button" class="ghost-btn" data-game="snake">贪吃蛇</button>
+          <button type="button" class="ghost-btn" data-game="flappy">Flappy</button>
+          <button type="button" class="ghost-btn" data-game="mole">打地鼠</button>
+        </div>
+        <div class="minigames-stage panel-card">
+          <div class="minigames-hud" id="minigames-hud"></div>
+          <canvas id="minigames-canvas" class="minigames-canvas" aria-label="摸鱼小游戏画布"></canvas>
+          <div id="minigames-overlay" class="minigames-overlay" hidden></div>
+        </div>
+        <p class="hint tight" id="minigames-hint">选择上方游戏开始；进度仅保存在本机。</p>
       </div>
     </section>
 
@@ -4378,9 +4400,10 @@ adb devices</pre>
   <script src="./lib/bridge-token.js?v=2026.08.29-181000"></script>
   <script src="./lib/lazy-scripts.js?v=2026.08.29-180000"></script>
   <script src="./theme.js?v=2026.08.29-180000"></script>
-  <script src="./app.js?v=2026.08.29-180000"></script>
-  <script src="./wheel.js?v=2026.08.29-190000"></script>
-  <script src="./ruler.js?v=2026.08.29-181000"></script>
-  <script src="./muyu.js?v=2026.08.29-193000"></script>
+  <script src="./app.js?v=2026.08.29-194000"></script>
+  <script src="./wheel.js?v=2026.08.29-194000"></script>
+  <script src="./ruler.js?v=2026.08.29-194000"></script>
+  <script src="./muyu.js?v=2026.08.29-194000"></script>
+  <script src="./minigames.js?v=2026.08.29-194000"></script>
 </body>
 </html>
