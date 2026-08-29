@@ -1,15 +1,18 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 640" role="img" aria-label="cbÏÜÂþ">
-  <title>cbÏÜÂþ</title>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 640" role="img" aria-label="??????" class="acu-svg">
+  <title>??????</title>
   <defs>
     <style>
       .body { fill: var(--panel-strong, #1a2332); stroke: var(--line, #3a4a5c); stroke-width: 1.2; }
-      .mer { fill: none; stroke-width: 2.2; stroke-linecap: round; opacity: 0.85; }
+      .mer { fill: none; stroke-width: 2.2; stroke-linecap: round; opacity: 0.85; transition: opacity 0.15s ease, stroke-width 0.15s ease; }
+      .has-mer-highlight .mer { opacity: 0.16; }
+      .has-mer-highlight [data-mer].is-mer-active { opacity: 1; stroke-width: 3.6; }
+      .has-mer-highlight .mer-box { opacity: 0.35; transition: opacity 0.15s ease; }
+      .has-mer-highlight .mer-box.is-mer-active { opacity: 1; }
       .label { fill: var(--muted, #8a9bb0); font-size: 9px; font-family: system-ui, sans-serif; }
       .title { fill: var(--ink, #e8edf4); font-size: 11px; font-weight: 600; font-family: system-ui, sans-serif; }
     </style>
   </defs>
-  <text class="title" x="160" y="22" text-anchor="middle">cb · AÛÏªL:</text>
-  <!-- ºSnÓ -->
+  <text class="title" x="160" y="22" text-anchor="middle">?? · ?????</text>
   <ellipse class="body" cx="160" cy="52" rx="28" ry="34"/>
   <path class="body" d="M132 86 Q160 96 188 86 L198 120 Q160 128 122 120 Z"/>
   <path class="body" d="M128 120 L112 280 Q108 380 120 480 L130 580 Q160 600 190 580 L200 480 Q212 380 208 280 L192 120"/>
@@ -17,31 +20,28 @@
   <path class="body" d="M192 140 L248 220 L262 320 L252 400"/>
   <path class="body" d="M130 580 L118 630 L142 636"/>
   <path class="body" d="M190 580 L202 630 L178 636"/>
-  <!-- û	 CV -->
-  <path class="mer" stroke="#ffd6a5" d="M160 86 L160 560"/>
-  <text class="label" x="168" y="300">û	 CV</text>
-  <!-- ÃÏ ST -->
-  <path class="mer" stroke="#f4d06f" d="M188 86 Q200 140 198 220 Q196 320 192 420 Q188 500 178 580"/>
-  <text class="label" x="204" y="200">ÃÏ ST</text>
-  <!-- >Ï SP -->
-  <path class="mer" stroke="#c5e063" d="M132 86 Q120 160 122 260 Q124 360 128 460 Q130 520 138 580"/>
-  <text class="label" x="98" y="260">>Ï SP</text>
-  <!-- ºÏ LUÂ…§	 -->
-  <path class="mer" stroke="#7eb8da" d="M148 120 Q140 160 128 200 Q118 240 108 280"/>
-  <text class="label" x="88" y="210">ºÏ LU</text>
-  <!-- '  LIÂ§	 -->
-  <path class="mer" stroke="#e8a87c" d="M172 120 Q182 160 192 200 Q202 240 212 280"/>
-  <text class="label" x="218" y="210">'  LI</text>
-  <!-- ÃÏ HT -->
-  <path class="mer" stroke="#f08a8a" d="M152 130 Q148 170 142 210 Q136 250 130 290"/>
-  <text class="label" x="112" y="250">ÃÏ HT</text>
-  <!-- Ã PC -->
-  <path class="mer" stroke="#ff9ecd" d="M158 130 Q160 180 158 230 Q156 270 152 310"/>
-  <text class="label" x="162" y="250">Ã PC</text>
-  <!--   SI -->
-  <path class="mer" stroke="#ffb4a2" d="M168 130 Q174 180 180 230 Q186 270 192 310"/>
-  <text class="label" x="196" y="250">  SI</text>
-  <!-- 	& TE -->
-  <path class="mer" stroke="#7fd8be" d="M162 130 Q168 190 172 250 Q176 300 180 350"/>
-  <text class="label" x="184" y="300">	& TE</text>
+  <path class="mer" data-mer="CV" stroke="#ffd6a5" d="M160 86 L160 560"/>
+  <text class="label" x="168" y="300">?? CV</text>
+  <path class="mer" data-mer="ST" stroke="#f4d06f" d="M188 86 Q200 140 198 220 Q196 320 192 420 Q188 500 178 580"/>
+  <text class="label" x="204" y="200">?? ST</text>
+  <path class="mer" data-mer="SP" stroke="#c5e063" d="M132 86 Q120 160 122 260 Q124 360 128 460 Q130 520 138 580"/>
+  <text class="label" x="98" y="260">?? SP</text>
+  <path class="mer" data-mer="LU" stroke="#7eb8da" d="M148 120 Q140 160 128 200 Q118 240 108 280"/>
+  <text class="label" x="88" y="210">?? LU</text>
+  <path class="mer" data-mer="LI" stroke="#e8a87c" d="M172 120 Q182 160 192 200 Q202 240 212 280"/>
+  <text class="label" x="218" y="210">?? LI</text>
+  <path class="mer" data-mer="HT" stroke="#f08a8a" d="M152 130 Q148 170 142 210 Q136 250 130 290"/>
+  <text class="label" x="112" y="250">?? HT</text>
+  <path class="mer" data-mer="PC" stroke="#ff9ecd" d="M158 130 Q160 180 158 230 Q156 270 152 310"/>
+  <text class="label" x="162" y="250">?? PC</text>
+  <path class="mer" data-mer="SI" stroke="#ffb4a2" d="M168 130 Q174 180 180 230 Q186 270 192 310"/>
+  <text class="label" x="196" y="250">?? SI</text>
+  <path class="mer" data-mer="TE" stroke="#7fd8be" d="M162 130 Q168 190 172 250 Q176 300 180 350"/>
+  <text class="label" x="184" y="300">?? TE</text>
+  <path class="mer" data-mer="KI" stroke="#b8a9ff" d="M138 480 Q134 520 132 560 Q130 590 128 620"/>
+  <text class="label" x="108" y="560">?? KI</text>
+  <path class="mer" data-mer="LR" stroke="#8fd694" d="M182 480 Q186 520 188 560 Q190 590 192 620"/>
+  <text class="label" x="198" y="560">?? LR</text>
+  <path class="mer" data-mer="GB" stroke="#a8e6cf" d="M198 140 Q210 200 214 280 Q218 360 212 440 Q206 520 198 580"/>
+  <text class="label" x="220" y="380">?? GB</text>
 </svg>

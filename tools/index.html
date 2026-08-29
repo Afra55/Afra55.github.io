@@ -18,7 +18,7 @@
   <!-- 不阻塞首屏：Noto Serif SC 只给文转图用，避免每次拉取中文字体；Google 字体 CSS 在国内常卡住数秒 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" /></noscript>
-  <link rel="stylesheet" href="./style.css?v=20260829navscroll1" />
+  <link rel="stylesheet" href="./style.css?v=20260829acu3" />
   <link rel="stylesheet" href="./workspace-nav.css?v=20260829navscroll1" />
   <script src="./lib/theme-presets.js?v=20260829acu2"></script>
   <script>
@@ -104,7 +104,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.29-memoloc1</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.29-acu3</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="pwa-install" hidden aria-hidden="true" title="安装到桌面/开始菜单">安装应用</button>
@@ -3641,48 +3641,64 @@ hello@world.org</textarea>
 <section id="acupoint" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>穴位图</h1>
-        <p>361 经穴 + 51 奇穴查阅：上方为 Wellcome 经络参考图（不可点击），下方搜索列表点选查看定位与主治。</p>
+        <p>361 经穴 + 51 奇穴查阅：上方为清晰经络简图（点列表可高亮对应经络），下方搜索列表点选查看定位与主治。</p>
       </div>
       <div class="panel-body acu-body">
-        <p class="hint tight" id="acu-meta">加载中…</p>
+        <p class="hint tight" id="acu-meta">打开本页后加载穴位数据…</p>
         <div class="acu-charts panel-card">
-          <div class="acu-chart-tabs" role="tablist" aria-label="经络参考图">
-            <button type="button" class="acu-chart-tab is-active" role="tab" data-acu-chart="whole" aria-selected="true">全身正背</button>
-            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="figures" aria-selected="false">全身双图</button>
-            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="full" aria-selected="false">全穴总图</button>
-            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="thorax" aria-selected="false">胸腹</button>
-            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="back" aria-selected="false">背腰</button>
-            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="head-front" aria-selected="false">头颈·前</button>
-            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="head-back" aria-selected="false">头颈·后</button>
+          <div class="acu-chart-tabs" role="tablist" aria-label="经络简图">
+            <button type="button" class="acu-chart-tab is-active" role="tab" data-acu-chart="front" aria-selected="true">正面</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="back" aria-selected="false">背面</button>
             <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="overview" aria-selected="false">十四经</button>
           </div>
           <div class="acu-chart-panels">
-            <div class="acu-chart-panel" data-acu-chart-panel="whole">
-              <img class="acu-chart-img" src="./lib/acupoint/wellcome/whole-body-front-back.jpg" alt="Wellcome 全身正背面经络穴图" width="960" height="1440" loading="lazy" decoding="async" />
-            </div>
-            <div class="acu-chart-panel" data-acu-chart-panel="figures" hidden>
-              <img class="acu-chart-img acu-chart-wide" src="./lib/acupoint/wellcome/figures-pair.jpg" alt="Wellcome 正背面双人体经络图" width="960" height="620" loading="lazy" decoding="async" />
-            </div>
-            <div class="acu-chart-panel" data-acu-chart-panel="full" hidden>
-              <img class="acu-chart-img acu-chart-tall" src="./lib/acupoint/wellcome/full-chart.jpg" alt="Wellcome 全穴总图" width="960" height="2450" loading="lazy" decoding="async" />
-            </div>
-            <div class="acu-chart-panel" data-acu-chart-panel="thorax" hidden>
-              <img class="acu-chart-img" src="./lib/acupoint/wellcome/thorax-abdomen.jpg" alt="Wellcome 胸腹部经络穴图" width="960" height="1440" loading="lazy" decoding="async" />
+            <div class="acu-chart-panel" data-acu-chart-panel="front">
+              <object class="acu-chart-img acu-chart-svg acu-svg" type="image/svg+xml" data="./lib/acupoint/body-front.svg?v=20260829acu3" aria-label="正面经络简图" width="320" height="640"></object>
             </div>
             <div class="acu-chart-panel" data-acu-chart-panel="back" hidden>
-              <img class="acu-chart-img" src="./lib/acupoint/wellcome/back-torso.jpg" alt="Wellcome 背腰部经络穴图" width="960" height="1440" loading="lazy" decoding="async" />
-            </div>
-            <div class="acu-chart-panel" data-acu-chart-panel="head-front" hidden>
-              <img class="acu-chart-img" src="./lib/acupoint/wellcome/head-front.jpg" alt="Wellcome 头颈前面经络穴图" width="960" height="1440" loading="lazy" decoding="async" />
-            </div>
-            <div class="acu-chart-panel" data-acu-chart-panel="head-back" hidden>
-              <img class="acu-chart-img" src="./lib/acupoint/wellcome/head-back.jpg" alt="Wellcome 头颈后面经络穴图" width="960" height="1440" loading="lazy" decoding="async" />
+              <object class="acu-chart-img acu-chart-svg acu-svg" type="image/svg+xml" data="./lib/acupoint/body-back.svg?v=20260829acu3" aria-label="背面经络简图" width="320" height="640"></object>
             </div>
             <div class="acu-chart-panel" data-acu-chart-panel="overview" hidden>
-              <img class="acu-chart-img acu-chart-wide" src="./lib/acupoint/meridians-overview.svg" alt="十四正经与任督二脉一览" width="640" height="360" loading="lazy" decoding="async" />
+              <object class="acu-chart-img acu-chart-wide acu-chart-svg acu-svg" type="image/svg+xml" data="./lib/acupoint/meridians-overview.svg?v=20260829acu3" aria-label="十四正经与任督二脉一览" width="640" height="360"></object>
             </div>
           </div>
-          <p class="hint tight acu-chart-note">参考图来自 Wellcome Collection（CC BY 4.0），仅供对照；详细定位请查下方列表。旧版简图仍保留于 <code class="mono">lib/acupoint/body-front.svg</code> 等。</p>
+          <p class="hint tight acu-chart-note">简图为示意对照，不含逐穴标注；精确位置请查下方列表文字说明。</p>
+          <details class="acu-wellcome">
+            <summary>Wellcome 历史参考图（较密，展开后按需加载）</summary>
+            <div class="acu-wellcome-tabs" role="tablist" aria-label="Wellcome 参考图">
+              <button type="button" class="acu-wellcome-tab is-active" role="tab" data-acu-wellcome="whole" aria-selected="true">全身正背</button>
+              <button type="button" class="acu-wellcome-tab" role="tab" data-acu-wellcome="figures" aria-selected="false">全身双图</button>
+              <button type="button" class="acu-wellcome-tab" role="tab" data-acu-wellcome="full" aria-selected="false">全穴总图</button>
+              <button type="button" class="acu-wellcome-tab" role="tab" data-acu-wellcome="thorax" aria-selected="false">胸腹</button>
+              <button type="button" class="acu-wellcome-tab" role="tab" data-acu-wellcome="back-torso" aria-selected="false">背腰</button>
+              <button type="button" class="acu-wellcome-tab" role="tab" data-acu-wellcome="head-front" aria-selected="false">头颈·前</button>
+              <button type="button" class="acu-wellcome-tab" role="tab" data-acu-wellcome="head-back" aria-selected="false">头颈·后</button>
+            </div>
+            <div class="acu-wellcome-panels">
+              <div class="acu-wellcome-panel" data-acu-wellcome-panel="whole">
+                <img class="acu-chart-img" data-src="./lib/acupoint/wellcome/whole-body-front-back.jpg" alt="Wellcome 全身正背面经络穴图" width="960" height="1440" decoding="async" />
+              </div>
+              <div class="acu-wellcome-panel" data-acu-wellcome-panel="figures" hidden>
+                <img class="acu-chart-img acu-chart-wide" data-src="./lib/acupoint/wellcome/figures-pair.jpg" alt="Wellcome 正背面双人体经络图" width="960" height="620" decoding="async" />
+              </div>
+              <div class="acu-wellcome-panel" data-acu-wellcome-panel="full" hidden>
+                <img class="acu-chart-img acu-chart-tall" data-src="./lib/acupoint/wellcome/full-chart.jpg" alt="Wellcome 全穴总图" width="960" height="2450" decoding="async" />
+              </div>
+              <div class="acu-wellcome-panel" data-acu-wellcome-panel="thorax" hidden>
+                <img class="acu-chart-img" data-src="./lib/acupoint/wellcome/thorax-abdomen.jpg" alt="Wellcome 胸腹部经络穴图" width="960" height="1440" decoding="async" />
+              </div>
+              <div class="acu-wellcome-panel" data-acu-wellcome-panel="back-torso" hidden>
+                <img class="acu-chart-img" data-src="./lib/acupoint/wellcome/back-torso.jpg" alt="Wellcome 背腰部经络穴图" width="960" height="1440" decoding="async" />
+              </div>
+              <div class="acu-wellcome-panel" data-acu-wellcome-panel="head-front" hidden>
+                <img class="acu-chart-img" data-src="./lib/acupoint/wellcome/head-front.jpg" alt="Wellcome 头颈前面经络穴图" width="960" height="1440" decoding="async" />
+              </div>
+              <div class="acu-wellcome-panel" data-acu-wellcome-panel="head-back" hidden>
+                <img class="acu-chart-img" data-src="./lib/acupoint/wellcome/head-back.jpg" alt="Wellcome 头颈后面经络穴图" width="960" height="1440" decoding="async" />
+              </div>
+            </div>
+            <p class="hint tight acu-chart-note">Wellcome Collection（CC BY 4.0）手工图，穴位密集不易辨认，仅作历史对照。</p>
+          </details>
         </div>
 
         <div class="acu-toolbar">
@@ -4065,7 +4081,7 @@ adb devices</pre>
   <script src="./app.js?v=20260829navscroll1"></script>
   <script src="./about.js?v=20260829acu2" defer></script>
   <script src="./extra.js?v=20260829memoloc1" defer></script>
-  <script src="./acupoint.js?v=20260829acu2" defer></script>
+  <script src="./acupoint.js?v=20260829acu3" defer></script>
   <script src="./vtrim.js?v=20260829acu2" defer></script>
   <script src="./vplay.js?v=20260817theme1" defer></script>
   <script src="./audio.js?v=20260817theme1" defer></script>
@@ -4073,7 +4089,7 @@ adb devices</pre>
   <script src="./lanshare.js?v=20260817theme1" defer></script>
   <script src="./setup.js?v=20260817theme1" defer></script>
   <script src="./imgkit.js?v=20260810l" defer></script>
-  <script src="./memo.js?v=20260829memoloc1" defer></script>
+  <script src="./memo.js?v=20260829acu3" defer></script>
   <script src="./textimg.js?v=20260817theme1" defer></script>
   <script src="./imgtext.js?v=20260817theme1" defer></script>
   <script src="./imgpreview.js?v=20260829imgprev2" defer></script>

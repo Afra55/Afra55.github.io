@@ -8662,10 +8662,58 @@ li a:not([class*="btn"]) {
   height: auto;
   border-radius: 8px;
   background: var(--panel-strong);
+  border: 0;
+  pointer-events: none;
+}
+
+object.acu-chart-svg {
+  display: block;
 }
 
 .acu-chart-wide {
   max-width: min(100%, 640px);
+}
+
+.acu-wellcome {
+  margin-top: 0.5rem;
+  border-top: 1px dashed var(--line);
+  padding-top: 0.65rem;
+}
+
+.acu-wellcome > summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.acu-wellcome-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.65rem 0 0.5rem;
+}
+
+.acu-wellcome-tab {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.acu-wellcome-tab.is-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+}
+
+.acu-wellcome-panels {
+  display: flex;
+  justify-content: center;
+  overflow: auto;
+  padding: 0.25rem;
 }
 
 .acu-chart-tall {

@@ -24,6 +24,9 @@
 
   const EXTRA_REGIONS = ["头颈部", "胸腹部", "背部", "肩胛部", "上肢", "下肢"];
 
+  let initStarted = false;
+  let activeMerAbbr = "";
+
   function norm(s) {
     return String(s || "")
       .toLowerCase()
@@ -55,6 +58,90 @@
     return m ? m.nameZh : ap.meridianKey || "—";
   }
 
+  function applyMerHighlight(svgRoot) {
+    if (!svgRoot) return;
+    const mer = activeMerAbbr && activeMerAbbr !== "EX" ? activeMerAbbr : "";
+    svgRoot.classList.toggle("has-mer-highlight", !!mer);
+    $$("[data-mer]", svgRoot).forEach((el) => {
+      el.classList.toggle("is-mer-active", mer && el.dataset.mer === mer);
+    });
+  }
+
+  function highlightMeridian(abbr) {
+    activeMerAbbr = abbr || "";
+    $$("object.acu-svg").forEach((obj) => {
+      applyMerHighlight(obj.contentDocument?.documentElement);
+    });
+  }
+
+  function bindSvgObjects() {
+    $$("object.acu-svg").forEach((obj) => {
+      obj.addEventListener("load", () => {
+        applyMerHighlight(obj.contentDocument?.documentElement);
+      });
+    });
+  }
+
+  function lazyLoadImg(img) {
+    if (!img || img.getAttribute("src") || !img.dataset.src) return;
+    img.setAttribute("src", img.dataset.src);
+    img.removeAttribute("data-src");
+  }
+
+  function lazyLoadPanelImages(panel) {
+    if (!panel) return;
+    $$("img[data-src]", panel).forEach(lazyLoadImg);
+  }
+
+  function bindChartTabs() {
+    const tabs = $$("[data-acu-chart]");
+    const panels = $$("[data-acu-chart-panel]");
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        const id = tab.dataset.acuChart;
+        tabs.forEach((t) => {
+          const on = t === tab;
+          t.classList.toggle("is-active", on);
+          t.setAttribute("aria-selected", on ? "true" : "false");
+        });
+        panels.forEach((p) => {
+          const on = p.dataset.acuChartPanel === id;
+          p.hidden = !on;
+          if (on) lazyLoadPanelImages(p);
+        });
+      });
+    });
+  }
+
+  function bindWellcomeTabs() {
+    const details = $(".acu-wellcome");
+    const tabs = $$("[data-acu-wellcome]");
+    const panels = $$("[data-acu-wellcome-panel]");
+    if (!details || !tabs.length) return;
+
+    details.addEventListener("toggle", () => {
+      if (!details.open) return;
+      const active = panels.find((p) => !p.hidden) || panels[0];
+      lazyLoadPanelImages(active);
+    });
+
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        const id = tab.dataset.acuWellcome;
+        tabs.forEach((t) => {
+          const on = t === tab;
+          t.classList.toggle("is-active", on);
+          t.setAttribute("aria-selected", on ? "true" : "false");
+        });
+        panels.forEach((p) => {
+          const on = p.dataset.acuWellcomePanel === id;
+          p.hidden = !on;
+          if (on) lazyLoadPanelImages(p);
+        });
+      });
+    });
+  }
+
   function renderDetail(ap, meridianByKey, q) {
     const detail = $("#acu-detail");
     const empty = $("#acu-detail-empty");
@@ -62,6 +149,7 @@
     if (!ap) {
       detail.hidden = true;
       empty.hidden = false;
+      highlightMeridian("");
       return;
     }
     empty.hidden = true;
@@ -108,6 +196,8 @@
 
     const richBadge = $("#acu-detail-rich");
     if (richBadge) richBadge.hidden = !ap.rich;
+
+    highlightMeridian(ap.type === "extra" ? "EX" : ap.meridianAbbr || "");
   }
 
   function matchesQuery(ap, q) {
@@ -130,24 +220,6 @@
     return norm(hay).includes(n);
   }
 
-  function bindChartTabs() {
-    const tabs = $$("[data-acu-chart]");
-    const panels = $$("[data-acu-chart-panel]");
-    tabs.forEach((tab) => {
-      tab.addEventListener("click", () => {
-        const id = tab.dataset.acuChart;
-        tabs.forEach((t) => {
-          const on = t === tab;
-          t.classList.toggle("is-active", on);
-          t.setAttribute("aria-selected", on ? "true" : "false");
-        });
-        panels.forEach((p) => {
-          p.hidden = p.dataset.acuChartPanel !== id;
-        });
-      });
-    });
-  }
-
   async function initAcupoint() {
     const root = $("#acupoint");
     if (!root || root.dataset.bound) return;
@@ -163,7 +235,7 @@
 
     let bundle;
     try {
-      const res = await fetch("./lib/acupoints-bundle.json?v=20260829acu2");
+      const res = await fetch("./lib/acupoints-bundle.json?v=20260829acu3");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       bundle = await res.json();
     } catch (err) {
@@ -193,7 +265,7 @@
     }
 
     if (metaEl) {
-      metaEl.textContent = `共 ${meridianCount} 经穴 + ${extraCount} 奇穴 · ${bundle.counts?.richDetail || 0} 条经穴含本草典详细字段 · 参考图来自 Wellcome Collection（CC BY 4.0）`;
+      metaEl.textContent = `共 ${meridianCount} 经穴 + ${extraCount} 奇穴 · ${bundle.counts?.richDetail || 0} 条经穴含本草典详细字段 · 上方简图可高亮经络`;
     }
 
     function syncTypeSeg() {
@@ -278,14 +350,37 @@
       renderList();
     });
 
+    bindSvgObjects();
     syncTypeSeg();
     bindChartTabs();
+    bindWellcomeTabs();
     renderList();
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initAcupoint);
-  } else {
+  function isAcupointActive() {
+    const root = $("#acupoint");
+    return !!(root && root.classList.contains("is-workspace-active") && !root.hidden);
+  }
+
+  function ensureInit() {
+    if (initStarted) return;
+    initStarted = true;
     initAcupoint();
+  }
+
+  function scheduleInit() {
+    if (isAcupointActive()) {
+      ensureInit();
+      return;
+    }
+    window.addEventListener("devtools:route", () => {
+      if (isAcupointActive()) ensureInit();
+    });
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", scheduleInit);
+  } else {
+    scheduleInit();
   }
 })();

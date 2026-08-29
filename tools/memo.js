@@ -5593,5 +5593,41 @@
     dismissClipOffer: () => dismissClipOffer(),
   };
 
-  boot().catch((err) => setError(memoError, err.message || String(err)));
+  let memoBooted = false;
+  let memoBootPromise = null;
+
+  function shouldBootMemoSoon() {
+    if (isMemoActive()) return true;
+    try {
+      if (localStorage.getItem("devtools-tool-last-v1") === "memo") return true;
+    } catch (_) {}
+    return false;
+  }
+
+  function ensureMemoBoot() {
+    if (memoBooted) return memoBootPromise;
+    memoBooted = true;
+    memoBootPromise = boot().catch((err) => setError(memoError, err.message || String(err)));
+    return memoBootPromise;
+  }
+
+  function scheduleMemoBoot() {
+    if (shouldBootMemoSoon()) {
+      ensureMemoBoot();
+      return;
+    }
+    const run = () => {
+      if (!memoBooted) ensureMemoBoot();
+    };
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(run, { timeout: 4000 });
+    } else {
+      setTimeout(run, 1500);
+    }
+    window.addEventListener("devtools:route", () => {
+      if (isMemoActive()) ensureMemoBoot();
+    });
+  }
+
+  scheduleMemoBoot();
 })();
