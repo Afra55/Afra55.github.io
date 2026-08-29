@@ -18,7 +18,7 @@
   let running = false;
   let keyHandler = null;
   let pointerHandler = null;
-  let resizeObserver = null;  let bestScores = { "2048": 0, snake: 0, flappy: 0, mole: 0 };
+  let bestScores = { "2048": 0, snake: 0, flappy: 0, mole: 0 };
 
   function loadScores() {
     try {
