@@ -3661,6 +3661,35 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    if (url.pathname === "/local/reveal" && req.method === "POST") {
+      if (!ffmpegBridge?.revealLocalPath) {
+        sendJson(res, 503, { ok: false, error: "未找到本机 reveal 模块" }, origin);
+        return;
+      }
+      const body = parseJsonBody(await readBody(req, 1024 * 1024));
+      const revealed = await ffmpegBridge.revealLocalPath(body.path || "");
+      const dirAbsPath = revealed.isDir ? revealed.path : path.dirname(revealed.path);
+      sendJson(res, 200, { ok: true, revealed: true, path: revealed.path, dirAbsPath }, origin);
+      return;
+    }
+
+    if (url.pathname === "/local/reveal-memo" && req.method === "POST") {
+      if (!ffmpegBridge?.findMemoStorageFile || !ffmpegBridge?.revealLocalPath) {
+        sendJson(res, 503, { ok: false, error: "未找到本机 reveal 模块" }, origin);
+        return;
+      }
+      const body = parseJsonBody(await readBody(req, 1024 * 1024));
+      const found = await ffmpegBridge.findMemoStorageFile({
+        folderName: body.folderName,
+        folderId: body.folderId,
+        fileName: body.fileName || body.name,
+      });
+      const revealed = await ffmpegBridge.revealLocalPath(found);
+      const dirAbsPath = path.dirname(path.dirname(found));
+      sendJson(res, 200, { ok: true, revealed: true, path: revealed.path, dirAbsPath }, origin);
+      return;
+    }
+
     if (url.pathname === "/fs/mkdir" && req.method === "POST") {
       const body = parseJsonBody(await readBody(req, 1024 * 1024));
       sendJson(res, 200, await mkdirPath(body.serial, body.path), origin);

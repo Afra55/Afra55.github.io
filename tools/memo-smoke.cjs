@@ -1170,7 +1170,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260829memoloc1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260829memoloc2/.test(s.src)),
     };
 
     out.pwa = {
@@ -1561,7 +1561,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/navctx1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memoloc2/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1830,8 +1830,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/navctx1/i.test(result.cacheBust?.version || "")) {
-    failed.push("cache-bust/version should be aligned to navctx1");
+  if (!/memoloc2/i.test(result.cacheBust?.version || "")) {
+    failed.push("cache-bust/version should be aligned to memoloc2");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
