@@ -5988,7 +5988,21 @@ button.adb-device-body.linkish {
   border-radius: 8px;
   background: color-mix(in srgb, var(--panel) 90%, transparent);
   overflow: hidden;
-  cursor: pointer;
+  cursor: grab;
+  touch-action: none;
+}
+
+.imgprev-thumb.is-dragging {
+  opacity: 0.55;
+  cursor: grabbing;
+}
+
+.imgprev-thumb.is-drop-before {
+  box-shadow: inset 3px 0 0 0 var(--accent);
+}
+
+.imgprev-thumb.is-drop-after {
+  box-shadow: inset -3px 0 0 0 var(--accent);
 }
 
 .imgprev-thumb.is-active {

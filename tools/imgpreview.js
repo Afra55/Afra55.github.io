@@ -29,7 +29,8 @@
   const HEIGHT_MIN = 280;
   const HEIGHT_DEFAULT = 480;
   const HEIGHT_STORAGE = "imgprev-wrap-height-v1";
-  const SNAP_PX = 10;
+  const SNAP_PX = 6;
+  const SNAP_RELEASE_MULT = 1.4;
 
   let uid = 0;
   /** @type {Array<{id:string,file:File,url:string,name:string,x:number,y:number,scale:number,opacity:number,z:number,nw:number,nh:number,ix:number,iy:number,iscale:number,iopacity:number,el:HTMLImageElement}>} */
@@ -49,6 +50,8 @@
   let dragItem = null;
   let dragOffsetX = 0;
   let dragOffsetY = 0;
+  /** @type {{ xLine: number|null, yLine: number|null }|null} */
+  let snapSession = null;
 
   function toast(msg) {
     const el = $("#toast");
@@ -181,9 +184,9 @@
     it.el.classList.toggle("is-selected", it.id === selectedId);
   }
 
-  function renderAllItems() {
+  function renderAllItems(opts = {}) {
     items.forEach(applyItemTransform);
-    renderThumbs();
+    if (!opts.skipThumbs) renderThumbs();
     syncControls();
     syncMeta();
   }
@@ -192,39 +195,50 @@
     return SNAP_PX / Math.max(view.scale, 0.05);
   }
 
-  function snapPosition(it, nx, ny) {
+  function bestAxisSnap(candidates, lines, thr, lockedLine) {
+    const releaseThr = thr * SNAP_RELEASE_MULT;
+    if (lockedLine != null) {
+      for (const c of candidates) {
+        const dist = Math.abs(c - lockedLine);
+        if (dist <= releaseThr) return { delta: lockedLine - c, line: lockedLine };
+      }
+    }
+    let bestDist = thr + 1;
+    let bestDelta = 0;
+    let bestLine = null;
+    for (const c of candidates) {
+      for (const line of lines) {
+        const dist = Math.abs(c - line);
+        if (dist <= thr && dist < bestDist) {
+          bestDist = dist;
+          bestDelta = line - c;
+          bestLine = line;
+        }
+      }
+    }
+    return { delta: bestDelta, line: bestLine };
+  }
+
+  function snapPosition(it, nx, ny, session = snapSession) {
     const b = itemBounds({ ...it, x: nx, y: ny });
     const thr = snapThresholdWorld();
-    let sx = nx;
-    let sy = ny;
-    const lines = [];
+    const xLines = [];
+    const yLines = [];
     items.forEach((other) => {
       if (other.id === it.id) return;
       const o = itemBounds(other);
-      lines.push(o.l, o.r, o.cx, o.t, o.b, o.cy);
+      xLines.push(o.l, o.r, o.cx);
+      yLines.push(o.t, o.b, o.cy);
     });
-    const candidatesX = [b.l, b.r, b.cx];
-    const candidatesY = [b.t, b.b, b.cy];
-    for (const cx of candidatesX) {
-      for (const line of lines) {
-        if (Math.abs(cx - line) <= thr) {
-          const delta = line - cx;
-          sx += delta;
-          break;
-        }
-      }
+    const snapX = bestAxisSnap([b.l, b.r, b.cx], xLines, thr, session?.xLine ?? null);
+    const sx = nx + snapX.delta;
+    const nb = itemBounds({ ...it, x: sx, y: ny });
+    const snapY = bestAxisSnap([nb.t, nb.b, nb.cy], yLines, thr, session?.yLine ?? null);
+    if (session) {
+      session.xLine = snapX.line;
+      session.yLine = snapY.line;
     }
-    const nb = itemBounds({ ...it, x: sx, y: sy });
-    for (const cy of [nb.t, nb.b, nb.cy]) {
-      for (const line of lines) {
-        if (Math.abs(cy - line) <= thr) {
-          const delta = line - cy;
-          sy += delta;
-          break;
-        }
-      }
-    }
-    return { x: sx, y: sy };
+    return { x: sx, y: ny + snapY.delta };
   }
 
   function fitView() {
@@ -252,9 +266,9 @@
     applyViewTransform();
   }
 
-  function selectItem(id) {
+  function selectItem(id, opts = {}) {
     selectedId = id;
-    renderAllItems();
+    renderAllItems(opts);
   }
 
   function syncControls() {
@@ -277,7 +291,7 @@
         "支持多选 / 拖拽添加。滚轮无极缩放选中图（无选中则缩放画布）；拖拽移动图片；底边可拉高预览区。";
       return;
     }
-    meta.textContent = `${items.length} 张 · 选中：${selectedItem()?.name || "无"} · 滚轮缩放 · 边缘吸附对齐`;
+    meta.textContent = `${items.length} 张 · 选中：${selectedItem()?.name || "无"} · 滚轮缩放 · 边缘吸附 · 底栏可拖拽排序`;
   }
 
   function syncEmpty() {
@@ -287,6 +301,95 @@
     if (thumbStrip) thumbStrip.hidden = !has;
   }
 
+  function reorderThumbZ(fromId, toId, insertBefore) {
+    const sorted = items.slice().sort((a, b) => a.z - b.z);
+    const fromIdx = sorted.findIndex((it) => it.id === fromId);
+    const toIdx = sorted.findIndex((it) => it.id === toId);
+    if (fromIdx < 0 || toIdx < 0 || fromId === toId) return;
+    const [moved] = sorted.splice(fromIdx, 1);
+    let insertIdx = sorted.findIndex((it) => it.id === toId);
+    if (!insertBefore) insertIdx += 1;
+    sorted.splice(insertIdx, 0, moved);
+    sorted.forEach((it, i) => {
+      it.z = i + 1;
+    });
+    renderAllItems();
+  }
+
+  function clearThumbDropMarkers() {
+    $$(".imgprev-thumb.is-drop-before, .imgprev-thumb.is-drop-after, .imgprev-thumb.is-dragging", thumbStrip).forEach((el) => {
+      el.classList.remove("is-drop-before", "is-drop-after", "is-dragging");
+    });
+  }
+
+  function bindThumbStrip() {
+    if (!thumbStrip || thumbStrip.dataset.bound === "1") return;
+    thumbStrip.dataset.bound = "1";
+    const THRESH = 6;
+    /** @type {{ id: string, startX: number, startY: number, pointerId: number, moved: boolean, btn: HTMLElement, dropTarget: { id: string, before: boolean }|null }|null} */
+    let drag = null;
+
+    thumbStrip.addEventListener("pointerdown", (e) => {
+      const btn = e.target.closest?.(".imgprev-thumb");
+      if (!btn || e.button !== 0) return;
+      e.preventDefault();
+      drag = {
+        id: btn.dataset.id,
+        startX: e.clientX,
+        startY: e.clientY,
+        pointerId: e.pointerId,
+        moved: false,
+        btn,
+        dropTarget: null,
+      };
+      try {
+        btn.setPointerCapture(e.pointerId);
+      } catch (_) {}
+    });
+
+    thumbStrip.addEventListener("pointermove", (e) => {
+      if (!drag || e.pointerId !== drag.pointerId) return;
+      if (!drag.moved) {
+        if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) < THRESH) return;
+        drag.moved = true;
+        drag.btn.classList.add("is-dragging");
+        selectedId = drag.id;
+        renderAllItems({ skipThumbs: true });
+        $$(".imgprev-thumb", thumbStrip).forEach((btn) => {
+          btn.classList.toggle("is-active", btn.dataset.id === drag.id);
+        });
+      }
+      clearThumbDropMarkers();
+      drag.btn.classList.add("is-dragging");
+      const hit = document.elementFromPoint(e.clientX, e.clientY)?.closest?.(".imgprev-thumb");
+      if (hit && hit.dataset.id !== drag.id) {
+        const rect = hit.getBoundingClientRect();
+        const before = e.clientX < rect.left + rect.width / 2;
+        hit.classList.add(before ? "is-drop-before" : "is-drop-after");
+        drag.dropTarget = { id: hit.dataset.id, before };
+      } else {
+        drag.dropTarget = null;
+      }
+    });
+
+    const endDrag = (e) => {
+      if (!drag || e.pointerId !== drag.pointerId) return;
+      if (drag.moved && drag.dropTarget) {
+        reorderThumbZ(drag.id, drag.dropTarget.id, drag.dropTarget.before);
+      } else if (!drag.moved) {
+        selectItem(drag.id);
+      }
+      clearThumbDropMarkers();
+      try {
+        drag.btn.releasePointerCapture(e.pointerId);
+      } catch (_) {}
+      drag = null;
+    };
+
+    thumbStrip.addEventListener("pointerup", endDrag);
+    thumbStrip.addEventListener("pointercancel", endDrag);
+  }
+
   function renderThumbs() {
     if (!thumbStrip) return;
     thumbStrip.innerHTML = items
@@ -294,14 +397,11 @@
       .sort((a, b) => a.z - b.z)
       .map((it) => {
         const active = it.id === selectedId ? " is-active" : "";
-        return `<button type="button" class="imgprev-thumb${active}" data-id="${it.id}" title="${it.name.replace(/"/g, "&quot;")}">
+        return `<button type="button" class="imgprev-thumb${active}" data-id="${it.id}" title="${it.name.replace(/"/g, "&quot;")} · 拖拽排序">
           <img src="${it.url}" alt="" draggable="false" />
         </button>`;
       })
       .join("");
-    $$(".imgprev-thumb", thumbStrip).forEach((btn) => {
-      btn.addEventListener("click", () => selectItem(btn.dataset.id));
-    });
   }
 
   function removeItem(id) {
@@ -474,6 +574,7 @@
     e.stopPropagation();
     selectItem(it.id);
     dragItem = it;
+    snapSession = { xLine: null, yLine: null };
     const p = clientToWorld(e.clientX, e.clientY);
     dragOffsetX = p.x - it.x;
     dragOffsetY = p.y - it.y;
@@ -491,6 +592,7 @@
     };
     const onEnd = () => {
       dragItem = null;
+      snapSession = null;
       viewport?.classList.remove("is-panning");
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onEnd);
@@ -607,6 +709,7 @@
   bindViewport();
   bindHeightControls();
   bindFileDrop();
+  bindThumbStrip();
   syncEmpty();
   syncControls();
 
