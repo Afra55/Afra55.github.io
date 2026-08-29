@@ -2846,7 +2846,7 @@
   };
   window.dispatchEvent(new CustomEvent("devtools:catalog"));
   syncSortHint();
-  // Safari / iOS：导航后 hash 可能短暂停留在上一页，延后 boot 并在 hashchange 时再次尝试恢复
+  // Safari / iOS：导航后 hash 可能短暂停留在上一页；首屏不等 DOMContentLoaded（defer 大包会拖住它）
   let bootPasses = 0;
   const scheduleBootRoute = () => {
     requestAnimationFrame(() => {
@@ -2857,10 +2857,9 @@
       setTimeout(bootRoute, 280);
     }
   };
+  scheduleBootRoute();
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", scheduleBootRoute, { once: true });
-  } else {
-    scheduleBootRoute();
   }
 
   // Init

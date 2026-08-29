@@ -631,6 +631,58 @@ button.tool-nav-link {
   display: none;
 }
 
+/* head 内联 boot 脚本写入 data-boot-panel，首屏不等 defer 大包 */
+html[data-boot-panel] .tool-panel {
+  display: none;
+}
+
+html[data-boot-panel="timestamp"] #timestamp,
+html[data-boot-panel="timediff"] #timediff,
+html[data-boot-panel="cron"] #cron,
+html[data-boot-panel="ahex"] #ahex,
+html[data-boot-panel="color"] #color,
+html[data-boot-panel="eyedropper"] #eyedropper,
+html[data-boot-panel="password"] #password,
+html[data-boot-panel="base64"] #base64,
+html[data-boot-panel="imgb64"] #imgb64,
+html[data-boot-panel="url"] #url,
+html[data-boot-panel="hash"] #hash,
+html[data-boot-panel="uuid"] #uuid,
+html[data-boot-panel="json"] #json,
+html[data-boot-panel="yaml"] #yaml,
+html[data-boot-panel="sharecard"] #sharecard,
+html[data-boot-panel="query"] #query,
+html[data-boot-panel="text"] #text,
+html[data-boot-panel="caseconv"] #caseconv,
+html[data-boot-panel="regex"] #regex,
+html[data-boot-panel="diff"] #diff,
+html[data-boot-panel="qrcode"] #qrcode,
+html[data-boot-panel="units"] #units,
+html[data-boot-panel="coord"] #coord,
+html[data-boot-panel="numbase"] #numbase,
+html[data-boot-panel="markdown"] #markdown,
+html[data-boot-panel="textimg"] #textimg,
+html[data-boot-panel="imgtext"] #imgtext,
+html[data-boot-panel="memo"] #memo,
+html[data-boot-panel="gifmaker"] #gifmaker,
+html[data-boot-panel="vsplit"] #vsplit,
+html[data-boot-panel="vbb"] #vbb,
+html[data-boot-panel="vtrim"] #vtrim,
+html[data-boot-panel="vplay"] #vplay,
+html[data-boot-panel="audio"] #audio,
+html[data-boot-panel="adb"] #adb,
+html[data-boot-panel="wheel"] #wheel,
+html[data-boot-panel="lanshare"] #lanshare,
+html[data-boot-panel="ffbridge"] #ffbridge,
+html[data-boot-panel="imgpreview"] #imgpreview,
+html[data-boot-panel="whiteboard"] #whiteboard,
+html[data-boot-panel="imgkit"] #imgkit,
+html[data-boot-panel="about"] #about,
+html[data-boot-panel="acupoint"] #acupoint,
+html[data-boot-panel="setup"] #setup {
+  display: block;
+}
+
 .tool-panel.is-workspace-active {
   display: block;
   animation: rise 0.35s ease both;
