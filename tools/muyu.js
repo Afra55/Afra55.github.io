@@ -6,6 +6,56 @@
   const STORAGE_KEY = "devtools-muyu-v1";
   const HTML_POOL_SIZE = 4;
 
+  /** 木鱼造型参考 wooden-fish-dsh/docs/fish.svg 与 heyuan110/cyber-merit */
+  function renderFishArt(prefix) {
+    const p = prefix;
+    return `<svg class="muyu-fish-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+      <defs>
+        <radialGradient id="${p}-body" cx="40%" cy="32%" r="80%">
+          <stop offset="0%" stop-color="#bd8244"/>
+          <stop offset="45%" stop-color="#7d5022"/>
+          <stop offset="100%" stop-color="#2c1a0a"/>
+        </radialGradient>
+        <linearGradient id="${p}-rim" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#e6bf80"/>
+          <stop offset="50%" stop-color="#9a6a32"/>
+          <stop offset="100%" stop-color="#553616"/>
+        </linearGradient>
+        <radialGradient id="${p}-mouth" cx="50%" cy="30%" r="75%">
+          <stop offset="0%" stop-color="#3a2410"/>
+          <stop offset="100%" stop-color="#0c0703"/>
+        </radialGradient>
+        <linearGradient id="${p}-hl" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="rgba(255,242,214,0.55)"/>
+          <stop offset="100%" stop-color="rgba(255,242,214,0)"/>
+        </linearGradient>
+      </defs>
+      <ellipse cx="100" cy="180" rx="72" ry="11" fill="rgba(0,0,0,0.28)"/>
+      <ellipse cx="100" cy="102" rx="91" ry="80" fill="url(#${p}-rim)"/>
+      <ellipse cx="100" cy="98" rx="83" ry="72" fill="url(#${p}-body)"/>
+      <g stroke="#3a2410" stroke-opacity="0.32" fill="none" stroke-linecap="round">
+        <path d="M40 92 Q100 64 160 92" stroke-width="2.3"/>
+        <path d="M46 112 Q100 90 154 112" stroke-width="2"/>
+        <path d="M56 132 Q100 116 144 132" stroke-width="1.7"/>
+      </g>
+      <g fill="none" stroke="#2c1a0a" stroke-opacity="0.55" stroke-linecap="round">
+        <path d="M134 54 Q166 66 162 106" stroke-width="4.5"/>
+        <path d="M146 62 Q168 78 164 102" stroke-width="2.8"/>
+      </g>
+      <circle cx="150" cy="84" r="7" fill="#221408"/>
+      <circle cx="147.5" cy="81.5" r="2.2" fill="#6a4520"/>
+      <path d="M50 116 Q100 156 150 116 Q126 138 100 138 Q74 138 50 116 Z" fill="url(#${p}-mouth)"/>
+      <ellipse cx="100" cy="119" rx="42" ry="14" fill="url(#${p}-mouth)"/>
+      <path d="M58 114 Q100 130 142 114" stroke="rgba(255,222,172,0.3)" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <ellipse cx="76" cy="60" rx="36" ry="21" fill="url(#${p}-hl)"/>
+      <ellipse cx="62" cy="54" rx="12" ry="7" fill="rgba(255,250,230,0.6)"/>
+      <g class="muyu-mallet">
+        <rect x="148" y="18" width="8" height="34" rx="4" fill="#8A5A2B" stroke="#6B421A" stroke-width="1.5"/>
+        <ellipse cx="152" cy="14" rx="11" ry="8" fill="#B87A35" stroke="#6B421A" stroke-width="1.5"/>
+      </g>
+    </svg>`;
+  }
+
   let root = null;
   let countEl = null;
   let countFsEl = null;
@@ -109,9 +159,7 @@
   function unlockMuyuAudio() {
     if (!soundOn) return;
     initKnockAudio();
-    if (htmlAudioPrimed) {
-      /* still refresh web audio */
-    } else {
+    if (!htmlAudioPrimed) {
       htmlAudioPrimed = true;
       const prime = new Audio(htmlKnockUri);
       prime.volume = 0.0001;
@@ -227,12 +275,24 @@
     if (soundOn) unlockMuyuAudio();
   }
 
+  function mountFishArt(btn, prefix, withHint) {
+    if (!btn || btn.dataset.art === "1") return;
+    btn.dataset.art = "1";
+    btn.innerHTML = renderFishArt(prefix);
+    if (withHint) {
+      const hint = document.createElement("span");
+      hint.className = "muyu-fish-hint";
+      hint.textContent = "点击敲击";
+      btn.appendChild(hint);
+    }
+  }
+
   function bumpFish(el) {
     if (!el) return;
     el.classList.remove("is-knocking");
     void el.offsetWidth;
     el.classList.add("is-knocking");
-    window.setTimeout(() => el.classList.remove("is-knocking"), 180);
+    window.setTimeout(() => el.classList.remove("is-knocking"), 320);
   }
 
   function knock(fromEl) {
@@ -251,7 +311,14 @@
     saveState();
   }
 
+  function forceExitFullscreen() {
+    fullscreen = false;
+    if (fsRoot) fsRoot.hidden = true;
+    document.body.classList.remove("muyu-fs-active");
+  }
+
   function enterFullscreen() {
+    ensureMuyu();
     if (fullscreen || !fsRoot) return;
     fullscreen = true;
     fsRoot.hidden = false;
@@ -261,10 +328,7 @@
   }
 
   function exitFullscreen() {
-    if (!fullscreen || !fsRoot) return;
-    fullscreen = false;
-    fsRoot.hidden = true;
-    document.body.classList.remove("muyu-fs-active");
+    forceExitFullscreen();
     fsBtn?.focus();
   }
 
@@ -273,10 +337,6 @@
       .replace(/^#/, "")
       .trim();
     return raw.split(/[/?]/)[0] === "muyu";
-  }
-
-  function isMuyuVisible() {
-    return !!(root && !root.hidden && root.classList.contains("is-workspace-active"));
   }
 
   function bindKnock(btn) {
@@ -334,6 +394,29 @@
     });
   }
 
+  function bindFsShell() {
+    const fs = document.getElementById("muyu-fs");
+    const close = document.getElementById("muyu-fs-close");
+    if (fs) fs.hidden = true;
+    if (close && close.dataset.shellBound !== "1") {
+      close.dataset.shellBound = "1";
+      close.addEventListener("click", (e) => {
+        e.stopPropagation();
+        exitFullscreen();
+      });
+    }
+  }
+
+  function mountFishArtEarly() {
+    mountFishArt(document.getElementById("muyu-fish"), "muyu", true);
+    mountFishArt(document.getElementById("muyu-fish-fs"), "muyu-fs", false);
+  }
+
+  function bootMuyuShell() {
+    bindFsShell();
+    mountFishArtEarly();
+  }
+
   function initMuyuCore() {
     root = $("#muyu");
     if (!root || root.dataset.bound) return false;
@@ -349,6 +432,10 @@
     fsRoot = $("#muyu-fs");
     fsCloseBtn = $("#muyu-fs-close");
     resetBtn = $("#muyu-reset");
+
+    mountFishArt(fishBtn, "muyu", true);
+    mountFishArt(fishFsBtn, "muyu-fs", false);
+    bindFsShell();
 
     loadState();
     syncSoundToggles();
@@ -366,9 +453,14 @@
 
   function onRoute(ev) {
     const tool = ev?.detail?.tool || (isMuyuRoute() ? "muyu" : "");
+    if (tool !== "muyu") forceExitFullscreen();
     if (tool === "muyu") ensureMuyu();
   }
 
+  bootMuyuShell();
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", bootMuyuShell, { once: true });
+  }
   window.addEventListener("devtools:route", onRoute);
   if (isMuyuRoute()) {
     if (document.readyState === "loading") {
