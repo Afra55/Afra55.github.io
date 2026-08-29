@@ -6925,6 +6925,29 @@ button.adb-device-body.linkish {
   color: color-mix(in srgb, var(--danger, #ff6b7a) 75%, var(--ink));
 }
 
+.memo-more-menu [data-memo-untemp],
+.memo-ctx-item.is-untemp {
+  border: 1px solid color-mix(in srgb, #2ecc71 68%, var(--line));
+  background: color-mix(in srgb, #2ecc71 24%, var(--panel-strong, #fff));
+  color: color-mix(in srgb, #1a7a42 92%, var(--ink));
+  font-weight: 700;
+  box-shadow: 0 0 0 1px color-mix(in srgb, #2ecc71 18%, transparent);
+}
+
+.memo-more-menu [data-memo-untemp]:hover,
+.memo-more-menu [data-memo-untemp]:focus-visible,
+.memo-ctx-item.is-untemp:hover,
+.memo-ctx-item.is-untemp:focus-visible {
+  background: color-mix(in srgb, #2ecc71 34%, var(--panel-strong, #fff));
+  color: color-mix(in srgb, #145c32 95%, var(--ink));
+}
+
+.memo-card.is-temp {
+  border-color: color-mix(in srgb, #e8a317 55%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, #e8a317 18%, transparent);
+  background: color-mix(in srgb, #e8a317 6%, var(--panel-strong, #fff));
+}
+
 .memo-ctx {
   position: fixed;
   z-index: 80;

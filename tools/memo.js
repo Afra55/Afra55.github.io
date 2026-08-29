@@ -1411,7 +1411,11 @@
     if (canOfferItemShare(item)) acts.push({ id: "share", label: "分享" });
     if (item?.type === "text") acts.push({ id: "edit", label: "编辑" });
     acts.push({ id: "note", label: noteRaw ? "改备注" : "备注" });
-    acts.push({ id: isTempItem(item) ? "untemp" : "temp", label: isTempItem(item) ? "取消临时" : "标为临时" });
+    acts.push({
+      id: isTempItem(item) ? "untemp" : "temp",
+      label: isTempItem(item) ? "取消临时" : "标为临时",
+      emphasis: isTempItem(item),
+    });
     if (canCopy) acts.push({ id: "dl", label: "下载" });
     if (state.mode === "dir" && !state.dirPending) {
       acts.push({ id: "loc", label: "打开文件位置" });
@@ -1801,10 +1805,11 @@
       ? `<button type="button" class="secondary-btn" data-memo-copy="${item.id}">复制</button>`
       : `<button type="button" class="secondary-btn" data-memo-dl="${item.id}">下载</button>`;
     const moreBits = itemSecondaryActions(item).map((act) => {
-      const danger = act.danger ? " memo-more-danger" : "";
-      return `<button type="button" class="ghost-btn${danger}" data-memo-${act.id}="${item.id}">${act.label}</button>`;
+      const extra = act.emphasis ? " memo-more-untemp" : act.danger ? " memo-more-danger" : "";
+      return `<button type="button" class="ghost-btn${extra}" data-memo-${act.id}="${item.id}">${act.label}</button>`;
     });
-    return `<article class="memo-card${editing}${pinnedCls}" data-memo-id="${item.id}" draggable="false">
+    const tempCls = isTempItem(item) ? " is-temp" : "";
+    return `<article class="memo-card${editing}${pinnedCls}${tempCls}" data-memo-id="${item.id}" draggable="false">
       <div class="memo-card-head">
         ${dragHandle}
         <label class="memo-check"><input type="checkbox" data-memo-check="${item.id}" ${checked} /></label>
@@ -2371,7 +2376,7 @@
 
   function syncMemoJsonActions(textarea, actionsEl, item) {
     if (!actionsEl) return;
-    const show = isMemoJsonItem(item) && isLikelyJsonText(textarea?.value || "");
+    const show = isMemoJsonItem(item) && isLikelyJsonText(String(textarea?.value || ""));
     actionsEl.hidden = !show;
     if (show) actionsEl.style.display = "";
     else actionsEl.style.display = "none";
@@ -2523,13 +2528,11 @@
       toast("仅文本条目可编辑");
       return;
     }
-    let text = item.textPreview || "";
-    if (!text) {
-      try {
-        text = await (await loadBlob(item)).text();
-      } catch (_) {
-        text = "";
-      }
+    let text = "";
+    try {
+      text = await (await loadBlob(item)).text();
+    } catch (_) {
+      text = item.textPreview || "";
     }
     closeLightbox();
     closeNoteEditPanel({ discard: true });
@@ -4875,9 +4878,9 @@
     else bits.push(`<button type="button" class="memo-ctx-item" role="menuitem" data-memo-ctx-act="dl">下载</button>`);
     itemSecondaryActions(item).forEach((act) => {
       if (!canCopy && act.id === "dl") return;
-      const danger = act.danger ? " is-danger" : "";
+      const extra = act.emphasis ? " is-untemp" : act.danger ? " is-danger" : "";
       bits.push(
-        `<button type="button" class="memo-ctx-item${danger}" role="menuitem" data-memo-ctx-act="${act.id}">${act.label}</button>`
+        `<button type="button" class="memo-ctx-item${extra}" role="menuitem" data-memo-ctx-act="${act.id}">${act.label}</button>`
       );
     });
     el.innerHTML = bits.join("");
