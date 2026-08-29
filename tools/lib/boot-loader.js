@@ -47,21 +47,14 @@
   else document.addEventListener("DOMContentLoaded", mount, { once: true });
 
   let routeReady = false;
-  let scriptsReady = false;
 
   function tryFinish() {
-    if (routeReady && scriptsReady) finish();
-  }
-
-  function markScriptsReady() {
-    scriptsReady = true;
-    tryFinish();
+    if (routeReady) finish();
   }
 
   function trackDeferScripts() {
-    // defer 脚本保证在 DOMContentLoaded 之前已顺序执行完毕，无需再等 load 事件
+    /* 核心工具脚本已改为切换时按需加载，首屏不等 defer 大包 */
     bump(88, "准备界面…");
-    markScriptsReady();
   }
 
   function hideOverlay() {

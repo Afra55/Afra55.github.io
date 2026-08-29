@@ -1504,7 +1504,7 @@
 
   function bootRoute() {
     restoreLastToolOnStartup();
-    applyRoute({ skipRecent: bootPasses > 0 });
+    applyRoute({ skipRecent: bootPasses > 0, deferAssets: true });
     forceDrawerClosed();
     bootPasses += 1;
   }
@@ -1928,7 +1928,7 @@
     return `#${tool}`;
   }
 
-  async function applyRoute({ skipRecent, keepDrawer } = {}) {
+  async function applyRoute({ skipRecent, keepDrawer, deferAssets = false } = {}) {
     let route = parseRoute();
     if (shouldRestoreLastTool()) {
       const saved = loadLastToolId();
@@ -1971,7 +1971,6 @@
     }
 
     const routeToolId = currentTool === "media" ? currentMediaTab : currentTool;
-    const isFirstBoot = !window.__devtoolsBootReady;
 
     $$(".tool-panel").forEach((panel) => {
       const id = panel.id;
@@ -2049,13 +2048,31 @@
       emitRoute();
     };
 
-    if (isFirstBoot) {
-      window.__devtoolsBootReady = true;
-      window.dispatchEvent(new CustomEvent("devtools:boot-ready"));
-      void loadLazyForRoute();
+    if (deferAssets) {
+      if (!window.__devtoolsShellBoot) {
+        window.__devtoolsShellBoot = true;
+        window.__devtoolsBootReady = true;
+        window.dispatchEvent(new CustomEvent("devtools:boot-ready"));
+        const idle = window.requestIdleCallback || ((cb) => window.setTimeout(cb, 1200));
+        idle(() => {
+          window.DevToolsLazy?.loadPwa?.().catch(() => {});
+        });
+      }
+      emitRoute();
     } else {
       await loadLazyForRoute();
+      idleLoadPwaOnce();
     }
+  }
+
+  let pwaIdleScheduled = false;
+  function idleLoadPwaOnce() {
+    if (pwaIdleScheduled) return;
+    pwaIdleScheduled = true;
+    const idle = window.requestIdleCallback || ((cb) => window.setTimeout(cb, 800));
+    idle(() => {
+      window.DevToolsLazy?.loadPwa?.().catch(() => {});
+    });
   }
 
   function navigateTo(tool, tab, { replace = false } = {}) {

@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const BUILD = "2026.08.29-173000";
+  const BUILD = "2026.08.29-174000";
 
   const VENDOR_FILES = {
     "js-yaml": { src: "./vendor/js-yaml.min.js", probe: () => typeof globalThis.jsyaml !== "undefined" },
@@ -42,7 +42,25 @@
     vbb: ["gif", "omggif"],
   };
 
+  /** 独立脚本即可运行，不必拉 extra.js（~580KB） */
+  const STANDALONE_NO_EXTRA = new Set([
+    "memo",
+    "whiteboard",
+    "acupoint",
+    "textimg",
+    "imgtext",
+    "imgpreview",
+    "setup",
+    "imgkit",
+    "lanshare",
+    "ffbridge",
+  ]);
+
+  /** 不依赖 DevToolsPure */
+  const NO_PURE = new Set(["acupoint", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "setup", "about"]);
+
   const scriptPromises = new Map();
+  let extraBundlePromise = null;
 
   function withVersion(src) {
     const url = new URL(src, document.baseURI || window.location.href);
@@ -87,7 +105,7 @@
       }
       const node = document.createElement("script");
       node.src = key;
-      node.async = true;
+      node.async = false;
       node.onload = () => {
         node.dataset.devtoolsLoaded = "1";
         finishOk();
@@ -100,6 +118,33 @@
     });
     scriptPromises.set(key, promise);
     return promise;
+  }
+
+  async function ensurePure() {
+    if (window.DevToolsPure) return;
+    await loadScript("./lib/pure.js");
+  }
+
+  async function loadExtraBundle() {
+    if (window.__devtoolsExtraBundle) return;
+    if (extraBundlePromise) return extraBundlePromise;
+    extraBundlePromise = (async () => {
+      await ensurePure();
+      await loadScript("./temp.js");
+      await loadScript("./lib/oss-deps.js");
+      await loadScript("./extra.js");
+      window.__devtoolsExtraBundle = true;
+    })().catch((err) => {
+      extraBundlePromise = null;
+      throw err;
+    });
+    return extraBundlePromise;
+  }
+
+  async function loadDiffBundle() {
+    await ensurePure();
+    if (!window.DiffCore) await loadScript("./lib/diff-core.js");
+    await loadScript("./diff.js");
   }
 
   async function loadVendor(id) {
@@ -116,21 +161,43 @@
     await loadScript(src);
   }
 
+  async function loadPwa() {
+    if (window.__devtoolsPwaLoaded) return;
+    await loadScript("./pwa.js");
+    window.__devtoolsPwaLoaded = true;
+  }
+
   async function ensureForTool(toolId) {
     const id = String(toolId || "").trim();
     if (!id) return;
-    const tasks = [];
-    if (TOOL_FILES[id]) tasks.push(loadToolScript(id));
+
+    if (id === "about") {
+      await loadScript("./about.js");
+      return;
+    }
+    if (id === "diff") {
+      await loadDiffBundle();
+      return;
+    }
+
+    if (!NO_PURE.has(id)) await ensurePure();
+
+    if (!STANDALONE_NO_EXTRA.has(id)) {
+      await loadExtraBundle();
+    }
+
+    if (TOOL_FILES[id]) await loadToolScript(id);
+
     const vendors = TOOL_VENDORS[id] || [];
-    vendors.forEach((vendorId) => tasks.push(loadVendor(vendorId)));
-    if (!tasks.length) return;
-    await Promise.all(tasks);
+    for (const vendorId of vendors) await loadVendor(vendorId);
   }
 
   window.DevToolsLazy = {
     BUILD,
     ensureForTool,
+    loadExtraBundle,
     loadVendor,
     loadToolScript,
+    loadPwa,
   };
 })();
