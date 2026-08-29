@@ -10361,3 +10361,261 @@ html[data-boot-loading="1"] body {
   font-size: 0.86rem;
   color: var(--muted, #9aabc4);
 }
+
+/* —— 环境音库 —— */
+.ambient-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ambient-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.ambient-search-row {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ambient-search-row .text-input {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.ambient-filters {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.65rem;
+}
+
+.ambient-filter-btn.is-active {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text);
+}
+
+.ambient-sleep-label {
+  margin-left: 0.15rem;
+}
+
+.ambient-sleep-select {
+  min-width: 7.5rem;
+}
+
+.ambient-grid-wrap {
+  padding: 0.65rem;
+  max-height: min(62vh, 560px);
+  overflow: auto;
+}
+
+.ambient-cat {
+  margin-bottom: 0.85rem;
+}
+
+.ambient-cat:last-child {
+  margin-bottom: 0;
+}
+
+.ambient-cat-head {
+  appearance: none;
+  border: none;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--text);
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.ambient-cat-ic {
+  font-size: 1.15rem;
+  color: var(--accent);
+}
+
+.ambient-cat-title {
+  flex: 1;
+  font-weight: 700;
+}
+
+.ambient-cat-en {
+  font-weight: 500;
+  color: var(--muted);
+  font-size: 0.88em;
+}
+
+.ambient-cat-count {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.ambient-cat-chevron {
+  color: var(--muted);
+  transition: transform 0.15s ease;
+}
+
+.ambient-cat.is-collapsed .ambient-cat-chevron {
+  transform: rotate(-90deg);
+}
+
+.ambient-cat.is-collapsed .ambient-grid {
+  display: none;
+}
+
+.ambient-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 148px), 1fr));
+  gap: 0.55rem;
+  margin-top: 0.55rem;
+}
+
+.ambient-card {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, var(--border) 85%, transparent);
+  background: var(--panel);
+  border-radius: 10px;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+  position: relative;
+  color: inherit;
+  touch-action: manipulation;
+}
+
+.ambient-card.is-playing {
+  border-color: color-mix(in srgb, var(--accent) 65%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+
+.ambient-card.is-paused {
+  opacity: 0.82;
+}
+
+.ambient-card-img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  background: color-mix(in srgb, var(--muted) 18%, transparent);
+}
+
+.ambient-card-img-fallback {
+  display: grid;
+  place-items: center;
+}
+
+.ambient-card-fallback-ic {
+  font-size: 2.4rem;
+  color: var(--accent);
+  opacity: 0.75;
+}
+
+.ambient-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  padding: 0.45rem 0.5rem 0.52rem;
+}
+
+.ambient-card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-weight: 700;
+  font-size: 0.92rem;
+  line-height: 1.25;
+}
+
+.ambient-card-title .ambient-ic {
+  font-size: 1.05rem;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.ambient-card-zh {
+  min-width: 0;
+}
+
+.ambient-card-en {
+  font-size: 0.78rem;
+  color: var(--muted);
+  padding-left: 1.35rem;
+}
+
+.ambient-card-fav {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.35rem;
+  width: 1.65rem;
+  height: 1.65rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, #000 45%, transparent);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  font-size: 0.82rem;
+  line-height: 1;
+  opacity: 0.55;
+}
+
+.ambient-card-fav.is-on {
+  opacity: 1;
+  color: #ff8fab;
+}
+
+.ambient-empty {
+  padding: 1rem 0.35rem;
+  text-align: center;
+}
+
+.ambient-player {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+
+.ambient-player-main {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  min-width: 0;
+}
+
+.ambient-player-ic {
+  font-size: 1.6rem;
+  color: var(--accent);
+}
+
+.ambient-player-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.ambient-player-text strong {
+  font-size: 0.98rem;
+}
+
+.ambient-player-actions {
+  flex-wrap: wrap;
+}
+
+.ambient-player-actions .ghost-btn.is-active {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  color: var(--accent);
+}

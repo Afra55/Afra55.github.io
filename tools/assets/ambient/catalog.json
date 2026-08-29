@@ -1,0 +1,1575 @@
+{
+  "version": 1,
+  "credit": "Audio catalog inspired by remvze/moodist (MIT). Audio assets from upstream third-party licenses (Pixabay/CC0).",
+  "categories": [
+    {
+      "id": "animals",
+      "nameZh": "动物",
+      "nameEn": "Animals",
+      "icon": "fa6:dog"
+    },
+    {
+      "id": "nature",
+      "nameZh": "自然",
+      "nameEn": "Nature",
+      "icon": "fa6:tree"
+    },
+    {
+      "id": "rain",
+      "nameZh": "雨声",
+      "nameEn": "Rain",
+      "icon": "bi:cloud-rain-fill"
+    },
+    {
+      "id": "urban",
+      "nameZh": "城市",
+      "nameEn": "Urban",
+      "icon": "fa6:city"
+    },
+    {
+      "id": "places",
+      "nameZh": "场所",
+      "nameEn": "Places",
+      "icon": "mdi:map-marker"
+    },
+    {
+      "id": "transport",
+      "nameZh": "交通",
+      "nameEn": "Transport",
+      "icon": "fa6:car-side"
+    },
+    {
+      "id": "things",
+      "nameZh": "物品",
+      "nameEn": "Things",
+      "icon": "mdi:robot-happy"
+    },
+    {
+      "id": "noise",
+      "nameZh": "噪音",
+      "nameEn": "Noise",
+      "icon": "bi:soundwave"
+    },
+    {
+      "id": "binaural",
+      "nameZh": "双耳节拍",
+      "nameEn": "Binaural",
+      "icon": "tabler:wave-sine"
+    }
+  ],
+  "items": [
+    {
+      "id": "birds",
+      "category": "animals",
+      "categoryZh": "动物",
+      "categoryIcon": "fa6:dog",
+      "nameZh": "鸟鸣",
+      "nameEn": "Birds",
+      "icon": "ph:bird-fill",
+      "audio": "./assets/ambient/sounds/animals/birds.mp3",
+      "image": "./assets/ambient/sounds/animals/birds.jpg",
+      "tags": [
+        "鸟鸣",
+        "Birds",
+        "动物",
+        "animals"
+      ]
+    },
+    {
+      "id": "seagulls",
+      "category": "animals",
+      "categoryZh": "动物",
+      "categoryIcon": "fa6:dog",
+      "nameZh": "海鸥",
+      "nameEn": "Seagulls",
+      "icon": "game-icons:seagull",
+      "audio": "./assets/ambient/sounds/animals/seagulls.mp3",
+      "image": "./assets/ambient/sounds/animals/seagulls.jpg",
+      "tags": [
+        "海鸥",
+        "Seagulls",
+        "动物",
+        "animals"
+      ]
+    },
+    {
+      "id": "crickets",
+      "category": "animals",
+      "categoryZh": "动物",
+      "categoryIcon": "fa6:dog",
+      "nameZh": "蟋蟀",
+      "nameEn": "Crickets",
+      "icon": "game-icons:cricket",
+      "audio": "./assets/ambient/sounds/animals/crickets.mp3",
+      "image": "./assets/ambient/sounds/animals/crickets.jpg",
+      "tags": [
+        "蟋蟀",
+        "Crickets",
+        "动物",
+        "animals"
+      ]
+    },
+    {
+      "id": "wolf",
+      "category": "animals",
+      "categoryZh": "动物",
+      "categoryIcon": "fa6:dog",
+      "nameZh": "狼嚎",
+      "nameEn": "Wolf",
+      "icon": "game-icons:wolf-head",
+      "audio": "./assets/ambient/sounds/animals/wolf.mp3",
+      "image": "./assets/ambient/sounds/animals/wolf.jpg",
+      "tags": [
+        "狼嚎",
+        "Wolf",
+        "动物",
+        "animals"
+      ]
+    },
+    {
+      "id": "owl",
+      "category": "animals",
+      "categoryZh": "动物",
+      "categoryIcon": "fa6:dog",
+      "nameZh": "猫头鹰",
+      "nameEn": "Owl",
+      "icon": "game-icons:owl",
+      "audio": "./assets/ambient/sounds/animals/owl.mp3",
+      "image": "./assets/ambient/sounds/animals/owl.jpg",
+      "tags": [
+        "猫头鹰",
+        "Owl",
+        "动物",
+        "animals"
+      ]
+    },
+    {
+      "id": "frog",
+      "category": "animals",
+      "categoryZh": "动物",
+      "categoryIcon": "fa6:dog",
+      "nameZh": "青蛙",
+      "nameEn": "Frog",
+      "icon": "fa6:frog",
+      "audio": "./assets/ambient/sounds/animals/frog.mp3",
+      "image": "./assets/ambient/sounds/animals/frog.jpg",
+      "tags": [
+        "青蛙",
+        "Frog",
+        "动物",
+        "animals"
+      ]
+    },
+    {
+      "id": "dog-barking",
+      "category": "animals",
+      "categoryZh": "动物",
+      "categoryIcon": "fa6:dog",
+      "nameZh": "狗叫",
+      "nameEn": "Dog Barking",
+      "icon": "ph:dog-fill",
+      "audio": "./assets/ambient/sounds/animals/dog-barking.mp3",
+      "image": "./assets/ambient/sounds/animals/dog-barking.jpg",
+      "tags": [
+        "狗叫",
+        "Dog Barking",
+        "动物",
+        "animals"
+      ]
+    },
+    {
+      "id": "horse-gallop",
+      "category": "animals",
+      "categoryZh": "动物",
+      "categoryIcon": "fa6:dog",
+      "nameZh": "马蹄",
+      "nameEn": "Horse Gallop",
+      "icon": "fa6:horse-head",
+      "audio": "./assets/ambient/sounds/animals/horse-gallop.mp3",
+      "image": "./assets/ambient/sounds/animals/horse-gallop.jpg",
+      "tags": [
+        "马蹄",
+        "Horse Gallop",
+        "动物",
+        "animals"
+      ]
+    },
+    {
+      "id": "cat-purring",
+      "category": "animals",
+      "categoryZh": "动物",
+      "categoryIcon": "fa6:dog",
+      "nameZh": "猫呼噜",
+      "nameEn": "Cat Purring",
+      "icon": "fa6:cat",
+      "audio": "./assets/ambient/sounds/animals/cat-purring.mp3",
+      "image": "./assets/ambient/sounds/animals/cat-purring.jpg",
+      "tags": [
+        "猫呼噜",
+        "Cat Purring",
+        "动物",
+        "animals"
+      ]
+    },
+    {
+      "id": "crows",
+      "category": "animals",
+      "categoryZh": "动物",
+      "categoryIcon": "fa6:dog",
+      "nameZh": "乌鸦",
+      "nameEn": "Crows",
+      "icon": "fa6:crow",
+      "audio": "./assets/ambient/sounds/animals/crows.mp3",
+      "image": "./assets/ambient/sounds/animals/crows.jpg",
+      "tags": [
+        "乌鸦",
+        "Crows",
+        "动物",
+        "animals"
+      ]
+    },
+    {
+      "id": "whale",
+      "category": "animals",
+      "categoryZh": "动物",
+      "categoryIcon": "fa6:dog",
+      "nameZh": "鲸鱼",
+      "nameEn": "Whale",
+      "icon": "game-icons:whale-tail",
+      "audio": "./assets/ambient/sounds/animals/whale.mp3",
+      "image": "./assets/ambient/sounds/animals/whale.jpg",
+      "tags": [
+        "鲸鱼",
+        "Whale",
+        "动物",
+        "animals"
+      ]
+    },
+    {
+      "id": "beehive",
+      "category": "animals",
+      "categoryZh": "动物",
+      "categoryIcon": "fa6:dog",
+      "nameZh": "蜂巢",
+      "nameEn": "Beehive",
+      "icon": "game-icons:beehive",
+      "audio": "./assets/ambient/sounds/animals/beehive.mp3",
+      "image": "./assets/ambient/sounds/animals/beehive.jpg",
+      "tags": [
+        "蜂巢",
+        "Beehive",
+        "动物",
+        "animals"
+      ]
+    },
+    {
+      "id": "woodpecker",
+      "category": "animals",
+      "categoryZh": "动物",
+      "categoryIcon": "fa6:dog",
+      "nameZh": "啄木鸟",
+      "nameEn": "Woodpecker",
+      "icon": "game-icons:woodpecker",
+      "audio": "./assets/ambient/sounds/animals/woodpecker.mp3",
+      "image": "./assets/ambient/sounds/animals/woodpecker.jpg",
+      "tags": [
+        "啄木鸟",
+        "Woodpecker",
+        "动物",
+        "animals"
+      ]
+    },
+    {
+      "id": "chickens",
+      "category": "animals",
+      "categoryZh": "动物",
+      "categoryIcon": "fa6:dog",
+      "nameZh": "鸡叫",
+      "nameEn": "Chickens",
+      "icon": "game-icons:chicken",
+      "audio": "./assets/ambient/sounds/animals/chickens.mp3",
+      "image": "./assets/ambient/sounds/animals/chickens.jpg",
+      "tags": [
+        "鸡叫",
+        "Chickens",
+        "动物",
+        "animals"
+      ]
+    },
+    {
+      "id": "cows",
+      "category": "animals",
+      "categoryZh": "动物",
+      "categoryIcon": "fa6:dog",
+      "nameZh": "牛鸣",
+      "nameEn": "Cows",
+      "icon": "game-icons:cow",
+      "audio": "./assets/ambient/sounds/animals/cows.mp3",
+      "image": "./assets/ambient/sounds/animals/cows.jpg",
+      "tags": [
+        "牛鸣",
+        "Cows",
+        "动物",
+        "animals"
+      ]
+    },
+    {
+      "id": "sheep",
+      "category": "animals",
+      "categoryZh": "动物",
+      "categoryIcon": "fa6:dog",
+      "nameZh": "羊叫",
+      "nameEn": "Sheep",
+      "icon": "game-icons:sheep",
+      "audio": "./assets/ambient/sounds/animals/sheep.mp3",
+      "image": "./assets/ambient/sounds/animals/sheep.jpg",
+      "tags": [
+        "羊叫",
+        "Sheep",
+        "动物",
+        "animals"
+      ]
+    },
+    {
+      "id": "river",
+      "category": "nature",
+      "categoryZh": "自然",
+      "categoryIcon": "fa6:tree",
+      "nameZh": "河流",
+      "nameEn": "River",
+      "icon": "bi:water",
+      "audio": "./assets/ambient/sounds/nature/river.mp3",
+      "image": "./assets/ambient/sounds/nature/river.jpg",
+      "tags": [
+        "河流",
+        "River",
+        "自然",
+        "nature"
+      ]
+    },
+    {
+      "id": "waves",
+      "category": "nature",
+      "categoryZh": "自然",
+      "categoryIcon": "fa6:tree",
+      "nameZh": "海浪",
+      "nameEn": "Waves",
+      "icon": "fa6:water",
+      "audio": "./assets/ambient/sounds/nature/waves.mp3",
+      "image": "./assets/ambient/sounds/nature/waves.jpg",
+      "tags": [
+        "海浪",
+        "Waves",
+        "自然",
+        "nature"
+      ]
+    },
+    {
+      "id": "campfire",
+      "category": "nature",
+      "categoryZh": "自然",
+      "categoryIcon": "fa6:tree",
+      "nameZh": "篝火",
+      "nameEn": "Campfire",
+      "icon": "bi:fire",
+      "audio": "./assets/ambient/sounds/nature/campfire.mp3",
+      "image": "./assets/ambient/sounds/nature/campfire.jpg",
+      "tags": [
+        "篝火",
+        "Campfire",
+        "自然",
+        "nature"
+      ]
+    },
+    {
+      "id": "wind",
+      "category": "nature",
+      "categoryZh": "自然",
+      "categoryIcon": "fa6:tree",
+      "nameZh": "风声",
+      "nameEn": "Wind",
+      "icon": "fa6:wind",
+      "audio": "./assets/ambient/sounds/nature/wind.mp3",
+      "image": "./assets/ambient/sounds/nature/wind.jpg",
+      "tags": [
+        "风声",
+        "Wind",
+        "自然",
+        "nature"
+      ]
+    },
+    {
+      "id": "howling-wind",
+      "category": "nature",
+      "categoryZh": "自然",
+      "categoryIcon": "fa6:tree",
+      "nameZh": "呼啸风",
+      "nameEn": "Howling Wind",
+      "icon": "fa6:wind",
+      "audio": "./assets/ambient/sounds/nature/howling-wind.mp3",
+      "image": "./assets/ambient/sounds/nature/howling-wind.jpg",
+      "tags": [
+        "呼啸风",
+        "Howling Wind",
+        "自然",
+        "nature"
+      ]
+    },
+    {
+      "id": "wind-in-trees",
+      "category": "nature",
+      "categoryZh": "自然",
+      "categoryIcon": "fa6:tree",
+      "nameZh": "林间风",
+      "nameEn": "Wind in Trees",
+      "icon": "bi:tree-fill",
+      "audio": "./assets/ambient/sounds/nature/wind-in-trees.mp3",
+      "image": "./assets/ambient/sounds/nature/wind-in-trees.jpg",
+      "tags": [
+        "林间风",
+        "Wind in Trees",
+        "自然",
+        "nature"
+      ]
+    },
+    {
+      "id": "waterfall",
+      "category": "nature",
+      "categoryZh": "自然",
+      "categoryIcon": "fa6:tree",
+      "nameZh": "瀑布",
+      "nameEn": "Waterfall",
+      "icon": "game-icons:waterfall",
+      "audio": "./assets/ambient/sounds/nature/waterfall.mp3",
+      "image": "./assets/ambient/sounds/nature/waterfall.jpg",
+      "tags": [
+        "瀑布",
+        "Waterfall",
+        "自然",
+        "nature"
+      ]
+    },
+    {
+      "id": "walk-in-snow",
+      "category": "nature",
+      "categoryZh": "自然",
+      "categoryIcon": "fa6:tree",
+      "nameZh": "踏雪",
+      "nameEn": "Walk in Snow",
+      "icon": "fa6:snowflake",
+      "audio": "./assets/ambient/sounds/nature/walk-in-snow.mp3",
+      "image": "./assets/ambient/sounds/nature/walk-in-snow.jpg",
+      "tags": [
+        "踏雪",
+        "Walk in Snow",
+        "自然",
+        "nature"
+      ]
+    },
+    {
+      "id": "walk-on-leaves",
+      "category": "nature",
+      "categoryZh": "自然",
+      "categoryIcon": "fa6:tree",
+      "nameZh": "踏叶",
+      "nameEn": "Walk on Leaves",
+      "icon": "fa6:leaf",
+      "audio": "./assets/ambient/sounds/nature/walk-on-leaves.mp3",
+      "image": "./assets/ambient/sounds/nature/walk-on-leaves.jpg",
+      "tags": [
+        "踏叶",
+        "Walk on Leaves",
+        "自然",
+        "nature"
+      ]
+    },
+    {
+      "id": "walk-on-gravel",
+      "category": "nature",
+      "categoryZh": "自然",
+      "categoryIcon": "fa6:tree",
+      "nameZh": "踏碎石",
+      "nameEn": "Walk on Gravel",
+      "icon": "game-icons:stone-pile",
+      "audio": "./assets/ambient/sounds/nature/walk-on-gravel.mp3",
+      "image": "./assets/ambient/sounds/nature/walk-on-gravel.jpg",
+      "tags": [
+        "踏碎石",
+        "Walk on Gravel",
+        "自然",
+        "nature"
+      ]
+    },
+    {
+      "id": "droplets",
+      "category": "nature",
+      "categoryZh": "自然",
+      "categoryIcon": "fa6:tree",
+      "nameZh": "水滴",
+      "nameEn": "Droplets",
+      "icon": "bi:droplet-fill",
+      "audio": "./assets/ambient/sounds/nature/droplets.mp3",
+      "image": "./assets/ambient/sounds/nature/droplets.jpg",
+      "tags": [
+        "水滴",
+        "Droplets",
+        "自然",
+        "nature"
+      ]
+    },
+    {
+      "id": "jungle",
+      "category": "nature",
+      "categoryZh": "自然",
+      "categoryIcon": "fa6:tree",
+      "nameZh": "丛林",
+      "nameEn": "Jungle",
+      "icon": "fa6:tree",
+      "audio": "./assets/ambient/sounds/nature/jungle.mp3",
+      "image": "./assets/ambient/sounds/nature/jungle.jpg",
+      "tags": [
+        "丛林",
+        "Jungle",
+        "自然",
+        "nature"
+      ]
+    },
+    {
+      "id": "light-rain",
+      "category": "rain",
+      "categoryZh": "雨声",
+      "categoryIcon": "bi:cloud-rain-fill",
+      "nameZh": "小雨",
+      "nameEn": "Light Rain",
+      "icon": "bi:cloud-rain-fill",
+      "audio": "./assets/ambient/sounds/rain/light-rain.mp3",
+      "image": "./assets/ambient/sounds/rain/light-rain.jpg",
+      "tags": [
+        "小雨",
+        "Light Rain",
+        "雨声",
+        "rain"
+      ]
+    },
+    {
+      "id": "heavy-rain",
+      "category": "rain",
+      "categoryZh": "雨声",
+      "categoryIcon": "bi:cloud-rain-fill",
+      "nameZh": "大雨",
+      "nameEn": "Heavy Rain",
+      "icon": "bi:cloud-rain-heavy-fill",
+      "audio": "./assets/ambient/sounds/rain/heavy-rain.mp3",
+      "image": "./assets/ambient/sounds/rain/heavy-rain.jpg",
+      "tags": [
+        "大雨",
+        "Heavy Rain",
+        "雨声",
+        "rain"
+      ]
+    },
+    {
+      "id": "thunder",
+      "category": "rain",
+      "categoryZh": "雨声",
+      "categoryIcon": "bi:cloud-rain-fill",
+      "nameZh": "雷声",
+      "nameEn": "Thunder",
+      "icon": "mdi:weather-lightning",
+      "audio": "./assets/ambient/sounds/rain/thunder.mp3",
+      "image": "./assets/ambient/sounds/rain/thunder.jpg",
+      "tags": [
+        "雷声",
+        "Thunder",
+        "雨声",
+        "rain"
+      ]
+    },
+    {
+      "id": "rain-on-window",
+      "category": "rain",
+      "categoryZh": "雨声",
+      "categoryIcon": "bi:cloud-rain-fill",
+      "nameZh": "窗上雨",
+      "nameEn": "Rain on Window",
+      "icon": "game-icons:window",
+      "audio": "./assets/ambient/sounds/rain/rain-on-window.mp3",
+      "image": "./assets/ambient/sounds/rain/rain-on-window.jpg",
+      "tags": [
+        "窗上雨",
+        "Rain on Window",
+        "雨声",
+        "rain"
+      ]
+    },
+    {
+      "id": "rain-on-car-roof",
+      "category": "rain",
+      "categoryZh": "雨声",
+      "categoryIcon": "bi:cloud-rain-fill",
+      "nameZh": "车顶雨",
+      "nameEn": "Rain on Car Roof",
+      "icon": "fa6:car-side",
+      "audio": "./assets/ambient/sounds/rain/rain-on-car-roof.mp3",
+      "image": "./assets/ambient/sounds/rain/rain-on-car-roof.jpg",
+      "tags": [
+        "车顶雨",
+        "Rain on Car Roof",
+        "雨声",
+        "rain"
+      ]
+    },
+    {
+      "id": "rain-on-umbrella",
+      "category": "rain",
+      "categoryZh": "雨声",
+      "categoryIcon": "bi:cloud-rain-fill",
+      "nameZh": "伞上雨",
+      "nameEn": "Rain on Umbrella",
+      "icon": "bi:umbrella-fill",
+      "audio": "./assets/ambient/sounds/rain/rain-on-umbrella.mp3",
+      "image": "./assets/ambient/sounds/rain/rain-on-umbrella.jpg",
+      "tags": [
+        "伞上雨",
+        "Rain on Umbrella",
+        "雨声",
+        "rain"
+      ]
+    },
+    {
+      "id": "rain-on-tent",
+      "category": "rain",
+      "categoryZh": "雨声",
+      "categoryIcon": "bi:cloud-rain-fill",
+      "nameZh": "帐篷雨",
+      "nameEn": "Rain on Tent",
+      "icon": "ph:tent-fill",
+      "audio": "./assets/ambient/sounds/rain/rain-on-tent.mp3",
+      "image": "./assets/ambient/sounds/rain/rain-on-tent.jpg",
+      "tags": [
+        "帐篷雨",
+        "Rain on Tent",
+        "雨声",
+        "rain"
+      ]
+    },
+    {
+      "id": "rain-on-leaves",
+      "category": "rain",
+      "categoryZh": "雨声",
+      "categoryIcon": "bi:cloud-rain-fill",
+      "nameZh": "叶上雨",
+      "nameEn": "Rain on Leaves",
+      "icon": "fa6:leaf",
+      "audio": "./assets/ambient/sounds/rain/rain-on-leaves.mp3",
+      "image": "./assets/ambient/sounds/rain/rain-on-leaves.jpg",
+      "tags": [
+        "叶上雨",
+        "Rain on Leaves",
+        "雨声",
+        "rain"
+      ]
+    },
+    {
+      "id": "highway",
+      "category": "urban",
+      "categoryZh": "城市",
+      "categoryIcon": "fa6:city",
+      "nameZh": "高速公路",
+      "nameEn": "Highway",
+      "icon": "ph:road-horizon-fill",
+      "audio": "./assets/ambient/sounds/urban/highway.mp3",
+      "image": "./assets/ambient/sounds/urban/highway.jpg",
+      "tags": [
+        "高速公路",
+        "Highway",
+        "城市",
+        "urban"
+      ]
+    },
+    {
+      "id": "road",
+      "category": "urban",
+      "categoryZh": "城市",
+      "categoryIcon": "fa6:city",
+      "nameZh": "公路",
+      "nameEn": "Road",
+      "icon": "fa6:road",
+      "audio": "./assets/ambient/sounds/urban/road.mp3",
+      "image": "./assets/ambient/sounds/urban/road.jpg",
+      "tags": [
+        "公路",
+        "Road",
+        "城市",
+        "urban"
+      ]
+    },
+    {
+      "id": "ambulance-siren",
+      "category": "urban",
+      "categoryZh": "城市",
+      "categoryIcon": "fa6:city",
+      "nameZh": "救护车",
+      "nameEn": "Ambulance Siren",
+      "icon": "ph:siren-fill",
+      "audio": "./assets/ambient/sounds/urban/ambulance-siren.mp3",
+      "image": "./assets/ambient/sounds/urban/ambulance-siren.jpg",
+      "tags": [
+        "救护车",
+        "Ambulance Siren",
+        "城市",
+        "urban"
+      ]
+    },
+    {
+      "id": "busy-street",
+      "category": "urban",
+      "categoryZh": "城市",
+      "categoryIcon": "fa6:city",
+      "nameZh": "繁忙街道",
+      "nameEn": "Busy Street",
+      "icon": "bi:soundwave",
+      "audio": "./assets/ambient/sounds/urban/busy-street.mp3",
+      "image": "./assets/ambient/sounds/urban/busy-street.jpg",
+      "tags": [
+        "繁忙街道",
+        "Busy Street",
+        "城市",
+        "urban"
+      ]
+    },
+    {
+      "id": "crowd",
+      "category": "urban",
+      "categoryZh": "城市",
+      "categoryIcon": "fa6:city",
+      "nameZh": "人群",
+      "nameEn": "Crowd",
+      "icon": "bi:people-fill",
+      "audio": "./assets/ambient/sounds/urban/crowd.mp3",
+      "image": "./assets/ambient/sounds/urban/crowd.jpg",
+      "tags": [
+        "人群",
+        "Crowd",
+        "城市",
+        "urban"
+      ]
+    },
+    {
+      "id": "traffic",
+      "category": "urban",
+      "categoryZh": "城市",
+      "categoryIcon": "fa6:city",
+      "nameZh": "交通",
+      "nameEn": "Traffic",
+      "icon": "bi:traffic-cone",
+      "audio": "./assets/ambient/sounds/urban/traffic.mp3",
+      "image": "./assets/ambient/sounds/urban/traffic.jpg",
+      "tags": [
+        "交通",
+        "Traffic",
+        "城市",
+        "urban"
+      ]
+    },
+    {
+      "id": "fireworks",
+      "category": "urban",
+      "categoryZh": "城市",
+      "categoryIcon": "fa6:city",
+      "nameZh": "烟花",
+      "nameEn": "Fireworks",
+      "icon": "ri:sparkling-2-fill",
+      "audio": "./assets/ambient/sounds/urban/fireworks.mp3",
+      "image": "./assets/ambient/sounds/urban/fireworks.jpg",
+      "tags": [
+        "烟花",
+        "Fireworks",
+        "城市",
+        "urban"
+      ]
+    },
+    {
+      "id": "cafe",
+      "category": "places",
+      "categoryZh": "场所",
+      "categoryIcon": "mdi:map-marker",
+      "nameZh": "咖啡馆",
+      "nameEn": "Cafe",
+      "icon": "bi:cup-hot-fill",
+      "audio": "./assets/ambient/sounds/places/cafe.mp3",
+      "image": "./assets/ambient/sounds/places/cafe.jpg",
+      "tags": [
+        "咖啡馆",
+        "Cafe",
+        "场所",
+        "places"
+      ]
+    },
+    {
+      "id": "airport",
+      "category": "places",
+      "categoryZh": "场所",
+      "categoryIcon": "mdi:map-marker",
+      "nameZh": "机场",
+      "nameEn": "Airport",
+      "icon": "bi:airplane-fill",
+      "audio": "./assets/ambient/sounds/places/airport.mp3",
+      "image": "./assets/ambient/sounds/places/airport.jpg",
+      "tags": [
+        "机场",
+        "Airport",
+        "场所",
+        "places"
+      ]
+    },
+    {
+      "id": "church",
+      "category": "places",
+      "categoryZh": "场所",
+      "categoryIcon": "mdi:map-marker",
+      "nameZh": "教堂",
+      "nameEn": "Church",
+      "icon": "fa6:church",
+      "audio": "./assets/ambient/sounds/places/church.mp3",
+      "image": "./assets/ambient/sounds/places/church.jpg",
+      "tags": [
+        "教堂",
+        "Church",
+        "场所",
+        "places"
+      ]
+    },
+    {
+      "id": "temple",
+      "category": "places",
+      "categoryZh": "场所",
+      "categoryIcon": "mdi:map-marker",
+      "nameZh": "寺庙",
+      "nameEn": "Temple",
+      "icon": "mdi:temple-buddhist",
+      "audio": "./assets/ambient/sounds/places/temple.mp3",
+      "image": "./assets/ambient/sounds/places/temple.jpg",
+      "tags": [
+        "寺庙",
+        "Temple",
+        "场所",
+        "places"
+      ]
+    },
+    {
+      "id": "construction-site",
+      "category": "places",
+      "categoryZh": "场所",
+      "categoryIcon": "mdi:map-marker",
+      "nameZh": "工地",
+      "nameEn": "Construction Site",
+      "icon": "mdi:hard-hat",
+      "audio": "./assets/ambient/sounds/places/construction-site.mp3",
+      "image": "./assets/ambient/sounds/places/construction-site.jpg",
+      "tags": [
+        "工地",
+        "Construction Site",
+        "场所",
+        "places"
+      ]
+    },
+    {
+      "id": "underwater",
+      "category": "places",
+      "categoryZh": "场所",
+      "categoryIcon": "mdi:map-marker",
+      "nameZh": "水下",
+      "nameEn": "Underwater",
+      "icon": "tabler:scuba-mask",
+      "audio": "./assets/ambient/sounds/places/underwater.mp3",
+      "image": "./assets/ambient/sounds/places/underwater.jpg",
+      "tags": [
+        "水下",
+        "Underwater",
+        "场所",
+        "places"
+      ]
+    },
+    {
+      "id": "crowded-bar",
+      "category": "places",
+      "categoryZh": "场所",
+      "categoryIcon": "mdi:map-marker",
+      "nameZh": "酒吧",
+      "nameEn": "Crowded Bar",
+      "icon": "tabler:beer-filled",
+      "audio": "./assets/ambient/sounds/places/crowded-bar.mp3",
+      "image": "./assets/ambient/sounds/places/crowded-bar.jpg",
+      "tags": [
+        "酒吧",
+        "Crowded Bar",
+        "场所",
+        "places"
+      ]
+    },
+    {
+      "id": "night-village",
+      "category": "places",
+      "categoryZh": "场所",
+      "categoryIcon": "mdi:map-marker",
+      "nameZh": "夜晚村落",
+      "nameEn": "Night Village",
+      "icon": "game-icons:village",
+      "audio": "./assets/ambient/sounds/places/night-village.mp3",
+      "image": "./assets/ambient/sounds/places/night-village.jpg",
+      "tags": [
+        "夜晚村落",
+        "Night Village",
+        "场所",
+        "places"
+      ]
+    },
+    {
+      "id": "subway-station",
+      "category": "places",
+      "categoryZh": "场所",
+      "categoryIcon": "mdi:map-marker",
+      "nameZh": "地铁站",
+      "nameEn": "Subway Station",
+      "icon": "fa6:train-subway",
+      "audio": "./assets/ambient/sounds/places/subway-station.mp3",
+      "image": "./assets/ambient/sounds/places/subway-station.jpg",
+      "tags": [
+        "地铁站",
+        "Subway Station",
+        "场所",
+        "places"
+      ]
+    },
+    {
+      "id": "office",
+      "category": "places",
+      "categoryZh": "场所",
+      "categoryIcon": "mdi:map-marker",
+      "nameZh": "办公室",
+      "nameEn": "Office",
+      "icon": "heroicons:building-office-2-solid",
+      "audio": "./assets/ambient/sounds/places/office.mp3",
+      "image": "./assets/ambient/sounds/places/office.jpg",
+      "tags": [
+        "办公室",
+        "Office",
+        "场所",
+        "places"
+      ]
+    },
+    {
+      "id": "supermarket",
+      "category": "places",
+      "categoryZh": "场所",
+      "categoryIcon": "mdi:map-marker",
+      "nameZh": "超市",
+      "nameEn": "Supermarket",
+      "icon": "fa6:basket-shopping",
+      "audio": "./assets/ambient/sounds/places/supermarket.mp3",
+      "image": "./assets/ambient/sounds/places/supermarket.jpg",
+      "tags": [
+        "超市",
+        "Supermarket",
+        "场所",
+        "places"
+      ]
+    },
+    {
+      "id": "carousel",
+      "category": "places",
+      "categoryZh": "场所",
+      "categoryIcon": "mdi:map-marker",
+      "nameZh": "旋转木马",
+      "nameEn": "Carousel",
+      "icon": "game-icons:carousel",
+      "audio": "./assets/ambient/sounds/places/carousel.mp3",
+      "image": "./assets/ambient/sounds/places/carousel.jpg",
+      "tags": [
+        "旋转木马",
+        "Carousel",
+        "场所",
+        "places"
+      ]
+    },
+    {
+      "id": "laboratory",
+      "category": "places",
+      "categoryZh": "场所",
+      "categoryIcon": "mdi:map-marker",
+      "nameZh": "实验室",
+      "nameEn": "Laboratory",
+      "icon": "bi:beaker-fill",
+      "audio": "./assets/ambient/sounds/places/laboratory.mp3",
+      "image": "./assets/ambient/sounds/places/laboratory.jpg",
+      "tags": [
+        "实验室",
+        "Laboratory",
+        "场所",
+        "places"
+      ]
+    },
+    {
+      "id": "laundry-room",
+      "category": "places",
+      "categoryZh": "场所",
+      "categoryIcon": "mdi:map-marker",
+      "nameZh": "洗衣房",
+      "nameEn": "Laundry Room",
+      "icon": "bi:wind",
+      "audio": "./assets/ambient/sounds/places/laundry-room.mp3",
+      "image": "./assets/ambient/sounds/places/laundry-room.jpg",
+      "tags": [
+        "洗衣房",
+        "Laundry Room",
+        "场所",
+        "places"
+      ]
+    },
+    {
+      "id": "restaurant",
+      "category": "places",
+      "categoryZh": "场所",
+      "categoryIcon": "mdi:map-marker",
+      "nameZh": "餐厅",
+      "nameEn": "Restaurant",
+      "icon": "io5:restaurant",
+      "audio": "./assets/ambient/sounds/places/restaurant.mp3",
+      "image": "./assets/ambient/sounds/places/restaurant.jpg",
+      "tags": [
+        "餐厅",
+        "Restaurant",
+        "场所",
+        "places"
+      ]
+    },
+    {
+      "id": "library",
+      "category": "places",
+      "categoryZh": "场所",
+      "categoryIcon": "mdi:map-marker",
+      "nameZh": "图书馆",
+      "nameEn": "Library",
+      "icon": "fa6:book-open",
+      "audio": "./assets/ambient/sounds/places/library.mp3",
+      "image": "./assets/ambient/sounds/places/library.jpg",
+      "tags": [
+        "图书馆",
+        "Library",
+        "场所",
+        "places"
+      ]
+    },
+    {
+      "id": "train",
+      "category": "transport",
+      "categoryZh": "交通",
+      "categoryIcon": "fa6:car-side",
+      "nameZh": "火车",
+      "nameEn": "Train",
+      "icon": "bi:train-front-fill",
+      "audio": "./assets/ambient/sounds/transport/train.mp3",
+      "image": "./assets/ambient/sounds/transport/train.jpg",
+      "tags": [
+        "火车",
+        "Train",
+        "交通",
+        "transport"
+      ]
+    },
+    {
+      "id": "inside-a-train",
+      "category": "transport",
+      "categoryZh": "交通",
+      "categoryIcon": "fa6:car-side",
+      "nameZh": "车厢内",
+      "nameEn": "Inside a Train",
+      "icon": "bi:train-front-fill",
+      "audio": "./assets/ambient/sounds/transport/inside-a-train.mp3",
+      "image": "./assets/ambient/sounds/transport/inside-a-train.jpg",
+      "tags": [
+        "车厢内",
+        "Inside a Train",
+        "交通",
+        "transport"
+      ]
+    },
+    {
+      "id": "airplane",
+      "category": "transport",
+      "categoryZh": "交通",
+      "categoryIcon": "fa6:car-side",
+      "nameZh": "飞机",
+      "nameEn": "Airplane",
+      "icon": "bi:airplane-fill",
+      "audio": "./assets/ambient/sounds/transport/airplane.mp3",
+      "image": "./assets/ambient/sounds/transport/airplane.jpg",
+      "tags": [
+        "飞机",
+        "Airplane",
+        "交通",
+        "transport"
+      ]
+    },
+    {
+      "id": "submarine",
+      "category": "transport",
+      "categoryZh": "交通",
+      "categoryIcon": "fa6:car-side",
+      "nameZh": "潜艇",
+      "nameEn": "Submarine",
+      "icon": "game-icons:submarine",
+      "audio": "./assets/ambient/sounds/transport/submarine.mp3",
+      "image": "./assets/ambient/sounds/transport/submarine.jpg",
+      "tags": [
+        "潜艇",
+        "Submarine",
+        "交通",
+        "transport"
+      ]
+    },
+    {
+      "id": "sailboat",
+      "category": "transport",
+      "categoryZh": "交通",
+      "categoryIcon": "fa6:car-side",
+      "nameZh": "帆船",
+      "nameEn": "Sailboat",
+      "icon": "game-icons:sailboat",
+      "audio": "./assets/ambient/sounds/transport/sailboat.mp3",
+      "image": "./assets/ambient/sounds/transport/sailboat.jpg",
+      "tags": [
+        "帆船",
+        "Sailboat",
+        "交通",
+        "transport"
+      ]
+    },
+    {
+      "id": "rowing-boat",
+      "category": "transport",
+      "categoryZh": "交通",
+      "categoryIcon": "fa6:car-side",
+      "nameZh": "划艇",
+      "nameEn": "Rowing Boat",
+      "icon": "tabler:sailboat",
+      "audio": "./assets/ambient/sounds/transport/rowing-boat.mp3",
+      "image": "./assets/ambient/sounds/transport/rowing-boat.jpg",
+      "tags": [
+        "划艇",
+        "Rowing Boat",
+        "交通",
+        "transport"
+      ]
+    },
+    {
+      "id": "keyboard",
+      "category": "things",
+      "categoryZh": "物品",
+      "categoryIcon": "mdi:robot-happy",
+      "nameZh": "键盘",
+      "nameEn": "Keyboard",
+      "icon": "bi:keyboard-fill",
+      "audio": "./assets/ambient/sounds/things/keyboard.mp3",
+      "image": "./assets/ambient/sounds/things/keyboard.jpg",
+      "tags": [
+        "键盘",
+        "Keyboard",
+        "物品",
+        "things"
+      ]
+    },
+    {
+      "id": "typewriter",
+      "category": "things",
+      "categoryZh": "物品",
+      "categoryIcon": "mdi:robot-happy",
+      "nameZh": "打字机",
+      "nameEn": "Typewriter",
+      "icon": "fa6:keyboard",
+      "audio": "./assets/ambient/sounds/things/typewriter.mp3",
+      "image": "./assets/ambient/sounds/things/typewriter.jpg",
+      "tags": [
+        "打字机",
+        "Typewriter",
+        "物品",
+        "things"
+      ]
+    },
+    {
+      "id": "paper",
+      "category": "things",
+      "categoryZh": "物品",
+      "categoryIcon": "mdi:robot-happy",
+      "nameZh": "纸张",
+      "nameEn": "Paper",
+      "icon": "ri:file-paper-2-fill",
+      "audio": "./assets/ambient/sounds/things/paper.mp3",
+      "image": "./assets/ambient/sounds/things/paper.jpg",
+      "tags": [
+        "纸张",
+        "Paper",
+        "物品",
+        "things"
+      ]
+    },
+    {
+      "id": "clock",
+      "category": "things",
+      "categoryZh": "物品",
+      "categoryIcon": "mdi:robot-happy",
+      "nameZh": "钟表",
+      "nameEn": "Clock",
+      "icon": "fa6:clock",
+      "audio": "./assets/ambient/sounds/things/clock.mp3",
+      "image": "./assets/ambient/sounds/things/clock.jpg",
+      "tags": [
+        "钟表",
+        "Clock",
+        "物品",
+        "things"
+      ]
+    },
+    {
+      "id": "wind-chimes",
+      "category": "things",
+      "categoryZh": "物品",
+      "categoryIcon": "mdi:robot-happy",
+      "nameZh": "风铃",
+      "nameEn": "Wind Chimes",
+      "icon": "game-icons:windchimes",
+      "audio": "./assets/ambient/sounds/things/wind-chimes.mp3",
+      "image": "./assets/ambient/sounds/things/wind-chimes.jpg",
+      "tags": [
+        "风铃",
+        "Wind Chimes",
+        "物品",
+        "things"
+      ]
+    },
+    {
+      "id": "singing-bowl",
+      "category": "things",
+      "categoryZh": "物品",
+      "categoryIcon": "mdi:robot-happy",
+      "nameZh": "颂钵",
+      "nameEn": "Singing Bowl",
+      "icon": "tabler:bowl-filled",
+      "audio": "./assets/ambient/sounds/things/singing-bowl.mp3",
+      "image": "./assets/ambient/sounds/things/singing-bowl.jpg",
+      "tags": [
+        "颂钵",
+        "Singing Bowl",
+        "物品",
+        "things"
+      ]
+    },
+    {
+      "id": "ceiling-fan",
+      "category": "things",
+      "categoryZh": "物品",
+      "categoryIcon": "mdi:robot-happy",
+      "nameZh": "吊扇",
+      "nameEn": "Ceiling Fan",
+      "icon": "fa6:fan",
+      "audio": "./assets/ambient/sounds/things/ceiling-fan.mp3",
+      "image": "./assets/ambient/sounds/things/ceiling-fan.jpg",
+      "tags": [
+        "吊扇",
+        "Ceiling Fan",
+        "物品",
+        "things"
+      ]
+    },
+    {
+      "id": "dryer",
+      "category": "things",
+      "categoryZh": "物品",
+      "categoryIcon": "mdi:robot-happy",
+      "nameZh": "烘干机",
+      "nameEn": "Dryer",
+      "icon": "bi:wind",
+      "audio": "./assets/ambient/sounds/things/dryer.mp3",
+      "image": "./assets/ambient/sounds/things/dryer.jpg",
+      "tags": [
+        "烘干机",
+        "Dryer",
+        "物品",
+        "things"
+      ]
+    },
+    {
+      "id": "slide-projector",
+      "category": "things",
+      "categoryZh": "物品",
+      "categoryIcon": "mdi:robot-happy",
+      "nameZh": "幻灯机",
+      "nameEn": "Slide Projector",
+      "icon": "game-icons:film-projector",
+      "audio": "./assets/ambient/sounds/things/slide-projector.mp3",
+      "image": "./assets/ambient/sounds/things/slide-projector.jpg",
+      "tags": [
+        "幻灯机",
+        "Slide Projector",
+        "物品",
+        "things"
+      ]
+    },
+    {
+      "id": "boiling-water",
+      "category": "things",
+      "categoryZh": "物品",
+      "categoryIcon": "mdi:robot-happy",
+      "nameZh": "沸水",
+      "nameEn": "Boiling Water",
+      "icon": "mdi:water-boiler",
+      "audio": "./assets/ambient/sounds/things/boiling-water.mp3",
+      "image": "./assets/ambient/sounds/things/boiling-water.jpg",
+      "tags": [
+        "沸水",
+        "Boiling Water",
+        "物品",
+        "things"
+      ]
+    },
+    {
+      "id": "bubbles",
+      "category": "things",
+      "categoryZh": "物品",
+      "categoryIcon": "mdi:robot-happy",
+      "nameZh": "气泡",
+      "nameEn": "Bubbles",
+      "icon": "ri:bubble-chart-fill",
+      "audio": "./assets/ambient/sounds/things/bubbles.mp3",
+      "image": "./assets/ambient/sounds/things/bubbles.jpg",
+      "tags": [
+        "气泡",
+        "Bubbles",
+        "物品",
+        "things"
+      ]
+    },
+    {
+      "id": "tuning-radio",
+      "category": "things",
+      "categoryZh": "物品",
+      "categoryIcon": "mdi:robot-happy",
+      "nameZh": "调频收音机",
+      "nameEn": "Tuning Radio",
+      "icon": "mdi:radio",
+      "audio": "./assets/ambient/sounds/things/tuning-radio.mp3",
+      "image": "./assets/ambient/sounds/things/tuning-radio.jpg",
+      "tags": [
+        "调频收音机",
+        "Tuning Radio",
+        "物品",
+        "things"
+      ]
+    },
+    {
+      "id": "morse-code",
+      "category": "things",
+      "categoryZh": "物品",
+      "categoryIcon": "mdi:robot-happy",
+      "nameZh": "摩斯电码",
+      "nameEn": "Morse Code",
+      "icon": "ion:radio",
+      "audio": "./assets/ambient/sounds/things/morse-code.mp3",
+      "image": "./assets/ambient/sounds/things/morse-code.jpg",
+      "tags": [
+        "摩斯电码",
+        "Morse Code",
+        "物品",
+        "things"
+      ]
+    },
+    {
+      "id": "washing-machine",
+      "category": "things",
+      "categoryZh": "物品",
+      "categoryIcon": "mdi:robot-happy",
+      "nameZh": "洗衣机",
+      "nameEn": "Washing Machine",
+      "icon": "game-icons:washing-machine",
+      "audio": "./assets/ambient/sounds/things/washing-machine.mp3",
+      "image": "./assets/ambient/sounds/things/washing-machine.jpg",
+      "tags": [
+        "洗衣机",
+        "Washing Machine",
+        "物品",
+        "things"
+      ]
+    },
+    {
+      "id": "vinyl-effect",
+      "category": "things",
+      "categoryZh": "物品",
+      "categoryIcon": "mdi:robot-happy",
+      "nameZh": "黑胶",
+      "nameEn": "Vinyl Effect",
+      "icon": "ph:vinyl-record-fill",
+      "audio": "./assets/ambient/sounds/things/vinyl-effect.mp3",
+      "image": "./assets/ambient/sounds/things/vinyl-effect.jpg",
+      "tags": [
+        "黑胶",
+        "Vinyl Effect",
+        "物品",
+        "things"
+      ]
+    },
+    {
+      "id": "windshield-wipers",
+      "category": "things",
+      "categoryZh": "物品",
+      "categoryIcon": "mdi:robot-happy",
+      "nameZh": "雨刷",
+      "nameEn": "Windshield Wipers",
+      "icon": "tabler:wiper-wash",
+      "audio": "./assets/ambient/sounds/things/windshield-wipers.mp3",
+      "image": "./assets/ambient/sounds/things/windshield-wipers.jpg",
+      "tags": [
+        "雨刷",
+        "Windshield Wipers",
+        "物品",
+        "things"
+      ]
+    },
+    {
+      "id": "white-noise",
+      "category": "noise",
+      "categoryZh": "噪音",
+      "categoryIcon": "bi:soundwave",
+      "nameZh": "白噪音",
+      "nameEn": "White Noise",
+      "icon": "game-icons:sound-waves",
+      "audio": "./assets/ambient/sounds/noise/white-noise.wav",
+      "image": "./assets/ambient/sounds/noise/white-noise.jpg",
+      "tags": [
+        "白噪音",
+        "White Noise",
+        "噪音",
+        "noise"
+      ]
+    },
+    {
+      "id": "pink-noise",
+      "category": "noise",
+      "categoryZh": "噪音",
+      "categoryIcon": "bi:soundwave",
+      "nameZh": "粉噪音",
+      "nameEn": "Pink Noise",
+      "icon": "game-icons:sound-waves",
+      "audio": "./assets/ambient/sounds/noise/pink-noise.wav",
+      "image": "./assets/ambient/sounds/noise/pink-noise.jpg",
+      "tags": [
+        "粉噪音",
+        "Pink Noise",
+        "噪音",
+        "noise"
+      ]
+    },
+    {
+      "id": "brown-noise",
+      "category": "noise",
+      "categoryZh": "噪音",
+      "categoryIcon": "bi:soundwave",
+      "nameZh": "棕噪音",
+      "nameEn": "Brown Noise",
+      "icon": "game-icons:sound-waves",
+      "audio": "./assets/ambient/sounds/noise/brown-noise.wav",
+      "image": "./assets/ambient/sounds/noise/brown-noise.jpg",
+      "tags": [
+        "棕噪音",
+        "Brown Noise",
+        "噪音",
+        "noise"
+      ]
+    },
+    {
+      "id": "binaural-delta",
+      "category": "binaural",
+      "categoryZh": "双耳节拍",
+      "categoryIcon": "tabler:wave-sine",
+      "nameZh": "Delta 节拍",
+      "nameEn": "Delta",
+      "icon": "bi:soundwave",
+      "audio": "./assets/ambient/sounds/binaural/binaural-delta.wav",
+      "image": "./assets/ambient/sounds/binaural/binaural-delta.jpg",
+      "tags": [
+        "Delta 节拍",
+        "Delta",
+        "双耳节拍",
+        "binaural"
+      ]
+    },
+    {
+      "id": "binaural-theta",
+      "category": "binaural",
+      "categoryZh": "双耳节拍",
+      "categoryIcon": "tabler:wave-sine",
+      "nameZh": "Theta 节拍",
+      "nameEn": "Theta",
+      "icon": "bi:soundwave",
+      "audio": "./assets/ambient/sounds/binaural/binaural-theta.wav",
+      "image": "./assets/ambient/sounds/binaural/binaural-theta.jpg",
+      "tags": [
+        "Theta 节拍",
+        "Theta",
+        "双耳节拍",
+        "binaural"
+      ]
+    },
+    {
+      "id": "binaural-alpha",
+      "category": "binaural",
+      "categoryZh": "双耳节拍",
+      "categoryIcon": "tabler:wave-sine",
+      "nameZh": "Alpha 节拍",
+      "nameEn": "Alpha",
+      "icon": "bi:soundwave",
+      "audio": "./assets/ambient/sounds/binaural/binaural-alpha.wav",
+      "image": "./assets/ambient/sounds/binaural/binaural-alpha.jpg",
+      "tags": [
+        "Alpha 节拍",
+        "Alpha",
+        "双耳节拍",
+        "binaural"
+      ]
+    },
+    {
+      "id": "binaural-beta",
+      "category": "binaural",
+      "categoryZh": "双耳节拍",
+      "categoryIcon": "tabler:wave-sine",
+      "nameZh": "Beta 节拍",
+      "nameEn": "Beta",
+      "icon": "bi:soundwave",
+      "audio": "./assets/ambient/sounds/binaural/binaural-beta.wav",
+      "image": "./assets/ambient/sounds/binaural/binaural-beta.jpg",
+      "tags": [
+        "Beta 节拍",
+        "Beta",
+        "双耳节拍",
+        "binaural"
+      ]
+    },
+    {
+      "id": "binaural-gamma",
+      "category": "binaural",
+      "categoryZh": "双耳节拍",
+      "categoryIcon": "tabler:wave-sine",
+      "nameZh": "Gamma 节拍",
+      "nameEn": "Gamma",
+      "icon": "bi:soundwave",
+      "audio": "./assets/ambient/sounds/binaural/binaural-gamma.wav",
+      "image": "./assets/ambient/sounds/binaural/binaural-gamma.jpg",
+      "tags": [
+        "Gamma 节拍",
+        "Gamma",
+        "双耳节拍",
+        "binaural"
+      ]
+    }
+  ]
+}
