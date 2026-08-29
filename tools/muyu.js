@@ -49,6 +49,8 @@
       <path d="M58 114 Q100 130 142 114" stroke="rgba(255,222,172,0.3)" stroke-width="2" fill="none" stroke-linecap="round"/>
       <ellipse cx="76" cy="60" rx="36" ry="21" fill="url(#${p}-hl)"/>
       <ellipse cx="62" cy="54" rx="12" ry="7" fill="rgba(255,250,230,0.6)"/>
+      <rect x="34" y="168" width="132" height="16" rx="8" fill="#8A5A2B" stroke="#6B421A" stroke-width="2"/>
+      <rect x="36" y="170" width="128" height="4" rx="2" fill="#A07038" opacity="0.75"/>
       <g class="muyu-mallet">
         <rect x="148" y="18" width="8" height="34" rx="4" fill="#8A5A2B" stroke="#6B421A" stroke-width="1.5"/>
         <ellipse cx="152" cy="14" rx="11" ry="8" fill="#B87A35" stroke="#6B421A" stroke-width="1.5"/>
@@ -78,6 +80,19 @@
   let htmlKnockCursor = 0;
   let htmlAudioPrimed = false;
   let syncingSound = false;
+  let fsBgCanvas = null;
+  let fsBgCtx = null;
+  let fsBgRaf = 0;
+  let fsBgRunning = false;
+  let fsPulseEl = null;
+  let fsRippleEl = null;
+  let fsFloatsEl = null;
+  let fsBgStars = [];
+  let fsBgDust = [];
+  let fsBgSparks = [];
+  let fsBgT = 0;
+
+  const FLOAT_PHRASES = ["功德 +1", "善哉", "福生无量", "随喜", "心安", "清净"];
 
   function prefersCoarsePointer() {
     try {
@@ -236,7 +251,157 @@
   function renderCount() {
     const text = formatCount(count);
     if (countEl) countEl.textContent = text;
-    if (countFsEl) countFsEl.textContent = text;
+    if (countFsEl) {
+      countFsEl.textContent = text;
+      countFsEl.classList.remove("is-bump");
+      void countFsEl.offsetWidth;
+      countFsEl.classList.add("is-bump");
+      window.setTimeout(() => countFsEl.classList.remove("is-bump"), 120);
+    }
+  }
+
+  function rnd(a, b) {
+    return a + Math.random() * (b - a);
+  }
+
+  function initFsBg() {
+    fsBgCanvas = document.getElementById("muyu-fs-bg");
+    fsPulseEl = document.getElementById("muyu-fs-pulse");
+    fsRippleEl = document.getElementById("muyu-fs-ripple");
+    fsFloatsEl = document.getElementById("muyu-fs-floats");
+    if (!fsBgCanvas) return;
+    fsBgCtx = fsBgCanvas.getContext("2d", { alpha: true });
+    fsBgStars = Array.from({ length: 28 }, () => ({
+      x: Math.random(),
+      y: Math.random() * 0.72,
+      r: rnd(0.5, 1.5),
+      tw: rnd(0, Math.PI * 2),
+      sp: rnd(1, 2.2),
+    }));
+    fsBgDust = Array.from({ length: 24 }, () => ({
+      x: rnd(0, 1),
+      y: rnd(0, 1),
+      r: rnd(0.8, 2.2),
+      v: rnd(0.05, 0.18),
+      drift: rnd(-0.03, 0.03),
+      a: rnd(0.2, 0.55),
+      ph: rnd(0, 6.28),
+    }));
+  }
+
+  function resizeFsBg() {
+    if (!fsBgCanvas || !fsBgCtx) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    fsBgCanvas.width = w * dpr;
+    fsBgCanvas.height = h * dpr;
+    fsBgCanvas.style.width = `${w}px`;
+    fsBgCanvas.style.height = `${h}px`;
+    fsBgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function burstFsSparks() {
+    const stage = document.getElementById("muyu-fs-stage");
+    if (!stage) return;
+    const rect = stage.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height * 0.46;
+    const n = 12;
+    for (let i = 0; i < n; i++) {
+      const ang = ((Math.PI * 2 * i) / n) + rnd(-0.3, 0.3);
+      const sp = rnd(1.2, 3.8);
+      fsBgSparks.push({
+        x: cx,
+        y: cy,
+        vx: Math.cos(ang) * sp,
+        vy: Math.sin(ang) * sp - 1.1,
+        life: 1,
+        r: rnd(1.2, 2.8),
+      });
+    }
+    if (fsBgSparks.length > 180) fsBgSparks = fsBgSparks.slice(-180);
+  }
+
+  function paintFsBgFrame() {
+    if (!fsBgCtx || !fsBgRunning) return;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    fsBgT += 0.016;
+    fsBgCtx.clearRect(0, 0, w, h);
+    for (const s of fsBgStars) {
+      const a = 0.35 + 0.45 * (0.5 + 0.5 * Math.sin(fsBgT * s.sp + s.tw));
+      fsBgCtx.beginPath();
+      fsBgCtx.arc(s.x * w, s.y * h, s.r, 0, Math.PI * 2);
+      fsBgCtx.fillStyle = `rgba(255,245,220,${a.toFixed(3)})`;
+      fsBgCtx.fill();
+    }
+    for (const d of fsBgDust) {
+      d.y -= d.v / h;
+      d.x += d.drift / w;
+      if (d.y < -0.02) {
+        d.y = 1.02;
+        d.x = rnd(0, 1);
+      }
+      const a = d.a * (0.6 + 0.4 * Math.sin(fsBgT * 1.5 + d.ph));
+      fsBgCtx.beginPath();
+      fsBgCtx.arc(d.x * w, d.y * h, d.r, 0, Math.PI * 2);
+      fsBgCtx.fillStyle = `rgba(255,210,120,${a.toFixed(3)})`;
+      fsBgCtx.fill();
+    }
+    for (const p of fsBgSparks) {
+      p.vy += 0.11;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= 0.024;
+      if (p.life <= 0) continue;
+      fsBgCtx.beginPath();
+      fsBgCtx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2);
+      fsBgCtx.fillStyle = `rgba(255,${190 + Math.floor(50 * p.life)},120,${p.life.toFixed(3)})`;
+      fsBgCtx.fill();
+    }
+    fsBgSparks = fsBgSparks.filter((p) => p.life > 0);
+    fsBgRaf = requestAnimationFrame(paintFsBgFrame);
+  }
+
+  function startFsBg() {
+    if (!fsBgCanvas) initFsBg();
+    if (!fsBgCtx || fsBgRunning) return;
+    fsBgRunning = true;
+    resizeFsBg();
+    fsBgRaf = requestAnimationFrame(paintFsBgFrame);
+  }
+
+  function stopFsBg() {
+    fsBgRunning = false;
+    if (fsBgRaf) cancelAnimationFrame(fsBgRaf);
+    fsBgRaf = 0;
+    fsBgSparks = [];
+    if (fsBgCtx && fsBgCanvas) fsBgCtx.clearRect(0, 0, fsBgCanvas.width, fsBgCanvas.height);
+  }
+
+  function playFsFx() {
+    if (!fullscreen) return;
+    if (fsPulseEl) {
+      fsPulseEl.classList.remove("is-flash");
+      void fsPulseEl.offsetWidth;
+      fsPulseEl.classList.add("is-flash");
+    }
+    if (fsRippleEl) {
+      fsRippleEl.classList.remove("is-go");
+      void fsRippleEl.offsetWidth;
+      fsRippleEl.classList.add("is-go");
+    }
+    if (fsFloatsEl) {
+      const f = document.createElement("span");
+      f.className = "muyu-fs-float";
+      f.textContent = FLOAT_PHRASES[Math.floor(Math.random() * FLOAT_PHRASES.length)];
+      f.style.setProperty("--muyu-dx", `${Math.round(rnd(-24, 24))}px`);
+      fsFloatsEl.appendChild(f);
+      window.setTimeout(() => f.remove(), 1000);
+    }
+    burstFsSparks();
+    if (navigator.vibrate) navigator.vibrate(12);
   }
 
   function loadState() {
@@ -301,6 +466,7 @@
     saveState();
     bumpFish(fromEl || (fullscreen ? fishFsBtn : fishBtn));
     playKnock();
+    playFsFx();
   }
 
   function resetCount() {
@@ -313,6 +479,7 @@
 
   function forceExitFullscreen() {
     fullscreen = false;
+    stopFsBg();
     if (fsRoot) fsRoot.hidden = true;
     document.body.classList.remove("muyu-fs-active");
   }
@@ -324,6 +491,7 @@
     fsRoot.hidden = false;
     document.body.classList.add("muyu-fs-active");
     syncSoundToggles();
+    startFsBg();
     fsCloseBtn?.focus();
   }
 
@@ -385,6 +553,10 @@
 
     resetBtn?.addEventListener("click", resetCount);
 
+    window.addEventListener("resize", () => {
+      if (fullscreen) resizeFsBg();
+    });
+
     document.addEventListener("keydown", (e) => {
       if (!fullscreen) return;
       if (e.key === "Escape") {
@@ -415,6 +587,7 @@
   function bootMuyuShell() {
     bindFsShell();
     mountFishArtEarly();
+    initFsBg();
   }
 
   function initMuyuCore() {
