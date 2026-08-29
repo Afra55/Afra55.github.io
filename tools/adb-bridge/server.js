@@ -18,6 +18,8 @@ const crypto = require("crypto");
 
 const HOST = "127.0.0.1";
 const PORT = Number(process.env.ADB_BRIDGE_PORT || process.env.DEVTOOLS_BRIDGE_PORT || 17888);
+/** 实际监听端口（端口被占用时可能高于 PORT） */
+let ACTIVE_PORT = PORT;
 const TOKEN = String(process.env.ADB_BRIDGE_TOKEN || process.env.DEVTOOLS_BRIDGE_TOKEN || "devtools-bridge");
 const ACCEPTED_TOKENS = new Set(
   [TOKEN, "devtools-bridge", "devtools-adb", "devtools-ffmpeg"].map(String).filter(Boolean)
@@ -38,7 +40,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.8.1";
+const BRIDGE_VERSION = "0.8.2";
 const scrcpyMirror = require("./scrcpy-mirror");
 function loadFfmpegBridge() {
   const candidates = [
@@ -3527,7 +3529,9 @@ async function handleApi(req, res, url) {
           ok: true,
           service: "devtools-bridge",
           version: BRIDGE_VERSION,
-          port: PORT,
+          port: ACTIVE_PORT,
+          requestedPort: PORT,
+          listenUrl: `http://${HOST}:${ACTIVE_PORT}`,
           tokenRequired: true,
           defaultTokenHint: "devtools-bridge",
           unified: true,
@@ -4105,7 +4109,7 @@ const server = http.createServer((req, res) => {
 server.on("upgrade", (req, socket, head) => {
   const handled = scrcpyMirror.handleUpgrade(req, socket, head, {
     host: HOST,
-    port: PORT,
+    port: ACTIVE_PORT,
     token: TOKEN,
     allowedOrigins: ALLOWED_ORIGINS,
     adbPath: "adb",
@@ -4118,6 +4122,7 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 function printBanner(activePort) {
+  ACTIVE_PORT = activePort;
   console.log("");
   console.log("========================================");
   console.log(" DevTools 本机桥 已启动（ADB + 镜像 + FFmpeg）");

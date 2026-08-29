@@ -10212,6 +10212,17 @@
       return String(adbBaseInput?.value || "http://127.0.0.1:17888").replace(/\/+$/, "");
     }
 
+    function adbBasePort() {
+      try {
+        const raw = adbBase();
+        const u = new URL(raw.includes("://") ? raw : `http://${raw}`);
+        if (u.port) return String(u.port);
+        return u.protocol === "https:" ? "443" : "80";
+      } catch {
+        return "17888";
+      }
+    }
+
     function adbToken() {
       return String(adbTokenInput?.value || "devtools-bridge");
     }
@@ -11874,6 +11885,14 @@
       try {
         const health = await adbFetch("/health", { auth: false });
         updateHostToolsProbe(health);
+        const actualPort = health.port ?? health.requestedPort;
+        const urlPort = adbBasePort();
+        if (actualPort && String(actualPort) !== String(urlPort)) {
+          const suggested = `http://127.0.0.1:${actualPort}`;
+          const portMsg = `桥运行在端口 ${actualPort}，网页填的是 ${urlPort}。请把桥地址改为 ${suggested} 后再试镜像。`;
+          setAdbStatus("is-warn", "桥端口与网页不一致", portMsg);
+          if (!fromPoll) toast(portMsg);
+        }
         if (!health.adb?.ok) {
           adbConnected = true;
           if (adbWorkspace) adbWorkspace.hidden = true;
@@ -11960,9 +11979,10 @@
       };
       const cfg = map[platform];
       if (!cfg) throw new Error("未知平台");
-      const [serverJs, mirrorJs, ffmpegJs, scriptRaw, serverJar] = await Promise.all([
+      const [serverJs, mirrorJs, portGuardJs, ffmpegJs, scriptRaw, serverJar] = await Promise.all([
         fetchTextAsset("./adb-bridge/server.js"),
         fetchTextAsset("./adb-bridge/scrcpy-mirror.js").catch(() => ""),
+        fetchTextAsset("./adb-bridge/port-guard.js").catch(() => ""),
         fetchTextAsset("./ffmpeg-bridge/server.js").catch(() => ""),
         fetchTextAsset(cfg.scriptPath),
         fetch("./adb-bridge/vendor/scrcpy-server-v3.1", { cache: "no-cache" })
@@ -11981,6 +12001,7 @@
         "本压缩包必须同时保留：",
         "  - server.js",
         "  - scrcpy-mirror.js",
+        "  - port-guard.js  （启动前自动结束占用端口的旧桥）",
         "  - ffmpeg-bridge/server.js",
         "  - vendor/scrcpy-server-v3.1  （可选；缺则首次镜像时自动下载）",
         "  - " + cfg.scriptName,
@@ -11999,6 +12020,7 @@
       const zip = new JSZip();
       zip.file("server.js", serverJs);
       if (mirrorJs) zip.file("scrcpy-mirror.js", mirrorJs);
+      if (portGuardJs) zip.file("port-guard.js", portGuardJs);
       if (ffmpegJs) zip.file("ffmpeg-bridge/server.js", ffmpegJs);
       if (serverJar) zip.file("vendor/scrcpy-server-v3.1", serverJar);
       zip.file(cfg.scriptName, scriptText, {
@@ -12968,6 +12990,15 @@
           throw new Error("本机桥版本过旧，不支持镜像。请重新下载完整 ZIP 并重启桥（≥0.7.0）");
         }
         try {
+          await adbFetch("/mirror/stop", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ serial }),
+          });
+        } catch {
+          /* ignore stale session */
+        }
+        try {
           await adbFetch("/mirror/prepare", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
         } catch (err) {
           const prep = await adbFetch("/mirror/status").catch(() => null);
@@ -12977,6 +13008,7 @@
         await new Promise((resolve, reject) => {
           let settled = false;
           let errTimer = 0;
+          let helloTimer = 0;
           const ws = new WebSocket(wsUrl);
           ws.binaryType = "arraybuffer";
           adbMirrorWs = ws;
@@ -12984,31 +13016,40 @@
             if (settled) return;
             settled = true;
             if (errTimer) clearTimeout(errTimer);
+            if (helloTimer) clearTimeout(helloTimer);
             stopMirrorPreview({ notifyBridge: true });
             reject(new Error(msg));
           };
-          const scheduleGenericFail = (msg) => {
+          const scheduleGenericFail = (msg, delayMs = 1200) => {
             if (settled || errTimer) return;
             errTimer = setTimeout(() => {
               errTimer = 0;
               fail(msg);
-            }, 500);
+            }, delayMs);
           };
+          helloTimer = setTimeout(() => {
+            fail(
+              "镜像启动超时（首次需向手机推送 scrcpy-server，请保持手机解锁、USB 调试已授权，并稍候重试）"
+            );
+          }, 30000);
           ws.onopen = () => {
             adbInputLive = true;
             updateInputLiveUi();
           };
           ws.onerror = () =>
             scheduleGenericFail(
-              "镜像 WebSocket 连接失败（请确认本机桥已启动、地址为 http://127.0.0.1:17888，且已重启到最新版）"
+              "镜像 WebSocket 连接失败：请确认本机桥已启动、网页地址端口与桥窗口一致（默认 17888），并重新运行启动脚本结束旧进程"
             );
           ws.onclose = () => {
             if (errTimer) {
               clearTimeout(errTimer);
               errTimer = 0;
             }
-            if (!settled) fail("镜像连接已关闭");
-            else {
+            if (!settled) {
+              scheduleGenericFail(
+                "镜像连接已关闭：常见原因是端口被旧桥占用（请重新运行启动脚本，会自动结束旧进程）或手机未就绪"
+              );
+            } else {
               adbMirrorWs = null;
               if (adbInputLive) {
                 adbInputLive = false;
@@ -13033,6 +13074,10 @@
                 return;
               }
               if (msg.type === "hello") {
+                if (helloTimer) {
+                  clearTimeout(helloTimer);
+                  helloTimer = 0;
+                }
                 if (errTimer) {
                   clearTimeout(errTimer);
                   errTimer = 0;

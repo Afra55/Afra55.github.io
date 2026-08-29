@@ -35,7 +35,7 @@ node server.js
 - 确认已安装 Node.js 与 adb，且在终端中可运行 `node -v` / `adb devices`
 默认地址：`http://127.0.0.1:17888`  
 默认 Token：`devtools-adb`（可用环境变量 `ADB_BRIDGE_TOKEN` 覆盖）
-若端口被占用，桥会自动尝试下一个端口并在窗口提示。
+若端口被占用，启动脚本会先结束旧的 DevTools 本机桥再启动；若仍失败，桥会自动尝试下一个端口并在窗口提示，**请在网页把桥地址改成窗口里显示的端口**。
 ## 网页使用
 
 1. 打开 Tools →「ADB 工具」

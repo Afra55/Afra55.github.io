@@ -78,6 +78,7 @@ sync_bridge_bundle() {
   local src="$1"
   local dst="$2"
   [ -f "${src}/scrcpy-mirror.js" ] && cp -f "${src}/scrcpy-mirror.js" "${dst}/scrcpy-mirror.js"
+  [ -f "${src}/port-guard.js" ] && cp -f "${src}/port-guard.js" "${dst}/port-guard.js"
   if [ -f "${src}/ffmpeg-bridge/server.js" ]; then
     mkdir -p "${dst}/ffmpeg-bridge"
     cp -f "${src}/ffmpeg-bridge/server.js" "${dst}/ffmpeg-bridge/server.js"
@@ -170,6 +171,13 @@ sync_bridge_bundle "${SCRIPT_DIR}" "${BRIDGE_DIR}"
 cd "${BRIDGE_DIR}" || pause_exit 1
 export ADB_BRIDGE_TOKEN="${ADB_BRIDGE_TOKEN:-devtools-bridge}"
 export ADB_BRIDGE_PORT="${ADB_BRIDGE_PORT:-17888}"
+GUARD="${SCRIPT_DIR}/port-guard.js"
+[ -f "${GUARD}" ] || GUARD="${BRIDGE_DIR}/port-guard.js"
+if [ -f "${GUARD}" ]; then
+  node "${GUARD}" "${ADB_BRIDGE_PORT}" || pause_exit 1
+else
+  echo "未找到 port-guard.js，跳过旧桥端口检测"
+fi
 echo "node: $(command -v node)"
 echo "adb 版本："
 adb version 2>/dev/null | head -n 1 || echo "(adb version 读取失败)"

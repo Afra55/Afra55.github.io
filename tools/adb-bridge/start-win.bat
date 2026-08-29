@@ -167,6 +167,10 @@ if exist "%MIRROR_LOCAL%" (
   copy /Y "%MIRROR_LOCAL%" "%MIRROR_TARGET%" >nul
   echo [OK] scrcpy-mirror.js synced>> "%LOG_FILE%"
 )
+if exist "%SCRIPT_DIR%port-guard.js" (
+  copy /Y "%SCRIPT_DIR%port-guard.js" "%BRIDGE_DIR%\port-guard.js" >nul
+  echo [OK] port-guard.js synced>> "%LOG_FILE%"
+)
 if exist "%SCRIPT_DIR%ffmpeg-bridge\server.js" (
   if not exist "%BRIDGE_DIR%\ffmpeg-bridge" mkdir "%BRIDGE_DIR%\ffmpeg-bridge" 2>nul
   copy /Y "%SCRIPT_DIR%ffmpeg-bridge\server.js" "%BRIDGE_DIR%\ffmpeg-bridge\server.js" >nul
@@ -204,6 +208,16 @@ if not exist "%BRIDGE_DIR%\ffmpeg-bridge\server.js" (
 cd /d "%BRIDGE_DIR%"
 if "%ADB_BRIDGE_TOKEN%"=="" set "ADB_BRIDGE_TOKEN=devtools-bridge"
 if "%ADB_BRIDGE_PORT%"=="" set "ADB_BRIDGE_PORT=17888"
+
+set "GUARD=%SCRIPT_DIR%port-guard.js"
+if not exist "%GUARD%" set "GUARD=%BRIDGE_DIR%\port-guard.js"
+if exist "%GUARD%" (
+  echo [..] Checking port %ADB_BRIDGE_PORT% ...
+  node "%GUARD%" %ADB_BRIDGE_PORT%
+  if errorlevel 1 exit /b 1
+) else (
+  echo [WARN] port-guard.js missing, skip stale port cleanup>> "%LOG_FILE%"
+)
 
 echo [OK] adb:
 adb version

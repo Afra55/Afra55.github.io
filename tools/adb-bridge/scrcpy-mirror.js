@@ -376,6 +376,10 @@ class MirrorSession {
   }
 
   addClient(socket) {
+    if (this._idleTimer) {
+      clearTimeout(this._idleTimer);
+      this._idleTimer = null;
+    }
     this.clients.add(socket);
     if (this.meta) {
       wsSendJson(socket, { type: "hello", ...this.meta });
@@ -385,7 +389,13 @@ class MirrorSession {
 
   removeClient(socket) {
     this.clients.delete(socket);
-    if (!this.clients.size) this.stop("无客户端");
+    if (!this.clients.size && !this.closed) {
+      if (this._idleTimer) clearTimeout(this._idleTimer);
+      this._idleTimer = setTimeout(() => {
+        this._idleTimer = null;
+        if (!this.clients.size && !this.closed) this.stop("无客户端");
+      }, 4000);
+    }
   }
 
   async pumpFrames() {
@@ -414,6 +424,10 @@ class MirrorSession {
     if (this.closed) return;
     this.closed = true;
     this.pumping = false;
+    if (this._idleTimer) {
+      clearTimeout(this._idleTimer);
+      this._idleTimer = null;
+    }
     for (const c of this.clients) {
       try {
         wsSendJson(c, { type: "bye", reason: reason || "stopped" });
