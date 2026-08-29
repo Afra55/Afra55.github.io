@@ -9706,7 +9706,6 @@ body.ruler-fs-active {
   gap: 0.55rem;
   padding: 0.35rem;
   color: #c58b45;
-  transition: transform 0.12s ease;
 }
 
 .muyu-fish-btn:focus-visible {
@@ -9715,36 +9714,38 @@ body.ruler-fs-active {
   border-radius: 999px;
 }
 
-.muyu-fish-btn.is-knocking {
-  transform: scale(0.94);
+.muyu-fish-btn.is-knocking .muyu-fish-svg {
+  transform: translateY(6px) scale(0.96);
+  transition: transform 0.05s ease;
+}
+
+.muyu-fish-btn.is-knocking .muyu-mallet {
+  animation: muyu-mallet-strike 0.34s cubic-bezier(0.4, 1.4, 0.6, 1);
+}
+
+@keyframes muyu-mallet-strike {
+  0% {
+    transform: rotate(-38deg);
+  }
+  38% {
+    transform: rotate(8deg);
+  }
+  100% {
+    transform: rotate(-38deg);
+  }
+}
+
+.muyu-mallet {
+  transform-origin: 88% 88%;
+  transform: rotate(-38deg);
 }
 
 .muyu-fish-svg {
-  width: min(72vw, 320px);
+  width: min(72vw, 280px);
   height: auto;
   display: block;
-  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.18));
-}
-
-.muyu-fish-body {
-  fill: currentColor;
-}
-
-.muyu-fish-hole {
-  fill: var(--panel);
-}
-
-.muyu-fish-slit {
-  stroke: color-mix(in srgb, currentColor 55%, #3b2a14);
-  stroke-width: 4;
-  stroke-linecap: round;
-}
-
-.muyu-fish-scale {
-  fill: none;
-  stroke: color-mix(in srgb, currentColor 70%, #fff);
-  stroke-width: 3;
-  stroke-linecap: round;
+  filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.22));
+  transition: transform 0.12s ease;
 }
 
 .muyu-fish-hint {
@@ -9752,12 +9753,19 @@ body.ruler-fs-active {
   color: var(--muted);
 }
 
+.muyu-fs[hidden] {
+  display: none !important;
+}
+
+.muyu-fs:not([hidden]) {
+  display: grid;
+  place-items: center;
+}
+
 .muyu-fs {
   position: fixed;
   inset: 0;
   z-index: 100050;
-  display: grid;
-  place-items: center;
   background: radial-gradient(circle at 50% 38%, color-mix(in srgb, var(--panel) 92%, #c58b45 8%), var(--bg));
   touch-action: manipulation;
 }
@@ -9805,7 +9813,7 @@ body.ruler-fs-active {
 }
 
 .muyu-fish-btn-fs .muyu-fish-svg {
-  width: min(78vw, 420px);
+  width: min(78vw, 360px);
 }
 
 body.muyu-fs-active {
