@@ -9889,36 +9889,39 @@ body.ruler-fs-active {
 }
 
 .muyu-fish-btn.is-knocking .muyu-fish-svg {
-  transform: translateY(6px) scale(0.96);
+  transform: translateY(5px) scale(0.972);
   transition: transform 0.05s ease;
 }
 
 .muyu-fish-btn.is-knocking .muyu-mallet {
-  animation: muyu-mallet-strike 0.34s cubic-bezier(0.4, 1.4, 0.6, 1);
+  animation: muyu-mallet-strike 0.36s cubic-bezier(0.4, 1.4, 0.6, 1);
 }
 
 @keyframes muyu-mallet-strike {
   0% {
-    transform: rotate(-38deg);
+    transform: rotate(-48deg);
   }
-  38% {
-    transform: rotate(8deg);
+  32% {
+    transform: rotate(2deg);
+  }
+  52% {
+    transform: rotate(-6deg);
   }
   100% {
-    transform: rotate(-38deg);
+    transform: rotate(-48deg);
   }
 }
 
 .muyu-mallet {
-  transform-origin: 88% 88%;
-  transform: rotate(-38deg);
+  transform-origin: 72% 92%;
+  transform: rotate(-48deg);
 }
 
 .muyu-fish-svg {
-  width: min(72vw, 280px);
+  width: min(72vw, 300px);
   height: auto;
   display: block;
-  filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.22));
+  filter: drop-shadow(0 14px 22px rgba(0, 0, 0, 0.32));
   transition: transform 0.12s ease;
 }
 
