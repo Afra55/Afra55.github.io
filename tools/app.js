@@ -773,33 +773,35 @@
   const SORT_HINT_KEY = "devtools-nav-sort-hint-seen-v1";
   /** 站点页不算「上次工具」，避免 about/setup 盖掉真实工具 */
   const SITE_NAV_IDS = new Set(["about", "setup"]);
-  const MEDIA_TABS = ["gifmaker", "vsplit", "vtrim", "audio"];
+  const MEDIA_TABS = ["gifmaker", "vsplit", "vtrim", "audio", "vplay"];
   const HASH_ALIASES = {
     gifmaker: { tool: "media", tab: "gifmaker" },
     vsplit: { tool: "media", tab: "vsplit" },
     vtrim: { tool: "media", tab: "vtrim" },
     audio: { tool: "media", tab: "audio" },
-    vplay: { tool: "vplay", tab: "gifmaker" },
+    vplay: { tool: "media", tab: "vplay" },
     vbb: { tool: "vbb" },
     blackbox: { tool: "vbb" },
   };
   const TOOL_GROUPS = [
     { id: "time", label: "时间", tools: ["timestamp", "timediff", "cron"] },
     { id: "color", label: "颜色", tools: ["ahex", "color", "eyedropper"] },
-    { id: "encode", label: "编码与安全", tools: ["base64", "imgb64", "url", "hash", "password", "uuid", "qrcode"] },
-    { id: "data", label: "数据格式", tools: ["json", "yaml", "query", "sharecard"] },
+    { id: "encode", label: "编码与生成", tools: ["base64", "url", "hash", "password", "uuid"] },
+    { id: "data", label: "数据格式", tools: ["json", "yaml", "query"] },
     {
       id: "text",
       label: "文本工具",
       tools: ["text", "caseconv", "regex", "diff", "markdown", "memo"],
     },
     { id: "blackbox", label: "黑盒", tools: ["vbb"] },
-    { id: "play", label: "播放", tools: ["vplay"] },
-    { id: "media", label: "媒体", tools: ["gifmaker", "vsplit", "vtrim", "audio"] },
-    { id: "image", label: "图片", tools: ["whiteboard", "imgkit", "textimg", "imgtext"] },
+    { id: "media", label: "媒体", tools: ["gifmaker", "vsplit", "vtrim", "audio", "vplay"] },
+    {
+      id: "image",
+      label: "图片",
+      tools: ["imgpreview", "whiteboard", "imgkit", "textimg", "imgtext", "sharecard", "imgb64", "qrcode"],
+    },
     { id: "convert", label: "换算", tools: ["units", "coord", "numbase"] },
-    { id: "share", label: "互传", tools: ["lanshare"] },
-    { id: "device", label: "设备", tools: ["adb", "ffbridge"] },
+    { id: "device", label: "设备", tools: ["lanshare", "adb", "ffbridge"] },
     { id: "site", label: "站点", tools: ["about", "setup"] },
   ];
   const DEFAULT_GROUP_ORDER = TOOL_GROUPS.map((g) => g.id);
@@ -838,6 +840,8 @@
     vtrim: "调整片头片尾时长、裁边框；网页 FFmpeg，手机可用。",
     vplay: "本地视频预览：滚轮缩放、拖拽移动、双击暂停/播放，双指捏合缩放。",
     audio: "修剪、音量、抽音轨；网页 FFmpeg 保底，电脑批量请用本机桥。",
+    imgpreview:
+      "多图叠放预览：拖拽定位、滚轮无极缩放、透明度与层级、边缘吸附对齐；底部缩略图快速选中。",
     whiteboard: "本地手绘白板（Excalidraw）：无限画布，自动存浏览器，可导出 PNG / SVG / .excalidraw。",
     imgkit: "图片压缩、裁剪、水印、拼接。",
     textimg: "文字/Markdown/代码生成分享图。",
@@ -879,6 +883,10 @@
     vtrim: { name: "视频修剪", aliases: ["修剪", "裁剪", "vtrim"] },
     vplay: { name: "视频播放", aliases: ["播放", "预览", "vplay", "player"] },
     audio: { name: "音频处理", aliases: ["音频", "音量", "抽音轨", "audio"] },
+    imgpreview: {
+      name: "图片预览",
+      aliases: ["多图", "叠图", "对比", "preview", "图层", "imgpreview"],
+    },
     whiteboard: { name: "画板", aliases: ["白板", "涂鸦", "手绘", "excalidraw", "whiteboard", "sketch"] },
     imgkit: { name: "图片工具", aliases: ["裁剪", "压缩", "水印", "拼接"] },
     textimg: { name: "文字转图片", aliases: ["文转图", "海报", "卡片", "carbon", "text to image"] },
@@ -1675,7 +1683,6 @@
     if (HASH_ALIASES[head]) return { ...HASH_ALIASES[head] };
     if (head === "media") {
       if (parts[1] === "vbb") return { tool: "vbb", tab: "gifmaker" };
-      if (parts[1] === "vplay") return { tool: "vplay", tab: "gifmaker" };
       const tab = MEDIA_TABS.includes(parts[1]) ? parts[1] : "gifmaker";
       return { tool: "media", tab };
     }
