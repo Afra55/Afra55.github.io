@@ -801,6 +801,7 @@
   const previewNoteBtn = $("#memo-preview-note");
   const previewCopyBtn = $("#memo-preview-copy");
   const previewPathBtn = $("#memo-preview-path");
+  const previewLocBtn = $("#memo-preview-loc");
   const previewDelBtn = $("#memo-preview-del");
   const previewTopBtn = $("#memo-preview-top");
   const previewPinBtn = $("#memo-preview-pin");
@@ -1408,7 +1409,10 @@
     acts.push({ id: "note", label: noteRaw ? "改备注" : "备注" });
     acts.push({ id: isTempItem(item) ? "untemp" : "temp", label: isTempItem(item) ? "取消临时" : "标为临时" });
     if (canCopy) acts.push({ id: "dl", label: "下载" });
-    if (state.mode === "dir" && !state.dirPending) acts.push({ id: "path", label: "新标签查看" });
+    if (state.mode === "dir" && !state.dirPending) {
+      acts.push({ id: "loc", label: "打开文件位置" });
+      acts.push({ id: "path", label: "新标签查看" });
+    }
     acts.push({ id: "del", label: "删除", danger: true });
     return acts;
   }
@@ -3540,6 +3544,21 @@
     return `应用内存储 / ${item.id}`;
   }
 
+  async function openItemLocation(item) {
+    if (!item) return;
+    if (state.mode !== "dir" || state.dirPending || !state.dirHandle) {
+      toast("请先绑定并连接存储文件夹");
+      return;
+    }
+    const tip = pathHint(item);
+    try {
+      await navigator.clipboard.writeText(tip);
+      toast(`已复制文件位置：${tip}`);
+    } catch (_) {
+      toast(tip);
+    }
+  }
+
   /** 打开条目对应文件（新标签）；目录模式下不再只复制路径字符串 */
   async function openItemPath(item) {
     if (!item) return;
@@ -4153,6 +4172,9 @@
     if (previewPathBtn) {
       previewPathBtn.hidden = !(item && state.mode === "dir" && !state.dirPending);
     }
+    if (previewLocBtn) {
+      previewLocBtn.hidden = !(item && state.mode === "dir" && !state.dirPending);
+    }
     if (previewDelBtn) previewDelBtn.hidden = !item;
     refreshPreviewOrderChrome(item);
   }
@@ -4736,6 +4758,7 @@
         else if (act === "note") await beginEditNote(item);
         else if (act === "temp") await applyItemTempMark(item);
         else if (act === "untemp") await applyItemTempClear(item);
+        else if (act === "loc") await openItemLocation(item);
         else if (act === "path") await openItemPath(item);
         else if (act === "del") await deleteItems([item.id], { confirm: false });
       } catch (err) {
@@ -4961,6 +4984,14 @@
         if (!item) return;
         await downloadItem(item);
         t.closest("details")?.removeAttribute("open");
+        return;
+      }
+      const locId = t.closest?.("[data-memo-loc]")?.dataset?.memoLoc;
+      if (locId) {
+        const item = state.index.items.find((x) => x.id === locId);
+        if (item) await openItemLocation(item);
+        t.closest("details")?.removeAttribute("open");
+        hideMemoCtx();
         return;
       }
       const pathId = t.closest?.("[data-memo-path]")?.dataset?.memoPath;
@@ -5372,10 +5403,22 @@
     if (!item) return;
     shareItem(item).catch((err) => setError(memoError, err.message || String(err)));
   });
+  previewLocBtn?.addEventListener("click", () => {
+    const item = previewItem;
+    if (!item) return;
+    openItemLocation(item).catch((err) => setError(memoError, err.message || String(err)));
+  });
   previewPathBtn?.addEventListener("click", () => {
     const item = previewItem;
     if (!item) return;
     openItemPath(item).catch((err) => setError(memoError, err.message || String(err)));
+  });
+  lightbox?.addEventListener("contextmenu", (e) => {
+    if (!lightbox?.open || !previewItem) return;
+    if (e.target.closest?.(".memo-preview-actions, .memo-lightbox-close, .memo-zoom-hud, .memo-preview-note-block")) return;
+    e.preventDefault();
+    hideMemoCtx();
+    showMemoCtx(previewItem, e.clientX, e.clientY);
   });
   previewTopBtn?.addEventListener("click", () => {
     const item = previewItem;

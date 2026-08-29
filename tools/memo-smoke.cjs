@@ -393,6 +393,7 @@ async function main() {
         hasDel: Boolean(document.getElementById("memo-preview-del")),
         delVisible: !document.getElementById("memo-preview-del")?.hidden,
         hasPath: Boolean(document.getElementById("memo-preview-path")),
+      hasLoc: Boolean(document.getElementById("memo-preview-loc")),
         hasTop: Boolean(document.getElementById("memo-preview-top")),
         topVisible: !document.getElementById("memo-preview-top")?.hidden,
         hasPin: Boolean(document.getElementById("memo-preview-pin")),
@@ -1164,7 +1165,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260829memoedit1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260829memoloc1/.test(s.src)),
     };
 
     out.pwa = {
@@ -1280,6 +1281,7 @@ async function main() {
       del: Boolean(moreCard?.querySelector(".memo-more [data-memo-del]")),
       top: Boolean(moreCard?.querySelector(".memo-more [data-memo-top]")),
       pin: Boolean(moreCard?.querySelector(".memo-more [data-memo-pin]")),
+      loc: Boolean(moreCard?.querySelector(".memo-more [data-memo-loc]")),
     };
 
     out.timeSelect = {
@@ -1554,7 +1556,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/navscroll1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memoloc1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1636,9 +1638,10 @@ async function main() {
     !result.previewUi?.hasTop ||
     !result.previewUi?.topVisible ||
     !result.previewUi?.hasPin ||
-    !result.previewUi?.pinVisible
+    !result.previewUi?.pinVisible ||
+    !result.previewUi?.hasLoc
   ) {
-    failed.push("preview should expose delete, pin, move-to-top and be list-wide");
+    failed.push("preview should expose delete, pin, move-to-top, file location and be list-wide");
   }
   if (!result.dataUrlImg?.newestIsImage || !result.dataUrlImg?.notPlainDataText) {
     failed.push("data:image base64 text should ingest as image");
@@ -1822,8 +1825,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/navscroll1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to navscroll1");
+  if (!/memoloc1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memoloc1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
