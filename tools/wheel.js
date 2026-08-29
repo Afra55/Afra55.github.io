@@ -39,6 +39,14 @@
   let segments = [];
   let soundOn = true;
   let audioCtx = null;
+  let audioBackend = "auto"; // auto | web | html
+  let htmlTickPool = [];
+  let htmlWinPool = [];
+  let htmlTickUri = "";
+  let htmlWinUri = "";
+  let htmlPoolCursor = 0;
+  let htmlAudioPrimed = false;
+  const HTML_POOL_SIZE = 8;
   let inited = false;
   let editorsReady = false;
   let panelFill = "";
@@ -432,6 +440,106 @@
     ctx.restore();
   }
 
+  function prefersCoarsePointer() {
+    try {
+      return window.matchMedia("(pointer: coarse)").matches || navigator.maxTouchPoints > 0;
+    } catch (_) {
+      return navigator.maxTouchPoints > 0;
+    }
+  }
+
+  function encodeWavMono16(samples, sampleRate) {
+    const numSamples = samples.length;
+    const buffer = new ArrayBuffer(44 + numSamples * 2);
+    const view = new DataView(buffer);
+    const writeStr = (off, s) => {
+      for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
+    };
+    writeStr(0, "RIFF");
+    view.setUint32(4, 36 + numSamples * 2, true);
+    writeStr(8, "WAVE");
+    writeStr(12, "fmt ");
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, 1, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * 2, true);
+    view.setUint16(32, 2, true);
+    view.setUint16(34, 16, true);
+    writeStr(36, "data");
+    view.setUint32(40, numSamples * 2, true);
+    let offset = 44;
+    for (let i = 0; i < numSamples; i++) {
+      const s = Math.max(-1, Math.min(1, samples[i]));
+      view.setInt16(offset, s * 0x7fff, true);
+      offset += 2;
+    }
+    const bytes = new Uint8Array(buffer);
+    let bin = "";
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    return `data:audio/wav;base64,${btoa(bin)}`;
+  }
+
+  function synthBeepUri(freq, durationSec, volume) {
+    const sampleRate = 22050;
+    const count = Math.max(1, Math.floor(sampleRate * durationSec));
+    const samples = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      const t = i / sampleRate;
+      const env = Math.exp(-t * 36);
+      samples[i] = Math.sin(Math.PI * 2 * freq * t) * volume * env;
+    }
+    return encodeWavMono16(samples, sampleRate);
+  }
+
+  function initHtmlWheelAudio() {
+    if (htmlTickUri) return;
+    htmlTickUri = synthBeepUri(920, 0.07, 0.55);
+    htmlWinUri = synthBeepUri(660, 0.22, 0.5);
+    htmlTickPool = Array.from({ length: HTML_POOL_SIZE }, () => {
+      const a = new Audio(htmlTickUri);
+      a.preload = "auto";
+      return a;
+    });
+    htmlWinPool = [523, 659, 784].map((freq) => {
+      const a = new Audio(synthBeepUri(freq, 0.28, 0.45));
+      a.preload = "auto";
+      return a;
+    });
+  }
+
+  function shouldUseHtmlAudio() {
+    if (audioBackend === "html") return true;
+    if (audioBackend === "web") return false;
+    return prefersCoarsePointer();
+  }
+
+  function playHtmlFromPool(pool, cursorRef, volume = 0.55) {
+    if (!pool.length) return false;
+    const a = pool[cursorRef.idx % pool.length];
+    cursorRef.idx += 1;
+    a.volume = volume;
+    try {
+      a.currentTime = 0;
+    } catch (_) {}
+    const p = a.play();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+    return true;
+  }
+
+  const htmlTickCursor = { idx: 0 };
+
+  function primeHtmlWheelAudio() {
+    if (!soundOn) return;
+    initHtmlWheelAudio();
+    if (htmlAudioPrimed) return;
+    htmlAudioPrimed = true;
+    const prime = new Audio(htmlTickUri);
+    prime.volume = 0.0001;
+    const p = prime.play();
+    if (p && typeof p.catch === "function") p.catch(() => {});
+  }
+
   function ensureAudio() {
     if (!audioCtx) {
       try {
@@ -441,66 +549,95 @@
     return audioCtx;
   }
 
-  /** 须在用户点击/触摸的同步回调里调用，否则 iOS 会静音 Web Audio */
+  /** 在用户手势回调里同步调用（touchend / click） */
   function unlockWheelAudio() {
     if (!soundOn) return;
-    const ac = ensureAudio();
-    if (!ac) return;
-    if (ac.state === "suspended") ac.resume().catch(() => {});
-    try {
-      const osc = ac.createOscillator();
-      const gain = ac.createGain();
-      gain.gain.value = 0.0001;
-      osc.connect(gain);
-      gain.connect(ac.destination);
-      osc.start(0);
-      osc.stop(ac.currentTime + 0.01);
-    } catch (_) {}
-  }
+    initHtmlWheelAudio();
+    primeHtmlWheelAudio();
 
-  async function resumeWheelAudio() {
+    if (shouldUseHtmlAudio()) return;
+
     const ac = ensureAudio();
-    if (!ac || ac.state !== "suspended") return ac;
-    try {
-      await ac.resume();
-    } catch (_) {
-      return null;
+    if (!ac) {
+      audioBackend = "html";
+      return;
     }
-    return ac;
+    try {
+      const buf = ac.createBuffer(1, 1, ac.sampleRate);
+      const src = ac.createBufferSource();
+      src.buffer = buf;
+      src.connect(ac.destination);
+      src.start(0);
+    } catch (_) {}
+    if (ac.state === "suspended") ac.resume().catch(() => {});
   }
 
-  async function playTick(intensity = 0.5) {
-    if (!soundOn) return;
-    const ac = await resumeWheelAudio();
-    if (!ac) return;
+  function playTickWeb(intensity = 0.5) {
+    const ac = ensureAudio();
+    if (!ac || ac.state !== "running") return false;
     const osc = ac.createOscillator();
     const gain = ac.createGain();
     osc.type = "triangle";
     osc.frequency.value = 880 + intensity * 440;
-    gain.gain.value = 0.08;
+    gain.gain.value = 0.14;
     gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.06);
     osc.connect(gain);
     gain.connect(ac.destination);
     osc.start();
     osc.stop(ac.currentTime + 0.07);
+    return true;
   }
 
-  async function playWinChime() {
-    if (!soundOn) return;
-    const ac = await resumeWheelAudio();
-    if (!ac) return;
+  function playWinChimeWeb() {
+    const ac = ensureAudio();
+    if (!ac || ac.state !== "running") return false;
     [523.25, 659.25, 783.99].forEach((freq, i) => {
       const osc = ac.createOscillator();
       const gain = ac.createGain();
       osc.type = "sine";
       osc.frequency.value = freq;
       const t = ac.currentTime + i * 0.08;
-      gain.gain.setValueAtTime(0.12, t);
+      gain.gain.setValueAtTime(0.16, t);
       gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
       osc.connect(gain);
       gain.connect(ac.destination);
       osc.start(t);
       osc.stop(t + 0.36);
+    });
+    return true;
+  }
+
+  function playTick(intensity = 0.5) {
+    if (!soundOn) return;
+    initHtmlWheelAudio();
+    if (shouldUseHtmlAudio() || !playTickWeb(intensity)) {
+      playHtmlFromPool(htmlTickPool, htmlTickCursor, 0.55 + intensity * 0.1);
+    }
+  }
+
+  function playWinChime() {
+    if (!soundOn) return;
+    initHtmlWheelAudio();
+    if (shouldUseHtmlAudio() || !playWinChimeWeb()) {
+      htmlWinPool.forEach((a, i) => {
+        window.setTimeout(() => {
+          a.volume = 0.5;
+          try {
+            a.currentTime = 0;
+          } catch (_) {}
+          const p = a.play();
+          if (p && typeof p.catch === "function") p.catch(() => {});
+        }, i * 80);
+      });
+    }
+  }
+
+  function bindWheelAudioUnlock() {
+    if (!root || root.dataset.wheelAudioBound === "1") return;
+    root.dataset.wheelAudioBound = "1";
+    initHtmlWheelAudio();
+    soundToggle?.addEventListener("change", () => {
+      if (soundToggle.checked) unlockWheelAudio();
     });
   }
 
@@ -581,6 +718,9 @@
       soundOn = Boolean(soundToggle.checked);
       saveState();
     });
+    spinBtn?.addEventListener("touchend", () => {
+      unlockWheelAudio();
+    }, { passive: true });
     spinBtn?.addEventListener("click", () => {
       unlockWheelAudio();
       spinWheel().catch(() => {});
@@ -653,6 +793,7 @@
 
     bindSegmentEditorEvents();
     bindControls();
+    bindWheelAudioUnlock();
     observeWheelStage();
     paintWheelSoon();
     scheduleSegmentEditors();
