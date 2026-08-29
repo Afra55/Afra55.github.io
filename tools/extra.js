@@ -9983,24 +9983,62 @@
             if (typeof globalThis.JSZip === "function") resolve(globalThis.JSZip);
             else reject(new Error("JSZip 未加载，无法打包下载"));
           };
+          const timer = setTimeout(() => reject(new Error("JSZip 加载超时，请刷新页面后重试")), 20000);
+          const finish = (fn) => {
+            clearTimeout(timer);
+            fn();
+          };
           const existing = document.querySelector('script[src*="jszip"]');
           if (existing) {
             if (typeof globalThis.JSZip === "function") {
+              clearTimeout(timer);
               resolve(globalThis.JSZip);
               return;
             }
-            existing.addEventListener("load", done, { once: true });
-            existing.addEventListener("error", () => reject(new Error("JSZip 脚本加载失败")), { once: true });
+            if (existing.readyState === "complete" || existing.readyState === "loaded") {
+              queueMicrotask(() => finish(done));
+              return;
+            }
+            existing.addEventListener("load", () => finish(done), { once: true });
+            existing.addEventListener("error", () => finish(() => reject(new Error("JSZip 脚本加载失败"))), {
+              once: true,
+            });
             return;
           }
           const s = document.createElement("script");
           s.src = "./vendor/jszip.min.js";
-          s.onload = done;
-          s.onerror = () => reject(new Error("JSZip 脚本加载失败"));
+          s.onload = () => finish(done);
+          s.onerror = () => finish(() => reject(new Error("JSZip 脚本加载失败")));
           document.head.appendChild(s);
         });
       }
       return jsZipLoadPromise;
+    }
+
+    let adbBundleBusy = false;
+
+    function adbBundleButtons() {
+      return ["#adb-dl-mac", "#adb-dl-win", "#adb-dl-linux"].map((sel) => $(sel)).filter(Boolean);
+    }
+
+    function setAdbBundleProgress(visible, { pct = 0, text = "" } = {}) {
+      const box = $("#adb-dl-progress");
+      const fill = $("#adb-dl-progress-fill");
+      const title = $("#adb-dl-progress-text");
+      const pctEl = $("#adb-dl-progress-pct");
+      const clamped = Math.max(0, Math.min(100, Number(pct) || 0));
+      if (box) box.hidden = !visible;
+      if (title) title.textContent = text || "准备下载包…";
+      if (pctEl) pctEl.textContent = `${Math.round(clamped)}%`;
+      if (fill) {
+        fill.style.width = `${clamped}%`;
+        fill.classList.toggle("is-busy", visible && clamped < 100);
+        fill.classList.toggle("is-active", visible && clamped < 100);
+      }
+      adbBundleButtons().forEach((btn) => {
+        btn.disabled = visible;
+        btn.setAttribute("aria-busy", visible ? "true" : "false");
+      });
     }
 
     const ADB_STORE_BASE = "devtools-adb-base";
@@ -12017,8 +12055,18 @@
     }
 
     async function downloadAdbBridgeBundle(platform) {
-      const JSZipCtor = await ensureJsZip();
-      const map = {
+      if (adbBundleBusy) {
+        toast("正在准备下载包…");
+        return;
+      }
+      adbBundleBusy = true;
+      setError(adbError, "");
+      setAdbBundleProgress(true, { pct: 4, text: "准备打包工具…" });
+      toast("正在准备完整包，请稍候…");
+      try {
+        setAdbBundleProgress(true, { pct: 10, text: "加载 JSZip…" });
+        const JSZipCtor = await ensureJsZip();
+        const map = {
         mac: {
           scriptPath: "./adb-bridge/start-mac.command",
           scriptName: "start-adb-bridge.command",
@@ -12041,6 +12089,7 @@
       };
       const cfg = map[platform];
       if (!cfg) throw new Error("未知平台");
+      setAdbBundleProgress(true, { pct: 22, text: "拉取桥文件…" });
       const [serverJs, mirrorJs, ffmpegJs, scriptRaw, resolvePortJs, serverJar] = await Promise.all([
         fetchTextAsset("./adb-bridge/server.js"),
         fetchTextAsset("./adb-bridge/scrcpy-mirror.js").catch(() => ""),
@@ -12099,10 +12148,20 @@
         zip.file("start-adb-bridge.cmd", wrapper);
       }
       zip.file(platform === "win" ? "README.txt" : "使用说明.txt", readme.replace(/\r?\n/g, platform === "win" ? "\r\n" : "\n"));
-      const blob = await zip.generateAsync({
-        type: "blob",
-        platform: platform === "win" ? "DOS" : "UNIX",
-      });
+      setAdbBundleProgress(true, { pct: 58, text: "正在压缩 ZIP…" });
+      const blob = await zip.generateAsync(
+        {
+          type: "blob",
+          platform: platform === "win" ? "DOS" : "UNIX",
+        },
+        (meta) => {
+          setAdbBundleProgress(true, {
+            pct: 58 + (Number(meta.percent) || 0) * 0.38,
+            text: `压缩中… ${Math.round(Number(meta.percent) || 0)}%`,
+          });
+        }
+      );
+      setAdbBundleProgress(true, { pct: 98, text: "开始下载…" });
       downloadBlobFile(blob, cfg.zipName);
       setAdbStatus(
         "is-warn",
@@ -12111,15 +12170,22 @@
       );
       toast("已下载完整包，请解压后运行");
       startAdbWaitPoll();
+      setAdbBundleProgress(true, { pct: 100, text: "下载已开始" });
+      } finally {
+        adbBundleBusy = false;
+        setAdbBundleProgress(false);
+      }
     }
 
-    function downloadAdbScriptAndWait(anchor) {
+    async function downloadAdbScriptAndWait(anchor) {
       const platform = anchor?.dataset?.adbBundle;
       if (platform) {
-        downloadAdbBridgeBundle(platform).catch((err) => {
+        try {
+          await downloadAdbBridgeBundle(platform);
+        } catch (err) {
           setError(adbError, err.message || String(err));
           setAdbStatus("is-err", "下载失败", err.message || String(err));
-        });
+        }
         return;
       }
       const href = anchor?.getAttribute("href");

@@ -4239,6 +4239,14 @@ body.vsplit-fs-open {
   display: none !important;
 }
 
+.adb-dl-progress {
+  margin-top: 0.65rem;
+}
+
+.adb-dl-progress[hidden] {
+  display: none !important;
+}
+
 .adb-app-actions {
   display: flex;
   flex-wrap: wrap;
