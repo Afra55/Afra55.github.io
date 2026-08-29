@@ -629,7 +629,7 @@
     } else {
       triggerRipple(stageRippleEl);
       spawnFloat(stageFloatsEl);
-      burstSparks(stageBgSparks, stageRoot || fishBtn, 80);
+      burstSparks(stageBgSparks, stageRoot || fishBtn, 80, true);
     }
     if (navigator.vibrate) navigator.vibrate(12);
   }
