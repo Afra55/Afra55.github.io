@@ -3629,6 +3629,36 @@
     return data;
   }
 
+  /** 浏览器原生：用已授权的目录句柄打开系统文件选择器并定位到 blobs 内对应文件（无法直接唤起 Explorer/Finder） */
+  async function revealMemoItemInBrowser(item) {
+    if (!item || state.mode !== "dir" || state.dirPending || !state.dirHandle) {
+      throw new Error("请先绑定并连接存储文件夹");
+    }
+    const ok = await ensureDirPermission(state.dirHandle, "read");
+    if (!ok) throw new Error("没有目录读取权限，请重新连接存储文件夹");
+    const dir = await getBlobsDir(false);
+    if (!dir) throw new Error("找不到 blobs 目录");
+    const fileName = item.fileName || item.id;
+    let fileHandle;
+    try {
+      fileHandle = await dir.getFileHandle(fileName);
+    } catch (_) {
+      throw new Error("找不到对应文件");
+    }
+    if (typeof window.showOpenFilePicker === "function") {
+      await window.showOpenFilePicker({
+        startIn: fileHandle,
+        multiple: false,
+      });
+      return { mode: "file-picker" };
+    }
+    if (typeof window.showDirectoryPicker === "function") {
+      await window.showDirectoryPicker({ startIn: dir, mode: "read" });
+      return { mode: "dir-picker" };
+    }
+    throw new Error("当前浏览器不支持文件夹定位");
+  }
+
   async function openItemLocation(item) {
     if (!item) return;
     if (state.mode !== "dir" || state.dirPending || !state.dirHandle) {
@@ -3639,10 +3669,19 @@
     try {
       await revealMemoItemFile(item);
       toast(`已在资源管理器中定位：${tip}`);
+      return;
+    } catch (_) {
+      /* bridge unavailable — try browser File System Access API */
+    }
+    try {
+      await revealMemoItemInBrowser(item);
+      toast(`已打开文件所在位置：${tip}`);
+      return;
     } catch (err) {
+      if (err?.name === "AbortError") return;
       try {
         await openItemPath(item);
-        toast(`本机桥未连接，已在新标签打开文件 · 连接本机桥后可定位到文件夹`);
+        toast(`无法定位文件夹，已在新标签打开文件 · 启动本机桥可一键在资源管理器中定位`);
       } catch (_) {
         setError(memoError, err.message || String(err));
         toast(`无法定位文件：${err.message || err}`);
