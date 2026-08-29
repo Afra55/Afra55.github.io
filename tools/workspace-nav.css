@@ -896,6 +896,7 @@ body.nav-open {
   position: fixed;
   z-index: 12000;
   min-width: 9.5rem;
+  max-width: min(18rem, calc(100vw - 1rem));
   padding: 0.35rem 0;
   border-radius: 10px;
   border: 1px solid var(--line);
@@ -914,6 +915,7 @@ body.nav-open {
   text-align: left;
   padding: 0.45rem 0.85rem;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .nav-tool-ctx-item:hover,

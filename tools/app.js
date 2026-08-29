@@ -1271,6 +1271,7 @@
 
   function showNavToolCtx(x, y, toolId) {
     if (!navToolCtx || !toolId || !DEFAULT_ORDER.includes(toolId)) return;
+    if (navToolCtx.parentElement !== document.body) document.body.appendChild(navToolCtx);
     navToolCtxId = toolId;
     const inFav = loadFavorites().includes(toolId);
     const addBtn = navToolCtx.querySelector('[data-nav-ctx="fav-add"]');
@@ -1281,11 +1282,14 @@
     navToolCtx.style.left = `${x}px`;
     navToolCtx.style.top = `${y}px`;
     requestAnimationFrame(() => {
+      const pad = 8;
       const rect = navToolCtx.getBoundingClientRect();
       let left = x;
       let top = y;
-      if (rect.right > window.innerWidth - 8) left = Math.max(8, window.innerWidth - rect.width - 8);
-      if (rect.bottom > window.innerHeight - 8) top = Math.max(8, window.innerHeight - rect.height - 8);
+      if (rect.right > window.innerWidth - pad) left = Math.max(pad, window.innerWidth - rect.width - pad);
+      if (rect.left < pad) left = pad;
+      if (rect.bottom > window.innerHeight - pad) top = Math.max(pad, window.innerHeight - rect.height - pad);
+      if (rect.top < pad) top = pad;
       navToolCtx.style.left = `${left}px`;
       navToolCtx.style.top = `${top}px`;
     });
@@ -1293,6 +1297,7 @@
 
   function bindNavToolCtx() {
     if (!navToolCtx || navToolCtx.dataset.bound === "1") return;
+    if (navToolCtx.parentElement !== document.body) document.body.appendChild(navToolCtx);
     navToolCtx.dataset.bound = "1";
     navToolCtx.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-nav-ctx]");

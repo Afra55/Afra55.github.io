@@ -19,7 +19,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" /></noscript>
   <link rel="stylesheet" href="./style.css?v=20260829adbcmdwheel1" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260829desktopchrome1" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260829navctx2" />
   <script src="./lib/theme-presets.js?v=20260829acu2"></script>
   <script>
     /* 尽早应用主题变量，减少闪烁；侧栏也依赖这些 CSS 变量 */
@@ -142,11 +142,6 @@
       </div>
       <p class="hint tight nav-sort-hint">分类与工具可排序：桌面直接拖；手机请<strong>长按</strong>分类标题或工具名再拖（松手前拖到边缘可滚动）。</p>
       <nav class="tool-nav" id="tool-nav" aria-label="工具分组"></nav>
-      <div class="nav-tool-ctx" id="nav-tool-ctx" role="menu" hidden>
-        <button type="button" class="nav-tool-ctx-item" role="menuitem" data-nav-ctx="open">打开</button>
-        <button type="button" class="nav-tool-ctx-item" role="menuitem" data-nav-ctx="fav-add">添加到常用工具</button>
-        <button type="button" class="nav-tool-ctx-item" role="menuitem" data-nav-ctx="fav-remove" hidden>从常用移除</button>
-      </div>
       <div class="nav-footer-actions">
         <p class="nav-cache-meta" id="nav-cache-meta" title="缓存可一键清理；备忘录数据不会被清掉">暂无缓存</p>
         <label class="nav-setting" for="nav-compact" title="开启后侧栏只显示分类名；当前工具所在分类也只高亮分类名，鼠标移上去或点选才展开工具">
@@ -4095,6 +4090,11 @@ adb devices</pre>
   </footer>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <div class="nav-tool-ctx" id="nav-tool-ctx" role="menu" hidden>
+    <button type="button" class="nav-tool-ctx-item" role="menuitem" data-nav-ctx="open">打开</button>
+    <button type="button" class="nav-tool-ctx-item" role="menuitem" data-nav-ctx="fav-add">添加到常用工具</button>
+    <button type="button" class="nav-tool-ctx-item" role="menuitem" data-nav-ctx="fav-remove" hidden>从常用移除</button>
+  </div>
   <div class="memo-temp-prompt-stack" id="memo-temp-prompt-stack" aria-live="polite"></div>
   <div class="vsplit-fs" id="vsplit-fs" hidden>
     <div class="vsplit-fs-top">
@@ -4120,7 +4120,7 @@ adb devices</pre>
   <script src="./temp.js?v=20260829acu2"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./lib/oss-deps.js?v=20260829acu2"></script>
-  <script src="./app.js?v=20260829adbcmdwheel1"></script>
+  <script src="./app.js?v=20260829navctx2"></script>
   <script src="./about.js?v=20260829acu2" defer></script>
   <script src="./extra.js?v=20260829adbcmdwheel1" defer></script>
   <script src="./acupoint.js?v=20260829acu2" defer></script>
