@@ -5,6 +5,14 @@
 
   const STORAGE_KEY = "devtools-muyu-v1";
   const HTML_POOL_SIZE = 4;
+  const DEFAULT_FLOAT_PHRASES = ["功德 +1", "善哉", "福生无量", "随喜", "心安", "清净", "平安喜乐"];
+  const VALID_THEMES = new Set(["zen", "ocean", "gold", "forest"]);
+  const MODAL_MODES = [
+    [1, 0.2, 0.55],
+    [2.76, 0.13, 0.3],
+    [5.4, 0.08, 0.16],
+    [8.93, 0.05, 0.08],
+  ];
 
   /** 木鱼造型参考 wooden-fish-dsh/docs/fish.svg 与 heyuan110/cyber-merit */
   function renderFishArt(prefix) {
@@ -91,8 +99,24 @@
   let fsBgDust = [];
   let fsBgSparks = [];
   let fsBgT = 0;
-
-  const FLOAT_PHRASES = ["功德 +1", "善哉", "福生无量", "随喜", "心安", "清净"];
+  let themeId = "zen";
+  let customPhrasesRaw = "";
+  let comboCount = 0;
+  let comboTimer = 0;
+  let noiseBuf = null;
+  let stageRoot = null;
+  let stageBgCanvas = null;
+  let stageBgCtx = null;
+  let stageBgRaf = 0;
+  let stageBgRunning = false;
+  let stageRippleEl = null;
+  let stageFloatsEl = null;
+  let stageBgStars = [];
+  let stageBgDust = [];
+  let stageBgSparks = [];
+  let stageBgT = 0;
+  let themeSelect = null;
+  let phrasesInput = null;
 
   function prefersCoarsePointer() {
     try {
@@ -134,32 +158,98 @@
     return `data:audio/wav;base64,${btoa(bin)}`;
   }
 
-  function synthKnockUri() {
-    const sampleRate = 22050;
-    const duration = 0.16;
+  function synthModalKnockSamples(sampleRate, pitch = 1) {
+    const duration = 0.34;
     const n = Math.max(1, Math.floor(sampleRate * duration));
     const samples = new Float32Array(n);
+    const base = 560 * pitch;
+    const noiseLen = Math.max(1, Math.floor(sampleRate * 0.04));
     for (let i = 0; i < n; i++) {
       const t = i / sampleRate;
-      const env = Math.exp(-t * 34);
-      const tone =
-        Math.sin(Math.PI * 2 * 320 * t) * 0.42 +
-        Math.sin(Math.PI * 2 * 640 * t) * 0.12 +
-        Math.sin(Math.PI * 2 * 180 * t) * 0.22;
-      const noise = (Math.random() * 2 - 1) * 0.08 * Math.exp(-t * 52);
-      samples[i] = (tone + noise) * env * 0.72;
+      let s = 0;
+      for (let m = 0; m < MODAL_MODES.length; m++) {
+        const mult = MODAL_MODES[m][0];
+        const dec = MODAL_MODES[m][1];
+        const amp = MODAL_MODES[m][2];
+        const attack = t < 0.003 ? t / 0.003 : 1;
+        s += Math.sin(Math.PI * 2 * base * mult * t) * amp * Math.exp(-t / dec) * attack;
+      }
+      if (t < 0.04) {
+        const ne = Math.pow(1 - t / 0.04, 3);
+        const ni = Math.min(noiseLen - 1, i);
+        const noise = (Math.random() * 2 - 1) * 0.42 * ne;
+        s += noise * Math.sin(Math.PI * 2 * 2300 * pitch * t);
+      }
+      samples[i] = s * 0.78;
     }
-    return encodeWavMono16(samples, sampleRate);
+    return samples;
+  }
+
+  function synthKnockUri(pitch = 1) {
+    const sampleRate = 22050;
+    return encodeWavMono16(synthModalKnockSamples(sampleRate, pitch), sampleRate);
   }
 
   function initKnockAudio() {
     if (htmlKnockUri) return;
-    htmlKnockUri = synthKnockUri();
+    htmlKnockUri = synthKnockUri(1);
     htmlKnockPool = Array.from({ length: HTML_POOL_SIZE }, () => {
       const a = new Audio(htmlKnockUri);
       a.preload = "auto";
       return a;
     });
+  }
+
+  function getNoiseBuffer(ac) {
+    if (noiseBuf) return noiseBuf;
+    const len = Math.floor(ac.sampleRate * 0.035);
+    noiseBuf = ac.createBuffer(1, len, ac.sampleRate);
+    const ch = noiseBuf.getChannelData(0);
+    for (let i = 0; i < len; i++) ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 3);
+    return noiseBuf;
+  }
+
+  function playKnockModal(pitch = 1) {
+    const ac = ensureAudio();
+    if (!ac || ac.state !== "running") return false;
+    const t0 = ac.currentTime;
+    const lp = ac.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 3800;
+    lp.Q.value = 0.5;
+    const out = ac.createGain();
+    out.gain.value = 0.9;
+    lp.connect(out).connect(ac.destination);
+
+    const ns = ac.createBufferSource();
+    ns.buffer = getNoiseBuffer(ac);
+    const bp = ac.createBiquadFilter();
+    bp.type = "bandpass";
+    bp.frequency.value = 2300 * pitch;
+    bp.Q.value = 0.9;
+    const ng = ac.createGain();
+    ng.gain.value = 0.4;
+    ns.connect(bp).connect(ng).connect(lp);
+    ns.start(t0);
+    ns.stop(t0 + 0.04);
+
+    const base = 560 * pitch;
+    for (let i = 0; i < MODAL_MODES.length; i++) {
+      const mult = MODAL_MODES[i][0];
+      const dec = MODAL_MODES[i][1];
+      const amp = MODAL_MODES[i][2];
+      const o = ac.createOscillator();
+      o.type = "sine";
+      o.frequency.value = base * mult;
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(amp, t0 + 0.003);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dec);
+      o.connect(g).connect(lp);
+      o.start(t0);
+      o.stop(t0 + dec + 0.02);
+    }
+    return true;
   }
 
   function ensureAudio() {
@@ -206,30 +296,20 @@
     }
   }
 
-  function playKnockWeb() {
-    const ac = ensureAudio();
-    if (!ac || ac.state !== "running") return false;
-    const t0 = ac.currentTime;
-    const osc = ac.createOscillator();
-    const gain = ac.createGain();
-    osc.type = "sine";
-    osc.frequency.setValueAtTime(340, t0);
-    osc.frequency.exponentialRampToValueAtTime(220, t0 + 0.08);
-    gain.gain.setValueAtTime(0.0001, t0);
-    gain.gain.exponentialRampToValueAtTime(0.28, t0 + 0.004);
-    gain.gain.exponentialRampToValueAtTime(0.001, t0 + 0.14);
-    osc.connect(gain);
-    gain.connect(ac.destination);
-    osc.start(t0);
-    osc.stop(t0 + 0.15);
-    return true;
+  function playKnockWeb(pitch = 1) {
+    return playKnockModal(pitch);
   }
 
-  function playKnockHtml() {
+  function playKnockHtml(pitch = 1) {
     if (!htmlKnockPool.length) return;
     const a = htmlKnockPool[htmlKnockCursor % HTML_POOL_SIZE];
     htmlKnockCursor += 1;
     a.volume = 0.72;
+    if (Math.abs(pitch - 1) > 0.02) {
+      a.src = synthKnockUri(pitch);
+    } else if (htmlKnockUri) {
+      a.src = htmlKnockUri;
+    }
     try {
       a.currentTime = 0;
     } catch (_) {}
@@ -237,11 +317,21 @@
     if (p && typeof p.catch === "function") p.catch(() => {});
   }
 
+  function registerCombo() {
+    comboCount += 1;
+    window.clearTimeout(comboTimer);
+    comboTimer = window.setTimeout(() => {
+      comboCount = 0;
+    }, 1100);
+    return 1 + Math.min(comboCount, 12) * 0.045;
+  }
+
   function playKnock() {
     if (!soundOn) return;
     initKnockAudio();
+    const pitch = registerCombo();
     const useHtml = prefersCoarsePointer() && !webAudioReady;
-    if (useHtml || !playKnockWeb()) playKnockHtml();
+    if (useHtml || !playKnockWeb(pitch)) playKnockHtml(pitch);
   }
 
   function formatCount(n) {
@@ -250,7 +340,13 @@
 
   function renderCount() {
     const text = formatCount(count);
-    if (countEl) countEl.textContent = text;
+    if (countEl) {
+      countEl.textContent = text;
+      countEl.classList.remove("is-bump");
+      void countEl.offsetWidth;
+      countEl.classList.add("is-bump");
+      window.setTimeout(() => countEl.classList.remove("is-bump"), 120);
+    }
     if (countFsEl) {
       countFsEl.textContent = text;
       countFsEl.classList.remove("is-bump");
@@ -260,8 +356,188 @@
     }
   }
 
+  function getFloatPhrases() {
+    const lines = String(customPhrasesRaw || "")
+      .split(/\r?\n/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    return lines.length ? lines : DEFAULT_FLOAT_PHRASES;
+  }
+
+  function pickFloatPhrase() {
+    const list = getFloatPhrases();
+    return list[Math.floor(Math.random() * list.length)];
+  }
+
+  function applyTheme(nextTheme) {
+    themeId = VALID_THEMES.has(nextTheme) ? nextTheme : "zen";
+    if (stageRoot) stageRoot.dataset.muyuTheme = themeId;
+    if (fsRoot) fsRoot.dataset.muyuTheme = themeId;
+    if (themeSelect && themeSelect.value !== themeId) themeSelect.value = themeId;
+  }
+
+  function themeParticleRgb() {
+    const map = {
+      zen: { star: "255,245,220", dust: "255,210,120", spark: "255" },
+      ocean: { star: "220,240,255", dust: "140,200,255", spark: "180" },
+      gold: { star: "255,245,220", dust: "255,200,100", spark: "255" },
+      forest: { star: "220,255,240", dust: "140,220,180", spark: "180" },
+    };
+    return map[themeId] || map.zen;
+  }
+
+  function spawnFloat(floatsEl) {
+    if (!floatsEl) return;
+    const f = document.createElement("span");
+    f.className = floatsEl.id === "muyu-stage-floats" ? "muyu-stage-float" : "muyu-fs-float";
+    f.textContent = pickFloatPhrase();
+    f.style.setProperty("--muyu-dx", `${Math.round(rnd(-24, 24))}px`);
+    floatsEl.appendChild(f);
+    window.setTimeout(() => f.remove(), 1000);
+  }
+
+  function triggerRipple(rippleEl) {
+    if (!rippleEl) return;
+    rippleEl.classList.remove("is-go");
+    void rippleEl.offsetWidth;
+    rippleEl.classList.add("is-go");
+  }
+
+  function burstSparks(sparks, stageEl, limit = 180, localCoords = false) {
+    if (!stageEl) return;
+    const rect = stageEl.getBoundingClientRect();
+    const cx = localCoords ? rect.width / 2 : rect.left + rect.width / 2;
+    const cy = localCoords ? rect.height * 0.46 : rect.top + rect.height * 0.46;
+    const n = 12;
+    for (let i = 0; i < n; i++) {
+      const ang = (Math.PI * 2 * i) / n + rnd(-0.3, 0.3);
+      const sp = rnd(1.2, 3.8);
+      sparks.push({
+        x: cx,
+        y: cy,
+        vx: Math.cos(ang) * sp,
+        vy: Math.sin(ang) * sp - 1.1,
+        life: 1,
+        r: rnd(1.2, 2.8),
+      });
+    }
+    if (sparks.length > limit) sparks.splice(0, sparks.length - limit);
+  }
+
+  function paintBgFrame(ctx, w, h, tRef, stars, dust, sparks, getSparkRgb) {
+    const rgb = themeParticleRgb();
+    ctx.clearRect(0, 0, w, h);
+    for (const s of stars) {
+      const a = 0.35 + 0.45 * (0.5 + 0.5 * Math.sin(tRef.value * s.sp + s.tw));
+      ctx.beginPath();
+      ctx.arc(s.x * w, s.y * h, s.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${rgb.star},${a.toFixed(3)})`;
+      ctx.fill();
+    }
+    for (const d of dust) {
+      d.y -= d.v / h;
+      d.x += d.drift / w;
+      if (d.y < -0.02) {
+        d.y = 1.02;
+        d.x = rnd(0, 1);
+      }
+      const a = d.a * (0.6 + 0.4 * Math.sin(tRef.value * 1.5 + d.ph));
+      ctx.beginPath();
+      ctx.arc(d.x * w, d.y * h, d.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(${rgb.dust},${a.toFixed(3)})`;
+      ctx.fill();
+    }
+    for (const p of sparks) {
+      p.vy += 0.11;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.life -= 0.024;
+      if (p.life <= 0) continue;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2);
+      const sparkG = getSparkRgb(p.life);
+      ctx.fillStyle = `rgba(${rgb.spark},${sparkG},120,${p.life.toFixed(3)})`;
+      ctx.fill();
+    }
+    return sparks.filter((p) => p.life > 0);
+  }
+
   function rnd(a, b) {
     return a + Math.random() * (b - a);
+  }
+
+  function initStageBg() {
+    stageBgCanvas = document.getElementById("muyu-stage-bg");
+    stageRippleEl = document.getElementById("muyu-stage-ripple");
+    stageFloatsEl = document.getElementById("muyu-stage-floats");
+    stageRoot = document.getElementById("muyu-stage");
+    if (!stageBgCanvas) return;
+    stageBgCtx = stageBgCanvas.getContext("2d", { alpha: true });
+    stageBgStars = Array.from({ length: 16 }, () => ({
+      x: Math.random(),
+      y: Math.random() * 0.75,
+      r: rnd(0.4, 1.2),
+      tw: rnd(0, Math.PI * 2),
+      sp: rnd(1, 2),
+    }));
+    stageBgDust = Array.from({ length: 14 }, () => ({
+      x: rnd(0, 1),
+      y: rnd(0, 1),
+      r: rnd(0.6, 1.8),
+      v: rnd(0.04, 0.14),
+      drift: rnd(-0.025, 0.025),
+      a: rnd(0.18, 0.48),
+      ph: rnd(0, 6.28),
+    }));
+  }
+
+  function resizeStageBg() {
+    if (!stageBgCanvas || !stageBgCtx || !stageRoot) return;
+    const rect = stageRoot.getBoundingClientRect();
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const w = Math.max(1, rect.width);
+    const h = Math.max(1, rect.height);
+    stageBgCanvas.width = w * dpr;
+    stageBgCanvas.height = h * dpr;
+    stageBgCanvas.style.width = `${w}px`;
+    stageBgCanvas.style.height = `${h}px`;
+    stageBgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function paintStageBgFrame() {
+    if (!stageBgCtx || !stageBgRunning || !stageRoot) return;
+    const rect = stageRoot.getBoundingClientRect();
+    const w = Math.max(1, rect.width);
+    const h = Math.max(1, rect.height);
+    stageBgT += 0.016;
+    const tRef = { value: stageBgT };
+    stageBgSparks = paintBgFrame(
+      stageBgCtx,
+      w,
+      h,
+      tRef,
+      stageBgStars,
+      stageBgDust,
+      stageBgSparks,
+      (life) => 190 + Math.floor(50 * life)
+    );
+    stageBgRaf = requestAnimationFrame(paintStageBgFrame);
+  }
+
+  function startStageBg() {
+    if (!stageBgCanvas) initStageBg();
+    if (!stageBgCtx || stageBgRunning || fullscreen) return;
+    stageBgRunning = true;
+    resizeStageBg();
+    stageBgRaf = requestAnimationFrame(paintStageBgFrame);
+  }
+
+  function stopStageBg() {
+    stageBgRunning = false;
+    if (stageBgRaf) cancelAnimationFrame(stageBgRaf);
+    stageBgRaf = 0;
+    stageBgSparks = [];
+    if (stageBgCtx && stageBgCanvas) stageBgCtx.clearRect(0, 0, stageBgCanvas.width, stageBgCanvas.height);
   }
 
   function initFsBg() {
@@ -302,25 +578,7 @@
   }
 
   function burstFsSparks() {
-    const stage = document.getElementById("muyu-fs-stage");
-    if (!stage) return;
-    const rect = stage.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height * 0.46;
-    const n = 12;
-    for (let i = 0; i < n; i++) {
-      const ang = ((Math.PI * 2 * i) / n) + rnd(-0.3, 0.3);
-      const sp = rnd(1.2, 3.8);
-      fsBgSparks.push({
-        x: cx,
-        y: cy,
-        vx: Math.cos(ang) * sp,
-        vy: Math.sin(ang) * sp - 1.1,
-        life: 1,
-        r: rnd(1.2, 2.8),
-      });
-    }
-    if (fsBgSparks.length > 180) fsBgSparks = fsBgSparks.slice(-180);
+    burstSparks(fsBgSparks, document.getElementById("muyu-fs-stage"));
   }
 
   function paintFsBgFrame() {
@@ -328,39 +586,17 @@
     const w = window.innerWidth;
     const h = window.innerHeight;
     fsBgT += 0.016;
-    fsBgCtx.clearRect(0, 0, w, h);
-    for (const s of fsBgStars) {
-      const a = 0.35 + 0.45 * (0.5 + 0.5 * Math.sin(fsBgT * s.sp + s.tw));
-      fsBgCtx.beginPath();
-      fsBgCtx.arc(s.x * w, s.y * h, s.r, 0, Math.PI * 2);
-      fsBgCtx.fillStyle = `rgba(255,245,220,${a.toFixed(3)})`;
-      fsBgCtx.fill();
-    }
-    for (const d of fsBgDust) {
-      d.y -= d.v / h;
-      d.x += d.drift / w;
-      if (d.y < -0.02) {
-        d.y = 1.02;
-        d.x = rnd(0, 1);
-      }
-      const a = d.a * (0.6 + 0.4 * Math.sin(fsBgT * 1.5 + d.ph));
-      fsBgCtx.beginPath();
-      fsBgCtx.arc(d.x * w, d.y * h, d.r, 0, Math.PI * 2);
-      fsBgCtx.fillStyle = `rgba(255,210,120,${a.toFixed(3)})`;
-      fsBgCtx.fill();
-    }
-    for (const p of fsBgSparks) {
-      p.vy += 0.11;
-      p.x += p.vx;
-      p.y += p.vy;
-      p.life -= 0.024;
-      if (p.life <= 0) continue;
-      fsBgCtx.beginPath();
-      fsBgCtx.arc(p.x, p.y, p.r * p.life, 0, Math.PI * 2);
-      fsBgCtx.fillStyle = `rgba(255,${190 + Math.floor(50 * p.life)},120,${p.life.toFixed(3)})`;
-      fsBgCtx.fill();
-    }
-    fsBgSparks = fsBgSparks.filter((p) => p.life > 0);
+    const tRef = { value: fsBgT };
+    fsBgSparks = paintBgFrame(
+      fsBgCtx,
+      w,
+      h,
+      tRef,
+      fsBgStars,
+      fsBgDust,
+      fsBgSparks,
+      (life) => 190 + Math.floor(50 * life)
+    );
     fsBgRaf = requestAnimationFrame(paintFsBgFrame);
   }
 
@@ -380,27 +616,21 @@
     if (fsBgCtx && fsBgCanvas) fsBgCtx.clearRect(0, 0, fsBgCanvas.width, fsBgCanvas.height);
   }
 
-  function playFsFx() {
-    if (!fullscreen) return;
-    if (fsPulseEl) {
-      fsPulseEl.classList.remove("is-flash");
-      void fsPulseEl.offsetWidth;
-      fsPulseEl.classList.add("is-flash");
+  function playKnockFx() {
+    if (fullscreen) {
+      if (fsPulseEl) {
+        fsPulseEl.classList.remove("is-flash");
+        void fsPulseEl.offsetWidth;
+        fsPulseEl.classList.add("is-flash");
+      }
+      triggerRipple(fsRippleEl);
+      spawnFloat(fsFloatsEl);
+      burstFsSparks();
+    } else {
+      triggerRipple(stageRippleEl);
+      spawnFloat(stageFloatsEl);
+      burstSparks(stageBgSparks, stageRoot || fishBtn, 80);
     }
-    if (fsRippleEl) {
-      fsRippleEl.classList.remove("is-go");
-      void fsRippleEl.offsetWidth;
-      fsRippleEl.classList.add("is-go");
-    }
-    if (fsFloatsEl) {
-      const f = document.createElement("span");
-      f.className = "muyu-fs-float";
-      f.textContent = FLOAT_PHRASES[Math.floor(Math.random() * FLOAT_PHRASES.length)];
-      f.style.setProperty("--muyu-dx", `${Math.round(rnd(-24, 24))}px`);
-      fsFloatsEl.appendChild(f);
-      window.setTimeout(() => f.remove(), 1000);
-    }
-    burstFsSparks();
     if (navigator.vibrate) navigator.vibrate(12);
   }
 
@@ -411,6 +641,8 @@
       const data = JSON.parse(raw);
       if (Number.isFinite(data.count) && data.count >= 0) count = Math.floor(data.count);
       if (typeof data.sound === "boolean") soundOn = data.sound;
+      if (typeof data.theme === "string") applyTheme(data.theme);
+      if (typeof data.phrases === "string") customPhrasesRaw = data.phrases;
     } catch (_) {}
   }
 
@@ -421,6 +653,8 @@
         JSON.stringify({
           count,
           sound: soundOn,
+          theme: themeId,
+          phrases: customPhrasesRaw,
         })
       );
     } catch (_) {}
@@ -466,7 +700,7 @@
     saveState();
     bumpFish(fromEl || (fullscreen ? fishFsBtn : fishBtn));
     playKnock();
-    playFsFx();
+    playKnockFx();
   }
 
   function resetCount() {
@@ -482,14 +716,17 @@
     stopFsBg();
     if (fsRoot) fsRoot.hidden = true;
     document.body.classList.remove("muyu-fs-active");
+    if (isMuyuRoute()) startStageBg();
   }
 
   function enterFullscreen() {
     ensureMuyu();
     if (fullscreen || !fsRoot) return;
+    stopStageBg();
     fullscreen = true;
     fsRoot.hidden = false;
     document.body.classList.add("muyu-fs-active");
+    applyTheme(themeId);
     syncSoundToggles();
     startFsBg();
     fsCloseBtn?.focus();
@@ -555,6 +792,17 @@
 
     window.addEventListener("resize", () => {
       if (fullscreen) resizeFsBg();
+      else if (stageBgRunning) resizeStageBg();
+    });
+
+    themeSelect?.addEventListener("change", () => {
+      applyTheme(themeSelect.value);
+      saveState();
+    });
+
+    phrasesInput?.addEventListener("input", () => {
+      customPhrasesRaw = phrasesInput.value;
+      saveState();
     });
 
     document.addEventListener("keydown", (e) => {
@@ -588,6 +836,7 @@
     bindFsShell();
     mountFishArtEarly();
     initFsBg();
+    initStageBg();
   }
 
   function initMuyuCore() {
@@ -605,16 +854,23 @@
     fsRoot = $("#muyu-fs");
     fsCloseBtn = $("#muyu-fs-close");
     resetBtn = $("#muyu-reset");
+    themeSelect = $("#muyu-theme");
+    phrasesInput = $("#muyu-phrases");
+    stageRoot = $("#muyu-stage");
 
     mountFishArt(fishBtn, "muyu", true);
     mountFishArt(fishFsBtn, "muyu-fs", false);
     bindFsShell();
+    initStageBg();
 
     loadState();
+    applyTheme(themeId);
+    if (phrasesInput) phrasesInput.value = customPhrasesRaw;
     syncSoundToggles();
     renderCount();
     initKnockAudio();
     bindControls();
+    startStageBg();
     return true;
   }
 
@@ -626,8 +882,14 @@
 
   function onRoute(ev) {
     const tool = ev?.detail?.tool || (isMuyuRoute() ? "muyu" : "");
-    if (tool !== "muyu") forceExitFullscreen();
-    if (tool === "muyu") ensureMuyu();
+    if (tool !== "muyu") {
+      forceExitFullscreen();
+      stopStageBg();
+    }
+    if (tool === "muyu") {
+      ensureMuyu();
+      startStageBg();
+    }
   }
 
   bootMuyuShell();

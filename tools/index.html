@@ -3246,7 +3246,7 @@ hello@world.org</textarea>
 <section id="muyu" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>木鱼</h1>
-        <p>点击敲木鱼，次数在本机<strong>永久累加</strong>；可<strong>全屏</strong>沉浸敲击，音效可关。</p>
+        <p>点击敲木鱼，次数在本机<strong>永久累加</strong>；可<strong>全屏</strong>沉浸敲击，音效为物理建模合成，飘字与主题可自定义。</p>
       </div>
       <div class="panel-body muyu-body">
         <div class="muyu-stats panel-card">
@@ -3261,9 +3261,40 @@ hello@world.org</textarea>
           </label>
           <button type="button" class="ghost-btn" id="muyu-reset">清零</button>
         </div>
-        <div class="muyu-stage panel-card">
+        <div class="muyu-settings panel-card">
+          <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.5rem 0.75rem">
+            <label for="muyu-theme">背景主题</label>
+            <select id="muyu-theme" class="select-input">
+              <option value="zen">禅意紫</option>
+              <option value="ocean">深空蓝</option>
+              <option value="gold">暖金</option>
+              <option value="forest">墨绿</option>
+            </select>
+          </div>
+          <div class="field-row" style="flex-direction:column;align-items:stretch;gap:0.35rem;margin-top:0.65rem">
+            <label for="muyu-phrases">飘字文案（每行一条，留空用默认）</label>
+            <textarea id="muyu-phrases" class="mono" rows="3" placeholder="功德 +1&#10;善哉&#10;福生无量"></textarea>
+          </div>
+        </div>
+        <div class="muyu-stage panel-card" id="muyu-stage" data-muyu-theme="zen">
+          <canvas id="muyu-stage-bg" class="muyu-stage-bg" aria-hidden="true"></canvas>
+          <div class="muyu-stage-moon" aria-hidden="true"></div>
+          <div class="muyu-stage-halo" aria-hidden="true"></div>
+          <div class="muyu-stage-ripple" id="muyu-stage-ripple" aria-hidden="true"></div>
+          <div class="muyu-stage-floats" id="muyu-stage-floats" aria-hidden="true"></div>
           <button type="button" class="muyu-fish-btn" id="muyu-fish" aria-label="敲木鱼"></button>
         </div>
+        <details class="muyu-picks panel-card">
+          <summary>摸鱼推荐 · 适合接入本站的小项目</summary>
+          <ul class="muyu-picks-list hint tight">
+            <li><strong>轻量可自研接入</strong>：俄罗斯方块、2048、贪吃蛇、Flappy、打地鼠（参考 <a href="https://github.com/omdsh-dev/dsh-minigames" target="_blank" rel="noopener noreferrer">dsh-minigames</a>，纯 Canvas 零资源）</li>
+            <li><strong>解压向</strong>：电子木鱼（本站已有）、赛博功德 <a href="https://github.com/heyuan110/cyber-merit" target="_blank" rel="noopener noreferrer">cyber-merit</a>（modal 合成音 + 粒子，可参考）</li>
+            <li><strong>体感玩法</strong>：<a href="https://github.com/jwenjian/wooden-fish" target="_blank" rel="noopener noreferrer">wooden-fish</a>（手机甩动敲木鱼，适合单独工具页）</li>
+            <li><strong>放置挂机</strong>：<a href="https://github.com/kangketikonlen/after-midnight" target="_blank" rel="noopener noreferrer">After Midnight</a>（深夜加班 idle，Vanilla JS）</li>
+            <li><strong>职场讽刺（外链）</strong>：<a href="https://babanomania.github.io/sprint-wars/" target="_blank" rel="noopener noreferrer">Sprint Wars</a>、<a href="https://babanomania.github.io/meeting-tycoon/" target="_blank" rel="noopener noreferrer">Meeting Tycoon</a>（React SPA，体量大，建议链出而非内嵌）</li>
+            <li><strong>桌面宠物</strong>：<a href="https://github.com/TongY1n/ui-muyu" target="_blank" rel="noopener noreferrer">ui-muyu</a>（可拖拽悬浮木鱼，适合 PWA 小窗）</li>
+          </ul>
+        </details>
       </div>
     </section>
 
@@ -4318,7 +4349,7 @@ adb devices</pre>
       <button type="button" class="primary-btn vsplit-fs-mark" id="vsplit-fs-mark">打起点</button>
     </div>
   </div>
-  <div id="muyu-fs" class="muyu-fs" hidden>
+  <div id="muyu-fs" class="muyu-fs" data-muyu-theme="zen" hidden>
     <canvas id="muyu-fs-bg" class="muyu-fs-bg" aria-hidden="true"></canvas>
     <div class="muyu-fs-moon" aria-hidden="true"></div>
     <div class="muyu-fs-pulse" id="muyu-fs-pulse" aria-hidden="true"></div>
@@ -4350,6 +4381,6 @@ adb devices</pre>
   <script src="./app.js?v=2026.08.29-180000"></script>
   <script src="./wheel.js?v=2026.08.29-190000"></script>
   <script src="./ruler.js?v=2026.08.29-181000"></script>
-  <script src="./muyu.js?v=2026.08.29-192000"></script>
+  <script src="./muyu.js?v=2026.08.29-193000"></script>
 </body>
 </html>
