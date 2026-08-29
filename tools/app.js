@@ -867,7 +867,7 @@
     wheel: "大转盘：自定义分块、比例与文字，按权重随机停针；可开关旋转音效与结果语音播报。",
     ruler: "屏幕直尺：四边刻度、十字准线，可全屏；厘米/毫米按本机 PPI 自动估算，可手动微调。",
     muyu: "敲木鱼：jwenjian/wooden-fish 造型与音效；次数本机永久累加，可全屏，空格键敲击。",
-    minigames: "摸鱼小游戏：2048、贪吃蛇、Flappy、打地鼠；纯本地 Canvas，最高分保存在本机。",
+    minigames: "摸鱼 & 解压：2048、贪吃蛇、Flappy、打地鼠、泡泡纸、Pop-it、升空气泡、键盘敲击音；纯本地 Canvas。",
     acupoint: "361 经穴 + 51 奇穴：Wellcome 经络参考图可点击放大，搜索列表查看定位与主治。",
     adb: "网页侧 ADB 调试辅助：设备、文件、输入、安装、任务与命令大全等。",
     lanshare: "局域网互传：多机同房间共享文件列表，下载时从上传者手机 WebRTC 直传，不经房主中转；房主可退出或解散，退出时最近加入者接任。",
@@ -919,7 +919,7 @@
     memo: { name: "备忘录", aliases: ["笔记", "剪贴板", "memo", "note", "便签"] },
     ruler: { name: "直尺", aliases: ["标尺", "刻度", "ruler", "测量", "全屏"] },
     muyu: { name: "木鱼", aliases: ["敲木鱼", "电子木鱼", "功德", "muyu", "woodfish", "冥想"] },
-    minigames: { name: "摸鱼小游戏", aliases: ["摸鱼", "小游戏", "2048", "贪吃蛇", "flappy", "打地鼠", "minigames", "game"] },
+    minigames: { name: "摸鱼 & 解压", aliases: ["摸鱼", "解压", "小游戏", "2048", "贪吃蛇", "flappy", "打地鼠", "泡泡纸", "pop-it", "popit", "升空气泡", "键盘音", "minigames", "game"] },
     adb: { name: "ADB 工具", aliases: ["安卓", "android", "设备", "adb"], desktopOnly: true },
     lanshare: { name: "局域网互传", aliases: ["互传", "传文件", "lan", "share", "webrtc", "局域网"] },
     ffbridge: {
