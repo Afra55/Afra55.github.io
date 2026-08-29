@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 640" role="img" aria-label="ÌbÏÜÂþ">
+  <title>ÌbÏÜÂþ</title>
+  <defs>
+    <style>
+      .body { fill: var(--panel-strong, #1a2332); stroke: var(--line, #3a4a5c); stroke-width: 1.2; }
+      .mer { fill: none; stroke-width: 2.2; stroke-linecap: round; opacity: 0.85; }
+      .label { fill: var(--muted, #8a9bb0); font-size: 9px; font-family: system-ui, sans-serif; }
+      .title { fill: var(--ink, #e8edf4); font-size: 11px; font-weight: 600; font-family: system-ui, sans-serif; }
+    </style>
+  </defs>
+  <text class="title" x="160" y="22" text-anchor="middle">Ìb · AÛÏªL:</text>
+  <ellipse class="body" cx="160" cy="52" rx="28" ry="34"/>
+  <path class="body" d="M132 86 Q160 96 188 86 L198 120 Q160 128 122 120 Z"/>
+  <path class="body" d="M128 120 L112 280 Q108 380 120 480 L130 580 Q160 600 190 580 L200 480 Q212 380 208 280 L192 120"/>
+  <path class="body" d="M128 140 L72 220 L58 320 L68 400"/>
+  <path class="body" d="M192 140 L248 220 L262 320 L252 400"/>
+  <path class="body" d="M130 580 L118 630 L142 636"/>
+  <path class="body" d="M190 580 L202 630 L178 636"/>
+  <!-- c	 GV -->
+  <path class="mer" stroke="#ffe066" d="M160 86 L160 560"/>
+  <text class="label" x="168" y="300">c	 GV</text>
+  <!-- €ñÏ BL -->
+  <path class="mer" stroke="#9bbcff" d="M148 100 Q132 160 128 240 Q124 340 126 440 Q128 520 134 580"/>
+  <path class="mer" stroke="#9bbcff" d="M172 100 Q188 160 192 240 Q196 340 194 440 Q192 520 186 580"/>
+  <text class="label" x="98" y="200">€ñÏ BL</text>
+  <!-- ÆÏ GB -->
+  <path class="mer" stroke="#a8e6cf" d="M188 120 Q210 180 218 260 Q224 360 218 460 Q212 540 200 590"/>
+  <text class="label" x="224" y="320">ÆÏ GB</text>
+  <!--   SI ©Ì -->
+  <path class="mer" stroke="#ffb4a2" d="M128 130 Q110 150 98 180"/>
+  <path class="mer" stroke="#ffb4a2" d="M192 130 Q210 150 222 180"/>
+  <!-- 	& TE © -->
+  <path class="mer" stroke="#7fd8be" d="M140 125 Q120 145 108 170"/>
+  <path class="mer" stroke="#7fd8be" d="M180 125 Q200 145 212 170"/>
+</svg>

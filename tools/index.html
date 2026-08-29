@@ -18,9 +18,9 @@
   <!-- 不阻塞首屏：Noto Serif SC 只给文转图用，避免每次拉取中文字体；Google 字体 CSS 在国内常卡住数秒 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" /></noscript>
-  <link rel="stylesheet" href="./style.css?v=20260817theme1" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260817theme1" />
-  <script src="./lib/theme-presets.js?v=20260817theme1"></script>
+  <link rel="stylesheet" href="./style.css?v=20260829acu1" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260829acu1" />
+  <script src="./lib/theme-presets.js?v=20260829acu1"></script>
   <script>
     /* 尽早应用主题变量，减少闪烁；侧栏也依赖这些 CSS 变量 */
     (function () {
@@ -104,7 +104,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.17-theme1</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.29-acu1</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="pwa-install" hidden aria-hidden="true" title="安装到桌面/开始菜单">安装应用</button>
@@ -3637,6 +3637,94 @@ hello@world.org</textarea>
       </div>
     </section>
 
+<section id="acupoint" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>穴位图</h1>
+        <p>361 个标准经穴查阅：上方为经络循行参考图（不可点击），下方搜索列表点选查看定位、功效与主治。</p>
+      </div>
+      <div class="panel-body acu-body">
+        <p class="hint tight" id="acu-meta">加载中…</p>
+        <div class="acu-charts panel-card">
+          <div class="acu-chart-tabs" role="tablist" aria-label="经络参考图">
+            <button type="button" class="acu-chart-tab is-active" role="tab" data-acu-chart="front" aria-selected="true">正面</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="back" aria-selected="false">背面</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="overview" aria-selected="false">十四经</button>
+          </div>
+          <div class="acu-chart-panels">
+            <div class="acu-chart-panel" data-acu-chart-panel="front">
+              <img class="acu-chart-img" src="./lib/acupoint/body-front.svg" alt="正面经络循行示意参考图" width="320" height="640" loading="lazy" decoding="async" />
+            </div>
+            <div class="acu-chart-panel" data-acu-chart-panel="back" hidden>
+              <img class="acu-chart-img" src="./lib/acupoint/body-back.svg" alt="背面经络循行示意参考图" width="320" height="640" loading="lazy" decoding="async" />
+            </div>
+            <div class="acu-chart-panel" data-acu-chart-panel="overview" hidden>
+              <img class="acu-chart-img acu-chart-wide" src="./lib/acupoint/meridians-overview.svg" alt="十四正经与任督二脉一览" width="640" height="360" loading="lazy" decoding="async" />
+            </div>
+          </div>
+          <p class="hint tight acu-chart-note">参考图为循行示意，非精确取穴位置；详细定位请查下方列表。</p>
+        </div>
+
+        <div class="acu-toolbar">
+          <label class="acu-search-wrap" for="acu-search">
+            <span class="visually-hidden">搜索穴位</span>
+            <input id="acu-search" class="mono" type="search" placeholder="穴名、拼音、编码、主治关键字…" autocomplete="off" enterkeyhint="search" />
+          </label>
+          <label class="acu-filter-wrap" for="acu-meridian">
+            <span class="visually-hidden">经络筛选</span>
+            <select id="acu-meridian" class="mono select-input"></select>
+          </label>
+          <span class="hint tight acu-count" id="acu-count"></span>
+        </div>
+
+        <div class="acu-layout">
+          <div class="acu-list-wrap panel-card">
+            <div class="acu-list-head">
+              <strong>经穴列表</strong>
+            </div>
+            <div class="acu-list" id="acu-list" role="listbox" aria-label="经穴列表"></div>
+          </div>
+          <div class="acu-detail-wrap panel-card">
+            <p class="hint acu-detail-empty" id="acu-detail-empty">在左侧列表选择穴位查看详情</p>
+            <article id="acu-detail" class="acu-detail" hidden>
+              <header class="acu-detail-head">
+                <span class="acu-detail-code mono" id="acu-detail-code"></span>
+                <h2 class="acu-detail-name" id="acu-detail-name"></h2>
+                <p class="acu-detail-pinyin" id="acu-detail-pinyin"></p>
+                <p class="hint tight">所属：<span id="acu-detail-meridian"></span>
+                  <span class="acu-rich-badge" id="acu-detail-rich" hidden>详</span>
+                </p>
+              </header>
+              <div class="acu-detail-block" id="acu-detail-location-wrap">
+                <h3 class="subhead">定位</h3>
+                <p id="acu-detail-location"></p>
+              </div>
+              <div class="acu-detail-block" id="acu-detail-depth-wrap" hidden>
+                <h3 class="subhead">针刺</h3>
+                <p id="acu-detail-depth"></p>
+              </div>
+              <div class="acu-detail-block" id="acu-detail-cats-wrap" hidden>
+                <h3 class="subhead">特殊分类</h3>
+                <div class="acu-tags" id="acu-detail-cats"></div>
+              </div>
+              <div class="acu-detail-block" id="acu-detail-desc-wrap" hidden>
+                <h3 class="subhead">说明</h3>
+                <p id="acu-detail-desc"></p>
+              </div>
+              <div class="acu-detail-block">
+                <h3 class="subhead">功效</h3>
+                <ul class="acu-detail-list" id="acu-detail-actions"></ul>
+              </div>
+              <div class="acu-detail-block">
+                <h3 class="subhead">主治</h3>
+                <ul class="acu-detail-list" id="acu-detail-indications"></ul>
+              </div>
+            </article>
+          </div>
+        </div>
+        <p class="hint tight acu-attrib">数据来源：本草典（CC BY-SA 4.0）经穴详情 + AcuKG 361 经穴名录；本站仅作查阅参考，不可替代医疗诊断。</p>
+      </div>
+    </section>
+
 <section id="setup" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>安装本机工具（小白指南）</h1>
@@ -3943,14 +4031,15 @@ adb devices</pre>
       <button type="button" class="primary-btn vsplit-fs-mark" id="vsplit-fs-mark">打起点</button>
     </div>
   </div>
-  <script src="./theme.js?v=20260817theme1"></script>
-  <script src="./temp.js?v=20260817theme1"></script>
+  <script src="./theme.js?v=20260829acu1"></script>
+  <script src="./temp.js?v=20260829acu1"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./lib/oss-deps.js?v=20260817theme1"></script>
-  <script src="./app.js?v=20260817theme1"></script>
-  <script src="./about.js?v=20260817theme1" defer></script>
-  <script src="./extra.js?v=20260817theme1" defer></script>
-  <script src="./vtrim.js?v=20260817theme1" defer></script>
+  <script src="./lib/oss-deps.js?v=20260829acu1"></script>
+  <script src="./app.js?v=20260829acu1"></script>
+  <script src="./about.js?v=20260829acu1" defer></script>
+  <script src="./extra.js?v=20260829acu1" defer></script>
+  <script src="./acupoint.js?v=20260829acu1" defer></script>
+  <script src="./vtrim.js?v=20260829acu1" defer></script>
   <script src="./vplay.js?v=20260817theme1" defer></script>
   <script src="./audio.js?v=20260817theme1" defer></script>
   <script src="./ffbridge.js?v=20260817theme1" defer></script>
