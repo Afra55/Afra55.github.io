@@ -19,7 +19,7 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" /></noscript>
   <link rel="stylesheet" href="./style.css?v=20260829adbcmdwheel1" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260829navctx2" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260829navfavdock1" />
   <script src="./lib/theme-presets.js?v=20260829acu2"></script>
   <script>
     /* 尽早应用主题变量，减少闪烁；侧栏也依赖这些 CSS 变量 */
@@ -104,7 +104,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.29-adbcmdwheel1</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.29-navfavdock1</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn site-chrome-toggle" id="site-chrome-toggle" aria-pressed="false" title="隐藏 DevTools 标题栏与左侧工具菜单">隐藏顶栏</button>
@@ -125,20 +125,17 @@
         <strong id="nav-drawer-title">选择工具</strong>
         <button type="button" class="ghost-btn nav-close-btn" id="nav-close">关闭</button>
       </div>
+      <div class="nav-favorites" id="tool-favorites">
+        <button type="button" class="tool-nav-link nav-fav-add-link" id="tool-fav-add" title="添加常用工具" aria-expanded="false" aria-controls="tool-fav-picker">新增工具</button>
+        <div class="nav-fav-picker" id="tool-fav-picker" hidden></div>
+        <div class="nav-fav-list" id="tool-fav-list" role="list"></div>
+      </div>
       <label class="nav-search-wrap" for="tool-search">
         <span class="visually-hidden">搜索工具</span>
         <input id="tool-search" class="nav-search" type="search" placeholder="搜索工具…" autocomplete="off" enterkeyhint="search" />
       </label>
       <div class="nav-strip nav-recent" id="tool-recent" hidden>
         <div class="nav-strip-list nav-recent-list" id="tool-recent-list"></div>
-      </div>
-      <div class="nav-strip nav-favorites" id="tool-favorites">
-        <div class="nav-strip-head">
-          <p class="nav-strip-title">常用工具</p>
-          <button type="button" class="nav-fav-add" id="tool-fav-add" title="添加常用工具" aria-expanded="false" aria-controls="tool-fav-picker">+</button>
-        </div>
-        <div class="nav-fav-picker" id="tool-fav-picker" hidden></div>
-        <div class="nav-strip-list nav-fav-list" id="tool-fav-list"></div>
       </div>
       <p class="hint tight nav-sort-hint">分类与工具可排序：桌面直接拖；手机请<strong>长按</strong>分类标题或工具名再拖（松手前拖到边缘可滚动）。</p>
       <nav class="tool-nav" id="tool-nav" aria-label="工具分组"></nav>
@@ -4120,7 +4117,7 @@ adb devices</pre>
   <script src="./temp.js?v=20260829acu2"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./lib/oss-deps.js?v=20260829acu2"></script>
-  <script src="./app.js?v=20260829navctx2"></script>
+  <script src="./app.js?v=20260829navfavdock1"></script>
   <script src="./about.js?v=20260829acu2" defer></script>
   <script src="./extra.js?v=20260829adbcmdwheel1" defer></script>
   <script src="./acupoint.js?v=20260829acu2" defer></script>

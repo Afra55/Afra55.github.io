@@ -1407,13 +1407,15 @@ async function main() {
     } catch (_) {}
 
     const favListEl = document.getElementById("tool-fav-list");
+    const favWrapEl = document.getElementById("tool-favorites");
     out.favoritesUi = {
-      hasSection: Boolean(document.getElementById("tool-favorites")),
-      hasTitle: /常用工具/.test(document.querySelector("#tool-favorites .nav-strip-title")?.textContent || ""),
+      hasSection: Boolean(favWrapEl),
       hasAddBtn: Boolean(document.getElementById("tool-fav-add")),
+      addLabel: document.getElementById("tool-fav-add")?.textContent?.trim() || "",
       api: typeof window.DevToolsNav?.addFavorite === "function",
       renderApi: typeof window.DevToolsNav?.renderFavorites === "function",
-      oneRowFlex: Boolean(favListEl) && getComputedStyle(favListEl).display === "flex",
+      columnList: Boolean(favListEl) && getComputedStyle(favListEl).flexDirection === "column",
+      stickyDock: Boolean(favWrapEl) && getComputedStyle(favWrapEl).position === "sticky",
     };
     try {
       localStorage.setItem(
@@ -1421,16 +1423,11 @@ async function main() {
         JSON.stringify(["json", "memo", "regex", "yaml", "base64", "uuid", "hash", "color", "url"])
       );
       window.DevToolsNav?.renderFavorites?.();
-      out.favoritesUi.chipCount = document.querySelectorAll(".nav-fav-chip").length;
-      out.favoritesUi.showsAll = out.favoritesUi.chipCount === 9;
-      out.favoritesUi.sortable = document.querySelector(".nav-fav-chip.is-sortable") != null;
+      out.favoritesUi.linkCount = document.querySelectorAll(".nav-fav-link").length;
+      out.favoritesUi.usesToolNavLink = document.querySelector(".nav-fav-link.tool-nav-link") != null;
+      out.favoritesUi.sortable = document.querySelector(".nav-fav-link.is-sortable") != null;
       window.DevToolsNav?.addFavorite?.("cron");
-      out.favoritesUi.afterAdd = document.querySelectorAll(".nav-fav-chip").length;
-      if (favListEl) {
-        out.favoritesUi.overflowX = getComputedStyle(favListEl).overflowX;
-        out.favoritesUi.scrollableX = favListEl.scrollWidth > favListEl.clientWidth + 1;
-        out.favoritesUi.visibleScrollbar = getComputedStyle(favListEl).scrollbarWidth !== "none";
-      }
+      out.favoritesUi.afterAdd = document.querySelectorAll(".nav-fav-link").length;
     } catch (_) {}
 
     const sortHint = document.querySelector(".nav-sort-hint");
@@ -1630,7 +1627,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/adbcmdwheel1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/navfavdock1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1899,8 +1896,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/adbcmdwheel1/i.test(result.cacheBust?.version || "")) {
-    failed.push("cache-bust/version should be aligned to adbcmdwheel1");
+  if (!/navfavdock1/i.test(result.cacheBust?.version || "")) {
+    failed.push("cache-bust/version should be aligned to navfavdock1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
@@ -1950,17 +1947,16 @@ async function main() {
   }
   if (
     !result.favoritesUi?.hasSection ||
-    !result.favoritesUi?.hasTitle ||
     !result.favoritesUi?.hasAddBtn ||
+    result.favoritesUi?.addLabel !== "新增工具" ||
     !result.favoritesUi?.api ||
-    !result.favoritesUi?.showsAll ||
+    !result.favoritesUi?.columnList ||
+    !result.favoritesUi?.stickyDock ||
+    !result.favoritesUi?.usesToolNavLink ||
     !result.favoritesUi?.sortable ||
-    !result.favoritesUi?.oneRowFlex ||
-    !result.favoritesUi?.scrollableX ||
-    !result.favoritesUi?.visibleScrollbar ||
     (result.favoritesUi?.afterAdd || 0) < 10
   ) {
-    failed.push("favorites strip should allow unlimited add and draggable sort");
+    failed.push("favorites should use sticky vertical tool-nav links with 新增工具 button");
   }
   if (!result.sortHint?.hasEl || !result.sortHint?.api || !result.sortHint?.marked || !result.sortHint?.visibleFirst || !result.sortHint?.hiddenSecond) {
     failed.push("sort hint should show once then hide on later visits");

@@ -1617,36 +1617,15 @@
     favoritesList.innerHTML = "";
     items.forEach((id) => {
       if (!isNavToolVisible(id)) return;
-      const chip = document.createElement("div");
-      chip.className = "nav-fav-chip is-sortable";
-      chip.dataset.tool = id;
-      chip.draggable = allowHtml5Drag;
-      chip.title = allowHtml5Drag ? "拖动排序；点击名称打开" : "长按拖动排序；点击名称打开";
-
-      const label = document.createElement("button");
-      label.type = "button";
-      label.className = "nav-fav-chip-label";
-      label.textContent = toolName(id);
-      label.addEventListener("click", (e) => {
-        e.stopPropagation();
-        if (didDrag) return;
-        navigateTo(id);
-      });
-      chip.appendChild(label);
-
-      const rm = document.createElement("button");
-      rm.type = "button";
-      rm.className = "nav-fav-chip-remove";
-      rm.setAttribute("aria-label", `从常用移除 ${toolName(id)}`);
-      rm.textContent = "×";
-      rm.addEventListener("click", (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        removeFavorite(id);
-      });
-      chip.appendChild(rm);
-
-      favoritesList.appendChild(chip);
+      const link = document.createElement("a");
+      link.className = "tool-nav-link nav-fav-link is-sortable";
+      link.href = MEDIA_TABS.includes(id) ? `#media/${id}` : `#${id}`;
+      link.dataset.tool = id;
+      link.draggable = allowHtml5Drag;
+      link.title = allowHtml5Drag ? "拖动排序；右键更多操作" : "长按拖动排序；右键更多操作";
+      link.textContent = toolName(id);
+      link.setAttribute("role", "listitem");
+      favoritesList.appendChild(link);
     });
     bindFavoriteInteractions();
     if (favPickerOpen) renderFavPicker();
@@ -1668,65 +1647,68 @@
 
   function bindFavoriteInteractions() {
     if (!favoritesList) return;
-    $$(".nav-fav-chip", favoritesList).forEach((chip) => {
-      if (chip.dataset.boundFav === "1") return;
-      chip.dataset.boundFav = "1";
-      chip.addEventListener("dragstart", (e) => {
-        if (!chip.draggable) {
+    $$(".nav-fav-link", favoritesList).forEach((link) => {
+      if (link.dataset.boundFav === "1") return;
+      link.dataset.boundFav = "1";
+      link.addEventListener("dragstart", (e) => {
+        if (!link.draggable) {
           e.preventDefault();
           return;
         }
-        dragPayload = { kind: "favorite", id: chip.dataset.tool };
+        dragPayload = { kind: "favorite", id: link.dataset.tool };
         didDrag = true;
-        chip.classList.add("is-dragging");
+        link.classList.add("is-dragging");
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData("application/x-devtools-nav", JSON.stringify(dragPayload));
         e.dataTransfer.setData("text/plain", dragPayload.id);
       });
-      chip.addEventListener("dragend", () => {
+      link.addEventListener("dragend", () => {
         clearNavDragStyles();
         dragPayload = null;
         setTimeout(() => {
           didDrag = false;
         }, 0);
       });
-      chip.addEventListener("dragover", (e) => {
+      link.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (didDrag) return;
+        navigateTo(link.dataset.tool);
+      });
+      link.addEventListener("dragover", (e) => {
         if (!canDesktopDrag()) return;
         const payload = dragPayload || readDragPayload(e);
         if (!payload || payload.kind !== "favorite") return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        chip.classList.add("drag-over");
+        link.classList.add("drag-over");
       });
-      chip.addEventListener("dragleave", () => chip.classList.remove("drag-over"));
-      chip.addEventListener("drop", (e) => {
+      link.addEventListener("dragleave", () => link.classList.remove("drag-over"));
+      link.addEventListener("drop", (e) => {
         e.preventDefault();
         e.stopPropagation();
         clearNavDragStyles();
         if (!canDesktopDrag()) return;
         const payload = readDragPayload(e);
-        const toTool = chip.dataset.tool;
+        const toTool = link.dataset.tool;
         if (!payload || payload.kind !== "favorite" || !toTool) return;
         commitFavoriteReorder(payload.id, toTool, { keepDrawer: false });
       });
-      chip.addEventListener("pointerdown", (e) => {
-        if (e.target.closest(".nav-fav-chip-remove")) return;
+      link.addEventListener("pointerdown", (e) => {
         beginMobilePointerSort(e, {
           kind: "favorite",
-          id: chip.dataset.tool,
-          handle: chip,
+          id: link.dataset.tool,
+          handle: link,
           wrap: favoritesList,
         });
       });
-      chip.addEventListener("contextmenu", (e) => {
-        if (e.target.closest(".nav-fav-chip-remove")) return;
+      link.addEventListener("contextmenu", (e) => {
         if (!canDesktopDrag()) {
           e.preventDefault();
           return;
         }
         e.preventDefault();
         hideNavToolCtx();
-        showNavToolCtx(e.clientX, e.clientY, chip.dataset.tool);
+        showNavToolCtx(e.clientX, e.clientY, link.dataset.tool);
       });
     });
   }
@@ -1925,6 +1907,11 @@
       link.classList.toggle("is-active", on);
       link.setAttribute("aria-current", on ? "page" : "false");
     });
+    $$(".nav-fav-link", favoritesList).forEach((link) => {
+      const on = currentTool === "media" ? link.dataset.tool === currentMediaTab : link.dataset.tool === currentTool;
+      link.classList.toggle("is-active", on);
+      link.setAttribute("aria-current", on ? "page" : "false");
+    });
     closeNavFlyouts();
     syncNavCompactUi();
 
@@ -1996,14 +1983,14 @@
   function clearNavDragStyles() {
     getNavLinks().forEach((l) => l.classList.remove("drag-over", "is-dragging"));
     $$(".nav-group", navEl).forEach((g) => g.classList.remove("drag-over", "is-dragging"));
-    $$(".nav-fav-chip", favoritesList).forEach((c) => c.classList.remove("drag-over", "is-dragging"));
+    $$(".nav-fav-link", favoritesList).forEach((c) => c.classList.remove("drag-over", "is-dragging"));
   }
 
   function navFavoriteAtPoint(x, y) {
     const stack = typeof document.elementsFromPoint === "function" ? document.elementsFromPoint(x, y) : [document.elementFromPoint(x, y)];
     for (const el of stack) {
-      const chip = el?.closest?.(".nav-fav-chip");
-      if (chip && favoritesList?.contains(chip)) return chip;
+      const link = el?.closest?.(".nav-fav-link");
+      if (link && favoritesList?.contains(link)) return link;
     }
     return null;
   }
@@ -2058,22 +2045,22 @@
   }
 
   function updatePointerSortAutoScroll(clientY, clientX) {
-    if (pointerSort?.kind === "favorite" && favoritesList && clientX != null) {
+    if (pointerSort?.kind === "favorite" && favoritesList && clientY != null) {
       const rect = favoritesList.getBoundingClientRect();
       const edge = 40;
       let dir = 0;
       let speed = 0;
-      if (clientX < rect.left + edge) {
+      if (clientY < rect.top + edge) {
         dir = -1;
-        const t = Math.max(0, Math.min(1, (rect.left + edge - clientX) / edge));
+        const t = Math.max(0, Math.min(1, (rect.top + edge - clientY) / edge));
         speed = 6 + t * 18;
-      } else if (clientX > rect.right - edge) {
+      } else if (clientY > rect.bottom - edge) {
         dir = 1;
-        const t = Math.max(0, Math.min(1, (clientX - (rect.right - edge)) / edge));
+        const t = Math.max(0, Math.min(1, (clientY - (rect.bottom - edge)) / edge));
         speed = 6 + t * 18;
       }
       if (dir) {
-        favoritesList.scrollLeft += dir * speed;
+        favoritesList.scrollTop += dir * speed;
         if (pointerSortScrollRaf) cancelAnimationFrame(pointerSortScrollRaf);
         pointerSortScrollRaf = requestAnimationFrame(tickPointerSortAutoScroll);
       }
@@ -2768,7 +2755,6 @@
   renderFavorites();
   bindNavToolCtx();
   bindNavStripWheelScroll(recentList);
-  bindNavStripWheelScroll(favoritesList);
   window.DevToolsCatalog = {
     groups: TOOL_GROUPS,
     meta: TOOL_META,
