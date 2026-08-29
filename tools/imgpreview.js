@@ -31,6 +31,9 @@
   const HEIGHT_STORAGE = "imgprev-wrap-height-v1";
   const SNAP_PX = 6;
   const SNAP_RELEASE_MULT = 1.4;
+  const SNAP_SWITCH_PX = 2;
+  const WHEEL_ZOOM_GAIN = 0.00006;
+  const WHEEL_ZOOM_STEP_MAX = 0.012;
 
   let uid = 0;
   /** @type {Array<{id:string,file:File,url:string,name:string,x:number,y:number,scale:number,opacity:number,z:number,nw:number,nh:number,ix:number,iy:number,iscale:number,iopacity:number,el:HTMLImageElement}>} */
@@ -50,7 +53,7 @@
   let dragItem = null;
   let dragOffsetX = 0;
   let dragOffsetY = 0;
-  /** @type {{ xLine: number|null, yLine: number|null }|null} */
+  /** @type {{ xEdge: number|null, xLine: number|null, yEdge: number|null, yLine: number|null, boxOtherId: string|null }|null} */
   let snapSession = null;
 
   function toast(msg) {
@@ -195,33 +198,98 @@
     return SNAP_PX / Math.max(view.scale, 0.05);
   }
 
-  function bestAxisSnap(candidates, lines, thr, lockedLine) {
+  function snapSwitchWorld() {
+    return SNAP_SWITCH_PX / Math.max(view.scale, 0.05);
+  }
+
+  function wheelDeltaY(e) {
+    let dy = e.deltaY;
+    if (e.deltaMode === 1) dy *= 16;
+    else if (e.deltaMode === 2) dy *= viewport?.clientHeight || 480;
+    return dy;
+  }
+
+  function wheelZoomFactor(e) {
+    const step = Math.max(-WHEEL_ZOOM_STEP_MAX, Math.min(WHEEL_ZOOM_STEP_MAX, -wheelDeltaY(e) * WHEEL_ZOOM_GAIN));
+    return Math.exp(step);
+  }
+
+  function bestAxisSnap(candidates, lines, thr, lockedEdge, lockedLine) {
     const releaseThr = thr * SNAP_RELEASE_MULT;
-    if (lockedLine != null) {
-      for (const c of candidates) {
-        const dist = Math.abs(c - lockedLine);
-        if (dist <= releaseThr) return { delta: lockedLine - c, line: lockedLine };
+    const switchThr = snapSwitchWorld();
+    if (lockedEdge != null && lockedLine != null && candidates[lockedEdge] != null) {
+      const dist = Math.abs(candidates[lockedEdge] - lockedLine);
+      if (dist <= releaseThr) {
+        return { delta: lockedLine - candidates[lockedEdge], line: lockedLine, edge: lockedEdge };
       }
     }
-    let bestDist = thr + 1;
-    let bestDelta = 0;
-    let bestLine = null;
-    for (const c of candidates) {
+    let best = null;
+    for (let ei = 0; ei < candidates.length; ei += 1) {
+      const c = candidates[ei];
       for (const line of lines) {
         const dist = Math.abs(c - line);
-        if (dist <= thr && dist < bestDist) {
-          bestDist = dist;
-          bestDelta = line - c;
-          bestLine = line;
+        if (dist <= thr && (!best || dist < best.dist)) {
+          best = { dist, delta: line - c, line, edge: ei };
         }
       }
     }
-    return { delta: bestDelta, line: bestLine };
+    if (best && lockedEdge != null && lockedLine != null && candidates[lockedEdge] != null) {
+      const lockedDist = Math.abs(candidates[lockedEdge] - lockedLine);
+      if (lockedDist <= thr && best.dist + switchThr > lockedDist) {
+        return { delta: lockedLine - candidates[lockedEdge], line: lockedLine, edge: lockedEdge };
+      }
+    }
+    if (best) return { delta: best.delta, line: best.line, edge: best.edge };
+    return { delta: 0, line: null, edge: null };
+  }
+
+  function tryBoxSnap(it, nx, ny, thr, session) {
+    const b = itemBounds({ ...it, x: nx, y: ny });
+    const releaseThr = thr * SNAP_RELEASE_MULT;
+    if (session?.boxOtherId) {
+      const other = items.find((o) => o.id === session.boxOtherId);
+      if (other) {
+        const o = itemBounds(other);
+        const edges = [b.l - o.l, b.r - o.r, b.t - o.t, b.b - o.b];
+        if (edges.every((d) => Math.abs(d) <= releaseThr)) {
+          return { x: other.x, y: other.y, otherId: other.id };
+        }
+      }
+      session.boxOtherId = null;
+    }
+    let best = null;
+    items.forEach((other) => {
+      if (other.id === it.id) return;
+      const o = itemBounds(other);
+      const dl = Math.abs(b.l - o.l);
+      const dr = Math.abs(b.r - o.r);
+      const dt = Math.abs(b.t - o.t);
+      const db = Math.abs(b.b - o.b);
+      const aligned = [dl, dr, dt, db].filter((d) => d <= thr).length;
+      if (aligned < 3) return;
+      const score = dl + dr + dt + db;
+      if (!best || score < best.score) {
+        best = { score, x: other.x, y: other.y, otherId: other.id };
+      }
+    });
+    if (!best) return null;
+    if (session) session.boxOtherId = best.otherId;
+    return { x: best.x, y: best.y, otherId: best.otherId };
   }
 
   function snapPosition(it, nx, ny, session = snapSession) {
-    const b = itemBounds({ ...it, x: nx, y: ny });
     const thr = snapThresholdWorld();
+    const box = tryBoxSnap(it, nx, ny, thr, session);
+    if (box) {
+      if (session) {
+        session.xEdge = null;
+        session.xLine = null;
+        session.yEdge = null;
+        session.yLine = null;
+      }
+      return { x: box.x, y: box.y };
+    }
+    const b = itemBounds({ ...it, x: nx, y: ny });
     const xLines = [];
     const yLines = [];
     items.forEach((other) => {
@@ -230,12 +298,15 @@
       xLines.push(o.l, o.r, o.cx);
       yLines.push(o.t, o.b, o.cy);
     });
-    const snapX = bestAxisSnap([b.l, b.r, b.cx], xLines, thr, session?.xLine ?? null);
+    if (session) session.boxOtherId = null;
+    const snapX = bestAxisSnap([b.l, b.r, b.cx], xLines, thr, session?.xEdge ?? null, session?.xLine ?? null);
     const sx = nx + snapX.delta;
     const nb = itemBounds({ ...it, x: sx, y: ny });
-    const snapY = bestAxisSnap([nb.t, nb.b, nb.cy], yLines, thr, session?.yLine ?? null);
+    const snapY = bestAxisSnap([nb.t, nb.b, nb.cy], yLines, thr, session?.yEdge ?? null, session?.yLine ?? null);
     if (session) {
+      session.xEdge = snapX.edge;
       session.xLine = snapX.line;
+      session.yEdge = snapY.edge;
       session.yLine = snapY.line;
     }
     return { x: sx, y: ny + snapY.delta };
@@ -574,7 +645,7 @@
     e.stopPropagation();
     selectItem(it.id);
     dragItem = it;
-    snapSession = { xLine: null, yLine: null };
+    snapSession = { xEdge: null, xLine: null, yEdge: null, yLine: null, boxOtherId: null };
     const p = clientToWorld(e.clientX, e.clientY);
     dragOffsetX = p.x - it.x;
     dragOffsetY = p.y - it.y;
@@ -612,7 +683,7 @@
       (e) => {
         if (!items.length) return;
         e.preventDefault();
-        const factor = Math.exp(-e.deltaY * 0.001);
+        const factor = wheelZoomFactor(e);
         const sel = selectedItem();
         if (sel && !e.altKey) {
           scaleItemAt(sel, e.clientX, e.clientY, sel.scale * factor);
