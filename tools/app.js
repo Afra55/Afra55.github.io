@@ -919,6 +919,8 @@
   const navBackdrop = $("#nav-backdrop");
   const navOpenBtn = $("#nav-open");
   const navCloseBtn = $("#nav-close");
+  const chromeToggleBtn = $("#site-chrome-toggle");
+  const chromeToggleFloat = $("#site-chrome-toggle-float");
   const workspaceSwitch = $("#workspace-switch");
   const workspaceTitle = $("#workspace-title");
   const mediaSubnav = $("#media-subnav");
@@ -2677,14 +2679,65 @@
 
   // Desktop sidebar max-height only
   const desktopNavMq = window.matchMedia("(min-width: 901px)");
+  const DESKTOP_CHROME_HIDDEN_KEY = "devtools-desktop-chrome-hidden-v1";
+  let desktopChromeHidden = false;
+
+  function loadDesktopChromeHiddenPref() {
+    try {
+      return localStorage.getItem(DESKTOP_CHROME_HIDDEN_KEY) === "1";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function saveDesktopChromeHiddenPref(hidden) {
+    try {
+      localStorage.setItem(DESKTOP_CHROME_HIDDEN_KEY, hidden ? "1" : "0");
+    } catch (_) {}
+  }
+
+  function syncDesktopChromeToggleUi() {
+    const hidden = document.body.classList.contains("desktop-chrome-hidden");
+    const label = hidden ? "显示顶栏" : "隐藏顶栏";
+    if (chromeToggleBtn) {
+      chromeToggleBtn.textContent = label;
+      chromeToggleBtn.setAttribute("aria-pressed", hidden ? "true" : "false");
+      chromeToggleBtn.title = hidden
+        ? "显示 DevTools 标题栏与左侧工具菜单"
+        : "隐藏 DevTools 标题栏与左侧工具菜单";
+    }
+    if (chromeToggleFloat) {
+      chromeToggleFloat.hidden = !hidden || !desktopNavMq.matches;
+      chromeToggleFloat.setAttribute("aria-pressed", hidden ? "true" : "false");
+    }
+  }
+
+  function applyDesktopChromeHidden(hidden, { persist = true } = {}) {
+    const want = Boolean(hidden) && desktopNavMq.matches;
+    desktopChromeHidden = want;
+    document.body.classList.toggle("desktop-chrome-hidden", want);
+    if (persist) saveDesktopChromeHiddenPref(want);
+    syncDesktopChromeToggleUi();
+    syncDesktopNavMaxHeight();
+  }
+
+  function toggleDesktopChrome() {
+    if (!desktopNavMq.matches) return;
+    applyDesktopChromeHidden(!desktopChromeHidden);
+  }
+
+  chromeToggleBtn?.addEventListener("click", toggleDesktopChrome);
+  chromeToggleFloat?.addEventListener("click", toggleDesktopChrome);
+
   function syncDesktopNavMaxHeight() {
     if (!navBar) return;
     if (!desktopNavMq.matches) {
       navBar.style.removeProperty("--nav-max-height");
       return;
     }
+    const headerHidden = document.body.classList.contains("desktop-chrome-hidden");
     const header = $(".site-header");
-    const headerH = header ? header.getBoundingClientRect().height : 64;
+    const headerH = headerHidden || !header ? 0 : header.getBoundingClientRect().height;
     const topGap = 0.65 * 16;
     const bottomGap = 16;
     const maxH = Math.max(240, window.innerHeight - headerH - topGap - bottomGap);
@@ -2694,11 +2747,13 @@
   if (typeof desktopNavMq.addEventListener === "function") {
     desktopNavMq.addEventListener("change", () => {
       forceDrawerClosed();
+      applyDesktopChromeHidden(loadDesktopChromeHiddenPref(), { persist: false });
       syncDesktopNavMaxHeight();
       renderNav(loadOrder());
       renderFavorites();
     });
   }
+  applyDesktopChromeHidden(loadDesktopChromeHiddenPref(), { persist: false });
   syncDesktopNavMaxHeight();
 
   renderNav(loadOrder());
@@ -2727,6 +2782,9 @@
     addFavorite,
     removeFavorite,
     loadFavorites,
+    isDesktopChromeHidden: () => desktopChromeHidden,
+    setDesktopChromeHidden: (on) => applyDesktopChromeHidden(Boolean(on)),
+    toggleDesktopChrome,
   };
   window.dispatchEvent(new CustomEvent("devtools:catalog"));
   syncSortHint();

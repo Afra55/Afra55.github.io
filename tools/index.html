@@ -18,8 +18,8 @@
   <!-- 不阻塞首屏：Noto Serif SC 只给文转图用，避免每次拉取中文字体；Google 字体 CSS 在国内常卡住数秒 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" /></noscript>
-  <link rel="stylesheet" href="./style.css?v=20260829memoloc3" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260829navctx1" />
+  <link rel="stylesheet" href="./style.css?v=20260829desktopchrome1" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260829desktopchrome1" />
   <script src="./lib/theme-presets.js?v=20260829acu2"></script>
   <script>
     /* 尽早应用主题变量，减少闪烁；侧栏也依赖这些 CSS 变量 */
@@ -104,9 +104,10 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.29-memoloc3</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.29-desktopchrome1</span>
       </div>
       <div class="header-actions">
+        <button type="button" class="ghost-btn site-chrome-toggle" id="site-chrome-toggle" aria-pressed="false" title="隐藏 DevTools 标题栏与左侧工具菜单">隐藏顶栏</button>
         <button type="button" class="ghost-btn" id="pwa-install" hidden aria-hidden="true" title="安装到桌面/开始菜单">安装应用</button>
         <button type="button" class="ghost-btn" id="theme-open" title="切换站点主题">主题</button>
         <a class="ghost-btn header-about-link" href="#about">关于</a>
@@ -161,7 +162,10 @@
       <div class="workspace-top" id="workspace-top">
         <div class="workspace-tool-meta">
           <h1 class="workspace-title" id="workspace-title">时间戳</h1>
-          <button type="button" class="ghost-btn workspace-switch" id="workspace-switch">切换工具</button>
+          <div class="workspace-tool-actions">
+            <button type="button" class="ghost-btn site-chrome-toggle-float" id="site-chrome-toggle-float" aria-pressed="true" title="显示 DevTools 标题栏与左侧工具菜单">显示顶栏</button>
+            <button type="button" class="ghost-btn workspace-switch" id="workspace-switch">切换工具</button>
+          </div>
         </div>
         <div class="media-subnav" id="media-subnav" hidden role="tablist" aria-label="媒体子功能">
           <button type="button" class="media-tab is-active" role="tab" id="media-tab-gifmaker" data-media-tab="gifmaker" aria-controls="gifmaker" aria-selected="true">GIF</button>
@@ -4067,9 +4071,9 @@ adb devices</pre>
   <script src="./temp.js?v=20260829acu2"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./lib/oss-deps.js?v=20260829acu2"></script>
-  <script src="./app.js?v=20260829navctx1"></script>
+  <script src="./app.js?v=20260829desktopchrome1"></script>
   <script src="./about.js?v=20260829acu2" defer></script>
-  <script src="./extra.js?v=20260829memoloc3" defer></script>
+  <script src="./extra.js?v=20260829desktopchrome1" defer></script>
   <script src="./acupoint.js?v=20260829acu2" defer></script>
   <script src="./vtrim.js?v=20260829acu2" defer></script>
   <script src="./vplay.js?v=20260817theme1" defer></script>
@@ -4078,7 +4082,7 @@ adb devices</pre>
   <script src="./lanshare.js?v=20260817theme1" defer></script>
   <script src="./setup.js?v=20260817theme1" defer></script>
   <script src="./imgkit.js?v=20260810l" defer></script>
-  <script src="./memo.js?v=20260829memoloc3" defer></script>
+  <script src="./memo.js?v=20260829desktopchrome1" defer></script>
   <script src="./textimg.js?v=20260817theme1" defer></script>
   <script src="./imgtext.js?v=20260817theme1" defer></script>
   <script src="./imgpreview.js?v=20260829imgprev2" defer></script>

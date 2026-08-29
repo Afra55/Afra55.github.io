@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.29-memoloc3";
+  const TOOLS_VERSION = "2026.08.29-desktopchrome1";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
   /** 切片/批量 GIF 产出后是否自动打 zip 下载；默认关，开启后记住 */

@@ -1179,6 +1179,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260829desktopchrome1/.test(s.src)),
     };
 
     out.pwa = {
@@ -1534,6 +1535,34 @@ async function main() {
     return out;
   });
 
+  result.desktopChrome = await page.evaluate(() => {
+    const out = {
+      hasToggle: Boolean(document.getElementById("site-chrome-toggle")),
+      hasFloat: Boolean(document.getElementById("site-chrome-toggle-float")),
+      api: typeof window.DevToolsNav?.setDesktopChromeHidden === "function",
+    };
+    if (!out.api) return out;
+    const header = document.querySelector(".site-header");
+    const nav = document.querySelector(".nav-bar");
+    const floatBtn = document.getElementById("site-chrome-toggle-float");
+    out.toggleVisible =
+      Boolean(document.getElementById("site-chrome-toggle")) &&
+      getComputedStyle(document.getElementById("site-chrome-toggle")).display !== "none";
+    window.DevToolsNav.setDesktopChromeHidden(true);
+    out.hidden = document.body.classList.contains("desktop-chrome-hidden");
+    out.headerHidden = Boolean(header) && getComputedStyle(header).display === "none";
+    out.navHidden = Boolean(nav) && getComputedStyle(nav).display === "none";
+    out.floatVisible = Boolean(floatBtn) && !floatBtn.hidden;
+    window.DevToolsNav.setDesktopChromeHidden(false);
+    out.restored =
+      !document.body.classList.contains("desktop-chrome-hidden") &&
+      Boolean(header) &&
+      getComputedStyle(header).display !== "none" &&
+      Boolean(nav) &&
+      getComputedStyle(nav).display !== "none";
+    return out;
+  });
+
   await page.setUserAgent(
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
   );
@@ -1569,6 +1598,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
+  if (!/desktopchrome1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1837,6 +1867,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
+  if (!/desktopchrome1/i.test(result.cacheBust?.version || "")) {
+    failed.push("cache-bust/version should be aligned to desktopchrome1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
@@ -1948,6 +1980,19 @@ async function main() {
     !result.navCompactDesktop?.restored
   ) {
     failed.push("desktop nav compact should keep using hover/pin flyouts");
+  }
+  if (
+    !result.desktopChrome?.hasToggle ||
+    !result.desktopChrome?.hasFloat ||
+    !result.desktopChrome?.api ||
+    !result.desktopChrome?.toggleVisible ||
+    !result.desktopChrome?.hidden ||
+    !result.desktopChrome?.headerHidden ||
+    !result.desktopChrome?.navHidden ||
+    !result.desktopChrome?.floatVisible ||
+    !result.desktopChrome?.restored
+  ) {
+    failed.push("desktop chrome toggle should hide/show header and nav bar");
   }
   if (
     !result.timeSelect?.hasToday ||

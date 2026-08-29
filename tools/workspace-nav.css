@@ -619,6 +619,18 @@ body.nav-sorting-favorites .nav-fav-list {
   gap: 0.75rem;
 }
 
+.workspace-tool-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+}
+
+.site-chrome-toggle,
+.site-chrome-toggle-float {
+  display: none;
+}
+
 .workspace-title {
   margin: 0;
   font-size: 1.15rem;
@@ -852,6 +864,31 @@ body.nav-open {
     display: block;
     width: 100%;
     box-sizing: border-box;
+  }
+
+  .site-chrome-toggle {
+    display: inline-flex;
+  }
+
+  .site-chrome-toggle-float {
+    display: none;
+  }
+
+  body.desktop-chrome-hidden .site-header {
+    display: none !important;
+  }
+
+  body.desktop-chrome-hidden .nav-bar {
+    display: none !important;
+  }
+
+  body.desktop-chrome-hidden .app-layout {
+    grid-template-columns: minmax(0, 1fr) !important;
+    padding-top: 0.65rem;
+  }
+
+  body.desktop-chrome-hidden .site-chrome-toggle-float {
+    display: inline-flex;
   }
 }
 
