@@ -918,6 +918,7 @@
 
   const navEl = $("#tool-nav") || $(".tool-nav");
   const navBar = $("#nav-bar") || $(".nav-bar");
+  const navBarScroll = $("#nav-bar-scroll") || navBar;
   const navBackdrop = $("#nav-backdrop");
   const navOpenBtn = $("#nav-open");
   const navCloseBtn = $("#nav-close");
@@ -2079,11 +2080,11 @@
 
   function tickPointerSortAutoScroll() {
     pointerSortScrollRaf = 0;
-    if (!pointerSort?.active || !navBar) return;
+    if (!pointerSort?.active || !navBarScroll) return;
     const dir = pointerSort.scrollDir || 0;
     const speed = pointerSort.scrollSpeed || 0;
     if (!dir || !speed) return;
-    navBar.scrollTop += dir * speed;
+    navBarScroll.scrollTop += dir * speed;
     // 滚动后按当前手指位置刷新高亮目标
     if (pointerSort.lastX != null && pointerSort.lastY != null) {
       clearNavDragStyles();
@@ -2128,11 +2129,11 @@
       }
       return;
     }
-    if (!navBar || !pointerSort?.active) {
+    if (!navBarScroll || !pointerSort?.active) {
       stopPointerSortAutoScroll();
       return;
     }
-    const rect = navBar.getBoundingClientRect();
+    const rect = navBarScroll.getBoundingClientRect();
     const edge = 64;
     let dir = 0;
     let speed = 0;

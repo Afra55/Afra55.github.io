@@ -812,25 +812,34 @@ body.nav-open {
   }
 
   .nav-search-wrap,
-  .nav-strip,
-  .nav-recent,
-  .nav-favorites,
-  .nav-sort-hint,
+  .nav-strip.nav-recent,
   .nav-drawer-head {
     flex-shrink: 0;
   }
 
-  .tool-nav {
-    display: block !important;
+  .nav-bar-scroll {
     flex: 1 1 auto !important;
     min-height: 0 !important;
-    flex-direction: column;
-    flex-wrap: nowrap !important;
     overflow-x: hidden !important;
     overflow-y: auto !important;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
+    width: 100%;
+  }
+
+  .nav-favorites,
+  .nav-sort-hint {
+    flex-shrink: 0;
+  }
+
+  .tool-nav {
+    display: block !important;
+    flex: 1 0 auto !important;
+    min-height: 0 !important;
+    flex-direction: column;
+    flex-wrap: nowrap !important;
+    overflow: visible !important;
     mask-image: none !important;
     width: 100%;
   }
@@ -855,9 +864,6 @@ body.nav-open {
     flex: 0 0 auto;
     margin-top: auto;
     padding-top: 0.45rem;
-    position: relative;
-    z-index: 2;
-    background: var(--nav-bg-solid, var(--panel-strong));
   }
 
   .nav-footer-toolbar {
@@ -925,10 +931,9 @@ body.nav-open {
   .tool-nav {
     display: block;
     width: 100%;
-    flex: 1 1 auto;
+    flex: 1 0 auto;
     min-height: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
+    overflow: visible;
   }
 
   .tool-nav-link {

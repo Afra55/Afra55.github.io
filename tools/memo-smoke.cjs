@@ -1286,23 +1286,31 @@ async function main() {
       window.DevToolsNav.setCompact(false);
       out.navCompact.restored = !document.getElementById("nav-bar")?.classList.contains("is-compact");
       const sortTitle = document.querySelector("#tool-nav .nav-group-title.is-sortable");
-      const toolNav = document.getElementById("tool-nav");
+      const navScrollEl = document.getElementById("nav-bar-scroll");
       out.navCompact.titlePanY = sortTitle ? getComputedStyle(sortTitle).touchAction.includes("pan-y") : false;
       out.navCompact.toolNavScrollable =
-        Boolean(toolNav) &&
-        (getComputedStyle(toolNav).overflowY === "auto" || getComputedStyle(toolNav).overflowY === "scroll") &&
-        getComputedStyle(toolNav).touchAction.includes("pan-y");
+        Boolean(navScrollEl) &&
+        (getComputedStyle(navScrollEl).overflowY === "auto" || getComputedStyle(navScrollEl).overflowY === "scroll") &&
+        getComputedStyle(navScrollEl).touchAction.includes("pan-y");
+      out.navCompact.favInScroll =
+        Boolean(navScrollEl) &&
+        Boolean(document.getElementById("tool-favorites")) &&
+        navScrollEl.contains(document.getElementById("tool-favorites"));
     }
 
     const navBarEl = document.getElementById("nav-bar");
+    const navScrollEl = document.getElementById("nav-bar-scroll");
     const navFooter = navBarEl?.querySelector(".nav-footer-actions");
     const toolNavEl = document.getElementById("tool-nav");
     const moreCard = document.querySelector(".memo-card");
+    const navBarRect = navBarEl?.getBoundingClientRect();
+    const navFooterRect = navFooter?.getBoundingClientRect();
     out.navFooter = {
       hasClear: Boolean(document.getElementById("nav-cache-clear")),
       hasReset: Boolean(document.getElementById("nav-reset")),
       hasCompact: Boolean(document.getElementById("nav-compact")),
       hasMeta: Boolean(document.getElementById("nav-cache-meta")),
+      inScroll: Boolean(navScrollEl && navFooter && navScrollEl.contains(navFooter)),
       belowList: Boolean(
         navFooter &&
           toolNavEl &&
@@ -1314,9 +1322,14 @@ async function main() {
           navFooter.offsetTop + 1 >= toolNavEl.offsetTop + toolNavEl.clientHeight
       ),
       atBottom: Boolean(
-        navBarEl &&
-          navFooter &&
-          navFooter.offsetTop + navFooter.offsetHeight <= navBarEl.clientHeight + 2
+        (navBarRect &&
+          navFooterRect &&
+          navFooterRect.bottom <= navBarRect.bottom + 2) ||
+          (navScrollEl &&
+            navFooter &&
+            navScrollEl.contains(navFooter) &&
+            navScrollEl.scrollHeight > navScrollEl.clientHeight + 8 &&
+            navScrollEl.lastElementChild === navFooter)
       ),
     };
     out.moreKeep = {
@@ -2109,7 +2122,8 @@ async function main() {
     !result.navCompact?.exclusiveFlyout ||
     !result.navCompact?.restored ||
     !result.navCompact?.titlePanY ||
-    !result.navCompact?.toolNavScrollable
+    !result.navCompact?.toolNavScrollable ||
+    !result.navCompact?.favInScroll
   ) {
     failed.push("mobile nav compact should expand as an in-drawer accordion and allow vertical scroll");
   }
@@ -2196,6 +2210,7 @@ async function main() {
     !result.navFooter?.hasReset ||
     !result.navFooter?.hasCompact ||
     !result.navFooter?.hasMeta ||
+    !result.navFooter?.inScroll ||
     !result.navFooter?.belowList ||
     !result.navFooter?.noOverlap ||
     !result.navFooter?.atBottom

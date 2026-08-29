@@ -319,6 +319,15 @@ body.theme-reduce-glow .bg-grid {
   background: var(--accent-soft);
 }
 
+.nav-bar-scroll {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.55rem;
+  width: 100%;
+  min-width: 0;
+}
+
 .nav-footer-actions {
   display: flex;
   flex-direction: column;
@@ -1375,30 +1384,40 @@ a.secondary-btn {
   }
 
   .nav-search-wrap,
-  .nav-strip,
-  .nav-recent,
-  .nav-favorites,
-  .nav-sort-hint,
+  .nav-strip.nav-recent,
   .nav-drawer-head {
     flex-shrink: 0;
   }
 
-  .tool-nav {
+  .nav-bar-scroll {
     flex: 1 1 auto;
     min-height: 0;
-    flex-direction: column;
-    flex-wrap: nowrap;
-    gap: 0.28rem;
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
   }
 
-  .tool-nav::-webkit-scrollbar {
+  .nav-bar-scroll::-webkit-scrollbar {
     width: 0;
     height: 0;
     display: none;
+  }
+
+  .nav-favorites,
+  .nav-sort-hint {
+    flex-shrink: 0;
+  }
+
+  .tool-nav {
+    flex: 1 0 auto;
+    min-height: 0;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 0.28rem;
+    overflow: visible;
   }
 
   .tool-nav-link {
@@ -1418,9 +1437,6 @@ a.secondary-btn {
     width: 100%;
     margin-top: auto;
     padding-top: 0.35rem;
-    position: relative;
-    z-index: 2;
-    background: var(--nav-bg);
   }
 
   .nav-footer-toolbar {
