@@ -7619,6 +7619,39 @@
       return `${m}:${String(r).padStart(2, "0")}${tail}`;
     }
 
+    /** GIF 实际播放时长（秒）：优先按帧数/帧率，否则用编码 span */
+    function vbbEncodedGifDurationSec(encoded) {
+      if (!encoded) return 0;
+      const fps = Math.max(1, Number(encoded.fps) || 15);
+      const frames = Number(encoded.frameCount) || 0;
+      if (frames > 1) return (frames - 1) / fps;
+      const span = Number(encoded.span);
+      return span > 0 ? span : 0;
+    }
+
+    function formatVbbGifDurationLabel(sec) {
+      const s = Math.max(0, Number(sec) || 0);
+      if (!(s > 0)) return "";
+      return `GIF ${formatVsplitSpanSec(s)}`;
+    }
+
+    function applyVbbClipEncoded(clip, encoded, extraBits = []) {
+      if (!clip || !encoded?.blob) return;
+      clip.gifBlob = encoded.blob;
+      clip.gifUrl = "";
+      clip.gifDuration = vbbEncodedGifDurationSec(encoded);
+      const bits = [];
+      extraBits.forEach((b) => {
+        if (b) bits.push(b);
+      });
+      if (encoded.fps) bits.push(`${encoded.fps} FPS`);
+      if (encoded.outW && encoded.outH) bits.push(`${encoded.outW}×${encoded.outH}`);
+      if (encoded.compressRounds > 0) bits.push(`已压 ${encoded.compressRounds} 轮`);
+      if (encoded.maxW) bits.push(`宽≤${encoded.maxW}`);
+      if (encoded.framesCapped && encoded.frameCount) bits.push(`已抽稀 ${encoded.frameCount} 帧`);
+      clip.gifNote = bits.filter(Boolean).join(" · ");
+    }
+
     function clearVbbResults() {
       vbbClips.forEach((c) => {
         try {
@@ -8211,6 +8244,8 @@
         meta.className = "hint tight";
         const bits = [];
         if (c.gifBlob) bits.push(formatKb(c.gifBlob.size));
+        const durLabel = formatVbbGifDurationLabel(c.gifDuration);
+        if (durLabel) bits.push(durLabel);
         if (c.gifNote) bits.push(c.gifNote);
         if (c.error) bits.push(c.error);
         meta.textContent = bits.join(" · ");
@@ -8368,6 +8403,7 @@
         gifBlob: null,
         gifUrl: "",
         gifNote: "",
+        gifDuration: 0,
         error: "",
         jobStatus: "pending",
         jobProgress: 0,
@@ -8414,9 +8450,8 @@
           });
           if (abortVbb) throw new Error("已取消");
           vbbClips[i].gifBlob = encoded.blob;
-          const noteBits = [`${encoded.fps || 15} FPS`, formatKb(encoded.blob.size)];
-          if (reuse.fromCache) noteBits.unshift("沿用方案");
-          vbbClips[i].gifNote = noteBits.join(" · ");
+          vbbClips[i].gifUrl = "";
+          applyVbbClipEncoded(vbbClips[i], encoded, reuse.fromCache ? ["沿用方案"] : []);
           if (!vbbClips[i].error) saveVbbSpanScheme(r.span, snapshotVbbEncodeSeed(encoded, {}), "blackbox");
           setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
           renderVbbResults();
@@ -8455,6 +8490,7 @@
         gifBlob: null,
         gifUrl: "",
         gifNote: "",
+        gifDuration: 0,
         error: "",
         jobStatus: "pending",
         jobProgress: 0,
@@ -8489,8 +8525,7 @@
                 }),
             });
             if (abortVbb) throw new Error("已取消");
-            vbbClips[i].gifBlob = encoded.blob;
-            vbbClips[i].gifNote = `${encoded.fps || 15} FPS · ${formatKb(encoded.blob.size)}`;
+            applyVbbClipEncoded(vbbClips[i], encoded);
             setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
             ok += 1;
             renderVbbResults();
@@ -8544,6 +8579,7 @@
           gifBlob: null,
           gifUrl: "",
           gifNote: "",
+          gifDuration: 0,
           error: "",
           jobStatus: "pending",
           jobProgress: 0,
@@ -8569,8 +8605,7 @@
             }),
         });
         if (abortVbb) throw new Error("已取消");
-        vbbClips[0].gifBlob = encoded.blob;
-        vbbClips[0].gifNote = `${encoded.fps || 15} FPS · ${formatKb(encoded.blob.size)}`;
+        applyVbbClipEncoded(vbbClips[0], encoded);
         setVbbClipJob(0, { status: "done", progress: 1, text: "完成" });
         renderVbbResults();
         setVbbProgress(true, 1, `黑盒完成 · ${formatKb(encoded.blob.size)}`);
@@ -8760,6 +8795,7 @@
           gifBlob: null,
           gifUrl: "",
           gifNote: "",
+          gifDuration: 0,
           error: "",
           jobStatus: "pending",
           jobProgress: 0,
@@ -8886,7 +8922,7 @@
               if (encoded?.maxW) usedWidth = encoded.maxW;
             }
             if (!encoded?.blob) throw new Error("未产出 GIF");
-            clip.gifBlob = encoded.blob;
+            clip.gifDuration = vbbEncodedGifDurationSec(encoded);
             // 延迟创建 ObjectURL：列表默认不解码预览
             clip.gifUrl = "";
             const bits = [];
@@ -8900,6 +8936,7 @@
             if (encoded.maxW) bits.push(`宽≤${encoded.maxW}`);
             else if (isWide && !usedFallback) bits.push(`宽≤${usedWidth}`);
             if (encoded.framesCapped) bits.push(`已抽稀 ${encoded.frameCount} 帧`);
+            clip.gifBlob = encoded.blob;
             clip.gifNote = bits.join(" · ");
             if (encoded.blob.size > V2G_BLACKBOX_MAX_BYTES) {
               clip.error = `仍超 6MB（${formatKb(encoded.blob.size)}）`;
