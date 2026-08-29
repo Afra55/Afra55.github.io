@@ -9833,10 +9833,14 @@ body.ruler-fs-active {
   left: 50%;
   top: 38%;
   transform: translateX(-50%);
-  color: var(--muyu-gold);
+  color: #fff6dc;
   font-weight: 800;
   font-size: clamp(0.95rem, 4vw, 1.25rem);
-  text-shadow: 0 0 10px color-mix(in srgb, var(--muyu-gold) 55%, transparent);
+  text-shadow:
+    0 0 1px rgba(0, 0, 0, 0.95),
+    0 2px 8px rgba(0, 0, 0, 0.82),
+    0 0 18px color-mix(in srgb, var(--muyu-gold) 90%, #fff);
+  -webkit-text-stroke: 0.45px rgba(0, 0, 0, 0.55);
   white-space: nowrap;
   animation: muyu-float-rise 1s ease-out forwards;
 }
@@ -9880,7 +9884,10 @@ body.ruler-fs-active {
   width: min(78vw, 320px);
   height: auto;
   display: block;
-  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.28));
+  filter:
+    drop-shadow(0 10px 18px rgba(0, 0, 0, 0.32))
+    brightness(0.92)
+    saturate(1.08);
   transition: transform 0.12s ease;
   user-select: none;
   -webkit-user-drag: none;
@@ -10164,10 +10171,14 @@ body.ruler-fs-active {
   left: 50%;
   top: 42%;
   transform: translateX(-50%);
-  color: var(--muyu-gold);
+  color: #fff6dc;
   font-weight: 800;
   font-size: clamp(1rem, 4.5vw, 1.45rem);
-  text-shadow: 0 0 12px rgba(255, 207, 107, 0.6);
+  text-shadow:
+    0 0 1px rgba(0, 0, 0, 0.95),
+    0 2px 10px rgba(0, 0, 0, 0.85),
+    0 0 22px color-mix(in srgb, var(--muyu-gold) 90%, #fff);
+  -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.55);
   white-space: nowrap;
   animation: muyu-float-rise 1s ease-out forwards;
 }
@@ -10201,7 +10212,10 @@ body.ruler-fs-active {
 
 .muyu-fish-btn-fs .muyu-fish-img {
   width: min(82vw, 360px);
-  filter: drop-shadow(0 16px 28px rgba(0, 0, 0, 0.45));
+  filter:
+    drop-shadow(0 16px 28px rgba(0, 0, 0, 0.48))
+    brightness(0.92)
+    saturate(1.08);
 }
 
 body.muyu-fs-active {
