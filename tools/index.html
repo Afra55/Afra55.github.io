@@ -18,8 +18,8 @@
   <!-- 不阻塞首屏：Noto Serif SC 只给文转图用，避免每次拉取中文字体；Google 字体 CSS 在国内常卡住数秒 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" /></noscript>
-  <link rel="stylesheet" href="./style.css?v=20260817ossdeps1" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=20260817ossdeps1" />
+  <link rel="stylesheet" href="./style.css?v=20260817imgprev1" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=20260817imgprev1" />
   <script>
     /* 尽早应用主题变量，减少闪烁；侧栏也依赖这些 CSS 变量 */
     (function () {
@@ -88,7 +88,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.17-ossdeps1</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.17-imgprev1</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="pwa-install" hidden aria-hidden="true" title="安装到桌面/开始菜单">安装应用</button>
@@ -3273,6 +3273,44 @@ hello@world.org</textarea>
       </div>
     </section>
 
+<section id="imgpreview" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>图片预览</h1>
+        <p>一次添加多张图片叠放对比：<strong>拖拽</strong>移动、<strong>滚轮无极缩放</strong>（选中图；按住 Alt 滚轮缩放画布）、单击选中、底栏缩略图切换；可调透明度与前后层级，边缘靠近时自动吸附对齐。</p>
+      </div>
+      <div class="panel-body">
+        <div class="btn-row tool-actions">
+          <label class="file-btn" for="imgprev-file">添加图片</label>
+          <input id="imgprev-file" type="file" accept="image/*" multiple hidden />
+          <button type="button" class="ghost-btn" id="imgprev-clear">清空</button>
+          <button type="button" class="ghost-btn" id="imgprev-reset-all">全部还原</button>
+        </div>
+        <p class="hint" id="imgprev-meta">支持多选 / 拖拽添加。滚轮无极缩放选中图（无选中则缩放画布）；拖拽移动图片；底边可拉高预览区。</p>
+        <div class="imgprev-stage" id="imgprev-stage">
+          <div class="imgprev-viewport" id="imgprev-viewport">
+            <p class="imgprev-empty-hint hint" id="imgprev-empty-hint">拖入图片到此处<br /><span class="hint tight">或点击选择 · 可多选</span></p>
+            <div class="imgprev-world" id="imgprev-world"></div>
+            <div class="imgprev-hud" aria-label="缩放信息">
+              <span class="mono imgprev-hud-item">画布 <span id="imgprev-view-pct">100%</span></span>
+              <span class="mono imgprev-hud-item">选中 <span id="imgprev-sel-scale">—</span></span>
+            </div>
+            <div class="imgprev-height-resize" id="imgprev-height-resize" role="separator" aria-orientation="horizontal" aria-label="拖动调整预览高度" title="拖动调整高度"></div>
+          </div>
+          <div class="imgprev-toolbar">
+            <label class="imgprev-opacity-label">透明度
+              <input id="imgprev-opacity" type="range" min="0" max="100" value="100" step="1" disabled />
+              <span class="mono" id="imgprev-opacity-val">—</span>
+            </label>
+            <button type="button" class="ghost-btn" id="imgprev-layer-up" disabled title="上移一层">前移</button>
+            <button type="button" class="ghost-btn" id="imgprev-layer-down" disabled title="下移一层">后移</button>
+            <button type="button" class="ghost-btn" id="imgprev-reset-sel" disabled>还原选中</button>
+          </div>
+          <div class="imgprev-thumbs" id="imgprev-thumbs" hidden aria-label="缩略图"></div>
+        </div>
+        <p class="error" id="imgprev-error" hidden></p>
+      </div>
+    </section>
+
 <section id="whiteboard" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>画板</h1>
@@ -3882,25 +3920,26 @@ adb devices</pre>
       <button type="button" class="primary-btn vsplit-fs-mark" id="vsplit-fs-mark">打起点</button>
     </div>
   </div>
-  <script src="./theme.js?v=20260817ossdeps1"></script>
-  <script src="./temp.js?v=20260817ossdeps1"></script>
+  <script src="./theme.js?v=20260817imgprev1"></script>
+  <script src="./temp.js?v=20260817imgprev1"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
-  <script src="./lib/oss-deps.js?v=20260817ossdeps1"></script>
-  <script src="./app.js?v=20260817ossdeps1"></script>
-  <script src="./about.js?v=20260817ossdeps1" defer></script>
-  <script src="./extra.js?v=20260817ossdeps1" defer></script>
-  <script src="./vtrim.js?v=20260817ossdeps1" defer></script>
-  <script src="./vplay.js?v=20260817ossdeps1" defer></script>
-  <script src="./audio.js?v=20260817ossdeps1" defer></script>
-  <script src="./ffbridge.js?v=20260817ossdeps1" defer></script>
-  <script src="./lanshare.js?v=20260817ossdeps1" defer></script>
-  <script src="./setup.js?v=20260817ossdeps1" defer></script>
+  <script src="./lib/oss-deps.js?v=20260817imgprev1"></script>
+  <script src="./app.js?v=20260817imgprev1"></script>
+  <script src="./about.js?v=20260817imgprev1" defer></script>
+  <script src="./extra.js?v=20260817imgprev1" defer></script>
+  <script src="./vtrim.js?v=20260817imgprev1" defer></script>
+  <script src="./vplay.js?v=20260817imgprev1" defer></script>
+  <script src="./audio.js?v=20260817imgprev1" defer></script>
+  <script src="./ffbridge.js?v=20260817imgprev1" defer></script>
+  <script src="./lanshare.js?v=20260817imgprev1" defer></script>
+  <script src="./setup.js?v=20260817imgprev1" defer></script>
   <script src="./imgkit.js?v=20260810l" defer></script>
-  <script src="./memo.js?v=20260817ossdeps1" defer></script>
-  <script src="./textimg.js?v=20260817ossdeps1" defer></script>
-  <script src="./imgtext.js?v=20260817ossdeps1" defer></script>
-  <script src="./whiteboard.js?v=20260817ossdeps1" defer></script>
-  <script src="./pwa.js?v=20260817ossdeps1" defer></script>
+  <script src="./memo.js?v=20260817imgprev1" defer></script>
+  <script src="./textimg.js?v=20260817imgprev1" defer></script>
+  <script src="./imgtext.js?v=20260817imgprev1" defer></script>
+  <script src="./imgpreview.js?v=20260817imgprev1" defer></script>
+  <script src="./whiteboard.js?v=20260817imgprev1" defer></script>
+  <script src="./pwa.js?v=20260817imgprev1" defer></script>
   <script src="./vendor/js-yaml.min.js" defer></script>
   <script src="./vendor/spark-md5.min.js" defer></script>
   <script src="./vendor/qrcode.min.js" defer></script>
