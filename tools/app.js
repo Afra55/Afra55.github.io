@@ -105,6 +105,7 @@
     }
   }
 
+  function initCoreToolPanels() {
   // ---- Timestamp ----
   const tsInput = $("#ts-input");
   const dtInput = $("#dt-input");
@@ -741,6 +742,17 @@
   rePattern.addEventListener("input", runRegex);
   reText.addEventListener("input", runRegex);
 
+  const now = Date.now();
+  tsInput.value = String(Math.floor(now / 1000));
+  dtInput.value = formatDateTime(now, timezone);
+  convertTsToDate();
+  renderFromAhexInput();
+  syncChecksFromFlags();
+  runRegex();
+  }
+
+  queueMicrotask(initCoreToolPanels);
+
   // ---- Copy / nav ----
   function copyFromValueEl(id) {
     const el = document.getElementById(id);
@@ -938,6 +950,34 @@
   const favTitle = $("#tool-fav-title");
   const favPicker = $("#tool-fav-picker");
   const canDesktopDrag = () => window.matchMedia("(min-width: 901px)").matches;
+
+  let navShellBootstrapped = false;
+  let bootPasses = 0;
+
+  function scheduleBootRoute() {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(bootRoute);
+    });
+    if (isPhoneLikeClient()) {
+      setTimeout(bootRoute, 60);
+      setTimeout(bootRoute, 280);
+    }
+  }
+
+  function bootstrapNavShell() {
+    if (navShellBootstrapped) return;
+    navShellBootstrapped = true;
+    renderNav(loadOrder());
+    renderRecent();
+    renderFavorites();
+    bindFavoritesGroupInteractions();
+    bindNavToolCtx();
+    bindNavStripWheelScroll(recentList);
+    syncSortHint();
+    scheduleBootRoute();
+  }
+
+  bootstrapNavShell();
 
   function allNavGroups() {
     const list = navEl ? [...$$(".nav-group", navEl)] : [];
@@ -2814,12 +2854,8 @@
   applyDesktopChromeHidden(loadDesktopChromeHiddenPref(), { persist: false });
   syncDesktopNavMaxHeight();
 
-  renderNav(loadOrder());
-  renderRecent();
-  renderFavorites();
-  bindFavoritesGroupInteractions();
-  bindNavToolCtx();
-  bindNavStripWheelScroll(recentList);
+  if (!navShellBootstrapped) bootstrapNavShell();
+
   window.DevToolsCatalog = {
     groups: TOOL_GROUPS,
     meta: TOOL_META,
@@ -2845,30 +2881,5 @@
     toggleDesktopChrome,
   };
   window.dispatchEvent(new CustomEvent("devtools:catalog"));
-  syncSortHint();
-  // Safari / iOS：导航后 hash 可能短暂停留在上一页；首屏不等 DOMContentLoaded（defer 大包会拖住它）
-  let bootPasses = 0;
-  const scheduleBootRoute = () => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(bootRoute);
-    });
-    if (isPhoneLikeClient()) {
-      setTimeout(bootRoute, 60);
-      setTimeout(bootRoute, 280);
-    }
-  };
-  scheduleBootRoute();
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", scheduleBootRoute, { once: true });
-  }
-
-  // Init
-  const now = Date.now();
-  tsInput.value = String(Math.floor(now / 1000));
-  dtInput.value = formatDateTime(now, timezone);
-  convertTsToDate();
-  renderFromAhexInput();
-  syncChecksFromFlags();
-  runRegex();
   window.DevToolsTemp?.refresh?.();
 })();

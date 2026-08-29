@@ -93,7 +93,7 @@
   }
 
   /** 全站逻辑版本；后缀为中国标准时间 Asia/Shanghai（UTC+8） */
-  const TOOLS_VERSION = "2026.08.29-144202";
+  const TOOLS_VERSION = "2026.08.29-144702";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
   /** 切片/批量 GIF 产出后是否自动打 zip 下载；默认关，开启后记住 */
@@ -9982,6 +9982,33 @@
     const adbStatusTitle = $("#adb-status-title");
     const adbStatusText = $("#adb-status-text");
     const adbError = $("#adb-error");
+    const adbSetupGuide = $("#adb-setup-guide");
+    const adbSetupGuideDismiss = $("#adb-setup-guide-dismiss");
+    const ADB_SETUP_GUIDE_HIDDEN_KEY = "devtools-adb-setup-guide-hidden-v1";
+
+    function isAdbSetupGuideHidden() {
+      try {
+        return localStorage.getItem(ADB_SETUP_GUIDE_HIDDEN_KEY) === "1";
+      } catch (_) {
+        return false;
+      }
+    }
+
+    function syncAdbSetupGuide() {
+      if (!adbSetupGuide) return;
+      adbSetupGuide.hidden = isAdbSetupGuideHidden();
+    }
+
+    function dismissAdbSetupGuide() {
+      try {
+        localStorage.setItem(ADB_SETUP_GUIDE_HIDDEN_KEY, "1");
+      } catch (_) {}
+      syncAdbSetupGuide();
+    }
+
+    syncAdbSetupGuide();
+    adbSetupGuideDismiss?.addEventListener("click", dismissAdbSetupGuide);
+
     const adbWorkspace = $("#adb-workspace");
     const adbDeviceList = $("#adb-device-list");
     const adbDeviceMeta = $("#adb-device-meta");
@@ -11767,7 +11794,13 @@
             health.adb?.setup ||
             "请安装 platform-tools 并确保 adb 在 PATH 中，然后重启桥";
           setAdbStatus("is-err", "桥已启动，但未找到 adb", setupMsg);
-          setError(adbError, health.adb?.error || "本机未找到 adb 命令。见上方「本机依赖怎么配？」");
+          setError(
+            adbError,
+            health.adb?.error ||
+              (isAdbSetupGuideHidden()
+                ? "本机未找到 adb 命令。请安装 platform-tools 并加入 PATH。"
+                : "本机未找到 adb 命令。见上方「本机依赖怎么配？」")
+          );
           return false;
         }
         adbConnected = true;
@@ -11785,7 +11818,7 @@
           "未连接本机桥",
           fromPoll
             ? "已下载完整包的话，请解压并运行启动脚本（同目录需有 server.js），保持窗口打开；正在等待桥启动…"
-            : "请先下载完整 ZIP 并运行启动脚本，再点连接。需本机已安装 adb（见上方配置说明）。"
+            : "请先下载完整 ZIP 并运行启动脚本，再点连接。需本机已安装 adb（platform-tools 加入 PATH）。"
         );
         if (!fromPoll) setError(adbError, err.message || "无法连接本机桥");
         return false;
