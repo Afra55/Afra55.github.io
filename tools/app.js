@@ -783,6 +783,7 @@
   const LAST_TOOL_KEY = "devtools-tool-last-v1";
   const LAST_TOOL_SESSION_KEY = "devtools-tool-last-session-v1";
   const SORT_HINT_KEY = "devtools-nav-sort-hint-seen-v1";
+  const NAV_COMPACT_KEY = "devtools-nav-compact-v1";
   /** 站点页不算「上次工具」，避免 about/setup 盖掉真实工具 */
   const SITE_NAV_IDS = new Set(["about", "setup"]);
   const MEDIA_TABS = ["gifmaker", "vsplit", "vtrim", "audio", "vplay"];
@@ -951,6 +952,18 @@
   const favPicker = $("#tool-fav-picker");
   const canDesktopDrag = () => window.matchMedia("(min-width: 901px)").matches;
 
+  let currentTool = "timestamp";
+  let currentMediaTab = "gifmaker";
+  let lastFocusBeforeDrawer = null;
+  let drawerFocusTimer = 0;
+  let drawerIgnoreOpenUntil = 0;
+  let navCompact = false;
+  try {
+    navCompact = localStorage.getItem(NAV_COMPACT_KEY) === "1";
+  } catch (_) {
+    navCompact = false;
+  }
+
   let navShellBootstrapped = false;
   let bootPasses = 0;
 
@@ -976,8 +989,6 @@
     syncSortHint();
     scheduleBootRoute();
   }
-
-  bootstrapNavShell();
 
   function allNavGroups() {
     const list = navEl ? [...$$(".nav-group", navEl)] : [];
@@ -1008,12 +1019,6 @@
     if (meta?.desktopOnly && isPhoneLikeClient()) return false;
     return true;
   }
-
-  let currentTool = "timestamp";
-  let currentMediaTab = "gifmaker";
-  let lastFocusBeforeDrawer = null;
-  let drawerFocusTimer = 0;
-  let drawerIgnoreOpenUntil = 0;
 
   function isMobileDrawer() {
     return !canDesktopDrag();
@@ -1096,14 +1101,6 @@
     return loadGroupOrder()
       .map((id) => GROUP_BY_ID[id])
       .filter(Boolean);
-  }
-
-  const NAV_COMPACT_KEY = "devtools-nav-compact-v1";
-  let navCompact = false;
-  try {
-    navCompact = localStorage.getItem(NAV_COMPACT_KEY) === "1";
-  } catch (_) {
-    navCompact = false;
   }
 
   function currentNavToolId() {
@@ -2662,6 +2659,8 @@
     if (Date.now() < drawerIgnoreOpenUntil) return;
     setDrawerOpen(true);
   });
+
+  queueMicrotask(bootstrapNavShell);
   navCloseBtn?.addEventListener("click", (e) => {
     e.preventDefault();
     e.stopPropagation();
