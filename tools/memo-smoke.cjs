@@ -902,6 +902,31 @@ async function main() {
     out.dedupeBump.movedFront = after[0]?.id === buried?.id;
     out.dedupeBump.noExtraCopy = after.filter((it) => (it.textPreview || "").includes("UNIQUE_BUMP_TEXT_991")).length === 1;
 
+    // 模拟 boot 期间 hashIndex 尚未就绪：仍应去重并置顶，不能克隆
+    const reloadText = "冒烟重载去重 UNIQUE_RELOAD_DEDUPE_992";
+    await window.DevToolsMemo.ingestText(reloadText);
+    await sleep(350);
+    await window.DevToolsMemo.ingestText("冒烟重载去重垫底");
+    await sleep(350);
+    const reloadBuried = (window.DevToolsMemo.getIndex().items || []).find((it) =>
+      (it.textPreview || "").includes("UNIQUE_RELOAD_DEDUPE_992")
+    );
+    if (typeof window.DevToolsMemo.clearHashIndexForTest === "function") {
+      window.DevToolsMemo.clearHashIndexForTest();
+    }
+    const reloadBeforeList = window.DevToolsMemo.getIndex().items || [];
+    const reloadBeforeIds = reloadBeforeList.map((x) => x.id);
+    const reloadBefore = reloadBeforeList.length;
+    await window.DevToolsMemo.ingestText(reloadText);
+    await sleep(400);
+    const reloadAfter = window.DevToolsMemo.getIndex().items || [];
+    out.dedupeReload = {
+      buriedBefore: Boolean(reloadBuried) && reloadBeforeIds[0] !== reloadBuried?.id,
+      movedFront: reloadAfter[0]?.id === reloadBuried?.id,
+      noExtraCopy: reloadAfter.filter((it) => (it.textPreview || "").includes("UNIQUE_RELOAD_DEDUPE_992")).length === 1,
+      countStable: reloadAfter.length === reloadBefore,
+    };
+
     const t0 = performance.now();
     const estBytes = await window.DevToolsMemo.getStorageBytes();
     const t1 = performance.now();
@@ -1641,7 +1666,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/timestampfix1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memoclipdedupe1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1836,6 +1861,14 @@ async function main() {
   if (!result.dedupeBump?.buried || !result.dedupeBump?.movedFront || !result.dedupeBump?.noExtraCopy) {
     failed.push("duplicate paste should bump existing item to front without cloning");
   }
+  if (
+    !result.dedupeReload?.buriedBefore ||
+    !result.dedupeReload?.movedFront ||
+    !result.dedupeReload?.noExtraCopy ||
+    !result.dedupeReload?.countStable
+  ) {
+    failed.push("reload-style dedupe should bump without cloning even when hash index is empty");
+  }
   if (!result.scale?.ordered || !result.scale?.countMatches || !result.scale?.estimateFast || !result.scale?.estimateBytes) {
     failed.push("scale adaptations missing or slow storage estimate");
   }
@@ -1910,8 +1943,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/timestampfix1/i.test(result.cacheBust?.version || "")) {
-    failed.push("cache-bust/version should be aligned to timestampfix1");
+  if (!/memoclipdedupe1/i.test(result.cacheBust?.version || "")) {
+    failed.push("cache-bust/version should be aligned to memoclipdedupe1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");

@@ -543,6 +543,7 @@
     testShareUi: false,
     cardHeightCache: new Map(),
     shareFilesCapable: null, // null=未探测, true/false
+    bootReady: false,
     hashIndex: new Map(), // contentHash -> item ref
     tagMap: new Map(), // tagId -> tag
     countCache: null, // { total, untagged, byTag:Map, byType }
@@ -1362,10 +1363,13 @@
   }
 
   function findDuplicateBySig(coarseSig, contentHash) {
-    // contentHash：Map O(1) 存条目引用；无 hash 的旧条目才走线性粗匹配
+    // contentHash：Map O(1) 存条目引用；hashIndex 未就绪时仍扫 items.contentHash
     if (contentHash) {
       const byMap = state.hashIndex.get(contentHash);
       if (byMap) return byMap;
+      for (const it of state.index.items) {
+        if (it.contentHash === contentHash) return it;
+      }
     }
     if (!coarseSig || coarseSig === "text:" || /^bin:\w+:0:/.test(coarseSig)) return null;
     for (const it of state.index.items) {
@@ -2875,6 +2879,7 @@
   }
 
   function maybeCaptureClipboard() {
+    if (!state.bootReady) return;
     if (shouldSkipClipCapture()) return;
     if (isIOS()) {
       if (state.clipPendingHint) showClipOffer();
@@ -3212,6 +3217,7 @@
     rebuildTagMap();
     invalidateCountCache();
     await purgeExpiredTempItems();
+    state.bootReady = true;
     renderAll();
     maybeCaptureClipboard();
     setInterval(() => {
@@ -5791,6 +5797,9 @@
     isIOS: () => isIOS(),
     showIosPasteCapture,
     dismissClipOffer: () => dismissClipOffer(),
+    clearHashIndexForTest: () => {
+      state.hashIndex = new Map();
+    },
   };
 
   boot().catch((err) => setError(memoError, err.message || String(err)));
