@@ -434,4 +434,14 @@ function almost(a, b, eps = 1e-6) {
   assert(!shouldReuseVbbFirstPlan(threeSame, 2), "3 equal clips: last does not reuse");
 }
 
+{
+  function vbbSpanSchemeKey(span) {
+    const s = Math.max(0.5, Number(span) || 0.5);
+    return s.toFixed(1);
+  }
+  assert(vbbSpanSchemeKey(12.04) === "12.0", "span scheme key rounds to 0.1s");
+  assert(vbbSpanSchemeKey(12.06) === "12.1", "span scheme key rounds");
+  assert(vbbSpanSchemeKey(12.02) === vbbSpanSchemeKey(12.04), "same 0.1s bucket shares key");
+}
+
 console.log("vbb-plan.test.js: all passed");

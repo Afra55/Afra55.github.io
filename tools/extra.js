@@ -95,7 +95,7 @@
   }
 
   /** 全站逻辑版本；后缀为中国标准时间 Asia/Shanghai（UTC+8） */
-  const TOOLS_VERSION = "2026.08.29-175000";
+  const TOOLS_VERSION = "2026.08.29-180000";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
   /** 切片/批量 GIF 产出后是否自动打 zip 下载；默认关，开启后记住 */
@@ -4119,6 +4119,59 @@
       return a > 0 && Math.abs(a - b) < 0.08;
     }
 
+    const VBB_SPAN_SCHEME_KEY = "devtools-vbb-span-scheme-v1";
+    const VBB_SPAN_SCHEME_MAX = 48;
+
+    function vbbSpanSchemeKey(span) {
+      const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
+      return s.toFixed(1);
+    }
+
+    function loadVbbSpanSchemes() {
+      try {
+        const raw = localStorage.getItem(VBB_SPAN_SCHEME_KEY);
+        return raw ? JSON.parse(raw) : {};
+      } catch (_) {
+        return {};
+      }
+    }
+
+    function loadVbbSpanScheme(span) {
+      const hit = loadVbbSpanSchemes()[vbbSpanSchemeKey(span)];
+      if (!hit || !(Number(hit.fps) > 0)) return null;
+      return hit;
+    }
+
+    function saveVbbSpanScheme(span, seed, encode) {
+      if (!seed?.fps) return;
+      try {
+        const map = loadVbbSpanSchemes();
+        const key = vbbSpanSchemeKey(span);
+        map[key] = {
+          fps: Number(seed.fps) || 15,
+          maxW: Math.max(64, Number(seed.maxW) || V2G_BLACKBOX_BASE_W),
+          compressRounds: Number(seed.compressRounds) || 0,
+          usedFallback: Boolean(seed.usedFallback),
+          encode: encode || "blackbox",
+          at: Date.now(),
+        };
+        const keys = Object.keys(map).sort((a, b) => (map[b].at || 0) - (map[a].at || 0));
+        while (keys.length > VBB_SPAN_SCHEME_MAX) delete map[keys.pop()];
+        localStorage.setItem(VBB_SPAN_SCHEME_KEY, JSON.stringify(map));
+      } catch (_) {}
+    }
+
+    function resolveVbbSegmentReuse(ranges, index, firstSeed, planEncode) {
+      const cached = loadVbbSpanScheme(ranges[index]?.span);
+      if (cached) {
+        return { seed: cached, fromCache: true, encode: cached.encode || planEncode };
+      }
+      if (firstSeed && shouldReuseVbbFirstPlan(ranges, index)) {
+        return { seed: firstSeed, fromCache: false, encode: planEncode };
+      }
+      return { seed: null, fromCache: false, encode: planEncode };
+    }
+
     function snapshotVbbEncodeSeed(encoded, extras = {}) {
       if (!encoded?.blob) return null;
       return {
@@ -4213,7 +4266,7 @@
         const fps = Number(seed.fps) || 15;
         const isLastFps = fpsList[fpsList.length - 1] === fps;
         let width = Math.max(64, Number(seed.maxW) || V2G_BLACKBOX_BASE_W);
-        onProgress(0.04, `沿用#01 · ${fps}FPS · 宽${width}`);
+        onProgress(0.04, `沿用方案 · ${fps}FPS · 宽${width}`);
         let candidate = await encodeAt(fps, width, 0.04, 0.5, `${fps}FPS·宽${width}`);
         candidate = await compressAt(candidate, fps, isLastFps, 0.55);
         while (candidate.blob.size > V2G_BLACKBOX_MAX_BYTES && width > V2G_BLACKBOX_BASE_W) {
@@ -7689,9 +7742,6 @@
     }
 
     function syncVbbModeUi() {
-      $("#vbb-mode-clarity")?.classList.toggle("is-active", vbbMode === "clarity");
-      $("#vbb-mode-sharp")?.classList.toggle("is-active", vbbMode === "sharp");
-      $("#vbb-mode-duration")?.classList.toggle("is-active", vbbMode === "duration");
       $("#vbb-mode-custom")?.classList.toggle("is-active", vbbMode === "custom");
       if (vbbCustomRow) vbbCustomRow.hidden = vbbMode !== "custom";
     }
@@ -8373,8 +8423,10 @@
         for (let i = 0; i < ranges.length; i++) {
           if (abortVbb) throw new Error("已取消");
           const r = ranges[i];
+          const reuse = resolveVbbSegmentReuse(ranges, i, null, "blackbox");
+          const followTip = reuse.fromCache ? " · 沿用方案" : "";
           setVbbClipJob(i, { status: "running", progress: 0.02, text: "黑盒编码…" });
-          setVbbProgress(true, i / ranges.length, `手动黑盒 · ${i + 1}/${ranges.length}`, {
+          setVbbProgress(true, i / ranges.length, `手动黑盒 · ${i + 1}/${ranges.length}${followTip}`, {
             sub: `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)}`,
             busy: true,
           });
@@ -8385,15 +8437,19 @@
             srcW,
             srcH,
             isAborted: () => abortVbb,
+            seed: reuse.seed || undefined,
             onProgress: (local, text) => {
               const p = i + Math.min(0.98, local);
               setVbbClipJob(i, { status: "running", progress: Math.min(0.98, local), text });
-              setVbbProgress(true, p / ranges.length, `手动黑盒 · ${i + 1}/${ranges.length}`, { sub: text, busy: true });
+              setVbbProgress(true, p / ranges.length, `手动黑盒 · ${i + 1}/${ranges.length}${followTip}`, { sub: text, busy: true });
             },
           });
           if (abortVbb) throw new Error("已取消");
           vbbClips[i].gifBlob = encoded.blob;
-          vbbClips[i].gifNote = `${encoded.fps || 15} FPS · ${formatKb(encoded.blob.size)}`;
+          const noteBits = [`${encoded.fps || 15} FPS`, formatKb(encoded.blob.size)];
+          if (reuse.fromCache) noteBits.unshift("沿用方案");
+          vbbClips[i].gifNote = noteBits.join(" · ");
+          if (!vbbClips[i].error) saveVbbSpanScheme(r.span, snapshotVbbEncodeSeed(encoded, {}), "blackbox");
           setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
           renderVbbResults();
           if (mobile && i < ranges.length - 1) {
@@ -8743,10 +8799,12 @@
           if (abortVbb) throw new Error("已取消");
           const r = plan.ranges[i];
           const clip = vbbClips[i];
-          const isWide = plan.encode === "clarity" || plan.encode === "sharp";
-          const reuseSeed = firstSeed && shouldReuseVbbFirstPlan(plan.ranges, i);
-          const label = plan.encode === "sharp" ? "锐度 GIF" : plan.encode === "clarity" ? "清晰 GIF" : "时长黑盒";
-          const followTip = reuseSeed ? " · 沿用#01" : "";
+          const reuse = resolveVbbSegmentReuse(plan.ranges, i, firstSeed, plan.encode);
+          const reuseSeed = reuse.seed;
+          const activeEncode = reuse.fromCache && reuse.encode ? reuse.encode : plan.encode;
+          const isWide = activeEncode === "clarity" || activeEncode === "sharp";
+          const label = activeEncode === "sharp" ? "锐度 GIF" : activeEncode === "clarity" ? "清晰 GIF" : "时长黑盒";
+          const followTip = reuse.fromCache ? " · 沿用方案" : reuseSeed ? " · 沿用#01" : "";
           setVbbClipJob(i, { status: "running", progress: 0.02, text: `${label}…` });
           setVbbProgress(true, i / plan.ranges.length, `${label} · ${i + 1}/${plan.ranges.length}${followTip}`, {
             sub: `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)}${isWide ? ` · 宽${(reuseSeed ? firstSeed.maxW : plan.maxW) || V2G_BLACKBOX_BASE_W}` : ""}`,
@@ -8861,7 +8919,8 @@
             // 延迟创建 ObjectURL：列表默认不解码预览
             clip.gifUrl = "";
             const bits = [];
-            if (reuseSeed) bits.push("沿用#01");
+            if (reuse.fromCache) bits.push("沿用方案");
+            else if (reuseSeed) bits.push("沿用#01");
             if (usedFallback) bits.push("超限→黑盒");
             else if (isWide && usedWidth !== (plan.maxW || V2G_BLACKBOX_BASE_W)) bits.push(`已降宽${usedWidth}`);
             if (encoded.fps) bits.push(`${encoded.fps}FPS`);
@@ -8875,6 +8934,13 @@
               clip.error = `仍超 6MB（${formatKb(encoded.blob.size)}）`;
             }
             if (i === 0) firstSeed = snapshotVbbEncodeSeed(encoded, { usedWidth, usedFallback });
+            if (!clip.error) {
+              saveVbbSpanScheme(
+                r.span,
+                snapshotVbbEncodeSeed(encoded, { usedWidth, usedFallback }),
+                usedFallback ? "blackbox" : activeEncode
+              );
+            }
             setVbbClipJob(i, {
               status: clip.error ? "error" : "done",
               progress: 1,
@@ -8971,18 +9037,6 @@
       }
     }
 
-    $("#vbb-mode-clarity")?.addEventListener("click", () => {
-      vbbMode = "clarity";
-      paintVbbPlan();
-    });
-    $("#vbb-mode-sharp")?.addEventListener("click", () => {
-      vbbMode = "sharp";
-      paintVbbPlan();
-    });
-    $("#vbb-mode-duration")?.addEventListener("click", () => {
-      vbbMode = "duration";
-      paintVbbPlan();
-    });
     $("#vbb-mode-custom")?.addEventListener("click", () => {
       vbbMode = "custom";
       paintVbbPlan();
@@ -9019,6 +9073,9 @@
       getActivePlan: () => (vbbAnalysis ? resolveActiveVbbPlan() : null),
       getClips: () => vbbClips.slice(),
       shouldReuseFirstPlan: (ranges, index) => shouldReuseVbbFirstPlan(ranges, index),
+      loadSpanScheme: (span) => loadVbbSpanScheme(span),
+      saveSpanScheme: (span, seed, enc) => saveVbbSpanScheme(span, seed, enc),
+      spanSchemeKey: (span) => vbbSpanSchemeKey(span),
       estimateBlackbox: (span) => {
         if (!vbbAnalysis) return null;
         return estimateVbbBlackboxPlan(vbbAnalysis.bps15, span, vbbAnalysis.srcW);

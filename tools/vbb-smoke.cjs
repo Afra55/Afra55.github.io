@@ -40,6 +40,17 @@ function startServer() {
   });
 }
 
+async function clickVbbPlanCard(page, pattern) {
+  await page.evaluate((pat) => {
+    const re = new RegExp(pat);
+    const card = [...document.querySelectorAll("#vbb-plan-compare .vbb-plan-card")].find((el) =>
+      re.test(el.textContent || "")
+    );
+    if (!card) throw new Error(`vbb plan card not found: ${pat}`);
+    card.click();
+  }, pattern);
+}
+
 async function main() {
   let puppeteer;
   try {
@@ -98,8 +109,6 @@ async function main() {
         "vbb-analyze",
         "vbb-run",
         "vbb-merge",
-        "vbb-mode-clarity",
-        "vbb-mode-duration",
         "vbb-mode-custom",
         "vbb-plan-compare",
         "vbb-list",
@@ -263,8 +272,8 @@ async function main() {
 
   // 均分打开时切换预设不应报错，且关均分后自定义仍是末段剩余
   await page.click("#vbb-equalize");
-  await page.click("#vbb-mode-clarity");
-  await page.click("#vbb-mode-duration");
+  await clickVbbPlanCard(page, "清晰");
+  await clickVbbPlanCard(page, "时长");
   await page.click("#vbb-mode-custom");
   await page.click("#vbb-equalize");
   const afterModeSwitch = await page.evaluate(() => {
@@ -281,24 +290,32 @@ async function main() {
   }
 
   // Switch duration mode and ensure plan updates
-  await page.click("#vbb-mode-duration");
+  await clickVbbPlanCard(page, "时长");
   const durationMode = await page.evaluate(() => {
     const summary = document.getElementById("vbb-plan-summary")?.textContent || "";
-    const active = document.getElementById("vbb-mode-duration")?.classList.contains("is-active");
+    const active = Boolean(
+      [...document.querySelectorAll("#vbb-plan-compare .vbb-plan-card.is-selected")].some((el) =>
+        /时长/.test(el.textContent || "")
+      )
+    );
     return { summary, active };
   });
 
-  await page.click("#vbb-mode-sharp");
+  await clickVbbPlanCard(page, "锐度");
   const sharpMode = await page.evaluate(() => {
     const summary = document.getElementById("vbb-plan-summary")?.textContent || "";
-    const active = document.getElementById("vbb-mode-sharp")?.classList.contains("is-active");
+    const active = Boolean(
+      [...document.querySelectorAll("#vbb-plan-compare .vbb-plan-card.is-selected")].some((el) =>
+        /锐度/.test(el.textContent || "")
+      )
+    );
     const card = [...document.querySelectorAll("#vbb-plan-compare .vbb-plan-card")].find((el) =>
       /锐度/.test(el.textContent || "")
     );
     return { summary, active, cardText: card?.textContent || "" };
   });
 
-  await page.click("#vbb-mode-clarity");
+  await clickVbbPlanCard(page, "清晰");
   await page.evaluate(() => {
     document.getElementById("vbb-advanced")?.setAttribute("open", "");
   });
@@ -412,7 +429,7 @@ async function main() {
   const todayTools = await page.evaluate(() => ({
     vsplit: Boolean(document.getElementById("vsplit")),
     gifm: Boolean(document.getElementById("gifm-merge") && document.getElementById("gifm-file")),
-    vbbSharp: Boolean(document.getElementById("vbb-mode-sharp")),
+    vbbSharp: document.querySelectorAll("#vbb-plan-compare .vbb-plan-card").length >= 3,
     mediaTabs: document.querySelectorAll("#media-subnav [data-media-tab]").length,
     vsplitManualMode: Boolean(document.getElementById("vsplit-mode-m")),
     vsplitMarks: Boolean(document.getElementById("vsplit-marks")),
