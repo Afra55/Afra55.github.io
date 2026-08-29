@@ -8664,6 +8664,29 @@ li a:not([class*="btn"]) {
   max-width: min(100%, 640px);
 }
 
+.acu-chart-tall {
+  max-width: min(100%, 420px);
+}
+
+.acu-type-seg {
+  flex: 0 0 auto;
+}
+
+.acu-type-badge {
+  display: inline-block;
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.acu-type-badge[data-kind="extra"] {
+  border-color: color-mix(in srgb, #c9a0ff 50%, var(--line));
+  color: #c9a0ff;
+}
+
 .acu-chart-note {
   margin: 0;
 }

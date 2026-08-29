@@ -167,6 +167,22 @@
             usedIn: "穴位图 · 361 经穴名录与英文主治补全",
             path: "tools/scripts/build-acupoints.mjs 输入",
           },
+          {
+            name: "Wellcome Collection",
+            version: "—",
+            license: "CC BY 4.0",
+            repo: "https://wellcomecollection.org/",
+            usedIn: "穴位图 · 经络参考图（wellcome/*.jpg）",
+            path: "tools/lib/acupoint/wellcome/",
+          },
+          {
+            name: "GB/T 40997-2021",
+            version: "2021",
+            license: "国家标准（名称与定位整理）",
+            repo: "https://ndls.cnis.ac.cn/standard/detail/d3fc1cfbf61f63334b07738ca9b2f4a9",
+            usedIn: "穴位图 · 51 经外奇穴",
+            path: "tools/lib/extra-acupoints-source.json",
+          },
         ],
       },
       {

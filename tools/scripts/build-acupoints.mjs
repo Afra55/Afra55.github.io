@@ -66,6 +66,7 @@ async function main() {
   const acuCnPath = process.env.ACUKG_CN || "/tmp/acu-Chinesename.json";
   const acuPyPath = process.env.ACUKG_PY || "/tmp/acu-pinyinname.json";
   const acuIndPath = process.env.ACUKG_IND || "/tmp/acu-Indication.json";
+  const extraPath = path.join(ROOT, "lib", "extra-acupoints-source.json");
 
   for (const p of [bencaodianPath, meridiansPath, acuCnPath, acuPyPath, acuIndPath]) {
     if (!fs.existsSync(p)) {
@@ -73,12 +74,17 @@ async function main() {
       process.exit(1);
     }
   }
+  if (!fs.existsSync(extraPath)) {
+    console.error(`缺少奇穴源文件: ${extraPath}`);
+    process.exit(1);
+  }
 
   const bencaodian = JSON.parse(fs.readFileSync(bencaodianPath, "utf8"));
   const meridiansRaw = JSON.parse(fs.readFileSync(meridiansPath, "utf8"));
   const cnRows = readJsonl(acuCnPath);
   const pyRows = readJsonl(acuPyPath);
   const indRows = readJsonl(acuIndPath);
+  const extraRaw = JSON.parse(fs.readFileSync(extraPath, "utf8"));
 
   const richByCode = {};
   bencaodian.filter((x) => x.code).forEach((x) => {
@@ -115,7 +121,7 @@ async function main() {
 
   const meridianByAbbr = Object.fromEntries(meridians.map((m) => [m.abbreviation, m]));
 
-  const acupoints = cnRows
+  const meridianPoints = cnRows
     .map((row) => {
       const rawCode = row.Acupoint_Code;
       const code = acuKgToCode(rawCode);
@@ -157,17 +163,55 @@ async function main() {
       return Number(an) - Number(bn);
     });
 
+  // meridianPoints only — extra merged below
+  const extraPoints = extraRaw.map((row) => ({
+    id: slugFromName(row.nameZh) || row.code.toLowerCase(),
+    code: row.code,
+    nameZh: row.nameZh,
+    namePinyin: row.namePinyin || "",
+    nameEn: row.nameEn || "",
+    meridianKey: "",
+    meridianAbbr: "EX",
+    region: row.region || "奇穴",
+    type: "extra",
+    location: row.location || "",
+    locationEn: "",
+    depth: "",
+    moxibustion: null,
+    specialCategories: [],
+    actions: [],
+    indications: row.indications || [],
+    description: "",
+    descriptionEn: "",
+    rich: Boolean(row.location),
+  }));
+
+  const acupoints = [...meridianPoints, ...extraPoints].sort((a, b) => {
+    if (a.type !== b.type) return a.type === "meridian" ? -1 : 1;
+    const [ap, an] = a.code.split("-");
+    const [bp, bn] = b.code.split("-");
+    if (ap !== bp) return ap.localeCompare(bp);
+    const anNum = Number(an);
+    const bnNum = Number(bn);
+    if (!Number.isNaN(anNum) && !Number.isNaN(bnNum)) return anNum - bnNum;
+    return String(an).localeCompare(String(bn));
+  });
+
   const bundle = {
-    version: 1,
+    version: 2,
     generated: new Date().toISOString().slice(0, 10),
     counts: {
       meridians: meridians.length,
-      acupoints: acupoints.length,
-      richDetail: acupoints.filter((x) => x.rich).length,
+      acupoints: meridianPoints.length,
+      extraPoints: extraPoints.length,
+      total: acupoints.length,
+      richDetail: meridianPoints.filter((x) => x.rich).length,
     },
     attribution: {
       bencaodian: "Bencaodian Editorial / 本草典编辑部 — CC BY-SA 4.0",
       acukg: "AcuKG (yimingli99) — 经穴名录与主治英文条目",
+      extraStandard: "GB/T 40997-2021 经外奇穴名称与定位（51 穴，本站结构化整理）",
+      charts: "Wellcome Collection — CC BY 4.0（经络参考图）",
     },
     meridians,
     acupoints,
