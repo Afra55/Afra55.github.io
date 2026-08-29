@@ -93,7 +93,7 @@
   }
 
   /** 全站逻辑版本；后缀为中国标准时间 Asia/Shanghai（UTC+8） */
-  const TOOLS_VERSION = "2026.08.29-151832";
+  const TOOLS_VERSION = "2026.08.29-152337";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
   /** 切片/批量 GIF 产出后是否自动打 zip 下载；默认关，开启后记住 */
@@ -11736,6 +11736,19 @@
       if (adbTab === "info") await loadSnapshot({ silent: true }).catch(() => {});
     }
 
+    function markAdbBridgeConnected(data) {
+      adbConnected = true;
+      if (adbWorkspace) adbWorkspace.hidden = false;
+      if ($("#adb-refresh")) $("#adb-refresh").disabled = false;
+      const adbLine = data?.adb?.version || "adb ok";
+      const count = adbDevices.length;
+      setAdbStatus(
+        count ? "is-ok" : "is-warn",
+        count ? `已连接 · ${count} 台设备` : "已连接桥 · 无设备",
+        `${adbLine}。支持文件 / 安装 / 应用 / 截图录屏。`
+      );
+    }
+
     async function refreshAdbDevices({ silent = false } = {}) {
       const data = await adbFetch("/devices");
       adbDevices = data.devices || [];
@@ -11747,28 +11760,40 @@
       }
       if (!adbChecked.size && adbSelected) adbChecked.add(adbSelected);
       renderAdbDevices();
+      markAdbBridgeConnected(data);
       if (adbSelected) {
-        await loadAdbInfo(adbSelected);
-        resetFsHistory();
-        await loadFs(adbFsPath?.value || "/");
+        try {
+          await loadAdbInfo(adbSelected);
+          resetFsHistory();
+          await loadFs(adbFsPath?.value || "/");
+        } catch (err) {
+          if (!silent) setError(adbError, err.message || String(err));
+        }
       } else {
         fillAdbInfo(null);
         if (adbFsList) adbFsList.innerHTML = `<div class="adb-fs-empty">请选择设备</div>`;
       }
-      const adbLine = data.adb?.version || "adb ok";
-      setAdbStatus(
-        adbDevices.length ? "is-ok" : "is-warn",
-        adbDevices.length ? `已连接 · ${adbDevices.length} 台设备` : "已连接桥 · 无设备",
-        `${adbLine}。支持文件 / 安装 / 应用 / 截图录屏。`
-      );
       if (!silent) toast(adbDevices.length ? `已刷新 ${adbDevices.length} 台设备` : "桥已连接，未发现设备");
+    }
+
+    async function resolveAdbBridgeDiscovery() {
+      let discovered = await window.devtoolsBridgeToken?.discoverBase?.(adbBase(), adbToken());
+      if (discovered?.health) return discovered;
+      const directBase = normalizeAdbBase(adbBase());
+      try {
+        const health = await window.devtoolsBridgeToken?.probeHealth?.(directBase, adbToken(), true);
+        if (health) return { base: directBase, health };
+      } catch (_) {
+        /* fall through */
+      }
+      return null;
     }
 
     async function connectAdbBridge({ fromPoll = false } = {}) {
       persistAdbSettings();
       setError(adbError, "");
       try {
-        const discovered = await window.devtoolsBridgeToken?.discoverBase?.(adbBase(), adbToken());
+        const discovered = await resolveAdbBridgeDiscovery();
         if (!discovered?.health) {
           throw new Error(
             "无法连接本机桥。请确认启动脚本窗口仍打开；若横幅端口不是 17888，点连接会自动扫描 17888–17899。Token 默认 devtools-bridge。"
@@ -11783,9 +11808,19 @@
             /* ignore */
           }
         }
-        const health = discovered.health;
+        let health = discovered.health;
         updateHostToolsProbe(health);
-        if (!health.adb?.ok) {
+        let adbReady = health.adb?.ok === true;
+        if (!adbReady) {
+          try {
+            const dev = await adbFetch("/devices");
+            adbReady = dev?.ok !== false;
+            if (dev?.adb) health = { ...health, adb: dev.adb };
+          } catch (_) {
+            adbReady = false;
+          }
+        }
+        if (!adbReady) {
           adbConnected = true;
           if (adbWorkspace) adbWorkspace.hidden = true;
           if ($("#adb-refresh")) $("#adb-refresh").disabled = true;
@@ -11803,12 +11838,24 @@
           );
           return false;
         }
-        adbConnected = true;
-        if (adbWorkspace) adbWorkspace.hidden = false;
-        if ($("#adb-refresh")) $("#adb-refresh").disabled = false;
         await refreshAdbDevices({ silent: fromPoll });
         return true;
       } catch (err) {
+        if (fromPoll && adbConnected) {
+          try {
+            await refreshAdbDevices({ silent: true });
+          } catch (_) {
+            /* keep last good UI */
+          }
+          return true;
+        }
+        try {
+          await refreshAdbDevices({ silent: true });
+          setError(adbError, "");
+          return true;
+        } catch (_) {
+          /* fall through to disconnected UI */
+        }
         adbConnected = false;
         if (adbWorkspace) adbWorkspace.hidden = true;
         if ($("#adb-refresh")) $("#adb-refresh").disabled = true;

@@ -74,13 +74,19 @@
       push(`http://127.0.0.1:${port}`);
     }
     for (const base of candidates) {
+      let health = null;
       try {
-        const health = await probeHealth(base, token, false);
-        const port = Number(health.port) || Number(base.split(":").pop()) || 17888;
-        return { base: `http://127.0.0.1:${port}`, health };
+        health = await probeHealth(base, token, false);
       } catch (_) {
-        /* try next port */
+        try {
+          health = await probeHealth(base, token, true);
+        } catch (_) {
+          /* try next port */
+        }
       }
+      if (!health) continue;
+      const port = Number(health.port) || Number(base.split(":").pop()) || 17888;
+      return { base: `http://127.0.0.1:${port}`, health };
     }
     return null;
   }
