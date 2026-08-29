@@ -305,7 +305,7 @@
 
     let bundle;
     try {
-      const res = await fetch("./lib/acupoints-bundle.json?v=2026.08.29-031412");
+      const res = await fetch("./lib/acupoints-bundle.json?v=2026.08.29-031730");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       bundle = await res.json();
     } catch (err) {

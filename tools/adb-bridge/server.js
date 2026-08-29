@@ -4136,6 +4136,7 @@ server.on("upgrade", (req, socket, head) => {
     host: HOST,
     port: PORT,
     token: TOKEN,
+    acceptedTokens: ACCEPTED_TOKENS,
     allowedOrigins: ALLOWED_ORIGINS,
     adbPath: "adb",
     adbSerial,

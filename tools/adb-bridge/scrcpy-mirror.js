@@ -502,8 +502,12 @@ function handleUpgrade(req, socket, head, deps) {
     }
   }
 
-  const token = url.searchParams.get("token") || req.headers["x-adb-token"] || "";
-  if (token !== deps.token) {
+  const token = String(url.searchParams.get("token") || req.headers["x-adb-token"] || req.headers["x-ffmpeg-token"] || "");
+  const accepted =
+    deps.acceptedTokens && typeof deps.acceptedTokens.has === "function"
+      ? deps.acceptedTokens
+      : new Set([deps.token, "devtools-bridge", "devtools-adb", "devtools-ffmpeg"].filter(Boolean));
+  if (!token || !accepted.has(token)) {
     socket.write("HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n");
     socket.destroy();
     return true;

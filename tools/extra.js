@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.29-031412";
+  const TOOLS_VERSION = "2026.08.29-031730";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
   /** 切片/批量 GIF 产出后是否自动打 zip 下载；默认关，开启后记住 */
@@ -10208,8 +10208,14 @@
     let adbLogLive = false;
     let adbTrackedJobs = new Set(); // jobs shown inline on current panels
 
+    function normalizeAdbBase(raw) {
+      let base = String(raw || "http://127.0.0.1:17888").trim().replace(/\/+$/, "");
+      if (!/^https?:\/\//i.test(base)) base = `http://${base}`;
+      return base;
+    }
+
     function adbBase() {
-      return String(adbBaseInput?.value || "http://127.0.0.1:17888").replace(/\/+$/, "");
+      return normalizeAdbBase(adbBaseInput?.value || "http://127.0.0.1:17888");
     }
 
     function adbToken() {
@@ -10229,7 +10235,7 @@
     }
 
     function adbMirrorWsUrl(serial) {
-      let base = adbBase().replace(/\/$/, "");
+      let base = adbBase();
       if (/^https:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(base)) {
         base = base.replace(/^https:/i, "http:");
       }
@@ -10262,7 +10268,7 @@
         const base = localStorage.getItem(ADB_STORE_BASE);
         const sharedToken = window.devtoolsBridgeToken?.read?.();
         const token = localStorage.getItem(ADB_STORE_TOKEN);
-        if (base && adbBaseInput) adbBaseInput.value = base;
+        if (base && adbBaseInput) adbBaseInput.value = normalizeAdbBase(base);
         if (adbTokenInput) adbTokenInput.value = sharedToken || token || adbTokenInput.value || "devtools-bridge";
         const view = localStorage.getItem(ADB_STORE_FSVIEW);
         if (view === "grid" || view === "list") adbFsView = view;
@@ -12767,6 +12773,7 @@
     }
 
     restoreAdbSettings();
+    window.addEventListener("devtools:theme", () => renderAdbDevices());
     $("#adb-fs-view-list")?.classList.toggle("is-active", adbFsView === "list");
     $("#adb-fs-view-grid")?.classList.toggle("is-active", adbFsView === "grid");
     setAdbStatus("is-err", "未连接本机桥", "使用本工具需要本机已安装 adb。请下载完整 ZIP（含 server.js）并运行后连接。");
@@ -13007,15 +13014,20 @@
           };
           ws.onerror = () =>
             scheduleGenericFail(
-              "镜像 WebSocket 连接失败（请确认本机桥已启动、地址为 http://127.0.0.1:17888，且已重启到最新版）"
+              "镜像 WebSocket 连接失败（请确认本机桥已启动、Token 与网页一致，且地址形如 http://127.0.0.1:17888）"
             );
-          ws.onclose = () => {
+          ws.onclose = (ev) => {
             if (errTimer) {
               clearTimeout(errTimer);
               errTimer = 0;
             }
-            if (!settled) fail("镜像连接已关闭");
-            else {
+            if (!settled) {
+              const hint =
+                ev?.code === 1006
+                  ? "镜像连接失败：请检查本机桥 Token（与 ADB/FFmpeg 页一致）及 scrcpy-server 是否已准备"
+                  : "镜像连接已关闭";
+              fail(hint);
+            } else {
               adbMirrorWs = null;
               if (adbInputLive) {
                 adbInputLive = false;

@@ -4304,14 +4304,14 @@ a.adb-tab.adb-tab-external::after {
   align-items: start;
   text-align: left;
   width: 100%;
-  border: 1px solid rgba(120, 150, 190, 0.28);
-  background: linear-gradient(135deg, rgba(14, 24, 42, 0.95), rgba(10, 18, 32, 0.88));
+  border: 1px solid var(--line);
+  background: var(--control-bg, color-mix(in srgb, var(--ink) 6%, transparent));
   color: var(--ink);
   border-radius: 12px;
   padding: 0.7rem 0.8rem;
   position: relative;
   overflow: hidden;
-  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.25);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 4%, transparent);
 }
 
 .adb-device-stripe {
@@ -4319,16 +4319,17 @@ a.adb-tab.adb-tab-external::after {
   align-self: stretch;
   min-height: 2.2rem;
   border-radius: 999px;
-  background: var(--adb-accent, rgba(46, 196, 182, 0.85));
+  background: var(--adb-accent, var(--accent));
 }
 
 .adb-device:hover {
   border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+  background: color-mix(in srgb, var(--accent) 6%, var(--control-bg, var(--panel)));
 }
 
 .adb-device.is-active {
   border-color: color-mix(in srgb, var(--accent) 75%, var(--line));
-  background: linear-gradient(135deg, rgba(20, 48, 52, 0.95), rgba(12, 28, 40, 0.9));
+  background: color-mix(in srgb, var(--accent) 14%, var(--control-bg, var(--panel)));
 }
 
 .adb-device-check {
