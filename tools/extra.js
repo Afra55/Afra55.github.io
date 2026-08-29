@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-imgprev2";
+  const TOOLS_VERSION = "2026.08.17-theme1";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -9451,7 +9451,7 @@
       if (!ctx) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, stageW, stageH);
-      ctx.fillStyle = "#0a101c";
+      ctx.fillStyle = window.DevToolsTheme?.stageBg?.() || "#0a101c";
       ctx.fillRect(0, 0, stageW, stageH);
       ctx.drawImage(src, ox, oy, dw, dh);
       const p = readGifeCropPct();

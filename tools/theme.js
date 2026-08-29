@@ -11,177 +11,11 @@
   /**
    * 预设原则：对比清晰、导航可读；避开纯黑/霓虹紫、奶油衬托陶土红。
    * 每套必须带 --link / --link-hover，否则说明文字链接会发灰或发青。
+   * 定义见 lib/theme-presets.js（与 index 首屏 bootstrap 共用）。
    */
-  const PRESETS = /** @type {ThemePreset[]} */ ([
-    {
-      id: "default",
-      name: "深海青绿",
-      hint: "原站气质，侧栏跟色",
-      vars: {
-        "--bg-0": "#0b1320",
-        "--bg-1": "#131c2e",
-        "--ink": "#eef3fb",
-        "--muted": "#9aabc4",
-        "--line": "rgba(238, 243, 251, 0.13)",
-        "--accent": "#2ec4b6",
-        "--accent-2": "#f0a46a",
-        "--link": "#6ef0e2",
-        "--link-hover": "#b4fff7",
-        "--danger": "#ff6b7a",
-        "--panel": "rgba(15, 23, 38, 0.84)",
-        "--panel-strong": "rgba(11, 18, 32, 0.96)",
-        "--shadow": "0 18px 50px rgba(0, 0, 0, 0.36)",
-        "--bg-glow-a": "rgba(46, 196, 182, 0.26)",
-        "--bg-glow-b": "rgba(240, 164, 106, 0.14)",
-        "--bg-radial-a": "rgba(46, 196, 182, 0.14)",
-        "--bg-radial-b": "rgba(240, 164, 106, 0.09)",
-        "--bg-base-0": "#0b1320",
-        "--bg-base-1": "#10192a",
-        "--bg-base-2": "#090f1a",
-        "--theme-scheme": "dark",
-      },
-    },
-    {
-      id: "pine",
-      name: "松林夜色",
-      hint: "墨绿护眼，长时间好用",
-      vars: {
-        "--bg-0": "#101714",
-        "--bg-1": "#182019",
-        "--ink": "#e7efe8",
-        "--muted": "#95a99a",
-        "--line": "rgba(231, 239, 232, 0.13)",
-        "--accent": "#5fbf8a",
-        "--accent-2": "#c9a66a",
-        "--link": "#8ad4ab",
-        "--link-hover": "#c2efd4",
-        "--danger": "#e08b8b",
-        "--panel": "rgba(20, 28, 24, 0.88)",
-        "--panel-strong": "rgba(14, 22, 18, 0.96)",
-        "--shadow": "0 18px 48px rgba(0, 0, 0, 0.34)",
-        "--bg-glow-a": "rgba(95, 191, 138, 0.2)",
-        "--bg-glow-b": "rgba(201, 166, 106, 0.1)",
-        "--bg-radial-a": "rgba(95, 191, 138, 0.11)",
-        "--bg-radial-b": "rgba(201, 166, 106, 0.07)",
-        "--bg-base-0": "#101714",
-        "--bg-base-1": "#151d17",
-        "--bg-base-2": "#0c120e",
-        "--theme-scheme": "dark",
-      },
-    },
-    {
-      id: "ink",
-      name: "墨蓝",
-      hint: "冷静蓝灰，阅读友好",
-      vars: {
-        "--bg-0": "#0e1520",
-        "--bg-1": "#161f2d",
-        "--ink": "#e9eff8",
-        "--muted": "#93a4bb",
-        "--line": "rgba(233, 239, 248, 0.13)",
-        "--accent": "#6aa3d4",
-        "--accent-2": "#c4a07e",
-        "--link": "#8fc4ef",
-        "--link-hover": "#c8e6ff",
-        "--danger": "#e0909a",
-        "--panel": "rgba(18, 26, 38, 0.88)",
-        "--panel-strong": "rgba(12, 19, 30, 0.96)",
-        "--shadow": "0 18px 48px rgba(0, 0, 0, 0.35)",
-        "--bg-glow-a": "rgba(106, 163, 212, 0.2)",
-        "--bg-glow-b": "rgba(196, 160, 126, 0.1)",
-        "--bg-radial-a": "rgba(106, 163, 212, 0.11)",
-        "--bg-radial-b": "rgba(196, 160, 126, 0.07)",
-        "--bg-base-0": "#0e1520",
-        "--bg-base-1": "#131b28",
-        "--bg-base-2": "#0a1018",
-        "--theme-scheme": "dark",
-      },
-    },
-    {
-      id: "graphite",
-      name: "石墨",
-      hint: "中性深灰，低干扰",
-      vars: {
-        "--bg-0": "#141416",
-        "--bg-1": "#1e1e22",
-        "--ink": "#f2f2f4",
-        "--muted": "#a3a3ab",
-        "--line": "rgba(242, 242, 244, 0.13)",
-        "--accent": "#7db8ae",
-        "--accent-2": "#c9ae86",
-        "--link": "#9ad4c8",
-        "--link-hover": "#d0f3ea",
-        "--danger": "#e09898",
-        "--panel": "rgba(26, 26, 30, 0.9)",
-        "--panel-strong": "rgba(18, 18, 22, 0.97)",
-        "--shadow": "0 16px 44px rgba(0, 0, 0, 0.42)",
-        "--bg-glow-a": "rgba(125, 184, 174, 0.14)",
-        "--bg-glow-b": "rgba(201, 174, 134, 0.09)",
-        "--bg-radial-a": "rgba(125, 184, 174, 0.08)",
-        "--bg-radial-b": "rgba(201, 174, 134, 0.06)",
-        "--bg-base-0": "#141416",
-        "--bg-base-1": "#1a1a1e",
-        "--bg-base-2": "#101012",
-        "--theme-scheme": "dark",
-      },
-    },
-    {
-      id: "paper",
-      name: "纸白",
-      hint: "干净浅色，菜单同步变亮",
-      vars: {
-        "--bg-0": "#f1f3f7",
-        "--bg-1": "#fafbfc",
-        "--ink": "#1a2738",
-        "--muted": "#55657c",
-        "--line": "rgba(26, 39, 56, 0.14)",
-        "--accent": "#1a7f74",
-        "--accent-2": "#a86a38",
-        "--link": "#0e655c",
-        "--link-hover": "#094841",
-        "--danger": "#c24b58",
-        "--panel": "rgba(255, 255, 255, 0.9)",
-        "--panel-strong": "rgba(255, 255, 255, 0.98)",
-        "--shadow": "0 14px 36px rgba(26, 39, 56, 0.1)",
-        "--bg-glow-a": "rgba(26, 127, 116, 0.1)",
-        "--bg-glow-b": "rgba(168, 106, 56, 0.07)",
-        "--bg-radial-a": "rgba(26, 127, 116, 0.07)",
-        "--bg-radial-b": "rgba(168, 106, 56, 0.05)",
-        "--bg-base-0": "#f1f3f7",
-        "--bg-base-1": "#f5f7fa",
-        "--bg-base-2": "#e6eaf0",
-        "--theme-scheme": "light",
-      },
-    },
-    {
-      id: "sky",
-      name: "晴空",
-      hint: "冷调浅色，蓝强调清晰",
-      vars: {
-        "--bg-0": "#e8eef6",
-        "--bg-1": "#f5f8fc",
-        "--ink": "#182640",
-        "--muted": "#546680",
-        "--line": "rgba(24, 38, 64, 0.14)",
-        "--accent": "#2a6ca8",
-        "--accent-2": "#b87334",
-        "--link": "#1a5a96",
-        "--link-hover": "#124270",
-        "--danger": "#c24b58",
-        "--panel": "rgba(255, 255, 255, 0.92)",
-        "--panel-strong": "rgba(255, 255, 255, 0.98)",
-        "--shadow": "0 14px 36px rgba(24, 38, 64, 0.1)",
-        "--bg-glow-a": "rgba(42, 108, 168, 0.1)",
-        "--bg-glow-b": "rgba(184, 115, 52, 0.07)",
-        "--bg-radial-a": "rgba(42, 108, 168, 0.07)",
-        "--bg-radial-b": "rgba(184, 115, 52, 0.05)",
-        "--bg-base-0": "#e8eef6",
-        "--bg-base-1": "#eef3f9",
-        "--bg-base-2": "#dce4ef",
-        "--theme-scheme": "light",
-      },
-    },
-  ]);
+  const PRESETS = /** @type {ThemePreset[]} */ (
+    window.DevToolsThemePresets?.length ? window.DevToolsThemePresets : [{ id: "default", name: "深海青绿", hint: "", vars: { "--bg-0": "#0b1320", "--theme-scheme": "dark" } }]
+  );
 
   const CUSTOM_KEYS = [
     ["--bg-0", "bg0", "背景"],
@@ -374,6 +208,26 @@
     });
   }
 
+  function readCssVar(name, fallback = "") {
+    try {
+      return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  function syncThemeColor(bgHex) {
+    const hex = String(bgHex || "").trim();
+    if (!/^#[0-9a-fA-F]{6}$/.test(hex)) return;
+    let meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.setAttribute("name", "theme-color");
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute("content", hex);
+  }
+
   function applyVars(vars) {
     const root = document.documentElement;
     const finalVars = ensureLinkVars({ ...vars });
@@ -381,6 +235,7 @@
       if (k.startsWith("--")) root.style.setProperty(k, v);
     });
     root.dataset.themeScheme = finalVars["--theme-scheme"] || "dark";
+    syncThemeColor(finalVars["--bg-0"]);
   }
 
   function clearInlineVars() {
@@ -616,6 +471,10 @@
     presets: PRESETS,
     getState: () => ({ ...state, custom: { ...state.custom } }),
     apply: applyTheme,
+    cssVar: readCssVar,
+    stageBg() {
+      return readCssVar("--stage-bg", readCssVar("--bg-base-2", "#0a101c"));
+    },
     setPreset(id) {
       const preset = presetById(id);
       state.useCustom = false;

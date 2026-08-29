@@ -357,7 +357,7 @@
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, stageW, stageH);
-    ctx.fillStyle = "#0a101c";
+    ctx.fillStyle = window.DevToolsTheme?.stageBg?.() || "#0a101c";
     ctx.fillRect(0, 0, stageW, stageH);
     ctx.drawImage(src, geom.ox, geom.oy, geom.dw, geom.dh);
     boxEl.hidden = false;
@@ -716,7 +716,7 @@
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, stageW, stageH);
-    ctx.fillStyle = "#0a101c";
+    ctx.fillStyle = window.DevToolsTheme?.stageBg?.() || "#0a101c";
     ctx.fillRect(0, 0, stageW, stageH);
     ctx.drawImage(geom.src, geom.ox, geom.oy, geom.dw, geom.dh);
   }

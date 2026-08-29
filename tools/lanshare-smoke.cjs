@@ -15,7 +15,7 @@ const fs = require("fs");
 
 const baseUrl = process.argv[2] || "http://127.0.0.1:4173/tools/";
 const root = path.join(__dirname);
-const VER = "imgprev2";
+const VER = "theme1";
 
 function fetchText(url) {
   return new Promise((resolve, reject) => {

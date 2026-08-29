@@ -346,7 +346,7 @@
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, cssW, cssH);
-    ctx.fillStyle = "color-mix(in srgb, var(--panel, #121826) 70%, #0a101c)";
+    ctx.fillStyle = window.DevToolsTheme?.stageBg?.() || "#0a101c";
     ctx.fillRect(0, 0, cssW, cssH);
     const mid = cssH / 2;
     const data = peaks && peaks.length ? peaks : null;
