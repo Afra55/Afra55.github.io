@@ -88,7 +88,12 @@ async function main() {
       return plan && !plan.hidden;
     }, { timeout: 180000 });
 
-    await page.click("#vbb-mode-duration");
+    await page.evaluate(() => {
+      const card = [...document.querySelectorAll("#vbb-plan-compare .vbb-plan-card")].find((el) =>
+        /时长/.test(el.textContent || "")
+      );
+      card?.click();
+    });
     const before = await page.evaluate(() => {
       const hook = window.DevToolsVbb;
       if (!hook?.getActivePlan || !hook?.estimateBlackbox) {
