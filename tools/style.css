@@ -9576,3 +9576,65 @@ li a:not([class*="btn"]) {
     text-align: left;
   }
 }
+
+/* 首屏启动进度遮罩 */
+html[data-boot-loading="1"] body {
+  overflow: hidden;
+}
+
+#devtools-boot-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100000;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: color-mix(in srgb, var(--bg-0, #0b1320) 88%, transparent);
+  backdrop-filter: blur(10px);
+  transition: opacity 0.38s ease, visibility 0.38s ease;
+}
+
+#devtools-boot-overlay.is-done {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.devtools-boot-card {
+  width: min(360px, 100%);
+  padding: 22px 20px 18px;
+  border-radius: 16px;
+  border: 1px solid var(--line, rgba(238, 243, 251, 0.13));
+  background: var(--panel-strong, rgba(11, 18, 32, 0.96));
+  box-shadow: var(--shadow, 0 18px 50px rgba(0, 0, 0, 0.36));
+}
+
+.devtools-boot-title {
+  font-size: 1.05rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+  margin-bottom: 14px;
+  color: var(--ink, #eef3fb);
+}
+
+.devtools-boot-bar {
+  height: 6px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--line, rgba(238, 243, 251, 0.13)) 70%, transparent);
+}
+
+.devtools-boot-bar-fill {
+  display: block;
+  height: 100%;
+  width: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent, #2ec4b6), var(--accent-2, #f0a46a));
+  transition: width 0.28s ease;
+}
+
+.devtools-boot-label {
+  margin-top: 10px;
+  font-size: 0.86rem;
+  color: var(--muted, #9aabc4);
+}

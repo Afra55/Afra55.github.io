@@ -1928,7 +1928,7 @@
     return `#${tool}`;
   }
 
-  function applyRoute({ skipRecent, keepDrawer } = {}) {
+  async function applyRoute({ skipRecent, keepDrawer } = {}) {
     let route = parseRoute();
     if (shouldRestoreLastTool()) {
       const saved = loadLastToolId();
@@ -1968,6 +1968,13 @@
       if (rawHash !== canonical.replace(/^#/, "")) {
         history.replaceState(null, "", canonical);
       }
+    }
+
+    const routeToolId = currentTool === "media" ? currentMediaTab : currentTool;
+    try {
+      await window.DevToolsLazy?.ensureForTool?.(routeToolId);
+    } catch (err) {
+      console.error("tool lazy-load failed", routeToolId, err);
     }
 
     $$(".tool-panel").forEach((panel) => {
@@ -2033,6 +2040,11 @@
         detail: { tool: currentTool, mediaTab: currentMediaTab },
       })
     );
+
+    if (!window.__devtoolsBootReady) {
+      window.__devtoolsBootReady = true;
+      window.dispatchEvent(new CustomEvent("devtools:boot-ready"));
+    }
   }
 
   function navigateTo(tool, tab, { replace = false } = {}) {
