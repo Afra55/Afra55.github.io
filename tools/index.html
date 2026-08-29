@@ -2452,6 +2452,14 @@ hello@world.org</textarea>
           </div>
         </div>
 
+        <div class="gif-progress adb-dl-progress" id="adb-dl-progress" hidden>
+          <div class="gif-progress-head">
+            <p class="hint gif-progress-title" id="adb-dl-progress-text">准备下载包…</p>
+            <span class="mono gif-progress-pct" id="adb-dl-progress-pct">0%</span>
+          </div>
+          <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill is-busy" id="adb-dl-progress-fill" style="width:0%"></span></div>
+        </div>
+
         <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
           <label for="adb-base">桥地址</label>
           <input id="adb-base" class="mono" type="text" value="http://127.0.0.1:17888" autocomplete="off" spellcheck="false" />
