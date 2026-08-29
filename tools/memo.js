@@ -5598,6 +5598,10 @@
 
   function shouldBootMemoSoon() {
     if (isMemoActive()) return true;
+    const hashHead = String(location.hash || "")
+      .replace(/^#/, "")
+      .split(/[/?]/)[0];
+    if (hashHead === "memo") return true;
     try {
       if (localStorage.getItem("devtools-tool-last-v1") === "memo") return true;
     } catch (_) {}
@@ -5612,21 +5616,16 @@
   }
 
   function scheduleMemoBoot() {
-    if (shouldBootMemoSoon()) {
-      ensureMemoBoot();
-      return;
-    }
-    const run = () => {
-      if (!memoBooted) ensureMemoBoot();
+    const tryBoot = () => {
+      if (shouldBootMemoSoon()) ensureMemoBoot();
     };
+    tryBoot();
+    window.addEventListener("devtools:route", tryBoot);
     if (typeof requestIdleCallback === "function") {
-      requestIdleCallback(run, { timeout: 4000 });
+      requestIdleCallback(tryBoot, { timeout: 4000 });
     } else {
-      setTimeout(run, 1500);
+      setTimeout(tryBoot, 1500);
     }
-    window.addEventListener("devtools:route", () => {
-      if (isMemoActive()) ensureMemoBoot();
-    });
   }
 
   scheduleMemoBoot();

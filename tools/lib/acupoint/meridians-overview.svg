@@ -6,6 +6,8 @@
       .abbr { fill: var(--accent, #6ec1ff); font-size: 13px; font-weight: 700; font-family: ui-monospace, monospace; }
       .name { fill: var(--ink, #e8edf4); font-size: 10px; font-family: system-ui, sans-serif; }
       .title { fill: var(--ink, #e8edf4); font-size: 12px; font-weight: 600; font-family: system-ui, sans-serif; }
+      .has-mer-highlight .mer-box { opacity: 0.35; transition: opacity 0.15s ease; }
+      .has-mer-highlight .mer-box.is-mer-active { opacity: 1; }
     </style>
   </defs>
   <text class="title" x="320" y="24" text-anchor="middle">十四正经 + 任督二脉</text>
