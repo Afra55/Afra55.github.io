@@ -46,7 +46,13 @@
   let htmlWinUri = "";
   let htmlPoolCursor = 0;
   let htmlAudioPrimed = false;
+  let webAudioReady = false;
+  let lastTickAt = 0;
+  let spinDisplaySize = 0;
+  let zhVoice = null;
+  let speechPrimed = false;
   const HTML_POOL_SIZE = 8;
+  const TICK_MIN_MS = 110;
   let inited = false;
   let editorsReady = false;
   let panelFill = "";
@@ -374,12 +380,13 @@
 
   function drawWheel(highlightIndex = -1) {
     if (!ctx || !canvas) return;
-    const cssW = wheelDisplaySize();
+    const cssW = spinning ? spinDisplaySize || wheelDisplaySize() : wheelDisplaySize();
     const cssH = cssW;
     if (cssW < 1) return;
     const cx = cssW / 2;
     const cy = cssH / 2;
     const radius = Math.min(cx, cy) * 0.88;
+    const liteSpin = spinning && highlightIndex < 0;
     ctx.clearRect(0, 0, cssW, cssH);
 
     ctx.save();
@@ -400,20 +407,22 @@
       ctx.lineWidth = 2;
       ctx.stroke();
 
-      ctx.save();
-      ctx.rotate(arc.mid);
-      ctx.textAlign = "right";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = "#fff";
-      if (highlightIndex < 0 && spinning) {
-        ctx.shadowColor = "transparent";
-        ctx.shadowBlur = 0;
-      } else {
-        ctx.shadowColor = "rgba(0,0,0,0.45)";
-        ctx.shadowBlur = 4;
+      if (!liteSpin) {
+        ctx.save();
+        ctx.rotate(arc.mid);
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        ctx.fillStyle = "#fff";
+        if (highlightIndex < 0 && spinning) {
+          ctx.shadowColor = "transparent";
+          ctx.shadowBlur = 0;
+        } else {
+          ctx.shadowColor = "rgba(0,0,0,0.45)";
+          ctx.shadowBlur = 4;
+        }
+        drawSegmentLabel(ctx, segments[i]?.label || "", arc, radius);
+        ctx.restore();
       }
-      drawSegmentLabel(ctx, segments[i]?.label || "", arc, radius);
-      ctx.restore();
     });
 
     ctx.beginPath();
@@ -511,7 +520,38 @@
   function shouldUseHtmlAudio() {
     if (audioBackend === "html") return true;
     if (audioBackend === "web") return false;
-    return prefersCoarsePointer();
+    return prefersCoarsePointer() && !webAudioReady;
+  }
+
+  function loadZhVoice() {
+    if (!window.speechSynthesis) return;
+    const voices = window.speechSynthesis.getVoices();
+    zhVoice =
+      voices.find((v) => /^zh-(CN|Hans)/i.test(v.lang)) ||
+      voices.find((v) => /^zh/i.test(v.lang)) ||
+      null;
+  }
+
+  function primeSpeechSynthesis() {
+    if (!window.speechSynthesis || speechPrimed) return;
+    speechPrimed = true;
+    loadZhVoice();
+    try {
+      if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+    } catch (_) {}
+    try {
+      const u = new SpeechSynthesisUtterance(" ");
+      u.volume = 0.01;
+      u.rate = 2;
+      if (zhVoice) u.voice = zhVoice;
+      window.speechSynthesis.speak(u);
+      window.speechSynthesis.cancel();
+    } catch (_) {}
+  }
+
+  if (typeof window !== "undefined" && window.speechSynthesis) {
+    window.speechSynthesis.addEventListener("voiceschanged", loadZhVoice);
+    loadZhVoice();
   }
 
   function playHtmlFromPool(pool, cursorRef, volume = 0.55) {
@@ -551,15 +591,15 @@
 
   /** 在用户手势回调里同步调用（touchend / click） */
   function unlockWheelAudio() {
+    primeSpeechSynthesis();
     if (!soundOn) return;
     initHtmlWheelAudio();
     primeHtmlWheelAudio();
 
-    if (shouldUseHtmlAudio()) return;
-
     const ac = ensureAudio();
     if (!ac) {
       audioBackend = "html";
+      webAudioReady = false;
       return;
     }
     try {
@@ -569,7 +609,18 @@
       src.connect(ac.destination);
       src.start(0);
     } catch (_) {}
-    if (ac.state === "suspended") ac.resume().catch(() => {});
+    if (ac.state === "suspended") {
+      ac.resume()
+        .then(() => {
+          webAudioReady = ac.state === "running";
+        })
+        .catch(() => {
+          webAudioReady = false;
+          audioBackend = "html";
+        });
+    } else {
+      webAudioReady = ac.state === "running";
+    }
   }
 
   function playTickWeb(intensity = 0.5) {
@@ -609,6 +660,9 @@
 
   function playTick(intensity = 0.5) {
     if (!soundOn) return;
+    const now = performance.now();
+    if (now - lastTickAt < TICK_MIN_MS) return;
+    lastTickAt = now;
     initHtmlWheelAudio();
     if (shouldUseHtmlAudio() || !playTickWeb(intensity)) {
       playHtmlFromPool(htmlTickPool, htmlTickCursor, 0.55 + intensity * 0.1);
@@ -643,11 +697,42 @@
 
   function speakResult(text) {
     if (!text || !window.speechSynthesis) return;
-    window.speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = "zh-CN";
-    u.rate = 0.95;
-    window.speechSynthesis.speak(u);
+    const synth = window.speechSynthesis;
+    loadZhVoice();
+    try {
+      if (synth.paused) synth.resume();
+    } catch (_) {}
+    synth.cancel();
+    window.setTimeout(() => {
+      try {
+        if (synth.paused) synth.resume();
+      } catch (_) {}
+      const u = new SpeechSynthesisUtterance(text);
+      u.lang = "zh-CN";
+      u.rate = 0.95;
+      if (zhVoice) u.voice = zhVoice;
+      synth.speak(u);
+    }, prefersCoarsePointer() ? 180 : 60);
+  }
+
+  function speakResultAfterEffects(text) {
+    if (!text) return;
+    if (!soundOn) {
+      speakResult(text);
+      return;
+    }
+    initHtmlWheelAudio();
+    let spoke = false;
+    const fire = () => {
+      if (spoke) return;
+      spoke = true;
+      speakResult(text);
+    };
+    window.setTimeout(fire, prefersCoarsePointer() ? 900 : 520);
+    if (htmlWinPool.length) {
+      const last = htmlWinPool[htmlWinPool.length - 1];
+      last.addEventListener("ended", fire, { once: true });
+    }
   }
 
   function easeOutCubic(t) {
@@ -657,6 +742,8 @@
   async function spinWheel() {
     if (spinning || !segments.length) return;
     spinning = true;
+    spinDisplaySize = wheelDisplaySize();
+    lastTickAt = 0;
     if (spinBtn) spinBtn.disabled = true;
     if (resultEl) resultEl.textContent = "旋转中…";
 
@@ -704,9 +791,10 @@
     if (resultEl) {
       resultEl.innerHTML = `🎯 <strong>${escapeHtml(winner)}</strong>`;
     }
-    speakResult(winner);
+    speakResultAfterEffects(winner);
 
     spinning = false;
+    spinDisplaySize = 0;
     if (spinBtn) spinBtn.disabled = false;
     saveState();
   }
@@ -723,6 +811,21 @@
     }, { passive: true });
     spinBtn?.addEventListener("click", () => {
       unlockWheelAudio();
+      const ac = ensureAudio();
+      if (ac && ac.state === "suspended") {
+        ac.resume()
+          .then(() => {
+            webAudioReady = ac.state === "running";
+            spinWheel().catch(() => {});
+          })
+          .catch(() => {
+            webAudioReady = false;
+            audioBackend = "html";
+            spinWheel().catch(() => {});
+          });
+        return;
+      }
+      if (ac) webAudioReady = ac.state === "running";
       spinWheel().catch(() => {});
     });
     window.addEventListener("resize", () => {
