@@ -2389,10 +2389,7 @@
   function openTextEditPanel() {
     const dlg = $("#memo-text-edit");
     if (!dlg) return;
-    if (!dlg.open) {
-      if (typeof dlg.show === "function") dlg.show();
-      else dlg.showModal?.();
-    }
+    if (!dlg.open && typeof dlg.showModal === "function") dlg.showModal();
     syncTextEditJsonActions();
   }
 
@@ -2535,7 +2532,6 @@
     if (sub) sub.textContent = item.name ? `正在编辑：${item.name}` : "修改后点保存，覆盖原条目";
     if (src) src.value = text;
     openTextEditPanel();
-    renderItems();
     setTimeout(() => {
       src?.focus?.();
       try {

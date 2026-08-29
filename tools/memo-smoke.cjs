@@ -268,7 +268,7 @@ async function main() {
       out.tempUx.stackCleared = document.querySelectorAll("#memo-temp-prompt-stack .memo-temp-prompt").length === 0;
     }
 
-    // inline text edit dialog
+    // modal text edit dialog
     const textItem = (window.DevToolsMemo.getIndex().items || []).find((it) => it.type === "text" && !/\.json$/i.test(it.fileName || it.name || ""));
     const jsonItem = (window.DevToolsMemo.getIndex().items || []).find((it) => /\.json$/i.test(it.fileName || it.name || ""));
     out.textEdit = {
@@ -291,7 +291,9 @@ async function main() {
       const listW = listEl?.getBoundingClientRect?.().width || 0;
       const editW = editDlg?.getBoundingClientRect?.().width || 0;
       const quickW = document.getElementById("memo-editor-fold")?.getBoundingClientRect?.().width || 0;
-      out.textEdit.widthMatchesList = mainW > 0 && editW >= mainW - 6 && quickW >= listW - 6;
+      out.textEdit.isModal = Boolean(editDlg?.matches?.(":modal"));
+      out.textEdit.modalWideEnough = editW >= 480;
+      out.textEdit.quickWidthOk = mainW > 0 && quickW >= listW - 6;
       out.textEdit.memoStillActive = document.getElementById("memo")?.classList.contains("is-workspace-active");
       out.textEdit.loaded = (editSrc?.value || "").includes("冒烟测试文本");
       out.textEdit.cardEditing = Boolean(document.querySelector(`.memo-card.is-editing[data-memo-id="${textItem.id}"]`));
@@ -1162,7 +1164,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260817theme1/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260829memoedit1/.test(s.src)),
     };
 
     out.pwa = {
@@ -1543,7 +1545,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/theme1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memoedit1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1744,7 +1746,7 @@ async function main() {
     failed.push("text edit UI missing");
   }
   if (!result.textEdit?.opened || !result.textEdit?.memoStillActive || !result.textEdit?.loaded) {
-    failed.push("text edit dialog should open inline with content");
+    failed.push("text edit dialog should open as modal with content");
   }
   if (!result.textEdit?.saved || !result.textEdit?.closed || !result.textEdit?.editingCleared || !result.textEdit?.noQuickJsonActions || !result.textEdit?.jsonHiddenForTxt) {
     failed.push("text edit save/close failed");
@@ -1811,8 +1813,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/theme1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
-    failed.push("cache-bust/version should be aligned to theme1");
+  if (!/memoedit1/i.test(result.cacheBust?.version || "") || !result.cacheBust?.memoScript) {
+    failed.push("cache-bust/version should be aligned to memoedit1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
@@ -1826,8 +1828,11 @@ async function main() {
   if (!result.tempUx?.api || !result.tempUx?.daysDefault || !result.tempUx?.marked || !result.tempUx?.badge || !result.tempUx?.badgeProminent || !result.tempUx?.cleared || !result.tempUx?.stackMulti || !result.tempUx?.stackCleared) {
     failed.push("memo temp mark API/UI failed");
   }
-  if (!result.textEdit?.widthMatchesList) {
-    failed.push("memo text edit / quick editor should be at least as wide as the list");
+  if (!result.textEdit?.isModal || !result.textEdit?.modalWideEnough) {
+    failed.push("memo text edit should open as centered modal dialog");
+  }
+  if (!result.textEdit?.quickWidthOk) {
+    failed.push("memo quick text editor should be at least as wide as the list");
   }
   if (!result.pwa?.hasManifestLink || !/manifest\.webmanifest/.test(result.pwa?.manifestHref || "")) {
     failed.push("PWA manifest link missing");

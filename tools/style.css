@@ -6605,22 +6605,12 @@ button.adb-device-body.linkish {
 }
 
 .memo-text-edit-dlg {
-  width: 100%;
-  max-width: 100% !important;
-  margin: 0 0 0.75rem;
-  box-sizing: border-box;
-}
-
-.memo-text-edit-dlg:not([open]) {
-  display: none;
-}
-
-.memo-text-edit-dlg[open] {
-  display: block;
+  max-width: min(96vw, 64rem) !important;
+  width: min(96vw, 64rem);
 }
 
 .memo-text-edit-dlg .area {
-  min-height: 18rem;
+  min-height: 22rem;
   width: 100%;
   box-sizing: border-box;
   resize: vertical;
