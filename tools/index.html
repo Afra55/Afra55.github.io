@@ -4319,13 +4319,25 @@ adb devices</pre>
     </div>
   </div>
   <div id="muyu-fs" class="muyu-fs" hidden>
+    <canvas id="muyu-fs-bg" class="muyu-fs-bg" aria-hidden="true"></canvas>
+    <div class="muyu-fs-moon" aria-hidden="true"></div>
+    <div class="muyu-fs-pulse" id="muyu-fs-pulse" aria-hidden="true"></div>
     <button type="button" class="muyu-fs-close ghost-btn" id="muyu-fs-close" title="退出全屏 (Esc)">退出全屏</button>
     <label class="muyu-fs-sound flag" for="muyu-sound-fs">
       <input type="checkbox" id="muyu-sound-fs" checked /> 音效
     </label>
-    <p class="muyu-fs-count mono" id="muyu-fs-count" aria-live="polite">0</p>
-    <p class="muyu-fs-count-label hint">已敲次数</p>
-    <button type="button" class="muyu-fish-btn muyu-fish-btn-fs" id="muyu-fish-fs" aria-label="敲木鱼"></button>
+    <header class="muyu-fs-head">
+      <p class="muyu-fs-title">电子木鱼</p>
+      <p class="muyu-fs-count-label hint">累计敲击</p>
+      <p class="muyu-fs-count mono" id="muyu-fs-count" aria-live="polite">0</p>
+    </header>
+    <div class="muyu-fs-stage" id="muyu-fs-stage">
+      <div class="muyu-fs-halo" aria-hidden="true"></div>
+      <div class="muyu-fs-ripple" id="muyu-fs-ripple" aria-hidden="true"></div>
+      <button type="button" class="muyu-fish-btn muyu-fish-btn-fs" id="muyu-fish-fs" aria-label="敲木鱼"></button>
+    </div>
+    <div class="muyu-fs-floats" id="muyu-fs-floats" aria-hidden="true"></div>
+    <p class="muyu-fs-foot hint">轻触木鱼 · 棒起清净心</p>
   </div>
   <div id="ruler-fs" class="ruler-fs" hidden>
     <canvas id="ruler-fs-canvas" class="ruler-fs-canvas" aria-label="全屏直尺"></canvas>
@@ -4338,6 +4350,6 @@ adb devices</pre>
   <script src="./app.js?v=2026.08.29-180000"></script>
   <script src="./wheel.js?v=2026.08.29-190000"></script>
   <script src="./ruler.js?v=2026.08.29-181000"></script>
-  <script src="./muyu.js?v=2026.08.29-191000"></script>
+  <script src="./muyu.js?v=2026.08.29-192000"></script>
 </body>
 </html>
