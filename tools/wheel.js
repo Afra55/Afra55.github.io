@@ -39,6 +39,10 @@
   let segments = [];
   let soundOn = true;
   let audioCtx = null;
+  let inited = false;
+  let editorsReady = false;
+  let panelFill = "";
+  let resizeObserver = null;
 
   function defaultLabel(i) {
     return `选项 ${i + 1}`;
@@ -164,6 +168,54 @@
       .replace(/>/g, "&gt;");
   }
 
+  function trimLabel(text) {
+    return String(text || "").slice(0, MAX_LABEL_LEN);
+  }
+
+  function autosizeWheelTextarea(el) {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${Math.max(36, el.scrollHeight)}px`;
+  }
+
+  function bindSegmentEditorEvents() {
+    if (!segmentsList || segmentsList.dataset.bound === "1") return;
+    segmentsList.dataset.bound = "1";
+
+    segmentsList.addEventListener("input", (ev) => {
+      const input = ev.target;
+      if (!(input instanceof HTMLTextAreaElement) || !input.classList.contains("wheel-seg-text")) return;
+      autosizeWheelTextarea(input);
+      const idx = Number(input.closest(".wheel-seg-row")?.dataset.idx);
+      if (!Number.isFinite(idx)) return;
+      segments[idx].label = trimLabel(input.value);
+      drawWheel();
+      saveState();
+    });
+
+    segmentsList.addEventListener("input", (ev) => {
+      const input = ev.target;
+      if (!(input instanceof HTMLInputElement) || !input.classList.contains("wheel-seg-range")) return;
+      const idx = Number(input.closest(".wheel-seg-row")?.dataset.idx);
+      if (!Number.isFinite(idx)) return;
+      setSegmentWeight(idx, Number(input.value));
+      syncSegmentRow(idx);
+      drawWheel();
+      saveState();
+    });
+
+    segmentsList.addEventListener("change", (ev) => {
+      const input = ev.target;
+      if (!(input instanceof HTMLInputElement) || !input.classList.contains("wheel-seg-num")) return;
+      const idx = Number(input.closest(".wheel-seg-row")?.dataset.idx);
+      if (!Number.isFinite(idx)) return;
+      setSegmentWeight(idx, Number(input.value));
+      renderSegmentEditors();
+      drawWheel();
+      saveState();
+    });
+  }
+
   function renderSegmentEditors() {
     if (!segmentsList) return;
     segmentsList.innerHTML = segments
@@ -183,40 +235,8 @@
       })
       .join("");
 
-    segmentsList.querySelectorAll(".wheel-seg-text").forEach((input) => {
-      autosizeWheelTextarea(input);
-      input.addEventListener("input", () => {
-        autosizeWheelTextarea(input);
-        const idx = Number(input.closest(".wheel-seg-row")?.dataset.idx);
-        if (Number.isFinite(idx)) {
-          segments[idx].label = trimLabel(input.value);
-          drawWheel();
-          saveState();
-        }
-      });
-    });
-
-    segmentsList.querySelectorAll(".wheel-seg-range").forEach((input) => {
-      input.addEventListener("input", () => {
-        const idx = Number(input.closest(".wheel-seg-row")?.dataset.idx);
-        if (!Number.isFinite(idx)) return;
-        setSegmentWeight(idx, Number(input.value));
-        syncSegmentRow(idx);
-        drawWheel();
-        saveState();
-      });
-    });
-
-    segmentsList.querySelectorAll(".wheel-seg-num").forEach((input) => {
-      input.addEventListener("change", () => {
-        const idx = Number(input.closest(".wheel-seg-row")?.dataset.idx);
-        if (!Number.isFinite(idx)) return;
-        setSegmentWeight(idx, Number(input.value));
-        renderSegmentEditors();
-        drawWheel();
-        saveState();
-      });
-    });
+    segmentsList.querySelectorAll(".wheel-seg-text").forEach((input) => autosizeWheelTextarea(input));
+    editorsReady = true;
   }
 
   function syncSegmentRow(index) {
@@ -238,16 +258,6 @@
       r.querySelector(".wheel-seg-num").value = String(wi);
       r.querySelector(".wheel-seg-pct").textContent = `${wi}%`;
     });
-  }
-
-  function trimLabel(text) {
-    return String(text || "").slice(0, MAX_LABEL_LEN);
-  }
-
-  function autosizeWheelTextarea(el) {
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${Math.max(36, el.scrollHeight)}px`;
   }
 
   function wrapWheelLabel(ctx, text, maxWidth) {
@@ -320,6 +330,17 @@
     return segments.length - 1;
   }
 
+  function isWheelRoute() {
+    const raw = String(location.hash || "")
+      .replace(/^#/, "")
+      .trim();
+    return raw.split(/[/?]/)[0] === "wheel";
+  }
+
+  function isWheelVisible() {
+    return !!(root && !root.hidden && root.classList.contains("is-workspace-active"));
+  }
+
   function resizeCanvas() {
     if (!canvas || !root) return;
     const box = canvas.parentElement;
@@ -327,6 +348,10 @@
     const size = Math.floor(Math.min(box.clientWidth, box.clientHeight, window.innerHeight * 0.78));
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const px = Math.max(280, size);
+    if (canvas.width === px * dpr && canvas.height === px * dpr) {
+      drawWheel();
+      return;
+    }
     canvas.width = px * dpr;
     canvas.height = px * dpr;
     canvas.style.width = `${px}px`;
@@ -367,15 +392,20 @@
       ctx.textAlign = "right";
       ctx.textBaseline = "middle";
       ctx.fillStyle = "#fff";
-      ctx.shadowColor = "rgba(0,0,0,0.45)";
-      ctx.shadowBlur = 4;
+      if (highlightIndex < 0 && spinning) {
+        ctx.shadowColor = "transparent";
+        ctx.shadowBlur = 0;
+      } else {
+        ctx.shadowColor = "rgba(0,0,0,0.45)";
+        ctx.shadowBlur = 4;
+      }
       drawSegmentLabel(ctx, segments[i]?.label || "", arc, radius);
       ctx.restore();
     });
 
     ctx.beginPath();
     ctx.arc(0, 0, radius * 0.12, 0, Math.PI * 2);
-    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--panel").trim() || "#1e1e2e";
+    ctx.fillStyle = panelFill || "#1e1e2e";
     ctx.fill();
     ctx.strokeStyle = "rgba(255,255,255,0.5)";
     ctx.lineWidth = 3;
@@ -520,27 +550,56 @@
       saveState();
     });
     spinBtn?.addEventListener("click", () => spinWheel().catch(() => {}));
-    window.addEventListener("resize", () => resizeCanvas(), { passive: true });
-    window.addEventListener("devtools:route", () => {
-      if (location.hash.replace(/^#/, "").split(/[/?]/)[0] === "wheel") {
-        requestAnimationFrame(resizeCanvas);
-      }
+    window.addEventListener("resize", () => {
+      if (isWheelVisible()) resizeCanvas();
+    }, { passive: true });
+  }
+
+  function observeWheelStage() {
+    const stage = canvas?.parentElement;
+    if (!stage || stage.dataset.wheelObserved === "1") return;
+    stage.dataset.wheelObserved = "1";
+    if (typeof ResizeObserver !== "function") return;
+    resizeObserver = new ResizeObserver(() => {
+      if (isWheelVisible()) resizeCanvas();
+    });
+    resizeObserver.observe(stage);
+  }
+
+  function scheduleSegmentEditors() {
+    if (editorsReady) return;
+    const run = () => {
+      if (editorsReady || !segmentsList) return;
+      renderSegmentEditors();
+    };
+    if (typeof requestIdleCallback === "function") {
+      requestIdleCallback(run, { timeout: 180 });
+    } else {
+      setTimeout(run, 0);
+    }
+  }
+
+  function paintWheelSoon() {
+    requestAnimationFrame(() => {
+      resizeCanvas();
+      requestAnimationFrame(resizeCanvas);
     });
   }
 
-  function initWheel() {
+  function initWheelCore() {
     root = $("#wheel");
-    if (!root || root.dataset.bound) return;
+    if (!root || root.dataset.bound) return false;
     root.dataset.bound = "1";
 
     canvas = $("#wheel-canvas");
-    ctx = canvas?.getContext("2d");
+    ctx = canvas?.getContext("2d", { alpha: true });
     spinBtn = $("#wheel-spin");
     resultEl = $("#wheel-result");
     countInput = $("#wheel-count");
     durationInput = $("#wheel-duration");
     soundToggle = $("#wheel-sound");
     segmentsList = $("#wheel-segments");
+    panelFill = getComputedStyle(document.documentElement).getPropertyValue("--panel").trim() || "#1e1e2e";
 
     const saved = loadState();
     if (saved) {
@@ -557,14 +616,35 @@
     if (countInput) countInput.value = String(segments.length);
     if (soundToggle) soundToggle.checked = soundOn;
 
-    renderSegmentEditors();
+    bindSegmentEditorEvents();
     bindControls();
-    requestAnimationFrame(resizeCanvas);
+    observeWheelStage();
+    paintWheelSoon();
+    scheduleSegmentEditors();
+    return true;
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initWheel);
-  } else {
-    initWheel();
+  function ensureWheel() {
+    if (inited) {
+      if (isWheelVisible()) paintWheelSoon();
+      if (!editorsReady) scheduleSegmentEditors();
+      return;
+    }
+    if (!initWheelCore()) return;
+    inited = true;
+  }
+
+  function onRoute(ev) {
+    const tool = ev?.detail?.tool || (isWheelRoute() ? "wheel" : "");
+    if (tool === "wheel") ensureWheel();
+  }
+
+  window.addEventListener("devtools:route", onRoute);
+  if (isWheelRoute()) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", ensureWheel, { once: true });
+    } else {
+      ensureWheel();
+    }
   }
 })();

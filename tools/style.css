@@ -477,6 +477,11 @@ body.theme-reduce-glow .bg-grid {
   animation: rise 0.65s ease forwards;
 }
 
+#wheel[data-reveal] {
+  animation-duration: 0.35s;
+  animation-delay: 0s;
+}
+
 .panel[data-reveal]:nth-of-type(n) {
   animation-delay: 0.08s;
 }
