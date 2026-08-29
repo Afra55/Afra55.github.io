@@ -138,8 +138,10 @@ html.is-pwa-standalone #pwa-install {
   cursor: grab;
   user-select: none;
   -webkit-user-select: none;
-  display: inline-block;
+  display: block;
+  width: 100%;
   max-width: 100%;
+  box-sizing: border-box;
   padding: 0.2rem 0.35rem;
   margin-left: -0.35rem;
   border-radius: 6px;
@@ -985,10 +987,65 @@ body.nav-open {
     transition: none;
   }
 
-  .tool-nav {
+  .nav-bar.is-compact .nav-group {
+    position: relative;
+    width: auto;
+    min-width: calc(18rem);
+    max-width: min(18rem, calc(100vw - 1rem));
+    flex: 0 0 auto;
+    margin-bottom: 0;
+    overflow: visible;
+  }
+
+  .nav-bar.is-compact .nav-group-title.is-sortable {
     display: block;
     width: 100%;
-    flex: 1 0 auto;
+    max-width: 100%;
+    box-sizing: border-box;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding-right: 2.75rem;
+  }
+
+  .nav-bar.is-compact .nav-group-title.is-sortable::after {
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    float: none;
+  }
+
+  .nav-bar.is-compact .nav-group {
+    position: relative;
+  }
+
+  .nav-bar.is-compact .nav-group-title.is-sortable {
+    position: relative;
+  }
+
+  .nav-bar.is-compact:not(.is-searching) .nav-group-tools {
+    left: 0;
+    right: auto;
+    min-width: calc(18rem);
+    width: max-content;
+    max-width: min(18rem, calc(100vw - 1rem));
+    z-index: 10;
+  }
+
+  .nav-bar.is-compact:not(.is-searching) .nav-group.is-flyout-open,
+  .nav-bar.is-compact:not(.is-searching) .nav-group.is-pinned {
+    z-index: 12;
+  }
+
+  .tool-nav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 0.45rem;
+    width: 100%;
+    flex: 1 1 auto;
+    min-width: calc(18rem);
     min-height: 0;
     overflow: visible;
   }
@@ -1049,6 +1106,8 @@ body.nav-open {
   padding: 0.45rem 0.85rem;
   cursor: pointer;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .nav-tool-ctx-item:hover,
