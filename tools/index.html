@@ -18,7 +18,7 @@
   <!-- 不阻塞首屏：Noto Serif SC 只给文转图用，避免每次拉取中文字体；Google 字体 CSS 在国内常卡住数秒 -->
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap" /></noscript>
-  <link rel="stylesheet" href="./style.css?v=20260829desktopchrome1" />
+  <link rel="stylesheet" href="./style.css?v=20260829adbcmdwheel1" />
   <link rel="stylesheet" href="./workspace-nav.css?v=20260829desktopchrome1" />
   <script src="./lib/theme-presets.js?v=20260829acu2"></script>
   <script>
@@ -104,7 +104,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.29-desktopchrome1</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本">v2026.08.29-adbcmdwheel1</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn site-chrome-toggle" id="site-chrome-toggle" aria-pressed="false" title="隐藏 DevTools 标题栏与左侧工具菜单">隐藏顶栏</button>
@@ -2435,6 +2435,18 @@ hello@world.org</textarea>
         </div>
         <p class="error" id="adb-error" hidden></p>
 
+        <div class="adb-cmds-section panel-card" id="adb-cmds-section">
+          <div class="label-row">
+            <h2 class="subhead">ADB 命令大全</h2>
+            <span class="hint tight" id="adb-cmds-meta">本地查阅 · 可搜索 · 点击复制</span>
+          </div>
+          <label class="adb-cmds-search-wrap" for="adb-cmds-search">
+            <span class="visually-hidden">搜索命令</span>
+            <input id="adb-cmds-search" class="mono adb-cmds-search" type="search" placeholder="搜索命令、说明、分类…" autocomplete="off" spellcheck="false" />
+          </label>
+          <div class="adb-cmds-list" id="adb-cmds-list" aria-live="polite">加载中…</div>
+        </div>
+
         <div class="adb-layout" id="adb-workspace" hidden>
           <div class="adb-side">
             <div class="label-row">
@@ -3124,6 +3136,43 @@ hello@world.org</textarea>
               </div>
               <div class="adb-jobs-list" id="adb-jobs-list" aria-live="polite"></div>
             </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+<section id="wheel" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>大转盘</h1>
+        <p>自定义分块、比例与文字，设置旋转秒数后随机停针；可选旋转音效，结束后语音读出结果。</p>
+      </div>
+      <div class="panel-body wheel-body">
+        <div class="wheel-layout">
+          <aside class="wheel-side panel-card">
+            <div class="wheel-controls">
+              <label class="wheel-field" for="wheel-count">
+                <span>分块数量</span>
+                <input id="wheel-count" class="mono meta-input" type="number" min="2" max="36" value="6" />
+              </label>
+              <label class="wheel-field" for="wheel-duration">
+                <span>旋转秒数</span>
+                <input id="wheel-duration" class="mono meta-input" type="number" min="1" max="60" step="0.5" value="5" />
+              </label>
+              <label class="wheel-field wheel-sound-field" for="wheel-sound">
+                <input id="wheel-sound" type="checkbox" checked />
+                <span>旋转音效</span>
+              </label>
+              <button type="button" class="primary-btn wheel-spin-btn" id="wheel-spin">开始旋转</button>
+              <p class="wheel-result" id="wheel-result" aria-live="polite">点击「开始旋转」随机抽选</p>
+            </div>
+            <div class="wheel-segments-head">
+              <strong>各块设置</strong>
+              <span class="hint tight">改一块比例时，其余块等比缩放</span>
+            </div>
+            <div class="wheel-segments" id="wheel-segments"></div>
+          </aside>
+          <div class="wheel-stage panel-card">
+            <canvas id="wheel-canvas" class="wheel-canvas" aria-label="大转盘"></canvas>
           </div>
         </div>
       </div>
@@ -4071,9 +4120,9 @@ adb devices</pre>
   <script src="./temp.js?v=20260829acu2"></script>
   <script src="./lib/pure.js?v=20260810l"></script>
   <script src="./lib/oss-deps.js?v=20260829acu2"></script>
-  <script src="./app.js?v=20260829desktopchrome1"></script>
+  <script src="./app.js?v=20260829adbcmdwheel1"></script>
   <script src="./about.js?v=20260829acu2" defer></script>
-  <script src="./extra.js?v=20260829desktopchrome1" defer></script>
+  <script src="./extra.js?v=20260829adbcmdwheel1" defer></script>
   <script src="./acupoint.js?v=20260829acu2" defer></script>
   <script src="./vtrim.js?v=20260829acu2" defer></script>
   <script src="./vplay.js?v=20260817theme1" defer></script>
@@ -4082,6 +4131,7 @@ adb devices</pre>
   <script src="./lanshare.js?v=20260817theme1" defer></script>
   <script src="./setup.js?v=20260817theme1" defer></script>
   <script src="./imgkit.js?v=20260810l" defer></script>
+  <script src="./wheel.js?v=20260829adbcmdwheel1" defer></script>
   <script src="./memo.js?v=20260829desktopchrome1" defer></script>
   <script src="./textimg.js?v=20260817theme1" defer></script>
   <script src="./imgtext.js?v=20260817theme1" defer></script>

@@ -1,0 +1,317 @@
+[
+  {
+    "category": "基础与连接",
+    "commands": [
+      { "cmd": "adb devices", "desc": "列出已连接的设备及状态（device / offline / unauthorized）" },
+      { "cmd": "adb devices -l", "desc": "列出设备并显示型号、传输 ID 等详细信息" },
+      { "cmd": "adb get-state", "desc": "输出当前默认设备的连接状态" },
+      { "cmd": "adb wait-for-device", "desc": "阻塞等待直到有设备连接" },
+      { "cmd": "adb wait-for-device shell", "desc": "等待设备就绪后进入 shell" },
+      { "cmd": "adb kill-server", "desc": "停止本地 ADB 服务端进程" },
+      { "cmd": "adb start-server", "desc": "启动本地 ADB 服务端" },
+      { "cmd": "adb reconnect", "desc": "尝试重新连接已断开的设备" },
+      { "cmd": "adb reconnect offline", "desc": "对 offline 设备发起重连" },
+      { "cmd": "adb reconnect device", "desc": "对已连接设备刷新连接" },
+      { "cmd": "adb usb", "desc": "将设备切换回 USB 调试模式（无线调试后常用）" },
+      { "cmd": "adb tcpip <port>", "desc": "重启 adbd 为 TCP 模式并监听指定端口（默认 5555）" },
+      { "cmd": "adb connect <host>:<port>", "desc": "通过 IP 地址连接无线调试设备" },
+      { "cmd": "adb disconnect", "desc": "断开所有无线连接" },
+      { "cmd": "adb disconnect <host>:<port>", "desc": "断开指定 IP 连接" },
+      { "cmd": "adb pair <host>:<port>", "desc": "Android 11+ 无线配对（需配对码）" },
+      { "cmd": "adb mdns services", "desc": "列出 mDNS 发现的无线调试服务" },
+      { "cmd": "adb mdns check", "desc": "检查 mDNS 服务是否可用" },
+      { "cmd": "adb version", "desc": "显示 ADB 客户端与服务端版本" },
+      { "cmd": "adb help", "desc": "显示 ADB 帮助信息" }
+    ]
+  },
+  {
+    "category": "多设备与序列号",
+    "commands": [
+      { "cmd": "adb -s <serial> <command>", "desc": "对指定序列号的设备执行命令" },
+      { "cmd": "adb -d <command>", "desc": "仅对 USB 连接的物理设备执行（忽略 emulator）" },
+      { "cmd": "adb -e <command>", "desc": "仅对正在运行的模拟器执行" },
+      { "cmd": "adb -t <transport_id> <command>", "desc": "按 transport ID 指定设备（devices -l 可见）" },
+      { "cmd": "adb get-serialno", "desc": "输出当前设备序列号" },
+      { "cmd": "adb get-devpath", "desc": "输出设备 USB 路径（Linux）" },
+      { "cmd": "adb host-serial <serial> <command>", "desc": "在 USB 主机侧按序列号路由命令" },
+      { "cmd": "adb host-transport <id> <command>", "desc": "在 USB 主机侧按 transport ID 路由" }
+    ]
+  },
+  {
+    "category": "Shell 与命令执行",
+    "commands": [
+      { "cmd": "adb shell", "desc": "进入设备交互式 shell（多为 sh 或 mksh）" },
+      { "cmd": "adb shell <command>", "desc": "在设备上执行单条 shell 命令并返回输出" },
+      { "cmd": "adb shell sh -c '<cmd>'", "desc": "显式通过 sh 执行复杂命令" },
+      { "cmd": "adb exec-out <command>", "desc": "执行命令并原样输出二进制流（适合截图/文件）" },
+      { "cmd": "adb exec-in <command>", "desc": "从 stdin 读取数据并传给设备命令" },
+      { "cmd": "adb shell echo $SHELL", "desc": "查看设备默认 shell 路径" },
+      { "cmd": "adb shell whoami", "desc": "查看当前 shell 用户（多为 shell）" },
+      { "cmd": "adb shell id", "desc": "查看当前 UID/GID" },
+      { "cmd": "adb shell pm list packages", "desc": "列出已安装包名（等同包管理）" },
+      { "cmd": "adb shell settings get global adb_enabled", "desc": "读取系统设置项示例" },
+      { "cmd": "adb shell settings put global stay_on_while_plugged_in 3", "desc": "充电时常亮屏幕（位掩码 1=USB 2=AC 3=两者）" },
+      { "cmd": "adb shell am start -a android.settings.SETTINGS", "desc": "打开系统设置主页" },
+      { "cmd": "adb shell am start -a android.settings.APPLICATION_DEVELOPMENT_SETTINGS", "desc": "打开开发者选项页" },
+      { "cmd": "adb shell input keyevent KEYCODE_HOME", "desc": "模拟按下 Home 键" },
+      { "cmd": "adb shell input keyevent KEYCODE_BACK", "desc": "模拟返回键" },
+      { "cmd": "adb shell input keyevent KEYCODE_POWER", "desc": "模拟电源键" },
+      { "cmd": "adb shell input keyevent KEYCODE_VOLUME_UP", "desc": "音量加" },
+      { "cmd": "adb shell input keyevent KEYCODE_VOLUME_DOWN", "desc": "音量减" },
+      { "cmd": "adb shell input keyevent 26", "desc": "用键码数字发送按键（26=电源）" },
+      { "cmd": "adb shell input text 'hello'", "desc": "输入 ASCII 文本（空格需转义 %s）" },
+      { "cmd": "adb shell input tap <x> <y>", "desc": "在坐标点击" },
+      { "cmd": "adb shell input swipe <x1> <y1> <x2> <y2> [ms]", "desc": "滑动手势" },
+      { "cmd": "adb shell input roll <dx> <dy>", "desc": "滚动/trackball 事件" },
+      { "cmd": "adb shell screencap -p /sdcard/screen.png", "desc": "设备端截图保存到路径" },
+      { "cmd": "adb shell screenrecord /sdcard/demo.mp4", "desc": "设备端录屏（Ctrl+C 结束）" },
+      { "cmd": "adb shell dumpsys", "desc": "输出所有系统服务 dump（信息量大）" },
+      { "cmd": "adb shell dumpsys battery", "desc": "电池状态" },
+      { "cmd": "adb shell dumpsys meminfo", "desc": "内存概况" },
+      { "cmd": "adb shell dumpsys activity activities", "desc": "Activity 栈信息" },
+      { "cmd": "adb shell dumpsys window windows", "desc": "窗口信息" },
+      { "cmd": "adb shell dumpsys package <pkg>", "desc": "指定包详细信息" },
+      { "cmd": "adb shell dumpsys gfxinfo <pkg>", "desc": "图形渲染性能" },
+      { "cmd": "adb shell getprop", "desc": "列出所有系统属性" },
+      { "cmd": "adb shell getprop ro.build.version.release", "desc": "读取 Android 版本属性" },
+      { "cmd": "adb shell setprop <key> <value>", "desc": "设置系统属性（通常需 root）" },
+      { "cmd": "adb shell su", "desc": "尝试获取 root shell（需已 root 且授权）" },
+      { "cmd": "adb root", "desc": "以 root 权限重启 adbd（userdebug/eng 或已 root 设备）" },
+      { "cmd": "adb unroot", "desc": "恢复 adbd 为非 root" },
+      { "cmd": "adb shell run-as <pkg> <cmd>", "desc": "以 debuggable 应用身份执行（访问应用私有目录）" }
+    ]
+  },
+  {
+    "category": "文件传输",
+    "commands": [
+      { "cmd": "adb push <local> <remote>", "desc": "将电脑文件推送到设备" },
+      { "cmd": "adb pull <remote> [local]", "desc": "从设备拉取文件到电脑" },
+      { "cmd": "adb push <dir>/ .", "desc": "推送整个目录内容到设备当前 remote 目录" },
+      { "cmd": "adb pull /sdcard/DCIM ./photos", "desc": "批量拉取相册目录示例" },
+      { "cmd": "adb sync [dir]", "desc": "同步 build 输出到设备（开发刷机场景，较少用）" },
+      { "cmd": "adb shell ls -la <path>", "desc": "列出设备目录" },
+      { "cmd": "adb shell rm <path>", "desc": "删除设备文件" },
+      { "cmd": "adb shell mkdir -p <path>", "desc": "创建设备目录" },
+      { "cmd": "adb shell cp <src> <dst>", "desc": "设备内复制文件" },
+      { "cmd": "adb shell mv <src> <dst>", "desc": "设备内移动/重命名" },
+      { "cmd": "adb shell cat <file>", "desc": "查看设备文本文件内容" },
+      { "cmd": "adb shell dd if=<src> of=<dst>", "desc": "设备内块复制（高级）" }
+    ]
+  },
+  {
+    "category": "应用安装与卸载",
+    "commands": [
+      { "cmd": "adb install <apk>", "desc": "安装 APK（覆盖旧版需 -r）" },
+      { "cmd": "adb install -r <apk>", "desc": "覆盖安装（保留数据）" },
+      { "cmd": "adb install -d <apk>", "desc": "允许降级安装" },
+      { "cmd": "adb install -g <apk>", "desc": "安装时授予 runtime 权限" },
+      { "cmd": "adb install -t <apk>", "desc": "允许安装 testOnly APK" },
+      { "cmd": "adb install-multiple <apk1> <apk2> ...", "desc": "安装 split APK 集合" },
+      { "cmd": "adb install-multi-package <pkg> <splits...>", "desc": "多包 split 安装" },
+      { "cmd": "adb uninstall <package>", "desc": "卸载应用" },
+      { "cmd": "adb uninstall -k <package>", "desc": "卸载但保留数据与缓存" },
+      { "cmd": "adb shell pm install -r /sdcard/app.apk", "desc": "在设备 shell 内安装（需路径可访问）" },
+      { "cmd": "adb shell pm uninstall <package>", "desc": "shell 内卸载" },
+      { "cmd": "adb shell pm clear <package>", "desc": "清除应用数据" },
+      { "cmd": "adb shell pm enable <package>", "desc": "启用应用/组件" },
+      { "cmd": "adb shell pm disable-user <package>", "desc": "禁用应用（当前用户）" },
+      { "cmd": "adb shell pm hide <package>", "desc": "隐藏应用（需系统权限）" },
+      { "cmd": "adb shell pm unhide <package>", "desc": "取消隐藏" },
+      { "cmd": "adb shell pm grant <package> <permission>", "desc": "授予运行时权限" },
+      { "cmd": "adb shell pm revoke <package> <permission>", "desc": "撤销运行时权限" },
+      { "cmd": "adb shell pm reset-permissions", "desc": "重置所有运行时权限" },
+      { "cmd": "adb shell pm set-install-location 0", "desc": "安装位置策略（0 自动 1 内部 2 外部）" },
+      { "cmd": "adb shell pm trim-caches <bytes>", "desc": "修剪缓存释放空间" },
+      { "cmd": "adb shell cmd package install-existing <package>", "desc": "安装系统中已存在但未启用的包" }
+    ]
+  },
+  {
+    "category": "包管理与查询",
+    "commands": [
+      { "cmd": "adb shell pm list packages", "desc": "列出所有包名" },
+      { "cmd": "adb shell pm list packages -3", "desc": "仅第三方应用" },
+      { "cmd": "adb shell pm list packages -s", "desc": "仅系统应用" },
+      { "cmd": "adb shell pm list packages -d", "desc": "已禁用的包" },
+      { "cmd": "adb shell pm list packages -u", "desc": "含未安装但有数据的包" },
+      { "cmd": "adb shell pm list packages -f", "desc": "显示 APK 路径" },
+      { "cmd": "adb shell pm list packages -i", "desc": "显示安装器包名" },
+      { "cmd": "adb shell pm list packages --user 0", "desc": "指定用户列出包" },
+      { "cmd": "adb shell pm path <package>", "desc": "输出 APK 路径" },
+      { "cmd": "adb shell pm dump <package>", "desc": "包详细信息 dump" },
+      { "cmd": "adb shell pm list permissions -g -d", "desc": "列出危险权限组" },
+      { "cmd": "adb shell pm list instrumentation", "desc": "列出 Instrumentation 测试" },
+      { "cmd": "adb shell pm list features", "desc": "设备支持的软件特性" },
+      { "cmd": "adb shell pm list libraries", "desc": "共享库列表" },
+      { "cmd": "adb shell pm get-install-location", "desc": "当前安装位置策略" },
+      { "cmd": "adb shell cmd package resolve-activity -a android.intent.action.MAIN -c android.intent.category.LAUNCHER <pkg>", "desc": "解析启动 Activity" }
+    ]
+  },
+  {
+    "category": "Activity 与 Intent",
+    "commands": [
+      { "cmd": "adb shell am start -n <pkg>/<activity>", "desc": "启动指定 Activity" },
+      { "cmd": "adb shell am start -a <action> -d <data>", "desc": "按 action/data 启动" },
+      { "cmd": "adb shell am start -W <component>", "desc": "启动并等待完成，输出耗时" },
+      { "cmd": "adb shell am start -S <component>", "desc": "启动前先 force-stop 应用" },
+      { "cmd": "adb shell am startservice -n <pkg>/<service>", "desc": "启动 Service" },
+      { "cmd": "adb shell am stopservice -n <pkg>/<service>", "desc": "停止 Service" },
+      { "cmd": "adb shell am broadcast -a <action>", "desc": "发送广播" },
+      { "cmd": "adb shell am force-stop <package>", "desc": "强制停止应用" },
+      { "cmd": "adb shell am kill <package>", "desc": "杀死应用进程（可恢复）" },
+      { "cmd": "adb shell am kill-all", "desc": "杀死所有后台可杀进程" },
+      { "cmd": "adb shell am stack list", "desc": "列出 Activity 栈" },
+      { "cmd": "adb shell am task list", "desc": "列出最近任务" },
+      { "cmd": "adb shell am get-inactive <package>", "desc": "查询应用是否处于闲置限制" },
+      { "cmd": "adb shell am set-inactive <package> true", "desc": "标记应用闲置状态" },
+      { "cmd": "adb shell am compat enable <change-id> <package>", "desc": "启用兼容模式变更" },
+      { "cmd": "adb shell am monitor", "desc": "监控 crash/ANR（开发调试）" }
+    ]
+  },
+  {
+    "category": "日志与调试",
+    "commands": [
+      { "cmd": "adb logcat", "desc": "实时查看系统日志" },
+      { "cmd": "adb logcat -c", "desc": "清空日志缓冲区" },
+      { "cmd": "adb logcat -d", "desc": "dump 后退出（不持续跟踪）" },
+      { "cmd": "adb logcat -v time", "desc": "带时间戳格式" },
+      { "cmd": "adb logcat -v threadtime", "desc": "线程时间格式（常用）" },
+      { "cmd": "adb logcat -v color", "desc": "彩色输出（终端支持时）" },
+      { "cmd": "adb logcat *:S Tag:V", "desc": "仅显示指定 Tag 为 Verbose" },
+      { "cmd": "adb logcat -s ActivityManager", "desc": "过滤 Tag" },
+      { "cmd": "adb logcat -b main", "desc": "指定缓冲区 main/system/events/crash/radio" },
+      { "cmd": "adb logcat -G 16M", "desc": "设置日志缓冲区大小" },
+      { "cmd": "adb logcat -f <file>", "desc": "输出到文件" },
+      { "cmd": "adb bugreport", "desc": "生成完整 bugreport（zip，耗时较长）" },
+      { "cmd": "adb bugreport <path>", "desc": "保存 bugreport 到指定路径" },
+      { "cmd": "adb shell dumpsys dropbox", "desc": "系统 dropbox 崩溃记录" },
+      { "cmd": "adb shell dumpsys activity service ActivityManager", "desc": "ActivityManager 服务 dump" },
+      { "cmd": "adb jdwp", "desc": "列出可 JDWP 调试的进程 PID" },
+      { "cmd": "adb forward tcp:8700 jdwp:<pid>", "desc": "转发 JDWP 调试端口" }
+    ]
+  },
+  {
+    "category": "端口转发与网络",
+    "commands": [
+      { "cmd": "adb forward tcp:<local> tcp:<remote>", "desc": "电脑端口转发到设备端口" },
+      { "cmd": "adb forward tcp:9222 localabstract:chrome_devtools_remote", "desc": "Chrome WebView 调试转发示例" },
+      { "cmd": "adb forward --list", "desc": "列出所有 forward 规则" },
+      { "cmd": "adb forward --remove tcp:<local>", "desc": "移除指定 forward" },
+      { "cmd": "adb forward --remove-all", "desc": "移除全部 forward" },
+      { "cmd": "adb reverse tcp:<remote> tcp:<local>", "desc": "设备端口反向转发到电脑（Web 调试常用）" },
+      { "cmd": "adb reverse --list", "desc": "列出 reverse 规则" },
+      { "cmd": "adb reverse --remove tcp:<remote>", "desc": "移除指定 reverse" },
+      { "cmd": "adb reverse --remove-all", "desc": "移除全部 reverse" },
+      { "cmd": "adb shell netstat", "desc": "网络连接状态（视 ROM 而定）" },
+      { "cmd": "adb shell ip addr", "desc": "网络接口与 IP" },
+      { "cmd": "adb shell ifconfig", "desc": "网络接口（旧命令）" },
+      { "cmd": "adb shell ping -c 4 8.8.8.8", "desc": "测试网络连通" },
+      { "cmd": "adb shell settings put global http_proxy <host:port>", "desc": "设置全局 HTTP 代理" },
+      { "cmd": "adb shell settings put global http_proxy :0", "desc": "清除 HTTP 代理" }
+    ]
+  },
+  {
+    "category": "截图与录屏",
+    "commands": [
+      { "cmd": "adb exec-out screencap -p > screen.png", "desc": "截图直接保存到电脑（PNG）" },
+      { "cmd": "adb shell screencap -p /sdcard/s.png && adb pull /sdcard/s.png", "desc": "先存设备再 pull" },
+      { "cmd": "adb shell screencap /sdcard/s.raw", "desc": "原始 framebuffer 截图" },
+      { "cmd": "adb shell screenrecord --help", "desc": "录屏参数说明" },
+      { "cmd": "adb shell screenrecord --time-limit 30 /sdcard/r.mp4", "desc": "最长录 30 秒" },
+      { "cmd": "adb shell screenrecord --size 1280x720 /sdcard/r.mp4", "desc": "指定分辨率录屏" },
+      { "cmd": "adb shell screenrecord --bit-rate 6000000 /sdcard/r.mp4", "desc": "指定码率" },
+      { "cmd": "adb pull /sdcard/r.mp4", "desc": "拉取录屏文件" },
+      { "cmd": "adb shell screenrecord --bugreport", "desc": "录屏附加 bugreport 信息" }
+    ]
+  },
+  {
+    "category": "备份与恢复",
+    "commands": [
+      { "cmd": "adb backup -f backup.ab <package>", "desc": "备份应用数据（需设备确认，Android 12 前较常用）" },
+      { "cmd": "adb backup -all -f full.ab", "desc": "备份全部允许的应用" },
+      { "cmd": "adb backup -noapk <package>", "desc": "备份不含 APK" },
+      { "cmd": "adb backup -shared -f shared.ab", "desc": "备份共享存储" },
+      { "cmd": "adb restore backup.ab", "desc": "从 backup 文件恢复" },
+      { "cmd": "adb shell bmgr backupnow <package>", "desc": "触发 BackupManager 立即备份" },
+      { "cmd": "adb shell bmgr list transports", "desc": "列出备份传输方式" }
+    ]
+  },
+  {
+    "category": "系统与重启",
+    "commands": [
+      { "cmd": "adb reboot", "desc": "正常重启设备" },
+      { "cmd": "adb reboot bootloader", "desc": "重启到 Bootloader / Fastboot" },
+      { "cmd": "adb reboot recovery", "desc": "重启到 Recovery" },
+      { "cmd": "adb reboot sideload", "desc": "重启到 sideload 模式" },
+      { "cmd": "adb reboot fastboot", "desc": "重启到 fastbootd（部分设备）" },
+      { "cmd": "adb shell reboot", "desc": "通过 shell 重启" },
+      { "cmd": "adb shell reboot -p", "desc": "关机" },
+      { "cmd": "adb shell svc power shutdown", "desc": "关机（部分 ROM）" },
+      { "cmd": "adb shell svc usb setFunctions mtp", "desc": "切换 USB 功能为 MTP" },
+      { "cmd": "adb shell svc usb setFunctions adb", "desc": "切换 USB 功能为 ADB" },
+      { "cmd": "adb shell svc wifi enable", "desc": "打开 Wi-Fi" },
+      { "cmd": "adb shell svc wifi disable", "desc": "关闭 Wi-Fi" },
+      { "cmd": "adb shell svc bluetooth enable", "desc": "打开蓝牙" },
+      { "cmd": "adb shell svc bluetooth disable", "desc": "关闭蓝牙" },
+      { "cmd": "adb shell cmd statusbar expand-notifications", "desc": "展开通知栏" },
+      { "cmd": "adb shell cmd statusbar collapse", "desc": "收起状态栏" }
+    ]
+  },
+  {
+    "category": "性能与测试",
+    "commands": [
+      { "cmd": "adb shell top -n 1", "desc": "进程 CPU/内存快照" },
+      { "cmd": "adb shell dumpsys cpuinfo", "desc": "CPU 使用概况" },
+      { "cmd": "adb shell dumpsys meminfo <package>", "desc": "指定应用内存详情" },
+      { "cmd": "adb shell dumpsys batterystats", "desc": "电池统计" },
+      { "cmd": "adb shell dumpsys batterystats --reset", "desc": "重置电池统计" },
+      { "cmd": "adb shell dumpsys SurfaceFlinger", "desc": "合成器/帧率相关信息" },
+      { "cmd": "adb shell dumpsys gfxinfo <package> framestats", "desc": "逐帧渲染统计" },
+      { "cmd": "adb shell cmd gfxinfo <package> reset", "desc": "重置 gfxinfo 统计" },
+      { "cmd": "adb shell monkey -p <package> -v 500", "desc": "Monkey 随机压力测试 500 事件" },
+      { "cmd": "adb shell monkey -p <package> --pct-touch 80 1000", "desc": "自定义事件比例" },
+      { "cmd": "adb shell am profile start <process> /sdcard/trace", "desc": "开始方法 profiling" },
+      { "cmd": "adb shell am profile stop <process>", "desc": "停止 profiling" },
+      { "cmd": "adb shell simpleperf record -p <pid>", "desc": "simpleperf 采样（NDK 性能）" }
+    ]
+  },
+  {
+    "category": "安全与策略",
+    "commands": [
+      { "cmd": "adb shell settings put global verifier_verify_adb_installs 0", "desc": "关闭 ADB 安装验证（视 ROM）" },
+      { "cmd": "adb shell settings put global package_verifier_enable 0", "desc": "关闭包验证器" },
+      { "cmd": "adb shell settings put secure install_non_market_apps 1", "desc": "允许未知来源（旧版）" },
+      { "cmd": "adb shell appops set <package> RUN_IN_BACKGROUND allow", "desc": "允许后台运行" },
+      { "cmd": "adb shell appops get <package>", "desc": "查看应用 ops 策略" },
+      { "cmd": "adb shell cmd appops set <package> android:mock_location allow", "desc": "允许模拟定位" },
+      { "cmd": "adb shell dpm set-device-owner <component>", "desc": "设置 Device Owner（企业）" },
+      { "cmd": "adb shell dpm set-profile-owner <component>", "desc": "设置 Profile Owner" },
+      { "cmd": "adb shell locksettings set-pin 1234", "desc": "设置 PIN（测试机）" },
+      { "cmd": "adb shell locksettings clear --old 1234", "desc": "清除锁屏" }
+    ]
+  },
+  {
+    "category": "模拟器与高级",
+    "commands": [
+      { "cmd": "adb emu avd name", "desc": "查询模拟器 AVD 名称" },
+      { "cmd": "adb emu kill", "desc": "关闭模拟器" },
+      { "cmd": "adb emu sms send <sender> <body>", "desc": "模拟收到短信" },
+      { "cmd": "adb emu geo fix <lon> <lat>", "desc": "设置 GPS 位置" },
+      { "cmd": "adb emu sensor set acceleration <x>:<y>:<z>", "desc": "模拟加速度传感器" },
+      { "cmd": "adb emu network speed full", "desc": "模拟网络速度" },
+      { "cmd": "adb emu network delay none", "desc": "模拟网络延迟" },
+      { "cmd": "adb shell cmd connectivity airplane-mode enable", "desc": "飞行模式开" },
+      { "cmd": "adb shell cmd connectivity airplane-mode disable", "desc": "飞行模式关" },
+      { "cmd": "adb shell cmd uimode night yes", "desc": "强制深色模式" },
+      { "cmd": "adb shell cmd uimode night no", "desc": "强制浅色模式" },
+      { "cmd": "adb shell cmd role add-role-holder android.app.role.BROWSER <package>", "desc": "设置默认浏览器" },
+      { "cmd": "adb install -r --fastdeploy <apk>", "desc": "快速增量部署（支持的 build）" },
+      { "cmd": "adb shell cmd jobscheduler run -f <package> <jobId>", "desc": "强制执行 JobScheduler 任务" },
+      { "cmd": "adb shell content query --uri content://media/external/file", "desc": "ContentProvider 查询示例" },
+      { "cmd": "adb shell settings list global", "desc": "列出 global 设置项" },
+      { "cmd": "adb shell settings list secure", "desc": "列出 secure 设置项" },
+      { "cmd": "adb shell settings list system", "desc": "列出 system 设置项" },
+      { "cmd": "adb shell cmd package compile -m speed -f <package>", "desc": "强制全量编译应用（优化）" },
+      { "cmd": "adb shell pm art dump", "desc": "ART 运行时信息" }
+    ]
+  }
+]

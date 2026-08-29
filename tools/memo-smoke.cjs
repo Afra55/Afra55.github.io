@@ -1563,6 +1563,38 @@ async function main() {
     return out;
   });
 
+  await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#wheel`, {
+    waitUntil: "networkidle0",
+    timeout: 60000,
+  });
+  await page.waitForFunction(() => document.getElementById("wheel")?.classList.contains("is-workspace-active"), {
+    timeout: 15000,
+  });
+  result.wheel = await page.evaluate(() => ({
+    active: document.getElementById("wheel")?.classList.contains("is-workspace-active"),
+    hasCanvas: Boolean(document.getElementById("wheel-canvas")),
+    hasSpin: Boolean(document.getElementById("wheel-spin")),
+    segRows: document.querySelectorAll("#wheel-segments .wheel-seg-row").length,
+    hasScript: [...document.scripts].some((s) => /wheel\.js/.test(s.src)),
+  }));
+
+  await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#adb`, {
+    waitUntil: "networkidle0",
+    timeout: 60000,
+  });
+  await page.waitForFunction(() => document.getElementById("adb")?.classList.contains("is-workspace-active"), {
+    timeout: 15000,
+  });
+  result.adbCmds = await page.evaluate(async () => {
+    const out = { section: Boolean(document.getElementById("adb-cmds-section")), rows: 0, searchable: Boolean(document.getElementById("adb-cmds-search")) };
+    for (let i = 0; i < 30; i += 1) {
+      out.rows = document.querySelectorAll(".adb-cmd-row").length;
+      if (out.rows > 10) break;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    return out;
+  });
+
   await page.setUserAgent(
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
   );
@@ -1598,7 +1630,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/desktopchrome1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/adbcmdwheel1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1867,8 +1899,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/desktopchrome1/i.test(result.cacheBust?.version || "")) {
-    failed.push("cache-bust/version should be aligned to desktopchrome1");
+  if (!/adbcmdwheel1/i.test(result.cacheBust?.version || "")) {
+    failed.push("cache-bust/version should be aligned to adbcmdwheel1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
@@ -1993,6 +2025,18 @@ async function main() {
     !result.desktopChrome?.restored
   ) {
     failed.push("desktop chrome toggle should hide/show header and nav bar");
+  }
+  if (
+    !result.wheel?.active ||
+    !result.wheel?.hasCanvas ||
+    !result.wheel?.hasSpin ||
+    !result.wheel?.hasScript ||
+    result.wheel?.segRows < 2
+  ) {
+    failed.push("wheel tool should render canvas, spin control and segment editors");
+  }
+  if (!result.adbCmds?.section || !result.adbCmds?.searchable || result.adbCmds?.rows < 10) {
+    failed.push("adb commands reference should load searchable command list");
   }
   if (
     !result.timeSelect?.hasToday ||
