@@ -9872,39 +9872,37 @@ body.ruler-fs-active {
 }
 
 .muyu-fish-btn.is-knocking .muyu-fish-svg {
-  transform: translateY(5px) scale(0.972);
+  transform: translateY(3px) scale(0.98);
   transition: transform 0.05s ease;
 }
 
 .muyu-fish-btn.is-knocking .muyu-mallet {
-  animation: muyu-mallet-strike 0.36s cubic-bezier(0.4, 1.4, 0.6, 1);
+  animation: muyu-mallet-strike 0.34s cubic-bezier(0.4, 1.4, 0.6, 1);
 }
 
 @keyframes muyu-mallet-strike {
   0% {
-    transform: rotate(-48deg);
+    transform: rotate(-42deg);
   }
-  32% {
-    transform: rotate(2deg);
-  }
-  52% {
-    transform: rotate(-6deg);
+  38% {
+    transform: rotate(8deg);
   }
   100% {
-    transform: rotate(-48deg);
+    transform: rotate(-42deg);
   }
 }
 
 .muyu-mallet {
-  transform-origin: 72% 92%;
-  transform: rotate(-48deg);
+  transform-box: fill-box;
+  transform-origin: 50% 90%;
+  transform: rotate(-42deg);
 }
 
 .muyu-fish-svg {
-  width: min(72vw, 300px);
+  width: min(78vw, 320px);
   height: auto;
   display: block;
-  filter: drop-shadow(0 14px 22px rgba(0, 0, 0, 0.32));
+  filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.28));
   transition: transform 0.12s ease;
 }
 
