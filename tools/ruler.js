@@ -16,6 +16,8 @@
   let coordFsEl = null;
   let unitSel = null;
   let ppiInput = null;
+  let ppiAutoBtn = null;
+  let ppiHintEl = null;
   let crossToggle = null;
   let fsBtn = null;
   let fsCloseBtn = null;
@@ -30,7 +32,41 @@
     unit: "px",
     ppi: 96,
     crosshair: true,
+    ppiManual: false,
   };
+
+  /** 物理单位：每英寸对应的 CSS 像素数（非 devicePixelRatio 乘 96 那种错算法） */
+  function detectPhysicalPpi() {
+    const dpr = Math.max(1, window.devicePixelRatio || 1);
+    const scr = window.screen;
+    if (typeof scr.deviceXDPI === "number" && scr.deviceXDPI > 72 && scr.deviceXDPI < 900) {
+      return Math.round(scr.deviceXDPI / dpr);
+    }
+    const ua = navigator.userAgent || "";
+    const mobile = /Android|iPhone|iPod|Mobile/i.test(ua);
+    const ipad =
+      /iPad/i.test(ua) ||
+      (/Macintosh/i.test(ua) && typeof navigator.maxTouchPoints === "number" && navigator.maxTouchPoints > 1);
+    if (/iPhone|iPod/i.test(ua)) return 163;
+    if (ipad) return 132;
+    if (mobile || /Android/i.test(ua)) return 160;
+    return 96;
+  }
+
+  function applyAutoPpi() {
+    state.ppi = detectPhysicalPpi();
+    state.ppiManual = false;
+  }
+
+  function syncPpiHint() {
+    if (!ppiHintEl) return;
+    if (state.unit === "px") {
+      ppiHintEl.textContent = "像素模式按屏幕 CSS 像素，无需 PPI。";
+      return;
+    }
+    const src = state.ppiManual ? "手动" : "本机自动";
+    ppiHintEl.textContent = `物理 ${state.unit === "cm" ? "厘米" : "毫米"} 按 PPI ${state.ppi} 估算（${src}，DPR ${Math.round((window.devicePixelRatio || 1) * 10) / 10}）。若与实物尺仍有偏差，请微调 PPI 或改用像素。`;
+  }
 
   function loadState() {
     try {
@@ -40,14 +76,21 @@
       if (data.unit === "px" || data.unit === "mm" || data.unit === "cm") state.unit = data.unit;
       if (Number(data.ppi) > 0) state.ppi = Number(data.ppi);
       if (typeof data.crosshair === "boolean") state.crosshair = data.crosshair;
+      if (typeof data.ppiManual === "boolean") state.ppiManual = data.ppiManual;
     } catch (_) {}
+    if (!state.ppiManual && state.unit !== "px") applyAutoPpi();
   }
 
   function saveState() {
     try {
       localStorage.setItem(
         STORAGE_KEY,
-        JSON.stringify({ unit: state.unit, ppi: state.ppi, crosshair: state.crosshair })
+        JSON.stringify({
+          unit: state.unit,
+          ppi: state.ppi,
+          crosshair: state.crosshair,
+          ppiManual: state.ppiManual,
+        })
       );
     } catch (_) {}
   }
@@ -56,13 +99,20 @@
     if (unitSel) unitSel.value = state.unit;
     if (ppiInput) ppiInput.value = String(state.ppi);
     if (crossToggle) crossToggle.checked = state.crosshair;
+    syncPpiHint();
   }
 
   function readControls() {
     if (unitSel) state.unit = unitSel.value || "px";
-    if (ppiInput) state.ppi = Math.max(72, Math.min(600, Number(ppiInput.value) || 96));
+    if (ppiInput) {
+      const next = Math.max(72, Math.min(600, Number(ppiInput.value) || 96));
+      if (next !== state.ppi) state.ppiManual = true;
+      state.ppi = next;
+    }
     if (crossToggle) state.crosshair = Boolean(crossToggle.checked);
+    if (state.unit !== "px" && !state.ppiManual) applyAutoPpi();
     saveState();
+    syncPpiHint();
   }
 
   function themeColors() {
@@ -338,11 +388,31 @@
 
   function bindEvents() {
     unitSel?.addEventListener("change", () => {
-      readControls();
+      const prevUnit = state.unit;
+      if (unitSel) state.unit = unitSel.value || "px";
+      if (state.unit !== "px" && prevUnit === "px" && !state.ppiManual) applyAutoPpi();
+      if (ppiInput) ppiInput.value = String(state.ppi);
+      saveState();
+      syncPpiHint();
       repaintAll();
     });
     ppiInput?.addEventListener("change", () => {
       readControls();
+      repaintAll();
+    });
+    ppiInput?.addEventListener("input", () => {
+      if (ppiInput) {
+        state.ppiManual = true;
+        state.ppi = Math.max(72, Math.min(600, Number(ppiInput.value) || state.ppi));
+        syncPpiHint();
+        repaintAll();
+      }
+    });
+    ppiAutoBtn?.addEventListener("click", () => {
+      applyAutoPpi();
+      if (ppiInput) ppiInput.value = String(state.ppi);
+      saveState();
+      syncPpiHint();
       repaintAll();
     });
     crossToggle?.addEventListener("change", () => {
@@ -411,14 +481,16 @@
     fsCtx = fsCanvas?.getContext("2d", { alpha: false });
     coordEl = $("#ruler-coord");
     coordFsEl = $("#ruler-coord-fs");
-    coordFsEl = $("#ruler-coord-fs");
     unitSel = $("#ruler-unit");
     ppiInput = $("#ruler-ppi");
+    ppiAutoBtn = $("#ruler-ppi-auto");
+    ppiHintEl = $("#ruler-ppi-hint");
     crossToggle = $("#ruler-crosshair");
     fsBtn = $("#ruler-fullscreen");
     fsCloseBtn = $("#ruler-fs-close");
 
     loadState();
+    if (state.unit !== "px" && !state.ppiManual) applyAutoPpi();
     syncControls();
     bindEvents();
     observePreview();
@@ -446,6 +518,7 @@
     exitFullscreen,
     repaint: repaintAll,
     isFullscreen: () => fullscreen,
+    detectPhysicalPpi,
   };
 
   window.addEventListener("devtools:route", onRoute);

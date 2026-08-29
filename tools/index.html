@@ -3223,7 +3223,7 @@ hello@world.org</textarea>
 <section id="ruler" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>直尺</h1>
-        <p>四边刻度尺，上下左右均可读数；支持像素或毫米/厘米（按 PPI 换算）。可<strong>全屏</strong>覆盖屏幕，移动指针查看坐标与十字准线。</p>
+        <p>四边刻度尺，上下左右均可读数；支持像素或毫米/厘米。手机会自动检测 PPI，使厘米/毫米更接近实物尺；可<strong>全屏</strong>覆盖屏幕。</p>
       </div>
       <div class="panel-body ruler-body">
         <div class="btn-row tool-actions ruler-actions">
@@ -3237,9 +3237,11 @@ hello@world.org</textarea>
             <option value="mm">毫米 mm</option>
             <option value="cm">厘米 cm</option>
           </select>
-          <label for="ruler-ppi" title="物理单位换算用，默认 96（CSS 像素/英寸）">PPI</label>
+          <label for="ruler-ppi" title="每英寸对应的 CSS 像素数；手机通常约 160（Android）或 163（iPhone）">PPI</label>
           <input id="ruler-ppi" class="mono meta-input ruler-ppi-input" type="number" min="72" max="600" step="1" value="96" />
+          <button type="button" class="ghost-btn" id="ruler-ppi-auto" title="按本机屏幕重新估算 PPI">自动 PPI</button>
         </div>
+        <p class="hint tight" id="ruler-ppi-hint">物理单位需按屏幕 PPI 换算；手机已自动估算，若与实物尺不符请微调。</p>
         <p class="hint mono" id="ruler-coord" aria-live="polite">移动指针查看坐标</p>
         <div class="ruler-preview-wrap panel-card" id="ruler-preview-wrap">
           <canvas id="ruler-preview" class="ruler-preview" aria-label="直尺预览"></canvas>
