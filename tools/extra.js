@@ -93,7 +93,7 @@
   }
 
   /** 全站逻辑版本；后缀为中国标准时间 Asia/Shanghai（UTC+8） */
-  const TOOLS_VERSION = "2026.08.29-143622";
+  const TOOLS_VERSION = "2026.08.29-144202";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
   /** 切片/批量 GIF 产出后是否自动打 zip 下载；默认关，开启后记住 */
@@ -11741,7 +11741,22 @@
       persistAdbSettings();
       setError(adbError, "");
       try {
-        const health = await adbFetch("/health", { auth: false });
+        const discovered = await window.devtoolsBridgeToken?.discoverBase?.(adbBase(), adbToken());
+        if (!discovered?.health) {
+          throw new Error(
+            "无法连接本机桥。请确认启动脚本窗口仍打开；若横幅端口不是 17888，点连接会自动扫描 17888–17899。Token 默认 devtools-bridge。"
+          );
+        }
+        if (adbBaseInput && normalizeAdbBase(adbBaseInput.value) !== discovered.base) {
+          adbBaseInput.value = discovered.base;
+          persistAdbSettings();
+          try {
+            localStorage.setItem("devtools-ffmpeg-base", discovered.base);
+          } catch (_) {
+            /* ignore */
+          }
+        }
+        const health = discovered.health;
         updateHostToolsProbe(health);
         if (!health.adb?.ok) {
           adbConnected = true;

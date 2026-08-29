@@ -604,12 +604,22 @@
     savePrefs();
     setError("");
     try {
-      let rootHealth = null;
-      try {
-        rootHealth = await ffFetch("/health", { auth: false, noPrefix: true });
-      } catch (_) {
-        rootHealth = null;
+      const discovered = await window.devtoolsBridgeToken?.discoverBase?.(baseUrl(), token());
+      if (!discovered?.health) {
+        throw new Error(
+          "无法连接本机桥。请确认启动脚本窗口仍打开；若横幅端口不是 17888，会自动扫描 17888–17899。Token 默认 devtools-bridge。"
+        );
       }
+      if (baseInput && baseUrl() !== discovered.base) {
+        baseInput.value = discovered.base;
+        savePrefs();
+        try {
+          localStorage.setItem("devtools-adb-base", discovered.base);
+        } catch (_) {
+          /* ignore */
+        }
+      }
+      let rootHealth = discovered.health;
       if (
         rootHealth?.unified ||
         rootHealth?.service === "devtools-bridge" ||

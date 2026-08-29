@@ -38,7 +38,8 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.8.1";
+const BRIDGE_VERSION = "0.8.2";
+let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
 function loadFfmpegBridge() {
   const candidates = [
@@ -101,14 +102,29 @@ function sendJson(res, status, data, origin) {
   res.end(body);
 }
 
+function isAllowedOrigin(origin) {
+  if (!origin) return false;
+  if (ALLOWED_ORIGINS.has(origin)) return true;
+  try {
+    const u = new URL(origin);
+    if (u.hostname === "127.0.0.1" || u.hostname === "localhost") return true;
+  } catch (_) {
+    /* ignore */
+  }
+  return false;
+}
+
 function applyCors(headers, origin) {
-  if (origin && ALLOWED_ORIGINS.has(origin)) {
+  if (isAllowedOrigin(origin)) {
     headers["Access-Control-Allow-Origin"] = origin;
     headers["Vary"] = "Origin";
-    headers["Access-Control-Allow-Headers"] = "Content-Type, X-Adb-Token, X-Ffmpeg-Token, X-Filename";
+    headers["Access-Control-Allow-Headers"] =
+      "Content-Type, X-Adb-Token, X-Ffmpeg-Token, X-Filename, Authorization";
     headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
     headers["Access-Control-Expose-Headers"] = "Content-Disposition, X-Adb-Filename";
   }
+  // HTTPS 站点（如 GitHub Pages）访问 127.0.0.1 时 Chrome 需要 Private Network Access 预检
+  headers["Access-Control-Allow-Private-Network"] = "true";
 }
 
 function readBody(req, limit = 512 * 1024 * 1024) {
@@ -3471,7 +3487,7 @@ async function runBackupJob(job, serial, packageName) {
 async function handleApi(req, res, url) {
   const origin = req.headers.origin || "";
   if (req.method === "OPTIONS") {
-    const headers = {};
+    const headers = { "Access-Control-Max-Age": "86400" };
     applyCors(headers, origin);
     res.writeHead(204, headers);
     res.end();
@@ -3527,7 +3543,7 @@ async function handleApi(req, res, url) {
           ok: true,
           service: "devtools-bridge",
           version: BRIDGE_VERSION,
-          port: PORT,
+          port: ACTIVE_PORT,
           tokenRequired: true,
           defaultTokenHint: "devtools-bridge",
           unified: true,
@@ -4134,7 +4150,7 @@ const server = http.createServer((req, res) => {
 server.on("upgrade", (req, socket, head) => {
   const handled = scrcpyMirror.handleUpgrade(req, socket, head, {
     host: HOST,
-    port: PORT,
+    port: ACTIVE_PORT,
     token: TOKEN,
     acceptedTokens: ACCEPTED_TOKENS,
     allowedOrigins: ALLOWED_ORIGINS,
@@ -4191,7 +4207,9 @@ function listenWithFallback(startPort, maxTries = 12) {
 
     const onListening = () => {
       server.removeListener("error", onError);
-      printBanner(port);
+      const bound = server.address();
+      ACTIVE_PORT = bound && typeof bound.port === "number" ? bound.port : port;
+      printBanner(ACTIVE_PORT);
     };
 
     server.once("error", onError);
