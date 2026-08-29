@@ -95,7 +95,7 @@
   }
 
   /** 全站逻辑版本；后缀为中国标准时间 Asia/Shanghai（UTC+8） */
-  const TOOLS_VERSION = "2026.08.29-171500";
+  const TOOLS_VERSION = "2026.08.29-172100";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
   /** 切片/批量 GIF 产出后是否自动打 zip 下载；默认关，开启后记住 */
@@ -11623,7 +11623,7 @@
       const mirrorBtn = $("#adb-input-mirror-start");
       if (mirrorBtn) {
         mirrorBtn.disabled = !canMirror && Boolean(health);
-        mirrorBtn.title = canMirror ? "" : "镜像需桥 ≥0.7.0（含 scrcpy-server）";
+        mirrorBtn.title = canMirror ? "" : "镜像需桥 ≥0.8.4（含 scrcpy-mirror 诊断）";
       }
       if (inputRefresh) {
         inputRefresh.disabled = Boolean(health) && !canInput;
@@ -13109,6 +13109,31 @@
       return adbMirrorDecoder;
     }
 
+    async function mirrorFailureDetail(msg, serial) {
+      let detail = String(msg || "镜像失败");
+      if (/socket closed/i.test(detail) && !/握手失败|scrcpy-server/i.test(detail)) {
+        detail =
+          "镜像握手失败（视频 socket 已关闭）。常见原因：scrcpy-server 未 push 成功、版本不匹配、或屏幕编码器不可用";
+      }
+      if (!bridgeAtLeast("0.8.4")) {
+        detail += "。建议重新下载桥 ZIP 并重启本机桥（≥0.8.4 含镜像诊断）";
+      }
+      try {
+        const st = await adbFetch(`/mirror/status?serial=${encodeURIComponent(serial)}`).then((r) => r.json());
+        if (st?.deviceJar && !st.deviceJar.present) {
+          detail += `。设备端未找到 ${st.deviceJar.path || "scrcpy-server"}，请重试「开始镜像」以自动 push v3.1`;
+        } else if (st?.deviceJar?.present && st.deviceJar.size) {
+          detail += `。设备 jar：${st.deviceJar.size} 字节 @ ${st.deviceJar.path || ""}`;
+        }
+        if (st?.jar && !st.jar.vendor && !st.jar.cached) {
+          detail += "。本机未缓存 scrcpy-server，请确认桥可联网或 ZIP 含 vendor/scrcpy-server-v3.1";
+        }
+      } catch {
+        /* ignore status enrichment */
+      }
+      return detail;
+    }
+
     async function startMirrorPreview() {
       if (adbMirrorStarting) return;
       if (adbMirrorWs && adbMirrorWs.readyState <= 1) return;
@@ -13143,41 +13168,43 @@
             settled = true;
             if (errTimer) clearTimeout(errTimer);
             stopMirrorPreview({ notifyBridge: true });
-            reject(new Error(msg));
+            mirrorFailureDetail(msg, serial)
+              .then((detail) => {
+                if ($("#adb-input-meta")) $("#adb-input-meta").textContent = `镜像失败：${detail}`;
+                reject(new Error(detail));
+              })
+              .catch(() => reject(new Error(msg)));
           };
-          const scheduleGenericFail = (msg) => {
+          const scheduleGenericFail = (msg, delayMs = 900) => {
             if (settled || errTimer) return;
             errTimer = setTimeout(() => {
               errTimer = 0;
               fail(msg);
-            }, 500);
+            }, delayMs);
           };
           ws.onopen = () => {
             adbInputLive = true;
             updateInputLiveUi();
+            if ($("#adb-input-meta")) $("#adb-input-meta").textContent = "镜像连接中，正在启动 scrcpy-server…";
           };
           ws.onerror = () =>
             scheduleGenericFail(
               "镜像 WebSocket 连接失败（请确认本机桥已启动、Token 与网页一致，且地址形如 http://127.0.0.1:17888）"
             );
           ws.onclose = (ev) => {
-            if (errTimer) {
-              clearTimeout(errTimer);
-              errTimer = 0;
-            }
-            if (!settled) {
-              const hint =
-                ev?.code === 1006
-                  ? "镜像连接失败：请检查本机桥 Token（与 ADB/FFmpeg 页一致）及 scrcpy-server 是否已准备"
-                  : "镜像连接已关闭";
-              fail(hint);
-            } else {
+            if (settled) {
               adbMirrorWs = null;
               if (adbInputLive) {
                 adbInputLive = false;
                 updateInputLiveUi();
               }
+              return;
             }
+            const hint =
+              ev?.code === 1006
+                ? "镜像连接失败：请检查本机桥 Token（与 ADB/FFmpeg 页一致）及 scrcpy-server 是否已准备"
+                : "镜像连接已关闭";
+            scheduleGenericFail(hint);
           };
           ws.onmessage = (ev) => {
             if (typeof ev.data === "string") {
@@ -13188,10 +13215,18 @@
                 return;
               }
               if (msg.type === "error") {
+                if (errTimer) {
+                  clearTimeout(errTimer);
+                  errTimer = 0;
+                }
                 fail(msg.error || "镜像错误");
                 return;
               }
               if (msg.type === "bye") {
+                if (errTimer) {
+                  clearTimeout(errTimer);
+                  errTimer = 0;
+                }
                 if (!settled) fail(msg.reason || "镜像结束");
                 return;
               }
