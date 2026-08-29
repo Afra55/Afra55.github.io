@@ -253,6 +253,10 @@ async function main() {
       const badgeEl = document.querySelector(`.memo-card[data-memo-id="${anyItem.id}"] .memo-temp-badge`);
       const badgeBg = badgeEl ? getComputedStyle(badgeEl).backgroundColor : "";
       out.tempUx.badgeProminent = /rgb/.test(badgeBg) && badgeBg !== "rgba(0, 0, 0, 0)";
+      out.tempUx.tempCard = Boolean(document.querySelector(`.memo-card.is-temp[data-memo-id="${anyItem.id}"]`));
+      const untempEl = document.querySelector(`.memo-more [data-memo-untemp="${anyItem.id}"]`);
+      out.tempUx.untempBtn = Boolean(untempEl);
+      out.tempUx.untempProminent = untempEl ? Number(getComputedStyle(untempEl).fontWeight) >= 600 : false;
       await window.DevToolsMemo.clearItemTemp(anyItem.id);
       await sleep(80);
       out.tempUx.cleared = !window.DevToolsMemo.isTempItem((window.DevToolsMemo.getIndex().items || []).find((x) => x.id === anyItem.id));
@@ -1170,7 +1174,7 @@ async function main() {
 
     out.cacheBust = {
       version: document.getElementById("site-tools-version")?.textContent || "",
-      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260829memoloc2/.test(s.src)),
+      memoScript: [...document.scripts].some((s) => /memo\.js\?v=20260829memoutemp1/.test(s.src)),
     };
 
     out.pwa = {
@@ -1561,7 +1565,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/memoloc2/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/memoutemp1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1830,8 +1834,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/memoloc2/i.test(result.cacheBust?.version || "")) {
-    failed.push("cache-bust/version should be aligned to memoloc2");
+  if (!/memoutemp1/i.test(result.cacheBust?.version || "")) {
+    failed.push("cache-bust/version should be aligned to memoutemp1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
@@ -1842,7 +1846,7 @@ async function main() {
   if (!result.dragSelect?.cardNotDraggable || (result.dragSelect?.canReorder && !result.dragSelect?.hasDragHandle)) {
     failed.push("memo cards should use drag handle instead of whole-card drag");
   }
-  if (!result.tempUx?.api || !result.tempUx?.daysDefault || !result.tempUx?.marked || !result.tempUx?.badge || !result.tempUx?.badgeProminent || !result.tempUx?.cleared || !result.tempUx?.stackMulti || !result.tempUx?.stackCleared) {
+  if (!result.tempUx?.api || !result.tempUx?.daysDefault || !result.tempUx?.marked || !result.tempUx?.badge || !result.tempUx?.badgeProminent || !result.tempUx?.tempCard || !result.tempUx?.untempBtn || !result.tempUx?.untempProminent || !result.tempUx?.cleared || !result.tempUx?.stackMulti || !result.tempUx?.stackCleared) {
     failed.push("memo temp mark API/UI failed");
   }
   if (!result.textEdit?.isModal || !result.textEdit?.modalWideEnough) {
