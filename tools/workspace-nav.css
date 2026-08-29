@@ -688,6 +688,11 @@ html[data-boot-panel="setup"] #setup {
   animation: rise 0.35s ease both;
 }
 
+/* boot 阶段 hide-all 规则带 html 元素选择器，特异性高于 .is-workspace-active */
+html[data-boot-panel] .tool-panel.is-workspace-active {
+  display: block;
+}
+
 .tool-panel[hidden] {
   display: none !important;
 }
