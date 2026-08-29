@@ -814,7 +814,7 @@
       tools: ["imgpreview", "whiteboard", "imgkit", "textimg", "imgtext", "sharecard", "imgb64", "qrcode"],
     },
     { id: "convert", label: "换算", tools: ["units", "coord", "numbase"] },
-    { id: "fun", label: "趣味", tools: ["wheel", "ruler", "muyu", "minigames"] },
+    { id: "fun", label: "趣味", tools: ["wheel", "ruler", "muyu", "minigames", "ambient"] },
     { id: "health", label: "健康", tools: ["acupoint"] },
     { id: "device", label: "设备", tools: ["lanshare", "adb", "ffbridge"] },
     { id: "site", label: "站点", tools: ["about", "setup"] },
@@ -868,6 +868,7 @@
     ruler: "屏幕直尺：四边刻度、十字准线，可全屏；厘米/毫米按本机 PPI 自动估算，可手动微调。",
     muyu: "敲木鱼：jwenjian/wooden-fish 造型与音效；次数本机永久累加，可全屏，空格键敲击。",
     minigames: "摸鱼 & 解压：2048、贪吃蛇、Flappy、打地鼠、泡泡纸、Pop-it、升空气泡、键盘敲击音；纯本地 Canvas。",
+    ambient: "环境音库：89 条单轨环境音，分类浏览、搜索、收藏与下载；封面为 Openverse 实景图，音效参考 remvze/moodist。",
     acupoint: "361 经穴 + 51 奇穴：Wellcome 经络参考图可点击放大，搜索列表查看定位与主治。",
     adb: "网页侧 ADB 调试辅助：设备、文件、输入、安装、任务与命令大全等。",
     lanshare: "局域网互传：多机同房间共享文件列表，下载时从上传者手机 WebRTC 直传，不经房主中转；房主可退出或解散，退出时最近加入者接任。",
@@ -920,6 +921,10 @@
     ruler: { name: "直尺", aliases: ["标尺", "刻度", "ruler", "测量", "全屏"] },
     muyu: { name: "木鱼", aliases: ["敲木鱼", "电子木鱼", "功德", "muyu", "woodfish", "冥想"] },
     minigames: { name: "摸鱼 & 解压", aliases: ["摸鱼", "解压", "小游戏", "2048", "贪吃蛇", "flappy", "打地鼠", "泡泡纸", "pop-it", "popit", "升空气泡", "键盘音", "minigames", "game"] },
+    ambient: {
+      name: "环境音库",
+      aliases: ["环境音", "白噪音", "ambient", "moodist", "雨声", "自然", "专注", "放松", "soundscape"],
+    },
     adb: { name: "ADB 工具", aliases: ["安卓", "android", "设备", "adb"], desktopOnly: true },
     lanshare: { name: "局域网互传", aliases: ["互传", "传文件", "lan", "share", "webrtc", "局域网"] },
     ffbridge: {

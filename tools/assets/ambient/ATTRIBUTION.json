@@ -1,0 +1,447 @@
+[
+  {
+    "id": "birds",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Openverse (cached)"
+  },
+  {
+    "id": "seagulls",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Openverse (cached)"
+  },
+  {
+    "id": "crickets",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Openverse (cached)"
+  },
+  {
+    "id": "wolf",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "YellowstoneNPS / flickr (PDM)"
+  },
+  {
+    "id": "owl",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Wonderlane / flickr (CC0)"
+  },
+  {
+    "id": "frog",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Icon fallback"
+  },
+  {
+    "id": "dog-barking",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Brian Moriarty / flickr (BY)"
+  },
+  {
+    "id": "horse-gallop",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Paolo Camera / flickr (BY)"
+  },
+  {
+    "id": "cat-purring",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Openverse (cached)"
+  },
+  {
+    "id": "crows",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Openverse (cached)"
+  },
+  {
+    "id": "whale",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Bernard Spragg / stocksnap (CC0)"
+  },
+  {
+    "id": "beehive",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Openverse (cached)"
+  },
+  {
+    "id": "woodpecker",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "OliBac / flickr (BY)"
+  },
+  {
+    "id": "chickens",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "petercooperuk / flickr (BY-SA)"
+  },
+  {
+    "id": "cows",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "lancekingphoto / flickr (BY)"
+  },
+  {
+    "id": "sheep",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "david_shankbone / flickr (BY)"
+  },
+  {
+    "id": "river",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Kylir / flickr (BY)"
+  },
+  {
+    "id": "waves",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "ustung / flickr (BY)"
+  },
+  {
+    "id": "campfire",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "andreawomack87 / flickr (PDM)"
+  },
+  {
+    "id": "wind",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "MeganEHansen / flickr (BY-SA)"
+  },
+  {
+    "id": "howling-wind",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "A. Hoffmann / flickr (BY)"
+  },
+  {
+    "id": "wind-in-trees",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Bonnie Moreland (free images) / flickr (PDM)"
+  },
+  {
+    "id": "waterfall",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "cluczkow / flickr (BY)"
+  },
+  {
+    "id": "walk-in-snow",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Wonderlane / flickr (BY)"
+  },
+  {
+    "id": "walk-on-leaves",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "*_* / flickr (BY)"
+  },
+  {
+    "id": "walk-on-gravel",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Image Catalog / flickr (CC0)"
+  },
+  {
+    "id": "droplets",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "MattX27 / flickr (BY-SA)"
+  },
+  {
+    "id": "jungle",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "clickfarmer / flickr (BY)"
+  },
+  {
+    "id": "light-rain",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "kevin dooley / flickr (BY)"
+  },
+  {
+    "id": "heavy-rain",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Tommy Japan 79 / flickr (BY)"
+  },
+  {
+    "id": "thunder",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Matt Biddulph / flickr (BY-SA)"
+  },
+  {
+    "id": "rain-on-window",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Jeremy Levine Design / flickr (BY)"
+  },
+  {
+    "id": "rain-on-car-roof",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "striatic / flickr (BY)"
+  },
+  {
+    "id": "rain-on-umbrella",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Robert Swier / flickr (BY)"
+  },
+  {
+    "id": "rain-on-tent",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "RichardBH / flickr (BY)"
+  },
+  {
+    "id": "rain-on-leaves",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "shannonkringen / flickr (BY-SA)"
+  },
+  {
+    "id": "highway",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Roman Harak / flickr (BY-SA)"
+  },
+  {
+    "id": "road",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Grant Wickes / flickr (BY)"
+  },
+  {
+    "id": "ambulance-siren",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Boston City Archives / flickr (BY-SA)"
+  },
+  {
+    "id": "busy-street",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "dphiffer / flickr (BY)"
+  },
+  {
+    "id": "crowd",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Anthony Delanoix / stocksnap (CC0)"
+  },
+  {
+    "id": "traffic",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Daniel Dionne / flickr (BY-SA)"
+  },
+  {
+    "id": "fireworks",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "zoxcleb / flickr (BY-SA)"
+  },
+  {
+    "id": "cafe",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "La Citta Vita / flickr (BY-SA)"
+  },
+  {
+    "id": "airport",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "mchart929 / flickr (BY-SA)"
+  },
+  {
+    "id": "church",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "striatic / flickr (BY)"
+  },
+  {
+    "id": "temple",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "be creator / flickr (BY)"
+  },
+  {
+    "id": "construction-site",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Amsterdam free photos & pictures of the Dutch city / flickr (CC0)"
+  },
+  {
+    "id": "underwater",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Phuketian.S / flickr (BY)"
+  },
+  {
+    "id": "crowded-bar",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "TANAKA Juuyoh (田中十洋) / flickr (BY)"
+  },
+  {
+    "id": "night-village",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "nicubunu.photo / flickr (BY-SA)"
+  },
+  {
+    "id": "subway-station",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "MTAPhotos / flickr (BY)"
+  },
+  {
+    "id": "office",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Jiri Brozovsky / flickr (BY)"
+  },
+  {
+    "id": "supermarket",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Sean MacEntee / flickr (BY)"
+  },
+  {
+    "id": "carousel",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Raphael Perez Israeli Artist / flickr (BY)"
+  },
+  {
+    "id": "laboratory",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "NASA Goddard Photo and Video / nasa (BY)"
+  },
+  {
+    "id": "laundry-room",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "mattgosselin / flickr (BY)"
+  },
+  {
+    "id": "restaurant",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "r.nial.bradshaw / flickr (BY)"
+  },
+  {
+    "id": "library",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Holiday Gems / flickr (BY)"
+  },
+  {
+    "id": "train",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Archives New Zealand / flickr (BY)"
+  },
+  {
+    "id": "inside-a-train",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Icon fallback"
+  },
+  {
+    "id": "airplane",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "cstrom / flickr (BY-SA)"
+  },
+  {
+    "id": "submarine",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Peer.Gynt / flickr (BY-SA)"
+  },
+  {
+    "id": "sailboat",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Ahunt / wikimedia (CC0)"
+  },
+  {
+    "id": "rowing-boat",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "flowcomm / flickr (BY)"
+  },
+  {
+    "id": "keyboard",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Nebulant / flickr (BY)"
+  },
+  {
+    "id": "typewriter",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "r.nial.bradshaw / flickr (BY)"
+  },
+  {
+    "id": "paper",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Caitlinator / flickr (BY)"
+  },
+  {
+    "id": "clock",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "alexkerhead / flickr (BY)"
+  },
+  {
+    "id": "wind-chimes",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "NAPARAZZI / flickr (BY-SA)"
+  },
+  {
+    "id": "singing-bowl",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "secretlondon123 / flickr (BY-SA)"
+  },
+  {
+    "id": "ceiling-fan",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "jeffk / flickr (BY)"
+  },
+  {
+    "id": "dryer",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Peter Blanchard / flickr (BY-SA)"
+  },
+  {
+    "id": "slide-projector",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "DanielSTL / flickr (BY)"
+  },
+  {
+    "id": "boiling-water",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Wonderlane / flickr (BY)"
+  },
+  {
+    "id": "bubbles",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Raphaël Quinet / flickr (BY-SA)"
+  },
+  {
+    "id": "tuning-radio",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "PoloGoomba / flickr (BY)"
+  },
+  {
+    "id": "morse-code",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "svofski / flickr (BY-SA)"
+  },
+  {
+    "id": "washing-machine",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "24oranges.nl / flickr (BY-SA)"
+  },
+  {
+    "id": "vinyl-effect",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Donnie Ozone / flickr (BY)"
+  },
+  {
+    "id": "windshield-wipers",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Wonderlane / flickr (CC0)"
+  },
+  {
+    "id": "white-noise",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "kevin dooley / flickr (BY)"
+  },
+  {
+    "id": "pink-noise",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Gael Varoquaux / flickr (BY)"
+  },
+  {
+    "id": "brown-noise",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "SixRevisions / flickr (BY)"
+  },
+  {
+    "id": "binaural-delta",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "geirt.com / flickr (BY)"
+  },
+  {
+    "id": "binaural-theta",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "JimGillette / flickr (BY)"
+  },
+  {
+    "id": "binaural-alpha",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "mRio / flickr (BY)"
+  },
+  {
+    "id": "binaural-beta",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "laszlo-photo / flickr (BY)"
+  },
+  {
+    "id": "binaural-gamma",
+    "audioSource": "remvze/moodist (Pixabay/CC0 per upstream)",
+    "imageCredit": "Mister.Tee / flickr (BY)"
+  }
+]
