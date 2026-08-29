@@ -9974,6 +9974,35 @@
   // Rebind copy buttons added dynamically in HTML for new panels
   // ---- ADB bridge client (P0–P3) ----
   try {
+    let jsZipLoadPromise = null;
+    async function ensureJsZip() {
+      if (typeof globalThis.JSZip === "function") return globalThis.JSZip;
+      if (!jsZipLoadPromise) {
+        jsZipLoadPromise = new Promise((resolve, reject) => {
+          const done = () => {
+            if (typeof globalThis.JSZip === "function") resolve(globalThis.JSZip);
+            else reject(new Error("JSZip 未加载，无法打包下载"));
+          };
+          const existing = document.querySelector('script[src*="jszip"]');
+          if (existing) {
+            if (typeof globalThis.JSZip === "function") {
+              resolve(globalThis.JSZip);
+              return;
+            }
+            existing.addEventListener("load", done, { once: true });
+            existing.addEventListener("error", () => reject(new Error("JSZip 脚本加载失败")), { once: true });
+            return;
+          }
+          const s = document.createElement("script");
+          s.src = "./vendor/jszip.min.js";
+          s.onload = done;
+          s.onerror = () => reject(new Error("JSZip 脚本加载失败"));
+          document.head.appendChild(s);
+        });
+      }
+      return jsZipLoadPromise;
+    }
+
     const ADB_STORE_BASE = "devtools-adb-base";
     const ADB_STORE_TOKEN = "devtools-adb-token";
     const ADB_FS_ROOTS_HINT_HTML =
@@ -11902,7 +11931,7 @@
     }
 
     async function downloadAdbBridgeBundle(platform) {
-      if (typeof JSZip === "undefined") throw new Error("JSZip 未加载，无法打包下载");
+      const JSZipCtor = await ensureJsZip();
       const map = {
         mac: {
           scriptPath: "./adb-bridge/start-mac.command",
@@ -11964,7 +11993,7 @@
         "只需启动这一座桥，不必再开第二个服务。",
         "",
       ].join("\n");
-      const zip = new JSZip();
+      const zip = new JSZipCtor();
       zip.file("server.js", serverJs);
       if (mirrorJs) zip.file("scrcpy-mirror.js", mirrorJs);
       if (resolvePortJs) zip.file("resolve-port.js", resolvePortJs);
@@ -12252,10 +12281,7 @@
     }
 
     async function downloadFolderBlob(remoteDir, { onProgress, signal, maxFiles = 400 } = {}) {
-      if (typeof JSZip === "undefined" && typeof window.JSZip === "undefined") {
-        throw new Error("JSZip 未加载，无法打包下载");
-      }
-      const Zip = typeof JSZip !== "undefined" ? JSZip : window.JSZip;
+      const Zip = await ensureJsZip();
       const zip = new Zip();
       const queue = [{ remote: remoteDir, rel: "" }];
       let count = 0;
@@ -12762,10 +12788,7 @@
     }
 
     async function zipJobArtifacts(jobId) {
-      if (typeof JSZip === "undefined" && typeof window.JSZip === "undefined") {
-        throw new Error("JSZip 未加载，无法打包下载");
-      }
-      const Zip = typeof JSZip !== "undefined" ? JSZip : window.JSZip;
+      const Zip = await ensureJsZip();
       const job = adbJobs.find((j) => j.id === jobId);
       const arts = job?.artifacts || [];
       if (!arts.length) throw new Error("该任务没有可打包的产物");
