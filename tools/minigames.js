@@ -3,7 +3,7 @@
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const STORAGE_KEY = "devtools-minigames-v1";
-  const GAME_IDS = ["2048", "snake", "flappy", "mole"];
+  const GAME_IDS = ["2048", "snake", "flappy", "mole", "bubble", "popit", "zen", "keytap"];
 
   let root = null;
   let canvas = null;
@@ -18,7 +18,62 @@
   let running = false;
   let keyHandler = null;
   let pointerHandler = null;
-  let bestScores = { "2048": 0, snake: 0, flappy: 0, mole: 0 };
+  let bestScores = { "2048": 0, snake: 0, flappy: 0, mole: 0, bubble: 0, popit: 0, zen: 0, keytap: 0 };
+  let audioCtx = null;
+
+  function getAudio() {
+    if (!audioCtx) {
+      try {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      } catch (_) {}
+    }
+    return audioCtx;
+  }
+
+  function resumeAudio() {
+    const ac = getAudio();
+    if (ac?.state === "suspended") ac.resume().catch(() => {});
+    return ac;
+  }
+
+  function sfxTone(freqStart, freqEnd, dur, vol, type = "sine") {
+    const ac = resumeAudio();
+    if (!ac) return;
+    const t = ac.currentTime;
+    const o = ac.createOscillator();
+    const g = ac.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(freqStart, t);
+    if (freqEnd !== freqStart) o.frequency.exponentialRampToValueAtTime(Math.max(20, freqEnd), t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g);
+    g.connect(ac.destination);
+    o.start(t);
+    o.stop(t + dur + 0.02);
+  }
+
+  function sfxPop() {
+    sfxTone(220 + Math.random() * 40, 70, 0.09, 0.14, "triangle");
+  }
+
+  function sfxPopIt() {
+    sfxTone(140 + Math.random() * 20, 90, 0.06, 0.12, "square");
+  }
+
+  function sfxZenPop() {
+    sfxTone(380 + Math.random() * 80, 160, 0.11, 0.1, "sine");
+  }
+
+  function sfxKeyClick() {
+    sfxTone(900 + Math.random() * 200, 420, 0.04, 0.07, "square");
+  }
+
+  function persistScore(id, n) {
+    const v = Math.max(0, Math.floor(Number(n) || 0));
+    bestScores[id] = v;
+    saveScores();
+  }
 
   function loadScores() {
     try {
@@ -663,11 +718,520 @@
     };
   })();
 
+  // —— 泡泡纸（参考 cheeaun/bubble-wrap 等）——
+  const BubbleWrap = (() => {
+    let bubbles = [];
+    let sheetPops = 0;
+    let totalPops = 0;
+
+    function layout(w, h) {
+      bubbles = [];
+      const pad = 12;
+      const cols = Math.max(4, Math.floor((w - pad * 2) / 46));
+      const rows = Math.max(5, Math.floor((h - pad * 2) / 46));
+      const gapX = (w - pad * 2) / cols;
+      const gapY = (h - pad * 2) / rows;
+      const r = Math.min(gapX, gapY) * 0.36;
+      for (let row = 0; row < rows; row++) {
+        for (let col = 0; col < cols; col++) {
+          bubbles.push({
+            x: pad + col * gapX + gapX / 2,
+            y: pad + row * gapY + gapY / 2,
+            r,
+            popped: false,
+          });
+        }
+      }
+      sheetPops = 0;
+    }
+
+    function drawBubble(b) {
+      if (!b.popped) {
+        const g = ctx.createRadialGradient(b.x - b.r * 0.25, b.y - b.r * 0.35, b.r * 0.05, b.x, b.y, b.r);
+        g.addColorStop(0, "#f4fbff");
+        g.addColorStop(0.45, "#c5dced");
+        g.addColorStop(1, "#7fa3bc");
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255,255,255,0.55)";
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      } else {
+        ctx.fillStyle = "#4a6478";
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r * 0.82, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = "#2f4555";
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+      }
+    }
+
+    function draw() {
+      const { w, h } = sizeCanvas();
+      ctx.fillStyle = "#c8d3dc";
+      ctx.fillRect(0, 0, w, h);
+      ctx.strokeStyle = "rgba(90,110,130,0.15)";
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 8; i++) {
+        ctx.beginPath();
+        ctx.moveTo(0, (h / 8) * i);
+        ctx.lineTo(w, (h / 8) * i);
+        ctx.stroke();
+      }
+      for (const b of bubbles) drawBubble(b);
+      setHud(
+        `<span>本张 <strong class="mono">${sheetPops}</strong></span><span>累计 <strong class="mono">${totalPops}</strong></span>`
+      );
+    }
+
+    function hit(x, y) {
+      for (const b of bubbles) {
+        if (b.popped) continue;
+        const dx = x - b.x;
+        const dy = y - b.y;
+        if (dx * dx + dy * dy <= b.r * b.r) {
+          b.popped = true;
+          sheetPops += 1;
+          totalPops += 1;
+          persistScore("bubble", totalPops);
+          sfxPop();
+          if (navigator.vibrate) navigator.vibrate(8);
+          if (bubbles.every((bb) => bb.popped)) {
+            const { w, h } = sizeCanvas();
+            layout(w, h);
+          }
+          draw();
+          return;
+        }
+      }
+    }
+
+    function onPointer(e) {
+      if (e.type !== "pointerdown") return;
+      resumeAudio();
+      const rect = canvas.getBoundingClientRect();
+      hit(e.clientX - rect.left, e.clientY - rect.top);
+    }
+
+    return {
+      id: "bubble",
+      hint: "点击捏爆气泡；整张捏完自动换新膜。无计时，纯解压。",
+      start() {
+        hideOverlay();
+        totalPops = bestScores.bubble || 0;
+        const { w, h } = sizeCanvas();
+        layout(w, h);
+        draw();
+      },
+      stop() {},
+      onKey(e) {
+        if (e.key.length === 1) {
+          resumeAudio();
+          const { w, h } = sizeCanvas();
+          for (let i = 0; i < 3; i++) {
+            const x = 20 + Math.random() * (w - 40);
+            const y = 20 + Math.random() * (h - 40);
+            hit(x, y);
+          }
+        }
+      },
+      onPointer,
+    };
+  })();
+
+  // —— Pop-it 解压板 ——
+  const PopIt = (() => {
+    let cells = [];
+    let cols = 6;
+    let rows = 5;
+    let boards = 0;
+    let presses = 0;
+    let flash = 0;
+
+    function layout(w, h) {
+      cols = Math.max(5, Math.min(8, Math.floor(w / 52)));
+      rows = Math.max(4, Math.min(7, Math.floor((h - 20) / 52)));
+      cells = Array.from({ length: cols * rows }, () => Math.random() < 0.5);
+    }
+
+    function cellAt(x, y, w, h) {
+      const pad = 14;
+      const gapX = (w - pad * 2) / cols;
+      const gapY = (h - pad * 2) / rows;
+      const r = Math.min(gapX, gapY) * 0.38;
+      const c = Math.floor((x - pad) / gapX);
+      const r0 = Math.floor((y - pad) / gapY);
+      if (c < 0 || c >= cols || r0 < 0 || r0 >= rows) return null;
+      return {
+        i: r0 * cols + c,
+        x: pad + c * gapX + gapX / 2,
+        y: pad + r0 * gapY + gapY / 2,
+        r,
+      };
+    }
+
+    function draw() {
+      const { w, h } = sizeCanvas();
+      ctx.fillStyle = "#1a1428";
+      ctx.fillRect(0, 0, w, h);
+      const pad = 14;
+      const gapX = (w - pad * 2) / cols;
+      const gapY = (h - pad * 2) / rows;
+      const r = Math.min(gapX, gapY) * 0.38;
+      for (let i = 0; i < cells.length; i++) {
+        const c = i % cols;
+        const r0 = Math.floor(i / cols);
+        const x = pad + c * gapX + gapX / 2;
+        const y = pad + r0 * gapY + gapY / 2;
+        const pressed = cells[i];
+        const hues = ["#ff6bcb", "#6b9fff", "#ffd166", "#06d6a0", "#ef476f"];
+        const hue = hues[(c + r0) % hues.length];
+        if (pressed) {
+          ctx.fillStyle = hue;
+          ctx.beginPath();
+          ctx.arc(x, y, r * 0.88, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "rgba(0,0,0,0.25)";
+          ctx.beginPath();
+          ctx.arc(x, y + r * 0.12, r * 0.75, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          const g = ctx.createRadialGradient(x - r * 0.2, y - r * 0.25, r * 0.1, x, y, r);
+          g.addColorStop(0, "#fff");
+          g.addColorStop(0.4, hue);
+          g.addColorStop(1, hue);
+          ctx.fillStyle = g;
+          ctx.beginPath();
+          ctx.arc(x, y, r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      if (flash > 0) {
+        ctx.fillStyle = `rgba(255,255,255,${flash * 0.35})`;
+        ctx.fillRect(0, 0, w, h);
+        flash -= 0.08;
+      }
+      setHud(
+        `<span>按压 <strong class="mono">${presses}</strong></span><span>整板 <strong class="mono">${boards}</strong></span><span>最佳 <strong class="mono">${bestScores.popit}</strong></span>`
+      );
+    }
+
+    function toggleAt(x, y) {
+      const { w, h } = sizeCanvas();
+      const cell = cellAt(x, y, w, h);
+      if (!cell) return;
+      cells[cell.i] = !cells[cell.i];
+      presses += 1;
+      sfxPopIt();
+      if (navigator.vibrate) navigator.vibrate(10);
+      const allIn = cells.every(Boolean);
+      const allOut = cells.every((v) => !v);
+      if (allIn || allOut) {
+        boards += 1;
+        bumpBest("popit", boards);
+        flash = 1;
+        layout(w, h);
+      }
+      draw();
+    }
+
+    function onPointer(e) {
+      if (e.type !== "pointerdown") return;
+      resumeAudio();
+      const rect = canvas.getBoundingClientRect();
+      toggleAt(e.clientX - rect.left, e.clientY - rect.top);
+    }
+
+    return {
+      id: "popit",
+      hint: "点击切换凸/凹；全部按平或全部弹出时换一张新板。",
+      start() {
+        hideOverlay();
+        boards = 0;
+        presses = 0;
+        flash = 0;
+        const { w, h } = sizeCanvas();
+        layout(w, h);
+        draw();
+      },
+      stop() {},
+      onKey() {},
+      onPointer,
+    };
+  })();
+
+  // —— 升空气泡（参考 toumbous/zen-bubbles）——
+  const ZenBubbles = (() => {
+    let items = [];
+    let score = 0;
+    let lives = 3;
+    let combo = 0;
+    let maxCombo = 0;
+    let lastPop = 0;
+    let spawnT = 0;
+    let elapsed = 0;
+    let playing = false;
+    let alive = true;
+
+    function spawn(w, h) {
+      const r = 10 + Math.random() * 22;
+      items.push({
+        x: r + Math.random() * (w - r * 2),
+        y: h + r,
+        r,
+        vy: 0.45 + Math.random() * 0.35 + elapsed * 0.002,
+        hue: 180 + Math.random() * 80,
+      });
+    }
+
+    function loop(now) {
+      if (!playing || !alive) return;
+      if (!loop.last) loop.last = now;
+      const dt = Math.min(32, now - loop.last);
+      loop.last = now;
+      elapsed += dt / 1000;
+      spawnT += dt;
+      const interval = Math.max(380, 900 - elapsed * 6);
+      if (spawnT >= interval) {
+        spawnT = 0;
+        const { w, h } = sizeCanvas();
+        spawn(w, h);
+      }
+      const { w, h } = sizeCanvas();
+      for (const b of items) b.y -= b.vy * (dt / 16);
+      items = items.filter((b) => {
+        if (b.y + b.r < -8) {
+          lives -= 1;
+          combo = 0;
+          if (lives <= 0) {
+            alive = false;
+            playing = false;
+            bumpBest("zen", score);
+            showOverlay("气泡逃走了", `得分 ${score} · 最高连击 ${maxCombo}`, "再来一局");
+          }
+          return false;
+        }
+        return true;
+      });
+      draw(w, h);
+      if (playing) raf = requestAnimationFrame(loop);
+    }
+
+    function draw(w, h) {
+      sizeCanvas();
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, "#0f172a");
+      grad.addColorStop(1, "#1e3a5f");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+      for (const b of items) {
+        const g = ctx.createRadialGradient(b.x - b.r * 0.3, b.y - b.r * 0.3, 1, b.x, b.y, b.r);
+        g.addColorStop(0, `hsla(${b.hue},90%,85%,0.95)`);
+        g.addColorStop(0.55, `hsla(${b.hue},80%,60%,0.55)`);
+        g.addColorStop(1, `hsla(${b.hue},70%,45%,0.15)`);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      setHud(
+        `<span>得分 <strong class="mono">${score}</strong></span><span>生命 <strong class="mono">${lives}</strong></span><span>连击 <strong class="mono">${combo}</strong></span><span>最佳 <strong class="mono">${bestScores.zen}</strong></span>`
+      );
+    }
+
+    function popAt(x, y) {
+      for (let i = items.length - 1; i >= 0; i--) {
+        const b = items[i];
+        const dx = x - b.x;
+        const dy = y - b.y;
+        if (dx * dx + dy * dy <= b.r * b.r) {
+          const now = performance.now();
+          if (now - lastPop < 600) combo += 1;
+          else combo = 1;
+          lastPop = now;
+          maxCombo = Math.max(maxCombo, combo);
+          const pts = Math.max(1, Math.round(30 - b.r + combo));
+          score += pts;
+          items.splice(i, 1);
+          sfxZenPop();
+          if (navigator.vibrate) navigator.vibrate(6);
+          return;
+        }
+      }
+      combo = 0;
+    }
+
+    function onPointer(e) {
+      if (!playing || e.type !== "pointerdown") return;
+      resumeAudio();
+      const rect = canvas.getBoundingClientRect();
+      popAt(e.clientX - rect.left, e.clientY - rect.top);
+    }
+
+    return {
+      id: "zen",
+      hint: "点击上升气泡得分；小泡分高。漏掉扣生命，600ms 内连击加分。",
+      start() {
+        hideOverlay();
+        items = [];
+        score = 0;
+        lives = 3;
+        combo = 0;
+        maxCombo = 0;
+        lastPop = 0;
+        spawnT = 0;
+        elapsed = 0;
+        playing = true;
+        alive = true;
+        loop.last = 0;
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(loop);
+      },
+      stop() {
+        playing = false;
+        cancelAnimationFrame(raf);
+      },
+      onKey() {},
+      onPointer,
+    };
+  })();
+
+  // —— 键盘敲击音（参考 tplai/kbsim、keythm 等轻量版）——
+  const KeyTap = (() => {
+    const ROWS = [
+      "`1234567890-=".split(""),
+      "qwertyuiop[]\\".split(""),
+      "asdfghjkl;'".split(""),
+      "zxcvbnm,./".split(""),
+    ];
+    let lit = new Map();
+    let count = 0;
+    let timeLeft = 60;
+    let playing = false;
+    let lastTick = 0;
+    let maxCombo = 0;
+    let streak = 0;
+    let lastKey = 0;
+
+    function keyLayout(w, h) {
+      const pad = 10;
+      const rowH = Math.min(42, (h - pad * 2) / ROWS.length - 4);
+      const keyW = Math.min(34, (w - pad * 2) / 14);
+      const layouts = [];
+      ROWS.forEach((row, ri) => {
+        const rowW = row.length * (keyW + 3);
+        const ox = (w - rowW) / 2;
+        const oy = pad + ri * (rowH + 6);
+        row.forEach((ch, ci) => {
+          layouts.push({ ch, x: ox + ci * (keyW + 3), y: oy, w: keyW, h: rowH });
+        });
+      });
+      return layouts;
+    }
+
+    function draw() {
+      const { w, h } = sizeCanvas();
+      ctx.fillStyle = "#14141a";
+      ctx.fillRect(0, 0, w, h);
+      const keys = keyLayout(w, h);
+      const now = performance.now();
+      for (const k of keys) {
+        const hot = lit.get(k.ch) && now - lit.get(k.ch) < 120;
+        ctx.fillStyle = hot ? "#ffd166" : "#2a2a35";
+        roundRect(ctx, k.x, k.y, k.w, k.h, 5);
+        ctx.fill();
+        if (hot) {
+          ctx.strokeStyle = "#ffef9f";
+          ctx.lineWidth = 2;
+          roundRect(ctx, k.x, k.y, k.w, k.h, 5);
+          ctx.stroke();
+        }
+        ctx.fillStyle = hot ? "#1a1200" : "#c8c8d0";
+        ctx.font = `${Math.max(10, k.h * 0.38)}px monospace`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(k.ch === " " ? "␣" : k.ch, k.x + k.w / 2, k.y + k.h / 2);
+      }
+      setHud(
+        `<span>敲击 <strong class="mono">${count}</strong></span><span>剩余 <strong class="mono">${timeLeft}s</strong></span><span>最佳 <strong class="mono">${bestScores.keytap}</strong></span>`
+      );
+      if (playing && timeLeft > 0) raf = requestAnimationFrame(draw);
+    }
+
+    function loop(now) {
+      if (!playing) return;
+      if (!lastTick) lastTick = now;
+      if (now - lastTick >= 1000) {
+        lastTick = now;
+        timeLeft -= 1;
+        if (timeLeft <= 0) {
+          playing = false;
+          bumpBest("keytap", count);
+          showOverlay("时间到", `${count} 次敲击 · 最高连击 ${maxCombo}`, "再来一局");
+          return;
+        }
+      }
+      draw();
+    }
+
+    function onKey(e) {
+      if (!playing) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === "Tab" || e.key === "Escape") return;
+      e.preventDefault();
+      resumeAudio();
+      const ch = e.key.length === 1 ? e.key.toLowerCase() : e.key === " " ? " " : "";
+      if (!ch) return;
+      const now = performance.now();
+      if (now - lastKey < 180) {
+        streak += 1;
+        maxCombo = Math.max(maxCombo, streak);
+      } else streak = 1;
+      lastKey = now;
+      count += 1;
+      lit.set(ch, now);
+      sfxKeyClick();
+      if (navigator.vibrate) navigator.vibrate(4);
+      draw();
+    }
+
+    return {
+      id: "keytap",
+      hint: "60 秒内尽情敲键盘；屏幕会高亮对应键并播放机械键声。",
+      start() {
+        hideOverlay();
+        lit = new Map();
+        count = 0;
+        timeLeft = 60;
+        maxCombo = 0;
+        streak = 0;
+        lastKey = 0;
+        lastTick = 0;
+        playing = true;
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(loop);
+      },
+      stop() {
+        playing = false;
+        cancelAnimationFrame(raf);
+      },
+      onKey,
+      onPointer() {},
+    };
+  })();
+
   const GAMES = {
     "2048": G2048,
     snake: Snake,
     flappy: Flappy,
     mole: Mole,
+    bubble: BubbleWrap,
+    popit: PopIt,
+    zen: ZenBubbles,
+    keytap: KeyTap,
   };
 
   function roundRect(c, x, y, w, h, r) {
