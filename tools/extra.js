@@ -95,7 +95,7 @@
   }
 
   /** 全站逻辑版本；后缀为中国标准时间 Asia/Shanghai（UTC+8） */
-  const TOOLS_VERSION = "2026.08.29-161530";
+  const TOOLS_VERSION = "2026.08.29-162030";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
   /** 切片/批量 GIF 产出后是否自动打 zip 下载；默认关，开启后记住 */
@@ -10416,8 +10416,8 @@
 
     function resetGetpropPanel() {
       adbGetpropCache = { serial: "", props: [] };
-      const wrap = $("#adb-getprop-wrap");
-      if (wrap) wrap.open = false;
+      const dlg = $("#adb-getprop-dlg");
+      if (dlg?.open && typeof dlg.close === "function") dlg.close();
       const list = $("#adb-getprop-list");
       if (list) {
         list.innerHTML = "";
@@ -10426,9 +10426,20 @@
       const search = $("#adb-getprop-search");
       if (search) search.value = "";
       const meta = $("#adb-getprop-meta");
-      if (meta) meta.textContent = "展开后加载";
+      if (meta) meta.textContent = "打开后加载";
       const empty = $("#adb-getprop-empty");
       if (empty) empty.hidden = true;
+    }
+
+    async function openGetpropDialog() {
+      const dlg = $("#adb-getprop-dlg");
+      if (!dlg) return;
+      if (typeof dlg.showModal === "function") {
+        if (!dlg.open) dlg.showModal();
+      } else if (!dlg.hasAttribute("open")) {
+        dlg.setAttribute("open", "");
+      }
+      await loadGetprop().catch((err) => setError(adbError, err.message || String(err)));
     }
 
     function filteredGetpropItems() {
@@ -14618,10 +14629,17 @@
     $("#adb-snap-refresh")?.addEventListener("click", () =>
       loadSnapshot().catch((err) => setError(adbError, err.message || String(err)))
     );
-    $("#adb-getprop-wrap")?.addEventListener("toggle", () => {
-      const wrap = $("#adb-getprop-wrap");
-      if (!wrap?.open) return;
-      loadGetprop().catch((err) => setError(adbError, err.message || String(err)));
+    $("#adb-getprop-open")?.addEventListener("click", () => {
+      openGetpropDialog().catch((err) => setError(adbError, err.message || String(err)));
+    });
+    $("#adb-getprop-close")?.addEventListener("click", () => {
+      const dlg = $("#adb-getprop-dlg");
+      if (dlg?.open && typeof dlg.close === "function") dlg.close();
+    });
+    $("#adb-getprop-dlg")?.addEventListener("cancel", (ev) => {
+      ev.preventDefault();
+      const dlg = $("#adb-getprop-dlg");
+      if (dlg?.open && typeof dlg.close === "function") dlg.close();
     });
     $("#adb-getprop-search")?.addEventListener("input", () => renderGetpropList());
     $("#adb-getprop-reload")?.addEventListener("click", () => {

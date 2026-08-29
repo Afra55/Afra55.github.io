@@ -56,6 +56,7 @@
   --mark-highlight-ink: var(--ink);
   --mark-alt-bg: color-mix(in srgb, var(--accent) 32%, transparent);
   --mark-alt-ink: color-mix(in srgb, var(--accent) 18%, var(--ink));
+  --dialog-backdrop: color-mix(in srgb, var(--bg-0) 42%, rgba(0, 0, 0, 0.72));
   --diff-shell-bg: color-mix(in srgb, var(--bg-0) 82%, #000);
   --diff-head-bg: var(--ink-6);
   --diff-row-bg: var(--ink-3);
@@ -2185,7 +2186,7 @@ a.secondary-btn {
   margin: 0 auto;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: #0a0f18;
+  background: var(--stage-bg, var(--bg-base-2));
   max-height: 320px;
 }
 
@@ -2410,11 +2411,11 @@ a.secondary-btn {
 }
 
 .vsplit-scrub-mark.is-start {
-  background: #34d399;
+  background: var(--accent);
 }
 
 .vsplit-scrub-mark.is-end {
-  background: #fb923c;
+  background: var(--accent-2);
 }
 
 .vsplit-scrub-mark.is-active {
@@ -3339,8 +3340,8 @@ body.vsplit-fs-open {
   height: 0.7rem;
   margin-top: 0.35rem;
   border-radius: 50%;
-  background: #6b7280;
-  box-shadow: 0 0 0 3px rgba(107, 114, 128, 0.18);
+  background: var(--muted);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--muted) 22%, transparent);
   flex: 0 0 auto;
 }
 
@@ -3351,12 +3352,12 @@ body.vsplit-fs-open {
 
 .adb-dot.is-warn {
   background: var(--accent-2);
-  box-shadow: 0 0 0 3px rgba(244, 162, 97, 0.2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-2) 22%, transparent);
 }
 
 .adb-dot.is-err {
   background: var(--danger);
-  box-shadow: 0 0 0 3px rgba(255, 107, 122, 0.18);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent);
 }
 
 .adb-layout {
@@ -3385,41 +3386,33 @@ body.vsplit-fs-open {
   word-break: break-all;
 }
 
-.adb-getprop-wrap {
-  margin-top: 1rem;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
-  padding: 0.55rem 0.75rem;
+.adb-getprop-open-row {
+  margin-top: 0.85rem;
 }
 
-.adb-getprop-wrap > summary {
-  cursor: pointer;
-  font-size: 0.88rem;
-  font-weight: 600;
-  color: var(--ink);
-  list-style: none;
+.adb-getprop-dlg {
+  max-width: min(96vw, 720px);
+  width: min(96vw, 720px);
+  padding: 0;
 }
 
-.adb-getprop-wrap > summary::-webkit-details-marker {
-  display: none;
+.adb-getprop-dlg-body {
+  display: grid;
+  gap: 0.55rem;
+  max-height: min(88vh, 760px);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 
-.adb-getprop-wrap > summary .mono {
-  font-weight: 500;
-  color: var(--muted);
-  font-size: 0.78rem;
-}
-
-.adb-getprop-panel {
-  margin-top: 0.65rem;
+.adb-getprop-dlg-actions {
+  margin-top: 0.15rem;
+  justify-content: flex-end;
 }
 
 .adb-getprop-toolbar {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.45rem;
-  margin-bottom: 0.55rem;
+  margin-bottom: 0;
 }
 
 .adb-getprop-toolbar #adb-getprop-search {
@@ -3428,7 +3421,12 @@ body.vsplit-fs-open {
 }
 
 .adb-getprop-list {
-  max-height: 22rem;
+  max-height: min(58vh, 520px);
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
+  padding: 0.35rem 0.55rem;
 }
 
 .adb-getprop-row .adb-getprop-key {
@@ -6074,7 +6072,7 @@ button.adb-device-body.linkish {
   min-height: 420px;
   border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
   border-radius: var(--radius-md, 10px);
-  background: #fff;
+  background: var(--panel-strong);
 }
 
 .imgprev-stage {
@@ -7256,7 +7254,8 @@ button.adb-device-body.linkish {
 }
 
 .memo-dialog::backdrop {
-  background: rgba(5, 10, 18, 0.65);
+  background: var(--dialog-backdrop);
+  backdrop-filter: blur(3px);
 }
 
 .memo-dialog-body {
@@ -9339,7 +9338,7 @@ li a:not([class*="btn"]) {
   appearance: none;
   border: 1px solid var(--line);
   background: var(--panel);
-  color: var(--accent, #6366f1);
+  color: var(--accent);
   border-radius: 8px;
   padding: 0.35rem 0.55rem;
   text-align: left;
@@ -9350,7 +9349,8 @@ li a:not([class*="btn"]) {
 }
 
 .adb-cmd-copy:hover {
-  border-color: var(--accent, #6366f1);
+  border-color: var(--accent);
+  background: var(--accent-soft);
 }
 
 .adb-cmd-desc {
