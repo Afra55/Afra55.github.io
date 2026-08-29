@@ -1428,7 +1428,8 @@
     if (!DEFAULT_ORDER.includes(id)) return;
     const next = [id, ...loadRecent().filter((x) => x !== id)];
     localStorage.setItem(RECENT_KEY, JSON.stringify(next));
-    saveLastTool(id);
+    // 占位路由上的默认 timestamp 不应覆盖已保存的上次工具（手机冷启动常见）
+    if (!(id === "timestamp" && shouldRestoreLastTool())) saveLastTool(id);
     renderRecent();
   }
 
@@ -1457,25 +1458,12 @@
   function persistActiveTool(route) {
     const id = activeToolIdFromRoute(route || { tool: currentTool, tab: currentMediaTab });
     if (!id) return;
+    if (id === "timestamp" && shouldRestoreLastTool()) return;
     saveLastTool(id);
   }
 
-  /** applyRoute 用：空 hash / 裸 #media 视为占位，不含 #timestamp（用户可显式打开时间戳） */
+  /** iOS PWA / Safari 冷启动常带 #timestamp、空 hash 或裸 #media，在此类占位路由上恢复上次工具 */
   function shouldRestoreLastTool() {
-    const raw0 = String(location.hash || "").replace(/^#/, "").trim();
-    if (!raw0 || raw0 === "/") return true;
-    const q = raw0.indexOf("?");
-    const path = q >= 0 ? raw0.slice(0, q) : raw0;
-    if (q >= 0 && path === "lanshare") return false;
-    if (!path || path === "/") return true;
-    const head = path.split(/[/?]/).filter(Boolean)[0] || "";
-    if (!head) return true;
-    if (head === "media" && !path.includes("/")) return true;
-    return false;
-  }
-
-  /** 冷启动占位 hash（含 iOS 常见的 #timestamp），仅 boot 时恢复上次工具 */
-  function isStartupPlaceholderHash() {
     const raw0 = String(location.hash || "").replace(/^#/, "").trim();
     if (!raw0 || raw0 === "/") return true;
     const q = raw0.indexOf("?");
@@ -1490,7 +1478,7 @@
   }
 
   function restoreLastToolOnStartup() {
-    if (!isStartupPlaceholderHash()) return false;
+    if (!shouldRestoreLastTool()) return false;
     const saved = loadLastToolId();
     if (!saved || saved === "timestamp") return false;
     const route = routeFromToolId(saved);
@@ -2059,6 +2047,11 @@
         });
       }
       emitRoute();
+      // 首屏只出壳；恢复的上次工具在 idle 后台加载脚本，避免用户以为未进入该工具
+      const idleTool = window.requestIdleCallback || ((cb) => window.setTimeout(cb, 400));
+      idleTool(() => {
+        loadLazyForRoute().catch((err) => console.error("boot lazy-load failed", routeToolId, err));
+      });
     } else {
       await loadLazyForRoute();
       idleLoadPwaOnce();
@@ -2772,17 +2765,17 @@
     navigateTo("media", tabs[next].dataset.mediaTab);
   });
   window.addEventListener("hashchange", () => {
-    if (isStartupPlaceholderHash()) restoreLastToolOnStartup();
+    if (shouldRestoreLastTool()) restoreLastToolOnStartup();
     applyRoute();
   });
   window.addEventListener("popstate", () => {
-    if (isStartupPlaceholderHash()) restoreLastToolOnStartup();
+    if (shouldRestoreLastTool()) restoreLastToolOnStartup();
     applyRoute();
   });
   // Safari：bfcache / 后台回收后恢复时强制关闭菜单，并重新套用路由（手机常回到 start_url）
   window.addEventListener("pageshow", () => {
     forceDrawerClosed();
-    if (isStartupPlaceholderHash()) restoreLastToolOnStartup();
+    if (shouldRestoreLastTool()) restoreLastToolOnStartup();
     applyRoute({ skipRecent: true });
   });
   document.addEventListener("visibilitychange", () => {
@@ -2791,7 +2784,7 @@
       return;
     }
     forceDrawerClosed();
-    if (isStartupPlaceholderHash()) restoreLastToolOnStartup();
+    if (shouldRestoreLastTool()) restoreLastToolOnStartup();
     applyRoute({ skipRecent: true });
   });
   window.addEventListener("pagehide", () => {

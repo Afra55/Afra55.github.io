@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const BUILD = "2026.08.29-174000";
+  const BUILD = "2026.08.29-175000";
 
   const VENDOR_FILES = {
     "js-yaml": { src: "./vendor/js-yaml.min.js", probe: () => typeof globalThis.jsyaml !== "undefined" },
@@ -122,6 +122,7 @@
 
   async function ensurePure() {
     if (window.DevToolsPure) return;
+    if (!window.DiffCore) await loadScript("./lib/diff-core.js");
     await loadScript("./lib/pure.js");
   }
 
