@@ -455,16 +455,21 @@
     });
   }
 
-  // early apply before DOM for less flash — state already loaded
+  function bootThemeUi() {
+    if (!$("#theme-presets")) return false;
+    bindUi();
+    applyTheme().catch(() => {});
+    return true;
+  }
+
   applyTheme().catch(() => {});
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-      bindUi();
-      applyTheme().catch(() => {});
-    });
-  } else {
-    bindUi();
+  if (!bootThemeUi()) {
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", () => bootThemeUi(), { once: true });
+    } else {
+      queueMicrotask(() => bootThemeUi());
+    }
   }
 
   window.DevToolsTheme = {
