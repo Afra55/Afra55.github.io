@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.29-025229";
+  const TOOLS_VERSION = "2026.08.29-025430";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
   /** 切片/批量 GIF 产出后是否自动打 zip 下载；默认关，开启后记住 */
@@ -10360,7 +10360,7 @@
     function switchAdbTab(tab) {
       const prev = adbTab;
       adbTab = tab;
-      $$(".adb-tab").forEach((btn) => {
+      $$(".adb-tab[data-adb-tab]").forEach((btn) => {
         btn.classList.toggle("is-active", btn.dataset.adbTab === tab);
       });
       $$("[data-adb-panel]").forEach((panel) => {
@@ -10377,87 +10377,6 @@
       }
       if (tab === "developer" && adbSelected) refreshDeveloper({ silent: true }).catch(() => {});
     }
-
-    const adbCmdsSearch = $("#adb-cmds-search");
-    const adbCmdsList = $("#adb-cmds-list");
-    const adbCmdsMeta = $("#adb-cmds-meta");
-    let adbCmdsData = null;
-    let adbCmdsFilter = "";
-
-    async function loadAdbCommandsData() {
-      if (adbCmdsData) return adbCmdsData;
-      const res = await fetch("./lib/adb-commands.json");
-      if (!res.ok) throw new Error("无法加载 ADB 命令数据");
-      adbCmdsData = await res.json();
-      return adbCmdsData;
-    }
-
-    function renderAdbCommands() {
-      if (!adbCmdsList || !adbCmdsData) return;
-      const q = adbCmdsFilter.trim().toLowerCase();
-      const total = adbCmdsData.reduce((s, g) => s + (g.commands?.length || 0), 0);
-      let shown = 0;
-      const html = adbCmdsData
-        .map((group) => {
-          const items = (group.commands || []).filter((item) => {
-            if (!q) return true;
-            const hay = `${group.category} ${item.cmd} ${item.desc}`.toLowerCase();
-            return hay.includes(q);
-          });
-          shown += items.length;
-          if (!items.length) return "";
-          return `<section class="adb-cmds-group">
-            <h3 class="adb-cmds-cat">${escapeHtml(group.category)}</h3>
-            <ul class="adb-cmds-items">
-              ${items
-                .map(
-                  (item) => `<li class="adb-cmd-row">
-                <button type="button" class="adb-cmd-copy mono" data-cmd="${escapeAttr(item.cmd)}" title="点击复制">${escapeHtml(item.cmd)}</button>
-                <p class="adb-cmd-desc">${escapeHtml(item.desc)}</p>
-              </li>`
-                )
-                .join("")}
-            </ul>
-          </section>`;
-        })
-        .join("");
-      adbCmdsList.innerHTML =
-        html ||
-        `<p class="hint adb-cmds-empty">没有匹配的命令，请换个关键词。</p>`;
-      if (adbCmdsMeta) {
-        adbCmdsMeta.textContent = q
-          ? `显示 ${shown} / ${total} 条 · 点击命令可复制`
-          : `共 ${total} 条 · 点击命令可复制`;
-      }
-    }
-
-    function escapeAttr(s) {
-      return String(s)
-        .replace(/&/g, "&amp;")
-        .replace(/"/g, "&quot;")
-        .replace(/</g, "&lt;");
-    }
-
-    async function ensureAdbCommandsRendered() {
-      if (!adbCmdsList) return;
-      try {
-        await loadAdbCommandsData();
-        renderAdbCommands();
-      } catch (err) {
-        adbCmdsList.innerHTML = `<p class="error">${escapeHtml(err.message || String(err))}</p>`;
-      }
-    }
-
-    adbCmdsSearch?.addEventListener("input", () => {
-      adbCmdsFilter = adbCmdsSearch.value || "";
-      renderAdbCommands();
-    });
-    adbCmdsList?.addEventListener("click", (e) => {
-      const btn = e.target.closest?.(".adb-cmd-copy");
-      if (!btn?.dataset.cmd) return;
-      copyText(btn.dataset.cmd);
-      toast("已复制命令");
-    });
 
     function adbDeviceAccent(serial) {
       const s = String(serial || "");
@@ -13466,7 +13385,7 @@
       downloadAdbScriptAndWait($("#adb-dl-linux"));
     });
 
-    $$(".adb-tab").forEach((btn) => {
+    $$(".adb-tab[data-adb-tab]").forEach((btn) => {
       btn.addEventListener("click", () => switchAdbTab(btn.dataset.adbTab));
     });
 
@@ -14943,7 +14862,6 @@
     }
 
     connectAdbBridge({ fromPoll: true }).catch(() => {});
-    ensureAdbCommandsRendered().catch(() => {});
   } catch (err) {
     console.error("adb tool init failed", err);
   }

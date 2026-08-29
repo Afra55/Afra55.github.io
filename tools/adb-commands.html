@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="description" content="ADB 命令大全：本地查阅、可搜索、点击复制" />
+  <meta name="theme-color" content="#0b1320" />
+  <title>ADB 命令大全 · DevTools</title>
+  <link rel="stylesheet" href="./style.css?v=2026.08.29-025430" />
+  <script src="./lib/theme-presets.js?v=2026.08.29-025430"></script>
+  <script>
+    try {
+      const t = localStorage.getItem("devtools-theme-v2") || localStorage.getItem("devtools-theme");
+      if (t) document.documentElement.dataset.theme = t;
+    } catch (_) {}
+  </script>
+</head>
+<body class="adb-cmds-page-body">
+  <main class="adb-cmds-page">
+    <header class="adb-cmds-page-head">
+      <div>
+        <p class="hint tight adb-cmds-back"><a href="./index.html#adb">← 返回 ADB 工具</a></p>
+        <h1>ADB 命令大全</h1>
+        <p class="hint" id="adb-cmds-meta">本地查阅 · 可搜索 · 点击复制</p>
+      </div>
+    </header>
+    <label class="adb-cmds-search-wrap" for="adb-cmds-search">
+      <span class="visually-hidden">搜索命令</span>
+      <input id="adb-cmds-search" class="mono adb-cmds-search" type="search" placeholder="搜索命令、说明、分类…" autocomplete="off" spellcheck="false" />
+    </label>
+    <div class="adb-cmds-list adb-cmds-page-list" id="adb-cmds-list" aria-live="polite">加载中…</div>
+  </main>
+  <script src="./adb-commands.js?v=2026.08.29-025430" defer></script>
+</body>
+</html>

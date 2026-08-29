@@ -4284,6 +4284,19 @@ body.vsplit-fs-open {
   background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
 }
 
+a.adb-tab.adb-tab-external {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+}
+
+a.adb-tab.adb-tab-external::after {
+  content: "↗";
+  font-size: 0.72em;
+  opacity: 0.65;
+}
+
 .adb-device {
   display: grid;
   grid-template-columns: auto auto 1fr;
@@ -9016,6 +9029,51 @@ li a:not([class*="btn"]) {
 }
 
 .adb-cmd-desc {
+  margin: 0;
+  font-size: 0.86rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.adb-cmds-page-body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--bg-0);
+  color: var(--ink);
+}
+
+.adb-cmds-page {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 2.5rem;
+}
+
+.adb-cmds-page-head h1 {
+  margin: 0.35rem 0 0.25rem;
+  font-size: 1.45rem;
+}
+
+.adb-cmds-back {
+  margin: 0;
+}
+
+.adb-cmds-page-list {
+  max-height: none;
+}
+
+.adb-cmds-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 1.25rem;
+  transform: translateX(-50%);
+  padding: 0.55rem 0.95rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 88%, transparent);
+  color: var(--bg-0);
+  font-size: 0.9rem;
+  z-index: 9999;
+  pointer-events: none;
+}
   margin: 0;
   font-size: 0.86rem;
   color: var(--muted);

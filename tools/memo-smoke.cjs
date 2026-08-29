@@ -1611,8 +1611,24 @@ async function main() {
   await page.waitForFunction(() => document.getElementById("adb")?.classList.contains("is-workspace-active"), {
     timeout: 15000,
   });
-  result.adbCmds = await page.evaluate(async () => {
-    const out = { section: Boolean(document.getElementById("adb-cmds-section")), rows: 0, searchable: Boolean(document.getElementById("adb-cmds-search")) };
+  result.adbCmds = await page.evaluate(() => {
+    const jobsTab = [...document.querySelectorAll(".adb-tab[data-adb-tab]")].find((b) => b.dataset.adbTab === "jobs");
+    const tabs = [...document.querySelectorAll(".adb-tab[data-adb-tab]")].map((b) => b.dataset.adbTab);
+    const link = document.querySelector('a.adb-tab-external[href*="adb-commands"]');
+    return {
+      inlineSection: Boolean(document.getElementById("adb-cmds-section")),
+      tabLink: Boolean(link),
+      href: link?.getAttribute("href") || "",
+      afterJobs: tabs[tabs.length - 1] === "jobs" && Boolean(link),
+    };
+  });
+
+  await page.goto(`http://127.0.0.1:${PORT}/tools/adb-commands.html`, {
+    waitUntil: "networkidle0",
+    timeout: 60000,
+  });
+  result.adbCmdsPage = await page.evaluate(async () => {
+    const out = { rows: 0, searchable: Boolean(document.getElementById("adb-cmds-search")), hasBack: /返回 ADB/.test(document.body.textContent || "") };
     for (let i = 0; i < 30; i += 1) {
       out.rows = document.querySelectorAll(".adb-cmd-row").length;
       if (out.rows > 10) break;
@@ -1621,6 +1637,10 @@ async function main() {
     return out;
   });
 
+  await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#timestamp`, {
+    waitUntil: "networkidle0",
+    timeout: 60000,
+  });
   result.timestampNav = await page.evaluate(async () => {
     localStorage.setItem("devtools-tool-last-v1", "memo");
     const link = [...document.querySelectorAll("#tool-nav .tool-nav-link")].find((a) => a.dataset.tool === "timestamp");
@@ -2090,8 +2110,14 @@ async function main() {
   ) {
     failed.push("wheel tool should render canvas, spin control and segment editors");
   }
-  if (!result.adbCmds?.section || !result.adbCmds?.searchable || result.adbCmds?.rows < 10) {
-    failed.push("adb commands reference should load searchable command list");
+  if (
+    result.adbCmds?.inlineSection ||
+    !result.adbCmds?.tabLink ||
+    !result.adbCmds?.afterJobs ||
+    !result.adbCmdsPage?.searchable ||
+    result.adbCmdsPage?.rows < 10
+  ) {
+    failed.push("adb commands reference should open from tab after jobs on external page");
   }
   if (
     result.timestampNav?.hash !== "#timestamp" ||
