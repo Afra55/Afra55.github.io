@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.8.3";
+const BRIDGE_VERSION = "0.8.4";
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
 function loadFfmpegBridge() {
@@ -4108,7 +4108,15 @@ async function handleApi(req, res, url) {
       const serial = url.searchParams.get("serial") || "";
       const jar = scrcpyMirror.jarStatus();
       const active = serial ? scrcpyMirror.sessions.has(serial) : [...scrcpyMirror.sessions.keys()];
-      sendJson(res, 200, { ok: true, jar, active, version: scrcpyMirror.SCRCPY_VERSION }, origin);
+      let deviceJar = null;
+      if (serial) {
+        try {
+          deviceJar = await scrcpyMirror.deviceJarStatus(serial, { adbSerial, adbPath: "adb" });
+        } catch {
+          deviceJar = null;
+        }
+      }
+      sendJson(res, 200, { ok: true, jar, deviceJar, active, version: scrcpyMirror.SCRCPY_VERSION }, origin);
       return;
     }
 

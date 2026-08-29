@@ -113,6 +113,78 @@ async function ensureServerJar() {
   return dest;
 }
 
+async function pickAppProcessRunner(deps, serial) {
+  try {
+    const { stdout } = await deps.adbSerial(serial, ["shell", "command -v app_process64 2>/dev/null || which app_process64"], {
+      timeout: 8000,
+    });
+    if (stdout && stdout.trim()) return "app_process64";
+  } catch {
+    /* fall through */
+  }
+  return "app_process";
+}
+
+async function remoteJarOnDevice(deps, serial) {
+  try {
+    const { stdout } = await deps.adbSerial(
+      serial,
+      ["shell", `ls -l ${REMOTE_JAR} 2>/dev/null || echo __MISSING__`],
+      { timeout: 10000 }
+    );
+    const line = String(stdout || "")
+      .trim()
+      .split("\n")
+      .pop();
+    if (!line || line.includes("__MISSING__") || /No such file/i.test(line)) {
+      return { present: false, path: REMOTE_JAR, detail: line || "not found" };
+    }
+    const sizeMatch = line.match(/\s(\d+)\s+\d{4}-\d{2}-\d{2}/);
+    const size = sizeMatch ? parseInt(sizeMatch[1], 10) : null;
+    return { present: true, path: REMOTE_JAR, size, detail: line.trim() };
+  } catch (err) {
+    return { present: false, path: REMOTE_JAR, error: err.message || String(err) };
+  }
+}
+
+async function ensureRemoteJar(deps, serial, localJar) {
+  const localSize = fs.statSync(localJar).size;
+  await deps.adbSerial(serial, ["push", localJar, REMOTE_JAR], { timeout: 120000 });
+  const remote = await remoteJarOnDevice(deps, serial);
+  if (!remote.present) {
+    throw new Error(
+      `无法 push scrcpy-server 到 ${REMOTE_JAR}（${remote.detail || remote.error || "设备上未找到文件"}）。请确认 USB 调试正常且 /data/local/tmp 可写`
+    );
+  }
+  if (remote.size != null && Math.abs(remote.size - localSize) > 512) {
+    throw new Error(
+      `设备端 scrcpy-server 大小异常（本地 ${localSize} 字节，远端 ${remote.size} 字节）。请重试「开始镜像」；手机其它路径的 jar 不会被使用，仅认 ${REMOTE_JAR} v${SCRCPY_VERSION}`
+    );
+  }
+  return { ...remote, expectedVersion: SCRCPY_VERSION, localSize };
+}
+
+function formatMirrorError(base, errTail, procExitCode) {
+  const tail = String(errTail || "").trim();
+  let msg = base;
+  if (/does not match the client/i.test(tail)) {
+    msg = `scrcpy-server 版本不匹配（需要 v${SCRCPY_VERSION}）。桥会自动 push 到 ${REMOTE_JAR}，手机其它路径的旧 jar 不会被使用`;
+  } else if (/IllegalArgumentException|Invalid key=value/i.test(tail)) {
+    msg = "scrcpy-server 启动参数被拒绝";
+  } else if (/Permission denied|SecurityException|INJECT_EVENTS/i.test(tail)) {
+    msg = "scrcpy-server 权限不足（请解锁屏幕并保持亮屏后重试）";
+  } else if (/Could not register|MediaCodec|encoder/i.test(tail)) {
+    msg = "scrcpy-server 无法启动屏幕编码（部分机型需关闭其它投屏/录屏应用）";
+  } else if (base === "socket closed" || /socket closed/i.test(base)) {
+    msg = `镜像握手失败（视频 socket 已关闭${procExitCode != null ? `，server 退出码 ${procExitCode}` : ""}）`;
+  }
+  if (tail) {
+    const short = tail.length > 280 ? `${tail.slice(-280)}…` : tail;
+    if (!msg.includes(short.slice(0, 40))) msg += ` — ${short}`;
+  }
+  return msg;
+}
+
 function findFreePort() {
   return new Promise((resolve, reject) => {
     const s = net.createServer();
@@ -175,7 +247,7 @@ function connectLocal(port, timeoutMs = 8000) {
   });
 }
 
-async function connectWithRetry(port, tries = 50, delayMs = 100) {
+async function connectWithRetry(port, tries = 80, delayMs = 120) {
   let last = null;
   for (let i = 0; i < tries; i++) {
     try {
@@ -286,24 +358,18 @@ class MirrorSession {
     this.closed = false;
     this.pumping = false;
     this.lastConfig = null;
+    this.errTail = "";
+    this.procExitCode = null;
   }
 
-  async start() {
-    const jar = await ensureServerJar();
-    const adb = this.deps.adbPath;
-    await this.deps.adbSerial(this.serial, ["push", jar, REMOTE_JAR], { timeout: 120000 });
+  mirrorError(base) {
+    return formatMirrorError(base, this.errTail, this.procExitCode);
+  }
 
-    const scid = crypto.randomBytes(4).readUInt32BE(0) & 0x7fffffff;
-    this.scidHex = scid.toString(16).padStart(8, "0");
-    this.port = await findFreePort();
-
-    await this.deps.adbSerial(this.serial, ["forward", `tcp:${this.port}`, `localabstract:scrcpy_${this.scidHex}`], {
-      timeout: 15000,
-    });
-
-    const shellCmd = [
+  buildServerShellCmd(appProcessRunner) {
+    return [
       `CLASSPATH=${REMOTE_JAR}`,
-      "app_process",
+      appProcessRunner,
       "/",
       "com.genymobile.scrcpy.Server",
       SCRCPY_VERSION,
@@ -317,26 +383,54 @@ class MirrorSession {
       "send_device_meta=true",
       "send_frame_meta=true",
       "send_codec_meta=true",
-      "cleanup=true",
+      "cleanup=false",
       "power_on=true",
       "video_bit_rate=6000000",
       "max_size=1280",
       "max_fps=60",
     ].join(" ");
+  }
 
-    this.proc = spawn(adb, ["-s", this.serial, "shell", shellCmd], {
+  attachServerProc(proc) {
+    this.proc = proc;
+    this.errTail = "";
+    this.procExitCode = null;
+    proc.stderr.on("data", (d) => {
+      this.errTail = (this.errTail + d.toString("utf8")).slice(-2000);
+    });
+    proc.stdout.on("data", (d) => {
+      this.errTail = (this.errTail + d.toString("utf8")).slice(-2000);
+    });
+    proc.on("exit", (code) => {
+      this.procExitCode = code;
+      if (!this.closed) {
+        this.stop(this.mirrorError(`scrcpy-server 已退出${code != null ? ` (code ${code})` : ""}`));
+      }
+    });
+  }
+
+  spawnServerProcess(adb, shellCmd) {
+    return spawn(adb, ["-s", this.serial, "shell", shellCmd], {
       stdio: ["ignore", "pipe", "pipe"],
     });
-    let errTail = "";
-    this.proc.stderr.on("data", (d) => {
-      errTail = (errTail + d.toString("utf8")).slice(-2000);
+  }
+
+  async start() {
+    const jar = await ensureServerJar();
+    const adb = this.deps.adbPath;
+    await ensureRemoteJar(this.deps, this.serial, jar);
+
+    const scid = crypto.randomBytes(4).readUInt32BE(0) & 0x7fffffff;
+    this.scidHex = scid.toString(16).padStart(8, "0");
+    this.port = await findFreePort();
+
+    await this.deps.adbSerial(this.serial, ["forward", `tcp:${this.port}`, `localabstract:scrcpy_${this.scidHex}`], {
+      timeout: 15000,
     });
-    this.proc.stdout.on("data", (d) => {
-      errTail = (errTail + d.toString("utf8")).slice(-2000);
-    });
-    this.proc.on("exit", () => {
-      if (!this.closed) this.stop(`scrcpy-server 已退出${errTail ? `: ${errTail.trim()}` : ""}`);
-    });
+
+    const appProcessRunner = await pickAppProcessRunner(this.deps, this.serial);
+    let shellCmd = this.buildServerShellCmd(appProcessRunner);
+    this.attachServerProc(this.spawnServerProcess(adb, shellCmd));
 
     try {
       this.videoSock = await connectWithRetry(this.port);
@@ -360,10 +454,55 @@ class MirrorSession {
               : `id:${codecId.toString(16)}`;
       this.meta = { deviceName, codec, codecId, width, height, version: SCRCPY_VERSION };
       this.pumping = true;
-      this.pumpFrames().catch((err) => this.stop(err.message || String(err)));
+      this.pumpFrames().catch((err) => this.stop(this.mirrorError(err.message || String(err))));
     } catch (err) {
-      this.stop(err.message || String(err));
-      throw err;
+      try {
+        this.videoSock?.destroy();
+      } catch {
+        /* ignore */
+      }
+      this.videoSock = null;
+      const failedWith64 = appProcessRunner === "app_process64";
+      if (failedWith64 && (err.message === "socket closed" || this.procExitCode != null)) {
+        try {
+          this.proc?.kill("SIGTERM");
+        } catch {
+          /* ignore */
+        }
+        this.proc = null;
+        shellCmd = this.buildServerShellCmd("app_process");
+        this.attachServerProc(this.spawnServerProcess(adb, shellCmd));
+        try {
+          this.videoSock = await connectWithRetry(this.port);
+          const dummy = await readExact(this.videoSock, 1);
+          if (dummy[0] !== 0) {
+            /* continue */
+          }
+          const nameBuf = await readExact(this.videoSock, DEVICE_NAME_LEN);
+          const deviceName = nameBuf.toString("utf8").replace(/\0+$/g, "") || this.serial;
+          const header = await readExact(this.videoSock, 12);
+          const codecId = header.readUInt32BE(0);
+          const width = header.readUInt32BE(4);
+          const height = header.readUInt32BE(8);
+          const codec =
+            codecId === 0x68323634
+              ? "h264"
+              : codecId === 0x68323635
+                ? "h265"
+                : codecId === 0x00617631
+                  ? "av1"
+                  : `id:${codecId.toString(16)}`;
+          this.meta = { deviceName, codec, codecId, width, height, version: SCRCPY_VERSION };
+          this.pumping = true;
+          this.pumpFrames().catch((innerErr) => this.stop(this.mirrorError(innerErr.message || String(innerErr))));
+          return;
+        } catch {
+          /* fall through to formatted error below */
+        }
+      }
+      const msg = this.mirrorError(err.message || String(err));
+      this.stop(msg);
+      throw new Error(msg);
     }
   }
 
@@ -471,9 +610,20 @@ function jarStatus() {
   const cached = cachedJarPath();
   return {
     version: SCRCPY_VERSION,
+    remotePath: REMOTE_JAR,
     vendor: fs.existsSync(vendor),
     cached: fs.existsSync(cached),
     url: SCRCPY_SERVER_URL,
+  };
+}
+
+async function deviceJarStatus(serial, deps) {
+  if (!serial || !deps?.adbSerial) return null;
+  const remote = await remoteJarOnDevice(deps, serial);
+  return {
+    ...remote,
+    expectedVersion: SCRCPY_VERSION,
+    note: "仅使用此固定路径的 v3.1 jar；手机其它位置的 scrcpy jar 不会被读取",
   };
 }
 
@@ -574,10 +724,12 @@ function handleUpgrade(req, socket, head, deps) {
 module.exports = {
   SCRCPY_VERSION,
   SCRCPY_SERVER_NAME,
+  REMOTE_JAR,
   ensureServerJar,
   handleUpgrade,
   stopSession,
   stopAll,
   jarStatus,
+  deviceJarStatus,
   sessions,
 };

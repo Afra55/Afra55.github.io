@@ -118,8 +118,8 @@ async function main() {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
     }
 
-    if (health2.json?.version !== "0.8.2") {
-      throw new Error(`expected bridge version 0.8.2, got ${health2.json?.version}`);
+    if (health2.json?.version !== "0.8.4") {
+      throw new Error(`expected bridge version 0.8.4, got ${health2.json?.version}`);
     }
     if (Number(health2.json?.port) !== PORT) {
       throw new Error(`health.port should match listen port ${PORT}, got ${health2.json?.port}`);
