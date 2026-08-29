@@ -65,11 +65,10 @@ test("text tools", () => {
 
 test("diff lines", () => {
   const d = P.diffLines("a\nb\nc", "a\nx\nc");
-  assert.ok(d.some((x) => x.type === "del" && x.text === "b"));
-  assert.ok(d.some((x) => x.type === "add" && x.text === "x"));
+  assert.ok(d.some((x) => x.type === "change" && x.left === "b" && x.right === "x"));
+  assert.ok(d.some((x) => x.type === "same" && x.text === "a"));
   const stats = P.diffStats(d);
-  assert.strictEqual(stats.del, 1);
-  assert.strictEqual(stats.add, 1);
+  assert.strictEqual(stats.change, 1);
   assert.strictEqual(stats.same, 2);
 });
 
@@ -82,8 +81,15 @@ test("diff align and ignore whitespace", () => {
   assert.ok(tail.some((x) => x.type === "del" && x.text === "c"));
 });
 
+test("diff change merge", () => {
+  const rows = P.diffLines("alpha\nkeep", "beta\nkeep");
+  assert.ok(rows.some((r) => r.type === "change"));
+  const aligned = P.diffAlignFromRows(rows);
+  assert.ok(aligned.some((r) => r.kind === "change"));
+});
+
 test("diff too large guard", () => {
-  const big = Array.from({ length: 4000 }, (_, i) => `line-${i}`).join("\n");
+  const big = Array.from({ length: 13000 }, (_, i) => `line-${i}`).join("\n");
   assert.throws(() => P.diffLines(big, "x"), /行数过多/);
 });
 

@@ -1507,6 +1507,9 @@ a.secondary-btn {
 .diff-box {
   display: grid;
   gap: 0.15rem;
+  max-height: min(62vh, 520px);
+  overflow: auto;
+  position: relative;
 }
 
 .diff-box .diff-mark {
@@ -1573,6 +1576,48 @@ a.secondary-btn {
 .diff-split-body {
   max-height: min(62vh, 520px);
   overflow: auto;
+  position: relative;
+}
+
+.diff-vp {
+  position: relative;
+  width: 100%;
+}
+
+.diff-vp-inner {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+}
+
+.diff-row-change .diff-side-left {
+  background: rgba(255, 107, 122, 0.1);
+}
+
+.diff-row-change .diff-side-right {
+  background: rgba(81, 207, 102, 0.1);
+}
+
+.diff-change {
+  display: grid;
+  gap: 0.2rem;
+  padding: 0.12rem 0.35rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.diff-change-side {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.diff-change-old {
+  color: var(--ink);
+}
+
+.diff-change-new {
+  color: var(--ink);
 }
 
 .diff-split-row {
