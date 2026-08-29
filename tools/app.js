@@ -927,6 +927,8 @@
   const recentList = $("#tool-recent-list");
   const favoritesWrap = $("#tool-favorites");
   const favoritesList = $("#tool-fav-list");
+  const navToolCtx = $("#nav-tool-ctx");
+  let navToolCtxId = "";
   const favAddBtn = $("#tool-fav-add");
   const favPicker = $("#tool-fav-picker");
   const canDesktopDrag = () => window.matchMedia("(min-width: 901px)").matches;
@@ -1136,13 +1138,55 @@
   }
 
   function scheduleCloseNavFlyout(wrap) {
+    if (document.body.classList.contains("nav-sorting-tools")) return;
     window.clearTimeout(navFlyoutTimer);
     navFlyoutTimer = window.setTimeout(() => {
       navFlyoutTimer = 0;
       if (!wrap || wrap.classList.contains("is-pinned")) return;
+      if (document.body.classList.contains("nav-sorting-tools")) return;
       wrap.classList.remove("is-flyout-open");
       wrap.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
     }, 200);
+  }
+
+  function isNavToolSorting() {
+    return document.body.classList.contains("nav-sorting-tools") || dragPayload?.kind === "tool";
+  }
+
+  function clearSortFlyouts() {
+    if (!navEl) return;
+    $$(".nav-group.is-sort-flyout", navEl).forEach((g) => {
+      g.classList.remove("is-sort-flyout");
+      if (!g.classList.contains("is-pinned")) {
+        g.classList.remove("is-flyout-open", "is-flyout-up");
+        g.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
+      }
+    });
+  }
+
+  function beginNavToolSort(wrap) {
+    document.body.classList.add("nav-sorting-tools");
+    window.clearTimeout(navFlyoutTimer);
+    navFlyoutTimer = 0;
+    if (wrap && navCompact && !compactNavSearching()) {
+      wrap.classList.add("is-flyout-open", "is-sort-flyout");
+      wrap.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "true");
+      positionNavFlyout(wrap);
+    }
+  }
+
+  function endNavToolSort() {
+    document.body.classList.remove("nav-sorting-tools");
+    clearSortFlyouts();
+  }
+
+  function peekNavFlyoutForSort(wrap) {
+    if (!wrap || !navCompact || compactNavSearching()) return;
+    if (!document.body.classList.contains("nav-sorting-tools")) return;
+    window.clearTimeout(navFlyoutTimer);
+    wrap.classList.add("is-flyout-open", "is-sort-flyout");
+    wrap.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "true");
+    positionNavFlyout(wrap);
   }
 
   function syncNavCompactUi() {
@@ -1213,6 +1257,65 @@
     const next = loadFavorites().filter((x) => x !== id);
     saveFavorites(next);
     showToast(`已从常用移除：${toolName(id)}`);
+  }
+
+  function hideNavToolCtx() {
+    if (!navToolCtx) return;
+    navToolCtx.hidden = true;
+    navToolCtxId = "";
+  }
+
+  function showNavToolCtx(x, y, toolId) {
+    if (!navToolCtx || !toolId || !DEFAULT_ORDER.includes(toolId)) return;
+    navToolCtxId = toolId;
+    const inFav = loadFavorites().includes(toolId);
+    const addBtn = navToolCtx.querySelector('[data-nav-ctx="fav-add"]');
+    const remBtn = navToolCtx.querySelector('[data-nav-ctx="fav-remove"]');
+    if (addBtn) addBtn.hidden = inFav;
+    if (remBtn) remBtn.hidden = !inFav;
+    navToolCtx.hidden = false;
+    navToolCtx.style.left = `${x}px`;
+    navToolCtx.style.top = `${y}px`;
+    requestAnimationFrame(() => {
+      const rect = navToolCtx.getBoundingClientRect();
+      let left = x;
+      let top = y;
+      if (rect.right > window.innerWidth - 8) left = Math.max(8, window.innerWidth - rect.width - 8);
+      if (rect.bottom > window.innerHeight - 8) top = Math.max(8, window.innerHeight - rect.height - 8);
+      navToolCtx.style.left = `${left}px`;
+      navToolCtx.style.top = `${top}px`;
+    });
+  }
+
+  function bindNavToolCtx() {
+    if (!navToolCtx || navToolCtx.dataset.bound === "1") return;
+    navToolCtx.dataset.bound = "1";
+    navToolCtx.addEventListener("click", (e) => {
+      const btn = e.target.closest("[data-nav-ctx]");
+      if (!btn || !navToolCtxId) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const action = btn.dataset.navCtx;
+      const id = navToolCtxId;
+      hideNavToolCtx();
+      if (action === "fav-add") addFavorite(id);
+      else if (action === "fav-remove") removeFavorite(id);
+      else if (action === "open") navigateTo(id);
+    });
+    document.addEventListener(
+      "click",
+      (e) => {
+        if (navToolCtx?.hidden) return;
+        if (e.target.closest("#nav-tool-ctx")) return;
+        hideNavToolCtx();
+      },
+      true
+    );
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") hideNavToolCtx();
+    });
+    window.addEventListener("scroll", hideNavToolCtx, true);
+    window.addEventListener("resize", hideNavToolCtx);
   }
 
   function loadRecent() {
@@ -1444,6 +1547,15 @@
       btn.className = "nav-recent-chip";
       btn.textContent = toolName(id);
       btn.addEventListener("click", () => navigateTo(id));
+      btn.addEventListener("contextmenu", (e) => {
+        if (!canDesktopDrag()) {
+          e.preventDefault();
+          return;
+        }
+        e.preventDefault();
+        hideNavToolCtx();
+        showNavToolCtx(e.clientX, e.clientY, id);
+      });
       recentList.appendChild(btn);
     });
     if (!recentList.children.length) {
@@ -1596,6 +1708,16 @@
           handle: chip,
           wrap: favoritesList,
         });
+      });
+      chip.addEventListener("contextmenu", (e) => {
+        if (e.target.closest(".nav-fav-chip-remove")) return;
+        if (!canDesktopDrag()) {
+          e.preventDefault();
+          return;
+        }
+        e.preventDefault();
+        hideNavToolCtx();
+        showNavToolCtx(e.clientX, e.clientY, chip.dataset.tool);
       });
     });
   }
@@ -1909,6 +2031,8 @@
       clearNavDragStyles();
       if (pointerSort.kind === "tool") {
         pointerSort.handle?.classList.add("is-dragging");
+        const group = navGroupAtPoint(pointerSort.lastX, pointerSort.lastY);
+        if (group) peekNavFlyoutForSort(group);
         const target = navToolAtPoint(pointerSort.lastX, pointerSort.lastY);
         if (target && target !== pointerSort.handle) target.classList.add("drag-over");
       } else if (pointerSort.kind === "favorite") {
@@ -1979,8 +2103,10 @@
       document.removeEventListener("pointerup", pointerSort.onUp);
       document.removeEventListener("pointercancel", pointerSort.onCancel);
     }
+    const wasToolSort = document.body.classList.contains("nav-sorting-tools");
     pointerSort = null;
     document.body.classList.remove("nav-sorting", "nav-sorting-tools", "nav-sorting-favorites", "nav-press-pending");
+    if (wasToolSort) clearSortFlyouts();
     clearNavDragStyles();
     dragPayload = null;
     if (!keepDidDrag) {
@@ -2072,6 +2198,8 @@
         if (target && target !== pointerSort.handle) target.classList.add("drag-over");
       } else {
         pointerSort.handle?.classList.add("is-dragging");
+        const group = navGroupAtPoint(ev.clientX, ev.clientY);
+        if (group) peekNavFlyoutForSort(group);
         const target = navToolAtPoint(ev.clientX, ev.clientY);
         if (target && target !== pointerSort.handle) target.classList.add("drag-over");
       }
@@ -2136,7 +2264,8 @@
         document.body.classList.add(
           kind === "group" ? "nav-sorting" : kind === "favorite" ? "nav-sorting-favorites" : "nav-sorting-tools"
         );
-        closeNavFlyouts();
+        if (kind === "tool") beginNavToolSort(opts.wrap);
+        else closeNavFlyouts();
         if (kind === "group") pointerSort.wrap?.classList.add("is-dragging");
         else pointerSort.handle?.classList.add("is-dragging");
         try {
@@ -2172,6 +2301,7 @@
         dragPayload = { kind: "tool", id: link.dataset.tool };
         didDrag = true;
         link.classList.add("is-dragging");
+        beginNavToolSort(link.closest(".nav-group"));
         e.dataTransfer.effectAllowed = "move";
         e.dataTransfer.setData("application/x-devtools-nav", JSON.stringify(dragPayload));
         e.dataTransfer.setData("text/plain", dragPayload.id);
@@ -2179,6 +2309,7 @@
       link.addEventListener("dragend", () => {
         clearNavDragStyles();
         dragPayload = null;
+        endNavToolSort();
         setTimeout(() => {
           didDrag = false;
         }, 0);
@@ -2189,7 +2320,13 @@
         navigateTo(link.dataset.tool);
       });
       link.addEventListener("contextmenu", (e) => {
-        if (!canDesktopDrag()) e.preventDefault();
+        if (!canDesktopDrag()) {
+          e.preventDefault();
+          return;
+        }
+        e.preventDefault();
+        hideNavToolCtx();
+        showNavToolCtx(e.clientX, e.clientY, link.dataset.tool);
       });
       link.addEventListener("dragover", (e) => {
         if (!canDesktopDrag()) return;
@@ -2197,8 +2334,10 @@
         if (!payload) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        if (payload.kind === "tool") link.classList.add("drag-over");
-        else link.closest(".nav-group")?.classList.add("drag-over");
+        if (payload.kind === "tool") {
+          link.classList.add("drag-over");
+          peekNavFlyoutForSort(link.closest(".nav-group"));
+        } else link.closest(".nav-group")?.classList.add("drag-over");
       });
       link.addEventListener("dragleave", () => {
         link.classList.remove("drag-over");
@@ -2261,7 +2400,14 @@
       const onGroupDragOver = (e) => {
         if (!canDesktopDrag()) return;
         const payload = dragPayload || readDragPayload(e);
-        if (!payload || payload.kind !== "group") return;
+        if (!payload) return;
+        if (payload.kind === "tool") {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          peekNavFlyoutForSort(wrap);
+          return;
+        }
+        if (payload.kind !== "group") return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
         wrap.classList.add("drag-over");
@@ -2313,6 +2459,7 @@
       wrap.addEventListener("pointerleave", (e) => {
         if (!navCompact || compactNavSearching()) return;
         if (wrap.classList.contains("is-pinned")) return;
+        if (isNavToolSorting()) return;
         if (e?.pointerType && e.pointerType !== "mouse") return;
         scheduleCloseNavFlyout(wrap);
       });
@@ -2323,6 +2470,7 @@
       wrap.addEventListener("focusout", (e) => {
         if (!navCompact || compactNavSearching()) return;
         if (wrap.classList.contains("is-pinned")) return;
+        if (isNavToolSorting()) return;
         const next = e.relatedTarget;
         if (next && wrap.contains(next)) return;
         scheduleCloseNavFlyout(wrap);
@@ -2338,6 +2486,10 @@
     "scroll",
     () => {
       if (!navCompact || compactNavSearching()) return;
+      if (document.body.classList.contains("nav-sorting-tools")) {
+        $$(".nav-group.is-sort-flyout", navEl).forEach((g) => positionNavFlyout(g));
+        return;
+      }
       const open = $(".nav-group.is-pinned, .nav-group.is-flyout-open", navEl);
       if (open?.classList.contains("is-pinned")) positionNavFlyout(open);
       else if (open) closeNavFlyouts();
@@ -2552,6 +2704,7 @@
   renderNav(loadOrder());
   renderRecent();
   renderFavorites();
+  bindNavToolCtx();
   bindNavStripWheelScroll(recentList);
   bindNavStripWheelScroll(favoritesList);
   window.DevToolsCatalog = {
@@ -2572,6 +2725,7 @@
     renderRecent,
     renderFavorites,
     addFavorite,
+    removeFavorite,
     loadFavorites,
   };
   window.dispatchEvent(new CustomEvent("devtools:catalog"));

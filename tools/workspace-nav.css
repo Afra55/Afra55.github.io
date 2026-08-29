@@ -855,6 +855,40 @@ body.nav-open {
   }
 }
 
+.nav-tool-ctx {
+  position: fixed;
+  z-index: 12000;
+  min-width: 9.5rem;
+  padding: 0.35rem 0;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.nav-tool-ctx-item {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  padding: 0.45rem 0.85rem;
+  cursor: pointer;
+}
+
+.nav-tool-ctx-item:hover,
+.nav-tool-ctx-item:focus-visible {
+  background: color-mix(in srgb, var(--accent) 14%, var(--panel));
+  outline: none;
+}
+
+.nav-tool-ctx-item[hidden] {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tool-panel.is-workspace-active,
   .nav-bar {
