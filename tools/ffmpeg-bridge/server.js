@@ -344,6 +344,114 @@ async function listLocalDir(inputPath) {
   return { ok: true, path: real, entries };
 }
 
+const MEMO_INDEX_NAME = "memo-index.json";
+const MEMO_BLOBS_DIR = "blobs";
+const MEMO_FIND_SKIP = new Set(["node_modules", ".git", "Library", "AppData", "Application Data"]);
+
+async function revealLocalPath(inputPath) {
+  const real = await resolveLocalPath(inputPath);
+  const st = await fs.promises.stat(real);
+  if (process.platform === "win32") {
+    if (st.isDirectory()) {
+      await execFileAsync("explorer.exe", [real], { timeout: 15000 });
+    } else {
+      await execFileAsync("explorer.exe", [`/select,${real}`], { timeout: 15000 });
+    }
+  } else if (process.platform === "darwin") {
+    if (st.isDirectory()) {
+      await execFileAsync("open", [real], { timeout: 15000 });
+    } else {
+      await execFileAsync("open", ["-R", real], { timeout: 15000 });
+    }
+  } else {
+    const target = st.isDirectory() ? real : path.dirname(real);
+    await execFileAsync("xdg-open", [target], { timeout: 15000 });
+  }
+  return { path: real, isDir: st.isDirectory() };
+}
+
+async function findMemoStorageFile({ folderName, folderId, fileName }) {
+  const name = String(fileName || "").trim();
+  if (!name || name.includes("/") || name.includes("\\") || name.includes("\0")) {
+    throw new Error("非法文件名");
+  }
+  const wantName = String(folderName || "").trim();
+  const wantId = String(folderId || "").trim();
+  if (!wantName && !wantId) throw new Error("缺少 folderName 或 folderId");
+
+  const seeds = new Set();
+  const addSeed = (p) => {
+    if (p) seeds.add(path.resolve(p));
+  };
+  addSeed(os.homedir());
+  addSeed(path.join(os.homedir(), "Desktop"));
+  addSeed(path.join(os.homedir(), "Documents"));
+  addSeed(path.join(os.homedir(), "Downloads"));
+  addSeed(path.join(os.homedir(), "OneDrive"));
+  addSeed(path.join(os.homedir(), "OneDrive", "Desktop"));
+  addSeed(path.join(os.homedir(), "OneDrive", "Documents"));
+  for (const r of localFsRoots()) addSeed(r.path);
+
+  const maxDepth = 6;
+  let scanned = 0;
+  const maxScan = 12000;
+
+  async function tryDir(dir) {
+    const indexPath = path.join(dir, MEMO_INDEX_NAME);
+    try {
+      const st = await fs.promises.stat(indexPath);
+      if (!st.isFile()) return null;
+      const raw = await fs.promises.readFile(indexPath, "utf8");
+      const data = JSON.parse(raw);
+      if (wantId && String(data.folderId || "") !== wantId) return null;
+      if (wantName && path.basename(dir) !== wantName) return null;
+      const blobPath = path.join(dir, MEMO_BLOBS_DIR, name);
+      await fs.promises.access(blobPath);
+      return blobPath;
+    } catch {
+      return null;
+    }
+  }
+
+  async function walk(dir, depth) {
+    if (depth > maxDepth || scanned >= maxScan) return null;
+    scanned += 1;
+    const hit = await tryDir(dir);
+    if (hit) return hit;
+    if (depth >= maxDepth) return null;
+    let dirents;
+    try {
+      dirents = await fs.promises.readdir(dir, { withFileTypes: true });
+    } catch {
+      return null;
+    }
+    for (const d of dirents) {
+      if (!d.isDirectory()) continue;
+      if (d.name.startsWith(".") || MEMO_FIND_SKIP.has(d.name)) continue;
+      const found = await walk(path.join(dir, d.name), depth + 1);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  for (const seed of seeds) {
+    let real;
+    try {
+      real = await fs.promises.realpath(seed);
+    } catch {
+      continue;
+    }
+    try {
+      await resolveLocalPath(real);
+    } catch {
+      continue;
+    }
+    const found = await walk(real, 0);
+    if (found) return found;
+  }
+  throw new Error("未找到备忘录文件，请确认本机桥可访问存储目录");
+}
+
 async function ensureWritableDir(dirPath) {
   const real = await resolveLocalPath(dirPath);
   const st = await fs.promises.stat(real);
@@ -3430,6 +3538,27 @@ async function handleRequest(req, res, opts = {}) {
       return;
     }
 
+    if (req.method === "POST" && pathname === "/local/reveal") {
+      const body = parseJsonBody(await readBody(req));
+      const revealed = await revealLocalPath(body.path || "");
+      const dirAbsPath = revealed.isDir ? revealed.path : path.dirname(revealed.path);
+      sendJson(res, 200, { ok: true, revealed: true, path: revealed.path, dirAbsPath }, origin);
+      return;
+    }
+
+    if (req.method === "POST" && pathname === "/local/reveal-memo") {
+      const body = parseJsonBody(await readBody(req));
+      const found = await findMemoStorageFile({
+        folderName: body.folderName,
+        folderId: body.folderId,
+        fileName: body.fileName || body.name,
+      });
+      const revealed = await revealLocalPath(found);
+      const dirAbsPath = path.dirname(path.dirname(found));
+      sendJson(res, 200, { ok: true, revealed: true, path: revealed.path, dirAbsPath }, origin);
+      return;
+    }
+
     if (req.method === "POST" && pathname === "/probe") {
       const body = parseJsonBody(await readBody(req));
       const data = await probeMedia(body.path || "");
@@ -3569,6 +3698,8 @@ module.exports = {
   BRIDGE_VERSION,
   FEATURES,
   checkBinary,
+  revealLocalPath,
+  findMemoStorageFile,
 };
 
 if (require.main === module) {

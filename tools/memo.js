@@ -12,6 +12,10 @@
   const BLOBS_DIR = "blobs";
   const DEFAULT_TAG_ID = "default";
   const META_KEY = "meta";
+  const MEMO_BRIDGE_BASE_KEY = "devtools-ffmpeg-base";
+  const MEMO_BRIDGE_TOKEN_KEY = "devtools-ffmpeg-token";
+  const MEMO_BRIDGE_DEFAULT_BASE = "http://127.0.0.1:17888";
+  const MEMO_BRIDGE_DEFAULT_TOKEN = "devtools-bridge";
   const PAGE_SIZE = 36;
   const TEMP_DAYS_KEY = "devtools-memo-temp-days-v1";
   const TEMP_FILTER_ID = "__temp__";
@@ -3544,6 +3548,87 @@
     return `应用内存储 / ${item.id}`;
   }
 
+  async function memoBridgeFetch(pathname, opts = {}) {
+    const base = String(localStorage.getItem(MEMO_BRIDGE_BASE_KEY) || MEMO_BRIDGE_DEFAULT_BASE).replace(/\/$/, "");
+    const token = String(localStorage.getItem(MEMO_BRIDGE_TOKEN_KEY) || MEMO_BRIDGE_DEFAULT_TOKEN).trim();
+    const headers = { ...(opts.headers || {}), "X-Ffmpeg-Token": token, "X-Adb-Token": token };
+    if (opts.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
+    const rawPath = String(pathname || "/");
+    const candidates =
+      rawPath.startsWith("/ff/") || rawPath === "/ff"
+        ? [rawPath]
+        : [`/ff${rawPath.startsWith("/") ? rawPath : `/${rawPath}`}`, rawPath];
+    let lastErr = null;
+    for (const p of candidates) {
+      try {
+        const res = await fetch(`${base}${p}`, {
+          method: opts.method || "GET",
+          headers,
+          body: opts.body ? JSON.stringify(opts.body) : undefined,
+        });
+        const text = await res.text();
+        let data = null;
+        try {
+          data = JSON.parse(text);
+        } catch (_) {
+          data = null;
+        }
+        if (!res.ok || data?.ok === false) {
+          const err = new Error(data?.error || text || `HTTP ${res.status}`);
+          err.status = res.status;
+          throw err;
+        }
+        return data;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr || new Error("本机桥不可用");
+  }
+
+  async function getMemoDirAbsPath() {
+    const meta = await idbGet("meta", META_KEY);
+    return meta?.dirAbsPath || null;
+  }
+
+  function parentDirPath(p) {
+    const s = String(p || "").replace(/[/\\]+$/, "");
+    const i = Math.max(s.lastIndexOf("/"), s.lastIndexOf("\\"));
+    return i > 0 ? s.slice(0, i) : s;
+  }
+
+  async function saveMemoDirAbsPath(dirAbsPath) {
+    let next = String(dirAbsPath || "").trim().replace(/[/\\]+$/, "");
+    if (!next) return;
+    if (next.endsWith(BLOBS_DIR)) next = parentDirPath(next);
+    const meta = (await idbGet("meta", META_KEY)) || {};
+    if (meta.dirAbsPath === next) return;
+    await idbSet("meta", META_KEY, { ...meta, dirAbsPath: next });
+  }
+
+  async function revealMemoItemFile(item) {
+    const fileName = item.fileName || item.id;
+    const folderName = state.dirHandle?.name || "";
+    const folderId = state.index?.folderId || "";
+    const dirAbs = await getMemoDirAbsPath();
+    if (dirAbs) {
+      const full = `${dirAbs.replace(/[/\\]+$/, "")}/${BLOBS_DIR}/${fileName}`;
+      try {
+        const data = await memoBridgeFetch("/local/reveal", { method: "POST", body: { path: full } });
+        if (data?.dirAbsPath) await saveMemoDirAbsPath(data.dirAbsPath);
+        return data;
+      } catch (_) {
+        /* cached path may be stale */
+      }
+    }
+    const data = await memoBridgeFetch("/local/reveal-memo", {
+      method: "POST",
+      body: { folderName, folderId, fileName },
+    });
+    if (data?.dirAbsPath) await saveMemoDirAbsPath(data.dirAbsPath);
+    return data;
+  }
+
   async function openItemLocation(item) {
     if (!item) return;
     if (state.mode !== "dir" || state.dirPending || !state.dirHandle) {
@@ -3552,10 +3637,16 @@
     }
     const tip = pathHint(item);
     try {
-      await navigator.clipboard.writeText(tip);
-      toast(`已复制文件位置：${tip}`);
-    } catch (_) {
-      toast(tip);
+      await revealMemoItemFile(item);
+      toast(`已在资源管理器中定位：${tip}`);
+    } catch (err) {
+      try {
+        await openItemPath(item);
+        toast(`本机桥未连接，已在新标签打开文件 · 连接本机桥后可定位到文件夹`);
+      } catch (_) {
+        setError(memoError, err.message || String(err));
+        toast(`无法定位文件：${err.message || err}`);
+      }
     }
   }
 
