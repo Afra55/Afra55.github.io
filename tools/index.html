@@ -3220,6 +3220,34 @@ hello@world.org</textarea>
       </div>
     </section>
 
+<section id="ruler" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>直尺</h1>
+        <p>四边刻度尺，上下左右均可读数；支持像素或毫米/厘米（按 PPI 换算）。可<strong>全屏</strong>覆盖屏幕，移动指针查看坐标与十字准线。</p>
+      </div>
+      <div class="panel-body ruler-body">
+        <div class="btn-row tool-actions ruler-actions">
+          <button type="button" class="primary-btn" id="ruler-fullscreen">全屏直尺</button>
+          <label class="flag" for="ruler-crosshair">
+            <input type="checkbox" id="ruler-crosshair" checked /> 十字准线
+          </label>
+          <label for="ruler-unit">单位</label>
+          <select id="ruler-unit" class="select-input mono">
+            <option value="px">像素 px</option>
+            <option value="mm">毫米 mm</option>
+            <option value="cm">厘米 cm</option>
+          </select>
+          <label for="ruler-ppi" title="物理单位换算用，默认 96（CSS 像素/英寸）">PPI</label>
+          <input id="ruler-ppi" class="mono meta-input ruler-ppi-input" type="number" min="72" max="600" step="1" value="96" />
+        </div>
+        <p class="hint mono" id="ruler-coord" aria-live="polite">移动指针查看坐标</p>
+        <div class="ruler-preview-wrap panel-card" id="ruler-preview-wrap">
+          <canvas id="ruler-preview" class="ruler-preview" aria-label="直尺预览"></canvas>
+        </div>
+        <p class="hint tight">预览区示意四边刻度布局；点「全屏直尺」后 Esc 或点空白处退出。原点为屏幕可用区内左上角（刻度内侧）。</p>
+      </div>
+    </section>
+
 <section id="lanshare" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>局域网互传</h1>
@@ -4271,10 +4299,16 @@ adb devices</pre>
       <button type="button" class="primary-btn vsplit-fs-mark" id="vsplit-fs-mark">打起点</button>
     </div>
   </div>
-  <script src="./lib/bridge-token.js?v=2026.08.29-180000"></script>
+  <div id="ruler-fs" class="ruler-fs" hidden>
+    <canvas id="ruler-fs-canvas" class="ruler-fs-canvas" aria-label="全屏直尺"></canvas>
+    <button type="button" class="ruler-fs-close ghost-btn" id="ruler-fs-close" title="退出全屏 (Esc)">退出全屏</button>
+    <p class="ruler-fs-hud mono hint" id="ruler-coord-fs" aria-live="polite"></p>
+  </div>
+  <script src="./lib/bridge-token.js?v=2026.08.29-181000"></script>
   <script src="./lib/lazy-scripts.js?v=2026.08.29-180000"></script>
   <script src="./theme.js?v=2026.08.29-180000"></script>
   <script src="./app.js?v=2026.08.29-180000"></script>
-  <script src="./wheel.js?v=2026.08.29-180000"></script>
+  <script src="./wheel.js?v=2026.08.29-181000"></script>
+  <script src="./ruler.js?v=2026.08.29-181000"></script>
 </body>
 </html>
