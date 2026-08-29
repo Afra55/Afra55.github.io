@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const BUILD = "2026.08.29-172100";
+  const BUILD = "2026.08.29-173000";
 
   const VENDOR_FILES = {
     "js-yaml": { src: "./vendor/js-yaml.min.js", probe: () => typeof globalThis.jsyaml !== "undefined" },
@@ -54,17 +54,30 @@
     const key = withVersion(src);
     if (scriptPromises.has(key)) return scriptPromises.get(key);
     const promise = new Promise((resolve, reject) => {
+      let settled = false;
+      const finishOk = () => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        resolve();
+      };
+      const finishErr = (err) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timer);
+        reject(err || new Error(`脚本加载失败：${src}`));
+      };
+      const timer = window.setTimeout(() => finishErr(new Error(`脚本加载超时：${src}`)), timeoutMs);
       const existing = [...document.scripts].find((s) => {
         try {
-          return withVersion(s.getAttribute("src") || "") === key || s.src.endsWith(src);
+          const attr = s.getAttribute("src") || "";
+          return withVersion(attr) === key || s.src.endsWith(src.replace(/^\.\//, ""));
         } catch (_) {
           return false;
         }
       });
-      const finishOk = () => resolve();
-      const finishErr = (err) => reject(err || new Error(`脚本加载失败：${src}`));
       if (existing) {
-        if (existing.dataset.lazyLoaded === "1" || existing.readyState === "complete" || existing.readyState === "loaded") {
+        if (existing.dataset.devtoolsLoaded === "1") {
           finishOk();
           return;
         }
@@ -72,19 +85,14 @@
         existing.addEventListener("error", () => finishErr(new Error(`脚本加载失败：${src}`)), { once: true });
         return;
       }
-      const timer = window.setTimeout(() => finishErr(new Error(`脚本加载超时：${src}`)), timeoutMs);
       const node = document.createElement("script");
       node.src = key;
       node.async = true;
-      node.dataset.lazyLoaded = "1";
       node.onload = () => {
-        window.clearTimeout(timer);
+        node.dataset.devtoolsLoaded = "1";
         finishOk();
       };
-      node.onerror = () => {
-        window.clearTimeout(timer);
-        finishErr(new Error(`脚本加载失败：${src}`));
-      };
+      node.onerror = () => finishErr(new Error(`脚本加载失败：${src}`));
       document.head.appendChild(node);
     }).catch((err) => {
       scriptPromises.delete(key);
@@ -116,7 +124,6 @@
     const vendors = TOOL_VENDORS[id] || [];
     vendors.forEach((vendorId) => tasks.push(loadVendor(vendorId)));
     if (!tasks.length) return;
-    window.DevToolsBoot?.setLabel?.("加载工具组件…");
     await Promise.all(tasks);
   }
 

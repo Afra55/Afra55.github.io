@@ -1971,11 +1971,7 @@
     }
 
     const routeToolId = currentTool === "media" ? currentMediaTab : currentTool;
-    try {
-      await window.DevToolsLazy?.ensureForTool?.(routeToolId);
-    } catch (err) {
-      console.error("tool lazy-load failed", routeToolId, err);
-    }
+    const isFirstBoot = !window.__devtoolsBootReady;
 
     $$(".tool-panel").forEach((panel) => {
       const id = panel.id;
@@ -2035,15 +2031,30 @@
       setDrawerOpen(false);
       window.scrollTo(0, 0);
     }
-    window.dispatchEvent(
-      new CustomEvent("devtools:route", {
-        detail: { tool: currentTool, mediaTab: currentMediaTab },
-      })
-    );
 
-    if (!window.__devtoolsBootReady) {
+    const emitRoute = () => {
+      window.dispatchEvent(
+        new CustomEvent("devtools:route", {
+          detail: { tool: currentTool, mediaTab: currentMediaTab },
+        })
+      );
+    };
+
+    const loadLazyForRoute = async () => {
+      try {
+        await window.DevToolsLazy?.ensureForTool?.(routeToolId);
+      } catch (err) {
+        console.error("tool lazy-load failed", routeToolId, err);
+      }
+      emitRoute();
+    };
+
+    if (isFirstBoot) {
       window.__devtoolsBootReady = true;
       window.dispatchEvent(new CustomEvent("devtools:boot-ready"));
+      void loadLazyForRoute();
+    } else {
+      await loadLazyForRoute();
     }
   }
 

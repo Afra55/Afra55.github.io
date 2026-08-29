@@ -59,42 +59,9 @@
   }
 
   function trackDeferScripts() {
-    const tracked = [...document.querySelectorAll("script[data-devtools-boot-track][defer]")];
-    if (!tracked.length) {
-      bump(88, "准备界面…");
-      markScriptsReady();
-      return;
-    }
-    let done = 0;
-    const step = () => {
-      done += 1;
-      const base = 18;
-      const span = 62;
-      bump(base + Math.round((done / tracked.length) * span), done >= tracked.length ? "准备界面…" : "加载模块…");
-      if (done >= tracked.length) markScriptsReady();
-    };
-    tracked.forEach((node) => {
-      if (node.dataset.devtoolsBootDone === "1") {
-        step();
-        return;
-      }
-      node.addEventListener(
-        "load",
-        () => {
-          node.dataset.devtoolsBootDone = "1";
-          step();
-        },
-        { once: true }
-      );
-      node.addEventListener(
-        "error",
-        () => {
-          node.dataset.devtoolsBootDone = "1";
-          step();
-        },
-        { once: true }
-      );
-    });
+    // defer 脚本保证在 DOMContentLoaded 之前已顺序执行完毕，无需再等 load 事件
+    bump(88, "准备界面…");
+    markScriptsReady();
   }
 
   function hideOverlay() {
