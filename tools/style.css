@@ -3964,6 +3964,20 @@ body.vsplit-fs-open {
   line-height: 1.55;
 }
 
+.adb-guide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.adb-guide-dismiss {
+  flex: 0 0 auto;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
 .adb-guide strong {
   color: var(--ink);
   font-weight: 600;
