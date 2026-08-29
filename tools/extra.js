@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.17-imgprev1";
+  const TOOLS_VERSION = "2026.08.17-imgprev2";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
 
@@ -568,14 +568,15 @@
       hash === "gifmaker" ||
       hash === "vsplit" ||
       hash === "vbb" ||
+      hash === "vplay" ||
       hash === "media" ||
       hash.indexOf("media/") === 0
     ) {
       return true;
     }
-    const mediaLink = document.querySelector('.tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"], .tool-nav-link[data-tool="vtrim"], .tool-nav-link[data-tool="audio"]');
+    const mediaLink = document.querySelector('.tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"], .tool-nav-link[data-tool="vtrim"], .tool-nav-link[data-tool="audio"], .tool-nav-link[data-tool="vplay"]');
     if (mediaLink?.classList.contains("is-active")) return true;
-    return ["gifmaker", "vsplit", "vbb", "vtrim", "audio"].some((id) => {
+    return ["gifmaker", "vsplit", "vbb", "vtrim", "audio", "vplay"].some((id) => {
       const panel = document.getElementById(id);
       return !!(panel && panel.classList.contains("is-workspace-active") && !panel.hidden);
     });
@@ -638,7 +639,7 @@
       if (!document.hidden) scheduleFfmpegPrewarm();
     });
     if (typeof MutationObserver === "function") {
-      ["gifmaker", "vsplit", "vbb", "vtrim", "audio"].forEach((id) => {
+      ["gifmaker", "vsplit", "vbb", "vtrim", "audio", "vplay"].forEach((id) => {
         const panel = document.getElementById(id);
         if (!panel) return;
         new MutationObserver(scheduleFfmpegPrewarm).observe(panel, {
@@ -649,7 +650,7 @@
     }
     document.addEventListener("click", (e) => {
       const t = e.target?.closest?.(
-        '.tool-nav-link[data-tool="media"], [data-media-tab], .tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"], .tool-nav-link[data-tool="vtrim"], .tool-nav-link[data-tool="audio"]'
+        '.tool-nav-link[data-tool="media"], [data-media-tab], .tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"], .tool-nav-link[data-tool="vtrim"], .tool-nav-link[data-tool="audio"], .tool-nav-link[data-tool="vplay"]'
       );
       if (t) setTimeout(scheduleFfmpegPrewarm, 0);
     });

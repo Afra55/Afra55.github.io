@@ -773,33 +773,35 @@
   const SORT_HINT_KEY = "devtools-nav-sort-hint-seen-v1";
   /** 站点页不算「上次工具」，避免 about/setup 盖掉真实工具 */
   const SITE_NAV_IDS = new Set(["about", "setup"]);
-  const MEDIA_TABS = ["gifmaker", "vsplit", "vtrim", "audio"];
+  const MEDIA_TABS = ["gifmaker", "vsplit", "vtrim", "audio", "vplay"];
   const HASH_ALIASES = {
     gifmaker: { tool: "media", tab: "gifmaker" },
     vsplit: { tool: "media", tab: "vsplit" },
     vtrim: { tool: "media", tab: "vtrim" },
     audio: { tool: "media", tab: "audio" },
-    vplay: { tool: "vplay", tab: "gifmaker" },
+    vplay: { tool: "media", tab: "vplay" },
     vbb: { tool: "vbb" },
     blackbox: { tool: "vbb" },
   };
   const TOOL_GROUPS = [
     { id: "time", label: "时间", tools: ["timestamp", "timediff", "cron"] },
     { id: "color", label: "颜色", tools: ["ahex", "color", "eyedropper"] },
-    { id: "encode", label: "编码与安全", tools: ["base64", "imgb64", "url", "hash", "password", "uuid", "qrcode"] },
-    { id: "data", label: "数据格式", tools: ["json", "yaml", "query", "sharecard"] },
+    { id: "encode", label: "编码与生成", tools: ["base64", "url", "hash", "password", "uuid"] },
+    { id: "data", label: "数据格式", tools: ["json", "yaml", "query"] },
     {
       id: "text",
       label: "文本工具",
       tools: ["text", "caseconv", "regex", "diff", "markdown", "memo"],
     },
     { id: "blackbox", label: "黑盒", tools: ["vbb"] },
-    { id: "play", label: "播放", tools: ["vplay"] },
-    { id: "media", label: "媒体", tools: ["gifmaker", "vsplit", "vtrim", "audio"] },
-    { id: "image", label: "图片", tools: ["imgpreview", "whiteboard", "imgkit", "textimg", "imgtext"] },
+    { id: "media", label: "媒体", tools: ["gifmaker", "vsplit", "vtrim", "audio", "vplay"] },
+    {
+      id: "image",
+      label: "图片",
+      tools: ["imgpreview", "whiteboard", "imgkit", "textimg", "imgtext", "sharecard", "imgb64", "qrcode"],
+    },
     { id: "convert", label: "换算", tools: ["units", "coord", "numbase"] },
-    { id: "share", label: "互传", tools: ["lanshare"] },
-    { id: "device", label: "设备", tools: ["adb", "ffbridge"] },
+    { id: "device", label: "设备", tools: ["lanshare", "adb", "ffbridge"] },
     { id: "site", label: "站点", tools: ["about", "setup"] },
   ];
   const DEFAULT_GROUP_ORDER = TOOL_GROUPS.map((g) => g.id);
@@ -1681,7 +1683,6 @@
     if (HASH_ALIASES[head]) return { ...HASH_ALIASES[head] };
     if (head === "media") {
       if (parts[1] === "vbb") return { tool: "vbb", tab: "gifmaker" };
-      if (parts[1] === "vplay") return { tool: "vplay", tab: "gifmaker" };
       const tab = MEDIA_TABS.includes(parts[1]) ? parts[1] : "gifmaker";
       return { tool: "media", tab };
     }

@@ -118,7 +118,7 @@ async function main() {
       hasPurge: typeof window.DevToolsTemp?.purgeSiteCache === "function",
     };
     try {
-      const mediaIds = ["gifmaker", "vsplit", "vtrim", "audio"];
+      const mediaIds = ["gifmaker", "vsplit", "vtrim", "audio", "vplay"];
       out.orderHasMedia = mediaIds.every((id) =>
         [...document.querySelectorAll(".tool-nav-link")].some((a) => a.dataset.tool === id)
       );

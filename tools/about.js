@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const MEDIA_IDS = new Set(["gifmaker", "vsplit", "vbb", "vtrim", "audio"]);
+  const MEDIA_IDS = new Set(["gifmaker", "vsplit", "vbb", "vtrim", "audio", "vplay"]);
 
   /** 新增工具时：在 app.js 的 TOOL_GROUPS / TOOL_META / ABOUT_DESC 同步更新 */
   function $(sel, root = document) {
