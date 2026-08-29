@@ -1459,8 +1459,7 @@ async function main() {
       out.lastTool.media = window.DevToolsNav.lastToolHash() === "#media/vsplit";
       localStorage.setItem("devtools-tool-last-v1", "memo");
       history.replaceState(null, "", "#timestamp");
-      out.lastTool.restoreTimestamp =
-        window.DevToolsNav.shouldRestoreLastTool() && window.DevToolsNav.lastToolHash() === "#memo";
+      out.lastTool.restoreTimestamp = window.DevToolsNav.lastToolHash() === "#memo";
       window.DevToolsNav.restoreLastToolOnStartup();
       window.dispatchEvent(new HashChangeEvent("hashchange"));
       out.lastTool.preserveLastKey = localStorage.getItem("devtools-tool-last-v1") === "memo";
@@ -1592,6 +1591,20 @@ async function main() {
     return out;
   });
 
+  result.timestampNav = await page.evaluate(async () => {
+    localStorage.setItem("devtools-tool-last-v1", "memo");
+    const link = [...document.querySelectorAll("#tool-nav .tool-nav-link")].find((a) => a.dataset.tool === "timestamp");
+    link?.click();
+    await new Promise((r) => setTimeout(r, 200));
+    return {
+      hash: location.hash,
+      tsActive: Boolean(document.getElementById("timestamp")?.classList.contains("is-workspace-active")),
+      memoActive: Boolean(document.getElementById("memo")?.classList.contains("is-workspace-active")),
+      lastKey: localStorage.getItem("devtools-tool-last-v1"),
+      title: document.getElementById("workspace-title")?.textContent || "",
+    };
+  });
+
   await page.setUserAgent(
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
   );
@@ -1603,6 +1616,7 @@ async function main() {
   await page.waitForFunction(() => document.getElementById("memo")?.classList.contains("is-workspace-active"), {
     timeout: 15000,
   });
+  await page.evaluate(() => localStorage.setItem("devtools-tool-last-v1", "memo"));
   await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#timestamp`, {
     waitUntil: "networkidle0",
     timeout: 60000,
@@ -1627,7 +1641,7 @@ async function main() {
   if (!result.ctxTemp?.hasVideo || !result.ctxTemp?.ctxShown || !result.ctxTemp?.hasTempAct || !result.ctxTemp?.marked) {
     failed.push(`video context-menu temp mark failed: ${JSON.stringify(result.ctxTemp)}`);
   }
-  if (!/navfavdock1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
+  if (!/timestampfix1/i.test(result.version)) failed.push(`unexpected version ${result.version}`);
   for (const step of result.steps) {
     for (const [k, v] of Object.entries(step)) {
       if (k === "count" || k === "bytes") continue;
@@ -1896,8 +1910,8 @@ async function main() {
   if (!result.btnSize?.ok || result.btnSize?.cardAligned === false) {
     failed.push("grouped action buttons should share the same height");
   }
-  if (!/navfavdock1/i.test(result.cacheBust?.version || "")) {
-    failed.push("cache-bust/version should be aligned to navfavdock1");
+  if (!/timestampfix1/i.test(result.cacheBust?.version || "")) {
+    failed.push("cache-bust/version should be aligned to timestampfix1");
   }
   if (!result.modules?.batchClear || !result.modules?.tempZone || !result.modules?.tempFilter || !result.modules?.tempPrompt) {
     failed.push("memo batch-clear / temp zone / temp prompt UI missing");
@@ -2033,6 +2047,15 @@ async function main() {
   }
   if (!result.adbCmds?.section || !result.adbCmds?.searchable || result.adbCmds?.rows < 10) {
     failed.push("adb commands reference should load searchable command list");
+  }
+  if (
+    result.timestampNav?.hash !== "#timestamp" ||
+    !result.timestampNav?.tsActive ||
+    result.timestampNav?.memoActive ||
+    result.timestampNav?.lastKey !== "timestamp" ||
+    !/时间戳/.test(result.timestampNav?.title || "")
+  ) {
+    failed.push(`explicit timestamp nav should open timestamp tool: ${JSON.stringify(result.timestampNav)}`);
   }
   if (
     !result.timeSelect?.hasToday ||

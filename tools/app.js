@@ -1379,8 +1379,7 @@
     if (!DEFAULT_ORDER.includes(id)) return;
     const next = [id, ...loadRecent().filter((x) => x !== id)];
     localStorage.setItem(RECENT_KEY, JSON.stringify(next));
-    // 占位路由上的默认 timestamp 不应覆盖已保存的上次工具（手机冷启动常见）
-    if (!(id === "timestamp" && shouldRestoreLastTool())) saveLastTool(id);
+    saveLastTool(id);
     renderRecent();
   }
 
@@ -1408,15 +1407,26 @@
 
   function persistActiveTool(route) {
     const id = activeToolIdFromRoute(route || { tool: currentTool, tab: currentMediaTab });
-    if (!id || id === "timestamp") {
-      if (!shouldRestoreLastTool()) saveLastTool("timestamp");
-      return;
-    }
+    if (!id) return;
     saveLastTool(id);
   }
 
-  /** iOS PWA / Safari 冷启动常带 #timestamp 或空 hash，需在此类「占位路由」上恢复上次工具 */
+  /** applyRoute 用：空 hash / 裸 #media 视为占位，不含 #timestamp（用户可显式打开时间戳） */
   function shouldRestoreLastTool() {
+    const raw0 = String(location.hash || "").replace(/^#/, "").trim();
+    if (!raw0 || raw0 === "/") return true;
+    const q = raw0.indexOf("?");
+    const path = q >= 0 ? raw0.slice(0, q) : raw0;
+    if (q >= 0 && path === "lanshare") return false;
+    if (!path || path === "/") return true;
+    const head = path.split(/[/?]/).filter(Boolean)[0] || "";
+    if (!head) return true;
+    if (head === "media" && !path.includes("/")) return true;
+    return false;
+  }
+
+  /** 冷启动占位 hash（含 iOS 常见的 #timestamp），仅 boot 时恢复上次工具 */
+  function isStartupPlaceholderHash() {
     const raw0 = String(location.hash || "").replace(/^#/, "").trim();
     if (!raw0 || raw0 === "/") return true;
     const q = raw0.indexOf("?");
@@ -1431,7 +1441,7 @@
   }
 
   function restoreLastToolOnStartup() {
-    if (!shouldRestoreLastTool()) return false;
+    if (!isStartupPlaceholderHash()) return false;
     const saved = loadLastToolId();
     if (!saved || saved === "timestamp") return false;
     const route = routeFromToolId(saved);
@@ -1945,7 +1955,7 @@
     const nextTab = nextTabArg || (nextTool === "media" ? currentMediaTab : null);
     const hash = routeHash(nextTool, nextTab);
     const persistId = navToolIdForSave(tool, tab, nextTool, nextTab);
-    if (persistId && persistId !== "timestamp") saveLastTool(persistId);
+    if (persistId) saveLastTool(persistId);
     const current = `#${String(location.hash || "").replace(/^#/, "")}`;
     // 媒体内切 Tab 用 replace，避免系统返回在子功能间来回跳
     const mediaTabOnly =
@@ -2623,17 +2633,17 @@
     navigateTo("media", tabs[next].dataset.mediaTab);
   });
   window.addEventListener("hashchange", () => {
-    if (shouldRestoreLastTool()) restoreLastToolOnStartup();
+    if (isStartupPlaceholderHash()) restoreLastToolOnStartup();
     applyRoute();
   });
   window.addEventListener("popstate", () => {
-    if (shouldRestoreLastTool()) restoreLastToolOnStartup();
+    if (isStartupPlaceholderHash()) restoreLastToolOnStartup();
     applyRoute();
   });
   // Safari：bfcache / 后台回收后恢复时强制关闭菜单，并重新套用路由（手机常回到 start_url）
   window.addEventListener("pageshow", () => {
     forceDrawerClosed();
-    if (shouldRestoreLastTool()) restoreLastToolOnStartup();
+    if (isStartupPlaceholderHash()) restoreLastToolOnStartup();
     applyRoute({ skipRecent: true });
   });
   document.addEventListener("visibilitychange", () => {
@@ -2642,7 +2652,7 @@
       return;
     }
     forceDrawerClosed();
-    if (shouldRestoreLastTool()) restoreLastToolOnStartup();
+    if (isStartupPlaceholderHash()) restoreLastToolOnStartup();
     applyRoute({ skipRecent: true });
   });
   window.addEventListener("pagehide", () => {
