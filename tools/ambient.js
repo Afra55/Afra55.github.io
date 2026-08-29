@@ -28,6 +28,9 @@
   let playerEl = null;
   let filterBtns = [];
   let sleepSelect = null;
+  let zhVoice = null;
+  let enVoice = null;
+  let speechPrimed = false;
 
   function cacheBust(url) {
     if (!url) return url;
@@ -90,6 +93,58 @@
 
   function iconHtml(iconId, cls = "") {
     return `<span class="iconify ambient-ic ${cls}" data-icon="${iconId}" aria-hidden="true"></span>`;
+  }
+
+  function loadSpeechVoices() {
+    if (!window.speechSynthesis) return;
+    const voices = window.speechSynthesis.getVoices();
+    zhVoice =
+      voices.find((v) => /^zh-(CN|Hans)/i.test(v.lang)) ||
+      voices.find((v) => /^zh/i.test(v.lang)) ||
+      null;
+    enVoice =
+      voices.find((v) => /^en(-US|$)/i.test(v.lang)) ||
+      voices.find((v) => /^en/i.test(v.lang)) ||
+      null;
+  }
+
+  function primeSpeech() {
+    if (!window.speechSynthesis || speechPrimed) return;
+    speechPrimed = true;
+    loadSpeechVoices();
+    try {
+      if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+    } catch (_) {}
+    try {
+      const u = new SpeechSynthesisUtterance(" ");
+      u.volume = 0.01;
+      u.rate = 2;
+      window.speechSynthesis.speak(u);
+      window.speechSynthesis.cancel();
+    } catch (_) {}
+  }
+
+  function speakName(text, lang) {
+    if (!text || !window.speechSynthesis) return;
+    primeSpeech();
+    const synth = window.speechSynthesis;
+    try {
+      synth.cancel();
+    } catch (_) {}
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = lang || "zh-CN";
+    if (u.lang.startsWith("zh") && zhVoice) u.voice = zhVoice;
+    else if (u.lang.startsWith("en") && enVoice) u.voice = enVoice;
+    u.rate = 0.95;
+    u.volume = 1;
+    synth.speak(u);
+  }
+
+  function speakLabelEl(el) {
+    const item = itemsById.get(el.dataset.speakId);
+    if (!item) return;
+    const lang = el.dataset.lang || "zh-CN";
+    speakName(lang.startsWith("zh") ? item.nameZh : item.nameEn, lang);
   }
 
   function bumpRecent(id) {
@@ -211,8 +266,8 @@
     return `<button type="button" class="ambient-card${active ? " is-playing" : ""}${isPaused ? " is-paused" : ""}" data-id="${item.id}" aria-pressed="${active}">
       ${img}
       <span class="ambient-card-body">
-        <span class="ambient-card-title">${iconHtml(item.icon)}<span class="ambient-card-zh">${escapeHtml(item.nameZh)}</span></span>
-        <span class="ambient-card-en">${escapeHtml(item.nameEn)}</span>
+        <span class="ambient-card-title">${iconHtml(item.icon)}<span class="ambient-card-zh ambient-speak" data-speak-id="${item.id}" data-lang="zh-CN" title="朗读中文">${escapeHtml(item.nameZh)}</span></span>
+        <span class="ambient-card-en ambient-speak" data-speak-id="${item.id}" data-lang="en" title="Read aloud">${escapeHtml(item.nameEn)}</span>
       </span>
       <span class="ambient-card-fav${fav ? " is-on" : ""}" data-fav="${item.id}" title="收藏" aria-label="收藏">♥</span>
     </button>`;
@@ -265,8 +320,8 @@
       <div class="ambient-player-main">
         ${iconHtml(item.icon, "ambient-player-ic")}
         <div class="ambient-player-text">
-          <strong>${escapeHtml(item.nameZh)}</strong>
-          <span class="hint">${escapeHtml(item.nameEn)}${sleepLeft ? ` · ${sleepLeft} 分钟后停止` : ""}</span>
+          <strong class="ambient-speak" data-speak-id="${item.id}" data-lang="zh-CN" title="朗读中文">${escapeHtml(item.nameZh)}</strong>
+          <span class="hint"><span class="ambient-speak" data-speak-id="${item.id}" data-lang="en" title="Read aloud">${escapeHtml(item.nameEn)}</span>${sleepLeft ? ` · ${sleepLeft} 分钟后停止` : ""}</span>
         </div>
       </div>
       <div class="ambient-player-actions btn-row">
@@ -287,8 +342,20 @@
     if (window.Iconify?.scan) window.Iconify.scan(playerEl);
   }
 
-  function bindGridEvents() {
-    gridEl?.addEventListener("click", (e) => {
+  function bindAmbientEvents() {
+    if (window.speechSynthesis) {
+      window.speechSynthesis.addEventListener("voiceschanged", loadSpeechVoices);
+      loadSpeechVoices();
+    }
+    root?.addEventListener("click", (e) => {
+      const speakEl = e.target.closest("[data-speak-id]");
+      if (speakEl) {
+        e.stopPropagation();
+        e.preventDefault();
+        speakLabelEl(speakEl);
+        return;
+      }
+      if (!gridEl?.contains(e.target)) return;
       const favBtn = e.target.closest("[data-fav]");
       if (favBtn) {
         e.stopPropagation();
@@ -347,6 +414,11 @@
   function onLeave() {
     stopAudio();
     currentId = null;
+    if (window.speechSynthesis) {
+      try {
+        window.speechSynthesis.cancel();
+      } catch (_) {}
+    }
     updatePlayer();
   }
 
@@ -382,7 +454,7 @@
       setSleepMinutes(leftMin);
     }
 
-    bindGridEvents();
+    bindAmbientEvents();
     bindFilters();
     inited = true;
     render();

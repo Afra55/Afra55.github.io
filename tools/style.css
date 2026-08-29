@@ -10551,6 +10551,20 @@ html[data-boot-loading="1"] body {
   padding-left: 1.35rem;
 }
 
+.ambient-speak {
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.ambient-speak:hover {
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--accent) 60%, transparent);
+}
+
+.ambient-player-text .ambient-speak:hover {
+  color: var(--text);
+}
+
 .ambient-card-fav {
   position: absolute;
   top: 0.35rem;
