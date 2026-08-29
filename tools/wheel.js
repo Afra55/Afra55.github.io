@@ -29,6 +29,7 @@
   let canvas = null;
   let ctx = null;
   let spinBtn = null;
+  let equalBtn = null;
   let resultEl = null;
   let countInput = null;
   let durationInput = null;
@@ -334,14 +335,54 @@
     });
   }
 
+  function wheelRandom() {
+    const total = segments.reduce((s, seg) => s + seg.weight, 0);
+    if (!(total > 0)) return 0;
+    let r;
+    try {
+      if (window.crypto?.getRandomValues) {
+        const buf = new Uint32Array(1);
+        window.crypto.getRandomValues(buf);
+        r = (buf[0] / 0x100000000) * total;
+      } else {
+        r = Math.random() * total;
+      }
+    } catch (_) {
+      r = Math.random() * total;
+    }
+    return r;
+  }
+
+  function segmentProbability(index) {
+    const total = segments.reduce((s, seg) => s + seg.weight, 0);
+    if (!(total > 0)) return 0;
+    return (segments[index]?.weight || 0) / total;
+  }
+
   function pickWeightedIndex() {
     const total = segments.reduce((s, seg) => s + seg.weight, 0);
-    let r = Math.random() * total;
+    if (!(total > 0)) return 0;
+    let r = wheelRandom();
     for (let i = 0; i < segments.length; i++) {
-      r -= segments[i].weight;
-      if (r <= 0) return i;
+      const w = segments[i].weight;
+      if (r < w) return i;
+      r -= w;
     }
     return segments.length - 1;
+  }
+
+  function equalizeWeights() {
+    const n = segments.length;
+    if (n <= 0) return;
+    const w = WEIGHT_TOTAL / n;
+    segments.forEach((seg) => {
+      seg.weight = roundWeight(w);
+    });
+    normalizeWeights();
+    renderSegmentEditors();
+    drawWheel();
+    saveState();
+    if (resultEl) resultEl.textContent = "已重置为均等比例，每块概率相同";
   }
 
   function isWheelRoute() {
@@ -386,7 +427,7 @@
     const cx = cssW / 2;
     const cy = cssH / 2;
     const radius = Math.min(cx, cy) * 0.88;
-    const liteSpin = spinning && highlightIndex < 0;
+    const liteSpin = spinning;
     ctx.clearRect(0, 0, cssW, cssH);
 
     ctx.save();
@@ -769,10 +810,10 @@
         const t = clamp((now - startTime) / durationMs, 0, 1);
         const eased = easeOutCubic(t);
         rotation = startRot + totalDelta * eased;
-        drawWheel(t < 1 ? -1 : winIndex);
+        drawWheel(-1);
 
         const crossed = Math.floor((rotation - startRot) / (Math.PI / 8));
-        if (crossed !== lastTickSeg && t < 0.98) {
+        if (crossed !== lastTickSeg && t < 0.92) {
           lastTickSeg = crossed;
           playTick(1 - t);
         }
@@ -784,17 +825,21 @@
     });
 
     rotation = endRot;
-    drawWheel(winIndex);
-    playWinChime();
-
-    const winner = segments[winIndex]?.label || `选项 ${winIndex + 1}`;
-    if (resultEl) {
-      resultEl.innerHTML = `🎯 <strong>${escapeHtml(winner)}</strong>`;
-    }
-    speakResultAfterEffects(winner);
-
     spinning = false;
     spinDisplaySize = 0;
+
+    const winner = segments[winIndex]?.label || `选项 ${winIndex + 1}`;
+    const pct = roundWeight(segmentProbability(winIndex) * 100);
+
+    requestAnimationFrame(() => {
+      drawWheel(winIndex);
+      playWinChime();
+      if (resultEl) {
+        resultEl.innerHTML = `🎯 <strong>${escapeHtml(winner)}</strong> <span class="hint tight">（${pct}%）</span>`;
+      }
+      speakResultAfterEffects(winner);
+    });
+
     if (spinBtn) spinBtn.disabled = false;
     saveState();
   }
@@ -806,6 +851,7 @@
       soundOn = Boolean(soundToggle.checked);
       saveState();
     });
+    equalBtn?.addEventListener("click", equalizeWeights);
     spinBtn?.addEventListener("touchend", () => {
       unlockWheelAudio();
     }, { passive: true });
@@ -872,6 +918,7 @@
     canvas = $("#wheel-canvas");
     ctx = canvas?.getContext("2d", { alpha: true });
     spinBtn = $("#wheel-spin");
+    equalBtn = $("#wheel-equal");
     resultEl = $("#wheel-result");
     countInput = $("#wheel-count");
     durationInput = $("#wheel-duration");

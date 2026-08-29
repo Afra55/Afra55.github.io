@@ -9451,6 +9451,10 @@ li a:not([class*="btn"]) {
   margin-top: 0.15rem;
 }
 
+.wheel-equal-btn {
+  width: 100%;
+}
+
 .wheel-result {
   margin: 0;
   min-height: 1.4em;

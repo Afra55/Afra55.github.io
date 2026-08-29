@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <link rel="stylesheet" href="./style.css?v=2026.08.29-185000" />
+  <link rel="stylesheet" href="./style.css?v=2026.08.29-188000" />
   <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.29-180000" />
   <script src="./lib/theme-presets.js?v=2026.08.29-180000"></script>
   <script src="./lib/boot-loader.js?v=2026.08.29-180000"></script>
@@ -3178,7 +3178,7 @@ hello@world.org</textarea>
 <section id="wheel" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>大转盘</h1>
-        <p>自定义分块、比例与文字，设置旋转秒数后随机停针；可选旋转音效，结束后语音读出结果。</p>
+        <p>自定义分块、比例与文字，设置旋转秒数后随机停针；<strong>按各块比例加权随机</strong>（比例相同则概率相等）。可选旋转音效，结束后语音读出结果。</p>
       </div>
       <div class="panel-body wheel-body">
         <div class="wheel-layout">
@@ -3197,11 +3197,12 @@ hello@world.org</textarea>
                 <span>旋转音效</span>
               </label>
               <button type="button" class="primary-btn wheel-spin-btn" id="wheel-spin">开始旋转</button>
-              <p class="wheel-result" id="wheel-result" aria-live="polite">点击「开始旋转」随机抽选</p>
+              <button type="button" class="secondary-btn wheel-equal-btn" id="wheel-equal">均等比例</button>
+              <p class="wheel-result" id="wheel-result" aria-live="polite">点击「开始旋转」按权重抽选</p>
             </div>
             <div class="wheel-segments-head">
               <strong>各块设置</strong>
-              <span class="hint tight">改一块比例时，其余块等比缩放</span>
+              <span class="hint tight">比例即中奖概率；改一块时其余块等比缩放</span>
             </div>
             <div class="wheel-segments" id="wheel-segments"></div>
           </aside>
@@ -4302,7 +4303,7 @@ adb devices</pre>
   <script src="./lib/lazy-scripts.js?v=2026.08.29-180000"></script>
   <script src="./theme.js?v=2026.08.29-180000"></script>
   <script src="./app.js?v=2026.08.29-180000"></script>
-  <script src="./wheel.js?v=2026.08.29-187000"></script>
+  <script src="./wheel.js?v=2026.08.29-188000"></script>
   <script src="./ruler.js?v=2026.08.29-181000"></script>
 </body>
 </html>
