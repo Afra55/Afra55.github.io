@@ -8,60 +8,72 @@
   const DEFAULT_FLOAT_PHRASES = ["功德 +1", "善哉", "福生无量", "随喜", "心安", "清净", "平安喜乐"];
   const VALID_THEMES = new Set(["zen", "ocean", "gold", "forest"]);
   const MODAL_MODES = [
-    [1, 0.2, 0.55],
-    [2.76, 0.13, 0.3],
-    [5.4, 0.08, 0.16],
-    [8.93, 0.05, 0.08],
+    [1, 0.34, 0.72],
+    [2.05, 0.24, 0.24],
+    [3.28, 0.16, 0.15],
+    [5.02, 0.1, 0.09],
+    [7.15, 0.06, 0.05],
   ];
+  const KNOCK_BASE_HZ = 398;
+  const HOLLOW_DELAYS = [0.013, 0.027, 0.041];
+  const HOLLOW_GAINS = [0.3, 0.16, 0.08];
 
-  /** 木鱼造型参考 wooden-fish-dsh/docs/fish.svg 与 heyuan110/cyber-merit */
+  /** 木鱼造型：法器侧视轮廓 + 鳞刻 + 腔口 + 木鱼棒（参考实物与 cyber-merit） */
+  const FISH_ART_VER = "3";
+
   function renderFishArt(prefix) {
     const p = prefix;
-    return `<svg class="muyu-fish-svg" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+    return `<svg class="muyu-fish-svg" viewBox="0 0 200 220" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
       <defs>
-        <radialGradient id="${p}-body" cx="40%" cy="32%" r="80%">
-          <stop offset="0%" stop-color="#bd8244"/>
-          <stop offset="45%" stop-color="#7d5022"/>
-          <stop offset="100%" stop-color="#2c1a0a"/>
-        </radialGradient>
-        <linearGradient id="${p}-rim" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#e6bf80"/>
-          <stop offset="50%" stop-color="#9a6a32"/>
-          <stop offset="100%" stop-color="#553616"/>
+        <linearGradient id="${p}-wood" x1="18%" y1="8%" x2="82%" y2="92%">
+          <stop offset="0%" stop-color="#c99852"/>
+          <stop offset="28%" stop-color="#9a6834"/>
+          <stop offset="62%" stop-color="#6f4520"/>
+          <stop offset="100%" stop-color="#3d2410"/>
         </linearGradient>
-        <radialGradient id="${p}-mouth" cx="50%" cy="30%" r="75%">
-          <stop offset="0%" stop-color="#3a2410"/>
-          <stop offset="100%" stop-color="#0c0703"/>
-        </radialGradient>
-        <linearGradient id="${p}-hl" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="rgba(255,242,214,0.55)"/>
-          <stop offset="100%" stop-color="rgba(255,242,214,0)"/>
+        <linearGradient id="${p}-wood-edge" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stop-color="#ddb878"/>
+          <stop offset="100%" stop-color="#5a3818"/>
         </linearGradient>
+        <radialGradient id="${p}-cavity" cx="50%" cy="35%" r="68%">
+          <stop offset="0%" stop-color="#1a0f08"/>
+          <stop offset="55%" stop-color="#0a0604"/>
+          <stop offset="100%" stop-color="#020101"/>
+        </radialGradient>
+        <linearGradient id="${p}-sheen" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="rgba(255,236,200,0.55)"/>
+          <stop offset="100%" stop-color="rgba(255,236,200,0)"/>
+        </linearGradient>
+        <filter id="${p}-soft" x="-8%" y="-8%" width="116%" height="116%">
+          <feDropShadow dx="0" dy="5" stdDeviation="4" flood-color="#000" flood-opacity="0.35"/>
+        </filter>
       </defs>
-      <ellipse cx="100" cy="180" rx="72" ry="11" fill="rgba(0,0,0,0.28)"/>
-      <ellipse cx="100" cy="102" rx="91" ry="80" fill="url(#${p}-rim)"/>
-      <ellipse cx="100" cy="98" rx="83" ry="72" fill="url(#${p}-body)"/>
-      <g stroke="#3a2410" stroke-opacity="0.32" fill="none" stroke-linecap="round">
-        <path d="M40 92 Q100 64 160 92" stroke-width="2.3"/>
-        <path d="M46 112 Q100 90 154 112" stroke-width="2"/>
-        <path d="M56 132 Q100 116 144 132" stroke-width="1.7"/>
+      <ellipse cx="100" cy="204" rx="78" ry="9" fill="rgba(0,0,0,0.22)"/>
+      <rect x="28" y="188" width="144" height="18" rx="9" fill="#5c2d4a" stroke="#3e1e32" stroke-width="1.5"/>
+      <rect x="32" y="190" width="136" height="6" rx="3" fill="#7a3d62" opacity="0.55"/>
+      <path d="M36 188 Q100 181 164 188" stroke="#9a5578" stroke-width="1.2" fill="none" opacity="0.65"/>
+      <g filter="url(#${p}-soft)">
+        <path d="M38 148 Q38 62 100 48 Q162 62 162 148 Q162 172 100 182 Q38 172 38 148 Z" fill="url(#${p}-wood-edge)"/>
+        <path d="M44 145 Q44 68 100 56 Q156 68 156 145 Q156 166 100 174 Q44 166 44 145 Z" fill="url(#${p}-wood)"/>
+        <path d="M44 145 Q44 68 100 56 Q156 68 156 145 Q156 166 100 174 Q44 166 44 145 Z" fill="none" stroke="#4a2c14" stroke-width="1.2" opacity="0.55"/>
       </g>
-      <g fill="none" stroke="#2c1a0a" stroke-opacity="0.55" stroke-linecap="round">
-        <path d="M134 54 Q166 66 162 106" stroke-width="4.5"/>
-        <path d="M146 62 Q168 78 164 102" stroke-width="2.8"/>
+      <g fill="none" stroke="#4a3018" stroke-opacity="0.42" stroke-linecap="round">
+        <path d="M52 108 Q100 78 148 108" stroke-width="2.2"/>
+        <path d="M58 122 Q100 98 142 122" stroke-width="1.9"/>
+        <path d="M64 136 Q100 118 136 136" stroke-width="1.6"/>
+        <path d="M70 148 Q100 134 130 148" stroke-width="1.3"/>
       </g>
-      <circle cx="150" cy="84" r="7" fill="#221408"/>
-      <circle cx="147.5" cy="81.5" r="2.2" fill="#6a4520"/>
-      <path d="M50 116 Q100 156 150 116 Q126 138 100 138 Q74 138 50 116 Z" fill="url(#${p}-mouth)"/>
-      <ellipse cx="100" cy="119" rx="42" ry="14" fill="url(#${p}-mouth)"/>
-      <path d="M58 114 Q100 130 142 114" stroke="rgba(255,222,172,0.3)" stroke-width="2" fill="none" stroke-linecap="round"/>
-      <ellipse cx="76" cy="60" rx="36" ry="21" fill="url(#${p}-hl)"/>
-      <ellipse cx="62" cy="54" rx="12" ry="7" fill="rgba(255,250,230,0.6)"/>
-      <rect x="34" y="168" width="132" height="16" rx="8" fill="#8A5A2B" stroke="#6B421A" stroke-width="2"/>
-      <rect x="36" y="170" width="128" height="4" rx="2" fill="#A07038" opacity="0.75"/>
+      <path d="M156 88 Q178 96 176 128 Q174 148 160 152" fill="none" stroke="#3d2410" stroke-width="5" stroke-linecap="round" opacity="0.75"/>
+      <path d="M44 118 Q28 124 26 142 Q24 154 36 158" fill="none" stroke="#3d2410" stroke-width="4.5" stroke-linecap="round" opacity="0.65"/>
+      <ellipse cx="100" cy="142" rx="34" ry="26" fill="url(#${p}-cavity)"/>
+      <ellipse cx="100" cy="136" rx="28" ry="18" fill="#070504"/>
+      <path d="M72 128 Q100 152 128 128" stroke="rgba(255,220,170,0.22)" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <ellipse cx="72" cy="78" rx="38" ry="22" fill="url(#${p}-sheen)" opacity="0.85"/>
+      <ellipse cx="58" cy="70" rx="11" ry="6.5" fill="rgba(255,248,230,0.72)"/>
       <g class="muyu-mallet">
-        <rect x="148" y="18" width="8" height="34" rx="4" fill="#8A5A2B" stroke="#6B421A" stroke-width="1.5"/>
-        <ellipse cx="152" cy="14" rx="11" ry="8" fill="#B87A35" stroke="#6B421A" stroke-width="1.5"/>
+        <path d="M148 8 L154 8 L162 88 L146 88 Z" fill="#7a5230" stroke="#4a3018" stroke-width="1.2"/>
+        <ellipse cx="151" cy="92" rx="13" ry="10" fill="#f5efe6" stroke="#c8b8a8" stroke-width="1.5"/>
+        <ellipse cx="151" cy="90" rx="9" ry="6" fill="#fffdf8" opacity="0.85"/>
       </g>
     </svg>`;
   }
@@ -159,28 +171,51 @@
   }
 
   function synthModalKnockSamples(sampleRate, pitch = 1) {
-    const duration = 0.34;
+    const duration = 0.42;
     const n = Math.max(1, Math.floor(sampleRate * duration));
     const samples = new Float32Array(n);
-    const base = 560 * pitch;
-    const noiseLen = Math.max(1, Math.floor(sampleRate * 0.04));
+    const base = KNOCK_BASE_HZ * pitch;
+    let rngState = (Math.random() * 0xffffffff) >>> 0;
+    const rnd = () => {
+      rngState = (rngState * 1664525 + 1013904223) >>> 0;
+      return rngState / 0xffffffff - 0.5;
+    };
+
     for (let i = 0; i < n; i++) {
       const t = i / sampleRate;
       let s = 0;
+      const atk = t < 0.004 ? t / 0.004 : 1;
       for (let m = 0; m < MODAL_MODES.length; m++) {
         const mult = MODAL_MODES[m][0];
         const dec = MODAL_MODES[m][1];
         const amp = MODAL_MODES[m][2];
-        const attack = t < 0.003 ? t / 0.003 : 1;
-        s += Math.sin(Math.PI * 2 * base * mult * t) * amp * Math.exp(-t / dec) * attack;
+        const env = Math.exp(-t / dec) * atk;
+        const w = Math.sin(Math.PI * 2 * base * mult * t);
+        s += w * amp * env;
+        if (m === 0) s += Math.sin(Math.PI * 2 * base * mult * t * 2) * amp * 0.08 * env;
       }
-      if (t < 0.04) {
-        const ne = Math.pow(1 - t / 0.04, 3);
-        const ni = Math.min(noiseLen - 1, i);
-        const noise = (Math.random() * 2 - 1) * 0.42 * ne;
-        s += noise * Math.sin(Math.PI * 2 * 2300 * pitch * t);
+      const thump = Math.sin(Math.PI * 2 * base * 0.52 * t) * Math.exp(-t / 0.07) * 0.38 * atk;
+      s += thump;
+      if (t < 0.012) {
+        const click = Math.pow(1 - t / 0.012, 2.2);
+        s += rnd() * 0.55 * click;
+        s += Math.sin(Math.PI * 2 * 1280 * pitch * t) * 0.18 * click;
       }
-      samples[i] = s * 0.78;
+      samples[i] = s;
+    }
+
+    for (let d = 0; d < HOLLOW_DELAYS.length; d++) {
+      const off = Math.max(1, Math.floor(HOLLOW_DELAYS[d] * sampleRate));
+      const g = HOLLOW_GAINS[d];
+      for (let i = n - 1; i >= off; i--) samples[i] += samples[i - off] * g;
+    }
+
+    let peak = 0;
+    for (let i = 0; i < n; i++) peak = Math.max(peak, Math.abs(samples[i]));
+    const norm = peak > 0 ? 0.82 / peak : 1;
+    for (let i = 0; i < n; i++) {
+      const x = samples[i] * norm;
+      samples[i] = Math.tanh(x * 1.15);
     }
     return samples;
   }
@@ -213,41 +248,70 @@
     const ac = ensureAudio();
     if (!ac || ac.state !== "running") return false;
     const t0 = ac.currentTime;
+    const bus = ac.createGain();
+    bus.gain.value = 1;
+
     const lp = ac.createBiquadFilter();
     lp.type = "lowpass";
-    lp.frequency.value = 3800;
-    lp.Q.value = 0.5;
+    lp.frequency.value = 3200;
+    lp.Q.value = 0.62;
+    const warm = ac.createBiquadFilter();
+    warm.type = "peaking";
+    warm.frequency.value = 920 * pitch;
+    warm.Q.value = 1.1;
+    warm.gain.value = 4.5;
     const out = ac.createGain();
-    out.gain.value = 0.9;
-    lp.connect(out).connect(ac.destination);
+    out.gain.value = 0.88;
+    bus.connect(warm).connect(lp).connect(out).connect(ac.destination);
+
+    for (let i = 0; i < HOLLOW_DELAYS.length; i++) {
+      const d = ac.createDelay(0.06);
+      d.delayTime.value = HOLLOW_DELAYS[i];
+      const g = ac.createGain();
+      g.gain.value = HOLLOW_GAINS[i];
+      lp.connect(d).connect(g).connect(out);
+    }
 
     const ns = ac.createBufferSource();
     ns.buffer = getNoiseBuffer(ac);
     const bp = ac.createBiquadFilter();
     bp.type = "bandpass";
-    bp.frequency.value = 2300 * pitch;
-    bp.Q.value = 0.9;
+    bp.frequency.value = 1380 * pitch;
+    bp.Q.value = 1.15;
     const ng = ac.createGain();
-    ng.gain.value = 0.4;
-    ns.connect(bp).connect(ng).connect(lp);
+    ng.gain.setValueAtTime(0.0001, t0);
+    ng.gain.exponentialRampToValueAtTime(0.52, t0 + 0.002);
+    ng.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.014);
+    ns.connect(bp).connect(ng).connect(bus);
     ns.start(t0);
-    ns.stop(t0 + 0.04);
+    ns.stop(t0 + 0.016);
 
-    const base = 560 * pitch;
+    const thump = ac.createOscillator();
+    thump.type = "sine";
+    thump.frequency.value = KNOCK_BASE_HZ * 0.52 * pitch;
+    const tg = ac.createGain();
+    tg.gain.setValueAtTime(0.0001, t0);
+    tg.gain.exponentialRampToValueAtTime(0.42, t0 + 0.003);
+    tg.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.09);
+    thump.connect(tg).connect(bus);
+    thump.start(t0);
+    thump.stop(t0 + 0.1);
+
+    const base = KNOCK_BASE_HZ * pitch;
     for (let i = 0; i < MODAL_MODES.length; i++) {
       const mult = MODAL_MODES[i][0];
       const dec = MODAL_MODES[i][1];
       const amp = MODAL_MODES[i][2];
       const o = ac.createOscillator();
-      o.type = "sine";
+      o.type = i === 0 ? "triangle" : "sine";
       o.frequency.value = base * mult;
       const g = ac.createGain();
       g.gain.setValueAtTime(0.0001, t0);
-      g.gain.exponentialRampToValueAtTime(amp, t0 + 0.003);
+      g.gain.exponentialRampToValueAtTime(amp, t0 + 0.004);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + dec);
-      o.connect(g).connect(lp);
+      o.connect(g).connect(bus);
       o.start(t0);
-      o.stop(t0 + dec + 0.02);
+      o.stop(t0 + dec + 0.03);
     }
     return true;
   }
@@ -323,7 +387,9 @@
     comboTimer = window.setTimeout(() => {
       comboCount = 0;
     }, 1100);
-    return 1 + Math.min(comboCount, 12) * 0.045;
+    const combo = 1 + Math.min(comboCount, 10) * 0.012;
+    const human = 0.975 + Math.random() * 0.05;
+    return combo * human;
   }
 
   function playKnock() {
@@ -675,8 +741,8 @@
   }
 
   function mountFishArt(btn, prefix, withHint) {
-    if (!btn || btn.dataset.art === "1") return;
-    btn.dataset.art = "1";
+    if (!btn || btn.dataset.art === FISH_ART_VER) return;
+    btn.dataset.art = FISH_ART_VER;
     btn.innerHTML = renderFishArt(prefix);
     if (withHint) {
       const hint = document.createElement("span");
