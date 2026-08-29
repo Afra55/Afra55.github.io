@@ -5765,6 +5765,49 @@ button.adb-device-body.linkish {
   color: color-mix(in srgb, #c88400 70%, var(--ink));
 }
 
+.memo-temp-prompt-preview {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--line) 80%, transparent);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-0, #fff) 55%, transparent);
+  max-height: 7.5rem;
+  overflow: hidden;
+}
+
+.memo-temp-prompt-name {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.memo-temp-prompt-text {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 4.5rem;
+  overflow: hidden;
+}
+
+.memo-temp-prompt-thumb {
+  display: block;
+  width: 100%;
+  max-height: 5.5rem;
+  object-fit: contain;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--line) 25%, transparent);
+}
+
+.memo-temp-prompt-meta {
+  margin: 0;
+}
+
 .blackbox-advanced {
   margin-top: 0.85rem;
   padding: 0.55rem 0.65rem;

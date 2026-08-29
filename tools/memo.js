@@ -111,6 +111,10 @@
       .replace(/'/g, "&#39;");
   }
 
+  function escapeAttr(str) {
+    return escapeHtml(str).replace(/`/g, "&#96;");
+  }
+
   function isMemoActive() {
     const panel = $("#memo");
     return !!(panel && panel.classList.contains("is-workspace-active") && !panel.hidden);
@@ -1037,10 +1041,53 @@
     const el = document.createElement("div");
     el.className = "memo-temp-prompt";
     el.dataset.memoTempPrompt = itemId;
-    el.innerHTML = `<p class="memo-temp-prompt-title">已加入备忘录</p>
+    el.innerHTML = `<p class="memo-temp-prompt-title">已加入列表</p>
+      <div class="memo-temp-prompt-preview" data-memo-temp-prompt-preview></div>
       <p class="hint tight memo-temp-prompt-sub"><span data-memo-temp-prompt-sec>${TEMP_PROMPT_SEC}</span> 秒后将标为临时</p>
       <button type="button" class="ghost-btn" data-memo-temp-prompt-skip>不标记临时</button>`;
     return el;
+  }
+
+  function tempPromptPreviewText(text) {
+    const raw = String(text || "").replace(/\s+/g, " ").trim();
+    if (!raw) return "（空文本）";
+    return raw.length > 120 ? `${raw.slice(0, 120)}…` : raw;
+  }
+
+  async function fillTempPromptPreview(el, item) {
+    const box = el?.querySelector?.("[data-memo-temp-prompt-preview]");
+    if (!box || !item) return null;
+    const name = escapeHtml(item.name || item.fileName || item.type || "条目");
+    if (item.type === "text") {
+      let full = item.textPreview || "";
+      if (!full || full.endsWith("…")) {
+        try {
+          full = await (await loadBlob(item)).text();
+        } catch (_) {
+          full = item.textPreview || "";
+        }
+      }
+      box.innerHTML = `<p class="memo-temp-prompt-name mono">${name}</p><pre class="memo-temp-prompt-text mono">${escapeHtml(tempPromptPreviewText(full))}</pre>`;
+      return null;
+    }
+    if (item.type === "image" || item.type === "gif") {
+      try {
+        const blob = await loadBlob(item);
+        const url = URL.createObjectURL(blob);
+        box.innerHTML = `<p class="memo-temp-prompt-name mono">${name}</p><img class="memo-temp-prompt-thumb" src="${escapeAttr(url)}" alt="" />`;
+        return url;
+      } catch (_) {
+        /* fall through */
+      }
+    }
+    box.innerHTML = `<p class="memo-temp-prompt-name mono">${name}</p><p class="hint tight memo-temp-prompt-meta">${escapeHtml(TYPE_LABELS[item.type] || item.type || "文件")} · ${escapeHtml(formatBytes(item.size || 0))}</p>`;
+    return null;
+  }
+
+  function revealClipboardItem(itemId, opts = {}) {
+    if (!itemId) return;
+    renderAll();
+    flashItem(itemId, opts.toast || null, { noScroll: Boolean(opts.noScroll) });
   }
 
   function finishTempPrompt(itemId, { markTemp = false } = {}) {
@@ -1048,6 +1095,11 @@
     if (!p) return;
     if (p.tickTimer) clearInterval(p.tickTimer);
     if (p.doneTimer) clearTimeout(p.doneTimer);
+    if (p.previewUrl) {
+      try {
+        URL.revokeObjectURL(p.previewUrl);
+      } catch (_) {}
+    }
     state.tempPrompts.delete(itemId);
     p.el?.remove();
     const item = state.index.items.find((x) => x.id === itemId);
@@ -1060,10 +1112,11 @@
     }
   }
 
-  function scheduleTempPrompt(itemId) {
+  async function scheduleTempPrompt(itemId) {
     if (!itemId || state.tempPrompts.has(itemId)) return;
     const stack = $("#memo-temp-prompt-stack");
     if (!stack) return;
+    const item = state.index.items.find((x) => x.id === itemId);
     const el = createTempPromptEl(itemId);
     stack.appendChild(el);
     let remaining = TEMP_PROMPT_SEC;
@@ -1072,6 +1125,7 @@
       itemId,
       el,
       cancelled: false,
+      previewUrl: null,
       tickTimer: setInterval(() => {
         remaining -= 1;
         if (secEl) secEl.textContent = String(Math.max(0, remaining));
@@ -1079,6 +1133,13 @@
       doneTimer: setTimeout(() => finishTempPrompt(itemId, { markTemp: true }), TEMP_PROMPT_SEC * 1000),
     };
     state.tempPrompts.set(itemId, prompt);
+    if (item) {
+      try {
+        prompt.previewUrl = await fillTempPromptPreview(el, item);
+      } catch (_) {
+        /* preview optional */
+      }
+    }
   }
 
   function customTagIds(item) {
@@ -2298,6 +2359,7 @@
     }
     const meta = memoTextBlobMeta(body);
     let added = null;
+    const beforeIds = new Set((state.index.items || []).map((x) => x.id));
     await withBusy(async () => {
       const blob = new Blob([meta.body], { type: meta.mime });
       added = await addItemFromBlob(blob, meta.fileName, {
@@ -2307,9 +2369,13 @@
       });
       if (editor) editor.value = "";
     });
-    if (added?.id && !opts.quiet) {
-      if (opts.offerTemp) scheduleTempPrompt(added.id);
-      else flashItem(added.id, "已添加", { noScroll: opts.noScroll });
+    if (added?.id) {
+      if (opts.offerTemp) {
+        revealClipboardItem(added.id, { noScroll: opts.noScroll });
+        if (!beforeIds.has(added.id)) scheduleTempPrompt(added.id);
+      } else if (!opts.quiet) {
+        flashItem(added.id, "已添加", { noScroll: opts.noScroll });
+      }
     }
     return added;
   }
@@ -2646,6 +2712,7 @@
       }
       if (lastId) {
         if (opts.offerTemp) {
+          revealClipboardItem(lastId, { noScroll: opts.noScroll });
           if (lastNew) scheduleTempPrompt(lastId);
         } else {
           const parts = [];
