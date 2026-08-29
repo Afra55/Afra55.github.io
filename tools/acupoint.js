@@ -142,9 +142,151 @@
           t.setAttribute("aria-selected", on ? "true" : "false");
         });
         panels.forEach((p) => {
-          p.hidden = p.dataset.acuChartPanel !== id;
+          const show = p.dataset.acuChartPanel === id;
+          p.hidden = !show;
+          if (show) {
+            p.querySelectorAll("img").forEach((img) => {
+              if (img.loading === "lazy") img.loading = "eager";
+              img.decode?.().catch(() => {});
+            });
+          }
         });
       });
+    });
+  }
+
+  function bindChartPreview() {
+    const dlg = $("#acu-lightbox");
+    const stage = $("#acu-lightbox-stage");
+    const img = $("#acu-lightbox-img");
+    const cap = $("#acu-lightbox-cap");
+    const pctEl = $("#acu-lightbox-zoom-pct");
+    const closeBtn = $("#acu-lightbox-close");
+    const zoomInBtn = $("#acu-lightbox-zoom-in");
+    const zoomOutBtn = $("#acu-lightbox-zoom-out");
+    const zoomResetBtn = $("#acu-lightbox-zoom-reset");
+    if (!dlg || !stage || !img) return;
+
+    const view = { scale: 1, x: 0, y: 0, dragging: false, lastX: 0, lastY: 0 };
+
+    function syncTransform() {
+      img.style.transform = `translate(calc(-50% + ${view.x}px), calc(-50% + ${view.y}px)) scale(${view.scale})`;
+      if (pctEl) pctEl.textContent = `${Math.round(view.scale * 100)}%`;
+    }
+
+    function fitImage() {
+      const sw = stage.clientWidth || 1;
+      const sh = stage.clientHeight || 1;
+      const nw = img.naturalWidth || 1;
+      const nh = img.naturalHeight || 1;
+      view.scale = Math.min(1, sw / nw, sh / nh);
+      view.x = 0;
+      view.y = 0;
+      syncTransform();
+    }
+
+    function resetView() {
+      fitImage();
+    }
+
+    function clampScale(next) {
+      return Math.min(6, Math.max(0.35, next));
+    }
+
+    function zoomAt(clientX, clientY, nextScale) {
+      const rect = stage.getBoundingClientRect();
+      const cx = clientX - rect.left - rect.width / 2;
+      const cy = clientY - rect.top - rect.height / 2;
+      const ratio = nextScale / view.scale;
+      view.x = cx - (cx - view.x) * ratio;
+      view.y = cy - (cy - view.y) * ratio;
+      view.scale = nextScale;
+      syncTransform();
+    }
+
+    function openPreview(src, alt) {
+      if (!src) return;
+      view.scale = 1;
+      view.x = 0;
+      view.y = 0;
+      img.onload = () => fitImage();
+      img.src = src;
+      img.alt = alt || "";
+      if (cap) cap.textContent = alt || "";
+      if (typeof dlg.showModal === "function") dlg.showModal();
+      else dlg.setAttribute("open", "");
+    }
+
+    function closePreview() {
+      if (dlg.open) dlg.close();
+      else dlg.removeAttribute("open");
+      img.removeAttribute("src");
+      resetView();
+    }
+
+    $$(".acu-chart-zoom").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const inner = btn.querySelector("img");
+        const src = btn.dataset.acuZoomSrc || inner?.currentSrc || inner?.src || "";
+        openPreview(src, inner?.alt || btn.getAttribute("aria-label") || "");
+      });
+    });
+
+    closeBtn?.addEventListener("click", closePreview);
+    dlg.addEventListener("click", (e) => {
+      if (e.target === dlg) closePreview();
+    });
+    dlg.addEventListener("cancel", (e) => {
+      e.preventDefault();
+      closePreview();
+    });
+
+    zoomInBtn?.addEventListener("click", () => {
+      const rect = stage.getBoundingClientRect();
+      zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, clampScale(view.scale * 1.2));
+    });
+    zoomOutBtn?.addEventListener("click", () => {
+      const rect = stage.getBoundingClientRect();
+      zoomAt(rect.left + rect.width / 2, rect.top + rect.height / 2, clampScale(view.scale / 1.2));
+    });
+    zoomResetBtn?.addEventListener("click", resetView);
+
+    stage.addEventListener(
+      "wheel",
+      (e) => {
+        if (!dlg.open) return;
+        e.preventDefault();
+        const factor = Math.exp(-e.deltaY * 0.0015);
+        zoomAt(e.clientX, e.clientY, clampScale(view.scale * factor));
+      },
+      { passive: false }
+    );
+
+    stage.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      view.dragging = true;
+      view.lastX = e.clientX;
+      view.lastY = e.clientY;
+      stage.setPointerCapture?.(e.pointerId);
+    });
+    stage.addEventListener("pointermove", (e) => {
+      if (!view.dragging) return;
+      view.x += e.clientX - view.lastX;
+      view.y += e.clientY - view.lastY;
+      view.lastX = e.clientX;
+      view.lastY = e.clientY;
+      syncTransform();
+    });
+    stage.addEventListener("pointerup", () => {
+      view.dragging = false;
+    });
+    stage.addEventListener("pointercancel", () => {
+      view.dragging = false;
+    });
+
+    stage.addEventListener("dblclick", (e) => {
+      if (view.scale > 1.05) resetView();
+      else zoomAt(e.clientX, e.clientY, clampScale(view.scale * 1.8));
     });
   }
 
@@ -163,7 +305,7 @@
 
     let bundle;
     try {
-      const res = await fetch("./lib/acupoints-bundle.json?v=2026.08.29-025229");
+      const res = await fetch("./lib/acupoints-bundle.json?v=2026.08.29-030442");
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       bundle = await res.json();
     } catch (err) {
@@ -280,6 +422,7 @@
 
     syncTypeSeg();
     bindChartTabs();
+    bindChartPreview();
     renderList();
   }
 

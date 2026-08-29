@@ -1611,6 +1611,33 @@ async function main() {
     hasScript: [...document.scripts].some((s) => /wheel\.js/.test(s.src)),
   }));
 
+  await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#acupoint`, {
+    waitUntil: "networkidle0",
+    timeout: 60000,
+  });
+  await page.waitForFunction(() => document.getElementById("acupoint")?.classList.contains("is-workspace-active"), {
+    timeout: 15000,
+  });
+  result.acupoint = await page.evaluate(async () => {
+    const out = {
+      tabs: document.querySelectorAll("[data-acu-chart]").length,
+      zoomBtns: document.querySelectorAll(".acu-chart-zoom").length,
+      hasLightbox: Boolean(document.getElementById("acu-lightbox")),
+    };
+    document.querySelector('[data-acu-chart="overview"]')?.click();
+    await new Promise((r) => setTimeout(r, 120));
+    const overviewImg = document.querySelector('[data-acu-chart-panel="overview"] img');
+    out.overviewLoaded = Boolean(overviewImg?.complete && overviewImg.naturalWidth > 10);
+    document.querySelector(".acu-chart-zoom")?.click();
+    await new Promise((r) => setTimeout(r, 80));
+    const dlg = document.getElementById("acu-lightbox");
+    out.previewOpen = Boolean(dlg?.open);
+    document.getElementById("acu-lightbox-close")?.click();
+    await new Promise((r) => setTimeout(r, 60));
+    out.previewClosed = !dlg?.open;
+    return out;
+  });
+
   await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#adb`, {
     waitUntil: "networkidle0",
     timeout: 60000,
@@ -2120,6 +2147,16 @@ async function main() {
     result.wheel?.segRows < 2
   ) {
     failed.push("wheel tool should render canvas, spin control and segment editors");
+  }
+  if (
+    (result.acupoint?.tabs || 0) < 14 ||
+    (result.acupoint?.zoomBtns || 0) < 14 ||
+    !result.acupoint?.hasLightbox ||
+    !result.acupoint?.overviewLoaded ||
+    !result.acupoint?.previewOpen ||
+    !result.acupoint?.previewClosed
+  ) {
+    failed.push("acupoint charts should load overview svg and open zoom preview");
   }
   if (
     result.adbCmds?.inlineSection ||
