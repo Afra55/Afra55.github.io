@@ -134,7 +134,7 @@ function applyCors(headers, origin) {
   if (origin && ALLOWED_ORIGINS.has(origin)) {
     headers["Access-Control-Allow-Origin"] = origin;
     headers["Vary"] = "Origin";
-    headers["Access-Control-Allow-Headers"] = "Content-Type, X-Ffmpeg-Token, X-Filename";
+    headers["Access-Control-Allow-Headers"] = "Content-Type, X-Ffmpeg-Token, X-Adb-Token, X-Filename";
     headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
     headers["Access-Control-Expose-Headers"] = "Content-Disposition";
   }

@@ -3626,7 +3626,11 @@
 
   async function memoBridgeFetch(pathname, opts = {}) {
     const base = String(localStorage.getItem(MEMO_BRIDGE_BASE_KEY) || MEMO_BRIDGE_DEFAULT_BASE).replace(/\/$/, "");
-    const token = String(localStorage.getItem(MEMO_BRIDGE_TOKEN_KEY) || MEMO_BRIDGE_DEFAULT_TOKEN).trim();
+    const token = String(
+      window.devtoolsBridgeToken?.read?.() ||
+        localStorage.getItem(MEMO_BRIDGE_TOKEN_KEY) ||
+        MEMO_BRIDGE_DEFAULT_TOKEN
+    ).trim();
     const headers = { ...(opts.headers || {}), "X-Ffmpeg-Token": token, "X-Adb-Token": token };
     if (opts.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json";
     const rawPath = String(pathname || "/");

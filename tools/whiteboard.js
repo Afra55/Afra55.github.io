@@ -12,6 +12,7 @@
     if (loaded) return;
     if (!panel.classList.contains("is-workspace-active")) return;
     loaded = true;
+    frame.referrerPolicy = "no-referrer";
     frame.src = SRC;
   }
 

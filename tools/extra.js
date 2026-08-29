@@ -92,7 +92,7 @@
     });
   }
 
-  const TOOLS_VERSION = "2026.08.29-030442";
+  const TOOLS_VERSION = "2026.08.29-031412";
   /** @deprecated 兼容旧冒烟/书签；与 TOOLS_VERSION 相同 */
   const GIF_TOOL_VERSION = TOOLS_VERSION;
   /** 切片/批量 GIF 产出后是否自动打 zip 下载；默认关，开启后记住 */
@@ -10249,7 +10249,9 @@
     function persistAdbSettings() {
       try {
         localStorage.setItem(ADB_STORE_BASE, adbBase());
-        localStorage.setItem(ADB_STORE_TOKEN, adbToken());
+        const token = adbToken();
+        if (window.devtoolsBridgeToken?.write) window.devtoolsBridgeToken.write(token);
+        else localStorage.setItem(ADB_STORE_TOKEN, token);
       } catch (_) {
         /* ignore */
       }
@@ -10258,9 +10260,10 @@
     function restoreAdbSettings() {
       try {
         const base = localStorage.getItem(ADB_STORE_BASE);
+        const sharedToken = window.devtoolsBridgeToken?.read?.();
         const token = localStorage.getItem(ADB_STORE_TOKEN);
         if (base && adbBaseInput) adbBaseInput.value = base;
-        if (token && adbTokenInput) adbTokenInput.value = token;
+        if (adbTokenInput) adbTokenInput.value = sharedToken || token || adbTokenInput.value || "devtools-bridge";
         const view = localStorage.getItem(ADB_STORE_FSVIEW);
         if (view === "grid" || view === "list") adbFsView = view;
       } catch (_) {
@@ -10325,7 +10328,11 @@
 
     async function adbFetch(pathname, options = {}) {
       const headers = Object.assign({}, options.headers || {});
-      if (options.auth !== false) headers["X-Adb-Token"] = adbToken();
+      if (options.auth !== false) {
+        const t = adbToken();
+        headers["X-Adb-Token"] = t;
+        headers["X-Ffmpeg-Token"] = t;
+      }
       const res = await fetch(`${adbBase()}${pathname}`, {
         ...options,
         headers,

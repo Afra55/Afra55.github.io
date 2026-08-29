@@ -232,10 +232,10 @@
   function loadPrefs() {
     try {
       const b = localStorage.getItem(BASE_KEY);
-      const t = localStorage.getItem(TOKEN_KEY);
+      const sharedToken = window.devtoolsBridgeToken?.read?.();
       const op = localStorage.getItem(OP_KEY);
       if (b && baseInput) baseInput.value = b;
-      if (t && tokenInput) tokenInput.value = t;
+      if (tokenInput) tokenInput.value = sharedToken || tokenInput.value || DEFAULT_TOKEN;
       if (op) currentOpId = op;
     } catch (_) {}
   }
@@ -243,7 +243,9 @@
   function savePrefs() {
     try {
       localStorage.setItem(BASE_KEY, baseInput?.value?.trim() || DEFAULT_BASE);
-      localStorage.setItem(TOKEN_KEY, tokenInput?.value?.trim() || DEFAULT_TOKEN);
+      const t = tokenInput?.value?.trim() || DEFAULT_TOKEN;
+      if (window.devtoolsBridgeToken?.write) window.devtoolsBridgeToken.write(t);
+      else localStorage.setItem(TOKEN_KEY, t);
       localStorage.setItem(OP_KEY, currentOpId);
     } catch (_) {}
   }

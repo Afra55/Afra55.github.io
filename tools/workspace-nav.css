@@ -470,15 +470,36 @@ button.tool-nav-link {
   border-color: color-mix(in srgb, var(--accent) 48%, var(--line));
 }
 
+.nav-bar.is-compact .nav-favorites.nav-strip {
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+
+.nav-bar.is-compact .nav-fav-head {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0;
+}
+
 .nav-bar.is-compact .nav-fav-title {
-  display: block;
-  width: 100%;
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  width: auto;
   box-sizing: border-box;
   cursor: pointer;
   padding: 0.42rem 0.5rem;
-  margin-left: 0;
+  margin: 0;
   border-radius: 8px;
   border: 1px solid transparent;
+}
+
+.nav-bar.is-compact .nav-fav-add {
+  align-self: center;
+  flex: 0 0 auto;
 }
 
 .nav-bar.is-compact .nav-favorites.is-current > .nav-fav-title {
