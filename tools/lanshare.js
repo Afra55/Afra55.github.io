@@ -17,9 +17,15 @@
   const ANSWER_RELAY_PREFIX = "devtools-lanshare-answer";
   const OFFER_RELAY_PREFIX = "devtools-lanshare-offer";
   const HOST_ANSWER_RELAY_PREFIX = "devtools-lanshare-host-answer";
-  const MQTT_BROKER = "wss://broker.emqx.io:8084/mqtt";
+  const MQTT_BROKERS = [
+    "wss://broker.emqx.io:8084/mqtt",
+    "wss://broker.hivemq.com:8884/mqtt",
+    "wss://test.mosquitto.org:8081/mqtt",
+  ];
   const MQTT_TOPIC_PREFIX = "devtools/lanshare/v1";
   const MQTT_MSG_TTL_MS = 120000;
+  const MQTT_OFFER_RETRY_MS = 2500;
+  const MQTT_JOIN_TIMEOUT_MS = 45000;
   const ROOM_PWD_MIN = 4;
   const ROOM_PWD_MAX = 16;
 
@@ -110,6 +116,9 @@
     mqttHelloTimer: null,
     mqttSeen: null,
     mqttGuestHandler: null,
+    mqttOfferRetryTimer: null,
+    mqttJoinTimeoutTimer: null,
+    mqttPendingOffer: null,
   };
 
   function stashPendingJoinToken(token) {
@@ -684,7 +693,9 @@
     }
     let statusExtra = "";
     if (state.pageHiddenWarn) statusExtra = " · 页面在后台，连接可能中断";
-    else if (inRoom && !state.controlLinked) statusExtra = " · 正在连接…";
+    else if (inRoom && !state.controlLinked) {
+      statusExtra = state.viaMqtt ? " · 密码配对中…" : " · 正在连接…";
+    }
     else if (inRoom && !state.isHost && state.controlDc?.readyState !== "open") statusExtra = " · 信令连接中…";
     if (els.statusText) {
       els.statusText.textContent = inRoom
@@ -903,16 +914,19 @@
     state.mqttClient.publish(state.mqttTopic, body, { qos: 0, retain });
   }
 
-  function connectMqttTopic(slug) {
+  function trimSdpForMqttSignal(sdp) {
+    return trimSdpForLan(sdp);
+  }
+
+  function connectMqttOnce(brokerUrl, topic) {
     const connectFn = getMqttConnect();
     if (!connectFn) return Promise.reject(new Error("信令库不可用"));
-    const topic = mqttTopicForSlug(slug);
     return new Promise((resolve, reject) => {
-      const client = connectFn(MQTT_BROKER, {
+      const client = connectFn(brokerUrl, {
         clientId: `ls_${uid(12)}`,
         clean: true,
-        reconnectPeriod: 4000,
-        connectTimeout: 12000,
+        reconnectPeriod: 5000,
+        connectTimeout: 10000,
       });
       let settled = false;
       const fail = (err) => {
@@ -926,7 +940,7 @@
         }
         reject(err instanceof Error ? err : new Error(String(err || "信令连接失败")));
       };
-      const to = setTimeout(() => fail(new Error("连接信令超时，请检查网络后重试")), 15000);
+      const to = setTimeout(() => fail(new Error("连接信令超时")), 12000);
       client.on("error", fail);
       client.on("connect", () => {
         client.subscribe(topic, { qos: 0 }, (err) => {
@@ -937,13 +951,74 @@
           if (settled) return;
           settled = true;
           clearTimeout(to);
-          resolve({ client, topic });
+          resolve(client);
         });
       });
     });
   }
 
-  function waitMqttHostHello(slug, timeoutMs = 18000) {
+  async function connectMqttTopic(slug) {
+    const topic = mqttTopicForSlug(slug);
+    let lastErr = null;
+    for (const broker of MQTT_BROKERS) {
+      try {
+        const client = await connectMqttOnce(broker, topic);
+        return { client, topic, broker };
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error("无法连接信令服务器，请检查网络后重试");
+  }
+
+  function clearMqttJoinTimers() {
+    if (state.mqttOfferRetryTimer) {
+      clearInterval(state.mqttOfferRetryTimer);
+      state.mqttOfferRetryTimer = null;
+    }
+    if (state.mqttJoinTimeoutTimer) {
+      clearTimeout(state.mqttJoinTimeoutTimer);
+      state.mqttJoinTimeoutTimer = null;
+    }
+    state.mqttPendingOffer = null;
+  }
+
+  function startMqttGuestJoinWatch() {
+    clearMqttJoinTimers();
+    if (!state.viaMqtt || state.isHost) return;
+    state.mqttJoinTimeoutTimer = setTimeout(() => {
+      if (state.controlLinked || !state.roomId || state.isHost) return;
+      setError("自动配对超时：请确认房主在线且密码正确；也可展开「备用」扫码/粘贴加入");
+      paintStatus();
+    }, MQTT_JOIN_TIMEOUT_MS);
+  }
+
+  function publishMqttGuestOffer(offerSdp, inv) {
+    if (!state.mqttClient || !state.mqttTopic) return;
+    publishMqttPayload({
+      type: "guest-offer",
+      roomId: inv.roomId,
+      hostId: inv.hostId,
+      memberId: state.peerId,
+      memberName: state.peerName,
+      sdp: trimSdpForMqttSignal(offerSdp),
+    });
+  }
+
+  function startMqttOfferRetry(offerSdp, inv) {
+    state.mqttPendingOffer = { offerSdp, inv };
+    publishMqttGuestOffer(offerSdp, inv);
+    if (state.mqttOfferRetryTimer) clearInterval(state.mqttOfferRetryTimer);
+    state.mqttOfferRetryTimer = setInterval(() => {
+      if (state.controlLinked || !state.viaMqtt || state.isHost || !state.mqttPendingOffer) {
+        clearMqttJoinTimers();
+        return;
+      }
+      publishMqttGuestOffer(state.mqttPendingOffer.offerSdp, state.mqttPendingOffer.inv);
+    }, MQTT_OFFER_RETRY_MS);
+  }
+
+  function waitMqttHostHello(slug, timeoutMs = 20000) {
     return connectMqttTopic(slug).then(
       ({ client, topic }) =>
         new Promise((resolve, reject) => {
@@ -993,12 +1068,23 @@
     if (msg.type !== "guest-offer" || !state.isHost) return;
     if (msg.roomId && msg.roomId !== state.roomId) return;
     if (msg.hostId && msg.hostId !== state.peerId) return;
-    applyJoinOfferDirect({
+    applyJoinOfferFromMqtt({
       sdp: msg.sdp,
       roomId: msg.roomId,
       hostId: msg.hostId,
       memberId: msg.memberId,
     }).catch(() => {});
+  }
+
+  async function applyJoinOfferFromMqtt(parsed) {
+    let ok = await applyJoinOfferDirect(parsed);
+    if (!ok && state.isHost && state.viaMqtt) {
+      await refreshJoinSlot();
+      ok = await applyJoinOfferDirect(parsed);
+    }
+    if (!ok && state.isHost && state.viaMqtt) {
+      setError("成员密码加入配对失败，请让对方重点「密码加入」");
+    }
   }
 
   function onMqttGuestMessage(_t, payload) {
@@ -1049,6 +1135,7 @@
   }
 
   function stopMqttSignaling() {
+    clearMqttJoinTimers();
     if (state.mqttHelloTimer) {
       clearInterval(state.mqttHelloTimer);
       state.mqttHelloTimer = null;
@@ -1136,6 +1223,7 @@
     state.files.clear();
     (snapshot.files || []).forEach((f) => state.files.set(f.id, f));
     state.controlLinked = true;
+    clearMqttJoinTimers();
     flushPendingOutbound();
     paintStatus();
   }
@@ -1487,14 +1575,8 @@
 
   async function publishJoinOffer(offerSdp, inv) {
     if (state.viaMqtt && state.mqttClient) {
-      publishMqttPayload({
-        type: "guest-offer",
-        roomId: inv.roomId,
-        hostId: inv.hostId,
-        memberId: state.peerId,
-        memberName: state.peerName,
-        sdp: trimSdpMinimal(offerSdp),
-      });
+      startMqttOfferRetry(offerSdp, inv);
+      startMqttGuestJoinWatch();
       if (els.guestAnswerArea) els.guestAnswerArea.hidden = true;
       paintStatus();
       return;
@@ -1530,13 +1612,15 @@
 
   async function publishHostAnswer(answerSdp, guestId) {
     if (state.viaMqtt && state.mqttClient) {
-      publishMqttPayload({
+      const ansMsg = {
         type: "host-answer",
         roomId: state.roomId,
         hostId: state.peerId,
         memberId: guestId,
-        sdp: trimSdpMinimal(answerSdp),
-      });
+        sdp: trimSdpForMqttSignal(answerSdp),
+      };
+      publishMqttPayload(ansMsg);
+      setTimeout(() => publishMqttPayload(ansMsg), 1200);
     }
 
     const token = await buildHostAnswerToken(answerSdp, guestId);
@@ -1726,7 +1810,6 @@
       }
     }
 
-    await refreshJoinSlot();
     if (state.viaMqtt) {
       try {
         await startMqttHost();
@@ -1735,6 +1818,7 @@
         state.viaMqtt = false;
       }
     }
+    await refreshJoinSlot();
     paintStatus();
   }
 
