@@ -1,13 +1,26 @@
 (() => {
   "use strict";
 
-  const BUILD = window.TOOLS_BUILD || "2026.08.30-062500";
+  const BUILD = window.TOOLS_BUILD || "2026.08.30-063000";
+
+  function getMqttConnect() {
+    const m = globalThis.mqtt;
+    if (!m) return null;
+    if (typeof m.connect === "function") return m.connect.bind(m);
+    if (typeof m.default?.connect === "function") return m.default.connect.bind(m.default);
+    if (typeof m.default === "function") return m.default;
+    return null;
+  }
 
   const VENDOR_FILES = {
     "js-yaml": { src: "./vendor/js-yaml.min.js", probe: () => typeof globalThis.jsyaml !== "undefined" },
     "spark-md5": { src: "./vendor/spark-md5.min.js", probe: () => typeof globalThis.SparkMD5 !== "undefined" },
     qrcode: { src: "./vendor/qrcode.min.js", probe: () => typeof globalThis.QRCode !== "undefined" },
     jsQR: { src: "./vendor/jsQR.js", probe: () => typeof globalThis.jsQR === "function" },
+    mqtt: {
+      src: "./vendor/mqtt.min.js",
+      probe: () => typeof globalThis.mqtt !== "undefined" && !!getMqttConnect(),
+    },
     html2canvas: {
       src: "./vendor/html2canvas.min.js",
       probe: () => typeof globalThis.html2canvas === "function",

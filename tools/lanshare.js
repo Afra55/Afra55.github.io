@@ -13,9 +13,15 @@
   const DC_BUFFER_LIMIT = 512 * 1024;
   const NAME_KEY = "devtools-lanshare-name";
   const PENDING_JOIN_KEY = "devtools-lanshare-pending-j";
+  const PENDING_PWD_KEY = "devtools-lanshare-pending-p";
   const ANSWER_RELAY_PREFIX = "devtools-lanshare-answer";
   const OFFER_RELAY_PREFIX = "devtools-lanshare-offer";
   const HOST_ANSWER_RELAY_PREFIX = "devtools-lanshare-host-answer";
+  const MQTT_BROKER = "wss://broker.emqx.io:8084/mqtt";
+  const MQTT_TOPIC_PREFIX = "devtools/lanshare/v1";
+  const MQTT_MSG_TTL_MS = 120000;
+  const ROOM_PWD_MIN = 4;
+  const ROOM_PWD_MAX = 16;
 
   const els = {
     statusDot: $("#ls-dot"),
@@ -30,7 +36,7 @@
     inviteQr: $("#ls-invite-qr"),
     copyInviteBtn: $("#ls-copy-invite"),
     scanAnswerBtn: $("#ls-scan-answer"),
-    roomCodeEl: $("#ls-room-code"),
+    roomCodeEl: $("#ls-room-pwd-display"),
     hostOfferPaste: $("#ls-host-offer-paste"),
     hostOfferConfirmBtn: $("#ls-host-offer-confirm"),
     pairingGuide: $("#ls-pairing-guide"),
@@ -44,6 +50,9 @@
     pasteJoinBtn: $("#ls-paste-join"),
     joinPaste: $("#ls-join-paste"),
     joinConfirmBtn: $("#ls-join-confirm"),
+    roomPwdHost: $("#ls-room-pwd-host"),
+    roomPwdJoin: $("#ls-room-pwd-join"),
+    joinPwdBtn: $("#ls-join-pwd"),
     roomMeta: $("#ls-room-meta"),
     membersEl: $("#ls-members"),
     filesEl: $("#ls-files"),
@@ -93,6 +102,14 @@
     hostAnswerBc: null,
     hostAnswerStorageHandler: null,
     answerScanMode: false,
+    roomPassword: "",
+    roomPasswordSlug: "",
+    viaMqtt: false,
+    mqttClient: null,
+    mqttTopic: "",
+    mqttHelloTimer: null,
+    mqttSeen: null,
+    mqttGuestHandler: null,
   };
 
   function stashPendingJoinToken(token) {
@@ -594,6 +611,7 @@
       return;
     }
     const parts = [];
+    parts.push("推荐：房主创建时设置房间密码，成员输入密码即可自动加入。");
     if (isIOS()) {
       parts.push("iOS：请用 Safari；可用相机扫电脑上的邀请二维码（会自动打开链接），或让电脑复制链接发给你。");
     } else if (isAndroid()) {
@@ -612,12 +630,21 @@
     els.pairingGuide.hidden = !inRoom;
     if (!inRoom) return;
     if (state.isHost) {
+      if (state.roomPassword) {
+        els.pairingGuide.innerHTML =
+          `<strong>房间密码：${escapeHtml(state.roomPassword)}</strong>` +
+          '<p class="hint tight" style="margin:0.35rem 0 0">告诉成员此密码，对方输入即可自动连接，无需扫码或粘贴连接码。</p>';
+      } else {
+        els.pairingGuide.innerHTML =
+          "<strong>电脑 + 手机配对</strong><ol class=\"hint tight\" style=\"margin:0.35rem 0 0 1.1rem;padding:0\">" +
+          "<li>手机扫下方二维码，或用微信打开「邀请链接」</li>" +
+          "<li>手机出现「连接码」后，复制链接发到电脑（微信/QQ 均可）</li>" +
+          "<li>电脑粘贴到「粘贴成员连接码」并确认 — 也可摄像头扫手机连接码</li>" +
+          "</ol>";
+      }
+    } else if (state.viaMqtt) {
       els.pairingGuide.innerHTML =
-        "<strong>电脑 + 手机配对</strong><ol class=\"hint tight\" style=\"margin:0.35rem 0 0 1.1rem;padding:0\">" +
-        "<li>手机扫下方二维码，或用微信打开「邀请链接」</li>" +
-        "<li>手机出现「连接码」后，复制链接发到电脑（微信/QQ 均可）</li>" +
-        "<li>电脑粘贴到「粘贴成员连接码」并确认 — 也可摄像头扫手机连接码</li>" +
-        "</ol>";
+        '<strong>密码加入</strong><p class="hint tight" style="margin:0.35rem 0 0">正在通过房间密码自动配对，请稍候…</p>';
     } else {
       els.pairingGuide.innerHTML =
         "<strong>等待与房主配对</strong><p class=\"hint tight\" style=\"margin:0.35rem 0 0\">" +
@@ -631,6 +658,7 @@
     if (els.scanBtn) els.scanBtn.disabled = !ok;
     if (els.pasteJoinBtn) els.pasteJoinBtn.disabled = !ok;
     if (els.joinConfirmBtn) els.joinConfirmBtn.disabled = !ok;
+    if (els.joinPwdBtn) els.joinPwdBtn.disabled = !ok;
   }
 
   function memberLabel(id) {
@@ -684,7 +712,11 @@
     if (els.roomCodeEl) {
       els.roomCodeEl.hidden = !inRoom || !state.isHost;
       if (inRoom && state.isHost) {
-        els.roomCodeEl.textContent = `房间号 ${state.roomId}（也可复制链接分享）`;
+        if (state.roomPassword) {
+          els.roomCodeEl.textContent = `房间密码 ${state.roomPassword} · 房间号 ${state.roomId}`;
+        } else {
+          els.roomCodeEl.textContent = `房间号 ${state.roomId}（也可复制链接分享）`;
+        }
       }
     }
   }
@@ -800,6 +832,249 @@
     if (typeof QRCode === "undefined" || typeof jsQR !== "function") {
       throw new Error("二维码库加载失败，请检查网络后刷新页面");
     }
+  }
+
+  function getMqttConnect() {
+    const m = typeof mqtt !== "undefined" ? mqtt : null;
+    if (!m) return null;
+    if (typeof m.connect === "function") return m.connect.bind(m);
+    if (typeof m.default?.connect === "function") return m.default.connect.bind(m.default);
+    if (typeof m.default === "function") return m.default;
+    return null;
+  }
+
+  async function ensureMqttLib() {
+    if (getMqttConnect()) return;
+    if (!window.DevToolsLazy?.loadVendor) throw new Error("脚本加载器未就绪，请刷新页面后重试");
+    await window.DevToolsLazy.loadVendor("mqtt");
+    if (!getMqttConnect()) throw new Error("信令库加载失败，请检查网络后刷新");
+  }
+
+  function normalizeRoomPassword(raw) {
+    return String(raw || "")
+      .trim()
+      .replace(/\s+/g, "")
+      .slice(0, ROOM_PWD_MAX);
+  }
+
+  function validateRoomPassword(pwd) {
+    const n = normalizeRoomPassword(pwd);
+    if (n.length < ROOM_PWD_MIN || n.length > ROOM_PWD_MAX) {
+      throw new Error(`房间密码需 ${ROOM_PWD_MIN}–${ROOM_PWD_MAX} 位字母或数字`);
+    }
+    if (!/^[A-Za-z0-9]+$/.test(n)) throw new Error("房间密码仅支持字母和数字");
+    return n;
+  }
+
+  async function hashRoomPassword(pwd) {
+    const norm = normalizeRoomPassword(pwd).toLowerCase();
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(norm));
+    return Array.from(new Uint8Array(buf))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")
+      .slice(0, 24);
+  }
+
+  function mqttTopicForSlug(slug) {
+    return `${MQTT_TOPIC_PREFIX}/${slug}`;
+  }
+
+  function isValidMqttMsg(msg) {
+    return msg && msg.proto === PROTO && typeof msg.type === "string" && typeof msg.ts === "number";
+  }
+
+  function mqttDedupeKey(msg) {
+    return `${msg.type}:${msg.memberId || ""}:${msg.hostId || ""}:${msg.ts}`;
+  }
+
+  function shouldAcceptMqttMsg(msg) {
+    if (!isValidMqttMsg(msg)) return false;
+    if (Date.now() - msg.ts > MQTT_MSG_TTL_MS) return false;
+    if (!state.mqttSeen) state.mqttSeen = new Set();
+    const key = mqttDedupeKey(msg);
+    if (state.mqttSeen.has(key)) return false;
+    state.mqttSeen.add(key);
+    return true;
+  }
+
+  function publishMqttPayload(msg, { retain = false } = {}) {
+    if (!state.mqttClient || !state.mqttTopic) return;
+    const body = JSON.stringify({ proto: PROTO, ts: Date.now(), ...msg });
+    state.mqttClient.publish(state.mqttTopic, body, { qos: 0, retain });
+  }
+
+  function connectMqttTopic(slug) {
+    const connectFn = getMqttConnect();
+    if (!connectFn) return Promise.reject(new Error("信令库不可用"));
+    const topic = mqttTopicForSlug(slug);
+    return new Promise((resolve, reject) => {
+      const client = connectFn(MQTT_BROKER, {
+        clientId: `ls_${uid(12)}`,
+        clean: true,
+        reconnectPeriod: 4000,
+        connectTimeout: 12000,
+      });
+      let settled = false;
+      const fail = (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(to);
+        try {
+          client.end(true);
+        } catch (_) {
+          /* ignore */
+        }
+        reject(err instanceof Error ? err : new Error(String(err || "信令连接失败")));
+      };
+      const to = setTimeout(() => fail(new Error("连接信令超时，请检查网络后重试")), 15000);
+      client.on("error", fail);
+      client.on("connect", () => {
+        client.subscribe(topic, { qos: 0 }, (err) => {
+          if (err) {
+            fail(err);
+            return;
+          }
+          if (settled) return;
+          settled = true;
+          clearTimeout(to);
+          resolve({ client, topic });
+        });
+      });
+    });
+  }
+
+  function waitMqttHostHello(slug, timeoutMs = 18000) {
+    return connectMqttTopic(slug).then(
+      ({ client, topic }) =>
+        new Promise((resolve, reject) => {
+          let settled = false;
+          const finish = (fn, val) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(to);
+            client.removeListener("message", onMsg);
+            fn(val);
+          };
+          const onMsg = (_t, payload) => {
+            try {
+              const msg = JSON.parse(payload.toString());
+              if (!isValidMqttMsg(msg) || msg.type !== "host-hello") return;
+              if (Date.now() - msg.ts > MQTT_MSG_TTL_MS) return;
+              if (!msg.roomId || !msg.hostId) return;
+              finish(resolve, { client, topic, hello: msg });
+            } catch (_) {
+              /* ignore */
+            }
+          };
+          const to = setTimeout(
+            () => {
+              try {
+                client.end(true);
+              } catch (_) {
+                /* ignore */
+              }
+              finish(reject, new Error("未找到该密码的房间，请确认密码或让房主已创建房间"));
+            },
+            timeoutMs
+          );
+          client.on("message", onMsg);
+        })
+    );
+  }
+
+  function onMqttHostMessage(_t, payload) {
+    let msg;
+    try {
+      msg = JSON.parse(payload.toString());
+    } catch {
+      return;
+    }
+    if (!shouldAcceptMqttMsg(msg)) return;
+    if (msg.type !== "guest-offer" || !state.isHost) return;
+    if (msg.roomId && msg.roomId !== state.roomId) return;
+    if (msg.hostId && msg.hostId !== state.peerId) return;
+    applyJoinOfferDirect({
+      sdp: msg.sdp,
+      roomId: msg.roomId,
+      hostId: msg.hostId,
+      memberId: msg.memberId,
+    }).catch(() => {});
+  }
+
+  function onMqttGuestMessage(_t, payload) {
+    let msg;
+    try {
+      msg = JSON.parse(payload.toString());
+    } catch {
+      return;
+    }
+    if (!shouldAcceptMqttMsg(msg)) return;
+    if (msg.type !== "host-answer" || state.isHost) return;
+    if (msg.memberId && msg.memberId !== state.peerId) return;
+    if (msg.roomId && msg.roomId !== state.roomId) return;
+    applyHostAnswerDirect(msg.sdp).catch(() => {});
+  }
+
+  async function startMqttHost() {
+    if (!state.roomPasswordSlug) return;
+    await ensureMqttLib();
+    stopMqttSignaling();
+    state.mqttSeen = new Set();
+    const { client, topic } = await connectMqttTopic(state.roomPasswordSlug);
+    state.mqttClient = client;
+    state.mqttTopic = topic;
+    client.on("message", onMqttHostMessage);
+    const publishHello = () => {
+      publishMqttPayload(
+        {
+          type: "host-hello",
+          roomId: state.roomId,
+          hostId: state.peerId,
+          hostName: state.peerName,
+        },
+        { retain: true }
+      );
+    };
+    publishHello();
+    state.mqttHelloTimer = setInterval(publishHello, 8000);
+  }
+
+  function attachMqttGuest(client, topic) {
+    if (state.mqttGuestHandler) client.removeListener("message", state.mqttGuestHandler);
+    state.mqttClient = client;
+    state.mqttTopic = topic;
+    state.mqttSeen = new Set();
+    state.mqttGuestHandler = onMqttGuestMessage;
+    client.on("message", state.mqttGuestHandler);
+  }
+
+  function stopMqttSignaling() {
+    if (state.mqttHelloTimer) {
+      clearInterval(state.mqttHelloTimer);
+      state.mqttHelloTimer = null;
+    }
+    const client = state.mqttClient;
+    if (client) {
+      if (state.mqttGuestHandler) {
+        client.removeListener("message", state.mqttGuestHandler);
+        state.mqttGuestHandler = null;
+      }
+      if (state.isHost && state.roomPasswordSlug && state.mqttTopic) {
+        try {
+          client.publish(state.mqttTopic, "", { qos: 0, retain: true });
+        } catch (_) {
+          /* ignore */
+        }
+      }
+      try {
+        client.end(true);
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    state.mqttClient = null;
+    state.mqttTopic = "";
+    state.mqttSeen = null;
   }
 
   async function preloadPanel() {
@@ -1166,9 +1441,8 @@
     return ok;
   }
 
-  async function applyJoinOffer(text) {
+  async function applyJoinOfferDirect(parsed) {
     if (!state.isHost || !state.pendingJoin?.pc) return false;
-    const parsed = await parseJoinOfferAsync(text);
     if (!parsed?.sdp) return false;
     if (parsed.roomId && parsed.roomId !== state.roomId) return false;
     if (parsed.hostId && parsed.hostId !== state.peerId) return false;
@@ -1186,6 +1460,11 @@
       setError(e?.message || "成员连接码无效，请让其重新加入");
       return false;
     }
+  }
+
+  async function applyJoinOffer(text) {
+    const parsed = await parseJoinOfferAsync(text);
+    return applyJoinOfferDirect(parsed);
   }
 
   async function applyJoinAnswer(text) {
@@ -1207,6 +1486,20 @@
   }
 
   async function publishJoinOffer(offerSdp, inv) {
+    if (state.viaMqtt && state.mqttClient) {
+      publishMqttPayload({
+        type: "guest-offer",
+        roomId: inv.roomId,
+        hostId: inv.hostId,
+        memberId: state.peerId,
+        memberName: state.peerName,
+        sdp: trimSdpMinimal(offerSdp),
+      });
+      if (els.guestAnswerArea) els.guestAnswerArea.hidden = true;
+      paintStatus();
+      return;
+    }
+
     const token = await buildJoinOfferToken(offerSdp);
     const offerText = joinOfferQrText(token);
     const offerUrl = `${inviteLinkBase()}#${offerText}`;
@@ -1236,6 +1529,16 @@
   }
 
   async function publishHostAnswer(answerSdp, guestId) {
+    if (state.viaMqtt && state.mqttClient) {
+      publishMqttPayload({
+        type: "host-answer",
+        roomId: state.roomId,
+        hostId: state.peerId,
+        memberId: guestId,
+        sdp: trimSdpMinimal(answerSdp),
+      });
+    }
+
     const token = await buildHostAnswerToken(answerSdp, guestId);
     const answerText = joinAnswerQrText(token);
     const relayKey = `${HOST_ANSWER_RELAY_PREFIX}:${state.roomId}:${guestId || "any"}`;
@@ -1279,16 +1582,13 @@
     }
   }
 
-  async function applyHostAnswer(text) {
+  async function applyHostAnswerDirect(sdp) {
     if (state.isHost || !state.controlPc || state.controlLinked) return false;
-    const parsed = await parseJoinAnswerAsync(text);
-    if (!parsed?.sdp) return false;
-    if (parsed.roomId && parsed.roomId !== state.roomId) return false;
-    if (parsed.memberId && parsed.memberId !== state.peerId) return false;
+    if (!sdp) return false;
     const pc = state.controlPc;
     if (pc.signalingState !== "have-local-offer") return false;
     try {
-      await pc.setRemoteDescription({ type: "answer", sdp: parsed.sdp });
+      await pc.setRemoteDescription({ type: "answer", sdp });
       whenDcOpen(state.controlDc, () => {
         sendHello(state.controlDc);
         paintStatus();
@@ -1299,6 +1599,15 @@
       setError(e?.message || "房主应答无效，请让房主重新扫描连接码");
       return false;
     }
+  }
+
+  async function applyHostAnswer(text) {
+    if (state.isHost || !state.controlPc || state.controlLinked) return false;
+    const parsed = await parseJoinAnswerAsync(text);
+    if (!parsed?.sdp) return false;
+    if (parsed.roomId && parsed.roomId !== state.roomId) return false;
+    if (parsed.memberId && parsed.memberId !== state.peerId) return false;
+    return applyHostAnswerDirect(parsed.sdp);
   }
 
   async function publishJoinAnswer(answerSdp, inv) {
@@ -1400,11 +1709,36 @@
     state.joinedAt = Date.now();
     state.members.set(state.peerId, { id: state.peerId, name: state.peerName, joinedAt: state.joinedAt });
     state.controlLinked = true;
+
+    const pwdRaw = els.roomPwdHost?.value || "";
+    if (normalizeRoomPassword(pwdRaw)) {
+      try {
+        state.roomPassword = validateRoomPassword(pwdRaw);
+        state.roomPasswordSlug = await hashRoomPassword(state.roomPassword);
+        state.viaMqtt = true;
+      } catch (e) {
+        state.roomId = "";
+        state.isHost = false;
+        state.hostId = "";
+        state.members.clear();
+        paintStatus();
+        throw e;
+      }
+    }
+
     await refreshJoinSlot();
+    if (state.viaMqtt) {
+      try {
+        await startMqttHost();
+      } catch (e) {
+        setError((e?.message || "密码信令启动失败") + "；仍可用下方二维码邀请加入");
+        state.viaMqtt = false;
+      }
+    }
     paintStatus();
   }
 
-  async function joinRoom(inviteText) {
+  async function joinRoom(inviteText, opts = {}) {
     if (!webrtcSupported()) {
       setError("当前浏览器不支持 WebRTC");
       return;
@@ -1412,7 +1746,11 @@
     setError("");
     saveName();
     const inv = await parseInviteAsync(inviteText);
-    cleanupRoom(false);
+    cleanupRoom(false, { keepMqtt: !!opts.keepMqtt });
+    if (opts.viaMqtt) state.viaMqtt = true;
+    if (opts.mqttClient && opts.mqttTopic) {
+      attachMqttGuest(opts.mqttClient, opts.mqttTopic);
+    }
     state.peerId = uid();
     state.peerName = peerName();
     state.roomId = inv.roomId;
@@ -1469,6 +1807,78 @@
       throw new Error(e?.message || "无法建立连接，请让房主刷新邀请二维码");
     }
     paintStatus();
+  }
+
+  async function joinByPassword(pwdRaw) {
+    if (!webrtcSupported()) {
+      setError("当前浏览器不支持 WebRTC");
+      return;
+    }
+    const pwd = validateRoomPassword(pwdRaw);
+    setError("");
+    saveName();
+    await ensureMqttLib();
+    const slug = await hashRoomPassword(pwd);
+    state.roomPassword = pwd;
+    state.roomPasswordSlug = slug;
+    const { client, topic, hello } = await waitMqttHostHello(slug);
+    const invText = `lanshare?r=${encodeURIComponent(hello.roomId)}&h=${encodeURIComponent(hello.hostId)}`;
+    await joinRoom(invText, { keepMqtt: true, viaMqtt: true, mqttClient: client, mqttTopic: topic });
+    if (els.roomPwdJoin) els.roomPwdJoin.value = "";
+    paintStatus();
+  }
+
+  function readPasswordFromHash() {
+    const full = String(location.hash || "").replace(/^#/, "");
+    if (!full.startsWith("lanshare?")) return "";
+    return new URLSearchParams(full.slice(full.indexOf("?") + 1)).get("p") || "";
+  }
+
+  function stashPendingPassword(pwd) {
+    if (!pwd) return;
+    try {
+      sessionStorage.setItem(PENDING_PWD_KEY, pwd);
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function takePendingPassword() {
+    const fromHash = readPasswordFromHash();
+    if (fromHash) {
+      stashPendingPassword(fromHash);
+      return fromHash;
+    }
+    try {
+      return sessionStorage.getItem(PENDING_PWD_KEY) || "";
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function clearPendingPassword() {
+    try {
+      sessionStorage.removeItem(PENDING_PWD_KEY);
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  async function tryAutoJoinFromPassword() {
+    if (state.roomId || state.autoJoinBusy) return;
+    const pending = takePendingPassword();
+    if (!pending) return;
+    state.autoJoinBusy = true;
+    try {
+      setError("");
+      await joinByPassword(pending);
+      clearPendingPassword();
+      history.replaceState(null, "", "#lanshare");
+    } catch (e) {
+      setError(e.message || "密码加入失败，请手动输入房间密码");
+    } finally {
+      state.autoJoinBusy = false;
+    }
   }
 
   function handleRelay(payload) {
@@ -1829,7 +2239,8 @@
     }
   }
 
-  function cleanupRoom(keepError) {
+  function cleanupRoom(keepError, opts = {}) {
+    if (!opts.keepMqtt) stopMqttSignaling();
     closeHostControl(true);
     closeMemberControl();
     state.transferPcs.forEach((pc) => pc.close());
@@ -1845,6 +2256,9 @@
     state.autoJoinBusy = false;
     state.controlLinked = false;
     state.pendingOutbound = [];
+    state.roomPassword = "";
+    state.roomPasswordSlug = "";
+    state.viaMqtt = false;
     stopSignalRelayListen();
     if (els.inviteText) els.inviteText.value = "";
     if (els.inviteQr) els.inviteQr.innerHTML = "";
@@ -2117,6 +2531,16 @@
   }
 
   els.createBtn?.addEventListener("click", () => createRoom().catch((e) => setError(e.message)));
+  els.joinPwdBtn?.addEventListener("click", () => {
+    const pwd = els.roomPwdJoin?.value || "";
+    joinByPassword(pwd).catch((e) => setError(e.message || "密码加入失败"));
+  });
+  els.roomPwdJoin?.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      els.joinPwdBtn?.click();
+    }
+  });
   els.pasteJoinBtn?.addEventListener("click", () => pasteJoin());
   els.joinConfirmBtn?.addEventListener("click", () => confirmPasteJoin().catch((e) => setError(e.message)));
   els.copyInviteBtn?.addEventListener("click", () => copyInvite());
@@ -2157,6 +2581,7 @@
   tryApplyJoinAnswerFromHash().catch(() => {});
   tryApplyHostAnswerFromHash().catch(() => {});
   tryAutoJoinFromHash().catch(() => {});
+  tryAutoJoinFromPassword().catch(() => {});
 
   window.LanShareSelfTest = {
     webrtcSupported,
@@ -2181,7 +2606,11 @@
     isAnswerScanData,
     readJoinTokenFromHash,
     readAnswerTokenFromHash,
+    readPasswordFromHash,
     takePendingJoinToken,
+    normalizeRoomPassword,
+    hashRoomPassword,
+    validateRoomPassword,
     getRoomId: () => state.roomId,
   };
 
@@ -2194,6 +2623,7 @@
         tryApplyJoinAnswerFromHash().catch(() => {});
         tryApplyHostAnswerFromHash().catch(() => {});
         tryAutoJoinFromHash().catch(() => {});
+        tryAutoJoinFromPassword().catch(() => {});
       });
     }
   });

@@ -109,6 +109,10 @@ async function main() {
   assert(/inviteQrTextShort/.test(js), "缺少超短邀请码");
   assert(/publishJoinOffer/.test(js), "缺少成员 offer 回传");
   assert(/applyJoinOffer/.test(js), "缺少房主 offer 应用");
+  assert(/joinByPassword/.test(js), "缺少密码加入");
+  assert(/hashRoomPassword/.test(js), "缺少房间密码哈希");
+  assert(/ls-room-pwd-join/.test(htmlLocal), "缺少密码加入输入框");
+  assert(/vendor\/mqtt\.min\.js/.test(lazyJs), "lazy-scripts 应注册 mqtt");
   assert(/lanshare:\s*\["qrcode",\s*"jsQR"\]/.test(lazyJs), "lazy-scripts 应为 lanshare 加载 qrcode/jsQR");
   assert(/broadcastExcept/.test(js), "房主应转发成员事件给其他成员");
   assert(/controlLinked/.test(js), "缺少 controlLinked 连接就绪状态");
@@ -157,6 +161,15 @@ async function main() {
     assert(core.ok, `邀请解析失败: ${core.err || ""}`);
     assert(core.shortLen < 80, `超短邀请码过长 (${core.shortLen})`);
     console.log("OK invite parse", JSON.stringify({ shortLen: core.shortLen, room: core.parsedRoom }));
+
+    const pwdHash = await page.evaluate(async () => {
+      const api = window.LanShareSelfTest;
+      const a = await api.hashRoomPassword("Test12");
+      const b = await api.hashRoomPassword("test12");
+      return { ok: a === b && a.length === 24, len: a.length };
+    });
+    assert(pwdHash.ok, "房间密码哈希不稳定");
+    console.log("OK room password hash", JSON.stringify(pwdHash));
 
     const realistic = await page.evaluate(async (sdpText) => {
       const api = window.LanShareSelfTest;
