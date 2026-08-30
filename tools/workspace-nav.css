@@ -325,7 +325,7 @@ body.nav-sorting .tool-nav-link,
   outline: none;
 }
 
-/* 常用工具：固定于搜索框下方、菜单首位 */
+/* 常用工具：位于滚动区首位，与分类列表一起滚动 */
 .nav-favorites {
   width: 100%;
   margin-bottom: 0.45rem;

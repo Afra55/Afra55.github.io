@@ -16,7 +16,7 @@
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
   <script src="./lib/tools-build.js?v=2026.08.30-214500"></script>
   <link rel="stylesheet" href="./style.css?v=2026.08.30-214500" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-230500" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-231500" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
   <script>
@@ -167,22 +167,22 @@
         <span class="visually-hidden">搜索工具</span>
         <input id="tool-search" class="nav-search" type="search" placeholder="搜索工具…" autocomplete="off" enterkeyhint="search" />
       </label>
-      <div class="nav-strip nav-favorites nav-group" id="tool-favorites" data-group="favorites">
-        <div class="nav-strip-head nav-fav-head">
-          <p class="nav-group-title nav-fav-title" id="tool-fav-title" aria-expanded="true">常用工具</p>
-          <button type="button" class="nav-fav-add" id="tool-fav-add" title="添加常用工具" aria-label="添加常用工具" aria-expanded="false" aria-controls="tool-fav-picker">+</button>
-        </div>
-        <div class="nav-fav-picker" id="tool-fav-picker" hidden></div>
-        <div class="nav-group-tools nav-fav-tools" id="tool-fav-list" role="list"></div>
-      </div>
       <div class="nav-strip nav-recent" id="tool-recent" hidden>
         <div class="nav-strip-head">
           <p class="nav-strip-title nav-recent-label">历史记录</p>
         </div>
         <div class="nav-strip-list nav-recent-list" id="tool-recent-list"></div>
       </div>
-      <p class="hint tight nav-sort-hint">分类与工具可排序：桌面直接拖名称；手机请拖左侧<strong>⠿</strong>手柄，长按工具名可加入常用。常用工具固定于菜单首位，不可排序。</p>
+      <p class="hint tight nav-sort-hint">分类与工具可排序：桌面直接拖名称；手机请拖左侧<strong>⠿</strong>手柄，长按工具名可加入常用。常用工具固定于菜单首位，其内工具可排序。</p>
       <div class="nav-bar-scroll" id="nav-bar-scroll">
+        <div class="nav-strip nav-favorites nav-group" id="tool-favorites" data-group="favorites">
+          <div class="nav-strip-head nav-fav-head">
+            <p class="nav-group-title nav-fav-title" id="tool-fav-title" aria-expanded="true">常用工具</p>
+            <button type="button" class="nav-fav-add" id="tool-fav-add" title="添加常用工具" aria-label="添加常用工具" aria-expanded="false" aria-controls="tool-fav-picker">+</button>
+          </div>
+          <div class="nav-fav-picker" id="tool-fav-picker" hidden></div>
+          <div class="nav-group-tools nav-fav-tools" id="tool-fav-list" role="list"></div>
+        </div>
         <nav class="tool-nav" id="tool-nav" aria-label="工具分组"></nav>
       </div>
       <div class="nav-footer-actions">
@@ -5286,7 +5286,7 @@ adb devices</pre>
   <script src="./lib/bridge-token.js?v=2026.08.30-062500"></script>
   <script src="./lib/lazy-scripts.js?v=2026.08.30-214500"></script>
   <script src="./theme.js?v=2026.08.30-062500"></script>
-  <script src="./app.js?v=2026.08.30-230500"></script>
+  <script src="./app.js?v=2026.08.30-231500"></script>
   <script src="./wheel.js?v=2026.08.30-062500"></script>
   <script src="./ruler.js?v=2026.08.30-062500"></script>
   <script src="./muyu.js?v=2026.08.30-084100"></script>
