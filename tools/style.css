@@ -8953,6 +8953,48 @@ li a:not([class*="btn"]) {
   vertical-align: middle;
 }
 
+.ls-file-actions {
+  flex: 0 0 auto;
+  min-width: 5.75rem;
+  justify-content: flex-end;
+}
+
+.ls-dl-progress {
+  min-width: 5.75rem;
+  display: grid;
+  gap: 0.22rem;
+}
+
+.ls-dl-progress-bar-wrap {
+  height: 0.38rem;
+  border-radius: 999px;
+  background: rgba(127, 127, 127, 0.2);
+  overflow: hidden;
+}
+
+.ls-dl-progress-bar {
+  height: 100%;
+  width: 0;
+  background: var(--accent, #3b82f6);
+  transition: width 0.12s ease;
+}
+
+.ls-dl-progress-label {
+  font-size: 0.72rem;
+  line-height: 1.2;
+  color: var(--muted, #888);
+  white-space: nowrap;
+}
+
+.ls-dl-status {
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+
+.ls-dl-status.is-ok {
+  color: var(--accent, #3b82f6);
+}
+
 .ls-progress-bar-wrap.is-busy .ls-progress-bar {
   width: 35% !important;
   animation: ls-progress-busy 1.1s ease-in-out infinite;

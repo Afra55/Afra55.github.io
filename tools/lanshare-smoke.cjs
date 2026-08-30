@@ -110,7 +110,8 @@ async function main() {
   assert(/publishJoinOffer/.test(js), "缺少成员 offer 回传");
   assert(/applyJoinOffer/.test(js), "缺少房主 offer 应用");
   assert(/joinByPassword/.test(js), "缺少密码加入");
-  assert(/abandonRoomOnPageHide/.test(js), "缺少关页清理");
+  assert(/fileActionsInnerHtml/.test(js), "缺少行内下载进度");
+  assert(/ls-dl-progress/.test(fs.readFileSync(path.join(root, "style.css"), "utf8")), "缺少行内下载样式");
   assert(/pagehide/.test(js), "应监听 pagehide");
   assert(/removeMemberFiles/.test(js), "缺少退出清理文件");
   assert(!/dissolveRoom/.test(js), "应移除解散房间");

@@ -84,6 +84,8 @@
   let infoTimer = null;
   /** @type {number} */
   let pendingJoinGen = 0;
+  /** @type {number|null} */
+  let downloadConnectTimer = null;
 
   const state = {
     peerId: "",
@@ -98,6 +100,8 @@
     memberLinks: new Map(),
     transferPcs: new Map(),
     transferring: false,
+    /** @type {{ fileId: string, pct: number, label: string, phase: string }|null} */
+    activeDownload: null,
     controlPc: null,
     controlDc: null,
     pendingJoin: null,
@@ -889,27 +893,101 @@
       : '<p class="hint tight">暂无成员</p>';
   }
 
+  function fileActionsInnerHtml(f) {
+    const mine = f.ownerId === state.peerId;
+    if (mine) {
+      return `<button type="button" class="ghost-btn ls-del" data-id="${f.id}">删除</button>`;
+    }
+    const dl = state.activeDownload;
+    if (dl?.fileId === f.id) {
+      if (dl.phase === "done") {
+        return `<span class="ls-dl-status is-ok">已完成</span>`;
+      }
+      if (dl.phase === "error") {
+        return `<button type="button" class="secondary-btn ls-dl" data-id="${f.id}">重试</button>`;
+      }
+      const pct = Math.min(100, Math.max(0, dl.pct));
+      return (
+        `<div class="ls-dl-progress" aria-live="polite">` +
+        `<div class="ls-dl-progress-bar-wrap"><div class="ls-dl-progress-bar" style="width:${pct}%"></div></div>` +
+        `<span class="ls-dl-progress-label mono">${escapeHtml(dl.label || "下载中…")}</span>` +
+        `</div>`
+      );
+    }
+    if (dl && dl.phase !== "done" && dl.phase !== "error") {
+      return `<button type="button" class="secondary-btn" disabled>下载</button>`;
+    }
+    return `<button type="button" class="secondary-btn ls-dl" data-id="${f.id}">下载</button>`;
+  }
+
+  function bindFileRowActions(root = els.filesEl) {
+    if (!root) return;
+    $$(".ls-del", root).forEach((btn) => btn.addEventListener("click", () => removeFile(btn.dataset.id)));
+    $$(".ls-dl", root).forEach((btn) => btn.addEventListener("click", () => requestDownload(btn.dataset.id)));
+  }
+
+  function setDownloadProgress(fileId, pct, label, phase = "downloading") {
+    state.activeDownload = { fileId, pct, label, phase };
+    state.transferring = phase === "connecting" || phase === "downloading";
+    updateFileRowActions(fileId);
+  }
+
+  function finishDownloadProgress(fileId, ok) {
+    clearTimeout(downloadConnectTimer);
+    downloadConnectTimer = null;
+    if (ok) {
+      setDownloadProgress(fileId, 100, "已完成", "done");
+      setTimeout(() => {
+        if (state.activeDownload?.fileId === fileId && state.activeDownload.phase === "done") {
+          state.activeDownload = null;
+          state.transferring = false;
+          paintFiles();
+        }
+      }, 2200);
+    } else {
+      setDownloadProgress(fileId, 0, "失败", "error");
+      state.transferring = false;
+    }
+  }
+
+  function clearDownloadProgress() {
+    clearTimeout(downloadConnectTimer);
+    downloadConnectTimer = null;
+    state.activeDownload = null;
+    state.transferring = false;
+  }
+
+  function updateFileRowActions(fileId) {
+    if (!els.filesEl) return;
+    const row = els.filesEl.querySelector(`.ls-file-row[data-id="${CSS.escape(fileId)}"]`);
+    if (!row) {
+      paintFiles();
+      return;
+    }
+    const actions = row.querySelector(".ls-file-actions");
+    const f = state.files.get(fileId);
+    if (actions && f) {
+      actions.innerHTML = fileActionsInnerHtml(f);
+      bindFileRowActions(actions);
+    }
+  }
+
   function paintFiles() {
     if (!els.filesEl) return;
     const list = [...state.files.values()].sort((a, b) => b.addedAt - a.addedAt);
     els.filesEl.innerHTML = list.length
       ? list
           .map((f) => {
-            const mine = f.ownerId === state.peerId;
             const kind = fileKindLabel(f);
             const preview = filePreviewSrc(f);
             const previewHtml = preview
               ? `<div class="ls-file-preview"><img class="ls-file-thumb" src="${preview}" alt="" loading="lazy" /></div>`
               : `<div class="ls-file-preview"><span class="ls-file-kind-badge">${escapeHtml(kind)}</span></div>`;
-            const actions = mine
-              ? `<button type="button" class="ghost-btn ls-del" data-id="${f.id}">删除</button>`
-              : `<button type="button" class="secondary-btn ls-dl" data-id="${f.id}">下载</button>`;
-            return `<div class="ls-file-row">${previewHtml}<div class="ls-file-main"><strong>${escapeHtml(f.name)}</strong><span class="hint mono"><span class="ls-file-kind-tag">${escapeHtml(kind)}</span>${fmtSize(f.size)} · ${escapeHtml(memberLabel(f.ownerId))}</span></div><div class="btn-row tight">${actions}</div></div>`;
+            return `<div class="ls-file-row" data-id="${escapeHtml(f.id)}">${previewHtml}<div class="ls-file-main"><strong>${escapeHtml(f.name)}</strong><span class="hint mono"><span class="ls-file-kind-tag">${escapeHtml(kind)}</span>${fmtSize(f.size)} · ${escapeHtml(memberLabel(f.ownerId))}</span></div><div class="ls-file-actions btn-row tight">${fileActionsInnerHtml(f)}</div></div>`;
           })
           .join("")
       : '<p class="hint tight">暂无文件，点「选择文件」上传</p>';
-    $$(".ls-del", els.filesEl).forEach((btn) => btn.addEventListener("click", () => removeFile(btn.dataset.id)));
-    $$(".ls-dl", els.filesEl).forEach((btn) => btn.addEventListener("click", () => requestDownload(btn.dataset.id)));
+    bindFileRowActions();
   }
 
   function createPeer() {
@@ -2235,11 +2313,27 @@
 
   function requestDownload(fileId) {
     const f = state.files.get(fileId);
-    if (!f || f.ownerId === state.peerId || state.transferring) return;
+    if (!f || f.ownerId === state.peerId) return;
+    if (state.activeDownload && state.activeDownload.phase !== "done" && state.activeDownload.phase !== "error") {
+      if (state.activeDownload.fileId !== fileId) return;
+    }
+    if (state.transferring && state.activeDownload?.fileId !== fileId) return;
     setError("");
+    setDownloadProgress(fileId, 0, "连接中…", "connecting");
+    clearTimeout(downloadConnectTimer);
+    downloadConnectTimer = window.setTimeout(() => {
+      if (state.activeDownload?.fileId === fileId && state.activeDownload.phase === "connecting") {
+        setError("连接上传者超时，请重试");
+        finishDownloadProgress(fileId, false);
+      }
+    }, 120000);
     const msg = { type: "download-request", fileId, requesterId: state.peerId };
     if (state.isHost) sendToMember(f.ownerId, msg);
     else if (state.controlDc?.readyState === "open") state.controlDc.send(JSON.stringify(msg));
+    else {
+      setError("连接未就绪，请稍候再下载");
+      finishDownloadProgress(fileId, false);
+    }
   }
 
   function waitDcDrain(dc) {
@@ -2346,9 +2440,9 @@
   }
 
   async function acceptFileOffer(from, fileId, sdp) {
-    if (state.transferring) return;
+    if (state.transferring && state.activeDownload?.fileId && state.activeDownload.fileId !== fileId) return;
     state.transferring = true;
-    setProgress(0, "正在连接上传者…");
+    setDownloadProgress(fileId, 0, "连接中…", "connecting");
     const key = `${from}:${fileId}`;
     const pc = createPeer();
     state.transferPcs.set(key, pc);
@@ -2368,6 +2462,7 @@
             if (msg.type === "meta") {
               meta = msg;
               total = msg.size || 0;
+              setDownloadProgress(fileId, 0, total ? `0 / ${fmtSize(total)}` : "下载中…", "downloading");
             } else if (msg.type === "done") {
               clearTimeout(timer);
               resolve({ meta, chunks });
@@ -2379,7 +2474,7 @@
             chunks.push(new Uint8Array(e.data));
             if (total > 0) {
               const got = chunks.reduce((s, c) => s + c.byteLength, 0);
-              setProgress((got / total) * 100, `下载 ${fmtSize(got)} / ${fmtSize(total)}`);
+              setDownloadProgress(fileId, (got / total) * 100, `${fmtSize(got)} / ${fmtSize(total)}`, "downloading");
             }
           }
         };
@@ -2407,13 +2502,12 @@
       const { meta, chunks } = await received;
       const blob = new Blob(chunks, { type: meta?.mime || "application/octet-stream" });
       await saveReceivedBlob(blob, meta?.name || "download");
-      setProgress(null);
+      finishDownloadProgress(fileId, true);
       if (isIOS()) setError("");
     } catch (e) {
       setError(e.message || "下载失败");
-      setProgress(null);
+      finishDownloadProgress(fileId, false);
     } finally {
-      state.transferring = false;
       state.transferPcs.delete(key);
       pc.close();
     }
@@ -2549,7 +2643,7 @@
     state.members.clear();
     state.files.clear();
     state.localFiles.clear();
-    state.transferring = false;
+    clearDownloadProgress();
     state.pageHiddenWarn = false;
     state.autoJoinBusy = false;
     state.controlLinked = false;
