@@ -172,10 +172,84 @@ body.nav-sorting-tools .nav-group-title.is-sortable {
   background: color-mix(in srgb, var(--accent) 6%, transparent);
 }
 
-.nav-group.drag-over > .nav-group-title {
+.nav-group.drag-over .nav-group-title {
   color: var(--ink);
   border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
   background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
+}
+
+/* 手机 ⠿ 排序手柄（桌面隐藏，仍用 HTML5 拖名称） */
+.nav-sort-handle {
+  display: none;
+}
+
+.nav-group-head,
+.tool-nav-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.nav-group-head .nav-group-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.tool-nav-row .tool-nav-link,
+.tool-nav-row .nav-fav-link {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .nav-sort-handle {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    align-self: stretch;
+    width: 2.75rem;
+    min-width: 2.75rem;
+    min-height: 2.75rem;
+    margin: 0;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+    border-radius: 10px;
+    background: color-mix(in srgb, var(--ink) 4%, transparent);
+    color: var(--muted);
+    font-size: 1.05rem;
+    line-height: 1;
+    cursor: grab;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .nav-sort-handle:active,
+  .nav-sort-handle.is-dragging {
+    cursor: grabbing;
+    color: var(--ink);
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+    background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
+  }
+
+  .nav-group-head .nav-group-title {
+    margin-left: 0;
+    padding-left: 0.5rem;
+  }
+
+  .tool-nav-row .tool-nav-link,
+  .tool-nav-row .nav-fav-link {
+    width: auto;
+    cursor: pointer;
+  }
+
+  .nav-group-head .nav-group-title.is-sortable {
+    cursor: pointer;
+  }
 }
 
 body.nav-sorting,
@@ -362,8 +436,10 @@ body.nav-sorting .nav-group-title.is-sortable {
   color: var(--ink);
 }
 
-body.nav-sorting .nav-group.is-dragging > .nav-group-title,
-body.nav-sorting-tools .tool-nav-link.is-dragging {
+body.nav-sorting .nav-group.is-dragging .nav-group-title,
+body.nav-sorting-tools .tool-nav-link.is-dragging,
+body.nav-sorting-tools .nav-sort-handle.is-dragging,
+body.nav-sorting-favorites .nav-sort-handle.is-dragging {
   opacity: 0.55;
   border-style: dashed;
 }
