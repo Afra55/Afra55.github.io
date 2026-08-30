@@ -9913,6 +9913,38 @@ body.ruler-fs-active {
   animation: muyu-halo-breathe 3.6s ease-in-out infinite;
 }
 
+.muyu-stage-ripple,
+.muyu-fs-ripple {
+  display: none;
+}
+
+.muyu-hit-ripple {
+  position: absolute;
+  width: 4.5rem;
+  height: 4.5rem;
+  transform: translate(-50%, -50%) scale(0.3);
+  border-radius: 50%;
+  border: 2px solid var(--muyu-ripple);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.muyu-hit-ripple.is-go {
+  animation: muyu-hit-ripple 0.5s ease-out forwards;
+}
+
+@keyframes muyu-hit-ripple {
+  0% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(0.3);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.5);
+  }
+}
+
 .muyu-stage-ripple {
   position: absolute;
   left: 50%;

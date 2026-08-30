@@ -270,18 +270,46 @@
     window.setTimeout(() => f.remove(), 1000);
   }
 
-  function triggerRipple(rippleEl) {
-    if (!rippleEl) return;
-    rippleEl.classList.remove("is-go");
-    void rippleEl.offsetWidth;
-    rippleEl.classList.add("is-go");
+  function pointerFromEvent(ev, fallbackEl) {
+    if (ev && Number.isFinite(ev.clientX) && Number.isFinite(ev.clientY)) {
+      return { x: ev.clientX, y: ev.clientY };
+    }
+    if (fallbackEl) {
+      const r = fallbackEl.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    }
+    return null;
   }
 
-  function burstSparks(sparks, stageEl, limit = 180, localCoords = false) {
+  function spawnRippleAt(container, localX, localY) {
+    if (!container || !Number.isFinite(localX) || !Number.isFinite(localY)) return;
+    const el = document.createElement("span");
+    el.className = "muyu-hit-ripple";
+    el.style.left = `${localX}px`;
+    el.style.top = `${localY}px`;
+    el.setAttribute("aria-hidden", "true");
+    container.appendChild(el);
+    void el.offsetWidth;
+    el.classList.add("is-go");
+    el.addEventListener("animationend", () => el.remove(), { once: true });
+    window.setTimeout(() => el.remove(), 600);
+  }
+
+  function burstSparks(sparks, stageEl, limit = 180, localCoords = false, at = null) {
     if (!stageEl) return;
     const rect = stageEl.getBoundingClientRect();
-    const cx = localCoords ? rect.width / 2 : rect.left + rect.width / 2;
-    const cy = localCoords ? rect.height * 0.46 : rect.top + rect.height * 0.46;
+    let cx;
+    let cy;
+    if (at && Number.isFinite(at.x) && Number.isFinite(at.y)) {
+      cx = localCoords ? at.x : at.x;
+      cy = localCoords ? at.y : at.y;
+    } else if (localCoords) {
+      cx = rect.width / 2;
+      cy = rect.height * 0.46;
+    } else {
+      cx = rect.left + rect.width / 2;
+      cy = rect.top + rect.height * 0.46;
+    }
     const n = 12;
     for (let i = 0; i < n; i++) {
       const ang = (Math.PI * 2 * i) / n + rnd(-0.3, 0.3);
@@ -451,8 +479,8 @@
     fsBgCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
   }
 
-  function burstFsSparks() {
-    burstSparks(fsBgSparks, document.getElementById("muyu-fs-stage"));
+  function burstFsSparks(at) {
+    burstSparks(fsBgSparks, document.getElementById("muyu-fs-stage"), 180, false, at);
   }
 
   function paintFsBgFrame() {
@@ -490,20 +518,45 @@
     if (fsBgCtx && fsBgCanvas) fsBgCtx.clearRect(0, 0, fsBgCanvas.width, fsBgCanvas.height);
   }
 
-  function playKnockFx() {
+  function playKnockImmediate() {
+    if (!soundOn) return;
+    if (playKnockWeb()) return;
+    if (playKnockHtml()) return;
+    void unlockMuyuAudio().then(() => {
+      if (!playKnockWeb()) playKnockHtml();
+    });
+  }
+
+  function playKnockFx(ev) {
+    const fishEl = fullscreen ? fishFsBtn : fishBtn;
+    const pt = pointerFromEvent(ev, fishEl);
     if (fullscreen) {
       if (fsPulseEl) {
         fsPulseEl.classList.remove("is-flash");
         void fsPulseEl.offsetWidth;
         fsPulseEl.classList.add("is-flash");
       }
-      triggerRipple(fsRippleEl);
+      if (fsRoot && pt) {
+        const local = { x: pt.x - fsRoot.getBoundingClientRect().left, y: pt.y - fsRoot.getBoundingClientRect().top };
+        spawnRippleAt(fsRoot, local.x, local.y);
+      }
       spawnFloat(fsFloatsEl);
-      burstFsSparks();
+      burstFsSparks(pt);
     } else {
-      triggerRipple(stageRippleEl);
+      if (stageRoot && pt) {
+        const rect = stageRoot.getBoundingClientRect();
+        spawnRippleAt(stageRoot, pt.x - rect.left, pt.y - rect.top);
+      }
       spawnFloat(stageFloatsEl);
-      burstSparks(stageBgSparks, stageRoot || fishBtn, 80, true);
+      if (pt) {
+        const rect = (stageRoot || fishBtn).getBoundingClientRect();
+        burstSparks(stageBgSparks, stageRoot || fishBtn, 80, true, {
+          x: pt.x - rect.left,
+          y: pt.y - rect.top,
+        });
+      } else {
+        burstSparks(stageBgSparks, stageRoot || fishBtn, 80, true);
+      }
     }
     if (navigator.vibrate) navigator.vibrate(12);
   }
@@ -579,14 +632,14 @@
     window.setTimeout(() => el.classList.remove("is-knocking"), 320);
   }
 
-  function knock(fromEl) {
+  function knock(fromEl, ev) {
     count += 1;
     renderCount();
     saveState();
+    void unlockMuyuAudio();
+    playKnockImmediate();
     bumpFish(fromEl || (fullscreen ? fishFsBtn : fishBtn));
-    playKnockFx();
-    if (playKnockWeb()) return;
-    unlockMuyuAudio().finally(() => playKnock());
+    playKnockFx(ev);
   }
 
   function resetCount() {
@@ -642,16 +695,16 @@
         window.setTimeout(() => {
           touchHandled = false;
         }, 450);
-        unlockMuyuAudio();
-        knock(btn);
+        void unlockMuyuAudio();
+        knock(btn, e);
       },
       { passive: false }
     );
     btn.addEventListener("click", (e) => {
       e.preventDefault();
       if (touchHandled) return;
-      unlockMuyuAudio();
-      knock(btn);
+      void unlockMuyuAudio();
+      knock(btn, e);
     });
   }
 
@@ -702,8 +755,8 @@
         const tag = String(e.target?.tagName || "").toLowerCase();
         if (tag === "input" || tag === "textarea" || tag === "select" || e.target?.isContentEditable) return;
         e.preventDefault();
-        unlockMuyuAudio();
-        knock(fishBtn);
+        void unlockMuyuAudio();
+        knock(fishBtn, e);
       }
       if (!fullscreen) return;
       if (e.key === "Escape") {
