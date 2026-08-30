@@ -20,6 +20,7 @@ function shouldBypass(url) {
   if (/\/vendor\/(ffmpeg|gifsicle|gif\.worker|omggif)/i.test(path)) return true;
   if (/\/ffmpeg\//i.test(path)) return true;
   if (/\/excalidraw\//i.test(path)) return true;
+  if (/\/sandspiel\//i.test(path)) return true;
   return false;
 }
 

@@ -1,0 +1,8 @@
+MIT 移植说明
+
+- 核心模拟与 UI 源于 https://github.com/MaxBittker/sandspiel （MIT，Copyright 2018 Max Bittker）
+- 本目录为单机中文构建：去掉 Firebase 登录/作品广场、Google 广告与统计、Sentry
+- 元素名与说明为中文翻译；WASM 物理规则未改
+- 流体部分源自 PavelDoGreat/WebGL-Fluid-Simulation（MIT）
+
+构建：在 sandspiel 源码上 wasm-pack + webpack，产物放入本目录。

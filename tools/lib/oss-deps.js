@@ -148,6 +148,28 @@
         ],
       },
       {
+        id: "sandspiel",
+        label: "落沙沙盒（自托管构建）",
+        items: [
+          {
+            name: "sandspiel",
+            version: "本站单机中文构建",
+            license: "MIT",
+            repo: "https://github.com/MaxBittker/sandspiel",
+            usedIn: "落沙沙盒 #sandspiel",
+            path: "tools/sandspiel/",
+          },
+          {
+            name: "WebGL-Fluid-Simulation",
+            version: "构建内嵌",
+            license: "MIT",
+            repo: "https://github.com/PavelDoGreat/WebGL-Fluid-Simulation",
+            usedIn: "落沙沙盒流体/风力",
+            path: "tools/sandspiel/",
+          },
+        ],
+      },
+      {
         id: "data",
         label: "结构化数据（穴位等）",
         items: [

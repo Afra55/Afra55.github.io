@@ -6075,6 +6075,32 @@ button.adb-device-body.linkish {
   background: var(--panel-strong);
 }
 
+.sandspiel-hint {
+  margin: 0 0 0.55rem;
+}
+
+.sandspiel-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: clamp(480px, calc(100dvh - 12rem), 900px);
+}
+
+.sandspiel-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 480px;
+  border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+  border-radius: var(--radius-md, 10px);
+  background: #f3f3f4;
+}
+
+@media (max-width: 700px) {
+  .sandspiel-shell,
+  .sandspiel-frame {
+    min-height: min(78dvh, 640px);
+  }
+}
+
 .imgprev-stage {
   margin-top: 0.85rem;
   display: flex;

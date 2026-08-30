@@ -14,9 +14,9 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.30-144500"></script>
-  <link rel="stylesheet" href="./style.css?v=2026.08.30-144500" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-144500" />
+  <script src="./lib/tools-build.js?v=2026.08.30-151800"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.08.30-151800" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-151800" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
   <script>
@@ -3695,6 +3695,19 @@ hello@world.org</textarea>
       </div>
     </section>
 
+<section id="sandspiel" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>落沙沙盒</h1>
+        <p>在格子里倒沙子、倒水、点火、种植物。本地 WASM + WebGL 模拟，不上传。移植自开源项目 <a href="https://github.com/MaxBittker/sandspiel" target="_blank" rel="noopener noreferrer">MaxBittker/sandspiel</a>（MIT），已中文化并去掉登录与广告。手机自动用较小网格以保流畅。</p>
+      </div>
+      <div class="panel-body sandspiel-body">
+        <p class="hint tight sandspiel-hint">点选元素后在画面上拖动画笔；「风」只吹流体。离开本页会自动暂停。</p>
+        <div class="sandspiel-shell">
+          <iframe id="sandspiel-frame" class="sandspiel-frame" title="落沙沙盒" loading="lazy" referrerpolicy="no-referrer"></iframe>
+        </div>
+      </div>
+    </section>
+
 <section id="ambient" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>环境音库</h1>
@@ -5269,9 +5282,9 @@ adb devices</pre>
     <p class="ruler-fs-hud mono hint" id="ruler-coord-fs" aria-live="polite"></p>
   </div>
   <script src="./lib/bridge-token.js?v=2026.08.30-062500"></script>
-  <script src="./lib/lazy-scripts.js?v=2026.08.30-144500"></script>
+  <script src="./lib/lazy-scripts.js?v=2026.08.30-151800"></script>
   <script src="./theme.js?v=2026.08.30-062500"></script>
-  <script src="./app.js?v=2026.08.30-144500"></script>
+  <script src="./app.js?v=2026.08.30-151800"></script>
   <script src="./wheel.js?v=2026.08.30-062500"></script>
   <script src="./ruler.js?v=2026.08.30-062500"></script>
   <script src="./muyu.js?v=2026.08.30-084100"></script>
