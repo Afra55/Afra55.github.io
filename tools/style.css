@@ -6121,6 +6121,10 @@ button.adb-device-body.linkish {
   background: var(--panel-strong);
 }
 
+.sandspiel-panel .panel-body {
+  padding-top: 0.35rem;
+}
+
 .sandspiel-hint {
   margin: 0;
   flex: 1 1 auto;
@@ -6130,10 +6134,10 @@ button.adb-device-body.linkish {
 .sandspiel-toolbar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.65rem;
+  justify-content: flex-end;
+  gap: 0.55rem;
   flex-wrap: wrap;
-  margin: 0 0 0.55rem;
+  margin: 0 0 0.4rem;
 }
 
 .sandspiel-fps-toggle {
@@ -6153,16 +6157,48 @@ button.adb-device-body.linkish {
   margin: 0;
 }
 
+.sandspiel-fullscreen-btn {
+  min-height: 2rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.82rem;
+}
+
 .sandspiel-shell {
   display: flex;
   flex-direction: column;
-  min-height: clamp(480px, calc(100dvh - 12rem), 900px);
+  min-height: clamp(520px, calc(100dvh - 9rem), 960px);
+  background: #f3f3f4;
+  border-radius: var(--radius-md, 10px);
+}
+
+.sandspiel-shell:fullscreen,
+.sandspiel-shell.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  width: 100vw !important;
+  max-width: none !important;
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #f3f3f4;
+}
+
+.sandspiel-shell:fullscreen .sandspiel-frame,
+.sandspiel-shell.is-fullscreen .sandspiel-frame {
+  min-height: 100dvh !important;
+  height: 100dvh !important;
+  border-radius: 0;
+  border: 0;
 }
 
 .sandspiel-frame {
   flex: 1;
   width: 100%;
-  min-height: 480px;
+  min-height: 520px;
   border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
   border-radius: var(--radius-md, 10px);
   background: #f3f3f4;
@@ -6171,7 +6207,11 @@ button.adb-device-body.linkish {
 @media (max-width: 700px) {
   .sandspiel-shell,
   .sandspiel-frame {
-    min-height: min(78dvh, 640px);
+    min-height: min(82dvh, 720px);
+  }
+
+  .sandspiel-toolbar {
+    margin-bottom: 0.3rem;
   }
 }
 
