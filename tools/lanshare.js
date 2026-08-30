@@ -14,6 +14,8 @@
   const NAME_KEY = "devtools-lanshare-name";
   const PENDING_JOIN_KEY = "devtools-lanshare-pending-j";
   const ANSWER_RELAY_PREFIX = "devtools-lanshare-answer";
+  const OFFER_RELAY_PREFIX = "devtools-lanshare-offer";
+  const HOST_ANSWER_RELAY_PREFIX = "devtools-lanshare-host-answer";
 
   const els = {
     statusDot: $("#ls-dot"),
@@ -82,6 +84,10 @@
     pendingOutbound: [],
     answerBc: null,
     answerStorageHandler: null,
+    offerBc: null,
+    offerStorageHandler: null,
+    hostAnswerBc: null,
+    hostAnswerStorageHandler: null,
     answerScanMode: false,
   };
 
@@ -115,10 +121,25 @@
     }
   }
 
+  async function tryApplyHostAnswerFromHash() {
+    if (state.isHost || !state.controlPc) return false;
+    const a = readAnswerTokenFromHash();
+    if (!a) return false;
+    const ok = await applyHostAnswer(joinAnswerQrText(a));
+    if (ok) history.replaceState(null, "", "#lanshare");
+    return ok;
+  }
+
   function readJoinTokenFromHash() {
     const full = String(location.hash || "").replace(/^#/, "");
     if (!full.startsWith("lanshare?")) return "";
-    return new URLSearchParams(full.slice(full.indexOf("?") + 1)).get("j") || "";
+    const params = new URLSearchParams(full.slice(full.indexOf("?") + 1));
+    const j = params.get("j");
+    if (j) return j;
+    const r = params.get("r");
+    const h = params.get("h");
+    if (r && h) return full;
+    return "";
   }
 
   stashPendingJoinToken(readJoinTokenFromHash());
@@ -225,8 +246,23 @@
     return `${keep.join("\r\n")}\r\n`;
   }
 
+  function trimSdpMinimal(sdp) {
+    if (!sdp) return sdp;
+    const keep = [];
+    for (const line of sdp.split(/\r?\n/)) {
+      if (!line) continue;
+      if (line.startsWith("a=candidate:")) continue;
+      if (line.startsWith("a=end-of-candidates")) continue;
+      if (line.startsWith("a=ssrc:")) continue;
+      if (line.startsWith("a=msid:")) continue;
+      keep.push(line);
+    }
+    return `${keep.join("\r\n")}\r\n`;
+  }
+
   function toInviteRecord({ roomId, hostId, hostName, sdp }) {
-    return { v: 1, r: roomId, h: hostId, n: hostName, s: trimSdpForLan(sdp) };
+    if (sdp) return { v: 1, r: roomId, h: hostId, n: hostName, s: trimSdpForLan(sdp) };
+    return { v: 3, r: roomId, h: hostId, n: hostName };
   }
 
   function fromInviteRecord(rec) {
@@ -239,6 +275,15 @@
   }
 
   function fromAnswerRecord(rec) {
+    return {
+      roomId: rec.r || rec.roomId,
+      hostId: rec.h || rec.hostId,
+      memberId: rec.f || rec.from || rec.memberId,
+      sdp: rec.s || rec.sdp,
+    };
+  }
+
+  function fromOfferRecord(rec) {
     return {
       roomId: rec.r || rec.roomId,
       hostId: rec.h || rec.hostId,
@@ -297,8 +342,36 @@
     });
   }
 
+  async function buildJoinOfferToken(offerSdp) {
+    return packInvitePayload({
+      t: "offer",
+      r: state.roomId,
+      h: state.hostId,
+      f: state.peerId,
+      s: trimSdpMinimal(offerSdp),
+    });
+  }
+
+  async function buildHostAnswerToken(answerSdp, guestId) {
+    return packInvitePayload({
+      t: "host-answer",
+      r: state.roomId,
+      h: state.peerId,
+      f: guestId,
+      s: trimSdpMinimal(answerSdp),
+    });
+  }
+
+  function inviteQrTextShort() {
+    return `lanshare?r=${encodeURIComponent(state.roomId)}&h=${encodeURIComponent(state.peerId)}`;
+  }
+
   function inviteQrText(token) {
     return `lanshare?j=${token}`;
+  }
+
+  function joinOfferQrText(token) {
+    return `lanshare?o=${token}`;
   }
 
   function joinAnswerQrText(token) {
@@ -321,10 +394,26 @@
     if (raw.startsWith("lanshare")) {
       const q = raw.indexOf("?");
       if (q >= 0) {
-        const j = new URLSearchParams(raw.slice(q + 1)).get("j");
+        const params = new URLSearchParams(raw.slice(q + 1));
+        const r = params.get("r");
+        const h = params.get("h");
+        if (r && h && !params.get("j")) {
+          return {
+            roomId: r,
+            hostId: h,
+            hostName: params.get("n") || "房主",
+            sdp: null,
+            mode: "short",
+          };
+        }
+        const j = params.get("j");
         if (j) {
           const inv = fromInviteRecord(await unpackInvitePayload(j));
-          if (!inv.sdp) throw new Error("邀请缺少连接信息");
+          if (inv.sdp) {
+            inv.mode = "legacy-offer";
+            return inv;
+          }
+          inv.mode = "short-token";
           return inv;
         }
       }
@@ -334,12 +423,17 @@
       if (i < 0) throw new Error("邀请码格式错误");
       const roomId = raw.slice(PROTO.length + 1, i);
       const data = b64dec(raw.slice(i + 1));
-      if (!data.sdp && !data.s) throw new Error("邀请码缺少连接信息");
-      return fromInviteRecord({ roomId, ...data, sdp: data.sdp || data.s });
+      const inv = fromInviteRecord({ roomId, ...data, sdp: data.sdp || data.s });
+      inv.mode = inv.sdp ? "legacy-offer" : "short-token";
+      return inv;
     }
     if (/^[zr][A-Za-z0-9_-]+$/.test(raw)) {
       const inv = fromInviteRecord(await unpackInvitePayload(raw));
-      if (!inv.sdp) throw new Error("邀请缺少连接信息");
+      if (inv.sdp) {
+        inv.mode = "legacy-offer";
+        return inv;
+      }
+      inv.mode = "short-token";
       return inv;
     }
     throw new Error("无效的邀请链接");
@@ -377,6 +471,46 @@
     throw new Error("无效的应答码");
   }
 
+  async function parseJoinOfferAsync(text) {
+    const raw = normalizeInviteText(text);
+    if (/^https?:\/\//i.test(raw)) {
+      let u;
+      try {
+        u = new URL(raw);
+      } catch {
+        throw new Error("无效的连接码链接");
+      }
+      const frag = u.hash.replace(/^#/, "");
+      if (frag.includes("lanshare")) return parseJoinOfferAsync(frag);
+      throw new Error("链接不是互传连接码");
+    }
+    if (raw.startsWith("lanshare")) {
+      const q = raw.indexOf("?");
+      if (q >= 0) {
+        const o = new URLSearchParams(raw.slice(q + 1)).get("o");
+        if (o) {
+          const offer = fromOfferRecord(await unpackInvitePayload(o));
+          if (!offer.sdp) throw new Error("连接码缺少 SDP");
+          return offer;
+        }
+      }
+    }
+    if (/^[zr][A-Za-z0-9_-]+$/.test(raw)) {
+      const offer = fromOfferRecord(await unpackInvitePayload(raw));
+      if (!offer.sdp) throw new Error("连接码缺少 SDP");
+      return offer;
+    }
+    throw new Error("无效的连接码");
+  }
+
+  function isOfferScanData(data) {
+    const s = normalizeInviteText(data);
+    if (!s) return false;
+    if (/^https?:\/\//i.test(s) && /lanshare/i.test(s) && /[?&]o=/.test(s)) return true;
+    if (s.startsWith("lanshare?") && /(?:^|[?&])o=/.test(s)) return true;
+    return false;
+  }
+
   function isAnswerScanData(data) {
     const s = normalizeInviteText(data);
     if (!s) return false;
@@ -388,10 +522,11 @@
   function isInviteScanData(data) {
     const s = normalizeInviteText(data);
     if (!s) return false;
+    if (isOfferScanData(s) || isAnswerScanData(s)) return false;
     if (s.startsWith(PROTO)) return true;
     if (/^https?:\/\//i.test(s) && /lanshare/i.test(s)) return true;
     if (s.startsWith("lanshare?")) return true;
-    if (/^[zr][A-Za-z0-9_-]{24,}$/.test(s)) return true;
+    if (/^[zr][A-Za-z0-9_-]{8,}$/.test(s)) return true;
     return false;
   }
 
@@ -594,33 +729,35 @@
     return buildInviteUrl(sdp);
   }
 
-  async function renderGuestAnswerQr(token) {
-    if (!els.guestAnswerQr) return;
-    els.guestAnswerQr.innerHTML = "";
+  async function renderGuestSignalQr(token, kind) {
+    const el = els.guestAnswerQr;
+    if (!el) return;
+    el.innerHTML = "";
     await ensureQrLibs();
     if (typeof QRCode === "undefined") {
-      els.guestAnswerQr.textContent = "二维码库未加载，请复制下方应答链接";
+      el.textContent = kind === "offer" ? "二维码库未加载，请复制下方连接码" : "二维码库未加载，请复制下方应答链接";
       return;
     }
+    const qrText = kind === "offer" ? joinOfferQrText(token) : joinAnswerQrText(token);
     const tries = [QRCode.CorrectLevel.L, QRCode.CorrectLevel.M];
-    for (const text of [joinAnswerQrText(token), `${inviteLinkBase()}#${joinAnswerQrText(token)}`]) {
+    for (const text of [qrText, `${inviteLinkBase()}#${qrText}`]) {
       for (const level of tries) {
         try {
-          renderQrBox(els.guestAnswerQr, text, level);
+          renderQrBox(el, text, level);
           return;
         } catch (err) {
           if (!/Too long|overflow|code length overflow/i.test(String(err.message || err))) break;
         }
       }
     }
-    els.guestAnswerQr.innerHTML = '<p class="hint tight">应答码较长，请复制下方链接给房主。</p>';
+    el.innerHTML = '<p class="hint tight">连接码较长，请复制下方链接给房主。</p>';
   }
 
-  async function updateInviteDisplay(offerSdp) {
-    const token = await buildInviteToken(offerSdp);
-    const url = `${inviteLinkBase()}#${inviteQrText(token)}`;
+  async function updateInviteDisplay() {
+    const shortText = inviteQrTextShort();
+    const url = `${inviteLinkBase()}#${shortText}`;
     if (els.inviteText) els.inviteText.value = url;
-    await renderInviteQr(token);
+    await renderInviteQr();
   }
 
   async function ensureQrLibs() {
@@ -637,7 +774,7 @@
     new QRCode(el, { text, width: 168, height: 168, correctLevel: level });
   }
 
-  async function renderInviteQr(token) {
+  async function renderInviteQr() {
     if (!els.inviteQr) return;
     els.inviteQr.innerHTML = "";
     await ensureQrLibs();
@@ -645,7 +782,8 @@
       els.inviteQr.textContent = "二维码库未加载，请复制下方邀请文本";
       return;
     }
-    const qrPayloads = [inviteQrText(token), `${inviteLinkBase()}#${inviteQrText(token)}`];
+    const shortText = inviteQrTextShort();
+    const qrPayloads = [shortText, `${inviteLinkBase()}#${shortText}`];
     const tries = [QRCode.CorrectLevel.L, QRCode.CorrectLevel.M];
     for (const text of qrPayloads) {
       for (const level of tries) {
@@ -657,8 +795,7 @@
         }
       }
     }
-    els.inviteQr.innerHTML =
-      '<p class="hint tight">邀请文本较长，二维码无法生成，请复制下方链接分享（或使用应用内扫码/粘贴）。</p>';
+    els.inviteQr.innerHTML = '<p class="hint tight">二维码生成失败，请复制下方链接分享。</p>';
   }
 
   function exportRoomState() {
@@ -875,6 +1012,58 @@
     }
   }
 
+  function stopOfferRelayListen() {
+    state.offerBc?.close();
+    state.offerBc = null;
+    if (state.offerStorageHandler) {
+      window.removeEventListener("storage", state.offerStorageHandler);
+      state.offerStorageHandler = null;
+    }
+  }
+
+  function stopHostAnswerListen() {
+    state.hostAnswerBc?.close();
+    state.hostAnswerBc = null;
+    if (state.hostAnswerStorageHandler) {
+      window.removeEventListener("storage", state.hostAnswerStorageHandler);
+      state.hostAnswerStorageHandler = null;
+    }
+  }
+
+  function stopSignalRelayListen() {
+    stopAnswerRelayListen();
+    stopOfferRelayListen();
+    stopHostAnswerListen();
+  }
+
+  function startOfferRelayListen() {
+    stopOfferRelayListen();
+    if (!state.isHost || !state.roomId) return;
+    try {
+      state.offerBc = new BroadcastChannel(`${OFFER_RELAY_PREFIX}:${state.roomId}`);
+      state.offerBc.onmessage = (ev) => {
+        const payload = ev.data;
+        if (!payload) return;
+        applyJoinOffer(payload.offerText || payload.text || (payload.token ? joinOfferQrText(payload.token) : "")).catch(
+          () => {}
+        );
+      };
+    } catch (_) {
+      /* ignore */
+    }
+    state.offerStorageHandler = (ev) => {
+      if (ev.key !== `${OFFER_RELAY_PREFIX}:${state.roomId}` || !ev.newValue) return;
+      applyJoinOffer(joinOfferQrText(ev.newValue)).catch(() => {});
+    };
+    window.addEventListener("storage", state.offerStorageHandler);
+    try {
+      const cached = localStorage.getItem(`${OFFER_RELAY_PREFIX}:${state.roomId}`);
+      if (cached) applyJoinOffer(joinOfferQrText(cached)).catch(() => {});
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
   function startAnswerRelayListen() {
     stopAnswerRelayListen();
     if (!state.isHost || !state.roomId) return;
@@ -903,10 +1092,25 @@
     }
   }
 
+  function readOfferTokenFromHash() {
+    const full = String(location.hash || "").replace(/^#/, "");
+    if (!full.startsWith("lanshare?")) return "";
+    return new URLSearchParams(full.slice(full.indexOf("?") + 1)).get("o") || "";
+  }
+
   function readAnswerTokenFromHash() {
     const full = String(location.hash || "").replace(/^#/, "");
     if (!full.startsWith("lanshare?")) return "";
     return new URLSearchParams(full.slice(full.indexOf("?") + 1)).get("a") || "";
+  }
+
+  async function tryApplyJoinOfferFromHash() {
+    if (!state.isHost || !state.pendingJoin?.pc) return false;
+    const o = readOfferTokenFromHash();
+    if (!o) return false;
+    const ok = await applyJoinOffer(joinOfferQrText(o));
+    if (ok) history.replaceState(null, "", "#lanshare");
+    return ok;
   }
 
   async function tryApplyJoinAnswerFromHash() {
@@ -916,6 +1120,28 @@
     const ok = await applyJoinAnswer(joinAnswerQrText(a));
     if (ok) history.replaceState(null, "", "#lanshare");
     return ok;
+  }
+
+  async function applyJoinOffer(text) {
+    if (!state.isHost || !state.pendingJoin?.pc) return false;
+    const parsed = await parseJoinOfferAsync(text);
+    if (!parsed?.sdp) return false;
+    if (parsed.roomId && parsed.roomId !== state.roomId) return false;
+    if (parsed.hostId && parsed.hostId !== state.peerId) return false;
+    const pc = state.pendingJoin.pc;
+    if (pc.signalingState !== "stable" || pc.localDescription) return false;
+    try {
+      await pc.setRemoteDescription({ type: "offer", sdp: parsed.sdp });
+      const ans = await pc.createAnswer();
+      await pc.setLocalDescription(ans);
+      await waitIce(pc);
+      await publishHostAnswer(pc.localDescription.sdp, parsed.memberId || "");
+      setError("");
+      return true;
+    } catch (e) {
+      setError(e?.message || "成员连接码无效，请让其重新加入");
+      return false;
+    }
   }
 
   async function applyJoinAnswer(text) {
@@ -932,6 +1158,101 @@
       return true;
     } catch (e) {
       setError(e?.message || "成员应答无效，请让其重新加入");
+      return false;
+    }
+  }
+
+  async function publishJoinOffer(offerSdp, inv) {
+    const token = await buildJoinOfferToken(offerSdp);
+    const offerText = joinOfferQrText(token);
+    const offerUrl = `${inviteLinkBase()}#${offerText}`;
+
+    try {
+      const bc = new BroadcastChannel(`${OFFER_RELAY_PREFIX}:${inv.roomId}`);
+      bc.postMessage({ token, offerText, offerUrl });
+      bc.close();
+    } catch (_) {
+      /* ignore */
+    }
+    try {
+      localStorage.setItem(`${OFFER_RELAY_PREFIX}:${inv.roomId}`, token);
+    } catch (_) {
+      /* ignore */
+    }
+
+    if (els.guestAnswerArea) els.guestAnswerArea.hidden = false;
+    if (els.guestAnswerText) els.guestAnswerText.value = offerUrl;
+    await renderGuestSignalQr(token, "offer");
+    try {
+      await copyText(offerUrl);
+    } catch (_) {
+      /* ignore */
+    }
+    paintStatus();
+  }
+
+  async function publishHostAnswer(answerSdp, guestId) {
+    const token = await buildHostAnswerToken(answerSdp, guestId);
+    const answerText = joinAnswerQrText(token);
+    const relayKey = `${HOST_ANSWER_RELAY_PREFIX}:${state.roomId}:${guestId || "any"}`;
+    try {
+      const bc = new BroadcastChannel(relayKey);
+      bc.postMessage({ token, answerText });
+      bc.close();
+    } catch (_) {
+      /* ignore */
+    }
+    try {
+      localStorage.setItem(relayKey, token);
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function startHostAnswerListen(roomId, peerId) {
+    stopHostAnswerListen();
+    const relayKey = `${HOST_ANSWER_RELAY_PREFIX}:${roomId}:${peerId}`;
+    try {
+      state.hostAnswerBc = new BroadcastChannel(relayKey);
+      state.hostAnswerBc.onmessage = (ev) => {
+        const payload = ev.data;
+        if (!payload) return;
+        applyHostAnswer(payload.answerText || (payload.token ? joinAnswerQrText(payload.token) : "")).catch(() => {});
+      };
+    } catch (_) {
+      /* ignore */
+    }
+    state.hostAnswerStorageHandler = (ev) => {
+      if (ev.key !== relayKey || !ev.newValue) return;
+      applyHostAnswer(joinAnswerQrText(ev.newValue)).catch(() => {});
+    };
+    window.addEventListener("storage", state.hostAnswerStorageHandler);
+    try {
+      const cached = localStorage.getItem(relayKey);
+      if (cached) applyHostAnswer(joinAnswerQrText(cached)).catch(() => {});
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  async function applyHostAnswer(text) {
+    if (state.isHost || !state.controlPc || state.controlLinked) return false;
+    const parsed = await parseJoinAnswerAsync(text);
+    if (!parsed?.sdp) return false;
+    if (parsed.roomId && parsed.roomId !== state.roomId) return false;
+    if (parsed.memberId && parsed.memberId !== state.peerId) return false;
+    const pc = state.controlPc;
+    if (pc.signalingState !== "have-local-offer") return false;
+    try {
+      await pc.setRemoteDescription({ type: "answer", sdp: parsed.sdp });
+      whenDcOpen(state.controlDc, () => {
+        sendHello(state.controlDc);
+        paintStatus();
+      });
+      setError("");
+      return true;
+    } catch (e) {
+      setError(e?.message || "房主应答无效，请让房主重新扫描连接码");
       return false;
     }
   }
@@ -956,7 +1277,7 @@
 
     if (els.guestAnswerArea) els.guestAnswerArea.hidden = false;
     if (els.guestAnswerText) els.guestAnswerText.value = answerUrl;
-    await renderGuestAnswerQr(token);
+    await renderGuestSignalQr(token, "answer");
     try {
       await copyText(answerUrl);
     } catch (_) {
@@ -972,41 +1293,49 @@
     setError("");
   }
 
+  async function applyOfferFromScanData(data) {
+    if (!state.isHost) throw new Error("仅房主可扫描成员连接码");
+    const ok = await applyJoinOffer(data);
+    if (!ok) throw new Error("连接码无效或已过期，请让成员重新加入");
+    setError("");
+  }
+
   async function refreshJoinSlot() {
     if (!state.isHost) return;
     state.pendingJoin?.pc?.close();
     const pc = createPeer();
-    const dc = pc.createDataChannel("control", { ordered: true });
     let settled = false;
-    state.pendingJoin = { pc, dc };
+    state.pendingJoin = { pc, dc: null };
 
-    const onHelloChannel = (e) => {
-      if (settled) return;
-      try {
-        const msg = JSON.parse(String(e.data));
-        if (msg.type !== "hello") return;
-        settled = true;
-        const memberId = msg.from;
-        state.memberLinks.set(memberId, { pc, dc });
-        state.pendingJoin = null;
-        bindControlDc(dc, memberId);
-        onControlMessage(msg, memberId);
-        refreshJoinSlot().catch(() => {});
-      } catch (_) {
-        /* ignore */
-      }
+    pc.ondatachannel = (ev) => {
+      const dc = ev.channel;
+      state.pendingJoin.dc = dc;
+      dc.onmessage = (e) => {
+        if (settled) return;
+        try {
+          const msg = JSON.parse(String(e.data));
+          if (msg.type !== "hello") return;
+          settled = true;
+          const memberId = msg.from;
+          state.memberLinks.set(memberId, { pc, dc });
+          state.pendingJoin = null;
+          bindControlDc(dc, memberId);
+          onControlMessage(msg, memberId);
+          refreshJoinSlot().catch(() => {});
+        } catch (_) {
+          /* ignore */
+        }
+      };
     };
-    dc.onmessage = onHelloChannel;
 
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "failed") setError("有新成员连接失败，请刷新邀请码重试");
     };
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    await waitIce(pc);
+    startOfferRelayListen();
     startAnswerRelayListen();
-    await updateInviteDisplay(pc.localDescription.sdp);
+    await updateInviteDisplay();
+    tryApplyJoinOfferFromHash().catch(() => {});
     tryApplyJoinAnswerFromHash().catch(() => {});
   }
 
@@ -1053,15 +1382,6 @@
     const pc = createPeer();
     state.controlPc = pc;
 
-    pc.ondatachannel = (ev) => {
-      state.controlDc = ev.channel;
-      bindControlDc(state.controlDc, inv.hostId);
-      whenDcOpen(state.controlDc, () => {
-        sendHello(state.controlDc);
-        paintStatus();
-      });
-    };
-
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "connected") paintStatus();
       if (pc.connectionState === "failed") setError("加入房间失败，请确认邀请码未过期并重试");
@@ -1069,11 +1389,31 @@
     };
 
     try {
-      await pc.setRemoteDescription({ type: "offer", sdp: inv.sdp });
-      const ans = await pc.createAnswer();
-      await pc.setLocalDescription(ans);
-      await waitIce(pc);
-      await publishJoinAnswer(pc.localDescription.sdp, inv);
+      if (inv.sdp && inv.mode === "legacy-offer") {
+        pc.ondatachannel = (ev) => {
+          state.controlDc = ev.channel;
+          bindControlDc(state.controlDc, inv.hostId);
+          whenDcOpen(state.controlDc, () => {
+            sendHello(state.controlDc);
+            paintStatus();
+          });
+        };
+        await pc.setRemoteDescription({ type: "offer", sdp: inv.sdp });
+        const ans = await pc.createAnswer();
+        await pc.setLocalDescription(ans);
+        await waitIce(pc);
+        await publishJoinAnswer(pc.localDescription.sdp, inv);
+      } else {
+        const dc = pc.createDataChannel("control", { ordered: true });
+        state.controlDc = dc;
+        bindControlDc(dc, inv.hostId);
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await waitIce(pc);
+        startHostAnswerListen(inv.roomId, state.peerId);
+        await publishJoinOffer(pc.localDescription.sdp, inv);
+        await tryApplyHostAnswerFromHash();
+      }
     } catch (e) {
       closeMemberControl();
       state.roomId = "";
@@ -1460,7 +1800,7 @@
     state.autoJoinBusy = false;
     state.controlLinked = false;
     state.pendingOutbound = [];
-    stopAnswerRelayListen();
+    stopSignalRelayListen();
     if (els.inviteText) els.inviteText.value = "";
     if (els.inviteQr) els.inviteQr.innerHTML = "";
     if (els.guestAnswerArea) els.guestAnswerArea.hidden = true;
@@ -1560,8 +1900,16 @@
   }
 
   async function joinFromScanData(data) {
+    if (isOfferScanData(data)) {
+      await applyOfferFromScanData(data);
+      return;
+    }
     if (isAnswerScanData(data)) {
-      await applyAnswerFromScanData(data);
+      if (state.isHost) {
+        await applyAnswerFromScanData(data);
+      } else {
+        await applyHostAnswer(data);
+      }
       return;
     }
     if (!isInviteScanData(data)) throw new Error("不是有效的互传邀请");
@@ -1570,12 +1918,13 @@
 
   async function tryAutoJoinFromHash() {
     if (state.roomId || state.autoJoinBusy) return;
-    const j = takePendingJoinToken();
-    if (!j) return;
+    const pending = takePendingJoinToken();
+    if (!pending) return;
     state.autoJoinBusy = true;
     try {
       setError("");
-      await joinRoom(`lanshare?j=${j}`);
+      const joinText = pending.startsWith("lanshare?") ? pending : `lanshare?j=${pending}`;
+      await joinRoom(joinText);
       clearPendingJoinToken();
       history.replaceState(null, "", "#lanshare");
     } catch (e) {
@@ -1631,9 +1980,19 @@
               inversionAttempts: "attemptBoth",
             });
             if (code?.data) {
-              if (isAnswerScanData(code.data)) {
+              if (state.isHost && isOfferScanData(code.data)) {
+                stopScan();
+                applyOfferFromScanData(code.data).catch((err) => setError(err.message));
+                return;
+              }
+              if (state.isHost && isAnswerScanData(code.data)) {
                 stopScan();
                 applyAnswerFromScanData(code.data).catch((err) => setError(err.message));
+                return;
+              }
+              if (!state.isHost && isAnswerScanData(code.data)) {
+                stopScan();
+                applyHostAnswer(code.data).catch((err) => setError(err.message));
                 return;
               }
               if (isInviteScanData(code.data)) {
@@ -1734,7 +2093,9 @@
   paintPlatformHint();
   disableIfUnsupported();
   paintStatus();
+  tryApplyJoinOfferFromHash().catch(() => {});
   tryApplyJoinAnswerFromHash().catch(() => {});
+  tryApplyHostAnswerFromHash().catch(() => {});
   tryAutoJoinFromHash().catch(() => {});
 
   window.LanShareSelfTest = {
@@ -1744,15 +2105,19 @@
     isMobileClient,
     parseInviteAsync,
     parseJoinAnswerAsync,
+    parseJoinOfferAsync,
     buildInviteUrl,
     buildInviteToken,
-    buildJoinAnswerToken,
+    buildJoinOfferToken,
+    inviteQrTextShort,
     inviteQrText,
+    joinOfferQrText,
     joinAnswerQrText,
     packInvitePayload,
     unpackInvitePayload,
     inviteLinkBase,
     isInviteScanData,
+    isOfferScanData,
     isAnswerScanData,
     readJoinTokenFromHash,
     readAnswerTokenFromHash,
@@ -1764,7 +2129,9 @@
     const head = location.hash.replace("#", "").split(/[/?]/)[0];
     if (head !== "lanshare") stopScan();
     else {
+      tryApplyJoinOfferFromHash().catch(() => {});
       tryApplyJoinAnswerFromHash().catch(() => {});
+      tryApplyHostAnswerFromHash().catch(() => {});
       tryAutoJoinFromHash().catch(() => {});
     }
   });
