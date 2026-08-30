@@ -9920,14 +9920,33 @@ body.ruler-fs-active {
 
 .muyu-hit-ripple {
   position: absolute;
-  width: 4.5rem;
-  height: 4.5rem;
+  width: 5rem;
+  height: 5rem;
   transform: translate(-50%, -50%) scale(0.3);
   border-radius: 50%;
-  border: 2px solid var(--muyu-ripple);
+  border: 2.5px solid rgba(255, 252, 240, 0.95);
+  box-shadow:
+    0 0 0 1px rgba(255, 170, 50, 0.65),
+    0 0 14px rgba(255, 210, 90, 0.55),
+    inset 0 0 12px rgba(255, 255, 255, 0.12);
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.28) 0%, rgba(255, 220, 120, 0.08) 42%, transparent 68%);
   opacity: 0;
   pointer-events: none;
-  z-index: 2;
+  z-index: 1;
+  mix-blend-mode: screen;
+}
+
+.muyu-stage-fx,
+.muyu-fs-fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  overflow: hidden;
+}
+
+.muyu-fs-fx {
+  z-index: 6;
 }
 
 .muyu-hit-ripple.is-go {
