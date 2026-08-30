@@ -1296,6 +1296,34 @@ async function main() {
         Boolean(navScrollEl) &&
         Boolean(document.getElementById("tool-favorites")) &&
         navScrollEl.contains(document.getElementById("tool-favorites"));
+      if (sortTitle) {
+        sortTitle.dispatchEvent(
+          new PointerEvent("pointerdown", {
+            bubbles: true,
+            cancelable: true,
+            pointerId: 991,
+            pointerType: "touch",
+            clientX: 12,
+            clientY: 12,
+            isPrimary: true,
+          })
+        );
+        out.navCompact.pressPending =
+          document.body.classList.contains("nav-press-pending") &&
+          getComputedStyle(sortTitle).touchAction === "none" &&
+          (!navScrollEl || getComputedStyle(navScrollEl).touchAction === "none");
+        document.dispatchEvent(
+          new PointerEvent("pointerup", {
+            bubbles: true,
+            cancelable: true,
+            pointerId: 991,
+            pointerType: "touch",
+            clientX: 12,
+            clientY: 12,
+            isPrimary: true,
+          })
+        );
+      }
     }
 
     const navBarEl = document.getElementById("nav-bar");

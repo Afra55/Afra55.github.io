@@ -1794,13 +1794,11 @@
         if (!payload || payload.kind !== "favorite" || !toTool) return;
         commitFavoriteReorder(payload.id, toTool, { keepDrawer: false });
       });
-      link.addEventListener("pointerdown", (e) => {
-        beginMobilePointerSort(e, {
-          kind: "favorite",
-          id: link.dataset.tool,
-          handle: link,
-          wrap: favoritesList,
-        });
+      bindMobileSortPress(link, {
+        kind: "favorite",
+        id: link.dataset.tool,
+        handle: link,
+        wrap: favoritesList,
       });
       link.addEventListener("contextmenu", (e) => {
         if (!canDesktopDrag()) {
@@ -2315,12 +2313,21 @@
     return null;
   }
 
+  /** 绑定手机长按排序 */
+  function bindMobileSortPress(el, opts) {
+    if (!el || el.dataset.boundMobileSort === "1") return;
+    el.dataset.boundMobileSort = "1";
+    el.addEventListener("pointerdown", (e) => beginMobilePointerSort(e, opts));
+  }
+
   /** 手机长按排序：分类标题 / 工具项；用 document 级指针事件兼容 iOS */
   function beginMobilePointerSort(e, opts) {
     if (canDesktopDrag()) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
-    if (pointerSort?.timer) clearTimeout(pointerSort.timer);
+    if (e.pointerType === "touch") e.preventDefault();
+    if (pointerSort) cancelPointerSort();
     stopPointerSortAutoScroll();
+    document.body.classList.add("nav-press-pending");
 
     const LONG_MS = 360;
     // iOS 长按期间手指微抖较大，阈值过小会提前取消
@@ -2384,13 +2391,12 @@
       }
       setTimeout(() => {
         didDrag = false;
-      }, 0);
+      }, 320);
     };
 
     const onUp = (ev) => finish(ev, false);
     const onCancel = (ev) => finish(ev, true);
 
-    document.body.classList.add("nav-press-pending");
     pointerSort = {
       kind,
       id: opts.id,
@@ -2516,13 +2522,11 @@
         commitToolReorder(payload.id, toTool, { keepDrawer: false });
       });
       // 手机：长按工具名排序
-      link.addEventListener("pointerdown", (e) => {
-        beginMobilePointerSort(e, {
-          kind: "tool",
-          id: link.dataset.tool,
-          handle: link,
-          wrap: link.closest(".nav-group"),
-        });
+      bindMobileSortPress(link, {
+        kind: "tool",
+        id: link.dataset.tool,
+        handle: link,
+        wrap: link.closest(".nav-group"),
       });
     });
 
@@ -2586,13 +2590,11 @@
       title.addEventListener("contextmenu", (e) => {
         if (!canDesktopDrag()) e.preventDefault();
       });
-      title.addEventListener("pointerdown", (e) => {
-        beginMobilePointerSort(e, {
-          kind: "group",
-          id: wrap.dataset.group,
-          handle: title,
-          wrap,
-        });
+      bindMobileSortPress(title, {
+        kind: "group",
+        id: wrap.dataset.group,
+        handle: title,
+        wrap,
       });
       title.addEventListener("click", (e) => {
         if (!navCompact || didDrag || compactNavSearching()) return;
