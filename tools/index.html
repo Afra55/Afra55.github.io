@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.30-081000"></script>
+  <script src="./lib/tools-build.js?v=2026.08.30-081500"></script>
   <link rel="stylesheet" href="./style.css?v=2026.08.30-062500" />
   <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-062500" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
@@ -141,7 +141,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本（北京时间）">v2026.08.30-081000</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本（北京时间）">v2026.08.30-081500</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="site-force-refresh" title="注销 Service Worker、清空浏览器缓存并重新加载，以获取最新脚本与样式">强制刷新</button>
@@ -3249,7 +3249,7 @@ hello@world.org</textarea>
 <section id="muyu" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>木鱼</h1>
-        <p>点击敲木鱼，次数在本机<strong>永久累加</strong>；造型与音效参考 <a href="https://github.com/jwenjian/wooden-fish" target="_blank" rel="noopener noreferrer">jwenjian/wooden-fish</a>，可<strong>全屏</strong>沉浸敲击。</p>
+        <p>点击敲木鱼，次数在本机<strong>永久累加</strong>；造型与音效参考 <a href="https://github.com/jwenjian/wooden-fish" target="_blank" rel="noopener noreferrer">jwenjian/wooden-fish</a>，可<strong>全屏</strong>沉浸敲击（全屏任意位置可敲，Esc 退出）。</p>
       </div>
       <div class="panel-body muyu-body">
         <div class="muyu-stats panel-card">
@@ -3276,10 +3276,7 @@ hello@world.org</textarea>
           </div>
           <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.5rem 0.75rem;margin-top:0.65rem">
             <label for="muyu-sound-variant">敲击音效</label>
-            <select id="muyu-sound-variant" class="select-input">
-              <option value="0">音效 1</option>
-              <option value="1">音效 2</option>
-            </select>
+            <select id="muyu-sound-variant" class="select-input" aria-label="敲击音效"></select>
           </div>
           <div class="field-row" style="flex-direction:column;align-items:stretch;gap:0.35rem;margin-top:0.65rem">
             <label for="muyu-phrases">飘字文案（每行一条，留空用默认）</label>
@@ -4470,7 +4467,7 @@ adb devices</pre>
   <script src="./app.js?v=2026.08.30-062500"></script>
   <script src="./wheel.js?v=2026.08.30-062500"></script>
   <script src="./ruler.js?v=2026.08.30-062500"></script>
-  <script src="./muyu.js?v=2026.08.30-081000"></script>
+  <script src="./muyu.js?v=2026.08.30-081500"></script>
   <script src="./minigames.js?v=2026.08.30-062500"></script>
   <script src="./ambient.js?v=2026.08.30-080500"></script>
 </body>
