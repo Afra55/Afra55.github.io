@@ -18,6 +18,10 @@
   const statusTitle = $("#yd-status-title");
   const statusText = $("#yd-status-text");
   const toolsProbe = $("#yd-tools-probe");
+  const setupGuide = $("#yd-setup-guide");
+  const setupGuideDismiss = $("#yd-setup-guide-dismiss");
+  const YD_SETUP_GUIDE_HIDDEN_KEY = "devtools-ytdlp-setup-guide-hidden-v1";
+  const installGuide = $("#yd-install-guide");
   const errorEl = $("#yd-error");
   const workspace = $("#yd-workspace");
   const connectBtn = $("#yd-connect");
@@ -43,6 +47,167 @@
     if (window.devtoolsToast) window.devtoolsToast(msg);
     else if (statusText) statusText.textContent = msg;
   }
+
+  function isSetupGuideHidden() {
+    try {
+      return localStorage.getItem(YD_SETUP_GUIDE_HIDDEN_KEY) === "1";
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function syncSetupGuide() {
+    if (!setupGuide) return;
+    setupGuide.hidden = isSetupGuideHidden();
+  }
+
+  function dismissSetupGuide() {
+    try {
+      localStorage.setItem(YD_SETUP_GUIDE_HIDDEN_KEY, "1");
+    } catch (_) {}
+    syncSetupGuide();
+  }
+
+  syncSetupGuide();
+  setupGuideDismiss?.addEventListener("click", dismissSetupGuide);
+
+  function detectOs() {
+    const ua = navigator.userAgent || "";
+    if (/Windows/i.test(ua)) return "win";
+    if (/Mac/i.test(ua)) return "mac";
+    return "linux";
+  }
+
+  function setInstallGuideOs(os) {
+    if (!installGuide) return;
+    const next = os === "win" || os === "linux" ? os : "mac";
+    $$("[data-yd-setup-os]", installGuide).forEach((btn) => {
+      btn.classList.toggle("is-active", btn.dataset.ydSetupOs === next);
+    });
+    $$("[data-yd-setup-panel]", installGuide).forEach((el) => {
+      el.hidden = el.dataset.ydSetupPanel !== next;
+    });
+    try {
+      localStorage.setItem("devtools-ytdlp-setup-os", next);
+    } catch (_) {}
+  }
+
+  if (installGuide) {
+    let initialOs = detectOs();
+    try {
+      const saved = localStorage.getItem("devtools-ytdlp-setup-os");
+      if (saved === "mac" || saved === "win" || saved === "linux") initialOs = saved;
+    } catch (_) {}
+    setInstallGuideOs(initialOs);
+    $$("[data-yd-setup-os]", installGuide).forEach((btn) => {
+      btn.addEventListener("click", () => setInstallGuideOs(btn.dataset.ydSetupOs));
+    });
+  }
+
+  async function fetchTextAsset(path) {
+    const res = await fetch(path, { cache: "no-cache" });
+    if (!res.ok) throw new Error(`无法读取 ${path}（${res.status}）`);
+    return res.text();
+  }
+
+  async function downloadBundle(platform) {
+    if (typeof JSZip === "undefined") throw new Error("JSZip 未加载，无法打包下载");
+    const map = {
+      mac: {
+        scriptPath: "./ffmpeg-bridge/start-mac.command",
+        scriptName: "start-devtools-bridge.command",
+        zipName: "devtools-bridge-mac.zip",
+        runHint: "解压后执行：chmod +x start-devtools-bridge.command && ./start-devtools-bridge.command\n也可在 Finder 中双击。",
+      },
+      win: {
+        scriptPath: "./ffmpeg-bridge/start-win.bat",
+        scriptName: "start-devtools-bridge.bat",
+        zipName: "devtools-bridge-win.zip",
+        runHint: "解压后优先双击 start-devtools-bridge.cmd；也可双击 .bat。请保持窗口打开。",
+      },
+      linux: {
+        scriptPath: "./ffmpeg-bridge/start-linux.sh",
+        scriptName: "start-devtools-bridge.sh",
+        zipName: "devtools-bridge-linux.zip",
+        runHint: "解压后执行：chmod +x start-devtools-bridge.sh && ./start-devtools-bridge.sh",
+      },
+    };
+    const cfg = map[platform];
+    if (!cfg) throw new Error("未知平台");
+    const [serverJs, ytdlpJs, scriptRaw] = await Promise.all([
+      fetchTextAsset("./ffmpeg-bridge/server.js"),
+      fetchTextAsset("./ffmpeg-bridge/ytdlp-core.js"),
+      fetchTextAsset(cfg.scriptPath),
+    ]);
+    if (!ytdlpJs) throw new Error("缺少 ytdlp-core.js，请刷新页面后重试");
+    const scriptText = platform === "win" ? String(scriptRaw).replace(/\r?\n/g, "\r\n") : scriptRaw;
+    const readme = [
+      "DevTools 统一本机桥（含 yt-dlp）",
+      "",
+      "必须保留：",
+      "  - server.js",
+      "  - ytdlp-core.js",
+      "  - " + cfg.scriptName,
+      "",
+      "使用步骤：",
+      "1. 解压到同一文件夹",
+      "2. 本机已安装 Node.js、yt-dlp（合并视频建议同时装 ffmpeg）",
+      "3. " + cfg.runHint.replace(/\n/g, "\n   "),
+      "4. 回到网页 yt-dlp 页点「连接本机桥」",
+      "",
+      "默认地址 http://127.0.0.1:17888  Token: devtools-bridge",
+      "yt-dlp 接口 /ytdlp/* · FFmpeg /ff/*",
+      "",
+    ].join("\n");
+    const zip = new JSZip();
+    zip.file("server.js", serverJs);
+    zip.file("ytdlp-core.js", ytdlpJs);
+    zip.file(cfg.scriptName, scriptText, {
+      unixPermissions: platform === "win" ? undefined : 0o755,
+    });
+    if (platform === "win") {
+      const wrapper = [
+        "@echo off",
+        'cd /d "%~dp0"',
+        'cmd /d /c ""%~dp0start-devtools-bridge.bat" & echo. & echo Log: %USERPROFILE%\\.devtools-ffmpeg-bridge\\last-start.log & pause"',
+        "",
+      ].join("\r\n");
+      zip.file("start-devtools-bridge.cmd", wrapper);
+    }
+    zip.file(platform === "win" ? "README.txt" : "使用说明.txt", readme);
+    const blob = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = cfg.zipName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+    toast("已下载完整包，解压运行后点连接");
+    startWaitPoll();
+  }
+
+  let waitPollTimer = 0;
+  function startWaitPoll() {
+    clearInterval(waitPollTimer);
+    let n = 0;
+    waitPollTimer = setInterval(async () => {
+      n += 1;
+      try {
+        await connectBridge();
+        if (connected || n >= 60) clearInterval(waitPollTimer);
+      } catch (_) {
+        if (n >= 60) clearInterval(waitPollTimer);
+      }
+    }, 2000);
+  }
+
+  $$("[data-yd-bundle]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      downloadBundle(btn.dataset.ydBundle).catch((err) => setError(err.message || String(err)));
+    });
+  });
 
   function escapeHtml(s) {
     return String(s)
@@ -448,6 +613,11 @@
         setStatus("is-warn", "桥已连上但未找到 yt-dlp", ydHealth.ytdlp?.setup || ydHealth.ytdlp?.error || "");
         if (refreshBtn) refreshBtn.disabled = true;
         if (updateBtn) updateBtn.disabled = true;
+        setError(
+          isSetupGuideHidden()
+            ? "本机未找到 yt-dlp。请安装并加入 PATH 后重启桥。"
+            : "本机未找到 yt-dlp。见上方「本机依赖怎么配？」或底部安装教程。"
+        );
         return;
       }
       connected = true;
@@ -465,7 +635,12 @@
       connected = false;
       if (workspace) workspace.hidden = true;
       setStatus("is-err", "未连接本机桥", err.message || String(err));
-      setError(err.message || String(err));
+      setError(
+        err.message ||
+          (isSetupGuideHidden()
+            ? "无法连接本机桥。请下载完整 ZIP、运行启动脚本并保持窗口打开。"
+            : "无法连接本机桥。见上方「本机依赖怎么配？」或底部安装教程。")
+      );
     }
   }
 
