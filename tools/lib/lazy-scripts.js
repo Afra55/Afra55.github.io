@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const BUILD = window.TOOLS_BUILD || "2026.08.30-054800";
+  const BUILD = window.TOOLS_BUILD || "2026.08.30-060000";
 
   const VENDOR_FILES = {
     "js-yaml": { src: "./vendor/js-yaml.min.js", probe: () => typeof globalThis.jsyaml !== "undefined" },
