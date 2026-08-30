@@ -10,15 +10,20 @@ body {
   /* overflow-x: hidden; */
 }
 
+html.sandspiel-hide-fps #fps {
+  display: none !important;
+  visibility: hidden !important;
+}
+
 body,
 #background {
   position: absolute;
   top: 0;
   left: 0;
   width: 100%;
-  height: calc(100% - 2px);
-  /* background-color: rgba(00, 00, 00, 0.2); */
+  height: 100%;
   background-color: #f3f3f4;
+  overflow: hidden;
 }
 canvas {
   position: absolute;
@@ -539,17 +544,18 @@ img {
 
 @media (max-width: 900px) {
   button {
-    height: 30px;
-    min-width: 2.1rem;
-    font-size: 12px;
-    padding: 1px 5px;
+    height: 28px;
+    min-width: 1.95rem;
+    font-size: 11px;
+    padding: 1px 4px;
     max-width: none;
-    flex: 0 1 calc(20% - 3px);
+    flex: 0 1 calc(16.666% - 3px);
   }
 
   #ui button[aria-label^="笔刷"] {
     flex: 0 0 auto;
-    min-width: 1.9rem;
+    min-width: 1.75rem;
+    height: 26px;
   }
 
   .sizes {

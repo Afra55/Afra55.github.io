@@ -16,7 +16,7 @@
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
   <script src="./lib/tools-build.js?v=2026.08.30-214500"></script>
   <link rel="stylesheet" href="./style.css?v=2026.08.30-214500" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-224500" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-230500" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
   <script>
@@ -3695,18 +3695,14 @@ hello@world.org</textarea>
       </div>
     </section>
 
-<section id="sandspiel" class="panel tool-panel" data-reveal>
-      <div class="panel-head">
-        <h1>落沙沙盒</h1>
-        <p>在格子里倒沙子、倒水、点火、种植物。本地 WASM + WebGL 模拟，不上传。移植自开源项目 <a href="https://github.com/MaxBittker/sandspiel" target="_blank" rel="noopener noreferrer">MaxBittker/sandspiel</a>（MIT），已中文化并去掉登录与广告。手机自动用较小网格以保流畅。</p>
-      </div>
+<section id="sandspiel" class="panel tool-panel sandspiel-panel" data-reveal>
       <div class="panel-body sandspiel-body">
         <div class="sandspiel-toolbar">
-          <p class="hint tight sandspiel-hint">点选元素后在画面上拖动画笔；「风」只吹流体。离开本页会自动暂停。</p>
           <label class="sandspiel-fps-toggle" for="sandspiel-show-fps">
             <input type="checkbox" id="sandspiel-show-fps" checked />
             <span>显示 FPS</span>
           </label>
+          <button type="button" class="ghost-btn sandspiel-fullscreen-btn" id="sandspiel-fullscreen" aria-pressed="false">全屏</button>
         </div>
         <div class="sandspiel-shell">
           <iframe id="sandspiel-frame" class="sandspiel-frame" title="落沙沙盒" loading="lazy" referrerpolicy="no-referrer"></iframe>
@@ -5290,7 +5286,7 @@ adb devices</pre>
   <script src="./lib/bridge-token.js?v=2026.08.30-062500"></script>
   <script src="./lib/lazy-scripts.js?v=2026.08.30-214500"></script>
   <script src="./theme.js?v=2026.08.30-062500"></script>
-  <script src="./app.js?v=2026.08.30-224500"></script>
+  <script src="./app.js?v=2026.08.30-230500"></script>
   <script src="./wheel.js?v=2026.08.30-062500"></script>
   <script src="./ruler.js?v=2026.08.30-062500"></script>
   <script src="./muyu.js?v=2026.08.30-084100"></script>
