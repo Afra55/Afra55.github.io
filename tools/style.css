@@ -8893,6 +8893,25 @@ li a:not([class*="btn"]) {
   }
 }
 
+.xor-algo-doc .xor-algo-body {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.65rem;
+}
+
+.xor-algo-doc .subhead {
+  margin: 0.5rem 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+.xor-algo-doc pre.highlight-box {
+  margin: 0;
+  max-height: none;
+  overflow: auto;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
 .ls-qr-duo {
   display: flex;
   flex-wrap: wrap;

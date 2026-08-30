@@ -799,7 +799,7 @@
   const TOOL_GROUPS = [
     { id: "time", label: "时间", tools: ["timestamp", "timediff", "cron"] },
     { id: "color", label: "颜色", tools: ["ahex", "color", "eyedropper"] },
-    { id: "encode", label: "编码与生成", tools: ["base64", "url", "hash", "password", "uuid"] },
+    { id: "encode", label: "编码与生成", tools: ["base64", "url", "hash", "xorenc", "password", "uuid"] },
     { id: "data", label: "数据格式", tools: ["json", "yaml", "query"] },
     {
       id: "text",
@@ -837,6 +837,7 @@
     imgb64: "图片与 Base64 Data URL 互转。",
     url: "URL 编码 / 解码。",
     hash: "本地计算 MD5、SHA-256。",
+    xorenc: "半段 XOR 加解密：文本与文件，可自定义两个密钥（默认 4/7）。",
     uuid: "生成 UUID / GUID。",
     json: "JSON 校验、美化与压缩。",
     yaml: "YAML 与 JSON 互转、校验。",
@@ -888,6 +889,7 @@
     imgb64: { name: "图片 Base64", aliases: ["图片编码"] },
     url: { name: "URL", aliases: ["encode", "decode"] },
     hash: { name: "Hash", aliases: ["md5", "sha"] },
+    xorenc: { name: "XOR 加解密", aliases: ["xor", "异或", "xorenc", "半段加密", "jiami"] },
     uuid: { name: "UUID", aliases: ["guid"] },
     json: { name: "JSON", aliases: ["格式化", "压缩"] },
     yaml: { name: "YAML", aliases: ["yml"] },

@@ -14,8 +14,8 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.30-102000"></script>
-  <link rel="stylesheet" href="./style.css?v=2026.08.30-102000" />
+  <script src="./lib/tools-build.js?v=2026.08.30-103000"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.08.30-103000" />
   <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-062500" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
@@ -589,6 +589,149 @@
           <div class="meta-row"><span>SHA-256</span><strong class="mono" id="hash-sha256">—</strong><button type="button" class="copy-btn" data-copy="hash-sha256">复制</button></div>
         </div>
         <p class="error" id="hash-error" hidden></p>
+      </div>
+    </section>
+
+<section id="xorenc" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>XOR 半段加解密</h1>
+        <p>对 UTF-8 文本或任意二进制文件做「前半 XOR + 全量 XOR」可逆混淆；两个密钥默认 4 与 7，可自定义（0–255）。</p>
+      </div>
+      <div class="panel-body">
+        <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.75rem 1.25rem">
+          <label for="xor-key-half">前半 XOR（默认 4）</label>
+          <input id="xor-key-half" class="mono meta-input" type="number" min="0" max="255" value="4" inputmode="numeric" />
+          <label for="xor-key-all">全量 XOR（默认 7）</label>
+          <input id="xor-key-all" class="mono meta-input" type="number" min="0" max="255" value="7" inputmode="numeric" />
+          <span class="hint tight">加解密须使用相同两个数；任意 0–255 均可，不限于 4 和 7。</span>
+        </div>
+
+        <h2 class="subhead" style="margin-top:1rem">文本</h2>
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="xor-plain">明文</label>
+            <textarea id="xor-plain" class="mono area" rows="7" placeholder="例如：你好吗?" spellcheck="false"></textarea>
+          </div>
+          <div class="field-block">
+            <label for="xor-cipher">密文（UTF-8 字节 XOR 后的字符串，可能含乱码）</label>
+            <textarea id="xor-cipher" class="mono area" rows="7" placeholder="加密结果…" spellcheck="false"></textarea>
+          </div>
+        </div>
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="xor-encrypt">加密 →</button>
+          <button type="button" class="secondary-btn" id="xor-decrypt">← 解密</button>
+          <button type="button" class="secondary-btn" id="xor-swap">互换</button>
+          <button type="button" class="ghost-btn" id="xor-clear">清空</button>
+        </div>
+        <p class="hint" id="xor-meta"></p>
+
+        <h2 class="subhead" style="margin-top:1.25rem">文件</h2>
+        <p class="hint tight">对原始字节流加解密，不经过 UTF-8 文本转换；加密后下载为 <code class="mono">*.xorenc</code>。</p>
+        <div class="btn-row tool-actions" style="flex-wrap:wrap">
+          <label class="file-btn" for="xor-file-in">选择文件</label>
+          <input id="xor-file-in" type="file" hidden />
+          <button type="button" class="primary-btn" id="xor-file-encrypt">加密并下载</button>
+          <button type="button" class="secondary-btn" id="xor-file-decrypt">解密并下载</button>
+        </div>
+        <p class="hint" id="xor-file-meta"></p>
+
+        <p class="error" id="xor-error" hidden></p>
+
+        <details class="panel-card hint tight xor-algo-doc" style="margin-top:1.25rem" open>
+          <summary><strong>算法说明与主流语言写法</strong></summary>
+          <div class="xor-algo-body">
+            <h3 class="subhead">原理（可自定义两个密钥）</h3>
+            <p>设明文为字节数组 <code>P</code>，长度为 <code>n</code>，前半长度为 <code>⌊n/2⌋</code>，两个密钥为 <code>a</code>、<code>b</code>（默认 <code>a=4</code>，<code>b=7</code>，取值 0–255 任意）：</p>
+            <ol>
+              <li><strong>加密</strong>：先对 <code>P[0 … ⌊n/2⌋−1]</code> 逐字节 XOR <code>a</code>；再对 <code>P[0 … n−1]</code> 全部 XOR <code>b</code>。</li>
+              <li><strong>解密</strong>：顺序相反——先全体 XOR <code>b</code>，再前半 XOR <code>a</code>（XOR 自身可逆，故可还原）。</li>
+            </ol>
+            <p>文本模式：字符串 ↔ UTF-8 字节 ↔ 上述运算 ↔ 再解码为字符串（非法 UTF-8 序列会被替换，与 Kotlin/JVM 行为一致）。文件模式：直接对文件原始字节运算。</p>
+            <p><strong>能否改 4 和 7？</strong> 可以。只要加解密使用同一对 <code>(a, b)</code> 即可；数值越大并不更安全，这仍是简单混淆而非密码学加密。</p>
+
+            <h3 class="subhead">Kotlin（原版）</h3>
+            <pre class="mono highlight-box">fun xorEncrypt(data: ByteArray, a: Int, b: Int): ByteArray {
+    val n = data.size
+    val half = n / 2
+    for (v in 0 until half) data[v] = (data[v].toInt() xor a).toByte()
+    for (v in 0 until n) data[v] = (data[v].toInt() xor b).toByte()
+    return data
+}
+fun xorDecrypt(data: ByteArray, a: Int, b: Int): ByteArray {
+    val n = data.size
+    val half = n / 2
+    for (v in 0 until n) data[v] = (data[v].toInt() xor b).toByte()
+    for (v in 0 until half) data[v] = (data[v].toInt() xor a).toByte()
+    return data
+}</pre>
+
+            <h3 class="subhead">JavaScript / TypeScript</h3>
+            <pre class="mono highlight-box">function xorCrypt(bytes, keyHalf, keyAll, decrypt = false) {
+  const arr = new Uint8Array(bytes);
+  const n = arr.length, half = Math.floor(n / 2);
+  if (!decrypt) {
+    for (let i = 0; i &lt; half; i++) arr[i] ^= keyHalf;
+    for (let i = 0; i &lt; n; i++) arr[i] ^= keyAll;
+  } else {
+    for (let i = 0; i &lt; n; i++) arr[i] ^= keyAll;
+    for (let i = 0; i &lt; half; i++) arr[i] ^= keyHalf;
+  }
+  return arr;
+}</pre>
+
+            <h3 class="subhead">Python</h3>
+            <pre class="mono highlight-box">def xor_crypt(data: bytearray, a: int, b: int, decrypt: bool = False) -&gt; bytes:
+    n = len(data)
+    half = n // 2
+    if not decrypt:
+        for i in range(half): data[i] ^= a
+        for i in range(n): data[i] ^= b
+    else:
+        for i in range(n): data[i] ^= b
+        for i in range(half): data[i] ^= a
+    return bytes(data)</pre>
+
+            <h3 class="subhead">Java</h3>
+            <pre class="mono highlight-box">static byte[] xorCrypt(byte[] data, int a, int b, boolean decrypt) {
+    int n = data.length, half = n / 2;
+    if (!decrypt) {
+        for (int i = 0; i &lt; half; i++) data[i] ^= (byte) a;
+        for (int i = 0; i &lt; n; i++) data[i] ^= (byte) b;
+    } else {
+        for (int i = 0; i &lt; n; i++) data[i] ^= (byte) b;
+        for (int i = 0; i &lt; half; i++) data[i] ^= (byte) a;
+    }
+    return data;
+}</pre>
+
+            <h3 class="subhead">C#</h3>
+            <pre class="mono highlight-box">static byte[] XorCrypt(byte[] data, byte a, byte b, bool decrypt) {
+    int n = data.Length, half = n / 2;
+    if (!decrypt) {
+        for (int i = 0; i &lt; half; i++) data[i] ^= a;
+        for (int i = 0; i &lt; n; i++) data[i] ^= b;
+    } else {
+        for (int i = 0; i &lt; n; i++) data[i] ^= b;
+        for (int i = 0; i &lt; half; i++) data[i] ^= a;
+    }
+    return data;
+}</pre>
+
+            <h3 class="subhead">Go</h3>
+            <pre class="mono highlight-box">func xorCrypt(data []byte, a, b byte, decrypt bool) {
+    n, half := len(data), len(data)/2
+    if !decrypt {
+        for i := 0; i &lt; half; i++ { data[i] ^= a }
+        for i := 0; i &lt; n; i++ { data[i] ^= b }
+    } else {
+        for i := 0; i &lt; n; i++ { data[i] ^= b }
+        for i := 0; i &lt; half; i++ { data[i] ^= a }
+    }
+}</pre>
+
+            <p class="hint tight">示例：<code class="mono">"你好吗?"</code> 在 <code>a=4,b=7</code> 下加密为 <code class="mono">羣榺◐8</code>，再解密可还原。</p>
+          </div>
+        </details>
       </div>
     </section>
 
