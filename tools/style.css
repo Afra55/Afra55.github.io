@@ -8895,24 +8895,30 @@ li a:not([class*="btn"]) {
 
 .ls-list {
   display: grid;
-  gap: 0.45rem;
+  gap: 0.5rem;
   padding: 0.65rem 0.75rem;
 }
 
 .ls-member-row,
 .ls-file-row {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.35rem 0.75rem;
+  gap: 0.65rem;
+}
+
+.ls-file-row {
+  padding: 0.55rem 0.65rem;
+  border: 1px solid rgba(127, 127, 127, 0.24);
+  border-radius: 0.45rem;
+  background: rgba(127, 127, 127, 0.04);
 }
 
 .ls-file-main {
   display: grid;
   gap: 0.15rem;
   min-width: 0;
-  flex: 1 1 12rem;
+  flex: 1 1 auto;
 }
 
 .ls-file-preview {
@@ -8955,35 +8961,89 @@ li a:not([class*="btn"]) {
 
 .ls-file-actions {
   flex: 0 0 auto;
-  min-width: 5.75rem;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 0.35rem;
 }
 
-.ls-dl-progress {
-  min-width: 5.75rem;
-  display: grid;
-  gap: 0.22rem;
+.ls-ring-progress {
+  position: relative;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex-shrink: 0;
 }
 
-.ls-dl-progress-bar-wrap {
-  height: 0.38rem;
-  border-radius: 999px;
-  background: rgba(127, 127, 127, 0.2);
-  overflow: hidden;
-}
-
-.ls-dl-progress-bar {
+.ls-ring-svg {
+  width: 100%;
   height: 100%;
-  width: 0;
-  background: var(--accent, #3b82f6);
-  transition: width 0.12s ease;
+  transform: rotate(-90deg);
 }
 
-.ls-dl-progress-label {
-  font-size: 0.72rem;
-  line-height: 1.2;
+.ls-ring-track {
+  stroke: rgba(127, 127, 127, 0.22);
+}
+
+.ls-ring-fill {
+  stroke: var(--accent, #3b82f6);
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.12s ease;
+}
+
+.ls-ring-pct {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.58rem;
+  font-weight: 600;
   color: var(--muted, #888);
+  pointer-events: none;
+}
+
+.ls-ring-progress.is-busy .ls-ring-svg {
+  animation: ls-ring-spin 0.85s linear infinite;
+}
+
+.ls-ring-progress.is-busy .ls-ring-fill {
+  stroke-dasharray: 30 100;
+}
+
+@keyframes ls-ring-spin {
+  to {
+    transform: rotate(270deg);
+  }
+}
+
+.ls-action-row {
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.ls-inline-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: 1 1 8rem;
+  min-width: 6rem;
+  max-width: 16rem;
+}
+
+.ls-inline-progress .ls-progress-bar-wrap {
+  flex: 1 1 4rem;
+  min-width: 3.5rem;
+}
+
+.ls-inline-progress-text {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.2;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 9rem;
 }
 
 .ls-dl-status {
