@@ -1237,9 +1237,9 @@
     }
   }
 
-  /** 手机抽屉始终展开工具列表；「仅分类」仅作用于桌面侧栏 */
+  /** 「仅显示分类」：桌面悬停/点击展开，手机点分类展开 */
   function navCompactActive() {
-    return navCompact && !compactNavOnMobile();
+    return navCompact;
   }
 
   function canHoverNavFlyout(e) {
@@ -2920,7 +2920,7 @@
   });
 
   async function runForceHardRefresh() {
-    const btns = [$("#site-force-refresh"), $("#nav-force-refresh")].filter(Boolean);
+    const btns = [$("#site-force-refresh")].filter(Boolean);
     btns.forEach((b) => {
       b.disabled = true;
     });
@@ -2975,9 +2975,6 @@
   });
 
   $("#site-force-refresh")?.addEventListener("click", () => {
-    runForceHardRefresh();
-  });
-  $("#nav-force-refresh")?.addEventListener("click", () => {
     runForceHardRefresh();
   });
 

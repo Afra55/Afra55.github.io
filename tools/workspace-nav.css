@@ -1124,9 +1124,9 @@ body.nav-open {
     background: var(--nav-bg-solid, var(--panel-strong));
   }
 
-  .nav-compact-bar,
-  .nav-compact-setting {
-    display: none !important;
+  .nav-compact-bar .nav-compact-setting {
+    font-size: 0.76rem;
+    padding: 0.32rem 0.4rem;
   }
 
   .nav-footer-toolbar {
