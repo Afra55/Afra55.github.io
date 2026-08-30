@@ -59,6 +59,7 @@
     roomPwdHost: $("#ls-room-pwd-host"),
     roomPwdJoin: $("#ls-room-pwd-join"),
     joinPwdBtn: $("#ls-join-pwd"),
+    joinFallback: $("#ls-join-fallback"),
     roomMeta: $("#ls-room-meta"),
     membersEl: $("#ls-members"),
     filesEl: $("#ls-files"),
@@ -102,6 +103,12 @@
     transferring: false,
     /** @type {{ fileId: string, pct: number, label: string, phase: string }|null} */
     activeDownload: null,
+    /** @type {string[]} */
+    downloadQueue: [],
+    /** @type {Map<string, { phase: string, pct: number, label: string }>} */
+    fileLocalStatus: new Map(),
+    /** @type {Map<string, { sent: number, total: number }>} */
+    sendSessions: new Map(),
     controlPc: null,
     controlDc: null,
     pendingJoin: null,
@@ -893,10 +900,84 @@
       : '<p class="hint tight">暂无成员</p>';
   }
 
+  function openJoinFallback(hint) {
+    if (els.joinFallback) els.joinFallback.open = true;
+    if (hint) setError(hint);
+  }
+
+  function setFileLocalStatus(fileId, pct, label, phase) {
+    state.fileLocalStatus.set(fileId, { pct, label, phase });
+    updateFileRowActions(fileId);
+  }
+
+  function clearFileLocalStatus(fileId) {
+    state.fileLocalStatus.delete(fileId);
+    let touched = false;
+    for (const key of state.sendSessions.keys()) {
+      if (key.startsWith(`${fileId}:`)) {
+        state.sendSessions.delete(key);
+        touched = true;
+      }
+    }
+    if (touched || state.fileLocalStatus.has(fileId)) updateFileRowActions(fileId);
+  }
+
+  function bumpSendProgress(fileId, requesterId, sent, total) {
+    state.sendSessions.set(`${fileId}:${requesterId}`, { sent, total });
+    let maxPct = 0;
+    let lanes = 0;
+    for (const [key, v] of state.sendSessions) {
+      if (!key.startsWith(`${fileId}:`)) continue;
+      lanes += 1;
+      if (v.total > 0) maxPct = Math.max(maxPct, (v.sent / v.total) * 100);
+    }
+    const label =
+      lanes > 1
+        ? `发送中 · ${lanes} 人 ${total ? fmtSize(sent) + " / " + fmtSize(total) : ""}`.trim()
+        : total
+          ? `发送 ${fmtSize(sent)} / ${fmtSize(total)}`
+          : "发送中…";
+    setFileLocalStatus(fileId, maxPct, label, "sending");
+  }
+
+  function clearSendSession(fileId, requesterId) {
+    state.sendSessions.delete(`${fileId}:${requesterId}`);
+    let lanes = 0;
+    for (const key of state.sendSessions.keys()) {
+      if (key.startsWith(`${fileId}:`)) lanes += 1;
+    }
+    if (lanes === 0) {
+      state.fileLocalStatus.delete(fileId);
+      updateFileRowActions(fileId);
+    }
+  }
+
   function fileActionsInnerHtml(f) {
     const mine = f.ownerId === state.peerId;
+    const local = state.fileLocalStatus.get(f.id);
     if (mine) {
+      if (local?.phase === "processing") {
+        return (
+          `<div class="ls-dl-progress" aria-live="polite">` +
+          `<div class="ls-dl-progress-bar-wrap is-busy"><div class="ls-dl-progress-bar"></div></div>` +
+          `<span class="ls-dl-progress-label mono">${escapeHtml(local.label || "处理中…")}</span></div>` +
+          `<button type="button" class="ghost-btn ls-del" data-id="${f.id}" disabled>删除</button>`
+        );
+      }
+      if (local?.phase === "sending") {
+        const pct = Math.min(100, Math.max(0, local.pct));
+        return (
+          `<div class="ls-dl-progress" aria-live="polite">` +
+          `<div class="ls-dl-progress-bar-wrap"><div class="ls-dl-progress-bar" style="width:${pct}%"></div></div>` +
+          `<span class="ls-dl-progress-label mono">${escapeHtml(local.label || "发送中…")}</span></div>` +
+          `<button type="button" class="ghost-btn ls-del" data-id="${f.id}">删除</button>`
+        );
+      }
       return `<button type="button" class="ghost-btn ls-del" data-id="${f.id}">删除</button>`;
+    }
+    if (state.downloadQueue.includes(f.id) && state.activeDownload?.fileId !== f.id) {
+      const pos = state.downloadQueue.indexOf(f.id) + 1;
+      return `<span class="ls-dl-status is-queue">排队中 #${pos}</span>`;
     }
     const dl = state.activeDownload;
     if (dl?.fileId === f.id) {
@@ -914,9 +995,6 @@
         `</div>`
       );
     }
-    if (dl && dl.phase !== "done" && dl.phase !== "error") {
-      return `<button type="button" class="secondary-btn" disabled>下载</button>`;
-    }
     return `<button type="button" class="secondary-btn ls-dl" data-id="${f.id}">下载</button>`;
   }
 
@@ -932,6 +1010,25 @@
     updateFileRowActions(fileId);
   }
 
+  function isDownloadBusy() {
+    const p = state.activeDownload?.phase;
+    return p === "connecting" || p === "downloading";
+  }
+
+  function advanceDownloadQueue() {
+    state.activeDownload = null;
+    state.transferring = false;
+    while (state.downloadQueue.length) {
+      const next = state.downloadQueue.shift();
+      const f = state.files.get(next);
+      if (f && f.ownerId !== state.peerId) {
+        startDownloadRequest(next);
+        return;
+      }
+    }
+    paintFiles();
+  }
+
   function finishDownloadProgress(fileId, ok) {
     clearTimeout(downloadConnectTimer);
     downloadConnectTimer = null;
@@ -939,14 +1036,17 @@
       setDownloadProgress(fileId, 100, "已完成", "done");
       setTimeout(() => {
         if (state.activeDownload?.fileId === fileId && state.activeDownload.phase === "done") {
-          state.activeDownload = null;
-          state.transferring = false;
-          paintFiles();
+          advanceDownloadQueue();
         }
-      }, 2200);
+      }, 1800);
     } else {
       setDownloadProgress(fileId, 0, "失败", "error");
       state.transferring = false;
+      setTimeout(() => {
+        if (state.activeDownload?.fileId === fileId && state.activeDownload.phase === "error") {
+          advanceDownloadQueue();
+        }
+      }, 2500);
     }
   }
 
@@ -954,6 +1054,7 @@
     clearTimeout(downloadConnectTimer);
     downloadConnectTimer = null;
     state.activeDownload = null;
+    state.downloadQueue = [];
     state.transferring = false;
   }
 
@@ -1212,7 +1313,7 @@
     if (!state.viaMqtt || state.isHost) return;
     state.mqttJoinTimeoutTimer = setTimeout(() => {
       if (state.controlLinked || !state.roomId || state.isHost) return;
-      setError("自动配对超时：请确认房主在线且密码正确；也可展开「备用」扫码/粘贴加入");
+      openJoinFallback("自动配对超时：请确认房主在线且密码正确，或改用下方扫码/粘贴邀请");
       paintStatus();
     }, MQTT_JOIN_TIMEOUT_MS);
   }
@@ -2050,7 +2151,7 @@
         try {
           await startMqttHost();
         } catch (e) {
-          setError((e?.message || "密码信令启动失败") + "；仍可用下方二维码邀请加入");
+          openJoinFallback((e?.message || "密码信令启动失败") + "；请改用下方扫码/粘贴邀请");
           state.viaMqtt = false;
         }
       }
@@ -2177,6 +2278,9 @@
       if (els.roomPwdJoin) els.roomPwdJoin.value = "";
       setProgress(100, "已加入房间");
       paintStatus();
+    } catch (e) {
+      openJoinFallback((e?.message || "密码加入失败") + "；请改用下方扫码/粘贴邀请");
+      throw e;
     } finally {
       setJoinUiBusy(false);
       setTimeout(stopBusyProgress, 450);
@@ -2230,7 +2334,7 @@
       clearPendingPassword();
       history.replaceState(null, "", "#lanshare");
     } catch (e) {
-      setError(e.message || "密码加入失败，请手动输入房间密码");
+      openJoinFallback((e?.message || "密码加入失败") + "；请改用下方扫码/粘贴邀请");
     } finally {
       state.autoJoinBusy = false;
     }
@@ -2249,6 +2353,7 @@
     const key = uploadTransferKey(fileId, requesterId);
     if (pc && state.transferPcs.get(key) !== pc) return;
     state.transferPcs.delete(key);
+    clearSendSession(fileId, requesterId);
     try {
       pc?.close();
     } catch (_) {
@@ -2305,7 +2410,6 @@
     for (const file of [...fileList]) {
       const id = uid(10);
       state.localFiles.set(id, file);
-      const thumb = await makeImageThumb(file);
       const meta = {
         id,
         name: file.name,
@@ -2313,12 +2417,17 @@
         mime: file.type || "application/octet-stream",
         ownerId: state.peerId,
         addedAt: Date.now(),
-        ...(thumb ? { thumb } : {}),
       };
       state.files.set(id, meta);
+      setFileLocalStatus(id, 0, "处理中…", "processing");
+      paintFiles();
+      const thumb = await makeImageThumb(file);
+      if (thumb) meta.thumb = thumb;
+      state.files.set(id, meta);
+      clearFileLocalStatus(id);
       memberSend({ type: "file-add", file: meta });
+      paintFiles();
     }
-    paintFiles();
   }
 
   function removeFile(fileId) {
@@ -2330,13 +2439,16 @@
     paintFiles();
   }
 
-  function requestDownload(fileId) {
+  function enqueueDownload(fileId) {
+    if (state.downloadQueue.includes(fileId)) return;
+    if (state.activeDownload?.fileId === fileId) return;
+    state.downloadQueue.push(fileId);
+    paintFiles();
+  }
+
+  function startDownloadRequest(fileId) {
     const f = state.files.get(fileId);
     if (!f || f.ownerId === state.peerId) return;
-    if (state.activeDownload && state.activeDownload.phase !== "done" && state.activeDownload.phase !== "error") {
-      if (state.activeDownload.fileId !== fileId) return;
-    }
-    if (state.transferring && state.activeDownload?.fileId !== fileId) return;
     setError("");
     setDownloadProgress(fileId, 0, "连接中…", "connecting");
     clearTimeout(downloadConnectTimer);
@@ -2355,6 +2467,21 @@
     }
   }
 
+  function requestDownload(fileId) {
+    const f = state.files.get(fileId);
+    if (!f || f.ownerId === state.peerId) return;
+    if (state.activeDownload?.fileId === fileId) {
+      const p = state.activeDownload.phase;
+      if (p === "connecting" || p === "downloading") return;
+    }
+    if (state.downloadQueue.includes(fileId)) return;
+    if (isDownloadBusy()) {
+      enqueueDownload(fileId);
+      return;
+    }
+    startDownloadRequest(fileId);
+  }
+
   function waitDcDrain(dc) {
     return new Promise((resolve) => {
       if (dc.bufferedAmount <= DC_BUFFER_LIMIT) {
@@ -2369,13 +2496,14 @@
     });
   }
 
-  async function sendFileChunks(dc, file) {
+  async function sendFileChunks(dc, file, onProgress) {
     let offset = 0;
     while (offset < file.size) {
       await waitDcDrain(dc);
       const buf = await file.slice(offset, offset + CHUNK_SIZE).arrayBuffer();
       dc.send(buf);
       offset += buf.byteLength;
+      onProgress?.(offset, file.size);
     }
   }
 
@@ -2411,12 +2539,14 @@
 
     dc.onopen = async () => {
       try {
+        bumpSendProgress(fileId, requesterId, 0, file.size);
         dc.send(JSON.stringify({ type: "meta", name: meta.name, size: meta.size, mime: meta.mime, fileId }));
-        await sendFileChunks(dc, file);
+        await sendFileChunks(dc, file, (sent, total) => bumpSendProgress(fileId, requesterId, sent, total));
         dc.send(JSON.stringify({ type: "done", fileId }));
       } catch (_) {
         dc.send(JSON.stringify({ type: "error", fileId, message: "发送中断" }));
       } finally {
+        clearSendSession(fileId, requesterId);
         try {
           dc.close();
         } catch (_) {
@@ -2679,6 +2809,8 @@
     state.members.clear();
     state.files.clear();
     state.localFiles.clear();
+    state.fileLocalStatus.clear();
+    state.sendSessions.clear();
     clearDownloadProgress();
     state.pageHiddenWarn = false;
     state.autoJoinBusy = false;
