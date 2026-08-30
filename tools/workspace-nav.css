@@ -325,7 +325,7 @@ body.nav-sorting .tool-nav-link,
   outline: none;
 }
 
-/* 常用工具：与历史记录同背景，位于其下方 */
+/* 常用工具：固定于搜索框下方、菜单首位 */
 .nav-favorites {
   width: 100%;
   margin-bottom: 0.45rem;
@@ -997,6 +997,7 @@ body.nav-open {
   }
 
   .nav-search-wrap,
+  .nav-strip.nav-favorites,
   .nav-strip.nav-recent,
   .nav-drawer-head,
   .nav-sort-hint {
