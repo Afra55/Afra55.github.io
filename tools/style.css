@@ -8912,6 +8912,53 @@ li a:not([class*="btn"]) {
   line-height: 1.45;
 }
 
+.morse-guide .morse-guide-body {
+  display: grid;
+  gap: 0.65rem;
+  margin-top: 0.65rem;
+}
+
+.morse-guide .subhead {
+  margin: 0.5rem 0 0.25rem;
+  font-size: 0.95rem;
+}
+
+.morse-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.morse-table th,
+.morse-table td {
+  border: 1px solid var(--line);
+  padding: 0.35rem 0.55rem;
+  text-align: left;
+}
+
+.morse-table th {
+  background: var(--ink-6);
+}
+
+.morse-alpha-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(4.5rem, 1fr));
+  gap: 0.35rem 0.5rem;
+  font-size: 0.86rem;
+  line-height: 1.5;
+}
+
+.morse-alpha-grid span {
+  padding: 0.2rem 0.35rem;
+  border-radius: 6px;
+  background: var(--ink-6);
+}
+
+.morse-digit-line {
+  line-height: 1.65;
+  word-break: break-word;
+}
+
 .ls-qr-duo {
   display: flex;
   flex-wrap: wrap;

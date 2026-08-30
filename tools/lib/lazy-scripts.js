@@ -39,6 +39,7 @@
     setup: "./setup.js",
     imgkit: "./imgkit.js",
     xorenc: "./xorenc.js",
+    morse: "./morse.js",
     memo: "./memo.js",
     textimg: "./textimg.js",
     imgtext: "./imgtext.js",
@@ -68,12 +69,13 @@
     "setup",
     "imgkit",
     "xorenc",
+    "morse",
     "lanshare",
     "ffbridge",
   ]);
 
   /** 不依赖 DevToolsPure */
-  const NO_PURE = new Set(["acupoint", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "setup", "about", "xorenc"]);
+  const NO_PURE = new Set(["acupoint", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "setup", "about", "xorenc", "morse"]);
 
   const scriptPromises = new Map();
   let extraBundlePromise = null;

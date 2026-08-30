@@ -799,7 +799,7 @@
   const TOOL_GROUPS = [
     { id: "time", label: "时间", tools: ["timestamp", "timediff", "cron"] },
     { id: "color", label: "颜色", tools: ["ahex", "color", "eyedropper"] },
-    { id: "encode", label: "编码与生成", tools: ["base64", "url", "hash", "xorenc", "password", "uuid"] },
+    { id: "encode", label: "编码与生成", tools: ["base64", "url", "hash", "xorenc", "morse", "password", "uuid"] },
     { id: "data", label: "数据格式", tools: ["json", "yaml", "query"] },
     {
       id: "text",
@@ -838,6 +838,7 @@
     url: "URL 编码 / 解码。",
     hash: "本地计算 MD5、SHA-256。",
     xorenc: "半段 XOR 加解密：文本与文件，可自定义两个密钥（默认 4/7）。",
+    morse: "摩尔斯电码与文本互转；底部含从零读懂 ·/- 电码的新手教程。",
     uuid: "生成 UUID / GUID。",
     json: "JSON 校验、美化与压缩。",
     yaml: "YAML 与 JSON 互转、校验。",
@@ -890,6 +891,7 @@
     url: { name: "URL", aliases: ["encode", "decode"] },
     hash: { name: "Hash", aliases: ["md5", "sha"] },
     xorenc: { name: "XOR 加解密", aliases: ["xor", "异或", "xorenc", "半段加密", "jiami"] },
+    morse: { name: "摩斯密码", aliases: ["摩尔斯", "morse", "morse code", "电码", "摩斯"] },
     uuid: { name: "UUID", aliases: ["guid"] },
     json: { name: "JSON", aliases: ["格式化", "压缩"] },
     yaml: { name: "YAML", aliases: ["yml"] },
