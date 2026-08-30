@@ -196,7 +196,7 @@
       if (line.startsWith("a=candidate:")) {
         if (!/ typ host /.test(line)) continue;
         host += 1;
-        if (host > 6) continue;
+        if (host > 3) continue;
       }
       if (line.startsWith("a=end-of-candidates")) continue;
       keep.push(line);
@@ -204,8 +204,22 @@
     return `${keep.join("\r\n")}\r\n`;
   }
 
-  function toInviteRecord({ roomId, hostId, hostName, sdp }) {
-    return { v: 1, r: roomId, h: hostId, n: hostName, s: trimSdpForLan(sdp) };
+  function trimSdpForAnswer(sdp) {
+    if (!sdp) return sdp;
+    const keep = [];
+    for (const line of sdp.split(/\r?\n/)) {
+      if (!line) continue;
+      if (line.startsWith("a=candidate:")) continue;
+      if (line.startsWith("a=end-of-candidates")) continue;
+      keep.push(line);
+    }
+    return `${keep.join("\r\n")}\r\n`;
+  }
+
+  function toInviteRecord({ roomId, hostId, hostName, sdp, answerSdp }) {
+    const rec = { v: 2, r: roomId, h: hostId, n: hostName, s: trimSdpForLan(sdp) };
+    if (answerSdp) rec.a = trimSdpForAnswer(answerSdp);
+    return rec;
   }
 
   function fromInviteRecord(rec) {
@@ -214,7 +228,28 @@
       hostId: rec.h || rec.hostId,
       hostName: rec.n || rec.hostName,
       sdp: rec.s || rec.sdp,
+      answerSdp: rec.a || rec.answerSdp,
     };
+  }
+
+  async function generateOfferAnswerPair() {
+    const pcOffer = createPeer();
+    pcOffer.createDataChannel("control", { ordered: true });
+    const offer = await pcOffer.createOffer();
+    await pcOffer.setLocalDescription(offer);
+    await waitIce(pcOffer);
+    const offerSdp = trimSdpForLan(pcOffer.localDescription.sdp);
+
+    const pcAns = createPeer();
+    await pcAns.setRemoteDescription({ type: "offer", sdp: offerSdp });
+    const answer = await pcAns.createAnswer();
+    await pcAns.setLocalDescription(answer);
+    await waitIce(pcAns);
+    const answerSdp = trimSdpForAnswer(pcAns.localDescription.sdp);
+
+    pcOffer.close();
+    pcAns.close();
+    return { offerSdp, answerSdp };
   }
 
   async function packInvitePayload(obj) {
@@ -244,11 +279,21 @@
     return b64dec(t);
   }
 
-  async function buildInviteUrl(sdp) {
+  async function buildInviteUrl(offerSdp, answerSdp) {
     const token = await packInvitePayload(
-      toInviteRecord({ roomId: state.roomId, hostId: state.peerId, hostName: state.peerName, sdp })
+      toInviteRecord({ roomId: state.roomId, hostId: state.peerId, hostName: state.peerName, sdp: offerSdp, answerSdp })
     );
     return `${inviteLinkBase()}#lanshare?j=${encodeURIComponent(token)}`;
+  }
+
+  async function buildInviteToken(offerSdp, answerSdp) {
+    return packInvitePayload(
+      toInviteRecord({ roomId: state.roomId, hostId: state.peerId, hostName: state.peerName, sdp: offerSdp, answerSdp })
+    );
+  }
+
+  function inviteQrText(token) {
+    return `lanshare?j=${token}`;
   }
 
   async function parseInviteAsync(text) {
@@ -495,8 +540,16 @@
       .replace(/^[\u201c\u201d\u2018\u2019]+|[\u201c\u201d\u2018\u2019]+$/g, "");
   }
 
-  function makeInvitePayload(sdp) {
-    return buildInviteUrl(sdp);
+  function makeInvitePayload(sdp, answerSdp) {
+    return buildInviteUrl(sdp, answerSdp);
+  }
+
+  async function ensureQrLibs() {
+    if (typeof QRCode !== "undefined" && typeof jsQR === "function") return;
+    if (window.DevToolsLazy?.loadVendor) {
+      if (typeof QRCode === "undefined") await window.DevToolsLazy.loadVendor("qrcode");
+      if (typeof jsQR !== "function") await window.DevToolsLazy.loadVendor("jsQR");
+    }
   }
 
   function renderQrBox(el, text, level) {
@@ -505,32 +558,35 @@
     new QRCode(el, { text, width: 168, height: 168, correctLevel: level });
   }
 
-  function renderInviteQr(payload) {
+  async function renderInviteQr(token) {
     if (!els.inviteQr) return;
     els.inviteQr.innerHTML = "";
+    await ensureQrLibs();
     if (typeof QRCode === "undefined") {
       els.inviteQr.textContent = "二维码库未加载，请复制下方邀请文本";
       return;
     }
-    const tries = [
-      QRCode.CorrectLevel.L,
-      QRCode.CorrectLevel.M,
-    ];
-    for (const level of tries) {
-      try {
-        renderQrBox(els.inviteQr, payload, level);
-        return;
-      } catch (err) {
-        if (!/Too long|overflow|code length overflow/i.test(String(err.message || err))) break;
+    const qrPayloads = [inviteQrText(token), `${inviteLinkBase()}#${inviteQrText(token)}`];
+    const tries = [QRCode.CorrectLevel.L, QRCode.CorrectLevel.M];
+    for (const text of qrPayloads) {
+      for (const level of tries) {
+        try {
+          renderQrBox(els.inviteQr, text, level);
+          return;
+        } catch (err) {
+          if (!/Too long|overflow|code length overflow/i.test(String(err.message || err))) break;
+        }
       }
     }
-    els.inviteQr.innerHTML = '<p class="hint tight">邀请文本较长，二维码无法生成，请复制下方文本分享（或使用电脑加入）。</p>';
+    els.inviteQr.innerHTML =
+      '<p class="hint tight">邀请文本较长，二维码无法生成，请复制下方链接分享（或使用应用内扫码/粘贴）。</p>';
   }
 
-  async function updateInviteDisplay(sdp) {
-    const url = await buildInviteUrl(sdp);
+  async function updateInviteDisplay(offerSdp, answerSdp) {
+    const token = await buildInviteToken(offerSdp, answerSdp);
+    const url = `${inviteLinkBase()}#${inviteQrText(token)}`;
     if (els.inviteText) els.inviteText.value = url;
-    renderInviteQr(url);
+    await renderInviteQr(token);
   }
 
   function exportRoomState() {
@@ -741,10 +797,14 @@
   async function refreshJoinSlot() {
     if (!state.isHost) return;
     state.pendingJoin?.pc?.close();
+    const pair = await generateOfferAnswerPair();
     const pc = createPeer();
     const dc = pc.createDataChannel("control", { ordered: true });
     let settled = false;
     state.pendingJoin = { pc, dc };
+
+    await pc.setLocalDescription({ type: "offer", sdp: pair.offerSdp });
+    await pc.setRemoteDescription({ type: "answer", sdp: pair.answerSdp });
 
     const onHelloChannel = (e) => {
       if (settled) return;
@@ -768,10 +828,7 @@
       if (pc.connectionState === "failed") setError("有新成员连接失败，请刷新邀请码重试");
     };
 
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-    await waitIce(pc);
-    await updateInviteDisplay(pc.localDescription.sdp);
+    await updateInviteDisplay(pair.offerSdp, pair.answerSdp);
   }
 
   async function createRoom() {
@@ -834,9 +891,13 @@
 
     try {
       await pc.setRemoteDescription({ type: "offer", sdp: inv.sdp });
-      const ans = await pc.createAnswer();
-      await pc.setLocalDescription(ans);
-      await waitIce(pc);
+      if (inv.answerSdp) {
+        await pc.setLocalDescription({ type: "answer", sdp: inv.answerSdp });
+      } else {
+        const ans = await pc.createAnswer();
+        await pc.setLocalDescription(ans);
+        await waitIce(pc);
+      }
     } catch (e) {
       closeMemberControl();
       state.roomId = "";
@@ -1341,6 +1402,12 @@
   }
 
   async function startScan() {
+    try {
+      await ensureQrLibs();
+    } catch (e) {
+      setError(e.message || "扫码库未加载");
+      return;
+    }
     if (typeof jsQR === "undefined") {
       setError("扫码库未加载");
       return;
@@ -1399,6 +1466,12 @@
   async function scanFromFile(file) {
     if (!file) return;
     stopScan();
+    try {
+      await ensureQrLibs();
+    } catch (e) {
+      setError(e.message || "扫码库未加载");
+      return;
+    }
     const url = URL.createObjectURL(file);
     try {
       const img = new Image();
@@ -1469,12 +1542,15 @@
     isMobileClient,
     parseInviteAsync,
     buildInviteUrl,
+    buildInviteToken,
+    inviteQrText,
     packInvitePayload,
     unpackInvitePayload,
     inviteLinkBase,
     isInviteScanData,
     readJoinTokenFromHash,
     takePendingJoinToken,
+    generateOfferAnswerPair,
     getRoomId: () => state.roomId,
   };
 

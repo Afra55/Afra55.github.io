@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const BUILD = window.TOOLS_BUILD || "2026.08.29-234500";
+  const BUILD = window.TOOLS_BUILD || "2026.08.30-054800";
 
   const VENDOR_FILES = {
     "js-yaml": { src: "./vendor/js-yaml.min.js", probe: () => typeof globalThis.jsyaml !== "undefined" },
@@ -36,6 +36,7 @@
     yaml: ["js-yaml"],
     hash: ["spark-md5"],
     qrcode: ["qrcode", "jsQR"],
+    lanshare: ["qrcode", "jsQR"],
     sharecard: ["html2canvas"],
     gifmaker: ["gif", "omggif"],
     vsplit: ["gif", "omggif"],
