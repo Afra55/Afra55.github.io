@@ -816,7 +816,7 @@
     { id: "convert", label: "换算", tools: ["units", "coord", "numbase"] },
     { id: "fun", label: "趣味", tools: ["wheel", "ruler", "muyu", "minigames", "ambient"] },
     { id: "health", label: "健康", tools: ["acupoint"] },
-    { id: "device", label: "设备", tools: ["lanshare", "adb", "ffbridge"] },
+    { id: "device", label: "设备", tools: ["lanshare", "adb", "ffbridge", "ytdlp"] },
     { id: "site", label: "站点", tools: ["about", "setup"] },
   ];
   const DEFAULT_GROUP_ORDER = TOOL_GROUPS.map((g) => g.id);
@@ -876,6 +876,7 @@
     adb: "网页侧 ADB 调试辅助：设备、文件、输入、安装、任务与命令大全等。",
     lanshare: "局域网互传：多机同房间共享文件列表，下载时从上传者手机 WebRTC 直传，不经房主中转；房主可退出或解散，退出时最近加入者接任。",
     ffbridge: "电脑批量用本机 FFmpeg 桥；手机请直接用媒体里的音频/修剪/GIF（网页内处理）。",
+    ytdlp: "本机 yt-dlp 桥：解析/下载视频与播放列表、字幕、封面、直播、Cookies 与 SponsorBlock；文件只保存在电脑。",
     about: "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
     setup: "小白向：如何下载安装 Node.js、ADB、FFmpeg；手机用网页保底、电脑用桥更优。",
   };
@@ -936,6 +937,11 @@
     ffbridge: {
       name: "FFmpeg 本机桥",
       aliases: ["本机桥", "ffbridge", "批量转码"],
+      desktopOnly: true,
+    },
+    ytdlp: {
+      name: "yt-dlp",
+      aliases: ["ytdlp", "youtube-dl", "下载视频", "b站", "youtube", "解析"],
       desktopOnly: true,
     },
     about: { name: "实用小工具合集", aliases: ["about", "介绍", "目录", "主题", "帮助", "总览", "关于"] },

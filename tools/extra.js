@@ -12168,10 +12168,11 @@
       const cfg = map[platform];
       if (!cfg) throw new Error("未知平台");
       setAdbBundleProgress(true, { pct: 22, text: "拉取桥文件…" });
-      const [serverJs, mirrorJs, ffmpegJs, scriptRaw, resolvePortJs, serverJar] = await Promise.all([
+      const [serverJs, mirrorJs, ffmpegJs, ytdlpJs, scriptRaw, resolvePortJs, serverJar] = await Promise.all([
         fetchTextAsset("./adb-bridge/server.js"),
         fetchTextAsset("./adb-bridge/scrcpy-mirror.js").catch(() => ""),
         fetchTextAsset("./ffmpeg-bridge/server.js").catch(() => ""),
+        fetchTextAsset("./ffmpeg-bridge/ytdlp-core.js").catch(() => ""),
         fetchTextAsset(cfg.scriptPath),
         fetchTextAsset("./adb-bridge/resolve-port.js").catch(() => ""),
         fetch("./adb-bridge/vendor/scrcpy-server-v3.1", { cache: "no-cache" })
@@ -12185,24 +12186,26 @@
         throw new Error("server.js 内容异常，请刷新页面后重试");
       }
       const readme = [
-        "DevTools 统一本机桥（ADB + Scrcpy 镜像 + FFmpeg）",
+        "DevTools 统一本机桥（ADB + Scrcpy 镜像 + FFmpeg + yt-dlp）",
         "",
         "本压缩包必须同时保留：",
         "  - server.js",
         "  - scrcpy-mirror.js",
         "  - resolve-port.js",
         "  - ffmpeg-bridge/server.js",
+        "  - ffmpeg-bridge/ytdlp-core.js",
         "  - vendor/scrcpy-server-v3.1  （可选；缺则首次镜像时自动下载）",
         "  - " + cfg.scriptName,
         "",
         "使用步骤：",
         "1. 解压到任意文件夹（保留 ffmpeg-bridge、vendor 子目录）",
-        "2. 本机已安装 Node.js；按需安装 adb / ffmpeg",
+        "2. 本机已安装 Node.js；按需安装 adb / ffmpeg / yt-dlp",
         "3. " + cfg.runHint.replace(/\n/g, "\n   "),
         "4. 回到网页：ADB 与 FFmpeg 本机桥都连 http://127.0.0.1:17888",
         "",
         "默认 Token: devtools-bridge（兼容旧 Token）",
         "FFmpeg API 前缀: /ff",
+        "yt-dlp API 前缀: /ytdlp",
         "只需启动这一座桥，不必再开第二个服务。",
         "",
       ].join("\n");
@@ -12211,6 +12214,7 @@
       if (mirrorJs) zip.file("scrcpy-mirror.js", mirrorJs);
       if (resolvePortJs) zip.file("resolve-port.js", resolvePortJs);
       if (ffmpegJs) zip.file("ffmpeg-bridge/server.js", ffmpegJs);
+      if (ytdlpJs) zip.file("ffmpeg-bridge/ytdlp-core.js", ytdlpJs);
       if (serverJar) zip.file("vendor/scrcpy-server-v3.1", serverJar);
       zip.file(cfg.scriptName, scriptText, {
         unixPermissions: platform === "win" ? undefined : 0o755,

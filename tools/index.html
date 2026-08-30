@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.30-121200"></script>
+  <script src="./lib/tools-build.js?v=2026.08.30-134000"></script>
   <link rel="stylesheet" href="./style.css?v=2026.08.30-103000" />
   <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-062500" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
@@ -3767,7 +3767,7 @@ hello@world.org</textarea>
           <label for="ff-token">Token</label>
           <input id="ff-token" class="mono" type="text" value="devtools-bridge" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint">与 ADB <strong>共用一座本机桥</strong>：地址 <span class="mono">17888</span>、Token <span class="mono">devtools-bridge</span>。FFmpeg 接口在 <span class="mono">/ff/*</span>。只需启动一次桥即可。</p>
+        <p class="hint">与 ADB <strong>共用一座本机桥</strong>：地址 <span class="mono">17888</span>、Token <span class="mono">devtools-bridge</span>。FFmpeg 接口在 <span class="mono">/ff/*</span>，视频下载见 <a href="#ytdlp">yt-dlp</a>（<span class="mono">/ytdlp/*</span>）。只需启动一次桥即可。</p>
         <p class="hint tight mono" id="ff-tools-probe" hidden></p>
         </div><!-- /ff-bridge-panel -->
 
@@ -3820,6 +3820,260 @@ hello@world.org</textarea>
           <pre class="mono adb-pre" id="ff-probe-out" hidden style="margin-top:0.55rem;max-height:10rem;overflow:auto"></pre>
           <div class="adb-jobs-list" id="ff-jobs-list" aria-live="polite" style="margin-top:0.75rem"></div>
           <p class="error" id="ff-error" hidden></p>
+        </div>
+      </div>
+    </section>
+
+<section id="ytdlp" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>yt-dlp 本机桥</h1>
+        <p>用本机已安装的 <span class="mono">yt-dlp</span> 解析并下载视频 / 播放列表 / 字幕 / 直播。走同一座本机桥（<span class="mono">/ytdlp</span>），文件只落在你电脑上。</p>
+      </div>
+      <div class="panel-body">
+        <div class="adb-status" id="yd-status">
+          <div class="adb-status-main">
+            <span class="adb-dot" id="yd-dot" aria-hidden="true"></span>
+            <div>
+              <strong id="yd-status-title">未连接本机桥</strong>
+              <p class="hint tight" id="yd-status-text">请先启动统一桥（默认 <span class="mono">127.0.0.1:17888</span>），本机 PATH 中需有 yt-dlp；合并/抽音还需要 ffmpeg。</p>
+            </div>
+          </div>
+          <div class="btn-row tool-actions">
+            <button type="button" class="primary-btn" id="yd-connect">连接本机桥</button>
+            <button type="button" class="secondary-btn" id="yd-refresh" disabled>刷新</button>
+            <button type="button" class="ghost-btn" id="yd-update" disabled>更新 yt-dlp</button>
+          </div>
+        </div>
+        <div class="field-row" style="flex-wrap:wrap;margin-top:0.75rem">
+          <label for="yd-base">桥地址</label>
+          <input id="yd-base" class="mono" type="text" value="http://127.0.0.1:17888" autocomplete="off" spellcheck="false" />
+          <label for="yd-token">Token</label>
+          <input id="yd-token" class="mono" type="text" value="devtools-bridge" autocomplete="off" spellcheck="false" />
+        </div>
+        <p class="hint tight mono" id="yd-tools-probe" hidden></p>
+        <p class="error" id="yd-error" hidden></p>
+
+        <div id="yd-workspace" hidden>
+          <div class="label-row" style="margin-top:1rem">
+            <h2 class="subhead">链接</h2>
+          </div>
+          <textarea id="yd-urls" class="mono area" rows="4" placeholder="每行一个链接，或 ytsearch10:关键词&#10;例如 https://www.youtube.com/watch?v=…  /  B站 / 播客 / 播放列表" spellcheck="false"></textarea>
+          <div class="btn-row tool-actions" style="margin-top:0.55rem;flex-wrap:wrap">
+            <button type="button" class="primary-btn" id="yd-probe">解析</button>
+            <button type="button" class="secondary-btn" id="yd-probe-list">解析为播放列表</button>
+            <label class="flag"><input type="checkbox" id="yd-no-playlist" checked /> 单条视频（忽略列表）</label>
+          </div>
+          <div id="yd-probe-out" class="yd-probe-out" hidden></div>
+
+          <div class="label-row" style="margin-top:1.1rem">
+            <h2 class="subhead">保存到</h2>
+            <span class="hint tight" id="yd-fs-meta"></span>
+          </div>
+          <div class="adb-fs-shortcuts" id="yd-roots" style="margin-bottom:0.45rem"></div>
+          <div class="adb-path-row">
+            <button type="button" class="ghost-btn" id="yd-fs-up">上级</button>
+            <input id="yd-fs-path" class="mono" type="text" value="" spellcheck="false" autocomplete="off" />
+            <button type="button" class="secondary-btn" id="yd-fs-go">打开</button>
+            <button type="button" class="ghost-btn" id="yd-fs-mkdir">新建文件夹</button>
+            <button type="button" class="ghost-btn" id="yd-fs-reveal">打开目录</button>
+          </div>
+          <div class="ff-fs-list adb-fs-list" id="yd-fs-list" role="list"></div>
+
+          <div class="yd-opts">
+            <details class="panel-card" open>
+              <summary><strong>画质与封装</strong></summary>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.5rem">
+                <label for="yd-mode">模式</label>
+                <select id="yd-mode" class="mono select-input">
+                  <option value="best" selected>最佳（视频+音频合并）</option>
+                  <option value="height">限定高度</option>
+                  <option value="audio">只下载音频</option>
+                  <option value="format">指定 format id</option>
+                </select>
+                <label for="yd-height">高度</label>
+                <select id="yd-height" class="mono select-input">
+                  <option value="2160">2160</option>
+                  <option value="1440">1440</option>
+                  <option value="1080" selected>1080</option>
+                  <option value="720">720</option>
+                  <option value="480">480</option>
+                  <option value="360">360</option>
+                </select>
+                <label for="yd-format">format</label>
+                <input id="yd-format" class="mono" type="text" placeholder="bv*+ba/b 或 137+140" spellcheck="false" />
+                <label for="yd-sort">排序 -S</label>
+                <input id="yd-sort" class="mono" type="text" placeholder="res,vcodec:h264" spellcheck="false" />
+              </div>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.4rem">
+                <label for="yd-merge">合并容器</label>
+                <select id="yd-merge" class="mono select-input">
+                  <option value="">自动</option>
+                  <option value="mp4">mp4</option>
+                  <option value="mkv">mkv</option>
+                  <option value="webm">webm</option>
+                  <option value="mov">mov</option>
+                </select>
+                <label for="yd-audio-fmt">音频格式</label>
+                <select id="yd-audio-fmt" class="mono select-input">
+                  <option value="mp3" selected>mp3</option>
+                  <option value="m4a">m4a</option>
+                  <option value="opus">opus</option>
+                  <option value="flac">flac</option>
+                  <option value="wav">wav</option>
+                  <option value="best">best</option>
+                </select>
+                <label for="yd-audio-q">音频质量 0–10</label>
+                <input id="yd-audio-q" class="mono meta-input" type="number" min="0" max="10" value="0" />
+                <label for="yd-recode">转码</label>
+                <select id="yd-recode" class="mono select-input">
+                  <option value="">不转码</option>
+                  <option value="mp4">mp4</option>
+                  <option value="mkv">mkv</option>
+                  <option value="webm">webm</option>
+                </select>
+                <label for="yd-remux">remux</label>
+                <select id="yd-remux" class="mono select-input">
+                  <option value="">不 remux</option>
+                  <option value="mp4">mp4</option>
+                  <option value="mkv">mkv</option>
+                </select>
+              </div>
+            </details>
+
+            <details class="panel-card">
+              <summary><strong>播放列表 / 过滤 / 档案</strong></summary>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.5rem">
+                <label for="yd-pl-items">条目 playlist-items</label>
+                <input id="yd-pl-items" class="mono" type="text" placeholder="1-10,15" spellcheck="false" />
+                <label for="yd-pl-start">从</label>
+                <input id="yd-pl-start" class="mono meta-input" type="number" min="1" placeholder="1" />
+                <label for="yd-pl-end">到</label>
+                <input id="yd-pl-end" class="mono meta-input" type="number" min="1" placeholder="" />
+                <label for="yd-max-dl">最多条数</label>
+                <input id="yd-max-dl" class="mono meta-input" type="number" min="1" placeholder="" />
+              </div>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.4rem">
+                <label for="yd-date-after">dateafter</label>
+                <input id="yd-date-after" class="mono" type="text" placeholder="20240101 或 now-1y" spellcheck="false" />
+                <label for="yd-date-before">datebefore</label>
+                <input id="yd-date-before" class="mono" type="text" placeholder="YYYYMMDD" spellcheck="false" />
+                <label for="yd-match">match-filter</label>
+                <input id="yd-match" class="mono" type="text" placeholder="duration > 60" spellcheck="false" />
+              </div>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.4rem">
+                <label class="flag"><input type="checkbox" id="yd-yes-playlist" /> 强制整列表</label>
+                <label class="flag"><input type="checkbox" id="yd-pl-random" /> 列表乱序</label>
+                <label class="flag"><input type="checkbox" id="yd-lazy-pl" /> 惰性列表</label>
+                <label class="flag"><input type="checkbox" id="yd-archive" checked /> 写入下载档案（跳过已下）</label>
+                <label class="flag"><input type="checkbox" id="yd-ignore-err" /> 遇错继续</label>
+              </div>
+            </details>
+
+            <details class="panel-card">
+              <summary><strong>字幕 / 封面 / 元数据 / 章节 / SponsorBlock</strong></summary>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.5rem">
+                <label class="flag"><input type="checkbox" id="yd-subs" /> 字幕</label>
+                <label class="flag"><input type="checkbox" id="yd-auto-subs" /> 自动字幕</label>
+                <label class="flag"><input type="checkbox" id="yd-embed-subs" /> 嵌入字幕</label>
+                <label for="yd-sub-langs">语言</label>
+                <input id="yd-sub-langs" class="mono" type="text" value="zh-Hans,zh-Hant,en.*" spellcheck="false" />
+                <label for="yd-sub-conv">转字幕</label>
+                <select id="yd-sub-conv" class="mono select-input">
+                  <option value="">原样</option>
+                  <option value="srt">srt</option>
+                  <option value="vtt">vtt</option>
+                  <option value="ass">ass</option>
+                </select>
+              </div>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.4rem">
+                <label class="flag"><input type="checkbox" id="yd-thumb" /> 封面</label>
+                <label class="flag"><input type="checkbox" id="yd-embed-thumb" /> 嵌入封面</label>
+                <label class="flag"><input type="checkbox" id="yd-infojson" /> info.json</label>
+                <label class="flag"><input type="checkbox" id="yd-desc" /> 简介</label>
+                <label class="flag"><input type="checkbox" id="yd-comments" /> 评论（慢）</label>
+                <label class="flag"><input type="checkbox" id="yd-link" /> 互联网快捷方式</label>
+                <label class="flag"><input type="checkbox" id="yd-meta" checked /> 嵌入元数据</label>
+                <label class="flag"><input type="checkbox" id="yd-chapters" checked /> 嵌入章节</label>
+                <label class="flag"><input type="checkbox" id="yd-split-ch" /> 按章节拆文件</label>
+              </div>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.4rem">
+                <label for="yd-sb-mark">SB 标记</label>
+                <input id="yd-sb-mark" class="mono" type="text" placeholder="sponsor,intro 或 all" spellcheck="false" />
+                <label for="yd-sb-rm">SB 裁掉</label>
+                <input id="yd-sb-rm" class="mono" type="text" placeholder="sponsor" spellcheck="false" />
+              </div>
+            </details>
+
+            <details class="panel-card">
+              <summary><strong>Cookies / 代理 / 网络 / 直播</strong></summary>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.5rem">
+                <label for="yd-browser">cookies 浏览器</label>
+                <select id="yd-browser" class="mono select-input">
+                  <option value="">不使用</option>
+                  <option value="chrome">chrome</option>
+                  <option value="edge">edge</option>
+                  <option value="firefox">firefox</option>
+                  <option value="brave">brave</option>
+                  <option value="chromium">chromium</option>
+                  <option value="vivaldi">vivaldi</option>
+                  <option value="opera">opera</option>
+                  <option value="safari">safari</option>
+                </select>
+                <label for="yd-cookies-file">cookies.txt</label>
+                <input id="yd-cookies-file" class="mono" type="text" placeholder="本机路径（可选）" spellcheck="false" />
+                <label for="yd-proxy">代理</label>
+                <input id="yd-proxy" class="mono" type="text" placeholder="socks5://127.0.0.1:1080" spellcheck="false" />
+              </div>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.4rem">
+                <label for="yd-client">YouTube client</label>
+                <select id="yd-client" class="mono select-input">
+                  <option value="">默认</option>
+                  <option value="youtube:player_client=android">android</option>
+                  <option value="youtube:player_client=ios">ios</option>
+                  <option value="youtube:player_client=web">web</option>
+                  <option value="youtube:player_client=tv">tv</option>
+                  <option value="youtube:player_client=mweb">mweb</option>
+                </select>
+                <label for="yd-rate">限速</label>
+                <input id="yd-rate" class="mono meta-input" type="text" placeholder="2M" spellcheck="false" />
+                <label for="yd-conc">并发分片</label>
+                <input id="yd-conc" class="mono meta-input" type="number" min="1" max="16" value="4" />
+                <label for="yd-retries">重试</label>
+                <input id="yd-retries" class="mono meta-input" type="number" min="0" max="50" value="10" />
+              </div>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.4rem">
+                <label class="flag"><input type="checkbox" id="yd-geo" /> geo-bypass</label>
+                <label class="flag"><input type="checkbox" id="yd-v4" /> 强制 IPv4</label>
+                <label class="flag"><input type="checkbox" id="yd-v6" /> 强制 IPv6</label>
+                <label class="flag"><input type="checkbox" id="yd-live-start" /> 直播从头录</label>
+                <label for="yd-wait">等到开播（秒）</label>
+                <input id="yd-wait" class="mono meta-input" type="number" min="0" max="86400" value="0" />
+                <label class="flag"><input type="checkbox" id="yd-hls-ts" /> HLS 用 mpegts</label>
+              </div>
+            </details>
+
+            <details class="panel-card">
+              <summary><strong>文件名与其它</strong></summary>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.5rem">
+                <label for="yd-template">输出模板</label>
+                <input id="yd-template" class="mono" type="text" value="%(title).200B [%(id)s].%(ext)s" spellcheck="false" style="min-width:18rem" />
+              </div>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.4rem">
+                <label class="flag"><input type="checkbox" id="yd-restrict" checked /> 限制文件名字符</label>
+                <label class="flag"><input type="checkbox" id="yd-win-names" /> Windows 文件名</label>
+                <label class="flag"><input type="checkbox" id="yd-no-ow" checked /> 不覆盖已有文件</label>
+                <label class="flag"><input type="checkbox" id="yd-keep" /> 保留合并前视频</label>
+                <label class="flag"><input type="checkbox" id="yd-simulate" /> 仅模拟（不下文件）</label>
+              </div>
+            </details>
+          </div>
+
+          <div class="btn-row tool-actions" style="margin-top:0.85rem;flex-wrap:wrap">
+            <button type="button" class="primary-btn" id="yd-download">开始下载</button>
+            <button type="button" class="ghost-btn" id="yd-extractors">支持站点列表</button>
+          </div>
+          <div id="yd-jobs" class="adb-jobs-list" style="margin-top:0.75rem"></div>
+          <pre class="mono highlight-box" id="yd-extractors-out" hidden style="max-height:16rem;overflow:auto;margin-top:0.75rem"></pre>
         </div>
       </div>
     </section>
@@ -4498,6 +4752,28 @@ ffmpeg -version</pre>
               </li>
               <li>Fedora：<code class="mono">sudo dnf install ffmpeg</code>；Arch：<code class="mono">sudo pacman -S ffmpeg</code>。</li>
             </ol>
+          </div>
+        </section>
+
+        <section class="setup-block panel-card" id="setup-ytdlp">
+          <h2 class="subhead">2b. 安装 yt-dlp（视频下载本机桥需要）</h2>
+          <p class="hint">网页 <a href="#ytdlp">yt-dlp</a> 通过本机桥调用命令行工具。装好后终端能跑 <span class="mono">yt-dlp --version</span>。合并音视频仍需要上面的 FFmpeg。</p>
+          <p class="btn-row tool-actions" style="flex-wrap:wrap">
+            <a class="primary-btn" href="https://github.com/yt-dlp/yt-dlp" target="_blank" rel="noopener noreferrer">yt-dlp GitHub</a>
+            <a class="ghost-btn" href="https://github.com/yt-dlp/yt-dlp/wiki/Installation" target="_blank" rel="noopener noreferrer">安装说明</a>
+          </p>
+          <div class="setup-os-panel" data-setup-panel="mac">
+            <pre class="mono setup-pre">brew install yt-dlp
+yt-dlp --version</pre>
+          </div>
+          <div class="setup-os-panel" data-setup-panel="win" hidden>
+            <p class="hint tight">可用 pipx / winget，或从 Releases 下载 <span class="mono">yt-dlp.exe</span> 加入 PATH。</p>
+            <pre class="mono setup-pre">winget install yt-dlp
+yt-dlp --version</pre>
+          </div>
+          <div class="setup-os-panel" data-setup-panel="linux" hidden>
+            <pre class="mono setup-pre">pipx install yt-dlp
+yt-dlp --version</pre>
           </div>
         </section>
 

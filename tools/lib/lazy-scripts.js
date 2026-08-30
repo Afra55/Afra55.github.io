@@ -35,6 +35,7 @@
     vplay: "./vplay.js",
     audio: "./audio.js",
     ffbridge: "./ffbridge.js",
+    ytdlp: "./ytdlp.js",
     lanshare: "./lanshare.js",
     setup: "./setup.js",
     imgkit: "./imgkit.js",
@@ -74,10 +75,11 @@
     "countdown",
     "lanshare",
     "ffbridge",
+    "ytdlp",
   ]);
 
   /** 不依赖 DevToolsPure */
-  const NO_PURE = new Set(["acupoint", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "setup", "about", "xorenc", "morse", "countdown"]);
+  const NO_PURE = new Set(["acupoint", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp", "setup", "about", "xorenc", "morse", "countdown"]);
 
   const scriptPromises = new Map();
   let extraBundlePromise = null;

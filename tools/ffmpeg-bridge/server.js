@@ -37,7 +37,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.4.1";
+const BRIDGE_VERSION = "0.5.0";
 const FEATURES = [
   "local-fs",
   "probe",
@@ -95,6 +95,9 @@ const FEATURES = [
   "jobs",
   "job-cancel",
   "jobs-run",
+  "ytdlp",
+  "ytdlp-probe",
+  "ytdlp-download",
 ];
 
 const VIDEO_EXTS = new Set([
@@ -3448,6 +3451,26 @@ async function startJobFromBody(body) {
   return job;
 }
 
+let ytdlpApi = null;
+try {
+  const createYtdlp = require("./ytdlp-core");
+  ytdlpApi = createYtdlp({
+    whichSync,
+    execFileAsync,
+    resolveLocalPath,
+    ensureWritableDir,
+    mkdirpAllowed,
+    revealLocalPath,
+    localFsRoots,
+    sendJson,
+    readBody,
+    parseJsonBody,
+    checkBinary,
+  });
+} catch (err) {
+  console.warn("yt-dlp 模块未加载:", err.message || err);
+}
+
 function listenWithFallback(startPort, maxTries = 12) {
   return new Promise((resolve, reject) => {
     let port = startPort;
@@ -3488,9 +3511,10 @@ async function handleRequest(req, res, opts = {}) {
     if (pathname.length > 1 && pathname.endsWith("/")) pathname = pathname.replace(/\/+$/, "");
 
     if (req.method === "GET" && pathname === "/health") {
-      const [ffmpeg, ffprobe] = await Promise.all([
+      const [ffmpeg, ffprobe, ytdlp] = await Promise.all([
         checkBinary("ffmpeg", ["-version"]),
         checkBinary("ffprobe", ["-version"]),
+        ytdlpApi ? ytdlpApi.checkYtdlp() : Promise.resolve({ ok: false, error: "模块未加载" }),
       ]);
       sendJson(
         res,
@@ -3505,12 +3529,15 @@ async function handleRequest(req, res, opts = {}) {
           features: FEATURES,
           ffmpeg,
           ffprobe,
-          tools: { ffmpeg, ffprobe },
+          ytdlp,
+          tools: { ffmpeg, ffprobe, ytdlp },
           setup: {
             ffmpeg: ffmpeg.ok ? "" : ffmpeg.setup || "",
             ffprobe: ffprobe.ok ? "" : ffprobe.setup || "",
+            ytdlp: ytdlp.ok ? "" : ytdlp.setup || ytdlp.error || "",
           },
           roots: localFsRoots(),
+          ytdlpMount: "/ytdlp",
           embedded: Boolean(opts.embedded),
         },
         origin
@@ -3518,7 +3545,17 @@ async function handleRequest(req, res, opts = {}) {
       return;
     }
 
+    if (ytdlpApi && req.method === "GET" && (pathname === "/ytdlp/health" || pathname === "/ytdlp")) {
+      await ytdlpApi.handle(req, res, { origin, pathname });
+      return;
+    }
+
     if (!opts.alreadyAuthed) requireToken(req);
+
+    if (ytdlpApi && pathname.startsWith("/ytdlp")) {
+      const handled = await ytdlpApi.handle(req, res, { origin, pathname });
+      if (handled) return;
+    }
 
     if (req.method === "GET" && pathname === "/local/roots") {
       sendJson(res, 200, { ok: true, roots: localFsRoots() }, origin);
@@ -3700,6 +3737,7 @@ module.exports = {
   checkBinary,
   revealLocalPath,
   findMemoStorageFile,
+  checkYtdlp: (...args) => (ytdlpApi ? ytdlpApi.checkYtdlp(...args) : Promise.resolve({ ok: false, error: "模块未加载" })),
 };
 
 if (require.main === module) {

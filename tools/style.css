@@ -11187,3 +11187,59 @@ html[data-boot-loading="1"] body {
   border-color: color-mix(in srgb, var(--accent) 55%, transparent);
   color: var(--accent);
 }
+
+.yd-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  margin-top: 1rem;
+}
+
+.yd-opts details.panel-card {
+  padding: 0.55rem 0.75rem;
+}
+
+.yd-opts summary {
+  cursor: pointer;
+}
+
+.yd-probe-out {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.yd-video-head {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+}
+
+.yd-thumb {
+  width: 8.5rem;
+  height: auto;
+  border-radius: 8px;
+  flex: 0 0 auto;
+  background: var(--ink-6);
+}
+
+.yd-table-wrap {
+  overflow: auto;
+  max-height: 18rem;
+  margin-top: 0.45rem;
+}
+
+.yd-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.yd-table th,
+.yd-table td {
+  border-bottom: 1px solid var(--line);
+  padding: 0.28rem 0.4rem;
+  text-align: left;
+  white-space: nowrap;
+}

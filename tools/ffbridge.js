@@ -736,8 +736,9 @@
     };
     const cfg = map[platform];
     if (!cfg) throw new Error("未知平台");
-    const [serverJs, scriptRaw] = await Promise.all([
+    const [serverJs, ytdlpJs, scriptRaw] = await Promise.all([
       fetchTextAsset("./ffmpeg-bridge/server.js"),
+      fetchTextAsset("./ffmpeg-bridge/ytdlp-core.js").catch(() => ""),
       fetchTextAsset(cfg.scriptPath),
     ]);
     const scriptText = platform === "win" ? String(scriptRaw).replace(/\r?\n/g, "\r\n") : scriptRaw;
@@ -749,11 +750,12 @@
       "",
       "必须保留：",
       "  - server.js",
+      "  - ytdlp-core.js",
       "  - " + cfg.scriptName,
       "",
       "使用步骤：",
       "1. 解压到同一文件夹",
-      "2. 本机已安装 Node.js 与 ffmpeg",
+      "2. 本机已安装 Node.js 与 ffmpeg（下载视频建议同时安装 yt-dlp）",
       "3. " + cfg.runHint.replace(/\n/g, "\n   "),
       "4. 回到网页点「连接本机桥」",
       "",
@@ -762,6 +764,7 @@
     ].join("\n");
     const zip = new JSZip();
     zip.file("server.js", serverJs);
+    if (ytdlpJs) zip.file("ytdlp-core.js", ytdlpJs);
     zip.file(cfg.scriptName, scriptText, {
       unixPermissions: platform === "win" ? undefined : 0o755,
     });

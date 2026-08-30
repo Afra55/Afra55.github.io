@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.8.4";
+const BRIDGE_VERSION = "0.8.5";
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
 function loadFfmpegBridge() {
@@ -3534,6 +3534,22 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    if (url.pathname === "/ytdlp" || url.pathname.startsWith("/ytdlp/")) {
+      if (!ffmpegBridge?.handleRequest) {
+        sendJson(res, 503, { ok: false, error: "未找到 yt-dlp 模块（请用完整 ZIP，含 ffmpeg-bridge/ytdlp-core.js）" }, origin);
+        return;
+      }
+      const isYtdlpHealth =
+        req.method === "GET" && (url.pathname === "/ytdlp/health" || url.pathname === "/ytdlp");
+      if (!isYtdlpHealth && req.method !== "OPTIONS") requireToken(req);
+      await ffmpegBridge.handleRequest(req, res, {
+        pathname: url.pathname,
+        alreadyAuthed: !isYtdlpHealth,
+        embedded: true,
+      });
+      return;
+    }
+
     if (url.pathname === "/health" && req.method === "GET") {
       const adbInfo = await checkAdb();
       const hostTools = await probeHostTools();
@@ -3547,6 +3563,7 @@ async function handleApi(req, res, url) {
       }
       let ffmpeg = { ok: false, error: "模块未加载" };
       let ffprobe = { ok: false, error: "模块未加载" };
+      let ytdlp = { ok: false, error: "模块未加载" };
       if (ffmpegBridge?.checkBinary) {
         try {
           [ffmpeg, ffprobe] = await Promise.all([
@@ -3556,6 +3573,13 @@ async function handleApi(req, res, url) {
         } catch (err) {
           ffmpeg = { ok: false, error: err.message || String(err) };
           ffprobe = ffmpeg;
+        }
+      }
+      if (ffmpegBridge?.checkYtdlp) {
+        try {
+          ytdlp = await ffmpegBridge.checkYtdlp();
+        } catch (err) {
+          ytdlp = { ok: false, error: err.message || String(err) };
         }
       }
       sendJson(
@@ -3572,6 +3596,7 @@ async function handleApi(req, res, url) {
           capabilities: {
             adb: true,
             ffmpeg: Boolean(ffmpegBridge),
+            ytdlp: Boolean(ffmpegBridge?.checkYtdlp),
             mirror: true,
           },
           features: [
@@ -3613,24 +3638,29 @@ async function handleApi(req, res, url) {
             "scrcpy-mirror",
             "ffmpeg-ops",
             "ffmpeg-mount",
+            "ytdlp",
+            "ytdlp-mount",
           ],
           mirror: scrcpyMirror.jarStatus(),
           adb: adbInfo,
           ffmpeg,
           ffprobe,
-          tools: { ...hostTools.tools, ffmpeg, ffprobe },
+          ytdlp,
+          tools: { ...hostTools.tools, ffmpeg, ffprobe, ytdlp },
           signingOk: hostTools.signingOk,
           setup: {
             ...hostTools.setup,
             ffmpeg: ffmpeg.ok ? "" : ffmpeg.setup || ffmpeg.error || "",
             ffprobe: ffprobe.ok ? "" : ffprobe.setup || ffprobe.error || "",
+            ytdlp: ytdlp.ok ? "" : ytdlp.setup || ytdlp.error || "",
           },
           deviceCount: devices.length,
           roots: ROOTS,
           writeRoots: WRITE_ROOTS,
           ffmpegMount: "/ff",
+          ytdlpMount: "/ytdlp",
           note:
-            "统一本机桥：ADB + Scrcpy 镜像 + FFmpeg（/ff/*）。Token 默认 devtools-bridge（兼容旧 Token）。",
+            "统一本机桥：ADB + Scrcpy 镜像 + FFmpeg（/ff/*）+ yt-dlp（/ytdlp/*）。Token 默认 devtools-bridge。",
         },
         origin
       );
@@ -4211,7 +4241,7 @@ function printBanner(activePort) {
   console.log(` 版本: ${BRIDGE_VERSION}`);
   console.log(` 地址: http://${HOST}:${activePort}`);
   console.log(` Token: ${TOKEN}（兼容旧 Token: devtools-adb / devtools-ffmpeg）`);
-  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / 代理转发 / Logcat / 任务");
+  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / yt-dlp(/ytdlp) / 代理转发 / Logcat / 任务");
   console.log(" 请保持此窗口打开，然后回到网页点「连接」——ADB 与 FFmpeg 共用这一座桥");
   if (activePort !== PORT) {
     console.log(` 注意: 默认端口 ${PORT} 被占用，已改用 ${activePort}`);
