@@ -989,8 +989,9 @@
     }
   }
 
-  /** 侧栏 Pointer 长按排序：窄屏抽屉，或紧凑模式 + 触控（HTML5 DnD 不可靠） */
-  function usePointerNavSort(pointerType) {
+  /** 侧栏 Pointer 长按排序：仅手机抽屉 ⠿ 手柄（HTML5 DnD 在触控上不可靠） */
+  function usePointerNavSort(pointerType, { fromHandle } = {}) {
+    if (!fromHandle) return false;
     if (!canDesktopDrag()) return true;
     if (!navCompactActive()) return false;
     if (pointerType === "touch") return true;
@@ -1024,6 +1025,7 @@
   }
 
   function navGroupSortHint() {
+    if (showMobileSortHandles()) return "拖左侧 ⠿ 手柄排序分类";
     return allowNavHtml5Drag()
       ? "拖动分类可调整整组顺序"
       : navCompactActive()
@@ -1032,6 +1034,7 @@
   }
 
   function navToolSortHint() {
+    if (showMobileSortHandles()) return "拖左侧 ⠿ 手柄排序；长按名称加入常用";
     return allowNavHtml5Drag() ? "拖动可调整工具顺序" : "长按工具名后拖动，可调整顺序";
   }
 
@@ -1051,7 +1054,7 @@
     if (favoritesList) {
       $$(".nav-fav-link", favoritesList).forEach((link) => {
         link.draggable = allowDrag;
-        link.title = allowDrag ? "拖动排序；右键更多操作" : "长按拖动排序；右键更多操作";
+        link.title = allowDrag ? "拖动排序；右键更多操作" : navToolSortHint();
       });
     }
   }
@@ -1126,6 +1129,10 @@
 
   function isMobileDrawer() {
     return !canDesktopDrag();
+  }
+
+  function showMobileSortHandles() {
+    return isMobileDrawer();
   }
 
   function toolName(id) {
@@ -1639,6 +1646,78 @@
     return $$(".tool-nav-link", navEl);
   }
 
+  function createNavSortHandle({ kind, id, wrap }) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "nav-sort-handle";
+    btn.textContent = "⠿";
+    btn.setAttribute(
+      "aria-label",
+      kind === "group" ? "长按拖动排序分类" : kind === "favorite" ? "长按拖动排序常用工具" : "长按拖动排序工具"
+    );
+    btn.title =
+      kind === "group" ? "长按后拖动排序分类" : kind === "favorite" ? "长按后拖动排序常用工具" : "长按后拖动排序工具";
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    });
+    bindMobileSortPress(btn, { kind, id, handle: btn, wrap, fromHandle: true });
+    return btn;
+  }
+
+  function bindMobileToolCtxPress(link) {
+    if (!link || link.dataset.boundMobileCtx === "1" || canDesktopDrag()) return;
+    link.dataset.boundMobileCtx = "1";
+    const LONG_MS = 480;
+    const CANCEL_PX = 14;
+    let timer = 0;
+    let pointerId = null;
+    let startX = 0;
+    let startY = 0;
+
+    const clearTimer = () => {
+      if (timer) {
+        clearTimeout(timer);
+        timer = 0;
+      }
+    };
+
+    link.addEventListener("pointerdown", (e) => {
+      if (e.pointerType === "mouse" && e.button !== 0) return;
+      if (navSortInteractionActive()) return;
+      pointerId = e.pointerId;
+      startX = e.clientX;
+      startY = e.clientY;
+      clearTimer();
+      timer = window.setTimeout(() => {
+        timer = 0;
+        const id = link.dataset.tool;
+        if (!id) return;
+        hideNavToolCtx();
+        showNavToolCtx(startX, startY, id);
+        navSortClickSuppressUntil = Date.now() + 520;
+        try {
+          navigator.vibrate?.(10);
+        } catch (_) {}
+      }, LONG_MS);
+    });
+
+    const cancel = (e) => {
+      if (pointerId == null || e.pointerId !== pointerId) return;
+      clearTimer();
+      pointerId = null;
+    };
+
+    link.addEventListener("pointermove", (e) => {
+      if (e.pointerId !== pointerId || !timer) return;
+      const dx = Math.abs(e.clientX - startX);
+      const dy = Math.abs(e.clientY - startY);
+      if (dx + dy > CANCEL_PX) cancel(e);
+    });
+    link.addEventListener("pointerup", cancel);
+    link.addEventListener("pointercancel", cancel);
+  }
+
   function renderNav(order) {
     if (!navEl) return;
     const list = order || loadOrder();
@@ -1650,13 +1729,19 @@
       const wrap = document.createElement("div");
       wrap.className = "nav-group";
       wrap.dataset.group = group.id;
+      const head = document.createElement("div");
+      head.className = "nav-group-head";
+      if (showMobileSortHandles()) {
+        head.appendChild(createNavSortHandle({ kind: "group", id: group.id, wrap }));
+      }
       const title = document.createElement("p");
       title.className = "nav-group-title is-sortable";
       title.textContent = group.label;
       title.setAttribute("aria-expanded", "true");
       title.draggable = allowHtml5Drag;
       title.title = navGroupSortHint();
-      wrap.appendChild(title);
+      head.appendChild(title);
+      wrap.appendChild(head);
       const toolsWrap = document.createElement("div");
       toolsWrap.className = "nav-group-tools";
       tools.forEach((id) => {
@@ -1668,7 +1753,15 @@
         a.draggable = allowHtml5Drag;
         a.title = navToolSortHint();
         a.textContent = toolName(id);
-        toolsWrap.appendChild(a);
+        if (showMobileSortHandles()) {
+          const row = document.createElement("div");
+          row.className = "tool-nav-row";
+          row.appendChild(createNavSortHandle({ kind: "tool", id, wrap }));
+          row.appendChild(a);
+          toolsWrap.appendChild(row);
+        } else {
+          toolsWrap.appendChild(a);
+        }
       });
       wrap.appendChild(toolsWrap);
       if (![...wrap.querySelectorAll(".tool-nav-link")].length) return;
@@ -1778,10 +1871,18 @@
       link.href = MEDIA_TABS.includes(id) ? `#media/${id}` : `#${id}`;
       link.dataset.tool = id;
       link.draggable = allowHtml5Drag;
-      link.title = allowHtml5Drag ? "拖动排序；右键更多操作" : "长按拖动排序；右键更多操作";
+      link.title = allowHtml5Drag ? "拖动排序；右键更多操作" : navToolSortHint();
       link.textContent = toolName(id);
       link.setAttribute("role", "listitem");
-      favoritesList.appendChild(link);
+      if (showMobileSortHandles()) {
+        const row = document.createElement("div");
+        row.className = "tool-nav-row";
+        row.appendChild(createNavSortHandle({ kind: "favorite", id, wrap: favoritesList }));
+        row.appendChild(link);
+        favoritesList.appendChild(row);
+      } else {
+        favoritesList.appendChild(link);
+      }
     });
     bindFavoriteInteractions();
     syncNavCompactUi();
@@ -1890,17 +1991,8 @@
         if (!payload || payload.kind !== "favorite" || !toTool) return;
         commitFavoriteReorder(payload.id, toTool, { keepDrawer: false });
       });
-      bindMobileSortPress(link, {
-        kind: "favorite",
-        id: link.dataset.tool,
-        handle: link,
-        wrap: favoritesList,
-      });
+      bindMobileToolCtxPress(link);
       link.addEventListener("contextmenu", (e) => {
-        if (!canDesktopDrag()) {
-          e.preventDefault();
-          return;
-        }
         e.preventDefault();
         hideNavToolCtx();
         showNavToolCtx(e.clientX, e.clientY, link.dataset.tool);
@@ -2236,20 +2328,24 @@
     $$(".nav-fav-link", favoritesList).forEach((c) => c.classList.remove("drag-over", "is-dragging"));
   }
 
-  function navFavoriteAtPoint(x, y) {
+  function navFavoriteAtPoint(x, y, { skipLink } = {}) {
     const stack = typeof document.elementsFromPoint === "function" ? document.elementsFromPoint(x, y) : [document.elementFromPoint(x, y)];
     for (const el of stack) {
       const link = el?.closest?.(".nav-fav-link");
-      if (link && favoritesList?.contains(link)) return link;
+      if (!link || !favoritesList?.contains(link)) continue;
+      if (skipLink && link === skipLink) continue;
+      return link;
     }
     return null;
   }
 
-  function navGroupAtPoint(x, y) {
+  function navGroupAtPoint(x, y, { skipGroup } = {}) {
     const stack = typeof document.elementsFromPoint === "function" ? document.elementsFromPoint(x, y) : [document.elementFromPoint(x, y)];
     for (const el of stack) {
       const group = el?.closest?.(".nav-group");
-      if (group && navEl?.contains(group) && !group.classList.contains("is-filtered-out")) return group;
+      if (!group || !navEl?.contains(group) || group.classList.contains("is-filtered-out")) continue;
+      if (skipGroup && group === skipGroup) continue;
+      return group;
     }
     return null;
   }
@@ -2279,16 +2375,16 @@
         pointerSort.handle?.classList.add("is-dragging");
         const group = navGroupAtPoint(pointerSort.lastX, pointerSort.lastY);
         if (group) peekNavFlyoutForSort(group);
-        const target = navToolAtPoint(pointerSort.lastX, pointerSort.lastY);
-        if (target && target !== pointerSort.handle) target.classList.add("drag-over");
+        const target = navToolAtPoint(pointerSort.lastX, pointerSort.lastY, { skipLink: pointerSort.skipLink });
+        if (target) target.classList.add("drag-over");
       } else if (pointerSort.kind === "favorite") {
         pointerSort.handle?.classList.add("is-dragging");
-        const target = navFavoriteAtPoint(pointerSort.lastX, pointerSort.lastY);
-        if (target && target !== pointerSort.handle) target.classList.add("drag-over");
+        const target = navFavoriteAtPoint(pointerSort.lastX, pointerSort.lastY, { skipLink: pointerSort.skipLink });
+        if (target) target.classList.add("drag-over");
       } else {
         pointerSort.wrap?.classList.add("is-dragging");
-        const target = navGroupAtPoint(pointerSort.lastX, pointerSort.lastY);
-        if (target && target !== pointerSort.wrap) target.classList.add("drag-over");
+        const target = navGroupAtPoint(pointerSort.lastX, pointerSort.lastY, { skipGroup: pointerSort.wrap });
+        if (target) target.classList.add("drag-over");
       }
     }
     pointerSortScrollRaf = requestAnimationFrame(tickPointerSortAutoScroll);
@@ -2387,11 +2483,13 @@
     return true;
   }
 
-  function navToolAtPoint(x, y) {
+  function navToolAtPoint(x, y, { skipLink } = {}) {
     const stack = typeof document.elementsFromPoint === "function" ? document.elementsFromPoint(x, y) : [document.elementFromPoint(x, y)];
     for (const el of stack) {
       const link = el?.closest?.(".tool-nav-link");
-      if (link && navEl?.contains(link) && !link.classList.contains("is-filtered-out")) return link;
+      if (!link || !navEl?.contains(link) || link.classList.contains("is-filtered-out")) continue;
+      if (skipLink && link === skipLink) continue;
+      return link;
     }
     return null;
   }
@@ -2409,36 +2507,47 @@
     return null;
   }
 
-  /** 绑定手机长按排序 */
+  /** 绑定手机 ⠿ 手柄长按排序 */
   function bindMobileSortPress(el, opts) {
     if (!el || el.dataset.boundMobileSort === "1") return;
     el.dataset.boundMobileSort = "1";
-    el.addEventListener("pointerdown", (e) => beginMobilePointerSort(e, opts));
+    el.addEventListener("pointerdown", (e) => {
+      e.stopPropagation();
+      beginMobilePointerSort(e, opts);
+    });
   }
 
-  /** 手机/紧凑模式长按排序：分类标题 / 工具项；不拦截普通上下滑滚动 */
+  /** 手机 ⠿ 手柄长按后拖动排序 */
   function beginMobilePointerSort(e, opts) {
-    if (!usePointerNavSort(e.pointerType)) return;
+    if (!usePointerNavSort(e.pointerType, opts)) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if (pointerSort) cancelPointerSort();
     stopPointerSortAutoScroll();
 
-    const LONG_MS = navCompact ? 420 : 360;
-    const CANCEL_PX = 28;
+    const fromHandle = Boolean(opts.fromHandle);
+    const LONG_MS = fromHandle ? 280 : navCompact ? 420 : 360;
+    const CANCEL_PX = fromHandle ? 36 : 28;
     const SCROLL_SLOP_PX = 8;
     const handle = opts.handle;
-    const kind = opts.kind; // group | tool
+    const kind = opts.kind; // group | tool | favorite
+    const skipGroup = kind === "group" ? opts.wrap : null;
+    const skipLink =
+      kind === "tool" || kind === "favorite"
+        ? opts.handle?.closest?.(".tool-nav-row")?.querySelector?.(".tool-nav-link, .nav-fav-link") || null
+        : null;
+
+    if (fromHandle && e.pointerType === "touch") e.preventDefault();
 
     const onMove = (ev) => {
       if (!pointerSort || pointerSort.pointerId !== ev.pointerId) return;
       const dx = Math.abs(ev.clientX - pointerSort.startX);
       const dy = Math.abs(ev.clientY - pointerSort.startY);
       if (!pointerSort.active) {
-        if (dy >= SCROLL_SLOP_PX && dy > dx * 1.08) {
+        if (!fromHandle && dy >= SCROLL_SLOP_PX && dy > dx * 1.08) {
           cancelPointerSort();
           return;
         }
-        if (dx + dy > CANCEL_PX) cancelPointerSort();
+        if (!fromHandle && dx + dy > CANCEL_PX) cancelPointerSort();
         return;
       }
       ev.preventDefault();
@@ -2447,18 +2556,18 @@
       clearNavDragStyles();
       if (kind === "group") {
         pointerSort.wrap?.classList.add("is-dragging");
-        const target = navGroupAtPoint(ev.clientX, ev.clientY);
-        if (target && target !== pointerSort.wrap) target.classList.add("drag-over");
+        const target = navGroupAtPoint(ev.clientX, ev.clientY, { skipGroup: pointerSort.wrap });
+        if (target) target.classList.add("drag-over");
       } else if (kind === "favorite") {
         pointerSort.handle?.classList.add("is-dragging");
-        const target = navFavoriteAtPoint(ev.clientX, ev.clientY);
-        if (target && target !== pointerSort.handle) target.classList.add("drag-over");
+        const target = navFavoriteAtPoint(ev.clientX, ev.clientY, { skipLink });
+        if (target) target.classList.add("drag-over");
       } else {
         pointerSort.handle?.classList.add("is-dragging");
         const group = navGroupAtPoint(ev.clientX, ev.clientY);
         if (group) peekNavFlyoutForSort(group);
-        const target = navToolAtPoint(ev.clientX, ev.clientY);
-        if (target && target !== pointerSort.handle) target.classList.add("drag-over");
+        const target = navToolAtPoint(ev.clientX, ev.clientY, { skipLink });
+        if (target) target.classList.add("drag-over");
       }
       updatePointerSortAutoScroll(ev.clientY, ev.clientX);
     };
@@ -2482,13 +2591,13 @@
       }
       if (cancelled || !wasActive) return;
       if (kind === "group") {
-        const target = navGroupAtPoint(x, y);
+        const target = navGroupAtPoint(x, y, { skipGroup: state.wrap });
         commitGroupReorder(fromId, target?.dataset?.group, { keepDrawer: true });
       } else if (kind === "favorite") {
-        const target = navFavoriteAtPoint(x, y);
+        const target = navFavoriteAtPoint(x, y, { skipLink });
         commitFavoriteReorder(fromId, target?.dataset?.tool, { keepDrawer: true });
       } else {
-        const target = navToolAtPoint(x, y);
+        const target = navToolAtPoint(x, y, { skipLink });
         commitToolReorder(fromId, target?.dataset?.tool, { keepDrawer: true });
       }
       setTimeout(() => {
@@ -2504,6 +2613,7 @@
       id: opts.id,
       wrap: opts.wrap || null,
       handle,
+      skipLink,
       pointerId: e.pointerId,
       startTime: Date.now(),
       startX: e.clientX,
@@ -2623,13 +2733,8 @@
         }
         commitToolReorder(payload.id, toTool, { keepDrawer: false });
       });
-      // 手机：长按工具名排序
-      bindMobileSortPress(link, {
-        kind: "tool",
-        id: link.dataset.tool,
-        handle: link,
-        wrap: link.closest(".nav-group"),
-      });
+      // 手机：长按工具名弹出常用菜单；排序仅通过 ⠿ 手柄
+      bindMobileToolCtxPress(link);
     });
 
     $$(".nav-group", navEl).forEach((wrap) => {
@@ -2691,12 +2796,6 @@
       wrap.addEventListener("drop", onGroupDrop);
       title.addEventListener("contextmenu", (e) => {
         if (!canDesktopDrag()) e.preventDefault();
-      });
-      bindMobileSortPress(title, {
-        kind: "group",
-        id: wrap.dataset.group,
-        handle: title,
-        wrap,
       });
       title.addEventListener("click", (e) => {
         if (!navCompactActive() || didDrag || compactNavSearching() || shouldSuppressNavCompactClick()) return;
