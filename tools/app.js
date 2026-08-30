@@ -2057,12 +2057,16 @@
           window.DevToolsLazy?.loadPwa?.().catch(() => {});
         });
       }
-      emitRoute();
-      // 首屏只出壳；恢复的上次工具在 idle 后台加载脚本，避免用户以为未进入该工具
-      const idleTool = window.requestIdleCallback || ((cb) => window.setTimeout(cb, 400));
-      idleTool(() => {
+      const eagerTool = routeToolId === "lanshare";
+      if (eagerTool) {
         loadLazyForRoute().catch((err) => console.error("boot lazy-load failed", routeToolId, err));
-      });
+      } else {
+        emitRoute();
+        const idleTool = window.requestIdleCallback || ((cb) => window.setTimeout(cb, 400));
+        idleTool(() => {
+          loadLazyForRoute().catch((err) => console.error("boot lazy-load failed", routeToolId, err));
+        });
+      }
     } else {
       await loadLazyForRoute();
       idleLoadPwaOnce();

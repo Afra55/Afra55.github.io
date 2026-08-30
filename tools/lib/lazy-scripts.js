@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const BUILD = window.TOOLS_BUILD || "2026.08.30-061500";
+  const BUILD = window.TOOLS_BUILD || "2026.08.30-062500";
 
   const VENDOR_FILES = {
     "js-yaml": { src: "./vendor/js-yaml.min.js", probe: () => typeof globalThis.jsyaml !== "undefined" },
@@ -188,10 +188,10 @@
       await loadExtraBundle();
     }
 
-    if (TOOL_FILES[id]) await loadToolScript(id);
-
     const vendors = TOOL_VENDORS[id] || [];
     for (const vendorId of vendors) await loadVendor(vendorId);
+
+    if (TOOL_FILES[id]) await loadToolScript(id);
   }
 
   window.DevToolsLazy = {
