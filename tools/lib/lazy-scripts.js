@@ -38,6 +38,7 @@
     lanshare: "./lanshare.js",
     setup: "./setup.js",
     imgkit: "./imgkit.js",
+    xorenc: "./xorenc.js",
     memo: "./memo.js",
     textimg: "./textimg.js",
     imgtext: "./imgtext.js",
@@ -66,12 +67,13 @@
     "imgpreview",
     "setup",
     "imgkit",
+    "xorenc",
     "lanshare",
     "ffbridge",
   ]);
 
   /** 不依赖 DevToolsPure */
-  const NO_PURE = new Set(["acupoint", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "setup", "about"]);
+  const NO_PURE = new Set(["acupoint", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "setup", "about", "xorenc"]);
 
   const scriptPromises = new Map();
   let extraBundlePromise = null;
