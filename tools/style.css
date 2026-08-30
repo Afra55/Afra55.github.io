@@ -1421,7 +1421,6 @@ a.secondary-btn {
   }
 
   .nav-search-wrap,
-  .nav-strip.nav-recent,
   .nav-drawer-head,
   .nav-sort-hint {
     flex-shrink: 0;
@@ -1450,8 +1449,17 @@ a.secondary-btn {
   }
 
   .nav-favorites,
+  .nav-strip.nav-recent,
   .nav-sort-hint {
     flex-shrink: 0;
+  }
+
+  .nav-bar-scroll > .nav-strip.nav-recent {
+    margin-bottom: 0.45rem;
+  }
+
+  .nav-bar-scroll > .nav-strip.nav-recent[hidden] {
+    display: none !important;
   }
 
   .nav-footer-actions {
