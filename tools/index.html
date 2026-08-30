@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.30-134000"></script>
+  <script src="./lib/tools-build.js?v=2026.08.30-140500"></script>
   <link rel="stylesheet" href="./style.css?v=2026.08.30-103000" />
   <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-062500" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
@@ -3827,7 +3827,7 @@ hello@world.org</textarea>
 <section id="ytdlp" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>yt-dlp 本机桥</h1>
-        <p>用本机已安装的 <span class="mono">yt-dlp</span> 解析并下载视频 / 播放列表 / 字幕 / 直播。走同一座本机桥（<span class="mono">/ytdlp</span>），文件只落在你电脑上。</p>
+        <p>用本机已安装的 <span class="mono">yt-dlp</span> 解析并下载视频 / 播放列表 / 字幕 / 直播。走同一座本机桥（<span class="mono">/ytdlp</span>），文件只落在你电脑上。<a href="#setup-ytdlp">不会装？看安装教程</a></p>
       </div>
       <div class="panel-body">
         <div class="adb-status" id="yd-status">
@@ -3835,13 +3835,18 @@ hello@world.org</textarea>
             <span class="adb-dot" id="yd-dot" aria-hidden="true"></span>
             <div>
               <strong id="yd-status-title">未连接本机桥</strong>
-              <p class="hint tight" id="yd-status-text">请先启动统一桥（默认 <span class="mono">127.0.0.1:17888</span>），本机 PATH 中需有 yt-dlp；合并/抽音还需要 ffmpeg。</p>
+              <p class="hint tight" id="yd-status-text">请先下载完整 ZIP 并运行启动脚本，本机 PATH 中需有 yt-dlp；合并/抽音还需要 ffmpeg。</p>
             </div>
           </div>
-          <div class="btn-row tool-actions">
+          <div class="btn-row tool-actions adb-status-actions">
             <button type="button" class="primary-btn" id="yd-connect">连接本机桥</button>
             <button type="button" class="secondary-btn" id="yd-refresh" disabled>刷新</button>
             <button type="button" class="ghost-btn" id="yd-update" disabled>更新 yt-dlp</button>
+            <span class="adb-dl-bundle" id="yd-dl-bundle">
+              <button type="button" class="secondary-btn" id="yd-dl-mac" data-yd-bundle="mac">下载 macOS 完整包</button>
+              <button type="button" class="secondary-btn" id="yd-dl-win" data-yd-bundle="win">下载 Windows 完整包</button>
+              <button type="button" class="secondary-btn" id="yd-dl-linux" data-yd-bundle="linux">下载 Linux 完整包</button>
+            </span>
           </div>
         </div>
         <div class="field-row" style="flex-wrap:wrap;margin-top:0.75rem">
@@ -3850,7 +3855,21 @@ hello@world.org</textarea>
           <label for="yd-token">Token</label>
           <input id="yd-token" class="mono" type="text" value="devtools-bridge" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint tight mono" id="yd-tools-probe" hidden></p>
+        <p class="hint">与 ADB / FFmpeg <strong>共用一座本机桥</strong>：地址 <span class="mono">17888</span>、Token <span class="mono">devtools-bridge</span>。yt-dlp 接口在 <span class="mono">/ytdlp/*</span>；完整包需含 <span class="mono">server.js</span> + <span class="mono">ytdlp-core.js</span>。</p>
+        <div class="adb-guide" id="yd-setup-guide">
+          <div class="adb-guide-head">
+            <strong>本机依赖怎么配？</strong>
+            <button type="button" class="ghost-btn adb-guide-dismiss" id="yd-setup-guide-dismiss" title="关闭并不再显示">关闭</button>
+          </div>
+          <ol>
+            <li><strong>Node.js（必装）</strong>：用来跑本机桥小服务。终端能跑 <span class="mono">node -v</span>。详见 <a href="#setup-nodejs">安装指南 · Node.js</a>。</li>
+            <li><strong>yt-dlp（必装）</strong>：终端能跑 <span class="mono">yt-dlp --version</span>。macOS：<span class="mono">brew install yt-dlp</span>；Windows：<span class="mono">winget install yt-dlp</span> 或 pipx；Linux：<span class="mono">pipx install yt-dlp</span> 或发行版包。详见下方教程或 <a href="#setup-ytdlp">全局安装说明</a>。</li>
+            <li><strong>FFmpeg（强烈建议）</strong>：合并音视频、只下音频转 mp3 时需要。终端能跑 <span class="mono">ffmpeg -version</span>。详见 <a href="#setup-ffmpeg">安装指南 · FFmpeg</a>。</li>
+            <li><strong>本机桥</strong>：下载上方完整 ZIP → 解压（同目录保留 <span class="mono">server.js</span> 与 <span class="mono">ytdlp-core.js</span>）→ 运行启动脚本 → 点「连接本机桥」。桥已连上但提示找不到 yt-dlp 时，先修好 PATH 再重启桥。</li>
+            <li><strong>会员 / 高码率（可选）</strong>：在下方选项里选「cookies 浏览器」，让 yt-dlp 读取你浏览器已登录的 Cookie；或导出 <span class="mono">cookies.txt</span> 填路径。</li>
+          </ol>
+          <p class="hint tight" id="yd-tools-probe" style="margin:0.55rem 0 0">连接桥后会显示本机 yt-dlp / ffmpeg 探测结果。</p>
+        </div>
         <p class="error" id="yd-error" hidden></p>
 
         <div id="yd-workspace" hidden>
@@ -4075,6 +4094,92 @@ hello@world.org</textarea>
           <div id="yd-jobs" class="adb-jobs-list" style="margin-top:0.75rem"></div>
           <pre class="mono highlight-box" id="yd-extractors-out" hidden style="max-height:16rem;overflow:auto;margin-top:0.75rem"></pre>
         </div>
+
+        <details class="panel-card hint tight yd-guide" id="yd-install-guide" style="margin-top:1.25rem" open>
+          <summary><strong>yt-dlp 安装教程：从零到能下载</strong></summary>
+          <div class="yd-guide-body">
+            <h3 class="subhead">1. 它是什么？为什么要本机桥？</h3>
+            <p><span class="mono">yt-dlp</span> 是开源命令行工具，能解析 YouTube、B 站等上千个站点并下载视频、音频、字幕与元数据。浏览器网页<strong>不能直接</strong>代你下载（跨域与版权限制），所以本站通过<strong>本机桥</strong>调用你电脑上已安装的 yt-dlp——链接与文件都只在你本机处理，不上传服务器。</p>
+
+            <h3 class="subhead">2. 你需要准备什么</h3>
+            <ul>
+              <li><strong>电脑</strong>（Windows / macOS / Linux）。手机浏览器无法跑本机桥，请用电脑。</li>
+              <li><strong>Node.js</strong>：跑桥服务。<a href="#setup-nodejs">安装步骤</a></li>
+              <li><strong>yt-dlp</strong>：真正干活的下载器（本节重点）。</li>
+              <li><strong>FFmpeg</strong>（建议）：合并分离的音视频、转 mp3 等。<a href="#setup-ffmpeg">安装步骤</a></li>
+              <li><strong>本页完整 ZIP 桥</strong>：点上方「下载 xxx 完整包」，解压后运行启动脚本。</li>
+            </ul>
+
+            <h3 class="subhead">3. 安装 yt-dlp（按系统）</h3>
+            <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.45rem;margin:0.5rem 0">
+              <span class="hint tight">选择你的系统：</span>
+              <span class="seg" role="group" aria-label="操作系统">
+                <button type="button" class="seg-btn is-active" data-yd-setup-os="mac">macOS</button>
+                <button type="button" class="seg-btn" data-yd-setup-os="win">Windows</button>
+                <button type="button" class="seg-btn" data-yd-setup-os="linux">Linux</button>
+              </span>
+            </div>
+            <div class="yd-setup-os-panel" data-yd-setup-panel="mac">
+              <ol>
+                <li>推荐 Homebrew（没有请先装 <a href="https://brew.sh/" target="_blank" rel="noopener noreferrer">brew.sh</a>）。</li>
+                <li>终端执行：
+                  <pre class="mono setup-pre">brew install yt-dlp
+yt-dlp --version</pre>
+                </li>
+                <li>同时建议：<code class="mono">brew install ffmpeg</code>（合并视频需要）。</li>
+              </ol>
+            </div>
+            <div class="yd-setup-os-panel" data-yd-setup-panel="win" hidden>
+              <ol>
+                <li>方式 A（推荐）：打开 PowerShell 或命令提示符：
+                  <pre class="mono setup-pre">winget install yt-dlp
+yt-dlp --version</pre>
+                </li>
+                <li>方式 B：若已装 Python，可用 pipx：<code class="mono">pipx install yt-dlp</code></li>
+                <li>方式 C：从 <a href="https://github.com/yt-dlp/yt-dlp/releases" target="_blank" rel="noopener noreferrer">GitHub Releases</a> 下载 <span class="mono">yt-dlp.exe</span>，放到固定目录并把该目录加入 PATH。</li>
+                <li>改完 PATH 后<strong>必须重新打开</strong>命令行窗口再验证。</li>
+                <li>FFmpeg：见 <a href="#setup-ffmpeg">安装指南</a> 或 gyan.dev 构建包。</li>
+              </ol>
+            </div>
+            <div class="yd-setup-os-panel" data-yd-setup-panel="linux" hidden>
+              <ol>
+                <li>推荐 pipx（隔离安装）：
+                  <pre class="mono setup-pre">pipx install yt-dlp
+yt-dlp --version</pre>
+                </li>
+                <li>或发行版包：Arch <code class="mono">pacman -S yt-dlp</code>；部分 Debian/Ubuntu 需用 pip / 官方脚本。</li>
+                <li>FFmpeg：<code class="mono">sudo apt install ffmpeg</code> 等，见 <a href="#setup-ffmpeg">指南</a>。</li>
+              </ol>
+            </div>
+            <p class="hint tight">看到版本号（如 <span class="mono">2024.xx.xx</span>）即安装成功。也可点上方「更新 yt-dlp」让桥帮你升级（需 yt-dlp 已在 PATH）。</p>
+
+            <h3 class="subhead">4. 启动本机桥并连接</h3>
+            <ol>
+              <li>在本页点「下载 macOS / Windows / Linux 完整包」→ 解压到同一文件夹（含 <span class="mono">server.js</span>、<span class="mono">ytdlp-core.js</span>、启动脚本）。</li>
+              <li>运行启动脚本，<strong>保持窗口不要关</strong>（Windows 用 <span class="mono">.cmd</span> 更稳）。</li>
+              <li>回到本页，确认桥地址 <span class="mono">http://127.0.0.1:17888</span>、Token <span class="mono">devtools-bridge</span>，点「连接本机桥」。</li>
+              <li>状态变绿且出现工作区后，粘贴链接 → 选保存目录 → 开始下载。</li>
+            </ol>
+            <p class="hint tight">若 ADB 或 FFmpeg 桥已在跑，<strong>不必再起第二个</strong>——同一端口即可，只要 ZIP 里含 <span class="mono">ytdlp-core.js</span>（桥 ≥ 对应版本）。</p>
+
+            <h3 class="subhead">5. 常见问题</h3>
+            <dl class="setup-faq">
+              <dt>桥连上了，但提示「未找到 yt-dlp」</dt>
+              <dd>终端自测 <span class="mono">yt-dlp --version</span>；Windows 改 PATH 后新开终端；装好后<strong>重启桥</strong>。也可设环境变量 <span class="mono">YTDLP_PATH</span> 指向可执行文件。</dd>
+              <dt>能解析但合并失败 / 只有视频没声音</dt>
+              <dd>安装 FFmpeg 并确认 <span class="mono">ffmpeg -version</span> 可用；选「最佳（视频+音频合并）」模式。</dd>
+              <dt>会员专享 / 年龄限制 / 403</dt>
+              <dd>在「Cookies / 代理」里选已登录的浏览器（chrome / edge 等），或提供 <span class="mono">cookies.txt</span>。</dd>
+              <dt>手机能用吗？</dt>
+              <dd>不能。本工具依赖电脑上的 yt-dlp 与桥服务；手机请用各平台官方 App 或其它方式。</dd>
+            </dl>
+            <p class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.65rem">
+              <a class="ghost-btn" href="#setup-ytdlp">打开全局安装指南</a>
+              <a class="ghost-btn" href="#ffbridge">FFmpeg 本机桥</a>
+              <a class="ghost-btn" href="#adb">ADB 工具</a>
+            </p>
+          </div>
+        </details>
       </div>
     </section>
 
@@ -4648,8 +4753,16 @@ hello@world.org</textarea>
               <span><strong>Node.js</strong> + <strong>FFmpeg</strong></span>
             </div>
             <div class="setup-need-row" role="row">
+              <span><a href="#ytdlp">yt-dlp 本机桥</a>（下载视频 / 播放列表）</span>
+              <span><strong>Node.js</strong> + <strong>yt-dlp</strong>（合并建议 + FFmpeg）</span>
+            </div>
+            <div class="setup-need-row" role="row">
               <span>两个都要用</span>
               <span>Node.js + ADB + FFmpeg（装一次即可）</span>
+            </div>
+            <div class="setup-need-row" role="row">
+              <span>ADB + FFmpeg + yt-dlp 都要用</span>
+              <span>Node.js + ADB + FFmpeg + yt-dlp（装一次即可）</span>
             </div>
           </div>
           <p class="hint tight" style="margin-top:0.65rem">推荐顺序：① Node.js → ② FFmpeg / ADB（按需）→ ③ 回网页下载对应「完整 ZIP 桥」并运行 → ④ 点「连接本机桥」。</p>
@@ -4757,24 +4870,42 @@ ffmpeg -version</pre>
 
         <section class="setup-block panel-card" id="setup-ytdlp">
           <h2 class="subhead">2b. 安装 yt-dlp（视频下载本机桥需要）</h2>
-          <p class="hint">网页 <a href="#ytdlp">yt-dlp</a> 通过本机桥调用命令行工具。装好后终端能跑 <span class="mono">yt-dlp --version</span>。合并音视频仍需要上面的 FFmpeg。</p>
+          <p class="hint">网页 <a href="#ytdlp">yt-dlp 本机桥</a> 通过本机桥调用命令行工具。装好后终端能跑 <span class="mono">yt-dlp --version</span>。合并音视频仍需要上面的 FFmpeg。页面内也有<a href="#ytdlp">详细教程</a>。</p>
           <p class="btn-row tool-actions" style="flex-wrap:wrap">
             <a class="primary-btn" href="https://github.com/yt-dlp/yt-dlp" target="_blank" rel="noopener noreferrer">yt-dlp GitHub</a>
-            <a class="ghost-btn" href="https://github.com/yt-dlp/yt-dlp/wiki/Installation" target="_blank" rel="noopener noreferrer">安装说明</a>
+            <a class="ghost-btn" href="https://github.com/yt-dlp/yt-dlp/wiki/Installation" target="_blank" rel="noopener noreferrer">官方安装说明</a>
+            <a class="ghost-btn" href="#ytdlp">打开 yt-dlp 工具页</a>
           </p>
           <div class="setup-os-panel" data-setup-panel="mac">
-            <pre class="mono setup-pre">brew install yt-dlp
-yt-dlp --version</pre>
+            <ol class="setup-steps">
+              <li>推荐 Homebrew：<code class="mono">brew install yt-dlp</code></li>
+              <li>验证：
+                <pre class="mono setup-pre">yt-dlp --version</pre>
+              </li>
+              <li>升级：<code class="mono">brew upgrade yt-dlp</code>，或在工具页连桥后点「更新 yt-dlp」。</li>
+            </ol>
           </div>
           <div class="setup-os-panel" data-setup-panel="win" hidden>
-            <p class="hint tight">可用 pipx / winget，或从 Releases 下载 <span class="mono">yt-dlp.exe</span> 加入 PATH。</p>
-            <pre class="mono setup-pre">winget install yt-dlp
+            <ol class="setup-steps">
+              <li>推荐 winget：
+                <pre class="mono setup-pre">winget install yt-dlp
 yt-dlp --version</pre>
+              </li>
+              <li>或 pipx：<code class="mono">pipx install yt-dlp</code>；或从 <a href="https://github.com/yt-dlp/yt-dlp/releases" target="_blank" rel="noopener noreferrer">Releases</a> 下载 <span class="mono">yt-dlp.exe</span> 加入 PATH。</li>
+              <li>改 PATH 后必须<strong>重新打开</strong>命令行再验证。</li>
+            </ol>
           </div>
           <div class="setup-os-panel" data-setup-panel="linux" hidden>
-            <pre class="mono setup-pre">pipx install yt-dlp
+            <ol class="setup-steps">
+              <li>推荐 pipx：
+                <pre class="mono setup-pre">pipx install yt-dlp
 yt-dlp --version</pre>
+              </li>
+              <li>Arch：<code class="mono">pacman -S yt-dlp</code>；其它发行版见官方 Wiki 或 pip 安装。</li>
+              <li>找不到命令时可设环境变量 <span class="mono">YTDLP_PATH</span> 指向可执行文件，然后重启桥。</li>
+            </ol>
           </div>
+          <p class="hint tight">提示找不到 yt-dlp：先在本机终端自测，再重启桥。会员内容可在工具页选「cookies 浏览器」。</p>
         </section>
 
         <!-- ===== ADB ===== -->
@@ -4827,15 +4958,16 @@ adb devices</pre>
         <!-- ===== Bridge ===== -->
         <section class="setup-block panel-card" id="setup-bridge">
           <h2 class="subhead">4. 下载并启动「本机桥」</h2>
-          <p class="hint">桥是我们网站提供的小程序：网页通过它调用你电脑上的 adb / ffmpeg。文件不会上传到互联网。</p>
+          <p class="hint">桥是我们网站提供的小程序：网页通过它调用你电脑上的 adb / ffmpeg / yt-dlp。文件不会上传到互联网。</p>
           <ol class="setup-steps">
             <li>打开对应页面：
               <span class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.35rem">
                 <a class="secondary-btn" href="#adb">打开 ADB 工具</a>
                 <a class="secondary-btn" href="#ffbridge">打开 FFmpeg 本机桥</a>
+                <a class="secondary-btn" href="#ytdlp">打开 yt-dlp 本机桥</a>
               </span>
             </li>
-            <li>点击「下载 xxx 完整包」（含 <span class="mono">server.js</span> + 启动脚本）。请解压后<strong>两个文件放在同一文件夹</strong>。</li>
+            <li>点击「下载 xxx 完整包」（含 <span class="mono">server.js</span> + 启动脚本；yt-dlp 还需 <span class="mono">ytdlp-core.js</span>）。请解压后<strong>放在同一文件夹</strong>。</li>
             <li>运行启动脚本：
               <ul>
                 <li>macOS：双击或 <span class="mono">chmod +x … &amp;&amp; ./…</span></li>
@@ -4845,8 +4977,9 @@ adb devices</pre>
             </li>
             <li>回到网页点「连接本机桥」。默认地址：
               <ul>
-                <li>统一本机桥：<span class="mono">http://127.0.0.1:17888</span>，Token <span class="mono">devtools-bridge</span>（ADB + 镜像 + FFmpeg）</li>
+                <li>统一本机桥：<span class="mono">http://127.0.0.1:17888</span>，Token <span class="mono">devtools-bridge</span>（ADB + 镜像 + FFmpeg + yt-dlp）</li>
                 <li>FFmpeg 接口前缀：<span class="mono">/ff</span>（例如 <span class="mono">/ff/ops</span>）</li>
+                <li>yt-dlp 接口前缀：<span class="mono">/ytdlp</span>（例如 <span class="mono">/ytdlp/health</span>）</li>
               </ul>
             </li>
           </ol>
@@ -4856,8 +4989,8 @@ adb devices</pre>
         <section class="setup-block panel-card" id="setup-faq">
           <h2 class="subhead">5. 常见问题</h2>
           <dl class="setup-faq">
-            <dt>提示找不到 node / ffmpeg / adb</dt>
-            <dd>确认已安装；Windows 改完 PATH 后必须新开终端；用上面的 <span class="mono">-v</span> / <span class="mono">-version</span> 命令自测。</dd>
+            <dt>提示找不到 node / ffmpeg / adb / yt-dlp</dt>
+            <dd>确认已安装；Windows 改完 PATH 后必须新开终端；用上面的 <span class="mono">-v</span> / <span class="mono">-version</span> 命令自测；yt-dlp 装好后需重启桥。</dd>
             <dt>桥连不上</dt>
             <dd>确认启动窗口还在跑；地址端口别填错；浏览器要用 https 本站或本机预览，不要用 <span class="mono">file://</span> 直接打开 HTML。</dd>
             <dt>手机 adb devices 是空的</dt>
@@ -4867,12 +5000,15 @@ adb devices</pre>
             <dt>只想批量抽音频，要不要装 ADB？</dt>
             <dd>不用。装 Node.js + FFmpeg，用 <a href="#ffbridge">FFmpeg 本机桥</a> 即可。</dd>
             <dt>偶尔处理一两个视频，要不要装本机桥？</dt>
-            <dd>不必。用媒体里的「音频处理 / 视频修剪」等浏览器内工具就够（也是保底方案）；几百个文件再上本机桥。</dd>
+            <dd>不必。用媒体里的「音频处理 / 视频修剪」等浏览器内工具就够（也是保底方案）；批量下载或整列表再用 <a href="#ytdlp">yt-dlp 本机桥</a>。</dd>
+            <dt>下载视频只要 yt-dlp，要不要装 ADB？</dt>
+            <dd>不用。装 Node.js + yt-dlp（合并建议 + FFmpeg），用 <a href="#ytdlp">yt-dlp 本机桥</a> 即可；与 ADB 共用同一座桥。</dd>
           </dl>
           <p class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.75rem">
             <a class="ghost-btn" href="#about">返回关于</a>
             <a class="ghost-btn" href="#adb">ADB 工具</a>
             <a class="ghost-btn" href="#ffbridge">FFmpeg 本机桥</a>
+            <a class="ghost-btn" href="#ytdlp">yt-dlp 本机桥</a>
           </p>
         </section>
       </div>
