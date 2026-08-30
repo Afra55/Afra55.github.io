@@ -65,7 +65,6 @@
     fileInput: $("#ls-file-input"),
     pickBtn: $("#ls-pick"),
     leaveBtn: $("#ls-leave"),
-    dissolveBtn: $("#ls-dissolve"),
     errorEl: $("#ls-error"),
     progressEl: $("#ls-progress"),
     progressBar: $("#ls-progress-bar"),
@@ -79,6 +78,12 @@
   let camStream = null;
   /** @type {number|null} */
   let scanRaf = null;
+  /** @type {number|null} */
+  let busyProgressTimer = null;
+  /** @type {number|null} */
+  let infoTimer = null;
+  /** @type {number} */
+  let pendingJoinGen = 0;
 
   const state = {
     peerId: "",
@@ -578,17 +583,154 @@
     els.errorEl.textContent = msg || "";
   }
 
-  function setProgress(pct, text) {
+  function setInfo(msg) {
+    clearTimeout(infoTimer);
+    if (!msg || !els.statusText || !state.roomId) return;
+    const base = `${state.members.size} 人在线 · 文件从上传者直传`;
+    els.statusText.textContent = `${base} · ${msg}`;
+    infoTimer = setTimeout(() => paintStatus(), 4500);
+  }
+
+  function setProgress(pct, text, { busy = false } = {}) {
     if (!els.progressEl) return;
+    const wrap = els.progressEl.querySelector(".ls-progress-bar-wrap");
     if (pct == null) {
       els.progressEl.hidden = true;
+      wrap?.classList.remove("is-busy");
       if (els.progressBar) els.progressBar.style.width = "0%";
       if (els.progressText) els.progressText.textContent = "";
       return;
     }
     els.progressEl.hidden = false;
-    if (els.progressBar) els.progressBar.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+    wrap?.classList.toggle("is-busy", !!busy);
+    if (!busy && els.progressBar) els.progressBar.style.width = `${Math.min(100, Math.max(0, pct))}%`;
     if (els.progressText) els.progressText.textContent = text || "";
+  }
+
+  function startBusyProgress(text) {
+    stopBusyProgress();
+    setProgress(0, text, { busy: true });
+    let p = 6;
+    busyProgressTimer = window.setInterval(() => {
+      p = Math.min(p + 4, 88);
+      if (els.progressText) els.progressText.textContent = text;
+      if (els.progressBar && !els.progressEl.querySelector(".ls-progress-bar-wrap")?.classList.contains("is-busy")) {
+        els.progressBar.style.width = `${p}%`;
+      }
+    }, 380);
+  }
+
+  function stopBusyProgress() {
+    if (busyProgressTimer) {
+      clearInterval(busyProgressTimer);
+      busyProgressTimer = null;
+    }
+    setProgress(null);
+  }
+
+  function setJoinUiBusy(busy) {
+    const disabled = !!busy;
+    if (els.createBtn) els.createBtn.disabled = disabled || !webrtcSupported();
+    if (els.joinPwdBtn) els.joinPwdBtn.disabled = disabled || !webrtcSupported();
+    if (els.scanBtn) els.scanBtn.disabled = disabled || !webrtcSupported();
+    if (els.pasteJoinBtn) els.pasteJoinBtn.disabled = disabled || !webrtcSupported();
+    if (els.joinConfirmBtn) els.joinConfirmBtn.disabled = disabled || !webrtcSupported();
+  }
+
+  function fileKindLabel(meta) {
+    const mime = String(meta?.mime || "").toLowerCase();
+    const ext = String(meta?.name || "")
+      .split(".")
+      .pop()
+      ?.toLowerCase() || "";
+    if (mime.startsWith("image/") || /^(jpg|jpeg|png|gif|webp|bmp|svg|heic|heif|avif)$/.test(ext)) return "图片";
+    if (mime.startsWith("video/") || /^(mp4|mov|webm|mkv|avi|m4v|3gp)$/.test(ext)) return "视频";
+    if (mime.startsWith("audio/") || /^(mp3|wav|flac|aac|m4a|ogg|opus)$/.test(ext)) return "音频";
+    if (mime.startsWith("text/") || /^(txt|md|json|xml|html|css|js|ts|csv|log)$/.test(ext)) return "文本";
+    if (/^(pdf|doc|docx|xls|xlsx|ppt|pptx)$/.test(ext)) return "文档";
+    if (/^(zip|rar|7z|tar|gz)$/.test(ext)) return "压缩包";
+    return "文件";
+  }
+
+  function isImageMeta(meta) {
+    const mime = String(meta?.mime || "").toLowerCase();
+    return mime.startsWith("image/") || !!meta?.thumb;
+  }
+
+  function filePreviewSrc(meta) {
+    if (meta?.thumb) return meta.thumb;
+    const local = state.localFiles.get(meta.id);
+    if (local && local.type?.startsWith("image/")) {
+      if (!meta._objUrl) {
+        meta._objUrl = URL.createObjectURL(local);
+      }
+      return meta._objUrl;
+    }
+    return "";
+  }
+
+  async function makeImageThumb(file) {
+    if (!file?.type?.startsWith("image/") || file.size > 12 * 1024 * 1024) return "";
+    try {
+      let bmp;
+      if (typeof createImageBitmap === "function") {
+        bmp = await createImageBitmap(file);
+      } else {
+        const url = URL.createObjectURL(file);
+        try {
+          bmp = await new Promise((resolve, reject) => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.onerror = reject;
+            img.src = url;
+          });
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      }
+      const maxSide = 128;
+      const scale = Math.min(1, maxSide / Math.max(bmp.width || 1, bmp.height || 1));
+      const w = Math.max(1, Math.round((bmp.width || 1) * scale));
+      const h = Math.max(1, Math.round((bmp.height || 1) * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w;
+      canvas.height = h;
+      canvas.getContext("2d")?.drawImage(bmp, 0, 0, w, h);
+      bmp.close?.();
+      return canvas.toDataURL("image/jpeg", 0.72);
+    } catch {
+      return "";
+    }
+  }
+
+  function revokeFilePreviewUrls() {
+    state.files.forEach((meta) => {
+      if (meta._objUrl) {
+        URL.revokeObjectURL(meta._objUrl);
+        delete meta._objUrl;
+      }
+    });
+  }
+
+  function removeMemberFiles(memberId, { notify = false } = {}) {
+    if (!memberId) return;
+    const ids = [...state.files.values()].filter((f) => f.ownerId === memberId).map((f) => f.id);
+    ids.forEach((id) => {
+      const meta = state.files.get(id);
+      if (meta?._objUrl) URL.revokeObjectURL(meta._objUrl);
+      state.files.delete(id);
+      state.localFiles.delete(id);
+      if (notify) memberSend({ type: "file-remove", fileId: id });
+    });
+    if (ids.length) paintFiles();
+  }
+
+  function closeMemberLink(memberId) {
+    const link = state.memberLinks.get(memberId);
+    if (!link) return;
+    link.dc?.close();
+    link.pc?.close();
+    state.memberLinks.delete(memberId);
   }
 
   function peerName() {
@@ -706,7 +848,6 @@
     if (els.joinArea) els.joinArea.hidden = inRoom;
     if (els.guestAnswerArea) els.guestAnswerArea.hidden = !inRoom || state.isHost || state.controlLinked;
     if (els.leaveBtn) els.leaveBtn.hidden = !inRoom;
-    if (els.dissolveBtn) els.dissolveBtn.hidden = !inRoom || !state.isHost;
     if (els.pickBtn) {
       els.pickBtn.disabled = !canUploadFiles();
       els.pickBtn.title = canUploadFiles() ? "" : "连接就绪后才可上传";
@@ -714,7 +855,7 @@
     if (els.roomMeta) {
       els.roomMeta.hidden = !inRoom;
       els.roomMeta.textContent = state.isHost
-        ? "你是房主：可解散；退出时由最近加入的在线成员接任"
+        ? "你是房主：退出后由最近加入的在线成员接任"
         : `房主：${memberLabel(state.hostId)}`;
     }
     paintMembers();
@@ -755,10 +896,15 @@
       ? list
           .map((f) => {
             const mine = f.ownerId === state.peerId;
+            const kind = fileKindLabel(f);
+            const preview = filePreviewSrc(f);
+            const previewHtml = preview
+              ? `<div class="ls-file-preview"><img class="ls-file-thumb" src="${preview}" alt="" loading="lazy" /></div>`
+              : `<div class="ls-file-preview"><span class="ls-file-kind-badge">${escapeHtml(kind)}</span></div>`;
             const actions = mine
               ? `<button type="button" class="ghost-btn ls-del" data-id="${f.id}">删除</button>`
               : `<button type="button" class="secondary-btn ls-dl" data-id="${f.id}">下载</button>`;
-            return `<div class="ls-file-row"><div class="ls-file-main"><strong>${escapeHtml(f.name)}</strong><span class="hint mono">${fmtSize(f.size)} · ${escapeHtml(memberLabel(f.ownerId))}</span></div><div class="btn-row tight">${actions}</div></div>`;
+            return `<div class="ls-file-row">${previewHtml}<div class="ls-file-main"><strong>${escapeHtml(f.name)}</strong><span class="hint mono"><span class="ls-file-kind-tag">${escapeHtml(kind)}</span>${fmtSize(f.size)} · ${escapeHtml(memberLabel(f.ownerId))}</span></div><div class="btn-row tight">${actions}</div></div>`;
           })
           .join("")
       : '<p class="hint tight">暂无文件，点「选择文件」上传</p>';
@@ -1340,11 +1486,14 @@
         paintStatus();
         break;
       case "member-left":
-        if (msg.memberId) {
+        if (msg.memberId && state.members.has(msg.memberId)) {
+          const leftName = msg.name || memberLabel(msg.memberId);
           state.members.delete(msg.memberId);
-          if (state.isHost) state.memberLinks.delete(msg.memberId);
+          removeMemberFiles(msg.memberId);
+          if (state.isHost) closeMemberLink(msg.memberId);
+          setInfo(`${leftName} 已退出`);
+          paintStatus();
         }
-        paintStatus();
         relayMemberEvent(msg, remoteId, ["member-left"]);
         break;
       case "file-add":
@@ -1401,10 +1550,13 @@
       }
     };
     dc.onclose = () => {
-      if (state.isHost && remoteId && remoteId !== state.peerId) {
+      if (state.isHost && remoteId && remoteId !== state.peerId && state.members.has(remoteId)) {
+        const leftName = memberLabel(remoteId);
         state.members.delete(remoteId);
-        state.memberLinks.delete(remoteId);
-        broadcast({ type: "member-left", memberId: remoteId });
+        removeMemberFiles(remoteId);
+        closeMemberLink(remoteId);
+        broadcast({ type: "member-left", memberId: remoteId, name: leftName });
+        setInfo(`${leftName} 已退出`);
         paintStatus();
       }
     };
@@ -1739,10 +1891,14 @@
 
   async function refreshJoinSlot() {
     if (!state.isHost) return;
-    state.pendingJoin?.pc?.close();
+    const prev = state.pendingJoin;
+    state.pendingJoin = null;
+    prev?.pc?.close();
+
     const pc = createPeer();
+    const slotGen = (pendingJoinGen += 1);
     let settled = false;
-    state.pendingJoin = { pc, dc: null };
+    state.pendingJoin = { pc, dc: null, gen: slotGen };
 
     pc.ondatachannel = (ev) => {
       const dc = ev.channel;
@@ -1766,7 +1922,11 @@
     };
 
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "failed") setError("有新成员连接失败，请刷新邀请码重试");
+      if (state.pendingJoin?.pc !== pc || state.pendingJoin?.gen !== slotGen) return;
+      if (pc.connectionState === "failed") {
+        setError("新成员连接失败，请让对方重新加入");
+        refreshJoinSlot().catch(() => {});
+      }
     };
 
     startOfferRelayListen();
@@ -1781,45 +1941,54 @@
       setError("当前浏览器不支持 WebRTC");
       return;
     }
-    await ensureQrLibs();
-    setError("");
-    saveName();
-    cleanupRoom(false);
-    state.peerId = uid();
-    state.peerName = peerName();
-    state.roomId = roomCode();
-    state.isHost = true;
-    state.hostId = state.peerId;
-    state.joinedAt = Date.now();
-    state.members.set(state.peerId, { id: state.peerId, name: state.peerName, joinedAt: state.joinedAt });
-    state.controlLinked = true;
+    setJoinUiBusy(true);
+    startBusyProgress("正在创建房间…");
+    try {
+      await ensureQrLibs();
+      setError("");
+      saveName();
+      cleanupRoom(false);
+      state.peerId = uid();
+      state.peerName = peerName();
+      state.roomId = roomCode();
+      state.isHost = true;
+      state.hostId = state.peerId;
+      state.joinedAt = Date.now();
+      state.members.set(state.peerId, { id: state.peerId, name: state.peerName, joinedAt: state.joinedAt });
+      state.controlLinked = true;
 
-    const pwdRaw = els.roomPwdHost?.value || "";
-    if (normalizeRoomPassword(pwdRaw)) {
-      try {
+      const pwdRaw = els.roomPwdHost?.value || "";
+      if (normalizeRoomPassword(pwdRaw)) {
         state.roomPassword = validateRoomPassword(pwdRaw);
         state.roomPasswordSlug = await hashRoomPassword(state.roomPassword);
         state.viaMqtt = true;
-      } catch (e) {
-        state.roomId = "";
-        state.isHost = false;
-        state.hostId = "";
-        state.members.clear();
-        paintStatus();
-        throw e;
       }
-    }
 
-    if (state.viaMqtt) {
-      try {
-        await startMqttHost();
-      } catch (e) {
-        setError((e?.message || "密码信令启动失败") + "；仍可用下方二维码邀请加入");
-        state.viaMqtt = false;
+      if (state.viaMqtt) {
+        if (els.progressText) els.progressText.textContent = "正在启动密码信令…";
+        try {
+          await startMqttHost();
+        } catch (e) {
+          setError((e?.message || "密码信令启动失败") + "；仍可用下方二维码邀请加入");
+          state.viaMqtt = false;
+        }
       }
+      if (els.progressText) els.progressText.textContent = "正在准备邀请…";
+      await refreshJoinSlot();
+      setProgress(100, "房间已创建");
+      paintStatus();
+    } catch (e) {
+      state.roomId = "";
+      state.isHost = false;
+      state.hostId = "";
+      state.members.clear();
+      paintStatus();
+      setError(e?.message || "创建房间失败");
+      throw e;
+    } finally {
+      setJoinUiBusy(false);
+      setTimeout(stopBusyProgress, 450);
     }
-    await refreshJoinSlot();
-    paintStatus();
   }
 
   async function joinRoom(inviteText, opts = {}) {
@@ -1827,35 +1996,40 @@
       setError("当前浏览器不支持 WebRTC");
       return;
     }
-    setError("");
-    saveName();
-    const inv = await parseInviteAsync(inviteText);
-    cleanupRoom(false, { keepMqtt: !!opts.keepMqtt });
-    if (opts.viaMqtt) state.viaMqtt = true;
-    if (opts.mqttClient && opts.mqttTopic) {
-      attachMqttGuest(opts.mqttClient, opts.mqttTopic);
+    if (!opts._skipBusy) {
+      setJoinUiBusy(true);
+      startBusyProgress(opts.viaMqtt ? "正在通过密码加入…" : "正在加入房间…");
     }
-    state.peerId = uid();
-    state.peerName = peerName();
-    state.roomId = inv.roomId;
-    state.hostId = inv.hostId;
-    state.isHost = false;
-    state.joinedAt = Date.now();
-    state.members.set(state.peerId, { id: state.peerId, name: state.peerName, joinedAt: state.joinedAt });
-    state.controlLinked = false;
-    state.pendingOutbound = [];
-    paintStatus();
-
-    const pc = createPeer();
-    state.controlPc = pc;
-
-    pc.onconnectionstatechange = () => {
-      if (pc.connectionState === "connected") paintStatus();
-      if (pc.connectionState === "failed") setError("加入房间失败，请确认邀请码未过期并重试");
-      if (pc.connectionState === "disconnected") setError("与房主连接中断，请重新加入");
-    };
-
     try {
+      setError("");
+      saveName();
+      const inv = await parseInviteAsync(inviteText);
+      cleanupRoom(false, { keepMqtt: !!opts.keepMqtt });
+      if (opts.viaMqtt) state.viaMqtt = true;
+      if (opts.mqttClient && opts.mqttTopic) {
+        attachMqttGuest(opts.mqttClient, opts.mqttTopic);
+      }
+      state.peerId = uid();
+      state.peerName = peerName();
+      state.roomId = inv.roomId;
+      state.hostId = inv.hostId;
+      state.isHost = false;
+      state.joinedAt = Date.now();
+      state.members.set(state.peerId, { id: state.peerId, name: state.peerName, joinedAt: state.joinedAt });
+      state.controlLinked = false;
+      state.pendingOutbound = [];
+      paintStatus();
+
+      if (els.progressText) els.progressText.textContent = "正在建立 WebRTC 连接…";
+      const pc = createPeer();
+      state.controlPc = pc;
+
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === "connected") paintStatus();
+        if (pc.connectionState === "failed") setError("加入房间失败，请确认邀请码未过期并重试");
+        if (pc.connectionState === "disconnected") setError("与房主连接中断，请重新加入");
+      };
+
       if (inv.sdp && inv.mode === "legacy-offer") {
         pc.ondatachannel = (ev) => {
           state.controlDc = ev.channel;
@@ -1877,10 +2051,13 @@
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         await waitIce(pc);
+        if (els.progressText) els.progressText.textContent = state.viaMqtt ? "正在自动配对…" : "正在等待房主确认…";
         startHostAnswerListen(inv.roomId, state.peerId);
         await publishJoinOffer(pc.localDescription.sdp, inv);
         await tryApplyHostAnswerFromHash();
       }
+      if (!opts._skipBusy) setProgress(100, "已加入房间");
+      paintStatus();
     } catch (e) {
       closeMemberControl();
       state.roomId = "";
@@ -1889,8 +2066,12 @@
       state.members.clear();
       paintStatus();
       throw new Error(e?.message || "无法建立连接，请让房主刷新邀请二维码");
+    } finally {
+      if (!opts._skipBusy) {
+        setJoinUiBusy(false);
+        setTimeout(stopBusyProgress, 450);
+      }
     }
-    paintStatus();
   }
 
   async function joinByPassword(pwdRaw) {
@@ -1898,18 +2079,27 @@
       setError("当前浏览器不支持 WebRTC");
       return;
     }
-    const pwd = validateRoomPassword(pwdRaw);
-    setError("");
-    saveName();
-    await ensureMqttLib();
-    const slug = await hashRoomPassword(pwd);
-    state.roomPassword = pwd;
-    state.roomPasswordSlug = slug;
-    const { client, topic, hello } = await waitMqttHostHello(slug);
-    const invText = `lanshare?r=${encodeURIComponent(hello.roomId)}&h=${encodeURIComponent(hello.hostId)}`;
-    await joinRoom(invText, { keepMqtt: true, viaMqtt: true, mqttClient: client, mqttTopic: topic });
-    if (els.roomPwdJoin) els.roomPwdJoin.value = "";
-    paintStatus();
+    setJoinUiBusy(true);
+    startBusyProgress("正在连接信令…");
+    try {
+      const pwd = validateRoomPassword(pwdRaw);
+      setError("");
+      saveName();
+      await ensureMqttLib();
+      const slug = await hashRoomPassword(pwd);
+      state.roomPassword = pwd;
+      state.roomPasswordSlug = slug;
+      if (els.progressText) els.progressText.textContent = "正在查找房间…";
+      const { client, topic, hello } = await waitMqttHostHello(slug);
+      const invText = `lanshare?r=${encodeURIComponent(hello.roomId)}&h=${encodeURIComponent(hello.hostId)}`;
+      await joinRoom(invText, { keepMqtt: true, viaMqtt: true, mqttClient: client, mqttTopic: topic, _skipBusy: true });
+      if (els.roomPwdJoin) els.roomPwdJoin.value = "";
+      setProgress(100, "已加入房间");
+      paintStatus();
+    } finally {
+      setJoinUiBusy(false);
+      setTimeout(stopBusyProgress, 450);
+    }
   }
 
   function readPasswordFromHash() {
@@ -2015,6 +2205,7 @@
     for (const file of [...fileList]) {
       const id = uid(10);
       state.localFiles.set(id, file);
+      const thumb = await makeImageThumb(file);
       const meta = {
         id,
         name: file.name,
@@ -2022,6 +2213,7 @@
         mime: file.type || "application/octet-stream",
         ownerId: state.peerId,
         addedAt: Date.now(),
+        ...(thumb ? { thumb } : {}),
       };
       state.files.set(id, meta);
       memberSend({ type: "file-add", file: meta });
@@ -2278,6 +2470,8 @@
 
   async function leaveRoom() {
     if (!state.roomId) return;
+    const myName = state.peerName || memberLabel(state.peerId);
+    removeMemberFiles(state.peerId, { notify: true });
     if (state.isHost) {
       const next = pickNextHost();
       if (next) {
@@ -2289,14 +2483,8 @@
         broadcast({ type: "room-closed" });
       }
     } else {
-      memberSend({ type: "member-left", memberId: state.peerId });
+      memberSend({ type: "member-left", memberId: state.peerId, name: myName });
     }
-    cleanupRoom(false);
-  }
-
-  function dissolveRoom() {
-    if (!state.isHost) return;
-    broadcast({ type: "room-closed" });
     cleanupRoom(false);
   }
 
@@ -2325,6 +2513,9 @@
 
   function cleanupRoom(keepError, opts = {}) {
     if (!opts.keepMqtt) stopMqttSignaling();
+    stopBusyProgress();
+    clearTimeout(infoTimer);
+    revokeFilePreviewUrls();
     closeHostControl(true);
     closeMemberControl();
     state.transferPcs.forEach((pc) => pc.close());
@@ -2643,7 +2834,6 @@
   });
   els.camStop?.addEventListener("click", () => stopScan());
   els.leaveBtn?.addEventListener("click", () => leaveRoom());
-  els.dissolveBtn?.addEventListener("click", () => dissolveRoom());
   els.pickBtn?.addEventListener("click", () => els.fileInput?.click());
   els.fileInput?.addEventListener("change", () => {
     if (els.fileInput?.files?.length) onFilesPicked(els.fileInput.files);

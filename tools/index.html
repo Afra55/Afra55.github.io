@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.30-063100"></script>
+  <script src="./lib/tools-build.js?v=2026.08.30-071500"></script>
   <link rel="stylesheet" href="./style.css?v=2026.08.30-062500" />
   <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-062500" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
@@ -141,7 +141,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本（北京时间）">v2026.08.30-063100</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本（北京时间）">v2026.08.30-071500</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="site-force-refresh" title="注销 Service Worker、清空浏览器缓存并重新加载，以获取最新脚本与样式">强制刷新</button>
@@ -3369,6 +3369,11 @@ hello@world.org</textarea>
           </div>
         </div>
 
+        <div id="ls-progress" class="panel-card" hidden style="margin-top:0.65rem">
+          <div class="ls-progress-bar-wrap"><div id="ls-progress-bar" class="ls-progress-bar"></div></div>
+          <p class="hint tight" id="ls-progress-text"></p>
+        </div>
+
         <p class="hint tight" id="ls-platform-hint" hidden style="margin-top:0.65rem"></p>
 
         <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem;align-items:center">
@@ -3446,7 +3451,6 @@ hello@world.org</textarea>
           <button type="button" class="secondary-btn" id="ls-pick" disabled>选择文件</button>
           <input id="ls-file-input" type="file" multiple accept="*/*" hidden />
           <button type="button" class="ghost-btn" id="ls-leave" hidden>退出房间</button>
-          <button type="button" class="ghost-btn" id="ls-dissolve" hidden>解散房间</button>
         </div>
 
         <div class="label-row" style="margin-top:1rem">
@@ -3458,11 +3462,6 @@ hello@world.org</textarea>
           <h2 class="subhead">文件列表</h2>
         </div>
         <div class="ls-list panel-card" id="ls-files"></div>
-
-        <div id="ls-progress" class="panel-card" hidden style="margin-top:0.85rem">
-          <div class="ls-progress-bar-wrap"><div id="ls-progress-bar" class="ls-progress-bar"></div></div>
-          <p class="hint tight" id="ls-progress-text"></p>
-        </div>
 
         <p class="error" id="ls-error" hidden></p>
       </div>

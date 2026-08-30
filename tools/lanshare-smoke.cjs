@@ -110,7 +110,11 @@ async function main() {
   assert(/publishJoinOffer/.test(js), "缺少成员 offer 回传");
   assert(/applyJoinOffer/.test(js), "缺少房主 offer 应用");
   assert(/joinByPassword/.test(js), "缺少密码加入");
-  assert(/startMqttOfferRetry/.test(js), "缺少 MQTT offer 重试");
+  assert(/startBusyProgress/.test(js), "缺少创建/加入进度");
+  assert(/removeMemberFiles/.test(js), "缺少退出清理文件");
+  assert(!/dissolveRoom/.test(js), "应移除解散房间");
+  assert(/fileKindLabel/.test(js), "缺少文件类型标签");
+  assert(!/ls-dissolve/.test(htmlLocal), "应移除解散按钮");
   assert(/MQTT_BROKERS/.test(js), "缺少 MQTT 多 broker 回退");
   assert(/ls-room-pwd-join/.test(htmlLocal), "缺少密码加入输入框");
   assert(/vendor\/mqtt\.min\.js/.test(lazyJs), "lazy-scripts 应注册 mqtt");
