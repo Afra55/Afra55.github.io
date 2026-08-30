@@ -679,7 +679,7 @@
     if (soundOn) void unlockMuyuAudio();
   }
 
-  function mountFishArt(btn, withHint) {
+  function mountFishArt(btn) {
     if (!btn || btn.dataset.art === FISH_ART_VER) return;
     btn.dataset.art = FISH_ART_VER;
     btn.replaceChildren();
@@ -690,12 +690,6 @@
     img.draggable = false;
     img.setAttribute("aria-hidden", "true");
     btn.appendChild(img);
-    if (withHint) {
-      const hint = document.createElement("span");
-      hint.className = "muyu-fish-hint";
-      hint.textContent = "点击敲击";
-      btn.appendChild(hint);
-    }
   }
 
   function bumpFish(el) {
@@ -901,8 +895,8 @@
   }
 
   function mountFishArtEarly() {
-    mountFishArt(document.getElementById("muyu-fish"), true);
-    mountFishArt(document.getElementById("muyu-fish-fs"), false);
+    mountFishArt(document.getElementById("muyu-fish"));
+    mountFishArt(document.getElementById("muyu-fish-fs"));
   }
 
   function bootMuyuShell() {
@@ -935,8 +929,8 @@
     soundVariantSelect = $("#muyu-sound-variant");
     stageRoot = $("#muyu-stage");
 
-    mountFishArt(fishBtn, true);
-    mountFishArt(fishFsBtn, false);
+    mountFishArt(fishBtn);
+    mountFishArt(fishFsBtn);
     bindFsShell();
     initStageBg();
 
