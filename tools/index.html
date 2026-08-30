@@ -16,7 +16,11 @@
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
   <script src="./lib/tools-build.js?v=2026.08.30-234000"></script>
   <link rel="stylesheet" href="./style.css?v=2026.08.30-234000" />
+<<<<<<< HEAD
   <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-232500" />
+=======
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-234000" />
+>>>>>>> origin/cursor/nav-menu-polish-ad72
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
   <script>
@@ -167,7 +171,13 @@
         <span class="visually-hidden">搜索工具</span>
         <input id="tool-search" class="nav-search" type="search" placeholder="搜索工具…" autocomplete="off" enterkeyhint="search" />
       </label>
-      <p class="hint tight nav-sort-hint">分类与工具可排序：桌面直接拖名称；手机请拖左侧<strong>⠿</strong>手柄，长按工具名可加入常用。常用工具固定于分类列表首位（历史记录下方），其内工具可排序。</p>
+      <div class="nav-compact-bar">
+        <label class="nav-setting nav-compact-setting" for="nav-compact" title="侧栏只显示分类名；鼠标移上去或点选才展开工具列表。">
+          <input type="checkbox" id="nav-compact" />
+          <span>仅显示分类</span>
+        </label>
+      </div>
+      <p class="hint tight nav-sort-hint">拖名称或左侧<strong>⠿</strong>排序；长按工具名可加入常用。</p>
       <div class="nav-bar-scroll" id="nav-bar-scroll">
         <div class="nav-strip nav-recent" id="tool-recent" hidden>
           <div class="nav-strip-head">
@@ -188,10 +198,6 @@
       <div class="nav-footer-actions">
         <p class="nav-cache-meta" id="nav-cache-meta" title="缓存可一键清理；备忘录数据不会被清掉">暂无缓存</p>
         <div class="nav-footer-toolbar">
-          <label class="nav-setting nav-setting-inline nav-compact-setting" for="nav-compact" title="桌面侧栏只显示分类名；鼠标移上去或点选才展开工具。手机抽屉始终列出全部工具。">
-            <input type="checkbox" id="nav-compact" />
-            <span>仅分类</span>
-          </label>
           <button type="button" class="nav-reset nav-footer-btn" id="nav-force-refresh" title="注销 Service Worker、清空浏览器缓存并重新加载最新版">强制刷新</button>
           <button type="button" class="nav-reset nav-cache-clear nav-footer-btn" id="nav-cache-clear" title="清掉本站临时视频、GIF 和编码器缓存；不会删除备忘录数据与系统相册/已下载文件。清理前请先在备忘录里导出备份。">清理缓存</button>
           <button type="button" class="nav-reset nav-footer-btn" id="nav-reset" title="恢复工具与分类的默认排序">默认排序</button>
@@ -5286,7 +5292,7 @@ adb devices</pre>
   <script src="./lib/bridge-token.js?v=2026.08.30-062500"></script>
   <script src="./lib/lazy-scripts.js?v=2026.08.30-214500"></script>
   <script src="./theme.js?v=2026.08.30-062500"></script>
-  <script src="./app.js?v=2026.08.30-232500"></script>
+  <script src="./app.js?v=2026.08.30-234000"></script>
   <script src="./wheel.js?v=2026.08.30-062500"></script>
   <script src="./ruler.js?v=2026.08.30-062500"></script>
   <script src="./muyu.js?v=2026.08.30-084100"></script>
