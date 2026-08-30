@@ -16,7 +16,7 @@
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
   <script src="./lib/tools-build.js?v=2026.08.30-214500"></script>
   <link rel="stylesheet" href="./style.css?v=2026.08.30-214500" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-221500" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-223000" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
   <script>
@@ -3701,7 +3701,13 @@ hello@world.org</textarea>
         <p>在格子里倒沙子、倒水、点火、种植物。本地 WASM + WebGL 模拟，不上传。移植自开源项目 <a href="https://github.com/MaxBittker/sandspiel" target="_blank" rel="noopener noreferrer">MaxBittker/sandspiel</a>（MIT），已中文化并去掉登录与广告。手机自动用较小网格以保流畅。</p>
       </div>
       <div class="panel-body sandspiel-body">
-        <p class="hint tight sandspiel-hint">点选元素后在画面上拖动画笔；「风」只吹流体。离开本页会自动暂停。</p>
+        <div class="sandspiel-toolbar">
+          <p class="hint tight sandspiel-hint">点选元素后在画面上拖动画笔；「风」只吹流体。离开本页会自动暂停。</p>
+          <label class="sandspiel-fps-toggle" for="sandspiel-show-fps">
+            <input type="checkbox" id="sandspiel-show-fps" checked />
+            <span>显示 FPS</span>
+          </label>
+        </div>
         <div class="sandspiel-shell">
           <iframe id="sandspiel-frame" class="sandspiel-frame" title="落沙沙盒" loading="lazy" referrerpolicy="no-referrer"></iframe>
         </div>
@@ -5284,7 +5290,7 @@ adb devices</pre>
   <script src="./lib/bridge-token.js?v=2026.08.30-062500"></script>
   <script src="./lib/lazy-scripts.js?v=2026.08.30-214500"></script>
   <script src="./theme.js?v=2026.08.30-062500"></script>
-  <script src="./app.js?v=2026.08.30-221500"></script>
+  <script src="./app.js?v=2026.08.30-223000"></script>
   <script src="./wheel.js?v=2026.08.30-062500"></script>
   <script src="./ruler.js?v=2026.08.30-062500"></script>
   <script src="./muyu.js?v=2026.08.30-084100"></script>

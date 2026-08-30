@@ -117,19 +117,23 @@ button.selected {
 }
 
 #fps {
-  pointer-events: none;
-
   z-index: 3;
   position: absolute;
   right: 0;
   bottom: 0;
-  padding: 2px;
-  background-color: rgba(255, 255, 255, 0.4);
+  padding: 2px 6px;
+  background-color: rgba(255, 255, 255, 0.72);
   text-align: right;
   display: inline-block;
   white-space: pre;
-  /* font-family: monospace; */
   user-select: none;
+  font-size: 0.78rem;
+  border-radius: 6px 0 0 0;
+  touch-action: manipulation;
+}
+
+#fps[hidden] {
+  display: none !important;
 }
 
 #controls {
@@ -142,18 +146,22 @@ button.selected {
 }
 
 .menu {
-  position: absolute;
-  left: 10px;
-  right: 10px;
-  top: 10px;
-  /* bottom: 10px; */
+  position: fixed;
+  left: max(8px, env(safe-area-inset-left, 0px));
+  right: max(8px, env(safe-area-inset-right, 0px));
+  top: max(8px, env(safe-area-inset-top, 0px));
+  bottom: max(8px, env(safe-area-inset-bottom, 0px));
   z-index: 5;
   background-color: #f3f3f4;
   border: 1px solid gray;
   box-shadow: 0px 0px 3px 3px rgba(0, 0, 0, 0.2);
   padding: 5px;
-  max-width: 900px;
+  max-width: min(900px, calc(100% - 16px));
   margin: auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 .submission img,
 .submissionImg {
@@ -166,11 +174,8 @@ button.selected {
 }
 
 .menu-scrim {
-  position: absolute;
-  left: 0px;
-  right: 0px;
-  top: 0px;
-  bottom: 0px;
+  position: fixed;
+  inset: 0;
   z-index: 4;
   background-color: #55555555;
 }
@@ -486,8 +491,11 @@ img {
 }
 
 .Info {
-  max-height: min(70vh, 520px);
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
   overflow: auto;
+  -webkit-overflow-scrolling: touch;
   padding: 0.4rem 0.6rem 0.8rem;
   font-size: 0.92rem;
   line-height: 1.5;
@@ -526,7 +534,29 @@ img {
 #ui {
   -webkit-overflow-scrolling: touch;
   gap: 3px;
+  align-content: flex-start;
 }
+
+@media (max-width: 900px) {
+  button {
+    height: 30px;
+    min-width: 2.1rem;
+    font-size: 12px;
+    padding: 1px 5px;
+    max-width: none;
+    flex: 0 1 calc(20% - 3px);
+  }
+
+  #ui button[aria-label^="笔刷"] {
+    flex: 0 0 auto;
+    min-width: 1.9rem;
+  }
+
+  .sizes {
+    display: contents;
+  }
+}
+
 html, body {
   touch-action: manipulation;
 }
