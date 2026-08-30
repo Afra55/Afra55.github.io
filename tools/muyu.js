@@ -48,6 +48,7 @@
   let fsBgRunning = false;
   let fsPulseEl = null;
   let fsRippleEl = null;
+  let fsFxEl = null;
   let fsFloatsEl = null;
   let fsBgStars = [];
   let fsBgDust = [];
@@ -63,6 +64,7 @@
   let stageBgRaf = 0;
   let stageBgRunning = false;
   let stageRippleEl = null;
+  let stageFxEl = null;
   let stageFloatsEl = null;
   let stageBgStars = [];
   let stageBgDust = [];
@@ -271,8 +273,22 @@
   }
 
   function pointerFromEvent(ev, fallbackEl) {
-    if (ev && Number.isFinite(ev.clientX) && Number.isFinite(ev.clientY)) {
-      return { x: ev.clientX, y: ev.clientY };
+    if (ev) {
+      if (ev.type === "touchend" && ev.changedTouches?.length) {
+        const t = ev.changedTouches[0];
+        if (Number.isFinite(t.clientX) && Number.isFinite(t.clientY)) {
+          return { x: t.clientX, y: t.clientY };
+        }
+      }
+      if (ev.type === "touchstart" && ev.touches?.length) {
+        const t = ev.touches[0];
+        if (Number.isFinite(t.clientX) && Number.isFinite(t.clientY)) {
+          return { x: t.clientX, y: t.clientY };
+        }
+      }
+      if (Number.isFinite(ev.clientX) && Number.isFinite(ev.clientY)) {
+        return { x: ev.clientX, y: ev.clientY };
+      }
     }
     if (fallbackEl) {
       const r = fallbackEl.getBoundingClientRect();
@@ -371,6 +387,7 @@
   function initStageBg() {
     stageBgCanvas = document.getElementById("muyu-stage-bg");
     stageRippleEl = document.getElementById("muyu-stage-ripple");
+    stageFxEl = document.getElementById("muyu-stage-fx");
     stageFloatsEl = document.getElementById("muyu-stage-floats");
     stageRoot = document.getElementById("muyu-stage");
     if (!stageBgCanvas) return;
@@ -446,6 +463,7 @@
     fsBgCanvas = document.getElementById("muyu-fs-bg");
     fsPulseEl = document.getElementById("muyu-fs-pulse");
     fsRippleEl = document.getElementById("muyu-fs-ripple");
+    fsFxEl = document.getElementById("muyu-fs-fx");
     fsFloatsEl = document.getElementById("muyu-fs-floats");
     if (!fsBgCanvas) return;
     fsBgCtx = fsBgCanvas.getContext("2d", { alpha: true });
@@ -530,23 +548,20 @@
   function playKnockFx(ev) {
     const fishEl = fullscreen ? fishFsBtn : fishBtn;
     const pt = pointerFromEvent(ev, fishEl);
+    const fxEl = fullscreen ? fsFxEl || fsRoot : stageFxEl || stageRoot;
+    if (fxEl && pt) {
+      const rect = fxEl.getBoundingClientRect();
+      spawnRippleAt(fxEl, pt.x - rect.left, pt.y - rect.top);
+    }
     if (fullscreen) {
       if (fsPulseEl) {
         fsPulseEl.classList.remove("is-flash");
         void fsPulseEl.offsetWidth;
         fsPulseEl.classList.add("is-flash");
       }
-      if (fsRoot && pt) {
-        const local = { x: pt.x - fsRoot.getBoundingClientRect().left, y: pt.y - fsRoot.getBoundingClientRect().top };
-        spawnRippleAt(fsRoot, local.x, local.y);
-      }
       spawnFloat(fsFloatsEl);
       burstFsSparks(pt);
     } else {
-      if (stageRoot && pt) {
-        const rect = stageRoot.getBoundingClientRect();
-        spawnRippleAt(stageRoot, pt.x - rect.left, pt.y - rect.top);
-      }
       spawnFloat(stageFloatsEl);
       if (pt) {
         const rect = (stageRoot || fishBtn).getBoundingClientRect();
