@@ -376,6 +376,25 @@ body.nav-sorting-tools .nav-bar {
   touch-action: none;
 }
 
+/* 紧凑模式排序：横向分组改为纵向列表，收起子工具与「展开」提示 */
+body.nav-sorting .nav-bar.is-compact .tool-nav,
+body.nav-press-pending .nav-bar.is-compact .tool-nav {
+  display: block !important;
+  flex-direction: column !important;
+  flex-wrap: nowrap !important;
+  min-width: 0 !important;
+}
+
+body.nav-sorting .nav-bar.is-compact .nav-group-tools,
+body.nav-press-pending .nav-bar.is-compact .nav-group-tools {
+  display: none !important;
+}
+
+body.nav-sorting .nav-bar.is-compact .nav-group-title.is-sortable::after,
+body.nav-press-pending .nav-bar.is-compact .nav-group-title.is-sortable::after {
+  content: none !important;
+}
+
 .nav-strip-list,
 .nav-recent-list {
   display: flex;

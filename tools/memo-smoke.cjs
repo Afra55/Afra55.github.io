@@ -1323,6 +1323,31 @@ async function main() {
             isPrimary: true,
           })
         );
+        await new Promise((r) => setTimeout(r, 500));
+        sortTitle.dispatchEvent(
+          new PointerEvent("pointerdown", {
+            bubbles: true,
+            cancelable: true,
+            pointerId: 992,
+            pointerType: "touch",
+            clientX: 12,
+            clientY: 12,
+            isPrimary: true,
+          })
+        );
+        await new Promise((r) => setTimeout(r, 460));
+        out.navCompact.compactSortMode = document.body.classList.contains("nav-sorting");
+        document.dispatchEvent(
+          new PointerEvent("pointerup", {
+            bubbles: true,
+            cancelable: true,
+            pointerId: 992,
+            pointerType: "touch",
+            clientX: 12,
+            clientY: 12,
+            isPrimary: true,
+          })
+        );
       }
     }
 

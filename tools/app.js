@@ -965,6 +965,82 @@
   const favPicker = $("#tool-fav-picker");
   const canDesktopDrag = () => window.matchMedia("(min-width: 901px)").matches;
 
+  function isCoarsePointer() {
+    try {
+      return window.matchMedia("(pointer: coarse)").matches;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /** 侧栏 Pointer 长按排序：窄屏抽屉，或紧凑模式 + 触控（HTML5 DnD 不可靠） */
+  function usePointerNavSort(pointerType) {
+    if (!canDesktopDrag()) return true;
+    if (!navCompact) return false;
+    if (pointerType === "touch") return true;
+    return isCoarsePointer();
+  }
+
+  function allowNavHtml5Drag() {
+    if (!canDesktopDrag()) return false;
+    if (!navCompact) return true;
+    if (isCoarsePointer()) return false;
+    try {
+      if (navigator.maxTouchPoints > 0) return false;
+    } catch (_) {
+      /* ignore */
+    }
+    return true;
+  }
+
+  function navSortInteractionActive() {
+    return (
+      document.body.classList.contains("nav-press-pending") ||
+      document.body.classList.contains("nav-sorting") ||
+      document.body.classList.contains("nav-sorting-tools") ||
+      document.body.classList.contains("nav-sorting-favorites")
+    );
+  }
+
+  let navSortClickSuppressUntil = 0;
+
+  function shouldSuppressNavCompactClick() {
+    return Date.now() < navSortClickSuppressUntil || navSortInteractionActive();
+  }
+
+  function navGroupSortHint() {
+    return allowNavHtml5Drag()
+      ? "拖动分类可调整整组顺序"
+      : navCompact
+        ? "长按分类标题再拖动排序（短按展开工具）"
+        : "长按分类标题后拖动，可调整整组顺序";
+  }
+
+  function navToolSortHint() {
+    return allowNavHtml5Drag() ? "拖动可调整工具顺序" : "长按工具名后拖动，可调整顺序";
+  }
+
+  function syncNavSortDragMode() {
+    if (!navEl) return;
+    const allowDrag = allowNavHtml5Drag();
+    const groupHint = navGroupSortHint();
+    const toolHint = navToolSortHint();
+    $$(".nav-group-title", navEl).forEach((title) => {
+      title.draggable = allowDrag;
+      title.title = groupHint;
+    });
+    getNavLinks().forEach((link) => {
+      link.draggable = allowDrag;
+      link.title = toolHint;
+    });
+    if (favoritesList) {
+      $$(".nav-fav-link", favoritesList).forEach((link) => {
+        link.draggable = allowDrag;
+        link.title = allowDrag ? "拖动排序；右键更多操作" : "长按拖动排序；右键更多操作";
+      });
+    }
+  }
+
   let currentTool = "timestamp";
   let currentMediaTab = "gifmaker";
   let lastFocusBeforeDrawer = null;
@@ -1275,6 +1351,7 @@
         title.setAttribute("aria-expanded", navCompact && !searching ? (open ? "true" : "false") : "true");
       }
     });
+    syncNavSortDragMode();
   }
 
   function setNavCompact(on) {
@@ -1544,7 +1621,7 @@
   function renderNav(order) {
     if (!navEl) return;
     const list = order || loadOrder();
-    const allowHtml5Drag = canDesktopDrag();
+    const allowHtml5Drag = allowNavHtml5Drag();
     navEl.innerHTML = "";
     groupsInOrder().forEach((group) => {
       const tools = list.filter((id) => group.tools.includes(id));
@@ -1557,9 +1634,7 @@
       title.textContent = group.label;
       title.setAttribute("aria-expanded", "true");
       title.draggable = allowHtml5Drag;
-      title.title = allowHtml5Drag
-        ? "拖动分类可调整整组顺序"
-        : "长按分类标题后拖动，可调整整组顺序";
+      title.title = navGroupSortHint();
       wrap.appendChild(title);
       const toolsWrap = document.createElement("div");
       toolsWrap.className = "nav-group-tools";
@@ -1570,7 +1645,7 @@
         a.href = MEDIA_TABS.includes(id) ? `#media/${id}` : `#${id}`;
         a.dataset.tool = id;
         a.draggable = allowHtml5Drag;
-        a.title = allowHtml5Drag ? "拖动可调整工具顺序" : "长按工具名后拖动，可调整顺序";
+        a.title = navToolSortHint();
         a.textContent = toolName(id);
         toolsWrap.appendChild(a);
       });
@@ -1673,7 +1748,7 @@
   function renderFavorites() {
     if (!favoritesList) return;
     const items = loadFavorites();
-    const allowHtml5Drag = canDesktopDrag();
+    const allowHtml5Drag = allowNavHtml5Drag();
     favoritesList.innerHTML = "";
     items.forEach((id) => {
       if (!isNavToolVisible(id)) return;
@@ -1712,7 +1787,7 @@
     const title = favTitle;
     if (!title) return;
     title.addEventListener("click", (e) => {
-      if (!navCompact || didDrag || compactNavSearching()) return;
+      if (!navCompact || didDrag || compactNavSearching() || shouldSuppressNavCompactClick()) return;
       e.preventDefault();
       const willPin = !favoritesWrap.classList.contains("is-pinned");
       if (willPin) openNavFlyout(favoritesWrap, { pin: true });
@@ -1733,7 +1808,7 @@
       scheduleCloseNavFlyout(favoritesWrap);
     });
     favoritesWrap.addEventListener("focusin", () => {
-      if (!navCompact || compactNavSearching()) return;
+      if (!navCompact || compactNavSearching() || navSortInteractionActive()) return;
       openNavFlyout(favoritesWrap);
     });
     favoritesWrap.addEventListener("focusout", (e) => {
@@ -2320,16 +2395,16 @@
     el.addEventListener("pointerdown", (e) => beginMobilePointerSort(e, opts));
   }
 
-  /** 手机长按排序：分类标题 / 工具项；用 document 级指针事件兼容 iOS */
+  /** 手机/紧凑模式长按排序：分类标题 / 工具项；用 document 级指针事件兼容 iOS */
   function beginMobilePointerSort(e, opts) {
-    if (canDesktopDrag()) return;
+    if (!usePointerNavSort(e.pointerType)) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
     if (e.pointerType === "touch") e.preventDefault();
     if (pointerSort) cancelPointerSort();
     stopPointerSortAutoScroll();
     document.body.classList.add("nav-press-pending");
 
-    const LONG_MS = 360;
+    const LONG_MS = navCompact ? 420 : 360;
     // iOS 长按期间手指微抖较大，阈值过小会提前取消
     const CANCEL_PX = 28;
     const handle = opts.handle;
@@ -2377,7 +2452,11 @@
       } catch (_) {
         /* ignore */
       }
+      const heldMs = Date.now() - (state.startTime || Date.now());
       cancelPointerSort({ keepDidDrag: wasActive });
+      if (wasActive || (navCompact && heldMs >= 280)) {
+        navSortClickSuppressUntil = Date.now() + 450;
+      }
       if (cancelled || !wasActive) return;
       if (kind === "group") {
         const target = navGroupAtPoint(x, y);
@@ -2403,6 +2482,7 @@
       wrap: opts.wrap || null,
       handle,
       pointerId: e.pointerId,
+      startTime: Date.now(),
       startX: e.clientX,
       startY: e.clientY,
       lastX: e.clientX,
@@ -2597,7 +2677,7 @@
         wrap,
       });
       title.addEventListener("click", (e) => {
-        if (!navCompact || didDrag || compactNavSearching()) return;
+        if (!navCompact || didDrag || compactNavSearching() || shouldSuppressNavCompactClick()) return;
         e.preventDefault();
         const willPin = !wrap.classList.contains("is-pinned");
         if (willPin) openNavFlyout(wrap, { pin: true });
@@ -2618,7 +2698,7 @@
         scheduleCloseNavFlyout(wrap);
       });
       wrap.addEventListener("focusin", () => {
-        if (!navCompact || compactNavSearching()) return;
+        if (!navCompact || compactNavSearching() || navSortInteractionActive()) return;
         openNavFlyout(wrap);
       });
       wrap.addEventListener("focusout", (e) => {
