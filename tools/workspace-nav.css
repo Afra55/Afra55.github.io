@@ -325,7 +325,7 @@ body.nav-sorting .tool-nav-link,
   outline: none;
 }
 
-/* 常用工具：位于滚动区首位，与分类列表一起滚动 */
+/* 常用工具：滚动区内分类列表首位，紧接历史记录下方 */
 .nav-favorites {
   width: 100%;
   margin-bottom: 0.45rem;
@@ -997,8 +997,6 @@ body.nav-open {
   }
 
   .nav-search-wrap,
-  .nav-strip.nav-favorites,
-  .nav-strip.nav-recent,
   .nav-drawer-head,
   .nav-sort-hint {
     flex-shrink: 0;
@@ -1034,6 +1032,15 @@ body.nav-open {
 
   .nav-favorites {
     flex-shrink: 0;
+  }
+
+  .nav-bar-scroll > .nav-strip.nav-recent {
+    flex-shrink: 0;
+    margin-bottom: 0.4rem;
+  }
+
+  .nav-bar-scroll > .nav-strip.nav-recent[hidden] {
+    display: none !important;
   }
 
   .tool-nav {
