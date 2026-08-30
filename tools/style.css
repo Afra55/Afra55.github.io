@@ -256,7 +256,7 @@ body.theme-reduce-glow .bg-grid {
   gap: 0.45rem;
   align-items: flex-start;
   flex: 1 1 auto;
-  min-width: calc(18rem);
+  min-width: 0;
   margin: 0;
   animation: none;
   position: static;
@@ -329,6 +329,28 @@ body.theme-reduce-glow .bg-grid {
   gap: 0.55rem;
   width: 100%;
   min-width: 0;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted) 50%, transparent) transparent;
+}
+
+.nav-bar-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.nav-bar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.nav-bar-scroll::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted) 45%, transparent);
 }
 
 .nav-footer-actions {
@@ -337,7 +359,12 @@ body.theme-reduce-glow .bg-grid {
   align-items: stretch;
   gap: 0.28rem;
   width: 100%;
-  margin-top: 0.1rem;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  margin-top: 0;
+  padding-top: 0.35rem;
+  border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  background: var(--nav-bg-solid, var(--panel-strong));
 }
 
 .nav-cache-meta {
@@ -1403,20 +1430,34 @@ a.secondary-btn {
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
-    scrollbar-width: none;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--muted) 50%, transparent) transparent;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
   }
 
   .nav-bar-scroll::-webkit-scrollbar {
-    width: 0;
-    height: 0;
-    display: none;
+    width: 6px;
+  }
+
+  .nav-bar-scroll::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--muted) 45%, transparent);
   }
 
   .nav-favorites,
   .nav-sort-hint {
     flex-shrink: 0;
+  }
+
+  .nav-footer-actions {
+    flex: 0 0 auto;
+    flex-shrink: 0;
+    width: 100%;
+    margin-top: 0;
+    padding-top: 0.45rem;
+    border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+    background: var(--nav-bg-solid, var(--panel-strong));
   }
 
   .tool-nav {
@@ -1443,7 +1484,7 @@ a.secondary-btn {
   .nav-footer-actions {
     flex: 0 0 auto;
     width: 100%;
-    margin-top: auto;
+    margin-top: 0;
     padding-top: 0.35rem;
   }
 

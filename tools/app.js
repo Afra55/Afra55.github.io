@@ -992,14 +992,14 @@
   /** 侧栏 Pointer 长按排序：窄屏抽屉，或紧凑模式 + 触控（HTML5 DnD 不可靠） */
   function usePointerNavSort(pointerType) {
     if (!canDesktopDrag()) return true;
-    if (!navCompact) return false;
+    if (!navCompactActive()) return false;
     if (pointerType === "touch") return true;
     return isCoarsePointer();
   }
 
   function allowNavHtml5Drag() {
     if (!canDesktopDrag()) return false;
-    if (!navCompact) return true;
+    if (!navCompactActive()) return true;
     if (isCoarsePointer()) return false;
     try {
       if (navigator.maxTouchPoints > 0) return false;
@@ -1027,7 +1027,7 @@
   function navGroupSortHint() {
     return allowNavHtml5Drag()
       ? "拖动分类可调整整组顺序"
-      : navCompact
+      : navCompactActive()
         ? "长按分类标题再拖动排序（短按展开工具）"
         : "长按分类标题后拖动，可调整整组顺序";
   }
@@ -1226,8 +1226,13 @@
     }
   }
 
+  /** 手机抽屉始终展开工具列表；「仅分类」仅作用于桌面侧栏 */
+  function navCompactActive() {
+    return navCompact && !compactNavOnMobile();
+  }
+
   function canHoverNavFlyout(e) {
-    if (!navCompact || compactNavSearching()) return false;
+    if (!navCompactActive() || compactNavSearching()) return false;
     if (
       document.body.classList.contains("nav-sorting") ||
       document.body.classList.contains("nav-sorting-tools") ||
@@ -1245,7 +1250,7 @@
   function positionNavFlyout(wrap) {
     const panel = wrap?.querySelector?.(".nav-group-tools");
     const title = wrap?.querySelector?.(".nav-group-title");
-    if (!panel || !title || !navCompact || compactNavSearching()) return;
+    if (!panel || !title || !navCompactActive() || compactNavSearching()) return;
     if (compactNavOnMobile()) {
       wrap.classList.remove("is-flyout-up");
       panel.style.maxHeight = "";
@@ -1281,7 +1286,7 @@
   }
 
   function openNavFlyout(wrap, { pin = false } = {}) {
-    if (!wrap || !navCompact || compactNavSearching()) return;
+    if (!wrap || !navCompactActive() || compactNavSearching()) return;
     window.clearTimeout(navFlyoutTimer);
     navFlyoutTimer = 0;
     allNavGroups().forEach((g) => {
@@ -1326,7 +1331,7 @@
     document.body.classList.add("nav-sorting-tools");
     window.clearTimeout(navFlyoutTimer);
     navFlyoutTimer = 0;
-    if (wrap && navCompact && !compactNavSearching()) {
+    if (wrap && navCompactActive() && !compactNavSearching()) {
       wrap.classList.add("is-flyout-open", "is-sort-flyout");
       wrap.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "true");
       positionNavFlyout(wrap);
@@ -1339,7 +1344,7 @@
   }
 
   function peekNavFlyoutForSort(wrap) {
-    if (!wrap || !navCompact || compactNavSearching()) return;
+    if (!wrap || !navCompactActive() || compactNavSearching()) return;
     if (!document.body.classList.contains("nav-sorting-tools")) return;
     window.clearTimeout(navFlyoutTimer);
     wrap.classList.add("is-flyout-open", "is-sort-flyout");
@@ -1349,13 +1354,14 @@
 
   function syncNavCompactUi() {
     if (!navBar) return;
-    navBar.classList.toggle("is-compact", navCompact);
+    const compactUi = navCompactActive();
+    navBar.classList.toggle("is-compact", compactUi);
     const searching = compactNavSearching();
     navBar.classList.toggle("is-searching", searching);
     const compactToggle = $("#nav-compact");
     if (compactToggle) compactToggle.checked = navCompact;
     if (!navEl) return;
-    if (!navCompact || searching) closeNavFlyouts();
+    if (!compactUi || searching) closeNavFlyouts();
     const currentId = currentNavToolId();
     allNavGroups().forEach((g) => {
       const ids = [...g.querySelectorAll(".tool-nav-link")].map((a) => a.dataset.tool);
@@ -1364,7 +1370,7 @@
       const title = g.querySelector(".nav-group-title");
       if (title) {
         const open = g.classList.contains("is-pinned") || g.classList.contains("is-flyout-open");
-        title.setAttribute("aria-expanded", navCompact && !searching ? (open ? "true" : "false") : "true");
+        title.setAttribute("aria-expanded", compactUi && !searching ? (open ? "true" : "false") : "true");
       }
     });
     syncNavSortDragMode();
@@ -1803,7 +1809,7 @@
     const title = favTitle;
     if (!title) return;
     title.addEventListener("click", (e) => {
-      if (!navCompact || didDrag || compactNavSearching() || shouldSuppressNavCompactClick()) return;
+      if (!navCompactActive() || didDrag || compactNavSearching() || shouldSuppressNavCompactClick()) return;
       e.preventDefault();
       const willPin = !favoritesWrap.classList.contains("is-pinned");
       if (willPin) openNavFlyout(favoritesWrap, { pin: true });
@@ -1817,18 +1823,18 @@
       openNavFlyout(favoritesWrap);
     });
     favoritesWrap.addEventListener("pointerleave", (e) => {
-      if (!navCompact || compactNavSearching()) return;
+      if (!navCompactActive() || compactNavSearching()) return;
       if (favoritesWrap.classList.contains("is-pinned")) return;
       if (isNavToolSorting()) return;
       if (e?.pointerType && e.pointerType !== "mouse") return;
       scheduleCloseNavFlyout(favoritesWrap);
     });
     favoritesWrap.addEventListener("focusin", () => {
-      if (!navCompact || compactNavSearching() || navSortInteractionActive()) return;
+      if (!navCompactActive() || compactNavSearching() || navSortInteractionActive()) return;
       openNavFlyout(favoritesWrap);
     });
     favoritesWrap.addEventListener("focusout", (e) => {
-      if (!navCompact || compactNavSearching()) return;
+      if (!navCompactActive() || compactNavSearching()) return;
       if (favoritesWrap.classList.contains("is-pinned")) return;
       if (isNavToolSorting()) return;
       const next = e.relatedTarget;
@@ -2693,7 +2699,7 @@
         wrap,
       });
       title.addEventListener("click", (e) => {
-        if (!navCompact || didDrag || compactNavSearching() || shouldSuppressNavCompactClick()) return;
+        if (!navCompactActive() || didDrag || compactNavSearching() || shouldSuppressNavCompactClick()) return;
         e.preventDefault();
         const willPin = !wrap.classList.contains("is-pinned");
         if (willPin) openNavFlyout(wrap, { pin: true });
@@ -2707,18 +2713,18 @@
         openNavFlyout(wrap);
       });
       wrap.addEventListener("pointerleave", (e) => {
-        if (!navCompact || compactNavSearching()) return;
+        if (!navCompactActive() || compactNavSearching()) return;
         if (wrap.classList.contains("is-pinned")) return;
         if (isNavToolSorting()) return;
         if (e?.pointerType && e.pointerType !== "mouse") return;
         scheduleCloseNavFlyout(wrap);
       });
       wrap.addEventListener("focusin", () => {
-        if (!navCompact || compactNavSearching() || navSortInteractionActive()) return;
+        if (!navCompactActive() || compactNavSearching() || navSortInteractionActive()) return;
         openNavFlyout(wrap);
       });
       wrap.addEventListener("focusout", (e) => {
-        if (!navCompact || compactNavSearching()) return;
+        if (!navCompactActive() || compactNavSearching()) return;
         if (wrap.classList.contains("is-pinned")) return;
         if (isNavToolSorting()) return;
         const next = e.relatedTarget;
@@ -2729,7 +2735,7 @@
   }
 
   function repositionOpenNavFlyouts() {
-    if (!navCompact || compactNavSearching()) return;
+    if (!navCompactActive() || compactNavSearching()) return;
     if (document.body.classList.contains("nav-sorting-tools")) {
       allNavGroups()
         .filter((g) => g.classList.contains("is-sort-flyout"))
@@ -2745,12 +2751,14 @@
     setNavCompact(Boolean(e.target?.checked));
   });
 
+  navBarScroll?.addEventListener("scroll", repositionOpenNavFlyouts, { passive: true });
   navEl?.addEventListener("scroll", repositionOpenNavFlyouts, { passive: true });
   navBar?.addEventListener("scroll", repositionOpenNavFlyouts, { passive: true });
   window.addEventListener(
     "resize",
     () => {
-      if (!navCompact) return;
+      syncNavCompactUi();
+      if (!navCompactActive()) return;
       const open = allNavGroups().find((g) => g.classList.contains("is-pinned") || g.classList.contains("is-flyout-open"));
       if (open) positionNavFlyout(open);
     },
