@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="实用小工具：时间戳、倒计时、颜色、Base64、JSON、正则、URL、UUID、Hash、文本、命名转换、坐标系互转、图片压缩裁剪水印拼接、穴位图、ADB、GIF、JWT、YAML、二维码等" />
+  <meta name="description" content="实用小工具：时间戳、倒计时、颜色、Base64、JSON、正则、URL、UUID、Hash、文本、命名转换、坐标系互转、图片压缩裁剪水印拼接、P站风Logo、诺基亚短信、穴位图、ADB、GIF、JWT、YAML、二维码等" />
   <meta name="theme-color" content="#0b1320" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -14,9 +14,9 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.30-134000"></script>
-  <link rel="stylesheet" href="./style.css?v=2026.08.30-103000" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-062500" />
+  <script src="./lib/tools-build.js?v=2026.08.30-143000"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.08.30-143000" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-143000" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
   <script>
@@ -998,6 +998,126 @@ fun Greeting(name: String) {
                   <div class="share-watermark" id="sc-card-watermark">Afra55 DevTools</div>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+<section id="phlogo" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>P站风 Logo</h1>
+        <p>两段文字 + 圆角色块，生成经典黑橙双色 Logo。本地 Canvas 绘制，可下 PNG / SVG。风格参考开源项目 <a href="https://github.com/bestony/logoly" target="_blank" rel="noopener noreferrer">bestony/logoly</a>。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid phlogo-layout">
+          <div class="field-block">
+            <div class="field-row" style="flex-wrap:wrap">
+              <label for="ph-left">左侧</label>
+              <input id="ph-left" type="text" value="Porn" maxlength="32" spellcheck="false" autocomplete="off" />
+              <label for="ph-right">右侧</label>
+              <input id="ph-right" type="text" value="Hub" maxlength="32" spellcheck="false" autocomplete="off" />
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+              <label for="ph-preset">预设</label>
+              <select id="ph-preset" class="select-input">
+                <option value="ph" selected>P 站（黑橙）</option>
+                <option value="yt">YouTube（白红）</option>
+                <option value="of">OnlyFans（白青）</option>
+                <option value="custom">自定义颜色</option>
+              </select>
+              <label class="flag"><input id="ph-reverse" type="checkbox" /> 色块在左侧</label>
+              <label class="flag"><input id="ph-transparent" type="checkbox" /> 透明底</label>
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+              <label for="ph-bg">背景</label>
+              <input id="ph-bg" type="color" value="#000000" />
+              <label for="ph-left-color">左字色</label>
+              <input id="ph-left-color" type="color" value="#ffffff" />
+              <label for="ph-box">色块</label>
+              <input id="ph-box" type="color" value="#ff9900" />
+              <label for="ph-right-color">右字色</label>
+              <input id="ph-right-color" type="color" value="#000000" />
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
+              <label for="ph-size">字号 <span class="mono" id="ph-size-val">72</span></label>
+              <input id="ph-size" type="range" min="28" max="140" value="72" />
+              <label for="ph-radius">圆角 <span class="mono" id="ph-radius-val">12</span></label>
+              <input id="ph-radius" type="range" min="0" max="40" value="12" />
+              <label for="ph-gap">间距 <span class="mono" id="ph-gap-val">10</span></label>
+              <input id="ph-gap" type="range" min="0" max="40" value="10" />
+              <label for="ph-pad">边距 <span class="mono" id="ph-pad-val">36</span></label>
+              <input id="ph-pad" type="range" min="8" max="80" value="36" />
+            </div>
+            <div class="btn-row tool-actions" style="margin-top:0.75rem;flex-wrap:wrap">
+              <button type="button" class="primary-btn" id="ph-download">下载 PNG</button>
+              <button type="button" class="secondary-btn" id="ph-svg">下载 SVG</button>
+              <button type="button" class="secondary-btn" id="ph-copy">复制图片</button>
+              <button type="button" class="ghost-btn" id="ph-to-memo">保存到备忘录</button>
+              <button type="button" class="ghost-btn" id="ph-reset">恢复默认</button>
+            </div>
+            <p class="hint tight" id="ph-meta">实时预览 · 纯本地生成</p>
+            <p class="error" id="ph-error" hidden></p>
+          </div>
+          <div class="field-block">
+            <label>预览</label>
+            <div class="phlogo-stage" id="ph-stage">
+              <canvas id="ph-canvas" class="phlogo-canvas" aria-label="Logo 预览"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+<section id="nokiasms" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>诺基亚短信</h1>
+        <p>生成老式诺基亚 3310 短信界面截图。本地 Canvas 绘制，不上传。灵感来自开源项目 <a href="https://github.com/dcalsky/zzkia" target="_blank" rel="noopener noreferrer">dcalsky/zzkia</a>。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid nokia-layout">
+          <div class="field-block">
+            <label for="nk-text">短信内容</label>
+            <textarea id="nk-text" class="area" rows="6" maxlength="900" placeholder="输入短信…" spellcheck="false">下班了吗？
+记得带饭。</textarea>
+            <p class="hint tight mono" id="nk-count">0 / 900</p>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+              <label for="nk-title">标题</label>
+              <input id="nk-title" type="text" value="短信" maxlength="12" spellcheck="false" />
+              <label for="nk-op">运营商</label>
+              <input id="nk-op" type="text" value="中国移动" maxlength="12" spellcheck="false" />
+              <label for="nk-time">时间</label>
+              <input id="nk-time" class="mono" type="text" value="12:00" maxlength="8" spellcheck="false" />
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+              <label for="nk-left-key">左键</label>
+              <input id="nk-left-key" type="text" value="选项" maxlength="6" spellcheck="false" />
+              <label for="nk-right-key">右键</label>
+              <input id="nk-right-key" type="text" value="返回" maxlength="6" spellcheck="false" />
+              <label for="nk-signal">信号</label>
+              <input id="nk-signal" class="mono meta-input" type="number" min="0" max="5" value="4" />
+              <label for="nk-batt">电量</label>
+              <input id="nk-batt" class="mono meta-input" type="number" min="0" max="5" value="3" />
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
+              <label for="nk-size">正文字号 <span class="mono" id="nk-size-val">22</span></label>
+              <input id="nk-size" type="range" min="14" max="32" value="22" />
+              <label class="flag"><input id="nk-tilt" type="checkbox" /> 机身倾斜（zzkia 风）</label>
+              <label class="flag"><input id="nk-counter" type="checkbox" checked /> 显示字数</label>
+            </div>
+            <div class="btn-row tool-actions" style="margin-top:0.75rem;flex-wrap:wrap">
+              <button type="button" class="primary-btn" id="nk-download">下载 PNG</button>
+              <button type="button" class="secondary-btn" id="nk-copy">复制图片</button>
+              <button type="button" class="ghost-btn" id="nk-to-memo">保存到备忘录</button>
+              <button type="button" class="ghost-btn" id="nk-now">填入当前时间</button>
+            </div>
+            <p class="hint tight" id="nk-meta">实时预览 · 纯本地生成</p>
+            <p class="error" id="nk-error" hidden></p>
+          </div>
+          <div class="field-block">
+            <label>预览</label>
+            <div class="nokia-stage" id="nk-stage">
+              <canvas id="nk-canvas" class="nokia-canvas" aria-label="诺基亚短信预览"></canvas>
             </div>
           </div>
         </div>
@@ -5013,9 +5133,9 @@ adb devices</pre>
     <p class="ruler-fs-hud mono hint" id="ruler-coord-fs" aria-live="polite"></p>
   </div>
   <script src="./lib/bridge-token.js?v=2026.08.30-062500"></script>
-  <script src="./lib/lazy-scripts.js?v=2026.08.30-062500"></script>
+  <script src="./lib/lazy-scripts.js?v=2026.08.30-143000"></script>
   <script src="./theme.js?v=2026.08.30-062500"></script>
-  <script src="./app.js?v=2026.08.30-062500"></script>
+  <script src="./app.js?v=2026.08.30-143000"></script>
   <script src="./wheel.js?v=2026.08.30-062500"></script>
   <script src="./ruler.js?v=2026.08.30-062500"></script>
   <script src="./muyu.js?v=2026.08.30-084100"></script>

@@ -47,6 +47,8 @@
     imgtext: "./imgtext.js",
     imgpreview: "./imgpreview.js",
     whiteboard: "./whiteboard.js",
+    phlogo: "./phlogo.js",
+    nokiasms: "./nokiasms.js",
   };
 
   const TOOL_VENDORS = {
@@ -76,10 +78,12 @@
     "lanshare",
     "ffbridge",
     "ytdlp",
+    "phlogo",
+    "nokiasms",
   ]);
 
   /** 不依赖 DevToolsPure */
-  const NO_PURE = new Set(["acupoint", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp", "setup", "about", "xorenc", "morse", "countdown"]);
+  const NO_PURE = new Set(["acupoint", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp", "setup", "about", "xorenc", "morse", "countdown", "phlogo", "nokiasms"]);
 
   const scriptPromises = new Map();
   let extraBundlePromise = null;
