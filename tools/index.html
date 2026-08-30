@@ -14,8 +14,8 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.30-101500"></script>
-  <link rel="stylesheet" href="./style.css?v=2026.08.30-101500" />
+  <script src="./lib/tools-build.js?v=2026.08.30-102000"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.08.30-102000" />
   <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-062500" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
@@ -3401,6 +3401,7 @@ hello@world.org</textarea>
             </div>
             <div id="ls-cam-wrap" class="qr-scan-wrap" hidden style="margin-top:0.65rem">
               <video id="ls-cam-video" class="qr-video" playsinline webkit-playsinline muted hidden></video>
+              <p class="hint tight" id="ls-scan-hint" hidden></p>
               <button type="button" class="ghost-btn" id="ls-cam-stop" hidden>关闭摄像头</button>
             </div>
             <label for="ls-join-paste" style="margin-top:0.65rem">或粘贴邀请链接</label>
@@ -3408,7 +3409,7 @@ hello@world.org</textarea>
             <div class="btn-row tool-actions" style="margin-top:0.35rem">
               <button type="button" class="secondary-btn" id="ls-join-confirm">确认加入</button>
             </div>
-            <p class="hint tight">手机可用<strong>微信/相机</strong>扫电脑邀请码（需完整网页链接二维码）；应用内也可用「摄像头扫码」。</p>
+            <p class="hint tight">应用内请扫房主「应用内扫码」短码；微信/系统相机请扫「微信 / 相机」完整链接码。</p>
           </details>
         </div>
 
@@ -3416,8 +3417,17 @@ hello@world.org</textarea>
           <h2 class="subhead">邀请加入</h2>
           <p class="mono panel-card tight" id="ls-room-pwd-display" hidden style="margin:0.5rem 0;font-size:1.15rem;letter-spacing:0.06em"></p>
           <div id="ls-pairing-guide" class="panel-card hint tight" hidden style="margin-bottom:0.65rem"></div>
-          <p class="hint tight">邀请二维码为<strong>完整网页链接</strong>，微信/相机可扫；仅应用内扫码时才识别短码。</p>
-          <div id="ls-invite-qr" class="qr-box-wrap" style="margin:0.5rem 0"></div>
+          <p class="hint tight">左为<strong>应用内短码</strong>（摄像头扫码用）；右为<strong>微信 / 系统相机</strong>完整链接码。</p>
+          <div class="ls-qr-duo">
+            <div class="ls-qr-piece">
+              <p class="hint tight">应用内扫码</p>
+              <div id="ls-invite-qr-app" class="qr-box-wrap"></div>
+            </div>
+            <div class="ls-qr-piece">
+              <p class="hint tight">微信 / 相机</p>
+              <div id="ls-invite-qr" class="qr-box-wrap"></div>
+            </div>
+          </div>
           <label for="ls-invite-text">邀请链接（可复制到微信发给手机）</label>
           <textarea id="ls-invite-text" class="mono area" rows="2" readonly spellcheck="false"></textarea>
           <div class="btn-row tool-actions" style="margin-top:0.35rem;flex-wrap:wrap">

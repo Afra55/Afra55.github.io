@@ -8893,6 +8893,26 @@ li a:not([class*="btn"]) {
   }
 }
 
+.ls-qr-duo {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin: 0.5rem 0;
+  align-items: flex-start;
+}
+
+.ls-qr-piece {
+  flex: 0 1 auto;
+}
+
+.ls-qr-piece .qr-box-wrap {
+  margin: 0.25rem 0 0;
+}
+
+#ls-scan-hint {
+  margin: 0.35rem 0 0;
+}
+
 .ls-list {
   display: grid;
   gap: 0.5rem;

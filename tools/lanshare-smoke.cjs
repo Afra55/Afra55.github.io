@@ -111,11 +111,14 @@ async function main() {
   assert(/applyJoinOffer/.test(js), "缺少房主 offer 应用");
   assert(/joinByPassword/.test(js), "缺少密码加入");
   assert(/uploadTransferKey/.test(js), "上传连接应按请求者区分");
-  assert(/ls-ring-progress/.test(fs.readFileSync(path.join(root, "style.css"), "utf8")), "缺少行内环形进度样式");
+  assert(/decodeQrFromSource/.test(js), "缺少多尺度二维码解码");
+  assert(/ls-invite-qr-app/.test(htmlLocal), "缺少应用内短码二维码区");
+  assert(/ls-qr-duo/.test(fs.readFileSync(path.join(root, "style.css"), "utf8")), "缺少双二维码布局样式");
   assert(/downloadQueue/.test(js), "缺少下载排队");
   assert(/enqueueDownload/.test(js), "缺少 enqueueDownload");
   assert(/openJoinFallback/.test(js), "缺少密码失败展开备用区");
   assert(/ls-inline-progress/.test(htmlLocal), "缺少按钮旁内联进度");
+  assert(/ls-ring-progress/.test(fs.readFileSync(path.join(root, "style.css"), "utf8")), "缺少行内环形进度样式");
   assert(/ls-join-fallback/.test(htmlLocal), "缺少备用加入区 id");
   assert(/bumpSendProgress/.test(js), "缺少上传发送进度");
   assert(/is-queue/.test(fs.readFileSync(path.join(root, "style.css"), "utf8")), "缺少排队样式");

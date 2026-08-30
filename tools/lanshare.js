@@ -40,6 +40,7 @@
     inviteArea: $("#ls-invite-area"),
     inviteText: $("#ls-invite-text"),
     inviteQr: $("#ls-invite-qr"),
+    inviteQrApp: $("#ls-invite-qr-app"),
     copyInviteBtn: $("#ls-copy-invite"),
     scanAnswerBtn: $("#ls-scan-answer"),
     roomCodeEl: $("#ls-room-pwd-display"),
@@ -73,12 +74,15 @@
     camWrap: $("#ls-cam-wrap"),
     camVideo: $("#ls-cam-video"),
     camStop: $("#ls-cam-stop"),
+    scanHint: $("#ls-scan-hint"),
   };
 
   /** @type {MediaStream|null} */
   let camStream = null;
   /** @type {number|null} */
-  let scanRaf = null;
+  let scanTimer = null;
+  /** @type {HTMLCanvasElement|null} */
+  let scanCanvas = null;
   /** @type {number|null} */
   let busyProgressTimer = null;
   /** @type {number|null} */
@@ -1527,18 +1531,34 @@
   }
 
   async function renderInviteQr() {
-    if (!els.inviteQr) return;
-    els.inviteQr.innerHTML = "";
+    if (els.inviteQr) els.inviteQr.innerHTML = "";
+    if (els.inviteQrApp) els.inviteQrApp.innerHTML = "";
+    if (!els.inviteQr && !els.inviteQrApp) return;
     await ensureQrLibs();
     if (typeof QRCode === "undefined") {
-      els.inviteQr.textContent = "二维码库未加载，请复制下方邀请文本";
+      const msg = "二维码库未加载，请复制下方邀请文本";
+      if (els.inviteQr) els.inviteQr.textContent = msg;
+      if (els.inviteQrApp) els.inviteQrApp.textContent = msg;
       return;
     }
     const shortText = inviteQrTextShort();
     const fullUrl = `${inviteLinkBase()}#${shortText}`;
-    const qrPayloads = [fullUrl, shortText];
     const tries = [QRCode.CorrectLevel.L, QRCode.CorrectLevel.M];
-    for (const text of qrPayloads) {
+    if (els.inviteQrApp) {
+      for (const level of tries) {
+        try {
+          renderQrBox(els.inviteQrApp, shortText, level);
+          break;
+        } catch (err) {
+          if (!/Too long|overflow|code length overflow/i.test(String(err.message || err))) break;
+        }
+      }
+      if (!els.inviteQrApp.childNodes.length) {
+        els.inviteQrApp.innerHTML = '<p class="hint tight">短码生成失败</p>';
+      }
+    }
+    if (!els.inviteQr) return;
+    for (const text of [fullUrl, shortText]) {
       for (const level of tries) {
         try {
           renderQrBox(els.inviteQr, text, level);
@@ -2844,6 +2864,7 @@
     stopSignalRelayListen();
     if (els.inviteText) els.inviteText.value = "";
     if (els.inviteQr) els.inviteQr.innerHTML = "";
+    if (els.inviteQrApp) els.inviteQrApp.innerHTML = "";
     if (els.guestAnswerArea) els.guestAnswerArea.hidden = true;
     if (els.guestAnswerQr) els.guestAnswerQr.innerHTML = "";
     if (els.guestAnswerText) els.guestAnswerText.value = "";
@@ -2935,23 +2956,114 @@
     }
   }
 
-  function decodeQrFromImage(img) {
-    if (typeof jsQR !== "function") throw new Error("扫码库未加载");
-    const canvas = document.createElement("canvas");
+  function getJsQR() {
+    const j = typeof jsQR !== "undefined" ? jsQR : globalThis.jsQR;
+    if (typeof j === "function") return j;
+    if (j && typeof j.default === "function") return j.default;
+    return null;
+  }
+
+  function decodeQrFromImageData(imageData, w, h) {
+    const fn = getJsQR();
+    if (!fn) return null;
+    return fn(imageData.data, w, h, { inversionAttempts: "attemptBoth" });
+  }
+
+  function decodeQrFromSource(source, sw, sh, sx = 0, sy = 0) {
+    if (!sw || !sh) return null;
+    if (!scanCanvas) scanCanvas = document.createElement("canvas");
+    const canvas = scanCanvas;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    const maxSide = 1400;
-    let w = img.naturalWidth || img.videoWidth || img.width;
-    let h = img.naturalHeight || img.videoHeight || img.height;
+    if (!ctx) return null;
+    const maxSide = 1000;
+    const base = Math.min(1, maxSide / Math.max(sw, sh));
+    const scales = [1, 0.75, 0.55, 1.35];
+    for (const scale of scales) {
+      const w = Math.max(1, Math.round(sw * base * scale));
+      const h = Math.max(1, Math.round(sh * base * scale));
+      canvas.width = w;
+      canvas.height = h;
+      ctx.drawImage(source, sx, sy, sw, sh, 0, 0, w, h);
+      const code = decodeQrFromImageData(ctx.getImageData(0, 0, w, h), w, h);
+      if (code?.data) return code.data;
+    }
+    const cw = Math.round(sw * 0.62);
+    const ch = Math.round(sh * 0.62);
+    const cx = Math.round((sw - cw) / 2);
+    const cy = Math.round((sh - ch) / 2);
+    for (const scale of [1, 0.8, 1.25]) {
+      const w = Math.max(1, Math.round(cw * base * scale));
+      const h = Math.max(1, Math.round(ch * base * scale));
+      canvas.width = w;
+      canvas.height = h;
+      ctx.drawImage(source, sx + cx, sy + cy, cw, ch, 0, 0, w, h);
+      const code = decodeQrFromImageData(ctx.getImageData(0, 0, w, h), w, h);
+      if (code?.data) return code.data;
+    }
+    return null;
+  }
+
+  function normalizeScanPayload(data) {
+    let s = normalizeInviteText(data);
+    if (!s) return "";
+    if (/^https?:\/\//i.test(s)) {
+      try {
+        const u = new URL(s);
+        const frag = u.hash.replace(/^#/, "").trim();
+        if (frag.includes("lanshare")) return frag;
+        const q = u.search.replace(/^\?/, "");
+        if (q && (/(^|&)(r|j|o|a)=/.test(q) || q.includes("lanshare"))) return `lanshare?${q}`;
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    return s;
+  }
+
+  function setScanHint(msg) {
+    if (!els.scanHint) return;
+    els.scanHint.hidden = !msg;
+    els.scanHint.textContent = msg || "";
+  }
+
+  function looksLikeLansharePayload(data) {
+    const s = normalizeScanPayload(data);
+    if (!s) return false;
+    if (isOfferScanData(s) || isAnswerScanData(s) || isInviteScanData(s)) return true;
+    return /lanshare/i.test(s) || s.startsWith(PROTO) || /^[zr][A-Za-z0-9_-]{8,}$/.test(s);
+  }
+
+  function handleDecodedScan(raw) {
+    const data = normalizeScanPayload(raw);
+    if (!data || !looksLikeLansharePayload(data)) {
+      setError("识别到二维码，但不是互传邀请/连接码");
+      return;
+    }
+    stopScan();
+    setScanHint("");
+    if (state.isHost && isOfferScanData(data)) {
+      applyOfferFromScanData(data).catch((err) => setError(err.message));
+      return;
+    }
+    if (state.isHost && isAnswerScanData(data)) {
+      applyAnswerFromScanData(data).catch((err) => setError(err.message));
+      return;
+    }
+    if (!state.isHost && isAnswerScanData(data)) {
+      applyHostAnswer(data).catch((err) => setError(err.message));
+      return;
+    }
+    joinFromScanData(data).catch((err) => setError(err.message));
+  }
+
+  function decodeQrFromImage(img) {
+    if (!getJsQR()) throw new Error("扫码库未加载");
+    const w = img.naturalWidth || img.videoWidth || img.width;
+    const h = img.naturalHeight || img.videoHeight || img.height;
     if (!w || !h) throw new Error("无法读取图片尺寸");
-    const scale = Math.min(1, maxSide / Math.max(w, h));
-    w = Math.max(1, Math.round(w * scale));
-    h = Math.max(1, Math.round(h * scale));
-    canvas.width = w;
-    canvas.height = h;
-    ctx.drawImage(img, 0, 0, w, h);
-    const code = jsQR(canvas.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: "attemptBoth" });
-    if (!code?.data) throw new Error("未识别到二维码");
-    return code.data;
+    const data = decodeQrFromSource(img, w, h);
+    if (!data) throw new Error("未识别到二维码，请换更清晰的图片或对准一些");
+    return data;
   }
 
   async function joinFromScanData(data) {
@@ -2996,18 +3108,19 @@
       setError(e.message || "扫码库未加载");
       return;
     }
-    if (typeof jsQR === "undefined") {
+    if (!getJsQR()) {
       setError("扫码库未加载");
       return;
     }
     stopScan();
+    setError("");
     if (!navigator.mediaDevices?.getUserMedia) {
       setError("当前环境无法打开摄像头，请用「图片识别邀请码」或手动粘贴");
       return;
     }
     try {
       const videoOpts = isIOS()
-        ? { facingMode: "environment" }
+        ? { facingMode: { ideal: "environment" } }
         : { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } };
       camStream = await navigator.mediaDevices.getUserMedia({ video: videoOpts, audio: false });
       if (els.camVideo) {
@@ -3021,49 +3134,26 @@
       }
       if (els.camWrap) els.camWrap.hidden = false;
       if (els.camStop) els.camStop.hidden = false;
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      setScanHint("对准二维码，保持稳定…");
       const tick = () => {
-        if (!camStream || !els.camVideo || !ctx) return;
+        if (!camStream || !els.camVideo) return;
         const v = els.camVideo;
-        if (v.readyState >= v.HAVE_CURRENT_DATA) {
-          canvas.width = v.videoWidth;
-          canvas.height = v.videoHeight;
-          ctx.drawImage(v, 0, 0);
+        if (v.readyState >= v.HAVE_CURRENT_DATA && v.videoWidth > 0 && v.videoHeight > 0) {
           try {
-            const code = jsQR(canvas.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, {
-              inversionAttempts: "attemptBoth",
-            });
-            if (code?.data) {
-              if (state.isHost && isOfferScanData(code.data)) {
-                stopScan();
-                applyOfferFromScanData(code.data).catch((err) => setError(err.message));
-                return;
-              }
-              if (state.isHost && isAnswerScanData(code.data)) {
-                stopScan();
-                applyAnswerFromScanData(code.data).catch((err) => setError(err.message));
-                return;
-              }
-              if (!state.isHost && isAnswerScanData(code.data)) {
-                stopScan();
-                applyHostAnswer(code.data).catch((err) => setError(err.message));
-                return;
-              }
-              if (isInviteScanData(code.data)) {
-                stopScan();
-                joinFromScanData(code.data).catch((err) => setError(err.message));
-                return;
-              }
+            const data = decodeQrFromSource(v, v.videoWidth, v.videoHeight);
+            if (data) {
+              handleDecodedScan(data);
+              return;
             }
           } catch (_) {
             /* ignore frame errors */
           }
         }
-        scanRaf = requestAnimationFrame(tick);
+        scanTimer = window.setTimeout(tick, 140);
       };
-      scanRaf = requestAnimationFrame(tick);
+      scanTimer = window.setTimeout(tick, 140);
     } catch (e) {
+      setScanHint("");
       setError(isIOS() ? "无法打开摄像头：请在 Safari 设置中允许相机，或改用「图片识别邀请码」" : "无法打开摄像头，请用图片识别或粘贴邀请文本");
     }
   }
@@ -3086,7 +3176,7 @@
         img.src = url;
       });
       const data = decodeQrFromImage(img);
-      await joinFromScanData(data);
+      handleDecodedScan(data);
     } catch (e) {
       setError(e.message || "识别失败");
     } finally {
@@ -3095,8 +3185,8 @@
   }
 
   function stopScan() {
-    if (scanRaf) cancelAnimationFrame(scanRaf);
-    scanRaf = null;
+    if (scanTimer) clearTimeout(scanTimer);
+    scanTimer = null;
     camStream?.getTracks().forEach((t) => t.stop());
     camStream = null;
     if (els.camVideo) {
@@ -3105,6 +3195,7 @@
     }
     if (els.camWrap) els.camWrap.hidden = true;
     if (els.camStop) els.camStop.hidden = true;
+    setScanHint("");
   }
 
   async function startAnswerScan() {
