@@ -10669,6 +10669,28 @@ html[data-boot-loading="1"] body {
   padding: 0.45rem 0.5rem 0.52rem;
 }
 
+.ambient-card-names {
+  display: block;
+  font-weight: 700;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.ambient-card-names .ambient-card-zh {
+  color: inherit;
+}
+
+.ambient-card-names .ambient-card-en {
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.ambient-card-sep {
+  color: var(--muted);
+  font-weight: 500;
+}
+
 .ambient-card-title {
   display: flex;
   align-items: center;
@@ -10689,9 +10711,9 @@ html[data-boot-loading="1"] body {
 }
 
 .ambient-card-en {
-  font-size: 0.78rem;
-  color: var(--muted);
-  padding-left: 1.35rem;
+  font-size: inherit;
+  color: inherit;
+  padding-left: 0;
 }
 
 .ambient-speak {
