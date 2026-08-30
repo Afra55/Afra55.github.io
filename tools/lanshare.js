@@ -602,6 +602,15 @@
     infoTimer = setTimeout(() => paintStatus(), 4500);
   }
 
+  function attachProgressSlot(slot) {
+    if (!els.progressEl) return;
+    const host =
+      slot === "create"
+        ? els.createBtn?.closest(".ls-action-row") || els.createBtn?.parentElement
+        : els.joinPwdBtn?.closest(".ls-action-row") || els.joinPwdBtn?.parentElement;
+    if (host && els.progressEl.parentElement !== host) host.appendChild(els.progressEl);
+  }
+
   function setProgress(pct, text, { busy = false } = {}) {
     if (!els.progressEl) return;
     const wrap = els.progressEl.querySelector(".ls-progress-bar-wrap");
@@ -618,7 +627,8 @@
     if (els.progressText) els.progressText.textContent = text || "";
   }
 
-  function startBusyProgress(text) {
+  function startBusyProgress(text, slot = "join") {
+    attachProgressSlot(slot);
     stopBusyProgress();
     setProgress(0, text, { busy: true });
     let p = 6;
@@ -952,24 +962,40 @@
     }
   }
 
+  const RING_PATH =
+    "M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831";
+
+  function ringProgressHtml(pct, label, { busy = false } = {}) {
+    const p = Math.min(100, Math.max(0, pct));
+    const title = escapeHtml(label || "");
+    const dash = busy ? "" : ` stroke-dasharray="${(p * 0.942).toFixed(2)}, 100"`;
+    const busyCls = busy ? " is-busy" : "";
+    const pctInner = busy ? "" : `<span class="ls-ring-pct mono">${Math.round(p)}</span>`;
+    return (
+      `<div class="ls-ring-progress${busyCls}" role="progressbar" aria-valuemin="0" aria-valuemax="100"` +
+      (busy ? "" : ` aria-valuenow="${Math.round(p)}"`) +
+      ` title="${title}" aria-label="${title}">` +
+      `<svg class="ls-ring-svg" viewBox="0 0 36 36" aria-hidden="true">` +
+      `<path class="ls-ring-track" d="${RING_PATH}" fill="none" stroke-width="3"/>` +
+      `<path class="ls-ring-fill" d="${RING_PATH}" fill="none" stroke-width="3"${dash}/>` +
+      `</svg>${pctInner}</div>`
+    );
+  }
+
   function fileActionsInnerHtml(f) {
     const mine = f.ownerId === state.peerId;
     const local = state.fileLocalStatus.get(f.id);
     if (mine) {
       if (local?.phase === "processing") {
         return (
-          `<div class="ls-dl-progress" aria-live="polite">` +
-          `<div class="ls-dl-progress-bar-wrap is-busy"><div class="ls-dl-progress-bar"></div></div>` +
-          `<span class="ls-dl-progress-label mono">${escapeHtml(local.label || "处理中…")}</span></div>` +
+          ringProgressHtml(0, local.label || "处理中…", { busy: true }) +
           `<button type="button" class="ghost-btn ls-del" data-id="${f.id}" disabled>删除</button>`
         );
       }
       if (local?.phase === "sending") {
         const pct = Math.min(100, Math.max(0, local.pct));
         return (
-          `<div class="ls-dl-progress" aria-live="polite">` +
-          `<div class="ls-dl-progress-bar-wrap"><div class="ls-dl-progress-bar" style="width:${pct}%"></div></div>` +
-          `<span class="ls-dl-progress-label mono">${escapeHtml(local.label || "发送中…")}</span></div>` +
+          ringProgressHtml(pct, local.label || "发送中…") +
           `<button type="button" class="ghost-btn ls-del" data-id="${f.id}">删除</button>`
         );
       }
@@ -977,7 +1003,7 @@
     }
     if (state.downloadQueue.includes(f.id) && state.activeDownload?.fileId !== f.id) {
       const pos = state.downloadQueue.indexOf(f.id) + 1;
-      return `<span class="ls-dl-status is-queue">排队中 #${pos}</span>`;
+      return `<span class="ls-dl-status is-queue">排队 #${pos}</span>`;
     }
     const dl = state.activeDownload;
     if (dl?.fileId === f.id) {
@@ -988,12 +1014,8 @@
         return `<button type="button" class="secondary-btn ls-dl" data-id="${f.id}">重试</button>`;
       }
       const pct = Math.min(100, Math.max(0, dl.pct));
-      return (
-        `<div class="ls-dl-progress" aria-live="polite">` +
-        `<div class="ls-dl-progress-bar-wrap"><div class="ls-dl-progress-bar" style="width:${pct}%"></div></div>` +
-        `<span class="ls-dl-progress-label mono">${escapeHtml(dl.label || "下载中…")}</span>` +
-        `</div>`
-      );
+      const busy = dl.phase === "connecting" && pct <= 0;
+      return ringProgressHtml(pct, dl.label || "下载中…", { busy });
     }
     return `<button type="button" class="secondary-btn ls-dl" data-id="${f.id}">下载</button>`;
   }
@@ -2124,7 +2146,7 @@
       return;
     }
     setJoinUiBusy(true);
-    startBusyProgress("正在创建房间…");
+    startBusyProgress("正在创建房间…", "create");
     try {
       await ensureQrLibs();
       setError("");
@@ -2180,7 +2202,7 @@
     }
     if (!opts._skipBusy) {
       setJoinUiBusy(true);
-      startBusyProgress(opts.viaMqtt ? "正在通过密码加入…" : "正在加入房间…");
+      startBusyProgress(opts.viaMqtt ? "正在通过密码加入…" : "正在加入房间…", "join");
     }
     try {
       setError("");
@@ -2262,7 +2284,7 @@
       return;
     }
     setJoinUiBusy(true);
-    startBusyProgress("正在连接信令…");
+    startBusyProgress("正在连接信令…", "join");
     try {
       const pwd = validateRoomPassword(pwdRaw);
       setError("");

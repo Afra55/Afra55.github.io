@@ -14,8 +14,8 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.30-084100"></script>
-  <link rel="stylesheet" href="./style.css?v=2026.08.30-062500" />
+  <script src="./lib/tools-build.js?v=2026.08.30-101500"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.08.30-101500" />
   <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-062500" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
@@ -3367,11 +3367,6 @@ hello@world.org</textarea>
           </div>
         </div>
 
-        <div id="ls-progress" class="panel-card" hidden style="margin-top:0.65rem">
-          <div class="ls-progress-bar-wrap"><div id="ls-progress-bar" class="ls-progress-bar"></div></div>
-          <p class="hint tight" id="ls-progress-text"></p>
-        </div>
-
         <p class="hint tight" id="ls-platform-hint" hidden style="margin-top:0.65rem"></p>
 
         <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem;align-items:center">
@@ -3382,13 +3377,17 @@ hello@world.org</textarea>
         <div id="ls-join-area" style="margin-top:0.85rem">
           <label for="ls-room-pwd-host">创建房间时设置密码（推荐）</label>
           <input id="ls-room-pwd-host" type="text" maxlength="16" placeholder="4–16 位字母或数字，成员输入即可加入" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off" style="min-width:10rem" />
-          <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
+          <div class="btn-row tool-actions ls-action-row" style="flex-wrap:wrap;margin-top:0.45rem">
             <button type="button" class="primary-btn" id="ls-create">创建房间</button>
+            <div id="ls-progress" class="ls-inline-progress" hidden aria-live="polite">
+              <div class="ls-progress-bar-wrap"><div id="ls-progress-bar" class="ls-progress-bar"></div></div>
+              <span class="hint tight ls-inline-progress-text" id="ls-progress-text"></span>
+            </div>
           </div>
 
           <label for="ls-room-pwd-join" style="margin-top:0.85rem">输入房间密码加入</label>
           <input id="ls-room-pwd-join" type="text" maxlength="16" placeholder="向房主索取密码" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off" style="min-width:10rem" />
-          <div class="btn-row tool-actions" style="margin-top:0.35rem">
+          <div class="btn-row tool-actions ls-action-row" style="margin-top:0.35rem">
             <button type="button" class="primary-btn" id="ls-join-pwd">密码加入</button>
           </div>
 
