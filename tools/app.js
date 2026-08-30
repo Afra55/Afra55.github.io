@@ -784,6 +784,7 @@
   const LAST_TOOL_SESSION_KEY = "devtools-tool-last-session-v1";
   const SORT_HINT_KEY = "devtools-nav-sort-hint-seen-v1";
   const NAV_COMPACT_KEY = "devtools-nav-compact-v1";
+  const NAV_RECENT_OPEN_KEY = "devtools-nav-recent-open-v1";
   /** 站点页不算「上次工具」，避免 about/setup 盖掉真实工具 */
   const SITE_NAV_IDS = new Set(["about", "setup"]);
   const MEDIA_TABS = ["gifmaker", "vsplit", "vtrim", "audio", "vplay"];
@@ -972,6 +973,8 @@
   const toolSearch = $("#tool-search");
   const recentWrap = $("#tool-recent");
   const recentList = $("#tool-recent-list");
+  const recentToggle = $("#tool-recent-toggle");
+  const recentCount = $("#tool-recent-count");
   const favoritesWrap = $("#tool-favorites");
   const favoritesList = $("#tool-fav-list");
   const navToolCtx = $("#nav-tool-ctx");
@@ -1071,9 +1074,18 @@
   let drawerIgnoreOpenUntil = 0;
   let navCompact = false;
   try {
-    navCompact = localStorage.getItem(NAV_COMPACT_KEY) === "1";
+    const storedCompact = localStorage.getItem(NAV_COMPACT_KEY);
+    if (storedCompact === null && compactNavOnMobile()) navCompact = true;
+    else navCompact = storedCompact === "1";
   } catch (_) {
     navCompact = false;
+  }
+
+  let recentOpen = false;
+  try {
+    recentOpen = localStorage.getItem(NAV_RECENT_OPEN_KEY) === "1";
+  } catch (_) {
+    recentOpen = false;
   }
 
   let navShellBootstrapped = false;
@@ -1098,6 +1110,7 @@
     bindFavoritesGroupInteractions();
     bindNavToolCtx();
     bindNavStripWheelScroll(recentList);
+    recentToggle?.addEventListener("click", () => setRecentOpen(!recentOpen));
     syncSortHint();
     scheduleBootRoute();
   }
@@ -1137,7 +1150,7 @@
   }
 
   function showMobileSortHandles() {
-    return isMobileDrawer();
+    return false;
   }
 
   function toolName(id) {
@@ -1634,22 +1647,8 @@
 
   function syncSortHint() {
     const el = document.querySelector(".nav-sort-hint");
-    if (!el) return false;
-    let seen = false;
-    try {
-      seen = localStorage.getItem(SORT_HINT_KEY) === "1";
-    } catch (_) {
-      seen = false;
-    }
-    if (seen) {
-      el.hidden = true;
-      return false;
-    }
-    el.hidden = false;
-    try {
-      localStorage.setItem(SORT_HINT_KEY, "1");
-    } catch (_) {}
-    return true;
+    if (el) el.hidden = true;
+    return false;
   }
 
   function getNavLinks() {
@@ -1855,6 +1854,21 @@
     );
   }
 
+  function syncRecentOpenUi() {
+    if (!recentToggle || !recentList) return;
+    recentToggle.setAttribute("aria-expanded", recentOpen ? "true" : "false");
+    recentList.hidden = !recentOpen;
+    recentToggle.classList.toggle("is-open", recentOpen);
+  }
+
+  function setRecentOpen(open) {
+    recentOpen = !!open;
+    try {
+      localStorage.setItem(NAV_RECENT_OPEN_KEY, recentOpen ? "1" : "0");
+    } catch (_) {}
+    syncRecentOpenUi();
+  }
+
   function renderRecent() {
     if (!recentWrap || !recentList) return;
     const items = loadRecent();
@@ -1864,6 +1878,7 @@
       return;
     }
     recentWrap.hidden = false;
+    if (recentCount) recentCount.textContent = String(items.length);
     items.forEach((id) => {
       if (!isNavToolVisible(id)) return;
       const btn = document.createElement("button");
@@ -1884,7 +1899,9 @@
     });
     if (!recentList.children.length) {
       recentWrap.hidden = true;
+      return;
     }
+    syncRecentOpenUi();
   }
 
   let favPickerOpen = false;
@@ -2911,12 +2928,19 @@
   );
 
   $("#nav-reset")?.addEventListener("click", () => {
+    if (!window.confirm("恢复工具与分类的默认排序？常用工具也会被清空。")) return;
     localStorage.removeItem(ORDER_KEY);
     localStorage.removeItem("devtools-tool-order-v2");
     localStorage.removeItem(GROUP_ORDER_KEY);
+    localStorage.removeItem(FAVORITES_KEY);
     renderNav(DEFAULT_ORDER.slice());
+    renderFavorites();
     applyRoute({ skipRecent: true });
     showToast("已恢复默认排序");
+  });
+
+  $("#nav-organize-open")?.addEventListener("click", () => {
+    window.DevToolsNavOrganize?.open?.();
   });
 
   async function runForceHardRefresh() {
@@ -3202,10 +3226,28 @@
     openFlyout: (el) => openNavFlyout(el?.closest?.(".nav-group") || el),
     closeFlyouts: () => closeNavFlyouts(),
     renderRecent,
+    setRecentOpen,
+    isRecentOpen: () => recentOpen,
     renderFavorites,
     addFavorite,
     removeFavorite,
     loadFavorites,
+    saveFavorites,
+    loadOrder,
+    saveOrder,
+    loadGroupOrder,
+    saveGroupOrder,
+    refreshNav: () => {
+      renderNav(loadOrder());
+      renderFavorites();
+      renderRecent();
+      syncNavCompactUi();
+    },
+    toolName,
+    isNavToolVisible,
+    GROUP_BY_ID,
+    DEFAULT_GROUP_ORDER,
+    DEFAULT_ORDER,
     isDesktopChromeHidden: () => desktopChromeHidden,
     setDesktopChromeHidden: (on) => applyDesktopChromeHidden(Boolean(on)),
     toggleDesktopChrome,

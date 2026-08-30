@@ -122,6 +122,67 @@ html.is-pwa-standalone #pwa-install {
   margin-bottom: 0.3rem;
 }
 
+.nav-strip-toggle {
+  appearance: none;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.12rem 0.15rem;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  cursor: pointer;
+  text-align: left;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+}
+
+.nav-strip-toggle:hover,
+.nav-strip-toggle:focus-visible {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  outline: none;
+}
+
+.nav-strip-toggle-label {
+  flex: 1 1 auto;
+}
+
+.nav-strip-toggle-meta {
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 0.85rem;
+  text-align: center;
+}
+
+.nav-strip-toggle-meta:empty {
+  display: none;
+}
+
+.nav-strip-toggle-icon {
+  display: inline-block;
+  font-size: 0.85rem;
+  line-height: 1;
+  transition: transform 0.15s ease;
+  color: var(--muted);
+}
+
+.nav-strip-toggle.is-open .nav-strip-toggle-icon {
+  transform: rotate(90deg);
+}
+
+.nav-recent .nav-strip-toggle.is-open {
+  margin-bottom: 0.28rem;
+}
+
 .nav-strip-title,
 .nav-recent-label {
   margin: 0 0 0.35rem;
@@ -433,6 +494,11 @@ body.nav-sorting .nav-footer-actions {
 
 body.nav-sorting .nav-group {
   margin-bottom: 0.35rem;
+}
+
+body.nav-sorting .nav-compact-bar,
+body.nav-sorting .nav-group-tools {
+  display: none !important;
 }
 
 body.nav-sorting .nav-group-title.is-sortable {

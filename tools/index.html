@@ -14,9 +14,9 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.30-234200"></script>
-  <link rel="stylesheet" href="./style.css?v=2026.08.30-234200" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-234200" />
+  <script src="./lib/tools-build.js?v=2026.08.30-235000"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.08.30-235000" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-235000" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
   <script>
@@ -173,13 +173,14 @@
           <span>仅显示分类</span>
         </label>
       </div>
-      <p class="hint tight nav-sort-hint">拖名称或左侧<strong>⠿</strong>排序；长按工具名可加入常用。</p>
       <div class="nav-bar-scroll" id="nav-bar-scroll">
         <div class="nav-strip nav-recent" id="tool-recent" hidden>
-          <div class="nav-strip-head">
-            <p class="nav-strip-title nav-recent-label">历史记录</p>
-          </div>
-          <div class="nav-strip-list nav-recent-list" id="tool-recent-list"></div>
+          <button type="button" class="nav-strip-toggle" id="tool-recent-toggle" aria-expanded="false" aria-controls="tool-recent-list">
+            <span class="nav-strip-toggle-label">最近使用</span>
+            <span class="nav-strip-toggle-meta" id="tool-recent-count"></span>
+            <span class="nav-strip-toggle-icon" aria-hidden="true">›</span>
+          </button>
+          <div class="nav-strip-list nav-recent-list" id="tool-recent-list" hidden></div>
         </div>
         <div class="nav-strip nav-favorites nav-group" id="tool-favorites" data-group="favorites">
           <div class="nav-strip-head nav-fav-head">
@@ -194,6 +195,7 @@
       <div class="nav-footer-actions">
         <p class="nav-cache-meta" id="nav-cache-meta" title="缓存可一键清理；备忘录数据不会被清掉">暂无缓存</p>
         <div class="nav-footer-toolbar">
+          <button type="button" class="nav-reset nav-footer-btn nav-organize-open" id="nav-organize-open" title="调整分类、工具与常用工具的顺序">整理顺序</button>
           <button type="button" class="nav-reset nav-cache-clear nav-footer-btn" id="nav-cache-clear" title="清掉本站临时视频、GIF 和编码器缓存；不会删除备忘录数据与系统相册/已下载文件。清理前请先在备忘录里导出备份。">清理缓存</button>
           <button type="button" class="nav-reset nav-footer-btn" id="nav-reset" title="恢复工具与分类的默认排序">默认排序</button>
         </div>
@@ -5220,6 +5222,35 @@ adb devices</pre>
   </footer>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <dialog class="nav-organize-dlg" id="nav-organize" aria-labelledby="nav-organize-title">
+    <div class="nav-organize-head">
+      <div class="nav-organize-head-text">
+        <h2 id="nav-organize-title">整理菜单</h2>
+        <p class="hint tight nav-organize-sub">调整分类、各分类下的工具与常用工具顺序。主菜单仅用于快速选工具。</p>
+      </div>
+      <button type="button" class="ghost-btn nav-organize-close" id="nav-organize-close" aria-label="关闭">×</button>
+    </div>
+    <div class="nav-organize-tabs" role="tablist" aria-label="整理项">
+      <button type="button" class="nav-organize-tab is-active" role="tab" id="nav-org-tab-groups" data-nav-org-tab="groups" aria-selected="true" aria-controls="nav-org-panel-groups">分类</button>
+      <button type="button" class="nav-organize-tab" role="tab" id="nav-org-tab-tools" data-nav-org-tab="tools" aria-selected="false" aria-controls="nav-org-panel-tools">工具</button>
+      <button type="button" class="nav-organize-tab" role="tab" id="nav-org-tab-favorites" data-nav-org-tab="favorites" aria-selected="false" aria-controls="nav-org-panel-favorites">常用</button>
+    </div>
+    <div class="nav-organize-body">
+      <div class="nav-organize-panel" id="nav-org-panel-groups" data-nav-org-panel="groups" role="tabpanel" aria-labelledby="nav-org-tab-groups"></div>
+      <div class="nav-organize-panel" id="nav-org-panel-tools" data-nav-org-panel="tools" role="tabpanel" aria-labelledby="nav-org-tab-tools" hidden>
+        <label class="nav-organize-group-pick" for="nav-org-tool-group">
+          <span>所属分类</span>
+          <select id="nav-org-tool-group" class="text-input"></select>
+        </label>
+        <div class="nav-organize-list" id="nav-org-tool-list"></div>
+      </div>
+      <div class="nav-organize-panel" id="nav-org-panel-favorites" data-nav-org-panel="favorites" role="tabpanel" aria-labelledby="nav-org-tab-favorites" hidden></div>
+    </div>
+    <div class="nav-organize-foot btn-row">
+      <button type="button" class="ghost-btn" id="nav-organize-reset">恢复默认</button>
+      <button type="button" class="primary-btn" id="nav-organize-done">完成</button>
+    </div>
+  </dialog>
   <div class="nav-tool-ctx" id="nav-tool-ctx" role="menu" hidden>
     <button type="button" class="nav-tool-ctx-item" role="menuitem" data-nav-ctx="open">打开</button>
     <button type="button" class="nav-tool-ctx-item" role="menuitem" data-nav-ctx="fav-add">添加到常用工具</button>
@@ -5287,7 +5318,8 @@ adb devices</pre>
   <script src="./lib/bridge-token.js?v=2026.08.30-062500"></script>
   <script src="./lib/lazy-scripts.js?v=2026.08.30-214500"></script>
   <script src="./theme.js?v=2026.08.30-062500"></script>
-  <script src="./app.js?v=2026.08.30-234200"></script>
+  <script src="./app.js?v=2026.08.30-235000"></script>
+  <script src="./nav-organize.js?v=2026.08.30-235000"></script>
   <script src="./wheel.js?v=2026.08.30-062500"></script>
   <script src="./ruler.js?v=2026.08.30-062500"></script>
   <script src="./muyu.js?v=2026.08.30-084100"></script>

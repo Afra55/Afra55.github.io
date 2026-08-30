@@ -1240,7 +1240,7 @@ async function main() {
 
     out.navCompact = {
       hasToggle: Boolean(document.getElementById("nav-compact")),
-      defaultOff: document.getElementById("nav-compact")?.checked === false,
+      defaultOnNarrow: document.getElementById("nav-compact")?.checked === true,
       api: typeof window.DevToolsNav?.setCompact === "function",
     };
     if (window.DevToolsNav?.setCompact) {
@@ -1479,7 +1479,8 @@ async function main() {
 
     const recentListEl = document.getElementById("tool-recent-list");
     out.recentUi = {
-      hasTitle: /历史记录/.test(document.querySelector("#tool-recent .nav-strip-title")?.textContent || ""),
+      hasToggle: /最近使用/.test(document.getElementById("tool-recent-toggle")?.textContent || ""),
+      collapsedByDefault: document.getElementById("tool-recent-list")?.hidden === true,
       noAxis: !document.querySelector(".nav-recent-axis"),
       oneRowFlex: Boolean(recentListEl) && getComputedStyle(recentListEl).display === "flex",
       nowrap: recentListEl ? getComputedStyle(recentListEl).flexWrap === "nowrap" : false,
@@ -1491,6 +1492,7 @@ async function main() {
       const ids = ["json", "base64", "uuid", "hash", "regex", "color", "url", "cron", "yaml"];
       localStorage.setItem("devtools-tool-recent-v1", JSON.stringify(ids));
       window.DevToolsNav?.renderRecent?.();
+      window.DevToolsNav?.setRecentOpen?.(true);
       if (recentListEl) {
         out.recentUi.chipCount = document.querySelectorAll(".nav-recent-chip").length;
         out.recentUi.showsAll = out.recentUi.chipCount === ids.length;
@@ -1533,21 +1535,11 @@ async function main() {
       out.favoritesUi.afterAdd = document.querySelectorAll(".nav-fav-link").length;
     } catch (_) {}
 
-    const sortHint = document.querySelector(".nav-sort-hint");
-    out.sortHint = {
-      hasEl: Boolean(sortHint),
-      api: typeof window.DevToolsNav?.syncSortHint === "function",
-      marked: (() => {
-        try {
-          return localStorage.getItem("devtools-nav-sort-hint-seen-v1") === "1";
-        } catch (_) {
-          return false;
-        }
-      })(),
-      visibleFirst: Boolean(sortHint) && !sortHint.hidden && getComputedStyle(sortHint).display !== "none",
+    out.navOrganize = {
+      hasBtn: Boolean(document.getElementById("nav-organize-open")),
+      hasDialog: Boolean(document.getElementById("nav-organize")),
+      api: typeof window.DevToolsNavOrganize?.open === "function",
     };
-    window.DevToolsNav?.syncSortHint?.();
-    out.sortHint.hiddenSecond = Boolean(sortHint?.hidden) || getComputedStyle(sortHint).display === "none";
 
     out.lastTool = {
       api: typeof window.DevToolsNav?.lastToolHash === "function",
@@ -2112,7 +2104,8 @@ async function main() {
     failed.push("nav cache hint should be a single short line with details in title");
   }
   if (
-    !result.recentUi?.hasTitle ||
+    !result.recentUi?.hasToggle ||
+    !result.recentUi?.collapsedByDefault ||
     !result.recentUi?.noAxis ||
     !result.recentUi?.oneRowFlex ||
     !result.recentUi?.nowrap ||
@@ -2122,7 +2115,7 @@ async function main() {
     !result.recentUi?.visibleScrollbar ||
     !result.recentUi?.fullText
   ) {
-    failed.push("recent tools should use a single-row horizontally scrollable strip with full labels");
+    failed.push("recent tools should collapse by default and expand to a single-row scrollable strip");
   }
   if (
     !result.favoritesUi?.hasSection ||
@@ -2141,8 +2134,8 @@ async function main() {
   ) {
     failed.push("favorites should sit below recent as strip category with + add and vertical tool links");
   }
-  if (!result.sortHint?.hasEl || !result.sortHint?.api || !result.sortHint?.marked || !result.sortHint?.visibleFirst || !result.sortHint?.hiddenSecond) {
-    failed.push("sort hint should show once then hide on later visits");
+  if (!result.navOrganize?.hasBtn || !result.navOrganize?.hasDialog || !result.navOrganize?.api) {
+    failed.push("nav organize dialog should be available for reordering");
   }
   if (!result.lastTool?.api || !result.lastTool?.json || !result.lastTool?.media) {
     failed.push("empty hash should restore last used tool including media tabs");
@@ -2163,7 +2156,7 @@ async function main() {
   }
   if (
     !result.navCompact?.hasToggle ||
-    !result.navCompact?.defaultOff ||
+    !result.navCompact?.defaultOnNarrow ||
     !result.navCompact?.api ||
     !result.navCompact?.barCompact ||
     !result.navCompact?.currentCollapsed ||
