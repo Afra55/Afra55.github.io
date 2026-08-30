@@ -2236,18 +2236,37 @@
     }
   }
 
+  function uploadTransferKey(fileId, requesterId) {
+    return `${state.peerId}:${fileId}:${requesterId}`;
+  }
+
+  function findUploadTransferPc(fileId, requesterId) {
+    if (!fileId || !requesterId) return null;
+    return state.transferPcs.get(uploadTransferKey(fileId, requesterId)) || null;
+  }
+
+  function releaseUploadTransfer(fileId, requesterId, pc) {
+    const key = uploadTransferKey(fileId, requesterId);
+    if (pc && state.transferPcs.get(key) !== pc) return;
+    state.transferPcs.delete(key);
+    try {
+      pc?.close();
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
   function handleRelay(payload) {
     if (!payload) return;
     if (payload.type === "webrtc-offer" && payload.to === state.peerId) {
       acceptFileOffer(payload.from, payload.fileId, payload.sdp);
     } else if (payload.type === "webrtc-answer" && payload.to === state.peerId) {
-      const key = `${state.peerId}:${payload.fileId}`;
-      const pc = state.transferPcs.get(key);
+      const pc = findUploadTransferPc(payload.fileId, payload.from);
       if (pc) pc.setRemoteDescription({ type: "answer", sdp: payload.sdp }).catch(() => {});
     } else if (payload.type === "ice-candidate") {
       const pc =
         state.transferPcs.get(`${payload.from}:${payload.fileId}`) ||
-        state.transferPcs.get(`${state.peerId}:${payload.fileId}`);
+        findUploadTransferPc(payload.fileId, payload.from);
       if (pc && payload.candidate) pc.addIceCandidate(payload.candidate).catch(() => {});
     } else if (payload.type === "host-handshake-offer" && payload.to === state.peerId) {
       reconnectToHost(payload);
@@ -2364,13 +2383,19 @@
     const file = state.localFiles.get(fileId);
     const meta = state.files.get(fileId);
     if (!file || !meta) return;
-    const key = `${state.peerId}:${fileId}`;
+    const key = uploadTransferKey(fileId, requesterId);
     if (state.transferPcs.has(key)) return;
 
     const pc = createPeer();
     state.transferPcs.set(key, pc);
     const dc = pc.createDataChannel("file", { ordered: true });
     dc.binaryType = "arraybuffer";
+
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "failed" || pc.connectionState === "closed") {
+        releaseUploadTransfer(fileId, requesterId, pc);
+      }
+    };
 
     pc.onicecandidate = (ev) => {
       if (ev.candidate) {
@@ -2391,7 +2416,18 @@
         dc.send(JSON.stringify({ type: "done", fileId }));
       } catch (_) {
         dc.send(JSON.stringify({ type: "error", fileId, message: "发送中断" }));
+      } finally {
+        try {
+          dc.close();
+        } catch (_) {
+          /* ignore */
+        }
+        releaseUploadTransfer(fileId, requesterId, pc);
       }
+    };
+
+    dc.onclose = () => {
+      releaseUploadTransfer(fileId, requesterId, pc);
     };
 
     const offer = await pc.createOffer();
