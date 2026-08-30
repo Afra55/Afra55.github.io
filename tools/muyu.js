@@ -370,6 +370,28 @@
     window.setTimeout(() => el.remove(), 600);
   }
 
+  function spawnSparksAt(container, localX, localY, count = 12) {
+    if (!container || !Number.isFinite(localX) || !Number.isFinite(localY)) return;
+    const host = document.createElement("span");
+    host.className = "muyu-hit-sparks";
+    host.style.left = `${localX}px`;
+    host.style.top = `${localY}px`;
+    host.setAttribute("aria-hidden", "true");
+    for (let i = 0; i < count; i += 1) {
+      const p = document.createElement("span");
+      p.className = "muyu-hit-spark";
+      const ang = (Math.PI * 2 * i) / count + rnd(-0.35, 0.35);
+      const dist = rnd(32, 64);
+      p.style.setProperty("--muyu-sx", `${Math.cos(ang) * dist}px`);
+      p.style.setProperty("--muyu-sy", `${Math.sin(ang) * dist - rnd(8, 18)}px`);
+      p.style.setProperty("--muyu-sd", `${rnd(0.42, 0.72).toFixed(2)}s`);
+      p.style.setProperty("--muyu-ss", rnd(0.65, 1.05).toFixed(2));
+      host.appendChild(p);
+    }
+    container.appendChild(host);
+    window.setTimeout(() => host.remove(), 850);
+  }
+
   function burstSparks(sparks, stageEl, limit = 180, localCoords = false, at = null) {
     if (!stageEl) return;
     const rect = stageEl.getBoundingClientRect();
@@ -607,10 +629,13 @@
   function playKnockFx(ev) {
     const fishEl = fullscreen ? fishFsBtn : fishBtn;
     const pt = pointerFromEvent(ev, fishEl);
-    const fxEl = fullscreen ? fsRoot : stageFxEl || stageRoot;
+    const fxEl = fullscreen ? fsFxEl || fsRoot : stageFxEl || stageRoot;
     if (fxEl && pt) {
       const rect = fxEl.getBoundingClientRect();
-      spawnRippleAt(fxEl, pt.x - rect.left, pt.y - rect.top);
+      const lx = pt.x - rect.left;
+      const ly = pt.y - rect.top;
+      spawnRippleAt(fxEl, lx, ly);
+      spawnSparksAt(fxEl, lx, ly);
     }
     if (fullscreen) {
       if (fsPulseEl) {
@@ -619,18 +644,8 @@
         fsPulseEl.classList.add("is-flash");
       }
       spawnFloat(fsFloatsEl);
-      burstFsSparks(pt);
     } else {
       spawnFloat(stageFloatsEl);
-      if (pt) {
-        const rect = (stageRoot || fishBtn).getBoundingClientRect();
-        burstSparks(stageBgSparks, stageRoot || fishBtn, 80, true, {
-          x: pt.x - rect.left,
-          y: pt.y - rect.top,
-        });
-      } else {
-        burstSparks(stageBgSparks, stageRoot || fishBtn, 80, true);
-      }
     }
     if (navigator.vibrate) navigator.vibrate(12);
   }
