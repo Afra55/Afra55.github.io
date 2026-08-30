@@ -14,9 +14,9 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.30-235000"></script>
-  <link rel="stylesheet" href="./style.css?v=2026.08.30-235000" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-235000" />
+  <script src="./lib/tools-build.js?v=2026.08.31-001000"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.08.31-001000" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.31-001000" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
   <script>
@@ -5226,7 +5226,7 @@ adb devices</pre>
     <div class="nav-organize-head">
       <div class="nav-organize-head-text">
         <h2 id="nav-organize-title">整理菜单</h2>
-        <p class="hint tight nav-organize-sub">调整分类、各分类下的工具与常用工具顺序。主菜单仅用于快速选工具。</p>
+        <p class="hint tight nav-organize-sub">搜索、排序，或在「常用」里直接添加/移除。主菜单只负责快速选工具。</p>
       </div>
       <button type="button" class="ghost-btn nav-organize-close" id="nav-organize-close" aria-label="关闭">×</button>
     </div>
@@ -5235,6 +5235,10 @@ adb devices</pre>
       <button type="button" class="nav-organize-tab" role="tab" id="nav-org-tab-tools" data-nav-org-tab="tools" aria-selected="false" aria-controls="nav-org-panel-tools">工具</button>
       <button type="button" class="nav-organize-tab" role="tab" id="nav-org-tab-favorites" data-nav-org-tab="favorites" aria-selected="false" aria-controls="nav-org-panel-favorites">常用</button>
     </div>
+    <label class="nav-organize-search-wrap" for="nav-org-search">
+      <span class="visually-hidden">搜索</span>
+      <input type="search" id="nav-org-search" class="nav-organize-search text-input" placeholder="搜索分类或工具…" autocomplete="off" enterkeyhint="search" />
+    </label>
     <div class="nav-organize-body">
       <div class="nav-organize-panel" id="nav-org-panel-groups" data-nav-org-panel="groups" role="tabpanel" aria-labelledby="nav-org-tab-groups"></div>
       <div class="nav-organize-panel" id="nav-org-panel-tools" data-nav-org-panel="tools" role="tabpanel" aria-labelledby="nav-org-tab-tools" hidden>
@@ -5248,6 +5252,7 @@ adb devices</pre>
     </div>
     <div class="nav-organize-foot btn-row">
       <button type="button" class="ghost-btn" id="nav-organize-reset">恢复默认</button>
+      <button type="button" class="ghost-btn" id="nav-organize-cancel">取消</button>
       <button type="button" class="primary-btn" id="nav-organize-done">完成</button>
     </div>
   </dialog>
@@ -5318,8 +5323,8 @@ adb devices</pre>
   <script src="./lib/bridge-token.js?v=2026.08.30-062500"></script>
   <script src="./lib/lazy-scripts.js?v=2026.08.30-214500"></script>
   <script src="./theme.js?v=2026.08.30-062500"></script>
-  <script src="./app.js?v=2026.08.30-235000"></script>
-  <script src="./nav-organize.js?v=2026.08.30-235000"></script>
+  <script src="./app.js?v=2026.08.31-001000"></script>
+  <script src="./nav-organize.js?v=2026.08.31-001000"></script>
   <script src="./wheel.js?v=2026.08.30-062500"></script>
   <script src="./ruler.js?v=2026.08.30-062500"></script>
   <script src="./muyu.js?v=2026.08.30-084100"></script>

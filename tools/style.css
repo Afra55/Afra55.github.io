@@ -7519,6 +7519,118 @@ body.sandspiel-fs-active .sandspiel-shell.is-fullscreen {
   padding: 0.55rem 0.75rem 0;
 }
 
+.nav-organize-search-wrap {
+  display: block;
+  padding: 0.5rem 0.75rem 0;
+}
+
+.nav-organize-search {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 0.88rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+}
+
+.nav-organize-search-hint {
+  margin: 0 0 0.35rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.nav-organize-section-label {
+  margin: 0.55rem 0 0.35rem;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.nav-organize-section-label:first-child {
+  margin-top: 0;
+}
+
+.nav-organize-row-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+}
+
+.nav-organize-row-meta {
+  font-size: 0.68rem;
+  color: var(--muted);
+  line-height: 1.2;
+}
+
+.nav-organize-remove {
+  min-width: auto;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  color: var(--muted);
+}
+
+.nav-organize-remove:hover,
+.nav-organize-remove:focus-visible {
+  color: var(--danger, #c44);
+  outline: none;
+}
+
+.nav-organize-add-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr));
+  gap: 0.35rem;
+}
+
+.nav-organize-add-btn {
+  appearance: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.45rem 0.55rem;
+  border: 1px dashed color-mix(in srgb, var(--line) 85%, var(--accent));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.nav-organize-add-btn:hover,
+.nav-organize-add-btn:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
+  outline: none;
+}
+
+.nav-organize-add-name {
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.nav-organize-add-meta {
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.nav-organize-foot.btn-row {
+  justify-content: flex-end;
+  gap: 0.35rem;
+}
+
+.nav-organize-foot .primary-btn {
+  margin-left: 0;
+}
+
 .nav-organize-tab {
   flex: 1 1 0;
   appearance: none;
@@ -7571,6 +7683,10 @@ body.sandspiel-fs-active .sandspiel-shell.is-fullscreen {
   border: 1px solid var(--line);
   border-radius: 10px;
   background: color-mix(in srgb, var(--ink) 3%, transparent);
+}
+
+.nav-organize-row .nav-organize-row-label {
+  flex: none;
 }
 
 .nav-organize-row-label {

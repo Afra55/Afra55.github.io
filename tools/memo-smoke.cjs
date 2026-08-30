@@ -1538,7 +1538,10 @@ async function main() {
     out.navOrganize = {
       hasBtn: Boolean(document.getElementById("nav-organize-open")),
       hasDialog: Boolean(document.getElementById("nav-organize")),
+      hasSearch: Boolean(document.getElementById("nav-org-search")),
+      hasCancel: Boolean(document.getElementById("nav-organize-cancel")),
       api: typeof window.DevToolsNavOrganize?.open === "function",
+      groupApi: typeof window.DevToolsNav?.toolGroupId === "function",
     };
 
     out.lastTool = {
@@ -2134,8 +2137,15 @@ async function main() {
   ) {
     failed.push("favorites should sit below recent as strip category with + add and vertical tool links");
   }
-  if (!result.navOrganize?.hasBtn || !result.navOrganize?.hasDialog || !result.navOrganize?.api) {
-    failed.push("nav organize dialog should be available for reordering");
+  if (
+    !result.navOrganize?.hasBtn ||
+    !result.navOrganize?.hasDialog ||
+    !result.navOrganize?.hasSearch ||
+    !result.navOrganize?.hasCancel ||
+    !result.navOrganize?.api ||
+    !result.navOrganize?.groupApi
+  ) {
+    failed.push("nav organize dialog should support search, cancel, and group metadata");
   }
   if (!result.lastTool?.api || !result.lastTool?.json || !result.lastTool?.media) {
     failed.push("empty hash should restore last used tool including media tabs");
