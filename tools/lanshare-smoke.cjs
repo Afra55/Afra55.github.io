@@ -110,7 +110,8 @@ async function main() {
   assert(/publishJoinOffer/.test(js), "缺少成员 offer 回传");
   assert(/applyJoinOffer/.test(js), "缺少房主 offer 应用");
   assert(/joinByPassword/.test(js), "缺少密码加入");
-  assert(/hashRoomPassword/.test(js), "缺少房间密码哈希");
+  assert(/startMqttOfferRetry/.test(js), "缺少 MQTT offer 重试");
+  assert(/MQTT_BROKERS/.test(js), "缺少 MQTT 多 broker 回退");
   assert(/ls-room-pwd-join/.test(htmlLocal), "缺少密码加入输入框");
   assert(/vendor\/mqtt\.min\.js/.test(lazyJs), "lazy-scripts 应注册 mqtt");
   assert(/lanshare:\s*\["qrcode",\s*"jsQR"\]/.test(lazyJs), "lazy-scripts 应为 lanshare 加载 qrcode/jsQR");
