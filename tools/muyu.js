@@ -32,6 +32,11 @@
   let count = 0;
   let soundOn = true;
   let soundVariant = 0;
+  let audioCtx = null;
+  let webAudioReady = false;
+  /** @type {(AudioBuffer|null)[]} */
+  let knockBuffers = [null, null];
+  let knockDecodePromise = null;
   let knockPools = [[], []];
   let htmlKnockCursor = 0;
   let htmlAudioPrimed = false;
@@ -66,6 +71,36 @@
   let themeSelect = null;
   let phrasesInput = null;
   let soundVariantSelect = null;
+
+  function ensureAudio() {
+    if (audioCtx) return audioCtx;
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return null;
+    audioCtx = new Ctx();
+    return audioCtx;
+  }
+
+  function decodeKnockBuffers() {
+    if (knockDecodePromise) return knockDecodePromise;
+    knockDecodePromise = (async () => {
+      const ac = ensureAudio();
+      if (!ac) return;
+      await Promise.all(
+        SOUND_FILES.map(async (file, idx) => {
+          if (knockBuffers[idx]) return;
+          try {
+            const res = await fetch(assetUrl(file));
+            if (!res.ok) return;
+            const ab = await res.arrayBuffer();
+            knockBuffers[idx] = await ac.decodeAudioData(ab.slice(0));
+          } catch (_) {
+            /* fallback to HTML Audio */
+          }
+        })
+      );
+    })();
+    return knockDecodePromise;
+  }
 
   function initKnockAudio() {
     SOUND_FILES.forEach((file, idx) => {
@@ -106,22 +141,56 @@
   }
 
   function unlockMuyuAudio() {
-    if (!soundOn) return;
+    if (!soundOn) return Promise.resolve();
     initKnockAudio();
     preloadKnockAudio();
-    if (htmlAudioPrimed) return;
-    htmlAudioPrimed = true;
-    const prime = new Audio(assetUrl(SOUND_FILES[soundVariant] || SOUND_FILES[0]));
-    prime.volume = 0.0001;
-    const p = prime.play();
-    if (p && typeof p.catch === "function") p.catch(() => {});
+    const decode = decodeKnockBuffers();
+    const ac = ensureAudio();
+    const resume =
+      ac && ac.state === "suspended"
+        ? ac
+            .resume()
+            .then(() => {
+              webAudioReady = ac.state === "running";
+            })
+            .catch(() => {
+              webAudioReady = false;
+            })
+        : Promise.resolve().then(() => {
+            if (ac) webAudioReady = ac.state === "running";
+          });
+    if (!htmlAudioPrimed && !webAudioReady) {
+      htmlAudioPrimed = true;
+      const prime = new Audio(assetUrl(SOUND_FILES[soundVariant] || SOUND_FILES[0]));
+      prime.volume = 0.0001;
+      const p = prime.play();
+      if (p && typeof p.catch === "function") p.catch(() => {});
+    }
+    return Promise.all([decode, resume]).then(() => {});
   }
 
-  function playKnock() {
-    if (!soundOn) return;
+  function playKnockWeb() {
+    const buf = knockBuffers[soundVariant] || knockBuffers[0];
+    const ac = ensureAudio();
+    if (!buf || !ac || ac.state !== "running") return false;
+    try {
+      const src = ac.createBufferSource();
+      src.buffer = buf;
+      const gain = ac.createGain();
+      gain.gain.value = 0.85;
+      src.connect(gain);
+      gain.connect(ac.destination);
+      src.start(0);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function playKnockHtml() {
     initKnockAudio();
     const pool = knockPools[soundVariant] || knockPools[0];
-    if (!pool?.length) return;
+    if (!pool?.length) return false;
     const a = pool[htmlKnockCursor % HTML_POOL_SIZE];
     htmlKnockCursor += 1;
     a.volume = 0.85;
@@ -131,6 +200,12 @@
     } catch (_) {}
     const p = a.play();
     if (p && typeof p.catch === "function") p.catch(() => {});
+    return true;
+  }
+
+  function playKnock() {
+    if (!soundOn) return;
+    if (!playKnockWeb()) playKnockHtml();
   }
 
   function formatCount(n) {
@@ -474,7 +549,7 @@
     soundOn = Boolean(on);
     syncSoundToggles();
     saveState();
-    if (soundOn) unlockMuyuAudio();
+    if (soundOn) void unlockMuyuAudio();
   }
 
   function mountFishArt(btn, withHint) {
@@ -509,8 +584,9 @@
     renderCount();
     saveState();
     bumpFish(fromEl || (fullscreen ? fishFsBtn : fishBtn));
-    playKnock();
     playKnockFx();
+    if (playKnockWeb()) return;
+    unlockMuyuAudio().finally(() => playKnock());
   }
 
   function resetCount() {
@@ -660,6 +736,9 @@
     mountFishArtEarly();
     initFsBg();
     initStageBg();
+    decodeKnockBuffers();
+    initKnockAudio();
+    preloadKnockAudio();
   }
 
   function initMuyuCore() {
