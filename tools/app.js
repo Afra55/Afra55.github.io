@@ -1439,11 +1439,16 @@
     if (!navToolCtx) return;
     navToolCtx.hidden = true;
     navToolCtxId = "";
+    document.body.classList.remove("nav-tool-ctx-open");
+    document.removeEventListener("selectionchange", clearNavTextSelection);
   }
 
   function showNavToolCtx(x, y, toolId) {
     if (!navToolCtx || !toolId || !DEFAULT_ORDER.includes(toolId)) return;
     if (navToolCtx.parentElement !== document.body) document.body.appendChild(navToolCtx);
+    clearNavTextSelection();
+    document.body.classList.add("nav-tool-ctx-open");
+    document.addEventListener("selectionchange", clearNavTextSelection);
     navToolCtxId = toolId;
     const inFav = loadFavorites().includes(toolId);
     const addBtn = navToolCtx.querySelector('[data-nav-ctx="fav-add"]');
@@ -1670,9 +1675,51 @@
     return btn;
   }
 
+  function clearNavTextSelection() {
+    try {
+      const sel = window.getSelection?.();
+      if (sel?.rangeCount) sel.removeAllRanges();
+    } catch (_) {}
+  }
+
+  let navSelectBlockDepth = 0;
+  let navSelectBlockHandler = null;
+
+  function pushNavSelectBlock() {
+    if (!navSelectBlockHandler) {
+      navSelectBlockHandler = (e) => {
+        if (e.target?.closest?.(".tool-nav-link, .nav-fav-link, .nav-group-title, .nav-recent-chip")) {
+          e.preventDefault();
+        }
+      };
+    }
+    navSelectBlockDepth += 1;
+    if (navSelectBlockDepth === 1) {
+      document.addEventListener("selectstart", navSelectBlockHandler, true);
+    }
+  }
+
+  function popNavSelectBlock() {
+    if (navSelectBlockDepth <= 0) return;
+    navSelectBlockDepth -= 1;
+    if (navSelectBlockDepth === 0 && navSelectBlockHandler) {
+      document.removeEventListener("selectstart", navSelectBlockHandler, true);
+    }
+  }
+
+  function bindNavLinkNoNativeSelect(link) {
+    if (!link || link.dataset.noNativeSelect === "1") return;
+    link.dataset.noNativeSelect = "1";
+    link.addEventListener("selectstart", (e) => e.preventDefault());
+    link.addEventListener("contextmenu", (e) => {
+      if (!canDesktopDrag()) e.preventDefault();
+    });
+  }
+
   function bindMobileToolCtxPress(link) {
     if (!link || link.dataset.boundMobileCtx === "1" || canDesktopDrag()) return;
     link.dataset.boundMobileCtx = "1";
+    bindNavLinkNoNativeSelect(link);
     const LONG_MS = 480;
     const CANCEL_PX = 14;
     let timer = 0;
@@ -1687,6 +1734,12 @@
       }
     };
 
+    const releasePress = () => {
+      clearTimer();
+      pointerId = null;
+      popNavSelectBlock();
+    };
+
     link.addEventListener("pointerdown", (e) => {
       if (e.pointerType === "mouse" && e.button !== 0) return;
       if (navSortInteractionActive()) return;
@@ -1694,13 +1747,19 @@
       startX = e.clientX;
       startY = e.clientY;
       clearTimer();
+      pushNavSelectBlock();
+      clearNavTextSelection();
       timer = window.setTimeout(() => {
         timer = 0;
         const id = link.dataset.tool;
         if (!id) return;
+        clearNavTextSelection();
         hideNavToolCtx();
         showNavToolCtx(startX, startY, id);
         navSortClickSuppressUntil = Date.now() + 520;
+        try {
+          link.setPointerCapture?.(pointerId);
+        } catch (_) {}
         try {
           navigator.vibrate?.(10);
         } catch (_) {}
@@ -1709,8 +1768,10 @@
 
     const cancel = (e) => {
       if (pointerId == null || e.pointerId !== pointerId) return;
-      clearTimer();
-      pointerId = null;
+      try {
+        if (link.hasPointerCapture?.(pointerId)) link.releasePointerCapture(pointerId);
+      } catch (_) {}
+      releasePress();
     };
 
     link.addEventListener("pointermove", (e) => {

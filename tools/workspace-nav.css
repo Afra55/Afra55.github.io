@@ -1080,6 +1080,26 @@ body.nav-open {
     font-size: 0.82rem !important;
     font-weight: 500 !important;
     white-space: normal;
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    -webkit-touch-callout: none !important;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .nav-fav-link,
+  .nav-group-title.is-sortable,
+  .nav-recent-chip {
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    -webkit-touch-callout: none !important;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body.nav-tool-ctx-open .nav-bar,
+  body.nav-tool-ctx-open .nav-bar * {
+    -webkit-user-select: none !important;
+    user-select: none !important;
+    -webkit-touch-callout: none !important;
   }
 
   .nav-group-head .nav-group-title {
