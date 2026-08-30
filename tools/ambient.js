@@ -124,27 +124,44 @@
     } catch (_) {}
   }
 
-  function speakName(text, lang) {
-    if (!text || !window.speechSynthesis) return;
+  function itemIcon(item) {
+    return item.icon || item.categoryIcon || "mdi:music-note";
+  }
+
+  function speakItemNames(item) {
+    if (!item || !window.speechSynthesis) return;
     primeSpeech();
     const synth = window.speechSynthesis;
     try {
       synth.cancel();
     } catch (_) {}
-    const u = new SpeechSynthesisUtterance(text);
-    u.lang = lang || "zh-CN";
-    if (u.lang.startsWith("zh") && zhVoice) u.voice = zhVoice;
-    else if (u.lang.startsWith("en") && enVoice) u.voice = enVoice;
-    u.rate = 0.95;
-    u.volume = 1;
-    synth.speak(u);
+    const parts = [];
+    if (item.nameZh) {
+      const u = new SpeechSynthesisUtterance(item.nameZh);
+      u.lang = "zh-CN";
+      if (zhVoice) u.voice = zhVoice;
+      u.rate = 0.95;
+      u.volume = 1;
+      parts.push(u);
+    }
+    if (item.nameEn) {
+      const u = new SpeechSynthesisUtterance(item.nameEn);
+      u.lang = "en-US";
+      if (enVoice) u.voice = enVoice;
+      u.rate = 0.95;
+      u.volume = 1;
+      parts.push(u);
+    }
+    parts.forEach((u, i) => {
+      if (i < parts.length - 1) u.onend = () => synth.speak(parts[i + 1]);
+    });
+    if (parts.length) synth.speak(parts[0]);
   }
 
   function speakLabelEl(el) {
     const item = itemsById.get(el.dataset.speakId);
     if (!item) return;
-    const lang = el.dataset.lang || "zh-CN";
-    speakName(lang.startsWith("zh") ? item.nameZh : item.nameEn, lang);
+    speakItemNames(item);
   }
 
   function bumpRecent(id) {
@@ -156,7 +173,8 @@
     if (favorites.has(id)) favorites.delete(id);
     else favorites.add(id);
     saveFavorites();
-    render();
+    if (filterMode === "fav") render();
+    else updateCardPlayingState();
     updatePlayer();
   }
 
@@ -182,12 +200,14 @@
     if (currentId === id && audio && !paused) {
       audio.pause();
       paused = true;
+      updateCardPlayingState();
       updatePlayer();
       return;
     }
     if (currentId === id && audio && paused) {
       unlockAudio();
       paused = false;
+      updateCardPlayingState();
       updatePlayer();
       return;
     }
@@ -201,7 +221,7 @@
     unlockAudio();
     bumpRecent(id);
     saveState();
-    render();
+    updateCardPlayingState();
     updatePlayer();
   }
 
@@ -226,7 +246,7 @@
         stopAudio();
         currentId = null;
         clearSleepTimer();
-        render();
+        updateCardPlayingState();
         updatePlayer();
       } else {
         updatePlayer();
@@ -260,17 +280,51 @@
     const active = currentId === item.id && audio && !paused;
     const isPaused = currentId === item.id && paused;
     const fav = favorites.has(item.id);
+    const ic = itemIcon(item);
     const img = item.image
-      ? `<img class="ambient-card-img" src="${cacheBust(item.image)}" alt="" loading="lazy" draggable="false" />`
-      : `<div class="ambient-card-img ambient-card-img-fallback">${iconHtml(item.icon, "ambient-card-fallback-ic")}</div>`;
+      ? `<img class="ambient-card-img" src="${cacheBust(item.image)}" alt="" loading="lazy" draggable="false" data-fallback-icon="${escapeHtml(ic)}" />`
+      : `<div class="ambient-card-img ambient-card-img-fallback">${iconHtml(ic, "ambient-card-fallback-ic")}</div>`;
     return `<button type="button" class="ambient-card${active ? " is-playing" : ""}${isPaused ? " is-paused" : ""}" data-id="${item.id}" aria-pressed="${active}">
       ${img}
       <span class="ambient-card-body">
-        <span class="ambient-card-title">${iconHtml(item.icon)}<span class="ambient-card-zh ambient-speak" data-speak-id="${item.id}" data-lang="zh-CN" title="朗读中文">${escapeHtml(item.nameZh)}</span></span>
-        <span class="ambient-card-en ambient-speak" data-speak-id="${item.id}" data-lang="en" title="Read aloud">${escapeHtml(item.nameEn)}</span>
+        <span class="ambient-card-names ambient-speak" data-speak-id="${item.id}" title="朗读中英文">
+          <span class="ambient-card-zh">${escapeHtml(item.nameZh)}</span><span class="ambient-card-sep" aria-hidden="true"> · </span><span class="ambient-card-en">${escapeHtml(item.nameEn)}</span>
+        </span>
       </span>
       <span class="ambient-card-fav${fav ? " is-on" : ""}" data-fav="${item.id}" title="收藏" aria-label="收藏">♥</span>
     </button>`;
+  }
+
+  function bindCardImageFallbacks() {
+    if (!gridEl) return;
+    $$(".ambient-card-img[src]", gridEl).forEach((img) => {
+      if (img.dataset.fallbackBound === "1") return;
+      img.dataset.fallbackBound = "1";
+      img.addEventListener("error", () => {
+        const ic = img.dataset.fallbackIcon || "mdi:music-note";
+        const wrap = document.createElement("div");
+        wrap.className = "ambient-card-img ambient-card-img-fallback";
+        wrap.innerHTML = iconHtml(ic, "ambient-card-fallback-ic");
+        img.replaceWith(wrap);
+        if (window.Iconify?.scan) window.Iconify.scan(wrap);
+        else if (window.iconify?.scan) window.iconify.scan(wrap);
+      }, { once: true });
+    });
+  }
+
+  function updateCardPlayingState() {
+    if (!gridEl) return;
+    $$(".ambient-card", gridEl).forEach((card) => {
+      const id = card.dataset.id;
+      const active = currentId === id && audio && !paused;
+      const isPaused = currentId === id && paused;
+      card.classList.toggle("is-playing", active);
+      card.classList.toggle("is-paused", isPaused);
+      card.setAttribute("aria-pressed", String(active));
+    });
+    $$(".ambient-card-fav", gridEl).forEach((fav) => {
+      fav.classList.toggle("is-on", favorites.has(fav.dataset.fav));
+    });
   }
 
   function escapeHtml(s) {
@@ -301,6 +355,7 @@
     gridEl.innerHTML =
       sections.join("") ||
       `<p class="hint ambient-empty">没有匹配的环境音，试试换个关键词或切换筛选。</p>`;
+    bindCardImageFallbacks();
     if (window.Iconify?.scan) window.Iconify.scan(gridEl);
     else if (window.iconify?.scan) window.iconify.scan(gridEl);
   }
@@ -318,10 +373,10 @@
     const playing = audio && !paused;
     playerEl.innerHTML = `
       <div class="ambient-player-main">
-        ${iconHtml(item.icon, "ambient-player-ic")}
+        ${iconHtml(itemIcon(item), "ambient-player-ic")}
         <div class="ambient-player-text">
-          <strong class="ambient-speak" data-speak-id="${item.id}" data-lang="zh-CN" title="朗读中文">${escapeHtml(item.nameZh)}</strong>
-          <span class="hint"><span class="ambient-speak" data-speak-id="${item.id}" data-lang="en" title="Read aloud">${escapeHtml(item.nameEn)}</span>${sleepLeft ? ` · ${sleepLeft} 分钟后停止` : ""}</span>
+          <strong class="ambient-speak" data-speak-id="${item.id}" title="朗读中英文"><span class="ambient-card-zh">${escapeHtml(item.nameZh)}</span><span class="ambient-card-sep" aria-hidden="true"> · </span><span class="ambient-card-en">${escapeHtml(item.nameEn)}</span></strong>
+          <span class="hint">${sleepLeft ? `${sleepLeft} 分钟后停止` : ""}</span>
         </div>
       </div>
       <div class="ambient-player-actions btn-row">
@@ -334,7 +389,7 @@
     $("#ambient-player-stop", playerEl)?.addEventListener("click", () => {
       stopAudio();
       currentId = null;
-      render();
+      updateCardPlayingState();
       updatePlayer();
     });
     $("#ambient-player-fav", playerEl)?.addEventListener("click", () => toggleFavorite(item.id));
