@@ -107,9 +107,24 @@
     });
   }
 
+  function syncMenuLayer() {
+    const ui = document.getElementById("ui");
+    const open = !!(ui && ui.querySelector(".menu-scrim"));
+    document.documentElement.classList.toggle("sandspiel-menu-open", open);
+  }
+
+  function observeMenuLayer() {
+    const ui = document.getElementById("ui");
+    if (!ui || ui.dataset.menuObserved === "1") return;
+    ui.dataset.menuObserved = "1";
+    new MutationObserver(syncMenuLayer).observe(ui, { childList: true, subtree: true });
+    syncMenuLayer();
+  }
+
   function boot() {
     enhanceFps();
     queueLayout();
+    observeMenuLayer();
 
     const ui = document.getElementById("ui");
     if (ui && !ui.dataset.layoutObserved) {
