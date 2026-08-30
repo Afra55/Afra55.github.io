@@ -10055,11 +10055,6 @@ body.ruler-fs-active {
   -webkit-user-drag: none;
 }
 
-.muyu-fish-hint {
-  font-size: 0.88rem;
-  color: var(--muted);
-}
-
 .muyu-fs:not([hidden]) {
   cursor: pointer;
 }
