@@ -13,6 +13,7 @@
   const DC_BUFFER_LIMIT = 512 * 1024;
   const NAME_KEY = "devtools-lanshare-name";
   const PENDING_JOIN_KEY = "devtools-lanshare-pending-j";
+  const ANSWER_RELAY_PREFIX = "devtools-lanshare-answer";
 
   const els = {
     statusDot: $("#ls-dot"),
@@ -26,6 +27,11 @@
     inviteText: $("#ls-invite-text"),
     inviteQr: $("#ls-invite-qr"),
     copyInviteBtn: $("#ls-copy-invite"),
+    scanAnswerBtn: $("#ls-scan-answer"),
+    guestAnswerArea: $("#ls-guest-answer-area"),
+    guestAnswerQr: $("#ls-guest-answer-qr"),
+    guestAnswerText: $("#ls-guest-answer-text"),
+    copyGuestAnswerBtn: $("#ls-copy-guest-answer"),
     scanBtn: $("#ls-scan"),
     scanFileBtn: $("#ls-scan-file"),
     scanFileInput: $("#ls-scan-file-input"),
@@ -74,6 +80,9 @@
     /** 成员侧：收到 welcome 后为 true；房主创建房间后为 true */
     controlLinked: false,
     pendingOutbound: [],
+    answerBc: null,
+    answerStorageHandler: null,
+    answerScanMode: false,
   };
 
   function stashPendingJoinToken(token) {
@@ -216,10 +225,8 @@
     return `${keep.join("\r\n")}\r\n`;
   }
 
-  function toInviteRecord({ roomId, hostId, hostName, sdp, answerSdp }) {
-    const rec = { v: 2, r: roomId, h: hostId, n: hostName, s: trimSdpForLan(sdp) };
-    if (answerSdp) rec.a = trimSdpForAnswer(answerSdp);
-    return rec;
+  function toInviteRecord({ roomId, hostId, hostName, sdp }) {
+    return { v: 1, r: roomId, h: hostId, n: hostName, s: trimSdpForLan(sdp) };
   }
 
   function fromInviteRecord(rec) {
@@ -228,28 +235,16 @@
       hostId: rec.h || rec.hostId,
       hostName: rec.n || rec.hostName,
       sdp: rec.s || rec.sdp,
-      answerSdp: rec.a || rec.answerSdp,
     };
   }
 
-  async function generateOfferAnswerPair() {
-    const pcOffer = createPeer();
-    pcOffer.createDataChannel("control", { ordered: true });
-    const offer = await pcOffer.createOffer();
-    await pcOffer.setLocalDescription(offer);
-    await waitIce(pcOffer);
-    const offerSdp = trimSdpForLan(pcOffer.localDescription.sdp);
-
-    const pcAns = createPeer();
-    await pcAns.setRemoteDescription({ type: "offer", sdp: offerSdp });
-    const answer = await pcAns.createAnswer();
-    await pcAns.setLocalDescription(answer);
-    await waitIce(pcAns);
-    const answerSdp = trimSdpForAnswer(pcAns.localDescription.sdp);
-
-    pcOffer.close();
-    pcAns.close();
-    return { offerSdp, answerSdp };
+  function fromAnswerRecord(rec) {
+    return {
+      roomId: rec.r || rec.roomId,
+      hostId: rec.h || rec.hostId,
+      memberId: rec.f || rec.from || rec.memberId,
+      sdp: rec.s || rec.sdp,
+    };
   }
 
   async function packInvitePayload(obj) {
@@ -279,21 +274,35 @@
     return b64dec(t);
   }
 
-  async function buildInviteUrl(offerSdp, answerSdp) {
+  async function buildInviteUrl(offerSdp) {
     const token = await packInvitePayload(
-      toInviteRecord({ roomId: state.roomId, hostId: state.peerId, hostName: state.peerName, sdp: offerSdp, answerSdp })
+      toInviteRecord({ roomId: state.roomId, hostId: state.peerId, hostName: state.peerName, sdp: offerSdp })
     );
     return `${inviteLinkBase()}#lanshare?j=${encodeURIComponent(token)}`;
   }
 
-  async function buildInviteToken(offerSdp, answerSdp) {
+  async function buildInviteToken(offerSdp) {
     return packInvitePayload(
-      toInviteRecord({ roomId: state.roomId, hostId: state.peerId, hostName: state.peerName, sdp: offerSdp, answerSdp })
+      toInviteRecord({ roomId: state.roomId, hostId: state.peerId, hostName: state.peerName, sdp: offerSdp })
     );
+  }
+
+  async function buildJoinAnswerToken(answerSdp) {
+    return packInvitePayload({
+      t: "answer",
+      r: state.roomId,
+      h: state.hostId,
+      f: state.peerId,
+      s: trimSdpForAnswer(answerSdp),
+    });
   }
 
   function inviteQrText(token) {
     return `lanshare?j=${token}`;
+  }
+
+  function joinAnswerQrText(token) {
+    return `lanshare?a=${token}`;
   }
 
   async function parseInviteAsync(text) {
@@ -334,6 +343,46 @@
       return inv;
     }
     throw new Error("无效的邀请链接");
+  }
+
+  async function parseJoinAnswerAsync(text) {
+    const raw = normalizeInviteText(text);
+    if (/^https?:\/\//i.test(raw)) {
+      let u;
+      try {
+        u = new URL(raw);
+      } catch {
+        throw new Error("无效的应答链接");
+      }
+      const frag = u.hash.replace(/^#/, "");
+      if (frag.includes("lanshare")) return parseJoinAnswerAsync(frag);
+      throw new Error("链接不是互传应答");
+    }
+    if (raw.startsWith("lanshare")) {
+      const q = raw.indexOf("?");
+      if (q >= 0) {
+        const a = new URLSearchParams(raw.slice(q + 1)).get("a");
+        if (a) {
+          const ans = fromAnswerRecord(await unpackInvitePayload(a));
+          if (!ans.sdp) throw new Error("应答缺少连接信息");
+          return ans;
+        }
+      }
+    }
+    if (/^[zr][A-Za-z0-9_-]+$/.test(raw)) {
+      const ans = fromAnswerRecord(await unpackInvitePayload(raw));
+      if (!ans.sdp) throw new Error("应答缺少连接信息");
+      return ans;
+    }
+    throw new Error("无效的应答码");
+  }
+
+  function isAnswerScanData(data) {
+    const s = normalizeInviteText(data);
+    if (!s) return false;
+    if (/^https?:\/\//i.test(s) && /lanshare/i.test(s) && /[?&]a=/.test(s)) return true;
+    if (s.startsWith("lanshare?") && /(?:^|[?&])a=/.test(s)) return true;
+    return false;
   }
 
   function isInviteScanData(data) {
@@ -458,6 +507,7 @@
     }
     if (els.inviteArea) els.inviteArea.hidden = !inRoom || !state.isHost;
     if (els.joinArea) els.joinArea.hidden = inRoom;
+    if (els.guestAnswerArea) els.guestAnswerArea.hidden = !inRoom || state.isHost || state.controlLinked;
     if (els.leaveBtn) els.leaveBtn.hidden = !inRoom;
     if (els.dissolveBtn) els.dissolveBtn.hidden = !inRoom || !state.isHost;
     if (els.pickBtn) {
@@ -540,8 +590,37 @@
       .replace(/^[\u201c\u201d\u2018\u2019]+|[\u201c\u201d\u2018\u2019]+$/g, "");
   }
 
-  function makeInvitePayload(sdp, answerSdp) {
-    return buildInviteUrl(sdp, answerSdp);
+  function makeInvitePayload(sdp) {
+    return buildInviteUrl(sdp);
+  }
+
+  async function renderGuestAnswerQr(token) {
+    if (!els.guestAnswerQr) return;
+    els.guestAnswerQr.innerHTML = "";
+    await ensureQrLibs();
+    if (typeof QRCode === "undefined") {
+      els.guestAnswerQr.textContent = "二维码库未加载，请复制下方应答链接";
+      return;
+    }
+    const tries = [QRCode.CorrectLevel.L, QRCode.CorrectLevel.M];
+    for (const text of [joinAnswerQrText(token), `${inviteLinkBase()}#${joinAnswerQrText(token)}`]) {
+      for (const level of tries) {
+        try {
+          renderQrBox(els.guestAnswerQr, text, level);
+          return;
+        } catch (err) {
+          if (!/Too long|overflow|code length overflow/i.test(String(err.message || err))) break;
+        }
+      }
+    }
+    els.guestAnswerQr.innerHTML = '<p class="hint tight">应答码较长，请复制下方链接给房主。</p>';
+  }
+
+  async function updateInviteDisplay(offerSdp) {
+    const token = await buildInviteToken(offerSdp);
+    const url = `${inviteLinkBase()}#${inviteQrText(token)}`;
+    if (els.inviteText) els.inviteText.value = url;
+    await renderInviteQr(token);
   }
 
   async function ensureQrLibs() {
@@ -580,13 +659,6 @@
     }
     els.inviteQr.innerHTML =
       '<p class="hint tight">邀请文本较长，二维码无法生成，请复制下方链接分享（或使用应用内扫码/粘贴）。</p>';
-  }
-
-  async function updateInviteDisplay(offerSdp, answerSdp) {
-    const token = await buildInviteToken(offerSdp, answerSdp);
-    const url = `${inviteLinkBase()}#${inviteQrText(token)}`;
-    if (els.inviteText) els.inviteText.value = url;
-    await renderInviteQr(token);
   }
 
   function exportRoomState() {
@@ -794,17 +866,119 @@
     };
   }
 
+  function stopAnswerRelayListen() {
+    state.answerBc?.close();
+    state.answerBc = null;
+    if (state.answerStorageHandler) {
+      window.removeEventListener("storage", state.answerStorageHandler);
+      state.answerStorageHandler = null;
+    }
+  }
+
+  function startAnswerRelayListen() {
+    stopAnswerRelayListen();
+    if (!state.isHost || !state.roomId) return;
+    try {
+      state.answerBc = new BroadcastChannel(`${ANSWER_RELAY_PREFIX}:${state.roomId}`);
+      state.answerBc.onmessage = (ev) => {
+        const payload = ev.data;
+        if (!payload) return;
+        applyJoinAnswer(payload.answerText || payload.text || (payload.token ? joinAnswerQrText(payload.token) : "")).catch(
+          () => {}
+        );
+      };
+    } catch (_) {
+      /* ignore */
+    }
+    state.answerStorageHandler = (ev) => {
+      if (ev.key !== `${ANSWER_RELAY_PREFIX}:${state.roomId}` || !ev.newValue) return;
+      applyJoinAnswer(joinAnswerQrText(ev.newValue)).catch(() => {});
+    };
+    window.addEventListener("storage", state.answerStorageHandler);
+    try {
+      const cached = localStorage.getItem(`${ANSWER_RELAY_PREFIX}:${state.roomId}`);
+      if (cached) applyJoinAnswer(joinAnswerQrText(cached)).catch(() => {});
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function readAnswerTokenFromHash() {
+    const full = String(location.hash || "").replace(/^#/, "");
+    if (!full.startsWith("lanshare?")) return "";
+    return new URLSearchParams(full.slice(full.indexOf("?") + 1)).get("a") || "";
+  }
+
+  async function tryApplyJoinAnswerFromHash() {
+    if (!state.isHost || !state.pendingJoin?.pc) return false;
+    const a = readAnswerTokenFromHash();
+    if (!a) return false;
+    const ok = await applyJoinAnswer(joinAnswerQrText(a));
+    if (ok) history.replaceState(null, "", "#lanshare");
+    return ok;
+  }
+
+  async function applyJoinAnswer(text) {
+    if (!state.isHost || !state.pendingJoin?.pc) return false;
+    const parsed = await parseJoinAnswerAsync(text);
+    if (!parsed?.sdp) return false;
+    if (parsed.roomId && parsed.roomId !== state.roomId) return false;
+    if (parsed.hostId && parsed.hostId !== state.peerId) return false;
+    const pc = state.pendingJoin.pc;
+    if (pc.signalingState !== "have-local-offer") return false;
+    try {
+      await pc.setRemoteDescription({ type: "answer", sdp: parsed.sdp });
+      setError("");
+      return true;
+    } catch (e) {
+      setError(e?.message || "成员应答无效，请让其重新加入");
+      return false;
+    }
+  }
+
+  async function publishJoinAnswer(answerSdp, inv) {
+    const token = await buildJoinAnswerToken(answerSdp);
+    const answerText = joinAnswerQrText(token);
+    const answerUrl = `${inviteLinkBase()}#${answerText}`;
+
+    try {
+      const bc = new BroadcastChannel(`${ANSWER_RELAY_PREFIX}:${inv.roomId}`);
+      bc.postMessage({ token, answerText, answerUrl });
+      bc.close();
+    } catch (_) {
+      /* ignore */
+    }
+    try {
+      localStorage.setItem(`${ANSWER_RELAY_PREFIX}:${inv.roomId}`, token);
+    } catch (_) {
+      /* ignore */
+    }
+
+    if (els.guestAnswerArea) els.guestAnswerArea.hidden = false;
+    if (els.guestAnswerText) els.guestAnswerText.value = answerUrl;
+    await renderGuestAnswerQr(token);
+    try {
+      await copyText(answerUrl);
+    } catch (_) {
+      /* ignore */
+    }
+    paintStatus();
+  }
+
+  async function applyAnswerFromScanData(data) {
+    if (!state.isHost) throw new Error("仅房主可扫描成员应答");
+    const ok = await applyJoinAnswer(data);
+    if (!ok) throw new Error("应答无效或已过期，请让成员重新加入");
+    setError("");
+  }
+
   async function refreshJoinSlot() {
     if (!state.isHost) return;
     state.pendingJoin?.pc?.close();
-    const pair = await generateOfferAnswerPair();
     const pc = createPeer();
     const dc = pc.createDataChannel("control", { ordered: true });
     let settled = false;
     state.pendingJoin = { pc, dc };
-
-    await pc.setLocalDescription({ type: "offer", sdp: pair.offerSdp });
-    await pc.setRemoteDescription({ type: "answer", sdp: pair.answerSdp });
 
     const onHelloChannel = (e) => {
       if (settled) return;
@@ -828,7 +1002,12 @@
       if (pc.connectionState === "failed") setError("有新成员连接失败，请刷新邀请码重试");
     };
 
-    await updateInviteDisplay(pair.offerSdp, pair.answerSdp);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+    await waitIce(pc);
+    startAnswerRelayListen();
+    await updateInviteDisplay(pc.localDescription.sdp);
+    tryApplyJoinAnswerFromHash().catch(() => {});
   }
 
   async function createRoom() {
@@ -891,13 +1070,10 @@
 
     try {
       await pc.setRemoteDescription({ type: "offer", sdp: inv.sdp });
-      if (inv.answerSdp) {
-        await pc.setLocalDescription({ type: "answer", sdp: inv.answerSdp });
-      } else {
-        const ans = await pc.createAnswer();
-        await pc.setLocalDescription(ans);
-        await waitIce(pc);
-      }
+      const ans = await pc.createAnswer();
+      await pc.setLocalDescription(ans);
+      await waitIce(pc);
+      await publishJoinAnswer(pc.localDescription.sdp, inv);
     } catch (e) {
       closeMemberControl();
       state.roomId = "";
@@ -1284,8 +1460,12 @@
     state.autoJoinBusy = false;
     state.controlLinked = false;
     state.pendingOutbound = [];
+    stopAnswerRelayListen();
     if (els.inviteText) els.inviteText.value = "";
     if (els.inviteQr) els.inviteQr.innerHTML = "";
+    if (els.guestAnswerArea) els.guestAnswerArea.hidden = true;
+    if (els.guestAnswerQr) els.guestAnswerQr.innerHTML = "";
+    if (els.guestAnswerText) els.guestAnswerText.value = "";
     setProgress(null);
     if (!keepError) setError("");
     paintStatus();
@@ -1380,6 +1560,10 @@
   }
 
   async function joinFromScanData(data) {
+    if (isAnswerScanData(data)) {
+      await applyAnswerFromScanData(data);
+      return;
+    }
     if (!isInviteScanData(data)) throw new Error("不是有效的互传邀请");
     await joinRoom(data);
   }
@@ -1446,10 +1630,17 @@
             const code = jsQR(canvas.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height, {
               inversionAttempts: "attemptBoth",
             });
-            if (code?.data && isInviteScanData(code.data)) {
-              stopScan();
-              joinFromScanData(code.data).catch((err) => setError(err.message));
-              return;
+            if (code?.data) {
+              if (isAnswerScanData(code.data)) {
+                stopScan();
+                applyAnswerFromScanData(code.data).catch((err) => setError(err.message));
+                return;
+              }
+              if (isInviteScanData(code.data)) {
+                stopScan();
+                joinFromScanData(code.data).catch((err) => setError(err.message));
+                return;
+              }
             }
           } catch (_) {
             /* ignore frame errors */
@@ -1502,11 +1693,21 @@
     if (els.camStop) els.camStop.hidden = true;
   }
 
+  async function startAnswerScan() {
+    state.answerScanMode = true;
+    await startScan();
+  }
+
   els.createBtn?.addEventListener("click", () => createRoom().catch((e) => setError(e.message)));
   els.pasteJoinBtn?.addEventListener("click", () => pasteJoin());
   els.joinConfirmBtn?.addEventListener("click", () => confirmPasteJoin().catch((e) => setError(e.message)));
   els.copyInviteBtn?.addEventListener("click", () => copyInvite());
-  els.scanBtn?.addEventListener("click", () => startScan());
+  els.scanAnswerBtn?.addEventListener("click", () => startAnswerScan());
+  els.copyGuestAnswerBtn?.addEventListener("click", () => copyText(els.guestAnswerText?.value || "").catch((e) => setError(e.message)));
+  els.scanBtn?.addEventListener("click", () => {
+    state.answerScanMode = false;
+    startScan();
+  });
   els.scanFileBtn?.addEventListener("click", () => els.scanFileInput?.click());
   els.scanFileInput?.addEventListener("change", () => {
     const f = els.scanFileInput?.files?.[0];
@@ -1533,6 +1734,7 @@
   paintPlatformHint();
   disableIfUnsupported();
   paintStatus();
+  tryApplyJoinAnswerFromHash().catch(() => {});
   tryAutoJoinFromHash().catch(() => {});
 
   window.LanShareSelfTest = {
@@ -1541,22 +1743,29 @@
     isAndroid,
     isMobileClient,
     parseInviteAsync,
+    parseJoinAnswerAsync,
     buildInviteUrl,
     buildInviteToken,
+    buildJoinAnswerToken,
     inviteQrText,
+    joinAnswerQrText,
     packInvitePayload,
     unpackInvitePayload,
     inviteLinkBase,
     isInviteScanData,
+    isAnswerScanData,
     readJoinTokenFromHash,
+    readAnswerTokenFromHash,
     takePendingJoinToken,
-    generateOfferAnswerPair,
     getRoomId: () => state.roomId,
   };
 
   window.addEventListener("devtools:route", () => {
     const head = location.hash.replace("#", "").split(/[/?]/)[0];
     if (head !== "lanshare") stopScan();
-    else tryAutoJoinFromHash().catch(() => {});
+    else {
+      tryApplyJoinAnswerFromHash().catch(() => {});
+      tryAutoJoinFromHash().catch(() => {});
+    }
   });
 })();

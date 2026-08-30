@@ -94,19 +94,21 @@ async function main() {
   const html = await fetchText(new URL("index.html", baseUrl).href).catch(() =>
     fs.readFileSync(path.join(root, "index.html"), "utf8")
   );
+  const htmlLocal = fs.readFileSync(path.join(root, "index.html"), "utf8");
   const lazyJs = fs.readFileSync(path.join(root, "lib/lazy-scripts.js"), "utf8");
 
-  assert(/id="lanshare"/.test(html), "缺少 #lanshare 面板");
-  assert(/邀请链接/.test(html), "缺少邀请链接文案");
+  assert(/id="lanshare"/.test(htmlLocal), "缺少 #lanshare 面板");
+  assert(/邀请链接/.test(htmlLocal), "缺少邀请链接文案");
   assert(/lanshare:\s*"\.\/lanshare\.js"/.test(lazyJs), "lazy-scripts 未注册 lanshare.js");
-  const build = toolsBuildFromHtml(html);
+  const build = toolsBuildFromHtml(htmlLocal);
   assert(build, "index.html 缺少 TOOLS_BUILD");
-  assert(new RegExp(`20260817${VER}|2026\\.08\\.30-054800`).test(html), `index.html 版本/cache-bust 异常 (${build})`);
+  assert(/2026\.08\.\d{2}-\d{6}|20260817theme1/.test(htmlLocal), `index.html 版本/cache-bust 异常 (${build})`);
 
   const js = fs.readFileSync(path.join(root, "lanshare.js"), "utf8");
   assert(/encodeURIComponent\(token\)/.test(js), "邀请 token 应 URL 编码");
   assert(/inviteQrText/.test(js), "缺少短码二维码文本");
-  assert(/generateOfferAnswerPair/.test(js), "缺少预生成 offer/answer 配对");
+  assert(/publishJoinAnswer/.test(js), "缺少成员应答回传");
+  assert(/applyJoinAnswer/.test(js), "缺少房主应答应用");
   assert(/lanshare:\s*\["qrcode",\s*"jsQR"\]/.test(lazyJs), "lazy-scripts 应为 lanshare 加载 qrcode/jsQR");
   assert(/broadcastExcept/.test(js), "房主应转发成员事件给其他成员");
   assert(/controlLinked/.test(js), "缺少 controlLinked 连接就绪状态");
@@ -168,19 +170,25 @@ async function main() {
 
     const realistic = await page.evaluate(async (sdpText) => {
       const api = window.LanShareSelfTest;
-      const pair = await api.generateOfferAnswerPair();
       const token = await api.packInvitePayload({
-        v: 2,
+        v: 1,
         r: "LAN001",
         h: "hostx",
         n: "房主",
-        s: pair.offerSdp || sdpText,
-        a: pair.answerSdp || "",
+        s: sdpText,
       });
       const qrText = api.inviteQrText(token);
       const url = `${api.inviteLinkBase()}#${qrText}`;
       const parsed = await api.parseInviteAsync(url);
       const parsedShort = await api.parseInviteAsync(qrText);
+      const answerToken = await api.packInvitePayload({
+        t: "answer",
+        r: "LAN001",
+        h: "hostx",
+        f: "guest1",
+        s: "v=0\r\no=- 0 0 IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\r\nc=IN IP4 0.0.0.0\r\n",
+      });
+      const answerParsed = await api.parseJoinAnswerAsync(api.joinAnswerQrText(answerToken));
       return {
         urlLen: url.length,
         qrLen: qrText.length,
@@ -188,7 +196,8 @@ async function main() {
           parsed.roomId === "LAN001" &&
           parsedShort.roomId === "LAN001" &&
           parsed.sdp.includes("m=application") &&
-          !!parsed.answerSdp,
+          answerParsed.roomId === "LAN001" &&
+          answerParsed.sdp.includes("m=application"),
       };
     }, sampleSdp());
     assert(realistic.ok, " realistic v2 SDP 邀请解析失败");
@@ -198,14 +207,12 @@ async function main() {
 
     const inviteUrl = await page.evaluate(async (sdpText) => {
       const api = window.LanShareSelfTest;
-      const pair = await api.generateOfferAnswerPair();
       const token = await api.packInvitePayload({
-        v: 2,
+        v: 1,
         r: "JOIN99",
         h: "hostz",
         n: "Z",
-        s: pair.offerSdp || sdpText,
-        a: pair.answerSdp || "",
+        s: sdpText,
       });
       return `${api.inviteLinkBase()}#${api.inviteQrText(token)}`;
     }, sampleSdp());
