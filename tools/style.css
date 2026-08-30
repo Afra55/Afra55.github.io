@@ -11243,3 +11243,49 @@ html[data-boot-loading="1"] body {
   text-align: left;
   white-space: nowrap;
 }
+
+.phlogo-stage,
+.nokia-stage {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background:
+    linear-gradient(45deg, rgba(0, 0, 0, 0.22) 25%, transparent 25%) 0 0 / 16px 16px,
+    linear-gradient(-45deg, rgba(0, 0, 0, 0.22) 25%, transparent 25%) 0 8px / 16px 16px,
+    var(--stage-bg);
+  padding: 1rem;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 12rem;
+}
+
+.phlogo-canvas,
+.nokia-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  image-rendering: auto;
+}
+
+.phlogo-layout .field-row input[type="range"],
+.nokia-layout .field-row input[type="range"] {
+  min-width: 8rem;
+  flex: 1 1 8rem;
+}
+
+.phlogo-layout input[type="color"],
+.nokia-layout input[type="color"] {
+  width: 2.4rem;
+  height: 2rem;
+  padding: 0.1rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+@media (max-width: 900px) {
+  .phlogo-layout,
+  .nokia-layout {
+    grid-template-columns: 1fr;
+  }
+}

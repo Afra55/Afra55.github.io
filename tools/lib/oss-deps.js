@@ -7,7 +7,7 @@
 
   /** @type {{ updated: string, groups: Array<{ id: string, label: string, items: OssItem[] }> }} */
   const OSS_DEPS = {
-    updated: "2026-08-29",
+    updated: "2026-08-30",
     groups: [
       {
         id: "vendor",
@@ -58,7 +58,7 @@
             version: "1.4.1",
             license: "MIT",
             repo: "https://github.com/niklasvh/html2canvas",
-            usedIn: "代码分享卡片截图",
+            usedIn: "代码分享卡片 / 文字转图片截图",
             path: "tools/vendor/html2canvas.min.js",
           },
           {
@@ -242,6 +242,28 @@
             repo: "https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API",
             usedIn: "局域网互传",
             path: "浏览器内置",
+          },
+        ],
+      },
+      {
+        id: "inspired",
+        label: "风格参考（本地重写，未嵌入其代码）",
+        items: [
+          {
+            name: "Logoly",
+            version: "—",
+            license: "WTFPL",
+            repo: "https://github.com/bestony/logoly",
+            usedIn: "P站风 Logo",
+            path: "—",
+          },
+          {
+            name: "zzkia",
+            version: "—",
+            license: "未声明",
+            repo: "https://github.com/dcalsky/zzkia",
+            usedIn: "诺基亚短信",
+            path: "—",
           },
         ],
       },
