@@ -1526,7 +1526,7 @@
         }
         break;
       case "room-closed":
-        setError("房主已解散房间");
+        setError(msg.reason === "host-offline" ? "房主已离线，房间已结束" : "房主已解散房间");
         cleanupRoom(true);
         break;
       case "host-transfer-start":
@@ -1558,6 +1558,9 @@
         broadcast({ type: "member-left", memberId: remoteId, name: leftName });
         setInfo(`${leftName} 已退出`);
         paintStatus();
+      } else if (!state.isHost && remoteId === state.hostId && state.roomId) {
+        setError("房主已离线，房间已结束");
+        cleanupRoom(true);
       }
     };
   }
@@ -2488,6 +2491,26 @@
     cleanupRoom(false);
   }
 
+  /** 直接关页/刷新时尽力通知对端（浏览器不保证一定送达） */
+  function abandonRoomOnPageHide() {
+    if (!state.roomId) return;
+    const myName = state.peerName || memberLabel(state.peerId);
+    try {
+      removeMemberFiles(state.peerId, { notify: true });
+      if (state.isHost) {
+        const others = [...state.members.values()].filter((m) => m.id !== state.peerId);
+        if (others.length) {
+          broadcast({ type: "room-closed", reason: "host-offline" });
+        }
+        stopMqttSignaling();
+      } else if (state.controlDc?.readyState === "open") {
+        state.controlDc.send(JSON.stringify({ type: "member-left", memberId: state.peerId, name: myName }));
+      }
+    } catch (_) {
+      /* 关页瞬间可能来不及发送 */
+    }
+  }
+
   function closeMemberControl() {
     state.controlDc?.close();
     state.controlDc = null;
@@ -2845,6 +2868,12 @@
     if (!state.roomId) return;
     state.pageHiddenWarn = document.hidden;
     paintStatus();
+  });
+
+  window.addEventListener("pagehide", (ev) => {
+    if (ev.persisted) return;
+    abandonRoomOnPageHide();
+    stopScan();
   });
 
   loadName();
