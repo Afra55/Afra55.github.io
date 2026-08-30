@@ -30,6 +30,10 @@
     inviteQr: $("#ls-invite-qr"),
     copyInviteBtn: $("#ls-copy-invite"),
     scanAnswerBtn: $("#ls-scan-answer"),
+    roomCodeEl: $("#ls-room-code"),
+    hostOfferPaste: $("#ls-host-offer-paste"),
+    hostOfferConfirmBtn: $("#ls-host-offer-confirm"),
+    pairingGuide: $("#ls-pairing-guide"),
     guestAnswerArea: $("#ls-guest-answer-area"),
     guestAnswerQr: $("#ls-guest-answer-qr"),
     guestAnswerText: $("#ls-guest-answer-text"),
@@ -591,15 +595,34 @@
     }
     const parts = [];
     if (isIOS()) {
-      parts.push("iOS：请用 Safari 并保持本页在前台；下载完成后可用「分享」保存到文件；若无法读剪贴板，请在下框手动粘贴邀请文本。");
+      parts.push("iOS：请用 Safari；可用相机扫电脑上的邀请二维码（会自动打开链接），或让电脑复制链接发给你。");
     } else if (isAndroid()) {
-      parts.push("Android：推荐 Chrome；扫码需授予相机权限；传大文件时请保持屏幕常亮。");
+      parts.push("Android：推荐 Chrome；可用微信/相机扫邀请码，或粘贴链接加入。");
     } else {
-      parts.push("电脑：可直接下载文件；也可扫码或复制邀请文本与手机互联。");
+      parts.push("电脑作房主：手机扫邀请码或打开链接加入，再把手机上的连接码链接发回电脑粘贴即可（不必对着扫）。");
     }
     parts.push("所有设备需在同一局域网。");
     els.platformHint.hidden = false;
     els.platformHint.textContent = parts.join(" ");
+  }
+
+  function paintPairingGuide() {
+    if (!els.pairingGuide) return;
+    const inRoom = !!state.roomId;
+    els.pairingGuide.hidden = !inRoom;
+    if (!inRoom) return;
+    if (state.isHost) {
+      els.pairingGuide.innerHTML =
+        "<strong>电脑 + 手机配对</strong><ol class=\"hint tight\" style=\"margin:0.35rem 0 0 1.1rem;padding:0\">" +
+        "<li>手机扫下方二维码，或用微信打开「邀请链接」</li>" +
+        "<li>手机出现「连接码」后，复制链接发到电脑（微信/QQ 均可）</li>" +
+        "<li>电脑粘贴到「粘贴成员连接码」并确认 — 也可摄像头扫手机连接码</li>" +
+        "</ol>";
+    } else {
+      els.pairingGuide.innerHTML =
+        "<strong>等待与房主配对</strong><p class=\"hint tight\" style=\"margin:0.35rem 0 0\">" +
+        "请将下方连接码二维码或链接发给房主（微信/QQ）。若扫不出二维码，复制链接即可。</p>";
+    }
   }
 
   function disableIfUnsupported() {
@@ -657,6 +680,13 @@
     }
     paintMembers();
     paintFiles();
+    paintPairingGuide();
+    if (els.roomCodeEl) {
+      els.roomCodeEl.hidden = !inRoom || !state.isHost;
+      if (inRoom && state.isHost) {
+        els.roomCodeEl.textContent = `房间号 ${state.roomId}（也可复制链接分享）`;
+      }
+    }
   }
 
   function paintMembers() {
@@ -740,7 +770,7 @@
     }
     const qrText = kind === "offer" ? joinOfferQrText(token) : joinAnswerQrText(token);
     const tries = [QRCode.CorrectLevel.L, QRCode.CorrectLevel.M];
-    for (const text of [qrText, `${inviteLinkBase()}#${qrText}`]) {
+    for (const text of [`${inviteLinkBase()}#${qrText}`, qrText]) {
       for (const level of tries) {
         try {
           renderQrBox(el, text, level);
@@ -762,9 +792,22 @@
 
   async function ensureQrLibs() {
     if (typeof QRCode !== "undefined" && typeof jsQR === "function") return;
-    if (window.DevToolsLazy?.loadVendor) {
-      if (typeof QRCode === "undefined") await window.DevToolsLazy.loadVendor("qrcode");
-      if (typeof jsQR !== "function") await window.DevToolsLazy.loadVendor("jsQR");
+    if (!window.DevToolsLazy?.loadVendor) {
+      throw new Error("脚本加载器未就绪，请刷新页面后重试");
+    }
+    if (typeof QRCode === "undefined") await window.DevToolsLazy.loadVendor("qrcode");
+    if (typeof jsQR !== "function") await window.DevToolsLazy.loadVendor("jsQR");
+    if (typeof QRCode === "undefined" || typeof jsQR !== "function") {
+      throw new Error("二维码库加载失败，请检查网络后刷新页面");
+    }
+  }
+
+  async function preloadPanel() {
+    try {
+      await window.DevToolsLazy?.ensureForTool?.("lanshare");
+      await ensureQrLibs();
+    } catch (e) {
+      setError(e?.message || "互传组件加载失败，请刷新页面");
     }
   }
 
@@ -783,7 +826,8 @@
       return;
     }
     const shortText = inviteQrTextShort();
-    const qrPayloads = [shortText, `${inviteLinkBase()}#${shortText}`];
+    const fullUrl = `${inviteLinkBase()}#${shortText}`;
+    const qrPayloads = [fullUrl, shortText];
     const tries = [QRCode.CorrectLevel.L, QRCode.CorrectLevel.M];
     for (const text of qrPayloads) {
       for (const level of tries) {
@@ -1344,6 +1388,7 @@
       setError("当前浏览器不支持 WebRTC");
       return;
     }
+    await ensureQrLibs();
     setError("");
     saveName();
     cleanupRoom(false);
@@ -1880,6 +1925,20 @@
     }
   }
 
+  async function confirmHostOfferPaste() {
+    const text = els.hostOfferPaste?.value || "";
+    if (!normalizeInviteText(text)) {
+      setError("请先粘贴成员发来的连接码链接或文本");
+      return;
+    }
+    try {
+      await applyOfferFromScanData(text);
+      if (els.hostOfferPaste) els.hostOfferPaste.value = "";
+    } catch (e) {
+      setError(e.message || "连接码无效");
+    }
+  }
+
   function decodeQrFromImage(img) {
     if (typeof jsQR !== "function") throw new Error("扫码库未加载");
     const canvas = document.createElement("canvas");
@@ -2062,6 +2121,7 @@
   els.joinConfirmBtn?.addEventListener("click", () => confirmPasteJoin().catch((e) => setError(e.message)));
   els.copyInviteBtn?.addEventListener("click", () => copyInvite());
   els.scanAnswerBtn?.addEventListener("click", () => startAnswerScan());
+  els.hostOfferConfirmBtn?.addEventListener("click", () => confirmHostOfferPaste().catch((e) => setError(e.message)));
   els.copyGuestAnswerBtn?.addEventListener("click", () => copyText(els.guestAnswerText?.value || "").catch((e) => setError(e.message)));
   els.scanBtn?.addEventListener("click", () => {
     state.answerScanMode = false;
@@ -2129,10 +2189,14 @@
     const head = location.hash.replace("#", "").split(/[/?]/)[0];
     if (head !== "lanshare") stopScan();
     else {
-      tryApplyJoinOfferFromHash().catch(() => {});
-      tryApplyJoinAnswerFromHash().catch(() => {});
-      tryApplyHostAnswerFromHash().catch(() => {});
-      tryAutoJoinFromHash().catch(() => {});
+      preloadPanel().finally(() => {
+        tryApplyJoinOfferFromHash().catch(() => {});
+        tryApplyJoinAnswerFromHash().catch(() => {});
+        tryApplyHostAnswerFromHash().catch(() => {});
+        tryAutoJoinFromHash().catch(() => {});
+      });
     }
   });
+
+  preloadPanel().catch(() => {});
 })();
