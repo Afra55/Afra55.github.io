@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="实用小工具：时间戳、颜色、Base64、JSON、正则、URL、UUID、Hash、文本、命名转换、坐标系互转、图片压缩裁剪水印拼接、穴位图、ADB、GIF、JWT、YAML、二维码等" />
+  <meta name="description" content="实用小工具：时间戳、倒计时、颜色、Base64、JSON、正则、URL、UUID、Hash、文本、命名转换、坐标系互转、图片压缩裁剪水印拼接、穴位图、ADB、GIF、JWT、YAML、二维码等" />
   <meta name="theme-color" content="#0b1320" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.30-120500"></script>
+  <script src="./lib/tools-build.js?v=2026.08.30-121200"></script>
   <link rel="stylesheet" href="./style.css?v=2026.08.30-103000" />
   <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-062500" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
@@ -320,6 +320,26 @@
         <p class="hint" id="cron-desc"></p>
         <pre class="mono highlight-box" id="cron-next"></pre>
         <p class="error" id="cron-error" hidden></p>
+      </div>
+    </section>
+
+<section id="countdown" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>倒计时清单</h1>
+        <p>按顺序执行多条内容：可填时分秒倒计时，也可只写内容作步骤提示。输入即时保存在本机。</p>
+      </div>
+      <div class="panel-body">
+        <div class="btn-row tool-actions cd-toolbar">
+          <button type="button" class="primary-btn" id="cd-start">开始</button>
+          <button type="button" class="secondary-btn" id="cd-save">收藏</button>
+          <button type="button" class="ghost-btn" id="cd-clear">清空</button>
+          <button type="button" class="secondary-btn" id="cd-add">添加一行</button>
+        </div>
+        <p class="hint tight" id="cd-hint">输入内容会立刻保存到本机。时分秒可选。</p>
+        <ol class="cd-list" id="cd-list"></ol>
+        <p class="error" id="cd-error" hidden></p>
+        <h2 class="subhead" style="margin-top:1.15rem">已收藏</h2>
+        <div id="cd-saved" class="cd-saved"></div>
       </div>
     </section>
 
@@ -4676,6 +4696,17 @@ adb devices</pre>
       <button type="button" class="ghost-btn" id="vsplit-fs-mute" aria-pressed="true">开声音</button>
       <button type="button" class="ghost-btn" id="vsplit-fs-undo" disabled>取消上一段</button>
       <button type="button" class="primary-btn vsplit-fs-mark" id="vsplit-fs-mark">打起点</button>
+    </div>
+  </div>
+  <div id="countdown-fs" class="countdown-fs" hidden>
+    <button type="button" class="countdown-fs-close ghost-btn" id="cd-fs-close" title="退出 (Esc)">退出</button>
+    <p class="countdown-fs-kicker hint" id="cd-fs-kicker">进行中</p>
+    <p class="countdown-fs-step hint" id="cd-fs-step"></p>
+    <p class="countdown-fs-content" id="cd-fs-content"></p>
+    <p class="countdown-fs-time mono" id="cd-fs-time" aria-live="polite">00:00</p>
+    <div class="btn-row countdown-fs-actions">
+      <button type="button" class="primary-btn" id="cd-fs-next" hidden>下一步</button>
+      <button type="button" class="primary-btn" id="cd-fs-done" hidden>完成</button>
     </div>
   </div>
   <div id="muyu-fs" class="muyu-fs" data-muyu-theme="zen" hidden>

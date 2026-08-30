@@ -797,7 +797,7 @@
     blackbox: { tool: "vbb" },
   };
   const TOOL_GROUPS = [
-    { id: "time", label: "时间", tools: ["timestamp", "timediff", "cron"] },
+    { id: "time", label: "时间", tools: ["timestamp", "timediff", "cron", "countdown"] },
     { id: "color", label: "颜色", tools: ["ahex", "color", "eyedropper"] },
     { id: "encode", label: "编码与生成", tools: ["base64", "url", "hash", "xorenc", "morse", "password", "uuid"] },
     { id: "data", label: "数据格式", tools: ["json", "yaml", "query"] },
@@ -829,6 +829,7 @@
     timestamp: "秒/毫秒时间戳与日期互转，支持本地时区与 UTC。",
     timediff: "计算两个时间点的差值，支持时间戳或日期字符串。",
     cron: "解析 Cron 表达式并预览接下来的触发时间。",
+    countdown: "多步骤倒计时清单：内容即时保存，可收藏整份列表；到点全屏提醒并可响铃震动。",
     ahex: "Android AARRGGBB 颜色与通道滑块互转。",
     color: "HEX / RGB / HSL 颜色格式互转与预览。",
     eyedropper: "屏幕取色（需浏览器 EyeDropper 支持）。",
@@ -882,6 +883,7 @@
     timestamp: { name: "时间戳", aliases: ["时间", "timestamp", "date"] },
     timediff: { name: "时间差", aliases: ["时差", "diff time"] },
     cron: { name: "Cron", aliases: ["定时", "crontab"] },
+    countdown: { name: "倒计时", aliases: ["timer", "countdown", "计时", "闹钟", "清单倒计时"] },
     ahex: { name: "AHEX", aliases: ["颜色", "alpha"] },
     color: { name: "颜色互转", aliases: ["rgb", "hex", "hsl"] },
     eyedropper: { name: "屏幕取色", aliases: ["取色", "eyedropper"] },
