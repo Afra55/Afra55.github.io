@@ -336,6 +336,7 @@ body.theme-reduce-glow .bg-grid {
   overscroll-behavior: contain;
   -webkit-overflow-scrolling: touch;
   touch-action: pan-y;
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--muted) 50%, transparent) transparent;
 }
@@ -463,6 +464,7 @@ body.theme-reduce-glow .bg-grid {
   font-size: 0.86rem;
   cursor: grab;
   user-select: none;
+  touch-action: pan-y;
   transition: color 0.2s, border-color 0.2s, background 0.2s, transform 0.15s;
 }
 
@@ -1420,7 +1422,8 @@ a.secondary-btn {
 
   .nav-search-wrap,
   .nav-strip.nav-recent,
-  .nav-drawer-head {
+  .nav-drawer-head,
+  .nav-sort-hint {
     flex-shrink: 0;
   }
 
@@ -1432,6 +1435,7 @@ a.secondary-btn {
     overscroll-behavior: contain;
     scrollbar-width: thin;
     scrollbar-color: color-mix(in srgb, var(--muted) 50%, transparent) transparent;
+    scrollbar-gutter: stable;
     -webkit-overflow-scrolling: touch;
     touch-action: pan-y;
   }

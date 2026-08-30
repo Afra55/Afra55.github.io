@@ -180,36 +180,41 @@ body.nav-sorting-tools .nav-group-title.is-sortable {
 
 body.nav-sorting,
 body.nav-sorting-tools,
-body.nav-press-pending {
+body.nav-sorting-favorites {
   user-select: none;
   -webkit-user-select: none;
   -webkit-touch-callout: none;
   cursor: grabbing;
 }
 
-body.nav-press-pending .nav-group-title,
-body.nav-press-pending .tool-nav-link,
-body.nav-press-pending .nav-fav-link,
+body.nav-sorting .nav-group-title,
+body.nav-sorting-tools .tool-nav-link,
+body.nav-sorting-favorites .nav-fav-link {
+  -webkit-touch-callout: none;
+}
+
+body.nav-sorting .nav-group-title.is-sortable,
+body.nav-sorting-tools .tool-nav-link,
+body.nav-sorting-favorites .nav-fav-link.is-sortable {
+  touch-action: none;
+}
+
+body.nav-sorting .nav-bar-scroll,
+body.nav-sorting-tools .nav-bar-scroll,
+body.nav-sorting-favorites .nav-bar-scroll {
+  touch-action: none;
+  overflow-y: hidden !important;
+}
+
 .nav-group-title.is-sortable,
 .tool-nav-link,
 .nav-fav-link.is-sortable {
   -webkit-touch-callout: none;
 }
 
-/* 长按等待期间禁止侧栏滚动，否则 pan-y 会在 360ms 内抢走手势导致排序无法触发 */
-body.nav-press-pending .nav-group-title.is-sortable,
-body.nav-press-pending .tool-nav-link,
-body.nav-press-pending .nav-fav-link.is-sortable {
-  touch-action: none;
-}
-
-body.nav-press-pending .nav-bar-scroll {
-  touch-action: none;
-  overflow-y: hidden !important;
-}
-
-body.nav-sorting-favorites .nav-bar-scroll {
-  touch-action: none;
+.tool-nav-link,
+.nav-fav-link {
+  touch-action: pan-y;
 }
 
 /* 拖拽分类时收起子工具，只留分类标题，更好对准 */
@@ -370,28 +375,26 @@ body.nav-sorting-tools .tool-nav-link.drag-over {
 }
 
 body.nav-sorting .nav-bar,
-body.nav-sorting-tools .nav-bar {
+body.nav-sorting-tools .nav-bar,
+body.nav-sorting-favorites .nav-bar {
   overflow-y: hidden !important;
   overscroll-behavior: contain;
   touch-action: none;
 }
 
 /* 紧凑模式排序：横向分组改为纵向列表，收起子工具与「展开」提示 */
-body.nav-sorting .nav-bar.is-compact .tool-nav,
-body.nav-press-pending .nav-bar.is-compact .tool-nav {
+body.nav-sorting .nav-bar.is-compact .tool-nav {
   display: block !important;
   flex-direction: column !important;
   flex-wrap: nowrap !important;
   min-width: 0 !important;
 }
 
-body.nav-sorting .nav-bar.is-compact .nav-group-tools,
-body.nav-press-pending .nav-bar.is-compact .nav-group-tools {
+body.nav-sorting .nav-bar.is-compact .nav-group-tools {
   display: none !important;
 }
 
-body.nav-sorting .nav-bar.is-compact .nav-group-title.is-sortable::after,
-body.nav-press-pending .nav-bar.is-compact .nav-group-title.is-sortable::after {
+body.nav-sorting .nav-bar.is-compact .nav-group-title.is-sortable::after {
   content: none !important;
 }
 
@@ -919,8 +922,15 @@ body.nav-open {
 
   .nav-search-wrap,
   .nav-strip.nav-recent,
-  .nav-drawer-head {
+  .nav-drawer-head,
+  .nav-sort-hint {
     flex-shrink: 0;
+  }
+
+  .nav-sort-hint {
+    margin: 0 0 0.35rem;
+    font-size: 0.68rem;
+    line-height: 1.35;
   }
 
   .nav-bar-scroll {
@@ -945,8 +955,7 @@ body.nav-open {
     background: color-mix(in srgb, var(--muted) 45%, transparent);
   }
 
-  .nav-favorites,
-  .nav-sort-hint {
+  .nav-favorites {
     flex-shrink: 0;
   }
 

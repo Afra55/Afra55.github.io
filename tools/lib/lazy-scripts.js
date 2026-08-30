@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const BUILD = window.TOOLS_BUILD || "2026.08.30-213800";
+  const BUILD = window.TOOLS_BUILD || "2026.08.30-214500";
 
   function getMqttConnect() {
     const m = globalThis.mqtt;

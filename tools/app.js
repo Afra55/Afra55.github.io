@@ -1011,7 +1011,6 @@
 
   function navSortInteractionActive() {
     return (
-      document.body.classList.contains("nav-press-pending") ||
       document.body.classList.contains("nav-sorting") ||
       document.body.classList.contains("nav-sorting-tools") ||
       document.body.classList.contains("nav-sorting-favorites")
@@ -2352,7 +2351,7 @@
     }
     const wasToolSort = document.body.classList.contains("nav-sorting-tools");
     pointerSort = null;
-    document.body.classList.remove("nav-sorting", "nav-sorting-tools", "nav-sorting-favorites", "nav-press-pending");
+    document.body.classList.remove("nav-sorting", "nav-sorting-tools", "nav-sorting-favorites");
     if (wasToolSort) clearSortFlyouts();
     clearNavDragStyles();
     dragPayload = null;
@@ -2417,18 +2416,16 @@
     el.addEventListener("pointerdown", (e) => beginMobilePointerSort(e, opts));
   }
 
-  /** 手机/紧凑模式长按排序：分类标题 / 工具项；用 document 级指针事件兼容 iOS */
+  /** 手机/紧凑模式长按排序：分类标题 / 工具项；不拦截普通上下滑滚动 */
   function beginMobilePointerSort(e, opts) {
     if (!usePointerNavSort(e.pointerType)) return;
     if (e.pointerType === "mouse" && e.button !== 0) return;
-    if (e.pointerType === "touch") e.preventDefault();
     if (pointerSort) cancelPointerSort();
     stopPointerSortAutoScroll();
-    document.body.classList.add("nav-press-pending");
 
     const LONG_MS = navCompact ? 420 : 360;
-    // iOS 长按期间手指微抖较大，阈值过小会提前取消
     const CANCEL_PX = 28;
+    const SCROLL_SLOP_PX = 8;
     const handle = opts.handle;
     const kind = opts.kind; // group | tool
 
@@ -2437,6 +2434,10 @@
       const dx = Math.abs(ev.clientX - pointerSort.startX);
       const dy = Math.abs(ev.clientY - pointerSort.startY);
       if (!pointerSort.active) {
+        if (dy >= SCROLL_SLOP_PX && dy > dx * 1.08) {
+          cancelPointerSort();
+          return;
+        }
         if (dx + dy > CANCEL_PX) cancelPointerSort();
         return;
       }
@@ -2520,7 +2521,6 @@
         pointerSort.active = true;
         didDrag = true;
         dragPayload = { kind, id: opts.id };
-        document.body.classList.remove("nav-press-pending");
         document.body.classList.add(
           kind === "group" ? "nav-sorting" : kind === "favorite" ? "nav-sorting-favorites" : "nav-sorting-tools"
         );
