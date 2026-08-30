@@ -119,6 +119,17 @@ button.selected {
   display: flex;
   flex-wrap: wrap;
   float: right;
+  position: relative;
+  z-index: 10;
+}
+
+html.sandspiel-menu-open #ui {
+  z-index: 1000;
+}
+
+html.sandspiel-menu-open #sand-canvas,
+html.sandspiel-menu-open #fluid-canvas {
+  z-index: 1 !important;
 }
 
 #fps {
@@ -156,7 +167,7 @@ button.selected {
   right: max(8px, env(safe-area-inset-right, 0px));
   top: max(8px, env(safe-area-inset-top, 0px));
   bottom: max(8px, env(safe-area-inset-bottom, 0px));
-  z-index: 5;
+  z-index: 9001;
   background-color: #f3f3f4;
   border: 1px solid gray;
   box-shadow: 0px 0px 3px 3px rgba(0, 0, 0, 0.2);
@@ -181,7 +192,7 @@ button.selected {
 .menu-scrim {
   position: fixed;
   inset: 0;
-  z-index: 4;
+  z-index: 9000;
   background-color: #55555555;
 }
 .x {
@@ -526,6 +537,21 @@ img {
   margin-top: 1rem;
   color: #555;
   font-size: 0.82rem;
+}
+
+.Info-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.45rem;
+}
+
+.Info-tag {
+  display: inline-block;
+  padding: 0.12rem 0.45rem;
+  background: gainsboro;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  line-height: 1.35;
 }
 .menu .x {
   position: absolute;

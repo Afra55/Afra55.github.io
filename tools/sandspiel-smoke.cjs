@@ -23,6 +23,8 @@ assert(html.includes('id="sandspiel"') && html.includes("id=\"sandspiel-frame\""
 assert(app.includes('"sandspiel"') && app.includes("sandspiel:"), "catalog");
 assert(lazy.includes('sandspiel: "./sandspiel.js"'), "lazy");
 assert(css.includes(".sandspiel-shell") && nav.includes('data-boot-panel="sandspiel"'), "css");
+assert(styles.includes("sandspiel-menu-open") && styles.includes("Info-tags"), "iframe css");
+assert(fs.readFileSync(path.join(ROOT, "tools/sandspiel/embed-ui.js"), "utf8").includes("sandspiel-menu-open"), "embed ui");
 assert(js.includes("sandspiel:pause") && js.includes("./sandspiel/index.html"), "loader");
 assert(oss.includes("MaxBittker/sandspiel"), "oss");
 assert(/sandspiel/.test(sw), "sw bypass");
@@ -39,7 +41,7 @@ const chunk = files
   .filter((f) => f.endsWith(".js") && !f.endsWith(".LICENSE.txt"))
   .map((f) => fs.readFileSync(path.join(ROOT, "tools/sandspiel", f), "utf8"))
   .join("\n");
-assert(chunk.includes("沙子") && chunk.includes("暂停") && chunk.includes("元素说明"), "zh ui");
+assert(chunk.includes("沙子") && chunk.includes("暂停") && chunk.includes("Info-tags"), "zh ui");
 assert(chunk.includes("__sandspielMobile") && chunk.includes("?180:300"), "mobile grid");
 assert(chunk.includes("sandspiel:pause") && !chunk.includes("pagead2"), "pause msg");
 console.log("sandspiel-smoke ok");
