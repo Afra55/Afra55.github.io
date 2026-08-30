@@ -3,7 +3,7 @@
 
   const frame = document.getElementById("sandspiel-frame");
   const panel = document.getElementById("sandspiel");
-  const shell = document.querySelector(".sandspiel-shell");
+  const shell = document.querySelector("#sandspiel .sandspiel-shell");
   const fpsToggle = document.getElementById("sandspiel-show-fps");
   const fsBtn = document.getElementById("sandspiel-fullscreen");
   if (!frame || !panel) return;
@@ -11,6 +11,7 @@
   const SRC = "./sandspiel/index.html";
   const FPS_KEY = "sandspiel-show-fps";
   let loaded = false;
+  let shellNativeFs = false;
 
   function postMsg(payload) {
     try {
@@ -61,59 +62,115 @@
     }
   });
 
+  function isSandspielFullscreen() {
+    return !!shell && (document.fullscreenElement === shell || shell.classList.contains("is-fullscreen"));
+  }
+
+  function relayoutFrame() {
+    if (!loaded) return;
+    postMsg({ type: "sandspiel:relayout" });
+    callFrame("__sandspielRelayout");
+  }
+
   function syncFsBtn() {
-    if (!fsBtn || !shell) return;
-    const on = document.fullscreenElement === shell;
+    if (!fsBtn) return;
+    const on = isSandspielFullscreen();
     fsBtn.setAttribute("aria-pressed", on ? "true" : "false");
     fsBtn.textContent = on ? "退出全屏" : "全屏";
+  }
+
+  function requestShellFullscreen() {
+    if (!shell) return Promise.reject(new Error("no shell"));
+    const req = shell.requestFullscreen || shell.webkitRequestFullscreen;
+    if (!req) return Promise.reject(new Error("no requestFullscreen"));
+    return Promise.resolve(req.call(shell));
+  }
+
+  function exitShellFullscreen() {
+    const exit = document.exitFullscreen || document.webkitExitFullscreen;
+    if (document.fullscreenElement && exit) {
+      return Promise.resolve(exit.call(document)).catch(() => {});
+    }
+    return Promise.resolve();
+  }
+
+  function applyPseudoFullscreen(on) {
+    if (!shell) return;
     shell.classList.toggle("is-fullscreen", on);
+    document.body.classList.toggle("sandspiel-fs-active", on);
+  }
+
+  async function enterFullscreen() {
+    if (!shell || isSandspielFullscreen()) return;
+    let nativeOk = false;
+    try {
+      await requestShellFullscreen();
+      nativeOk = document.fullscreenElement === shell;
+      if (nativeOk) shellNativeFs = true;
+    } catch (_) {}
+    if (!nativeOk) applyPseudoFullscreen(true);
+    syncFsBtn();
+    window.setTimeout(relayoutFrame, 60);
+  }
+
+  async function exitFullscreen() {
+    if (!shell || !isSandspielFullscreen()) return;
+    const wasNative = document.fullscreenElement === shell;
+    applyPseudoFullscreen(false);
+    if (wasNative) {
+      shellNativeFs = false;
+      await exitShellFullscreen();
+    }
+    syncFsBtn();
+    window.setTimeout(relayoutFrame, 60);
   }
 
   async function toggleFullscreen() {
-    if (!shell) return;
-    try {
-      if (document.fullscreenElement === shell) {
-        await document.exitFullscreen();
-      } else if (shell.requestFullscreen) {
-        await shell.requestFullscreen();
-      } else {
-        shell.classList.toggle("is-fullscreen");
-        syncFsBtn();
-      }
-    } catch (_) {
-      shell.classList.toggle("is-fullscreen");
-      syncFsBtn();
-    }
+    if (isSandspielFullscreen()) await exitFullscreen();
+    else await enterFullscreen();
   }
 
-  fsBtn?.addEventListener("click", () => {
+  fsBtn?.addEventListener("click", (e) => {
+    e.preventDefault();
     toggleFullscreen();
   });
-  document.addEventListener("fullscreenchange", () => {
-    syncFsBtn();
-    if (loaded) {
-      postMsg({ type: "sandspiel:relayout" });
-      callFrame("__sandspielRelayout");
+
+  function onFullscreenChange() {
+    if (!shell) return;
+    const nativeOn = document.fullscreenElement === shell;
+    if (nativeOn) {
+      shellNativeFs = true;
+      applyPseudoFullscreen(false);
+    } else if (shellNativeFs) {
+      shellNativeFs = false;
+      applyPseudoFullscreen(false);
     }
+    syncFsBtn();
+    relayoutFrame();
+  }
+
+  document.addEventListener("fullscreenchange", onFullscreenChange);
+  document.addEventListener("webkitfullscreenchange", onFullscreenChange);
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || !isSandspielFullscreen()) return;
+    if (document.fullscreenElement === shell) return;
+    exitFullscreen();
   });
 
   function onFrameReady() {
     applyFpsPref(readShowFps());
-    postMsg({ type: "sandspiel:relayout" });
-    callFrame("__sandspielRelayout");
+    relayoutFrame();
     window.setTimeout(() => {
       applyFpsPref(readShowFps());
-      postMsg({ type: "sandspiel:relayout" });
-      callFrame("__sandspielRelayout");
+      relayoutFrame();
     }, 500);
   }
 
   function ensureLoaded() {
     if (!panel.classList.contains("is-workspace-active")) {
       if (loaded) postMsg("sandspiel:pause");
-      if (document.fullscreenElement === shell) {
-        document.exitFullscreen?.().catch(() => {});
-      }
+      if (isSandspielFullscreen()) exitFullscreen();
       return;
     }
     if (!loaded) {

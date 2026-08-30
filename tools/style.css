@@ -6192,6 +6192,17 @@ button.adb-device-body.linkish {
   border: 0;
   border-radius: 0;
   background: #f3f3f4;
+  box-sizing: border-box;
+}
+
+body.sandspiel-fs-active {
+  overflow: hidden;
+}
+
+body.sandspiel-fs-active .sandspiel-shell.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
 }
 
 .sandspiel-shell:fullscreen .sandspiel-frame,

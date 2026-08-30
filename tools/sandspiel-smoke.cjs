@@ -23,7 +23,7 @@ assert(html.includes('id="sandspiel"') && html.includes("id=\"sandspiel-frame\""
 assert(app.includes('"sandspiel"') && app.includes("sandspiel:"), "catalog");
 assert(lazy.includes('sandspiel: "./sandspiel.js"'), "lazy");
 assert(css.includes(".sandspiel-shell") && nav.includes('data-boot-panel="sandspiel"'), "css");
-assert(js.includes("sandspiel:pause") && js.includes("./sandspiel/index.html"), "loader");
+assert(js.includes("sandspiel:pause") && js.includes("./sandspiel/index.html") && js.includes("isSandspielFullscreen"), "loader");
 assert(oss.includes("MaxBittker/sandspiel"), "oss");
 assert(/sandspiel/.test(sw), "sw bypass");
 assert(iframe.includes("sand-canvas") && iframe.includes("fluid-canvas"), "iframe html");
