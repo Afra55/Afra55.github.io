@@ -7,7 +7,15 @@
   const HTML_POOL_SIZE = 4;
   const DEFAULT_FLOAT_PHRASES = ["功德 +1", "善哉", "福生无量", "随喜", "心安", "清净", "平安喜乐"];
   const VALID_THEMES = new Set(["zen", "ocean", "gold", "forest"]);
-  const SOUND_FILES = ["sound_1.mp3", "sound_2.mp3"];
+  const SOUND_PRESETS = [
+    { file: "sound_1.mp3", label: "清亮" },
+    { file: "sound_2.mp3", label: "浑厚" },
+    { file: "sound_3.mp3", label: "高音" },
+    { file: "sound_4.mp3", label: "低沉" },
+    { file: "sound_5.mp3", label: "回响" },
+    { file: "sound_6.mp3", label: "短促" },
+  ];
+  const SOUND_FILES = SOUND_PRESETS.map((p) => p.file);
   /** 造型与音效来自 jwenjian/wooden-fish（fork Ares-Chang/wooden-fish，MIT） */
   const FISH_ART_VER = "jwenjian";
 
@@ -35,9 +43,9 @@
   let audioCtx = null;
   let webAudioReady = false;
   /** @type {(AudioBuffer|null)[]} */
-  let knockBuffers = [null, null];
+  let knockBuffers = [];
   let knockDecodePromise = null;
-  let knockPools = [[], []];
+  let knockPools = [];
   let htmlKnockCursor = 0;
   let htmlAudioPrimed = false;
   let knockAudioReady = false;
@@ -548,7 +556,7 @@
   function playKnockFx(ev) {
     const fishEl = fullscreen ? fishFsBtn : fishBtn;
     const pt = pointerFromEvent(ev, fishEl);
-    const fxEl = fullscreen ? fsFxEl || fsRoot : stageFxEl || stageRoot;
+    const fxEl = fullscreen ? fsRoot : stageFxEl || stageRoot;
     if (fxEl && pt) {
       const rect = fxEl.getBoundingClientRect();
       spawnRippleAt(fxEl, pt.x - rect.left, pt.y - rect.top);
@@ -698,6 +706,52 @@
     return raw.split(/[/?]/)[0] === "muyu";
   }
 
+  function populateSoundSelect() {
+    if (!soundVariantSelect) return;
+    soundVariantSelect.replaceChildren();
+    SOUND_PRESETS.forEach((p, i) => {
+      const opt = document.createElement("option");
+      opt.value = String(i);
+      opt.textContent = p.label;
+      soundVariantSelect.appendChild(opt);
+    });
+    soundVariant = Math.min(Math.max(0, soundVariant), SOUND_PRESETS.length - 1);
+    soundVariantSelect.value = String(soundVariant);
+  }
+
+  function isFsUiTarget(el) {
+    return !!el?.closest?.(".muyu-fs-close, .muyu-fs-sound");
+  }
+
+  function bindFsKnockArea() {
+    const fs = fsRoot || document.getElementById("muyu-fs");
+    if (!fs || fs.dataset.knockAreaBound === "1") return;
+    fs.dataset.knockAreaBound = "1";
+    let touchHandled = false;
+    fs.addEventListener(
+      "touchend",
+      (e) => {
+        if (!fullscreen) return;
+        if (isFsUiTarget(e.target)) return;
+        e.preventDefault();
+        touchHandled = true;
+        window.setTimeout(() => {
+          touchHandled = false;
+        }, 450);
+        void unlockMuyuAudio();
+        knock(fishFsBtn, e);
+      },
+      { passive: false }
+    );
+    fs.addEventListener("click", (e) => {
+      if (!fullscreen) return;
+      if (isFsUiTarget(e.target)) return;
+      if (touchHandled) return;
+      void unlockMuyuAudio();
+      knock(fishFsBtn, e);
+    });
+  }
+
   function bindKnock(btn) {
     if (!btn || btn.dataset.bound === "1") return;
     btn.dataset.bound = "1";
@@ -725,7 +779,7 @@
 
   function bindControls() {
     bindKnock(fishBtn);
-    bindKnock(fishFsBtn);
+    bindFsKnockArea();
 
     fsBtn?.addEventListener("click", enterFullscreen);
     fsCloseBtn?.addEventListener("click", (e) => {
@@ -766,12 +820,12 @@
     });
 
     document.addEventListener("keydown", (e) => {
-      if (e.key === " " && isMuyuRoute() && !fullscreen) {
+      if (e.key === " " && isMuyuRoute()) {
         const tag = String(e.target?.tagName || "").toLowerCase();
         if (tag === "input" || tag === "textarea" || tag === "select" || e.target?.isContentEditable) return;
         e.preventDefault();
         void unlockMuyuAudio();
-        knock(fishBtn, e);
+        knock(fullscreen ? fishFsBtn : fishBtn, e);
       }
       if (!fullscreen) return;
       if (e.key === "Escape") {
@@ -792,6 +846,7 @@
         exitFullscreen();
       });
     }
+    bindFsKnockArea();
   }
 
   function mountFishArtEarly() {
@@ -837,7 +892,7 @@
     loadState();
     applyTheme(themeId);
     if (phrasesInput) phrasesInput.value = customPhrasesRaw;
-    if (soundVariantSelect) soundVariantSelect.value = String(soundVariant);
+    populateSoundSelect();
     syncSoundToggles();
     renderCount();
     initKnockAudio();

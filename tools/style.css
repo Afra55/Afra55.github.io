@@ -10060,6 +10060,15 @@ body.ruler-fs-active {
   color: var(--muted);
 }
 
+.muyu-fs:not([hidden]) {
+  cursor: pointer;
+}
+
+.muyu-fs-close,
+.muyu-fs-sound {
+  cursor: default;
+}
+
 .muyu-fs[hidden] {
   display: none !important;
 }
