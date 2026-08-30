@@ -1543,6 +1543,13 @@ async function main() {
       api: typeof window.DevToolsNavOrganize?.open === "function",
       groupApi: typeof window.DevToolsNav?.toolGroupId === "function",
     };
+    try {
+      window.DevToolsNavOrganize?.open?.();
+      out.navOrganize.hasDragHandle = Boolean(document.querySelector(".nav-organize-drag-handle"));
+      document.getElementById("nav-organize-cancel")?.click();
+    } catch (_) {
+      out.navOrganize.hasDragHandle = false;
+    }
 
     out.lastTool = {
       api: typeof window.DevToolsNav?.lastToolHash === "function",
@@ -2142,6 +2149,7 @@ async function main() {
     !result.navOrganize?.hasDialog ||
     !result.navOrganize?.hasSearch ||
     !result.navOrganize?.hasCancel ||
+    !result.navOrganize?.hasDragHandle ||
     !result.navOrganize?.api ||
     !result.navOrganize?.groupApi
   ) {

@@ -7685,6 +7685,58 @@ body.sandspiel-fs-active .sandspiel-shell.is-fullscreen {
   background: color-mix(in srgb, var(--ink) 3%, transparent);
 }
 
+.nav-organize-drag-handle {
+  flex: 0 0 auto;
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.65rem;
+  height: 1.65rem;
+  margin: 0;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.nav-organize-drag-handle:hover,
+.nav-organize-drag-handle:focus-visible {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--line) 80%, var(--accent));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  outline: none;
+}
+
+.nav-organize-drag-handle:active,
+.nav-organize-row.is-dragging .nav-organize-drag-handle {
+  cursor: grabbing;
+}
+
+.nav-organize-row.is-dragging {
+  opacity: 0.52;
+}
+
+.nav-organize-row.drag-over {
+  outline: 1px dashed color-mix(in srgb, var(--accent) 65%, transparent);
+  outline-offset: 1px;
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--line));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
+}
+
+.nav-organize-sort-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
 .nav-organize-row .nav-organize-row-label {
   flex: none;
 }
