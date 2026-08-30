@@ -14,11 +14,11 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.30-060000"></script>
-  <link rel="stylesheet" href="./style.css?v=2026.08.30-060000" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-060000" />
-  <script src="./lib/theme-presets.js?v=2026.08.30-060000"></script>
-  <script src="./lib/boot-loader.js?v=2026.08.30-060000"></script>
+  <script src="./lib/tools-build.js?v=2026.08.30-061500"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.08.30-061500" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.30-061500" />
+  <script src="./lib/theme-presets.js?v=2026.08.30-061500"></script>
+  <script src="./lib/boot-loader.js?v=2026.08.30-061500"></script>
   <script>
     /* 尽早决定首屏工具面板，避免等 defer 大包执行完才显示内容 */
     (function () {
@@ -141,7 +141,7 @@
           <span class="brand-mark" aria-hidden="true"></span>
           <span class="brand-name">DevTools</span>
         </a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本（北京时间）">v2026.08.30-060000</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本（北京时间）">v2026.08.30-061500</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn" id="site-force-refresh" title="注销 Service Worker、清空浏览器缓存并重新加载，以获取最新脚本与样式">强制刷新</button>
@@ -3398,24 +3398,24 @@ hello@world.org</textarea>
 
         <div id="ls-invite-area" hidden style="margin-top:0.85rem">
           <h2 class="subhead">邀请加入</h2>
-          <p class="hint tight">二维码优先使用短码（应用内扫码/粘贴均可）；若无法生成则复制下方完整链接。成员扫码后请再扫其<strong>应答码</strong>完成连接。</p>
+          <p class="hint tight">邀请二维码仅含房间号，体积极小、易于扫描。成员加入后会显示<strong>连接码</strong>，请再扫一次完成配对。</p>
           <div id="ls-invite-qr" class="qr-box-wrap" style="margin:0.5rem 0"></div>
           <label for="ls-invite-text">邀请链接（可复制分享）</label>
-          <textarea id="ls-invite-text" class="mono area" rows="3" readonly spellcheck="false"></textarea>
+          <textarea id="ls-invite-text" class="mono area" rows="2" readonly spellcheck="false"></textarea>
           <div class="btn-row tool-actions" style="margin-top:0.35rem">
             <button type="button" class="secondary-btn" id="ls-copy-invite">复制邀请</button>
-            <button type="button" class="secondary-btn" id="ls-scan-answer">扫描成员应答</button>
+            <button type="button" class="secondary-btn" id="ls-scan-answer">扫描成员连接码</button>
           </div>
         </div>
 
         <div id="ls-guest-answer-area" hidden style="margin-top:0.85rem">
-          <h2 class="subhead">连接应答</h2>
-          <p class="hint tight">已加入房间，请将下方应答码给房主扫描（或复制链接），完成最后一步连接。</p>
+          <h2 class="subhead">连接码</h2>
+          <p class="hint tight">已读取邀请，请将下方连接码给房主扫描（或复制链接），完成最后一步配对。</p>
           <div id="ls-guest-answer-qr" class="qr-box-wrap" style="margin:0.5rem 0"></div>
-          <label for="ls-guest-answer-text">应答链接</label>
+          <label for="ls-guest-answer-text">连接码链接</label>
           <textarea id="ls-guest-answer-text" class="mono area" rows="2" readonly spellcheck="false"></textarea>
           <div class="btn-row tool-actions" style="margin-top:0.35rem">
-            <button type="button" class="secondary-btn" id="ls-copy-guest-answer">复制应答</button>
+            <button type="button" class="secondary-btn" id="ls-copy-guest-answer">复制连接码</button>
           </div>
         </div>
 
@@ -4442,14 +4442,14 @@ adb devices</pre>
     <button type="button" class="ruler-fs-close ghost-btn" id="ruler-fs-close" title="退出全屏 (Esc)">退出全屏</button>
     <p class="ruler-fs-hud mono hint" id="ruler-coord-fs" aria-live="polite"></p>
   </div>
-  <script src="./lib/bridge-token.js?v=2026.08.30-060000"></script>
-  <script src="./lib/lazy-scripts.js?v=2026.08.30-060000"></script>
-  <script src="./theme.js?v=2026.08.30-060000"></script>
-  <script src="./app.js?v=2026.08.30-060000"></script>
-  <script src="./wheel.js?v=2026.08.30-060000"></script>
-  <script src="./ruler.js?v=2026.08.30-060000"></script>
-  <script src="./muyu.js?v=2026.08.30-060000"></script>
-  <script src="./minigames.js?v=2026.08.30-060000"></script>
-  <script src="./ambient.js?v=2026.08.30-060000"></script>
+  <script src="./lib/bridge-token.js?v=2026.08.30-061500"></script>
+  <script src="./lib/lazy-scripts.js?v=2026.08.30-061500"></script>
+  <script src="./theme.js?v=2026.08.30-061500"></script>
+  <script src="./app.js?v=2026.08.30-061500"></script>
+  <script src="./wheel.js?v=2026.08.30-061500"></script>
+  <script src="./ruler.js?v=2026.08.30-061500"></script>
+  <script src="./muyu.js?v=2026.08.30-061500"></script>
+  <script src="./minigames.js?v=2026.08.30-061500"></script>
+  <script src="./ambient.js?v=2026.08.30-061500"></script>
 </body>
 </html>
