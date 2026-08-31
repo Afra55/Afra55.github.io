@@ -175,6 +175,8 @@ body.theme-reduce-glow .bg-grid {
   margin: 0 auto;
   padding: 2.4rem 1.25rem 1rem;
   animation: rise 0.7s ease both;
+  position: relative;
+  z-index: 30;
 }
 
 .header-row {
@@ -233,13 +235,14 @@ body.theme-reduce-glow .bg-grid {
 .header-more-wrap {
   position: relative;
   display: none;
+  z-index: 2;
 }
 
 .header-more-menu {
   position: absolute;
   top: calc(100% + 0.35rem);
   right: 0;
-  z-index: 50;
+  z-index: 12050;
   min-width: 9.5rem;
   padding: 0.35rem 0;
   border: 1px solid var(--line);
@@ -285,6 +288,26 @@ body.theme-reduce-glow .bg-grid {
 }
 
 @media (max-width: 900px) {
+  .header-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.55rem 0.75rem;
+    flex-wrap: nowrap;
+  }
+
+  .header-brand-block {
+    min-width: 0;
+  }
+
+  .header-actions {
+    justify-content: flex-end;
+    justify-self: end;
+    flex-wrap: nowrap;
+    margin-left: 0;
+    gap: 0.35rem;
+  }
+
   .header-action-collapse {
     display: none !important;
   }
