@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="实用小工具：时间戳、倒计时、颜色、Base64、JSON、正则、URL、UUID、Hash、文本、命名转换、坐标系互转、图片压缩裁剪水印拼接、P站风Logo、诺基亚短信、穴位图、ADB、GIF、JWT、YAML、二维码等" />
+  <meta name="description" content="实用小工具：时间戳、倒计时、日期提醒、颜色、Base64、JSON、正则、URL、UUID、Hash、文本、命名转换、坐标系互转、图片压缩裁剪水印拼接、P站风Logo、诺基亚短信、穴位图、ADB、GIF、JWT、YAML、二维码等" />
   <meta name="theme-color" content="#0b1320" />
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -14,9 +14,9 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.31-013000"></script>
-  <link rel="stylesheet" href="./style.css?v=2026.08.31-013000" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.31-013000" />
+  <script src="./lib/tools-build.js?v=2026.08.31-014000"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.08.31-014000" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.31-014000" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
   <script>
@@ -204,7 +204,10 @@
     <main class="shell">
       <div class="workspace-top" id="workspace-top">
         <div class="workspace-tool-meta">
-          <h1 class="workspace-title" id="workspace-title">时间戳</h1>
+          <div class="workspace-title-wrap">
+            <h1 class="workspace-title" id="workspace-title">时间戳</h1>
+            <span id="dr-top-badge" class="dr-top-badge" hidden aria-label="日期提醒"></span>
+          </div>
           <div class="workspace-tool-actions">
             <button type="button" class="ghost-btn site-chrome-toggle-float" id="site-chrome-toggle-float" aria-pressed="true" title="显示 DevTools 标题栏与左侧工具菜单">显示顶栏</button>
             <button type="button" class="ghost-btn workspace-switch" id="workspace-switch">切换工具</button>
@@ -342,6 +345,132 @@
         <p class="error" id="cd-error" hidden></p>
         <h2 class="subhead" style="margin-top:1.15rem">已收藏</h2>
         <div id="cd-saved" class="cd-saved"></div>
+      </div>
+    </section>
+
+<section id="dateremind" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>日期提醒</h1>
+        <p>生日、节日与重要日期：支持阳历/农历、每年重复或一次性；打开本站时全屏提醒（非系统闹钟）。</p>
+      </div>
+      <div class="panel-body dr-panel">
+        <div class="dr-settings">
+          <div class="field-row">
+            <label for="dr-default-advance">默认提前天数</label>
+            <input id="dr-default-advance" class="mono" type="number" min="0" max="365" step="1" value="7" inputmode="numeric" style="max-width:5rem" />
+          </div>
+          <label class="flag tight" for="dr-show-badge">
+            <input type="checkbox" id="dr-show-badge" checked /> 顶栏显示进行中角标
+          </label>
+        </div>
+
+        <div id="dr-list" class="dr-list" aria-live="polite"></div>
+
+        <details class="dr-archived-wrap" id="dr-archived-wrap">
+          <summary class="subhead">已归档</summary>
+          <div id="dr-archived-list" class="dr-list dr-archived-list" hidden></div>
+        </details>
+
+        <h2 class="subhead" id="dr-form-title">添加提醒</h2>
+        <form id="dr-form" class="dr-form highlight-box">
+          <div class="field-block">
+            <label for="dr-title">标题</label>
+            <input id="dr-title" type="text" required maxlength="80" placeholder="如：妈妈生日" autocomplete="off" />
+          </div>
+          <div class="field-block">
+            <label for="dr-note">备注（可选）</label>
+            <textarea id="dr-note" rows="2" maxlength="300" placeholder="礼物、地点等"></textarea>
+          </div>
+          <div class="field-row">
+            <label for="dr-category">分类</label>
+            <select id="dr-category">
+              <option value="birthday">生日</option>
+              <option value="holiday">节日</option>
+              <option value="memo">事项</option>
+              <option value="custom">其它</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label for="dr-calendar">历法</label>
+            <select id="dr-calendar">
+              <option value="solar">阳历</option>
+              <option value="lunar">农历</option>
+            </select>
+          </div>
+          <div class="field-row">
+            <label for="dr-repeat">重复</label>
+            <select id="dr-repeat">
+              <option value="yearly">每年</option>
+              <option value="once">仅一次</option>
+            </select>
+          </div>
+          <div id="dr-solar-fields" class="dr-date-fields">
+            <div class="field-row">
+              <label for="dr-solar-month">月</label>
+              <select id="dr-solar-month">
+                <option value="1">1 月</option><option value="2">2 月</option><option value="3">3 月</option>
+                <option value="4">4 月</option><option value="5">5 月</option><option value="6">6 月</option>
+                <option value="7">7 月</option><option value="8">8 月</option><option value="9">9 月</option>
+                <option value="10">10 月</option><option value="11">11 月</option><option value="12">12 月</option>
+              </select>
+              <label for="dr-solar-day">日</label>
+              <select id="dr-solar-day">
+                <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+                <option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option>
+                <option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option>
+                <option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option>
+                <option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option>
+                <option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option>
+                <option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option>
+                <option value="29">29</option><option value="30">30</option><option value="31">31</option>
+              </select>
+            </div>
+          </div>
+          <div id="dr-lunar-fields" class="dr-date-fields" hidden>
+            <div class="field-row">
+              <label for="dr-lunar-month">农历月</label>
+              <select id="dr-lunar-month"></select>
+              <label for="dr-lunar-day">农历日</label>
+              <select id="dr-lunar-day"></select>
+            </div>
+          </div>
+          <div id="dr-year-row" class="field-row" hidden>
+            <label for="dr-year">年份</label>
+            <input id="dr-year" class="mono" type="number" min="1901" max="2100" step="1" inputmode="numeric" style="max-width:6rem" />
+          </div>
+          <div id="dr-leap-row" class="field-row" hidden>
+            <label class="flag" for="dr-leap">
+              <input type="checkbox" id="dr-leap" /> 闰月
+            </label>
+          </div>
+          <div class="field-row">
+            <label for="dr-advance">提前天数</label>
+            <input id="dr-advance" class="mono" type="number" min="0" max="365" step="1" placeholder="留空用默认" inputmode="numeric" style="max-width:5rem" />
+          </div>
+          <div class="field-row">
+            <label for="dr-time">时刻（可选）</label>
+            <input id="dr-time" class="mono" type="text" inputmode="numeric" placeholder="09:00" maxlength="5" autocomplete="off" style="max-width:5.5rem" />
+          </div>
+          <label class="flag" for="dr-enabled">
+            <input type="checkbox" id="dr-enabled" checked /> 启用
+          </label>
+          <div class="btn-row">
+            <button type="submit" class="primary-btn">保存</button>
+            <button type="button" class="ghost-btn" id="dr-reset-form">重置</button>
+          </div>
+          <p class="error" id="dr-error" hidden></p>
+        </form>
+
+        <h2 class="subhead">备份与导出</h2>
+        <div class="btn-row dr-io">
+          <button type="button" class="secondary-btn" id="dr-export-json">导出 JSON</button>
+          <button type="button" class="secondary-btn" id="dr-export-ics">导出 ICS</button>
+          <label class="secondary-btn file-btn">
+            导入 JSON
+            <input type="file" id="dr-import-file" accept="application/json,.json" hidden />
+          </label>
+        </div>
+        <p class="hint tight">数据保存在本机浏览器；ICS 可导入系统日历作参考。</p>
       </div>
     </section>
 
@@ -5368,6 +5497,17 @@ adb devices</pre>
       <button type="button" class="primary-btn" id="cd-fs-done" hidden>完成</button>
     </div>
   </div>
+  <div id="dateremind-fs" class="dateremind-fs" hidden>
+    <button type="button" class="dateremind-fs-close ghost-btn" id="dr-fs-close" title="关闭 (Esc)">关闭</button>
+    <p class="dateremind-fs-kicker hint">日期提醒</p>
+    <h2 class="dateremind-fs-heading">临近的重要日期</h2>
+    <div id="dr-fs-list" class="dr-fs-list"></div>
+    <div class="btn-row dateremind-fs-actions">
+      <button type="button" class="ghost-btn" id="dr-fs-dismiss-today">今日不再提醒</button>
+      <button type="button" class="secondary-btn" id="dr-fs-goto">管理提醒</button>
+      <button type="button" class="primary-btn" id="dr-fs-ok">知道了</button>
+    </div>
+  </div>
   <div id="muyu-fs" class="muyu-fs" data-muyu-theme="zen" hidden>
     <canvas id="muyu-fs-bg" class="muyu-fs-bg" aria-hidden="true"></canvas>
     <div class="muyu-fs-moon" aria-hidden="true"></div>
@@ -5396,10 +5536,12 @@ adb devices</pre>
     <p class="ruler-fs-hud mono hint" id="ruler-coord-fs" aria-live="polite"></p>
   </div>
   <script src="./lib/bridge-token.js?v=2026.08.30-062500"></script>
-  <script src="./lib/lazy-scripts.js?v=2026.08.31-013000"></script>
+  <script src="./lib/lazy-scripts.js?v=2026.08.31-014000"></script>
+  <script src="./vendor/solarlunar.min.js?v=2026.08.31-014000"></script>
+  <script src="./dateremind.js?v=2026.08.31-014000"></script>
   <script src="./theme.js?v=2026.08.30-062500"></script>
-  <script src="./app.js?v=2026.08.31-013000"></script>
-  <script src="./nav-organize.js?v=2026.08.31-013000"></script>
+  <script src="./app.js?v=2026.08.31-014000"></script>
+  <script src="./nav-organize.js?v=2026.08.31-014000"></script>
   <script src="./wheel.js?v=2026.08.30-062500"></script>
   <script src="./ruler.js?v=2026.08.30-062500"></script>
   <script src="./muyu.js?v=2026.08.30-084100"></script>

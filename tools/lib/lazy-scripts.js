@@ -27,6 +27,10 @@
     },
     gif: { src: "./vendor/gif.js", probe: () => typeof globalThis.GIF === "function" },
     omggif: { src: "./vendor/omggif.js", probe: () => typeof globalThis.GifReader === "function" },
+    solarlunar: {
+      src: "./vendor/solarlunar.min.js",
+      probe: () => typeof globalThis.solarlunar === "object",
+    },
   };
 
   const TOOL_FILES = {
@@ -43,6 +47,7 @@
     xorenc: "./xorenc.js",
     morse: "./morse.js",
     countdown: "./countdown.js",
+    dateremind: "./dateremind.js",
     memo: "./memo.js",
     textimg: "./textimg.js",
     imgtext: "./imgtext.js",
@@ -63,6 +68,7 @@
     vsplit: ["gif", "omggif"],
     vbb: ["gif", "omggif"],
     gifbb: ["gif", "omggif"],
+    dateremind: ["solarlunar"],
   };
 
   /** 独立脚本即可运行，不必拉 extra.js（~580KB） */
@@ -79,6 +85,7 @@
     "xorenc",
     "morse",
     "countdown",
+    "dateremind",
     "lanshare",
     "ffbridge",
     "ytdlp",
@@ -88,7 +95,7 @@
   ]);
 
   /** 不依赖 DevToolsPure */
-  const NO_PURE = new Set(["acupoint", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp", "setup", "about", "xorenc", "morse", "countdown", "phlogo", "nokiasms", "sandspiel"]);
+  const NO_PURE = new Set(["acupoint", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp", "setup", "about", "xorenc", "morse", "countdown", "dateremind", "phlogo", "nokiasms", "sandspiel"]);
 
   const scriptPromises = new Map();
   let extraBundlePromise = null;

@@ -798,7 +798,7 @@
     gifbb: { tool: "gifbb" },
   };
   const TOOL_GROUPS = [
-    { id: "time", label: "时间", tools: ["timestamp", "timediff", "cron", "countdown"] },
+    { id: "time", label: "时间", tools: ["timestamp", "timediff", "cron", "countdown", "dateremind"] },
     { id: "color", label: "颜色", tools: ["ahex", "color", "eyedropper"] },
     { id: "encode", label: "编码与生成", tools: ["base64", "url", "hash", "xorenc", "morse", "password", "uuid"] },
     { id: "data", label: "数据格式", tools: ["json", "yaml", "query"] },
@@ -831,6 +831,7 @@
     timediff: "计算两个时间点的差值，支持时间戳或日期字符串。",
     cron: "解析 Cron 表达式并预览接下来的触发时间。",
     countdown: "多步骤倒计时清单：内容即时保存，可收藏整份列表；到点全屏提醒并可响铃震动。",
+    dateremind: "生日、节日与重要日期提醒：阳历/农历、每年或一次；打开本站时全屏提醒，支持 JSON/ICS 导入导出。",
     ahex: "Android AARRGGBB 颜色与通道滑块互转。",
     color: "HEX / RGB / HSL 颜色格式互转与预览。",
     eyedropper: "屏幕取色（需浏览器 EyeDropper 支持）。",
@@ -891,6 +892,7 @@
     timediff: { name: "时间差", aliases: ["时差", "diff time"] },
     cron: { name: "Cron", aliases: ["定时", "crontab"] },
     countdown: { name: "倒计时", aliases: ["timer", "countdown", "计时", "闹钟", "清单倒计时"] },
+    dateremind: { name: "日期提醒", aliases: ["remind", "calendar", "生日", "农历", "节日", "提醒", "闹铃"] },
     ahex: { name: "AHEX", aliases: ["颜色", "alpha"] },
     color: { name: "颜色互转", aliases: ["rgb", "hex", "hsl"] },
     eyedropper: { name: "屏幕取色", aliases: ["取色", "eyedropper"] },
@@ -3133,6 +3135,8 @@
     forceDrawerClosed();
     if (shouldRestoreLastTool()) restoreLastToolOnStartup();
     applyRoute({ skipRecent: true });
+    window.DevToolsDateRemind?.reload?.();
+    window.DevToolsDateRemind?.checkOnVisit?.();
   });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
@@ -3142,6 +3146,8 @@
     forceDrawerClosed();
     if (shouldRestoreLastTool()) restoreLastToolOnStartup();
     applyRoute({ skipRecent: true });
+    window.DevToolsDateRemind?.reload?.();
+    window.DevToolsDateRemind?.checkOnVisit?.();
   });
   window.addEventListener("pagehide", () => {
     persistActiveTool();

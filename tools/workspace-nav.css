@@ -848,6 +848,7 @@ html[data-boot-panel="timestamp"] #timestamp,
 html[data-boot-panel="timediff"] #timediff,
 html[data-boot-panel="cron"] #cron,
 html[data-boot-panel="countdown"] #countdown,
+html[data-boot-panel="dateremind"] #dateremind,
 html[data-boot-panel="ahex"] #ahex,
 html[data-boot-panel="color"] #color,
 html[data-boot-panel="eyedropper"] #eyedropper,
@@ -964,6 +965,34 @@ html[data-boot-panel] .tool-panel.is-workspace-active {
 .site-chrome-toggle,
 .site-chrome-toggle-float {
   display: none;
+}
+
+.workspace-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-width: 0;
+}
+
+.dr-top-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  background: #e91e8c;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--bg-0) 80%, transparent);
+  flex-shrink: 0;
+}
+
+.dr-top-badge[hidden] {
+  display: none !important;
 }
 
 .workspace-title {
