@@ -408,6 +408,10 @@
   }
 
   // ---- 管理面板 UI ----
+  let renderListsRef = null;
+
+  loadState();
+
   const panel = $("#dateremind");
   if (panel) {
     const listEl = $("#dr-list");
@@ -595,6 +599,8 @@
       updateBadge();
     }
 
+    renderListsRef = renderLists;
+
     function persistSettingsFromUi() {
       const n = Number(defaultAdvance?.value);
       settings.defaultAdvanceDays = Number.isFinite(n) ? Math.min(365, Math.max(0, Math.floor(n))) : 7;
@@ -754,8 +760,6 @@
     if (e.key === "Escape" && fs && !fs.hidden) closeFullscreen();
   });
 
-  loadState();
-
   globalThis.DevToolsDateRemind = {
     checkOnVisit,
     updateBadge,
@@ -764,9 +768,16 @@
     dismissToday,
     reload: () => {
       loadState();
+      renderListsRef?.();
       updateBadge();
     },
   };
+
+  document.addEventListener("devtools:route", () => {
+    if (location.hash.replace(/^#/, "").split(/[/?]/)[0] === "dateremind") {
+      renderListsRef?.();
+    }
+  });
 
   queueMicrotask(() => {
     updateBadge();
