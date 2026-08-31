@@ -418,7 +418,6 @@
     const archivedEl = $("#dr-archived-list");
     const form = $("#dr-form");
     const errorEl = $("#dr-error");
-    const defaultAdvance = $("#dr-default-advance");
     const showBadgeEl = $("#dr-show-badge");
     const importInput = $("#dr-import-file");
 
@@ -602,8 +601,6 @@
     renderListsRef = renderLists;
 
     function persistSettingsFromUi() {
-      const n = Number(defaultAdvance?.value);
-      settings.defaultAdvanceDays = Number.isFinite(n) ? Math.min(365, Math.max(0, Math.floor(n))) : 7;
       settings.showBadge = Boolean(showBadgeEl?.checked);
       saveState();
       updateBadge();
@@ -637,7 +634,6 @@
       $("#" + id)?.addEventListener("change", syncFormVisibility);
     });
 
-    defaultAdvance?.addEventListener("change", persistSettingsFromUi);
     showBadgeEl?.addEventListener("change", persistSettingsFromUi);
 
     listEl?.addEventListener("click", (e) => {
@@ -719,7 +715,6 @@
           if (data.settings) settings = { ...settings, ...data.settings };
           if (Array.isArray(data.items)) items = data.items;
           saveState();
-          if (defaultAdvance) defaultAdvance.value = String(settings.defaultAdvanceDays);
           if (showBadgeEl) showBadgeEl.checked = settings.showBadge !== false;
           renderLists();
           setError("");
@@ -732,7 +727,6 @@
     });
 
     fillLunarSelects();
-    if (defaultAdvance) defaultAdvance.value = String(settings.defaultAdvanceDays);
     if (showBadgeEl) showBadgeEl.checked = settings.showBadge !== false;
     fillForm(emptyItem());
     renderLists();

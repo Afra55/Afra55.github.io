@@ -14,9 +14,9 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.31-019000"></script>
-  <link rel="stylesheet" href="./style.css?v=2026.08.31-019000" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.31-019000" />
+  <script src="./lib/tools-build.js?v=2026.08.31-020000"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.08.31-020000" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.31-020000" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
   <script>
@@ -365,11 +365,6 @@
       </div>
       <div class="panel-body dr-panel">
         <div class="dr-settings">
-          <div class="dr-field">
-            <label for="dr-default-advance">提前天数</label>
-            <input id="dr-default-advance" class="mono" type="number" min="0" max="365" step="1" value="7" inputmode="numeric" />
-          </div>
-          <p class="hint tight">新建提醒未单独填写时，按此天数提前提醒（通常为 7 天）。</p>
           <label class="flag tight" for="dr-show-badge">
             <input type="checkbox" id="dr-show-badge" checked /> 顶栏显示进行中角标
           </label>
@@ -465,7 +460,7 @@
           <div class="dr-field">
             <label for="dr-advance">本条提前天数</label>
             <input id="dr-advance" class="mono" type="number" min="0" max="365" step="1" placeholder="如 7" inputmode="numeric" />
-            <p class="hint tight dr-field-hint">留空则按上方提前天数</p>
+            <p class="hint tight dr-field-hint">留空则提前 7 天提醒</p>
           </div>
           <div class="dr-field">
             <label for="dr-time">时刻（可选）</label>
@@ -5558,12 +5553,12 @@ adb devices</pre>
     <p class="ruler-fs-hud mono hint" id="ruler-coord-fs" aria-live="polite"></p>
   </div>
   <script src="./lib/bridge-token.js?v=2026.08.30-062500"></script>
-  <script src="./lib/lazy-scripts.js?v=2026.08.31-019000"></script>
-  <script src="./vendor/solarlunar.min.js?v=2026.08.31-019000"></script>
-  <script src="./dateremind.js?v=2026.08.31-019000"></script>
+  <script src="./lib/lazy-scripts.js?v=2026.08.31-020000"></script>
+  <script src="./vendor/solarlunar.min.js?v=2026.08.31-020000"></script>
+  <script src="./dateremind.js?v=2026.08.31-020000"></script>
   <script src="./theme.js?v=2026.08.30-062500"></script>
-  <script src="./app.js?v=2026.08.31-019000"></script>
-  <script src="./nav-organize.js?v=2026.08.31-019000"></script>
+  <script src="./app.js?v=2026.08.31-020000"></script>
+  <script src="./nav-organize.js?v=2026.08.31-020000"></script>
   <script src="./wheel.js?v=2026.08.30-062500"></script>
   <script src="./ruler.js?v=2026.08.30-062500"></script>
   <script src="./muyu.js?v=2026.08.30-084100"></script>
