@@ -14,9 +14,9 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.31-020000"></script>
-  <link rel="stylesheet" href="./style.css?v=2026.08.31-020000" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.31-020000" />
+  <script src="./lib/tools-build.js?v=2026.08.31-021000"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.08.31-021000" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.31-021000" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
   <script>
@@ -2886,6 +2886,10 @@ hello@world.org</textarea>
           </div>
           <p class="hint tight">拖入视频即可播放 · 拖进度条实时预览 · 滚轮缩放 · 按住拖拽画面 · 底边可拉高预览区</p>
         </div>
+        <div class="preview-info-panel" id="vplay-info" hidden>
+          <h2 class="subhead preview-info-title">视频信息</h2>
+          <dl class="preview-info-grid" id="vplay-info-grid"></dl>
+        </div>
         <p class="error" id="vplay-error" hidden></p>
       </div>
     </section>
@@ -4519,6 +4523,10 @@ yt-dlp --version</pre>
           </div>
           <div class="imgprev-thumbs" id="imgprev-thumbs" hidden aria-label="缩略图"></div>
         </div>
+        <div class="preview-info-panel" id="imgprev-info" hidden>
+          <h2 class="subhead preview-info-title">图片信息</h2>
+          <dl class="preview-info-grid" id="imgprev-info-grid"></dl>
+        </div>
         <p class="error" id="imgprev-error" hidden></p>
       </div>
     </section>
@@ -5553,12 +5561,12 @@ adb devices</pre>
     <p class="ruler-fs-hud mono hint" id="ruler-coord-fs" aria-live="polite"></p>
   </div>
   <script src="./lib/bridge-token.js?v=2026.08.30-062500"></script>
-  <script src="./lib/lazy-scripts.js?v=2026.08.31-020000"></script>
-  <script src="./vendor/solarlunar.min.js?v=2026.08.31-020000"></script>
-  <script src="./dateremind.js?v=2026.08.31-020000"></script>
+  <script src="./lib/lazy-scripts.js?v=2026.08.31-021000"></script>
+  <script src="./vendor/solarlunar.min.js?v=2026.08.31-021000"></script>
+  <script src="./dateremind.js?v=2026.08.31-021000"></script>
   <script src="./theme.js?v=2026.08.30-062500"></script>
-  <script src="./app.js?v=2026.08.31-020000"></script>
-  <script src="./nav-organize.js?v=2026.08.31-020000"></script>
+  <script src="./app.js?v=2026.08.31-021000"></script>
+  <script src="./nav-organize.js?v=2026.08.31-021000"></script>
   <script src="./wheel.js?v=2026.08.30-062500"></script>
   <script src="./ruler.js?v=2026.08.30-062500"></script>
   <script src="./muyu.js?v=2026.08.30-084100"></script>

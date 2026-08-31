@@ -1517,7 +1517,21 @@ a.secondary-btn {
 }
 
 @media (min-width: 901px) {
+  html {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
   .site-header {
+    flex-shrink: 0;
     max-width: none;
     width: 100%;
     padding: 1.15rem 1.5rem 0.65rem;
@@ -1541,6 +1555,9 @@ a.secondary-btn {
     max-width: none;
     padding: 0 1.5rem 1.5rem;
     box-sizing: border-box;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .nav-bar {
@@ -1681,11 +1698,17 @@ a.secondary-btn {
     max-width: none;
     width: 100%;
     min-width: 0;
+    min-height: 0;
     margin: 0;
     padding: 0 0 1.5rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
   }
 
   .site-footer {
+    flex-shrink: 0;
     max-width: none;
     width: 100%;
     padding: 0 1.5rem 1.75rem;
@@ -6413,6 +6436,50 @@ body.sandspiel-fs-active .sandspiel-shell.is-fullscreen {
   .sandspiel-toolbar {
     margin-bottom: 0.3rem;
   }
+}
+
+/* ---- 预览信息面板（图片 / 视频） ---- */
+.preview-info-panel {
+  margin-top: 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-1) 88%, transparent);
+}
+
+.preview-info-title {
+  margin: 0 0 0.55rem;
+}
+
+.preview-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.45rem 1rem;
+  margin: 0;
+}
+
+.preview-info-item {
+  min-width: 0;
+}
+
+.preview-info-grid dt {
+  margin: 0;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+
+.preview-info-grid dd {
+  margin: 0.12rem 0 0;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.preview-info-grid dd.mono {
+  font-family: var(--mono-font, ui-monospace, monospace);
+  font-size: 0.84rem;
 }
 
 .imgprev-stage {

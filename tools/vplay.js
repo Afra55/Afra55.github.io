@@ -21,6 +21,8 @@
   const emptyHint = $("#vplay-empty-hint");
   const zoomHud = $(".vplay-zoom-hud", zoomWrap || document);
   const heightResize = $("#vplay-height-resize");
+  const infoPanel = $("#vplay-info");
+  const infoGrid = $("#vplay-info-grid");
 
   const HEIGHT_MIN = 280;
   const HEIGHT_DEFAULT = 480;
@@ -90,6 +92,99 @@
     if (n < 1024) return `${n} B`;
     if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
     return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  function gcd(a, b) {
+    let x = Math.abs(Math.round(a));
+    let y = Math.abs(Math.round(b));
+    while (y) {
+      const t = y;
+      y = x % y;
+      x = t;
+    }
+    return x || 1;
+  }
+
+  function aspectLabel(w, h) {
+    if (!(w > 0 && h > 0)) return "—";
+    const g = gcd(w, h);
+    return `${Math.round(w / g)}∶${Math.round(h / g)}`;
+  }
+
+  function formatFileTime(ms) {
+    const n = Number(ms);
+    if (!Number.isFinite(n) || n <= 0) return "—";
+    try {
+      return new Date(n).toLocaleString("zh-CN", { hour12: false });
+    } catch (_) {
+      return "—";
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function hasAudioTrack() {
+    if (!video) return "未知";
+    try {
+      if (typeof video.audioTracks !== "undefined" && video.audioTracks?.length != null) {
+        return video.audioTracks.length > 0 ? "有音轨" : "无音轨";
+      }
+      if (typeof video.mozHasAudio === "boolean") return video.mozHasAudio ? "有音轨" : "无音轨";
+      if (typeof video.webkitAudioDecodedByteCount === "number") {
+        return video.webkitAudioDecodedByteCount > 0 ? "有音轨" : "待解码";
+      }
+    } catch (_) {}
+    return "未知";
+  }
+
+  function infoRow(label, value, mono = false) {
+    const ddClass = mono ? ' class="mono"' : "";
+    return `<div class="preview-info-item"><dt>${label}</dt><dd${ddClass}>${value}</dd></div>`;
+  }
+
+  function syncInfoPanel() {
+    if (!infoPanel || !infoGrid) return;
+    if (!sourceFile || !video?.videoWidth) {
+      infoPanel.hidden = true;
+      infoGrid.innerHTML = "";
+      return;
+    }
+    infoPanel.hidden = false;
+    const name = sourceFile.name || "未命名";
+    const mime = sourceFile.type || "—";
+    const d = duration();
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    const mp = ((w * h) / 1_000_000).toFixed(2);
+    const cur = currentTime();
+    const paused = video.paused;
+    const mutedNow = video.muted;
+    const rate = video.playbackRate || 1;
+    const seekable = video.seekable?.length ? video.seekable.end(video.seekable.length - 1) : d;
+    infoGrid.innerHTML = [
+      infoRow("文件名", escapeHtml(name)),
+      infoRow("文件大小", formatKb(sourceFile.size), true),
+      infoRow("MIME / 类型", mime || "—", true),
+      infoRow("时长", `${formatClock(d)}（${d.toFixed(2)} s）`, true),
+      infoRow("当前进度", `${formatClock(cur)} / ${formatClock(d)}`, true),
+      infoRow("分辨率", `${w} × ${h} px`, true),
+      infoRow("像素总量", `${(w * h).toLocaleString("zh-CN")}（约 ${mp} MP）`, true),
+      infoRow("宽高比", aspectLabel(w, h), true),
+      infoRow("画面缩放", `${Math.round((zoom.scale / Math.max(zoom.fit, 0.001)) * 100)}%`, true),
+      infoRow("旋转", `${zoom.rotate}°`, true),
+      infoRow("播放状态", paused ? "暂停" : "播放中"),
+      infoRow("音量", mutedNow ? "静音" : "有声"),
+      infoRow("播放速率", `${rate}×`, true),
+      infoRow("音频", hasAudioTrack()),
+      infoRow("可 seek 至", `${formatClock(seekable)}`, true),
+      infoRow("修改时间", formatFileTime(sourceFile.lastModified)),
+    ].join("");
   }
 
   function duration() {
@@ -266,6 +361,7 @@
       const pct = zoom.fit ? Math.round((zoom.scale / zoom.fit) * 100) : 100;
       zoomPct.textContent = `${pct}%`;
     }
+    syncInfoPanel();
   }
 
   function fitZoom() {
@@ -323,11 +419,13 @@
     video.muted = muted;
     muteBtn.textContent = muted ? "开声音" : "静音";
     muteBtn.setAttribute("aria-pressed", muted ? "true" : "false");
+    syncInfoPanel();
   }
 
   function syncPlayUi() {
     if (!playBtn || !video) return;
     playBtn.textContent = video.paused ? "播放" : "暂停";
+    syncInfoPanel();
   }
 
   function setControlsEnabled(on) {
@@ -339,6 +437,7 @@
   function syncClock() {
     if (!clock) return;
     clock.textContent = `${formatClock(currentTime())} / ${formatClock(duration())}`;
+    syncInfoPanel();
   }
 
   function syncScrubFromVideo() {
@@ -559,6 +658,7 @@
     syncClock();
     syncScrubFromVideo();
     setControlsEnabled(false);
+    syncInfoPanel();
   }
 
   async function loadFile(file, opts = {}) {
@@ -598,6 +698,7 @@
       if (meta) {
         meta.textContent = `${name} · ${formatKb(file.size)} · ${d.toFixed(1)}s · ${video.videoWidth}×${video.videoHeight}`;
       }
+      syncInfoPanel();
       if (d >= LONG_VIDEO_SEC) toast("长视频：滚轮/拖拽定位，双击播放/暂停");
       else toast(opts.autoplay ? "已加载并开始播放" : "视频已加载");
       if (!opts.autoplay) applySeek(0, { fromScrub: true });

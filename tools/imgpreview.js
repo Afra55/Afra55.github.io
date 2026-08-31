@@ -25,6 +25,8 @@
   const layerDownBtn = $("#imgprev-layer-down");
   const viewPctEl = $("#imgprev-view-pct");
   const selScaleEl = $("#imgprev-sel-scale");
+  const infoPanel = $("#imgprev-info");
+  const infoGrid = $("#imgprev-info-grid");
 
   const HEIGHT_MIN = 280;
   const HEIGHT_DEFAULT = 480;
@@ -192,6 +194,7 @@
     if (!opts.skipThumbs) renderThumbs();
     syncControls();
     syncMeta();
+    syncInfoPanel();
   }
 
   function snapThresholdWorld() {
@@ -353,6 +356,105 @@
     }
     if (opacityVal) opacityVal.textContent = sel ? `${Math.round(sel.opacity * 100)}%` : "—";
     if (selScaleEl) selScaleEl.textContent = sel ? `${Math.round(sel.scale * 100)}%` : "—";
+  }
+
+  function formatBytes(bytes) {
+    const n = Number(bytes) || 0;
+    if (n < 1024) return `${n} B`;
+    if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+    return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  function formatMime(file) {
+    const t = String(file?.type || "").trim();
+    if (t) return t;
+    const ext = String(file?.name || "").split(".").pop()?.toUpperCase();
+    return ext ? `.${ext}` : "—";
+  }
+
+  function gcd(a, b) {
+    let x = Math.abs(Math.round(a));
+    let y = Math.abs(Math.round(b));
+    while (y) {
+      const t = y;
+      y = x % y;
+      x = t;
+    }
+    return x || 1;
+  }
+
+  function aspectLabel(w, h) {
+    if (!(w > 0 && h > 0)) return "—";
+    const g = gcd(w, h);
+    return `${Math.round(w / g)}∶${Math.round(h / g)}`;
+  }
+
+  function formatFileTime(ms) {
+    const n = Number(ms);
+    if (!Number.isFinite(n) || n <= 0) return "—";
+    try {
+      return new Date(n).toLocaleString("zh-CN", { hour12: false });
+    } catch (_) {
+      return "—";
+    }
+  }
+
+  function infoRow(label, value, mono = false) {
+    const ddClass = mono ? ' class="mono"' : "";
+    return `<div class="preview-info-item"><dt>${label}</dt><dd${ddClass}>${value}</dd></div>`;
+  }
+
+  function syncInfoPanel() {
+    if (!infoPanel || !infoGrid) return;
+    if (!items.length) {
+      infoPanel.hidden = true;
+      infoGrid.innerHTML = "";
+      return;
+    }
+    infoPanel.hidden = false;
+    const sel = selectedItem();
+    const totalBytes = items.reduce((sum, it) => sum + (Number(it.file?.size) || 0), 0);
+    const sorted = items.slice().sort((a, b) => a.z - b.z);
+    if (sel) {
+      const dispW = Math.round(sel.nw * sel.scale);
+      const dispH = Math.round(sel.nh * sel.scale);
+      const layerIdx = sorted.findIndex((it) => it.id === sel.id) + 1;
+      const mp = ((sel.nw * sel.nh) / 1_000_000).toFixed(2);
+      infoGrid.innerHTML = [
+        infoRow("文件名", escapeHtml(sel.name)),
+        infoRow("文件大小", formatBytes(sel.file?.size), true),
+        infoRow("MIME / 类型", formatMime(sel.file), true),
+        infoRow("原始像素", `${sel.nw} × ${sel.nh} px`, true),
+        infoRow("显示尺寸", `${dispW} × ${dispH} px`, true),
+        infoRow("像素总量", `${(sel.nw * sel.nh).toLocaleString("zh-CN")}（约 ${mp} MP）`, true),
+        infoRow("宽高比", aspectLabel(sel.nw, sel.nh), true),
+        infoRow("位置", `X ${Math.round(sel.x)} · Y ${Math.round(sel.y)}`, true),
+        infoRow("缩放", `${Math.round(sel.scale * 100)}%`, true),
+        infoRow("透明度", `${Math.round(sel.opacity * 100)}%`, true),
+        infoRow("图层", `#${layerIdx} / 共 ${items.length} 张`, true),
+        infoRow("画布缩放", `${Math.round(view.scale * 100)}%`, true),
+        infoRow("修改时间", formatFileTime(sel.file?.lastModified)),
+        infoRow("全部合计", `${items.length} 张 · ${formatBytes(totalBytes)}`, true),
+      ].join("");
+      return;
+    }
+    const maxW = Math.max(...items.map((it) => it.nw));
+    const maxH = Math.max(...items.map((it) => it.nh));
+    infoGrid.innerHTML = [
+      infoRow("图片数量", `${items.length} 张`, true),
+      infoRow("合计大小", formatBytes(totalBytes), true),
+      infoRow("最大原始尺寸", `${maxW} × ${maxH} px`, true),
+      infoRow("画布缩放", `${Math.round(view.scale * 100)}%`, true),
+      infoRow("提示", "单击某张图片可查看该图详细信息"),
+    ].join("");
+  }
+
+  function escapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
   function syncMeta() {
