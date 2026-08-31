@@ -1384,6 +1384,13 @@ async function main() {
             navScrollEl.scrollHeight > navScrollEl.clientHeight + 8 &&
             navScrollEl.lastElementChild === navFooter)
       ),
+      footerVisible: Boolean(
+        navFooterRect &&
+          navBarRect &&
+          navFooterRect.height >= 28 &&
+          navFooterRect.bottom <= navBarRect.bottom + 1 &&
+          navFooterRect.top >= navBarRect.top
+      ),
     };
     out.moreKeep = {
       preview: Boolean(moreCard?.querySelector(".memo-more [data-memo-open]")),
@@ -2277,7 +2284,8 @@ async function main() {
     !result.navFooter?.inScroll ||
     !result.navFooter?.belowList ||
     !result.navFooter?.noOverlap ||
-    !result.navFooter?.atBottom
+    !result.navFooter?.atBottom ||
+    !result.navFooter?.footerVisible
   ) {
     failed.push("nav footer (cache clear / compact / reset) should stay at the bottom, not overlap the tool list");
   }

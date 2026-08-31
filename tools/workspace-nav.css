@@ -1065,9 +1065,12 @@ body.nav-open {
     overflow-x: hidden !important;
     overflow-y: hidden !important;
     overscroll-behavior: contain;
-    padding: 0.85rem 0.85rem 1.25rem !important;
+    padding: 0.85rem 0.85rem max(1rem, calc(0.85rem + env(safe-area-inset-bottom, 0px))) !important;
     box-shadow: 12px 0 40px color-mix(in srgb, var(--bg-0) 45%, transparent);
     transition: transform 0.28s ease, background 0.2s ease;
+    box-sizing: border-box !important;
+    max-height: 100dvh !important;
+    height: 100dvh !important;
   }
 
   body.nav-open .nav-bar,
@@ -1092,7 +1095,7 @@ body.nav-open {
   }
 
   .nav-bar-scroll {
-    flex: 1 1 auto !important;
+    flex: 1 1 0 !important;
     min-height: 0 !important;
     overflow-x: hidden !important;
     overflow-y: auto !important;
@@ -1181,13 +1184,16 @@ body.nav-open {
   }
 
   .nav-footer-actions {
-    flex: 0 0 auto;
-    flex-shrink: 0;
+    flex: 0 0 auto !important;
+    flex-shrink: 0 !important;
     width: 100%;
-    margin-top: 0;
+    margin-top: auto !important;
     padding-top: 0.45rem;
+    padding-bottom: max(0.35rem, env(safe-area-inset-bottom, 0px));
     border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
     background: var(--nav-bg-solid, var(--panel-strong));
+    position: relative;
+    z-index: 3;
   }
 
   .nav-compact-bar .nav-compact-setting {
@@ -1203,11 +1209,12 @@ body.nav-open {
   .nav-footer-actions .nav-reset,
   .nav-footer-actions .nav-footer-btn {
     width: auto;
-    min-height: 0;
+    min-height: 2.15rem;
     flex: 1 1 0;
     border-radius: 10px;
-    padding-top: 0.32rem;
-    padding-bottom: 0.32rem;
+    padding-top: 0.42rem;
+    padding-bottom: 0.42rem;
+    line-height: 1.2;
   }
 
   .nav-setting-inline {
