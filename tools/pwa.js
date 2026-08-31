@@ -67,10 +67,62 @@
     setInstallVisible(false);
   });
 
+  /**
+   * 在外部浏览器打开链接（PWA 独立窗口内尽量跳出到系统浏览器）。
+   * @returns {{ ok: boolean, mode?: string }}
+   */
+  function openExternal(url) {
+    const raw = String(url || "").trim();
+    if (!raw) return { ok: false, mode: "empty" };
+
+    const standalone = isStandalone();
+
+    /** @param {string} href @param {"anchor"|"blank"|"open"} kind */
+    function tryOpen(href, kind) {
+      try {
+        if (kind === "anchor") {
+          const a = document.createElement("a");
+          a.href = href;
+          a.target = "_blank";
+          a.rel = "noopener noreferrer external";
+          a.referrerPolicy = "no-referrer";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          return true;
+        }
+        const features = "noopener,noreferrer";
+        const win = window.open(kind === "blank" ? "" : href, "_blank", features);
+        if (!win) return false;
+        try {
+          win.opener = null;
+        } catch (_) {}
+        if (kind === "blank") {
+          win.location.href = href;
+        }
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    if (!standalone) {
+      if (tryOpen(raw, "anchor") || tryOpen(raw, "open")) return { ok: true, mode: "browser" };
+      return { ok: false, mode: "blocked" };
+    }
+
+    // PWA：先 blank 再赋值 location，iOS/Android 上更容易落到系统浏览器
+    if (tryOpen(raw, "blank")) return { ok: true, mode: "pwa-blank" };
+    if (tryOpen(raw, "anchor")) return { ok: true, mode: "pwa-anchor" };
+    if (tryOpen(raw, "open")) return { ok: true, mode: "pwa-open" };
+    return { ok: false, mode: "blocked" };
+  }
+
   window.DevToolsPwa = {
     isStandalone,
     setInstallVisible,
     canPromptInstall: () => Boolean(deferredPrompt),
+    openExternal,
   };
 
   if (!("serviceWorker" in navigator)) return;
