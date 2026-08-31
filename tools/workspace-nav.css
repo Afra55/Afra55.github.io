@@ -168,15 +168,23 @@ html.is-pwa-standalone #pwa-install {
 }
 
 .nav-strip-toggle-icon {
-  display: inline-block;
-  font-size: 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 1.35rem;
+  height: 1.35rem;
+  font-size: 0.95rem;
   line-height: 1;
-  transition: transform 0.15s ease;
+  transition: transform 0.15s ease, color 0.15s, background 0.15s;
   color: var(--muted);
+  border-radius: 6px;
+  pointer-events: none;
 }
 
 .nav-strip-toggle.is-open .nav-strip-toggle-icon {
   transform: rotate(90deg);
+  color: var(--accent);
 }
 
 .nav-recent .nav-strip-toggle.is-open {

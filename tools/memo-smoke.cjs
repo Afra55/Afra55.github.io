@@ -1484,31 +1484,29 @@ async function main() {
       hasTitle: /备忘录/.test(cacheMeta?.getAttribute("title") || ""),
     };
 
-    const recentListEl = document.getElementById("tool-recent-list");
+    const recentListEl = document.getElementById("nav-recent-dlg-list");
     out.recentUi = {
       hasToggle: /最近使用/.test(document.getElementById("tool-recent-toggle")?.textContent || ""),
-      collapsedByDefault: document.getElementById("tool-recent-list")?.hidden === true,
+      hasDialog: Boolean(document.getElementById("nav-recent-dlg")),
+      openApi: typeof window.DevToolsNav?.openRecentDialog === "function",
+      noInlineList: !document.getElementById("tool-recent-list"),
       noAxis: !document.querySelector(".nav-recent-axis"),
-      oneRowFlex: Boolean(recentListEl) && getComputedStyle(recentListEl).display === "flex",
-      nowrap: recentListEl ? getComputedStyle(recentListEl).flexWrap === "nowrap" : false,
-      overflowX: recentListEl ? getComputedStyle(recentListEl).overflowX : "",
-      hiddenScrollbar: recentListEl ? getComputedStyle(recentListEl).scrollbarWidth === "none" : false,
-      visibleScrollbar: recentListEl ? getComputedStyle(recentListEl).scrollbarWidth !== "none" : false,
     };
     try {
       const ids = ["json", "base64", "uuid", "hash", "regex", "color", "url", "cron", "yaml"];
       localStorage.setItem("devtools-tool-recent-v1", JSON.stringify(ids));
       window.DevToolsNav?.renderRecent?.();
-      window.DevToolsNav?.setRecentOpen?.(true);
+      window.DevToolsNav?.openRecentDialog?.();
       if (recentListEl) {
-        out.recentUi.chipCount = document.querySelectorAll(".nav-recent-chip").length;
+        out.recentUi.chipCount = document.querySelectorAll(".nav-recent-dlg-item").length;
         out.recentUi.showsAll = out.recentUi.chipCount === ids.length;
-        out.recentUi.scrollableX = recentListEl.scrollWidth > recentListEl.clientWidth + 1;
-        const chip = document.querySelector(".nav-recent-chip");
+        out.recentUi.dialogOpen = document.getElementById("nav-recent-dlg")?.open === true;
+        const chip = document.querySelector(".nav-recent-dlg-item");
         out.recentUi.fullText = chip
           ? getComputedStyle(chip).textOverflow !== "ellipsis" && getComputedStyle(chip).overflow !== "hidden"
           : false;
       }
+      window.DevToolsNav?.closeRecentDialog?.();
     } catch (_) {}
 
     const favListEl = document.getElementById("tool-fav-list");
@@ -2122,17 +2120,15 @@ async function main() {
   }
   if (
     !result.recentUi?.hasToggle ||
-    !result.recentUi?.collapsedByDefault ||
+    !result.recentUi?.hasDialog ||
+    !result.recentUi?.openApi ||
+    !result.recentUi?.noInlineList ||
     !result.recentUi?.noAxis ||
-    !result.recentUi?.oneRowFlex ||
-    !result.recentUi?.nowrap ||
     !result.recentUi?.showsAll ||
-    result.recentUi?.overflowX !== "auto" ||
-    !result.recentUi?.scrollableX ||
-    !result.recentUi?.visibleScrollbar ||
+    !result.recentUi?.dialogOpen ||
     !result.recentUi?.fullText
   ) {
-    failed.push("recent tools should collapse by default and expand to a single-row scrollable strip");
+    failed.push("recent tools should open a picker dialog with full tool names");
   }
   if (
     !result.favoritesUi?.hasSection ||
