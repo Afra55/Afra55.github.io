@@ -7522,6 +7522,9 @@ body.sandspiel-fs-active .sandspiel-shell.is-fullscreen {
   max-width: min(92vw, 420px);
   max-height: min(88vh, 640px);
   overflow: hidden;
+}
+
+.nav-organize-dlg[open] {
   display: flex;
   flex-direction: column;
 }
@@ -7698,6 +7701,9 @@ body.sandspiel-fs-active .sandspiel-shell.is-fullscreen {
   max-width: min(92vw, 360px);
   max-height: min(70vh, 480px);
   overflow: hidden;
+}
+
+.nav-recent-dlg[open] {
   display: flex;
   flex-direction: column;
 }
