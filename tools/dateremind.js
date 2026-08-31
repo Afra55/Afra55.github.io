@@ -158,9 +158,18 @@
   }
 
   function advanceFor(item) {
-    const n = Number(item.advanceDays);
-    if (Number.isFinite(n) && n >= 0) return Math.min(365, Math.floor(n));
-    return Math.min(365, Math.max(0, Number(settings.defaultAdvanceDays) || 0));
+    if (item.advanceDays != null && item.advanceDays !== "") {
+      const n = Number(item.advanceDays);
+      if (Number.isFinite(n) && n >= 0) return Math.min(365, Math.floor(n));
+    }
+    const d = Number(settings.defaultAdvanceDays);
+    return Math.min(365, Math.max(0, Number.isFinite(d) ? Math.floor(d) : 7));
+  }
+
+  function advanceLabel(days) {
+    const n = Math.min(365, Math.max(0, Math.floor(Number(days) || 0)));
+    if (n === 0) return "当天提醒";
+    return `提前 ${n} 天提醒`;
   }
 
   function lunarToSolar(lYear, lMonth, lDay, isLeap) {
@@ -550,7 +559,7 @@
                       ? "已过"
                       : `还有 ${it.daysUntil} 天`;
               const rep = it.repeat === "once" ? "一次" : "每年";
-              const adv = it.advanceDays == null ? `默认 ${advanceFor(it)} 天` : `提前 ${it.advanceDays} 天`;
+              const adv = advanceLabel(advanceFor(it));
               return `<article class="dr-card${it.enabled ? "" : " is-off"}" style="--dr-cat:${cat.color}" data-id="${it.id}">
                 <div class="dr-card-head">
                   <span class="dr-card-cat">${escapeHtml(cat.label)}</span>
