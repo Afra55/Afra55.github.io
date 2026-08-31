@@ -795,6 +795,7 @@
     vplay: { tool: "media", tab: "vplay" },
     vbb: { tool: "vbb" },
     blackbox: { tool: "vbb" },
+    gifbb: { tool: "gifbb" },
   };
   const TOOL_GROUPS = [
     { id: "time", label: "时间", tools: ["timestamp", "timediff", "cron", "countdown"] },
@@ -806,7 +807,7 @@
       label: "文本工具",
       tools: ["text", "caseconv", "regex", "diff", "markdown", "memo"],
     },
-    { id: "blackbox", label: "黑盒", tools: ["vbb"] },
+    { id: "blackbox", label: "黑盒", tools: ["vbb", "gifbb"] },
     { id: "media", label: "媒体", tools: ["gifmaker", "vsplit", "vtrim", "audio", "vplay"] },
     {
       id: "image",
@@ -856,7 +857,8 @@
     memo: "本地备忘录：一键读剪贴板入库、搜索/点选筛选；文本图片可复制，其它类型可下载，手机可单条分享（文转图/OCR 见独立工具）。",
     gifmaker: "视频转 GIF/WebP、压缩、拼接、亮度等本地动图处理（≤6MB 黑盒见「黑盒」分类）。",
     vsplit: "预览打点切分视频片段，支持全屏标记与打包下载（黑盒 GIF 见「黑盒」分类）。",
-    vbb: "预制参数一键出 ≤6MB 黑盒 GIF：整段或长视频自动切片；可批量压缩已有 GIF 至黑盒规格，全程本地处理。",
+    vbb: "预制参数一键出 ≤6MB 黑盒 GIF：整段或长视频自动切片，全程本地处理。",
+    gifbb: "多选已有 GIF，按黑盒规则压至 ≤6MB；已符合体积要求的会跳过。",
     vtrim: "调整片头片尾时长、裁边框；网页 FFmpeg，手机可用。",
     vplay: "本地视频预览：滚轮缩放、拖拽移动、双击暂停/播放，双指捏合缩放。",
     audio: "修剪、音量、抽音轨；网页 FFmpeg 保底，电脑批量请用本机桥。",
@@ -913,7 +915,8 @@
     qrcode: { name: "二维码", aliases: ["qr", "扫码"] },
     gifmaker: { name: "GIF / 动图", aliases: ["gif", "动图", "webp", "ffmpeg"] },
     vsplit: { name: "视频切分", aliases: ["切分", "vsplit", "视频"] },
-    vbb: { name: "黑盒 GIF", aliases: ["黑盒", "vbb", "批量切分", "blackbox", "6mb"] },
+    vbb: { name: "黑盒 GIF", aliases: ["黑盒", "vbb", "批量切分", "blackbox", "6mb", "视频转gif"] },
+    gifbb: { name: "GIF 压黑盒", aliases: ["已有gif", "gif压缩", "压黑盒", "gifbb", "6mb gif"] },
     vtrim: { name: "视频修剪", aliases: ["修剪", "裁剪", "vtrim"] },
     vplay: { name: "视频播放", aliases: ["播放", "预览", "vplay", "player"] },
     audio: { name: "音频处理", aliases: ["音频", "音量", "抽音轨", "audio"] },

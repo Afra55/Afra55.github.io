@@ -14,9 +14,9 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.31-011000"></script>
-  <link rel="stylesheet" href="./style.css?v=2026.08.31-011000" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.31-011000" />
+  <script src="./lib/tools-build.js?v=2026.08.31-012000"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.08.31-012000" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.31-012000" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
   <script>
@@ -2445,7 +2445,7 @@ hello@world.org</textarea>
 <section id="vbb" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>黑盒 GIF</h1>
-        <p>预制参数（宽 420 · ≤6MB · 自动压帧/加宽），全程本地处理。选视频后点<strong>一键黑盒</strong>即可；已裁好的多个短片可多选一次性转换；长视频可自动切片，也可<strong>手动打点</strong>自选片段。下方还可<strong>批量压缩已有 GIF</strong>至黑盒规格。</p>
+        <p>预制参数（宽 420 · ≤6MB · 自动压帧/加宽），全程本地处理。选视频后点<strong>一键黑盒</strong>即可；已裁好的多个短片可多选一次性转换；长视频可自动切片，也可<strong>手动打点</strong>自选片段。</p>
       </div>
       <div class="panel-body">
         <div class="btn-row tool-actions">
@@ -2539,22 +2539,6 @@ hello@world.org</textarea>
         </div>
         </details>
 
-        <div class="field-block vbb-gif-compress" style="margin-top:1.25rem" id="vbb-gif-block">
-          <h2 class="subhead">已有 GIF 压黑盒</h2>
-          <p class="hint tight">多选本地 GIF，按黑盒规则压至 ≤6MB；体积已符合要求的会跳过，不重复压缩。</p>
-          <div class="btn-row tool-actions" style="flex-wrap:wrap">
-            <label class="file-btn" for="vbb-gif-file">选择 GIF（可多选）</label>
-            <input id="vbb-gif-file" type="file" accept="image/gif,.gif" multiple hidden />
-            <button type="button" class="primary-btn" id="vbb-gif-run" disabled>压黑盒</button>
-            <button type="button" class="secondary-btn" id="vbb-gif-zip" disabled title="打包已处理的 GIF">打包下载</button>
-            <button type="button" class="ghost-btn" id="vbb-gif-clear">清空</button>
-            <button type="button" class="ghost-btn" id="vbb-gif-abort" hidden>取消</button>
-          </div>
-          <p class="hint" id="vbb-gif-meta">未选择 GIF</p>
-          <div class="gif-frame-list" id="vbb-gif-list" hidden aria-live="polite"></div>
-          <p class="error" id="vbb-gif-error" hidden></p>
-        </div>
-
         <div class="field-block" style="margin-top:1.25rem" id="vbb-result-block" hidden>
           <h2 class="subhead">生成结果</h2>
           <div class="gif-frame-list" id="vbb-list" aria-live="polite"></div>
@@ -2563,6 +2547,26 @@ hello@world.org</textarea>
           </div>
         </div>
         <p class="error" id="vbb-error" hidden></p>
+      </div>
+    </section>
+
+<section id="gifbb" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>已有 GIF 压黑盒</h1>
+        <p>多选本地 GIF，按黑盒规则压至 ≤6MB；体积已符合要求的会跳过，不重复压缩。全程本地处理，不会上传。</p>
+      </div>
+      <div class="panel-body">
+        <div class="btn-row tool-actions" style="flex-wrap:wrap">
+          <label class="file-btn" for="gifbb-file">选择 GIF（可多选）</label>
+          <input id="gifbb-file" type="file" accept="image/gif,.gif" multiple hidden />
+          <button type="button" class="primary-btn" id="gifbb-run" disabled>压黑盒</button>
+          <button type="button" class="secondary-btn" id="gifbb-zip" disabled title="打包已处理的 GIF">打包下载</button>
+          <button type="button" class="ghost-btn" id="gifbb-clear">清空</button>
+          <button type="button" class="ghost-btn" id="gifbb-abort" hidden>取消</button>
+        </div>
+        <p class="hint" id="gifbb-meta">未选择 GIF</p>
+        <div class="gif-frame-list" id="gifbb-list" hidden aria-live="polite"></div>
+        <p class="error" id="gifbb-error" hidden></p>
       </div>
     </section>
 
@@ -5393,10 +5397,10 @@ adb devices</pre>
     <p class="ruler-fs-hud mono hint" id="ruler-coord-fs" aria-live="polite"></p>
   </div>
   <script src="./lib/bridge-token.js?v=2026.08.30-062500"></script>
-  <script src="./lib/lazy-scripts.js?v=2026.08.31-011000"></script>
+  <script src="./lib/lazy-scripts.js?v=2026.08.31-012000"></script>
   <script src="./theme.js?v=2026.08.30-062500"></script>
-  <script src="./app.js?v=2026.08.31-011000"></script>
-  <script src="./nav-organize.js?v=2026.08.31-011000"></script>
+  <script src="./app.js?v=2026.08.31-012000"></script>
+  <script src="./nav-organize.js?v=2026.08.31-012000"></script>
   <script src="./wheel.js?v=2026.08.30-062500"></script>
   <script src="./ruler.js?v=2026.08.30-062500"></script>
   <script src="./muyu.js?v=2026.08.30-084100"></script>

@@ -9184,27 +9184,90 @@
     vbbNudgeM01?.addEventListener("click", () => nudgeVbbPreview(-0.1));
     vbbNudgeP01?.addEventListener("click", () => nudgeVbbPreview(0.1));
     vbbNudgeP1?.addEventListener("click", () => nudgeVbbPreview(1));
-    // ---- 已有 GIF 压黑盒（批量） ----
-    const vbbGifFile = $("#vbb-gif-file");
-    const vbbGifMeta = $("#vbb-gif-meta");
-    const vbbGifError = $("#vbb-gif-error");
-    const vbbGifList = $("#vbb-gif-list");
-    const vbbGifRun = $("#vbb-gif-run");
-    const vbbGifZip = $("#vbb-gif-zip");
-    const vbbGifClear = $("#vbb-gif-clear");
-    const vbbGifAbort = $("#vbb-gif-abort");
-    /** @type {{ file: File, outBlob?: Blob, status: string, note: string, error?: string, previewIdx?: boolean }[]} */
-    let vbbGifItems = [];
-    let vbbGifBusy = false;
-    let abortVbbGif = false;
-    let vbbGifZipUrl = "";
-    /** @type {string[]} */
-    let vbbGifPreviewUrls = [];
+    syncVbbWorkflowUi();
+    syncVbbModeUi();
+    setVbbButtons();
+  } catch (err) {
+    console.error("video to gif init failed", err);
+  }
 
-    function vbbGifOutName(item) {
-      const base = vbbGifBaseName(item.file);
+  // ---- 已有 GIF 压黑盒（gifbb，独立工具） ----
+  try {
+    const gifbbPanel = $("#gifbb");
+    if (!gifbbPanel) throw new Error("skip gifbb");
+    const gifbbFile = $("#gifbb-file");
+    const gifbbMeta = $("#gifbb-meta");
+    const gifbbError = $("#gifbb-error");
+    const gifbbList = $("#gifbb-list");
+    const gifbbRun = $("#gifbb-run");
+    const gifbbZip = $("#gifbb-zip");
+    const gifbbClear = $("#gifbb-clear");
+    const gifbbAbort = $("#gifbb-abort");
+    /** @type {{ file: File, outBlob?: Blob, status: string, note: string, error?: string, previewIdx?: boolean, jobProgress?: number, jobText?: string }[]} */
+    let gifbbItems = [];
+    let gifbbBusy = false;
+    let abortGifbb = false;
+    let gifbbZipUrl = "";
+    /** @type {string[]} */
+    let gifbbPreviewUrls = [];
+
+    function gifbbBaseName(file) {
+      const name = String(file?.name || "clip.gif");
+      return name.replace(/\.gif$/i, "").replace(/[^\w\u4e00-\u9fff.-]+/g, "_") || "clip";
+    }
+
+    function gifbbOutName(item) {
+      const base = gifbbBaseName(item.file);
       if (item.status === "skip") return `${base}.gif`;
       return `${base}-blackbox.gif`;
+    }
+
+    function buildGifbbProgressDom() {
+      const box = document.createElement("div");
+      box.className = "vsplit-clip-progress";
+      box.hidden = true;
+      box.innerHTML =
+        '<div class="vsplit-clip-progress-head">' +
+        '<span class="hint tight vsplit-clip-progress-text">等待中…</span>' +
+        '<span class="mono vsplit-clip-progress-pct">—</span>' +
+        "</div>" +
+        '<div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill"></span></div>';
+      return box;
+    }
+
+    function syncGifbbProgressDom(box, job) {
+      if (!box) return;
+      const status = job?.jobStatus || "";
+      const show = status === "pending" || status === "running" || status === "done" || status === "error";
+      box.hidden = !show;
+      if (!show) return;
+      box.dataset.status = status;
+      const ratio = Math.max(0, Math.min(1, Number(job.jobProgress) || 0));
+      const pct = Math.round(ratio * 100);
+      const fill = box.querySelector(".gif-progress-fill");
+      const textEl = box.querySelector(".vsplit-clip-progress-text");
+      const pctEl = box.querySelector(".vsplit-clip-progress-pct");
+      const running = status === "running";
+      if (fill) {
+        const width = status === "pending" ? 0 : Math.max(pct, running && pct < 6 ? 6 : pct);
+        fill.style.width = `${width}%`;
+        fill.classList.toggle("is-active", running);
+        fill.classList.toggle("is-busy", running);
+      }
+      if (textEl) {
+        textEl.textContent =
+          job.jobText ||
+          (status === "pending"
+            ? "等待中…"
+            : status === "running"
+              ? "处理中…"
+              : status === "done"
+                ? "完成"
+                : status === "error"
+                  ? "失败"
+                  : "");
+      }
+      if (pctEl) pctEl.textContent = status === "pending" ? "—" : `${pct}%`;
     }
 
     async function compressExistingGifToBlackbox(blob, onProgress) {
@@ -9215,7 +9278,7 @@
       let candidate = blob;
       let compressRounds = 0;
       for (let round = 1; round <= V2G_BLACKBOX_MAX_COMPRESS_ROUNDS; round++) {
-        if (abortVbbGif) throw new Error("已取消");
+        if (abortGifbb) throw new Error("已取消");
         const before = candidate.size;
         const plan = buildBlackboxHardCompressArgs(round);
         const out = await compressGifBlob(
@@ -9239,38 +9302,38 @@
       };
     }
 
-    function setVbbGifButtons() {
-      const done = vbbGifItems.filter((it) => it.outBlob).length;
-      if (vbbGifRun) vbbGifRun.disabled = vbbGifItems.length === 0 || vbbGifBusy;
-      if (vbbGifZip) vbbGifZip.disabled = done < 1 || vbbGifBusy;
-      if (vbbGifClear) vbbGifClear.disabled = vbbGifBusy && vbbGifItems.length === 0;
-      if (vbbGifAbort) vbbGifAbort.hidden = !vbbGifBusy;
+    function setGifbbButtons() {
+      const done = gifbbItems.filter((it) => it.outBlob).length;
+      if (gifbbRun) gifbbRun.disabled = gifbbItems.length === 0 || gifbbBusy;
+      if (gifbbZip) gifbbZip.disabled = done < 1 || gifbbBusy;
+      if (gifbbClear) gifbbClear.disabled = gifbbBusy && gifbbItems.length === 0;
+      if (gifbbAbort) gifbbAbort.hidden = !gifbbBusy;
     }
 
-    function renderVbbGifList() {
-      if (!vbbGifList) return;
-      vbbGifPreviewUrls.forEach((u) => {
+    function renderGifbbList() {
+      if (!gifbbList) return;
+      gifbbPreviewUrls.forEach((u) => {
         try {
           URL.revokeObjectURL(u);
         } catch (_) {}
       });
-      vbbGifPreviewUrls = [];
-      vbbGifList.innerHTML = "";
-      if (!vbbGifItems.length) {
-        vbbGifList.hidden = true;
-        if (vbbGifMeta) vbbGifMeta.textContent = "未选择 GIF";
-        setVbbGifButtons();
+      gifbbPreviewUrls = [];
+      gifbbList.innerHTML = "";
+      if (!gifbbItems.length) {
+        gifbbList.hidden = true;
+        if (gifbbMeta) gifbbMeta.textContent = "未选择 GIF";
+        setGifbbButtons();
         return;
       }
-      vbbGifList.hidden = false;
-      const total = vbbGifItems.reduce((s, it) => s + (it.file.size || 0), 0);
-      if (vbbGifMeta) {
-        vbbGifMeta.textContent = `已选 ${vbbGifItems.length} 个 · 共 ${formatKb(total)} · 点「压黑盒」批量处理（≤6MB 的会跳过）`;
+      gifbbList.hidden = false;
+      const total = gifbbItems.reduce((s, it) => s + (it.file.size || 0), 0);
+      if (gifbbMeta) {
+        gifbbMeta.textContent = `已选 ${gifbbItems.length} 个 · 共 ${formatKb(total)} · 点「压黑盒」批量处理（≤6MB 的会跳过）`;
       }
-      vbbGifItems.forEach((item, idx) => {
+      gifbbItems.forEach((item, idx) => {
         const row = document.createElement("div");
         row.className = "gif-frame vsplit-clip";
-        row.dataset.vbbGifIdx = String(idx);
+        row.dataset.gifbbIdx = String(idx);
         const top = document.createElement("div");
         top.className = "vsplit-clip-top";
         const title = document.createElement("strong");
@@ -9289,7 +9352,7 @@
           dlBtn.className = "secondary-btn";
           dlBtn.textContent = "下载";
           dlBtn.addEventListener("click", () => {
-            triggerLocalDownload(item.outBlob, vbbGifOutName(item));
+            triggerLocalDownload(item.outBlob, gifbbOutName(item));
           });
           actions.appendChild(dlBtn);
           const previewBtn = document.createElement("button");
@@ -9297,19 +9360,19 @@
           previewBtn.className = "ghost-btn";
           previewBtn.textContent = item.previewIdx ? "收起预览" : "预览";
           previewBtn.addEventListener("click", () => {
-            vbbGifItems.forEach((it, i) => {
+            gifbbItems.forEach((it, i) => {
               it.previewIdx = i === idx ? !it.previewIdx : false;
             });
-            renderVbbGifList();
+            renderGifbbList();
           });
           actions.appendChild(previewBtn);
         }
         top.append(title, meta, actions);
         row.appendChild(top);
         if (item.status === "working") {
-          const progressBox = buildClipProgressDom();
+          const progressBox = buildGifbbProgressDom();
           row.appendChild(progressBox);
-          syncClipProgressDom(progressBox, {
+          syncGifbbProgressDom(progressBox, {
             jobStatus: "working",
             jobProgress: item.jobProgress || 0,
             jobText: item.jobText || "处理中…",
@@ -9317,7 +9380,7 @@
         }
         if (item.outBlob && item.previewIdx) {
           const url = URL.createObjectURL(item.outBlob);
-          vbbGifPreviewUrls.push(url);
+          gifbbPreviewUrls.push(url);
           const img = document.createElement("img");
           img.className = "vsplit-clip-gif";
           img.alt = item.file.name;
@@ -9326,68 +9389,68 @@
           img.src = url;
           row.appendChild(img);
         }
-        vbbGifList.appendChild(row);
+        gifbbList.appendChild(row);
       });
-      setVbbGifButtons();
+      setGifbbButtons();
     }
 
-    function clearVbbGifCompress() {
-      if (vbbGifBusy) abortVbbGif = true;
-      vbbGifItems = [];
-      abortVbbGif = false;
-      vbbGifBusy = false;
-      if (vbbGifZipUrl) {
+    function clearGifbb() {
+      if (gifbbBusy) abortGifbb = true;
+      gifbbItems = [];
+      abortGifbb = false;
+      gifbbBusy = false;
+      if (gifbbZipUrl) {
         try {
-          URL.revokeObjectURL(vbbGifZipUrl);
+          URL.revokeObjectURL(gifbbZipUrl);
         } catch (_) {}
       }
-      vbbGifZipUrl = "";
-      if (vbbGifFile) vbbGifFile.value = "";
-      setError(vbbGifError, "");
-      renderVbbGifList();
+      gifbbZipUrl = "";
+      if (gifbbFile) gifbbFile.value = "";
+      setError(gifbbError, "");
+      renderGifbbList();
     }
 
-    function loadVbbGifFiles(fileList) {
+    function loadGifbbFiles(fileList) {
       const files = [...(fileList || [])].filter((f) => {
         const type = String(f.type || "").toLowerCase();
         const name = String(f.name || "");
         return type === "image/gif" || /\.gif$/i.test(name);
       });
       if (!files.length) {
-        setError(vbbGifError, "请选择 GIF 文件");
+        setError(gifbbError, "请选择 GIF 文件");
         return;
       }
-      setError(vbbGifError, "");
-      vbbGifItems = files.map((file) => ({
+      setError(gifbbError, "");
+      gifbbItems = files.map((file) => ({
         file,
         status: "pending",
         note: "",
         previewIdx: false,
       }));
-      renderVbbGifList();
+      renderGifbbList();
       toast(`已添加 ${files.length} 个 GIF`);
     }
 
-    async function runVbbGifCompress() {
-      if (!vbbGifItems.length || vbbGifBusy) return;
-      vbbGifBusy = true;
-      abortVbbGif = false;
-      setError(vbbGifError, "");
-      setVbbGifButtons();
+    async function runGifbbCompress() {
+      if (!gifbbItems.length || gifbbBusy) return;
+      gifbbBusy = true;
+      abortGifbb = false;
+      setError(gifbbError, "");
+      setGifbbButtons();
       let ok = 0;
       let skip = 0;
       let fail = 0;
       try {
-        for (let i = 0; i < vbbGifItems.length; i++) {
-          if (abortVbbGif) throw new Error("已取消");
-          const item = vbbGifItems[i];
+        for (let i = 0; i < gifbbItems.length; i++) {
+          if (abortGifbb) throw new Error("已取消");
+          const item = gifbbItems[i];
           item.status = "working";
           item.jobProgress = 0;
           item.jobText = "准备…";
           item.note = "";
           item.error = "";
           item.outBlob = undefined;
-          renderVbbGifList();
+          renderGifbbList();
           try {
             const before = item.file.size;
             if (before <= V2G_BLACKBOX_MAX_BYTES) {
@@ -9400,7 +9463,7 @@
               const result = await compressExistingGifToBlackbox(item.file, (ratio, text) => {
                 item.jobProgress = Math.max(0, Math.min(1, Number(ratio) || 0));
                 item.jobText = text || "压缩中…";
-                renderVbbGifList();
+                renderGifbbList();
               });
               item.outBlob = result.blob;
               item.status = result.ok ? "done" : "warn";
@@ -9425,62 +9488,58 @@
             fail++;
           }
           item.status = item.status === "working" ? "done" : item.status;
-          renderVbbGifList();
+          renderGifbbList();
         }
-        if (abortVbbGif) toast("已取消");
+        if (abortGifbb) toast("已取消");
         else if (fail) toast(`完成：${ok + skip} 个成功，${fail} 个有问题`);
         else toast(`全部完成（${skip} 个跳过，${ok} 个已压缩）`);
       } catch (err) {
-        if (String(err?.message) !== "已取消") setError(vbbGifError, err.message || String(err));
+        if (String(err?.message) !== "已取消") setError(gifbbError, err.message || String(err));
         else toast("已取消");
       } finally {
-        vbbGifBusy = false;
-        abortVbbGif = false;
-        setVbbGifButtons();
+        gifbbBusy = false;
+        abortGifbb = false;
+        setGifbbButtons();
       }
     }
 
-    async function packVbbGifResults() {
-      const ready = vbbGifItems.filter((it) => it.outBlob);
+    async function packGifbbResults() {
+      const ready = gifbbItems.filter((it) => it.outBlob);
       if (!ready.length) {
         toast("请先处理 GIF");
         return;
       }
       const packed = await zipBlobs(
-        ready.map((it) => ({ name: vbbGifOutName(it), blob: it.outBlob })),
+        ready.map((it) => ({ name: gifbbOutName(it), blob: it.outBlob })),
         "blackbox-gifs.zip"
       );
-      if (vbbGifZipUrl) {
+      if (gifbbZipUrl) {
         try {
-          URL.revokeObjectURL(vbbGifZipUrl);
+          URL.revokeObjectURL(gifbbZipUrl);
         } catch (_) {}
       }
-      vbbGifZipUrl = packed.url;
+      gifbbZipUrl = packed.url;
       triggerLocalDownload(packed.blob, packed.name);
       toast(`已打包 ${ready.length} 个 GIF`);
     }
 
-    vbbGifFile?.addEventListener("change", (e) => {
-      loadVbbGifFiles(e.target.files);
+    gifbbFile?.addEventListener("change", (e) => {
+      loadGifbbFiles(e.target.files);
     });
-    vbbGifRun?.addEventListener("click", () => {
-      runVbbGifCompress().catch((err) => setError(vbbGifError, err.message || String(err)));
+    gifbbRun?.addEventListener("click", () => {
+      runGifbbCompress().catch((err) => setError(gifbbError, err.message || String(err)));
     });
-    vbbGifZip?.addEventListener("click", () => {
-      packVbbGifResults().catch((err) => setError(vbbGifError, err.message || String(err)));
+    gifbbZip?.addEventListener("click", () => {
+      packGifbbResults().catch((err) => setError(gifbbError, err.message || String(err)));
     });
-    vbbGifClear?.addEventListener("click", clearVbbGifCompress);
-    vbbGifAbort?.addEventListener("click", () => {
-      abortVbbGif = true;
+    gifbbClear?.addEventListener("click", clearGifbb);
+    gifbbAbort?.addEventListener("click", () => {
+      abortGifbb = true;
     });
-    window.DevToolsTemp?.registerCleanup(clearVbbGifCompress);
-    renderVbbGifList();
-
-    syncVbbWorkflowUi();
-    syncVbbModeUi();
-    setVbbButtons();
+    window.DevToolsTemp?.registerCleanup(clearGifbb);
+    renderGifbbList();
   } catch (err) {
-    console.error("video to gif init failed", err);
+    if (String(err?.message) !== "skip gifbb") console.error("gifbb init failed", err);
   }
 
   // ---- Compress existing GIF ----

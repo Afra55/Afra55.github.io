@@ -62,6 +62,7 @@
     gifmaker: ["gif", "omggif"],
     vsplit: ["gif", "omggif"],
     vbb: ["gif", "omggif"],
+    gifbb: ["gif", "omggif"],
   };
 
   /** 独立脚本即可运行，不必拉 extra.js（~580KB） */
