@@ -33,6 +33,8 @@
     },
   };
 
+  const EXTERNAL_SITE_TOOLS = new Set(["pdfcraft", "insectworld", "prehmuseum"]);
+
   const TOOL_FILES = {
     acupoint: "./acupoint.js",
     vtrim: "./vtrim.js",
@@ -49,6 +51,8 @@
     countdown: "./countdown.js",
     dateremind: "./dateremind.js",
     pdfcraft: "./pdfcraft.js",
+    insectworld: "./insectworld.js",
+    prehmuseum: "./prehmuseum.js",
     memo: "./memo.js",
     textimg: "./textimg.js",
     imgtext: "./imgtext.js",
@@ -88,6 +92,8 @@
     "countdown",
     "dateremind",
     "pdfcraft",
+    "insectworld",
+    "prehmuseum",
     "lanshare",
     "ffbridge",
     "ytdlp",
@@ -97,7 +103,7 @@
   ]);
 
   /** 不依赖 DevToolsPure */
-  const NO_PURE = new Set(["acupoint", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp", "setup", "about", "pdfcraft", "xorenc", "morse", "countdown", "dateremind", "phlogo", "nokiasms", "sandspiel"]);
+  const NO_PURE = new Set(["acupoint", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp", "setup", "about", "pdfcraft", "insectworld", "prehmuseum", "xorenc", "morse", "countdown", "dateremind", "phlogo", "nokiasms", "sandspiel"]);
 
   const scriptPromises = new Map();
   let extraBundlePromise = null;
@@ -199,6 +205,9 @@
   async function loadToolScript(toolId) {
     const src = TOOL_FILES[toolId];
     if (!src) return;
+    if (EXTERNAL_SITE_TOOLS.has(toolId)) {
+      await loadScript("./lib/open-external-site.js");
+    }
     await loadScript(src);
   }
 

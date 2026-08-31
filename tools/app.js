@@ -818,7 +818,7 @@
     { id: "fun", label: "趣味", tools: ["wheel", "ruler", "muyu", "minigames", "sandspiel", "ambient"] },
     { id: "health", label: "健康", tools: ["acupoint"] },
     { id: "device", label: "设备", tools: ["lanshare", "adb", "ffbridge", "ytdlp"] },
-    { id: "site", label: "站点", tools: ["about", "pdfcraft", "setup"] },
+    { id: "site", label: "站点", tools: ["about", "pdfcraft", "insectworld", "prehmuseum", "setup"] },
   ];
   const DEFAULT_GROUP_ORDER = TOOL_GROUPS.map((g) => g.id);
   const GROUP_BY_ID = Object.fromEntries(TOOL_GROUPS.map((g) => [g.id, g]));
@@ -886,6 +886,8 @@
     ytdlp: "本机 yt-dlp 桥：解析/下载视频与播放列表、字幕、封面、直播、Cookies 与 SponsorBlock；含安装教程，文件只保存在电脑。",
     about: "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
     pdfcraft: "跳转 PDFCraft 中文官网（100+ 本地 PDF 工具）；在新窗口打开，PWA 模式下尽量用系统浏览器。",
+    insectworld: "跳转 Insect World：63 种昆虫 3D 交互图鉴；新窗口打开，PWA 尽量用系统浏览器。",
+    prehmuseum: "跳转史前动物博物馆（中文 3D 恐龙/古生物，适合亲子）；新窗口打开，PWA 尽量用系统浏览器。",
     setup: "小白向：如何下载安装 Node.js、ADB、FFmpeg；手机用网页保底、电脑用桥更优。",
   };
   const TOOL_META = {
@@ -960,6 +962,8 @@
     },
     about: { name: "实用小工具合集", aliases: ["about", "介绍", "目录", "主题", "帮助", "总览", "关于"] },
     pdfcraft: { name: "PDF 工具箱", aliases: ["pdf", "pdfcraft", "合并pdf", "拆分pdf", "压缩pdf", "pdf工具"] },
+    insectworld: { name: "昆虫世界", aliases: ["insect", "昆虫", "甲虫", "蝴蝶", "3d昆虫", "insect world"] },
+    prehmuseum: { name: "史前博物馆", aliases: ["恐龙", "博物馆", "古生物", "leon", "史前动物"] },
     setup: {
       name: "安装本机工具",
       aliases: ["帮助", "安装", "nodejs", "node", "adb", "ffmpeg", "配置", "小白", "setup", "教程"],

@@ -1,7 +1,7 @@
 (() => {
   "use strict";
   window.DevToolsOpenExternalSite?.init({
-    id: "pdfcraft",
-    url: "https://pdfcraft.devtoolcafe.com/zh/",
+    id: "insectworld",
+    url: "https://insect-world.pages.dev/",
   });
 })();
