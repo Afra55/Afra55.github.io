@@ -14,9 +14,9 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.31-014000"></script>
-  <link rel="stylesheet" href="./style.css?v=2026.08.31-014000" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.31-014000" />
+  <script src="./lib/tools-build.js?v=2026.08.31-015000"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.08.31-015000" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.31-015000" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
   <script>
@@ -355,9 +355,9 @@
       </div>
       <div class="panel-body dr-panel">
         <div class="dr-settings">
-          <div class="field-row">
+          <div class="dr-field">
             <label for="dr-default-advance">默认提前天数</label>
-            <input id="dr-default-advance" class="mono" type="number" min="0" max="365" step="1" value="7" inputmode="numeric" style="max-width:5rem" />
+            <input id="dr-default-advance" class="mono" type="number" min="0" max="365" step="1" value="7" inputmode="numeric" />
           </div>
           <label class="flag tight" for="dr-show-badge">
             <input type="checkbox" id="dr-show-badge" checked /> 顶栏显示进行中角标
@@ -372,16 +372,16 @@
         </details>
 
         <h2 class="subhead" id="dr-form-title">添加提醒</h2>
-        <form id="dr-form" class="dr-form highlight-box">
-          <div class="field-block">
+        <form id="dr-form" class="dr-form">
+          <div class="dr-field">
             <label for="dr-title">标题</label>
             <input id="dr-title" type="text" required maxlength="80" placeholder="如：妈妈生日" autocomplete="off" />
           </div>
-          <div class="field-block">
+          <div class="dr-field">
             <label for="dr-note">备注（可选）</label>
             <textarea id="dr-note" rows="2" maxlength="300" placeholder="礼物、地点等"></textarea>
           </div>
-          <div class="field-row">
+          <div class="dr-field">
             <label for="dr-category">分类</label>
             <select id="dr-category">
               <option value="birthday">生日</option>
@@ -390,14 +390,14 @@
               <option value="custom">其它</option>
             </select>
           </div>
-          <div class="field-row">
+          <div class="dr-field">
             <label for="dr-calendar">历法</label>
             <select id="dr-calendar">
               <option value="solar">阳历</option>
               <option value="lunar">农历</option>
             </select>
           </div>
-          <div class="field-row">
+          <div class="dr-field">
             <label for="dr-repeat">重复</label>
             <select id="dr-repeat">
               <option value="yearly">每年</option>
@@ -405,55 +405,66 @@
             </select>
           </div>
           <div id="dr-solar-fields" class="dr-date-fields">
-            <div class="field-row">
-              <label for="dr-solar-month">月</label>
-              <select id="dr-solar-month">
-                <option value="1">1 月</option><option value="2">2 月</option><option value="3">3 月</option>
-                <option value="4">4 月</option><option value="5">5 月</option><option value="6">6 月</option>
-                <option value="7">7 月</option><option value="8">8 月</option><option value="9">9 月</option>
-                <option value="10">10 月</option><option value="11">11 月</option><option value="12">12 月</option>
-              </select>
-              <label for="dr-solar-day">日</label>
-              <select id="dr-solar-day">
-                <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
-                <option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option>
-                <option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option>
-                <option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option>
-                <option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option>
-                <option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option>
-                <option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option>
-                <option value="29">29</option><option value="30">30</option><option value="31">31</option>
-              </select>
+            <div class="dr-date-grid">
+              <div class="dr-field">
+                <label for="dr-solar-month">月</label>
+                <select id="dr-solar-month">
+                  <option value="1">1 月</option><option value="2">2 月</option><option value="3">3 月</option>
+                  <option value="4">4 月</option><option value="5">5 月</option><option value="6">6 月</option>
+                  <option value="7">7 月</option><option value="8">8 月</option><option value="9">9 月</option>
+                  <option value="10">10 月</option><option value="11">11 月</option><option value="12">12 月</option>
+                </select>
+              </div>
+              <div class="dr-field">
+                <label for="dr-solar-day">日</label>
+                <select id="dr-solar-day">
+                  <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+                  <option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option>
+                  <option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option>
+                  <option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option>
+                  <option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option>
+                  <option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option>
+                  <option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option>
+                  <option value="29">29</option><option value="30">30</option><option value="31">31</option>
+                </select>
+              </div>
             </div>
           </div>
           <div id="dr-lunar-fields" class="dr-date-fields" hidden>
-            <div class="field-row">
-              <label for="dr-lunar-month">农历月</label>
-              <select id="dr-lunar-month"></select>
-              <label for="dr-lunar-day">农历日</label>
-              <select id="dr-lunar-day"></select>
+            <div class="dr-date-grid">
+              <div class="dr-field">
+                <label for="dr-lunar-month">农历月</label>
+                <select id="dr-lunar-month"></select>
+              </div>
+              <div class="dr-field">
+                <label for="dr-lunar-day">农历日</label>
+                <select id="dr-lunar-day"></select>
+              </div>
             </div>
           </div>
-          <div id="dr-year-row" class="field-row" hidden>
+          <div id="dr-year-row" class="dr-field" hidden>
             <label for="dr-year">年份</label>
-            <input id="dr-year" class="mono" type="number" min="1901" max="2100" step="1" inputmode="numeric" style="max-width:6rem" />
+            <input id="dr-year" class="mono" type="number" min="1901" max="2100" step="1" inputmode="numeric" />
           </div>
-          <div id="dr-leap-row" class="field-row" hidden>
+          <div id="dr-leap-row" class="dr-field dr-field-check" hidden>
             <label class="flag" for="dr-leap">
               <input type="checkbox" id="dr-leap" /> 闰月
             </label>
           </div>
-          <div class="field-row">
+          <div class="dr-field">
             <label for="dr-advance">提前天数</label>
-            <input id="dr-advance" class="mono" type="number" min="0" max="365" step="1" placeholder="留空用默认" inputmode="numeric" style="max-width:5rem" />
+            <input id="dr-advance" class="mono" type="number" min="0" max="365" step="1" placeholder="留空用默认" inputmode="numeric" />
+            <p class="hint tight dr-field-hint">留空则使用上方默认提前天数</p>
           </div>
-          <div class="field-row">
+          <div class="dr-field">
             <label for="dr-time">时刻（可选）</label>
-            <input id="dr-time" class="mono" type="text" inputmode="numeric" placeholder="09:00" maxlength="5" autocomplete="off" style="max-width:5.5rem" />
+            <input id="dr-time" class="mono" type="text" inputmode="numeric" placeholder="09:00" maxlength="5" autocomplete="off" />
           </div>
-          <label class="flag" for="dr-enabled">
-            <input type="checkbox" id="dr-enabled" checked /> 启用
-          </label>
+          <div class="dr-field dr-field-check">
+            <label class="flag" for="dr-enabled">
+              <input type="checkbox" id="dr-enabled" checked /> 启用
+            </label>
+          </div>
           <div class="btn-row">
             <button type="submit" class="primary-btn">保存</button>
             <button type="button" class="ghost-btn" id="dr-reset-form">重置</button>
@@ -5536,12 +5547,12 @@ adb devices</pre>
     <p class="ruler-fs-hud mono hint" id="ruler-coord-fs" aria-live="polite"></p>
   </div>
   <script src="./lib/bridge-token.js?v=2026.08.30-062500"></script>
-  <script src="./lib/lazy-scripts.js?v=2026.08.31-014000"></script>
-  <script src="./vendor/solarlunar.min.js?v=2026.08.31-014000"></script>
-  <script src="./dateremind.js?v=2026.08.31-014000"></script>
+  <script src="./lib/lazy-scripts.js?v=2026.08.31-015000"></script>
+  <script src="./vendor/solarlunar.min.js?v=2026.08.31-015000"></script>
+  <script src="./dateremind.js?v=2026.08.31-015000"></script>
   <script src="./theme.js?v=2026.08.30-062500"></script>
-  <script src="./app.js?v=2026.08.31-014000"></script>
-  <script src="./nav-organize.js?v=2026.08.31-014000"></script>
+  <script src="./app.js?v=2026.08.31-015000"></script>
+  <script src="./nav-organize.js?v=2026.08.31-015000"></script>
   <script src="./wheel.js?v=2026.08.30-062500"></script>
   <script src="./ruler.js?v=2026.08.30-062500"></script>
   <script src="./muyu.js?v=2026.08.30-084100"></script>

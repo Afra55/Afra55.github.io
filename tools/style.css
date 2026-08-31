@@ -10801,8 +10801,89 @@ body.countdown-fs-active {
   margin-top: 0.45rem;
 }
 
-.dr-form .field-row {
-  flex-wrap: wrap;
+.dr-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-1) 88%, transparent);
+}
+
+.dr-field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.28rem;
+  min-width: 0;
+}
+
+.dr-field > label:not(.flag) {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1.25;
+}
+
+.dr-field-check {
+  gap: 0;
+}
+
+.dr-field-hint {
+  margin: 0.15rem 0 0;
+}
+
+.dr-form input[type="text"],
+.dr-form input[type="number"],
+.dr-form select,
+.dr-form textarea,
+.dr-settings input[type="number"] {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+  color: var(--ink);
+  border-radius: 11px;
+  font: inherit;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.dr-form input[type="text"],
+.dr-form input[type="number"],
+.dr-form select {
+  padding: 0.65rem 0.8rem;
+  font-size: 0.95rem;
+}
+
+.dr-form textarea {
+  padding: 0.65rem 0.8rem;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  resize: vertical;
+  min-height: 4.2rem;
+}
+
+.dr-form input:focus,
+.dr-form select:focus,
+.dr-form textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.dr-date-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+}
+
+.dr-settings .dr-field {
+  flex: 1 1 8rem;
+  max-width: 10rem;
 }
 
 .dr-date-fields[hidden] {
