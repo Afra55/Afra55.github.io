@@ -50,11 +50,16 @@
     lastX: 0,
     lastY: 0,
     pointers: new Map(),
+    pinchStartDist: 0,
+    pinchStartScale: 1,
+    pinchTarget: null,
   };
 
   let dragItem = null;
   let dragOffsetX = 0;
   let dragOffsetY = 0;
+  /** @type {(() => void)|null} */
+  let itemDragCleanup = null;
   /** @type {{ xEdge: number|null, xLine: number|null, yEdge: number|null, yLine: number|null, boxOtherId: string|null }|null} */
   let snapSession = null;
 
@@ -461,10 +466,10 @@
     if (!meta) return;
     if (!items.length) {
       meta.textContent =
-        "支持多选 / 拖拽添加。滚轮无极缩放选中图（无选中则缩放画布）；拖拽移动图片；底边可拉高预览区。";
+        "支持多选 / 拖拽添加。滚轮或双指缩放选中图（无选中则缩放画布）；单指拖拽移动；底边可拉高预览区。";
       return;
     }
-    meta.textContent = `${items.length} 张 · 选中：${selectedItem()?.name || "无"} · 滚轮缩放 · 边缘吸附 · 底栏可拖拽排序`;
+    meta.textContent = `${items.length} 张 · 选中：${selectedItem()?.name || "无"} · 滚轮/双指缩放 · 边缘吸附 · 底栏可拖拽排序`;
   }
 
   function syncEmpty() {
@@ -743,7 +748,67 @@
     syncControls();
   }
 
+  function cancelItemDrag() {
+    if (itemDragCleanup) {
+      itemDragCleanup();
+      itemDragCleanup = null;
+    } else {
+      dragItem = null;
+      snapSession = null;
+      viewport?.classList.remove("is-panning");
+    }
+  }
+
+  function pinchMidpoint() {
+    const pts = [...view.pointers.values()];
+    if (pts.length < 2) return null;
+    return {
+      x: (pts[0].x + pts[1].x) / 2,
+      y: (pts[0].y + pts[1].y) / 2,
+    };
+  }
+
+  function beginPinchIfReady() {
+    if (view.pointers.size < 2) return false;
+    cancelItemDrag();
+    view.dragging = false;
+    const pts = [...view.pointers.values()];
+    const dx = pts[0].x - pts[1].x;
+    const dy = pts[0].y - pts[1].y;
+    view.pinchStartDist = Math.hypot(dx, dy) || 1;
+    const sel = selectedItem();
+    view.pinchTarget = sel ? "item" : "view";
+    view.pinchStartScale = sel ? sel.scale : view.scale;
+    viewport?.classList.add("is-panning");
+    return true;
+  }
+
+  function applyPinchZoom() {
+    if (view.pointers.size < 2 || !(view.pinchStartDist > 0)) return;
+    const pts = [...view.pointers.values()];
+    const dx = pts[0].x - pts[1].x;
+    const dy = pts[0].y - pts[1].y;
+    const dist = Math.hypot(dx, dy) || 1;
+    const mid = pinchMidpoint();
+    if (!mid) return;
+    const next = view.pinchStartScale * (dist / view.pinchStartDist);
+    if (view.pinchTarget === "item") {
+      const sel = selectedItem();
+      if (sel) scaleItemAt(sel, mid.x, mid.y, next);
+    } else {
+      zoomViewAt(mid.x, mid.y, next);
+    }
+  }
+
+  function resetPinchState() {
+    view.pinchStartDist = 0;
+    view.pinchStartScale = 1;
+    view.pinchTarget = null;
+    if (!view.dragging && !dragItem) viewport?.classList.remove("is-panning");
+  }
+
   function onItemPointerDown(e, it) {
+    if (view.pointers.size > 1) return;
     e.stopPropagation();
     selectItem(it.id);
     dragItem = it;
@@ -766,14 +831,63 @@
     const onEnd = () => {
       dragItem = null;
       snapSession = null;
+      itemDragCleanup = null;
       viewport?.classList.remove("is-panning");
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onEnd);
       window.removeEventListener("pointercancel", onEnd);
     };
+    itemDragCleanup = onEnd;
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onEnd);
     window.addEventListener("pointercancel", onEnd);
+  }
+
+  function bindViewportPinch() {
+    if (!viewport || viewport.dataset.pinchBound === "1") return;
+    viewport.dataset.pinchBound = "1";
+
+    const trackPointer = (e) => {
+      if (!items.length) return;
+      if (e.pointerType === "mouse" && e.buttons === 0) {
+        view.pointers.delete(e.pointerId);
+        return;
+      }
+      view.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    };
+
+    viewport.addEventListener(
+      "pointerdown",
+      (e) => {
+        if (!items.length) return;
+        if (e.target.closest?.(".imgprev-height-resize, .imgprev-hud")) return;
+        trackPointer(e);
+        if (beginPinchIfReady()) e.preventDefault();
+      },
+      { capture: true }
+    );
+
+    viewport.addEventListener(
+      "pointermove",
+      (e) => {
+        if (!items.length || !view.pointers.has(e.pointerId)) return;
+        trackPointer(e);
+        if (view.pointers.size >= 2) {
+          if (!(view.pinchStartDist > 0)) beginPinchIfReady();
+          e.preventDefault();
+          applyPinchZoom();
+        }
+      },
+      { capture: true, passive: false }
+    );
+
+    const releasePointer = (e) => {
+      view.pointers.delete(e.pointerId);
+      if (view.pointers.size < 2) resetPinchState();
+    };
+    viewport.addEventListener("pointerup", releasePointer, { capture: true });
+    viewport.addEventListener("pointercancel", releasePointer, { capture: true });
+    viewport.addEventListener("lostpointercapture", releasePointer, { capture: true });
   }
 
   function bindViewport() {
@@ -880,6 +994,7 @@
   });
 
   bindViewport();
+  bindViewportPinch();
   bindHeightControls();
   bindFileDrop();
   bindThumbStrip();
