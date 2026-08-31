@@ -974,6 +974,9 @@
   const chromeToggleBtn = $("#site-chrome-toggle");
   const chromeToggleFloat = $("#site-chrome-toggle-float");
   const workspaceSwitch = $("#workspace-switch");
+  const workspaceShare = $("#workspace-share");
+  const headerMoreToggle = $("#header-more-toggle");
+  const headerMoreMenu = $("#header-more-menu");
   const workspaceTitle = $("#workspace-title");
   const mediaSubnav = $("#media-subnav");
   const toolSearch = $("#tool-search");
@@ -2241,6 +2244,104 @@
     return `#${tool}`;
   }
 
+  function shareToolUrl() {
+    try {
+      const u = new URL(location.href);
+      u.search = "";
+      const raw = String(location.hash || "")
+        .replace(/^#/, "")
+        .trim();
+      const head = raw.split(/[/?]/)[0];
+      if (head === "lanshare" && raw.includes("?")) u.hash = raw;
+      else u.hash = routeHash(currentTool, currentMediaTab).replace(/^#/, "");
+      return u.toString();
+    } catch (_) {
+      return `${location.origin}${location.pathname || "/"}${routeHash(currentTool, currentMediaTab)}`;
+    }
+  }
+
+  function activeToolShareTitle() {
+    if (currentTool === "about") return "DevTools · 本地实用小工具合集";
+    const name = currentTool === "media" ? toolName(currentMediaTab) : toolName(currentTool);
+    return `${name} · DevTools`;
+  }
+
+  async function copyTextFallback(text) {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch (_) {}
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.setAttribute("readonly", "");
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      return ok;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function shareCurrentTool() {
+    const url = shareToolUrl();
+    const name = currentTool === "media" ? toolName(currentMediaTab) : toolName(currentTool);
+    const title = activeToolShareTitle();
+    const text = `打开 DevTools「${name}」：`;
+    const data = { title, text, url };
+    const prevTitle = document.title;
+    document.title = title;
+    const restoreTitle = () => {
+      try {
+        document.title = prevTitle;
+      } catch (_) {}
+    };
+
+    if (typeof navigator.share === "function") {
+      try {
+        if (!navigator.canShare || navigator.canShare(data)) {
+          await navigator.share(data);
+          restoreTitle();
+          showToast("已打开系统分享");
+          return;
+        }
+      } catch (err) {
+        if (err && (err.name === "AbortError" || /abort|cancel|取消/i.test(String(err.message || "")))) {
+          restoreTitle();
+          return;
+        }
+        try {
+          await navigator.share({ title, text: `${text}\n${url}` });
+          restoreTitle();
+          showToast("已打开系统分享");
+          return;
+        } catch (err2) {
+          if (err2 && (err2.name === "AbortError" || /abort|cancel|取消/i.test(String(err2.message || "")))) {
+            restoreTitle();
+            return;
+          }
+        }
+      }
+    }
+
+    restoreTitle();
+    if (await copyTextFallback(url)) showToast("链接已复制");
+    else showToast("复制失败，请手动复制地址栏链接");
+  }
+
+  function setHeaderMoreOpen(open) {
+    if (!headerMoreMenu) return;
+    const want = Boolean(open);
+    headerMoreMenu.hidden = !want;
+    headerMoreToggle?.setAttribute("aria-expanded", want ? "true" : "false");
+  }
+
   async function applyRoute({ skipRecent, keepDrawer, deferAssets = false } = {}) {
     let route = parseRoute();
     if (shouldRestoreLastTool()) {
@@ -3042,6 +3143,40 @@
 
   $("#site-force-refresh")?.addEventListener("click", () => {
     runForceHardRefresh();
+  });
+
+  headerMoreToggle?.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setHeaderMoreOpen(headerMoreMenu?.hidden);
+  });
+
+  headerMoreMenu?.querySelectorAll("[data-header-proxy]").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      e.preventDefault();
+      setHeaderMoreOpen(false);
+      const id = el.getAttribute("data-header-proxy");
+      $("#" + id)?.click();
+    });
+  });
+
+  headerMoreMenu?.querySelectorAll('a[role="menuitem"]').forEach((el) => {
+    el.addEventListener("click", () => setHeaderMoreOpen(false));
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!headerMoreMenu || headerMoreMenu.hidden) return;
+    if (e.target.closest(".header-more-wrap")) return;
+    setHeaderMoreOpen(false);
+  });
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && headerMoreMenu && !headerMoreMenu.hidden) setHeaderMoreOpen(false);
+  });
+
+  workspaceShare?.addEventListener("click", (e) => {
+    e.preventDefault();
+    shareCurrentTool().catch((err) => showToast(err?.message || "分享失败"));
   });
 
   navOpenBtn?.addEventListener("click", (e) => {

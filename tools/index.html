@@ -14,9 +14,9 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.31-016000"></script>
-  <link rel="stylesheet" href="./style.css?v=2026.08.31-016000" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.31-016000" />
+  <script src="./lib/tools-build.js?v=2026.08.31-017000"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.08.31-017000" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.31-017000" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
   <script>
@@ -144,13 +144,22 @@
         <span class="tool-ver site-tools-ver mono" id="site-tools-version" title="工具页逻辑版本（北京时间）">v2026.08.30-084100</span>
       </div>
       <div class="header-actions">
-        <button type="button" class="ghost-btn" id="site-force-refresh" title="注销 Service Worker、清空浏览器缓存并重新加载，以获取最新脚本与样式">强制刷新</button>
+        <button type="button" class="ghost-btn header-action-collapse" id="site-force-refresh" title="注销 Service Worker、清空浏览器缓存并重新加载，以获取最新脚本与样式">强制刷新</button>
         <button type="button" class="ghost-btn site-chrome-toggle" id="site-chrome-toggle" aria-pressed="false" title="隐藏 DevTools 标题栏与左侧工具菜单">隐藏顶栏</button>
-        <button type="button" class="ghost-btn" id="pwa-install" hidden aria-hidden="true" title="安装到桌面/开始菜单">安装应用</button>
+        <button type="button" class="ghost-btn header-action-collapse" id="pwa-install" hidden aria-hidden="true" title="安装到桌面/开始菜单">安装应用</button>
         <button type="button" class="ghost-btn" id="theme-open" title="切换站点主题">主题</button>
-        <a class="ghost-btn header-about-link" href="#about">关于</a>
-        <a class="ghost-btn header-about-link" href="#setup" title="安装 Node / ADB / FFmpeg">安装帮助</a>
-        <button type="button" class="nav-menu-btn" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
+        <a class="ghost-btn header-about-link header-action-collapse" href="#about">关于</a>
+        <a class="ghost-btn header-about-link header-action-collapse" href="#setup" title="安装 Node / ADB / FFmpeg">安装帮助</a>
+        <button type="button" class="nav-menu-btn header-action-collapse" id="nav-open" aria-controls="nav-bar" aria-expanded="false" aria-haspopup="dialog">工具</button>
+        <div class="header-more-wrap">
+          <button type="button" class="ghost-btn" id="header-more-toggle" aria-expanded="false" aria-controls="header-more-menu" aria-haspopup="menu" title="更多操作">更多</button>
+          <div id="header-more-menu" class="header-more-menu" hidden role="menu" aria-label="更多操作">
+            <button type="button" class="header-more-item" role="menuitem" data-header-proxy="site-force-refresh">强制刷新</button>
+            <a class="header-more-item" role="menuitem" href="#about">关于</a>
+            <a class="header-more-item" role="menuitem" href="#setup">安装帮助</a>
+            <button type="button" class="header-more-item" role="menuitem" data-header-proxy="pwa-install" id="header-more-pwa" hidden aria-hidden="true">安装应用</button>
+          </div>
+        </div>
       </div>
     </div>
     <p class="tagline">常用开发小工具合集 · 本地处理不上传 · 单工具工作台</p>
@@ -210,6 +219,7 @@
           </div>
           <div class="workspace-tool-actions">
             <button type="button" class="ghost-btn site-chrome-toggle-float" id="site-chrome-toggle-float" aria-pressed="true" title="显示 DevTools 标题栏与左侧工具菜单">显示顶栏</button>
+            <button type="button" class="ghost-btn workspace-share" id="workspace-share" title="分享当前工具页面">分享</button>
             <button type="button" class="ghost-btn workspace-switch" id="workspace-switch">切换工具</button>
           </div>
         </div>
@@ -5548,12 +5558,12 @@ adb devices</pre>
     <p class="ruler-fs-hud mono hint" id="ruler-coord-fs" aria-live="polite"></p>
   </div>
   <script src="./lib/bridge-token.js?v=2026.08.30-062500"></script>
-  <script src="./lib/lazy-scripts.js?v=2026.08.31-016000"></script>
-  <script src="./vendor/solarlunar.min.js?v=2026.08.31-016000"></script>
-  <script src="./dateremind.js?v=2026.08.31-016000"></script>
+  <script src="./lib/lazy-scripts.js?v=2026.08.31-017000"></script>
+  <script src="./vendor/solarlunar.min.js?v=2026.08.31-017000"></script>
+  <script src="./dateremind.js?v=2026.08.31-017000"></script>
   <script src="./theme.js?v=2026.08.30-062500"></script>
-  <script src="./app.js?v=2026.08.31-016000"></script>
-  <script src="./nav-organize.js?v=2026.08.31-016000"></script>
+  <script src="./app.js?v=2026.08.31-017000"></script>
+  <script src="./nav-organize.js?v=2026.08.31-017000"></script>
   <script src="./wheel.js?v=2026.08.30-062500"></script>
   <script src="./ruler.js?v=2026.08.30-062500"></script>
   <script src="./muyu.js?v=2026.08.30-084100"></script>

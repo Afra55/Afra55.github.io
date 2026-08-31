@@ -23,6 +23,11 @@
     const show = Boolean(on) && !isStandalone();
     btn.hidden = !show;
     btn.setAttribute("aria-hidden", show ? "false" : "true");
+    const menuPwa = document.getElementById("header-more-pwa");
+    if (menuPwa) {
+      menuPwa.hidden = !show;
+      menuPwa.setAttribute("aria-hidden", show ? "false" : "true");
+    }
   }
 
   syncStandaloneClass();
