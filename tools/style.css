@@ -4783,6 +4783,43 @@ button.adb-device-body.linkish {
   margin-top: 1rem;
 }
 
+.imgtrim-layout {
+  display: grid;
+  grid-template-columns: minmax(160px, 1fr) minmax(200px, 1.2fr);
+  gap: 1rem;
+}
+
+.imgtrim-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-height: 24rem;
+  overflow: auto;
+}
+
+.imgtrim-row {
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  padding: 0.45rem 0.6rem;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+}
+
+.imgtrim-row-head {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.imgtrim-row-head .btn-row {
+  margin-top: 0.2rem;
+}
+
+@media (max-width: 720px) {
+  .imgtrim-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
 .imgkit-list {
   display: flex;
   flex-direction: column;

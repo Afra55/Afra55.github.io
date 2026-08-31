@@ -895,6 +895,7 @@ html[data-boot-panel="ytdlp"] #ytdlp,
 html[data-boot-panel="imgpreview"] #imgpreview,
 html[data-boot-panel="whiteboard"] #whiteboard,
 html[data-boot-panel="imgkit"] #imgkit,
+html[data-boot-panel="imgtrim"] #imgtrim,
 html[data-boot-panel="about"] #about,
 html[data-boot-panel="acupoint"] #acupoint,
 html[data-boot-panel="setup"] #setup {

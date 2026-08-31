@@ -14,9 +14,9 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.08.31-004000"></script>
-  <link rel="stylesheet" href="./style.css?v=2026.08.31-004000" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.31-004000" />
+  <script src="./lib/tools-build.js?v=2026.08.31-005000"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.08.31-005000" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.08.31-005000" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
   <script>
@@ -2445,7 +2445,7 @@ hello@world.org</textarea>
 <section id="vbb" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>黑盒 GIF</h1>
-        <p>预制参数（宽 420 · ≤6MB · 自动压帧/加宽），全程本地处理。选视频后点<strong>一键黑盒</strong>即可；已裁好的多个短片可多选一次性转换；长视频可自动切片，也可<strong>手动打点</strong>自选片段。</p>
+        <p>预制参数（宽 420 · ≤6MB · 自动压帧/加宽），全程本地处理。选视频后点<strong>一键黑盒</strong>即可；已裁好的多个短片可多选一次性转换；长视频可自动切片，也可<strong>手动打点</strong>自选片段。下方还可<strong>批量压缩已有 GIF</strong>至黑盒规格。</p>
       </div>
       <div class="panel-body">
         <div class="btn-row tool-actions">
@@ -2538,6 +2538,22 @@ hello@world.org</textarea>
           <div class="vbb-plan-compare" id="vbb-plan-compare"></div>
         </div>
         </details>
+
+        <div class="field-block vbb-gif-compress" style="margin-top:1.25rem" id="vbb-gif-block">
+          <h2 class="subhead">已有 GIF 压黑盒</h2>
+          <p class="hint tight">多选本地 GIF，按黑盒规则压至 ≤6MB；体积已符合要求的会跳过，不重复压缩。</p>
+          <div class="btn-row tool-actions" style="flex-wrap:wrap">
+            <label class="file-btn" for="vbb-gif-file">选择 GIF（可多选）</label>
+            <input id="vbb-gif-file" type="file" accept="image/gif,.gif" multiple hidden />
+            <button type="button" class="primary-btn" id="vbb-gif-run" disabled>压黑盒</button>
+            <button type="button" class="secondary-btn" id="vbb-gif-zip" disabled title="打包已处理的 GIF">打包下载</button>
+            <button type="button" class="ghost-btn" id="vbb-gif-clear">清空</button>
+            <button type="button" class="ghost-btn" id="vbb-gif-abort" hidden>取消</button>
+          </div>
+          <p class="hint" id="vbb-gif-meta">未选择 GIF</p>
+          <div class="gif-frame-list" id="vbb-gif-list" hidden aria-live="polite"></div>
+          <p class="error" id="vbb-gif-error" hidden></p>
+        </div>
 
         <div class="field-block" style="margin-top:1.25rem" id="vbb-result-block" hidden>
           <h2 class="subhead">生成结果</h2>
@@ -4371,6 +4387,56 @@ yt-dlp --version</pre>
       </div>
     </section>
 
+<section id="imgtrim" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>去色边</h1>
+        <p>裁掉图片四周的纯色边框（白边、黑边或其它单色），从每条边向内扫描直到出现其它颜色。支持多选批量处理。</p>
+      </div>
+      <div class="panel-body">
+        <div class="imgtrim-drop imgkit-drop" id="imgtrim-drop">
+          <div class="btn-row tool-actions">
+            <label class="file-btn" for="imgtrim-file">添加图片（可多选）</label>
+            <input id="imgtrim-file" type="file" accept="image/*" multiple hidden />
+            <button type="button" class="ghost-btn" id="imgtrim-clear">清空</button>
+          </div>
+          <p class="hint" id="imgtrim-meta">支持 PNG / JPEG / WebP / GIF（动图仅首帧）。可拖拽多图到此处。本地处理，不会上传。</p>
+        </div>
+        <div class="field-row" style="flex-wrap:wrap;margin-top:0.65rem;align-items:center">
+          <label for="imgtrim-mode">边色</label>
+          <select id="imgtrim-mode" class="mono select-input">
+            <option value="auto" selected>自动检测</option>
+            <option value="white">纯白</option>
+            <option value="black">纯黑</option>
+            <option value="custom">自定义</option>
+          </select>
+          <span id="imgtrim-custom-row" hidden>
+            <label for="imgtrim-custom-color">色值</label>
+            <input id="imgtrim-custom-color" class="mono meta-input" type="text" value="#000000" placeholder="#RRGGBB" />
+          </span>
+          <label for="imgtrim-tolerance">容差</label>
+          <input id="imgtrim-tolerance" class="mono meta-input" type="number" min="0" max="64" step="1" value="8" title="颜色匹配容差，0 为精确匹配" />
+        </div>
+        <div class="btn-row tool-actions" style="margin-top:0.55rem;flex-wrap:wrap">
+          <button type="button" class="primary-btn" id="imgtrim-run" disabled>裁掉色边</button>
+          <button type="button" class="secondary-btn" id="imgtrim-zip" disabled>打包下载</button>
+        </div>
+        <div class="imgtrim-layout" style="margin-top:0.85rem">
+          <div class="imgtrim-side">
+            <h2 class="subhead">图片列表</h2>
+            <div class="imgtrim-list" id="imgtrim-list"></div>
+          </div>
+          <div class="imgtrim-main">
+            <h2 class="subhead">预览</h2>
+            <p class="hint tight" id="imgtrim-preview-meta">处理后会显示预览</p>
+            <div class="imgkit-preview-wrap">
+              <img id="imgtrim-preview" class="imgkit-preview" alt="裁边预览" hidden />
+            </div>
+          </div>
+        </div>
+        <p class="error" id="imgtrim-error" hidden></p>
+      </div>
+    </section>
+
 <section id="imgkit" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>图片工具</h1>
@@ -5329,8 +5395,8 @@ adb devices</pre>
   <script src="./lib/bridge-token.js?v=2026.08.30-062500"></script>
   <script src="./lib/lazy-scripts.js?v=2026.08.30-214500"></script>
   <script src="./theme.js?v=2026.08.30-062500"></script>
-  <script src="./app.js?v=2026.08.31-004000"></script>
-  <script src="./nav-organize.js?v=2026.08.31-004000"></script>
+  <script src="./app.js?v=2026.08.31-005000"></script>
+  <script src="./nav-organize.js?v=2026.08.31-005000"></script>
   <script src="./wheel.js?v=2026.08.30-062500"></script>
   <script src="./ruler.js?v=2026.08.30-062500"></script>
   <script src="./muyu.js?v=2026.08.30-084100"></script>

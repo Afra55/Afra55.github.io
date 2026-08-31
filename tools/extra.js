@@ -9184,6 +9184,298 @@
     vbbNudgeM01?.addEventListener("click", () => nudgeVbbPreview(-0.1));
     vbbNudgeP01?.addEventListener("click", () => nudgeVbbPreview(0.1));
     vbbNudgeP1?.addEventListener("click", () => nudgeVbbPreview(1));
+    // ---- 已有 GIF 压黑盒（批量） ----
+    const vbbGifFile = $("#vbb-gif-file");
+    const vbbGifMeta = $("#vbb-gif-meta");
+    const vbbGifError = $("#vbb-gif-error");
+    const vbbGifList = $("#vbb-gif-list");
+    const vbbGifRun = $("#vbb-gif-run");
+    const vbbGifZip = $("#vbb-gif-zip");
+    const vbbGifClear = $("#vbb-gif-clear");
+    const vbbGifAbort = $("#vbb-gif-abort");
+    /** @type {{ file: File, outBlob?: Blob, status: string, note: string, error?: string, previewIdx?: boolean }[]} */
+    let vbbGifItems = [];
+    let vbbGifBusy = false;
+    let abortVbbGif = false;
+    let vbbGifZipUrl = "";
+    /** @type {string[]} */
+    let vbbGifPreviewUrls = [];
+
+    function vbbGifOutName(item) {
+      const base = vbbGifBaseName(item.file);
+      if (item.status === "skip") return `${base}.gif`;
+      return `${base}-blackbox.gif`;
+    }
+
+    async function compressExistingGifToBlackbox(blob, onProgress) {
+      if (!blob) throw new Error("没有可压缩的 GIF");
+      if (blob.size <= V2G_BLACKBOX_MAX_BYTES) {
+        return { blob, skipped: true, compressRounds: 0, ok: true };
+      }
+      let candidate = blob;
+      let compressRounds = 0;
+      for (let round = 1; round <= V2G_BLACKBOX_MAX_COMPRESS_ROUNDS; round++) {
+        if (abortVbbGif) throw new Error("已取消");
+        const before = candidate.size;
+        const plan = buildBlackboxHardCompressArgs(round);
+        const out = await compressGifBlob(
+          candidate,
+          "standard",
+          (ratio, text) => onProgress?.(ratio, text || `第 ${round} 轮`),
+          { round, plan }
+        );
+        compressRounds = round;
+        candidate = out;
+        if (out.size <= V2G_BLACKBOX_MAX_BYTES) {
+          return { blob: out, skipped: false, compressRounds, ok: true };
+        }
+        if (out.size >= before * 0.99) break;
+      }
+      return {
+        blob: candidate,
+        skipped: false,
+        compressRounds,
+        ok: candidate.size <= V2G_BLACKBOX_MAX_BYTES,
+      };
+    }
+
+    function setVbbGifButtons() {
+      const done = vbbGifItems.filter((it) => it.outBlob).length;
+      if (vbbGifRun) vbbGifRun.disabled = vbbGifItems.length === 0 || vbbGifBusy;
+      if (vbbGifZip) vbbGifZip.disabled = done < 1 || vbbGifBusy;
+      if (vbbGifClear) vbbGifClear.disabled = vbbGifBusy && vbbGifItems.length === 0;
+      if (vbbGifAbort) vbbGifAbort.hidden = !vbbGifBusy;
+    }
+
+    function renderVbbGifList() {
+      if (!vbbGifList) return;
+      vbbGifPreviewUrls.forEach((u) => {
+        try {
+          URL.revokeObjectURL(u);
+        } catch (_) {}
+      });
+      vbbGifPreviewUrls = [];
+      vbbGifList.innerHTML = "";
+      if (!vbbGifItems.length) {
+        vbbGifList.hidden = true;
+        if (vbbGifMeta) vbbGifMeta.textContent = "未选择 GIF";
+        setVbbGifButtons();
+        return;
+      }
+      vbbGifList.hidden = false;
+      const total = vbbGifItems.reduce((s, it) => s + (it.file.size || 0), 0);
+      if (vbbGifMeta) {
+        vbbGifMeta.textContent = `已选 ${vbbGifItems.length} 个 · 共 ${formatKb(total)} · 点「压黑盒」批量处理（≤6MB 的会跳过）`;
+      }
+      vbbGifItems.forEach((item, idx) => {
+        const row = document.createElement("div");
+        row.className = "gif-frame vsplit-clip";
+        row.dataset.vbbGifIdx = String(idx);
+        const top = document.createElement("div");
+        top.className = "vsplit-clip-top";
+        const title = document.createElement("strong");
+        title.textContent = item.file.name;
+        const meta = document.createElement("span");
+        meta.className = "hint tight";
+        const bits = [formatKb(item.file.size)];
+        if (item.note) bits.push(item.note);
+        if (item.error) bits.push(item.error);
+        meta.textContent = bits.join(" · ");
+        const actions = document.createElement("div");
+        actions.className = "btn-row";
+        if (item.outBlob) {
+          const dlBtn = document.createElement("button");
+          dlBtn.type = "button";
+          dlBtn.className = "secondary-btn";
+          dlBtn.textContent = "下载";
+          dlBtn.addEventListener("click", () => {
+            triggerLocalDownload(item.outBlob, vbbGifOutName(item));
+          });
+          actions.appendChild(dlBtn);
+          const previewBtn = document.createElement("button");
+          previewBtn.type = "button";
+          previewBtn.className = "ghost-btn";
+          previewBtn.textContent = item.previewIdx ? "收起预览" : "预览";
+          previewBtn.addEventListener("click", () => {
+            vbbGifItems.forEach((it, i) => {
+              it.previewIdx = i === idx ? !it.previewIdx : false;
+            });
+            renderVbbGifList();
+          });
+          actions.appendChild(previewBtn);
+        }
+        top.append(title, meta, actions);
+        row.appendChild(top);
+        if (item.status === "working") {
+          const progressBox = buildClipProgressDom();
+          row.appendChild(progressBox);
+          syncClipProgressDom(progressBox, {
+            jobStatus: "working",
+            jobProgress: item.jobProgress || 0,
+            jobText: item.jobText || "处理中…",
+          });
+        }
+        if (item.outBlob && item.previewIdx) {
+          const url = URL.createObjectURL(item.outBlob);
+          vbbGifPreviewUrls.push(url);
+          const img = document.createElement("img");
+          img.className = "vsplit-clip-gif";
+          img.alt = item.file.name;
+          img.loading = "lazy";
+          img.decoding = "async";
+          img.src = url;
+          row.appendChild(img);
+        }
+        vbbGifList.appendChild(row);
+      });
+      setVbbGifButtons();
+    }
+
+    function clearVbbGifCompress() {
+      if (vbbGifBusy) abortVbbGif = true;
+      vbbGifItems = [];
+      abortVbbGif = false;
+      vbbGifBusy = false;
+      if (vbbGifZipUrl) {
+        try {
+          URL.revokeObjectURL(vbbGifZipUrl);
+        } catch (_) {}
+      }
+      vbbGifZipUrl = "";
+      if (vbbGifFile) vbbGifFile.value = "";
+      setError(vbbGifError, "");
+      renderVbbGifList();
+    }
+
+    function loadVbbGifFiles(fileList) {
+      const files = [...(fileList || [])].filter((f) => {
+        const type = String(f.type || "").toLowerCase();
+        const name = String(f.name || "");
+        return type === "image/gif" || /\.gif$/i.test(name);
+      });
+      if (!files.length) {
+        setError(vbbGifError, "请选择 GIF 文件");
+        return;
+      }
+      setError(vbbGifError, "");
+      vbbGifItems = files.map((file) => ({
+        file,
+        status: "pending",
+        note: "",
+        previewIdx: false,
+      }));
+      renderVbbGifList();
+      toast(`已添加 ${files.length} 个 GIF`);
+    }
+
+    async function runVbbGifCompress() {
+      if (!vbbGifItems.length || vbbGifBusy) return;
+      vbbGifBusy = true;
+      abortVbbGif = false;
+      setError(vbbGifError, "");
+      setVbbGifButtons();
+      let ok = 0;
+      let skip = 0;
+      let fail = 0;
+      try {
+        for (let i = 0; i < vbbGifItems.length; i++) {
+          if (abortVbbGif) throw new Error("已取消");
+          const item = vbbGifItems[i];
+          item.status = "working";
+          item.jobProgress = 0;
+          item.jobText = "准备…";
+          item.note = "";
+          item.error = "";
+          item.outBlob = undefined;
+          renderVbbGifList();
+          try {
+            const before = item.file.size;
+            if (before <= V2G_BLACKBOX_MAX_BYTES) {
+              item.outBlob = item.file;
+              item.status = "skip";
+              item.note = `已符合黑盒 · ${formatKb(before)} · 未压缩`;
+              skip++;
+            } else {
+              item.jobText = `压缩中 · ${formatKb(before)}`;
+              const result = await compressExistingGifToBlackbox(item.file, (ratio, text) => {
+                item.jobProgress = Math.max(0, Math.min(1, Number(ratio) || 0));
+                item.jobText = text || "压缩中…";
+                renderVbbGifList();
+              });
+              item.outBlob = result.blob;
+              item.status = result.ok ? "done" : "warn";
+              const after = result.blob.size;
+              const saved =
+                before > 0 ? Math.max(0, Math.round((1 - after / before) * 100)) : 0;
+              if (result.skipped) {
+                item.note = `已符合黑盒 · ${formatKb(after)}`;
+                skip++;
+              } else if (result.ok) {
+                item.note = `${formatKb(before)} → ${formatKb(after)} · 约省 ${saved}% · ${result.compressRounds} 轮`;
+                ok++;
+              } else {
+                item.note = `仍 ${formatKb(after)}（超 6MB）· 已压 ${result.compressRounds} 轮`;
+                item.error = "未压进 6MB";
+                fail++;
+              }
+            }
+          } catch (err) {
+            item.status = "error";
+            item.error = err.message || String(err);
+            fail++;
+          }
+          item.status = item.status === "working" ? "done" : item.status;
+          renderVbbGifList();
+        }
+        if (abortVbbGif) toast("已取消");
+        else if (fail) toast(`完成：${ok + skip} 个成功，${fail} 个有问题`);
+        else toast(`全部完成（${skip} 个跳过，${ok} 个已压缩）`);
+      } catch (err) {
+        if (String(err?.message) !== "已取消") setError(vbbGifError, err.message || String(err));
+        else toast("已取消");
+      } finally {
+        vbbGifBusy = false;
+        abortVbbGif = false;
+        setVbbGifButtons();
+      }
+    }
+
+    async function packVbbGifResults() {
+      const ready = vbbGifItems.filter((it) => it.outBlob);
+      if (!ready.length) {
+        toast("请先处理 GIF");
+        return;
+      }
+      const packed = await zipBlobs(
+        ready.map((it) => ({ name: vbbGifOutName(it), blob: it.outBlob })),
+        "blackbox-gifs.zip"
+      );
+      if (vbbGifZipUrl) {
+        try {
+          URL.revokeObjectURL(vbbGifZipUrl);
+        } catch (_) {}
+      }
+      vbbGifZipUrl = packed.url;
+      triggerLocalDownload(packed.blob, packed.name);
+      toast(`已打包 ${ready.length} 个 GIF`);
+    }
+
+    vbbGifFile?.addEventListener("change", (e) => {
+      loadVbbGifFiles(e.target.files);
+    });
+    vbbGifRun?.addEventListener("click", () => {
+      runVbbGifCompress().catch((err) => setError(vbbGifError, err.message || String(err)));
+    });
+    vbbGifZip?.addEventListener("click", () => {
+      packVbbGifResults().catch((err) => setError(vbbGifError, err.message || String(err)));
+    });
+    vbbGifClear?.addEventListener("click", clearVbbGifCompress);
+    vbbGifAbort?.addEventListener("click", () => {
+      abortVbbGif = true;
+    });
+    window.DevToolsTemp?.registerCleanup(clearVbbGifCompress);
+    renderVbbGifList();
+
     syncVbbWorkflowUi();
     syncVbbModeUi();
     setVbbButtons();
