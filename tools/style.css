@@ -3362,29 +3362,6 @@ body.vsplit-fs-open {
   background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
 }
 
-.vbb-plan-compare {
-  display: grid;
-  gap: 0.55rem;
-  margin-top: 0.75rem;
-}
-
-.vbb-plan-card {
-  padding: 0.7rem 0.8rem;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
-}
-
-.vbb-plan-card.is-selected {
-  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-  background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
-}
-
-.vbb-plan-card strong {
-  display: block;
-  margin-bottom: 0.25rem;
-}
-
 .vbb-plan-row {
   display: grid;
   grid-template-columns: auto 1fr auto;

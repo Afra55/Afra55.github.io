@@ -7143,7 +7143,6 @@
     const vbbMergedPreview = $("#vbb-merged-preview");
     const vbbPlan = $("#vbb-plan");
     const vbbPlanSummary = $("#vbb-plan-summary");
-    const vbbPlanCompare = $("#vbb-plan-compare");
     const vbbPlanList = $("#vbb-plan-list");
     const vbbList = $("#vbb-list");
     const vbbBatchList = $("#vbb-batch-list");
@@ -8169,32 +8168,6 @@
       if (vbbAdvanced) vbbAdvanced.open = true;
       syncVbbModeUi();
 
-      if (vbbPlanCompare) {
-        vbbPlanCompare.innerHTML = "";
-        [vbbAnalysis.clarity, vbbAnalysis.sharp, vbbAnalysis.durationPlan].forEach((p) => {
-          if (!p) return;
-          const card = document.createElement("button");
-          card.type = "button";
-          card.className = `vbb-plan-card${vbbMode === p.key ? " is-selected" : ""}`;
-          const title = document.createElement("strong");
-          title.textContent = p.label;
-          const line = document.createElement("span");
-          line.className = "hint tight";
-          const widthTip = p.maxW ? ` · 宽${p.maxW}` : "";
-          const fpsTip = ` · ${formatVbbFpsTip(p.estFps || 15, p.estCompressRounds || 0)}`;
-          line.textContent = `${p.count} 段 · ${formatVbbRangesSpanTip(p.ranges)}${widthTip}${fpsTip} · 预估 ${formatKb(p.estBytes)}/段`;
-          const note = document.createElement("span");
-          note.className = "hint tight";
-          note.textContent = p.note;
-          card.append(title, line, note);
-          card.addEventListener("click", () => {
-            vbbMode = p.key;
-            paintVbbPlan();
-          });
-          vbbPlanCompare.appendChild(card);
-        });
-      }
-
       if (vbbPlanSummary && active) {
         const widthTip = active.maxW ? ` · 目标宽 ${active.maxW}` : "";
         const fpsTip = ` · ${formatVbbFpsTip(active.estFps || 15, active.estCompressRounds || 0)}`;
@@ -8739,7 +8712,7 @@
           1,
           `分析完成 · 样片 ${formatKb(sample.blob.size)} / ${vbbAnalysis.sampleSpan.toFixed(1)}s`
         );
-        toast(`清晰 ${clarity.count} 段 · 锐度 ${sharp.count} 段(宽${sharp.maxW}) · 时长 ${durationPlan.count} 段`);
+        toast(`分析完成 · 默认 ${durationPlan.count} 段 · 可自定义段时长`);
         if (isLikelyMobileBrowser() && (duration >= 90 || (vbbSourceFile?.size || 0) >= 200 * 1024 * 1024)) {
           toast("大视频在手机上易内存不足。已优化分段写入；仍建议少段处理或用电脑。");
         }
@@ -9089,6 +9062,12 @@
         return estimateVbbBlackboxPlan(vbbAnalysis.bps15, span, vbbAnalysis.srcW);
       },
       isEqualize: () => isVbbEqualize(),
+      getMode: () => vbbMode,
+      setMode: (mode) => {
+        if (!vbbAnalysis) return;
+        vbbMode = String(mode || "duration");
+        paintVbbPlan();
+      },
       getWorkflow: () => vbbWorkflow,
       getMarks: () => vbbMarks.map((m) => ({ ...m })),
       getDraftStart: () => vbbDraftStart,

@@ -40,17 +40,6 @@ function startServer() {
   });
 }
 
-async function clickVbbPlanCard(page, pattern) {
-  await page.evaluate((pat) => {
-    const re = new RegExp(pat);
-    const card = [...document.querySelectorAll("#vbb-plan-compare .vbb-plan-card")].find((el) =>
-      re.test(el.textContent || "")
-    );
-    if (!card) throw new Error(`vbb plan card not found: ${pat}`);
-    card.click();
-  }, pattern);
-}
-
 async function main() {
   let puppeteer;
   try {
@@ -110,7 +99,6 @@ async function main() {
         "vbb-run",
         "vbb-merge",
         "vbb-mode-custom",
-        "vbb-plan-compare",
         "vbb-list",
       ].map((id) => ({ id, ok: Boolean(document.getElementById(id)) })),
       orderHasMedia: false,
@@ -190,13 +178,11 @@ async function main() {
     const summary = document.getElementById("vbb-plan-summary")?.textContent || "";
     const runDisabled = document.getElementById("vbb-run")?.disabled;
     const rows = document.querySelectorAll("#vbb-plan-list .vbb-plan-row").length;
-    const cards = document.querySelectorAll("#vbb-plan-compare .vbb-plan-card").length;
     const eq = document.getElementById("vbb-equalize");
     return {
       summary,
       runDisabled,
       rows,
-      cards,
       equalizeExists: Boolean(eq),
       equalizeChecked: Boolean(eq?.checked),
       hookEqualize: Boolean(window.DevToolsVbb?.isEqualize?.()),
@@ -270,10 +256,10 @@ async function main() {
     throw new Error(`turning equalize off should restore 3+1, got ${JSON.stringify(customEqualizeOff)}`);
   }
 
-  // 均分打开时切换预设不应报错，且关均分后自定义仍是末段剩余
+  // 均分打开时切换方案模式不应报错，且关均分后自定义仍是末段剩余
   await page.click("#vbb-equalize");
-  await clickVbbPlanCard(page, "清晰");
-  await clickVbbPlanCard(page, "时长");
+  await page.evaluate(() => window.DevToolsVbb?.setMode?.("clarity"));
+  await page.evaluate(() => window.DevToolsVbb?.setMode?.("duration"));
   await page.click("#vbb-mode-custom");
   await page.click("#vbb-equalize");
   const afterModeSwitch = await page.evaluate(() => {
@@ -289,34 +275,8 @@ async function main() {
     throw new Error(`mode switch with toggle should keep remainder, got ${JSON.stringify(afterModeSwitch)}`);
   }
 
-  // Switch duration mode and ensure plan updates
-  await clickVbbPlanCard(page, "时长");
-  const durationMode = await page.evaluate(() => {
-    const summary = document.getElementById("vbb-plan-summary")?.textContent || "";
-    const active = Boolean(
-      [...document.querySelectorAll("#vbb-plan-compare .vbb-plan-card.is-selected")].some((el) =>
-        /时长/.test(el.textContent || "")
-      )
-    );
-    return { summary, active };
-  });
-
-  await clickVbbPlanCard(page, "锐度");
-  const sharpMode = await page.evaluate(() => {
-    const summary = document.getElementById("vbb-plan-summary")?.textContent || "";
-    const active = Boolean(
-      [...document.querySelectorAll("#vbb-plan-compare .vbb-plan-card.is-selected")].some((el) =>
-        /锐度/.test(el.textContent || "")
-      )
-    );
-    const card = [...document.querySelectorAll("#vbb-plan-compare .vbb-plan-card")].find((el) =>
-      /锐度/.test(el.textContent || "")
-    );
-    return { summary, active, cardText: card?.textContent || "" };
-  });
-
-  await clickVbbPlanCard(page, "清晰");
   await page.evaluate(() => {
+    window.DevToolsVbb?.setMode?.("duration");
     document.getElementById("vbb-advanced")?.setAttribute("open", "");
   });
   await page.click("#vbb-run");
@@ -429,7 +389,7 @@ async function main() {
   const todayTools = await page.evaluate(() => ({
     vsplit: Boolean(document.getElementById("vsplit")),
     gifm: Boolean(document.getElementById("gifm-merge") && document.getElementById("gifm-file")),
-    vbbSharp: document.querySelectorAll("#vbb-plan-compare .vbb-plan-card").length >= 3,
+    vbb: Boolean(document.getElementById("vbb")),
     mediaTabs: document.querySelectorAll("#media-subnav [data-media-tab]").length,
     vsplitManualMode: Boolean(document.getElementById("vsplit-mode-m")),
     vsplitMarks: Boolean(document.getElementById("vsplit-marks")),
@@ -1305,25 +1265,12 @@ async function main() {
   if (afterAnalyze.rows) problems.push("per-clip estimate preview should be removed");
   if (/预计压/.test(afterAnalyze.summary || "")) problems.push("summary should not show per-clip compress preview");
   if (afterAnalyze.equalizeChecked) problems.push("equalize switch should default off");
-  if (afterAnalyze.cards !== 3) problems.push(`expected 3 compare cards, got ${afterAnalyze.cards}`);
   if (afterAnalyze.runDisabled !== false) problems.push("run should enable after analyze");
-  if (!durationMode.active) problems.push("duration mode not active");
-  if (!/FPS/i.test(durationMode.summary)) problems.push("duration summary missing FPS");
-  if (!sharpMode.active) problems.push("sharp mode not active");
-  if (!/FPS/i.test(sharpMode.summary + sharpMode.cardText)) problems.push("sharp summary missing FPS");
-  if (!/宽\s*[4-7][0-9]{2}|宽[4-7][0-9]{2}/.test(sharpMode.summary + sharpMode.cardText)) {
-    problems.push("sharp mode missing width hint");
-  }
-  // 1280 源 + 短片：锐度档应能抬到 >420
-  if (!/宽\s*(?:480|540|600|660|720)|宽(?:480|540|600|660|720)/.test(sharpMode.summary + sharpMode.cardText)) {
-    problems.push(`sharp mode should widen above 420 for 1280 source: ${sharpMode.summary}`);
-  }
   if (!analyze.ready) problems.push("TOOLS_VERSION missing");
   if (!afterRun.clips || !afterRun.downloads) problems.push(`execute clips/download missing: ${JSON.stringify(afterRun)}`);
   if (afterRun.errorVisible) problems.push(`execute error: ${afterRun.errorText}`);
   if (!todayTools.vsplit) problems.push("missing video split tool");
   if (!todayTools.gifm) problems.push("missing gif merge UI");
-  if (!todayTools.vbbSharp) problems.push("missing sharp mode");
   if (!todayTools.vsplitManualMode) problems.push("missing vsplit manual mode button");
   if (!todayTools.vsplitMarks) problems.push("missing vsplit marks list");
   if (todayTools.mediaTabs !== 5) problems.push("media subnav should have 5 tabs");
