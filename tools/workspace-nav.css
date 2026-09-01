@@ -193,12 +193,28 @@ html.is-pwa-standalone #pwa-install {
 
 .nav-strip-title,
 .nav-recent-label {
-  margin: 0 0 0.35rem;
   color: var(--muted);
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
+}
+
+.nav-recent-label {
+  display: flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin: 0 0 0.32rem;
+}
+
+.nav-recent-count {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 600;
+}
+
+.nav-recent-count:empty {
+  display: none;
 }
 
 .nav-group-title {
@@ -573,27 +589,17 @@ body.nav-sorting .nav-bar.is-compact .nav-group-title.is-sortable::after {
   overflow-y: hidden;
   overscroll-behavior-x: contain;
   -webkit-overflow-scrolling: touch;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--muted) 55%, transparent) transparent;
-  padding-bottom: 0.42rem;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding-bottom: 0.12rem;
   box-sizing: border-box;
 }
 
 .nav-strip-list::-webkit-scrollbar,
 .nav-recent-list::-webkit-scrollbar {
-  height: 6px;
-}
-
-.nav-strip-list::-webkit-scrollbar-track,
-.nav-recent-list::-webkit-scrollbar-track {
-  margin-top: 0.3rem;
-  background: transparent;
-}
-
-.nav-strip-list::-webkit-scrollbar-thumb,
-.nav-recent-list::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--muted) 52%, var(--line));
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .nav-recent-chip {

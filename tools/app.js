@@ -989,11 +989,8 @@
   const mediaSubnav = $("#media-subnav");
   const toolSearch = $("#tool-search");
   const recentWrap = $("#tool-recent");
-  const recentToggle = $("#tool-recent-toggle");
+  const recentList = $("#tool-recent-list");
   const recentCount = $("#tool-recent-count");
-  const recentDlg = $("#nav-recent-dlg");
-  const recentDlgList = $("#nav-recent-dlg-list");
-  const recentDlgClose = $("#nav-recent-dlg-close");
   const favoritesWrap = $("#tool-favorites");
   const favoritesList = $("#tool-fav-list");
   const navToolCtx = $("#nav-tool-ctx");
@@ -1100,8 +1097,6 @@
     navCompact = false;
   }
 
-  let recentOpen = false;
-
   let navShellBootstrapped = false;
   let bootPasses = 0;
 
@@ -1123,19 +1118,7 @@
     renderFavorites();
     bindFavoritesGroupInteractions();
     bindNavToolCtx();
-    recentToggle?.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      openRecentDialog();
-    });
-    recentDlgClose?.addEventListener("click", () => closeRecentDialog());
-    recentDlg?.addEventListener("cancel", (e) => {
-      e.preventDefault();
-      closeRecentDialog();
-    });
-    recentDlg?.addEventListener("click", (e) => {
-      if (e.target === recentDlg) closeRecentDialog();
-    });
+    bindNavStripWheelScroll(recentList);
     syncSortHint();
     scheduleBootRoute();
   }
@@ -1879,39 +1862,23 @@
     );
   }
 
-  function syncRecentOpenUi() {
-    if (!recentToggle) return;
-    recentToggle.setAttribute("aria-expanded", recentOpen ? "true" : "false");
-    recentToggle.classList.toggle("is-open", recentOpen);
-  }
-
-  function closeRecentDialog() {
-    recentOpen = false;
-    syncRecentOpenUi();
-    if (typeof recentDlg?.close === "function") recentDlg.close();
-    else recentDlg?.removeAttribute("open");
-    document.body.classList.remove("nav-recent-dlg-open");
-  }
-
-  function renderRecentDialogList() {
-    if (!recentDlgList) return;
-    recentDlgList.innerHTML = "";
+  function renderRecent() {
+    if (!recentWrap || !recentList) return;
     const items = loadRecent().filter((id) => isNavToolVisible(id));
+    recentList.innerHTML = "";
     if (!items.length) {
-      const empty = document.createElement("p");
-      empty.className = "hint tight nav-recent-dlg-empty";
-      empty.textContent = "还没有最近使用的工具";
-      recentDlgList.appendChild(empty);
+      recentWrap.hidden = true;
       return;
     }
+    recentWrap.hidden = false;
+    if (recentCount) recentCount.textContent = items.length > 1 ? ` (${items.length})` : "";
     items.forEach((id) => {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "nav-recent-dlg-item";
+      btn.className = "nav-recent-chip";
       btn.setAttribute("role", "listitem");
       btn.textContent = toolName(id);
       btn.addEventListener("click", () => {
-        closeRecentDialog();
         navigateTo(id);
         if (isMobileDrawer()) setDrawerOpen(false);
       });
@@ -1924,37 +1891,8 @@
         hideNavToolCtx();
         showNavToolCtx(e.clientX, e.clientY, id);
       });
-      recentDlgList.appendChild(btn);
+      recentList.appendChild(btn);
     });
-  }
-
-  function openRecentDialog() {
-    if (!recentDlg) return;
-    renderRecentDialogList();
-    recentOpen = true;
-    syncRecentOpenUi();
-    if (typeof recentDlg.showModal === "function") recentDlg.showModal();
-    else recentDlg.setAttribute("open", "");
-    document.body.classList.add("nav-recent-dlg-open");
-  }
-
-  function setRecentOpen(open) {
-    if (open) openRecentDialog();
-    else closeRecentDialog();
-  }
-
-  function renderRecent() {
-    if (!recentWrap) return;
-    const items = loadRecent().filter((id) => isNavToolVisible(id));
-    if (!items.length) {
-      recentWrap.hidden = true;
-      if (recentOpen) closeRecentDialog();
-      return;
-    }
-    recentWrap.hidden = false;
-    if (recentCount) recentCount.textContent = String(items.length);
-    if (recentOpen) renderRecentDialogList();
-    syncRecentOpenUi();
   }
 
   let favPickerOpen = false;
@@ -3486,10 +3424,6 @@
     openFlyout: (el) => openNavFlyout(el?.closest?.(".nav-group") || el),
     closeFlyouts: () => closeNavFlyouts(),
     renderRecent,
-    openRecentDialog,
-    closeRecentDialog,
-    setRecentOpen,
-    isRecentOpen: () => recentOpen,
     renderFavorites,
     addFavorite,
     removeFavorite,
