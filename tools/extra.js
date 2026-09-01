@@ -15,6 +15,12 @@
   const EBind = () => window.DevToolsExtraBind;
   const bindPanel = (id, fn) => EBind()?.register?.(id, fn);
 
+  function flushPendingFileInput(input, handler) {
+    if (!input?.files?.length) return;
+    const files = input.files;
+    void Promise.resolve(handler(files)).catch(() => {});
+  }
+
   function setError(el, msg) {
     if (!el) return;
     if (!msg) {
@@ -4863,10 +4869,44 @@
       }
     }
 
-    bindPanel("gifmaker", () => {
+    bindPanel("gifmaker", (root) => {
+      root = root || document.getElementById("gifmaker");
+      v2gFile = $("#v2g-file", root);
+      v2gVideo = $("#v2g-video", root);
+      v2gMeta = $("#v2g-meta", root);
+      v2gError = $("#v2g-error", root);
+      v2gFps = $("#v2g-fps", root);
+      v2gWidth = $("#v2g-width", root);
+      v2gMaxsec = $("#v2g-maxsec", root);
+      v2gStart = $("#v2g-start", root);
+      v2gQuality = $("#v2g-quality", root);
+      v2gBrightEnable = $("#v2g-bright-enable", root);
+      v2gBrightPanel = $("#v2g-bright-panel", root);
+      v2gBrightPresets = $("#v2g-bright-presets", root);
+      v2gBrightAmount = $("#v2g-bright-amount", root);
+      v2gBrightPct = $("#v2g-bright-pct", root);
+      v2gBrightReset = $("#v2g-bright-reset", root);
+      v2gBrightPreview = $("#v2g-bright-preview", root);
+      v2gGenerate = $("#v2g-generate", root);
+      v2gGenerateWebp = $("#v2g-generate-webp", root);
+      v2gAbort = $("#v2g-abort", root);
+      v2gProgress = $("#v2g-progress", root);
+      v2gProgressFill = $("#v2g-progress-fill", root);
+      v2gProgressText = $("#v2g-progress-text", root);
+      v2gProgressSub = $("#v2g-progress-sub", root);
+      v2gProgressPct = $("#v2g-progress-pct", root);
+      v2gPreview = $("#v2g-preview", root);
+      v2gDownload = $("#v2g-download", root);
+      v2gCompress = $("#v2g-compress", root);
+      v2gCompressAgain = $("#v2g-compress-again", root);
+      v2gCompressLevel = $("#v2g-compress-level", root);
 
-          v2gFile?.addEventListener("change", (e) => loadVideoFile(e.target.files?.[0]));
-    $("#v2g-clear")?.addEventListener("click", clearV2g);
+      if (v2gFile && !v2gFile.dataset.v2gBound) {
+        v2gFile.dataset.v2gBound = "1";
+        v2gFile.addEventListener("change", (e) => loadVideoFile(e.target.files?.[0]));
+      }
+
+          $("#v2g-clear", root)?.addEventListener("click", clearV2g);
     window.DevToolsTemp?.registerCleanup(clearV2g);
     v2gGenerate?.addEventListener("click", convertVideoToGif);
     v2gGenerateWebp?.addEventListener("click", () => {
@@ -4924,6 +4964,7 @@
     v2gStart?.addEventListener("change", () => scheduleV2gBrightPreview({ forceCapture: true }));
     v2gStart?.addEventListener("input", () => scheduleV2gBrightPreview({ forceCapture: true }));
     syncV2gBrightUi();
+    flushPendingFileInput(v2gFile, (files) => loadVideoFile(files?.[0]));
 
 
     });
@@ -7465,6 +7506,12 @@
     syncVsplitMode();
     applyVsplitMute();
     setVsplitButtons();
+    flushPendingFileInput(vsplitFile, (files) =>
+      loadVsplitFile(files?.[0]).catch((err) => {
+        clearVsplit();
+        setError(vsplitError, err.message || String(err));
+      })
+    );
 
 
     });
@@ -9376,15 +9423,8 @@
       if (vbbMode !== "custom") vbbMode = "custom";
       paintVbbPlan();
     };
-    vbbTargetSpan?.addEventListener("change", () => syncCustomTarget(vbbTargetSpan.value));
-    vbbTargetSpan?.addEventListener("input", () => syncCustomTarget(vbbTargetSpan.value));
-    vbbTargetRange?.addEventListener("input", () => syncCustomTarget(vbbTargetRange.value));
-    vbbEqualize?.addEventListener("change", () => {
-      rebuildVbbDerivedPlans();
-      paintVbbPlan();
-    });
-    bindPanel("vbb", () => {
-      const root = document.getElementById("vbb");
+    bindPanel("vbb", (root) => {
+      root = root || document.getElementById("vbb");
       vbbFile = $("#vbb-file", root);
       vbbVideo = $("#vbb-video", root);
       vbbMeta = $("#vbb-meta", root);
@@ -9426,17 +9466,26 @@
       vbbJumpTime = $("#vbb-jump-time", root);
       vbbJumpGo = $("#vbb-jump-go", root);
       vbbLongHint = $("#vbb-long-hint", root);
-      vbbFile?.addEventListener("click", () => {
-        vbbFile.value = "";
+      if (vbbFile && !vbbFile.dataset.vbbBound) {
+        vbbFile.dataset.vbbBound = "1";
+        vbbFile.addEventListener("click", () => {
+          vbbFile.value = "";
+        });
+        vbbFile.addEventListener("change", (e) => {
+          loadVbbFiles(e.target.files).catch((err) => {
+            clearVbb();
+            setError(vbbError, err.message || String(err));
+          });
+        });
+      }
+      $("#vbb-clear", root)?.addEventListener("click", clearVbb);
+      vbbTargetSpan?.addEventListener("change", () => syncCustomTarget(vbbTargetSpan.value));
+      vbbTargetSpan?.addEventListener("input", () => syncCustomTarget(vbbTargetSpan.value));
+      vbbTargetRange?.addEventListener("input", () => syncCustomTarget(vbbTargetRange.value));
+      vbbEqualize?.addEventListener("change", () => {
+        rebuildVbbDerivedPlans();
+        paintVbbPlan();
       });
-
-          vbbFile?.addEventListener("change", (e) => {
-      loadVbbFiles(e.target.files).catch((err) => {
-        clearVbb();
-        setError(vbbError, err.message || String(err));
-      });
-    });
-    $("#vbb-clear")?.addEventListener("click", clearVbb);
     window.DevToolsTemp?.registerCleanup(clearVbb);
     // 供预估准确性测试读取（不影响 UI）
     window.DevToolsVbb = {
@@ -9557,6 +9606,12 @@
     syncVbbWorkflowUi();
     syncVbbModeUi();
     setVbbButtons();
+    flushPendingFileInput(vbbFile, (files) =>
+      loadVbbFiles(files).catch((err) => {
+        clearVbb();
+        setError(vbbError, err.message || String(err));
+      })
+    );
 
     });  } catch (err) {
     console.error("video to gif init failed", err);
@@ -9892,11 +9947,24 @@
       toast(`已打包 ${ready.length} 个 GIF`);
     }
 
-    bindPanel("gifbb", () => {
+    bindPanel("gifbb", (root) => {
+      root = root || document.getElementById("gifbb");
+      gifbbFile = $("#gifbb-file", root);
+      gifbbMeta = $("#gifbb-meta", root);
+      gifbbError = $("#gifbb-error", root);
+      gifbbList = $("#gifbb-list", root);
+      gifbbRun = $("#gifbb-run", root);
+      gifbbZip = $("#gifbb-zip", root);
+      gifbbClear = $("#gifbb-clear", root);
+      gifbbAbort = $("#gifbb-abort", root);
 
-          gifbbFile?.addEventListener("change", (e) => {
-      loadGifbbFiles(e.target.files);
-    });
+      if (gifbbFile && !gifbbFile.dataset.gifbbBound) {
+        gifbbFile.dataset.gifbbBound = "1";
+        gifbbFile.addEventListener("change", (e) => {
+          loadGifbbFiles(e.target.files);
+        });
+      }
+
     gifbbRun?.addEventListener("click", () => {
       runGifbbCompress().catch((err) => setError(gifbbError, err.message || String(err)));
     });
@@ -9909,6 +9977,7 @@
     });
     window.DevToolsTemp?.registerCleanup(clearGifbb);
     renderGifbbList();
+    flushPendingFileInput(gifbbFile, (files) => loadGifbbFiles(files));
     });
   } catch (err) {
     if (String(err?.message) !== "skip gifbb") console.error("gifbb init failed", err);
