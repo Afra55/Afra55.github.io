@@ -2836,10 +2836,8 @@
     const hash = routeHash(nextTool);
     saveLastTool(nextTool);
     const current = `#${String(location.hash || "").replace(/^#/, "")}`;
-    const sameGroup =
-      TOOL_TO_GROUP[nextTool] && TOOL_TO_GROUP[nextTool] === TOOL_TO_GROUP[currentTool] && nextTool !== currentTool;
-    const shouldReplace = replace || sameGroup;
-    if (shouldReplace) history.replaceState(null, "", hash);
+    // 每个工具独立深链，同分类切换也写入历史，便于后退/分享
+    if (replace) history.replaceState(null, "", hash);
     else if (current !== hash) history.pushState(null, "", hash);
     applyRoute();
   }
