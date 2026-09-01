@@ -15,12 +15,12 @@
     "长寿功",
     "张至顺"
   ],
-  "cover": "https://imgheybox1.max-c.com/bbs/2026/08/31/fdd07b4c19cf9cd21ba09d34c27cb8c5.webp?imageMogr2/format/webp/quality/75/ignore-error/1/auto-orient",
+  "cover": "./lib/health-articles/jgj-longevity-16/assets/cover.webp",
   "images": [
-    "https://imgheybox1.max-c.com/bbs/2026/08/31/fdd07b4c19cf9cd21ba09d34c27cb8c5.webp?imageMogr2/format/webp/quality/75/ignore-error/1/auto-orient",
-    "https://imgheybox.max-c.com/bbs/2026/08/31/64c162c3682ee4f8bd2252c649e8bd05/thumb.png?imageMogr2/format/webp/quality/75/ignore-error/1/auto-orient",
-    "https://imgheybox.max-c.com/bbs/2026/08/31/b2977fdaa4f9585248fba81949b28e85/thumb.png?imageMogr2/format/webp/quality/75/ignore-error/1/auto-orient",
-    "https://imgheybox.max-c.com/bbs/2026/08/31/b0be22f19afd132b516e85417c7168c9/thumb.png?imageMogr2/format/webp/quality/75/ignore-error/1/auto-orient"
+    "./lib/health-articles/jgj-longevity-16/assets/cover.webp",
+    "./lib/health-articles/jgj-longevity-16/assets/img-01.png",
+    "./lib/health-articles/jgj-longevity-16/assets/img-02.png",
+    "./lib/health-articles/jgj-longevity-16/assets/img-03.png"
   ],
   "sections": [
     {
