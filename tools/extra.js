@@ -7582,9 +7582,9 @@
     const VBB_DEFAULT_META =
       "支持 MP4 / WebM / MOV。可多选已裁好的短片，一次性全部转黑盒 GIF；仅本机读取，不会上传。";
     const VBB_WORKFLOW_HINTS = {
-      single: "整段视频将输出一个 GIF，无需切分或调参。",
-      split: "长视频自动切片：先点「分析切分方案」，满意后再「按当前方案执行」。",
-      manual: "手动打点：拖到起点/终点点「打起点」「打终点」，可标记多段后点「一键黑盒」。",
+      single: "整段视频将输出一个 GIF，选视频后点「一键黑盒」即可。",
+      split: "长视频切片：先点「① 分析切分方案」查看段数与预估，调整满意后点「② 按方案生成 GIF」。",
+      manual: "手动打点：拖到起点/终点点「打起点」「打终点」，标记多段后点「一键黑盒」。",
     };
 
     let vbbSourceFile = null;
@@ -7797,6 +7797,10 @@
 
     function isVbbManualMode() {
       return vbbWorkflow === "manual" && !isVbbBatchMode();
+    }
+
+    function isVbbSplitMode() {
+      return vbbWorkflow === "split" && !isVbbBatchMode();
     }
 
     function vbbVideoDuration() {
@@ -8154,7 +8158,8 @@
       const gifCount = vbbClips.filter((c) => c.gifBlob).length;
       if (vbbOneclick) {
         const manualNeedMarks = isVbbManualMode() && manualCount < 1;
-        vbbOneclick.disabled = !hasVideo || vbbBusy || manualNeedMarks;
+        vbbOneclick.hidden = isVbbSplitMode();
+        vbbOneclick.disabled = !hasVideo || vbbBusy || manualNeedMarks || isVbbSplitMode();
         if (isVbbBatchMode()) {
           vbbOneclick.textContent = `一键黑盒（${vbbBatchFiles.length} 个）`;
         } else if (isVbbManualMode()) {
@@ -8164,7 +8169,10 @@
         }
       }
       if (vbbAnalyze) vbbAnalyze.disabled = !hasVideo || vbbBusy || isVbbBatchMode() || isVbbManualMode();
-      if (vbbRun) vbbRun.disabled = !hasPlan || vbbBusy || isVbbBatchMode() || isVbbManualMode();
+      if (vbbRun) {
+        vbbRun.disabled = !hasPlan || vbbBusy || isVbbBatchMode() || isVbbManualMode();
+        vbbRun.classList.toggle("is-ready", hasPlan && !vbbBusy && isVbbSplitMode());
+      }
       if (vbbMerge) vbbMerge.disabled = gifCount < 2 || vbbBusy || isVbbBatchMode();
       if (vbbZip) vbbZip.disabled = gifCount < 1 || vbbBusy;
       if (isVbbManualMode()) paintVbbManualControls();
@@ -8177,7 +8185,7 @@
       $("#vbb-workflow-single")?.classList.toggle("is-active", vbbWorkflow === "single");
       $("#vbb-workflow-split")?.classList.toggle("is-active", vbbWorkflow === "split");
       $("#vbb-workflow-manual")?.classList.toggle("is-active", vbbWorkflow === "manual");
-      const showSplit = vbbWorkflow === "split" && !batch;
+      const showSplit = isVbbSplitMode();
       if (vbbSplitPanel) vbbSplitPanel.hidden = !showSplit;
       if (vbbWorkflowHint) {
         vbbWorkflowHint.textContent = batch
@@ -9085,19 +9093,17 @@
         return;
       }
       if (!vbbSourceFile) return;
+      if (isVbbSplitMode()) {
+        toast("长视频切片请先「分析切分方案」，确认后再「按方案生成 GIF」");
+        return;
+      }
       if (vbbWorkflow === "single") {
         await runVbbSingleBlackbox().catch((err) => setError(vbbError, err.message || String(err)));
         return;
       }
       if (vbbWorkflow === "manual") {
         await runVbbManualBlackbox().catch((err) => setError(vbbError, err.message || String(err)));
-        return;
       }
-      await runVbbAnalyze().catch((err) => setError(vbbError, err.message || String(err)));
-      if (!vbbAnalysis?.duration || vbbBusy) return;
-      vbbMode = "duration";
-      paintVbbPlan();
-      await runVbbExecute().catch((err) => setError(vbbError, err.message || String(err)));
     }
 
     async function runVbbAnalyze() {
@@ -9195,7 +9201,7 @@
           1,
           `分析完成 · 样片 ${formatKb(sample.blob.size)} / ${vbbAnalysis.sampleSpan.toFixed(1)}s`
         );
-        toast(`分析完成 · 默认 ${durationPlan.count} 段 · 可自定义段时长`);
+        toast(`分析完成 · 默认 ${durationPlan.count} 段 · 可调整方案后点「② 按方案生成 GIF」`);
         if (isLikelyMobileBrowser() && (duration >= 90 || (vbbSourceFile?.size || 0) >= 200 * 1024 * 1024)) {
           toast("大视频在手机上易内存不足。已优化分段写入；仍建议少段处理或用电脑。");
         }

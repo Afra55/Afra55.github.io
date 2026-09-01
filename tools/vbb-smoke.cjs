@@ -182,6 +182,9 @@ async function main() {
     const split = {
       active: document.getElementById("vbb-workflow-split")?.classList.contains("is-active"),
       panelOpen: !document.getElementById("vbb-split-panel")?.hidden,
+      oneclickHidden: document.getElementById("vbb-oneclick")?.hidden,
+      analyzePrimary: document.getElementById("vbb-analyze")?.classList.contains("primary-btn"),
+      runPrimary: document.getElementById("vbb-run")?.classList.contains("primary-btn"),
       workflow: window.DevToolsVbb?.getWorkflow?.(),
     };
     click("vbb-workflow-manual");
@@ -1540,6 +1543,12 @@ async function main() {
   if (!navAudit.gifbbRoute?.hasGifbbFile) problems.push("gifbb panel missing file input");
   if (!vbbWorkflowUi.split?.active || !vbbWorkflowUi.split?.panelOpen) {
     problems.push(`vbb split workflow UI broken: ${JSON.stringify(vbbWorkflowUi.split)}`);
+  }
+  if (!vbbWorkflowUi.split?.oneclickHidden) {
+    problems.push("vbb oneclick should hide in split workflow");
+  }
+  if (!vbbWorkflowUi.split?.analyzePrimary || !vbbWorkflowUi.split?.runPrimary) {
+    problems.push(`vbb split actions should be primary buttons: ${JSON.stringify(vbbWorkflowUi.split)}`);
   }
   if (!vbbWorkflowUi.manual?.active || !vbbWorkflowUi.manual?.panelOpen || !vbbWorkflowUi.manual?.splitClosed) {
     problems.push(`vbb manual workflow UI broken: ${JSON.stringify(vbbWorkflowUi.manual)}`);
