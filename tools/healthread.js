@@ -45,9 +45,11 @@
         if (!src) return "";
         const alt = esc(fig?.alt || fig?.caption || `配图 ${i + 1}`);
         const cap = fig?.caption ? `<figcaption>${esc(fig.caption)}</figcaption>` : "";
-        return `<figure class="hr-figure">
+        const isGif = fig?.type === "gif" || /\.gif(\?|$)/i.test(fig?.src || "");
+        const cls = isGif ? "hr-figure hr-figure-gif" : "hr-figure";
+        return `<figure class="${cls}">
           <button type="button" class="hr-figure-btn" data-hr-img="${esc(src)}" aria-label="查看大图：${alt}">
-            <img src="${esc(src)}" alt="${alt}" loading="lazy" decoding="async" />
+            <img src="${esc(src)}" alt="${alt}" loading="lazy" decoding="async"${isGif ? ' data-hr-gif="1"' : ""} />
           </button>
           ${cap}
         </figure>`;

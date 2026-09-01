@@ -12461,6 +12461,13 @@ html[data-boot-loading="1"] body {
   background: color-mix(in srgb, var(--ink) 3%, transparent);
 }
 
+.hr-figure-gif img {
+  max-height: min(72vh, 640px);
+  width: auto;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
 .hr-figure figcaption {
   margin-top: 0.35rem;
   font-size: 0.85rem;
