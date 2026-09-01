@@ -755,7 +755,7 @@ const OPS_CATALOG = [
     desc: "从视频抽出或音频互转（含原「音频转码」）",
     accept: "media",
     webHint: "少量文件也可用网页「音频处理」",
-    webHref: "#media/audio",
+    webHref: "#audio",
     fields: [
       { key: "format", type: "select", label: "格式", options: AUDIO_FMT_OPTS, default: "mp3" },
       { key: "bitrate", type: "select", label: "码率", options: BITRATE_OPTS, default: "192k" },
@@ -769,7 +769,7 @@ const OPS_CATALOG = [
     desc: "放大/缩小音量；可选只导出音频或保留视频",
     accept: "media",
     webHint: "单文件预览调音量可用网页「音频处理」",
-    webHref: "#media/audio",
+    webHref: "#audio",
     fields: [
       { key: "volumePct", type: "number", label: "音量%", min: 5, max: 400, step: 5, default: 100 },
       {
@@ -979,7 +979,7 @@ const OPS_CATALOG = [
     desc: "按宽高比中心裁剪",
     accept: "video",
     webHint: "交互式裁边框可用网页「视频修剪」",
-    webHref: "#media/vtrim",
+    webHref: "#vtrim",
     fields: [
       {
         key: "cropRatio",
@@ -1120,7 +1120,7 @@ const OPS_CATALOG = [
     desc: "截取区间或保留片尾（合并原裁剪/保留片尾）",
     accept: "media",
     webHint: "交互式修剪片头片尾可用网页「视频修剪 / 音频处理」",
-    webHref: "#media/vtrim",
+    webHref: "#vtrim",
     fields: [
       {
         key: "trimMode",
@@ -1214,7 +1214,7 @@ const OPS_CATALOG = [
     desc: "导出 GIF 或动态 WebP（合并原转 GIF/WebP）",
     accept: "video",
     webHint: "多图合成/压缩 GIF 请用网页「GIF 工具」",
-    webHref: "#media/gifmaker",
+    webHref: "#gifmaker",
     fields: [
       {
         key: "animFormat",
@@ -1295,7 +1295,7 @@ const OPS_CATALOG = [
     desc: "多张图片合成视频",
     accept: "image",
     webHint: "多图合成 GIF 请用网页「GIF 工具」",
-    webHref: "#media/gifmaker",
+    webHref: "#gifmaker",
     fields: [
       { key: "holdSec", type: "number", label: "每张秒数", min: 0.3, max: 30, step: 0.1, default: 2 },
       {

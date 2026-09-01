@@ -824,13 +824,15 @@
   const NAV_COMPACT_KEY = "devtools-nav-compact-v1";
   /** 站点页不算「上次工具」，避免 about/setup 盖掉真实工具 */
   const SITE_NAV_IDS = new Set(["about", "setup"]);
-  const MEDIA_TABS = ["gifmaker", "vsplit", "vtrim", "audio", "vplay"];
+  const LEGACY_MEDIA_TOOLS = ["gifmaker", "vsplit", "vtrim", "audio", "vplay"];
+  /** 非紧凑侧栏时也显示顶栏分类条（工具数≥2） */
+  const GROUPS_WITH_ALWAYS_SUBNAV = new Set(["video", "blackbox"]);
   const HASH_ALIASES = {
-    gifmaker: { tool: "media", tab: "gifmaker" },
-    vsplit: { tool: "media", tab: "vsplit" },
-    vtrim: { tool: "media", tab: "vtrim" },
-    audio: { tool: "media", tab: "audio" },
-    vplay: { tool: "media", tab: "vplay" },
+    gifmaker: { tool: "gifmaker" },
+    vsplit: { tool: "vsplit" },
+    vtrim: { tool: "vtrim" },
+    audio: { tool: "audio" },
+    vplay: { tool: "vplay" },
     vbb: { tool: "vbb" },
     blackbox: { tool: "vbb" },
     gifbb: { tool: "gifbb" },
@@ -845,8 +847,9 @@
       label: "文本工具",
       tools: ["text", "caseconv", "regex", "diff", "markdown", "memo"],
     },
+    { id: "gif", label: "GIF", tools: ["gifmaker"] },
+    { id: "video", label: "视频", tools: ["vsplit", "vtrim", "audio", "vplay"] },
     { id: "blackbox", label: "黑盒", tools: ["vbb", "gifbb"] },
-    { id: "media", label: "媒体", tools: ["gifmaker", "vsplit", "vtrim", "audio", "vplay"] },
     {
       id: "image",
       label: "图片",
@@ -921,7 +924,7 @@
     healthread: "养生功法等文章离线阅读：列表搜索、按需加载动图，记住阅读进度。",
     adb: "网页侧 ADB 调试辅助：设备、文件、输入、安装、任务与命令大全等。",
     lanshare: "局域网互传：多机同房间共享文件列表，下载时从上传者手机 WebRTC 直传，不经房主中转；房主可退出或解散，退出时最近加入者接任。",
-    ffbridge: "电脑批量用本机 FFmpeg 桥；手机请直接用媒体里的音频/修剪/GIF（网页内处理）。",
+    ffbridge: "电脑批量用本机 FFmpeg 桥；手机请直接用视频/GIF 分类里的音频/修剪/动图（网页内处理）。",
     ytdlp: "本机 yt-dlp 桥：解析/下载视频与播放列表、字幕、封面、直播、Cookies 与 SponsorBlock；含安装教程，文件只保存在电脑。",
     about: "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
     pdfcraft: "跳转 PDFCraft 中文官网（100+ 本地 PDF 工具）；在新窗口打开，PWA 模式下尽量用系统浏览器。",
@@ -1024,7 +1027,8 @@
   const headerMoreToggle = $("#header-more-toggle");
   const headerMoreMenu = $("#header-more-menu");
   const workspaceTitle = $("#workspace-title");
-  const mediaSubnav = $("#media-subnav");
+  const mediaSubnav = $("#category-subnav");
+  const categorySubnav = mediaSubnav;
   const toolSearch = $("#tool-search");
   const recentWrap = $("#tool-recent");
   const recentList = $("#tool-recent-list");
@@ -1126,7 +1130,6 @@
   }
 
   let currentTool = "timestamp";
-  let currentMediaTab = "gifmaker";
   let lastFocusBeforeDrawer = null;
   let drawerFocusTimer = 0;
   let drawerIgnoreOpenUntil = 0;
@@ -1285,7 +1288,8 @@
     const seen = new Set();
     const out = [];
     (Array.isArray(raw) ? raw : []).forEach((id) => {
-      const expanded = id === "media" ? MEDIA_TABS.slice() : [id];
+      const expanded =
+        id === "media" ? LEGACY_MEDIA_TOOLS.slice() : [id];
       expanded.forEach((next) => {
         if (!DEFAULT_ORDER.includes(next) || seen.has(next)) return;
         seen.add(next);
@@ -1357,7 +1361,52 @@
   }
 
   function currentNavToolId() {
-    return currentTool === "media" ? currentMediaTab : currentTool;
+    return currentTool;
+  }
+
+  function groupToolsForSubnav(groupId) {
+    const group = GROUP_BY_ID[groupId];
+    if (!group) return [];
+    const order = loadOrder();
+    return order.filter((id) => group.tools.includes(id) && isNavToolVisible(id));
+  }
+
+  function shouldShowCategorySubnav(groupId, tools) {
+    if (!groupId || tools.length < 2) return false;
+    if (navCompactActive()) return true;
+    return GROUPS_WITH_ALWAYS_SUBNAV.has(groupId);
+  }
+
+  function renderCategorySubnav() {
+    if (!categorySubnav) return;
+    const groupId = TOOL_TO_GROUP[currentTool];
+    const group = GROUP_BY_ID[groupId];
+    const tools = groupToolsForSubnav(groupId);
+    const show = shouldShowCategorySubnav(groupId, tools);
+    categorySubnav.hidden = !show;
+    if (!show) {
+      categorySubnav.innerHTML = "";
+      categorySubnav.removeAttribute("aria-label");
+      return;
+    }
+    categorySubnav.setAttribute("aria-label", `${group?.label || "分类"}内工具`);
+    categorySubnav.innerHTML = "";
+    tools.forEach((id) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "category-tab media-tab";
+      btn.dataset.categoryTab = id;
+      btn.setAttribute("role", "tab");
+      btn.id = `category-tab-${id}`;
+      btn.setAttribute("aria-controls", id);
+      const on = id === currentTool;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+      btn.tabIndex = on ? 0 : -1;
+      btn.textContent = toolName(id);
+      categorySubnav.appendChild(btn);
+    });
+    bindNavStripWheelScroll(categorySubnav);
   }
 
   let navFlyoutTimer = 0;
@@ -1531,6 +1580,7 @@
     } catch (_) {}
     allNavGroups().forEach((g) => g.classList.remove("is-pinned"));
     syncNavCompactUi();
+    renderCategorySubnav();
   }
 
   function moveGroupOrder(fromId, toId) {
@@ -1685,7 +1735,6 @@
 
   function toolIdToHash(id) {
     if (!id) return "#timestamp";
-    if (MEDIA_TABS.includes(id)) return `#media/${id}`;
     return `#${id}`;
   }
 
@@ -1703,25 +1752,25 @@
   }
 
   function routeFromToolId(id) {
-    if (!id) return { tool: "timestamp", tab: "gifmaker" };
+    if (!id) return { tool: "timestamp" };
     if (HASH_ALIASES[id]) return { ...HASH_ALIASES[id] };
-    if (MEDIA_TABS.includes(id)) return { tool: "media", tab: id };
-    if (DEFAULT_ORDER.includes(id)) return { tool: id, tab: "gifmaker" };
-    return { tool: "timestamp", tab: "gifmaker" };
+    if (DEFAULT_ORDER.includes(id)) return { tool: id };
+    return { tool: "timestamp" };
   }
 
   function activeToolIdFromRoute(route) {
     if (!route) return "timestamp";
-    return route.tool === "media" ? route.tab || "gifmaker" : route.tool;
+    if (route.tool === "media") return route.tab || "gifmaker";
+    return route.tool || "timestamp";
   }
 
   function navToolIdForSave(tool, tab, nextTool, nextTab) {
-    if (nextTool === "media") return nextTab || tab || currentMediaTab || "gifmaker";
+    if (nextTool === "media") return nextTab || tab || "gifmaker";
     return nextTool || tool;
   }
 
   function persistActiveTool(route) {
-    const id = activeToolIdFromRoute(route || { tool: currentTool, tab: currentMediaTab });
+    const id = activeToolIdFromRoute(route || { tool: currentTool });
     if (!id) return;
     if (id === "timestamp" && shouldRestoreLastTool()) return;
     saveLastTool(id);
@@ -1747,7 +1796,7 @@
     const saved = loadLastToolId();
     if (!saved || saved === "timestamp") return false;
     const route = routeFromToolId(saved);
-    const target = routeHash(route.tool, route.tab);
+    const target = routeHash(activeToolIdFromRoute(route));
     const raw = String(location.hash || "").replace(/^#/, "").trim();
     const q = raw.indexOf("?");
     const path = q >= 0 ? raw.slice(0, q) : raw;
@@ -1937,7 +1986,7 @@
         if (!isNavToolVisible(id)) return;
         const a = document.createElement("a");
         a.className = "tool-nav-link";
-        a.href = MEDIA_TABS.includes(id) ? `#media/${id}` : `#${id}`;
+        a.href = `#${id}`;
         a.dataset.tool = id;
         a.draggable = allowHtml5Drag;
         a.title = navToolSortHint();
@@ -2125,7 +2174,7 @@
       if (!isNavToolVisible(id)) return;
       const link = document.createElement("a");
       link.className = "tool-nav-link nav-fav-link is-sortable";
-      link.href = MEDIA_TABS.includes(id) ? `#media/${id}` : `#${id}`;
+      link.href = `#${id}`;
       link.dataset.tool = id;
       link.draggable = allowHtml5Drag;
       link.title = allowHtml5Drag ? "拖动排序；右键更多操作" : navFavSortHint();
@@ -2355,22 +2404,22 @@
     let raw = String(location.hash || "").replace(/^#/, "").trim();
     const q = raw.indexOf("?");
     if (q >= 0) raw = raw.slice(0, q);
-    if (!raw) return { tool: "timestamp", tab: "gifmaker" };
+    if (!raw) return { tool: "timestamp" };
     const parts = raw.split(/[/?]/).filter(Boolean);
     const head = parts[0] || "timestamp";
     if (HASH_ALIASES[head]) return { ...HASH_ALIASES[head] };
     if (head === "media") {
-      if (parts[1] === "vbb") return { tool: "vbb", tab: "gifmaker" };
-      const tab = MEDIA_TABS.includes(parts[1]) ? parts[1] : "gifmaker";
-      return { tool: "media", tab };
+      if (parts[1] === "vbb") return { tool: "vbb" };
+      const tab = parts[1];
+      if (tab && DEFAULT_ORDER.includes(tab)) return { tool: tab };
+      return { tool: "gifmaker" };
     }
-    if (DEFAULT_ORDER.includes(head)) return { tool: head, tab: "gifmaker" };
-    return { tool: "timestamp", tab: "gifmaker" };
+    if (DEFAULT_ORDER.includes(head)) return { tool: head };
+    return { tool: "timestamp" };
   }
 
-  function routeHash(tool, tab) {
-    if (tool === "media") return `#media/${tab || "gifmaker"}`;
-    return `#${tool}`;
+  function routeHash(tool) {
+    return `#${tool || "timestamp"}`;
   }
 
   function shareToolUrl() {
@@ -2382,17 +2431,16 @@
         .trim();
       const head = raw.split(/[/?]/)[0];
       if (head === "lanshare" && raw.includes("?")) u.hash = raw;
-      else u.hash = routeHash(currentTool, currentMediaTab).replace(/^#/, "");
+      else u.hash = routeHash(currentTool).replace(/^#/, "");
       return u.toString();
     } catch (_) {
-      return `${location.origin}${location.pathname || "/"}${routeHash(currentTool, currentMediaTab)}`;
+      return `${location.origin}${location.pathname || "/"}${routeHash(currentTool)}`;
     }
   }
 
   function activeToolShareTitle() {
     if (currentTool === "about") return "DevTools · 本地实用小工具合集";
-    const name = currentTool === "media" ? toolName(currentMediaTab) : toolName(currentTool);
-    return `${name} · DevTools`;
+    return `${toolName(currentTool)} · DevTools`;
   }
 
   async function copyTextFallback(text) {
@@ -2420,7 +2468,7 @@
 
   async function shareCurrentTool() {
     const url = shareToolUrl();
-    const name = currentTool === "media" ? toolName(currentMediaTab) : toolName(currentTool);
+    const name = toolName(currentTool);
     const title = activeToolShareTitle();
     const text = `打开 DevTools「${name}」：`;
     const data = { title, text, url };
@@ -2560,33 +2608,41 @@
       const saved = loadLastToolId();
       if (saved && saved !== "timestamp") {
         route = routeFromToolId(saved);
-        const target = routeHash(route.tool, route.tab);
+        const target = routeHash(route.tool);
         const raw = String(location.hash || "").replace(/^#/, "").trim();
         const q = raw.indexOf("?");
         const path = q >= 0 ? raw.slice(0, q) : raw;
         if (`#${path}` !== target) history.replaceState(null, "", target);
       }
     }
-    // 手机深链 #ffbridge / #adb → 网页媒体，避免无用桥页面
+    // 手机深链 #ffbridge / #adb → 网页视频工具，避免空白桥面板
     if (isPhoneLikeClient() && (route.tool === "ffbridge" || route.tool === "adb")) {
-      route = { tool: "media", tab: route.tool === "ffbridge" ? "audio" : currentMediaTab || "gifmaker" };
-      const canonicalMobile = routeHash(route.tool, route.tab);
+      const mobileTool = route.tool === "ffbridge" ? "audio" : loadLastToolId() || "gifmaker";
+      route = { tool: mobileTool };
+      const canonicalMobile = routeHash(route.tool);
       if (`#${String(location.hash || "").replace(/^#/, "")}` !== canonicalMobile) {
         history.replaceState(null, "", canonicalMobile);
       }
     }
-    currentTool = route.tool;
-    currentMediaTab = route.tab || "gifmaker";
+    if (route.tool === "media") {
+      route = { tool: route.tab || "gifmaker" };
+    }
+    currentTool = activeToolIdFromRoute(route);
 
-    // 旧深链 #gifmaker / #vsplit → #media/...；#media/vbb / #vbb → #vbb
+    // 旧深链 #gifmaker / #media/... → #工具名
     const rawHash = String(location.hash || "")
       .replace(/^#/, "")
       .trim();
     const rawHead = rawHash.split(/[/?]/)[0];
-    const canonical = routeHash(currentTool, currentMediaTab);
+    const canonical = routeHash(currentTool);
     const preserveLanshareJoin = rawHead === "lanshare" && rawHash.includes("?");
     if (/^media\/vbb\b/i.test(rawHash)) {
       if (rawHash !== "vbb") history.replaceState(null, "", "#vbb");
+    } else if (rawHead === "media" && rawHash.includes("/")) {
+      const legacyTab = rawHash.split("/").filter(Boolean)[1];
+      const legacyTool = legacyTab && DEFAULT_ORDER.includes(legacyTab) ? legacyTab : "gifmaker";
+      if (rawHash !== legacyTool) history.replaceState(null, "", routeHash(legacyTool));
+      currentTool = legacyTool;
     } else if (
       !preserveLanshareJoin &&
       (HASH_ALIASES[rawHead] || (rawHead === "media" && !rawHash.includes("/")))
@@ -2596,7 +2652,7 @@
       }
     }
 
-    const routeToolId = currentTool === "media" ? currentMediaTab : currentTool;
+    const routeToolId = currentTool;
 
     try {
       await window.DevToolsPanels?.bootReady;
@@ -2611,9 +2667,7 @@
 
     $$(".tool-panel").forEach((panel) => {
       const id = panel.id;
-      let active = false;
-      if (currentTool === "media") active = id === currentMediaTab;
-      else active = id === currentTool;
+      const active = id === currentTool;
       panel.classList.toggle("is-workspace-active", active);
       panel.hidden = !active;
       if (active) panel.removeAttribute("aria-hidden");
@@ -2625,42 +2679,28 @@
       document.documentElement.removeAttribute("data-boot-panel");
     }
 
-    if (mediaSubnav) {
-      const showMedia = currentTool === "media";
-      mediaSubnav.hidden = !showMedia;
-      $$("[data-media-tab]", mediaSubnav).forEach((btn) => {
-        const on = btn.dataset.mediaTab === currentMediaTab;
-        btn.classList.toggle("is-active", on);
-        btn.setAttribute("aria-selected", on ? "true" : "false");
-        btn.tabIndex = on ? 0 : -1;
-      });
-    }
+    renderCategorySubnav();
 
-    const title =
-      currentTool === "about"
-        ? "实用小工具合集"
-        : currentTool === "media"
-          ? toolName(currentMediaTab)
-          : toolName(currentTool);
+    const title = currentTool === "about" ? "实用小工具合集" : toolName(currentTool);
     if (workspaceTitle) workspaceTitle.textContent = title;
     document.title =
       currentTool === "about" ? "DevTools · 本地实用小工具合集" : `${title} · DevTools`;
 
     getNavLinks().forEach((link) => {
-      const on = currentTool === "media" ? link.dataset.tool === currentMediaTab : link.dataset.tool === currentTool;
+      const on = link.dataset.tool === currentTool;
       link.classList.toggle("is-active", on);
       link.setAttribute("aria-current", on ? "page" : "false");
     });
     $$(".nav-fav-link", favoritesList).forEach((link) => {
-      const on = currentTool === "media" ? link.dataset.tool === currentMediaTab : link.dataset.tool === currentTool;
+      const on = link.dataset.tool === currentTool;
       link.classList.toggle("is-active", on);
       link.setAttribute("aria-current", on ? "page" : "false");
     });
     closeNavFlyouts();
     syncNavCompactUi();
 
-    if (!skipRecent) pushRecent(currentTool === "media" ? currentMediaTab : currentTool);
-    persistActiveTool({ tool: currentTool, tab: currentMediaTab });
+    if (!skipRecent) pushRecent(currentTool);
+    persistActiveTool({ tool: currentTool });
     // 手机分类拖拽排序后需保持抽屉打开
     if (!keepDrawer) {
       setDrawerOpen(false);
@@ -2670,7 +2710,7 @@
     const emitRoute = () => {
       window.dispatchEvent(
         new CustomEvent("devtools:route", {
-          detail: { tool: currentTool, mediaTab: currentMediaTab },
+          detail: { tool: currentTool, groupId: TOOL_TO_GROUP[currentTool] || null },
         })
       );
     };
@@ -2735,29 +2775,20 @@
     });
   }
 
-  function navigateTo(tool, tab, { replace = false } = {}) {
-    let nextTool = tool;
-    let nextTabArg = tab;
-    // 侧栏媒体子项 → 统一走 #media/<tab>
-    if (MEDIA_TABS.includes(tool)) {
-      nextTool = "media";
-      nextTabArg = tool;
+  function navigateTo(tool, _tab, { replace = false } = {}) {
+    let nextTool = String(tool || "").trim();
+    if (!nextTool) return;
+    // 手机打开本机桥/ADB：引导到网页视频能力，避免空白桥面板
+    if (isPhoneLikeClient() && (nextTool === "ffbridge" || nextTool === "adb")) {
+      nextTool = nextTool === "ffbridge" ? "audio" : loadLastToolId() || "gifmaker";
+      replace = true;
     }
-    // 手机打开本机桥/ADB：引导到网页媒体能力，避免空白桥面板
-    if (isPhoneLikeClient() && (tool === "ffbridge" || tool === "adb")) {
-      nextTool = "media";
-      nextTabArg = tool === "ffbridge" ? "audio" : currentMediaTab || "gifmaker";
-    }
-    const nextTab = nextTabArg || (nextTool === "media" ? currentMediaTab : null);
-    const hash = routeHash(nextTool, nextTab);
-    const persistId = navToolIdForSave(tool, tab, nextTool, nextTab);
-    if (persistId) saveLastTool(persistId);
+    const hash = routeHash(nextTool);
+    saveLastTool(nextTool);
     const current = `#${String(location.hash || "").replace(/^#/, "")}`;
-    // 媒体内切 Tab 用 replace，避免系统返回在子功能间来回跳
-    const mediaTabOnly =
-      nextTool === "media" && currentTool === "media" && nextTab && nextTab !== currentMediaTab;
-    const shouldReplace =
-      replace || mediaTabOnly || (isPhoneLikeClient() && (tool === "ffbridge" || tool === "adb"));
+    const sameGroup =
+      TOOL_TO_GROUP[nextTool] && TOOL_TO_GROUP[nextTool] === TOOL_TO_GROUP[currentTool] && nextTool !== currentTool;
+    const shouldReplace = replace || sameGroup;
     if (shouldReplace) history.replaceState(null, "", hash);
     else if (current !== hash) history.pushState(null, "", hash);
     applyRoute();
@@ -3476,13 +3507,13 @@
     if (e.target.closest("#tool-fav-add") || e.target.closest("#tool-fav-picker")) return;
     setFavPickerOpen(false);
   });
-  mediaSubnav?.addEventListener("click", (e) => {
-    const btn = e.target?.closest?.("[data-media-tab]");
+  categorySubnav?.addEventListener("click", (e) => {
+    const btn = e.target?.closest?.("[data-category-tab]");
     if (!btn) return;
-    navigateTo("media", btn.dataset.mediaTab);
+    navigateTo(btn.dataset.categoryTab);
   });
-  mediaSubnav?.addEventListener("keydown", (e) => {
-    const tabs = $$(".media-tab", mediaSubnav);
+  categorySubnav?.addEventListener("keydown", (e) => {
+    const tabs = $$(".category-tab", categorySubnav);
     if (!tabs.length) return;
     const idx = tabs.indexOf(document.activeElement);
     if (idx < 0) return;
@@ -3494,7 +3525,7 @@
     if (next < 0) return;
     e.preventDefault();
     tabs[next].focus();
-    navigateTo("media", tabs[next].dataset.mediaTab);
+    navigateTo(tabs[next].dataset.categoryTab);
   });
   window.addEventListener("hashchange", () => {
     if (shouldRestoreLastTool()) restoreLastToolOnStartup();
@@ -3639,7 +3670,7 @@
     groups: TOOL_GROUPS,
     meta: TOOL_META,
     about: ABOUT_DESC,
-    mediaTabs: MEDIA_TABS,
+    legacyMediaTools: LEGACY_MEDIA_TOOLS,
   };
   window.DevToolsNav = {
     isCompact: () => navCompact,

@@ -1578,7 +1578,7 @@ async function main() {
       out.lastTool.json = window.DevToolsNav.lastToolHash() === "#json";
       localStorage.setItem("devtools-tool-last-v1", "vsplit");
       localStorage.setItem("devtools-tool-recent-v1", JSON.stringify(["vsplit"]));
-      out.lastTool.media = window.DevToolsNav.lastToolHash() === "#media/vsplit";
+      out.lastTool.media = window.DevToolsNav.lastToolHash() === "#vsplit";
       localStorage.setItem("devtools-tool-last-v1", "memo");
       history.replaceState(null, "", "#timestamp");
       out.lastTool.restoreTimestamp = window.DevToolsNav.lastToolHash() === "#memo";
