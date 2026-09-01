@@ -184,10 +184,11 @@
       </div>
       <div class="nav-bar-scroll" id="nav-bar-scroll">
         <div class="nav-strip nav-recent" id="tool-recent" hidden>
-          <p class="nav-strip-title nav-recent-label" id="tool-recent-label">
-            最近使用
-            <span class="nav-recent-count" id="tool-recent-count" aria-hidden="true"></span>
-          </p>
+          <button type="button" class="nav-strip-toggle" id="tool-recent-toggle" aria-expanded="false" aria-controls="nav-recent-dlg" aria-haspopup="dialog">
+            <span class="nav-strip-toggle-label">最近使用</span>
+            <span class="nav-strip-toggle-meta" id="tool-recent-count"></span>
+            <span class="nav-strip-toggle-icon" aria-hidden="true">›</span>
+          </button>
           <div class="nav-strip-list nav-recent-list" id="tool-recent-list" role="list"></div>
         </div>
         <div class="nav-strip nav-favorites nav-group" id="tool-favorites" data-group="favorites">
@@ -5506,6 +5507,13 @@ adb devices</pre>
   </dialog>
 
   <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  <dialog class="nav-recent-dlg" id="nav-recent-dlg" aria-labelledby="nav-recent-dlg-title">
+    <div class="nav-recent-dlg-head">
+      <h2 id="nav-recent-dlg-title">最近使用</h2>
+      <button type="button" class="ghost-btn nav-recent-dlg-close" id="nav-recent-dlg-close" aria-label="关闭">×</button>
+    </div>
+    <div class="nav-recent-dlg-body" id="nav-recent-dlg-list" role="list"></div>
+  </dialog>
   <dialog class="nav-organize-dlg" id="nav-organize" aria-labelledby="nav-organize-title">
     <div class="nav-organize-head">
       <div class="nav-organize-head-text">
