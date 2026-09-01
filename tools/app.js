@@ -2750,6 +2750,9 @@
       window.DevToolsBoot?.bump?.(22, "加载面板…");
       await window.DevToolsPanels?.ensure?.(routeToolId);
       initCorePanel(routeToolId);
+      if (window.__devtoolsExtraBundle) {
+        window.DevToolsExtraBind?.bind?.(routeToolId);
+      }
       bindCopyButtons(document.getElementById(routeToolId));
     } catch (err) {
       console.error("panel load failed", routeToolId, err);
