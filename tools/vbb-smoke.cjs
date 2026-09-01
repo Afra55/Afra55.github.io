@@ -102,9 +102,7 @@ async function main() {
         "vbb-list",
       ].map((id) => ({ id, ok: Boolean(document.getElementById(id)) })),
       orderHasMedia: false,
-      footerText: document.querySelector(".site-footer")?.textContent || "",
       homeLinkCount: [...document.querySelectorAll("a")].filter((a) => /返回主站/.test(a.textContent || "")).length,
-      footerHomeHref: [...document.querySelectorAll(".site-footer a")].some((a) => a.getAttribute("href") === "/"),
       vbbPreload: document.getElementById("vbb-video")?.getAttribute("preload") || "",
       v2gPreload: document.getElementById("v2g-video")?.getAttribute("preload") || "",
       vsplitPreload: document.getElementById("vsplit-video")?.getAttribute("preload") || "",
@@ -1247,9 +1245,6 @@ async function main() {
   if (result.runDisabled !== true) problems.push("run should start disabled");
   if (!result.ids.every((x) => x.ok)) problems.push("missing ids");
   if (result.homeLinkCount) problems.push("footer should not have 返回主站");
-  if (result.footerHomeHref) problems.push("footer should not link to /");
-  if (!/本地处理/.test(result.footerText || "")) problems.push("footer privacy note missing");
-  if (!/关闭页面会释放/.test(result.footerText || "")) problems.push("footer should mention auto-release on close");
   if (result.vbbPreload !== "metadata") problems.push(`vbb preload should be metadata, got ${result.vbbPreload}`);
   if (result.v2gPreload !== "metadata") problems.push(`v2g preload should be metadata, got ${result.v2gPreload}`);
   if (result.vsplitPreload !== "metadata") problems.push(`vsplit preload should be metadata, got ${result.vsplitPreload}`);
@@ -1260,7 +1255,6 @@ async function main() {
   if (!result.hasPurge) problems.push("DevToolsTemp.purgeSiteCache missing");
   if (!result.autoPackVsplit || !result.autoPackVbb) problems.push("missing auto-pack zip toggles on vsplit/vbb");
   if (!result.autoPackDefaultOff || !result.autoPackApi) problems.push("auto-pack zip should default off");
-  if (!/侧栏/.test(result.footerText || "")) problems.push("footer should mention sidebar cache cleanup");
   if (!afterAnalyze.summary) problems.push("plan summary missing after analyze");
   if (afterAnalyze.rows) problems.push("per-clip estimate preview should be removed");
   if (/预计压/.test(afterAnalyze.summary || "")) problems.push("summary should not show per-clip compress preview");

@@ -3376,17 +3376,15 @@
     }
     const headerHidden = document.body.classList.contains("desktop-chrome-hidden");
     const header = $(".site-header");
-    const footer = $(".site-footer");
     const layout = $(".app-layout");
     const headerH = headerHidden || !header ? 0 : header.getBoundingClientRect().height;
-    const footerH = footer ? footer.getBoundingClientRect().height : 0;
     const layoutH = layout?.getBoundingClientRect().height;
     const topGap = 0.65 * 16;
     const bottomGap = 8;
     const maxH =
       layoutH && layoutH > 0
         ? Math.max(240, layoutH - topGap)
-        : Math.max(240, window.innerHeight - headerH - footerH - topGap - bottomGap);
+        : Math.max(240, window.innerHeight - headerH - topGap - bottomGap);
     navBar.style.setProperty("--nav-max-height", `${Math.floor(maxH)}px`);
   }
   window.addEventListener("resize", syncDesktopNavMaxHeight, { passive: true });
