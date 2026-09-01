@@ -1,0 +1,36 @@
+<section id="about" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>实用小工具合集</h1>
+        <p>本站工具均在浏览器本地处理，不上传你的内容。下面是能力目录与快捷入口；新增功能会同步写进本页。</p>
+      </div>
+      <div class="panel-body about-body">
+        <div class="about-lead panel-card">
+          <p class="hint tight" id="about-version"></p>
+          <p>适合开发与日常：时间、颜色、编码、JSON/文本、图片与媒体、备忘录剪贴板、ADB 等。侧栏可搜索与排序；顶栏可换主题。</p>
+          <div class="about-share-bar" aria-label="分享本站">
+            <p class="hint tight about-share-hint">手机可一键分享给朋友；桌面可复制链接。</p>
+            <div class="btn-row tool-actions" style="flex-wrap:wrap">
+              <button type="button" class="primary-btn" id="about-share">分享本站</button>
+              <button type="button" class="secondary-btn" id="about-copy-link">复制链接</button>
+            </div>
+            <p class="hint tight mono" id="about-share-url" hidden></p>
+          </div>
+          <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.55rem">
+            <a class="primary-btn" href="#setup">安装本机工具（小白指南）</a>
+            <button type="button" class="ghost-btn" id="theme-about-open">打开主题设置</button>
+            <a class="ghost-btn" href="#memo">备忘录</a>
+            <a class="ghost-btn" href="#media/gifmaker">媒体工具</a>
+            <a class="ghost-btn" href="#adb">ADB</a>
+            <a class="ghost-btn" href="#ffbridge">FFmpeg 桥</a>
+          </div>
+          <p class="hint tight" style="margin-top:0.55rem">要用 ADB / 批量 FFmpeg，请先看 <a href="#setup">安装本机工具</a>：含 Node.js、ADB、FFmpeg 下载链接与逐步配置。</p>
+          <p class="hint tight" style="margin-top:0.35rem">维护说明：新增工具时请同步更新 <code class="mono">TOOL_GROUPS</code>、<code class="mono">TOOL_META</code>、<code class="mono">ABOUT_DESC</code>（见 <code class="mono">app.js</code>）；升级第三方库时更新 <code class="mono">lib/oss-deps.js</code>。</p>
+        </div>
+        <div id="about-catalog" class="about-catalog" aria-label="工具能力目录"></div>
+        <section class="about-oss panel-card" id="about-oss" aria-label="开源依赖清单">
+          <h2 class="subhead">开源依赖</h2>
+          <p class="hint tight about-oss-intro">本站使用的第三方开源项目；升级 vendor / CDN / 画板构建后请同步更新 <code class="mono">tools/lib/oss-deps.js</code>。</p>
+          <div id="about-oss-body" class="about-oss-body"></div>
+        </section>
+      </div>
+    </section>

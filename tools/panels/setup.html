@@ -1,0 +1,287 @@
+<section id="setup" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>安装本机工具（小白指南）</h1>
+        <p>本站大部分功能在浏览器里就能用。只有电脑上的 <a href="#adb">ADB</a> / <a href="#ffbridge">FFmpeg 批量</a> / 镜像需要启动<strong>一座本机桥</strong>（同一端口）。下面按步骤来，尽量少术语。</p>
+      </div>
+      <div class="panel-body setup-body">
+        <div class="setup-callout panel-card">
+          <h2 class="subhead">你需要装什么？</h2>
+          <p class="hint tight"><strong>手机</strong>：不用装这些，直接用网页里的音频处理 / 视频修剪即可。<strong>电脑</strong>：批量任务优先装本机桥；没装或连不上时，网页 FFmpeg 仍可当保底。</p>
+          <div class="setup-need-table" role="table" aria-label="依赖对照">
+            <div class="setup-need-row setup-need-head" role="row">
+              <span role="columnheader">要用的网页功能</span>
+              <span role="columnheader">本机要装</span>
+            </div>
+            <div class="setup-need-row" role="row">
+              <span>时间戳、JSON、备忘录、GIF、音频修剪等</span>
+              <span><strong>不用装</strong>，打开网页即可</span>
+            </div>
+            <div class="setup-need-row" role="row">
+              <span><a href="#adb">ADB 工具</a>（管安卓手机）</span>
+              <span><strong>Node.js</strong> + <strong>ADB</strong></span>
+            </div>
+            <div class="setup-need-row" role="row">
+              <span><a href="#ffbridge">FFmpeg 本机桥</a>（批量抽音频等）</span>
+              <span><strong>Node.js</strong> + <strong>FFmpeg</strong></span>
+            </div>
+            <div class="setup-need-row" role="row">
+              <span><a href="#ytdlp">yt-dlp 本机桥</a>（下载视频 / 播放列表）</span>
+              <span><strong>Node.js</strong> + <strong>yt-dlp</strong>（合并建议 + FFmpeg）</span>
+            </div>
+            <div class="setup-need-row" role="row">
+              <span>两个都要用</span>
+              <span>Node.js + ADB + FFmpeg（装一次即可）</span>
+            </div>
+            <div class="setup-need-row" role="row">
+              <span>ADB + FFmpeg + yt-dlp 都要用</span>
+              <span>Node.js + ADB + FFmpeg + yt-dlp（装一次即可）</span>
+            </div>
+          </div>
+          <p class="hint tight" style="margin-top:0.65rem">推荐顺序：① Node.js → ② FFmpeg / ADB（按需）→ ③ 回网页下载对应「完整 ZIP 桥」并运行 → ④ 点「连接本机桥」。</p>
+        </div>
+
+        <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.45rem;margin-top:1rem">
+          <span class="hint tight">选择你的系统：</span>
+          <span class="seg" role="group" aria-label="操作系统">
+            <button type="button" class="seg-btn is-active" data-setup-os="mac">macOS</button>
+            <button type="button" class="seg-btn" data-setup-os="win">Windows</button>
+            <button type="button" class="seg-btn" data-setup-os="linux">Linux</button>
+          </span>
+        </div>
+
+        <!-- ===== Node.js ===== -->
+        <section class="setup-block panel-card" id="setup-nodejs">
+          <h2 class="subhead">1. 安装 Node.js（本机桥需要）</h2>
+          <p class="hint">Node.js 用来在本机运行我们提供的「桥」小服务。装 LTS（长期支持版）即可，不必选最新实验版。</p>
+          <p class="btn-row tool-actions" style="flex-wrap:wrap">
+            <a class="primary-btn" href="https://nodejs.org/" target="_blank" rel="noopener noreferrer">打开 Node.js 官网下载</a>
+            <a class="ghost-btn" href="https://nodejs.org/zh-cn/download" target="_blank" rel="noopener noreferrer">中文下载页</a>
+          </p>
+
+          <div class="setup-os-panel" data-setup-panel="mac">
+            <ol class="setup-steps">
+              <li>打开官网，下载 <strong>macOS 安装包（.pkg）</strong>，双击一路「继续」安装。</li>
+              <li>（可选，更方便）若已装 Homebrew，也可在「终端」执行：<code class="mono">brew install node</code></li>
+              <li>打开「终端」，输入下面两行，回车，应能看到版本号：
+                <pre class="mono setup-pre">node -v
+npm -v</pre>
+              </li>
+            </ol>
+          </div>
+          <div class="setup-os-panel" data-setup-panel="win" hidden>
+            <ol class="setup-steps">
+              <li>打开官网，下载 <strong>Windows 安装包（.msi）</strong>，双击安装。勾选「自动加入 PATH」（默认一般已勾选）。</li>
+              <li>关闭并重新打开「命令提示符」或 PowerShell（很重要，否则可能仍提示找不到 node）。</li>
+              <li>输入下面两行，回车，应能看到版本号：
+                <pre class="mono setup-pre">node -v
+npm -v</pre>
+              </li>
+            </ol>
+          </div>
+          <div class="setup-os-panel" data-setup-panel="linux" hidden>
+            <ol class="setup-steps">
+              <li>优先用官网安装包 / 发行版包，或参考官网 Linux 说明。</li>
+              <li>Ubuntu / Debian 示例：
+                <pre class="mono setup-pre">sudo apt update
+sudo apt install -y nodejs npm
+node -v</pre>
+              </li>
+              <li>若版本过旧，建议用 <a href="https://nodejs.org/zh-cn/download" target="_blank" rel="noopener noreferrer">官网</a> 或 <a href="https://github.com/nvm-sh/nvm" target="_blank" rel="noopener noreferrer">nvm</a> 安装较新的 LTS。</li>
+            </ol>
+          </div>
+          <p class="hint tight">看到类似 <span class="mono">v20.x.x</span> 就说明 Node 装好了。</p>
+        </section>
+
+        <!-- ===== FFmpeg ===== -->
+        <section class="setup-block panel-card" id="setup-ffmpeg">
+          <h2 class="subhead">2. 安装 FFmpeg（FFmpeg 本机桥需要）</h2>
+          <p class="hint">FFmpeg 负责真正的音视频处理。装好后，终端里能跑 <span class="mono">ffmpeg -version</span> 即可。</p>
+          <p class="btn-row tool-actions" style="flex-wrap:wrap">
+            <a class="primary-btn" href="https://ffmpeg.org/download.html" target="_blank" rel="noopener noreferrer">FFmpeg 官网下载页</a>
+            <a class="ghost-btn" href="https://www.gyan.dev/ffmpeg/builds/" target="_blank" rel="noopener noreferrer">Windows 常用构建（gyan.dev）</a>
+            <a class="ghost-btn" href="https://brew.sh/" target="_blank" rel="noopener noreferrer">Homebrew（macOS）</a>
+          </p>
+
+          <div class="setup-os-panel" data-setup-panel="mac">
+            <ol class="setup-steps">
+              <li>推荐用 Homebrew（若还没有：打开 <a href="https://brew.sh/" target="_blank" rel="noopener noreferrer">brew.sh</a>，按首页命令安装）。</li>
+              <li>终端执行：
+                <pre class="mono setup-pre">brew install ffmpeg
+ffmpeg -version
+ffprobe -version</pre>
+              </li>
+            </ol>
+          </div>
+          <div class="setup-os-panel" data-setup-panel="win" hidden>
+            <ol class="setup-steps">
+              <li>打开 <a href="https://www.gyan.dev/ffmpeg/builds/" target="_blank" rel="noopener noreferrer">gyan.dev/ffmpeg/builds</a>，下载 <strong>ffmpeg-release-essentials.zip</strong>（或官网推荐的 Windows 构建）。</li>
+              <li>解压到固定位置，例如 <span class="mono">C:\ffmpeg</span>。确认里面有 <span class="mono">bin\ffmpeg.exe</span>。</li>
+              <li>把 <span class="mono">C:\ffmpeg\bin</span> 加到系统环境变量 PATH：
+                <ul>
+                  <li>设置 → 系统 → 关于 → 高级系统设置 → 环境变量</li>
+                  <li>在「用户变量」或「系统变量」里找到 Path → 编辑 → 新建 → 粘贴该 bin 路径 → 确定</li>
+                </ul>
+              </li>
+              <li><strong>重新打开</strong>命令行窗口，验证：
+                <pre class="mono setup-pre">ffmpeg -version
+ffprobe -version</pre>
+              </li>
+            </ol>
+          </div>
+          <div class="setup-os-panel" data-setup-panel="linux" hidden>
+            <ol class="setup-steps">
+              <li>Ubuntu / Debian：
+                <pre class="mono setup-pre">sudo apt update
+sudo apt install -y ffmpeg
+ffmpeg -version</pre>
+              </li>
+              <li>Fedora：<code class="mono">sudo dnf install ffmpeg</code>；Arch：<code class="mono">sudo pacman -S ffmpeg</code>。</li>
+            </ol>
+          </div>
+        </section>
+
+        <section class="setup-block panel-card" id="setup-ytdlp">
+          <h2 class="subhead">2b. 安装 yt-dlp（视频下载本机桥需要）</h2>
+          <p class="hint">网页 <a href="#ytdlp">yt-dlp 本机桥</a> 通过本机桥调用命令行工具。装好后终端能跑 <span class="mono">yt-dlp --version</span>。合并音视频仍需要上面的 FFmpeg。页面内也有<a href="#ytdlp">详细教程</a>。</p>
+          <p class="btn-row tool-actions" style="flex-wrap:wrap">
+            <a class="primary-btn" href="https://github.com/yt-dlp/yt-dlp" target="_blank" rel="noopener noreferrer">yt-dlp GitHub</a>
+            <a class="ghost-btn" href="https://github.com/yt-dlp/yt-dlp/wiki/Installation" target="_blank" rel="noopener noreferrer">官方安装说明</a>
+            <a class="ghost-btn" href="#ytdlp">打开 yt-dlp 工具页</a>
+          </p>
+          <div class="setup-os-panel" data-setup-panel="mac">
+            <ol class="setup-steps">
+              <li>推荐 Homebrew：<code class="mono">brew install yt-dlp</code></li>
+              <li>验证：
+                <pre class="mono setup-pre">yt-dlp --version</pre>
+              </li>
+              <li>升级：<code class="mono">brew upgrade yt-dlp</code>，或在工具页连桥后点「更新 yt-dlp」。</li>
+            </ol>
+          </div>
+          <div class="setup-os-panel" data-setup-panel="win" hidden>
+            <ol class="setup-steps">
+              <li>推荐 winget：
+                <pre class="mono setup-pre">winget install yt-dlp
+yt-dlp --version</pre>
+              </li>
+              <li>或 pipx：<code class="mono">pipx install yt-dlp</code>；或从 <a href="https://github.com/yt-dlp/yt-dlp/releases" target="_blank" rel="noopener noreferrer">Releases</a> 下载 <span class="mono">yt-dlp.exe</span> 加入 PATH。</li>
+              <li>改 PATH 后必须<strong>重新打开</strong>命令行再验证。</li>
+            </ol>
+          </div>
+          <div class="setup-os-panel" data-setup-panel="linux" hidden>
+            <ol class="setup-steps">
+              <li>推荐 pipx：
+                <pre class="mono setup-pre">pipx install yt-dlp
+yt-dlp --version</pre>
+              </li>
+              <li>Arch：<code class="mono">pacman -S yt-dlp</code>；其它发行版见官方 Wiki 或 pip 安装。</li>
+              <li>找不到命令时可设环境变量 <span class="mono">YTDLP_PATH</span> 指向可执行文件，然后重启桥。</li>
+            </ol>
+          </div>
+          <p class="hint tight">提示找不到 yt-dlp：先在本机终端自测，再重启桥。会员内容可在工具页选「cookies 浏览器」。</p>
+        </section>
+
+        <!-- ===== ADB ===== -->
+        <section class="setup-block panel-card" id="setup-adb">
+          <h2 class="subhead">3. 安装 ADB（ADB 工具需要）</h2>
+          <p class="hint">ADB 用来连接安卓手机。只需「Platform-Tools」这一小包，不必装整个 Android Studio（当然装了 Studio 也自带 adb）。</p>
+          <p class="btn-row tool-actions" style="flex-wrap:wrap">
+            <a class="primary-btn" href="https://developer.android.com/tools/releases/platform-tools" target="_blank" rel="noopener noreferrer">官方说明与下载页</a>
+            <a class="secondary-btn" href="https://dl.google.com/android/repository/platform-tools-latest-windows.zip" target="_blank" rel="noopener noreferrer">Windows 直链 ZIP</a>
+            <a class="secondary-btn" href="https://dl.google.com/android/repository/platform-tools-latest-darwin.zip" target="_blank" rel="noopener noreferrer">macOS 直链 ZIP</a>
+            <a class="secondary-btn" href="https://dl.google.com/android/repository/platform-tools-latest-linux.zip" target="_blank" rel="noopener noreferrer">Linux 直链 ZIP</a>
+            <a class="ghost-btn" href="https://developer.android.google.cn/tools/releases/platform-tools" target="_blank" rel="noopener noreferrer">国内镜像说明页</a>
+          </p>
+
+          <div class="setup-os-panel" data-setup-panel="mac">
+            <ol class="setup-steps">
+              <li>下载 macOS ZIP 并解压，得到 <span class="mono">platform-tools</span> 文件夹（内含 <span class="mono">adb</span>）。</li>
+              <li>可选：移到 <span class="mono">~/platform-tools</span>，并写入 PATH（把下面加到 <span class="mono">~/.zshrc</span>）：
+                <pre class="mono setup-pre">export PATH="$HOME/platform-tools:$PATH"</pre>
+                然后执行 <code class="mono">source ~/.zshrc</code>。
+              </li>
+              <li>或用 Homebrew：<code class="mono">brew install android-platform-tools</code></li>
+              <li>验证：
+                <pre class="mono setup-pre">adb version
+adb devices</pre>
+              </li>
+              <li>手机：打开「开发者选项」→ 开启「USB 调试」→ 用数据线连接电脑 → 手机上点「允许」。此时 <span class="mono">adb devices</span> 应出现设备序列号。</li>
+            </ol>
+          </div>
+          <div class="setup-os-panel" data-setup-panel="win" hidden>
+            <ol class="setup-steps">
+              <li>下载 Windows ZIP，解压到例如 <span class="mono">C:\platform-tools</span>。</li>
+              <li>把该文件夹路径加入 PATH（同 FFmpeg 的环境变量步骤）。</li>
+              <li>重新打开命令行，验证：
+                <pre class="mono setup-pre">adb version
+adb devices</pre>
+              </li>
+              <li>手机开启 USB 调试并授权；若驱动异常，可装厂商驱动或 Android Studio 自带的 Google USB Driver。</li>
+            </ol>
+          </div>
+          <div class="setup-os-panel" data-setup-panel="linux" hidden>
+            <ol class="setup-steps">
+              <li>下载 Linux ZIP 并解压，或发行版包：<code class="mono">sudo apt install adb</code>（名称因发行版而异）。</li>
+              <li>将 <span class="mono">platform-tools</span> 加入 PATH 后验证 <span class="mono">adb version</span>。</li>
+              <li>部分发行版需配置 udev 规则才能稳定识别设备；若 <span class="mono">adb devices</span> 显示 unauthorized / no permissions，请搜索「发行版名 + adb udev」。</li>
+            </ol>
+          </div>
+        </section>
+
+        <!-- ===== Bridge ===== -->
+        <section class="setup-block panel-card" id="setup-bridge">
+          <h2 class="subhead">4. 下载并启动「本机桥」</h2>
+          <p class="hint">桥是我们网站提供的小程序：网页通过它调用你电脑上的 adb / ffmpeg / yt-dlp。文件不会上传到互联网。</p>
+          <ol class="setup-steps">
+            <li>打开对应页面：
+              <span class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.35rem">
+                <a class="secondary-btn" href="#adb">打开 ADB 工具</a>
+                <a class="secondary-btn" href="#ffbridge">打开 FFmpeg 本机桥</a>
+                <a class="secondary-btn" href="#ytdlp">打开 yt-dlp 本机桥</a>
+              </span>
+            </li>
+            <li>点击「下载 xxx 完整包」（含 <span class="mono">server.js</span> + 启动脚本；yt-dlp 还需 <span class="mono">ytdlp-core.js</span>）。请解压后<strong>放在同一文件夹</strong>。</li>
+            <li>运行启动脚本：
+              <ul>
+                <li>macOS：双击或 <span class="mono">chmod +x … &amp;&amp; ./…</span></li>
+                <li>Windows：优先双击 <span class="mono">.cmd</span>，保持黑色窗口不要关</li>
+                <li>Linux：给脚本执行权限后运行</li>
+              </ul>
+            </li>
+            <li>回到网页点「连接本机桥」。默认地址：
+              <ul>
+                <li>统一本机桥：<span class="mono">http://127.0.0.1:17888</span>，Token <span class="mono">devtools-bridge</span>（ADB + 镜像 + FFmpeg + yt-dlp）</li>
+                <li>FFmpeg 接口前缀：<span class="mono">/ff</span>（例如 <span class="mono">/ff/ops</span>）</li>
+                <li>yt-dlp 接口前缀：<span class="mono">/ytdlp</span>（例如 <span class="mono">/ytdlp/health</span>）</li>
+              </ul>
+            </li>
+          </ol>
+          <p class="hint tight">窗口一闪就关：多半是没装 Node / 缺 server.js / 端口占用。看脚本目录旁的日志提示，或用户目录下 <span class="mono">.devtools-adb-bridge</span> / <span class="mono">.devtools-ffmpeg-bridge</span> 的 <span class="mono">last-start.log</span>。</p>
+        </section>
+
+        <section class="setup-block panel-card" id="setup-faq">
+          <h2 class="subhead">5. 常见问题</h2>
+          <dl class="setup-faq">
+            <dt>提示找不到 node / ffmpeg / adb / yt-dlp</dt>
+            <dd>确认已安装；Windows 改完 PATH 后必须新开终端；用上面的 <span class="mono">-v</span> / <span class="mono">-version</span> 命令自测；yt-dlp 装好后需重启桥。</dd>
+            <dt>桥连不上</dt>
+            <dd>确认启动窗口还在跑；地址端口别填错；浏览器要用 https 本站或本机预览，不要用 <span class="mono">file://</span> 直接打开 HTML。</dd>
+            <dt>手机 adb devices 是空的</dt>
+            <dd>检查线材、USB 调试、手机上的授权弹窗；换口 / 换线；部分机型要开「仅充电」以外的文件传输模式。</dd>
+            <dt>手机上怎么用 FFmpeg？</dt>
+            <dd>手机装不了本机桥。请用媒体里的 <a href="#media/audio">音频处理</a> / <a href="#media/vtrim">视频修剪</a>（网页内 FFmpeg）。电脑批量再用本机桥。</dd>
+            <dt>只想批量抽音频，要不要装 ADB？</dt>
+            <dd>不用。装 Node.js + FFmpeg，用 <a href="#ffbridge">FFmpeg 本机桥</a> 即可。</dd>
+            <dt>偶尔处理一两个视频，要不要装本机桥？</dt>
+            <dd>不必。用媒体里的「音频处理 / 视频修剪」等浏览器内工具就够（也是保底方案）；批量下载或整列表再用 <a href="#ytdlp">yt-dlp 本机桥</a>。</dd>
+            <dt>下载视频只要 yt-dlp，要不要装 ADB？</dt>
+            <dd>不用。装 Node.js + yt-dlp（合并建议 + FFmpeg），用 <a href="#ytdlp">yt-dlp 本机桥</a> 即可；与 ADB 共用同一座桥。</dd>
+          </dl>
+          <p class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.75rem">
+            <a class="ghost-btn" href="#about">返回关于</a>
+            <a class="ghost-btn" href="#adb">ADB 工具</a>
+            <a class="ghost-btn" href="#ffbridge">FFmpeg 本机桥</a>
+            <a class="ghost-btn" href="#ytdlp">yt-dlp 本机桥</a>
+          </p>
+        </section>
+      </div>
+    </section>

@@ -1,0 +1,51 @@
+.re-mark {
+  background: var(--mark-highlight-bg);
+  color: var(--mark-highlight-ink);
+  border-radius: 4px;
+  padding: 0 0.12em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.re-mark:nth-of-type(odd) {
+  background: var(--mark-alt-bg);
+  color: var(--mark-alt-ink);
+}
+
+.match-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--ink-3);
+  padding: 0.75rem 0.85rem;
+}
+
+.match-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.4rem 0.8rem;
+  margin-bottom: 0.45rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.match-groups {
+  margin: 0.35rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.25rem;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.match-groups strong {
+  color: var(--ink);
+  font-weight: 560;
+}
+
+.match-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+  padding: 0.4rem 0;
+}

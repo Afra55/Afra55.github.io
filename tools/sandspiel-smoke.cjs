@@ -7,11 +7,12 @@ const assert = (c, m) => {
   if (!c) throw new Error(m);
 };
 
-const html = fs.readFileSync(path.join(ROOT, "tools/index.html"), "utf8");
+const shell = fs.readFileSync(path.join(ROOT, "tools/index.html"), "utf8");
+const panel = fs.readFileSync(path.join(ROOT, "tools/panels/sandspiel.html"), "utf8");
 const app = fs.readFileSync(path.join(ROOT, "tools/app.js"), "utf8");
 const lazy = fs.readFileSync(path.join(ROOT, "tools/lib/lazy-scripts.js"), "utf8");
 const css = fs.readFileSync(path.join(ROOT, "tools/style.css"), "utf8");
-const nav = fs.readFileSync(path.join(ROOT, "tools/workspace-nav.css"), "utf8");
+const panelCss = fs.readFileSync(path.join(ROOT, "tools/styles/panels/sandspiel.css"), "utf8");
 const js = fs.readFileSync(path.join(ROOT, "tools/sandspiel.js"), "utf8");
 const oss = fs.readFileSync(path.join(ROOT, "tools/lib/oss-deps.js"), "utf8");
 const sw = fs.readFileSync(path.join(ROOT, "tools/sw.js"), "utf8");
@@ -19,10 +20,11 @@ const iframe = fs.readFileSync(path.join(ROOT, "tools/sandspiel/index.html"), "u
 const styles = fs.readFileSync(path.join(ROOT, "tools/sandspiel/styles.css"), "utf8");
 const notice = fs.readFileSync(path.join(ROOT, "tools/sandspiel/NOTICE.txt"), "utf8");
 
-assert(html.includes('id="sandspiel"') && html.includes("id=\"sandspiel-frame\""), "panel");
+assert(shell.includes('id="workspace-panels"'), "shell");
+assert(panel.includes('id="sandspiel"') && panel.includes('id="sandspiel-frame"'), "panel");
 assert(app.includes('"sandspiel"') && app.includes("sandspiel:"), "catalog");
 assert(lazy.includes('sandspiel: "./sandspiel.js"'), "lazy");
-assert(css.includes(".sandspiel-shell") && nav.includes('data-boot-panel="sandspiel"'), "css");
+assert((css.includes(".sandspiel-shell") || panelCss.includes(".sandspiel-shell")), "css");
 assert(styles.includes("sandspiel-menu-open") && styles.includes("Info-tags"), "iframe css");
 assert(fs.readFileSync(path.join(ROOT, "tools/sandspiel/embed-ui.js"), "utf8").includes("sandspiel-menu-open"), "embed ui");
 assert(js.includes("sandspiel:pause") && js.includes("./sandspiel/index.html") && js.includes("isSandspielFullscreen"), "loader");

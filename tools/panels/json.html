@@ -1,0 +1,23 @@
+<section id="json" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>JSON 格式化</h1>
+        <p>校验、美化与压缩，全部在本地完成。输入与结果共用同一编辑框。</p>
+      </div>
+      <div class="panel-body">
+        <div class="field-block">
+          <div class="label-row">
+            <label for="json-input">JSON</label>
+            <button type="button" class="copy-btn" data-copy-value="json-input">复制</button>
+          </div>
+          <textarea id="json-input" class="mono area json-area" rows="12" placeholder='{"hello":"world"}' spellcheck="false"></textarea>
+        </div>
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="json-pretty">美化</button>
+          <button type="button" class="secondary-btn" id="json-minify">压缩</button>
+          <button type="button" class="secondary-btn" id="json-validate">仅校验</button>
+          <button type="button" class="ghost-btn" id="json-clear">清空</button>
+        </div>
+        <p class="hint" id="json-meta"></p>
+        <p class="error" id="json-error" hidden></p>
+      </div>
+    </section>

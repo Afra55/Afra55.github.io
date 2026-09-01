@@ -1,0 +1,85 @@
+<section id="sharecard" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>代码卡片</h1>
+        <p>把代码或 JSON 生成精美分享图，可加水印并导出 PNG。左上角可显示装饰圆点。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="sc-input">代码 / JSON</label>
+            <textarea id="sc-input" class="mono area" rows="12" spellcheck="false" placeholder="粘贴 Java / Kotlin / Compose / JSON / JS 等代码…">@Composable
+fun Greeting(name: String) {
+    Text(text = "Hello, $name!")
+}</textarea>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.8rem">
+              <label for="sc-lang">语言</label>
+              <select id="sc-lang" class="mono select-input">
+                <option value="auto" selected>自动</option>
+                <option value="json">JSON</option>
+                <option value="kotlin">Kotlin / Compose</option>
+                <option value="java">Java</option>
+                <option value="javascript">JavaScript</option>
+                <option value="typescript">TypeScript</option>
+                <option value="python">Python</option>
+                <option value="go">Go</option>
+                <option value="rust">Rust</option>
+                <option value="swift">Swift</option>
+                <option value="dart">Dart / Flutter</option>
+                <option value="c">C</option>
+                <option value="cpp">C++</option>
+                <option value="ruby">Ruby</option>
+                <option value="php">PHP</option>
+                <option value="sql">SQL</option>
+                <option value="shell">Shell / Bash</option>
+                <option value="css">CSS</option>
+                <option value="xml">XML / HTML</option>
+                <option value="text">纯文本</option>
+              </select>
+              <label for="sc-theme">主题</label>
+              <select id="sc-theme" class="mono select-input">
+                <option value="midnight">Midnight</option>
+                <option value="ember">Ember</option>
+                <option value="mint">Mint</option>
+                <option value="paper">Paper</option>
+              </select>
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+              <label for="sc-title">标题</label>
+              <input id="sc-title" class="mono" type="text" value="Greeting.kt" spellcheck="false" />
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+              <label for="sc-watermark">水印</label>
+              <input id="sc-watermark" class="mono" type="text" value="Afra55 DevTools" spellcheck="false" />
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+              <label class="flag"><input id="sc-lines" type="checkbox" checked /> 行号</label>
+              <label class="flag"><input id="sc-pretty" type="checkbox" checked /> JSON 自动美化</label>
+              <label class="flag"><input id="sc-dots" type="checkbox" checked /> 装饰圆点</label>
+            </div>
+            <div class="btn-row tool-actions">
+              <button type="button" class="primary-btn" id="sc-export">导出 PNG</button>
+              <button type="button" class="secondary-btn" id="sc-refresh">刷新预览</button>
+            </div>
+            <p class="hint" id="sc-meta"></p>
+            <p class="error" id="sc-error" hidden></p>
+          </div>
+          <div class="field-block">
+            <label>预览</label>
+            <div class="share-stage" id="sc-stage">
+              <div class="share-capture" id="sc-capture">
+                <div class="share-card theme-midnight" id="sc-card">
+                  <div class="share-chrome" id="sc-chrome">
+                    <span class="share-dots" id="sc-dots-el" aria-hidden="true" title="装饰圆点">
+                      <i class="share-dot"></i>
+                    </span>
+                    <span class="share-title mono" id="sc-card-title">Greeting.kt</span>
+                  </div>
+                  <pre class="share-code mono" id="sc-code"></pre>
+                  <div class="share-watermark" id="sc-card-watermark">Afra55 DevTools</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>

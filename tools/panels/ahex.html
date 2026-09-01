@@ -1,0 +1,85 @@
+<section id="ahex" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>AHEX 颜色</h1>
+        <p>输入或调节 <span class="mono">#AARRGGBB</span>（如 <span class="mono">#FF000000</span>），滑块与通道可实时互相同步。</p>
+      </div>
+
+      <div class="panel-body">
+        <div class="color-layout">
+          <div class="field-block">
+            <label for="ahex-input">AHEX</label>
+            <input id="ahex-input" class="mono" type="text" value="#FF000000" maxlength="9" spellcheck="false" autocomplete="off" />
+            <p class="hint">格式：<span class="mono">#AARRGGBB</span>，也可省略 <span class="mono">#</span></p>
+
+            <div class="swatch-stack" aria-hidden="true">
+              <div class="swatch-checker"></div>
+              <div class="swatch" id="ahex-swatch"></div>
+            </div>
+
+            <div class="result" id="ahex-result" hidden>
+              <span class="result-label">CSS</span>
+              <code class="result-value mono" id="ahex-css"></code>
+              <button type="button" class="copy-btn" data-copy="ahex-css">复制</button>
+            </div>
+            <p class="error" id="ahex-error" hidden></p>
+          </div>
+
+          <div class="channel-grid" id="ahex-channels" hidden>
+            <div class="channel">
+              <label class="channel-name" for="slider-a">Alpha</label>
+              <input class="channel-num mono" id="num-a" type="number" min="0" max="255" step="1" inputmode="numeric" />
+              <input class="channel-slider" id="slider-a" type="range" min="0" max="255" step="1" aria-label="Alpha 滑块" />
+            </div>
+            <div class="channel channel-r">
+              <label class="channel-name" for="slider-r">Red</label>
+              <input class="channel-num mono" id="num-r" type="number" min="0" max="255" step="1" inputmode="numeric" />
+              <input class="channel-slider" id="slider-r" type="range" min="0" max="255" step="1" aria-label="Red 滑块" />
+            </div>
+            <div class="channel channel-g">
+              <label class="channel-name" for="slider-g">Green</label>
+              <input class="channel-num mono" id="num-g" type="number" min="0" max="255" step="1" inputmode="numeric" />
+              <input class="channel-slider" id="slider-g" type="range" min="0" max="255" step="1" aria-label="Green 滑块" />
+            </div>
+            <div class="channel channel-b">
+              <label class="channel-name" for="slider-b">Blue</label>
+              <input class="channel-num mono" id="num-b" type="number" min="0" max="255" step="1" inputmode="numeric" />
+              <input class="channel-slider" id="slider-b" type="range" min="0" max="255" step="1" aria-label="Blue 滑块" />
+            </div>
+
+            <div class="channel-meta">
+              <div class="meta-row">
+                <label for="num-opacity">不透明度</label>
+                <div class="meta-edit">
+                  <input class="meta-input mono" id="num-opacity" type="text" inputmode="numeric" pattern="[0-9]*" maxlength="3" autocomplete="off" spellcheck="false" />
+                  <span class="meta-unit">%</span>
+                </div>
+              </div>
+              <div class="meta-row meta-rgb">
+                <span>RGB</span>
+                <div class="rgb-edit">
+                  <label class="sr-only" for="edit-r">R</label>
+                  <input class="meta-input mono" id="edit-r" type="number" min="0" max="255" step="1" inputmode="numeric" title="R" />
+                  <label class="sr-only" for="edit-g">G</label>
+                  <input class="meta-input mono" id="edit-g" type="number" min="0" max="255" step="1" inputmode="numeric" title="G" />
+                  <label class="sr-only" for="edit-b">B</label>
+                  <input class="meta-input mono" id="edit-b" type="number" min="0" max="255" step="1" inputmode="numeric" title="B" />
+                </div>
+              </div>
+              <div class="meta-row">
+                <label for="edit-hex">HEX RGB</label>
+                <input class="meta-input meta-hex mono" id="edit-hex" type="text" maxlength="7" spellcheck="false" autocomplete="off" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="preset-row" aria-label="常用示例">
+          <button type="button" class="preset" data-ahex="#FF000000">黑 #FF000000</button>
+          <button type="button" class="preset" data-ahex="#FFFFFFFF">白 #FFFFFFFF</button>
+          <button type="button" class="preset" data-ahex="#FFFF0000">红 #FFFF0000</button>
+          <button type="button" class="preset" data-ahex="#FF00FF00">绿 #FF00FF00</button>
+          <button type="button" class="preset" data-ahex="#FF0000FF">蓝 #FF0000FF</button>
+          <button type="button" class="preset" data-ahex="#80FF5722">半透明橙 #80FF5722</button>
+        </div>
+      </div>
+    </section>

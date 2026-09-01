@@ -13,14 +13,16 @@ execSync("node --check tools/ytdlp.js", { cwd: ROOT, stdio: "inherit" });
 execSync("node --check tools/ffmpeg-bridge/server.js", { cwd: ROOT, stdio: "inherit" });
 execSync("node --check tools/adb-bridge/server.js", { cwd: ROOT, stdio: "inherit" });
 
-const html = fs.readFileSync(path.join(ROOT, "tools/index.html"), "utf8");
+const shell = fs.readFileSync(path.join(ROOT, "tools/index.html"), "utf8");
+const panel = fs.readFileSync(path.join(ROOT, "tools/panels/ytdlp.html"), "utf8");
 const app = fs.readFileSync(path.join(ROOT, "tools/app.js"), "utf8");
 const lazy = fs.readFileSync(path.join(ROOT, "tools/lib/lazy-scripts.js"), "utf8");
 const adb = fs.readFileSync(path.join(ROOT, "tools/adb-bridge/server.js"), "utf8");
 const extra = fs.readFileSync(path.join(ROOT, "tools/extra.js"), "utf8");
 
-assert(html.includes('id="ytdlp"'), "panel");
-assert(html.includes("id=\"yd-download\""), "download btn");
+assert(shell.includes('id="workspace-panels"'), "shell missing");
+assert(panel.includes('id="ytdlp"'), "panel");
+assert(panel.includes('id="yd-download"'), "download btn");
 assert(app.includes('"ytdlp"'), "TOOL_GROUPS");
 assert(lazy.includes('ytdlp: "./ytdlp.js"'), "lazy");
 assert(adb.includes("/ytdlp"), "adb mount");

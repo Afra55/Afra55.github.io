@@ -1,0 +1,37 @@
+<section id="wheel" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>大转盘</h1>
+        <p>自定义分块、比例与文字，设置旋转秒数后随机停针；<strong>按各块比例加权随机</strong>（比例相同则概率相等）。可开关旋转音效与结果语音播报。</p>
+      </div>
+      <div class="panel-body wheel-body">
+        <div class="wheel-layout">
+          <aside class="wheel-side panel-card">
+            <div class="wheel-controls">
+              <label class="wheel-field" for="wheel-count">
+                <span>分块数量</span>
+                <input id="wheel-count" class="mono meta-input" type="number" min="2" max="36" value="6" />
+              </label>
+              <label class="wheel-field" for="wheel-duration">
+                <span>旋转秒数</span>
+                <input id="wheel-duration" class="mono meta-input" type="number" min="1" max="60" step="0.5" value="5" />
+              </label>
+              <label class="wheel-field wheel-sound-field" for="wheel-sound">
+                <input id="wheel-sound" type="checkbox" checked />
+                <span>音效与语音</span>
+              </label>
+              <button type="button" class="primary-btn wheel-spin-btn" id="wheel-spin">开始旋转</button>
+              <button type="button" class="secondary-btn wheel-equal-btn" id="wheel-equal">均等比例</button>
+              <p class="wheel-result" id="wheel-result" aria-live="polite">点击「开始旋转」按权重抽选</p>
+            </div>
+            <div class="wheel-segments-head">
+              <strong>各块设置</strong>
+              <span class="hint tight">比例即中奖概率；改一块时其余块等比缩放</span>
+            </div>
+            <div class="wheel-segments" id="wheel-segments"></div>
+          </aside>
+          <div class="wheel-stage panel-card">
+            <canvas id="wheel-canvas" class="wheel-canvas" aria-label="大转盘"></canvas>
+          </div>
+        </div>
+      </div>
+    </section>

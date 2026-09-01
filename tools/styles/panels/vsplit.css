@@ -1,0 +1,919 @@
+.vsplit-clip {
+  grid-template-columns: 1fr;
+  align-items: stretch;
+}
+
+.vsplit-stage {
+  margin-top: 0.65rem;
+}
+
+.vsplit-preview-wrap {
+  margin-bottom: 0;
+}
+
+.vsplit-sticky-core {
+  margin: 0;
+}
+
+.vsplit-stage.is-manual #vsplit-video:not(.is-fs) {
+  max-height: min(36vh, 280px);
+  width: auto;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.vsplit-manual-transport {
+  margin-top: 0.45rem;
+  padding: 0.55rem 0.65rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel-strong);
+}
+
+.vsplit-manual {
+  margin-top: 0.45rem;
+  padding: 0.55rem 0.65rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel-strong);
+}
+
+.vsplit-transport {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.vsplit-transport #vsplit-play,
+.vsplit-transport #vsplit-mute,
+.vsplit-transport #vsplit-fs-open {
+  flex: 0 0 auto;
+  min-width: 4.2rem;
+  min-height: 2.4rem;
+}
+
+.vsplit-transport #vsplit-mute.is-muted,
+#vsplit-fs-mute.is-muted {
+  opacity: 0.85;
+}
+
+.vsplit-transport .vsplit-scrub-meta {
+  flex: 1 1 8rem;
+  margin: 0;
+}
+
+.vsplit-scrub-block {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.vsplit-scrub-hit {
+  position: relative;
+  padding: 1.05rem 0 0.1rem;
+}
+
+.vsplit-scrub-marks {
+  position: absolute;
+  left: 0.15rem;
+  right: 0.15rem;
+  top: 0.12rem;
+  height: 0.9rem;
+  pointer-events: auto;
+  z-index: 3;
+  touch-action: manipulation;
+}
+
+.vsplit-scrub-mark {
+  appearance: none;
+  -webkit-appearance: none;
+  position: absolute;
+  top: 0.06rem;
+  width: 0.78rem;
+  height: 0.78rem;
+  margin-left: -0.39rem;
+  padding: 0;
+  border-radius: 50%;
+  border: 1.5px solid rgba(11, 18, 32, 0.92);
+  box-shadow: 0 0 0 1px var(--ink-28);
+  pointer-events: auto;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  background-clip: padding-box;
+  z-index: 1;
+}
+
+.vsplit-scrub-mark::before {
+  content: "";
+  position: absolute;
+  inset: -0.7rem -0.55rem;
+  border-radius: 999px;
+}
+
+.vsplit-scrub-mark.is-start {
+  background: var(--accent);
+}
+
+.vsplit-scrub-mark.is-end {
+  background: var(--accent-2);
+}
+
+.vsplit-scrub-mark.is-active {
+  width: 0.94rem;
+  height: 0.94rem;
+  margin-left: -0.47rem;
+  top: -0.02rem;
+  z-index: 4;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.vsplit-scrub-mark.is-picked {
+  width: 1.05rem;
+  height: 1.05rem;
+  margin-left: -0.525rem;
+  top: -0.08rem;
+  z-index: 6;
+  box-shadow:
+    0 0 0 2px #fff,
+    0 0 0 4px color-mix(in srgb, var(--accent) 75%, transparent);
+  transform: scale(1.08);
+  animation: vsplit-mark-pulse 1s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+.vsplit-scrub-mark.is-picked {
+    animation: none;
+  }
+}
+
+.vsplit-scrub-mark.is-editable:active,
+.vsplit-scrub-mark.is-jump:active {
+  transform: scale(1.12);
+}
+
+.vsplit-mark-chips {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 0.15rem 0.05rem 0.35rem;
+  scrollbar-width: thin;
+}
+
+.vsplit-mark-chip-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+}
+
+.vsplit-mark-chip {
+  appearance: none;
+  flex: 0 0 auto;
+  border: 1px solid var(--line);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.28rem 1.55rem 0.28rem 0.7rem;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.vsplit-mark-chip-del {
+  appearance: none;
+  position: absolute;
+  top: 50%;
+  right: 0.2rem;
+  transform: translateY(-50%);
+  width: 1.15rem;
+  height: 1.15rem;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  margin: 0;
+  background: color-mix(in srgb, #c45c5c 78%, transparent);
+  color: #fff;
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.vsplit-mark-chip-del:hover,
+.vsplit-mark-chip-del:focus-visible {
+  background: #c45c5c;
+}
+
+.vsplit-mark-chip-wrap.is-active .vsplit-mark-chip,
+.vsplit-mark-chip.is-active {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--line));
+  background: var(--accent-soft-strong, color-mix(in srgb, var(--accent) 16%, transparent));
+  color: var(--ink);
+}
+
+.vsplit-mark-chip-wrap.is-incomplete .vsplit-mark-chip,
+.vsplit-mark-chip.is-incomplete {
+  opacity: 0.72;
+}
+
+.vsplit-mark-picker {
+  position: absolute;
+  z-index: 8;
+  min-width: 9.5rem;
+  max-width: min(92vw, 16rem);
+  max-height: 12rem;
+  overflow: auto;
+  padding: 0.35rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(10, 16, 28, 0.96);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.vsplit-mark-picker[hidden] {
+  display: none !important;
+}
+
+.vsplit-mark-picker-title {
+  margin: 0.1rem 0.35rem 0.2rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.vsplit-mark-picker button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+  padding: 0.45rem 0.55rem;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+
+.vsplit-mark-picker button:hover,
+.vsplit-mark-picker button:focus-visible {
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 14%, transparent));
+}
+
+.vsplit-mark-picker button.is-nearest {
+  background: var(--accent-soft-strong, color-mix(in srgb, var(--accent) 20%, transparent));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.vsplit-mark-picker button.is-nearest:hover,
+.vsplit-mark-picker button.is-nearest:focus-visible {
+  background: var(--accent-soft-strong, color-mix(in srgb, var(--accent) 28%, transparent));
+}
+
+.vsplit-mark-picker-badge {
+  display: inline-block;
+  margin-right: 0.35rem;
+  padding: 0.08rem 0.35rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: color-mix(in srgb, var(--bg-0) 20%, #000);
+  background: var(--accent, #2ec4b6);
+  vertical-align: 0.05em;
+}
+
+.vsplit-mark-picker button .mono {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.vsplit-mark-picker-range {
+  display: block;
+  margin-top: 0.12rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+}
+
+.vsplit-scrub {
+  -webkit-appearance: none;
+  appearance: none;
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  height: 1.65rem;
+  margin: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: none;
+}
+
+.vsplit-scrub:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.vsplit-scrub::-webkit-slider-runnable-track {
+  height: 0.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 28%, var(--ink-10));
+}
+
+.vsplit-scrub::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 1.35rem;
+  height: 1.35rem;
+  margin-top: -0.5rem;
+  border-radius: 50%;
+  border: 2px solid rgba(11, 18, 32, 0.9);
+  background: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 50%, transparent);
+}
+
+.vsplit-scrub::-moz-range-track {
+  height: 0.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 28%, var(--ink-10));
+}
+
+.vsplit-scrub::-moz-range-thumb {
+  width: 1.35rem;
+  height: 1.35rem;
+  border-radius: 50%;
+  border: 2px solid rgba(11, 18, 32, 0.9);
+  background: var(--accent);
+}
+
+.vsplit-scrub-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.vsplit-nudge-btns {
+  margin-top: 0.15rem;
+  flex-wrap: nowrap;
+  gap: 0.25rem;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.vsplit-nudge-btns .ghost-btn {
+  flex: 1 1 0;
+  min-height: 2.05rem;
+  padding-left: 0.28rem;
+  padding-right: 0.28rem;
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: none;
+  caret-color: transparent;
+}
+
+.vsplit-mark-btns {
+  margin-top: 0.35rem;
+  flex-wrap: nowrap;
+  position: relative;
+  z-index: 5;
+  touch-action: manipulation;
+}
+
+.vsplit-mark-btns .primary-btn,
+.vsplit-mark-btns .secondary-btn,
+.vsplit-mark-btns .ghost-btn {
+  flex: 1 1 0;
+  min-height: 2.4rem;
+  justify-content: center;
+  text-align: center;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.vsplit-mark-btns .primary-btn {
+  flex: 1.4 1 0;
+}
+
+.vsplit-edit-bar {
+  margin-top: 0.4rem;
+  padding: 0.45rem 0.5rem 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-radius: 12px;
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 8%, transparent));
+  display: grid;
+  gap: 0.35rem;
+}
+
+.vsplit-edit-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+}
+
+.vsplit-edit-head .hint {
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+.vsplit-edit-head .secondary-btn,
+.vsplit-edit-head .ghost-btn {
+  flex: 0 0 auto;
+  min-height: 2.35rem;
+  padding: 0.25rem 0.85rem;
+  font-size: 0.86rem;
+}
+
+.vsplit-edit-focus {
+  display: flex;
+  width: 100%;
+}
+
+.vsplit-edit-focus .seg-btn {
+  flex: 1 1 0;
+  min-height: 2.55rem;
+  font-size: 0.92rem;
+  touch-action: manipulation;
+}
+
+.vsplit-edit-actions {
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.vsplit-edit-actions .primary-btn,
+.vsplit-edit-actions .secondary-btn,
+.vsplit-edit-actions .ghost-btn {
+  flex: 1 1 auto;
+  min-height: 2.25rem;
+}
+
+.vsplit-quick-export {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  margin-top: 0.45rem;
+}
+
+.vsplit-quick-export .secondary-btn,
+.vsplit-quick-export .ghost-btn {
+  min-height: 2.35rem;
+  justify-content: center;
+  text-align: center;
+}
+
+.vsplit-marks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+}
+
+.vsplit-mark {
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.65rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
+}
+
+.vsplit-mark.is-editing {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: var(--accent-soft, color-mix(in srgb, var(--accent) 12%, transparent));
+}
+
+.vsplit-mark.is-incomplete {
+  border-color: color-mix(in srgb, #e8a45a 50%, var(--line));
+}
+
+.vsplit-mark-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+}
+
+.vsplit-mark-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.vsplit-fs {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: flex;
+  flex-direction: column;
+  background: var(--shell-bg);
+  padding:
+    calc(0.55rem + env(safe-area-inset-top, 0px))
+    calc(0.7rem + env(safe-area-inset-right, 0px))
+    calc(0.7rem + env(safe-area-inset-bottom, 0px))
+    calc(0.7rem + env(safe-area-inset-left, 0px));
+  box-sizing: border-box;
+}
+
+.vsplit-fs[hidden] {
+  display: none !important;
+}
+
+.vsplit-fs-top,
+.vsplit-fs-bottom {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 3;
+}
+
+.vsplit-fs-top {
+  justify-content: space-between;
+  margin-bottom: 0.45rem;
+}
+
+.vsplit-fs-close {
+  min-height: 2.4rem;
+  padding-left: 0.9rem;
+  padding-right: 0.9rem;
+}
+
+.vsplit-fs-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+  color: var(--ink-92);
+  font-variant-numeric: tabular-nums;
+  min-width: 0;
+}
+
+.vsplit-fs-status {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  line-height: 1.2;
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.vsplit-fs-status.is-bump {
+  color: var(--accent);
+  transform: scale(1.04);
+}
+
+.vsplit-fs-now {
+  font-size: 0.82rem;
+  color: var(--ink-62);
+}
+
+.vsplit-fs-host {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: min(38vh, 280px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #000;
+  z-index: 1;
+}
+
+.vsplit-fs-flash {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  opacity: 0;
+  border-radius: inherit;
+}
+
+.vsplit-fs-flash.is-start {
+  box-shadow:
+    inset 0 0 0 4px #34d399,
+    inset 0 0 28px rgba(52, 211, 153, 0.45);
+  background: rgba(52, 211, 153, 0.16);
+}
+
+.vsplit-fs-flash.is-end {
+  box-shadow:
+    inset 0 0 0 4px #fb923c,
+    inset 0 0 28px rgba(251, 146, 60, 0.42);
+  background: rgba(251, 146, 60, 0.16);
+}
+
+.vsplit-fs-flash.is-pop {
+  animation: vsplit-fs-flash-pop 0.42s ease-out;
+}
+
+.vsplit-fs-host #vsplit-video,
+.vsplit-fs-host #vsplit-video.is-fs {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  max-width: 100%;
+  object-fit: contain;
+  margin: 0;
+  border-radius: 0;
+  border: 0;
+  background: #000;
+  transform: translateZ(0);
+  -webkit-transform: translateZ(0);
+}
+
+.vsplit-fs-note {
+  flex: 0 0 auto;
+  margin: 0.45rem 0 0;
+  min-height: 1.25rem;
+  text-align: center;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink-92);
+  font-variant-numeric: tabular-nums;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+
+.vsplit-fs-note.is-on {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.vsplit-fs-note.is-start {
+  color: #6ee7b7;
+}
+
+.vsplit-fs-note.is-end {
+  color: #fdba74;
+}
+
+.vsplit-fs-scrub {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  margin-top: 0.35rem;
+  padding: 0.35rem 0.15rem 0.15rem;
+  position: relative;
+  z-index: 3;
+}
+
+.vsplit-fs-scrub .vsplit-scrub-block {
+  margin: 0;
+  padding: 0.35rem 0.45rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--control-bg-strong, color-mix(in srgb, var(--bg-0) 70%, var(--panel-strong)));
+}
+
+.vsplit-fs-scrub .vsplit-scrub-marks {
+  z-index: 6;
+  pointer-events: auto;
+}
+
+.vsplit-fs-scrub .vsplit-scrub-mark.is-jump {
+  z-index: 6;
+  pointer-events: auto;
+}
+
+.vsplit-fs-scrub .vsplit-scrub-mark.is-jump::before {
+  inset: -0.9rem -0.75rem;
+}
+
+.vsplit-fs-scrub .vsplit-nudge-btns {
+  display: flex !important;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  margin-top: 0.15rem;
+}
+
+.vsplit-fs-scrub .vsplit-mark-btns,
+.vsplit-fs-scrub .vsplit-edit-bar,
+.vsplit-fs-scrub #vsplit-scrub-hint,
+.vsplit-fs-scrub .vsplit-mark-chips {
+  /* 芯片易误触进编辑且全屏重建会拖垮页面 */
+  display: none !important;
+}
+
+.vsplit-fs-bottom {
+  margin-top: 0.45rem;
+  gap: 0.45rem;
+  flex-wrap: nowrap;
+}
+
+.vsplit-fs-bottom #vsplit-fs-play,
+.vsplit-fs-bottom #vsplit-fs-undo {
+  flex: 0 0 auto;
+  min-width: 4.4rem;
+  min-height: 3rem;
+  padding-left: 0.65rem;
+  padding-right: 0.65rem;
+  font-size: 0.9rem;
+}
+
+.vsplit-fs-mark {
+  flex: 1 1 auto;
+  min-height: 3.1rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.vsplit-fs-mark.is-pulse {
+  transform: scale(0.98);
+}
+
+.vsplit-fs-mark.is-pulse-start {
+  box-shadow: 0 0 0 2px rgba(52, 211, 153, 0.55);
+}
+
+.vsplit-fs-mark.is-pulse-end {
+  box-shadow: 0 0 0 2px rgba(251, 146, 60, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+.vsplit-fs-flash.is-pop,
+  .vsplit-fs-status.is-bump,
+  .vsplit-fs-mark.is-pulse,
+  .vsplit-fs-note {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+}
+
+body.vsplit-fs-open {
+  overflow: hidden;
+}
+
+@media (max-width: 900px) {
+.vsplit-stage.is-manual .vsplit-sticky-core {
+    position: sticky;
+    top: 3.85rem;
+    z-index: 3;
+    margin-left: -0.15rem;
+    margin-right: -0.15rem;
+    padding: 0.28rem 0.15rem 0.35rem;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--bg-0) 98%, transparent) 55%,
+      color-mix(in srgb, var(--bg-0) 88%, transparent) 100%
+    );
+    backdrop-filter: blur(10px);
+  }
+
+.vsplit-stage.is-manual #vsplit-video:not(.is-fs) {
+    max-height: min(22vh, 168px);
+  }
+
+.vsplit-fs-host {
+    min-height: min(34vh, 240px);
+  }
+
+.vsplit-fs-host #vsplit-video.is-fs {
+    max-height: none !important;
+    width: 100% !important;
+    height: 100% !important;
+  }
+
+.vsplit-fs-bottom #vsplit-fs-play,
+  .vsplit-fs-bottom #vsplit-fs-undo,
+  .vsplit-fs-bottom #vsplit-fs-mark,
+  .vsplit-fs-bottom #vsplit-fs-mute {
+    min-height: 2.75rem;
+  }
+
+.vsplit-manual-transport {
+    border-radius: 12px;
+    padding: 0.4rem 0.5rem 0.45rem;
+  }
+
+.vsplit-manual {
+    border-radius: 12px;
+    padding: 0.45rem 0.5rem 0.5rem;
+  }
+
+.vsplit-transport {
+    margin-bottom: 0.2rem;
+    gap: 0.35rem;
+  }
+
+.vsplit-transport #vsplit-play,
+  .vsplit-transport #vsplit-mute,
+  .vsplit-transport #vsplit-fs-open {
+    min-height: 2.15rem;
+    min-width: 3.6rem;
+    padding-left: 0.55rem;
+    padding-right: 0.55rem;
+    font-size: 0.84rem;
+  }
+
+.vsplit-edit-bar {
+    position: relative;
+    z-index: 4;
+  }
+
+.vsplit-edit-focus {
+    display: flex;
+    width: 100%;
+  }
+
+.vsplit-edit-focus .seg-btn {
+    flex: 1 1 0;
+    min-height: 2.35rem;
+    pointer-events: auto;
+  }
+
+.vsplit-fs-scrub .vsplit-scrub {
+    min-height: 1.6rem;
+  }
+
+.vsplit-mark-btns,
+  .vsplit-nudge-btns {
+    gap: 0.25rem;
+  }
+
+.vsplit-mark-btns .primary-btn,
+  .vsplit-mark-btns .ghost-btn,
+  .vsplit-nudge-btns .ghost-btn {
+    padding-left: 0.32rem;
+    padding-right: 0.32rem;
+    font-size: 0.84rem;
+  }
+}
+
+.vsplit-clip-top {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 0.75rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.vsplit-clip-progress {
+  margin-top: 0.45rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
+}
+
+.vsplit-clip-progress[hidden] {
+  display: none !important;
+}
+
+.vsplit-clip-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.3rem;
+}
+
+.vsplit-clip-progress-head .hint {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.vsplit-clip-progress-pct {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.vsplit-clip-gif {
+  display: block;
+  max-height: 180px;
+  width: auto;
+  max-width: 100%;
+  margin: 0.35rem auto 0;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
+@media (max-width: 700px) {
+.vsplit-clip {
+    grid-template-columns: 1fr;
+  }
+}

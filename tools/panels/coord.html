@@ -1,0 +1,63 @@
+<section id="coord" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>坐标系互转</h1>
+        <p>WGS84 / GCJ02 / BD09 / CGCS2000 本地公式互转，格式为经度,纬度。</p>
+      </div>
+      <div class="panel-body">
+        <div class="field-row" style="flex-wrap:wrap">
+          <label for="coord-system">输入坐标系</label>
+          <select id="coord-system" class="mono select-input">
+            <option value="wgs84" selected>WGS84（GPS）</option>
+            <option value="gcj02">GCJ02（国测局 / 高德 / 腾讯）</option>
+            <option value="bd09">BD09（百度）</option>
+            <option value="cgcs2000">CGCS2000（近似 WGS84）</option>
+          </select>
+        </div>
+        <div class="field-block">
+          <label for="coord-input">经纬度（lng,lat）</label>
+          <textarea id="coord-input" class="mono area" rows="4" placeholder="116.397428,39.90923&#10;121.4737 31.2304" spellcheck="false">116.397428,39.90923</textarea>
+        </div>
+        <p class="hint" id="coord-meta">每行一组坐标，顺序为经度在前、纬度在后。CGCS2000 按 WGS84 近似处理。</p>
+        <p class="error" id="coord-error" hidden></p>
+        <div class="channel-meta case-results coord-results" style="border-top:1px solid var(--line);padding-top:0.85rem;margin-top:0.85rem">
+          <div class="meta-row coord-row">
+            <span>WGS84</span>
+            <div class="coord-vals">
+              <strong class="mono case-out" id="coord-wgs84">—</strong>
+              <span class="mono coord-dms" id="coord-wgs84-dms">—</span>
+            </div>
+            <button type="button" class="copy-btn" data-copy="coord-wgs84">复制</button>
+          </div>
+          <div class="meta-row coord-row">
+            <span>GCJ02</span>
+            <div class="coord-vals">
+              <strong class="mono case-out" id="coord-gcj02">—</strong>
+              <span class="mono coord-dms" id="coord-gcj02-dms">—</span>
+            </div>
+            <button type="button" class="copy-btn" data-copy="coord-gcj02">复制</button>
+          </div>
+          <div class="meta-row coord-row">
+            <span>BD09</span>
+            <div class="coord-vals">
+              <strong class="mono case-out" id="coord-bd09">—</strong>
+              <span class="mono coord-dms" id="coord-bd09-dms">—</span>
+            </div>
+            <button type="button" class="copy-btn" data-copy="coord-bd09">复制</button>
+          </div>
+          <div class="meta-row coord-row">
+            <span>CGCS2000</span>
+            <div class="coord-vals">
+              <strong class="mono case-out" id="coord-cgcs2000">—</strong>
+              <span class="mono coord-dms" id="coord-cgcs2000-dms">—</span>
+            </div>
+            <button type="button" class="copy-btn" data-copy="coord-cgcs2000">复制</button>
+          </div>
+        </div>
+        <div class="btn-row tool-actions" style="margin-top:0.9rem">
+          <button type="button" class="secondary-btn" id="coord-use-wgs84">填入 WGS84</button>
+          <button type="button" class="secondary-btn" id="coord-use-gcj02">填入 GCJ02</button>
+          <button type="button" class="secondary-btn" id="coord-use-bd09">填入 BD09</button>
+          <button type="button" class="ghost-btn" id="coord-clear">清空</button>
+        </div>
+      </div>
+    </section>

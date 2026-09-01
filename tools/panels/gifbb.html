@@ -1,0 +1,19 @@
+<section id="gifbb" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>已有 GIF 压黑盒</h1>
+        <p>多选本地 GIF，按黑盒规则压至 ≤6MB；体积已符合要求的会跳过，不重复压缩。全程本地处理，不会上传。</p>
+      </div>
+      <div class="panel-body">
+        <div class="btn-row tool-actions" style="flex-wrap:wrap">
+          <label class="file-btn" for="gifbb-file">选择 GIF（可多选）</label>
+          <input id="gifbb-file" type="file" accept="image/gif,.gif" multiple hidden />
+          <button type="button" class="primary-btn" id="gifbb-run" disabled>压黑盒</button>
+          <button type="button" class="secondary-btn" id="gifbb-zip" disabled title="打包已处理的 GIF">打包下载</button>
+          <button type="button" class="ghost-btn" id="gifbb-clear">清空</button>
+          <button type="button" class="ghost-btn" id="gifbb-abort" hidden>取消</button>
+        </div>
+        <p class="hint" id="gifbb-meta">未选择 GIF</p>
+        <div class="gif-frame-list" id="gifbb-list" hidden aria-live="polite"></div>
+        <p class="error" id="gifbb-error" hidden></p>
+      </div>
+    </section>

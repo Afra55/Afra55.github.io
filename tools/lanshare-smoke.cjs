@@ -95,14 +95,16 @@ async function main() {
     fs.readFileSync(path.join(root, "index.html"), "utf8")
   );
   const htmlLocal = fs.readFileSync(path.join(root, "index.html"), "utf8");
+  const lansharePanel = fs.readFileSync(path.join(root, "panels/lanshare.html"), "utf8");
   const lazyJs = fs.readFileSync(path.join(root, "lib/lazy-scripts.js"), "utf8");
 
-  assert(/id="lanshare"/.test(htmlLocal), "缺少 #lanshare 面板");
-  assert(/邀请链接/.test(htmlLocal), "缺少邀请链接文案");
+  assert(/id="workspace-panels"/.test(htmlLocal), "缺少 workspace-panels 容器");
+  assert(/id="lanshare"/.test(lansharePanel), "缺少 #lanshare 面板");
+  assert(/邀请链接/.test(lansharePanel), "缺少邀请链接文案");
   assert(/lanshare:\s*"\.\/lanshare\.js"/.test(lazyJs), "lazy-scripts 未注册 lanshare.js");
   const build = toolsBuildFromHtml(htmlLocal);
   assert(build, "index.html 缺少 TOOLS_BUILD");
-  assert(/2026\.08\.\d{2}-\d{6}|20260817theme1/.test(htmlLocal), `index.html 版本/cache-bust 异常 (${build})`);
+  assert(/2026\.(08|09)\.\d{2}-\d{6}|20260817theme1/.test(htmlLocal), `index.html 版本/cache-bust 异常 (${build})`);
 
   const js = fs.readFileSync(path.join(root, "lanshare.js"), "utf8");
   assert(/encodeURIComponent\(token\)/.test(js), "邀请 token 应 URL 编码");
@@ -112,23 +114,23 @@ async function main() {
   assert(/joinByPassword/.test(js), "缺少密码加入");
   assert(/uploadTransferKey/.test(js), "上传连接应按请求者区分");
   assert(/decodeQrFromSource/.test(js), "缺少多尺度二维码解码");
-  assert(/ls-invite-qr-app/.test(htmlLocal), "缺少应用内短码二维码区");
+  assert(/ls-invite-qr-app/.test(lansharePanel), "缺少应用内短码二维码区");
   assert(/ls-qr-duo/.test(fs.readFileSync(path.join(root, "style.css"), "utf8")), "缺少双二维码布局样式");
   assert(/downloadQueue/.test(js), "缺少下载排队");
   assert(/enqueueDownload/.test(js), "缺少 enqueueDownload");
   assert(/openJoinFallback/.test(js), "缺少密码失败展开备用区");
-  assert(/ls-inline-progress/.test(htmlLocal), "缺少按钮旁内联进度");
+  assert(/ls-inline-progress/.test(lansharePanel), "缺少按钮旁内联进度");
   assert(/ls-ring-progress/.test(fs.readFileSync(path.join(root, "style.css"), "utf8")), "缺少行内环形进度样式");
-  assert(/ls-join-fallback/.test(htmlLocal), "缺少备用加入区 id");
+  assert(/ls-join-fallback/.test(lansharePanel), "缺少备用加入区 id");
   assert(/bumpSendProgress/.test(js), "缺少上传发送进度");
   assert(/is-queue/.test(fs.readFileSync(path.join(root, "style.css"), "utf8")), "缺少排队样式");
   assert(/pagehide/.test(js), "应监听 pagehide");
   assert(/removeMemberFiles/.test(js), "缺少退出清理文件");
   assert(!/dissolveRoom/.test(js), "应移除解散房间");
   assert(/fileKindLabel/.test(js), "缺少文件类型标签");
-  assert(!/ls-dissolve/.test(htmlLocal), "应移除解散按钮");
+  assert(!/ls-dissolve/.test(lansharePanel), "应移除解散按钮");
   assert(/MQTT_BROKERS/.test(js), "缺少 MQTT 多 broker 回退");
-  assert(/ls-room-pwd-join/.test(htmlLocal), "缺少密码加入输入框");
+  assert(/ls-room-pwd-join/.test(lansharePanel), "缺少密码加入输入框");
   assert(/vendor\/mqtt\.min\.js/.test(lazyJs), "lazy-scripts 应注册 mqtt");
   assert(/lanshare:\s*\["qrcode",\s*"jsQR"\]/.test(lazyJs), "lazy-scripts 应为 lanshare 加载 qrcode/jsQR");
   assert(/broadcastExcept/.test(js), "房主应转发成员事件给其他成员");

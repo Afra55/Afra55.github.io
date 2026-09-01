@@ -1,0 +1,182 @@
+.vplay-stage {
+  margin-top: 0.85rem;
+}
+
+.vplay-stage:fullscreen {
+  padding: 0.75rem;
+  background: var(--bg-0);
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.vplay-zoom-wrap {
+  position: relative;
+  width: 100%;
+  height: var(--vplay-wrap-height, min(56vh, 480px));
+  min-height: 280px;
+  max-height: min(92vh, 960px);
+  overflow: hidden;
+  touch-action: none;
+  overscroll-behavior: none;
+  cursor: grab;
+  user-select: none;
+  border-radius: 12px;
+  background: #000;
+}
+
+.vplay-stage:fullscreen .vplay-zoom-wrap {
+  flex: 1;
+  min-height: 0;
+  border-radius: 8px;
+}
+
+.vplay-zoom-wrap.is-panning {
+  cursor: grabbing;
+}
+
+#vplay-video {
+  position: absolute;
+  left: 0;
+  top: 0;
+  max-width: none;
+  max-height: none;
+  width: auto;
+  height: auto;
+  transform-origin: 0 0;
+  pointer-events: none;
+  will-change: transform;
+  z-index: 1;
+  background: #000;
+}
+
+.vplay-zoom-hud {
+  position: absolute;
+  right: 0.55rem;
+  bottom: 0.55rem;
+  top: auto;
+  z-index: 8;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.28rem;
+  max-width: calc(100% - 1rem);
+  padding: 0.22rem 0.28rem;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+  background: color-mix(in srgb, var(--panel-strong) 82%, transparent);
+  backdrop-filter: blur(8px);
+  pointer-events: auto;
+}
+
+.vplay-zoom-hud[hidden] {
+  display: none !important;
+}
+
+.vplay-zoom-btn {
+  min-height: 1.85rem;
+  padding: 0.15rem 0.55rem;
+  font-size: 0.92rem;
+}
+
+.vplay-zoom-pct {
+  min-width: 3.2rem;
+  text-align: center;
+  font-size: 0.78rem;
+  color: var(--ink);
+}
+
+.vplay-zoom-wrap.is-empty {
+  cursor: pointer;
+}
+
+.vplay-empty-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  margin: 0;
+  text-align: center;
+  color: color-mix(in srgb, var(--ink) 72%, #fff);
+  pointer-events: none;
+}
+
+.vplay-empty-hint[hidden],
+.vplay-zoom-wrap:not(.is-empty) .vplay-empty-hint {
+  display: none !important;
+}
+
+.vplay-zoom-wrap.is-empty .vplay-empty-hint {
+  pointer-events: auto;
+}
+
+.vplay-zoom-wrap.is-file-drag,
+.vplay-stage.is-file-drag .vplay-zoom-wrap {
+  outline: 2px dashed color-mix(in srgb, var(--accent) 75%, #fff);
+  outline-offset: -3px;
+  background: color-mix(in srgb, var(--accent) 12%, #000);
+}
+
+.vplay-zoom-wrap.is-file-drag .vplay-empty-hint,
+.vplay-stage.is-file-drag .vplay-empty-hint {
+  color: var(--accent);
+}
+
+.vplay-transport {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin-top: 0.65rem;
+}
+
+.vplay-transport-btn {
+  min-height: 2rem;
+  padding: 0.2rem 0.65rem;
+  flex: 0 0 auto;
+}
+
+.vplay-height-resize {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 7;
+  height: 12px;
+  cursor: ns-resize;
+  touch-action: none;
+  background: linear-gradient(to top, color-mix(in srgb, var(--line) 35%, transparent), transparent);
+}
+
+.vplay-height-resize::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: 3px;
+  width: 2.4rem;
+  height: 3px;
+  margin-left: -1.2rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 45%, transparent);
+  pointer-events: none;
+}
+
+.vplay-height-resize:hover::after,
+.vplay-height-resize:focus-visible::after {
+  background: var(--accent);
+}
+
+.vplay-scrub {
+  flex: 1;
+  min-width: 0;
+}
+
+.vplay-clock {
+  white-space: nowrap;
+  font-size: 0.88rem;
+}

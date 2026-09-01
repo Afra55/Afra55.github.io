@@ -1,0 +1,44 @@
+<section id="muyu" class="panel tool-panel" data-reveal>
+      <div class="panel-body muyu-body">
+        <div class="muyu-stats panel-card">
+          <span class="muyu-count-label">已敲</span>
+          <strong class="muyu-count mono" id="muyu-count">0</strong>
+          <span class="muyu-count-unit">次</span>
+        </div>
+        <div class="btn-row tool-actions muyu-actions">
+          <button type="button" class="primary-btn" id="muyu-fullscreen">全屏木鱼</button>
+          <label class="flag" for="muyu-sound">
+            <input type="checkbox" id="muyu-sound" checked /> 音效
+          </label>
+          <button type="button" class="ghost-btn" id="muyu-reset">清零</button>
+        </div>
+        <div class="muyu-settings panel-card">
+          <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.5rem 0.75rem">
+            <label for="muyu-theme">背景主题</label>
+            <select id="muyu-theme" class="select-input">
+              <option value="zen">禅意紫</option>
+              <option value="ocean">深空蓝</option>
+              <option value="gold">暖金</option>
+              <option value="forest">墨绿</option>
+            </select>
+          </div>
+          <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.5rem 0.75rem;margin-top:0.65rem">
+            <label for="muyu-sound-variant">敲击音效</label>
+            <select id="muyu-sound-variant" class="select-input" aria-label="敲击音效"></select>
+          </div>
+          <div class="field-row" style="flex-direction:column;align-items:stretch;gap:0.35rem;margin-top:0.65rem">
+            <label for="muyu-phrases">飘字文案（每行一条，留空用默认）</label>
+            <textarea id="muyu-phrases" class="mono" rows="3" placeholder="功德 +1&#10;善哉&#10;福生无量&#10;阿弥陀佛"></textarea>
+          </div>
+        </div>
+        <div class="muyu-stage panel-card" id="muyu-stage" data-muyu-theme="zen">
+          <canvas id="muyu-stage-bg" class="muyu-stage-bg" aria-hidden="true"></canvas>
+          <div class="muyu-stage-moon" aria-hidden="true"></div>
+          <div class="muyu-stage-halo" aria-hidden="true"></div>
+          <div class="muyu-stage-ripple" id="muyu-stage-ripple" aria-hidden="true"></div>
+          <div class="muyu-stage-floats" id="muyu-stage-floats" aria-hidden="true"></div>
+          <button type="button" class="muyu-fish-btn" id="muyu-fish" aria-label="敲木鱼"></button>
+          <div class="muyu-stage-fx" id="muyu-stage-fx" aria-hidden="true"></div>
+        </div>
+      </div>
+    </section>

@@ -1,0 +1,43 @@
+<section id="regex" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>正则测试</h1>
+        <p>实时匹配、高亮与捕获分组，支持常用 flags。</p>
+      </div>
+      <div class="panel-body">
+        <div class="field-block">
+          <label for="re-pattern">正则表达式</label>
+          <div class="regex-line">
+            <span class="regex-slash mono" aria-hidden="true">/</span>
+            <input id="re-pattern" class="mono" type="text" value="(\w+)@(\w+)\.(\w+)" spellcheck="false" autocomplete="off" />
+            <span class="regex-slash mono" aria-hidden="true">/</span>
+            <input id="re-flags" class="mono flags-input" type="text" value="g" maxlength="8" spellcheck="false" autocomplete="off" aria-label="flags" />
+          </div>
+          <div class="flag-row" role="group" aria-label="正则 flags">
+            <label class="flag"><input type="checkbox" data-flag="g" checked /> g 全局</label>
+            <label class="flag"><input type="checkbox" data-flag="i" /> i 忽略大小写</label>
+            <label class="flag"><input type="checkbox" data-flag="m" /> m 多行</label>
+            <label class="flag"><input type="checkbox" data-flag="s" /> s 点号匹配换行</label>
+            <label class="flag"><input type="checkbox" data-flag="u" /> u Unicode</label>
+          </div>
+        </div>
+
+        <div class="convert-grid regex-grid">
+          <div class="field-block">
+            <label for="re-text">测试文本</label>
+            <textarea id="re-text" class="mono area" rows="8" spellcheck="false">contact@example.com
+hello@world.org</textarea>
+          </div>
+          <div class="field-block">
+            <label>高亮预览</label>
+            <pre class="mono highlight-box" id="re-highlight" aria-live="polite"></pre>
+          </div>
+        </div>
+
+        <div class="label-row">
+          <h2 class="subhead">匹配结果</h2>
+          <span class="hint tight" id="re-meta">0 处匹配</span>
+        </div>
+        <div class="match-list" id="re-matches"></div>
+        <p class="error" id="re-error" hidden></p>
+      </div>
+    </section>

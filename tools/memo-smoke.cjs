@@ -1584,12 +1584,14 @@ async function main() {
       out.lastTool.restoreTimestamp = window.DevToolsNav.lastToolHash() === "#memo";
       window.DevToolsNav.restoreLastToolOnStartup();
       window.dispatchEvent(new HashChangeEvent("hashchange"));
+      await window.DevToolsNav.whenRouteSettled();
       out.lastTool.preserveLastKey = localStorage.getItem("devtools-tool-last-v1") === "memo";
       out.lastTool.memoPanelAfterRestore = document.getElementById("memo")?.classList.contains("is-workspace-active");
       localStorage.setItem("devtools-tool-last-v1", "vbb");
       history.replaceState(null, "", "#timestamp");
       window.DevToolsNav.restoreLastToolOnStartup();
       window.dispatchEvent(new HashChangeEvent("hashchange"));
+      await window.DevToolsNav.whenRouteSettled();
       out.lastTool.vbbRestore =
         localStorage.getItem("devtools-tool-last-v1") === "vbb" &&
         location.hash === "#vbb" &&
@@ -1688,6 +1690,13 @@ async function main() {
   await page.waitForFunction(() => document.getElementById("wheel")?.classList.contains("is-workspace-active"), {
     timeout: 15000,
   });
+  await page.waitForFunction(
+    () =>
+      document.getElementById("wheel-canvas") &&
+      document.querySelectorAll("#wheel-segments .wheel-seg-row").length >= 2 &&
+      [...document.scripts].some((s) => /wheel\.js/.test(s.src)),
+    { timeout: 15000 }
+  );
   result.wheel = await page.evaluate(() => ({
     active: document.getElementById("wheel")?.classList.contains("is-workspace-active"),
     hasCanvas: Boolean(document.getElementById("wheel-canvas")),

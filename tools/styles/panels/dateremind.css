@@ -1,0 +1,244 @@
+.dr-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.dr-settings {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+}
+
+.dr-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.dr-card {
+  border-left: 3px solid var(--dr-cat, var(--accent));
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-1) 88%, transparent);
+}
+
+.dr-card.is-off {
+  opacity: 0.55;
+}
+
+.dr-card.is-archived {
+  opacity: 0.7;
+}
+
+.dr-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.55rem;
+}
+
+.dr-card-cat {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--dr-cat, var(--accent));
+  letter-spacing: 0.04em;
+}
+
+.dr-card-title {
+  font-size: 1rem;
+}
+
+.dr-card-meta,
+.dr-card-note {
+  margin: 0.25rem 0 0;
+}
+
+.dr-card-actions {
+  margin-top: 0.45rem;
+}
+
+.dr-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-1) 88%, transparent);
+}
+
+.dr-field {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.28rem;
+  min-width: 0;
+}
+
+.dr-field > label:not(.flag) {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  line-height: 1.25;
+}
+
+.dr-field-check {
+  gap: 0;
+}
+
+.dr-field-hint {
+  margin: 0.15rem 0 0;
+}
+
+.dr-form input[type="text"],
+.dr-form input[type="number"],
+.dr-form select,
+.dr-form textarea,
+.dr-settings input[type="number"] {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  appearance: none;
+  border: 1px solid var(--line);
+  background: var(--panel-strong);
+  color: var(--ink);
+  border-radius: 11px;
+  font: inherit;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.dr-form input[type="text"],
+.dr-form input[type="number"],
+.dr-form select {
+  padding: 0.65rem 0.8rem;
+  font-size: 0.95rem;
+}
+
+.dr-form textarea {
+  padding: 0.65rem 0.8rem;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  resize: vertical;
+  min-height: 4.2rem;
+}
+
+.dr-form input:focus,
+.dr-form select:focus,
+.dr-form textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent);
+}
+
+.dr-date-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+}
+
+.dr-settings .dr-field {
+  flex: 1 1 8rem;
+  max-width: 10rem;
+}
+
+.dr-date-fields[hidden] {
+  display: none !important;
+}
+
+.dr-io .file-btn {
+  cursor: pointer;
+}
+
+.dr-archived-wrap summary {
+  cursor: pointer;
+  user-select: none;
+}
+
+.dateremind-fs {
+  position: fixed;
+  inset: 0;
+  z-index: 100045;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.65rem;
+  padding: 3.5rem 1rem 1.25rem;
+  box-sizing: border-box;
+  background: color-mix(in srgb, var(--bg-0) 94%, transparent);
+  color: var(--ink);
+  overflow: auto;
+}
+
+.dateremind-fs[hidden] {
+  display: none !important;
+}
+
+body.dateremind-fs-active {
+  overflow: hidden;
+}
+
+.dateremind-fs-close {
+  position: fixed;
+  top: max(0.55rem, env(safe-area-inset-top, 0px));
+  right: max(0.55rem, env(safe-area-inset-right, 0px));
+  z-index: 100046;
+}
+
+.dateremind-fs-kicker {
+  margin: 0;
+  text-align: center;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+}
+
+.dateremind-fs-heading {
+  margin: 0;
+  text-align: center;
+  font-size: clamp(1.2rem, 4.5vw, 1.6rem);
+}
+
+.dr-fs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  max-width: 28rem;
+  width: 100%;
+  margin: 0 auto;
+  flex: 1;
+}
+
+.dr-fs-card {
+  border-left: 4px solid var(--dr-cat, var(--accent));
+  padding: 0.75rem 0.85rem;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg-1) 90%, transparent);
+}
+
+.dr-fs-cat {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--dr-cat, var(--accent));
+}
+
+.dr-fs-title {
+  margin: 0.2rem 0 0;
+  font-size: 1.15rem;
+}
+
+.dr-fs-when,
+.dr-fs-note {
+  margin: 0.35rem 0 0;
+  font-size: 0.88rem;
+  color: var(--ink-muted);
+}
+
+.dateremind-fs-actions {
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: 0.5rem;
+}

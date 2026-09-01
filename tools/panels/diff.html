@@ -1,0 +1,51 @@
+<section id="diff" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>文本比对</h1>
+        <p>并排或合并视图对比两段文本，高亮增删改（含行内差异）；大文本在后台 Worker 中比对。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid">
+          <div class="field-block">
+            <div class="label-row">
+              <label for="diff-a">文本 A（旧版 / 左侧）</label>
+              <button type="button" class="ghost-btn" id="diff-paste-a">粘贴</button>
+            </div>
+            <textarea id="diff-a" class="mono area" rows="10" spellcheck="false" placeholder="粘贴或输入第一段文本…"></textarea>
+          </div>
+          <div class="field-block">
+            <div class="label-row">
+              <label for="diff-b">文本 B（新版 / 右侧）</label>
+              <button type="button" class="ghost-btn" id="diff-paste-b">粘贴</button>
+            </div>
+            <textarea id="diff-b" class="mono area" rows="10" spellcheck="false" placeholder="粘贴或输入第二段文本…"></textarea>
+          </div>
+        </div>
+        <div class="btn-row tool-actions diff-toolbar">
+          <button type="button" class="primary-btn" id="diff-run">对比</button>
+          <button type="button" class="ghost-btn" id="diff-prev" disabled title="上一处差异">上一处</button>
+          <button type="button" class="ghost-btn" id="diff-next" disabled title="下一处差异">下一处</button>
+          <button type="button" class="secondary-btn" id="diff-swap">交换 A/B</button>
+          <button type="button" class="ghost-btn" id="diff-clear">清空</button>
+          <label class="flag"><input type="checkbox" id="diff-auto" checked /> 输入时自动对比</label>
+          <label class="flag"><input type="checkbox" id="diff-ignore-ws" /> 忽略空白差异</label>
+          <label class="flag"><input type="checkbox" id="diff-trim-trail" /> 忽略行尾空格</label>
+          <label class="flag"><input type="checkbox" id="diff-hide-same" /> 隐藏相同行</label>
+        </div>
+        <div class="diff-mode-row">
+          <span class="hint tight">视图</span>
+          <div class="seg" role="tablist" aria-label="比对视图">
+            <button type="button" class="seg-btn is-active" id="diff-mode-split" data-mode="split" role="tab" aria-selected="true">并排</button>
+            <button type="button" class="seg-btn" id="diff-mode-unified" data-mode="unified" role="tab" aria-selected="false">合并</button>
+          </div>
+        </div>
+        <p class="hint tight" id="diff-meta" aria-live="polite"></p>
+        <div id="diff-split-wrap" class="diff-split-wrap">
+          <div class="diff-split-head">
+            <span class="diff-split-title">A</span>
+            <span class="diff-split-title">B</span>
+          </div>
+          <div class="diff-split-body mono" id="diff-split-out" aria-live="polite"></div>
+        </div>
+        <div class="mono highlight-box diff-box" id="diff-out" hidden></div>
+      </div>
+    </section>

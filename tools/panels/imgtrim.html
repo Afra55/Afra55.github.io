@@ -1,0 +1,49 @@
+<section id="imgtrim" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>去色边</h1>
+        <p>裁掉图片四周的纯色边框（白边、黑边或其它单色），从每条边向内扫描直到出现其它颜色。支持多选批量处理。</p>
+      </div>
+      <div class="panel-body">
+        <div class="imgtrim-drop imgkit-drop" id="imgtrim-drop">
+          <div class="btn-row tool-actions">
+            <label class="file-btn" for="imgtrim-file">添加图片（可多选）</label>
+            <input id="imgtrim-file" type="file" accept="image/*" multiple hidden />
+            <button type="button" class="ghost-btn" id="imgtrim-clear">清空</button>
+          </div>
+          <p class="hint" id="imgtrim-meta">支持 PNG / JPEG / WebP / GIF（动图仅首帧）。可拖拽多图到此处。本地处理，不会上传。</p>
+        </div>
+        <div class="field-row" style="flex-wrap:wrap;margin-top:0.65rem;align-items:center">
+          <label for="imgtrim-mode">边色</label>
+          <select id="imgtrim-mode" class="mono select-input">
+            <option value="auto" selected>自动检测</option>
+            <option value="white">纯白</option>
+            <option value="black">纯黑</option>
+            <option value="custom">自定义</option>
+          </select>
+          <span id="imgtrim-custom-row" hidden>
+            <label for="imgtrim-custom-color">色值</label>
+            <input id="imgtrim-custom-color" class="mono meta-input" type="text" value="#000000" placeholder="#RRGGBB" />
+          </span>
+          <label for="imgtrim-tolerance">容差</label>
+          <input id="imgtrim-tolerance" class="mono meta-input" type="number" min="0" max="64" step="1" value="8" title="颜色匹配容差，0 为精确匹配" />
+        </div>
+        <div class="btn-row tool-actions" style="margin-top:0.55rem;flex-wrap:wrap">
+          <button type="button" class="primary-btn" id="imgtrim-run" disabled>裁掉色边</button>
+          <button type="button" class="secondary-btn" id="imgtrim-zip" disabled>打包下载</button>
+        </div>
+        <div class="imgtrim-layout" style="margin-top:0.85rem">
+          <div class="imgtrim-side">
+            <h2 class="subhead">图片列表</h2>
+            <div class="imgtrim-list" id="imgtrim-list"></div>
+          </div>
+          <div class="imgtrim-main">
+            <h2 class="subhead">预览</h2>
+            <p class="hint tight" id="imgtrim-preview-meta">处理后会显示预览</p>
+            <div class="imgkit-preview-wrap">
+              <img id="imgtrim-preview" class="imgkit-preview" alt="裁边预览" hidden />
+            </div>
+          </div>
+        </div>
+        <p class="error" id="imgtrim-error" hidden></p>
+      </div>
+    </section>

@@ -1,0 +1,91 @@
+<section id="morse" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>摩斯密码</h1>
+        <p>文本 ↔ 摩尔斯电码互转（国际电码 ·/-）；底部含从零读懂电码的新手教程。</p>
+      </div>
+      <div class="panel-body">
+        <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.65rem 1rem">
+          <label class="flag"><input id="morse-pretty" type="checkbox" checked /> 显示为 · / −（更易读）</label>
+          <span class="hint tight">单词之间用 <code class="mono"> / </code> 分隔；字母之间用空格。仅支持拉丁字母、数字与常用标点。</span>
+        </div>
+
+        <div class="convert-grid" style="margin-top:0.75rem">
+          <div class="field-block">
+            <label for="morse-plain">明文</label>
+            <textarea id="morse-plain" class="mono area" rows="7" placeholder="例如：SOS 或 HELLO WORLD" spellcheck="false"></textarea>
+          </div>
+          <div class="field-block">
+            <label for="morse-code">摩尔斯电码</label>
+            <textarea id="morse-code" class="mono area" rows="7" placeholder="例如：··· --- ··· 或 ... --- ..." spellcheck="false"></textarea>
+          </div>
+        </div>
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="morse-encode">编码 →</button>
+          <button type="button" class="secondary-btn" id="morse-decode">← 解码</button>
+          <button type="button" class="secondary-btn" id="morse-swap">互换</button>
+          <button type="button" class="ghost-btn" id="morse-clear">清空</button>
+        </div>
+        <p class="hint" id="morse-meta"></p>
+        <p class="error" id="morse-error" hidden></p>
+
+        <details class="panel-card hint tight morse-guide" style="margin-top:1.25rem" open>
+          <summary><strong>摩斯密码新手教程：从零学会「看」电码</strong></summary>
+          <div class="morse-guide-body">
+            <h3 class="subhead">1. 它是什么？</h3>
+            <p>摩尔斯电码（Morse Code）用<strong>两种基本信号</strong>表示字符：短信号「点」（dit，写作 <code class="mono">·</code> 或 <code class="mono">.</code>）和长信号「划」（dah，写作 <code class="mono">−</code> 或 <code class="mono">-</code>）。通过电报、灯光闪烁、声音嘀嗒均可传递；本工具只做<strong>文字形式</strong>互转。</p>
+
+            <h3 class="subhead">2. 先记住三条 spacing 规则（读懂的关键）</h3>
+            <ol>
+              <li><strong>同一个字母内</strong>：点划紧挨着写，<em>中间不加空格</em>。例如字母 <code class="mono">A</code> = <code class="mono">·−</code>（一点一划）。</li>
+              <li><strong>字母与字母之间</strong>：空一格。例如 <code class="mono">SOS</code> 三字分别为 <code class="mono">···</code>、<code class="mono">---</code>、<code class="mono">···</code>，合写为 <code class="mono">··· --- ···</code>。</li>
+              <li><strong>单词与单词之间</strong>：用 <code class="mono"> / </code>（斜杠两侧可有空格）或至少两个空格。例如 <code class="mono">HI BOB</code> = <code class="mono">···· ·· / −··· --- −··</code>。</li>
+            </ol>
+            <p class="hint tight">听音时的时长比例（了解即可）：划 = 3 个点长；字母间隔 ≈ 3 点；单词间隔 ≈ 7 点。看文字版时，用空格和 <code class="mono">/</code> 对应即可。</p>
+
+            <h3 class="subhead">3. 最快上手：5 个超高频字母</h3>
+            <p>英语电报里几乎一半的字母是下面五个，先背它们：</p>
+            <table class="morse-table mono">
+              <thead><tr><th>字母</th><th>电码</th><th>口诀</th></tr></thead>
+              <tbody>
+                <tr><td>E</td><td><code>·</code></td><td>最简单，一个点</td></tr>
+                <tr><td>T</td><td><code>−</code></td><td>最简单，一个划</td></tr>
+                <tr><td>A</td><td><code>·−</code></td><td>「啊」短长</td></tr>
+                <tr><td>O</td><td><code>---</code></td><td>三划，像说「哦——」</td></tr>
+                <tr><td>I</td><td><code>··</code></td><td>两短点</td></tr>
+              </tbody>
+            </table>
+            <p>试着在本页上方解码框输入 <code class="mono">· / −</code>（勾选「显示为 · / −」），应得到 <code class="mono">E T</code>。</p>
+
+            <h3 class="subhead">4. 完整字母表（A–Z）</h3>
+            <div class="morse-alpha-grid mono" aria-label="字母表">
+              <span>A ·−</span><span>B −···</span><span>C −·−·</span><span>D −··</span><span>E ·</span><span>F ··−·</span><span>G −−·</span><span>H ····</span><span>I ··</span><span>J ·−−−</span><span>K −·−</span><span>L ·−··</span><span>M −−</span><span>N −·</span><span>O −−−</span><span>P ·−−·</span><span>Q −−·−</span><span>R ·−·</span><span>S ···</span><span>T −</span><span>U ··−</span><span>V ···−</span><span>W ·−−</span><span>X −··−</span><span>Y −·−−</span><span>Z −−··</span>
+            </div>
+
+            <h3 class="subhead">5. 数字 0–9</h3>
+            <p class="mono morse-digit-line">0 −−−−−　1 ·−−−−　2 ··−−−　3 ···−−　4 ····−　5 ·····　6 −····　7 −−···　8 −−−··　9 −−−−·</p>
+            <p class="hint tight">规律：数字 <code class="mono">1</code> 是一个点加四划，<code class="mono">2</code> 是两短三长……<code class="mono">0</code> 是五划；<code class="mono">5</code> 是五个点。</p>
+
+            <h3 class="subhead">6. 常用标点</h3>
+            <p class="mono">. ·−·−−·　, −−··−−　? ··−−··　! −·−·−−　@ ·−−·−·　- −····−　/ −··−·　( −·−−·　) −·−−·−</p>
+
+            <h3 class="subhead">7. 怎么「读」一行电码？四步练习</h3>
+            <ol>
+              <li>先找 <code class="mono">/</code>，把句子切成单词。</li>
+              <li>在每个单词里按<strong>空格</strong>切成一组点划，每一组对应一个字母。</li>
+              <li>对照上表，把每组翻成字母。</li>
+              <li>连起来读单词；整句连读即得明文。</li>
+            </ol>
+            <p><strong>练习 1</strong>：<code class="mono">··· --- ···</code> → 三组分别是 S、O、S → <strong>SOS</strong>（国际求救）。</p>
+            <p><strong>练习 2</strong>：<code class="mono">.... .. / --. ---</code> → HI / GO → <strong>HI GO</strong>。</p>
+            <p><strong>练习 3</strong>：<code class="mono">-- --- .-. ... .</code> → MORSE（可粘贴到解码框验证）。</p>
+
+            <h3 class="subhead">8. 本工具约定</h3>
+            <ul>
+              <li>编码时字母一律转大写；中文等非拉丁字符不支持，请先用拼音或英文。</li>
+              <li>输入电码时可写 <code class="mono">.</code> 或 <code class="mono">·</code>，可写 <code class="mono">-</code> 或 <code class="mono">−</code>。</li>
+              <li>单词分隔推荐 <code class="mono"> / </code>；连续两个以上空格也会被当作单词分隔。</li>
+            </ul>
+          </div>
+        </details>
+      </div>
+    </section>

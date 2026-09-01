@@ -1,0 +1,112 @@
+html[data-theme-scheme="light"] .setup-pre {
+  background: color-mix(in srgb, var(--bg-1) 75%, var(--panel-strong));
+  color: var(--ink);
+}
+
+.setup-body {
+  display: grid;
+  gap: 0.85rem;
+}
+
+#setup a:not([class*="btn"]) {
+  color: var(--link, #6ef0e2);
+  font-weight: 650;
+  text-decoration: underline;
+  text-decoration-thickness: 0.12em;
+  text-underline-offset: 0.2em;
+  text-decoration-color: color-mix(in srgb, var(--link, #6ef0e2) 85%, transparent);
+}
+
+#setup a:not([class*="btn"]):hover,
+#setup a:not([class*="btn"]):focus-visible {
+  color: var(--link-hover, #a8fff6);
+  text-decoration-thickness: 0.14em;
+  text-decoration-color: currentColor;
+}
+
+#setup .panel-head p a,
+#setup .hint a,
+#setup .setup-faq a,
+#setup .setup-steps a,
+#setup .setup-need-row a {
+  color: var(--link, #6ef0e2);
+}
+
+.setup-callout,
+.setup-block {
+  padding: 0.95rem 1rem;
+}
+
+.setup-need-table {
+  display: grid;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+}
+
+.setup-need-row {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--panel, #121826) 88%, transparent);
+  align-items: start;
+}
+
+.setup-need-head {
+  background: color-mix(in srgb, var(--accent, #2ec4b6) 12%, var(--panel, #121826));
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.setup-steps {
+  margin: 0.55rem 0 0;
+  padding-left: 1.2rem;
+  display: grid;
+  gap: 0.55rem;
+  line-height: 1.55;
+}
+
+.setup-steps li ul {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+}
+
+.setup-pre {
+  display: block;
+  margin: 0.45rem 0 0;
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--stage-bg) 80%, var(--panel-strong));
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.setup-faq {
+  margin: 0.55rem 0 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.setup-faq dt {
+  font-weight: 600;
+  margin-top: 0.25rem;
+}
+
+.setup-faq dd {
+  margin: 0.15rem 0 0;
+  color: var(--muted, #9aa4b2);
+  line-height: 1.5;
+}
+
+@media (max-width: 700px) {
+.setup-need-row {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
+  }
+}

@@ -1,0 +1,18 @@
+<section id="text" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>文本处理</h1>
+        <p>大小写、去空行、去首尾空白，以及字数统计。</p>
+      </div>
+      <div class="panel-body">
+        <textarea id="text-input" class="mono area" rows="8" placeholder="在这里粘贴文本…" spellcheck="false"></textarea>
+        <div class="btn-row tool-actions">
+          <button type="button" class="secondary-btn" data-text-action="upper">大写</button>
+          <button type="button" class="secondary-btn" data-text-action="lower">小写</button>
+          <button type="button" class="secondary-btn" data-text-action="trim">去首尾空白</button>
+          <button type="button" class="secondary-btn" data-text-action="dedupe-empty">去空行</button>
+          <button type="button" class="secondary-btn" data-text-action="sort">按行排序</button>
+          <button type="button" class="secondary-btn" data-text-action="reverse">行倒序</button>
+        </div>
+        <p class="hint" id="text-stats"></p>
+      </div>
+    </section>

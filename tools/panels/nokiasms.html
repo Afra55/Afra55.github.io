@@ -1,0 +1,54 @@
+<section id="nokiasms" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>诺基亚短信</h1>
+        <p>生成老式诺基亚 3310 短信界面截图。本地 Canvas 绘制，不上传。灵感来自开源项目 <a href="https://github.com/dcalsky/zzkia" target="_blank" rel="noopener noreferrer">dcalsky/zzkia</a>。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid nokia-layout">
+          <div class="field-block">
+            <label for="nk-text">短信内容</label>
+            <textarea id="nk-text" class="area" rows="6" maxlength="900" placeholder="输入短信…" spellcheck="false">下班了吗？
+记得带饭。</textarea>
+            <p class="hint tight mono" id="nk-count">0 / 900</p>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+              <label for="nk-title">标题</label>
+              <input id="nk-title" type="text" value="短信" maxlength="12" spellcheck="false" />
+              <label for="nk-op">运营商</label>
+              <input id="nk-op" type="text" value="中国移动" maxlength="12" spellcheck="false" />
+              <label for="nk-time">时间</label>
+              <input id="nk-time" class="mono" type="text" value="12:00" maxlength="8" spellcheck="false" />
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+              <label for="nk-left-key">左键</label>
+              <input id="nk-left-key" type="text" value="选项" maxlength="6" spellcheck="false" />
+              <label for="nk-right-key">右键</label>
+              <input id="nk-right-key" type="text" value="返回" maxlength="6" spellcheck="false" />
+              <label for="nk-signal">信号</label>
+              <input id="nk-signal" class="mono meta-input" type="number" min="0" max="5" value="4" />
+              <label for="nk-batt">电量</label>
+              <input id="nk-batt" class="mono meta-input" type="number" min="0" max="5" value="3" />
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
+              <label for="nk-size">正文字号 <span class="mono" id="nk-size-val">22</span></label>
+              <input id="nk-size" type="range" min="14" max="32" value="22" />
+              <label class="flag"><input id="nk-tilt" type="checkbox" /> 机身倾斜（zzkia 风）</label>
+              <label class="flag"><input id="nk-counter" type="checkbox" checked /> 显示字数</label>
+            </div>
+            <div class="btn-row tool-actions" style="margin-top:0.75rem;flex-wrap:wrap">
+              <button type="button" class="primary-btn" id="nk-download">下载 PNG</button>
+              <button type="button" class="secondary-btn" id="nk-copy">复制图片</button>
+              <button type="button" class="ghost-btn" id="nk-to-memo">保存到备忘录</button>
+              <button type="button" class="ghost-btn" id="nk-now">填入当前时间</button>
+            </div>
+            <p class="hint tight" id="nk-meta">实时预览 · 纯本地生成</p>
+            <p class="error" id="nk-error" hidden></p>
+          </div>
+          <div class="field-block">
+            <label>预览</label>
+            <div class="nokia-stage" id="nk-stage">
+              <canvas id="nk-canvas" class="nokia-canvas" aria-label="诺基亚短信预览"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>

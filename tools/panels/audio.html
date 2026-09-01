@@ -1,0 +1,74 @@
+<section id="audio" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-audio">
+      <div class="panel-head">
+        <h1>音频处理</h1>
+        <p>浏览器内 FFmpeg：修剪时长、调节音量、从视频抽音轨。手机可直接用。<span class="ff-desktop-only-hint">电脑批量可选 <a href="#ffbridge">本机桥</a>。</span><span id="audio-adapt-tip" class="hint tight"></span></p>
+      </div>
+      <div class="panel-body">
+        <div class="btn-row tool-actions">
+          <label class="file-btn" for="audio-file">选择音频/视频</label>
+          <input id="audio-file" type="file" accept="audio/*,video/*,.mp3,.m4a,.aac,.wav,.ogg,.flac,.mp4,.mov,.webm,.m4v" hidden />
+          <button type="button" class="ghost-btn" id="audio-clear">清空</button>
+          <button type="button" class="ghost-btn" id="audio-undo" disabled>撤销</button>
+          <button type="button" class="ghost-btn" id="audio-reset" disabled>重置</button>
+        </div>
+        <p class="hint" id="audio-meta">支持常见音频与视频（将抽取音轨）。选择后仅本机读取。</p>
+
+        <div class="audio-stage" id="audio-stage" hidden>
+          <audio id="audio-el" controls preload="metadata" class="audio-player"></audio>
+          <div class="audio-transport">
+            <button type="button" class="secondary-btn" id="audio-play" disabled>播放</button>
+            <span class="mono" id="audio-clock">0:00 / 0:00</span>
+            <span class="hint tight" id="audio-range-label">保留全程</span>
+          </div>
+
+          <canvas id="audio-wave" class="audio-wave" width="640" height="72" aria-label="波形"></canvas>
+          <div class="audio-timeline" id="audio-timeline" aria-label="修剪片头片尾">
+            <div class="audio-sel" id="audio-sel">
+              <span class="audio-window" id="audio-window" aria-hidden="true"></span>
+              <span class="audio-handle audio-handle-start" id="audio-handle-start" role="slider" tabindex="0" aria-label="起点"></span>
+              <span class="audio-handle audio-handle-end" id="audio-handle-end" role="slider" tabindex="0" aria-label="终点"></span>
+              <span class="audio-playhead" id="audio-playhead" aria-hidden="true"></span>
+            </div>
+          </div>
+          <div class="btn-row tool-actions" style="flex-wrap:wrap">
+            <button type="button" class="ghost-btn" id="audio-nudge-sm" disabled>起点 −0.1</button>
+            <button type="button" class="ghost-btn" id="audio-nudge-sp" disabled>起点 +0.1</button>
+            <button type="button" class="ghost-btn" id="audio-nudge-em" disabled>终点 −0.1</button>
+            <button type="button" class="ghost-btn" id="audio-nudge-ep" disabled>终点 +0.1</button>
+          </div>
+
+          <div class="field-row" style="flex-wrap:wrap;align-items:center;margin-top:0.75rem">
+            <label for="audio-gain">音量</label>
+            <input id="audio-gain" class="audio-gain" type="range" min="10" max="300" step="5" value="100" disabled />
+            <span class="mono" id="audio-gain-val">100%</span>
+            <button type="button" class="ghost-btn" id="audio-gain-reset" disabled>音量复位</button>
+          </div>
+          <p class="hint tight">音量在试听时实时生效；导出时写入文件。无法可靠分离人声与背景伴奏（需大型 AI 模型）。</p>
+        </div>
+
+        <div class="audio-export-bar" id="audio-export-bar" hidden>
+          <p class="hint tight mono" id="audio-summary">—</p>
+          <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.45rem">
+            <span class="seg" role="group" aria-label="导出格式">
+              <button type="button" class="seg-btn is-active" data-audio-fmt="m4a">M4A</button>
+              <button type="button" class="seg-btn" data-audio-fmt="mp3">MP3</button>
+              <button type="button" class="seg-btn" data-audio-fmt="wav">WAV</button>
+            </span>
+          </div>
+        </div>
+        <div class="btn-row tool-actions" style="margin-top:0.75rem;flex-wrap:wrap">
+          <button type="button" class="primary-btn" id="audio-export" disabled>导出音频</button>
+          <button type="button" class="ghost-btn" id="audio-abort" hidden>取消</button>
+          <a class="secondary-btn" id="audio-download" href="#" download="audio.m4a" hidden>下载结果</a>
+        </div>
+        <div class="gif-progress" id="audio-progress" hidden>
+          <div class="gif-progress-head">
+            <p class="hint gif-progress-title" id="audio-progress-text">准备中…</p>
+            <span class="mono gif-progress-pct" id="audio-progress-pct">0%</span>
+          </div>
+          <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="audio-progress-fill"></span></div>
+        </div>
+        <audio id="audio-result" controls class="audio-player" hidden style="margin-top:0.75rem;width:100%"></audio>
+        <p class="error" id="audio-error" hidden></p>
+      </div>
+    </section>

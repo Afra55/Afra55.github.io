@@ -1,0 +1,122 @@
+<section id="lanshare" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>局域网互传</h1>
+        <p>多设备同房间共享文件；下载时与上传者 WebRTC 直连，房主只做协调，不经手文件数据。</p>
+      </div>
+      <div class="panel-body">
+        <div class="adb-status panel-card" id="ls-status">
+          <div class="adb-status-main">
+            <span class="adb-dot" id="ls-dot" aria-hidden="true"></span>
+            <div>
+              <strong id="ls-status-title">未加入房间</strong>
+              <p class="hint tight" id="ls-status-text">创建或加入房间；推荐用<strong>房间密码</strong>一键加入，文件不经房主中转。</p>
+            </div>
+          </div>
+        </div>
+
+        <p class="hint tight" id="ls-platform-hint" hidden style="margin-top:0.65rem"></p>
+
+        <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem;align-items:center">
+          <label for="ls-name">设备名</label>
+          <input id="ls-name" type="text" maxlength="24" placeholder="例如：小明的手机" autocomplete="off" spellcheck="false" style="min-width:10rem" />
+        </div>
+
+        <div id="ls-join-area" style="margin-top:0.85rem">
+          <label for="ls-room-pwd-host">创建房间时设置密码（推荐）</label>
+          <input id="ls-room-pwd-host" type="text" maxlength="16" placeholder="4–16 位字母或数字，成员输入即可加入" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off" style="min-width:10rem" />
+          <div class="btn-row tool-actions ls-action-row" style="flex-wrap:wrap;margin-top:0.45rem">
+            <button type="button" class="primary-btn" id="ls-create">创建房间</button>
+            <div id="ls-progress" class="ls-inline-progress" hidden aria-live="polite">
+              <div class="ls-progress-bar-wrap"><div id="ls-progress-bar" class="ls-progress-bar"></div></div>
+              <span class="hint tight ls-inline-progress-text" id="ls-progress-text"></span>
+            </div>
+          </div>
+
+          <label for="ls-room-pwd-join" style="margin-top:0.85rem">输入房间密码加入</label>
+          <input id="ls-room-pwd-join" type="text" maxlength="16" placeholder="向房主索取密码" autocomplete="off" spellcheck="false" autocapitalize="off" autocorrect="off" style="min-width:10rem" />
+          <div class="btn-row tool-actions ls-action-row" style="margin-top:0.35rem">
+            <button type="button" class="primary-btn" id="ls-join-pwd">密码加入</button>
+          </div>
+
+          <details class="hint tight" id="ls-join-fallback" style="margin-top:0.85rem">
+            <summary>扫码 / 粘贴邀请（备用）</summary>
+            <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
+              <button type="button" class="secondary-btn" id="ls-scan">摄像头扫码</button>
+              <label class="secondary-btn file-btn" for="ls-scan-file-input">图片识别邀请码</label>
+              <input id="ls-scan-file-input" type="file" accept="image/*" hidden />
+              <button type="button" class="ghost-btn" id="ls-paste-join">粘贴邀请加入</button>
+            </div>
+            <div id="ls-cam-wrap" class="qr-scan-wrap" hidden style="margin-top:0.65rem">
+              <video id="ls-cam-video" class="qr-video" playsinline webkit-playsinline muted hidden></video>
+              <p class="hint tight" id="ls-scan-hint" hidden></p>
+              <button type="button" class="ghost-btn" id="ls-cam-stop" hidden>关闭摄像头</button>
+            </div>
+            <label for="ls-join-paste" style="margin-top:0.65rem">或粘贴邀请链接</label>
+            <textarea id="ls-join-paste" class="mono area" rows="3" placeholder="https://…/tools/#lanshare?r=房间号&h=…" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+            <div class="btn-row tool-actions" style="margin-top:0.35rem">
+              <button type="button" class="secondary-btn" id="ls-join-confirm">确认加入</button>
+            </div>
+            <p class="hint tight">应用内请扫房主「应用内扫码」短码；微信/系统相机请扫「微信 / 相机」完整链接码。</p>
+          </details>
+        </div>
+
+        <div id="ls-invite-area" hidden style="margin-top:0.85rem">
+          <h2 class="subhead">邀请加入</h2>
+          <p class="mono panel-card tight" id="ls-room-pwd-display" hidden style="margin:0.5rem 0;font-size:1.15rem;letter-spacing:0.06em"></p>
+          <div id="ls-pairing-guide" class="panel-card hint tight" hidden style="margin-bottom:0.65rem"></div>
+          <p class="hint tight">左为<strong>应用内短码</strong>（摄像头扫码用）；右为<strong>微信 / 系统相机</strong>完整链接码。</p>
+          <div class="ls-qr-duo">
+            <div class="ls-qr-piece">
+              <p class="hint tight">应用内扫码</p>
+              <div id="ls-invite-qr-app" class="qr-box-wrap"></div>
+            </div>
+            <div class="ls-qr-piece">
+              <p class="hint tight">微信 / 相机</p>
+              <div id="ls-invite-qr" class="qr-box-wrap"></div>
+            </div>
+          </div>
+          <label for="ls-invite-text">邀请链接（可复制到微信发给手机）</label>
+          <textarea id="ls-invite-text" class="mono area" rows="2" readonly spellcheck="false"></textarea>
+          <div class="btn-row tool-actions" style="margin-top:0.35rem;flex-wrap:wrap">
+            <button type="button" class="secondary-btn" id="ls-copy-invite">复制邀请</button>
+            <button type="button" class="secondary-btn" id="ls-scan-answer">扫描成员连接码</button>
+          </div>
+          <label for="ls-host-offer-paste" style="margin-top:0.65rem">或粘贴成员连接码</label>
+          <textarea id="ls-host-offer-paste" class="mono area" rows="2" placeholder="成员微信发来的连接码链接，粘贴后点确认" spellcheck="false" autocapitalize="off" autocorrect="off"></textarea>
+          <div class="btn-row tool-actions" style="margin-top:0.35rem">
+            <button type="button" class="secondary-btn" id="ls-host-offer-confirm">确认连接</button>
+          </div>
+        </div>
+
+        <div id="ls-guest-answer-area" hidden style="margin-top:0.85rem">
+          <h2 class="subhead">连接码</h2>
+          <p class="hint tight">请把下方链接<strong>复制发给出房主</strong>（微信/QQ），或让其扫连接码二维码。链接过长时优先复制，不必扫码。</p>
+          <div id="ls-guest-answer-qr" class="qr-box-wrap" style="margin:0.5rem 0"></div>
+          <label for="ls-guest-answer-text">连接码链接</label>
+          <textarea id="ls-guest-answer-text" class="mono area" rows="2" readonly spellcheck="false"></textarea>
+          <div class="btn-row tool-actions" style="margin-top:0.35rem">
+            <button type="button" class="secondary-btn" id="ls-copy-guest-answer">复制连接码</button>
+          </div>
+        </div>
+
+        <p class="hint mono" id="ls-room-meta" hidden style="margin-top:0.65rem"></p>
+
+        <div class="btn-row tool-actions" style="margin-top:0.65rem;flex-wrap:wrap">
+          <button type="button" class="secondary-btn" id="ls-pick" disabled>选择文件</button>
+          <input id="ls-file-input" type="file" multiple accept="*/*" hidden />
+          <button type="button" class="ghost-btn" id="ls-leave" hidden>退出房间</button>
+        </div>
+
+        <div class="label-row" style="margin-top:1rem">
+          <h2 class="subhead">在线成员</h2>
+        </div>
+        <div class="ls-list panel-card" id="ls-members"></div>
+
+        <div class="label-row" style="margin-top:1rem">
+          <h2 class="subhead">文件列表</h2>
+        </div>
+        <div class="ls-list panel-card" id="ls-files"></div>
+
+        <p class="error" id="ls-error" hidden></p>
+      </div>
+    </section>

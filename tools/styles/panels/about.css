@@ -1,0 +1,161 @@
+.about-lead {
+  margin-bottom: 1rem;
+}
+
+.about-share-bar {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 8%, var(--panel));
+}
+
+.about-share-hint {
+  margin: 0;
+}
+
+#about-share-url {
+  word-break: break-all;
+  margin: 0;
+  opacity: 0.9;
+}
+
+.about-catalog {
+  display: grid;
+  gap: 1.15rem;
+}
+
+.about-group .subhead {
+  margin: 0 0 0.55rem;
+}
+
+.about-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
+  gap: 0.65rem;
+}
+
+.about-card {
+  display: grid;
+  gap: 0.35rem;
+  padding: 0.75rem 0.8rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+}
+
+.about-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.about-card-head h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.about-go {
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.about-oss {
+  margin-top: 1.25rem;
+}
+
+.about-oss-intro {
+  margin: 0 0 0.65rem;
+}
+
+.about-oss-updated {
+  margin: 0 0 0.75rem;
+  opacity: 0.88;
+}
+
+.about-oss-body {
+  display: grid;
+  gap: 1rem;
+}
+
+.about-oss-group-title {
+  margin: 0 0 0.45rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.about-oss-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 90%, transparent);
+}
+
+.about-oss-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.about-oss-table th,
+.about-oss-table td {
+  padding: 0.45rem 0.55rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 75%, transparent);
+  text-align: left;
+  vertical-align: top;
+}
+
+.about-oss-table thead th {
+  font-size: 0.78rem;
+  color: var(--muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.about-oss-table tbody tr:last-child th,
+.about-oss-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.about-oss-table tbody th {
+  font-weight: 500;
+  min-width: 7rem;
+}
+
+.about-oss-used {
+  min-width: 8rem;
+}
+
+.about-oss-path {
+  word-break: break-all;
+  opacity: 0.92;
+  min-width: 9rem;
+}
+
+.about-sublinks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.25rem;
+}
+
+.about-sublink {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-radius: 999px;
+  padding: 0.12rem 0.55rem;
+}
+
+.about-sublink:hover {
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+}
+
+.about-subdesc {
+  margin: 0.35rem 0 0;
+  padding-left: 1.1rem;
+}

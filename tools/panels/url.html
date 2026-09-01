@@ -1,0 +1,24 @@
+<section id="url" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>URL 编解码</h1>
+        <p>支持 encodeURIComponent / decodeURIComponent。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="url-raw">原文</label>
+            <textarea id="url-raw" class="mono area" rows="6" placeholder="https://example.com/?q=你好" spellcheck="false"></textarea>
+          </div>
+          <div class="field-block">
+            <label for="url-enc">编码结果</label>
+            <textarea id="url-enc" class="mono area" rows="6" spellcheck="false"></textarea>
+          </div>
+        </div>
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="url-encode">编码 →</button>
+          <button type="button" class="secondary-btn" id="url-decode">← 解码</button>
+          <button type="button" class="secondary-btn" id="url-swap">互换</button>
+        </div>
+        <p class="error" id="url-error" hidden></p>
+      </div>
+    </section>

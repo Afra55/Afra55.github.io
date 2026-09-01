@@ -1077,10 +1077,12 @@
   const tdError = $("#td-error");
 
   function fillNowDate(input) {
+    if (!input) return;
     input.value = P.formatDateTime(Date.now());
   }
 
   function fillNowTs(input, asMs) {
+    if (!input) return;
     const now = Date.now();
     input.value = String(asMs ? now : Math.floor(now / 1000));
   }
@@ -1110,10 +1112,12 @@
     });
   });
 
-  // 默认演示：秒时间戳 vs 日期时间
-  fillNowTs(tdA, false);
-  fillNowDate(tdB);
-  tdB.value = P.formatDateTime(Date.now() + 86400000);
+  // 默认演示：秒时间戳 vs 日期时间（面板按需挂载后再初始化）
+  if (tdA && tdB) {
+    fillNowTs(tdA, false);
+    fillNowDate(tdB);
+    tdB.value = P.formatDateTime(Date.now() + 86400000);
+  }
 
   // ---- Color convert ----
   const cHex = $("#c-hex");
@@ -1203,15 +1207,18 @@
 
   // ---- UUID ----
   function genUuid() {
-    const count = Math.min(200, Math.max(1, Number($("#uuid-count").value) || 1));
-    const upper = $("#uuid-upper").checked;
-    const noHyphen = $("#uuid-nohyphen").checked;
+    const countEl = $("#uuid-count");
+    const outEl = $("#uuid-out");
+    if (!countEl || !outEl) return;
+    const count = Math.min(200, Math.max(1, Number(countEl.value) || 1));
+    const upper = $("#uuid-upper")?.checked;
+    const noHyphen = $("#uuid-nohyphen")?.checked;
     const list = [];
     for (let i = 0; i < count; i++) list.push(P.formatUuid(P.uuidv4(), { upper, noHyphen }));
-    $("#uuid-out").value = list.join("\n");
+    outEl.value = list.join("\n");
   }
   $("#uuid-gen")?.addEventListener("click", genUuid);
-  genUuid();
+  if ($("#uuid-count")) genUuid();
 
   // ---- Hash ----
   async function sha256(text) {
@@ -1236,6 +1243,7 @@
   const textStatsEl = $("#text-stats");
 
   function refreshTextStats() {
+    if (!textInput || !textStatsEl) return;
     const s = P.textStats(textInput.value);
     textStatsEl.textContent = `字符 ${s.chars} · 非空白 ${s.charsNoSpace} · 词 ${s.words} · 行 ${s.lines}（非空 ${s.nonEmptyLines}）`;
   }
@@ -1247,7 +1255,7 @@
       refreshTextStats();
     });
   });
-  refreshTextStats();
+  if (textInput) refreshTextStats();
 
   // ---- Case convert ----
   try {
@@ -1553,7 +1561,7 @@
     }
   }
   $("#qr-gen")?.addEventListener("click", generateQr);
-  generateQr();
+  if ($("#qr-text")) generateQr();
 
   const qrVideo = $("#qr-video");
   const qrCanvas = $("#qr-scan-canvas");
@@ -1704,8 +1712,10 @@
 
   // ---- Cron ----
   function runCron() {
+    const cronInput = $("#cron-input");
+    if (!cronInput) return;
     try {
-      const expr = $("#cron-input").value;
+      const expr = cronInput.value;
       $("#cron-desc").textContent = P.describeCron(expr);
       const next = P.nextCronTimes(expr, Date.now(), 8);
       $("#cron-next").textContent = next.map((ms, i) => `${i + 1}. ${P.formatDateTime(ms)}`).join("\n");
@@ -1718,7 +1728,7 @@
   }
   $("#cron-run")?.addEventListener("click", runCron);
   $("#cron-input")?.addEventListener("change", runCron);
-  runCron();
+  if ($("#cron-input")) runCron();
 
   // ---- Units ----
   const unitCat = $("#unit-cat");
@@ -1729,6 +1739,7 @@
   const unitHint = $("#unit-hint");
 
   function fillUnitSelects() {
+    if (!unitCat || !unitFrom || !unitTo || !unitFromVal || !unitToVal || !unitHint) return;
     const cat = unitCat.value;
     const table = P.UNIT_TABLES[cat];
     const units = cat === "temp" ? table.units : Object.keys(table.units);
@@ -1759,7 +1770,7 @@
 
   unitCat?.addEventListener("change", fillUnitSelects);
   [unitFrom, unitTo, unitFromVal].forEach((el) => el?.addEventListener("input", convertUnits));
-  fillUnitSelects();
+  if (unitCat) fillUnitSelects();
 
   // ---- Share card ----
   const scInput = $("#sc-input");
@@ -1852,7 +1863,7 @@
     }
   });
 
-  refreshShareCard();
+  if (scCard) refreshShareCard();
 
 
   // ---- Number base ----
@@ -1865,6 +1876,7 @@
   const nbError = $("#nb-error");
 
   function convertBase() {
+    if (!nbInput || !nbFrom || !nbBin || !nbOct || !nbDec || !nbHex) return;
     try {
       const raw = (nbInput.value || "").trim();
       if (!raw) throw new Error("请输入数值");
@@ -1883,7 +1895,7 @@
   }
   [nbInput, nbFrom].forEach((el) => el?.addEventListener("input", convertBase));
   nbFrom?.addEventListener("change", convertBase);
-  convertBase();
+  if (nbInput) convertBase();
 
   // ---- Markdown preview ----
   const mdInput = $("#md-input");
@@ -1923,7 +1935,31 @@
     if (mdPreview) mdPreview.innerHTML = renderMarkdown(mdInput?.value || "");
   }
   mdInput?.addEventListener("input", refreshMarkdown);
-  refreshMarkdown();
+  if (mdInput) refreshMarkdown();
+
+  function bootExtraPanel(toolId) {
+    const id = String(toolId || "").trim();
+    if (!id) return;
+    if (id === "timediff" && tdA && tdB) {
+      fillNowTs(tdA, false);
+      fillNowDate(tdB);
+      tdB.value = P.formatDateTime(Date.now() + 86400000);
+    }
+    if (id === "uuid") genUuid();
+    if (id === "text") refreshTextStats();
+    if (id === "qrcode") generateQr();
+    if (id === "cron") runCron();
+    if (id === "units") fillUnitSelects();
+    if (id === "sharecard") refreshShareCard();
+    if (id === "numbase") convertBase();
+    if (id === "markdown") refreshMarkdown();
+  }
+
+  window.addEventListener("devtools:route", (e) => {
+    const d = e.detail || {};
+    const id = d.tool === "media" ? d.mediaTab : d.tool;
+    bootExtraPanel(id);
+  });
 
   // ---- EyeDropper / image color picker ----
   try {
