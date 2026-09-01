@@ -1,0 +1,27 @@
+---
+description: DevTools 工具按需加载——禁止首屏全量加载工具脚本
+globs:
+  - tools/**
+  - tools/index.html
+alwaysApply: false
+---
+
+# 工具按需加载（必须遵守）
+
+**打开哪个工具，才加载哪个工具。禁止在 `tools/index.html` 首屏同步引入各工具 `*.js`。**
+
+## 壳层脚本（index.html 底部仅此列表）
+
+`tools-build.js`、`theme-presets.js`、`boot-loader.js`、`bridge-token.js`、`lazy-scripts.js`、`theme.js`、`app.js`、`nav-organize.js`
+
+## 新工具必做
+
+1. 在 `tools/lib/lazy-scripts.js` 注册 `TOOL_FILES`（及 `STANDALONE_NO_EXTRA` / `NO_PURE` / `TOOL_VENDORS`）
+2. 在 `tools/app.js` 注册 `TOOL_GROUPS` / `TOOL_META`
+3. 在 `tools/workspace-nav.css` 补 `data-boot-panel` 选择器
+4. 工具脚本用 `devtools:route` 延迟初始化，勿顶层全量 fetch
+5. **不要**在 `index.html` 加 `<script src="./工具.js">`
+
+## 详细说明
+
+阅读 `tools/docs/LAZY-LOAD.md`。

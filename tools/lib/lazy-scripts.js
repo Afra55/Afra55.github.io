@@ -1,3 +1,8 @@
+/**
+ * 工具脚本按需加载调度器。
+ * 规则：打开哪个工具才加载哪个；禁止在 index.html 首屏引入各工具 *.js。
+ * 详见 tools/docs/LAZY-LOAD.md
+ */
 (() => {
   "use strict";
 

@@ -82,6 +82,12 @@ node tools/ffmpeg-bridge/smoke-check.js
 # node tools/vbb-smoke.cjs
 ```
 
+## 性能：工具按需加载
+
+**打开哪个工具，才加载哪个工具**——首屏只加载壳层脚本（路由、导航、主题），各工具 `*.js` 与 `extra.js` 在切换路由时由 `lib/lazy-scripts.js` 拉取。
+
+新增或修改工具时请阅读 **[docs/LAZY-LOAD.md](./docs/LAZY-LOAD.md)**（检查清单、允许例外、反例）。
+
 ## 说明
 
 目录自包含，后续可整体迁出为独立仓库。
