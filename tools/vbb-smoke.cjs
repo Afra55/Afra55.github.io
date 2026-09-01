@@ -68,6 +68,8 @@ async function main() {
     errors.push(`console: ${text}`);
   });
 
+  await page.setViewport({ width: 1280, height: 800, isMobile: false, hasTouch: false });
+
   await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#vbb`, {
     waitUntil: "networkidle0",
     timeout: 60000,
@@ -172,11 +174,37 @@ async function main() {
     throw new Error(`vbb video preload should be metadata, got ${localPick.preload}`);
   }
 
-  await page.click("#vbb-workflow-split");
-  await page.evaluate(() => {
-    const panel = document.getElementById("vbb-split-panel");
-    if (panel) panel.hidden = false;
+  const vbbWorkflowUi = await page.evaluate(() => {
+    const click = (id) => document.getElementById(id)?.click();
+    click("vbb-workflow-split");
+    const split = {
+      active: document.getElementById("vbb-workflow-split")?.classList.contains("is-active"),
+      panelOpen: !document.getElementById("vbb-split-panel")?.hidden,
+      workflow: window.DevToolsVbb?.getWorkflow?.(),
+    };
+    click("vbb-workflow-manual");
+    const manual = {
+      active: document.getElementById("vbb-workflow-manual")?.classList.contains("is-active"),
+      panelOpen: !document.getElementById("vbb-manual-panel")?.hidden,
+      splitClosed: document.getElementById("vbb-split-panel")?.hidden,
+      workflow: window.DevToolsVbb?.getWorkflow?.(),
+    };
+    click("vbb-workflow-single");
+    const single = {
+      active: document.getElementById("vbb-workflow-single")?.classList.contains("is-active"),
+      splitClosed: document.getElementById("vbb-split-panel")?.hidden,
+      manualClosed: document.getElementById("vbb-manual-panel")?.hidden,
+      workflow: window.DevToolsVbb?.getWorkflow?.(),
+    };
+    click("vbb-workflow-split");
+    return { split, manual, single };
   });
+
+  await page.click("#vbb-workflow-split");
+  await page.waitForFunction(
+    () => !document.getElementById("vbb-split-panel")?.hidden,
+    { timeout: 5000 }
+  );
   await page.waitForFunction(() => {
     const b = document.getElementById("vbb-analyze");
     return b && !b.disabled;
@@ -290,8 +318,6 @@ async function main() {
 
   await page.evaluate(() => {
     window.DevToolsVbb?.setMode?.("duration");
-    const panel = document.getElementById("vbb-split-panel");
-    if (panel) panel.hidden = false;
   });
   await page.click("#vbb-run");
   await page.waitForFunction(() => {
@@ -325,10 +351,10 @@ async function main() {
     return b && !b.disabled;
   }, { timeout: 15000 });
   await page.click("#vbb-workflow-split");
-  await page.evaluate(() => {
-    const panel = document.getElementById("vbb-split-panel");
-    if (panel) panel.hidden = false;
-  });
+  await page.waitForFunction(
+    () => !document.getElementById("vbb-split-panel")?.hidden,
+    { timeout: 5000 }
+  );
   await page.waitForFunction(() => {
     const b = document.getElementById("vbb-analyze");
     return b && !b.disabled;
@@ -451,9 +477,74 @@ async function main() {
   });
   await page.waitForFunction(() => location.hash === "#gifmaker", { timeout: 10000 });
   await page.waitForFunction(() => window.__devtoolsBootReady, { timeout: 60000 });
-  todayTools.gifm = await page.evaluate(
-    () => Boolean(document.getElementById("gifm-merge") && document.getElementById("gifm-file"))
-  );
+  const gifToolsAudit = {};
+  for (const [hash, probe] of [
+    ["gifmaker", () => Boolean(document.getElementById("gif-generate"))],
+    ["v2g", () => Boolean(document.getElementById("v2g-generate"))],
+    ["gifc", () => Boolean(document.getElementById("gifc-compress"))],
+    ["gife", () => Boolean(document.getElementById("gife-apply"))],
+    ["gifm", () => Boolean(document.getElementById("gifm-merge"))],
+    ["gifx", () => Boolean(document.getElementById("gifx-zip"))],
+  ]) {
+    await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#${hash}`, {
+      waitUntil: "networkidle0",
+      timeout: 60000,
+    });
+    await page.waitForFunction((h) => location.hash === `#${h}`, { timeout: 10000 }, hash);
+    await page.waitForFunction(() => window.__devtoolsBootReady, { timeout: 60000 });
+    gifToolsAudit[hash] = await page.evaluate(probe);
+  }
+  todayTools.gifm = gifToolsAudit.gifm;
+  await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#gifmaker`, {
+    waitUntil: "networkidle0",
+    timeout: 60000,
+  });
+  await page.waitForFunction(() => location.hash === "#gifmaker", { timeout: 10000 });
+  const navAudit = await page.evaluate(() => {
+    const navLinks = [...document.querySelectorAll(".tool-nav-link")].map((a) => a.dataset.tool);
+    const groups = window.DevToolsCatalog?.groups || [];
+    const gifGroup = groups.find((g) => g.id === "gif");
+    const videoGroup = groups.find((g) => g.id === "video");
+    const blackboxGroup = groups.find((g) => g.id === "blackbox");
+    return {
+      gifGroupTools: gifGroup?.tools || [],
+      videoGroupTools: videoGroup?.tools || [],
+      blackboxGroupTools: blackboxGroup?.tools || [],
+      hasGifbbNav: navLinks.includes("gifbb"),
+      noMediaNav: !navLinks.includes("media"),
+      gifTabCount: document.querySelectorAll("#category-subnav [data-category-tab]").length,
+    };
+  });
+  // 旧 #media/vsplit 深链应跳到独立视频工具
+  await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#media/vsplit`, {
+    waitUntil: "networkidle0",
+    timeout: 60000,
+  });
+  await page.waitForFunction(() => location.hash === "#vsplit", { timeout: 10000 });
+  navAudit.legacyMediaVsplit = await page.evaluate(() => ({
+    hash: location.hash,
+    vsplitActive: document.getElementById("vsplit")?.classList.contains("is-workspace-active"),
+  }));
+  await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#media/vbb`, {
+    waitUntil: "networkidle0",
+    timeout: 60000,
+  });
+  await page.waitForFunction(() => location.hash === "#vbb", { timeout: 10000 });
+  navAudit.legacyMediaVbb = await page.evaluate(() => ({
+    hash: location.hash,
+    vbbActive: document.getElementById("vbb")?.classList.contains("is-workspace-active"),
+  }));
+  await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#gifbb`, {
+    waitUntil: "networkidle0",
+    timeout: 60000,
+  });
+  await page.waitForFunction(() => location.hash === "#gifbb", { timeout: 10000 });
+  await page.waitForFunction(() => window.__devtoolsBootReady, { timeout: 60000 });
+  navAudit.gifbbRoute = await page.evaluate(() => ({
+    hash: location.hash,
+    gifbbActive: document.getElementById("gifbb")?.classList.contains("is-workspace-active"),
+    hasGifbbFile: Boolean(document.getElementById("gifbb-file")),
+  }));
   for (const [hash, patch] of [
     ["vtrim", () => ({ vtrim: Boolean(document.getElementById("vtrim")), vtrimApi: typeof window.DevToolsVtrim?.getRange === "function", vtrimTrack: Boolean(document.querySelector("[data-vtrim-track]")) })],
     ["audio", () => ({ audio: Boolean(document.getElementById("audio")), audioApi: typeof window.DevToolsAudio?.getRange === "function", audioMp3: Boolean(document.querySelector('[data-audio-fmt="mp3"]')) })],
@@ -471,6 +562,35 @@ async function main() {
   todayTools.ffmpegApi = await page.evaluate(
     () => typeof window.DevToolsFfmpeg?.getInstance === "function"
   );
+
+  const compactFlyout = await page.evaluate(() => {
+    if (typeof window.DevToolsNav?.setCompact !== "function") return { skip: true };
+    window.DevToolsNav.setCompact(true);
+    const group =
+      document.querySelector("#tool-nav .nav-group[data-group='video']") ||
+      document.querySelector("#tool-nav .nav-group:not(.is-filtered-out)");
+    const title = group?.querySelector(".nav-group-title");
+    const panel = group?.querySelector(".nav-group-tools");
+    if (!group || !title || !panel) {
+      window.DevToolsNav.setCompact(false);
+      return { skip: true };
+    }
+    const h0 = group.getBoundingClientRect().height;
+    window.DevToolsNav.openFlyout(group);
+    const gr = group.getBoundingClientRect();
+    const tr = title.getBoundingClientRect();
+    const pr = panel.getBoundingClientRect();
+    const panelStyle = getComputedStyle(panel);
+    const out = {
+      opensRight: pr.left >= gr.right - 4,
+      topAligned: Math.abs(pr.top - tr.top) < 8,
+      flyoutNoGrow: Math.abs(group.getBoundingClientRect().height - h0) < 4,
+      panelVisible: panelStyle.display !== "none",
+    };
+    group.classList.remove("is-flyout-open", "is-pinned", "is-flyout-left");
+    window.DevToolsNav.setCompact(false);
+    return out;
+  });
 
   // Mobile drawer + category tab switch
   await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
@@ -598,11 +718,11 @@ async function main() {
     ),
   };
 
-  // 黑盒分类 Tab 切换应 push 历史，便于后退
+  // 手机无顶部分类条，侧栏切换也应 push 历史，便于后退
   const histBefore = await page.evaluate(() => history.length);
-  await page.evaluate(() => document.querySelector('[data-category-tab="gifbb"]')?.click());
+  await page.evaluate(() => document.querySelector('.tool-nav-link[data-tool="gifbb"]')?.click());
   await page.waitForFunction(() => location.hash === "#gifbb", { timeout: 5000 });
-  await page.evaluate(() => document.querySelector('[data-category-tab="vbb"]')?.click());
+  await page.evaluate(() => document.querySelector('.tool-nav-link[data-tool="vbb"]')?.click());
   await page.waitForFunction(() => location.hash === "#vbb", { timeout: 5000 });
   const shellFixes = await page.evaluate((prevLen) => {
     const recentRaw = localStorage.getItem("devtools-tool-recent-v1");
@@ -620,6 +740,7 @@ async function main() {
     );
     const comingGone = !document.getElementById("coming");
     return {
+      subnavHidden: document.getElementById("category-subnav")?.hidden === true,
       historyGrew: history.length > prevLen + 1,
       historyLength: history.length,
       prevLen,
@@ -1385,6 +1506,49 @@ async function main() {
   if (!todayTools.ffbridge || !todayTools.ffbridgeApi) problems.push("missing FFmpeg bridge tool");
   if (!todayTools.setup || !todayTools.setupApi) problems.push("missing setup help page");
   if (!todayTools.ffModeBanner || !todayTools.ffAdaptApi) problems.push("missing ffmpeg device adapt UI");
+  if (JSON.stringify(navAudit.gifGroupTools) !== JSON.stringify(["gifmaker", "v2g", "gifc", "gife", "gifm", "gifx"])) {
+    problems.push(`GIF group tools mismatch: ${JSON.stringify(navAudit.gifGroupTools)}`);
+  }
+  if (JSON.stringify(navAudit.videoGroupTools) !== JSON.stringify(["vsplit", "vtrim", "audio", "vplay"])) {
+    problems.push(`video group tools mismatch: ${JSON.stringify(navAudit.videoGroupTools)}`);
+  }
+  if (JSON.stringify(navAudit.blackboxGroupTools) !== JSON.stringify(["vbb", "gifbb"])) {
+    problems.push(`blackbox group tools mismatch: ${JSON.stringify(navAudit.blackboxGroupTools)}`);
+  }
+  if (!navAudit.hasGifbbNav) problems.push("gifbb should be a separate sidebar tool");
+  if (!navAudit.noMediaNav) problems.push("collapsed media nav entry should be removed");
+  if (navAudit.gifTabCount !== 6) {
+    problems.push(`GIF category subnav should have 6 tabs, got ${navAudit.gifTabCount}`);
+  }
+  const gifToolIds = ["gifmaker", "v2g", "gifc", "gife", "gifm", "gifx"];
+  for (const id of gifToolIds) {
+    if (!gifToolsAudit[id]) problems.push(`gif tool panel missing core UI: ${id}`);
+  }
+  if (navAudit.legacyMediaVsplit?.hash !== "#vsplit" || !navAudit.legacyMediaVsplit?.vsplitActive) {
+    problems.push(`legacy #media/vsplit redirect broken: ${JSON.stringify(navAudit.legacyMediaVsplit)}`);
+  }
+  if (navAudit.legacyMediaVbb?.hash !== "#vbb" || !navAudit.legacyMediaVbb?.vbbActive) {
+    problems.push(`legacy #media/vbb redirect broken: ${JSON.stringify(navAudit.legacyMediaVbb)}`);
+  }
+  if (navAudit.gifbbRoute?.hash !== "#gifbb" || !navAudit.gifbbRoute?.gifbbActive) {
+    problems.push(`#gifbb route broken: ${JSON.stringify(navAudit.gifbbRoute)}`);
+  }
+  if (!navAudit.gifbbRoute?.hasGifbbFile) problems.push("gifbb panel missing file input");
+  if (!vbbWorkflowUi.split?.active || !vbbWorkflowUi.split?.panelOpen) {
+    problems.push(`vbb split workflow UI broken: ${JSON.stringify(vbbWorkflowUi.split)}`);
+  }
+  if (!vbbWorkflowUi.manual?.active || !vbbWorkflowUi.manual?.panelOpen || !vbbWorkflowUi.manual?.splitClosed) {
+    problems.push(`vbb manual workflow UI broken: ${JSON.stringify(vbbWorkflowUi.manual)}`);
+  }
+  if (!vbbWorkflowUi.single?.active || !vbbWorkflowUi.single?.splitClosed || !vbbWorkflowUi.single?.manualClosed) {
+    problems.push(`vbb single workflow UI broken: ${JSON.stringify(vbbWorkflowUi.single)}`);
+  }
+  if (!compactFlyout.skip) {
+    if (!compactFlyout.panelVisible) problems.push("desktop compact flyout should show tools panel");
+    if (!compactFlyout.opensRight) problems.push("desktop compact flyout should open to the right of category");
+    if (!compactFlyout.topAligned) problems.push("desktop compact flyout should align with category title");
+    if (!compactFlyout.flyoutNoGrow) problems.push("desktop compact flyout should not expand category row height");
+  }
   if (!mobileShell.drawerOpen) problems.push("mobile drawer failed to open");
   if (!mobileShell.closedByBtn) problems.push("nav-close should close drawer");
   if (!mobileShell.stayedClosedAfterGhostOpen) {
@@ -1403,7 +1567,9 @@ async function main() {
   if (mobileShell.hashVbb !== "#vbb") problems.push(`blackbox nav hash: ${mobileShell.hashVbb}`);
   if (!mobileShell.vbbActive) problems.push("vbb tab switch failed");
   if (!mobileShell.onlyOneActive) problems.push("more than one panel active");
-  if (!shellFixes.historyGrew) problems.push("category tab switches should pushState and grow history");
+  if (mobileShell.afterGif?.subnav) problems.push("category subnav should be hidden on mobile");
+  if (!shellFixes.subnavHidden) problems.push("category subnav should stay hidden on mobile viewport");
+  if (!shellFixes.historyGrew) problems.push("sidebar tool switches should pushState and grow history on mobile");
   if (shellFixes.recentLooksDefault) problems.push("recent list looks like default order padding");
   if (!shellFixes.searchFindsMedia) problems.push("search vbb should match blackbox");
   if (!shellFixes.comingGone) problems.push("#coming placeholder should be removed");
@@ -1427,6 +1593,10 @@ async function main() {
       fsMark,
       analyze,
       todayTools,
+      navAudit,
+      gifToolsAudit,
+      vbbWorkflowUi,
+      compactFlyout,
       mobileShell,
       shellFixes,
       errors,

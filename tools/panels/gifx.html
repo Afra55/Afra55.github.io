@@ -1,0 +1,44 @@
+<section id="gifx" class="panel tool-panel gif-tool-panel" data-reveal>
+  <div class="panel-head gif-tool-head">
+    <p class="gif-tool-kicker">GIF</p>
+    <h1>GIF 拆帧 / 转视频</h1>
+    <p class="gif-tool-lead">把 GIF 拆成逐帧图片打包下载，或导出为 WebM 视频。</p>
+  </div>
+  <div class="panel-body gif-tool-body">
+    <div class="gif-tool-card">
+<div class="field-block">
+            <div class="btn-row tool-actions">
+              <label class="file-btn" for="gifx-file">选择 GIF</label>
+              <input id="gifx-file" type="file" accept="image/gif,.gif" hidden />
+              <button type="button" class="ghost-btn" id="gifx-clear">清空</button>
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
+              <label for="gifx-format">导出图片</label>
+              <select id="gifx-format" class="select-input">
+                <option value="png" selected>PNG</option>
+                <option value="jpeg">JPEG</option>
+                <option value="webp">WebP</option>
+              </select>
+              <label for="gifx-fps">视频基准 FPS</label>
+              <input id="gifx-fps" class="mono meta-input" type="number" min="5" max="60" step="1" value="20" />
+            </div>
+            <p class="hint" id="gifx-meta">上传 GIF 后可拆成逐帧图片，或导出 WebM 视频。</p>
+            <div class="gif-frame-list" id="gifx-frames" aria-live="polite"></div>
+            <div class="btn-row tool-actions" style="margin-top:1rem">
+              <button type="button" class="primary-btn" id="gifx-zip" disabled>打包下载全部帧</button>
+              <button type="button" class="secondary-btn" id="gifx-video" disabled>导出 WebM</button>
+              <button type="button" class="ghost-btn" id="gifx-abort" hidden>取消</button>
+              <a class="secondary-btn" id="gifx-download-video" href="#" download="animation.webm" hidden>下载视频</a>
+            </div>
+            <div class="gif-progress" id="gifx-progress" hidden>
+              <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="gifx-progress-fill"></span></div>
+              <p class="hint" id="gifx-progress-text">准备中…</p>
+            </div>
+            <div class="gif-preview-wrap">
+              <video id="gifx-video-preview" class="img-preview gif-preview" controls playsinline hidden></video>
+            </div>
+            <p class="error" id="gifx-error" hidden></p>
+          </div>
+    </div>
+  </div>
+</section>

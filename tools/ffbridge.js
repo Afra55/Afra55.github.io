@@ -168,7 +168,7 @@
     if (headDesc) {
       headDesc.innerHTML = host
         ? `电脑批量：连本机桥用系统 FFmpeg。没连上时，用网页 <a href="#audio">音频处理</a> / <a href="#vtrim">视频修剪</a> 保底。<a href="#setup">安装指南</a>`
-        : `手机请直接用网页内工具（无需安装本机桥）：<a href="#audio">音频处理</a>、<a href="#vtrim">视频修剪</a>、<a href="#gifmaker">GIF</a>。`;
+        : `手机请直接用网页内工具（无需安装本机桥）：<a href="#audio">音频处理</a>、<a href="#vtrim">视频修剪</a>、<a href="#v2g">视频转 GIF</a>。`;
     }
 
     if (modeTitle && modeText && modeActions) {
@@ -179,7 +179,7 @@
         modeActions.innerHTML = `
           <a class="primary-btn" href="#audio">音频处理</a>
           <a class="secondary-btn" href="#vtrim">视频修剪</a>
-          <a class="secondary-btn" href="#gifmaker">GIF 工具</a>
+          <a class="secondary-btn" href="#v2g">视频转 GIF</a>
         `;
         if (bridgePanel) bridgePanel.hidden = true;
         if (workspace) workspace.hidden = true;

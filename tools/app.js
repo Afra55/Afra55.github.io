@@ -873,7 +873,7 @@
   const SITE_NAV_IDS = new Set(["about", "setup"]);
   const LEGACY_MEDIA_TOOLS = ["gifmaker", "vsplit", "vtrim", "audio", "vplay"];
   /** 非紧凑侧栏时也显示顶栏分类条（工具数≥2） */
-  const GROUPS_WITH_ALWAYS_SUBNAV = new Set(["video", "blackbox"]);
+  const GROUPS_WITH_ALWAYS_SUBNAV = new Set(["gif", "video", "blackbox"]);
   const HASH_ALIASES = {
     gifmaker: { tool: "gifmaker" },
     vsplit: { tool: "vsplit" },
@@ -894,7 +894,7 @@
       label: "文本工具",
       tools: ["text", "caseconv", "regex", "diff", "markdown", "memo"],
     },
-    { id: "gif", label: "GIF", tools: ["gifmaker"] },
+    { id: "gif", label: "GIF", tools: ["gifmaker", "v2g", "gifc", "gife", "gifm", "gifx"] },
     { id: "video", label: "视频", tools: ["vsplit", "vtrim", "audio", "vplay"] },
     { id: "blackbox", label: "黑盒", tools: ["vbb", "gifbb"] },
     {
@@ -944,7 +944,12 @@
     qrcode: "生成与识别二维码。",
     markdown: "Markdown 预览。",
     memo: "本地备忘录：一键读剪贴板入库、搜索/点选筛选；文本图片可复制，其它类型可下载，手机可单条分享（文转图/OCR 见独立工具）。",
-    gifmaker: "视频转 GIF/WebP、压缩、拼接、亮度等本地动图处理（≤6MB 黑盒见「黑盒」分类）。",
+    gifmaker: "多张静态图合成 GIF，可调帧时长、宽度、质量与水印。",
+    v2g: "本地把视频转为 GIF 或动画 WebP，可调帧率、宽度与亮度（≤6MB 黑盒见「黑盒」分类）。",
+    gifx: "GIF 拆成逐帧图片打包下载，或导出为 WebM 视频。",
+    gifc: "上传已有 GIF 按档位压缩体积，可继续压一轮。",
+    gife: "裁剪画面、去黑边、去掉首尾帧，导出为新 GIF。",
+    gifm: "按顺序拼接多条 GIF 为一条长动图（各段宽高需一致）。",
     vsplit: "预览打点切分视频片段，支持全屏标记与打包下载（黑盒 GIF 见「黑盒」分类）。",
     vbb: "预制参数一键出 ≤6MB 黑盒 GIF：整段或长视频自动切片，全程本地处理。",
     gifbb: "多选已有 GIF，按黑盒规则压至 ≤6MB；已符合体积要求的会跳过。",
@@ -1007,7 +1012,12 @@
     regex: { name: "正则", aliases: ["regexp", "正则表达式"] },
     diff: { name: "文本比对", aliases: ["对比", "差异", "diff", "compare", "比对"] },
     qrcode: { name: "二维码", aliases: ["qr", "扫码"] },
-    gifmaker: { name: "GIF / 动图", aliases: ["gif", "动图", "webp", "ffmpeg"] },
+    gifmaker: { name: "多图合成 GIF", aliases: ["gif", "动图", "合成", "拼图"] },
+    v2g: { name: "视频转 GIF", aliases: ["视频", "webp", "ffmpeg", "转gif"] },
+    gifx: { name: "GIF 拆帧", aliases: ["拆帧", "转webm", "逐帧"] },
+    gifc: { name: "GIF 压缩", aliases: ["压缩gif", "缩小体积"] },
+    gife: { name: "GIF 编辑", aliases: ["裁剪", "去黑边", "删帧"] },
+    gifm: { name: "GIF 合并", aliases: ["拼接", "合并gif"] },
     vsplit: { name: "视频切分", aliases: ["切分", "vsplit", "视频"] },
     vbb: { name: "黑盒 GIF", aliases: ["黑盒", "vbb", "批量切分", "blackbox", "6mb", "视频转gif"] },
     gifbb: { name: "GIF 压黑盒", aliases: ["已有gif", "gif压缩", "压黑盒", "gifbb", "6mb gif"] },
@@ -1420,6 +1430,8 @@
 
   function shouldShowCategorySubnav(groupId, tools) {
     if (!groupId || tools.length < 2) return false;
+    // 窄屏/抽屉导航时用侧栏切换，顶部分类条占纵向空间
+    if (isMobileDrawer()) return false;
     if (navCompactActive()) return true;
     return GROUPS_WITH_ALWAYS_SUBNAV.has(groupId);
   }
@@ -1493,37 +1505,48 @@
 
   function positionNavFlyout(wrap) {
     const panel = wrap?.querySelector?.(".nav-group-tools");
-    const title = wrap?.querySelector?.(".nav-group-title");
+    const title = wrap?.querySelector?.(".nav-group-title, .nav-fav-title");
     if (!panel || !title || !navCompactActive() || compactNavSearching()) return;
     if (compactNavOnMobile()) {
-      wrap.classList.remove("is-flyout-up");
+      wrap.classList.remove("is-flyout-up", "is-flyout-left");
       panel.style.maxHeight = "";
       panel.style.width = "";
       panel.style.left = "";
+      panel.style.right = "";
       panel.style.top = "";
       panel.style.bottom = "";
       return;
     }
-    const scroller = navFlyoutScroller(wrap);
-    const scrollerRect = scroller.getBoundingClientRect();
+    const gap = 6;
+    const wrapRect = wrap.getBoundingClientRect();
     const titleRect = title.getBoundingClientRect();
-    const gap = 8;
-    const spaceBelow = scrollerRect.bottom - titleRect.bottom - gap;
-    const spaceAbove = titleRect.top - scrollerRect.top - gap;
-    const openUp = spaceBelow < 132 && spaceAbove > spaceBelow;
-    wrap.classList.toggle("is-flyout-up", openUp);
-    panel.style.maxHeight = `${Math.round(Math.min(280, Math.max(96, openUp ? spaceAbove : spaceBelow)))}px`;
-    panel.style.width = "";
-    panel.style.left = "";
-    panel.style.top = "";
-    panel.style.bottom = "";
+    const panelWidth = Math.min(288, Math.max(184, panel.offsetWidth || 220));
+    const spaceRight = window.innerWidth - wrapRect.right - gap;
+    const openLeft = spaceRight < panelWidth + 12;
+    wrap.classList.remove("is-flyout-up");
+    wrap.classList.toggle("is-flyout-left", openLeft);
+
+    const topInWrap = Math.max(0, Math.round(titleRect.top - wrapRect.top));
+    panel.style.top = `${topInWrap}px`;
+    panel.style.bottom = "auto";
+    if (openLeft) {
+      panel.style.left = "";
+      panel.style.right = `calc(100% + ${gap}px)`;
+    } else {
+      panel.style.left = `calc(100% + ${gap}px)`;
+      panel.style.right = "";
+    }
+    panel.style.width = `${panelWidth}px`;
+
+    const spaceBelow = window.innerHeight - titleRect.top - gap;
+    panel.style.maxHeight = `${Math.round(Math.min(360, Math.max(120, spaceBelow)))}px`;
   }
 
   function closeNavFlyouts({ keepPinned = false } = {}) {
     window.clearTimeout(navFlyoutTimer);
     navFlyoutTimer = 0;
     allNavGroups().forEach((g) => {
-      g.classList.remove("is-flyout-open", "is-flyout-up");
+      g.classList.remove("is-flyout-open", "is-flyout-up", "is-flyout-left");
       if (!keepPinned) g.classList.remove("is-pinned");
       g.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
     });
@@ -1535,7 +1558,7 @@
     navFlyoutTimer = 0;
     allNavGroups().forEach((g) => {
       if (g === wrap) return;
-      g.classList.remove("is-flyout-open", "is-flyout-up", "is-pinned");
+      g.classList.remove("is-flyout-open", "is-flyout-up", "is-flyout-left", "is-pinned");
       g.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
     });
     if (pin) wrap.classList.add("is-pinned");
@@ -1565,7 +1588,7 @@
     $$(".nav-group.is-sort-flyout", navEl).forEach((g) => {
       g.classList.remove("is-sort-flyout");
       if (!g.classList.contains("is-pinned")) {
-        g.classList.remove("is-flyout-open", "is-flyout-up");
+        g.classList.remove("is-flyout-open", "is-flyout-up", "is-flyout-left");
         g.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
       }
     });
@@ -3379,6 +3402,7 @@
     "resize",
     () => {
       syncNavCompactUi();
+      renderCategorySubnav();
       if (!navCompactActive()) return;
       const open = allNavGroups().find((g) => g.classList.contains("is-pinned") || g.classList.contains("is-flyout-open"));
       if (open) positionNavFlyout(open);

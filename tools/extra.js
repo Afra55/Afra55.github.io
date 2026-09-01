@@ -650,21 +650,19 @@
     });
   }
 
+  const GIF_FFMPEG_TOOLS = new Set(["gifmaker", "v2g", "gifx", "gifc", "gife", "gifm", "vsplit", "vbb", "vtrim", "audio", "vplay"]);
+
   function isGifmakerActive() {
     const hash = String(location.hash || "").replace(/^#/, "").toLowerCase();
-    if (
-      hash === "gifmaker" ||
-      hash === "vsplit" ||
-      hash === "vbb" ||
-      hash === "vplay" ||
-      hash === "media" ||
-      hash.indexOf("media/") === 0
-    ) {
+    const head = hash.split(/[/?]/).filter(Boolean)[0] || "";
+    if (GIF_FFMPEG_TOOLS.has(head) || hash === "media" || hash.indexOf("media/") === 0) {
       return true;
     }
-    const mediaLink = document.querySelector('.tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"], .tool-nav-link[data-tool="vtrim"], .tool-nav-link[data-tool="audio"], .tool-nav-link[data-tool="vplay"]');
+    const mediaLink = document.querySelector(
+      '.tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="v2g"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"], .tool-nav-link[data-tool="vtrim"], .tool-nav-link[data-tool="audio"], .tool-nav-link[data-tool="vplay"]'
+    );
     if (mediaLink?.classList.contains("is-active")) return true;
-    return ["gifmaker", "vsplit", "vbb", "vtrim", "audio", "vplay"].some((id) => {
+    return [...GIF_FFMPEG_TOOLS, "vbb", "vtrim", "audio", "vplay"].some((id) => {
       const panel = document.getElementById(id);
       return !!(panel && panel.classList.contains("is-workspace-active") && !panel.hidden);
     });
@@ -727,7 +725,7 @@
       if (!document.hidden) scheduleFfmpegPrewarm();
     });
     if (typeof MutationObserver === "function") {
-      ["gifmaker", "vsplit", "vbb", "vtrim", "audio", "vplay"].forEach((id) => {
+      [...GIF_FFMPEG_TOOLS, "vbb", "vtrim", "audio", "vplay"].forEach((id) => {
         const panel = document.getElementById(id);
         if (!panel) return;
         new MutationObserver(scheduleFfmpegPrewarm).observe(panel, {
@@ -738,7 +736,7 @@
     }
     document.addEventListener("click", (e) => {
       const t = e.target?.closest?.(
-        '.tool-nav-link[data-tool="media"], [data-category-tab], .tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"], .tool-nav-link[data-tool="vtrim"], .tool-nav-link[data-tool="audio"], .tool-nav-link[data-tool="vplay"]'
+        '.tool-nav-link[data-tool="media"], [data-category-tab], .tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="v2g"], .tool-nav-link[data-tool="gifx"], .tool-nav-link[data-tool="gifc"], .tool-nav-link[data-tool="gife"], .tool-nav-link[data-tool="gifm"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"], .tool-nav-link[data-tool="vtrim"], .tool-nav-link[data-tool="audio"], .tool-nav-link[data-tool="vplay"]'
       );
       if (t) setTimeout(scheduleFfmpegPrewarm, 0);
     });
@@ -3122,7 +3120,7 @@
       }
     }
 
-    bindPanel("gifmaker", () => {
+    bindPanel("gifx", () => {
           gifxFile = $("#gifx-file");
           gifxFramesEl = $("#gifx-frames");
           gifxMeta = $("#gifx-meta");
@@ -4869,8 +4867,8 @@
       }
     }
 
-    bindPanel("gifmaker", (root) => {
-      root = root || document.getElementById("gifmaker");
+    bindPanel("v2g", (root) => {
+      root = root || document.getElementById("v2g");
       v2gFile = $("#v2g-file", root);
       v2gVideo = $("#v2g-video", root);
       v2gMeta = $("#v2g-meta", root);
@@ -7524,6 +7522,8 @@
     let vbbRun;
     let vbbOneclick;
     let vbbAdvanced;
+    let vbbSplitPanel;
+    let vbbWorkflowHint;
     let vbbMerge;
     let vbbAbort;
     let vbbZip;
@@ -7573,6 +7573,11 @@
     const VBB_SOFT_COMPRESS_KEEP = 0.72;
     const VBB_DEFAULT_META =
       "支持 MP4 / WebM / MOV。可多选已裁好的短片，一次性全部转黑盒 GIF；仅本机读取，不会上传。";
+    const VBB_WORKFLOW_HINTS = {
+      single: "整段视频将输出一个 GIF，无需切分或调参。",
+      split: "长视频自动切片：先点「分析切分方案」，满意后再「按当前方案执行」。",
+      manual: "手动打点：拖到起点/终点点「打起点」「打终点」，可标记多段后点「一键黑盒」。",
+    };
 
     let vbbSourceFile = null;
     /** @type {{ file: File, duration: number, srcW: number, srcH: number }[]} */
@@ -8098,13 +8103,22 @@
     }
 
     function syncVbbWorkflowUi() {
+      const batch = isVbbBatchMode();
       const workflowRow = document.querySelector(".blackbox-workflow-row");
-      if (workflowRow) workflowRow.hidden = isVbbBatchMode();
+      if (workflowRow) workflowRow.hidden = batch;
       $("#vbb-workflow-single")?.classList.toggle("is-active", vbbWorkflow === "single");
       $("#vbb-workflow-split")?.classList.toggle("is-active", vbbWorkflow === "split");
       $("#vbb-workflow-manual")?.classList.toggle("is-active", vbbWorkflow === "manual");
-      if (vbbAdvanced) vbbAdvanced.hidden = isVbbManualMode() || isVbbBatchMode();
+      const showSplit = vbbWorkflow === "split" && !batch;
+      if (vbbSplitPanel) vbbSplitPanel.hidden = !showSplit;
+      if (vbbWorkflowHint) {
+        vbbWorkflowHint.textContent = batch
+          ? "多选短片时将逐个转换，无需切换模式。"
+          : VBB_WORKFLOW_HINTS[vbbWorkflow] || VBB_WORKFLOW_HINTS.single;
+      }
+      if (vbbAdvanced) vbbAdvanced.hidden = isVbbManualMode() || batch;
       paintVbbManualUi();
+      setVbbButtons();
     }
 
     async function packDownloadVbbGifs({ auto = false } = {}) {
@@ -9409,20 +9423,12 @@
       }
     }
 
-    $("#vbb-mode-custom")?.addEventListener("click", () => {
-      vbbMode = "custom";
-      paintVbbPlan();
-    });
-    const syncCustomTarget = (raw) => {
-      if (!vbbAnalysis) return;
-      const min = Number(vbbTargetRange?.min) || VBB_MIN_SPAN;
-      const max = Number(vbbTargetRange?.max) || VBB_DURATION_MAX_SPAN;
-      const val = Math.max(min, Math.min(max, Number(raw) || min));
-      if (vbbTargetSpan) vbbTargetSpan.value = String(Number(val.toFixed(1)));
-      if (vbbTargetRange) vbbTargetRange.value = String(Number(val.toFixed(1)));
-      if (vbbMode !== "custom") vbbMode = "custom";
-      paintVbbPlan();
-    };
+    function bindVbbOnce(el, key, handler) {
+      if (!el || el.dataset[key]) return;
+      el.dataset[key] = "1";
+      el.addEventListener("click", handler);
+    }
+
     bindPanel("vbb", (root) => {
       root = root || document.getElementById("vbb");
       vbbFile = $("#vbb-file", root);
@@ -9433,6 +9439,8 @@
       vbbRun = $("#vbb-run", root);
       vbbOneclick = $("#vbb-oneclick", root);
       vbbAdvanced = $("#vbb-advanced", root);
+      vbbSplitPanel = $("#vbb-split-panel", root);
+      vbbWorkflowHint = $("#vbb-workflow-hint", root);
       vbbMerge = $("#vbb-merge", root);
       vbbAbort = $("#vbb-abort", root);
       vbbZip = $("#vbb-zip", root);
@@ -9466,6 +9474,16 @@
       vbbJumpTime = $("#vbb-jump-time", root);
       vbbJumpGo = $("#vbb-jump-go", root);
       vbbLongHint = $("#vbb-long-hint", root);
+      const syncCustomTarget = (raw) => {
+        if (!vbbAnalysis) return;
+        const min = Number(vbbTargetRange?.min) || VBB_MIN_SPAN;
+        const max = Number(vbbTargetRange?.max) || VBB_DURATION_MAX_SPAN;
+        const val = Math.max(min, Math.min(max, Number(raw) || min));
+        if (vbbTargetSpan) vbbTargetSpan.value = String(Number(val.toFixed(1)));
+        if (vbbTargetRange) vbbTargetRange.value = String(Number(val.toFixed(1)));
+        if (vbbMode !== "custom") vbbMode = "custom";
+        paintVbbPlan();
+      };
       if (vbbFile && !vbbFile.dataset.vbbBound) {
         vbbFile.dataset.vbbBound = "1";
         vbbFile.addEventListener("click", () => {
@@ -9486,6 +9504,29 @@
         rebuildVbbDerivedPlans();
         paintVbbPlan();
       });
+      bindVbbOnce($("#vbb-mode-custom", root), "vbbModeBound", () => {
+        vbbMode = "custom";
+        paintVbbPlan();
+      });
+      const workflowRow = root.querySelector(".blackbox-workflow-row");
+      if (workflowRow && !workflowRow.dataset.vbbWorkflowBound) {
+        workflowRow.dataset.vbbWorkflowBound = "1";
+        workflowRow.addEventListener("click", (e) => {
+          const btn = e.target.closest("[data-vbb-workflow]");
+          if (!btn || !workflowRow.contains(btn)) return;
+          const next = String(btn.dataset.vbbWorkflow || "").trim();
+          if (!next || next === vbbWorkflow) return;
+          vbbWorkflow = next;
+          if (next === "manual") pauseVbbPreview();
+          syncVbbWorkflowUi();
+          if (next === "manual") {
+            const d = vbbVideoDuration();
+            if (d >= VBB_LONG_VIDEO_SEC) {
+              toast("长视频：拖动定位即可，播放会占用更多内存");
+            }
+          }
+        });
+      }
     window.DevToolsTemp?.registerCleanup(clearVbb);
     // 供预估准确性测试读取（不影响 UI）
     window.DevToolsVbb = {
@@ -9525,23 +9566,6 @@
       abortV2g = true;
       terminateFfmpegInstance({ revokeAssets: false });
       scheduleFfmpegPrewarm();
-    });
-    $("#vbb-workflow-single")?.addEventListener("click", () => {
-      vbbWorkflow = "single";
-      syncVbbWorkflowUi();
-    });
-    $("#vbb-workflow-split")?.addEventListener("click", () => {
-      vbbWorkflow = "split";
-      syncVbbWorkflowUi();
-    });
-    $("#vbb-workflow-manual")?.addEventListener("click", () => {
-      vbbWorkflow = "manual";
-      pauseVbbPreview();
-      syncVbbWorkflowUi();
-      const d = vbbVideoDuration();
-      if (d >= VBB_LONG_VIDEO_SEC) {
-        toast("长视频：拖动定位即可，播放会占用更多内存");
-      }
     });
     vbbJumpGo?.addEventListener("click", () => {
       const t = parseVbbJumpTime(vbbJumpTime?.value);
@@ -10140,7 +10164,7 @@
       }
     }
 
-    bindPanel("gifmaker", () => {
+    bindPanel("gifc", () => {
           gifcFile = $("#gifc-file");
           gifcMeta = $("#gifc-meta");
           gifcError = $("#gifc-error");
@@ -10586,7 +10610,7 @@
       syncGifeMeta();
     }
 
-    bindPanel("gifmaker", () => {
+    bindPanel("gife", () => {
           gifeFile = $("#gife-file");
           gifeMeta = $("#gife-meta");
           gifeError = $("#gife-error");
@@ -10821,7 +10845,7 @@
       renderGifmList();
     }
 
-    bindPanel("gifmaker", () => {
+    bindPanel("gifm", () => {
           gifmFile = $("#gifm-file");
           gifmList = $("#gifm-list");
           gifmMeta = $("#gifm-meta");

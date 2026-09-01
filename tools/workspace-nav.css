@@ -1342,12 +1342,27 @@ body.nav-open {
   }
 
   .nav-bar.is-compact:not(.is-searching) .nav-group-tools {
-    left: 0;
-    right: 0;
-    min-width: 0;
-    width: 100%;
-    max-width: 100%;
+    left: calc(100% + 6px);
+    right: auto;
+    top: 0;
+    bottom: auto;
+    width: 12.5rem;
+    min-width: 11.5rem;
+    max-width: min(18rem, calc(100vw - 10rem));
     z-index: 10;
+  }
+
+  .nav-bar.is-compact:not(.is-searching) .nav-group.is-flyout-left > .nav-group-tools {
+    left: auto;
+    right: calc(100% + 6px);
+  }
+
+  .nav-bar.is-compact:not(.is-searching) {
+    overflow: visible;
+  }
+
+  .nav-bar.is-compact:not(.is-searching) .nav-bar-scroll {
+    overflow-x: visible;
   }
 
   .nav-bar.is-compact:not(.is-searching) .nav-group.is-flyout-open,

@@ -1,0 +1,105 @@
+<section id="v2g" class="panel tool-panel gif-tool-panel" data-reveal>
+  <div class="panel-head gif-tool-head">
+    <p class="gif-tool-kicker">GIF</p>
+    <h1>视频转 GIF</h1>
+    <p class="gif-tool-lead">本地把视频转为 GIF 或动画 WebP，可调帧率、宽度与亮度。≤6MB 黑盒见「黑盒」分类。</p>
+  </div>
+  <div class="panel-body gif-tool-body">
+    <div class="gif-tool-card">
+<div class="field-block" style="margin-top:1.5rem">
+          <div class="btn-row tool-actions">
+            <label class="file-btn" for="v2g-file">选择视频</label>
+            <input id="v2g-file" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" hidden />
+            <button type="button" class="ghost-btn" id="v2g-clear">清空</button>
+          </div>
+          <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
+            <label for="v2g-fps">帧率 FPS</label>
+            <input id="v2g-fps" class="mono meta-input" type="number" min="2" max="15" step="1" value="15" />
+            <label for="v2g-width">最大宽度</label>
+            <input id="v2g-width" class="mono meta-input" type="number" min="64" max="720" step="1" value="480" />
+            <label for="v2g-maxsec">最长秒数</label>
+            <input id="v2g-maxsec" class="mono meta-input" type="number" min="0.5" max="600" step="0.1" value="" placeholder="自动=全长" title="选择后自动填入视频时长，可手动缩短" />
+            <label for="v2g-start">起始秒</label>
+            <input id="v2g-start" class="mono meta-input" type="number" min="0" max="600" step="0.1" value="0" />
+            <label for="v2g-quality">质量 (1–30)</label>
+            <input id="v2g-quality" class="mono meta-input" type="number" min="1" max="30" step="1" value="5" />
+          </div>
+          <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
+            <label class="flag"><input type="checkbox" id="v2g-wm-enable" /> 右上角文字水印</label>
+            <label for="v2g-wm-text">文字</label>
+            <input id="v2g-wm-text" class="mono meta-input" type="text" value="Elliot718703" maxlength="40" style="min-width:10rem" />
+            <label for="v2g-wm-size">字号</label>
+            <select id="v2g-wm-size" class="mono select-input">
+              <option value="small" selected>小</option>
+              <option value="medium">中</option>
+              <option value="large">大</option>
+            </select>
+          </div>
+          <div class="field-row v2g-bright-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
+            <label class="flag"><input type="checkbox" id="v2g-bright-enable" /> 调亮画面</label>
+            <span class="hint tight" style="margin:0">开启后在视频下方预览并调节</span>
+          </div>
+          <p class="hint" id="v2g-meta">支持 MP4 / WebM / MOV。选择后仅本机读取，不会上传。默认 15FPS / 宽480 / 质量5。关闭页面会释放本次视频和 GIF；编码器缓存可在侧栏一键清理。</p>
+          <div class="gif-preview-wrap">
+            <video id="v2g-video" class="img-preview gif-preview" controls playsinline muted preload="metadata" hidden></video>
+          </div>
+          <div class="v2g-bright-panel" id="v2g-bright-panel" hidden>
+            <div class="v2g-bright-preview-wrap" id="v2g-bright-preview-wrap">
+              <canvas id="v2g-bright-preview" class="img-preview gif-preview v2g-bright-preview" width="480" height="270" aria-label="调亮预览"></canvas>
+              <p class="hint tight">调亮预览（起始秒附近单帧，与导出同为相对提亮）</p>
+            </div>
+            <div class="v2g-bright-controls">
+              <div class="seg v2g-bright-seg" id="v2g-bright-presets" role="group" aria-label="调亮档位">
+                <button type="button" class="seg-btn" data-bright="10">稍亮</button>
+                <button type="button" class="seg-btn is-active" data-bright="20">更亮</button>
+                <button type="button" class="seg-btn" data-bright="35">最亮</button>
+              </div>
+              <div class="v2g-bright-fine" id="v2g-bright-fine">
+                <div class="v2g-bright-fine-head">
+                  <label for="v2g-bright-pct">亮度</label>
+                  <input id="v2g-bright-pct" class="mono meta-input v2g-bright-pct" type="number" min="0" step="1" value="20" inputmode="numeric" title="相对提亮百分比，可输入超过滑块范围" />
+                  <span class="hint tight v2g-bright-pct-unit">%</span>
+                  <button type="button" class="ghost-btn v2g-bright-reset" id="v2g-bright-reset" title="恢复为原始亮度（+0%）">还原</button>
+                </div>
+                <input id="v2g-bright-amount" class="v2g-bright-range" type="range" min="0" max="200" step="1" value="20" aria-label="亮度滑块" />
+              </div>
+            </div>
+          </div>
+          <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
+            <button type="button" class="primary-btn" id="v2g-generate" disabled title="使用 FFmpeg 双通道调色板编码 GIF">转为 GIF</button>
+            <button type="button" class="secondary-btn" id="v2g-generate-webp" disabled title="浏览器原生编码各帧再封装为动画 WebP；通常比 GIF 更清晰更小">转为动画 WebP</button>
+            <a class="ghost-btn" href="#vbb" title="预制参数 ≤6MB 黑盒 GIF">黑盒 GIF →</a>
+            <button type="button" class="ghost-btn" id="v2g-abort" hidden>取消</button>
+            <label for="v2g-compress-level" class="hint tight" style="margin:0">压缩</label>
+            <select id="v2g-compress-level" class="mono select-input" title="压缩档位（仅 GIF）">
+              <option value="light">轻度</option>
+              <option value="standard" selected>标准</option>
+              <option value="strong">强力</option>
+            </select>
+            <button type="button" class="secondary-btn" id="v2g-compress" disabled title="仅支持 GIF">压缩体积</button>
+            <button type="button" class="secondary-btn" id="v2g-compress-again" disabled hidden>继续压缩</button>
+            <a class="secondary-btn" id="v2g-download" href="#" download="from-video.gif" hidden>下载 GIF</a>
+          </div>
+          <div class="v2g-engine-warm" id="v2g-engine-warm" style="margin-top:0.55rem">
+            <p class="hint tight" id="v2g-hq-warm" aria-live="polite">进入本页将预热本地编码器（不上传视频）</p>
+            <div class="gif-progress" id="v2g-warm-progress" hidden>
+              <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="v2g-warm-progress-fill"></span></div>
+              <p class="hint" id="v2g-warm-progress-text">准备引擎…</p>
+            </div>
+          </div>
+          <div class="gif-progress" id="v2g-progress" hidden>
+            <div class="gif-progress-head">
+              <p class="hint gif-progress-title" id="v2g-progress-text">准备中…</p>
+              <span class="mono gif-progress-pct" id="v2g-progress-pct">0%</span>
+            </div>
+            <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="v2g-progress-fill"></span></div>
+            <p class="hint tight gif-progress-sub" id="v2g-progress-sub" hidden></p>
+          </div>
+          <div class="gif-preview-wrap">
+            <img id="v2g-preview" class="img-preview gif-preview" alt="视频转 GIF 预览" hidden />
+          </div>
+          <p class="error" id="v2g-error" hidden></p>
+        </div>
+    </div>
+  </div>
+</section>
