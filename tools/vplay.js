@@ -681,6 +681,10 @@
 
   function clearVplay() {
     sourceFile = null;
+    scrubbing = false;
+    window.clearTimeout(scrubSeekTimer);
+    scrubSeekTimer = 0;
+    scrubPendingSec = null;
     if (objectUrl) {
       URL.revokeObjectURL(objectUrl);
       objectUrl = "";
