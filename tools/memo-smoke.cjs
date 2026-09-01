@@ -1488,19 +1488,22 @@ async function main() {
     };
 
     const recentListEl = document.getElementById("tool-recent-list");
+    const recentDlgListEl = document.getElementById("nav-recent-dlg-list");
     out.recentUi = {
-      hasLabel: /最近使用/.test(document.getElementById("tool-recent-label")?.textContent || ""),
+      hasToggle: /最近使用/.test(document.getElementById("tool-recent-toggle")?.textContent || ""),
       hasInlineList: Boolean(recentListEl),
+      hasDialog: Boolean(document.getElementById("nav-recent-dlg")),
+      openApi: typeof window.DevToolsNav?.openRecentDialog === "function",
       renderApi: typeof window.DevToolsNav?.renderRecent === "function",
-      noDialog: !document.getElementById("nav-recent-dlg"),
     };
     try {
       const ids = ["json", "base64", "uuid", "hash", "regex", "color", "url", "cron", "yaml"];
       localStorage.setItem("devtools-tool-recent-v1", JSON.stringify(ids));
       window.DevToolsNav?.renderRecent?.();
+      window.DevToolsNav?.openRecentDialog?.();
       if (recentListEl) {
-        out.recentUi.chipCount = document.querySelectorAll(".nav-recent-chip").length;
-        out.recentUi.showsAll = out.recentUi.chipCount === ids.length;
+        out.recentUi.inlineChipCount = document.querySelectorAll(".nav-recent-chip").length;
+        out.recentUi.showsAllInline = out.recentUi.inlineChipCount === ids.length;
         out.recentUi.rowLayout = getComputedStyle(recentListEl).flexDirection === "row";
         out.recentUi.noScrollbar =
           getComputedStyle(recentListEl).scrollbarWidth === "none" ||
@@ -1510,6 +1513,12 @@ async function main() {
           ? getComputedStyle(chip).textOverflow !== "ellipsis" && getComputedStyle(chip).overflow !== "hidden"
           : false;
       }
+      if (recentDlgListEl) {
+        out.recentUi.dlgChipCount = document.querySelectorAll(".nav-recent-dlg-item").length;
+        out.recentUi.showsAllDlg = out.recentUi.dlgChipCount === ids.length;
+        out.recentUi.dialogOpen = document.getElementById("nav-recent-dlg")?.open === true;
+      }
+      window.DevToolsNav?.closeRecentDialog?.();
     } catch (_) {}
 
     const favListEl = document.getElementById("tool-fav-list");
@@ -2122,13 +2131,15 @@ async function main() {
     failed.push("nav cache hint should be a single short line with details in title");
   }
   if (
-    !result.recentUi?.hasLabel ||
+    !result.recentUi?.hasToggle ||
     !result.recentUi?.hasInlineList ||
-    !result.recentUi?.renderApi ||
-    !result.recentUi?.noDialog ||
-    !result.recentUi?.showsAll ||
+    !result.recentUi?.hasDialog ||
+    !result.recentUi?.openApi ||
+    !result.recentUi?.showsAllInline ||
+    !result.recentUi?.showsAllDlg ||
     !result.recentUi?.rowLayout ||
     !result.recentUi?.noScrollbar ||
+    !result.recentUi?.dialogOpen ||
     !result.recentUi?.fullText
   ) {
     failed.push("recent tools should open a picker dialog with full tool names");
