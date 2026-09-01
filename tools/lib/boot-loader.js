@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const MIN_SHOW_MS = 320;
+  const MIN_SHOW_MS = 380;
   const startedAt = Date.now();
   let finished = false;
   let pct = 4;

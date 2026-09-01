@@ -2350,6 +2350,61 @@
     headerMoreToggle?.setAttribute("aria-expanded", want ? "true" : "false");
   }
 
+  let toolLoadToken = 0;
+  function setToolLoadProgress(pct) {
+    const bar = document.getElementById("devtools-tool-load");
+    const fill = bar?.querySelector(".devtools-tool-load-fill");
+    if (!bar || !fill) return;
+    const v = Math.min(100, Math.max(0, pct));
+    bar.hidden = false;
+    bar.setAttribute("aria-hidden", "false");
+    bar.setAttribute("aria-busy", "true");
+    bar.setAttribute("aria-valuenow", String(Math.round(v)));
+    fill.style.width = `${v}%`;
+  }
+
+  function hideToolLoadProgress() {
+    const bar = document.getElementById("devtools-tool-load");
+    const fill = bar?.querySelector(".devtools-tool-load-fill");
+    if (!bar) return;
+    bar.hidden = true;
+    bar.setAttribute("aria-hidden", "true");
+    bar.setAttribute("aria-busy", "false");
+    bar.setAttribute("aria-valuenow", "0");
+    if (fill) fill.style.width = "0%";
+  }
+
+  async function withToolLoadProgress(run) {
+    const token = ++toolLoadToken;
+    setToolLoadProgress(12);
+    try {
+      await run((pct) => {
+        if (token === toolLoadToken) setToolLoadProgress(pct);
+      });
+      if (token === toolLoadToken) setToolLoadProgress(100);
+    } finally {
+      if (token === toolLoadToken) {
+        window.setTimeout(() => {
+          if (token === toolLoadToken) hideToolLoadProgress();
+        }, 200);
+      }
+    }
+  }
+
+  let dateremindIdleScheduled = false;
+  function scheduleDateremindReminders() {
+    if (dateremindIdleScheduled) return;
+    dateremindIdleScheduled = true;
+    const idle = window.requestIdleCallback || ((cb) => window.setTimeout(cb, 2500));
+    idle(() => {
+      window.DevToolsLazy?.ensureForTool?.("dateremind")
+        .then(() => {
+          window.DevToolsDateRemind?.checkOnVisit?.();
+        })
+        .catch(() => {});
+    });
+  }
+
   async function applyRoute({ skipRecent, keepDrawer, deferAssets = false } = {}) {
     let route = parseRoute();
     if (shouldRestoreLastTool()) {
@@ -2461,9 +2516,11 @@
       );
     };
 
-    const loadLazyForRoute = async () => {
+    const loadLazyForRoute = async (onProgress) => {
       try {
+        onProgress?.(42);
         await window.DevToolsLazy?.ensureForTool?.(routeToolId);
+        onProgress?.(88);
       } catch (err) {
         console.error("tool lazy-load failed", routeToolId, err);
       }
@@ -2473,16 +2530,23 @@
     if (deferAssets) {
       if (!window.__devtoolsShellBoot) {
         window.__devtoolsShellBoot = true;
-        window.__devtoolsBootReady = true;
-        window.dispatchEvent(new CustomEvent("devtools:boot-ready"));
-        const idle = window.requestIdleCallback || ((cb) => window.setTimeout(cb, 1200));
-        idle(() => {
-          window.DevToolsLazy?.loadPwa?.().catch(() => {});
-        });
-      }
-      const eagerTool = routeToolId === "lanshare";
-      if (eagerTool) {
-        loadLazyForRoute().catch((err) => console.error("boot lazy-load failed", routeToolId, err));
+        void (async () => {
+          try {
+            window.DevToolsBoot?.bump?.(48, `加载 ${toolName(routeToolId)}…`);
+            setToolLoadProgress(28);
+            await window.DevToolsLazy?.ensureForTool?.(routeToolId);
+            window.DevToolsBoot?.bump?.(88, "即将完成…");
+            setToolLoadProgress(92);
+          } catch (err) {
+            console.error("boot lazy-load failed", routeToolId, err);
+          }
+          window.__devtoolsBootReady = true;
+          window.dispatchEvent(new CustomEvent("devtools:boot-ready"));
+          emitRoute();
+          hideToolLoadProgress();
+          idleLoadPwaOnce();
+          scheduleDateremindReminders();
+        })();
       } else {
         emitRoute();
         const idleTool = window.requestIdleCallback || ((cb) => window.setTimeout(cb, 400));
@@ -2491,7 +2555,9 @@
         });
       }
     } else {
-      await loadLazyForRoute();
+      await withToolLoadProgress(async (onProgress) => {
+        await loadLazyForRoute(onProgress);
+      });
       idleLoadPwaOnce();
     }
   }

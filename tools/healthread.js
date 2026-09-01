@@ -377,15 +377,24 @@
       if (status) status.textContent = `${state.index.length} 篇文章`;
     }
 
-    window.addEventListener("devtools:route", () => {
-      if (!$("#healthread")?.classList.contains("is-workspace-active")) return;
-      if (state.view === "reader" && state.articleId) saveScroll(state.articleId);
-    });
+  let booted = false;
+
+  function bootIfNeeded() {
+    if (booted) return;
+    booted = true;
+    void init();
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => void init());
-  } else {
-    void init();
+  document.addEventListener("devtools:route", (e) => {
+    const d = e.detail || {};
+    const tool = d.tool === "media" ? d.mediaTab : d.tool;
+    if (tool === "healthread") bootIfNeeded();
+    if (tool !== "healthread") return;
+    if (!$("#healthread")?.classList.contains("is-workspace-active")) return;
+    if (state.view === "reader" && state.articleId) saveScroll(state.articleId);
+  });
+
+  if (document.getElementById("healthread")?.classList.contains("is-workspace-active")) {
+    bootIfNeeded();
   }
 })();

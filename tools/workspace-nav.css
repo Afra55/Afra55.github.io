@@ -883,6 +883,11 @@ html[data-boot-panel="imgkit"] #imgkit,
 html[data-boot-panel="imgtrim"] #imgtrim,
 html[data-boot-panel="about"] #about,
 html[data-boot-panel="acupoint"] #acupoint,
+html[data-boot-panel="healthread"] #healthread,
+html[data-boot-panel="pdfcraft"] #pdfcraft,
+html[data-boot-panel="insectworld"] #insectworld,
+html[data-boot-panel="prehmuseum"] #prehmuseum,
+html[data-boot-panel="xorenc"] #xorenc,
 html[data-boot-panel="setup"] #setup {
   display: block;
 }

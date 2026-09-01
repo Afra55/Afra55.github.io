@@ -54,6 +54,12 @@
     pdfcraft: "./pdfcraft.js",
     insectworld: "./insectworld.js",
     prehmuseum: "./prehmuseum.js",
+    wheel: "./wheel.js",
+    ruler: "./ruler.js",
+    muyu: "./muyu.js",
+    minigames: "./minigames.js",
+    ambient: "./ambient.js",
+    sandspiel: "./sandspiel.js",
     memo: "./memo.js",
     textimg: "./textimg.js",
     imgtext: "./imgtext.js",
@@ -96,6 +102,12 @@
     "pdfcraft",
     "insectworld",
     "prehmuseum",
+    "wheel",
+    "ruler",
+    "muyu",
+    "minigames",
+    "ambient",
+    "sandspiel",
     "lanshare",
     "ffbridge",
     "ytdlp",
@@ -105,7 +117,7 @@
   ]);
 
   /** 不依赖 DevToolsPure */
-  const NO_PURE = new Set(["acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp", "setup", "about", "pdfcraft", "insectworld", "prehmuseum", "xorenc", "morse", "countdown", "dateremind", "phlogo", "nokiasms", "sandspiel"]);
+  const NO_PURE = new Set(["acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp", "setup", "about", "pdfcraft", "insectworld", "prehmuseum", "xorenc", "morse", "countdown", "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "minigames", "ambient"]);
 
   const scriptPromises = new Map();
   let extraBundlePromise = null;

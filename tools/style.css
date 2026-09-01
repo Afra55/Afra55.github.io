@@ -11982,6 +11982,27 @@ html[data-boot-loading="1"] body {
   color: var(--muted, #9aabc4);
 }
 
+.devtools-tool-load {
+  height: 3px;
+  margin: 0 0 0.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line, rgba(238, 243, 251, 0.13)) 70%, transparent);
+  overflow: hidden;
+}
+
+.devtools-tool-load[hidden] {
+  display: none !important;
+}
+
+.devtools-tool-load-fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent, #2ec4b6), var(--accent-2, #f0a46a));
+  transition: width 0.22s ease;
+}
+
 /* —— 环境音库 —— */
 .ambient-body {
   display: flex;
@@ -12727,4 +12748,14 @@ html[data-boot-loading="1"] body {
   margin: 0 0 0.55rem;
   line-height: 1.65;
   color: var(--ink);
+}
+
+@media (max-width: 520px) {
+  .hr-cards {
+    grid-template-columns: 1fr;
+  }
+
+  .hr-status {
+    text-align: left;
+  }
 }
