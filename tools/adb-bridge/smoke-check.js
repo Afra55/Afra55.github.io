@@ -4,10 +4,15 @@
 const http = require("http");
 const { spawn } = require("child_process");
 const path = require("path");
+const fs = require("fs");
 
 const PORT = 17991;
 const TOKEN = "devtools-bridge";
 const HOST = "127.0.0.1";
+const EXPECTED_BRIDGE_VERSION = (() => {
+  const src = fs.readFileSync(path.join(__dirname, "server.js"), "utf8");
+  return src.match(/const BRIDGE_VERSION = "([^"]+)"/)?.[1] || "";
+})();
 
 function req(method, urlPath, { headers = {}, body } = {}) {
   return new Promise((resolve, reject) => {
@@ -118,8 +123,8 @@ async function main() {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
     }
 
-    if (health2.json?.version !== "0.8.4") {
-      throw new Error(`expected bridge version 0.8.4, got ${health2.json?.version}`);
+    if (health2.json?.version !== EXPECTED_BRIDGE_VERSION) {
+      throw new Error(`expected bridge version ${EXPECTED_BRIDGE_VERSION}, got ${health2.json?.version}`);
     }
     if (Number(health2.json?.port) !== PORT) {
       throw new Error(`health.port should match listen port ${PORT}, got ${health2.json?.port}`);

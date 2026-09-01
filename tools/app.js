@@ -913,7 +913,7 @@
   const TOOL_TO_GROUP = Object.fromEntries(
     TOOL_GROUPS.flatMap((g) => g.tools.map((id) => [id, g.id]))
   );
-  /** 关于页说明：新增工具时请同步 TOOL_GROUPS、TOOL_META、ABOUT_DESC */
+  /** 关于页说明：新增工具时请同步 TOOL_GROUPS、TOOL_META、ABOUT_DESC，并运行 node tools/scripts/verify-registry.cjs */
   const ABOUT_DESC = {
     timestamp: "秒/毫秒时间戳与日期互转，支持本地时区与 UTC。",
     timediff: "计算两个时间点的差值，支持时间戳或日期字符串。",
@@ -1038,6 +1038,7 @@
     acupoint: { name: "穴位图", aliases: ["穴位", "经络", "针灸", "acupoint", "361", "奇穴"] },
     healthread: { name: "健康阅读", aliases: ["养生", "功法", "金刚功", "长寿功", "张至顺", "健康文章", "阅读"] },
     numbase: { name: "进制转换", aliases: ["二进制", "十六进制"] },
+    wheel: { name: "大转盘", aliases: ["转盘", "抽奖", "wheel", "随机", "lottery"] },
     markdown: { name: "Markdown", aliases: ["md", "预览"] },
     memo: { name: "备忘录", aliases: ["笔记", "剪贴板", "memo", "note", "便签"] },
     ruler: { name: "直尺", aliases: ["标尺", "刻度", "ruler", "测量", "全屏"] },

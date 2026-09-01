@@ -10,6 +10,10 @@ const path = require("path");
 const PORT = 17996;
 const TOKEN = "devtools-ffmpeg";
 const HOST = "127.0.0.1";
+const EXPECTED_BRIDGE_VERSION = (() => {
+  const src = fs.readFileSync(path.join(__dirname, "server.js"), "utf8");
+  return src.match(/const BRIDGE_VERSION = "([^"]+)"/)?.[1] || "";
+})();
 
 function req(method, urlPath, { headers = {}, body } = {}) {
   return new Promise((resolve, reject) => {
@@ -105,7 +109,9 @@ async function main() {
       }
     }
     if (!healthy?.json?.ok) throw new Error(`health failed: ${boot}`);
-    if (String(healthy.json.version) !== "0.4.1") throw new Error(`version ${healthy.json.version}`);
+    if (String(healthy.json.version) !== EXPECTED_BRIDGE_VERSION) {
+      throw new Error(`version ${healthy.json.version}, expected ${EXPECTED_BRIDGE_VERSION}`);
+    }
 
     const ops = await req("GET", "/ops", { headers: { "X-Ffmpeg-Token": TOKEN } });
     if (!ops.json?.ok || ops.json.ops.length < 28) throw new Error(`ops ${ops.json?.ops?.length}`);

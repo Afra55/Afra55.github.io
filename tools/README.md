@@ -74,6 +74,9 @@ python3 -m http.server 8080 --directory .
 ## 测试
 
 ```bash
+node tools/scripts/ci.cjs
+# 或分项：
+node tools/scripts/verify-registry.cjs
 node tools/test/pure.test.js
 node tools/vbb-plan.test.js
 node tools/adb-bridge/smoke-check.js
