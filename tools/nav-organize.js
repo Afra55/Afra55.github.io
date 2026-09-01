@@ -714,7 +714,5 @@
     if (e.target === dlg) closeOrganize(false);
   });
 
-  openBtn?.addEventListener("click", () => openOrganize());
-
   window.DevToolsNavOrganize = { open: openOrganize, close: () => closeOrganize(true) };
 })();

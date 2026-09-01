@@ -12,15 +12,15 @@ const path = require("path");
 const { execSync } = require("child_process");
 
 const ROOT = __dirname;
-const EXTRA = path.join(ROOT, "extra.js");
+const TOOLS_BUILD = path.join(ROOT, "lib/tools-build.js");
 
 function chinaVersionStamp() {
   return execSync("TZ=Asia/Shanghai date +%Y.%m.%d-%H%M%S", { encoding: "utf8" }).trim();
 }
 
 function readCurrentVersion() {
-  const text = fs.readFileSync(EXTRA, "utf8");
-  const m = text.match(/const TOOLS_VERSION = "([^"]+)"/);
+  const text = fs.readFileSync(TOOLS_BUILD, "utf8");
+  const m = text.match(/const BUILD = "([^"]+)"/) || text.match(/window\.TOOLS_BUILD = "([^"]+)"/);
   return m ? m[1] : "";
 }
 
@@ -49,7 +49,7 @@ function main() {
   const oldVer = readCurrentVersion();
   const newVer = chinaVersionStamp();
   if (!oldVer) {
-    console.error("TOOLS_VERSION not found in tools/extra.js");
+    console.error("BUILD not found in tools/lib/tools-build.js");
     process.exit(1);
   }
   if (oldVer === newVer) {

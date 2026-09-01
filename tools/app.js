@@ -1116,9 +1116,68 @@
     }
   }
 
+  let navOrganizePromise = null;
+
+  function ensureNavOrganizeScript() {
+    if (window.DevToolsNavOrganize) return Promise.resolve();
+    if (navOrganizePromise) return navOrganizePromise;
+    const build = window.TOOLS_BUILD || "dev";
+    navOrganizePromise = new Promise((resolve, reject) => {
+      const src = `./nav-organize.js?v=${encodeURIComponent(build)}`;
+      const existing = [...document.scripts].find((s) => String(s.src || "").includes("nav-organize.js"));
+      if (existing) {
+        if (existing.dataset.devtoolsLoaded === "1" || window.DevToolsNavOrganize) {
+          resolve();
+          return;
+        }
+        existing.addEventListener("load", () => resolve(), { once: true });
+        existing.addEventListener("error", () => reject(new Error("nav-organize.js 加载失败")), { once: true });
+        return;
+      }
+      const node = document.createElement("script");
+      node.src = src;
+      node.async = true;
+      node.onload = () => {
+        node.dataset.devtoolsLoaded = "1";
+        resolve();
+      };
+      node.onerror = () => {
+        navOrganizePromise = null;
+        reject(new Error("nav-organize.js 加载失败"));
+      };
+      document.head.appendChild(node);
+    });
+    return navOrganizePromise;
+  }
+
+  function handleBuildUpgrade() {
+    const info = window.__devtoolsBuildUpgraded;
+    if (!info?.to) return;
+    const toastKey = `devtools-upgrade-toast-${info.to}`;
+    try {
+      if (!sessionStorage.getItem(toastKey)) {
+        sessionStorage.setItem(toastKey, "1");
+        showToast(`已加载新版本 v${info.to}`);
+      }
+    } catch (_) {
+      showToast(`已加载新版本 v${info.to}`);
+    }
+    if (window.caches?.keys) {
+      window.caches
+        .keys()
+        .then((keys) =>
+          Promise.all(
+            keys.filter((k) => k.startsWith("devtools-shell-") && k !== "devtools-shell-20260901-101500").map((k) => caches.delete(k))
+          )
+        )
+        .catch(() => {});
+    }
+  }
+
   function bootstrapNavShell() {
     if (navShellBootstrapped) return;
     navShellBootstrapped = true;
+    handleBuildUpgrade();
     renderNav(loadOrder());
     renderRecent();
     renderFavorites();
@@ -3181,7 +3240,9 @@
   });
 
   $("#nav-organize-open")?.addEventListener("click", () => {
-    window.DevToolsNavOrganize?.open?.();
+    ensureNavOrganizeScript()
+      .then(() => window.DevToolsNavOrganize?.open?.())
+      .catch((err) => showToast(err?.message || "整理菜单加载失败"));
   });
 
   async function runForceHardRefresh() {

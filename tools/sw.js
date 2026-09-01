@@ -2,7 +2,7 @@
 /* eslint-disable no-restricted-globals */
 "use strict";
 
-const SHELL_CACHE = "devtools-shell-20260829-234500";
+const SHELL_CACHE = "devtools-shell-20260901-101500";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -21,6 +21,17 @@ function shouldBypass(url) {
   if (/\/ffmpeg\//i.test(path)) return true;
   if (/\/excalidraw\//i.test(path)) return true;
   if (/\/sandspiel\//i.test(path)) return true;
+  return false;
+}
+
+/** 脚本/样式走网络，避免升级后 SW 回退到旧版 JS/CSS */
+function shouldCacheResponse(url, req) {
+  const path = url.pathname;
+  if (/\.(js|css|mjs)$/i.test(path)) return false;
+  if (req.mode === "navigate") return true;
+  if (/\/index\.html$/i.test(path) || path.endsWith("/tools/") || path.endsWith("/tools")) return true;
+  if (/\/icons\//i.test(path)) return true;
+  if (path.endsWith("/manifest.webmanifest")) return true;
   return false;
 }
 
@@ -60,11 +71,11 @@ self.addEventListener("fetch", (event) => {
   }
   if (shouldBypass(url)) return;
 
-  // 在线优先拉新，离线再回退缓存——这样网页更新后 PWA 下次打开会同步
+  // 在线优先拉新，离线再回退缓存——JS/CSS 不写入缓存，减少新旧版本混用
   event.respondWith(
     fetch(req)
       .then((res) => {
-        if (res && res.ok && res.type !== "opaque") {
+        if (res && res.ok && res.type !== "opaque" && shouldCacheResponse(url, req)) {
           const copy = res.clone();
           caches.open(SHELL_CACHE).then((c) => c.put(req, copy)).catch(() => {});
         }
