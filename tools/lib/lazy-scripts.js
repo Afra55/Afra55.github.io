@@ -193,6 +193,7 @@
       await ensurePure();
       await loadScript("./temp.js");
       await loadScript("./lib/oss-deps.js");
+      await loadScript("./lib/extra-bind.js");
       await loadScript("./extra.js");
       window.__devtoolsExtraBundle = true;
     })().catch((err) => {

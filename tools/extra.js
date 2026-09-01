@@ -12,6 +12,9 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
+  const EBind = () => window.DevToolsExtraBind;
+  const bindPanel = (id, fn) => EBind()?.register?.(id, fn);
+
   function setError(el, msg) {
     if (!el) return;
     if (!msg) {
@@ -1070,11 +1073,11 @@
   }
 
   // ---- Time diff ----
-  const tdA = $("#td-a");
-  const tdB = $("#td-b");
-  const tdResult = $("#td-result");
-  const tdValue = $("#td-result-value");
-  const tdError = $("#td-error");
+  let tdA;
+  let tdB;
+  let tdResult;
+  let tdValue;
+  let tdError;
 
   function fillNowDate(input) {
     if (!input) return;
@@ -1099,7 +1102,14 @@
     }
   }
 
-  $("#td-now-a")?.addEventListener("click", () => fillNowDate(tdA));
+  bindPanel("timediff", () => {
+      tdA = $("#td-a");
+      tdB = $("#td-b");
+      tdResult = $("#td-result");
+      tdValue = $("#td-result-value");
+      tdError = $("#td-error");
+
+      $("#td-now-a")?.addEventListener("click", () => fillNowDate(tdA));
   $("#td-now-b")?.addEventListener("click", () => fillNowDate(tdB));
   $("#td-ts-a")?.addEventListener("click", () => fillNowTs(tdA, false));
   $("#td-ts-b")?.addEventListener("click", () => fillNowTs(tdB, false));
@@ -1119,13 +1129,14 @@
     tdB.value = P.formatDateTime(Date.now() + 86400000);
   }
 
-  // ---- Color convert ----
-  const cHex = $("#c-hex");
-  const cRgb = $("#c-rgb");
-  const cHsl = $("#c-hsl");
-  const cSwatch = $("#c-swatch");
-  const cPreview = $("#c-preview-hex");
-  const cError = $("#c-error");
+  
+  });// ---- Color convert ----
+  let cHex;
+  let cRgb;
+  let cHsl;
+  let cSwatch;
+  let cPreview;
+  let cError;
   let colorSync = false;
 
   function applyColorSource(source) {
@@ -1147,16 +1158,30 @@
     }
   }
 
-  cHex?.addEventListener("input", () => applyColorSource("hex"));
+  bindPanel("color", () => {
+      cHex = $("#c-hex");
+      cRgb = $("#c-rgb");
+      cHsl = $("#c-hsl");
+      cSwatch = $("#c-swatch");
+      cPreview = $("#c-preview-hex");
+      cError = $("#c-error");
+
+      cHex?.addEventListener("input", () => applyColorSource("hex"));
   cRgb?.addEventListener("input", () => applyColorSource("rgb"));
   cHsl?.addEventListener("input", () => applyColorSource("hsl"));
   applyColorSource("hex");
 
-  // ---- URL ----
-  const urlRaw = $("#url-raw");
-  const urlEnc = $("#url-enc");
-  const urlError = $("#url-error");
-  $("#url-encode")?.addEventListener("click", () => {
+  
+  });// ---- URL ----
+  let urlRaw;
+  let urlEnc;
+  let urlError;
+  bindPanel("url", () => {
+      urlRaw = $("#url-raw");
+      urlEnc = $("#url-enc");
+      urlError = $("#url-error");
+
+      $("#url-encode")?.addEventListener("click", () => {
     try {
       urlEnc.value = encodeURIComponent(urlRaw.value);
       setError(urlError, "");
@@ -1178,14 +1203,22 @@
     urlEnc.value = t;
   });
 
-  // ---- Query / JWT ----
-  const qInput = $("#q-input");
-  const qOut = $("#q-out");
-  const jwtInput = $("#jwt-input");
-  const jwtOut = $("#jwt-out");
-  const qError = $("#q-error");
+  
+  });// ---- Query / JWT ----
+  let qInput;
+  let qOut;
+  let jwtInput;
+  let jwtOut;
+  let qError;
 
-  $("#q-parse")?.addEventListener("click", () => {
+  bindPanel("query", () => {
+      qInput = $("#q-input");
+      qOut = $("#q-out");
+      jwtInput = $("#jwt-input");
+      jwtOut = $("#jwt-out");
+      qError = $("#q-error");
+
+      $("#q-parse")?.addEventListener("click", () => {
     try {
       const obj = P.parseQuery(qInput.value);
       qOut.textContent = JSON.stringify(obj, null, 2);
@@ -1205,10 +1238,11 @@
     }
   });
 
-  // ---- UUID ----
+  
+  });// ---- UUID ----
   function genUuid() {
-    const countEl = $("#uuid-count");
-    const outEl = $("#uuid-out");
+    let countEl;
+    let outEl;
     if (!countEl || !outEl) return;
     const count = Math.min(200, Math.max(1, Number(countEl.value) || 1));
     const upper = $("#uuid-upper")?.checked;
@@ -1217,17 +1251,24 @@
     for (let i = 0; i < count; i++) list.push(P.formatUuid(P.uuidv4(), { upper, noHyphen }));
     outEl.value = list.join("\n");
   }
-  $("#uuid-gen")?.addEventListener("click", genUuid);
+  bindPanel("uuid", () => {
+        countEl = $("#uuid-count");
+        outEl = $("#uuid-out");
+
+      $("#uuid-gen")?.addEventListener("click", genUuid);
   if ($("#uuid-count")) genUuid();
 
-  // ---- Hash ----
+  
+  });// ---- Hash ----
   async function sha256(text) {
     const data = new TextEncoder().encode(text);
     const digest = await crypto.subtle.digest("SHA-256", data);
     return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
   }
 
-  $("#hash-run")?.addEventListener("click", async () => {
+  bindPanel("hash", () => {
+
+      $("#hash-run")?.addEventListener("click", async () => {
     const text = $("#hash-input").value;
     try {
       $("#hash-md5").textContent = P.md5(text);
@@ -1238,9 +1279,10 @@
     }
   });
 
-  // ---- Text ----
-  const textInput = $("#text-input");
-  const textStatsEl = $("#text-stats");
+  
+  });// ---- Text ----
+  let textInput;
+  let textStatsEl;
 
   function refreshTextStats() {
     if (!textInput || !textStatsEl) return;
@@ -1248,7 +1290,11 @@
     textStatsEl.textContent = `字符 ${s.chars} · 非空白 ${s.charsNoSpace} · 词 ${s.words} · 行 ${s.lines}（非空 ${s.nonEmptyLines}）`;
   }
 
-  textInput?.addEventListener("input", refreshTextStats);
+  bindPanel("text", () => {
+      textInput = $("#text-input");
+      textStatsEl = $("#text-stats");
+
+      textInput?.addEventListener("input", refreshTextStats);
   $$("[data-text-action]").forEach((btn) => {
     btn.addEventListener("click", () => {
       textInput.value = P.transformText(textInput.value, btn.dataset.textAction);
@@ -1257,20 +1303,12 @@
   });
   if (textInput) refreshTextStats();
 
-  // ---- Case convert ----
+  
+  });// ---- Case convert ----
   try {
-    const caseInput = $("#case-input");
-    const caseMeta = $("#case-meta");
-    const caseMap = {
-      camel: $("#case-camel"),
-      pascal: $("#case-pascal"),
-      snake: $("#case-snake"),
-      screaming: $("#case-screaming"),
-      kebab: $("#case-kebab"),
-      dot: $("#case-dot"),
-      path: $("#case-path"),
-      title: $("#case-title"),
-    };
+    let caseInput;
+    let caseMeta;
+    let caseMap;
 
     function refreshCaseConvert() {
       if (!caseInput) return;
@@ -1289,7 +1327,21 @@
       }
     }
 
-    caseInput?.addEventListener("input", refreshCaseConvert);
+    bindPanel("caseconv", () => {
+          caseInput = $("#case-input");
+          caseMeta = $("#case-meta");
+          caseMap = {
+            camel: $("#case-camel"),
+            pascal: $("#case-pascal"),
+            snake: $("#case-snake"),
+            screaming: $("#case-screaming"),
+            kebab: $("#case-kebab"),
+            dot: $("#case-dot"),
+            path: $("#case-path"),
+            title: $("#case-title"),
+          };
+
+          caseInput?.addEventListener("input", refreshCaseConvert);
     $("#case-clear")?.addEventListener("click", () => {
       if (caseInput) caseInput.value = "";
       refreshCaseConvert();
@@ -1319,26 +1371,19 @@
       toast("已填入 kebab-case");
     });
     refreshCaseConvert();
+    });
   } catch (err) {
     console.error("case convert init failed", err);
   }
 
   // ---- Coordinate convert ----
   try {
-    const coordInput = $("#coord-input");
-    const coordSystem = $("#coord-system");
-    const coordMeta = $("#coord-meta");
-    const coordError = $("#coord-error");
+    let coordInput;
+    let coordSystem;
+    let coordMeta;
+    let coordError;
     const systems = ["wgs84", "gcj02", "bd09", "cgcs2000"];
-    const coordOut = Object.fromEntries(
-      systems.map((key) => [
-        key,
-        {
-          decimal: $(`#coord-${key}`),
-          dms: $(`#coord-${key}-dms`),
-        },
-      ])
-    );
+    let coordOut;
 
     function refreshCoordConvert() {
       if (!coordInput || !coordSystem) return;
@@ -1400,7 +1445,22 @@
       toast(`已填入 ${system.toUpperCase()}`);
     }
 
-    coordInput?.addEventListener("input", refreshCoordConvert);
+    bindPanel("coord", () => {
+          coordInput = $("#coord-input");
+          coordSystem = $("#coord-system");
+          coordMeta = $("#coord-meta");
+          coordError = $("#coord-error");
+          coordOut = Object.fromEntries(
+            systems.map((key) => [
+              key,
+              {
+                decimal: $(`#coord-${key}`),
+                dms: $(`#coord-${key}-dms`),
+              },
+            ])
+          );
+
+          coordInput?.addEventListener("input", refreshCoordConvert);
     coordSystem?.addEventListener("change", refreshCoordConvert);
     $("#coord-clear")?.addEventListener("click", () => {
       if (coordInput) coordInput.value = "";
@@ -1410,6 +1470,7 @@
     $("#coord-use-gcj02")?.addEventListener("click", () => useCoordResult("gcj02"));
     $("#coord-use-bd09")?.addEventListener("click", () => useCoordResult("bd09"));
     refreshCoordConvert();
+    });
   } catch (err) {
     console.error("coord convert init failed", err);
   }
@@ -1417,7 +1478,9 @@
   // ---- 文本比对（见 diff.js） ----
 
   // ---- YAML ----
-  $("#yaml-to-json")?.addEventListener("click", () => {
+  bindPanel("yaml", () => {
+
+      $("#yaml-to-json")?.addEventListener("click", () => {
     try {
       if (typeof jsyaml === "undefined") throw new Error("js-yaml 未加载");
       const data = jsyaml.load($("#yaml-in").value);
@@ -1441,8 +1504,11 @@
     $("#yaml-to-json")?.click();
   }
 
-  // ---- Image Base64 ----
-  $("#img-file")?.addEventListener("change", (e) => {
+  
+  });// ---- Image Base64 ----
+  bindPanel("imgb64", () => {
+
+      $("#img-file")?.addEventListener("change", (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (!file.type.startsWith("image/")) {
@@ -1461,7 +1527,8 @@
     reader.readAsDataURL(file);
   });
 
-  // ---- QR generate + decode ----
+  
+  });// ---- QR generate + decode ----
   const QR_CAP_L40 = 2953;
 
   function qrPayloadBytes(text) {
@@ -1514,8 +1581,8 @@
   }
 
   function generateQr() {
-    const wrap = $("#qr-box-wrap");
-    const meta = $("#qr-meta");
+    let wrap;
+    let meta;
     const text = $("#qr-text")?.value.trim() || "";
     if (!wrap) return;
     wrap.innerHTML = "";
@@ -1560,7 +1627,19 @@
       setError($("#qr-error"), err.message || String(err));
     }
   }
-  $("#qr-gen")?.addEventListener("click", generateQr);
+  bindPanel("qrcode", () => {
+        wrap = $("#qr-box-wrap");
+        meta = $("#qr-meta");
+      qrVideo = $("#qr-video");
+      qrCanvas = $("#qr-scan-canvas");
+      qrPreview = $("#qr-scan-preview");
+      qrDecoded = $("#qr-decoded");
+      qrDecodeMeta = $("#qr-decode-meta");
+      qrDecodeError = $("#qr-decode-error");
+      qrCamStart = $("#qr-cam-start");
+      qrCamStop = $("#qr-cam-stop");
+
+      $("#qr-gen")?.addEventListener("click", generateQr);
   if ($("#qr-text")) generateQr();
 
   const qrVideo = $("#qr-video");
@@ -1710,9 +1789,10 @@
 
   window.addEventListener("pagehide", stopCamera);
 
-  // ---- Cron ----
+  
+  });// ---- Cron ----
   function runCron() {
-    const cronInput = $("#cron-input");
+    let cronInput;
     if (!cronInput) return;
     try {
       const expr = cronInput.value;
@@ -1726,17 +1806,21 @@
       setError($("#cron-error"), err.message || String(err));
     }
   }
-  $("#cron-run")?.addEventListener("click", runCron);
+  bindPanel("cron", () => {
+        cronInput = $("#cron-input");
+
+      $("#cron-run")?.addEventListener("click", runCron);
   $("#cron-input")?.addEventListener("change", runCron);
   if ($("#cron-input")) runCron();
 
-  // ---- Units ----
-  const unitCat = $("#unit-cat");
-  const unitFrom = $("#unit-from");
-  const unitTo = $("#unit-to");
-  const unitFromVal = $("#unit-from-val");
-  const unitToVal = $("#unit-to-val");
-  const unitHint = $("#unit-hint");
+  
+  });// ---- Units ----
+  let unitCat;
+  let unitFrom;
+  let unitTo;
+  let unitFromVal;
+  let unitToVal;
+  let unitHint;
 
   function fillUnitSelects() {
     if (!unitCat || !unitFrom || !unitTo || !unitFromVal || !unitToVal || !unitHint) return;
@@ -1768,27 +1852,36 @@
     }
   }
 
-  unitCat?.addEventListener("change", fillUnitSelects);
+  bindPanel("units", () => {
+      unitCat = $("#unit-cat");
+      unitFrom = $("#unit-from");
+      unitTo = $("#unit-to");
+      unitFromVal = $("#unit-from-val");
+      unitToVal = $("#unit-to-val");
+      unitHint = $("#unit-hint");
+
+      unitCat?.addEventListener("change", fillUnitSelects);
   [unitFrom, unitTo, unitFromVal].forEach((el) => el?.addEventListener("input", convertUnits));
   if (unitCat) fillUnitSelects();
 
-  // ---- Share card ----
-  const scInput = $("#sc-input");
-  const scLang = $("#sc-lang");
-  const scTheme = $("#sc-theme");
-  const scTitle = $("#sc-title");
-  const scWatermark = $("#sc-watermark");
-  const scLines = $("#sc-lines");
-  const scPretty = $("#sc-pretty");
-  const scDots = $("#sc-dots");
-  const scDotsEl = $("#sc-dots-el");
-  const scCard = $("#sc-card");
-  const scCode = $("#sc-code");
-  const scCardTitle = $("#sc-card-title");
-  const scCardWatermark = $("#sc-card-watermark");
-  const scMeta = $("#sc-meta");
-  const scError = $("#sc-error");
-  const scCapture = $("#sc-capture");
+  
+  });// ---- Share card ----
+  let scInput;
+  let scLang;
+  let scTheme;
+  let scTitle;
+  let scWatermark;
+  let scLines;
+  let scPretty;
+  let scDots;
+  let scDotsEl;
+  let scCard;
+  let scCode;
+  let scCardTitle;
+  let scCardWatermark;
+  let scMeta;
+  let scError;
+  let scCapture;
 
   const LANG_LABEL = {
     json: "JSON",
@@ -1832,7 +1925,25 @@
     scPretty,
     scDots,
   ].forEach((el) => {
-    el?.addEventListener("input", refreshShareCard);
+  bindPanel("sharecard", () => {
+      scInput = $("#sc-input");
+      scLang = $("#sc-lang");
+      scTheme = $("#sc-theme");
+      scTitle = $("#sc-title");
+      scWatermark = $("#sc-watermark");
+      scLines = $("#sc-lines");
+      scPretty = $("#sc-pretty");
+      scDots = $("#sc-dots");
+      scDotsEl = $("#sc-dots-el");
+      scCard = $("#sc-card");
+      scCode = $("#sc-code");
+      scCardTitle = $("#sc-card-title");
+      scCardWatermark = $("#sc-card-watermark");
+      scMeta = $("#sc-meta");
+      scError = $("#sc-error");
+      scCapture = $("#sc-capture");
+
+        el?.addEventListener("input", refreshShareCard);
     el?.addEventListener("change", refreshShareCard);
   });
   $("#sc-refresh")?.addEventListener("click", refreshShareCard);
@@ -1866,14 +1977,15 @@
   if (scCard) refreshShareCard();
 
 
-  // ---- Number base ----
-  const nbInput = $("#nb-input");
-  const nbFrom = $("#nb-from");
-  const nbBin = $("#nb-bin");
-  const nbOct = $("#nb-oct");
-  const nbDec = $("#nb-dec");
-  const nbHex = $("#nb-hex");
-  const nbError = $("#nb-error");
+  
+  });// ---- Number base ----
+  let nbInput;
+  let nbFrom;
+  let nbBin;
+  let nbOct;
+  let nbDec;
+  let nbHex;
+  let nbError;
 
   function convertBase() {
     if (!nbInput || !nbFrom || !nbBin || !nbOct || !nbDec || !nbHex) return;
@@ -1893,13 +2005,23 @@
       setError(nbError, err.message || String(err));
     }
   }
-  [nbInput, nbFrom].forEach((el) => el?.addEventListener("input", convertBase));
+  bindPanel("numbase", () => {
+      nbInput = $("#nb-input");
+      nbFrom = $("#nb-from");
+      nbBin = $("#nb-bin");
+      nbOct = $("#nb-oct");
+      nbDec = $("#nb-dec");
+      nbHex = $("#nb-hex");
+      nbError = $("#nb-error");
+
+      [nbInput, nbFrom].forEach((el) => el?.addEventListener("input", convertBase));
   nbFrom?.addEventListener("change", convertBase);
   if (nbInput) convertBase();
 
-  // ---- Markdown preview ----
-  const mdInput = $("#md-input");
-  const mdPreview = $("#md-preview");
+  
+  });// ---- Markdown preview ----
+  let mdInput;
+  let mdPreview;
 
   function renderMarkdown(src) {
     let html = String(src || "");
@@ -1934,12 +2056,21 @@
   function refreshMarkdown() {
     if (mdPreview) mdPreview.innerHTML = renderMarkdown(mdInput?.value || "");
   }
-  mdInput?.addEventListener("input", refreshMarkdown);
+  bindPanel("markdown", () => {
+      mdInput = $("#md-input");
+      mdPreview = $("#md-preview");
+
+      mdInput?.addEventListener("input", refreshMarkdown);
   if (mdInput) refreshMarkdown();
+
+
+  });
+
 
   function bootExtraPanel(toolId) {
     const id = String(toolId || "").trim();
     if (!id) return;
+    EBind()?.bind?.(id);
     if (id === "timediff" && tdA && tdB) {
       fillNowTs(tdA, false);
       fillNowDate(tdB);
@@ -1963,16 +2094,16 @@
 
   // ---- EyeDropper / image color picker ----
   try {
-    const eyePick = $("#eye-pick");
-    const eyeFile = $("#eye-file");
-    const eyeSwatch = $("#eye-swatch");
-    const eyeHex = $("#eye-hex");
-    const eyeRgb = $("#eye-rgb");
-    const eyeAhex = $("#eye-ahex");
-    const eyeImg = $("#eye-img");
-    const eyeMeta = $("#eye-meta");
-    const eyeHint = $("#eye-hint");
-    const eyeError = $("#eye-error");
+    let eyePick;
+    let eyeFile;
+    let eyeSwatch;
+    let eyeHex;
+    let eyeRgb;
+    let eyeAhex;
+    let eyeImg;
+    let eyeMeta;
+    let eyeHint;
+    let eyeError;
     const hasEyeDropper = "EyeDropper" in window;
 
     function applyPickedColor(hex) {
@@ -1985,7 +2116,19 @@
       setError(eyeError, "");
     }
 
-    if (!hasEyeDropper) {
+    bindPanel("eyedropper", () => {
+          eyePick = $("#eye-pick");
+          eyeFile = $("#eye-file");
+          eyeSwatch = $("#eye-swatch");
+          eyeHex = $("#eye-hex");
+          eyeRgb = $("#eye-rgb");
+          eyeAhex = $("#eye-ahex");
+          eyeImg = $("#eye-img");
+          eyeMeta = $("#eye-meta");
+          eyeHint = $("#eye-hint");
+          eyeError = $("#eye-error");
+
+          if (!hasEyeDropper) {
       if (eyeHint) {
         eyeHint.textContent = "当前浏览器不支持屏幕取色，请改用「上传图片取色」。Chrome / Edge 桌面版通常支持。";
       }
@@ -2066,23 +2209,24 @@
       }
     });
     applyPickedColor("#2EC4B6");
+    });
   } catch (err) {
     console.error("eyedropper init failed", err);
   }
 
   // ---- Password generator ----
   try {
-    const pwLength = $("#pw-length");
-    const pwCount = $("#pw-count");
-    const pwUpper = $("#pw-upper");
-    const pwLower = $("#pw-lower");
-    const pwNumber = $("#pw-number");
-    const pwSymbol = $("#pw-symbol");
-    const pwNoAmbiguous = $("#pw-no-ambiguous");
-    const pwOutput = $("#pw-output");
-    const pwMeta = $("#pw-meta");
-    const pwError = $("#pw-error");
-    const pwGenerate = $("#pw-generate");
+    let pwLength;
+    let pwCount;
+    let pwUpper;
+    let pwLower;
+    let pwNumber;
+    let pwSymbol;
+    let pwNoAmbiguous;
+    let pwOutput;
+    let pwMeta;
+    let pwError;
+    let pwGenerate;
 
     function genPasswords(fromClick) {
       try {
@@ -2110,7 +2254,20 @@
       }
     }
 
-    pwGenerate?.addEventListener("click", (e) => {
+    bindPanel("password", () => {
+          pwLength = $("#pw-length");
+          pwCount = $("#pw-count");
+          pwUpper = $("#pw-upper");
+          pwLower = $("#pw-lower");
+          pwNumber = $("#pw-number");
+          pwSymbol = $("#pw-symbol");
+          pwNoAmbiguous = $("#pw-no-ambiguous");
+          pwOutput = $("#pw-output");
+          pwMeta = $("#pw-meta");
+          pwError = $("#pw-error");
+          pwGenerate = $("#pw-generate");
+
+          pwGenerate?.addEventListener("click", (e) => {
       e.preventDefault();
       genPasswords(true);
     });
@@ -2119,29 +2276,30 @@
       el?.addEventListener("change", () => genPasswords(false));
     });
     genPasswords(false);
+    });
   } catch (err) {
     console.error("password init failed", err);
   }
 
   // ---- GIF maker ----
   try {
-    const gifFile = $("#gif-file");
-    const gifFramesEl = $("#gif-frames");
-    const gifDelay = $("#gif-delay");
-    const gifWidth = $("#gif-width");
-    const gifQuality = $("#gif-quality");
-    const gifMeta = $("#gif-meta");
-    const gifError = $("#gif-error");
-    const gifProgress = $("#gif-progress");
-    const gifProgressFill = $("#gif-progress-fill");
-    const gifProgressText = $("#gif-progress-text");
-    const gifPreview = $("#gif-preview");
-    const gifDownload = $("#gif-download");
-    const gifGenerate = $("#gif-generate");
-    const gifAbort = $("#gif-abort");
-    const gifCompress = $("#gif-compress");
-    const gifCompressAgain = $("#gif-compress-again");
-    const gifCompressLevel = $("#gif-compress-level");
+    let gifFile;
+    let gifFramesEl;
+    let gifDelay;
+    let gifWidth;
+    let gifQuality;
+    let gifMeta;
+    let gifError;
+    let gifProgress;
+    let gifProgressFill;
+    let gifProgressText;
+    let gifPreview;
+    let gifDownload;
+    let gifGenerate;
+    let gifAbort;
+    let gifCompress;
+    let gifCompressAgain;
+    let gifCompressLevel;
     const MAX_GIF_FRAMES = 40;
     const frames = [];
     let frameSeq = 0;
@@ -2531,7 +2689,26 @@
       }
     }
 
-    gifFile?.addEventListener("change", (e) => addFiles(e.target.files));
+    bindPanel("gifmaker", () => {
+          gifFile = $("#gif-file");
+          gifFramesEl = $("#gif-frames");
+          gifDelay = $("#gif-delay");
+          gifWidth = $("#gif-width");
+          gifQuality = $("#gif-quality");
+          gifMeta = $("#gif-meta");
+          gifError = $("#gif-error");
+          gifProgress = $("#gif-progress");
+          gifProgressFill = $("#gif-progress-fill");
+          gifProgressText = $("#gif-progress-text");
+          gifPreview = $("#gif-preview");
+          gifDownload = $("#gif-download");
+          gifGenerate = $("#gif-generate");
+          gifAbort = $("#gif-abort");
+          gifCompress = $("#gif-compress");
+          gifCompressAgain = $("#gif-compress-again");
+          gifCompressLevel = $("#gif-compress-level");
+
+          gifFile?.addEventListener("change", (e) => addFiles(e.target.files));
     $("#gif-clear")?.addEventListener("click", clearGifMakerTemps);
     window.DevToolsTemp?.registerCleanup(clearGifMakerTemps);
     $("#gif-apply-delay")?.addEventListener("click", () => {
@@ -2552,26 +2729,27 @@
       compressGeneratedGif({ again: true }).catch((err) => setError(gifError, err.message || String(err)));
     });
     updateGifMeta();
+    });
   } catch (err) {
     console.error("gif maker init failed", err);
   }
 
   // ---- GIF extract / to video ----
   try {
-    const gifxFile = $("#gifx-file");
-    const gifxFramesEl = $("#gifx-frames");
-    const gifxMeta = $("#gifx-meta");
-    const gifxError = $("#gifx-error");
-    const gifxFormat = $("#gifx-format");
-    const gifxFps = $("#gifx-fps");
-    const gifxProgress = $("#gifx-progress");
-    const gifxProgressFill = $("#gifx-progress-fill");
-    const gifxProgressText = $("#gifx-progress-text");
-    const gifxZipBtn = $("#gifx-zip");
-    const gifxVideoBtn = $("#gifx-video");
-    const gifxAbort = $("#gifx-abort");
-    const gifxDownloadVideo = $("#gifx-download-video");
-    const gifxVideoPreview = $("#gifx-video-preview");
+    let gifxFile;
+    let gifxFramesEl;
+    let gifxMeta;
+    let gifxError;
+    let gifxFormat;
+    let gifxFps;
+    let gifxProgress;
+    let gifxProgressFill;
+    let gifxProgressText;
+    let gifxZipBtn;
+    let gifxVideoBtn;
+    let gifxAbort;
+    let gifxDownloadVideo;
+    let gifxVideoPreview;
     const extracted = [];
     let videoUrl = "";
     let abortVideo = false;
@@ -2912,7 +3090,23 @@
       }
     }
 
-    gifxFile?.addEventListener("change", (e) => loadGifFile(e.target.files?.[0]));
+    bindPanel("gifmaker", () => {
+          gifxFile = $("#gifx-file");
+          gifxFramesEl = $("#gifx-frames");
+          gifxMeta = $("#gifx-meta");
+          gifxError = $("#gifx-error");
+          gifxFormat = $("#gifx-format");
+          gifxFps = $("#gifx-fps");
+          gifxProgress = $("#gifx-progress");
+          gifxProgressFill = $("#gifx-progress-fill");
+          gifxProgressText = $("#gifx-progress-text");
+          gifxZipBtn = $("#gifx-zip");
+          gifxVideoBtn = $("#gifx-video");
+          gifxAbort = $("#gifx-abort");
+          gifxDownloadVideo = $("#gifx-download-video");
+          gifxVideoPreview = $("#gifx-video-preview");
+
+          gifxFile?.addEventListener("change", (e) => loadGifFile(e.target.files?.[0]));
     $("#gifx-clear")?.addEventListener("click", clearExtracted);
     window.DevToolsTemp?.registerCleanup(clearExtracted);
     gifxZipBtn?.addEventListener("click", downloadZip);
@@ -2920,42 +3114,43 @@
     gifxAbort?.addEventListener("click", () => {
       abortVideo = true;
     });
+    });
   } catch (err) {
     console.error("gif extract init failed", err);
   }
 
   // ---- Video to GIF ----
   try {
-    const v2gFile = $("#v2g-file");
-    const v2gVideo = $("#v2g-video");
-    const v2gMeta = $("#v2g-meta");
-    const v2gError = $("#v2g-error");
-    const v2gFps = $("#v2g-fps");
-    const v2gWidth = $("#v2g-width");
-    const v2gMaxsec = $("#v2g-maxsec");
-    const v2gStart = $("#v2g-start");
-    const v2gQuality = $("#v2g-quality");
-    const v2gBrightEnable = $("#v2g-bright-enable");
-    const v2gBrightPanel = $("#v2g-bright-panel");
-    const v2gBrightPresets = $("#v2g-bright-presets");
-    const v2gBrightAmount = $("#v2g-bright-amount");
-    const v2gBrightPct = $("#v2g-bright-pct");
-    const v2gBrightReset = $("#v2g-bright-reset");
-    const v2gBrightPreview = $("#v2g-bright-preview");
-    const v2gGenerate = $("#v2g-generate");
-    const v2gGenerateWebp = $("#v2g-generate-webp");
-    const v2gBlackbox = $("#v2g-blackbox");
-    const v2gAbort = $("#v2g-abort");
-    const v2gProgress = $("#v2g-progress");
-    const v2gProgressFill = $("#v2g-progress-fill");
-    const v2gProgressText = $("#v2g-progress-text");
-    const v2gProgressSub = $("#v2g-progress-sub");
-    const v2gProgressPct = $("#v2g-progress-pct");
-    const v2gPreview = $("#v2g-preview");
-    const v2gDownload = $("#v2g-download");
-    const v2gCompress = $("#v2g-compress");
-    const v2gCompressAgain = $("#v2g-compress-again");
-    const v2gCompressLevel = $("#v2g-compress-level");
+    let v2gFile;
+    let v2gVideo;
+    let v2gMeta;
+    let v2gError;
+    let v2gFps;
+    let v2gWidth;
+    let v2gMaxsec;
+    let v2gStart;
+    let v2gQuality;
+    let v2gBrightEnable;
+    let v2gBrightPanel;
+    let v2gBrightPresets;
+    let v2gBrightAmount;
+    let v2gBrightPct;
+    let v2gBrightReset;
+    let v2gBrightPreview;
+    let v2gGenerate;
+    let v2gGenerateWebp;
+    let v2gBlackbox;
+    let v2gAbort;
+    let v2gProgress;
+    let v2gProgressFill;
+    let v2gProgressText;
+    let v2gProgressSub;
+    let v2gProgressPct;
+    let v2gPreview;
+    let v2gDownload;
+    let v2gCompress;
+    let v2gCompressAgain;
+    let v2gCompressLevel;
     const MAX_V2G_FRAMES = 300;
     const MAX_V2G_SECONDS = 600;
     const V2G_BLACKBOX_MAX_BYTES = 6 * 1024 * 1024;
@@ -4642,7 +4837,9 @@
       }
     }
 
-    v2gFile?.addEventListener("change", (e) => loadVideoFile(e.target.files?.[0]));
+    bindPanel("gifmaker", () => {
+
+          v2gFile?.addEventListener("change", (e) => loadVideoFile(e.target.files?.[0]));
     $("#v2g-clear")?.addEventListener("click", clearV2g);
     window.DevToolsTemp?.registerCleanup(clearV2g);
     v2gGenerate?.addEventListener("click", convertVideoToGif);
@@ -4702,82 +4899,84 @@
     v2gStart?.addEventListener("input", () => scheduleV2gBrightPreview({ forceCapture: true }));
     syncV2gBrightUi();
 
+
+    });
     // ---- Video split (shares FFmpeg / blackbox encoder) ----
-    const vsplitFile = $("#vsplit-file");
-    const vsplitVideo = $("#vsplit-video");
-    const vsplitMeta = $("#vsplit-meta");
-    const vsplitError = $("#vsplit-error");
-    const vsplitCount = $("#vsplit-count");
-    const vsplitCountRow = $("#vsplit-count-row");
-    const vsplitDurationRow = $("#vsplit-duration-row");
-    const vsplitManualRow = $("#vsplit-manual-row");
-    const vsplitManualTransport = $("#vsplit-manual-transport");
-    const vsplitStage = $("#vsplit-stage");
-    const vsplitScrub = $("#vsplit-scrub");
-    const vsplitScrubHome = $("#vsplit-scrub-home");
-    const vsplitScrubBlock = $("#vsplit-scrub-block");
-    const vsplitFsScrubSlot = $("#vsplit-fs-scrub-slot");
-    const vsplitScrubHit = $("#vsplit-scrub-hit");
-    const vsplitScrubMarks = $("#vsplit-scrub-marks");
-    const vsplitMarkPicker = $("#vsplit-mark-picker");
-    const vsplitMarkChips = $("#vsplit-mark-chips");
-    const vsplitScrubHint = $("#vsplit-scrub-hint");
-    const vsplitPlay = $("#vsplit-play");
-    const vsplitMute = $("#vsplit-mute");
-    const vsplitFs = $("#vsplit-fs");
-    const vsplitFsHost = $("#vsplit-fs-host");
-    const vsplitFsOpenBtn = $("#vsplit-fs-open");
-    const vsplitFsClose = $("#vsplit-fs-close");
-    const vsplitFsPlay = $("#vsplit-fs-play");
-    const vsplitFsMute = $("#vsplit-fs-mute");
-    const vsplitFsMark = $("#vsplit-fs-mark");
-    const vsplitFsUndo = $("#vsplit-fs-undo");
-    const vsplitFsNow = $("#vsplit-fs-now");
-    const vsplitFsStatus = $("#vsplit-fs-status");
-    const vsplitFsNote = $("#vsplit-fs-note");
-    const vsplitFsFlash = $("#vsplit-fs-flash");
-    const vsplitPreviewWrap = $("#vsplit-preview-wrap");
-    const vsplitManualNow = $("#vsplit-manual-now");
-    const vsplitManualCount = $("#vsplit-manual-count");
-    const vsplitManualDraft = $("#vsplit-manual-draft");
-    const vsplitMarksEl = $("#vsplit-marks");
-    const vsplitMarkTap = $("#vsplit-mark-tap");
-    const vsplitMarkUndo = $("#vsplit-mark-undo");
-    const vsplitMarkClear = $("#vsplit-mark-clear");
-    const vsplitAddBtns = $("#vsplit-add-btns");
-    const vsplitEditBar = $("#vsplit-edit-bar");
-    const vsplitEditTitle = $("#vsplit-edit-title");
-    const vsplitEditApply = $("#vsplit-edit-apply");
-    const vsplitEditDelStart = $("#vsplit-edit-del-start");
-    const vsplitEditDelEnd = $("#vsplit-edit-del-end");
-    const vsplitEditDone = $("#vsplit-edit-done");
-    const vsplitQuickExport = $("#vsplit-quick-export");
-    const vsplitQuickCut = $("#vsplit-quick-cut");
-    const vsplitQuickHq = $("#vsplit-quick-hq");
-    const vsplitNudgeM1 = $("#vsplit-nudge-m1");
-    const vsplitNudgeM01 = $("#vsplit-nudge-m01");
-    const vsplitNudgeP01 = $("#vsplit-nudge-p01");
-    const vsplitNudgeP1 = $("#vsplit-nudge-p1");
-    const vsplitH = $("#vsplit-h");
-    const vsplitM = $("#vsplit-m");
-    const vsplitS = $("#vsplit-s");
-    const vsplitFps = $("#vsplit-fps");
-    const vsplitWidth = $("#vsplit-width");
-    const vsplitQuality = $("#vsplit-quality");
-    const vsplitCut = $("#vsplit-cut");
-    const vsplitGifHq = $("#vsplit-gif-hq");
-    const vsplitMerge = $("#vsplit-merge");
-    const vsplitAbort = $("#vsplit-abort");
-    const vsplitList = $("#vsplit-list");
-    const vsplitZipVideo = $("#vsplit-zip-video");
-    const vsplitZipGif = $("#vsplit-zip-gif");
-    const vsplitMergedDl = $("#vsplit-merged-dl");
-    const vsplitMergedPreview = $("#vsplit-merged-preview");
-    const vsplitProgress = $("#vsplit-progress");
-    const vsplitProgressFill = $("#vsplit-progress-fill");
-    const vsplitProgressText = $("#vsplit-progress-text");
-    const vsplitProgressSub = $("#vsplit-progress-sub");
-    const vsplitProgressPct = $("#vsplit-progress-pct");
+    let vsplitFile;
+    let vsplitVideo;
+    let vsplitMeta;
+    let vsplitError;
+    let vsplitCount;
+    let vsplitCountRow;
+    let vsplitDurationRow;
+    let vsplitManualRow;
+    let vsplitManualTransport;
+    let vsplitStage;
+    let vsplitScrub;
+    let vsplitScrubHome;
+    let vsplitScrubBlock;
+    let vsplitFsScrubSlot;
+    let vsplitScrubHit;
+    let vsplitScrubMarks;
+    let vsplitMarkPicker;
+    let vsplitMarkChips;
+    let vsplitScrubHint;
+    let vsplitPlay;
+    let vsplitMute;
+    let vsplitFs;
+    let vsplitFsHost;
+    let vsplitFsOpenBtn;
+    let vsplitFsClose;
+    let vsplitFsPlay;
+    let vsplitFsMute;
+    let vsplitFsMark;
+    let vsplitFsUndo;
+    let vsplitFsNow;
+    let vsplitFsStatus;
+    let vsplitFsNote;
+    let vsplitFsFlash;
+    let vsplitPreviewWrap;
+    let vsplitManualNow;
+    let vsplitManualCount;
+    let vsplitManualDraft;
+    let vsplitMarksEl;
+    let vsplitMarkTap;
+    let vsplitMarkUndo;
+    let vsplitMarkClear;
+    let vsplitAddBtns;
+    let vsplitEditBar;
+    let vsplitEditTitle;
+    let vsplitEditApply;
+    let vsplitEditDelStart;
+    let vsplitEditDelEnd;
+    let vsplitEditDone;
+    let vsplitQuickExport;
+    let vsplitQuickCut;
+    let vsplitQuickHq;
+    let vsplitNudgeM1;
+    let vsplitNudgeM01;
+    let vsplitNudgeP01;
+    let vsplitNudgeP1;
+    let vsplitH;
+    let vsplitM;
+    let vsplitS;
+    let vsplitFps;
+    let vsplitWidth;
+    let vsplitQuality;
+    let vsplitCut;
+    let vsplitGifHq;
+    let vsplitMerge;
+    let vsplitAbort;
+    let vsplitList;
+    let vsplitZipVideo;
+    let vsplitZipGif;
+    let vsplitMergedDl;
+    let vsplitMergedPreview;
+    let vsplitProgress;
+    let vsplitProgressFill;
+    let vsplitProgressText;
+    let vsplitProgressSub;
+    let vsplitProgressPct;
     const VSPLIT_MAX_CLIPS = 50;
     const VSPLIT_MIN_SPAN = 0.5;
     const VSPLIT_DEFAULT_META =
@@ -7117,7 +7316,9 @@
       syncVsplitScrubFromVideo();
       paintVsplitNow();
     });
-    vsplitFile?.addEventListener("change", (e) => {
+    bindPanel("vsplit", () => {
+
+          vsplitFile?.addEventListener("change", (e) => {
       loadVsplitFile(e.target.files?.[0]).catch((err) => {
         clearVsplit();
         setError(vsplitError, err.message || String(err));
@@ -7163,49 +7364,50 @@
     applyVsplitMute();
     setVsplitButtons();
 
+
+    });
     // ---- One-click blackbox split planner (vbb) ----
-    const vbbFile = $("#vbb-file");
-    const vbbVideo = $("#vbb-video");
-    const vbbMeta = $("#vbb-meta");
-    const vbbError = $("#vbb-error");
-    const vbbAnalyze = $("#vbb-analyze");
-    const vbbRun = $("#vbb-run");
-    const vbbOneclick = $("#vbb-oneclick");
-    const vbbSplitPanel = $("#vbb-split-panel");
-    const vbbWorkflowHint = $("#vbb-workflow-hint");
-    const vbbMerge = $("#vbb-merge");
-    const vbbAbort = $("#vbb-abort");
-    const vbbZip = $("#vbb-zip");
-    const vbbMergedDl = $("#vbb-merged-dl");
-    const vbbMergedPreview = $("#vbb-merged-preview");
-    const vbbPlan = $("#vbb-plan");
-    const vbbPlanSummary = $("#vbb-plan-summary");
-    const vbbPlanList = $("#vbb-plan-list");
-    const vbbList = $("#vbb-list");
-    const vbbBatchList = $("#vbb-batch-list");
-    const vbbResultBlock = $("#vbb-result-block");
-    const vbbCustomRow = $("#vbb-custom-row");
-    const vbbTargetSpan = $("#vbb-target-span");
-    const vbbTargetRange = $("#vbb-target-range");
-    const vbbEqualize = $("#vbb-equalize");
-    const vbbManualPanel = $("#vbb-manual-panel");
-    const vbbScrub = $("#vbb-scrub");
-    const vbbPlay = $("#vbb-play");
-    const vbbManualNow = $("#vbb-manual-now");
-    const vbbManualCount = $("#vbb-manual-count");
-    const vbbManualDraft = $("#vbb-manual-draft");
-    const vbbMarkTap = $("#vbb-mark-tap");
-    const vbbMarkUndo = $("#vbb-mark-undo");
-    const vbbMarkClear = $("#vbb-mark-clear");
-    const vbbNudgeM1 = $("#vbb-nudge-m1");
-    const vbbNudgeM01 = $("#vbb-nudge-m01");
-    const vbbNudgeP01 = $("#vbb-nudge-p01");
-    const vbbNudgeP1 = $("#vbb-nudge-p1");
-    const vbbScrubMarks = $("#vbb-scrub-marks");
-    const vbbMarkChips = $("#vbb-mark-chips");
-    const vbbJumpTime = $("#vbb-jump-time");
-    const vbbJumpGo = $("#vbb-jump-go");
-    const vbbLongHint = $("#vbb-long-hint");
+    let vbbFile;
+    let vbbVideo;
+    let vbbMeta;
+    let vbbError;
+    let vbbAnalyze;
+    let vbbRun;
+    let vbbOneclick;
+    let vbbAdvanced;
+    let vbbMerge;
+    let vbbAbort;
+    let vbbZip;
+    let vbbMergedDl;
+    let vbbMergedPreview;
+    let vbbPlan;
+    let vbbPlanSummary;
+    let vbbPlanList;
+    let vbbList;
+    let vbbBatchList;
+    let vbbResultBlock;
+    let vbbCustomRow;
+    let vbbTargetSpan;
+    let vbbTargetRange;
+    let vbbEqualize;
+    let vbbManualPanel;
+    let vbbScrub;
+    let vbbPlay;
+    let vbbManualNow;
+    let vbbManualCount;
+    let vbbManualDraft;
+    let vbbMarkTap;
+    let vbbMarkUndo;
+    let vbbMarkClear;
+    let vbbNudgeM1;
+    let vbbNudgeM01;
+    let vbbNudgeP01;
+    let vbbNudgeP1;
+    let vbbScrubMarks;
+    let vbbMarkChips;
+    let vbbJumpTime;
+    let vbbJumpGo;
+    let vbbLongHint;
     const VBB_LONG_VIDEO_SEC = 180;
     const VBB_MANUAL_SEEK_DEBOUNCE_MS = 120;
     const VBB_SAMPLE_SPAN = 2.5;
@@ -7398,7 +7600,7 @@
     function paintVbbManualControls() {
       const manual = isVbbManualMode();
       if (vbbManualPanel) vbbManualPanel.hidden = !manual;
-      if (vbbSplitPanel) vbbSplitPanel.hidden = !isVbbSplitMode();
+      if (vbbAdvanced) vbbAdvanced.hidden = manual || isVbbBatchMode();
       if (vbbVideo) {
         if (manual && vbbVideo.src) {
           vbbVideo.controls = false;
@@ -7433,14 +7635,6 @@
 
     function isVbbManualMode() {
       return vbbWorkflow === "manual" && !isVbbBatchMode();
-    }
-
-    function isVbbSplitMode() {
-      return vbbWorkflow === "split" && !isVbbBatchMode();
-    }
-
-    function isVbbSingleMode() {
-      return vbbWorkflow === "single" && !isVbbBatchMode();
     }
 
     function vbbVideoDuration() {
@@ -7744,11 +7938,11 @@
         } else if (isVbbManualMode()) {
           vbbOneclick.textContent = manualCount > 0 ? `一键黑盒（${manualCount} 段）` : "一键黑盒";
         } else {
-          vbbOneclick.textContent = isVbbSplitMode() ? "分析并执行" : "一键黑盒";
+          vbbOneclick.textContent = "一键黑盒";
         }
       }
-      if (vbbAnalyze) vbbAnalyze.disabled = !hasVideo || vbbBusy || !isVbbSplitMode();
-      if (vbbRun) vbbRun.disabled = !hasPlan || vbbBusy || !isVbbSplitMode();
+      if (vbbAnalyze) vbbAnalyze.disabled = !hasVideo || vbbBusy || isVbbBatchMode() || isVbbManualMode();
+      if (vbbRun) vbbRun.disabled = !hasPlan || vbbBusy || isVbbBatchMode() || isVbbManualMode();
       if (vbbMerge) vbbMerge.disabled = gifCount < 2 || vbbBusy || isVbbBatchMode();
       if (vbbZip) vbbZip.disabled = gifCount < 1 || vbbBusy;
       if (isVbbManualMode()) paintVbbManualControls();
@@ -7760,31 +7954,8 @@
       $("#vbb-workflow-single")?.classList.toggle("is-active", vbbWorkflow === "single");
       $("#vbb-workflow-split")?.classList.toggle("is-active", vbbWorkflow === "split");
       $("#vbb-workflow-manual")?.classList.toggle("is-active", vbbWorkflow === "manual");
-      if (vbbSplitPanel) vbbSplitPanel.hidden = !isVbbSplitMode();
-      if (vbbWorkflowHint) {
-        vbbWorkflowHint.hidden = isVbbBatchMode();
-        if (!isVbbBatchMode()) {
-          if (vbbWorkflow === "single") {
-            vbbWorkflowHint.textContent = "整段视频将输出一个 GIF，无需切分或调参。";
-          } else if (vbbWorkflow === "split") {
-            vbbWorkflowHint.textContent =
-              "长视频自动切为多段 ≤6MB GIF。请先点「分析切分方案」查看段数与预估，满意后再执行。";
-          } else {
-            vbbWorkflowHint.textContent = "手动标记多段起点终点后一键转换。";
-          }
-        }
-      }
-      if (isVbbSingleMode() && vbbAnalysis) {
-        vbbAnalysis = null;
-        if (vbbPlan) vbbPlan.hidden = true;
-      }
-      if (vbbOneclick && isVbbSplitMode()) {
-        vbbOneclick.textContent = "分析并执行";
-      } else if (vbbOneclick && !isVbbBatchMode() && !isVbbManualMode()) {
-        vbbOneclick.textContent = "一键黑盒";
-      }
+      if (vbbAdvanced) vbbAdvanced.hidden = isVbbManualMode() || isVbbBatchMode();
       paintVbbManualUi();
-      setVbbButtons();
     }
 
     async function packDownloadVbbGifs({ auto = false } = {}) {
@@ -7976,55 +8147,6 @@
       return estimateVbbBlackboxPlan(bps15, span, srcW).bytes;
     }
 
-    /** 用分析阶段黑盒样片校准后的 bps，线性外推并考虑降帧 */
-    function estimateVbbBlackboxBytesCalibrated(blackboxBps, span, cal, srcW) {
-      const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
-      const calFps = Math.max(1, Number(cal?.fps) || 15);
-      const calSpan = Math.max(VBB_MIN_SPAN, Number(cal?.span) || VBB_SAMPLE_SPAN);
-      const calBytes = Math.max(1, Number(cal?.bytes) || blackboxBps * calSpan);
-      const targetFps = resolveBlackboxEstimateFpsList(s)[0];
-      let bytes;
-      if (Math.abs(s - calSpan) < 0.12) {
-        bytes = calBytes * (targetFps / calFps);
-      } else {
-        bytes = blackboxBps * s * (targetFps / calFps);
-      }
-      bytes = Math.round(bytes);
-      if (bytes <= V2G_BLACKBOX_MAX_BYTES) return bytes;
-      return Math.round(V2G_BLACKBOX_MAX_BYTES * (cal?.compressRounds > 0 ? 0.92 : 0.96));
-    }
-
-    function estimateVbbBytesForPlan(bps15, span, encode, maxW, srcW) {
-      const mode = encode === "blackbox" ? "duration" : encode || "clarity";
-      if (mode === "duration" || mode === "blackbox") {
-        if (vbbAnalysis?.blackboxBps > 0 && vbbAnalysis?.blackboxCal) {
-          return estimateVbbBlackboxBytesCalibrated(
-            vbbAnalysis.blackboxBps,
-            span,
-            vbbAnalysis.blackboxCal,
-            srcW
-          );
-        }
-        return estimateVbbBytesBlackbox(bps15, span, srcW);
-      }
-      return estimateVbbBytes(bps15, span, mode, maxW, srcW);
-    }
-
-    function summarizeVbbPlanEstimates(plan, bps15, srcW) {
-      if (!plan?.ranges?.length) return { total: 0, min: 0, max: 0 };
-      const encode = plan.encode || "blackbox";
-      const maxW = plan.maxW || vbbSampleBaseWidth(srcW);
-      const sizes = plan.ranges.map((r) =>
-        estimateVbbBytesForPlan(bps15, r.span, encode, maxW, srcW)
-      );
-      return {
-        sizes,
-        total: sizes.reduce((a, b) => a + b, 0),
-        min: Math.min(...sizes),
-        max: Math.max(...sizes),
-      };
-    }
-
     function estimateVbbFps(bps15, span, mode, width, srcW) {
       if (mode !== "duration" && mode !== "blackbox") return 15;
       return estimateVbbBlackboxPlan(bps15, span, srcW).fps;
@@ -8098,24 +8220,11 @@
       let estCompressRounds = 0;
       let outMaxW = maxW;
       if (estMode === "duration") {
-        if (vbbAnalysis?.blackboxBps > 0 && vbbAnalysis?.blackboxCal) {
-          estBytes = estimateVbbBlackboxBytesCalibrated(
-            vbbAnalysis.blackboxBps,
-            typicalSpan,
-            vbbAnalysis.blackboxCal,
-            srcW
-          );
-          const bb = estimateVbbBlackboxPlan(bps15, typicalSpan, srcW);
-          estFps = bb.fps;
-          estCompressRounds = bb.compressRounds;
-          outMaxW = vbbAnalysis.blackboxCal.maxW || bb.maxW || maxW;
-        } else {
-          const bb = estimateVbbBlackboxPlan(bps15, typicalSpan, srcW);
-          estBytes = bb.bytes;
-          estFps = bb.fps;
-          estCompressRounds = bb.compressRounds;
-          outMaxW = bb.maxW || maxW;
-        }
+        const bb = estimateVbbBlackboxPlan(bps15, typicalSpan, srcW);
+        estBytes = bb.bytes;
+        estFps = bb.fps;
+        estCompressRounds = bb.compressRounds;
+        outMaxW = bb.maxW || maxW;
       } else {
         estBytes = estimateVbbBytes(bps15, typicalSpan, estMode, maxW, srcW);
         estFps = 15;
@@ -8233,25 +8342,7 @@
       const avgSpan = ranges.reduce((a, r) => a + r.span, 0) / Math.max(1, ranges.length);
       const typicalSpan = typicalVbbSpan(ranges, target);
       if (typicalSpan > clarity.maxSpan + 0.05) {
-        let estBytes;
-        let estFps;
-        let estCompressRounds;
-        if (vbbAnalysis?.blackboxBps > 0 && vbbAnalysis?.blackboxCal) {
-          estBytes = estimateVbbBlackboxBytesCalibrated(
-            vbbAnalysis.blackboxBps,
-            typicalSpan,
-            vbbAnalysis.blackboxCal,
-            srcW
-          );
-          const estPlan = estimateVbbBlackboxPlan(bps15, typicalSpan, srcW);
-          estFps = estPlan.fps;
-          estCompressRounds = estPlan.compressRounds;
-        } else {
-          const estPlan = estimateVbbBlackboxPlan(bps15, typicalSpan, srcW);
-          estBytes = estPlan.bytes;
-          estFps = estPlan.fps;
-          estCompressRounds = estPlan.compressRounds;
-        }
+        const estPlan = estimateVbbBlackboxPlan(bps15, typicalSpan, srcW);
         return annotateVbbPlan(
           {
             key: "custom",
@@ -8261,9 +8352,9 @@
             count: ranges.length,
             avgSpan,
             typicalSpan,
-            estBytes,
-            estFps,
-            estCompressRounds,
+            estBytes: estPlan.bytes,
+            estFps: estPlan.fps,
+            estCompressRounds: estPlan.compressRounds,
             note: describeVbbExpect(
               "custom",
               typicalSpan,
@@ -8313,20 +8404,14 @@
       const active = resolveActiveVbbPlan();
       vbbAnalysis.active = active;
       if (vbbPlan) vbbPlan.hidden = false;
+      if (vbbAdvanced) vbbAdvanced.open = true;
       syncVbbModeUi();
 
       if (vbbPlanSummary && active) {
         const widthTip = active.maxW ? ` · 目标宽 ${active.maxW}` : "";
-        const fpsTip = ` · ${formatVbbFpsTip(active.estFps || 15)}`;
+        const fpsTip = ` · ${formatVbbFpsTip(active.estFps || 15, active.estCompressRounds || 0)}`;
         const warn = active.unsafe ? " ⚠ 可能超预算，执行时超限会降宽或改走黑盒。" : "";
-        const est = summarizeVbbPlanEstimates(active, vbbAnalysis.bps15, vbbAnalysis.srcW);
-        const sizeTip =
-          est.min === est.max
-            ? `预估约 ${formatKb(est.min)}/段`
-            : `预估单段 ${formatKb(est.min)}–${formatKb(est.max)}`;
-        const totalTip = est.total > 0 ? ` · 合计约 ${formatKb(est.total)}` : "";
-        const calTip = vbbAnalysis.blackboxBps > 0 ? "（按黑盒样片校准）" : "（按样片估算）";
-        vbbPlanSummary.textContent = `将生成 ${active.count} 个切片 · ${formatVbbRangesSpanTip(active.ranges)}${widthTip}${fpsTip} · ${sizeTip}${totalTip}${calTip} · ${active.note}（生成后以下方实际体积为准）${warn}`;
+        vbbPlanSummary.textContent = `将生成 ${active.count} 个切片 · ${formatVbbRangesSpanTip(active.ranges)}${widthTip}${fpsTip} · 预估约 ${formatKb(active.estBytes)}/段 · ${active.note}（体积为估算；各段预览在生成后显示）${warn}`;
       }
 
       if (vbbPlanList) vbbPlanList.innerHTML = "";
@@ -8513,11 +8598,7 @@
       syncVbbScrubFromVideo();
       syncVbbWorkflowUi();
       setVbbButtons();
-      if (isVbbSplitMode()) {
-        toast("视频已就绪，请点「分析切分方案」或「分析并执行」");
-      } else {
-        toast("视频已就绪，点「一键黑盒」即可");
-      }
+      toast("视频已就绪，点「一键黑盒」即可");
     }
 
     async function runVbbManualBlackbox() {
@@ -8820,33 +8901,6 @@
         if (abortVbb) throw new Error("已取消");
         if (!sample?.blob?.size) throw new Error("样片编码失败");
         const bps15 = sample.blob.size / Math.max(0.5, sample.span || sampleSpan);
-        setVbbProgress(true, 0.42, "分析中 · 黑盒样片校准", {
-          sub: `${sampleSpan.toFixed(1)}s · 对齐实际输出体积`,
-          busy: true,
-        });
-        if (vbbMeta) vbbMeta.textContent = `分析中 · 黑盒样片校准 ${sampleSpan.toFixed(1)}s…`;
-        const bbSample = await encodeBlackboxClip({
-          file: vbbSourceFile,
-          startSec: sampleStart,
-          span: sampleSpan,
-          srcW,
-          srcH,
-          isAborted: () => abortVbb,
-          onProgress: (local, text) => {
-            if (vbbMeta) vbbMeta.textContent = `分析中 · ${text || "黑盒样片"}`;
-          },
-        });
-        if (abortVbb) throw new Error("已取消");
-        if (!bbSample?.blob?.size) throw new Error("黑盒样片编码失败");
-        const bbSpan = Math.max(VBB_MIN_SPAN, Number(bbSample.span) || sampleSpan);
-        const blackboxBps = bbSample.blob.size / bbSpan;
-        const blackboxCal = {
-          fps: Number(bbSample.fps) || 15,
-          maxW: Math.max(64, Number(bbSample.maxW || bbSample.outW) || V2G_BLACKBOX_BASE_W),
-          span: bbSpan,
-          bytes: bbSample.blob.size,
-          compressRounds: Number(bbSample.compressRounds) || 0,
-        };
         const clarityMax = Math.max(
           VBB_MIN_SPAN,
           Math.min(VBB_CLARITY_MAX_SPAN, (V2G_BLACKBOX_MAX_BYTES * VBB_CLARITY_FILL) / bps15)
@@ -8882,10 +8936,7 @@
           srcW,
           srcH,
           bps15,
-          blackboxBps,
-          blackboxCal,
           sampleBytes: sample.blob.size,
-          blackboxSampleBytes: bbSample.blob.size,
           sampleSpan: sample.span || sampleSpan,
           clarityMax,
           durationMax,
@@ -8901,9 +8952,9 @@
         setVbbProgress(
           true,
           1,
-          `分析完成 · 样片 ${formatKb(bbSample.blob.size)} / ${bbSpan.toFixed(1)}s`
+          `分析完成 · 样片 ${formatKb(sample.blob.size)} / ${vbbAnalysis.sampleSpan.toFixed(1)}s`
         );
-        toast(`分析完成 · 默认 ${durationPlan.count} 段 · 预估已按黑盒样片校准`);
+        toast(`分析完成 · 默认 ${durationPlan.count} 段 · 可自定义段时长`);
         if (isLikelyMobileBrowser() && (duration >= 90 || (vbbSourceFile?.size || 0) >= 200 * 1024 * 1024)) {
           toast("大视频在手机上易内存不足。已优化分段写入；仍建议少段处理或用电脑。");
         }
@@ -9233,7 +9284,9 @@
     vbbFile?.addEventListener("click", () => {
       vbbFile.value = "";
     });
-    vbbFile?.addEventListener("change", (e) => {
+    bindPanel("vbb", () => {
+
+          vbbFile?.addEventListener("change", (e) => {
       loadVbbFiles(e.target.files).catch((err) => {
         clearVbb();
         setError(vbbError, err.message || String(err));
@@ -9282,8 +9335,6 @@
     });
     $("#vbb-workflow-single")?.addEventListener("click", () => {
       vbbWorkflow = "single";
-      vbbAnalysis = null;
-      if (vbbPlan) vbbPlan.hidden = true;
       syncVbbWorkflowUi();
     });
     $("#vbb-workflow-split")?.addEventListener("click", () => {
@@ -9362,22 +9413,21 @@
     syncVbbWorkflowUi();
     syncVbbModeUi();
     setVbbButtons();
-  } catch (err) {
+
+    });  } catch (err) {
     console.error("video to gif init failed", err);
   }
 
   // ---- 已有 GIF 压黑盒（gifbb，独立工具） ----
   try {
-    const gifbbPanel = $("#gifbb");
-    if (!gifbbPanel) throw new Error("skip gifbb");
-    const gifbbFile = $("#gifbb-file");
-    const gifbbMeta = $("#gifbb-meta");
-    const gifbbError = $("#gifbb-error");
-    const gifbbList = $("#gifbb-list");
-    const gifbbRun = $("#gifbb-run");
-    const gifbbZip = $("#gifbb-zip");
-    const gifbbClear = $("#gifbb-clear");
-    const gifbbAbort = $("#gifbb-abort");
+    let gifbbFile;
+    let gifbbMeta;
+    let gifbbError;
+    let gifbbList;
+    let gifbbRun;
+    let gifbbZip;
+    let gifbbClear;
+    let gifbbAbort;
     /** @type {{ file: File, outBlob?: Blob, status: string, note: string, error?: string, previewIdx?: boolean, jobProgress?: number, jobText?: string }[]} */
     let gifbbItems = [];
     let gifbbBusy = false;
@@ -9698,7 +9748,9 @@
       toast(`已打包 ${ready.length} 个 GIF`);
     }
 
-    gifbbFile?.addEventListener("change", (e) => {
+    bindPanel("gifbb", () => {
+
+          gifbbFile?.addEventListener("change", (e) => {
       loadGifbbFiles(e.target.files);
     });
     gifbbRun?.addEventListener("click", () => {
@@ -9713,24 +9765,25 @@
     });
     window.DevToolsTemp?.registerCleanup(clearGifbb);
     renderGifbbList();
+    });
   } catch (err) {
     if (String(err?.message) !== "skip gifbb") console.error("gifbb init failed", err);
   }
 
   // ---- Compress existing GIF ----
   try {
-    const gifcFile = $("#gifc-file");
-    const gifcMeta = $("#gifc-meta");
-    const gifcError = $("#gifc-error");
-    const gifcLevel = $("#gifc-compress-level");
-    const gifcCompress = $("#gifc-compress");
-    const gifcCompressAgain = $("#gifc-compress-again");
-    const gifcDownload = $("#gifc-download");
-    const gifcSource = $("#gifc-source");
-    const gifcPreview = $("#gifc-preview");
-    const gifcProgress = $("#gifc-progress");
-    const gifcProgressFill = $("#gifc-progress-fill");
-    const gifcProgressText = $("#gifc-progress-text");
+    let gifcFile;
+    let gifcMeta;
+    let gifcError;
+    let gifcLevel;
+    let gifcCompress;
+    let gifcCompressAgain;
+    let gifcDownload;
+    let gifcSource;
+    let gifcPreview;
+    let gifcProgress;
+    let gifcProgressFill;
+    let gifcProgressText;
     let sourceBlob = null;
     let workingBlob = null;
     let originalSize = 0;
@@ -9874,7 +9927,21 @@
       }
     }
 
-    gifcFile?.addEventListener("change", (e) => {
+    bindPanel("gifmaker", () => {
+          gifcFile = $("#gifc-file");
+          gifcMeta = $("#gifc-meta");
+          gifcError = $("#gifc-error");
+          gifcLevel = $("#gifc-compress-level");
+          gifcCompress = $("#gifc-compress");
+          gifcCompressAgain = $("#gifc-compress-again");
+          gifcDownload = $("#gifc-download");
+          gifcSource = $("#gifc-source");
+          gifcPreview = $("#gifc-preview");
+          gifcProgress = $("#gifc-progress");
+          gifcProgressFill = $("#gifc-progress-fill");
+          gifcProgressText = $("#gifc-progress-text");
+
+          gifcFile?.addEventListener("change", (e) => {
       loadExistingGif(e.target.files?.[0]).catch((err) => setError(gifcError, err.message || String(err)));
     });
     $("#gifc-clear")?.addEventListener("click", clearGifc);
@@ -9885,33 +9952,34 @@
     gifcCompressAgain?.addEventListener("click", () => {
       compressExistingGif({ again: true }).catch((err) => setError(gifcError, err.message || String(err)));
     });
+    });
   } catch (err) {
     console.error("gif compress existing init failed", err);
   }
 
   // ---- Edit existing GIF (crop / trim frames) ----
   try {
-    const gifeFile = $("#gife-file");
-    const gifeMeta = $("#gife-meta");
-    const gifeError = $("#gife-error");
-    const gifeTrimHead = $("#gife-trim-head");
-    const gifeTrimTail = $("#gife-trim-tail");
-    const gifeCropX = $("#gife-crop-x");
-    const gifeCropY = $("#gife-crop-y");
-    const gifeCropW = $("#gife-crop-w");
-    const gifeCropH = $("#gife-crop-h");
-    const gifeAutoCrop = $("#gife-auto-crop");
-    const gifeResetCrop = $("#gife-reset-crop");
-    const gifeCropEditor = $("#gife-crop-editor");
-    const gifeCropStage = $("#gife-crop-stage");
-    const gifeCropCanvas = $("#gife-crop-canvas");
-    const gifeCropBox = $("#gife-crop-box");
-    const gifeApply = $("#gife-apply");
-    const gifeDownload = $("#gife-download");
-    const gifePreview = $("#gife-preview");
-    const gifeProgress = $("#gife-progress");
-    const gifeProgressFill = $("#gife-progress-fill");
-    const gifeProgressText = $("#gife-progress-text");
+    let gifeFile;
+    let gifeMeta;
+    let gifeError;
+    let gifeTrimHead;
+    let gifeTrimTail;
+    let gifeCropX;
+    let gifeCropY;
+    let gifeCropW;
+    let gifeCropH;
+    let gifeAutoCrop;
+    let gifeResetCrop;
+    let gifeCropEditor;
+    let gifeCropStage;
+    let gifeCropCanvas;
+    let gifeCropBox;
+    let gifeApply;
+    let gifeDownload;
+    let gifePreview;
+    let gifeProgress;
+    let gifeProgressFill;
+    let gifeProgressText;
     const GIFE_DEFAULT_META =
       "裁剪画面（去黑边或裁掉一部分）、去掉前几帧或后几帧，再导出为新 GIF。";
     /** @type {{ canvas: HTMLCanvasElement, delay: number }[]} */
@@ -10305,7 +10373,30 @@
       syncGifeMeta();
     }
 
-    gifeFile?.addEventListener("change", (e) => {
+    bindPanel("gifmaker", () => {
+          gifeFile = $("#gife-file");
+          gifeMeta = $("#gife-meta");
+          gifeError = $("#gife-error");
+          gifeTrimHead = $("#gife-trim-head");
+          gifeTrimTail = $("#gife-trim-tail");
+          gifeCropX = $("#gife-crop-x");
+          gifeCropY = $("#gife-crop-y");
+          gifeCropW = $("#gife-crop-w");
+          gifeCropH = $("#gife-crop-h");
+          gifeAutoCrop = $("#gife-auto-crop");
+          gifeResetCrop = $("#gife-reset-crop");
+          gifeCropEditor = $("#gife-crop-editor");
+          gifeCropStage = $("#gife-crop-stage");
+          gifeCropCanvas = $("#gife-crop-canvas");
+          gifeCropBox = $("#gife-crop-box");
+          gifeApply = $("#gife-apply");
+          gifeDownload = $("#gife-download");
+          gifePreview = $("#gife-preview");
+          gifeProgress = $("#gife-progress");
+          gifeProgressFill = $("#gife-progress-fill");
+          gifeProgressText = $("#gife-progress-text");
+
+          gifeFile?.addEventListener("change", (e) => {
       loadGifeFile(e.target.files?.[0]).catch((err) => setError(gifeError, err.message || String(err)));
     });
     $("#gife-clear")?.addEventListener("click", clearGife);
@@ -10395,22 +10486,23 @@
     window.addEventListener("resize", () => {
       if (gifeFrames.length) paintGifeCropEditor();
     });
+    });
   } catch (err) {
     console.error("gif edit init failed", err);
   }
 
   // ---- Merge GIFs ----
   try {
-    const gifmFile = $("#gifm-file");
-    const gifmList = $("#gifm-list");
-    const gifmMeta = $("#gifm-meta");
-    const gifmError = $("#gifm-error");
-    const gifmMerge = $("#gifm-merge");
-    const gifmDownload = $("#gifm-download");
-    const gifmPreview = $("#gifm-preview");
-    const gifmProgress = $("#gifm-progress");
-    const gifmProgressFill = $("#gifm-progress-fill");
-    const gifmProgressText = $("#gifm-progress-text");
+    let gifmFile;
+    let gifmList;
+    let gifmMeta;
+    let gifmError;
+    let gifmMerge;
+    let gifmDownload;
+    let gifmPreview;
+    let gifmProgress;
+    let gifmProgressFill;
+    let gifmProgressText;
     const items = [];
     let mergedUrl = "";
     let merging = false;
@@ -10516,7 +10608,19 @@
       renderGifmList();
     }
 
-    gifmFile?.addEventListener("change", (e) => {
+    bindPanel("gifmaker", () => {
+          gifmFile = $("#gifm-file");
+          gifmList = $("#gifm-list");
+          gifmMeta = $("#gifm-meta");
+          gifmError = $("#gifm-error");
+          gifmMerge = $("#gifm-merge");
+          gifmDownload = $("#gifm-download");
+          gifmPreview = $("#gifm-preview");
+          gifmProgress = $("#gifm-progress");
+          gifmProgressFill = $("#gifm-progress-fill");
+          gifmProgressText = $("#gifm-progress-text");
+
+          gifmFile?.addEventListener("change", (e) => {
       const files = [...(e.target.files || [])];
       files.forEach((file) => {
         const type = String(file.type || "").toLowerCase();
@@ -10560,6 +10664,7 @@
       }
     });
     renderGifmList();
+    });
   } catch (err) {
     console.error("gif merge init failed", err);
   }
@@ -10638,14 +10743,14 @@
     const ADB_STORE_TOKEN = "devtools-adb-token";
     const ADB_FS_ROOTS_HINT_HTML =
       "对标桌面文件管理器：双栏互拖、拖入上传；文件夹优先桥端打包。Delete / F2 / Ctrl+A。「内部存储」= /storage/emulated/0。";
-    const adbBaseInput = $("#adb-base");
-    const adbTokenInput = $("#adb-token");
-    const adbDot = $("#adb-dot");
-    const adbStatusTitle = $("#adb-status-title");
-    const adbStatusText = $("#adb-status-text");
-    const adbError = $("#adb-error");
-    const adbSetupGuide = $("#adb-setup-guide");
-    const adbSetupGuideDismiss = $("#adb-setup-guide-dismiss");
+    let adbBaseInput;
+    let adbTokenInput;
+    let adbDot;
+    let adbStatusTitle;
+    let adbStatusText;
+    let adbError;
+    let adbSetupGuide;
+    let adbSetupGuideDismiss;
     const ADB_SETUP_GUIDE_HIDDEN_KEY = "devtools-adb-setup-guide-hidden-v1";
 
     function isAdbSetupGuideHidden() {
@@ -10671,20 +10776,20 @@
     syncAdbSetupGuide();
     adbSetupGuideDismiss?.addEventListener("click", dismissAdbSetupGuide);
 
-    const adbWorkspace = $("#adb-workspace");
-    const adbDeviceList = $("#adb-device-list");
-    const adbDeviceMeta = $("#adb-device-meta");
-    const adbSelectedMeta = $("#adb-selected-meta");
-    const adbFsList = $("#adb-fs-list");
-    const adbFsPath = $("#adb-fs-path");
-    const adbFsMeta = $("#adb-fs-meta");
-    const adbInfoMeta = $("#adb-info-meta");
-    const adbAppsList = $("#adb-apps-list");
-    const adbAppsMeta = $("#adb-apps-meta");
-    const adbJobsList = $("#adb-jobs-list");
-    const adbJobsMeta = $("#adb-jobs-meta");
-    const adbInstallMeta = $("#adb-install-meta");
-    const adbApkName = $("#adb-apk-name");
+    let adbWorkspace;
+    let adbDeviceList;
+    let adbDeviceMeta;
+    let adbSelectedMeta;
+    let adbFsList;
+    let adbFsPath;
+    let adbFsMeta;
+    let adbInfoMeta;
+    let adbAppsList;
+    let adbAppsMeta;
+    let adbJobsList;
+    let adbJobsMeta;
+    let adbInstallMeta;
+    let adbApkName;
     let adbConnected = false;
     let adbDevices = [];
     let adbSelected = "";
@@ -10723,12 +10828,12 @@
     let adbLocalEntries = [];
     let adbLocalChecked = new Map(); // path -> { path, name, isDir }
     let adbLocalBusy = false;
-    const adbFsPreview = $("#adb-fs-preview");
-    const adbFsPreviewTitle = $("#adb-fs-preview-title");
-    const adbFsPreviewMeta = $("#adb-fs-preview-meta");
-    const adbFsPreviewBody = $("#adb-fs-preview-body");
-    const adbFsBatch = $("#adb-fs-batch");
-    const adbFsBatchMeta = $("#adb-fs-batch-meta");
+    let adbFsPreview;
+    let adbFsPreviewTitle;
+    let adbFsPreviewMeta;
+    let adbFsPreviewBody;
+    let adbFsBatch;
+    let adbFsBatchMeta;
     const ADB_PREVIEW_IMAGE_MAX = 12 * 1024 * 1024;
     const ADB_PREVIEW_TEXT_MAX = 1.5 * 1024 * 1024;
     const ADB_PREVIEW_MEDIA_MAX = 28 * 1024 * 1024;
@@ -14158,1182 +14263,1213 @@
           : `将录制约 ${sec} 秒后结束（部分系统硬上限约 180 秒）。也可随时取消。`;
     }
 
-    $("#adb-connect")?.addEventListener("click", () => connectAdbBridge());
-    $("#adb-refresh")?.addEventListener("click", () =>
-      refreshAdbDevices().catch((err) => setError(adbError, err.message || String(err)))
-    );
-    adbBaseInput?.addEventListener("change", persistAdbSettings);
-    adbTokenInput?.addEventListener("change", persistAdbSettings);
 
-    $("#adb-dl-mac")?.addEventListener("click", (e) => {
+    bindPanel("adb", () => {
+      adbBaseInput = $("#adb-base");
+      adbTokenInput = $("#adb-token");
+      adbDot = $("#adb-dot");
+      adbStatusTitle = $("#adb-status-title");
+      adbStatusText = $("#adb-status-text");
+      adbError = $("#adb-error");
+      adbSetupGuide = $("#adb-setup-guide");
+      adbSetupGuideDismiss = $("#adb-setup-guide-dismiss");
+      adbWorkspace = $("#adb-workspace");
+      adbDeviceList = $("#adb-device-list");
+      adbDeviceMeta = $("#adb-device-meta");
+      adbSelectedMeta = $("#adb-selected-meta");
+      adbFsList = $("#adb-fs-list");
+      adbFsPath = $("#adb-fs-path");
+      adbFsMeta = $("#adb-fs-meta");
+      adbInfoMeta = $("#adb-info-meta");
+      adbAppsList = $("#adb-apps-list");
+      adbAppsMeta = $("#adb-apps-meta");
+      adbJobsList = $("#adb-jobs-list");
+      adbJobsMeta = $("#adb-jobs-meta");
+      adbInstallMeta = $("#adb-install-meta");
+      adbApkName = $("#adb-apk-name");
+      adbFsPreview = $("#adb-fs-preview");
+      adbFsPreviewTitle = $("#adb-fs-preview-title");
+      adbFsPreviewMeta = $("#adb-fs-preview-meta");
+      adbFsPreviewBody = $("#adb-fs-preview-body");
+      adbFsBatch = $("#adb-fs-batch");
+      adbFsBatchMeta = $("#adb-fs-batch-meta");
+
+      $("#adb-connect")?.addEventListener("click", () => connectAdbBridge());
+      $("#adb-refresh")?.addEventListener("click", () =>
+      refreshAdbDevices().catch((err) => setError(adbError, err.message || String(err)))
+      );
+      adbBaseInput?.addEventListener("change", persistAdbSettings);
+      adbTokenInput?.addEventListener("change", persistAdbSettings);
+
+      $("#adb-dl-mac")?.addEventListener("click", (e) => {
       e.preventDefault();
       downloadAdbScriptAndWait($("#adb-dl-mac"));
-    });
-    $("#adb-dl-win")?.addEventListener("click", (e) => {
+      });
+      $("#adb-dl-win")?.addEventListener("click", (e) => {
       e.preventDefault();
       downloadAdbScriptAndWait($("#adb-dl-win"));
-    });
-    $("#adb-dl-linux")?.addEventListener("click", (e) => {
+      });
+      $("#adb-dl-linux")?.addEventListener("click", (e) => {
       e.preventDefault();
       downloadAdbScriptAndWait($("#adb-dl-linux"));
-    });
+      });
 
-    $$(".adb-tab[data-adb-tab]").forEach((btn) => {
+      $$(".adb-tab[data-adb-tab]").forEach((btn) => {
       btn.addEventListener("click", () => switchAdbTab(btn.dataset.adbTab));
-    });
+      });
 
-    function ensureLocalPaneLoaded() {
+      function ensureLocalPaneLoaded() {
       if (!adbLocalRoots.length) return loadLocalRoots();
       if (!adbLocalPath && adbLocalRoots.length) return loadLocalPath(adbLocalRoots[0].path);
       syncLocalSaveMeta();
       return Promise.resolve();
-    }
+      }
 
-    $("#adb-fs-local-fold")?.addEventListener("toggle", (e) => {
+      $("#adb-fs-local-fold")?.addEventListener("toggle", (e) => {
       const open = Boolean(e.currentTarget?.open);
       if (open) ensureLocalPaneLoaded().catch((err) => setError(adbError, err.message || String(err)));
-    });
+      });
 
-    $("#adb-select-all")?.addEventListener("click", () => {
+      $("#adb-select-all")?.addEventListener("click", () => {
       adbChecked = new Set(adbDevices.map((d) => d.serial));
       renderAdbDevices();
-    });
-    $("#adb-select-none")?.addEventListener("click", () => {
+      });
+      $("#adb-select-none")?.addEventListener("click", () => {
       adbChecked = new Set();
       renderAdbDevices();
-    });
+      });
 
-    adbDeviceList?.addEventListener("click", (e) => {
+      adbDeviceList?.addEventListener("click", (e) => {
       const check = e.target.closest("[data-adb-check]");
       if (check) return;
       const btn = e.target.closest("[data-serial]");
       if (!btn) return;
       selectAdbDevice(btn.dataset.serial).catch((err) => setError(adbError, err.message || String(err)));
-    });
-    adbDeviceList?.addEventListener("change", (e) => {
+      });
+      adbDeviceList?.addEventListener("change", (e) => {
       const check = e.target.closest("[data-adb-check]");
       if (!check) return;
       const serial = check.dataset.adbCheck;
       if (check.checked) adbChecked.add(serial);
       else adbChecked.delete(serial);
       updateSelectedMeta();
-    });
+      });
 
-    $("#adb-fs-go")?.addEventListener("click", () => loadFs(adbFsPath?.value || "/"));
-    $("#adb-fs-refresh")?.addEventListener("click", () => loadFs(adbFsPath?.value || "/", { history: "replace" }));
-    $("#adb-fs-back")?.addEventListener("click", () => {
+      $("#adb-fs-go")?.addEventListener("click", () => loadFs(adbFsPath?.value || "/"));
+      $("#adb-fs-refresh")?.addEventListener("click", () => loadFs(adbFsPath?.value || "/", { history: "replace" }));
+      $("#adb-fs-back")?.addEventListener("click", () => {
       if (adbFsHistIdx <= 0) return;
       adbFsHistIdx -= 1;
       loadFs(adbFsHistory[adbFsHistIdx], { history: "none" });
-    });
-    $("#adb-fs-forward")?.addEventListener("click", () => {
+      });
+      $("#adb-fs-forward")?.addEventListener("click", () => {
       if (adbFsHistIdx < 0 || adbFsHistIdx >= adbFsHistory.length - 1) return;
       adbFsHistIdx += 1;
       loadFs(adbFsHistory[adbFsHistIdx], { history: "none" });
-    });
-    $("#adb-fs-shortcuts")?.addEventListener("click", (e) => {
+      });
+      $("#adb-fs-shortcuts")?.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-adb-fs-jump]");
       if (!btn) return;
       e.preventDefault();
       const target = btn.getAttribute("data-adb-fs-jump") || "/";
       loadFs(target);
-    });
-    adbFsPath?.addEventListener("keydown", (e) => {
+      });
+      adbFsPath?.addEventListener("keydown", (e) => {
       if (e.key === "Enter") loadFs(adbFsPath.value || "/");
-    });
-    $("#adb-fs-up")?.addEventListener("click", () => {
+      });
+      $("#adb-fs-up")?.addEventListener("click", () => {
       const cur = adbFsPath?.value || "/";
       if (cur === "/" || cur === "") {
-        loadFs("/");
-        return;
+      loadFs("/");
+      return;
       }
       const parts = cur.replace(/\/+$/, "").split("/");
       if (parts.length <= 1) {
-        loadFs("/");
-        return;
+      loadFs("/");
+      return;
       }
       parts.pop();
       loadFs(parts.join("/") || "/");
-    });
-    $("#adb-fs-mkdir")?.addEventListener("click", async () => {
+      });
+      $("#adb-fs-mkdir")?.addEventListener("click", async () => {
       if (!adbSelected) return;
       const name = window.prompt("新建文件夹名称");
       if (!name || !name.trim()) return;
       const target = joinRemote(adbFsPath?.value || "/", name.trim());
       try {
-        await adbFetch("/fs/mkdir", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ serial: adbSelected, path: target }),
-        });
-        toast("已创建文件夹");
-        await loadFs(adbFsPath?.value || "/");
+      await adbFetch("/fs/mkdir", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serial: adbSelected, path: target }),
+      });
+      toast("已创建文件夹");
+      await loadFs(adbFsPath?.value || "/");
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       }
-    });
-    $("#adb-fs-upload")?.addEventListener("change", async (e) => {
+      });
+      $("#adb-fs-upload")?.addEventListener("change", async (e) => {
       try {
-        await uploadAdbFiles(e.target.files || []);
+      await uploadAdbFiles(e.target.files || []);
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       } finally {
-        e.target.value = "";
+      e.target.value = "";
       }
-    });
-    $("#adb-fs-upload-dir")?.addEventListener("change", async (e) => {
+      });
+      $("#adb-fs-upload-dir")?.addEventListener("change", async (e) => {
       try {
-        await uploadAdbFiles(e.target.files || [], { relativePaths: true });
+      await uploadAdbFiles(e.target.files || [], { relativePaths: true });
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       } finally {
-        e.target.value = "";
+      e.target.value = "";
       }
-    });
-    $("#adb-fs-xfer-cancel")?.addEventListener("click", () => {
+      });
+      $("#adb-fs-xfer-cancel")?.addEventListener("click", () => {
       if (adbFsXferAbort) {
-        adbFsXferAbort.abort();
-        toast("正在取消…");
+      adbFsXferAbort.abort();
+      toast("正在取消…");
       } else {
-        hideFsXfer();
+      hideFsXfer();
       }
-    });
-    $("#adb-fs-view-list")?.addEventListener("click", () => setAdbFsView("list"));
-    $("#adb-fs-view-grid")?.addEventListener("click", () => setAdbFsView("grid"));
+      });
+      $("#adb-fs-view-list")?.addEventListener("click", () => setAdbFsView("list"));
+      $("#adb-fs-view-grid")?.addEventListener("click", () => setAdbFsView("grid"));
 
-    $("#adb-fs-local-list")?.addEventListener("click", (e) => {
+      $("#adb-fs-local-list")?.addEventListener("click", (e) => {
       const check = e.target.closest("[data-adb-local-check]");
       if (check) {
-        const path = check.dataset.adbLocalCheck || "";
-        const row = check.closest(".adb-fs-local-row");
-        const name = row?.dataset.adbLocalName || basenameRemote(path);
-        const isDir = row?.dataset.adbLocalDir === "1";
-        if (check.checked) adbLocalChecked.set(path, { path, name, isDir });
-        else adbLocalChecked.delete(path);
-        row?.classList.toggle("is-checked", check.checked);
-        syncLocalPushBtn();
-        return;
+      const path = check.dataset.adbLocalCheck || "";
+      const row = check.closest(".adb-fs-local-row");
+      const name = row?.dataset.adbLocalName || basenameRemote(path);
+      const isDir = row?.dataset.adbLocalDir === "1";
+      if (check.checked) adbLocalChecked.set(path, { path, name, isDir });
+      else adbLocalChecked.delete(path);
+      row?.classList.toggle("is-checked", check.checked);
+      syncLocalPushBtn();
+      return;
       }
       const openEl = e.target.closest("[data-adb-local-open]");
       if (openEl?.dataset.adbLocalOpen) {
-        loadLocalPath(openEl.dataset.adbLocalOpen).catch((err) => setError(adbError, err.message || String(err)));
+      loadLocalPath(openEl.dataset.adbLocalOpen).catch((err) => setError(adbError, err.message || String(err)));
       }
-    });
-    $("#adb-fs-local-up")?.addEventListener("click", () => {
+      });
+      $("#adb-fs-local-up")?.addEventListener("click", () => {
       if (!adbLocalPath) return;
       loadLocalPath(parentOfLocalPath(adbLocalPath)).catch((err) => setError(adbError, err.message || String(err)));
-    });
-    $("#adb-fs-local-go")?.addEventListener("click", () => {
+      });
+      $("#adb-fs-local-go")?.addEventListener("click", () => {
       const p = $("#adb-fs-local-path")?.value || "";
       if (p) loadLocalPath(p).catch((err) => setError(adbError, err.message || String(err)));
-    });
-    $("#adb-fs-local-path")?.addEventListener("keydown", (e) => {
+      });
+      $("#adb-fs-local-path")?.addEventListener("keydown", (e) => {
       if (e.key === "Enter") $("#adb-fs-local-go")?.click();
-    });
-    $("#adb-fs-local-roots")?.addEventListener("click", (e) => {
+      });
+      $("#adb-fs-local-roots")?.addEventListener("click", (e) => {
       const btn = e.target.closest("[data-adb-local-root]");
       if (!btn) return;
       loadLocalPath(btn.dataset.adbLocalRoot || "").catch((err) => setError(adbError, err.message || String(err)));
-    });
-    $("#adb-fs-local-push")?.addEventListener("click", async () => {
+      });
+      $("#adb-fs-local-push")?.addEventListener("click", async () => {
       if (!adbSelected) {
-        toast("请先选择设备");
-        return;
+      toast("请先选择设备");
+      return;
       }
       const items = [...adbLocalChecked.values()];
       if (!items.length) return;
       if (!adbFsDirWritable) {
-        toast("当前设备目录只读，无法推送");
-        return;
+      toast("当前设备目录只读，无法推送");
+      return;
       }
       const remoteDir = adbFsPath?.value || "/";
       try {
-        const data = await adbFetch("/local/push", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ serial: adbSelected, paths: items.map((it) => it.path), remoteDir }),
-        });
-        const results = data.results || [];
-        const ok = results.filter((r) => r.ok).length;
-        const fail = results.length - ok;
-        toast(fail ? `已推送 ${ok} 项，失败 ${fail} 项` : `已推送 ${ok} 项`);
-        adbLocalChecked.clear();
-        renderLocalList();
-        syncLocalPushBtn();
-        await loadFs(remoteDir, { history: "replace" });
+      const data = await adbFetch("/local/push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serial: adbSelected, paths: items.map((it) => it.path), remoteDir }),
+      });
+      const results = data.results || [];
+      const ok = results.filter((r) => r.ok).length;
+      const fail = results.length - ok;
+      toast(fail ? `已推送 ${ok} 项，失败 ${fail} 项` : `已推送 ${ok} 项`);
+      adbLocalChecked.clear();
+      renderLocalList();
+      syncLocalPushBtn();
+      await loadFs(remoteDir, { history: "replace" });
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       }
-    });
+      });
 
-    adbFsList?.addEventListener("click", async (e) => {
+      adbFsList?.addEventListener("click", async (e) => {
       const sortBtn = e.target.closest("[data-adb-fs-sort]");
       if (sortBtn) {
-        e.preventDefault();
-        e.stopPropagation();
-        const key = sortBtn.dataset.adbFsSort || "name";
-        if (adbFsSortKey === key) adbFsSortDir *= -1;
-        else {
-          adbFsSortKey = key;
-          adbFsSortDir = 1;
-        }
-        paintFsList();
-        return;
+      e.preventDefault();
+      e.stopPropagation();
+      const key = sortBtn.dataset.adbFsSort || "name";
+      if (adbFsSortKey === key) adbFsSortDir *= -1;
+      else {
+      adbFsSortKey = key;
+      adbFsSortDir = 1;
+      }
+      paintFsList();
+      return;
       }
       const moreBtn = e.target.closest("[data-adb-fs-more]");
       if (moreBtn) {
-        e.preventDefault();
-        e.stopPropagation();
-        const row = moreBtn.closest(".adb-fs-row");
-        const entry = collectFsEntrySelection(row);
-        const rect = moreBtn.getBoundingClientRect();
-        showFsCtxMenu(entry, rect.left, rect.bottom + 4);
-        return;
+      e.preventDefault();
+      e.stopPropagation();
+      const row = moreBtn.closest(".adb-fs-row");
+      const entry = collectFsEntrySelection(row);
+      const rect = moreBtn.getBoundingClientRect();
+      showFsCtxMenu(entry, rect.left, rect.bottom + 4);
+      return;
       }
       const check = e.target.closest(".adb-fs-check");
       if (check) {
-        e.stopPropagation();
-        hideFsCtxMenu();
-        const row = check.closest(".adb-fs-row");
-        const entry = collectFsEntrySelection(row);
-        if (!entry || entry.virtual) return;
-        if (check.checked) adbFsChecked.set(entry.path, entry);
-        else adbFsChecked.delete(entry.path);
-        syncFsBatchBar();
-        return;
+      e.stopPropagation();
+      hideFsCtxMenu();
+      const row = check.closest(".adb-fs-row");
+      const entry = collectFsEntrySelection(row);
+      if (!entry || entry.virtual) return;
+      if (check.checked) adbFsChecked.set(entry.path, entry);
+      else adbFsChecked.delete(entry.path);
+      syncFsBatchBar();
+      return;
       }
       hideFsCtxMenu();
       const row = e.target.closest(".adb-fs-row[data-adb-entry]");
       if (!row) return;
       // 单击：目录/虚拟包打开，文件预览
       if (row.dataset.adbOpen) {
-        loadFs(row.dataset.adbOpen);
-        return;
+      loadFs(row.dataset.adbOpen);
+      return;
       }
       if (row.dataset.adbFile) {
-        adbFsList.querySelectorAll(".adb-fs-row.is-selected").forEach((r) => r.classList.remove("is-selected"));
-        row.classList.add("is-selected");
-        adbFsSelected = row.dataset.adbFile || "";
-        showFsProps(collectFsEntrySelection(row));
-        previewAdbFile(row.dataset.adbFile, row.dataset.adbFileName, row.dataset.adbFileSize).catch((err) =>
-          setError(adbError, err.message || String(err))
-        );
+      adbFsList.querySelectorAll(".adb-fs-row.is-selected").forEach((r) => r.classList.remove("is-selected"));
+      row.classList.add("is-selected");
+      adbFsSelected = row.dataset.adbFile || "";
+      showFsProps(collectFsEntrySelection(row));
+      previewAdbFile(row.dataset.adbFile, row.dataset.adbFileName, row.dataset.adbFileSize).catch((err) =>
+      setError(adbError, err.message || String(err))
+      );
       }
-    });
-    $("#adb-fs-filter")?.addEventListener("input", () => {
+      });
+      $("#adb-fs-filter")?.addEventListener("input", () => {
       paintFsList();
       if (adbFsMeta && adbFsPathCache) {
-        const total = (adbFsEntriesCache || []).length;
-        const q = String($("#adb-fs-filter")?.value || "").trim();
-        adbFsMeta.textContent = q
-          ? `筛选中 · 共 ${total} 项 · ${adbFsPathCache}`
-          : `${total} 项 · ${adbFsPathCache}`;
+      const total = (adbFsEntriesCache || []).length;
+      const q = String($("#adb-fs-filter")?.value || "").trim();
+      adbFsMeta.textContent = q
+      ? `筛选中 · 共 ${total} 项 · ${adbFsPathCache}`
+      : `${total} 项 · ${adbFsPathCache}`;
       }
-    });
-    {
+      });
+      {
       const dropEl = $("#adb-fs-workspace") || adbFsList;
       const localDrop = $("#adb-fs-local") || $(".adb-fs-pane-local");
       const hasFiles = (dt) => dt && [...(dt.types || [])].includes("Files");
       const hasLocalPaths = (dt) =>
-        dt && ([...(dt.types || [])].includes("application/x-adb-local-paths") || dt.getData?.("application/x-adb-local-paths"));
+      dt && ([...(dt.types || [])].includes("application/x-adb-local-paths") || dt.getData?.("application/x-adb-local-paths"));
       const hasDevicePaths = (dt) =>
-        dt && ([...(dt.types || [])].includes("application/x-adb-device-paths") || dt.getData?.("application/x-adb-device-paths"));
+      dt && ([...(dt.types || [])].includes("application/x-adb-device-paths") || dt.getData?.("application/x-adb-device-paths"));
       const readEntryFile = (fileEntry) =>
-        new Promise((resolve, reject) => {
-          fileEntry.file(resolve, reject);
-        });
+      new Promise((resolve, reject) => {
+      fileEntry.file(resolve, reject);
+      });
       const readEntries = (reader) =>
-        new Promise((resolve, reject) => {
-          reader.readEntries(resolve, reject);
-        });
+      new Promise((resolve, reject) => {
+      reader.readEntries(resolve, reject);
+      });
       async function walkEntry(entry, prefix, out) {
-        if (!entry) return;
-        if (entry.isFile) {
-          const file = await readEntryFile(entry);
-          try {
-            Object.defineProperty(file, "webkitRelativePath", {
-              configurable: true,
-              value: prefix ? `${prefix}/${file.name}` : file.name,
-            });
-          } catch (_) {
-            /* ignore */
-          }
-          out.push(file);
-          return;
-        }
-        if (entry.isDirectory) {
-          const reader = entry.createReader();
-          const nextPrefix = prefix ? `${prefix}/${entry.name}` : entry.name;
-          while (true) {
-            const batch = await readEntries(reader);
-            if (!batch.length) break;
-            for (const child of batch) {
-              await walkEntry(child, nextPrefix, out);
-            }
-          }
-        }
+      if (!entry) return;
+      if (entry.isFile) {
+      const file = await readEntryFile(entry);
+      try {
+      Object.defineProperty(file, "webkitRelativePath", {
+      configurable: true,
+      value: prefix ? `${prefix}/${file.name}` : file.name,
+      });
+      } catch (_) {
+      /* ignore */
+      }
+      out.push(file);
+      return;
+      }
+      if (entry.isDirectory) {
+      const reader = entry.createReader();
+      const nextPrefix = prefix ? `${prefix}/${entry.name}` : entry.name;
+      while (true) {
+      const batch = await readEntries(reader);
+      if (!batch.length) break;
+      for (const child of batch) {
+      await walkEntry(child, nextPrefix, out);
+      }
+      }
+      }
       }
       async function collectDroppedFiles(dt) {
-        const out = [];
-        const items = dt?.items ? [...dt.items] : [];
-        if (items.some((it) => typeof it.webkitGetAsEntry === "function" && it.webkitGetAsEntry())) {
-          for (const item of items) {
-            if (item.kind !== "file") continue;
-            const entry = item.webkitGetAsEntry?.();
-            if (entry) await walkEntry(entry, "", out);
-            else if (item.getAsFile) {
-              const f = item.getAsFile();
-              if (f) out.push(f);
-            }
-          }
-          return out;
-        }
-        return [...(dt?.files || [])];
+      const out = [];
+      const items = dt?.items ? [...dt.items] : [];
+      if (items.some((it) => typeof it.webkitGetAsEntry === "function" && it.webkitGetAsEntry())) {
+      for (const item of items) {
+      if (item.kind !== "file") continue;
+      const entry = item.webkitGetAsEntry?.();
+      if (entry) await walkEntry(entry, "", out);
+      else if (item.getAsFile) {
+      const f = item.getAsFile();
+      if (f) out.push(f);
+      }
+      }
+      return out;
+      }
+      return [...(dt?.files || [])];
       }
       async function pushLocalPathsToDevice(paths) {
-        if (!paths?.length || !adbSelected) return;
-        if (!adbFsDirWritable) {
-          toast("当前设备目录只读，无法接收");
-          return;
-        }
-        const remoteDir = adbFsPath?.value || "/";
-        const data = await adbFetch("/local/push", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ serial: adbSelected, paths, remoteDir }),
-        });
-        const results = data.results || [];
-        const ok = results.filter((r) => r.ok).length;
-        const fail = results.length - ok;
-        toast(fail ? `已推送 ${ok} 项，失败 ${fail} 项` : `已推送 ${ok} 项`);
-        await loadFs(remoteDir, { history: "replace" });
+      if (!paths?.length || !adbSelected) return;
+      if (!adbFsDirWritable) {
+      toast("当前设备目录只读，无法接收");
+      return;
+      }
+      const remoteDir = adbFsPath?.value || "/";
+      const data = await adbFetch("/local/push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serial: adbSelected, paths, remoteDir }),
+      });
+      const results = data.results || [];
+      const ok = results.filter((r) => r.ok).length;
+      const fail = results.length - ok;
+      toast(fail ? `已推送 ${ok} 项，失败 ${fail} 项` : `已推送 ${ok} 项`);
+      await loadFs(remoteDir, { history: "replace" });
       }
       async function pullDevicePathsToLocal(items) {
-        if (!items?.length || !canLocalPull()) {
-          toast(canLocalPull() ? "无项目" : "本机直存不可用，请更新桥 ≥0.6.11");
-          return;
-        }
-        for (const it of items) {
-          if (it.isDir) await pullRemoteToLocalDir(it.path, it.name);
-          else await pullRemoteToLocalDir(it.path, it.name);
-        }
-        toast(`已保存 ${items.length} 项到本机`);
-        loadLocalPath(adbLocalPath).catch(() => {});
+      if (!items?.length || !canLocalPull()) {
+      toast(canLocalPull() ? "无项目" : "本机直存不可用，请更新桥 ≥0.6.11");
+      return;
+      }
+      for (const it of items) {
+      if (it.isDir) await pullRemoteToLocalDir(it.path, it.name);
+      else await pullRemoteToLocalDir(it.path, it.name);
+      }
+      toast(`已保存 ${items.length} 项到本机`);
+      loadLocalPath(adbLocalPath).catch(() => {});
       }
 
       // OS files → device
       dropEl?.addEventListener("dragenter", (e) => {
-        if (!hasFiles(e.dataTransfer) && !hasLocalPaths(e.dataTransfer)) return;
-        e.preventDefault();
-        dropEl.classList.add("is-drop");
-        adbFsList?.classList.add("is-drop");
+      if (!hasFiles(e.dataTransfer) && !hasLocalPaths(e.dataTransfer)) return;
+      e.preventDefault();
+      dropEl.classList.add("is-drop");
+      adbFsList?.classList.add("is-drop");
       });
       dropEl?.addEventListener("dragover", (e) => {
-        if (!hasFiles(e.dataTransfer) && !hasLocalPaths(e.dataTransfer)) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "copy";
-        dropEl.classList.add("is-drop");
-        adbFsList?.classList.add("is-drop");
+      if (!hasFiles(e.dataTransfer) && !hasLocalPaths(e.dataTransfer)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      dropEl.classList.add("is-drop");
+      adbFsList?.classList.add("is-drop");
       });
       dropEl?.addEventListener("dragleave", (e) => {
-        if (e.relatedTarget && dropEl.contains(e.relatedTarget)) return;
-        dropEl.classList.remove("is-drop");
-        adbFsList?.classList.remove("is-drop");
+      if (e.relatedTarget && dropEl.contains(e.relatedTarget)) return;
+      dropEl.classList.remove("is-drop");
+      adbFsList?.classList.remove("is-drop");
       });
       dropEl?.addEventListener("drop", (e) => {
-        e.preventDefault();
-        dropEl.classList.remove("is-drop");
-        adbFsList?.classList.remove("is-drop");
-        try {
-          const rawLocal = e.dataTransfer.getData("application/x-adb-local-paths");
-          if (rawLocal) {
-            const paths = JSON.parse(rawLocal);
-            pushLocalPathsToDevice(paths).catch((err) => setError(adbError, err.message || String(err)));
-            return;
-          }
-        } catch (_) {
-          /* fall through */
-        }
-        if (!hasFiles(e.dataTransfer)) return;
-        collectDroppedFiles(e.dataTransfer)
-          .then((files) => {
-            if (!files.length) return;
-            const hasRel = files.some((f) => f.webkitRelativePath && f.webkitRelativePath.includes("/"));
-            return uploadAdbFiles(files, { relativePaths: hasRel });
-          })
-          .catch((err) => setError(adbError, err.message || String(err)));
+      e.preventDefault();
+      dropEl.classList.remove("is-drop");
+      adbFsList?.classList.remove("is-drop");
+      try {
+      const rawLocal = e.dataTransfer.getData("application/x-adb-local-paths");
+      if (rawLocal) {
+      const paths = JSON.parse(rawLocal);
+      pushLocalPathsToDevice(paths).catch((err) => setError(adbError, err.message || String(err)));
+      return;
+      }
+      } catch (_) {
+      /* fall through */
+      }
+      if (!hasFiles(e.dataTransfer)) return;
+      collectDroppedFiles(e.dataTransfer)
+      .then((files) => {
+      if (!files.length) return;
+      const hasRel = files.some((f) => f.webkitRelativePath && f.webkitRelativePath.includes("/"));
+      return uploadAdbFiles(files, { relativePaths: hasRel });
+      })
+      .catch((err) => setError(adbError, err.message || String(err)));
       });
 
       // device → local
       localDrop?.addEventListener("dragenter", (e) => {
-        if (!hasDevicePaths(e.dataTransfer)) return;
-        e.preventDefault();
-        localDrop.classList.add("is-drop");
+      if (!hasDevicePaths(e.dataTransfer)) return;
+      e.preventDefault();
+      localDrop.classList.add("is-drop");
       });
       localDrop?.addEventListener("dragover", (e) => {
-        if (!hasDevicePaths(e.dataTransfer)) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "copy";
-        localDrop.classList.add("is-drop");
+      if (!hasDevicePaths(e.dataTransfer)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      localDrop.classList.add("is-drop");
       });
       localDrop?.addEventListener("dragleave", (e) => {
-        if (e.relatedTarget && localDrop.contains(e.relatedTarget)) return;
-        localDrop.classList.remove("is-drop");
+      if (e.relatedTarget && localDrop.contains(e.relatedTarget)) return;
+      localDrop.classList.remove("is-drop");
       });
       localDrop?.addEventListener("drop", (e) => {
-        e.preventDefault();
-        localDrop.classList.remove("is-drop");
-        try {
-          const raw = e.dataTransfer.getData("application/x-adb-device-paths");
-          if (!raw) return;
-          const items = JSON.parse(raw);
-          pullDevicePathsToLocal(items).catch((err) => setError(adbError, err.message || String(err)));
-        } catch (err) {
-          setError(adbError, err.message || String(err));
-        }
+      e.preventDefault();
+      localDrop.classList.remove("is-drop");
+      try {
+      const raw = e.dataTransfer.getData("application/x-adb-device-paths");
+      if (!raw) return;
+      const items = JSON.parse(raw);
+      pullDevicePathsToLocal(items).catch((err) => setError(adbError, err.message || String(err)));
+      } catch (err) {
+      setError(adbError, err.message || String(err));
+      }
       });
 
       // dragstart: local rows → device
       $("#adb-fs-local-list")?.addEventListener("dragstart", (e) => {
-        const row = e.target.closest(".adb-fs-local-row[data-adb-local-path]");
-        if (!row) return;
-        const path = row.dataset.adbLocalPath;
-        if (!path) return;
-        const paths =
-          adbLocalChecked.size && adbLocalChecked.has(path)
-            ? [...adbLocalChecked.keys()]
-            : [path];
-        e.dataTransfer.effectAllowed = "copy";
-        e.dataTransfer.setData("application/x-adb-local-paths", JSON.stringify(paths));
-        e.dataTransfer.setData("text/plain", paths.join("\n"));
+      const row = e.target.closest(".adb-fs-local-row[data-adb-local-path]");
+      if (!row) return;
+      const path = row.dataset.adbLocalPath;
+      if (!path) return;
+      const paths =
+      adbLocalChecked.size && adbLocalChecked.has(path)
+      ? [...adbLocalChecked.keys()]
+      : [path];
+      e.dataTransfer.effectAllowed = "copy";
+      e.dataTransfer.setData("application/x-adb-local-paths", JSON.stringify(paths));
+      e.dataTransfer.setData("text/plain", paths.join("\n"));
       });
 
       // dragstart: device rows → local
       adbFsList?.addEventListener("dragstart", (e) => {
-        const row = e.target.closest(".adb-fs-row[data-adb-entry]");
-        if (!row || row.classList.contains("is-virtual")) return;
-        if (e.target.closest(".adb-fs-check") || e.target.closest("[data-adb-fs-more]")) {
-          e.preventDefault();
-          return;
-        }
-        const entry = collectFsEntrySelection(row);
-        if (!entry) return;
-        const items =
-          adbFsChecked.size && adbFsChecked.has(entry.path)
-            ? [...adbFsChecked.values()]
-            : [entry];
-        e.dataTransfer.effectAllowed = "copy";
-        e.dataTransfer.setData(
-          "application/x-adb-device-paths",
-          JSON.stringify(items.map((it) => ({ path: it.path, name: it.name, isDir: !!it.isDir })))
-        );
-        e.dataTransfer.setData("text/plain", items.map((it) => it.path).join("\n"));
+      const row = e.target.closest(".adb-fs-row[data-adb-entry]");
+      if (!row || row.classList.contains("is-virtual")) return;
+      if (e.target.closest(".adb-fs-check") || e.target.closest("[data-adb-fs-more]")) {
+      e.preventDefault();
+      return;
+      }
+      const entry = collectFsEntrySelection(row);
+      if (!entry) return;
+      const items =
+      adbFsChecked.size && adbFsChecked.has(entry.path)
+      ? [...adbFsChecked.values()]
+      : [entry];
+      e.dataTransfer.effectAllowed = "copy";
+      e.dataTransfer.setData(
+      "application/x-adb-device-paths",
+      JSON.stringify(items.map((it) => ({ path: it.path, name: it.name, isDir: !!it.isDir })))
+      );
+      e.dataTransfer.setData("text/plain", items.map((it) => it.path).join("\n"));
       });
-    }
-    adbFsList?.addEventListener("contextmenu", (e) => {
+      }
+      adbFsList?.addEventListener("contextmenu", (e) => {
       const row = e.target.closest(".adb-fs-row[data-adb-entry]");
       if (!row || row.classList.contains("is-virtual")) return;
       if (e.target.closest(".adb-fs-check")) return;
       e.preventDefault();
       const entry = collectFsEntrySelection(row);
       showFsCtxMenu(entry, e.clientX, e.clientY);
-    });
-    document.addEventListener("click", (e) => {
+      });
+      document.addEventListener("click", (e) => {
       if (e.target.closest("#adb-fs-ctx") || e.target.closest("[data-adb-fs-more]")) return;
       hideFsCtxMenu();
       if (!e.target.closest("#adb-app-ctx")) hideAppCtxMenu();
-    });
-    document.addEventListener("keydown", (e) => {
+      });
+      document.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
-        hideFsCtxMenu();
-        hideAppCtxMenu();
+      hideFsCtxMenu();
+      hideAppCtxMenu();
       }
-    });
-    document.addEventListener("keydown", (e) => {
+      });
+      document.addEventListener("keydown", (e) => {
       if (adbTab !== "files") return;
       const tag = (e.target && e.target.tagName) || "";
       const typing =
-        tag === "INPUT" ||
-        tag === "TEXTAREA" ||
-        tag === "SELECT" ||
-        (e.target && e.target.isContentEditable);
+      tag === "INPUT" ||
+      tag === "TEXTAREA" ||
+      tag === "SELECT" ||
+      (e.target && e.target.isContentEditable);
       if (typing) return;
       const mod = e.ctrlKey || e.metaKey;
       if (mod && e.key.toLowerCase() === "a") {
-        e.preventDefault();
-        $("#adb-fs-select-all")?.click();
-        return;
+      e.preventDefault();
+      $("#adb-fs-select-all")?.click();
+      return;
       }
       if (e.key === "Escape") {
-        hideFsCtxMenu();
-        clearFsChecked();
-        clearAdbFsPreview();
-        return;
+      hideFsCtxMenu();
+      clearFsChecked();
+      clearAdbFsPreview();
+      return;
       }
       const selectedRow =
-        adbFsList?.querySelector(".adb-fs-row.is-selected[data-adb-entry]") ||
-        adbFsList?.querySelector(".adb-fs-row.is-checked[data-adb-entry]");
+      adbFsList?.querySelector(".adb-fs-row.is-selected[data-adb-entry]") ||
+      adbFsList?.querySelector(".adb-fs-row.is-checked[data-adb-entry]");
       if (e.key === "F2") {
-        e.preventDefault();
-        const entry = collectFsEntrySelection(selectedRow);
-        if (entry && !entry.virtual) runFsEntryAction("rename", entry);
-        return;
+      e.preventDefault();
+      const entry = collectFsEntrySelection(selectedRow);
+      if (entry && !entry.virtual) runFsEntryAction("rename", entry);
+      return;
       }
       if (e.key === "Delete" || e.key === "Backspace") {
-        if (adbFsChecked.size) {
-          e.preventDefault();
-          $("#adb-fs-batch-del")?.click();
-          return;
-        }
-        const entry = collectFsEntrySelection(selectedRow);
-        if (entry && !entry.virtual) {
-          e.preventDefault();
-          runFsEntryAction("delete", entry);
-        }
-        return;
+      if (adbFsChecked.size) {
+      e.preventDefault();
+      $("#adb-fs-batch-del")?.click();
+      return;
+      }
+      const entry = collectFsEntrySelection(selectedRow);
+      if (entry && !entry.virtual) {
+      e.preventDefault();
+      runFsEntryAction("delete", entry);
+      }
+      return;
       }
       if (e.key === "Enter") {
-        const entry = collectFsEntrySelection(selectedRow);
-        if (!entry) return;
-        e.preventDefault();
-        if (entry.isDir || entry.virtual) runFsEntryAction("open", entry);
-        else runFsEntryAction("preview", entry);
+      const entry = collectFsEntrySelection(selectedRow);
+      if (!entry) return;
+      e.preventDefault();
+      if (entry.isDir || entry.virtual) runFsEntryAction("open", entry);
+      else runFsEntryAction("preview", entry);
       }
-    });
-    window.addEventListener("scroll", hideFsCtxMenu, true);
-    $("#adb-fs-preview-close")?.addEventListener("click", () => clearAdbFsPreview());
-    $("#adb-fs-select-all")?.addEventListener("click", () => {
+      });
+      window.addEventListener("scroll", hideFsCtxMenu, true);
+      $("#adb-fs-preview-close")?.addEventListener("click", () => clearAdbFsPreview());
+      $("#adb-fs-select-all")?.addEventListener("click", () => {
       adbFsList?.querySelectorAll(".adb-fs-row[data-adb-entry]:not(.is-virtual)").forEach((row) => {
-        const entry = collectFsEntrySelection(row);
-        if (entry) adbFsChecked.set(entry.path, entry);
+      const entry = collectFsEntrySelection(row);
+      if (entry) adbFsChecked.set(entry.path, entry);
       });
       syncFsBatchBar();
-    });
-    $("#adb-fs-select-none")?.addEventListener("click", () => clearFsChecked());
-    $("#adb-fs-batch-dl")?.addEventListener("click", async () => {
+      });
+      $("#adb-fs-select-none")?.addEventListener("click", () => clearFsChecked());
+      $("#adb-fs-batch-dl")?.addEventListener("click", async () => {
       const items = [...adbFsChecked.values()];
       if (!items.length) {
-        toast("请先勾选要下载的文件或文件夹");
-        return;
+      toast("请先勾选要下载的文件或文件夹");
+      return;
       }
       if (adbFsXferBusy) {
-        toast("已有传输进行中");
-        return;
+      toast("已有传输进行中");
+      return;
       }
       adbFsXferBusy = true;
       const controller = new AbortController();
       adbFsXferAbort = controller;
       const started = performance.now();
       try {
-        for (let i = 0; i < items.length; i++) {
-          if (controller.signal.aborted) throw new DOMException("aborted", "AbortError");
-          const it = items[i];
-          if (it.isDir) {
-            updateFsXfer({
-              title: `批量下载 ${i + 1}/${items.length} · ${canLocalPull() ? "拉取文件夹" : "打包文件夹"}`,
-              name: it.name,
-              loaded: i,
-              total: items.length,
-              started,
-            });
-            if (canLocalPull()) {
-              await pullRemoteToLocalDir(it.path, it.name, { signal: controller.signal });
-              toast(`「${it.name}」已保存到本机目录`);
-            } else if (canFsZip()) {
-              const res = await adbFetch(
-                `/fs/zip?serial=${encodeURIComponent(adbSelected)}&path=${encodeURIComponent(it.path)}`,
-                { signal: controller.signal }
-              );
-              const blob = await res.blob();
-              downloadBlobFile(blob, `${it.name || basenameRemote(it.path) || "folder"}.zip`);
-              toast(`「${it.name}」已桥端打包下载`);
-            } else {
-              const { blob, count, skipped } = await downloadFolderBlob(it.path, {
-                signal: controller.signal,
-                onProgress: ({ name: n }) => {
-                  updateFsXfer({
-                    title: `批量下载 ${i + 1}/${items.length} · 打包文件夹`,
-                    name: n,
-                    loaded: i,
-                    total: items.length,
-                    started,
-                  });
-                },
-              });
-              downloadBlobFile(blob, `${it.name || basenameRemote(it.path) || "folder"}.zip`);
-              toast(skipped ? `「${it.name}」已打包 ${count} 个文件（已达上限）` : `「${it.name}」已打包 ${count} 个文件`);
-            }
-          } else {
-            updateFsXfer({
-              title: `批量下载 ${i + 1}/${items.length}`,
-              name: it.name,
-              loaded: i,
-              total: items.length,
-              started,
-            });
-            await downloadAdbFile(it.path, it.name, { nested: true, signal: controller.signal });
-          }
-        }
-        toast(canLocalPull() ? `已保存 ${items.length} 项到本机目录` : `已开始下载 ${items.length} 项`);
-        if (canLocalPull()) {
-          loadLocalPath(adbLocalPath).catch(() => {});
-        }
-      } catch (err) {
-        if (err?.name === "AbortError") toast("已取消批量下载");
-        else setError(adbError, err.message || String(err));
-      } finally {
-        adbFsXferBusy = false;
-        adbFsXferAbort = null;
-        hideFsXfer();
+      for (let i = 0; i < items.length; i++) {
+      if (controller.signal.aborted) throw new DOMException("aborted", "AbortError");
+      const it = items[i];
+      if (it.isDir) {
+      updateFsXfer({
+      title: `批量下载 ${i + 1}/${items.length} · ${canLocalPull() ? "拉取文件夹" : "打包文件夹"}`,
+      name: it.name,
+      loaded: i,
+      total: items.length,
+      started,
+      });
+      if (canLocalPull()) {
+      await pullRemoteToLocalDir(it.path, it.name, { signal: controller.signal });
+      toast(`「${it.name}」已保存到本机目录`);
+      } else if (canFsZip()) {
+      const res = await adbFetch(
+      `/fs/zip?serial=${encodeURIComponent(adbSelected)}&path=${encodeURIComponent(it.path)}`,
+      { signal: controller.signal }
+      );
+      const blob = await res.blob();
+      downloadBlobFile(blob, `${it.name || basenameRemote(it.path) || "folder"}.zip`);
+      toast(`「${it.name}」已桥端打包下载`);
+      } else {
+      const { blob, count, skipped } = await downloadFolderBlob(it.path, {
+      signal: controller.signal,
+      onProgress: ({ name: n }) => {
+      updateFsXfer({
+      title: `批量下载 ${i + 1}/${items.length} · 打包文件夹`,
+      name: n,
+      loaded: i,
+      total: items.length,
+      started,
+      });
+      },
+      });
+      downloadBlobFile(blob, `${it.name || basenameRemote(it.path) || "folder"}.zip`);
+      toast(skipped ? `「${it.name}」已打包 ${count} 个文件（已达上限）` : `「${it.name}」已打包 ${count} 个文件`);
       }
-    });
-    $("#adb-fs-batch-cut")?.addEventListener("click", () => {
+      } else {
+      updateFsXfer({
+      title: `批量下载 ${i + 1}/${items.length}`,
+      name: it.name,
+      loaded: i,
+      total: items.length,
+      started,
+      });
+      await downloadAdbFile(it.path, it.name, { nested: true, signal: controller.signal });
+      }
+      }
+      toast(canLocalPull() ? `已保存 ${items.length} 项到本机目录` : `已开始下载 ${items.length} 项`);
+      if (canLocalPull()) {
+      loadLocalPath(adbLocalPath).catch(() => {});
+      }
+      } catch (err) {
+      if (err?.name === "AbortError") toast("已取消批量下载");
+      else setError(adbError, err.message || String(err));
+      } finally {
+      adbFsXferBusy = false;
+      adbFsXferAbort = null;
+      hideFsXfer();
+      }
+      });
+      $("#adb-fs-batch-cut")?.addEventListener("click", () => {
       const items = [...adbFsChecked.values()];
       if (!items.length) return;
       setFsClipboard("cut", items);
       clearFsChecked();
       toast(`已准备移动 ${items.length} 项，打开目标目录后粘贴`);
-    });
-    $("#adb-fs-batch-copy")?.addEventListener("click", () => {
+      });
+      $("#adb-fs-batch-copy")?.addEventListener("click", () => {
       const items = [...adbFsChecked.values()];
       if (!items.length) return;
       setFsClipboard("copy", items);
       toast(`已复制 ${items.length} 项，打开目标目录后粘贴`);
-    });
-    $("#adb-fs-batch-del")?.addEventListener("click", async () => {
+      });
+      $("#adb-fs-batch-del")?.addEventListener("click", async () => {
       const items = [...adbFsChecked.values()];
       if (!items.length) return;
       if (!window.confirm(`确认删除选中的 ${items.length} 项？此操作不可恢复。`)) return;
       try {
-        for (let i = 0; i < items.length; i++) {
-          if (adbFsMeta) adbFsMeta.textContent = `批量删除 ${i + 1}/${items.length}：${items[i].name}`;
-          await adbFetch("/fs/delete", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ serial: adbSelected, path: items[i].path }),
-          });
-        }
-        toast(`已删除 ${items.length} 项`);
-        clearFsChecked();
-        await loadFs(adbFsPath?.value || "/");
-      } catch (err) {
-        setError(adbError, err.message || String(err));
+      for (let i = 0; i < items.length; i++) {
+      if (adbFsMeta) adbFsMeta.textContent = `批量删除 ${i + 1}/${items.length}：${items[i].name}`;
+      await adbFetch("/fs/delete", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serial: adbSelected, path: items[i].path }),
+      });
       }
-    });
-    $("#adb-fs-paste")?.addEventListener("click", async () => {
+      toast(`已删除 ${items.length} 项`);
+      clearFsChecked();
+      await loadFs(adbFsPath?.value || "/");
+      } catch (err) {
+      setError(adbError, err.message || String(err));
+      }
+      });
+      $("#adb-fs-paste")?.addEventListener("click", async () => {
       const items = clipboardItems();
       if (!items.length || !adbSelected) return;
       const dir = adbFsPath?.value || "/";
       const mode = adbFsClipboard.mode === "cut" ? "cut" : "copy";
       try {
-        for (let i = 0; i < items.length; i++) {
-          const it = items[i];
-          const destName = it.name || basenameRemote(it.path);
-          const to = joinRemote(dir, destName);
-          if (adbFsMeta) adbFsMeta.textContent = `${mode === "cut" ? "移动" : "复制"} ${i + 1}/${items.length}：${destName}`;
-          if (mode === "cut") {
-            await adbFetch("/fs/move", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ serial: adbSelected, from: it.path, to }),
-            });
-          } else {
-            await adbFetch("/fs/copy", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ serial: adbSelected, from: it.path, to }),
-            });
-          }
-        }
-        toast(mode === "cut" ? `已移动 ${items.length} 项到当前目录` : `已复制 ${items.length} 项到当前目录`);
-        if (mode === "cut") adbFsClipboard = null;
-        updateFsClipboardMeta();
-        await loadFs(dir);
-      } catch (err) {
-        setError(adbError, err.message || String(err));
+      for (let i = 0; i < items.length; i++) {
+      const it = items[i];
+      const destName = it.name || basenameRemote(it.path);
+      const to = joinRemote(dir, destName);
+      if (adbFsMeta) adbFsMeta.textContent = `${mode === "cut" ? "移动" : "复制"} ${i + 1}/${items.length}：${destName}`;
+      if (mode === "cut") {
+      await adbFetch("/fs/move", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serial: adbSelected, from: it.path, to }),
+      });
+      } else {
+      await adbFetch("/fs/copy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serial: adbSelected, from: it.path, to }),
+      });
       }
-    });
-    adbFsList?.addEventListener("dblclick", (e) => {
+      }
+      toast(mode === "cut" ? `已移动 ${items.length} 项到当前目录` : `已复制 ${items.length} 项到当前目录`);
+      if (mode === "cut") adbFsClipboard = null;
+      updateFsClipboardMeta();
+      await loadFs(dir);
+      } catch (err) {
+      setError(adbError, err.message || String(err));
+      }
+      });
+      adbFsList?.addEventListener("dblclick", (e) => {
       if (e.target.closest(".adb-fs-check, .adb-fs-more, #adb-fs-ctx")) return;
       const row = e.target.closest(".adb-fs-row[data-adb-entry]");
       if (!row) return;
       e.preventDefault();
       if (row.dataset.adbOpen) {
-        loadFs(row.dataset.adbOpen);
-        return;
+      loadFs(row.dataset.adbOpen);
+      return;
       }
       if (row.dataset.adbFile) {
-        adbFsList.querySelectorAll(".adb-fs-row.is-selected").forEach((r) => r.classList.remove("is-selected"));
-        row.classList.add("is-selected");
-        adbFsSelected = row.dataset.adbFile || "";
-        showFsProps(collectFsEntrySelection(row));
-        previewAdbFile(row.dataset.adbFile, row.dataset.adbFileName, row.dataset.adbFileSize).catch((err) =>
-          setError(adbError, err.message || String(err))
-        );
+      adbFsList.querySelectorAll(".adb-fs-row.is-selected").forEach((r) => r.classList.remove("is-selected"));
+      row.classList.add("is-selected");
+      adbFsSelected = row.dataset.adbFile || "";
+      showFsProps(collectFsEntrySelection(row));
+      previewAdbFile(row.dataset.adbFile, row.dataset.adbFileName, row.dataset.adbFileSize).catch((err) =>
+      setError(adbError, err.message || String(err))
+      );
       }
-    });
-    $("#adb-fs-crumbs")?.addEventListener("click", (e) => {
+      });
+      $("#adb-fs-crumbs")?.addEventListener("click", (e) => {
       const openBtn = e.target.closest("[data-adb-open]");
       if (!openBtn) return;
       loadFs(openBtn.dataset.adbOpen);
-    });
-    $("[data-adb-panel='files']")?.addEventListener("click", (e) => {
+      });
+      $("[data-adb-panel='files']")?.addEventListener("click", (e) => {
       if (e.target.closest("#adb-fs-list, #adb-fs-crumbs")) return;
       const openBtn = e.target.closest("button[data-adb-open]");
       if (!openBtn) return;
       loadFs(openBtn.dataset.adbOpen);
-    });
+      });
 
-    $("#adb-apk-file")?.addEventListener("change", (e) => {
+      $("#adb-apk-file")?.addEventListener("change", (e) => {
       adbApkFile = e.target.files?.[0] || null;
       adbApkUploadId = "";
       adbApkInfo = null;
       if ($("#adb-apk-pkg")) $("#adb-apk-pkg").value = "";
       if (adbApkName) {
-        adbApkName.textContent = adbApkFile
-          ? `${adbApkFile.name}（${formatBytes(adbApkFile.size)}）`
-          : "尚未选择 APK";
+      adbApkName.textContent = adbApkFile
+      ? `${adbApkFile.name}（${formatBytes(adbApkFile.size)}）`
+      : "尚未选择 APK";
       }
       setApkButtonsEnabled(Boolean(adbApkFile));
       const infoEl = $("#adb-apk-info");
       if (infoEl) {
-        infoEl.hidden = true;
-        infoEl.textContent = "";
+      infoEl.hidden = true;
+      infoEl.textContent = "";
       }
-    });
-    $("#adb-apk-analyze")?.addEventListener("click", () =>
+      });
+      $("#adb-apk-analyze")?.addEventListener("click", () =>
       analyzeSelectedApk().catch((err) => setError(adbError, err.message || String(err)))
-    );
-    $("#adb-apk-push-system")?.addEventListener("click", () =>
+      );
+      $("#adb-apk-push-system")?.addEventListener("click", () =>
       pushSystemApk().catch((err) => setError(adbError, err.message || String(err)))
-    );
-    $("#adb-apk-install-selected")?.addEventListener("click", async () => {
+      );
+      $("#adb-apk-install-selected")?.addEventListener("click", async () => {
       try {
-        await startInstall(targetSerials(true));
+      await startInstall(targetSerials(true));
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       }
-    });
-    $("#adb-apk-install-current")?.addEventListener("click", async () => {
+      });
+      $("#adb-apk-install-current")?.addEventListener("click", async () => {
       try {
-        if (!adbSelected) throw new Error("请先选择当前设备");
-        await startInstall([adbSelected]);
+      if (!adbSelected) throw new Error("请先选择当前设备");
+      await startInstall([adbSelected]);
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       }
-    });
+      });
 
-    $("#adb-apps-refresh")?.addEventListener("click", () =>
+      $("#adb-apps-refresh")?.addEventListener("click", () =>
       loadApps().catch((err) => setError(adbError, err.message || String(err)))
-    );
-    async function runPermAction(action) {
+      );
+      async function runPermAction(action) {
       if (!adbPermPackage) throw new Error("请先在应用列表点「选中」");
       const permission = String($("#adb-perm-name")?.value || "").trim();
       if (!permission) throw new Error("请填写权限名");
       await adbFetch("/apps/permission", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          serial: requireCurrentSerial(),
-          packageName: adbPermPackage,
-          action,
-          permission,
-        }),
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+      serial: requireCurrentSerial(),
+      packageName: adbPermPackage,
+      action,
+      permission,
+      }),
       });
       toast(action === "grant" ? "已授予权限" : "已撤销权限");
-    }
-    $("#adb-perm-grant")?.addEventListener("click", () =>
+      }
+      $("#adb-perm-grant")?.addEventListener("click", () =>
       runPermAction("grant").catch((err) => setError(adbError, err.message || String(err)))
-    );
-    $("#adb-perm-revoke")?.addEventListener("click", () =>
+      );
+      $("#adb-perm-revoke")?.addEventListener("click", () =>
       runPermAction("revoke").catch((err) => setError(adbError, err.message || String(err)))
-    );
+      );
 
-    $("#adb-proxy-refresh")?.addEventListener("click", () =>
+      $("#adb-proxy-refresh")?.addEventListener("click", () =>
       refreshProxy().catch((err) => setError(adbError, err.message || String(err)))
-    );
-    $("#adb-proxy-set")?.addEventListener("click", async () => {
+      );
+      $("#adb-proxy-set")?.addEventListener("click", async () => {
       try {
-        const data = await adbFetch("/network/proxy", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            serial: requireCurrentSerial(),
-            host: $("#adb-proxy-host")?.value || "",
-            port: $("#adb-proxy-port")?.value || "",
-          }),
-        });
-        toast(data.message || "代理已设置");
-        await refreshProxy({ silent: true });
+      const data = await adbFetch("/network/proxy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+      serial: requireCurrentSerial(),
+      host: $("#adb-proxy-host")?.value || "",
+      port: $("#adb-proxy-port")?.value || "",
+      }),
+      });
+      toast(data.message || "代理已设置");
+      await refreshProxy({ silent: true });
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       }
-    });
-    $("#adb-proxy-clear")?.addEventListener("click", async () => {
+      });
+      $("#adb-proxy-clear")?.addEventListener("click", async () => {
       try {
-        const data = await adbFetch("/network/proxy", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ serial: requireCurrentSerial(), clear: true }),
-        });
-        toast(data.message || "代理已清除");
-        if ($("#adb-proxy-host")) $("#adb-proxy-host").value = "";
-        if ($("#adb-proxy-port")) $("#adb-proxy-port").value = "";
-        await refreshProxy({ silent: true });
+      const data = await adbFetch("/network/proxy", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serial: requireCurrentSerial(), clear: true }),
+      });
+      toast(data.message || "代理已清除");
+      if ($("#adb-proxy-host")) $("#adb-proxy-host").value = "";
+      if ($("#adb-proxy-port")) $("#adb-proxy-port").value = "";
+      await refreshProxy({ silent: true });
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       }
-    });
-    $("#adb-fwd-refresh")?.addEventListener("click", () =>
+      });
+      $("#adb-fwd-refresh")?.addEventListener("click", () =>
       refreshForwards().catch((err) => setError(adbError, err.message || String(err)))
-    );
-    $("#adb-fwd-add")?.addEventListener("click", async () => {
+      );
+      $("#adb-fwd-add")?.addEventListener("click", async () => {
       try {
-        const data = await adbFetch("/network/forward", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            serial: requireCurrentSerial(),
-            direction: $("#adb-fwd-dir")?.value || "forward",
-            local: $("#adb-fwd-local")?.value || "",
-            remote: $("#adb-fwd-remote")?.value || "",
-          }),
-        });
-        toast(data.message || "已添加转发");
-        await refreshForwards({ silent: true });
+      const data = await adbFetch("/network/forward", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+      serial: requireCurrentSerial(),
+      direction: $("#adb-fwd-dir")?.value || "forward",
+      local: $("#adb-fwd-local")?.value || "",
+      remote: $("#adb-fwd-remote")?.value || "",
+      }),
+      });
+      toast(data.message || "已添加转发");
+      await refreshForwards({ silent: true });
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       }
-    });
-    $("#adb-fwd-remove")?.addEventListener("click", async () => {
+      });
+      $("#adb-fwd-remove")?.addEventListener("click", async () => {
       try {
-        const data = await adbFetch("/network/forward", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            serial: requireCurrentSerial(),
-            direction: $("#adb-fwd-dir")?.value || "forward",
-            local: $("#adb-fwd-local")?.value || "",
-            remove: true,
-          }),
-        });
-        toast(data.message || "已移除");
-        await refreshForwards({ silent: true });
+      const data = await adbFetch("/network/forward", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+      serial: requireCurrentSerial(),
+      direction: $("#adb-fwd-dir")?.value || "forward",
+      local: $("#adb-fwd-local")?.value || "",
+      remove: true,
+      }),
+      });
+      toast(data.message || "已移除");
+      await refreshForwards({ silent: true });
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       }
-    });
-    $("#adb-fwd-clear")?.addEventListener("click", async () => {
+      });
+      $("#adb-fwd-clear")?.addEventListener("click", async () => {
       try {
-        if (!window.confirm("确认清除当前方向的全部端口转发？")) return;
-        const data = await adbFetch("/network/forward", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            serial: requireCurrentSerial(),
-            direction: $("#adb-fwd-dir")?.value || "forward",
-            removeAll: true,
-          }),
-        });
-        toast(data.message || "已清除");
-        await refreshForwards({ silent: true });
+      if (!window.confirm("确认清除当前方向的全部端口转发？")) return;
+      const data = await adbFetch("/network/forward", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+      serial: requireCurrentSerial(),
+      direction: $("#adb-fwd-dir")?.value || "forward",
+      removeAll: true,
+      }),
+      });
+      toast(data.message || "已清除");
+      await refreshForwards({ silent: true });
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       }
-    });
+      });
 
-    $("#adb-dev-refresh")?.addEventListener("click", () =>
+      $("#adb-dev-refresh")?.addEventListener("click", () =>
       refreshDeveloper().catch((err) => setError(adbError, err.message || String(err)))
-    );
-    $("#adb-open-dev-page")?.addEventListener("click", () =>
+      );
+      $("#adb-open-dev-page")?.addEventListener("click", () =>
       deviceControl("open_developer").catch((err) => setError(adbError, err.message || String(err)))
-    );
-    $$("[data-adb-dev]").forEach((btn) => {
+      );
+      $$("[data-adb-dev]").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        try {
-          const key = btn.dataset.adbDev;
-          const raw = btn.dataset.adbDevVal;
-          const value = raw === "1" || raw === "true";
-          const data = await adbFetch("/developer", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ serial: requireCurrentSerial(), key, value }),
-          });
-          toast(data.message || "已更新");
-          await refreshDeveloper({ silent: true });
-        } catch (err) {
-          setError(adbError, err.message || String(err));
-        }
-      });
-    });
-    $$("[data-adb-dev-quick]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        try {
-          const action = btn.dataset.adbDevQuick;
-          const data = await adbFetch("/device/control", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ serial: requireCurrentSerial(), action }),
-          });
-          toast(data.message || "已执行");
-        } catch (err) {
-          setError(adbError, err.message || String(err));
-        }
-      });
-    });
-    $("#adb-anim-apply")?.addEventListener("click", async () => {
       try {
-        const data = await adbFetch("/developer", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            serial: requireCurrentSerial(),
-            key: "animation_scale_all",
-            value: $("#adb-anim-scale")?.value || "1",
-          }),
-        });
-        toast(data.message || "动画倍率已应用");
-        await refreshDeveloper({ silent: true });
+      const key = btn.dataset.adbDev;
+      const raw = btn.dataset.adbDevVal;
+      const value = raw === "1" || raw === "true";
+      const data = await adbFetch("/developer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serial: requireCurrentSerial(), key, value }),
+      });
+      toast(data.message || "已更新");
+      await refreshDeveloper({ silent: true });
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       }
-    });
-    $("#adb-apps-kind")?.addEventListener("change", () =>
+      });
+      });
+      $$("[data-adb-dev-quick]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+      try {
+      const action = btn.dataset.adbDevQuick;
+      const data = await adbFetch("/device/control", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serial: requireCurrentSerial(), action }),
+      });
+      toast(data.message || "已执行");
+      } catch (err) {
+      setError(adbError, err.message || String(err));
+      }
+      });
+      });
+      $("#adb-anim-apply")?.addEventListener("click", async () => {
+      try {
+      const data = await adbFetch("/developer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+      serial: requireCurrentSerial(),
+      key: "animation_scale_all",
+      value: $("#adb-anim-scale")?.value || "1",
+      }),
+      });
+      toast(data.message || "动画倍率已应用");
+      await refreshDeveloper({ silent: true });
+      } catch (err) {
+      setError(adbError, err.message || String(err));
+      }
+      });
+      $("#adb-apps-kind")?.addEventListener("change", () =>
       loadApps().catch((err) => setError(adbError, err.message || String(err)))
-    );
-    $("#adb-apps-filter")?.addEventListener("input", () => renderApps());
-    adbAppsList?.addEventListener("change", (e) => {
+      );
+      $("#adb-apps-filter")?.addEventListener("input", () => renderApps());
+      adbAppsList?.addEventListener("change", (e) => {
       const check = e.target.closest("[data-adb-app-check]");
       if (!check) return;
       if (check.checked) {
-        adbAppsList.querySelectorAll("[data-adb-app-check]").forEach((el) => {
-          if (el !== check) el.checked = false;
-        });
-        setPermTarget(check.dataset.adbAppCheck);
+      adbAppsList.querySelectorAll("[data-adb-app-check]").forEach((el) => {
+      if (el !== check) el.checked = false;
+      });
+      setPermTarget(check.dataset.adbAppCheck);
       } else if (adbPermPackage === check.dataset.adbAppCheck) {
-        setPermTarget("");
+      setPermTarget("");
       }
-    });
-    adbAppsList?.addEventListener("click", async (e) => {
+      });
+      adbAppsList?.addEventListener("click", async (e) => {
       if (e.target.closest("[data-adb-app-check]") || e.target.closest(".adb-app-select")) {
-        // checkbox handled in change; allow label click without triggering action buttons
-        if (!e.target.closest("button")) return;
+      // checkbox handled in change; allow label click without triggering action buttons
+      if (!e.target.closest("button")) return;
       }
       const openBtn = e.target.closest("[data-adb-app-open]");
       const infoBtn = e.target.closest("[data-adb-app-info]");
       const uninstallBtn = e.target.closest("[data-adb-app-uninstall]");
       try {
-        if (openBtn) {
-          await runAppRowAction("open", openBtn.dataset.adbAppOpen);
-          return;
-        }
-        if (infoBtn) {
-          await runAppRowAction("info", infoBtn.dataset.adbAppInfo);
-          return;
-        }
-        if (uninstallBtn) {
-          await runAppRowAction("uninstall", uninstallBtn.dataset.adbAppUninstall);
-        }
-      } catch (err) {
-        setError(adbError, err.message || String(err));
+      if (openBtn) {
+      await runAppRowAction("open", openBtn.dataset.adbAppOpen);
+      return;
       }
-    });
-    adbAppsList?.addEventListener("contextmenu", (e) => {
+      if (infoBtn) {
+      await runAppRowAction("info", infoBtn.dataset.adbAppInfo);
+      return;
+      }
+      if (uninstallBtn) {
+      await runAppRowAction("uninstall", uninstallBtn.dataset.adbAppUninstall);
+      }
+      } catch (err) {
+      setError(adbError, err.message || String(err));
+      }
+      });
+      adbAppsList?.addEventListener("contextmenu", (e) => {
       const row = e.target.closest(".adb-app-row[data-adb-app-pkg]");
       if (!row) return;
       if (e.target.closest("button") || e.target.closest("input")) return;
       e.preventDefault();
       hideFsCtxMenu();
       showAppCtxMenu(row.dataset.adbAppPkg, e.clientX, e.clientY);
-    });
+      });
 
-    $("#adb-shot-selected")?.addEventListener("click", async () => {
+      $("#adb-shot-selected")?.addEventListener("click", async () => {
       try {
-        const serials = targetSerials(true);
-        if (!serials.length) throw new Error("请选择设备");
-        const data = await adbFetch("/media/screenshot", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ serials }),
-        });
-        await trackJob(data.job);
+      const serials = targetSerials(true);
+      if (!serials.length) throw new Error("请选择设备");
+      const data = await adbFetch("/media/screenshot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serials }),
+      });
+      await trackJob(data.job);
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       }
-    });
-    $("#adb-shot-current")?.addEventListener("click", async () => {
+      });
+      $("#adb-shot-current")?.addEventListener("click", async () => {
       try {
-        if (!adbSelected) throw new Error("请先选择当前设备");
-        const data = await adbFetch("/media/screenshot", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ serials: [adbSelected] }),
-        });
-        await trackJob(data.job);
+      if (!adbSelected) throw new Error("请先选择当前设备");
+      const data = await adbFetch("/media/screenshot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serials: [adbSelected] }),
+      });
+      await trackJob(data.job);
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       }
-    });
-    $("#adb-record-current")?.addEventListener("click", async () => {
+      });
+      $("#adb-record-current")?.addEventListener("click", async () => {
       try {
-        if (!adbSelected) throw new Error("请先选择当前设备");
-        const raw = $("#adb-record-sec")?.value;
-        const seconds = raw === "" || raw == null ? 30 : Number(raw);
-        if (seconds === 0) {
-          updateRecordTip();
-          toast("无时限录屏已开始，请稍后取消结束");
-        }
-        const data = await adbFetch("/media/record", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ serial: adbSelected, seconds }),
-        });
-        await trackJob(data.job);
-      } catch (err) {
-        setError(adbError, err.message || String(err));
+      if (!adbSelected) throw new Error("请先选择当前设备");
+      const raw = $("#adb-record-sec")?.value;
+      const seconds = raw === "" || raw == null ? 30 : Number(raw);
+      if (seconds === 0) {
+      updateRecordTip();
+      toast("无时限录屏已开始，请稍后取消结束");
       }
-    });
-    $("#adb-record-sec")?.addEventListener("input", updateRecordTip);
-    $("#adb-record-cancel")?.addEventListener("click", async () => {
+      const data = await adbFetch("/media/record", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serial: adbSelected, seconds }),
+      });
+      await trackJob(data.job);
+      } catch (err) {
+      setError(adbError, err.message || String(err));
+      }
+      });
+      $("#adb-record-sec")?.addEventListener("input", updateRecordTip);
+      $("#adb-record-cancel")?.addEventListener("click", async () => {
       try {
-        const job = adbJobs.find(
-          (j) =>
-            j.type === "record" &&
-            (j.status === "running" || j.status === "pending" || j.status === "queued")
-        );
-        if (!job) throw new Error("没有进行中的录屏任务");
-        await cancelAdbJob(job.id);
+      const job = adbJobs.find(
+      (j) =>
+      j.type === "record" &&
+      (j.status === "running" || j.status === "pending" || j.status === "queued")
+      );
+      if (!job) throw new Error("没有进行中的录屏任务");
+      await cancelAdbJob(job.id);
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       }
-    });
-    $("#adb-media-zip")?.addEventListener("click", async () => {
+      });
+      $("#adb-media-zip")?.addEventListener("click", async () => {
       try {
-        const done = (j) =>
-          j.status === "done" || j.status === "completed" || j.status === "success" || j.status === "cancelled";
-        const withArts = (adbJobs || []).filter((j) => (j.artifacts || []).length && done(j));
-        const job =
-          withArts.find((j) => j.type === "screenshot") ||
-          withArts.find((j) => j.type === "record") ||
-          withArts[0];
-        if (!job) throw new Error("没有可打包的任务产物，请先截图/录屏并等待完成");
-        await zipJobArtifacts(job.id);
+      const done = (j) =>
+      j.status === "done" || j.status === "completed" || j.status === "success" || j.status === "cancelled";
+      const withArts = (adbJobs || []).filter((j) => (j.artifacts || []).length && done(j));
+      const job =
+      withArts.find((j) => j.type === "screenshot") ||
+      withArts.find((j) => j.type === "record") ||
+      withArts[0];
+      if (!job) throw new Error("没有可打包的任务产物，请先截图/录屏并等待完成");
+      await zipJobArtifacts(job.id);
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       }
-    });
+      });
 
-    $("#adb-jobs-refresh")?.addEventListener("click", () =>
+      $("#adb-jobs-refresh")?.addEventListener("click", () =>
       refreshJobs().catch((err) => setError(adbError, err.message || String(err)))
-    );
-    async function onAdbJobClick(e) {
+      );
+      async function onAdbJobClick(e) {
       const cancelBtn = e.target.closest("[data-adb-job-cancel]");
       if (cancelBtn) {
-        try {
-          await cancelAdbJob(cancelBtn.dataset.adbJobCancel);
-        } catch (err) {
-          setError(adbError, err.message || String(err));
-        }
-        return;
+      try {
+      await cancelAdbJob(cancelBtn.dataset.adbJobCancel);
+      } catch (err) {
+      setError(adbError, err.message || String(err));
+      }
+      return;
       }
       const zipBtn = e.target.closest("[data-adb-job-zip]");
       if (zipBtn) {
-        try {
-          await zipJobArtifacts(zipBtn.dataset.adbJobZip);
-        } catch (err) {
-          setError(adbError, err.message || String(err));
-        }
-        return;
+      try {
+      await zipJobArtifacts(zipBtn.dataset.adbJobZip);
+      } catch (err) {
+      setError(adbError, err.message || String(err));
+      }
+      return;
       }
       const btn = e.target.closest("[data-adb-art-job]");
       if (!btn) return;
       try {
-        await downloadArtifact(btn.dataset.adbArtJob, btn.dataset.adbArtName);
+      await downloadArtifact(btn.dataset.adbArtJob, btn.dataset.adbArtName);
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       }
-    }
-    adbJobsList?.addEventListener("click", onAdbJobClick);
-    $("#adb-media-jobs")?.addEventListener("click", onAdbJobClick);
-    $("#adb-install-jobs")?.addEventListener("click", onAdbJobClick);
-    $("#adb-media-preview")?.addEventListener("click", onAdbJobClick);
+      }
+      adbJobsList?.addEventListener("click", onAdbJobClick);
+      $("#adb-media-jobs")?.addEventListener("click", onAdbJobClick);
+      $("#adb-install-jobs")?.addEventListener("click", onAdbJobClick);
+      $("#adb-media-preview")?.addEventListener("click", onAdbJobClick);
 
-    $("#adb-snap-refresh")?.addEventListener("click", () =>
+      $("#adb-snap-refresh")?.addEventListener("click", () =>
       loadSnapshot().catch((err) => setError(adbError, err.message || String(err)))
-    );
-    $("#adb-getprop-open")?.addEventListener("click", () => {
+      );
+      $("#adb-getprop-open")?.addEventListener("click", () => {
       openGetpropDialog().catch((err) => setError(adbError, err.message || String(err)));
-    });
-    $("#adb-getprop-close")?.addEventListener("click", () => {
+      });
+      $("#adb-getprop-close")?.addEventListener("click", () => {
       const dlg = $("#adb-getprop-dlg");
       if (dlg?.open && typeof dlg.close === "function") dlg.close();
-    });
-    $("#adb-getprop-dlg")?.addEventListener("cancel", (ev) => {
+      });
+      $("#adb-getprop-dlg")?.addEventListener("cancel", (ev) => {
       ev.preventDefault();
       const dlg = $("#adb-getprop-dlg");
       if (dlg?.open && typeof dlg.close === "function") dlg.close();
-    });
-    $("#adb-getprop-search")?.addEventListener("input", () => renderGetpropList());
-    $("#adb-getprop-reload")?.addEventListener("click", () => {
+      });
+      $("#adb-getprop-search")?.addEventListener("input", () => renderGetpropList());
+      $("#adb-getprop-reload")?.addEventListener("click", () => {
       loadGetprop({ force: true }).catch((err) => setError(adbError, err.message || String(err)));
-    });
-    $("#adb-stay-on")?.addEventListener("click", () =>
+      });
+      $("#adb-stay-on")?.addEventListener("click", () =>
       deviceControl("stay_awake_on").catch((err) => setError(adbError, err.message || String(err)))
-    );
-    $("#adb-stay-off")?.addEventListener("click", () =>
+      );
+      $("#adb-stay-off")?.addEventListener("click", () =>
       deviceControl("stay_awake_off").catch((err) => setError(adbError, err.message || String(err)))
-    );
-    $("#adb-open-dev")?.addEventListener("click", () =>
+      );
+      $("#adb-open-dev")?.addEventListener("click", () =>
       deviceControl("open_developer").catch((err) => setError(adbError, err.message || String(err)))
-    );
-    $("#adb-open-log")?.addEventListener("click", () =>
+      );
+      $("#adb-open-log")?.addEventListener("click", () =>
       deviceControl("open_logging").catch((err) => setError(adbError, err.message || String(err)))
-    );
-    $("#adb-usb-install")?.addEventListener("click", () =>
+      );
+      $("#adb-usb-install")?.addEventListener("click", () =>
       deviceControl("enable_usb_install").catch((err) => setError(adbError, err.message || String(err)))
-    );
-    $("#adb-open-unknown")?.addEventListener("click", () =>
+      );
+      $("#adb-open-unknown")?.addEventListener("click", () =>
       deviceControl("open_install_unknown").catch((err) => setError(adbError, err.message || String(err)))
-    );
+      );
 
-    $("#adb-log-fetch")?.addEventListener("click", () =>
+      $("#adb-log-fetch")?.addEventListener("click", () =>
       fetchLogcat().catch((err) => setError(adbError, err.message || String(err)))
-    );
-    const adbLogLiveEl = $("#adb-log-live");
-    if (adbLogLiveEl) {
+      );
+      let adbLogLiveEl;
+      if (adbLogLiveEl) {
       if (adbLogLiveEl.type === "checkbox") {
-        adbLogLiveEl.addEventListener("change", () => {
-          toggleAdbLogLive(adbLogLiveEl.checked);
-        });
+      adbLogLiveEl.addEventListener("change", () => {
+      toggleAdbLogLive(adbLogLiveEl.checked);
+      });
       } else {
-        adbLogLiveEl.addEventListener("click", () => toggleAdbLogLive());
+      adbLogLiveEl.addEventListener("click", () => toggleAdbLogLive());
       }
-    }
-    $("#adb-log-clear")?.addEventListener("click", async () => {
+      }
+      $("#adb-log-clear")?.addEventListener("click", async () => {
       try {
-        const serial = requireCurrentSerial();
-        if (!window.confirm("确认清空设备 logcat 缓冲？")) return;
-        await adbFetch("/logcat/clear", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ serial }),
-        });
-        toast("已清空日志缓冲");
+      const serial = requireCurrentSerial();
+      if (!window.confirm("确认清空设备 logcat 缓冲？")) return;
+      await adbFetch("/logcat/clear", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serial }),
+      });
+      toast("已清空日志缓冲");
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       }
-    });
-    $("#adb-log-copy")?.addEventListener("click", async () => {
+      });
+      $("#adb-log-copy")?.addEventListener("click", async () => {
       const text = $("#adb-log-out")?.textContent || "";
       if (!text || text === "尚未拉取") return;
       try {
-        await navigator.clipboard.writeText(text);
-        toast("日志已复制");
+      await navigator.clipboard.writeText(text);
+      toast("日志已复制");
       } catch (_) {
-        toast("复制失败");
+      toast("复制失败");
       }
-    });
-    $("#adb-log-download")?.addEventListener("click", () => {
+      });
+      $("#adb-log-download")?.addEventListener("click", () => {
       const text = $("#adb-log-out")?.textContent || "";
       if (!text || text === "尚未拉取") return;
       const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
@@ -15345,118 +15481,118 @@
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
-    });
-
-    $("#adb-tap-run")?.addEventListener("click", async () => {
-      try {
-        await adbFetch("/input", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            serial: requireCurrentSerial(),
-            action: "tap",
-            x: Number($("#adb-tap-x")?.value),
-            y: Number($("#adb-tap-y")?.value),
-          }),
-        });
-        toast("已点击");
-        if (!$("#adb-input-canvas")?.hidden) afterInputPreviewAction();
-      } catch (err) {
-        setError(adbError, err.message || String(err));
-      }
-    });
-    $("#adb-swipe-run")?.addEventListener("click", async () => {
-      try {
-        await adbFetch("/input", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            serial: requireCurrentSerial(),
-            action: "swipe",
-            x1: Number($("#adb-swipe-x1")?.value),
-            y1: Number($("#adb-swipe-y1")?.value),
-            x2: Number($("#adb-swipe-x2")?.value),
-            y2: Number($("#adb-swipe-y2")?.value),
-            duration: Number($("#adb-swipe-ms")?.value || 300),
-          }),
-        });
-        toast("已滑动");
-        if (!$("#adb-input-canvas")?.hidden) afterInputPreviewAction();
-      } catch (err) {
-        setError(adbError, err.message || String(err));
-      }
-    });
-    $$("[data-adb-key]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        try {
-          await adbFetch("/input", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              serial: requireCurrentSerial(),
-              action: "key",
-              key: btn.dataset.adbKey,
-            }),
-          });
-          toast(`按键 ${btn.dataset.adbKey}`);
-          if (adbTab === "input" && !$("#adb-input-canvas")?.hidden) afterInputPreviewAction();
-        } catch (err) {
-          setError(adbError, err.message || String(err));
-        }
       });
-    });
-    $("#adb-input-text-run")?.addEventListener("click", async () => {
+
+      $("#adb-tap-run")?.addEventListener("click", async () => {
       try {
-        await adbFetch("/input", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            serial: requireCurrentSerial(),
-            action: "text",
-            text: $("#adb-input-text")?.value || "",
-          }),
-        });
-        toast("已输入文本");
-        if (!$("#adb-input-canvas")?.hidden) afterInputPreviewAction();
+      await adbFetch("/input", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+      serial: requireCurrentSerial(),
+      action: "tap",
+      x: Number($("#adb-tap-x")?.value),
+      y: Number($("#adb-tap-y")?.value),
+      }),
+      });
+      toast("已点击");
+      if (!$("#adb-input-canvas")?.hidden) afterInputPreviewAction();
       } catch (err) {
-        setError(adbError, err.message || String(err));
+      setError(adbError, err.message || String(err));
       }
-    });
-    $("#adb-input-refresh-shot")?.addEventListener("click", () => {
+      });
+      $("#adb-swipe-run")?.addEventListener("click", async () => {
+      try {
+      await adbFetch("/input", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+      serial: requireCurrentSerial(),
+      action: "swipe",
+      x1: Number($("#adb-swipe-x1")?.value),
+      y1: Number($("#adb-swipe-y1")?.value),
+      x2: Number($("#adb-swipe-x2")?.value),
+      y2: Number($("#adb-swipe-y2")?.value),
+      duration: Number($("#adb-swipe-ms")?.value || 300),
+      }),
+      });
+      toast("已滑动");
+      if (!$("#adb-input-canvas")?.hidden) afterInputPreviewAction();
+      } catch (err) {
+      setError(adbError, err.message || String(err));
+      }
+      });
+      $$("[data-adb-key]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+      try {
+      await adbFetch("/input", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+      serial: requireCurrentSerial(),
+      action: "key",
+      key: btn.dataset.adbKey,
+      }),
+      });
+      toast(`按键 ${btn.dataset.adbKey}`);
+      if (adbTab === "input" && !$("#adb-input-canvas")?.hidden) afterInputPreviewAction();
+      } catch (err) {
+      setError(adbError, err.message || String(err));
+      }
+      });
+      });
+      $("#adb-input-text-run")?.addEventListener("click", async () => {
+      try {
+      await adbFetch("/input", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+      serial: requireCurrentSerial(),
+      action: "text",
+      text: $("#adb-input-text")?.value || "",
+      }),
+      });
+      toast("已输入文本");
+      if (!$("#adb-input-canvas")?.hidden) afterInputPreviewAction();
+      } catch (err) {
+      setError(adbError, err.message || String(err));
+      }
+      });
+      $("#adb-input-refresh-shot")?.addEventListener("click", () => {
       if (adbInputLiveTimer) {
-        clearInterval(adbInputLiveTimer);
-        adbInputLiveTimer = 0;
-        adbInputLive = false;
+      clearInterval(adbInputLiveTimer);
+      adbInputLiveTimer = 0;
+      adbInputLive = false;
       }
       stopMirrorPreview({ notifyBridge: true });
       refreshInputScreencap().catch((err) => setError(adbError, err.message || String(err)));
-    });
-    $("#adb-input-mirror-start")?.addEventListener("click", () => {
+      });
+      $("#adb-input-mirror-start")?.addEventListener("click", () => {
       startMirrorPreview()
-        .then(() => toast("镜像已开始"))
-        .catch((err) => setError(adbError, err.message || String(err)));
-    });
-    $("#adb-input-live-stop")?.addEventListener("click", () => {
+      .then(() => toast("镜像已开始"))
+      .catch((err) => setError(adbError, err.message || String(err)));
+      });
+      $("#adb-input-live-stop")?.addEventListener("click", () => {
       stopInputLivePreview();
       toast("已停止预览");
-    });
-    $("#adb-input-record-toggle")?.addEventListener("click", () => {
+      });
+      $("#adb-input-record-toggle")?.addEventListener("click", () => {
       toggleInputRecord().catch((err) => setError(adbError, err.message || String(err)));
-    });
-    $("#adb-input-clip-pc")?.addEventListener("click", () => {
+      });
+      $("#adb-input-clip-pc")?.addEventListener("click", () => {
       pushPcClipboard().catch((err) => setError(adbError, err.message || String(err)));
-    });
-    {
+      });
+      {
       const sizeEl = $("#adb-input-shot-size");
       sizeEl?.addEventListener("input", () => applyInputShotSize(sizeEl.value));
       sizeEl?.addEventListener("change", () => applyInputShotSize(sizeEl.value));
       $("#adb-input-shot-size-reset")?.addEventListener("click", () => {
-        applyInputShotSize(ADB_INPUT_SHOT_VH_DEFAULT);
-        toast("已恢复默认预览大小");
+      applyInputShotSize(ADB_INPUT_SHOT_VH_DEFAULT);
+      toast("已恢复默认预览大小");
       });
       restoreInputShotSize();
-    }
-    {
+      }
+      {
       const wrap = $("#adb-input-shot-wrap");
       const LONG_MS = 520;
       const DOUBLE_MS = 320;
@@ -15466,211 +15602,213 @@
       let pendingTap = null; // { x, y, timer }
 
       const clearLongTimer = () => {
-        if (longTimer) {
-          clearTimeout(longTimer);
-          longTimer = 0;
-        }
+      if (longTimer) {
+      clearTimeout(longTimer);
+      longTimer = 0;
+      }
       };
       const clearPendingTap = () => {
-        if (pendingTap?.timer) clearTimeout(pendingTap.timer);
-        pendingTap = null;
+      if (pendingTap?.timer) clearTimeout(pendingTap.timer);
+      pendingTap = null;
       };
       const sendInput = (body) =>
-        adbFetch("/input", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ serial: requireCurrentSerial(), ...body }),
-        });
+      adbFetch("/input", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ serial: requireCurrentSerial(), ...body }),
+      });
       const surfaceReady = (el) => {
-        if (!el) return false;
-        if (el.tagName === "CANVAS") return el.width > 0 && !el.hidden;
-        return Boolean(el.naturalWidth) && !el.hidden;
+      if (!el) return false;
+      if (el.tagName === "CANVAS") return el.width > 0 && !el.hidden;
+      return Boolean(el.naturalWidth) && !el.hidden;
       };
 
       wrap?.addEventListener("pointerdown", (e) => {
-        if (e.target?.closest?.(".adb-input-drop-hint")) return;
-        const surface = adbPreviewSurface();
-        if (!surfaceReady(surface)) return;
-        surface.setPointerCapture?.(e.pointerId);
-        const pt = adbCanvasCoords(surface, e.clientX, e.clientY);
-        const now = Date.now();
-        let asDouble = false;
-        if (
-          pendingTap &&
-          now - pendingTap.at < DOUBLE_MS &&
-          Math.abs(pt.x - pendingTap.x) + Math.abs(pt.y - pendingTap.y) <= 36
-        ) {
-          clearPendingTap();
-          asDouble = true;
-        }
-        drag = {
-          ...pt,
-          moved: false,
-          pointerId: e.pointerId,
-          at: now,
-          asDouble,
-          fired: "",
-        };
-        clearLongTimer();
-        if (!asDouble) {
-          longTimer = setTimeout(async () => {
-            longTimer = 0;
-            if (!drag || drag.moved || drag.fired || drag.asDouble) return;
-            drag.fired = "longpress";
-            try {
-              await sendInput({
-                action: "longpress",
-                x: drag.x,
-                y: drag.y,
-                duration: 1000,
-              });
-              if ($("#adb-tap-x")) $("#adb-tap-x").value = String(drag.x);
-              if ($("#adb-tap-y")) $("#adb-tap-y").value = String(drag.y);
-              toast(`已长按 ${drag.x},${drag.y}`);
-              if ($("#adb-input-meta")) {
-                $("#adb-input-meta").textContent = `长按 ${drag.x},${drag.y} · 单指手势：单击 / 长按 / 双击 / 拖拽`;
-              }
-              afterInputPreviewAction();
-            } catch (err) {
-              setError(adbError, err.message || String(err));
-            }
-          }, LONG_MS);
-        }
-        e.preventDefault();
+      if (e.target?.closest?.(".adb-input-drop-hint")) return;
+      const surface = adbPreviewSurface();
+      if (!surfaceReady(surface)) return;
+      surface.setPointerCapture?.(e.pointerId);
+      const pt = adbCanvasCoords(surface, e.clientX, e.clientY);
+      const now = Date.now();
+      let asDouble = false;
+      if (
+      pendingTap &&
+      now - pendingTap.at < DOUBLE_MS &&
+      Math.abs(pt.x - pendingTap.x) + Math.abs(pt.y - pendingTap.y) <= 36
+      ) {
+      clearPendingTap();
+      asDouble = true;
+      }
+      drag = {
+      ...pt,
+      moved: false,
+      pointerId: e.pointerId,
+      at: now,
+      asDouble,
+      fired: "",
+      };
+      clearLongTimer();
+      if (!asDouble) {
+      longTimer = setTimeout(async () => {
+      longTimer = 0;
+      if (!drag || drag.moved || drag.fired || drag.asDouble) return;
+      drag.fired = "longpress";
+      try {
+      await sendInput({
+      action: "longpress",
+      x: drag.x,
+      y: drag.y,
+      duration: 1000,
+      });
+      if ($("#adb-tap-x")) $("#adb-tap-x").value = String(drag.x);
+      if ($("#adb-tap-y")) $("#adb-tap-y").value = String(drag.y);
+      toast(`已长按 ${drag.x},${drag.y}`);
+      if ($("#adb-input-meta")) {
+      $("#adb-input-meta").textContent = `长按 ${drag.x},${drag.y} · 单指手势：单击 / 长按 / 双击 / 拖拽`;
+      }
+      afterInputPreviewAction();
+      } catch (err) {
+      setError(adbError, err.message || String(err));
+      }
+      }, LONG_MS);
+      }
+      e.preventDefault();
       });
       wrap?.addEventListener("pointermove", (e) => {
-        if (!drag || drag.pointerId !== e.pointerId) return;
-        const surface = adbPreviewSurface();
-        if (!surfaceReady(surface)) return;
-        const pt = adbCanvasCoords(surface, e.clientX, e.clientY);
-        if (Math.abs(pt.x - drag.x) + Math.abs(pt.y - drag.y) > MOVE_THRESH) {
-          drag.moved = true;
-          clearLongTimer();
-        }
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      const surface = adbPreviewSurface();
+      if (!surfaceReady(surface)) return;
+      const pt = adbCanvasCoords(surface, e.clientX, e.clientY);
+      if (Math.abs(pt.x - drag.x) + Math.abs(pt.y - drag.y) > MOVE_THRESH) {
+      drag.moved = true;
+      clearLongTimer();
+      }
       });
       wrap?.addEventListener("pointerup", async (e) => {
-        if (!drag || drag.pointerId !== e.pointerId) return;
-        const start = drag;
-        drag = null;
-        clearLongTimer();
-        if (start.fired === "longpress") return;
-        const surface = adbPreviewSurface();
-        if (!surfaceReady(surface)) return;
-        try {
-          const end = adbCanvasCoords(surface, e.clientX, e.clientY);
-          if (start.moved) {
-            clearPendingTap();
-            await sendInput({
-              action: "swipe",
-              x1: start.x,
-              y1: start.y,
-              x2: end.x,
-              y2: end.y,
-              duration: Number($("#adb-swipe-ms")?.value || 300),
-            });
-            toast("已滑动");
-            afterInputPreviewAction();
-            return;
-          }
-          if (start.asDouble) {
-            await sendInput({ action: "doubletap", x: start.x, y: start.y });
-            if ($("#adb-tap-x")) $("#adb-tap-x").value = String(start.x);
-            if ($("#adb-tap-y")) $("#adb-tap-y").value = String(start.y);
-            toast(`已双击 ${start.x},${start.y}`);
-            afterInputPreviewAction();
-            return;
-          }
-          clearPendingTap();
-          pendingTap = {
-            x: start.x,
-            y: start.y,
-            at: Date.now(),
-            timer: setTimeout(async () => {
-              pendingTap = null;
-              try {
-                await sendInput({ action: "tap", x: start.x, y: start.y });
-                if ($("#adb-tap-x")) $("#adb-tap-x").value = String(start.x);
-                if ($("#adb-tap-y")) $("#adb-tap-y").value = String(start.y);
-                toast(`已点击 ${start.x},${start.y}`);
-                afterInputPreviewAction();
-              } catch (err) {
-                setError(adbError, err.message || String(err));
-              }
-            }, DOUBLE_MS),
-          };
-        } catch (err) {
-          setError(adbError, err.message || String(err));
-        }
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      const start = drag;
+      drag = null;
+      clearLongTimer();
+      if (start.fired === "longpress") return;
+      const surface = adbPreviewSurface();
+      if (!surfaceReady(surface)) return;
+      try {
+      const end = adbCanvasCoords(surface, e.clientX, e.clientY);
+      if (start.moved) {
+      clearPendingTap();
+      await sendInput({
+      action: "swipe",
+      x1: start.x,
+      y1: start.y,
+      x2: end.x,
+      y2: end.y,
+      duration: Number($("#adb-swipe-ms")?.value || 300),
+      });
+      toast("已滑动");
+      afterInputPreviewAction();
+      return;
+      }
+      if (start.asDouble) {
+      await sendInput({ action: "doubletap", x: start.x, y: start.y });
+      if ($("#adb-tap-x")) $("#adb-tap-x").value = String(start.x);
+      if ($("#adb-tap-y")) $("#adb-tap-y").value = String(start.y);
+      toast(`已双击 ${start.x},${start.y}`);
+      afterInputPreviewAction();
+      return;
+      }
+      clearPendingTap();
+      pendingTap = {
+      x: start.x,
+      y: start.y,
+      at: Date.now(),
+      timer: setTimeout(async () => {
+      pendingTap = null;
+      try {
+      await sendInput({ action: "tap", x: start.x, y: start.y });
+      if ($("#adb-tap-x")) $("#adb-tap-x").value = String(start.x);
+      if ($("#adb-tap-y")) $("#adb-tap-y").value = String(start.y);
+      toast(`已点击 ${start.x},${start.y}`);
+      afterInputPreviewAction();
+      } catch (err) {
+      setError(adbError, err.message || String(err));
+      }
+      }, DOUBLE_MS),
+      };
+      } catch (err) {
+      setError(adbError, err.message || String(err));
+      }
       });
       wrap?.addEventListener("pointercancel", () => {
-        clearLongTimer();
-        drag = null;
+      clearLongTimer();
+      drag = null;
       });
 
       const dropHint = $("#adb-input-drop-hint");
       let inputDropDepth = 0;
       const hasFiles = (dt) => dt && [...(dt.types || [])].includes("Files");
       const resetInputDropUi = () => {
-        inputDropDepth = 0;
-        setInputDropHintVisible(false);
+      inputDropDepth = 0;
+      setInputDropHintVisible(false);
       };
       wrap?.addEventListener("dragenter", (e) => {
-        if (!hasFiles(e.dataTransfer)) return;
-        e.preventDefault();
-        inputDropDepth += 1;
-        setInputDropHintVisible(true);
+      if (!hasFiles(e.dataTransfer)) return;
+      e.preventDefault();
+      inputDropDepth += 1;
+      setInputDropHintVisible(true);
       });
       wrap?.addEventListener("dragover", (e) => {
-        if (!hasFiles(e.dataTransfer)) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "copy";
-        setInputDropHintVisible(true);
+      if (!hasFiles(e.dataTransfer)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "copy";
+      setInputDropHintVisible(true);
       });
       wrap?.addEventListener("dragleave", (e) => {
-        if (!hasFiles(e.dataTransfer)) return;
-        inputDropDepth = Math.max(0, inputDropDepth - 1);
-        if (inputDropDepth > 0) return;
-        resetInputDropUi();
+      if (!hasFiles(e.dataTransfer)) return;
+      inputDropDepth = Math.max(0, inputDropDepth - 1);
+      if (inputDropDepth > 0) return;
+      resetInputDropUi();
       });
       wrap?.addEventListener("drop", (e) => {
-        e.preventDefault();
-        resetInputDropUi();
-        const files = e.dataTransfer?.files;
-        pushFilesToDeviceDownload(files).catch((err) => setError(adbError, err.message || String(err)));
+      e.preventDefault();
+      resetInputDropUi();
+      const files = e.dataTransfer?.files;
+      pushFilesToDeviceDownload(files).catch((err) => setError(adbError, err.message || String(err)));
       });
       document.addEventListener("dragend", resetInputDropUi);
-    }
-    updateRecordTip();
-
-    $("#adb-clip-run")?.addEventListener("click", async () => {
-      try {
-        const data = await adbFetch("/clipboard", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            serial: requireCurrentSerial(),
-            text: $("#adb-clip-text")?.value || "",
-          }),
-        });
-        toast(data.note || "已推送剪贴板");
-      } catch (err) {
-        setError(adbError, err.message || String(err));
       }
-    });
+      updateRecordTip();
 
-    const ua = navigator.userAgent || "";
-    if (/Windows/i.test(ua)) {
+      $("#adb-clip-run")?.addEventListener("click", async () => {
+      try {
+      const data = await adbFetch("/clipboard", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+      serial: requireCurrentSerial(),
+      text: $("#adb-clip-text")?.value || "",
+      }),
+      });
+      toast(data.note || "已推送剪贴板");
+      } catch (err) {
+      setError(adbError, err.message || String(err));
+      }
+      });
+
+      const ua = navigator.userAgent || "";
+      if (/Windows/i.test(ua)) {
       $("#adb-dl-win")?.classList.add("primary-btn");
       $("#adb-dl-win")?.classList.remove("secondary-btn");
-    } else if (/Mac OS|Macintosh/i.test(ua)) {
+      } else if (/Mac OS|Macintosh/i.test(ua)) {
       $("#adb-dl-mac")?.classList.add("primary-btn");
       $("#adb-dl-mac")?.classList.remove("secondary-btn");
-    } else {
+      } else {
       $("#adb-dl-linux")?.classList.add("primary-btn");
       $("#adb-dl-linux")?.classList.remove("secondary-btn");
-    }
+      }
 
-    connectAdbBridge({ fromPoll: true }).catch(() => {});
+      connectAdbBridge({ fromPoll: true }).catch(() => {});
+
+    });
   } catch (err) {
     console.error("adb tool init failed", err);
   }
@@ -15705,4 +15843,5 @@
       }
     });
   });
+  EBind()?.bindMounted?.();
 })();

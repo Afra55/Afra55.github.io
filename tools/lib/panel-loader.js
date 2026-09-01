@@ -85,7 +85,23 @@
       root.appendChild(panel);
     }
     mounted.add(id);
+    notifyExtraBind(id);
     return panel;
+  }
+
+  function notifyExtraBind(panelId) {
+    const id = String(panelId || "").trim();
+    if (!id) return;
+    try {
+      window.DevToolsExtraBind?.bind?.(id);
+    } catch (_) {
+      /* extra.js 尚未加载 */
+    }
+    try {
+      window.dispatchEvent(new CustomEvent("devtools:panel-mounted", { detail: { id } }));
+    } catch (_) {
+      /* ignore */
+    }
   }
 
   async function ensure(toolId) {
@@ -93,6 +109,7 @@
     if (!id) return null;
     if (mounted.has(id)) {
       await ensurePanelCss(id);
+      notifyExtraBind(id);
       return document.getElementById(id);
     }
     const [html] = await Promise.all([loadPanelHtml(id), ensurePanelCss(id)]);
