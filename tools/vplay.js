@@ -4,10 +4,10 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const SCRUB_STEPS = 1000;
   const LONG_VIDEO_SEC = 180;
-  const SCRUB_SEEK_DEBOUNCE_MS = 80;
 
   const fileInput = $("#vplay-file");
   const clearBtn = $("#vplay-clear");
+  const shotBtn = $("#vplay-shot");
   const meta = $("#vplay-meta");
   const errorEl = $("#vplay-error");
   const stage = $("#vplay-stage");
@@ -32,7 +32,7 @@
   let sourceFile = null;
   let objectUrl = "";
   let scrubbing = false;
-  let scrubSeekTimer = 0;
+  let scrubRaf = 0;
   let scrubPendingSec = null;
   let muted = true;
   let seekReady = false;
@@ -444,7 +444,7 @@
   }
 
   function setControlsEnabled(on) {
-    [playBtn, muteBtn, fsBtn, $("#vplay-zoom-in"), $("#vplay-zoom-out"), $("#vplay-zoom-reset"), $("#vplay-zoom-rotate")].forEach((btn) => {
+    [playBtn, muteBtn, fsBtn, shotBtn, $("#vplay-zoom-in"), $("#vplay-zoom-out"), $("#vplay-zoom-reset"), $("#vplay-zoom-rotate")].forEach((btn) => {
       if (btn) btn.disabled = !on;
     });
   }
@@ -471,13 +471,12 @@
   function applySeek(sec, opts = {}) {
     if (!video?.src) return;
     const t = Math.max(0, Math.min(duration(), Number(sec) || 0));
-    if (!video.paused) video.pause();
+    if (!video.paused && !opts.keepPlaying) video.pause();
     const gen = ++seekGen;
     const doSeek = () => {
       if (gen !== seekGen) return;
       try {
-        if (opts.fromScrub || video.readyState < 3) video.currentTime = t;
-        else if (typeof video.fastSeek === "function") video.fastSeek(t);
+        if (typeof video.fastSeek === "function") video.fastSeek(t);
         else video.currentTime = t;
       } catch (_) {}
       if (!opts.fromScrub) syncScrubFromVideo();
@@ -486,7 +485,7 @@
         syncPlayUi();
       }
     };
-    if (seekReady && video.readyState >= 2) {
+    if (video.readyState >= 1) {
       doSeek();
       return;
     }
@@ -503,21 +502,28 @@
     ensureSeekReady();
   }
 
+  function flushScrubRaf() {
+    if (scrubRaf) {
+      cancelAnimationFrame(scrubRaf);
+      scrubRaf = 0;
+    }
+  }
+
   function scheduleScrubSeek(sec) {
     scrubPendingSec = sec;
-    window.clearTimeout(scrubSeekTimer);
-    scrubSeekTimer = window.setTimeout(() => {
-      scrubSeekTimer = 0;
+    if (scrubRaf) return;
+    scrubRaf = requestAnimationFrame(() => {
+      scrubRaf = 0;
       if (scrubPendingSec == null) return;
       const t = scrubPendingSec;
       scrubPendingSec = null;
       applySeek(t, { fromScrub: true, skipClock: true });
-    }, SCRUB_SEEK_DEBOUNCE_MS);
+      syncClock({ skipInfo: true });
+    });
   }
 
   function flushScrubSeek() {
-    window.clearTimeout(scrubSeekTimer);
-    scrubSeekTimer = 0;
+    flushScrubRaf();
     if (scrubPendingSec != null) {
       const t = scrubPendingSec;
       scrubPendingSec = null;
@@ -530,8 +536,86 @@
   function scrubToValue() {
     if (!video?.src || !scrub) return;
     beginScrub();
-    syncClock({ skipInfo: true });
     scheduleScrubSeek(scrubValueToTime());
+  }
+
+  function sanitizeFilenamePart(s) {
+    return String(s || "")
+      .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 120);
+  }
+
+  function screenshotFilename() {
+    const raw = sourceFile?.name || "video";
+    const base = sanitizeFilenamePart(raw.replace(/\.[^.]+$/i, "") || "video");
+    const timeLabel = formatClock(clockTime())
+      .replace(/:/g, "-")
+      .replace(/\./g, "_");
+    return `${base}_${timeLabel}.png`;
+  }
+
+  function waitVideoFrame() {
+    return new Promise((resolve) => {
+      if (!video?.src) {
+        resolve();
+        return;
+      }
+      if (!video.seeking && video.readyState >= 2) {
+        requestAnimationFrame(() => resolve());
+        return;
+      }
+      const done = () => {
+        video.removeEventListener("seeked", done);
+        video.removeEventListener("loadeddata", done);
+        requestAnimationFrame(() => resolve());
+      };
+      video.addEventListener("seeked", done, { once: true });
+      video.addEventListener("loadeddata", done, { once: true });
+      window.setTimeout(done, 120);
+    });
+  }
+
+  async function captureScreenshot() {
+    if (!video?.src || !video.videoWidth) {
+      toast("请先加载视频");
+      return;
+    }
+    flushScrubSeek();
+    await ensureSeekReady();
+    await waitVideoFrame();
+    const w = video.videoWidth;
+    const h = video.videoHeight;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) {
+      toast("无法创建画布");
+      return;
+    }
+    try {
+      ctx.drawImage(video, 0, 0, w, h);
+    } catch (err) {
+      toast(err?.message || "截图失败");
+      return;
+    }
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    if (!blob) {
+      toast("截图失败");
+      return;
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = screenshotFilename();
+    a.rel = "noopener";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 2000);
+    toast("已保存截图");
   }
 
   function togglePlay() {
@@ -682,8 +766,7 @@
   function clearVplay() {
     sourceFile = null;
     scrubbing = false;
-    window.clearTimeout(scrubSeekTimer);
-    scrubSeekTimer = 0;
+    flushScrubRaf();
     scrubPendingSec = null;
     if (objectUrl) {
       URL.revokeObjectURL(objectUrl);
@@ -790,6 +873,9 @@
     fitZoom();
   });
   fsBtn?.addEventListener("click", toggleFullscreen);
+  shotBtn?.addEventListener("click", () => {
+    captureScreenshot().catch((err) => toast(err?.message || "截图失败"));
+  });
   scrub?.addEventListener("pointerdown", () => {
     scrubToValue();
   });

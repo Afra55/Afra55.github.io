@@ -14,7 +14,7 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.09.01-080000"></script>
+  <script src="./lib/tools-build.js?v=2026.09.01-093000"></script>
   <link rel="stylesheet" href="./style.css?v=2026.09.01-080000" />
   <link rel="stylesheet" href="./workspace-nav.css?v=2026.09.01-080000" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
@@ -2885,9 +2885,10 @@ hello@world.org</textarea>
             <label class="visually-hidden" for="vplay-scrub">播放进度</label>
             <input id="vplay-scrub" class="vsplit-scrub vplay-scrub" type="range" min="0" max="1000" value="0" step="1" disabled />
             <span class="mono vplay-clock" id="vplay-clock">0:00 / 0:00</span>
+            <button type="button" class="ghost-btn vplay-transport-btn" id="vplay-shot" disabled title="截取当前画面">截图</button>
             <button type="button" class="ghost-btn vplay-transport-btn" id="vplay-fs" disabled title="全屏">全屏</button>
           </div>
-          <p class="hint tight">拖入视频即可播放 · 拖进度条实时预览 · 滚轮缩放 · 按住拖拽画面 · 底边可拉高预览区</p>
+          <p class="hint tight">拖入视频即可播放 · 拖进度条实时预览 · 点「截图」保存当前画面 · 滚轮缩放 · 按住拖拽画面 · 底边可拉高预览区</p>
         </div>
         <div class="preview-info-panel" id="vplay-info" hidden>
           <h2 class="subhead preview-info-title">视频信息</h2>
