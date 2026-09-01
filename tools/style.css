@@ -3673,7 +3673,98 @@ html[data-boot-loading="1"] body {
   cursor: pointer;
 }
 
-/* 桌面壳层：侧栏 + 工作区双栏（拆 CSS 时勿删） */
+/* shell-layout-protected: responsive shell — do not remove */
+@media (max-width: 900px) {
+  .header-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.55rem 0.75rem;
+    flex-wrap: nowrap;
+  }
+
+  .header-brand-block {
+    min-width: 0;
+  }
+
+  .header-actions {
+    justify-content: flex-end;
+    justify-self: end;
+    flex-wrap: nowrap;
+    margin-left: 0;
+    gap: 0.35rem;
+  }
+
+  .header-action-collapse {
+    display: none !important;
+  }
+
+  .header-more-wrap {
+    display: block;
+  }
+
+  .workspace-title-wrap {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .workspace-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .workspace-tool-actions {
+    flex-shrink: 0;
+    gap: 0.35rem;
+  }
+
+  .workspace-share,
+  .workspace-switch {
+    padding-inline: 0.62rem;
+    font-size: 0.86rem;
+  }
+}
+
+@media (max-width: 700px) {
+  .site-header {
+    padding: 1.1rem 1rem 0.55rem;
+  }
+
+  .brand-name {
+    font-size: 1.55rem;
+  }
+
+  .tagline {
+    margin-top: 0.3rem;
+    font-size: 0.86rem;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+}
+
+@media (max-width: 600px) {
+  .panel-head,
+  .panel-body {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  .input-with-action {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav-bar {
+    transition: none;
+  }
+}
+
+/* shell-layout-protected: desktop sidebar + workspace grid — do not remove */
 @media (min-width: 901px) {
   html {
     height: 100%;
