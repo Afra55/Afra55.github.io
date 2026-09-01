@@ -37,6 +37,7 @@
 
   const TOOL_FILES = {
     acupoint: "./acupoint.js",
+    healthread: "./healthread.js",
     vtrim: "./vtrim.js",
     vplay: "./vplay.js",
     audio: "./audio.js",
@@ -81,6 +82,7 @@
     "memo",
     "whiteboard",
     "acupoint",
+    "healthread",
     "textimg",
     "imgtext",
     "imgpreview",
@@ -103,7 +105,7 @@
   ]);
 
   /** 不依赖 DevToolsPure */
-  const NO_PURE = new Set(["acupoint", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp", "setup", "about", "pdfcraft", "insectworld", "prehmuseum", "xorenc", "morse", "countdown", "dateremind", "phlogo", "nokiasms", "sandspiel"]);
+  const NO_PURE = new Set(["acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp", "setup", "about", "pdfcraft", "insectworld", "prehmuseum", "xorenc", "morse", "countdown", "dateremind", "phlogo", "nokiasms", "sandspiel"]);
 
   const scriptPromises = new Map();
   let extraBundlePromise = null;
