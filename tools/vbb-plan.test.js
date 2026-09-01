@@ -26,12 +26,11 @@ function buildVbbRanges(duration, targetSpan, equalize) {
   const useEqual = Boolean(equalize) || needed > VBB_MAX_CLIPS;
   if (useEqual) {
     const n = Math.min(VBB_MAX_CLIPS, needed);
-    const slice = d / n;
     const ranges = [];
     for (let i = 0; i < n; i++) {
-      const start = i * slice;
-      const end = i === n - 1 ? d : (i + 1) * slice;
-      ranges.push({ start, span: Math.max(VBB_MIN_SPAN, end - start) });
+      const start = (i * d) / n;
+      const end = ((i + 1) * d) / n;
+      ranges.push({ start, span: end - start });
     }
     return ranges;
   }

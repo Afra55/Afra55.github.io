@@ -79,13 +79,13 @@
             </span>
           </div>
           <div class="field-row" id="vbb-custom-row" hidden style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
-            <label for="vbb-target-span">目标段时长（秒）</label>
+            <label for="vbb-target-span" id="vbb-target-label">目标段时长（秒）</label>
             <input id="vbb-target-span" class="mono meta-input" type="number" min="0.5" max="60" step="0.1" value="12" />
             <input id="vbb-target-range" class="v2g-bright-range" type="range" min="5" max="30" step="0.1" value="12" aria-label="目标段时长滑块" />
           </div>
           <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.55rem 0.9rem">
             <label class="flag"><input type="checkbox" id="vbb-equalize" /> 均分各段</label>
-            <span class="hint tight">默认关：前面按目标时长切，末段吃剩余</span>
+            <span class="hint tight" id="vbb-equalize-hint">默认关：前面按目标时长切，末段吃剩余</span>
           </div>
           <p class="hint" id="vbb-plan-summary">分析完成后显示段数、时长与预估体积。</p>
         </div>

@@ -287,6 +287,18 @@ async function main() {
   if (!customEqualize.summary) {
     throw new Error("equalize plan summary missing");
   }
+  const equalizeTimeSync = await page.evaluate(() => {
+    const summary = document.getElementById("vbb-plan-summary")?.textContent || "";
+    const span = document.getElementById("vbb-target-span")?.value || "";
+    const m = summary.match(/每段 ([\d.]+)s/);
+    return { span, summarySpan: m?.[1] || null, summary };
+  });
+  if (
+    equalizeTimeSync.summarySpan &&
+    Math.abs(Number(equalizeTimeSync.span) - Number(equalizeTimeSync.summarySpan)) > 0.05
+  ) {
+    throw new Error(`equalize span display mismatch: ${JSON.stringify(equalizeTimeSync)}`);
+  }
 
   await page.click("#vbb-equalize");
   const customEqualizeOff = await page.evaluate(() => {
