@@ -144,6 +144,23 @@ function estimateVbbBlackboxPlan(bps15, span, srcW) {
   return { bytes: maxBytes, fps: 10, compressRounds: 2, maxW: baseW };
 }
 
+function estimateVbbBlackboxBytesCalibrated(blackboxBps, span, cal, srcW) {
+  const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
+  const calFps = Math.max(1, Number(cal?.fps) || 15);
+  const calSpan = Math.max(VBB_MIN_SPAN, Number(cal?.span) || VBB_SAMPLE_SPAN);
+  const calBytes = Math.max(1, Number(cal?.bytes) || blackboxBps * calSpan);
+  const targetFps = resolveBlackboxEstimateFpsList(s)[0];
+  let bytes;
+  if (Math.abs(s - calSpan) < 0.12) {
+    bytes = calBytes * (targetFps / calFps);
+  } else {
+    bytes = blackboxBps * s * (targetFps / calFps);
+  }
+  bytes = Math.round(bytes);
+  if (bytes <= V2G_BLACKBOX_MAX_BYTES) return bytes;
+  return Math.round(V2G_BLACKBOX_MAX_BYTES * (cal?.compressRounds > 0 ? 0.92 : 0.96));
+}
+
 function estimateVbbBytesBlackbox(bps15, span, srcW) {
   return estimateVbbBlackboxPlan(bps15, span, srcW).bytes;
 }
@@ -442,6 +459,16 @@ function almost(a, b, eps = 1e-6) {
   assert(vbbSpanSchemeKey(12.04) === "12.0", "span scheme key rounds to 0.1s");
   assert(vbbSpanSchemeKey(12.06) === "12.1", "span scheme key rounds");
   assert(vbbSpanSchemeKey(12.02) === vbbSpanSchemeKey(12.04), "same 0.1s bucket shares key");
+}
+
+{
+  const cal = { fps: 15, span: 2.5, bytes: 1.8 * 1024 * 1024, compressRounds: 0, maxW: 480 };
+  const bps = cal.bytes / cal.span;
+  const e25 = estimateVbbBlackboxBytesCalibrated(bps, 2.5, cal, 1280);
+  assert(Math.abs(e25 - cal.bytes) < 64 * 1024, `same span should match cal, got ${e25}`);
+  const e10 = estimateVbbBlackboxBytesCalibrated(bps, 10, cal, 1280);
+  assert(e10 > cal.bytes * 3 && e10 < cal.bytes * 4.2, `10s should scale ~4x, got ${e10}`);
+  assert(e10 <= V2G_BLACKBOX_MAX_BYTES, "scaled est under 6MB");
 }
 
 console.log("vbb-plan.test.js: all passed");

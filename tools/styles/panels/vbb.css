@@ -1,5 +1,17 @@
+.vbb-split-panel {
+  margin-top: 1rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--bg-0) 72%, transparent);
+}
+
+.vbb-split-panel > .subhead {
+  margin: 0 0 0.35rem;
+}
+
 .vbb-plan {
-  margin-top: 1.15rem;
+  margin-top: 0.85rem;
   padding: 0.95rem 1rem;
   border: 1px solid var(--line);
   border-radius: 14px;

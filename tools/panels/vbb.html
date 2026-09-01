@@ -18,6 +18,7 @@
             <button type="button" class="seg-btn" id="vbb-workflow-manual" data-vbb-workflow="manual">手动打点</button>
           </span>
         </div>
+        <p class="hint tight" id="vbb-workflow-hint">整段视频将输出一个 GIF，无需切分或调参。</p>
         <div class="gif-preview-wrap vbb-preview-wrap" id="vbb-preview-wrap">
           <video id="vbb-video" class="img-preview gif-preview" controls playsinline muted preload="metadata" hidden></video>
         </div>
@@ -68,8 +69,9 @@
           </label>
         </div>
 
-        <details class="blackbox-advanced" id="vbb-advanced">
-          <summary class="hint tight">高级选项（手动分析 / 换方案）</summary>
+        <div class="vbb-split-panel" id="vbb-split-panel" hidden>
+          <h2 class="subhead">长视频切片</h2>
+          <p class="hint tight">先分析切分方案（段数、时长、预估体积），满意后再执行。整段模式无需此步骤。</p>
           <div class="btn-row tool-actions" style="margin-top:0.65rem;flex-wrap:wrap">
             <button type="button" class="secondary-btn" id="vbb-analyze" disabled>分析切分方案</button>
             <button type="button" class="secondary-btn" id="vbb-run" disabled>按当前方案执行</button>
@@ -92,7 +94,7 @@
           </div>
           <p class="hint" id="vbb-plan-summary">分析完成后显示段数、时长与预估体积。</p>
         </div>
-        </details>
+        </div>
 
         <div class="field-block" style="margin-top:1.25rem" id="vbb-result-block" hidden>
           <h2 class="subhead">生成结果</h2>

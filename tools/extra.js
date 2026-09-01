@@ -7171,7 +7171,8 @@
     const vbbAnalyze = $("#vbb-analyze");
     const vbbRun = $("#vbb-run");
     const vbbOneclick = $("#vbb-oneclick");
-    const vbbAdvanced = $("#vbb-advanced");
+    const vbbSplitPanel = $("#vbb-split-panel");
+    const vbbWorkflowHint = $("#vbb-workflow-hint");
     const vbbMerge = $("#vbb-merge");
     const vbbAbort = $("#vbb-abort");
     const vbbZip = $("#vbb-zip");
@@ -7397,7 +7398,7 @@
     function paintVbbManualControls() {
       const manual = isVbbManualMode();
       if (vbbManualPanel) vbbManualPanel.hidden = !manual;
-      if (vbbAdvanced) vbbAdvanced.hidden = manual || isVbbBatchMode();
+      if (vbbSplitPanel) vbbSplitPanel.hidden = !isVbbSplitMode();
       if (vbbVideo) {
         if (manual && vbbVideo.src) {
           vbbVideo.controls = false;
@@ -7432,6 +7433,14 @@
 
     function isVbbManualMode() {
       return vbbWorkflow === "manual" && !isVbbBatchMode();
+    }
+
+    function isVbbSplitMode() {
+      return vbbWorkflow === "split" && !isVbbBatchMode();
+    }
+
+    function isVbbSingleMode() {
+      return vbbWorkflow === "single" && !isVbbBatchMode();
     }
 
     function vbbVideoDuration() {
@@ -7735,11 +7744,11 @@
         } else if (isVbbManualMode()) {
           vbbOneclick.textContent = manualCount > 0 ? `一键黑盒（${manualCount} 段）` : "一键黑盒";
         } else {
-          vbbOneclick.textContent = "一键黑盒";
+          vbbOneclick.textContent = isVbbSplitMode() ? "分析并执行" : "一键黑盒";
         }
       }
-      if (vbbAnalyze) vbbAnalyze.disabled = !hasVideo || vbbBusy || isVbbBatchMode() || isVbbManualMode();
-      if (vbbRun) vbbRun.disabled = !hasPlan || vbbBusy || isVbbBatchMode() || isVbbManualMode();
+      if (vbbAnalyze) vbbAnalyze.disabled = !hasVideo || vbbBusy || !isVbbSplitMode();
+      if (vbbRun) vbbRun.disabled = !hasPlan || vbbBusy || !isVbbSplitMode();
       if (vbbMerge) vbbMerge.disabled = gifCount < 2 || vbbBusy || isVbbBatchMode();
       if (vbbZip) vbbZip.disabled = gifCount < 1 || vbbBusy;
       if (isVbbManualMode()) paintVbbManualControls();
@@ -7751,8 +7760,31 @@
       $("#vbb-workflow-single")?.classList.toggle("is-active", vbbWorkflow === "single");
       $("#vbb-workflow-split")?.classList.toggle("is-active", vbbWorkflow === "split");
       $("#vbb-workflow-manual")?.classList.toggle("is-active", vbbWorkflow === "manual");
-      if (vbbAdvanced) vbbAdvanced.hidden = isVbbManualMode() || isVbbBatchMode();
+      if (vbbSplitPanel) vbbSplitPanel.hidden = !isVbbSplitMode();
+      if (vbbWorkflowHint) {
+        vbbWorkflowHint.hidden = isVbbBatchMode();
+        if (!isVbbBatchMode()) {
+          if (vbbWorkflow === "single") {
+            vbbWorkflowHint.textContent = "整段视频将输出一个 GIF，无需切分或调参。";
+          } else if (vbbWorkflow === "split") {
+            vbbWorkflowHint.textContent =
+              "长视频自动切为多段 ≤6MB GIF。请先点「分析切分方案」查看段数与预估，满意后再执行。";
+          } else {
+            vbbWorkflowHint.textContent = "手动标记多段起点终点后一键转换。";
+          }
+        }
+      }
+      if (isVbbSingleMode() && vbbAnalysis) {
+        vbbAnalysis = null;
+        if (vbbPlan) vbbPlan.hidden = true;
+      }
+      if (vbbOneclick && isVbbSplitMode()) {
+        vbbOneclick.textContent = "分析并执行";
+      } else if (vbbOneclick && !isVbbBatchMode() && !isVbbManualMode()) {
+        vbbOneclick.textContent = "一键黑盒";
+      }
       paintVbbManualUi();
+      setVbbButtons();
     }
 
     async function packDownloadVbbGifs({ auto = false } = {}) {
@@ -7944,6 +7976,55 @@
       return estimateVbbBlackboxPlan(bps15, span, srcW).bytes;
     }
 
+    /** 用分析阶段黑盒样片校准后的 bps，线性外推并考虑降帧 */
+    function estimateVbbBlackboxBytesCalibrated(blackboxBps, span, cal, srcW) {
+      const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
+      const calFps = Math.max(1, Number(cal?.fps) || 15);
+      const calSpan = Math.max(VBB_MIN_SPAN, Number(cal?.span) || VBB_SAMPLE_SPAN);
+      const calBytes = Math.max(1, Number(cal?.bytes) || blackboxBps * calSpan);
+      const targetFps = resolveBlackboxEstimateFpsList(s)[0];
+      let bytes;
+      if (Math.abs(s - calSpan) < 0.12) {
+        bytes = calBytes * (targetFps / calFps);
+      } else {
+        bytes = blackboxBps * s * (targetFps / calFps);
+      }
+      bytes = Math.round(bytes);
+      if (bytes <= V2G_BLACKBOX_MAX_BYTES) return bytes;
+      return Math.round(V2G_BLACKBOX_MAX_BYTES * (cal?.compressRounds > 0 ? 0.92 : 0.96));
+    }
+
+    function estimateVbbBytesForPlan(bps15, span, encode, maxW, srcW) {
+      const mode = encode === "blackbox" ? "duration" : encode || "clarity";
+      if (mode === "duration" || mode === "blackbox") {
+        if (vbbAnalysis?.blackboxBps > 0 && vbbAnalysis?.blackboxCal) {
+          return estimateVbbBlackboxBytesCalibrated(
+            vbbAnalysis.blackboxBps,
+            span,
+            vbbAnalysis.blackboxCal,
+            srcW
+          );
+        }
+        return estimateVbbBytesBlackbox(bps15, span, srcW);
+      }
+      return estimateVbbBytes(bps15, span, mode, maxW, srcW);
+    }
+
+    function summarizeVbbPlanEstimates(plan, bps15, srcW) {
+      if (!plan?.ranges?.length) return { total: 0, min: 0, max: 0 };
+      const encode = plan.encode || "blackbox";
+      const maxW = plan.maxW || vbbSampleBaseWidth(srcW);
+      const sizes = plan.ranges.map((r) =>
+        estimateVbbBytesForPlan(bps15, r.span, encode, maxW, srcW)
+      );
+      return {
+        sizes,
+        total: sizes.reduce((a, b) => a + b, 0),
+        min: Math.min(...sizes),
+        max: Math.max(...sizes),
+      };
+    }
+
     function estimateVbbFps(bps15, span, mode, width, srcW) {
       if (mode !== "duration" && mode !== "blackbox") return 15;
       return estimateVbbBlackboxPlan(bps15, span, srcW).fps;
@@ -8017,11 +8098,24 @@
       let estCompressRounds = 0;
       let outMaxW = maxW;
       if (estMode === "duration") {
-        const bb = estimateVbbBlackboxPlan(bps15, typicalSpan, srcW);
-        estBytes = bb.bytes;
-        estFps = bb.fps;
-        estCompressRounds = bb.compressRounds;
-        outMaxW = bb.maxW || maxW;
+        if (vbbAnalysis?.blackboxBps > 0 && vbbAnalysis?.blackboxCal) {
+          estBytes = estimateVbbBlackboxBytesCalibrated(
+            vbbAnalysis.blackboxBps,
+            typicalSpan,
+            vbbAnalysis.blackboxCal,
+            srcW
+          );
+          const bb = estimateVbbBlackboxPlan(bps15, typicalSpan, srcW);
+          estFps = bb.fps;
+          estCompressRounds = bb.compressRounds;
+          outMaxW = vbbAnalysis.blackboxCal.maxW || bb.maxW || maxW;
+        } else {
+          const bb = estimateVbbBlackboxPlan(bps15, typicalSpan, srcW);
+          estBytes = bb.bytes;
+          estFps = bb.fps;
+          estCompressRounds = bb.compressRounds;
+          outMaxW = bb.maxW || maxW;
+        }
       } else {
         estBytes = estimateVbbBytes(bps15, typicalSpan, estMode, maxW, srcW);
         estFps = 15;
@@ -8139,7 +8233,25 @@
       const avgSpan = ranges.reduce((a, r) => a + r.span, 0) / Math.max(1, ranges.length);
       const typicalSpan = typicalVbbSpan(ranges, target);
       if (typicalSpan > clarity.maxSpan + 0.05) {
-        const estPlan = estimateVbbBlackboxPlan(bps15, typicalSpan, srcW);
+        let estBytes;
+        let estFps;
+        let estCompressRounds;
+        if (vbbAnalysis?.blackboxBps > 0 && vbbAnalysis?.blackboxCal) {
+          estBytes = estimateVbbBlackboxBytesCalibrated(
+            vbbAnalysis.blackboxBps,
+            typicalSpan,
+            vbbAnalysis.blackboxCal,
+            srcW
+          );
+          const estPlan = estimateVbbBlackboxPlan(bps15, typicalSpan, srcW);
+          estFps = estPlan.fps;
+          estCompressRounds = estPlan.compressRounds;
+        } else {
+          const estPlan = estimateVbbBlackboxPlan(bps15, typicalSpan, srcW);
+          estBytes = estPlan.bytes;
+          estFps = estPlan.fps;
+          estCompressRounds = estPlan.compressRounds;
+        }
         return annotateVbbPlan(
           {
             key: "custom",
@@ -8149,9 +8261,9 @@
             count: ranges.length,
             avgSpan,
             typicalSpan,
-            estBytes: estPlan.bytes,
-            estFps: estPlan.fps,
-            estCompressRounds: estPlan.compressRounds,
+            estBytes,
+            estFps,
+            estCompressRounds,
             note: describeVbbExpect(
               "custom",
               typicalSpan,
@@ -8201,14 +8313,20 @@
       const active = resolveActiveVbbPlan();
       vbbAnalysis.active = active;
       if (vbbPlan) vbbPlan.hidden = false;
-      if (vbbAdvanced) vbbAdvanced.open = true;
       syncVbbModeUi();
 
       if (vbbPlanSummary && active) {
         const widthTip = active.maxW ? ` · 目标宽 ${active.maxW}` : "";
-        const fpsTip = ` · ${formatVbbFpsTip(active.estFps || 15, active.estCompressRounds || 0)}`;
+        const fpsTip = ` · ${formatVbbFpsTip(active.estFps || 15)}`;
         const warn = active.unsafe ? " ⚠ 可能超预算，执行时超限会降宽或改走黑盒。" : "";
-        vbbPlanSummary.textContent = `将生成 ${active.count} 个切片 · ${formatVbbRangesSpanTip(active.ranges)}${widthTip}${fpsTip} · 预估约 ${formatKb(active.estBytes)}/段 · ${active.note}（体积为估算；各段预览在生成后显示）${warn}`;
+        const est = summarizeVbbPlanEstimates(active, vbbAnalysis.bps15, vbbAnalysis.srcW);
+        const sizeTip =
+          est.min === est.max
+            ? `预估约 ${formatKb(est.min)}/段`
+            : `预估单段 ${formatKb(est.min)}–${formatKb(est.max)}`;
+        const totalTip = est.total > 0 ? ` · 合计约 ${formatKb(est.total)}` : "";
+        const calTip = vbbAnalysis.blackboxBps > 0 ? "（按黑盒样片校准）" : "（按样片估算）";
+        vbbPlanSummary.textContent = `将生成 ${active.count} 个切片 · ${formatVbbRangesSpanTip(active.ranges)}${widthTip}${fpsTip} · ${sizeTip}${totalTip}${calTip} · ${active.note}（生成后以下方实际体积为准）${warn}`;
       }
 
       if (vbbPlanList) vbbPlanList.innerHTML = "";
@@ -8395,7 +8513,11 @@
       syncVbbScrubFromVideo();
       syncVbbWorkflowUi();
       setVbbButtons();
-      toast("视频已就绪，点「一键黑盒」即可");
+      if (isVbbSplitMode()) {
+        toast("视频已就绪，请点「分析切分方案」或「分析并执行」");
+      } else {
+        toast("视频已就绪，点「一键黑盒」即可");
+      }
     }
 
     async function runVbbManualBlackbox() {
@@ -8698,6 +8820,33 @@
         if (abortVbb) throw new Error("已取消");
         if (!sample?.blob?.size) throw new Error("样片编码失败");
         const bps15 = sample.blob.size / Math.max(0.5, sample.span || sampleSpan);
+        setVbbProgress(true, 0.42, "分析中 · 黑盒样片校准", {
+          sub: `${sampleSpan.toFixed(1)}s · 对齐实际输出体积`,
+          busy: true,
+        });
+        if (vbbMeta) vbbMeta.textContent = `分析中 · 黑盒样片校准 ${sampleSpan.toFixed(1)}s…`;
+        const bbSample = await encodeBlackboxClip({
+          file: vbbSourceFile,
+          startSec: sampleStart,
+          span: sampleSpan,
+          srcW,
+          srcH,
+          isAborted: () => abortVbb,
+          onProgress: (local, text) => {
+            if (vbbMeta) vbbMeta.textContent = `分析中 · ${text || "黑盒样片"}`;
+          },
+        });
+        if (abortVbb) throw new Error("已取消");
+        if (!bbSample?.blob?.size) throw new Error("黑盒样片编码失败");
+        const bbSpan = Math.max(VBB_MIN_SPAN, Number(bbSample.span) || sampleSpan);
+        const blackboxBps = bbSample.blob.size / bbSpan;
+        const blackboxCal = {
+          fps: Number(bbSample.fps) || 15,
+          maxW: Math.max(64, Number(bbSample.maxW || bbSample.outW) || V2G_BLACKBOX_BASE_W),
+          span: bbSpan,
+          bytes: bbSample.blob.size,
+          compressRounds: Number(bbSample.compressRounds) || 0,
+        };
         const clarityMax = Math.max(
           VBB_MIN_SPAN,
           Math.min(VBB_CLARITY_MAX_SPAN, (V2G_BLACKBOX_MAX_BYTES * VBB_CLARITY_FILL) / bps15)
@@ -8733,7 +8882,10 @@
           srcW,
           srcH,
           bps15,
+          blackboxBps,
+          blackboxCal,
           sampleBytes: sample.blob.size,
+          blackboxSampleBytes: bbSample.blob.size,
           sampleSpan: sample.span || sampleSpan,
           clarityMax,
           durationMax,
@@ -8749,9 +8901,9 @@
         setVbbProgress(
           true,
           1,
-          `分析完成 · 样片 ${formatKb(sample.blob.size)} / ${vbbAnalysis.sampleSpan.toFixed(1)}s`
+          `分析完成 · 样片 ${formatKb(bbSample.blob.size)} / ${bbSpan.toFixed(1)}s`
         );
-        toast(`分析完成 · 默认 ${durationPlan.count} 段 · 可自定义段时长`);
+        toast(`分析完成 · 默认 ${durationPlan.count} 段 · 预估已按黑盒样片校准`);
         if (isLikelyMobileBrowser() && (duration >= 90 || (vbbSourceFile?.size || 0) >= 200 * 1024 * 1024)) {
           toast("大视频在手机上易内存不足。已优化分段写入；仍建议少段处理或用电脑。");
         }
@@ -9130,6 +9282,8 @@
     });
     $("#vbb-workflow-single")?.addEventListener("click", () => {
       vbbWorkflow = "single";
+      vbbAnalysis = null;
+      if (vbbPlan) vbbPlan.hidden = true;
       syncVbbWorkflowUi();
     });
     $("#vbb-workflow-split")?.addEventListener("click", () => {
