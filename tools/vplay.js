@@ -4,6 +4,7 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const SCRUB_STEPS = 1000;
   const LONG_VIDEO_SEC = 180;
+  const SCRUB_SEEK_DEBOUNCE_MS = 80;
 
   const fileInput = $("#vplay-file");
   const clearBtn = $("#vplay-clear");
@@ -31,6 +32,8 @@
   let sourceFile = null;
   let objectUrl = "";
   let scrubbing = false;
+  let scrubSeekTimer = 0;
+  let scrubPendingSec = null;
   let muted = true;
   let seekReady = false;
   let primePromise = null;
@@ -162,7 +165,7 @@
     const w = video.videoWidth;
     const h = video.videoHeight;
     const mp = ((w * h) / 1_000_000).toFixed(2);
-    const cur = currentTime();
+    const cur = clockTime();
     const paused = video.paused;
     const mutedNow = video.muted;
     const rate = video.playbackRate || 1;
@@ -194,6 +197,18 @@
   function currentTime() {
     if (!video) return 0;
     return Math.max(0, Math.min(duration(), Number(video.currentTime) || 0));
+  }
+
+  function scrubValueToTime(value = scrub?.value) {
+    const d = duration();
+    if (!(d > 0)) return 0;
+    return (Number(value) / SCRUB_STEPS) * d;
+  }
+
+  /** 进度条旁时间：拖动时跟滑块，否则跟视频 */
+  function clockTime() {
+    if (scrubbing && scrub) return scrubValueToTime();
+    return currentTime();
   }
 
   function waitVideoMetadata(videoEl, timeoutMs = 12000) {
@@ -434,10 +449,11 @@
     });
   }
 
-  function syncClock() {
+  function syncClock(opts = {}) {
     if (!clock) return;
-    clock.textContent = `${formatClock(currentTime())} / ${formatClock(duration())}`;
-    syncInfoPanel();
+    const d = duration();
+    clock.textContent = `${formatClock(clockTime())} / ${formatClock(d)}`;
+    if (!opts.skipInfo) syncInfoPanel();
   }
 
   function syncScrubFromVideo() {
@@ -465,8 +481,10 @@
         else video.currentTime = t;
       } catch (_) {}
       if (!opts.fromScrub) syncScrubFromVideo();
-      syncClock();
-      syncPlayUi();
+      if (!opts.skipClock) {
+        syncClock();
+        syncPlayUi();
+      }
     };
     if (seekReady && video.readyState >= 2) {
       doSeek();
@@ -485,11 +503,35 @@
     ensureSeekReady();
   }
 
+  function scheduleScrubSeek(sec) {
+    scrubPendingSec = sec;
+    window.clearTimeout(scrubSeekTimer);
+    scrubSeekTimer = window.setTimeout(() => {
+      scrubSeekTimer = 0;
+      if (scrubPendingSec == null) return;
+      const t = scrubPendingSec;
+      scrubPendingSec = null;
+      applySeek(t, { fromScrub: true, skipClock: true });
+    }, SCRUB_SEEK_DEBOUNCE_MS);
+  }
+
+  function flushScrubSeek() {
+    window.clearTimeout(scrubSeekTimer);
+    scrubSeekTimer = 0;
+    if (scrubPendingSec != null) {
+      const t = scrubPendingSec;
+      scrubPendingSec = null;
+      applySeek(t, { fromScrub: true });
+      return;
+    }
+    syncClock();
+  }
+
   function scrubToValue() {
     if (!video?.src || !scrub) return;
-    const t = (Number(scrub.value) / SCRUB_STEPS) * duration();
-    syncClock();
-    applySeek(t, { fromScrub: true });
+    beginScrub();
+    syncClock({ skipInfo: true });
+    scheduleScrubSeek(scrubValueToTime());
   }
 
   function togglePlay() {
@@ -745,17 +787,17 @@
   });
   fsBtn?.addEventListener("click", toggleFullscreen);
   scrub?.addEventListener("pointerdown", () => {
-    beginScrub();
     scrubToValue();
   });
   scrub?.addEventListener("input", () => {
     if (!video?.src) return;
-    beginScrub();
     scrubToValue();
   });
   scrub?.addEventListener("change", () => {
     scrubbing = false;
+    flushScrubSeek();
     syncScrubFromVideo();
+    syncClock();
   });
   video?.addEventListener("timeupdate", () => {
     if (scrubbing) return;
