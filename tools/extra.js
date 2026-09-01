@@ -650,21 +650,19 @@
     });
   }
 
+  const GIF_FFMPEG_TOOLS = new Set(["gifmaker", "v2g", "gifx", "gifc", "gife", "gifm", "vsplit", "vbb", "vtrim", "audio", "vplay"]);
+
   function isGifmakerActive() {
     const hash = String(location.hash || "").replace(/^#/, "").toLowerCase();
-    if (
-      hash === "gifmaker" ||
-      hash === "vsplit" ||
-      hash === "vbb" ||
-      hash === "vplay" ||
-      hash === "media" ||
-      hash.indexOf("media/") === 0
-    ) {
+    const head = hash.split(/[/?]/).filter(Boolean)[0] || "";
+    if (GIF_FFMPEG_TOOLS.has(head) || hash === "media" || hash.indexOf("media/") === 0) {
       return true;
     }
-    const mediaLink = document.querySelector('.tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"], .tool-nav-link[data-tool="vtrim"], .tool-nav-link[data-tool="audio"], .tool-nav-link[data-tool="vplay"]');
+    const mediaLink = document.querySelector(
+      '.tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="v2g"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"], .tool-nav-link[data-tool="vtrim"], .tool-nav-link[data-tool="audio"], .tool-nav-link[data-tool="vplay"]'
+    );
     if (mediaLink?.classList.contains("is-active")) return true;
-    return ["gifmaker", "vsplit", "vbb", "vtrim", "audio", "vplay"].some((id) => {
+    return [...GIF_FFMPEG_TOOLS, "vbb", "vtrim", "audio", "vplay"].some((id) => {
       const panel = document.getElementById(id);
       return !!(panel && panel.classList.contains("is-workspace-active") && !panel.hidden);
     });
@@ -727,7 +725,7 @@
       if (!document.hidden) scheduleFfmpegPrewarm();
     });
     if (typeof MutationObserver === "function") {
-      ["gifmaker", "vsplit", "vbb", "vtrim", "audio", "vplay"].forEach((id) => {
+      [...GIF_FFMPEG_TOOLS, "vbb", "vtrim", "audio", "vplay"].forEach((id) => {
         const panel = document.getElementById(id);
         if (!panel) return;
         new MutationObserver(scheduleFfmpegPrewarm).observe(panel, {
@@ -738,7 +736,7 @@
     }
     document.addEventListener("click", (e) => {
       const t = e.target?.closest?.(
-        '.tool-nav-link[data-tool="media"], [data-category-tab], .tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"], .tool-nav-link[data-tool="vtrim"], .tool-nav-link[data-tool="audio"], .tool-nav-link[data-tool="vplay"]'
+        '.tool-nav-link[data-tool="media"], [data-category-tab], .tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="v2g"], .tool-nav-link[data-tool="gifx"], .tool-nav-link[data-tool="gifc"], .tool-nav-link[data-tool="gife"], .tool-nav-link[data-tool="gifm"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"], .tool-nav-link[data-tool="vtrim"], .tool-nav-link[data-tool="audio"], .tool-nav-link[data-tool="vplay"]'
       );
       if (t) setTimeout(scheduleFfmpegPrewarm, 0);
     });
@@ -3122,7 +3120,7 @@
       }
     }
 
-    bindPanel("gifmaker", () => {
+    bindPanel("gifx", () => {
           gifxFile = $("#gifx-file");
           gifxFramesEl = $("#gifx-frames");
           gifxMeta = $("#gifx-meta");
@@ -4869,8 +4867,8 @@
       }
     }
 
-    bindPanel("gifmaker", (root) => {
-      root = root || document.getElementById("gifmaker");
+    bindPanel("v2g", (root) => {
+      root = root || document.getElementById("v2g");
       v2gFile = $("#v2g-file", root);
       v2gVideo = $("#v2g-video", root);
       v2gMeta = $("#v2g-meta", root);
@@ -10166,7 +10164,7 @@
       }
     }
 
-    bindPanel("gifmaker", () => {
+    bindPanel("gifc", () => {
           gifcFile = $("#gifc-file");
           gifcMeta = $("#gifc-meta");
           gifcError = $("#gifc-error");
@@ -10612,7 +10610,7 @@
       syncGifeMeta();
     }
 
-    bindPanel("gifmaker", () => {
+    bindPanel("gife", () => {
           gifeFile = $("#gife-file");
           gifeMeta = $("#gife-meta");
           gifeError = $("#gife-error");
@@ -10847,7 +10845,7 @@
       renderGifmList();
     }
 
-    bindPanel("gifmaker", () => {
+    bindPanel("gifm", () => {
           gifmFile = $("#gifm-file");
           gifmList = $("#gifm-list");
           gifmMeta = $("#gifm-meta");

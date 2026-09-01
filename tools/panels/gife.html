@@ -1,0 +1,66 @@
+<section id="gife" class="panel tool-panel gif-tool-panel" data-reveal>
+  <div class="panel-head gif-tool-head">
+    <p class="gif-tool-kicker">GIF</p>
+    <h1>GIF 编辑</h1>
+    <p class="gif-tool-lead">裁剪画面、去黑边、去掉首尾帧，导出为新 GIF。</p>
+  </div>
+  <div class="panel-body gif-tool-body">
+    <div class="gif-tool-card">
+<div class="field-block" style="margin-top:1.5rem">
+          <div class="btn-row tool-actions">
+            <label class="file-btn" for="gife-file">选择 GIF</label>
+            <input id="gife-file" type="file" accept="image/gif,.gif" hidden />
+            <button type="button" class="ghost-btn" id="gife-clear">清空</button>
+          </div>
+          <p class="hint" id="gife-meta">裁剪画面（去黑边或裁掉一部分）、去掉前几帧或后几帧，再导出为新 GIF。</p>
+          <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem;align-items:center">
+            <label for="gife-trim-head">去掉前</label>
+            <input id="gife-trim-head" class="mono meta-input" type="number" min="0" max="999" step="1" value="0" title="去掉前几帧" />
+            <span class="hint tight">帧</span>
+            <label for="gife-trim-tail">去掉后</label>
+            <input id="gife-trim-tail" class="mono meta-input" type="number" min="0" max="999" step="1" value="0" title="去掉后几帧" />
+            <span class="hint tight">帧</span>
+          </div>
+          <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
+            <label for="gife-crop-x">裁剪 X%</label>
+            <input id="gife-crop-x" class="mono meta-input" type="number" min="0" max="99" value="0" />
+            <label for="gife-crop-y">Y%</label>
+            <input id="gife-crop-y" class="mono meta-input" type="number" min="0" max="99" value="0" />
+            <label for="gife-crop-w">W%</label>
+            <input id="gife-crop-w" class="mono meta-input" type="number" min="1" max="100" value="100" />
+            <label for="gife-crop-h">H%</label>
+            <input id="gife-crop-h" class="mono meta-input" type="number" min="1" max="100" value="100" />
+            <button type="button" class="ghost-btn" id="gife-auto-crop" disabled title="自动检测黑边并填入裁剪区域">自动去黑边</button>
+            <button type="button" class="ghost-btn" id="gife-reset-crop" disabled>重置裁剪</button>
+          </div>
+          <div class="imgkit-crop-editor gife-crop-editor" id="gife-crop-editor" hidden>
+            <div class="imgkit-crop-stage" id="gife-crop-stage">
+              <canvas id="gife-crop-canvas" width="1" height="1"></canvas>
+              <div class="imgkit-crop-box" id="gife-crop-box" hidden>
+                <span class="imgkit-crop-handle" data-gife-handle="nw"></span>
+                <span class="imgkit-crop-handle" data-gife-handle="n"></span>
+                <span class="imgkit-crop-handle" data-gife-handle="ne"></span>
+                <span class="imgkit-crop-handle" data-gife-handle="e"></span>
+                <span class="imgkit-crop-handle" data-gife-handle="se"></span>
+                <span class="imgkit-crop-handle" data-gife-handle="s"></span>
+                <span class="imgkit-crop-handle" data-gife-handle="sw"></span>
+                <span class="imgkit-crop-handle" data-gife-handle="w"></span>
+              </div>
+            </div>
+          </div>
+          <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
+            <button type="button" class="primary-btn" id="gife-apply" disabled>应用并导出</button>
+            <a class="secondary-btn" id="gife-download" href="#" download="edited.gif" hidden>下载编辑后 GIF</a>
+          </div>
+          <div class="gif-progress" id="gife-progress" hidden>
+            <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="gife-progress-fill"></span></div>
+            <p class="hint" id="gife-progress-text">准备中…</p>
+          </div>
+          <div class="gif-preview-wrap">
+            <img id="gife-preview" class="img-preview gif-preview" alt="编辑后 GIF 预览" hidden />
+          </div>
+          <p class="error" id="gife-error" hidden></p>
+        </div>
+    </div>
+  </div>
+</section>

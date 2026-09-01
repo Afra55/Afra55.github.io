@@ -477,26 +477,42 @@ async function main() {
   });
   await page.waitForFunction(() => location.hash === "#gifmaker", { timeout: 10000 });
   await page.waitForFunction(() => window.__devtoolsBootReady, { timeout: 60000 });
-  todayTools.gifm = await page.evaluate(
-    () => Boolean(document.getElementById("gifm-merge") && document.getElementById("gifm-file"))
-  );
+  const gifToolsAudit = {};
+  for (const [hash, probe] of [
+    ["gifmaker", () => Boolean(document.getElementById("gif-generate"))],
+    ["v2g", () => Boolean(document.getElementById("v2g-generate"))],
+    ["gifc", () => Boolean(document.getElementById("gifc-compress"))],
+    ["gife", () => Boolean(document.getElementById("gife-apply"))],
+    ["gifm", () => Boolean(document.getElementById("gifm-merge"))],
+    ["gifx", () => Boolean(document.getElementById("gifx-zip"))],
+  ]) {
+    await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#${hash}`, {
+      waitUntil: "networkidle0",
+      timeout: 60000,
+    });
+    await page.waitForFunction((h) => location.hash === `#${h}`, { timeout: 10000 }, hash);
+    await page.waitForFunction(() => window.__devtoolsBootReady, { timeout: 60000 });
+    gifToolsAudit[hash] = await page.evaluate(probe);
+  }
+  todayTools.gifm = gifToolsAudit.gifm;
+  await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#gifmaker`, {
+    waitUntil: "networkidle0",
+    timeout: 60000,
+  });
+  await page.waitForFunction(() => location.hash === "#gifmaker", { timeout: 10000 });
   const navAudit = await page.evaluate(() => {
     const navLinks = [...document.querySelectorAll(".tool-nav-link")].map((a) => a.dataset.tool);
     const groups = window.DevToolsCatalog?.groups || [];
     const gifGroup = groups.find((g) => g.id === "gif");
     const videoGroup = groups.find((g) => g.id === "video");
     const blackboxGroup = groups.find((g) => g.id === "blackbox");
-  const gifmakerSections = ["gif-generate", "gifx-zip", "gifc-compress", "gife-apply", "gifm-merge", "v2g-generate"].map(
-      (id) => Boolean(document.getElementById(id))
-    );
     return {
       gifGroupTools: gifGroup?.tools || [],
       videoGroupTools: videoGroup?.tools || [],
       blackboxGroupTools: blackboxGroup?.tools || [],
       hasGifbbNav: navLinks.includes("gifbb"),
       noMediaNav: !navLinks.includes("media"),
-      gifmakerSectionCount: gifmakerSections.filter(Boolean).length,
-      gifmakerSectionsOk: gifmakerSections.every(Boolean),
+      gifTabCount: document.querySelectorAll("#category-subnav [data-category-tab]").length,
     };
   });
   // 旧 #media/vsplit 深链应跳到独立视频工具
@@ -1490,8 +1506,8 @@ async function main() {
   if (!todayTools.ffbridge || !todayTools.ffbridgeApi) problems.push("missing FFmpeg bridge tool");
   if (!todayTools.setup || !todayTools.setupApi) problems.push("missing setup help page");
   if (!todayTools.ffModeBanner || !todayTools.ffAdaptApi) problems.push("missing ffmpeg device adapt UI");
-  if (!navAudit.gifGroupTools?.includes("gifmaker") || navAudit.gifGroupTools.length !== 1) {
-    problems.push(`GIF group should only contain gifmaker, got ${JSON.stringify(navAudit.gifGroupTools)}`);
+  if (JSON.stringify(navAudit.gifGroupTools) !== JSON.stringify(["gifmaker", "v2g", "gifc", "gife", "gifm", "gifx"])) {
+    problems.push(`GIF group tools mismatch: ${JSON.stringify(navAudit.gifGroupTools)}`);
   }
   if (JSON.stringify(navAudit.videoGroupTools) !== JSON.stringify(["vsplit", "vtrim", "audio", "vplay"])) {
     problems.push(`video group tools mismatch: ${JSON.stringify(navAudit.videoGroupTools)}`);
@@ -1501,8 +1517,12 @@ async function main() {
   }
   if (!navAudit.hasGifbbNav) problems.push("gifbb should be a separate sidebar tool");
   if (!navAudit.noMediaNav) problems.push("collapsed media nav entry should be removed");
-  if (!navAudit.gifmakerSectionsOk) {
-    problems.push(`gifmaker sub-features missing (${navAudit.gifmakerSectionCount}/6)`);
+  if (navAudit.gifTabCount !== 6) {
+    problems.push(`GIF category subnav should have 6 tabs, got ${navAudit.gifTabCount}`);
+  }
+  const gifToolIds = ["gifmaker", "v2g", "gifc", "gife", "gifm", "gifx"];
+  for (const id of gifToolIds) {
+    if (!gifToolsAudit[id]) problems.push(`gif tool panel missing core UI: ${id}`);
   }
   if (navAudit.legacyMediaVsplit?.hash !== "#vsplit" || !navAudit.legacyMediaVsplit?.vsplitActive) {
     problems.push(`legacy #media/vsplit redirect broken: ${JSON.stringify(navAudit.legacyMediaVsplit)}`);
@@ -1574,6 +1594,7 @@ async function main() {
       analyze,
       todayTools,
       navAudit,
+      gifToolsAudit,
       vbbWorkflowUi,
       compactFlyout,
       mobileShell,

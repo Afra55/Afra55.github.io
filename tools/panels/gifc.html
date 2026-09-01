@@ -1,0 +1,43 @@
+<section id="gifc" class="panel tool-panel gif-tool-panel" data-reveal>
+  <div class="panel-head gif-tool-head">
+    <p class="gif-tool-kicker">GIF</p>
+    <h1>GIF 压缩</h1>
+    <p class="gif-tool-lead">上传已有 GIF，按档位压缩体积；不满意可继续压一轮。</p>
+  </div>
+  <div class="panel-body gif-tool-body">
+    <div class="gif-tool-card">
+<div class="field-block" style="margin-top:1.5rem">
+          <div class="btn-row tool-actions">
+            <label class="file-btn" for="gifc-file">选择 GIF</label>
+            <input id="gifc-file" type="file" accept="image/gif,.gif" hidden />
+            <button type="button" class="ghost-btn" id="gifc-clear">清空</button>
+          </div>
+          <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
+            <label for="gifc-compress-level">压缩档位</label>
+            <select id="gifc-compress-level" class="mono select-input" title="压缩档位">
+              <option value="light">轻度</option>
+              <option value="standard" selected>标准</option>
+              <option value="strong">强力</option>
+            </select>
+          </div>
+          <p class="hint" id="gifc-meta">上传本地已有 GIF，选择档位后压缩；效果不满意可点「继续压缩」，会基于当前结果再压一轮。</p>
+          <div class="gif-preview-wrap">
+            <img id="gifc-source" class="img-preview gif-preview" alt="原始 GIF 预览" hidden />
+          </div>
+          <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
+            <button type="button" class="primary-btn" id="gifc-compress" disabled>压缩体积</button>
+            <button type="button" class="secondary-btn" id="gifc-compress-again" disabled hidden>继续压缩</button>
+            <a class="secondary-btn" id="gifc-download" href="#" download="compressed.gif" hidden>下载压缩 GIF</a>
+          </div>
+          <div class="gif-progress" id="gifc-progress" hidden>
+            <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="gifc-progress-fill"></span></div>
+            <p class="hint" id="gifc-progress-text">准备中…</p>
+          </div>
+          <div class="gif-preview-wrap">
+            <img id="gifc-preview" class="img-preview gif-preview" alt="压缩后 GIF 预览" hidden />
+          </div>
+          <p class="error" id="gifc-error" hidden></p>
+        </div>
+    </div>
+  </div>
+</section>

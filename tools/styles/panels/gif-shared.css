@@ -1,0 +1,68 @@
+.gif-tool-panel .gif-tool-head {
+  margin-bottom: 0.35rem;
+}
+
+.gif-tool-kicker {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--accent) 72%, var(--muted));
+}
+
+.gif-tool-head h1 {
+  margin: 0 0 0.45rem;
+  font-size: clamp(1.35rem, 2.4vw, 1.65rem);
+  letter-spacing: -0.02em;
+}
+
+.gif-tool-lead {
+  margin: 0;
+  max-width: 46rem;
+  color: var(--muted);
+  line-height: 1.55;
+  font-size: 0.95rem;
+}
+
+.gif-tool-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.gif-tool-card {
+  padding: 1rem 1.05rem 1.1rem;
+  border: 1px solid color-mix(in srgb, var(--line) 88%, var(--accent) 12%);
+  border-radius: 14px;
+  background: linear-gradient(
+    165deg,
+    color-mix(in srgb, var(--panel-strong) 96%, var(--accent) 4%) 0%,
+    color-mix(in srgb, var(--panel) 94%, transparent) 100%
+  );
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--bg-0) 22%, transparent);
+}
+
+.gif-tool-card .gif-preview-wrap {
+  margin-top: 0.85rem;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.gif-tool-card .gif-frame-list {
+  margin-top: 0.75rem;
+}
+
+.gif-tool-card .btn-row.tool-actions {
+  margin-top: 0.85rem;
+}
+
+@media (max-width: 900px) {
+  .gif-tool-card {
+    padding: 0.85rem 0.9rem 0.95rem;
+    border-radius: 12px;
+    box-shadow: none;
+  }
+}

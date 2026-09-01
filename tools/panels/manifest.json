@@ -3,281 +3,6 @@
   "generatedAt": "2026-09-01T10:28:48.470Z",
   "panels": [
     {
-      "id": "timestamp",
-      "file": "./panels/timestamp.html",
-      "bytes": 2535
-    },
-    {
-      "id": "timediff",
-      "file": "./panels/timediff.html",
-      "bytes": 2055
-    },
-    {
-      "id": "cron",
-      "file": "./panels/cron.html",
-      "bytes": 838
-    },
-    {
-      "id": "countdown",
-      "file": "./panels/countdown.html",
-      "bytes": 1063
-    },
-    {
-      "id": "dateremind",
-      "file": "./panels/dateremind.html",
-      "bytes": 6917
-    },
-    {
-      "id": "ahex",
-      "file": "./panels/ahex.html",
-      "bytes": 4978
-    },
-    {
-      "id": "color",
-      "file": "./panels/color.html",
-      "bytes": 1258
-    },
-    {
-      "id": "eyedropper",
-      "file": "./panels/eyedropper.html",
-      "bytes": 1946
-    },
-    {
-      "id": "password",
-      "file": "./panels/password.html",
-      "bytes": 1736
-    },
-    {
-      "id": "base64",
-      "file": "./panels/base64.html",
-      "bytes": 1454
-    },
-    {
-      "id": "imgb64",
-      "file": "./panels/imgb64.html",
-      "bytes": 1074
-    },
-    {
-      "id": "url",
-      "file": "./panels/url.html",
-      "bytes": 1115
-    },
-    {
-      "id": "hash",
-      "file": "./panels/hash.html",
-      "bytes": 1111
-    },
-    {
-      "id": "xorenc",
-      "file": "./panels/xorenc.html",
-      "bytes": 7363
-    },
-    {
-      "id": "morse",
-      "file": "./panels/morse.html",
-      "bytes": 7597
-    },
-    {
-      "id": "uuid",
-      "file": "./panels/uuid.html",
-      "bytes": 952
-    },
-    {
-      "id": "json",
-      "file": "./panels/json.html",
-      "bytes": 1181
-    },
-    {
-      "id": "yaml",
-      "file": "./panels/yaml.html",
-      "bytes": 1031
-    },
-    {
-      "id": "sharecard",
-      "file": "./panels/sharecard.html",
-      "bytes": 4496
-    },
-    {
-      "id": "phlogo",
-      "file": "./panels/phlogo.html",
-      "bytes": 4028
-    },
-    {
-      "id": "nokiasms",
-      "file": "./panels/nokiasms.html",
-      "bytes": 3496
-    },
-    {
-      "id": "query",
-      "file": "./panels/query.html",
-      "bytes": 1265
-    },
-    {
-      "id": "text",
-      "file": "./panels/text.html",
-      "bytes": 1101
-    },
-    {
-      "id": "caseconv",
-      "file": "./panels/caseconv.html",
-      "bytes": 2834
-    },
-    {
-      "id": "regex",
-      "file": "./panels/regex.html",
-      "bytes": 2161
-    },
-    {
-      "id": "diff",
-      "file": "./panels/diff.html",
-      "bytes": 3113
-    },
-    {
-      "id": "qrcode",
-      "file": "./panels/qrcode.html",
-      "bytes": 2422
-    },
-    {
-      "id": "units",
-      "file": "./panels/units.html",
-      "bytes": 1348
-    },
-    {
-      "id": "coord",
-      "file": "./panels/coord.html",
-      "bytes": 3428
-    },
-    {
-      "id": "numbase",
-      "file": "./panels/numbase.html",
-      "bytes": 1488
-    },
-    {
-      "id": "markdown",
-      "file": "./panels/markdown.html",
-      "bytes": 815
-    },
-    {
-      "id": "textimg",
-      "file": "./panels/textimg.html",
-      "bytes": 7467
-    },
-    {
-      "id": "imgtext",
-      "file": "./panels/imgtext.html",
-      "bytes": 2723
-    },
-    {
-      "id": "memo",
-      "file": "./panels/memo.html",
-      "bytes": 22856
-    },
-    {
-      "id": "gifmaker",
-      "file": "./panels/gifmaker.html",
-      "bytes": 21221
-    },
-    {
-      "id": "vsplit",
-      "file": "./panels/vsplit.html",
-      "bytes": 10491
-    },
-    {
-      "id": "vbb",
-      "file": "./panels/vbb.html",
-      "bytes": 7980
-    },
-    {
-      "id": "gifbb",
-      "file": "./panels/gifbb.html",
-      "bytes": 1205
-    },
-    {
-      "id": "vtrim",
-      "file": "./panels/vtrim.html",
-      "bytes": 9697
-    },
-    {
-      "id": "vplay",
-      "file": "./panels/vplay.html",
-      "bytes": 3682
-    },
-    {
-      "id": "audio",
-      "file": "./panels/audio.html",
-      "bytes": 5089
-    },
-    {
-      "id": "adb",
-      "file": "./panels/adb.html",
-      "bytes": 53339
-    },
-    {
-      "id": "wheel",
-      "file": "./panels/wheel.html",
-      "bytes": 2062
-    },
-    {
-      "id": "ruler",
-      "file": "./panels/ruler.html",
-      "bytes": 2003
-    },
-    {
-      "id": "muyu",
-      "file": "./panels/muyu.html",
-      "bytes": 2613
-    },
-    {
-      "id": "minigames",
-      "file": "./panels/minigames.html",
-      "bytes": 1625
-    },
-    {
-      "id": "sandspiel",
-      "file": "./panels/sandspiel.html",
-      "bytes": 733
-    },
-    {
-      "id": "ambient",
-      "file": "./panels/ambient.html",
-      "bytes": 2034
-    },
-    {
-      "id": "lanshare",
-      "file": "./panels/lanshare.html",
-      "bytes": 7985
-    },
-    {
-      "id": "ffbridge",
-      "file": "./panels/ffbridge.html",
-      "bytes": 6553
-    },
-    {
-      "id": "ytdlp",
-      "file": "./panels/ytdlp.html",
-      "bytes": 25736
-    },
-    {
-      "id": "imgpreview",
-      "file": "./panels/imgpreview.html",
-      "bytes": 2979
-    },
-    {
-      "id": "whiteboard",
-      "file": "./panels/whiteboard.html",
-      "bytes": 786
-    },
-    {
-      "id": "imgtrim",
-      "file": "./panels/imgtrim.html",
-      "bytes": 2798
-    },
-    {
-      "id": "imgkit",
-      "file": "./panels/imgkit.html",
-      "bytes": 16959
-    },
-    {
       "id": "about",
       "file": "./panels/about.html",
       "bytes": 2820
@@ -288,14 +13,139 @@
       "bytes": 16003
     },
     {
+      "id": "adb",
+      "file": "./panels/adb.html",
+      "bytes": 53339
+    },
+    {
+      "id": "ahex",
+      "file": "./panels/ahex.html",
+      "bytes": 4978
+    },
+    {
+      "id": "ambient",
+      "file": "./panels/ambient.html",
+      "bytes": 2034
+    },
+    {
+      "id": "audio",
+      "file": "./panels/audio.html",
+      "bytes": 5089
+    },
+    {
+      "id": "base64",
+      "file": "./panels/base64.html",
+      "bytes": 1454
+    },
+    {
+      "id": "caseconv",
+      "file": "./panels/caseconv.html",
+      "bytes": 2834
+    },
+    {
+      "id": "color",
+      "file": "./panels/color.html",
+      "bytes": 1258
+    },
+    {
+      "id": "coord",
+      "file": "./panels/coord.html",
+      "bytes": 3428
+    },
+    {
+      "id": "countdown",
+      "file": "./panels/countdown.html",
+      "bytes": 1063
+    },
+    {
+      "id": "cron",
+      "file": "./panels/cron.html",
+      "bytes": 838
+    },
+    {
+      "id": "dateremind",
+      "file": "./panels/dateremind.html",
+      "bytes": 6917
+    },
+    {
+      "id": "diff",
+      "file": "./panels/diff.html",
+      "bytes": 3113
+    },
+    {
+      "id": "eyedropper",
+      "file": "./panels/eyedropper.html",
+      "bytes": 1946
+    },
+    {
+      "id": "ffbridge",
+      "file": "./panels/ffbridge.html",
+      "bytes": 6553
+    },
+    {
+      "id": "gifbb",
+      "file": "./panels/gifbb.html",
+      "bytes": 1205
+    },
+    {
+      "id": "gifc",
+      "file": "./panels/gifc.html",
+      "bytes": 2476
+    },
+    {
+      "id": "gife",
+      "file": "./panels/gife.html",
+      "bytes": 4300
+    },
+    {
+      "id": "gifm",
+      "file": "./panels/gifm.html",
+      "bytes": 1818
+    },
+    {
+      "id": "gifmaker",
+      "file": "./panels/gifmaker.html",
+      "bytes": 3981
+    },
+    {
+      "id": "gifx",
+      "file": "./panels/gifx.html",
+      "bytes": 2565
+    },
+    {
+      "id": "hash",
+      "file": "./panels/hash.html",
+      "bytes": 1111
+    },
+    {
       "id": "healthread",
       "file": "./panels/healthread.html",
       "bytes": 727
     },
     {
-      "id": "pdfcraft",
-      "file": "./panels/pdfcraft.html",
-      "bytes": 1317
+      "id": "imgb64",
+      "file": "./panels/imgb64.html",
+      "bytes": 1074
+    },
+    {
+      "id": "imgkit",
+      "file": "./panels/imgkit.html",
+      "bytes": 16959
+    },
+    {
+      "id": "imgpreview",
+      "file": "./panels/imgpreview.html",
+      "bytes": 2979
+    },
+    {
+      "id": "imgtext",
+      "file": "./panels/imgtext.html",
+      "bytes": 2723
+    },
+    {
+      "id": "imgtrim",
+      "file": "./panels/imgtrim.html",
+      "bytes": 2798
     },
     {
       "id": "insectworld",
@@ -303,14 +153,189 @@
       "bytes": 1175
     },
     {
+      "id": "json",
+      "file": "./panels/json.html",
+      "bytes": 1181
+    },
+    {
+      "id": "lanshare",
+      "file": "./panels/lanshare.html",
+      "bytes": 7985
+    },
+    {
+      "id": "markdown",
+      "file": "./panels/markdown.html",
+      "bytes": 815
+    },
+    {
+      "id": "memo",
+      "file": "./panels/memo.html",
+      "bytes": 22856
+    },
+    {
+      "id": "minigames",
+      "file": "./panels/minigames.html",
+      "bytes": 1625
+    },
+    {
+      "id": "morse",
+      "file": "./panels/morse.html",
+      "bytes": 7597
+    },
+    {
+      "id": "muyu",
+      "file": "./panels/muyu.html",
+      "bytes": 2613
+    },
+    {
+      "id": "nokiasms",
+      "file": "./panels/nokiasms.html",
+      "bytes": 3496
+    },
+    {
+      "id": "numbase",
+      "file": "./panels/numbase.html",
+      "bytes": 1488
+    },
+    {
+      "id": "password",
+      "file": "./panels/password.html",
+      "bytes": 1736
+    },
+    {
+      "id": "pdfcraft",
+      "file": "./panels/pdfcraft.html",
+      "bytes": 1317
+    },
+    {
+      "id": "phlogo",
+      "file": "./panels/phlogo.html",
+      "bytes": 4028
+    },
+    {
       "id": "prehmuseum",
       "file": "./panels/prehmuseum.html",
       "bytes": 1221
     },
     {
+      "id": "qrcode",
+      "file": "./panels/qrcode.html",
+      "bytes": 2422
+    },
+    {
+      "id": "query",
+      "file": "./panels/query.html",
+      "bytes": 1265
+    },
+    {
+      "id": "regex",
+      "file": "./panels/regex.html",
+      "bytes": 2161
+    },
+    {
+      "id": "ruler",
+      "file": "./panels/ruler.html",
+      "bytes": 2003
+    },
+    {
+      "id": "sandspiel",
+      "file": "./panels/sandspiel.html",
+      "bytes": 733
+    },
+    {
       "id": "setup",
       "file": "./panels/setup.html",
       "bytes": 19698
+    },
+    {
+      "id": "sharecard",
+      "file": "./panels/sharecard.html",
+      "bytes": 4496
+    },
+    {
+      "id": "text",
+      "file": "./panels/text.html",
+      "bytes": 1101
+    },
+    {
+      "id": "textimg",
+      "file": "./panels/textimg.html",
+      "bytes": 7467
+    },
+    {
+      "id": "timediff",
+      "file": "./panels/timediff.html",
+      "bytes": 2055
+    },
+    {
+      "id": "timestamp",
+      "file": "./panels/timestamp.html",
+      "bytes": 2535
+    },
+    {
+      "id": "units",
+      "file": "./panels/units.html",
+      "bytes": 1348
+    },
+    {
+      "id": "url",
+      "file": "./panels/url.html",
+      "bytes": 1115
+    },
+    {
+      "id": "uuid",
+      "file": "./panels/uuid.html",
+      "bytes": 952
+    },
+    {
+      "id": "v2g",
+      "file": "./panels/v2g.html",
+      "bytes": 7704
+    },
+    {
+      "id": "vbb",
+      "file": "./panels/vbb.html",
+      "bytes": 7980
+    },
+    {
+      "id": "vplay",
+      "file": "./panels/vplay.html",
+      "bytes": 3682
+    },
+    {
+      "id": "vsplit",
+      "file": "./panels/vsplit.html",
+      "bytes": 10491
+    },
+    {
+      "id": "vtrim",
+      "file": "./panels/vtrim.html",
+      "bytes": 9697
+    },
+    {
+      "id": "wheel",
+      "file": "./panels/wheel.html",
+      "bytes": 2062
+    },
+    {
+      "id": "whiteboard",
+      "file": "./panels/whiteboard.html",
+      "bytes": 786
+    },
+    {
+      "id": "xorenc",
+      "file": "./panels/xorenc.html",
+      "bytes": 7363
+    },
+    {
+      "id": "yaml",
+      "file": "./panels/yaml.html",
+      "bytes": 1031
+    },
+    {
+      "id": "ytdlp",
+      "file": "./panels/ytdlp.html",
+      "bytes": 25736
     }
   ]
 }

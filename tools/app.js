@@ -873,7 +873,7 @@
   const SITE_NAV_IDS = new Set(["about", "setup"]);
   const LEGACY_MEDIA_TOOLS = ["gifmaker", "vsplit", "vtrim", "audio", "vplay"];
   /** 非紧凑侧栏时也显示顶栏分类条（工具数≥2） */
-  const GROUPS_WITH_ALWAYS_SUBNAV = new Set(["video", "blackbox"]);
+  const GROUPS_WITH_ALWAYS_SUBNAV = new Set(["gif", "video", "blackbox"]);
   const HASH_ALIASES = {
     gifmaker: { tool: "gifmaker" },
     vsplit: { tool: "vsplit" },
@@ -894,7 +894,7 @@
       label: "文本工具",
       tools: ["text", "caseconv", "regex", "diff", "markdown", "memo"],
     },
-    { id: "gif", label: "GIF", tools: ["gifmaker"] },
+    { id: "gif", label: "GIF", tools: ["gifmaker", "v2g", "gifc", "gife", "gifm", "gifx"] },
     { id: "video", label: "视频", tools: ["vsplit", "vtrim", "audio", "vplay"] },
     { id: "blackbox", label: "黑盒", tools: ["vbb", "gifbb"] },
     {
@@ -944,7 +944,12 @@
     qrcode: "生成与识别二维码。",
     markdown: "Markdown 预览。",
     memo: "本地备忘录：一键读剪贴板入库、搜索/点选筛选；文本图片可复制，其它类型可下载，手机可单条分享（文转图/OCR 见独立工具）。",
-    gifmaker: "视频转 GIF/WebP、压缩、拼接、亮度等本地动图处理（≤6MB 黑盒见「黑盒」分类）。",
+    gifmaker: "多张静态图合成 GIF，可调帧时长、宽度、质量与水印。",
+    v2g: "本地把视频转为 GIF 或动画 WebP，可调帧率、宽度与亮度（≤6MB 黑盒见「黑盒」分类）。",
+    gifx: "GIF 拆成逐帧图片打包下载，或导出为 WebM 视频。",
+    gifc: "上传已有 GIF 按档位压缩体积，可继续压一轮。",
+    gife: "裁剪画面、去黑边、去掉首尾帧，导出为新 GIF。",
+    gifm: "按顺序拼接多条 GIF 为一条长动图（各段宽高需一致）。",
     vsplit: "预览打点切分视频片段，支持全屏标记与打包下载（黑盒 GIF 见「黑盒」分类）。",
     vbb: "预制参数一键出 ≤6MB 黑盒 GIF：整段或长视频自动切片，全程本地处理。",
     gifbb: "多选已有 GIF，按黑盒规则压至 ≤6MB；已符合体积要求的会跳过。",
@@ -1007,7 +1012,12 @@
     regex: { name: "正则", aliases: ["regexp", "正则表达式"] },
     diff: { name: "文本比对", aliases: ["对比", "差异", "diff", "compare", "比对"] },
     qrcode: { name: "二维码", aliases: ["qr", "扫码"] },
-    gifmaker: { name: "GIF / 动图", aliases: ["gif", "动图", "webp", "ffmpeg"] },
+    gifmaker: { name: "多图合成 GIF", aliases: ["gif", "动图", "合成", "拼图"] },
+    v2g: { name: "视频转 GIF", aliases: ["视频", "webp", "ffmpeg", "转gif"] },
+    gifx: { name: "GIF 拆帧", aliases: ["拆帧", "转webm", "逐帧"] },
+    gifc: { name: "GIF 压缩", aliases: ["压缩gif", "缩小体积"] },
+    gife: { name: "GIF 编辑", aliases: ["裁剪", "去黑边", "删帧"] },
+    gifm: { name: "GIF 合并", aliases: ["拼接", "合并gif"] },
     vsplit: { name: "视频切分", aliases: ["切分", "vsplit", "视频"] },
     vbb: { name: "黑盒 GIF", aliases: ["黑盒", "vbb", "批量切分", "blackbox", "6mb", "视频转gif"] },
     gifbb: { name: "GIF 压黑盒", aliases: ["已有gif", "gif压缩", "压黑盒", "gifbb", "6mb gif"] },
