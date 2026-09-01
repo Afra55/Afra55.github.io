@@ -2581,6 +2581,7 @@
       bindCopyButtons(document.getElementById(routeToolId));
     } catch (err) {
       console.error("panel load failed", routeToolId, err);
+      showToast(`加载「${toolName(routeToolId)}」失败，请点顶栏「强制刷新」后重试`);
     }
 
     $$(".tool-panel").forEach((panel) => {

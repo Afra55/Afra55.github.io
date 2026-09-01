@@ -9,6 +9,57 @@ const STYLE = path.join(TOOLS, "style.css");
 const CORE = path.join(TOOLS, "style.css");
 const PANELS_DIR = path.join(TOOLS, "styles", "panels");
 
+/** 壳层/全局选择器：永不拆到 panel CSS */
+const SHELL_SELECTOR_PREFIXES = [
+  ".header-",
+  ".workspace-",
+  ".app-layout",
+  ".shell",
+  ".site-header",
+  ".site-footer",
+  ".site-chrome-",
+  ".brand",
+  ".tagline",
+  ".nav-bar",
+  ".nav-footer",
+  ".nav-search",
+  ".nav-drawer",
+  ".nav-compact",
+  ".nav-sort-hint",
+  ".nav-reset",
+  ".nav-menu-btn",
+  ".nav-backdrop",
+  ".tool-nav",
+  ".panel-head",
+  ".panel-body",
+  ".panel-wrap",
+  ".input-with-action",
+  ".media-subnav",
+  ".ghost-btn",
+  ".primary-btn",
+  ".secondary-btn",
+  "html",
+  "body",
+];
+
+const SHELL_MEDIA_SNIPPETS = [
+  "min-width: 901px",
+  "max-width: 900px",
+  "max-width: 700px",
+  "max-width: 600px",
+  "prefers-reduced-motion",
+];
+
+function isShellSelector(selectorText) {
+  const sel = String(selectorText || "").toLowerCase();
+  return SHELL_SELECTOR_PREFIXES.some((pfx) => sel.includes(pfx));
+}
+
+function isShellMedia(head) {
+  const h = String(head || "").toLowerCase();
+  return SHELL_MEDIA_SNIPPETS.some((s) => h.includes(s));
+}
+
 const PANEL_SELECTORS = {
   timestamp: ["#timestamp", "#ts-", ".ts-"],
   timediff: ["#timediff", "#td-", ".td-"],
@@ -116,6 +167,7 @@ function readBalanced(css, start) {
 }
 
 function assignPanel(selectorText) {
+  if (isShellSelector(selectorText)) return null;
   const sel = selectorText.toLowerCase();
   let hit = null;
   let hits = 0;
@@ -155,6 +207,15 @@ function parseRules(css) {
 
 function splitRule(rule) {
   if (/^@media/i.test(rule.head)) {
+    if (isShellMedia(rule.head)) {
+      const open = rule.text.indexOf("{");
+      const close = rule.text.lastIndexOf("}");
+      const inner = rule.text.slice(open + 1, close);
+      const innerRules = parseRules(inner);
+      if (innerRules.some((r) => isShellSelector(r.head) || isShellMedia(r.head))) {
+        return { text: rule.text, panel: null };
+      }
+    }
     const open = rule.text.indexOf("{");
     const close = rule.text.lastIndexOf("}");
     const mediaHead = rule.text.slice(0, open + 1);
@@ -192,7 +253,13 @@ function splitRule(rule) {
 }
 
 function main() {
+  const force = process.argv.includes("--force");
   const css = fs.readFileSync(STYLE, "utf8");
+  const panelCssExists = fs.existsSync(PANELS_DIR) && fs.readdirSync(PANELS_DIR).some((f) => f.endsWith(".css"));
+  if (panelCssExists && !force) {
+    console.error("split-styles: panel CSS already exists; pass --force to re-split (may strip comments).");
+    process.exit(1);
+  }
   const rules = parseRules(css);
   const core = [];
   const panels = Object.fromEntries(Object.keys(PANEL_SELECTORS).map((k) => [k, []]));
