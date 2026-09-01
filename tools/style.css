@@ -3578,6 +3578,17 @@ html[data-boot-loading="1"] body {
   transition: width 0.22s ease;
 }
 
+.devtools-tool-load-label {
+  margin: 0.15rem 0 0.35rem;
+  font-size: 0.78rem;
+  color: var(--muted, #9aabc4);
+  min-height: 1.1em;
+}
+
+.devtools-tool-load-label[hidden] {
+  display: none !important;
+}
+
 .yd-opts {
   display: flex;
   flex-direction: column;
