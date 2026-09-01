@@ -1,7 +1,7 @@
 <section id="vbb" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>黑盒 GIF</h1>
-        <p>预制参数（宽 420 · ≤6MB · 自动压帧/加宽），全程本地处理。选视频后点<strong>一键黑盒</strong>即可；已裁好的多个短片可多选一次性转换；长视频可自动切片，也可<strong>手动打点</strong>自选片段。</p>
+        <p>预制参数（宽 420 · ≤6MB · 自动压帧/加宽），全程本地处理。短片选视频后点<strong>一键黑盒</strong>；长视频请用<strong>切片模式</strong>先分析方案再生成；也可<strong>手动打点</strong>自选片段。</p>
       </div>
       <div class="panel-body">
         <div class="btn-row tool-actions">
@@ -60,34 +60,16 @@
             </div>
             <p class="hint tight" id="vbb-manual-draft" hidden></p>
             <p class="hint tight" id="vbb-long-hint" hidden>超过 3 分钟的视频：建议只拖动定位、少点播放；拖动时自动暂停以减轻内存压力。也可先在「视频切分」打点再转黑盒。</p>
-            <p class="hint tight">拖到起点后点「打起点」，再拖到终点点「打终点」；进度条绿/橙点可点跳转；可标记多段后点「一键黑盒」。</p>
+            <p class="hint tight">拖到起点后点「打起点」，再拖到终点点「打终点」；进度条绿/橙点可点跳转；标记多段后点上方「一键黑盒」。</p>
           </div>
-        </div>
-        <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
-          <button type="button" class="primary-btn" id="vbb-oneclick" disabled>一键黑盒</button>
-          <button type="button" class="secondary-btn" id="vbb-merge" disabled title="合并各段 GIF，不重新调色板；超限会自动压黑盒">合并 GIF</button>
-          <button type="button" class="ghost-btn" id="vbb-abort" hidden>取消</button>
-          <button type="button" class="secondary-btn" id="vbb-zip" disabled title="把已生成的 GIF 打成一个 zip">打包下载</button>
-          <a class="secondary-btn" id="vbb-merged-dl" href="#" download="blackbox-merged.gif" hidden>下载合并 GIF</a>
-          <label class="flag" style="margin-left:0.15rem" title="默认关闭。开启后转 GIF 成功时自动打 zip 并下载；与视频切片共用，会记住选择">
-            <input type="checkbox" id="vbb-auto-pack" data-auto-pack-zip /> 产出后自动打包下载
-          </label>
-        </div>
-        <div class="gif-progress" id="vbb-progress" hidden>
-          <div class="gif-progress-head">
-            <p class="hint gif-progress-title" id="vbb-progress-text">准备中…</p>
-            <span class="mono gif-progress-pct" id="vbb-progress-pct">0%</span>
-          </div>
-          <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="vbb-progress-fill"></span></div>
-          <p class="hint tight gif-progress-sub" id="vbb-progress-sub" hidden></p>
         </div>
 
         <div class="vbb-split-panel" id="vbb-split-panel" hidden>
           <h2 class="subhead">长视频切片</h2>
-          <p class="hint tight">先分析切分方案（段数、时长、预估体积），满意后再执行。整段模式无需此步骤。</p>
-          <div class="btn-row tool-actions" style="margin-top:0.65rem;flex-wrap:wrap">
-            <button type="button" class="secondary-btn" id="vbb-analyze" disabled>分析切分方案</button>
-            <button type="button" class="secondary-btn" id="vbb-run" disabled>按当前方案执行</button>
+          <p class="hint tight" id="vbb-split-intro">先分析视频并确认切分方案（段数、时长、预估体积），满意后再按方案逐段生成黑盒 GIF。</p>
+          <div class="btn-row tool-actions vbb-split-actions" style="margin-top:0.65rem;flex-wrap:wrap">
+            <button type="button" class="primary-btn" id="vbb-analyze" disabled>① 分析切分方案</button>
+            <button type="button" class="primary-btn" id="vbb-run" disabled>② 按方案生成 GIF</button>
           </div>
         <div class="vbb-plan" id="vbb-plan" hidden>
           <h2 class="subhead">切分方案</h2>
@@ -107,6 +89,25 @@
           </div>
           <p class="hint" id="vbb-plan-summary">分析完成后显示段数、时长与预估体积。</p>
         </div>
+        </div>
+
+        <div class="btn-row tool-actions vbb-main-actions" style="margin-top:1rem;flex-wrap:wrap">
+          <button type="button" class="primary-btn" id="vbb-oneclick" disabled>一键黑盒</button>
+          <button type="button" class="secondary-btn" id="vbb-merge" disabled title="合并各段 GIF，不重新调色板；超限会自动压黑盒">合并 GIF</button>
+          <button type="button" class="ghost-btn" id="vbb-abort" hidden>取消</button>
+          <button type="button" class="secondary-btn" id="vbb-zip" disabled title="把已生成的 GIF 打成一个 zip">打包下载</button>
+          <a class="secondary-btn" id="vbb-merged-dl" href="#" download="blackbox-merged.gif" hidden>下载合并 GIF</a>
+          <label class="flag" style="margin-left:0.15rem" title="默认关闭。开启后转 GIF 成功时自动打 zip 并下载；与视频切片共用，会记住选择">
+            <input type="checkbox" id="vbb-auto-pack" data-auto-pack-zip /> 产出后自动打包下载
+          </label>
+        </div>
+        <div class="gif-progress" id="vbb-progress" hidden>
+          <div class="gif-progress-head">
+            <p class="hint gif-progress-title" id="vbb-progress-text">准备中…</p>
+            <span class="mono gif-progress-pct" id="vbb-progress-pct">0%</span>
+          </div>
+          <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="vbb-progress-fill"></span></div>
+          <p class="hint tight gif-progress-sub" id="vbb-progress-sub" hidden></p>
         </div>
 
         <div class="vbb-result-block" id="vbb-result-block" hidden>

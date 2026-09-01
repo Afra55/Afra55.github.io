@@ -1,5 +1,25 @@
 @import url("./gif-shared.css");
 
+.vbb-split-actions {
+  gap: 0.55rem;
+}
+
+.vbb-split-actions .primary-btn {
+  min-width: 9.5rem;
+}
+
+.vbb-split-actions .primary-btn.is-ready {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent);
+}
+
+.vbb-main-actions .primary-btn[hidden] {
+  display: none !important;
+}
+
+.vbb-split-panel .vbb-plan {
+  margin-top: 0.85rem;
+}
+
 .vbb-split-panel {
   margin-top: 1rem;
   padding: 0.95rem 1rem;
