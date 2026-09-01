@@ -1,0 +1,29 @@
+<section id="caseconv" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>命名转换</h1>
+        <p>camelCase / snake_case / kebab-case 等风格互转，支持多行。</p>
+      </div>
+      <div class="panel-body">
+        <div class="field-block">
+          <label for="case-input">输入标识符</label>
+          <textarea id="case-input" class="mono area" rows="5" placeholder="userOrderId&#10;user-order-id&#10;USER_ORDER_ID" spellcheck="false">userOrderId</textarea>
+        </div>
+        <p class="hint" id="case-meta">每行一个名称，自动识别并转换。</p>
+        <div class="channel-meta case-results" style="border-top:1px solid var(--line);padding-top:0.85rem;margin-top:0.85rem">
+          <div class="meta-row"><span>camelCase</span><strong class="mono case-out" id="case-camel">—</strong><button type="button" class="copy-btn" data-copy="case-camel">复制</button></div>
+          <div class="meta-row"><span>PascalCase</span><strong class="mono case-out" id="case-pascal">—</strong><button type="button" class="copy-btn" data-copy="case-pascal">复制</button></div>
+          <div class="meta-row"><span>snake_case</span><strong class="mono case-out" id="case-snake">—</strong><button type="button" class="copy-btn" data-copy="case-snake">复制</button></div>
+          <div class="meta-row"><span>SCREAMING_SNAKE</span><strong class="mono case-out" id="case-screaming">—</strong><button type="button" class="copy-btn" data-copy="case-screaming">复制</button></div>
+          <div class="meta-row"><span>kebab-case</span><strong class="mono case-out" id="case-kebab">—</strong><button type="button" class="copy-btn" data-copy="case-kebab">复制</button></div>
+          <div class="meta-row"><span>dot.case</span><strong class="mono case-out" id="case-dot">—</strong><button type="button" class="copy-btn" data-copy="case-dot">复制</button></div>
+          <div class="meta-row"><span>path/case</span><strong class="mono case-out" id="case-path">—</strong><button type="button" class="copy-btn" data-copy="case-path">复制</button></div>
+          <div class="meta-row"><span>Title Case</span><strong class="mono case-out" id="case-title">—</strong><button type="button" class="copy-btn" data-copy="case-title">复制</button></div>
+        </div>
+        <div class="btn-row tool-actions" style="margin-top:0.9rem">
+          <button type="button" class="secondary-btn" id="case-use-camel">填入 camelCase</button>
+          <button type="button" class="secondary-btn" id="case-use-snake">填入 snake_case</button>
+          <button type="button" class="secondary-btn" id="case-use-kebab">填入 kebab-case</button>
+          <button type="button" class="ghost-btn" id="case-clear">清空</button>
+        </div>
+      </div>
+    </section>

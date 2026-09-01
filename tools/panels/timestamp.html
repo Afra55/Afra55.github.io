@@ -1,0 +1,50 @@
+<section id="timestamp" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>时间戳转换</h1>
+        <p>秒 / 毫秒时间戳与年月日时分秒互转，支持本地时区与 UTC。</p>
+      </div>
+
+      <div class="panel-body">
+        <div class="field-row">
+          <label for="tz">时区</label>
+          <div class="seg" role="group" aria-label="时区选择">
+            <button type="button" class="seg-btn is-active" data-tz="local">本地</button>
+            <button type="button" class="seg-btn" data-tz="utc">UTC</button>
+          </div>
+        </div>
+
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="ts-input">时间戳</label>
+            <div class="input-with-action">
+              <input id="ts-input" class="mono" type="text" inputmode="numeric" placeholder="例如 1719792000 或 1719792000000" autocomplete="off" />
+              <button type="button" class="ghost-btn" id="ts-now" title="填入当前时间戳">现在</button>
+            </div>
+            <p class="hint" id="ts-hint">自动识别秒 / 毫秒</p>
+            <button type="button" class="primary-btn" id="ts-to-date">转为日期时间</button>
+            <div class="result" id="ts-result" hidden>
+              <span class="result-label">结果</span>
+              <code class="result-value mono" id="ts-result-value"></code>
+              <button type="button" class="copy-btn" data-copy="ts-result-value">复制</button>
+            </div>
+          </div>
+
+          <div class="field-block">
+            <label for="dt-input">年月日时分秒</label>
+            <input id="dt-input" class="mono" type="text" placeholder="YYYY-MM-DD HH:mm:ss" autocomplete="off" />
+            <p class="hint">也支持 <span class="mono">YYYY/MM/DD HH:mm:ss</span> 或 HTML datetime-local</p>
+            <div class="btn-row">
+              <button type="button" class="primary-btn" id="date-to-ts-s">转为秒时间戳</button>
+              <button type="button" class="secondary-btn" id="date-to-ts-ms">转为毫秒</button>
+            </div>
+            <div class="result" id="dt-result" hidden>
+              <span class="result-label">结果</span>
+              <code class="result-value mono" id="dt-result-value"></code>
+              <button type="button" class="copy-btn" data-copy="dt-result-value">复制</button>
+            </div>
+          </div>
+        </div>
+
+        <p class="error" id="ts-error" hidden></p>
+      </div>
+    </section>

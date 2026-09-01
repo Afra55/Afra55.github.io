@@ -1,0 +1,24 @@
+<section id="minigames" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>摸鱼 & 解压</h1>
+        <p>纯本地 Canvas 小游戏与解压敲击：<strong>2048 / 贪吃蛇 / Flappy / 打地鼠</strong>，以及<strong>泡泡纸 / Pop-it / 升空气泡 / 键盘敲击音</strong>；进度保存在本机。</p>
+      </div>
+      <div class="panel-body minigames-body">
+        <div class="btn-row minigames-tabs tool-actions">
+          <button type="button" class="ghost-btn is-active" data-game="2048">2048</button>
+          <button type="button" class="ghost-btn" data-game="snake">贪吃蛇</button>
+          <button type="button" class="ghost-btn" data-game="flappy">Flappy</button>
+          <button type="button" class="ghost-btn" data-game="mole">打地鼠</button>
+          <button type="button" class="ghost-btn" data-game="bubble">泡泡纸</button>
+          <button type="button" class="ghost-btn" data-game="popit">Pop-it</button>
+          <button type="button" class="ghost-btn" data-game="zen">升空气泡</button>
+          <button type="button" class="ghost-btn" data-game="keytap">键盘音</button>
+        </div>
+        <div class="minigames-stage panel-card">
+          <div class="minigames-hud" id="minigames-hud"></div>
+          <canvas id="minigames-canvas" class="minigames-canvas" aria-label="摸鱼小游戏画布"></canvas>
+          <div id="minigames-overlay" class="minigames-overlay" hidden></div>
+        </div>
+        <p class="hint tight" id="minigames-hint">选择上方游戏开始；进度仅保存在本机。</p>
+      </div>
+    </section>

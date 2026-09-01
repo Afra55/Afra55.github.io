@@ -1,0 +1,33 @@
+<section id="units" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>单位换算</h1>
+        <p>长度、重量、温度常用单位互转。</p>
+      </div>
+      <div class="panel-body">
+        <div class="field-row" style="flex-wrap:wrap">
+          <label for="unit-cat">类别</label>
+          <select id="unit-cat" class="mono select-input">
+            <option value="length">长度</option>
+            <option value="weight">重量</option>
+            <option value="temp">温度</option>
+          </select>
+        </div>
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="unit-from-val">从</label>
+            <div class="input-with-action">
+              <input id="unit-from-val" class="mono" type="number" value="1" step="any" />
+              <select id="unit-from" class="mono select-input"></select>
+            </div>
+          </div>
+          <div class="field-block">
+            <label for="unit-to-val">到</label>
+            <div class="input-with-action">
+              <input id="unit-to-val" class="mono" type="number" readonly step="any" />
+              <select id="unit-to" class="mono select-input"></select>
+            </div>
+          </div>
+        </div>
+        <p class="hint" id="unit-hint"></p>
+      </div>
+    </section>

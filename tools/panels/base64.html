@@ -1,0 +1,28 @@
+<section id="base64" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>Base64 编解码</h1>
+        <p>文本与 Base64 互转，支持 UTF-8；也可选择本地文件编码为 Base64。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="b64-text">文本</label>
+            <textarea id="b64-text" class="mono area" rows="8" placeholder="输入要编码的文本…" spellcheck="false"></textarea>
+          </div>
+          <div class="field-block">
+            <label for="b64-encoded">Base64</label>
+            <textarea id="b64-encoded" class="mono area" rows="8" placeholder="输入要解码的 Base64…" spellcheck="false"></textarea>
+          </div>
+        </div>
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="b64-encode">编码 →</button>
+          <button type="button" class="secondary-btn" id="b64-decode">← 解码</button>
+          <button type="button" class="secondary-btn" id="b64-swap">互换</button>
+          <button type="button" class="ghost-btn" id="b64-clear">清空</button>
+          <label class="file-btn" for="b64-file">选择文件编码</label>
+          <input id="b64-file" type="file" hidden />
+        </div>
+        <p class="hint" id="b64-meta"></p>
+        <p class="error" id="b64-error" hidden></p>
+      </div>
+    </section>

@@ -1,0 +1,30 @@
+<section id="numbase" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>进制转换</h1>
+        <p>二 / 八 / 十 / 十六进制互转。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="nb-input">输入数值</label>
+            <input id="nb-input" class="mono" type="text" value="255" autocomplete="off" />
+            <label for="nb-from">输入进制</label>
+            <select id="nb-from" class="mono select-input">
+              <option value="10" selected>十进制</option>
+              <option value="2">二进制</option>
+              <option value="8">八进制</option>
+              <option value="16">十六进制</option>
+            </select>
+          </div>
+          <div class="field-block">
+            <div class="channel-meta" style="border:0;padding-top:0">
+              <div class="meta-row"><span>二进制</span><strong class="mono" id="nb-bin">—</strong></div>
+              <div class="meta-row"><span>八进制</span><strong class="mono" id="nb-oct">—</strong></div>
+              <div class="meta-row"><span>十进制</span><strong class="mono" id="nb-dec">—</strong></div>
+              <div class="meta-row"><span>十六进制</span><strong class="mono" id="nb-hex">—</strong></div>
+            </div>
+          </div>
+        </div>
+        <p class="error" id="nb-error" hidden></p>
+      </div>
+    </section>

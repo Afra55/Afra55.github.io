@@ -1,0 +1,328 @@
+<section id="memo" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>备忘录</h1>
+        <p>本地轻量剪贴板备份：拷进来、收着、找得回。桌面可选目录持久保存；换机前请导出。文转图 / OCR 请用侧栏独立工具。</p>
+      </div>
+      <div class="panel-body memo-body">
+        <div class="memo-toolbar">
+          <div class="memo-capture-bar panel-card">
+            <p class="memo-capture-title">存进来</p>
+            <p class="hint tight memo-capture-hint">
+              <span class="memo-hint-wide">复制别处内容后，点下方按钮，或直接 Ctrl/⌘+V / 拖入文件。</span>
+              <span class="memo-hint-narrow">手机可长按页面空白处粘贴入库；iOS 点「读取剪贴板」会打开粘贴框（系统不支持直接读取）。</span>
+            </p>
+            <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
+              <button type="button" class="primary-btn" id="memo-read-clip">读取剪贴板</button>
+              <label class="file-btn" for="memo-file">添加文件</label>
+              <input id="memo-file" type="file" multiple hidden />
+            </div>
+          </div>
+
+          <details class="memo-backup-bar memo-storage-fold panel-card" id="memo-backup-fold">
+            <summary class="memo-backup-sum">备份与存储</summary>
+            <p class="hint tight memo-storage-tip" id="memo-storage-tip" hidden>
+              桌面可将条目存到磁盘文件夹，清浏览器缓存后文件仍在。在下方「存储位置」里点「选择存储文件夹」即可绑定。
+            </p>
+
+            <div class="memo-backup-group">
+              <p class="memo-backup-group-title">存储位置</p>
+              <div class="btn-row tool-actions memo-backup-actions">
+                <button type="button" class="secondary-btn" id="memo-pick-dir">选择存储文件夹</button>
+                <button type="button" class="secondary-btn" id="memo-switch-dir" hidden title="更换磁盘文件夹，可选带走当前内容">更换文件夹</button>
+                <button type="button" class="ghost-btn" id="memo-reconnect" hidden>重新连接</button>
+              </div>
+              <p class="hint tight" id="memo-store-meta">正在检测存储能力…</p>
+            </div>
+
+            <div class="memo-backup-group">
+              <p class="memo-backup-group-title">备份与迁移</p>
+              <p class="hint tight memo-backup-tip">导出可换机带走，可选类型/标签/加密。已绑定文件夹时可写入 backups/ 快照（不加密）。</p>
+              <div class="btn-row tool-actions memo-backup-actions">
+                <button type="button" class="secondary-btn" id="memo-export">导出</button>
+                <label class="file-btn" for="memo-import">导入</label>
+                <input id="memo-import" type="file" accept=".zip,.memo,.bin,application/zip" hidden />
+                <button type="button" class="ghost-btn" id="memo-export-to-dir" hidden title="写入当前存储目录下的 backups/ 文件夹，全量且不加密">写入 backups 快照</button>
+              </div>
+            </div>
+
+            <p class="hint tight memo-backup-nudge" id="memo-backup-nudge" hidden></p>
+          </details>
+
+          <dialog class="memo-dialog" id="memo-switch-dir-dlg" aria-label="更换存储目录">
+            <div class="memo-dialog-body">
+              <h2 class="subhead" id="memo-switch-dir-title">更换存储目录</h2>
+              <p class="hint tight" id="memo-switch-dir-sub"></p>
+              <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.75rem">
+                <button type="button" class="primary-btn" id="memo-switch-migrate" hidden>带走当前内容并切换</button>
+                <button type="button" class="secondary-btn" id="memo-switch-open" hidden>打开该目录</button>
+                <button type="button" class="ghost-btn" id="memo-switch-empty" hidden>绑定空目录（不带走）</button>
+                <button type="button" class="ghost-btn" id="memo-switch-cancel">取消</button>
+              </div>
+            </div>
+          </dialog>
+
+          <dialog class="memo-dialog" id="memo-import-pass-dlg" aria-label="导入加密包">
+            <form method="dialog" class="memo-dialog-body" id="memo-import-pass-form">
+              <h2 class="subhead">导入加密备份</h2>
+              <p class="hint tight">该文件可能已加密，请输入导出时的口令。</p>
+              <label for="memo-import-pass">口令</label>
+              <input id="memo-import-pass" class="mono meta-input" type="password" autocomplete="current-password" placeholder="导入口令" />
+              <div class="btn-row tool-actions" style="margin-top:0.75rem">
+                <button type="submit" class="primary-btn" value="ok" id="memo-import-pass-ok">解密并导入</button>
+                <button type="submit" class="ghost-btn" value="cancel">取消</button>
+              </div>
+            </form>
+          </dialog>
+
+          <div class="memo-reconnect-banner" id="memo-reconnect-banner" hidden>
+            <strong>文件夹连接已失效</strong>
+            <p class="hint tight">磁盘文件通常还在。请点「重新连接」并选回同一路径以恢复预览与写入。</p>
+            <button type="button" class="primary-btn" id="memo-reconnect-banner-btn">重新连接</button>
+          </div>
+        </div>
+
+        <div class="memo-layout">
+          <aside class="memo-tags" id="memo-tags-aside" aria-label="标签">
+            <button type="button" class="memo-tags-toggle secondary-btn" id="memo-tags-toggle" aria-expanded="false" aria-controls="memo-tags-panel">
+              标签筛选
+            </button>
+            <div class="memo-tags-panel" id="memo-tags-panel">
+              <div class="memo-tags-head label-row">
+                <h2 class="subhead">标签</h2>
+                <button type="button" class="ghost-btn" id="memo-tag-new">新建</button>
+              </div>
+              <p class="hint tight memo-tag-tip">点标签名筛选；自定义标签可点「删除」（只删标签，不删条目）。</p>
+              <div class="memo-tag-list" id="memo-tag-list"></div>
+              <div class="memo-temp-zone" id="memo-temp-zone">
+                <div class="memo-temp-head label-row">
+                  <h2 class="subhead">临时</h2>
+                  <label class="memo-temp-days-lab" title="临时条目到期后自动删除">
+                    <span>保留</span>
+                    <input id="memo-temp-days" class="mono meta-input" type="number" min="1" max="365" value="7" inputmode="numeric" />
+                    <span>天</span>
+                  </label>
+                </div>
+                <button type="button" class="memo-temp-filter" id="memo-temp-filter" data-memo-temp-filter="1">
+                  临时条目<span class="mono memo-temp-count" id="memo-temp-count">0</span>
+                </button>
+                <p class="hint tight memo-temp-tip">与普通标签分开；剪贴板入库时可自动标记，也可在条目上手动加/移除。</p>
+              </div>
+            </div>
+          </aside>
+
+          <div class="memo-main">
+            <div class="memo-quick-text panel-card" id="memo-editor-fold">
+              <label class="memo-quick-text-lab" for="memo-editor">直接写一段文字</label>
+              <textarea id="memo-editor" class="area memo-quick-text-area mono" rows="5" placeholder="在此输入后点「保存文字」，或按 Ctrl/⌘+Enter"></textarea>
+              <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.35rem">
+                <button type="button" class="secondary-btn" id="memo-save-text">保存文字</button>
+              </div>
+            </div>
+
+            <dialog class="memo-dialog memo-ios-paste-dlg" id="memo-ios-paste-dlg" aria-label="粘贴入库">
+              <div class="memo-dialog-body">
+                <div class="label-row">
+                  <h2 class="subhead">粘贴入库</h2>
+                  <p class="hint tight">iOS 无法直接读取剪贴板。请在下框内<strong>长按</strong>，点「粘贴」。</p>
+                </div>
+                <label class="memo-ti-src-lab" for="memo-ios-paste-input">粘贴区
+                  <textarea id="memo-ios-paste-input" class="area mono" rows="6" placeholder="长按此处 → 粘贴" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
+                </label>
+                <div class="btn-row tool-actions" style="flex-wrap:wrap">
+                  <button type="button" class="ghost-btn" id="memo-ios-paste-cancel">取消</button>
+                </div>
+              </div>
+            </dialog>
+
+            <dialog class="memo-dialog memo-text-edit-dlg" id="memo-text-edit" aria-label="编辑文本">
+              <div class="memo-dialog-body">
+                <div class="label-row">
+                  <h2 class="subhead">编辑文本</h2>
+                  <p class="hint tight" id="memo-text-edit-sub">修改后点保存，覆盖原条目</p>
+                </div>
+                <label class="memo-ti-src-lab" for="memo-text-edit-src">内容
+                  <textarea id="memo-text-edit-src" class="area mono" rows="20" placeholder="编辑备忘录文本…"></textarea>
+                </label>
+                <div class="btn-row tool-actions memo-json-actions" id="memo-text-edit-json" hidden>
+                  <button type="button" class="ghost-btn" id="memo-text-edit-json-pretty">美化 JSON</button>
+                  <button type="button" class="ghost-btn" id="memo-text-edit-json-minify">压缩 JSON</button>
+                </div>
+                <div class="btn-row tool-actions" style="flex-wrap:wrap">
+                  <button type="button" class="primary-btn" id="memo-text-edit-save">保存修改</button>
+                  <button type="button" class="ghost-btn" id="memo-text-edit-cancel">取消</button>
+                </div>
+                <p class="error" id="memo-text-edit-error" hidden></p>
+              </div>
+            </dialog>
+
+            <dialog class="memo-dialog memo-note-edit-dlg" id="memo-note-edit" aria-label="编辑备注">
+              <div class="memo-dialog-body">
+                <div class="label-row">
+                  <h2 class="subhead">备注</h2>
+                  <p class="hint tight" id="memo-note-edit-sub">说明这条用来干什么，可搜索</p>
+                </div>
+                <label class="memo-ti-src-lab" for="memo-note-edit-src">备注内容
+                  <textarea id="memo-note-edit-src" class="area" rows="4" maxlength="500" placeholder="例如：登录页截图、周一要用的合同…"></textarea>
+                </label>
+                <p class="hint tight mono memo-note-edit-count" id="memo-note-edit-count" aria-live="polite">0 / 500</p>
+                <div class="btn-row tool-actions" style="flex-wrap:wrap">
+                  <button type="button" class="primary-btn" id="memo-note-edit-save">保存备注</button>
+                  <button type="button" class="ghost-btn" id="memo-note-edit-clear">清空</button>
+                  <button type="button" class="ghost-btn" id="memo-note-edit-cancel">取消</button>
+                </div>
+                <p class="error" id="memo-note-edit-error" hidden></p>
+              </div>
+            </dialog>
+
+            <div class="memo-progress" id="memo-progress" hidden>
+              <div class="gif-progress-head">
+                <p class="hint gif-progress-title" id="memo-progress-text">处理中…</p>
+                <span class="mono gif-progress-pct" id="memo-progress-pct">0%</span>
+              </div>
+              <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="memo-progress-fill"></span></div>
+              <div class="btn-row tool-actions" style="margin-top:0.35rem">
+                <button type="button" class="ghost-btn" id="memo-progress-cancel" hidden>取消</button>
+              </div>
+            </div>
+
+            <div class="label-row" style="margin-top:0.85rem">
+              <h2 class="subhead">条目</h2>
+              <div class="btn-row memo-list-head-actions">
+                <label class="flag" id="memo-select-all-lab"><input type="checkbox" id="memo-select-all" /> <span class="memo-select-all-text">全选筛选结果</span></label>
+                <div class="memo-time-select" id="memo-time-select" title="只勾选当前筛选结果，不直接删除">
+                  <button type="button" class="ghost-btn" data-memo-sel-today>今天</button>
+                  <button type="button" class="ghost-btn" data-memo-sel-temp>临时</button>
+                  <button type="button" class="ghost-btn" id="memo-sel-range-btn" aria-expanded="false" aria-controls="memo-sel-range">选时间段</button>
+                </div>
+                <button type="button" class="ghost-btn" id="memo-batch-clear" disabled>取消选中</button>
+                <button type="button" class="ghost-btn" id="memo-batch-del" disabled>批量删除</button>
+              </div>
+            </div>
+            <div class="memo-sel-range" id="memo-sel-range" hidden>
+              <label>从 <input id="memo-sel-from" type="date" /></label>
+              <label>到 <input id="memo-sel-to" type="date" /></label>
+              <button type="button" class="secondary-btn" id="memo-sel-range-ok">勾选这段</button>
+              <p class="hint tight">只填「从」则勾选该日及之后；只填「到」则勾选今天到该日；两端都填则按该区间。只改勾选，不直接删除。</p>
+            </div>
+            <div class="memo-list-tools">
+              <label class="memo-search-lab" for="memo-search">
+                <span class="visually-hidden">搜索备忘录</span>
+                <input id="memo-search" class="mono memo-search" type="search" placeholder="输入关键词（文件名、正文、备注、标签名都行）" autocomplete="off" enterkeyhint="search" />
+              </label>
+              <button type="button" class="ghost-btn" id="memo-clear-filters" hidden>清除筛选</button>
+            </div>
+            <p class="hint tight" id="memo-filter-hint">点标签或类型即可筛选；直接搜标签名也行。</p>
+            <div class="memo-type-filter" id="memo-type-filter" aria-label="按类型筛选"></div>
+            <p class="hint tight mono" id="memo-list-meta" hidden></p>
+            <div class="memo-drop" id="memo-drop">
+              <p class="hint tight">拖拽文件到本页任意区域添加 · 最新在上 · 滑到底部自动加载</p>
+              <div class="memo-list" id="memo-list"></div>
+              <div class="memo-scroll-sentinel" id="memo-scroll-sentinel" hidden aria-hidden="true"></div>
+              <p class="hint tight mono memo-loading-more" id="memo-loading-more" hidden>正在加载更多…</p>
+              <div class="btn-row tool-actions memo-more-row" id="memo-more-row" hidden>
+                <button type="button" class="ghost-btn" id="memo-load-more">加载更多</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <dialog class="memo-dialog" id="memo-export-dlg">
+          <form method="dialog" class="memo-dialog-body">
+            <h2 class="subhead">导出备忘录</h2>
+            <p class="hint tight">可选内容与可选口令。有口令时压缩包内容会加密，导入需同一口令。</p>
+            <p class="hint tight">备注会随条目一起导出，导入后仍可搜索与编辑。</p>
+            <fieldset class="memo-export-kinds">
+              <legend>类型</legend>
+              <label class="flag"><input type="checkbox" name="kind" value="text" checked /> 文本</label>
+              <label class="flag"><input type="checkbox" name="kind" value="image" checked /> 图片</label>
+              <label class="flag"><input type="checkbox" name="kind" value="gif" checked /> 动图</label>
+              <label class="flag"><input type="checkbox" name="kind" value="video" checked /> 视频</label>
+              <label class="flag"><input type="checkbox" name="kind" value="audio" checked /> 音频</label>
+              <label class="flag"><input type="checkbox" name="kind" value="file" checked /> 其它文件</label>
+            </fieldset>
+            <label for="memo-export-tags">按标签（可多选，空=全部）</label>
+            <select id="memo-export-tags" class="select-input" multiple size="5"></select>
+            <label for="memo-export-pass">加密口令（可选）</label>
+            <input id="memo-export-pass" class="mono meta-input" type="password" autocomplete="new-password" placeholder="留空则不加密" />
+            <div class="btn-row tool-actions" style="margin-top:0.75rem">
+              <button type="submit" class="primary-btn" value="ok" id="memo-export-ok">导出</button>
+              <button type="submit" class="ghost-btn" value="cancel">取消</button>
+            </div>
+          </form>
+        </dialog>
+
+        <dialog class="memo-dialog" id="memo-tag-dlg" aria-label="选择标签">
+          <form method="dialog" class="memo-dialog-body">
+            <h2 class="subhead">添加标签</h2>
+            <p class="hint tight">输入可搜索已有标签；没有则新建。</p>
+            <input id="memo-tag-search" class="mono memo-search" type="search" placeholder="搜索或新建标签…" autocomplete="off" />
+            <div class="memo-tag-suggest" id="memo-tag-suggest"></div>
+            <div class="btn-row tool-actions" style="margin-top:0.55rem">
+              <button type="submit" class="primary-btn" value="ok" id="memo-tag-ok">使用输入创建/添加</button>
+              <button type="submit" class="ghost-btn" value="cancel">取消</button>
+            </div>
+          </form>
+        </dialog>
+
+        <dialog class="memo-dialog memo-preview-dlg" id="memo-lightbox" aria-label="预览">
+          <div class="memo-lightbox-inner">
+            <div class="memo-preview-bar">
+              <div class="memo-preview-meta">
+                <strong id="memo-preview-title">预览</strong>
+                <span class="hint tight mono" id="memo-preview-sub"></span>
+                <button type="button" class="memo-preview-note-block" id="memo-preview-note" hidden></button>
+              </div>
+              <div class="btn-row memo-preview-actions">
+                <button type="button" class="secondary-btn" id="memo-preview-copy" hidden>复制</button>
+                <button type="button" class="secondary-btn" id="memo-preview-edit" hidden>编辑</button>
+                <button type="button" class="ghost-btn" id="memo-preview-top" hidden>移动到顶部</button>
+                <button type="button" class="ghost-btn" id="memo-preview-pin" hidden>一直置顶</button>
+                <button type="button" class="ghost-btn" id="memo-preview-share" hidden>分享</button>
+                <button type="button" class="ghost-btn" id="memo-preview-fs" hidden>全屏</button>
+                <button type="button" class="ghost-btn" id="memo-preview-newtab" hidden>新标签打开</button>
+                <button type="button" class="ghost-btn" id="memo-preview-dl" hidden>下载</button>
+                <button type="button" class="ghost-btn" id="memo-preview-loc" hidden>打开文件位置</button>
+                <button type="button" class="ghost-btn" id="memo-preview-path" hidden>新标签查看</button>
+                <button type="button" class="ghost-btn memo-preview-del" id="memo-preview-del" hidden>删除</button>
+                <button type="button" class="ghost-btn memo-lightbox-close" id="memo-lightbox-close">关闭</button>
+              </div>
+            </div>
+            <div class="memo-preview-stage" id="memo-preview-stage">
+              <div class="memo-zoom-wrap" id="memo-zoom-wrap" hidden title="滚轮缩放，拖拽查看不同区域">
+                <img id="memo-lightbox-img" alt="图片预览" draggable="false" />
+                <div class="memo-zoom-hud">
+                  <button type="button" class="ghost-btn memo-zoom-btn" id="memo-zoom-out" title="缩小">－</button>
+                  <span class="mono memo-zoom-pct" id="memo-zoom-pct">100%</span>
+                  <button type="button" class="ghost-btn memo-zoom-btn" id="memo-zoom-in" title="放大">＋</button>
+                  <button type="button" class="ghost-btn memo-zoom-btn" id="memo-zoom-reset" title="还原到适应窗口">还原</button>
+                </div>
+              </div>
+              <div class="memo-zoom-wrap memo-video-zoom-wrap" id="memo-video-zoom-wrap" hidden title="滚轮缩放，拖拽移动，双击暂停/播放">
+                <video id="memo-lightbox-video" class="memo-preview-video" playsinline hidden></video>
+                <div class="memo-zoom-hud memo-video-zoom-hud">
+                  <button type="button" class="ghost-btn memo-zoom-btn" id="memo-video-zoom-out" title="缩小">－</button>
+                  <span class="mono memo-zoom-pct" id="memo-video-zoom-pct">100%</span>
+                  <button type="button" class="ghost-btn memo-zoom-btn" id="memo-video-zoom-in" title="放大">＋</button>
+                  <button type="button" class="ghost-btn memo-zoom-btn" id="memo-video-zoom-reset" title="还原到适应窗口">还原</button>
+                  <button type="button" class="ghost-btn memo-zoom-btn" id="memo-video-zoom-rotate" title="顺时针旋转 90°">↻</button>
+                </div>
+              </div>
+              <div class="memo-preview-audio-wrap" id="memo-preview-audio-wrap" hidden>
+                <div class="memo-preview-audio-art" aria-hidden="true"></div>
+                <audio id="memo-lightbox-audio" class="memo-preview-audio" controls></audio>
+              </div>
+              <pre id="memo-lightbox-text" class="mono memo-preview-text" hidden></pre>
+              <iframe id="memo-lightbox-frame" class="memo-preview-frame" title="文档预览" hidden></iframe>
+              <div class="memo-preview-file" id="memo-preview-file" hidden>
+                <p class="memo-preview-file-kicker hint tight">文件预览</p>
+                <p class="memo-preview-file-name mono" id="memo-preview-file-name"></p>
+                <p class="hint tight" id="memo-preview-file-meta"></p>
+                <p class="hint tight">此类型无法在页内完整打开，请下载、分享或新标签尝试查看。</p>
+              </div>
+            </div>
+          </div>
+        </dialog>
+
+        <p class="error" id="memo-error" hidden></p>
+      </div>
+    </section>

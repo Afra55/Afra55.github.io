@@ -1,0 +1,23 @@
+<section id="query" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>Query / JWT 解析</h1>
+        <p>解析 URL 查询参数，或拆开 JWT 查看 Header / Payload（不校验签名）。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="q-input">URL 或 Query</label>
+            <textarea id="q-input" class="mono area" rows="5" placeholder="https://a.com/?name=tom&age=18 或 name=tom&age=18" spellcheck="false"></textarea>
+            <button type="button" class="primary-btn" id="q-parse">解析 Query</button>
+            <pre class="mono highlight-box" id="q-out" style="margin-top:0.8rem"></pre>
+          </div>
+          <div class="field-block">
+            <label for="jwt-input">JWT</label>
+            <textarea id="jwt-input" class="mono area" rows="5" placeholder="eyJhbGciOi... .eyJzdWIiOi... .sig" spellcheck="false"></textarea>
+            <button type="button" class="primary-btn" id="jwt-parse">解析 JWT</button>
+            <pre class="mono highlight-box" id="jwt-out" style="margin-top:0.8rem"></pre>
+          </div>
+        </div>
+        <p class="error" id="q-error" hidden></p>
+      </div>
+    </section>

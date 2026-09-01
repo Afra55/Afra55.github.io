@@ -1,0 +1,24 @@
+<section id="imgb64" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>图片转 Base64</h1>
+        <p>选择图片后生成 Data URL，并预览。</p>
+      </div>
+      <div class="panel-body">
+        <label class="file-btn" for="img-file">选择图片</label>
+        <input id="img-file" type="file" accept="image/*" hidden />
+        <div class="convert-grid" style="margin-top:1rem">
+          <div class="field-block">
+            <img id="img-preview" class="img-preview" alt="预览将显示在这里" />
+            <p class="hint" id="img-meta"></p>
+          </div>
+          <div class="field-block">
+            <div class="label-row">
+              <label for="img-b64">Data URL / Base64</label>
+              <button type="button" class="copy-btn" data-copy-value="img-b64">复制</button>
+            </div>
+            <textarea id="img-b64" class="mono area" rows="10" readonly spellcheck="false"></textarea>
+          </div>
+        </div>
+        <p class="error" id="img-error" hidden></p>
+      </div>
+    </section>

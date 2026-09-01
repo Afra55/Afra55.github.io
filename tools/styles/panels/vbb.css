@@ -1,0 +1,41 @@
+.vbb-plan {
+  margin-top: 1.15rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
+}
+
+.vbb-plan-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.55rem 0.75rem;
+  align-items: center;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
+}
+
+.vbb-plan-row .hint {
+  margin: 0;
+}
+
+.vbb-batch-list {
+  margin-top: 0.55rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 0.55rem;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  max-height: 12rem;
+  overflow: auto;
+}
+
+.vbb-batch-row {
+  padding: 0.2rem 0;
+  line-height: 1.45;
+}
+
+.vbb-manual-transport {
+  margin-top: 0.65rem;
+}

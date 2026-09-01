@@ -1,0 +1,18 @@
+.sc-line {
+  display: flex;
+  gap: 0.85rem;
+  min-height: 1.55em;
+}
+
+.sc-ln {
+  flex: 0 0 auto;
+  opacity: 0.35;
+  user-select: none;
+  text-align: right;
+  min-width: 1.6em;
+}
+
+.sc-code {
+  flex: 1;
+  min-width: 0;
+}

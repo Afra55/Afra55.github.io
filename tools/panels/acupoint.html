@@ -1,0 +1,201 @@
+<section id="acupoint" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>穴位图</h1>
+        <p>361 经穴 + 51 奇穴查阅：上方 Wellcome 经络参考图可<strong>点击放大预览</strong>，下方列表点选查看定位与主治。</p>
+      </div>
+      <div class="panel-body acu-body">
+        <p class="hint tight" id="acu-meta">加载中…</p>
+        <div class="acu-charts panel-card">
+          <div class="acu-chart-tabs" role="tablist" aria-label="经络参考图">
+            <button type="button" class="acu-chart-tab is-active" role="tab" data-acu-chart="whole" aria-selected="true">全身正背</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="figures" aria-selected="false">全身双图</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="full" aria-selected="false">全穴总图</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="thorax" aria-selected="false">胸腹</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="back" aria-selected="false">背腰</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="head-front" aria-selected="false">头颈·前</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="head-back" aria-selected="false">头颈·后</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="hand-yin" aria-selected="false">手三阴</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="hand-yang" aria-selected="false">手三阳</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="stomach" aria-selected="false">胃经</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="kidney" aria-selected="false">肾经</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="foot" aria-selected="false">足部</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="head17" aria-selected="false">头·17世纪</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="chest17" aria-selected="false">胸腹·17世纪</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="body-front" aria-selected="false">简图·前</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="body-back" aria-selected="false">简图·后</button>
+            <button type="button" class="acu-chart-tab" role="tab" data-acu-chart="overview" aria-selected="false">十四经</button>
+          </div>
+          <div class="acu-chart-panels">
+            <div class="acu-chart-panel" data-acu-chart-panel="whole">
+              <button type="button" class="acu-chart-zoom" data-acu-zoom-src="./lib/acupoint/wellcome/whole-body-front-back.jpg" aria-label="放大预览全身正背面经络穴图">
+                <img class="acu-chart-img" src="./lib/acupoint/wellcome/whole-body-front-back.jpg" alt="Wellcome 全身正背面经络穴图" width="960" height="1440" loading="eager" decoding="async" />
+              </button>
+            </div>
+            <div class="acu-chart-panel" data-acu-chart-panel="figures" hidden>
+              <button type="button" class="acu-chart-zoom" data-acu-zoom-src="./lib/acupoint/wellcome/figures-pair.jpg" aria-label="放大预览正背面双人体经络图">
+                <img class="acu-chart-img acu-chart-wide" src="./lib/acupoint/wellcome/figures-pair.jpg" alt="Wellcome 正背面双人体经络图" width="960" height="620" loading="lazy" decoding="async" />
+              </button>
+            </div>
+            <div class="acu-chart-panel" data-acu-chart-panel="full" hidden>
+              <button type="button" class="acu-chart-zoom" data-acu-zoom-src="./lib/acupoint/wellcome/full-chart.jpg" aria-label="放大预览全穴总图">
+                <img class="acu-chart-img acu-chart-tall" src="./lib/acupoint/wellcome/full-chart.jpg" alt="Wellcome 全穴总图" width="960" height="2450" loading="lazy" decoding="async" />
+              </button>
+            </div>
+            <div class="acu-chart-panel" data-acu-chart-panel="thorax" hidden>
+              <button type="button" class="acu-chart-zoom" data-acu-zoom-src="./lib/acupoint/wellcome/thorax-abdomen.jpg" aria-label="放大预览胸腹部经络穴图">
+                <img class="acu-chart-img" src="./lib/acupoint/wellcome/thorax-abdomen.jpg" alt="Wellcome 胸腹部经络穴图" width="960" height="1440" loading="lazy" decoding="async" />
+              </button>
+            </div>
+            <div class="acu-chart-panel" data-acu-chart-panel="back" hidden>
+              <button type="button" class="acu-chart-zoom" data-acu-zoom-src="./lib/acupoint/wellcome/back-torso.jpg" aria-label="放大预览背腰部经络穴图">
+                <img class="acu-chart-img" src="./lib/acupoint/wellcome/back-torso.jpg" alt="Wellcome 背腰部经络穴图" width="960" height="1440" loading="lazy" decoding="async" />
+              </button>
+            </div>
+            <div class="acu-chart-panel" data-acu-chart-panel="head-front" hidden>
+              <button type="button" class="acu-chart-zoom" data-acu-zoom-src="./lib/acupoint/wellcome/head-front.jpg" aria-label="放大预览头颈前面经络穴图">
+                <img class="acu-chart-img" src="./lib/acupoint/wellcome/head-front.jpg" alt="Wellcome 头颈前面经络穴图" width="960" height="1440" loading="lazy" decoding="async" />
+              </button>
+            </div>
+            <div class="acu-chart-panel" data-acu-chart-panel="head-back" hidden>
+              <button type="button" class="acu-chart-zoom" data-acu-zoom-src="./lib/acupoint/wellcome/head-back.jpg" aria-label="放大预览头颈后面经络穴图">
+                <img class="acu-chart-img" src="./lib/acupoint/wellcome/head-back.jpg" alt="Wellcome 头颈后面经络穴图" width="960" height="1440" loading="lazy" decoding="async" />
+              </button>
+            </div>
+            <div class="acu-chart-panel" data-acu-chart-panel="hand-yin" hidden>
+              <button type="button" class="acu-chart-zoom" data-acu-zoom-src="./lib/acupoint/wellcome/hand-yin-channels.jpg" aria-label="放大预览手三阴经图">
+                <img class="acu-chart-img" src="./lib/acupoint/wellcome/hand-yin-channels.jpg" alt="Wellcome 手三阴经穴图" width="960" height="1440" loading="lazy" decoding="async" />
+              </button>
+            </div>
+            <div class="acu-chart-panel" data-acu-chart-panel="hand-yang" hidden>
+              <button type="button" class="acu-chart-zoom" data-acu-zoom-src="./lib/acupoint/wellcome/hand-yang-channels.jpg" aria-label="放大预览手三阳经图">
+                <img class="acu-chart-img" src="./lib/acupoint/wellcome/hand-yang-channels.jpg" alt="Wellcome 手三阳经穴图" width="960" height="1440" loading="lazy" decoding="async" />
+              </button>
+            </div>
+            <div class="acu-chart-panel" data-acu-chart-panel="stomach" hidden>
+              <button type="button" class="acu-chart-zoom" data-acu-zoom-src="./lib/acupoint/wellcome/stomach-channel.jpg" aria-label="放大预览足阳明胃经图">
+                <img class="acu-chart-img" src="./lib/acupoint/wellcome/stomach-channel.jpg" alt="Wellcome 足阳明胃经穴图" width="960" height="1440" loading="lazy" decoding="async" />
+              </button>
+            </div>
+            <div class="acu-chart-panel" data-acu-chart-panel="kidney" hidden>
+              <button type="button" class="acu-chart-zoom" data-acu-zoom-src="./lib/acupoint/wellcome/kidney-channel.jpg" aria-label="放大预览足少阴肾经图">
+                <img class="acu-chart-img" src="./lib/acupoint/wellcome/kidney-channel.jpg" alt="Wellcome 足少阴肾经穴图" width="960" height="1440" loading="lazy" decoding="async" />
+              </button>
+            </div>
+            <div class="acu-chart-panel" data-acu-chart-panel="foot" hidden>
+              <button type="button" class="acu-chart-zoom" data-acu-zoom-src="./lib/acupoint/wellcome/foot-acupoints.jpg" aria-label="放大预览足部穴图">
+                <img class="acu-chart-img acu-chart-wide" src="./lib/acupoint/wellcome/foot-acupoints.jpg" alt="Wellcome 足部经络穴图" width="960" height="1360" loading="lazy" decoding="async" />
+              </button>
+            </div>
+            <div class="acu-chart-panel" data-acu-chart-panel="head17" hidden>
+              <button type="button" class="acu-chart-zoom" data-acu-zoom-src="./lib/acupoint/wellcome/head-front-17c.jpg" aria-label="放大预览17世纪头面图">
+                <img class="acu-chart-img" src="./lib/acupoint/wellcome/head-front-17c.jpg" alt="Wellcome 17世纪头面经络穴图" width="960" height="1440" loading="lazy" decoding="async" />
+              </button>
+            </div>
+            <div class="acu-chart-panel" data-acu-chart-panel="chest17" hidden>
+              <button type="button" class="acu-chart-zoom" data-acu-zoom-src="./lib/acupoint/wellcome/chest-17c.jpg" aria-label="放大预览17世纪胸腹图">
+                <img class="acu-chart-img" src="./lib/acupoint/wellcome/chest-17c.jpg" alt="Wellcome 17世纪胸腹经络穴图" width="960" height="1440" loading="lazy" decoding="async" />
+              </button>
+            </div>
+            <div class="acu-chart-panel" data-acu-chart-panel="body-front" hidden>
+              <button type="button" class="acu-chart-zoom" data-acu-zoom-src="./lib/acupoint/body-front.svg" aria-label="放大预览简图正面">
+                <img class="acu-chart-img" src="./lib/acupoint/body-front.svg" alt="正面经络简图" width="320" height="640" loading="lazy" decoding="async" />
+              </button>
+            </div>
+            <div class="acu-chart-panel" data-acu-chart-panel="body-back" hidden>
+              <button type="button" class="acu-chart-zoom" data-acu-zoom-src="./lib/acupoint/body-back.svg" aria-label="放大预览简图背面">
+                <img class="acu-chart-img" src="./lib/acupoint/body-back.svg" alt="背面经络简图" width="320" height="640" loading="lazy" decoding="async" />
+              </button>
+            </div>
+            <div class="acu-chart-panel" data-acu-chart-panel="overview" hidden>
+              <button type="button" class="acu-chart-zoom" data-acu-zoom-src="./lib/acupoint/meridians-overview.svg" aria-label="放大预览十四经一览">
+                <img class="acu-chart-img acu-chart-wide" src="./lib/acupoint/meridians-overview.svg" alt="十四正经与任督二脉一览" width="720" height="400" loading="eager" decoding="async" />
+              </button>
+            </div>
+          </div>
+          <p class="hint tight acu-chart-note">参考图来自 Wellcome Collection（CC BY 4.0），点击图可放大预览；详细定位请查下方列表。</p>
+        </div>
+
+        <dialog class="acu-lightbox" id="acu-lightbox" aria-labelledby="acu-lightbox-cap">
+          <div class="acu-lightbox-inner">
+            <div class="acu-lightbox-head">
+              <p class="hint tight acu-lightbox-cap" id="acu-lightbox-cap"></p>
+              <button type="button" class="ghost-btn acu-lightbox-close" id="acu-lightbox-close" aria-label="关闭预览">关闭</button>
+            </div>
+            <div class="acu-lightbox-stage" id="acu-lightbox-stage">
+              <img id="acu-lightbox-img" class="acu-lightbox-img" alt="" />
+            </div>
+            <div class="acu-lightbox-toolbar">
+              <button type="button" class="ghost-btn" id="acu-lightbox-zoom-out" aria-label="缩小">－</button>
+              <span class="mono" id="acu-lightbox-zoom-pct">100%</span>
+              <button type="button" class="ghost-btn" id="acu-lightbox-zoom-in" aria-label="放大">＋</button>
+              <button type="button" class="ghost-btn" id="acu-lightbox-zoom-reset">还原</button>
+            </div>
+          </div>
+        </dialog>
+
+        <div class="acu-toolbar">
+          <div class="seg acu-type-seg" id="acu-type-seg" role="group" aria-label="穴位类型">
+            <button type="button" class="seg-btn acu-type-btn is-active" data-acu-type="all">全部</button>
+            <button type="button" class="seg-btn acu-type-btn" data-acu-type="meridian">经穴</button>
+            <button type="button" class="seg-btn acu-type-btn" data-acu-type="extra">奇穴</button>
+          </div>
+          <label class="acu-search-wrap" for="acu-search">
+            <span class="visually-hidden">搜索穴位</span>
+            <input id="acu-search" class="mono" type="search" placeholder="穴名、拼音、编码、主治关键字…" autocomplete="off" enterkeyhint="search" />
+          </label>
+          <label class="acu-filter-wrap" for="acu-meridian">
+            <span class="visually-hidden">经络筛选</span>
+            <select id="acu-meridian" class="mono select-input"></select>
+          </label>
+          <span class="hint tight acu-count" id="acu-count"></span>
+        </div>
+
+        <div class="acu-layout">
+          <div class="acu-list-wrap panel-card">
+            <div class="acu-list-head">
+              <strong id="acu-list-title">穴位列表</strong>
+            </div>
+            <div class="acu-list" id="acu-list" role="listbox" aria-label="穴位列表"></div>
+          </div>
+          <div class="acu-detail-wrap panel-card">
+            <p class="hint acu-detail-empty" id="acu-detail-empty">在左侧列表选择穴位查看详情</p>
+            <article id="acu-detail" class="acu-detail" hidden>
+              <header class="acu-detail-head">
+                <span class="acu-detail-code mono" id="acu-detail-code"></span>
+                <h2 class="acu-detail-name" id="acu-detail-name"></h2>
+                <p class="acu-detail-pinyin" id="acu-detail-pinyin"></p>
+                <p class="hint tight">所属：<span id="acu-detail-meridian"></span>
+                  <span class="acu-type-badge" id="acu-detail-type" data-kind="meridian">经穴</span>
+                  <span class="acu-rich-badge" id="acu-detail-rich" hidden>详</span>
+                </p>
+              </header>
+              <div class="acu-detail-block" id="acu-detail-location-wrap">
+                <h3 class="subhead">定位</h3>
+                <p id="acu-detail-location"></p>
+              </div>
+              <div class="acu-detail-block" id="acu-detail-depth-wrap" hidden>
+                <h3 class="subhead">针刺</h3>
+                <p id="acu-detail-depth"></p>
+              </div>
+              <div class="acu-detail-block" id="acu-detail-cats-wrap" hidden>
+                <h3 class="subhead">特殊分类</h3>
+                <div class="acu-tags" id="acu-detail-cats"></div>
+              </div>
+              <div class="acu-detail-block" id="acu-detail-desc-wrap" hidden>
+                <h3 class="subhead">说明</h3>
+                <p id="acu-detail-desc"></p>
+              </div>
+              <div class="acu-detail-block" id="acu-detail-actions-wrap">
+                <h3 class="subhead">功效</h3>
+                <ul class="acu-detail-list" id="acu-detail-actions"></ul>
+              </div>
+              <div class="acu-detail-block">
+                <h3 class="subhead">主治</h3>
+                <ul class="acu-detail-list" id="acu-detail-indications"></ul>
+              </div>
+            </article>
+          </div>
+        </div>
+        <p class="hint tight acu-attrib">数据：本草典（CC BY-SA 4.0）经穴详情、AcuKG 361 经穴名录、GB/T 40997-2021 奇穴（本站整理）；图：Wellcome Collection（CC BY 4.0）。仅供查阅，不可替代医疗诊断。</p>
+      </div>
+    </section>

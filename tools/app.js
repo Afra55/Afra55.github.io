@@ -105,10 +105,13 @@
     }
   }
 
-  function initCoreToolPanels() {
+  const initedCorePanels = new Set();
+
+  function initTimestampPanel() {
   // ---- Timestamp ----
   const tsInput = $("#ts-input");
   const dtInput = $("#dt-input");
+  if (!tsInput || !dtInput) return;
   const tsHint = $("#ts-hint");
   const tsError = $("#ts-error");
   const tsResult = $("#ts-result");
@@ -185,8 +188,16 @@
     if (e.key === "Enter") convertDateToTs(false);
   });
 
+  const now = Date.now();
+  tsInput.value = String(Math.floor(now / 1000));
+  dtInput.value = formatDateTime(now, timezone);
+  convertTsToDate();
+  }
+
+  function initAhexPanel() {
   // ---- AHEX ----
   const ahexInput = $("#ahex-input");
+  if (!ahexInput) return;
   const ahexSwatch = $("#ahex-swatch");
   const ahexResult = $("#ahex-result");
   const ahexCss = $("#ahex-css");
@@ -433,8 +444,13 @@
     });
   });
 
+  renderFromAhexInput();
+  }
+
+  function initBase64Panel() {
   // ---- Base64 ----
   const b64Text = $("#b64-text");
+  if (!b64Text) return;
   const b64Encoded = $("#b64-encoded");
   const b64Error = $("#b64-error");
   const b64Meta = $("#b64-meta");
@@ -527,9 +543,12 @@
       e.target.value = "";
     }
   });
+  }
 
+  function initJsonPanel() {
   // ---- JSON ----
   const jsonInput = $("#json-input");
+  if (!jsonInput) return;
   const jsonError = $("#json-error");
   const jsonMeta = $("#json-meta");
   const JSON_AREA_MIN_PX = 192;
@@ -592,9 +611,12 @@
     setToolError(jsonError, "");
     resetJsonAreaHeight();
   });
+  }
 
+  function initRegexPanel() {
   // ---- Regex ----
   const rePattern = $("#re-pattern");
+  if (!rePattern) return;
   const reFlags = $("#re-flags");
   const reText = $("#re-text");
   const reHighlight = $("#re-highlight");
@@ -742,16 +764,44 @@
   rePattern.addEventListener("input", runRegex);
   reText.addEventListener("input", runRegex);
 
-  const now = Date.now();
-  tsInput.value = String(Math.floor(now / 1000));
-  dtInput.value = formatDateTime(now, timezone);
-  convertTsToDate();
-  renderFromAhexInput();
   syncChecksFromFlags();
   runRegex();
   }
 
-  queueMicrotask(initCoreToolPanels);
+  const CORE_PANEL_INIT = {
+    timestamp: initTimestampPanel,
+    ahex: initAhexPanel,
+    base64: initBase64Panel,
+    json: initJsonPanel,
+    regex: initRegexPanel,
+  };
+
+  function initCorePanel(toolId) {
+    const id = String(toolId || "").trim();
+    if (!id || initedCorePanels.has(id)) return;
+    const fn = CORE_PANEL_INIT[id];
+    if (!fn) return;
+    initedCorePanels.add(id);
+    fn();
+    const root = document.getElementById(id);
+    if (root) bindCopyButtons(root);
+  }
+
+  function bindCopyButtons(root = document) {
+  $$("[data-copy]", root).forEach((btn) => {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", () => {
+      const target = document.getElementById(btn.dataset.copy);
+      if (target?.textContent) copyText(target.textContent);
+    });
+  });
+  $$("[data-copy-value]", root).forEach((btn) => {
+    if (btn.dataset.bound) return;
+    btn.dataset.bound = "1";
+    btn.addEventListener("click", () => copyFromValueEl(btn.dataset.copyValue));
+  });
+  }
 
   // ---- Copy / nav ----
   function copyFromValueEl(id) {
@@ -761,19 +811,7 @@
     if (text) copyText(text);
   }
 
-  $$("[data-copy]").forEach((btn) => {
-    if (btn.dataset.bound) return;
-    btn.dataset.bound = "1";
-    btn.addEventListener("click", () => {
-      const target = document.getElementById(btn.dataset.copy);
-      if (target?.textContent) copyText(target.textContent);
-    });
-  });
-  $$("[data-copy-value]").forEach((btn) => {
-    if (btn.dataset.bound) return;
-    btn.dataset.bound = "1";
-    btn.addEventListener("click", () => copyFromValueEl(btn.dataset.copyValue));
-  });
+  bindCopyButtons();
 
   // ---- Workspace shell: groups, search, single-tool route ----
   const ORDER_KEY = "devtools-tool-order-v3";
@@ -2488,7 +2526,10 @@
     });
   }
 
+  let routeSettled = Promise.resolve();
+
   async function applyRoute({ skipRecent, keepDrawer, deferAssets = false } = {}) {
+    const run = async () => {
     let route = parseRoute();
     if (shouldRestoreLastTool()) {
       const saved = loadLastToolId();
@@ -2532,6 +2573,16 @@
 
     const routeToolId = currentTool === "media" ? currentMediaTab : currentTool;
 
+    try {
+      await window.DevToolsPanels?.bootReady;
+      window.DevToolsBoot?.bump?.(22, "加载面板…");
+      await window.DevToolsPanels?.ensure?.(routeToolId);
+      initCorePanel(routeToolId);
+      bindCopyButtons(document.getElementById(routeToolId));
+    } catch (err) {
+      console.error("panel load failed", routeToolId, err);
+    }
+
     $$(".tool-panel").forEach((panel) => {
       const id = panel.id;
       let active = false;
@@ -2543,8 +2594,7 @@
       else panel.setAttribute("aria-hidden", "true");
     });
 
-    // 首屏 boot CSS 靠 data-boot-panel 显示初始面板；路由就绪后须移除，否则
-    // html[data-boot-panel] .tool-panel { display:none } 特异性高于 .is-workspace-active
+    // 首屏 boot：data-boot-panel 仅用于 panel-loader 决定预拉哪个面板
     if (document.documentElement.hasAttribute("data-boot-panel")) {
       document.documentElement.removeAttribute("data-boot-panel");
     }
@@ -2643,6 +2693,11 @@
       });
       idleLoadPwaOnce();
     }
+    };
+    routeSettled = run().catch((err) => {
+      console.error("applyRoute failed", err);
+    });
+    return routeSettled;
   }
 
   let pwaIdleScheduled = false;
@@ -3567,6 +3622,7 @@
     lastToolHash,
     shouldRestoreLastTool,
     restoreLastToolOnStartup,
+    whenRouteSettled: () => routeSettled,
     syncSortHint,
     openFlyout: (el) => openNavFlyout(el?.closest?.(".nav-group") || el),
     closeFlyouts: () => closeNavFlyouts(),

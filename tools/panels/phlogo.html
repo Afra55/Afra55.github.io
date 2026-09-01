@@ -1,0 +1,64 @@
+<section id="phlogo" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>P站风 Logo</h1>
+        <p>两段文字 + 圆角色块，生成经典黑橙双色 Logo。本地 Canvas 绘制，可下 PNG / SVG。风格参考开源项目 <a href="https://github.com/bestony/logoly" target="_blank" rel="noopener noreferrer">bestony/logoly</a>。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid phlogo-layout">
+          <div class="field-block">
+            <div class="field-row" style="flex-wrap:wrap">
+              <label for="ph-left">左侧</label>
+              <input id="ph-left" type="text" value="Porn" maxlength="32" spellcheck="false" autocomplete="off" />
+              <label for="ph-right">右侧</label>
+              <input id="ph-right" type="text" value="Hub" maxlength="32" spellcheck="false" autocomplete="off" />
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+              <label for="ph-preset">预设</label>
+              <select id="ph-preset" class="select-input">
+                <option value="ph" selected>P 站（黑橙）</option>
+                <option value="yt">YouTube（白红）</option>
+                <option value="of">OnlyFans（白青）</option>
+                <option value="custom">自定义颜色</option>
+              </select>
+              <label class="flag"><input id="ph-reverse" type="checkbox" /> 色块在左侧</label>
+              <label class="flag"><input id="ph-transparent" type="checkbox" /> 透明底</label>
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+              <label for="ph-bg">背景</label>
+              <input id="ph-bg" type="color" value="#000000" />
+              <label for="ph-left-color">左字色</label>
+              <input id="ph-left-color" type="color" value="#ffffff" />
+              <label for="ph-box">色块</label>
+              <input id="ph-box" type="color" value="#ff9900" />
+              <label for="ph-right-color">右字色</label>
+              <input id="ph-right-color" type="color" value="#000000" />
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
+              <label for="ph-size">字号 <span class="mono" id="ph-size-val">72</span></label>
+              <input id="ph-size" type="range" min="28" max="140" value="72" />
+              <label for="ph-radius">圆角 <span class="mono" id="ph-radius-val">12</span></label>
+              <input id="ph-radius" type="range" min="0" max="40" value="12" />
+              <label for="ph-gap">间距 <span class="mono" id="ph-gap-val">10</span></label>
+              <input id="ph-gap" type="range" min="0" max="40" value="10" />
+              <label for="ph-pad">边距 <span class="mono" id="ph-pad-val">36</span></label>
+              <input id="ph-pad" type="range" min="8" max="80" value="36" />
+            </div>
+            <div class="btn-row tool-actions" style="margin-top:0.75rem;flex-wrap:wrap">
+              <button type="button" class="primary-btn" id="ph-download">下载 PNG</button>
+              <button type="button" class="secondary-btn" id="ph-svg">下载 SVG</button>
+              <button type="button" class="secondary-btn" id="ph-copy">复制图片</button>
+              <button type="button" class="ghost-btn" id="ph-to-memo">保存到备忘录</button>
+              <button type="button" class="ghost-btn" id="ph-reset">恢复默认</button>
+            </div>
+            <p class="hint tight" id="ph-meta">实时预览 · 纯本地生成</p>
+            <p class="error" id="ph-error" hidden></p>
+          </div>
+          <div class="field-block">
+            <label>预览</label>
+            <div class="phlogo-stage" id="ph-stage">
+              <canvas id="ph-canvas" class="phlogo-canvas" aria-label="Logo 预览"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>

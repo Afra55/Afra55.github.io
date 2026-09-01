@@ -1,0 +1,30 @@
+<section id="ambient" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>环境音库</h1>
+        <p>单轨播放、每次一条；点击封面播放。点击<strong>中 · 英名称</strong>可连续朗读中英文。音效目录参考 <a href="https://github.com/remvze/moodist" target="_blank" rel="noopener noreferrer">remvze/moodist</a>，封面来自 Openverse 实景图。支持<strong>搜索、收藏、下载</strong>与睡眠定时。</p>
+      </div>
+      <div class="panel-body ambient-body">
+        <div class="ambient-toolbar panel-card">
+          <div class="field-row ambient-search-row">
+            <label for="ambient-search">搜索</label>
+            <input type="search" id="ambient-search" class="text-input" placeholder="中文 / English / 分类…" autocomplete="off" />
+          </div>
+          <div class="btn-row tool-actions ambient-filters">
+            <button type="button" class="ghost-btn ambient-filter-btn is-active" data-filter="all">全部</button>
+            <button type="button" class="ghost-btn ambient-filter-btn" data-filter="fav">收藏</button>
+            <button type="button" class="ghost-btn ambient-filter-btn" data-filter="recent">最近</button>
+            <label class="flag ambient-sleep-label" for="ambient-sleep">睡眠定时</label>
+            <select id="ambient-sleep" class="select-input ambient-sleep-select">
+              <option value="0">关闭</option>
+              <option value="15">15 分钟</option>
+              <option value="30">30 分钟</option>
+              <option value="45">45 分钟</option>
+              <option value="60">60 分钟</option>
+            </select>
+          </div>
+        </div>
+        <div class="ambient-grid-wrap panel-card" id="ambient-grid"></div>
+        <div class="ambient-player panel-card" id="ambient-player" hidden></div>
+        <p class="hint tight">数据与收藏保存在本机；首次播放某条音轨时会从仓库加载音频文件。</p>
+      </div>
+    </section>

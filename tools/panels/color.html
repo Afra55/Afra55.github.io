@@ -1,0 +1,25 @@
+<section id="color" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>颜色互转</h1>
+        <p>HEX / RGB / HSL 互相转换，并实时预览。</p>
+      </div>
+      <div class="panel-body">
+        <div class="color-layout">
+          <div class="field-block">
+            <label for="c-hex">HEX</label>
+            <input id="c-hex" class="mono" type="text" value="#2EC4B6" maxlength="7" spellcheck="false" />
+            <label for="c-rgb">RGB</label>
+            <input id="c-rgb" class="mono" type="text" value="rgb(46, 196, 182)" spellcheck="false" />
+            <label for="c-hsl">HSL</label>
+            <input id="c-hsl" class="mono" type="text" value="hsl(174, 62%, 47%)" spellcheck="false" />
+            <p class="error" id="c-error" hidden></p>
+          </div>
+          <div class="field-block">
+            <div class="swatch-stack"><div class="swatch-checker"></div><div class="swatch" id="c-swatch"></div></div>
+            <div class="channel-meta" style="border:0;padding-top:0.8rem;margin-top:0.8rem">
+              <div class="meta-row"><span>预览</span><strong class="mono" id="c-preview-hex">#2EC4B6</strong></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>

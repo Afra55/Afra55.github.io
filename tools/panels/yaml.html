@@ -1,0 +1,26 @@
+<section id="yaml" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>YAML ⇄ JSON</h1>
+        <p>本地互转与格式化。</p>
+      </div>
+      <div class="panel-body">
+        <div class="convert-grid">
+          <div class="field-block">
+            <label for="yaml-in">YAML</label>
+            <textarea id="yaml-in" class="mono area" rows="10" spellcheck="false">name: DevTools
+features:
+  - timestamp
+  - color</textarea>
+          </div>
+          <div class="field-block">
+            <label for="json-from-yaml">JSON</label>
+            <textarea id="json-from-yaml" class="mono area" rows="10" spellcheck="false"></textarea>
+          </div>
+        </div>
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="yaml-to-json">YAML → JSON</button>
+          <button type="button" class="secondary-btn" id="json-to-yaml">JSON → YAML</button>
+        </div>
+        <p class="error" id="yaml-error" hidden></p>
+      </div>
+    </section>

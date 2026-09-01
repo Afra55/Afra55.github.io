@@ -1,0 +1,18 @@
+<section id="hash" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>Hash</h1>
+        <p>计算文本的 MD5 / SHA-256（本地计算）。</p>
+      </div>
+      <div class="panel-body">
+        <label for="hash-input">文本</label>
+        <textarea id="hash-input" class="mono area" rows="5" placeholder="输入要哈希的文本" spellcheck="false"></textarea>
+        <div class="btn-row tool-actions">
+          <button type="button" class="primary-btn" id="hash-run">计算</button>
+        </div>
+        <div class="channel-meta" style="border-top:1px solid var(--line);padding-top:0.8rem;margin-top:0.4rem">
+          <div class="meta-row"><span>MD5</span><strong class="mono" id="hash-md5">—</strong><button type="button" class="copy-btn" data-copy="hash-md5">复制</button></div>
+          <div class="meta-row"><span>SHA-256</span><strong class="mono" id="hash-sha256">—</strong><button type="button" class="copy-btn" data-copy="hash-sha256">复制</button></div>
+        </div>
+        <p class="error" id="hash-error" hidden></p>
+      </div>
+    </section>

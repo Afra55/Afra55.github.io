@@ -1,0 +1,76 @@
+.minigames-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.minigames-tabs {
+  flex-wrap: wrap;
+}
+
+.minigames-tabs .ghost-btn.is-active {
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+  color: var(--text);
+}
+
+.minigames-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 0.65rem;
+  min-height: min(56vh, 420px);
+  overflow: hidden;
+}
+
+.minigames-hud {
+  position: absolute;
+  top: 0.55rem;
+  left: 0.65rem;
+  right: 0.65rem;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.minigames-hud strong {
+  color: var(--text);
+}
+
+.minigames-canvas {
+  display: block;
+  max-width: 100%;
+  border-radius: 10px;
+  touch-action: manipulation;
+  cursor: pointer;
+  background: #111;
+}
+
+.minigames-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 0.55rem;
+  padding: 1rem;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  border-radius: inherit;
+}
+
+.minigames-overlay strong {
+  font-size: 1.25rem;
+  color: #fff;
+}
+
+.minigames-overlay span {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.92rem;
+}

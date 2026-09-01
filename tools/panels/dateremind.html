@@ -1,0 +1,132 @@
+<section id="dateremind" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>日期提醒</h1>
+        <p>生日、节日与重要日期：支持阳历/农历、每年重复或一次性；打开本站时全屏提醒（非系统闹钟）。</p>
+      </div>
+      <div class="panel-body dr-panel">
+        <div class="dr-settings">
+          <label class="flag tight" for="dr-show-badge">
+            <input type="checkbox" id="dr-show-badge" checked /> 顶栏显示进行中角标
+          </label>
+        </div>
+
+        <div id="dr-list" class="dr-list" aria-live="polite"></div>
+
+        <details class="dr-archived-wrap" id="dr-archived-wrap">
+          <summary class="subhead">已归档</summary>
+          <div id="dr-archived-list" class="dr-list dr-archived-list" hidden></div>
+        </details>
+
+        <h2 class="subhead" id="dr-form-title">添加提醒</h2>
+        <form id="dr-form" class="dr-form">
+          <div class="dr-field">
+            <label for="dr-title">标题</label>
+            <input id="dr-title" type="text" required maxlength="80" placeholder="如：妈妈生日" autocomplete="off" />
+          </div>
+          <div class="dr-field">
+            <label for="dr-note">备注（可选）</label>
+            <textarea id="dr-note" rows="2" maxlength="300" placeholder="礼物、地点等"></textarea>
+          </div>
+          <div class="dr-field">
+            <label for="dr-category">分类</label>
+            <select id="dr-category">
+              <option value="birthday">生日</option>
+              <option value="holiday">节日</option>
+              <option value="memo">事项</option>
+              <option value="custom">其它</option>
+            </select>
+          </div>
+          <div class="dr-field">
+            <label for="dr-calendar">历法</label>
+            <select id="dr-calendar">
+              <option value="solar">阳历</option>
+              <option value="lunar">农历</option>
+            </select>
+          </div>
+          <div class="dr-field">
+            <label for="dr-repeat">重复</label>
+            <select id="dr-repeat">
+              <option value="yearly">每年</option>
+              <option value="once">仅一次</option>
+            </select>
+          </div>
+          <div id="dr-solar-fields" class="dr-date-fields">
+            <div class="dr-date-grid">
+              <div class="dr-field">
+                <label for="dr-solar-month">月</label>
+                <select id="dr-solar-month">
+                  <option value="1">1 月</option><option value="2">2 月</option><option value="3">3 月</option>
+                  <option value="4">4 月</option><option value="5">5 月</option><option value="6">6 月</option>
+                  <option value="7">7 月</option><option value="8">8 月</option><option value="9">9 月</option>
+                  <option value="10">10 月</option><option value="11">11 月</option><option value="12">12 月</option>
+                </select>
+              </div>
+              <div class="dr-field">
+                <label for="dr-solar-day">日</label>
+                <select id="dr-solar-day">
+                  <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option>
+                  <option value="5">5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option>
+                  <option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option>
+                  <option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option>
+                  <option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option>
+                  <option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option>
+                  <option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option>
+                  <option value="29">29</option><option value="30">30</option><option value="31">31</option>
+                </select>
+              </div>
+            </div>
+          </div>
+          <div id="dr-lunar-fields" class="dr-date-fields" hidden>
+            <div class="dr-date-grid">
+              <div class="dr-field">
+                <label for="dr-lunar-month">农历月</label>
+                <select id="dr-lunar-month"></select>
+              </div>
+              <div class="dr-field">
+                <label for="dr-lunar-day">农历日</label>
+                <select id="dr-lunar-day"></select>
+              </div>
+            </div>
+          </div>
+          <div id="dr-year-row" class="dr-field" hidden>
+            <label for="dr-year">年份</label>
+            <input id="dr-year" class="mono" type="number" min="1901" max="2100" step="1" inputmode="numeric" />
+          </div>
+          <div id="dr-leap-row" class="dr-field dr-field-check" hidden>
+            <label class="flag" for="dr-leap">
+              <input type="checkbox" id="dr-leap" /> 闰月
+            </label>
+          </div>
+          <div class="dr-field">
+            <label for="dr-advance">本条提前天数</label>
+            <input id="dr-advance" class="mono" type="number" min="0" max="365" step="1" placeholder="如 7" inputmode="numeric" />
+            <p class="hint tight dr-field-hint">留空则提前 7 天提醒</p>
+          </div>
+          <div class="dr-field">
+            <label for="dr-time">时刻（可选）</label>
+            <input id="dr-time" class="mono" type="text" inputmode="numeric" placeholder="09:00" maxlength="5" autocomplete="off" />
+          </div>
+          <div class="dr-field dr-field-check">
+            <label class="flag" for="dr-enabled">
+              <input type="checkbox" id="dr-enabled" checked /> 启用
+            </label>
+          </div>
+          <div class="btn-row">
+            <button type="submit" class="primary-btn">保存</button>
+            <button type="button" class="ghost-btn" id="dr-reset-form">重置</button>
+          </div>
+          <p class="error" id="dr-error" hidden></p>
+        </form>
+
+        <h2 class="subhead">备份与导出</h2>
+        <div class="btn-row dr-io">
+          <button type="button" class="secondary-btn" id="dr-export-json">导出 JSON</button>
+          <button type="button" class="secondary-btn" id="dr-export-ics">导出 ICS</button>
+          <label class="secondary-btn file-btn">
+            导入 JSON
+            <input type="file" id="dr-import-file" accept="application/json,.json" hidden />
+          </label>
+        </div>
+        <p class="hint tight">数据保存在本机浏览器；ICS 可导入系统日历作参考。</p>
+      </div>
+    </section>

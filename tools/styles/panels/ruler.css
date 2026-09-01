@@ -1,0 +1,70 @@
+.ruler-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ruler-actions {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.75rem;
+}
+
+.ruler-ppi-input {
+  width: 4.5rem;
+}
+
+.ruler-preview-wrap {
+  padding: 0;
+  overflow: hidden;
+  min-height: 220px;
+}
+
+.ruler-preview {
+  display: block;
+  width: 100%;
+  height: min(52vh, 420px);
+  min-height: 220px;
+  background: var(--panel);
+}
+
+.ruler-fs {
+  position: fixed;
+  inset: 0;
+  z-index: 100050;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.ruler-fs-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.ruler-fs-close {
+  position: fixed;
+  top: max(0.55rem, env(safe-area-inset-top, 0px));
+  right: max(0.55rem, env(safe-area-inset-right, 0px));
+  z-index: 100051;
+  backdrop-filter: blur(6px);
+}
+
+.ruler-fs-hud {
+  position: fixed;
+  left: 50%;
+  bottom: max(0.65rem, env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  z-index: 100051;
+  margin: 0;
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.45rem;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  border: 1px solid var(--border);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+body.ruler-fs-active {
+  overflow: hidden;
+}

@@ -1,0 +1,19 @@
+<section id="countdown" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>倒计时清单</h1>
+        <p>按顺序执行多条内容：可填时分秒倒计时，也可只写内容作步骤提示。输入即时保存在本机。</p>
+      </div>
+      <div class="panel-body">
+        <div class="btn-row tool-actions cd-toolbar">
+          <button type="button" class="primary-btn" id="cd-start">开始</button>
+          <button type="button" class="secondary-btn" id="cd-save">收藏</button>
+          <button type="button" class="ghost-btn" id="cd-clear">清空</button>
+          <button type="button" class="secondary-btn" id="cd-add">添加一行</button>
+        </div>
+        <p class="hint tight" id="cd-hint">输入内容会立刻保存到本机。时分秒可选。</p>
+        <ol class="cd-list" id="cd-list"></ol>
+        <p class="error" id="cd-error" hidden></p>
+        <h2 class="subhead" style="margin-top:1.15rem">已收藏</h2>
+        <div id="cd-saved" class="cd-saved"></div>
+      </div>
+    </section>
