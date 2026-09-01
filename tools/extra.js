@@ -2081,14 +2081,15 @@
   function refreshMarkdown() {
     if (mdPreview) mdPreview.innerHTML = renderMarkdown(mdInput?.value || "");
   }
-  bindPanel("markdown", () => {
-      mdInput = $("#md-input");
-      mdPreview = $("#md-preview");
+  bindPanel("markdown", (root) => {
+      if (root?.dataset?.mdInited === "1") return;
+      mdInput = $("#md-input", root);
+      mdPreview = $("#md-preview", root);
+      if (!mdInput || !mdPreview) return;
 
-      mdInput?.addEventListener("input", refreshMarkdown);
-  if (mdInput) refreshMarkdown();
-
-
+      mdInput.addEventListener("input", refreshMarkdown);
+      if (root.dataset) root.dataset.mdInited = "1";
+      refreshMarkdown();
   });
 
 

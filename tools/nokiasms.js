@@ -363,6 +363,41 @@
     c.fillText("NOKIA", nx, py + ph - 28);
   }
 
+  function trimCanvasToAlpha(cvs, alphaThreshold = 8) {
+    const c = cvs.getContext("2d");
+    const w = cvs.width;
+    const h = cvs.height;
+    const { data } = c.getImageData(0, 0, w, h);
+    let top = h;
+    let left = w;
+    let right = -1;
+    let bottom = -1;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (data[(y * w + x) * 4 + 3] > alphaThreshold) {
+          if (x < left) left = x;
+          if (x > right) right = x;
+          if (y < top) top = y;
+          if (y > bottom) bottom = y;
+        }
+      }
+    }
+    if (right < left || bottom < top) return cvs;
+    const tw = right - left + 1;
+    const th = bottom - top + 1;
+    const out = document.createElement("canvas");
+    out.width = tw;
+    out.height = th;
+    out.getContext("2d").drawImage(cvs, left, top, tw, th, 0, 0, tw, th);
+    return out;
+  }
+
+  function exportCanvas() {
+    const s = readState();
+    if (!s.tilt) return canvas;
+    return trimCanvasToAlpha(canvas);
+  }
+
   function paint() {
     if (!ctx || !canvas) return;
     const s = readState();
@@ -377,8 +412,6 @@
     canvas.height = Math.round(outH * dpr);
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, outW, outH);
-    ctx.fillStyle = "#0b0d10";
-    ctx.fillRect(0, 0, outW, outH);
     ctx.save();
     if (tilt) {
       ctx.translate(outW / 2, outH / 2);
@@ -392,12 +425,20 @@
     canvas.style.width = `${Math.round(outW * 0.58)}px`;
     canvas.style.maxWidth = "100%";
     canvas.style.height = "auto";
-    if (metaEl) metaEl.textContent = `${outW}×${outH} · 2× PNG`;
+    if (metaEl) {
+      const exp = s.tilt ? trimCanvasToAlpha(canvas) : canvas;
+      const ew = Math.round(exp.width / dpr);
+      const eh = Math.round(exp.height / dpr);
+      metaEl.textContent = s.tilt
+        ? `${ew}×${eh} · 2× PNG（透明底，已裁切）`
+        : `${outW}×${outH} · 2× PNG（透明底）`;
+    }
   }
 
   function toBlob() {
     return new Promise((resolve, reject) => {
-      canvas.toBlob((b) => (b ? resolve(b) : reject(new Error("导出失败"))), "image/png");
+      const src = exportCanvas();
+      src.toBlob((b) => (b ? resolve(b) : reject(new Error("导出失败"))), "image/png");
     });
   }
 

@@ -34,6 +34,7 @@ assert(css.includes(".phlogo-stage") || fs.existsSync(path.join(ROOT, "tools/sty
 assert(nkPanel.includes("nokia") || css.includes(".nokia-stage"), "nk styles");
 assert(ph.includes("devtools-phlogo-v1") && ph.includes("buildSvg"), "ph features");
 assert(nk.includes("devtools-nokiasms-v1") && nk.includes("wrapLines") && nk.includes("drawPhone"), "nk features");
+assert(nk.includes("trimCanvasToAlpha") && !nk.includes('fillStyle = "#0b0d10"'), "nk transparent export");
 assert(oss.includes("bestony/logoly") && oss.includes("dcalsky/zzkia"), "oss inspired");
 
 function wrapByWidth(text, max) {

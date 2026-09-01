@@ -85,6 +85,7 @@
 
   /** 独立脚本即可运行，不必拉 extra.js（~580KB） */
   const STANDALONE_NO_EXTRA = new Set([
+    "markdown",
     "memo",
     "whiteboard",
     "acupoint",
