@@ -8291,7 +8291,6 @@
       if (vbbFile) vbbFile.value = "";
       if (vbbAbort) vbbAbort.hidden = true;
       if (vbbPlan) vbbPlan.hidden = true;
-      if (vbbPlanCompare) vbbPlanCompare.innerHTML = "";
       if (vbbPlanList) vbbPlanList.innerHTML = "";
       clearVbbMarks();
       clearTimeout(vbbSeekTimer);
@@ -8308,7 +8307,11 @@
 
     async function loadVbbFiles(fileList) {
       const files = [...(fileList || [])].filter(isLikelyVideoFile);
-      if (!files.length) return;
+      if (!files.length) {
+        setError(vbbError, "未识别为视频文件，请选择 MP4 / WebM / MOV 等格式");
+        toast("未识别为视频文件");
+        return;
+      }
       if (files.length === 1) {
         await loadVbbFile(files[0]);
         return;
@@ -9038,6 +9041,9 @@
     vbbEqualize?.addEventListener("change", () => {
       rebuildVbbDerivedPlans();
       paintVbbPlan();
+    });
+    vbbFile?.addEventListener("click", () => {
+      vbbFile.value = "";
     });
     vbbFile?.addEventListener("change", (e) => {
       loadVbbFiles(e.target.files).catch((err) => {
