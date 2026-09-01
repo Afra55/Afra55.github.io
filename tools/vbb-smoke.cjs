@@ -174,11 +174,37 @@ async function main() {
     throw new Error(`vbb video preload should be metadata, got ${localPick.preload}`);
   }
 
-  await page.click("#vbb-workflow-split");
-  await page.evaluate(() => {
-    const panel = document.getElementById("vbb-split-panel");
-    if (panel) panel.hidden = false;
+  const vbbWorkflowUi = await page.evaluate(() => {
+    const click = (id) => document.getElementById(id)?.click();
+    click("vbb-workflow-split");
+    const split = {
+      active: document.getElementById("vbb-workflow-split")?.classList.contains("is-active"),
+      panelOpen: !document.getElementById("vbb-split-panel")?.hidden,
+      workflow: window.DevToolsVbb?.getWorkflow?.(),
+    };
+    click("vbb-workflow-manual");
+    const manual = {
+      active: document.getElementById("vbb-workflow-manual")?.classList.contains("is-active"),
+      panelOpen: !document.getElementById("vbb-manual-panel")?.hidden,
+      splitClosed: document.getElementById("vbb-split-panel")?.hidden,
+      workflow: window.DevToolsVbb?.getWorkflow?.(),
+    };
+    click("vbb-workflow-single");
+    const single = {
+      active: document.getElementById("vbb-workflow-single")?.classList.contains("is-active"),
+      splitClosed: document.getElementById("vbb-split-panel")?.hidden,
+      manualClosed: document.getElementById("vbb-manual-panel")?.hidden,
+      workflow: window.DevToolsVbb?.getWorkflow?.(),
+    };
+    click("vbb-workflow-split");
+    return { split, manual, single };
   });
+
+  await page.click("#vbb-workflow-split");
+  await page.waitForFunction(
+    () => !document.getElementById("vbb-split-panel")?.hidden,
+    { timeout: 5000 }
+  );
   await page.waitForFunction(() => {
     const b = document.getElementById("vbb-analyze");
     return b && !b.disabled;
@@ -292,8 +318,6 @@ async function main() {
 
   await page.evaluate(() => {
     window.DevToolsVbb?.setMode?.("duration");
-    const panel = document.getElementById("vbb-split-panel");
-    if (panel) panel.hidden = false;
   });
   await page.click("#vbb-run");
   await page.waitForFunction(() => {
@@ -327,10 +351,10 @@ async function main() {
     return b && !b.disabled;
   }, { timeout: 15000 });
   await page.click("#vbb-workflow-split");
-  await page.evaluate(() => {
-    const panel = document.getElementById("vbb-split-panel");
-    if (panel) panel.hidden = false;
-  });
+  await page.waitForFunction(
+    () => !document.getElementById("vbb-split-panel")?.hidden,
+    { timeout: 5000 }
+  );
   await page.waitForFunction(() => {
     const b = document.getElementById("vbb-analyze");
     return b && !b.disabled;
@@ -1490,6 +1514,15 @@ async function main() {
     problems.push(`#gifbb route broken: ${JSON.stringify(navAudit.gifbbRoute)}`);
   }
   if (!navAudit.gifbbRoute?.hasGifbbFile) problems.push("gifbb panel missing file input");
+  if (!vbbWorkflowUi.split?.active || !vbbWorkflowUi.split?.panelOpen) {
+    problems.push(`vbb split workflow UI broken: ${JSON.stringify(vbbWorkflowUi.split)}`);
+  }
+  if (!vbbWorkflowUi.manual?.active || !vbbWorkflowUi.manual?.panelOpen || !vbbWorkflowUi.manual?.splitClosed) {
+    problems.push(`vbb manual workflow UI broken: ${JSON.stringify(vbbWorkflowUi.manual)}`);
+  }
+  if (!vbbWorkflowUi.single?.active || !vbbWorkflowUi.single?.splitClosed || !vbbWorkflowUi.single?.manualClosed) {
+    problems.push(`vbb single workflow UI broken: ${JSON.stringify(vbbWorkflowUi.single)}`);
+  }
   if (!compactFlyout.skip) {
     if (!compactFlyout.panelVisible) problems.push("desktop compact flyout should show tools panel");
     if (!compactFlyout.opensRight) problems.push("desktop compact flyout should open to the right of category");
@@ -1541,6 +1574,7 @@ async function main() {
       analyze,
       todayTools,
       navAudit,
+      vbbWorkflowUi,
       compactFlyout,
       mobileShell,
       shellFixes,
