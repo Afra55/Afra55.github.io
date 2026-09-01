@@ -598,7 +598,7 @@ async function main() {
     ),
   };
 
-  // 黑盒分类 Tab 应 replace 而非堆历史；最近使用不应被默认排序灌满
+  // 黑盒分类 Tab 切换应 push 历史，便于后退
   const histBefore = await page.evaluate(() => history.length);
   await page.evaluate(() => document.querySelector('[data-category-tab="gifbb"]')?.click());
   await page.waitForFunction(() => location.hash === "#gifbb", { timeout: 5000 });
@@ -1403,7 +1403,7 @@ async function main() {
   if (mobileShell.hashVbb !== "#vbb") problems.push(`blackbox nav hash: ${mobileShell.hashVbb}`);
   if (!mobileShell.vbbActive) problems.push("vbb tab switch failed");
   if (!mobileShell.onlyOneActive) problems.push("more than one panel active");
-  if (shellFixes.historyGrew) problems.push("category tab switches should replaceState, not grow history much");
+  if (!shellFixes.historyGrew) problems.push("category tab switches should pushState and grow history");
   if (shellFixes.recentLooksDefault) problems.push("recent list looks like default order padding");
   if (!shellFixes.searchFindsMedia) problems.push("search vbb should match blackbox");
   if (!shellFixes.comingGone) problems.push("#coming placeholder should be removed");
