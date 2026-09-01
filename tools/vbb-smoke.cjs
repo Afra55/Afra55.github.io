@@ -90,6 +90,8 @@ async function main() {
       planHidden: document.getElementById("vbb-plan")?.hidden,
       hasOneclick: Boolean(document.getElementById("vbb-oneclick")),
       hasSplitPanel: Boolean(document.getElementById("vbb-split-panel")),
+      hasProgress: Boolean(document.getElementById("vbb-progress")),
+      mergedBlockHidden: document.getElementById("vbb-merged-block")?.hidden !== false,
       fileInputMultiple: document.getElementById("vbb-file")?.hasAttribute("multiple"),
       hasBatchList: Boolean(document.getElementById("vbb-batch-list")),
       noV2gBlackboxBtn: !document.getElementById("v2g-blackbox"),
