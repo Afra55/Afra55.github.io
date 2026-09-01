@@ -145,10 +145,10 @@
 
 .vbb-result-list .gif-frame.vsplit-clip {
   margin: 0;
-  padding: 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
+  padding: 0.7rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel-strong) 92%, transparent);
 }
 
 .vbb-clip-head {
