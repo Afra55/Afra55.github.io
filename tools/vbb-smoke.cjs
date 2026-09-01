@@ -523,6 +523,35 @@ async function main() {
     () => typeof window.DevToolsFfmpeg?.getInstance === "function"
   );
 
+  const compactFlyout = await page.evaluate(() => {
+    if (typeof window.DevToolsNav?.setCompact !== "function") return { skip: true };
+    window.DevToolsNav.setCompact(true);
+    const group =
+      document.querySelector("#tool-nav .nav-group[data-group='video']") ||
+      document.querySelector("#tool-nav .nav-group:not(.is-filtered-out)");
+    const title = group?.querySelector(".nav-group-title");
+    const panel = group?.querySelector(".nav-group-tools");
+    if (!group || !title || !panel) {
+      window.DevToolsNav.setCompact(false);
+      return { skip: true };
+    }
+    const h0 = group.getBoundingClientRect().height;
+    window.DevToolsNav.openFlyout(group);
+    const gr = group.getBoundingClientRect();
+    const tr = title.getBoundingClientRect();
+    const pr = panel.getBoundingClientRect();
+    const panelStyle = getComputedStyle(panel);
+    const out = {
+      opensRight: pr.left >= gr.right - 4,
+      topAligned: Math.abs(pr.top - tr.top) < 8,
+      flyoutNoGrow: Math.abs(group.getBoundingClientRect().height - h0) < 4,
+      panelVisible: panelStyle.display !== "none",
+    };
+    group.classList.remove("is-flyout-open", "is-pinned", "is-flyout-left");
+    window.DevToolsNav.setCompact(false);
+    return out;
+  });
+
   // Mobile drawer + category tab switch
   await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
   await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#timestamp`, {
@@ -1461,6 +1490,12 @@ async function main() {
     problems.push(`#gifbb route broken: ${JSON.stringify(navAudit.gifbbRoute)}`);
   }
   if (!navAudit.gifbbRoute?.hasGifbbFile) problems.push("gifbb panel missing file input");
+  if (!compactFlyout.skip) {
+    if (!compactFlyout.panelVisible) problems.push("desktop compact flyout should show tools panel");
+    if (!compactFlyout.opensRight) problems.push("desktop compact flyout should open to the right of category");
+    if (!compactFlyout.topAligned) problems.push("desktop compact flyout should align with category title");
+    if (!compactFlyout.flyoutNoGrow) problems.push("desktop compact flyout should not expand category row height");
+  }
   if (!mobileShell.drawerOpen) problems.push("mobile drawer failed to open");
   if (!mobileShell.closedByBtn) problems.push("nav-close should close drawer");
   if (!mobileShell.stayedClosedAfterGhostOpen) {
@@ -1506,6 +1541,7 @@ async function main() {
       analyze,
       todayTools,
       navAudit,
+      compactFlyout,
       mobileShell,
       shellFixes,
       errors,

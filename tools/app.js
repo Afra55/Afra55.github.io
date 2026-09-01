@@ -1495,37 +1495,48 @@
 
   function positionNavFlyout(wrap) {
     const panel = wrap?.querySelector?.(".nav-group-tools");
-    const title = wrap?.querySelector?.(".nav-group-title");
+    const title = wrap?.querySelector?.(".nav-group-title, .nav-fav-title");
     if (!panel || !title || !navCompactActive() || compactNavSearching()) return;
     if (compactNavOnMobile()) {
-      wrap.classList.remove("is-flyout-up");
+      wrap.classList.remove("is-flyout-up", "is-flyout-left");
       panel.style.maxHeight = "";
       panel.style.width = "";
       panel.style.left = "";
+      panel.style.right = "";
       panel.style.top = "";
       panel.style.bottom = "";
       return;
     }
-    const scroller = navFlyoutScroller(wrap);
-    const scrollerRect = scroller.getBoundingClientRect();
+    const gap = 6;
+    const wrapRect = wrap.getBoundingClientRect();
     const titleRect = title.getBoundingClientRect();
-    const gap = 8;
-    const spaceBelow = scrollerRect.bottom - titleRect.bottom - gap;
-    const spaceAbove = titleRect.top - scrollerRect.top - gap;
-    const openUp = spaceBelow < 132 && spaceAbove > spaceBelow;
-    wrap.classList.toggle("is-flyout-up", openUp);
-    panel.style.maxHeight = `${Math.round(Math.min(280, Math.max(96, openUp ? spaceAbove : spaceBelow)))}px`;
-    panel.style.width = "";
-    panel.style.left = "";
-    panel.style.top = "";
-    panel.style.bottom = "";
+    const panelWidth = Math.min(288, Math.max(184, panel.offsetWidth || 220));
+    const spaceRight = window.innerWidth - wrapRect.right - gap;
+    const openLeft = spaceRight < panelWidth + 12;
+    wrap.classList.remove("is-flyout-up");
+    wrap.classList.toggle("is-flyout-left", openLeft);
+
+    const topInWrap = Math.max(0, Math.round(titleRect.top - wrapRect.top));
+    panel.style.top = `${topInWrap}px`;
+    panel.style.bottom = "auto";
+    if (openLeft) {
+      panel.style.left = "";
+      panel.style.right = `calc(100% + ${gap}px)`;
+    } else {
+      panel.style.left = `calc(100% + ${gap}px)`;
+      panel.style.right = "";
+    }
+    panel.style.width = `${panelWidth}px`;
+
+    const spaceBelow = window.innerHeight - titleRect.top - gap;
+    panel.style.maxHeight = `${Math.round(Math.min(360, Math.max(120, spaceBelow)))}px`;
   }
 
   function closeNavFlyouts({ keepPinned = false } = {}) {
     window.clearTimeout(navFlyoutTimer);
     navFlyoutTimer = 0;
     allNavGroups().forEach((g) => {
-      g.classList.remove("is-flyout-open", "is-flyout-up");
+      g.classList.remove("is-flyout-open", "is-flyout-up", "is-flyout-left");
       if (!keepPinned) g.classList.remove("is-pinned");
       g.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
     });
@@ -1537,7 +1548,7 @@
     navFlyoutTimer = 0;
     allNavGroups().forEach((g) => {
       if (g === wrap) return;
-      g.classList.remove("is-flyout-open", "is-flyout-up", "is-pinned");
+      g.classList.remove("is-flyout-open", "is-flyout-up", "is-flyout-left", "is-pinned");
       g.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
     });
     if (pin) wrap.classList.add("is-pinned");
@@ -1567,7 +1578,7 @@
     $$(".nav-group.is-sort-flyout", navEl).forEach((g) => {
       g.classList.remove("is-sort-flyout");
       if (!g.classList.contains("is-pinned")) {
-        g.classList.remove("is-flyout-open", "is-flyout-up");
+        g.classList.remove("is-flyout-open", "is-flyout-up", "is-flyout-left");
         g.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
       }
     });
