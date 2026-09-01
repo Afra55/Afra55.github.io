@@ -932,6 +932,7 @@ html[data-panel-loading] .workspace-panels:empty::after {
   letter-spacing: -0.02em;
 }
 
+.category-subnav,
 .media-subnav {
   display: flex;
   gap: 0.35rem;
@@ -941,14 +942,17 @@ html[data-panel-loading] .workspace-panels:empty::after {
   scrollbar-width: none;
 }
 
+.category-subnav[hidden],
 .media-subnav[hidden] {
   display: none !important;
 }
 
+.category-subnav::-webkit-scrollbar,
 .media-subnav::-webkit-scrollbar {
   display: none;
 }
 
+.category-tab,
 .media-tab {
   appearance: none;
   flex: 0 0 auto;
@@ -963,6 +967,7 @@ html[data-panel-loading] .workspace-panels:empty::after {
   cursor: pointer;
 }
 
+.category-tab.is-active,
 .media-tab.is-active {
   color: var(--ink);
   border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
@@ -1203,7 +1208,8 @@ body.nav-open {
     padding-right: 0.15rem;
   }
 
-  .media-tab {
+  .category-tab,
+.media-tab {
     min-height: 2.5rem;
     padding: 0.55rem 0.95rem;
     font-size: 0.92rem;

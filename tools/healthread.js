@@ -444,7 +444,7 @@
 
   document.addEventListener("devtools:route", (e) => {
     const d = e.detail || {};
-    const tool = d.tool === "media" ? d.mediaTab : d.tool;
+    const tool = String(d.tool || "").trim();
     if (tool === "healthread") bootIfNeeded();
     if (tool !== "healthread") return;
     if (!$("#healthread")?.classList.contains("is-workspace-active")) return;
