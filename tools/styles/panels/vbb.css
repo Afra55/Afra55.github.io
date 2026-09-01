@@ -26,6 +26,29 @@
   border: 1px solid var(--line);
   border-radius: 14px;
   background: color-mix(in srgb, var(--bg-0) 72%, transparent);
+  overflow-anchor: none;
+}
+
+.vbb-scroll-anchor {
+  overflow-anchor: auto;
+  height: 0;
+}
+
+#vbb-plan,
+#vbb-progress,
+#vbb-result-block,
+#vbb-list {
+  overflow-anchor: none;
+}
+
+@media (max-width: 900px) {
+  #vbb .panel-body {
+    overflow-anchor: auto;
+  }
+
+  #vbb .vbb-split-actions .primary-btn {
+    scroll-margin-top: 5.5rem;
+  }
 }
 
 .vbb-split-panel > .subhead {

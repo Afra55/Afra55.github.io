@@ -40,6 +40,15 @@ function startServer() {
   });
 }
 
+async function tap(page, selector) {
+  await page.evaluate((sel) => {
+    const el = document.querySelector(sel);
+    if (!el) throw new Error(`missing element: ${sel}`);
+    el.scrollIntoView({ block: "center", inline: "nearest" });
+    el.click();
+  }, selector);
+}
+
 async function main() {
   let puppeteer;
   try {
@@ -153,7 +162,8 @@ async function main() {
     };
   }, pathToFileURL(tmpMp4).href);
 
-  // Upload via puppeteer and click analyze
+  // Upload via puppeteer and click analyze (mobile viewport — matches real phone usage; avoid desktop→mobile resize clearing local video state)
+  await page.setViewport({ width: 390, height: 844, isMobile: true, hasTouch: true });
   await page.waitForFunction(
     () => window.__devtoolsBootReady && Boolean(document.getElementById("vbb-file")),
     { timeout: 60000 }
@@ -205,7 +215,7 @@ async function main() {
     return { split, manual, single };
   });
 
-  await page.click("#vbb-workflow-split");
+  await tap(page, "#vbb-workflow-split");
   await page.waitForFunction(
     () => !document.getElementById("vbb-split-panel")?.hidden,
     { timeout: 5000 }
@@ -214,11 +224,19 @@ async function main() {
     const b = document.getElementById("vbb-analyze");
     return b && !b.disabled;
   }, { timeout: 15000 });
-  await page.click("#vbb-analyze");
+  await page.evaluate(() => window.scrollTo(0, 160));
+  const scrollBeforeAnalyze = await page.evaluate(() => window.scrollY);
+  await tap(page, "#vbb-analyze");
   await page.waitForFunction(() => {
     const plan = document.getElementById("vbb-plan");
     return plan && !plan.hidden;
   }, { timeout: 180000 });
+  const scrollAfterAnalyze = await page.evaluate(() => window.scrollY);
+  if (Math.abs(scrollAfterAnalyze - scrollBeforeAnalyze) > 36) {
+    throw new Error(
+      `vbb analyze should not scroll page on mobile: ${scrollBeforeAnalyze} -> ${scrollAfterAnalyze}`
+    );
+  }
 
   const afterAnalyze = await page.evaluate(() => {
     const summary = document.getElementById("vbb-plan-summary")?.textContent || "";
@@ -240,7 +258,7 @@ async function main() {
   }
 
   // 自定义时长：4s 视频目标 3s → 前段 3.0s、末段 1.0s，不得均分成 2.0s
-  await page.click("#vbb-mode-custom");
+  await tap(page, "#vbb-mode-custom");
   await page.evaluate(() => {
     const el = document.getElementById("vbb-target-span");
     el.value = "3";
@@ -270,7 +288,7 @@ async function main() {
     throw new Error(`2-clip plan must not reuse last clip: ${JSON.stringify(customRemainder)}`);
   }
 
-  await page.click("#vbb-equalize");
+  await tap(page, "#vbb-equalize");
   const customEqualize = await page.evaluate(() => {
     const plan = window.DevToolsVbb?.getActivePlan?.();
     return {
@@ -300,7 +318,7 @@ async function main() {
     throw new Error(`equalize span display mismatch: ${JSON.stringify(equalizeTimeSync)}`);
   }
 
-  await page.click("#vbb-equalize");
+  await tap(page, "#vbb-equalize");
   const customEqualizeOff = await page.evaluate(() => {
     const plan = window.DevToolsVbb?.getActivePlan?.();
     return {
@@ -315,11 +333,11 @@ async function main() {
   }
 
   // 均分打开时切换方案模式不应报错，且关均分后自定义仍是末段剩余
-  await page.click("#vbb-equalize");
+  await tap(page, "#vbb-equalize");
   await page.evaluate(() => window.DevToolsVbb?.setMode?.("clarity"));
   await page.evaluate(() => window.DevToolsVbb?.setMode?.("duration"));
-  await page.click("#vbb-mode-custom");
-  await page.click("#vbb-equalize");
+  await tap(page, "#vbb-mode-custom");
+  await tap(page, "#vbb-equalize");
   const afterModeSwitch = await page.evaluate(() => {
     const plan = window.DevToolsVbb?.getActivePlan?.();
     return {
@@ -336,11 +354,18 @@ async function main() {
   await page.evaluate(() => {
     window.DevToolsVbb?.setMode?.("duration");
   });
-  await page.click("#vbb-run");
+  const scrollBeforeRun = await page.evaluate(() => window.scrollY);
+  await tap(page, "#vbb-run");
   await page.waitForFunction(() => {
     const list = document.getElementById("vbb-list");
     return list && list.querySelectorAll(".vsplit-clip").length > 0;
   }, { timeout: 180000 });
+  const scrollAfterFirstClip = await page.evaluate(() => window.scrollY);
+  if (Math.abs(scrollAfterFirstClip - scrollBeforeRun) > 36) {
+    throw new Error(
+      `vbb run should not scroll page on mobile when first clip appears: ${scrollBeforeRun} -> ${scrollAfterFirstClip}`
+    );
+  }
 
   const afterRun = await page.evaluate(() => {
     const clips = document.querySelectorAll("#vbb-list .vsplit-clip").length;
@@ -367,7 +392,7 @@ async function main() {
     const b = document.getElementById("vbb-analyze");
     return b && !b.disabled;
   }, { timeout: 15000 });
-  await page.click("#vbb-workflow-split");
+  await tap(page, "#vbb-workflow-split");
   await page.waitForFunction(
     () => !document.getElementById("vbb-split-panel")?.hidden,
     { timeout: 5000 }
@@ -376,12 +401,12 @@ async function main() {
     const b = document.getElementById("vbb-analyze");
     return b && !b.disabled;
   }, { timeout: 15000 });
-  await page.click("#vbb-analyze");
+  await tap(page, "#vbb-analyze");
   await page.waitForFunction(() => {
     const plan = document.getElementById("vbb-plan");
     return plan && !plan.hidden;
   }, { timeout: 180000 });
-  await page.click("#vbb-mode-custom");
+  await tap(page, "#vbb-mode-custom");
   await page.evaluate(() => {
     const el = document.getElementById("vbb-target-span");
     el.value = "0.8";
@@ -403,7 +428,7 @@ async function main() {
   if (reusePlan.flags[0] !== false || reusePlan.flags[1] !== true || reusePlan.flags[2] !== false) {
     throw new Error(`reuse flags should be [false,true,false], got ${JSON.stringify(reusePlan)}`);
   }
-  await page.click("#vbb-run");
+  await tap(page, "#vbb-run");
   await page.waitForFunction(() => {
     const notes = window.DevToolsVbb?.getClips?.() || [];
     return notes.length >= 3 && notes.every((c) => c.gifBlob || c.error);

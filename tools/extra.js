@@ -7946,6 +7946,58 @@
       );
     }
 
+    function shouldPinVbbScroll() {
+      return isLikelyMobileBrowser();
+    }
+
+    function vbbScrollRoot() {
+      const shell = document.querySelector(".shell");
+      if (window.matchMedia("(min-width: 901px)").matches && shell) return shell;
+      return document.scrollingElement || document.documentElement;
+    }
+
+    function readVbbScrollTop(root) {
+      if (!root || root === document.documentElement || root === document.scrollingElement) {
+        return window.scrollY || 0;
+      }
+      return root.scrollTop || 0;
+    }
+
+    function writeVbbScrollTop(root, top) {
+      const y = Math.max(0, Number(top) || 0);
+      if (!root || root === document.documentElement || root === document.scrollingElement) {
+        window.scrollTo({ top: y, left: 0, behavior: "auto" });
+        return;
+      }
+      root.scrollTop = y;
+    }
+
+    function restoreVbbScrollLater(top) {
+      const root = vbbScrollRoot();
+      const apply = () => writeVbbScrollTop(root, top);
+      requestAnimationFrame(() => {
+        apply();
+        requestAnimationFrame(apply);
+      });
+    }
+
+    function pinVbbViewport(mutator) {
+      if (!shouldPinVbbScroll()) return mutator();
+      const top = readVbbScrollTop(vbbScrollRoot());
+      const out = mutator();
+      restoreVbbScrollLater(top);
+      return out;
+    }
+
+    function blurVbbActionButton(el) {
+      if (!shouldPinVbbScroll() || !el) return;
+      requestAnimationFrame(() => {
+        try {
+          el.blur();
+        } catch (_) {}
+      });
+    }
+
     async function probeVbbVideoFile(file, videoEl = vbbVideo) {
       if (!file || !videoEl) throw new Error("无法读取视频");
       const url = URL.createObjectURL(file);
@@ -7994,33 +8046,35 @@
 
     /** 总进度条与各片段进度并存 */
     function setVbbProgress(visible, ratio, text, opts = {}) {
-      if (!vbbProgress) return;
-      vbbProgress.hidden = !visible;
-      if (!visible) {
-        if (vbbProgressFill) {
-          vbbProgressFill.style.width = "0%";
-          vbbProgressFill.classList.remove("is-active", "is-busy");
+      pinVbbViewport(() => {
+        if (!vbbProgress) return;
+        vbbProgress.hidden = !visible;
+        if (!visible) {
+          if (vbbProgressFill) {
+            vbbProgressFill.style.width = "0%";
+            vbbProgressFill.classList.remove("is-active", "is-busy");
+          }
+          if (vbbProgressPct) vbbProgressPct.hidden = true;
+          if (vbbProgressSub) vbbProgressSub.hidden = true;
+          return;
         }
-        if (vbbProgressPct) vbbProgressPct.hidden = true;
-        if (vbbProgressSub) vbbProgressSub.hidden = true;
-        return;
-      }
-      const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)));
-      const busy = Boolean(opts.busy) || (pct > 0 && pct < 100);
-      if (vbbProgressFill) {
-        vbbProgressFill.style.width = `${Math.max(pct, busy && pct < 8 ? 8 : pct)}%`;
-        vbbProgressFill.classList.toggle("is-active", busy);
-        vbbProgressFill.classList.toggle("is-busy", Boolean(opts.busy));
-      }
-      if (vbbProgressPct) {
-        vbbProgressPct.textContent = `${pct}%`;
-        vbbProgressPct.hidden = false;
-      }
-      if (vbbProgressText) vbbProgressText.textContent = text || `${pct}%`;
-      if (vbbProgressSub) {
-        vbbProgressSub.textContent = opts.sub || "";
-        vbbProgressSub.hidden = !opts.sub;
-      }
+        const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)));
+        const busy = Boolean(opts.busy) || (pct > 0 && pct < 100);
+        if (vbbProgressFill) {
+          vbbProgressFill.style.width = `${Math.max(pct, busy && pct < 8 ? 8 : pct)}%`;
+          vbbProgressFill.classList.toggle("is-active", busy);
+          vbbProgressFill.classList.toggle("is-busy", Boolean(opts.busy));
+        }
+        if (vbbProgressPct) {
+          vbbProgressPct.textContent = `${pct}%`;
+          vbbProgressPct.hidden = false;
+        }
+        if (vbbProgressText) vbbProgressText.textContent = text || `${pct}%`;
+        if (vbbProgressSub) {
+          vbbProgressSub.textContent = opts.sub || "";
+          vbbProgressSub.hidden = !opts.sub;
+        }
+      });
     }
 
     function hideVbbMergedBlock() {
@@ -8073,8 +8127,10 @@
       if (patch.status != null) c.jobStatus = patch.status;
       if (patch.progress != null) c.jobProgress = Math.max(0, Math.min(1, Number(patch.progress) || 0));
       if (patch.text != null) c.jobText = String(patch.text || "");
-      const row = vbbList?.querySelector(`[data-vbb-clip="${idx}"]`);
-      if (row) syncClipProgressDom(row.querySelector(".vsplit-clip-progress"), c);
+      pinVbbViewport(() => {
+        const row = vbbList?.querySelector(`[data-vbb-clip="${idx}"]`);
+        if (row) syncClipProgressDom(row.querySelector(".vsplit-clip-progress"), c);
+      });
     }
 
     function clearVbbClipJobs() {
@@ -8669,53 +8725,56 @@
     }
 
     function paintVbbPlan() {
-      if (!vbbAnalysis) {
-        if (vbbPlan) vbbPlan.hidden = true;
-        setVbbButtons();
-        return;
-      }
-      const active = resolveActiveVbbPlan();
-      vbbAnalysis.active = active;
-      if (vbbPlan) vbbPlan.hidden = false;
-      if (vbbAdvanced) vbbAdvanced.open = true;
-      syncVbbModeUi();
-
-      if (vbbPlanSummary && active) {
-        const widthTip = active.maxW ? ` · 目标宽 ${active.maxW}` : "";
-        const fpsTip = ` · ${formatVbbFpsTip(active.estFps || 15, active.estCompressRounds || 0)}`;
-        const warn = active.unsafe ? " ⚠ 可能超预算，执行时超限会降宽或改走黑盒。" : "";
-        vbbPlanSummary.textContent = `将生成 ${active.count} 个切片 · ${formatVbbRangesSpanTip(active.ranges, isVbbEqualize())}${widthTip}${fpsTip} · 预估约 ${formatKb(active.estBytes)}/段 · ${active.note}（体积为估算；各段预览在生成后显示）${warn}`;
-      }
-
-      if (vbbPlanList) vbbPlanList.innerHTML = "";
-
-      if (vbbTargetSpan && vbbTargetRange && vbbAnalysis) {
-        const min = VBB_MIN_SPAN;
-        const max = Math.max(
-          vbbAnalysis.clarity.maxSpan,
-          vbbAnalysis.sharp?.maxSpan || 0,
-          vbbAnalysis.durationPlan.maxSpan
-        );
-        vbbTargetRange.min = String(Number(min.toFixed(1)));
-        vbbTargetRange.max = String(Number(max.toFixed(1)));
-        let cur = Number(vbbTargetSpan.value);
-        if (!(cur >= min && cur <= max)) {
-          cur = Math.min(max, Math.max(min, vbbAnalysis.clarity.maxSpan));
-          vbbSegmentTarget = cur;
-          vbbTargetSpan.value = String(Number(cur.toFixed(1)));
+      pinVbbViewport(() => {
+        if (!vbbAnalysis) {
+          if (vbbPlan) vbbPlan.hidden = true;
+          setVbbButtons();
+          return;
         }
-        vbbTargetRange.value = String(Number(cur.toFixed(1)));
-        vbbTargetSpan.min = vbbTargetRange.min;
-        vbbTargetSpan.max = vbbTargetRange.max;
-      }
+        const active = resolveActiveVbbPlan();
+        vbbAnalysis.active = active;
+        if (vbbPlan) vbbPlan.hidden = false;
+        if (vbbAdvanced) vbbAdvanced.open = true;
+        syncVbbModeUi();
 
-      syncVbbEqualizeUi(active);
+        if (vbbPlanSummary && active) {
+          const widthTip = active.maxW ? ` · 目标宽 ${active.maxW}` : "";
+          const fpsTip = ` · ${formatVbbFpsTip(active.estFps || 15, active.estCompressRounds || 0)}`;
+          const warn = active.unsafe ? " ⚠ 可能超预算，执行时超限会降宽或改走黑盒。" : "";
+          vbbPlanSummary.textContent = `将生成 ${active.count} 个切片 · ${formatVbbRangesSpanTip(active.ranges, isVbbEqualize())}${widthTip}${fpsTip} · 预估约 ${formatKb(active.estBytes)}/段 · ${active.note}（体积为估算；各段预览在生成后显示）${warn}`;
+        }
 
-      setVbbButtons();
+        if (vbbPlanList) vbbPlanList.innerHTML = "";
+
+        if (vbbTargetSpan && vbbTargetRange && vbbAnalysis) {
+          const min = VBB_MIN_SPAN;
+          const max = Math.max(
+            vbbAnalysis.clarity.maxSpan,
+            vbbAnalysis.sharp?.maxSpan || 0,
+            vbbAnalysis.durationPlan.maxSpan
+          );
+          vbbTargetRange.min = String(Number(min.toFixed(1)));
+          vbbTargetRange.max = String(Number(max.toFixed(1)));
+          let cur = Number(vbbTargetSpan.value);
+          if (!(cur >= min && cur <= max)) {
+            cur = Math.min(max, Math.max(min, vbbAnalysis.clarity.maxSpan));
+            vbbSegmentTarget = cur;
+            vbbTargetSpan.value = String(Number(cur.toFixed(1)));
+          }
+          vbbTargetRange.value = String(Number(cur.toFixed(1)));
+          vbbTargetSpan.min = vbbTargetRange.min;
+          vbbTargetSpan.max = vbbTargetRange.max;
+        }
+
+        syncVbbEqualizeUi(active);
+
+        setVbbButtons();
+      });
     }
 
     function renderVbbResults() {
-      if (!vbbList) return;
+      pinVbbViewport(() => {
+        if (!vbbList) return;
       vbbList.innerHTML = "";
       const gifCount = vbbClips.filter((c) => c.gifBlob).length;
       const failCount = vbbClips.filter((c) => c.error && !c.gifBlob).length;
@@ -8789,6 +8848,7 @@
         vbbList.appendChild(row);
       });
       setVbbButtons();
+      });
     }
 
     function clearVbb() {
@@ -9700,9 +9760,19 @@
       getDraftStart: () => vbbDraftStart,
       computeManualRanges: () => computeVbbManualRanges(),
     };
-    vbbAnalyze?.addEventListener("click", () => runVbbAnalyze().catch((err) => setError(vbbError, err.message || String(err))));
+    vbbAnalyze?.addEventListener("click", (e) => {
+      const btn = e.currentTarget;
+      runVbbAnalyze()
+        .catch((err) => setError(vbbError, err.message || String(err)))
+        .finally(() => blurVbbActionButton(btn));
+    });
     vbbOneclick?.addEventListener("click", () => runVbbOneClick().catch((err) => setError(vbbError, err.message || String(err))));
-    vbbRun?.addEventListener("click", () => runVbbExecute().catch((err) => setError(vbbError, err.message || String(err))));
+    vbbRun?.addEventListener("click", (e) => {
+      const btn = e.currentTarget;
+      runVbbExecute()
+        .catch((err) => setError(vbbError, err.message || String(err)))
+        .finally(() => blurVbbActionButton(btn));
+    });
     vbbMerge?.addEventListener("click", () => runVbbMerge().catch((err) => setError(vbbError, err.message || String(err))));
     vbbZip?.addEventListener("click", () => {
       packDownloadVbbGifs().catch((err) => setError(vbbError, err.message || String(err)));

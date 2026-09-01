@@ -4,6 +4,7 @@
         <p>预制参数（宽 420 · ≤6MB · 自动压帧/加宽），全程本地处理。短片选视频后点<strong>一键黑盒</strong>；长视频请用<strong>切片模式</strong>先分析方案再生成；也可<strong>手动打点</strong>自选片段。</p>
       </div>
       <div class="panel-body">
+        <div class="vbb-scroll-anchor" aria-hidden="true"></div>
         <div class="btn-row tool-actions">
           <label class="file-btn" for="vbb-file">选择视频（可多选）</label>
           <input id="vbb-file" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" multiple hidden />
@@ -115,7 +116,7 @@
             <h2 class="subhead">生成结果</h2>
             <p class="hint tight" id="vbb-result-summary">完成各段后可预览、下载或合并。</p>
           </div>
-          <div class="gif-frame-list vbb-result-list" id="vbb-list" aria-live="polite"></div>
+          <div class="gif-frame-list vbb-result-list" id="vbb-list" aria-live="off"></div>
           <div class="vbb-merged-block" id="vbb-merged-block" hidden>
             <h3 class="vbb-merged-title">合并 GIF</h3>
             <p class="hint tight" id="vbb-merged-meta"></p>
