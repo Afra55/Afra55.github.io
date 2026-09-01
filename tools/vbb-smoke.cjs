@@ -456,6 +456,55 @@ async function main() {
   todayTools.gifm = await page.evaluate(
     () => Boolean(document.getElementById("gifm-merge") && document.getElementById("gifm-file"))
   );
+  const navAudit = await page.evaluate(() => {
+    const navLinks = [...document.querySelectorAll(".tool-nav-link")].map((a) => a.dataset.tool);
+    const groups = window.DevToolsCatalog?.groups || [];
+    const gifGroup = groups.find((g) => g.id === "gif");
+    const videoGroup = groups.find((g) => g.id === "video");
+    const blackboxGroup = groups.find((g) => g.id === "blackbox");
+  const gifmakerSections = ["gif-generate", "gifx-zip", "gifc-compress", "gife-apply", "gifm-merge", "v2g-generate"].map(
+      (id) => Boolean(document.getElementById(id))
+    );
+    return {
+      gifGroupTools: gifGroup?.tools || [],
+      videoGroupTools: videoGroup?.tools || [],
+      blackboxGroupTools: blackboxGroup?.tools || [],
+      hasGifbbNav: navLinks.includes("gifbb"),
+      noMediaNav: !navLinks.includes("media"),
+      gifmakerSectionCount: gifmakerSections.filter(Boolean).length,
+      gifmakerSectionsOk: gifmakerSections.every(Boolean),
+    };
+  });
+  // 旧 #media/vsplit 深链应跳到独立视频工具
+  await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#media/vsplit`, {
+    waitUntil: "networkidle0",
+    timeout: 60000,
+  });
+  await page.waitForFunction(() => location.hash === "#vsplit", { timeout: 10000 });
+  navAudit.legacyMediaVsplit = await page.evaluate(() => ({
+    hash: location.hash,
+    vsplitActive: document.getElementById("vsplit")?.classList.contains("is-workspace-active"),
+  }));
+  await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#media/vbb`, {
+    waitUntil: "networkidle0",
+    timeout: 60000,
+  });
+  await page.waitForFunction(() => location.hash === "#vbb", { timeout: 10000 });
+  navAudit.legacyMediaVbb = await page.evaluate(() => ({
+    hash: location.hash,
+    vbbActive: document.getElementById("vbb")?.classList.contains("is-workspace-active"),
+  }));
+  await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#gifbb`, {
+    waitUntil: "networkidle0",
+    timeout: 60000,
+  });
+  await page.waitForFunction(() => location.hash === "#gifbb", { timeout: 10000 });
+  await page.waitForFunction(() => window.__devtoolsBootReady, { timeout: 60000 });
+  navAudit.gifbbRoute = await page.evaluate(() => ({
+    hash: location.hash,
+    gifbbActive: document.getElementById("gifbb")?.classList.contains("is-workspace-active"),
+    hasGifbbFile: Boolean(document.getElementById("gifbb-file")),
+  }));
   for (const [hash, patch] of [
     ["vtrim", () => ({ vtrim: Boolean(document.getElementById("vtrim")), vtrimApi: typeof window.DevToolsVtrim?.getRange === "function", vtrimTrack: Boolean(document.querySelector("[data-vtrim-track]")) })],
     ["audio", () => ({ audio: Boolean(document.getElementById("audio")), audioApi: typeof window.DevToolsAudio?.getRange === "function", audioMp3: Boolean(document.querySelector('[data-audio-fmt="mp3"]')) })],
@@ -1388,6 +1437,30 @@ async function main() {
   if (!todayTools.ffbridge || !todayTools.ffbridgeApi) problems.push("missing FFmpeg bridge tool");
   if (!todayTools.setup || !todayTools.setupApi) problems.push("missing setup help page");
   if (!todayTools.ffModeBanner || !todayTools.ffAdaptApi) problems.push("missing ffmpeg device adapt UI");
+  if (!navAudit.gifGroupTools?.includes("gifmaker") || navAudit.gifGroupTools.length !== 1) {
+    problems.push(`GIF group should only contain gifmaker, got ${JSON.stringify(navAudit.gifGroupTools)}`);
+  }
+  if (JSON.stringify(navAudit.videoGroupTools) !== JSON.stringify(["vsplit", "vtrim", "audio", "vplay"])) {
+    problems.push(`video group tools mismatch: ${JSON.stringify(navAudit.videoGroupTools)}`);
+  }
+  if (JSON.stringify(navAudit.blackboxGroupTools) !== JSON.stringify(["vbb", "gifbb"])) {
+    problems.push(`blackbox group tools mismatch: ${JSON.stringify(navAudit.blackboxGroupTools)}`);
+  }
+  if (!navAudit.hasGifbbNav) problems.push("gifbb should be a separate sidebar tool");
+  if (!navAudit.noMediaNav) problems.push("collapsed media nav entry should be removed");
+  if (!navAudit.gifmakerSectionsOk) {
+    problems.push(`gifmaker sub-features missing (${navAudit.gifmakerSectionCount}/6)`);
+  }
+  if (navAudit.legacyMediaVsplit?.hash !== "#vsplit" || !navAudit.legacyMediaVsplit?.vsplitActive) {
+    problems.push(`legacy #media/vsplit redirect broken: ${JSON.stringify(navAudit.legacyMediaVsplit)}`);
+  }
+  if (navAudit.legacyMediaVbb?.hash !== "#vbb" || !navAudit.legacyMediaVbb?.vbbActive) {
+    problems.push(`legacy #media/vbb redirect broken: ${JSON.stringify(navAudit.legacyMediaVbb)}`);
+  }
+  if (navAudit.gifbbRoute?.hash !== "#gifbb" || !navAudit.gifbbRoute?.gifbbActive) {
+    problems.push(`#gifbb route broken: ${JSON.stringify(navAudit.gifbbRoute)}`);
+  }
+  if (!navAudit.gifbbRoute?.hasGifbbFile) problems.push("gifbb panel missing file input");
   if (!mobileShell.drawerOpen) problems.push("mobile drawer failed to open");
   if (!mobileShell.closedByBtn) problems.push("nav-close should close drawer");
   if (!mobileShell.stayedClosedAfterGhostOpen) {
@@ -1432,6 +1505,7 @@ async function main() {
       fsMark,
       analyze,
       todayTools,
+      navAudit,
       mobileShell,
       shellFixes,
       errors,
