@@ -66,3 +66,74 @@
     box-shadow: none;
   }
 }
+
+.gif-progress {
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
+}
+
+.gif-progress[hidden] {
+  display: none !important;
+}
+
+.gif-progress-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.gif-progress-title {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.gif-progress-pct {
+  flex: 0 0 auto;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.gif-progress-track {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--line) 85%, transparent);
+  overflow: hidden;
+}
+
+.gif-progress-fill {
+  display: block;
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #34d399));
+  transition: width 0.2s ease;
+}
+
+.gif-progress-fill.is-active {
+  animation: gif-progress-pulse 1.2s ease-in-out infinite;
+}
+
+.gif-progress-fill.is-busy {
+  background: linear-gradient(
+    90deg,
+    var(--accent) 0%,
+    color-mix(in srgb, var(--accent) 65%, #5eead4) 50%,
+    var(--accent) 100%
+  );
+  background-size: 28px 100%;
+  animation: gif-progress-stripe 0.75s linear infinite;
+}
+
+.gif-progress-sub {
+  margin: 0.35rem 0 0;
+}
+
+.gif-progress-sub[hidden] {
+  display: none !important;
+}
