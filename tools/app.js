@@ -2566,17 +2566,21 @@
     headerMoreToggle?.setAttribute("aria-expanded", want ? "true" : "false");
   }
 
-  let toolLoadToken = 0;
-  function setToolLoadProgress(pct, label) {
-    const bar = document.getElementById("devtools-tool-load");
-    const fill = bar?.querySelector(".devtools-tool-load-fill");
+  let routeGen = 0;
+  let toolLoadGen = 0;
+
+  function setToolLoadProgress(pct, label, gen = toolLoadGen) {
+    if (gen !== toolLoadGen) return;
+    const shell = document.getElementById("devtools-tool-load");
+    const fill = shell?.querySelector(".devtools-tool-load-fill");
+    const bar = shell?.querySelector(".workspace-panel-load-bar");
     const labelEl = document.getElementById("devtools-tool-load-label");
-    if (!bar || !fill) return;
+    if (!shell || !fill) return;
     const v = Math.min(100, Math.max(0, pct));
-    bar.hidden = false;
-    bar.setAttribute("aria-hidden", "false");
-    bar.setAttribute("aria-busy", "true");
-    bar.setAttribute("aria-valuenow", String(Math.round(v)));
+    shell.hidden = false;
+    shell.setAttribute("aria-hidden", "false");
+    shell.setAttribute("aria-busy", "true");
+    if (bar) bar.setAttribute("aria-valuenow", String(Math.round(v)));
     fill.style.width = `${v}%`;
     if (labelEl) {
       const text = String(label || "").trim();
@@ -2587,15 +2591,17 @@
     }
   }
 
-  function hideToolLoadProgress() {
-    const bar = document.getElementById("devtools-tool-load");
-    const fill = bar?.querySelector(".devtools-tool-load-fill");
+  function hideToolLoadProgress(gen = toolLoadGen) {
+    if (gen !== toolLoadGen) return;
+    const shell = document.getElementById("devtools-tool-load");
+    const fill = shell?.querySelector(".devtools-tool-load-fill");
+    const bar = shell?.querySelector(".workspace-panel-load-bar");
     const labelEl = document.getElementById("devtools-tool-load-label");
-    if (!bar) return;
-    bar.hidden = true;
-    bar.setAttribute("aria-hidden", "true");
-    bar.setAttribute("aria-busy", "false");
-    bar.setAttribute("aria-valuenow", "0");
+    if (!shell) return;
+    shell.hidden = true;
+    shell.setAttribute("aria-hidden", "true");
+    shell.setAttribute("aria-busy", "false");
+    if (bar) bar.setAttribute("aria-valuenow", "0");
     if (fill) fill.style.width = "0%";
     if (labelEl) {
       labelEl.hidden = true;
@@ -2605,8 +2611,7 @@
 
   function mapLazyLoadProgress(ratio, label, onProgress) {
     const pct = 12 + Math.max(0, Math.min(1, Number(ratio) || 0)) * 80;
-    onProgress?.(pct);
-    setToolLoadProgress(pct, label);
+    onProgress?.(pct, label);
   }
 
   async function ensureToolAssets(toolId, onProgress) {
@@ -2615,21 +2620,59 @@
     });
   }
 
-  async function withToolLoadProgress(run) {
-    const token = ++toolLoadToken;
-    setToolLoadProgress(12);
-    try {
-      await run((pct) => {
-        if (token === toolLoadToken) setToolLoadProgress(pct);
-      });
-      if (token === toolLoadToken) setToolLoadProgress(100);
-    } finally {
-      if (token === toolLoadToken) {
-        window.setTimeout(() => {
-          if (token === toolLoadToken) hideToolLoadProgress();
-        }, 200);
+  function markShellBootReady() {
+    if (window.__devtoolsBootReady) return;
+    window.__devtoolsBootReady = true;
+    window.DevToolsBoot?.bump?.(88, "界面就绪…");
+    window.dispatchEvent(new CustomEvent("devtools:boot-ready"));
+    idleLoadPwaOnce();
+    scheduleDateremindReminders();
+  }
+
+  function startToolAssetLoad(gen, toolId) {
+    const loadGen = ++toolLoadGen;
+    const name = toolName(toolId);
+    let overlayShown = false;
+    const showDelay = window.setTimeout(() => {
+      if (gen !== routeGen) return;
+      overlayShown = true;
+      setToolLoadProgress(12, `正在加载「${name}」…`, loadGen);
+    }, 140);
+
+    void (async () => {
+      try {
+        await ensureToolAssets(toolId, (pct, label) => {
+          if (gen !== routeGen) return;
+          if (!overlayShown) {
+            window.clearTimeout(showDelay);
+            overlayShown = true;
+          }
+          setToolLoadProgress(pct, label || `正在加载「${name}」…`, loadGen);
+        });
+      } catch (err) {
+        console.error("tool lazy-load failed", toolId, err);
+        if (gen === routeGen) {
+          showToast(`「${name}」加载失败，可切换其他工具或稍后重试`);
+        }
+      } finally {
+        window.clearTimeout(showDelay);
       }
-    }
+
+      if (gen !== routeGen) return;
+
+      window.dispatchEvent(
+        new CustomEvent("devtools:route", {
+          detail: { tool: currentTool, groupId: TOOL_TO_GROUP[currentTool] || null },
+        })
+      );
+
+      if (!overlayShown) return;
+
+      setToolLoadProgress(100, `${name} 已就绪`, loadGen);
+      window.setTimeout(() => {
+        if (gen === routeGen && loadGen === toolLoadGen) hideToolLoadProgress(loadGen);
+      }, 220);
+    })();
   }
 
   let dateremindIdleScheduled = false;
@@ -2649,6 +2692,7 @@
   let routeSettled = Promise.resolve();
 
   async function applyRoute({ skipRecent, keepDrawer, deferAssets = false } = {}) {
+    const gen = ++routeGen;
     const run = async () => {
     let route = parseRoute();
     if (shouldRestoreLastTool()) {
@@ -2754,57 +2798,13 @@
       window.scrollTo(0, 0);
     }
 
-    const emitRoute = () => {
-      window.dispatchEvent(
-        new CustomEvent("devtools:route", {
-          detail: { tool: currentTool, groupId: TOOL_TO_GROUP[currentTool] || null },
-        })
-      );
-    };
-
-    const loadLazyForRoute = async (onProgress) => {
-      try {
-        setToolLoadProgress(12, `正在打开「${toolName(routeToolId)}」…`);
-        await ensureToolAssets(routeToolId, onProgress);
-      } catch (err) {
-        console.error("tool lazy-load failed", routeToolId, err);
-      }
-      emitRoute();
-    };
-
-    if (deferAssets) {
-      if (!window.__devtoolsShellBoot) {
-        window.__devtoolsShellBoot = true;
-        void (async () => {
-          try {
-            window.DevToolsBoot?.bump?.(48, `加载 ${toolName(routeToolId)}…`);
-            setToolLoadProgress(20, `正在打开「${toolName(routeToolId)}」…`);
-            await ensureToolAssets(routeToolId, (pct) => setToolLoadProgress(pct));
-            window.DevToolsBoot?.bump?.(88, "即将完成…");
-            setToolLoadProgress(96, "界面准备就绪…");
-          } catch (err) {
-            console.error("boot lazy-load failed", routeToolId, err);
-          }
-          window.__devtoolsBootReady = true;
-          window.dispatchEvent(new CustomEvent("devtools:boot-ready"));
-          emitRoute();
-          hideToolLoadProgress();
-          idleLoadPwaOnce();
-          scheduleDateremindReminders();
-        })();
-      } else {
-        emitRoute();
-        const idleTool = window.requestIdleCallback || ((cb) => window.setTimeout(cb, 400));
-        idleTool(() => {
-          loadLazyForRoute().catch((err) => console.error("boot lazy-load failed", routeToolId, err));
-        });
-      }
-    } else {
-      await withToolLoadProgress(async (onProgress) => {
-        await loadLazyForRoute(onProgress);
-      });
-      idleLoadPwaOnce();
+    if (!window.__devtoolsShellBoot) {
+      window.__devtoolsShellBoot = true;
+      window.DevToolsBoot?.bump?.(48, `打开 ${toolName(routeToolId)}…`);
     }
+    markShellBootReady();
+
+    startToolAssetLoad(gen, routeToolId);
     };
     routeSettled = run().catch((err) => {
       console.error("applyRoute failed", err);
