@@ -1,0 +1,15 @@
+{
+  "articles": [
+    {
+      "id": "jgj-longevity-16",
+      "title": "金刚长寿功十六式详解",
+      "subtitle": "八部金刚功 · 八部长寿功",
+      "author": "Elliot718703",
+      "published": "2026-08-31",
+      "tags": ["养生", "气功", "金刚功", "长寿功", "张至顺"],
+      "cover": "lib/health-articles/jgj-longevity-16/assets/cover.webp",
+      "file": "lib/health-articles/jgj-longevity-16.json",
+      "summary": "张至顺道长一系金刚功、长寿功十六式自学对照：各部功效、做法、注意与动作演示动图。"
+    }
+  ]
+}

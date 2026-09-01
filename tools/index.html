@@ -14,9 +14,9 @@
   <link rel="icon" type="image/png" sizes="192x192" href="./icons/icon-192.png" />
   <title>DevTools · 本地实用小工具合集</title>
   <!-- 首屏不拉 Google Fonts（国内易超时阻塞）；正文用系统字体栈，文转图按需再加载 Noto -->
-  <script src="./lib/tools-build.js?v=2026.09.01-072500"></script>
-  <link rel="stylesheet" href="./style.css?v=2026.09.01-072500" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.09.01-072500" />
+  <script src="./lib/tools-build.js?v=2026.09.01-074300"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.09.01-074300" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.09.01-074300" />
   <script src="./lib/theme-presets.js?v=2026.08.30-062500"></script>
   <script src="./lib/boot-loader.js?v=2026.08.30-062500"></script>
   <script>
@@ -5085,15 +5085,15 @@ yt-dlp --version</pre>
 <section id="healthread" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>健康阅读</h1>
-        <p>养生与功法类文章离线阅读：正文与配图保存在本站，便于对照练习。</p>
+        <p>养生与功法类文章离线阅读：卡片列表、搜索筛选，动图点击后再加载，自动记住上次阅读位置。</p>
       </div>
       <div class="panel-body hr-body-wrap">
         <div class="hr-toolbar panel-card">
-          <label class="hr-picker-label" for="hr-picker">文章</label>
-          <select id="hr-picker" class="hr-picker"></select>
-          <p class="hint tight" id="hr-status">加载中…</p>
+          <button type="button" class="ghost-btn hr-back" id="hr-back" hidden>← 返回列表</button>
+          <p class="hint tight hr-status" id="hr-status">加载目录…</p>
         </div>
-        <div id="hr-article" class="hr-article" aria-live="polite"></div>
+        <div id="hr-list" class="hr-list" aria-live="polite"></div>
+        <div id="hr-reader" class="hr-article" hidden aria-live="polite"></div>
       </div>
     </section>
 
@@ -5619,12 +5619,12 @@ adb devices</pre>
     <p class="ruler-fs-hud mono hint" id="ruler-coord-fs" aria-live="polite"></p>
   </div>
   <script src="./lib/bridge-token.js?v=2026.08.30-062500"></script>
-  <script src="./lib/lazy-scripts.js?v=2026.09.01-072500"></script>
-  <script src="./vendor/solarlunar.min.js?v=2026.09.01-072500"></script>
-  <script src="./dateremind.js?v=2026.09.01-072500"></script>
+  <script src="./lib/lazy-scripts.js?v=2026.09.01-074300"></script>
+  <script src="./vendor/solarlunar.min.js?v=2026.09.01-074300"></script>
+  <script src="./dateremind.js?v=2026.09.01-074300"></script>
   <script src="./theme.js?v=2026.08.30-062500"></script>
-  <script src="./app.js?v=2026.09.01-072500"></script>
-  <script src="./nav-organize.js?v=2026.09.01-072500"></script>
+  <script src="./app.js?v=2026.09.01-074300"></script>
+  <script src="./nav-organize.js?v=2026.09.01-074300"></script>
   <script src="./wheel.js?v=2026.08.30-062500"></script>
   <script src="./ruler.js?v=2026.08.30-062500"></script>
   <script src="./muyu.js?v=2026.08.30-084100"></script>
