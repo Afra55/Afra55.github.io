@@ -12,7 +12,7 @@
   function withVersion(src) {
     const url = new URL(src, document.baseURI || window.location.href);
     url.searchParams.set("v", BUILD);
-    return url.pathname + url.search;
+    return url.href;
   }
 
   async function fetchText(url) {
@@ -44,7 +44,7 @@
 
     const href = withVersion(`./styles/panels/${id}.css`);
     const existing = [...document.querySelectorAll('link[data-panel-css]')].find(
-      (l) => l.getAttribute("href") === href
+      (l) => l.href === href || l.getAttribute("href") === href
     );
     if (existing) {
       cssLoaded.add(id);
