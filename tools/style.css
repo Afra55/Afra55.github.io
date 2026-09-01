@@ -12487,6 +12487,11 @@ html[data-boot-loading="1"] body {
   border-color: var(--accent);
 }
 
+.hr-card.is-last-read {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
 .hr-card-cover {
   width: 88px;
   height: 66px;

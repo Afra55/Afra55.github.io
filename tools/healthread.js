@@ -5,12 +5,39 @@
   const INDEX_URL = "./lib/health-articles/index.json";
   const LS_LAST_ID = "devtools:healthread:last-id";
   const LS_SCROLL_PREFIX = "devtools:healthread:scroll:";
+  /** 内联目录快照：首屏零请求即可渲染列表；后台再拉 index.json 更新 */
+  const INDEX_BOOTSTRAP = [
+    {
+      id: "jgj-longevity-16",
+      title: "金刚长寿功十六式详解",
+      subtitle: "八部金刚功 · 八部长寿功",
+      author: "Elliot718703",
+      published: "2026-08-31",
+      tags: ["养生", "气功", "金刚功", "长寿功", "张至顺"],
+      cover: "lib/health-articles/jgj-longevity-16/assets/cover.webp",
+      file: "lib/health-articles/jgj-longevity-16.json",
+      summary: "张至顺道长一系金刚功、长寿功十六式自学对照：各部功效、做法、注意与动作演示动图。",
+    },
+  ];
+
+  let indexPrefetch = null;
+  function prefetchIndex() {
+    if (!indexPrefetch) {
+      const v = encodeURIComponent(window.TOOLS_BUILD || "");
+      indexPrefetch = fetch(`${INDEX_URL}?v=${v}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null);
+    }
+    return indexPrefetch;
+  }
+  prefetchIndex();
 
   const state = {
     view: "list",
     index: [],
     article: null,
     articleId: "",
+    resumeId: "",
     query: "",
     tag: "",
     loading: false,
@@ -258,7 +285,8 @@
                     ? `<img class="hr-card-cover" src="${esc(cover)}" alt="" loading="lazy" decoding="async" />`
                     : `<div class="hr-card-cover hr-card-cover-empty" aria-hidden="true">文</div>`;
                   const tagHtml = (a.tags || []).slice(0, 4).map((t) => `<span class="hr-tag">${esc(t)}</span>`).join("");
-                  return `<button type="button" class="hr-card" role="listitem" data-hr-open="${esc(a.id)}">
+                  const lastMark = a.id === state.resumeId ? " is-last-read" : "";
+                  return `<button type="button" class="hr-card${lastMark}" role="listitem" data-hr-open="${esc(a.id)}">
                     ${coverHtml}
                     <span class="hr-card-body">
                       <span class="hr-card-title">${esc(a.title)}</span>
@@ -337,51 +365,80 @@
     if (state.articleId) saveScroll(state.articleId);
     state.article = null;
     state.articleId = "";
+    try {
+      const lastId = localStorage.getItem(LS_LAST_ID) || "";
+      state.resumeId = lastId && state.index.some((a) => a.id === lastId) ? lastId : "";
+    } catch (_) {
+      state.resumeId = "";
+    }
     renderList();
     const status = $("#hr-status");
     if (status) status.textContent = `${state.index.length} 篇文章`;
   }
 
   async function loadIndex() {
-    const status = $("#hr-status");
-    if (status) status.textContent = "加载目录…";
-    const res = await fetch(`${INDEX_URL}?v=${window.TOOLS_BUILD || ""}`);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
+    const build = window.TOOLS_BUILD || "";
+    const cacheKey = `devtools:healthread:index:${build}`;
+    try {
+      const raw = sessionStorage.getItem(cacheKey);
+      if (raw) {
+        const cached = JSON.parse(raw);
+        if (Array.isArray(cached?.articles) && cached.articles.length) {
+          state.index = cached.articles;
+          return;
+        }
+      }
+    } catch (_) {}
+
+    const data =
+      (await prefetchIndex()) ||
+      (await fetch(`${INDEX_URL}?v=${encodeURIComponent(build)}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .catch(() => null));
+    if (!data) throw new Error("无法读取目录");
     state.index = Array.isArray(data?.articles) ? data.articles : [];
     if (!state.index.length) throw new Error("文章目录为空");
+    try {
+      sessionStorage.setItem(cacheKey, JSON.stringify({ articles: state.index }));
+    } catch (_) {}
+  }
+
+  function paintCatalog() {
+    state.index = INDEX_BOOTSTRAP.slice();
+    renderList();
+    const status = $("#hr-status");
+    if (status) status.textContent = `${state.index.length} 篇文章`;
   }
 
   async function init() {
-    const backBtn = $("#hr-back");
-    backBtn?.addEventListener("click", () => showList());
-
-    try {
-      await loadIndex();
-    } catch (e) {
-      const listEl = $("#hr-list");
-      if (listEl) listEl.innerHTML = `<p class="hint">目录加载失败：${esc(String(e?.message || e))}</p>`;
-      return;
-    }
-
     let lastId = "";
     try {
       lastId = localStorage.getItem(LS_LAST_ID) || "";
     } catch (_) {}
+    state.resumeId = lastId && INDEX_BOOTSTRAP.some((a) => a.id === lastId) ? lastId : "";
 
-    if (lastId && state.index.some((a) => a.id === lastId)) {
-      await openArticle(lastId);
-    } else {
-      renderList();
-      const status = $("#hr-status");
-      if (status) status.textContent = `${state.index.length} 篇文章`;
+    paintCatalog();
+
+    const refresh = loadIndex()
+      .then(() => {
+        state.resumeId = lastId && state.index.some((a) => a.id === lastId) ? lastId : "";
+        renderList();
+        const status = $("#hr-status");
+        if (status && state.view === "list") status.textContent = `${state.index.length} 篇文章`;
+      })
+      .catch(() => {});
+
+    if (state.resumeId) {
+      void refresh.then(() => openArticle(state.resumeId));
     }
+  }
 
   let booted = false;
 
   function bootIfNeeded() {
     if (booted) return;
     booted = true;
+    $("#hr-back")?.addEventListener("click", () => showList());
     void init();
   }
 
