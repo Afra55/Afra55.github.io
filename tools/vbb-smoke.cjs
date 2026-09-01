@@ -68,6 +68,8 @@ async function main() {
     errors.push(`console: ${text}`);
   });
 
+  await page.setViewport({ width: 1280, height: 800, isMobile: false, hasTouch: false });
+
   await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#vbb`, {
     waitUntil: "networkidle0",
     timeout: 60000,
@@ -598,11 +600,11 @@ async function main() {
     ),
   };
 
-  // 黑盒分类 Tab 切换应 push 历史，便于后退
+  // 手机无顶部分类条，侧栏切换也应 push 历史，便于后退
   const histBefore = await page.evaluate(() => history.length);
-  await page.evaluate(() => document.querySelector('[data-category-tab="gifbb"]')?.click());
+  await page.evaluate(() => document.querySelector('.tool-nav-link[data-tool="gifbb"]')?.click());
   await page.waitForFunction(() => location.hash === "#gifbb", { timeout: 5000 });
-  await page.evaluate(() => document.querySelector('[data-category-tab="vbb"]')?.click());
+  await page.evaluate(() => document.querySelector('.tool-nav-link[data-tool="vbb"]')?.click());
   await page.waitForFunction(() => location.hash === "#vbb", { timeout: 5000 });
   const shellFixes = await page.evaluate((prevLen) => {
     const recentRaw = localStorage.getItem("devtools-tool-recent-v1");
@@ -620,6 +622,7 @@ async function main() {
     );
     const comingGone = !document.getElementById("coming");
     return {
+      subnavHidden: document.getElementById("category-subnav")?.hidden === true,
       historyGrew: history.length > prevLen + 1,
       historyLength: history.length,
       prevLen,
@@ -1403,7 +1406,9 @@ async function main() {
   if (mobileShell.hashVbb !== "#vbb") problems.push(`blackbox nav hash: ${mobileShell.hashVbb}`);
   if (!mobileShell.vbbActive) problems.push("vbb tab switch failed");
   if (!mobileShell.onlyOneActive) problems.push("more than one panel active");
-  if (!shellFixes.historyGrew) problems.push("category tab switches should pushState and grow history");
+  if (mobileShell.afterGif?.subnav) problems.push("category subnav should be hidden on mobile");
+  if (!shellFixes.subnavHidden) problems.push("category subnav should stay hidden on mobile viewport");
+  if (!shellFixes.historyGrew) problems.push("sidebar tool switches should pushState and grow history on mobile");
   if (shellFixes.recentLooksDefault) problems.push("recent list looks like default order padding");
   if (!shellFixes.searchFindsMedia) problems.push("search vbb should match blackbox");
   if (!shellFixes.comingGone) problems.push("#coming placeholder should be removed");

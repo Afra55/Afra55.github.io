@@ -1420,6 +1420,8 @@
 
   function shouldShowCategorySubnav(groupId, tools) {
     if (!groupId || tools.length < 2) return false;
+    // 窄屏/抽屉导航时用侧栏切换，顶部分类条占纵向空间
+    if (isMobileDrawer()) return false;
     if (navCompactActive()) return true;
     return GROUPS_WITH_ALWAYS_SUBNAV.has(groupId);
   }
@@ -3379,6 +3381,7 @@
     "resize",
     () => {
       syncNavCompactUi();
+      renderCategorySubnav();
       if (!navCompactActive()) return;
       const open = allNavGroups().find((g) => g.classList.contains("is-pinned") || g.classList.contains("is-flyout-open"));
       if (open) positionNavFlyout(open);
