@@ -161,19 +161,10 @@
 
   async function ingestFromClipboardData(cd, opts = { offerTemp: false }) {
     if (!cd) return false;
-    const files = [...(cd.files || [])];
+    const files = collectFilesFromClipboardData(cd);
     if (files.length) {
       await ingestFiles(files, opts);
       return true;
-    }
-    const items = [...(cd.items || [])];
-    const img = items.find((it) => it.kind === "file" && String(it.type || "").startsWith("image/"));
-    if (img) {
-      const f = img.getAsFile();
-      if (f) {
-        await ingestFiles([f], opts);
-        return true;
-      }
     }
     const text = cd.getData("text/plain");
     if (text && text.trim()) {
@@ -271,6 +262,48 @@
     if (m.startsWith("audio/") || /\.(mp3|wav|ogg|m4a|aac|flac)$/.test(n)) return "audio";
     if (m.startsWith("text/") || m === "application/json" || /\.(txt|md|json|csv|log)$/.test(n)) return "text";
     return "file";
+  }
+
+  const CLIP_TEXT_MIMES = new Set(["text/plain", "text/html", "text/uri-list"]);
+
+  function isClipboardFileMime(type) {
+    const t = String(type || "").toLowerCase();
+    if (!t || CLIP_TEXT_MIMES.has(t)) return false;
+    if (t.startsWith("image/")) return true;
+    if (t.startsWith("video/")) return true;
+    if (t.startsWith("audio/")) return true;
+    if (t.startsWith("application/")) return true;
+    return false;
+  }
+
+  function clipFileNameForMime(mime, index = 0) {
+    const raw = String(mime || "application/octet-stream").toLowerCase().split(";")[0];
+    let ext = raw.split("/")[1] || "bin";
+    if (ext === "octet-stream" || ext === "x-msdownload") ext = "bin";
+    const suffix = index > 0 ? `-${index + 1}` : "";
+    return `剪贴板${suffix}.${ext}`;
+  }
+
+  function isFilesystemPathText(text) {
+    const t = String(text || "").trim();
+    if (!t || t.includes("\n") || t.includes("\r")) return false;
+    if (/^data:/i.test(t)) return false;
+    if (/^file:\/\//i.test(t)) return true;
+    if (/^[a-zA-Z]:\\/.test(t)) return true;
+    if (/^\\\\[^\\]+\\/.test(t)) return true;
+    if (/^\/[^/]/.test(t) && !t.startsWith("//")) return true;
+    return false;
+  }
+
+  function collectFilesFromClipboardData(cd) {
+    const files = [...(cd?.files || [])];
+    if (files.length) return files;
+    for (const it of [...(cd?.items || [])]) {
+      if (it.kind !== "file") continue;
+      const f = it.getAsFile?.();
+      if (f) files.push(f);
+    }
+    return files;
   }
 
   let dbPromise = null;
@@ -2780,6 +2813,12 @@
           state.clipPendingHint = false;
           return;
         }
+        if (parsed?.pathOnly) {
+          if (force) toast("已复制文件，但浏览器无法通过路径读取。请拖入文件或在页面内 Ctrl+V 粘贴");
+          dismissClipOffer();
+          state.clipPendingHint = false;
+          return;
+        }
         dismissClipOffer();
         state.clipPendingHint = false;
         if (parsed?.files?.length) {
@@ -2806,6 +2845,12 @@
         const sig = `text:${text.slice(0, 80)}:${text.length}`;
         if (sig === state.lastClipSig) {
           if (force) toast("剪贴板内容与上次相同");
+          dismissClipOffer();
+          state.clipPendingHint = false;
+          return;
+        }
+        if (isFilesystemPathText(text)) {
+          if (force) toast("已复制文件，但浏览器无法通过路径读取。请拖入文件或在页面内 Ctrl+V 粘贴");
           dismissClipOffer();
           state.clipPendingHint = false;
           return;
@@ -2941,21 +2986,26 @@
     const files = [];
     let textBody = "";
     let got = false;
+
     for (const item of items || []) {
-      const types = [...(item.types || [])];
-      const imgTypes = types.filter((t) => String(t).startsWith("image/"));
-      for (const imgType of imgTypes) {
+      for (const type of [...(item.types || [])]) {
+        if (!isClipboardFileMime(type)) continue;
         try {
-          const blob = await item.getType(imgType);
+          const blob = await item.getType(type);
           if (!blob?.size) continue;
-          const sig = `img:${blob.size}:${imgType}`;
+          const mime = String(type).split(";")[0];
+          const sig = `file:${blob.size}:${mime}`;
           if (!force && sig === state.lastClipSig) return { duplicate: true };
           state.lastClipSig = sig;
-          files.push(new File([blob], `剪贴板.${imgType.split("/")[1] || "png"}`, { type: imgType }));
+          files.push(new File([blob], clipFileNameForMime(mime, files.length), { type: mime }));
           got = true;
         } catch (_) {}
       }
-      if (files.length) continue;
+    }
+    if (files.length) return { files, textBody: "", got: true };
+
+    for (const item of items || []) {
+      const types = [...(item.types || [])];
       if (types.includes("text/plain")) {
         try {
           const blob = await item.getType("text/plain");
@@ -2970,6 +3020,7 @@
             got = true;
             continue;
           }
+          if (isFilesystemPathText(text)) return { pathOnly: true, got: true };
           const sig = `text:${text.slice(0, 80)}:${text.length}`;
           if (!force && sig === state.lastClipSig) return { duplicate: true };
           state.lastClipSig = sig;
@@ -2991,23 +3042,9 @@
           }
         } catch (_) {}
       }
-      if (!files.length) {
-        for (const type of types) {
-          if (type === "text/plain" || type === "text/html" || String(type).startsWith("image/")) continue;
-          try {
-            const blob = await item.getType(type);
-            if (!blob?.size) continue;
-            const ext = type.split("/")[1] || "bin";
-            const sig = `bin:${blob.size}:${type}`;
-            if (!force && sig === state.lastClipSig) return { duplicate: true };
-            state.lastClipSig = sig;
-            files.push(new File([blob], `剪贴板.${ext}`, { type: type || "application/octet-stream" }));
-            got = true;
-            break;
-          } catch (_) {}
-        }
-      }
     }
+    if (files.length) return { files, textBody: "", got: true };
+    if (textBody && isFilesystemPathText(textBody)) return { pathOnly: true, got: true };
     return { files, textBody, got };
   }
 
@@ -5523,24 +5560,21 @@
           .catch((err) => setError(memoError, err.message || String(err)));
         return;
       }
-      const files = [...(cd.files || [])];
+      const files = collectFilesFromClipboardData(cd);
       if (files.length) {
         e.preventDefault();
         ingestFiles(files, { offerTemp: false }).catch((err) => setError(memoError, err.message || String(err)));
-        return;
-      }
-      const items = [...(cd.items || [])];
-      const img = items.find((it) => it.kind === "file" && String(it.type || "").startsWith("image/"));
-      if (img) {
-        e.preventDefault();
-        const f = img.getAsFile();
-        if (f) ingestFiles([f], { offerTemp: false }).catch((err) => setError(memoError, err.message || String(err)));
         return;
       }
       // 编辑框 / 其它可编辑控件内：文本交给默认粘贴
       if (active === editor || isEditableTarget(active)) return;
       const text = cd.getData("text/plain");
       if (text && text.trim()) {
+        if (isFilesystemPathText(text)) {
+          e.preventDefault();
+          toast("已复制文件路径，请拖入文件或在页面内 Ctrl+V 粘贴（部分浏览器仅粘贴时带文件数据）");
+          return;
+        }
         e.preventDefault();
         addText(text).catch((err) => setError(memoError, err.message || String(err)));
         return;

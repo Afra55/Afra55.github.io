@@ -252,7 +252,10 @@ async function main() {
       out.tempUx.badge = Boolean(document.querySelector(`.memo-card[data-memo-id="${anyItem.id}"] .memo-temp-badge`));
       const badgeEl = document.querySelector(`.memo-card[data-memo-id="${anyItem.id}"] .memo-temp-badge`);
       const badgeBg = badgeEl ? getComputedStyle(badgeEl).backgroundColor : "";
-      out.tempUx.badgeProminent = /rgb/.test(badgeBg) && badgeBg !== "rgba(0, 0, 0, 0)";
+      out.tempUx.badgeSubtle = badgeEl
+        ? Number(getComputedStyle(badgeEl).fontWeight) < 700 &&
+          !/e8a317|rgb\(232,\s*163,\s*23/i.test(getComputedStyle(badgeEl).backgroundColor + getComputedStyle(badgeEl).color)
+        : false;
       out.tempUx.tempCard = Boolean(document.querySelector(`.memo-card.is-temp[data-memo-id="${anyItem.id}"]`));
       const untempEl = document.querySelector(`.memo-more [data-memo-untemp="${anyItem.id}"]`);
       out.tempUx.untempBtn = Boolean(untempEl);
@@ -2094,7 +2097,7 @@ async function main() {
   if (!result.dragSelect?.cardNotDraggable || (result.dragSelect?.canReorder && !result.dragSelect?.hasDragHandle)) {
     failed.push("memo cards should use drag handle instead of whole-card drag");
   }
-  if (!result.tempUx?.api || !result.tempUx?.daysDefault || !result.tempUx?.marked || !result.tempUx?.badge || !result.tempUx?.badgeProminent || !result.tempUx?.tempCard || !result.tempUx?.untempBtn || !result.tempUx?.untempProminent || !result.tempUx?.cleared || !result.tempUx?.stackMulti || !result.tempUx?.stackCleared || !result.tempUx?.promptPreview || !result.tempUx?.promptHasBody) {
+  if (!result.tempUx?.api || !result.tempUx?.daysDefault || !result.tempUx?.marked || !result.tempUx?.badge || !result.tempUx?.badgeSubtle || !result.tempUx?.tempCard || !result.tempUx?.untempBtn || !result.tempUx?.untempProminent || !result.tempUx?.cleared || !result.tempUx?.stackMulti || !result.tempUx?.stackCleared || !result.tempUx?.promptPreview || !result.tempUx?.promptHasBody) {
     failed.push("memo temp mark API/UI failed");
   }
   if (!result.textEdit?.isModal || !result.textEdit?.modalWideEnough) {
