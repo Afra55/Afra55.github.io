@@ -8045,6 +8045,33 @@
     }
 
     /** 总进度条与各片段进度并存 */
+    function vbbStageText(text) {
+      const t = String(text || "").trim();
+      if (!t) return "";
+      if (/^(完成|失败|等待|编码|合并|分析|压缩|降宽)/.test(t) && t.length <= 12) return t;
+      const fps = t.match(/(\d+)FPS/);
+      if (fps && /压缩|编码/.test(t)) return `${fps[1]}FPS`;
+      if (/降宽/.test(t)) {
+        const w = t.match(/→\s*(\d+)/) || t.match(/宽\s*(\d+)/);
+        return w ? `降宽 ${w[1]}` : "降宽";
+      }
+      if (/沿用/.test(t)) return t.includes("方案") ? "沿用方案" : "沿用";
+      if (/样片|分析/.test(t)) return t.replace(/编码样片/, "样片").replace(/分析中\s*[·.]?\s*/, "分析 ");
+      return t
+        .replace(/超限→黑盒|仍超限[，,]?\s*改走黑盒/g, "超限")
+        .replace(/清晰 GIF|锐度 GIF/g, (m) => m.replace(" GIF", ""))
+        .replace(/时长黑盒|手动黑盒|批量黑盒|黑盒回退|黑盒完成|黑盒编码|改走黑盒|压黑盒|黑盒压缩|黑盒加宽|符合黑盒|黑盒/g, "")
+        .replace(/\s*·\s*/g, " · ")
+        .replace(/(^·|·$)/g, "")
+        .trim();
+    }
+
+    function vbbClipProgressLine(i, total, { reuse = false } = {}) {
+      const bits = [`${i + 1}/${total}`];
+      if (reuse) bits.push("沿用");
+      return bits.join(" · ");
+    }
+
     function setVbbProgress(visible, ratio, text, opts = {}) {
       pinVbbViewport(() => {
         if (!vbbProgress) return;
@@ -8073,8 +8100,9 @@
           vbbProgressPct.hidden = false;
         }
         const sub = String(opts.sub || "").trim();
-        const main = text || `${pct}%`;
-        if (vbbProgressText) vbbProgressText.textContent = sub ? `${main} · ${sub}` : main;
+        const main = vbbStageText(text || `${pct}%`);
+        const line = vbbStageText(sub ? `${main} · ${sub}` : main) || `${pct}%`;
+        if (vbbProgressText) vbbProgressText.textContent = line;
         if (vbbProgressSub) {
           vbbProgressSub.hidden = true;
           vbbProgressSub.classList.remove("is-empty");
@@ -8120,7 +8148,7 @@
           bits.push(`${formatKb(info.beforeSize)} → ${formatKb(blob.size)}`);
         }
         if (info.compressRounds > 0) bits.push(`已压 ${info.compressRounds} 轮`);
-        bits.push(blob.size <= V2G_BLACKBOX_MAX_BYTES ? "符合黑盒 ≤6MB" : "仍超 6MB");
+        bits.push(blob.size <= V2G_BLACKBOX_MAX_BYTES ? "≤6MB" : "仍超 6MB");
         vbbMergedMeta.textContent = bits.join(" · ");
       }
       if (vbbResultBlock) vbbResultBlock.hidden = false;
@@ -8131,7 +8159,10 @@
       if (!c) return;
       if (patch.status != null) c.jobStatus = patch.status;
       if (patch.progress != null) c.jobProgress = Math.max(0, Math.min(1, Number(patch.progress) || 0));
-      if (patch.text != null) c.jobText = String(patch.text || "");
+      if (patch.text != null) {
+        const polished = vbbStageText(String(patch.text || ""));
+        c.jobText = polished || String(patch.text || "");
+      }
       pinVbbViewport(() => {
         const row = vbbList?.querySelector(`[data-vbb-clip="${idx}"]`);
         if (row) syncClipProgressDom(row.querySelector(".vsplit-clip-progress"), c);
@@ -8186,7 +8217,7 @@
           continue;
         }
         if (/超限/.test(part)) {
-          out.push("超限黑盒");
+          out.push("超限");
           continue;
         }
         const fps = part.match(/^(\d+)FPS$/);
@@ -8260,7 +8291,10 @@
       hideVbbMergedBlock();
       if (vbbZip) vbbZip.disabled = true;
       if (vbbResultBlock) vbbResultBlock.hidden = true;
-      if (vbbResultSummary) vbbResultSummary.textContent = "完成各段后可预览、下载或合并。";
+      if (vbbResultSummary) {
+        vbbResultSummary.textContent = "";
+        vbbResultSummary.hidden = true;
+      }
     }
 
     function setVbbButtons() {
@@ -8838,8 +8872,10 @@
         const bits = [`${vbbClips.length} 段`];
         if (gifCount) bits.push(`${gifCount} 个 GIF · ${formatKb(totalBytes)}`);
         if (failCount) bits.push(`${failCount} 段失败`);
-        bits.push("点「预览」查看单段，多段可「合并 GIF」");
         vbbResultSummary.textContent = bits.join(" · ");
+        vbbResultSummary.hidden = bits.length === 0;
+      } else if (vbbResultSummary) {
+        vbbResultSummary.hidden = true;
       }
       vbbClips.forEach((c, idx) => {
         const row = document.createElement("div");
@@ -8895,7 +8931,7 @@
           wrap.className = "vbb-clip-preview-wrap";
           const img = document.createElement("img");
           img.className = "vsplit-clip-gif";
-          img.alt = `黑盒片段 ${idx + 1}`;
+          img.alt = `片段 ${idx + 1}`;
           img.loading = "lazy";
           img.decoding = "async";
           img.src = c.gifUrl;
@@ -9047,8 +9083,8 @@
           const r = ranges[i];
           const reuse = resolveVbbSegmentReuse(ranges, i, null, "blackbox");
           const followTip = reuse.fromCache ? " · 沿用方案" : "";
-          setVbbClipJob(i, { status: "running", progress: 0.02, text: "黑盒编码…" });
-          setVbbProgress(true, i / ranges.length, `手动黑盒 · ${i + 1}/${ranges.length}${followTip}`, {
+          setVbbClipJob(i, { status: "running", progress: 0.02, text: "编码…" });
+          setVbbProgress(true, i / ranges.length, vbbClipProgressLine(i, ranges.length, { reuse: Boolean(reuse.fromCache) }), {
             sub: `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)}`,
             busy: true,
           });
@@ -9063,7 +9099,10 @@
             onProgress: (local, text) => {
               const p = i + Math.min(0.98, local);
               setVbbClipJob(i, { status: "running", progress: Math.min(0.98, local), text });
-              setVbbProgress(true, p / ranges.length, `手动黑盒 · ${i + 1}/${ranges.length}${followTip}`, { sub: text, busy: true });
+              setVbbProgress(true, p / ranges.length, vbbClipProgressLine(i, ranges.length, { reuse: Boolean(reuse.fromCache) }), {
+                sub: vbbStageText(text),
+                busy: true,
+              });
             },
           });
           if (abortVbb) throw new Error("已取消");
@@ -9077,8 +9116,8 @@
             await new Promise((r) => setTimeout(r, hugeFile ? 180 : 80));
           }
         }
-        setVbbProgress(true, 1, `黑盒完成 · ${ranges.length} 段`);
-        toast(`黑盒完成 · ${ranges.length} 段 · 可逐条下载或打包`);
+        setVbbProgress(true, 1, `完成 · ${ranges.length} 段`);
+        toast(`已完成 ${ranges.length} 段 · 可逐条下载或打包`);
       } catch (err) {
         if (String(err?.message) !== "已取消") setError(vbbError, err.message || String(err));
         else toast("已取消");
@@ -9121,9 +9160,9 @@
         for (let i = 0; i < total; i++) {
           if (abortVbb) throw new Error("已取消");
           const item = vbbBatchFiles[i];
-          setVbbClipJob(i, { status: "running", progress: 0.02, text: "黑盒编码…" });
+          setVbbClipJob(i, { status: "running", progress: 0.02, text: "编码…" });
           const base = i / total;
-          setVbbProgress(true, base + 0.02, `批量黑盒 ${i + 1}/${total}`, {
+          setVbbProgress(true, base + 0.02, vbbClipProgressLine(i, total), {
             sub: item.file.name,
             busy: true,
           });
@@ -9160,8 +9199,8 @@
         if (ok > 0) {
           toast(
             ok === total
-              ? `批量黑盒完成 · ${ok} 个 · 可在下方逐条下载或点「打包下载」`
-              : `批量黑盒完成 · 成功 ${ok}/${total} · 可在下方逐条下载或点「打包下载」`
+              ? `批量完成 · ${ok} 个 · 可在下方逐条下载或点「打包下载」`
+              : `批量完成 · 成功 ${ok}/${total} · 可在下方逐条下载或点「打包下载」`
           );
         } else {
           throw new Error("全部转换失败，请查看各条错误信息");
@@ -9207,7 +9246,7 @@
       renderVbbResults();
       try {
         await prewarmFfmpegEngine().catch(() => {});
-        setVbbClipJob(0, { status: "running", progress: 0.02, text: "黑盒编码…" });
+        setVbbClipJob(0, { status: "running", progress: 0.02, text: "编码…" });
         const encoded = await encodeBlackboxClip({
           file: vbbSourceFile,
           startSec: 0,
@@ -9219,15 +9258,15 @@
             setVbbClipJob(0, {
               status: "running",
               progress: Math.min(0.98, 0.08 + Math.min(0.9, local) * 0.9),
-              text: text || "黑盒编码…",
+              text: text || "编码…",
             }),
         });
         if (abortVbb) throw new Error("已取消");
         applyVbbClipEncoded(vbbClips[0], encoded);
         setVbbClipJob(0, { status: "done", progress: 1, text: "完成" });
         renderVbbResults();
-        setVbbProgress(true, 1, `黑盒完成 · ${formatKb(encoded.blob.size)}`);
-        toast(`黑盒完成 · ${formatKb(encoded.blob.size)} · 可点下方「下载 GIF」`);
+        setVbbProgress(true, 1, `完成 · ${formatKb(encoded.blob.size)}`);
+        toast(`已完成 · ${formatKb(encoded.blob.size)} · 可点下方「下载 GIF」`);
       } catch (err) {
         if (String(err?.message) !== "已取消") setError(vbbError, err.message || String(err));
         else toast("已取消");
@@ -9275,11 +9314,11 @@
         const srcH = vbbVideo.videoHeight || 0;
         const sampleSpan = Math.min(VBB_SAMPLE_SPAN, Math.max(VBB_MIN_SPAN, duration));
         const sampleStart = Math.max(0, Math.min(Math.max(0, duration - sampleSpan), duration * 0.4));
-        setVbbProgress(true, 0.08, "分析中 · 编码样片", {
-          sub: `${sampleSpan.toFixed(1)}s @ 15FPS / 宽${V2G_BLACKBOX_BASE_W}`,
+        setVbbProgress(true, 0.08, "分析样片", {
+          sub: `${sampleSpan.toFixed(1)}s`,
           busy: true,
         });
-        if (vbbMeta) vbbMeta.textContent = `分析中 · 编码样片 ${sampleSpan.toFixed(1)}s…`;
+        if (vbbMeta) vbbMeta.textContent = `分析中 · 样片 ${sampleSpan.toFixed(1)}s…`;
         await prewarmFfmpegEngine().catch(() => {});
         const sample = await encodeV2gGifFfmpeg({
           file: vbbSourceFile,
@@ -9296,7 +9335,7 @@
           isAborted: () => abortVbb,
           stageLabel: "样片",
           onProgress: (local, text) => {
-            if (vbbMeta) vbbMeta.textContent = `分析中 · ${text || "编码样片"}`;
+            if (vbbMeta) vbbMeta.textContent = `分析中 · ${vbbStageText(text) || "样片"}`;
           },
         });
         if (abortVbb) throw new Error("已取消");
@@ -9354,7 +9393,7 @@
         setVbbProgress(
           true,
           1,
-          `分析完成 · 样片 ${formatKb(sample.blob.size)} / ${vbbAnalysis.sampleSpan.toFixed(1)}s`
+          `分析完成 · ${formatKb(sample.blob.size)} / ${vbbAnalysis.sampleSpan.toFixed(1)}s`
         );
         toast(`分析完成 · 默认 ${durationPlan.count} 段 · 可调整方案后点「② 按方案生成 GIF」`);
         if (isLikelyMobileBrowser() && (duration >= 90 || (vbbSourceFile?.size || 0) >= 200 * 1024 * 1024)) {
@@ -9427,13 +9466,18 @@
           const reuseSeed = reuse.seed;
           const activeEncode = reuse.fromCache && reuse.encode ? reuse.encode : plan.encode;
           const isWide = activeEncode === "clarity" || activeEncode === "sharp";
-          const label = activeEncode === "sharp" ? "锐度 GIF" : activeEncode === "clarity" ? "清晰 GIF" : "时长黑盒";
-          const followTip = reuse.fromCache ? " · 沿用方案" : reuseSeed && i > 0 ? " · 沿用#01" : "";
-          setVbbClipJob(i, { status: "running", progress: 0.02, text: `${label}…` });
-          setVbbProgress(true, i / plan.ranges.length, `${label} · ${i + 1}/${plan.ranges.length}${followTip}`, {
-            sub: `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)}${isWide ? ` · 宽${(reuseSeed?.maxW || plan.maxW) || V2G_BLACKBOX_BASE_W}` : ""}`,
-            busy: true,
-          });
+          const encodeTag = activeEncode === "sharp" ? "锐度" : activeEncode === "clarity" ? "清晰" : "";
+          const clipLine = (extra = {}) =>
+            vbbClipProgressLine(i, plan.ranges.length, {
+              reuse: Boolean(reuse.fromCache || (reuseSeed && i > 0)),
+              ...extra,
+            });
+          const timeRange = `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)}`;
+          const mainLine = () => (encodeTag ? `${clipLine()} · ${encodeTag}` : clipLine());
+          const bumpProgress = (localP, sub = timeRange) =>
+            setVbbProgress(true, (i + localP) / plan.ranges.length, mainLine(), { sub, busy: true });
+          setVbbClipJob(i, { status: "running", progress: 0.02, text: encodeTag ? `${encodeTag}…` : "编码…" });
+          setVbbProgress(true, i / plan.ranges.length, mainLine(), { sub: timeRange, busy: true });
           try {
             let encoded;
             let usedFallback = false;
@@ -9441,7 +9485,7 @@
               ? reuseSeed.maxW
               : plan.maxW || V2G_BLACKBOX_BASE_W;
             if (isWide && !(reuseSeed && reuseSeed.usedFallback)) {
-              const tryEncodeWide = async (maxW, phaseLabel, localBase, localSpan) =>
+              const tryEncodeWide = async (maxW, localBase, localSpan) =>
                 encodeV2gGifFfmpeg({
                   file: vbbSourceFile,
                   fps: reuseSeed?.fps || 15,
@@ -9458,25 +9502,20 @@
                   stageLabel: `#${i + 1}`,
                   onProgress: (local, text) => {
                     const p = localBase + Math.min(1, local) * localSpan;
-                    setVbbClipJob(i, { status: "running", progress: Math.min(0.98, p), text: `${text} · 宽${maxW}` });
-                    setVbbProgress(true, (i + p) / plan.ranges.length, `${phaseLabel} · ${i + 1}/${plan.ranges.length}`, {
-                      sub: `${text} · 宽${maxW}`,
-                      busy: true,
-                    });
+                    const stage = vbbStageText(text) || `宽${maxW}`;
+                    setVbbClipJob(i, { status: "running", progress: Math.min(0.98, p), text: stage });
+                    bumpProgress(p, stage);
                   },
                 });
 
-              encoded = await tryEncodeWide(usedWidth, reuseSeed ? "沿用#01" : label, 0, 0.55);
+              encoded = await tryEncodeWide(usedWidth, 0, 0.55);
               if (!encoded?.blob) throw new Error("未产出 GIF");
               encoded = { ...encoded, compressRounds: encoded.compressRounds || 0, maxW: usedWidth };
               while (encoded?.blob?.size > V2G_BLACKBOX_MAX_BYTES && usedWidth > V2G_BLACKBOX_BASE_W) {
                 usedWidth = Math.max(V2G_BLACKBOX_BASE_W, usedWidth - V2G_BLACKBOX_WIDTH_STEP);
-                setVbbProgress(true, (i + 0.55) / plan.ranges.length, `超限降宽 → ${usedWidth} · ${i + 1}/${plan.ranges.length}`, {
-                  sub: formatKb(encoded.blob.size),
-                  busy: true,
-                });
-                setVbbClipJob(i, { status: "running", progress: 0.55, text: `超限降宽 → ${usedWidth}` });
-                encoded = await tryEncodeWide(usedWidth, "降宽重编", 0.55, 0.25);
+                setVbbClipJob(i, { status: "running", progress: 0.55, text: `降宽 ${usedWidth}` });
+                bumpProgress(0.55, `降宽 ${usedWidth}`);
+                encoded = await tryEncodeWide(usedWidth, 0.55, 0.25);
                 encoded = { ...encoded, compressRounds: 0, maxW: usedWidth };
               }
               if (reuseSeed && encoded?.blob?.size < V2G_BLACKBOX_WIDEN_BYTES && encoded?.blob?.size <= V2G_BLACKBOX_MAX_BYTES) {
@@ -9484,7 +9523,7 @@
                 let nextW = usedWidth + V2G_BLACKBOX_WIDTH_STEP;
                 while (nextW <= hardMax) {
                   if (isAborted()) throw new Error("已取消");
-                  const wider = await tryEncodeWide(nextW, "沿用后加宽", 0.72, 0.15);
+                  const wider = await tryEncodeWide(nextW, 0.72, 0.15);
                   if (wider?.blob?.size > V2G_BLACKBOX_MAX_BYTES) break;
                   encoded = { ...wider, compressRounds: 0, maxW: nextW };
                   usedWidth = nextW;
@@ -9493,11 +9532,8 @@
                 }
               }
               if (encoded?.blob?.size > V2G_BLACKBOX_MAX_BYTES) {
-                setVbbProgress(true, (i + 0.8) / plan.ranges.length, `仍超限，改走黑盒 · ${i + 1}/${plan.ranges.length}`, {
-                  sub: formatKb(encoded.blob.size),
-                  busy: true,
-                });
-                setVbbClipJob(i, { status: "running", progress: 0.8, text: "仍超限，改走黑盒…" });
+                setVbbClipJob(i, { status: "running", progress: 0.8, text: "超限压缩…" });
+                bumpProgress(0.8, "超限压缩");
                 encoded = await encodeBlackboxClip({
                   file: vbbSourceFile,
                   startSec: r.start,
@@ -9508,11 +9544,9 @@
                   seed: reuseSeed || null,
                   onProgress: (local, text) => {
                     const p = 0.8 + Math.min(0.18, local) * 0.18;
-                    setVbbClipJob(i, { status: "running", progress: Math.min(0.98, p), text });
-                    setVbbProgress(true, (i + p) / plan.ranges.length, `黑盒回退 · ${i + 1}/${plan.ranges.length}`, {
-                      sub: text,
-                      busy: true,
-                    });
+                    const stage = vbbStageText(text) || "压缩";
+                    setVbbClipJob(i, { status: "running", progress: Math.min(0.98, p), text: stage });
+                    bumpProgress(p, stage);
                   },
                 });
                 usedFallback = true;
@@ -9528,11 +9562,9 @@
                 seed: reuseSeed || null,
                 onProgress: (local, text) => {
                   const p = Math.min(0.98, Number(local) || 0);
-                  setVbbClipJob(i, { status: "running", progress: p, text: text || `${label}…` });
-                  setVbbProgress(true, (i + p) / plan.ranges.length, `${label} · ${i + 1}/${plan.ranges.length}${followTip}`, {
-                    sub: text,
-                    busy: true,
-                  });
+                  const stage = vbbStageText(text) || "编码…";
+                  setVbbClipJob(i, { status: "running", progress: p, text: stage });
+                  bumpProgress(p, stage);
                 },
               });
               if (reuseSeed?.usedFallback) usedFallback = true;
@@ -9545,7 +9577,7 @@
             const bits = [];
             if (reuse.fromCache) bits.push("沿用方案");
             else if (reuseSeed) bits.push("沿用#01");
-            if (usedFallback) bits.push("超限→黑盒");
+            if (usedFallback) bits.push("超限");
             else if (isWide && usedWidth !== (plan.maxW || V2G_BLACKBOX_BASE_W)) bits.push(`已降宽${usedWidth}`);
             if (encoded.fps) bits.push(`${encoded.fps}FPS`);
             if (encoded.outW && encoded.outH) bits.push(`${encoded.outW}×${encoded.outH}`);
@@ -9645,9 +9677,9 @@
         const mergedBefore = blob.size;
         let compressRounds = 0;
         if (blob.size > V2G_BLACKBOX_MAX_BYTES) {
-          setVbbProgress(true, 0.58, "合并完成，体积超限，正在压黑盒…", { busy: true });
+          setVbbProgress(true, 0.58, "超限压缩", { busy: true });
           const compressed = await compressExistingGifToBlackbox(blob, (ratio, text) =>
-            setVbbProgress(true, 0.58 + ratio * 0.4, "压黑盒", { sub: text, busy: ratio < 1 })
+            setVbbProgress(true, 0.58 + ratio * 0.4, "压缩", { sub: vbbStageText(text), busy: ratio < 1 })
           );
           blob = compressed.blob;
           compressRounds = compressed.compressRounds || 0;
@@ -9663,7 +9695,7 @@
           compressRounds,
           downloadName: "blackbox-merged.gif",
         });
-        const okTip = blob.size <= V2G_BLACKBOX_MAX_BYTES ? "符合黑盒" : "仍超 6MB";
+        const okTip = blob.size <= V2G_BLACKBOX_MAX_BYTES ? "≤6MB" : "仍超 6MB";
         setVbbProgress(true, 1, `合并完成 · ${formatKb(blob.size)} · ${okTip}`);
         toast(blob.size <= V2G_BLACKBOX_MAX_BYTES ? "已合并为一条 GIF" : `已合并，但体积仍超 6MB（${formatKb(blob.size)}）`);
       } catch (err) {

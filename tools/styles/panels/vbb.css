@@ -117,8 +117,9 @@
 
 .vbb-result-block {
   margin-top: 0.85rem;
-  padding: 0;
+  padding: 0.85rem 0 0;
   border: none;
+  border-top: 1px solid var(--line);
   border-radius: 0;
   background: transparent;
   box-shadow: none;
@@ -128,21 +129,12 @@
   display: none !important;
 }
 
-.vbb-result-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 0.35rem 0.75rem;
-  margin-bottom: 0.55rem;
+.vbb-result-summary {
+  margin: 0 0 0.55rem;
 }
 
-.vbb-result-head .subhead {
-  margin: 0;
-}
-
-.vbb-result-head .hint {
-  margin: 0;
+.vbb-result-summary[hidden] {
+  display: none !important;
 }
 
 .vbb-result-list {
