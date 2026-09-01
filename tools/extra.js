@@ -8072,12 +8072,12 @@
           vbbProgressPct.textContent = `${pct}%`;
           vbbProgressPct.hidden = false;
         }
-        if (vbbProgressText) vbbProgressText.textContent = text || `${pct}%`;
+        const sub = String(opts.sub || "").trim();
+        const main = text || `${pct}%`;
+        if (vbbProgressText) vbbProgressText.textContent = sub ? `${main} · ${sub}` : main;
         if (vbbProgressSub) {
-          const sub = String(opts.sub || "").trim();
-          vbbProgressSub.textContent = sub || "\u00a0";
-          vbbProgressSub.hidden = false;
-          vbbProgressSub.classList.toggle("is-empty", !sub);
+          vbbProgressSub.hidden = true;
+          vbbProgressSub.classList.remove("is-empty");
         }
       });
     }
@@ -8174,6 +8174,55 @@
       const s = Math.max(0, Number(sec) || 0);
       if (!(s > 0)) return "";
       return `GIF ${formatVsplitSpanSec(s)}`;
+    }
+
+    function simplifyVbbGifNote(note, { mobile = false } = {}) {
+      const raw = String(note || "").trim();
+      if (!raw || !mobile) return raw;
+      const out = [];
+      for (const part of raw.split(" · ").filter(Boolean)) {
+        if (/^沿用/.test(part)) {
+          out.push("沿用");
+          continue;
+        }
+        if (/超限/.test(part)) {
+          out.push("超限黑盒");
+          continue;
+        }
+        const fps = part.match(/^(\d+)FPS$/);
+        if (fps) {
+          out.push(`${fps[1]}FPS`);
+          continue;
+        }
+        const dim = part.match(/^(\d+)×\d+$/);
+        if (dim) {
+          out.push(`${dim[1]}宽`);
+          continue;
+        }
+        if (/^宽≤/.test(part) || /^已压 /.test(part)) continue;
+        if (/^已降宽/.test(part)) {
+          out.push(part.replace("已降宽", "降宽"));
+          continue;
+        }
+        if (out.length < 2) out.push(part);
+      }
+      return out.slice(0, 3).join(" · ");
+    }
+
+    function formatVbbClipTitle(c, idx) {
+      if (c.sourceFile) return c.sourceFile;
+      const n = `#${String(idx + 1).padStart(2, "0")}`;
+      const span = formatVsplitSpanSec(c.span);
+      const head = `${n}  ${formatVbbClock(c.start)}–${formatVbbClock(c.start + c.span)} · ${span}`;
+      if (c.gifBlob) return `${head} · ${formatKb(c.gifBlob.size)}`;
+      return head;
+    }
+
+    function formatVbbClipMeta(c, { mobile = false } = {}) {
+      if (c.error) return c.error;
+      if (c.gifNote) return simplifyVbbGifNote(c.gifNote, { mobile });
+      if (c.jobStatus === "running" || c.jobStatus === "pending") return c.jobText || "";
+      return "";
     }
 
     function applyVbbClipEncoded(clip, encoded, extraBits = []) {
@@ -8798,19 +8847,19 @@
         row.dataset.vbbClip = String(idx);
         const top = document.createElement("div");
         top.className = "vsplit-clip-top";
+        const head = document.createElement("div");
+        head.className = "vbb-clip-head";
         const title = document.createElement("strong");
-        title.textContent = c.sourceFile
-          ? c.sourceFile
-          : `#${String(idx + 1).padStart(2, "0")}  ${formatVbbClock(c.start)}–${formatVbbClock(c.start + c.span)} · 共${formatVsplitSpanSec(c.span)}`;
-        const meta = document.createElement("span");
-        meta.className = "hint tight";
-        const bits = [];
-        if (c.gifBlob) bits.push(formatKb(c.gifBlob.size));
-        const durLabel = formatVbbGifDurationLabel(c.gifDuration);
-        if (durLabel) bits.push(durLabel);
-        if (c.gifNote) bits.push(c.gifNote);
-        if (c.error) bits.push(c.error);
-        meta.textContent = bits.join(" · ");
+        title.className = "vbb-clip-title";
+        title.textContent = formatVbbClipTitle(c, idx);
+        head.appendChild(title);
+        const metaText = formatVbbClipMeta(c, { mobile: isLikelyMobileBrowser() });
+        if (metaText) {
+          const meta = document.createElement("span");
+          meta.className = "hint tight vbb-clip-meta";
+          meta.textContent = metaText;
+          head.appendChild(meta);
+        }
         const actions = document.createElement("div");
         actions.className = "btn-row";
         if (c.gifBlob) {
@@ -8834,7 +8883,7 @@
           });
           actions.appendChild(previewBtn);
         }
-        top.append(title, meta, actions);
+        top.append(head, actions);
         row.appendChild(top);
         const progressBox = buildClipProgressDom();
         row.appendChild(progressBox);
@@ -8842,13 +8891,16 @@
         // 默认不挂载全部 <img>，避免手机同时解码多个大 GIF 导致白屏/杀进程
         if (c.gifBlob && vbbPreviewIdx === idx) {
           if (!c.gifUrl) c.gifUrl = URL.createObjectURL(c.gifBlob);
+          const wrap = document.createElement("div");
+          wrap.className = "vbb-clip-preview-wrap";
           const img = document.createElement("img");
           img.className = "vsplit-clip-gif";
           img.alt = `黑盒片段 ${idx + 1}`;
           img.loading = "lazy";
           img.decoding = "async";
           img.src = c.gifUrl;
-          row.appendChild(img);
+          wrap.appendChild(img);
+          row.appendChild(wrap);
         }
         vbbList.appendChild(row);
       });

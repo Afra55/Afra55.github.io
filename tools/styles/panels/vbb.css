@@ -41,30 +41,22 @@
   overflow-anchor: none;
 }
 
-/* 总进度：固定标题两行 + 副标题一行占位，避免更新时上下晃 */
+/* 总进度：单行文案，收紧与进度条间距 */
 #vbb-progress .gif-progress-head {
-  align-items: flex-start;
-  min-height: 2.7em;
+  align-items: center;
+  margin-bottom: 0.28rem;
 }
 
 #vbb-progress .gif-progress-title {
-  line-height: 1.35;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-  overflow: hidden;
-}
-
-#vbb-progress .gif-progress-sub {
-  min-height: 1.35em;
+  margin: 0;
   line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-#vbb-progress .gif-progress-sub.is-empty {
-  visibility: hidden;
+#vbb-progress .gif-progress-sub {
+  display: none !important;
 }
 
 @media (max-width: 900px) {
@@ -124,16 +116,12 @@
 }
 
 .vbb-result-block {
-  margin-top: 1.15rem;
-  padding: 1rem 1.05rem 1.1rem;
-  border: 1px solid color-mix(in srgb, var(--line) 88%, var(--accent) 12%);
-  border-radius: 14px;
-  background: linear-gradient(
-    165deg,
-    color-mix(in srgb, var(--panel-strong) 96%, var(--accent) 4%) 0%,
-    color-mix(in srgb, var(--panel) 94%, transparent) 100%
-  );
-  box-shadow: 0 10px 28px color-mix(in srgb, var(--bg-0) 18%, transparent);
+  margin-top: 0.85rem;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .vbb-result-block[hidden] {
@@ -146,7 +134,7 @@
   align-items: baseline;
   justify-content: space-between;
   gap: 0.35rem 0.75rem;
-  margin-bottom: 0.75rem;
+  margin-bottom: 0.55rem;
 }
 
 .vbb-result-head .subhead {
@@ -160,15 +148,37 @@
 .vbb-result-list {
   display: flex;
   flex-direction: column;
-  gap: 0.65rem;
+  gap: 0.75rem;
 }
 
 .vbb-result-list .gif-frame.vsplit-clip {
   margin: 0;
-  padding: 0.7rem 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--panel-strong) 92%, transparent);
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.vbb-clip-head {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.vbb-clip-title {
+  display: block;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vbb-clip-meta {
+  display: block;
+  margin-top: 0.12rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .vbb-merged-block {
@@ -189,10 +199,11 @@
 
 .vbb-merged-preview-wrap {
   margin-top: 0.65rem;
+  padding: 0.65rem 0.75rem;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--line);
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
   text-align: center;
 }
 
@@ -202,21 +213,23 @@
   width: auto;
   max-width: 100%;
   margin: 0 auto;
+  border: none;
+  border-radius: 0;
 }
 
 .vbb-result-list .vsplit-clip-top {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem 0.75rem;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
 }
 
 .vbb-result-list .vsplit-clip-progress {
   margin-top: 0.45rem;
-  padding: 0.4rem 0.5rem;
+  padding: 0.65rem 0.75rem;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 12px;
   background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
 }
 
@@ -226,11 +239,10 @@
 
 .vbb-result-list .vsplit-clip-progress-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
-  margin-bottom: 0.3rem;
-  min-height: 1.35em;
+  margin-bottom: 0.28rem;
 }
 
 .vbb-result-list .vsplit-clip-progress-head .hint {
@@ -249,20 +261,27 @@
   color: var(--muted);
 }
 
+.vbb-clip-preview-wrap {
+  margin-top: 0.45rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
+  text-align: center;
+}
+
 .vbb-result-list .vsplit-clip-gif {
   display: block;
   max-height: 180px;
   width: auto;
   max-width: 100%;
-  margin: 0.45rem auto 0;
-  border-radius: 10px;
-  border: 1px solid var(--line);
+  margin: 0 auto;
+  border: none;
+  border-radius: 8px;
 }
 
 @media (max-width: 900px) {
-  .vbb-result-block {
-    padding: 0.85rem 0.9rem 0.95rem;
-    border-radius: 12px;
-    box-shadow: none;
+  .vbb-result-list {
+    gap: 0.65rem;
   }
 }
