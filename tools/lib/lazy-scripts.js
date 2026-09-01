@@ -253,6 +253,11 @@
     const vendors = TOOL_VENDORS[id] || [];
     for (const vendorId of vendors) await loadVendor(vendorId);
 
+    if (id === "healthread") {
+      const v = encodeURIComponent(BUILD);
+      fetch(`./lib/health-articles/index.json?v=${v}`).catch(() => {});
+    }
+
     if (TOOL_FILES[id]) await loadToolScript(id);
   }
 
