@@ -7546,6 +7546,8 @@
     let vbbCustomRow;
     let vbbTargetSpan;
     let vbbTargetRange;
+    let vbbTargetLabel;
+    let vbbEqualizeHint;
     let vbbEqualize;
     let vbbManualPanel;
     let vbbScrub;
@@ -7595,6 +7597,8 @@
     let abortVbb = false;
     let vbbMode = "duration";
     let vbbWorkflow = "single";
+    /** 自定义段时长参考值（均分开启时仅用于算段数，不直接覆盖为实际每段时长） */
+    let vbbSegmentTarget = 12;
     let vbbAnalysis = null;
     let vbbClips = [];
     let vbbZipUrl = "";
@@ -8237,12 +8241,11 @@
       // 均分，或触顶段数上限：每段等长
       if (useEqual) {
         const n = Math.min(VBB_MAX_CLIPS, needed);
-        const slice = d / n;
         const ranges = [];
         for (let i = 0; i < n; i++) {
-          const start = i * slice;
-          const end = i === n - 1 ? d : (i + 1) * slice;
-          ranges.push({ start, span: Math.max(VBB_MIN_SPAN, end - start) });
+          const start = (i * d) / n;
+          const end = ((i + 1) * d) / n;
+          ranges.push({ start, span: end - start });
         }
         return ranges;
       }
@@ -8263,18 +8266,49 @@
     }
 
     function typicalVbbSpan(ranges, fallback) {
-      if (ranges?.length) return ranges[0].span;
-      return Math.max(VBB_MIN_SPAN, Number(fallback) || VBB_MIN_SPAN);
+      if (!ranges?.length) return Math.max(VBB_MIN_SPAN, Number(fallback) || VBB_MIN_SPAN);
+      const avg = ranges.reduce((sum, r) => sum + r.span, 0) / ranges.length;
+      const first = ranges[0].span;
+      if (ranges.every((r) => Math.abs(r.span - first) < 0.08)) return avg;
+      return first;
     }
 
-    function formatVbbRangesSpanTip(ranges) {
+    function formatVbbRangesSpanTip(ranges, equalize = false) {
       if (!ranges?.length) return "";
+      const avg = ranges.reduce((sum, r) => sum + r.span, 0) / ranges.length;
       const first = ranges[0].span;
       const last = ranges[ranges.length - 1].span;
-      if (ranges.length === 1 || Math.abs(last - first) < 0.08) {
+      if (equalize || ranges.length === 1 || ranges.every((r) => Math.abs(r.span - first) < 0.08)) {
+        return `每段 ${avg.toFixed(1)}s`;
+      }
+      if (Math.abs(last - first) < 0.08) {
         return `每段 ${first.toFixed(1)}s`;
       }
       return `前${ranges.length - 1}段 ${first.toFixed(1)}s · 末段 ${last.toFixed(1)}s`;
+    }
+
+    function syncVbbEqualizeUi(active) {
+      const equalize = isVbbEqualize();
+      if (vbbTargetLabel) {
+        vbbTargetLabel.textContent = equalize ? "每段时长（秒）" : "目标段时长（秒）";
+      }
+      if (vbbEqualizeHint) {
+        vbbEqualizeHint.textContent = equalize
+          ? "各段等长；滑块数值与下方预估一致"
+          : "默认关：前面按目标时长切，末段吃剩余";
+      }
+      if (!vbbTargetSpan || !vbbTargetRange) return;
+      if (equalize && active?.ranges?.length) {
+        const span = Number(active.typicalSpan ?? typicalVbbSpan(active.ranges, active.maxSpan));
+        if (!(span > 0)) return;
+        const shown = Number(span.toFixed(1));
+        vbbTargetSpan.value = String(shown);
+        vbbTargetRange.value = String(shown);
+        return;
+      }
+      const shown = Number((vbbSegmentTarget || Number(vbbTargetSpan.value) || VBB_MIN_SPAN).toFixed(1));
+      vbbTargetSpan.value = String(shown);
+      vbbTargetRange.value = String(shown);
     }
 
     function vbbWidthLadder(srcW) {
@@ -8574,7 +8608,7 @@
       if (vbbMode === "clarity") return { ...clarity, encode: clarity.encode || "clarity", maxW: clarity.maxW || vbbSampleBaseWidth(srcW) };
       if (vbbMode === "sharp") return { ...sharp, encode: "sharp", maxW: sharp.maxW || vbbSampleBaseWidth(srcW) };
       if (vbbMode === "duration") return { ...durationPlan, encode: "blackbox", maxW: durationPlan.maxW || vbbSampleBaseWidth(srcW) };
-      let target = Number(vbbTargetSpan?.value);
+      let target = Number(vbbSegmentTarget || vbbTargetSpan?.value);
       if (!(target > 0)) target = clarity.maxSpan;
       target = Math.max(VBB_MIN_SPAN, Math.min(VBB_DURATION_MAX_SPAN, target));
       const ranges = buildVbbRanges(duration, target, isVbbEqualize());
@@ -8650,7 +8684,7 @@
         const widthTip = active.maxW ? ` · 目标宽 ${active.maxW}` : "";
         const fpsTip = ` · ${formatVbbFpsTip(active.estFps || 15, active.estCompressRounds || 0)}`;
         const warn = active.unsafe ? " ⚠ 可能超预算，执行时超限会降宽或改走黑盒。" : "";
-        vbbPlanSummary.textContent = `将生成 ${active.count} 个切片 · ${formatVbbRangesSpanTip(active.ranges)}${widthTip}${fpsTip} · 预估约 ${formatKb(active.estBytes)}/段 · ${active.note}（体积为估算；各段预览在生成后显示）${warn}`;
+        vbbPlanSummary.textContent = `将生成 ${active.count} 个切片 · ${formatVbbRangesSpanTip(active.ranges, isVbbEqualize())}${widthTip}${fpsTip} · 预估约 ${formatKb(active.estBytes)}/段 · ${active.note}（体积为估算；各段预览在生成后显示）${warn}`;
       }
 
       if (vbbPlanList) vbbPlanList.innerHTML = "";
@@ -8667,12 +8701,15 @@
         let cur = Number(vbbTargetSpan.value);
         if (!(cur >= min && cur <= max)) {
           cur = Math.min(max, Math.max(min, vbbAnalysis.clarity.maxSpan));
+          vbbSegmentTarget = cur;
           vbbTargetSpan.value = String(Number(cur.toFixed(1)));
         }
         vbbTargetRange.value = String(Number(cur.toFixed(1)));
         vbbTargetSpan.min = vbbTargetRange.min;
         vbbTargetSpan.max = vbbTargetRange.max;
       }
+
+      syncVbbEqualizeUi(active);
 
       setVbbButtons();
     }
@@ -9194,6 +9231,7 @@
         };
         if (vbbTargetSpan) vbbTargetSpan.value = String(Number(clarity.maxSpan.toFixed(1)));
         if (vbbTargetRange) vbbTargetRange.value = vbbTargetSpan.value;
+        vbbSegmentTarget = clarity.maxSpan;
         vbbMode = "duration";
         paintVbbPlan();
         setVbbProgress(
@@ -9560,6 +9598,8 @@
       vbbCustomRow = $("#vbb-custom-row", root);
       vbbTargetSpan = $("#vbb-target-span", root);
       vbbTargetRange = $("#vbb-target-range", root);
+      vbbTargetLabel = $("#vbb-target-label", root);
+      vbbEqualizeHint = $("#vbb-equalize-hint", root);
       vbbEqualize = $("#vbb-equalize", root);
       vbbManualPanel = $("#vbb-manual-panel", root);
       vbbScrub = $("#vbb-scrub", root);
@@ -9584,6 +9624,7 @@
         const min = Number(vbbTargetRange?.min) || VBB_MIN_SPAN;
         const max = Number(vbbTargetRange?.max) || VBB_DURATION_MAX_SPAN;
         const val = Math.max(min, Math.min(max, Number(raw) || min));
+        vbbSegmentTarget = val;
         if (vbbTargetSpan) vbbTargetSpan.value = String(Number(val.toFixed(1)));
         if (vbbTargetRange) vbbTargetRange.value = String(Number(val.toFixed(1)));
         if (vbbMode !== "custom") vbbMode = "custom";
