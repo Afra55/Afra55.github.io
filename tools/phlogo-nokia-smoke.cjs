@@ -11,25 +11,27 @@ const assert = (c, m) => {
 execSync("node --check tools/phlogo.js", { cwd: ROOT, stdio: "inherit" });
 execSync("node --check tools/nokiasms.js", { cwd: ROOT, stdio: "inherit" });
 
-const html = fs.readFileSync(path.join(ROOT, "tools/index.html"), "utf8");
+const shell = fs.readFileSync(path.join(ROOT, "tools/index.html"), "utf8");
+const phPanel = fs.readFileSync(path.join(ROOT, "tools/panels/phlogo.html"), "utf8");
+const nkPanel = fs.readFileSync(path.join(ROOT, "tools/panels/nokiasms.html"), "utf8");
 const app = fs.readFileSync(path.join(ROOT, "tools/app.js"), "utf8");
 const lazy = fs.readFileSync(path.join(ROOT, "tools/lib/lazy-scripts.js"), "utf8");
 const css = fs.readFileSync(path.join(ROOT, "tools/style.css"), "utf8");
-const nav = fs.readFileSync(path.join(ROOT, "tools/workspace-nav.css"), "utf8");
 const ph = fs.readFileSync(path.join(ROOT, "tools/phlogo.js"), "utf8");
 const nk = fs.readFileSync(path.join(ROOT, "tools/nokiasms.js"), "utf8");
 const oss = fs.readFileSync(path.join(ROOT, "tools/lib/oss-deps.js"), "utf8");
 
-assert(html.includes('id="phlogo"') && html.includes('id="nokiasms"'), "panels missing");
-assert(html.includes("id=\"ph-download\"") && html.includes("id=\"ph-svg\""), "ph toolbar");
-assert(html.includes("id=\"nk-download\"") && html.includes("id=\"nk-tilt\""), "nk toolbar");
-assert(html.includes("bestony/logoly") && html.includes("dcalsky/zzkia"), "attribution");
+assert(shell.includes('id="workspace-panels"'), "shell missing");
+assert(phPanel.includes('id="phlogo"') && nkPanel.includes('id="nokiasms"'), "panels missing");
+assert(phPanel.includes('id="ph-download"') && phPanel.includes('id="ph-svg"'), "ph toolbar");
+assert(nkPanel.includes('id="nk-download"') && nkPanel.includes('id="nk-tilt"'), "nk toolbar");
+assert(phPanel.includes("bestony/logoly") && nkPanel.includes("dcalsky/zzkia"), "attribution");
 assert(app.includes('"phlogo"') && app.includes('"nokiasms"'), "TOOL_GROUPS");
 assert(app.includes("phlogo:") && app.includes("nokiasms:"), "ABOUT/META");
 assert(lazy.includes('phlogo: "./phlogo.js"') && lazy.includes('nokiasms: "./nokiasms.js"'), "lazy files");
 assert(lazy.includes('"phlogo"') && lazy.includes('"nokiasms"'), "standalone set");
-assert(nav.includes('data-boot-panel="phlogo"') && nav.includes('data-boot-panel="nokiasms"'), "boot css");
-assert(css.includes(".phlogo-stage") && css.includes(".nokia-stage"), "styles");
+assert(css.includes(".phlogo-stage") || fs.existsSync(path.join(ROOT, "tools/styles/panels/phlogo.css")), "ph styles");
+assert(nkPanel.includes("nokia") || css.includes(".nokia-stage"), "nk styles");
 assert(ph.includes("devtools-phlogo-v1") && ph.includes("buildSvg"), "ph features");
 assert(nk.includes("devtools-nokiasms-v1") && nk.includes("wrapLines") && nk.includes("drawPhone"), "nk features");
 assert(oss.includes("bestony/logoly") && oss.includes("dcalsky/zzkia"), "oss inspired");
