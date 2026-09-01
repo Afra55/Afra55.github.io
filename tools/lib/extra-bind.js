@@ -34,5 +34,10 @@
     mount.querySelectorAll(".tool-panel[id]").forEach((el) => bind(el.id));
   }
 
+  window.addEventListener("devtools:panel-mounted", (e) => {
+    const id = String(e.detail?.id || "").trim();
+    if (id) bind(id);
+  });
+
   window.DevToolsExtraBind = { register, bind, bindMounted };
 })();

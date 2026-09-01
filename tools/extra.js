@@ -732,7 +732,7 @@
     }
     document.addEventListener("click", (e) => {
       const t = e.target?.closest?.(
-        '.tool-nav-link[data-tool="media"], [data-media-tab], .tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"], .tool-nav-link[data-tool="vtrim"], .tool-nav-link[data-tool="audio"], .tool-nav-link[data-tool="vplay"]'
+        '.tool-nav-link[data-tool="media"], [data-category-tab], .tool-nav-link[data-tool="gifmaker"], .tool-nav-link[data-tool="vsplit"], .tool-nav-link[data-tool="vbb"], .tool-nav-link[data-tool="vtrim"], .tool-nav-link[data-tool="audio"], .tool-nav-link[data-tool="vplay"]'
       );
       if (t) setTimeout(scheduleFfmpegPrewarm, 0);
     });
@@ -2081,14 +2081,15 @@
   function refreshMarkdown() {
     if (mdPreview) mdPreview.innerHTML = renderMarkdown(mdInput?.value || "");
   }
-  bindPanel("markdown", () => {
-      mdInput = $("#md-input");
-      mdPreview = $("#md-preview");
+  bindPanel("markdown", (root) => {
+      if (root?.dataset?.mdInited === "1") return;
+      mdInput = $("#md-input", root);
+      mdPreview = $("#md-preview", root);
+      if (!mdInput || !mdPreview) return;
 
-      mdInput?.addEventListener("input", refreshMarkdown);
-  if (mdInput) refreshMarkdown();
-
-
+      mdInput.addEventListener("input", refreshMarkdown);
+      if (root.dataset) root.dataset.mdInited = "1";
+      refreshMarkdown();
   });
 
 
@@ -2113,7 +2114,7 @@
 
   window.addEventListener("devtools:route", (e) => {
     const d = e.detail || {};
-    const id = d.tool === "media" ? d.mediaTab : d.tool;
+    const id = String(d.tool || "").trim();
     bootExtraPanel(id);
   });
 
@@ -7138,6 +7139,84 @@
       }
     }
 
+    bindPanel("vsplit", () => {
+      const root = document.getElementById("vsplit");
+      vsplitFile = $("#vsplit-file", root);
+      vsplitVideo = $("#vsplit-video", root);
+      vsplitMeta = $("#vsplit-meta", root);
+      vsplitError = $("#vsplit-error", root);
+      vsplitCount = $("#vsplit-count", root);
+      vsplitCountRow = $("#vsplit-count-row", root);
+      vsplitDurationRow = $("#vsplit-duration-row", root);
+      vsplitManualRow = $("#vsplit-manual-row", root);
+      vsplitManualTransport = $("#vsplit-manual-transport", root);
+      vsplitStage = $("#vsplit-stage", root);
+      vsplitScrub = $("#vsplit-scrub", root);
+      vsplitScrubHome = $("#vsplit-scrub-home", root);
+      vsplitScrubBlock = $("#vsplit-scrub-block", root);
+      vsplitFsScrubSlot = $("#vsplit-fs-scrub-slot");
+      vsplitScrubHit = $("#vsplit-scrub-hit", root);
+      vsplitScrubMarks = $("#vsplit-scrub-marks", root);
+      vsplitMarkPicker = $("#vsplit-mark-picker", root);
+      vsplitMarkChips = $("#vsplit-mark-chips", root);
+      vsplitScrubHint = $("#vsplit-scrub-hint", root);
+      vsplitPlay = $("#vsplit-play", root);
+      vsplitMute = $("#vsplit-mute", root);
+      vsplitFs = $("#vsplit-fs");
+      vsplitFsHost = $("#vsplit-fs-host");
+      vsplitFsOpenBtn = $("#vsplit-fs-open", root);
+      vsplitFsClose = $("#vsplit-fs-close");
+      vsplitFsPlay = $("#vsplit-fs-play");
+      vsplitFsMute = $("#vsplit-fs-mute");
+      vsplitFsMark = $("#vsplit-fs-mark");
+      vsplitFsUndo = $("#vsplit-fs-undo");
+      vsplitFsNow = $("#vsplit-fs-now");
+      vsplitFsStatus = $("#vsplit-fs-status");
+      vsplitFsNote = $("#vsplit-fs-note");
+      vsplitFsFlash = $("#vsplit-fs-flash");
+      vsplitPreviewWrap = $("#vsplit-preview-wrap", root);
+      vsplitManualNow = $("#vsplit-manual-now", root);
+      vsplitManualCount = $("#vsplit-manual-count", root);
+      vsplitManualDraft = $("#vsplit-manual-draft", root);
+      vsplitMarksEl = $("#vsplit-marks", root);
+      vsplitMarkTap = $("#vsplit-mark-tap", root);
+      vsplitMarkUndo = $("#vsplit-mark-undo", root);
+      vsplitMarkClear = $("#vsplit-mark-clear", root);
+      vsplitAddBtns = $("#vsplit-add-btns", root);
+      vsplitEditBar = $("#vsplit-edit-bar", root);
+      vsplitEditTitle = $("#vsplit-edit-title", root);
+      vsplitEditApply = $("#vsplit-edit-apply", root);
+      vsplitEditDelStart = $("#vsplit-edit-del-start", root);
+      vsplitEditDelEnd = $("#vsplit-edit-del-end", root);
+      vsplitEditDone = $("#vsplit-edit-done", root);
+      vsplitQuickExport = $("#vsplit-quick-export", root);
+      vsplitQuickCut = $("#vsplit-quick-cut", root);
+      vsplitQuickHq = $("#vsplit-quick-hq", root);
+      vsplitNudgeM1 = $("#vsplit-nudge-m1", root);
+      vsplitNudgeM01 = $("#vsplit-nudge-m01", root);
+      vsplitNudgeP01 = $("#vsplit-nudge-p01", root);
+      vsplitNudgeP1 = $("#vsplit-nudge-p1", root);
+      vsplitH = $("#vsplit-h", root);
+      vsplitM = $("#vsplit-m", root);
+      vsplitS = $("#vsplit-s", root);
+      vsplitFps = $("#vsplit-fps", root);
+      vsplitWidth = $("#vsplit-width", root);
+      vsplitQuality = $("#vsplit-quality", root);
+      vsplitCut = $("#vsplit-cut", root);
+      vsplitGifHq = $("#vsplit-gif-hq", root);
+      vsplitMerge = $("#vsplit-merge", root);
+      vsplitAbort = $("#vsplit-abort", root);
+      vsplitList = $("#vsplit-list", root);
+      vsplitZipVideo = $("#vsplit-zip-video", root);
+      vsplitZipGif = $("#vsplit-zip-gif", root);
+      vsplitMergedDl = $("#vsplit-merged-dl", root);
+      vsplitMergedPreview = $("#vsplit-merged-preview", root);
+      vsplitProgress = $("#vsplit-progress", root);
+      vsplitProgressFill = $("#vsplit-progress-fill", root);
+      vsplitProgressText = $("#vsplit-progress-text", root);
+      vsplitProgressSub = $("#vsplit-progress-sub", root);
+      vsplitProgressPct = $("#vsplit-progress-pct", root);
+
     $("#vsplit-mode-n")?.addEventListener("click", () => {
       vsplitMode = "count";
       vsplitDraftStart = null;
@@ -7341,8 +7420,6 @@
       syncVsplitScrubFromVideo();
       paintVsplitNow();
     });
-    bindPanel("vsplit", () => {
-
           vsplitFile?.addEventListener("change", (e) => {
       loadVsplitFile(e.target.files?.[0]).catch((err) => {
         clearVsplit();
@@ -9306,10 +9383,52 @@
       rebuildVbbDerivedPlans();
       paintVbbPlan();
     });
-    vbbFile?.addEventListener("click", () => {
-      vbbFile.value = "";
-    });
     bindPanel("vbb", () => {
+      const root = document.getElementById("vbb");
+      vbbFile = $("#vbb-file", root);
+      vbbVideo = $("#vbb-video", root);
+      vbbMeta = $("#vbb-meta", root);
+      vbbError = $("#vbb-error", root);
+      vbbAnalyze = $("#vbb-analyze", root);
+      vbbRun = $("#vbb-run", root);
+      vbbOneclick = $("#vbb-oneclick", root);
+      vbbAdvanced = $("#vbb-advanced", root);
+      vbbMerge = $("#vbb-merge", root);
+      vbbAbort = $("#vbb-abort", root);
+      vbbZip = $("#vbb-zip", root);
+      vbbMergedDl = $("#vbb-merged-dl", root);
+      vbbMergedPreview = $("#vbb-merged-preview", root);
+      vbbPlan = $("#vbb-plan", root);
+      vbbPlanSummary = $("#vbb-plan-summary", root);
+      vbbPlanList = $("#vbb-plan-list", root);
+      vbbList = $("#vbb-list", root);
+      vbbBatchList = $("#vbb-batch-list", root);
+      vbbResultBlock = $("#vbb-result-block", root);
+      vbbCustomRow = $("#vbb-custom-row", root);
+      vbbTargetSpan = $("#vbb-target-span", root);
+      vbbTargetRange = $("#vbb-target-range", root);
+      vbbEqualize = $("#vbb-equalize", root);
+      vbbManualPanel = $("#vbb-manual-panel", root);
+      vbbScrub = $("#vbb-scrub", root);
+      vbbPlay = $("#vbb-play", root);
+      vbbManualNow = $("#vbb-manual-now", root);
+      vbbManualCount = $("#vbb-manual-count", root);
+      vbbManualDraft = $("#vbb-manual-draft", root);
+      vbbMarkTap = $("#vbb-mark-tap", root);
+      vbbMarkUndo = $("#vbb-mark-undo", root);
+      vbbMarkClear = $("#vbb-mark-clear", root);
+      vbbNudgeM1 = $("#vbb-nudge-m1", root);
+      vbbNudgeM01 = $("#vbb-nudge-m01", root);
+      vbbNudgeP01 = $("#vbb-nudge-p01", root);
+      vbbNudgeP1 = $("#vbb-nudge-p1", root);
+      vbbScrubMarks = $("#vbb-scrub-marks", root);
+      vbbMarkChips = $("#vbb-mark-chips", root);
+      vbbJumpTime = $("#vbb-jump-time", root);
+      vbbJumpGo = $("#vbb-jump-go", root);
+      vbbLongHint = $("#vbb-long-hint", root);
+      vbbFile?.addEventListener("click", () => {
+        vbbFile.value = "";
+      });
 
           vbbFile?.addEventListener("change", (e) => {
       loadVbbFiles(e.target.files).catch((err) => {

@@ -1,8 +1,6 @@
 (() => {
   "use strict";
 
-  const MEDIA_IDS = new Set(["gifmaker", "vsplit", "vbb", "vtrim", "audio", "vplay"]);
-
   /** 新增工具时：在 app.js 的 TOOL_GROUPS / TOOL_META / ABOUT_DESC 同步更新 */
   function $(sel, root = document) {
     return root.querySelector(sel);
@@ -233,7 +231,7 @@
           .map((id) => {
             const name = meta[id]?.name || id;
             const desc = about[id] || meta[id]?.aliases?.slice(0, 4).join(" · ") || "本地实用工具";
-            const href = MEDIA_IDS.has(id) ? `#media/${id}` : `#${id}`;
+            const href = `#${id}`;
             return `<article class="about-card">
               <div class="about-card-head">
                 <h3>${escapeHtml(name)}</h3>

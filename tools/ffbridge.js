@@ -133,8 +133,8 @@
 
   function webFallbackLinksHtml() {
     return `
-      <a class="primary-btn" href="#media/audio">网页·音频处理</a>
-      <a class="secondary-btn" href="#media/vtrim">网页·视频修剪</a>
+      <a class="primary-btn" href="#audio">网页·音频处理</a>
+      <a class="secondary-btn" href="#vtrim">网页·视频修剪</a>
       <a class="ghost-btn" href="#setup">安装指南</a>
     `;
   }
@@ -167,8 +167,8 @@
 
     if (headDesc) {
       headDesc.innerHTML = host
-        ? `电脑批量：连本机桥用系统 FFmpeg。没连上时，用网页 <a href="#media/audio">音频处理</a> / <a href="#media/vtrim">视频修剪</a> 保底。<a href="#setup">安装指南</a>`
-        : `手机请直接用网页内工具（无需安装本机桥）：<a href="#media/audio">音频处理</a>、<a href="#media/vtrim">视频修剪</a>、<a href="#media/gifmaker">GIF</a>。`;
+        ? `电脑批量：连本机桥用系统 FFmpeg。没连上时，用网页 <a href="#audio">音频处理</a> / <a href="#vtrim">视频修剪</a> 保底。<a href="#setup">安装指南</a>`
+        : `手机请直接用网页内工具（无需安装本机桥）：<a href="#audio">音频处理</a>、<a href="#vtrim">视频修剪</a>、<a href="#gifmaker">GIF</a>。`;
     }
 
     if (modeTitle && modeText && modeActions) {
@@ -177,9 +177,9 @@
         modeText.textContent =
           "本机桥只适合电脑。手机上请用下面入口，文件在浏览器本地处理，不上传。";
         modeActions.innerHTML = `
-          <a class="primary-btn" href="#media/audio">音频处理</a>
-          <a class="secondary-btn" href="#media/vtrim">视频修剪</a>
-          <a class="secondary-btn" href="#media/gifmaker">GIF 工具</a>
+          <a class="primary-btn" href="#audio">音频处理</a>
+          <a class="secondary-btn" href="#vtrim">视频修剪</a>
+          <a class="secondary-btn" href="#gifmaker">GIF 工具</a>
         `;
         if (bridgePanel) bridgePanel.hidden = true;
         if (workspace) workspace.hidden = true;
@@ -187,8 +187,8 @@
         modeTitle.textContent = "已走更优路径：本机 FFmpeg 桥";
         modeText.textContent = `已整理为常用 ${opsTiers.common?.length || "…"} 项（可展开更多）。桥擅长批量；网页擅长少量交互预览。`;
         modeActions.innerHTML = `
-          <a class="ghost-btn" href="#media/audio">网页·音频</a>
-          <a class="ghost-btn" href="#media/vtrim">网页·修剪</a>
+          <a class="ghost-btn" href="#audio">网页·音频</a>
+          <a class="ghost-btn" href="#vtrim">网页·修剪</a>
         `;
         if (bridgePanel) bridgePanel.hidden = false;
       } else {

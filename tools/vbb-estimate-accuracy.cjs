@@ -72,7 +72,7 @@ async function main() {
   for (const span of SPANS) {
     const mp4 = `/tmp/vbb-acc-${span}s.mp4`;
     makeMp4(span, mp4);
-    await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#media/vbb`, {
+    await page.goto(`http://127.0.0.1:${PORT}/tools/index.html#vbb`, {
       waitUntil: "networkidle0",
       timeout: 60000,
     });
