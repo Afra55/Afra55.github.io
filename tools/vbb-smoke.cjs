@@ -1464,6 +1464,8 @@ async function main() {
   if (!result.hasBlackboxNav) problems.push("nav missing standalone blackbox entry");
   if (!result.hasVbbInBlackboxTabs) problems.push("vbb should appear in blackbox category tabs");
   if (!result.hasOneclick) problems.push("missing vbb-oneclick");
+  if (!result.hasProgress) problems.push("missing vbb-progress bar");
+  if (!result.mergedBlockHidden) problems.push("vbb merged preview should stay hidden before merge");
   if (!result.fileInputMultiple) problems.push("vbb file input should allow multiple");
   if (!result.hasBatchList) problems.push("missing vbb batch list");
   if (!result.noV2gBlackboxBtn) problems.push("v2g blackbox button should be removed");
