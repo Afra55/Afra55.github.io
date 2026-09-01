@@ -3672,3 +3672,200 @@ html[data-boot-loading="1"] body {
   border-radius: 8px;
   cursor: pointer;
 }
+
+/* 桌面壳层：侧栏 + 工作区双栏（拆 CSS 时勿删） */
+@media (min-width: 901px) {
+  html {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    display: flex;
+    flex-direction: column;
+    min-height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
+  .site-header {
+    flex-shrink: 0;
+    max-width: none;
+    width: 100%;
+    padding: 1.15rem 1.5rem 0.65rem;
+  }
+
+  .site-header .brand-name {
+    font-size: 1.55rem;
+  }
+
+  .site-header .tagline {
+    margin-top: 0.2rem;
+    font-size: 0.86rem;
+  }
+
+  .app-layout {
+    display: grid;
+    grid-template-columns: 13.5rem minmax(0, 1fr);
+    gap: 0 1.25rem;
+    align-items: stretch;
+    width: 100%;
+    max-width: none;
+    padding: 0 1.5rem 1.5rem;
+    box-sizing: border-box;
+    flex: 1 1 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .nav-bar {
+    position: sticky;
+    top: 0.65rem;
+    z-index: 5;
+    align-self: stretch;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 0.55rem;
+    margin-bottom: 0;
+    height: var(--nav-max-height, calc(100dvh - 7rem));
+    min-height: var(--nav-max-height, calc(100dvh - 7rem));
+    max-height: var(--nav-max-height, calc(100dvh - 7rem));
+    overflow-x: hidden;
+    overflow-y: hidden;
+    overscroll-behavior: contain;
+    padding: 0.65rem;
+    padding-bottom: max(0.65rem, env(safe-area-inset-bottom, 0px));
+    box-sizing: border-box;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .nav-bar::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none;
+  }
+
+  .nav-bar.is-collapsed {
+    transform: none;
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .nav-search-wrap,
+  .nav-drawer-head,
+  .nav-compact-bar,
+  .nav-sort-hint {
+    flex-shrink: 0;
+  }
+
+  .nav-bar-scroll {
+    flex: 1 1 0;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--muted) 50%, transparent) transparent;
+    scrollbar-gutter: stable;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+  }
+
+  .nav-bar-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .nav-bar-scroll::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--muted) 45%, transparent);
+  }
+
+  .nav-favorites,
+  .nav-strip.nav-recent,
+  .nav-sort-hint {
+    flex-shrink: 0;
+  }
+
+  .nav-bar-scroll > .nav-strip.nav-recent {
+    margin-bottom: 0.45rem;
+  }
+
+  .nav-bar-scroll > .nav-strip.nav-recent[hidden] {
+    display: none !important;
+  }
+
+  .nav-footer-actions {
+    flex: 0 0 auto;
+    flex-shrink: 0;
+    width: 100%;
+    margin-top: auto;
+    padding-top: 0.45rem;
+    padding-bottom: max(0.35rem, env(safe-area-inset-bottom, 0px));
+    border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+    background: var(--nav-bg-solid, var(--panel-strong));
+  }
+
+  .tool-nav {
+    flex: 1 0 auto;
+    min-height: 0;
+    flex-direction: column;
+    flex-wrap: nowrap;
+    gap: 0.28rem;
+    overflow: visible;
+  }
+
+  .tool-nav-link {
+    border-radius: 9px;
+    padding: 0.38rem 0.55rem;
+    font-size: 0.78rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  .nav-group-title.is-sortable {
+    font-size: 0.88rem;
+    padding: 0.28rem 0.4rem;
+  }
+
+  .nav-reset {
+    width: auto;
+    border-radius: 10px;
+    text-align: center;
+  }
+
+  .nav-footer-toolbar {
+    gap: 0.28rem;
+  }
+
+  .nav-footer-actions .nav-footer-btn {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  .shell {
+    max-width: none;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    margin: 0;
+    padding: 0 0 1.5rem;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .site-footer {
+    flex-shrink: 0;
+    max-width: none;
+    width: 100%;
+    padding: 0 1.5rem 1.75rem;
+    box-sizing: border-box;
+  }
+
+  .header-more-wrap {
+    display: none !important;
+  }
+}
