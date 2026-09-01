@@ -8055,7 +8055,10 @@
             vbbProgressFill.classList.remove("is-active", "is-busy");
           }
           if (vbbProgressPct) vbbProgressPct.hidden = true;
-          if (vbbProgressSub) vbbProgressSub.hidden = true;
+          if (vbbProgressSub) {
+            vbbProgressSub.hidden = true;
+            vbbProgressSub.classList.remove("is-empty");
+          }
           return;
         }
         const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)));
@@ -8071,8 +8074,10 @@
         }
         if (vbbProgressText) vbbProgressText.textContent = text || `${pct}%`;
         if (vbbProgressSub) {
-          vbbProgressSub.textContent = opts.sub || "";
-          vbbProgressSub.hidden = !opts.sub;
+          const sub = String(opts.sub || "").trim();
+          vbbProgressSub.textContent = sub || "\u00a0";
+          vbbProgressSub.hidden = false;
+          vbbProgressSub.classList.toggle("is-empty", !sub);
         }
       });
     }

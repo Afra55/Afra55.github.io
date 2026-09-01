@@ -41,6 +41,32 @@
   overflow-anchor: none;
 }
 
+/* 总进度：固定标题两行 + 副标题一行占位，避免更新时上下晃 */
+#vbb-progress .gif-progress-head {
+  align-items: flex-start;
+  min-height: 2.7em;
+}
+
+#vbb-progress .gif-progress-title {
+  line-height: 1.35;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+#vbb-progress .gif-progress-sub {
+  min-height: 1.35em;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#vbb-progress .gif-progress-sub.is-empty {
+  visibility: hidden;
+}
+
 @media (max-width: 900px) {
   #vbb .panel-body {
     overflow-anchor: auto;
@@ -200,16 +226,21 @@
 
 .vbb-result-list .vsplit-clip-progress-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 0.5rem;
   margin-bottom: 0.3rem;
+  min-height: 1.35em;
 }
 
 .vbb-result-list .vsplit-clip-progress-head .hint {
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
+  line-height: 1.35;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .vbb-result-list .vsplit-clip-progress-pct {
