@@ -10,6 +10,11 @@
           <button type="button" class="ghost-btn" id="vbb-clear">清空</button>
         </div>
         <p class="hint" id="vbb-meta">支持 MP4 / WebM / MOV。可多选已裁好的短片，一次性全部转黑盒 GIF；仅本机读取，不会上传。</p>
+        <p class="hint tight" id="vbb-ffmpeg-warm" aria-live="polite">首次进入将准备本地视频编码器（约 30MB，仅下载一次，不上传视频）</p>
+        <div class="gif-progress" id="vbb-ffmpeg-warm-progress" hidden>
+          <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="vbb-ffmpeg-warm-progress-fill"></span></div>
+          <p class="hint" id="vbb-ffmpeg-warm-progress-text">准备编码器…</p>
+        </div>
         <div class="vbb-batch-list" id="vbb-batch-list" hidden aria-live="polite"></div>
         <div class="field-row blackbox-workflow-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
           <span class="seg" role="group" aria-label="黑盒模式">

@@ -186,15 +186,20 @@
     await loadScript("./lib/pure.js");
   }
 
-  async function loadExtraBundle() {
+  async function loadExtraBundle(onProgress) {
     if (window.__devtoolsExtraBundle) return;
     if (extraBundlePromise) return extraBundlePromise;
     extraBundlePromise = (async () => {
       await ensurePure();
+      onProgress?.(0.28, "加载工具基础库…");
       await loadScript("./temp.js");
+      onProgress?.(0.38, "加载临时存储模块…");
       await loadScript("./lib/oss-deps.js");
+      onProgress?.(0.44, "初始化面板绑定…");
       await loadScript("./lib/extra-bind.js");
+      onProgress?.(0.52, "加载媒体工具脚本（首次约数秒）…");
       await loadScript("./extra.js");
+      onProgress?.(0.72, "媒体工具脚本已就绪");
       window.__devtoolsExtraBundle = true;
     })().catch((err) => {
       extraBundlePromise = null;
@@ -232,34 +237,67 @@
     window.__devtoolsPwaLoaded = true;
   }
 
-  async function ensureForTool(toolId) {
+  const VENDOR_LABELS = {
+    "js-yaml": "YAML 库",
+    "spark-md5": "MD5 库",
+    qrcode: "二维码库",
+    jsQR: "扫码库",
+    mqtt: "MQTT 库",
+    html2canvas: "截图库",
+    gif: "GIF 编码库",
+    omggif: "GIF 解码库",
+    solarlunar: "农历库",
+  };
+
+  async function ensureForTool(toolId, opts = {}) {
     const id = String(toolId || "").trim();
     if (!id) return;
+    const onProgress = typeof opts.onProgress === "function" ? opts.onProgress : null;
+    const report = (ratio, label) => onProgress?.(Math.max(0, Math.min(1, Number(ratio) || 0)), label);
 
     if (id === "about") {
+      report(0.2, "加载关于页…");
       await loadScript("./about.js");
+      report(1, "关于页已就绪");
       return;
     }
     if (id === "diff") {
+      report(0.2, "加载文本比对…");
       await loadDiffBundle();
+      report(1, "文本比对已就绪");
       return;
     }
 
-    if (!NO_PURE.has(id)) await ensurePure();
+    if (!NO_PURE.has(id)) {
+      report(0.08, "加载计算核心…");
+      await ensurePure();
+      report(0.16, "计算核心已就绪");
+    }
 
     if (!STANDALONE_NO_EXTRA.has(id)) {
-      await loadExtraBundle();
+      await loadExtraBundle((ratio, label) => {
+        report(0.16 + ratio * 0.56, label);
+      });
     }
 
     const vendors = TOOL_VENDORS[id] || [];
-    for (const vendorId of vendors) await loadVendor(vendorId);
+    for (let i = 0; i < vendors.length; i++) {
+      const vendorId = vendors[i];
+      const name = VENDOR_LABELS[vendorId] || vendorId;
+      report(0.74 + (i / Math.max(1, vendors.length)) * 0.18, `加载${name}…`);
+      await loadVendor(vendorId);
+    }
 
     if (id === "healthread") {
       const v = encodeURIComponent(BUILD);
       fetch(`./lib/health-articles/index.json?v=${v}`).catch(() => {});
     }
 
-    if (TOOL_FILES[id]) await loadToolScript(id);
+    if (TOOL_FILES[id]) {
+      report(0.94, `加载${id} 模块…`);
+      await loadToolScript(id);
+    }
+    report(1, "工具已就绪");
   }
 
   window.DevToolsLazy = {

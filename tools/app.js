@@ -2472,9 +2472,10 @@
   }
 
   let toolLoadToken = 0;
-  function setToolLoadProgress(pct) {
+  function setToolLoadProgress(pct, label) {
     const bar = document.getElementById("devtools-tool-load");
     const fill = bar?.querySelector(".devtools-tool-load-fill");
+    const labelEl = document.getElementById("devtools-tool-load-label");
     if (!bar || !fill) return;
     const v = Math.min(100, Math.max(0, pct));
     bar.hidden = false;
@@ -2482,17 +2483,41 @@
     bar.setAttribute("aria-busy", "true");
     bar.setAttribute("aria-valuenow", String(Math.round(v)));
     fill.style.width = `${v}%`;
+    if (labelEl) {
+      const text = String(label || "").trim();
+      if (text) {
+        labelEl.hidden = false;
+        labelEl.textContent = text;
+      }
+    }
   }
 
   function hideToolLoadProgress() {
     const bar = document.getElementById("devtools-tool-load");
     const fill = bar?.querySelector(".devtools-tool-load-fill");
+    const labelEl = document.getElementById("devtools-tool-load-label");
     if (!bar) return;
     bar.hidden = true;
     bar.setAttribute("aria-hidden", "true");
     bar.setAttribute("aria-busy", "false");
     bar.setAttribute("aria-valuenow", "0");
     if (fill) fill.style.width = "0%";
+    if (labelEl) {
+      labelEl.hidden = true;
+      labelEl.textContent = "";
+    }
+  }
+
+  function mapLazyLoadProgress(ratio, label, onProgress) {
+    const pct = 12 + Math.max(0, Math.min(1, Number(ratio) || 0)) * 80;
+    onProgress?.(pct);
+    setToolLoadProgress(pct, label);
+  }
+
+  async function ensureToolAssets(toolId, onProgress) {
+    await window.DevToolsLazy?.ensureForTool?.(toolId, {
+      onProgress: (ratio, label) => mapLazyLoadProgress(ratio, label, onProgress),
+    });
   }
 
   async function withToolLoadProgress(run) {
@@ -2652,9 +2677,8 @@
 
     const loadLazyForRoute = async (onProgress) => {
       try {
-        onProgress?.(42);
-        await window.DevToolsLazy?.ensureForTool?.(routeToolId);
-        onProgress?.(88);
+        setToolLoadProgress(12, `正在打开「${toolName(routeToolId)}」…`);
+        await ensureToolAssets(routeToolId, onProgress);
       } catch (err) {
         console.error("tool lazy-load failed", routeToolId, err);
       }
@@ -2667,10 +2691,10 @@
         void (async () => {
           try {
             window.DevToolsBoot?.bump?.(48, `加载 ${toolName(routeToolId)}…`);
-            setToolLoadProgress(28);
-            await window.DevToolsLazy?.ensureForTool?.(routeToolId);
+            setToolLoadProgress(20, `正在打开「${toolName(routeToolId)}」…`);
+            await ensureToolAssets(routeToolId, (pct) => setToolLoadProgress(pct));
             window.DevToolsBoot?.bump?.(88, "即将完成…");
-            setToolLoadProgress(92);
+            setToolLoadProgress(96, "界面准备就绪…");
           } catch (err) {
             console.error("boot lazy-load failed", routeToolId, err);
           }

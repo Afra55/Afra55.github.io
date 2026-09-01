@@ -555,11 +555,28 @@
     paintFfmpegWarmHint();
   }
 
+  const FFMPEG_WARM_UI = [
+    {
+      hint: "v2g-hq-warm",
+      wrap: "v2g-warm-progress",
+      fill: "v2g-warm-progress-fill",
+      text: "v2g-warm-progress-text",
+    },
+    {
+      hint: "vbb-ffmpeg-warm",
+      wrap: "vbb-ffmpeg-warm-progress",
+      fill: "vbb-ffmpeg-warm-progress-fill",
+      text: "vbb-ffmpeg-warm-progress-text",
+    },
+    {
+      hint: "vsplit-ffmpeg-warm",
+      wrap: "vsplit-ffmpeg-warm-progress",
+      fill: "vsplit-ffmpeg-warm-progress-fill",
+      text: "vsplit-ffmpeg-warm-progress-text",
+    },
+  ];
+
   function paintFfmpegWarmHint() {
-    const el = document.getElementById("v2g-hq-warm");
-    const wrap = document.getElementById("v2g-warm-progress");
-    const fill = document.getElementById("v2g-warm-progress-fill");
-    const textEl = document.getElementById("v2g-warm-progress-text");
     const genBtn = document.getElementById("v2g-generate");
     if (genBtn && ffmpegWarmState === "ready") {
       genBtn.title = "使用 FFmpeg 双通道调色板编码 GIF（引擎已就绪）";
@@ -576,18 +593,26 @@
     } else {
       text = "进入本页将预热本地编码器（不上传视频）";
     }
-    if (el) el.textContent = text;
     const showBar = ffmpegWarmState === "warming";
-    if (wrap) wrap.hidden = !showBar;
-    if (showBar && fill) {
-      const pct = Math.max(0, Math.min(100, Math.round((ffmpegWarmDetail.ratio || 0) * 100)));
-      fill.style.width = `${pct}%`;
-      fill.classList.add("is-active");
-    } else if (fill) {
-      fill.classList.remove("is-active");
-      if (ffmpegWarmState === "ready") fill.style.width = "100%";
+    const pct = Math.max(0, Math.min(100, Math.round((ffmpegWarmDetail.ratio || 0) * 100)));
+    for (const ui of FFMPEG_WARM_UI) {
+      const hintEl = document.getElementById(ui.hint);
+      const wrap = document.getElementById(ui.wrap);
+      const fill = document.getElementById(ui.fill);
+      const textEl = document.getElementById(ui.text);
+      if (hintEl) hintEl.textContent = text;
+      if (wrap) wrap.hidden = !showBar;
+      if (fill) {
+        if (showBar) {
+          fill.style.width = `${pct}%`;
+          fill.classList.add("is-active");
+        } else {
+          fill.classList.remove("is-active");
+          if (ffmpegWarmState === "ready") fill.style.width = "100%";
+        }
+      }
+      if (textEl) textEl.textContent = showBar ? ffmpegWarmDetail.text || text : "";
     }
-    if (textEl) textEl.textContent = showBar ? text : "";
   }
 
   function setFfmpegWarmProgress(ratio, text) {
