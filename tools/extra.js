@@ -9371,23 +9371,23 @@
           const activeEncode = reuse.fromCache && reuse.encode ? reuse.encode : plan.encode;
           const isWide = activeEncode === "clarity" || activeEncode === "sharp";
           const label = activeEncode === "sharp" ? "锐度 GIF" : activeEncode === "clarity" ? "清晰 GIF" : "时长黑盒";
-          const followTip = reuse.fromCache ? " · 沿用方案" : reuseSeed ? " · 沿用#01" : "";
+          const followTip = reuse.fromCache ? " · 沿用方案" : reuseSeed && i > 0 ? " · 沿用#01" : "";
           setVbbClipJob(i, { status: "running", progress: 0.02, text: `${label}…` });
           setVbbProgress(true, i / plan.ranges.length, `${label} · ${i + 1}/${plan.ranges.length}${followTip}`, {
-            sub: `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)}${isWide ? ` · 宽${(reuseSeed ? firstSeed.maxW : plan.maxW) || V2G_BLACKBOX_BASE_W}` : ""}`,
+            sub: `${formatVbbClock(r.start)}–${formatVbbClock(r.start + r.span)}${isWide ? ` · 宽${(reuseSeed?.maxW || plan.maxW) || V2G_BLACKBOX_BASE_W}` : ""}`,
             busy: true,
           });
           try {
             let encoded;
             let usedFallback = false;
-            let usedWidth = reuseSeed && !firstSeed.usedFallback
-              ? firstSeed.maxW
+            let usedWidth = reuseSeed && !reuseSeed.usedFallback
+              ? reuseSeed.maxW
               : plan.maxW || V2G_BLACKBOX_BASE_W;
-            if (isWide && !(reuseSeed && firstSeed.usedFallback)) {
+            if (isWide && !(reuseSeed && reuseSeed.usedFallback)) {
               const tryEncodeWide = async (maxW, phaseLabel, localBase, localSpan) =>
                 encodeV2gGifFfmpeg({
                   file: vbbSourceFile,
-                  fps: reuseSeed ? firstSeed.fps || 15 : 15,
+                  fps: reuseSeed?.fps || 15,
                   maxW,
                   quality: V2G_BLACKBOX_QUALITY,
                   startSec: r.start,
@@ -9448,7 +9448,7 @@
                   srcW,
                   srcH,
                   isAborted,
-                  seed: reuseSeed ? firstSeed : null,
+                  seed: reuseSeed || null,
                   onProgress: (local, text) => {
                     const p = 0.8 + Math.min(0.18, local) * 0.18;
                     setVbbClipJob(i, { status: "running", progress: Math.min(0.98, p), text });
@@ -9468,7 +9468,7 @@
                 srcW,
                 srcH,
                 isAborted,
-                seed: reuseSeed ? firstSeed : null,
+                seed: reuseSeed || null,
                 onProgress: (local, text) => {
                   const p = Math.min(0.98, Number(local) || 0);
                   setVbbClipJob(i, { status: "running", progress: p, text: text || `${label}…` });
@@ -9478,7 +9478,7 @@
                   });
                 },
               });
-              if (reuseSeed && firstSeed.usedFallback) usedFallback = true;
+              if (reuseSeed?.usedFallback) usedFallback = true;
               if (encoded?.maxW) usedWidth = encoded.maxW;
             }
             if (!encoded?.blob) throw new Error("未产出 GIF");

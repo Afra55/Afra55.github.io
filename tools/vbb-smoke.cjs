@@ -428,6 +428,16 @@ async function main() {
   if (reusePlan.flags[0] !== false || reusePlan.flags[1] !== true || reusePlan.flags[2] !== false) {
     throw new Error(`reuse flags should be [false,true,false], got ${JSON.stringify(reusePlan)}`);
   }
+  await page.evaluate(() => {
+    window.DevToolsVbb?.saveSpanScheme?.(
+      0.8,
+      { fps: 15, maxW: 420, compressRounds: 0, usedFallback: false },
+      "blackbox"
+    );
+    if (!window.DevToolsVbb?.loadSpanScheme?.(0.8)) {
+      throw new Error("span scheme cache not written");
+    }
+  });
   await tap(page, "#vbb-run");
   await page.waitForFunction(() => {
     const notes = window.DevToolsVbb?.getClips?.() || [];
@@ -444,6 +454,9 @@ async function main() {
   });
   if (reuseRun.length !== 3 || reuseRun.some((c) => !c.hasBlob || c.error)) {
     throw new Error(`reuse encode failed: ${JSON.stringify(reuseRun)}`);
+  }
+  if (reuseRun.some((c) => /firstSeed|usedFallback/.test(c.error))) {
+    throw new Error(`cached span seed should not throw: ${JSON.stringify(reuseRun)}`);
   }
   if (/沿用#01/.test(reuseRun[0].note)) throw new Error(`#01 should probe, got ${reuseRun[0].note}`);
   if (!/沿用/.test(reuseRun[1].note)) throw new Error(`#02 should reuse #01, got ${reuseRun[1].note}`);
