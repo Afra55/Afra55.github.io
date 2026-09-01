@@ -3,6 +3,7 @@
   "title": "金刚长寿功十六式详解",
   "subtitle": "八部金刚功 · 八部长寿功",
   "author": "Elliot718703",
+  "copyright": "原创作者授权本站收录",
   "source": {
     "name": "小黑盒",
     "url": "https://www.xiaoheihe.cn/bbs/post_share?link_id=70227260c3ff"
@@ -15,19 +16,19 @@
     "长寿功",
     "张至顺"
   ],
-  "cover": "./lib/health-articles/jgj-longevity-16/assets/cover.webp",
-  "images": [
-    "./lib/health-articles/jgj-longevity-16/assets/cover.webp",
-    "./lib/health-articles/jgj-longevity-16/assets/img-01.png",
-    "./lib/health-articles/jgj-longevity-16/assets/img-02.png",
-    "./lib/health-articles/jgj-longevity-16/assets/img-03.png"
-  ],
+  "cover": "lib/health-articles/jgj-longevity-16/assets/cover.webp",
   "sections": [
     {
       "heading": "导读",
       "paragraphs": [
         "八部金刚功 · 八部长寿功",
         "据张至顺道长公开传授整理，供自学对照。各家二次教学在手型、圈数、意念上略有出入，细节以道长本人演示为准。文中“功效”取自功法口诀、中医经络解释和习练者常见体感，属于传统养生说法，不是临床结论，不能代替正规诊疗。每部一般做 5 至 9 遍（取奇数）。左右对称的动作，左右合起来算一遍。每次必做预备式和收功。"
+      ],
+      "figures": [
+        {
+          "src": "lib/health-articles/jgj-longevity-16/assets/img-01.png",
+          "alt": "阴阳太极示意"
+        }
       ],
       "subsections": []
     },
@@ -39,6 +40,12 @@
         "一九九二年，他应邀到中山大学讲授道教养生，当场演练金刚功和长寿功，这套原先口传的功法开始进入公共视野。此后上海、海南、陕西、湖南等地都有他的讲学记录。晚年曾任海南省道教协会名誉会长、西安万寿八仙宫名誉住持、海南玉蟾宫住持等职，著有《炁体源流》《八部金刚功》《济世良方》等。二〇一三年《八部金刚功》整理出版。二〇一五年七月二十八日（农历乙未年六月十三）午时，于湖南张家界慈利黄中宫羽化，世寿一百零四岁。",
         "二〇二三年，金刚长寿功（含八部金刚功与八部长寿功）被列入湖南省省级非物质文化遗产代表性项目。需要说明的是：功法的古代文献链并不像八段锦那样完整，现在通行的十六式，主要依据张至顺一系的口述、演示和当代出版物。它常被称作“道观八段锦”，口诀与八段锦相近，但用力、顺序、手型（方拳）和是否强求呼吸，都与国家体育总局推广的八段锦不同。",
         "道长本人的说法很朴素：金刚功练外、练形、练五脏六腑，用刚性内劲疏通经脉；长寿功练内、练神、练先天之气，用柔和的圆弧把气收回来。一刚一柔，一后一先，合起来才叫金刚长寿功。"
+      ],
+      "figures": [
+        {
+          "src": "lib/health-articles/jgj-longevity-16/assets/img-02.png",
+          "alt": "张至顺道长"
+        }
       ],
       "subsections": []
     },
@@ -52,6 +59,12 @@
         "对称动作左右都要做。老人、腰椎颈椎不适者，把后瞧、望足、顿足改小、改慢。",
         "饭后一小时内不练。雷雨、大风、大雾不宜户外练。孕妇、术后、未控制的严重心脑血管病、急性腰突、眩晕未稳定者，先问医生，或只做最小幅度。",
         "初学可以对着张至顺原演示慢放。拍自己的正面和侧面视频对比轨迹，比看后来花哨的改编更可靠。"
+      ],
+      "figures": [
+        {
+          "src": "lib/health-articles/jgj-longevity-16/assets/img-03.png",
+          "alt": "八部金刚功与八部长寿功对照表"
+        }
       ],
       "subsections": []
     },
