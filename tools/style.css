@@ -3562,16 +3562,15 @@ html[data-boot-loading="1"] body {
 }
 
 .workspace-panel-load {
-  position: absolute;
-  inset: 0;
-  z-index: 6;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 1.25rem 1rem 2rem;
+  position: sticky;
+  top: 0;
+  z-index: 4;
+  display: block;
+  margin: 0;
+  padding: 0.55rem 0.85rem 0.5rem;
   pointer-events: none;
-  background: color-mix(in srgb, var(--bg-0, #0b1320) 42%, transparent);
-  backdrop-filter: blur(2px);
+  border-bottom: 1px solid color-mix(in srgb, var(--line, rgba(238, 243, 251, 0.13)) 80%, transparent);
+  background: color-mix(in srgb, var(--panel-strong, rgba(11, 18, 32, 0.96)) 94%, transparent);
 }
 
 .workspace-panel-load[hidden] {
@@ -3579,17 +3578,17 @@ html[data-boot-loading="1"] body {
 }
 
 .workspace-panel-load-card {
-  width: min(420px, 100%);
-  margin-top: min(18vh, 7rem);
-  padding: 1rem 1.1rem 0.85rem;
-  border-radius: 14px;
-  border: 1px solid var(--line, rgba(238, 243, 251, 0.13));
-  background: color-mix(in srgb, var(--panel-strong, rgba(11, 18, 32, 0.96)) 92%, transparent);
-  box-shadow: var(--shadow, 0 12px 36px rgba(0, 0, 0, 0.28));
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .workspace-panel-load-bar {
-  height: 5px;
+  height: 4px;
   border-radius: 999px;
   overflow: hidden;
   background: color-mix(in srgb, var(--line, rgba(238, 243, 251, 0.13)) 70%, transparent);
@@ -3607,10 +3606,10 @@ html[data-boot-loading="1"] body {
 
 .workspace-panel-load-label,
 .devtools-tool-load-label {
-  margin: 0.55rem 0 0.2rem;
-  font-size: 0.82rem;
+  margin: 0.4rem 0 0.15rem;
+  font-size: 0.8rem;
   color: var(--ink, #eef3fb);
-  min-height: 1.1em;
+  min-height: 1.05em;
 }
 
 .workspace-panel-load-label[hidden],
@@ -3620,8 +3619,20 @@ html[data-boot-loading="1"] body {
 
 .workspace-panel-load-hint {
   margin: 0;
-  font-size: 0.74rem;
+  font-size: 0.72rem;
   color: var(--muted, #9aabc4);
+}
+
+.tool-panel.is-tool-assets-loading .panel-body {
+  pointer-events: none;
+}
+
+.tool-panel.is-tool-assets-loading .panel-body :is(button, input, textarea, select, a.file-btn, label.file-btn) {
+  cursor: not-allowed;
+}
+
+.tool-panel.is-tool-assets-loading .panel-body :is(button, input, textarea, select) {
+  opacity: 0.72;
 }
 
 .yd-opts {

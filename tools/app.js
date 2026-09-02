@@ -2434,6 +2434,25 @@
 
   let routeGen = 0;
   let toolLoadGen = 0;
+  let toolLoadPanelId = "";
+
+  function mountToolLoadBar(toolId) {
+    const shell = document.getElementById("devtools-tool-load");
+    const panel = document.getElementById(toolId);
+    if (!shell || !panel) return;
+    const head = panel.querySelector(".panel-head");
+    if (head?.nextElementSibling === shell) return;
+    if (head) head.insertAdjacentElement("afterend", shell);
+    else panel.prepend(shell);
+  }
+
+  function setPanelAssetLoading(toolId, loading) {
+    const panel = document.getElementById(toolId);
+    if (!panel) return;
+    panel.classList.toggle("is-tool-assets-loading", loading);
+    if (loading) panel.setAttribute("aria-busy", "true");
+    else panel.removeAttribute("aria-busy");
+  }
 
   function setToolLoadProgress(pct, label, gen = toolLoadGen) {
     if (gen !== toolLoadGen) return;
@@ -2442,6 +2461,10 @@
     const bar = shell?.querySelector(".workspace-panel-load-bar");
     const labelEl = document.getElementById("devtools-tool-load-label");
     if (!shell || !fill) return;
+    if (toolLoadPanelId) {
+      mountToolLoadBar(toolLoadPanelId);
+      setPanelAssetLoading(toolLoadPanelId, true);
+    }
     const v = Math.min(100, Math.max(0, pct));
     shell.hidden = false;
     shell.setAttribute("aria-hidden", "false");
@@ -2463,6 +2486,7 @@
     const fill = shell?.querySelector(".devtools-tool-load-fill");
     const bar = shell?.querySelector(".workspace-panel-load-bar");
     const labelEl = document.getElementById("devtools-tool-load-label");
+    if (toolLoadPanelId) setPanelAssetLoading(toolLoadPanelId, false);
     if (!shell) return;
     shell.hidden = true;
     shell.setAttribute("aria-hidden", "true");
@@ -2497,6 +2521,7 @@
 
   function startToolAssetLoad(gen, toolId) {
     const loadGen = ++toolLoadGen;
+    toolLoadPanelId = String(toolId || "").trim();
     const name = toolName(toolId);
     let overlayShown = false;
     const showDelay = window.setTimeout(() => {
@@ -2631,8 +2656,13 @@
       panel.classList.toggle("is-workspace-active", active);
       panel.hidden = !active;
       if (active) panel.removeAttribute("aria-hidden");
-      else panel.setAttribute("aria-hidden", "true");
+      else {
+        panel.setAttribute("aria-hidden", "true");
+        panel.classList.remove("is-tool-assets-loading");
+        panel.removeAttribute("aria-busy");
+      }
     });
+    mountToolLoadBar(routeToolId);
 
     // 首屏 boot：data-boot-panel 仅用于 panel-loader 决定预拉哪个面板
     if (document.documentElement.hasAttribute("data-boot-panel")) {

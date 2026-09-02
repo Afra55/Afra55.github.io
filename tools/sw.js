@@ -2,7 +2,7 @@
 /* eslint-disable no-restricted-globals */
 "use strict";
 
-const SHELL_CACHE = "devtools-shell-20260901-195541";
+const SHELL_CACHE = "devtools-shell-20260902-024500";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -24,15 +24,40 @@ function shouldBypass(url) {
   return false;
 }
 
-/** 脚本/样式走网络，避免升级后 SW 回退到旧版 JS/CSS */
-function shouldCacheResponse(url, req) {
+/** 可缓存的静态资源（含带 ?v= 的 JS/CSS/HTML）；大体积编码器与 wasm 除外 */
+function shouldCacheResponse(url) {
   const path = url.pathname;
-  if (/\.(js|css|mjs)$/i.test(path)) return false;
-  if (req.mode === "navigate") return true;
+  if (/\.wasm$/i.test(path)) return false;
+  if (/\/vendor\/(ffmpeg|gifsicle|gif\.worker|omggif)/i.test(path)) return false;
+  if (/\/ffmpeg\//i.test(path)) return false;
+  if (path.includes("/tools")) return true;
   if (/\/index\.html$/i.test(path) || path.endsWith("/tools/") || path.endsWith("/tools")) return true;
   if (/\/icons\//i.test(path)) return true;
   if (path.endsWith("/manifest.webmanifest")) return true;
   return false;
+}
+
+function cacheResponse(req, res) {
+  if (!res || !res.ok || res.type === "opaque") return;
+  const copy = res.clone();
+  caches.open(SHELL_CACHE).then((c) => c.put(req, copy)).catch(() => {});
+}
+
+function networkFetch(req, url) {
+  return fetch(req)
+    .then((res) => {
+      if (shouldCacheResponse(url)) cacheResponse(req, res);
+      return res;
+    })
+    .catch(() =>
+      caches.match(req).then((cached) => {
+        if (cached) return cached;
+        if (req.mode === "navigate") {
+          return caches.match("./index.html").then((r) => r || caches.match("./"));
+        }
+        return undefined;
+      })
+    );
 }
 
 self.addEventListener("install", (event) => {
@@ -71,22 +96,15 @@ self.addEventListener("fetch", (event) => {
   }
   if (shouldBypass(url)) return;
 
-  // 在线优先拉新，离线再回退缓存——JS/CSS 不写入缓存，减少新旧版本混用
+  // 缓存优先：命中即返回，后台 stale-while-revalidate；强制刷新会清空 SW 缓存
   event.respondWith(
-    fetch(req)
-      .then((res) => {
-        if (res && res.ok && res.type !== "opaque" && shouldCacheResponse(url, req)) {
-          const copy = res.clone();
-          caches.open(SHELL_CACHE).then((c) => c.put(req, copy)).catch(() => {});
-        }
-        return res;
-      })
-      .catch(() =>
-        caches.match(req).then((cached) => {
-          if (cached) return cached;
-          if (req.mode === "navigate") return caches.match("./index.html").then((r) => r || caches.match("./"));
-          return undefined;
-        })
-      )
+    caches.match(req).then((cached) => {
+      const network = networkFetch(req, url);
+      if (cached) {
+        event.waitUntil(network.catch(() => {}));
+        return cached;
+      }
+      return network;
+    })
   );
 });

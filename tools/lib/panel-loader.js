@@ -9,6 +9,18 @@
   const mounted = new Set();
   const inflight = new Map();
 
+  function isForceFreshLoad() {
+    try {
+      return new URLSearchParams(location.search).has("_fresh");
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function fetchInit(extra = {}) {
+    return isForceFreshLoad() ? { cache: "no-store", ...extra } : { cache: "default", ...extra };
+  }
+
   function withVersion(src) {
     const url = new URL(src, document.baseURI || window.location.href);
     url.searchParams.set("v", BUILD);
@@ -16,7 +28,7 @@
   }
 
   async function fetchText(url) {
-    const res = await fetch(withVersion(url), { cache: "no-cache" });
+    const res = await fetch(withVersion(url), fetchInit());
     if (!res.ok) throw new Error(`加载失败：${url} (${res.status})`);
     return res.text();
   }
@@ -24,7 +36,7 @@
   async function loadPanelHtml(toolId) {
     const id = String(toolId || "").trim();
     if (!id) throw new Error("panel id required");
-    if (htmlCache.has(id)) return htmlCache.get(id);
+    if (!isForceFreshLoad() && htmlCache.has(id)) return htmlCache.get(id);
     if (inflight.has(`html:${id}`)) return inflight.get(`html:${id}`);
 
     const promise = fetchText(`./panels/${id}.html`)
@@ -51,7 +63,7 @@
       return Promise.resolve();
     }
 
-    const promise = fetch(withVersion(`./styles/panels/${id}.css`), { method: "HEAD", cache: "no-cache" })
+    const promise = fetch(withVersion(`./styles/panels/${id}.css`), fetchInit({ method: "HEAD" }))
       .then((res) => {
         if (!res.ok) {
           cssLoaded.add(id);
@@ -136,10 +148,21 @@
     }
   })();
 
+  function clearSessionCache() {
+    htmlCache.clear();
+    cssLoaded.clear();
+    mounted.clear();
+    inflight.clear();
+  }
+
+  if (isForceFreshLoad()) clearSessionCache();
+
   window.DevToolsPanels = {
     BUILD,
     ensure,
     bootReady: bootPromise,
     isMounted: (id) => mounted.has(String(id || "").trim()),
+    clearSessionCache,
+    isForceFreshLoad,
   };
 })();
