@@ -1269,9 +1269,10 @@
 
   
   });// ---- UUID ----
+  let countEl;
+  let outEl;
+
   function genUuid() {
-    let countEl;
-    let outEl;
     if (!countEl || !outEl) return;
     const count = Math.min(200, Math.max(1, Number(countEl.value) || 1));
     const upper = $("#uuid-upper")?.checked;
@@ -1820,8 +1821,9 @@
 
   
   });// ---- Cron ----
+  let cronInput;
+
   function runCron() {
-    let cronInput;
     if (!cronInput) return;
     try {
       const expr = cronInput.value;
@@ -1944,69 +1946,58 @@
     }
   }
 
-  [
-    scInput,
-    scLang,
-    scTheme,
-    scTitle,
-    scWatermark,
-    scLines,
-    scPretty,
-    scDots,
-  ].forEach((el) => {
   bindPanel("sharecard", () => {
-      scInput = $("#sc-input");
-      scLang = $("#sc-lang");
-      scTheme = $("#sc-theme");
-      scTitle = $("#sc-title");
-      scWatermark = $("#sc-watermark");
-      scLines = $("#sc-lines");
-      scPretty = $("#sc-pretty");
-      scDots = $("#sc-dots");
-      scDotsEl = $("#sc-dots-el");
-      scCard = $("#sc-card");
-      scCode = $("#sc-code");
-      scCardTitle = $("#sc-card-title");
-      scCardWatermark = $("#sc-card-watermark");
-      scMeta = $("#sc-meta");
-      scError = $("#sc-error");
-      scCapture = $("#sc-capture");
+    scInput = $("#sc-input");
+    scLang = $("#sc-lang");
+    scTheme = $("#sc-theme");
+    scTitle = $("#sc-title");
+    scWatermark = $("#sc-watermark");
+    scLines = $("#sc-lines");
+    scPretty = $("#sc-pretty");
+    scDots = $("#sc-dots");
+    scDotsEl = $("#sc-dots-el");
+    scCard = $("#sc-card");
+    scCode = $("#sc-code");
+    scCardTitle = $("#sc-card-title");
+    scCardWatermark = $("#sc-card-watermark");
+    scMeta = $("#sc-meta");
+    scError = $("#sc-error");
+    scCapture = $("#sc-capture");
 
-        el?.addEventListener("input", refreshShareCard);
-    el?.addEventListener("change", refreshShareCard);
-  });
-  $("#sc-refresh")?.addEventListener("click", refreshShareCard);
+    [scInput, scLang, scTheme, scTitle, scWatermark, scLines, scPretty, scDots].forEach((el) => {
+      el?.addEventListener("input", refreshShareCard);
+      el?.addEventListener("change", refreshShareCard);
+    });
 
-  $("#sc-export")?.addEventListener("click", async () => {
+    $("#sc-refresh")?.addEventListener("click", refreshShareCard);
+
+    $("#sc-export")?.addEventListener("click", async () => {
+      refreshShareCard();
+      if (typeof html2canvas !== "function") {
+        setError(scError, "html2canvas 未加载");
+        return;
+      }
+      try {
+        const canvas = await html2canvas(scCapture, {
+          backgroundColor: null,
+          scale: 2,
+          useCORS: true,
+          logging: false,
+        });
+        const link = document.createElement("a");
+        const name = (scTitle.value.trim() || "code-card").replace(/[^\w.-]+/g, "_");
+        link.download = `${name}.png`;
+        link.href = canvas.toDataURL("image/png");
+        link.click();
+        scMeta.textContent = `已导出 ${canvas.width}×${canvas.height} PNG`;
+        toast("已导出图片");
+        setError(scError, "");
+      } catch (err) {
+        setError(scError, `导出失败：${err.message || err}`);
+      }
+    });
+
     refreshShareCard();
-    if (typeof html2canvas !== "function") {
-      setError(scError, "html2canvas 未加载");
-      return;
-    }
-    try {
-      const canvas = await html2canvas(scCapture, {
-        backgroundColor: null,
-        scale: 2,
-        useCORS: true,
-        logging: false,
-      });
-      const link = document.createElement("a");
-      const name = (scTitle.value.trim() || "code-card").replace(/[^\w.-]+/g, "_");
-      link.download = `${name}.png`;
-      link.href = canvas.toDataURL("image/png");
-      link.click();
-      scMeta.textContent = `已导出 ${canvas.width}×${canvas.height} PNG`;
-      toast("已导出图片");
-      setError(scError, "");
-    } catch (err) {
-      setError(scError, `导出失败：${err.message || err}`);
-    }
-  });
-
-  if (scCard) refreshShareCard();
-
-
-  
   });// ---- Number base ----
   let nbInput;
   let nbFrom;
