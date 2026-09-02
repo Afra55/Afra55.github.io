@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # DevTools ADB Bridge launcher (Linux)
 # Do not use set -e for the whole script — always show errors before exit.
+# Runtime files stay in the same folder as this script.
 
 echo "DevTools ADB Bridge 启动中..."
 echo "使用本工具需要本机已安装 adb，并可用：adb devices"
@@ -42,11 +43,12 @@ pause_exit() {
   exit "$code"
 }
 
-LOG_DIR="${HOME}/.devtools-adb-bridge"
-mkdir -p "${LOG_DIR}"
-LOG_FILE="${LOG_DIR}/last-start.log"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BRIDGE_DIR="${SCRIPT_DIR}"
+LOG_FILE="${SCRIPT_DIR}/last-start.log"
 {
   echo "==== $(date) ===="
+  echo "SCRIPT_DIR=${SCRIPT_DIR}"
   echo "PATH=$PATH"
   command -v node || true
   command -v adb || true
@@ -64,28 +66,11 @@ if ! command -v adb >/dev/null 2>&1; then
   pause_exit 1
 fi
 
-BRIDGE_DIR="${HOME}/.devtools-adb-bridge"
-mkdir -p "${BRIDGE_DIR}"
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-TARGET="${BRIDGE_DIR}/server.js"
+TARGET="${SCRIPT_DIR}/server.js"
 
 is_valid_server() {
   local f="$1"
   [ -f "$f" ] && [ -s "$f" ] && grep -q "devtools-adb-bridge\|ADB_BRIDGE_TOKEN\|DevTools local ADB bridge\|devtools-bridge\|统一本机桥" "$f" 2>/dev/null
-}
-
-sync_bridge_bundle() {
-  local src="$1"
-  local dst="$2"
-  [ -f "${src}/scrcpy-mirror.js" ] && cp -f "${src}/scrcpy-mirror.js" "${dst}/scrcpy-mirror.js"
-  if [ -f "${src}/ffmpeg-bridge/server.js" ]; then
-    mkdir -p "${dst}/ffmpeg-bridge"
-    cp -f "${src}/ffmpeg-bridge/server.js" "${dst}/ffmpeg-bridge/server.js"
-  fi
-  if [ -f "${src}/vendor/scrcpy-server-v3.1" ]; then
-    mkdir -p "${dst}/vendor"
-    cp -f "${src}/vendor/scrcpy-server-v3.1" "${dst}/vendor/scrcpy-server-v3.1"
-  fi
 }
 
 download_mirror_js() {
@@ -108,12 +93,8 @@ download_mirror_js() {
   return 1
 }
 
-if is_valid_server "${SCRIPT_DIR}/server.js"; then
-  cp -f "${SCRIPT_DIR}/server.js" "${TARGET}"
-  sync_bridge_bundle "${SCRIPT_DIR}" "${BRIDGE_DIR}"
+if is_valid_server "${TARGET}"; then
   echo "已使用同目录 server.js"
-elif is_valid_server "${TARGET}"; then
-  echo "已使用本地缓存：${TARGET}"
 else
   URLS=(
     "${ADB_BRIDGE_BASE_URL:-https://afra55.github.io/tools/adb-bridge}/server.js"
@@ -155,28 +136,18 @@ if ! is_valid_server "${TARGET}"; then
   pause_exit 1
 fi
 
-if [ ! -f "${BRIDGE_DIR}/scrcpy-mirror.js" ]; then
-  if [ -f "${SCRIPT_DIR}/scrcpy-mirror.js" ]; then
-    cp -f "${SCRIPT_DIR}/scrcpy-mirror.js" "${BRIDGE_DIR}/scrcpy-mirror.js"
-  else
-    download_mirror_js "${BRIDGE_DIR}/scrcpy-mirror.js" || {
-      echo "无法获取 scrcpy-mirror.js。请重新下载完整 ZIP 包。"
-      pause_exit 1
-    }
-  fi
+if [ ! -f "${SCRIPT_DIR}/scrcpy-mirror.js" ]; then
+  download_mirror_js "${SCRIPT_DIR}/scrcpy-mirror.js" || {
+    echo "无法获取 scrcpy-mirror.js。请重新下载完整 ZIP 包。"
+    pause_exit 1
+  }
 fi
-sync_bridge_bundle "${SCRIPT_DIR}" "${BRIDGE_DIR}"
 
 cd "${BRIDGE_DIR}" || pause_exit 1
 export ADB_BRIDGE_TOKEN="${ADB_BRIDGE_TOKEN:-devtools-bridge}"
+export ADB_BRIDGE_DIR="${BRIDGE_DIR}"
 
 RESOLVE_SCRIPT="${SCRIPT_DIR}/resolve-port.js"
-if [ -f "${SCRIPT_DIR}/resolve-port.js" ]; then
-  cp -f "${SCRIPT_DIR}/resolve-port.js" "${BRIDGE_DIR}/resolve-port.js" 2>/dev/null || true
-fi
-if [ ! -f "${RESOLVE_SCRIPT}" ] && [ -f "${BRIDGE_DIR}/resolve-port.js" ]; then
-  RESOLVE_SCRIPT="${BRIDGE_DIR}/resolve-port.js"
-fi
 if [ -f "${RESOLVE_SCRIPT}" ]; then
   echo "检查端口是否可用…"
   RESOLVED_PORT="$(node "${RESOLVE_SCRIPT}")" || pause_exit $?

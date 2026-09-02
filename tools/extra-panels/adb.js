@@ -2217,7 +2217,7 @@
           const wrapper = [
             "@echo off",
             'cd /d "%~dp0"',
-            'cmd /d /c ""%~dp0start-adb-bridge.bat" & echo. & echo Log: %USERPROFILE%\\.devtools-adb-bridge\\last-start.log & echo Desktop copy: devtools-adb-bridge-last-start.log & pause"',
+            'cmd /d /c ""%~dp0start-adb-bridge.bat" & echo. & echo Log: last-start.log in this folder & pause"',
             "",
           ].join("\r\n");
           zip.file("start-adb-bridge.cmd", wrapper);
@@ -4938,9 +4938,20 @@
         refreshInputScreencap().catch((err) => setError(adbError, err.message || String(err)));
         });
         $("#adb-input-mirror-start")?.addEventListener("click", () => {
+        const meta = $("#adb-input-meta");
+        const mirrorBtn = $("#adb-input-mirror-start");
+        if (meta) meta.textContent = "正在启动镜像…";
+        if (mirrorBtn) mirrorBtn.disabled = true;
         startMirrorPreview()
         .then(() => toast("镜像已开始"))
-        .catch((err) => setError(adbError, err.message || String(err)));
+        .catch((err) => {
+          const msg = err.message || String(err);
+          setError(adbError, msg);
+          if (meta) meta.textContent = `镜像失败：${msg}`;
+        })
+        .finally(() => {
+          if (mirrorBtn && !mirrorBtn.title) mirrorBtn.disabled = false;
+        });
         });
         $("#adb-input-live-stop")?.addEventListener("click", () => {
         stopInputLivePreview();
