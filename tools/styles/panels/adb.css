@@ -1276,6 +1276,186 @@ button.adb-device-body.linkish {
   max-height: 28rem;
 }
 
+.adb-perf-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.55rem;
+  margin-top: 0.75rem;
+}
+
+.adb-perf-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.65rem 0.75rem;
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.adb-perf-card span {
+  font-size: 0.78rem;
+  color: var(--muted, #888);
+}
+
+.adb-perf-card strong {
+  font-size: 1.05rem;
+}
+
+.adb-perf-chart {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  margin-top: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
+}
+
+.adb-perf-cores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.55rem;
+}
+
+.adb-perf-core {
+  font-size: 0.75rem;
+  padding: 0.2rem 0.45rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.adb-procs-table-wrap {
+  margin-top: 0.75rem;
+  max-height: 28rem;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.adb-procs-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.adb-procs-table th,
+.adb-procs-table td {
+  padding: 0.4rem 0.55rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.adb-procs-table th {
+  position: sticky;
+  top: 0;
+  background: var(--bg-0, #111);
+  z-index: 1;
+}
+
+.adb-procs-table .adb-procs-name {
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.75rem;
+}
+
+.adb-shell-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.55rem 0;
+}
+
+.adb-shell-tab {
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.2rem 0.65rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.adb-shell-tab.is-active {
+  border-color: var(--accent, #5b8cff);
+  background: color-mix(in srgb, var(--accent, #5b8cff) 18%, transparent);
+}
+
+.adb-shell-out {
+  max-height: 22rem;
+  min-height: 12rem;
+  white-space: pre-wrap;
+}
+
+.adb-shell-input-row {
+  display: flex;
+  gap: 0.45rem;
+  align-items: center;
+  margin-top: 0.55rem;
+}
+
+.adb-shell-input-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.adb-shell-prompt {
+  opacity: 0.7;
+}
+
+.adb-shell-oneshot {
+  margin-top: 0.85rem;
+}
+
+.adb-layout-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 860px) {
+  .adb-layout-split {
+    grid-template-columns: 1fr;
+  }
+}
+
+.adb-layout-tree {
+  max-height: 28rem;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.35rem;
+}
+
+.adb-layout-node {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  padding: 0.35rem 0.45rem;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.adb-layout-node:hover,
+.adb-layout-node.is-active {
+  background: color-mix(in srgb, var(--accent, #5b8cff) 16%, transparent);
+}
+
+.adb-layout-detail .adb-pre {
+  margin-top: 0.35rem;
+  max-height: 26rem;
+}
+
 .adb-jobs-list {
   display: flex;
   flex-direction: column;

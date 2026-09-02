@@ -38,10 +38,11 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.8.6";
+const BRIDGE_VERSION = "0.9.0";
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
 const everythingProxy = require("./everything-proxy");
+const deviceInspect = require("./device-inspect");
 function loadFfmpegBridge() {
   const candidates = [
     path.join(__dirname, "ffmpeg-bridge", "server.js"),
@@ -3656,6 +3657,10 @@ async function handleApi(req, res, url) {
             "ytdlp",
             "ytdlp-mount",
             "everything-proxy",
+            "device-perf",
+            "device-processes",
+            "device-shell",
+            "device-layout",
           ],
           mirror: scrcpyMirror.jarStatus(),
           adb: adbInfo,
@@ -4039,6 +4044,53 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    if (url.pathname === "/device/perf" && req.method === "GET") {
+      const serial = url.searchParams.get("serial") || "";
+      const period = url.searchParams.get("period");
+      const packageName = url.searchParams.get("package") || "";
+      sendJson(res, 200, await deviceInspect.getPerf(adbSerial, serial, { period, package: packageName }), origin);
+      return;
+    }
+
+    if (url.pathname === "/device/processes" && req.method === "GET") {
+      const serial = url.searchParams.get("serial") || "";
+      sendJson(
+        res,
+        200,
+        await deviceInspect.listProcesses(adbSerial, serial, {
+          query: url.searchParams.get("query") || "",
+          limit: url.searchParams.get("limit"),
+        }),
+        origin
+      );
+      return;
+    }
+
+    if (url.pathname === "/device/process/kill" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req, 1024 * 1024));
+      sendJson(res, 200, await deviceInspect.killProcess(adbSerial, body.serial, body), origin);
+      return;
+    }
+
+    if (url.pathname === "/device/layout" && req.method === "GET") {
+      const serial = url.searchParams.get("serial") || "";
+      sendJson(res, 200, await deviceInspect.dumpLayout(adbSerial, serial), origin);
+      return;
+    }
+
+    if (url.pathname === "/shell/exec" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req, 1024 * 1024));
+      sendJson(
+        res,
+        200,
+        await deviceInspect.shellExec(adbSerial, body.serial, body.command || body.cmd, {
+          timeout: body.timeout,
+        }),
+        origin
+      );
+      return;
+    }
+
     if (url.pathname === "/device/control" && req.method === "POST") {
       const body = parseJsonBody(await readBody(req, 1024 * 1024));
       sendJson(res, 200, await deviceControl(body.serial, body.action), origin);
@@ -4236,7 +4288,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.on("upgrade", (req, socket, head) => {
-  const handled = scrcpyMirror.handleUpgrade(req, socket, head, {
+  const deps = {
     host: HOST,
     port: ACTIVE_PORT,
     token: TOKEN,
@@ -4244,7 +4296,10 @@ server.on("upgrade", (req, socket, head) => {
     allowedOrigins: ALLOWED_ORIGINS,
     adbPath: "adb",
     adbSerial,
-  });
+  };
+  const handled =
+    scrcpyMirror.handleUpgrade(req, socket, head, deps) ||
+    deviceInspect.handleShellUpgrade(req, socket, head, deps);
   if (!handled) {
     socket.write("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
     socket.destroy();

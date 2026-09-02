@@ -1,7 +1,7 @@
 <section id="adb" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>ADB 工具</h1>
-        <p>通过本机 ADB 桥管理多台设备：文件、安装、应用、网络代理/转发、开发者选项、Logcat、输入与截图录屏。使用前需本机已安装 <code class="mono">adb</code>，并启动本地桥接服务。<a href="#setup">不会装？看小白指南</a></p>
+        <p>通过本机 ADB 桥管理多台设备：文件、安装、应用、网络、开发者、性能/进程/Shell/布局、Logcat、输入与截图录屏。使用前需本机已安装 <code class="mono">adb</code>，并启动本地桥接服务。<a href="#setup">不会装？看小白指南</a></p>
       </div>
       <div class="panel-body">
         <div class="adb-status" id="adb-status">
@@ -74,6 +74,10 @@
               <button type="button" class="adb-tab" data-adb-tab="apps">应用</button>
               <button type="button" class="adb-tab" data-adb-tab="network">网络</button>
               <button type="button" class="adb-tab" data-adb-tab="developer">开发者</button>
+              <button type="button" class="adb-tab" data-adb-tab="perf">性能</button>
+              <button type="button" class="adb-tab" data-adb-tab="procs">进程</button>
+              <button type="button" class="adb-tab" data-adb-tab="shell">Shell</button>
+              <button type="button" class="adb-tab" data-adb-tab="layout">布局</button>
               <button type="button" class="adb-tab" data-adb-tab="logcat">Logcat</button>
               <button type="button" class="adb-tab" data-adb-tab="input">输入</button>
               <button type="button" class="adb-tab" data-adb-tab="media">截图录屏</button>
@@ -585,6 +589,97 @@
               </div>
               <p class="hint" id="adb-dev-scales">window / transition / animator：—</p>
               <p class="hint">部分开关因机型/系统版本可能无效；改完可回设置页核对。调试完记得关过度绘制与严格模式。</p>
+            </div>
+
+            <div class="adb-tab-panel" data-adb-panel="perf" hidden>
+              <div class="label-row">
+                <h2 class="subhead">性能监控</h2>
+                <span class="hint tight" id="adb-perf-meta">CPU / 内存 / FPS（需桥 ≥0.9.0）</span>
+              </div>
+              <div class="btn-row tool-actions">
+                <button type="button" class="primary-btn" id="adb-perf-start">开始采样</button>
+                <button type="button" class="ghost-btn" id="adb-perf-stop" hidden>停止</button>
+                <button type="button" class="secondary-btn" id="adb-perf-once">采一次</button>
+                <label for="adb-perf-interval">间隔(ms)</label>
+                <input id="adb-perf-interval" class="mono meta-input" type="number" min="500" max="5000" step="100" value="1000" />
+              </div>
+              <div class="adb-perf-cards" id="adb-perf-cards">
+                <div class="adb-perf-card"><span>CPU 均载</span><strong class="mono" id="adb-perf-cpu">—</strong></div>
+                <div class="adb-perf-card"><span>内存</span><strong class="mono" id="adb-perf-mem">—</strong></div>
+                <div class="adb-perf-card"><span>FPS</span><strong class="mono" id="adb-perf-fps">—</strong></div>
+                <div class="adb-perf-card"><span>温度</span><strong class="mono" id="adb-perf-temp">—</strong></div>
+              </div>
+              <canvas id="adb-perf-chart" class="adb-perf-chart" width="720" height="180" aria-label="性能曲线"></canvas>
+              <p class="hint tight" id="adb-perf-fg">前台：—</p>
+              <div class="adb-perf-cores" id="adb-perf-cores"></div>
+            </div>
+
+            <div class="adb-tab-panel" data-adb-panel="procs" hidden>
+              <div class="label-row">
+                <h2 class="subhead">进程</h2>
+                <span class="hint tight" id="adb-procs-meta">列表 + 结束进程（需桥 ≥0.9.0）</span>
+              </div>
+              <div class="field-row" style="flex-wrap:wrap">
+                <label for="adb-procs-query">过滤</label>
+                <input id="adb-procs-query" class="mono" type="search" placeholder="包名 / PID / 用户" autocomplete="off" />
+                <button type="button" class="primary-btn" id="adb-procs-refresh">刷新</button>
+              </div>
+              <div class="adb-procs-table-wrap">
+                <table class="adb-procs-table" id="adb-procs-table">
+                  <thead>
+                    <tr><th>PID</th><th>用户</th><th>RSS</th><th>名称</th><th></th></tr>
+                  </thead>
+                  <tbody id="adb-procs-body">
+                    <tr><td colspan="5" class="hint">选择设备后刷新</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="adb-tab-panel" data-adb-panel="shell" hidden>
+              <div class="label-row">
+                <h2 class="subhead">交互 Shell</h2>
+                <span class="hint tight" id="adb-shell-meta">WebSocket 会话（需桥 ≥0.9.0）</span>
+              </div>
+              <div class="adb-shell-tabs" id="adb-shell-tabs" role="tablist" aria-label="Shell 会话"></div>
+              <div class="btn-row tool-actions">
+                <button type="button" class="primary-btn" id="adb-shell-new">新建会话</button>
+                <button type="button" class="ghost-btn" id="adb-shell-close">关闭当前</button>
+                <button type="button" class="secondary-btn" id="adb-shell-clear">清屏</button>
+              </div>
+              <pre class="mono adb-pre adb-shell-out" id="adb-shell-out" aria-live="polite"></pre>
+              <div class="adb-shell-input-row">
+                <span class="mono adb-shell-prompt">$</span>
+                <input id="adb-shell-input" class="mono" type="text" placeholder="输入命令后回车；也可直接输入交互内容" autocomplete="off" spellcheck="false" />
+                <button type="button" class="primary-btn" id="adb-shell-send">发送</button>
+              </div>
+              <details class="adb-shell-oneshot">
+                <summary>单次执行（HTTP，不占会话）</summary>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem">
+                  <input id="adb-shell-once-cmd" class="mono" type="text" placeholder="如 getprop ro.build.version.release" autocomplete="off" spellcheck="false" style="flex:1;min-width:12rem" />
+                  <button type="button" class="secondary-btn" id="adb-shell-once-run">执行</button>
+                </div>
+                <pre class="mono adb-pre" id="adb-shell-once-out" style="max-height:10rem">尚未执行</pre>
+              </details>
+            </div>
+
+            <div class="adb-tab-panel" data-adb-panel="layout" hidden>
+              <div class="label-row">
+                <h2 class="subhead">布局检查</h2>
+                <span class="hint tight" id="adb-layout-meta">uiautomator dump（需桥 ≥0.9.0）</span>
+              </div>
+              <div class="btn-row tool-actions">
+                <button type="button" class="primary-btn" id="adb-layout-dump">刷新 Dump</button>
+                <button type="button" class="ghost-btn" id="adb-layout-copy">复制 XML</button>
+                <input id="adb-layout-filter" class="mono" type="search" placeholder="过滤 text / id / class" autocomplete="off" />
+              </div>
+              <div class="adb-layout-split">
+                <div class="adb-layout-tree" id="adb-layout-tree" aria-label="节点列表"></div>
+                <div class="adb-layout-detail">
+                  <h3 class="subhead" style="font-size:0.95rem">属性</h3>
+                  <pre class="mono adb-pre" id="adb-layout-attrs">选择节点查看属性</pre>
+                </div>
+              </div>
             </div>
 
             <div class="adb-tab-panel" data-adb-panel="logcat" hidden>

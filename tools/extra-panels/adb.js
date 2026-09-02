@@ -219,6 +219,15 @@
       let adbPermPackage = "";
       let adbLogLive = false;
       let adbTrackedJobs = new Set(); // jobs shown inline on current panels
+      let adbPerfTimer = 0;
+      let adbPerfHistory = []; // { t, cpu, mem, fps }
+      let adbProcList = [];
+      /** @type {{ id: string, ws: WebSocket|null, buf: string, title: string }[]} */
+      let adbShellSessions = [];
+      let adbShellActive = "";
+      let adbLayoutNodes = [];
+      let adbLayoutXml = "";
+      let adbLayoutSelected = -1;
   
       function normalizeAdbBase(raw) {
         let base = String(raw || "http://127.0.0.1:17888").trim().replace(/\/+$/, "");
@@ -393,6 +402,7 @@
         });
         if (prev === "logcat" && tab !== "logcat") stopAdbLogLive();
         if (prev === "input" && tab !== "input") stopInputLivePreview();
+        if (prev === "perf" && tab !== "perf") stopAdbPerf();
         if (tab === "apps" && adbSelected && !adbApps.length) loadApps().catch(() => {});
         if (tab === "jobs") refreshJobs().catch(() => {});
         if (tab === "info" && adbSelected) loadSnapshot({ silent: true }).catch(() => {});
@@ -401,6 +411,345 @@
           refreshForwards({ silent: true }).catch(() => {});
         }
         if (tab === "developer" && adbSelected) refreshDeveloper({ silent: true }).catch(() => {});
+        if (tab === "procs" && adbSelected) refreshProcesses().catch(() => {});
+        if (tab === "layout" && adbSelected && !adbLayoutNodes.length) {
+          /* wait for user dump */
+        }
+        if (tab === "shell") renderShellTabs();
+      }
+
+      function canDeviceInspect() {
+        return (
+          bridgeHas("device-perf") ||
+          bridgeHas("device-processes") ||
+          bridgeHas("device-shell") ||
+          bridgeHas("device-layout") ||
+          bridgeAtLeast("0.9.0")
+        );
+      }
+
+      function stopAdbPerf() {
+        if (adbPerfTimer) {
+          clearInterval(adbPerfTimer);
+          adbPerfTimer = 0;
+        }
+        const stopBtn = $("#adb-perf-stop");
+        const startBtn = $("#adb-perf-start");
+        if (stopBtn) stopBtn.hidden = true;
+        if (startBtn) startBtn.hidden = false;
+      }
+
+      function drawPerfChart() {
+        const canvas = $("#adb-perf-chart");
+        if (!canvas) return;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) return;
+        const w = canvas.width;
+        const h = canvas.height;
+        ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = getComputedStyle(canvas).getPropertyValue("--ink") || "#888";
+        ctx.globalAlpha = 0.08;
+        ctx.fillRect(0, 0, w, h);
+        ctx.globalAlpha = 1;
+        const series = [
+          { key: "cpu", color: "#5b8cff" },
+          { key: "mem", color: "#3ecf8e" },
+          { key: "fps", color: "#f5a524", scale: 120 },
+        ];
+        const hist = adbPerfHistory.slice(-60);
+        if (hist.length < 2) return;
+        for (const s of series) {
+          ctx.beginPath();
+          ctx.strokeStyle = s.color;
+          ctx.lineWidth = 1.5;
+          hist.forEach((pt, i) => {
+            const x = (i / (hist.length - 1)) * (w - 8) + 4;
+            let v = Number(pt[s.key]) || 0;
+            if (s.scale) v = Math.min(100, (v / s.scale) * 100);
+            const y = h - 4 - (Math.max(0, Math.min(100, v)) / 100) * (h - 8);
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+        }
+      }
+
+      function renderPerfSample(data) {
+        const cpu = data?.cpu?.avgPct;
+        const mem = data?.memory;
+        const fps = data?.fps;
+        const temp = data?.temperatureC;
+        if ($("#adb-perf-cpu")) $("#adb-perf-cpu").textContent = cpu == null ? "—" : `${cpu}%`;
+        if ($("#adb-perf-mem")) {
+          $("#adb-perf-mem").textContent = mem?.totalKb
+            ? `${formatBytes((mem.usedKb || 0) * 1024)} / ${formatBytes(mem.totalKb * 1024)} (${Math.round(
+                (mem.usedRatio || 0) * 100
+              )}%)`
+            : "—";
+        }
+        if ($("#adb-perf-fps")) $("#adb-perf-fps").textContent = fps == null ? "—" : String(fps);
+        if ($("#adb-perf-temp")) $("#adb-perf-temp").textContent = temp == null ? "—" : `${temp}°C`;
+        if ($("#adb-perf-fg")) {
+          $("#adb-perf-fg").textContent = `前台：${data?.foreground || "—"}`;
+        }
+        const coresEl = $("#adb-perf-cores");
+        if (coresEl) {
+          const cores = data?.cpu?.cores || [];
+          coresEl.innerHTML = cores
+            .map((c) => `<span class="adb-perf-core">${escapeHtml(c.id)} ${c.loadPct}%</span>`)
+            .join("");
+        }
+        adbPerfHistory.push({
+          t: Date.now(),
+          cpu: Number(cpu) || 0,
+          mem: Math.round((mem?.usedRatio || 0) * 100),
+          fps: Number(fps) || 0,
+        });
+        if (adbPerfHistory.length > 90) adbPerfHistory = adbPerfHistory.slice(-90);
+        drawPerfChart();
+        if ($("#adb-perf-meta")) {
+          $("#adb-perf-meta").textContent = `已采样 ${adbPerfHistory.length} 点 · 桥 ${adbBridgeVersion || "?"}`;
+        }
+      }
+
+      async function samplePerfOnce() {
+        if (!canDeviceInspect() && adbBridgeVersion) {
+          throw new Error("性能监控需桥 ≥0.9.0，请重新下载完整 ZIP 并重启桥");
+        }
+        const serial = requireCurrentSerial();
+        const data = await adbFetch(`/device/perf?serial=${encodeURIComponent(serial)}&period=200`);
+        renderPerfSample(data);
+        return data;
+      }
+
+      function startAdbPerf() {
+        stopAdbPerf();
+        const interval = Math.max(500, Math.min(5000, Number($("#adb-perf-interval")?.value) || 1000));
+        const stopBtn = $("#adb-perf-stop");
+        const startBtn = $("#adb-perf-start");
+        if (stopBtn) stopBtn.hidden = false;
+        if (startBtn) startBtn.hidden = true;
+        samplePerfOnce().catch((err) => setError(adbError, err.message || String(err)));
+        adbPerfTimer = setInterval(() => {
+          if (adbTab !== "perf") {
+            stopAdbPerf();
+            return;
+          }
+          samplePerfOnce().catch((err) => setError(adbError, err.message || String(err)));
+        }, interval);
+      }
+
+      function renderProcesses(list) {
+        const body = $("#adb-procs-body");
+        if (!body) return;
+        if (!list.length) {
+          body.innerHTML = `<tr><td colspan="5" class="hint">无匹配进程</td></tr>`;
+          return;
+        }
+        body.innerHTML = list
+          .map((p) => {
+            const pkgGuess = String(p.name || "").includes(".") ? String(p.name).split(/\s+/)[0] : "";
+            return `<tr>
+              <td class="mono">${p.pid}</td>
+              <td class="mono">${escapeHtml(p.user || "")}</td>
+              <td class="mono">${p.rssKb ? formatBytes(p.rssKb * 1024) : "—"}</td>
+              <td class="adb-procs-name">${escapeHtml(p.name || "")}</td>
+              <td>
+                <button type="button" class="ghost-btn" data-adb-kill-pid="${p.pid}">结束</button>
+                ${
+                  pkgGuess && /^[A-Za-z0-9._]+$/.test(pkgGuess)
+                    ? `<button type="button" class="ghost-btn" data-adb-force-stop="${escapeHtml(pkgGuess)}">强停</button>`
+                    : ""
+                }
+              </td>
+            </tr>`;
+          })
+          .join("");
+      }
+
+      async function refreshProcesses() {
+        if (!canDeviceInspect() && adbBridgeVersion) {
+          throw new Error("进程列表需桥 ≥0.9.0，请重新下载完整 ZIP 并重启桥");
+        }
+        const serial = requireCurrentSerial();
+        const q = ($("#adb-procs-query")?.value || "").trim();
+        const params = new URLSearchParams({ serial, limit: "500" });
+        if (q) params.set("query", q);
+        const data = await adbFetch(`/device/processes?${params.toString()}`);
+        adbProcList = data.processes || [];
+        renderProcesses(adbProcList);
+        if ($("#adb-procs-meta")) {
+          $("#adb-procs-meta").textContent = `${adbProcList.length} 个${data.truncated ? "+" : ""} · 桥 ${
+            adbBridgeVersion || "?"
+          }`;
+        }
+      }
+
+      function shellWsUrl(serial) {
+        const base = adbBase().replace(/^http/i, (m) => (m.toLowerCase() === "https" ? "wss" : "ws"));
+        return `${base}/shell/ws?serial=${encodeURIComponent(serial)}&token=${encodeURIComponent(adbToken())}`;
+      }
+
+      function renderShellTabs() {
+        const el = $("#adb-shell-tabs");
+        if (!el) return;
+        if (!adbShellSessions.length) {
+          el.innerHTML = `<span class="hint tight">尚无会话，点「新建会话」</span>`;
+          return;
+        }
+        el.innerHTML = adbShellSessions
+          .map(
+            (s) =>
+              `<button type="button" class="adb-shell-tab${s.id === adbShellActive ? " is-active" : ""}" data-adb-shell-id="${s.id}">${escapeHtml(
+                s.title
+              )}</button>`
+          )
+          .join("");
+      }
+
+      function activeShell() {
+        return adbShellSessions.find((s) => s.id === adbShellActive) || null;
+      }
+
+      function renderShellOut() {
+        const out = $("#adb-shell-out");
+        if (!out) return;
+        const s = activeShell();
+        out.textContent = s ? s.buf : "";
+        out.scrollTop = out.scrollHeight;
+      }
+
+      function appendShell(id, text) {
+        const s = adbShellSessions.find((x) => x.id === id);
+        if (!s) return;
+        s.buf += text;
+        if (s.buf.length > 200000) s.buf = s.buf.slice(-160000);
+        if (id === adbShellActive) renderShellOut();
+      }
+
+      function closeShellSession(id) {
+        const idx = adbShellSessions.findIndex((s) => s.id === id);
+        if (idx < 0) return;
+        const s = adbShellSessions[idx];
+        try {
+          if (s.ws && s.ws.readyState <= 1) {
+            s.ws.send(JSON.stringify({ type: "close" }));
+            s.ws.close();
+          }
+        } catch {
+          /* ignore */
+        }
+        adbShellSessions.splice(idx, 1);
+        if (adbShellActive === id) {
+          adbShellActive = adbShellSessions[0]?.id || "";
+        }
+        renderShellTabs();
+        renderShellOut();
+      }
+
+      function openShellSession() {
+        if (!canDeviceInspect() && adbBridgeVersion) {
+          throw new Error("交互 Shell 需桥 ≥0.9.0，请重新下载完整 ZIP 并重启桥");
+        }
+        const serial = requireCurrentSerial();
+        const id = `s${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+        const title = `会话 ${adbShellSessions.length + 1}`;
+        const session = { id, ws: null, buf: "", title };
+        adbShellSessions.push(session);
+        adbShellActive = id;
+        renderShellTabs();
+        renderShellOut();
+        const ws = new WebSocket(shellWsUrl(serial));
+        session.ws = ws;
+        ws.addEventListener("open", () => appendShell(id, "[connected]\n"));
+        ws.addEventListener("message", (ev) => {
+          try {
+            const msg = JSON.parse(String(ev.data || ""));
+            if (msg.type === "data") appendShell(id, msg.data || "");
+            else if (msg.type === "ready") appendShell(id, `[ready ${msg.sessionId || ""}]\n`);
+            else if (msg.type === "error") appendShell(id, `\n[error] ${msg.error || ""}\n`);
+            else if (msg.type === "exit") appendShell(id, `\n[exit code=${msg.code}]\n`);
+            else appendShell(id, String(ev.data || ""));
+          } catch {
+            appendShell(id, String(ev.data || ""));
+          }
+        });
+        ws.addEventListener("close", () => appendShell(id, "\n[disconnected]\n"));
+        ws.addEventListener("error", () => appendShell(id, "\n[ws error]\n"));
+        if ($("#adb-shell-meta")) {
+          $("#adb-shell-meta").textContent = `WebSocket · ${serial} · 桥 ${adbBridgeVersion || "?"}`;
+        }
+      }
+
+      function sendShellInput(raw, addNewline = true) {
+        const s = activeShell();
+        if (!s?.ws || s.ws.readyState !== 1) throw new Error("当前会话未连接");
+        const data = addNewline && !String(raw).endsWith("\n") ? `${raw}\n` : String(raw);
+        s.ws.send(JSON.stringify({ type: "stdin", data }));
+        appendShell(s.id, data.startsWith("\n") ? data : data);
+      }
+
+      function renderLayoutTree(filter = "") {
+        const tree = $("#adb-layout-tree");
+        if (!tree) return;
+        const q = String(filter || "").trim().toLowerCase();
+        const list = !q
+          ? adbLayoutNodes
+          : adbLayoutNodes.filter((n) => {
+              const hay = `${n.text} ${n.resourceId} ${n.class} ${n.contentDesc} ${n.package}`.toLowerCase();
+              return hay.includes(q);
+            });
+        if (!list.length) {
+          tree.innerHTML = `<div class="hint" style="padding:0.5rem">无节点</div>`;
+          return;
+        }
+        tree.innerHTML = list
+          .slice(0, 800)
+          .map((n) => {
+            const label = [
+              n.class?.split(".").pop() || "node",
+              n.text ? `"${n.text.slice(0, 40)}"` : "",
+              n.resourceId ? `#${n.resourceId.split("/").pop()}` : "",
+            ]
+              .filter(Boolean)
+              .join(" ");
+            return `<button type="button" class="adb-layout-node${
+              n.index === adbLayoutSelected ? " is-active" : ""
+            }" data-adb-layout-idx="${n.index}">${escapeHtml(label)}</button>`;
+          })
+          .join("");
+      }
+
+      function showLayoutNode(idx) {
+        adbLayoutSelected = idx;
+        const n = adbLayoutNodes[idx];
+        const el = $("#adb-layout-attrs");
+        if (!el) return;
+        if (!n) {
+          el.textContent = "选择节点查看属性";
+          return;
+        }
+        const lines = Object.entries(n.attrs || {}).map(([k, v]) => `${k}=${v}`);
+        if (n.rect) lines.push(`parsed.bounds=${n.rect.w}x${n.rect.h} @ (${n.rect.x1},${n.rect.y1})`);
+        el.textContent = lines.join("\n");
+        renderLayoutTree($("#adb-layout-filter")?.value || "");
+      }
+
+      async function dumpLayout() {
+        if (!canDeviceInspect() && adbBridgeVersion) {
+          throw new Error("布局检查需桥 ≥0.9.0，请重新下载完整 ZIP 并重启桥");
+        }
+        const serial = requireCurrentSerial();
+        if ($("#adb-layout-meta")) $("#adb-layout-meta").textContent = "Dumping…";
+        const data = await adbFetch(`/device/layout?serial=${encodeURIComponent(serial)}`);
+        adbLayoutNodes = data.nodes || [];
+        adbLayoutXml = data.xml || "";
+        adbLayoutSelected = adbLayoutNodes[0]?.index ?? -1;
+        renderLayoutTree($("#adb-layout-filter")?.value || "");
+        if (adbLayoutSelected >= 0) showLayoutNode(adbLayoutSelected);
+        if ($("#adb-layout-meta")) {
+          $("#adb-layout-meta").textContent = `${adbLayoutNodes.length} 节点 · 桥 ${adbBridgeVersion || "?"}`;
+        }
       }
   
       function adbDeviceAccent(serial) {
@@ -2161,10 +2510,11 @@
         const cfg = map[platform];
         if (!cfg) throw new Error("未知平台");
         setAdbBundleProgress(true, { pct: 22, text: "拉取桥文件…" });
-        const [serverJs, mirrorJs, evProxyJs, ffmpegJs, ytdlpJs, scriptRaw, resolvePortJs, serverJar] = await Promise.all([
+        const [serverJs, mirrorJs, evProxyJs, inspectJs, ffmpegJs, ytdlpJs, scriptRaw, resolvePortJs, serverJar] = await Promise.all([
           fetchTextAsset("./adb-bridge/server.js"),
           fetchTextAsset("./adb-bridge/scrcpy-mirror.js").catch(() => ""),
           fetchTextAsset("./adb-bridge/everything-proxy.js").catch(() => ""),
+          fetchTextAsset("./adb-bridge/device-inspect.js").catch(() => ""),
           fetchTextAsset("./ffmpeg-bridge/server.js").catch(() => ""),
           fetchTextAsset("./ffmpeg-bridge/ytdlp-core.js").catch(() => ""),
           fetchTextAsset(cfg.scriptPath),
@@ -2186,6 +2536,7 @@
           "  - server.js",
           "  - scrcpy-mirror.js",
           "  - everything-proxy.js",
+          "  - device-inspect.js",
           "  - resolve-port.js",
           "  - ffmpeg-bridge/server.js",
           "  - ffmpeg-bridge/ytdlp-core.js",
@@ -2208,6 +2559,7 @@
         zip.file("server.js", serverJs);
         if (mirrorJs) zip.file("scrcpy-mirror.js", mirrorJs);
         if (evProxyJs) zip.file("everything-proxy.js", evProxyJs);
+        if (inspectJs) zip.file("device-inspect.js", inspectJs);
         if (resolvePortJs) zip.file("resolve-port.js", resolvePortJs);
         if (ffmpegJs) zip.file("ffmpeg-bridge/server.js", ffmpegJs);
         if (ytdlpJs) zip.file("ffmpeg-bridge/ytdlp-core.js", ytdlpJs);
@@ -3689,6 +4041,137 @@
   
         $$(".adb-tab[data-adb-tab]").forEach((btn) => {
         btn.addEventListener("click", () => switchAdbTab(btn.dataset.adbTab));
+        });
+
+        $("#adb-perf-start")?.addEventListener("click", () => {
+          try {
+            startAdbPerf();
+          } catch (err) {
+            setError(adbError, err.message || String(err));
+          }
+        });
+        $("#adb-perf-stop")?.addEventListener("click", () => stopAdbPerf());
+        $("#adb-perf-once")?.addEventListener("click", () => {
+          samplePerfOnce().catch((err) => setError(adbError, err.message || String(err)));
+        });
+
+        $("#adb-procs-refresh")?.addEventListener("click", () => {
+          refreshProcesses().catch((err) => setError(adbError, err.message || String(err)));
+        });
+        $("#adb-procs-query")?.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") refreshProcesses().catch((err) => setError(adbError, err.message || String(err)));
+        });
+        $("#adb-procs-body")?.addEventListener("click", async (e) => {
+          const killBtn = e.target.closest("[data-adb-kill-pid]");
+          const stopBtn = e.target.closest("[data-adb-force-stop]");
+          try {
+            const serial = requireCurrentSerial();
+            if (killBtn) {
+              const pid = Number(killBtn.getAttribute("data-adb-kill-pid"));
+              if (!confirm(`结束 PID ${pid}？`)) return;
+              await adbFetch("/device/process/kill", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ serial, pid, mode: "kill" }),
+              });
+              toast(`已发送 kill ${pid}`);
+              await refreshProcesses();
+            } else if (stopBtn) {
+              const packageName = stopBtn.getAttribute("data-adb-force-stop") || "";
+              if (!confirm(`force-stop ${packageName}？`)) return;
+              await adbFetch("/device/process/kill", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ serial, packageName, mode: "force-stop" }),
+              });
+              toast(`已 force-stop ${packageName}`);
+              await refreshProcesses();
+            }
+          } catch (err) {
+            setError(adbError, err.message || String(err));
+          }
+        });
+
+        $("#adb-shell-new")?.addEventListener("click", () => {
+          try {
+            openShellSession();
+          } catch (err) {
+            setError(adbError, err.message || String(err));
+          }
+        });
+        $("#adb-shell-close")?.addEventListener("click", () => {
+          if (adbShellActive) closeShellSession(adbShellActive);
+        });
+        $("#adb-shell-clear")?.addEventListener("click", () => {
+          const s = activeShell();
+          if (s) {
+            s.buf = "";
+            renderShellOut();
+          }
+        });
+        $("#adb-shell-tabs")?.addEventListener("click", (e) => {
+          const btn = e.target.closest("[data-adb-shell-id]");
+          if (!btn) return;
+          adbShellActive = btn.getAttribute("data-adb-shell-id") || "";
+          renderShellTabs();
+          renderShellOut();
+        });
+        const sendShellLine = () => {
+          try {
+            const input = $("#adb-shell-input");
+            const line = input?.value || "";
+            sendShellInput(line, true);
+            if (input) input.value = "";
+          } catch (err) {
+            setError(adbError, err.message || String(err));
+          }
+        };
+        $("#adb-shell-send")?.addEventListener("click", sendShellLine);
+        $("#adb-shell-input")?.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            sendShellLine();
+          }
+        });
+        $("#adb-shell-once-run")?.addEventListener("click", async () => {
+          try {
+            const serial = requireCurrentSerial();
+            const command = $("#adb-shell-once-cmd")?.value || "";
+            const data = await adbFetch("/shell/exec", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ serial, command }),
+            });
+            const out = $("#adb-shell-once-out");
+            if (out) {
+              out.textContent = `${data.stdout || ""}${data.stderr ? `\n${data.stderr}` : ""}${
+                data.error ? `\n[error] ${data.error}` : ""
+              }`.trim() || "(空输出)";
+            }
+          } catch (err) {
+            setError(adbError, err.message || String(err));
+          }
+        });
+
+        $("#adb-layout-dump")?.addEventListener("click", () => {
+          dumpLayout().catch((err) => setError(adbError, err.message || String(err)));
+        });
+        $("#adb-layout-copy")?.addEventListener("click", async () => {
+          try {
+            if (!adbLayoutXml) throw new Error("请先 Dump");
+            await navigator.clipboard.writeText(adbLayoutXml);
+            toast("已复制 XML");
+          } catch (err) {
+            setError(adbError, err.message || String(err));
+          }
+        });
+        $("#adb-layout-filter")?.addEventListener("input", () => {
+          renderLayoutTree($("#adb-layout-filter")?.value || "");
+        });
+        $("#adb-layout-tree")?.addEventListener("click", (e) => {
+          const btn = e.target.closest("[data-adb-layout-idx]");
+          if (!btn) return;
+          showLayoutNode(Number(btn.getAttribute("data-adb-layout-idx")));
         });
   
         function ensureLocalPaneLoaded() {

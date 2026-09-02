@@ -130,7 +130,7 @@ async function main() {
       throw new Error(`health.port should match listen port ${PORT}, got ${health2.json?.port}`);
     }
     if (!features.includes("local-pull")) throw new Error("health missing feature: local-pull");
-    for (const need of ["fs-zip", "app-backup-splits", "logcat-level", "mirror", "scrcpy-mirror", "unified-bridge", "ffmpeg-mount", "everything-proxy"]) {
+    for (const need of ["fs-zip", "app-backup-splits", "logcat-level", "mirror", "scrcpy-mirror", "unified-bridge", "ffmpeg-mount", "everything-proxy", "device-perf", "device-processes", "device-shell", "device-layout"]) {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
     }
     if (!health2.json?.unified) throw new Error("expected unified bridge flag");
@@ -297,6 +297,42 @@ Package [com.other] (def):
       body: JSON.stringify({ serial: "demo", action: "nope" }),
     });
     if (badInput.status === 200) throw new Error("input should reject unknown action");
+
+    // device-inspect parsers (no device required)
+    const di = require("./device-inspect");
+    const cpus = di.parseProcStat(
+      "cpu  1 2 3 4 5 6 7\ncpu0 10 0 5 100 0 0 0\ncpu1 20 0 10 200 0 0 0\n"
+    );
+    if (cpus.length !== 2) throw new Error(`parseProcStat expected 2 cpus, got ${cpus.length}`);
+    const load = di.cpuLoadBetween(
+      { times: { user: 10, nice: 0, sys: 5, idle: 100, iowait: 0, irq: 0, softirq: 0 } },
+      { times: { user: 20, nice: 0, sys: 10, idle: 110, iowait: 0, irq: 0, softirq: 0 } }
+    );
+    if (!(load > 0.4 && load < 0.8)) throw new Error(`cpuLoadBetween unexpected ${load}`);
+    const mem = di.parseMeminfo("MemTotal: 1000 kB\nMemAvailable: 400 kB\nMemFree: 200 kB\n");
+    if (mem.totalKb !== 1000 || mem.usedKb !== 600) throw new Error("parseMeminfo failed");
+    const procs = di.parsePs("USER PID PPID VSZ RSS WCHAN ADDR S NAME\nu0_a1 123 1 100 50 0 0 S com.example.app\n");
+    if (!procs.some((p) => p.pid === 123 && /com\.example\.app/.test(p.name))) {
+      throw new Error(`parsePs failed: ${JSON.stringify(procs)}`);
+    }
+    const nodes = di.parseUiAutomatorXml(
+      '<?xml version="1.0"?><hierarchy><node class="android.widget.TextView" text="Hi" bounds="[0,0][10,20]" resource-id="a:id/b" clickable="true" /></hierarchy>'
+    );
+    if (nodes.length !== 1 || nodes[0].text !== "Hi" || nodes[0].rect?.w !== 10) {
+      throw new Error(`parseUiAutomatorXml failed: ${JSON.stringify(nodes)}`);
+    }
+
+    const badKill = await req("POST", "/device/process/kill", {
+      headers: { "X-Adb-Token": TOKEN, "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    if (badKill.status === 200) throw new Error("process/kill should reject missing serial");
+
+    const badShell = await req("POST", "/shell/exec", {
+      headers: { "X-Adb-Token": TOKEN, "Content-Type": "application/json" },
+      body: JSON.stringify({ serial: "", command: "echo hi" }),
+    });
+    if (badShell.status === 200) throw new Error("shell/exec should reject missing serial");
 
     // APK signing: upload sample jarsigner APK and expect alias/SHA1
     const sampleApk = "/tmp/adb-apk-sign-test/sample.apk";

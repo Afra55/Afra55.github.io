@@ -81,6 +81,12 @@ FFmpeg 接口前缀：`/ff/*`（例如 `GET /ff/ops`、`POST /ff/jobs/run`）
 | POST | `/input` | 点击 / 长按 / 双击 / 滑动 / 按键 / 文本 |
 | POST | `/clipboard` | 推送剪贴板（机型相关） |
 | GET | `/device/snapshot?serial=` | 状态快照 |
+| GET | `/device/perf?serial=` | CPU / 内存 / FPS 采样（≥0.9.0） |
+| GET | `/device/processes?serial=` | 进程列表（≥0.9.0） |
+| POST | `/device/process/kill` | 结束进程 / force-stop（≥0.9.0） |
+| GET | `/device/layout?serial=` | uiautomator 布局 dump（≥0.9.0） |
+| POST | `/shell/exec` | 单次 shell 命令（≥0.9.0） |
+| WS | `/shell/ws?serial=&token=` | 交互式 shell（≥0.9.0，需 `device-inspect.js`） |
 | POST | `/device/control` | 常亮 / 开发者选项 / USB 安装等 |
 | GET | `/mirror/status?serial=` | scrcpy-server 镜像状态（jar / 会话） |
 | POST | `/mirror/prepare` | 确保本机已缓存 scrcpy-server（可首次联网下载） |
