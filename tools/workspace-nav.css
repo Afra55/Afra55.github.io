@@ -1281,14 +1281,6 @@ body.nav-open {
 }
 
 @media (min-width: 901px) {
-  .nav-bar.is-compact:not(.is-searching) .nav-group-tools.is-flyout-fixed {
-    position: fixed;
-    z-index: 120;
-    box-shadow: 0 12px 32px color-mix(in srgb, var(--bg-0) 50%, transparent);
-  }
-}
-
-@media (min-width: 901px) {
   .nav-menu-btn,
   .workspace-switch,
   .nav-drawer-head {
@@ -1334,11 +1326,43 @@ body.nav-open {
   }
 
   .nav-bar.is-compact .nav-group-title.is-sortable::after {
+    content: "›";
     position: absolute;
     right: 0.5rem;
     top: 50%;
     transform: translateY(-50%);
     float: none;
+    opacity: 0.55;
+    font-size: 1rem;
+    line-height: 1;
+    pointer-events: none;
+    transition: transform 0.15s ease;
+  }
+
+  .nav-bar.is-compact .nav-group.is-pinned > .nav-group-title.is-sortable::after,
+  .nav-bar.is-compact .nav-group.is-flyout-open > .nav-group-title.is-sortable::after,
+  .nav-bar.is-compact .nav-favorites.is-pinned > .nav-fav-title::after,
+  .nav-bar.is-compact .nav-favorites.is-flyout-open > .nav-fav-title::after {
+    transform: translateY(-50%) rotate(90deg);
+    opacity: 0.85;
+  }
+
+  .nav-bar.is-compact .nav-fav-title {
+    position: relative;
+    padding-right: 2rem;
+  }
+
+  .nav-bar.is-compact .nav-fav-title::after {
+    content: "›";
+    position: absolute;
+    right: 0.5rem;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0.55;
+    font-size: 1rem;
+    line-height: 1;
+    pointer-events: none;
+    transition: transform 0.15s ease;
   }
 
   .nav-bar.is-compact .nav-group {
@@ -1349,33 +1373,40 @@ body.nav-open {
     position: relative;
   }
 
-  .nav-bar.is-compact:not(.is-searching) .nav-group-tools {
-    left: calc(100% + 6px);
-    right: auto;
-    top: 0;
-    bottom: auto;
-    width: 12.5rem;
-    min-width: 11.5rem;
-    max-width: min(18rem, calc(100vw - 10rem));
-    z-index: 10;
+  .nav-bar.is-compact:not(.is-searching) .nav-group {
+    margin-bottom: 0.35rem;
   }
 
-  .nav-bar.is-compact:not(.is-searching) .nav-group.is-flyout-left > .nav-group-tools {
+  .nav-bar.is-compact:not(.is-searching) .nav-group-tools {
+    position: static;
     left: auto;
-    right: calc(100% + 6px);
+    right: auto;
+    top: auto;
+    bottom: auto;
+    z-index: auto;
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+    margin-top: 0.28rem;
+    padding: 0.24rem 0.28rem;
+    border-radius: 10px;
+    box-shadow: none;
+    background: color-mix(in srgb, var(--accent) 5%, var(--panel-strong));
+    max-height: none !important;
   }
 
   .nav-bar.is-compact:not(.is-searching) {
-    overflow: visible;
+    overflow: hidden;
   }
 
   .nav-bar.is-compact:not(.is-searching) .nav-bar-scroll {
-    overflow-x: visible;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   .nav-bar.is-compact:not(.is-searching) .nav-group.is-flyout-open,
   .nav-bar.is-compact:not(.is-searching) .nav-group.is-pinned {
-    z-index: 12;
+    z-index: 1;
   }
 
   .nav-bar.is-compact:not(.is-searching) .nav-group-tools.is-flyout-fixed {

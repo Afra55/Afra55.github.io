@@ -631,16 +631,12 @@ async function main() {
       return { skip: true };
     }
     const h0 = group.getBoundingClientRect().height;
-    window.DevToolsNav.openFlyout(group);
-    const gr = group.getBoundingClientRect();
-    const tr = title.getBoundingClientRect();
-    const pr = panel.getBoundingClientRect();
+    window.DevToolsNav.openFlyout(group, { pin: true });
     const panelStyle = getComputedStyle(panel);
     const out = {
-      opensRight: pr.left >= gr.right - 4,
-      topAligned: Math.abs(pr.top - tr.top) < 8,
-      flyoutNoGrow: Math.abs(group.getBoundingClientRect().height - h0) < 4,
       panelVisible: panelStyle.display !== "none",
+      inlineExpands: group.getBoundingClientRect().height > h0 + 8,
+      panelInFlow: panelStyle.position === "static",
     };
     group.classList.remove("is-flyout-open", "is-pinned", "is-flyout-left");
     window.DevToolsNav.setCompact(false);
@@ -1607,10 +1603,9 @@ async function main() {
     problems.push(`vbb single workflow UI broken: ${JSON.stringify(vbbWorkflowUi.single)}`);
   }
   if (!compactFlyout.skip) {
-    if (!compactFlyout.panelVisible) problems.push("desktop compact flyout should show tools panel");
-    if (!compactFlyout.opensRight) problems.push("desktop compact flyout should open to the right of category");
-    if (!compactFlyout.topAligned) problems.push("desktop compact flyout should align with category title");
-    if (!compactFlyout.flyoutNoGrow) problems.push("desktop compact flyout should not expand category row height");
+    if (!compactFlyout.panelVisible) problems.push("desktop compact should show tools panel when category opens");
+    if (!compactFlyout.inlineExpands) problems.push("desktop compact should expand tools inline below category");
+    if (!compactFlyout.panelInFlow) problems.push("desktop compact tools should use in-flow layout (not side flyout)");
   }
   if (!mobileShell.drawerOpen) problems.push("mobile drawer failed to open");
   if (!mobileShell.closedByBtn) problems.push("nav-close should close drawer");

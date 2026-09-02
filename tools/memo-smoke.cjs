@@ -1627,18 +1627,18 @@ async function main() {
       const pinnedPanel = current.querySelector(".nav-group-tools");
       out.pinShows = Boolean(pinnedPanel) && getComputedStyle(pinnedPanel).display !== "none";
       const h1 = current.getBoundingClientRect().height;
-      out.flyoutNoGrow = Math.abs(h1 - h0) < 4;
+      out.inlineExpands = h1 > h0 + 8;
       current.classList.remove("is-pinned");
     }
     if (other) {
       other.classList.add("is-flyout-open");
       const hoverPanel = other.querySelector(".nav-group-tools");
-      out.hoverShows = Boolean(hoverPanel) && getComputedStyle(hoverPanel).display !== "none";
+      out.expandShows = Boolean(hoverPanel) && getComputedStyle(hoverPanel).display !== "none";
       other.classList.remove("is-flyout-open");
     }
     if (current && other && window.DevToolsNav.openFlyout) {
       current.classList.add("is-pinned");
-      window.DevToolsNav.openFlyout(other);
+      window.DevToolsNav.openFlyout(other, { pin: true });
       const aPanel = current.querySelector(".nav-group-tools");
       const bPanel = other.querySelector(".nav-group-tools");
       out.exclusiveFlyout =
@@ -2223,12 +2223,12 @@ async function main() {
     !result.navCompactDesktop?.currentCollapsed ||
     !result.navCompactDesktop?.otherHidden ||
     !result.navCompactDesktop?.pinShows ||
-    !result.navCompactDesktop?.flyoutNoGrow ||
-    !result.navCompactDesktop?.hoverShows ||
+    !result.navCompactDesktop?.inlineExpands ||
+    !result.navCompactDesktop?.expandShows ||
     !result.navCompactDesktop?.exclusiveFlyout ||
     !result.navCompactDesktop?.restored
   ) {
-    failed.push("desktop nav compact should keep using hover/pin flyouts");
+    failed.push("desktop nav compact should expand tools inline below category on click");
   }
   if (
     !result.desktopChrome?.hasToggle ||

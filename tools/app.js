@@ -1311,25 +1311,13 @@
     }
   }
 
-  /** 「仅显示分类」：桌面悬停/点击展开，手机点分类展开 */
+  /** 「仅显示分类」：点击分类在下方展开工具；搜索时仍平铺全部匹配项 */
   function navCompactActive() {
     return navCompact;
   }
 
-  function canHoverNavFlyout(e) {
-    if (!navCompactActive() || compactNavSearching()) return false;
-    if (
-      document.body.classList.contains("nav-sorting") ||
-      document.body.classList.contains("nav-sorting-tools") ||
-      document.body.classList.contains("nav-sorting-favorites")
-    ) {
-      return false;
-    }
-    if (e?.pointerType && e.pointerType !== "mouse") return false;
-    try {
-      if (window.matchMedia && !window.matchMedia("(hover: hover) and (pointer: fine)").matches) return false;
-    } catch (_) {}
-    return true;
+  function canHoverNavFlyout() {
+    return false;
   }
 
   function navFlyoutPanel(wrap) {
@@ -1351,38 +1339,8 @@
 
   function positionNavFlyout(wrap) {
     const panel = navFlyoutPanel(wrap);
-    const title = wrap?.querySelector?.(".nav-group-title, .nav-fav-title");
-    if (!panel || !title || !navCompactActive() || compactNavSearching()) return;
-    if (compactNavOnMobile()) {
-      wrap.classList.remove("is-flyout-up", "is-flyout-left");
-      resetNavFlyoutPanel(panel);
-      return;
-    }
-    const gap = 6;
-    const wrapRect = wrap.getBoundingClientRect();
-    const titleRect = title.getBoundingClientRect();
-    const panelWidth = Math.min(288, Math.max(184, panel.offsetWidth || 220));
-    const spaceRight = window.innerWidth - wrapRect.right - gap;
-    const openLeft = spaceRight < panelWidth + 12;
-    wrap.classList.remove("is-flyout-up");
-    wrap.classList.toggle("is-flyout-left", openLeft);
-
-    panel.classList.add("is-flyout-fixed");
-    panel.style.position = "fixed";
-    panel.style.zIndex = "120";
-    panel.style.width = `${panelWidth}px`;
-    panel.style.bottom = "auto";
-    if (openLeft) {
-      panel.style.left = `${Math.max(8, Math.round(titleRect.left - panelWidth - gap))}px`;
-      panel.style.right = "auto";
-    } else {
-      panel.style.left = `${Math.round(wrapRect.right + gap)}px`;
-      panel.style.right = "auto";
-    }
-    panel.style.top = `${Math.round(titleRect.top)}px`;
-
-    const spaceBelow = window.innerHeight - titleRect.top - gap;
-    panel.style.maxHeight = `${Math.round(Math.min(360, Math.max(120, spaceBelow)))}px`;
+    if (!panel) return;
+    resetNavFlyoutPanel(panel);
   }
 
   function closeNavFlyouts({ keepPinned = false } = {}) {
@@ -1410,6 +1368,13 @@
     wrap.classList.add("is-flyout-open");
     wrap.querySelector(".nav-group-title, .nav-fav-title")?.setAttribute("aria-expanded", "true");
     positionNavFlyout(wrap);
+    if (pin && wrap.scrollIntoView) {
+      requestAnimationFrame(() => {
+        try {
+          wrap.scrollIntoView({ block: "nearest", inline: "nearest" });
+        } catch (_) {}
+      });
+    }
   }
 
   function scheduleCloseNavFlyout(wrap) {
@@ -1425,27 +1390,7 @@
     }, 200);
   }
 
-  function bindNavFlyoutPanelHover(wrap) {
-    const panel = navFlyoutPanel(wrap);
-    if (!panel || panel.dataset.boundNavFlyout === "1") return;
-    panel.dataset.boundNavFlyout = "1";
-    panel.addEventListener("pointerenter", (e) => {
-      if (!navCompactActive() || compactNavSearching()) return;
-      if (!canHoverNavFlyout(e)) return;
-      window.clearTimeout(navFlyoutTimer);
-      navFlyoutTimer = 0;
-      if (!wrap.classList.contains("is-flyout-open")) openNavFlyout(wrap);
-    });
-    panel.addEventListener("pointerleave", (e) => {
-      if (!navCompactActive() || compactNavSearching()) return;
-      if (wrap.classList.contains("is-pinned")) return;
-      if (isNavToolSorting()) return;
-      if (e?.pointerType && e.pointerType !== "mouse") return;
-      const next = e.relatedTarget;
-      if (next && wrap.contains(next)) return;
-      scheduleCloseNavFlyout(wrap);
-    });
-  }
+  function bindNavFlyoutPanelHover() {}
 
   function isNavToolSorting() {
     return document.body.classList.contains("nav-sorting-tools") || dragPayload?.kind === "tool";
@@ -2204,24 +2149,9 @@
         resetNavFlyoutPanel(navFlyoutPanel(favoritesWrap));
       }
     });
-    favoritesWrap.addEventListener("pointerenter", (e) => {
-      if (!canHoverNavFlyout(e)) return;
-      openNavFlyout(favoritesWrap);
-    });
-    favoritesWrap.addEventListener("pointerleave", (e) => {
-      if (!navCompactActive() || compactNavSearching()) return;
-      if (favoritesWrap.classList.contains("is-pinned")) return;
-      if (isNavToolSorting()) return;
-      if (e?.pointerType && e.pointerType !== "mouse") return;
-      const next = e.relatedTarget;
-      const panel = navFlyoutPanel(favoritesWrap);
-      if (next && (favoritesWrap.contains(next) || panel?.contains(next))) return;
-      scheduleCloseNavFlyout(favoritesWrap);
-    });
-    bindNavFlyoutPanelHover(favoritesWrap);
     favoritesWrap.addEventListener("focusin", () => {
       if (!navCompactActive() || compactNavSearching() || navSortInteractionActive()) return;
-      openNavFlyout(favoritesWrap);
+      openNavFlyout(favoritesWrap, { pin: true });
     });
     favoritesWrap.addEventListener("focusout", (e) => {
       if (!navCompactActive() || compactNavSearching()) return;
@@ -3275,30 +3205,16 @@
         e.preventDefault();
         const willPin = !wrap.classList.contains("is-pinned");
         if (willPin) openNavFlyout(wrap, { pin: true });
-      else {
-        wrap.classList.remove("is-pinned", "is-flyout-open");
-        title.setAttribute("aria-expanded", "false");
-        resetNavFlyoutPanel(navFlyoutPanel(wrap));
-      }
-      });
-      wrap.addEventListener("pointerenter", (e) => {
-        if (!canHoverNavFlyout(e)) return;
-        openNavFlyout(wrap);
-      });
-      wrap.addEventListener("pointerleave", (e) => {
-        if (!navCompactActive() || compactNavSearching()) return;
-        if (wrap.classList.contains("is-pinned")) return;
-        if (isNavToolSorting()) return;
-        if (e?.pointerType && e.pointerType !== "mouse") return;
-        const next = e.relatedTarget;
-        const panel = navFlyoutPanel(wrap);
-        if (next && (wrap.contains(next) || panel?.contains(next))) return;
-        scheduleCloseNavFlyout(wrap);
+        else {
+          wrap.classList.remove("is-pinned", "is-flyout-open");
+          title.setAttribute("aria-expanded", "false");
+          resetNavFlyoutPanel(navFlyoutPanel(wrap));
+        }
       });
       bindNavFlyoutPanelHover(wrap);
       wrap.addEventListener("focusin", () => {
         if (!navCompactActive() || compactNavSearching() || navSortInteractionActive()) return;
-        openNavFlyout(wrap);
+        openNavFlyout(wrap, { pin: true });
       });
       wrap.addEventListener("focusout", (e) => {
         if (!navCompactActive() || compactNavSearching()) return;
@@ -3311,17 +3227,7 @@
     });
   }
 
-  function repositionOpenNavFlyouts() {
-    if (!navCompactActive() || compactNavSearching()) return;
-    if (document.body.classList.contains("nav-sorting-tools")) {
-      allNavGroups()
-        .filter((g) => g.classList.contains("is-sort-flyout"))
-        .forEach((g) => positionNavFlyout(g));
-      return;
-    }
-    const open = allNavGroups().find((g) => g.classList.contains("is-pinned") || g.classList.contains("is-flyout-open"));
-    if (open) positionNavFlyout(open);
-  }
+  function repositionOpenNavFlyouts() {}
 
   $("#nav-compact")?.addEventListener("change", (e) => {
     setNavCompact(Boolean(e.target?.checked));
@@ -3684,7 +3590,7 @@
     restoreLastToolOnStartup,
     whenRouteSettled: () => routeSettled,
     syncSortHint,
-    openFlyout: (el) => openNavFlyout(el?.closest?.(".nav-group") || el),
+    openFlyout: (el, opts) => openNavFlyout(el?.closest?.(".nav-group") || el, opts),
     closeFlyouts: () => closeNavFlyouts(),
     renderRecent,
     openRecentDialog,
