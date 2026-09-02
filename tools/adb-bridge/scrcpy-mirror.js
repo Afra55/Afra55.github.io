@@ -27,6 +27,10 @@ const PACKET_FLAG_CONFIG = 1n << 63n;
 const PACKET_FLAG_KEY_FRAME = 1n << 62n;
 const DEVICE_NAME_LEN = 64;
 const REMOTE_JAR = "/data/local/tmp/devtools-scrcpy-server.jar";
+/** 单帧 payload 上限（与 pumpFrames 一致） */
+const MAX_FRAME_BYTES = 16 * 1024 * 1024;
+/** readExact 绝对缓冲上限，防止协议错位时无限累积 */
+const MAX_READ_BUFFER = MAX_FRAME_BYTES + 256 * 1024;
 
 const sessions = new Map(); // serial -> Session
 
@@ -202,35 +206,99 @@ function findFreePort() {
   });
 }
 
-function readExact(socket, n) {
+function readExact(socket, n, opts = {}) {
+  if (!Number.isFinite(n) || n < 0 || n > MAX_READ_BUFFER) {
+    return Promise.reject(new Error(`readExact 非法长度 ${n}`));
+  }
+  const slack = opts.slack ?? Math.min(256 * 1024, Math.max(4096, Math.ceil(n * 0.05)));
+  const maxTotal = Math.min(opts.maxTotal ?? n + slack, MAX_READ_BUFFER);
+
   return new Promise((resolve, reject) => {
-    let buf = Buffer.alloc(0);
+    const chunks = [];
+    let total = 0;
     let settled = false;
-    const done = (err, data) => {
-      if (settled) return;
-      settled = true;
+    let timer = null;
+    const cleanup = () => {
       socket.off("data", onData);
       socket.off("error", onErr);
       socket.off("close", onClose);
+      if (timer) clearTimeout(timer);
+    };
+    const done = (err, data) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
       if (err) reject(err);
       else resolve(data);
     };
     const onErr = (e) => done(e || new Error("socket error"));
     const onClose = () => done(new Error("socket closed"));
     const onData = (chunk) => {
-      buf = Buffer.concat([buf, chunk]);
-      if (buf.length >= n) {
-        const out = buf.subarray(0, n);
-        const rest = buf.subarray(n);
-        if (rest.length) socket.unshift(rest);
-        done(null, out);
+      total += chunk.length;
+      if (total > maxTotal) {
+        done(new Error(`镜像数据流协议错位（期望 ${n} 字节，缓冲已达 ${total}）`));
+        return;
       }
+      chunks.push(chunk);
+      if (total < n) return;
+
+      let out;
+      if (chunks.length === 1) {
+        out = chunks[0].subarray(0, n);
+        const rest = chunks[0].subarray(n);
+        if (rest.length) socket.unshift(rest);
+      } else {
+        const merged = Buffer.concat(chunks, total);
+        out = merged.subarray(0, n);
+        const rest = merged.subarray(n);
+        if (rest.length) socket.unshift(rest);
+      }
+      done(null, out);
     };
+    const timeoutMs = opts.timeoutMs ?? (n > 65536 ? 120_000 : 30_000);
+    timer = setTimeout(() => {
+      done(new Error(`读取 ${n} 字节超时（${timeoutMs}ms）`));
+      try {
+        socket.destroy();
+      } catch {
+        /* ignore */
+      }
+    }, timeoutMs);
     socket.on("data", onData);
     socket.on("error", onErr);
     socket.on("close", onClose);
     socket.resume();
   });
+}
+
+function parseVideoMeta(header) {
+  const codecId = header.readUInt32BE(0);
+  const width = header.readUInt32BE(4);
+  const height = header.readUInt32BE(8);
+  if (width <= 0 || width > 8192 || height <= 0 || height > 8192) {
+    throw new Error(`异常分辨率 ${width}x${height}（握手可能失败，请重试镜像）`);
+  }
+  const codec =
+    codecId === 0x68323634
+      ? "h264"
+      : codecId === 0x68323635
+        ? "h265"
+        : codecId === 0x00617631
+          ? "av1"
+          : `id:${codecId.toString(16)}`;
+  return { codecId, width, height, codec };
+}
+
+async function readMirrorHandshake(videoSock, serial) {
+  const dummy = await readExact(videoSock, 1);
+  if (dummy[0] !== 0) {
+    /* some builds may omit strict dummy */
+  }
+  const nameBuf = await readExact(videoSock, DEVICE_NAME_LEN);
+  const deviceName = nameBuf.toString("utf8").replace(/\0+$/g, "") || serial;
+  const header = await readExact(videoSock, 12);
+  const { codecId, width, height, codec } = parseVideoMeta(header);
+  return { deviceName, codec, codecId, width, height, version: SCRCPY_VERSION };
 }
 
 function connectLocal(port, timeoutMs = 8000) {
@@ -454,25 +522,7 @@ class MirrorSession {
 
     try {
       this.videoSock = await connectWithRetry(this.port, 100, 150);
-      const dummy = await readExact(this.videoSock, 1);
-      if (dummy[0] !== 0) {
-        // still proceed; some builds may omit
-      }
-      const nameBuf = await readExact(this.videoSock, DEVICE_NAME_LEN);
-      const deviceName = nameBuf.toString("utf8").replace(/\0+$/g, "") || this.serial;
-      const header = await readExact(this.videoSock, 12);
-      const codecId = header.readUInt32BE(0);
-      const width = header.readUInt32BE(4);
-      const height = header.readUInt32BE(8);
-      const codec =
-        codecId === 0x68323634
-          ? "h264"
-          : codecId === 0x68323635
-            ? "h265"
-            : codecId === 0x00617631
-              ? "av1"
-              : `id:${codecId.toString(16)}`;
-      this.meta = { deviceName, codec, codecId, width, height, version: SCRCPY_VERSION };
+      this.meta = await readMirrorHandshake(this.videoSock, this.serial);
       this.pumping = true;
       this.pumpFrames().catch((err) => this.stop(this.mirrorError(err.message || String(err))));
     } catch (err) {
@@ -495,25 +545,7 @@ class MirrorSession {
         await new Promise((r) => setTimeout(r, 280));
         try {
           this.videoSock = await connectWithRetry(this.port, 100, 150);
-          const dummy = await readExact(this.videoSock, 1);
-          if (dummy[0] !== 0) {
-            /* continue */
-          }
-          const nameBuf = await readExact(this.videoSock, DEVICE_NAME_LEN);
-          const deviceName = nameBuf.toString("utf8").replace(/\0+$/g, "") || this.serial;
-          const header = await readExact(this.videoSock, 12);
-          const codecId = header.readUInt32BE(0);
-          const width = header.readUInt32BE(4);
-          const height = header.readUInt32BE(8);
-          const codec =
-            codecId === 0x68323634
-              ? "h264"
-              : codecId === 0x68323635
-                ? "h265"
-                : codecId === 0x00617631
-                  ? "av1"
-                  : `id:${codecId.toString(16)}`;
-          this.meta = { deviceName, codec, codecId, width, height, version: SCRCPY_VERSION };
+          this.meta = await readMirrorHandshake(this.videoSock, this.serial);
           this.pumping = true;
           this.pumpFrames().catch((innerErr) => this.stop(this.mirrorError(innerErr.message || String(innerErr))));
           return;
@@ -553,8 +585,8 @@ class MirrorSession {
       const hdr = await readExact(this.videoSock, 12);
       const ptsFlags = hdr.readBigUInt64BE(0);
       const size = hdr.readUInt32BE(8);
-      if (size <= 0 || size > 16 * 1024 * 1024) throw new Error(`异常帧大小 ${size}`);
-      const payload = await readExact(this.videoSock, size);
+      if (size <= 0 || size > MAX_FRAME_BYTES) throw new Error(`异常帧大小 ${size}`);
+      const payload = await readExact(this.videoSock, size, { slack: 0, maxTotal: size });
       const isConfig = (ptsFlags & PACKET_FLAG_CONFIG) !== 0n;
       const isKey = (ptsFlags & PACKET_FLAG_KEY_FRAME) !== 0n;
       const pts = Number(ptsFlags & ~(PACKET_FLAG_CONFIG | PACKET_FLAG_KEY_FRAME));
