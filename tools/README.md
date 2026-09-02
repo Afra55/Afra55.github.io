@@ -81,6 +81,8 @@ python3 -m http.server 8080 --directory .
 
 ```bash
 node tools/scripts/ci.cjs
+# 阶段 A 回归（需 Chrome）：注册表、搜索、路由
+# node tools/phase-a-smoke.cjs
 # 或分项：
 node tools/scripts/verify-registry.cjs
 node tools/test/pure.test.js
