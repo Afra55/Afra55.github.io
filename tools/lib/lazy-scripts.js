@@ -67,8 +67,47 @@
     whiteboard: "./whiteboard.js",
     phlogo: "./phlogo.js",
     nokiasms: "./nokiasms.js",
-    sandspiel: "./sandspiel.js",
+    timediff: "./extra-panels/timediff.js",
+    color: "./extra-panels/color.js",
+    url: "./extra-panels/url.js",
+    query: "./extra-panels/query.js",
+    uuid: "./extra-panels/uuid.js",
+    hash: "./extra-panels/hash.js",
+    text: "./extra-panels/text.js",
+    caseconv: "./extra-panels/caseconv.js",
+    coord: "./extra-panels/coord.js",
+    yaml: "./extra-panels/yaml.js",
+    imgb64: "./extra-panels/imgb64.js",
+    qrcode: "./extra-panels/qrcode.js",
+    cron: "./extra-panels/cron.js",
+    units: "./extra-panels/units.js",
+    sharecard: "./extra-panels/sharecard.js",
+    numbase: "./extra-panels/numbase.js",
+    markdown: "./extra-panels/markdown.js",
+    eyedropper: "./extra-panels/eyedropper.js",
+    password: "./extra-panels/password.js",
+    gifmaker: "./extra-panels/gifmaker.js",
+    gifx: "./extra-panels/gifx.js",
+    v2g: "./extra-panels/v2g-suite.js",
+    gifbb: "./extra-panels/gifbb.js",
+    gifc: "./extra-panels/gifc.js",
+    gife: "./extra-panels/gife.js",
+    gifm: "./extra-panels/gifm.js",
+    adb: "./extra-panels/adb.js",
+    vsplit: "./extra-panels/v2g-suite.js",
+    vbb: "./extra-panels/v2g-suite.js",
   };
+
+  const EXTRA_PANEL_IDS = new Set([
+    "timediff", "color", "url", "query", "uuid", "hash", "text", "caseconv", "coord",
+    "yaml", "imgb64", "qrcode", "cron", "units", "sharecard", "numbase", "markdown",
+    "eyedropper", "password", "gifmaker", "gifx", "v2g", "gifbb", "gifc", "gife", "gifm",
+    "adb", "vsplit", "vbb",
+  ]);
+
+  const EXTRA_MEDIA_TOOLS = new Set([
+    "sharecard", "gifmaker", "gifx", "v2g", "vsplit", "vbb", "gifbb", "gifc", "gife", "gifm", "adb",
+  ]);
 
   const TOOL_VENDORS = {
     yaml: ["js-yaml"],
@@ -88,9 +127,8 @@
     dateremind: ["solarlunar"],
   };
 
-  /** 独立脚本即可运行，不必拉 extra.js（~580KB） */
+  /** 独立脚本，不走 extra 面板栈 */
   const STANDALONE_NO_EXTRA = new Set([
-    "markdown",
     "memo",
     "whiteboard",
     "acupoint",
@@ -119,14 +157,16 @@
     "ytdlp",
     "phlogo",
     "nokiasms",
-    "sandspiel",
   ]);
 
-  /** 不依赖 DevToolsPure */
-  const NO_PURE = new Set(["acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp", "setup", "about", "pdfcraft", "insectworld", "prehmuseum", "xorenc", "morse", "countdown", "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "minigames", "ambient"]);
+  const NO_PURE = new Set([
+    "acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp",
+    "setup", "about", "pdfcraft", "insectworld", "prehmuseum", "xorenc", "morse", "countdown",
+    "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "minigames", "ambient",
+  ]);
 
   const scriptPromises = new Map();
-  let extraBundlePromise = null;
+  let extraCorePromise = null;
 
   function withVersion(src) {
     const url = new URL(src, document.baseURI || window.location.href);
@@ -192,26 +232,38 @@
     await loadScript("./lib/pure.js");
   }
 
-  async function loadExtraBundle(onProgress) {
-    if (window.__devtoolsExtraBundle) return;
-    if (extraBundlePromise) return extraBundlePromise;
-    extraBundlePromise = (async () => {
-      await ensurePure();
-      onProgress?.(0.28, "加载工具基础库…");
-      await loadScript("./temp.js");
-      onProgress?.(0.38, "加载临时存储模块…");
-      await loadScript("./lib/oss-deps.js");
-      onProgress?.(0.44, "初始化面板绑定…");
-      await loadScript("./lib/extra-bind.js");
-      onProgress?.(0.52, "加载媒体工具脚本（首次约数秒）…");
-      await loadScript("./extra.js");
-      onProgress?.(0.72, "媒体工具脚本已就绪");
+  async function loadExtraCore(onProgress, { media = false } = {}) {
+    if (window.__devtoolsExtraCore && (!media || window.DevToolsExtraMedia)) return;
+    if (extraCorePromise) return extraCorePromise;
+    extraCorePromise = (async () => {
+      onProgress?.(0.1, "初始化面板绑定…");
+      if (!window.DevToolsExtraBind) await loadScript("./lib/extra-bind.js");
+      onProgress?.(0.22, "加载工具基础库…");
+      if (!window.DevToolsExtraKit) await loadScript("./lib/extra-kit.js");
+      if (!window.__devtoolsExtraBootstrap) {
+        await loadScript("./lib/extra-bootstrap.js");
+        window.__devtoolsExtraBootstrap = true;
+      }
+      if (media) {
+        onProgress?.(0.35, "加载临时存储…");
+        if (!window.DevToolsTemp) await loadScript("./temp.js");
+        await loadScript("./lib/oss-deps.js");
+        onProgress?.(0.48, "加载媒体编码核心…");
+        if (!window.DevToolsExtraMedia) await loadScript("./lib/extra-media.js");
+      }
+      window.__devtoolsExtraCore = true;
       window.__devtoolsExtraBundle = true;
+      onProgress?.(0.62, "工具基础库已就绪");
     })().catch((err) => {
-      extraBundlePromise = null;
+      extraCorePromise = null;
       throw err;
     });
-    return extraBundlePromise;
+    return extraCorePromise;
+  }
+
+  async function loadExtraBundle(onProgress) {
+    await ensurePure();
+    await loadExtraCore(onProgress, { media: true });
   }
 
   async function loadDiffBundle() {
@@ -280,7 +332,11 @@
       report(0.16, "计算核心已就绪");
     }
 
-    if (!STANDALONE_NO_EXTRA.has(id)) {
+    if (EXTRA_PANEL_IDS.has(id)) {
+      await loadExtraCore((ratio, label) => report(0.16 + ratio * 0.5, label), {
+        media: EXTRA_MEDIA_TOOLS.has(id),
+      });
+    } else if (!STANDALONE_NO_EXTRA.has(id)) {
       await loadExtraBundle((ratio, label) => {
         report(0.16 + ratio * 0.56, label);
       });
@@ -310,6 +366,7 @@
     BUILD,
     ensureForTool,
     loadExtraBundle,
+    loadExtraCore,
     loadVendor,
     loadToolScript,
     loadPwa,
