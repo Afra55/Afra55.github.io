@@ -1,12 +1,12 @@
 <section id="everything" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>Everything 搜索</h1>
-        <p>连接 Windows 本机 <a href="https://www.voidtools.com/" target="_blank" rel="noopener noreferrer">Everything</a> HTTP 服务：实时过滤、完整语法、排序分页与文件下载。桌面版仍更快，网页版在 HTTP API 范围内尽量接近原生体验。<a href="#ev-setup-guide">启用教程</a></p>
+        <p>通过<strong>本机桥</strong>连接 Windows <a href="https://www.voidtools.com/" target="_blank" rel="noopener noreferrer">Everything</a> HTTP 服务（解决 HTTPS 站点无法直连问题）：实时过滤、完整语法、排序分页与下载。<a href="#ev-setup-guide">启用教程</a></p>
       </div>
       <div class="panel-body">
         <div class="ev-mode-banner panel-card" id="ev-mode-banner" hidden aria-live="polite">
-          <strong id="ev-mode-title">无法从当前页面直连本机</strong>
-          <p class="hint tight" id="ev-mode-text">HTTPS 站点访问 <span class="mono">http://127.0.0.1</span> 可能被浏览器拦截。可改用「Everything 网页」，或把本站保存到本机 / localhost 打开后再搜。</p>
+          <strong id="ev-mode-title">本机桥未连接</strong>
+          <p class="hint tight" id="ev-mode-text">HTTPS 站点不能直连 Everything，需先启动与 ADB 共用的本机桥（默认 <span class="mono">17888</span>），由桥转发到 Everything HTTP。</p>
           <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
             <button type="button" class="secondary-btn" id="ev-open-web">在 Everything 网页打开</button>
           </div>
@@ -17,7 +17,7 @@
             <span class="adb-dot" id="ev-dot" aria-hidden="true"></span>
             <div>
               <strong id="ev-status-title">未连接 Everything</strong>
-              <p class="hint tight" id="ev-status-text">请在本机 Windows 安装 Everything 并启用 HTTP Server，再点「测试连接」。</p>
+              <p class="hint tight" id="ev-status-text">需同时：① 运行本机桥 ② Everything 启用 HTTP Server。再点「测试连接」。</p>
             </div>
           </div>
           <div class="btn-row tool-actions adb-status-actions">
@@ -27,14 +27,20 @@
         </div>
 
         <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
-          <label for="ev-base">服务地址</label>
-          <input id="ev-base" class="mono" type="text" value="http://127.0.0.1" autocomplete="off" spellcheck="false" />
+          <label for="ev-bridge">本机桥</label>
+          <input id="ev-bridge" class="mono" type="text" value="http://127.0.0.1:17888" autocomplete="off" spellcheck="false" />
+          <label for="ev-token">Token</label>
+          <input id="ev-token" class="mono" type="text" value="devtools-bridge" autocomplete="off" spellcheck="false" />
+        </div>
+        <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+          <label for="ev-target">Everything</label>
+          <input id="ev-target" class="mono" type="text" value="http://127.0.0.1" autocomplete="off" spellcheck="false" />
           <label for="ev-user">用户名</label>
           <input id="ev-user" class="mono" type="text" value="" autocomplete="username" spellcheck="false" placeholder="可选" />
           <label for="ev-pass">密码</label>
           <input id="ev-pass" class="mono" type="password" value="" autocomplete="current-password" spellcheck="false" placeholder="可选" />
         </div>
-        <p class="hint">默认端口 <span class="mono">80</span>；改过端口请写 <span class="mono">http://127.0.0.1:8080</span>。HTTP 用户名/密码在此填写。</p>
+        <p class="hint">本机桥与 ADB / FFmpeg <strong>共用</strong>（<span class="mono">17888</span>、Token <span class="mono">devtools-bridge</span>）。Everything 默认 <span class="mono">http://127.0.0.1</span>（端口 80；改过请写 <span class="mono">:8080</span>）。</p>
 
         <div class="adb-guide" id="ev-setup-guide">
           <div class="adb-guide-head">
@@ -42,10 +48,10 @@
             <button type="button" class="ghost-btn adb-guide-dismiss" id="ev-setup-guide-dismiss" title="关闭并不再显示">关闭</button>
           </div>
           <ol>
+            <li><strong>启动本机桥</strong>：下载 ADB 完整 ZIP → 运行 <span class="mono">start-adb-bridge.cmd</span>，保持窗口打开（与 ADB 同一座桥）。</li>
             <li><strong>安装 Everything</strong>：从 <a href="https://www.voidtools.com/downloads/" target="_blank" rel="noopener noreferrer">voidtools 官网</a> 下载 Windows 版；首次运行建立索引。</li>
             <li><strong>启用 HTTP</strong>：Everything → 工具 → 选项 → <strong>HTTP Server</strong> → 勾选 <strong>Enable HTTP server</strong> → 允许文件下载（需下载时）→ 确定。</li>
-            <li><strong>验证</strong>：浏览器打开 <span class="mono">http://127.0.0.1</span> 应出现 Everything 网页搜索。</li>
-            <li><strong>最佳体验</strong>：在本机用浏览器打开本站（或 PWA），避免 HTTPS 拦截 localhost；复杂操作仍可用 Everything 桌面版。</li>
+            <li><strong>验证</strong>：浏览器打开 <span class="mono">http://127.0.0.1</span> 应出现 Everything 网页；回到本站点「测试连接」。</li>
           </ol>
         </div>
         <p class="error" id="ev-error" hidden></p>

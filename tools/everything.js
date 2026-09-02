@@ -7,17 +7,23 @@
   const panel = $("#everything");
   if (!panel) return;
 
-  const BASE_KEY = "devtools-everything-base";
+  const BRIDGE_KEY = "devtools-ffmpeg-base";
+  const TOKEN_KEY = "devtools-ffmpeg-token";
+  const TARGET_KEY = "devtools-everything-target";
   const USER_KEY = "devtools-everything-user";
+  const LEGACY_BASE_KEY = "devtools-everything-base";
   const RECENT_KEY = "devtools-everything-recent-v1";
   const LIVE_KEY = "devtools-everything-live-v1";
   const SETUP_GUIDE_HIDDEN_KEY = "devtools-everything-setup-guide-hidden-v1";
-  const DEFAULT_BASE = "http://127.0.0.1";
+  const DEFAULT_BRIDGE = "http://127.0.0.1:17888";
+  const DEFAULT_TARGET = "http://127.0.0.1";
+  const DEFAULT_TOKEN = "devtools-bridge";
   const LIVE_DEBOUNCE_MS = 280;
   const MAX_RECENT = 16;
 
-  const baseInput = $("#ev-base");
-  const userInput = $("#ev-user");
+  const bridgeInput = $("#ev-bridge");
+  const tokenInput = $("#ev-token");
+  const targetInput = $("#ev-target");
   const passInput = $("#ev-pass");
   const dot = $("#ev-dot");
   const statusTitle = $("#ev-status-title");
@@ -50,7 +56,7 @@
   const optCount = $("#ev-count");
 
   let connected = false;
-  let apiBlocked = false;
+  let bridgeDown = false;
   let lastQuery = "";
   let lastTotal = 0;
   let offset = 0;
@@ -80,20 +86,30 @@
     return /Windows/i.test(navigator.userAgent || "");
   }
 
-  function normalizeBase(raw) {
+  function normalizeBase(raw, fallback = DEFAULT_TARGET) {
     let s = String(raw || "").trim();
-    if (!s) s = DEFAULT_BASE;
+    if (!s) s = fallback;
     if (!/^https?:\/\//i.test(s)) s = `http://${s}`;
     return s.replace(/\/+$/, "");
   }
 
-  function baseUrl() {
-    return normalizeBase(baseInput?.value || localStorage.getItem(BASE_KEY) || DEFAULT_BASE);
+  function bridgeBase() {
+    return normalizeBase(bridgeInput?.value || localStorage.getItem(BRIDGE_KEY) || DEFAULT_BRIDGE, DEFAULT_BRIDGE);
+  }
+
+  function everythingTarget() {
+    return normalizeBase(targetInput?.value || localStorage.getItem(TARGET_KEY) || DEFAULT_TARGET, DEFAULT_TARGET);
+  }
+
+  function bridgeToken() {
+    return String(tokenInput?.value || localStorage.getItem(TOKEN_KEY) || DEFAULT_TOKEN).trim() || DEFAULT_TOKEN;
   }
 
   function persistSettings() {
     try {
-      localStorage.setItem(BASE_KEY, baseUrl());
+      localStorage.setItem(BRIDGE_KEY, bridgeBase());
+      localStorage.setItem(TOKEN_KEY, bridgeToken());
+      localStorage.setItem(TARGET_KEY, everythingTarget());
       localStorage.setItem(USER_KEY, userInput?.value?.trim() || "");
       localStorage.setItem(LIVE_KEY, optLive?.checked ? "1" : "0");
     } catch (_) {}
@@ -101,8 +117,13 @@
 
   function loadSettings() {
     try {
-      const savedBase = localStorage.getItem(BASE_KEY);
-      if (savedBase && baseInput) baseInput.value = savedBase;
+      const savedBridge = localStorage.getItem(BRIDGE_KEY);
+      if (savedBridge && bridgeInput) bridgeInput.value = savedBridge;
+      const savedToken = localStorage.getItem(TOKEN_KEY);
+      if (savedToken && tokenInput) tokenInput.value = savedToken;
+      let savedTarget = localStorage.getItem(TARGET_KEY);
+      if (!savedTarget) savedTarget = localStorage.getItem(LEGACY_BASE_KEY);
+      if (savedTarget && targetInput) targetInput.value = savedTarget;
       const savedUser = localStorage.getItem(USER_KEY);
       if (savedUser && userInput) userInput.value = savedUser;
       const live = localStorage.getItem(LIVE_KEY);
@@ -160,17 +181,17 @@
 
   function syncModeBanner() {
     if (!modeBanner) return;
-    if (apiBlocked) {
+    if (bridgeDown) {
       modeBanner.hidden = false;
-      if (modeTitle) modeTitle.textContent = "无法从当前页面直连本机 Everything";
+      if (modeTitle) modeTitle.textContent = "本机桥未连接";
       if (modeText) {
         modeText.innerHTML =
-          "HTTPS 页面访问 <span class=\"mono\">http://127.0.0.1</span> 可能被拦截。请用「Everything 网页」，或把本站保存到本机 / localhost 打开后再搜。";
+          "请先运行 <span class=\"mono\">start-adb-bridge.cmd</span>（与 ADB 共用，端口 <span class=\"mono\">17888</span>），再点「测试连接」。仍可用「Everything 网页」直连。";
       }
     } else if (connected) {
       modeBanner.hidden = false;
-      if (modeTitle) modeTitle.textContent = "已连接 Everything HTTP";
-      if (modeText) modeText.textContent = "已启用完整 JSON 列与实时搜索；复杂筛选仍可用 Everything 桌面版。";
+      if (modeTitle) modeTitle.textContent = "已通过本机桥连接 Everything";
+      if (modeText) modeText.textContent = "搜索经桥转发，HTTPS 站点也可正常使用。";
     } else {
       modeBanner.hidden = true;
     }
@@ -238,11 +259,50 @@
     for (const k of ["path_column", "size_column", "date_modified_column", "date_created_column", "attributes_column"]) {
       params.delete(k);
     }
-    return `${baseUrl()}/?${params.toString()}`;
+    return `${everythingTarget()}/?${params.toString()}`;
   }
 
-  function apiSearchUrl(query, opts) {
-    return `${baseUrl()}/?${buildSearchParams(query, opts).toString()}`;
+  function searchParamsObject(query, opts) {
+    const params = buildSearchParams(query, opts);
+    const out = {};
+    for (const [k, v] of params.entries()) out[k] = v;
+    return out;
+  }
+
+  function bridgeHeaders() {
+    const t = bridgeToken();
+    const headers = {
+      Accept: "application/json, text/plain, */*",
+      "X-Adb-Token": t,
+      "X-Ffmpeg-Token": t,
+      ...authHeaders(),
+    };
+    return headers;
+  }
+
+  function bridgeApiUrl(path, extraParams = {}) {
+    const url = new URL(`${bridgeBase()}${path}`);
+    url.searchParams.set("target", everythingTarget());
+    for (const [k, v] of Object.entries(extraParams)) url.searchParams.set(k, String(v));
+    return url.toString();
+  }
+
+  async function bridgeFetch(path, extraParams = {}) {
+    const res = await fetch(bridgeApiUrl(path, extraParams), {
+      method: "GET",
+      cache: "no-store",
+      headers: bridgeHeaders(),
+    });
+    const type = res.headers.get("content-type") || "";
+    if (type.includes("application/json")) {
+      const data = await res.json();
+      if (!res.ok || data.ok === false) {
+        throw new Error(data.error || data.hint || `请求失败 (${res.status})`);
+      }
+      return data;
+    }
+    if (!res.ok) throw new Error(`请求失败 (${res.status})`);
+    return res;
   }
 
   function currentOpts(extra = {}) {
@@ -284,65 +344,57 @@
     return `parent:"${q}"`;
   }
 
-  function fileDownloadUrl(full) {
-    const base = baseUrl();
-    const p = String(full || "").replace(/\\/g, "/");
-    if (!p) return base;
-    if (/^[a-z]:\//i.test(p)) return `${base}/${encodeURI(p)}`;
-    return `${base}/${encodeURI(p.replace(/^\/+/, ""))}`;
-  }
-
   function desktopSearchCommand(query) {
     const q = String(query || "").replace(/"/g, '\\"');
     return `Everything.exe -search "${q}"`;
   }
 
-  async function apiFetch(url) {
-    const res = await fetch(url, {
-      method: "GET",
-      cache: "no-store",
-      headers: {
-        Accept: "application/json, text/plain, */*",
-        ...authHeaders(),
-      },
-    });
-    if (res.status === 401) throw new Error("HTTP 401：用户名或密码错误");
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const text = await res.text();
-    try {
-      return JSON.parse(text);
-    } catch (_) {
-      throw new Error("响应不是 JSON，请确认 Everything HTTP Server 已启用");
+  async function downloadViaBridge(fp) {
+    const url = bridgeApiUrl("/everything/download", { path: fp });
+    const res = await fetch(url, { headers: bridgeHeaders(), cache: "no-store" });
+    if (!res.ok) {
+      let msg = `下载失败 (${res.status})`;
+      try {
+        const data = await res.json();
+        if (data?.error) msg = data.error;
+      } catch (_) {}
+      throw new Error(msg);
     }
+    const blob = await res.blob();
+    const name = String(fp).replace(/^.*[\\/]/, "") || "download.bin";
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast(`已开始下载 ${name}`);
   }
 
   async function testConnection() {
     persistSettings();
     showError("");
-    setStatus("", "正在连接…", "探测 Everything HTTP 服务");
+    setStatus("", "正在连接…", "经本机桥探测 Everything");
     connectBtn.disabled = true;
     try {
-      const data = await apiFetch(apiSearchUrl("", { ...currentOpts(), offset: 0, count: 1 }));
-      if (!data || typeof data !== "object") throw new Error("无效响应");
+      const data = await bridgeFetch("/everything/health", { count: "1", json: "1", search: "" });
       connected = true;
-      apiBlocked = false;
+      bridgeDown = false;
       setStatus(
         "is-ok",
         "已连接 Everything",
-        `HTTP 正常${Number.isFinite(data.totalResults) ? ` · 索引约 ${data.totalResults.toLocaleString()} 条` : ""} · 支持实时搜索`
+        `经本机桥正常${Number.isFinite(data.totalResults) ? ` · 索引约 ${data.totalResults.toLocaleString()} 条` : ""}`
       );
       syncModeBanner();
       return true;
     } catch (err) {
       connected = false;
       const msg = err?.message || String(err);
-      const blocked =
-        /Failed to fetch|NetworkError|Load failed|CORS|Mixed Content|Network request failed/i.test(msg);
-      apiBlocked = blocked;
-      if (blocked) {
-        setStatus("is-warn", "无法直连本机", "请用「Everything 网页」或在本机打开本站后重试");
+      bridgeDown = /Failed to fetch|NetworkError|Load failed|Network request failed|ECONNREFUSED/i.test(msg);
+      if (bridgeDown) {
+        setStatus("is-err", "本机桥未连接", "请先运行 start-adb-bridge.cmd 并保持窗口打开");
+        showError(`${msg}。请确认本机桥已启动（${bridgeBase()}）且 Token 为 devtools-bridge`);
       } else {
-        setStatus("is-err", "连接失败", msg);
+        setStatus("is-err", "Everything 连接失败", msg);
         showError(msg);
       }
       syncModeBanner();
@@ -407,7 +459,7 @@
           ${isFolder ? `<button type="button" class="ghost-btn" data-ev-enter="${escapeAttr(fp)}">进入文件夹</button>` : ""}
           ${!isFolder ? `<button type="button" class="ghost-btn" data-ev-parent="${escapeAttr(parentFolderPath(fp))}">上级目录</button>` : ""}
           <button type="button" class="ghost-btn" data-ev-web="${escapeAttr(fp)}">网页打开</button>
-          ${!isFolder ? `<a class="ghost-btn" href="${escapeAttr(fileDownloadUrl(fp))}" target="_blank" rel="noopener noreferrer">下载</a>` : ""}
+          ${!isFolder ? `<button type="button" class="ghost-btn" data-ev-dl="${escapeAttr(fp)}">下载</button>` : ""}
         </div>`;
       if (isFolder) {
         row.addEventListener("dblclick", (e) => {
@@ -479,21 +531,12 @@
     updatePager();
     searchBtn.disabled = true;
     try {
-      if (!connected && !apiBlocked) {
+      if (!connected) {
         const ok = await testConnection();
-        if (!ok && apiBlocked) {
-          window.open(webSearchUrl(query), "_blank", "noopener,noreferrer");
-          toast("已在 Everything 网页打开搜索");
-          return;
-        }
         if (!ok) return;
       }
-      if (apiBlocked) {
-        window.open(webSearchUrl(query), "_blank", "noopener,noreferrer");
-        toast("无法直连，已在 Everything 网页打开");
-        return;
-      }
-      const data = await apiFetch(apiSearchUrl(query, currentOpts()));
+      const params = searchParamsObject(query, currentOpts());
+      const data = await bridgeFetch("/everything/search", params);
       if (gen !== searchGen) return;
       lastTotal = Number(data?.totalResults) || 0;
       renderResults(data);
@@ -501,11 +544,11 @@
     } catch (err) {
       if (gen !== searchGen) return;
       const msg = err?.message || String(err);
-      if (/Failed to fetch|NetworkError|Load failed|CORS|Mixed Content/i.test(msg)) {
-        apiBlocked = true;
+      if (/Failed to fetch|NetworkError|Load failed|Network request failed/i.test(msg)) {
+        bridgeDown = true;
+        connected = false;
         syncModeBanner();
-        window.open(webSearchUrl(query), "_blank", "noopener,noreferrer");
-        toast("连接失败，已在 Everything 网页打开");
+        showError(`${msg}。本机桥可能已关闭，请重启 start-adb-bridge.cmd`);
       } else {
         showError(msg);
         if (resultsEl) resultsEl.innerHTML = "";
@@ -648,10 +691,15 @@
     if (webBtn) {
       const fp = webBtn.getAttribute("data-ev-web") || "";
       window.open(webSearchUrl(fp), "_blank", "noopener,noreferrer");
+      return;
+    }
+    const dlBtn = e.target.closest("[data-ev-dl]");
+    if (dlBtn) {
+      downloadViaBridge(dlBtn.getAttribute("data-ev-dl") || "").catch((err) => showError(err.message || String(err)));
     }
   });
 
-  [baseInput, userInput, passInput].forEach((el) => {
+  [bridgeInput, tokenInput, targetInput, userInput, passInput].forEach((el) => {
     el?.addEventListener("change", persistSettings);
   });
 

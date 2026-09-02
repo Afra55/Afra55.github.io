@@ -2161,9 +2161,10 @@
         const cfg = map[platform];
         if (!cfg) throw new Error("未知平台");
         setAdbBundleProgress(true, { pct: 22, text: "拉取桥文件…" });
-        const [serverJs, mirrorJs, ffmpegJs, ytdlpJs, scriptRaw, resolvePortJs, serverJar] = await Promise.all([
+        const [serverJs, mirrorJs, evProxyJs, ffmpegJs, ytdlpJs, scriptRaw, resolvePortJs, serverJar] = await Promise.all([
           fetchTextAsset("./adb-bridge/server.js"),
           fetchTextAsset("./adb-bridge/scrcpy-mirror.js").catch(() => ""),
+          fetchTextAsset("./adb-bridge/everything-proxy.js").catch(() => ""),
           fetchTextAsset("./ffmpeg-bridge/server.js").catch(() => ""),
           fetchTextAsset("./ffmpeg-bridge/ytdlp-core.js").catch(() => ""),
           fetchTextAsset(cfg.scriptPath),
@@ -2184,6 +2185,7 @@
           "本压缩包必须同时保留：",
           "  - server.js",
           "  - scrcpy-mirror.js",
+          "  - everything-proxy.js",
           "  - resolve-port.js",
           "  - ffmpeg-bridge/server.js",
           "  - ffmpeg-bridge/ytdlp-core.js",
@@ -2205,6 +2207,7 @@
         const zip = new JSZipCtor();
         zip.file("server.js", serverJs);
         if (mirrorJs) zip.file("scrcpy-mirror.js", mirrorJs);
+        if (evProxyJs) zip.file("everything-proxy.js", evProxyJs);
         if (resolvePortJs) zip.file("resolve-port.js", resolvePortJs);
         if (ffmpegJs) zip.file("ffmpeg-bridge/server.js", ffmpegJs);
         if (ytdlpJs) zip.file("ffmpeg-bridge/ytdlp-core.js", ytdlpJs);

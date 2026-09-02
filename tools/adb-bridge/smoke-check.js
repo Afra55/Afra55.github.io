@@ -130,7 +130,7 @@ async function main() {
       throw new Error(`health.port should match listen port ${PORT}, got ${health2.json?.port}`);
     }
     if (!features.includes("local-pull")) throw new Error("health missing feature: local-pull");
-    for (const need of ["fs-zip", "app-backup-splits", "logcat-level", "mirror", "scrcpy-mirror", "unified-bridge", "ffmpeg-mount"]) {
+    for (const need of ["fs-zip", "app-backup-splits", "logcat-level", "mirror", "scrcpy-mirror", "unified-bridge", "ffmpeg-mount", "everything-proxy"]) {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
     }
     if (!health2.json?.unified) throw new Error("expected unified bridge flag");
@@ -159,6 +159,14 @@ async function main() {
     }
     if (!prepared.json?.jar?.vendor && !prepared.json?.jar?.cached) {
       throw new Error("mirror prepare did not locate scrcpy-server jar");
+    }
+
+    const evHealth = await req("GET", "/everything/health?target=http://127.0.0.1:9", {
+      headers: { "X-Adb-Token": TOKEN },
+    });
+    if (evHealth.status === 404) throw new Error("everything/health route missing");
+    if (evHealth.status !== 502 && evHealth.status !== 200) {
+      throw new Error(`unexpected everything/health status: ${evHealth.status}`);
     }
 
     // Token compat

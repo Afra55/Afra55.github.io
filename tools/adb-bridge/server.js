@@ -38,9 +38,10 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.8.5";
+const BRIDGE_VERSION = "0.8.6";
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
+const everythingProxy = require("./everything-proxy");
 function loadFfmpegBridge() {
   const candidates = [
     path.join(__dirname, "ffmpeg-bridge", "server.js"),
@@ -3552,6 +3553,17 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    if (url.pathname === "/everything" || url.pathname.startsWith("/everything/")) {
+      if (req.method !== "OPTIONS") requireToken(req);
+      const handled = await everythingProxy.handleApi(req, res, url, {
+        sendJson,
+        requireToken,
+        applyCors,
+        origin,
+      });
+      if (handled) return;
+    }
+
     if (url.pathname === "/health" && req.method === "GET") {
       const adbInfo = await checkAdb();
       const hostTools = await probeHostTools();
@@ -3600,6 +3612,7 @@ async function handleApi(req, res, url) {
             ffmpeg: Boolean(ffmpegBridge),
             ytdlp: Boolean(ffmpegBridge?.checkYtdlp),
             mirror: true,
+            everything: true,
           },
           features: [
             "unified-bridge",
@@ -3642,6 +3655,7 @@ async function handleApi(req, res, url) {
             "ffmpeg-mount",
             "ytdlp",
             "ytdlp-mount",
+            "everything-proxy",
           ],
           mirror: scrcpyMirror.jarStatus(),
           adb: adbInfo,
@@ -3661,8 +3675,9 @@ async function handleApi(req, res, url) {
           writeRoots: WRITE_ROOTS,
           ffmpegMount: "/ff",
           ytdlpMount: "/ytdlp",
+          everythingMount: "/everything",
           note:
-            "统一本机桥：ADB + Scrcpy 镜像 + FFmpeg（/ff/*）+ yt-dlp（/ytdlp/*）。Token 默认 devtools-bridge。",
+            "统一本机桥：ADB + Scrcpy 镜像 + FFmpeg（/ff/*）+ yt-dlp（/ytdlp/*）+ Everything（/everything/*）。Token 默认 devtools-bridge。",
         },
         origin
       );

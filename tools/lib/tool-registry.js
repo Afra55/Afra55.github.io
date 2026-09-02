@@ -851,7 +851,7 @@
     "acupoint": "361 经穴 + 51 奇穴：Wellcome 经络参考图可点击放大，搜索列表查看定位与主治。",
     "healthread": "养生功法等文章离线阅读：列表搜索、按需加载动图，记住阅读进度。",
     "adb": "网页侧 ADB 调试辅助：设备、文件、输入、安装、任务与命令大全等。",
-    "everything": "Everything HTTP 全能力网页端：实时搜索、语法快捷、完整元数据、文件夹浏览、下载与桌面版命令；HTTPS 受限时降级 Everything 网页。",
+    "everything": "Everything 经本机桥代理（/everything/*）：HTTPS 站点可搜全盘、实时过滤、下载；需同时启动桥与 Everything HTTP。",
     "lanshare": "局域网互传：多机同房间共享文件列表，下载时从上传者手机 WebRTC 直传，不经房主中转；房主可退出或解散，退出时最近加入者接任。",
     "ffbridge": "电脑批量用本机 FFmpeg 桥；手机请直接用视频/GIF 分类里的音频/修剪/动图（网页内处理）。",
     "ytdlp": "本机 yt-dlp 桥：解析/下载视频与播放列表、字幕、封面、直播、Cookies 与 SponsorBlock；含安装教程，文件只保存在电脑。",
