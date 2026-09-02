@@ -45,6 +45,7 @@
     vtrim: "./vtrim.js",
     vplay: "./vplay.js",
     audio: "./audio.js",
+    everything: "./everything.js",
     ffbridge: "./ffbridge.js",
     ytdlp: "./ytdlp.js",
     lanshare: "./lanshare.js",
@@ -157,6 +158,7 @@
     "ambient",
     "sandspiel",
     "lanshare",
+    "everything",
     "ffbridge",
     "ytdlp",
     "phlogo",
@@ -164,7 +166,7 @@
   ]);
 
   const NO_PURE = new Set([
-    "acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp",
+    "acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "everything", "ffbridge", "ytdlp",
     "setup", "about", "pdfcraft", "insectworld", "prehmuseum", "xorenc", "morse", "countdown",
     "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "minigames", "ambient",
   ]);

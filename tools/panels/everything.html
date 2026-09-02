@@ -1,0 +1,96 @@
+<section id="everything" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>Everything 搜索</h1>
+        <p>连接 Windows 本机 <a href="https://www.voidtools.com/" target="_blank" rel="noopener noreferrer">Everything</a> 的 HTTP 服务，在浏览器里极速搜全盘文件。需先在 Everything 里启用 HTTP Server。<a href="#ev-setup-guide">不会开？看启用教程</a></p>
+      </div>
+      <div class="panel-body">
+        <div class="ev-mode-banner panel-card" id="ev-mode-banner" hidden aria-live="polite">
+          <strong id="ev-mode-title">无法从当前页面直连本机</strong>
+          <p class="hint tight" id="ev-mode-text">HTTPS 站点访问 <span class="mono">http://127.0.0.1</span> 可能被浏览器拦截。可改用下方「在 Everything 网页打开」，或在本机用 <span class="mono">file://</span> / localhost 打开本站。</p>
+          <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
+            <button type="button" class="secondary-btn" id="ev-open-web">在 Everything 网页打开</button>
+          </div>
+        </div>
+
+        <div class="adb-status" id="ev-status">
+          <div class="adb-status-main">
+            <span class="adb-dot" id="ev-dot" aria-hidden="true"></span>
+            <div>
+              <strong id="ev-status-title">未连接 Everything</strong>
+              <p class="hint tight" id="ev-status-text">请在本机 Windows 安装 Everything 并启用 HTTP Server，再点「测试连接」。</p>
+            </div>
+          </div>
+          <div class="btn-row tool-actions adb-status-actions">
+            <button type="button" class="primary-btn" id="ev-connect">测试连接</button>
+            <button type="button" class="secondary-btn" id="ev-open-web-top">Everything 网页</button>
+          </div>
+        </div>
+
+        <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
+          <label for="ev-base">服务地址</label>
+          <input id="ev-base" class="mono" type="text" value="http://127.0.0.1" autocomplete="off" spellcheck="false" />
+          <label for="ev-user">用户名</label>
+          <input id="ev-user" class="mono" type="text" value="" autocomplete="username" spellcheck="false" placeholder="可选" />
+          <label for="ev-pass">密码</label>
+          <input id="ev-pass" class="mono" type="password" value="" autocomplete="current-password" spellcheck="false" placeholder="可选" />
+        </div>
+        <p class="hint">默认端口 <span class="mono">80</span>；若改过端口请写成 <span class="mono">http://127.0.0.1:8080</span>。Everything 里设置了 HTTP 用户名/密码时在此填写。</p>
+
+        <div class="adb-guide" id="ev-setup-guide">
+          <div class="adb-guide-head">
+            <strong>怎么启用 HTTP Server？</strong>
+            <button type="button" class="ghost-btn adb-guide-dismiss" id="ev-setup-guide-dismiss" title="关闭并不再显示">关闭</button>
+          </div>
+          <ol>
+            <li><strong>安装 Everything</strong>：从 <a href="https://www.voidtools.com/downloads/" target="_blank" rel="noopener noreferrer">voidtools 官网</a> 下载 Windows 版并安装；首次运行会建立索引。</li>
+            <li><strong>启用 HTTP</strong>：Everything → 工具 → 选项 → <strong>HTTP Server</strong> 选项卡 → 勾选 <strong>Enable HTTP server</strong> → 记下端口（默认 80，冲突时可改为 8080）→ 确定。</li>
+            <li><strong>验证</strong>：浏览器打开 <span class="mono">http://127.0.0.1</span>（或带端口）应能看到 Everything 网页搜索。</li>
+            <li><strong>安全</strong>：HTTP 可搜并下载本机已索引的全部文件，请勿对公网暴露；建议设用户名密码，或仅在本机使用。</li>
+          </ol>
+        </div>
+        <p class="error" id="ev-error" hidden></p>
+
+        <div id="ev-workspace">
+          <div class="label-row" style="margin-top:1rem">
+            <h2 class="subhead">搜索</h2>
+          </div>
+          <div class="ev-search-row">
+            <input id="ev-query" class="mono" type="search" placeholder="文件名、路径、扩展名… 支持 Everything 语法" spellcheck="false" autocomplete="off" />
+            <button type="button" class="primary-btn" id="ev-search">搜索</button>
+          </div>
+          <div class="ev-opts btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.55rem">
+            <label class="flag"><input type="checkbox" id="ev-case" /> 区分大小写</label>
+            <label class="flag"><input type="checkbox" id="ev-wholeword" /> 整词</label>
+            <label class="flag"><input type="checkbox" id="ev-path" /> 搜路径</label>
+            <label class="flag"><input type="checkbox" id="ev-regex" /> 正则</label>
+            <label class="flag"><input type="checkbox" id="ev-diacritics" /> 变音符号</label>
+            <label class="flag">排序
+              <select id="ev-sort">
+                <option value="name">名称</option>
+                <option value="path">路径</option>
+                <option value="size">大小</option>
+                <option value="date_modified">修改时间</option>
+              </select>
+            </label>
+            <label class="flag"><input type="checkbox" id="ev-asc" checked /> 升序</label>
+            <label class="flag">条数
+              <select id="ev-count">
+                <option value="50">50</option>
+                <option value="100" selected>100</option>
+                <option value="200">200</option>
+                <option value="500">500</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="label-row" style="margin-top:0.85rem">
+            <span class="hint tight" id="ev-meta">输入关键词后搜索</span>
+            <div class="btn-row tool-actions ev-pager">
+              <button type="button" class="ghost-btn" id="ev-prev" disabled>上一页</button>
+              <button type="button" class="ghost-btn" id="ev-next" disabled>下一页</button>
+            </div>
+          </div>
+          <div class="ev-results" id="ev-results" role="list" aria-label="搜索结果"></div>
+        </div>
+      </div>
+    </section>
