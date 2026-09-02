@@ -25,9 +25,99 @@
       return encoded.length + (encoded.length !== s.length ? 3 : 0);
     }
   
+    function qrEccFromLevel(level) {
+      const qg = globalThis.qrcodegen?.QrCode;
+      const map = globalThis.QRCode?.CorrectLevel;
+      if (!qg) return null;
+      if (map) {
+        if (level === map.L) return qg.Ecc.LOW;
+        if (level === map.M) return qg.Ecc.MEDIUM;
+        if (level === map.Q) return qg.Ecc.QUARTILE;
+        if (level === map.H) return qg.Ecc.HIGH;
+      }
+      return qg.Ecc.MEDIUM;
+    }
+
+    function drawQrCanvas(parent, qr, px) {
+      const border = 4;
+      const n = qr.size;
+      const scale = Math.max(1, Math.floor(px / (n + border * 2)));
+      const size = (n + border * 2) * scale;
+      const canvas = document.createElement("canvas");
+      canvas.width = canvas.height = size;
+      canvas.setAttribute("role", "img");
+      canvas.setAttribute("aria-label", "二维码");
+      const ctx = canvas.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, size, size);
+      ctx.fillStyle = "#0b1220";
+      for (let y = 0; y < n; y += 1) {
+        for (let x = 0; x < n; x += 1) {
+          if (qr.getModule(x, y)) {
+            ctx.fillRect((x + border) * scale, (y + border) * scale, scale, scale);
+          }
+        }
+      }
+      parent.appendChild(canvas);
+    }
+
+    function qrCorrectLevels() {
+      const map = globalThis.QRCode?.CorrectLevel;
+      const qg = globalThis.qrcodegen?.QrCode;
+      if (map) {
+        return [
+          { level: map.M, label: "标准纠错" },
+          { level: map.L, label: "低纠错（容量更大）" },
+        ];
+      }
+      if (qg) {
+        return [
+          { level: qg.Ecc.MEDIUM, label: "标准纠错", qg: true },
+          { level: qg.Ecc.LOW, label: "低纠错（容量更大）", qg: true },
+        ];
+      }
+      return [];
+    }
+
+    function renderQrBoxWithEcc(text, ecc, { qgDirect = false } = {}) {
+      if (qgDirect && globalThis.qrcodegen?.QrCode) {
+        const el = document.createElement("div");
+        el.className = "qr-box";
+        const qr = globalThis.qrcodegen.QrCode.encodeSegments(
+          /[^\u0000-\u007f]/.test(text)
+            ? [
+                globalThis.qrcodegen.QrSegment.makeEci(26),
+                globalThis.qrcodegen.QrSegment.makeBytes(globalThis.qrcodegen.QrSegment.toUtf8ByteArray(text)),
+              ]
+            : globalThis.qrcodegen.QrSegment.makeSegments(text),
+          ecc
+        );
+        drawQrCanvas(el, qr, 180);
+        return el;
+      }
+      return renderQrBox(text, ecc);
+    }
+
+    function encodeQrUtf8(text, level) {
+      const QrCode = globalThis.qrcodegen?.QrCode;
+      const QrSegment = globalThis.qrcodegen?.QrSegment;
+      if (!QrCode || !QrSegment) return null;
+      const ecl = qrEccFromLevel(level) ?? QrCode.Ecc.MEDIUM;
+      const segs = /[^\u0000-\u007f]/.test(text)
+        ? [QrSegment.makeEci(26), QrSegment.makeBytes(QrSegment.toUtf8ByteArray(text))]
+        : QrSegment.makeSegments(text);
+      return QrCode.encodeSegments(segs, ecl);
+    }
+
     function renderQrBox(text, level) {
       const el = document.createElement("div");
       el.className = "qr-box";
+      const utf8Qr = encodeQrUtf8(text, level);
+      if (utf8Qr) {
+        drawQrCanvas(el, utf8Qr, 180);
+        return el;
+      }
+      if (typeof QRCode === "undefined") throw new Error("QRCode 库未加载");
       // eslint-disable-next-line no-new
       new QRCode(el, {
         text,
@@ -78,14 +168,14 @@
         return;
       }
       try {
-        if (typeof QRCode === "undefined") throw new Error("QRCode 库未加载");
-        const tries = [
-          { level: QRCode.CorrectLevel.M, label: "标准纠错" },
-          { level: QRCode.CorrectLevel.L, label: "低纠错（容量更大）" },
-        ];
-        for (const { level, label } of tries) {
+        if (typeof QRCode === "undefined" && typeof globalThis.qrcodegen?.QrCode === "undefined") {
+          throw new Error("QRCode 库未加载");
+        }
+        const tries = qrCorrectLevels();
+        if (!tries.length) throw new Error("QRCode 库未加载");
+        for (const { level, label, qg } of tries) {
           try {
-            wrap.appendChild(renderQrBox(text, level));
+            wrap.appendChild(renderQrBoxWithEcc(text, level, { qgDirect: Boolean(qg) }));
             if (meta) meta.textContent = `已生成 · ${label} · 约 ${text.length} 字`;
             setError($("#qr-error"), "");
             return;
@@ -95,6 +185,7 @@
         }
         const chunks = splitQrChunks(text);
         if (!chunks.length) throw new Error("内容过长，无法生成二维码");
+        const lowLevel = globalThis.QRCode?.CorrectLevel?.L ?? globalThis.qrcodegen?.QrCode?.Ecc?.LOW;
         chunks.forEach((payload, i) => {
           const piece = document.createElement("div");
           piece.className = "qr-piece";
@@ -102,7 +193,9 @@
           lab.className = "hint tight qr-piece-label";
           lab.textContent = `第 ${i + 1}/${chunks.length} 张`;
           piece.appendChild(lab);
-          piece.appendChild(renderQrBox(payload, QRCode.CorrectLevel.L));
+          piece.appendChild(
+            renderQrBoxWithEcc(payload, lowLevel, { qgDirect: !globalThis.QRCode?.CorrectLevel })
+          );
           wrap.appendChild(piece);
         });
         if (meta) {

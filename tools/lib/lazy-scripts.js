@@ -15,6 +15,10 @@
   const VENDOR_FILES = {
     "js-yaml": { src: "./vendor/js-yaml.min.js", probe: () => typeof globalThis.jsyaml !== "undefined" },
     "spark-md5": { src: "./vendor/spark-md5.min.js", probe: () => typeof globalThis.SparkMD5 !== "undefined" },
+    qrcodegen: {
+      src: "./vendor/qrcodegen.js",
+      probe: () => typeof globalThis.qrcodegen?.QrCode !== "undefined",
+    },
     qrcode: { src: "./vendor/qrcode.min.js", probe: () => typeof globalThis.QRCode !== "undefined" },
     jsQR: { src: "./vendor/jsQR.js", probe: () => typeof globalThis.jsQR === "function" },
     mqtt: {
@@ -112,7 +116,7 @@
   const TOOL_VENDORS = {
     yaml: ["js-yaml"],
     hash: ["spark-md5"],
-    qrcode: ["qrcode", "jsQR"],
+    qrcode: ["qrcodegen", "qrcode", "jsQR"],
     lanshare: ["qrcode", "jsQR"],
     sharecard: ["html2canvas"],
     gifmaker: ["gif", "omggif"],

@@ -420,10 +420,24 @@ class MirrorSession {
     const adb = this.deps.adbPath;
     await ensureRemoteJar(this.deps, this.serial, jar);
 
+    try {
+      await this.deps.adbSerial(
+        this.serial,
+        [
+          "shell",
+          "pkill -f com.genymobile.scrcpy.Server 2>/dev/null; pkill -f devtools-scrcpy-server 2>/dev/null; true",
+        ],
+        { timeout: 8000 }
+      );
+    } catch {
+      /* ignore */
+    }
+
     const scid = crypto.randomBytes(4).readUInt32BE(0) & 0x7fffffff;
     this.scidHex = scid.toString(16).padStart(8, "0");
     this.port = await findFreePort();
 
+    await this.deps.adbSerial(this.serial, ["forward", "--remove", `tcp:${this.port}`], { timeout: 8000 }).catch(() => {});
     await this.deps.adbSerial(this.serial, ["forward", `tcp:${this.port}`, `localabstract:scrcpy_${this.scidHex}`], {
       timeout: 15000,
     });
@@ -431,9 +445,10 @@ class MirrorSession {
     const appProcessRunner = await pickAppProcessRunner(this.deps, this.serial);
     let shellCmd = this.buildServerShellCmd(appProcessRunner);
     this.attachServerProc(this.spawnServerProcess(adb, shellCmd));
+    await new Promise((r) => setTimeout(r, 280));
 
     try {
-      this.videoSock = await connectWithRetry(this.port);
+      this.videoSock = await connectWithRetry(this.port, 100, 150);
       const dummy = await readExact(this.videoSock, 1);
       if (dummy[0] !== 0) {
         // still proceed; some builds may omit
@@ -472,8 +487,9 @@ class MirrorSession {
         this.proc = null;
         shellCmd = this.buildServerShellCmd("app_process");
         this.attachServerProc(this.spawnServerProcess(adb, shellCmd));
+        await new Promise((r) => setTimeout(r, 280));
         try {
-          this.videoSock = await connectWithRetry(this.port);
+          this.videoSock = await connectWithRetry(this.port, 100, 150);
           const dummy = await readExact(this.videoSock, 1);
           if (dummy[0] !== 0) {
             /* continue */
@@ -583,7 +599,9 @@ class MirrorSession {
 
 async function getOrStartSession(serial, deps) {
   const existing = sessions.get(serial);
-  if (existing && !existing.closed) return existing;
+  if (existing && !existing.closed) {
+    existing.stop("restart");
+  }
   const session = new MirrorSession(serial, deps);
   sessions.set(serial, session);
   try {

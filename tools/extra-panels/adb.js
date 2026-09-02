@@ -114,6 +114,7 @@
       function syncAdbSetupGuide() {
         if (!adbSetupGuide) return;
         adbSetupGuide.hidden = isAdbSetupGuideHidden();
+        syncAdbSetupGuideShowBtn();
       }
   
       function dismissAdbSetupGuide() {
@@ -122,9 +123,20 @@
         } catch (_) {}
         syncAdbSetupGuide();
       }
+
+      function showAdbSetupGuide() {
+        try {
+          localStorage.removeItem(ADB_SETUP_GUIDE_HIDDEN_KEY);
+        } catch (_) {}
+        syncAdbSetupGuide();
+      }
+
+      function syncAdbSetupGuideShowBtn() {
+        const btn = $("#adb-setup-guide-show");
+        if (btn) btn.hidden = !isAdbSetupGuideHidden();
+      }
   
       syncAdbSetupGuide();
-      adbSetupGuideDismiss?.addEventListener("click", dismissAdbSetupGuide);
   
       let adbWorkspace;
       let adbDeviceList;
@@ -3163,7 +3175,7 @@
         let detail = String(msg || "镜像失败");
         if (/socket closed/i.test(detail) && !/握手失败|scrcpy-server/i.test(detail)) {
           detail =
-            "镜像握手失败（视频 socket 已关闭）。常见原因：scrcpy-server 未 push 成功、版本不匹配、或屏幕编码器不可用";
+            "镜像握手失败（视频 socket 已关闭）。请确认：① 手机已解锁并保持亮屏 ② USB 调试已授权 ③ 本机桥为最新完整 ZIP（含 scrcpy-server v3.1）④ 无其它投屏/录屏占用编码器";
         }
         if (!bridgeAtLeast("0.8.4")) {
           detail += "。建议重新下载桥 ZIP 并重启本机桥（≥0.8.4 含镜像诊断）";
@@ -3200,6 +3212,11 @@
           if (!bridgeHas("mirror") && !bridgeHas("scrcpy-mirror") && !bridgeAtLeast("0.7.0")) {
             throw new Error("本机桥版本过旧，不支持镜像。请重新下载完整 ZIP 并重启桥（≥0.7.0）");
           }
+          await adbFetch("/mirror/stop", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ serial }),
+          }).catch(() => {});
           try {
             await adbFetch("/mirror/prepare", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
           } catch (err) {
@@ -3623,6 +3640,9 @@
         adbError = $("#adb-error");
         adbSetupGuide = $("#adb-setup-guide");
         adbSetupGuideDismiss = $("#adb-setup-guide-dismiss");
+        syncAdbSetupGuide();
+        adbSetupGuideDismiss?.addEventListener("click", dismissAdbSetupGuide);
+        $("#adb-setup-guide-show")?.addEventListener("click", showAdbSetupGuide);
         adbWorkspace = $("#adb-workspace");
         adbDeviceList = $("#adb-device-list");
         adbDeviceMeta = $("#adb-device-meta");
