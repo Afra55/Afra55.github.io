@@ -101,7 +101,7 @@ ${lines.slice(mediaStartLine - 1, mediaEndLine).join("\n")}
     paintToolsVersion, loadGifsicle, buildGifCompressArgs, buildBlackboxSoftCompressArgs,
     buildBlackboxHardCompressArgs, gifCompressSummary, readGifWatermarkOptions,
     drawGifTextWatermark, compressGifBlob, mergeGifBlobs, TOOLS_VERSION, GIF_TOOL_VERSION,
-    AUTO_PACK_ZIP_KEY,
+    AUTO_PACK_ZIP_KEY, FFMPEG_SEG_FILE_BYTES,
     formatLocalPickMeta: K.formatLocalPickMeta,
     attachLocalVideoPreview: K.attachLocalVideoPreview,
     waitVideoMetadata: K.waitVideoMetadata,
@@ -159,7 +159,7 @@ function panelWrapper(body, chunk) {
     encodeAnimatedWebpFromStillFrames, isAutoPackZipEnabled, setAutoPackZipEnabled, syncAutoPackZipToggles,
     bindAutoPackZipToggles, canEncodeStillWebp, gifQualityToWebpQuality, gifQualityToMaxColors,
     terminateFfmpegInstance, paintFfmpegWarmHint, prewarmFfmpegEngine, TOOLS_VERSION, GIF_TOOL_VERSION,
-    AUTO_PACK_ZIP_KEY,
+    AUTO_PACK_ZIP_KEY, FFMPEG_SEG_FILE_BYTES,
   } = M;
   const formatLocalPickMeta = K.formatLocalPickMeta;
   const attachLocalVideoPreview = K.attachLocalVideoPreview;

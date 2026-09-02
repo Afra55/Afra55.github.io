@@ -21,6 +21,10 @@ if (!/const \$\$ = \(sel, root = document\)/.test(kitSrc)) {
 }
 
 const files = fs.readdirSync(PANELS_DIR).filter((f) => f.endsWith(".js"));
+const v2gSuite = fs.readFileSync(path.join(PANELS_DIR, "v2g-suite.js"), "utf8");
+if (/FFMPEG_SEG_FILE_BYTES/.test(v2gSuite) && !/const FFMPEG_SEG_FILE_BYTES\s*=/.test(v2gSuite)) {
+  failures.push("v2g-suite.js: 使用 FFMPEG_SEG_FILE_BYTES 但未定义");
+}
 
 const shadowRe = /function\s+(\w+)\s*\(\)\s*\{[\s\S]*?\n\s+let\s+(\w+);\s*\n(?:\s+let\s+\w+;\s*\n)?\s+if\s*\(\s*!\2\b/g;
 
