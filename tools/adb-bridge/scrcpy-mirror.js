@@ -12,7 +12,6 @@
  */
 
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
 const net = require("net");
 const http = require("http");
@@ -31,16 +30,22 @@ const REMOTE_JAR = "/data/local/tmp/devtools-scrcpy-server.jar";
 
 const sessions = new Map(); // serial -> Session
 
+function bridgeDataDir() {
+  const raw = process.env.ADB_BRIDGE_DIR || process.env.DEVTOOLS_BRIDGE_DIR;
+  if (raw && String(raw).trim()) return path.resolve(String(raw).trim());
+  return __dirname;
+}
+
 function cacheDir() {
-  return path.join(os.homedir(), ".devtools-adb-bridge");
+  return bridgeDataDir();
 }
 
 function vendorJarPath() {
-  return path.join(__dirname, "vendor", SCRCPY_SERVER_NAME);
+  return path.join(bridgeDataDir(), "vendor", SCRCPY_SERVER_NAME);
 }
 
 function cachedJarPath() {
-  return path.join(cacheDir(), SCRCPY_SERVER_NAME);
+  return path.join(bridgeDataDir(), "vendor", SCRCPY_SERVER_NAME);
 }
 
 function sha256File(file) {

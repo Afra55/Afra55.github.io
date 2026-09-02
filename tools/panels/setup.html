@@ -255,7 +255,7 @@ adb devices</pre>
               </ul>
             </li>
           </ol>
-          <p class="hint tight">窗口一闪就关：多半是没装 Node / 缺 server.js / 端口占用。看脚本目录旁的日志提示，或用户目录下 <span class="mono">.devtools-adb-bridge</span> / <span class="mono">.devtools-ffmpeg-bridge</span> 的 <span class="mono">last-start.log</span>。</p>
+          <p class="hint tight">窗口一闪就关：多半是没装 Node / 缺 server.js / 端口占用。日志在启动脚本<strong>同目录</strong>的 <span class="mono">last-start.log</span>；镜像用的 <span class="mono">vendor/scrcpy-server-v3.1</span> 也会下载到该目录。</p>
         </section>
 
         <section class="setup-block panel-card" id="setup-faq">

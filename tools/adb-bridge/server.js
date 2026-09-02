@@ -1233,7 +1233,9 @@ function parseDumpsysPackageLabels(stdout) {
 }
 
 function labelCachePath() {
-  return path.join(os.homedir(), ".devtools-adb-bridge", "app-labels-cache.json");
+  const raw = process.env.ADB_BRIDGE_DIR || process.env.DEVTOOLS_BRIDGE_DIR;
+  const base = raw && String(raw).trim() ? path.resolve(String(raw).trim()) : __dirname;
+  return path.join(base, "app-labels-cache.json");
 }
 
 function readLabelCache() {

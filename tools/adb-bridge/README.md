@@ -29,7 +29,7 @@ node server.js
 启动脚本会优先使用**同目录**的 `server.js`；若缺失则尝试从 GitHub Pages / raw 下载。若仍失败，请重新下载完整 ZIP。
 
 双击后窗口一闪而过时：
-- 查看 `~/.devtools-adb-bridge/last-start.log`（Windows：`%USERPROFILE%\.devtools-adb-bridge\last-start.log`，并会复制到桌面）
+- 查看启动脚本**同目录**下的 `last-start.log`（Windows / macOS / Linux 均不再写入用户主目录缓存）
 - Windows 请重新下载「完整 ZIP」；启动脚本为 ASCII+CRLF，避免中文编码导致秒退
 - macOS 可先执行 `chmod +x start-adb-bridge.command`，或用 `bash start-adb-bridge.command`
 - 确认已安装 Node.js 与 adb，且在终端中可运行 `node -v` / `adb devices`
