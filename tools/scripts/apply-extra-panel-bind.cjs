@@ -80,11 +80,16 @@ function collectDomAssigns(section) {
 }
 
 function replaceDomConsts(section) {
+  // 勿在 function 体内把 const dom = $("#…") 提成 let dom; — 会导致变量遮蔽（见 extra-bind-audit.cjs）
+  let depth = 0;
   return section
     .split("\n")
     .map((line) => {
+      const opens = (line.match(/\{/g) || []).length;
+      const closes = (line.match(/\}/g) || []).length;
       const m = line.match(DOM_CONST_RE);
-      if (m) return `${m[1]}let ${m[2]};${m[4]}`;
+      if (m && depth === 0) return `${m[1]}let ${m[2]};${m[4]}`;
+      depth += opens - closes;
       return line;
     })
     .join("\n");

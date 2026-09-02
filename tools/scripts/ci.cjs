@@ -9,6 +9,7 @@ const ROOT = path.resolve(__dirname, "..");
 const STEPS = [
   { name: "syntax app.js", cmd: "node", args: ["--check", "app.js"] },
   { name: "syntax extra.js", cmd: "node", args: ["--check", "extra.js"] },
+  { name: "extra bind audit", cmd: "node", args: ["scripts/extra-bind-audit.cjs"] },
   { name: "registry verify", cmd: "node", args: ["scripts/verify-registry.cjs"] },
   { name: "pure tests", cmd: "node", args: ["test/pure.test.js"] },
   { name: "vbb plan tests", cmd: "node", args: ["vbb-plan.test.js"] },
