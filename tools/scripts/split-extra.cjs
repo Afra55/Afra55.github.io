@@ -48,6 +48,9 @@ const kitOut = `(() => {
     return;
   }
 
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+
 ${kitBody}
 
   const EBind = () => window.DevToolsExtraBind;

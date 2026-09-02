@@ -9,7 +9,16 @@ const fs = require("fs");
 const path = require("path");
 
 const PANELS_DIR = path.join(__dirname, "../extra-panels");
+const KIT_PATH = path.join(__dirname, "../lib/extra-kit.js");
 const failures = [];
+
+const kitSrc = fs.readFileSync(KIT_PATH, "utf8");
+if (!/const \$ = \(sel, root = document\)/.test(kitSrc)) {
+  failures.push("extra-kit.js: 缺少 $ 定义（拆分后会导致 DevToolsExtraKit 初始化失败）");
+}
+if (!/const \$\$ = \(sel, root = document\)/.test(kitSrc)) {
+  failures.push("extra-kit.js: 缺少 $$ 定义");
+}
 
 const files = fs.readdirSync(PANELS_DIR).filter((f) => f.endsWith(".js"));
 

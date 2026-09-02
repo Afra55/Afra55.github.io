@@ -10,6 +10,7 @@
     if (!id || typeof fn !== "function") return;
     if (!binders[id]) binders[id] = [];
     binders[id].push(fn);
+    if (!bound.has(id) && document.getElementById(id)) bind(id);
   }
 
   function bind(panelId) {
