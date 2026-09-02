@@ -1,11 +1,18 @@
-<section id="whiteboard" class="panel tool-panel" data-reveal>
+<section id="whiteboard" class="panel tool-panel whiteboard-panel" data-reveal>
       <div class="panel-head">
         <h1>画板</h1>
         <p>本地手绘白板：无限画布，数据自动保存在浏览器，可导出 PNG / SVG / <code>.excalidraw</code>。首次打开会加载约 46MB 静态资源，之后可离线使用。</p>
       </div>
       <div class="panel-body whiteboard-body">
-        <p class="hint tight whiteboard-hint">纯本地运行，不上传服务器。菜单可导入/导出文件；协作与分享链接功能在嵌入模式下不可用。</p>
-        <div class="whiteboard-shell">
+        <div class="whiteboard-toolbar">
+          <p class="hint tight whiteboard-hint">纯本地运行，不上传服务器。菜单可导入/导出文件；协作与分享链接功能在嵌入模式下不可用。</p>
+          <button type="button" class="ghost-btn whiteboard-fullscreen-btn" id="whiteboard-fullscreen" aria-pressed="false">全屏</button>
+        </div>
+        <div class="whiteboard-shell" id="whiteboard-shell">
+          <div class="whiteboard-load" id="whiteboard-load" hidden aria-live="polite">
+            <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="whiteboard-load-fill"></span></div>
+            <p class="hint tight" id="whiteboard-load-text">正在加载画板…</p>
+          </div>
           <iframe id="whiteboard-frame" class="whiteboard-frame" title="Excalidraw 画板" loading="lazy" referrerpolicy="no-referrer"></iframe>
         </div>
       </div>

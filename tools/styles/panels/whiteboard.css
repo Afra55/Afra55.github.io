@@ -1,22 +1,119 @@
+@import url("./gif-shared.css");
+
 .whiteboard-body {
   padding-top: 0.35rem;
 }
 
-.whiteboard-hint {
+.whiteboard-toolbar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.65rem;
+  flex-wrap: wrap;
   margin: 0 0 0.55rem;
 }
 
+.whiteboard-hint {
+  margin: 0;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.whiteboard-fullscreen-btn {
+  flex: 0 0 auto;
+  min-height: 2rem;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.82rem;
+}
+
 .whiteboard-shell {
+  position: relative;
   display: flex;
   flex-direction: column;
-  min-height: clamp(420px, calc(100dvh - 11.5rem), 860px);
+  min-height: clamp(480px, calc(100dvh - 8.5rem), 960px);
+  background: var(--panel-strong);
+  border-radius: var(--radius-md, 10px);
+}
+
+.whiteboard-shell:fullscreen,
+.whiteboard-shell.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+  width: 100vw !important;
+  max-width: none !important;
+  height: 100dvh !important;
+  min-height: 100dvh !important;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  box-sizing: border-box;
+}
+
+body.whiteboard-fs-active {
+  overflow: hidden;
+}
+
+body.whiteboard-fs-active .whiteboard-shell.is-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 10050;
+}
+
+.whiteboard-shell:fullscreen .whiteboard-frame,
+.whiteboard-shell.is-fullscreen .whiteboard-frame {
+  min-height: 100dvh !important;
+  height: 100dvh !important;
+  border-radius: 0;
+  border: 0;
+}
+
+.whiteboard-load {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.45rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--panel-strong) 94%, var(--bg-0));
+  box-sizing: border-box;
+}
+
+.whiteboard-load[hidden] {
+  display: none !important;
+}
+
+.whiteboard-load .gif-progress-track {
+  width: 100%;
+}
+
+.whiteboard-load .hint {
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .whiteboard-frame {
   flex: 1;
   width: 100%;
-  min-height: 420px;
+  min-height: 480px;
   border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
   border-radius: var(--radius-md, 10px);
   background: var(--panel-strong);
+}
+
+.whiteboard-frame.is-loading {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.whiteboard-shell:fullscreen .whiteboard-frame,
+.whiteboard-shell.is-fullscreen .whiteboard-frame {
+  opacity: 1;
 }
