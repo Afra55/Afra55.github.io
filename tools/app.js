@@ -2524,6 +2524,7 @@
     toolLoadPanelId = String(toolId || "").trim();
     const name = toolName(toolId);
     let overlayShown = false;
+    if (gen === routeGen) setPanelAssetLoading(toolLoadPanelId, true);
     const showDelay = window.setTimeout(() => {
       if (gen !== routeGen) return;
       overlayShown = true;
@@ -2544,18 +2545,25 @@
         console.error("tool lazy-load failed", toolId, err);
         if (gen === routeGen) {
           showToast(`「${name}」加载失败，可切换其他工具或稍后重试`);
+          setPanelAssetLoading(toolLoadPanelId, false);
         }
+        return;
       } finally {
         window.clearTimeout(showDelay);
       }
 
-      if (gen !== routeGen) return;
+      if (gen !== routeGen) {
+        if (loadGen === toolLoadGen) setPanelAssetLoading(toolLoadPanelId, false);
+        return;
+      }
 
       window.dispatchEvent(
         new CustomEvent("devtools:route", {
           detail: { tool: currentTool, groupId: TOOL_TO_GROUP[currentTool] || null },
         })
       );
+
+      if (gen === routeGen) setPanelAssetLoading(toolLoadPanelId, false);
 
       if (!overlayShown) return;
 
