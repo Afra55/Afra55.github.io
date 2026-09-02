@@ -1281,6 +1281,14 @@ body.nav-open {
 }
 
 @media (min-width: 901px) {
+  .nav-bar.is-compact:not(.is-searching) .nav-group-tools.is-flyout-fixed {
+    position: fixed;
+    z-index: 120;
+    box-shadow: 0 12px 32px color-mix(in srgb, var(--bg-0) 50%, transparent);
+  }
+}
+
+@media (min-width: 901px) {
   .nav-menu-btn,
   .workspace-switch,
   .nav-drawer-head {
@@ -1368,6 +1376,12 @@ body.nav-open {
   .nav-bar.is-compact:not(.is-searching) .nav-group.is-flyout-open,
   .nav-bar.is-compact:not(.is-searching) .nav-group.is-pinned {
     z-index: 12;
+  }
+
+  .nav-bar.is-compact:not(.is-searching) .nav-group-tools.is-flyout-fixed {
+    position: fixed;
+    z-index: 120;
+    box-shadow: 0 12px 32px color-mix(in srgb, var(--bg-0) 50%, transparent);
   }
 
   .tool-nav {

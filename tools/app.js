@@ -1332,18 +1332,30 @@
     return true;
   }
 
+  function navFlyoutPanel(wrap) {
+    return wrap?.querySelector?.(".nav-group-tools");
+  }
+
+  function resetNavFlyoutPanel(panel) {
+    if (!panel) return;
+    panel.classList.remove("is-flyout-fixed");
+    panel.style.position = "";
+    panel.style.zIndex = "";
+    panel.style.left = "";
+    panel.style.right = "";
+    panel.style.top = "";
+    panel.style.bottom = "";
+    panel.style.width = "";
+    panel.style.maxHeight = "";
+  }
+
   function positionNavFlyout(wrap) {
-    const panel = wrap?.querySelector?.(".nav-group-tools");
+    const panel = navFlyoutPanel(wrap);
     const title = wrap?.querySelector?.(".nav-group-title, .nav-fav-title");
     if (!panel || !title || !navCompactActive() || compactNavSearching()) return;
     if (compactNavOnMobile()) {
       wrap.classList.remove("is-flyout-up", "is-flyout-left");
-      panel.style.maxHeight = "";
-      panel.style.width = "";
-      panel.style.left = "";
-      panel.style.right = "";
-      panel.style.top = "";
-      panel.style.bottom = "";
+      resetNavFlyoutPanel(panel);
       return;
     }
     const gap = 6;
@@ -1355,17 +1367,19 @@
     wrap.classList.remove("is-flyout-up");
     wrap.classList.toggle("is-flyout-left", openLeft);
 
-    const topInWrap = Math.max(0, Math.round(titleRect.top - wrapRect.top));
-    panel.style.top = `${topInWrap}px`;
+    panel.classList.add("is-flyout-fixed");
+    panel.style.position = "fixed";
+    panel.style.zIndex = "120";
+    panel.style.width = `${panelWidth}px`;
     panel.style.bottom = "auto";
     if (openLeft) {
-      panel.style.left = "";
-      panel.style.right = `calc(100% + ${gap}px)`;
+      panel.style.left = `${Math.max(8, Math.round(titleRect.left - panelWidth - gap))}px`;
+      panel.style.right = "auto";
     } else {
-      panel.style.left = `calc(100% + ${gap}px)`;
-      panel.style.right = "";
+      panel.style.left = `${Math.round(wrapRect.right + gap)}px`;
+      panel.style.right = "auto";
     }
-    panel.style.width = `${panelWidth}px`;
+    panel.style.top = `${Math.round(titleRect.top)}px`;
 
     const spaceBelow = window.innerHeight - titleRect.top - gap;
     panel.style.maxHeight = `${Math.round(Math.min(360, Math.max(120, spaceBelow)))}px`;
@@ -1377,7 +1391,8 @@
     allNavGroups().forEach((g) => {
       g.classList.remove("is-flyout-open", "is-flyout-up", "is-flyout-left");
       if (!keepPinned) g.classList.remove("is-pinned");
-      g.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
+      g.querySelector(".nav-group-title, .nav-fav-title")?.setAttribute("aria-expanded", "false");
+      resetNavFlyoutPanel(navFlyoutPanel(g));
     });
   }
 
@@ -1388,11 +1403,12 @@
     allNavGroups().forEach((g) => {
       if (g === wrap) return;
       g.classList.remove("is-flyout-open", "is-flyout-up", "is-flyout-left", "is-pinned");
-      g.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
+      g.querySelector(".nav-group-title, .nav-fav-title")?.setAttribute("aria-expanded", "false");
+      resetNavFlyoutPanel(navFlyoutPanel(g));
     });
     if (pin) wrap.classList.add("is-pinned");
     wrap.classList.add("is-flyout-open");
-    wrap.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "true");
+    wrap.querySelector(".nav-group-title, .nav-fav-title")?.setAttribute("aria-expanded", "true");
     positionNavFlyout(wrap);
   }
 
@@ -1404,8 +1420,31 @@
       if (!wrap || wrap.classList.contains("is-pinned")) return;
       if (document.body.classList.contains("nav-sorting-tools")) return;
       wrap.classList.remove("is-flyout-open");
-      wrap.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
+      wrap.querySelector(".nav-group-title, .nav-fav-title")?.setAttribute("aria-expanded", "false");
+      resetNavFlyoutPanel(navFlyoutPanel(wrap));
     }, 200);
+  }
+
+  function bindNavFlyoutPanelHover(wrap) {
+    const panel = navFlyoutPanel(wrap);
+    if (!panel || panel.dataset.boundNavFlyout === "1") return;
+    panel.dataset.boundNavFlyout = "1";
+    panel.addEventListener("pointerenter", (e) => {
+      if (!navCompactActive() || compactNavSearching()) return;
+      if (!canHoverNavFlyout(e)) return;
+      window.clearTimeout(navFlyoutTimer);
+      navFlyoutTimer = 0;
+      if (!wrap.classList.contains("is-flyout-open")) openNavFlyout(wrap);
+    });
+    panel.addEventListener("pointerleave", (e) => {
+      if (!navCompactActive() || compactNavSearching()) return;
+      if (wrap.classList.contains("is-pinned")) return;
+      if (isNavToolSorting()) return;
+      if (e?.pointerType && e.pointerType !== "mouse") return;
+      const next = e.relatedTarget;
+      if (next && wrap.contains(next)) return;
+      scheduleCloseNavFlyout(wrap);
+    });
   }
 
   function isNavToolSorting() {
@@ -1418,7 +1457,8 @@
       g.classList.remove("is-sort-flyout");
       if (!g.classList.contains("is-pinned")) {
         g.classList.remove("is-flyout-open", "is-flyout-up", "is-flyout-left");
-        g.querySelector(".nav-group-title")?.setAttribute("aria-expanded", "false");
+        g.querySelector(".nav-group-title, .nav-fav-title")?.setAttribute("aria-expanded", "false");
+        resetNavFlyoutPanel(navFlyoutPanel(g));
       }
     });
   }
@@ -2161,6 +2201,7 @@
       else {
         favoritesWrap.classList.remove("is-pinned", "is-flyout-open");
         title.setAttribute("aria-expanded", "false");
+        resetNavFlyoutPanel(navFlyoutPanel(favoritesWrap));
       }
     });
     favoritesWrap.addEventListener("pointerenter", (e) => {
@@ -2172,8 +2213,12 @@
       if (favoritesWrap.classList.contains("is-pinned")) return;
       if (isNavToolSorting()) return;
       if (e?.pointerType && e.pointerType !== "mouse") return;
+      const next = e.relatedTarget;
+      const panel = navFlyoutPanel(favoritesWrap);
+      if (next && (favoritesWrap.contains(next) || panel?.contains(next))) return;
       scheduleCloseNavFlyout(favoritesWrap);
     });
+    bindNavFlyoutPanelHover(favoritesWrap);
     favoritesWrap.addEventListener("focusin", () => {
       if (!navCompactActive() || compactNavSearching() || navSortInteractionActive()) return;
       openNavFlyout(favoritesWrap);
@@ -3230,10 +3275,11 @@
         e.preventDefault();
         const willPin = !wrap.classList.contains("is-pinned");
         if (willPin) openNavFlyout(wrap, { pin: true });
-        else {
-          wrap.classList.remove("is-pinned", "is-flyout-open");
-          title.setAttribute("aria-expanded", "false");
-        }
+      else {
+        wrap.classList.remove("is-pinned", "is-flyout-open");
+        title.setAttribute("aria-expanded", "false");
+        resetNavFlyoutPanel(navFlyoutPanel(wrap));
+      }
       });
       wrap.addEventListener("pointerenter", (e) => {
         if (!canHoverNavFlyout(e)) return;
@@ -3244,8 +3290,12 @@
         if (wrap.classList.contains("is-pinned")) return;
         if (isNavToolSorting()) return;
         if (e?.pointerType && e.pointerType !== "mouse") return;
+        const next = e.relatedTarget;
+        const panel = navFlyoutPanel(wrap);
+        if (next && (wrap.contains(next) || panel?.contains(next))) return;
         scheduleCloseNavFlyout(wrap);
       });
+      bindNavFlyoutPanelHover(wrap);
       wrap.addEventListener("focusin", () => {
         if (!navCompactActive() || compactNavSearching() || navSortInteractionActive()) return;
         openNavFlyout(wrap);
@@ -3270,8 +3320,7 @@
       return;
     }
     const open = allNavGroups().find((g) => g.classList.contains("is-pinned") || g.classList.contains("is-flyout-open"));
-    if (open?.classList.contains("is-pinned")) positionNavFlyout(open);
-    else if (open) closeNavFlyouts();
+    if (open) positionNavFlyout(open);
   }
 
   $("#nav-compact")?.addEventListener("change", (e) => {
