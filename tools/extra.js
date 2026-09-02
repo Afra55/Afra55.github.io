@@ -1558,6 +1558,16 @@
 
   
   });// ---- QR generate + decode ----
+  let wrap;
+  let meta;
+  let qrVideo;
+  let qrCanvas;
+  let qrPreview;
+  let qrDecoded;
+  let qrDecodeMeta;
+  let qrDecodeError;
+  let qrCamStart;
+  let qrCamStop;
   const QR_CAP_L40 = 2953;
 
   function qrPayloadBytes(text) {
@@ -1610,8 +1620,6 @@
   }
 
   function generateQr() {
-    let wrap;
-    let meta;
     const text = $("#qr-text")?.value.trim() || "";
     if (!wrap) return;
     wrap.innerHTML = "";
@@ -1671,14 +1679,6 @@
       $("#qr-gen")?.addEventListener("click", generateQr);
   if ($("#qr-text")) generateQr();
 
-  const qrVideo = $("#qr-video");
-  const qrCanvas = $("#qr-scan-canvas");
-  const qrPreview = $("#qr-scan-preview");
-  const qrDecoded = $("#qr-decoded");
-  const qrDecodeMeta = $("#qr-decode-meta");
-  const qrDecodeError = $("#qr-decode-error");
-  const qrCamStart = $("#qr-cam-start");
-  const qrCamStop = $("#qr-cam-stop");
   let qrStream = null;
   let qrScanTimer = 0;
   let qrScanning = false;
