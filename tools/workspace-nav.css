@@ -1460,3 +1460,31 @@ body.nav-open {
     transition: none !important;
   }
 }
+
+/* 阶段 A：工具数较多时减轻侧栏绘制压力 */
+.tool-nav.nav-is-scalable .tool-nav-link {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 2.25rem;
+}
+
+.nav-group-tools-virtual {
+  position: relative;
+}
+
+.nav-virtual-host {
+  width: 100%;
+}
+
+.nav-virtual-row {
+  box-sizing: border-box;
+}
+
+.nav-virtual-row .tool-nav-link {
+  display: block;
+  width: 100%;
+}
+
+.nav-virtual-row.is-filtered-out,
+.tool-nav-link.is-filtered-out {
+  display: none !important;
+}

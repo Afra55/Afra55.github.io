@@ -6,7 +6,8 @@ const path = require("path");
 const { extractJsConst, extractJsSet } = require("./lib/extract-js-const.cjs");
 
 const TOOLS = path.resolve(__dirname, "..");
-const APP_JS = path.join(TOOLS, "app.js");
+const REGISTRY_JSON = path.join(TOOLS, "registry/tools.json");
+const REGISTRY_JS = path.join(TOOLS, "lib/tool-registry.js");
 const LAZY_JS = path.join(TOOLS, "lib/lazy-scripts.js");
 const MANIFEST = path.join(TOOLS, "panels/manifest.json");
 const PANELS_DIR = path.join(TOOLS, "panels");
@@ -20,14 +21,35 @@ function read(file) {
   return fs.readFileSync(file, "utf8");
 }
 
+function expectedRegistryJs(data) {
+  return `(() => {
+  "use strict";
+  /** 由 registry/tools.json 生成，勿手改。运行: node tools/scripts/build-tool-registry.cjs */
+  window.DEVTOOLS_REGISTRY = ${JSON.stringify(data, null, 2)};
+})();
+`;
+}
+
 function main() {
-  const app = read(APP_JS);
+  const registry = JSON.parse(read(REGISTRY_JSON));
   const lazy = read(LAZY_JS);
   const manifest = JSON.parse(read(MANIFEST));
 
-  const groups = extractJsConst(app, "TOOL_GROUPS");
-  const meta = extractJsConst(app, "TOOL_META");
-  const about = extractJsConst(app, "ABOUT_DESC");
+  const groups = registry.groups;
+  const meta = registry.meta;
+  const about = registry.about;
+
+  if (!Array.isArray(groups) || !meta || !about) {
+    fail("registry/tools.json 缺少 groups / meta / about");
+    return;
+  }
+
+  const built = read(REGISTRY_JS);
+  const expected = expectedRegistryJs(registry);
+  if (built !== expected) {
+    fail("lib/tool-registry.js 与 registry/tools.json 不同步，请运行 node tools/scripts/build-tool-registry.cjs");
+  }
+
   const toolFiles = extractJsConst(lazy, "TOOL_FILES");
   const toolVendors = extractJsConst(lazy, "TOOL_VENDORS");
   const standalone = extractJsSet(lazy, "STANDALONE_NO_EXTRA");
@@ -40,7 +62,7 @@ function main() {
 
   if (unique.size !== toolIds.length) {
     const dup = toolIds.filter((id, i) => toolIds.indexOf(id) !== i);
-    fail(`TOOL_GROUPS 存在重复工具：${[...new Set(dup)].join(", ")}`);
+    fail(`groups 存在重复工具：${[...new Set(dup)].join(", ")}`);
   }
 
   for (const g of groups) {
@@ -50,19 +72,19 @@ function main() {
   }
 
   for (const id of toolIds) {
-    if (!meta[id]) fail(`TOOL_META 缺少：${id}`);
-    if (!about[id]) fail(`ABOUT_DESC 缺少：${id}`);
+    if (!meta[id]) fail(`meta 缺少：${id}`);
+    if (!about[id]) fail(`about 缺少：${id}`);
     if (!panelIds.has(id)) fail(`panels/manifest.json 缺少面板：${id}`);
     const htmlPath = path.join(PANELS_DIR, `${id}.html`);
     if (!fs.existsSync(htmlPath)) fail(`缺少面板文件：panels/${id}.html`);
   }
 
   for (const id of Object.keys(meta)) {
-    if (!unique.has(id)) fail(`TOOL_META 多余条目（未在 TOOL_GROUPS）：${id}`);
+    if (!unique.has(id)) fail(`meta 多余条目（未在 groups）：${id}`);
   }
 
   for (const id of panelIds) {
-    if (!unique.has(id)) fail(`manifest 面板未注册到 TOOL_GROUPS：${id}`);
+    if (!unique.has(id)) fail(`manifest 面板未注册到 groups：${id}`);
   }
 
   for (const id of Object.keys(toolFiles)) {

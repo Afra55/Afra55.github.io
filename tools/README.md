@@ -71,6 +71,12 @@ python3 -m http.server 8080 --directory .
 
 打开 `http://localhost:8080/tools/`。
 
+## 新增工具（阶段 A 注册表）
+
+1. 编辑 `tools/registry/tools.json`（groups / meta / about）
+2. 生成运行时脚本：`node tools/scripts/build-tool-registry.cjs`
+3. 同步 lazy-scripts、面板等后校验：`node tools/scripts/verify-registry.cjs`
+
 ## 测试
 
 ```bash
