@@ -7,7 +7,7 @@
 
   /** @type {{ updated: string, groups: Array<{ id: string, label: string, items: OssItem[] }> }} */
   const OSS_DEPS = {
-    updated: "2026-08-30",
+    updated: "2026-09-02",
     groups: [
       {
         id: "vendor",
@@ -76,6 +76,14 @@
             repo: "https://github.com/deanm/omggif",
             usedIn: "GIF 解码 / 帧读取",
             path: "tools/vendor/omggif.js",
+          },
+          {
+            name: "jsonrepair",
+            version: "3.15.0",
+            license: "ISC",
+            repo: "https://github.com/josdejong/jsonrepair",
+            usedIn: "JSON 修复（尾逗号、注释、单引号等）",
+            path: "tools/vendor/jsonrepair.min.js",
           },
           {
             name: "gifsicle-wasm-browser",

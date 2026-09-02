@@ -602,6 +602,40 @@
     }
   }
 
+  async function runJsonRepair() {
+    const raw = jsonInput.value.trim();
+    if (!raw) {
+      jsonMeta.textContent = "";
+      setToolError(jsonError, "请先输入 JSON");
+      return;
+    }
+    const repairBtn = $("#json-repair");
+    try {
+      setToolError(jsonError, "");
+      jsonMeta.textContent = "加载修复库…";
+      if (repairBtn) repairBtn.disabled = true;
+      await window.DevToolsLazy?.loadVendor("jsonrepair");
+      const jsonrepair = globalThis.JSONRepair?.jsonrepair;
+      if (typeof jsonrepair !== "function") throw new Error("JSON 修复库未就绪");
+      const repaired = jsonrepair(raw);
+      const data = JSON.parse(repaired);
+      const pretty = JSON.stringify(data, null, 2);
+      jsonInput.value = pretty;
+      jsonMeta.textContent = `已修复并美化 · 根类型 ${Array.isArray(data) ? "array" : typeof data} · ${pretty.split("\n").length} 行 · ${pretty.length} 字符`;
+      fitJsonArea();
+      showToast(repaired.replace(/\s/g, "") === raw.replace(/\s/g, "") ? "JSON 已是合法格式" : "JSON 已修复");
+    } catch (err) {
+      jsonMeta.textContent = "";
+      const msg = err?.position != null ? `${err.message}` : String(err?.message || err);
+      setToolError(jsonError, `修复失败：${msg}`);
+    } finally {
+      if (repairBtn) repairBtn.disabled = false;
+    }
+  }
+
+  $("#json-repair")?.addEventListener("click", () => {
+    void runJsonRepair();
+  });
   $("#json-pretty").addEventListener("click", () => runJson("pretty"));
   $("#json-minify").addEventListener("click", () => runJson("minify"));
   $("#json-validate").addEventListener("click", () => runJson("validate"));

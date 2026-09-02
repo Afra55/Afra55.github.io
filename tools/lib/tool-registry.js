@@ -808,7 +808,7 @@
     "xorenc": "半段 XOR 加解密：文本与文件，可自定义两个密钥（默认 4/7）。",
     "morse": "摩尔斯电码与文本互转；底部含从零读懂 ·/- 电码的新手教程。",
     "uuid": "生成 UUID / GUID。",
-    "json": "JSON 校验、美化与压缩。",
+    "json": "JSON 校验、修复、美化与压缩。",
     "yaml": "YAML 与 JSON 互转、校验。",
     "sharecard": "代码/JSON 生成分享卡片图。",
     "phlogo": "P 站风双色 Logo：两段文字 + 圆角色块，可改颜色/字号，导出 PNG 或 SVG。参考 bestony/logoly。",

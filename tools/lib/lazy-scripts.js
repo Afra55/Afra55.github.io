@@ -35,6 +35,10 @@
       src: "./vendor/solarlunar.min.js",
       probe: () => typeof globalThis.solarlunar === "object",
     },
+    jsonrepair: {
+      src: "./vendor/jsonrepair.min.js",
+      probe: () => typeof globalThis.JSONRepair?.jsonrepair === "function",
+    },
   };
 
   const EXTERNAL_SITE_TOOLS = new Set(["pdfcraft", "insectworld", "prehmuseum"]);
@@ -311,6 +315,7 @@
     gif: "GIF 编码库",
     omggif: "GIF 解码库",
     solarlunar: "农历库",
+    jsonrepair: "JSON 修复库",
   };
 
   async function ensureForTool(toolId, opts = {}) {
