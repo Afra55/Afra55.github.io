@@ -80,8 +80,67 @@
     });
   }
 
-  async function encodeCanvas(canvas, format, quality, targetBytes) {
-    const mime = P.mimeFromFormat(format);
+  let jsquashPromise = null;
+  function loadJsquash() {
+    if (window.DevToolsJsquash) return Promise.resolve(window.DevToolsJsquash);
+    if (!jsquashPromise) {
+      const v = encodeURIComponent(window.TOOLS_BUILD || window.TOOLS_VERSION || "");
+      jsquashPromise = import(`./vendor/jsquash/hub.js?v=${v}`).then((mod) => {
+        window.DevToolsJsquash = mod;
+        return mod;
+      });
+    }
+    return jsquashPromise;
+  }
+
+  async function ensureJsZip() {
+    if (typeof globalThis.JSZip === "function") return globalThis.JSZip;
+    const v = encodeURIComponent(window.TOOLS_BUILD || "");
+    await new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = `./vendor/jszip.min.js?v=${v}`;
+      s.onload = resolve;
+      s.onerror = () => reject(new Error("JSZip 加载失败"));
+      document.head.appendChild(s);
+    });
+    if (typeof globalThis.JSZip !== "function") throw new Error("JSZip 未加载");
+    return globalThis.JSZip;
+  }
+
+  function sourceFormatOf(item) {
+    const type = String(item?.file?.type || "").toLowerCase();
+    const name = String(item?.name || "").toLowerCase();
+    if (type.includes("jpeg") || name.endsWith(".jpg") || name.endsWith(".jpeg")) return "jpeg";
+    if (type.includes("png") || name.endsWith(".png")) return "png";
+    if (type.includes("webp") || name.endsWith(".webp")) return "webp";
+    if (type.includes("avif") || name.endsWith(".avif")) return "avif";
+    return "png";
+  }
+
+  function resolveExportFormat(item, opts) {
+    if (opts.keepFormat && item) return sourceFormatOf(item);
+    return opts.format || "png";
+  }
+
+  async function encodeCanvas(canvas, format, quality, targetBytes, encoder) {
+    const fmt = String(format || "png").toLowerCase();
+    let useHq = encoder === "hq" || fmt === "avif";
+    if (useHq) {
+      try {
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const hub = await loadJsquash();
+        return await hub.encodeImageData(imageData, fmt, {
+          quality,
+          targetBytes: targetBytes || 0,
+        });
+      } catch (err) {
+        if (fmt === "avif") throw err;
+        console.warn("[imgkit] 高质量编码失败，回退浏览器编码", err);
+        useHq = false;
+      }
+    }
+    const mime = P.mimeFromFormat(fmt);
     const supportsQuality = mime === "image/jpeg" || mime === "image/webp";
     if (!supportsQuality || !targetBytes || targetBytes <= 0) {
       const q = supportsQuality ? Math.min(1, Math.max(0.05, Number(quality) || 0.9)) : undefined;
@@ -101,7 +160,6 @@
       }
     }
     if (best.size > targetBytes) {
-      // last attempt at lowest quality
       best = await canvasToBlob(canvas, mime, 0.05);
     }
     return best;
@@ -204,7 +262,9 @@
     const resizeMode = $("#imgkit-resize-mode")?.value || "max";
     return {
       format: $("#imgkit-format")?.value || "png",
-      quality: Number($("#imgkit-quality")?.value || 0.9),
+      encoder: $("#imgkit-encoder")?.value || "hq",
+      keepFormat: Boolean($("#imgkit-keep-format")?.checked),
+      quality: Number($("#imgkit-quality")?.value || 0.8),
       targetKB: Number($("#imgkit-target-kb")?.value || 0),
       resizeMode,
       keepAspect: Boolean($("#imgkit-keep-aspect")?.checked),
@@ -1015,8 +1075,9 @@
     ctx.restore();
 
     const targetBytes = opts.targetKB > 0 ? opts.targetKB * 1024 : 0;
-    const blob = await encodeCanvas(canvas, opts.format, opts.quality, targetBytes);
-    return { canvas, blob, width: canvas.width, height: canvas.height };
+    const format = resolveExportFormat(item, opts);
+    const blob = await encodeCanvas(canvas, format, opts.quality, targetBytes, opts.encoder);
+    return { canvas, blob, width: canvas.width, height: canvas.height, format };
   }
 
   function renderList() {
@@ -1044,6 +1105,7 @@
       return;
     }
     const type = item.file.type || "unknown";
+    const outFmt = processed?.format;
     const colorMode =
       type.includes("png") || type.includes("webp")
         ? "RGBA / sRGB（画布导出）"
@@ -1063,8 +1125,9 @@
         `导出体积: ${formatBytes(processed.blob.size)}`,
         `导出格式: ${processed.blob.type || "—"}`
       );
+      if (processed.format) lines.push(`扩展名: .${P.extFromFormat(processed.format)}`);
     }
-    els.info.textContent = lines.join("\n");
+    els.info.textContent = lines.filter(Boolean).join("\n");
     if (els.exif) {
       const tags = item.exif?.tags || {};
       const keys = Object.keys(tags);
@@ -1076,7 +1139,9 @@
     }
   }
 
+  let previewToken = 0;
   async function refreshPreview() {
+    const token = ++previewToken;
     const item = selectedItem();
     setError(els.error, "");
     if (!item) {
@@ -1092,7 +1157,9 @@
     try {
       if (els.meta) els.meta.textContent = "处理中…";
       if (!state.cropDrag) syncImageCropEditor();
-      const result = await processItem(item, readOptions());
+      const opts = readOptions();
+      const result = await processItem(item, opts);
+      if (token !== previewToken) return;
       if (state.previewUrl) URL.revokeObjectURL(state.previewUrl);
       state.previewUrl = URL.createObjectURL(result.blob);
       if (els.preview) {
@@ -1100,8 +1167,12 @@
         els.preview.hidden = false;
       }
       updateInfo(item, result);
-      if (els.meta) els.meta.textContent = `预览约 ${formatBytes(result.blob.size)}`;
+      if (els.meta) {
+        const enc = opts.encoder === "hq" ? "高质量 WASM，与导出/批量相同" : "浏览器快速编码";
+        els.meta.textContent = `预览约 ${formatBytes(result.blob.size)} · ${enc}`;
+      }
     } catch (err) {
+      if (token !== previewToken) return;
       setError(els.error, err.message || String(err));
       if (els.meta) els.meta.textContent = "处理失败";
     }
@@ -1145,22 +1216,23 @@
     const opts = readOptions();
     const result = await processItem(item, opts);
     const base = item.name.replace(/\.[^.]+$/, "");
-    downloadBlob(result.blob, `${base}.${P.extFromFormat(opts.format)}`);
+    downloadBlob(result.blob, `${base}.${P.extFromFormat(result.format || opts.format)}`);
     toast("已导出当前图片");
   }
 
   async function exportBatchZip() {
     if (!state.items.length) throw new Error("请先添加图片");
-    if (typeof JSZip === "undefined") throw new Error("JSZip 未加载");
+    const JSZip = await ensureJsZip();
     const opts = readOptions();
     const zip = new JSZip();
     const folder = zip.folder("images");
     for (let i = 0; i < state.items.length; i++) {
       const item = state.items[i];
-      if (els.meta) els.meta.textContent = `批量处理 ${i + 1}/${state.items.length}`;
+      if (els.meta) els.meta.textContent = `批量处理 ${i + 1}/${state.items.length}（高质量与单张相同，逐张排队）`;
       const result = await processItem(item, opts);
-      const base = item.name.replace(/\.[^.]+$/, "");
-      folder.file(`${base}.${P.extFromFormat(opts.format)}`, result.blob);
+      const base = item.name.replace(/\.[^.]+$/, "") || `img-${i + 1}`;
+      folder.file(`${base}.${P.extFromFormat(result.format || opts.format)}`, result.blob);
+      await new Promise((r) => setTimeout(r, 0));
     }
     const blob = await zip.generateAsync({ type: "blob" });
     downloadBlob(blob, `images-batch-${Date.now()}.zip`);
@@ -1173,7 +1245,7 @@
     const opts = readOptions();
     const built = buildStitchCanvas(opts);
     if (!built) throw new Error("无法生成拼接图");
-    const blob = await encodeCanvas(built.canvas, opts.format, opts.quality, 0);
+    const blob = await encodeCanvas(built.canvas, opts.format, opts.quality, 0, opts.encoder);
     downloadBlob(blob, `stitch.${P.extFromFormat(opts.format)}`);
     toast(`拼接图已导出（${built.width}×${built.height}）`);
   }
@@ -1181,7 +1253,7 @@
   async function exportNineGrid() {
     const item = selectedItem();
     if (!item) throw new Error("请先选择图片");
-    if (typeof JSZip === "undefined") throw new Error("JSZip 未加载");
+    const JSZip = await ensureJsZip();
     const opts = readOptions();
     const result = await processItem(item, opts);
     const url = URL.createObjectURL(result.blob);
@@ -1195,13 +1267,14 @@
     const rects = P.calcNineGridRects(img.naturalWidth, img.naturalHeight);
     const zip = new JSZip();
     const folder = zip.folder("nine-grid");
+    const partFmt = result.format || opts.format;
     for (const rect of rects) {
       const c = document.createElement("canvas");
       c.width = rect.width;
       c.height = rect.height;
       c.getContext("2d").drawImage(img, rect.x, rect.y, rect.width, rect.height, 0, 0, rect.width, rect.height);
-      const blob = await encodeCanvas(c, opts.format, opts.quality, 0);
-      folder.file(`part-${rect.index}.${P.extFromFormat(opts.format)}`, blob);
+      const blob = await encodeCanvas(c, partFmt, opts.quality, 0, opts.encoder);
+      folder.file(`part-${rect.index}.${P.extFromFormat(partFmt)}`, blob);
     }
     const blob = await zip.generateAsync({ type: "blob" });
     downloadBlob(blob, `nine-grid-${Date.now()}.zip`);
@@ -1211,7 +1284,7 @@
   async function exportAppIcons() {
     const item = selectedItem();
     if (!item) throw new Error("请先选择图片");
-    if (typeof JSZip === "undefined") throw new Error("JSZip 未加载");
+    const JSZip = await ensureJsZip();
     const opts = readOptions();
     // Use square center crop then scale to each size
     const squareOpts = { ...opts, aspect: "1:1", resizeMode: "wh", keepAspect: false };
@@ -1232,12 +1305,63 @@
       c.width = size;
       c.height = size;
       c.getContext("2d").drawImage(img, 0, 0, size, size);
-      const blob = await encodeCanvas(c, "png", 1, 0);
+      const blob = await encodeCanvas(c, "png", 1, 0, opts.encoder);
       folder.file(`icon-${size}.png`, blob);
     }
     const blob = await zip.generateAsync({ type: "blob" });
     downloadBlob(blob, `app-icons-${opts.iconPlatform}-${Date.now()}.zip`);
     toast("App 图标包已导出");
+  }
+
+  function syncKeepFormatUi() {
+    const keep = Boolean($("#imgkit-keep-format")?.checked);
+    const formatEl = $("#imgkit-format");
+    if (formatEl) formatEl.disabled = keep;
+  }
+
+  function applyImgkitPreset(kind) {
+    const encoder = $("#imgkit-encoder");
+    const keep = $("#imgkit-keep-format");
+    const format = $("#imgkit-format");
+    const quality = $("#imgkit-quality");
+    const target = $("#imgkit-target-kb");
+    const resizeMode = $("#imgkit-resize-mode");
+    const maxEdge = $("#imgkit-max-edge");
+    if (encoder) encoder.value = "hq";
+    if (kind === "keep") {
+      if (keep) keep.checked = true;
+      if (quality) quality.value = "0.8";
+      if (target) target.value = "0";
+    } else if (kind === "tiny") {
+      if (keep) keep.checked = false;
+      if (format) format.value = "avif";
+      if (quality) quality.value = "0.45";
+      if (target) target.value = "0";
+    } else if (kind === "moments") {
+      if (keep) keep.checked = false;
+      if (format) format.value = "jpeg";
+      if (quality) quality.value = "0.75";
+      if (target) target.value = "0";
+      if (resizeMode) resizeMode.value = "max";
+      if (maxEdge) maxEdge.value = "1440";
+    }
+    syncKeepFormatUi();
+    syncResizeFields();
+    schedulePreview();
+  }
+
+  let previewTimer = 0;
+  function schedulePreview() {
+    const delay = ($("#imgkit-encoder")?.value || "hq") === "hq" ? 360 : 0;
+    clearTimeout(previewTimer);
+    if (!delay) {
+      refreshPreview();
+      return;
+    }
+    if (els.meta) els.meta.textContent = "高质量编码中…";
+    previewTimer = setTimeout(() => {
+      refreshPreview();
+    }, delay);
   }
 
   function syncResizeFields() {
@@ -1294,6 +1418,8 @@
 
   [
     "imgkit-format",
+    "imgkit-encoder",
+    "imgkit-keep-format",
     "imgkit-quality",
     "imgkit-target-kb",
     "imgkit-resize-mode",
@@ -1336,8 +1462,9 @@
         state.cropSource = null;
         state.cropSourceKey = "";
       }
+      if (id === "imgkit-keep-format") syncKeepFormatUi();
       syncImageCropEditor();
-      refreshPreview();
+      schedulePreview();
     });
     el?.addEventListener("change", () => {
       if (id === "imgkit-resize-mode") syncResizeFields();
@@ -1353,8 +1480,9 @@
         state.cropSource = null;
         state.cropSourceKey = "";
       }
+      if (id === "imgkit-keep-format") syncKeepFormatUi();
       syncImageCropEditor();
-      refreshPreview();
+      schedulePreview();
     });
   });
 
@@ -1589,6 +1717,10 @@
     await refreshPreview();
   });
 
+  $("#imgkit-preset-keep")?.addEventListener("click", () => applyImgkitPreset("keep"));
+  $("#imgkit-preset-tiny")?.addEventListener("click", () => applyImgkitPreset("tiny"));
+  $("#imgkit-preset-moments")?.addEventListener("click", () => applyImgkitPreset("moments"));
+
   $("#imgkit-export")?.addEventListener("click", () =>
     exportCurrent().catch((err) => setError(els.error, err.message || String(err)))
   );
@@ -1675,6 +1807,7 @@
   });
 
   syncResizeFields();
+  syncKeepFormatUi();
   renderList();
   updateInfo(null);
   renderStitchCrops();

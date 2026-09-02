@@ -7,7 +7,7 @@
 
   /** @type {{ updated: string, groups: Array<{ id: string, label: string, items: OssItem[] }> }} */
   const OSS_DEPS = {
-    updated: "2026-09-02",
+    updated: "2026-09-03",
     groups: [
       {
         id: "vendor",
@@ -100,6 +100,14 @@
             repo: "https://github.com/ffmpegwasm/ffmpeg.wasm",
             usedIn: "视频修剪 / 音频 / GIF / 黑盒等网页 FFmpeg",
             path: "tools/vendor/ffmpeg/",
+          },
+          {
+            name: "jSquash (mozjpeg / WebP / AVIF / oxipng)",
+            version: "jpeg 1.6.0 · webp 1.5.0 · avif 2.1.1 · oxipng 2.3.0",
+            license: "Apache-2.0",
+            repo: "https://github.com/jamsinclair/jSquash",
+            usedIn: "图片工具高质量压缩（Squoosh 编解码 WASM）",
+            path: "tools/vendor/jsquash/",
           },
         ],
       },

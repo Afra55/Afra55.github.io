@@ -502,7 +502,12 @@
         "裁剪",
         "压缩",
         "水印",
-        "拼接"
+        "拼接",
+        "mozjpeg",
+        "avif",
+        "oxipng",
+        "高质量",
+        "批量压缩"
       ]
     },
     "imgtrim": {
@@ -832,7 +837,7 @@
     "audio": "修剪、音量、抽音轨；网页 FFmpeg 保底，电脑批量请用本机桥。",
     "imgpreview": "多图叠放预览：拖拽定位、滚轮无极缩放、透明度与层级、边缘吸附对齐；底部缩略图快速选中。",
     "whiteboard": "本地手绘白板（Excalidraw）：无限画布，自动存浏览器，可导出 PNG / SVG / .excalidraw。",
-    "imgkit": "图片压缩、裁剪、水印、拼接。",
+    "imgkit": "图片压缩（mozjpeg/AVIF/oxipng 高质量档）、裁剪、水印、拼接。",
     "imgtrim": "裁掉图片四周纯色边框（白/黑/其它单色），从各边向内直到出现其它颜色；支持多选。",
     "textimg": "文字/Markdown/代码生成分享图。",
     "imgtext": "本地 OCR 图片转文字（Tesseract）。",

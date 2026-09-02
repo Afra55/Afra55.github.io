@@ -1,7 +1,7 @@
 <section id="imgkit" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>图片工具</h1>
-        <p>本地压缩、改尺寸、转格式、裁剪、水印、拼接、九宫格与 App 图标导出；按页签操作，底部随时可导出。</p>
+        <p>本地压缩、改尺寸、转格式、裁剪、水印、拼接、九宫格与 App 图标导出。高质量档用 mozjpeg/AVIF/oxipng（浏览器 WASM），批量也是同一编码器逐张排队。</p>
       </div>
       <div class="panel-body">
         <div class="imgkit-drop" id="imgkit-drop">
@@ -45,18 +45,33 @@
                   <div class="field-block">
                     <h2 class="subhead">格式与压缩</h2>
                     <div class="field-row" style="flex-wrap:wrap">
+                      <span class="hint tight" style="margin-right:0.35rem">预设</span>
+                      <button type="button" class="ghost-btn" id="imgkit-preset-keep">保格式高质量</button>
+                      <button type="button" class="ghost-btn" id="imgkit-preset-tiny">尽量小</button>
+                      <button type="button" class="ghost-btn" id="imgkit-preset-moments">朋友圈</button>
+                    </div>
+                    <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem">
+                      <label for="imgkit-encoder">编码</label>
+                      <select id="imgkit-encoder" class="mono select-input">
+                        <option value="fast">快速（浏览器）</option>
+                        <option value="hq" selected>高质量（mozjpeg / AVIF / oxipng）</option>
+                      </select>
+                      <label class="flag"><input type="checkbox" id="imgkit-keep-format" checked /> 保持原格式</label>
+                    </div>
+                    <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem">
                       <label for="imgkit-format">格式</label>
                       <select id="imgkit-format" class="mono select-input">
                         <option value="webp">WebP</option>
                         <option value="jpeg">JPEG</option>
                         <option value="png" selected>PNG</option>
+                        <option value="avif">AVIF</option>
                       </select>
                       <label for="imgkit-quality">质量</label>
-                      <input id="imgkit-quality" class="mono meta-input" type="number" min="0.05" max="1" step="0.05" value="0.9" />
+                      <input id="imgkit-quality" class="mono meta-input" type="number" min="0.05" max="1" step="0.05" value="0.8" />
                       <label for="imgkit-target-kb">目标 KB</label>
-                      <input id="imgkit-target-kb" class="mono meta-input" type="number" min="0" step="1" value="0" title="0 表示不限制；JPEG/WebP 有效" />
+                      <input id="imgkit-target-kb" class="mono meta-input" type="number" min="0" step="1" value="0" title="0 表示不限制；JPEG/WebP/AVIF 有效" />
                     </div>
-                    <p class="hint">目标体积会对 JPEG/WebP 自动二分质量；PNG 忽略质量/目标体积。</p>
+                    <p class="hint" id="imgkit-encode-hint">高质量编码用 Squoosh 系 WASM：JPG 仍是 JPG（mozjpeg），PNG 仍是 PNG（oxipng）。点「尽量小」才会改成 AVIF。预览 / 导出 / 批量 ZIP 共用同一编码器；批量逐张排队，不经本机桥。</p>
                   </div>
                   <div class="field-block" style="margin-top:0.85rem">
                     <h2 class="subhead">尺寸</h2>
