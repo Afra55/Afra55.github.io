@@ -2,14 +2,19 @@
   "use strict";
 
   const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
 
   const panel = $("#everything");
   if (!panel) return;
 
   const BASE_KEY = "devtools-everything-base";
   const USER_KEY = "devtools-everything-user";
+  const RECENT_KEY = "devtools-everything-recent-v1";
+  const LIVE_KEY = "devtools-everything-live-v1";
   const SETUP_GUIDE_HIDDEN_KEY = "devtools-everything-setup-guide-hidden-v1";
   const DEFAULT_BASE = "http://127.0.0.1";
+  const LIVE_DEBOUNCE_MS = 280;
+  const MAX_RECENT = 16;
 
   const baseInput = $("#ev-base");
   const userInput = $("#ev-user");
@@ -32,6 +37,8 @@
   const metaEl = $("#ev-meta");
   const prevBtn = $("#ev-prev");
   const nextBtn = $("#ev-next");
+  const recentSelect = $("#ev-recent");
+  const optLive = $("#ev-live");
 
   const optCase = $("#ev-case");
   const optWhole = $("#ev-wholeword");
@@ -48,6 +55,10 @@
   let lastTotal = 0;
   let offset = 0;
   let searching = false;
+  let liveTimer = 0;
+  let searchGen = 0;
+  /** @type {string[]} */
+  let lastResults = [];
 
   function toast(msg) {
     if (window.devtoolsToast) window.devtoolsToast(msg);
@@ -84,6 +95,7 @@
     try {
       localStorage.setItem(BASE_KEY, baseUrl());
       localStorage.setItem(USER_KEY, userInput?.value?.trim() || "");
+      localStorage.setItem(LIVE_KEY, optLive?.checked ? "1" : "0");
     } catch (_) {}
   }
 
@@ -93,7 +105,42 @@
       if (savedBase && baseInput) baseInput.value = savedBase;
       const savedUser = localStorage.getItem(USER_KEY);
       if (savedUser && userInput) userInput.value = savedUser;
+      const live = localStorage.getItem(LIVE_KEY);
+      if (optLive && live != null) optLive.checked = live !== "0";
     } catch (_) {}
+  }
+
+  function readRecent() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
+      return Array.isArray(raw) ? raw.filter((s) => typeof s === "string" && s.trim()) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  function pushRecent(q) {
+    const s = String(q || "").trim();
+    if (!s) return;
+    const list = readRecent().filter((x) => x !== s);
+    list.unshift(s);
+    const next = list.slice(0, MAX_RECENT);
+    try {
+      localStorage.setItem(RECENT_KEY, JSON.stringify(next));
+    } catch (_) {}
+    syncRecentSelect(next);
+  }
+
+  function syncRecentSelect(list = readRecent()) {
+    if (!recentSelect) return;
+    recentSelect.innerHTML = '<option value="">最近搜索…</option>';
+    for (const q of list) {
+      const opt = document.createElement("option");
+      opt.value = q;
+      opt.textContent = q.length > 48 ? `${q.slice(0, 48)}…` : q;
+      recentSelect.appendChild(opt);
+    }
+    recentSelect.hidden = list.length === 0;
   }
 
   function authHeaders() {
@@ -118,13 +165,12 @@
       if (modeTitle) modeTitle.textContent = "无法从当前页面直连本机 Everything";
       if (modeText) {
         modeText.innerHTML =
-          "HTTPS 页面访问 <span class=\"mono\">http://127.0.0.1</span> 可能被浏览器拦截。请用「Everything 网页」在新标签打开，或在本机用 localhost / file 打开本站后再试。";
+          "HTTPS 页面访问 <span class=\"mono\">http://127.0.0.1</span> 可能被拦截。请用「Everything 网页」，或把本站保存到本机 / localhost 打开后再搜。";
       }
     } else if (connected) {
       modeBanner.hidden = false;
       if (modeTitle) modeTitle.textContent = "已连接 Everything HTTP";
-      if (modeText) modeText.textContent = "JSON 搜索可用；也可随时用 Everything 自带网页界面。";
-      modeBanner.style.background = "";
+      if (modeText) modeText.textContent = "已启用完整 JSON 列与实时搜索；复杂筛选仍可用 Everything 桌面版。";
     } else {
       modeBanner.hidden = true;
     }
@@ -134,7 +180,7 @@
   function isSetupGuideHidden() {
     try {
       return localStorage.getItem(SETUP_GUIDE_HIDDEN_KEY) === "1";
-    } catch (_) {
+    } catch {
       return false;
     }
   }
@@ -172,6 +218,8 @@
     params.set("path_column", "1");
     params.set("size_column", "1");
     params.set("date_modified_column", "1");
+    params.set("date_created_column", "1");
+    params.set("attributes_column", "1");
     params.set("offset", String(opts.offset ?? 0));
     params.set("count", String(opts.count ?? 100));
     params.set("sort", opts.sort || "name");
@@ -187,9 +235,9 @@
   function webSearchUrl(query) {
     const params = buildSearchParams(query, currentOpts());
     params.delete("json");
-    params.delete("path_column");
-    params.delete("size_column");
-    params.delete("date_modified_column");
+    for (const k of ["path_column", "size_column", "date_modified_column", "date_created_column", "attributes_column"]) {
+      params.delete(k);
+    }
     return `${baseUrl()}/?${params.toString()}`;
   }
 
@@ -223,12 +271,30 @@
     return `${path}${sep}${name}`;
   }
 
+  function parentFolderPath(fp) {
+    const s = String(fp || "").replace(/[\\/]+$/, "");
+    const i = Math.max(s.lastIndexOf("\\"), s.lastIndexOf("/"));
+    return i > 0 ? s.slice(0, i) : s;
+  }
+
+  function folderBrowseQuery(fp) {
+    const p = String(fp || "").replace(/\//g, "\\");
+    if (!p) return "";
+    const q = p.endsWith("\\") ? p : `${p}\\`;
+    return `parent:"${q}"`;
+  }
+
   function fileDownloadUrl(full) {
     const base = baseUrl();
     const p = String(full || "").replace(/\\/g, "/");
     if (!p) return base;
     if (/^[a-z]:\//i.test(p)) return `${base}/${encodeURI(p)}`;
     return `${base}/${encodeURI(p.replace(/^\/+/, ""))}`;
+  }
+
+  function desktopSearchCommand(query) {
+    const q = String(query || "").replace(/"/g, '\\"');
+    return `Everything.exe -search "${q}"`;
   }
 
   async function apiFetch(url) {
@@ -260,7 +326,11 @@
       if (!data || typeof data !== "object") throw new Error("无效响应");
       connected = true;
       apiBlocked = false;
-      setStatus("is-ok", "已连接 Everything", `HTTP 服务正常${Number.isFinite(data.totalResults) ? ` · 索引约 ${data.totalResults.toLocaleString()} 条` : ""}`);
+      setStatus(
+        "is-ok",
+        "已连接 Everything",
+        `HTTP 正常${Number.isFinite(data.totalResults) ? ` · 索引约 ${data.totalResults.toLocaleString()} 条` : ""} · 支持实时搜索`
+      );
       syncModeBanner();
       return true;
     } catch (err) {
@@ -282,43 +352,6 @@
     }
   }
 
-  function renderResults(data) {
-    if (!resultsEl) return;
-    resultsEl.innerHTML = "";
-    const rows = Array.isArray(data?.results) ? data.results : [];
-    if (!rows.length) {
-      resultsEl.innerHTML = '<p class="ev-empty">没有匹配结果</p>';
-      return;
-    }
-    for (const item of rows) {
-      const row = document.createElement("div");
-      row.className = "ev-row";
-      row.setAttribute("role", "listitem");
-      const fp = fullPath(item);
-      const isFolder = item.type === "folder";
-      const icon = isFolder ? "📁" : "📄";
-      const size = item.size != null && !isFolder ? formatBytes(item.size) : isFolder ? "文件夹" : "";
-      const modified = item.date_modified ? String(item.date_modified) : "";
-
-      row.innerHTML = `
-        <span class="ev-row-icon" aria-hidden="true">${icon}</span>
-        <div class="ev-row-main">
-          <div class="ev-row-name">${escapeHtml(item.name || fp)}</div>
-          <div class="ev-row-path mono">${escapeHtml(fp)}</div>
-        </div>
-        <div class="ev-row-meta">
-          ${size ? `<span>${escapeHtml(size)}</span>` : ""}
-          ${modified ? `<span>${escapeHtml(modified)}</span>` : ""}
-        </div>
-        <div class="ev-row-actions">
-          <button type="button" class="ghost-btn" data-ev-copy="${escapeAttr(fp)}">复制路径</button>
-          <button type="button" class="ghost-btn" data-ev-web="${escapeAttr(fp)}">网页打开</button>
-          ${!isFolder ? `<a class="ghost-btn" href="${escapeAttr(fileDownloadUrl(fp))}" target="_blank" rel="noopener noreferrer">下载</a>` : ""}
-        </div>`;
-      resultsEl.appendChild(row);
-    }
-  }
-
   function escapeHtml(s) {
     return String(s)
       .replace(/&/g, "&amp;")
@@ -331,12 +364,74 @@
     return escapeHtml(s).replace(/'/g, "&#39;");
   }
 
+  function renderResults(data) {
+    if (!resultsEl) return;
+    resultsEl.innerHTML = "";
+    lastResults = [];
+    const rows = Array.isArray(data?.results) ? data.results : [];
+    if (!rows.length) {
+      resultsEl.innerHTML = '<p class="ev-empty">没有匹配结果</p>';
+      return;
+    }
+    let idx = 0;
+    for (const item of rows) {
+      const fp = fullPath(item);
+      lastResults.push(fp);
+      const isFolder = item.type === "folder";
+      const icon = isFolder ? "📁" : "📄";
+      const size = item.size != null && !isFolder ? formatBytes(item.size) : isFolder ? "文件夹" : "";
+      const modified = item.date_modified ? String(item.date_modified) : "";
+      const created = item.date_created ? String(item.date_created) : "";
+      const attrs = item.attributes ? String(item.attributes) : "";
+
+      const row = document.createElement("div");
+      row.className = "ev-row";
+      row.dataset.evIdx = String(idx);
+      row.setAttribute("role", "listitem");
+      row.tabIndex = 0;
+      row.innerHTML = `
+        <span class="ev-row-icon" aria-hidden="true">${icon}</span>
+        <div class="ev-row-main">
+          <div class="ev-row-name">${escapeHtml(item.name || fp)}</div>
+          <div class="ev-row-path mono">${escapeHtml(fp)}</div>
+        </div>
+        <div class="ev-row-meta">
+          ${size ? `<span>${escapeHtml(size)}</span>` : ""}
+          ${modified ? `<span title="修改时间">${escapeHtml(modified)}</span>` : ""}
+          ${created ? `<span title="创建时间">${escapeHtml(created)}</span>` : ""}
+          ${attrs ? `<span title="属性">${escapeHtml(attrs)}</span>` : ""}
+        </div>
+        <div class="ev-row-actions">
+          <button type="button" class="ghost-btn" data-ev-copy="${escapeAttr(fp)}">复制路径</button>
+          <button type="button" class="ghost-btn" data-ev-cmd="${escapeAttr(desktopSearchCommand(fp))}">桌面搜索</button>
+          ${isFolder ? `<button type="button" class="ghost-btn" data-ev-enter="${escapeAttr(fp)}">进入文件夹</button>` : ""}
+          ${!isFolder ? `<button type="button" class="ghost-btn" data-ev-parent="${escapeAttr(parentFolderPath(fp))}">上级目录</button>` : ""}
+          <button type="button" class="ghost-btn" data-ev-web="${escapeAttr(fp)}">网页打开</button>
+          ${!isFolder ? `<a class="ghost-btn" href="${escapeAttr(fileDownloadUrl(fp))}" target="_blank" rel="noopener noreferrer">下载</a>` : ""}
+        </div>`;
+      if (isFolder) {
+        row.addEventListener("dblclick", (e) => {
+          if (e.target.closest("button,a")) return;
+          enterFolder(fp);
+        });
+      }
+      row.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          copyText(fp);
+        }
+      });
+      resultsEl.appendChild(row);
+      idx += 1;
+    }
+  }
+
   function updatePager() {
     const count = Number(optCount?.value) || 100;
     if (prevBtn) prevBtn.disabled = offset <= 0 || searching;
     if (nextBtn) nextBtn.disabled = offset + count >= lastTotal || searching;
     if (metaEl) {
-      if (!lastQuery && !searching) metaEl.textContent = "输入关键词后搜索";
+      if (!lastQuery && !searching) metaEl.textContent = "输入关键词；开启「实时搜索」时随输入过滤";
       else if (searching) metaEl.textContent = "搜索中…";
       else {
         const from = lastTotal ? offset + 1 : 0;
@@ -346,10 +441,33 @@
     }
   }
 
-  async function runSearch(resetOffset = true) {
+  function mergePreset(base, preset) {
+    const b = String(base || "").trim();
+    const p = String(preset || "").trim();
+    if (!p) return b;
+    if (!b) return p;
+    if (b.includes(p)) return b;
+    return `${b} ${p}`;
+  }
+
+  function enterFolder(fp) {
+    const q = folderBrowseQuery(fp);
+    if (!q || !queryInput) return;
+    queryInput.value = q;
+    runSearch(true);
+  }
+
+  async function runSearch(resetOffset = true, opts = {}) {
     const query = queryInput?.value?.trim() ?? "";
     if (!query) {
-      showError("请输入搜索关键词");
+      if (!opts.allowEmpty) {
+        showError("请输入搜索关键词");
+        return;
+      }
+      if (resultsEl) resultsEl.innerHTML = "";
+      lastQuery = "";
+      lastTotal = 0;
+      updatePager();
       return;
     }
     persistSettings();
@@ -357,6 +475,7 @@
     if (resetOffset) offset = 0;
     lastQuery = query;
     searching = true;
+    const gen = ++searchGen;
     updatePager();
     searchBtn.disabled = true;
     try {
@@ -375,9 +494,12 @@
         return;
       }
       const data = await apiFetch(apiSearchUrl(query, currentOpts()));
+      if (gen !== searchGen) return;
       lastTotal = Number(data?.totalResults) || 0;
       renderResults(data);
+      if (!opts.skipRecent) pushRecent(query);
     } catch (err) {
+      if (gen !== searchGen) return;
       const msg = err?.message || String(err);
       if (/Failed to fetch|NetworkError|Load failed|CORS|Mixed Content/i.test(msg)) {
         apiBlocked = true;
@@ -389,10 +511,26 @@
         if (resultsEl) resultsEl.innerHTML = "";
       }
     } finally {
-      searching = false;
-      searchBtn.disabled = false;
-      updatePager();
+      if (gen === searchGen) {
+        searching = false;
+        searchBtn.disabled = false;
+        updatePager();
+      }
     }
+  }
+
+  function scheduleLiveSearch() {
+    if (!optLive?.checked) return;
+    if (liveTimer) clearTimeout(liveTimer);
+    liveTimer = setTimeout(() => {
+      liveTimer = 0;
+      const q = queryInput?.value?.trim() ?? "";
+      if (!q) {
+        runSearch(true, { allowEmpty: true, skipRecent: true });
+        return;
+      }
+      runSearch(true, { skipRecent: true });
+    }, LIVE_DEBOUNCE_MS);
   }
 
   function openWebSearch() {
@@ -404,7 +542,7 @@
   function copyText(text) {
     const s = String(text || "");
     if (navigator.clipboard?.writeText) {
-      navigator.clipboard.writeText(s).then(() => toast("已复制路径")).catch(() => fallbackCopy(s));
+      navigator.clipboard.writeText(s).then(() => toast("已复制")).catch(() => fallbackCopy(s));
     } else fallbackCopy(s);
   }
 
@@ -417,7 +555,7 @@
     ta.select();
     try {
       document.execCommand("copy");
-      toast("已复制路径");
+      toast("已复制");
     } catch (_) {
       toast("复制失败");
     }
@@ -426,9 +564,10 @@
 
   loadSettings();
   syncSetupGuide();
+  syncRecentSelect();
 
   if (!isWindows()) {
-    setStatus("is-warn", "Everything 仅支持 Windows", "本工具需 Windows + Everything HTTP Server；其他系统可浏览教程或跳转官网");
+    setStatus("is-warn", "Everything 仅支持 Windows", "需 Windows + Everything HTTP Server；其他系统可浏览教程");
   }
 
   connectBtn?.addEventListener("click", () => testConnection());
@@ -439,21 +578,70 @@
   queryInput?.addEventListener("keydown", (e) => {
     if (e.key === "Enter") runSearch(true);
   });
+  queryInput?.addEventListener("input", scheduleLiveSearch);
+  optLive?.addEventListener("change", () => {
+    persistSettings();
+    scheduleLiveSearch();
+  });
+  recentSelect?.addEventListener("change", () => {
+    const v = recentSelect.value;
+    if (!v || !queryInput) return;
+    queryInput.value = v;
+    runSearch(true);
+    recentSelect.value = "";
+  });
+
+  $$("[data-ev-preset]", panel).forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const preset = btn.getAttribute("data-ev-preset") || "";
+      if (!queryInput) return;
+      queryInput.value = mergePreset(queryInput.value, preset);
+      queryInput.focus();
+      runSearch(true);
+    });
+  });
+
+  [optCase, optWhole, optPath, optRegex, optDiacritics, optSort, optAsc, optCount].forEach((el) => {
+    el?.addEventListener("change", () => {
+      if (lastQuery || queryInput?.value?.trim()) runSearch(true, { skipRecent: true });
+    });
+  });
+
   prevBtn?.addEventListener("click", () => {
     const count = Number(optCount?.value) || 100;
     offset = Math.max(0, offset - count);
-    runSearch(false);
+    runSearch(false, { skipRecent: true });
   });
   nextBtn?.addEventListener("click", () => {
     const count = Number(optCount?.value) || 100;
     offset += count;
-    runSearch(false);
+    runSearch(false, { skipRecent: true });
   });
 
   resultsEl?.addEventListener("click", (e) => {
     const copyBtn = e.target.closest("[data-ev-copy]");
     if (copyBtn) {
       copyText(copyBtn.getAttribute("data-ev-copy"));
+      return;
+    }
+    const cmdBtn = e.target.closest("[data-ev-cmd]");
+    if (cmdBtn) {
+      copyText(cmdBtn.getAttribute("data-ev-cmd"));
+      toast("已复制桌面版命令，可在 cmd 或 Win+R 运行");
+      return;
+    }
+    const enterBtn = e.target.closest("[data-ev-enter]");
+    if (enterBtn) {
+      enterFolder(enterBtn.getAttribute("data-ev-enter") || "");
+      return;
+    }
+    const parentBtn = e.target.closest("[data-ev-parent]");
+    if (parentBtn) {
+      const p = parentBtn.getAttribute("data-ev-parent") || "";
+      if (queryInput) {
+        queryInput.value = folderBrowseQuery(p);
+        runSearch(true);
+      }
       return;
     }
     const webBtn = e.target.closest("[data-ev-web]");

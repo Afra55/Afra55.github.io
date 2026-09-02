@@ -18,6 +18,27 @@
   min-width: 0;
 }
 
+.ev-recent {
+  max-width: 12rem;
+  font-size: 0.82rem;
+}
+
+.ev-presets {
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.5rem;
+}
+
+.ev-presets .ghost-btn {
+  font-size: 0.82rem;
+  padding: 0.28rem 0.55rem;
+}
+
+.ev-row:focus-visible {
+  outline: 2px solid var(--accent, #2ec4b6);
+  outline-offset: 2px;
+}
+
 .ev-opts select {
   margin-left: 0.25rem;
 }
