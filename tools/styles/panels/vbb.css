@@ -42,6 +42,11 @@
 }
 
 /* 总进度：单行文案，收紧与进度条间距 */
+#vbb-progress {
+  min-height: 3.35rem;
+  contain: layout style;
+}
+
 #vbb-progress .gif-progress-head {
   align-items: center;
   margin-bottom: 0.28rem;
@@ -255,10 +260,10 @@
 
 .vbb-clip-preview-wrap {
   margin-top: 0.45rem;
-  padding: 0.65rem 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
   text-align: center;
 }
 

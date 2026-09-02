@@ -7950,6 +7950,35 @@
       return isLikelyMobileBrowser();
     }
 
+    let vbbScrollGuardReady = false;
+    let vbbUserScrollUntil = 0;
+    let vbbProgrammaticScroll = false;
+
+    function markVbbUserScroll() {
+      if (vbbProgrammaticScroll) return;
+      vbbUserScrollUntil = Date.now() + 480;
+    }
+
+    function isVbbUserScrolling() {
+      return Date.now() < vbbUserScrollUntil;
+    }
+
+    function ensureVbbScrollGuard() {
+      if (vbbScrollGuardReady) return;
+      vbbScrollGuardReady = true;
+      const opts = { passive: true, capture: true };
+      window.addEventListener("touchstart", markVbbUserScroll, opts);
+      window.addEventListener("touchmove", markVbbUserScroll, opts);
+      window.addEventListener("wheel", markVbbUserScroll, opts);
+      const shell = document.querySelector(".shell");
+      if (shell) {
+        shell.addEventListener("touchstart", markVbbUserScroll, opts);
+        shell.addEventListener("touchmove", markVbbUserScroll, opts);
+        shell.addEventListener("wheel", markVbbUserScroll, opts);
+        shell.addEventListener("scroll", markVbbUserScroll, opts);
+      }
+    }
+
     function vbbScrollRoot() {
       const shell = document.querySelector(".shell");
       if (window.matchMedia("(min-width: 901px)").matches && shell) return shell;
@@ -7974,7 +8003,13 @@
 
     function restoreVbbScrollLater(top) {
       const root = vbbScrollRoot();
-      const apply = () => writeVbbScrollTop(root, top);
+      const apply = () => {
+        vbbProgrammaticScroll = true;
+        writeVbbScrollTop(root, top);
+        requestAnimationFrame(() => {
+          vbbProgrammaticScroll = false;
+        });
+      };
       requestAnimationFrame(() => {
         apply();
         requestAnimationFrame(apply);
@@ -7982,11 +8017,16 @@
     }
 
     function pinVbbViewport(mutator) {
-      if (!shouldPinVbbScroll()) return mutator();
+      if (!shouldPinVbbScroll() || isVbbUserScrolling()) return mutator();
       const top = readVbbScrollTop(vbbScrollRoot());
       const out = mutator();
       restoreVbbScrollLater(top);
       return out;
+    }
+
+    function runVbbLayoutUpdate(mutator, { pin = false } = {}) {
+      if (pin && shouldPinVbbScroll() && !isVbbUserScrolling()) return pinVbbViewport(mutator);
+      return mutator();
     }
 
     function blurVbbActionButton(el) {
@@ -8066,6 +8106,37 @@
         .trim();
     }
 
+    function vbbTickerLine(text) {
+      const t = String(text || "").trim();
+      if (!t) return "";
+      if (/已用时|%\s*·|编码中|请稍候/.test(t)) {
+        const elapsed = t.match(/已用时\s*(\d+)\s*s/i);
+        const pct = t.match(/(\d+)\s*%/);
+        const phaseRaw = t.split("·")[0]?.trim() || "";
+        const phase = vbbStageText(phaseRaw);
+        const stalled = /编码中|请稍候/.test(t);
+        const parts = [];
+        if (phase) parts.push(phase);
+        else if (phaseRaw && !/^\d+%?$/.test(phaseRaw)) parts.push(vbbStageText(phaseRaw) || phaseRaw.slice(0, 10));
+        if (pct) parts.push(`${pct[1]}%`);
+        if (elapsed) parts.push(`${elapsed[1]}s`);
+        if (stalled && (!pct || Number(pct[1]) < 99)) parts.push("编码中");
+        if (parts.length) return parts.join(" · ");
+      }
+      return vbbStageText(t) || t;
+    }
+
+    function formatVbbProgressLine(main, sub, pct) {
+      const m = vbbStageText(String(main || "").trim());
+      const rawSub = String(sub || "").trim();
+      const s = rawSub ? (/已用时|%\s*·|编码中|请稍候/.test(rawSub) ? vbbTickerLine(rawSub) : vbbStageText(rawSub) || rawSub) : "";
+      const bits = [];
+      if (m) bits.push(m);
+      if (s && s !== m && !m.includes(s)) bits.push(s);
+      const line = bits.join(" · ");
+      return line || (pct != null ? `${pct}%` : "");
+    }
+
     function vbbClipProgressLine(i, total, { reuse = false } = {}) {
       const bits = [`${i + 1}/${total}`];
       if (reuse) bits.push("沿用");
@@ -8073,8 +8144,9 @@
     }
 
     function setVbbProgress(visible, ratio, text, opts = {}) {
-      pinVbbViewport(() => {
-        if (!vbbProgress) return;
+      if (!vbbProgress) return;
+      const pin = Boolean(visible && vbbProgress.hidden);
+      runVbbLayoutUpdate(() => {
         vbbProgress.hidden = !visible;
         if (!visible) {
           if (vbbProgressFill) {
@@ -8099,15 +8171,13 @@
           vbbProgressPct.textContent = `${pct}%`;
           vbbProgressPct.hidden = false;
         }
-        const sub = String(opts.sub || "").trim();
-        const main = vbbStageText(text || `${pct}%`);
-        const line = vbbStageText(sub ? `${main} · ${sub}` : main) || `${pct}%`;
+        const line = formatVbbProgressLine(text, opts.sub, pct);
         if (vbbProgressText) vbbProgressText.textContent = line;
         if (vbbProgressSub) {
           vbbProgressSub.hidden = true;
           vbbProgressSub.classList.remove("is-empty");
         }
-      });
+      }, { pin });
     }
 
     function hideVbbMergedBlock() {
@@ -8163,10 +8233,8 @@
         const polished = vbbStageText(String(patch.text || ""));
         c.jobText = polished || String(patch.text || "");
       }
-      pinVbbViewport(() => {
-        const row = vbbList?.querySelector(`[data-vbb-clip="${idx}"]`);
-        if (row) syncClipProgressDom(row.querySelector(".vsplit-clip-progress"), c);
-      });
+      const row = vbbList?.querySelector(`[data-vbb-clip="${idx}"]`);
+      if (row) syncClipProgressDom(row.querySelector(".vsplit-clip-progress"), c);
     }
 
     function clearVbbClipJobs() {
@@ -8813,7 +8881,10 @@
     }
 
     function paintVbbPlan() {
-      pinVbbViewport(() => {
+      const planWasHidden = Boolean(vbbPlan?.hidden);
+      const willShowPlan = Boolean(vbbAnalysis);
+      const pin = planWasHidden && willShowPlan;
+      runVbbLayoutUpdate(() => {
         if (!vbbAnalysis) {
           if (vbbPlan) vbbPlan.hidden = true;
           setVbbButtons();
@@ -8857,13 +8928,10 @@
         syncVbbEqualizeUi(active);
 
         setVbbButtons();
-      });
+      }, { pin });
     }
 
-    function renderVbbResults() {
-      pinVbbViewport(() => {
-        if (!vbbList) return;
-      vbbList.innerHTML = "";
+    function syncVbbResultSummary() {
       const gifCount = vbbClips.filter((c) => c.gifBlob).length;
       const failCount = vbbClips.filter((c) => c.error && !c.gifBlob).length;
       if (vbbResultBlock) vbbResultBlock.hidden = vbbClips.length === 0;
@@ -8877,71 +8945,136 @@
       } else if (vbbResultSummary) {
         vbbResultSummary.hidden = true;
       }
-      vbbClips.forEach((c, idx) => {
-        const row = document.createElement("div");
-        row.className = "gif-frame vsplit-clip";
-        row.dataset.vbbClip = String(idx);
-        const top = document.createElement("div");
-        top.className = "vsplit-clip-top";
-        const head = document.createElement("div");
-        head.className = "vbb-clip-head";
-        const title = document.createElement("strong");
-        title.className = "vbb-clip-title";
-        title.textContent = formatVbbClipTitle(c, idx);
-        head.appendChild(title);
-        const metaText = formatVbbClipMeta(c, { mobile: isLikelyMobileBrowser() });
-        if (metaText) {
-          const meta = document.createElement("span");
+    }
+
+    function buildVbbClipPreviewWrap(c, idx) {
+      if (!c.gifBlob || vbbPreviewIdx !== idx) return null;
+      if (!c.gifUrl) c.gifUrl = URL.createObjectURL(c.gifBlob);
+      const wrap = document.createElement("div");
+      wrap.className = "vbb-clip-preview-wrap";
+      const img = document.createElement("img");
+      img.className = "vsplit-clip-gif";
+      img.alt = `片段 ${idx + 1}`;
+      img.loading = "lazy";
+      img.decoding = "async";
+      img.src = c.gifUrl;
+      wrap.appendChild(img);
+      return wrap;
+    }
+
+    function buildVbbClipActions(c, idx) {
+      const actions = document.createElement("div");
+      actions.className = "btn-row";
+      if (!c.gifBlob) return actions;
+      const dlBtn = document.createElement("button");
+      dlBtn.type = "button";
+      dlBtn.className = "secondary-btn";
+      dlBtn.textContent = "下载 GIF";
+      dlBtn.addEventListener("click", () => {
+        if (!c.gifBlob) return;
+        triggerLocalDownload(c.gifBlob, vbbGifDownloadName(c, idx));
+      });
+      actions.appendChild(dlBtn);
+      const previewBtn = document.createElement("button");
+      previewBtn.type = "button";
+      previewBtn.className = "ghost-btn vbb-preview-btn";
+      previewBtn.textContent = vbbPreviewIdx === idx ? "收起预览" : "预览";
+      previewBtn.addEventListener("click", () => toggleVbbClipPreview(idx));
+      actions.appendChild(previewBtn);
+      return actions;
+    }
+
+    function buildVbbClipRow(c, idx) {
+      const row = document.createElement("div");
+      row.className = "gif-frame vsplit-clip";
+      row.dataset.vbbClip = String(idx);
+      const top = document.createElement("div");
+      top.className = "vsplit-clip-top";
+      const head = document.createElement("div");
+      head.className = "vbb-clip-head";
+      const title = document.createElement("strong");
+      title.className = "vbb-clip-title";
+      title.textContent = formatVbbClipTitle(c, idx);
+      head.appendChild(title);
+      const metaText = formatVbbClipMeta(c, { mobile: isLikelyMobileBrowser() });
+      if (metaText) {
+        const meta = document.createElement("span");
+        meta.className = "hint tight vbb-clip-meta";
+        meta.textContent = metaText;
+        head.appendChild(meta);
+      }
+      top.append(head, buildVbbClipActions(c, idx));
+      row.appendChild(top);
+      const progressBox = buildClipProgressDom();
+      row.appendChild(progressBox);
+      syncClipProgressDom(progressBox, c);
+      const preview = buildVbbClipPreviewWrap(c, idx);
+      if (preview) row.appendChild(preview);
+      return row;
+    }
+
+    function toggleVbbClipPreview(idx) {
+      const next = vbbPreviewIdx === idx ? -1 : idx;
+      const prev = vbbPreviewIdx;
+      vbbPreviewIdx = next;
+      if (prev >= 0 && prev !== next) {
+        vbbList?.querySelector(`[data-vbb-clip="${prev}"]`)?.querySelector(".vbb-clip-preview-wrap")?.remove();
+        const prevBtn = vbbList?.querySelector(`[data-vbb-clip="${prev}"] .vbb-preview-btn`);
+        if (prevBtn) prevBtn.textContent = "预览";
+      }
+      if (next < 0) return;
+      const c = vbbClips[next];
+      const row = vbbList?.querySelector(`[data-vbb-clip="${next}"]`);
+      if (!row || !c?.gifBlob) return;
+      row.querySelector(".vbb-clip-preview-wrap")?.remove();
+      const preview = buildVbbClipPreviewWrap(c, next);
+      if (preview) row.appendChild(preview);
+      const btn = row.querySelector(".vbb-preview-btn");
+      if (btn) btn.textContent = "收起预览";
+    }
+
+    function refreshVbbClipRow(idx) {
+      const c = vbbClips[idx];
+      const row = vbbList?.querySelector(`[data-vbb-clip="${idx}"]`);
+      if (!c || !row) return;
+      const title = row.querySelector(".vbb-clip-title");
+      if (title) title.textContent = formatVbbClipTitle(c, idx);
+      const head = row.querySelector(".vbb-clip-head");
+      const metaText = formatVbbClipMeta(c, { mobile: isLikelyMobileBrowser() });
+      let meta = row.querySelector(".vbb-clip-meta");
+      if (metaText) {
+        if (!meta && head) {
+          meta = document.createElement("span");
           meta.className = "hint tight vbb-clip-meta";
-          meta.textContent = metaText;
           head.appendChild(meta);
         }
-        const actions = document.createElement("div");
-        actions.className = "btn-row";
-        if (c.gifBlob) {
-          if (!c.gifUrl) c.gifUrl = URL.createObjectURL(c.gifBlob);
-          const dlBtn = document.createElement("button");
-          dlBtn.type = "button";
-          dlBtn.className = "secondary-btn";
-          dlBtn.textContent = "下载 GIF";
-          dlBtn.addEventListener("click", () => {
-            if (!c.gifBlob) return;
-            triggerLocalDownload(c.gifBlob, vbbGifDownloadName(c, idx));
-          });
-          actions.appendChild(dlBtn);
-          const previewBtn = document.createElement("button");
-          previewBtn.type = "button";
-          previewBtn.className = "ghost-btn";
-          previewBtn.textContent = vbbPreviewIdx === idx ? "收起预览" : "预览";
-          previewBtn.addEventListener("click", () => {
-            vbbPreviewIdx = vbbPreviewIdx === idx ? -1 : idx;
-            renderVbbResults();
-          });
-          actions.appendChild(previewBtn);
-        }
-        top.append(head, actions);
-        row.appendChild(top);
-        const progressBox = buildClipProgressDom();
-        row.appendChild(progressBox);
-        syncClipProgressDom(progressBox, c);
-        // 默认不挂载全部 <img>，避免手机同时解码多个大 GIF 导致白屏/杀进程
-        if (c.gifBlob && vbbPreviewIdx === idx) {
-          if (!c.gifUrl) c.gifUrl = URL.createObjectURL(c.gifBlob);
-          const wrap = document.createElement("div");
-          wrap.className = "vbb-clip-preview-wrap";
-          const img = document.createElement("img");
-          img.className = "vsplit-clip-gif";
-          img.alt = `片段 ${idx + 1}`;
-          img.loading = "lazy";
-          img.decoding = "async";
-          img.src = c.gifUrl;
-          wrap.appendChild(img);
-          row.appendChild(wrap);
-        }
-        vbbList.appendChild(row);
-      });
+        if (meta) meta.textContent = metaText;
+      } else if (meta) {
+        meta.remove();
+      }
+      const top = row.querySelector(".vsplit-clip-top");
+      const oldActions = row.querySelector(".vsplit-clip-top .btn-row");
+      const nextActions = buildVbbClipActions(c, idx);
+      if (oldActions) oldActions.replaceWith(nextActions);
+      else if (top) top.appendChild(nextActions);
+      syncClipProgressDom(row.querySelector(".vsplit-clip-progress"), c);
+      syncVbbResultSummary();
       setVbbButtons();
-      });
+    }
+
+    function renderVbbResults() {
+      if (!vbbList) return;
+      const prevCount = vbbList.childElementCount;
+      const blockWasHidden = Boolean(vbbResultBlock?.hidden);
+      const pin = blockWasHidden || prevCount !== vbbClips.length;
+      runVbbLayoutUpdate(() => {
+        vbbList.innerHTML = "";
+        syncVbbResultSummary();
+        vbbClips.forEach((c, idx) => {
+          vbbList.appendChild(buildVbbClipRow(c, idx));
+        });
+        setVbbButtons();
+      }, { pin });
     }
 
     function clearVbb() {
@@ -9100,7 +9233,7 @@
               const p = i + Math.min(0.98, local);
               setVbbClipJob(i, { status: "running", progress: Math.min(0.98, local), text });
               setVbbProgress(true, p / ranges.length, vbbClipProgressLine(i, ranges.length, { reuse: Boolean(reuse.fromCache) }), {
-                sub: vbbStageText(text),
+                sub: vbbTickerLine(text) || vbbStageText(text),
                 busy: true,
               });
             },
@@ -9111,7 +9244,7 @@
           applyVbbClipEncoded(vbbClips[i], encoded, reuse.fromCache ? ["沿用方案"] : []);
           if (!vbbClips[i].error) saveVbbSpanScheme(r.span, snapshotVbbEncodeSeed(encoded, {}), "blackbox");
           setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
-          renderVbbResults();
+          refreshVbbClipRow(i);
           if (mobile && i < ranges.length - 1) {
             await new Promise((r) => setTimeout(r, hugeFile ? 180 : 80));
           }
@@ -9185,12 +9318,12 @@
             applyVbbClipEncoded(vbbClips[i], encoded);
             setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
             ok += 1;
-            renderVbbResults();
+            refreshVbbClipRow(i);
           } catch (err) {
             if (String(err?.message) === "已取消") throw err;
             vbbClips[i].error = err.message || String(err);
             setVbbClipJob(i, { status: "error", progress: 0, text: "失败" });
-            renderVbbResults();
+            refreshVbbClipRow(i);
           }
         }
         if (abortVbb) throw new Error("已取消");
@@ -9264,7 +9397,7 @@
         if (abortVbb) throw new Error("已取消");
         applyVbbClipEncoded(vbbClips[0], encoded);
         setVbbClipJob(0, { status: "done", progress: 1, text: "完成" });
-        renderVbbResults();
+        refreshVbbClipRow(0);
         setVbbProgress(true, 1, `完成 · ${formatKb(encoded.blob.size)}`);
         toast(`已完成 · ${formatKb(encoded.blob.size)} · 可点下方「下载 GIF」`);
       } catch (err) {
@@ -9335,7 +9468,12 @@
           isAborted: () => abortVbb,
           stageLabel: "样片",
           onProgress: (local, text) => {
-            if (vbbMeta) vbbMeta.textContent = `分析中 · ${vbbStageText(text) || "样片"}`;
+            const pct = 0.08 + Math.min(0.82, local * 0.82);
+            setVbbProgress(true, pct, "分析样片", {
+              sub: vbbTickerLine(text) || `${sampleSpan.toFixed(1)}s`,
+              busy: true,
+            });
+            if (vbbMeta) vbbMeta.textContent = `分析中 · ${vbbTickerLine(text) || "样片"}`;
           },
         });
         if (abortVbb) throw new Error("已取消");
@@ -9502,7 +9640,7 @@
                   stageLabel: `#${i + 1}`,
                   onProgress: (local, text) => {
                     const p = localBase + Math.min(1, local) * localSpan;
-                    const stage = vbbStageText(text) || `宽${maxW}`;
+                    const stage = vbbTickerLine(text) || `宽${maxW}`;
                     setVbbClipJob(i, { status: "running", progress: Math.min(0.98, p), text: stage });
                     bumpProgress(p, stage);
                   },
@@ -9544,7 +9682,7 @@
                   seed: reuseSeed || null,
                   onProgress: (local, text) => {
                     const p = 0.8 + Math.min(0.18, local) * 0.18;
-                    const stage = vbbStageText(text) || "压缩";
+                    const stage = vbbTickerLine(text) || "压缩";
                     setVbbClipJob(i, { status: "running", progress: Math.min(0.98, p), text: stage });
                     bumpProgress(p, stage);
                   },
@@ -9562,7 +9700,7 @@
                 seed: reuseSeed || null,
                 onProgress: (local, text) => {
                   const p = Math.min(0.98, Number(local) || 0);
-                  const stage = vbbStageText(text) || "编码…";
+                  const stage = vbbTickerLine(text) || "编码…";
                   setVbbClipJob(i, { status: "running", progress: p, text: stage });
                   bumpProgress(p, stage);
                 },
@@ -9609,7 +9747,7 @@
             setVbbClipJob(i, { status: "error", progress: 1, text: "失败" });
           }
           // 只刷新列表元数据，不自动展开全部预览
-          renderVbbResults();
+          refreshVbbClipRow(i);
           // 让出主线程，便于 Safari 回收临时内存
           const pauseMs = mobile ? (hugeFile ? 220 : 120) : 16;
           await new Promise((r) => setTimeout(r, pauseMs));
@@ -9679,7 +9817,7 @@
         if (blob.size > V2G_BLACKBOX_MAX_BYTES) {
           setVbbProgress(true, 0.58, "超限压缩", { busy: true });
           const compressed = await compressExistingGifToBlackbox(blob, (ratio, text) =>
-            setVbbProgress(true, 0.58 + ratio * 0.4, "压缩", { sub: vbbStageText(text), busy: ratio < 1 })
+            setVbbProgress(true, 0.58 + ratio * 0.4, "压缩", { sub: vbbTickerLine(text), busy: ratio < 1 })
           );
           blob = compressed.blob;
           compressRounds = compressed.compressRounds || 0;
@@ -9715,6 +9853,7 @@
 
     bindPanel("vbb", (root) => {
       root = root || document.getElementById("vbb");
+      ensureVbbScrollGuard();
       vbbFile = $("#vbb-file", root);
       vbbVideo = $("#vbb-video", root);
       vbbMeta = $("#vbb-meta", root);
