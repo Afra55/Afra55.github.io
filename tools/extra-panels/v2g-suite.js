@@ -17,6 +17,7 @@
     terminateFfmpegInstance, paintFfmpegWarmHint, prewarmFfmpegEngine, TOOLS_VERSION, GIF_TOOL_VERSION,
     AUTO_PACK_ZIP_KEY,
   } = M;
+  const FFMPEG_SEG_FILE_BYTES = M.FFMPEG_SEG_FILE_BYTES ?? 48 * 1024 * 1024;
   const formatLocalPickMeta = K.formatLocalPickMeta;
   const attachLocalVideoPreview = K.attachLocalVideoPreview;
   const waitVideoMetadata = K.waitVideoMetadata;
