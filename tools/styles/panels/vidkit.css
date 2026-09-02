@@ -1,0 +1,150 @@
+.vidkit-bridge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.vidkit-bridge-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  min-width: 0;
+  flex: 1;
+}
+
+.vidkit-drop {
+  border: 1px dashed var(--border, #3a4458);
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.75rem;
+  background: color-mix(in srgb, var(--panel, #151a24) 92%, transparent);
+}
+
+.vidkit-drop.is-dragover {
+  border-color: var(--accent, #5b8cff);
+  background: color-mix(in srgb, var(--accent, #5b8cff) 12%, transparent);
+}
+
+.vidkit-layout {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) minmax(0, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 860px) {
+  .vidkit-layout {
+    grid-template-columns: 1fr;
+  }
+}
+
+.vidkit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  max-height: 28rem;
+  overflow: auto;
+}
+
+.vidkit-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  text-align: left;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--border, #3a4458);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.vidkit-item.is-active {
+  border-color: var(--accent, #5b8cff);
+  background: color-mix(in srgb, var(--accent, #5b8cff) 14%, transparent);
+}
+
+.vidkit-item-name {
+  font-size: 0.86rem;
+  word-break: break-all;
+}
+
+.vidkit-item-meta {
+  font-size: 0.75rem;
+  opacity: 0.75;
+}
+
+.vidkit-empty {
+  opacity: 0.7;
+  font-size: 0.86rem;
+  padding: 0.5rem;
+}
+
+.vidkit-preview-wrap {
+  min-height: 180px;
+  border-radius: 10px;
+  border: 1px solid var(--border, #3a4458);
+  background: #0b0e14;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.vidkit-preview {
+  max-width: 100%;
+  max-height: 360px;
+  display: block;
+}
+
+.vidkit-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.85rem 0 0.65rem;
+}
+
+.vidkit-tab {
+  border: 1px solid var(--border, #3a4458);
+  background: transparent;
+  color: inherit;
+  border-radius: 999px;
+  padding: 0.3rem 0.75rem;
+  cursor: pointer;
+}
+
+.vidkit-tab.is-active {
+  border-color: var(--accent, #5b8cff);
+  background: color-mix(in srgb, var(--accent, #5b8cff) 16%, transparent);
+}
+
+.vidkit-tab-panel[hidden] {
+  display: none !important;
+}
+
+.vidkit-workspace .ghost-btn.is-active {
+  border-color: var(--accent, #5b8cff);
+  background: color-mix(in srgb, var(--accent, #5b8cff) 14%, transparent);
+}
+
+.vidkit-progress {
+  margin-top: 0.75rem;
+}
+
+.vidkit-progress-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--border, #3a4458) 70%, transparent);
+  overflow: hidden;
+}
+
+.vidkit-progress-bar > span {
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--accent, #5b8cff);
+  transition: width 0.2s ease;
+}

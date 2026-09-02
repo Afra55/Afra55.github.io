@@ -47,6 +47,7 @@
     acupoint: "./acupoint.js",
     healthread: "./healthread.js",
     vtrim: "./vtrim.js",
+    vidkit: "./vidkit.js",
     vplay: "./vplay.js",
     audio: "./audio.js",
     everything: "./everything.js",

@@ -1,0 +1,119 @@
+<section id="vidkit" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>视频工具</h1>
+        <p>
+          格式转换与高观感压缩。有本机桥时优先系统 FFmpeg（极致保画质 / H.265 / 大文件）；无桥时用网页 FFmpeg 保底。
+          <a href="#ffbridge">本机桥</a> · <a href="#setup">安装指南</a>
+        </p>
+      </div>
+      <div class="panel-body">
+        <div class="vidkit-bridge panel-card" id="vidkit-bridge" aria-live="polite">
+          <div class="vidkit-bridge-main">
+            <span class="adb-dot" id="vidkit-bridge-dot" aria-hidden="true"></span>
+            <div>
+              <strong id="vidkit-bridge-title">正在探测本机桥…</strong>
+              <p class="hint tight" id="vidkit-bridge-text"></p>
+            </div>
+          </div>
+          <div class="btn-row tool-actions">
+            <button type="button" class="secondary-btn" id="vidkit-bridge-reconnect">重新连接</button>
+            <a class="ghost-btn" href="#ffbridge">打开本机桥面板</a>
+          </div>
+        </div>
+
+        <div class="vidkit-drop" id="vidkit-drop">
+          <div class="btn-row tool-actions">
+            <label class="file-btn" for="vidkit-file">添加视频</label>
+            <input id="vidkit-file" type="file" accept="video/*,.mp4,.mov,.mkv,.webm,.m4v,.avi" multiple hidden />
+            <button type="button" class="ghost-btn" id="vidkit-clear">清空</button>
+          </div>
+          <p class="hint" id="vidkit-meta">支持拖拽多段视频。本地处理；走本机桥时仅发往 127.0.0.1，不上传公网。</p>
+        </div>
+        <p class="error" id="vidkit-error" hidden></p>
+
+        <div class="vidkit-layout">
+          <div class="vidkit-side">
+            <div class="label-row">
+              <h2 class="subhead">视频列表</h2>
+            </div>
+            <div class="vidkit-list" id="vidkit-list"></div>
+          </div>
+
+          <div class="vidkit-main">
+            <div class="label-row">
+              <h2 class="subhead">预览</h2>
+              <span class="hint tight" id="vidkit-preview-meta">添加后可预览</span>
+            </div>
+            <div class="vidkit-preview-wrap">
+              <video id="vidkit-preview" class="vidkit-preview" controls playsinline preload="metadata" hidden></video>
+            </div>
+
+            <div class="vidkit-workspace">
+              <div class="vidkit-tabs" role="tablist" aria-label="视频工具模式">
+                <button type="button" class="vidkit-tab is-active" role="tab" aria-selected="true" data-vidkit-tab="convert">格式转换</button>
+                <button type="button" class="vidkit-tab" role="tab" aria-selected="false" data-vidkit-tab="compress">高观感压缩</button>
+              </div>
+
+              <div class="vidkit-tab-panels">
+                <div class="vidkit-tab-panel is-active" data-vidkit-panel="convert" role="tabpanel">
+                  <div class="field-block">
+                    <h2 class="subhead">输出格式</h2>
+                    <div class="field-row" style="flex-wrap:wrap">
+                      <label for="vidkit-format">格式</label>
+                      <select id="vidkit-format" class="mono select-input">
+                        <option value="mp4" selected>MP4 (H.264)</option>
+                        <option value="webm">WebM (VP9)</option>
+                        <option value="mkv">MKV</option>
+                        <option value="mov">MOV</option>
+                        <option value="copy">仅换封装（流拷贝，最快）</option>
+                      </select>
+                    </div>
+                    <p class="hint">流拷贝几乎不损画质，但封装/编码不兼容时会失败并自动回退重编码。</p>
+                  </div>
+                </div>
+
+                <div class="vidkit-tab-panel" data-vidkit-panel="compress" role="tabpanel" hidden>
+                  <div class="field-block">
+                    <h2 class="subhead">压缩档位</h2>
+                    <div class="field-row" style="flex-wrap:wrap;gap:0.35rem">
+                      <button type="button" class="ghost-btn is-active" data-vidkit-preset="quality">画质优先</button>
+                      <button type="button" class="ghost-btn" data-vidkit-preset="balanced">均衡</button>
+                      <button type="button" class="ghost-btn" data-vidkit-preset="small">强压体积</button>
+                      <button type="button" class="ghost-btn" data-vidkit-preset="extreme" id="vidkit-preset-extreme">极致保画质</button>
+                      <button type="button" class="ghost-btn" data-vidkit-preset="extreme-hevc" id="vidkit-preset-hevc">极致·H.265</button>
+                    </div>
+                    <p class="hint" id="vidkit-compress-hint">画质优先 ≈ CRF 20；均衡 CRF 23；强压 CRF 28。极致档需本机桥（慢预设 + 低 CRF，观感优先）。</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="field-block" style="margin-top:0.85rem">
+                <h2 class="subhead">尺寸（可选）</h2>
+                <div class="field-row" style="flex-wrap:wrap">
+                  <label for="vidkit-scale">最长边</label>
+                  <select id="vidkit-scale" class="mono select-input">
+                    <option value="0" selected>保持原分辨率</option>
+                    <option value="1080">限制 1080p</option>
+                    <option value="720">限制 720p</option>
+                    <option value="480">限制 480p</option>
+                  </select>
+                  <label class="flag" id="vidkit-prefer-bridge-wrap"><input type="checkbox" id="vidkit-prefer-bridge" checked /> 有桥时优先本机 FFmpeg</label>
+                </div>
+              </div>
+
+              <div class="vidkit-progress" id="vidkit-progress" hidden>
+                <div class="vidkit-progress-bar"><span id="vidkit-progress-fill"></span></div>
+                <p class="hint tight" id="vidkit-progress-text">处理中…</p>
+              </div>
+
+              <div class="btn-row tool-actions vidkit-actions" style="margin-top:0.85rem;flex-wrap:wrap">
+                <button type="button" class="primary-btn" id="vidkit-run" data-vidkit-action="run">处理当前</button>
+                <button type="button" class="secondary-btn" id="vidkit-run-all" data-vidkit-action="run-all">批量处理</button>
+                <button type="button" class="ghost-btn" id="vidkit-cancel" hidden>取消</button>
+              </div>
+              <p class="hint tight" id="vidkit-action-hint">选好转格式或压缩档后点处理。批量会逐个排队。</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>

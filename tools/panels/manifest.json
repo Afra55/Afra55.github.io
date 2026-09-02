@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-01T10:28:48.470Z",
+  "generatedAt": "2026-09-02T23:53:57.663Z",
   "panels": [
     {
       "id": "about",
@@ -301,6 +301,11 @@
       "id": "vbb",
       "file": "./panels/vbb.html",
       "bytes": 7980
+    },
+    {
+      "id": "vidkit",
+      "file": "./panels/vidkit.html",
+      "bytes": 6833
     },
     {
       "id": "vplay",
