@@ -2444,11 +2444,11 @@
       ? rows.findIndex((r) => r.kind === "item" && r.item?.id === preferId)
       : -1;
     if (force && preferIdx >= 0) {
-      start = Math.max(0, preferIdx - 8);
-      end = Math.min(rows.length, preferIdx + 12);
+      start = Math.max(0, preferIdx - 12);
+      end = Math.min(rows.length, preferIdx + 18);
     } else {
-      start = Math.max(0, indexAtOffset(prefix, viewTop) - 4);
-      end = Math.min(rows.length, indexAtOffset(prefix, viewTop + viewH) + 6);
+      start = Math.max(0, indexAtOffset(prefix, viewTop) - 10);
+      end = Math.min(rows.length, indexAtOffset(prefix, viewTop + viewH) + 14);
     }
     if (state.pendingUndo) {
       const a = state.pendingUndo.anchorVisibleIdx;
@@ -2463,9 +2463,9 @@
         }
       }
     }
-    if (end - start < 16) {
-      end = Math.min(rows.length, start + 16);
-      start = Math.max(0, end - 16);
+    if (end - start < 24) {
+      end = Math.min(rows.length, start + 24);
+      start = Math.max(0, end - 24);
     }
     const topPad = prefix[start] || 0;
     const bottomPad = Math.max(0, totalH - (prefix[end] || 0));
