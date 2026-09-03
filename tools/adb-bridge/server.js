@@ -38,7 +38,8 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.3";
+const BRIDGE_VERSION = "0.9.4";
+const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
 const everythingProxy = require("./everything-proxy");
@@ -4330,6 +4331,60 @@ function printBanner(activePort) {
   console.log("");
 }
 
+function writeInstanceLock() {
+  try {
+    fs.writeFileSync(INSTANCE_LOCK, `${process.pid}\n${Date.now()}\n`, "utf8");
+  } catch {
+    /* ignore */
+  }
+}
+
+function clearInstanceLock() {
+  try {
+    const text = fs.readFileSync(INSTANCE_LOCK, "utf8");
+    const pid = Number(String(text).split(/\r?\n/)[0]);
+    if (!pid || pid === process.pid) fs.unlinkSync(INSTANCE_LOCK);
+  } catch {
+    /* ignore */
+  }
+}
+
+function probeOurBridge(port) {
+  return new Promise((resolve) => {
+    const req = http.get(
+      { host: HOST, port, path: "/health", timeout: 900 },
+      (res) => {
+        let raw = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => {
+          raw += chunk;
+          if (raw.length > 65536) req.destroy();
+        });
+        res.on("end", () => {
+          try {
+            const data = JSON.parse(raw);
+            resolve(
+              Boolean(
+                data?.ok &&
+                  (data.service === "devtools-bridge" ||
+                    data.service === "devtools-adb-bridge" ||
+                    data.unified === true)
+              )
+            );
+          } catch {
+            resolve(false);
+          }
+        });
+      }
+    );
+    req.on("error", () => resolve(false));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(false);
+    });
+  });
+}
+
 function listenWithFallback(startPort, maxTries = 12) {
   let port = startPort;
   let tries = 0;
@@ -4337,28 +4392,41 @@ function listenWithFallback(startPort, maxTries = 12) {
   const tryListen = () => {
     const onError = (err) => {
       server.removeListener("listening", onListening);
-      if (err && err.code === "EADDRINUSE" && tries < maxTries - 1) {
-        tries += 1;
-        const next = startPort + tries;
-        console.warn(`端口 ${port} 已被占用，尝试 ${next}…`);
-        port = next;
-        setTimeout(tryListen, 50);
-        return;
-      }
-      console.error("");
-      console.error("启动失败:", err && err.message ? err.message : String(err));
-      if (err && err.code === "EADDRINUSE") {
-        console.error(`端口 ${startPort} 起连续 ${maxTries} 个均被占用。`);
-        console.error("请关闭旧的桥接窗口，或设置环境变量 ADB_BRIDGE_PORT 换端口。");
-      }
-      console.error("");
-      process.exitCode = 1;
+      void (async () => {
+        if (err && err.code === "EADDRINUSE") {
+          await new Promise((r) => setTimeout(r, 400));
+          if (await probeOurBridge(port)) {
+            console.log("");
+            console.log(`[OK] 本机桥已在端口 ${port} 运行，本窗口不重复启动。`);
+            console.log("请关掉这个多余窗口，使用先打开的那一座。");
+            console.log("");
+            process.exit(0);
+          }
+          if (tries < maxTries - 1) {
+            tries += 1;
+            const next = startPort + tries;
+            console.warn(`端口 ${port} 已被占用（不是本站桥），尝试 ${next}…`);
+            port = next;
+            setTimeout(tryListen, 50);
+            return;
+          }
+        }
+        console.error("");
+        console.error("启动失败:", err && err.message ? err.message : String(err));
+        if (err && err.code === "EADDRINUSE") {
+          console.error(`端口 ${startPort} 起连续 ${maxTries} 个均被占用。`);
+          console.error("请关闭旧的桥接窗口，或设置环境变量 ADB_BRIDGE_PORT 换端口。");
+        }
+        console.error("");
+        process.exitCode = 1;
+      })();
     };
 
     const onListening = () => {
       server.removeListener("error", onError);
       const bound = server.address();
       ACTIVE_PORT = bound && typeof bound.port === "number" ? bound.port : port;
+      writeInstanceLock();
       printBanner(ACTIVE_PORT);
     };
 
@@ -4388,11 +4456,19 @@ function cleanup() {
   } catch {
     /* ignore */
   }
+  clearInstanceLock();
   process.exit(0);
 }
 
 process.on("SIGINT", cleanup);
 process.on("SIGTERM", cleanup);
+process.on("exit", () => {
+  try {
+    clearInstanceLock();
+  } catch {
+    /* ignore */
+  }
+});
 
 process.on("uncaughtException", (err) => {
   console.error("");

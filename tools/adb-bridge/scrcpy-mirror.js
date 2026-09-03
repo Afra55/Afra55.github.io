@@ -186,6 +186,8 @@ function formatMirrorError(base, errTail, procExitCode) {
     msg = "scrcpy-server 无法启动屏幕编码（部分机型需关闭其它投屏/录屏应用）";
   } else if (base === "socket closed" || /socket closed/i.test(base)) {
     msg = `镜像握手失败（视频 socket 已关闭${procExitCode != null ? `，server 退出码 ${procExitCode}` : ""}）`;
+  } else if (/ECONNREFUSED/i.test(base)) {
+    msg = `无法连接本地转发端口（adb forward 未在 127.0.0.1 监听）。请只留一座桥窗口后重试；Windows 上该端口可能被系统保留`;
   }
   if (tail) {
     const short = tail.length > 280 ? `${tail.slice(-280)}…` : tail;
@@ -194,7 +196,16 @@ function formatMirrorError(base, errTail, procExitCode) {
   return msg;
 }
 
-function findFreePort() {
+function isPortTaken(port) {
+  return new Promise((resolve) => {
+    const s = net.createServer();
+    s.once("error", () => resolve(true));
+    s.once("listening", () => s.close(() => resolve(false)));
+    s.listen(port, "127.0.0.1");
+  });
+}
+
+function findEphemeralPort() {
   return new Promise((resolve, reject) => {
     const s = net.createServer();
     s.listen(0, "127.0.0.1", () => {
@@ -204,6 +215,72 @@ function findFreePort() {
     });
     s.on("error", reject);
   });
+}
+
+/** scrcpy 默认区间，避开 Windows Hyper-V/WinNAT 排除端口。 */
+async function findScrcpyTunnelPort() {
+  const min = 27183;
+  const max = 27320;
+  for (let p = min; p <= max; p += 1) {
+    if (!(await isPortTaken(p))) return p;
+  }
+  return findEphemeralPort();
+}
+
+function waitForLocalListen(port, timeoutMs) {
+  return new Promise((resolve, reject) => {
+    const t0 = Date.now();
+    const attempt = () => {
+      const sock = net.connect({ host: "127.0.0.1", port });
+      sock.once("connect", () => {
+        sock.destroy();
+        resolve();
+      });
+      sock.once("error", (err) => {
+        try {
+          sock.destroy();
+        } catch {
+          /* ignore */
+        }
+        if (Date.now() - t0 >= timeoutMs) reject(err);
+        else setTimeout(attempt, 90);
+      });
+    };
+    attempt();
+  });
+}
+
+async function listAdbForwards(deps, serial) {
+  try {
+    const { stdout } = await deps.adbSerial(serial, ["forward", "--list"], { timeout: 8000 });
+    return String(stdout || "");
+  } catch {
+    return "";
+  }
+}
+
+async function setupAdbForward(deps, serial, scidHex) {
+  let lastErr = null;
+  for (let i = 0; i < 8; i += 1) {
+    const port = await findScrcpyTunnelPort();
+    try {
+      await deps.adbSerial(serial, ["forward", "--remove", `tcp:${port}`], { timeout: 8000 }).catch(() => {});
+      await deps.adbSerial(serial, ["forward", `tcp:${port}`, `localabstract:scrcpy_${scidHex}`], {
+        timeout: 15000,
+      });
+      const listed = await listAdbForwards(deps, serial);
+      if (!listed.includes(`tcp:${port}`)) {
+        throw new Error(`adb forward 未登记 tcp:${port}`);
+      }
+      await waitForLocalListen(port, 2500);
+      return port;
+    } catch (err) {
+      lastErr = err;
+      await deps.adbSerial(serial, ["forward", "--remove", `tcp:${port}`], { timeout: 8000 }).catch(() => {});
+    }
+  }
+  const detail = lastErr && lastErr.message ? lastErr.message : String(lastErr || "unknown");
+  throw new Error(`无法建立 adb 端口转发：${detail}`);
 }
 
 /**
@@ -578,12 +655,8 @@ class MirrorSession {
 
     const scid = crypto.randomBytes(4).readUInt32BE(0) & 0x7fffffff;
     this.scidHex = scid.toString(16).padStart(8, "0");
-    this.port = await findFreePort();
-
-    await this.deps.adbSerial(this.serial, ["forward", "--remove", `tcp:${this.port}`], { timeout: 8000 }).catch(() => {});
-    await this.deps.adbSerial(this.serial, ["forward", `tcp:${this.port}`, `localabstract:scrcpy_${this.scidHex}`], {
-      timeout: 15000,
-    });
+    onProgress?.("正在建立 adb 端口转发…");
+    this.port = await setupAdbForward(this.deps, this.serial, this.scidHex);
 
     const appProcessRunner = await pickAppProcessRunner(this.deps, this.serial);
     let shellCmd = this.buildServerShellCmd(appProcessRunner);

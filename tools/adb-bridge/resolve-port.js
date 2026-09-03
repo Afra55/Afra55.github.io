@@ -13,12 +13,15 @@
 const fs = require("fs");
 const http = require("http");
 const net = require("net");
+const path = require("path");
 const readline = require("readline");
 const { execSync } = require("child_process");
 
 const PORT_MIN = 17888;
 const PORT_MAX = 17899;
 const DEFAULT_PORT = Number(process.env.ADB_BRIDGE_PORT || process.env.DEVTOOLS_BRIDGE_PORT || PORT_MIN);
+const LOCK_PATH = path.join(__dirname, ".bridge-instance.lock");
+const LOCK_STALE_MS = 20000;
 
 function isPortInUse(port) {
   return new Promise((resolve) => {
@@ -233,11 +236,116 @@ function emit(mode, port) {
   process.stdout.write(`${mode} ${port}`);
 }
 
+function isPidAlive(pid) {
+  if (!Number.isFinite(pid) || pid <= 0) return false;
+  if (process.platform === "win32") {
+    try {
+      const out = execSync(`tasklist /FI "PID eq ${pid}" /NH`, {
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "ignore"],
+      });
+      return new RegExp(`\\b${pid}\\b`).test(out);
+    } catch (_) {
+      return false;
+    }
+  }
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function readLockMeta() {
+  try {
+    const text = fs.readFileSync(LOCK_PATH, "utf8");
+    const [pidLine, tsLine] = text.split(/\r?\n/);
+    return { pid: Number(pidLine), ts: Number(tsLine) || 0 };
+  } catch (_) {
+    return null;
+  }
+}
+
+function tryWriteLock() {
+  try {
+    const fd = fs.openSync(LOCK_PATH, "wx");
+    fs.writeFileSync(fd, `${process.pid}\n${Date.now()}\n`);
+    fs.closeSync(fd);
+    return true;
+  } catch (err) {
+    if (err && err.code === "EEXIST") return false;
+    throw err;
+  }
+}
+
+async function probeAnyBridge(timeoutMs = 800) {
+  const ports = [];
+  const push = (p) => {
+    if (!Number.isFinite(p) || p <= 0 || ports.includes(p)) return;
+    ports.push(p);
+  };
+  push(DEFAULT_PORT);
+  for (let port = PORT_MIN; port <= PORT_MAX; port += 1) push(port);
+  for (const port of ports) {
+    const existing = await probeBridgeHealth(port, timeoutMs);
+    if (existing) return existing;
+  }
+  return null;
+}
+
+/**
+ * 防止「手动双击 + 网页协议唤起」在第一座尚未 listen 时各起一座。
+ * 锁由本进程写入；server.js 听端口成功后会改写成自己的 pid。
+ */
+async function acquireStarterLock() {
+  const deadline = Date.now() + 16000;
+  while (Date.now() < deadline) {
+    const running = await probeAnyBridge(600);
+    if (running) return { mode: "already", health: running };
+
+    if (tryWriteLock()) return { mode: "acquired" };
+
+    const meta = readLockMeta();
+    const age = meta?.ts ? Date.now() - meta.ts : Infinity;
+    const alive = meta?.pid ? isPidAlive(meta.pid) : false;
+    if (!alive && age > LOCK_STALE_MS) {
+      try {
+        fs.unlinkSync(LOCK_PATH);
+      } catch (_) {
+        /* ignore */
+      }
+      continue;
+    }
+    await sleep(400);
+  }
+  const running = await probeAnyBridge(800);
+  if (running) return { mode: "already", health: running };
+  console.error("");
+  console.error("[OK] 另一个启动脚本正在打开本机桥，本窗口不再重复启动。");
+  console.error("请使用已经打开的窗口，回到网页点「连接」。");
+  console.error("");
+  return { mode: "already", health: null };
+}
+
 async function main() {
   let port = DEFAULT_PORT;
   if (port < PORT_MIN || port > PORT_MAX) {
     console.error(`ADB_BRIDGE_PORT=${port} 超出本机桥范围 ${PORT_MIN}-${PORT_MAX}`);
     process.exit(1);
+  }
+
+  const lock = await acquireStarterLock();
+  if (lock.mode === "already") {
+    const shown = Number(lock.health?.port) || port;
+    if (lock.health) {
+      console.error("");
+      console.error(`[OK] 本机桥已在端口 ${shown} 运行（版本 ${lock.health.version || "?"}）。`);
+      console.error("无需再开第二个窗口。请保持已打开的启动脚本窗口，回到网页点「连接」。");
+      console.error("");
+    }
+    emit("ALREADY", shown);
+    return;
   }
 
   if (!(await isPortInUse(port))) {

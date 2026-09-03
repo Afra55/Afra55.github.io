@@ -94,6 +94,25 @@
   const INSTALL_DIR_KEY = "devtools-bridge-install-dir";
   const AUTO_START_KEY = "devtools-bridge-autostart";
   const PROTOCOL = "devtools-bridge://start";
+  const LAUNCH_AT_KEY = "devtools-bridge-protocol-launch-at";
+  const LAUNCH_COOLDOWN_MS = 60000;
+
+  function recentlyLaunchedProtocol() {
+    try {
+      const at = Number(sessionStorage.getItem(LAUNCH_AT_KEY) || 0);
+      return at > 0 && Date.now() - at < LAUNCH_COOLDOWN_MS;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function markProtocolLaunched() {
+    try {
+      sessionStorage.setItem(LAUNCH_AT_KEY, String(Date.now()));
+    } catch (_) {
+      /* ignore */
+    }
+  }
 
   function readInstallDir() {
     try {
@@ -140,6 +159,8 @@
 
   /** 尝试通过自定义协议唤起本机启动脚本（需用户曾运行过带注册逻辑的启动脚本） */
   function tryLaunchBridge() {
+    if (recentlyLaunchedProtocol()) return PROTOCOL;
+    markProtocolLaunched();
     try {
       const iframe = document.createElement("iframe");
       iframe.style.cssText = "display:none;width:0;height:0;border:0";
@@ -163,7 +184,18 @@
       rememberFromHealth(found.health);
       return found;
     }
-    if (launch && readAutoStart()) tryLaunchBridge();
+    if (launch && readAutoStart()) {
+      const graceEnd = Date.now() + 4000;
+      while (Date.now() < graceEnd) {
+        await new Promise((r) => setTimeout(r, 700));
+        found = await discoverBase(preferredBase, token || read());
+        if (found?.health) {
+          rememberFromHealth(found.health);
+          return found;
+        }
+      }
+      tryLaunchBridge();
+    }
     while (Date.now() - t0 < timeoutMs) {
       await new Promise((r) => setTimeout(r, 1500));
       found = await discoverBase(preferredBase, token || read());

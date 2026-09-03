@@ -2559,6 +2559,7 @@
           "",
           "注意：只需打开一个启动脚本窗口。若提示桥已在运行，不要再双击一次。",
           "Windows：优先双击 start-adb-bridge.cmd；不要同时再开 .bat。",
+          "若浏览器弹出「打开 DevTools Bridge」而你已经双击过启动脚本：点取消即可。",
           "",
           "默认 Token: devtools-bridge（兼容旧 Token）",
           "FFmpeg API 前缀: /ff",
@@ -2583,6 +2584,11 @@
           const wrapper = [
             "@echo off",
             'cd /d "%~dp0"',
+            'echo %* | findstr /I "devtools-bridge:" >nul 2>&1',
+            "if not errorlevel 1 (",
+            '  cmd /d /c ""%~dp0start-adb-bridge.bat" %*"',
+            "  exit /b %ERRORLEVEL%",
+            ")",
             'cmd /d /c ""%~dp0start-adb-bridge.bat" & echo. & echo Log: last-start.log in this folder & pause"',
             "",
           ].join("\r\n");
@@ -4062,7 +4068,7 @@
         $("#adb-bridge-launch")?.addEventListener("click", async () => {
           const dir = String($("#adb-install-dir")?.value || "").trim();
           if (dir) window.devtoolsBridgeToken?.writeInstallDir?.(dir);
-          setAdbStatus("is-warn", "正在唤起本机桥…", "若浏览器询问打开「devtools-bridge」请允许；首次使用请先手动运行解压目录里的启动脚本以完成协议注册。");
+          setAdbStatus("is-warn", "正在唤起本机桥…", "若已手动打开启动脚本，浏览器再询问时请点取消。首次使用请先手动运行一次以完成协议注册。");
           window.devtoolsBridgeToken?.tryLaunchBridge?.();
           startAdbWaitPoll();
           const found = await window.devtoolsBridgeToken?.ensureBridgeRunning?.({
@@ -4089,7 +4095,7 @@
             const found = await window.devtoolsBridgeToken?.ensureBridgeRunning?.({
               preferredBase: adbBase(),
               token: adbToken(),
-              timeoutMs: 8000,
+              timeoutMs: 20000,
               launch: true,
             });
             if (found?.health) await connectAdbBridge({ fromPoll: true });

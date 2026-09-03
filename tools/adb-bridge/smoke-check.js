@@ -136,6 +136,43 @@ async function main() {
     if (!health2.json?.unified) throw new Error("expected unified bridge flag");
     if (health2.json?.ffmpegMount !== "/ff") throw new Error("expected ffmpegMount /ff");
 
+    const child2 = spawn(process.execPath, [path.join(__dirname, "server.js")], {
+      env: {
+        ...process.env,
+        ADB_BRIDGE_PORT: String(PORT),
+        ADB_BRIDGE_TOKEN: TOKEN,
+        ADB_BRIDGE_ORIGINS: "http://127.0.0.1:8080,https://afra55.github.io",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let boot2 = "";
+    child2.stdout.on("data", (d) => {
+      boot2 += d.toString("utf8");
+    });
+    child2.stderr.on("data", (d) => {
+      boot2 += d.toString("utf8");
+    });
+    const code2 = await new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        try {
+          child2.kill("SIGTERM");
+        } catch {
+          /* ignore */
+        }
+        resolve(-1);
+      }, 8000);
+      child2.on("exit", (code) => {
+        clearTimeout(timer);
+        resolve(code == null ? 0 : code);
+      });
+    });
+    if (code2 !== 0) {
+      throw new Error(`second instance should exit 0 when port busy, got ${code2}: ${boot2}`);
+    }
+    if (!/不重复启动|已在端口/.test(boot2)) {
+      throw new Error(`second instance should refuse to start another bridge: ${boot2}`);
+    }
+
     const ffHealth = await req("GET", "/ff/health", { headers: { "X-Adb-Token": TOKEN } });
     // /ff/health should work without token actually - test without
     const ffHealthOpen = await req("GET", "/ff/health");

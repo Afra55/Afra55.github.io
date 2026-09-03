@@ -181,6 +181,11 @@ cat > "$HANDLER" <<EOF
 #!/usr/bin/env bash
 DIR="$SCRIPT_DIR"
 cd "\$DIR" || exit 1
+if command -v curl >/dev/null 2>&1; then
+  if curl -fsS --connect-timeout 1 --max-time 2 "http://127.0.0.1:17888/health" >/dev/null 2>&1; then
+    exit 0
+  fi
+fi
 for s in start-adb-bridge.sh start-linux.sh; do
   if [ -f "\$DIR/\$s" ]; then
     nohup bash "\$DIR/\$s" >/dev/null 2>&1 &

@@ -5,8 +5,12 @@ rem ASCII-only control flow. UTF-8 Chinese in .bat often flash-closes on CN Wind
 rem All runtime files stay in the same folder as this script (no %USERPROFILE% cache).
 
 set "EXIT_CODE=0"
+echo %* | findstr /I "devtools-bridge:" >nul 2>&1
+if not errorlevel 1 set "FROM_PROTOCOL=1"
 call :MAIN
 set "EXIT_CODE=!ERRORLEVEL!"
+
+if /i "!FROM_PROTOCOL!"=="1" if "!EXIT_CODE!"=="0" exit /b 0
 
 echo.
 echo ========================================
@@ -167,7 +171,7 @@ rem Register custom URL protocol so the webpage can request start (devtools-brid
 set "ADB_BRIDGE_DIR=%SCRIPT_DIR%"
 reg add "HKCU\Software\Classes\devtools-bridge" /ve /d "URL:DevTools Bridge Protocol" /f >> "%LOG_FILE%" 2>&1
 reg add "HKCU\Software\Classes\devtools-bridge" /v "URL Protocol" /d "" /f >> "%LOG_FILE%" 2>&1
-reg add "HKCU\Software\Classes\devtools-bridge\shell\open\command" /ve /d "\"%~f0\"" /f >> "%LOG_FILE%" 2>&1
+reg add "HKCU\Software\Classes\devtools-bridge\shell\open\command" /ve /d "\"%~f0\" \"%1\"" /f >> "%LOG_FILE%" 2>&1
 echo [OK] Registered protocol devtools-bridge:// >> "%LOG_FILE%"
 
 
@@ -222,6 +226,9 @@ if /i "!PORT_MODE!"=="ALREADY" (
   echo [OK] Bridge already running on port !ADB_BRIDGE_PORT!
   echo      Do not open another bat/cmd. Keep the first window open, then click Connect on the webpage.
   echo already running port=!ADB_BRIDGE_PORT!>> "%LOG_FILE%"
+  if /i "!FROM_PROTOCOL!"=="1" exit /b 0
+  echo.
+  echo This extra window can be closed.
   exit /b 0
 )
 echo [OK] Bridge port: %ADB_BRIDGE_PORT%

@@ -48,7 +48,7 @@
             <input type="checkbox" id="adb-bridge-autostart" checked />
             进入本页时若未连接则尝试自动启动
           </label>
-          <p class="hint tight" id="adb-install-dir-hint">下载解压后把文件夹路径填在这里并「记住」。首次请手动双击启动脚本（会注册 <span class="mono">devtools-bridge://</span>）；之后网页可一键/自动唤起。浏览器无法直接执行本地程序。</p>
+          <p class="hint tight" id="adb-install-dir-hint">下载解压后把文件夹路径填在这里并「记住」。首次请手动双击启动脚本（会注册 <span class="mono">devtools-bridge://</span>）。之后网页可自动唤起：若已手动打开窗口，浏览器再弹出「打开 DevTools Bridge」请点取消，不要再开第二座。</p>
         </div>
         <p class="hint">默认 Token 为 <span class="mono">devtools-bridge</span>（兼容旧 <span class="mono">devtools-adb</span>）。<strong>一座桥</strong>同时提供 ADB、Scrcpy 镜像与 FFmpeg（<span class="mono">/ff</span>）。完整包需含 <span class="mono">server.js</span> + <span class="mono">ffmpeg-bridge/</span>（桥 ≥0.8.0）。<button type="button" class="ghost-btn" id="adb-setup-guide-show" hidden style="margin-left:0.35rem">显示本机依赖说明</button></p>
         <div class="adb-guide" id="adb-setup-guide">
