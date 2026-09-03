@@ -1973,9 +1973,9 @@
       if (!noScroll && rowIdx >= 0 && items.length >= VIRTUAL_MIN) {
         paintVirtualWindow(rows, { force: true, preferId: id });
         const prefix = buildHeightPrefix(rows);
-        const listTop = itemList.getBoundingClientRect().top + window.scrollY;
-        const targetY = Math.max(0, listTop + (prefix[rowIdx] || 0) - 72);
-        window.scrollTo({ top: targetY, behavior: "smooth" });
+        const listOffset = memoElementOffsetInRoot(itemList);
+        const targetY = Math.max(0, listOffset + (prefix[rowIdx] || 0) - 72);
+        memoScrollToY(targetY, { behavior: "smooth" });
       }
       requestAnimationFrame(() => {
         const card = itemList?.querySelector?.(`.memo-card[data-memo-id="${id}"]`) || null;
@@ -2286,7 +2286,7 @@
           hydrateOneMedia(el).catch(() => {});
         });
       },
-      { root: null, rootMargin: "160px 0px", threshold: 0.01 }
+      { root: memoScrollRoot(), rootMargin: "160px 0px", threshold: 0.01 }
     );
     nodes.forEach((el) => mediaObserver.observe(el));
   }
@@ -2302,10 +2302,63 @@
     }
     meta.hidden = false;
     const parts = [`共 ${total} 条`];
-    if (shown < total) parts.push(`已显示 ${shown}`);
+    // 虚拟列表的「窗口条数」易误解成分页已加载量，只在非虚拟分页时展示
+    if (!state.virtualMode && shown < total) parts.push(`已显示 ${shown}`);
     if (q) parts.push(`搜索「${q}」`);
     meta.textContent = parts.join(" · ");
   }
+
+  /** 桌面端实际滚动容器是 main.shell（html/body overflow:hidden），移动端仍为窗口 */
+  function memoScrollRoot() {
+    const shell = document.querySelector("main.shell");
+    if (!shell) return null;
+    try {
+      const oy = getComputedStyle(shell).overflowY;
+      if (oy === "auto" || oy === "scroll" || oy === "overlay") return shell;
+    } catch (_) {
+      /* ignore */
+    }
+    return null;
+  }
+
+  function memoListViewMetrics(listEl) {
+    const listRect = listEl.getBoundingClientRect();
+    const root = memoScrollRoot();
+    if (root) {
+      const rootRect = root.getBoundingClientRect();
+      return {
+        root,
+        viewTop: Math.max(0, rootRect.top - listRect.top + 8),
+        viewH: Math.max(120, root.clientHeight || window.innerHeight || 800),
+      };
+    }
+    return {
+      root: null,
+      viewTop: Math.max(0, 8 - listRect.top),
+      viewH: window.innerHeight || 800,
+    };
+  }
+
+  function memoElementOffsetInRoot(el) {
+    const rect = el.getBoundingClientRect();
+    const root = memoScrollRoot();
+    if (root) {
+      const rootRect = root.getBoundingClientRect();
+      return rect.top - rootRect.top + root.scrollTop;
+    }
+    return rect.top + window.scrollY;
+  }
+
+  function memoScrollToY(top, { behavior = "auto" } = {}) {
+    const root = memoScrollRoot();
+    if (root) {
+      root.scrollTo({ top, behavior });
+      return;
+    }
+    window.scrollTo({ top, behavior });
+  }
+
+  let virtualScrollBound = null;
 
   function stopVirtualScroll() {
     if (state.virtualRaf) {
@@ -2313,8 +2366,10 @@
       state.virtualRaf = 0;
     }
     state.virtualMode = false;
-    window.removeEventListener("scroll", onVirtualScroll);
-    window.removeEventListener("resize", onVirtualScroll);
+    const target = virtualScrollBound || window;
+    target.removeEventListener("scroll", onVirtualScroll);
+    window.removeEventListener("resize", onVirtualScrollResize);
+    virtualScrollBound = null;
   }
 
   function onVirtualScroll() {
@@ -2331,11 +2386,23 @@
     });
   }
 
+  function onVirtualScrollResize() {
+    if (!state.virtualMode) return;
+    const next = memoScrollRoot();
+    if (next !== virtualScrollBound) {
+      setupVirtualScroll();
+      return;
+    }
+    onVirtualScroll();
+  }
+
   function setupVirtualScroll() {
     stopVirtualScroll();
     state.virtualMode = true;
-    window.addEventListener("scroll", onVirtualScroll, { passive: true });
-    window.addEventListener("resize", onVirtualScroll);
+    virtualScrollBound = memoScrollRoot();
+    const target = virtualScrollBound || window;
+    target.addEventListener("scroll", onVirtualScroll, { passive: true });
+    window.addEventListener("resize", onVirtualScrollResize);
   }
 
   function itemIndexBeforeRow(rows, rowIdx) {
@@ -2370,20 +2437,18 @@
     const rows = Array.isArray(rowsIn) ? rowsIn : buildTimelineRows(visibleItems());
     const prefix = buildHeightPrefix(rows);
     const totalH = prefix[rows.length] || 0;
-    const listTop = itemList.getBoundingClientRect().top + window.scrollY;
-    const viewTop = Math.max(0, window.scrollY + 8 - listTop);
-    const viewH = window.innerHeight || 800;
+    const { viewTop, viewH } = memoListViewMetrics(itemList);
     let start;
     let end;
     const preferIdx = preferId
       ? rows.findIndex((r) => r.kind === "item" && r.item?.id === preferId)
       : -1;
     if (force && preferIdx >= 0) {
-      start = Math.max(0, preferIdx - 8);
-      end = Math.min(rows.length, preferIdx + 12);
+      start = Math.max(0, preferIdx - 12);
+      end = Math.min(rows.length, preferIdx + 18);
     } else {
-      start = Math.max(0, indexAtOffset(prefix, viewTop) - 4);
-      end = Math.min(rows.length, indexAtOffset(prefix, viewTop + viewH) + 6);
+      start = Math.max(0, indexAtOffset(prefix, viewTop) - 10);
+      end = Math.min(rows.length, indexAtOffset(prefix, viewTop + viewH) + 14);
     }
     if (state.pendingUndo) {
       const a = state.pendingUndo.anchorVisibleIdx;
@@ -2398,7 +2463,16 @@
         }
       }
     }
-    if (end - start < 16) end = Math.min(rows.length, start + 16);
+    if (end - start < 24) {
+      end = Math.min(rows.length, start + 24);
+      start = Math.max(0, end - 24);
+    }
+    // 贴顶/贴底：避免首尾条目落在 spacer 里只剩空白
+    if (viewTop <= 96) start = 0;
+    if (viewTop + viewH >= totalH - Math.max(200, viewH * 0.4)) {
+      end = rows.length;
+      start = Math.min(start, Math.max(0, rows.length - 24));
+    }
     const topPad = prefix[start] || 0;
     const bottomPad = Math.max(0, totalH - (prefix[end] || 0));
     const slice = rows.slice(start, end);
@@ -2523,8 +2597,8 @@
     renderListMeta(items.length, shown);
     if (moreRow) {
       const hasMore = shown < items.length;
-      const needManual = typeof IntersectionObserver !== "function";
-      moreRow.hidden = !(hasMore && needManual);
+      // 始终提供手动兜底；自动加载由 IntersectionObserver 负责
+      moreRow.hidden = !hasMore;
       if (loadMoreBtn) {
         loadMoreBtn.textContent = `加载更多（还剩 ${Math.max(0, items.length - shown)}）`;
       }
@@ -2576,18 +2650,24 @@
     }
     if (sentinel.hidden) return;
     if (typeof IntersectionObserver !== "function") return;
+    const root = memoScrollRoot();
     infiniteObserver = new IntersectionObserver(
       (entries) => {
         const hit = entries.some((e) => e.isIntersecting);
         if (!hit) return;
         bumpListLimitFromScroll();
       },
-      { root: null, rootMargin: "320px 0px", threshold: 0 }
+      { root, rootMargin: "320px 0px", threshold: 0 }
     );
     infiniteObserver.observe(sentinel);
     // 首屏已露出哨兵时立刻补一页，避免只看到「手动/加载」暗示
     requestAnimationFrame(() => {
       const rect = sentinel.getBoundingClientRect();
+      if (root) {
+        const rootRect = root.getBoundingClientRect();
+        if (rect.top <= rootRect.bottom + 320) bumpListLimitFromScroll();
+        return;
+      }
       const vh = window.innerHeight || document.documentElement.clientHeight || 0;
       if (rect.top <= vh + 320) bumpListLimitFromScroll();
     });
