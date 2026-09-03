@@ -1517,6 +1517,23 @@ async function main() {
         out.recentUi.dlgChipCount = document.querySelectorAll(".nav-recent-dlg-item").length;
         out.recentUi.showsAllDlg = out.recentUi.dlgChipCount === ids.length;
         out.recentUi.dialogOpen = document.getElementById("nav-recent-dlg")?.open === true;
+        const dlgItem = document.querySelector(".nav-recent-dlg-item");
+        const dlg = document.getElementById("nav-recent-dlg");
+        const ctx = document.getElementById("nav-tool-ctx");
+        if (dlgItem && dlg && ctx) {
+          dlgItem.dispatchEvent(
+            new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 120, clientY: 160 })
+          );
+          out.recentUi.ctxVisible = ctx.hidden === false;
+          out.recentUi.ctxInDialog = dlg.contains(ctx);
+          out.recentUi.ctxHasFavAdd = Boolean(ctx.querySelector('[data-nav-ctx="fav-add"]:not([hidden])'));
+          const addBtn = ctx.querySelector('[data-nav-ctx="fav-add"]');
+          localStorage.setItem("devtools-tool-favorites-v1", JSON.stringify(["uuid"]));
+          window.DevToolsNav?.renderFavorites?.();
+          addBtn?.click();
+          const favs = JSON.parse(localStorage.getItem("devtools-tool-favorites-v1") || "[]");
+          out.recentUi.favAddedFromDlg = favs.includes(dlgItem.dataset.tool);
+        }
       }
       window.DevToolsNav?.closeRecentDialog?.();
     } catch (_) {}
@@ -2149,9 +2166,13 @@ async function main() {
     !result.recentUi?.rowLayout ||
     !result.recentUi?.noScrollbar ||
     !result.recentUi?.dialogOpen ||
-    !result.recentUi?.fullText
+    !result.recentUi?.fullText ||
+    !result.recentUi?.ctxVisible ||
+    !result.recentUi?.ctxInDialog ||
+    !result.recentUi?.ctxHasFavAdd ||
+    !result.recentUi?.favAddedFromDlg
   ) {
-    failed.push("recent tools should open a picker dialog with full tool names");
+    failed.push("recent dialog should list tools and support right-click add-to-favorites inside modal");
   }
   if (
     !result.favoritesUi?.hasSection ||

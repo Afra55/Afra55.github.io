@@ -1686,17 +1686,25 @@
     showToast(`已从常用移除：${toolName(id)}`);
   }
 
+  function navToolCtxHost() {
+    // showModal() 的 dialog 在顶层；菜单必须挂进同一层，否则点得到但看不见
+    if (recentDlg?.open) return recentDlg;
+    return document.body;
+  }
+
   function hideNavToolCtx() {
     if (!navToolCtx) return;
     navToolCtx.hidden = true;
     navToolCtxId = "";
     document.body.classList.remove("nav-tool-ctx-open");
     document.removeEventListener("selectionchange", clearNavTextSelection);
+    if (navToolCtx.parentElement !== document.body) document.body.appendChild(navToolCtx);
   }
 
   function showNavToolCtx(x, y, toolId) {
     if (!navToolCtx || !toolId || !DEFAULT_ORDER.includes(toolId)) return;
-    if (navToolCtx.parentElement !== document.body) document.body.appendChild(navToolCtx);
+    const host = navToolCtxHost();
+    if (navToolCtx.parentElement !== host) host.appendChild(navToolCtx);
     clearNavTextSelection();
     document.body.classList.add("nav-tool-ctx-open");
     document.addEventListener("selectionchange", clearNavTextSelection);
@@ -1737,7 +1745,10 @@
       hideNavToolCtx();
       if (action === "fav-add") addFavorite(id);
       else if (action === "fav-remove") removeFavorite(id);
-      else if (action === "open") navigateTo(id);
+      else if (action === "open") {
+        closeRecentDialog();
+        navigateTo(id);
+      }
     });
     document.addEventListener(
       "click",
@@ -1924,7 +1935,7 @@
   function pushNavSelectBlock() {
     if (!navSelectBlockHandler) {
       navSelectBlockHandler = (e) => {
-        if (e.target?.closest?.(".tool-nav-link, .nav-fav-link, .nav-group-title, .nav-recent-chip")) {
+        if (e.target?.closest?.(".tool-nav-link, .nav-fav-link, .nav-group-title, .nav-recent-chip, .nav-recent-dlg-item")) {
           e.preventDefault();
         }
       };
@@ -2163,6 +2174,7 @@
   }
 
   function closeRecentDialog() {
+    hideNavToolCtx();
     recentOpen = false;
     syncRecentOpenUi();
     if (typeof recentDlg?.close === "function") recentDlg.close();
@@ -2185,22 +2197,22 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "nav-recent-dlg-item";
+      btn.dataset.tool = id;
       btn.setAttribute("role", "listitem");
+      btn.title = "右键 / 长按可加入常用工具";
       btn.textContent = toolName(id);
       btn.addEventListener("click", () => {
+        if (Date.now() < navSortClickSuppressUntil) return;
         closeRecentDialog();
         navigateTo(id);
         if (isMobileDrawer()) setDrawerOpen(false);
       });
       btn.addEventListener("contextmenu", (e) => {
-        if (!canDesktopDrag()) {
-          e.preventDefault();
-          return;
-        }
         e.preventDefault();
         hideNavToolCtx();
         showNavToolCtx(e.clientX, e.clientY, id);
       });
+      bindMobileToolCtxPress(btn);
       recentDlgList.appendChild(btn);
     });
   }
@@ -2237,21 +2249,21 @@
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = "nav-recent-chip";
+      btn.dataset.tool = id;
       btn.setAttribute("role", "listitem");
+      btn.title = "右键 / 长按可加入常用工具";
       btn.textContent = toolName(id);
       btn.addEventListener("click", () => {
+        if (Date.now() < navSortClickSuppressUntil) return;
         navigateTo(id);
         if (isMobileDrawer()) setDrawerOpen(false);
       });
       btn.addEventListener("contextmenu", (e) => {
-        if (!canDesktopDrag()) {
-          e.preventDefault();
-          return;
-        }
         e.preventDefault();
         hideNavToolCtx();
         showNavToolCtx(e.clientX, e.clientY, id);
       });
+      bindMobileToolCtxPress(btn);
       recentList.appendChild(btn);
     });
   }
