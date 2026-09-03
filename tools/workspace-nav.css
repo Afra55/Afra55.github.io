@@ -918,6 +918,7 @@ html[data-panel-loading] .workspace-panels:empty::after {
 .tool-panel.is-workspace-active {
   display: block;
   animation: rise 0.35s ease both;
+  margin-bottom: 0;
 }
 
 .tool-panel[hidden] {
@@ -1084,7 +1085,7 @@ body.nav-open {
 
   .app-layout {
     display: block;
-    padding: 0 1rem 1.25rem;
+    padding: 0 1rem max(0.65rem, env(safe-area-inset-bottom, 0px));
     box-sizing: border-box;
   }
 
