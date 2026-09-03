@@ -10,6 +10,8 @@
   const hint = $("#env-run-hint");
   const grid = $("#env-probe-grid");
   const errEl = $("#env-error");
+  const installBtns = $("#env-install-btns");
+  const upgradeBtns = $("#env-upgrade-btns");
 
   const BRIDGES = [
     {
@@ -45,38 +47,72 @@
     return "linux";
   }
 
+  function linkBtn(href, download, label, primary) {
+    const a = document.createElement("a");
+    a.className = primary ? "primary-btn" : "secondary-btn";
+    a.href = href;
+    a.download = download;
+    a.textContent = label;
+    return a;
+  }
+
   function setOs(os) {
     const next = os === "win" || os === "linux" ? os : "mac";
     $$("[data-env-os]", panel).forEach((btn) => {
       btn.classList.toggle("is-active", btn.dataset.envOs === next);
     });
+
+    installBtns.innerHTML = "";
+    upgradeBtns.innerHTML = "";
+
     if (next === "win") {
+      installBtns.append(
+        linkBtn("./envkit/install-win.cmd", "install-win.cmd", "下载安装（双击 .cmd）", true),
+        linkBtn("./envkit/install-devtools-env.ps1", "install-devtools-env.ps1", "PowerShell 脚本", false)
+      );
+      upgradeBtns.append(
+        linkBtn("./envkit/upgrade-win.cmd", "upgrade-win.cmd", "下载一键升级（双击）", true),
+        linkBtn("./envkit/upgrade-devtools-env.ps1", "upgrade-devtools-env.ps1", "升级 PowerShell", false)
+      );
       hint.textContent = [
-        "Windows（PowerShell）：",
-        "1. 把 install-devtools-env.ps1 与 install-win.cmd 放同一文件夹",
-        "2. 双击 install-win.cmd",
-        "   或：powershell -ExecutionPolicy Bypass -File .\\install-devtools-env.ps1",
-        "3. 升级：… -Mode upgrade    只更新桥：… -Mode bridges",
-        "4. 启动 ~/DevToolsBridges 里 adb-bridge\\start-win.cmd 与 git-bridge\\start-win.cmd",
+        "升级会处理：Node、Git、FFmpeg、ADB、yt-dlp（winget / yt-dlp -U）+ 全部桥文件。",
+        "1. 下载 upgrade-win.cmd（建议与 ps1 同目录）",
+        "2. 双击运行，等对照表打印完成",
+        "3. 新开终端，再启动 DevToolsBridges 里的桥",
+        "仅检测：powershell -File install-devtools-env.ps1 -Mode check",
       ].join("\n");
     } else if (next === "mac") {
+      installBtns.append(
+        linkBtn("./envkit/install-mac.command", "install-mac.command", "下载安装（双击）", true),
+        linkBtn("./envkit/install-devtools-env.sh", "install-devtools-env.sh", "Shell 脚本", false)
+      );
+      upgradeBtns.append(
+        linkBtn("./envkit/upgrade-mac.command", "upgrade-mac.command", "下载一键升级（双击）", true),
+        linkBtn("./envkit/upgrade-devtools-env.sh", "upgrade-devtools-env.sh", "升级 Shell（联网拉最新）", false)
+      );
       hint.textContent = [
-        "macOS：",
-        "1. chmod +x install-devtools-env.sh && ./install-devtools-env.sh",
-        "   或双击 install-mac.command",
-        "2. 只检测：./install-devtools-env.sh check",
-        "3. 升级：./install-devtools-env.sh upgrade",
-        "4. 启动 ~/DevToolsBridges/adb-bridge 与 git-bridge 下的 start-mac.command",
+        "升级会处理：Node、Git、FFmpeg、ADB、yt-dlp（Homebrew 等）+ 全部桥文件。",
+        "1. 下载 upgrade-mac.command 并允许打开，或：",
+        "   chmod +x upgrade-devtools-env.sh && ./upgrade-devtools-env.sh",
+        "2. 看终端「升级后对照」；日志在 ~/DevToolsBridges/last-upgrade.log",
+        "3. 重新启动桥进程以加载新 server.js",
       ].join("\n");
     } else {
+      installBtns.append(
+        linkBtn("./envkit/install-devtools-env.sh", "install-devtools-env.sh", "下载安装脚本", true)
+      );
+      upgradeBtns.append(
+        linkBtn("./envkit/upgrade-devtools-env.sh", "upgrade-devtools-env.sh", "下载一键升级脚本", true),
+        linkBtn("./envkit/install-devtools-env.sh", "install-devtools-env.sh", "完整脚本（再跑 upgrade）", false)
+      );
       hint.textContent = [
-        "Linux：",
-        "1. chmod +x install-devtools-env.sh && ./install-devtools-env.sh",
-        "2. check / upgrade / bridges 同上",
-        "3. 启动 ~/DevToolsBridges/*/start-linux.sh",
-        "注：部分发行版装 ADB/FFmpeg 需要 sudo。",
+        "升级会处理：Node、Git、FFmpeg、ADB、yt-dlp（apt/dnf/pacman 等）+ 全部桥文件。",
+        "chmod +x upgrade-devtools-env.sh && ./upgrade-devtools-env.sh",
+        "或：./install-devtools-env.sh upgrade",
+        "需要 sudo 时会提示输入密码。",
       ].join("\n");
     }
+
     try {
       localStorage.setItem("devtools-envkit-os", next);
     } catch (_) {}

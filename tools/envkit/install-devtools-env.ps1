@@ -57,6 +57,17 @@ function Install-One([string]$Name) {
 }
 
 function Upgrade-One([string]$Name) {
+  if ($Name -eq "yt-dlp") {
+    if (Have-Cmd "yt-dlp") {
+      try { yt-dlp -U 2>$null } catch {}
+    }
+    if (Have-Cmd "pipx") {
+      try { pipx upgrade yt-dlp } catch { try { pipx install yt-dlp } catch {} }
+    }
+    if (Have-Cmd "pip") {
+      try { pip install --user -U yt-dlp } catch {}
+    }
+  }
   if (-not (Ensure-Winget)) { return }
   $id = switch ($Name) {
     "node" { "OpenJS.NodeJS.LTS" }
@@ -66,8 +77,65 @@ function Upgrade-One([string]$Name) {
     "yt-dlp" { "yt-dlp.yt-dlp" }
   }
   if ($id) {
-    winget upgrade -e --id $id --accept-package-agreements --accept-source-agreements
+    winget upgrade -e --id $id --include-unknown --accept-package-agreements --accept-source-agreements
+    if ($LASTEXITCODE -ne 0) {
+      # 可能已是最新，或未通过 winget 安装；尝试 install 兜底
+      winget install -e --id $id --accept-package-agreements --accept-source-agreements
+    }
   }
+}
+
+function Snapshot-Versions {
+  $map = [ordered]@{}
+  foreach ($n in @("node", "git", "ffmpeg", "adb", "yt-dlp")) {
+    $v = Get-Ver $n
+    if ($v) { $map[$n] = [string]$v } else { $map[$n] = "(missing)" }
+  }
+  return $map
+}
+
+function Do-Upgrade {
+  Write-Host ""
+  Write-Host "== 升级本机工具（Node / Git / FFmpeg / ADB / yt-dlp）+ 桥文件 =="
+  $before = Snapshot-Versions
+  Write-Host "-- 升级前 --"
+  foreach ($k in $before.Keys) { Write-Info "$k=$($before[$k])" }
+
+  foreach ($n in @("node", "git", "ffmpeg", "adb", "yt-dlp")) {
+    if (Have-Cmd $n) {
+      Write-Info "升级 $n …"
+      Upgrade-One $n
+    } else {
+      Write-Info "$n 未安装 → 安装"
+      Install-One $n
+    }
+  }
+
+  Write-Host ""
+  Write-Host "== 同步最新桥脚本 =="
+  Sync-Bridges
+
+  # 刷新 PATH 后再读版本（本会话可能仍旧）
+  $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+  $after = Snapshot-Versions
+  Write-Host ""
+  Write-Host "-- 升级后对照 --"
+  $lines = @("upgradedAt=$((Get-Date).ToUniversalTime().ToString('o'))", "---- before ----")
+  foreach ($k in $before.Keys) {
+    $b = $before[$k]; $a = $after[$k]
+    if ($b -eq $a) { Write-Ok "$k 未变 · $a" } else {
+      Write-Ok "$k 已更新"
+      Write-Info "  前: $b"
+      Write-Info "  后: $a"
+    }
+    $lines += "before_$k=$b"
+  }
+  $lines += "---- after ----"
+  foreach ($k in $after.Keys) { $lines += "after_$k=$($after[$k])" }
+  if (-not (Test-Path $BridgeDir)) { New-Item -ItemType Directory -Force -Path $BridgeDir | Out-Null }
+  Set-Content -Encoding UTF8 (Join-Path $BridgeDir "last-upgrade.log") ($lines -join "`n")
+  Write-Ok "对照已写入 $BridgeDir\last-upgrade.log"
+  Write-Host "若版本显示仍旧：请新开终端再 check（PATH 需刷新）。"
 }
 
 function Download-File([string]$Url, [string]$Dest) {
@@ -162,18 +230,7 @@ switch ($Mode) {
     Show-Report
   }
   "upgrade" {
-    Write-Host ""
-    Write-Host "== 升级 =="
-    foreach ($n in @("node", "git", "ffmpeg", "adb", "yt-dlp")) {
-      if (Have-Cmd $n) {
-        Write-Info "升级 $n …"
-        Upgrade-One $n
-      } else {
-        Write-Info "安装 $n …"
-        Install-One $n
-      }
-    }
-    Sync-Bridges
+    Do-Upgrade
     Show-Report
   }
   "bridges" { Sync-Bridges }

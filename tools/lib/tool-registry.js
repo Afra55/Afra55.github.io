@@ -918,7 +918,7 @@
     "gitbridge": "本机 Git 桥：选本地仓库、彩色提交图、人话解释 merge/分支关系，按钮对应真实 git 命令。",
     "about": "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
     "setup": "小白向：如何下载安装 Node.js、ADB、FFmpeg；手机用网页保底、电脑用桥更优。",
-    "envkit": "一键检测/安装/升级 Node、Git、FFmpeg、ADB、yt-dlp，并同步各本机桥文件；已装则跳过。",
+    "envkit": "一键安装或缺省跳过；一键升级会更新 Node/Git/FFmpeg/ADB/yt-dlp 与全部桥文件。",
     "mathedit": "MathLive 在线数学公式编辑：可视化输入，导出 LaTeX / MathML / AsciiMath。",
     "mdslides": "把 Markdown 做成网页幻灯片（Reveal.js）；用 --- 分页，一键全屏演示。",
     "sitenav": "外链导航：PDFCraft、昆虫世界、史前博物馆、Slidev 等站外服务；本站已有工具不重复列出。"

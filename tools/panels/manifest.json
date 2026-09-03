@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-03T13:05:48.345Z",
+  "generatedAt": "2026-09-03T13:09:07.493Z",
   "panels": [
     {
       "id": "about",
@@ -75,7 +75,7 @@
     {
       "id": "envkit",
       "file": "./panels/envkit.html",
-      "bytes": 3966
+      "bytes": 3534
     },
     {
       "id": "everything",
