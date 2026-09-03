@@ -208,6 +208,11 @@
       "bytes": 4028
     },
     {
+      "id": "piano",
+      "file": "./panels/piano.html",
+      "bytes": 2282
+    },
+    {
       "id": "qrcode",
       "file": "./panels/qrcode.html",
       "bytes": 2422

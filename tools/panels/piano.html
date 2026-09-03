@@ -1,0 +1,40 @@
+<section id="piano" class="panel tool-panel" data-reveal>
+  <div class="panel-head">
+    <h1>在线钢琴</h1>
+    <p>鼠标、触摸或电脑键盘弹奏。交互布局参考开源 <a href="https://github.com/kevinsqi/react-piano" target="_blank" rel="noopener noreferrer">kevinsqi/react-piano</a>（MIT）；默认 Web Audio 合成，离线可用。可选加载 <a href="https://github.com/danigb/soundfont-player" target="_blank" rel="noopener noreferrer">soundfont-player</a> 三角钢琴采样（需联网）。</p>
+  </div>
+  <div class="panel-body piano-body">
+    <div class="piano-toolbar">
+      <label class="piano-field" for="piano-engine">
+        <span>音色</span>
+        <select id="piano-engine" class="select-input">
+          <option value="synth">合成器（离线）</option>
+          <option value="acoustic">三角钢琴采样</option>
+        </select>
+      </label>
+      <label class="piano-field" for="piano-vol">
+        <span>音量</span>
+        <input id="piano-vol" type="range" min="0" max="100" value="72" />
+      </label>
+      <div class="piano-field">
+        <span>八度</span>
+        <div class="piano-octave">
+          <button type="button" class="ghost-btn" id="piano-oct-down" aria-label="降低八度">−</button>
+          <strong class="mono" id="piano-oct-label">0</strong>
+          <button type="button" class="ghost-btn" id="piano-oct-up" aria-label="升高八度">+</button>
+        </div>
+      </div>
+      <label class="flag" for="piano-sustain">
+        <input type="checkbox" id="piano-sustain" /> 延音
+      </label>
+      <button type="button" class="secondary-btn" id="piano-demo-twinkle">小星星</button>
+      <button type="button" class="ghost-btn" id="piano-demo-ode">欢乐颂</button>
+      <button type="button" class="ghost-btn" id="piano-demo-stop" hidden>停止试听</button>
+    </div>
+    <p class="hint tight" id="piano-status">点任意琴键开始。电脑键盘 A–L 为白键，W/E/T/Y/U/O/P 为黑键（与 react-piano 相同）；空格为延音。</p>
+    <p class="piano-now" id="piano-now" aria-live="polite">—</p>
+    <div class="piano-bed" id="piano-bed">
+      <div class="piano-kb" id="piano-kb" role="application" aria-label="钢琴键盘"></div>
+    </div>
+  </div>
+</section>

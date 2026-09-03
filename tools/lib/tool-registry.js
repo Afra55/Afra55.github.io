@@ -124,6 +124,7 @@
         "wheel",
         "ruler",
         "muyu",
+        "piano",
         "minigames",
         "sandspiel",
         "ambient"
@@ -648,6 +649,19 @@
         "冥想"
       ]
     },
+    "piano": {
+      "name": "在线钢琴",
+      "aliases": [
+        "钢琴",
+        "piano",
+        "键盘",
+        "弹奏",
+        "midi",
+        "琴键",
+        "电子琴",
+        "soundfont"
+      ]
+    },
     "minigames": {
       "name": "摸鱼 & 解压",
       "aliases": [
@@ -864,6 +878,7 @@
     "wheel": "大转盘：自定义分块、比例与文字，按权重随机停针；可开关旋转音效与结果语音播报。",
     "ruler": "屏幕直尺：四边刻度、十字准线，可全屏；厘米/毫米按本机 PPI 自动估算，可手动微调。",
     "muyu": "敲木鱼：jwenjian/wooden-fish 造型与音效；次数本机永久累加，可全屏，空格键敲击。",
+    "piano": "在线钢琴：鼠标/触摸/电脑键盘弹奏。布局参考 kevinsqi/react-piano（MIT）；默认 Web Audio 合成（离线可用），可选加载三角钢琴采样。",
     "minigames": "摸鱼 & 解压：2048、贪吃蛇、Flappy、打地鼠、泡泡纸、Pop-it、升空气泡、键盘敲击音；纯本地 Canvas。",
     "sandspiel": "落沙沙盒：沙子/水/火/植物等元胞自动机，本地 WASM+WebGL。移植自 MaxBittker/sandspiel 并中文化，无登录无广告。",
     "ambient": "环境音库：89 条单轨环境音，分类浏览、搜索、收藏与下载；封面为 Openverse 实景图，音效参考 remvze/moodist。",

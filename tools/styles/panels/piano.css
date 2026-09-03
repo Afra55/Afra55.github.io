@@ -1,0 +1,184 @@
+.piano-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+
+.piano-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.65rem 0.85rem;
+}
+
+.piano-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  min-width: 7.5rem;
+}
+
+.piano-field > span {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.piano-field .select-input {
+  min-width: 10.5rem;
+}
+
+.piano-field input[type="range"] {
+  width: 9.5rem;
+  accent-color: var(--accent);
+}
+
+.piano-octave {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.piano-octave .ghost-btn {
+  min-width: 2.1rem;
+  padding: 0.35rem 0.55rem;
+}
+
+.piano-octave strong {
+  min-width: 1.6rem;
+  text-align: center;
+  font-size: 1rem;
+}
+
+.piano-now {
+  margin: 0;
+  min-height: 1.35em;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  color: var(--ink);
+}
+
+.piano-bed {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.85rem 0.7rem 1.05rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, #3a2418 55%, var(--line));
+  background:
+    linear-gradient(180deg, #5a3d2c 0%, #2a1810 42%, #140c09 100%);
+  box-shadow: inset 0 1px 0 rgba(255, 220, 180, 0.12);
+  -webkit-overflow-scrolling: touch;
+}
+
+.piano-kb {
+  position: relative;
+  display: flex;
+  height: min(46vh, 240px);
+  min-height: 168px;
+  min-width: 640px;
+  user-select: none;
+  touch-action: none;
+}
+
+.piano-white,
+.piano-black {
+  appearance: none;
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+  margin: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.piano-white {
+  flex: 1 0 0;
+  position: relative;
+  z-index: 1;
+  border: 1px solid #c9bfae;
+  border-bottom-width: 2px;
+  border-radius: 0 0 8px 8px;
+  background: linear-gradient(180deg, #fbf8f1 0%, #efe6d6 72%, #ddd2c0 100%);
+  box-shadow:
+    inset 0 -10px 12px rgba(80, 60, 30, 0.08),
+    0 6px 0 #c4b8a4;
+  color: #5c5348;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.12rem;
+  padding-bottom: 0.45rem;
+}
+
+.piano-white.is-active {
+  background: linear-gradient(180deg, #dce6ff 0%, #b7c8f4 100%);
+  box-shadow:
+    inset 0 8px 10px rgba(40, 50, 90, 0.12),
+    0 3px 0 #9aaad4;
+  transform: translateY(3px);
+}
+
+.piano-black {
+  position: absolute;
+  top: 0;
+  z-index: 2;
+  height: 61%;
+  border: 0;
+  border-radius: 0 0 6px 6px;
+  background: linear-gradient(180deg, #4a4a52 0%, #1a1a1e 38%, #0b0b0d 100%);
+  box-shadow:
+    inset 1px 0 0 rgba(255, 255, 255, 0.16),
+    inset -1px 0 0 rgba(0, 0, 0, 0.5),
+    0 8px 0 #050506;
+  color: #d7d2c8;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.08rem;
+  padding-bottom: 0.35rem;
+}
+
+.piano-black.is-active {
+  background: linear-gradient(180deg, #5b6ea8 0%, #243056 100%);
+  box-shadow:
+    inset 0 6px 8px rgba(0, 0, 0, 0.35),
+    0 4px 0 #12151f;
+  transform: translateY(2px);
+}
+
+.piano-key-note {
+  font-size: 0.68rem;
+  font-weight: 650;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.piano-key-hot {
+  font-size: 0.62rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  opacity: 0.72;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.piano-black .piano-key-note {
+  font-size: 0.58rem;
+}
+
+@media (pointer: coarse) {
+  .piano-key-hot {
+    display: none;
+  }
+
+  .piano-kb {
+    min-height: 188px;
+  }
+}
+
+@media (max-width: 720px) {
+  .piano-kb {
+    min-width: 560px;
+    height: 180px;
+  }
+}

@@ -68,6 +68,7 @@
     wheel: "./wheel.js",
     ruler: "./ruler.js",
     muyu: "./muyu.js",
+    piano: "./piano.js",
     minigames: "./minigames.js",
     ambient: "./ambient.js",
     sandspiel: "./sandspiel.js",
@@ -164,6 +165,7 @@
     "wheel",
     "ruler",
     "muyu",
+    "piano",
     "minigames",
     "ambient",
     "sandspiel",
@@ -178,7 +180,7 @@
   const NO_PURE = new Set([
     "acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "everything", "ffbridge", "ytdlp",
     "setup", "about", "xorenc", "morse", "countdown",
-    "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "minigames", "ambient",
+    "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "piano", "minigames", "ambient",
   ]);
 
   const scriptPromises = new Map();

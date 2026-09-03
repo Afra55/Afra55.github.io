@@ -15,6 +15,7 @@ const STEPS = [
   { name: "extra bind audit", cmd: "node", args: ["scripts/extra-bind-audit.cjs"] },
   { name: "extra media import audit", cmd: "node", args: ["scripts/extra-media-import-audit.cjs"] },
   { name: "extra panel smoke", cmd: "node", args: ["extra-panel-smoke.cjs"] },
+  { name: "piano smoke", cmd: "node", args: ["piano-smoke.cjs"] },
   { name: "markdown smoke", cmd: "node", args: ["markdown-smoke.cjs"] },
   { name: "registry verify", cmd: "node", args: ["scripts/verify-registry.cjs"] },
   { name: "pure tests", cmd: "node", args: ["test/pure.test.js"] },
