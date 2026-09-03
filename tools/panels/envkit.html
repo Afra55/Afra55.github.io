@@ -1,0 +1,59 @@
+<section id="envkit" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>环境管家</h1>
+        <p>一键检测 / 安装 / 升级本机依赖（Node、Git、FFmpeg、ADB、yt-dlp）并同步各桥文件。已安装的会跳过。<a href="#setup">图文安装指南</a></p>
+      </div>
+      <div class="panel-body">
+        <div class="panel-card">
+          <h2 class="subhead">1. 下载并运行一键脚本</h2>
+          <p class="hint tight">浏览器<strong>不能</strong>直接改你电脑。请下载脚本，在本机运行一次。脚本会：检测 → 只装缺失项 → 把最新桥文件放到 <span class="mono">~/DevToolsBridges</span>。</p>
+          <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.55rem">
+            <a class="primary-btn" id="env-dl-mac" href="./envkit/install-devtools-env.sh" download="install-devtools-env.sh">下载 macOS / Linux 脚本</a>
+            <a class="secondary-btn" id="env-dl-mac-cmd" href="./envkit/install-mac.command" download="install-mac.command">mac 双击入口</a>
+            <a class="primary-btn" id="env-dl-win" href="./envkit/install-devtools-env.ps1" download="install-devtools-env.ps1">下载 Windows PowerShell</a>
+            <a class="secondary-btn" id="env-dl-win-cmd" href="./envkit/install-win.cmd" download="install-win.cmd">Win 双击入口</a>
+          </div>
+          <div class="field-row" style="flex-wrap:wrap;margin-top:0.75rem;gap:0.45rem;align-items:center">
+            <span class="hint tight">系统：</span>
+            <span class="seg" role="group" aria-label="操作系统">
+              <button type="button" class="seg-btn" data-env-os="mac">macOS</button>
+              <button type="button" class="seg-btn" data-env-os="win">Windows</button>
+              <button type="button" class="seg-btn" data-env-os="linux">Linux</button>
+            </span>
+          </div>
+          <pre class="mono adb-pre" id="env-run-hint" style="margin-top:0.55rem;white-space:pre-wrap"></pre>
+        </div>
+
+        <div class="panel-card" style="margin-top:0.85rem">
+          <h2 class="subhead">2. 常用模式</h2>
+          <ul class="hint" style="margin:0.35rem 0 0;padding-left:1.2rem;line-height:1.55">
+            <li><span class="mono">check</span>：只检测，不改动</li>
+            <li><span class="mono">install</span>（默认）：缺啥装啥 + 同步桥</li>
+            <li><span class="mono">upgrade</span>：升级已装工具 + 同步桥</li>
+            <li><span class="mono">bridges</span>：只更新桥文件，不碰系统包</li>
+          </ul>
+          <p class="hint tight" style="margin-top:0.45rem">跳过某项：设环境变量 <span class="mono">DEVTOOLS_SKIP_ADB=1</span> / <span class="mono">DEVTOOLS_SKIP_FFMPEG=1</span> 等。</p>
+        </div>
+
+        <div class="panel-card" style="margin-top:0.85rem">
+          <div class="label-row">
+            <h2 class="subhead">3. 桥在线状态</h2>
+            <button type="button" class="secondary-btn" id="env-probe">重新探测</button>
+          </div>
+          <p class="hint tight">脚本跑完并启动桥之后，点探测。网页只连本机 <span class="mono">127.0.0.1</span>。</p>
+          <div class="env-probe-grid" id="env-probe-grid" style="margin-top:0.55rem"></div>
+          <p class="error" id="env-error" hidden></p>
+        </div>
+
+        <div class="panel-card" style="margin-top:0.85rem">
+          <h2 class="subhead">4. 启动后去哪</h2>
+          <div class="btn-row tool-actions" style="flex-wrap:wrap">
+            <a class="ghost-btn" href="#adb">ADB / 统一桥 17888</a>
+            <a class="ghost-btn" href="#ffbridge">FFmpeg</a>
+            <a class="ghost-btn" href="#ytdlp">yt-dlp</a>
+            <a class="ghost-btn" href="#gitbridge">Git 可视化 17890</a>
+            <a class="ghost-btn" href="#setup">图文指南</a>
+          </div>
+        </div>
+      </div>
+    </section>

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-03T12:41:29.908Z",
+  "generatedAt": "2026-09-03T13:05:48.345Z",
   "panels": [
     {
       "id": "about",
@@ -73,6 +73,11 @@
       "bytes": 3113
     },
     {
+      "id": "envkit",
+      "file": "./panels/envkit.html",
+      "bytes": 3966
+    },
+    {
       "id": "everything",
       "file": "./panels/everything.html",
       "bytes": 8243
@@ -120,7 +125,7 @@
     {
       "id": "gitbridge",
       "file": "./panels/gitbridge.html",
-      "bytes": 7348
+      "bytes": 7764
     },
     {
       "id": "hash",
@@ -255,7 +260,7 @@
     {
       "id": "setup",
       "file": "./panels/setup.html",
-      "bytes": 20693
+      "bytes": 20729
     },
     {
       "id": "sharecard",

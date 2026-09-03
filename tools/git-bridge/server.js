@@ -39,7 +39,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.1.0";
+const BRIDGE_VERSION = "0.1.1";
 const FEATURES = [
   "fs-browse",
   "repo-open",
@@ -49,6 +49,7 @@ const FEATURES = [
   "commit-detail",
   "explain",
   "ops-checkout",
+  "ops-switch",
   "ops-branch",
   "ops-merge",
   "ops-rebase",
@@ -58,7 +59,14 @@ const FEATURES = [
   "ops-stash",
   "ops-remote",
   "ops-commit",
+  "ops-amend",
   "ops-tag",
+  "ops-reflog",
+  "ops-blame",
+  "ops-diff",
+  "ops-worktree",
+  "ops-submodule",
+  "ops-clean",
   "raw-log",
 ];
 
@@ -656,6 +664,114 @@ function buildOp(op, params = {}) {
       need("a", "b");
       return { argv: ["merge-base", String(p.a), String(p.b)], label: `merge-base ${p.a} ${p.b}` };
     }
+    case "switch": {
+      need("target");
+      const argv = ["switch"];
+      if (p.create) argv.push("-c");
+      argv.push(String(p.target));
+      return { argv, label: argv.join(" ") };
+    }
+    case "restore": {
+      need("path");
+      const argv = ["restore"];
+      if (p.staged) argv.push("--staged");
+      if (p.source) {
+        assertNoShellMeta(p.source);
+        argv.push("--source", String(p.source));
+      }
+      argv.push("--", String(p.path));
+      return { argv, label: argv.join(" ") };
+    }
+    case "clean-dry":
+      return { argv: ["clean", "-fdn"], label: "clean -fdn（仅预览）" };
+    case "clean": {
+      if (!p.confirmClean) {
+        throw Object.assign(new Error("clean 需要 confirmClean=true；可先 clean-dry"), { status: 400 });
+      }
+      return { argv: ["clean", "-fd"], label: "clean -fd" };
+    }
+    case "reflog": {
+      const n = Math.min(80, Number(p.max) || 30);
+      return { argv: ["reflog", `--max-count=${n}`], label: `reflog -n ${n}` };
+    }
+    case "blame": {
+      need("path");
+      const argv = ["blame", "--line-porcelain"];
+      if (p.sha) {
+        assertNoShellMeta(p.sha);
+        argv.push(String(p.sha));
+      }
+      argv.push("--", String(p.path));
+      return { argv, label: `blame ${p.path}`, maxBuffer: 32 * 1024 * 1024 };
+    }
+    case "diff": {
+      const argv = ["diff", "--stat"];
+      if (p.a) {
+        assertNoShellMeta(p.a);
+        argv.push(String(p.a));
+      }
+      if (p.b) {
+        assertNoShellMeta(p.b);
+        argv.push(String(p.b));
+      }
+      return { argv, label: argv.join(" ") };
+    }
+    case "diff-files": {
+      const argv = ["diff", "--name-status"];
+      if (p.a) {
+        assertNoShellMeta(p.a);
+        argv.push(String(p.a));
+      }
+      if (p.b) {
+        assertNoShellMeta(p.b);
+        argv.push(String(p.b));
+      }
+      return { argv, label: argv.join(" ") };
+    }
+    case "show-file": {
+      need("sha", "path");
+      return {
+        argv: ["show", `${p.sha}:${p.path}`],
+        label: `show ${p.sha}:${p.path}`,
+        maxBuffer: 32 * 1024 * 1024,
+      };
+    }
+    case "remote-list":
+      return { argv: ["remote", "-v"], label: "remote -v" };
+    case "remote-add": {
+      need("name", "url");
+      return { argv: ["remote", "add", String(p.name), String(p.url)], label: `remote add ${p.name}` };
+    }
+    case "push-lease": {
+      const argv = ["push", "--force-with-lease"];
+      if (p.remote) {
+        assertNoShellMeta(p.remote);
+        argv.push(p.remote);
+      }
+      if (p.branch) {
+        assertNoShellMeta(p.branch);
+        argv.push(p.branch);
+      }
+      return { argv, label: argv.join(" ") };
+    }
+    case "worktree-list":
+      return { argv: ["worktree", "list", "--porcelain"], label: "worktree list" };
+    case "submodule-status":
+      return { argv: ["submodule", "status"], label: "submodule status" };
+    case "bisect-log":
+      return { argv: ["bisect", "log"], label: "bisect log" };
+    case "stash-show": {
+      const ref = p.ref ? String(p.ref) : "stash@{0}";
+      assertNoShellMeta(ref);
+      return { argv: ["stash", "show", "-p", ref], label: `stash show -p ${ref}` };
+    }
+    case "commit-amend": {
+      need("message");
+      return {
+        argv: ["commit", "--amend", "-m", String(p.message)],
+        label: `commit --amend -m …`,
+      };
+    }
     default:
       throw Object.assign(new Error(`不支持的操作：${op}`), { status: 400 });
   }
@@ -663,7 +779,7 @@ function buildOp(op, params = {}) {
 
 async function runOp(repo, op, params) {
   const built = buildOp(op, params);
-  const result = await git(repo, built.argv);
+  const result = await git(repo, built.argv, built.maxBuffer ? { maxBuffer: built.maxBuffer } : {});
   return {
     ok: true,
     op,
@@ -795,7 +911,9 @@ async function handleRequest(req, res) {
             "pull",
             "pull-merge",
             "push",
+            "push-lease",
             "checkout",
+            "switch",
             "branch-create",
             "branch-delete",
             "branch-rename",
@@ -807,12 +925,27 @@ async function handleRequest(req, res) {
             "stash-push",
             "stash-pop",
             "stash-list",
+            "stash-show",
             "add-all",
             "commit",
+            "commit-amend",
             "tag-create",
             "tag-delete",
             "log-graph",
             "merge-base",
+            "restore",
+            "clean-dry",
+            "clean",
+            "reflog",
+            "blame",
+            "diff",
+            "diff-files",
+            "show-file",
+            "remote-list",
+            "remote-add",
+            "worktree-list",
+            "submodule-status",
+            "bisect-log",
           ],
         },
         origin

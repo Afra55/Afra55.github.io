@@ -26,6 +26,7 @@
 | `tools/adb-bridge/` | ADB / Everything 桥（`17888`） |
 | `tools/ffmpeg-bridge/` | FFmpeg / yt-dlp 桥（`17889`） |
 | `tools/git-bridge/` | Git 可视化桥（`17890`） |
+| `tools/envkit/` | 一键检测/安装/升级脚本 |
 | `tools/theme.js` / `tools/lib/theme-presets.js` | 主题 |
 
 ## 新增 / 改工具
@@ -86,7 +87,8 @@
 - **备忘录滚动**：桌面滚动根是 `main.shell`（非 `window`）
 - **视频拖进度**：串行等 `seeked`（`pumpScrubSeek`），勿密集 `fastSeek`
 - **导航**：仅显示分类时滚轮交给 `.nav-bar-scroll`；站点外链只在 `sitenav`
-- **Git 可视化**：独立桥 `git-bridge`（17890）；面板 `#gitbridge`；勿塞进统一 ADB ZIP 除非显式挂载
+- **Git 可视化**：独立桥 `git-bridge`（17890，≥0.1.1）；面板 `#gitbridge`；白名单 ops 含 reflog/diff/worktree 等
+- **环境管家**：`#envkit` + `tools/envkit/install-devtools-env.{sh,ps1}`；缺啥装啥、可 upgrade/bridges
 
 ## 不要硬塞
 

@@ -1,0 +1,28 @@
+/* 环境管家 */
+#envkit .env-probe-grid {
+  display: grid;
+  gap: 0.45rem;
+}
+
+#envkit .env-probe-card {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.45rem 0.65rem;
+  align-items: center;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid var(--border, #2a2f3a);
+  border-radius: 8px;
+}
+
+#envkit .env-probe-card .adb-dot {
+  width: 0.65rem;
+  height: 0.65rem;
+}
+
+#envkit .env-probe-card.is-ok {
+  border-color: color-mix(in srgb, #3dd68c 45%, var(--border, #2a2f3a));
+}
+
+#envkit .env-probe-card.is-err {
+  border-color: color-mix(in srgb, #f31260 40%, var(--border, #2a2f3a));
+}
