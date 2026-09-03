@@ -73,9 +73,10 @@
 .piano-kb {
   position: relative;
   display: flex;
-  height: min(46vh, 240px);
+  height: min(42vh, 228px);
   min-height: 168px;
-  min-width: 640px;
+  width: max-content;
+  min-width: 100%;
   user-select: none;
   touch-action: none;
 }
@@ -91,7 +92,9 @@
 }
 
 .piano-white {
-  flex: 1 0 0;
+  flex: 0 0 1.75rem;
+  width: 1.75rem;
+  min-width: 1.75rem;
   position: relative;
   z-index: 1;
   border: 1px solid #c9bfae;
@@ -148,14 +151,14 @@
 }
 
 .piano-key-note {
-  font-size: 0.68rem;
+  font-size: 0.58rem;
   font-weight: 650;
   line-height: 1;
   pointer-events: none;
 }
 
 .piano-key-hot {
-  font-size: 0.62rem;
+  font-size: 0.58rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   opacity: 0.72;
   text-transform: uppercase;
@@ -174,11 +177,16 @@
   .piano-kb {
     min-height: 188px;
   }
+
+  .piano-white {
+    flex-basis: 1.55rem;
+    width: 1.55rem;
+    min-width: 1.55rem;
+  }
 }
 
 @media (max-width: 720px) {
   .piano-kb {
-    min-width: 560px;
-    height: 180px;
+    height: 172px;
   }
 }

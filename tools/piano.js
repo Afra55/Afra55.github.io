@@ -4,29 +4,54 @@
   const $ = (sel, root = document) => root.querySelector(sel);
 
   const STORAGE_KEY = "devtools-piano-v1";
-  const FIRST = 48; // C3
-  const LAST = 77; // F5
-  const HOME_BASE = 60; // C4 → A
+  /** 标准 88 键：A0–C8 */
+  const FIRST = 21;
+  const LAST = 108;
   const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-  const HOME_ROW = [
-    ["a", 0],
-    ["w", 1],
-    ["s", 2],
-    ["e", 3],
-    ["d", 4],
-    ["f", 5],
-    ["t", 6],
-    ["g", 7],
-    ["y", 8],
-    ["h", 9],
-    ["u", 10],
-    ["j", 11],
-    ["k", 12],
-    ["o", 13],
-    ["l", 14],
-    ["p", 15],
-    [";", 16],
+  const OCTAVE_MIN = -3;
+  const OCTAVE_MAX = 3;
+  /**
+   * 电脑键盘：Z 行 C3、Q 行 C4、I 行 C5（互不重叠，约 2.5 个八度）。
+   * octave 平移整组映射。
+   */
+  const KEY_BINDS = [
+    { code: "KeyZ", label: "Z", midi: 48 },
+    { code: "KeyS", label: "S", midi: 49 },
+    { code: "KeyX", label: "X", midi: 50 },
+    { code: "KeyD", label: "D", midi: 51 },
+    { code: "KeyC", label: "C", midi: 52 },
+    { code: "KeyV", label: "V", midi: 53 },
+    { code: "KeyG", label: "G", midi: 54 },
+    { code: "KeyB", label: "B", midi: 55 },
+    { code: "KeyH", label: "H", midi: 56 },
+    { code: "KeyN", label: "N", midi: 57 },
+    { code: "KeyJ", label: "J", midi: 58 },
+    { code: "KeyM", label: "M", midi: 59 },
+    { code: "KeyQ", label: "Q", midi: 60 },
+    { code: "Digit2", label: "2", midi: 61 },
+    { code: "KeyW", label: "W", midi: 62 },
+    { code: "Digit3", label: "3", midi: 63 },
+    { code: "KeyE", label: "E", midi: 64 },
+    { code: "KeyR", label: "R", midi: 65 },
+    { code: "Digit5", label: "5", midi: 66 },
+    { code: "KeyT", label: "T", midi: 67 },
+    { code: "Digit6", label: "6", midi: 68 },
+    { code: "KeyY", label: "Y", midi: 69 },
+    { code: "Digit7", label: "7", midi: 70 },
+    { code: "KeyU", label: "U", midi: 71 },
+    { code: "KeyI", label: "I", midi: 72 },
+    { code: "Digit9", label: "9", midi: 73 },
+    { code: "KeyO", label: "O", midi: 74 },
+    { code: "Digit0", label: "0", midi: 75 },
+    { code: "KeyP", label: "P", midi: 76 },
+    { code: "BracketLeft", label: "[", midi: 77 },
+    { code: "Minus", label: "-", midi: 78 },
+    { code: "BracketRight", label: "]", midi: 79 },
+    { code: "Equal", label: "=", midi: 80 },
+    { code: "Backslash", label: "\\", midi: 81 },
+    { code: "Quote", label: "'", midi: 82 },
   ];
+  const HINT_KEYS = "电脑键盘：Z 行从 C3 起、Q 行从 C4 起、I 行从 C5 起（约 2.5 个八度）；↑↓ 调八度，空格延音。";
   const SF_SCRIPT = "https://cdn.jsdelivr.net/npm/soundfont-player@0.12.0/dist/soundfont-player.min.js";
   const SF_FONT = (name, sf, format) =>
     `https://cdn.jsdelivr.net/gh/gleitz/midi-js-soundfonts@gh-pages/${sf}/${name}-${format}.js`;
@@ -85,15 +110,15 @@
   }
 
   function hotkeyMap() {
-    const map = new Map();
+    const byCode = new Map();
     const inv = new Map();
-    for (const [key, delta] of HOME_ROW) {
-      const midi = HOME_BASE + octave * 12 + delta;
+    for (const b of KEY_BINDS) {
+      const midi = b.midi + octave * 12;
       if (midi < FIRST || midi > LAST) continue;
-      map.set(key, midi);
-      inv.set(midi, key);
+      byCode.set(b.code, midi);
+      if (!inv.has(midi)) inv.set(midi, b.label);
     }
-    return { map, inv };
+    return { byCode, inv };
   }
 
   function toast(msg) {
@@ -121,7 +146,7 @@
       const raw = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
       if (raw.engine === "acoustic" || raw.engine === "synth") engine = raw.engine;
       if (Number.isFinite(raw.volume)) volume = Math.max(0, Math.min(1, raw.volume));
-      if (Number.isFinite(raw.octave)) octave = Math.max(-2, Math.min(2, Math.round(raw.octave)));
+      if (Number.isFinite(raw.octave)) octave = Math.max(OCTAVE_MIN, Math.min(OCTAVE_MAX, Math.round(raw.octave)));
       sustainStick = Boolean(raw.sustain);
     } catch (_) {
       /* ignore */
@@ -320,6 +345,15 @@
     paintNow();
   }
 
+  function scrollKeyIntoView(midi) {
+    const bed = $("#piano-bed");
+    const kb = $("#piano-kb");
+    const el = kb?.querySelector(`[data-midi="${midi}"]`);
+    if (!bed || !el) return;
+    const left = el.offsetLeft - Math.max(24, bed.clientWidth * 0.22);
+    bed.scrollLeft = Math.max(0, left);
+  }
+
   function renderKeyboard() {
     const kb = $("#piano-kb");
     if (!kb) return;
@@ -330,6 +364,7 @@
       if (isAccidental(m)) blacks.push(m);
       else whites.push(m);
     }
+    kb.style.setProperty("--piano-whites", String(whites.length));
     kb.replaceChildren();
     whites.forEach((midi) => {
       const btn = document.createElement("button");
@@ -338,10 +373,12 @@
       btn.dataset.midi = String(midi);
       btn.tabIndex = -1;
       btn.setAttribute("aria-label", midiName(midi));
-      const note = document.createElement("span");
-      note.className = "piano-key-note";
-      note.textContent = midiName(midi);
-      btn.appendChild(note);
+      if (midi % 12 === 0 || midi === FIRST || midi === LAST) {
+        const note = document.createElement("span");
+        note.className = "piano-key-note";
+        note.textContent = midiName(midi);
+        btn.appendChild(note);
+      }
       const hot = inv.get(midi);
       if (hot) {
         const k = document.createElement("span");
@@ -361,10 +398,6 @@
       btn.setAttribute("aria-label", midiName(midi));
       btn.style.left = `calc((100% / ${whites.length}) * ${idx + 0.68})`;
       btn.style.width = `calc(100% / ${whites.length} * 0.62)`;
-      const note = document.createElement("span");
-      note.className = "piano-key-note";
-      note.textContent = midiName(midi).replace("#", "♯");
-      btn.appendChild(note);
       const hot = inv.get(midi);
       if (hot) {
         const k = document.createElement("span");
@@ -375,6 +408,9 @@
       kb.appendChild(btn);
     });
     paintKeys();
+    const mapped = [...hotkeyMap().byCode.values()].sort((a, b) => a - b);
+    const focus = mapped.find((m) => m >= 60) || mapped[0] || 60;
+    requestAnimationFrame(() => scrollKeyIntoView(focus));
   }
 
   function midiFromPoint(x, y) {
@@ -426,6 +462,15 @@
     return Boolean(el.isContentEditable);
   }
 
+  function shiftOctave(delta) {
+    const next = Math.max(OCTAVE_MIN, Math.min(OCTAVE_MAX, octave + delta));
+    if (next === octave) return;
+    octave = next;
+    savePrefs();
+    syncControls();
+    renderKeyboard();
+  }
+
   function onKeyDown(e) {
     if (!$("#piano")?.classList.contains("is-workspace-active")) return;
     if (isTypingTarget(e.target)) return;
@@ -437,8 +482,18 @@
       }
       return;
     }
-    const { map } = hotkeyMap();
-    const midi = map.get(String(e.key).toLowerCase());
+    if (e.code === "ArrowUp" || e.code === "ArrowRight") {
+      e.preventDefault();
+      if (!e.repeat) shiftOctave(1);
+      return;
+    }
+    if (e.code === "ArrowDown" || e.code === "ArrowLeft") {
+      e.preventDefault();
+      if (!e.repeat) shiftOctave(-1);
+      return;
+    }
+    const { byCode } = hotkeyMap();
+    const midi = byCode.get(e.code);
     if (midi == null) return;
     e.preventDefault();
     if (e.repeat || keyNotes.has(e.code)) return;
@@ -490,7 +545,7 @@
         nameToUrl: SF_FONT,
         destination: master,
       });
-      setStatus("三角钢琴采样已就绪。电脑键盘 A–L 为白键；空格延音。");
+      setStatus(`三角钢琴采样已就绪。${HINT_KEYS}`);
       toast("采样已加载");
       return acoustic;
     })().catch((err) => {
@@ -570,6 +625,7 @@
     loadPrefs();
     renderKeyboard();
     syncControls();
+    setStatus(`88 键 A0–C8，可左右滑动。${HINT_KEYS}`);
     bindPointer($("#piano-kb"));
 
     $("#piano-engine")?.addEventListener("change", async (e) => {
@@ -580,7 +636,7 @@
           await ensureAcoustic();
         } catch (_) {}
       } else {
-        setStatus("合成器已就绪（离线可用）。电脑键盘 A–L 为白键；空格延音。");
+        setStatus(`合成器已就绪（离线可用）。${HINT_KEYS}`);
       }
     });
     $("#piano-vol")?.addEventListener("input", (e) => {
@@ -588,18 +644,9 @@
       if (master) master.gain.value = volume;
       savePrefs();
     });
-    $("#piano-oct-down")?.addEventListener("click", () => {
-      octave = Math.max(-2, octave - 1);
-      savePrefs();
-      syncControls();
-      renderKeyboard();
-    });
-    $("#piano-oct-up")?.addEventListener("click", () => {
-      octave = Math.min(2, octave + 1);
-      savePrefs();
-      syncControls();
-      renderKeyboard();
-    });
+    $("#piano-oct-down")?.addEventListener("click", () => shiftOctave(-1));
+    $("#piano-oct-up")?.addEventListener("click", () => shiftOctave(1));
+    $("#piano-goto-c4")?.addEventListener("click", () => scrollKeyIntoView(60));
     $("#piano-sustain")?.addEventListener("change", (e) => {
       applySustain({ stick: Boolean(e.target.checked) });
       savePrefs();
@@ -634,6 +681,6 @@
     isAccidental,
     first: FIRST,
     last: LAST,
-    homeRow: HOME_ROW,
+    keyBinds: KEY_BINDS,
   };
 })();

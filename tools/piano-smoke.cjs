@@ -26,7 +26,7 @@ function staticChecks() {
   assert(html.includes('id="piano"'), "panel id");
   assert(html.includes('id="piano-kb"') && html.includes('id="piano-engine"'), "toolbar ids");
   assert(html.includes("kevinsqi/react-piano") && html.includes("danigb/soundfont-player"), "attribution");
-  assert(js.includes("HOME_ROW") && js.includes("Soundfont"), "js core");
+  assert(js.includes("KEY_BINDS") && js.includes("Soundfont"), "js core");
   assert(css.includes(".piano-kb") && css.includes(".piano-black"), "css");
   assert(registry.includes('"piano"') && /"name": "在线钢琴"/.test(registry), "registry meta");
   assert(/piano:\s*"\.\/piano\.js"/.test(lazy), "TOOL_FILES");
@@ -117,26 +117,37 @@ async function browserChecks() {
       { timeout: 90000 }
     );
     await page.waitForFunction(
-      () => document.querySelectorAll("#piano-kb .piano-white").length >= 16,
+      () => document.querySelectorAll("#piano-kb .piano-white").length >= 50,
       { timeout: 30000 }
     );
     const counts = await page.evaluate(() => ({
       white: document.querySelectorAll("#piano-kb .piano-white").length,
       black: document.querySelectorAll("#piano-kb .piano-black").length,
       c4: Boolean(document.querySelector('#piano-kb [data-midi="60"]')),
+      a0: Boolean(document.querySelector('#piano-kb [data-midi="21"]')),
+      c8: Boolean(document.querySelector('#piano-kb [data-midi="108"]')),
+      binds: window.PianoTool?.keyBinds?.length || 0,
     }));
-    assert(counts.white === 18, `white keys ${counts.white}`);
-    assert(counts.black === 12, `black keys ${counts.black}`);
-    assert(counts.c4, "missing C4");
+    assert(counts.white === 52, `white keys ${counts.white}`);
+    assert(counts.black === 36, `black keys ${counts.black}`);
+    assert(counts.c4 && counts.a0 && counts.c8, "missing A0/C4/C8");
+    assert(counts.binds >= 30, `key binds ${counts.binds}`);
 
-    await page.keyboard.down("a");
+    await page.keyboard.down("q");
     await page.waitForFunction(
       () => document.querySelector('#piano-kb [data-midi="60"]')?.classList.contains("is-active"),
       { timeout: 5000 }
     );
     const now = await page.$eval("#piano-now", (el) => el.textContent || "");
     assert(/C4/.test(now), `now text ${now}`);
-    await page.keyboard.up("a");
+    await page.keyboard.up("q");
+
+    await page.keyboard.down("z");
+    await page.waitForFunction(
+      () => document.querySelector('#piano-kb [data-midi="48"]')?.classList.contains("is-active"),
+      { timeout: 5000 }
+    );
+    await page.keyboard.up("z");
 
     await page.click('#piano-kb [data-midi="64"]', { delay: 40 });
     assert(!errors.length, `pageerror: ${errors.join("; ")}`);
