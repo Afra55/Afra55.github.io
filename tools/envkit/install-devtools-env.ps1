@@ -254,4 +254,4 @@ switch ($Mode) {
 }
 
 Write-Host ""
-Write-Host "下一步：启动 $BridgeDir 里的 start-win.cmd，再打开网页 #envkit 看在线状态。"
+Write-Host "下一步：启动 $BridgeDir\adb-bridge\start-win.cmd（统一桥 17888），再打开网页 #envkit / #gitbridge。"
