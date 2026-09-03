@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.7";
+const BRIDGE_VERSION = "0.9.8";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -2609,10 +2609,19 @@ async function runInput(serial, body = {}) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) throw new Error("坐标无效");
     const sx = String(Math.round(x));
     const sy = String(Math.round(y));
+    const timeout = phase === "MOVE" ? 2500 : 8000;
     try {
-      await adbSerial(serial, ["shell", "input", "motionevent", phase, sx, sy], { timeout: 8000 });
+      await adbSerial(serial, ["shell", "input", "motionevent", phase, sx, sy], { timeout });
       return { ok: true, action, phase, mode: "motionevent" };
     } catch (err) {
+      try {
+        await adbSerial(serial, ["shell", "input", "touchscreen", "motionevent", phase, sx, sy], {
+          timeout,
+        });
+        return { ok: true, action, phase, mode: "touchscreen-motionevent" };
+      } catch {
+        /* fall through */
+      }
       // 部分机型无 motionevent：用极短 swipe 近似
       if (phase === "MOVE" || phase === "UP") {
         const x0 = Number(body.x0);
@@ -2620,8 +2629,8 @@ async function runInput(serial, body = {}) {
         if (Number.isFinite(x0) && Number.isFinite(y0)) {
           await adbSerial(
             serial,
-            ["shell", "input", "swipe", String(Math.round(x0)), String(Math.round(y0)), sx, sy, "40"],
-            { timeout: 8000 }
+            ["shell", "input", "swipe", String(Math.round(x0)), String(Math.round(y0)), sx, sy, "32"],
+            { timeout: 5000 }
           );
           return { ok: true, action, phase, mode: "swipe-fallback" };
         }

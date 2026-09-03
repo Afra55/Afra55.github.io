@@ -71,6 +71,9 @@ async function main() {
   if (!/max_fps=30/.test(mirrorJs) || !/video_bit_rate=2500000/.test(mirrorJs)) {
     throw new Error("scrcpy-mirror.js should use browser-friendly fps/bitrate");
   }
+  if (!/lastKeyFrame|i-frame-interval=1/.test(mirrorJs)) {
+    throw new Error("scrcpy-mirror.js should replay keyframes and shorten i-frame-interval");
+  }
   if (!/action === "touch"/.test(fs.readFileSync(path.join(__dirname, "server.js"), "utf8"))) {
     throw new Error("server.js should support input touch/motionevent");
   }

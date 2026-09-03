@@ -579,6 +579,7 @@ class MirrorSession {
     this.closed = false;
     this.pumping = false;
     this.lastConfig = null;
+    this.lastKeyFrame = null;
     this.errTail = "";
     this.procExitCode = null;
     this.reader = null;
@@ -612,6 +613,8 @@ class MirrorSession {
       "video_bit_rate=2500000",
       "max_size=1280",
       "max_fps=30",
+      // 默认关键帧约 10s；网页晚半步连上会错过首个 IDR → 黑屏。压到 1s。
+      "video_codec_options=i-frame-interval=1",
     ].join(" ");
   }
 
@@ -777,7 +780,9 @@ class MirrorSession {
     this.clients.add(socket);
     if (this.meta) {
       wsSendJson(socket, { type: "hello", ...this.meta });
+      // 首个 config/key 常在客户端连上前就泵出；重放避免干等下一个 IDR（默认可长达数秒）
       if (this.lastConfig) wsSendBinary(socket, Buffer.from(this.lastConfig));
+      if (this.lastKeyFrame) wsSendBinary(socket, Buffer.from(this.lastKeyFrame));
     }
   }
 
@@ -804,7 +809,8 @@ class MirrorSession {
       out.writeUInt32BE(pts >>> 0, 1);
       payload.copy(out, 5);
       if (isConfig) this.lastConfig = out;
-      this.broadcastBinary(out);
+      else if (isKey) this.lastKeyFrame = out;
+      if (this.clients.size) this.broadcastBinary(out);
     }
   }
 
