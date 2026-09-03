@@ -195,11 +195,13 @@ async function main() {
       throw new Error(`health.port should match listen port ${PORT}, got ${health2.json?.port}`);
     }
     if (!features.includes("local-pull")) throw new Error("health missing feature: local-pull");
-    for (const need of ["fs-zip", "app-backup-splits", "logcat-level", "mirror", "scrcpy-mirror", "unified-bridge", "ffmpeg-mount", "everything-proxy", "device-perf", "device-processes", "device-shell", "device-layout"]) {
+    for (const need of ["fs-zip", "app-backup-splits", "logcat-level", "mirror", "scrcpy-mirror", "unified-bridge", "ffmpeg-mount", "git-mount", "everything-proxy", "device-perf", "device-processes", "device-shell", "device-layout"]) {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
     }
     if (!health2.json?.unified) throw new Error("expected unified bridge flag");
     if (health2.json?.ffmpegMount !== "/ff") throw new Error("expected ffmpegMount /ff");
+    if (health2.json?.gitMount !== "/git") throw new Error("expected gitMount /git");
+    if (!health2.json?.capabilities?.git) throw new Error("expected capabilities.git");
 
     const child2 = spawn(process.execPath, [path.join(__dirname, "server.js")], {
       env: {
@@ -275,6 +277,16 @@ async function main() {
     const ops = await req("GET", "/ff/ops", { headers: { "X-Adb-Token": "devtools-bridge" } });
     if (ops.status !== 200 || !ops.json?.ok) throw new Error("ff/ops with unified token failed");
     void ffHealth;
+
+    const gitHealth = await req("GET", "/git/health", { headers: { "X-Adb-Token": TOKEN } });
+    if (gitHealth.status !== 200 || !gitHealth.json?.ok) {
+      throw new Error("git/health failed: " + JSON.stringify(gitHealth.json));
+    }
+    if (!gitHealth.json?.git) throw new Error("git binary missing in /git/health");
+    const gitOps = await req("GET", "/git/repo/ops", { headers: { "X-Adb-Token": TOKEN } });
+    if (gitOps.status !== 200 || !(gitOps.json?.ops || []).length) {
+      throw new Error("git/repo/ops failed");
+    }
 
     // Path alias expansion (mirrors server expandFsPathCandidates)
     const expand = (input) => {

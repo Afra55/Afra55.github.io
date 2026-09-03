@@ -20,7 +20,7 @@ const HOST = "127.0.0.1";
 const PORT = Number(process.env.ADB_BRIDGE_PORT || process.env.DEVTOOLS_BRIDGE_PORT || 17888);
 const TOKEN = String(process.env.ADB_BRIDGE_TOKEN || process.env.DEVTOOLS_BRIDGE_TOKEN || "devtools-bridge");
 const ACCEPTED_TOKENS = new Set(
-  [TOKEN, "devtools-bridge", "devtools-adb", "devtools-ffmpeg"].map(String).filter(Boolean)
+  [TOKEN, "devtools-bridge", "devtools-adb", "devtools-ffmpeg", "devtools-git"].map(String).filter(Boolean)
 );
 const ALLOWED_ORIGINS = new Set(
   String(
@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.12";
+const BRIDGE_VERSION = "0.9.13";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -59,9 +59,27 @@ function loadFfmpegBridge() {
   }
   return null;
 }
+function loadGitBridge() {
+  const candidates = [
+    path.join(__dirname, "git-bridge", "server.js"),
+    path.join(__dirname, "..", "git-bridge", "server.js"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return require(candidate);
+    } catch (err) {
+      console.warn("加载 Git 模块失败:", candidate, err.message || err);
+    }
+  }
+  return null;
+}
 const ffmpegBridge = loadFfmpegBridge();
 if (!ffmpegBridge) {
   console.warn("未找到 FFmpeg 模块：统一桥仍可提供 ADB/镜像；完整 ZIP 请包含 ffmpeg-bridge/server.js");
+}
+const gitBridge = loadGitBridge();
+if (!gitBridge) {
+  console.warn("未找到 Git 模块：统一桥仍可提供 ADB；完整 ZIP 请包含 git-bridge/server.js + git-ops.js");
 }
 
 /** Preferred quick roots shown in UI (reads are not limited to these) */
@@ -325,9 +343,11 @@ function basenameRemote(remotePath) {
 }
 
 function requireToken(req) {
-  const token = String(req.headers["x-adb-token"] || req.headers["x-ffmpeg-token"] || "");
+  const token = String(
+    req.headers["x-adb-token"] || req.headers["x-ffmpeg-token"] || req.headers["x-git-token"] || ""
+  );
   if (!token || !ACCEPTED_TOKENS.has(token)) {
-    const err = new Error("未授权：缺少或错误的 Token（X-Adb-Token / X-Ffmpeg-Token）");
+    const err = new Error("未授权：缺少或错误的 Token（X-Adb-Token / X-Ffmpeg-Token / X-Git-Token）");
     err.status = 401;
     throw err;
   }
@@ -3595,6 +3615,23 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    // 统一桥：Git API 挂在 /git/*
+    if (url.pathname === "/git" || url.pathname.startsWith("/git/")) {
+      if (!gitBridge?.handleRequest) {
+        sendJson(res, 503, { ok: false, error: "未找到 Git 模块（请用完整 ZIP，含 git-bridge/server.js + git-ops.js）" }, origin);
+        return;
+      }
+      const stripped = url.pathname === "/git" ? "/" : url.pathname.slice(4) || "/";
+      const isGitHealth = stripped === "/health" && req.method === "GET";
+      if (!isGitHealth && req.method !== "OPTIONS") requireToken(req);
+      await gitBridge.handleRequest(req, res, {
+        pathname: stripped,
+        alreadyAuthed: !isGitHealth,
+        embedded: true,
+      });
+      return;
+    }
+
     if (url.pathname === "/everything" || url.pathname.startsWith("/everything/")) {
       if (req.method !== "OPTIONS") requireToken(req);
       const handled = await everythingProxy.handleApi(req, res, url, {
@@ -3620,6 +3657,7 @@ async function handleApi(req, res, url) {
       let ffmpeg = { ok: false, error: "模块未加载" };
       let ffprobe = { ok: false, error: "模块未加载" };
       let ytdlp = { ok: false, error: "模块未加载" };
+      let gitTool = { ok: false, error: "模块未加载" };
       if (ffmpegBridge?.checkBinary) {
         try {
           [ffmpeg, ffprobe] = await Promise.all([
@@ -3636,6 +3674,19 @@ async function handleApi(req, res, url) {
           ytdlp = await ffmpegBridge.checkYtdlp();
         } catch (err) {
           ytdlp = { ok: false, error: err.message || String(err) };
+        }
+      }
+      if (gitBridge) {
+        try {
+          const ver = await new Promise((resolve) => {
+            execFile("git", ["--version"], { timeout: 8000, encoding: "utf8" }, (err, stdout) => {
+              if (err) resolve({ ok: false, error: err.message || String(err) });
+              else resolve({ ok: true, version: String(stdout || "").trim() });
+            });
+          });
+          gitTool = ver;
+        } catch (err) {
+          gitTool = { ok: false, error: err.message || String(err) };
         }
       }
       sendJson(
@@ -3660,6 +3711,7 @@ async function handleApi(req, res, url) {
             adb: true,
             ffmpeg: Boolean(ffmpegBridge),
             ytdlp: Boolean(ffmpegBridge?.checkYtdlp),
+            git: Boolean(gitBridge),
             mirror: true,
             everything: true,
           },
@@ -3704,6 +3756,7 @@ async function handleApi(req, res, url) {
             "ffmpeg-mount",
             "ytdlp",
             "ytdlp-mount",
+            "git-mount",
             "everything-proxy",
             "device-perf",
             "device-processes",
@@ -3715,22 +3768,25 @@ async function handleApi(req, res, url) {
           ffmpeg,
           ffprobe,
           ytdlp,
-          tools: { ...hostTools.tools, ffmpeg, ffprobe, ytdlp },
+          git: gitTool,
+          tools: { ...hostTools.tools, ffmpeg, ffprobe, ytdlp, git: gitTool },
           signingOk: hostTools.signingOk,
           setup: {
             ...hostTools.setup,
             ffmpeg: ffmpeg.ok ? "" : ffmpeg.setup || ffmpeg.error || "",
             ffprobe: ffprobe.ok ? "" : ffprobe.setup || ffprobe.error || "",
             ytdlp: ytdlp.ok ? "" : ytdlp.setup || ytdlp.error || "",
+            git: gitTool.ok ? "" : gitTool.error || "未找到 git",
           },
           deviceCount: devices.length,
           roots: ROOTS,
           writeRoots: WRITE_ROOTS,
           ffmpegMount: "/ff",
           ytdlpMount: "/ytdlp",
+          gitMount: "/git",
           everythingMount: "/everything",
           note:
-            "统一本机桥：ADB + Scrcpy 镜像 + FFmpeg（/ff/*）+ yt-dlp（/ytdlp/*）+ Everything（/everything/*）。Token 默认 devtools-bridge。",
+            "统一本机桥：ADB + Scrcpy + FFmpeg(/ff) + yt-dlp(/ytdlp) + Git(/git) + Everything。Token 默认 devtools-bridge。只需启动一次。",
         },
         origin
       );
@@ -4361,7 +4417,7 @@ function printBanner(activePort) {
   console.log(` 版本: ${BRIDGE_VERSION}`);
   console.log(` 地址: http://${HOST}:${activePort}`);
   console.log(` Token: ${TOKEN}（兼容旧 Token: devtools-adb / devtools-ffmpeg）`);
-  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / yt-dlp(/ytdlp) / 代理转发 / Logcat / 任务");
+  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / yt-dlp(/ytdlp) / Git(/git) / Everything / 任务");
   console.log(" 请保持此窗口打开，然后回到网页点「连接」——ADB 与 FFmpeg 共用这一座桥");
   if (activePort !== PORT) {
     console.log(` 注意: 默认端口 ${PORT} 被占用，已改用 ${activePort}`);

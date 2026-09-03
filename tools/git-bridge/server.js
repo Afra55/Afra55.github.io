@@ -520,7 +520,7 @@ async function runOp(repo, op, params) {
   };
 }
 
-async function handleRequest(req, res) {
+async function handleRequest(req, res, opts = {}) {
   const origin = req.headers.origin || "";
   if (req.method === "OPTIONS") {
     const headers = {};
@@ -539,7 +539,9 @@ async function handleRequest(req, res) {
     return;
   }
 
-  const pathname = url.pathname.replace(/\/+$/, "") || "/";
+  let pathname = opts.pathname != null ? String(opts.pathname) : url.pathname;
+  pathname = pathname.replace(/\/+$/, "") || "/";
+  const embedded = Boolean(opts.embedded);
 
   try {
     if (pathname === "/health" && req.method === "GET") {
@@ -555,22 +557,24 @@ async function handleRequest(req, res) {
         200,
         {
           ok: true,
-          service: "devtools-git-bridge",
+          service: embedded ? "devtools-bridge-git" : "devtools-git-bridge",
           version: BRIDGE_VERSION,
           features: FEATURES,
           git: gitVer,
-          port: PORT,
-          defaultToken: "devtools-git",
-          installDir: process.env.GIT_BRIDGE_DIR || __dirname,
-          bridgeDir: process.env.GIT_BRIDGE_DIR || __dirname,
+          port: embedded ? undefined : PORT,
+          defaultToken: embedded ? "devtools-bridge" : "devtools-git",
+          installDir: process.env.GIT_BRIDGE_DIR || process.env.ADB_BRIDGE_DIR || __dirname,
+          bridgeDir: process.env.GIT_BRIDGE_DIR || process.env.ADB_BRIDGE_DIR || __dirname,
+          embedded,
+          mount: embedded ? "/git" : "",
         },
         origin
       );
       return;
     }
 
-    if (!requireToken(req)) {
-      sendJson(res, 401, { error: "Token 无效。请求头加 X-Git-Token: devtools-git" }, origin);
+    if (!opts.alreadyAuthed && !requireToken(req)) {
+      sendJson(res, 401, { error: "Token 无效。请求头加 X-Git-Token / X-Adb-Token: devtools-bridge" }, origin);
       return;
     }
 

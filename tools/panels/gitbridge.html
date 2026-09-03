@@ -1,15 +1,15 @@
 <section id="gitbridge" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>Git 可视化</h1>
-        <p>本机桥调用系统 <span class="mono">git</span>：选仓库、看分支交叉、用人话解释 merge；白名单命令覆盖查阅 / 提交 / 分支 / stash / 合并 / 远程。<a href="#setup">安装指南</a></p>
+        <p>本机调用系统 <span class="mono">git</span>：默认挂在<strong>统一桥</strong>（与 ADB/FFmpeg 同座）。选仓库、看分支交叉、新手三步提交，并显示将要执行的命令。<a href="#setup">安装指南</a> · <a href="#adb">下载完整包</a></p>
       </div>
       <div class="panel-body">
         <div class="adb-status" id="git-status">
           <div class="adb-status-main">
             <span class="adb-dot" id="git-dot" aria-hidden="true"></span>
             <div>
-              <strong id="git-status-title">未连接 Git 桥</strong>
-              <p class="hint tight" id="git-status-text">下载完整包并启动后点「连接」。默认端口 17890。</p>
+              <strong id="git-status-title">未连接本机桥</strong>
+              <p class="hint tight" id="git-status-text">与 ADB / FFmpeg <strong>共用一座桥</strong>。下载完整包并启动后点「连接」。默认端口 17888。</p>
             </div>
           </div>
           <div class="btn-row tool-actions adb-status-actions">
@@ -17,9 +17,9 @@
             <button type="button" class="secondary-btn" id="git-bridge-launch">启动本机桥</button>
             <button type="button" class="secondary-btn" id="git-refresh" disabled>刷新仓库</button>
             <span class="adb-dl-bundle" id="git-dl-bundle">
-              <button type="button" class="secondary-btn" id="git-dl-mac" data-git-bundle="mac">下载 macOS 包</button>
-              <button type="button" class="secondary-btn" id="git-dl-win" data-git-bundle="win">下载 Windows 包</button>
-              <button type="button" class="secondary-btn" id="git-dl-linux" data-git-bundle="linux">下载 Linux 包</button>
+              <button type="button" class="secondary-btn" id="git-dl-mac" data-git-bundle="mac">下载 macOS 独立包</button>
+              <button type="button" class="secondary-btn" id="git-dl-win" data-git-bundle="win">下载 Windows 独立包</button>
+              <button type="button" class="secondary-btn" id="git-dl-linux" data-git-bundle="linux">下载 Linux 独立包</button>
             </span>
           </div>
         </div>
@@ -27,23 +27,23 @@
         <div class="field-block adb-install-dir" style="margin-top:0.65rem">
           <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.4rem">
             <label for="git-install-dir">桥解压目录</label>
-            <input id="git-install-dir" class="mono" type="text" placeholder="例如 C:\Tools\git-bridge 或 ~/DevToolsBridges/git-bridge" autocomplete="off" spellcheck="false" style="min-width:min(100%,22rem);flex:1" />
+            <input id="git-install-dir" class="mono" type="text" placeholder="与 ADB 相同，例如 C:\Tools\devtools-bridge" autocomplete="off" spellcheck="false" style="min-width:min(100%,22rem);flex:1" />
             <button type="button" class="secondary-btn" id="git-install-dir-save">记住目录</button>
           </div>
           <label class="flag" style="margin-top:0.35rem;display:inline-flex;align-items:center;gap:0.35rem">
             <input type="checkbox" id="git-bridge-autostart" checked />
             进入本页时若未连接则尝试自动启动
           </label>
-          <p class="hint tight" id="git-install-dir-hint">下载解压后把文件夹路径填在这里并「记住」。首次请手动双击启动脚本（会注册 <span class="mono">devtools-git://</span>）。之后网页可自动唤起：若已手动打开窗口，浏览器再弹出请点取消。</p>
+          <p class="hint tight" id="git-install-dir-hint">推荐到 <a href="#adb">ADB</a> 下载<strong>完整包</strong>（已含 git-bridge），只需启动一次。协议 <span class="mono">devtools-bridge://</span>。下方「独立包」仅给只想用 Git、不装 ADB 的场景。</p>
         </div>
 
         <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
           <label for="git-base">桥地址</label>
-          <input id="git-base" class="mono" type="text" value="http://127.0.0.1:17890" autocomplete="off" spellcheck="false" />
+          <input id="git-base" class="mono" type="text" value="http://127.0.0.1:17888" autocomplete="off" spellcheck="false" />
           <label for="git-token">Token</label>
-          <input id="git-token" class="mono" type="text" value="devtools-git" autocomplete="off" spellcheck="false" />
+          <input id="git-token" class="mono" type="text" value="devtools-bridge" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint tight">独立桥端口 <span class="mono">17890</span>（与 ADB 17888 / FFmpeg 17889 分开）。Token 默认 <span class="mono">devtools-git</span>，也接受 <span class="mono">devtools-bridge</span>。</p>
+        <p class="hint tight">默认走统一桥 <span class="mono">17888</span> · API <span class="mono">/git/*</span> · Token <span class="mono">devtools-bridge</span>。若仍用旧独立 Git 桥，地址改 <span class="mono">17890</span>、Token <span class="mono">devtools-git</span>。</p>
 
         <div id="git-workspace" hidden>
           <div class="label-row" style="margin-top:1rem">

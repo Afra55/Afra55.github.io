@@ -365,9 +365,10 @@ sync_bridges() {
 DevTools 桥目录：${BRIDGE_DIR}
 
 推荐：
-  1) 统一桥（ADB + FFmpeg + yt-dlp）：运行 adb-bridge/start-*.sh|command|cmd
+  1) 统一桥（ADB + FFmpeg + yt-dlp + Git + Everything）：运行 adb-bridge/start-*
      地址 http://127.0.0.1:17888  Token: devtools-bridge
-  2) Git 桥：运行 git-bridge/start-*（需同目录有 server.js + git-ops.js）
+     API：/ff · /ytdlp · /git · /everything
+  2) （可选）独立 Git 桥：仅当不需要 ADB 时，运行 git-bridge/start-*
      地址 http://127.0.0.1:17890  Token: devtools-git
 
 网页：${BASE_URL%/tools}/tools/#envkit

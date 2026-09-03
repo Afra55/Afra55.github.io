@@ -220,6 +220,13 @@ if not exist "%SCRIPT_DIR%ffmpeg-bridge\server.js" (
   echo [WARN] missing ffmpeg-bridge>> "%LOG_FILE%"
 )
 
+if not exist "%SCRIPT_DIR%git-bridge\server.js" (
+  if not exist "%SCRIPT_DIR%..\git-bridge\server.js" (
+    echo [WARN] git-bridge/server.js not found - Git API disabled until full ZIP is used.
+    echo [WARN] missing git-bridge>> "%LOG_FILE%"
+  )
+)
+
 if "%ADB_BRIDGE_TOKEN%"=="" set "ADB_BRIDGE_TOKEN=devtools-bridge"
 set "ADB_BRIDGE_DIR=%CD%"
 

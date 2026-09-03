@@ -23,9 +23,9 @@
 | `tools/extra-panels/*.js` | 额外面板逻辑 |
 | `tools/vendor/` | 浏览器第三方库 |
 | `tools/lib/oss-deps.js` | 关于页 OSS 清单（升级 vendor 后同步） |
-| `tools/adb-bridge/` | ADB / Everything 桥（`17888`） |
-| `tools/ffmpeg-bridge/` | FFmpeg / yt-dlp 桥（`17889`） |
-| `tools/git-bridge/` | Git 可视化桥（`17890`） |
+| `tools/adb-bridge/` | **统一本机桥**（`17888`）：ADB / Everything / FFmpeg(`/ff`) / yt-dlp(`/ytdlp`) / Git(`/git`) |
+| `tools/ffmpeg-bridge/` | FFmpeg / yt-dlp 模块（由统一桥挂载；也可独立 `17889`） |
+| `tools/git-bridge/` | Git 模块（由统一桥挂载 `/git`；也可独立 `17890`） |
 | `tools/envkit/` | 一键检测/安装/升级脚本 |
 | `tools/theme.js` / `tools/lib/theme-presets.js` | 主题 |
 
@@ -41,10 +41,9 @@
 
 ## 本机桥
 
-- ADB：`http://127.0.0.1:17888`；Token 以面板提示为准（常见 `devtools-bridge` / `devtools-adb`）
-- Everything：经 ADB 桥代理，勿假定浏览器可直连
-- FFmpeg：`http://127.0.0.1:17889`
-- Git：`http://127.0.0.1:17890`；Token 默认 `devtools-git`（也接受 `devtools-bridge`）；只跑白名单 `git` 子命令
+- ADB：**统一桥** `http://127.0.0.1:17888`；Token 常见 `devtools-bridge`
+- Everything / FFmpeg(`/ff`) / yt-dlp(`/ytdlp`) / Git(`/git`)：默认都走统一桥，**只需启动一次**
+- 独立 FFmpeg：`17889`；独立 Git：`17890`（可选，兼容旧包）
 - 改桥时同步 ZIP/启动脚本文件列表与 `BRIDGE_VERSION`
 - bat/sh 缓存写在**脚本同目录**，勿写死用户主目录
 

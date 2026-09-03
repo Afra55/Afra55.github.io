@@ -7,8 +7,8 @@
   const BASE_KEY = "devtools-git-base";
   const TOKEN_KEY = "devtools-git-token";
   const RECENT_KEY = "devtools-git-recent";
-  const DEFAULT_BASE = "http://127.0.0.1:17890";
-  const DEFAULT_TOKEN = "devtools-git";
+  const DEFAULT_BASE = "http://127.0.0.1:17888";
+  const DEFAULT_TOKEN = "devtools-bridge";
   const LANE_COLORS = ["#5b8cff", "#3dd68c", "#f5a524", "#f31260", "#a78bfa", "#22d3ee", "#fb7185", "#84cc16"];
 
   const panel = $("#gitbridge");
@@ -31,6 +31,9 @@
   let repoPath = "";
   let graphCommits = [];
   let selectedSha = "";
+  /** "" = 独立 Git 桥；"/git" = 统一桥挂载 */
+  let apiPrefix = "/git";
+  let bridgeMode = "unified";
 
   try {
     baseInput.value = localStorage.getItem(BASE_KEY) || DEFAULT_BASE;
@@ -76,11 +79,15 @@
 
   async function api(path, opts = {}) {
     const headers = Object.assign(
-      { "X-Git-Token": token() },
+      {
+        "X-Git-Token": token(),
+        "X-Adb-Token": token(),
+        "X-Ffmpeg-Token": token(),
+      },
       opts.body ? { "Content-Type": "application/json" } : {},
       opts.headers || {}
     );
-    const res = await fetch(baseUrl() + path, {
+    const res = await fetch(baseUrl() + apiPrefix + path, {
       method: opts.method || "GET",
       headers,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
@@ -320,40 +327,109 @@
     showError("");
     persistConn();
     try {
-      let discovered = await window.devtoolsBridgeToken?.discoverBase?.(baseUrl(), token(), { kind: "git" });
-      if (!discovered?.health && window.devtoolsBridgeToken?.readAutoStart?.("git") !== false) {
+      // 1) 优先统一桥（17888，/git）
+      let discovered = await window.devtoolsBridgeToken?.discoverBase?.(baseUrl(), token(), {
+        kind: "unified",
+      });
+      if (!discovered?.health && window.devtoolsBridgeToken?.readAutoStart?.("unified") !== false) {
         discovered = await window.devtoolsBridgeToken?.ensureBridgeRunning?.({
-          preferredBase: baseUrl(),
+          preferredBase: baseUrl() || DEFAULT_BASE,
           token: token(),
           timeoutMs: 12000,
           launch: true,
-          kind: "git",
+          kind: "unified",
         });
       }
-      const health = discovered?.health || (await api("/health"));
-      if (discovered?.base && baseUrl() !== discovered.base) {
-        baseInput.value = discovered.base;
-        persistConn();
+
+      let health = null;
+      if (
+        discovered?.health &&
+        (discovered.health.capabilities?.git ||
+          discovered.health.gitMount === "/git" ||
+          discovered.health.unified)
+      ) {
+        // 探测 /git/health
+        try {
+          if (discovered.base && baseUrl() !== discovered.base) {
+            baseInput.value = discovered.base;
+            persistConn();
+          }
+          apiPrefix = "/git";
+          bridgeMode = "unified";
+          const res = await fetch(`${baseUrl()}/git/health`, {
+            headers: { "X-Adb-Token": token(), "X-Git-Token": token() },
+            cache: "no-store",
+          });
+          health = await res.json();
+          if (!res.ok || !health?.ok) throw new Error(health?.error || "统一桥未挂载 Git");
+          try {
+            window.devtoolsBridgeToken?.rememberFromHealth?.(discovered.health, "unified");
+          } catch (_) {
+            /* ignore */
+          }
+        } catch (e) {
+          health = null;
+          if (discovered.health.capabilities?.git === false) {
+            /* fall through to standalone */
+          } else if (!discovered.health.unified) {
+            health = null;
+          } else {
+            // unified but no git module
+            throw new Error(
+              "统一桥已连接但未挂载 Git。请重新下载「ADB 完整包」（含 git-bridge/）或用 EnvKit 同步后重启桥。"
+            );
+          }
+        }
       }
-      if (!health.ok) throw new Error("桥响应异常");
-      if (health.service && health.service !== "devtools-git-bridge") {
-        throw new Error("连到了其他桥，请确认端口 17890 是 Git 桥");
+
+      // 2) 回退独立 Git 桥 17890
+      if (!health) {
+        const gitFound = await window.devtoolsBridgeToken?.discoverBase?.(
+          "http://127.0.0.1:17890",
+          token() === "devtools-bridge" ? "devtools-git" : token(),
+          { kind: "git" }
+        );
+        if (gitFound?.health) {
+          baseInput.value = gitFound.base;
+          if (tokenInput && token() === "devtools-bridge") tokenInput.value = "devtools-git";
+          persistConn();
+          apiPrefix = "";
+          bridgeMode = "standalone";
+          health = gitFound.health;
+          try {
+            window.devtoolsBridgeToken?.rememberFromHealth?.(health, "git");
+          } catch (_) {
+            /* ignore */
+          }
+        }
+      }
+
+      if (!health?.ok) {
+        throw new Error(
+          "无法连接本机桥。推荐：下载 ADB 完整包并启动一次（含 Git）。或单独启动 Git 桥（17890）。"
+        );
       }
       if (!health.git) throw new Error("桥已启动，但本机找不到 git，请安装后重启桥");
+
       try {
-        window.devtoolsBridgeToken?.rememberFromHealth?.(health, "git");
         const dirInput = $("#git-install-dir");
-        if (dirInput && !dirInput.value) dirInput.value = window.devtoolsBridgeToken?.readInstallDir?.("git") || "";
+        if (dirInput && !dirInput.value) {
+          dirInput.value =
+            window.devtoolsBridgeToken?.readInstallDir?.(bridgeMode === "git" ? "git" : "unified") ||
+            "";
+        }
       } catch (_) {
         /* ignore */
       }
+
       connected = true;
       workspace.hidden = false;
       $("#git-refresh").disabled = false;
+      const modeLabel = bridgeMode === "unified" ? "统一桥" : "独立 Git 桥";
       setStatus(
         "is-ok",
-        `已连接 · v${health.version}`,
-        `${health.git} · 端口见地址栏。下一步：拖文件夹进来，或选一个带「仓库」标记的目录。`
+        `已连接 · ${modeLabel} v${health.version}`,
+        `${health.git} · ${bridgeMode === "unified" ? "API /git · 与 ADB/FFmpeg 同座" : "端口 17890"}`
       );
       await loadOpsCatalog();
       await loadRoots();
@@ -376,7 +452,7 @@
       connected = false;
       workspace.hidden = true;
       $("#git-refresh").disabled = true;
-      setStatus("is-err", "未连接 Git 桥", e.message || "连接失败");
+      setStatus("is-err", "未连接本机桥", e.message || "连接失败");
       showError(e.message);
       return false;
     }
@@ -1001,12 +1077,12 @@
   wireDropzone();
 
   window.devtoolsBridgeToken?.bindBridgeLaunchUI?.({
-    kind: "git",
+    kind: "unified",
     dirInput: $("#git-install-dir"),
     saveBtn: $("#git-install-dir-save"),
     launchBtn: $("#git-bridge-launch"),
     autoEl: $("#git-bridge-autostart"),
-    getPreferredBase: () => baseUrl(),
+    getPreferredBase: () => baseUrl() || DEFAULT_BASE,
     getToken: () => token(),
     onStatus: (kind, title, text) => setStatus(kind, title, text),
     onConnected: async () => {
@@ -1018,19 +1094,19 @@
     },
   });
 
-  // Auto-try connect when panel shown
+  // Auto-try connect when panel shown（统一桥协议）
   void (async () => {
-    if (window.devtoolsBridgeToken?.readAutoStart?.("git") === false) {
+    if (window.devtoolsBridgeToken?.readAutoStart?.("unified") === false) {
       connectBridge().catch(() => {});
       return;
     }
     try {
       const found = await window.devtoolsBridgeToken?.ensureBridgeRunning?.({
-        preferredBase: baseUrl(),
+        preferredBase: baseUrl() || DEFAULT_BASE,
         token: token(),
         timeoutMs: 20000,
         launch: true,
-        kind: "git",
+        kind: "unified",
       });
       if (found?.health) await connectBridge();
       else connectBridge().catch(() => {});
