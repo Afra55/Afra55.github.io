@@ -17,9 +17,21 @@ viewsourceroot: https://github.com/Afra55/Afra55.github.io/
 # this is the url root of the create page link on the footer page.
 newsourceroot: https://github.com/Afra55/Afra55.github.io/
 #########################################
-
-disqus_shortname: Afra55
-disqus_url: "http://Afra55.github.io"
+# 评论：giscus（GitHub Discussions）
+# 开启 Discussions + 安装 https://github.com/apps/giscus 后，
+# 运行：node tools/scripts/fetch-giscus-ids.cjs
+giscus:
+  repo: Afra55/Afra55.github.io
+  repo_id: "MDEwOlJlcG9zaXRvcnk0Njg1MDkxNw=="
+  category: "Announcements"
+  category_id: ""
+  mapping: pathname
+  strict: "0"
+  reactions_enabled: "1"
+  emit_metadata: "0"
+  input_position: bottom
+  theme: preferred_color_scheme
+  lang: zh-CN
 #########################################
 
 # Build settings

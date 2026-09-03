@@ -1,36 +1,34 @@
-{% if page.comments %}
-    <!-- duoshuo.com javascript include code. -->    
-    {% if site.duoshuo_url %}
-      <div class="post-area post comment">
-        <div class="ds-thread" data-thread-key="{{ page.id }}" data-title="{{ page.title }}" data-url="{{ site.duoshuo_url }}{{ page.url }}"></div>
-      </div>
-	  <script type="text/javascript">
-		var duoshuoQuery = {short_name:"{{ site.duoshuo_shortname }}"};
-		(function() {
-		  var ds = document.createElement('script');
-		  ds.type = 'text/javascript';ds.async = true;
-		  ds.src = (document.location.protocol == 'https:' ? 'https:' : 'http:') + '//static.duoshuo.com/embed.js';
-		  ds.charset = 'UTF-8';
-		  (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(ds);
-		})();
-	  </script>
-	{% endif %}
-    <!-- disqus.com javascript include code. -->
-	{% if site.disqus_url %}
-    <div class="post-area post comment">
-        <div id="disqus_thread"></div>
-    </div>
-	<script>
-		var disqus_config = function () {
-			this.page.url = "{{ site.disqus_url }}{{ page.url }}"; 
-			this.page.identifier = "{{ page.id }}"; 
-		};
-		(function() {
-			var d = document, s = d.createElement('script');
-			s.src = '//{{ site.disqus_shortname }}.disqus.com/embed.js';
-			s.setAttribute('data-timestamp', +new Date());
-			(d.head || d.body).appendChild(s);
-		})();
-	</script>
-	{% endif %}
-{% endif %}    
+{% if page.comments != false and site.giscus.repo_id and site.giscus.category_id %}
+<div class="post-area post comment giscus-comments" id="giscus-comments">
+  <script
+    src="https://giscus.app/client.js"
+    data-repo="{{ site.giscus.repo }}"
+    data-repo-id="{{ site.giscus.repo_id }}"
+    data-category="{{ site.giscus.category }}"
+    data-category-id="{{ site.giscus.category_id }}"
+    data-mapping="{{ site.giscus.mapping | default: 'pathname' }}"
+    data-strict="{{ site.giscus.strict | default: '0' }}"
+    data-reactions-enabled="{{ site.giscus.reactions_enabled | default: '1' }}"
+    data-emit-metadata="{{ site.giscus.emit_metadata | default: '0' }}"
+    data-input-position="{{ site.giscus.input_position | default: 'bottom' }}"
+    data-theme="{{ site.giscus.theme | default: 'preferred_color_scheme' }}"
+    data-lang="{{ site.giscus.lang | default: 'zh-CN' }}"
+    data-loading="lazy"
+    crossorigin="anonymous"
+    async
+  ></script>
+</div>
+{% elsif page.comments != false and site.giscus.repo %}
+<div class="post-area post comment giscus-comments giscus-setup" id="giscus-comments">
+  <p class="giscus-setup-note">
+    评论系统已切换为
+    <a href="https://giscus.app/zh-CN" rel="noopener noreferrer" target="_blank">giscus</a>
+    （GitHub Discussions）。请仓库管理员：
+    开启 Discussions、安装
+    <a href="https://github.com/apps/giscus" rel="noopener noreferrer" target="_blank">giscus App</a>，
+    并在
+    <a href="https://giscus.app/zh-CN" rel="noopener noreferrer" target="_blank">giscus.app</a>
+    生成配置后写入 <code>_config.yml</code> 的 <code>giscus.category_id</code>。
+  </p>
+</div>
+{% endif %}
