@@ -37,6 +37,19 @@
           <label for="adb-token">Token</label>
           <input id="adb-token" class="mono" type="text" value="devtools-bridge" autocomplete="off" spellcheck="false" />
         </div>
+        <div class="field-block adb-install-dir" style="margin-top:0.65rem">
+          <div class="field-row" style="flex-wrap:wrap;align-items:center">
+            <label for="adb-install-dir">桥解压目录</label>
+            <input id="adb-install-dir" class="mono" type="text" placeholder="例如 C:\Tools\devtools-bridge 或 /Users/me/devtools-bridge" autocomplete="off" spellcheck="false" style="min-width:min(100%,22rem);flex:1" />
+            <button type="button" class="secondary-btn" id="adb-install-dir-save">记住目录</button>
+            <button type="button" class="primary-btn" id="adb-bridge-launch">启动本机桥</button>
+          </div>
+          <label class="flag" style="margin-top:0.35rem;display:inline-flex;gap:0.35rem;align-items:center">
+            <input type="checkbox" id="adb-bridge-autostart" checked />
+            进入本页时若未连接则尝试自动启动
+          </label>
+          <p class="hint tight" id="adb-install-dir-hint">下载解压后把文件夹路径填在这里并「记住」。首次请手动双击启动脚本（会注册 <span class="mono">devtools-bridge://</span>）；之后网页可一键/自动唤起。浏览器无法直接执行本地程序。</p>
+        </div>
         <p class="hint">默认 Token 为 <span class="mono">devtools-bridge</span>（兼容旧 <span class="mono">devtools-adb</span>）。<strong>一座桥</strong>同时提供 ADB、Scrcpy 镜像与 FFmpeg（<span class="mono">/ff</span>）。完整包需含 <span class="mono">server.js</span> + <span class="mono">ffmpeg-bridge/</span>（桥 ≥0.8.0）。<button type="button" class="ghost-btn" id="adb-setup-guide-show" hidden style="margin-left:0.35rem">显示本机依赖说明</button></p>
         <div class="adb-guide" id="adb-setup-guide">
           <div class="adb-guide-head">

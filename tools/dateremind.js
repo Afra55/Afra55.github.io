@@ -133,7 +133,11 @@
   function saveState() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ settings, items }));
-    } catch (_) {}
+      return true;
+    } catch (err) {
+      console.warn("[dateremind] save failed", err);
+      return false;
+    }
   }
 
   function saveDismiss() {
@@ -261,11 +265,11 @@
     const isToday = daysUntil === 0;
     const time = parseTime(item.time);
     let showNow = inWindow;
+    // 当天若设置了时刻：未到点不弹；到点后才弹
     if (isToday && time) {
-      const now = fromDate;
       const moment = new Date(today);
       moment.setHours(time.h, time.min, 0, 0);
-      if (now < moment) showNow = true;
+      showNow = Boolean(inWindow && fromDate >= moment);
     }
     return {
       ...item,
@@ -412,8 +416,11 @@
 
   loadState();
 
-  const panel = $("#dateremind");
-  if (panel) {
+  let panelBound = false;
+  function bindPanelUi() {
+    const panel = $("#dateremind");
+    if (!panel || panelBound) return;
+    panelBound = true;
     const listEl = $("#dr-list");
     const archivedEl = $("#dr-archived-list");
     const form = $("#dr-form");
@@ -613,7 +620,10 @@
         const idx = items.findIndex((x) => x.id === item.id);
         if (idx >= 0) items[idx] = { ...items[idx], ...item };
         else items.push(item);
-        saveState();
+        if (!saveState()) {
+          setError("保存失败：浏览器存储已满或不可用，请清理站点数据后重试");
+          return;
+        }
         autoArchiveOnce();
         editingId = "";
         fillForm(emptyItem());
@@ -733,6 +743,16 @@
     window.DevToolsTemp?.registerCleanup(() => {
       closeFullscreen();
     });
+  }
+
+  // idle 预加载脚本时面板可能尚未挂载；等 panel-mounted / ExtraBind 再绑保存等事件
+  if (window.DevToolsExtraBind?.register) {
+    window.DevToolsExtraBind.register("dateremind", bindPanelUi);
+  } else {
+    window.addEventListener("devtools:panel-mounted", (e) => {
+      if (e.detail?.id === "dateremind") bindPanelUi();
+    });
+    if ($("#dateremind")) bindPanelUi();
   }
 
   fsDismiss?.addEventListener("click", () => {

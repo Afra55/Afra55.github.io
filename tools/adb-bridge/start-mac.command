@@ -180,6 +180,78 @@ echo "若窗口立刻关掉，请查看日志：${LOG_FILE}"
 echo ""
 
 set +e
+
+# Remember install dir for /health and register URL scheme helper (best-effort)
+export ADB_BRIDGE_DIR="$SCRIPT_DIR"
+PROTOCOL_APP="$SCRIPT_DIR/DevToolsBridge Protocol.app"
+if [ ! -d "$PROTOCOL_APP" ]; then
+  mkdir -p "$PROTOCOL_APP/Contents/MacOS" "$PROTOCOL_APP/Contents/Resources"
+  cat > "$PROTOCOL_APP/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>io.github.afra55.devtools-bridge</string>
+  <key>CFBundleName</key><string>DevToolsBridge</string>
+  <key>CFBundleExecutable</key><string>launch</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleURLTypes</key><array><dict>
+    <key>CFBundleURLName</key><string>DevTools Bridge</string>
+    <key>CFBundleURLSchemes</key><array><string>devtools-bridge</string></array>
+  </dict></array>
+</dict></plist>
+PLIST
+  cat > "$PROTOCOL_APP/Contents/MacOS/launch" <<EOF
+#!/bin/bash
+cd "$SCRIPT_DIR" || exit 1
+exec "$SCRIPT_DIR/$(basename "$0")"
+EOF
+  # Fix: launch should call the .command file by absolute path
+  cat > "$PROTOCOL_APP/Contents/MacOS/launch" <<EOF
+#!/bin/bash
+DIR="$SCRIPT_DIR"
+cd "\$DIR" || exit 1
+# Re-enter the same start script (ignore URL args)
+nohup bash "$SCRIPT_DIR/$(basename "$0")" >/dev/null 2>&1 &
+EOF
+  # Actually basename of start-mac.command when packaged becomes start-adb-bridge.command
+  cat > "$PROTOCOL_APP/Contents/MacOS/launch" <<'EOF'
+#!/bin/bash
+DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+# App is at $BRIDGE/DevToolsBridge Protocol.app → parent is bridge dir
+DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+cd "$DIR" || exit 1
+for s in start-adb-bridge.command start-mac.command; do
+  if [ -x "$DIR/$s" ] || [ -f "$DIR/$s" ]; then
+    nohup bash "$DIR/$s" >/dev/null 2>&1 &
+    exit 0
+  fi
+done
+exit 1
+EOF
+  chmod +x "$PROTOCOL_APP/Contents/MacOS/launch"
+  # Fix DIR: Contents/MacOS -> ../.. is Contents, ../../.. is app root, ../../../.. is bridge
+  cat > "$PROTOCOL_APP/Contents/MacOS/launch" <<'EOF'
+#!/bin/bash
+DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+cd "$DIR" || exit 1
+for s in start-adb-bridge.command start-mac.command; do
+  if [ -f "$DIR/$s" ]; then
+    nohup bash "$DIR/$s" >/dev/null 2>&1 &
+    exit 0
+  fi
+done
+exit 1
+EOF
+  chmod +x "$PROTOCOL_APP/Contents/MacOS/launch"
+fi
+# Register with Launch Services (best-effort)
+if command -v lsregister >/dev/null 2>&1; then
+  lsregister -f "$PROTOCOL_APP" >/dev/null 2>&1 || true
+elif [ -x "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister" ]; then
+  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$PROTOCOL_APP" >/dev/null 2>&1 || true
+fi
+
+
 node server.js 2>&1 | tee -a "${LOG_FILE}"
 CODE=${PIPESTATUS[0]}
 set -e

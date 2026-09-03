@@ -2384,6 +2384,14 @@
             }
           }
           let health = discovered.health;
+          try {
+            window.devtoolsBridgeToken?.rememberFromHealth?.(health);
+            const dir = window.devtoolsBridgeToken?.readInstallDir?.() || "";
+            const dirInput = $("#adb-install-dir");
+            if (dirInput && dir) dirInput.value = dir;
+          } catch (_) {
+            /* ignore */
+          }
           updateHostToolsProbe(health);
           let adbReady = health.adb?.ok === true;
           if (!adbReady) {
@@ -4020,6 +4028,63 @@
         adbFsBatchMeta = $("#adb-fs-batch-meta");
   
         $("#adb-connect")?.addEventListener("click", () => connectAdbBridge());
+
+        // 桥解压目录记忆 + 协议唤起启动
+        try {
+          const dirInput = $("#adb-install-dir");
+          const autoEl = $("#adb-bridge-autostart");
+          if (dirInput) dirInput.value = window.devtoolsBridgeToken?.readInstallDir?.() || dirInput.value || "";
+          if (autoEl) autoEl.checked = window.devtoolsBridgeToken?.readAutoStart?.() !== false;
+        } catch (_) {
+          /* ignore */
+        }
+        $("#adb-install-dir-save")?.addEventListener("click", () => {
+          const dir = String($("#adb-install-dir")?.value || "").trim();
+          window.devtoolsBridgeToken?.writeInstallDir?.(dir);
+          toast(dir ? "已记住桥目录" : "已清除桥目录");
+        });
+        $("#adb-bridge-autostart")?.addEventListener("change", (e) => {
+          window.devtoolsBridgeToken?.writeAutoStart?.(Boolean(e.target.checked));
+        });
+        $("#adb-bridge-launch")?.addEventListener("click", async () => {
+          const dir = String($("#adb-install-dir")?.value || "").trim();
+          if (dir) window.devtoolsBridgeToken?.writeInstallDir?.(dir);
+          setAdbStatus("is-warn", "正在唤起本机桥…", "若浏览器询问打开「devtools-bridge」请允许；首次使用请先手动运行解压目录里的启动脚本以完成协议注册。");
+          window.devtoolsBridgeToken?.tryLaunchBridge?.();
+          startAdbWaitPoll();
+          const found = await window.devtoolsBridgeToken?.ensureBridgeRunning?.({
+            preferredBase: adbBase(),
+            token: adbToken(),
+            timeoutMs: 20000,
+            launch: false,
+          });
+          if (found?.health) {
+            await connectAdbBridge();
+          } else {
+            setAdbStatus(
+              "is-warn",
+              "等待本机桥…",
+              "若未弹出启动，请到已记住的目录双击启动脚本，并保持窗口打开。"
+            );
+          }
+        });
+        // 进入面板时：未连接则按开关尝试自动启动
+        void (async () => {
+          if (adbConnected) return;
+          if (window.devtoolsBridgeToken?.readAutoStart?.() === false) return;
+          try {
+            const found = await window.devtoolsBridgeToken?.ensureBridgeRunning?.({
+              preferredBase: adbBase(),
+              token: adbToken(),
+              timeoutMs: 8000,
+              launch: true,
+            });
+            if (found?.health) await connectAdbBridge({ fromPoll: true });
+          } catch (_) {
+            /* ignore */
+          }
+        })();
+
         $("#adb-refresh")?.addEventListener("click", () =>
         refreshAdbDevices().catch((err) => setError(adbError, err.message || String(err)))
         );

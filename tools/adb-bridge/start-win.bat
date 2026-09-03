@@ -163,6 +163,14 @@ if not exist "%MIRROR_TARGET%" (
 )
 echo [OK] scrcpy-mirror.js ready>> "%LOG_FILE%"
 
+rem Register custom URL protocol so the webpage can request start (devtools-bridge://start)
+set "ADB_BRIDGE_DIR=%SCRIPT_DIR%"
+reg add "HKCU\Software\Classes\devtools-bridge" /ve /d "URL:DevTools Bridge Protocol" /f >> "%LOG_FILE%" 2>&1
+reg add "HKCU\Software\Classes\devtools-bridge" /v "URL Protocol" /d "" /f >> "%LOG_FILE%" 2>&1
+reg add "HKCU\Software\Classes\devtools-bridge\shell\open\command" /ve /d "\"%~f0\"" /f >> "%LOG_FILE%" 2>&1
+echo [OK] Registered protocol devtools-bridge:// >> "%LOG_FILE%"
+
+
 set "EV_PROXY=%SCRIPT_DIR%everything-proxy.js"
 if not exist "%EV_PROXY%" (
   echo [..] Downloading everything-proxy.js ...

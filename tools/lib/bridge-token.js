@@ -91,13 +91,107 @@
     return null;
   }
 
+  const INSTALL_DIR_KEY = "devtools-bridge-install-dir";
+  const AUTO_START_KEY = "devtools-bridge-autostart";
+  const PROTOCOL = "devtools-bridge://start";
+
+  function readInstallDir() {
+    try {
+      return String(localStorage.getItem(INSTALL_DIR_KEY) || "").trim();
+    } catch (_) {
+      return "";
+    }
+  }
+
+  function writeInstallDir(dir) {
+    const value = String(dir || "").trim();
+    try {
+      if (value) localStorage.setItem(INSTALL_DIR_KEY, value);
+      else localStorage.removeItem(INSTALL_DIR_KEY);
+    } catch (_) {
+      /* ignore */
+    }
+    return value;
+  }
+
+  function readAutoStart() {
+    try {
+      const v = localStorage.getItem(AUTO_START_KEY);
+      return v == null ? true : v === "1" || v === "true";
+    } catch (_) {
+      return true;
+    }
+  }
+
+  function writeAutoStart(on) {
+    try {
+      localStorage.setItem(AUTO_START_KEY, on ? "1" : "0");
+    } catch (_) {
+      /* ignore */
+    }
+    return Boolean(on);
+  }
+
+  function rememberFromHealth(health) {
+    const dir = String(health?.installDir || health?.bridgeDir || "").trim();
+    if (dir) writeInstallDir(dir);
+    return dir;
+  }
+
+  /** 尝试通过自定义协议唤起本机启动脚本（需用户曾运行过带注册逻辑的启动脚本） */
+  function tryLaunchBridge() {
+    try {
+      const iframe = document.createElement("iframe");
+      iframe.style.cssText = "display:none;width:0;height:0;border:0";
+      iframe.src = PROTOCOL;
+      document.body.appendChild(iframe);
+      setTimeout(() => iframe.remove(), 2500);
+    } catch (_) {
+      try {
+        window.location.href = PROTOCOL;
+      } catch (_) {
+        /* ignore */
+      }
+    }
+    return PROTOCOL;
+  }
+
+  async function ensureBridgeRunning({ preferredBase, token, timeoutMs = 45000, launch = true } = {}) {
+    const t0 = Date.now();
+    let found = await discoverBase(preferredBase, token || read());
+    if (found?.health) {
+      rememberFromHealth(found.health);
+      return found;
+    }
+    if (launch && readAutoStart()) tryLaunchBridge();
+    while (Date.now() - t0 < timeoutMs) {
+      await new Promise((r) => setTimeout(r, 1500));
+      found = await discoverBase(preferredBase, token || read());
+      if (found?.health) {
+        rememberFromHealth(found.health);
+        return found;
+      }
+    }
+    return null;
+  }
+
   window.devtoolsBridgeToken = {
     read,
     write,
     DEFAULT,
     KEYS,
+    INSTALL_DIR_KEY,
+    AUTO_START_KEY,
+    PROTOCOL,
     normalizeBridgeBase,
     probeHealth,
     discoverBase,
+    readInstallDir,
+    writeInstallDir,
+    readAutoStart,
+    writeAutoStart,
+    rememberFromHealth,
+    tryLaunchBridge,
+    ensureBridgeRunning,
   };
 })();

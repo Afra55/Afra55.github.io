@@ -61,3 +61,112 @@ body.countdown-fs-active {
   justify-content: center;
   margin-top: 0.5rem;
 }
+
+/* ---- 列表行（覆盖 style.css；手机改多行） ---- */
+.cd-toolbar {
+  flex-wrap: wrap;
+}
+
+.cd-list {
+  min-width: 0;
+}
+
+.cd-row {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+  grid-template-areas: "drag idx content hms del";
+  align-items: center;
+  gap: 0.4rem 0.5rem;
+  min-width: 0;
+}
+
+.cd-drag { grid-area: drag; }
+.cd-idx { grid-area: idx; }
+.cd-content { grid-area: content; min-width: 0; }
+.cd-hms { grid-area: hms; min-width: 0; }
+.cd-del { grid-area: del; }
+
+.cd-num {
+  width: 3.4rem;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  font-size: 1rem;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.cd-num::-webkit-outer-spin-button,
+.cd-num::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.countdown-fs {
+  overflow: auto;
+  padding: max(3.5rem, calc(0.55rem + env(safe-area-inset-top, 0px)))
+    1rem
+    max(1.25rem, env(safe-area-inset-bottom, 0px));
+}
+
+.countdown-fs-content {
+  max-width: min(22rem, 100%);
+  width: 100%;
+}
+
+.countdown-fs-time {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+.countdown-fs-actions {
+  flex-wrap: wrap;
+  width: 100%;
+  max-width: min(22rem, 100%);
+}
+
+@media (max-width: 640px) {
+  .cd-row {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "drag content del"
+      "hms hms hms";
+    align-items: stretch;
+  }
+
+  .cd-idx {
+    display: none;
+  }
+
+  .cd-content {
+    width: 100%;
+    font-size: 1rem;
+  }
+
+  .cd-hms {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    width: 100%;
+    gap: 0.35rem;
+    flex-wrap: nowrap;
+  }
+
+  .cd-hms label {
+    min-width: 0;
+  }
+
+  .cd-num {
+    width: 100%;
+  }
+
+  .cd-del {
+    padding-inline: 0.55rem;
+    align-self: center;
+  }
+
+  .cd-toolbar > .primary-btn,
+  .cd-toolbar > .secondary-btn,
+  .cd-toolbar > .ghost-btn {
+    flex: 1 1 calc(50% - 0.55rem);
+  }
+}

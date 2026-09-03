@@ -604,11 +604,24 @@
     savePrefs();
     setError("");
     try {
-      const discovered = await window.devtoolsBridgeToken?.discoverBase?.(baseUrl(), token());
+      let discovered = await window.devtoolsBridgeToken?.discoverBase?.(baseUrl(), token());
+      if (!discovered?.health && window.devtoolsBridgeToken?.readAutoStart?.() !== false) {
+        discovered = await window.devtoolsBridgeToken.ensureBridgeRunning?.({
+          preferredBase: baseUrl(),
+          token: token(),
+          timeoutMs: 12000,
+          launch: true,
+        });
+      }
       if (!discovered?.health) {
         throw new Error(
-          "无法连接本机桥。请确认启动脚本窗口仍打开；若横幅端口不是 17888，会自动扫描 17888–17899。Token 默认 devtools-bridge。"
+          "无法连接本机桥。请到 ADB 页填写并记住解压目录，首次手动运行启动脚本；之后可点「启动本机桥」或开启自动启动。Token 默认 devtools-bridge。"
         );
+      }
+      try {
+        window.devtoolsBridgeToken?.rememberFromHealth?.(discovered.health);
+      } catch (_) {
+        /* ignore */
       }
       if (baseInput && baseUrl() !== discovered.base) {
         baseInput.value = discovered.base;

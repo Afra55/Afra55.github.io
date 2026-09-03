@@ -263,6 +263,31 @@
         /* try next */
       }
     }
+    // 未连上时按开关尝试协议唤起（与 ADB 页共用安装目录记忆）
+    if (window.devtoolsBridgeToken?.readAutoStart?.() !== false) {
+      try {
+        const found = await window.devtoolsBridgeToken.ensureBridgeRunning?.({
+          preferredBase: storedBridgeBase(),
+          token,
+          timeoutMs: 10000,
+          launch: true,
+        });
+        if (found?.health) {
+          const c = { base: found.base, prefix: prefixFromHealth(found.health) };
+          state.bridge = {
+            ok: true,
+            base: c.base,
+            prefix: c.prefix,
+            token,
+            version: found.health.version || "",
+          };
+          paintBridge();
+          return true;
+        }
+      } catch (_) {
+        /* ignore */
+      }
+    }
     state.bridge.ok = false;
     paintBridge();
     return false;
