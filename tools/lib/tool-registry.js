@@ -146,7 +146,8 @@
         "adb",
         "everything",
         "ffbridge",
-        "ytdlp"
+        "ytdlp",
+        "gitbridge"
       ]
     },
     {
@@ -761,6 +762,18 @@
       ],
       "desktopOnly": true
     },
+    "gitbridge": {
+      "name": "Git 可视化",
+      "aliases": [
+        "git",
+        "gitbridge",
+        "分支",
+        "merge",
+        "提交图",
+        "版本控制"
+      ],
+      "desktopOnly": true
+    },
     "about": {
       "name": "实用小工具合集",
       "aliases": [
@@ -889,6 +902,7 @@
     "lanshare": "局域网互传：多机同房间共享文件列表，下载时从上传者手机 WebRTC 直传，不经房主中转；房主可退出或解散，退出时最近加入者接任。",
     "ffbridge": "电脑批量用本机 FFmpeg 桥；手机请直接用视频/GIF 分类里的音频/修剪/动图（网页内处理）。",
     "ytdlp": "本机 yt-dlp 桥：解析/下载视频与播放列表、字幕、封面、直播、Cookies 与 SponsorBlock；含安装教程，文件只保存在电脑。",
+    "gitbridge": "本机 Git 桥：选本地仓库、彩色提交图、人话解释 merge/分支关系，按钮对应真实 git 命令。",
     "about": "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
     "setup": "小白向：如何下载安装 Node.js、ADB、FFmpeg；手机用网页保底、电脑用桥更优。",
     "mathedit": "MathLive 在线数学公式编辑：可视化输入，导出 LaTeX / MathML / AsciiMath。",

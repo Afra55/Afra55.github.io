@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-02T23:53:57.663Z",
+  "generatedAt": "2026-09-03T12:41:29.908Z",
   "panels": [
     {
       "id": "about",
@@ -73,14 +73,14 @@
       "bytes": 3113
     },
     {
-      "id": "eyedropper",
-      "file": "./panels/eyedropper.html",
-      "bytes": 1946
-    },
-    {
       "id": "everything",
       "file": "./panels/everything.html",
       "bytes": 8243
+    },
+    {
+      "id": "eyedropper",
+      "file": "./panels/eyedropper.html",
+      "bytes": 1946
     },
     {
       "id": "ffbridge",
@@ -116,6 +116,11 @@
       "id": "gifx",
       "file": "./panels/gifx.html",
       "bytes": 2565
+    },
+    {
+      "id": "gitbridge",
+      "file": "./panels/gitbridge.html",
+      "bytes": 7348
     },
     {
       "id": "hash",
@@ -166,6 +171,16 @@
       "id": "markdown",
       "file": "./panels/markdown.html",
       "bytes": 815
+    },
+    {
+      "id": "mathedit",
+      "file": "./panels/mathedit.html",
+      "bytes": 1417
+    },
+    {
+      "id": "mdslides",
+      "file": "./panels/mdslides.html",
+      "bytes": 1322
     },
     {
       "id": "memo",
@@ -240,12 +255,17 @@
     {
       "id": "setup",
       "file": "./panels/setup.html",
-      "bytes": 19698
+      "bytes": 20693
     },
     {
       "id": "sharecard",
       "file": "./panels/sharecard.html",
       "bytes": 4496
+    },
+    {
+      "id": "sitenav",
+      "file": "./panels/sitenav.html",
+      "bytes": 707
     },
     {
       "id": "text",
@@ -336,21 +356,6 @@
       "id": "ytdlp",
       "file": "./panels/ytdlp.html",
       "bytes": 25736
-    },
-    {
-      "id": "mathedit",
-      "file": "./panels/mathedit.html",
-      "bytes": 1417
-    },
-    {
-      "id": "mdslides",
-      "file": "./panels/mdslides.html",
-      "bytes": 1322
-    },
-    {
-      "id": "sitenav",
-      "file": "./panels/sitenav.html",
-      "bytes": 707
     }
   ]
 }

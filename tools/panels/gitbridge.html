@@ -1,0 +1,110 @@
+<section id="gitbridge" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>Git 可视化</h1>
+        <p>本机桥调用系统 <span class="mono">git</span>：选仓库、看分支交叉、用人话解释 merge，并显示将要执行的命令。<a href="#setup">安装指南</a></p>
+      </div>
+      <div class="panel-body">
+        <div class="adb-status" id="git-status">
+          <div class="adb-status-main">
+            <span class="adb-dot" id="git-dot" aria-hidden="true"></span>
+            <div>
+              <strong id="git-status-title">未连接 Git 桥</strong>
+              <p class="hint tight" id="git-status-text">下载完整包并启动后点「连接」。默认端口 17890。</p>
+            </div>
+          </div>
+          <div class="btn-row tool-actions adb-status-actions">
+            <button type="button" class="primary-btn" id="git-connect">连接本机桥</button>
+            <button type="button" class="secondary-btn" id="git-refresh" disabled>刷新仓库</button>
+            <span class="adb-dl-bundle" id="git-dl-bundle">
+              <button type="button" class="secondary-btn" id="git-dl-mac" data-git-bundle="mac">下载 macOS 包</button>
+              <button type="button" class="secondary-btn" id="git-dl-win" data-git-bundle="win">下载 Windows 包</button>
+              <button type="button" class="secondary-btn" id="git-dl-linux" data-git-bundle="linux">下载 Linux 包</button>
+            </span>
+          </div>
+        </div>
+
+        <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
+          <label for="git-base">桥地址</label>
+          <input id="git-base" class="mono" type="text" value="http://127.0.0.1:17890" autocomplete="off" spellcheck="false" />
+          <label for="git-token">Token</label>
+          <input id="git-token" class="mono" type="text" value="devtools-git" autocomplete="off" spellcheck="false" />
+        </div>
+        <p class="hint tight">独立桥端口 <span class="mono">17890</span>（与 ADB 17888 / FFmpeg 17889 分开）。Token 默认 <span class="mono">devtools-git</span>，也接受 <span class="mono">devtools-bridge</span>。</p>
+
+        <div id="git-workspace" hidden>
+          <div class="label-row" style="margin-top:1rem">
+            <h2 class="subhead">选择仓库</h2>
+            <span class="hint tight" id="git-fs-meta">点带「仓库」标记的文件夹，或粘贴路径</span>
+          </div>
+          <div class="adb-fs-shortcuts" id="git-roots" style="margin-bottom:0.45rem"></div>
+          <div class="adb-path-row">
+            <button type="button" class="ghost-btn" id="git-fs-up" title="上级目录">上级</button>
+            <input id="git-fs-path" class="mono" type="text" value="" spellcheck="false" autocomplete="off" />
+            <button type="button" class="secondary-btn" id="git-fs-go">打开目录</button>
+            <button type="button" class="primary-btn" id="git-open-repo">当作仓库打开</button>
+          </div>
+          <div class="ff-fs-list adb-fs-list" id="git-fs-list" role="list"></div>
+
+          <div id="git-repo-panel" hidden>
+            <div class="label-row" style="margin-top:1.1rem">
+              <h2 class="subhead">当前仓库</h2>
+              <span class="hint tight mono" id="git-repo-meta"></span>
+            </div>
+            <p class="hint" id="git-repo-summary"></p>
+
+            <div class="git-layout">
+              <div class="git-graph-pane">
+                <div class="label-row">
+                  <h2 class="subhead">提交图</h2>
+                  <label class="flag"><input type="checkbox" id="git-show-ascii" /> 对照终端 --graph</label>
+                </div>
+                <p class="hint tight">彩色竖线 = 分支车道；汇合点 = merge。点一行看人话解释。</p>
+                <div class="git-graph" id="git-graph" role="list"></div>
+                <pre class="mono adb-pre" id="git-ascii" hidden style="margin-top:0.55rem;max-height:14rem;overflow:auto"></pre>
+              </div>
+              <div class="git-side-pane">
+                <div class="label-row">
+                  <h2 class="subhead">人话解释</h2>
+                </div>
+                <div class="panel-card git-explain" id="git-explain">
+                  <p class="hint">先点左侧某个提交。</p>
+                </div>
+                <div class="label-row" style="margin-top:0.85rem">
+                  <h2 class="subhead">分支</h2>
+                </div>
+                <div class="git-branch-list" id="git-branches"></div>
+                <div class="label-row" style="margin-top:0.85rem">
+                  <h2 class="subhead">常用操作</h2>
+                </div>
+                <p class="hint tight">执行前会预览完整 <span class="mono">git …</span> 命令。</p>
+                <div class="btn-row tool-actions" style="flex-wrap:wrap" id="git-ops-row">
+                  <button type="button" class="secondary-btn" data-git-op="fetch">fetch</button>
+                  <button type="button" class="secondary-btn" data-git-op="pull">pull --ff-only</button>
+                  <button type="button" class="secondary-btn" data-git-op="status">status</button>
+                  <button type="button" class="secondary-btn" data-git-op="stash-push">stash</button>
+                  <button type="button" class="secondary-btn" data-git-op="stash-pop">stash pop</button>
+                  <button type="button" class="secondary-btn" data-git-op="log-graph">终端 graph</button>
+                </div>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center;gap:0.4rem">
+                  <label for="git-op-target">目标</label>
+                  <input id="git-op-target" class="mono" type="text" placeholder="分支名 / commit" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
+                  <button type="button" class="ghost-btn" data-git-op="checkout">checkout</button>
+                  <button type="button" class="ghost-btn" data-git-op="merge">merge</button>
+                  <button type="button" class="ghost-btn" data-git-op="rebase">rebase onto</button>
+                  <button type="button" class="ghost-btn" data-git-op="cherry-pick">cherry-pick</button>
+                </div>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
+                  <label for="git-new-branch">新分支</label>
+                  <input id="git-new-branch" class="mono" type="text" placeholder="feature/foo" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
+                  <button type="button" class="ghost-btn" data-git-op="branch-create">创建</button>
+                  <button type="button" class="ghost-btn" data-git-op="branch-create-co">创建并 checkout</button>
+                </div>
+                <pre class="mono adb-pre" id="git-cmd-preview" style="margin-top:0.55rem;max-height:6rem;overflow:auto" hidden></pre>
+                <pre class="mono adb-pre" id="git-op-out" style="margin-top:0.45rem;max-height:10rem;overflow:auto" hidden></pre>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="error" id="git-error" hidden></p>
+      </div>
+    </section>

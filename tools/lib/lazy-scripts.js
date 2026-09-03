@@ -57,6 +57,7 @@
     everything: "./everything.js",
     ffbridge: "./ffbridge.js",
     ytdlp: "./ytdlp.js",
+    gitbridge: "./gitbridge.js",
     lanshare: "./lanshare.js",
     setup: "./setup.js",
     imgkit: "./imgkit.js",
@@ -173,12 +174,14 @@
     "everything",
     "ffbridge",
     "ytdlp",
+    "gitbridge",
     "phlogo",
     "nokiasms",
   ]);
 
   const NO_PURE = new Set([
     "acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "everything", "ffbridge", "ytdlp",
+    "gitbridge",
     "setup", "about", "xorenc", "morse", "countdown",
     "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "piano", "minigames", "ambient",
   ]);

@@ -1,7 +1,7 @@
 <section id="setup" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>安装本机工具（小白指南）</h1>
-        <p>本站大部分功能在浏览器里就能用。只有电脑上的 <a href="#adb">ADB</a> / <a href="#ffbridge">FFmpeg 批量</a> / 镜像需要启动<strong>一座本机桥</strong>（同一端口）。下面按步骤来，尽量少术语。</p>
+        <p>本站大部分功能在浏览器里就能用。电脑上的 <a href="#adb">ADB</a> / <a href="#ffbridge">FFmpeg</a> / 镜像共用一座桥（17888）；<a href="#gitbridge">Git 可视化</a>用独立桥（17890）。下面按步骤来，尽量少术语。</p>
       </div>
       <div class="panel-body setup-body">
         <div class="setup-callout panel-card">
@@ -27,6 +27,10 @@
             <div class="setup-need-row" role="row">
               <span><a href="#ytdlp">yt-dlp 本机桥</a>（下载视频 / 播放列表）</span>
               <span><strong>Node.js</strong> + <strong>yt-dlp</strong>（合并建议 + FFmpeg）</span>
+            </div>
+            <div class="setup-need-row" role="row">
+              <span><a href="#gitbridge">Git 可视化</a>（本地仓库 / 分支图）</span>
+              <span><strong>Node.js</strong> + <strong>git</strong></span>
             </div>
             <div class="setup-need-row" role="row">
               <span>两个都要用</span>
@@ -230,13 +234,14 @@ adb devices</pre>
         <!-- ===== Bridge ===== -->
         <section class="setup-block panel-card" id="setup-bridge">
           <h2 class="subhead">4. 下载并启动「本机桥」</h2>
-          <p class="hint">桥是我们网站提供的小程序：网页通过它调用你电脑上的 adb / ffmpeg / yt-dlp。文件不会上传到互联网。</p>
+          <p class="hint">桥是我们网站提供的小程序：网页通过它调用你电脑上的 adb / ffmpeg / yt-dlp / git。文件不会上传到互联网。</p>
           <ol class="setup-steps">
             <li>打开对应页面：
               <span class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.35rem">
                 <a class="secondary-btn" href="#adb">打开 ADB 工具</a>
                 <a class="secondary-btn" href="#ffbridge">打开 FFmpeg 本机桥</a>
                 <a class="secondary-btn" href="#ytdlp">打开 yt-dlp 本机桥</a>
+                <a class="secondary-btn" href="#gitbridge">打开 Git 可视化</a>
               </span>
             </li>
             <li>点击「下载 xxx 完整包」（含 <span class="mono">server.js</span> + 启动脚本；yt-dlp 还需 <span class="mono">ytdlp-core.js</span>）。请解压后<strong>放在同一文件夹</strong>。</li>
@@ -253,6 +258,7 @@ adb devices</pre>
                 <li>统一本机桥：<span class="mono">http://127.0.0.1:17888</span>，Token <span class="mono">devtools-bridge</span>（ADB + 镜像 + FFmpeg + yt-dlp）</li>
                 <li>FFmpeg 接口前缀：<span class="mono">/ff</span>（例如 <span class="mono">/ff/ops</span>）</li>
                 <li>yt-dlp 接口前缀：<span class="mono">/ytdlp</span>（例如 <span class="mono">/ytdlp/health</span>）</li>
+                <li>Git 独立桥：<span class="mono">http://127.0.0.1:17890</span>，Token <span class="mono">devtools-git</span></li>
               </ul>
             </li>
           </ol>
@@ -276,12 +282,15 @@ adb devices</pre>
             <dd>不必。用媒体里的「音频处理 / 视频修剪」等浏览器内工具就够（也是保底方案）；批量下载或整列表再用 <a href="#ytdlp">yt-dlp 本机桥</a>。</dd>
             <dt>下载视频只要 yt-dlp，要不要装 ADB？</dt>
             <dd>不用。装 Node.js + yt-dlp（合并建议 + FFmpeg），用 <a href="#ytdlp">yt-dlp 本机桥</a> 即可；与 ADB 共用同一座桥。</dd>
+            <dt>只想看本地 Git 分支图？</dt>
+            <dd>装 Node.js + git，打开 <a href="#gitbridge">Git 可视化</a>下载 17890 桥即可；不必装 ADB/FFmpeg。</dd>
           </dl>
           <p class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.75rem">
             <a class="ghost-btn" href="#about">返回关于</a>
             <a class="ghost-btn" href="#adb">ADB 工具</a>
             <a class="ghost-btn" href="#ffbridge">FFmpeg 本机桥</a>
             <a class="ghost-btn" href="#ytdlp">yt-dlp 本机桥</a>
+            <a class="ghost-btn" href="#gitbridge">Git 可视化</a>
           </p>
         </section>
       </div>
