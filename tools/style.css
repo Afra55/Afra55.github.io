@@ -309,19 +309,8 @@ body.theme-reduce-glow .bg-grid {
 
 .devtools-giscus-wrap {
   margin: 1.75rem 0 2.5rem;
-  padding: 1.1rem 1.15rem 1.25rem;
+  padding: 0.85rem 0 1.25rem;
   border-top: 1px solid var(--line);
-}
-
-.devtools-giscus-title {
-  margin: 0 0 0.35rem;
-  font-size: 1.05rem;
-  font-weight: 650;
-  color: var(--ink);
-}
-
-.devtools-giscus-lead {
-  margin: 0 0 0.85rem;
 }
 
 .devtools-giscus {
