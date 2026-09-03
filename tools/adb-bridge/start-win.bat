@@ -167,6 +167,28 @@ if not exist "%MIRROR_TARGET%" (
 )
 echo [OK] scrcpy-mirror.js ready>> "%LOG_FILE%"
 
+set "CTRL_TARGET=%SCRIPT_DIR%scrcpy-ctrl.js"
+if not exist "%CTRL_TARGET%" (
+  echo [..] Downloading scrcpy-ctrl.js ...
+  echo downloading scrcpy-ctrl.js>> "%LOG_FILE%"
+  if exist "%CTRL_TARGET%.tmp" del /f /q "%CTRL_TARGET%.tmp" >nul 2>&1
+  where curl >nul 2>&1
+  if not errorlevel 1 (
+    curl.exe -fsSL --connect-timeout 15 --max-time 120 "https://afra55.github.io/tools/adb-bridge/scrcpy-ctrl.js" -o "%CTRL_TARGET%.tmp" >> "%LOG_FILE%" 2>&1
+    if errorlevel 1 curl.exe -fsSL --connect-timeout 15 --max-time 120 "https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/tools/adb-bridge/scrcpy-ctrl.js" -o "%CTRL_TARGET%.tmp" >> "%LOG_FILE%" 2>&1
+  ) else (
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-WebRequest -UseBasicParsing 'https://afra55.github.io/tools/adb-bridge/scrcpy-ctrl.js' -OutFile '%CTRL_TARGET%.tmp'; exit 0 } catch { try { Invoke-WebRequest -UseBasicParsing 'https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/tools/adb-bridge/scrcpy-ctrl.js' -OutFile '%CTRL_TARGET%.tmp'; exit 0 } catch { exit 1 } }" >> "%LOG_FILE%" 2>&1
+  )
+  if exist "%CTRL_TARGET%.tmp" move /Y "%CTRL_TARGET%.tmp" "%CTRL_TARGET%" >nul
+)
+if not exist "%CTRL_TARGET%" (
+  echo [ERROR] Missing scrcpy-ctrl.js next to server.js
+  echo Re-download the full ZIP and keep scrcpy-ctrl.js in the same folder.
+  echo [ERROR] missing scrcpy-ctrl.js>> "%LOG_FILE%"
+  exit /b 1
+)
+echo [OK] scrcpy-ctrl.js ready>> "%LOG_FILE%"
+
 rem Register custom URL protocol so the webpage can request start (devtools-bridge://start)
 set "ADB_BRIDGE_DIR=%SCRIPT_DIR%"
 reg add "HKCU\Software\Classes\devtools-bridge" /ve /d "URL:DevTools Bridge Protocol" /f >> "%LOG_FILE%" 2>&1

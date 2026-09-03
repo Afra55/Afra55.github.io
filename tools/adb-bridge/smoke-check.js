@@ -68,8 +68,8 @@ async function main() {
     throw new Error("resolve-port.js should support quiet mode for protocol launches");
   }
   const mirrorJs = fs.readFileSync(path.join(__dirname, "scrcpy-mirror.js"), "utf8");
-  if (!/(max_fps=30|maxFps:\s*30)/.test(mirrorJs) || !/(video_bit_rate=2500000|videoBitRate:\s*2500000)/.test(mirrorJs)) {
-    throw new Error("scrcpy-mirror.js should use browser-friendly fps/bitrate");
+  if (!/(max_fps|maxFps|QUALITY_PRESETS)/.test(mirrorJs) || !/(video_bit_rate|videoBitRate|2500000)/.test(mirrorJs + require("fs").readFileSync(require("path").join(__dirname, "scrcpy-ctrl.js"), "utf8"))) {
+    throw new Error("scrcpy-mirror.js should use browser-friendly fps/bitrate presets");
   }
   if (!/lastKeyFrame/.test(mirrorJs)) {
     throw new Error("scrcpy-mirror.js should cache/replay lastKeyFrame for late WS clients");
@@ -77,13 +77,25 @@ async function main() {
   if (!/pendingConfig|packet_merger|wrapMirrorPacket/.test(mirrorJs)) {
     throw new Error("scrcpy-mirror.js should merge codec config into following media packets");
   }
-  if (!/control=true|CTRL_RESET_VIDEO|injectTouch/.test(mirrorJs)) {
-    throw new Error("scrcpy-mirror.js should enable scrcpy control channel (touch + RESET_VIDEO)");
+  if (!/control=true|CTRL_RESET_VIDEO|injectTouch|encodeKeycode|TYPE_SET_CLIPBOARD/.test(mirrorJs + require("fs").readFileSync(require("path").join(__dirname, "scrcpy-ctrl.js"), "utf8"))) {
+    throw new Error("scrcpy-mirror should expose full control surface (touch/key/clipboard/…)");
+  }
+  if (!/scrcpy-ctrl/.test(mirrorJs)) {
+    throw new Error("scrcpy-mirror.js should require scrcpy-ctrl.js");
   }
   if (!/连接 scrcpy 控制通道|控制通道连接失败/.test(mirrorJs)) {
     throw new Error("scrcpy-mirror.js should connect control socket after video dummy byte");
   }
-  if (/video_codec_options=i-frame-interval=1/.test(mirrorJs) && !/不要默认传 video_codec_options|启用 control/.test(mirrorJs)) {
+  if (!/QUALITY_PRESETS|resolveQuality|quality=/.test(mirrorJs)) {
+    throw new Error("scrcpy-mirror.js should support quality presets");
+  }
+  if (!/audio=true|pumpAudio|AUDIO_FLAG/.test(mirrorJs)) {
+    throw new Error("scrcpy-mirror.js should support optional audio forwarding");
+  }
+  if (!/show_touches=true/.test(mirrorJs)) {
+    throw new Error("scrcpy-mirror.js should support show_touches");
+  }
+  if (/video_codec_options=i-frame-interval=1/.test(mirrorJs) && !/不要默认传 video_codec_options|启用 control|控制通道/.test(mirrorJs)) {
     throw new Error("scrcpy-mirror.js must not force i-frame-interval=1 (breaks some OEM encoders)");
   }
   if (!/i-frame-interval=5/.test(mirrorJs)) {

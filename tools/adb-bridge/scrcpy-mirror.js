@@ -1,16 +1,18 @@
 "use strict";
 
 /**
- * Scrcpy-server mirror helper (video only).
+ * Scrcpy-server mirror helper (video + control [+ optional audio]).
  * Zero npm deps. Pins Genymobile scrcpy-server v3.1.
  *
- * Protocol (tunnel_forward, video + control, audio=false):
+ * Protocol (tunnel_forward):
  *  1) video TCP: dummy byte 0x00
- *  2) control TCP: second connect to same adb forward (no dummy)
- *  3) device name 64 bytes on video
- *  4) video header: codec_id u32 + width u32 + height u32
- *  5) frames: pts/flags u64 + size u32 + payload
- *  Control: inject touch / RESET_VIDEO (type 17) like official client
+ *  2) audio TCP (optional): second connect
+ *  3) control TCP: next connect (no dummy)
+ *  4) device name 64 bytes on video
+ *  5) video header: codec_id + width + height
+ *  6) audio codec id u32 (if audio)
+ *  7) frames: pts/flags u64 + size u32 + payload
+ * WS binary: video flags 0..3; audio = 0x80|flags
  */
 
 const fs = require("fs");
@@ -20,6 +22,7 @@ const http = require("http");
 const https = require("https");
 const crypto = require("crypto");
 const { spawn } = require("child_process");
+const ctrl = require("./scrcpy-ctrl");
 
 const SCRCPY_VERSION = "3.1";
 const SCRCPY_SERVER_NAME = `scrcpy-server-v${SCRCPY_VERSION}`;
@@ -29,19 +32,10 @@ const PACKET_FLAG_CONFIG = 1n << 63n;
 const PACKET_FLAG_KEY_FRAME = 1n << 62n;
 const DEVICE_NAME_LEN = 64;
 const REMOTE_JAR = "/data/local/tmp/devtools-scrcpy-server.jar";
-/** scrcpy control: INJECT_TOUCH_EVENT */
-const CTRL_INJECT_TOUCH = 2;
-/** scrcpy control: RESET_VIDEO — 强制新 IDR，晚连/黑屏时用 */
-const CTRL_RESET_VIDEO = 17;
-const POINTER_ID_FINGER = 0xfffffffffffffffen;
-/** Android MotionEvent */
-const AMOTION_DOWN = 0;
-const AMOTION_UP = 1;
-const AMOTION_MOVE = 2;
-/** 单帧 payload 上限（与 pumpFrames 一致） */
 const MAX_FRAME_BYTES = 16 * 1024 * 1024;
-/** readExact 绝对缓冲上限，防止协议错位时无限累积 */
 const MAX_READ_BUFFER = MAX_FRAME_BYTES + 256 * 1024;
+const AUDIO_FLAG = 0x80;
+const CODEC_OPUS = 0x6f707573;
 
 const sessions = new Map(); // serial -> Session
 
@@ -583,13 +577,15 @@ function attachWsReader(socket, { onMessage, onClose }) {
 }
 
 class MirrorSession {
-  constructor(serial, deps) {
+  constructor(serial, deps, startOpts = {}) {
     this.serial = serial;
     this.deps = deps;
+    this.startOpts = startOpts || {};
     this.port = 0;
     this.scidHex = "";
     this.proc = null;
     this.videoSock = null;
+    this.audioSock = null;
     this.controlSock = null;
     this.clients = new Set();
     this.meta = null;
@@ -600,7 +596,12 @@ class MirrorSession {
     this.errTail = "";
     this.procExitCode = null;
     this.reader = null;
+    this.audioReader = null;
     this.controlEnabled = true;
+    this.audioEnabled = false;
+    this.clipboardSeq = 1n;
+    this.controlBuf = Buffer.alloc(0);
+    this.quality = ctrl.resolveQuality(this.startOpts.quality);
   }
 
   mirrorError(base) {
@@ -608,13 +609,14 @@ class MirrorSession {
   }
 
   buildServerShellCmd(appProcessRunner, opts = {}) {
-    const videoBitRate = opts.videoBitRate ?? 2500000;
-    const maxSize = opts.maxSize ?? 1280;
-    const maxFps = opts.maxFps ?? 30;
-    // 启用 control：触控走官方注入通道（低延迟），并可 RESET_VIDEO 强制关键帧。
-    // audio 仍关：网页侧暂不播设备音频，少一次 socket accept。
+    const q = opts.quality || this.quality;
+    const videoBitRate = opts.videoBitRate ?? q.videoBitRate ?? 2500000;
+    const maxSize = opts.maxSize ?? q.maxSize ?? 1280;
+    const maxFps = opts.maxFps ?? q.maxFps ?? 30;
     const useControl = opts.control !== false;
+    const useAudio = opts.audio === true;
     this.controlEnabled = useControl;
+    this.audioEnabled = useAudio;
     const parts = [
       `CLASSPATH=${REMOTE_JAR}`,
       appProcessRunner,
@@ -624,7 +626,7 @@ class MirrorSession {
       `scid=${this.scidHex}`,
       "log_level=info",
       "video=true",
-      "audio=false",
+      `audio=${useAudio ? "true" : "false"}`,
       `control=${useControl ? "true" : "false"}`,
       "tunnel_forward=true",
       "send_dummy_byte=true",
@@ -639,6 +641,12 @@ class MirrorSession {
       `max_size=${maxSize}`,
       `max_fps=${maxFps}`,
     ];
+    if (useAudio) {
+      parts.push("audio_codec=opus", "audio_bit_rate=128000");
+    }
+    if (opts.showTouches) {
+      parts.push("show_touches=true");
+    }
     if (opts.videoCodecOptions) {
       parts.push(`video_codec_options=${opts.videoCodecOptions}`);
     }
@@ -736,11 +744,23 @@ class MirrorSession {
       }
       this.reader = null;
       try {
+        this.audioReader?.destroy();
+      } catch {
+        /* ignore */
+      }
+      this.audioReader = null;
+      try {
         this.videoSock?.destroy();
       } catch {
         /* ignore */
       }
       this.videoSock = null;
+      try {
+        this.audioSock?.destroy();
+      } catch {
+        /* ignore */
+      }
+      this.audioSock = null;
       try {
         this.controlSock?.destroy();
       } catch {
@@ -758,7 +778,6 @@ class MirrorSession {
           );
         }
         if (/\[server\]\s*INFO:\s*Device:/i.test(this.errTail) || /INFO:\s*Device:/i.test(this.errTail)) {
-          // Device 打印后立刻 open()/accept；给 LocalServerSocket 极短就绪窗口，避免抢连
           await delay(120);
           return;
         }
@@ -776,13 +795,24 @@ class MirrorSession {
       });
       this.videoSock = sock;
       this.reader = reader;
-      // tunnel_forward + control=true：服务端 accept(video) 后阻塞等 control；
-      // 必须立刻二次 connect，否则永远读不到 device meta。
+      // accept 顺序：video → [audio] → [control]
+      if (this.audioEnabled) {
+        onProgress?.("连接音频通道…");
+        try {
+          this.audioSock = await connectLocalAny(this.port, 5000);
+          this.audioSock.setNoDelay(true);
+          this.audioSock.pause();
+          this.audioReader = new SocketReader(this.audioSock);
+        } catch (err) {
+          throw new Error(`音频通道连接失败：${err.message || err}`);
+        }
+      }
       if (this.controlEnabled) {
         onProgress?.("连接 scrcpy 控制通道…");
         try {
           this.controlSock = await connectLocalAny(this.port, 5000);
           this.controlSock.setNoDelay(true);
+          this.attachControlPump();
         } catch (err) {
           throw new Error(`控制通道连接失败：${err.message || err}`);
         }
@@ -790,23 +820,63 @@ class MirrorSession {
       onProgress?.("已连接，读取分辨率…");
       this.meta = await readMirrorHandshake(reader, this.serial);
       this.meta.control = Boolean(this.controlSock && !this.controlSock.destroyed);
+      this.meta.quality = this.quality.name;
+      this.meta.audio = false;
+      if (this.audioEnabled && this.audioReader) {
+        const acodec = await this.audioReader.read(4, { timeoutMs: 15000 });
+        const codecId = acodec.readUInt32BE(0);
+        if (codecId === 0) {
+          // 设备显式禁用音频
+          this.audioEnabled = false;
+        } else if (codecId === 1) {
+          throw new Error("设备音频配置失败");
+        } else {
+          this.meta.audio = true;
+          this.meta.audioCodec = codecId === CODEC_OPUS ? "opus" : `id:${codecId.toString(16)}`;
+          this.meta.audioCodecId = codecId;
+        }
+      }
       this.pumping = true;
       this.pumpFrames().catch((err) => this.stop(this.mirrorError(err.message || String(err))));
+      if (this.audioEnabled && this.audioReader) {
+        this.pumpAudio().catch((err) => {
+          this.broadcastJson({ type: "status", message: `音频中断：${err.message || err}` });
+        });
+      }
     };
 
     const isRetryableHandshake = (err) => {
       const m = err?.message || String(err || "");
       return (
-        /socket closed|dummy byte|握手|ECONNREFUSED|MediaCodec|encoder|IllegalArgument|无法启动屏幕编码|控制通道/i.test(m) ||
+        /socket closed|dummy byte|握手|ECONNREFUSED|MediaCodec|encoder|IllegalArgument|无法启动屏幕编码|控制通道|音频通道/i.test(m) ||
         this.procExitCode != null
       );
     };
 
-    /** 参数阶梯：先正常，再降分辨率；64 位失败再换 app_process；最后最小参数。
-     * 不要默认 i-frame-interval=1（部分机型拒编）；末次用较温和的 =5 缩短黑屏等待。 */
+    const wantAudio = this.startOpts.audio === true;
+    const wantTouches = this.startOpts.showTouches === true;
+    const q = this.quality;
+
+    /** 参数阶梯：先按画质档位，再降级；控制/音频失败可关。 */
     const attempts = [
-      { label: null, runner: preferredRunner, maxSize: 1280, videoBitRate: 2500000, maxFps: 30 },
-      { label: "编码器异常，降低分辨率重试…", runner: preferredRunner, maxSize: 800, videoBitRate: 1500000, maxFps: 24 },
+      {
+        label: null,
+        runner: preferredRunner,
+        maxSize: q.maxSize,
+        videoBitRate: q.videoBitRate,
+        maxFps: q.maxFps,
+        audio: wantAudio,
+        showTouches: wantTouches,
+      },
+      {
+        label: "编码器异常，降低分辨率重试…",
+        runner: preferredRunner,
+        maxSize: Math.min(800, q.maxSize),
+        videoBitRate: 1500000,
+        maxFps: 24,
+        audio: false,
+        showTouches: wantTouches,
+      },
     ];
     if (preferredRunner === "app_process64") {
       attempts.push({
@@ -815,6 +885,8 @@ class MirrorSession {
         maxSize: 800,
         videoBitRate: 1500000,
         maxFps: 24,
+        audio: false,
+        showTouches: false,
       });
     }
     attempts.push({
@@ -824,6 +896,8 @@ class MirrorSession {
       videoBitRate: 1000000,
       maxFps: 20,
       videoCodecOptions: "i-frame-interval=5",
+      audio: false,
+      showTouches: false,
     });
     attempts.push({
       label: "无控制通道降级（仅视频）…",
@@ -832,6 +906,8 @@ class MirrorSession {
       videoBitRate: 1500000,
       maxFps: 24,
       control: false,
+      audio: false,
+      showTouches: false,
     });
 
     let lastErr = null;
@@ -855,6 +931,8 @@ class MirrorSession {
           maxFps: attempt.maxFps,
           videoCodecOptions: attempt.videoCodecOptions,
           control: attempt.control,
+          audio: attempt.audio,
+          showTouches: attempt.showTouches,
         });
         onProgress?.(i === 0 ? "正在启动设备端 scrcpy-server…" : `正在启动 scrcpy-server（${attempt.maxSize}p）…`);
         this.attachServerProc(this.spawnServerProcess(adb, shellCmd));
@@ -864,11 +942,9 @@ class MirrorSession {
         cleanupHandshakeSockets();
         lastErr = err;
         const refused = /ECONNREFUSED/i.test(err.message || String(err || ""));
-        // 同一次参数下，forward 被掐时先重建再试一次（不换 profile）
         if (refused && !this.closed && i === 0) {
           try {
             onProgress?.("转发已失效，正在重建 adb forward…");
-            // 设备端 scrcpy 已用当前 scid 监听，只能重建同 scid 的 forward
             await freshForward({ newScid: false });
             await handshakeOnce();
             return;
@@ -911,43 +987,118 @@ class MirrorSession {
     }
   }
 
-  /** 强制编码器吐新 IDR（官方 TYPE_RESET_VIDEO） */
   resetVideo() {
-    return this.writeControl(Buffer.from([CTRL_RESET_VIDEO]));
+    return this.writeControl(ctrl.encodeEmpty(ctrl.TYPE_RESET_VIDEO));
   }
 
-  /**
-   * 注入触控。坐标相对视频分辨率（与官方 client 一致）。
-   * action: 0=DOWN 1=UP 2=MOVE，或 phase 字符串。
-   */
+  videoSize() {
+    return {
+      w: Math.max(1, Math.min(0xffff, this.meta?.width || 1)),
+      h: Math.max(1, Math.min(0xffff, this.meta?.height || 1)),
+    };
+  }
+
   injectTouch(msg = {}) {
     if (!this.meta) return false;
-    let action = msg.action;
-    if (typeof action === "string") {
-      const p = action.toUpperCase();
-      action = p === "DOWN" ? AMOTION_DOWN : p === "UP" ? AMOTION_UP : AMOTION_MOVE;
-    } else if (msg.phase) {
-      const p = String(msg.phase).toUpperCase();
-      action = p === "DOWN" ? AMOTION_DOWN : p === "UP" ? AMOTION_UP : AMOTION_MOVE;
+    const action = ctrl.resolveMotionAction(msg);
+    if (action == null) return false;
+    const { w, h } = this.videoSize();
+    const x = Math.max(0, Math.min(w - 1, Math.round(Number(msg.x) || 0)));
+    const y = Math.max(0, Math.min(h - 1, Math.round(Number(msg.y) || 0)));
+    let pointerId = ctrl.POINTER_ID_FINGER;
+    if (msg.pointerId === "virtual" || msg.pointer === "virtual" || msg.finger === 2) {
+      pointerId = ctrl.POINTER_ID_VIRTUAL;
+    } else if (msg.pointerId != null && typeof msg.pointerId !== "string") {
+      try {
+        pointerId = BigInt(msg.pointerId);
+      } catch {
+        /* keep finger */
+      }
     }
-    if (![AMOTION_DOWN, AMOTION_UP, AMOTION_MOVE].includes(action)) return false;
-    const x = Math.max(0, Math.round(Number(msg.x) || 0));
-    const y = Math.max(0, Math.round(Number(msg.y) || 0));
-    const w = Math.max(1, Math.min(0xffff, this.meta.width || 1));
-    const h = Math.max(1, Math.min(0xffff, this.meta.height || 1));
-    const pressure = action === AMOTION_UP ? 0 : 1;
-    const buf = Buffer.alloc(32);
-    buf[0] = CTRL_INJECT_TOUCH;
-    buf[1] = action;
-    buf.writeBigUInt64BE(POINTER_ID_FINGER, 2);
-    buf.writeUInt32BE(Math.min(x, w - 1), 10);
-    buf.writeUInt32BE(Math.min(y, h - 1), 14);
-    buf.writeUInt16BE(w, 18);
-    buf.writeUInt16BE(h, 20);
-    buf.writeUInt16BE(Math.round(pressure * 0xffff) & 0xffff, 22);
-    buf.writeUInt32BE(0, 24); // action_button
-    buf.writeUInt32BE(0, 28); // buttons
-    return this.writeControl(buf);
+    return this.writeControl(
+      ctrl.encodeTouch({
+        action,
+        x,
+        y,
+        width: w,
+        height: h,
+        pressure: msg.pressure,
+        pointerId,
+      })
+    );
+  }
+
+  injectScroll(msg = {}) {
+    if (!this.meta) return false;
+    const { w, h } = this.videoSize();
+    const x = Math.max(0, Math.min(w - 1, Math.round(Number(msg.x) || w / 2)));
+    const y = Math.max(0, Math.min(h - 1, Math.round(Number(msg.y) || h / 2)));
+    return this.writeControl(
+      ctrl.encodeScroll({
+        x,
+        y,
+        width: w,
+        height: h,
+        hScroll: msg.hScroll ?? msg.h ?? 0,
+        vScroll: msg.vScroll ?? msg.v ?? 0,
+      })
+    );
+  }
+
+  injectKey(msg = {}) {
+    const keycode = ctrl.resolveKeycode(msg.keycode ?? msg.key);
+    if (keycode == null) return false;
+    const metaState = Number(msg.metaState) || 0;
+    const repeat = Number(msg.repeat) || 0;
+    if (msg.action === "down" || msg.action === ctrl.AKEY_DOWN) {
+      return this.writeControl(ctrl.encodeKeycode({ action: ctrl.AKEY_DOWN, keycode, repeat, metaState }));
+    }
+    if (msg.action === "up" || msg.action === ctrl.AKEY_UP) {
+      return this.writeControl(ctrl.encodeKeycode({ action: ctrl.AKEY_UP, keycode, repeat, metaState }));
+    }
+    // 完整按键：down + up
+    const ok1 = this.writeControl(ctrl.encodeKeycode({ action: ctrl.AKEY_DOWN, keycode, repeat, metaState }));
+    const ok2 = this.writeControl(ctrl.encodeKeycode({ action: ctrl.AKEY_UP, keycode, repeat: 0, metaState }));
+    return ok1 && ok2;
+  }
+
+  injectText(text) {
+    return this.writeControl(ctrl.encodeText(text));
+  }
+
+  setClipboard(text, paste = false) {
+    const seq = this.clipboardSeq;
+    this.clipboardSeq += 1n;
+    return this.writeControl(ctrl.encodeSetClipboard(text, { sequence: seq, paste: Boolean(paste) }));
+  }
+
+  getClipboard() {
+    return this.writeControl(ctrl.encodeGetClipboard(0));
+  }
+
+  setDisplayPower(on) {
+    return this.writeControl(ctrl.encodeDisplayPower(Boolean(on)));
+  }
+
+  expandNotification() {
+    return this.writeControl(ctrl.encodeEmpty(ctrl.TYPE_EXPAND_NOTIFICATION));
+  }
+
+  collapsePanels() {
+    return this.writeControl(ctrl.encodeEmpty(ctrl.TYPE_COLLAPSE_PANELS));
+  }
+
+  rotateDevice() {
+    return this.writeControl(ctrl.encodeEmpty(ctrl.TYPE_ROTATE_DEVICE));
+  }
+
+  /** 双指捏合：主指 + 虚拟指（官方 POINTER_ID_VIRTUAL_FINGER） */
+  injectPinch(msg = {}) {
+    const phase = String(msg.phase || msg.action || "MOVE").toUpperCase();
+    const action = phase === "DOWN" ? ctrl.AMOTION_DOWN : phase === "UP" ? ctrl.AMOTION_UP : ctrl.AMOTION_MOVE;
+    const ok1 = this.injectTouch({ action, x: msg.x1, y: msg.y1, pointerId: ctrl.POINTER_ID_FINGER });
+    const ok2 = this.injectTouch({ action, x: msg.x2, y: msg.y2, pointerId: ctrl.POINTER_ID_VIRTUAL });
+    return ok1 && ok2;
   }
 
   handleClientMessage(raw) {
@@ -958,23 +1109,91 @@ class MirrorSession {
       return;
     }
     if (!msg || typeof msg !== "object") return;
-    if (msg.type === "touch") {
-      this.injectTouch(msg);
-      return;
+    switch (msg.type) {
+      case "touch":
+        this.injectTouch(msg);
+        break;
+      case "scroll":
+        this.injectScroll(msg);
+        break;
+      case "key":
+      case "keycode":
+        this.injectKey(msg);
+        break;
+      case "text":
+        this.injectText(msg.text || "");
+        break;
+      case "clipboard":
+      case "set_clipboard":
+        this.setClipboard(msg.text || "", msg.paste);
+        break;
+      case "get_clipboard":
+        this.getClipboard();
+        break;
+      case "display_power":
+      case "power":
+        this.setDisplayPower(msg.on !== false && msg.on !== 0);
+        break;
+      case "expand_notification":
+        this.expandNotification();
+        break;
+      case "collapse_panels":
+        this.collapsePanels();
+        break;
+      case "rotate":
+        this.rotateDevice();
+        break;
+      case "pinch":
+        this.injectPinch(msg);
+        break;
+      case "reset_video":
+      case "resetVideo":
+        this.resetVideo();
+        break;
+      default:
+        break;
     }
-    if (msg.type === "reset_video" || msg.type === "resetVideo") {
-      this.resetVideo();
-    }
+  }
+
+  attachControlPump() {
+    if (!this.controlSock) return;
+    this.controlSock.on("data", (chunk) => {
+      this.controlBuf = Buffer.concat([this.controlBuf, chunk]);
+      for (;;) {
+        const { consumed, msg } = ctrl.parseDeviceMessage(this.controlBuf);
+        if (consumed < 0) {
+          this.controlBuf = Buffer.alloc(0);
+          break;
+        }
+        if (!consumed) break;
+        this.controlBuf = this.controlBuf.subarray(consumed);
+        if (msg) this.broadcastJson(msg);
+      }
+    });
+    this.controlSock.on("error", () => {});
   }
 
   addClient(socket) {
     this.clients.add(socket);
     if (this.meta) {
-      wsSendJson(socket, { type: "hello", ...this.meta, control: Boolean(this.controlSock && !this.controlSock.destroyed) });
-      // 首个 config/key 常在客户端连上前就泵出；重放避免干等下一个 IDR（默认 I 帧间隔约 10s）
+      wsSendJson(socket, {
+        type: "hello",
+        ...this.meta,
+        control: Boolean(this.controlSock && !this.controlSock.destroyed),
+        features: {
+          touch: true,
+          scroll: true,
+          key: true,
+          text: true,
+          clipboard: true,
+          displayPower: true,
+          pinch: true,
+          audio: Boolean(this.meta.audio),
+          quality: this.quality.name,
+        },
+      });
       if (this.lastConfig) wsSendBinary(socket, Buffer.from(this.lastConfig));
       if (this.lastKeyFrame) {
-        // 与官方 demuxer 一致：关键帧前拼上 SPS/PPS，避免 WebCodecs 只拿到裸 IDR
         let keyPkt = this.lastKeyFrame;
         if (this.lastConfig && this.lastConfig.length > 5) {
           const cfg = this.lastConfig.subarray(5);
@@ -986,7 +1205,6 @@ class MirrorSession {
         }
         wsSendBinary(socket, Buffer.from(keyPkt));
       }
-      // 再要一帧新 IDR，覆盖长 GOP / 解码器状态漂移
       this.resetVideo();
     }
   }
@@ -997,7 +1215,6 @@ class MirrorSession {
   }
 
   async pumpFrames() {
-    /** @type {Buffer|null} 待并入下一媒体包的 codec config（对齐官方 packet_merger） */
     let pendingConfig = null;
     while (this.pumping && this.reader && this.videoSock && !this.videoSock.destroyed) {
       const hdr = await this.reader.read(12, { timeoutMs: 120_000 });
@@ -1013,7 +1230,6 @@ class MirrorSession {
         pendingConfig = Buffer.from(payload);
         const out = this.wrapMirrorPacket(1, 0, pendingConfig);
         this.lastConfig = out;
-        // 仍单独发给前端，便于 VideoDecoder.configure；媒体包里再合并一份供解码
         if (this.clients.size) this.broadcastBinary(out);
         continue;
       }
@@ -1027,6 +1243,32 @@ class MirrorSession {
       if (isKey) flags |= 2;
       const out = this.wrapMirrorPacket(flags, pts, media);
       if (isKey) this.lastKeyFrame = out;
+      if (this.clients.size) this.broadcastBinary(out);
+    }
+  }
+
+  async pumpAudio() {
+    let pendingConfig = null;
+    while (this.pumping && this.audioReader && this.audioSock && !this.audioSock.destroyed) {
+      const hdr = await this.audioReader.read(12, { timeoutMs: 120_000 });
+      const ptsFlags = hdr.readBigUInt64BE(0);
+      const size = hdr.readUInt32BE(8);
+      if (size <= 0 || size > MAX_FRAME_BYTES) throw new Error(`异常音频帧 ${size}`);
+      const payload = await this.audioReader.read(size, { slack: 0, maxTotal: size, timeoutMs: 120_000 });
+      const isConfig = (ptsFlags & PACKET_FLAG_CONFIG) !== 0n;
+      const pts = Number(ptsFlags & ~(PACKET_FLAG_CONFIG | PACKET_FLAG_KEY_FRAME));
+      if (isConfig) {
+        pendingConfig = Buffer.from(payload);
+        const out = this.wrapMirrorPacket(AUDIO_FLAG | 1, 0, pendingConfig);
+        if (this.clients.size) this.broadcastBinary(out);
+        continue;
+      }
+      let media = payload;
+      if (pendingConfig && pendingConfig.length) {
+        // opus config 单独给 decoder；媒体帧不再强制合并
+        pendingConfig = null;
+      }
+      const out = this.wrapMirrorPacket(AUDIO_FLAG, pts, media);
       if (this.clients.size) this.broadcastBinary(out);
     }
   }
@@ -1051,11 +1293,23 @@ class MirrorSession {
     }
     this.reader = null;
     try {
+      this.audioReader?.destroy();
+    } catch {
+      /* ignore */
+    }
+    this.audioReader = null;
+    try {
       this.videoSock?.destroy();
     } catch {
       /* ignore */
     }
     this.videoSock = null;
+    try {
+      this.audioSock?.destroy();
+    } catch {
+      /* ignore */
+    }
+    this.audioSock = null;
     try {
       this.controlSock?.destroy();
     } catch {
@@ -1075,12 +1329,12 @@ class MirrorSession {
   }
 }
 
-async function getOrStartSession(serial, deps, onProgress) {
+async function getOrStartSession(serial, deps, onProgress, startOpts = {}) {
   const existing = sessions.get(serial);
   if (existing && !existing.closed) {
     existing.stop("restart");
   }
-  const session = new MirrorSession(serial, deps);
+  const session = new MirrorSession(serial, deps, startOpts);
   sessions.set(serial, session);
   try {
     await session.start(onProgress);
@@ -1205,15 +1459,27 @@ function handleUpgrade(req, socket, head, deps) {
     },
   });
 
-  getOrStartSession(serial, deps, (message) => {
-    if (!closed && !socket.destroyed) {
-      try {
-        wsSendJson(socket, { type: "status", message });
-      } catch {
-        /* ignore */
+  const startOpts = {
+    quality: url.searchParams.get("quality") || "balanced",
+    audio: url.searchParams.get("audio") === "1" || url.searchParams.get("audio") === "true",
+    showTouches:
+      url.searchParams.get("show_touches") === "1" || url.searchParams.get("show_touches") === "true",
+  };
+
+  getOrStartSession(
+    serial,
+    deps,
+    (message) => {
+      if (!closed && !socket.destroyed) {
+        try {
+          wsSendJson(socket, { type: "status", message });
+        } catch {
+          /* ignore */
+        }
       }
-    }
-  })
+    },
+    startOpts
+  )
     .then((s) => {
       session = s;
       if (closed || socket.destroyed) {
@@ -1238,4 +1504,5 @@ module.exports = {
   jarStatus,
   deviceJarStatus,
   sessions,
+  QUALITY_PRESETS: ctrl.QUALITY_PRESETS,
 };

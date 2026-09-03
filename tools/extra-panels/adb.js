@@ -221,6 +221,62 @@
       let adbMirrorSoftTried = false;
       /** @type {Uint8Array|null} */
       let adbMirrorLastKeyData = null;
+      /** @type {AudioDecoder|null} */
+      let adbMirrorAudioDecoder = null;
+      let adbMirrorAudioTs = 0;
+      /** @type {AudioContext|null} */
+      let adbMirrorAudioCtx = null;
+      let adbMirrorAudioNext = 0;
+      /** @type {MediaRecorder|null} */
+      let adbMirrorLocalRec = null;
+      let adbMirrorLocalChunks = [];
+      let adbMirrorDisplayOff = false;
+      const ADB_STORE_MIRROR_QUALITY = "devtools-adb-mirror-quality";
+      const ADB_STORE_MIRROR_AUDIO = "devtools-adb-mirror-audio";
+      const ADB_STORE_MIRROR_TOUCHES = "devtools-adb-mirror-touches";
+
+      function sendMirrorCtrl(obj) {
+        if (!adbMirrorWs || adbMirrorWs.readyState !== 1 || !adbMirrorMeta?.control) return false;
+        try {
+          adbMirrorWs.send(JSON.stringify(obj));
+          return true;
+        } catch {
+          return false;
+        }
+      }
+
+      function updateMirrorPowerUi() {
+        const offBtn = $("#adb-mirror-power-off");
+        const onBtn = $("#adb-mirror-power-on");
+        const notifBtn = $("#adb-mirror-notif");
+        const live = Boolean(adbMirrorWs && adbMirrorWs.readyState === 1 && adbMirrorMeta?.control);
+        if (offBtn) offBtn.disabled = !live || adbMirrorDisplayOff;
+        if (onBtn) onBtn.disabled = !live || !adbMirrorDisplayOff;
+        if (notifBtn) notifBtn.disabled = !live;
+      }
+
+      function restoreMirrorOptions() {
+        try {
+          const q = localStorage.getItem(ADB_STORE_MIRROR_QUALITY);
+          if (q && $("#adb-mirror-quality")) $("#adb-mirror-quality").value = q;
+          const a = localStorage.getItem(ADB_STORE_MIRROR_AUDIO);
+          if ($("#adb-mirror-audio") && a != null) $("#adb-mirror-audio").checked = a === "1";
+          const t = localStorage.getItem(ADB_STORE_MIRROR_TOUCHES);
+          if ($("#adb-mirror-show-touches") && t != null) $("#adb-mirror-show-touches").checked = t === "1";
+        } catch {
+          /* ignore */
+        }
+      }
+
+      function persistMirrorOptions() {
+        try {
+          localStorage.setItem(ADB_STORE_MIRROR_QUALITY, $("#adb-mirror-quality")?.value || "balanced");
+          localStorage.setItem(ADB_STORE_MIRROR_AUDIO, $("#adb-mirror-audio")?.checked ? "1" : "0");
+          localStorage.setItem(ADB_STORE_MIRROR_TOUCHES, $("#adb-mirror-show-touches")?.checked ? "1" : "0");
+        } catch {
+          /* ignore */
+        }
+      }
       let adbInputRecordJobId = "";
       let adbInputRecordPoll = 0;
       const ADB_STORE_INPUT_SHOT_VH = "devtools-adb-input-shot-vh";
@@ -273,7 +329,11 @@
         const wsBase = base.startsWith("https://")
           ? base.replace(/^https:\/\//i, "wss://")
           : base.replace(/^http:\/\//i, "ws://");
-        return `${wsBase}/mirror/ws?serial=${encodeURIComponent(serial)}&token=${encodeURIComponent(adbToken())}`;
+        const quality = $("#adb-mirror-quality")?.value || "balanced";
+        const audio = $("#adb-mirror-audio")?.checked ? "1" : "0";
+        const showTouches = $("#adb-mirror-show-touches")?.checked ? "1" : "0";
+        const extra = `&quality=${encodeURIComponent(quality)}&audio=${audio}&show_touches=${showTouches}`;
+        return `${wsBase}/mirror/ws?serial=${encodeURIComponent(serial)}&token=${encodeURIComponent(adbToken())}${extra}`;
       }
   
       function setInputDropHintVisible(visible) {
@@ -2528,9 +2588,10 @@
         const cfg = map[platform];
         if (!cfg) throw new Error("未知平台");
         setAdbBundleProgress(true, { pct: 22, text: "拉取桥文件…" });
-        const [serverJs, mirrorJs, evProxyJs, inspectJs, ffmpegJs, ytdlpJs, scriptRaw, resolvePortJs, serverJar] = await Promise.all([
+        const [serverJs, mirrorJs, ctrlJs, evProxyJs, inspectJs, ffmpegJs, ytdlpJs, scriptRaw, resolvePortJs, serverJar] = await Promise.all([
           fetchTextAsset("./adb-bridge/server.js"),
           fetchTextAsset("./adb-bridge/scrcpy-mirror.js").catch(() => ""),
+          fetchTextAsset("./adb-bridge/scrcpy-ctrl.js").catch(() => ""),
           fetchTextAsset("./adb-bridge/everything-proxy.js").catch(() => ""),
           fetchTextAsset("./adb-bridge/device-inspect.js").catch(() => ""),
           fetchTextAsset("./ffmpeg-bridge/server.js").catch(() => ""),
@@ -2553,6 +2614,7 @@
           "本压缩包必须同时保留：",
           "  - server.js",
           "  - scrcpy-mirror.js",
+          "  - scrcpy-ctrl.js",
           "  - everything-proxy.js",
           "  - device-inspect.js",
           "  - resolve-port.js",
@@ -2580,6 +2642,7 @@
         const zip = new JSZipCtor();
         zip.file("server.js", serverJs);
         if (mirrorJs) zip.file("scrcpy-mirror.js", mirrorJs);
+        if (ctrlJs) zip.file("scrcpy-ctrl.js", ctrlJs);
         if (evProxyJs) zip.file("everything-proxy.js", evProxyJs);
         if (inspectJs) zip.file("device-inspect.js", inspectJs);
         if (resolvePortJs) zip.file("resolve-port.js", resolvePortJs);
@@ -3597,6 +3660,27 @@
         adbMirrorHwPref = "prefer-hardware";
         adbMirrorSoftTried = false;
         adbMirrorLastKeyData = null;
+        adbMirrorDisplayOff = false;
+        if (adbMirrorAudioDecoder) {
+          try {
+            adbMirrorAudioDecoder.close();
+          } catch {
+            /* ignore */
+          }
+          adbMirrorAudioDecoder = null;
+        }
+        adbMirrorAudioTs = 0;
+        adbMirrorAudioNext = 0;
+        if (adbMirrorLocalRec && adbMirrorLocalRec.state !== "inactive") {
+          try {
+            adbMirrorLocalRec.stop();
+          } catch {
+            /* ignore */
+          }
+        }
+        adbMirrorLocalRec = null;
+        adbMirrorLocalChunks = [];
+        updateMirrorPowerUi();
         if (adbMirrorWaitTimer) {
           clearTimeout(adbMirrorWaitTimer);
           adbMirrorWaitTimer = 0;
@@ -3742,6 +3826,81 @@
         }, 3200);
       }
   
+      function handleMirrorAudioPacket(isConfig, _isKey, payload) {
+        if (typeof AudioDecoder === "undefined") return;
+        try {
+          if (!adbMirrorAudioCtx) {
+            adbMirrorAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            adbMirrorAudioNext = adbMirrorAudioCtx.currentTime;
+          }
+          if (adbMirrorAudioCtx.state === "suspended") adbMirrorAudioCtx.resume().catch(() => {});
+          if (isConfig) {
+            if (adbMirrorAudioDecoder) {
+              try {
+                adbMirrorAudioDecoder.close();
+              } catch {
+                /* ignore */
+              }
+            }
+            adbMirrorAudioDecoder = new AudioDecoder({
+              output: (audioData) => {
+                try {
+                  const channels = [];
+                  for (let ch = 0; ch < audioData.numberOfChannels; ch++) {
+                    const buf = new Float32Array(audioData.numberOfFrames);
+                    audioData.copyTo(buf, { planeIndex: ch });
+                    channels.push(buf);
+                  }
+                  const abuf = adbMirrorAudioCtx.createBuffer(
+                    audioData.numberOfChannels,
+                    audioData.numberOfFrames,
+                    audioData.sampleRate
+                  );
+                  for (let i = 0; i < channels.length; i++) abuf.copyToChannel(channels[i], i);
+                  const src = adbMirrorAudioCtx.createBufferSource();
+                  src.buffer = abuf;
+                  src.connect(adbMirrorAudioCtx.destination);
+                  const t = Math.max(adbMirrorAudioCtx.currentTime + 0.02, adbMirrorAudioNext);
+                  src.start(t);
+                  adbMirrorAudioNext = t + abuf.duration;
+                } finally {
+                  audioData.close();
+                }
+              },
+              error: () => {
+                /* ignore sporadic audio decode errors */
+              },
+            });
+            const desc = payload && payload.length ? payload.slice() : undefined;
+            const cfg = { codec: "opus", numberOfChannels: 2, sampleRate: 48000 };
+            if (desc) cfg.description = desc;
+            try {
+              adbMirrorAudioDecoder.configure(cfg);
+            } catch {
+              delete cfg.description;
+              try {
+                adbMirrorAudioDecoder.configure(cfg);
+              } catch {
+                /* give up audio */
+              }
+            }
+            adbMirrorAudioTs = 0;
+            return;
+          }
+          if (!adbMirrorAudioDecoder || adbMirrorAudioDecoder.state !== "configured") return;
+          adbMirrorAudioTs += 20_000;
+          adbMirrorAudioDecoder.decode(
+            new EncodedAudioChunk({
+              type: "key",
+              timestamp: adbMirrorAudioTs,
+              data: payload,
+            })
+          );
+        } catch {
+          /* ignore */
+        }
+      }
+
       async function mirrorFailureDetail(msg, serial) {
         let detail = String(msg || "镜像失败");
         if (/socket closed/i.test(detail) && !/握手失败|scrcpy-server/i.test(detail)) {
@@ -3751,11 +3910,11 @@
         if (/ECONNREFUSED|转发.*断开|forward 未在/i.test(detail) && !bridgeAtLeast("0.9.5")) {
           detail += "。请重新下载完整桥 ZIP（≥0.9.5 修复握手前抢连导致转发失效）并只留一座桥窗口";
         } else if (/socket closed|编码器|MediaCodec/i.test(detail) && !bridgeAtLeast("0.9.11")) {
-          detail += "。请更新到桥 ≥0.9.11（scrcpy control 触控 + RESET_VIDEO 关键帧）";
+          detail += "。请更新到桥 ≥0.9.12（scrcpy 全控制：按键/滚轮/剪贴板/熄屏/音频）";
         } else if (/socket closed|编码器|MediaCodec/i.test(detail) && !bridgeAtLeast("0.9.10")) {
           detail += "。请更新到桥 ≥0.9.10（scrcpy 帧合并 + 解码兼容，握手失败自动降级）";
-        } else if (!bridgeAtLeast("0.9.11")) {
-          detail += "。建议更新到桥 ≥0.9.11（control 触控与强制关键帧）";
+        } else if (!bridgeAtLeast("0.9.12")) {
+          detail += "。建议更新到桥 ≥0.9.12（画质档位 / 熄屏 / 音频 / 全控制）";
         } else if (!bridgeAtLeast("0.8.4")) {
           detail += "。建议重新下载桥 ZIP 并重启本机桥（≥0.8.4 含镜像诊断）";
         }
@@ -3886,6 +4045,17 @@
                   if ($("#adb-input-meta")) $("#adb-input-meta").textContent = msg.message || "镜像启动中…";
                   return;
                 }
+                if (msg.type === "clipboard") {
+                  if ($("#adb-clip-text")) $("#adb-clip-text").value = msg.text || "";
+                  if (msg.text) {
+                    navigator.clipboard?.writeText?.(msg.text).catch(() => {});
+                    toast("已同步手机剪贴板");
+                  }
+                  return;
+                }
+                if (msg.type === "clipboard_ack") {
+                  return;
+                }
                 if (msg.type === "hello") {
                   if (errTimer) {
                     clearTimeout(errTimer);
@@ -3893,6 +4063,7 @@
                   }
                   adbMirrorMeta = msg;
                   adbInputPreviewMode = "mirror";
+                  adbMirrorDisplayOff = false;
                   try {
                     ensureMirrorDecoder(msg);
                     if (!settled) {
@@ -3900,11 +4071,19 @@
                       resolve();
                     }
                     updateInputLiveUi();
+                    updateMirrorPowerUi();
                     const meta = $("#adb-input-live-meta");
                     if (meta) {
                       meta.hidden = false;
-                      const ctrl = msg.control ? " · scrcpy控制" : "";
-                      meta.textContent = `镜像中 · ${msg.codec || "h264"} · ${msg.width}×${msg.height} · ${msg.deviceName || serial}${ctrl}`;
+                      const bits = [
+                        msg.codec || "h264",
+                        `${msg.width}×${msg.height}`,
+                        msg.quality || "",
+                        msg.control ? "scrcpy控制" : "",
+                        msg.audio ? "音频" : "",
+                        msg.deviceName || serial,
+                      ].filter(Boolean);
+                      meta.textContent = `镜像中 · ${bits.join(" · ")}`;
                     }
                     if ($("#adb-input-meta")) {
                       $("#adb-input-meta").textContent = "镜像已连接，等待首帧画面…";
@@ -3918,11 +4097,18 @@
                 return;
               }
               const buf = new Uint8Array(ev.data);
-              if (buf.length < 5 || !adbMirrorDecoder || !adbMirrorMeta) return;
-              const flags = buf[0];
+              if (buf.length < 5 || !adbMirrorMeta) return;
+              const streamFlags = buf[0];
+              const isAudio = (streamFlags & 0x80) !== 0;
+              const flags = streamFlags & 0x7f;
               let payload = buf.subarray(5);
               const isConfig = (flags & 1) !== 0;
               const isKey = (flags & 2) !== 0;
+              if (isAudio) {
+                handleMirrorAudioPacket(isConfig, isKey, payload);
+                return;
+              }
+              if (!adbMirrorDecoder) return;
               try {
                 if (isConfig) {
                   adbMirrorPkt.config += 1;
@@ -3961,11 +4147,9 @@
                 else adbMirrorPkt.delta += 1;
                 if (adbMirrorDecoder.state !== "configured") return;
                 if (adbMirrorNeedKey && !isKey) return;
-                // 只丢弃非关键帧，避免排队时把 IDR 丢掉导致一直黑屏
                 if (!isKey && adbMirrorDecoder.decodeQueueSize > 2) return;
                 payload = toAnnexB(payload);
                 let data = payload;
-                // 桥 ≥0.9.10 已在关键帧前合并 SPS/PPS；若已有 SPS 则勿再拼一份
                 if (isKey && adbMirrorPendingConfig && adbMirrorPendingConfig[0] !== 1 && !payloadHasSps(payload)) {
                   data = concatBytes(toAnnexB(adbMirrorPendingConfig), payload);
                 }
@@ -4075,7 +4259,10 @@
         const liveMeta = adbInputPreviewMode === "live" || adbInputPreviewMode === "mirror" || adbInputLive || mirroring;
         if (meta) meta.hidden = !liveMeta;
         const recBtn = $("#adb-input-record-toggle");
-        if (recBtn) recBtn.textContent = adbInputRecordJobId ? "停止录屏" : "开始录屏";
+        if (recBtn) {
+          const localRec = adbMirrorLocalRec && adbMirrorLocalRec.state !== "inactive";
+          recBtn.textContent = adbInputRecordJobId || localRec ? "停止录屏" : "开始录屏";
+        }
       }
   
       function startInputLivePreview({ forceShot = false } = {}) {
@@ -4139,6 +4326,48 @@
   
       async function toggleInputRecord() {
         const serial = requireCurrentSerial();
+        // 镜像中：优先浏览器侧录 canvas（含画面；音频另轨未混入）
+        const canvas = $("#adb-input-mirror");
+        if (adbInputPreviewMode === "mirror" && canvas && !canvas.hidden && canvas.captureStream) {
+          if (adbMirrorLocalRec && adbMirrorLocalRec.state !== "inactive") {
+            await new Promise((resolve) => {
+              adbMirrorLocalRec.onstop = resolve;
+              try {
+                adbMirrorLocalRec.stop();
+              } catch {
+                resolve();
+              }
+            });
+            const blob = new Blob(adbMirrorLocalChunks, { type: adbMirrorLocalRec.mimeType || "video/webm" });
+            adbMirrorLocalRec = null;
+            adbMirrorLocalChunks = [];
+            updateInputRecordUi();
+            if (blob.size) {
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(blob);
+              a.download = `adb-mirror-${Date.now()}.webm`;
+              a.click();
+              setTimeout(() => URL.revokeObjectURL(a.href), 30_000);
+              toast("已保存浏览器侧镜像录屏");
+            }
+            return;
+          }
+          const stream = canvas.captureStream(30);
+          const mime = MediaRecorder.isTypeSupported("video/webm;codecs=vp9")
+            ? "video/webm;codecs=vp9"
+            : MediaRecorder.isTypeSupported("video/webm")
+              ? "video/webm"
+              : "";
+          adbMirrorLocalChunks = [];
+          adbMirrorLocalRec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+          adbMirrorLocalRec.ondataavailable = (ev) => {
+            if (ev.data?.size) adbMirrorLocalChunks.push(ev.data);
+          };
+          adbMirrorLocalRec.start(1000);
+          updateInputRecordUi();
+          toast("浏览器侧镜像录屏中，再点停止并下载");
+          return;
+        }
         if (adbInputRecordJobId) {
           try {
             await cancelAdbJob(adbInputRecordJobId);
@@ -4190,6 +4419,10 @@
         }
         if (!String(text || "").trim()) throw new Error("电脑剪贴板为空");
         if ($("#adb-clip-text")) $("#adb-clip-text").value = text;
+        if (sendMirrorCtrl({ type: "clipboard", text, paste: false })) {
+          toast("已经 scrcpy 推送剪贴板到手机");
+          return;
+        }
         await adbFetch("/clipboard", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -5695,6 +5928,10 @@
         $$("[data-adb-key]").forEach((btn) => {
         btn.addEventListener("click", async () => {
         try {
+        if (sendMirrorCtrl({ type: "key", key: btn.dataset.adbKey })) {
+          toast(`按键 ${btn.dataset.adbKey}`);
+          return;
+        }
         await adbFetch("/input", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -5713,13 +5950,18 @@
         });
         $("#adb-input-text-run")?.addEventListener("click", async () => {
         try {
+        const text = $("#adb-input-text")?.value || "";
+        if (sendMirrorCtrl({ type: "text", text })) {
+          toast("已经 scrcpy 输入文本");
+          return;
+        }
         await adbFetch("/input", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
         serial: requireCurrentSerial(),
         action: "text",
-        text: $("#adb-input-text")?.value || "",
+        text,
         }),
         });
         toast("已输入文本");
@@ -5763,6 +6005,34 @@
         $("#adb-input-clip-pc")?.addEventListener("click", () => {
         pushPcClipboard().catch((err) => setError(adbError, err.message || String(err)));
         });
+        $("#adb-input-clip-pull")?.addEventListener("click", () => {
+          if (!sendMirrorCtrl({ type: "get_clipboard" })) {
+            toast("需镜像 + scrcpy 控制通道");
+            return;
+          }
+          toast("已请求手机剪贴板…");
+        });
+        $("#adb-mirror-power-off")?.addEventListener("click", () => {
+          if (sendMirrorCtrl({ type: "display_power", on: false })) {
+            adbMirrorDisplayOff = true;
+            updateMirrorPowerUi();
+            toast("已熄屏（镜像继续）");
+          }
+        });
+        $("#adb-mirror-power-on")?.addEventListener("click", () => {
+          if (sendMirrorCtrl({ type: "display_power", on: true })) {
+            adbMirrorDisplayOff = false;
+            updateMirrorPowerUi();
+            toast("已亮屏");
+          }
+        });
+        $("#adb-mirror-notif")?.addEventListener("click", () => {
+          if (sendMirrorCtrl({ type: "expand_notification" })) toast("已展开通知栏");
+        });
+        ["adb-mirror-quality", "adb-mirror-audio", "adb-mirror-show-touches"].forEach((id) => {
+          $(`#${id}`)?.addEventListener("change", () => persistMirrorOptions());
+        });
+        restoreMirrorOptions();
         {
         const sizeEl = $("#adb-input-shot-size");
         sizeEl?.addEventListener("input", () => applyInputShotSize(sizeEl.value));
@@ -5871,6 +6141,53 @@
         return Boolean(el.naturalWidth) && !el.hidden;
         };
   
+        wrap?.addEventListener("wheel", (e) => {
+          if (!mirrorLive() || !adbMirrorMeta?.control) return;
+          const surface = adbPreviewSurface();
+          if (!surfaceReady(surface)) return;
+          e.preventDefault();
+          const pt = adbCanvasCoords(surface, e.clientX, e.clientY);
+          const v = Math.max(-1, Math.min(1, -e.deltaY / 240));
+          const h = Math.max(-1, Math.min(1, -e.deltaX / 240));
+          if (v === 0 && h === 0) return;
+          sendMirrorCtrl({ type: "scroll", x: pt.x, y: pt.y, hScroll: h, vScroll: v });
+        }, { passive: false });
+
+        // 触控板/双指捏合（ctrl+wheel 作备选；pointer 双指）
+        let pinchActive = null;
+        wrap?.addEventListener("touchstart", (e) => {
+          if (!mirrorLive() || !adbMirrorMeta?.control) return;
+          if (e.touches.length !== 2) return;
+          const surface = adbPreviewSurface();
+          if (!surfaceReady(surface)) return;
+          e.preventDefault();
+          const a = adbCanvasCoords(surface, e.touches[0].clientX, e.touches[0].clientY);
+          const b = adbCanvasCoords(surface, e.touches[1].clientX, e.touches[1].clientY);
+          pinchActive = { a, b };
+          sendMirrorCtrl({ type: "pinch", phase: "DOWN", x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+        }, { passive: false });
+        wrap?.addEventListener("touchmove", (e) => {
+          if (!pinchActive || e.touches.length !== 2) return;
+          const surface = adbPreviewSurface();
+          if (!surfaceReady(surface)) return;
+          e.preventDefault();
+          const a = adbCanvasCoords(surface, e.touches[0].clientX, e.touches[0].clientY);
+          const b = adbCanvasCoords(surface, e.touches[1].clientX, e.touches[1].clientY);
+          sendMirrorCtrl({ type: "pinch", phase: "MOVE", x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+        }, { passive: false });
+        const endPinch = (e) => {
+          if (!pinchActive) return;
+          const surface = adbPreviewSurface();
+          const a = pinchActive.a;
+          const b = pinchActive.b;
+          pinchActive = null;
+          if (surfaceReady(surface)) {
+            sendMirrorCtrl({ type: "pinch", phase: "UP", x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+          }
+        };
+        wrap?.addEventListener("touchend", endPinch);
+        wrap?.addEventListener("touchcancel", endPinch);
+
         wrap?.addEventListener("pointerdown", (e) => {
         if (e.target?.closest?.(".adb-input-drop-hint")) return;
         const surface = adbPreviewSurface();
@@ -6065,12 +6382,17 @@
   
         $("#adb-clip-run")?.addEventListener("click", async () => {
         try {
+        const text = $("#adb-clip-text")?.value || "";
+        if (sendMirrorCtrl({ type: "clipboard", text, paste: false })) {
+          toast("已经 scrcpy 推送剪贴板");
+          return;
+        }
         const data = await adbFetch("/clipboard", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
         serial: requireCurrentSerial(),
-        text: $("#adb-clip-text")?.value || "",
+        text,
         }),
         });
         toast(data.note || "已推送剪贴板");

@@ -143,6 +143,27 @@ if [ ! -f "${SCRIPT_DIR}/scrcpy-mirror.js" ]; then
   }
 fi
 
+if [ ! -f "${SCRIPT_DIR}/scrcpy-ctrl.js" ]; then
+  for url in \
+    "${ADB_BRIDGE_BASE_URL:-https://afra55.github.io/tools/adb-bridge}/scrcpy-ctrl.js" \
+    "https://afra55.github.io/tools/adb-bridge/scrcpy-ctrl.js" \
+    "https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/tools/adb-bridge/scrcpy-ctrl.js"
+  do
+    echo "正在下载 scrcpy-ctrl.js：${url}"
+    if curl -fsSL --connect-timeout 15 --max-time 120 "$url" -o "${SCRIPT_DIR}/scrcpy-ctrl.js.tmp"; then
+      if [ -s "${SCRIPT_DIR}/scrcpy-ctrl.js.tmp" ] && grep -q "QUALITY_PRESETS\|encodeTouch" "${SCRIPT_DIR}/scrcpy-ctrl.js.tmp" 2>/dev/null; then
+        mv -f "${SCRIPT_DIR}/scrcpy-ctrl.js.tmp" "${SCRIPT_DIR}/scrcpy-ctrl.js"
+        break
+      fi
+      rm -f "${SCRIPT_DIR}/scrcpy-ctrl.js.tmp"
+    fi
+  done
+  if [ ! -f "${SCRIPT_DIR}/scrcpy-ctrl.js" ]; then
+    echo "无法获取 scrcpy-ctrl.js。请重新下载完整 ZIP 包。"
+    pause_exit 1
+  fi
+fi
+
 cd "${BRIDGE_DIR}" || pause_exit 1
 export ADB_BRIDGE_TOKEN="${ADB_BRIDGE_TOKEN:-devtools-bridge}"
 export ADB_BRIDGE_DIR="${BRIDGE_DIR}"

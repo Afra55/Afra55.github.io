@@ -746,7 +746,7 @@
                 <span class="hint tight">镜像预览：单击 / 长按 / 双击 / 拖拽；可拖文件进手机</span>
               </div>
               <div class="adb-guide">
-                <strong>怎么用：</strong>点「开始镜像」由本机桥推送官方 <span class="mono">scrcpy-server</span> v3.1（视频 + 控制通道，不必装桌面 Scrcpy）。触控经 scrcpy 注入；连接后等首帧出画。可拖文件到预览区推到手机 Download。
+                <strong>怎么用：</strong>点「开始镜像」拉起官方 scrcpy-server（视频 + 控制；可选音频）。触控/滚轮/按键/剪贴板走 scrcpy；支持熄屏镜像、画质档位、双指捏合、浏览器侧录屏。可拖文件到预览区 → Download。
               </div>
               <div class="btn-row tool-actions">
                 <button type="button" class="primary-btn" id="adb-input-mirror-start">开始镜像</button>
@@ -754,6 +754,25 @@
                 <button type="button" class="secondary-btn" id="adb-input-refresh-shot">截图刷新</button>
                 <button type="button" class="ghost-btn" id="adb-input-record-toggle">开始录屏</button>
                 <button type="button" class="ghost-btn" id="adb-input-clip-pc">推送电脑剪贴板</button>
+                <button type="button" class="ghost-btn" id="adb-input-clip-pull" title="经 scrcpy 拉取手机剪贴板">拉取手机剪贴板</button>
+              </div>
+              <div class="btn-row tool-actions" style="margin-top:0.45rem;flex-wrap:wrap;gap:0.45rem;align-items:center">
+                <label class="hint tight" for="adb-mirror-quality">画质</label>
+                <select id="adb-mirror-quality" class="meta-input" style="min-width:7rem">
+                  <option value="balanced" selected>均衡 720p</option>
+                  <option value="high">高清 1080p</option>
+                  <option value="smooth">高帧 60fps</option>
+                  <option value="low">省流</option>
+                </select>
+                <label class="hint tight" style="display:inline-flex;align-items:center;gap:0.3rem">
+                  <input type="checkbox" id="adb-mirror-audio" /> 音频
+                </label>
+                <label class="hint tight" style="display:inline-flex;align-items:center;gap:0.3rem">
+                  <input type="checkbox" id="adb-mirror-show-touches" /> 显示触摸点
+                </label>
+                <button type="button" class="ghost-btn" id="adb-mirror-power-off" title="熄屏继续镜像（scrcpy）" disabled>熄屏镜像</button>
+                <button type="button" class="ghost-btn" id="adb-mirror-power-on" title="点亮屏幕" disabled>亮屏</button>
+                <button type="button" class="ghost-btn" id="adb-mirror-notif" title="展开通知栏" disabled>通知栏</button>
               </div>
               <div class="btn-row tool-actions" style="margin-top:0.55rem">
                 <button type="button" class="ghost-btn" data-adb-key="BACK">返回</button>
