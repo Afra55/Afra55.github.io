@@ -5193,10 +5193,12 @@
         return span > 0 ? span : 0;
       }
   
-      function formatVbbGifDurationLabel(sec) {
-        const s = Math.max(0, Number(sec) || 0);
-        if (!(s > 0)) return "";
-        return `GIF ${formatVsplitSpanSec(s)}`;
+      function attachVbbEncodedMeta(clip, encoded) {
+        if (!clip || !encoded) return;
+        clip.gifOutW = Number(encoded.outW) || 0;
+        clip.gifOutH = Number(encoded.outH) || 0;
+        clip.gifFps = Number(encoded.fps) || 0;
+        clip.gifDuration = vbbEncodedGifDurationSec(encoded);
       }
   
       function simplifyVbbGifNote(note, { mobile = false } = {}) {
@@ -5234,25 +5236,50 @@
   
       function formatVbbClipTitle(c, idx) {
         if (c.sourceFile) return c.sourceFile;
+        if (c.sourceName) return c.sourceName;
         const n = `#${String(idx + 1).padStart(2, "0")}`;
-        const span = formatVsplitSpanSec(c.span);
-        const head = `${n}  ${formatVbbClock(c.start)}–${formatVbbClock(c.start + c.span)} · ${span}`;
-        if (c.gifBlob) return `${head} · ${formatKb(c.gifBlob.size)}`;
-        return head;
+        if (!(Number(c.start) > 0) && vbbWorkflow === "single" && !isVbbBatchMode()) {
+          return vbbSourceFile?.name || "整段 GIF";
+        }
+        return `${n}  ${formatVbbClock(c.start)}–${formatVbbClock(c.start + c.span)}`;
       }
   
       function formatVbbClipMeta(c, { mobile = false } = {}) {
-        if (c.error) return c.error;
-        if (c.gifNote) return simplifyVbbGifNote(c.gifNote, { mobile });
-        if (c.jobStatus === "running" || c.jobStatus === "pending") return c.jobText || "";
-        return "";
+        if (c.error && !c.gifBlob) return c.error;
+        if (!c.gifBlob) {
+          if (c.jobStatus === "running" || c.jobStatus === "pending") return c.jobText || "";
+          return c.error || "";
+        }
+        const bits = [];
+        const videoSec = Number(c.span) || 0;
+        if (videoSec > 0) bits.push(`时长 ${formatVsplitSpanSec(videoSec)}`);
+        const w = Number(c.gifOutW) || 0;
+        const h = Number(c.gifOutH) || 0;
+        if (w && h) bits.push(`GIF ${w}×${h}`);
+        bits.push(formatKb(c.gifBlob.size));
+        const extra = simplifyVbbGifNote(c.gifNote, { mobile });
+        if (extra) {
+          extra.split(" · ").forEach((part) => {
+            if (!part) return;
+            if (/^\d+×\d+$/.test(part) || /^GIF \d+×\d+$/.test(part)) return;
+            if (/^\d+\s*FPS$/i.test(part)) {
+              if (!mobile) bits.push(part.replace(/\s+/g, ""));
+              return;
+            }
+            if (/^沿用|^超限|^已压|^降宽|^已抽稀|^宽≤/.test(part) || (mobile && /^\d+宽$/.test(part))) {
+              bits.push(part);
+            }
+          });
+        }
+        if (c.error) bits.push(c.error);
+        return bits.join(" · ");
       }
   
       function applyVbbClipEncoded(clip, encoded, extraBits = []) {
         if (!clip || !encoded?.blob) return;
         clip.gifBlob = encoded.blob;
         clip.gifUrl = "";
-        clip.gifDuration = vbbEncodedGifDurationSec(encoded);
+        attachVbbEncodedMeta(clip, encoded);
         const bits = [];
         extraBits.forEach((b) => {
           if (b) bits.push(b);
@@ -6290,6 +6317,7 @@
           {
             start: 0,
             span: duration,
+            sourceName: vbbGifBaseName(vbbSourceFile),
             gifBlob: null,
             gifUrl: "",
             gifNote: "",
@@ -6643,7 +6671,7 @@
                 if (encoded?.maxW) usedWidth = encoded.maxW;
               }
               if (!encoded?.blob) throw new Error("未产出 GIF");
-              clip.gifDuration = vbbEncodedGifDurationSec(encoded);
+              attachVbbEncodedMeta(clip, encoded);
               // 延迟创建 ObjectURL：列表默认不解码预览
               clip.gifUrl = "";
               const bits = [];
@@ -6902,6 +6930,8 @@
         getSrcW: () => vbbAnalysis?.srcW ?? 0,
         getActivePlan: () => (vbbAnalysis ? resolveActiveVbbPlan() : null),
         getClips: () => vbbClips.slice(),
+        formatClipTitle: (c, idx) => formatVbbClipTitle(c, idx),
+        formatClipMeta: (c, opts) => formatVbbClipMeta(c, opts || {}),
         shouldReuseFirstPlan: (ranges, index) => shouldReuseVbbFirstPlan(ranges, index),
         loadSpanScheme: (span) => loadVbbSpanScheme(span),
         saveSpanScheme: (span, seed, enc) => saveVbbSpanScheme(span, seed, enc),

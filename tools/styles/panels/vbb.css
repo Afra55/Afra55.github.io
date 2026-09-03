@@ -172,10 +172,9 @@
 .vbb-clip-meta {
   display: block;
   margin-top: 0.12rem;
-  line-height: 1.35;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
 }
 
 .vbb-merged-block {

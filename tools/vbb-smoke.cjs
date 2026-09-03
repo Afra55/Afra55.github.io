@@ -186,6 +186,42 @@ async function main() {
     throw new Error(`vbb video preload should be metadata, got ${localPick.preload}`);
   }
 
+  const cardMeta = await page.evaluate(() => {
+    const fmt = window.DevToolsVbb?.formatClipMeta;
+    const title = window.DevToolsVbb?.formatClipTitle;
+    if (typeof fmt !== "function" || typeof title !== "function") {
+      return { error: "formatClipMeta/title missing" };
+    }
+    const blob = new Blob([new Uint8Array(2048)], { type: "image/gif" });
+    const c = {
+      start: 0,
+      span: 12.4,
+      gifBlob: blob,
+      gifOutW: 420,
+      gifOutH: 236,
+      gifNote: "12 FPS · 420×236 · 已压 1 轮",
+      sourceName: "demo",
+    };
+    return {
+      title: title(c, 0),
+      meta: fmt(c),
+      mobile: fmt(c, { mobile: true }),
+    };
+  });
+  if (cardMeta.error) throw new Error(cardMeta.error);
+  if (!/时长 12\.4秒/.test(cardMeta.meta)) {
+    throw new Error(`card subtitle missing duration: ${cardMeta.meta}`);
+  }
+  if (!/GIF 420×236/.test(cardMeta.meta)) {
+    throw new Error(`card subtitle missing gif size: ${cardMeta.meta}`);
+  }
+  if (!/\d+(\.\d+)?\s*(KB|MB|B)/i.test(cardMeta.meta)) {
+    throw new Error(`card subtitle missing file size: ${cardMeta.meta}`);
+  }
+  if (cardMeta.title !== "demo") {
+    throw new Error(`whole-video card title should be source name, got ${cardMeta.title}`);
+  }
+
   const vbbWorkflowUi = await page.evaluate(() => {
     const click = (id) => document.getElementById(id)?.click();
     click("vbb-workflow-split");
