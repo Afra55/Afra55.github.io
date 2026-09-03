@@ -47,10 +47,12 @@
 
 ## Git / 合入习惯（对用户）
 
-- 用户常用：**「直接合入」= 在 `master` 上改 → commit → `git push origin master`**
-- Cloud Agent 默认规范也可能要求 `cursor/<name>-ad72` 分支 + PR；**以用户当次指示为准**。用户说合入 master 就合入 master
+- **默认直接合入 `master`**：改完 → commit → `git push origin master`，不要长期堆 PR 分支
+- 若环境强制走 `cursor/<name>-xxxx` 分支 + PR：合入后立刻 squash/merge 到 `master`，并**删除远程与本地特性分支**，避免仓库分支膨胀
+- 已合入或过时、无用的 `cursor/*` 分支：主动清理（`git push origin --delete …`）；本地只留 `master`
 - 提交信息用中文或英文均可，需说清「改了什么 / 为什么」
 - 功能合入后必须 bump `TOOLS_BUILD`，否则用户硬刷新也可能看到旧缓存
+- **不要**为验收刻意做截图 / walkthrough 录屏；用户自己看效果。除非用户明确要求演示证据
 
 ## 代码与产品偏好
 
