@@ -2196,3 +2196,135 @@
   text-align: center;
   margin: 0.35rem 0 0;
 }
+
+.memo-day-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0.55rem 0 0.35rem;
+  padding: 0.2rem 0.15rem;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: color-mix(in srgb, var(--bg-0) 92%, transparent);
+  backdrop-filter: blur(6px);
+  border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.memo-day-head strong {
+  font-size: 0.86rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.memo-day-count {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.memo-card.is-drop-before {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.memo-card.is-drop-after {
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+.memo-card.is-drop-blocked {
+  outline: 1px dashed color-mix(in srgb, #c44 55%, var(--line));
+}
+
+.memo-temp-zone.is-drop-target {
+  border-radius: 10px;
+  outline: 2px solid color-mix(in srgb, #e8a317 70%, var(--accent));
+  background: color-mix(in srgb, #e8a317 12%, transparent);
+}
+
+.memo-arch-badge {
+  display: inline-block;
+  margin-right: 0.35rem;
+  padding: 0.05rem 0.38rem;
+  border-radius: 6px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  vertical-align: 1px;
+  color: color-mix(in srgb, var(--ink) 55%, var(--muted));
+  background: color-mix(in srgb, var(--ink) 8%, transparent);
+}
+
+.memo-card.is-archived {
+  opacity: 0.88;
+}
+
+.memo-search-hit {
+  padding: 0 0.1em;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
+  color: inherit;
+}
+
+.memo-link-card {
+  display: grid;
+  gap: 0.1rem;
+  margin-top: 0.45rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid color-mix(in srgb, var(--line) 85%, transparent);
+  border-radius: 10px;
+  text-decoration: none;
+  color: inherit;
+  background: color-mix(in srgb, var(--bg-0) 55%, transparent);
+}
+
+.memo-link-card:hover {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+}
+
+.memo-link-card-kicker {
+  font-size: 0.68rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.memo-link-card-host {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.memo-link-card-url {
+  font-size: 0.72rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memo-text.is-md {
+  white-space: normal;
+  font-family: inherit;
+  line-height: 1.45;
+}
+
+.memo-text.is-md h1,
+.memo-text.is-md h2,
+.memo-text.is-md h3 {
+  margin: 0.35em 0 0.2em;
+  font-size: 1em;
+}
+
+.memo-text.is-md p {
+  margin: 0.25em 0;
+}
+
+.memo-text.is-md ul {
+  margin: 0.25em 0;
+  padding-left: 1.2em;
+}
+
+.memo-view-toggle.is-active {
+  color: color-mix(in srgb, var(--accent) 70%, var(--ink));
+}
+
+.memo-archive-filter {
+  margin-top: 0.15rem;
+}

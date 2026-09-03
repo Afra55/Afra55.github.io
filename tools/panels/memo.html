@@ -40,7 +40,7 @@
               <div class="btn-row tool-actions memo-backup-actions">
                 <button type="button" class="secondary-btn" id="memo-export">导出</button>
                 <label class="file-btn" for="memo-import">导入</label>
-                <input id="memo-import" type="file" accept=".zip,.memo,.bin,application/zip" hidden />
+                <input id="memo-import" type="file" accept=".zip,.memo,.bin,.json,application/zip,application/json" hidden />
                 <button type="button" class="ghost-btn" id="memo-export-to-dir" hidden title="写入当前存储目录下的 backups/ 文件夹，全量且不加密">写入 backups 快照</button>
               </div>
             </div>
@@ -105,7 +105,11 @@
                 <button type="button" class="memo-temp-filter" id="memo-temp-filter" data-memo-temp-filter="1">
                   临时条目<span class="mono memo-temp-count" id="memo-temp-count">0</span>
                 </button>
-                <p class="hint tight memo-temp-tip">与普通标签分开；剪贴板入库时可自动标记，也可在条目上手动加/移除。</p>
+                <p class="hint tight memo-temp-tip">与普通标签分开；可把条目或文件拖到本区标为临时。剪贴板入库也可自动标记。</p>
+                <button type="button" class="memo-temp-filter memo-archive-filter" id="memo-archive-filter" data-memo-archive-filter="1">
+                  已归档<span class="mono memo-temp-count" id="memo-archive-count">0</span>
+                </button>
+                <p class="hint tight memo-temp-tip">归档默认不出现在列表；点此查看或恢复。</p>
               </div>
             </div>
           </aside>
@@ -113,7 +117,7 @@
           <div class="memo-main">
             <div class="memo-quick-text panel-card" id="memo-editor-fold">
               <label class="memo-quick-text-lab" for="memo-editor">直接写一段文字</label>
-              <textarea id="memo-editor" class="area memo-quick-text-area mono" rows="5" placeholder="在此输入后点「保存文字」，或按 Ctrl/⌘+Enter"></textarea>
+              <textarea id="memo-editor" class="area memo-quick-text-area mono" rows="5" placeholder="空着点一下即可开始写；可用 #标签；Ctrl/⌘+Enter 保存"></textarea>
               <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.35rem">
                 <button type="button" class="secondary-btn" id="memo-save-text">保存文字</button>
               </div>
@@ -210,8 +214,10 @@
                 <input id="memo-search" class="mono memo-search" type="search" placeholder="输入关键词（文件名、正文、备注、标签名都行）" autocomplete="off" enterkeyhint="search" />
               </label>
               <button type="button" class="ghost-btn" id="memo-clear-filters" hidden>清除筛选</button>
+              <button type="button" class="ghost-btn memo-view-toggle" id="memo-toggle-day" aria-pressed="true">按日分组：开</button>
+              <button type="button" class="ghost-btn memo-view-toggle" id="memo-toggle-md" aria-pressed="false">MD 预览：关</button>
             </div>
-            <p class="hint tight" id="memo-filter-hint">点标签或类型即可筛选；直接搜标签名也行。</p>
+            <p class="hint tight" id="memo-filter-hint">点标签或类型即可筛选；正文 #标签 会自动识别；直接搜标签名也行。</p>
             <div class="memo-type-filter" id="memo-type-filter" aria-label="按类型筛选"></div>
             <p class="hint tight mono" id="memo-list-meta" hidden></p>
             <div class="memo-drop" id="memo-drop">
@@ -229,8 +235,14 @@
         <dialog class="memo-dialog" id="memo-export-dlg">
           <form method="dialog" class="memo-dialog-body">
             <h2 class="subhead">导出备忘录</h2>
-            <p class="hint tight">可选内容与可选口令。有口令时压缩包内容会加密，导入需同一口令。</p>
+            <p class="hint tight">可选内容与格式。完整包可加密；JSON/Markdown 便于备份文本索引。</p>
             <p class="hint tight">备注会随条目一起导出，导入后仍可搜索与编辑。</p>
+            <fieldset class="memo-export-kinds">
+              <legend>格式</legend>
+              <label class="flag"><input type="radio" name="format" value="zip" checked /> 完整包 ZIP</label>
+              <label class="flag"><input type="radio" name="format" value="json" /> JSON 索引</label>
+              <label class="flag"><input type="radio" name="format" value="markdown" /> Markdown</label>
+            </fieldset>
             <fieldset class="memo-export-kinds">
               <legend>类型</legend>
               <label class="flag"><input type="checkbox" name="kind" value="text" checked /> 文本</label>

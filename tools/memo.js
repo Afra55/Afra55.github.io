@@ -19,9 +19,12 @@
   const PAGE_SIZE = 36;
   const TEMP_DAYS_KEY = "devtools-memo-temp-days-v1";
   const TEMP_FILTER_ID = "__temp__";
+  const ARCHIVE_FILTER_ID = "__archive__";
   const TEMP_DEFAULT_DAYS = 7;
   const TEMP_PROMPT_SEC = 5;
   const LAST_EXPORT_KEY = "devtools-memo-last-export-v1";
+  const MD_PREVIEW_KEY = "devtools-memo-md-preview-v1";
+  const GROUP_BY_DAY_KEY = "devtools-memo-group-by-day-v1";
   const BACKUP_NUDGE_DAYS = 7;
   const BACKUP_NUDGE_MIN_ITEMS = 3;
   const LARGE_WARN_BYTES = 25 * 1024 * 1024;
@@ -32,8 +35,11 @@
   const TEXT_CARD_LINES = 50;
   const NOTE_MAX = 500;
   const NOTE_CARD_CLIP = 80;
+  const DAY_HEADER_H = 40;
   const CARD_EST_DEFAULT = 210;
   const CARD_EST_NOTE = 28;
+  const CARD_EST_LINK = 52;
+  const CARD_EST_MD_EXTRA = 24;
   const CARD_EST_BY_TYPE = {
     text: 200,
     image: 268,
@@ -94,6 +100,127 @@
     if (num < 1024) return `${Math.round(num)} B`;
     if (num < 1024 * 1024) return `${(num / 1024).toFixed(1)} KB`;
     return `${(num / (1024 * 1024)).toFixed(2)} MB`;
+  }
+
+  function pad2(n) {
+    return String(n).padStart(2, "0");
+  }
+
+  function dayKeyOf(itemOrTs) {
+    const ts = itemOrTs && typeof itemOrTs === "object" ? itemOrTs.createdAt : itemOrTs;
+    const d = new Date(Number(ts) || 0);
+    if (!Number.isFinite(d.getTime()) || d.getTime() <= 0) return "unknown";
+    return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  }
+
+  function formatDayHeading(dayKey) {
+    if (dayKey === "__pinned__") return "置顶";
+    if (dayKey === "unknown") return "未知日期";
+    const m = String(dayKey || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return String(dayKey || "");
+    const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    const today = new Date();
+    const todayKey = dayKeyOf(today.getTime());
+    const yest = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1);
+    const yestKey = dayKeyOf(yest.getTime());
+    const week = ["日", "一", "二", "三", "四", "五", "六"][d.getDay()] || "";
+    if (dayKey === todayKey) return `今天 · ${m[2]}-${m[3]} 周${week}`;
+    if (dayKey === yestKey) return `昨天 · ${m[2]}-${m[3]} 周${week}`;
+    if (Number(m[1]) === today.getFullYear()) return `${Number(m[2])}月${Number(m[3])}日 · 周${week}`;
+    return `${m[1]}年${Number(m[2])}月${Number(m[3])}日 · 周${week}`;
+  }
+
+  function readBoolPref(key, fallback) {
+    try {
+      const v = localStorage.getItem(key);
+      if (v === "1" || v === "true") return true;
+      if (v === "0" || v === "false") return false;
+    } catch (_) {}
+    return Boolean(fallback);
+  }
+
+  function writeBoolPref(key, on) {
+    try {
+      localStorage.setItem(key, on ? "1" : "0");
+    } catch (_) {}
+  }
+
+  function isArchived(item) {
+    return Boolean(item?.archived);
+  }
+
+  function extractHashTags(text) {
+    const src = String(text || "");
+    const re = /(?:^|[\s\u3000([{（【「『"'])#([^\s#]{1,32})/g;
+    const out = [];
+    const seen = new Set();
+    let m;
+    while ((m = re.exec(src))) {
+      const name = String(m[1] || "")
+        .replace(/[)\]}>）】」』"'，。,.!?;:]+$/g, "")
+        .trim();
+      if (!name || name.length > 32) continue;
+      const key = name.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push(name);
+    }
+    return out;
+  }
+
+  function firstHttpUrl(text) {
+    const m = String(text || "").match(/https?:\/\/[^\s<>"'）】」』]+/i);
+    if (!m) return "";
+    return m[0].replace(/[),.;!?，。；！？]+$/g, "");
+  }
+
+  function highlightEscaped(escaped, query) {
+    const q = String(query || "").trim();
+    if (!q || !escaped) return escaped;
+    const safeQ = escapeHtml(q);
+    if (!safeQ) return escaped;
+    try {
+      const re = new RegExp(safeQ.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+      return escaped.replace(re, (hit) => `<mark class="memo-search-hit">${hit}</mark>`);
+    } catch (_) {
+      return escaped;
+    }
+  }
+
+  function renderMemoMarkdown(src) {
+    let html = escapeHtml(src || "");
+    html = html.replace(/^### (.+)$/gm, "<h3>$1</h3>");
+    html = html.replace(/^## (.+)$/gm, "<h2>$1</h2>");
+    html = html.replace(/^# (.+)$/gm, "<h1>$1</h1>");
+    html = html.replace(/```[\s\S]*?```/g, (m) => {
+      const inner = m.slice(3, -3).replace(/^\w*\n/, "");
+      return `<pre class="mono">${inner}</pre>`;
+    });
+    html = html.replace(/`([^`]+)`/g, '<code class="mono">$1</code>');
+    html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    html = html.replace(/__(.+?)__/g, "<strong>$1</strong>");
+    html = html.replace(/\*(.+?)\*/g, "<em>$1</em>");
+    html = html.replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    html = html.replace(/^[-*] (.+)$/gm, "<li>$1</li>");
+    html = html.replace(/(?:<li>.*?<\/li>\n?)+/g, (m) => `<ul>${m}</ul>`);
+    html = html.replace(/\n{2,}/g, "</p><p>");
+    html = `<p>${html}</p>`;
+    html = html.replace(/<p>\s*(<(?:h[1-6]|pre|ul))/g, "$1").replace(/(<\/(?:h[1-6]|pre|ul)>)\s*<\/p>/g, "$1");
+    html = html.replace(/<p>\s*<\/p>/g, "");
+    return html;
+  }
+
+  function linkCardHtml(url) {
+    if (!url) return "";
+    let host = url;
+    try {
+      host = new URL(url).hostname.replace(/^www\./, "");
+    } catch (_) {}
+    return `<a class="memo-link-card" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer" draggable="false">
+      <span class="memo-link-card-kicker">链接</span>
+      <span class="memo-link-card-host">${escapeHtml(host)}</span>
+      <span class="memo-link-card-url mono">${escapeHtml(url)}</span>
+    </a>`;
   }
 
   function formatTime(ts) {
@@ -227,6 +354,7 @@
       it.tagIds = custom.length ? custom : [DEFAULT_TAG_ID];
       if (it.order == null) it.order = i;
       it.pinned = Boolean(it.pinned);
+      it.archived = Boolean(it.archived);
       // 历史图片中的 GIF/APNG 归入动图
       if (it.type === "image" && isGifLike(it.mime, it.name || it.fileName)) it.type = "gif";
       if (!it.type) it.type = detectKind(it.mime, it.name || it.fileName);
@@ -553,6 +681,8 @@
     activeTagId: "all",
     activeType: "all", // all | text | image | gif | video | audio | file
     searchQuery: "",
+    groupByDay: readBoolPref(GROUP_BY_DAY_KEY, true),
+    mdPreview: readBoolPref(MD_PREVIEW_KEY, false),
     listLimit: PAGE_SIZE,
     tempDays: TEMP_DEFAULT_DAYS,
     tempPrompts: new Map(),
@@ -573,6 +703,7 @@
     pendingUndo: null,
     virtualMode: false,
     virtualRaf: 0,
+    dragInsertAfter: false,
     testShareUi: false,
     cardHeightCache: new Map(),
     shareFilesCapable: null, // null=未探测, true/false
@@ -1069,6 +1200,10 @@
     if (filterBtn) filterBtn.classList.toggle("is-active", state.activeTagId === TEMP_FILTER_ID);
     const daysInput = $("#memo-temp-days");
     if (daysInput && document.activeElement !== daysInput) daysInput.value = String(state.tempDays);
+    const archCount = $("#memo-archive-count");
+    if (archCount) archCount.textContent = String(cache.archived || 0);
+    const archBtn = $("#memo-archive-filter");
+    if (archBtn) archBtn.classList.toggle("is-active", state.activeTagId === ARCHIVE_FILTER_ID);
   }
 
   function createTempPromptEl(itemId) {
@@ -1213,9 +1348,14 @@
     const byType = { text: 0, image: 0, gif: 0, video: 0, audio: 0, file: 0 };
     let untagged = 0;
     let temp = 0;
+    let archived = 0;
     const items = state.index.items || [];
     for (let i = 0; i < items.length; i++) {
       const it = items[i];
+      if (isArchived(it)) {
+        archived += 1;
+        continue;
+      }
       const tk = byType[it.type] != null ? it.type : "file";
       byType[tk] += 1;
       if (isTempItem(it)) temp += 1;
@@ -1229,7 +1369,8 @@
       }
     }
     state.countCache = {
-      total: items.length,
+      total: items.length - archived,
+      archived,
       untagged,
       temp,
       byTag,
@@ -1270,10 +1411,18 @@
     const tagAll = !tagId || tagId === "all";
     const tagDefault = tagId === DEFAULT_TAG_ID || tagId === "default";
     const tagTemp = tagId === TEMP_FILTER_ID;
+    const tagArchive = tagId === ARCHIVE_FILTER_ID;
     for (let i = 0; i < src.length; i++) {
       const it = src[i];
+      if (tagArchive) {
+        if (!isArchived(it)) continue;
+      } else if (isArchived(it)) {
+        continue;
+      }
       if (tagTemp) {
         if (!isTempItem(it)) continue;
+      } else if (tagArchive) {
+        // only archive filter
       } else if (tagDefault) {
         if (!isUntagged(it)) continue;
       } else if (!tagAll) {
@@ -1297,8 +1446,16 @@
   }
 
   function canDragReorder() {
-    if (isLikelyMobile()) return false;
-    return (state.index.items?.length || 0) < VIRTUAL_MIN;
+    // 虚拟列表也可排序；仅移动端关闭（触摸与滚动冲突）
+    return !isLikelyMobile();
+  }
+
+  function sameDragGroup(a, b) {
+    if (!a || !b) return false;
+    if (Boolean(a.pinned) !== Boolean(b.pinned)) return false;
+    if (!state.groupByDay) return true;
+    if (a.pinned && b.pinned) return true;
+    return dayKeyOf(a) === dayKeyOf(b);
   }
 
   function hasActiveFilters() {
@@ -1316,13 +1473,16 @@
     if (!hint) return;
     const parts = [];
     if (state.activeTagId === TEMP_FILTER_ID) parts.push("临时条目");
+    else if (state.activeTagId === ARCHIVE_FILTER_ID) parts.push("已归档");
     else if (state.activeTagId === "all") parts.push("标签：全部");
     else if (state.activeTagId === DEFAULT_TAG_ID || state.activeTagId === "default") parts.push("标签：未分类");
     else parts.push(`标签：${tagById(state.activeTagId)?.name || "已选"}`);
     parts.push(`类型：${state.activeType === "all" ? "全部" : TYPE_LABELS[state.activeType] || state.activeType}`);
     const q = String(state.searchQuery || "").trim();
     if (q) parts.push(`关键词：「${q}」`);
-    hint.textContent = `${parts.join(" · ")}。点标签或类型即可筛选；直接搜标签名也行。`;
+    if (state.groupByDay) parts.push("按日分组");
+    if (state.mdPreview) parts.push("MD 预览");
+    hint.textContent = `${parts.join(" · ")}。点标签或类型即可筛选；正文里的 #标签 会自动识别。`;
   }
 
   function clearAllFilters() {
@@ -1341,6 +1501,39 @@
     resetListPaging();
     renderAll();
     toast(state.activeTagId === TEMP_FILTER_ID ? "仅显示临时条目" : "已显示全部条目");
+  }
+
+  function toggleArchiveFilter() {
+    state.activeTagId = state.activeTagId === ARCHIVE_FILTER_ID ? "all" : ARCHIVE_FILTER_ID;
+    resetListPaging();
+    renderAll();
+    toast(state.activeTagId === ARCHIVE_FILTER_ID ? "仅显示已归档" : "已隐藏归档（默认）");
+  }
+
+  function syncViewToggles() {
+    const dayBtn = $("#memo-toggle-day");
+    if (dayBtn) {
+      dayBtn.classList.toggle("is-active", state.groupByDay);
+      dayBtn.setAttribute("aria-pressed", state.groupByDay ? "true" : "false");
+      dayBtn.textContent = state.groupByDay ? "按日分组：开" : "按日分组：关";
+    }
+    const mdBtn = $("#memo-toggle-md");
+    if (mdBtn) {
+      mdBtn.classList.toggle("is-active", state.mdPreview);
+      mdBtn.setAttribute("aria-pressed", state.mdPreview ? "true" : "false");
+      mdBtn.textContent = state.mdPreview ? "MD 预览：开" : "MD 预览：关";
+    }
+  }
+
+  function focusQuickCapture({ force = false } = {}) {
+    if (!editor) return;
+    if (!force && String(editor.value || "").trim()) return;
+    if (!isMemoActive()) return;
+    try {
+      editor.focus({ preventScroll: true });
+    } catch (_) {
+      editor.focus();
+    }
   }
 
   function textContentSig(text) {
@@ -1434,22 +1627,36 @@
   /** 卡片内文本：≤50 行完整展示；超过则截断，点预览看全文（无滚动条） */
   function formatCardTextBody(full) {
     const raw = String(full || "");
+    const q = String(state.searchQuery || "").trim();
     const lines = splitTextLines(raw);
     const lineCount = lines.length;
+    if (state.mdPreview) {
+      const shown = lineCount <= TEXT_CARD_LINES ? raw : `${lines.slice(0, TEXT_CARD_LINES).join("\n")}\n…`;
+      const html = renderMemoMarkdown(shown);
+      return {
+        html,
+        truncated: lineCount > TEXT_CARD_LINES,
+        lineCount,
+        title: "Markdown 预览 · 双击编辑",
+        md: true,
+      };
+    }
     if (lineCount <= TEXT_CARD_LINES) {
       return {
-        html: escapeHtml(raw),
+        html: highlightEscaped(escapeHtml(raw), q),
         truncated: false,
         lineCount,
         title: "拖选复制 · 双击编辑",
+        md: false,
       };
     }
     const shown = lines.slice(0, TEXT_CARD_LINES).join("\n");
     return {
-      html: `${escapeHtml(shown)}\n<span class="memo-text-more">…共 ${lineCount} 行，点此预览全文</span>`,
+      html: `${highlightEscaped(escapeHtml(shown), q)}\n<span class="memo-text-more">…共 ${lineCount} 行，点此预览全文</span>`,
       truncated: true,
       lineCount,
       title: `已截断前 ${TEXT_CARD_LINES} 行 · 单击预览全文 · 双击编辑`,
+      md: false,
     };
   }
 
@@ -1498,6 +1705,34 @@
     return item?.pinned ? "取消置顶" : "一直置顶";
   }
 
+  function archiveActionLabel(item) {
+    return item?.archived ? "取消归档" : "归档";
+  }
+
+  async function setItemArchived(item, archived) {
+    if (!item?.id) return item;
+    const row = state.index.items.find((x) => x.id === item.id);
+    if (!row) return item;
+    row.archived = Boolean(archived);
+    row.updatedAt = Date.now();
+    if (row.archived) {
+      row.pinned = false;
+      clearItemTemp(row);
+    }
+    invalidateCountCache();
+    await persistIndex();
+    return row;
+  }
+
+  async function applyItemArchiveToggle(item) {
+    if (!item?.id) return;
+    const next = !isArchived(item);
+    await setItemArchived(item, next);
+    const row = state.index.items.find((x) => x.id === item.id) || item;
+    renderAll();
+    flashItem(row.id, next ? "已归档（默认列表隐藏）" : "已取消归档");
+  }
+
   function itemSecondaryActions(item) {
     const canCopy = canClipboardCopy(item);
     const noteRaw = String(item?.note || "").trim();
@@ -1505,6 +1740,7 @@
       { id: "open", label: "预览" },
       { id: "top", label: "移动到顶部" },
       { id: "pin", label: pinActionLabel(item) },
+      { id: "archive", label: archiveActionLabel(item) },
     ];
     if (canOfferItemShare(item)) acts.push({ id: "share", label: "分享" });
     if (item?.type === "text") acts.push({ id: "edit", label: "编辑" });
@@ -1591,17 +1827,67 @@
     if (item?.type === "text") {
       const lines = Math.min(TEXT_CARD_LINES, splitTextLines(item.textPreview || "").length || 1);
       h = 118 + Math.min(420, Math.round(lines * 18.5));
+      if (state.mdPreview) h += CARD_EST_MD_EXTRA;
+      if (firstHttpUrl(item.textPreview || "")) h += CARD_EST_LINK;
     }
     const hasNote = String(item?.note || "").trim();
     if (hasNote || (item?.type && item.type !== "text")) h += CARD_EST_NOTE;
     return h;
   }
 
-  function buildHeightPrefix(items) {
-    const prefix = new Array(items.length + 1);
+  function estimateRowHeight(row) {
+    if (!row) return CARD_EST_DEFAULT;
+    if (row.kind === "day") return DAY_HEADER_H;
+    return estimateCardHeight(row.item);
+  }
+
+  function buildTimelineRows(items) {
+    const list = Array.isArray(items) ? items : [];
+    if (!state.groupByDay) {
+      return list.map((item) => ({ kind: "item", item, dayKey: dayKeyOf(item) }));
+    }
+    const rows = [];
+    const pinned = [];
+    const rest = [];
+    for (let i = 0; i < list.length; i++) {
+      const it = list[i];
+      if (it.pinned && !isArchived(it)) pinned.push(it);
+      else rest.push(it);
+    }
+    if (pinned.length) {
+      rows.push({ kind: "day", dayKey: "__pinned__", label: "置顶", count: pinned.length });
+      for (let i = 0; i < pinned.length; i++) {
+        rows.push({ kind: "item", item: pinned[i], dayKey: "__pinned__" });
+      }
+    }
+    const byDay = new Map();
+    for (let i = 0; i < rest.length; i++) {
+      const it = rest[i];
+      const k = dayKeyOf(it);
+      if (!byDay.has(k)) byDay.set(k, []);
+      byDay.get(k).push(it);
+    }
+    const days = [...byDay.keys()].sort((a, b) => String(b).localeCompare(String(a)));
+    for (let i = 0; i < days.length; i++) {
+      const day = days[i];
+      const group = byDay.get(day) || [];
+      rows.push({ kind: "day", dayKey: day, label: formatDayHeading(day), count: group.length });
+      for (let j = 0; j < group.length; j++) {
+        rows.push({ kind: "item", item: group[j], dayKey: day });
+      }
+    }
+    return rows;
+  }
+
+  function buildHeightPrefix(itemsOrRows) {
+    const rows =
+      itemsOrRows?.length && itemsOrRows[0]?.kind
+        ? itemsOrRows
+        : buildTimelineRows(itemsOrRows || []);
+    const prefix = new Array(rows.length + 1);
     prefix[0] = 0;
-    for (let i = 0; i < items.length; i++) {
-      prefix[i + 1] = prefix[i] + estimateCardHeight(items[i]);
+    for (let i = 0; i < rows.length; i++) {
+      prefix[i + 1] = prefix[i] + estimateRowHeight(rows[i]);
     }
     return prefix;
   }
@@ -1615,6 +1901,34 @@
       else hi = mid - 1;
     }
     return lo;
+  }
+
+  function dayHeaderHtml(row) {
+    return `<div class="memo-day-head" data-memo-day="${escapeAttr(row.dayKey)}" role="presentation">
+      <strong>${escapeHtml(row.label)}</strong>
+      <span class="mono memo-day-count">${row.count || 0}</span>
+    </div>`;
+  }
+
+  function rowsHtmlWithUndo(rows, itemIndexOffset = 0) {
+    const undo = state.pendingUndo;
+    const undoAt = undo ? undo.anchorVisibleIdx : -1;
+    const sec = undo?.remainingSec ?? 0;
+    const count = undo?.items?.length ?? 0;
+    const parts = [];
+    let itemIdx = itemIndexOffset - 1;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.kind === "day") {
+        parts.push(dayHeaderHtml(row));
+        continue;
+      }
+      itemIdx += 1;
+      if (undoAt === itemIdx) parts.push(undoPlaceholderHtml(sec, count));
+      parts.push(itemCardHtml(row.item));
+    }
+    if (undoAt === itemIdx + 1) parts.push(undoPlaceholderHtml(sec, count));
+    return parts.join("");
   }
 
   function measureVisibleCardHeights() {
@@ -1654,12 +1968,13 @@
     renderAll();
     requestAnimationFrame(() => {
       const items = visibleItems();
-      const idx = items.findIndex((x) => x.id === id);
-      if (!noScroll && idx >= 0 && items.length >= VIRTUAL_MIN) {
-        paintVirtualWindow(items, { force: true, preferId: id });
-        const prefix = buildHeightPrefix(items);
+      const rows = buildTimelineRows(items);
+      const rowIdx = rows.findIndex((r) => r.kind === "item" && r.item?.id === id);
+      if (!noScroll && rowIdx >= 0 && items.length >= VIRTUAL_MIN) {
+        paintVirtualWindow(rows, { force: true, preferId: id });
+        const prefix = buildHeightPrefix(rows);
         const listTop = itemList.getBoundingClientRect().top + window.scrollY;
-        const targetY = Math.max(0, listTop + prefix[idx] - 72);
+        const targetY = Math.max(0, listTop + (prefix[rowIdx] || 0) - 72);
         window.scrollTo({ top: targetY, behavior: "smooth" });
       }
       requestAnimationFrame(() => {
@@ -1816,22 +2131,14 @@
   }
 
   function cardsHtmlWithUndo(slice, sliceStart = 0) {
-    const undo = state.pendingUndo;
-    const undoAt = undo ? undo.anchorVisibleIdx : -1;
-    const sec = undo?.remainingSec ?? 0;
-    const count = undo?.items?.length ?? 0;
-    const parts = [];
-    for (let i = 0; i < slice.length; i++) {
-      const globalIdx = sliceStart + i;
-      if (undoAt === globalIdx) parts.push(undoPlaceholderHtml(sec, count));
-      parts.push(itemCardHtml(slice[i]));
-    }
-    if (undoAt === sliceStart + slice.length) parts.push(undoPlaceholderHtml(sec, count));
-    return parts.join("");
+    const rows = buildTimelineRows(slice);
+    // sliceStart is item index; when grouping, day headers don't advance item index inside rowsHtmlWithUndo via offset
+    return rowsHtmlWithUndo(rows, sliceStart);
   }
 
   function itemCardHtml(item) {
     const checked = state.selected.has(item.id) ? "checked" : "";
+    const q = String(state.searchQuery || "").trim();
     const tags = (item.tagIds || [])
       .filter((id) => id !== DEFAULT_TAG_ID)
       .map((id) => ({ id, name: tagById(id)?.name || id }))
@@ -1839,10 +2146,10 @@
     const tagHtml = tags
       .map(
         (t) =>
-          `<span class="memo-chip"><button type="button" class="memo-chip-name" data-memo-chip-filter="${escapeHtml(t.id)}" title="筛选此标签">${escapeHtml(t.name)}</button><button type="button" class="memo-chip-x" data-memo-chip-rm="${item.id}" data-memo-chip-tag="${escapeHtml(t.id)}" title="移除此标签" aria-label="移除标签 ${escapeHtml(t.name)}">×</button></span>`
+          `<span class="memo-chip"><button type="button" class="memo-chip-name" data-memo-chip-filter="${escapeHtml(t.id)}" title="筛选此标签">${highlightEscaped(escapeHtml(t.name), q)}</button><button type="button" class="memo-chip-x" data-memo-chip-rm="${item.id}" data-memo-chip-tag="${escapeHtml(t.id)}" title="移除此标签" aria-label="移除标签 ${escapeHtml(t.name)}">×</button></span>`
       )
       .join("");
-    const title = escapeHtml(item.name || item.type || "条目");
+    const title = highlightEscaped(escapeHtml(item.name || item.type || "条目"), q);
     const time = formatTime(item.createdAt);
     const size = formatBytes(item.size || 0);
     const typeLabel = TYPE_LABELS[item.type] || item.type || "文件";
@@ -1854,7 +2161,7 @@
       const long = noteRaw.length > NOTE_CARD_CLIP;
       const shown = !long || expanded ? noteRaw : `${noteRaw.slice(0, NOTE_CARD_CLIP)}…`;
       noteHtml = `<div class="memo-card-note-wrap">
-        <button type="button" class="memo-card-note" data-memo-note="${item.id}" title="点击编辑备注">${escapeHtml(shown)}</button>
+        <button type="button" class="memo-card-note" data-memo-note="${item.id}" title="点击编辑备注">${highlightEscaped(escapeHtml(shown), q)}</button>
         ${
           long
             ? `<button type="button" class="ghost-btn memo-note-expand" data-memo-note-expand="${item.id}">${
@@ -1870,7 +2177,10 @@
     if (item.type === "text") {
       const full = item.textPreview || "";
       const formatted = formatCardTextBody(full);
-      body = `<pre class="memo-text mono${formatted.truncated ? " is-truncated" : ""}" data-memo-expand="${item.id}" draggable="false" title="${escapeHtml(formatted.title)}">${formatted.html}</pre>`;
+      const link = linkCardHtml(firstHttpUrl(full));
+      const textTag = formatted.md ? "div" : "pre";
+      const textCls = `memo-text mono${formatted.truncated ? " is-truncated" : ""}${formatted.md ? " is-md" : ""}`;
+      body = `<${textTag} class="${textCls}" data-memo-expand="${item.id}" draggable="false" title="${escapeHtml(formatted.title)}">${formatted.html}</${textTag}>${link}`;
     } else if (item.type === "image" || item.type === "gif") {
       const badge = item.type === "gif" ? `<span class="memo-anim-badge">动图</span>` : "";
       body = `<div class="memo-thumb-wrap memo-media-hit" data-memo-preview="${item.id}">${badge}<img class="memo-thumb" data-memo-thumb="${item.id}" alt="" loading="lazy" decoding="async" /></div>`;
@@ -1892,12 +2202,14 @@
     }
     const editing = state.editingId === item.id ? " is-editing" : "";
     const pinnedCls = item.pinned ? " is-pinned" : "";
+    const archivedCls = isArchived(item) ? " is-archived" : "";
     const dragHandle = canDragReorder()
       ? `<button type="button" class="memo-drag-handle" draggable="true" data-memo-drag="${item.id}" title="拖拽排序" aria-label="拖拽排序">⠿</button>`
       : "";
     const tempBadge = isTempItem(item)
       ? `<span class="memo-temp-badge" title="${escapeHtml(formatTempRemain(item))}">临时</span>`
       : "";
+    const archBadge = isArchived(item) ? `<span class="memo-arch-badge">归档</span>` : "";
     const canCopy = canClipboardCopy(item);
     const primaryAction = canCopy
       ? `<button type="button" class="secondary-btn" data-memo-copy="${item.id}">复制</button>`
@@ -1907,12 +2219,12 @@
       return `<button type="button" class="ghost-btn${extra}" data-memo-${act.id}="${item.id}">${act.label}</button>`;
     });
     const tempCls = isTempItem(item) ? " is-temp" : "";
-    return `<article class="memo-card${editing}${pinnedCls}${tempCls}" data-memo-id="${item.id}" draggable="false">
+    return `<article class="memo-card${editing}${pinnedCls}${tempCls}${archivedCls}" data-memo-id="${item.id}" data-memo-day="${escapeAttr(dayKeyOf(item))}" draggable="false">
       <div class="memo-card-head">
         ${dragHandle}
         <label class="memo-check"><input type="checkbox" data-memo-check="${item.id}" ${checked} /></label>
         <div class="memo-card-meta">
-          <button type="button" class="memo-card-title" data-memo-rename="${item.id}" title="单击或双击修改名称">${item.pinned ? `<span class="memo-pin-mark" title="已置顶">置顶</span>` : ""}${tempBadge}${title}</button>
+          <button type="button" class="memo-card-title" data-memo-rename="${item.id}" title="单击或双击修改名称">${item.pinned ? `<span class="memo-pin-mark" title="已置顶">置顶</span>` : ""}${tempBadge}${archBadge}${title}</button>
           <span class="hint tight mono"><span class="memo-type-pill">${escapeHtml(typeLabel)}</span> · ${time} · ${size}</span>
         </div>
       </div>
@@ -2015,7 +2327,7 @@
         renderItems();
         return;
       }
-      paintVirtualWindow(items);
+      paintVirtualWindow(buildTimelineRows(items));
     });
   }
 
@@ -2026,33 +2338,70 @@
     window.addEventListener("resize", onVirtualScroll);
   }
 
-  function paintVirtualWindow(items, { force = false, preferId = "", skipMeasure = false } = {}) {
+  function itemIndexBeforeRow(rows, rowIdx) {
+    let n = 0;
+    const end = Math.max(0, Math.min(rowIdx, rows.length));
+    for (let i = 0; i < end; i++) {
+      if (rows[i]?.kind === "item") n += 1;
+    }
+    return n;
+  }
+
+  function sliceRowsByItemLimit(rows, itemLimit) {
+    const limit = Math.max(0, itemLimit || 0);
+    const out = [];
+    let n = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.kind === "day") {
+        out.push(row);
+        continue;
+      }
+      if (n >= limit) break;
+      out.push(row);
+      n += 1;
+    }
+    while (out.length && out[out.length - 1].kind === "day") out.pop();
+    return out;
+  }
+
+  function paintVirtualWindow(rowsIn, { force = false, preferId = "", skipMeasure = false } = {}) {
     if (!itemList) return;
-    const prefix = buildHeightPrefix(items);
-    const totalH = prefix[items.length] || 0;
+    const rows = Array.isArray(rowsIn) ? rowsIn : buildTimelineRows(visibleItems());
+    const prefix = buildHeightPrefix(rows);
+    const totalH = prefix[rows.length] || 0;
     const listTop = itemList.getBoundingClientRect().top + window.scrollY;
     const viewTop = Math.max(0, window.scrollY + 8 - listTop);
     const viewH = window.innerHeight || 800;
     let start;
     let end;
-    const preferIdx = preferId ? items.findIndex((x) => x.id === preferId) : -1;
+    const preferIdx = preferId
+      ? rows.findIndex((r) => r.kind === "item" && r.item?.id === preferId)
+      : -1;
     if (force && preferIdx >= 0) {
       start = Math.max(0, preferIdx - 8);
-      end = Math.min(items.length, preferIdx + 12);
+      end = Math.min(rows.length, preferIdx + 12);
     } else {
       start = Math.max(0, indexAtOffset(prefix, viewTop) - 4);
-      end = Math.min(items.length, indexAtOffset(prefix, viewTop + viewH) + 6);
+      end = Math.min(rows.length, indexAtOffset(prefix, viewTop + viewH) + 6);
     }
     if (state.pendingUndo) {
       const a = state.pendingUndo.anchorVisibleIdx;
-      start = Math.min(start, Math.max(0, a - 3));
-      end = Math.max(end, Math.min(items.length, a + 4));
-      if (a >= items.length) end = Math.max(end, Math.min(items.length, start + 16));
+      // expand window around undo anchor item
+      let itemN = -1;
+      for (let i = 0; i < rows.length; i++) {
+        if (rows[i].kind !== "item") continue;
+        itemN += 1;
+        if (itemN === a || itemN === a - 1 || itemN === a + 1) {
+          start = Math.min(start, Math.max(0, i - 3));
+          end = Math.max(end, Math.min(rows.length, i + 4));
+        }
+      }
     }
-    if (end - start < 16) end = Math.min(items.length, start + 16);
+    if (end - start < 16) end = Math.min(rows.length, start + 16);
     const topPad = prefix[start] || 0;
     const bottomPad = Math.max(0, totalH - (prefix[end] || 0));
-    const slice = items.slice(start, end);
+    const slice = rows.slice(start, end);
     const prevStart = itemList.dataset.virtStart || "";
     const prevEnd = itemList.dataset.virtEnd || "";
     if (!force && prevStart === String(start) && prevEnd === String(end) && itemList.querySelector(".memo-card")) {
@@ -2062,16 +2411,19 @@
     revokeTrackedUrls();
     itemList.dataset.virtStart = String(start);
     itemList.dataset.virtEnd = String(end);
-    itemList.innerHTML = `<div class="memo-virt-spacer" data-memo-virt-top style="height:${topPad}px" aria-hidden="true"></div>${cardsHtmlWithUndo(slice, start)}<div class="memo-virt-spacer" data-memo-virt-bottom style="height:${bottomPad}px" aria-hidden="true"></div>`;
-    renderListMeta(items.length, slice.length);
+    const itemOffset = itemIndexBeforeRow(rows, start);
+    itemList.innerHTML = `<div class="memo-virt-spacer" data-memo-virt-top style="height:${topPad}px" aria-hidden="true"></div>${rowsHtmlWithUndo(slice, itemOffset)}<div class="memo-virt-spacer" data-memo-virt-bottom style="height:${bottomPad}px" aria-hidden="true"></div>`;
+    const itemTotal = visibleItems().length;
+    const shown = slice.reduce((n, r) => n + (r.kind === "item" ? 1 : 0), 0);
+    renderListMeta(itemTotal, shown);
     hydrateMedia();
     syncSelectAllChrome();
     if (skipMeasure) return;
     requestAnimationFrame(() => {
       if (!state.virtualMode) return;
       if (!measureVisibleCardHeights()) return;
-      const next = visibleItems();
-      if (next.length < VIRTUAL_MIN) return;
+      const next = buildTimelineRows(visibleItems());
+      if (visibleItems().length < VIRTUAL_MIN) return;
       const keepId = preferId || itemList.querySelector(".memo-card")?.dataset?.memoId || "";
       paintVirtualWindow(next, { force: true, preferId: keepId, skipMeasure: true });
     });
@@ -2080,23 +2432,30 @@
   function syncDropHint() {
     const dropHint = $("#memo-drop > p.hint");
     if (!dropHint) return;
-    dropHint.textContent = canDragReorder()
-      ? "拖拽文件到本页任意区域添加 · 最新在上 · 拖卡片左侧把手排序 · 滑到底部自动加载"
-      : isLikelyMobile()
-        ? "拖拽文件到本页任意区域添加 · 最新在上 · 请用搜索或标签定位 · 滑到底部自动加载"
-        : "拖拽文件到本页任意区域添加 · 最新在上 · 条目较多已关闭拖拽排序，请用筛选/搜索定位";
+    if (canDragReorder()) {
+      dropHint.textContent = state.groupByDay
+        ? "拖拽文件到本页添加 · 拖把手排序（仅同日/置顶区内） · 拖到左侧「临时」可标临时 · 滑到底部加载"
+        : "拖拽文件到本页添加 · 拖卡片左侧把手排序 · 拖到左侧「临时」可标临时 · 滑到底部自动加载";
+    } else if (isLikelyMobile()) {
+      dropHint.textContent = "拖拽文件到本页任意区域添加 · 最新在上 · 请用搜索或标签定位 · 滑到底部自动加载";
+    } else {
+      dropHint.textContent = "拖拽文件到本页任意区域添加 · 最新在上 · 滑到底部自动加载";
+    }
   }
 
   function renderItems() {
     if (!itemList) return;
     stopMediaObserver();
     revokeTrackedUrls();
+    clearDragInsertState();
     const items = visibleItems();
+    const rows = buildTimelineRows(items);
     const moreRow = $("#memo-more-row");
     const loadMoreBtn = $("#memo-load-more");
     const sentinel = $("#memo-scroll-sentinel");
     const loadingTip = $("#memo-loading-more");
     syncDropHint();
+    syncViewToggles();
     if (!items.length) {
       stopVirtualScroll();
       itemList.dataset.virtStart = "";
@@ -2113,6 +2472,8 @@
       let emptyTip = "还没有条目。先读剪贴板、写一段文字，或添加文件。";
       if (state.searchQuery.trim()) {
         emptyTip = `没有匹配「${state.searchQuery.trim()}」的条目。`;
+      } else if (state.activeTagId === ARCHIVE_FILTER_ID) {
+        emptyTip = "暂无归档条目。";
       } else if (state.activeType !== "all" && state.activeTagId !== "all") {
         emptyTip = "当前标签与类型筛选下暂无条目。";
       } else if (state.activeType !== "all") {
@@ -2148,7 +2509,7 @@
       itemList.dataset.virtStart = "";
       itemList.dataset.virtEnd = "";
       setupVirtualScroll();
-      paintVirtualWindow(items);
+      paintVirtualWindow(rows);
       return;
     }
 
@@ -2156,17 +2517,16 @@
     itemList.dataset.virtStart = "";
     itemList.dataset.virtEnd = "";
     const limit = Math.max(PAGE_SIZE, state.listLimit || PAGE_SIZE);
-    const page = items.slice(0, limit);
-    // 统一按入库顺序平铺：最新在上，不再按文本/图片等分类分组
-    itemList.innerHTML = cardsHtmlWithUndo(page, 0);
-    renderListMeta(items.length, page.length);
+    const pageRows = sliceRowsByItemLimit(rows, limit);
+    const shown = pageRows.reduce((n, r) => n + (r.kind === "item" ? 1 : 0), 0);
+    itemList.innerHTML = rowsHtmlWithUndo(pageRows, 0);
+    renderListMeta(items.length, shown);
     if (moreRow) {
-      const hasMore = page.length < items.length;
-      // 有 IntersectionObserver 时靠哨兵自动加载；仅无 API 时露出按钮兜底
+      const hasMore = shown < items.length;
       const needManual = typeof IntersectionObserver !== "function";
       moreRow.hidden = !(hasMore && needManual);
       if (loadMoreBtn) {
-        loadMoreBtn.textContent = `加载更多（还剩 ${Math.max(0, items.length - page.length)}）`;
+        loadMoreBtn.textContent = `加载更多（还剩 ${Math.max(0, items.length - shown)}）`;
       }
       if (sentinel) sentinel.hidden = !hasMore;
       if (loadingTip && !hasMore) loadingTip.hidden = true;
@@ -2380,6 +2740,33 @@
     };
   }
 
+  async function attachHashTagsFromText(item, text) {
+    if (!item) return false;
+    const names = extractHashTags(text);
+    if (!names.length) return false;
+    let changed = false;
+    for (let i = 0; i < names.length; i++) {
+      const name = names[i];
+      let tag = state.index.tags.find((t) => t.id !== DEFAULT_TAG_ID && String(t.name).toLowerCase() === name.toLowerCase());
+      if (!tag) {
+        tag = { id: uid(), name, order: -1 };
+        state.index.tags.unshift(tag);
+        changed = true;
+      }
+      if (!item.tagIds.includes(tag.id)) {
+        item.tagIds.push(tag.id);
+        changed = true;
+      }
+    }
+    if (changed) {
+      ensureTagMembership(item);
+      reindexOrders();
+      rebuildTagMap();
+      invalidateCountCache();
+    }
+    return changed;
+  }
+
   async function addText(text, opts = {}) {
     const body = String(text || "").trim();
     if (!body) {
@@ -2405,6 +2792,14 @@
         quiet: Boolean(opts.quiet || opts.offerTemp),
       });
       if (editor) editor.value = "";
+      if (added?.id) {
+        const tagged = await attachHashTagsFromText(added, meta.body);
+        if (tagged) await persistIndex();
+        if (opts.markTemp) {
+          markItemTemp(added, state.tempDays);
+          await persistIndex();
+        }
+      }
     });
     if (added?.id) {
       if (opts.offerTemp) {
@@ -2687,6 +3082,7 @@
         item.contentHash = await hashBlobPartial(blob);
       } catch (_) {}
       rememberHash(item);
+      await attachHashTagsFromText(item, body);
       await persistIndex();
       const savedId = id;
       state.editingId = "";
@@ -2738,6 +3134,12 @@
           if (item?.id) {
             lastId = item.id;
             lastNew = state.index.items.length > before;
+            if (opts.markTemp && lastNew) {
+              markItemTemp(item, state.tempDays);
+            }
+            if (item.type === "text" && lastNew) {
+              await attachHashTagsFromText(item, item.textPreview || "");
+            }
           }
           if (state.index.items.length > before) added += 1;
           else if (item) skipped += 1;
@@ -2747,10 +3149,13 @@
         endSaveAbort();
         setProgress(false, 0, "");
       }
+      if (opts.markTemp && added) await persistIndex();
       if (lastId) {
         if (opts.offerTemp) {
           revealClipboardItem(lastId, { noScroll: opts.noScroll });
           if (lastNew) scheduleTempPrompt(lastId);
+        } else if (opts.markTemp && lastNew) {
+          flashItem(lastId, `已添加并标为临时（${added}）`, { noScroll: opts.noScroll });
         } else {
           const parts = [];
           if (added) parts.push(`已添加 ${added} 个`);
@@ -3257,6 +3662,7 @@
     state.bootReady = true;
     renderAll();
     maybeCaptureClipboard();
+    queueMicrotask(() => focusQuickCapture());
     setInterval(() => {
       purgeExpiredTempItems().catch(() => {});
     }, 3600000);
@@ -3843,6 +4249,8 @@
       })
       .join("");
     $("#memo-export-pass").value = "";
+    const zipFmt = $('#memo-export-dlg input[name="format"][value="zip"]');
+    if (zipFmt) zipFmt.checked = true;
     exportDlg.showModal();
   }
 
@@ -3852,6 +4260,22 @@
       if (!kinds.length) throw new Error("请至少选择一种类型");
       const tagIds = [...(exportTags?.selectedOptions || [])].map((o) => o.value);
       const password = String($("#memo-export-pass")?.value || "");
+      const format = String($('#memo-export-dlg input[name="format"]:checked')?.value || "zip");
+      if (format === "json") {
+        const packed = await buildExportJson({ kinds, tagIds });
+        downloadBlob(packed.blob, packed.filename);
+        markLastExport();
+        toast(`已导出 JSON 索引 ${packed.count} 条`);
+        return;
+      }
+      if (format === "markdown") {
+        const packed = await buildExportMarkdown({ kinds, tagIds });
+        downloadBlob(packed.blob, packed.filename);
+        markLastExport();
+        toast(`已导出 Markdown ${packed.count} 条`);
+        return;
+      }
+      if (password && format !== "zip") throw new Error("加密仅支持完整 ZIP 包");
       const packed = await buildExportZip({ kinds, tagIds, password });
       if (share) {
         try {
@@ -3935,6 +4359,66 @@
     }
     setProgress(false, 0, "");
     return { blob: outBlob, filename, count: picked.length };
+  }
+
+  function pickExportItems({ kinds, tagIds }) {
+    const kindSet = new Set(kinds);
+    const tagSet = tagIds?.length ? new Set(tagIds) : null;
+    return state.index.items.filter((it) => {
+      if (!kindSet.has(it.type)) return false;
+      if (!tagSet) return true;
+      return (it.tagIds || []).some((id) => tagSet.has(id));
+    });
+  }
+
+  async function buildExportJson({ kinds, tagIds }) {
+    const picked = pickExportItems({ kinds, tagIds });
+    if (!picked.length) throw new Error("没有符合条件的条目");
+    const payload = {
+      version: 1,
+      format: "devtools-memo-json-v1",
+      exportedAt: Date.now(),
+      tags: state.index.tags,
+      items: picked.map((it) => ({ ...it })),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+    return { blob, filename: `memo-index-${Date.now()}.json`, count: picked.length };
+  }
+
+  async function buildExportMarkdown({ kinds, tagIds }) {
+    const picked = pickExportItems({ kinds, tagIds });
+    if (!picked.length) throw new Error("没有符合条件的条目");
+    const lines = [`# 备忘录导出`, ``, `导出时间：${formatTime(Date.now())}`, ``];
+    for (let i = 0; i < picked.length; i++) {
+      const it = picked[i];
+      setProgress(true, i / picked.length, `写出 ${it.name}`);
+      const tags = (it.tagIds || [])
+        .filter((id) => id !== DEFAULT_TAG_ID)
+        .map((id) => tagById(id)?.name || id)
+        .filter(Boolean);
+      lines.push(`## ${it.name || it.type || "条目"}`);
+      lines.push(``);
+      lines.push(`- 类型：${TYPE_LABELS[it.type] || it.type}`);
+      lines.push(`- 时间：${formatTime(it.createdAt)}`);
+      if (tags.length) lines.push(`- 标签：${tags.map((t) => `#${t}`).join(" ")}`);
+      if (it.note) lines.push(`- 备注：${it.note}`);
+      lines.push(``);
+      if (it.type === "text") {
+        let body = it.textPreview || "";
+        try {
+          body = await (await loadBlob(it)).text();
+        } catch (_) {}
+        lines.push(body);
+      } else {
+        lines.push(`（二进制：${it.fileName || it.name || it.id}，${formatBytes(it.size || 0)}）`);
+      }
+      lines.push(``);
+      lines.push(`---`);
+      lines.push(``);
+    }
+    setProgress(false, 0, "");
+    const blob = new Blob([lines.join("\n")], { type: "text/markdown;charset=utf-8" });
+    return { blob, filename: `memo-export-${Date.now()}.md`, count: picked.length };
   }
 
   const imgZoom = {
@@ -4642,8 +5126,61 @@
   async function doImport(file) {
     if (!file) return;
     await withBusy(async () => {
-      let zipBlob = file;
       const name = file.name || "";
+      if (/\.json$/i.test(name) || file.type === "application/json") {
+        const text = await file.text();
+        const raw = JSON.parse(text);
+        const imported = normalizeIndex(raw);
+        const tagMap = new Map(state.index.tags.map((t) => [t.id, t]));
+        imported.tags.forEach((t) => {
+          if (t.id === DEFAULT_TAG_ID) return;
+          if (!tagMap.has(t.id)) {
+            state.index.tags.unshift({ ...t, order: -1 });
+            tagMap.set(t.id, t);
+          }
+        });
+        let importedCount = 0;
+        let skipped = 0;
+        for (let i = 0; i < imported.items.length; i++) {
+          const it = imported.items[i];
+          setProgress(true, i / Math.max(1, imported.items.length), `导入 ${it.name}`);
+          if (it.type !== "text" && !it.textPreview) {
+            skipped += 1;
+            continue;
+          }
+          const body = it.type === "text" ? String(it.textPreview || "") : "";
+          if (!body && it.type === "text") {
+            skipped += 1;
+            continue;
+          }
+          const meta = memoTextBlobMeta(body || JSON.stringify(it));
+          const blob = new Blob([meta.body], { type: meta.mime });
+          const added = await addItemFromBlob(blob, it.name || meta.fileName, {
+            type: "text",
+            textPreview: meta.body,
+            quiet: true,
+            skipLargeConfirm: true,
+            tagIds: it.tagIds,
+          });
+          if (added?.id) {
+            if (it.note) added.note = clipNote(it.note);
+            if (it.pinned) added.pinned = true;
+            if (it.archived) added.archived = true;
+            if (it.createdAt) added.createdAt = it.createdAt;
+            importedCount += 1;
+          } else skipped += 1;
+        }
+        reindexOrders();
+        rebuildTagMap();
+        invalidateCountCache();
+        await persistIndex({ immediate: true });
+        setProgress(false, 0, "");
+        renderAll();
+        toast(`JSON 导入完成：新增 ${importedCount}${skipped ? `，跳过 ${skipped}` : ""}`);
+        return;
+      }
+
+      let zipBlob = file;
       const looksEncrypted = /\.memo$/i.test(name);
       const tryLoadZip = async (blob) => {
         if (typeof JSZip !== "function") throw new Error("JSZip 未加载");
@@ -4698,43 +5235,45 @@
         const coarse =
           it.type === "text"
             ? textContentSig(it.textPreview || "")
-            : `bin:${it.type || detectKind(typed.type, it.name)}:${typed.size || it.size || 0}:${typed.type || it.mime || ""}`;
+            : blobContentSig(typed, it.type || detectKind(it.mime, it.name));
         const dup = findDuplicateBySig(coarse, contentHash);
         if (dup) {
-          await bumpItemToFront(dup);
           skipped += 1;
+          if (it.note && !dup.note) {
+            dup.note = clipNote(it.note);
+            notedImport += 1;
+          }
           continue;
         }
-        const newId = uid();
-        const fileName = await saveBlob(newId, typed, `${newId}_${safeFileName(it.fileName || it.name || "file")}`);
-        const row = {
-          ...it,
-          id: newId,
-          fileName,
-          contentHash: contentHash || it.contentHash || undefined,
-          createdAt: it.createdAt || Date.now(),
-          updatedAt: Date.now(),
-          order: -1,
-        };
-        const note = clipNote(row.note || "");
-        if (note) {
-          row.note = note;
-          notedImport += 1;
-        } else delete row.note;
-        state.index.items.unshift(row);
-        rememberHash(row);
-        importedCount += 1;
+        const added = await addItemFromBlob(typed, it.name || it.fileName || it.id, {
+          type: it.type || detectKind(it.mime, it.name),
+          textPreview: it.textPreview || "",
+          quiet: true,
+          skipLargeConfirm: true,
+          tagIds: it.tagIds,
+        });
+        if (added?.id) {
+          if (it.note) {
+            added.note = clipNote(it.note);
+            notedImport += 1;
+          }
+          if (it.pinned) added.pinned = true;
+          if (it.archived) added.archived = true;
+          if (it.tempUntil) added.tempUntil = it.tempUntil;
+          if (it.createdAt) added.createdAt = it.createdAt;
+          importedCount += 1;
+        } else skipped += 1;
       }
       reindexOrders();
       rebuildTagMap();
+      invalidateCountCache();
       await persistIndex({ immediate: true });
       setProgress(false, 0, "");
       renderAll();
-      const noteBit = notedImport ? `，其中 ${notedImport} 条含备注` : "";
-      if (importedCount && skipped) toast(`导入完成：新增 ${importedCount} 条${noteBit}，重复置顶 ${skipped} 条`);
-      else if (importedCount) toast(`导入完成（${importedCount} 条${noteBit}）`);
-      else if (skipped) toast(`全部为重复内容，已置顶 ${skipped} 条`);
-      else toast("导入完成，但未找到可写入的文件");
+      const bits = [`导入完成：新增 ${importedCount}`];
+      if (skipped) bits.push(`跳过重复 ${skipped}`);
+      if (notedImport) bits.push(`备注 ${notedImport}`);
+      toast(bits.join("，"));
     });
   }
 
@@ -5001,6 +5540,7 @@
         else if (act === "open") await openItemPreview(item);
         else if (act === "top") await applyItemMoveToTop(item);
         else if (act === "pin") await applyItemPinToggle(item);
+        else if (act === "archive") await applyItemArchiveToggle(item);
         else if (act === "edit") await beginEditText(item);
         else if (act === "note") await beginEditNote(item);
         else if (act === "temp") await applyItemTempMark(item);
@@ -5174,6 +5714,13 @@
       if (pinId) {
         const item = state.index.items.find((x) => x.id === pinId);
         if (item) await applyItemPinToggle(item);
+        t.closest("details")?.removeAttribute("open");
+        return;
+      }
+      const archiveId = t.closest?.("[data-memo-archive]")?.dataset?.memoArchive;
+      if (archiveId) {
+        const item = state.index.items.find((x) => x.id === archiveId);
+        if (item) await applyItemArchiveToggle(item);
         t.closest("details")?.removeAttribute("open");
         return;
       }
@@ -5354,6 +5901,22 @@
     toast("已取消全部选中");
   });
   $("#memo-temp-filter")?.addEventListener("click", () => toggleTempFilter());
+  $("#memo-archive-filter")?.addEventListener("click", () => toggleArchiveFilter());
+  $("#memo-toggle-day")?.addEventListener("click", () => {
+    state.groupByDay = !state.groupByDay;
+    writeBoolPref(GROUP_BY_DAY_KEY, state.groupByDay);
+    resetListPaging();
+    renderAll();
+    toast(state.groupByDay ? "已按日分组（组内可拖拽）" : "已关闭按日分组");
+  });
+  $("#memo-toggle-md")?.addEventListener("click", () => {
+    state.mdPreview = !state.mdPreview;
+    writeBoolPref(MD_PREVIEW_KEY, state.mdPreview);
+    state.cardHeightCache.clear();
+    renderItems();
+    syncViewToggles();
+    toast(state.mdPreview ? "已开启 Markdown 预览" : "已关闭 Markdown 预览");
+  });
   $("#memo-temp-days")?.addEventListener("change", (e) => {
     saveTempDays(e.target.value);
     toast(`临时条目默认保留 ${state.tempDays} 天`);
@@ -5445,6 +6008,67 @@
 
   // item drag reorder (仅拖左侧把手，避免与文本框选冲突)
   let dragItemId = null;
+
+  function clearDragInsertState() {
+    if (!itemList) return;
+    $$(".memo-card.is-drop-before, .memo-card.is-drop-after", itemList).forEach((el) => {
+      el.classList.remove("is-drop-before", "is-drop-after");
+    });
+    state.dragInsertAfter = false;
+  }
+
+  function updateDragInsertIndicator(e) {
+    clearDragInsertState();
+    if (!dragItemId) return null;
+    const card = e.target?.closest?.(".memo-card");
+    if (!card || !itemList?.contains(card)) return null;
+    const toId = card.dataset.memoId;
+    if (!toId || toId === dragItemId) return null;
+    const fromItem = state.index.items.find((x) => x.id === dragItemId);
+    const toItem = state.index.items.find((x) => x.id === toId);
+    if (!sameDragGroup(fromItem, toItem)) {
+      card.classList.add("is-drop-blocked");
+      return null;
+    }
+    const rect = card.getBoundingClientRect();
+    const after = e.clientY > rect.top + rect.height / 2;
+    state.dragInsertAfter = after;
+    card.classList.add(after ? "is-drop-after" : "is-drop-before");
+    return { toId, after };
+  }
+
+  function reorderWithinGroup(fromId, toId, placeAfter) {
+    const items = state.index.items;
+    const fromItem = items.find((x) => x.id === fromId);
+    const toItem = items.find((x) => x.id === toId);
+    if (!fromItem || !toItem || fromId === toId) return false;
+    if (!sameDragGroup(fromItem, toItem)) {
+      toast(state.groupByDay ? "日视图下只能在同一天（或置顶区）内排序" : "置顶与普通条目请用置顶按钮调整");
+      return false;
+    }
+    const groupIdxs = [];
+    for (let i = 0; i < items.length; i++) {
+      if (sameDragGroup(items[i], fromItem)) groupIdxs.push(i);
+    }
+    const groupItems = groupIdxs.map((i) => items[i]);
+    const fromG = groupItems.findIndex((x) => x.id === fromId);
+    let toG = groupItems.findIndex((x) => x.id === toId);
+    if (fromG < 0 || toG < 0) return false;
+    const [moved] = groupItems.splice(fromG, 1);
+    if (fromG < toG) toG -= 1;
+    const insertG = placeAfter ? toG + 1 : toG;
+    groupItems.splice(Math.max(0, Math.min(groupItems.length, insertG)), 0, moved);
+    groupIdxs.forEach((idx, j) => {
+      items[idx] = groupItems[j];
+    });
+    // 保持全局置顶块在前
+    const pins = items.filter((x) => x.pinned);
+    const rest = items.filter((x) => !x.pinned);
+    state.index.items = pins.concat(rest);
+    reindexOrders();
+    return true;
+  }
+
   itemList?.addEventListener("dragstart", (e) => {
     const hit = e.target?.nodeType === 1 ? e.target : e.target?.parentElement;
     const handle = hit?.closest(".memo-drag-handle");
@@ -5464,35 +6088,79 @@
     }
     dragItemId = card.dataset.memoId;
     e.dataTransfer.effectAllowed = "move";
+    try {
+      e.dataTransfer.setData("text/memo-item-id", dragItemId);
+    } catch (_) {}
     card.classList.add("is-dragging");
   });
   itemList?.addEventListener("dragend", () => {
     $$(".memo-card.is-dragging", itemList).forEach((el) => el.classList.remove("is-dragging"));
+    $$(".memo-card.is-drop-blocked", itemList).forEach((el) => el.classList.remove("is-drop-blocked"));
+    clearDragInsertState();
+    $("#memo-temp-zone")?.classList.remove("is-drop-target");
     dragItemId = null;
   });
   itemList?.addEventListener("dragover", (e) => {
     if (!dragItemId) return;
     e.preventDefault();
+    updateDragInsertIndicator(e);
+  });
+  itemList?.addEventListener("dragleave", (e) => {
+    if (!itemList.contains(e.relatedTarget)) clearDragInsertState();
   });
   itemList?.addEventListener("drop", async (e) => {
     const card = e.target.closest(".memo-card");
     if (!dragItemId || !card) return;
     e.preventDefault();
+    e.stopPropagation();
     const toId = card.dataset.memoId;
+    const placeAfter = state.dragInsertAfter;
+    clearDragInsertState();
     if (!toId || toId === dragItemId) return;
-    const items = state.index.items;
-    const from = items.findIndex((x) => x.id === dragItemId);
-    const to = items.findIndex((x) => x.id === toId);
-    if (from < 0 || to < 0) return;
-    const [row] = items.splice(from, 1);
-    items.splice(to, 0, row);
-    const pins = items.filter((x) => x.pinned);
-    const rest = items.filter((x) => !x.pinned);
-    state.index.items = pins.concat(rest);
-    reindexOrders();
+    const ok = reorderWithinGroup(dragItemId, toId, placeAfter);
+    dragItemId = null;
+    if (!ok) return;
     await persistIndex();
     renderAll();
   });
+
+  // 拖到「临时」区 = 临时入库 / 标临时
+  const tempZone = $("#memo-temp-zone");
+  if (tempZone && tempZone.dataset.memoTempDropBound !== "1") {
+    tempZone.dataset.memoTempDropBound = "1";
+    tempZone.addEventListener("dragover", (e) => {
+      const types = [...(e.dataTransfer?.types || [])];
+      if (dragItemId || types.includes("Files") || types.includes("text/memo-item-id")) {
+        e.preventDefault();
+        e.stopPropagation();
+        tempZone.classList.add("is-drop-target");
+      }
+    });
+    tempZone.addEventListener("dragleave", (e) => {
+      if (tempZone.contains(e.relatedTarget)) return;
+      tempZone.classList.remove("is-drop-target");
+    });
+    tempZone.addEventListener("drop", async (e) => {
+      tempZone.classList.remove("is-drop-target");
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        if (dragItemId) {
+          const item = state.index.items.find((x) => x.id === dragItemId);
+          dragItemId = null;
+          clearDragInsertState();
+          if (item) await applyItemTempMark(item);
+          return;
+        }
+        if (e.dataTransfer?.files?.length) {
+          await ingestFiles(e.dataTransfer.files, { offerTemp: false, markTemp: true });
+          return;
+        }
+      } catch (err) {
+        setError(memoError, err.message || String(err));
+      }
+    });
+  }
 
   // drop files — 列表区 + 整页备忘录面板
   const drop = $("#memo-drop");
@@ -5503,6 +6171,7 @@
     el.dataset.memoDropBound = "1";
     let dropLock = 0;
     el.addEventListener("dragover", (e) => {
+      if (dragItemId) return;
       if ([...e.dataTransfer.types].includes("Files")) {
         e.preventDefault();
         memoPanel?.classList.add("is-memo-file-drag");
@@ -5517,6 +6186,7 @@
     el.addEventListener("drop", (e) => {
       memoPanel?.classList.remove("is-memo-file-drag");
       drop?.classList.remove("is-drag");
+      if (dragItemId) return;
       if (!e.dataTransfer?.files?.length) return;
       e.preventDefault();
       if (Date.now() - dropLock < 80) return;
@@ -5757,10 +6427,19 @@
     "click",
     (e) => {
       if (!e.target.closest?.(".tool-nav-link[data-tool='memo']")) return;
-      queueMicrotask(() => maybeCaptureClipboard());
+      queueMicrotask(() => {
+        maybeCaptureClipboard();
+        focusQuickCapture();
+      });
     },
     true
   );
+
+  window.addEventListener("hashchange", () => {
+    if (location.hash.replace(/^#/, "").split(/[/?]/)[0] === "memo") {
+      queueMicrotask(() => focusQuickCapture());
+    }
+  });
 
   window.DevToolsMemo = {
     getStorageBytes: estimateStorageBytes,
@@ -5798,6 +6477,27 @@
       renderAll();
       return row;
     },
+    setItemArchived: async (id, on) => {
+      const item = state.index.items.find((x) => x.id === id);
+      if (!item) return null;
+      const row = await setItemArchived(item, Boolean(on));
+      renderAll();
+      return row;
+    },
+    setGroupByDay: (on) => {
+      state.groupByDay = Boolean(on);
+      writeBoolPref(GROUP_BY_DAY_KEY, state.groupByDay);
+      renderAll();
+    },
+    setMdPreview: (on) => {
+      state.mdPreview = Boolean(on);
+      writeBoolPref(MD_PREVIEW_KEY, state.mdPreview);
+      state.cardHeightCache.clear();
+      renderItems();
+      syncViewToggles();
+    },
+    extractHashTags: (text) => extractHashTags(text),
+    buildTimelineRows: (items) => buildTimelineRows(items || visibleItems()),
     setShareUiForTest: (on) => {
       state.testShareUi = Boolean(on);
       renderItems();
@@ -5813,6 +6513,7 @@
     selectVisibleTemp,
     selectVisibleDateRangeFromInputs,
     isTempItem: (item) => isTempItem(item),
+    isArchived: (item) => isArchived(item),
     markItemTemp: async (id, days) => {
       const item = state.index.items.find((x) => x.id === id);
       if (!item) throw new Error("条目不存在");
