@@ -372,6 +372,39 @@ const OP_DEFS = {
       return { argv, label: argv.join(" ") };
     },
   },
+  "checkout-ours": {
+    group: "合并",
+    title: "checkout --ours",
+    build: (p) => {
+      need(p, "path");
+      return {
+        argv: ["checkout", "--ours", "--", assertPath(p.path)],
+        label: `checkout --ours -- ${p.path}`,
+        dangerous: true,
+      };
+    },
+  },
+  "checkout-theirs": {
+    group: "合并",
+    title: "checkout --theirs",
+    build: (p) => {
+      need(p, "path");
+      return {
+        argv: ["checkout", "--theirs", "--", assertPath(p.path)],
+        label: `checkout --theirs -- ${p.path}`,
+        dangerous: true,
+      };
+    },
+  },
+  "reset-soft-1": {
+    group: "提交",
+    title: "reset --soft HEAD~1",
+    build: () => ({
+      argv: ["reset", "--soft", "HEAD~1"],
+      label: "reset --soft HEAD~1",
+      dangerous: true,
+    }),
+  },
   "restore-workdir": {
     group: "分支",
     title: "restore .",
@@ -469,7 +502,11 @@ const OP_DEFS = {
   "merge-continue": {
     group: "合并",
     title: "merge --continue",
-    build: () => ({ argv: ["merge", "--continue"], label: "merge --continue", dangerous: true }),
+    build: () => ({
+      argv: ["-c", "core.editor=true", "merge", "--continue"],
+      label: "merge --continue",
+      dangerous: true,
+    }),
   },
   rebase: {
     group: "合并",
@@ -487,7 +524,11 @@ const OP_DEFS = {
   "rebase-continue": {
     group: "合并",
     title: "rebase --continue",
-    build: () => ({ argv: ["rebase", "--continue"], label: "rebase --continue", dangerous: true }),
+    build: () => ({
+      argv: ["-c", "core.editor=true", "rebase", "--continue"],
+      label: "rebase --continue",
+      dangerous: true,
+    }),
   },
   "rebase-skip": {
     group: "合并",
@@ -510,7 +551,11 @@ const OP_DEFS = {
   "cherry-pick-continue": {
     group: "合并",
     title: "cherry-pick --continue",
-    build: () => ({ argv: ["cherry-pick", "--continue"], label: "cherry-pick --continue", dangerous: true }),
+    build: () => ({
+      argv: ["-c", "core.editor=true", "cherry-pick", "--continue"],
+      label: "cherry-pick --continue",
+      dangerous: true,
+    }),
   },
   revert: {
     group: "合并",
@@ -532,7 +577,11 @@ const OP_DEFS = {
   "revert-continue": {
     group: "合并",
     title: "revert --continue",
-    build: () => ({ argv: ["revert", "--continue"], label: "revert --continue", dangerous: true }),
+    build: () => ({
+      argv: ["-c", "core.editor=true", "revert", "--continue"],
+      label: "revert --continue",
+      dangerous: true,
+    }),
   },
   reset: {
     group: "合并",
@@ -845,6 +894,7 @@ const CONFIRM_OPS = new Set([
   "remote-remove",
   "remote-set-url",
   "reset",
+  "reset-soft-1",
   "restore-workdir",
   "revert",
   "revert-abort",
@@ -856,6 +906,8 @@ const CONFIRM_OPS = new Set([
   "tag-delete",
   "worktree-add",
   "worktree-remove",
+  "checkout-ours",
+  "checkout-theirs",
 ]);
 
 function isDangerousOp(id, def) {

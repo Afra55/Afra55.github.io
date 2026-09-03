@@ -39,12 +39,13 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const { buildOp, listOpsCatalog } = require("./git-ops");
+const { buildOp, listOpsCatalog, assertPath } = require("./git-ops");
 
-const BRIDGE_VERSION = "0.2.1";
+const BRIDGE_VERSION = "0.2.3";
 const FEATURES = [
   "fs-browse","repo-open","repo-init","repo-clone","graph","branches",
-  "status","commit-detail","explain","ops-catalog","ops-full","protocol-launch"
+  "status","commit-detail","explain","ops-catalog","ops-full","protocol-launch",
+  "conflict-assist","read-write-file","beginner-plain-steps"
 ];
 
 const GIT_TIMEOUT_MS = 120000;
@@ -359,9 +360,132 @@ async function repoGraph(repo, maxN) {
   return { commits, ascii: ascii.stdout, cmd: log.cmd, limit: n };
 }
 
+function assertInsideRepo(repo, relPath) {
+  const rel = assertPath(relPath);
+  if (rel.startsWith("/") || /^[A-Za-z]:[\\/]/.test(rel) || rel.includes("..")) {
+    throw Object.assign(new Error("路径必须是仓库内相对路径"), { status: 400 });
+  }
+  const abs = path.resolve(repo, rel);
+  const root = path.resolve(repo);
+  if (abs !== root && !abs.startsWith(root + path.sep)) {
+    throw Object.assign(new Error("路径越出仓库"), { status: 400 });
+  }
+  return { rel, abs };
+}
+
+async function readRepoFile(repo, relPath) {
+  const { rel, abs } = assertInsideRepo(repo, relPath);
+  if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+    throw Object.assign(new Error("文件不存在"), { status: 404 });
+  }
+  const buf = fs.readFileSync(abs);
+  if (buf.length > 2 * 1024 * 1024) {
+    throw Object.assign(new Error("文件过大（>2MB），请用外部编辑器"), { status: 413 });
+  }
+  // reject obvious binary
+  if (buf.includes(0)) {
+    throw Object.assign(new Error("二进制文件不支持在线编辑"), { status: 415 });
+  }
+  return { path: rel, content: buf.toString("utf8"), bytes: buf.length };
+}
+
+async function writeRepoFile(repo, relPath, content) {
+  const { rel, abs } = assertInsideRepo(repo, relPath);
+  const text = String(content ?? "");
+  if (Buffer.byteLength(text, "utf8") > 2 * 1024 * 1024) {
+    throw Object.assign(new Error("内容过大（>2MB）"), { status: 413 });
+  }
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, text, "utf8");
+  return { path: rel, bytes: Buffer.byteLength(text, "utf8") };
+}
+
 async function repoStatus(repo) {
   const porcelain = await git(repo, ["status", "--porcelain=v2", "-b", "--untracked-files=all"]);
   const stash = await git(repo, ["stash", "list"]).catch(() => ({ stdout: "" }));
+  const text = String(porcelain.stdout || "");
+  const changes = [];
+  const conflicts = [];
+  let branch = "";
+  let upstream = "";
+  let ahead = 0;
+  let behind = 0;
+  for (const line of text.split("\n")) {
+    if (!line) continue;
+    if (line.startsWith("# branch.head ")) {
+      branch = line.slice("# branch.head ".length).trim();
+      continue;
+    }
+    if (line.startsWith("# branch.upstream ")) {
+      upstream = line.slice("# branch.upstream ".length).trim();
+      continue;
+    }
+    if (line.startsWith("# branch.ab ")) {
+      const m = line.match(/\+(\d+)\s+-(\d+)/);
+      if (m) {
+        ahead = Number(m[1]) || 0;
+        behind = Number(m[2]) || 0;
+      }
+      continue;
+    }
+    if (line.startsWith("#")) continue;
+    if (line.startsWith("u ")) {
+      const parts = line.split(" ");
+      const path = parts[parts.length - 1];
+      conflicts.push({ path, label: path });
+      continue;
+    }
+    if (line.startsWith("? ")) {
+      const path = line.slice(2);
+      changes.push({ path, kind: "新", staged: false, unstaged: true, conflict: false });
+      continue;
+    }
+    if (line.startsWith("1 ") || line.startsWith("2 ")) {
+      const parts = line.split(" ");
+      const xy = parts[1] || "..";
+      const path = parts[parts.length - 1];
+      changes.push({
+        path,
+        kind: xy.includes("A") ? "加" : xy.includes("D") ? "删" : xy.includes("R") ? "改名" : "改",
+        staged: xy[0] !== ".",
+        unstaged: xy[1] !== ".",
+        conflict: false,
+        xy,
+      });
+    }
+  }
+
+  let inProgress = null;
+  const markers = [
+    [".git/MERGE_HEAD", "merge"],
+    [".git/REBASE_HEAD", "rebase"],
+    [".git/CHERRY_PICK_HEAD", "cherry-pick"],
+    [".git/REVERT_HEAD", "revert"],
+  ];
+  for (const [rel, kind] of markers) {
+    if (fs.existsSync(path.join(repo, rel))) {
+      inProgress = kind;
+      break;
+    }
+  }
+  // rebase may use .git/rebase-merge or rebase-apply
+  if (!inProgress) {
+    if (fs.existsSync(path.join(repo, ".git/rebase-merge")) || fs.existsSync(path.join(repo, ".git/rebase-apply"))) {
+      inProgress = "rebase";
+    }
+  }
+
+  const plainSteps = [];
+  if (inProgress === "merge") plainSteps.push("正在合并两条线，请先处理冲突文件");
+  else if (inProgress === "rebase") plainSteps.push("正在改写提交顺序，请先处理冲突");
+  else if (inProgress === "cherry-pick") plainSteps.push("正在拣选某个提交，请先处理冲突");
+  else if (inProgress === "revert") plainSteps.push("正在撤销某个提交，请先处理冲突");
+  if (conflicts.length) plainSteps.push(`有 ${conflicts.length} 个文件两边改得不一样，需要你选`);
+  if (changes.length) plainSteps.push(`有 ${changes.length} 个文件改动还没保存进历史`);
+  if (behind > 0) plainSteps.push(`网上还有 ${behind} 个更新可以拉下来`);
+  if (ahead > 0) plainSteps.push(`你本地多出 ${ahead} 个提交可以上传`);
+  if (!plainSteps.length) plainSteps.push("工作区干净，可以放心切换分支或从网上更新");
+
   return {
     porcelain: porcelain.stdout,
     stash: String(stash.stdout || "")
@@ -369,6 +493,15 @@ async function repoStatus(repo) {
       .split("\n")
       .filter(Boolean),
     cmd: porcelain.cmd,
+    branch,
+    upstream,
+    ahead,
+    behind,
+    changes,
+    conflicts,
+    inProgress,
+    plainSteps,
+    dirtyCount: changes.length + conflicts.length,
   };
 }
 
@@ -619,6 +752,21 @@ async function handleRequest(req, res, opts = {}) {
     if (pathname === "/repo/status" && req.method === "GET") {
       const repo = await resolveRepoRoot(url.searchParams.get("repo"));
       sendJson(res, 200, await repoStatus(repo), origin);
+      return;
+    }
+
+    if (pathname === "/repo/read-file" && req.method === "GET") {
+      const repo = await resolveRepoRoot(url.searchParams.get("repo"));
+      const filePath = url.searchParams.get("path");
+      sendJson(res, 200, { ok: true, ...(await readRepoFile(repo, filePath)) }, origin);
+      return;
+    }
+
+    if (pathname === "/repo/write-file" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req));
+      const repo = await resolveRepoRoot(body.repo || body.path);
+      const written = await writeRepoFile(repo, body.file || body.filePath, body.content);
+      sendJson(res, 200, { ok: true, ...written }, origin);
       return;
     }
 

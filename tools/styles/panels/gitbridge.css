@@ -208,6 +208,30 @@
   min-width: 2.2rem;
 }
 
+#gitbridge .git-conflict-box {
+  margin-top: 0.55rem;
+  padding: 0.55rem 0.65rem;
+  border: 1px solid color-mix(in srgb, #f5a524 45%, var(--border, #2a2f3a));
+  border-radius: 8px;
+  background: color-mix(in srgb, #f5a524 8%, transparent);
+}
+
+#gitbridge .git-conflict-editor textarea {
+  width: 100%;
+  min-height: 12rem;
+  margin-top: 0.35rem;
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+#gitbridge .git-conflict-item.is-active {
+  outline: 1px solid color-mix(in srgb, var(--accent, #5b8cff) 55%, transparent);
+}
+
+#gitbridge .git-easy-now-warn {
+  color: color-mix(in srgb, #f5a524 80%, var(--text, #e8eaed));
+}
+
 #gitbridge .git-ops-details {
   margin-top: 0.35rem;
 }

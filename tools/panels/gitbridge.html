@@ -77,29 +77,74 @@
 
             <div class="git-beginner panel-card" id="git-beginner">
               <div class="label-row">
-                <h2 class="subhead">新手三步（不用记命令）</h2>
-                <button type="button" class="ghost-btn" id="git-easy-refresh">刷新变更</button>
+                <h2 class="subhead">小白模式（不用记命令）</h2>
+                <button type="button" class="ghost-btn" id="git-easy-refresh">刷新状态</button>
+              </div>
+              <p class="hint tight" id="git-easy-now">打开仓库后，这里会用人话告诉你「现在可以做什么」。</p>
+              <div class="git-easy-actions btn-row tool-actions" id="git-easy-actions" style="flex-wrap:wrap;margin-top:0.45rem">
+                <button type="button" class="secondary-btn" id="git-easy-pull" title="git pull --ff-only">① 从网上更新</button>
+                <button type="button" class="secondary-btn" id="git-easy-push" title="git push">② 上传我的改动</button>
+                <button type="button" class="ghost-btn" id="git-easy-stash" title="git stash -u">先把改动收起来</button>
+                <button type="button" class="ghost-btn" id="git-easy-stash-pop" title="git stash pop">取出收起的改动</button>
+                <button type="button" class="ghost-btn" id="git-easy-undo" title="git reset --soft HEAD~1">撤销上一次保存</button>
+              </div>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
+                <label for="git-easy-branch">换工作线</label>
+                <select id="git-easy-branch" class="mono select-input" style="min-width:10rem;flex:1"></select>
+                <button type="button" class="ghost-btn" id="git-easy-switch">切换过去</button>
+              </div>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
+                <label for="git-easy-newbr">开新线</label>
+                <input id="git-easy-newbr" class="mono" type="text" placeholder="例如 fix-login" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
+                <button type="button" class="ghost-btn" id="git-easy-newbr-go">创建并切换</button>
+              </div>
+
+              <div id="git-conflict-box" class="git-conflict-box" hidden>
+                <div class="label-row" style="margin-top:0.75rem">
+                  <h2 class="subhead">两边改冲突了</h2>
+                  <span class="hint tight" id="git-conflict-meta"></span>
+                </div>
+                <p class="hint tight">每个冲突文件三选一：<strong>留我的</strong>、<strong>留对方的</strong>，或<strong>打开编辑</strong>自己改。改完点「保存并标记已解决」。全部解决后点「继续合并」。</p>
+                <div id="git-conflict-list" class="git-change-list"></div>
+                <div id="git-conflict-editor" class="git-conflict-editor" hidden>
+                  <p class="hint tight mono" id="git-conflict-path"></p>
+                  <p class="hint tight">文件里若有 <span class="mono">&lt;&lt;&lt;&lt;&lt;&lt;&lt;</span> / <span class="mono">=======</span> / <span class="mono">&gt;&gt;&gt;&gt;&gt;&gt;&gt;</span> 标记：中间线以上是一边，以下是另一边。删掉标记，只留你要的内容，再点保存。</p>
+                  <textarea id="git-conflict-text" class="mono area" rows="12" spellcheck="false"></textarea>
+                  <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.35rem">
+                    <button type="button" class="ghost-btn" id="git-conflict-ours">留我的版本</button>
+                    <button type="button" class="ghost-btn" id="git-conflict-theirs">留对方版本</button>
+                    <button type="button" class="secondary-btn" id="git-conflict-save">保存并标记已解决</button>
+                    <button type="button" class="ghost-btn" id="git-conflict-close">关闭编辑</button>
+                  </div>
+                </div>
+                <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
+                  <button type="button" class="primary-btn" id="git-conflict-continue">继续合并</button>
+                  <button type="button" class="ghost-btn" id="git-conflict-abort">放弃这次合并</button>
+                </div>
+              </div>
+
+              <div class="label-row" style="margin-top:0.75rem">
+                <h2 class="subhead">保存我的改动</h2>
               </div>
               <ol class="git-beginner-steps hint">
-                <li>看下面「改了哪些文件」，勾选要保存的。</li>
-                <li>写一句人话说明，点「提交」。</li>
-                <li>需要同步到 GitHub 等远程时，再点「推送」。</li>
+                <li>勾选要保存的文件（默认全勾）。</li>
+                <li>写一句人话说明，点「保存到历史」。</li>
+                <li>需要同步到 GitHub 时，再点上面的「上传我的改动」。</li>
               </ol>
               <div id="git-change-list" class="git-change-list" aria-live="polite">
                 <p class="hint tight">打开仓库后显示未提交变更。</p>
               </div>
               <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
-                <button type="button" class="secondary-btn" id="git-easy-stage">暂存勾选</button>
-                <button type="button" class="ghost-btn" id="git-easy-stage-all">暂存全部</button>
-                <button type="button" class="ghost-btn" id="git-easy-unstage">取消暂存勾选</button>
+                <button type="button" class="secondary-btn" id="git-easy-stage">勾选进待保存</button>
+                <button type="button" class="ghost-btn" id="git-easy-stage-all">全部进待保存</button>
+                <button type="button" class="ghost-btn" id="git-easy-unstage">移出待保存</button>
               </div>
               <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
                 <label for="git-easy-msg">说明</label>
                 <input id="git-easy-msg" class="mono" type="text" placeholder="例如：修好登录按钮样式" spellcheck="false" autocomplete="off" style="flex:1;min-width:10rem" />
-                <button type="button" class="primary-btn" id="git-easy-commit">提交</button>
-                <button type="button" class="secondary-btn" id="git-easy-push">推送</button>
+                <button type="button" class="primary-btn" id="git-easy-commit">保存到历史</button>
               </div>
-              <p class="hint tight" id="git-easy-hint">提交 = 把勾选的改动记进历史；推送 = 上传到远程（需已配置 remote）。</p>
+              <p class="hint tight" id="git-easy-hint">「保存到历史」= 记一笔本地记录；「上传」= 发到远程仓库。</p>
             </div>
 
             <div class="git-layout">
@@ -126,45 +171,48 @@
                 <div class="label-row" style="margin-top:0.85rem">
                   <h2 class="subhead">常用操作</h2>
                 </div>
-                <p class="hint tight">执行前会预览完整 <span class="mono">git …</span>。目标框给分支/commit；路径给 blame/add；说明给 commit。</p>
-                <div class="btn-row tool-actions" style="flex-wrap:wrap" id="git-ops-row">
-                  <button type="button" class="secondary-btn" data-git-op="fetch">fetch</button>
-                  <button type="button" class="secondary-btn" data-git-op="pull">pull --ff-only</button>
-                  <button type="button" class="secondary-btn" data-git-op="status">status</button>
-                  <button type="button" class="secondary-btn" data-git-op="diff">diff --stat</button>
-                  <button type="button" class="secondary-btn" data-git-op="reflog">reflog</button>
-                  <button type="button" class="secondary-btn" data-git-op="remote-list">remote -v</button>
-                  <button type="button" class="secondary-btn" data-git-op="stash-push">stash</button>
-                  <button type="button" class="secondary-btn" data-git-op="stash-pop">stash pop</button>
-                  <button type="button" class="secondary-btn" data-git-op="worktree-list">worktree</button>
-                  <button type="button" class="secondary-btn" data-git-op="log-graph">终端 graph</button>
-                </div>
-                <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center;gap:0.4rem">
-                  <label for="git-op-target">目标</label>
-                  <input id="git-op-target" class="mono" type="text" placeholder="分支名 / commit" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
-                  <button type="button" class="ghost-btn" data-git-op="checkout">checkout</button>
-                  <button type="button" class="ghost-btn" data-git-op="merge">merge</button>
-                  <button type="button" class="ghost-btn" data-git-op="rebase">rebase onto</button>
-                  <button type="button" class="ghost-btn" data-git-op="cherry-pick">cherry-pick</button>
-                </div>
-                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
-                  <label for="git-new-branch">新分支</label>
-                  <input id="git-new-branch" class="mono" type="text" placeholder="feature/foo" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
-                  <button type="button" class="ghost-btn" data-git-op="branch-create">创建</button>
-                  <button type="button" class="ghost-btn" data-git-op="branch-create-co">创建并 checkout</button>
-                </div>
-                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
-                  <label for="git-op-path">路径</label>
-                  <input id="git-op-path" class="mono" type="text" placeholder="文件路径（blame / add / restore）" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
-                  <button type="button" class="ghost-btn" data-git-op="blame">blame</button>
-                  <button type="button" class="ghost-btn" data-git-op="add">add</button>
-                </div>
-                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
-                  <label for="git-commit-msg">说明</label>
-                  <input id="git-commit-msg" class="mono" type="text" placeholder="commit -m" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
-                  <button type="button" class="ghost-btn" data-git-op="add-all">add -A</button>
-                  <button type="button" class="ghost-btn" data-git-op="commit">commit</button>
-                </div>
+                <details class="git-ops-details">
+                  <summary class="hint">展开（给会一点 git 的人；小白请用上方「小白模式」）</summary>
+                  <p class="hint tight">执行前会预览完整 <span class="mono">git …</span>。目标框给分支/commit；路径给 blame/add；说明给 commit。</p>
+                  <div class="btn-row tool-actions" style="flex-wrap:wrap" id="git-ops-row">
+                    <button type="button" class="secondary-btn" data-git-op="fetch">fetch</button>
+                    <button type="button" class="secondary-btn" data-git-op="pull">pull --ff-only</button>
+                    <button type="button" class="secondary-btn" data-git-op="status">status</button>
+                    <button type="button" class="secondary-btn" data-git-op="diff">diff --stat</button>
+                    <button type="button" class="secondary-btn" data-git-op="reflog">reflog</button>
+                    <button type="button" class="secondary-btn" data-git-op="remote-list">remote -v</button>
+                    <button type="button" class="secondary-btn" data-git-op="stash-push">stash</button>
+                    <button type="button" class="secondary-btn" data-git-op="stash-pop">stash pop</button>
+                    <button type="button" class="secondary-btn" data-git-op="worktree-list">worktree</button>
+                    <button type="button" class="secondary-btn" data-git-op="log-graph">终端 graph</button>
+                  </div>
+                  <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center;gap:0.4rem">
+                    <label for="git-op-target">目标</label>
+                    <input id="git-op-target" class="mono" type="text" placeholder="分支名 / commit" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
+                    <button type="button" class="ghost-btn" data-git-op="checkout">checkout</button>
+                    <button type="button" class="ghost-btn" data-git-op="merge">merge</button>
+                    <button type="button" class="ghost-btn" data-git-op="rebase">rebase onto</button>
+                    <button type="button" class="ghost-btn" data-git-op="cherry-pick">cherry-pick</button>
+                  </div>
+                  <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
+                    <label for="git-new-branch">新分支</label>
+                    <input id="git-new-branch" class="mono" type="text" placeholder="feature/foo" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
+                    <button type="button" class="ghost-btn" data-git-op="branch-create">创建</button>
+                    <button type="button" class="ghost-btn" data-git-op="branch-create-co">创建并 checkout</button>
+                  </div>
+                  <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
+                    <label for="git-op-path">路径</label>
+                    <input id="git-op-path" class="mono" type="text" placeholder="文件路径（blame / add / restore）" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
+                    <button type="button" class="ghost-btn" data-git-op="blame">blame</button>
+                    <button type="button" class="ghost-btn" data-git-op="add">add</button>
+                  </div>
+                  <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
+                    <label for="git-commit-msg">说明</label>
+                    <input id="git-commit-msg" class="mono" type="text" placeholder="commit -m" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
+                    <button type="button" class="ghost-btn" data-git-op="add-all">add -A</button>
+                    <button type="button" class="ghost-btn" data-git-op="commit">commit</button>
+                  </div>
+                </details>
                 <div class="label-row" style="margin-top:0.75rem">
                   <h2 class="subhead">全部 git 命令</h2>
                   <span class="hint tight" id="git-ops-count"></span>

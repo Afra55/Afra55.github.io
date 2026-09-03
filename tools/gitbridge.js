@@ -561,32 +561,194 @@
     return rows;
   }
 
+  let conflictEditPath = "";
+  let lastStatus = null;
+
   async function refreshChanges() {
     const box = $("#git-change-list");
     const hint = $("#git-easy-hint");
+    const nowEl = $("#git-easy-now");
+    const conflictBox = $("#git-conflict-box");
+    const conflictList = $("#git-conflict-list");
+    const conflictMeta = $("#git-conflict-meta");
     if (!box || !repoPath) return;
     try {
       const data = await api(`/repo/status?repo=${encodeURIComponent(repoPath)}`);
-      const rows = parseStatusPayload(data);
+      lastStatus = data;
+      const rows = Array.isArray(data.changes) && data.changes.length
+        ? data.changes
+        : parseStatusPayload(data).filter((r) => !String(r.xy || "").startsWith("u"));
+      const conflicts = Array.isArray(data.conflicts) ? data.conflicts : [];
+
+      if (nowEl) {
+        const steps = data.plainSteps || [];
+        nowEl.textContent = "现在：" + (steps.join("；") || "一切正常");
+        nowEl.classList.toggle("git-easy-now-warn", Boolean(data.inProgress || conflicts.length));
+      }
+
+      if (conflictBox) {
+        conflictBox.hidden = !(data.inProgress || conflicts.length);
+        if (conflictMeta) {
+          conflictMeta.textContent = data.inProgress
+            ? `进行中：${data.inProgress} · 冲突 ${conflicts.length} 个`
+            : `冲突 ${conflicts.length} 个`;
+        }
+        if (conflictList) {
+          conflictList.innerHTML = "";
+          if (!conflicts.length) {
+            conflictList.innerHTML = `<p class="hint tight">没有冲突文件了。若合并仍在进行，点「继续合并」。</p>`;
+          } else {
+            for (const c of conflicts) {
+              const row = document.createElement("div");
+              row.className = "git-change-item git-conflict-item";
+              row.innerHTML = `<span class="git-change-badge mono">冲突</span>
+                <span class="mono" title="${escapeHtml(c.path)}">${escapeHtml(c.path)}</span>
+                <button type="button" class="ghost-btn" data-conflict-ours="${escapeHtml(c.path)}">留我的</button>
+                <button type="button" class="ghost-btn" data-conflict-theirs="${escapeHtml(c.path)}">留对方</button>
+                <button type="button" class="ghost-btn" data-conflict-edit="${escapeHtml(c.path)}">打开编辑</button>`;
+              conflictList.appendChild(row);
+            }
+            conflictList.querySelectorAll("[data-conflict-edit]").forEach((btn) => {
+              btn.addEventListener("click", () => {
+                openConflictEditor(btn.getAttribute("data-conflict-edit")).catch((e) => showError(e.message));
+              });
+            });
+            conflictList.querySelectorAll("[data-conflict-ours]").forEach((btn) => {
+              btn.addEventListener("click", () => {
+                conflictTake("ours", btn.getAttribute("data-conflict-ours")).catch((e) => showError(e.message));
+              });
+            });
+            conflictList.querySelectorAll("[data-conflict-theirs]").forEach((btn) => {
+              btn.addEventListener("click", () => {
+                conflictTake("theirs", btn.getAttribute("data-conflict-theirs")).catch((e) => showError(e.message));
+              });
+            });
+          }
+        }
+      }
+
       box.innerHTML = "";
       if (!rows.length) {
-        box.innerHTML = `<p class="hint tight">工作区干净，没有未提交变更。</p>`;
-        if (hint) hint.textContent = "没有改动可提交。改文件后点「刷新变更」。";
-        return;
+        box.innerHTML = `<p class="hint tight">没有待保存的改动。</p>`;
+        if (hint) hint.textContent = "改完文件后点「刷新状态」。";
+      } else {
+        for (const r of rows) {
+          const row = document.createElement("label");
+          row.className = "git-change-item";
+          const checked = r.unstaged || !r.staged ? "checked" : "";
+          row.innerHTML = `<input type="checkbox" data-git-path="${escapeHtml(r.path)}" ${checked} />
+            <span class="git-change-badge mono">${escapeHtml(r.kind || "改")}</span>
+            <span class="mono" title="${escapeHtml(r.path)}">${escapeHtml(r.path)}</span>`;
+          box.appendChild(row);
+        }
+        if (hint) hint.textContent = `共 ${rows.length} 项。勾选 → 写说明 →「保存到历史」→ 需要时「上传」。`;
       }
-      for (const r of rows) {
-        const row = document.createElement("label");
-        row.className = "git-change-item";
-        const checked = r.unstaged || !r.staged ? "checked" : "";
-        row.innerHTML = `<input type="checkbox" data-git-path="${escapeHtml(r.path)}" ${checked} />
-          <span class="git-change-badge mono">${escapeHtml(r.kind)}</span>
-          <span class="mono" title="${escapeHtml(r.label)}">${escapeHtml(r.path)}</span>`;
-        box.appendChild(row);
+
+      // branch select for 换工作线
+      const sel = $("#git-easy-branch");
+      if (sel && !sel.dataset.wiredOnce) {
+        sel.dataset.wiredOnce = "1";
       }
-      if (hint) hint.textContent = `共 ${rows.length} 项变更。勾选 → 暂存 → 写说明 → 提交。`;
+      if (sel) {
+        const prev = sel.value;
+        const branches = await api(`/repo/branches?repo=${encodeURIComponent(repoPath)}`).catch(() => ({ local: [] }));
+        sel.innerHTML = "";
+        for (const b of branches.local || []) {
+          const opt = document.createElement("option");
+          opt.value = b.name;
+          opt.textContent = (b.current ? "● " : "") + b.name;
+          if (b.current) opt.selected = true;
+          sel.appendChild(opt);
+        }
+        if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
+      }
+
+      if ($("#git-repo-summary") && data.branch) {
+        const bits = [`当前工作线 ${data.branch}`];
+        if (data.upstream) bits.push(`跟踪 ${data.upstream}`);
+        if (data.ahead) bits.push(`可上传 ${data.ahead}`);
+        if (data.behind) bits.push(`可更新 ${data.behind}`);
+        bits.push(`未保存 ${data.dirtyCount || 0} 项`);
+        $("#git-repo-summary").textContent = bits.join(" · ");
+      }
     } catch (e) {
       box.innerHTML = `<p class="error">${escapeHtml(e.message)}</p>`;
     }
+  }
+
+  async function openConflictEditor(filePath) {
+    conflictEditPath = filePath;
+    const editor = $("#git-conflict-editor");
+    const pathEl = $("#git-conflict-path");
+    const ta = $("#git-conflict-text");
+    if (!editor || !ta) return;
+    const data = await api(
+      `/repo/read-file?repo=${encodeURIComponent(repoPath)}&path=${encodeURIComponent(filePath)}`
+    );
+    if (pathEl) pathEl.textContent = filePath;
+    ta.value = data.content || "";
+    editor.hidden = false;
+    $$(".git-conflict-item").forEach((el) => {
+      el.classList.toggle("is-active", el.textContent.includes(filePath));
+    });
+  }
+
+  async function conflictTake(side, filePath) {
+    const target = filePath || conflictEditPath;
+    if (!target) return showError("先点一个冲突文件的「留我的 / 留对方」或打开编辑");
+    conflictEditPath = target;
+    const op = side === "ours" ? "checkout-ours" : "checkout-theirs";
+    await runOp(op, { path: target }, { skipConfirm: true, skipRefresh: true });
+    await runOp("add", { path: target }, { skipConfirm: true, skipRefresh: true });
+    showError("");
+    opOut.hidden = false;
+    opOut.textContent = `已选${side === "ours" ? "我的" : "对方"}版本并标记解决：${target}`;
+    const editor = $("#git-conflict-editor");
+    if (editor && !editor.hidden) await openConflictEditor(target);
+    await refreshChanges();
+  }
+
+  async function conflictSaveResolved() {
+    if (!conflictEditPath) return showError("先打开一个冲突文件");
+    const ta = $("#git-conflict-text");
+    await api("/repo/write-file", {
+      method: "POST",
+      body: { repo: repoPath, file: conflictEditPath, content: ta?.value ?? "" },
+    });
+    await runOp("add", { path: conflictEditPath }, { skipConfirm: true, skipRefresh: true });
+    showError("");
+    opOut.hidden = false;
+    opOut.textContent = `已保存并标记解决：${conflictEditPath}`;
+    await refreshChanges();
+  }
+
+  async function conflictContinue() {
+    const kind = lastStatus?.inProgress || "merge";
+    const op =
+      kind === "rebase"
+        ? "rebase-continue"
+        : kind === "cherry-pick"
+          ? "cherry-pick-continue"
+          : kind === "revert"
+            ? "revert-continue"
+            : "merge-continue";
+    await runOp(op, {}, { skipConfirm: true });
+    await refreshChanges();
+  }
+
+  async function conflictAbort() {
+    const kind = lastStatus?.inProgress || "merge";
+    const op =
+      kind === "rebase"
+        ? "rebase-abort"
+        : kind === "cherry-pick"
+          ? "cherry-pick-abort"
+          : kind === "revert"
+            ? "revert-abort"
+            : "merge-abort";
+    if (!window.confirm("确定放弃这次合并/改写？工作区会回到操作前。")) return;
+    await runOp(op, {});
+    await refreshChanges();
   }
 
   function selectedChangePaths() {
@@ -598,12 +760,12 @@
   async function easyStage(all) {
     if (!repoPath) return showError("先打开一个仓库");
     if (all) {
-      await runOp("add-all");
+      await runOp("add-all", {}, { skipConfirm: true });
     } else {
       const paths = selectedChangePaths();
-      if (!paths.length) return showError("先勾选要暂存的文件");
+      if (!paths.length) return showError("先勾选要保存的文件");
       for (const p of paths) {
-        await runOp("add", { path: p });
+        await runOp("add", { path: p }, { skipConfirm: true, skipRefresh: true });
       }
     }
     await refreshChanges();
@@ -612,9 +774,9 @@
   async function easyUnstage() {
     if (!repoPath) return showError("先打开一个仓库");
     const paths = selectedChangePaths();
-    if (!paths.length) return showError("先勾选要取消暂存的文件");
+    if (!paths.length) return showError("先勾选文件");
     for (const p of paths) {
-      await runOp("restore", { path: p, staged: true });
+      await runOp("restore", { path: p, staged: true }, { skipConfirm: true, skipRefresh: true });
     }
     await refreshChanges();
   }
@@ -622,19 +784,69 @@
   async function easyCommit() {
     if (!repoPath) return showError("先打开一个仓库");
     const msg = String($("#git-easy-msg")?.value || $("#git-commit-msg")?.value || "").trim();
-    if (!msg) return showError("先写一句提交说明");
+    if (!msg) return showError("先写一句说明，比如「修好登录按钮」");
     if ($("#git-commit-msg")) $("#git-commit-msg").value = msg;
     const paths = selectedChangePaths();
     if (paths.length) {
-      for (const p of paths) await runOp("add", { path: p });
+      for (const p of paths) await runOp("add", { path: p }, { skipConfirm: true, skipRefresh: true });
     }
-    await runOp("commit", { message: msg });
+    await runOp("commit", { message: msg }, { skipConfirm: true });
+    if ($("#git-easy-msg")) $("#git-easy-msg").value = "";
     await refreshChanges();
   }
 
   async function easyPush() {
     if (!repoPath) return showError("先打开一个仓库");
-    await runOp("push", {});
+    if (!window.confirm("把本地已保存的改动上传到网上？\n（相当于 git push）")) return;
+    await runOp("push", {}, { skipConfirm: true });
+    await refreshChanges();
+  }
+
+  async function easyPull() {
+    if (!repoPath) return showError("先打开一个仓库");
+    if (!window.confirm("从网上拉最新改动到本地？\n（相当于 git pull，若两边都改过同一文件可能产生冲突）")) return;
+    await runOp("pull", {}, { skipConfirm: true });
+    await refreshChanges();
+  }
+
+  async function easyStash() {
+    if (!repoPath) return showError("先打开一个仓库");
+    if (!window.confirm("先把未保存的改动临时收起来，让工作区变干净？\n之后可用「取出收起的改动」拿回来。")) return;
+    await runOp("stash-push", {}, { skipConfirm: true });
+    await refreshChanges();
+  }
+
+  async function easyStashPop() {
+    if (!repoPath) return showError("先打开一个仓库");
+    if (!window.confirm("取出最近一次收起来的改动？\n若和当前文件打架，会出现冲突，按上方提示处理即可。")) return;
+    await runOp("stash-pop", {}, { skipConfirm: true });
+    await refreshChanges();
+  }
+
+  async function easyUndo() {
+    if (!repoPath) return showError("先打开一个仓库");
+    if (!window.confirm("撤销上一次「保存到历史」？改动还会留在文件里，只是从历史里拿掉最近一笔。")) return;
+    await runOp("reset-soft-1", {}, { skipConfirm: true });
+    await refreshChanges();
+  }
+
+  async function easySwitch() {
+    if (!repoPath) return showError("先打开一个仓库");
+    const name = String($("#git-easy-branch")?.value || "").trim();
+    if (!name) return showError("先选一条工作线");
+    if (!window.confirm(`切换到工作线「${name}」？\n未保存的改动若冲突会失败，可先「收起来」再切。`)) return;
+    await runOp("checkout", { target: name }, { skipConfirm: true });
+    await refreshChanges();
+  }
+
+  async function easyNewBranch() {
+    if (!repoPath) return showError("先打开一个仓库");
+    const name = String($("#git-easy-newbr")?.value || "").trim();
+    if (!name) return showError("先填新工作线名字");
+    if (!window.confirm(`创建并切换到新工作线「${name}」？`)) return;
+    if ($("#git-new-branch")) $("#git-new-branch").value = name;
+    await runOp("branch-create-co", {}, { skipConfirm: true });
+    await refreshChanges();
   }
 
   async function handleDroppedPaths(paths) {
@@ -847,7 +1059,9 @@
       fillIf(p, "sha", sha);
       fillIf(p, "path", filePath);
     }
-    if (op === "blame" || op === "add" || op === "restore") fillIf(p, "path", filePath);
+    if (op === "blame" || op === "add" || op === "restore" || op === "checkout-ours" || op === "checkout-theirs") {
+      fillIf(p, "path", filePath);
+    }
     if (op === "blame") fillIf(p, "sha", target);
     if (op === "commit") fillIf(p, "message", message);
     if (op === "commit-amend") {
@@ -939,7 +1153,7 @@
     }
   }
 
-  async function runOp(op, params) {
+  async function runOp(op, params, opts = {}) {
     if (!repoPath) {
       showError("先打开一个仓库");
       return;
@@ -977,12 +1191,19 @@
       "pull",
       "push",
       "reset",
+      "reset-soft-1",
       "clean",
       "commit-amend",
       "restore-workdir",
+      "checkout-ours",
+      "checkout-theirs",
+      "merge-continue",
+      "merge-abort",
+      "rebase-continue",
+      "rebase-abort",
     ]);
     const dangerous = !!(item && item.dangerous) || fallbackDangerous.has(op);
-    if (dangerous && !window.confirm(`确认执行？\n\n${preview}\n操作：${op}`)) return;
+    if (dangerous && !opts.skipConfirm && !window.confirm(`确认执行？\n\n${preview}\n操作：${op}`)) return;
 
     try {
       const out = await api("/repo/exec", {
@@ -996,7 +1217,8 @@
         String(out.stdout || "") +
         (out.stderr ? "\n" + out.stderr : "");
       cmdPreview.textContent = "已执行：\n" + (out.cmd || []).join(" ");
-      await refreshRepo();
+      if (!opts.skipRefresh) await refreshRepo();
+      return out;
     } catch (e) {
       const d = e.data || {};
       opOut.hidden = false;
@@ -1005,6 +1227,7 @@
         (e.message || "") +
         (d.stderr ? "\n" + d.stderr : "");
       showError(e.message);
+      throw e;
     }
   }
 
@@ -1058,6 +1281,22 @@
   $("#git-easy-unstage")?.addEventListener("click", () => easyUnstage().catch((e) => showError(e.message)));
   $("#git-easy-commit")?.addEventListener("click", () => easyCommit().catch((e) => showError(e.message)));
   $("#git-easy-push")?.addEventListener("click", () => easyPush().catch((e) => showError(e.message)));
+  $("#git-easy-pull")?.addEventListener("click", () => easyPull().catch((e) => showError(e.message)));
+  $("#git-easy-stash")?.addEventListener("click", () => easyStash().catch((e) => showError(e.message)));
+  $("#git-easy-stash-pop")?.addEventListener("click", () => easyStashPop().catch((e) => showError(e.message)));
+  $("#git-easy-undo")?.addEventListener("click", () => easyUndo().catch((e) => showError(e.message)));
+  $("#git-easy-switch")?.addEventListener("click", () => easySwitch().catch((e) => showError(e.message)));
+  $("#git-easy-newbr-go")?.addEventListener("click", () => easyNewBranch().catch((e) => showError(e.message)));
+  $("#git-conflict-ours")?.addEventListener("click", () => conflictTake("ours").catch((e) => showError(e.message)));
+  $("#git-conflict-theirs")?.addEventListener("click", () => conflictTake("theirs").catch((e) => showError(e.message)));
+  $("#git-conflict-save")?.addEventListener("click", () => conflictSaveResolved().catch((e) => showError(e.message)));
+  $("#git-conflict-close")?.addEventListener("click", () => {
+    const ed = $("#git-conflict-editor");
+    if (ed) ed.hidden = true;
+    conflictEditPath = "";
+  });
+  $("#git-conflict-continue")?.addEventListener("click", () => conflictContinue().catch((e) => showError(e.message)));
+  $("#git-conflict-abort")?.addEventListener("click", () => conflictAbort().catch((e) => showError(e.message)));
   $("#git-show-ascii").addEventListener("change", (ev) => {
     asciiEl.hidden = !ev.target.checked;
   });

@@ -92,7 +92,7 @@ async function main() {
 
     const health = await req("GET", "/health");
     if (!health.json.git) throw new Error("git missing on host");
-    if (health.json.version !== "0.2.1" && health.json.version !== "0.2.0") {
+    if (health.json.version !== "0.2.3") {
       throw new Error("unexpected version " + health.json.version);
     }
 
@@ -117,6 +117,16 @@ async function main() {
       params: {},
     });
     if (status.status !== 200 || !status.json.ok) throw new Error("status op failed");
+
+    const st = await req("GET", `/repo/status?repo=${encodeURIComponent(opened.json.repo)}`);
+    if (st.status !== 200 || !Array.isArray(st.json.plainSteps)) throw new Error("status plainSteps missing");
+    if (!("conflicts" in st.json) || !("changes" in st.json)) throw new Error("status structured fields missing");
+
+    const readme = await req(
+      "GET",
+      `/repo/read-file?repo=${encodeURIComponent(opened.json.repo)}&path=${encodeURIComponent("AGENTS.md")}`
+    );
+    if (readme.status !== 200 || !readme.json.content) throw new Error("read-file failed");
 
     const logGraph = await req("POST", "/repo/exec", {
       repo: opened.json.repo,
