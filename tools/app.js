@@ -2555,7 +2555,7 @@
     const name = toolName(currentTool);
     const title = activeToolShareTitle();
     const text = `打开 DevTools「${name}」：`;
-    const data = { title, text, url };
+    const clip = `${title}\n${url}`;
     const prevTitle = document.title;
     document.title = title;
     const restoreTitle = () => {
@@ -2564,7 +2564,16 @@
       } catch (_) {}
     };
 
+    // 电脑端系统分享基本无用：直接复制标题+链接并提示
+    if (!isPhoneLikeClient()) {
+      restoreTitle();
+      if (await copyTextFallback(clip)) showToast("已复制标题和链接到剪贴板");
+      else showToast("复制失败，请手动复制地址栏链接");
+      return;
+    }
+
     if (typeof navigator.share === "function") {
+      const data = { title, text, url };
       try {
         if (!navigator.canShare || navigator.canShare(data)) {
           await navigator.share(data);
@@ -2592,7 +2601,7 @@
     }
 
     restoreTitle();
-    if (await copyTextFallback(url)) showToast("链接已复制");
+    if (await copyTextFallback(clip)) showToast("已复制标题和链接到剪贴板");
     else showToast("复制失败，请手动复制地址栏链接");
   }
 
