@@ -3820,7 +3820,7 @@
             $("#adb-input-meta").textContent =
               `仍无画面（config=${p.config} key=${p.key} delta=${p.delta} decoded=${p.decoded}）。` +
               (p.config === 0 && p.key === 0
-                ? "桥未收到视频帧：请更新本机桥 ZIP（≥0.9.11）、只开一座桥，并解锁亮屏后重试"
+                ? "桥未收到视频帧：请更新本机桥 ZIP（≥0.9.12）、只开一座桥，并解锁亮屏后重试"
                 : "已收到码流但解不出画面：请换 Chrome/Edge 最新版，或更新桥 ZIP 后重试「开始镜像」");
           }
         }, 3200);
@@ -3909,7 +3909,7 @@
         }
         if (/ECONNREFUSED|转发.*断开|forward 未在/i.test(detail) && !bridgeAtLeast("0.9.5")) {
           detail += "。请重新下载完整桥 ZIP（≥0.9.5 修复握手前抢连导致转发失效）并只留一座桥窗口";
-        } else if (/socket closed|编码器|MediaCodec/i.test(detail) && !bridgeAtLeast("0.9.11")) {
+        } else if (/socket closed|编码器|MediaCodec/i.test(detail) && !bridgeAtLeast("0.9.12")) {
           detail += "。请更新到桥 ≥0.9.12（scrcpy 全控制：按键/滚轮/剪贴板/熄屏/音频）";
         } else if (/socket closed|编码器|MediaCodec/i.test(detail) && !bridgeAtLeast("0.9.10")) {
           detail += "。请更新到桥 ≥0.9.10（scrcpy 帧合并 + 解码兼容，握手失败自动降级）";
