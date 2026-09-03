@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  /** 外链卡片：集中展示「打开对应网站」类工具，参考 nav 站点卡片布局 */
+  /** 外链卡片：只列站外服务；已在本站做成工具的不再单独展示 */
   const LINKS = [
     {
       id: "pdfcraft",
@@ -25,43 +25,11 @@
       tags: ["科普", "博物馆"],
     },
     {
-      id: "revealjs",
-      title: "Reveal.js",
-      desc: "经典网页幻灯片框架；本站「MD 幻灯片」基于它做本地演示。",
-      url: "https://revealjs.com/",
-      tags: ["ppt", "markdown"],
-      tool: "mdslides",
-    },
-    {
       id: "slidev",
       title: "Slidev",
       desc: "开发者向 Markdown 演示工具（本机 Node 使用更完整）。",
       url: "https://sli.dev/",
       tags: ["ppt", "markdown", "vue"],
-    },
-    {
-      id: "regexvis",
-      title: "Regex Vis",
-      desc: "正则可视化编辑器原站；本站「正则」面板默认可点选编辑（嵌入）。",
-      url: "https://regex-vis.com/",
-      tags: ["正则"],
-      tool: "regex",
-    },
-    {
-      id: "mathlive",
-      title: "MathLive",
-      desc: "数学公式编辑组件官网；本站「公式编辑」已本地集成。",
-      url: "https://mathlive.io/",
-      tags: ["公式", "latex"],
-      tool: "mathedit",
-    },
-    {
-      id: "regulex",
-      title: "Regulex",
-      desc: "铁路图正则可视化（只读）；本站「正则」面板可切换查看。",
-      url: "https://jex.im/regulex/",
-      tags: ["正则"],
-      tool: "regex",
     },
   ];
 
@@ -77,11 +45,6 @@
     a.click();
   }
 
-  function goTool(id) {
-    if (!id) return;
-    location.hash = `#${id}`;
-  }
-
   function render(filter) {
     const grid = $("#sitenav-grid");
     const empty = $("#sitenav-empty");
@@ -89,7 +52,8 @@
     const q = String(filter || "")
       .trim()
       .toLowerCase();
-    const list = LINKS.filter((item) => {
+    // 有 tool 字段的是站内已有工具，外链导航不重复展示
+    const list = LINKS.filter((item) => !item.tool).filter((item) => {
       if (!q) return true;
       const hay = `${item.title} ${item.desc} ${(item.tags || []).join(" ")} ${item.id}`.toLowerCase();
       return hay.includes(q);
@@ -104,11 +68,6 @@
         <p class="sitenav-card-desc">${item.desc}</p>
         <div class="sitenav-card-actions">
           <button type="button" class="primary-btn sitenav-open" data-url="${item.url}">打开网站</button>
-          ${
-            item.tool
-              ? `<button type="button" class="ghost-btn sitenav-tool" data-tool="${item.tool}">站内工具</button>`
-              : ""
-          }
         </div>
       </article>`
       )
@@ -129,12 +88,6 @@
       const openBtn = e.target.closest?.(".sitenav-open");
       if (openBtn) {
         void openExternal(openBtn.dataset.url);
-        return;
-      }
-      const toolBtn = e.target.closest?.(".sitenav-tool");
-      if (toolBtn) {
-        goTool(toolBtn.dataset.tool);
-        return;
       }
     });
     render("");

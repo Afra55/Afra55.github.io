@@ -916,7 +916,7 @@
     "setup": "小白向：如何下载安装 Node.js、ADB、FFmpeg；手机用网页保底、电脑用桥更优。",
     "mathedit": "MathLive 在线数学公式编辑：可视化输入，导出 LaTeX / MathML / AsciiMath。",
     "mdslides": "把 Markdown 做成网页幻灯片（Reveal.js）；用 --- 分页，一键全屏演示。",
-    "sitenav": "外链工具卡片导航：PDFCraft、昆虫世界、史前博物馆等，点卡片新窗口打开。"
+    "sitenav": "外链导航：只展示站外服务（PDFCraft、昆虫世界等）；本站已有工具不再重复列出。"
   }
 };
 })();
