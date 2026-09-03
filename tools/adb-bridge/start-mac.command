@@ -165,12 +165,14 @@ export ADB_BRIDGE_DIR="${BRIDGE_DIR}"
 RESOLVE_SCRIPT="${SCRIPT_DIR}/resolve-port.js"
 if [ -f "${RESOLVE_SCRIPT}" ]; then
   echo "检查端口是否可用…"
+  if [ ! -t 0 ]; then export DEVTOOLS_BRIDGE_QUIET="${DEVTOOLS_BRIDGE_QUIET:-1}"; fi
   RESOLVE_OUT="$(node "${RESOLVE_SCRIPT}")" || pause_exit $?
   PORT_MODE="${RESOLVE_OUT%% *}"
   RESOLVED_PORT="${RESOLVE_OUT#* }"
   if [ "${PORT_MODE}" = "ALREADY" ]; then
     echo "本机桥已在端口 ${RESOLVED_PORT:-17888} 运行，无需重复启动。"
     echo "请保持已打开的窗口，回到网页点「连接」。"
+    echo "（手动双击启动时可在提示中选择结束旧桥并重启。）"
     exit 0
   fi
   export ADB_BRIDGE_PORT="${RESOLVED_PORT:-17888}"

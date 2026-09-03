@@ -201,6 +201,9 @@ if not exist "%SCRIPT_DIR%ffmpeg-bridge\server.js" (
 if "%ADB_BRIDGE_TOKEN%"=="" set "ADB_BRIDGE_TOKEN=devtools-bridge"
 set "ADB_BRIDGE_DIR=%CD%"
 
+rem Webpage protocol launch must not prompt — reuse the running bridge quietly.
+if /i "%FROM_PROTOCOL%"=="1" set "DEVTOOLS_BRIDGE_QUIET=1"
+
 set "RESOLVE_SCRIPT=%SCRIPT_DIR%resolve-port.js"
 set "ADB_BRIDGE_PORT="
 set "PORT_MODE=READY"
@@ -224,7 +227,8 @@ if exist "%RESOLVE_SCRIPT%" (
 if not defined ADB_BRIDGE_PORT set "ADB_BRIDGE_PORT=17888"
 if /i "!PORT_MODE!"=="ALREADY" (
   echo [OK] Bridge already running on port !ADB_BRIDGE_PORT!
-  echo      Do not open another bat/cmd. Keep the first window open, then click Connect on the webpage.
+  echo      Keep the first window open, then click Connect on the webpage.
+  echo      ^(Manual double-click can choose restart in the prompt above.^)
   echo already running port=!ADB_BRIDGE_PORT!>> "%LOG_FILE%"
   if /i "!FROM_PROTOCOL!"=="1" exit /b 0
   echo.

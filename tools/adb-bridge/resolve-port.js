@@ -3,7 +3,8 @@
 
 /**
  * 启动前检查默认桥端口。
- * - 若已被本机 DevTools 桥占用：输出 `ALREADY <port>`，调用方应直接退出（勿再起一座）。
+ * - 若已被本机 DevTools 桥占用：交互询问「保持 / 结束并重启 / 取消」；
+ *   网页协议唤起或非交互（DEVTOOLS_BRIDGE_QUIET=1）则直接 `ALREADY <port>`。
  * - 若端口空闲：输出 `READY <port>`。
  * - 若被其他进程占用：交互询问结束进程 / 换端口 / 取消；非交互则尽量换空闲端口。
  *
@@ -236,6 +237,100 @@ function emit(mode, port) {
   process.stdout.write(`${mode} ${port}`);
 }
 
+function isQuietMode() {
+  const v = String(process.env.DEVTOOLS_BRIDGE_QUIET || process.env.ADB_BRIDGE_QUIET || "").trim();
+  return v === "1" || /^true$/i.test(v) || /^yes$/i.test(v);
+}
+
+function clearInstanceLock() {
+  try {
+    fs.unlinkSync(LOCK_PATH);
+  } catch (_) {
+    /* ignore */
+  }
+}
+
+function releaseStarterLockIfOurs() {
+  const meta = readLockMeta();
+  if (meta?.pid === process.pid) clearInstanceLock();
+}
+
+/**
+ * 本站桥已在跑：不要「再开一座」。
+ * 手动双击可选手动结束旧桥后在本窗口重启；协议唤起 / 非交互则静默复用。
+ */
+async function resolveExistingBridge(port, health) {
+  const shown = Number(health?.port) || port;
+  const ver = health?.version || "?";
+
+  if (isQuietMode()) {
+    releaseStarterLockIfOurs();
+    emit("ALREADY", shown);
+    return;
+  }
+
+  const streams = getAskStreams();
+  if (!streams) {
+    console.error("");
+    console.error(`[OK] 本机桥已在端口 ${shown} 运行（版本 ${ver}）。`);
+    console.error("无需再开第二个窗口。请保持已打开的启动脚本窗口，回到网页点「连接」。");
+    console.error("");
+    releaseStarterLockIfOurs();
+    emit("ALREADY", shown);
+    return;
+  }
+
+  console.error("");
+  console.error(`[OK] 检测到本机桥已在端口 ${shown} 运行（版本 ${ver}）。`);
+  console.error("同时开两座桥容易导致镜像/连接异常，不建议再开新进程。");
+  console.error("");
+  console.error("请选择：");
+  console.error("  1) 保持现有桥（推荐）— 关掉本窗口，回到网页点「连接」");
+  console.error("  2) 结束旧桥，在本窗口重新启动");
+  console.error("  3) 取消");
+  console.error("");
+
+  const choice = (await ask("请输入 [1/2/3]: ", streams)).toLowerCase();
+
+  if (choice === "2" || choice === "r" || choice === "restart") {
+    const pids = getBridgeRangePids().filter((pid) => pid !== process.pid);
+    if (pids.length) {
+      console.error(`正在结束旧桥相关进程: ${pids.join(", ")}`);
+      await killPids(pids);
+      await sleep(600);
+    } else {
+      console.error("未找到可结束的监听进程，仍将尝试启动…");
+    }
+    clearInstanceLock();
+    const prefer = Number.isFinite(shown) && shown >= PORT_MIN && shown <= PORT_MAX ? shown : port;
+    if (await isPortInUse(prefer)) {
+      const alt = await findFreePort(prefer === PORT_MAX ? PORT_MIN : prefer + 1);
+      if (alt == null) {
+        console.error(`端口 ${PORT_MIN}-${PORT_MAX} 仍被占用，请手动结束后重试。`);
+        process.exit(1);
+      }
+      console.error(`将使用端口 ${alt}。网页桥地址请改为: http://127.0.0.1:${alt}`);
+      tryWriteLock();
+      emit("READY", alt);
+      return;
+    }
+    tryWriteLock();
+    console.error(`将在本窗口重新启动（端口 ${prefer}）。`);
+    emit("READY", prefer);
+    return;
+  }
+
+  if (choice === "3" || choice === "c" || choice === "cancel") {
+    releaseStarterLockIfOurs();
+    console.error("已取消启动。");
+    process.exit(1);
+  }
+
+  console.error("将保持现有桥。请关掉本窗口，回到网页点「连接」。");
+  releaseStarterLockIfOurs();
+  emit("ALREADY", shown);
+}
+
 function isPidAlive(pid) {
   if (!Number.isFinite(pid) || pid <= 0) return false;
   if (process.platform === "win32") {
@@ -337,13 +432,15 @@ async function main() {
 
   const lock = await acquireStarterLock();
   if (lock.mode === "already") {
-    const shown = Number(lock.health?.port) || port;
     if (lock.health) {
-      console.error("");
-      console.error(`[OK] 本机桥已在端口 ${shown} 运行（版本 ${lock.health.version || "?"}）。`);
-      console.error("无需再开第二个窗口。请保持已打开的启动脚本窗口，回到网页点「连接」。");
-      console.error("");
+      await resolveExistingBridge(port, lock.health);
+      return;
     }
+    const shown = port;
+    console.error("");
+    console.error("[OK] 另一个启动脚本正在打开本机桥，本窗口不再重复启动。");
+    console.error("请使用已经打开的窗口，回到网页点「连接」。");
+    console.error("");
     emit("ALREADY", shown);
     return;
   }
@@ -355,17 +452,12 @@ async function main() {
 
   const existing = await probeBridgeHealth(port);
   if (existing) {
-    const shown = Number(existing.port) || port;
-    console.error("");
-    console.error(`[OK] 本机桥已在端口 ${shown} 运行（版本 ${existing.version || "?"}）。`);
-    console.error("无需再开第二个窗口。请保持已打开的启动脚本窗口，回到网页点「连接」。");
-    console.error("");
-    emit("ALREADY", shown);
+    await resolveExistingBridge(port, existing);
     return;
   }
 
   const streams = getAskStreams();
-  if (!streams) {
+  if (!streams || isQuietMode()) {
     const alt = await findFreePort(port + 1);
     if (alt == null) {
       console.error(`端口 ${PORT_MIN}-${PORT_MAX} 均已占用，且当前为非交互环境，无法询问。`);
@@ -402,6 +494,7 @@ async function main() {
     } else {
       console.error("未找到可结束的监听进程，仍将尝试启动…");
     }
+    clearInstanceLock();
     if (await isPortInUse(port)) {
       console.error(`端口 ${port} 仍被占用，请手动结束占用进程后重试。`);
       process.exit(1);

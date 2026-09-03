@@ -60,6 +60,14 @@ async function main() {
     throw new Error("BRIDGE_VERSION missing in server.js");
   }
 
+  const resolveSrc = fs.readFileSync(path.join(__dirname, "resolve-port.js"), "utf8");
+  if (!/保持现有桥|结束旧桥/.test(resolveSrc)) {
+    throw new Error("resolve-port.js should prompt keep/restart when our bridge is running");
+  }
+  if (!/isQuietMode|DEVTOOLS_BRIDGE_QUIET/.test(resolveSrc)) {
+    throw new Error("resolve-port.js should support quiet mode for protocol launches");
+  }
+
   const child = spawn(process.execPath, [path.join(__dirname, "server.js")], {
     env: {
       ...process.env,
