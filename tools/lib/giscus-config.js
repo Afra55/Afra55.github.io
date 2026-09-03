@@ -12,7 +12,7 @@
     repoId: "MDEwOlJlcG9zaXRvcnk0Njg1MDkxNw==",
     category: "Announcements",
     /** 开启 Discussions 并安装 giscus App 后填入，例如 DIC_kwDO... */
-    categoryId: "",
+    categoryId: "DIC_kwDOAsrjZc4DEww8",
     mapping: "specific",
     strict: "0",
     reactionsEnabled: "1",
