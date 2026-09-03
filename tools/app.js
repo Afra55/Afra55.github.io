@@ -657,8 +657,13 @@
   const reMatches = $("#re-matches");
   const reMeta = $("#re-meta");
   const reError = $("#re-error");
+  const reVisPaper = $("#re-vis-paper");
+  const reVisError = $("#re-vis-error");
+  const reVisHint = $("#re-vis-hint");
   const flagChecks = $$("[data-flag]");
   let flagsSyncing = false;
+  let reVisTimer = 0;
+  let regulexApi = null;
 
   function uniqueFlags(raw) {
     const allowed = new Set(["g", "i", "m", "s", "u", "y", "d"]);
@@ -696,10 +701,71 @@
       .replace(/"/g, "&quot;");
   }
 
+  function loadRegulex() {
+    if (regulexApi) return Promise.resolve(regulexApi);
+    return window.DevToolsLazy.loadVendor("regulex").then(
+      () =>
+        new Promise((resolve, reject) => {
+          if (typeof require !== "function") {
+            reject(new Error("Regulex 加载失败"));
+            return;
+          }
+          require(["regulex"], (api) => {
+            regulexApi = api;
+            resolve(api);
+          }, reject);
+        })
+    );
+  }
+
+  function setVisError(msg) {
+    if (!reVisError) return;
+    if (!msg) {
+      reVisError.hidden = true;
+      reVisError.textContent = "";
+      return;
+    }
+    reVisError.hidden = false;
+    reVisError.textContent = msg;
+  }
+
+  function drawRegexVis() {
+    if (!reVisPaper) return;
+    const pattern = rePattern.value;
+    const flags = uniqueFlags(reFlags.value);
+    if (!pattern) {
+      reVisPaper.innerHTML = "";
+      if (reVisHint) reVisHint.hidden = false;
+      setVisError("");
+      return;
+    }
+    loadRegulex()
+      .then((R) => {
+        reVisPaper.innerHTML = "";
+        if (reVisHint) reVisHint.hidden = true;
+        const paper = R.Raphael(reVisPaper, 10, 10);
+        try {
+          R.visualize(R.parse(pattern), flags, paper);
+          setVisError("");
+        } catch (err) {
+          reVisPaper.innerHTML = "";
+          const tip = err?.message || String(err);
+          setVisError(`结构图解析失败：${tip}`);
+        }
+      })
+      .catch((err) => setVisError(err.message || String(err)));
+  }
+
+  function scheduleVis() {
+    clearTimeout(reVisTimer);
+    reVisTimer = setTimeout(drawRegexVis, 220);
+  }
+
   function runRegex() {
     const pattern = rePattern.value;
     const text = reText.value;
     const flags = uniqueFlags(reFlags.value);
+    scheduleVis();
 
     if (!pattern) {
       reHighlight.textContent = text;
@@ -797,6 +863,7 @@
   });
   rePattern.addEventListener("input", runRegex);
   reText.addEventListener("input", runRegex);
+  $("#re-vis-refresh")?.addEventListener("click", drawRegexVis);
 
   syncChecksFromFlags();
   runRegex();

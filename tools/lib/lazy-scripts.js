@@ -39,6 +39,10 @@
       src: "./vendor/jsonrepair.min.js",
       probe: () => typeof globalThis.JSONRepair?.jsonrepair === "function",
     },
+    regulex: {
+      src: "./vendor/regulex.js",
+      probe: () => typeof globalThis.require === "function",
+    },
   };
 
   const EXTERNAL_SITE_TOOLS = new Set(["pdfcraft", "insectworld", "prehmuseum"]);
@@ -71,6 +75,9 @@
     ambient: "./ambient.js",
     sandspiel: "./sandspiel.js",
     memo: "./memo.js",
+    sitenav: "./sitenav.js",
+    mdslides: "./mdslides.js",
+    mathedit: "./mathedit.js",
     textimg: "./textimg.js",
     imgtext: "./imgtext.js",
     imgpreview: "./imgpreview.js",
@@ -120,6 +127,7 @@
   ]);
 
   const TOOL_VENDORS = {
+    regex: ["regulex"],
     yaml: ["js-yaml"],
     hash: ["spark-md5"],
     qrcode: ["qrcodegen", "qrcode", "jsQR"],
@@ -140,6 +148,9 @@
   /** 独立脚本，不走 extra 面板栈 */
   const STANDALONE_NO_EXTRA = new Set([
     "memo",
+    "sitenav",
+    "mdslides",
+    "mathedit",
     "whiteboard",
     "acupoint",
     "healthread",
@@ -317,6 +328,7 @@
     omggif: "GIF 解码库",
     solarlunar: "农历库",
     jsonrepair: "JSON 修复库",
+    regulex: "正则结构图库",
   };
 
   async function ensureForTool(toolId, opts = {}) {

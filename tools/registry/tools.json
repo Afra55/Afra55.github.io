@@ -52,6 +52,8 @@
         "regex",
         "diff",
         "markdown",
+        "mathedit",
+        "mdslides",
         "memo"
       ]
     },
@@ -148,6 +150,7 @@
       "label": "站点",
       "tools": [
         "about",
+        "sitenav",
         "pdfcraft",
         "insectworld",
         "prehmuseum",
@@ -802,6 +805,40 @@
         "setup",
         "教程"
       ]
+    },
+    "mathedit": {
+      "name": "公式编辑",
+      "aliases": [
+        "math",
+        "latex",
+        "公式",
+        "数学公式",
+        "mathlive",
+        "tex"
+      ]
+    },
+    "mdslides": {
+      "name": "MD 幻灯片",
+      "aliases": [
+        "ppt",
+        "slides",
+        "reveal",
+        "slidev",
+        "演示",
+        "幻灯片",
+        "markdown ppt"
+      ]
+    },
+    "sitenav": {
+      "name": "外链导航",
+      "aliases": [
+        "导航",
+        "nav",
+        "外链",
+        "收藏夹",
+        "站点导航",
+        "卡片"
+      ]
     }
   },
   "about": {
@@ -829,11 +866,11 @@
     "query": "Query 字符串与 JWT 解析查看。",
     "text": "文本统计、去重、大小写等处理。",
     "caseconv": "驼峰 / snake / kebab 等命名风格转换。",
-    "regex": "正则匹配测试与分组查看。",
+    "regex": "正则匹配测试、捕获分组，以及铁路图结构可视化（中文界面）。",
     "diff": "两段文本并排/合并比对，高亮增删改；可忽略空白、隐藏相同行。",
     "qrcode": "生成与识别二维码。",
     "markdown": "Markdown 预览。",
-    "memo": "本地备忘录：一键读剪贴板入库、搜索/点选筛选；文本图片可复制，其它类型可下载，手机可单条分享（文转图/OCR 见独立工具）。",
+    "memo": "本地备忘录：剪贴板入库、搜索筛选、把手拖拽排序与拖入文件入库（与 memos 时间线产品不同，拖拽不冗余）。",
     "gifmaker": "多张静态图合成 GIF，可调帧时长、宽度、质量与水印。",
     "v2g": "本地把视频转为 GIF 或动画 WebP，可调帧率、宽度与亮度（≤6MB 黑盒见「黑盒」分类）。",
     "gifx": "GIF 拆成逐帧图片打包下载，或导出为 WebM 视频。",
@@ -873,6 +910,9 @@
     "pdfcraft": "跳转 PDFCraft 中文官网（100+ 本地 PDF 工具）；在新窗口打开，PWA 模式下尽量用系统浏览器。",
     "insectworld": "跳转 Insect World：63 种昆虫 3D 交互图鉴；新窗口打开，PWA 尽量用系统浏览器。",
     "prehmuseum": "跳转史前动物博物馆（中文 3D 恐龙/古生物，适合亲子）；新窗口打开，PWA 尽量用系统浏览器。",
-    "setup": "小白向：如何下载安装 Node.js、ADB、FFmpeg；手机用网页保底、电脑用桥更优。"
+    "setup": "小白向：如何下载安装 Node.js、ADB、FFmpeg；手机用网页保底、电脑用桥更优。",
+    "mathedit": "MathLive 在线数学公式编辑：可视化输入，导出 LaTeX / MathML / AsciiMath。",
+    "mdslides": "把 Markdown 做成网页幻灯片（Reveal.js）；用 --- 分页，一键全屏演示。",
+    "sitenav": "外链工具卡片导航：PDFCraft、昆虫世界、史前博物馆等，点卡片新窗口打开。"
   }
 }

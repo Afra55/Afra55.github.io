@@ -1,0 +1,35 @@
+<section id="mdslides" class="panel tool-panel" data-reveal>
+  <div class="panel-head">
+    <h1>MD 幻灯片</h1>
+    <p>把 Markdown 做成网页 PPT。语法参考 <a href="https://revealjs.com" target="_blank" rel="noopener noreferrer">Reveal.js</a>；也可用 <a href="https://sli.dev" target="_blank" rel="noopener noreferrer">Slidev</a> 做更完整的技术演示。</p>
+  </div>
+  <div class="panel-body">
+    <div class="field-block">
+      <label for="mdslides-src">Markdown（用单独一行的 <code>---</code> 分页）</label>
+      <textarea id="mdslides-src" class="mono area" rows="16" spellcheck="false"># 标题页
+
+本地 MD → 网页幻灯片
+
+---
+
+## 要点
+
+- 纯前端演示
+- 无需上传
+- 支持基础 Markdown
+
+---
+
+## 结束
+
+谢谢</textarea>
+    </div>
+    <div class="btn-row">
+      <button type="button" class="primary-btn" id="mdslides-present">全屏演示</button>
+      <button type="button" class="secondary-btn" id="mdslides-preview">新窗口预览</button>
+      <button type="button" class="ghost-btn" id="mdslides-sample">恢复示例</button>
+    </div>
+    <p class="hint tight">演示页通过 CDN 加载 Reveal.js；左右方向键翻页，按 <kbd>F</kbd> 全屏，按 <kbd>Esc</kbd> 概览。</p>
+    <p class="error" id="mdslides-error" hidden></p>
+  </div>
+</section>

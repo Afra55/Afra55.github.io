@@ -1,0 +1,25 @@
+<section id="mathedit" class="panel tool-panel" data-reveal>
+  <div class="panel-head">
+    <h1>公式编辑</h1>
+    <p>基于开源 <a href="https://github.com/arnog/mathlive" target="_blank" rel="noopener noreferrer">MathLive</a>（2k+★）的可视化数学公式编辑器，本地输入，可导出多种格式。</p>
+  </div>
+  <div class="panel-body">
+    <div class="field-block">
+      <label for="math-field">公式输入</label>
+      <math-field id="math-field" class="math-field-host">x=\frac{-b\pm\sqrt{b^2-4ac}}{2a}</math-field>
+      <p class="hint tight">可用虚拟键盘或 LaTeX 快捷键；手机上会弹出公式键盘。</p>
+    </div>
+    <div class="btn-row">
+      <button type="button" class="secondary-btn" id="math-copy-latex">复制 LaTeX</button>
+      <button type="button" class="ghost-btn" id="math-copy-mathml">复制 MathML</button>
+      <button type="button" class="ghost-btn" id="math-copy-ascii">复制 AsciiMath</button>
+      <button type="button" class="ghost-btn" id="math-clear">清空</button>
+    </div>
+    <div class="field-block">
+      <label for="math-latex-out">LaTeX</label>
+      <textarea id="math-latex-out" class="mono area" rows="3" spellcheck="false" readonly></textarea>
+    </div>
+    <p class="error" id="math-error" hidden></p>
+    <p class="hint tight" id="math-status">首次打开将按需加载 MathLive（约 800KB）。</p>
+  </div>
+</section>

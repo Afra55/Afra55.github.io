@@ -1,7 +1,7 @@
 <section id="regex" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>正则测试</h1>
-        <p>实时匹配、高亮与捕获分组，支持常用 flags。</p>
+        <p>实时匹配、高亮与捕获分组，并提供中文铁路图结构可视化。</p>
       </div>
       <div class="panel-body">
         <div class="field-block">
@@ -38,6 +38,21 @@ hello@world.org</textarea>
           <span class="hint tight" id="re-meta">0 处匹配</span>
         </div>
         <div class="match-list" id="re-matches"></div>
+
+        <div class="label-row re-vis-head">
+          <h2 class="subhead">结构图</h2>
+          <span class="hint tight">铁路图可视化（中文界面 · 引擎 Regulex，参考 Regex Vis）</span>
+        </div>
+        <div class="re-vis-toolbar btn-row">
+          <button type="button" class="secondary-btn" id="re-vis-refresh">刷新结构图</button>
+          <a class="ghost-btn" href="https://regex-vis.com/" target="_blank" rel="noopener noreferrer">打开 Regex Vis 原站</a>
+        </div>
+        <div id="re-vis-wrap" class="re-vis-wrap" aria-live="polite">
+          <div id="re-vis-paper" class="re-vis-paper"></div>
+          <p class="hint tight" id="re-vis-hint">输入正则后自动绘制；复杂表达式可点「刷新结构图」。</p>
+          <p class="error" id="re-vis-error" hidden></p>
+        </div>
+
         <p class="error" id="re-error" hidden></p>
       </div>
     </section>

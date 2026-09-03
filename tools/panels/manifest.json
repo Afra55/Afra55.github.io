@@ -346,6 +346,21 @@
       "id": "ytdlp",
       "file": "./panels/ytdlp.html",
       "bytes": 25736
+    },
+    {
+      "id": "mathedit",
+      "file": "./panels/mathedit.html",
+      "bytes": 1417
+    },
+    {
+      "id": "mdslides",
+      "file": "./panels/mdslides.html",
+      "bytes": 1322
+    },
+    {
+      "id": "sitenav",
+      "file": "./panels/sitenav.html",
+      "bytes": 707
     }
   ]
 }

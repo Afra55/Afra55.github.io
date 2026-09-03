@@ -86,6 +86,14 @@
             path: "tools/vendor/jsonrepair.min.js",
           },
           {
+            name: "regulex",
+            version: "0.0.5",
+            license: "MIT",
+            repo: "https://github.com/CJex/regulex",
+            usedIn: "正则结构图（铁路图）",
+            path: "tools/vendor/regulex.js",
+          },
+          {
             name: "gifsicle-wasm-browser",
             version: "v1.5.19",
             license: "MIT",
@@ -115,6 +123,22 @@
         id: "cdn",
         label: "运行时 CDN 加载",
         items: [
+          {
+            name: "MathLive",
+            version: "0.110.0",
+            license: "MIT",
+            repo: "https://github.com/arnog/mathlive",
+            usedIn: "公式编辑",
+            path: "cdn.jsdelivr.net/npm/mathlive@0.110.0",
+          },
+          {
+            name: "Reveal.js",
+            version: "5.1.0",
+            license: "MIT",
+            repo: "https://github.com/hakimel/reveal.js",
+            usedIn: "MD 幻灯片演示",
+            path: "cdn.jsdelivr.net/npm/reveal.js@5.1.0",
+          },
           {
             name: "Tesseract.js",
             version: "5.1.1",

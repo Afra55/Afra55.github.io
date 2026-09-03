@@ -49,3 +49,47 @@
   font-size: 0.9rem;
   padding: 0.4rem 0;
 }
+
+.re-vis-head {
+  margin-top: 1.25rem;
+}
+
+.re-vis-wrap {
+  margin-top: 0.45rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  overflow: auto;
+}
+
+.re-vis-paper {
+  min-height: 120px;
+  width: 100%;
+}
+
+.re-vis-paper svg {
+  max-width: none;
+}
+
+.re-vis-head {
+  margin-top: 1.25rem;
+}
+
+.re-vis-wrap {
+  margin-top: 0.45rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  overflow: auto;
+}
+
+.re-vis-paper {
+  min-height: 120px;
+  width: 100%;
+}
+
+.re-vis-paper svg {
+  max-width: none;
+}
