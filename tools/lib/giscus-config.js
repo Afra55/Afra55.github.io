@@ -15,7 +15,7 @@
     categoryId: "DIC_kwDOAsrjZc4DEww8",
     mapping: "specific",
     strict: "0",
-    reactionsEnabled: "1",
+    reactionsEnabled: "0",
     emitMetadata: "0",
     inputPosition: "bottom",
     lang: "zh-CN",

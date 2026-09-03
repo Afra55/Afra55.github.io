@@ -23,7 +23,7 @@
     script.setAttribute("data-category-id", categoryId);
     script.setAttribute("data-mapping", el.dataset.mapping || "pathname");
     script.setAttribute("data-strict", el.dataset.strict || "0");
-    script.setAttribute("data-reactions-enabled", el.dataset.reactionsEnabled || "1");
+    script.setAttribute("data-reactions-enabled", el.dataset.reactionsEnabled || "0");
     script.setAttribute("data-emit-metadata", el.dataset.emitMetadata || "0");
     script.setAttribute("data-input-position", el.dataset.inputPosition || "bottom");
     script.setAttribute("data-theme", theme);

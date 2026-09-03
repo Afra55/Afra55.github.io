@@ -67,10 +67,10 @@ main {
   --color-fg-default: rgb(238 243 251 / 94%);
   --color-fg-muted: rgb(154 171 196 / 92%);
   --color-fg-subtle: rgb(154 171 196 / 62%);
-  --color-canvas-default: rgb(15 23 38 / 0%);
+  --color-canvas-default: transparent;
   --color-canvas-overlay: rgb(11 18 32 / 98%);
-  --color-canvas-inset: rgb(9 15 26 / 72%);
-  --color-canvas-subtle: rgb(19 28 46 / 88%);
+  --color-canvas-inset: transparent;
+  --color-canvas-subtle: transparent;
   --color-border-default: rgb(238 243 251 / 12%);
   --color-border-muted: rgb(238 243 251 / 8%);
   --color-neutral-muted: rgb(238 243 251 / 8%);
@@ -100,15 +100,36 @@ main .gsc-loading-image {
   background-image: url("https://github.githubassets.com/images/mona-loading-dark.gif");
 }
 
+/* 极简：去掉顶部表情栏、评论数/排序头，透明底 */
+html,
+body,
+main {
+  background: transparent !important;
+}
+
+.gsc-reactions,
+.gsc-header,
+.gsc-comments-count {
+  display: none !important;
+}
+
+main .gsc-comment-box,
+main .gsc-comment,
+main .gsc-reply {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
 main .gsc-comment-box-textarea,
 main .gsc-reply-box .gsc-comment-box-textarea {
   border-radius: 12px !important;
   border-color: rgb(238 243 251 / 12%) !important;
-  background: rgb(9 15 26 / 55%) !important;
+  background: rgb(9 15 26 / 40%) !important;
 }
 
 main .gsc-comment-box-tabs {
   border-radius: 12px 12px 0 0;
+  background: transparent !important;
 }
 
 main .gsc-social-reaction-summary-item,
@@ -118,4 +139,5 @@ main .gsc-reactions-count {
 
 main .gsc-comment:not(.gsc-reply-box) .gsc-replies {
   border-radius: 0 0 12px 12px;
+  background: transparent !important;
 }

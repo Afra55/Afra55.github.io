@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const THEME_VER = "2026.09.03-theme1";
+  const THEME_VER = "2026.09.03-theme2";
   const CDN_BASE = "https://cdn.jsdelivr.net/gh/Afra55/Afra55.github.io@master/static/giscus";
 
   function resolveScheme(root) {

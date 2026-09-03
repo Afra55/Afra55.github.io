@@ -89,7 +89,7 @@
     script.setAttribute("data-mapping", c.mapping || "specific");
     script.setAttribute("data-term", term);
     script.setAttribute("data-strict", c.strict || "0");
-    script.setAttribute("data-reactions-enabled", c.reactionsEnabled || "1");
+    script.setAttribute("data-reactions-enabled", c.reactionsEnabled || "0");
     script.setAttribute("data-emit-metadata", c.emitMetadata || "0");
     script.setAttribute("data-input-position", c.inputPosition || "bottom");
     script.setAttribute("data-theme", resolveTheme());

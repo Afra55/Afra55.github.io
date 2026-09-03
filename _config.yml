@@ -27,11 +27,11 @@ giscus:
   category_id: "DIC_kwDOAsrjZc4DEww8"
   mapping: pathname
   strict: "0"
-  reactions_enabled: "1"
+  reactions_enabled: "0"
   emit_metadata: "0"
   input_position: bottom
   theme: preferred_color_scheme
-  theme_ver: "2026.09.03-theme1"
+  theme_ver: "2026.09.03-theme2"
   lang: zh-CN
 #########################################
 
