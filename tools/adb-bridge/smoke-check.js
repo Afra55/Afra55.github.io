@@ -67,6 +67,13 @@ async function main() {
   if (!/isQuietMode|DEVTOOLS_BRIDGE_QUIET/.test(resolveSrc)) {
     throw new Error("resolve-port.js should support quiet mode for protocol launches");
   }
+  const mirrorJs = fs.readFileSync(path.join(__dirname, "scrcpy-mirror.js"), "utf8");
+  if (!/max_fps=30/.test(mirrorJs) || !/video_bit_rate=2500000/.test(mirrorJs)) {
+    throw new Error("scrcpy-mirror.js should use browser-friendly fps/bitrate");
+  }
+  if (!/action === "touch"/.test(fs.readFileSync(path.join(__dirname, "server.js"), "utf8"))) {
+    throw new Error("server.js should support input touch/motionevent");
+  }
 
   const child = spawn(process.execPath, [path.join(__dirname, "server.js")], {
     env: {

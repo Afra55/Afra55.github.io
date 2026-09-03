@@ -609,9 +609,9 @@ class MirrorSession {
       "power_on=true",
       "stay_awake=true",
       "video_codec=h264",
-      "video_bit_rate=4000000",
+      "video_bit_rate=2500000",
       "max_size=1280",
-      "max_fps=60",
+      "max_fps=30",
     ].join(" ");
   }
 

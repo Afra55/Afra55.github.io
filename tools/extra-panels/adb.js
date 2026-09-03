@@ -211,6 +211,9 @@
       let adbMirrorMeta = null;
       let adbMirrorPendingConfig = null;
       let adbMirrorStarting = false;
+      let adbMirrorFrameTs = 0;
+      let adbMirrorNeedKey = false;
+      let adbMirrorGotFrame = false;
       let adbInputRecordJobId = "";
       let adbInputRecordPoll = 0;
       const ADB_STORE_INPUT_SHOT_VH = "devtools-adb-input-shot-vh";
@@ -3431,6 +3434,38 @@
         return mirror || img || null;
       }
   
+      function findAnnexBNals(bytes) {
+        const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+        const nals = [];
+        let i = 0;
+        while (i + 3 < u.length) {
+          let hdr = -1;
+          if (u[i] === 0 && u[i + 1] === 0 && u[i + 2] === 1) hdr = i + 3;
+          else if (u[i] === 0 && u[i + 1] === 0 && u[i + 2] === 0 && i + 4 <= u.length && u[i + 3] === 1) hdr = i + 4;
+          else {
+            i += 1;
+            continue;
+          }
+          let j = hdr;
+          let next = -1;
+          while (j + 3 < u.length) {
+            if (u[j] === 0 && u[j + 1] === 0 && u[j + 2] === 1) {
+              next = j;
+              break;
+            }
+            if (u[j] === 0 && u[j + 1] === 0 && u[j + 2] === 0 && j + 4 <= u.length && u[j + 3] === 1) {
+              next = j;
+              break;
+            }
+            j += 1;
+          }
+          const end = next >= 0 ? next : u.length;
+          if (end > hdr) nals.push(u.subarray(hdr, end));
+          i = end;
+        }
+        return nals;
+      }
+
       function codecStringFromConfig(bytes, codecName) {
         if (codecName === "h265") return "hev1.1.6.L93.B0";
         if (codecName === "av1") return "av01.0.04M.08";
@@ -3439,7 +3474,22 @@
           const p = u[1].toString(16).padStart(2, "0");
           const c = u[2].toString(16).padStart(2, "0");
           const l = u[3].toString(16).padStart(2, "0");
-          return `avc1.${p}${c}${l}`.toUpperCase().replace("AVC1", "avc1");
+          return `avc1.${p}${c}${l}`;
+        }
+        for (const nal of findAnnexBNals(u)) {
+          if (!nal.length) continue;
+          if ((nal[0] & 0x1f) === 7 && nal.length >= 4) {
+            const p = nal[1].toString(16).padStart(2, "0");
+            const c = nal[2].toString(16).padStart(2, "0");
+            const l = nal[3].toString(16).padStart(2, "0");
+            return `avc1.${p}${c}${l}`;
+          }
+        }
+        if (u.length >= 4 && (u[0] & 0x1f) === 7) {
+          const p = u[1].toString(16).padStart(2, "0");
+          const c = u[2].toString(16).padStart(2, "0");
+          const l = u[3].toString(16).padStart(2, "0");
+          return `avc1.${p}${c}${l}`;
         }
         return "avc1.42E01E";
       }
@@ -3492,6 +3542,9 @@
           adbMirrorDecoder = null;
         }
         adbMirrorPendingConfig = null;
+        adbMirrorFrameTs = 0;
+        adbMirrorNeedKey = false;
+        adbMirrorGotFrame = false;
         setInputDropHintVisible(false);
         const canvas = $("#adb-input-mirror");
         if (canvas) canvas.hidden = true;
@@ -3508,7 +3561,7 @@
         const canvas = $("#adb-input-mirror");
         if (!canvas) throw new Error("缺少镜像画布");
         if (typeof VideoDecoder === "undefined") throw new Error("当前浏览器不支持 WebCodecs（请用较新的 Chrome / Edge）");
-        const ctx = canvas.getContext("2d", { alpha: false });
+        const ctx = canvas.getContext("2d", { alpha: false, desynchronized: true });
         if (adbMirrorDecoder) {
           try {
             adbMirrorDecoder.close();
@@ -3516,6 +3569,7 @@
             /* ignore */
           }
         }
+        adbMirrorGotFrame = false;
         adbMirrorDecoder = new VideoDecoder({
           output: (frame) => {
             try {
@@ -3524,6 +3578,13 @@
                 canvas.height = frame.displayHeight;
               }
               ctx.drawImage(frame, 0, 0);
+              if (!adbMirrorGotFrame) {
+                adbMirrorGotFrame = true;
+                if ($("#adb-input-meta")) {
+                  $("#adb-input-meta").textContent =
+                    "镜像预览中：单击 / 长按 / 双击 / 拖拽；拖文件到画面可 push 到 Download。";
+                }
+              }
             } finally {
               frame.close();
             }
@@ -3531,6 +3592,7 @@
           error: (err) => {
             const msg = err?.message || String(err);
             if ($("#adb-input-meta")) $("#adb-input-meta").textContent = `解码错误：${msg}`;
+            adbMirrorNeedKey = true;
           },
         });
         canvas.dataset.deviceW = String(meta.width || 0);
@@ -3551,6 +3613,8 @@
         }
         if (/ECONNREFUSED|转发.*断开|forward 未在/i.test(detail) && !bridgeAtLeast("0.9.5")) {
           detail += "。请重新下载完整桥 ZIP（≥0.9.5 修复握手前抢连导致转发失效）并只留一座桥窗口";
+        } else if (!bridgeAtLeast("0.9.7")) {
+          detail += "。建议更新到桥 ≥0.9.7（镜像黑屏/滑动延迟修复）";
         } else if (!bridgeAtLeast("0.8.4")) {
           detail += "。建议重新下载桥 ZIP 并重启本机桥（≥0.8.4 含镜像诊断）";
         }
@@ -3701,8 +3765,7 @@
                       meta.textContent = `镜像中 · ${msg.codec || "h264"} · ${msg.width}×${msg.height} · ${msg.deviceName || serial}`;
                     }
                     if ($("#adb-input-meta")) {
-                      $("#adb-input-meta").textContent =
-                        "镜像预览中：单击 / 长按 / 双击 / 拖拽；拖文件到画面可 push 到 Download。";
+                      $("#adb-input-meta").textContent = "镜像已连接，等待首帧解码…";
                     }
                   } catch (err) {
                     fail(err.message || String(err));
@@ -3714,7 +3777,6 @@
               const buf = new Uint8Array(ev.data);
               if (buf.length < 5 || !adbMirrorDecoder || !adbMirrorMeta) return;
               const flags = buf[0];
-              const pts = new DataView(buf.buffer, buf.byteOffset + 1, 4).getUint32(0);
               const payload = buf.subarray(5);
               const isConfig = (flags & 1) !== 0;
               const isKey = (flags & 2) !== 0;
@@ -3722,7 +3784,7 @@
                 if (isConfig) {
                   adbMirrorPendingConfig = payload.slice();
                   const codec = codecStringFromConfig(payload, adbMirrorMeta.codec);
-                  const desc = payload[0] === 1 ? payload : undefined;
+                  const isAvcc = payload[0] === 1;
                   if (adbMirrorDecoder.state === "configured") {
                     try {
                       adbMirrorDecoder.reset();
@@ -3730,29 +3792,41 @@
                       ensureMirrorDecoder(adbMirrorMeta);
                     }
                   }
-                  adbMirrorDecoder.configure({
+                  const cfg = {
                     codec,
-                    codedWidth: adbMirrorMeta.width,
-                    codedHeight: adbMirrorMeta.height,
                     optimizeForLatency: true,
-                    ...(desc ? { description: desc } : {}),
-                  });
+                  };
+                  if (isAvcc) cfg.description = payload;
+                  else cfg.avc = { format: "annexb" };
+                  try {
+                    adbMirrorDecoder.configure(cfg);
+                  } catch (_) {
+                    delete cfg.avc;
+                    adbMirrorDecoder.configure(cfg);
+                  }
+                  adbMirrorNeedKey = true;
+                  adbMirrorFrameTs = 0;
                   return;
                 }
                 if (adbMirrorDecoder.state !== "configured") return;
+                if (adbMirrorNeedKey && !isKey) return;
+                // 只丢弃非关键帧，避免排队时把 IDR 丢掉导致一直黑屏
+                if (!isKey && adbMirrorDecoder.decodeQueueSize > 2) return;
                 let data = payload;
                 if (isKey && adbMirrorPendingConfig && adbMirrorPendingConfig[0] !== 1) {
                   data = concatBytes(adbMirrorPendingConfig, payload);
                 }
-                if (adbMirrorDecoder.decodeQueueSize > 8) return;
+                adbMirrorFrameTs += 33_333;
                 adbMirrorDecoder.decode(
                   new EncodedVideoChunk({
                     type: isKey ? "key" : "delta",
-                    timestamp: pts,
+                    timestamp: adbMirrorFrameTs,
                     data,
                   })
                 );
+                if (isKey) adbMirrorNeedKey = false;
               } catch (err) {
+                adbMirrorNeedKey = true;
                 if ($("#adb-input-meta")) $("#adb-input-meta").textContent = `解码失败：${err.message || err}`;
               }
             };
@@ -5550,10 +5624,12 @@
         const LONG_MS = 520;
         const DOUBLE_MS = 320;
         const MOVE_THRESH = 10;
+        const MIRROR_MOVE_MS = 32;
         let drag = null;
         let longTimer = 0;
         let pendingTap = null; // { x, y, timer }
-  
+        let mirrorTouchBusy = false;
+
         const clearLongTimer = () => {
         if (longTimer) {
         clearTimeout(longTimer);
@@ -5570,6 +5646,23 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ serial: requireCurrentSerial(), ...body }),
         });
+        const mirrorLive = () =>
+          adbInputPreviewMode === "mirror" && adbMirrorWs && adbMirrorWs.readyState === 1;
+        const sendMirrorTouch = async (phase, x, y, x0, y0) => {
+          if (mirrorTouchBusy && phase === "MOVE") return;
+          mirrorTouchBusy = true;
+          try {
+            await sendInput({
+              action: "touch",
+              phase,
+              x,
+              y,
+              ...(Number.isFinite(x0) ? { x0, y0 } : {}),
+            });
+          } finally {
+            mirrorTouchBusy = false;
+          }
+        };
         const surfaceReady = (el) => {
         if (!el) return false;
         if (el.tagName === "CANVAS") return el.width > 0 && !el.hidden;
@@ -5599,9 +5692,17 @@
         at: now,
         asDouble,
         fired: "",
+        lastX: pt.x,
+        lastY: pt.y,
+        lastMoveAt: 0,
+        streamTouch: false,
         };
         clearLongTimer();
-        if (!asDouble) {
+        if (!asDouble && mirrorLive()) {
+          drag.streamTouch = true;
+          sendMirrorTouch("DOWN", pt.x, pt.y).catch(() => {});
+        }
+        if (!asDouble && !drag.streamTouch) {
         longTimer = setTimeout(async () => {
         longTimer = 0;
         if (!drag || drag.moved || drag.fired || drag.asDouble) return;
@@ -5636,6 +5737,17 @@
         drag.moved = true;
         clearLongTimer();
         }
+        if (drag.streamTouch && drag.moved) {
+          const now = Date.now();
+          if (now - drag.lastMoveAt >= MIRROR_MOVE_MS) {
+            const fromX = drag.lastX;
+            const fromY = drag.lastY;
+            drag.lastX = pt.x;
+            drag.lastY = pt.y;
+            drag.lastMoveAt = now;
+            sendMirrorTouch("MOVE", pt.x, pt.y, fromX, fromY).catch(() => {});
+          }
+        }
         });
         wrap?.addEventListener("pointerup", async (e) => {
         if (!drag || drag.pointerId !== e.pointerId) return;
@@ -5647,6 +5759,21 @@
         if (!surfaceReady(surface)) return;
         try {
         const end = adbCanvasCoords(surface, e.clientX, e.clientY);
+        if (start.streamTouch) {
+          clearPendingTap();
+          if (start.moved) {
+            await sendMirrorTouch("UP", end.x, end.y, start.lastX, start.lastY);
+          } else if (start.asDouble) {
+            await sendInput({ action: "doubletap", x: start.x, y: start.y });
+            toast(`已双击 ${start.x},${start.y}`);
+          } else {
+            await sendMirrorTouch("UP", start.x, start.y, start.x, start.y);
+            toast(`已点击 ${start.x},${start.y}`);
+          }
+          if ($("#adb-tap-x")) $("#adb-tap-x").value = String(end.x);
+          if ($("#adb-tap-y")) $("#adb-tap-y").value = String(end.y);
+          return;
+        }
         if (start.moved) {
         clearPendingTap();
         await sendInput({
@@ -5655,7 +5782,7 @@
         y1: start.y,
         x2: end.x,
         y2: end.y,
-        duration: Number($("#adb-swipe-ms")?.value || 300),
+        duration: Math.min(180, Number($("#adb-swipe-ms")?.value || 120)),
         });
         toast("已滑动");
         afterInputPreviewAction();
@@ -5692,6 +5819,9 @@
         }
         });
         wrap?.addEventListener("pointercancel", () => {
+        if (drag?.streamTouch) {
+          sendMirrorTouch("UP", drag.lastX, drag.lastY, drag.lastX, drag.lastY).catch(() => {});
+        }
         clearLongTimer();
         drag = null;
         });
