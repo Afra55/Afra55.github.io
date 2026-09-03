@@ -34,6 +34,10 @@
   let scrubbing = false;
   let scrubRaf = 0;
   let scrubPendingSec = null;
+  /** 拖进度条时串行 seek：等 seeked 再应用最新目标，避免快拖画面不更新 */
+  let scrubSeekInflight = false;
+  let scrubSeekWanted = null;
+  let scrubSeekToken = 0;
   let muted = true;
   let seekReady = false;
   let primePromise = null;
@@ -476,9 +480,14 @@
     const doSeek = () => {
       if (gen !== seekGen) return;
       try {
-        if (typeof video.fastSeek === "function") video.fastSeek(t);
-        else video.currentTime = t;
-      } catch (_) {}
+        // 拖进度条预览用 currentTime，比 fastSeek（关键帧）更跟手
+        if (opts.fromScrub || typeof video.fastSeek !== "function") video.currentTime = t;
+        else video.fastSeek(t);
+      } catch (_) {
+        try {
+          video.currentTime = t;
+        } catch (__) {}
+      }
       if (!opts.fromScrub) syncScrubFromVideo();
       if (!opts.skipClock) {
         syncClock();
@@ -509,28 +518,90 @@
     }
   }
 
+  function cancelScrubSeekPipeline() {
+    scrubSeekToken += 1;
+    scrubSeekInflight = false;
+    scrubSeekWanted = null;
+    scrubPendingSec = null;
+    flushScrubRaf();
+  }
+
+  function pumpScrubSeek() {
+    if (!video?.src || scrubSeekInflight) return;
+    if (scrubSeekWanted == null) return;
+    const t = Math.max(0, Math.min(duration(), scrubSeekWanted));
+    scrubSeekWanted = null;
+    if (Math.abs((Number(video.currentTime) || 0) - t) < 0.04 && !video.seeking) {
+      syncClock({ skipInfo: true });
+      return;
+    }
+    const token = scrubSeekToken;
+    scrubSeekInflight = true;
+    let settled = false;
+    const finish = () => {
+      if (settled || token !== scrubSeekToken) return;
+      settled = true;
+      window.clearTimeout(watchdog);
+      video.removeEventListener("seeked", finish);
+      video.removeEventListener("error", finish);
+      scrubSeekInflight = false;
+      syncClock({ skipInfo: true });
+      if (scrubSeekWanted != null) pumpScrubSeek();
+    };
+    // 个别编码 seeked 丢失时，超时后继续跟下一次目标，避免进度条卡死
+    const watchdog = window.setTimeout(finish, 320);
+    video.addEventListener("seeked", finish);
+    video.addEventListener("error", finish);
+    try {
+      video.currentTime = t;
+    } catch (_) {
+      finish();
+      return;
+    }
+    // 已在目标点时部分浏览器不派发 seeked
+    if (!video.seeking && Math.abs((Number(video.currentTime) || 0) - t) < 0.04) {
+      finish();
+    }
+  }
+
   function scheduleScrubSeek(sec) {
     scrubPendingSec = sec;
+    scrubSeekWanted = sec;
+    syncClock({ skipInfo: true });
     if (scrubRaf) return;
     scrubRaf = requestAnimationFrame(() => {
       scrubRaf = 0;
       if (scrubPendingSec == null) return;
-      const t = scrubPendingSec;
       scrubPendingSec = null;
-      applySeek(t, { fromScrub: true, skipClock: true });
-      syncClock({ skipInfo: true });
+      ensureSeekReady().then(() => {
+        if (!scrubbing && scrubSeekWanted == null) return;
+        pumpScrubSeek();
+      });
     });
   }
 
   function flushScrubSeek() {
     flushScrubRaf();
     if (scrubPendingSec != null) {
-      const t = scrubPendingSec;
+      scrubSeekWanted = scrubPendingSec;
       scrubPendingSec = null;
-      applySeek(t, { fromScrub: true });
+    }
+    if (scrubSeekWanted == null && !scrubSeekInflight) {
+      syncClock();
       return;
     }
-    syncClock();
+    const waitDone = () => {
+      if (scrubSeekInflight || scrubSeekWanted != null) {
+        requestAnimationFrame(waitDone);
+        return;
+      }
+      syncClock();
+      syncScrubFromVideo();
+    };
+    ensureSeekReady().then(() => {
+      pumpScrubSeek();
+      waitDone();
+    });
   }
 
   function scrubToValue() {
@@ -766,8 +837,7 @@
   function clearVplay() {
     sourceFile = null;
     scrubbing = false;
-    flushScrubRaf();
-    scrubPendingSec = null;
+    cancelScrubSeekPipeline();
     if (objectUrl) {
       URL.revokeObjectURL(objectUrl);
       objectUrl = "";
@@ -883,12 +953,16 @@
     if (!video?.src) return;
     scrubToValue();
   });
-  scrub?.addEventListener("change", () => {
+  const endScrubGesture = () => {
+    if (!scrubbing && scrubSeekWanted == null && !scrubSeekInflight) return;
     scrubbing = false;
     flushScrubSeek();
     syncScrubFromVideo();
     syncClock();
-  });
+  };
+  scrub?.addEventListener("change", endScrubGesture);
+  scrub?.addEventListener("pointerup", endScrubGesture);
+  scrub?.addEventListener("pointercancel", endScrubGesture);
   video?.addEventListener("timeupdate", () => {
     if (scrubbing) return;
     syncClock();
