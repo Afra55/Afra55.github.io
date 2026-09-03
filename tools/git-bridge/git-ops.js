@@ -311,8 +311,12 @@ const OP_DEFS = {
     build: (p) => {
       need(p, "target");
       const argv = ["checkout"];
-      if (p.create) argv.push("-b");
-      argv.push(assertRef(p.target, "target"));
+      if (p.create) {
+        argv.push("-b", assertRef(p.target, "target"));
+        if (p.start) argv.push(assertRef(p.start, "start"));
+      } else {
+        argv.push(assertRef(p.target, "target"));
+      }
       return { argv, label: argv.join(" ") };
     },
   },
@@ -322,8 +326,13 @@ const OP_DEFS = {
     build: (p) => {
       need(p, "target");
       const argv = ["switch"];
-      if (p.create) argv.push("-c");
-      argv.push(assertRef(p.target, "target"));
+      if (p.create) {
+        argv.push("-c", assertRef(p.target, "target"));
+        if (p.start) argv.push("--track", assertRef(p.start, "start"));
+        else if (p.track) argv.push("--track");
+      } else {
+        argv.push(assertRef(p.target, "target"));
+      }
       return { argv, label: argv.join(" ") };
     },
   },
@@ -699,6 +708,25 @@ const OP_DEFS = {
       return { argv, label: argv.join(" "), dangerous: true };
     },
   },
+  "push-gerrit": {
+    group: "远程",
+    title: "push refs/for/*",
+    build: (p) => {
+      need(p, "branch");
+      const remote = assertRef(p.remote || "origin", "remote");
+      const branch = assertRef(p.branch, "branch");
+      let dest = `HEAD:refs/for/${branch}`;
+      if (p.topic) {
+        const topic = String(p.topic).replace(/[^A-Za-z0-9._/-]/g, "");
+        if (topic) dest += `%topic=${topic}`;
+      }
+      return {
+        argv: ["push", remote, dest],
+        label: `push ${remote} ${dest}`,
+        dangerous: true,
+      };
+    },
+  },
   "push-lease": {
     group: "远程",
     title: "push --force-with-lease",
@@ -947,6 +975,7 @@ const CONFIRM_OPS = new Set([
   "pull-merge",
   "pull-rebase",
   "push",
+  "push-gerrit",
   "push-lease",
   "push-tags",
   "rebase",

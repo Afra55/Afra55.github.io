@@ -39,13 +39,26 @@
 6. 第三方库进 `vendor/`，并登记 `lazy-scripts.js` + `oss-deps.js`
 7. 合入前：`node tools/bump-version.cjs`（北京时间戳）
 
-## 本机桥
+## 本机桥（强制 · 统一桥优先）
 
-- ADB：**统一桥** `http://127.0.0.1:17888`；Token 常见 `devtools-bridge`
-- Everything / FFmpeg(`/ff`) / yt-dlp(`/ytdlp`) / Git(`/git`)：默认都走统一桥，**只需启动一次**
-- 独立 FFmpeg：`17889`；独立 Git：`17890`（可选，兼容旧包）
-- 改桥时同步 ZIP/启动脚本文件列表与 `BRIDGE_VERSION`
+- **唯一默认入口**：`http://127.0.0.1:17888`，Token `devtools-bridge`，协议 `devtools-bridge://start`
+- 能力挂载：Everything（根）· FFmpeg `/ff` · yt-dlp `/ytdlp` · Git `/git`；**用户只需启动一次**
+- 独立端口仅兼容旧包：FFmpeg `17889`、Git `17890`；**新功能不要默认新端口**
+- 面板一律：`bindBridgeLaunchUI({ kind: "unified" })`（`tools/lib/bridge-token.js`）；共用「记住解压目录 / 自动启动」
+- 改桥逻辑必须同步：`BRIDGE_VERSION`（`adb-bridge/server.js`）+ 完整 ZIP 文件列表（`extra-panels/adb.js` → `downloadAdbBridgeBundle`）+ EnvKit `sync_bridges` / `Sync-Bridges`（sh+ps1）+ 启动脚本缺文件 WARN
 - bat/sh 缓存写在**脚本同目录**，勿写死用户主目录
+
+### 新增一座「桥能力」要对齐（一键装 / 一键更）
+
+1. 模块目录 `tools/<name>-bridge/`（可被 `adb-bridge` `require`；含 `server.js` 等）
+2. **挂进统一桥** `adb-bridge/server.js`（load + 路由前缀），默认走 17888
+3. **完整 ZIP**：`downloadAdbBridgeBundle` 写入 zip（与 ffmpeg-bridge、git-bridge 同级）
+4. **EnvKit**：`install-devtools-env.{sh,ps1}` 的 `sync_bridges` / `Sync-Bridges` 下载并校验；`install`/`upgrade`/`bridges` 三种模式都要覆盖
+5. **面板**：默认 17888 + Token `devtools-bridge` + `bindBridgeLaunchUI(unified)`；独立包仅作可选回退
+6. **探测文案**：`envkit.js` 的 BRIDGES、`setup.html` / 面板说明写「统一桥」，勿只写独立端口
+7. registry + lazy-scripts + `bump-version.cjs`
+
+禁止：只做独立端口桥却不进统一 ZIP / EnvKit；禁止新工具另起一套「记住目录」实现。
 
 ## Git（强制）
 

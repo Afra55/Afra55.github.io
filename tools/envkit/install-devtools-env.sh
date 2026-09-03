@@ -446,8 +446,9 @@ main() {
   esac
   say ""
   say "下一步："
-  say "  1. 启动 ${BRIDGE_DIR}/adb-bridge 与/或 git-bridge 启动脚本"
-  say "  2. 打开网页 ${BASE_URL%/tools}/tools/#envkit 查看桥在线状态"
+  say "  1. 启动 ${BRIDGE_DIR}/adb-bridge 启动脚本（统一桥 17888，含 FFmpeg/yt-dlp/Git）"
+  say "  2. 打开网页 ${BASE_URL%/tools}/tools/#envkit 探测；Git 用 #gitbridge（API /git）"
+  say "  3. （可选）仅当不用统一桥时，再跑 git-bridge/start-*"
 }
 
 main

@@ -234,8 +234,34 @@
   outline: 1px solid color-mix(in srgb, var(--accent, #5b8cff) 55%, transparent);
 }
 
-#gitbridge .git-easy-now-warn {
-  color: color-mix(in srgb, #f5a524 80%, var(--text, #e8eaed));
+#gitbridge .git-conflict-preview {
+  margin-top: 0.35rem;
+  max-height: 8rem;
+  overflow: auto;
+  font-size: 0.75rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+
+#gitbridge .git-conflict-preview .mk-ours {
+  background: color-mix(in srgb, #3dd68c 22%, transparent);
+}
+
+#gitbridge .git-conflict-preview .mk-theirs {
+  background: color-mix(in srgb, #5b8cff 22%, transparent);
+}
+
+#gitbridge .git-conflict-preview .mk-mark {
+  background: color-mix(in srgb, #f5a524 28%, transparent);
+  font-weight: 600;
+}
+
+#gitbridge .git-change-item.is-diffing {
+  outline: 1px solid color-mix(in srgb, var(--accent, #5b8cff) 50%, transparent);
+}
+
+#gitbridge .git-ready {
+  padding: 0.65rem 0.75rem;
 }
 
 #gitbridge .git-ops-details {

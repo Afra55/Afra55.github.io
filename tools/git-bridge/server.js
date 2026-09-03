@@ -41,11 +41,12 @@ const ALLOWED_ORIGINS = new Set(
 
 const { buildOp, listOpsCatalog, assertPath } = require("./git-ops");
 
-const BRIDGE_VERSION = "0.2.4";
+const BRIDGE_VERSION = "0.2.5";
 const FEATURES = [
   "fs-browse","repo-open","repo-init","repo-clone","graph","branches",
   "status","commit-detail","explain","ops-catalog","ops-full","protocol-launch",
-  "conflict-assist","read-write-file","beginner-plain-steps","beginner-sync-reset-patch"
+  "conflict-assist","read-write-file","beginner-plain-steps","beginner-sync-reset-patch",
+  "diff-file","push-gerrit","zero-difficulty"
 ];
 
 const GIT_TIMEOUT_MS = 120000;
@@ -763,6 +764,27 @@ async function handleRequest(req, res, opts = {}) {
       const repo = await resolveRepoRoot(url.searchParams.get("repo"));
       const filePath = url.searchParams.get("path");
       sendJson(res, 200, { ok: true, ...(await readRepoFile(repo, filePath)) }, origin);
+      return;
+    }
+
+    if (pathname === "/repo/diff-file" && req.method === "GET") {
+      const repo = await resolveRepoRoot(url.searchParams.get("repo"));
+      const filePath = assertPath(url.searchParams.get("path"));
+      const staged = url.searchParams.get("staged") === "1" || url.searchParams.get("staged") === "true";
+      const argv = staged ? ["diff", "--cached", "--", filePath] : ["diff", "--", filePath];
+      const r = await git(repo, argv, { maxBuffer: 8 * 1024 * 1024 });
+      sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          path: filePath,
+          staged,
+          diff: String(r.stdout || "") || "(无差异或为新文件未暂存内容；可先「勾选进待保存」再看)",
+          cmd: r.cmd,
+        },
+        origin
+      );
       return;
     }
 

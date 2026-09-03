@@ -1,7 +1,7 @@
 (() => {
   "use strict";
   /** 全站构建版本（北京时间后缀）。每次合入功能/修复必须递增此号，并运行 node tools/bump-version.cjs 同步 ?v=。 */
-  const BUILD = "2026.09.04-073501";
+  const BUILD = "2026.09.04-074324";
   window.TOOLS_BUILD = BUILD;
   window.TOOLS_VERSION = BUILD;
 

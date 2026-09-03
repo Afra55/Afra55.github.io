@@ -92,7 +92,7 @@ async function main() {
 
     const health = await req("GET", "/health");
     if (!health.json.git) throw new Error("git missing on host");
-    if (health.json.version !== "0.2.4") {
+    if (health.json.version !== "0.2.5") {
       throw new Error("unexpected version " + health.json.version);
     }
 
@@ -100,7 +100,15 @@ async function main() {
   if (remoteOps.status !== 200 || (remoteOps.json.ops || []).length < 80) {
     throw new Error("GET /repo/ops failed: " + JSON.stringify(remoteOps.json));
   }
-  for (const need of ["pull-merge", "reset-hard-upstream", "format-patch", "am", "reset-soft-n", "commit-amend"]) {
+  for (const need of [
+    "pull-merge",
+    "reset-hard-upstream",
+    "format-patch",
+    "am",
+    "reset-soft-n",
+    "commit-amend",
+    "push-gerrit",
+  ]) {
     if (!(remoteOps.json.ops || []).includes(need)) throw new Error("missing op " + need);
   }
 
@@ -130,6 +138,12 @@ async function main() {
       `/repo/read-file?repo=${encodeURIComponent(opened.json.repo)}&path=${encodeURIComponent("AGENTS.md")}`
     );
     if (readme.status !== 200 || !readme.json.content) throw new Error("read-file failed");
+
+    const diffFile = await req(
+      "GET",
+      `/repo/diff-file?repo=${encodeURIComponent(opened.json.repo)}&path=${encodeURIComponent("AGENTS.md")}`
+    );
+    if (diffFile.status !== 200 || !("diff" in diffFile.json)) throw new Error("diff-file failed");
 
     const logGraph = await req("POST", "/repo/exec", {
       repo: opened.json.repo,

@@ -15,12 +15,20 @@
 
   const BRIDGES = [
     {
-      id: "adb",
-      name: "统一桥（ADB / FFmpeg / yt-dlp）",
+      id: "unified",
+      name: "统一桥（ADB / FFmpeg / yt-dlp / Git / Everything）",
       url: "http://127.0.0.1:17888/health",
       token: "devtools-bridge",
       tokenHeader: "X-Adb-Token",
       link: "#adb",
+    },
+    {
+      id: "git-mount",
+      name: "统一桥 · Git 挂载 /git",
+      url: "http://127.0.0.1:17888/git/health",
+      token: "devtools-bridge",
+      tokenHeader: "X-Git-Token",
+      link: "#gitbridge",
     },
     {
       id: "ffmpeg-standalone",
@@ -31,8 +39,8 @@
       link: "#ffbridge",
     },
     {
-      id: "git",
-      name: "Git 桥",
+      id: "git-standalone",
+      name: "Git 独立桥（可选 17890）",
       url: "http://127.0.0.1:17890/health",
       token: "devtools-git",
       tokenHeader: "X-Git-Token",

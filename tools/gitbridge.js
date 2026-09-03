@@ -674,29 +674,71 @@
           const checked = r.unstaged || !r.staged ? "checked" : "";
           row.innerHTML = `<input type="checkbox" data-git-path="${escapeHtml(r.path)}" ${checked} />
             <span class="git-change-badge mono">${escapeHtml(r.kind || "改")}</span>
-            <span class="mono" title="${escapeHtml(r.path)}">${escapeHtml(r.path)}</span>`;
+            <button type="button" class="ghost-btn git-change-path mono" data-diff-path="${escapeHtml(r.path)}" title="看改动">${escapeHtml(r.path)}</button>`;
           box.appendChild(row);
         }
-        if (hint) hint.textContent = `共 ${rows.length} 项。勾选 → 写说明 →「保存到历史」→ 需要时「上传」。`;
+        box.querySelectorAll("[data-diff-path]").forEach((btn) => {
+          btn.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            showFileDiff(btn.getAttribute("data-diff-path")).catch((e) => showError(e.message));
+          });
+        });
+        if (hint) hint.textContent = `共 ${rows.length} 项。点文件名看 diff → 勾选 → 写说明 →「保存到历史」→ 需要时「上传」。`;
       }
 
-      // branch select for 换工作线
+      // branch select for 换工作线（本地 + 远程）
       const sel = $("#git-easy-branch");
-      if (sel && !sel.dataset.wiredOnce) {
-        sel.dataset.wiredOnce = "1";
-      }
       if (sel) {
         const prev = sel.value;
-        const branches = await api(`/repo/branches?repo=${encodeURIComponent(repoPath)}`).catch(() => ({ local: [] }));
+        const branches = await api(`/repo/branches?repo=${encodeURIComponent(repoPath)}`).catch(() => ({
+          local: [],
+          remote: [],
+        }));
         sel.innerHTML = "";
+        const ogLocal = document.createElement("optgroup");
+        ogLocal.label = "本地";
         for (const b of branches.local || []) {
           const opt = document.createElement("option");
           opt.value = b.name;
           opt.textContent = (b.current ? "● " : "") + b.name;
           if (b.current) opt.selected = true;
-          sel.appendChild(opt);
+          ogLocal.appendChild(opt);
+        }
+        sel.appendChild(ogLocal);
+        const remotes = (branches.remote || []).filter((b) => b.name && !/HEAD$/.test(b.name));
+        if (remotes.length) {
+          const ogRemote = document.createElement("optgroup");
+          ogRemote.label = "网上";
+          for (const b of remotes.slice(0, 80)) {
+            const opt = document.createElement("option");
+            opt.value = "remote:" + b.name;
+            opt.textContent = "☁ " + b.name;
+            ogRemote.appendChild(opt);
+          }
+          sel.appendChild(ogRemote);
         }
         if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
+      }
+
+      const stashSel = $("#git-easy-stash-sel");
+      if (stashSel) {
+        const list = data.stash || [];
+        stashSel.innerHTML = "";
+        if (!list.length) {
+          const opt = document.createElement("option");
+          opt.value = "";
+          opt.textContent = "（空）";
+          stashSel.appendChild(opt);
+        } else {
+          list.forEach((line, i) => {
+            const opt = document.createElement("option");
+            const m = String(line).match(/^(stash@\{\d+\})/);
+            opt.value = m ? m[1] : `stash@{${i}}`;
+            opt.textContent = String(line).slice(0, 80);
+            stashSel.appendChild(opt);
+          });
+        }
       }
 
       if ($("#git-repo-summary") && data.branch) {
@@ -724,9 +766,88 @@
     if (pathEl) pathEl.textContent = filePath;
     ta.value = data.content || "";
     editor.hidden = false;
+    renderConflictPreview();
     $$(".git-conflict-item").forEach((el) => {
       el.classList.toggle("is-active", el.textContent.includes(filePath));
     });
+  }
+
+  function renderConflictPreview() {
+    const ta = $("#git-conflict-text");
+    const pre = $("#git-conflict-preview");
+    if (!ta || !pre) return;
+    const text = ta.value || "";
+    if (!/<<<<<<</.test(text)) {
+      pre.hidden = true;
+      pre.innerHTML = "";
+      return;
+    }
+    pre.hidden = false;
+    let mode = "";
+    pre.innerHTML = text
+      .split("\n")
+      .map((line) => {
+        const esc = escapeHtml(line);
+        if (/^<<<<<<< /.test(line) || line === "<<<<<<<") {
+          mode = "ours";
+          return `<span class="mk-mark">${esc}</span>`;
+        }
+        if (line === "=======") {
+          mode = "theirs";
+          return `<span class="mk-mark">${esc}</span>`;
+        }
+        if (/^>>>>>>> /.test(line) || line === ">>>>>>>") {
+          mode = "";
+          return `<span class="mk-mark">${esc}</span>`;
+        }
+        if (mode === "ours") return `<span class="mk-ours">${esc}</span>`;
+        if (mode === "theirs") return `<span class="mk-theirs">${esc}</span>`;
+        return esc;
+      })
+      .join("\n");
+  }
+
+  function jumpConflictMarker(dir) {
+    const ta = $("#git-conflict-text");
+    if (!ta) return;
+    const text = ta.value || "";
+    const re = /^<<<<<<< /gm;
+    const indices = [];
+    let m;
+    while ((m = re.exec(text))) indices.push(m.index);
+    if (!indices.length) {
+      showError("当前文件里没有 <<<<<<< 冲突标记（可能已选边解决）");
+      return;
+    }
+    const cur = ta.selectionStart || 0;
+    let target = indices[0];
+    if (dir > 0) {
+      target = indices.find((i) => i > cur) ?? indices[0];
+    } else {
+      const before = indices.filter((i) => i < cur);
+      target = before.length ? before[before.length - 1] : indices[indices.length - 1];
+    }
+    ta.focus();
+    ta.setSelectionRange(target, Math.min(target + 7, text.length));
+    const line = text.slice(0, target).split("\n").length;
+    const lh = ta.scrollHeight / Math.max(1, text.split("\n").length);
+    ta.scrollTop = Math.max(0, (line - 3) * lh);
+  }
+
+  async function showFileDiff(filePath) {
+    if (!repoPath || !filePath) return;
+    const view = $("#git-diff-view");
+    $$(".git-change-item").forEach((el) => {
+      const hit = el.querySelector("[data-diff-path]");
+      el.classList.toggle("is-diffing", hit?.getAttribute("data-diff-path") === filePath);
+    });
+    const data = await api(
+      `/repo/diff-file?repo=${encodeURIComponent(repoPath)}&path=${encodeURIComponent(filePath)}`
+    );
+    if (view) {
+      view.hidden = false;
+      view.textContent = `${filePath}\n\n${data.diff || "(空)"}`;
+    }
   }
 
   async function conflictTake(side, filePath) {
@@ -918,11 +1039,13 @@
   async function easyAmend() {
     if (!repoPath) return showError("先打开一个仓库");
     const msg = String($("#git-easy-msg")?.value || "").trim();
+    const maybePublished = Boolean(lastStatus?.upstream);
     if (
       !window.confirm(
         msg
-          ? "用当前说明改写「上一笔保存」？若还有勾选文件会一并补进去。\n（若上一笔已上传过，之后上传可能需要强制推送，请谨慎）"
-          : "把勾选文件补进「上一笔保存」，说明文字不变？"
+          ? "用当前说明改写「上一笔保存」？若还有勾选文件会一并补进去。"
+          : "把勾选文件补进「上一笔保存」，说明文字不变？" +
+              (maybePublished ? "\n\n注意：若上一笔已上传过，之后需要「安全强推」才能更新网上。" : "")
       )
     ) {
       return;
@@ -933,9 +1056,111 @@
     } else {
       await runOp("add-all", {}, { skipConfirm: true, skipRefresh: true });
     }
-    if (msg) await runOp("commit-amend", { message: msg }, { skipConfirm: true });
-    else await runOp("commit-amend", { noEdit: true }, { skipConfirm: true });
+    if (msg) await runOp("commit-amend", { message: msg }, { skipConfirm: true, skipRefresh: true });
+    else await runOp("commit-amend", { noEdit: true }, { skipConfirm: true, skipRefresh: true });
+    if (
+      maybePublished &&
+      window.confirm("上一笔可能已在网上。要用「安全强推」覆盖远程同名线吗？\n（force-with-lease，别人若已有新提交会拒绝）")
+    ) {
+      await runOp("push-lease", {}, { skipConfirm: true });
+    }
     await refreshChanges();
+    await refreshRepo();
+  }
+
+  async function easySwitch() {
+    if (!repoPath) return showError("先打开一个仓库");
+    const raw = String($("#git-easy-branch")?.value || "").trim();
+    if (!raw) return showError("先选一条工作线");
+    let params;
+    let label;
+    if (raw.startsWith("remote:")) {
+      const remoteRef = raw.slice("remote:".length);
+      const local = remoteRef.includes("/") ? remoteRef.split("/").slice(1).join("/") : remoteRef;
+      if (!local) return showError("远程分支名无效");
+      label = `基于 ${remoteRef} 开本地线 ${local}`;
+      params = { target: local, create: true, start: remoteRef };
+    } else {
+      label = raw;
+      params = { target: raw };
+    }
+    if (!window.confirm(`切换到「${label}」？\n未保存的改动若冲突会先提示收起。`)) return;
+    try {
+      await runOp("checkout", params, { skipConfirm: true });
+    } catch (e) {
+      const msg = String(e.message || "") + String(e.data?.stderr || "");
+      if (/local changes|would be overwritten|uncommitted/i.test(msg)) {
+        if (!window.confirm("有未保存改动挡着。先收起来再切换？")) throw e;
+        await runOp("stash-push", {}, { skipConfirm: true, skipRefresh: true });
+        await runOp("checkout", params, { skipConfirm: true });
+      } else {
+        throw e;
+      }
+    }
+    await refreshChanges();
+  }
+
+  async function easyAuthCheck() {
+    if (!repoPath) return showError("先打开一个仓库");
+    if (!window.confirm("试着访问远程（fetch），用来检查登录是否正常？")) return;
+    try {
+      await runOp("fetch", {}, { skipConfirm: true });
+      showError("");
+      opOut.hidden = false;
+      opOut.textContent = "登录体检通过：已能访问远程。\n若仍推送失败，检查分支权限或 Gerrit 项目 ACL。";
+    } catch (e) {
+      showError(
+        humanizeGitError(String(e.message || "") + "\n" + String(e.data?.stderr || "")) +
+          "\n\n建议：GitHub 用 HTTPS Personal Access Token 或 SSH；Gerrit 在本机配好 HTTP 密码 / SSH key。"
+      );
+      throw e;
+    }
+  }
+
+  async function easyReflog() {
+    if (!repoPath) return showError("先打开一个仓库");
+    await runOp("reflog", {}, { skipConfirm: true, skipRefresh: true });
+    opOut.hidden = false;
+    opOut.textContent =
+      (opOut.textContent || "") +
+      "\n\n—— 后悔药用法 ——\n上面每一行前面的短 SHA 可填到右侧「目标」后执行 reset（高级）。\n小白误点「对齐到网上最新」后，可找对齐前的那一行 SHA，在高级区 reset --soft 回去。";
+  }
+
+  async function easyGerrit() {
+    if (!repoPath) return showError("先打开一个仓库");
+    const branch = String($("#git-easy-gerrit")?.value || "").trim() || lastStatus?.upstream?.split("/")?.pop() || "master";
+    const topic = String($("#git-easy-gerrit-topic")?.value || "").trim();
+    if (!window.confirm(`送审到 Gerrit？\npush origin HEAD:refs/for/${branch}${topic ? "%topic=" + topic : ""}`)) {
+      return;
+    }
+    await runOp("push-gerrit", { branch, topic: topic || undefined, remote: "origin" }, { skipConfirm: true });
+    await refreshChanges();
+  }
+
+  async function easyStashApplySel() {
+    if (!repoPath) return showError("先打开一个仓库");
+    const ref = String($("#git-easy-stash-sel")?.value || "").trim();
+    if (!ref) return showError("收起柜是空的");
+    if (!window.confirm(`取出 ${ref}？（不删除柜中记录，用 apply）`)) return;
+    await runOp("stash-apply", { ref }, { skipConfirm: true });
+    await refreshChanges();
+  }
+
+  async function easyReadyGo() {
+    showError("");
+    setStatus("", "正在启动…", "尝试唤起统一桥并连接");
+    try {
+      if (window.devtoolsBridgeToken?.ensureBridgeRunning) {
+        await window.devtoolsBridgeToken.ensureBridgeRunning({
+          kind: "unified",
+          preferredBase: baseUrl() || DEFAULT_BASE,
+          token: token(),
+        });
+      }
+    } catch (_) {
+      /* connect 会给出更明确错误 */
+    }
+    await connect();
   }
 
   async function easySquash() {
@@ -1009,15 +1234,6 @@
     if (!repoPath) return showError("先打开一个仓库");
     if (!window.confirm("撤销上一次「保存到历史」？改动还会留在文件里，只是从历史里拿掉最近一笔。")) return;
     await runOp("reset-soft-1", {}, { skipConfirm: true });
-    await refreshChanges();
-  }
-
-  async function easySwitch() {
-    if (!repoPath) return showError("先打开一个仓库");
-    const name = String($("#git-easy-branch")?.value || "").trim();
-    if (!name) return showError("先选一条工作线");
-    if (!window.confirm(`切换到工作线「${name}」？\n未保存的改动若冲突会失败，可先「收起来」再切。`)) return;
-    await runOp("checkout", { target: name }, { skipConfirm: true });
     await refreshChanges();
   }
 
@@ -1484,8 +1700,12 @@
   $("#git-easy-pull")?.addEventListener("click", () => easyPull().catch((e) => showError(e.message)));
   $("#git-easy-fetch")?.addEventListener("click", () => easyFetch().catch((e) => showError(e.message)));
   $("#git-easy-align")?.addEventListener("click", () => easyAlignRemote().catch((e) => showError(e.message)));
+  $("#git-easy-auth")?.addEventListener("click", () => easyAuthCheck().catch((e) => showError(e.message)));
+  $("#git-easy-reflog")?.addEventListener("click", () => easyReflog().catch((e) => showError(e.message)));
+  $("#git-easy-gerrit-go")?.addEventListener("click", () => easyGerrit().catch((e) => showError(e.message)));
   $("#git-easy-stash")?.addEventListener("click", () => easyStash().catch((e) => showError(e.message)));
   $("#git-easy-stash-pop")?.addEventListener("click", () => easyStashPop().catch((e) => showError(e.message)));
+  $("#git-easy-stash-apply")?.addEventListener("click", () => easyStashApplySel().catch((e) => showError(e.message)));
   $("#git-easy-undo")?.addEventListener("click", () => easyUndo().catch((e) => showError(e.message)));
   $("#git-easy-squash")?.addEventListener("click", () => easySquash().catch((e) => showError(e.message)));
   $("#git-easy-format-patch")?.addEventListener("click", () => easyFormatPatch().catch((e) => showError(e.message)));
@@ -1493,6 +1713,10 @@
   $("#git-easy-apply")?.addEventListener("click", () => easyApply().catch((e) => showError(e.message)));
   $("#git-easy-switch")?.addEventListener("click", () => easySwitch().catch((e) => showError(e.message)));
   $("#git-easy-newbr-go")?.addEventListener("click", () => easyNewBranch().catch((e) => showError(e.message)));
+  $("#git-ready-go")?.addEventListener("click", () => easyReadyGo().catch((e) => showError(e.message)));
+  $("#git-conflict-next")?.addEventListener("click", () => jumpConflictMarker(1));
+  $("#git-conflict-prev")?.addEventListener("click", () => jumpConflictMarker(-1));
+  $("#git-conflict-text")?.addEventListener("input", () => renderConflictPreview());
   $("#git-conflict-ours")?.addEventListener("click", () => conflictTake("ours").catch((e) => showError(e.message)));
   $("#git-conflict-theirs")?.addEventListener("click", () => conflictTake("theirs").catch((e) => showError(e.message)));
   $("#git-conflict-save")?.addEventListener("click", () => conflictSaveResolved().catch((e) => showError(e.message)));
