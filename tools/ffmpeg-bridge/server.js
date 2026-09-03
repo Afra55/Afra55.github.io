@@ -37,7 +37,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.5.0";
+const BRIDGE_VERSION = "0.5.1";
 const FEATURES = [
   "local-fs",
   "probe",
@@ -57,6 +57,8 @@ const FEATURES = [
   "convert",
   "compress",
   "hevc",
+  "keep-quality",
+  "browser-run",
   "scale",
   "fps",
   "mute",
@@ -165,6 +167,57 @@ function parseJsonBody(buf) {
   const text = Buffer.isBuffer(buf) ? buf.toString("utf8") : String(buf || "");
   if (!text.trim()) return {};
   return JSON.parse(text);
+}
+
+/** Stream request body to a file (for browser uploads; avoid buffering whole video in RAM). */
+function saveRequestToFile(req, destPath, limitBytes) {
+  return new Promise((resolve, reject) => {
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    const ws = fs.createWriteStream(destPath);
+    let size = 0;
+    let settled = false;
+    const fail = (err) => {
+      if (settled) return;
+      settled = true;
+      try {
+        ws.destroy();
+      } catch {
+        /* ignore */
+      }
+      try {
+        fs.unlinkSync(destPath);
+      } catch {
+        /* ignore */
+      }
+      reject(err);
+    };
+    req.on("data", (chunk) => {
+      size += chunk.length;
+      if (size > limitBytes) {
+        fail(Object.assign(new Error(`上传过大（上限 ${Math.round(limitBytes / 1024 / 1024)}MB）`), { status: 413 }));
+        req.destroy();
+        return;
+      }
+      if (!ws.write(chunk)) {
+        req.pause();
+        ws.once("drain", () => req.resume());
+      }
+    });
+    req.on("end", () => {
+      ws.end(() => {
+        if (settled) return;
+        settled = true;
+        resolve(size);
+      });
+    });
+    req.on("error", fail);
+    ws.on("error", fail);
+  });
+}
+
+function safeUploadFilename(name) {
+  const base = path.basename(String(name || "upload.bin")).replace(/[^\w.\u4e00-\u9fff-]+/g, "_");
+  return base.slice(0, 120) || "upload.bin";
 }
 
 function execFileAsync(file, args, opts = {}) {
@@ -893,6 +946,8 @@ const OPS_CATALOG = [
           { value: "mp4-fast", label: "MP4 快速" },
           { value: "mp4-hq", label: "MP4 高清" },
           { value: "mp4-copy", label: "MP4 流拷贝" },
+          { value: "keep-quality", label: "极致保画质·H.264" },
+          { value: "keep-quality-hevc", label: "极致保画质·H.265" },
           { value: "compress-low", label: "压体积·轻度" },
           { value: "compress-medium", label: "压体积·均衡" },
           { value: "compress-high", label: "压体积·强压" },
@@ -1609,6 +1664,71 @@ function planOp(op, optsIn = {}) {
       attemptsBuilder = (src, dest) => [
         ["-y", "-i", src, "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", dest],
       ];
+    } else if (p === "keep-quality" || p === "keep-quality-h264") {
+      // 小丸式：慢预设 + 低 CRF，体积可控但观感优先
+      suffix = "-keepq";
+      attemptsBuilder = (src, dest) => [
+        [
+          "-y",
+          "-i",
+          src,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "slow",
+          "-crf",
+          "18",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "192k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+      ];
+    } else if (p === "keep-quality-hevc" || p === "keep-quality-h265") {
+      suffix = "-keepq-hevc";
+      attemptsBuilder = (src, dest) => [
+        [
+          "-y",
+          "-i",
+          src,
+          "-c:v",
+          "libx265",
+          "-preset",
+          "medium",
+          "-crf",
+          "22",
+          "-tag:v",
+          "hvc1",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "160k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+        [
+          "-y",
+          "-i",
+          src,
+          "-c:v",
+          "libx264",
+          "-preset",
+          "slow",
+          "-crf",
+          "18",
+          "-c:a",
+          "aac",
+          "-b:a",
+          "192k",
+          "-movflags",
+          "+faststart",
+          dest,
+        ],
+      ];
     } else if (p === "mp4-copy") {
       suffix = "-copy";
       attemptsBuilder = (src, dest) => [["-y", "-i", src, "-c", "copy", "-movflags", "+faststart", dest]];
@@ -1725,11 +1845,64 @@ function planOp(op, optsIn = {}) {
       ];
     }
 
+    const rawScaleH = Math.max(0, Math.min(4320, Number(opts.scaleHeight) || 0));
+    // even() 会把 0 抬成 2（编码偶数边），可选缩放必须先判断 raw>0
+    const scaleH = rawScaleH > 0 ? even(rawScaleH) : 0;
+
+    let buildArgs = attemptsBuilder;
+    if (scaleH > 0 && typeof attemptsBuilder === "function") {
+      suffix = `${suffix}-${scaleH}p`;
+      buildArgs = (src, dest) => {
+        const attempts = attemptsBuilder(src, dest) || [];
+        const scaled = [];
+        for (const args of attempts) {
+          if (!Array.isArray(args)) continue;
+          // 流拷贝无法缩放，跳过，由后续重编码 attempt 承接
+          const copyIdx = args.indexOf("-c");
+          if (copyIdx >= 0 && args[copyIdx + 1] === "copy") continue;
+          const next = args.slice();
+          const vfIdx = next.indexOf("-vf");
+          const scaleExpr = `scale=-2:min(ih\\,${scaleH})`;
+          if (vfIdx >= 0 && next[vfIdx + 1]) {
+            next[vfIdx + 1] = `${next[vfIdx + 1]},${scaleExpr}`;
+          } else {
+            const iIdx = next.indexOf("-i");
+            const insertAt = iIdx >= 0 ? iIdx + 2 : 2;
+            next.splice(insertAt, 0, "-vf", scaleExpr);
+          }
+          scaled.push(next);
+        }
+        if (!scaled.length) {
+          scaled.push([
+            "-y",
+            "-i",
+            src,
+            "-vf",
+            `scale=-2:min(ih\\,${scaleH})`,
+            "-c:v",
+            "libx264",
+            "-preset",
+            "medium",
+            "-crf",
+            "20",
+            "-c:a",
+            "aac",
+            "-b:a",
+            "160k",
+            "-movflags",
+            "+faststart",
+            dest,
+          ]);
+        }
+        return scaled;
+      };
+    }
+
     return {
       ext,
       mime,
       suffix,
-      buildArgs: attemptsBuilder,
+      buildArgs,
     };
   }
 
@@ -3629,10 +3802,30 @@ async function handleRequest(req, res, opts = {}) {
     }
 
     if (req.method === "GET" && pathname.startsWith("/jobs/")) {
-      const id = pathname.slice("/jobs/".length).split("/")[0];
+      const parts = pathname.slice("/jobs/".length).split("/").filter(Boolean);
+      const id = parts[0];
       const job = JOBS.get(id);
       if (!job) {
         sendJson(res, 404, { ok: false, error: "任务不存在" }, origin);
+        return;
+      }
+      if (parts[1] === "download") {
+        const art =
+          job.artifacts.find((a) => a.path && fs.existsSync(a.path) && a.mime !== "inode/directory") || null;
+        if (!art) {
+          sendJson(res, 404, { ok: false, error: "暂无可下载产物（任务未完成或失败）" }, origin);
+          return;
+        }
+        const data = fs.readFileSync(art.path);
+        const headers = {
+          "Content-Type": art.mime || "application/octet-stream",
+          "Content-Length": data.length,
+          "Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(art.name || "output.bin")}`,
+          "Cache-Control": "no-store",
+        };
+        applyCors(headers, origin);
+        res.writeHead(200, headers);
+        res.end(data);
         return;
       }
       sendJson(res, 200, { ok: true, job: publicJob(job) }, origin);
@@ -3673,6 +3866,40 @@ async function handleRequest(req, res, opts = {}) {
       const body = parseJsonBody(await readBody(req));
       const job = await startJobFromBody(body);
       sendJson(res, 200, { ok: true, job: publicJob(job) }, origin);
+      return;
+    }
+
+    if (req.method === "POST" && pathname === "/jobs/browser-run") {
+      // Browser File → temp → convert/compress. Query: op, preset, scaleHeight
+      const q = url.searchParams;
+      const op = String(q.get("op") || "convert");
+      const preset = String(q.get("preset") || "keep-quality");
+      const scaleHeight = Number(q.get("scaleHeight") || 0) || 0;
+      const filename = safeUploadFilename(req.headers["x-filename"] || q.get("filename") || "upload.bin");
+      const uploadId = `up-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+      const workDir = path.join(TMP_ROOT, "browser", uploadId);
+      const inPath = path.join(workDir, filename);
+      const outDir = path.join(workDir, "out");
+      fs.mkdirSync(outDir, { recursive: true });
+      const maxBytes = 512 * 1024 * 1024;
+      const size = await saveRequestToFile(req, inPath, maxBytes);
+      if (size < 32) throw Object.assign(new Error("上传文件过小或为空"), { status: 400 });
+      const body = {
+        op,
+        paths: [inPath],
+        outDir,
+        createOutDir: false,
+        overwrite: true,
+        preset,
+      };
+      if (scaleHeight > 0) {
+        // Optional: chain via convert then note; for v1 apply scale in preset path only when op=scale
+        if (op === "scale") body.height = String(scaleHeight);
+        else body.scaleHeight = scaleHeight;
+      }
+      const job = await startJobFromBody(body);
+      job.meta = { ...(job.meta || {}), browserUpload: true, uploadBytes: size, uploadName: filename };
+      sendJson(res, 200, { ok: true, job: publicJob(job), downloadPath: `/jobs/${job.id}/download` }, origin);
       return;
     }
 
