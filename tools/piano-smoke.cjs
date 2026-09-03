@@ -27,7 +27,10 @@ function staticChecks() {
   assert(html.includes('id="piano-kb"') && html.includes('id="piano-engine"'), "toolbar ids");
   assert(html.includes("kevinsqi/react-piano") && html.includes("danigb/soundfont-player"), "attribution");
   assert(js.includes("KEY_BINDS") && js.includes("Soundfont"), "js core");
+  assert(/"C#":\s*0\.55/.test(js) && /"A#":\s*5\.85/.test(js), "react-piano pitchPositions");
+  assert(/ACCIDENTAL_WIDTH_RATIO\s*=\s*0\.65/.test(js), "accidental width ratio");
   assert(css.includes(".piano-kb") && css.includes(".piano-black"), "css");
+  assert(/--piano-whites/.test(css) && !/min-width:\s*100%/.test(css), "keyboard width follows white keys");
   assert(registry.includes('"piano"') && /"name": "在线钢琴"/.test(registry), "registry meta");
   assert(/piano:\s*"\.\/piano\.js"/.test(lazy), "TOOL_FILES");
   assert(lazy.includes('"piano"'), "standalone/no_pure");
@@ -150,6 +153,23 @@ async function browserChecks() {
     await page.keyboard.up("z");
 
     await page.click('#piano-kb [data-midi="64"]', { delay: 40 });
+
+    const geom = await page.evaluate(() => {
+      const kb = document.getElementById("piano-kb");
+      const lastBlack = kb.querySelector('[data-midi="106"]');
+      const c8 = kb.querySelector('[data-midi="108"]');
+      const kbR = kb.getBoundingClientRect();
+      const bR = lastBlack.getBoundingClientRect();
+      const wR = c8.getBoundingClientRect();
+      return {
+        overflow: bR.right - kbR.right,
+        blackRight: bR.right,
+        c8Left: wR.left,
+      };
+    });
+    assert(geom.overflow < 2, `last black overflows keyboard by ${geom.overflow}`);
+    assert(geom.blackRight < geom.c8Left + 8, "A#7 should sit left of C8, not float past the last whites");
+
     assert(!errors.length, `pageerror: ${errors.join("; ")}`);
   } finally {
     if (browser) await browser.close().catch(() => {});

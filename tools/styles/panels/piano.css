@@ -72,11 +72,10 @@
 
 .piano-kb {
   position: relative;
-  display: flex;
   height: min(42vh, 228px);
   min-height: 168px;
-  width: max-content;
-  min-width: 100%;
+  width: calc(var(--piano-whites, 52) * 1.75rem);
+  flex: 0 0 auto;
   user-select: none;
   touch-action: none;
 }
@@ -84,6 +83,7 @@
 .piano-white,
 .piano-black {
   appearance: none;
+  box-sizing: border-box;
   font: inherit;
   cursor: pointer;
   padding: 0;
@@ -92,10 +92,9 @@
 }
 
 .piano-white {
-  flex: 0 0 1.75rem;
-  width: 1.75rem;
-  min-width: 1.75rem;
-  position: relative;
+  position: absolute;
+  top: 0;
+  bottom: 0;
   z-index: 1;
   border: 1px solid #c9bfae;
   border-bottom-width: 2px;
@@ -176,12 +175,7 @@
 
   .piano-kb {
     min-height: 188px;
-  }
-
-  .piano-white {
-    flex-basis: 1.55rem;
-    width: 1.55rem;
-    min-width: 1.55rem;
+    width: calc(var(--piano-whites, 52) * 1.55rem);
   }
 }
 

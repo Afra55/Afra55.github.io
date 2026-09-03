@@ -8,6 +8,25 @@
   const FIRST = 21;
   const LAST = 108;
   const NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  /**
+   * 黑键几何来自 kevinsqi/react-piano Key.js（MIT）：
+   * 不是「上一白键 + 固定 0.68」，而是按 C#/D# 一组、F#/G#/A# 一组的真实位置。
+   */
+  const PITCH_POS = {
+    C: 0,
+    "C#": 0.55,
+    D: 1,
+    "D#": 1.8,
+    E: 2,
+    F: 3,
+    "F#": 3.5,
+    G: 4,
+    "G#": 4.7,
+    A: 5,
+    "A#": 5.85,
+    B: 6,
+  };
+  const ACCIDENTAL_WIDTH_RATIO = 0.65;
   const OCTAVE_MIN = -3;
   const OCTAVE_MAX = 3;
   /**
@@ -354,50 +373,49 @@
     bed.scrollLeft = Math.max(0, left);
   }
 
+  function midiOctave(midi) {
+    return Math.floor(midi / 12) - 1;
+  }
+
+  function absKeyPos(midi) {
+    return PITCH_POS[NAMES[midi % 12]] + 7 * midiOctave(midi);
+  }
+
   function renderKeyboard() {
     const kb = $("#piano-kb");
     if (!kb) return;
     const { inv } = hotkeyMap();
     const whites = [];
-    const blacks = [];
+    const keys = [];
     for (let m = FIRST; m <= LAST; m++) {
-      if (isAccidental(m)) blacks.push(m);
-      else whites.push(m);
+      if (isAccidental(m)) keys.push(m);
+      else {
+        whites.push(m);
+        keys.push(m);
+      }
     }
-    kb.style.setProperty("--piano-whites", String(whites.length));
+    const nWhite = whites.length;
+    const origin = absKeyPos(FIRST);
+    kb.style.setProperty("--piano-whites", String(nWhite));
     kb.replaceChildren();
-    whites.forEach((midi) => {
+    keys.forEach((midi) => {
+      const sharp = isAccidental(midi);
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = "piano-white";
+      btn.className = sharp ? "piano-black" : "piano-white";
       btn.dataset.midi = String(midi);
       btn.tabIndex = -1;
       btn.setAttribute("aria-label", midiName(midi));
-      if (midi % 12 === 0 || midi === FIRST || midi === LAST) {
+      const left = (absKeyPos(midi) - origin) / nWhite;
+      const width = (sharp ? ACCIDENTAL_WIDTH_RATIO : 1) / nWhite;
+      btn.style.left = `${left * 100}%`;
+      btn.style.width = `${width * 100}%`;
+      if (!sharp && (midi % 12 === 0 || midi === FIRST || midi === LAST)) {
         const note = document.createElement("span");
         note.className = "piano-key-note";
         note.textContent = midiName(midi);
         btn.appendChild(note);
       }
-      const hot = inv.get(midi);
-      if (hot) {
-        const k = document.createElement("span");
-        k.className = "piano-key-hot";
-        k.textContent = hot;
-        btn.appendChild(k);
-      }
-      kb.appendChild(btn);
-    });
-    blacks.forEach((midi) => {
-      const idx = whites.indexOf(midi - 1);
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "piano-black";
-      btn.dataset.midi = String(midi);
-      btn.tabIndex = -1;
-      btn.setAttribute("aria-label", midiName(midi));
-      btn.style.left = `calc((100% / ${whites.length}) * ${idx + 0.68})`;
-      btn.style.width = `calc(100% / ${whites.length} * 0.62)`;
       const hot = inv.get(midi);
       if (hot) {
         const k = document.createElement("span");
