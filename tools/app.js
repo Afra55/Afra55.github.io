@@ -2096,6 +2096,7 @@
         visibleTools.forEach((id) => appendToolNavLink(toolsWrap, id, { allowHtml5Drag, groupWrap: wrap }));
       }
       wrap.appendChild(toolsWrap);
+      bindNavGroupToolsWheelScroll(toolsWrap);
       if (![...wrap.querySelectorAll(".tool-nav-link")].length) return;
       navEl.appendChild(wrap);
     });
@@ -2116,6 +2117,31 @@
         el.scrollLeft += delta;
         e.preventDefault();
         e.stopPropagation();
+      },
+      { passive: false }
+    );
+  }
+
+  /** 紧凑模式展开的工具列表：自身不可滚时把滚轮交给侧栏 scroll 容器 */
+  function bindNavGroupToolsWheelScroll(panel) {
+    if (!panel || panel.dataset.wheelNavBound === "1") return;
+    panel.dataset.wheelNavBound = "1";
+    panel.addEventListener(
+      "wheel",
+      (e) => {
+        const scroller = navBarScroll || navBar;
+        if (!scroller) return;
+        const canSelf =
+          panel.scrollHeight > panel.clientHeight + 1 &&
+          getComputedStyle(panel).overflowY !== "visible";
+        if (canSelf) {
+          const atTop = panel.scrollTop <= 0;
+          const atBottom = panel.scrollTop + panel.clientHeight >= panel.scrollHeight - 1;
+          if ((e.deltaY < 0 && !atTop) || (e.deltaY > 0 && !atBottom)) return;
+        }
+        if (scroller.scrollHeight <= scroller.clientHeight + 1) return;
+        scroller.scrollTop += e.deltaY;
+        e.preventDefault();
       },
       { passive: false }
     );
@@ -2285,6 +2311,7 @@
       }
     });
     bindFavoriteInteractions();
+    bindNavGroupToolsWheelScroll(favoritesList);
     syncNavCompactUi();
     syncNavSortDragMode();
     if (favPickerOpen) renderFavPicker();

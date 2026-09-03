@@ -805,6 +805,9 @@ button.tool-nav-link {
     box-shadow: none;
     background: color-mix(in srgb, var(--accent) 5%, var(--panel-strong));
     max-height: none !important;
+    /* 内联展开时勿占住 overflow+contain，否则滚轮被吃掉、侧栏无法滚动 */
+    overflow: visible;
+    overscroll-behavior: auto;
   }
 }
 
@@ -1405,6 +1408,9 @@ body.nav-open {
     box-shadow: none;
     background: color-mix(in srgb, var(--accent) 5%, var(--panel-strong));
     max-height: none !important;
+    /* 内联展开：溢出交给 .nav-bar-scroll，避免 overflow:auto + contain 吞掉滚轮 */
+    overflow: visible;
+    overscroll-behavior: auto;
   }
 
   .nav-bar.is-compact:not(.is-searching) {
