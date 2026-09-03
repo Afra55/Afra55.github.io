@@ -2733,6 +2733,9 @@
 
     if (!skipRecent) pushRecent(currentTool);
     persistActiveTool({ tool: currentTool });
+    try {
+      window.DevToolsGiscus?.sync?.(currentTool);
+    } catch (_) {}
     // 手机分类拖拽排序后需保持抽屉打开
     if (!keepDrawer) {
       setDrawerOpen(false);
