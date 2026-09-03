@@ -173,6 +173,12 @@
   padding: 0.75rem 0.85rem;
 }
 
+#gitbridge .git-easy-sec {
+  margin: 0.85rem 0 0.25rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+}
+
 #gitbridge .git-beginner-steps {
   margin: 0.35rem 0 0.55rem;
   padding-left: 1.2rem;

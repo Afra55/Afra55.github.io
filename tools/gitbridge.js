@@ -49,7 +49,43 @@
       return;
     }
     errEl.hidden = false;
-    errEl.textContent = msg;
+    errEl.textContent = humanizeGitError(msg);
+  }
+
+  function humanizeGitError(raw) {
+    const s = String(raw || "");
+    if (!s) return s;
+    if (/non-fast-forward|Not possible to fast-forward|cannot fast-forward/i.test(s)) {
+      return "网上和本地都有新改动，不能直接快进。把「更新方式」改成「合并更新」或「变基更新」再试。";
+    }
+    if (/divergent branches|need to specify how to reconcile/i.test(s)) {
+      return "本地和网上各走各的了。请选「合并更新」或「变基更新」。";
+    }
+    if (/no upstream|no tracking information|has no upstream branch|set-upstream/i.test(s)) {
+      return "这条工作线还没绑定网上对应线。点「② 上传我的改动」会自动建立绑定；或先确认远程已有同名分支。";
+    }
+    if (/Authentication failed|could not read Username|Permission denied \(publickey\)|403 Forbidden|401 Unauthorized|terminal prompts disabled/i.test(s)) {
+      return "登录远程失败：请在本机配好 HTTPS 凭据或 SSH 密钥（Gerrit/GitHub 账号）。";
+    }
+    if (/Your local changes|would be overwritten|uncommitted changes/i.test(s)) {
+      return "有未保存的文件改动挡着了。先「收起改动」或先「保存到历史」，再重试。";
+    }
+    if (/CONFLICT|conflict|Merge conflict|fixing conflicts/i.test(s)) {
+      return "出现冲突了。请到上方「两边改冲突了」区域：留我的 / 留对方 / 手改，然后继续合并。";
+    }
+    if (/not a git repository/i.test(s)) {
+      return "当前目录还不是仓库。可点「在此新建空仓库」或「从网址下载仓库」。";
+    }
+    if (/pathspec|does not match any|ambiguous argument/i.test(s) && /reset|checkout/i.test(s)) {
+      return "找不到对应的网上跟踪线。请先「只看网上有没有新的」，确认已设置上游分支。";
+    }
+    if (/Cannot rebase|no rebase in progress|no merge in progress/i.test(s)) {
+      return "当前没有进行中的合并/变基，无需继续或中止。";
+    }
+    if (/patch does not apply|corrupt patch|does not exist/i.test(s) && /am|apply|patch/i.test(s)) {
+      return "补丁套不上或路径不对。请检查补丁文件路径，或改用「只改文件不记提交」。";
+    }
+    return s;
   }
 
   function setStatus(kind, title, text) {
@@ -797,15 +833,161 @@
 
   async function easyPush() {
     if (!repoPath) return showError("先打开一个仓库");
-    if (!window.confirm("把本地已保存的改动上传到网上？\n（相当于 git push）")) return;
-    await runOp("push", {}, { skipConfirm: true });
+    const needsU = lastStatus && !lastStatus.upstream;
+    const tip = needsU
+      ? "第一次上传：会绑定网上同名工作线并推送。继续？"
+      : "把本地已保存的改动上传到网上？";
+    if (!window.confirm(tip)) return;
+    const params = needsU
+      ? {
+          setUpstream: true,
+          remote: "origin",
+          branch: lastStatus.branch && lastStatus.branch !== "(detached)" ? lastStatus.branch : undefined,
+        }
+      : {};
+    await runOp("push", params, { skipConfirm: true });
     await refreshChanges();
   }
 
   async function easyPull() {
     if (!repoPath) return showError("先打开一个仓库");
-    if (!window.confirm("从网上拉最新改动到本地？\n（相当于 git pull，若两边都改过同一文件可能产生冲突）")) return;
-    await runOp("pull", {}, { skipConfirm: true });
+    const mode = String($("#git-easy-pull-mode")?.value || "auto");
+    const labels = {
+      auto: "自动更新（能快进就快进，不行再合并）",
+      ff: "只要快进更新",
+      merge: "合并更新（可能产生冲突）",
+      rebase: "变基更新（可能产生冲突）",
+    };
+    if (!window.confirm(`${labels[mode] || "更新"}？`)) return;
+
+    const runPull = async (op) => runOp(op, {}, { skipConfirm: true, skipRefresh: true });
+
+    try {
+      if (mode === "ff") {
+        await runPull("pull");
+      } else if (mode === "merge") {
+        await runPull("pull-merge");
+      } else if (mode === "rebase") {
+        await runPull("pull-rebase");
+      } else {
+        try {
+          await runPull("pull");
+        } catch (e) {
+          const msg = String(e.message || "") + " " + String(e.data?.stderr || "");
+          if (/fast-forward|divergent|reconcile|non-fast-forward/i.test(msg)) {
+            opOut.hidden = false;
+            opOut.textContent = "快进失败，改为合并更新…\n" + msg;
+            await runPull("pull-merge");
+          } else {
+            throw e;
+          }
+        }
+      }
+      showError("");
+      await refreshChanges();
+      await refreshRepo();
+    } catch (e) {
+      await refreshChanges().catch(() => {});
+      throw e;
+    }
+  }
+
+  async function easyFetch() {
+    if (!repoPath) return showError("先打开一个仓库");
+    await runOp("fetch", {}, { skipConfirm: true });
+    await refreshChanges();
+  }
+
+  async function easyAlignRemote() {
+    if (!repoPath) return showError("先打开一个仓库");
+    if (
+      !window.confirm(
+        "把本地这条线强制对齐到「网上跟踪线」最新？\n\n" +
+          "· 本地多出来的提交会丢掉\n" +
+          "· 未保存的文件改动也会丢掉\n" +
+          "· 适合：Gerrit 已提交但未合入、想回到线上最新再重来\n\n确定继续？"
+      )
+    ) {
+      return;
+    }
+    await runOp("fetch", {}, { skipConfirm: true, skipRefresh: true });
+    await runOp("reset-hard-upstream", { confirmHard: true }, { skipConfirm: true });
+    await refreshChanges();
+  }
+
+  async function easyAmend() {
+    if (!repoPath) return showError("先打开一个仓库");
+    const msg = String($("#git-easy-msg")?.value || "").trim();
+    if (
+      !window.confirm(
+        msg
+          ? "用当前说明改写「上一笔保存」？若还有勾选文件会一并补进去。\n（若上一笔已上传过，之后上传可能需要强制推送，请谨慎）"
+          : "把勾选文件补进「上一笔保存」，说明文字不变？"
+      )
+    ) {
+      return;
+    }
+    const paths = selectedChangePaths();
+    if (paths.length) {
+      for (const p of paths) await runOp("add", { path: p }, { skipConfirm: true, skipRefresh: true });
+    } else {
+      await runOp("add-all", {}, { skipConfirm: true, skipRefresh: true });
+    }
+    if (msg) await runOp("commit-amend", { message: msg }, { skipConfirm: true });
+    else await runOp("commit-amend", { noEdit: true }, { skipConfirm: true });
+    await refreshChanges();
+  }
+
+  async function easySquash() {
+    if (!repoPath) return showError("先打开一个仓库");
+    const n = Math.min(50, Math.max(2, Number($("#git-easy-squash-n")?.value) || 2));
+    const msg =
+      String($("#git-easy-squash-msg")?.value || "").trim() ||
+      String($("#git-easy-msg")?.value || "").trim() ||
+      `合并最近 ${n} 笔`;
+    if (
+      !window.confirm(
+        `把最近 ${n} 笔保存合成一笔？\n说明：${msg}\n（只动本地历史；若这些提交已上传，之后上传会变复杂）`
+      )
+    ) {
+      return;
+    }
+    await runOp("reset-soft-n", { count: n }, { skipConfirm: true, skipRefresh: true });
+    await runOp("commit", { message: msg }, { skipConfirm: true });
+    await refreshChanges();
+  }
+
+  async function easyFormatPatch() {
+    if (!repoPath) return showError("先打开一个仓库");
+    const n = Math.min(50, Math.max(1, Number($("#git-easy-patch-n")?.value) || 1));
+    if (!window.confirm(`把最近 ${n} 笔打成补丁文件？\n会写到仓库内 .devtools-patches/`)) return;
+    const out = await runOp("format-patch", { count: n, outdir: ".devtools-patches" }, { skipConfirm: true });
+    const files = String(out?.stdout || "")
+      .trim()
+      .split("\n")
+      .filter(Boolean);
+    if (files[0] && $("#git-easy-patch-path")) $("#git-easy-patch-path").value = files[0];
+    showError("");
+    opOut.hidden = false;
+    opOut.textContent = `补丁已生成：\n${files.join("\n") || "(见 .devtools-patches/)"}`;
+    await refreshChanges();
+  }
+
+  async function easyAm() {
+    if (!repoPath) return showError("先打开一个仓库");
+    const path = String($("#git-easy-patch-path")?.value || "").trim();
+    if (!path) return showError("先填补丁文件路径（相对仓库根目录）");
+    if (!window.confirm(`按提交方式应用补丁？\n${path}`)) return;
+    await runOp("am", { path }, { skipConfirm: true });
+    await refreshChanges();
+  }
+
+  async function easyApply() {
+    if (!repoPath) return showError("先打开一个仓库");
+    const path = String($("#git-easy-patch-path")?.value || "").trim();
+    if (!path) return showError("先填补丁文件路径（相对仓库根目录）");
+    if (!window.confirm(`只改工作区文件、不自动记提交？\n${path}`)) return;
+    await runOp("apply", { path }, { skipConfirm: true });
     await refreshChanges();
   }
 
@@ -1068,6 +1250,13 @@
       if (message) fillIf(p, "message", message);
       else if (p.noEdit == null) p.noEdit = true;
     }
+    if (op === "format-patch") {
+      if (p.count == null) p.count = 1;
+      fillIf(p, "outdir", ".devtools-patches");
+      fillIf(p, "sha", sha);
+    }
+    if (op === "am" || op === "apply") fillIf(p, "path", filePath);
+    if (op === "reset-soft-n" && p.count == null) p.count = 2;
     if (op === "stash-push") fillIf(p, "message", message);
     if (op === "stash-apply" || op === "stash-drop" || op === "stash-show") fillIf(p, "ref", target);
     if (op === "stash-clear") p.confirmClear = true;
@@ -1192,6 +1381,12 @@
       "push",
       "reset",
       "reset-soft-1",
+      "reset-soft-n",
+      "reset-hard-upstream",
+      "pull-merge",
+      "pull-rebase",
+      "am",
+      "apply",
       "clean",
       "commit-amend",
       "restore-workdir",
@@ -1204,6 +1399,8 @@
     ]);
     const dangerous = !!(item && item.dangerous) || fallbackDangerous.has(op);
     if (dangerous && !opts.skipConfirm && !window.confirm(`确认执行？\n\n${preview}\n操作：${op}`)) return;
+    if (op === "reset-hard-upstream") p.confirmHard = true;
+    if (op === "reset" && p.mode === "hard") p.confirmHard = true;
 
     try {
       const out = await api("/repo/exec", {
@@ -1221,12 +1418,14 @@
       return out;
     } catch (e) {
       const d = e.data || {};
+      const raw = [e.message, d.stderr, d.stdout].filter(Boolean).join("\n");
+      const nice = humanizeGitError(raw);
       opOut.hidden = false;
       opOut.textContent =
         (d.cmd ? (Array.isArray(d.cmd) ? d.cmd.join(" ") : d.cmd) + "\n\n" : "") +
-        (e.message || "") +
-        (d.stderr ? "\n" + d.stderr : "");
-      showError(e.message);
+        nice +
+        (raw && raw !== nice ? "\n\n—— 原始信息 ——\n" + raw : "");
+      showError(nice);
       throw e;
     }
   }
@@ -1237,7 +1436,7 @@
       showError("先打开一个目录");
       return;
     }
-    if (!window.confirm(`在此目录执行 git init？\n\n${dir}`)) return;
+    if (!window.confirm(`在此目录新建空仓库？\n\n${dir}`)) return;
     showError("");
     const data = await api("/repo/init", { method: "POST", body: { path: dir } });
     await openRepo(data.repo || dir);
@@ -1249,10 +1448,10 @@
     const url = String($("#git-clone-url")?.value || "").trim();
     const dir = String($("#git-fs-path").value || "").trim();
     if (!url) {
-      showError("填写 clone URL");
+      showError("填写仓库网址");
       return;
     }
-    if (!window.confirm(`克隆到当前目录？\n\n${url}\n→ ${dir || "(默认 DevToolsRepos)"}`)) return;
+    if (!window.confirm(`从网址下载仓库到当前目录？\n\n${url}\n→ ${dir || "(默认 DevToolsRepos)"}`)) return;
     showError("");
     const data = await api("/repo/clone", { method: "POST", body: { url, dir: dir || undefined } });
     await openRepo(data.repo);
@@ -1280,11 +1479,18 @@
   $("#git-easy-stage-all")?.addEventListener("click", () => easyStage(true).catch((e) => showError(e.message)));
   $("#git-easy-unstage")?.addEventListener("click", () => easyUnstage().catch((e) => showError(e.message)));
   $("#git-easy-commit")?.addEventListener("click", () => easyCommit().catch((e) => showError(e.message)));
+  $("#git-easy-amend")?.addEventListener("click", () => easyAmend().catch((e) => showError(e.message)));
   $("#git-easy-push")?.addEventListener("click", () => easyPush().catch((e) => showError(e.message)));
   $("#git-easy-pull")?.addEventListener("click", () => easyPull().catch((e) => showError(e.message)));
+  $("#git-easy-fetch")?.addEventListener("click", () => easyFetch().catch((e) => showError(e.message)));
+  $("#git-easy-align")?.addEventListener("click", () => easyAlignRemote().catch((e) => showError(e.message)));
   $("#git-easy-stash")?.addEventListener("click", () => easyStash().catch((e) => showError(e.message)));
   $("#git-easy-stash-pop")?.addEventListener("click", () => easyStashPop().catch((e) => showError(e.message)));
   $("#git-easy-undo")?.addEventListener("click", () => easyUndo().catch((e) => showError(e.message)));
+  $("#git-easy-squash")?.addEventListener("click", () => easySquash().catch((e) => showError(e.message)));
+  $("#git-easy-format-patch")?.addEventListener("click", () => easyFormatPatch().catch((e) => showError(e.message)));
+  $("#git-easy-am")?.addEventListener("click", () => easyAm().catch((e) => showError(e.message)));
+  $("#git-easy-apply")?.addEventListener("click", () => easyApply().catch((e) => showError(e.message)));
   $("#git-easy-switch")?.addEventListener("click", () => easySwitch().catch((e) => showError(e.message)));
   $("#git-easy-newbr-go")?.addEventListener("click", () => easyNewBranch().catch((e) => showError(e.message)));
   $("#git-conflict-ours")?.addEventListener("click", () => conflictTake("ours").catch((e) => showError(e.message)));

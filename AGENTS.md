@@ -86,7 +86,7 @@
 - **备忘录滚动**：桌面滚动根是 `main.shell`（非 `window`）
 - **视频拖进度**：串行等 `seeked`（`pumpScrubSeek`），勿密集 `fastSeek`
 - **导航**：仅显示分类时滚轮交给 `.nav-bar-scroll`；站点外链只在 `sitenav`
-- **Git 可视化**：独立桥 `git-bridge`（17890，≥0.1.1）；面板 `#gitbridge`；白名单 ops 含 reflog/diff/worktree 等
+- **Git 可视化**：统一桥 `/git`（完整包）；独立桥 `git-bridge` 17890 可选；面板 `#gitbridge`；小白模式含同步/冲突/补丁/对齐线上
 - **环境管家**：`#envkit` + `tools/envkit/install-devtools-env.{sh,ps1}`；缺啥装啥、可 upgrade/bridges
 
 ## 不要硬塞

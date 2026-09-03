@@ -405,6 +405,68 @@ const OP_DEFS = {
       dangerous: true,
     }),
   },
+  "reset-soft-n": {
+    group: "提交",
+    title: "reset --soft HEAD~N",
+    build: (p) => {
+      const n = Math.min(50, Math.max(1, Number(p.count) || 1));
+      if (!Number.isFinite(n)) throw Object.assign(new Error("count 无效"), { status: 400 });
+      return {
+        argv: ["reset", "--soft", `HEAD~${n}`],
+        label: `reset --soft HEAD~${n}`,
+        dangerous: true,
+      };
+    },
+  },
+  "reset-hard-upstream": {
+    group: "远程",
+    title: "reset --hard @{upstream}",
+    build: (p) => {
+      if (!p.confirmHard) {
+        throw Object.assign(new Error("hard reset 需要 confirmHard=true"), { status: 400 });
+      }
+      const ref = p.ref ? assertRef(p.ref, "ref") : "@{upstream}";
+      return {
+        argv: ["reset", "--hard", ref],
+        label: `reset --hard ${ref}`,
+        dangerous: true,
+      };
+    },
+  },
+  "format-patch": {
+    group: "提交",
+    title: "format-patch",
+    build: (p) => {
+      const n = Math.min(50, Math.max(1, Number(p.count) || 1));
+      const outdir = assertPath(p.outdir || ".devtools-patches");
+      const argv = ["format-patch", `-${n}`, "-o", outdir];
+      if (p.sha) argv.push(assertRef(p.sha, "sha"));
+      return { argv, label: `format-patch -${n} -o ${outdir}`, maxBuffer: 16 * 1024 * 1024 };
+    },
+  },
+  am: {
+    group: "提交",
+    title: "am <patch>",
+    build: (p) => {
+      need(p, "path");
+      return {
+        argv: ["am", assertPath(p.path)],
+        label: `am ${p.path}`,
+        dangerous: true,
+      };
+    },
+  },
+  apply: {
+    group: "提交",
+    title: "apply <patch>",
+    build: (p) => {
+      need(p, "path");
+      const argv = ["apply"];
+      if (p.check) argv.push("--check");
+      argv.push(assertPath(p.path));
+      return { argv, label: argv.join(" "), dangerous: !p.check };
+    },
+  },
   "restore-workdir": {
     group: "分支",
     title: "restore .",
@@ -895,6 +957,10 @@ const CONFIRM_OPS = new Set([
   "remote-set-url",
   "reset",
   "reset-soft-1",
+  "reset-soft-n",
+  "reset-hard-upstream",
+  "am",
+  "apply",
   "restore-workdir",
   "revert",
   "revert-abort",

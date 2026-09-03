@@ -41,11 +41,11 @@ const ALLOWED_ORIGINS = new Set(
 
 const { buildOp, listOpsCatalog, assertPath } = require("./git-ops");
 
-const BRIDGE_VERSION = "0.2.3";
+const BRIDGE_VERSION = "0.2.4";
 const FEATURES = [
   "fs-browse","repo-open","repo-init","repo-clone","graph","branches",
   "status","commit-detail","explain","ops-catalog","ops-full","protocol-launch",
-  "conflict-assist","read-write-file","beginner-plain-steps"
+  "conflict-assist","read-write-file","beginner-plain-steps","beginner-sync-reset-patch"
 ];
 
 const GIT_TIMEOUT_MS = 120000;
@@ -484,14 +484,18 @@ async function repoStatus(repo) {
   if (changes.length) plainSteps.push(`有 ${changes.length} 个文件改动还没保存进历史`);
   if (behind > 0) plainSteps.push(`网上还有 ${behind} 个更新可以拉下来`);
   if (ahead > 0) plainSteps.push(`你本地多出 ${ahead} 个提交可以上传`);
+  const stashList = String(stash.stdout || "")
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+  const stashCount = stashList.length;
+  if (stashCount > 0) plainSteps.push(`收起柜里还有 ${stashCount} 份临时改动`);
   if (!plainSteps.length) plainSteps.push("工作区干净，可以放心切换分支或从网上更新");
 
   return {
     porcelain: porcelain.stdout,
-    stash: String(stash.stdout || "")
-      .trim()
-      .split("\n")
-      .filter(Boolean),
+    stash: stashList,
+    stashCount,
     cmd: porcelain.cmd,
     branch,
     upstream,

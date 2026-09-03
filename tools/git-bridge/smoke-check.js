@@ -92,14 +92,17 @@ async function main() {
 
     const health = await req("GET", "/health");
     if (!health.json.git) throw new Error("git missing on host");
-    if (health.json.version !== "0.2.3") {
+    if (health.json.version !== "0.2.4") {
       throw new Error("unexpected version " + health.json.version);
     }
 
-    const remoteOps = await req("GET", "/repo/ops");
-    if (remoteOps.status !== 200 || (remoteOps.json.ops || []).length < 80) {
-      throw new Error("GET /repo/ops failed: " + JSON.stringify(remoteOps.json));
-    }
+  const remoteOps = await req("GET", "/repo/ops");
+  if (remoteOps.status !== 200 || (remoteOps.json.ops || []).length < 80) {
+    throw new Error("GET /repo/ops failed: " + JSON.stringify(remoteOps.json));
+  }
+  for (const need of ["pull-merge", "reset-hard-upstream", "format-patch", "am", "reset-soft-n", "commit-amend"]) {
+    if (!(remoteOps.json.ops || []).includes(need)) throw new Error("missing op " + need);
+  }
 
     const opened = await req("POST", "/repo/open", { path: ROOT });
     if (opened.status !== 200 || !opened.json.repo) throw new Error("open failed: " + JSON.stringify(opened.json));
