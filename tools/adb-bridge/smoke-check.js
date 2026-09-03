@@ -68,11 +68,17 @@ async function main() {
     throw new Error("resolve-port.js should support quiet mode for protocol launches");
   }
   const mirrorJs = fs.readFileSync(path.join(__dirname, "scrcpy-mirror.js"), "utf8");
-  if (!/max_fps=30/.test(mirrorJs) || !/video_bit_rate=2500000/.test(mirrorJs)) {
+  if (!/(max_fps=30|maxFps:\s*30)/.test(mirrorJs) || !/(video_bit_rate=2500000|videoBitRate:\s*2500000)/.test(mirrorJs)) {
     throw new Error("scrcpy-mirror.js should use browser-friendly fps/bitrate");
   }
-  if (!/lastKeyFrame|i-frame-interval=1/.test(mirrorJs)) {
-    throw new Error("scrcpy-mirror.js should replay keyframes and shorten i-frame-interval");
+  if (!/lastKeyFrame/.test(mirrorJs)) {
+    throw new Error("scrcpy-mirror.js should cache/replay lastKeyFrame for late WS clients");
+  }
+  if (/video_codec_options=i-frame-interval=1/.test(mirrorJs) && !/不要默认传 video_codec_options/.test(mirrorJs)) {
+    throw new Error("scrcpy-mirror.js must not force i-frame-interval=1 (breaks some OEM encoders)");
+  }
+  if (!/降低分辨率重试|最小参数重试/.test(mirrorJs)) {
+    throw new Error("scrcpy-mirror.js should retry handshake with softer encoder profiles");
   }
   if (!/action === "touch"/.test(fs.readFileSync(path.join(__dirname, "server.js"), "utf8"))) {
     throw new Error("server.js should support input touch/motionevent");

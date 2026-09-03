@@ -182,10 +182,15 @@ function formatMirrorError(base, errTail, procExitCode) {
     msg = "scrcpy-server 启动参数被拒绝";
   } else if (/Permission denied|SecurityException|INJECT_EVENTS/i.test(tail)) {
     msg = "scrcpy-server 权限不足（请解锁屏幕并保持亮屏后重试）";
-  } else if (/Could not register|MediaCodec|encoder/i.test(tail)) {
-    msg = "scrcpy-server 无法启动屏幕编码（部分机型需关闭其它投屏/录屏应用）";
+  } else if (/Could not register|MediaCodec|encoder|IllegalStateException/i.test(tail)) {
+    msg = "scrcpy-server 无法启动屏幕编码（请关闭其它投屏/录屏，解锁亮屏后重试；桥会自动降分辨率重试）";
   } else if (base === "socket closed" || /socket closed/i.test(base)) {
+    const deviceSeen = /INFO:\s*Device:/i.test(tail);
     msg = `镜像握手失败（视频 socket 已关闭${procExitCode != null ? `，server 退出码 ${procExitCode}` : ""}）`;
+    if (deviceSeen) {
+      msg +=
+        "。设备已启动但编码器/出流阶段断开（部分 Android 15+ / 红魔等机型对编码参数敏感）；请更新本站桥后重试，或关闭其它投屏后解锁亮屏再开镜像";
+    }
   } else if (/ECONNREFUSED/i.test(base)) {
     if (/Device:/i.test(tail) || /INFO:.*Android/i.test(tail)) {
       msg =
@@ -589,8 +594,14 @@ class MirrorSession {
     return formatMirrorError(base, this.errTail, this.procExitCode);
   }
 
-  buildServerShellCmd(appProcessRunner) {
-    return [
+  buildServerShellCmd(appProcessRunner, opts = {}) {
+    const videoBitRate = opts.videoBitRate ?? 2500000;
+    const maxSize = opts.maxSize ?? 1280;
+    const maxFps = opts.maxFps ?? 30;
+    // 不要默认传 video_codec_options=i-frame-interval：部分机型（红魔 Android 17 等）
+    // MediaCodec 会在 Device 横幅之后直接拒编并关掉视频 socket。
+    // 黑屏靠客户端重放 lastConfig/lastKeyFrame 解决，不必强行缩短 GOP。
+    const parts = [
       `CLASSPATH=${REMOTE_JAR}`,
       appProcessRunner,
       "/",
@@ -610,12 +621,14 @@ class MirrorSession {
       "power_on=true",
       "stay_awake=true",
       "video_codec=h264",
-      "video_bit_rate=2500000",
-      "max_size=1280",
-      "max_fps=30",
-      // 默认关键帧约 10s；网页晚半步连上会错过首个 IDR → 黑屏。压到 1s。
-      "video_codec_options=i-frame-interval=1",
-    ].join(" ");
+      `video_bit_rate=${videoBitRate}`,
+      `max_size=${maxSize}`,
+      `max_fps=${maxFps}`,
+    ];
+    if (opts.videoCodecOptions) {
+      parts.push(`video_codec_options=${opts.videoCodecOptions}`);
+    }
+    return parts.join(" ");
   }
 
   attachServerProc(proc) {
@@ -667,27 +680,38 @@ class MirrorSession {
       /* ignore */
     }
 
-    const scid = crypto.randomBytes(4).readUInt32BE(0) & 0x7fffffff;
-    this.scidHex = scid.toString(16).padStart(8, "0");
-    onProgress?.("正在建立 adb 端口转发…");
-    this.port = await setupAdbForward(this.deps, this.serial, this.scidHex);
+    const preferredRunner = await pickAppProcessRunner(this.deps, this.serial);
 
-    const appProcessRunner = await pickAppProcessRunner(this.deps, this.serial);
-    let shellCmd = this.buildServerShellCmd(appProcessRunner);
-    onProgress?.("正在启动设备端 scrcpy-server…");
-    this.attachServerProc(this.spawnServerProcess(adb, shellCmd));
-
-    const waitServerBanner = async () => {
-      const t0 = Date.now();
-      while (Date.now() - t0 < 5000) {
-        if (this.procExitCode != null) {
-          throw new Error(this.mirrorError(`scrcpy-server 已退出${this.procExitCode != null ? ` (code ${this.procExitCode})` : ""}`));
-        }
-        if (/\[server\]\s*INFO:\s*Device:/i.test(this.errTail) || /INFO:\s*Device:/i.test(this.errTail)) {
-          return;
-        }
-        await delay(80);
+    const killServerProc = async () => {
+      try {
+        this.proc?.kill("SIGTERM");
+      } catch {
+        /* ignore */
       }
+      this.proc = null;
+      try {
+        await this.deps.adbSerial(
+          this.serial,
+          [
+            "shell",
+            "pkill -f com.genymobile.scrcpy.Server 2>/dev/null; pkill -f devtools-scrcpy-server 2>/dev/null; true",
+          ],
+          { timeout: 8000 }
+        );
+      } catch {
+        /* ignore */
+      }
+    };
+
+    const freshForward = async ({ newScid = true } = {}) => {
+      if (this.port) {
+        await this.deps.adbSerial(this.serial, ["forward", "--remove", `tcp:${this.port}`], { timeout: 8000 }).catch(() => {});
+      }
+      if (newScid || !this.scidHex) {
+        const scid = crypto.randomBytes(4).readUInt32BE(0) & 0x7fffffff;
+        this.scidHex = scid.toString(16).padStart(8, "0");
+      }
+      this.port = await setupAdbForward(this.deps, this.serial, this.scidHex);
     };
 
     const cleanupHandshakeSockets = () => {
@@ -705,9 +729,25 @@ class MirrorSession {
       this.videoSock = null;
     };
 
+    const waitServerBanner = async () => {
+      const t0 = Date.now();
+      while (Date.now() - t0 < 5000) {
+        if (this.procExitCode != null) {
+          throw new Error(
+            this.mirrorError(`scrcpy-server 已退出${this.procExitCode != null ? ` (code ${this.procExitCode})` : ""}`)
+          );
+        }
+        if (/\[server\]\s*INFO:\s*Device:/i.test(this.errTail) || /INFO:\s*Device:/i.test(this.errTail)) {
+          // Device 打印后立刻 open()/accept；给 LocalServerSocket 极短就绪窗口，避免抢连
+          await delay(120);
+          return;
+        }
+        await delay(80);
+      }
+    };
+
     const handshakeOnce = async () => {
       await waitServerBanner().catch((err) => {
-        // banner 超时仍继续握手；已退出则抛出
         if (/已退出/i.test(err.message || "")) throw err;
       });
       onProgress?.("等待视频握手（dummy byte）…");
@@ -722,50 +762,80 @@ class MirrorSession {
       this.pumpFrames().catch((err) => this.stop(this.mirrorError(err.message || String(err))));
     };
 
-    try {
-      await handshakeOnce();
-    } catch (err) {
-      cleanupHandshakeSockets();
-      const refused = /ECONNREFUSED/i.test(err.message || String(err || ""));
-      if (refused && !this.closed) {
-        onProgress?.("转发已失效，正在重建 adb forward…");
-        try {
-          if (this.port) {
-            await this.deps.adbSerial(this.serial, ["forward", "--remove", `tcp:${this.port}`], { timeout: 8000 }).catch(() => {});
-          }
-          this.port = await setupAdbForward(this.deps, this.serial, this.scidHex);
-          await handshakeOnce();
-          return;
-        } catch (err2) {
-          cleanupHandshakeSockets();
-          err = err2;
-        }
-      }
-      const failedWith64 = appProcessRunner === "app_process64";
-      if (failedWith64 && (/socket closed|dummy byte|握手|ECONNREFUSED/i.test(err.message || "") || this.procExitCode != null)) {
-        try {
-          this.proc?.kill("SIGTERM");
-        } catch {
-          /* ignore */
-        }
-        this.proc = null;
-        shellCmd = this.buildServerShellCmd("app_process");
-        onProgress?.("改用 app_process 重试…");
-        this.attachServerProc(this.spawnServerProcess(adb, shellCmd));
-        try {
-          if (refused || /ECONNREFUSED/i.test(err.message || "")) {
-            this.port = await setupAdbForward(this.deps, this.serial, this.scidHex);
-          }
-          await handshakeOnce();
-          return;
-        } catch {
-          /* fall through to formatted error below */
-        }
-      }
-      const msg = this.mirrorError(err.message || String(err));
-      this.stop(msg);
-      throw new Error(msg);
+    const isRetryableHandshake = (err) => {
+      const m = err?.message || String(err || "");
+      return /socket closed|dummy byte|握手|ECONNREFUSED|MediaCodec|encoder|IllegalArgument|无法启动屏幕编码/i.test(m) || this.procExitCode != null;
+    };
+
+    /** 参数阶梯：先正常，再降分辨率；64 位失败再换 app_process；最后最小参数。 */
+    const attempts = [
+      { label: null, runner: preferredRunner, maxSize: 1280, videoBitRate: 2500000, maxFps: 30 },
+      { label: "编码器异常，降低分辨率重试…", runner: preferredRunner, maxSize: 800, videoBitRate: 1500000, maxFps: 24 },
+    ];
+    if (preferredRunner === "app_process64") {
+      attempts.push({
+        label: "改用 app_process 重试…",
+        runner: "app_process",
+        maxSize: 800,
+        videoBitRate: 1500000,
+        maxFps: 24,
+      });
     }
+    attempts.push({
+      label: "最小参数重试…",
+      runner: "app_process",
+      maxSize: 640,
+      videoBitRate: 1000000,
+      maxFps: 20,
+    });
+
+    let lastErr = null;
+    for (let i = 0; i < attempts.length; i++) {
+      const attempt = attempts[i];
+      if (this.closed) break;
+      if (i > 0) {
+        if (!isRetryableHandshake(lastErr)) break;
+        cleanupHandshakeSockets();
+        await killServerProc();
+        onProgress?.(attempt.label || "正在重试镜像…");
+      } else {
+        onProgress?.("正在建立 adb 端口转发…");
+      }
+
+      try {
+        await freshForward();
+        const shellCmd = this.buildServerShellCmd(attempt.runner, {
+          maxSize: attempt.maxSize,
+          videoBitRate: attempt.videoBitRate,
+          maxFps: attempt.maxFps,
+        });
+        onProgress?.(i === 0 ? "正在启动设备端 scrcpy-server…" : `正在启动 scrcpy-server（${attempt.maxSize}p）…`);
+        this.attachServerProc(this.spawnServerProcess(adb, shellCmd));
+        await handshakeOnce();
+        return;
+      } catch (err) {
+        cleanupHandshakeSockets();
+        lastErr = err;
+        const refused = /ECONNREFUSED/i.test(err.message || String(err || ""));
+        // 同一次参数下，forward 被掐时先重建再试一次（不换 profile）
+        if (refused && !this.closed && i === 0) {
+          try {
+            onProgress?.("转发已失效，正在重建 adb forward…");
+            // 设备端 scrcpy 已用当前 scid 监听，只能重建同 scid 的 forward
+            await freshForward({ newScid: false });
+            await handshakeOnce();
+            return;
+          } catch (err2) {
+            cleanupHandshakeSockets();
+            lastErr = err2;
+          }
+        }
+      }
+    }
+
+    const msg = this.mirrorError(lastErr?.message || String(lastErr || "握手失败"));
+    this.stop(msg);
+    throw new Error(msg);
   }
 
   broadcastJson(obj) {

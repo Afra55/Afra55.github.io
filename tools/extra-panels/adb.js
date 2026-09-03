@@ -3629,6 +3629,8 @@
         }
         if (/ECONNREFUSED|转发.*断开|forward 未在/i.test(detail) && !bridgeAtLeast("0.9.5")) {
           detail += "。请重新下载完整桥 ZIP（≥0.9.5 修复握手前抢连导致转发失效）并只留一座桥窗口";
+        } else if (/socket closed|编码器|MediaCodec/i.test(detail) && !bridgeAtLeast("0.9.9")) {
+          detail += "。请更新到桥 ≥0.9.9（去掉易崩的编码参数，并在握手失败时自动降分辨率重试）";
         } else if (!bridgeAtLeast("0.9.8")) {
           detail += "。建议更新到桥 ≥0.9.8（修复首帧丢失导致黑屏）";
         } else if (!bridgeAtLeast("0.8.4")) {
