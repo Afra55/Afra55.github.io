@@ -1,7 +1,7 @@
 <section id="setup" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>安装本机工具（小白指南）</h1>
-        <p>本站大部分功能在浏览器里就能用。电脑依赖与桥可用 <a href="#envkit">环境管家</a> 一键安装/升级；或按下面图文一步步来。ADB/FFmpeg 共用桥（17888），Git 独立桥（17890）。</p>
+        <p>本站大部分功能在浏览器里就能用。电脑依赖与桥可用 <a href="#envkit">环境管家</a> 一键安装/升级；或按下面图文一步步来。<strong>ADB / FFmpeg / yt-dlp / Git / Everything 共用一座桥（17888）</strong>，启动一次即可。</p>
       </div>
       <div class="panel-body setup-body">
         <div class="setup-callout panel-card">
@@ -258,7 +258,8 @@ adb devices</pre>
                 <li>统一本机桥：<span class="mono">http://127.0.0.1:17888</span>，Token <span class="mono">devtools-bridge</span>（ADB + 镜像 + FFmpeg + yt-dlp）</li>
                 <li>FFmpeg 接口前缀：<span class="mono">/ff</span>（例如 <span class="mono">/ff/ops</span>）</li>
                 <li>yt-dlp 接口前缀：<span class="mono">/ytdlp</span>（例如 <span class="mono">/ytdlp/health</span>）</li>
-                <li>Git 独立桥：<span class="mono">http://127.0.0.1:17890</span>，Token <span class="mono">devtools-git</span></li>
+                <li>统一桥：<span class="mono">http://127.0.0.1:17888</span>，Token <span class="mono">devtools-bridge</span>（含 ADB / FFmpeg / yt-dlp / Git / Everything）</li>
+                <li>Git API：统一桥上的 <span class="mono">/git/*</span>（旧独立包 17890 仍可用）</li>
               </ul>
             </li>
           </ol>
@@ -283,7 +284,7 @@ adb devices</pre>
             <dt>下载视频只要 yt-dlp，要不要装 ADB？</dt>
             <dd>不用。装 Node.js + yt-dlp（合并建议 + FFmpeg），用 <a href="#ytdlp">yt-dlp 本机桥</a> 即可；与 ADB 共用同一座桥。</dd>
             <dt>只想看本地 Git 分支图？</dt>
-            <dd>装 Node.js + git，打开 <a href="#gitbridge">Git 可视化</a>下载 17890 桥即可；不必装 ADB/FFmpeg。</dd>
+            <dd>装 Node.js + git，打开 <a href="#adb">ADB</a> 下载完整包（已含 Git）启动一次即可；也可只用 Git 独立包。</dd>
           </dl>
           <p class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.75rem">
             <a class="ghost-btn" href="#about">返回关于</a>
