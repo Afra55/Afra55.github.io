@@ -2,10 +2,16 @@
 "use strict";
 
 /**
- * 启动前检查默认桥端口；若被占用则询问：结束占用进程 / 换端口 / 取消。
- * 输出最终端口号到 stdout（最后一行），供 start-*.bat/sh 读取。
+ * 启动前检查默认桥端口。
+ * - 若已被本机 DevTools 桥占用：输出 `ALREADY <port>`，调用方应直接退出（勿再起一座）。
+ * - 若端口空闲：输出 `READY <port>`。
+ * - 若被其他进程占用：交互询问结束进程 / 换端口 / 取消；非交互则尽量换空闲端口。
+ *
+ * 提示与问答一律走 stderr；stdout 仅输出最终一行，便于 bat/sh 重定向捕获。
  */
 
+const fs = require("fs");
+const http = require("http");
 const net = require("net");
 const readline = require("readline");
 const { execSync } = require("child_process");
@@ -20,6 +26,49 @@ function isPortInUse(port) {
     server.once("error", (err) => resolve(err && err.code === "EADDRINUSE"));
     server.once("listening", () => server.close(() => resolve(false)));
     server.listen(port, "127.0.0.1");
+  });
+}
+
+function probeBridgeHealth(port, timeoutMs = 2500) {
+  return new Promise((resolve) => {
+    const req = http.get(
+      {
+        host: "127.0.0.1",
+        port,
+        path: "/health",
+        timeout: timeoutMs,
+        headers: { Accept: "application/json" },
+      },
+      (res) => {
+        let raw = "";
+        res.setEncoding("utf8");
+        res.on("data", (chunk) => {
+          raw += chunk;
+          if (raw.length > 65536) req.destroy();
+        });
+        res.on("end", () => {
+          try {
+            const data = JSON.parse(raw);
+            const service = String(data?.service || "");
+            const looksLikeOurs =
+              data?.ok === true &&
+              (service === "devtools-bridge" ||
+                service === "devtools-adb-bridge" ||
+                Array.isArray(data?.features) ||
+                data?.unified === true ||
+                Boolean(data?.version));
+            resolve(looksLikeOurs ? data : null);
+          } catch (_) {
+            resolve(null);
+          }
+        });
+      }
+    );
+    req.on("error", () => resolve(null));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(null);
+    });
   });
 }
 
@@ -49,7 +98,8 @@ function getListenerPids(port) {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     });
-    out.split(/\r?\n/)
+    out
+      .split(/\r?\n/)
       .map((s) => Number(s.trim()))
       .filter((n) => Number.isFinite(n) && n > 0)
       .forEach((n) => pids.add(n));
@@ -136,8 +186,31 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-function ask(question) {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+/** Prefer console for Q&A even when stdout is redirected to a file by the launcher. */
+function getAskStreams() {
+  if (process.stdin.isTTY) {
+    return { input: process.stdin, output: process.stderr };
+  }
+  if (process.platform === "win32") {
+    return null;
+  }
+  try {
+    fs.accessSync("/dev/tty", fs.constants.R_OK | fs.constants.W_OK);
+    return {
+      input: fs.createReadStream("/dev/tty"),
+      output: fs.createWriteStream("/dev/tty"),
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function ask(question, streams) {
+  const rl = readline.createInterface({
+    input: streams.input,
+    output: streams.output,
+    terminal: true,
+  });
   return new Promise((resolve) => {
     rl.question(question, (answer) => {
       rl.close();
@@ -156,6 +229,10 @@ async function findFreePort(prefer) {
   return null;
 }
 
+function emit(mode, port) {
+  process.stdout.write(`${mode} ${port}`);
+}
+
 async function main() {
   let port = DEFAULT_PORT;
   if (port < PORT_MIN || port > PORT_MAX) {
@@ -164,24 +241,35 @@ async function main() {
   }
 
   if (!(await isPortInUse(port))) {
-    process.stdout.write(String(port));
+    emit("READY", port);
     return;
   }
 
-  const interactive = process.stdin.isTTY && process.stdout.isTTY;
-  if (!interactive) {
+  const existing = await probeBridgeHealth(port);
+  if (existing) {
+    const shown = Number(existing.port) || port;
+    console.error("");
+    console.error(`[OK] 本机桥已在端口 ${shown} 运行（版本 ${existing.version || "?"}）。`);
+    console.error("无需再开第二个窗口。请保持已打开的启动脚本窗口，回到网页点「连接」。");
+    console.error("");
+    emit("ALREADY", shown);
+    return;
+  }
+
+  const streams = getAskStreams();
+  if (!streams) {
     const alt = await findFreePort(port + 1);
     if (alt == null) {
       console.error(`端口 ${PORT_MIN}-${PORT_MAX} 均已占用，且当前为非交互环境，无法询问。`);
       process.exit(1);
     }
-    console.warn(`[resolve-port] 端口 ${port} 被占用，非交互模式自动改用 ${alt}`);
-    process.stdout.write(String(alt));
+    console.error(`[resolve-port] 端口 ${port} 被占用（非本站桥），非交互模式自动改用 ${alt}`);
+    emit("READY", alt);
     return;
   }
 
   console.error("");
-  console.error(`[WARN] 端口 ${port} 已被占用。`);
+  console.error(`[WARN] 端口 ${port} 已被占用，且不是可识别的 DevTools 本机桥。`);
   console.error("常见原因：上次直接关闭了命令窗口，本机桥进程仍在后台运行。");
   console.error("");
   console.error("当前占用：");
@@ -195,7 +283,7 @@ async function main() {
   console.error("  3) 取消");
   console.error("");
 
-  const choice = (await ask("请输入 [1/2/3]: ")).toLowerCase();
+  const choice = (await ask("请输入 [1/2/3]: ", streams)).toLowerCase();
 
   if (choice === "1" || choice === "k" || choice === "kill") {
     const pids = getBridgeRangePids();
@@ -210,7 +298,7 @@ async function main() {
       console.error(`端口 ${port} 仍被占用，请手动结束占用进程后重试。`);
       process.exit(1);
     }
-    process.stdout.write(String(port));
+    emit("READY", port);
     return;
   }
 
@@ -223,7 +311,7 @@ async function main() {
     console.error("");
     console.error(`将使用端口 ${alt}。网页桥地址请改为: http://127.0.0.1:${alt}`);
     console.error("");
-    process.stdout.write(String(alt));
+    emit("READY", alt);
     return;
   }
 

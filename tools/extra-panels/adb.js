@@ -2506,7 +2506,7 @@
             scriptName: "start-adb-bridge.bat",
             zipName: "devtools-adb-bridge-win.zip",
             runHint:
-              "解压后优先双击 start-adb-bridge.cmd（更不易闪退）；也可双击 start-adb-bridge.bat。请保持窗口打开。",
+              "解压后优先双击 start-adb-bridge.cmd（更不易闪退）；不要再同时打开 .bat。请保持窗口打开。",
           },
           linux: {
             scriptPath: "./adb-bridge/start-linux.sh",
@@ -2556,6 +2556,9 @@
           "2. 本机已安装 Node.js；按需安装 adb / ffmpeg / yt-dlp",
           "3. " + cfg.runHint.replace(/\n/g, "\n   "),
           "4. 回到网页：ADB 与 FFmpeg 本机桥都连 http://127.0.0.1:17888",
+          "",
+          "注意：只需打开一个启动脚本窗口。若提示桥已在运行，不要再双击一次。",
+          "Windows：优先双击 start-adb-bridge.cmd；不要同时再开 .bat。",
           "",
           "默认 Token: devtools-bridge（兼容旧 Token）",
           "FFmpeg API 前缀: /ff",

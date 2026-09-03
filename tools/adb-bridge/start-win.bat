@@ -199,16 +199,31 @@ set "ADB_BRIDGE_DIR=%CD%"
 
 set "RESOLVE_SCRIPT=%SCRIPT_DIR%resolve-port.js"
 set "ADB_BRIDGE_PORT="
+set "PORT_MODE=READY"
+set "PORT_FILE=%SCRIPT_DIR%.bridge-port.tmp"
 if exist "%RESOLVE_SCRIPT%" (
   echo [..] Checking port availability...
-  for /f "usebackq delims=" %%P in (`node "%RESOLVE_SCRIPT%"`) do set "ADB_BRIDGE_PORT=%%P"
+  rem Redirect stdout only so prompts stay on this console; avoids for /f stealing stdin.
+  node "%RESOLVE_SCRIPT%" > "%PORT_FILE%"
   if errorlevel 1 (
     echo [ERROR] Port resolve cancelled or failed.
     echo [ERROR] port resolve failed>> "%LOG_FILE%"
+    if exist "%PORT_FILE%" del /f /q "%PORT_FILE%" >nul 2>&1
     exit /b 1
   )
+  for /f "usebackq tokens=1,2" %%A in ("%PORT_FILE%") do (
+    set "PORT_MODE=%%A"
+    set "ADB_BRIDGE_PORT=%%B"
+  )
+  if exist "%PORT_FILE%" del /f /q "%PORT_FILE%" >nul 2>&1
 )
 if not defined ADB_BRIDGE_PORT set "ADB_BRIDGE_PORT=17888"
+if /i "!PORT_MODE!"=="ALREADY" (
+  echo [OK] Bridge already running on port !ADB_BRIDGE_PORT!
+  echo      Do not open another bat/cmd. Keep the first window open, then click Connect on the webpage.
+  echo already running port=!ADB_BRIDGE_PORT!>> "%LOG_FILE%"
+  exit /b 0
+)
 echo [OK] Bridge port: %ADB_BRIDGE_PORT%
 echo bridge port=%ADB_BRIDGE_PORT%>> "%LOG_FILE%"
 echo ADB_BRIDGE_DIR=%ADB_BRIDGE_DIR%>> "%LOG_FILE%"
