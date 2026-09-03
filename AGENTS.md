@@ -45,14 +45,15 @@
 - 改桥逻辑时同步 ZIP/启动脚本所需文件列表与 `BRIDGE_VERSION`（若有）
 - bat/sh 缓存与生成文件应落在 **脚本同目录**，不要写死用户主目录 C 盘路径
 
-## Git / 合入习惯（对用户）
+## Git / 合入习惯（强制）
 
-- **默认直接合入 `master`**：改完 → commit → `git push origin master`，不要长期堆 PR 分支
-- 若环境强制走 `cursor/<name>-xxxx` 分支 + PR：合入后立刻 squash/merge 到 `master`，并**删除远程与本地特性分支**，避免仓库分支膨胀
-- 已合入或过时、无用的 `cursor/*` 分支：主动清理（`git push origin --delete …`）；本地只留 `master`
+- **所有修改默认自动合入 `master`**：改完 → commit → `git push origin master`（或特性分支立刻 squash/merge 进 master）
+- **合入后必须删除本次特性分支**（远程 + 本地），避免 `cursor/*` 堆积冗余；仓库远程尽量只保留 `master`
+- 若环境强制先开 `cursor/<name>-xxxx` 分支 / PR：合入 master 后**同一回合内**删分支；不要留着「已合入的僵尸分支」
+- 已合入或过时、无用的分支：主动 `git push origin --delete …` 清理
 - 提交信息用中文或英文均可，需说清「改了什么 / 为什么」
 - 功能合入后必须 bump `TOOLS_BUILD`，否则用户硬刷新也可能看到旧缓存
-- **不要**为验收刻意做截图 / walkthrough 录屏；用户自己看效果。除非用户明确要求演示证据
+- **不要做最后验收截图 / walkthrough 录屏**；用户自己看效果。除非用户当次明确要求演示证据
 
 ## 代码与产品偏好
 
