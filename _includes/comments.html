@@ -1,23 +1,22 @@
 {% if page.comments != false and site.giscus.repo_id and site.giscus.category_id %}
-<div class="post-area post comment giscus-comments" id="giscus-comments">
-  <script
-    src="https://giscus.app/client.js"
-    data-repo="{{ site.giscus.repo }}"
-    data-repo-id="{{ site.giscus.repo_id }}"
-    data-category="{{ site.giscus.category }}"
-    data-category-id="{{ site.giscus.category_id }}"
-    data-mapping="{{ site.giscus.mapping | default: 'pathname' }}"
-    data-strict="{{ site.giscus.strict | default: '0' }}"
-    data-reactions-enabled="{{ site.giscus.reactions_enabled | default: '1' }}"
-    data-emit-metadata="{{ site.giscus.emit_metadata | default: '0' }}"
-    data-input-position="{{ site.giscus.input_position | default: 'bottom' }}"
-    data-theme="{{ site.giscus.theme | default: 'preferred_color_scheme' }}"
-    data-lang="{{ site.giscus.lang | default: 'zh-CN' }}"
-    data-loading="lazy"
-    crossorigin="anonymous"
-    async
-  ></script>
-</div>
+<div
+  class="post-area post comment giscus-comments"
+  id="giscus-comments"
+  data-giscus-embed="1"
+  data-repo="{{ site.giscus.repo }}"
+  data-repo-id="{{ site.giscus.repo_id }}"
+  data-category="{{ site.giscus.category }}"
+  data-category-id="{{ site.giscus.category_id }}"
+  data-mapping="{{ site.giscus.mapping | default: 'pathname' }}"
+  data-strict="{{ site.giscus.strict | default: '0' }}"
+  data-reactions-enabled="{{ site.giscus.reactions_enabled | default: '1' }}"
+  data-emit-metadata="{{ site.giscus.emit_metadata | default: '0' }}"
+  data-input-position="{{ site.giscus.input_position | default: 'bottom' }}"
+  data-lang="{{ site.giscus.lang | default: 'zh-CN' }}"
+  data-theme-ver="{{ site.giscus.theme_ver | default: '2026.09.03-theme1' }}"
+></div>
+<script src="/static/js/giscus-theme.js"></script>
+<script src="/static/js/giscus-embed.js"></script>
 {% elsif page.comments != false and site.giscus.repo %}
 <div class="post-area post comment giscus-comments giscus-setup" id="giscus-comments">
   <p class="giscus-setup-note">

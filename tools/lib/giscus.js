@@ -19,11 +19,18 @@
     return !!(c.enabled && c.repo && c.repoId && c.category && c.categoryId);
   }
 
+  function themeUtil() {
+    return window.GiscusThemeUtil;
+  }
+
+  function resolveScheme() {
+    return themeUtil()?.resolveScheme?.() || "dark";
+  }
+
   function resolveTheme() {
-    const scheme = document.documentElement.dataset.themeScheme;
-    if (scheme === "light") return "noborder_light";
-    if (scheme === "dark") return "noborder_dark";
-    return "preferred_color_scheme";
+    const util = themeUtil();
+    if (!util) return resolveScheme() === "light" ? "noborder_light" : "noborder_dark";
+    return util.themeCssUrl(resolveScheme(), window.TOOLS_BUILD || util.THEME_VER);
   }
 
   function termForTool(toolId) {
@@ -100,5 +107,5 @@
     }
   }
 
-  window.DevToolsGiscus = { sync, setTheme, termForTool, isReady };
+  window.DevToolsGiscus = { sync, setTheme, termForTool, isReady, resolveTheme };
 })();
