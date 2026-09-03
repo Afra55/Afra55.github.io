@@ -58,7 +58,7 @@
     {
       id: "regulex",
       title: "Regulex",
-      desc: "铁路图正则可视化（中文作者）；本站正则结构图所用引擎。",
+      desc: "铁路图正则可视化（只读）；本站「正则」面板可切换查看。",
       url: "https://jex.im/regulex/",
       tags: ["正则"],
       tool: "regex",
