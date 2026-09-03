@@ -77,11 +77,20 @@ async function main() {
   if (!/pendingConfig|packet_merger|wrapMirrorPacket/.test(mirrorJs)) {
     throw new Error("scrcpy-mirror.js should merge codec config into following media packets");
   }
-  if (/video_codec_options=i-frame-interval=1/.test(mirrorJs) && !/不要默认传 video_codec_options/.test(mirrorJs)) {
+  if (!/control=true|CTRL_RESET_VIDEO|injectTouch/.test(mirrorJs)) {
+    throw new Error("scrcpy-mirror.js should enable scrcpy control channel (touch + RESET_VIDEO)");
+  }
+  if (!/连接 scrcpy 控制通道|控制通道连接失败/.test(mirrorJs)) {
+    throw new Error("scrcpy-mirror.js should connect control socket after video dummy byte");
+  }
+  if (/video_codec_options=i-frame-interval=1/.test(mirrorJs) && !/不要默认传 video_codec_options|启用 control/.test(mirrorJs)) {
     throw new Error("scrcpy-mirror.js must not force i-frame-interval=1 (breaks some OEM encoders)");
   }
   if (!/i-frame-interval=5/.test(mirrorJs)) {
     throw new Error("scrcpy-mirror.js should allow soft i-frame-interval=5 on last retry");
+  }
+  if (!/无控制通道降级/.test(mirrorJs)) {
+    throw new Error("scrcpy-mirror.js should fall back to control=false if control channel fails");
   }
   if (!/降低分辨率重试|最小参数重试/.test(mirrorJs)) {
     throw new Error("scrcpy-mirror.js should retry handshake with softer encoder profiles");

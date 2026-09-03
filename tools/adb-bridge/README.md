@@ -91,7 +91,7 @@ FFmpeg 接口前缀：`/ff/*`（例如 `GET /ff/ops`、`POST /ff/jobs/run`）
 | GET | `/mirror/status?serial=` | scrcpy-server 镜像状态（jar / 会话） |
 | POST | `/mirror/prepare` | 确保本机已缓存 scrcpy-server（可首次联网下载） |
 | POST | `/mirror/stop` | 停止某设备镜像 `{ serial }` |
-| WS | `/mirror/ws?serial=&token=` | H.264 镜像流（WebCodecs）；完整包含 `scrcpy-mirror.js` + `vendor/scrcpy-server-v3.1` |
+| WS | `/mirror/ws?serial=&token=` | H.264 镜像 + scrcpy control 触控（WebCodecs；需 `scrcpy-mirror.js` + `vendor/scrcpy-server-v3.1`；≥0.9.11） |
 | GET | `/jobs` `/jobs/:id` `/jobs/:id/artifact/:name` | 任务与产物下载 |
 | POST | `/jobs/:id/cancel` | 取消任务（录屏：SIGINT screenrecord 并尝试拉取片段） |
 

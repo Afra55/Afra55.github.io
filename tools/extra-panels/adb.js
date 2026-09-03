@@ -3736,7 +3736,7 @@
             $("#adb-input-meta").textContent =
               `仍无画面（config=${p.config} key=${p.key} delta=${p.delta} decoded=${p.decoded}）。` +
               (p.config === 0 && p.key === 0
-                ? "桥未收到视频帧：请更新本机桥 ZIP（≥0.9.10）、只开一座桥，并解锁亮屏后重试"
+                ? "桥未收到视频帧：请更新本机桥 ZIP（≥0.9.11）、只开一座桥，并解锁亮屏后重试"
                 : "已收到码流但解不出画面：请换 Chrome/Edge 最新版，或更新桥 ZIP 后重试「开始镜像」");
           }
         }, 3200);
@@ -3750,12 +3750,12 @@
         }
         if (/ECONNREFUSED|转发.*断开|forward 未在/i.test(detail) && !bridgeAtLeast("0.9.5")) {
           detail += "。请重新下载完整桥 ZIP（≥0.9.5 修复握手前抢连导致转发失效）并只留一座桥窗口";
+        } else if (/socket closed|编码器|MediaCodec/i.test(detail) && !bridgeAtLeast("0.9.11")) {
+          detail += "。请更新到桥 ≥0.9.11（scrcpy control 触控 + RESET_VIDEO 关键帧）";
         } else if (/socket closed|编码器|MediaCodec/i.test(detail) && !bridgeAtLeast("0.9.10")) {
           detail += "。请更新到桥 ≥0.9.10（scrcpy 帧合并 + 解码兼容，握手失败自动降级）";
-        } else if (/socket closed|编码器|MediaCodec/i.test(detail) && !bridgeAtLeast("0.9.9")) {
-          detail += "。请更新到桥 ≥0.9.9（去掉易崩的编码参数，并在握手失败时自动降分辨率重试）";
-        } else if (!bridgeAtLeast("0.9.10")) {
-          detail += "。建议更新到桥 ≥0.9.10（修复镜像无画面：帧合并与解码兼容）";
+        } else if (!bridgeAtLeast("0.9.11")) {
+          detail += "。建议更新到桥 ≥0.9.11（control 触控与强制关键帧）";
         } else if (!bridgeAtLeast("0.8.4")) {
           detail += "。建议重新下载桥 ZIP 并重启本机桥（≥0.8.4 含镜像诊断）";
         }
@@ -3903,7 +3903,8 @@
                     const meta = $("#adb-input-live-meta");
                     if (meta) {
                       meta.hidden = false;
-                      meta.textContent = `镜像中 · ${msg.codec || "h264"} · ${msg.width}×${msg.height} · ${msg.deviceName || serial}`;
+                      const ctrl = msg.control ? " · scrcpy控制" : "";
+                      meta.textContent = `镜像中 · ${msg.codec || "h264"} · ${msg.width}×${msg.height} · ${msg.deviceName || serial}${ctrl}`;
                     }
                     if ($("#adb-input-meta")) {
                       $("#adb-input-meta").textContent = "镜像已连接，等待首帧画面…";
@@ -5803,6 +5804,17 @@
         });
         const mirrorLive = () =>
           adbInputPreviewMode === "mirror" && adbMirrorWs && adbMirrorWs.readyState === 1;
+        const sendMirrorControlTouch = (phase, x, y) => {
+          if (!adbMirrorWs || adbMirrorWs.readyState !== 1) return false;
+          // 必须等 hello.control===true，避免旧桥吞掉 WS 消息却不注入
+          if (!adbMirrorMeta?.control) return false;
+          try {
+            adbMirrorWs.send(JSON.stringify({ type: "touch", phase, x, y }));
+            return true;
+          } catch {
+            return false;
+          }
+        };
         const pumpMirrorMoves = async () => {
           if (mirrorMovePumping) return;
           mirrorMovePumping = true;
@@ -5811,6 +5823,7 @@
               const m = mirrorMoveLatest;
               mirrorMoveLatest = null;
               try {
+                if (sendMirrorControlTouch("MOVE", m.x, m.y)) continue;
                 await sendInput({
                   action: "touch",
                   phase: "MOVE",
@@ -5834,7 +5847,8 @@
             pumpMirrorMoves();
             return;
           }
-          // DOWN/UP 等当前 MOVE 抽干，避免乱序
+          // DOWN/UP：优先 scrcpy control（低延迟）；失败再回退 adb motionevent
+          if (sendMirrorControlTouch(phase, x, y)) return;
           while (mirrorMovePumping || mirrorMoveLatest) {
             await new Promise((r) => setTimeout(r, 8));
           }

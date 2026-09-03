@@ -4,11 +4,13 @@
  * Scrcpy-server mirror helper (video only).
  * Zero npm deps. Pins Genymobile scrcpy-server v3.1.
  *
- * Protocol (tunnel_forward, video only, control=false):
- *  1) dummy byte 0x00
- *  2) device name 64 bytes
- *  3) video header: codec_id u32 + width u32 + height u32
- *  4) frames: pts/flags u64 + size u32 + payload
+ * Protocol (tunnel_forward, video + control, audio=false):
+ *  1) video TCP: dummy byte 0x00
+ *  2) control TCP: second connect to same adb forward (no dummy)
+ *  3) device name 64 bytes on video
+ *  4) video header: codec_id u32 + width u32 + height u32
+ *  5) frames: pts/flags u64 + size u32 + payload
+ *  Control: inject touch / RESET_VIDEO (type 17) like official client
  */
 
 const fs = require("fs");
@@ -27,6 +29,15 @@ const PACKET_FLAG_CONFIG = 1n << 63n;
 const PACKET_FLAG_KEY_FRAME = 1n << 62n;
 const DEVICE_NAME_LEN = 64;
 const REMOTE_JAR = "/data/local/tmp/devtools-scrcpy-server.jar";
+/** scrcpy control: INJECT_TOUCH_EVENT */
+const CTRL_INJECT_TOUCH = 2;
+/** scrcpy control: RESET_VIDEO — 强制新 IDR，晚连/黑屏时用 */
+const CTRL_RESET_VIDEO = 17;
+const POINTER_ID_FINGER = 0xfffffffffffffffen;
+/** Android MotionEvent */
+const AMOTION_DOWN = 0;
+const AMOTION_UP = 1;
+const AMOTION_MOVE = 2;
 /** 单帧 payload 上限（与 pumpFrames 一致） */
 const MAX_FRAME_BYTES = 16 * 1024 * 1024;
 /** readExact 绝对缓冲上限，防止协议错位时无限累积 */
@@ -579,6 +590,7 @@ class MirrorSession {
     this.scidHex = "";
     this.proc = null;
     this.videoSock = null;
+    this.controlSock = null;
     this.clients = new Set();
     this.meta = null;
     this.closed = false;
@@ -588,6 +600,7 @@ class MirrorSession {
     this.errTail = "";
     this.procExitCode = null;
     this.reader = null;
+    this.controlEnabled = true;
   }
 
   mirrorError(base) {
@@ -598,9 +611,10 @@ class MirrorSession {
     const videoBitRate = opts.videoBitRate ?? 2500000;
     const maxSize = opts.maxSize ?? 1280;
     const maxFps = opts.maxFps ?? 30;
-    // 不要默认传 video_codec_options=i-frame-interval：部分机型（红魔 Android 17 等）
-    // MediaCodec 会在 Device 横幅之后直接拒编并关掉视频 socket。
-    // 黑屏靠客户端重放 lastConfig/lastKeyFrame 解决，不必强行缩短 GOP。
+    // 启用 control：触控走官方注入通道（低延迟），并可 RESET_VIDEO 强制关键帧。
+    // audio 仍关：网页侧暂不播设备音频，少一次 socket accept。
+    const useControl = opts.control !== false;
+    this.controlEnabled = useControl;
     const parts = [
       `CLASSPATH=${REMOTE_JAR}`,
       appProcessRunner,
@@ -611,7 +625,7 @@ class MirrorSession {
       "log_level=info",
       "video=true",
       "audio=false",
-      "control=false",
+      `control=${useControl ? "true" : "false"}`,
       "tunnel_forward=true",
       "send_dummy_byte=true",
       "send_device_meta=true",
@@ -727,6 +741,12 @@ class MirrorSession {
         /* ignore */
       }
       this.videoSock = null;
+      try {
+        this.controlSock?.destroy();
+      } catch {
+        /* ignore */
+      }
+      this.controlSock = null;
     };
 
     const waitServerBanner = async () => {
@@ -756,15 +776,30 @@ class MirrorSession {
       });
       this.videoSock = sock;
       this.reader = reader;
+      // tunnel_forward + control=true：服务端 accept(video) 后阻塞等 control；
+      // 必须立刻二次 connect，否则永远读不到 device meta。
+      if (this.controlEnabled) {
+        onProgress?.("连接 scrcpy 控制通道…");
+        try {
+          this.controlSock = await connectLocalAny(this.port, 5000);
+          this.controlSock.setNoDelay(true);
+        } catch (err) {
+          throw new Error(`控制通道连接失败：${err.message || err}`);
+        }
+      }
       onProgress?.("已连接，读取分辨率…");
       this.meta = await readMirrorHandshake(reader, this.serial);
+      this.meta.control = Boolean(this.controlSock && !this.controlSock.destroyed);
       this.pumping = true;
       this.pumpFrames().catch((err) => this.stop(this.mirrorError(err.message || String(err))));
     };
 
     const isRetryableHandshake = (err) => {
       const m = err?.message || String(err || "");
-      return /socket closed|dummy byte|握手|ECONNREFUSED|MediaCodec|encoder|IllegalArgument|无法启动屏幕编码/i.test(m) || this.procExitCode != null;
+      return (
+        /socket closed|dummy byte|握手|ECONNREFUSED|MediaCodec|encoder|IllegalArgument|无法启动屏幕编码|控制通道/i.test(m) ||
+        this.procExitCode != null
+      );
     };
 
     /** 参数阶梯：先正常，再降分辨率；64 位失败再换 app_process；最后最小参数。
@@ -790,6 +825,14 @@ class MirrorSession {
       maxFps: 20,
       videoCodecOptions: "i-frame-interval=5",
     });
+    attempts.push({
+      label: "无控制通道降级（仅视频）…",
+      runner: "app_process",
+      maxSize: 800,
+      videoBitRate: 1500000,
+      maxFps: 24,
+      control: false,
+    });
 
     let lastErr = null;
     for (let i = 0; i < attempts.length; i++) {
@@ -811,6 +854,7 @@ class MirrorSession {
           videoBitRate: attempt.videoBitRate,
           maxFps: attempt.maxFps,
           videoCodecOptions: attempt.videoCodecOptions,
+          control: attempt.control,
         });
         onProgress?.(i === 0 ? "正在启动设备端 scrcpy-server…" : `正在启动 scrcpy-server（${attempt.maxSize}p）…`);
         this.attachServerProc(this.spawnServerProcess(adb, shellCmd));
@@ -857,10 +901,76 @@ class MirrorSession {
     return out;
   }
 
+  writeControl(buf) {
+    if (!this.controlSock || this.controlSock.destroyed) return false;
+    try {
+      this.controlSock.write(buf);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** 强制编码器吐新 IDR（官方 TYPE_RESET_VIDEO） */
+  resetVideo() {
+    return this.writeControl(Buffer.from([CTRL_RESET_VIDEO]));
+  }
+
+  /**
+   * 注入触控。坐标相对视频分辨率（与官方 client 一致）。
+   * action: 0=DOWN 1=UP 2=MOVE，或 phase 字符串。
+   */
+  injectTouch(msg = {}) {
+    if (!this.meta) return false;
+    let action = msg.action;
+    if (typeof action === "string") {
+      const p = action.toUpperCase();
+      action = p === "DOWN" ? AMOTION_DOWN : p === "UP" ? AMOTION_UP : AMOTION_MOVE;
+    } else if (msg.phase) {
+      const p = String(msg.phase).toUpperCase();
+      action = p === "DOWN" ? AMOTION_DOWN : p === "UP" ? AMOTION_UP : AMOTION_MOVE;
+    }
+    if (![AMOTION_DOWN, AMOTION_UP, AMOTION_MOVE].includes(action)) return false;
+    const x = Math.max(0, Math.round(Number(msg.x) || 0));
+    const y = Math.max(0, Math.round(Number(msg.y) || 0));
+    const w = Math.max(1, Math.min(0xffff, this.meta.width || 1));
+    const h = Math.max(1, Math.min(0xffff, this.meta.height || 1));
+    const pressure = action === AMOTION_UP ? 0 : 1;
+    const buf = Buffer.alloc(32);
+    buf[0] = CTRL_INJECT_TOUCH;
+    buf[1] = action;
+    buf.writeBigUInt64BE(POINTER_ID_FINGER, 2);
+    buf.writeUInt32BE(Math.min(x, w - 1), 10);
+    buf.writeUInt32BE(Math.min(y, h - 1), 14);
+    buf.writeUInt16BE(w, 18);
+    buf.writeUInt16BE(h, 20);
+    buf.writeUInt16BE(Math.round(pressure * 0xffff) & 0xffff, 22);
+    buf.writeUInt32BE(0, 24); // action_button
+    buf.writeUInt32BE(0, 28); // buttons
+    return this.writeControl(buf);
+  }
+
+  handleClientMessage(raw) {
+    let msg = null;
+    try {
+      msg = JSON.parse(Buffer.isBuffer(raw) ? raw.toString("utf8") : String(raw));
+    } catch {
+      return;
+    }
+    if (!msg || typeof msg !== "object") return;
+    if (msg.type === "touch") {
+      this.injectTouch(msg);
+      return;
+    }
+    if (msg.type === "reset_video" || msg.type === "resetVideo") {
+      this.resetVideo();
+    }
+  }
+
   addClient(socket) {
     this.clients.add(socket);
     if (this.meta) {
-      wsSendJson(socket, { type: "hello", ...this.meta });
+      wsSendJson(socket, { type: "hello", ...this.meta, control: Boolean(this.controlSock && !this.controlSock.destroyed) });
       // 首个 config/key 常在客户端连上前就泵出；重放避免干等下一个 IDR（默认 I 帧间隔约 10s）
       if (this.lastConfig) wsSendBinary(socket, Buffer.from(this.lastConfig));
       if (this.lastKeyFrame) {
@@ -876,6 +986,8 @@ class MirrorSession {
         }
         wsSendBinary(socket, Buffer.from(keyPkt));
       }
+      // 再要一帧新 IDR，覆盖长 GOP / 解码器状态漂移
+      this.resetVideo();
     }
   }
 
@@ -944,6 +1056,12 @@ class MirrorSession {
       /* ignore */
     }
     this.videoSock = null;
+    try {
+      this.controlSock?.destroy();
+    } catch {
+      /* ignore */
+    }
+    this.controlSock = null;
     try {
       this.proc?.kill("SIGTERM");
     } catch {
@@ -1079,7 +1197,9 @@ function handleUpgrade(req, socket, head, deps) {
   };
 
   attachWsReader(socket, {
-    onMessage: () => {},
+    onMessage: (payload, opcode) => {
+      if (opcode === 1 && session) session.handleClientMessage(payload);
+    },
     onClose: () => {
       if (session) session.removeClient(socket);
     },
