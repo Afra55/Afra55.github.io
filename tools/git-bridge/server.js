@@ -39,35 +39,12 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.1.1";
+const { buildOp, listOpsCatalog } = require("./git-ops");
+
+const BRIDGE_VERSION = "0.2.0";
 const FEATURES = [
-  "fs-browse",
-  "repo-open",
-  "graph",
-  "branches",
-  "status",
-  "commit-detail",
-  "explain",
-  "ops-checkout",
-  "ops-switch",
-  "ops-branch",
-  "ops-merge",
-  "ops-rebase",
-  "ops-cherry-pick",
-  "ops-revert",
-  "ops-reset",
-  "ops-stash",
-  "ops-remote",
-  "ops-commit",
-  "ops-amend",
-  "ops-tag",
-  "ops-reflog",
-  "ops-blame",
-  "ops-diff",
-  "ops-worktree",
-  "ops-submodule",
-  "ops-clean",
-  "raw-log",
+  "fs-browse","repo-open","repo-init","repo-clone","graph","branches",
+  "status","commit-detail","explain","ops-catalog","ops-full"
 ];
 
 const GIT_TIMEOUT_MS = 120000;
@@ -530,253 +507,6 @@ async function explainCommit(repo, sha) {
   };
 }
 
-/** Whitelisted high-level ops → argv + human label */
-function buildOp(op, params = {}) {
-  const p = params || {};
-  const need = (...keys) => {
-    for (const k of keys) {
-      if (p[k] == null || p[k] === "") throw Object.assign(new Error(`缺少参数 ${k}`), { status: 400 });
-      assertNoShellMeta(String(p[k]));
-    }
-  };
-
-  switch (op) {
-    case "status":
-      return { argv: ["status"], label: "查看状态" };
-    case "fetch":
-      return { argv: ["fetch", "--all", "--prune"], label: "fetch --all --prune" };
-    case "pull":
-      return { argv: ["pull", "--ff-only"], label: "pull --ff-only" };
-    case "pull-merge":
-      return { argv: ["pull", "--no-rebase"], label: "pull --no-rebase" };
-    case "push": {
-      const argv = ["push"];
-      if (p.setUpstream) argv.push("-u");
-      if (p.remote) {
-        assertNoShellMeta(p.remote);
-        argv.push(p.remote);
-      }
-      if (p.branch) {
-        assertNoShellMeta(p.branch);
-        argv.push(p.branch);
-      }
-      return { argv, label: argv.join(" ") };
-    }
-    case "checkout": {
-      need("target");
-      const argv = ["checkout"];
-      if (p.create) argv.push("-b");
-      argv.push(String(p.target));
-      return { argv, label: argv.join(" ") };
-    }
-    case "branch-create": {
-      need("name");
-      const argv = ["branch"];
-      if (p.start) {
-        assertNoShellMeta(p.start);
-        argv.push(String(p.name), String(p.start));
-      } else argv.push(String(p.name));
-      return { argv, label: argv.join(" ") };
-    }
-    case "branch-delete": {
-      need("name");
-      const argv = [p.force ? "branch" : "branch", p.force ? "-D" : "-d", String(p.name)];
-      return { argv, label: argv.join(" ") };
-    }
-    case "branch-rename": {
-      need("oldName", "newName");
-      return {
-        argv: ["branch", "-m", String(p.oldName), String(p.newName)],
-        label: `branch -m ${p.oldName} ${p.newName}`,
-      };
-    }
-    case "merge": {
-      need("branch");
-      const argv = ["merge"];
-      if (p.noFf) argv.push("--no-ff");
-      if (p.ffOnly) argv.push("--ff-only");
-      if (p.squash) argv.push("--squash");
-      argv.push(String(p.branch));
-      return { argv, label: argv.join(" ") };
-    }
-    case "rebase": {
-      need("onto");
-      return { argv: ["rebase", String(p.onto)], label: `rebase ${p.onto}` };
-    }
-    case "cherry-pick": {
-      need("sha");
-      return { argv: ["cherry-pick", String(p.sha)], label: `cherry-pick ${p.sha}` };
-    }
-    case "revert": {
-      need("sha");
-      return { argv: ["revert", "--no-edit", String(p.sha)], label: `revert --no-edit ${p.sha}` };
-    }
-    case "reset": {
-      need("sha");
-      const mode = p.mode === "soft" || p.mode === "hard" ? p.mode : "mixed";
-      if (mode === "hard" && !p.confirmHard) {
-        throw Object.assign(new Error("hard reset 需要 confirmHard=true"), { status: 400 });
-      }
-      return { argv: ["reset", `--${mode}`, String(p.sha)], label: `reset --${mode} ${p.sha}` };
-    }
-    case "stash-push": {
-      const argv = ["stash", "push", "-u"];
-      if (p.message) {
-        assertNoShellMeta(p.message);
-        argv.push("-m", String(p.message));
-      }
-      return { argv, label: argv.join(" ") };
-    }
-    case "stash-pop":
-      return { argv: ["stash", "pop"], label: "stash pop" };
-    case "stash-list":
-      return { argv: ["stash", "list"], label: "stash list" };
-    case "add-all":
-      return { argv: ["add", "-A"], label: "add -A" };
-    case "commit": {
-      need("message");
-      return { argv: ["commit", "-m", String(p.message)], label: `commit -m ${JSON.stringify(p.message)}` };
-    }
-    case "tag-create": {
-      need("name");
-      const argv = ["tag"];
-      if (p.annotate) {
-        argv.push("-a", String(p.name), "-m", String(p.message || p.name));
-      } else argv.push(String(p.name));
-      if (p.sha) {
-        assertNoShellMeta(p.sha);
-        argv.push(String(p.sha));
-      }
-      return { argv, label: argv.join(" ") };
-    }
-    case "tag-delete": {
-      need("name");
-      return { argv: ["tag", "-d", String(p.name)], label: `tag -d ${p.name}` };
-    }
-    case "log-graph": {
-      const n = Math.min(80, Number(p.max) || 40);
-      return {
-        argv: ["log", "--all", "--decorate", "--graph", "--oneline", `--max-count=${n}`],
-        label: "log --graph --oneline",
-      };
-    }
-    case "merge-base": {
-      need("a", "b");
-      return { argv: ["merge-base", String(p.a), String(p.b)], label: `merge-base ${p.a} ${p.b}` };
-    }
-    case "switch": {
-      need("target");
-      const argv = ["switch"];
-      if (p.create) argv.push("-c");
-      argv.push(String(p.target));
-      return { argv, label: argv.join(" ") };
-    }
-    case "restore": {
-      need("path");
-      const argv = ["restore"];
-      if (p.staged) argv.push("--staged");
-      if (p.source) {
-        assertNoShellMeta(p.source);
-        argv.push("--source", String(p.source));
-      }
-      argv.push("--", String(p.path));
-      return { argv, label: argv.join(" ") };
-    }
-    case "clean-dry":
-      return { argv: ["clean", "-fdn"], label: "clean -fdn（仅预览）" };
-    case "clean": {
-      if (!p.confirmClean) {
-        throw Object.assign(new Error("clean 需要 confirmClean=true；可先 clean-dry"), { status: 400 });
-      }
-      return { argv: ["clean", "-fd"], label: "clean -fd" };
-    }
-    case "reflog": {
-      const n = Math.min(80, Number(p.max) || 30);
-      return { argv: ["reflog", `--max-count=${n}`], label: `reflog -n ${n}` };
-    }
-    case "blame": {
-      need("path");
-      const argv = ["blame", "--line-porcelain"];
-      if (p.sha) {
-        assertNoShellMeta(p.sha);
-        argv.push(String(p.sha));
-      }
-      argv.push("--", String(p.path));
-      return { argv, label: `blame ${p.path}`, maxBuffer: 32 * 1024 * 1024 };
-    }
-    case "diff": {
-      const argv = ["diff", "--stat"];
-      if (p.a) {
-        assertNoShellMeta(p.a);
-        argv.push(String(p.a));
-      }
-      if (p.b) {
-        assertNoShellMeta(p.b);
-        argv.push(String(p.b));
-      }
-      return { argv, label: argv.join(" ") };
-    }
-    case "diff-files": {
-      const argv = ["diff", "--name-status"];
-      if (p.a) {
-        assertNoShellMeta(p.a);
-        argv.push(String(p.a));
-      }
-      if (p.b) {
-        assertNoShellMeta(p.b);
-        argv.push(String(p.b));
-      }
-      return { argv, label: argv.join(" ") };
-    }
-    case "show-file": {
-      need("sha", "path");
-      return {
-        argv: ["show", `${p.sha}:${p.path}`],
-        label: `show ${p.sha}:${p.path}`,
-        maxBuffer: 32 * 1024 * 1024,
-      };
-    }
-    case "remote-list":
-      return { argv: ["remote", "-v"], label: "remote -v" };
-    case "remote-add": {
-      need("name", "url");
-      return { argv: ["remote", "add", String(p.name), String(p.url)], label: `remote add ${p.name}` };
-    }
-    case "push-lease": {
-      const argv = ["push", "--force-with-lease"];
-      if (p.remote) {
-        assertNoShellMeta(p.remote);
-        argv.push(p.remote);
-      }
-      if (p.branch) {
-        assertNoShellMeta(p.branch);
-        argv.push(p.branch);
-      }
-      return { argv, label: argv.join(" ") };
-    }
-    case "worktree-list":
-      return { argv: ["worktree", "list", "--porcelain"], label: "worktree list" };
-    case "submodule-status":
-      return { argv: ["submodule", "status"], label: "submodule status" };
-    case "bisect-log":
-      return { argv: ["bisect", "log"], label: "bisect log" };
-    case "stash-show": {
-      const ref = p.ref ? String(p.ref) : "stash@{0}";
-      assertNoShellMeta(ref);
-      return { argv: ["stash", "show", "-p", ref], label: `stash show -p ${ref}` };
-    }
-    case "commit-amend": {
-      need("message");
-      return {
-        argv: ["commit", "--amend", "-m", String(p.message)],
-        label: `commit --amend -m …`,
-      };
-    }
-    default:
-      throw Object.assign(new Error(`不支持的操作：${op}`), { status: 400 });
-  }
-}
-
 async function runOp(repo, op, params) {
   const built = buildOp(op, params);
   const result = await git(repo, built.argv, built.maxBuffer ? { maxBuffer: built.maxBuffer } : {});
@@ -901,55 +631,42 @@ async function handleRequest(req, res) {
     }
 
     if (pathname === "/repo/ops" && req.method === "GET") {
-      sendJson(
-        res,
-        200,
-        {
-          ops: [
-            "status",
-            "fetch",
-            "pull",
-            "pull-merge",
-            "push",
-            "push-lease",
-            "checkout",
-            "switch",
-            "branch-create",
-            "branch-delete",
-            "branch-rename",
-            "merge",
-            "rebase",
-            "cherry-pick",
-            "revert",
-            "reset",
-            "stash-push",
-            "stash-pop",
-            "stash-list",
-            "stash-show",
-            "add-all",
-            "commit",
-            "commit-amend",
-            "tag-create",
-            "tag-delete",
-            "log-graph",
-            "merge-base",
-            "restore",
-            "clean-dry",
-            "clean",
-            "reflog",
-            "blame",
-            "diff",
-            "diff-files",
-            "show-file",
-            "remote-list",
-            "remote-add",
-            "worktree-list",
-            "submodule-status",
-            "bisect-log",
-          ],
-        },
-        origin
-      );
+      sendJson(res, 200, listOpsCatalog(), origin);
+      return;
+    }
+
+    if (pathname === "/repo/init" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req));
+      const dir = safePath(body.path);
+      fs.mkdirSync(dir, { recursive: true });
+      const r = await git(dir, ["init"]);
+      const root = await resolveRepoRoot(dir);
+      const summary = await repoSummary(root);
+      sendJson(res, 200, { ok: true, ...summary, stdout: r.stdout, cmd: r.cmd }, origin);
+      return;
+    }
+
+    if (pathname === "/repo/clone" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req));
+      const url = String(body.url || "");
+      if (!/^https?:\/\//i.test(url) && !/^git@/i.test(url) && !/^ssh:\/\//i.test(url)) {
+        throw Object.assign(new Error("clone url 仅允许 http(s)/git@/ssh"), { status: 400 });
+      }
+      if (/[\r\n\0]/.test(url)) throw Object.assign(new Error("非法 url"), { status: 400 });
+      const parent = safePath(body.dir || path.join(os.homedir(), "DevToolsRepos"));
+      fs.mkdirSync(parent, { recursive: true });
+      const argv = ["clone", "--", url];
+      if (body.name) {
+        if (/[\r\n\0\/]/.test(String(body.name)) || String(body.name).startsWith("-")) {
+          throw Object.assign(new Error("非法目录名"), { status: 400 });
+        }
+        argv.push(String(body.name));
+      }
+      const r = await git(parent, argv);
+      const dest = body.name ? path.join(parent, String(body.name)) : path.join(parent, path.basename(url).replace(/\.git$/i, ""));
+      const root = await resolveRepoRoot(dest);
+      const summary = await repoSummary(root);
+      sendJson(res, 200, { ok: true, ...summary, stdout: r.stdout, cmd: ["git", "-C", parent, ...argv] }, origin);
       return;
     }
 

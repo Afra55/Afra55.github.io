@@ -1,7 +1,7 @@
 <section id="gitbridge" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>Git 可视化</h1>
-        <p>本机桥调用系统 <span class="mono">git</span>：选仓库、看分支交叉、用人话解释 merge，并显示将要执行的命令。<a href="#setup">安装指南</a></p>
+        <p>本机桥调用系统 <span class="mono">git</span>：选仓库、看分支交叉、用人话解释 merge；白名单命令覆盖查阅 / 提交 / 分支 / stash / 合并 / 远程。<a href="#setup">安装指南</a></p>
       </div>
       <div class="panel-body">
         <div class="adb-status" id="git-status">
@@ -43,6 +43,11 @@
             <button type="button" class="secondary-btn" id="git-fs-go">打开目录</button>
             <button type="button" class="primary-btn" id="git-open-repo">当作仓库打开</button>
           </div>
+          <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
+            <button type="button" class="ghost-btn" id="git-init">在此目录 git init</button>
+            <input id="git-clone-url" class="mono" type="text" placeholder="clone URL（https / git@ / ssh）" spellcheck="false" autocomplete="off" style="flex:1;min-width:12rem" />
+            <button type="button" class="ghost-btn" id="git-clone">克隆到当前目录</button>
+          </div>
           <div class="ff-fs-list adb-fs-list" id="git-fs-list" role="list"></div>
 
           <div id="git-repo-panel" hidden>
@@ -76,7 +81,7 @@
                 <div class="label-row" style="margin-top:0.85rem">
                   <h2 class="subhead">常用操作</h2>
                 </div>
-                <p class="hint tight">执行前会预览完整 <span class="mono">git …</span> 命令。</p>
+                <p class="hint tight">执行前会预览完整 <span class="mono">git …</span>。目标框给分支/commit；路径给 blame/add；说明给 commit。</p>
                 <div class="btn-row tool-actions" style="flex-wrap:wrap" id="git-ops-row">
                   <button type="button" class="secondary-btn" data-git-op="fetch">fetch</button>
                   <button type="button" class="secondary-btn" data-git-op="pull">pull --ff-only</button>
@@ -103,6 +108,23 @@
                   <button type="button" class="ghost-btn" data-git-op="branch-create">创建</button>
                   <button type="button" class="ghost-btn" data-git-op="branch-create-co">创建并 checkout</button>
                 </div>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
+                  <label for="git-op-path">路径</label>
+                  <input id="git-op-path" class="mono" type="text" placeholder="文件路径（blame / add / restore）" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
+                  <button type="button" class="ghost-btn" data-git-op="blame">blame</button>
+                  <button type="button" class="ghost-btn" data-git-op="add">add</button>
+                </div>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
+                  <label for="git-commit-msg">说明</label>
+                  <input id="git-commit-msg" class="mono" type="text" placeholder="commit -m" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
+                  <button type="button" class="ghost-btn" data-git-op="add-all">add -A</button>
+                  <button type="button" class="ghost-btn" data-git-op="commit">commit</button>
+                </div>
+                <div class="label-row" style="margin-top:0.75rem">
+                  <h2 class="subhead">全部 git 命令</h2>
+                  <span class="hint tight" id="git-ops-count"></span>
+                </div>
+                <div id="git-ops-catalog" class="git-ops-catalog"></div>
                 <pre class="mono adb-pre" id="git-cmd-preview" style="margin-top:0.55rem;max-height:6rem;overflow:auto" hidden></pre>
                 <pre class="mono adb-pre" id="git-op-out" style="margin-top:0.45rem;max-height:10rem;overflow:auto" hidden></pre>
               </div>

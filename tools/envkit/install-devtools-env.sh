@@ -320,21 +320,54 @@ sync_bridges() {
   done
   chmod +x "$BRIDGE_DIR/ffmpeg-bridge/start-linux.sh" "$BRIDGE_DIR/ffmpeg-bridge/start-mac.command" 2>/dev/null || true
 
-  # Git
-  for f in server.js start-linux.sh start-mac.command; do
+  # Git（含 git-ops.js）
+  for f in server.js git-ops.js start-linux.sh start-mac.command start-win.bat start-win.cmd; do
     info "git-bridge/$f"
     download_file "${BASE_URL}/git-bridge/$f" "$BRIDGE_DIR/git-bridge/$f" || warn "下载失败 $f"
   done
   chmod +x "$BRIDGE_DIR/git-bridge/start-linux.sh" "$BRIDGE_DIR/git-bridge/start-mac.command" 2>/dev/null || true
+
+  # ADB / FFmpeg 补齐 Windows 启动脚本
+  for f in start-win.bat start-win.cmd; do
+    download_file "${BASE_URL}/adb-bridge/$f" "$BRIDGE_DIR/adb-bridge/$f" || true
+    download_file "${BASE_URL}/ffmpeg-bridge/$f" "$BRIDGE_DIR/ffmpeg-bridge/$f" || true
+  done
+
+  # 校验关键文件
+  local bad=0
+  for f in \
+    "$BRIDGE_DIR/adb-bridge/server.js" \
+    "$BRIDGE_DIR/ffmpeg-bridge/server.js" \
+    "$BRIDGE_DIR/git-bridge/server.js" \
+    "$BRIDGE_DIR/git-bridge/git-ops.js"
+  do
+    if [[ ! -s "$f" ]]; then
+      warn "缺失或空文件：$f"
+      bad=1
+    fi
+  done
+  if ! grep -q "devtools-git-bridge\|GIT_BRIDGE_TOKEN" "$BRIDGE_DIR/git-bridge/server.js" 2>/dev/null; then
+    warn "git-bridge/server.js 内容异常"
+    bad=1
+  fi
+  if ! grep -q "OP_DEFS\|buildOp" "$BRIDGE_DIR/git-bridge/git-ops.js" 2>/dev/null; then
+    warn "git-bridge/git-ops.js 内容异常"
+    bad=1
+  fi
+  if [[ "$bad" -eq 0 ]]; then
+    ok "关键文件校验通过"
+  else
+    warn "桥文件校验有问题，请重跑 bridges 或检查网络"
+  fi
 
   # 便捷启动器
   cat >"$BRIDGE_DIR/start-all-hint.txt" <<EOF
 DevTools 桥目录：${BRIDGE_DIR}
 
 推荐：
-  1) 统一桥（ADB + FFmpeg + yt-dlp）：运行 adb-bridge/start-*.sh|command
+  1) 统一桥（ADB + FFmpeg + yt-dlp）：运行 adb-bridge/start-*.sh|command|cmd
      地址 http://127.0.0.1:17888  Token: devtools-bridge
-  2) Git 桥：运行 git-bridge/start-*.sh|command
+  2) Git 桥：运行 git-bridge/start-*（需同目录有 server.js + git-ops.js）
      地址 http://127.0.0.1:17890  Token: devtools-git
 
 网页：${BASE_URL%/tools}/tools/#envkit
@@ -343,7 +376,8 @@ EOF
   printf '%s\n' "{
   \"updatedAt\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",
   \"baseUrl\": \"${BASE_URL}\",
-  \"bridgeDir\": \"${BRIDGE_DIR}\"
+  \"bridgeDir\": \"${BRIDGE_DIR}\",
+  \"ok\": $((1-bad))
 }" >"$BRIDGE_DIR/envkit-state.json"
 
   ok "桥文件已同步到 ${BRIDGE_DIR}"

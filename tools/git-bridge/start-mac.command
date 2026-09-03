@@ -74,6 +74,28 @@ else
   fi
 fi
 
+OPS_JS="${SCRIPT_DIR}/git-ops.js"
+if [ ! -s "${OPS_JS}" ] || ! grep -q "OP_DEFS\|buildOp" "${OPS_JS}" 2>/dev/null; then
+  echo "正在下载 git-ops.js …"
+  for url in \
+    "${GIT_BRIDGE_BASE_URL:-https://afra55.github.io/tools/git-bridge}/git-ops.js" \
+    "https://afra55.github.io/tools/git-bridge/git-ops.js" \
+    "https://raw.githubusercontent.com/Afra55/Afra55.github.io/master/tools/git-bridge/git-ops.js"
+  do
+    if curl -fsSL --connect-timeout 15 --max-time 120 "$url" -o "${OPS_JS}.tmp"; then
+      if grep -q "OP_DEFS\|buildOp" "${OPS_JS}.tmp" 2>/dev/null; then
+        mv -f "${OPS_JS}.tmp" "${OPS_JS}"
+        break
+      fi
+      rm -f "${OPS_JS}.tmp"
+    fi
+  done
+fi
+if [ ! -s "${OPS_JS}" ]; then
+  echo "缺少 git-ops.js。请重新下载完整包。"
+  pause_exit 1
+fi
+
 cd "${SCRIPT_DIR}" || pause_exit 1
 export GIT_BRIDGE_TOKEN="${GIT_BRIDGE_TOKEN:-devtools-git}"
 export GIT_BRIDGE_PORT="${GIT_BRIDGE_PORT:-17890}"

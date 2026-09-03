@@ -35,6 +35,13 @@ if not exist "%~dp0server.js" (
   exit /b 1
 )
 
+if not exist "%~dp0git-ops.js" (
+  echo git-ops.js missing. Re-download the full ZIP from the website.
+  echo Log: %LOG_FILE%
+  pause
+  exit /b 1
+)
+
 set "GIT_BRIDGE_TOKEN=devtools-git"
 set "GIT_BRIDGE_PORT=17890"
 echo Starting bridge on http://127.0.0.1:%GIT_BRIDGE_PORT%

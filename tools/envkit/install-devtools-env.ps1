@@ -162,17 +162,32 @@ function Sync-Bridges {
     try { Download-File "$BaseUrl/ffmpeg-bridge/$f" (Join-Path $BridgeDir "ffmpeg-bridge\$f") }
     catch { Write-Miss "下载失败 $f" }
   }
-  foreach ($f in @("server.js", "start-win.bat", "start-win.cmd")) {
+  foreach ($f in @("server.js", "git-ops.js", "start-win.bat", "start-win.cmd", "start-linux.sh", "start-mac.command")) {
     Write-Info "git-bridge/$f"
     try { Download-File "$BaseUrl/git-bridge/$f" (Join-Path $BridgeDir "git-bridge\$f") }
     catch { Write-Miss "下载失败 $f" }
   }
+  foreach ($f in @("start-win.bat", "start-win.cmd", "start-linux.sh", "start-mac.command")) {
+    try { Download-File "$BaseUrl/adb-bridge/$f" (Join-Path $BridgeDir "adb-bridge\$f") } catch {}
+    try { Download-File "$BaseUrl/ffmpeg-bridge/$f" (Join-Path $BridgeDir "ffmpeg-bridge\$f") } catch {}
+  }
+
+  $bad = $false
+  foreach ($rel in @("adb-bridge\server.js", "ffmpeg-bridge\server.js", "git-bridge\server.js", "git-bridge\git-ops.js")) {
+    $p = Join-Path $BridgeDir $rel
+    if (-not (Test-Path $p) -or (Get-Item $p).Length -lt 10) {
+      Write-Miss "缺失或空：$rel"
+      $bad = $true
+    }
+  }
+  if (-not $bad) { Write-Ok "关键文件校验通过" } else { Write-Miss "桥文件校验有问题" }
+
   @"
 DevTools 桥目录：$BridgeDir
 
 1) 统一桥：双击 adb-bridge\start-win.cmd
    http://127.0.0.1:17888  Token: devtools-bridge
-2) Git 桥：双击 git-bridge\start-win.cmd
+2) Git 桥：双击 git-bridge\start-win.cmd（同目录需 server.js + git-ops.js）
    http://127.0.0.1:17890  Token: devtools-git
 
 网页：https://afra55.github.io/tools/#envkit
@@ -182,6 +197,7 @@ DevTools 桥目录：$BridgeDir
     updatedAt = (Get-Date).ToUniversalTime().ToString("o")
     baseUrl = $BaseUrl
     bridgeDir = $BridgeDir
+    ok = -not $bad
   } | ConvertTo-Json
   Set-Content -Encoding UTF8 (Join-Path $BridgeDir "envkit-state.json") $state
   Write-Ok "桥文件已同步"

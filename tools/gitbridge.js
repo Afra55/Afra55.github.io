@@ -331,6 +331,7 @@
         `已连接 · v${health.version}`,
         `${health.git} · 端口见地址栏。下一步：选一个带「仓库」标记的文件夹。`
       );
+      await loadOpsCatalog();
       await loadRoots();
       const recent = recentRepos()[0];
       if (recent) {
@@ -496,19 +497,23 @@
     };
     const cfg = map[platform];
     if (!cfg) throw new Error("未知平台");
-    const [serverJs, scriptRaw, winCmd] = await Promise.all([
+    const [serverJs, opsJs, scriptRaw, winCmd] = await Promise.all([
       fetchTextAsset("./git-bridge/server.js"),
+      fetchTextAsset("./git-bridge/git-ops.js"),
       fetchTextAsset(cfg.scriptPath),
       platform === "win" ? fetchTextAsset("./git-bridge/start-win.cmd") : Promise.resolve(""),
     ]);
     if (!/devtools-git-bridge|GIT_BRIDGE_TOKEN/.test(serverJs)) {
       throw new Error("server.js 异常，请刷新后重试");
     }
+    if (!/OP_DEFS|buildOp/.test(opsJs)) {
+      throw new Error("git-ops.js 异常，请刷新后重试");
+    }
     const scriptText = platform === "win" ? String(scriptRaw).replace(/\r?\n/g, "\r\n") : scriptRaw;
     const readme = [
       "DevTools Git Bridge",
       "",
-      "保留：server.js + 启动脚本 在同一文件夹",
+      "保留：server.js + git-ops.js + 启动脚本 在同一文件夹",
       "需要：Node.js + git",
       "启动：" + cfg.runHint,
       "默认 http://127.0.0.1:17890  Token: devtools-git",
@@ -516,6 +521,7 @@
     ].join("\n");
     const zip = new JSZip();
     zip.file("server.js", serverJs);
+    zip.file("git-ops.js", opsJs);
     zip.file(cfg.scriptName, scriptText, platform === "win" ? {} : { unixPermissions: 0o755 });
     if (platform === "win" && winCmd) {
       zip.file("start-git-bridge.cmd", String(winCmd).replace(/\r?\n/g, "\r\n"));
@@ -529,64 +535,188 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 2000);
   }
 
+  let opsCatalog = { ops: [], groups: [] };
+
+  function catalogItem(op) {
+    for (const g of opsCatalog.groups || []) {
+      const hit = (g.items || []).find((it) => it.id === op);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  function fillIf(p, key, val) {
+    if (val && (p[key] == null || p[key] === "")) p[key] = val;
+  }
+
+  function fillOpParams(op, params) {
+    const p = { ...(params || {}) };
+    const target = String($("#git-op-target")?.value || "").trim();
+    const newBranch = String($("#git-new-branch")?.value || "").trim();
+    const filePath = String($("#git-op-path")?.value || "").trim();
+    const message = String($("#git-commit-msg")?.value || "").trim();
+    const cloneUrl = String($("#git-clone-url")?.value || "").trim();
+    const sha = target || selectedSha;
+
+    if (op === "checkout" || op === "switch") fillIf(p, "target", target);
+    if (op === "merge") {
+      fillIf(p, "branch", target);
+      if (p.noFf == null && p.ffOnly == null) p.noFf = true;
+    }
+    if (op === "rebase") fillIf(p, "onto", target);
+    if (
+      op === "cherry-pick" ||
+      op === "revert" ||
+      op === "show" ||
+      op === "show-patch" ||
+      op === "reset" ||
+      op === "describe" ||
+      op === "name-rev" ||
+      op === "bisect-bad" ||
+      op === "bisect-good"
+    ) {
+      fillIf(p, "sha", sha);
+    }
+    if (op === "show-file") {
+      fillIf(p, "sha", sha);
+      fillIf(p, "path", filePath);
+    }
+    if (op === "blame" || op === "add" || op === "restore") fillIf(p, "path", filePath);
+    if (op === "blame") fillIf(p, "sha", target);
+    if (op === "commit") fillIf(p, "message", message);
+    if (op === "commit-amend") {
+      if (message) fillIf(p, "message", message);
+      else if (p.noEdit == null) p.noEdit = true;
+    }
+    if (op === "stash-push") fillIf(p, "message", message);
+    if (op === "stash-apply" || op === "stash-drop" || op === "stash-show") fillIf(p, "ref", target);
+    if (op === "stash-clear") p.confirmClear = true;
+    if (op === "clean") p.confirmClean = true;
+    if (op === "rev-parse") fillIf(p, "ref", target);
+    if (op === "config-get") fillIf(p, "key", target);
+    if (op === "branch-create") {
+      fillIf(p, "name", newBranch);
+      fillIf(p, "start", target);
+    }
+    if (op === "branch-delete") fillIf(p, "name", target || newBranch);
+    if (op === "branch-rename") {
+      fillIf(p, "oldName", target);
+      fillIf(p, "newName", newBranch);
+    }
+    if (op === "tag-create" || op === "tag-delete") {
+      fillIf(p, "name", newBranch || target);
+      fillIf(p, "sha", selectedSha);
+      fillIf(p, "message", message);
+    }
+    if (op === "remote-add" || op === "remote-set-url") {
+      fillIf(p, "name", newBranch || "origin");
+      fillIf(p, "url", cloneUrl || target);
+    }
+    if (op === "remote-remove") fillIf(p, "name", target || "origin");
+    if (op === "remote-rename") {
+      fillIf(p, "oldName", target);
+      fillIf(p, "newName", newBranch);
+    }
+    if (op === "push" || op === "push-lease") fillIf(p, "branch", target);
+    if (op === "worktree-add") {
+      fillIf(p, "path", filePath);
+      fillIf(p, "ref", target);
+    }
+    if (op === "worktree-remove") fillIf(p, "path", filePath || target);
+    return p;
+  }
+
+  async function loadOpsCatalog() {
+    const box = $("#git-ops-catalog");
+    const count = $("#git-ops-count");
+    if (!box) return;
+    try {
+      const data = await api("/repo/ops");
+      opsCatalog = data || { ops: [], groups: [] };
+      renderOpsCatalog(opsCatalog);
+    } catch (e) {
+      opsCatalog = { ops: [], groups: [] };
+      if (count) count.textContent = "";
+      box.innerHTML = `<p class="hint">当前桥没有完整命令目录（需要 v0.2.0+）。请重新下载 ZIP 并重启桥。${
+        e.message ? " " + escapeHtml(e.message) : ""
+      }</p>`;
+    }
+  }
+
+  function renderOpsCatalog(data) {
+    const box = $("#git-ops-catalog");
+    const count = $("#git-ops-count");
+    if (!box) return;
+    const ops = data.ops || [];
+    if (count) count.textContent = `${ops.length} 条`;
+    box.innerHTML = "";
+    for (const g of data.groups || []) {
+      const wrap = document.createElement("div");
+      wrap.className = "git-ops-group";
+      const h = document.createElement("h3");
+      h.className = "git-ops-group-title";
+      h.textContent = g.name;
+      wrap.appendChild(h);
+      const row = document.createElement("div");
+      row.className = "btn-row tool-actions";
+      for (const item of g.items || []) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = item.dangerous ? "ghost-btn" : "secondary-btn";
+        btn.textContent = item.title;
+        btn.title = item.dangerous ? `${item.id}（会改仓库，执行前确认）` : item.id;
+        btn.addEventListener("click", () => runOp(item.id).catch((e) => showError(e.message)));
+        row.appendChild(btn);
+      }
+      wrap.appendChild(row);
+      box.appendChild(wrap);
+    }
+  }
+
   async function runOp(op, params) {
     if (!repoPath) {
       showError("先打开一个仓库");
       return;
     }
     showError("");
-    let p = { ...(params || {}) };
-    const target = String($("#git-op-target").value || "").trim();
-    const newBranch = String($("#git-new-branch").value || "").trim();
-
-    if (op === "checkout" && !p.target) p.target = target;
-    if (op === "merge" && !p.branch) {
-      p.branch = target;
-      p.noFf = true;
-    }
-    if (op === "rebase" && !p.onto) p.onto = target;
-    if (op === "cherry-pick" && !p.sha) p.sha = target;
+    let p = fillOpParams(op, params);
     if (op === "branch-create") {
-      if (!newBranch) {
+      if (!p.name) {
         showError("填写新分支名");
         return;
       }
-      p.name = newBranch;
-      if (target) p.start = target;
     }
     if (op === "branch-create-co") {
-      if (!newBranch) {
+      const name = String($("#git-new-branch")?.value || "").trim();
+      if (!name) {
         showError("填写新分支名");
         return;
       }
-      // create then checkout -c
       op = "checkout";
-      p = { target: newBranch, create: true };
+      p = { target: name, create: true };
     }
 
-    // Preview via dry description
-    const previewMap = {
-      fetch: "git fetch --all --prune",
-      pull: "git pull --ff-only",
-      status: "git status",
-      diff: "git diff --stat",
-      reflog: "git reflog",
-      "remote-list": "git remote -v",
-      "worktree-list": "git worktree list --porcelain",
-      "stash-push": "git stash push -u",
-      "stash-pop": "git stash pop",
-      "log-graph": "git log --all --decorate --graph --oneline",
-      checkout: `git checkout${p.create ? " -b" : ""} ${p.target || ""}`,
-      merge: `git merge --no-ff ${p.branch || ""}`,
-      rebase: `git rebase ${p.onto || ""}`,
-      "cherry-pick": `git cherry-pick ${p.sha || ""}`,
-      "branch-create": `git branch ${p.name || ""}${p.start ? " " + p.start : ""}`,
-    };
+    const item = catalogItem(op);
+    const preview = item ? `git ${item.title}` : op;
     cmdPreview.hidden = false;
-    cmdPreview.textContent = "即将执行：\n" + (previewMap[op] || op);
+    cmdPreview.textContent = "即将执行：\n" + preview;
 
-    const dangerous = op === "rebase" || op === "merge" || op === "cherry-pick" || op === "stash-pop";
-    if (dangerous && !window.confirm(`确认执行？\n\n${previewMap[op] || op}`)) return;
+    const fallbackDangerous = new Set([
+      "merge",
+      "rebase",
+      "cherry-pick",
+      "stash-pop",
+      "stash-clear",
+      "stash-drop",
+      "pull",
+      "push",
+      "reset",
+      "clean",
+      "commit-amend",
+      "restore-workdir",
+    ]);
+    const dangerous = !!(item && item.dangerous) || fallbackDangerous.has(op);
+    if (dangerous && !window.confirm(`确认执行？\n\n${preview}\n操作：${op}`)) return;
 
     try {
       const out = await api("/repo/exec", {
@@ -612,6 +742,35 @@
     }
   }
 
+  async function initRepoHere() {
+    const dir = String($("#git-fs-path").value || "").trim();
+    if (!dir) {
+      showError("先打开一个目录");
+      return;
+    }
+    if (!window.confirm(`在此目录执行 git init？\n\n${dir}`)) return;
+    showError("");
+    const data = await api("/repo/init", { method: "POST", body: { path: dir } });
+    await openRepo(data.repo || dir);
+    opOut.hidden = false;
+    opOut.textContent = (Array.isArray(data.cmd) ? data.cmd.join(" ") : data.cmd || "git init");
+  }
+
+  async function cloneRepoHere() {
+    const url = String($("#git-clone-url")?.value || "").trim();
+    const dir = String($("#git-fs-path").value || "").trim();
+    if (!url) {
+      showError("填写 clone URL");
+      return;
+    }
+    if (!window.confirm(`克隆到当前目录？\n\n${url}\n→ ${dir || "(默认 DevToolsRepos)"}`)) return;
+    showError("");
+    const data = await api("/repo/clone", { method: "POST", body: { url, dir: dir || undefined } });
+    await openRepo(data.repo);
+    opOut.hidden = false;
+    opOut.textContent = (Array.isArray(data.cmd) ? data.cmd.join(" ") : "") + "\n\n" + (data.stdout || "");
+  }
+
   $("#git-connect").addEventListener("click", () => connectBridge());
   $("#git-refresh").addEventListener("click", () => refreshRepo().catch((e) => showError(e.message)));
   $("#git-fs-go").addEventListener("click", () => {
@@ -625,6 +784,8 @@
   $("#git-open-repo").addEventListener("click", () => {
     openRepo($("#git-fs-path").value.trim()).catch((e) => showError(e.message));
   });
+  $("#git-init")?.addEventListener("click", () => initRepoHere().catch((e) => showError(e.message)));
+  $("#git-clone")?.addEventListener("click", () => cloneRepoHere().catch((e) => showError(e.message)));
   $("#git-show-ascii").addEventListener("change", (ev) => {
     asciiEl.hidden = !ev.target.checked;
   });

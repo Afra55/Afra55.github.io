@@ -127,11 +127,22 @@
   line-height: 1.45;
 }
 
-#gitbridge .git-repo-badge {
-  display: inline-block;
-  margin-left: 0.35rem;
-  padding: 0.05rem 0.35rem;
-  border-radius: 4px;
-  font-size: 0.7rem;
-  background: color-mix(in srgb, #3dd68c 25%, transparent);
+#gitbridge .git-ops-catalog {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  max-height: 18rem;
+  overflow: auto;
+  margin-top: 0.35rem;
+}
+
+#gitbridge .git-ops-group-title {
+  margin: 0 0 0.25rem;
+  font-size: 0.78rem;
+  opacity: 0.75;
+}
+
+#gitbridge .git-ops-group .btn-row {
+  flex-wrap: wrap;
+  gap: 0.3rem;
 }
