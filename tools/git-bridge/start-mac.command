@@ -99,6 +99,51 @@ fi
 cd "${SCRIPT_DIR}" || pause_exit 1
 export GIT_BRIDGE_TOKEN="${GIT_BRIDGE_TOKEN:-devtools-git}"
 export GIT_BRIDGE_PORT="${GIT_BRIDGE_PORT:-17890}"
+export GIT_BRIDGE_DIR="${SCRIPT_DIR}"
+
+# Register URL scheme helper (best-effort)
+PROTOCOL_APP="$SCRIPT_DIR/DevToolsGitBridge Protocol.app"
+if [ ! -d "$PROTOCOL_APP" ]; then
+  mkdir -p "$PROTOCOL_APP/Contents/MacOS" "$PROTOCOL_APP/Contents/Resources"
+  cat > "$PROTOCOL_APP/Contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>io.github.afra55.devtools-git</string>
+  <key>CFBundleName</key><string>DevToolsGitBridge</string>
+  <key>CFBundleExecutable</key><string>launch</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleURLTypes</key><array><dict>
+    <key>CFBundleURLName</key><string>DevTools Git Bridge</string>
+    <key>CFBundleURLSchemes</key><array><string>devtools-git</string></array>
+  </dict></array>
+</dict></plist>
+PLIST
+  cat > "$PROTOCOL_APP/Contents/MacOS/launch" <<'EOF'
+#!/bin/bash
+DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
+cd "$DIR" || exit 1
+if command -v curl >/dev/null 2>&1; then
+  if curl -fsS --connect-timeout 1 --max-time 2 "http://127.0.0.1:17890/health" >/dev/null 2>&1; then
+    exit 0
+  fi
+fi
+for s in start-git-bridge.command start-mac.command; do
+  if [ -f "$DIR/$s" ]; then
+    nohup bash "$DIR/$s" >/dev/null 2>&1 &
+    exit 0
+  fi
+done
+exit 1
+EOF
+  chmod +x "$PROTOCOL_APP/Contents/MacOS/launch"
+fi
+if command -v lsregister >/dev/null 2>&1; then
+  lsregister -f "$PROTOCOL_APP" >/dev/null 2>&1 || true
+elif [ -x "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister" ]; then
+  /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$PROTOCOL_APP" >/dev/null 2>&1 || true
+fi
+
 echo "启动桥：${TARGET}"
 echo "地址 http://127.0.0.1:${GIT_BRIDGE_PORT}  Token: ${GIT_BRIDGE_TOKEN}"
 echo ""
@@ -109,5 +154,7 @@ CODE=${PIPESTATUS[0]}
 set -e
 
 echo ""
-read -r -p "按回车关闭窗口..." _
+if [ "${DEVTOOLS_GIT_QUIET:-0}" != "1" ]; then
+  read -r -p "按回车关闭窗口..." _
+fi
 exit "$CODE"

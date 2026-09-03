@@ -146,3 +146,73 @@
   flex-wrap: wrap;
   gap: 0.3rem;
 }
+
+#gitbridge .git-dropzone {
+  margin-top: 0.55rem;
+  padding: 0.85rem 1rem;
+  border: 1px dashed color-mix(in srgb, var(--accent, #5b8cff) 55%, var(--border, #2a2f3a));
+  border-radius: 8px;
+  text-align: center;
+  cursor: pointer;
+  background: color-mix(in srgb, var(--accent, #5b8cff) 6%, transparent);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+#gitbridge .git-dropzone.is-dragover {
+  background: color-mix(in srgb, var(--accent, #5b8cff) 18%, transparent);
+  border-color: var(--accent, #5b8cff);
+}
+
+#gitbridge .git-dropzone strong {
+  display: block;
+  margin-bottom: 0.2rem;
+}
+
+#gitbridge .git-beginner {
+  margin-top: 0.85rem;
+  padding: 0.75rem 0.85rem;
+}
+
+#gitbridge .git-beginner-steps {
+  margin: 0.35rem 0 0.55rem;
+  padding-left: 1.2rem;
+}
+
+#gitbridge .git-change-list {
+  max-height: 10rem;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--border, #2a2f3a) 70%, transparent);
+  border-radius: 6px;
+  padding: 0.35rem 0.45rem;
+}
+
+#gitbridge .git-change-item {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.2rem 0.15rem;
+  font-size: 0.84rem;
+}
+
+#gitbridge .git-change-item .mono {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#gitbridge .git-change-badge {
+  font-size: 0.72rem;
+  opacity: 0.75;
+  min-width: 2.2rem;
+}
+
+#gitbridge .git-ops-details {
+  margin-top: 0.35rem;
+}
+
+#gitbridge .git-ops-details > summary {
+  cursor: pointer;
+  user-select: none;
+}

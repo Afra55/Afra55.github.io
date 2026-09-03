@@ -21,6 +21,7 @@
           </div>
           <div class="btn-row tool-actions adb-status-actions">
             <button type="button" class="primary-btn" id="ff-connect">连接本机桥</button>
+            <button type="button" class="secondary-btn" id="ff-bridge-launch">启动本机桥</button>
             <button type="button" class="secondary-btn" id="ff-refresh" disabled>刷新</button>
             <span class="adb-dl-bundle" id="ff-dl-bundle">
               <button type="button" class="secondary-btn" id="ff-dl-mac" data-ff-bundle="mac">下载 macOS 完整包</button>
@@ -28,6 +29,19 @@
               <button type="button" class="secondary-btn" id="ff-dl-linux" data-ff-bundle="linux">下载 Linux 完整包</button>
             </span>
           </div>
+        </div>
+
+        <div class="field-block adb-install-dir" style="margin-top:0.65rem">
+          <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.4rem">
+            <label for="ff-install-dir">桥解压目录</label>
+            <input id="ff-install-dir" class="mono" type="text" placeholder="与 ADB 相同，例如 C:\Tools\devtools-bridge" autocomplete="off" spellcheck="false" style="min-width:min(100%,22rem);flex:1" />
+            <button type="button" class="secondary-btn" id="ff-install-dir-save">记住目录</button>
+          </div>
+          <label class="flag" style="margin-top:0.35rem;display:inline-flex;align-items:center;gap:0.35rem">
+            <input type="checkbox" id="ff-bridge-autostart" checked />
+            进入本页时若未连接则尝试自动启动
+          </label>
+          <p class="hint tight">与 ADB 共用一座桥（<span class="mono">devtools-bridge://</span>）。首次请手动运行启动脚本完成协议注册。</p>
         </div>
 
         <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">

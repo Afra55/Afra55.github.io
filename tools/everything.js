@@ -376,6 +376,26 @@
     setStatus("", "正在连接…", "经本机桥探测 Everything");
     connectBtn.disabled = true;
     try {
+      if (window.devtoolsBridgeToken?.readAutoStart?.("unified") !== false) {
+        const found = await window.devtoolsBridgeToken?.ensureBridgeRunning?.({
+          preferredBase: bridgeBase(),
+          token: bridgeToken(),
+          timeoutMs: 12000,
+          launch: true,
+          kind: "unified",
+        });
+        if (found?.base && bridgeInput && bridgeBase() !== found.base) {
+          bridgeInput.value = found.base;
+          persistSettings();
+        }
+        if (found?.health) {
+          try {
+            window.devtoolsBridgeToken?.rememberFromHealth?.(found.health, "unified");
+          } catch (_) {
+            /* ignore */
+          }
+        }
+      }
       const data = await bridgeFetch("/everything/health", { count: "1", json: "1", search: "" });
       connected = true;
       bridgeDown = false;
@@ -391,7 +411,7 @@
       const msg = err?.message || String(err);
       bridgeDown = /Failed to fetch|NetworkError|Load failed|Network request failed|ECONNREFUSED/i.test(msg);
       if (bridgeDown) {
-        setStatus("is-err", "本机桥未连接", "请先运行 start-adb-bridge.cmd 并保持窗口打开");
+        setStatus("is-err", "本机桥未连接", "请先运行 start-adb-bridge.cmd 并保持窗口打开，或点「启动本机桥」");
         showError(`${msg}。请确认本机桥已启动（${bridgeBase()}）且 Token 为 devtools-bridge`);
       } else {
         setStatus("is-err", "Everything 连接失败", msg);
@@ -616,6 +636,32 @@
   connectBtn?.addEventListener("click", () => testConnection());
   openWebTopBtn?.addEventListener("click", openWebSearch);
   openWebBtn?.addEventListener("click", openWebSearch);
+
+  window.devtoolsBridgeToken?.bindBridgeLaunchUI?.({
+    kind: "unified",
+    dirInput: $("#ev-install-dir"),
+    saveBtn: $("#ev-install-dir-save"),
+    launchBtn: $("#ev-bridge-launch"),
+    autoEl: $("#ev-bridge-autostart"),
+    getPreferredBase: () => bridgeBase(),
+    getToken: () => bridgeToken(),
+    onStatus: (kind, title, text) => setStatus(kind, title, text),
+    onConnected: async () => {
+      await testConnection();
+    },
+    toast: (msg) => setStatus("is-ok", "桥目录", msg),
+  });
+
+  void (async () => {
+    if (window.devtoolsBridgeToken?.readAutoStart?.("unified") === false) return;
+    if (!isWindows()) return;
+    try {
+      await testConnection();
+    } catch (_) {
+      /* ignore */
+    }
+  })();
+
   setupGuideDismiss?.addEventListener("click", dismissSetupGuide);
   searchBtn?.addEventListener("click", () => runSearch(true));
   queryInput?.addEventListener("keydown", (e) => {

@@ -102,6 +102,43 @@ fi
 cd "${SCRIPT_DIR}" || pause_exit 1
 export GIT_BRIDGE_TOKEN="${GIT_BRIDGE_TOKEN:-devtools-git}"
 export GIT_BRIDGE_PORT="${GIT_BRIDGE_PORT:-17890}"
+export GIT_BRIDGE_DIR="${SCRIPT_DIR}"
+
+# Register xdg URL handler (best-effort) so webpage can open devtools-git://start
+DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+mkdir -p "$DESKTOP_DIR"
+HANDLER="$SCRIPT_DIR/devtools-git-open.sh"
+cat > "$HANDLER" <<EOF
+#!/usr/bin/env bash
+DIR="$SCRIPT_DIR"
+cd "\$DIR" || exit 1
+export DEVTOOLS_GIT_QUIET=1
+if command -v curl >/dev/null 2>&1; then
+  if curl -fsS --connect-timeout 1 --max-time 2 "http://127.0.0.1:\${GIT_BRIDGE_PORT:-17890}/health" >/dev/null 2>&1; then
+    exit 0
+  fi
+fi
+for s in start-git-bridge.sh start-linux.sh; do
+  if [ -f "\$DIR/\$s" ]; then
+    nohup bash "\$DIR/\$s" >/dev/null 2>&1 &
+    exit 0
+  fi
+done
+exit 1
+EOF
+chmod +x "$HANDLER"
+cat > "$DESKTOP_DIR/devtools-git.desktop" <<EOF
+[Desktop Entry]
+Name=DevTools Git Bridge
+Exec=$HANDLER %u
+Type=Application
+Terminal=false
+MimeType=x-scheme-handler/devtools-git;
+NoDisplay=true
+EOF
+xdg-mime default devtools-git.desktop x-scheme-handler/devtools-git >/dev/null 2>&1 || true
+update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
+
 echo "启动桥：${TARGET}"
 echo "地址 http://127.0.0.1:${GIT_BRIDGE_PORT}  Token: ${GIT_BRIDGE_TOKEN}"
 echo ""
@@ -112,7 +149,7 @@ CODE=${PIPESTATUS[0]}
 set -e
 
 echo ""
-if [ -t 0 ]; then
+if [ -t 0 ] && [ "${DEVTOOLS_GIT_QUIET:-0}" != "1" ]; then
   read -r -p "按回车关闭..." _
 fi
 exit "$CODE"

@@ -320,16 +320,40 @@
     showError("");
     persistConn();
     try {
-      const health = await api("/health");
+      let discovered = await window.devtoolsBridgeToken?.discoverBase?.(baseUrl(), token(), { kind: "git" });
+      if (!discovered?.health && window.devtoolsBridgeToken?.readAutoStart?.("git") !== false) {
+        discovered = await window.devtoolsBridgeToken?.ensureBridgeRunning?.({
+          preferredBase: baseUrl(),
+          token: token(),
+          timeoutMs: 12000,
+          launch: true,
+          kind: "git",
+        });
+      }
+      const health = discovered?.health || (await api("/health"));
+      if (discovered?.base && baseUrl() !== discovered.base) {
+        baseInput.value = discovered.base;
+        persistConn();
+      }
       if (!health.ok) throw new Error("桥响应异常");
+      if (health.service && health.service !== "devtools-git-bridge") {
+        throw new Error("连到了其他桥，请确认端口 17890 是 Git 桥");
+      }
       if (!health.git) throw new Error("桥已启动，但本机找不到 git，请安装后重启桥");
+      try {
+        window.devtoolsBridgeToken?.rememberFromHealth?.(health, "git");
+        const dirInput = $("#git-install-dir");
+        if (dirInput && !dirInput.value) dirInput.value = window.devtoolsBridgeToken?.readInstallDir?.("git") || "";
+      } catch (_) {
+        /* ignore */
+      }
       connected = true;
       workspace.hidden = false;
       $("#git-refresh").disabled = false;
       setStatus(
         "is-ok",
         `已连接 · v${health.version}`,
-        `${health.git} · 端口见地址栏。下一步：选一个带「仓库」标记的文件夹。`
+        `${health.git} · 端口见地址栏。下一步：拖文件夹进来，或选一个带「仓库」标记的目录。`
       );
       await loadOpsCatalog();
       await loadRoots();
@@ -418,6 +442,171 @@
     await refreshRepo();
   }
 
+  function parseStatusPayload(data) {
+    const rows = [];
+    const text = String(data?.porcelain || data?.stdout || "");
+    for (const line of text.split("\n")) {
+      if (!line || line.startsWith("#")) continue;
+      if (line.startsWith("? ")) {
+        const path = line.slice(2);
+        rows.push({ path, xy: "??", staged: false, unstaged: true, kind: "新", label: `?? ${path}` });
+        continue;
+      }
+      if (line.startsWith("1 ") || line.startsWith("2 ") || line.startsWith("u ")) {
+        const parts = line.split(" ");
+        const xy = (parts[1] || "..").replace(/\./g, " ");
+        const path = parts[parts.length - 1];
+        const xyRaw = parts[1] || "..";
+        rows.push({
+          path,
+          xy: xyRaw,
+          staged: xyRaw[0] !== ".",
+          unstaged: xyRaw[1] !== ".",
+          kind: xyRaw.includes("A") ? "加" : xyRaw.includes("D") ? "删" : xyRaw.includes("R") ? "改名" : "改",
+          label: `${xyRaw} ${path}`,
+        });
+        continue;
+      }
+      // porcelain v1 fallback: XY path
+      if (/^[ \\?ACDMRU!]{2} /.test(line)) {
+        const xy = line.slice(0, 2);
+        let path = line.slice(3);
+        if (path.includes(" -> ")) path = path.split(" -> ").pop();
+        rows.push({
+          path,
+          xy,
+          staged: xy[0] !== " " && xy[0] !== "?",
+          unstaged: xy[1] !== " " || xy[0] === "?",
+          kind: xy === "??" ? "新" : xy.includes("A") ? "加" : xy.includes("D") ? "删" : "改",
+          label: `${xy} ${path}`,
+        });
+      }
+    }
+    return rows;
+  }
+
+  async function refreshChanges() {
+    const box = $("#git-change-list");
+    const hint = $("#git-easy-hint");
+    if (!box || !repoPath) return;
+    try {
+      const data = await api(`/repo/status?repo=${encodeURIComponent(repoPath)}`);
+      const rows = parseStatusPayload(data);
+      box.innerHTML = "";
+      if (!rows.length) {
+        box.innerHTML = `<p class="hint tight">工作区干净，没有未提交变更。</p>`;
+        if (hint) hint.textContent = "没有改动可提交。改文件后点「刷新变更」。";
+        return;
+      }
+      for (const r of rows) {
+        const row = document.createElement("label");
+        row.className = "git-change-item";
+        const checked = r.unstaged || !r.staged ? "checked" : "";
+        row.innerHTML = `<input type="checkbox" data-git-path="${escapeHtml(r.path)}" ${checked} />
+          <span class="git-change-badge mono">${escapeHtml(r.kind)}</span>
+          <span class="mono" title="${escapeHtml(r.label)}">${escapeHtml(r.path)}</span>`;
+        box.appendChild(row);
+      }
+      if (hint) hint.textContent = `共 ${rows.length} 项变更。勾选 → 暂存 → 写说明 → 提交。`;
+    } catch (e) {
+      box.innerHTML = `<p class="error">${escapeHtml(e.message)}</p>`;
+    }
+  }
+
+  function selectedChangePaths() {
+    return $$("#git-change-list input[type=checkbox]:checked")
+      .map((el) => el.getAttribute("data-git-path"))
+      .filter(Boolean);
+  }
+
+  async function easyStage(all) {
+    if (!repoPath) return showError("先打开一个仓库");
+    if (all) {
+      await runOp("add-all");
+    } else {
+      const paths = selectedChangePaths();
+      if (!paths.length) return showError("先勾选要暂存的文件");
+      for (const p of paths) {
+        await runOp("add", { path: p });
+      }
+    }
+    await refreshChanges();
+  }
+
+  async function easyUnstage() {
+    if (!repoPath) return showError("先打开一个仓库");
+    const paths = selectedChangePaths();
+    if (!paths.length) return showError("先勾选要取消暂存的文件");
+    for (const p of paths) {
+      await runOp("restore", { path: p, staged: true });
+    }
+    await refreshChanges();
+  }
+
+  async function easyCommit() {
+    if (!repoPath) return showError("先打开一个仓库");
+    const msg = String($("#git-easy-msg")?.value || $("#git-commit-msg")?.value || "").trim();
+    if (!msg) return showError("先写一句提交说明");
+    if ($("#git-commit-msg")) $("#git-commit-msg").value = msg;
+    const paths = selectedChangePaths();
+    if (paths.length) {
+      for (const p of paths) await runOp("add", { path: p });
+    }
+    await runOp("commit", { message: msg });
+    await refreshChanges();
+  }
+
+  async function easyPush() {
+    if (!repoPath) return showError("先打开一个仓库");
+    await runOp("push", {});
+  }
+
+  async function handleDroppedPaths(paths) {
+    if (!paths.length) {
+      showError("浏览器没给出文件夹绝对路径。请把路径粘贴到上方输入框，或用目录列表点开。");
+      return;
+    }
+    const target = paths[0];
+    $("#git-fs-path").value = target;
+    try {
+      await openRepo(target);
+    } catch (_) {
+      await loadFs(target);
+      showError("已打开该目录。若它是 git 仓库，再点「当作仓库打开」。");
+    }
+  }
+
+  function wireDropzone() {
+    const zone = $("#git-dropzone");
+    if (!zone) return;
+    const mark = (on) => zone.classList.toggle("is-dragover", on);
+    ["dragenter", "dragover"].forEach((evName) => {
+      zone.addEventListener(evName, (e) => {
+        e.preventDefault();
+        mark(true);
+      });
+    });
+    zone.addEventListener("dragleave", (e) => {
+      e.preventDefault();
+      mark(false);
+    });
+    zone.addEventListener("drop", (e) => {
+      e.preventDefault();
+      mark(false);
+      const paths = window.devtoolsBridgeToken?.pathsFromDataTransfer?.(e.dataTransfer) || [];
+      handleDroppedPaths(paths).catch((err) => showError(err.message));
+    });
+    const also = [$("#git-fs-path"), $("#git-fs-list"), workspace].filter(Boolean);
+    for (const el of also) {
+      el.addEventListener("dragover", (e) => e.preventDefault());
+      el.addEventListener("drop", (e) => {
+        e.preventDefault();
+        const paths = window.devtoolsBridgeToken?.pathsFromDataTransfer?.(e.dataTransfer) || [];
+        handleDroppedPaths(paths).catch((err) => showError(err.message));
+      });
+    }
+  }
+
   async function refreshRepo() {
     if (!repoPath) return;
     showError("");
@@ -451,6 +640,7 @@
     const headCommit = (graph.commits || []).find((c) => (c.refs || []).some((r) => /HEAD/.test(r)));
     if (headCommit) selectCommit(headCommit.hash);
     else if (graph.commits && graph.commits[0]) selectCommit(graph.commits[0].hash);
+    await refreshChanges();
   }
 
   async function ensureJsZip() {
@@ -786,6 +976,12 @@
   });
   $("#git-init")?.addEventListener("click", () => initRepoHere().catch((e) => showError(e.message)));
   $("#git-clone")?.addEventListener("click", () => cloneRepoHere().catch((e) => showError(e.message)));
+  $("#git-easy-refresh")?.addEventListener("click", () => refreshChanges().catch((e) => showError(e.message)));
+  $("#git-easy-stage")?.addEventListener("click", () => easyStage(false).catch((e) => showError(e.message)));
+  $("#git-easy-stage-all")?.addEventListener("click", () => easyStage(true).catch((e) => showError(e.message)));
+  $("#git-easy-unstage")?.addEventListener("click", () => easyUnstage().catch((e) => showError(e.message)));
+  $("#git-easy-commit")?.addEventListener("click", () => easyCommit().catch((e) => showError(e.message)));
+  $("#git-easy-push")?.addEventListener("click", () => easyPush().catch((e) => showError(e.message)));
   $("#git-show-ascii").addEventListener("change", (ev) => {
     asciiEl.hidden = !ev.target.checked;
   });
@@ -802,6 +998,44 @@
     });
   });
 
+  wireDropzone();
+
+  window.devtoolsBridgeToken?.bindBridgeLaunchUI?.({
+    kind: "git",
+    dirInput: $("#git-install-dir"),
+    saveBtn: $("#git-install-dir-save"),
+    launchBtn: $("#git-bridge-launch"),
+    autoEl: $("#git-bridge-autostart"),
+    getPreferredBase: () => baseUrl(),
+    getToken: () => token(),
+    onStatus: (kind, title, text) => setStatus(kind, title, text),
+    onConnected: async () => {
+      await connectBridge();
+    },
+    toast: (msg) => {
+      showError("");
+      setStatus("is-ok", "桥目录", msg);
+    },
+  });
+
   // Auto-try connect when panel shown
-  connectBridge().catch(() => {});
+  void (async () => {
+    if (window.devtoolsBridgeToken?.readAutoStart?.("git") === false) {
+      connectBridge().catch(() => {});
+      return;
+    }
+    try {
+      const found = await window.devtoolsBridgeToken?.ensureBridgeRunning?.({
+        preferredBase: baseUrl(),
+        token: token(),
+        timeoutMs: 20000,
+        launch: true,
+        kind: "git",
+      });
+      if (found?.health) await connectBridge();
+      else connectBridge().catch(() => {});
+    } catch (_) {
+      connectBridge().catch(() => {});
+    }
+  })();
 })();

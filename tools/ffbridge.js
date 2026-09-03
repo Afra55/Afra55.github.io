@@ -604,13 +604,14 @@
     savePrefs();
     setError("");
     try {
-      let discovered = await window.devtoolsBridgeToken?.discoverBase?.(baseUrl(), token());
-      if (!discovered?.health && window.devtoolsBridgeToken?.readAutoStart?.() !== false) {
+      let discovered = await window.devtoolsBridgeToken?.discoverBase?.(baseUrl(), token(), { kind: "unified" });
+      if (!discovered?.health && window.devtoolsBridgeToken?.readAutoStart?.("unified") !== false) {
         discovered = await window.devtoolsBridgeToken.ensureBridgeRunning?.({
           preferredBase: baseUrl(),
           token: token(),
           timeoutMs: 12000,
           launch: true,
+          kind: "unified",
         });
       }
       if (!discovered?.health) {
@@ -918,6 +919,21 @@
     } catch (err) {
       setError(err.message || String(err));
     }
+  });
+
+  window.devtoolsBridgeToken?.bindBridgeLaunchUI?.({
+    kind: "unified",
+    dirInput: $("#ff-install-dir"),
+    saveBtn: $("#ff-install-dir-save"),
+    launchBtn: $("#ff-bridge-launch"),
+    autoEl: $("#ff-bridge-autostart"),
+    getPreferredBase: () => baseUrl(),
+    getToken: () => token(),
+    onStatus: (kind, title, text) => setStatus(kind, title, text),
+    onConnected: async () => {
+      await connectBridge();
+    },
+    toast: (msg) => setStatus("is-ok", "桥目录", msg),
   });
   $("#ff-fs-go")?.addEventListener("click", () => {
     openPath(pathInput?.value || "").catch((err) => setError(err.message || String(err)));

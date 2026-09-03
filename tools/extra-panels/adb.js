@@ -2422,7 +2422,7 @@
       }
   
       async function resolveAdbBridgeDiscovery() {
-        let discovered = await window.devtoolsBridgeToken?.discoverBase?.(adbBase(), adbToken());
+        let discovered = await window.devtoolsBridgeToken?.discoverBase?.(adbBase(), adbToken(), { kind: "unified" });
         if (discovered?.health) return discovered;
         const directBase = normalizeAdbBase(adbBase());
         try {
@@ -4539,6 +4539,7 @@
             token: adbToken(),
             timeoutMs: 20000,
             launch: false,
+            kind: "unified",
           });
           if (found?.health) {
             await connectAdbBridge();
@@ -4560,6 +4561,7 @@
               token: adbToken(),
               timeoutMs: 20000,
               launch: true,
+              kind: "unified",
             });
             if (found?.health) await connectAdbBridge({ fromPoll: true });
           } catch (_) {

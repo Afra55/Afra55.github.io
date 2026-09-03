@@ -22,8 +22,22 @@
           </div>
           <div class="btn-row tool-actions adb-status-actions">
             <button type="button" class="primary-btn" id="ev-connect">测试连接</button>
+            <button type="button" class="secondary-btn" id="ev-bridge-launch">启动本机桥</button>
             <button type="button" class="secondary-btn" id="ev-open-web-top">Everything 网页</button>
           </div>
+        </div>
+
+        <div class="field-block adb-install-dir" style="margin-top:0.65rem">
+          <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.4rem">
+            <label for="ev-install-dir">桥解压目录</label>
+            <input id="ev-install-dir" class="mono" type="text" placeholder="与 ADB 相同，例如 C:\Tools\devtools-bridge" autocomplete="off" spellcheck="false" style="min-width:min(100%,22rem);flex:1" />
+            <button type="button" class="secondary-btn" id="ev-install-dir-save">记住目录</button>
+          </div>
+          <label class="flag" style="margin-top:0.35rem;display:inline-flex;align-items:center;gap:0.35rem">
+            <input type="checkbox" id="ev-bridge-autostart" checked />
+            进入本页时若未连接则尝试自动启动本机桥
+          </label>
+          <p class="hint tight">Everything 经统一桥代理；协议 <span class="mono">devtools-bridge://</span>。还需本机 Everything 开启 HTTP Server。</p>
         </div>
 
         <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">

@@ -92,7 +92,9 @@ async function main() {
 
     const health = await req("GET", "/health");
     if (!health.json.git) throw new Error("git missing on host");
-    if (health.json.version !== "0.2.0") throw new Error("unexpected version " + health.json.version);
+    if (health.json.version !== "0.2.1" && health.json.version !== "0.2.0") {
+      throw new Error("unexpected version " + health.json.version);
+    }
 
     const remoteOps = await req("GET", "/repo/ops");
     if (remoteOps.status !== 200 || (remoteOps.json.ops || []).length < 80) {

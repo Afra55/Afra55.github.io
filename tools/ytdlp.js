@@ -585,8 +585,22 @@
     savePrefs();
     setError("");
     try {
-      const discovered = await window.devtoolsBridgeToken?.discoverBase?.(baseUrl(), token());
-      if (!discovered?.health) throw new Error("无法连接本机桥。请确认启动脚本窗口仍打开。");
+      let discovered = await window.devtoolsBridgeToken?.discoverBase?.(baseUrl(), token(), { kind: "unified" });
+      if (!discovered?.health && window.devtoolsBridgeToken?.readAutoStart?.("unified") !== false) {
+        discovered = await window.devtoolsBridgeToken?.ensureBridgeRunning?.({
+          preferredBase: baseUrl(),
+          token: token(),
+          timeoutMs: 12000,
+          launch: true,
+          kind: "unified",
+        });
+      }
+      if (!discovered?.health) throw new Error("无法连接本机桥。请确认启动脚本窗口仍打开，或点「启动本机桥」。");
+      try {
+        window.devtoolsBridgeToken?.rememberFromHealth?.(discovered.health, "unified");
+      } catch (_) {
+        /* ignore */
+      }
       if (baseInput && baseUrl() !== discovered.base) {
         baseInput.value = discovered.base;
         savePrefs();
@@ -663,6 +677,22 @@
 
   connectBtn?.addEventListener("click", () => connectBridge());
   refreshBtn?.addEventListener("click", () => connectBridge());
+
+  window.devtoolsBridgeToken?.bindBridgeLaunchUI?.({
+    kind: "unified",
+    dirInput: $("#yd-install-dir"),
+    saveBtn: $("#yd-install-dir-save"),
+    launchBtn: $("#yd-bridge-launch"),
+    autoEl: $("#yd-bridge-autostart"),
+    getPreferredBase: () => baseUrl(),
+    getToken: () => token(),
+    onStatus: (kind, title, text) => setStatus(kind, title, text),
+    onConnected: async () => {
+      await connectBridge();
+    },
+    toast: (msg) => setStatus("is-ok", "桥目录", msg),
+  });
+
   updateBtn?.addEventListener("click", async () => {
     try {
       const data = await yd("/update", { method: "POST", body: {} });
@@ -728,4 +758,19 @@
   document.addEventListener("devtools:route", (e) => {
     if (e.detail?.tool === "ytdlp" && !connected) connectBridge().catch(() => {});
   });
+  void (async () => {
+    if (window.devtoolsBridgeToken?.readAutoStart?.("unified") === false) return;
+    try {
+      const found = await window.devtoolsBridgeToken?.ensureBridgeRunning?.({
+        preferredBase: baseUrl(),
+        token: token(),
+        timeoutMs: 12000,
+        launch: true,
+        kind: "unified",
+      });
+      if (found?.health) await connectBridge();
+    } catch (_) {
+      /* ignore */
+    }
+  })();
 })();

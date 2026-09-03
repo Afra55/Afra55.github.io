@@ -41,10 +41,10 @@ const ALLOWED_ORIGINS = new Set(
 
 const { buildOp, listOpsCatalog } = require("./git-ops");
 
-const BRIDGE_VERSION = "0.2.0";
+const BRIDGE_VERSION = "0.2.1";
 const FEATURES = [
   "fs-browse","repo-open","repo-init","repo-clone","graph","branches",
-  "status","commit-detail","explain","ops-catalog","ops-full"
+  "status","commit-detail","explain","ops-catalog","ops-full","protocol-launch"
 ];
 
 const GIT_TIMEOUT_MS = 120000;
@@ -561,6 +561,8 @@ async function handleRequest(req, res) {
           git: gitVer,
           port: PORT,
           defaultToken: "devtools-git",
+          installDir: process.env.GIT_BRIDGE_DIR || __dirname,
+          bridgeDir: process.env.GIT_BRIDGE_DIR || __dirname,
         },
         origin
       );

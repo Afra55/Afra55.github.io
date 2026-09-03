@@ -42,8 +42,17 @@ if not exist "%~dp0git-ops.js" (
   exit /b 1
 )
 
+rem Register custom URL protocol so the webpage can request start (devtools-git://start)
+set "GIT_BRIDGE_DIR=%~dp0"
+reg add "HKCU\Software\Classes\devtools-git" /ve /d "URL:DevTools Git Bridge Protocol" /f >> "%LOG_FILE%" 2>&1
+reg add "HKCU\Software\Classes\devtools-git" /v "URL Protocol" /d "" /f >> "%LOG_FILE%" 2>&1
+reg add "HKCU\Software\Classes\devtools-git\shell\open\command" /ve /d "\"%~f0\" \"%1\"" /f >> "%LOG_FILE%" 2>&1
+echo [OK] Registered protocol devtools-git:// >> "%LOG_FILE%"
+
 set "GIT_BRIDGE_TOKEN=devtools-git"
 set "GIT_BRIDGE_PORT=17890"
+set "GIT_BRIDGE_DIR=%~dp0"
+if /i "%~1"=="devtools-git://start" set "DEVTOOLS_GIT_QUIET=1"
 echo Starting bridge on http://127.0.0.1:%GIT_BRIDGE_PORT%
 echo Token: %GIT_BRIDGE_TOKEN%
 echo.
@@ -54,5 +63,5 @@ if not "%CODE%"=="0" (
   echo Bridge exited with code %CODE%.
   echo Log: %LOG_FILE%
 )
-pause
+if /i not "%DEVTOOLS_GIT_QUIET%"=="1" pause
 exit /b %CODE%

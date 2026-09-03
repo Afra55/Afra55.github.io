@@ -14,6 +14,7 @@
           </div>
           <div class="btn-row tool-actions adb-status-actions">
             <button type="button" class="primary-btn" id="git-connect">连接本机桥</button>
+            <button type="button" class="secondary-btn" id="git-bridge-launch">启动本机桥</button>
             <button type="button" class="secondary-btn" id="git-refresh" disabled>刷新仓库</button>
             <span class="adb-dl-bundle" id="git-dl-bundle">
               <button type="button" class="secondary-btn" id="git-dl-mac" data-git-bundle="mac">下载 macOS 包</button>
@@ -21,6 +22,19 @@
               <button type="button" class="secondary-btn" id="git-dl-linux" data-git-bundle="linux">下载 Linux 包</button>
             </span>
           </div>
+        </div>
+
+        <div class="field-block adb-install-dir" style="margin-top:0.65rem">
+          <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.4rem">
+            <label for="git-install-dir">桥解压目录</label>
+            <input id="git-install-dir" class="mono" type="text" placeholder="例如 C:\Tools\git-bridge 或 ~/DevToolsBridges/git-bridge" autocomplete="off" spellcheck="false" style="min-width:min(100%,22rem);flex:1" />
+            <button type="button" class="secondary-btn" id="git-install-dir-save">记住目录</button>
+          </div>
+          <label class="flag" style="margin-top:0.35rem;display:inline-flex;align-items:center;gap:0.35rem">
+            <input type="checkbox" id="git-bridge-autostart" checked />
+            进入本页时若未连接则尝试自动启动
+          </label>
+          <p class="hint tight" id="git-install-dir-hint">下载解压后把文件夹路径填在这里并「记住」。首次请手动双击启动脚本（会注册 <span class="mono">devtools-git://</span>）。之后网页可自动唤起：若已手动打开窗口，浏览器再弹出请点取消。</p>
         </div>
 
         <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
@@ -34,7 +48,7 @@
         <div id="git-workspace" hidden>
           <div class="label-row" style="margin-top:1rem">
             <h2 class="subhead">选择仓库</h2>
-            <span class="hint tight" id="git-fs-meta">点带「仓库」标记的文件夹，或粘贴路径</span>
+            <span class="hint tight" id="git-fs-meta">拖文件夹进来，或点带「仓库」标记的目录，或粘贴路径</span>
           </div>
           <div class="adb-fs-shortcuts" id="git-roots" style="margin-bottom:0.45rem"></div>
           <div class="adb-path-row">
@@ -48,6 +62,10 @@
             <input id="git-clone-url" class="mono" type="text" placeholder="clone URL（https / git@ / ssh）" spellcheck="false" autocomplete="off" style="flex:1;min-width:12rem" />
             <button type="button" class="ghost-btn" id="git-clone">克隆到当前目录</button>
           </div>
+          <div class="git-dropzone" id="git-dropzone" tabindex="0" role="button" aria-label="拖拽文件夹到此处打开仓库">
+            <strong>把文件夹拖到这里</strong>
+            <p class="hint tight">从资源管理器 / Finder 拖入仓库文件夹；拿不到路径时请粘贴到上方输入框。</p>
+          </div>
           <div class="ff-fs-list adb-fs-list" id="git-fs-list" role="list"></div>
 
           <div id="git-repo-panel" hidden>
@@ -56,6 +74,33 @@
               <span class="hint tight mono" id="git-repo-meta"></span>
             </div>
             <p class="hint" id="git-repo-summary"></p>
+
+            <div class="git-beginner panel-card" id="git-beginner">
+              <div class="label-row">
+                <h2 class="subhead">新手三步（不用记命令）</h2>
+                <button type="button" class="ghost-btn" id="git-easy-refresh">刷新变更</button>
+              </div>
+              <ol class="git-beginner-steps hint">
+                <li>看下面「改了哪些文件」，勾选要保存的。</li>
+                <li>写一句人话说明，点「提交」。</li>
+                <li>需要同步到 GitHub 等远程时，再点「推送」。</li>
+              </ol>
+              <div id="git-change-list" class="git-change-list" aria-live="polite">
+                <p class="hint tight">打开仓库后显示未提交变更。</p>
+              </div>
+              <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem">
+                <button type="button" class="secondary-btn" id="git-easy-stage">暂存勾选</button>
+                <button type="button" class="ghost-btn" id="git-easy-stage-all">暂存全部</button>
+                <button type="button" class="ghost-btn" id="git-easy-unstage">取消暂存勾选</button>
+              </div>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
+                <label for="git-easy-msg">说明</label>
+                <input id="git-easy-msg" class="mono" type="text" placeholder="例如：修好登录按钮样式" spellcheck="false" autocomplete="off" style="flex:1;min-width:10rem" />
+                <button type="button" class="primary-btn" id="git-easy-commit">提交</button>
+                <button type="button" class="secondary-btn" id="git-easy-push">推送</button>
+              </div>
+              <p class="hint tight" id="git-easy-hint">提交 = 把勾选的改动记进历史；推送 = 上传到远程（需已配置 remote）。</p>
+            </div>
 
             <div class="git-layout">
               <div class="git-graph-pane">
@@ -124,7 +169,10 @@
                   <h2 class="subhead">全部 git 命令</h2>
                   <span class="hint tight" id="git-ops-count"></span>
                 </div>
-                <div id="git-ops-catalog" class="git-ops-catalog"></div>
+                <details class="git-ops-details" id="git-ops-details">
+                  <summary class="hint">展开白名单命令目录（高级）</summary>
+                  <div id="git-ops-catalog" class="git-ops-catalog"></div>
+                </details>
                 <pre class="mono adb-pre" id="git-cmd-preview" style="margin-top:0.55rem;max-height:6rem;overflow:auto" hidden></pre>
                 <pre class="mono adb-pre" id="git-op-out" style="margin-top:0.45rem;max-height:10rem;overflow:auto" hidden></pre>
               </div>

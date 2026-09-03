@@ -219,7 +219,7 @@
     let prefix = "/ff";
     let rootHealth = null;
     try {
-      const discovered = await window.devtoolsBridgeToken?.discoverBase?.(base, token);
+      const discovered = await window.devtoolsBridgeToken?.discoverBase?.(base, token, { kind: "unified" });
       if (discovered?.base) base = String(discovered.base).replace(/\/$/, "");
       rootHealth = discovered?.health || null;
       prefix = prefixFromHealth(rootHealth);
@@ -271,6 +271,7 @@
           token,
           timeoutMs: 10000,
           launch: true,
+          kind: "unified",
         });
         if (found?.health) {
           const c = { base: found.base, prefix: prefixFromHealth(found.health) };
