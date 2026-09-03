@@ -3547,7 +3547,7 @@
           detail += "。建议重新下载桥 ZIP 并重启本机桥（≥0.8.4 含镜像诊断）";
         }
         try {
-          const st = await adbFetch(`/mirror/status?serial=${encodeURIComponent(serial)}`).then((r) => r.json());
+          const st = await adbFetch(`/mirror/status?serial=${encodeURIComponent(serial)}`);
           if (st?.deviceJar && !st.deviceJar.present) {
             detail += `。设备端未找到 ${st.deviceJar.path || "scrcpy-server"}，请重试「开始镜像」以自动 push v3.1`;
           } else if (st?.deviceJar?.present && st.deviceJar.size) {
@@ -3563,9 +3563,11 @@
       }
   
       async function startMirrorPreview() {
-        if (adbMirrorStarting) return;
-        if (adbMirrorWs && adbMirrorWs.readyState <= 1) return;
         const serial = requireCurrentSerial();
+        if (adbMirrorStarting || (adbMirrorWs && adbMirrorWs.readyState <= 1)) {
+          stopMirrorPreview({ notifyBridge: true });
+          adbMirrorStarting = false;
+        }
         if (typeof VideoDecoder === "undefined") {
           toast("浏览器不支持 WebCodecs，已回退截图预览");
           startInputLivePreview({ forceShot: true });
@@ -3661,6 +3663,14 @@
                     errTimer = 0;
                   }
                   if (!settled) fail(msg.reason || "镜像结束");
+                  return;
+                }
+                if (msg.type === "status") {
+                  if (errTimer) {
+                    clearTimeout(errTimer);
+                    errTimer = 0;
+                  }
+                  if ($("#adb-input-meta")) $("#adb-input-meta").textContent = msg.message || "镜像启动中…";
                   return;
                 }
                 if (msg.type === "hello") {

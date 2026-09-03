@@ -206,69 +206,109 @@ function findFreePort() {
   });
 }
 
-function readExact(socket, n, opts = {}) {
-  if (!Number.isFinite(n) || n < 0 || n > MAX_READ_BUFFER) {
-    return Promise.reject(new Error(`readExact 非法长度 ${n}`));
+/**
+ * 持续缓冲 socket 数据，避免每次 readExact 用 unshift 换监听时丢掉后续字节。
+ */
+class SocketReader {
+  constructor(socket) {
+    this.socket = socket;
+    this.chunks = [];
+    this.total = 0;
+    this.wait = null;
+    this.ended = null;
+    this.onData = (chunk) => {
+      if (!chunk || !chunk.length) return;
+      this.chunks.push(chunk);
+      this.total += chunk.length;
+      this._flush();
+    };
+    this.onErr = (err) => this._end(err || new Error("socket error"));
+    this.onClose = () => this._end(new Error("socket closed"));
+    socket.on("data", this.onData);
+    socket.on("error", this.onErr);
+    socket.on("close", this.onClose);
+    socket.resume();
   }
-  const slack = opts.slack ?? Math.min(256 * 1024, Math.max(4096, Math.ceil(n * 0.05)));
-  const maxTotal = Math.min(opts.maxTotal ?? n + slack, MAX_READ_BUFFER);
 
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    let total = 0;
-    let settled = false;
-    let timer = null;
-    const cleanup = () => {
-      socket.off("data", onData);
-      socket.off("error", onErr);
-      socket.off("close", onClose);
-      if (timer) clearTimeout(timer);
-    };
-    const done = (err, data) => {
-      if (settled) return;
-      settled = true;
-      cleanup();
-      if (err) reject(err);
-      else resolve(data);
-    };
-    const onErr = (e) => done(e || new Error("socket error"));
-    const onClose = () => done(new Error("socket closed"));
-    const onData = (chunk) => {
-      total += chunk.length;
-      if (total > maxTotal) {
-        done(new Error(`镜像数据流协议错位（期望 ${n} 字节，缓冲已达 ${total}）`));
+  read(n, opts = {}) {
+    const timeoutMs = opts.timeoutMs ?? (n > 65536 ? 120_000 : 30_000);
+    const slack = opts.slack ?? 0;
+    const maxTotal = Math.min(opts.maxTotal ?? n + slack, MAX_READ_BUFFER);
+    return new Promise((resolve, reject) => {
+      if (this.wait) {
+        reject(new Error("SocketReader 重叠读取"));
         return;
       }
-      chunks.push(chunk);
-      if (total < n) return;
+      if (!Number.isFinite(n) || n < 0 || n > MAX_READ_BUFFER) {
+        reject(new Error(`readExact 非法长度 ${n}`));
+        return;
+      }
+      const waiter = { n, maxTotal, resolve, reject, timer: null };
+      waiter.timer = setTimeout(() => {
+        if (this.wait === waiter) this.wait = null;
+        reject(new Error(`读取 ${n} 字节超时（${timeoutMs}ms）`));
+      }, timeoutMs);
+      this.wait = waiter;
+      this._flush();
+    });
+  }
 
-      let out;
-      if (chunks.length === 1) {
-        out = chunks[0].subarray(0, n);
-        const rest = chunks[0].subarray(n);
-        if (rest.length) socket.unshift(rest);
-      } else {
-        const merged = Buffer.concat(chunks, total);
-        out = merged.subarray(0, n);
-        const rest = merged.subarray(n);
-        if (rest.length) socket.unshift(rest);
-      }
-      done(null, out);
-    };
-    const timeoutMs = opts.timeoutMs ?? (n > 65536 ? 120_000 : 30_000);
-    timer = setTimeout(() => {
-      done(new Error(`读取 ${n} 字节超时（${timeoutMs}ms）`));
-      try {
-        socket.destroy();
-      } catch {
-        /* ignore */
-      }
-    }, timeoutMs);
-    socket.on("data", onData);
-    socket.on("error", onErr);
-    socket.on("close", onClose);
-    socket.resume();
-  });
+  _take(n) {
+    if (this.total < n) return null;
+    if (this.chunks.length === 1) {
+      const c = this.chunks[0];
+      const out = c.subarray(0, n);
+      const rest = c.subarray(n);
+      this.chunks = rest.length ? [rest] : [];
+      this.total -= n;
+      return out;
+    }
+    const merged = Buffer.concat(this.chunks, this.total);
+    const out = merged.subarray(0, n);
+    const rest = merged.subarray(n);
+    this.chunks = rest.length ? [rest] : [];
+    this.total = rest.length;
+    return out;
+  }
+
+  _flush() {
+    const w = this.wait;
+    if (!w) return;
+    if (this.total > w.maxTotal) {
+      this.wait = null;
+      clearTimeout(w.timer);
+      w.reject(new Error(`镜像数据流协议错位（期望 ${w.n} 字节，缓冲已达 ${this.total}）`));
+      return;
+    }
+    if (this.total >= w.n) {
+      this.wait = null;
+      clearTimeout(w.timer);
+      w.resolve(this._take(w.n));
+      return;
+    }
+    if (this.ended) {
+      this.wait = null;
+      clearTimeout(w.timer);
+      w.reject(this.ended);
+    }
+  }
+
+  _end(err) {
+    if (this.ended) {
+      this._flush();
+      return;
+    }
+    this.ended = err instanceof Error ? err : new Error(String(err || "socket closed"));
+    this._flush();
+  }
+
+  destroy() {
+    try {
+      this.socket.destroy();
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 function parseVideoMeta(header) {
@@ -289,14 +329,10 @@ function parseVideoMeta(header) {
   return { codecId, width, height, codec };
 }
 
-async function readMirrorHandshake(videoSock, serial) {
-  const dummy = await readExact(videoSock, 1);
-  if (dummy[0] !== 0) {
-    /* some builds may omit strict dummy */
-  }
-  const nameBuf = await readExact(videoSock, DEVICE_NAME_LEN);
+async function readMirrorHandshake(reader, serial) {
+  const nameBuf = await reader.read(DEVICE_NAME_LEN, { timeoutMs: 8000 });
   const deviceName = nameBuf.toString("utf8").replace(/\0+$/g, "") || serial;
-  const header = await readExact(videoSock, 12);
+  const header = await reader.read(12, { timeoutMs: 45000 });
   const { codecId, width, height, codec } = parseVideoMeta(header);
   return { deviceName, codec, codecId, width, height, version: SCRCPY_VERSION };
 }
@@ -311,6 +347,7 @@ function connectLocal(port, timeoutMs = 8000) {
     sock.once("connect", () => {
       clearTimeout(timer);
       sock.setNoDelay(true);
+      sock.pause();
       resolve(sock);
     });
     sock.once("error", (err) => {
@@ -320,17 +357,40 @@ function connectLocal(port, timeoutMs = 8000) {
   });
 }
 
-async function connectWithRetry(port, tries = 80, delayMs = 120) {
+/**
+ * adb forward 的 TCP 连接会立刻成功，即使设备端尚未 listen。
+ * 必须等到 dummy byte 0x00，才说明 scrcpy-server 真正 accept 了。
+ */
+async function connectUntilDummy(port, onProgress) {
   let last = null;
+  const tries = 40;
   for (let i = 0; i < tries; i++) {
+    let sock = null;
+    let reader = null;
     try {
-      return await connectLocal(port, 1500);
+      sock = await connectLocal(port, 1500);
+      reader = new SocketReader(sock);
+      const dummy = await reader.read(1, { timeoutMs: 2200 });
+      return { sock, reader, dummy };
     } catch (err) {
       last = err;
-      await new Promise((r) => setTimeout(r, delayMs));
+      try {
+        reader?.destroy();
+      } catch {
+        /* ignore */
+      }
+      try {
+        sock?.destroy();
+      } catch {
+        /* ignore */
+      }
+      if (i === 3 || i === 10 || i === 20) {
+        onProgress?.(`等待设备端握手… (${i + 1}/${tries})`);
+      }
+      await new Promise((r) => setTimeout(r, 180));
     }
   }
-  throw last || new Error("无法连接 scrcpy 视频端口");
+  throw last || new Error("等待视频握手超时（设备端未发送 dummy byte）");
 }
 
 function wsAcceptKey(key) {
@@ -433,6 +493,7 @@ class MirrorSession {
     this.lastConfig = null;
     this.errTail = "";
     this.procExitCode = null;
+    this.reader = null;
   }
 
   mirrorError(base) {
@@ -458,7 +519,9 @@ class MirrorSession {
       "send_codec_meta=true",
       "cleanup=false",
       "power_on=true",
-      "video_bit_rate=6000000",
+      "stay_awake=true",
+      "video_codec=h264",
+      "video_bit_rate=4000000",
       "max_size=1280",
       "max_fps=60",
     ].join(" ");
@@ -488,9 +551,10 @@ class MirrorSession {
     });
   }
 
-  async start() {
+  async start(onProgress) {
     const jar = await ensureServerJar();
     const adb = this.deps.adbPath;
+    onProgress?.("正在推送 scrcpy-server 到手机…");
     await ensureRemoteJar(this.deps, this.serial, jar);
 
     try {
@@ -506,6 +570,12 @@ class MirrorSession {
       /* ignore */
     }
 
+    try {
+      await this.deps.adbSerial(this.serial, ["shell", "input keyevent KEYCODE_WAKEUP"], { timeout: 5000 });
+    } catch {
+      /* ignore */
+    }
+
     const scid = crypto.randomBytes(4).readUInt32BE(0) & 0x7fffffff;
     this.scidHex = scid.toString(16).padStart(8, "0");
     this.port = await findFreePort();
@@ -517,15 +587,30 @@ class MirrorSession {
 
     const appProcessRunner = await pickAppProcessRunner(this.deps, this.serial);
     let shellCmd = this.buildServerShellCmd(appProcessRunner);
+    onProgress?.("正在启动设备端 scrcpy-server…");
     this.attachServerProc(this.spawnServerProcess(adb, shellCmd));
-    await new Promise((r) => setTimeout(r, 280));
+    await new Promise((r) => setTimeout(r, 200));
 
-    try {
-      this.videoSock = await connectWithRetry(this.port, 100, 150);
-      this.meta = await readMirrorHandshake(this.videoSock, this.serial);
+    const handshakeOnce = async () => {
+      onProgress?.("等待视频握手（dummy byte）…");
+      const { sock, reader } = await connectUntilDummy(this.port, onProgress);
+      this.videoSock = sock;
+      this.reader = reader;
+      onProgress?.("已连接，读取分辨率…");
+      this.meta = await readMirrorHandshake(reader, this.serial);
       this.pumping = true;
       this.pumpFrames().catch((err) => this.stop(this.mirrorError(err.message || String(err))));
+    };
+
+    try {
+      await handshakeOnce();
     } catch (err) {
+      try {
+        this.reader?.destroy();
+      } catch {
+        /* ignore */
+      }
+      this.reader = null;
       try {
         this.videoSock?.destroy();
       } catch {
@@ -533,7 +618,7 @@ class MirrorSession {
       }
       this.videoSock = null;
       const failedWith64 = appProcessRunner === "app_process64";
-      if (failedWith64 && (err.message === "socket closed" || this.procExitCode != null)) {
+      if (failedWith64 && ( /socket closed|dummy byte|握手/i.test(err.message || "") || this.procExitCode != null)) {
         try {
           this.proc?.kill("SIGTERM");
         } catch {
@@ -541,13 +626,11 @@ class MirrorSession {
         }
         this.proc = null;
         shellCmd = this.buildServerShellCmd("app_process");
+        onProgress?.("改用 app_process 重试…");
         this.attachServerProc(this.spawnServerProcess(adb, shellCmd));
-        await new Promise((r) => setTimeout(r, 280));
+        await new Promise((r) => setTimeout(r, 200));
         try {
-          this.videoSock = await connectWithRetry(this.port, 100, 150);
-          this.meta = await readMirrorHandshake(this.videoSock, this.serial);
-          this.pumping = true;
-          this.pumpFrames().catch((innerErr) => this.stop(this.mirrorError(innerErr.message || String(innerErr))));
+          await handshakeOnce();
           return;
         } catch {
           /* fall through to formatted error below */
@@ -581,12 +664,12 @@ class MirrorSession {
   }
 
   async pumpFrames() {
-    while (this.pumping && this.videoSock && !this.videoSock.destroyed) {
-      const hdr = await readExact(this.videoSock, 12);
+    while (this.pumping && this.reader && this.videoSock && !this.videoSock.destroyed) {
+      const hdr = await this.reader.read(12, { timeoutMs: 120_000 });
       const ptsFlags = hdr.readBigUInt64BE(0);
       const size = hdr.readUInt32BE(8);
       if (size <= 0 || size > MAX_FRAME_BYTES) throw new Error(`异常帧大小 ${size}`);
-      const payload = await readExact(this.videoSock, size, { slack: 0, maxTotal: size });
+      const payload = await this.reader.read(size, { slack: 0, maxTotal: size, timeoutMs: 120_000 });
       const isConfig = (ptsFlags & PACKET_FLAG_CONFIG) !== 0n;
       const isKey = (ptsFlags & PACKET_FLAG_KEY_FRAME) !== 0n;
       const pts = Number(ptsFlags & ~(PACKET_FLAG_CONFIG | PACKET_FLAG_KEY_FRAME));
@@ -616,6 +699,12 @@ class MirrorSession {
     }
     this.clients.clear();
     try {
+      this.reader?.destroy();
+    } catch {
+      /* ignore */
+    }
+    this.reader = null;
+    try {
       this.videoSock?.destroy();
     } catch {
       /* ignore */
@@ -634,7 +723,7 @@ class MirrorSession {
   }
 }
 
-async function getOrStartSession(serial, deps) {
+async function getOrStartSession(serial, deps, onProgress) {
   const existing = sessions.get(serial);
   if (existing && !existing.closed) {
     existing.stop("restart");
@@ -642,7 +731,7 @@ async function getOrStartSession(serial, deps) {
   const session = new MirrorSession(serial, deps);
   sessions.set(serial, session);
   try {
-    await session.start();
+    await session.start(onProgress);
     return session;
   } catch (err) {
     sessions.delete(serial);
@@ -762,7 +851,15 @@ function handleUpgrade(req, socket, head, deps) {
     },
   });
 
-  getOrStartSession(serial, deps)
+  getOrStartSession(serial, deps, (message) => {
+    if (!closed && !socket.destroyed) {
+      try {
+        wsSendJson(socket, { type: "status", message });
+      } catch {
+        /* ignore */
+      }
+    }
+  })
     .then((s) => {
       session = s;
       if (closed || socket.destroyed) {

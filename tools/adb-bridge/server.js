@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.2";
+const BRIDGE_VERSION = "0.9.3";
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
 const everythingProxy = require("./everything-proxy");
