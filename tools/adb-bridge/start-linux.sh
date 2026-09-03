@@ -164,6 +164,38 @@ echo "启动桥：${TARGET}"
 echo "日志：${LOG_FILE}"
 echo ""
 
+
+export ADB_BRIDGE_DIR="$SCRIPT_DIR"
+# Register xdg URL handler (best-effort) so webpage can open devtools-bridge://start
+DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+mkdir -p "$DESKTOP_DIR"
+HANDLER="$SCRIPT_DIR/devtools-bridge-open.sh"
+cat > "$HANDLER" <<EOF
+#!/usr/bin/env bash
+DIR="$SCRIPT_DIR"
+cd "\$DIR" || exit 1
+for s in start-adb-bridge.sh start-linux.sh; do
+  if [ -f "\$DIR/\$s" ]; then
+    nohup bash "\$DIR/\$s" >/dev/null 2>&1 &
+    exit 0
+  fi
+done
+exit 1
+EOF
+chmod +x "$HANDLER"
+cat > "$DESKTOP_DIR/devtools-bridge.desktop" <<EOF
+[Desktop Entry]
+Name=DevTools Bridge
+Exec=$HANDLER %u
+Type=Application
+Terminal=false
+MimeType=x-scheme-handler/devtools-bridge;
+NoDisplay=true
+EOF
+xdg-mime default devtools-bridge.desktop x-scheme-handler/devtools-bridge >/dev/null 2>&1 || true
+update-desktop-database "$DESKTOP_DIR" >/dev/null 2>&1 || true
+
+
 node server.js 2>&1 | tee -a "${LOG_FILE}"
 CODE=${PIPESTATUS[0]}
 echo ""

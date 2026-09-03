@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.0";
+const BRIDGE_VERSION = "0.9.1";
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
 const everythingProxy = require("./everything-proxy");
@@ -3608,6 +3608,13 @@ async function handleApi(req, res, url) {
           tokenRequired: true,
           defaultTokenHint: "devtools-bridge",
           unified: true,
+          installDir: process.env.ADB_BRIDGE_DIR || __dirname,
+          startScripts: {
+            win: "start-adb-bridge.cmd",
+            mac: "start-adb-bridge.command",
+            linux: "start-adb-bridge.sh",
+          },
+          protocol: "devtools-bridge:",
           capabilities: {
             adb: true,
             ffmpeg: Boolean(ffmpegBridge),
