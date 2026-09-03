@@ -74,8 +74,14 @@ async function main() {
   if (!/lastKeyFrame/.test(mirrorJs)) {
     throw new Error("scrcpy-mirror.js should cache/replay lastKeyFrame for late WS clients");
   }
+  if (!/pendingConfig|packet_merger|wrapMirrorPacket/.test(mirrorJs)) {
+    throw new Error("scrcpy-mirror.js should merge codec config into following media packets");
+  }
   if (/video_codec_options=i-frame-interval=1/.test(mirrorJs) && !/不要默认传 video_codec_options/.test(mirrorJs)) {
     throw new Error("scrcpy-mirror.js must not force i-frame-interval=1 (breaks some OEM encoders)");
+  }
+  if (!/i-frame-interval=5/.test(mirrorJs)) {
+    throw new Error("scrcpy-mirror.js should allow soft i-frame-interval=5 on last retry");
   }
   if (!/降低分辨率重试|最小参数重试/.test(mirrorJs)) {
     throw new Error("scrcpy-mirror.js should retry handshake with softer encoder profiles");

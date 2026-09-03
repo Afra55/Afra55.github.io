@@ -767,7 +767,8 @@ class MirrorSession {
       return /socket closed|dummy byte|握手|ECONNREFUSED|MediaCodec|encoder|IllegalArgument|无法启动屏幕编码/i.test(m) || this.procExitCode != null;
     };
 
-    /** 参数阶梯：先正常，再降分辨率；64 位失败再换 app_process；最后最小参数。 */
+    /** 参数阶梯：先正常，再降分辨率；64 位失败再换 app_process；最后最小参数。
+     * 不要默认 i-frame-interval=1（部分机型拒编）；末次用较温和的 =5 缩短黑屏等待。 */
     const attempts = [
       { label: null, runner: preferredRunner, maxSize: 1280, videoBitRate: 2500000, maxFps: 30 },
       { label: "编码器异常，降低分辨率重试…", runner: preferredRunner, maxSize: 800, videoBitRate: 1500000, maxFps: 24 },
@@ -787,6 +788,7 @@ class MirrorSession {
       maxSize: 640,
       videoBitRate: 1000000,
       maxFps: 20,
+      videoCodecOptions: "i-frame-interval=5",
     });
 
     let lastErr = null;
@@ -808,6 +810,7 @@ class MirrorSession {
           maxSize: attempt.maxSize,
           videoBitRate: attempt.videoBitRate,
           maxFps: attempt.maxFps,
+          videoCodecOptions: attempt.videoCodecOptions,
         });
         onProgress?.(i === 0 ? "正在启动设备端 scrcpy-server…" : `正在启动 scrcpy-server（${attempt.maxSize}p）…`);
         this.attachServerProc(this.spawnServerProcess(adb, shellCmd));
@@ -846,13 +849,33 @@ class MirrorSession {
     for (const c of this.clients) wsSendBinary(c, buf);
   }
 
+  wrapMirrorPacket(flags, pts, payload) {
+    const out = Buffer.alloc(5 + payload.length);
+    out[0] = flags;
+    out.writeUInt32BE(pts >>> 0, 1);
+    payload.copy(out, 5);
+    return out;
+  }
+
   addClient(socket) {
     this.clients.add(socket);
     if (this.meta) {
       wsSendJson(socket, { type: "hello", ...this.meta });
-      // 首个 config/key 常在客户端连上前就泵出；重放避免干等下一个 IDR（默认可长达数秒）
+      // 首个 config/key 常在客户端连上前就泵出；重放避免干等下一个 IDR（默认 I 帧间隔约 10s）
       if (this.lastConfig) wsSendBinary(socket, Buffer.from(this.lastConfig));
-      if (this.lastKeyFrame) wsSendBinary(socket, Buffer.from(this.lastKeyFrame));
+      if (this.lastKeyFrame) {
+        // 与官方 demuxer 一致：关键帧前拼上 SPS/PPS，避免 WebCodecs 只拿到裸 IDR
+        let keyPkt = this.lastKeyFrame;
+        if (this.lastConfig && this.lastConfig.length > 5) {
+          const cfg = this.lastConfig.subarray(5);
+          const keyBody = this.lastKeyFrame.subarray(5);
+          if (cfg.length && (keyBody.length < cfg.length || Buffer.compare(keyBody.subarray(0, cfg.length), cfg) !== 0)) {
+            const pts = this.lastKeyFrame.readUInt32BE(1);
+            keyPkt = this.wrapMirrorPacket(2, pts, Buffer.concat([cfg, keyBody]));
+          }
+        }
+        wsSendBinary(socket, Buffer.from(keyPkt));
+      }
     }
   }
 
@@ -862,6 +885,8 @@ class MirrorSession {
   }
 
   async pumpFrames() {
+    /** @type {Buffer|null} 待并入下一媒体包的 codec config（对齐官方 packet_merger） */
+    let pendingConfig = null;
     while (this.pumping && this.reader && this.videoSock && !this.videoSock.destroyed) {
       const hdr = await this.reader.read(12, { timeoutMs: 120_000 });
       const ptsFlags = hdr.readBigUInt64BE(0);
@@ -871,15 +896,25 @@ class MirrorSession {
       const isConfig = (ptsFlags & PACKET_FLAG_CONFIG) !== 0n;
       const isKey = (ptsFlags & PACKET_FLAG_KEY_FRAME) !== 0n;
       const pts = Number(ptsFlags & ~(PACKET_FLAG_CONFIG | PACKET_FLAG_KEY_FRAME));
-      const out = Buffer.alloc(5 + payload.length);
+
+      if (isConfig) {
+        pendingConfig = Buffer.from(payload);
+        const out = this.wrapMirrorPacket(1, 0, pendingConfig);
+        this.lastConfig = out;
+        // 仍单独发给前端，便于 VideoDecoder.configure；媒体包里再合并一份供解码
+        if (this.clients.size) this.broadcastBinary(out);
+        continue;
+      }
+
+      let media = payload;
+      if (pendingConfig && pendingConfig.length) {
+        media = Buffer.concat([pendingConfig, payload]);
+        pendingConfig = null;
+      }
       let flags = 0;
-      if (isConfig) flags |= 1;
       if (isKey) flags |= 2;
-      out[0] = flags;
-      out.writeUInt32BE(pts >>> 0, 1);
-      payload.copy(out, 5);
-      if (isConfig) this.lastConfig = out;
-      else if (isKey) this.lastKeyFrame = out;
+      const out = this.wrapMirrorPacket(flags, pts, media);
+      if (isKey) this.lastKeyFrame = out;
       if (this.clients.size) this.broadcastBinary(out);
     }
   }

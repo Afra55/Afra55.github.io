@@ -216,6 +216,11 @@
       let adbMirrorGotFrame = false;
       let adbMirrorWaitTimer = 0;
       let adbMirrorPkt = { config: 0, key: 0, delta: 0, decoded: 0 };
+      /** @type {"prefer-hardware" | "prefer-software" | "no-preference"} */
+      let adbMirrorHwPref = "prefer-hardware";
+      let adbMirrorSoftTried = false;
+      /** @type {Uint8Array|null} */
+      let adbMirrorLastKeyData = null;
       let adbInputRecordJobId = "";
       let adbInputRecordPoll = 0;
       const ADB_STORE_INPUT_SHOT_VH = "devtools-adb-input-shot-vh";
@@ -3468,34 +3473,75 @@
         return nals;
       }
 
+      function looksAnnexB(bytes) {
+        const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+        if (u.length < 4) return false;
+        return u[0] === 0 && u[1] === 0 && (u[2] === 1 || (u[2] === 0 && u[3] === 1));
+      }
+
+      /** 部分机型 MediaCodec 输出 length-prefixed NAL，WebCodecs 需要 Annex-B */
+      function toAnnexB(bytes) {
+        const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+        if (!u.length || looksAnnexB(u) || u[0] === 1) return u;
+        const parts = [];
+        let i = 0;
+        let ok = false;
+        while (i + 4 <= u.length) {
+          const n = ((u[i] << 24) | (u[i + 1] << 16) | (u[i + 2] << 8) | u[i + 3]) >>> 0;
+          i += 4;
+          if (n === 0 || i + n > u.length) return u;
+          const nal = u.subarray(i, i + n);
+          const type = nal[0] & 0x1f;
+          if (type === 0 || type > 12) return u;
+          parts.push(new Uint8Array([0, 0, 0, 1]), nal);
+          i += n;
+          ok = true;
+        }
+        if (!ok || i !== u.length) return u;
+        return concatBytesMany(parts);
+      }
+
+      function concatBytesMany(chunks) {
+        let total = 0;
+        for (const c of chunks) total += c.length;
+        const out = new Uint8Array(total);
+        let off = 0;
+        for (const c of chunks) {
+          out.set(c, off);
+          off += c.length;
+        }
+        return out;
+      }
+
+      function payloadHasSps(bytes) {
+        for (const nal of findAnnexBNals(bytes)) {
+          if (nal.length && (nal[0] & 0x1f) === 7) return true;
+        }
+        return false;
+      }
+
       function codecStringFromConfig(bytes, codecName) {
         if (codecName === "h265") return "hev1.1.6.L93.B0";
         if (codecName === "av1") return "av01.0.04M.08";
         const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+        const hex3 = (a, b, c) =>
+          `${a.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}${c.toString(16).padStart(2, "0")}`.toUpperCase();
         if (u.length >= 4 && u[0] === 1) {
-          const p = u[1].toString(16).padStart(2, "0");
-          const c = u[2].toString(16).padStart(2, "0");
-          const l = u[3].toString(16).padStart(2, "0");
-          return `avc1.${p}${c}${l}`;
+          return `avc1.${hex3(u[1], u[2], u[3])}`;
         }
-        for (const nal of findAnnexBNals(u)) {
+        const annex = toAnnexB(u);
+        for (const nal of findAnnexBNals(annex)) {
           if (!nal.length) continue;
           if ((nal[0] & 0x1f) === 7 && nal.length >= 4) {
-            const p = nal[1].toString(16).padStart(2, "0");
-            const c = nal[2].toString(16).padStart(2, "0");
-            const l = nal[3].toString(16).padStart(2, "0");
-            return `avc1.${p}${c}${l}`;
+            return `avc1.${hex3(nal[1], nal[2], nal[3])}`;
           }
         }
         if (u.length >= 4 && (u[0] & 0x1f) === 7) {
-          const p = u[1].toString(16).padStart(2, "0");
-          const c = u[2].toString(16).padStart(2, "0");
-          const l = u[3].toString(16).padStart(2, "0");
-          return `avc1.${p}${c}${l}`;
+          return `avc1.${hex3(u[1], u[2], u[3])}`;
         }
         return "avc1.42E01E";
       }
-  
+
       function concatBytes(a, b) {
         const aa = a instanceof Uint8Array ? a : new Uint8Array(a);
         const bb = b instanceof Uint8Array ? b : new Uint8Array(b);
@@ -3548,6 +3594,9 @@
         adbMirrorNeedKey = false;
         adbMirrorGotFrame = false;
         adbMirrorPkt = { config: 0, key: 0, delta: 0, decoded: 0 };
+        adbMirrorHwPref = "prefer-hardware";
+        adbMirrorSoftTried = false;
+        adbMirrorLastKeyData = null;
         if (adbMirrorWaitTimer) {
           clearTimeout(adbMirrorWaitTimer);
           adbMirrorWaitTimer = 0;
@@ -3568,9 +3617,8 @@
         const canvas = $("#adb-input-mirror");
         if (!canvas) throw new Error("缺少镜像画布");
         if (typeof VideoDecoder === "undefined") throw new Error("当前浏览器不支持 WebCodecs（请用较新的 Chrome / Edge）");
-        const ctx =
-          canvas.getContext("2d", { alpha: false, desynchronized: true }) ||
-          canvas.getContext("2d", { alpha: false });
+        // 避免 desynchronized 上下文在部分 GPU 上画不出 VideoFrame
+        const ctx = canvas.getContext("2d", { alpha: false });
         if (!ctx) throw new Error("无法创建画布上下文");
         if (adbMirrorDecoder) {
           try {
@@ -3600,6 +3648,7 @@
                   $("#adb-input-meta").textContent =
                     "镜像预览中：单击 / 长按 / 双击 / 拖拽；拖文件到画面可 push 到 Download。";
                 }
+                toast("镜像画面已就绪");
               }
             } finally {
               frame.close();
@@ -3620,6 +3669,78 @@
         if (img) img.hidden = true;
         return adbMirrorDecoder;
       }
+
+      function configureMirrorFromPending() {
+        if (!adbMirrorDecoder || !adbMirrorMeta || !adbMirrorPendingConfig) return false;
+        const payload = adbMirrorPendingConfig;
+        const codec = codecStringFromConfig(payload, adbMirrorMeta.codec);
+        const isAvcc = payload[0] === 1;
+        const cfg = {
+          codec,
+          codedWidth: adbMirrorMeta.width || undefined,
+          codedHeight: adbMirrorMeta.height || undefined,
+          optimizeForLatency: true,
+          hardwareAcceleration: adbMirrorHwPref,
+        };
+        if (isAvcc) cfg.description = payload;
+        adbMirrorDecoder.configure(cfg);
+        adbMirrorNeedKey = true;
+        adbMirrorFrameTs = 0;
+        return true;
+      }
+
+      function decodeMirrorKeyData(data) {
+        if (!adbMirrorDecoder || adbMirrorDecoder.state !== "configured" || !data?.length) return;
+        adbMirrorFrameTs += 33_333;
+        adbMirrorDecoder.decode(
+          new EncodedVideoChunk({
+            type: "key",
+            timestamp: adbMirrorFrameTs,
+            data,
+          })
+        );
+        adbMirrorNeedKey = false;
+      }
+
+      function scheduleMirrorBlankWatch(serial) {
+        if (adbMirrorWaitTimer) clearTimeout(adbMirrorWaitTimer);
+        adbMirrorWaitTimer = setTimeout(() => {
+          if (adbMirrorGotFrame) return;
+          const p = adbMirrorPkt;
+          if ((p.config > 0 || p.key > 0) && p.decoded === 0 && !adbMirrorSoftTried && adbMirrorMeta) {
+            adbMirrorSoftTried = true;
+            adbMirrorHwPref = "prefer-software";
+            if ($("#adb-input-meta")) {
+              $("#adb-input-meta").textContent = "硬解无画面，正在改用软解重试…";
+            }
+            try {
+              const savedCfg = adbMirrorPendingConfig;
+              const savedKey = adbMirrorLastKeyData;
+              ensureMirrorDecoder(adbMirrorMeta);
+              adbMirrorPendingConfig = savedCfg;
+              adbMirrorLastKeyData = savedKey;
+              // 软解重试时保留计数，便于最终诊断
+              adbMirrorPkt = { ...p, decoded: 0 };
+              if (configureMirrorFromPending() && savedKey) {
+                decodeMirrorKeyData(savedKey);
+              }
+            } catch (err) {
+              if ($("#adb-input-meta")) {
+                $("#adb-input-meta").textContent = `软解重试失败：${err.message || err}`;
+              }
+            }
+            scheduleMirrorBlankWatch(serial);
+            return;
+          }
+          if ($("#adb-input-meta")) {
+            $("#adb-input-meta").textContent =
+              `仍无画面（config=${p.config} key=${p.key} delta=${p.delta} decoded=${p.decoded}）。` +
+              (p.config === 0 && p.key === 0
+                ? "桥未收到视频帧：请更新本机桥 ZIP（≥0.9.10）、只开一座桥，并解锁亮屏后重试"
+                : "已收到码流但解不出画面：请换 Chrome/Edge 最新版，或更新桥 ZIP 后重试「开始镜像」");
+          }
+        }, 3200);
+      }
   
       async function mirrorFailureDetail(msg, serial) {
         let detail = String(msg || "镜像失败");
@@ -3629,10 +3750,12 @@
         }
         if (/ECONNREFUSED|转发.*断开|forward 未在/i.test(detail) && !bridgeAtLeast("0.9.5")) {
           detail += "。请重新下载完整桥 ZIP（≥0.9.5 修复握手前抢连导致转发失效）并只留一座桥窗口";
+        } else if (/socket closed|编码器|MediaCodec/i.test(detail) && !bridgeAtLeast("0.9.10")) {
+          detail += "。请更新到桥 ≥0.9.10（scrcpy 帧合并 + 解码兼容，握手失败自动降级）";
         } else if (/socket closed|编码器|MediaCodec/i.test(detail) && !bridgeAtLeast("0.9.9")) {
           detail += "。请更新到桥 ≥0.9.9（去掉易崩的编码参数，并在握手失败时自动降分辨率重试）";
-        } else if (!bridgeAtLeast("0.9.8")) {
-          detail += "。建议更新到桥 ≥0.9.8（修复首帧丢失导致黑屏）";
+        } else if (!bridgeAtLeast("0.9.10")) {
+          detail += "。建议更新到桥 ≥0.9.10（修复镜像无画面：帧合并与解码兼容）";
         } else if (!bridgeAtLeast("0.8.4")) {
           detail += "。建议重新下载桥 ZIP 并重启本机桥（≥0.8.4 含镜像诊断）";
         }
@@ -3783,17 +3906,9 @@
                       meta.textContent = `镜像中 · ${msg.codec || "h264"} · ${msg.width}×${msg.height} · ${msg.deviceName || serial}`;
                     }
                     if ($("#adb-input-meta")) {
-                      $("#adb-input-meta").textContent = "镜像已连接，等待关键帧画面…";
+                      $("#adb-input-meta").textContent = "镜像已连接，等待首帧画面…";
                     }
-                    if (adbMirrorWaitTimer) clearTimeout(adbMirrorWaitTimer);
-                    adbMirrorWaitTimer = setTimeout(() => {
-                      if (adbMirrorGotFrame) return;
-                      if ($("#adb-input-meta")) {
-                        const p = adbMirrorPkt;
-                        $("#adb-input-meta").textContent =
-                          `仍无画面（config=${p.config} key=${p.key} delta=${p.delta}）。可停止后重试「开始镜像」；请确认桥 ≥0.9.8`;
-                      }
-                    }, 2500);
+                    scheduleMirrorBlankWatch(serial);
                   } catch (err) {
                     fail(err.message || String(err));
                   }
@@ -3804,12 +3919,13 @@
               const buf = new Uint8Array(ev.data);
               if (buf.length < 5 || !adbMirrorDecoder || !adbMirrorMeta) return;
               const flags = buf[0];
-              const payload = buf.subarray(5);
+              let payload = buf.subarray(5);
               const isConfig = (flags & 1) !== 0;
               const isKey = (flags & 2) !== 0;
               try {
                 if (isConfig) {
                   adbMirrorPkt.config += 1;
+                  payload = toAnnexB(payload);
                   adbMirrorPendingConfig = payload.slice();
                   const codec = codecStringFromConfig(payload, adbMirrorMeta.codec);
                   const isAvcc = payload[0] === 1;
@@ -3822,7 +3938,10 @@
                   }
                   const cfg = {
                     codec,
+                    codedWidth: adbMirrorMeta.width || undefined,
+                    codedHeight: adbMirrorMeta.height || undefined,
                     optimizeForLatency: true,
+                    hardwareAcceleration: adbMirrorHwPref,
                   };
                   if (isAvcc) cfg.description = payload;
                   try {
@@ -3843,10 +3962,13 @@
                 if (adbMirrorNeedKey && !isKey) return;
                 // 只丢弃非关键帧，避免排队时把 IDR 丢掉导致一直黑屏
                 if (!isKey && adbMirrorDecoder.decodeQueueSize > 2) return;
+                payload = toAnnexB(payload);
                 let data = payload;
-                if (isKey && adbMirrorPendingConfig && adbMirrorPendingConfig[0] !== 1) {
-                  data = concatBytes(adbMirrorPendingConfig, payload);
+                // 桥 ≥0.9.10 已在关键帧前合并 SPS/PPS；若已有 SPS 则勿再拼一份
+                if (isKey && adbMirrorPendingConfig && adbMirrorPendingConfig[0] !== 1 && !payloadHasSps(payload)) {
+                  data = concatBytes(toAnnexB(adbMirrorPendingConfig), payload);
                 }
+                if (isKey) adbMirrorLastKeyData = data.slice();
                 adbMirrorFrameTs += 33_333;
                 adbMirrorDecoder.decode(
                   new EncodedVideoChunk({
@@ -5620,7 +5742,7 @@
         if (meta) meta.textContent = "正在启动镜像…";
         if (mirrorBtn) mirrorBtn.disabled = true;
         startMirrorPreview()
-        .then(() => toast("镜像已开始"))
+        .then(() => toast("镜像已连接，正在出画…"))
         .catch((err) => {
           const msg = err.message || String(err);
           setError(adbError, msg);
