@@ -11,6 +11,13 @@
       tags: ["pdf", "办公"],
     },
     {
+      id: "tubatools",
+      title: "图吧工具箱",
+      desc: "WinUI3 版 Windows 装机/硬件工具箱：一键启动 CPU-Z、GPU-Z、磁盘检测等百款工具，含系统优化与硬件信息。",
+      url: "https://tubawinui3.cn/",
+      tags: ["windows", "硬件", "装机"],
+    },
+    {
       id: "insectworld",
       title: "昆虫世界",
       desc: "互动昆虫图鉴与观察站。",
