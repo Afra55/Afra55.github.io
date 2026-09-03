@@ -2467,6 +2467,12 @@
       end = Math.min(rows.length, start + 24);
       start = Math.max(0, end - 24);
     }
+    // 贴顶/贴底：避免首尾条目落在 spacer 里只剩空白
+    if (viewTop <= 96) start = 0;
+    if (viewTop + viewH >= totalH - Math.max(200, viewH * 0.4)) {
+      end = rows.length;
+      start = Math.min(start, Math.max(0, rows.length - 24));
+    }
     const topPad = prefix[start] || 0;
     const bottomPad = Math.max(0, totalH - (prefix[end] || 0));
     const slice = rows.slice(start, end);
