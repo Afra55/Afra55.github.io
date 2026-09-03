@@ -45,7 +45,7 @@
     },
   };
 
-  const EXTERNAL_SITE_TOOLS = new Set(["pdfcraft", "insectworld", "prehmuseum"]);
+  const EXTERNAL_SITE_TOOLS = new Set([]);
 
   const TOOL_FILES = {
     acupoint: "./acupoint.js",
@@ -65,9 +65,6 @@
     morse: "./morse.js",
     countdown: "./countdown.js",
     dateremind: "./dateremind.js",
-    pdfcraft: "./pdfcraft.js",
-    insectworld: "./insectworld.js",
-    prehmuseum: "./prehmuseum.js",
     wheel: "./wheel.js",
     ruler: "./ruler.js",
     muyu: "./muyu.js",
@@ -164,9 +161,6 @@
     "morse",
     "countdown",
     "dateremind",
-    "pdfcraft",
-    "insectworld",
-    "prehmuseum",
     "wheel",
     "ruler",
     "muyu",
@@ -183,7 +177,7 @@
 
   const NO_PURE = new Set([
     "acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "everything", "ffbridge", "ytdlp",
-    "setup", "about", "pdfcraft", "insectworld", "prehmuseum", "xorenc", "morse", "countdown",
+    "setup", "about", "xorenc", "morse", "countdown",
     "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "minigames", "ambient",
   ]);
 

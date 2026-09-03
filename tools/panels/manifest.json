@@ -153,11 +153,6 @@
       "bytes": 2798
     },
     {
-      "id": "insectworld",
-      "file": "./panels/insectworld.html",
-      "bytes": 1175
-    },
-    {
       "id": "json",
       "file": "./panels/json.html",
       "bytes": 1181
@@ -208,19 +203,9 @@
       "bytes": 1736
     },
     {
-      "id": "pdfcraft",
-      "file": "./panels/pdfcraft.html",
-      "bytes": 1317
-    },
-    {
       "id": "phlogo",
       "file": "./panels/phlogo.html",
       "bytes": 4028
-    },
-    {
-      "id": "prehmuseum",
-      "file": "./panels/prehmuseum.html",
-      "bytes": 1221
     },
     {
       "id": "qrcode",

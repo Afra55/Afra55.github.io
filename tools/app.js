@@ -1054,6 +1054,10 @@
     vbb: { tool: "vbb" },
     blackbox: { tool: "vbb" },
     gifbb: { tool: "gifbb" },
+    // 已并入外链导航，旧深链跳转过去
+    pdfcraft: { tool: "sitenav" },
+    insectworld: { tool: "sitenav" },
+    prehmuseum: { tool: "sitenav" },
   };
   const REG = window.DEVTOOLS_REGISTRY || {};
   const TOOL_GROUPS = REG.groups || [];
@@ -1518,6 +1522,11 @@
     window.clearTimeout(navFlyoutTimer);
     navFlyoutTimer = 0;
     allNavGroups().forEach((g) => {
+      if (keepPinned && g.classList.contains("is-pinned")) {
+        g.classList.remove("is-flyout-up", "is-flyout-left");
+        g.querySelector(".nav-group-title, .nav-fav-title")?.setAttribute("aria-expanded", "true");
+        return;
+      }
       g.classList.remove("is-flyout-open", "is-flyout-up", "is-flyout-left");
       if (!keepPinned) g.classList.remove("is-pinned");
       g.querySelector(".nav-group-title, .nav-fav-title")?.setAttribute("aria-expanded", "false");
@@ -2901,7 +2910,7 @@
       link.classList.toggle("is-active", on);
       link.setAttribute("aria-current", on ? "page" : "false");
     });
-    closeNavFlyouts();
+    closeNavFlyouts({ keepPinned: true });
     syncNavCompactUi();
 
     if (!skipRecent) pushRecent(currentTool);
