@@ -45,12 +45,12 @@
 - 改桥逻辑时同步 ZIP/启动脚本所需文件列表与 `BRIDGE_VERSION`（若有）
 - bat/sh 缓存与生成文件应落在 **脚本同目录**，不要写死用户主目录 C 盘路径
 
-## Git / 合入习惯（强制）
+## Git / 合入习惯（强制 · 默认行为）
 
-- **所有修改默认自动合入 `master`**：改完 → commit → `git push origin master`（或特性分支立刻 squash/merge 进 master）
-- **合入后必须删除本次特性分支**（远程 + 本地），避免 `cursor/*` 堆积冗余；仓库远程尽量只保留 `master`
-- 若环境强制先开 `cursor/<name>-xxxx` 分支 / PR：合入 master 后**同一回合内**删分支；不要留着「已合入的僵尸分支」
-- 已合入或过时、无用的分支：主动 `git push origin --delete …` 清理
+- **自动合入所有修改到 `master`**：功能做完、CI/本地校验通过后，**不要等用户再说「合入」**；直接在 `master` 上 commit → `git push origin master`（或特性分支立刻 merge/fast-forward 进 master 并 push）
+- 若 Cloud 环境强制先开 `cursor/<name>-xxxx` 分支 / PR：同一回合内必须 **merge 进 master + push + 删分支**；PR 仅作记录，不以「等用户点 Merge」为终点
+- **合入后必须删除本次特性分支**（远程 + 本地），避免 `cursor/*` 堆积；远程尽量只保留 `master`
+- 已合入或过时分支：主动 `git push origin --delete …` 清理
 - 提交信息用中文或英文均可，需说清「改了什么 / 为什么」
 - 功能合入后必须 bump `TOOLS_BUILD`，否则用户硬刷新也可能看到旧缓存
 - **不要做最后验收截图 / walkthrough 录屏**；用户自己看效果。除非用户当次明确要求演示证据
@@ -67,7 +67,7 @@
 
 - **JSON 修复**：`jsonrepair` @ `tools/vendor/jsonrepair.min.js`，面板「修复」按钮，lazy load
 - **Everything**：`tools/everything.js` + 桥内 `everything-proxy.js`；需同时开 ADB 桥与 Everything HTTP Server
-- **ADB 镜像**：scrcpy 相关；bat/工作目录与桥目录一致；端口占用提示、禁止第二座桥抢端口、握手/关键帧/触控多次迭代（桥版本随 `adb-bridge` 递增）；大包读取分块避免 OOM
+- **ADB 镜像（scrcpy-server v3.1，桥 ≥0.9.12）**：视频 + control；触控/按键/文本/滚轮/剪贴板/熄屏/通知栏；画质档位与 `show_touches`；可选 Opus 音频；双指 pinch；浏览器侧 canvas 录屏；`scrcpy-ctrl.js` 须进 ZIP；勿默认 `i-frame-interval=1`
 - **备忘录虚拟列表 / 无限滚动**：桌面滚动根是 `main.shell`（非 `window`）；见 `memoScrollRoot` / `memoListViewMetrics`（`tools/memo.js`）
 - **视频播放拖进度条**：串行等 `seeked` 再跟最新目标（`pumpScrubSeek` in `tools/vplay.js`），勿再改回密集 `fastSeek`
 - **仅显示分类**：子工具内联展开后滚轮交给 `.nav-bar-scroll`（`overflow: visible` + `bindNavGroupToolsWheelScroll`）；点工具后 `closeNavFlyouts({ keepPinned: true })` 保持展开
