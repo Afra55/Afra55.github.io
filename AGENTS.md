@@ -67,8 +67,15 @@
 
 - **JSON 修复**：`jsonrepair` @ `tools/vendor/jsonrepair.min.js`，面板「修复」按钮，lazy load
 - **Everything**：`tools/everything.js` + 桥内 `everything-proxy.js`；需同时开 ADB 桥与 Everything HTTP Server
-- **ADB 镜像**：scrcpy 相关；bat 工作目录与桥目录一致；注意大包读取分块避免 OOM
-- 大量历史 PR 分支名为 `cursor/*-ad72`，多为已合入或废弃的特性分支
+- **ADB 镜像**：scrcpy 相关；bat/工作目录与桥目录一致；端口占用提示、禁止第二座桥抢端口、握手/关键帧/触控多次迭代（桥版本随 `adb-bridge` 递增）；大包读取分块避免 OOM
+- **备忘录虚拟列表 / 无限滚动**：桌面滚动根是 `main.shell`（非 `window`）；见 `memoScrollRoot` / `memoListViewMetrics`（`tools/memo.js`）
+- **视频播放拖进度条**：串行等 `seeked` 再跟最新目标（`pumpScrubSeek` in `tools/vplay.js`），勿再改回密集 `fastSeek`
+- **仅显示分类**：子工具内联展开后滚轮交给 `.nav-bar-scroll`（`overflow: visible` + `bindNavGroupToolsWheelScroll`）；点工具后 `closeNavFlyouts({ keepPinned: true })` 保持展开
+- **站点外链**：PDFCraft / 昆虫世界 / 史前博物馆 **只在外链导航**（`sitenav`），侧栏「站点」分组不再单独占位；旧 `#pdfcraft` 等 hash 别名跳 `sitenav`
+- **在线钢琴**：`tools/piano.js` + `panels/piano.html`；88 键、黑键用 react-piano `pitchPositions`、电脑键盘约 2.5 八度
+- **最近使用 → 常用**：最近弹框/芯片支持右键与长按加常用（`navToolCtx` 挂到 `showModal` 的 dialog 内才能看见）
+- **工具区底边距**：桌面滚动在 `.shell`；勿把大块底 padding 放回会裁切的 `app-layout`
+- 大量历史 PR 分支名为 `cursor/*-ad72` / `cursor/*-15bf`，多为已合入或废弃；合入后应删除
 
 ## 明确不适合硬塞进本站的东西
 
