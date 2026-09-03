@@ -1528,6 +1528,7 @@
     const f = String(format || "png").toLowerCase();
     if (f === "jpeg" || f === "jpg") return "image/jpeg";
     if (f === "webp") return "image/webp";
+    if (f === "avif") return "image/avif";
     return "image/png";
   }
 
@@ -1535,6 +1536,7 @@
     const f = String(format || "png").toLowerCase();
     if (f === "jpeg" || f === "jpg") return "jpg";
     if (f === "webp") return "webp";
+    if (f === "avif") return "avif";
     return "png";
   }
 
