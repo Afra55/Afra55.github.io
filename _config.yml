@@ -31,6 +31,7 @@ giscus:
   emit_metadata: "0"
   input_position: bottom
   theme: preferred_color_scheme
+  theme_ver: "2026.09.03-theme1"
   lang: zh-CN
 #########################################
 
