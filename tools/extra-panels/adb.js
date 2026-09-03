@@ -3549,7 +3549,9 @@
           detail =
             "镜像握手失败（视频 socket 已关闭）。请确认：① 手机已解锁并保持亮屏 ② USB 调试已授权 ③ 本机桥为最新完整 ZIP（含 scrcpy-server v3.1）④ 无其它投屏/录屏占用编码器";
         }
-        if (!bridgeAtLeast("0.8.4")) {
+        if (/ECONNREFUSED|转发.*断开|forward 未在/i.test(detail) && !bridgeAtLeast("0.9.5")) {
+          detail += "。请重新下载完整桥 ZIP（≥0.9.5 修复握手前抢连导致转发失效）并只留一座桥窗口";
+        } else if (!bridgeAtLeast("0.8.4")) {
           detail += "。建议重新下载桥 ZIP 并重启本机桥（≥0.8.4 含镜像诊断）";
         }
         try {

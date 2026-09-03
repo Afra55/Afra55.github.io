@@ -187,7 +187,13 @@ function formatMirrorError(base, errTail, procExitCode) {
   } else if (base === "socket closed" || /socket closed/i.test(base)) {
     msg = `镜像握手失败（视频 socket 已关闭${procExitCode != null ? `，server 退出码 ${procExitCode}` : ""}）`;
   } else if (/ECONNREFUSED/i.test(base)) {
-    msg = `无法连接本地转发端口（adb forward 未在 127.0.0.1 监听）。请只留一座桥窗口后重试；Windows 上该端口可能被系统保留`;
+    if (/Device:/i.test(tail) || /INFO:.*Android/i.test(tail)) {
+      msg =
+        "本地 adb forward 在设备已启动后断开。常见原因：握手前抢连转发、多座桥抢端口。将自动重建转发；请只留一座桥窗口并保持手机解锁亮屏";
+    } else {
+      msg =
+        "无法连接本地转发端口（adb forward 未在 127.0.0.1 监听）。请只留一座桥窗口后重试；Windows 上该端口可能被系统保留";
+    }
   }
   if (tail) {
     const short = tail.length > 280 ? `${tail.slice(-280)}…` : tail;
@@ -227,27 +233,8 @@ async function findScrcpyTunnelPort() {
   return findEphemeralPort();
 }
 
-function waitForLocalListen(port, timeoutMs) {
-  return new Promise((resolve, reject) => {
-    const t0 = Date.now();
-    const attempt = () => {
-      const sock = net.connect({ host: "127.0.0.1", port });
-      sock.once("connect", () => {
-        sock.destroy();
-        resolve();
-      });
-      sock.once("error", (err) => {
-        try {
-          sock.destroy();
-        } catch {
-          /* ignore */
-        }
-        if (Date.now() - t0 >= timeoutMs) reject(err);
-        else setTimeout(attempt, 90);
-      });
-    };
-    attempt();
-  });
+function delay(ms) {
+  return new Promise((r) => setTimeout(r, ms));
 }
 
 async function listAdbForwards(deps, serial) {
@@ -259,6 +246,10 @@ async function listAdbForwards(deps, serial) {
   }
 }
 
+/**
+ * 只登记 adb forward，不要在设备端 abstract socket 就绪前去 TCP 探测。
+ * 部分机型（含 Android 14+）上，抢连会导致本机监听随后 ECONNREFUSED。
+ */
 async function setupAdbForward(deps, serial, scidHex) {
   let lastErr = null;
   for (let i = 0; i < 8; i += 1) {
@@ -272,7 +263,8 @@ async function setupAdbForward(deps, serial, scidHex) {
       if (!listed.includes(`tcp:${port}`)) {
         throw new Error(`adb forward 未登记 tcp:${port}`);
       }
-      await waitForLocalListen(port, 2500);
+      // 给 adb 一点时间真正 bind；不要 connect，否则可能弄丢转发
+      await delay(80);
       return port;
     } catch (err) {
       lastErr = err;
@@ -414,9 +406,9 @@ async function readMirrorHandshake(reader, serial) {
   return { deviceName, codec, codecId, width, height, version: SCRCPY_VERSION };
 }
 
-function connectLocal(port, timeoutMs = 8000) {
+function connectLocal(port, timeoutMs = 8000, host = "127.0.0.1") {
   return new Promise((resolve, reject) => {
-    const sock = net.connect({ host: "127.0.0.1", port });
+    const sock = net.connect({ host, port });
     const timer = setTimeout(() => {
       sock.destroy();
       reject(new Error("连接镜像端口超时"));
@@ -434,18 +426,33 @@ function connectLocal(port, timeoutMs = 8000) {
   });
 }
 
+async function connectLocalAny(port, timeoutMs = 8000) {
+  let last = null;
+  for (const host of ["127.0.0.1", "localhost"]) {
+    try {
+      return await connectLocal(port, timeoutMs, host);
+    } catch (err) {
+      last = err;
+    }
+  }
+  throw last || new Error("连接镜像端口失败");
+}
+
 /**
  * adb forward 的 TCP 连接会立刻成功，即使设备端尚未 listen。
  * 必须等到 dummy byte 0x00，才说明 scrcpy-server 真正 accept 了。
+ * 切勿在 server 启动前 connect：部分机型会弄丢本机监听。
  */
-async function connectUntilDummy(port, onProgress) {
+async function connectUntilDummy(port, onProgress, opts = {}) {
   let last = null;
-  const tries = 40;
+  const tries = opts.tries ?? 40;
+  const shouldAbort = opts.shouldAbort;
   for (let i = 0; i < tries; i++) {
+    if (shouldAbort?.()) break;
     let sock = null;
     let reader = null;
     try {
-      sock = await connectLocal(port, 1500);
+      sock = await connectLocalAny(port, 1500);
       reader = new SocketReader(sock);
       const dummy = await reader.read(1, { timeoutMs: 2200 });
       return { sock, reader, dummy };
@@ -461,10 +468,14 @@ async function connectUntilDummy(port, onProgress) {
       } catch {
         /* ignore */
       }
+      // 本机已无监听：继续空转无意义，交给上层重建 forward
+      if (/ECONNREFUSED/i.test(err?.message || String(err || ""))) {
+        throw err;
+      }
       if (i === 3 || i === 10 || i === 20) {
         onProgress?.(`等待设备端握手… (${i + 1}/${tries})`);
       }
-      await new Promise((r) => setTimeout(r, 180));
+      await delay(180);
     }
   }
   throw last || new Error("等待视频握手超时（设备端未发送 dummy byte）");
@@ -662,22 +673,21 @@ class MirrorSession {
     let shellCmd = this.buildServerShellCmd(appProcessRunner);
     onProgress?.("正在启动设备端 scrcpy-server…");
     this.attachServerProc(this.spawnServerProcess(adb, shellCmd));
-    await new Promise((r) => setTimeout(r, 200));
 
-    const handshakeOnce = async () => {
-      onProgress?.("等待视频握手（dummy byte）…");
-      const { sock, reader } = await connectUntilDummy(this.port, onProgress);
-      this.videoSock = sock;
-      this.reader = reader;
-      onProgress?.("已连接，读取分辨率…");
-      this.meta = await readMirrorHandshake(reader, this.serial);
-      this.pumping = true;
-      this.pumpFrames().catch((err) => this.stop(this.mirrorError(err.message || String(err))));
+    const waitServerBanner = async () => {
+      const t0 = Date.now();
+      while (Date.now() - t0 < 5000) {
+        if (this.procExitCode != null) {
+          throw new Error(this.mirrorError(`scrcpy-server 已退出${this.procExitCode != null ? ` (code ${this.procExitCode})` : ""}`));
+        }
+        if (/\[server\]\s*INFO:\s*Device:/i.test(this.errTail) || /INFO:\s*Device:/i.test(this.errTail)) {
+          return;
+        }
+        await delay(80);
+      }
     };
 
-    try {
-      await handshakeOnce();
-    } catch (err) {
+    const cleanupHandshakeSockets = () => {
       try {
         this.reader?.destroy();
       } catch {
@@ -690,8 +700,46 @@ class MirrorSession {
         /* ignore */
       }
       this.videoSock = null;
+    };
+
+    const handshakeOnce = async () => {
+      await waitServerBanner().catch((err) => {
+        // banner 超时仍继续握手；已退出则抛出
+        if (/已退出/i.test(err.message || "")) throw err;
+      });
+      onProgress?.("等待视频握手（dummy byte）…");
+      const { sock, reader } = await connectUntilDummy(this.port, onProgress, {
+        shouldAbort: () => this.closed || this.procExitCode != null,
+      });
+      this.videoSock = sock;
+      this.reader = reader;
+      onProgress?.("已连接，读取分辨率…");
+      this.meta = await readMirrorHandshake(reader, this.serial);
+      this.pumping = true;
+      this.pumpFrames().catch((err) => this.stop(this.mirrorError(err.message || String(err))));
+    };
+
+    try {
+      await handshakeOnce();
+    } catch (err) {
+      cleanupHandshakeSockets();
+      const refused = /ECONNREFUSED/i.test(err.message || String(err || ""));
+      if (refused && !this.closed) {
+        onProgress?.("转发已失效，正在重建 adb forward…");
+        try {
+          if (this.port) {
+            await this.deps.adbSerial(this.serial, ["forward", "--remove", `tcp:${this.port}`], { timeout: 8000 }).catch(() => {});
+          }
+          this.port = await setupAdbForward(this.deps, this.serial, this.scidHex);
+          await handshakeOnce();
+          return;
+        } catch (err2) {
+          cleanupHandshakeSockets();
+          err = err2;
+        }
+      }
       const failedWith64 = appProcessRunner === "app_process64";
-      if (failedWith64 && ( /socket closed|dummy byte|握手/i.test(err.message || "") || this.procExitCode != null)) {
+      if (failedWith64 && (/socket closed|dummy byte|握手|ECONNREFUSED/i.test(err.message || "") || this.procExitCode != null)) {
         try {
           this.proc?.kill("SIGTERM");
         } catch {
@@ -701,8 +749,10 @@ class MirrorSession {
         shellCmd = this.buildServerShellCmd("app_process");
         onProgress?.("改用 app_process 重试…");
         this.attachServerProc(this.spawnServerProcess(adb, shellCmd));
-        await new Promise((r) => setTimeout(r, 200));
         try {
+          if (refused || /ECONNREFUSED/i.test(err.message || "")) {
+            this.port = await setupAdbForward(this.deps, this.serial, this.scidHex);
+          }
           await handshakeOnce();
           return;
         } catch {

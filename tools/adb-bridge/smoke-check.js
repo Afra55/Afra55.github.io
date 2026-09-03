@@ -46,6 +46,20 @@ function req(method, urlPath, { headers = {}, body } = {}) {
 }
 
 async function main() {
+  const mirrorSrc = fs.readFileSync(path.join(__dirname, "scrcpy-mirror.js"), "utf8");
+  if (/waitForLocalListen/.test(mirrorSrc)) {
+    throw new Error("scrcpy-mirror.js must not probe-connect adb forward before device listen");
+  }
+  if (!/转发已失效，正在重建 adb forward/.test(mirrorSrc)) {
+    throw new Error("scrcpy-mirror.js should rebuild forward on ECONNREFUSED");
+  }
+  if (!/INFO:\\s\*Device:/.test(mirrorSrc)) {
+    throw new Error("scrcpy-mirror.js should wait for Device banner before handshake connect");
+  }
+  if (!EXPECTED_BRIDGE_VERSION) {
+    throw new Error("BRIDGE_VERSION missing in server.js");
+  }
+
   const child = spawn(process.execPath, [path.join(__dirname, "server.js")], {
     env: {
       ...process.env,
