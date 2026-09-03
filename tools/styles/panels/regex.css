@@ -54,6 +54,32 @@
   margin-top: 1.25rem;
 }
 
+.re-vis-mode {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0.35rem 0 0.55rem;
+}
+
+.re-vis-mode-btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.28rem 0.75rem;
+  font: inherit;
+  font-size: 0.84rem;
+  cursor: pointer;
+}
+
+.re-vis-mode-btn.is-active {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  color: color-mix(in srgb, var(--accent) 70%, var(--ink));
+  font-weight: 600;
+}
+
 .re-vis-wrap {
   margin-top: 0.45rem;
   padding: 0.75rem;
@@ -63,26 +89,19 @@
   overflow: auto;
 }
 
-.re-vis-paper {
-  min-height: 120px;
+.re-vis-edit-wrap {
+  padding: 0.45rem;
+  overflow: hidden;
+}
+
+.re-vis-frame {
+  display: block;
   width: 100%;
-}
-
-.re-vis-paper svg {
-  max-width: none;
-}
-
-.re-vis-head {
-  margin-top: 1.25rem;
-}
-
-.re-vis-wrap {
-  margin-top: 0.45rem;
-  padding: 0.75rem;
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--panel) 70%, transparent);
-  overflow: auto;
+  min-height: min(72vh, 720px);
+  height: 72vh;
+  border: 0;
+  border-radius: 10px;
+  background: #fff;
 }
 
 .re-vis-paper {

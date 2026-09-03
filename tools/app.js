@@ -660,10 +660,21 @@
   const reVisPaper = $("#re-vis-paper");
   const reVisError = $("#re-vis-error");
   const reVisHint = $("#re-vis-hint");
+  const reVisFrame = $("#re-vis-frame");
+  const reVisOpen = $("#re-vis-open");
+  const reVisModeHint = $("#re-vis-mode-hint");
+  const reVisEditWrap = $("#re-vis-edit-wrap");
+  const reVisRailWrap = $("#re-vis-wrap");
+  const reVisToolbarEdit = $("#re-vis-toolbar-edit");
+  const reVisToolbarRail = $("#re-vis-toolbar-rail");
   const flagChecks = $$("[data-flag]");
   let flagsSyncing = false;
   let reVisTimer = 0;
+  let reVisFrameTimer = 0;
   let regulexApi = null;
+  let reVisMode = "edit"; // edit | rail
+  let reVisFrameLoaded = false;
+  let reVisLastSrc = "";
 
   function uniqueFlags(raw) {
     const allowed = new Set(["g", "i", "m", "s", "u", "y", "d"]);
@@ -729,8 +740,58 @@
     reVisError.textContent = msg;
   }
 
+  function regexVisUrl(pattern, flags) {
+    const re = String(pattern || "");
+    const f = uniqueFlags(flags);
+    const qs = new URLSearchParams();
+    if (re) qs.set("r", re);
+    // Regex Vis 以 AST 编辑为主；flags 一并带上方便对照
+    if (f) qs.set("f", f);
+    const q = qs.toString();
+    return q ? `https://regex-vis.com/?${q}` : "https://regex-vis.com/";
+  }
+
+  function syncRegexVisFrame({ force = false } = {}) {
+    if (!reVisFrame || reVisMode !== "edit") return;
+    const pattern = rePattern.value;
+    const flags = uniqueFlags(reFlags.value);
+    const src = regexVisUrl(pattern, flags);
+    if (reVisOpen) reVisOpen.href = src;
+    if (!force && src === reVisLastSrc && reVisFrameLoaded) return;
+    reVisLastSrc = src;
+    reVisFrameLoaded = true;
+    reVisFrame.src = src;
+  }
+
+  function scheduleRegexVisFrame() {
+    if (reVisMode !== "edit") return;
+    clearTimeout(reVisFrameTimer);
+    reVisFrameTimer = setTimeout(() => syncRegexVisFrame(), 450);
+  }
+
+  function setRegexVisMode(mode) {
+    reVisMode = mode === "rail" ? "rail" : "edit";
+    $$("[data-re-vis-mode]").forEach((btn) => {
+      const on = btn.dataset.reVisMode === reVisMode;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    if (reVisEditWrap) reVisEditWrap.hidden = reVisMode !== "edit";
+    if (reVisRailWrap) reVisRailWrap.hidden = reVisMode !== "rail";
+    if (reVisToolbarEdit) reVisToolbarEdit.hidden = reVisMode !== "edit";
+    if (reVisToolbarRail) reVisToolbarRail.hidden = reVisMode !== "rail";
+    if (reVisModeHint) {
+      reVisModeHint.textContent =
+        reVisMode === "edit"
+          ? "点选节点可编辑正则（嵌入 Regex Vis）"
+          : "本地 Regulex 铁路图（只读，不能点选编辑）";
+    }
+    if (reVisMode === "edit") syncRegexVisFrame({ force: !reVisFrameLoaded });
+    else drawRegexVis();
+  }
+
   function drawRegexVis() {
-    if (!reVisPaper) return;
+    if (!reVisPaper || reVisMode !== "rail") return;
     const pattern = rePattern.value;
     const flags = uniqueFlags(reFlags.value);
     if (!pattern) {
@@ -757,6 +818,10 @@
   }
 
   function scheduleVis() {
+    if (reVisMode === "edit") {
+      scheduleRegexVisFrame();
+      return;
+    }
     clearTimeout(reVisTimer);
     reVisTimer = setTimeout(drawRegexVis, 220);
   }
@@ -864,8 +929,13 @@
   rePattern.addEventListener("input", runRegex);
   reText.addEventListener("input", runRegex);
   $("#re-vis-refresh")?.addEventListener("click", drawRegexVis);
+  $("#re-vis-sync")?.addEventListener("click", () => syncRegexVisFrame({ force: true }));
+  $$("[data-re-vis-mode]").forEach((btn) => {
+    btn.addEventListener("click", () => setRegexVisMode(btn.dataset.reVisMode || "edit"));
+  });
 
   syncChecksFromFlags();
+  setRegexVisMode("edit");
   runRegex();
   }
 

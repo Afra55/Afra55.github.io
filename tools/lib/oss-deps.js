@@ -90,8 +90,15 @@
             version: "0.0.5",
             license: "MIT",
             repo: "https://github.com/CJex/regulex",
-            usedIn: "正则结构图（铁路图）",
+            usedIn: "正则结构图 · 铁路图只读预览",
             path: "tools/vendor/regulex.js",
+          },
+          {
+            name: "Regex Vis",
+            license: "MIT",
+            repo: "https://github.com/Bowen7/regex-vis",
+            usedIn: "正则结构可视化编辑（页面内嵌原站，可点选）",
+            path: "https://regex-vis.com/",
           },
           {
             name: "gifsicle-wasm-browser",

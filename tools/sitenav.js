@@ -42,7 +42,7 @@
     {
       id: "regexvis",
       title: "Regex Vis",
-      desc: "正则可视化编辑器原站；本站正则工具已内嵌中文铁路图。",
+      desc: "正则可视化编辑器原站；本站「正则」面板默认可点选编辑（嵌入）。",
       url: "https://regex-vis.com/",
       tags: ["正则"],
       tool: "regex",

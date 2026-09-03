@@ -1,7 +1,7 @@
 <section id="regex" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>正则测试</h1>
-        <p>实时匹配、高亮与捕获分组，并提供中文铁路图结构可视化。</p>
+        <p>实时匹配、高亮与捕获分组；下方可选「可视化编辑」（可点选改图）或本地「铁路图」只读预览。</p>
       </div>
       <div class="panel-body">
         <div class="field-block">
@@ -40,16 +40,28 @@ hello@world.org</textarea>
         <div class="match-list" id="re-matches"></div>
 
         <div class="label-row re-vis-head">
-          <h2 class="subhead">结构图</h2>
-          <span class="hint tight">铁路图可视化（中文界面 · 引擎 Regulex，参考 Regex Vis）</span>
+          <h2 class="subhead">结构可视化</h2>
+          <span class="hint tight" id="re-vis-mode-hint">点选节点可编辑正则（Regex Vis）</span>
         </div>
-        <div class="re-vis-toolbar btn-row">
-          <button type="button" class="secondary-btn" id="re-vis-refresh">刷新结构图</button>
-          <a class="ghost-btn" href="https://regex-vis.com/" target="_blank" rel="noopener noreferrer">打开 Regex Vis 原站</a>
+        <div class="re-vis-mode" role="tablist" aria-label="可视化模式">
+          <button type="button" class="re-vis-mode-btn is-active" role="tab" aria-selected="true" data-re-vis-mode="edit" id="re-vis-mode-edit">可视化编辑</button>
+          <button type="button" class="re-vis-mode-btn" role="tab" aria-selected="false" data-re-vis-mode="rail" id="re-vis-mode-rail">铁路图（只读）</button>
         </div>
-        <div id="re-vis-wrap" class="re-vis-wrap" aria-live="polite">
+        <div class="re-vis-toolbar btn-row" id="re-vis-toolbar-edit">
+          <button type="button" class="secondary-btn" id="re-vis-sync">用上方正则刷新编辑器</button>
+          <a class="ghost-btn" id="re-vis-open" href="https://regex-vis.com/" target="_blank" rel="noopener noreferrer">新标签打开 Regex Vis</a>
+        </div>
+        <div class="re-vis-toolbar btn-row" id="re-vis-toolbar-rail" hidden>
+          <button type="button" class="secondary-btn" id="re-vis-refresh">刷新铁路图</button>
+          <a class="ghost-btn" href="https://jex.im/regulex/" target="_blank" rel="noopener noreferrer">打开 Regulex 原站</a>
+        </div>
+        <div id="re-vis-edit-wrap" class="re-vis-wrap re-vis-edit-wrap" aria-live="polite">
+          <iframe id="re-vis-frame" class="re-vis-frame" title="Regex Vis 可视化编辑器" loading="lazy" referrerpolicy="no-referrer-when-downgrade"></iframe>
+          <p class="hint tight" id="re-vis-edit-hint">在图中点选节点即可插入、分组、加量词等；改完可把结果抄回上方输入框，或继续在本页测匹配。</p>
+        </div>
+        <div id="re-vis-wrap" class="re-vis-wrap" hidden aria-live="polite">
           <div id="re-vis-paper" class="re-vis-paper"></div>
-          <p class="hint tight" id="re-vis-hint">输入正则后自动绘制；复杂表达式可点「刷新结构图」。</p>
+          <p class="hint tight" id="re-vis-hint">本地 Regulex 铁路图（只读预览，不支持点选编辑）。</p>
           <p class="error" id="re-vis-error" hidden></p>
         </div>
 
