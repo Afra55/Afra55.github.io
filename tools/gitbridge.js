@@ -747,7 +747,7 @@
             ? "revert-abort"
             : "merge-abort";
     if (!window.confirm("确定放弃这次合并/改写？工作区会回到操作前。")) return;
-    await runOp(op, {});
+    await runOp(op, {}, { skipConfirm: true });
     await refreshChanges();
   }
 
