@@ -259,6 +259,47 @@
     /* ignore */
   }
 
+  function syncInstallDirInputsFromStore() {
+    let stored = "";
+    try {
+      stored = String(localStorage.getItem(INSTALL_DIR_KEY) || "").trim();
+    } catch (_) {
+      /* ignore */
+    }
+    if (!stored) return "";
+    applyInstallDirToInputs(stored);
+    return stored;
+  }
+
+  // 面板 HTML 可能先于脚本挂载：新出现的桥目录输入框立刻回填共用值
+  try {
+    let moTimer = 0;
+    const mo = new MutationObserver(() => {
+      window.clearTimeout(moTimer);
+      moTimer = window.setTimeout(() => syncInstallDirInputsFromStore(), 40);
+    });
+    const startMo = () => {
+      try {
+        mo.observe(document.documentElement || document.body, {
+          childList: true,
+          subtree: true,
+        });
+      } catch (_) {
+        /* ignore */
+      }
+    };
+    if (document.documentElement) startMo();
+    else window.addEventListener("DOMContentLoaded", startMo, { once: true });
+    window.addEventListener("devtools:panel-mounted", () => {
+      syncInstallDirInputsFromStore();
+    });
+    window.addEventListener("devtools:route", () => {
+      syncInstallDirInputsFromStore();
+    });
+  } catch (_) {
+    /* ignore */
+  }
+
   function readAutoStart(kind = "unified") {
     const key = kindConfig(kind).autoStartKey;
     try {
@@ -287,6 +328,17 @@
       (health?.service === "devtools-git-bridge"
         ? "git"
         : "unified");
+    // 用户已填写/记住的目录优先，避免连接时冲掉；只在空时用桥回报路径回填
+    let existing = "";
+    try {
+      existing = String(localStorage.getItem(kindConfig(resolvedKind).installDirKey) || "").trim();
+    } catch (_) {
+      /* ignore */
+    }
+    if (existing) {
+      broadcastInstallDir(existing);
+      return existing;
+    }
     writeInstallDir(dir, resolvedKind);
     return dir;
   }
@@ -512,5 +564,6 @@
     bindBridgeLaunchUI,
     pathsFromDataTransfer,
     kindConfig,
+    syncInstallDirInputsFromStore,
   };
 })();
