@@ -1,0 +1,79 @@
+<section id="passvault" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>本地密码库</h1>
+        <p>密文只存在本浏览器（Web Crypto AES-GCM）。主密码解锁后可增删改查；可导出加密备份。不上传服务器。</p>
+      </div>
+      <div class="panel-body">
+        <div id="pv-locked" class="pv-gate panel-card">
+          <p class="hint tight" id="pv-gate-hint">设置或输入主密码以打开本机密码库。</p>
+          <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.4rem">
+            <label for="pv-master">主密码</label>
+            <input id="pv-master" type="password" autocomplete="current-password" style="flex:1;min-width:12rem" />
+          </div>
+          <div class="field-row" id="pv-master2-row" style="flex-wrap:wrap;align-items:center;gap:0.4rem;margin-top:0.35rem" hidden>
+            <label for="pv-master2">再输一次</label>
+            <input id="pv-master2" type="password" autocomplete="new-password" style="flex:1;min-width:12rem" />
+          </div>
+          <div class="btn-row tool-actions" style="margin-top:0.55rem;flex-wrap:wrap">
+            <button type="button" class="primary-btn" id="pv-unlock">打开密码库</button>
+            <button type="button" class="ghost-btn" id="pv-import">导入加密备份</button>
+            <input id="pv-import-file" type="file" accept="application/json,.json" hidden />
+          </div>
+          <p class="hint tight" style="margin-top:0.45rem">忘记主密码 = 无法解密。请自行牢记，并定期导出备份到安全位置。</p>
+        </div>
+
+        <div id="pv-open" hidden>
+          <div class="label-row">
+            <h2 class="subhead">条目 <span class="hint tight" id="pv-count"></span></h2>
+            <div class="btn-row tool-actions" style="flex-wrap:wrap;gap:0.3rem">
+              <button type="button" class="secondary-btn" id="pv-add">新增</button>
+              <button type="button" class="ghost-btn" id="pv-export">导出加密备份</button>
+              <button type="button" class="ghost-btn" id="pv-lock">立即上锁</button>
+            </div>
+          </div>
+          <p class="hint tight" id="pv-session-meta">解锁后约 5 分钟无操作会自动上锁。</p>
+          <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
+            <label for="pv-filter">搜索</label>
+            <input id="pv-filter" type="search" placeholder="标题 / 账号 / 网址" spellcheck="false" autocomplete="off" style="flex:1;min-width:10rem" />
+          </div>
+          <div id="pv-list" class="pv-list" aria-live="polite"></div>
+
+          <div id="pv-editor" class="pv-editor panel-card" hidden>
+            <div class="label-row">
+              <h2 class="subhead" id="pv-editor-title">编辑条目</h2>
+              <button type="button" class="ghost-btn" id="pv-editor-close">关闭</button>
+            </div>
+            <input id="pv-edit-id" type="hidden" />
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
+              <label for="pv-title">标题</label>
+              <input id="pv-title" type="text" placeholder="例如 GitHub" spellcheck="false" style="flex:1;min-width:10rem" />
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
+              <label for="pv-user">账号</label>
+              <input id="pv-user" type="text" placeholder="用户名 / 邮箱" spellcheck="false" autocomplete="off" style="flex:1;min-width:10rem" />
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
+              <label for="pv-pass">密码</label>
+              <input id="pv-pass" type="password" placeholder="密码" spellcheck="false" autocomplete="new-password" style="flex:1;min-width:8rem" />
+              <button type="button" class="ghost-btn" id="pv-pass-show">显示</button>
+              <button type="button" class="ghost-btn" id="pv-pass-gen">生成</button>
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
+              <label for="pv-url">网址</label>
+              <input id="pv-url" type="url" placeholder="https://" spellcheck="false" style="flex:1;min-width:10rem" />
+            </div>
+            <div class="field-row" style="margin-top:0.35rem">
+              <label for="pv-notes">备注</label>
+            </div>
+            <textarea id="pv-notes" class="area" rows="3" spellcheck="false" placeholder="可选"></textarea>
+            <div class="btn-row tool-actions" style="margin-top:0.45rem;flex-wrap:wrap">
+              <button type="button" class="primary-btn" id="pv-save">保存条目</button>
+              <button type="button" class="ghost-btn is-warn-text" id="pv-delete" hidden>删除</button>
+            </div>
+          </div>
+        </div>
+
+        <p class="error" id="pv-error" hidden></p>
+        <p class="hint tight" style="margin-top:0.65rem">说明：这是浏览器本地便利库，不是银行级硬件金库。换设备/清站点数据会丢失，请导出备份。敏感公司密钥仍建议专用方案。</p>
+      </div>
+    </section>

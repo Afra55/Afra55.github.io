@@ -274,6 +274,184 @@
     return "一切就绪。去编辑器改文件，改完回来点「刷新状态」。";
   }
 
+  function dashActionFor(data, dirtyCount) {
+    const conflicts = Array.isArray(data?.conflicts) ? data.conflicts : [];
+    const behind = Number(data?.behind) || 0;
+    const ahead = Number(data?.ahead) || 0;
+    const dirty = Number(dirtyCount) || 0;
+    if (data?.inProgress || conflicts.length) {
+      return {
+        id: "conflict",
+        label: "去处理冲突",
+        hint: "冲突不解决，更新/上传都会卡住。",
+        run: () => {
+          const box = $("#git-conflict-box");
+          try {
+            box?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          } catch (_) {}
+        },
+      };
+    }
+    if (behind > 0) {
+      return {
+        id: "pull",
+        label: `更新（网上 ${behind}）`,
+        hint: "先把网上的拉下来，再保存自己的改动更安全。",
+        run: () => easyPull().catch((e) => showError(e.message)),
+      };
+    }
+    if (dirty > 0) {
+      return {
+        id: "commit",
+        label: `保存（${dirty} 个文件）`,
+        hint: "勾选文件、写说明，然后点保存；或直接点这个主按钮（用已勾选+说明框）。",
+        run: () => {
+          try {
+            $("#git-flow-2")?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          } catch (_) {}
+          $("#git-easy-msg")?.focus();
+        },
+      };
+    }
+    if (ahead > 0) {
+      return {
+        id: "push",
+        label: data?.gerritPushConfigured ? `上传送审（${ahead}）` : `上传（${ahead}）`,
+        hint: data?.gerritPushConfigured
+          ? "已配 Gerrit：上传会走 refs/for 评审。"
+          : "把本机多出来的历史发给网上。",
+        run: () => easyPush().catch((e) => showError(e.message)),
+      };
+    }
+    return {
+      id: "idle",
+      label: "去改文件 · 回来刷新",
+      hint: "工作区干净。改完代码点「刷新状态」，看板会告诉你下一步。",
+      run: () => refreshChanges().catch((e) => showError(e.message)),
+    };
+  }
+
+  function renderDashBoard(data, dirtyCount) {
+    const cardsEl = $("#git-dash-cards");
+    const goBtn = $("#git-dash-go");
+    const hint = $("#git-dash-hint");
+    const gerritLane = $("#git-gerrit-lane");
+    const gerritText = $("#git-gerrit-lane-text");
+    if (!cardsEl || !goBtn) return;
+
+    const conflicts = Array.isArray(data?.conflicts) ? data.conflicts : [];
+    const behind = Number(data?.behind) || 0;
+    const ahead = Number(data?.ahead) || 0;
+    const dirty = Number(dirtyCount) || 0;
+    const cards = [
+      {
+        k: behind > 0 ? "is-hot" : "is-ok",
+        t: "可更新",
+        v: String(behind),
+        s: behind > 0 ? "网上有新的" : "已跟上",
+      },
+      {
+        k: dirty > 0 ? "is-hot" : "is-ok",
+        t: "未保存",
+        v: String(dirty),
+        s: dirty > 0 ? "本机改动" : "无改动",
+      },
+      {
+        k: ahead > 0 ? "is-hot" : "is-ok",
+        t: "可上传",
+        v: String(ahead),
+        s: ahead > 0 ? "别人还看不见" : "已对齐",
+      },
+      {
+        k: conflicts.length || data?.inProgress ? "is-warn" : "is-ok",
+        t: "冲突",
+        v: String(conflicts.length),
+        s: data?.inProgress ? `进行中·${data.inProgress}` : conflicts.length ? "需处理" : "无",
+      },
+      {
+        k: data?.gerritPushConfigured ? "is-gerrit" : "",
+        t: "Gerrit",
+        v: data?.gerritPushConfigured ? "已配" : "否",
+        s: data?.gerritPushConfigured ? "送审模式" : "普通推送",
+      },
+    ];
+    cardsEl.innerHTML = cards
+      .map(
+        (c) => `<div class="git-dash-card ${c.k}">
+        <span class="git-dash-card-t">${escapeHtml(c.t)}</span>
+        <strong class="git-dash-card-v">${escapeHtml(c.v)}</strong>
+        <span class="git-dash-card-s">${escapeHtml(c.s)}</span>
+      </div>`
+      )
+      .join("");
+
+    const action = dashActionFor(data, dirty);
+    goBtn.textContent = action.label;
+    goBtn.dataset.dashAction = action.id;
+    goBtn.classList.toggle("is-idle-cta", action.id === "idle");
+    goBtn.classList.toggle("is-warn-cta", action.id === "conflict");
+    goBtn.onclick = () => action.run();
+    if (hint) hint.textContent = action.hint;
+
+    if (gerritLane && gerritText) {
+      if (data?.gerritPushConfigured) {
+        gerritLane.hidden = false;
+        const fixupReady = Boolean(selectedSha);
+        const bits = [];
+        bits.push("推送已指向 refs/for（评审），点「上传」= 送审而不是直推分支。");
+        if (ahead > 0) bits.push(`本机多 ${ahead} 笔，适合送审或用「把改动补进选中那一笔」(fixup)。`);
+        bits.push(
+          fixupReady
+            ? `历史里已选中 ${String(selectedSha).slice(0, 7)}，可做 fixup。`
+            : "若要改已有 Change：先在历史图点中目标提交，再用少用功能里的 fixup。"
+        );
+        gerritText.textContent = bits.join(" ");
+      } else {
+        gerritLane.hidden = true;
+        gerritText.textContent = "";
+      }
+    }
+  }
+
+  function applyMsgTemplate(tpl) {
+    const input = $("#git-easy-msg");
+    if (!input) return;
+    const cur = String(input.value || "");
+    const prefix = String(tpl || "");
+    if (!prefix) return;
+    if (cur.startsWith(prefix)) {
+      input.focus();
+      return;
+    }
+    // 若已有其它 conventional 前缀，替换之
+    const stripped = cur.replace(/^(fix|feat|docs|chore|revert):\s*/i, "").replace(/^【[^】]*】\s*/, "");
+    input.value = prefix + stripped;
+    input.focus();
+    try {
+      input.setSelectionRange(input.value.length, input.value.length);
+    } catch (_) {}
+  }
+
+  function showConflictRecap(text) {
+    const el = $("#git-conflict-recap");
+    if (!el) return;
+    const msg = String(text || "").trim();
+    if (!msg) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    el.textContent = msg;
+    window.clearTimeout(showConflictRecap._t);
+    showConflictRecap._t = window.setTimeout(() => {
+      if (el.textContent === msg) {
+        el.hidden = true;
+        el.textContent = "";
+      }
+    }, 20000);
+  }
+
   function showComfortSuccess(msg) {
     const el = $("#git-easy-success");
     if (!el) return;
@@ -971,6 +1149,10 @@
         cmdsPre.textContent = cmds.slice(0, 8).join("\n");
         if (cmdsBox) cmdsBox.hidden = false;
       }
+      if (lastStatus) {
+        const dirty = lastStatus.dirtyCount != null ? lastStatus.dirtyCount : (lastStatus.changes || []).length;
+        renderDashBoard(lastStatus, dirty);
+      }
     } catch (e) {
       lastExplain = null;
       explainEl.innerHTML = `<p class="error">${escapeHtml(e.message)}</p>`;
@@ -1601,11 +1783,13 @@
         nowEl.classList.toggle("git-easy-now-idle", !data.inProgress && !conflicts.length && !data.behind && !rows.length && !data.ahead);
       }
 
+      const dirtyForDash = data.dirtyCount != null ? data.dirtyCount : rows.length;
       updateFlowHighlight({
         ...data,
-        dirtyCount: data.dirtyCount != null ? data.dirtyCount : rows.length,
+        dirtyCount: dirtyForDash,
         conflicts,
       });
+      renderDashBoard(data, dirtyForDash);
 
       const pills = $("#git-status-pills");
       if (pills) {
@@ -2078,6 +2262,15 @@
 
   async function conflictContinue() {
     const kind = lastStatus?.inProgress || "merge";
+    const nConflicts = Array.isArray(lastStatus?.conflicts) ? lastStatus.conflicts.length : 0;
+    const kindLabel =
+      kind === "rebase"
+        ? "改写顺序（rebase）"
+        : kind === "cherry-pick"
+          ? "拣选（cherry-pick）"
+          : kind === "revert"
+            ? "反做（revert）"
+            : "合并（merge）";
     const op =
       kind === "rebase"
         ? "rebase-continue"
@@ -2088,6 +2281,16 @@
             : "merge-continue";
     await runOp(op, {}, { skipConfirm: true });
     await refreshChanges();
+    const still = Boolean(lastStatus?.inProgress) || (lastStatus?.conflicts || []).length;
+    if (still) {
+      showConflictRecap(`白话复盘：${kindLabel}还没结束——还有冲突或步骤未完成，请继续处理上方冲突区。`);
+    } else {
+      showConflictRecap(
+        `白话复盘：刚才的${kindLabel}已经走完。你选好的内容已合进当前线；若还要让别人看见，看看板「可上传」再点上传。` +
+          (nConflicts ? `（此前约处理过 ${nConflicts} 个冲突文件）` : "")
+      );
+      showComfortSuccess("冲突流程结束，可以继续交码。");
+    }
   }
 
   async function conflictAbort() {
@@ -3288,6 +3491,11 @@
   $("#git-init")?.addEventListener("click", () => initRepoHere().catch((e) => showError(e.message)));
   $("#git-open-history")?.addEventListener("click", () => openHistoryPanel());
   $("#git-ops-filter")?.addEventListener("input", () => renderOpsCatalog());
+  $("#git-msg-templates")?.addEventListener("click", (ev) => {
+    const btn = ev.target.closest?.("[data-msg-tpl]");
+    if (!btn) return;
+    applyMsgTemplate(btn.getAttribute("data-msg-tpl"));
+  });
   $("#git-clone-go")?.addEventListener("click", () => easyClone().catch((e) => showError(e.message)));
   $("#git-clone-url")?.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter") {

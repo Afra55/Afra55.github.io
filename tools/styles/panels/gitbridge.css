@@ -1355,6 +1355,195 @@
   opacity: 0.88;
 }
 
+#gitbridge .git-beginner {
+  position: relative;
+  overflow: hidden;
+}
+
+#gitbridge .git-beginner::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--accent, #2ec4b6) 15%, transparent),
+    color-mix(in srgb, var(--accent, #2ec4b6) 80%, transparent),
+    color-mix(in srgb, #5b8cff 70%, transparent)
+  );
+  pointer-events: none;
+}
+
+#gitbridge .git-dash {
+  margin: 0.55rem 0 0.75rem;
+  padding: 0.65rem 0.7rem;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent, #2ec4b6) 28%, var(--line, #2a2f3a));
+  background:
+    radial-gradient(120% 80% at 0% 0%, color-mix(in srgb, var(--accent, #2ec4b6) 12%, transparent), transparent 55%),
+    color-mix(in srgb, var(--panel, #12141a) 70%, transparent);
+}
+
+#gitbridge .git-dash-cards {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0.4rem;
+}
+
+@media (max-width: 900px) {
+  #gitbridge .git-dash-cards {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  #gitbridge .git-dash-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+#gitbridge .git-dash-card {
+  padding: 0.45rem 0.5rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--line, #2a2f3a) 80%, transparent);
+  background: color-mix(in srgb, var(--panel, #12141a) 55%, transparent);
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+#gitbridge .git-dash-card.is-hot {
+  border-color: color-mix(in srgb, var(--accent, #2ec4b6) 55%, transparent);
+  background: color-mix(in srgb, var(--accent, #2ec4b6) 14%, transparent);
+  animation: git-dash-breathe 2.4s ease-in-out infinite;
+}
+
+#gitbridge .git-dash-card.is-warn {
+  border-color: color-mix(in srgb, #f5a524 55%, transparent);
+  background: color-mix(in srgb, #f5a524 14%, transparent);
+}
+
+#gitbridge .git-dash-card.is-gerrit {
+  border-color: color-mix(in srgb, #e6a23c 50%, transparent);
+}
+
+#gitbridge .git-dash-card-t {
+  font-size: 0.72rem;
+  opacity: 0.72;
+}
+
+#gitbridge .git-dash-card-v {
+  font-size: 1.15rem;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+}
+
+#gitbridge .git-dash-card-s {
+  font-size: 0.7rem;
+  opacity: 0.68;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#gitbridge .git-dash-cta {
+  margin-top: 0.55rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.55rem 0.85rem;
+}
+
+#gitbridge .git-dash-go {
+  min-width: 11rem;
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent, #2ec4b6) 0%, transparent);
+  animation: git-dash-cta-pulse 2s ease-in-out infinite;
+}
+
+#gitbridge .git-dash-go.is-idle-cta {
+  animation: none;
+  opacity: 0.92;
+}
+
+#gitbridge .git-dash-go.is-warn-cta {
+  background: color-mix(in srgb, #f5a524 75%, var(--accent, #2ec4b6));
+}
+
+#gitbridge .git-gerrit-lane {
+  margin-top: 0.55rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 10px;
+  border: 1px dashed color-mix(in srgb, #e6a23c 55%, transparent);
+  background: color-mix(in srgb, #e6a23c 10%, transparent);
+}
+
+#gitbridge .git-gerrit-lane-title {
+  margin: 0 0 0.2rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+#gitbridge .git-msg-templates {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.35rem;
+}
+
+#gitbridge .git-msg-chip {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, var(--line, #2a2f3a) 85%, transparent);
+  background: color-mix(in srgb, var(--panel, #12141a) 65%, transparent);
+  color: inherit;
+  border-radius: 999px;
+  padding: 0.18rem 0.55rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+#gitbridge .git-msg-chip:hover {
+  border-color: color-mix(in srgb, var(--accent, #2ec4b6) 50%, transparent);
+}
+
+#gitbridge .git-conflict-recap {
+  margin: 0.35rem 0;
+  padding: 0.5rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, #5b8cff 40%, transparent);
+  background: color-mix(in srgb, #5b8cff 12%, transparent);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+
+@keyframes git-dash-breathe {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-1px);
+  }
+}
+
+@keyframes git-dash-cta-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent, #2ec4b6) 0%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent, #2ec4b6) 22%, transparent);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #gitbridge .git-dash-card.is-hot,
+  #gitbridge .git-dash-go {
+    animation: none;
+  }
+}
+
 #gitbridge .git-flow-head {
   display: flex;
   align-items: center;

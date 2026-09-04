@@ -57,6 +57,7 @@
     ffbridge: "./ffbridge.js",
     ytdlp: "./ytdlp.js",
     gitbridge: "./gitbridge.js",
+    passvault: "./passvault.js",
     lanshare: "./lanshare.js",
     setup: "./setup.js",
     envkit: "./envkit.js",
@@ -178,13 +179,14 @@
     "ffbridge",
     "ytdlp",
     "gitbridge",
+    "passvault",
     "phlogo",
     "nokiasms",
   ]);
 
   const NO_PURE = new Set([
     "acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp",
-    "gitbridge", "envkit", "feedbackhub",
+    "gitbridge", "passvault", "envkit", "feedbackhub",
     "setup", "about", "xorenc", "morse", "countdown",
     "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "piano", "minigames", "ambient", "enspeak",
   ]);

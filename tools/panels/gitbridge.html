@@ -53,10 +53,22 @@
 
             <div class="git-beginner panel-card" id="git-beginner">
               <div class="label-row">
-                <h2 class="subhead">日常三步 · 跟着高亮走</h2>
+                <h2 class="subhead">今日交码</h2>
                 <div class="btn-row tool-actions" style="flex-wrap:wrap;gap:0.3rem">
                   <button type="button" class="ghost-btn" id="git-open-history" title="展开历史图，可对某一笔右键操作">看历史 · 对某笔做事</button>
                   <button type="button" class="ghost-btn" id="git-easy-refresh">刷新状态</button>
+                </div>
+              </div>
+
+              <div class="git-dash" id="git-dash" aria-label="今日交码看板">
+                <div class="git-dash-cards" id="git-dash-cards"></div>
+                <div class="git-dash-cta">
+                  <button type="button" class="primary-btn git-dash-go" id="git-dash-go">打开仓库后显示主操作</button>
+                  <p class="hint tight" id="git-dash-hint">状态刷新后，这里只留一个主按钮。</p>
+                </div>
+                <div class="git-gerrit-lane" id="git-gerrit-lane" hidden>
+                  <p class="git-gerrit-lane-title">Gerrit 交码视角</p>
+                  <p class="hint tight" id="git-gerrit-lane-text"></p>
                 </div>
               </div>
 
@@ -79,6 +91,7 @@
 
               <p class="git-easy-now" id="git-easy-now">打开仓库后，这里会告诉你<strong>现在只做一件事</strong>。</p>
               <p class="git-easy-success" id="git-easy-success" hidden></p>
+              <p class="git-conflict-recap" id="git-conflict-recap" hidden></p>
               <div class="git-status-pills" id="git-status-pills" aria-live="polite"></div>
 
               <div class="git-flow-step" data-git-flow="1" id="git-flow-1">
@@ -174,7 +187,15 @@
                   <input id="git-easy-msg" type="text" placeholder="例如：修好登录按钮样式" spellcheck="false" autocomplete="off" style="flex:1;min-width:10rem" />
                   <button type="button" class="primary-btn" id="git-easy-commit">保存</button>
                 </div>
-                <p class="hint tight" id="git-easy-hint">「保存」只记在本机；「上传」才发给网上。</p>
+                <div class="git-msg-templates" id="git-msg-templates" aria-label="说明模板">
+                  <button type="button" class="git-msg-chip" data-msg-tpl="fix: ">fix:</button>
+                  <button type="button" class="git-msg-chip" data-msg-tpl="feat: ">feat:</button>
+                  <button type="button" class="git-msg-chip" data-msg-tpl="docs: ">docs:</button>
+                  <button type="button" class="git-msg-chip" data-msg-tpl="chore: ">chore:</button>
+                  <button type="button" class="git-msg-chip" data-msg-tpl="【模块】">【模块】</button>
+                  <button type="button" class="git-msg-chip" data-msg-tpl="revert: ">revert:</button>
+                </div>
+                <p class="hint tight" id="git-easy-hint">「保存」只记在本机；「上传」才发给网上。点上方芯片可快速填说明前缀。</p>
               </div>
 
               <div class="git-flow-step" data-git-flow="3" id="git-flow-3">

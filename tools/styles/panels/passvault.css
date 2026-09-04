@@ -1,0 +1,52 @@
+/* 本地密码库 */
+#passvault .pv-gate {
+  padding: 0.85rem 0.9rem;
+}
+
+#passvault .pv-list {
+  margin-top: 0.55rem;
+  display: grid;
+  gap: 0.45rem;
+}
+
+#passvault .pv-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem 0.75rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--line, #2a2f3a) 80%, transparent);
+  background: color-mix(in srgb, var(--panel, #12141a) 60%, transparent);
+}
+
+#passvault .pv-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  flex: 1;
+}
+
+#passvault .pv-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+#passvault .pv-url {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 28rem;
+}
+
+#passvault .pv-editor {
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.85rem;
+}
+
+#passvault .is-warn-text {
+  color: color-mix(in srgb, #f31260 85%, var(--text, #e8eaed));
+}

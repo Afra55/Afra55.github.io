@@ -31,6 +31,7 @@
         "xorenc",
         "morse",
         "password",
+        "passvault",
         "uuid"
       ]
     },
@@ -237,6 +238,18 @@
       "aliases": [
         "password",
         "随机密码"
+      ]
+    },
+    "passvault": {
+      "name": "本地密码库",
+      "aliases": [
+        "passvault",
+        "密码库",
+        "密码管理",
+        "保险柜",
+        "vault",
+        "凭据",
+        "账号密码"
       ]
     },
     "base64": {
@@ -877,6 +890,7 @@
     "color": "HEX / RGB / HSL 颜色格式互转与预览。",
     "eyedropper": "屏幕取色（需浏览器 EyeDropper 支持）。",
     "password": "可配置字符集与长度的本地随机密码。",
+    "passvault": "浏览器本地加密密码库（Web Crypto AES-GCM）：主密码解锁、条目增删改、加密备份导入导出；数据不出本机。",
     "base64": "文本 Base64 编码与解码。",
     "imgb64": "图片与 Base64 Data URL 互转。",
     "url": "URL 编码 / 解码。",
@@ -933,7 +947,7 @@
     "lanshare": "局域网互传：多机同房间共享文件列表，下载时从上传者手机 WebRTC 直传，不经房主中转；房主可退出或解散，退出时最近加入者接任。",
     "ffbridge": "电脑批量用本机 FFmpeg 桥；手机请直接用视频/GIF 分类里的音频/修剪/动图（网页内处理）。",
     "ytdlp": "本机 yt-dlp 桥：解析/下载视频与播放列表、字幕、封面、直播、Cookies 与 SponsorBlock；含安装教程，文件只保存在电脑。",
-    "gitbridge": "日常三步 + 历史/工作线右键；命令可搜索；进阶按场景分组。统一桥 /git。",
+    "gitbridge": "今日交码看板 + 说明模板 + Gerrit 视角 + 历史/工作线右键；统一桥 /git。",
     "about": "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
     "setup": "小白向：如何下载安装 Node.js、ADB、FFmpeg；手机用网页保底、电脑用桥更优。",
     "envkit": "一键安装/升级与统一桥探测：ADB、FFmpeg、yt-dlp、Git 均列在 17888。",

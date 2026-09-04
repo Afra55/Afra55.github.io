@@ -223,6 +223,11 @@
       "bytes": 1488
     },
     {
+      "id": "passvault",
+      "file": "./panels/passvault.html",
+      "bytes": 5350
+    },
+    {
       "id": "password",
       "file": "./panels/password.html",
       "bytes": 1736
