@@ -48,7 +48,6 @@
 - **下载入口**：各桥面板（ADB / FFmpeg / yt-dlp / Git）必须调用 `tools/lib/unified-bridge-bundle.js` 打**同一份统一完整包**；禁止再提供独立 Git / 独立 FFmpeg ZIP
 - 改桥逻辑必须同步：`BRIDGE_VERSION`（`adb-bridge/server.js`）+ 完整 ZIP 文件列表（`unified-bridge-bundle.js`）+ EnvKit `sync_bridges` / `Sync-Bridges`（sh+ps1）+ 启动脚本缺文件 WARN
 - bat/sh 缓存写在**脚本同目录**，勿写死用户主目录
-- Everything 已改为外链（`#sitenav` → voidtools）；站内不再提供搜索面板（桥内 `/everything` 代理可保留兼容，勿再做成工具）
 
 ### 新增一座「桥能力」要对齐（一键装 / 一键更）
 
@@ -102,7 +101,7 @@
 - **导航**：仅显示分类时滚轮交给 `.nav-bar-scroll`；站点外链只在 `sitenav`
 - **Git 可视化**：统一桥 `/git`（完整包）；独立桥 `git-bridge` 17890 可选；面板 `#gitbridge`；小白模式含同步/冲突/补丁/对齐线上
 - **环境管家**：`#envkit` + `tools/envkit/install-devtools-env.{sh,ps1}`；缺啥装啥、可 upgrade/bridges
-- **Everything**：官方客户端外链（`#sitenav`），勿再做站内集成
+- **外链导航**：站外服务（含 Everything 官网）只在 `#sitenav`，勿再做站内集成
 
 ## 不要硬塞
 

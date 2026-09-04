@@ -198,13 +198,16 @@ async function main() {
       throw new Error(`health.port should match listen port ${PORT}, got ${health2.json?.port}`);
     }
     if (!features.includes("local-pull")) throw new Error("health missing feature: local-pull");
-    for (const need of ["fs-zip", "app-backup-splits", "logcat-level", "mirror", "scrcpy-mirror", "unified-bridge", "ffmpeg-mount", "git-mount", "everything-proxy", "device-perf", "device-processes", "device-shell", "device-layout"]) {
+    for (const need of ["fs-zip", "app-backup-splits", "logcat-level", "mirror", "scrcpy-mirror", "unified-bridge", "ffmpeg-mount", "git-mount", "device-perf", "device-processes", "device-shell", "device-layout"]) {
       if (!features.includes(need)) throw new Error(`health missing feature: ${need}`);
     }
     if (!health2.json?.unified) throw new Error("expected unified bridge flag");
     if (health2.json?.ffmpegMount !== "/ff") throw new Error("expected ffmpegMount /ff");
     if (health2.json?.gitMount !== "/git") throw new Error("expected gitMount /git");
     if (!health2.json?.capabilities?.git) throw new Error("expected capabilities.git");
+    if (health2.json?.capabilities?.everything || health2.json?.everythingMount) {
+      throw new Error("everything capability/mount should be removed");
+    }
 
     const child2 = spawn(process.execPath, [path.join(__dirname, "server.js")], {
       env: {
@@ -268,12 +271,11 @@ async function main() {
       throw new Error("mirror prepare did not locate scrcpy-server jar");
     }
 
-    const evHealth = await req("GET", "/everything/health?target=http://127.0.0.1:9", {
+    const evGone = await req("GET", "/everything/health", {
       headers: { "X-Adb-Token": TOKEN },
     });
-    if (evHealth.status === 404) throw new Error("everything/health route missing");
-    if (evHealth.status !== 502 && evHealth.status !== 200) {
-      throw new Error(`unexpected everything/health status: ${evHealth.status}`);
+    if (evGone.status !== 404) {
+      throw new Error(`expected /everything removed (404), got ${evGone.status}`);
     }
 
     // Token compat

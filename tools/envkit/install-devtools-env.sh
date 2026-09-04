@@ -304,7 +304,7 @@ sync_bridges() {
   mkdir -p "$BRIDGE_DIR/adb-bridge" "$BRIDGE_DIR/ffmpeg-bridge" "$BRIDGE_DIR/git-bridge"
 
   # ADB 统一桥核心文件
-  local adb_files=(server.js resolve-port.js scrcpy-mirror.js scrcpy-ctrl.js everything-proxy.js device-inspect.js)
+  local adb_files=(server.js resolve-port.js scrcpy-mirror.js scrcpy-ctrl.js device-inspect.js)
   for f in "${adb_files[@]}"; do
     info "adb-bridge/$f"
     download_file "${BASE_URL}/adb-bridge/$f" "$BRIDGE_DIR/adb-bridge/$f" || warn "下载失败 $f"
@@ -367,7 +367,7 @@ DevTools 桥目录：${BRIDGE_DIR}
 只需启动一座统一桥：
   运行 adb-bridge/start-*
   地址 http://127.0.0.1:17888  Token: devtools-bridge
-  API：/ff · /ytdlp · /git · /everything
+  API：/ff · /ytdlp · /git
 
 （ffmpeg-bridge / git-bridge 目录是统一桥的嵌套模块，请勿单独启动。）
 

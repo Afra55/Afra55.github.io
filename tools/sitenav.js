@@ -6,7 +6,7 @@
     {
       id: "everything",
       title: "Everything",
-      desc: "Windows 瞬时全盘文件搜索（voidtools 官网）。本站不再内嵌，请用官方客户端。",
+      desc: "Windows 瞬时全盘文件搜索（voidtools 官网客户端）。",
       url: "https://www.voidtools.com/zh-cn/",
       tags: ["windows", "搜索", "文件"],
     },

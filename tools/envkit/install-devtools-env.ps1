@@ -150,7 +150,7 @@ function Sync-Bridges {
   Write-Host "== 同步本机桥文件 → $BridgeDir =="
   $adb = @(
     "server.js", "resolve-port.js", "scrcpy-mirror.js", "scrcpy-ctrl.js",
-    "everything-proxy.js", "device-inspect.js", "start-win.bat", "start-win.cmd"
+    "device-inspect.js", "start-win.bat", "start-win.cmd"
   )
   foreach ($f in $adb) {
     Write-Info "adb-bridge/$f"
@@ -188,7 +188,7 @@ DevTools 桥目录：$BridgeDir
 只需启动一座统一桥：
   双击 adb-bridge\start-win.cmd
   地址 http://127.0.0.1:17888  Token: devtools-bridge
-  API: /ff · /ytdlp · /git · /everything
+  API: /ff · /ytdlp · /git
 
 （ffmpeg-bridge / git-bridge 目录是统一桥的嵌套模块，请勿单独启动。）
 

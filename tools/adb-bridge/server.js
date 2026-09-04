@@ -38,11 +38,10 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.18";
+const BRIDGE_VERSION = "0.9.19";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
-const everythingProxy = require("./everything-proxy");
 const deviceInspect = require("./device-inspect");
 function loadFfmpegBridge() {
   const candidates = [
@@ -3632,17 +3631,6 @@ async function handleApi(req, res, url) {
       return;
     }
 
-    if (url.pathname === "/everything" || url.pathname.startsWith("/everything/")) {
-      if (req.method !== "OPTIONS") requireToken(req);
-      const handled = await everythingProxy.handleApi(req, res, url, {
-        sendJson,
-        requireToken,
-        applyCors,
-        origin,
-      });
-      if (handled) return;
-    }
-
     if (url.pathname === "/health" && req.method === "GET") {
       const adbInfo = await checkAdb();
       const hostTools = await probeHostTools();
@@ -3713,7 +3701,6 @@ async function handleApi(req, res, url) {
             ytdlp: Boolean(ffmpegBridge?.checkYtdlp),
             git: Boolean(gitBridge),
             mirror: true,
-            everything: true,
           },
           features: [
             "unified-bridge",
@@ -3757,7 +3744,6 @@ async function handleApi(req, res, url) {
             "ytdlp",
             "ytdlp-mount",
             "git-mount",
-            "everything-proxy",
             "device-perf",
             "device-processes",
             "device-shell",
@@ -3784,9 +3770,8 @@ async function handleApi(req, res, url) {
           ffmpegMount: "/ff",
           ytdlpMount: "/ytdlp",
           gitMount: "/git",
-          everythingMount: "/everything",
           note:
-            "统一本机桥：ADB + Scrcpy + FFmpeg(/ff) + yt-dlp(/ytdlp) + Git(/git) + Everything。Token 默认 devtools-bridge。只需启动一次。",
+            "统一本机桥：ADB + Scrcpy + FFmpeg(/ff) + yt-dlp(/ytdlp) + Git(/git)。Token 默认 devtools-bridge。只需启动一次。",
         },
         origin
       );
@@ -4417,7 +4402,7 @@ function printBanner(activePort) {
   console.log(` 版本: ${BRIDGE_VERSION}`);
   console.log(` 地址: http://${HOST}:${activePort}`);
   console.log(` Token: ${TOKEN}（兼容旧 Token: devtools-adb / devtools-ffmpeg）`);
-  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / yt-dlp(/ytdlp) / Git(/git) / Everything / 任务");
+  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / yt-dlp(/ytdlp) / Git(/git) / 任务");
   console.log(" 请保持此窗口打开，然后回到网页点「连接」——ADB 与 FFmpeg 共用这一座桥");
   if (activePort !== PORT) {
     console.log(` 注意: 默认端口 ${PORT} 被占用，已改用 ${activePort}`);

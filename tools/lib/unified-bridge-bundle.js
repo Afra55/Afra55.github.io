@@ -2,7 +2,7 @@
   "use strict";
 
   /**
-   * 统一本机桥完整 ZIP（ADB + FFmpeg + yt-dlp + Git + Everything）。
+   * 统一本机桥完整 ZIP（ADB + FFmpeg + yt-dlp + Git）。
    * 各桥面板下载入口必须走这里，禁止再打独立包。
    */
   let busy = false;
@@ -87,7 +87,6 @@
         serverJs,
         mirrorJs,
         ctrlJs,
-        evProxyJs,
         inspectJs,
         ffmpegJs,
         ytdlpJs,
@@ -103,7 +102,6 @@
         fetchTextAsset("./adb-bridge/server.js"),
         fetchTextAsset("./adb-bridge/scrcpy-mirror.js").catch(() => ""),
         fetchTextAsset("./adb-bridge/scrcpy-ctrl.js").catch(() => ""),
-        fetchTextAsset("./adb-bridge/everything-proxy.js").catch(() => ""),
         fetchTextAsset("./adb-bridge/device-inspect.js").catch(() => ""),
         fetchTextAsset("./ffmpeg-bridge/server.js").catch(() => ""),
         fetchTextAsset("./ffmpeg-bridge/ytdlp-core.js").catch(() => ""),
@@ -134,11 +132,11 @@
         throw new Error("完整包缺少 ffmpeg-bridge，请硬刷新页面后重试");
       }
       const readme = [
-        "DevTools 统一本机桥完整包（ADB + Scrcpy + FFmpeg + yt-dlp + Git + Everything）",
+        "DevTools 统一本机桥完整包（ADB + Scrcpy + FFmpeg + yt-dlp + Git）",
         "",
         "本压缩包必须同时保留：",
         "  - server.js",
-        "  - scrcpy-mirror.js / scrcpy-ctrl.js / everything-proxy.js / device-inspect.js / resolve-port.js",
+        "  - scrcpy-mirror.js / scrcpy-ctrl.js / device-inspect.js / resolve-port.js",
         "  - ffmpeg-bridge/server.js + ytdlp-core.js",
         "  - git-bridge/server.js + git-ops.js + noop-editor.*",
         "  - vendor/scrcpy-server-v3.1（可选）",
@@ -151,7 +149,7 @@
         "4. 网页各工具都连 http://127.0.0.1:17888 · Token: devtools-bridge",
         "",
         "只需启动这一座桥。不要再下「独立 Git / 独立 FFmpeg」包。",
-        "API：/ff · /ytdlp · /git · /everything",
+        "API：/ff · /ytdlp · /git",
         "",
       ].join("\n");
 
@@ -160,7 +158,6 @@
       zip.file("server.js", serverJs);
       if (mirrorJs) zip.file("scrcpy-mirror.js", mirrorJs);
       if (ctrlJs) zip.file("scrcpy-ctrl.js", ctrlJs);
-      if (evProxyJs) zip.file("everything-proxy.js", evProxyJs);
       if (inspectJs) zip.file("device-inspect.js", inspectJs);
       if (resolvePortJs) zip.file("resolve-port.js", resolvePortJs);
       zip.file("ffmpeg-bridge/server.js", ffmpegJs);
