@@ -335,6 +335,18 @@
                   </p>
                   <div id="git-ops-catalog" class="git-ops-catalog"></div>
                 </details>
+                <div class="label-row" style="margin-top:0.75rem">
+                  <h2 class="subhead">执行历史</h2>
+                  <span class="hint tight" id="git-hist-count"></span>
+                </div>
+                <details class="git-ops-details" id="git-hist-details" open>
+                  <summary class="hint">近 7 天执行过的命令（本机保存，到期自动清理）</summary>
+                  <div class="btn-row tool-actions" style="margin-top:0.35rem;flex-wrap:wrap">
+                    <button type="button" class="ghost-btn" id="git-hist-refresh">刷新列表</button>
+                    <button type="button" class="ghost-btn" id="git-hist-clear">清空历史</button>
+                  </div>
+                  <div id="git-hist-list" class="git-hist-list" aria-live="polite"></div>
+                </details>
                 <pre class="mono adb-pre" id="git-cmd-preview" style="margin-top:0.55rem;max-height:6rem;overflow:auto" hidden></pre>
                 <pre class="mono adb-pre" id="git-op-out" style="margin-top:0.45rem;max-height:10rem;overflow:auto" hidden></pre>
               </div>

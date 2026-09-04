@@ -7,6 +7,9 @@
   const BASE_KEY = "devtools-git-base";
   const TOKEN_KEY = "devtools-git-token";
   const RECENT_KEY = "devtools-git-recent";
+  const HIST_KEY = "devtools-git-exec-history-v1";
+  const HIST_KEEP_MS = 7 * 86400000;
+  const HIST_MAX = 300;
   const DEFAULT_BASE = "http://127.0.0.1:17888";
   const DEFAULT_TOKEN = "devtools-bridge";
   const LANE_COLORS = ["#5b8cff", "#3dd68c", "#f5a524", "#f31260", "#a78bfa", "#22d3ee", "#fb7185", "#84cc16"];
@@ -505,6 +508,7 @@
         `${health.git} · API /git · 与 ADB/FFmpeg 同座`
       );
       await loadOpsCatalog();
+      renderExecHistory();
       await loadRoots();
       const recent = recentRepos()[0];
       if (recent) {
@@ -590,6 +594,7 @@
       data.dirtyCount
     } 项`;
     await refreshRepo();
+    renderExecHistory();
   }
 
   function parseStatusPayload(data) {
@@ -2035,6 +2040,104 @@
     }
   }
 
+  function pruneExecHistory(list) {
+    const cut = Date.now() - HIST_KEEP_MS;
+    return (Array.isArray(list) ? list : [])
+      .filter((x) => x && Number(x.at) > cut)
+      .sort((a, b) => Number(b.at) - Number(a.at))
+      .slice(0, HIST_MAX);
+  }
+
+  function loadExecHistory() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(HIST_KEY) || "[]");
+      const next = pruneExecHistory(raw);
+      if (next.length !== (raw || []).length) {
+        try {
+          localStorage.setItem(HIST_KEY, JSON.stringify(next));
+        } catch (_) {}
+      }
+      return next;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function saveExecHistory(list) {
+    const next = pruneExecHistory(list);
+    try {
+      localStorage.setItem(HIST_KEY, JSON.stringify(next));
+    } catch (_) {}
+    return next;
+  }
+
+  function formatHistTime(ts) {
+    const d = new Date(Number(ts) || Date.now());
+    const p = (n) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+  }
+
+  function recordExecHistory(entry) {
+    const list = loadExecHistory();
+    list.unshift({
+      id: `h-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+      at: Date.now(),
+      op: String(entry.op || ""),
+      plain: String(entry.plain || ""),
+      cmd: String(entry.cmd || ""),
+      ok: Boolean(entry.ok),
+      repo: String(entry.repo || repoPath || ""),
+      error: entry.error ? String(entry.error).slice(0, 400) : "",
+    });
+    saveExecHistory(list);
+    renderExecHistory();
+  }
+
+  function renderExecHistory() {
+    const box = $("#git-hist-list");
+    const count = $("#git-hist-count");
+    if (!box) return;
+    const list = loadExecHistory();
+    if (count) count.textContent = list.length ? `${list.length} 条 · 保留 7 天` : "暂无 · 保留 7 天";
+    if (!list.length) {
+      box.innerHTML = `<p class="hint tight">还没有执行记录。点上面的命令或小白按钮后会出现在这里。</p>`;
+      return;
+    }
+    box.innerHTML = list
+      .map((it) => {
+        const repoShort = String(it.repo || "")
+          .replace(/\\/g, "/")
+          .split("/")
+          .filter(Boolean)
+          .slice(-2)
+          .join("/") || "—";
+        const status = it.ok
+          ? `<span class="git-hist-ok">成功</span>`
+          : `<span class="git-hist-fail">失败</span>`;
+        const err = !it.ok && it.error
+          ? `<p class="hint tight git-hist-err">${escapeHtml(it.error)}</p>`
+          : "";
+        return `<article class="git-hist-item ${it.ok ? "" : "is-fail"}">
+          <div class="git-hist-head">
+            <time class="mono hint tight">${escapeHtml(formatHistTime(it.at))}</time>
+            ${status}
+          </div>
+          <p class="git-hist-plain">${escapeHtml(it.plain || it.op || "（无描述）")}</p>
+          <p class="mono git-hist-cmd">${escapeHtml(it.cmd || it.op || "")}</p>
+          <p class="hint tight mono">仓库 · ${escapeHtml(repoShort)}</p>
+          ${err}
+        </article>`;
+      })
+      .join("");
+  }
+
+  function clearExecHistory() {
+    try {
+      localStorage.removeItem(HIST_KEY);
+    } catch (_) {}
+    renderExecHistory();
+  }
+
   function renderOpsCatalog(data) {
     const box = $("#git-ops-catalog");
     const count = $("#git-ops-count");
@@ -2172,6 +2275,13 @@
         String(out.stdout || "") +
         (out.stderr ? "\n" + out.stderr : "");
       cmdPreview.textContent = "已执行：\n" + (out.cmd || []).join(" ");
+      recordExecHistory({
+        op,
+        plain,
+        cmd: Array.isArray(out.cmd) ? out.cmd.join(" ") : String(out.cmd || preview),
+        ok: true,
+        repo: repoPath,
+      });
       if (!opts.skipRefresh) await refreshRepo();
       return out;
     } catch (e) {
@@ -2183,6 +2293,14 @@
         (d.cmd ? (Array.isArray(d.cmd) ? d.cmd.join(" ") : d.cmd) + "\n\n" : "") +
         nice +
         (raw && raw !== nice ? "\n\n—— 原始信息 ——\n" + raw : "");
+      recordExecHistory({
+        op,
+        plain,
+        cmd: Array.isArray(d.cmd) ? d.cmd.join(" ") : String(d.cmd || preview),
+        ok: false,
+        repo: repoPath,
+        error: nice || e.message,
+      });
       showError(nice);
       throw e;
     }
@@ -2238,6 +2356,11 @@
   $("#git-easy-unstage")?.addEventListener("click", () => easyUnstage().catch((e) => showError(e.message)));
   $("#git-easy-commit")?.addEventListener("click", () => easyCommit().catch((e) => showError(e.message)));
   $("#git-easy-amend")?.addEventListener("click", () => easyAmend().catch((e) => showError(e.message)));
+  $("#git-hist-refresh")?.addEventListener("click", () => renderExecHistory());
+  $("#git-hist-clear")?.addEventListener("click", async () => {
+    if (!(await askConfirm("清空本机保存的近 7 天执行历史？"))) return;
+    clearExecHistory();
+  });
   $("#git-easy-fixup")?.addEventListener("click", () => easyFixupIntoSelected().catch((e) => showError(e.message)));
   $("#git-easy-push")?.addEventListener("click", () => easyPush().catch((e) => showError(e.message)));
   $("#git-easy-pull")?.addEventListener("click", () => easyPull().catch((e) => showError(e.message)));
