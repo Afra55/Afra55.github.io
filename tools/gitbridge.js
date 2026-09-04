@@ -8,6 +8,8 @@
   const TOKEN_KEY = "devtools-git-token";
   const RECENT_KEY = "devtools-git-recent";
   const HIST_KEY = "devtools-git-exec-history-v1";
+  const FAV_KEY = "devtools-git-fav-ops-v1";
+  const FAV_MAX = 24;
   const HIST_KEEP_MS = 7 * 86400000;
   const HIST_MAX = 300;
   const DEFAULT_BASE = "http://127.0.0.1:17888";
@@ -509,6 +511,7 @@
       );
       await loadOpsCatalog();
       renderExecHistory();
+      renderFavOps();
       await loadRoots();
       const recent = recentRepos()[0];
       if (recent) {
@@ -595,6 +598,7 @@
     } 项`;
     await refreshRepo();
     renderExecHistory();
+    renderFavOps();
   }
 
   function parseStatusPayload(data) {
@@ -2037,6 +2041,7 @@
       box.innerHTML = `<p class="hint">当前桥没有完整命令目录（需要 v0.2.0+）。请重新下载 ZIP 并重启桥。${
         e.message ? " " + escapeHtml(e.message) : ""
       }</p>`;
+      renderFavOps();
     }
   }
 
@@ -2131,6 +2136,103 @@
       .join("");
   }
 
+  function loadFavOps() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(FAV_KEY) || "[]");
+      if (!Array.isArray(raw)) return [];
+      return [...new Set(raw.map((x) => String(x || "").trim()).filter(Boolean))].slice(0, FAV_MAX);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  function saveFavOps(ids) {
+    const next = [...new Set((ids || []).map((x) => String(x || "").trim()).filter(Boolean))].slice(0, FAV_MAX);
+    try {
+      localStorage.setItem(FAV_KEY, JSON.stringify(next));
+    } catch (_) {}
+    return next;
+  }
+
+  function isFavOp(opId) {
+    return loadFavOps().includes(String(opId || ""));
+  }
+
+  function toggleFavOp(opId) {
+    const id = String(opId || "").trim();
+    if (!id) return loadFavOps();
+    const cur = loadFavOps();
+    const i = cur.indexOf(id);
+    if (i >= 0) cur.splice(i, 1);
+    else {
+      if (cur.length >= FAV_MAX) cur.pop();
+      cur.unshift(id);
+    }
+    const next = saveFavOps(cur);
+    renderFavOps();
+    renderOpsCatalog(opsCatalog);
+    return next;
+  }
+
+  function findOpMeta(opId) {
+    const id = String(opId || "");
+    const fromCatalog = catalogItem(id);
+    if (fromCatalog) return fromCatalog;
+    return { id, title: id, plain: id, dangerous: false };
+  }
+
+  function makeOpRow(item, { favMode = false } = {}) {
+    const row = document.createElement("div");
+    row.className = "git-op-row";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = item.dangerous ? "git-op-plain-btn is-danger" : "git-op-plain-btn";
+    const plain = item.plain || item.title || item.id;
+    const gitTitle = item.title || item.id;
+    btn.title = item.dangerous
+      ? `${plain}\n对应：git ${gitTitle}\n（会改仓库，执行前确认）`
+      : `${plain}\n对应：git ${gitTitle}`;
+    btn.innerHTML = `<span class="git-op-plain-text">${escapeHtml(plain)}</span><span class="git-op-cmd mono">对应 git ${escapeHtml(gitTitle)}</span>`;
+    btn.addEventListener("click", () => runOp(item.id).catch((e) => showError(e.message)));
+
+    const star = document.createElement("button");
+    star.type = "button";
+    const on = isFavOp(item.id);
+    star.className = on ? "git-op-fav-toggle is-on" : "git-op-fav-toggle";
+    star.textContent = favMode || on ? "移出常用" : "加到常用";
+    star.title = favMode || on ? "从「我的常用」移除" : "加到「我的常用」";
+    star.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      toggleFavOp(item.id);
+    });
+
+    row.appendChild(btn);
+    row.appendChild(star);
+    return row;
+  }
+
+  function renderFavOps() {
+    const list = $("#git-fav-list");
+    const empty = $("#git-fav-empty");
+    const count = $("#git-fav-count");
+    if (!list) return;
+    const ids = loadFavOps();
+    if (count) count.textContent = ids.length ? `${ids.length} 条` : "还没有";
+    list.innerHTML = "";
+    if (!ids.length) {
+      list.hidden = true;
+      if (empty) empty.hidden = false;
+      return;
+    }
+    if (empty) empty.hidden = true;
+    list.hidden = false;
+    for (const id of ids) {
+      const item = findOpMeta(id);
+      list.appendChild(makeOpRow({ ...item, id }, { favMode: true }));
+    }
+  }
+
   function clearExecHistory() {
     try {
       localStorage.removeItem(HIST_KEY);
@@ -2162,21 +2264,12 @@
       const row = document.createElement("div");
       row.className = "git-ops-plain-list";
       for (const item of g.items || []) {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = item.dangerous ? "git-op-plain-btn is-danger" : "git-op-plain-btn";
-        const plain = item.plain || item.title;
-        const gitTitle = item.title || item.id;
-        btn.title = item.dangerous
-          ? `${plain}\n对应：git ${gitTitle}\n（会改仓库，执行前确认）`
-          : `${plain}\n对应：git ${gitTitle}`;
-        btn.innerHTML = `<span class="git-op-plain-text">${escapeHtml(plain)}</span><span class="git-op-cmd mono">${escapeHtml(gitTitle)}</span>`;
-        btn.addEventListener("click", () => runOp(item.id).catch((e) => showError(e.message)));
-        row.appendChild(btn);
+        row.appendChild(makeOpRow(item));
       }
       wrap.appendChild(row);
       box.appendChild(wrap);
     }
+    renderFavOps();
   }
 
   async function runOp(op, params, opts = {}) {
@@ -2463,6 +2556,8 @@
       setStatus("is-ok", "桥目录", msg);
     },
   });
+
+  renderFavOps();
 
   // Auto-try connect when panel shown（统一桥协议）
   void (async () => {
