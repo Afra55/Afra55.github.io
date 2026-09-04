@@ -1536,6 +1536,13 @@
     }
   }
 
+  /** 正在「直接写一段文字」：有焦点或已有草稿 */
+  function isQuickCaptureBusy() {
+    if (!editor) return false;
+    if (document.activeElement === editor) return true;
+    return Boolean(String(editor.value || "").trim());
+  }
+
   function textContentSig(text) {
     return `text:${String(text || "").trim()}`;
   }
@@ -2853,12 +2860,13 @@
       toast("内容为空");
       return null;
     }
+    const clearEditor = Boolean(opts.clearEditor);
     // 剪贴板有时把图片写成 data:image/...;base64 文本，入库前转成真正图片
     const dataImg = await dataUrlToImageFile(body);
     if (dataImg) {
       // ingestFiles 自身已 withBusy，此处不可再包一层（会直接被 busy 挡掉）
       await ingestFiles([dataImg], opts);
-      if (editor) editor.value = "";
+      if (clearEditor && editor) editor.value = "";
       return null;
     }
     const meta = memoTextBlobMeta(body);
@@ -2871,7 +2879,8 @@
         textPreview: meta.body,
         quiet: Boolean(opts.quiet || opts.offerTemp),
       });
-      if (editor) editor.value = "";
+      // 仅「从编辑框保存」时清空；剪贴板入库不得冲掉正在写的草稿
+      if (clearEditor && editor) editor.value = "";
       if (added?.id) {
         const tagged = await attachHashTagsFromText(added, meta.body);
         if (tagged) await persistIndex();
@@ -3401,6 +3410,8 @@
   function shouldSkipClipCapture() {
     if (state.busy || state.clipCaptureBusy) return true;
     if (isTextEditOpen()) return true;
+    // 正在写「直接写一段文字」（有焦点或已有草稿）时不要自动抢剪贴板
+    if (isQuickCaptureBusy()) return true;
     const active = document.activeElement;
     if (active && active !== document.body && isEditableTarget(active) && !$("#memo")?.contains(active)) {
       return true;
@@ -5462,12 +5473,12 @@
     applyMemoJsonFormat($("#memo-text-edit-src"), "minify");
   });
   $("#memo-save-text")?.addEventListener("click", () => {
-    addText(editor?.value || "").catch((err) => setError(memoError, err.message || String(err)));
+    addText(editor?.value || "", { clearEditor: true }).catch((err) => setError(memoError, err.message || String(err)));
   });
   editor?.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" || !(e.ctrlKey || e.metaKey)) return;
     e.preventDefault();
-    addText(editor.value || "").catch((err) => setError(memoError, err.message || String(err)));
+    addText(editor.value || "", { clearEditor: true }).catch((err) => setError(memoError, err.message || String(err)));
   });
   $("#memo-text-edit-save")?.addEventListener("click", () => {
     saveEditedTextFromPanel().catch((err) => {
