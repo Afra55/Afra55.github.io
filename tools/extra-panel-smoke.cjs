@@ -85,10 +85,17 @@ async function openPage(browser, hash, port) {
   if (!ok) {
     throw new Error(`panel not active: ${toolId}`);
   }
+  // 加载条可能延迟显示，不能只靠 !is-tool-assets-loading；须等懒加载真正就绪
+  // 启动遮罩未退时 Puppeteer click 会点到 overlay，须等 is-done / 移除
   await page.waitForFunction(
     (id) => {
+      if (!window.__devtoolsBootReady) return false;
+      const boot = document.getElementById("devtools-boot-overlay");
+      if (boot && !boot.classList.contains("is-done")) return false;
+      if (!window.DevToolsLazy?.isToolReady?.(id)) return false;
       if (!window.__devtoolsExtraCore || !window.DevToolsExtraKit?.$) return false;
       if (document.querySelector(`#${id}.is-tool-assets-loading`)) return false;
+      if (document.querySelector(`#${id}[aria-busy="true"]`)) return false;
       return true;
     },
     { timeout: 90000 },

@@ -2772,6 +2772,11 @@
     }
 
     let overlayShown = false;
+    // 立刻标 busy（无视觉遮挡），避免冒烟/无障碍在延迟进度条窗口误判已就绪
+    if (gen === routeGen) {
+      const panel = document.getElementById(toolLoadPanelId);
+      if (panel) panel.setAttribute("aria-busy", "true");
+    }
     // 先不遮挡面板；仅当加载超过阈值才显示进度条
     const showDelay = window.setTimeout(() => {
       if (gen !== routeGen) return;
