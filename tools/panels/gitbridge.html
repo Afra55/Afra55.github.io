@@ -24,6 +24,14 @@
           </div>
         </div>
 
+        <div class="gif-progress bridge-dl-progress" id="git-dl-progress" hidden>
+          <div class="gif-progress-head">
+            <p class="hint gif-progress-title" id="git-dl-progress-text">准备下载包…</p>
+            <span class="mono gif-progress-pct" id="git-dl-progress-pct">0%</span>
+          </div>
+          <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill is-busy" id="git-dl-progress-fill" style="width:0%"></span></div>
+        </div>
+
         <div class="field-block adb-install-dir" style="margin-top:0.65rem">
           <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.4rem">
             <label for="git-install-dir">桥解压目录</label>
@@ -130,46 +138,6 @@
                 </select>
               </div>
 
-              <h3 class="git-easy-sec">保存我的改动</h3>
-              <p class="hint tight">勾选文件 → 写说明 → 点「保存」（自动记入历史）。点文件名看彩色对比。</p>
-              <div id="git-change-list" class="git-change-list" aria-live="polite">
-                <p class="hint tight">没有改动时这里是空的。</p>
-              </div>
-              <div class="git-diff-panel" id="git-diff-panel" hidden>
-                <div class="label-row">
-                  <span class="hint tight mono" id="git-diff-title"></span>
-                  <button type="button" class="ghost-btn" id="git-diff-close">关闭对比</button>
-                </div>
-                <div class="git-diff-view" id="git-diff-view" role="region" aria-label="文件改动对比"></div>
-              </div>
-              <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
-                <label for="git-easy-msg">说明</label>
-                <input id="git-easy-msg" type="text" placeholder="例如：修好登录按钮样式" spellcheck="false" autocomplete="off" style="flex:1;min-width:10rem" />
-                <button type="button" class="primary-btn" id="git-easy-commit">保存</button>
-                <button type="button" class="ghost-btn" id="git-easy-amend">改上一笔</button>
-              </div>
-              <p class="hint tight" id="git-easy-hint">「保存」只记在本机；要别人看见再点上面的「上传」。</p>
-              <details class="git-ops-details" style="margin-top:0.35rem">
-                <summary class="hint">高级：暂存区微调</summary>
-                <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.35rem">
-                  <button type="button" class="ghost-btn" id="git-easy-stage-all">全部进待保存</button>
-                  <button type="button" class="ghost-btn" id="git-easy-stage">勾选进待保存</button>
-                  <button type="button" class="ghost-btn" id="git-easy-unstage">移出待保存</button>
-                </div>
-              </details>
-
-              <div class="git-quick-row btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.65rem">
-                <button type="button" class="ghost-btn" id="git-easy-stash">收起改动</button>
-                <button type="button" class="ghost-btn" id="git-easy-stash-pop">取出最近一份</button>
-                <button type="button" class="ghost-btn" id="git-easy-undo">撤销上次保存</button>
-                <button type="button" class="ghost-btn" id="git-easy-reflog">后悔药</button>
-              </div>
-              <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
-                <label for="git-easy-stash-sel">收起柜</label>
-                <select id="git-easy-stash-sel" class="select-input" style="flex:1;min-width:10rem"></select>
-                <button type="button" class="ghost-btn" id="git-easy-stash-apply">取出选中</button>
-              </div>
-
               <div id="git-confirm-bar" class="git-confirm-bar" hidden>
                 <p class="hint tight" id="git-confirm-text"></p>
                 <div class="btn-row tool-actions" style="flex-wrap:wrap">
@@ -178,37 +146,8 @@
                 </div>
               </div>
 
-              <details class="git-ops-details git-more-details">
-                <summary class="hint">更多：合并多笔 · 补丁 · Gerrit 送审</summary>
-                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
-                  <label for="git-easy-squash-n">把最近</label>
-                  <input id="git-easy-squash-n" type="number" min="2" max="50" value="2" style="width:3.5rem" />
-                  <span class="hint tight">笔合成一笔</span>
-                  <input id="git-easy-squash-msg" type="text" placeholder="合成后的说明（可空）" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
-                  <button type="button" class="ghost-btn" id="git-easy-squash">合并提交</button>
-                </div>
-                <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
-                  <label for="git-easy-patch-n">最近</label>
-                  <input id="git-easy-patch-n" type="number" min="1" max="50" value="1" style="width:3.5rem" />
-                  <span class="hint tight">笔 → 补丁</span>
-                  <button type="button" class="ghost-btn" id="git-easy-format-patch">打成补丁</button>
-                </div>
-                <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
-                  <label for="git-easy-patch-path">补丁路径</label>
-                  <input id="git-easy-patch-path" class="mono" type="text" placeholder=".devtools-patches/0001-xxx.patch" spellcheck="false" autocomplete="off" style="flex:1;min-width:10rem" />
-                  <button type="button" class="ghost-btn" id="git-easy-am">按提交恢复</button>
-                  <button type="button" class="ghost-btn" id="git-easy-apply">只改文件</button>
-                </div>
-                <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
-                  <label for="git-easy-gerrit">Gerrit 送审到</label>
-                  <input id="git-easy-gerrit" type="text" placeholder="目标分支，如 master" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
-                  <input id="git-easy-gerrit-topic" type="text" placeholder="topic（可空）" spellcheck="false" autocomplete="off" style="width:8rem" />
-                  <button type="button" class="ghost-btn" id="git-easy-gerrit-go">送审</button>
-                </div>
-              </details>
-
               <div id="git-conflict-box" class="git-conflict-box" hidden>
-                <div class="label-row" style="margin-top:0.75rem">
+                <div class="label-row" style="margin-top:0.35rem">
                   <h2 class="subhead">两边改冲突了</h2>
                   <span class="hint tight" id="git-conflict-meta"></span>
                 </div>
@@ -235,6 +174,71 @@
                   <button type="button" class="ghost-btn" id="git-conflict-abort">放弃这次合并</button>
                 </div>
               </div>
+
+              <div class="git-save-zone" id="git-save-zone">
+              <h3 class="git-easy-sec">保存我的改动</h3>
+              <p class="hint tight">勾选文件 → 写说明 → 点「保存」（自动记入历史）。点文件名看彩色对比。</p>
+              <div id="git-change-list" class="git-change-list" aria-live="polite">
+                <p class="hint tight git-empty-hint">还没有改动 · 去改文件再回来</p>
+              </div>
+              <div class="git-diff-panel" id="git-diff-panel" hidden>
+                <div class="label-row">
+                  <span class="hint tight mono" id="git-diff-title"></span>
+                  <button type="button" class="ghost-btn" id="git-diff-close">关闭对比</button>
+                </div>
+                <div class="git-diff-view" id="git-diff-view" role="region" aria-label="文件改动对比"></div>
+              </div>
+              <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
+                <label for="git-easy-msg">说明</label>
+                <input id="git-easy-msg" type="text" placeholder="例如：修好登录按钮样式" spellcheck="false" autocomplete="off" style="flex:1;min-width:10rem" />
+                <button type="button" class="primary-btn" id="git-easy-commit">保存</button>
+                <button type="button" class="ghost-btn" id="git-easy-amend">改上一笔</button>
+              </div>
+              <p class="hint tight" id="git-easy-hint">「保存」只记在本机；要别人看见再点上面的「上传」。</p>
+              </div>
+
+              <details class="git-ops-details git-more-details">
+                <summary class="hint">更多：暂存微调 · 收起柜 · 合并多笔 · 补丁 · Gerrit</summary>
+                <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.35rem">
+                  <button type="button" class="ghost-btn" id="git-easy-stage-all">全部进待保存</button>
+                  <button type="button" class="ghost-btn" id="git-easy-stage">勾选进待保存</button>
+                  <button type="button" class="ghost-btn" id="git-easy-unstage">移出待保存</button>
+                  <button type="button" class="ghost-btn" id="git-easy-stash">收起改动</button>
+                  <button type="button" class="ghost-btn" id="git-easy-stash-pop">取出最近一份</button>
+                  <button type="button" class="ghost-btn" id="git-easy-undo">撤销上次保存</button>
+                  <button type="button" class="ghost-btn" id="git-easy-reflog">后悔药</button>
+                </div>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
+                  <label for="git-easy-stash-sel">收起柜</label>
+                  <select id="git-easy-stash-sel" class="select-input" style="flex:1;min-width:10rem"></select>
+                  <button type="button" class="ghost-btn" id="git-easy-stash-apply">取出选中</button>
+                </div>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
+                  <label for="git-easy-squash-n">把最近</label>
+                  <input id="git-easy-squash-n" type="number" min="2" max="50" value="2" style="width:3.5rem" />
+                  <span class="hint tight">笔合成一笔</span>
+                  <input id="git-easy-squash-msg" type="text" placeholder="合成后的说明（可空）" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
+                  <button type="button" class="ghost-btn" id="git-easy-squash">合并提交</button>
+                </div>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
+                  <label for="git-easy-patch-n">最近</label>
+                  <input id="git-easy-patch-n" type="number" min="1" max="50" value="1" style="width:3.5rem" />
+                  <span class="hint tight">笔 → 补丁</span>
+                  <button type="button" class="ghost-btn" id="git-easy-format-patch">打成补丁</button>
+                </div>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
+                  <label for="git-easy-patch-path">补丁路径</label>
+                  <input id="git-easy-patch-path" class="mono" type="text" placeholder=".devtools-patches/0001-xxx.patch" spellcheck="false" autocomplete="off" style="flex:1;min-width:10rem" />
+                  <button type="button" class="ghost-btn" id="git-easy-am">按提交恢复</button>
+                  <button type="button" class="ghost-btn" id="git-easy-apply">只改文件</button>
+                </div>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
+                  <label for="git-easy-gerrit">Gerrit 送审到</label>
+                  <input id="git-easy-gerrit" type="text" placeholder="目标分支，如 master" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
+                  <input id="git-easy-gerrit-topic" type="text" placeholder="topic（可空）" spellcheck="false" autocomplete="off" style="width:8rem" />
+                  <button type="button" class="ghost-btn" id="git-easy-gerrit-go">送审</button>
+                </div>
+              </details>
             </div>
 
             <div class="git-layout">

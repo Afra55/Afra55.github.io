@@ -296,7 +296,11 @@
     rows.forEach((row) => {
       const c = row.commit;
       const el = document.createElement("div");
-      el.className = "git-row" + (c.isMerge ? " is-merge" : "") + (c.hash === selectedSha ? " is-active" : "");
+      el.className =
+        "git-row" +
+        (c.isMerge ? " is-merge" : "") +
+        (c.hash === selectedSha ? " is-active" : "") +
+        ((c.refs || []).some((r) => /HEAD/.test(r)) ? " is-head-row" : "");
       el.dataset.sha = c.hash;
       el.setAttribute("role", "listitem");
 
@@ -675,7 +679,10 @@
 
   function makeBranchCard(b, kind) {
     const card = document.createElement("div");
-    card.className = "git-branch-card" + (b.current ? " is-current" : "");
+    card.className =
+      "git-branch-card" +
+      (b.current ? " is-current" : "") +
+      (kind === "remote" ? " is-remote" : "");
 
     const head = document.createElement("div");
     head.className = "git-branch-card-head";
@@ -845,7 +852,15 @@
       }
 
       if (conflictBox) {
-        conflictBox.hidden = !(data.inProgress || conflicts.length);
+        const showConflict = Boolean(data.inProgress || conflicts.length);
+        conflictBox.hidden = !showConflict;
+        if (showConflict) {
+          try {
+            conflictBox.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          } catch (_) {
+            /* ignore */
+          }
+        }
         if (conflictMeta) {
           conflictMeta.textContent = data.inProgress
             ? `进行中：${data.inProgress} · 冲突 ${conflicts.length} 个`
@@ -887,8 +902,8 @@
 
       box.innerHTML = "";
       if (!rows.length) {
-        box.innerHTML = `<p class="hint tight">没有待保存的改动。</p>`;
-        if (hint) hint.textContent = "改完文件后点「刷新状态」。";
+        box.innerHTML = `<p class="hint tight git-empty-hint">还没有改动 · 去改文件再回来</p>`;
+        if (hint) hint.textContent = "改完文件后点「刷新」。";
       } else {
         for (const r of rows) {
           const row = document.createElement("label");
@@ -1519,13 +1534,31 @@
   async function downloadBundle(platform) {
     const api = window.devtoolsUnifiedBridgeBundle;
     if (!api?.download) throw new Error("统一完整包模块未加载，请硬刷新页面");
+    const box = $("#git-dl-progress");
+    const fill = $("#git-dl-progress-fill");
+    const title = $("#git-dl-progress-text");
+    const pctEl = $("#git-dl-progress-pct");
+    const setProg = (on, p = {}) => {
+      if (!box) return;
+      box.hidden = !on;
+      if (fill) fill.style.width = `${Math.max(0, Math.min(100, Number(p.pct) || 0))}%`;
+      if (title && p.text) title.textContent = p.text;
+      if (pctEl) pctEl.textContent = `${Math.round(Number(p.pct) || 0)}%`;
+    };
     setStatus("is-warn", "正在打包…", "下载统一完整包（含 Git），请稍候");
-    await api.download(platform);
-    setStatus(
-      "is-warn",
-      "等待本机桥启动…",
-      "完整包已下载。解压后运行 start-adb-bridge.*，保持窗口打开，再点连接。"
-    );
+    setProg(true, { pct: 4, text: "准备打包…" });
+    try {
+      await api.download(platform, {
+        onProgress: (p) => setProg(true, p),
+      });
+      setStatus(
+        "is-warn",
+        "等待本机桥启动…",
+        "完整包已下载。解压后运行 start-adb-bridge.*，保持窗口打开，再点连接。"
+      );
+    } finally {
+      setProg(false);
+    }
   }
 
   let opsCatalog = { ops: [], groups: [] };

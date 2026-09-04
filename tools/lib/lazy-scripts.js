@@ -61,6 +61,7 @@
     lanshare: "./lanshare.js",
     setup: "./setup.js",
     envkit: "./envkit.js",
+    feedbackhub: "./feedbackhub.js",
     imgkit: "./imgkit.js",
     imgtrim: "./imgtrim.js",
     xorenc: "./xorenc.js",
@@ -183,7 +184,7 @@
 
   const NO_PURE = new Set([
     "acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "everything", "ffbridge", "ytdlp",
-    "gitbridge", "envkit",
+    "gitbridge", "envkit", "feedbackhub",
     "setup", "about", "xorenc", "morse", "countdown",
     "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "piano", "minigames", "ambient",
   ]);

@@ -729,10 +729,26 @@
   async function downloadBundle(platform) {
     const api = window.devtoolsUnifiedBridgeBundle;
     if (!api?.download) throw new Error("统一完整包模块未加载，请硬刷新页面");
+    const box = $("#ff-dl-progress");
+    const fill = $("#ff-dl-progress-fill");
+    const title = $("#ff-dl-progress-text");
+    const pctEl = $("#ff-dl-progress-pct");
+    const setProg = (on, p = {}) => {
+      if (!box) return;
+      box.hidden = !on;
+      if (fill) fill.style.width = `${Math.max(0, Math.min(100, Number(p.pct) || 0))}%`;
+      if (title && p.text) title.textContent = p.text;
+      if (pctEl) pctEl.textContent = `${Math.round(Number(p.pct) || 0)}%`;
+    };
     toast("正在准备统一完整包…");
-    await api.download(platform);
-    toast("已下载完整包，解压运行 start-adb-bridge.* 后点连接");
-    startWaitPoll();
+    setProg(true, { pct: 4, text: "准备打包…" });
+    try {
+      await api.download(platform, { onProgress: (p) => setProg(true, p) });
+      toast("已下载完整包，解压运行 start-adb-bridge.* 后点连接");
+      startWaitPoll();
+    } finally {
+      setProg(false);
+    }
   }
 
   function outDirHintForOp(opId) {

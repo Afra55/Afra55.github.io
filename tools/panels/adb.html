@@ -14,6 +14,7 @@
           </div>
           <div class="btn-row tool-actions adb-status-actions">
             <button type="button" class="primary-btn" id="adb-connect">连接本机桥</button>
+            <button type="button" class="secondary-btn" id="adb-bridge-launch">启动本机桥</button>
             <button type="button" class="secondary-btn" id="adb-refresh" disabled>刷新设备</button>
             <span class="adb-dl-bundle" id="adb-dl-bundle">
               <button type="button" class="secondary-btn" id="adb-dl-mac" data-adb-bundle="mac">下载 macOS 完整包</button>
@@ -31,24 +32,23 @@
           <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill is-busy" id="adb-dl-progress-fill" style="width:0%"></span></div>
         </div>
 
-        <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
-          <label for="adb-base">桥地址</label>
-          <input id="adb-base" class="mono" type="text" value="http://127.0.0.1:17888" autocomplete="off" spellcheck="false" />
-          <label for="adb-token">Token</label>
-          <input id="adb-token" class="mono" type="text" value="devtools-bridge" autocomplete="off" spellcheck="false" />
-        </div>
         <div class="field-block adb-install-dir" style="margin-top:0.65rem">
           <div class="field-row" style="flex-wrap:wrap;align-items:center">
             <label for="adb-install-dir">桥解压目录</label>
             <input id="adb-install-dir" class="mono" type="text" placeholder="例如 C:\Tools\devtools-bridge 或 /Users/me/devtools-bridge" autocomplete="off" spellcheck="false" style="min-width:min(100%,22rem);flex:1" />
             <button type="button" class="secondary-btn" id="adb-install-dir-save">记住目录</button>
-            <button type="button" class="primary-btn" id="adb-bridge-launch">启动本机桥</button>
           </div>
           <label class="flag" style="margin-top:0.35rem;display:inline-flex;gap:0.35rem;align-items:center">
             <input type="checkbox" id="adb-bridge-autostart" checked />
             进入本页时若未连接则尝试自动启动
           </label>
           <p class="hint tight" id="adb-install-dir-hint">下载解压后把文件夹路径填在这里并「记住」。首次请手动双击启动脚本（会注册 <span class="mono">devtools-bridge://</span>）。之后网页可自动唤起：若已手动打开窗口，浏览器再弹出「打开 DevTools Bridge」请点取消，不要再开第二座。</p>
+        </div>
+        <div class="field-row bridge-conn-fields" style="flex-wrap:wrap;margin-top:0.65rem">
+          <label for="adb-base">桥地址</label>
+          <input id="adb-base" class="mono" type="text" value="http://127.0.0.1:17888" autocomplete="off" spellcheck="false" />
+          <label for="adb-token">Token</label>
+          <input id="adb-token" class="mono" type="text" value="devtools-bridge" autocomplete="off" spellcheck="false" />
         </div>
         <p class="hint">默认 Token 为 <span class="mono">devtools-bridge</span>（兼容旧 <span class="mono">devtools-adb</span>）。<strong>一座桥</strong>同时提供 ADB、Scrcpy 镜像与 FFmpeg（<span class="mono">/ff</span>）。完整包需含 <span class="mono">server.js</span> + <span class="mono">ffmpeg-bridge/</span>（桥 ≥0.8.0）。<button type="button" class="ghost-btn" id="adb-setup-guide-show" hidden style="margin-left:0.35rem">显示本机依赖说明</button></p>
         <div class="adb-guide" id="adb-setup-guide">

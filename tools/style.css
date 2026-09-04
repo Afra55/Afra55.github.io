@@ -343,6 +343,90 @@ body.theme-reduce-glow .bg-grid {
   font-size: 0.86em;
 }
 
+/* === shared bridge status (all bridge panels) === */
+.adb-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
+}
+
+.adb-status-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.adb-status-main strong {
+  display: block;
+  font-size: 1rem;
+}
+
+.adb-status-actions {
+  flex-wrap: wrap;
+}
+
+.adb-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-top: 0.35rem;
+  border-radius: 50%;
+  background: var(--muted);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--muted) 22%, transparent);
+  flex: 0 0 auto;
+}
+
+.adb-dot.is-ok {
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 20%, transparent);
+}
+
+.adb-dot.is-warn {
+  background: var(--accent-2);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-2) 22%, transparent);
+}
+
+.adb-dot.is-err {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--danger) 22%, transparent);
+}
+
+.adb-dl-bundle {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.adb-install-dir .field-row {
+  align-items: center;
+}
+
+.bridge-dl-progress {
+  margin-top: 0.55rem;
+}
+
+.bridge-conn-fields {
+  margin-top: 0.65rem;
+}
+
+.devtools-giscus-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.45rem 1rem;
+  margin: 0 0 0.65rem;
+}
+
+.devtools-giscus-head .subhead {
+  margin: 0;
+  font-size: 1rem;
+}
+
+
 .tool-nav {
   display: flex;
   flex-wrap: wrap;

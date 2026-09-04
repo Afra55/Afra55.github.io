@@ -157,7 +157,8 @@
         "about",
         "sitenav",
         "setup",
-        "envkit"
+        "envkit",
+        "feedbackhub"
       ]
     }
   ],
@@ -775,6 +776,18 @@
       ],
       "desktopOnly": true
     },
+    "feedbackhub": {
+      "name": "评价汇总",
+      "aliases": [
+        "评价",
+        "评论",
+        "反馈",
+        "giscus",
+        "discussions",
+        "feedback",
+        "reviews"
+      ]
+    },
     "about": {
       "name": "实用小工具合集",
       "aliases": [
@@ -915,10 +928,11 @@
     "lanshare": "局域网互传：多机同房间共享文件列表，下载时从上传者手机 WebRTC 直传，不经房主中转；房主可退出或解散，退出时最近加入者接任。",
     "ffbridge": "电脑批量用本机 FFmpeg 桥；手机请直接用视频/GIF 分类里的音频/修剪/动图（网页内处理）。",
     "ytdlp": "本机 yt-dlp 桥：解析/下载视频与播放列表、字幕、封面、直播、Cookies 与 SponsorBlock；含安装教程，文件只保存在电脑。",
-    "gitbridge": "分支工作台（切换/合并/删除/ahead·behind）+ 面板内确认 + 大按钮三步；彩色图/diff/冲突；统一桥 /git。",
+    "gitbridge": "分支工作台 + 冲突置顶 + 面板确认 + 小 GUI 美化；统一桥 /git。",
     "about": "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
     "setup": "小白向：如何下载安装 Node.js、ADB、FFmpeg；手机用网页保底、电脑用桥更优。",
-    "envkit": "一键安装或缺省跳过；一键升级会更新 Node/Git/FFmpeg/ADB/yt-dlp 与全部桥文件。",
+    "envkit": "一键安装/升级系统工具与统一桥文件；探测以 17888 统一桥为主（独立桥仅遗留可选）。",
+    "feedbackhub": "汇集各工具底部 giscus 评价：按工具/时间查看，并跳转 GitHub Discussions 回复。",
     "mathedit": "MathLive 在线数学公式编辑：可视化输入，导出 LaTeX / MathML / AsciiMath。",
     "mdslides": "把 Markdown 做成网页幻灯片（Reveal.js）；用 --- 分页，一键全屏演示。",
     "sitenav": "外链导航：PDFCraft、图吧工具箱、昆虫世界、史前博物馆、Slidev 等站外服务；本站已有工具不重复列出。"

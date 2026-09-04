@@ -1,0 +1,28 @@
+/* 评价汇总 */
+#feedbackhub .fb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+#feedbackhub .fb-card {
+  padding: 0.75rem 0.85rem;
+}
+
+#feedbackhub .fb-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.35rem 0.75rem;
+}
+
+#feedbackhub .fb-card-meta {
+  margin: 0.25rem 0 0;
+}
+
+#feedbackhub .fb-excerpt {
+  margin: 0.45rem 0 0;
+  line-height: 1.45;
+  font-size: 0.9rem;
+}

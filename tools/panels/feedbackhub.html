@@ -1,0 +1,33 @@
+<section id="feedbackhub" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>评价汇总</h1>
+        <p>汇集各工具底部 <strong>giscus</strong> 评论（GitHub Discussions）。按工具 / 时间查看，并可跳转回复。</p>
+      </div>
+      <div class="panel-body">
+        <div class="panel-card">
+          <h2 class="subhead">评价系统说明</h2>
+          <ul class="hint" style="margin:0.35rem 0 0;padding-left:1.2rem;line-height:1.55">
+            <li>每个工具面板<strong>底部</strong>有评论区：用户发帖后，同一工具下其他人也能立刻看到。</li>
+            <li>评论存在仓库 Discussions（分类 Announcements），映射词为 <span class="mono">devtools/&lt;工具id&gt;</span>。</li>
+            <li>本页汇总全站评论线程，方便站长按工具浏览与到 GitHub 回复。</li>
+          </ul>
+          <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.55rem">
+            <button type="button" class="primary-btn" id="fb-refresh">刷新列表</button>
+            <a class="secondary-btn" href="https://github.com/Afra55/Afra55.github.io/discussions" target="_blank" rel="noopener noreferrer">打开 GitHub Discussions</a>
+            <a class="ghost-btn" href="#about">关于本站</a>
+          </div>
+          <p class="hint tight" id="fb-meta" style="margin-top:0.45rem">尚未加载。</p>
+          <p class="error" id="fb-error" hidden></p>
+        </div>
+
+        <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem;align-items:center;gap:0.4rem">
+          <label for="fb-filter">筛选工具</label>
+          <input id="fb-filter" type="search" placeholder="工具名 / id，如 json、git" autocomplete="off" spellcheck="false" style="flex:1;min-width:10rem" />
+          <label class="flag"><input type="checkbox" id="fb-only-devtools" checked /> 仅 DevTools 线程</label>
+        </div>
+
+        <div class="fb-list" id="fb-list" style="margin-top:0.75rem" aria-live="polite">
+          <p class="hint tight">点「刷新列表」从 GitHub 拉取 Discussions。</p>
+        </div>
+      </div>
+    </section>

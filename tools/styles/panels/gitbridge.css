@@ -519,3 +519,78 @@
   cursor: pointer;
   user-select: none;
 }
+
+#gitbridge .git-save-zone {
+  margin-top: 0.35rem;
+}
+
+#gitbridge .git-conflict-box:not([hidden]) {
+  margin: 0.55rem 0 0.75rem;
+  padding: 0.65rem 0.7rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, #f5a524 55%, transparent);
+  background: color-mix(in srgb, #f5a524 9%, transparent);
+  order: -1;
+}
+
+#gitbridge .git-empty-hint {
+  padding: 0.85rem 0.35rem;
+  text-align: center;
+  opacity: 0.78;
+}
+
+#gitbridge .git-row.is-head-row {
+  box-shadow: inset 3px 0 0 color-mix(in srgb, #3dd68c 75%, transparent);
+  background: color-mix(in srgb, #3dd68c 8%, transparent);
+}
+
+#gitbridge .git-branch-card {
+  position: relative;
+  padding-left: 0.7rem;
+}
+
+#gitbridge .git-branch-card::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.35rem;
+  bottom: 0.35rem;
+  width: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--border, #2a2f3a) 80%, transparent);
+}
+
+#gitbridge .git-branch-card.is-current::before {
+  background: #3dd68c;
+}
+
+#gitbridge .git-branch-card.is-remote {
+  background: color-mix(in srgb, var(--accent, #5b8cff) 5%, transparent);
+}
+
+#gitbridge .git-branch-card.is-remote::before {
+  background: color-mix(in srgb, var(--accent, #5b8cff) 55%, transparent);
+}
+
+#gitbridge .git-action-tile {
+  min-height: 5rem;
+}
+
+#gitbridge .git-action-tile .git-action-ico {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--accent, #5b8cff) 12%, transparent);
+  font-size: 1rem;
+}
+
+#gitbridge .git-action-tile.is-primary {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #5b8cff) 35%, transparent);
+}
+
+#gitbridge .git-action-tile.is-primary .git-action-ico {
+  background: color-mix(in srgb, var(--accent, #5b8cff) 28%, transparent);
+}

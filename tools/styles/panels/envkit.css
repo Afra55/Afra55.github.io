@@ -1,7 +1,11 @@
-/* 环境管家 */
+/* 环境管家 — 探测卡对齐统一桥 status 视觉 */
 #envkit .env-probe-grid {
   display: grid;
-  gap: 0.45rem;
+  gap: 0.55rem;
+}
+
+#envkit .env-probe-legacy-label {
+  margin: 0.55rem 0 0;
 }
 
 #envkit .env-probe-card {
@@ -9,20 +13,26 @@
   grid-template-columns: auto 1fr auto;
   gap: 0.45rem 0.65rem;
   align-items: center;
-  padding: 0.55rem 0.65rem;
-  border: 1px solid var(--border, #2a2f3a);
-  border-radius: 8px;
+  padding: 0.75rem 0.85rem;
+  border: 1px solid var(--line, var(--border, #2a2f3a));
+  border-radius: 14px;
+  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
 }
 
 #envkit .env-probe-card .adb-dot {
-  width: 0.65rem;
-  height: 0.65rem;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-top: 0;
 }
 
 #envkit .env-probe-card.is-ok {
-  border-color: color-mix(in srgb, #3dd68c 45%, var(--border, #2a2f3a));
+  border-color: color-mix(in srgb, var(--accent, #3dd68c) 40%, var(--line, #2a2f3a));
 }
 
 #envkit .env-probe-card.is-err {
-  border-color: color-mix(in srgb, #f31260 40%, var(--border, #2a2f3a));
+  border-color: color-mix(in srgb, var(--danger, #f31260) 35%, var(--line, #2a2f3a));
+}
+
+#envkit .env-probe-card.is-legacy {
+  opacity: 0.78;
 }

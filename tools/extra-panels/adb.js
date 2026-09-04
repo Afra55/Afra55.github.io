@@ -4395,50 +4395,26 @@
   
         $("#adb-connect")?.addEventListener("click", () => connectAdbBridge());
 
-        // 桥解压目录记忆 + 协议唤起启动
-        try {
-          const dirInput = $("#adb-install-dir");
-          const autoEl = $("#adb-bridge-autostart");
-          if (dirInput) dirInput.value = window.devtoolsBridgeToken?.readInstallDir?.() || dirInput.value || "";
-          if (autoEl) autoEl.checked = window.devtoolsBridgeToken?.readAutoStart?.() !== false;
-        } catch (_) {
-          /* ignore */
-        }
-        $("#adb-install-dir-save")?.addEventListener("click", () => {
-          const dir = String($("#adb-install-dir")?.value || "").trim();
-          window.devtoolsBridgeToken?.writeInstallDir?.(dir);
-          toast(dir ? "已记住桥目录" : "已清除桥目录");
-        });
-        $("#adb-bridge-autostart")?.addEventListener("change", (e) => {
-          window.devtoolsBridgeToken?.writeAutoStart?.(Boolean(e.target.checked));
-        });
-        $("#adb-bridge-launch")?.addEventListener("click", async () => {
-          const dir = String($("#adb-install-dir")?.value || "").trim();
-          if (dir) window.devtoolsBridgeToken?.writeInstallDir?.(dir);
-          setAdbStatus("is-warn", "正在唤起本机桥…", "若已手动打开启动脚本，浏览器再询问时请点取消。首次使用请先手动运行一次以完成协议注册。");
-          window.devtoolsBridgeToken?.tryLaunchBridge?.();
-          startAdbWaitPoll();
-          const found = await window.devtoolsBridgeToken?.ensureBridgeRunning?.({
-            preferredBase: adbBase(),
-            token: adbToken(),
-            timeoutMs: 20000,
-            launch: false,
-            kind: "unified",
-          });
-          if (found?.health) {
+        // 桥解压目录记忆 + 协议唤起启动（与 FF/Git 等同标准）
+        window.devtoolsBridgeToken?.bindBridgeLaunchUI?.({
+          kind: "unified",
+          dirInput: $("#adb-install-dir"),
+          saveBtn: $("#adb-install-dir-save"),
+          launchBtn: $("#adb-bridge-launch"),
+          autoEl: $("#adb-bridge-autostart"),
+          getPreferredBase: () => adbBase(),
+          getToken: () => adbToken(),
+          onStatus: (kind, title, text) => setAdbStatus(kind, title, text),
+          onConnected: async () => {
+            startAdbWaitPoll?.();
             await connectAdbBridge();
-          } else {
-            setAdbStatus(
-              "is-warn",
-              "等待本机桥…",
-              "若未弹出启动，请到已记住的目录双击启动脚本，并保持窗口打开。"
-            );
-          }
+          },
+          toast: (msg) => toast(msg),
         });
         // 进入面板时：未连接则按开关尝试自动启动
         void (async () => {
           if (adbConnected) return;
-          if (window.devtoolsBridgeToken?.readAutoStart?.() === false) return;
+          if (window.devtoolsBridgeToken?.readAutoStart?.("unified") === false) return;
           try {
             const found = await window.devtoolsBridgeToken?.ensureBridgeRunning?.({
               preferredBase: adbBase(),

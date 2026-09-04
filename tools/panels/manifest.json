@@ -88,6 +88,11 @@
       "bytes": 1946
     },
     {
+      "id": "feedbackhub",
+      "file": "./panels/feedbackhub.html",
+      "bytes": 1800
+    },
+    {
       "id": "ffbridge",
       "file": "./panels/ffbridge.html",
       "bytes": 6553
