@@ -1405,15 +1405,6 @@
     return hay.includes(q);
   }
 
-  function dateFilterBounds() {
-    if (state.dateFilterTo == null) return null;
-    const today = startOfLocalDay(Date.now());
-    const toDay = startOfLocalDay(state.dateFilterTo);
-    const lo = Math.min(today, toDay);
-    const hi = endOfLocalDay(Math.max(today, toDay));
-    return { lo, hi };
-  }
-
   function filterItems({
     type = state.activeType,
     tagId = state.activeTagId,

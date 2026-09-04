@@ -2,9 +2,7 @@
   "use strict";
 
   const panel = document.querySelector("#passvault");
-  if (!panel) return;
-
-  const $ = (sel, root = panel) => root.querySelector(sel);
+  const $ = (sel, root = panel || document) => (root || document).querySelector(sel);
   const STORE_KEY = "devtools-passvault-blob-v1";
   const DIR_META_KEY = "devtools-passvault-dir-meta-v1";
   const IDB_NAME = "devtools-passvault-fs";
@@ -555,6 +553,14 @@
     return new File([JSON.stringify(blob, null, 2)], name, { type: "application/json" });
   }
 
+  // 互传等工具可能先拉脚本：无面板时也要能读加密备份
+  window.DevToolsPassvault = {
+    hasVault: () => Boolean(loadBlob()),
+    getEncryptedBackupFile,
+  };
+
+  if (!panel) return;
+
   async function bindDirectory(existing) {
     showError("");
     if (!fsSupported()) {
@@ -721,11 +727,6 @@
       if (cryptoKey) bumpActivity();
     });
   });
-
-  window.DevToolsPassvault = {
-    hasVault: () => Boolean(loadBlob()),
-    getEncryptedBackupFile,
-  };
 
   hydrateDir()
     .then(() => setGateMode(Boolean(loadBlob())))

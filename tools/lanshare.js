@@ -2569,11 +2569,56 @@
   }
 
   async function ensureToolScript(toolId) {
-    if (window.DevToolsLazy?.ensureForTool) {
-      await window.DevToolsLazy.ensureForTool(toolId);
-      return;
+    if (window.DevToolsPanels?.bootReady) {
+      try {
+        await window.DevToolsPanels.bootReady;
+      } catch (_) {
+        /* ignore */
+      }
     }
-    throw new Error("脚本加载器未就绪，请刷新后重试");
+    // 必须先挂面板再跑脚本：memo/passvault 无 DOM 时会直接 return
+    if (window.DevToolsPanels?.ensure) {
+      await window.DevToolsPanels.ensure(toolId);
+    }
+    if (!window.DevToolsLazy?.ensureForTool) {
+      throw new Error("脚本加载器未就绪，请刷新后重试");
+    }
+    await window.DevToolsLazy.ensureForTool(toolId);
+  }
+
+  function toolScriptPath(toolId) {
+    if (toolId === "passvault") return "./passvault.js";
+    if (toolId === "memo") return "./memo.js";
+    return `./${toolId}.js`;
+  }
+
+  async function reinjectToolScript(toolId) {
+    const build = window.TOOLS_BUILD || window.TOOLS_VERSION || Date.now();
+    const src = `${toolScriptPath(toolId)}?v=${encodeURIComponent(build)}&reinit=${Date.now()}`;
+    await new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = src;
+      s.async = false;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error(`重新加载 ${toolId} 失败`));
+      document.head.appendChild(s);
+    });
+  }
+
+  async function waitForApi(probe, label, { reinjectId = "", tries = 50 } = {}) {
+    for (let i = 0; i < tries; i++) {
+      const api = probe();
+      if (api) return api;
+      if (i === 8 && reinjectId) {
+        try {
+          await reinjectToolScript(reinjectId);
+        } catch (_) {
+          /* continue polling */
+        }
+      }
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    throw new Error(label);
   }
 
   async function addPassvaultToShare() {
@@ -2581,8 +2626,11 @@
     setSiteDataMeta("正在读取密码库…");
     try {
       await ensureToolScript("passvault");
-      const api = window.DevToolsPassvault;
-      if (!api?.getEncryptedBackupFile) throw new Error("密码库脚本未就绪");
+      const api = await waitForApi(
+        () => (window.DevToolsPassvault?.getEncryptedBackupFile ? window.DevToolsPassvault : null),
+        "密码库脚本未就绪",
+        { reinjectId: "passvault" }
+      );
       if (!api.hasVault?.()) throw new Error("本机还没有密码库；请先到「本地密码库」创建");
       const file = api.getEncryptedBackupFile();
       if (!file) throw new Error("没有可添加的加密备份");
@@ -2620,8 +2668,11 @@
     setSiteDataMeta("正在打包备忘录…");
     try {
       await ensureToolScript("memo");
-      const api = window.DevToolsMemo;
-      if (!api?.buildShareExportFile) throw new Error("备忘录脚本未就绪");
+      const api = await waitForApi(
+        () => (window.DevToolsMemo?.buildShareExportFile ? window.DevToolsMemo : null),
+        "备忘录脚本未就绪",
+        { reinjectId: "memo" }
+      );
       if (api.whenReady) await api.whenReady();
       const packed = await api.buildShareExportFile({ kinds });
       if (!packed?.file) throw new Error("打包失败");
