@@ -1563,7 +1563,9 @@
     if (!repoPath) return showError("先打开一个仓库");
     const sha = String(selectedSha || "").trim();
     if (!sha || sha.length < 7) {
-      return showError("先在提交图里点中要改的那一笔，再点「补进选中提交」");
+      const graphDetails = $("#git-graph-details");
+      if (graphDetails) graphDetails.open = true;
+      return showError("先展开「保存历史图」，点中要改的那一笔，再点「补进选中提交」");
     }
     if (
       !(await askConfirm(

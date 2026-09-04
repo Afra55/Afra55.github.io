@@ -1,7 +1,7 @@
 <section id="gitbridge" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>Git 可视化</h1>
-        <p>本机调用系统 <span class="mono">git</span>。日常只要<strong>保存 → 上传</strong>；下面密密麻麻的命令可先折叠不看，需要时每条都有中文说明。<a href="#setup">安装指南</a> · <a href="#adb">下载完整包</a></p>
+        <p>本机调用系统 <span class="mono">git</span>。开仓库后看「小白模式」：保存 → 上传就够。下面图和命令都可先不看。<a href="#setup">安装指南</a> · <a href="#adb">下载完整包</a></p>
       </div>
       <div class="panel-body">
         <div class="adb-status" id="git-status">
@@ -104,26 +104,31 @@
                 <button type="button" class="ghost-btn" id="git-easy-refresh">刷新状态</button>
               </div>
               <div class="git-calm-banner" id="git-calm-banner">
-                <p><strong>日常只要三步：</strong>① 改文件 → ② 下面「保存」→ ③ 点「上传」。其它按钮都可以先不点。</p>
+                <p><strong>日常就这三步，其它先别管：</strong></p>
+                <ol class="git-calm-steps">
+                  <li><strong>更新</strong>（可选）——别人有新改动时先拉下来</li>
+                  <li><strong>保存</strong>——勾文件、写说明、点保存</li>
+                  <li><strong>上传</strong>——让别人也能看见</li>
+                </ol>
               </div>
               <p class="hint tight" id="git-easy-now">打开仓库后，这里会告诉你现在适合做什么。</p>
               <div class="git-status-pills" id="git-status-pills" aria-live="polite"></div>
 
               <div class="git-action-grid git-action-grid-main" id="git-action-grid">
                 <button type="button" class="git-action-tile" id="git-easy-pull" title="从远程拉最新（git pull）">
-                  <span class="git-action-ico" aria-hidden="true">↓</span>
+                  <span class="git-action-step" aria-hidden="true">1</span>
                   <strong>更新</strong>
                   <span>把网上最新拉到本机</span>
                 </button>
                 <button type="button" class="git-action-tile is-primary" id="git-easy-push" title="推送到远程（git push）">
-                  <span class="git-action-ico" aria-hidden="true">↑</span>
+                  <span class="git-action-step" aria-hidden="true">3</span>
                   <strong>上传</strong>
                   <span>把已保存的历史发上网</span>
                 </button>
-                <button type="button" class="git-action-tile" id="git-easy-fetch" title="只刷新远程信息（git fetch）">
+                <button type="button" class="git-action-tile git-action-tile-quiet" id="git-easy-fetch" title="只刷新远程信息（git fetch）">
                   <span class="git-action-ico" aria-hidden="true">↻</span>
                   <strong>查新</strong>
-                  <span>只看看网上有没有新的（不改你的文件）</span>
+                  <span>只看看有没有新的（不改文件）</span>
                 </button>
               </div>
               <details class="git-ops-details git-pull-mode-details">
@@ -180,7 +185,7 @@
               </div>
 
               <div class="git-save-zone" id="git-save-zone">
-              <h3 class="git-easy-sec">② 保存我的改动</h3>
+              <h3 class="git-easy-sec"><span class="git-step-badge" aria-hidden="true">2</span> 保存我的改动</h3>
               <p class="hint tight">勾选文件 → 写一句说明 → 点「保存」。点文件名可看彩色对比。保存只记在本机，别人要看见再点上面的「上传」。</p>
               <div id="git-change-list" class="git-change-list" aria-live="polite">
                 <p class="hint tight git-empty-hint">还没有改动 · 去改文件再回来</p>
@@ -252,118 +257,122 @@
               </details>
             </div>
 
-            <div class="git-layout">
-              <div class="git-graph-pane">
-                <div class="label-row">
-                  <h2 class="subhead">提交图（可选看）</h2>
-                  <label class="flag"><input type="checkbox" id="git-show-ascii" /> 对照终端图</label>
-                </div>
-                <p class="hint tight">每一行是一次「保存」。点一行，右侧会用人话解释。日常上传前不用盯着看。</p>
-                <div class="git-graph" id="git-graph" role="list"></div>
-                <pre class="mono adb-pre" id="git-ascii" hidden style="margin-top:0.55rem;max-height:14rem;overflow:auto"></pre>
-              </div>
-              <div class="git-side-pane">
-                <div class="label-row">
-                  <h2 class="subhead">工作线（分支）</h2>
-                  <button type="button" class="ghost-btn" id="git-branch-refresh">刷新</button>
-                </div>
-                <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.35rem">
-                  <input id="git-easy-newbr" type="text" placeholder="新线名字，如 fix-login" spellcheck="false" autocomplete="off" style="flex:1;min-width:7rem" />
-                  <button type="button" class="secondary-btn" id="git-easy-newbr-go">开新线</button>
-                </div>
-                <p class="hint tight" style="margin-top:0.25rem">一条「工作线」= 一串保存记录。不确定就留在当前线，点卡片上的「切到这条」即可。</p>
-                <div class="git-branch-board" id="git-branches"></div>
-                <!-- 兼容旧下拉：隐藏但供脚本填充 -->
-                <select id="git-easy-branch" class="select-input" hidden></select>
-                <button type="button" id="git-easy-switch" hidden></button>
+            <p class="git-below-fold-hint hint tight" id="git-below-fold-hint">—— 上面够日常用了；下面都可以先不看 ——</p>
 
-                <div class="label-row" style="margin-top:0.85rem">
-                  <h2 class="subhead">人话解释</h2>
-                </div>
-                <div class="panel-card git-explain" id="git-explain">
-                  <p class="hint">点左侧提交图里的某一行，这里会用白话说明这一笔是什么。</p>
-                </div>
+            <div class="label-row" style="margin-top:0.65rem">
+              <h2 class="subhead">我的常用</h2>
+              <span class="hint tight" id="git-fav-count"></span>
+            </div>
+            <div class="panel-card git-fav-box" id="git-fav-box">
+              <p class="hint tight" id="git-fav-empty">还没有常用。需要时在「全部命令」里点「加到常用」。</p>
+              <div id="git-fav-list" class="git-ops-plain-list" hidden></div>
+            </div>
 
-                <div class="label-row" style="margin-top:0.85rem">
-                  <h2 class="subhead">我的常用</h2>
-                  <span class="hint tight" id="git-fav-count"></span>
+            <div class="git-layout git-layout-calm" id="git-advanced-layout">
+              <details class="git-ops-details git-adv-block" id="git-graph-details">
+                <summary class="hint">保存历史图 + 人话解释（可选，日常不用看）</summary>
+                <div class="git-adv-inner git-layout-inner">
+                  <div class="git-graph-pane">
+                    <div class="label-row" style="margin-top:0.45rem">
+                      <h2 class="subhead">历史里的每一次保存</h2>
+                      <label class="flag"><input type="checkbox" id="git-show-ascii" /> 对照终端图</label>
+                    </div>
+                    <p class="hint tight">每一行是一次「保存」。点一行看右边解释。</p>
+                    <div class="git-graph" id="git-graph" role="list"></div>
+                    <pre class="mono adb-pre" id="git-ascii" hidden style="margin-top:0.55rem;max-height:14rem;overflow:auto"></pre>
+                  </div>
+                  <div class="git-side-pane git-explain-pane">
+                    <div class="label-row" style="margin-top:0.45rem">
+                      <h2 class="subhead">人话解释</h2>
+                    </div>
+                    <div class="panel-card git-explain" id="git-explain">
+                      <p class="hint">点左侧某一行，这里会用白话说明这一笔是什么。</p>
+                    </div>
+                  </div>
                 </div>
-                <div class="panel-card git-fav-box" id="git-fav-box">
-                  <p class="hint tight" id="git-fav-empty">还没有常用。在下面命令旁点「加到常用」。</p>
-                  <div id="git-fav-list" class="git-ops-plain-list" hidden></div>
-                </div>
+              </details>
 
-                <div class="label-row" style="margin-top:0.85rem">
-                  <h2 class="subhead">命令（都有中文）</h2>
-                  <span class="hint tight" id="git-ops-count"></span>
+              <details class="git-ops-details git-adv-block" id="git-branch-details">
+                <summary class="hint">换工作线 / 开新线（可选）</summary>
+                <div class="git-adv-inner" style="margin-top:0.45rem">
+                  <div class="label-row">
+                    <h2 class="subhead">工作线</h2>
+                    <button type="button" class="ghost-btn" id="git-branch-refresh">刷新</button>
+                  </div>
+                  <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.35rem">
+                    <input id="git-easy-newbr" type="text" placeholder="新线名字，如 fix-login" spellcheck="false" autocomplete="off" style="flex:1;min-width:7rem" />
+                    <button type="button" class="secondary-btn" id="git-easy-newbr-go">开新线</button>
+                  </div>
+                  <p class="hint tight" style="margin-top:0.25rem">不确定就留在当前线。点卡片「切到这条」即可换线。</p>
+                  <div class="git-branch-board" id="git-branches"></div>
+                  <select id="git-easy-branch" class="select-input" hidden></select>
+                  <button type="button" id="git-easy-switch" hidden></button>
                 </div>
-                <details class="git-ops-details" id="git-ops-details" open>
-                  <summary class="hint">展开 / 收起命令目录 —— 每条第一行人话，第二行才是 git 原名</summary>
-                  <p class="hint tight" id="git-ops-whitelist-tip" style="margin-top:0.35rem">
-                    看不懂英文没关系：先读<strong>中文</strong>那一行。右侧「加到常用」可钉到上方。点下去前会弹出将要执行的命令预览。
-                  </p>
-                  <div id="git-ops-catalog" class="git-ops-catalog"></div>
-                </details>
+              </details>
 
-                <details class="git-ops-details" style="margin-top:0.55rem">
-                  <summary class="hint">进阶快捷钮（可先不看；会一点 git 再用）</summary>
-                  <p class="hint tight" style="margin-top:0.35rem">按钮上是中文；括号里是 git 原名。完整列表仍在上面的命令目录。</p>
-                  <div class="btn-row tool-actions" style="flex-wrap:wrap" id="git-ops-row">
-                    <button type="button" class="secondary-btn" data-git-op="fetch" title="git fetch">查新 (fetch)</button>
-                    <button type="button" class="secondary-btn" data-git-op="pull" title="git pull --ff-only">快进更新 (pull)</button>
-                    <button type="button" class="secondary-btn" data-git-op="status" title="git status">看改动 (status)</button>
-                    <button type="button" class="secondary-btn" data-git-op="diff" title="git diff --stat">改动统计 (diff)</button>
-                    <button type="button" class="secondary-btn" data-git-op="reflog" title="git reflog">后悔药 (reflog)</button>
-                    <button type="button" class="secondary-btn" data-git-op="remote-list" title="git remote -v">远程地址 (remote)</button>
-                    <button type="button" class="secondary-btn" data-git-op="stash-push" title="git stash">收起改动 (stash)</button>
-                    <button type="button" class="secondary-btn" data-git-op="stash-pop" title="git stash pop">取出收起 (stash pop)</button>
-                    <button type="button" class="secondary-btn" data-git-op="worktree-list" title="git worktree list">额外工作目录</button>
-                    <button type="button" class="secondary-btn" data-git-op="log-graph" title="git log --graph">终端分叉图</button>
-                  </div>
-                  <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center;gap:0.4rem">
-                    <label for="git-op-target">目标</label>
-                    <input id="git-op-target" class="mono" type="text" placeholder="留空=当前选中提交 / 当前分支" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
-                    <button type="button" class="ghost-btn" data-git-op="checkout" title="git checkout">切过去</button>
-                    <button type="button" class="ghost-btn" data-git-op="merge" title="git merge">合进来</button>
-                    <button type="button" class="ghost-btn" data-git-op="rebase" title="git rebase">接到后面</button>
-                    <button type="button" class="ghost-btn" data-git-op="cherry-pick" title="git cherry-pick">只拣一笔</button>
-                  </div>
-                  <p class="hint tight" id="git-op-autofill-hint" style="margin-top:0.25rem">点命令时会自动带上：选中提交、当前分支、冲突/改动文件路径、说明文字。</p>
-                  <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
-                    <label for="git-new-branch">新分支</label>
-                    <input id="git-new-branch" class="mono" type="text" placeholder="feature/foo" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
-                    <button type="button" class="ghost-btn" data-git-op="branch-create" title="git branch">创建</button>
-                    <button type="button" class="ghost-btn" data-git-op="branch-create-co" title="git checkout -b">创建并切过去</button>
-                  </div>
-                  <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
-                    <label for="git-op-path">路径</label>
-                    <input id="git-op-path" class="mono" type="text" placeholder="文件路径" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
-                    <button type="button" class="ghost-btn" data-git-op="blame" title="git blame">谁改的这行</button>
-                    <button type="button" class="ghost-btn" data-git-op="add" title="git add">放进待保存</button>
-                  </div>
-                  <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
-                    <label for="git-commit-msg">说明</label>
-                    <input id="git-commit-msg" class="mono" type="text" placeholder="一句话说明这次保存" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
-                    <button type="button" class="ghost-btn" data-git-op="add-all" title="git add -A">全部进待保存</button>
-                    <button type="button" class="ghost-btn" data-git-op="commit" title="git commit">记入历史</button>
-                  </div>
-                </details>
+              <details class="git-ops-details git-adv-block" id="git-ops-details">
+                <summary class="hint">全部命令目录（每条有中文；可先不看） <span class="hint tight" id="git-ops-count"></span></summary>
+                <p class="hint tight" id="git-ops-whitelist-tip" style="margin-top:0.35rem">
+                  先读<strong>中文</strong>那一行。右侧「加到常用」会钉到上方「我的常用」。点下去前会预览。
+                </p>
+                <div id="git-ops-catalog" class="git-ops-catalog"></div>
+              </details>
 
-                <div class="label-row" style="margin-top:0.75rem">
-                  <h2 class="subhead">执行历史</h2>
-                  <span class="hint tight" id="git-hist-count"></span>
+              <details class="git-ops-details git-adv-block">
+                <summary class="hint">进阶快捷钮（可先不看）</summary>
+                <p class="hint tight" style="margin-top:0.35rem">按钮上是中文；括号里是 git 原名。</p>
+                <div class="btn-row tool-actions" style="flex-wrap:wrap" id="git-ops-row">
+                  <button type="button" class="secondary-btn" data-git-op="fetch" title="git fetch">查新 (fetch)</button>
+                  <button type="button" class="secondary-btn" data-git-op="pull" title="git pull --ff-only">快进更新 (pull)</button>
+                  <button type="button" class="secondary-btn" data-git-op="status" title="git status">看改动 (status)</button>
+                  <button type="button" class="secondary-btn" data-git-op="diff" title="git diff --stat">改动统计 (diff)</button>
+                  <button type="button" class="secondary-btn" data-git-op="reflog" title="git reflog">后悔药 (reflog)</button>
+                  <button type="button" class="secondary-btn" data-git-op="remote-list" title="git remote -v">远程地址 (remote)</button>
+                  <button type="button" class="secondary-btn" data-git-op="stash-push" title="git stash">收起改动 (stash)</button>
+                  <button type="button" class="secondary-btn" data-git-op="stash-pop" title="git stash pop">取出收起 (stash pop)</button>
+                  <button type="button" class="secondary-btn" data-git-op="worktree-list" title="git worktree list">额外工作目录</button>
+                  <button type="button" class="secondary-btn" data-git-op="log-graph" title="git log --graph">终端分叉图</button>
                 </div>
-                <details class="git-ops-details" id="git-hist-details">
-                  <summary class="hint">近 7 天点过的操作（本机保存；可先不看）</summary>
-                  <div class="btn-row tool-actions" style="margin-top:0.35rem;flex-wrap:wrap">
-                    <button type="button" class="ghost-btn" id="git-hist-refresh">刷新列表</button>
-                    <button type="button" class="ghost-btn" id="git-hist-clear">清空历史</button>
-                  </div>
-                  <div id="git-hist-list" class="git-hist-list" aria-live="polite"></div>
-                </details>
-                <pre class="mono adb-pre" id="git-cmd-preview" style="margin-top:0.55rem;max-height:6rem;overflow:auto" hidden></pre>
-                <pre class="mono adb-pre" id="git-op-out" style="margin-top:0.45rem;max-height:10rem;overflow:auto" hidden></pre>
-              </div>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center;gap:0.4rem">
+                  <label for="git-op-target">目标</label>
+                  <input id="git-op-target" class="mono" type="text" placeholder="留空=当前选中提交 / 当前分支" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
+                  <button type="button" class="ghost-btn" data-git-op="checkout" title="git checkout">切过去</button>
+                  <button type="button" class="ghost-btn" data-git-op="merge" title="git merge">合进来</button>
+                  <button type="button" class="ghost-btn" data-git-op="rebase" title="git rebase">接到后面</button>
+                  <button type="button" class="ghost-btn" data-git-op="cherry-pick" title="git cherry-pick">只拣一笔</button>
+                </div>
+                <p class="hint tight" id="git-op-autofill-hint" style="margin-top:0.25rem">点命令时会自动带上：选中提交、当前分支、冲突/改动文件路径、说明文字。</p>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
+                  <label for="git-new-branch">新分支</label>
+                  <input id="git-new-branch" class="mono" type="text" placeholder="feature/foo" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
+                  <button type="button" class="ghost-btn" data-git-op="branch-create" title="git branch">创建</button>
+                  <button type="button" class="ghost-btn" data-git-op="branch-create-co" title="git checkout -b">创建并切过去</button>
+                </div>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
+                  <label for="git-op-path">路径</label>
+                  <input id="git-op-path" class="mono" type="text" placeholder="文件路径" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
+                  <button type="button" class="ghost-btn" data-git-op="blame" title="git blame">谁改的这行</button>
+                  <button type="button" class="ghost-btn" data-git-op="add" title="git add">放进待保存</button>
+                </div>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
+                  <label for="git-commit-msg">说明</label>
+                  <input id="git-commit-msg" class="mono" type="text" placeholder="一句话说明这次保存" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
+                  <button type="button" class="ghost-btn" data-git-op="add-all" title="git add -A">全部进待保存</button>
+                  <button type="button" class="ghost-btn" data-git-op="commit" title="git commit">记入历史</button>
+                </div>
+              </details>
+
+              <details class="git-ops-details git-adv-block" id="git-hist-details">
+                <summary class="hint">执行历史（近 7 天，可先不看） <span class="hint tight" id="git-hist-count"></span></summary>
+                <div class="btn-row tool-actions" style="margin-top:0.35rem;flex-wrap:wrap">
+                  <button type="button" class="ghost-btn" id="git-hist-refresh">刷新列表</button>
+                  <button type="button" class="ghost-btn" id="git-hist-clear">清空历史</button>
+                </div>
+                <div id="git-hist-list" class="git-hist-list" aria-live="polite"></div>
+              </details>
+
+              <pre class="mono adb-pre" id="git-cmd-preview" style="margin-top:0.55rem;max-height:6rem;overflow:auto" hidden></pre>
+              <pre class="mono adb-pre" id="git-op-out" style="margin-top:0.45rem;max-height:10rem;overflow:auto" hidden></pre>
             </div>
           </div>
         </div>
