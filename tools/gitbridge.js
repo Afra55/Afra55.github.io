@@ -908,6 +908,7 @@
     try {
       const data = await api(`/repo/status?repo=${encodeURIComponent(repoPath)}`);
       lastStatus = data;
+      if (lastBranches) updateBranchSummary(lastBranches);
       const rows = Array.isArray(data.changes) && data.changes.length
         ? data.changes
         : parseStatusPayload(data).filter((r) => !String(r.xy || "").startsWith("u"));
