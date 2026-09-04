@@ -802,7 +802,7 @@
         : lastStatus?.upstream
           ? ` · 跟踪 ${lastStatus.upstream}`
           : "";
-    sum.textContent = `工作线 · 当前：${name}${track}（折叠，点开可切换/合线）`;
+    sum.textContent = `工作线 · 当前：${name}${track}`;
   }
 
   function renderBranchWorkbench(branches) {
@@ -2276,14 +2276,16 @@
       (item.dangerous ? "git-op-plain-btn is-danger" : "git-op-plain-btn") +
       (isGerritOp(item) ? " git-op-gerrit-btn" : "");
     const plain = item.plain || item.title || item.id;
-    const gitTitle = item.title || item.id;
+    const rawTitle = String(item.title || item.id || "");
+    const gitTitle = /^git\s/i.test(rawTitle) ? rawTitle : `git ${rawTitle}`;
     const gerritTip = isGerritOp(item) ? "【Gerrit 专用】" : "";
     btn.title = item.dangerous
-      ? `${gerritTip}${plain}\n对应：git ${gitTitle}\n（会改仓库，执行前确认）`
-      : `${gerritTip}${plain}\n对应：git ${gitTitle}`;
+      ? `${gerritTip}${gitTitle}\n${plain}\n（会改仓库，执行前确认）`
+      : `${gerritTip}${gitTitle}\n${plain}`;
     const tag = isGerritOp(item) ? `<span class="git-op-gerrit-tag">Gerrit</span>` : "";
-    btn.innerHTML = `${tag}<span class="git-op-plain-text">${escapeHtml(plain)}</span><span class="git-op-cmd mono">对应 git ${escapeHtml(
-      gitTitle
+    // 第一行：命令；第二行：中文解释
+    btn.innerHTML = `${tag}<span class="git-op-cmd mono">${escapeHtml(gitTitle)}</span><span class="git-op-plain-text">${escapeHtml(
+      plain
     )}</span>`;
     btn.addEventListener("click", () => runOp(item.id).catch((e) => showError(e.message)));
 
@@ -2395,7 +2397,7 @@
       .filter((k) => p[k] != null && p[k] !== "")
       .map((k) => `${k}=${String(p[k]).slice(0, 48)}`);
     cmdPreview.textContent =
-      (plain ? `白话：${plain}\n` : "") +
+      (plain ? `${plain}\n` : "") +
       "即将执行：\n" +
       preview +
       (paramBits.length ? "\n参数：" + paramBits.join(" · ") : "");
