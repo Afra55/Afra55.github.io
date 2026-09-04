@@ -1,7 +1,7 @@
 <section id="gitbridge" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>Git 可视化</h1>
-        <p>本机调用系统 <span class="mono">git</span>。连上桥 → 打开仓库 → 按「更新 · 保存 · 上传」三步走。下面工作线 / 历史图 / 命令默认收起，需要再展开。<a href="#setup">安装指南</a> · <a href="#envkit">环境管家</a></p>
+        <p>本机调用系统 <span class="mono">git</span>。连上桥 → 打开仓库 → 跟着高亮走「更新 · 保存 · 上传」。下面工程项默认收起，日常不用看。<a href="#setup">安装指南</a> · <a href="#envkit">环境管家</a></p>
       </div>
       <div class="panel-body">
         <div id="git-bridge-shell" class="bridge-shell-host"></div>
@@ -9,15 +9,19 @@
         <div id="git-workspace" hidden>
           <div class="label-row" style="margin-top:1rem">
             <h2 class="subhead">选择仓库</h2>
-            <span class="hint tight" id="git-fs-meta">粘贴路径回车，或点下方拖拽区选文件夹</span>
+            <span class="hint tight" id="git-fs-meta">粘贴路径回车，或点下方区域选文件夹</span>
           </div>
           <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.4rem">
             <label for="git-fs-path">文件夹路径</label>
             <input id="git-fs-path" class="mono" type="text" value="" placeholder="例如 /Users/你/项目 或 C:\work\repo" spellcheck="false" autocomplete="off" style="flex:1;min-width:12rem" />
           </div>
+          <div id="git-recent" class="git-recent" hidden>
+            <span class="hint tight">最近打开</span>
+            <div id="git-recent-list" class="git-recent-list"></div>
+          </div>
           <div class="git-dropzone" id="git-dropzone" tabindex="0" role="button" aria-label="拖入或点击选择文件夹">
-            <strong>拖文件夹到这里，或点这里选择</strong>
-            <p class="hint tight">自动判断是不是 Git 仓库；不是的话会出现「新建空仓库」。</p>
+            <strong>点这里选文件夹</strong>
+            <p class="hint tight">也可以把文件夹拖进来。选不了时，把完整路径粘贴到上方按回车。</p>
           </div>
           <div id="git-init-box" class="git-init-box panel-card" hidden>
             <p class="hint tight" id="git-pick-hint">这个文件夹还不是 Git 仓库。</p>
@@ -25,6 +29,19 @@
               <button type="button" class="secondary-btn" id="git-init" title="git init">在此新建空仓库</button>
             </div>
           </div>
+          <details class="git-ops-details git-clone-details" id="git-clone-details">
+            <summary class="hint">还没有本地仓库？从网上克隆一份</summary>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
+              <label for="git-clone-url">地址</label>
+              <input id="git-clone-url" class="mono" type="text" placeholder="https://… 或 git@…" spellcheck="false" autocomplete="off" style="flex:1;min-width:12rem" />
+            </div>
+            <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
+              <label for="git-clone-dir">放到</label>
+              <input id="git-clone-dir" class="mono" type="text" placeholder="父文件夹路径（可空=默认目录）" spellcheck="false" autocomplete="off" style="flex:1;min-width:10rem" />
+              <button type="button" class="secondary-btn" id="git-clone-go">开始克隆</button>
+            </div>
+            <p class="hint tight" style="margin-top:0.3rem">克隆需要本机已登录远程；完成后会自动打开仓库。</p>
+          </details>
 
           <div id="git-repo-panel" hidden>
             <!-- beginner + advanced content kept in original; loaded via remaining file -->
@@ -36,28 +53,29 @@
 
             <div class="git-beginner panel-card" id="git-beginner">
               <div class="label-row">
-                <h2 class="subhead">小白模式 · 先别慌</h2>
+                <h2 class="subhead">日常三步 · 跟着高亮走</h2>
                 <button type="button" class="ghost-btn" id="git-easy-refresh">刷新状态</button>
               </div>
 
               <div class="git-progress-rail" id="git-progress-rail" aria-label="日常三步进度">
-                <div class="git-progress-step" data-git-step="1" id="git-progress-1">
+                <button type="button" class="git-progress-step" data-git-step="1" id="git-progress-1" title="跳到「更新」">
                   <span class="git-progress-num">1</span>
                   <span class="git-progress-label">更新</span>
-                </div>
+                </button>
                 <div class="git-progress-line" aria-hidden="true"></div>
-                <div class="git-progress-step" data-git-step="2" id="git-progress-2">
+                <button type="button" class="git-progress-step" data-git-step="2" id="git-progress-2" title="跳到「保存」">
                   <span class="git-progress-num">2</span>
                   <span class="git-progress-label">保存</span>
-                </div>
+                </button>
                 <div class="git-progress-line" aria-hidden="true"></div>
-                <div class="git-progress-step" data-git-step="3" id="git-progress-3">
+                <button type="button" class="git-progress-step" data-git-step="3" id="git-progress-3" title="跳到「上传」">
                   <span class="git-progress-num">3</span>
                   <span class="git-progress-label">上传</span>
-                </div>
+                </button>
               </div>
 
-              <p class="hint tight" id="git-easy-now">打开仓库后，这里会告诉你现在适合做什么。</p>
+              <p class="git-easy-now" id="git-easy-now">打开仓库后，这里会告诉你<strong>现在只做一件事</strong>。</p>
+              <p class="git-easy-success" id="git-easy-success" hidden></p>
               <div class="git-status-pills" id="git-status-pills" aria-live="polite"></div>
 
               <div class="git-flow-step" data-git-flow="1" id="git-flow-1">
@@ -137,9 +155,9 @@
                   <span class="git-step-badge" aria-hidden="true">2</span>
                   <h3 class="git-easy-sec">保存我的改动</h3>
                 </div>
-                <p class="hint tight">勾选文件 → 写一句说明 → 点「保存」。点文件名可看彩色对比。保存只记在本机，别人要看见再点下面的「上传」。</p>
+                <p class="hint tight">勾选文件 → 写一句说明 → 点「保存」。点文件名可看彩色对比。先只记在本机；别人要看见，再点下面「上传」。</p>
                 <div id="git-change-list" class="git-change-list" aria-live="polite">
-                  <p class="hint tight git-empty-hint">还没有改动 · 去改文件再回来</p>
+                  <p class="hint tight git-empty-hint">还没有改动 · 去编辑器改文件，再回这里点「刷新状态」</p>
                 </div>
                 <div class="git-diff-panel" id="git-diff-panel" hidden>
                   <div class="label-row">
@@ -153,7 +171,7 @@
                   <input id="git-easy-msg" type="text" placeholder="例如：修好登录按钮样式" spellcheck="false" autocomplete="off" style="flex:1;min-width:10rem" />
                   <button type="button" class="primary-btn" id="git-easy-commit">保存</button>
                 </div>
-                <p class="hint tight" id="git-easy-hint">「保存」= 记一笔历史；「上传」= 发给网上的仓库。</p>
+                <p class="hint tight" id="git-easy-hint">「保存」只记在本机；「上传」才发给网上。</p>
               </div>
 
               <div class="git-flow-step" data-git-flow="3" id="git-flow-3">
@@ -221,16 +239,15 @@
               </details>
             </div>
 
-            <p class="git-below-fold-hint hint tight" id="git-below-fold-hint">—— 日常三步在上面；下面是工作线、历史图与全部命令（默认收起）——</p>
+            <p class="git-below-fold-hint hint tight" id="git-below-fold-hint">—— 日常到此结束；下面默认收起，需要再点开 ——</p>
 
-            <div class="label-row" style="margin-top:0.65rem">
-              <h2 class="subhead">我的常用</h2>
-              <span class="hint tight" id="git-fav-count"></span>
-            </div>
-            <div class="panel-card git-fav-box" id="git-fav-box">
-              <p class="hint tight" id="git-fav-empty">还没有常用。在「全部命令」里点「加到常用」。</p>
-              <div id="git-fav-list" class="git-ops-plain-list" hidden></div>
-            </div>
+            <details class="git-ops-details git-fav-details" id="git-fav-details">
+              <summary class="hint">我的常用 <span class="hint tight" id="git-fav-count"></span></summary>
+              <div class="panel-card git-fav-box" id="git-fav-box" style="margin-top:0.4rem">
+                <p class="hint tight" id="git-fav-empty">还没有常用。在下方「全部命令」里点「加到常用」。</p>
+                <div id="git-fav-list" class="git-ops-plain-list" hidden></div>
+              </div>
+            </details>
 
             <div class="git-layout git-layout-calm" id="git-advanced-layout">
               <details class="git-ops-details git-adv-block" id="git-branch-details">

@@ -38,6 +38,72 @@
   letter-spacing: 0.02em;
 }
 
+#gitbridge .git-recent {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.55rem;
+  margin: 0.45rem 0 0.35rem;
+}
+
+#gitbridge .git-recent-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+#gitbridge .git-recent-chip {
+  appearance: none;
+  border: 1px solid color-mix(in srgb, var(--line, #2a2f3a) 80%, transparent);
+  background: color-mix(in srgb, var(--panel, #12141a) 70%, transparent);
+  color: inherit;
+  border-radius: 999px;
+  padding: 0.22rem 0.7rem;
+  font-size: 0.82rem;
+  cursor: pointer;
+  max-width: 12rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#gitbridge .git-recent-chip:hover {
+  border-color: color-mix(in srgb, var(--accent, #2ec4b6) 45%, transparent);
+}
+
+#gitbridge .git-clone-details {
+  margin-top: 0.55rem;
+}
+
+#gitbridge .git-easy-now {
+  margin: 0.35rem 0 0.25rem;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  font-weight: 600;
+}
+
+#gitbridge .git-easy-now.git-easy-now-warn {
+  color: color-mix(in srgb, #f5a524 85%, var(--text, #e8eaed));
+}
+
+#gitbridge .git-easy-now.git-easy-now-idle {
+  font-weight: 500;
+  opacity: 0.92;
+}
+
+#gitbridge .git-easy-success {
+  margin: 0.2rem 0 0.35rem;
+  padding: 0.45rem 0.65rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, #3dd68c 16%, transparent);
+  border: 1px solid color-mix(in srgb, #3dd68c 35%, transparent);
+  font-size: 0.88rem;
+}
+
+#gitbridge .git-fav-details.is-empty:not([open]) {
+  opacity: 0.62;
+}
+
 #gitbridge .git-calm-steps {
   margin: 0.35rem 0 0;
   padding-left: 1.2rem;
@@ -994,6 +1060,11 @@
   padding: 0.45rem 0.55rem;
   border-radius: 12px;
   background: color-mix(in srgb, var(--accent, #2ec4b6) 8%, transparent);
+  transition: background 0.2s ease;
+}
+
+#gitbridge .git-progress-rail.is-idle {
+  background: color-mix(in srgb, #3dd68c 12%, transparent);
 }
 
 #gitbridge .git-progress-step {
@@ -1006,6 +1077,13 @@
   border-radius: 999px;
   opacity: 0.72;
   transition: background 0.15s ease, opacity 0.15s ease;
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 #gitbridge .git-progress-step.is-focus {
@@ -1055,12 +1133,21 @@
   border-radius: 12px;
   border: 1px solid color-mix(in srgb, var(--line, #2a2f3a) 75%, transparent);
   background: color-mix(in srgb, var(--panel, #12141a) 55%, transparent);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
+}
+
+#gitbridge .git-flow-step.is-dim {
+  opacity: 0.55;
 }
 
 #gitbridge .git-flow-step.is-focus {
+  opacity: 1;
   border-color: color-mix(in srgb, var(--accent, #2ec4b6) 55%, transparent);
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #2ec4b6) 22%, transparent);
+}
+
+#gitbridge .git-beginner.is-idle .git-flow-step {
+  opacity: 0.88;
 }
 
 #gitbridge .git-flow-head {

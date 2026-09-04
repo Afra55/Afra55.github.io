@@ -127,7 +127,7 @@
       return "本地和网上各走各的了。请选「合并更新」或「变基更新」。";
     }
     if (/no upstream|no tracking information|has no upstream branch|set-upstream/i.test(s)) {
-      return "这条工作线还没绑定网上对应线。点「③ 上传」会自动建立绑定；或先确认远程已有同名分支。";
+      return "这条工作线还没绑定网上对应线。点「上传」会自动建立绑定；或先确认远程已有同名分支。";
     }
     if (/prohibited by Gerrit|not permitted to create|can not update|You need 'Create Change'|remote rejected.*refs\/heads|Push to refs\/for/i.test(s)) {
       return "远程像是 Gerrit，禁止直接推分支。请先点「配置推送规则」（remote.origin.push → refs/heads/*:refs/for/*），再用「上传」或「送审」。";
@@ -139,7 +139,7 @@
       return "连不上远程地址（网络或 URL 有问题）。在「进阶快捷钮」里点「远程地址」核对 origin，并确认本机能上网。";
     }
     if (/Your local changes|would be overwritten|uncommitted changes/i.test(s)) {
-      return "有未保存的文件改动挡着了。先「收起改动」或先「保存到历史」，再重试。";
+      return "有未保存的文件改动挡着了。先「收起改动」或先点「保存」，再重试。";
     }
     if (/CONFLICT|conflict|Merge conflict|fixing conflicts/i.test(s)) {
       return "出现冲突了。请到上方「两边改冲突了」区域：留我的 / 留对方 / 手改，然后继续合并。";
@@ -159,38 +159,128 @@
     return s;
   }
 
+  let lastFlowFocus = -1;
+
   function updateFlowHighlight(data) {
     const conflicts = Array.isArray(data?.conflicts) ? data.conflicts : [];
     const behind = Number(data?.behind) || 0;
     const dirty = Number(data?.dirtyCount) || (Array.isArray(data?.changes) ? data.changes.length : 0);
     const ahead = Number(data?.ahead) || 0;
     const inProgress = Boolean(data?.inProgress);
+    const blocked = Boolean(inProgress || conflicts.length);
 
     let focus = 0;
-    if (inProgress || conflicts.length) focus = 0;
+    if (blocked) focus = 0;
     else if (behind > 0) focus = 1;
     else if (dirty > 0) focus = 2;
     else if (ahead > 0) focus = 3;
     else focus = 0;
 
+    const idle = !blocked && focus === 0;
+    $("#git-progress-rail")?.classList.toggle("is-idle", idle);
+    $("#git-beginner")?.classList.toggle("is-idle", idle);
+
     for (let i = 1; i <= 3; i++) {
       const rail = $(`#git-progress-${i}`);
       const flow = $(`#git-flow-${i}`);
       const on = focus === i;
-      const done =
-        (i === 1 && behind <= 0 && !inProgress && !conflicts.length) ||
+      const stepDone =
+        (i === 1 && behind <= 0 && !blocked) ||
         (i === 2 && dirty <= 0 && !conflicts.length) ||
-        (i === 3 && ahead <= 0 && dirty <= 0 && behind <= 0 && !conflicts.length);
+        (i === 3 && ahead <= 0 && dirty <= 0 && behind <= 0 && !blocked);
       rail?.classList.toggle("is-focus", on);
-      rail?.classList.toggle("is-done", !on && done && focus !== 0);
+      rail?.classList.toggle("is-done", Boolean((idle || (!on && focus !== 0)) && stepDone));
       flow?.classList.toggle("is-focus", on);
+      flow?.classList.toggle("is-dim", Boolean(focus && !on && !blocked));
     }
 
     $("#git-easy-pull")?.classList.toggle("is-primary", focus === 1);
     $("#git-easy-pull")?.classList.toggle("is-suggested", focus === 1);
     $("#git-easy-commit")?.classList.toggle("is-suggested", focus === 2);
     $("#git-easy-push")?.classList.toggle("is-suggested", focus === 3);
-    $("#git-easy-push")?.classList.toggle("is-primary", focus === 3 || focus === 0);
+    $("#git-easy-push")?.classList.toggle("is-primary", focus === 3);
+
+    if (focus !== lastFlowFocus) {
+      lastFlowFocus = focus;
+      if (focus >= 1 && focus <= 3) {
+        try {
+          $(`#git-flow-${focus}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        } catch (_) {
+          /* ignore */
+        }
+      }
+    }
+  }
+
+  function comfortNowText(data, dirtyCount) {
+    const conflicts = Array.isArray(data?.conflicts) ? data.conflicts : [];
+    const behind = Number(data?.behind) || 0;
+    const ahead = Number(data?.ahead) || 0;
+    const dirty = Number(dirtyCount) || 0;
+    const stash = Number(data?.stashCount) || 0;
+    if (data?.inProgress || conflicts.length) {
+      return "先处理上面的冲突，处理完再点「继续合并」。其它先别管。";
+    }
+    if (behind > 0) {
+      return `现在只做一件事：点「更新」——网上还有 ${behind} 个新改动。`;
+    }
+    if (dirty > 0) {
+      return `现在只做一件事：勾选文件 → 写说明 → 点「保存」（${dirty} 个文件待保存）。`;
+    }
+    if (ahead > 0) {
+      return data?.gerritPushConfigured
+        ? `现在只做一件事：点「上传」送审（本机多 ${ahead} 笔）。`
+        : `现在只做一件事：点「上传」（本机多 ${ahead} 笔，别人还看不到）。`;
+    }
+    if (stash > 0) {
+      return `一切就绪。收起柜里还有 ${stash} 份临时改动，需要时再取出。`;
+    }
+    return "一切就绪。去编辑器改文件，改完回来点「刷新状态」。";
+  }
+
+  function showComfortSuccess(msg) {
+    const el = $("#git-easy-success");
+    if (!el) return;
+    const text = String(msg || "").trim();
+    if (!text) {
+      el.hidden = true;
+      el.textContent = "";
+      return;
+    }
+    el.hidden = false;
+    el.textContent = text;
+    window.clearTimeout(showComfortSuccess._t);
+    showComfortSuccess._t = window.setTimeout(() => {
+      if (el.textContent === text) {
+        el.hidden = true;
+        el.textContent = "";
+      }
+    }, 8000);
+  }
+
+  function renderRecentRepos() {
+    const wrap = $("#git-recent");
+    const list = $("#git-recent-list");
+    if (!wrap || !list) return;
+    const items = recentRepos().filter(Boolean).slice(0, 6);
+    list.innerHTML = "";
+    if (!items.length) {
+      wrap.hidden = true;
+      return;
+    }
+    wrap.hidden = false;
+    for (const p of items) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "git-recent-chip";
+      const base = String(p).replace(/[\\/]+$/, "").split(/[\\/]/).pop() || p;
+      btn.textContent = base;
+      btn.title = p;
+      btn.addEventListener("click", () => {
+        tryOpenPath(p).catch((e) => showError(e.message));
+      });
+      list.appendChild(btn);
+    }
   }
 
   function setStatus(kind, title, text) {
@@ -252,6 +342,7 @@
     } catch (_) {
       /* ignore */
     }
+    renderRecentRepos();
   }
 
   function recentRepos() {
@@ -567,17 +658,18 @@
       await loadOpsCatalog();
       renderExecHistory();
       renderFavOps();
+      renderRecentRepos();
       const recent = recentRepos()[0];
       if (recent) {
         $("#git-fs-path").value = recent;
-        setPickMeta("最近打开过，回车或点拖拽区可再选");
+        setPickMeta("已填入最近仓库 · 也可点下方芯片切换");
         try {
           await tryOpenPath(recent, { quietFail: true });
         } catch (_) {
           /* 最近路径失效时留在输入框即可 */
         }
       } else {
-        setPickMeta("粘贴路径回车，或点下方拖拽区选文件夹");
+        setPickMeta("粘贴路径回车，或点下方区域选文件夹");
         setInitVisible(false);
       }
       return true;
@@ -641,16 +733,23 @@
   async function pickFolderAndOpen() {
     showError("");
     setPickMeta("正在弹出本机文件夹选择…");
-    const data = await api("/fs/pick-dir", { method: "POST", body: {} });
-    if (data?.cancelled || !data?.path) {
-      setPickMeta("已取消选择");
-      return;
+    try {
+      const data = await api("/fs/pick-dir", { method: "POST", body: {} });
+      if (data?.cancelled || !data?.path) {
+        setPickMeta("已取消 · 也可粘贴完整路径后回车");
+        return;
+      }
+      await tryOpenPath(data.path);
+    } catch (e) {
+      setPickMeta("选目录不可用 · 请把完整路径粘贴到上方，按回车");
+      showError(e.message || "本机文件夹选择失败");
     }
-    await tryOpenPath(data.path);
   }
 
   async function openRepo(pathInput) {
     showError("");
+    showComfortSuccess("");
+    lastFlowFocus = -1;
     const data = await api("/repo/open", { method: "POST", body: { path: pathInput } });
     repoPath = data.repo;
     rememberRepo(repoPath);
@@ -979,9 +1078,9 @@
       const conflicts = Array.isArray(data.conflicts) ? data.conflicts : [];
 
       if (nowEl) {
-        const steps = data.plainSteps || [];
-        nowEl.textContent = "现在：" + (steps.join("；") || "一切正常");
+        nowEl.textContent = comfortNowText(data, data.dirtyCount != null ? data.dirtyCount : rows.length);
         nowEl.classList.toggle("git-easy-now-warn", Boolean(data.inProgress || conflicts.length));
+        nowEl.classList.toggle("git-easy-now-idle", !data.inProgress && !conflicts.length && !data.behind && !rows.length && !data.ahead);
       }
 
       updateFlowHighlight({
@@ -1067,8 +1166,8 @@
 
       box.innerHTML = "";
       if (!rows.length) {
-        box.innerHTML = `<p class="hint tight git-empty-hint">还没有改动 · 去改文件再回来</p>`;
-        if (hint) hint.textContent = "改完文件后点「刷新」。";
+        box.innerHTML = `<p class="hint tight git-empty-hint">还没有改动 · 去编辑器改文件，再回这里点「刷新状态」</p>`;
+        if (hint) hint.textContent = "改完文件后点「刷新状态」。";
       } else {
         for (const r of rows) {
           const row = document.createElement("label");
@@ -1086,7 +1185,7 @@
             showFileDiff(btn.getAttribute("data-diff-path")).catch((e) => showError(e.message));
           });
         });
-        if (hint) hint.textContent = `共 ${rows.length} 项。点文件名看 diff → 勾选 → 写说明 →「保存到历史」→ 需要时「上传」。`;
+        if (hint) hint.textContent = `共 ${rows.length} 项。点文件名看对比 → 勾选 → 写说明 →「保存」→ 需要时「上传」。`;
       }
 
       // 分支下拉（隐藏兼容）+ 工作台卡片
@@ -1491,6 +1590,12 @@
     await runOp("commit", { message: msg }, { skipConfirm: true });
     if ($("#git-easy-msg")) $("#git-easy-msg").value = "";
     await refreshChanges();
+    const ahead = Number(lastStatus?.ahead) || 0;
+    showComfortSuccess(
+      ahead > 0
+        ? "已保存到本机。继续点「上传」，别人才能看见。"
+        : "已保存到本机。需要同步给别人时再点「上传」。"
+    );
   }
 
   async function easyPush() {
@@ -1515,6 +1620,7 @@
       }
       await runOp("push", {}, { skipConfirm: true });
       await refreshChanges();
+      showComfortSuccess("已送审 / 上传。可以歇一会儿了。");
       return;
     }
 
@@ -1549,12 +1655,40 @@
           }
           await runOp("push", {}, { skipConfirm: true });
           await refreshChanges();
+          showComfortSuccess("已按 Gerrit 方式上传。");
           return;
         }
       }
       throw e;
     }
     await refreshChanges();
+    showComfortSuccess("上传完成。本机与网上已对齐。");
+  }
+
+  async function easyClone() {
+    if (!connected) return showError("先连接本机桥");
+    const url = String($("#git-clone-url")?.value || "").trim();
+    if (!url) return showError("先填网上仓库地址");
+    const dir = String($("#git-clone-dir")?.value || "").trim();
+    showError("");
+    setPickMeta("正在克隆…");
+    showComfortSuccess("");
+    try {
+      const body = { url };
+      if (dir) body.dir = dir;
+      const data = await api("/repo/clone", { method: "POST", body });
+      const dest = data?.repo || data?.path;
+      if (!dest) throw new Error("克隆完成但未返回路径");
+      if ($("#git-clone-url")) $("#git-clone-url").value = "";
+      const details = $("#git-clone-details");
+      if (details) details.open = false;
+      await openRepo(dest);
+      showComfortSuccess("克隆完成，仓库已打开。");
+      setPickMeta("克隆完成");
+    } catch (e) {
+      setPickMeta("克隆失败 · 可检查地址与本机登录");
+      showError(humanizeGitError(e.message || e) || String(e.message || e));
+    }
   }
 
   async function easyGerritSetup() {
@@ -1918,7 +2052,7 @@
 
   async function handleDroppedPaths(paths) {
     if (!paths.length) {
-      showError("浏览器没给出文件夹绝对路径。请粘贴到上方输入框回车，或点拖拽区用本机对话框选择。");
+      showError("没拿到文件夹完整路径。请粘贴到上方输入框后回车，或点选区用本机对话框。");
       return;
     }
     await tryOpenPath(paths[0]);
@@ -2342,6 +2476,7 @@
     const list = $("#git-fav-list");
     const empty = $("#git-fav-empty");
     const count = $("#git-fav-count");
+    const details = $("#git-fav-details");
     if (!list) return;
     const ids = loadFavOps();
     if (count) count.textContent = ids.length ? `${ids.length} 条` : "还没有";
@@ -2349,10 +2484,12 @@
     if (!ids.length) {
       list.hidden = true;
       if (empty) empty.hidden = false;
+      if (details) details.classList.add("is-empty");
       return;
     }
     if (empty) empty.hidden = true;
     list.hidden = false;
+    if (details) details.classList.remove("is-empty");
     for (const id of ids) {
       const item = findOpMeta(id);
       list.appendChild(makeOpRow({ ...item, id }, { favMode: true }));
@@ -2545,6 +2682,24 @@
     tryOpenPath(e.target.value).catch((err) => showError(err.message));
   });
   $("#git-init")?.addEventListener("click", () => initRepoHere().catch((e) => showError(e.message)));
+  $("#git-clone-go")?.addEventListener("click", () => easyClone().catch((e) => showError(e.message)));
+  $("#git-clone-url")?.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") {
+      ev.preventDefault();
+      easyClone().catch((e) => showError(e.message));
+    }
+  });
+  $$("#git-progress-rail [data-git-step]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const n = Number(btn.getAttribute("data-git-step"));
+      if (!n) return;
+      try {
+        $(`#git-flow-${n}`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      } catch (_) {
+        /* ignore */
+      }
+    });
+  });
   $("#git-easy-refresh")?.addEventListener("click", () => refreshChanges().catch((e) => showError(e.message)));
   $("#git-easy-stage")?.addEventListener("click", () => easyStage(false).catch((e) => showError(e.message)));
   $("#git-easy-stage-all")?.addEventListener("click", () => easyStage(true).catch((e) => showError(e.message)));

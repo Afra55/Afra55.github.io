@@ -41,7 +41,7 @@ const ALLOWED_ORIGINS = new Set(
 
 const { buildOp, listOpsCatalog, assertPath } = require("./git-ops");
 
-const BRIDGE_VERSION = "0.2.13";
+const BRIDGE_VERSION = "0.2.14";
 const FEATURES = [
   "fs-browse","fs-pick-dir","repo-open","repo-probe","repo-init","repo-clone","graph","branches",
   "status","commit-detail","explain","ops-catalog","ops-full","protocol-launch",
@@ -658,8 +658,9 @@ async function repoStatus(repo) {
   else if (inProgress === "cherry-pick") plainSteps.push("正在拣选某个提交，请先处理冲突");
   else if (inProgress === "revert") plainSteps.push("正在撤销某个提交，请先处理冲突");
   if (conflicts.length) plainSteps.push(`有 ${conflicts.length} 个文件两边改得不一样，需要你选`);
-  if (changes.length) plainSteps.push(`有 ${changes.length} 个文件改动还没保存进历史`);
+  // 顺序与小白焦点一致：先更新 → 再保存 → 再上传
   if (behind > 0) plainSteps.push(`网上还有 ${behind} 个更新可以拉下来`);
+  if (changes.length) plainSteps.push(`有 ${changes.length} 个文件改动还没保存`);
   if (ahead > 0) {
     plainSteps.push(
       gerritPushConfigured
@@ -673,7 +674,7 @@ async function repoStatus(repo) {
     .filter(Boolean);
   const stashCount = stashList.length;
   if (stashCount > 0) plainSteps.push(`收起柜里还有 ${stashCount} 份临时改动`);
-  if (!plainSteps.length) plainSteps.push("工作区干净，可以放心切换分支或从网上更新");
+  if (!plainSteps.length) plainSteps.push("一切就绪。去改文件，改完回来刷新状态即可");
 
   return {
     porcelain: porcelain.stdout,
