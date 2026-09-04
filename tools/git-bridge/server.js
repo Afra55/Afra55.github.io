@@ -41,12 +41,12 @@ const ALLOWED_ORIGINS = new Set(
 
 const { buildOp, listOpsCatalog, assertPath } = require("./git-ops");
 
-const BRIDGE_VERSION = "0.2.6";
+const BRIDGE_VERSION = "0.2.7";
 const FEATURES = [
   "fs-browse","repo-open","repo-init","repo-clone","graph","branches",
   "status","commit-detail","explain","ops-catalog","ops-full","protocol-launch",
   "conflict-assist","read-write-file","beginner-plain-steps","beginner-sync-reset-patch",
-  "diff-file","push-gerrit","zero-difficulty","branch-track-stats"
+  "diff-file","push-gerrit","gerrit-config-push","zero-difficulty","branch-track-stats"
 ];
 
 const GIT_TIMEOUT_MS = 120000;
@@ -497,6 +497,13 @@ async function repoStatus(repo) {
     }
   }
 
+  const pushCfg = await git(repo, ["config", "--get-all", "remote.origin.push"]).catch(() => ({ stdout: "" }));
+  const gerritPushValues = String(pushCfg.stdout || "")
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const gerritPushConfigured = gerritPushValues.some((v) => /refs\/for\//.test(v));
+
   const plainSteps = [];
   if (inProgress === "merge") plainSteps.push("正在合并两条线，请先处理冲突文件");
   else if (inProgress === "rebase") plainSteps.push("正在改写提交顺序，请先处理冲突");
@@ -505,7 +512,13 @@ async function repoStatus(repo) {
   if (conflicts.length) plainSteps.push(`有 ${conflicts.length} 个文件两边改得不一样，需要你选`);
   if (changes.length) plainSteps.push(`有 ${changes.length} 个文件改动还没保存进历史`);
   if (behind > 0) plainSteps.push(`网上还有 ${behind} 个更新可以拉下来`);
-  if (ahead > 0) plainSteps.push(`你本地多出 ${ahead} 个提交可以上传`);
+  if (ahead > 0) {
+    plainSteps.push(
+      gerritPushConfigured
+        ? `你本地多出 ${ahead} 个提交可以送审（Gerrit refs/for）`
+        : `你本地多出 ${ahead} 个提交可以上传`
+    );
+  }
   const stashList = String(stash.stdout || "")
     .trim()
     .split("\n")
@@ -528,6 +541,8 @@ async function repoStatus(repo) {
     inProgress,
     plainSteps,
     dirtyCount: changes.length + conflicts.length,
+    gerritPushConfigured,
+    gerritPushValues,
   };
 }
 

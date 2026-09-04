@@ -92,7 +92,7 @@ async function main() {
 
     const health = await req("GET", "/health");
     if (!health.json.git) throw new Error("git missing on host");
-    if (health.json.version !== "0.2.6") {
+    if (health.json.version !== "0.2.7") {
       throw new Error("unexpected version " + health.json.version);
     }
 
@@ -108,6 +108,8 @@ async function main() {
     "reset-soft-n",
     "commit-amend",
     "push-gerrit",
+    "gerrit-config-push",
+    "branch-set-upstream",
   ]) {
     if (!(remoteOps.json.ops || []).includes(need)) throw new Error("missing op " + need);
   }

@@ -233,11 +233,13 @@
                   <button type="button" class="ghost-btn" id="git-easy-apply">只改文件</button>
                 </div>
                 <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
-                  <label for="git-easy-gerrit">Gerrit 送审到</label>
-                  <input id="git-easy-gerrit" type="text" placeholder="目标分支，如 master" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
+                  <label for="git-easy-gerrit">Gerrit</label>
+                  <button type="button" class="secondary-btn" id="git-easy-gerrit-setup" title="git config remote.origin.push refs/heads/*:refs/for/*">配置推送规则</button>
+                  <input id="git-easy-gerrit" type="text" placeholder="送审目标分支，如 master" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
                   <input id="git-easy-gerrit-topic" type="text" placeholder="topic（可空）" spellcheck="false" autocomplete="off" style="width:8rem" />
                   <button type="button" class="ghost-btn" id="git-easy-gerrit-go">送审</button>
                 </div>
+                <p class="hint tight" id="git-easy-gerrit-hint" style="margin-top:0.25rem">Gerrit 必须配置 <span class="mono">remote.origin.push = refs/heads/*:refs/for/*</span>，之后「上传」才会进评审；否则会直接推 heads 被拒。</p>
               </details>
             </div>
 

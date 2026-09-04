@@ -727,6 +727,34 @@ const OP_DEFS = {
       };
     },
   },
+  /** Gerrit 必配：使裸 git push 映射到 refs/for/*，而不是直接推 refs/heads/* */
+  "gerrit-config-push": {
+    group: "远程",
+    title: "config remote.*.push → refs/for/*",
+    build: (p) => {
+      const remote = assertRef(p.remote || "origin", "remote");
+      if (!/^[A-Za-z0-9._-]+$/.test(remote)) {
+        throw Object.assign(new Error("非法 remote 名"), { status: 400 });
+      }
+      const key = `remote.${remote}.push`;
+      const value = "refs/heads/*:refs/for/*";
+      return {
+        argv: ["config", key, value],
+        label: `config ${key} ${value}`,
+      };
+    },
+  },
+  "branch-set-upstream": {
+    group: "分支",
+    title: "branch --set-upstream-to",
+    build: (p) => {
+      need(p, "upstream");
+      const upstream = assertRef(p.upstream, "upstream");
+      const argv = ["branch", `--set-upstream-to=${upstream}`];
+      if (p.branch) argv.push(assertRef(p.branch, "branch"));
+      return { argv, label: argv.join(" ") };
+    },
+  },
   "push-lease": {
     group: "远程",
     title: "push --force-with-lease",
@@ -976,8 +1004,10 @@ const CONFIRM_OPS = new Set([
   "pull-rebase",
   "push",
   "push-gerrit",
+  "gerrit-config-push",
   "push-lease",
   "push-tags",
+  "branch-set-upstream",
   "rebase",
   "rebase-abort",
   "rebase-continue",

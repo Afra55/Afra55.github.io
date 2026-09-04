@@ -105,6 +105,9 @@
     if (/no upstream|no tracking information|has no upstream branch|set-upstream/i.test(s)) {
       return "这条工作线还没绑定网上对应线。点「② 上传我的改动」会自动建立绑定；或先确认远程已有同名分支。";
     }
+    if (/prohibited by Gerrit|not permitted to create|can not update|You need 'Create Change'|remote rejected.*refs\/heads|Push to refs\/for/i.test(s)) {
+      return "远程像是 Gerrit，禁止直接推分支。请先点「配置推送规则」（remote.origin.push → refs/heads/*:refs/for/*），再用「上传」或「送审」。";
+    }
     if (/Authentication failed|could not read Username|Permission denied \(publickey\)|403 Forbidden|401 Unauthorized|terminal prompts disabled/i.test(s)) {
       return "远程拒绝访问（账号/权限问题）。请在本机自行登录 Git 后再试本页操作。";
     }
@@ -847,8 +850,21 @@
         if (data.dirtyCount) bits.push({ t: `未保存 ${data.dirtyCount}`, k: "is-warn" });
         if (conflicts.length) bits.push({ t: `冲突 ${conflicts.length}`, k: "is-warn" });
         if (data.stashCount) bits.push({ t: `收起 ${data.stashCount}`, k: "" });
+        if (data.gerritPushConfigured) bits.push({ t: "Gerrit 推送已配", k: "is-ok" });
         if (!bits.length) bits.push({ t: "干净", k: "is-ok" });
         pills.innerHTML = bits.map((b) => `<span class="git-pill ${b.k}">${escapeHtml(b.t)}</span>`).join("");
+      }
+
+      const gerritHint = $("#git-easy-gerrit-hint");
+      if (gerritHint) {
+        if (data.gerritPushConfigured) {
+          const vals = (data.gerritPushValues || []).join(" · ") || "refs/heads/*:refs/for/*";
+          gerritHint.innerHTML =
+            `已配置：<span class="mono">remote.origin.push = ${escapeHtml(vals)}</span>。「上传」会走评审；也可用下方「送审」指定分支/topic。`;
+        } else {
+          gerritHint.innerHTML =
+            `Gerrit 必须配置 <span class="mono">remote.origin.push = refs/heads/*:refs/for/*</span>，之后「上传」才会进评审；否则会直接推 heads 被拒。`;
+        }
       }
 
       if (conflictBox) {
@@ -1176,15 +1192,109 @@
 
   async function easyPush() {
     if (!repoPath) return showError("先打开一个仓库");
+    const branch =
+      lastStatus?.branch && lastStatus.branch !== "(detached)" ? lastStatus.branch : "";
     const needsU = lastStatus && !lastStatus.upstream;
+    const gerritMode = Boolean(lastStatus?.gerritPushConfigured);
+
+    if (gerritMode) {
+      // 已配 remote.origin.push → refs/for/*：必须用裸 git push，不能 push -u origin branch（会直推 heads）
+      if (needsU && branch) {
+        try {
+          await runOp(
+            "branch-set-upstream",
+            { upstream: `origin/${branch}`, branch },
+            { skipConfirm: true, skipRefresh: true }
+          );
+        } catch (_) {
+          /* 远程尚无同名分支时跟踪会失败，送审仍可继续 */
+        }
+      }
+      await runOp("push", {}, { skipConfirm: true });
+      await refreshChanges();
+      return;
+    }
+
     const params = needsU
       ? {
           setUpstream: true,
           remote: "origin",
-          branch: lastStatus.branch && lastStatus.branch !== "(detached)" ? lastStatus.branch : undefined,
+          branch: branch || undefined,
         }
       : {};
-    await runOp("push", params, { skipConfirm: true });
+    try {
+      await runOp("push", params, { skipConfirm: true });
+    } catch (e) {
+      const msg = String(e.message || "") + " " + String(e.data?.stderr || "");
+      if (/prohibited by Gerrit|not permitted to create|can not update|You need 'Create Change'|remote rejected.*refs\/heads|Push to refs\/for|refs\/for/i.test(msg)) {
+        if (
+          await askConfirm(
+            "远程拒绝了直接推分支（常见于 Gerrit）。要先写入配置 remote.origin.push = refs/heads/*:refs/for/*，再按评审方式上传吗？"
+          )
+        ) {
+          await runOp("gerrit-config-push", { remote: "origin" }, { skipConfirm: true, skipRefresh: true });
+          if (needsU && branch) {
+            try {
+              await runOp(
+                "branch-set-upstream",
+                { upstream: `origin/${branch}`, branch },
+                { skipConfirm: true, skipRefresh: true }
+              );
+            } catch (_) {
+              /* ignore */
+            }
+          }
+          await runOp("push", {}, { skipConfirm: true });
+          await refreshChanges();
+          return;
+        }
+      }
+      throw e;
+    }
+    await refreshChanges();
+  }
+
+  async function easyGerritSetup() {
+    if (!repoPath) return showError("先打开一个仓库");
+    if (
+      !(await askConfirm(
+        "写入本地配置？\ngit config remote.origin.push refs/heads/*:refs/for/*\n之后点「上传」会按 Gerrit 评审推送，而不是直推分支。"
+      ))
+    ) {
+      return;
+    }
+    await runOp("gerrit-config-push", { remote: "origin" }, { skipConfirm: true });
+    await refreshChanges();
+    showError("");
+    opOut.hidden = false;
+    opOut.textContent = (opOut.textContent || "") + "\n\n已配置 remote.origin.push = refs/heads/*:refs/for/*";
+  }
+
+  async function easyGerrit() {
+    if (!repoPath) return showError("先打开一个仓库");
+    if (!lastStatus?.gerritPushConfigured) {
+      if (
+        await askConfirm(
+          "尚未配置 remote.origin.push = refs/heads/*:refs/for/*。先写入该配置（推荐），再送审？"
+        )
+      ) {
+        await runOp("gerrit-config-push", { remote: "origin" }, { skipConfirm: true, skipRefresh: true });
+      }
+    }
+    const branch =
+      String($("#git-easy-gerrit")?.value || "").trim() ||
+      lastStatus?.upstream?.split("/")?.pop() ||
+      (lastStatus?.branch && lastStatus.branch !== "(detached)" ? lastStatus.branch : "") ||
+      "master";
+    const topic = String($("#git-easy-gerrit-topic")?.value || "").trim();
+    if (
+      !(await askConfirm(
+        `送审到 Gerrit？push origin HEAD:refs/for/${branch}${topic ? "%topic=" + topic : ""}`
+      ))
+    ) {
+      return;
+    }
+    await runOp("push-gerrit", { branch, topic: topic || undefined, remote: "origin" }, { skipConfirm: true });
     await refreshChanges();
   }
 
@@ -1345,21 +1455,6 @@
     opOut.textContent =
       (opOut.textContent || "") +
       "\n\n—— 后悔药 ——\n上面每行前面的短编号，可到右侧高级区填进「目标」后重置。误点「对齐线上」后，找对齐前那一行即可。";
-  }
-
-  async function easyGerrit() {
-    if (!repoPath) return showError("先打开一个仓库");
-    const branch = String($("#git-easy-gerrit")?.value || "").trim() || lastStatus?.upstream?.split("/")?.pop() || "master";
-    const topic = String($("#git-easy-gerrit-topic")?.value || "").trim();
-    if (
-      !(await askConfirm(
-        `送审到 Gerrit？push origin HEAD:refs/for/${branch}${topic ? "%topic=" + topic : ""}`
-      ))
-    ) {
-      return;
-    }
-    await runOp("push-gerrit", { branch, topic: topic || undefined, remote: "origin" }, { skipConfirm: true });
-    await refreshChanges();
   }
 
   async function easyStashApplySel() {
@@ -1854,6 +1949,7 @@
   $("#git-easy-align")?.addEventListener("click", () => easyAlignRemote().catch((e) => showError(e.message)));
   $("#git-easy-reflog")?.addEventListener("click", () => easyReflog().catch((e) => showError(e.message)));
   $("#git-easy-gerrit-go")?.addEventListener("click", () => easyGerrit().catch((e) => showError(e.message)));
+  $("#git-easy-gerrit-setup")?.addEventListener("click", () => easyGerritSetup().catch((e) => showError(e.message)));
   $("#git-diff-close")?.addEventListener("click", () => {
     const panel = $("#git-diff-panel");
     if (panel) panel.hidden = true;
