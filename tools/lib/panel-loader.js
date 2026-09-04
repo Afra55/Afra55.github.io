@@ -164,5 +164,6 @@
     isMounted: (id) => mounted.has(String(id || "").trim()),
     clearSessionCache,
     isForceFreshLoad,
+    prefetchHtml: (toolId) => loadPanelHtml(toolId).catch(() => null),
   };
 })();

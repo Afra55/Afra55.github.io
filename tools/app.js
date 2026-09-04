@@ -2752,34 +2752,41 @@
     const loadGen = ++toolLoadGen;
     toolLoadPanelId = String(toolId || "").trim();
     const name = toolName(toolId);
-    const alreadyReady = Boolean(window.DevToolsLazy?.isToolReady?.(toolId));
+    const forceFresh = Boolean(window.DevToolsPanels?.isForceFreshLoad?.());
+    const alreadyReady =
+      !forceFresh &&
+      (Boolean(window.DevToolsLazy?.isToolReady?.(toolId)) || Boolean(window.DevToolsLazy?.isToolWarm?.(toolId)));
 
-    // 本会话已加载过：直接发路由事件，不展示加载条、不重复拉脚本
-    if (alreadyReady && !window.DevToolsPanels?.isForceFreshLoad?.()) {
+    // 本会话已加载 / 依赖已在内存：直接发路由事件，不遮挡、不重拉
+    if (alreadyReady) {
       if (gen === routeGen) setPanelAssetLoading(toolLoadPanelId, false);
+      // warm 但未 mark 时补一次静默 ensure（极快）
+      void window.DevToolsLazy?.ensureForTool?.(toolId).catch(() => {});
       window.dispatchEvent(
         new CustomEvent("devtools:route", {
           detail: { tool: currentTool, groupId: TOOL_TO_GROUP[currentTool] || null },
         })
       );
+      scheduleToolPrefetch(toolId);
       return;
     }
 
     let overlayShown = false;
-    if (gen === routeGen) setPanelAssetLoading(toolLoadPanelId, true);
+    // 先不遮挡面板；仅当加载超过阈值才显示进度条
     const showDelay = window.setTimeout(() => {
       if (gen !== routeGen) return;
       overlayShown = true;
+      setPanelAssetLoading(toolLoadPanelId, true);
       setToolLoadProgress(12, `正在加载「${name}」…`, loadGen);
-    }, 140);
+    }, 220);
 
     void (async () => {
       try {
         await ensureToolAssets(toolId, (pct, label) => {
           if (gen !== routeGen) return;
           if (!overlayShown) {
-            window.clearTimeout(showDelay);
-            overlayShown = true;
+            // 仍很快：不提前弹出；只有回调持续到来且已过 delay 才由 timer 负责
+            return;
           }
           setToolLoadProgress(pct, label || `正在加载「${name}」…`, loadGen);
         });
@@ -2807,13 +2814,47 @@
 
       if (gen === routeGen) setPanelAssetLoading(toolLoadPanelId, false);
 
+      scheduleToolPrefetch(toolId);
+
       if (!overlayShown) return;
 
       setToolLoadProgress(100, `${name} 已就绪`, loadGen);
       window.setTimeout(() => {
         if (gen === routeGen && loadGen === toolLoadGen) hideToolLoadProgress(loadGen);
-      }, 220);
+      }, 180);
     })();
+  }
+
+  /** 空闲预取：最近用过的、同组的、收藏的工具（面板 HTML + 脚本） */
+  let toolPrefetchTimer = 0;
+  function scheduleToolPrefetch(activeId) {
+    if (window.DevToolsPanels?.isForceFreshLoad?.()) return;
+    window.clearTimeout(toolPrefetchTimer);
+    toolPrefetchTimer = window.setTimeout(() => {
+      const idle = window.requestIdleCallback || ((cb) => window.setTimeout(() => cb({ timeRemaining: () => 12 }), 600));
+      idle(() => {
+        try {
+          const ids = [];
+          const groupId = TOOL_TO_GROUP[activeId];
+          const group = TOOL_GROUPS.find((g) => g.id === groupId);
+          if (group?.tools?.length) ids.push(...group.tools);
+          try {
+            const recent = JSON.parse(localStorage.getItem(RECENT_KEY) || "[]");
+            if (Array.isArray(recent)) ids.push(...recent);
+          } catch (_) {}
+          try {
+            const fav = JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]");
+            if (Array.isArray(fav)) ids.push(...fav);
+          } catch (_) {}
+          const uniq = [...new Set(ids.map(String))].filter(
+            (id) => id && id !== activeId && DEFAULT_ORDER.includes(id) && !SITE_NAV_IDS.has(id)
+          );
+          window.DevToolsLazy?.prefetchTools?.(uniq, { limit: 8 });
+        } catch (_) {
+          /* ignore */
+        }
+      });
+    }, 400);
   }
 
   let dateremindIdleScheduled = false;
@@ -2982,6 +3023,7 @@
       window.DevToolsBoot?.bump?.(48, `打开 ${toolName(routeToolId)}…`);
     }
     markShellBootReady();
+    scheduleToolPrefetch(routeToolId);
 
     startToolAssetLoad(gen, routeToolId);
     };

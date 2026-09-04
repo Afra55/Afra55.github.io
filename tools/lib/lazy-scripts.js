@@ -207,6 +207,41 @@
     readyTools.clear();
   }
 
+  function vendorReady(vendorId) {
+    const spec = VENDOR_FILES[vendorId];
+    return Boolean(spec?.probe?.());
+  }
+
+  function scriptLikelyLoaded(src) {
+    if (!src) return true;
+    const key = withVersion(src);
+    if (scriptPromises.has(key)) return true;
+    return [...document.scripts].some((s) => {
+      try {
+        const attr = s.getAttribute("src") || "";
+        return withVersion(attr) === key || s.dataset.devtoolsLoaded === "1";
+      } catch (_) {
+        return false;
+      }
+    });
+  }
+
+  /** 依赖是否已在内存：再次进入或同组切换时可跳过加载条 */
+  function isToolWarm(toolId) {
+    const id = String(toolId || "").trim();
+    if (!id) return false;
+    if (readyTools.has(id)) return true;
+    if (window.DevToolsPanels?.isForceFreshLoad?.()) return false;
+    const vendors = TOOL_VENDORS[id] || [];
+    if (!vendors.every((v) => vendorReady(v))) return false;
+    if (!NO_PURE.has(id) && !window.DevToolsPure) return false;
+    if (EXTRA_MEDIA_TOOLS.has(id) && !window.DevToolsExtraMedia) return false;
+    if (EXTRA_PANEL_IDS.has(id) && !window.__devtoolsExtraCore) return false;
+    if (id === "diff" && !(window.DiffCore && scriptLikelyLoaded("./diff.js"))) return false;
+    if (TOOL_FILES[id] && !scriptLikelyLoaded(TOOL_FILES[id])) return false;
+    return true;
+  }
+
   function withVersion(src) {
     const url = new URL(src, document.baseURI || window.location.href);
     url.searchParams.set("v", BUILD);
@@ -360,6 +395,13 @@
       return;
     }
 
+    // 依赖已在内存：静默标记，避免重复进度条
+    if (!force && isToolWarm(id)) {
+      markToolReady(id);
+      report(1, "已缓存");
+      return;
+    }
+
     if (id === "about") {
       report(0.2, "加载关于页…");
       await loadScript("./about.js");
@@ -412,11 +454,45 @@
     markToolReady(id);
   }
 
+  /** 空闲预取：不弹进度条；失败静默 */
+  let prefetchChain = Promise.resolve();
+  function prefetchTool(toolId) {
+    const id = String(toolId || "").trim();
+    if (!id || readyTools.has(id)) return prefetchChain;
+    if (window.DevToolsPanels?.isForceFreshLoad?.()) return prefetchChain;
+    prefetchChain = prefetchChain
+      .then(async () => {
+        if (readyTools.has(id)) return;
+        try {
+          await window.DevToolsPanels?.ensure?.(id);
+        } catch (_) {
+          /* panel html optional */
+        }
+        try {
+          await ensureForTool(id, { force: false });
+        } catch (_) {
+          /* ignore prefetch errors */
+        }
+      })
+      .catch(() => {});
+    return prefetchChain;
+  }
+
+  function prefetchTools(ids, { limit = 6 } = {}) {
+    const list = [...new Set((ids || []).map((x) => String(x || "").trim()).filter(Boolean))];
+    const todo = list.filter((id) => !readyTools.has(id)).slice(0, Math.max(0, limit));
+    for (const id of todo) prefetchTool(id);
+    return prefetchChain;
+  }
+
   window.DevToolsLazy = {
     BUILD,
     ensureForTool,
     isToolReady,
+    isToolWarm,
     clearReadyTools,
+    prefetchTool,
+    prefetchTools,
     loadExtraBundle,
     loadExtraCore,
     loadVendor,
