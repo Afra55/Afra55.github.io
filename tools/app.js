@@ -2745,6 +2745,7 @@
     window.dispatchEvent(new CustomEvent("devtools:boot-ready"));
     idleLoadPwaOnce();
     scheduleDateremindReminders();
+    scheduleMemoClipboardWatch();
   }
 
   function startToolAssetLoad(gen, toolId) {
@@ -2814,6 +2815,33 @@
         })
         .catch(() => {});
     });
+  }
+
+  /** 非备忘录页也要能感知剪贴板：空闲时预挂载面板并启动 memo 监听 */
+  let memoClipIdleScheduled = false;
+  function scheduleMemoClipboardWatch() {
+    if (memoClipIdleScheduled) return;
+    memoClipIdleScheduled = true;
+    const run = () => {
+      Promise.resolve()
+        .then(() => window.DevToolsPanels?.ensure?.("memo"))
+        .then(() => {
+          const panel = document.getElementById("memo");
+          if (panel && currentTool !== "memo") {
+            panel.hidden = true;
+            panel.classList.remove("is-workspace-active");
+            panel.setAttribute("aria-hidden", "true");
+          }
+        })
+        .then(() => window.DevToolsLazy?.ensureForTool?.("memo"))
+        .then(() => window.DevToolsMemo?.whenReady?.())
+        .then(() => {
+          window.DevToolsMemo?.captureClipboard?.();
+        })
+        .catch(() => {});
+    };
+    const idle = window.requestIdleCallback || ((cb) => window.setTimeout(cb, 500));
+    idle(() => run(), { timeout: 900 });
   }
 
   let routeSettled = Promise.resolve();

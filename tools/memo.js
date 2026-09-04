@@ -3742,7 +3742,13 @@
     state.bootReady = true;
     renderAll();
     maybeCaptureClipboard();
-    queueMicrotask(() => focusQuickCapture());
+    if (isMemoActive()) queueMicrotask(() => focusQuickCapture());
+    // 首屏不在备忘录时：等一次用户手势后再试读（浏览器常拦无手势的 clipboard.read）
+    if (!isMemoActive()) {
+      const retry = () => maybeCaptureClipboard();
+      document.addEventListener("pointerdown", retry, { once: true, capture: true });
+      document.addEventListener("keydown", retry, { once: true, capture: true });
+    }
     setInterval(() => {
       purgeExpiredTempItems().catch(() => {});
     }, 3600000);
@@ -6517,7 +6523,10 @@
 
   window.addEventListener("hashchange", () => {
     if (location.hash.replace(/^#/, "").split(/[/?]/)[0] === "memo") {
-      queueMicrotask(() => focusQuickCapture());
+      queueMicrotask(() => {
+        maybeCaptureClipboard();
+        focusQuickCapture();
+      });
     }
   });
 
@@ -6525,6 +6534,7 @@
     getStorageBytes: estimateStorageBytes,
     getMode: () => state.mode,
     getIndex: () => state.index,
+    whenReady: () => bootPromise,
     ingestBlob: (blob, name) => addItemFromBlob(blob, name || `import-${Date.now()}`, { quiet: false }),
     ingestText: (text) => addText(text),
     renameItem: async (id, name) => {
@@ -6616,10 +6626,11 @@
     isIOS: () => isIOS(),
     showIosPasteCapture,
     dismissClipOffer: () => dismissClipOffer(),
+    captureClipboard: () => maybeCaptureClipboard(),
     clearHashIndexForTest: () => {
       state.hashIndex = new Map();
     },
   };
 
-  boot().catch((err) => setError(memoError, err.message || String(err)));
+  const bootPromise = boot().catch((err) => setError(memoError, err.message || String(err)));
 })();
