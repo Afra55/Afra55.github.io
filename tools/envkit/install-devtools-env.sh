@@ -321,11 +321,11 @@ sync_bridges() {
   chmod +x "$BRIDGE_DIR/ffmpeg-bridge/start-linux.sh" "$BRIDGE_DIR/ffmpeg-bridge/start-mac.command" 2>/dev/null || true
 
   # Git（含 git-ops.js）
-  for f in server.js git-ops.js start-linux.sh start-mac.command start-win.bat start-win.cmd; do
+  for f in server.js git-ops.js noop-editor.sh noop-editor.cmd noop-editor.cjs start-linux.sh start-mac.command start-win.bat start-win.cmd; do
     info "git-bridge/$f"
     download_file "${BASE_URL}/git-bridge/$f" "$BRIDGE_DIR/git-bridge/$f" || warn "下载失败 $f"
   done
-  chmod +x "$BRIDGE_DIR/git-bridge/start-linux.sh" "$BRIDGE_DIR/git-bridge/start-mac.command" 2>/dev/null || true
+  chmod +x "$BRIDGE_DIR/git-bridge/start-linux.sh" "$BRIDGE_DIR/git-bridge/start-mac.command" "$BRIDGE_DIR/git-bridge/noop-editor.sh" 2>/dev/null || true
 
   # ADB / FFmpeg 补齐 Windows 启动脚本
   for f in start-win.bat start-win.cmd; do

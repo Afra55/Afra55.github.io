@@ -2207,7 +2207,7 @@
       ? `<button type="button" class="memo-drag-handle" draggable="true" data-memo-drag="${item.id}" title="拖拽排序" aria-label="拖拽排序">⠿</button>`
       : "";
     const tempBadge = isTempItem(item)
-      ? `<span class="memo-temp-badge" title="${escapeHtml(formatTempRemain(item))}">临时</span>`
+      ? `<span class="memo-temp-badge" title="${escapeHtml(formatTempRemain(item))}">临时 · ${escapeHtml(formatTempRemain(item))}</span>`
       : "";
     const archBadge = isArchived(item) ? `<span class="memo-arch-badge">归档</span>` : "";
     const canCopy = canClipboardCopy(item);

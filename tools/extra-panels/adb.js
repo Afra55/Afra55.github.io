@@ -210,6 +210,8 @@
       let adbMirrorDecoder = null;
       let adbMirrorMeta = null;
       let adbMirrorPendingConfig = null;
+      /** Annex-B SPS/PPS；configure 不带 description，关键帧前拼上 */
+      let adbMirrorParamSets = null;
       let adbMirrorStarting = false;
       let adbMirrorFrameTs = 0;
       let adbMirrorNeedKey = false;
@@ -3431,11 +3433,40 @@
         return u.length >= 7 && u.length <= 2048 && u[0] === 1;
       }
 
-      /** 部分机型 MediaCodec 输出 length-prefixed NAL，WebCodecs 需要 Annex-B */
+      /** avcC → Annex-B SPS/PPS（供无 description 的 WebCodecs 路径） */
+      function avcCToAnnexBParamSets(bytes) {
+        const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+        if (!isAvcDecoderConfig(u)) return null;
+        const parts = [];
+        let i = 5;
+        if (i >= u.length) return null;
+        const numSps = u[i++] & 0x1f;
+        for (let s = 0; s < numSps; s++) {
+          if (i + 2 > u.length) return null;
+          const len = ((u[i] << 8) | u[i + 1]) >>> 0;
+          i += 2;
+          if (!len || i + len > u.length) return null;
+          parts.push(new Uint8Array([0, 0, 0, 1]), u.subarray(i, i + len));
+          i += len;
+        }
+        if (i >= u.length) return parts.length ? concatBytesMany(parts) : null;
+        const numPps = u[i++];
+        for (let p = 0; p < numPps; p++) {
+          if (i + 2 > u.length) return null;
+          const len = ((u[i] << 8) | u[i + 1]) >>> 0;
+          i += 2;
+          if (!len || i + len > u.length) return null;
+          parts.push(new Uint8Array([0, 0, 0, 1]), u.subarray(i, i + len));
+          i += len;
+        }
+        return parts.length ? concatBytesMany(parts) : null;
+      }
+
+      /** 部分机型 MediaCodec 输出 length-prefixed NAL，WebCodecs Annex-B 路径需要 start code */
       function toAnnexB(bytes) {
         const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
         if (!u.length || looksAnnexB(u)) return u;
-        // 短 avcC 留给 description；长大包若以 1 开头多半是误并的 avcC+帧，不能整包原样返回
+        // 纯 avcC 配置不是帧；留给 param-sets 提取
         if (isAvcDecoderConfig(u) && u.length < 512) return u;
         const parts = [];
         let i = 0;
@@ -3480,13 +3511,16 @@
         return data;
       }
 
+      /**
+       * scrcpy 帧多为 Annex-B。若 configure 时带了 avcC description，却喂 Annex-B，会黑屏无报错。
+       * 统一走「无 description + Annex-B」，关键帧前补 SPS/PPS。
+       */
       function prepareMirrorVideoData(payload, isKey) {
         let data = stripLeadingConfig(payload, adbMirrorPendingConfig);
         data = toAnnexB(data);
-        const cfg = adbMirrorPendingConfig;
-        const isAvcc = cfg && isAvcDecoderConfig(cfg);
-        if (isKey && cfg && !isAvcc && !payloadHasSps(data)) {
-          data = concatBytes(toAnnexB(cfg), data);
+        const params = adbMirrorParamSets;
+        if (isKey && params?.length && !payloadHasSps(data)) {
+          data = concatBytes(params, data);
         }
         return data;
       }
@@ -3580,6 +3614,7 @@
           adbMirrorDecoder = null;
         }
         adbMirrorPendingConfig = null;
+        adbMirrorParamSets = null;
         adbMirrorFrameTs = 0;
         adbMirrorNeedKey = false;
         adbMirrorGotFrame = false;
@@ -3685,7 +3720,12 @@
         if (!adbMirrorDecoder || !adbMirrorMeta || !adbMirrorPendingConfig) return false;
         const payload = adbMirrorPendingConfig;
         const codec = codecStringFromConfig(payload, adbMirrorMeta.codec);
-        const isAvcc = isAvcDecoderConfig(payload);
+        // 禁止 description+Annex-B 混用（会导致黑屏无报错）
+        if (isAvcDecoderConfig(payload)) {
+          adbMirrorParamSets = avcCToAnnexBParamSets(payload);
+        } else {
+          adbMirrorParamSets = toAnnexB(payload);
+        }
         const cfg = {
           codec,
           codedWidth: adbMirrorMeta.width || undefined,
@@ -3693,7 +3733,6 @@
           optimizeForLatency: true,
           hardwareAcceleration: adbMirrorHwPref,
         };
-        if (isAvcc) cfg.description = payload;
         adbMirrorDecoder.configure(cfg);
         adbMirrorNeedKey = true;
         adbMirrorFrameTs = 0;
@@ -3762,7 +3801,7 @@
               `仍无画面（config=${p.config} key=${p.key} delta=${p.delta} decoded=${p.decoded}）。` +
               (p.config === 0 && p.key === 0
                 ? "桥未收到视频帧：请更新本机桥 ZIP（≥0.9.15）、只开一座桥，并解锁亮屏后重试"
-                : "已收到码流但解不出画面：请换 Chrome/Edge 最新版，或更新桥 ZIP（≥0.9.15）后重试「开始镜像」");
+                : "已收到码流但解不出画面：请硬刷新网页后重试；仍黑屏请换 Chrome/Edge 最新版，或更新桥 ZIP（≥0.9.15）");
           }
         }, 2800);
       }
@@ -4053,10 +4092,14 @@
               try {
                 if (isConfig) {
                   adbMirrorPkt.config += 1;
-                  payload = isAvcDecoderConfig(payload) ? payload.slice() : toAnnexB(payload);
-                  adbMirrorPendingConfig = payload.slice();
-                  const codec = codecStringFromConfig(payload, adbMirrorMeta.codec);
-                  const isAvcc = isAvcDecoderConfig(payload);
+                  const raw = payload.slice();
+                  adbMirrorPendingConfig = raw;
+                  if (isAvcDecoderConfig(raw)) {
+                    adbMirrorParamSets = avcCToAnnexBParamSets(raw);
+                  } else {
+                    adbMirrorParamSets = toAnnexB(raw);
+                  }
+                  const codec = codecStringFromConfig(raw, adbMirrorMeta.codec);
                   if (adbMirrorDecoder.state === "configured") {
                     try {
                       adbMirrorDecoder.reset();
@@ -4071,7 +4114,7 @@
                     optimizeForLatency: true,
                     hardwareAcceleration: adbMirrorHwPref,
                   };
-                  if (isAvcc) cfg.description = payload;
+                  // 统一 Annex-B：不要设 description
                   try {
                     adbMirrorDecoder.configure(cfg);
                   } catch (err) {

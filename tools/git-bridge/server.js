@@ -41,7 +41,7 @@ const ALLOWED_ORIGINS = new Set(
 
 const { buildOp, listOpsCatalog, assertPath } = require("./git-ops");
 
-const BRIDGE_VERSION = "0.2.9";
+const BRIDGE_VERSION = "0.2.10";
 const FEATURES = [
   "fs-browse","repo-open","repo-init","repo-clone","graph","branches",
   "status","commit-detail","explain","ops-catalog","ops-full","protocol-launch",
@@ -124,7 +124,7 @@ function git(repo, args, opts = {}) {
         encoding: "utf8",
         maxBuffer: opts.maxBuffer || 16 * 1024 * 1024,
         timeout: opts.timeout || GIT_TIMEOUT_MS,
-        env: { ...process.env, GIT_TERMINAL_PROMPT: "0", LC_ALL: "C" },
+        env: { ...process.env, GIT_TERMINAL_PROMPT: "0", LC_ALL: "C", ...(opts.env || {}) },
       },
       (err, stdout, stderr) => {
         if (err) {
@@ -724,7 +724,10 @@ async function explainCommit(repo, sha) {
 
 async function runOp(repo, op, params) {
   const built = buildOp(op, params);
-  const result = await git(repo, built.argv, built.maxBuffer ? { maxBuffer: built.maxBuffer } : {});
+  const result = await git(repo, built.argv, {
+    ...(built.maxBuffer ? { maxBuffer: built.maxBuffer } : {}),
+    ...(built.env ? { env: built.env } : {}),
+  });
   return {
     ok: true,
     op,

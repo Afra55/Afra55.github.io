@@ -1550,6 +1550,35 @@
     await refreshRepo();
   }
 
+  async function easyFixupIntoSelected() {
+    if (!repoPath) return showError("先打开一个仓库");
+    const sha = String(selectedSha || "").trim();
+    if (!sha || sha.length < 7) {
+      return showError("先在提交图里点中要改的那一笔，再点「补进选中提交」");
+    }
+    if (
+      !(await askConfirm(
+        `把当前勾选改动并入选中提交 ${sha.slice(0, 10)}…？\n会用 fixup + autosquash（保留原 Change-Id，适合 Gerrit 改更早一笔）。冲突时请在「进行中」里继续或放弃。`
+      ))
+    ) {
+      return;
+    }
+    const paths = selectedChangePaths();
+    if (paths.length) {
+      for (const p of paths) await runOp("add", { path: p }, { skipConfirm: true, skipRefresh: true });
+    } else {
+      await runOp("add-all", {}, { skipConfirm: true, skipRefresh: true });
+    }
+    await runOp("commit-fixup", { sha }, { skipConfirm: true, skipRefresh: true });
+    await runOp("rebase-autosquash", { onto: `${sha}^` }, { skipConfirm: true, skipRefresh: true });
+    showError("");
+    await refreshChanges();
+    await refreshRepo();
+    if ($("#git-easy-hint")) {
+      $("#git-easy-hint").textContent = "已并入选中提交。Gerrit 请再点「送审」更新对应 Change（保留 Change-Id）。";
+    }
+  }
+
   async function switchToBranch(rawOverride) {
     if (!repoPath) return showError("先打开一个仓库");
     const raw = String(rawOverride != null ? rawOverride : $("#git-easy-branch")?.value || "").trim();
@@ -2193,6 +2222,7 @@
   $("#git-easy-unstage")?.addEventListener("click", () => easyUnstage().catch((e) => showError(e.message)));
   $("#git-easy-commit")?.addEventListener("click", () => easyCommit().catch((e) => showError(e.message)));
   $("#git-easy-amend")?.addEventListener("click", () => easyAmend().catch((e) => showError(e.message)));
+  $("#git-easy-fixup")?.addEventListener("click", () => easyFixupIntoSelected().catch((e) => showError(e.message)));
   $("#git-easy-push")?.addEventListener("click", () => easyPush().catch((e) => showError(e.message)));
   $("#git-easy-pull")?.addEventListener("click", () => easyPull().catch((e) => showError(e.message)));
   $("#git-easy-fetch")?.addEventListener("click", () => easyFetch().catch((e) => showError(e.message)));

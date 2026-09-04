@@ -5,6 +5,15 @@
  * Every op maps to argv via execFile (no shell).
  */
 
+const path = require("path");
+
+function pathResolveNoopEditor() {
+  // rebase -i --autosquash 会先改好 todo；编辑器只需成功退出（路径勿含空格参数）
+  return process.platform === "win32"
+    ? path.join(__dirname, "noop-editor.cmd")
+    : path.join(__dirname, "noop-editor.sh");
+}
+
 function assertNoShellMeta(s) {
   if (/[\r\n\0]/.test(String(s))) {
     throw Object.assign(new Error("参数含非法字符"), { status: 400 });
@@ -301,6 +310,38 @@ const OP_DEFS = {
       if (p.noEdit) return { argv: ["commit", "--amend", "--no-edit"], label: "commit --amend --no-edit" };
       need(p, "message");
       return { argv: ["commit", "--amend", "-m", String(p.message)], label: "commit --amend -m …" };
+    },
+  },
+  /** 把当前暂存改动记成 fixup，随后配合 rebase-autosquash 并入目标提交（Gerrit 改更早一笔） */
+  "commit-fixup": {
+    group: "提交",
+    title: "commit --fixup",
+    build: (p) => {
+      need(p, "sha");
+      const sha = assertRef(p.sha, "sha");
+      return {
+        argv: ["commit", `--fixup=${sha}`],
+        label: `commit --fixup=${sha}`,
+        dangerous: true,
+      };
+    },
+  },
+  "rebase-autosquash": {
+    group: "历史",
+    title: "rebase -i --autosquash",
+    build: (p) => {
+      need(p, "onto");
+      const onto = assertRef(p.onto, "onto");
+      const editor = pathResolveNoopEditor();
+      return {
+        argv: ["rebase", "-i", "--autosquash", onto],
+        label: `rebase -i --autosquash ${onto}`,
+        dangerous: true,
+        env: {
+          GIT_SEQUENCE_EDITOR: editor,
+          GIT_EDITOR: editor,
+        },
+      };
     },
   },
 
@@ -1009,6 +1050,7 @@ const CONFIRM_OPS = new Set([
   "cherry-pick-continue",
   "clean",
   "commit-amend",
+  "commit-fixup",
   "merge",
   "merge-abort",
   "merge-continue",
@@ -1023,6 +1065,7 @@ const CONFIRM_OPS = new Set([
   "branch-set-upstream",
   "rebase",
   "rebase-abort",
+  "rebase-autosquash",
   "rebase-continue",
   "rebase-skip",
   "remote-remove",
