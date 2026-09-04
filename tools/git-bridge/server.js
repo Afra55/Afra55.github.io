@@ -41,7 +41,7 @@ const ALLOWED_ORIGINS = new Set(
 
 const { buildOp, listOpsCatalog, assertPath } = require("./git-ops");
 
-const BRIDGE_VERSION = "0.2.14";
+const BRIDGE_VERSION = "0.2.15";
 const FEATURES = [
   "fs-browse","fs-pick-dir","repo-open","repo-probe","repo-init","repo-clone","graph","branches",
   "status","commit-detail","explain","ops-catalog","ops-full","protocol-launch",
@@ -715,7 +715,48 @@ async function commitDetail(repo, sha) {
   const subject = lines[8] || "";
   const body = lines.slice(9).join("\n").trim();
   const nameStatus = await git(repo, ["diff-tree", "--no-commit-id", "--name-status", "-r", hash]);
+  const numstat = await git(repo, ["diff-tree", "--no-commit-id", "--numstat", "-r", hash]).catch(() => ({
+    stdout: "",
+  }));
+  const shortstat = await git(repo, ["diff-tree", "--no-commit-id", "--shortstat", "-r", hash]).catch(() => ({
+    stdout: "",
+  }));
   const decorate = await git(repo, ["log", "-1", "--decorate=full", "--oneline", hash]);
+  const numMap = new Map();
+  for (const row of String(numstat.stdout || "")
+    .trim()
+    .split("\n")
+    .filter(Boolean)) {
+    const parts = row.split("\t");
+    if (parts.length < 3) continue;
+    const path = parts.slice(2).join("\t");
+    numMap.set(path, {
+      added: parts[0] === "-" ? null : Number(parts[0]) || 0,
+      deleted: parts[1] === "-" ? null : Number(parts[1]) || 0,
+    });
+  }
+  const files = String(nameStatus.stdout || "")
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((row) => {
+      const m = row.match(/^(\S+)\s+(.+)$/);
+      const status = m ? m[1] : "?";
+      const path = m ? m[2] : row;
+      const n = numMap.get(path) || {};
+      return {
+        status,
+        path,
+        added: n.added ?? null,
+        deleted: n.deleted ?? null,
+      };
+    });
+  let insertions = 0;
+  let deletions = 0;
+  for (const f of files) {
+    if (typeof f.added === "number") insertions += f.added;
+    if (typeof f.deleted === "number") deletions += f.deleted;
+  }
   return {
     hash,
     short: hash.slice(0, 7),
@@ -724,16 +765,14 @@ async function commitDetail(repo, sha) {
     email: lines[3],
     timestamp: Number(lines[4]) || 0,
     committer: lines[5],
+    committerEmail: lines[6],
+    committerTimestamp: Number(lines[7]) || 0,
     subject,
     body,
-    files: String(nameStatus.stdout || "")
-      .trim()
-      .split("\n")
-      .filter(Boolean)
-      .map((row) => {
-        const m = row.match(/^(\S+)\s+(.+)$/);
-        return m ? { status: m[1], path: m[2] } : { status: "?", path: row };
-      }),
+    files,
+    shortstat: String(shortstat.stdout || "").trim(),
+    insertions,
+    deletions,
     oneline: String(decorate.stdout || "").trim(),
     cmd: show.cmd,
   };

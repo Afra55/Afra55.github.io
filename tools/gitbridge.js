@@ -532,32 +532,395 @@
       el.appendChild(laneBox);
       el.appendChild(meta);
       el.addEventListener("click", () => selectCommit(c.hash));
+      el.addEventListener("contextmenu", (ev) => {
+        ev.preventDefault();
+        openCommitMenu(c.hash, ev.clientX, ev.clientY);
+      });
+      let pressTimer = 0;
+      el.addEventListener(
+        "touchstart",
+        (ev) => {
+          if (!ev.touches?.[0]) return;
+          const t = ev.touches[0];
+          pressTimer = window.setTimeout(() => {
+            openCommitMenu(c.hash, t.clientX, t.clientY);
+          }, 520);
+        },
+        { passive: true }
+      );
+      const clearPress = () => {
+        if (pressTimer) window.clearTimeout(pressTimer);
+        pressTimer = 0;
+      };
+      el.addEventListener("touchend", clearPress);
+      el.addEventListener("touchmove", clearPress);
+      el.addEventListener("touchcancel", clearPress);
       graphEl.appendChild(el);
     });
+  }
+
+  let lastExplain = null;
+
+  async function copyText(text) {
+    const s = String(text || "");
+    if (!s) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(s);
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = s;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+      }
+      showComfortSuccess("已复制到剪贴板");
+    } catch (e) {
+      showError("复制失败：" + (e.message || e));
+    }
+  }
+
+  function askPrompt(message, def = "") {
+    try {
+      const v = window.prompt(message, def);
+      return v == null ? null : String(v).trim();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function statusLabel(st) {
+    const s = String(st || "");
+    if (s.startsWith("A")) return "新增";
+    if (s.startsWith("D")) return "删除";
+    if (s.startsWith("R") || s.startsWith("C")) return "改名";
+    if (s.startsWith("M")) return "修改";
+    return s || "改";
+  }
+
+  function hideCommitMenu() {
+    const menu = $("#git-commit-menu");
+    if (menu) {
+      menu.hidden = true;
+      menu.innerHTML = "";
+    }
+  }
+
+  function commitMenuItems() {
+    return [
+      { group: "查看", items: [
+        { id: "show", label: "看改动摘要", hint: "git show --stat" },
+        { id: "show-patch", label: "看完整补丁", hint: "git show -p" },
+        { id: "copy-short", label: "复制短号" },
+        { id: "copy-hash", label: "复制完整号" },
+        { id: "copy-subject", label: "复制说明" },
+        { id: "copy-message", label: "复制完整留言" },
+      ]},
+      { group: "基于这一笔", items: [
+        { id: "cherry-pick", label: "拣到当前线", hint: "cherry-pick", warn: true },
+        { id: "revert", label: "反做这一笔", hint: "revert", warn: true },
+        { id: "merge", label: "合进当前线", hint: "merge", warn: true },
+        { id: "branch", label: "从这里开新线…" },
+        { id: "checkout-branch", label: "开新线并切过去…" },
+        { id: "tag", label: "在这打标签…" },
+      ]},
+      { group: "移动位置", items: [
+        { id: "checkout", label: "切到这一笔看看", hint: "detached HEAD", warn: true },
+        { id: "reset-soft", label: "软重置到这里（改动还留着）", warn: true },
+        { id: "reset-hard", label: "硬重置到这里（丢掉改动）", danger: true },
+      ]},
+    ];
+  }
+
+  function openCommitMenu(sha, clientX, clientY) {
+    const details = $("#git-graph-details");
+    if (details && !details.open) details.open = true;
+    void selectCommit(sha);
+    const menu = $("#git-commit-menu");
+    if (!menu) return;
+    menu.innerHTML = "";
+    menu.hidden = false;
+    for (const g of commitMenuItems()) {
+      const title = document.createElement("div");
+      title.className = "git-ctx-group";
+      title.textContent = g.group;
+      menu.appendChild(title);
+      for (const item of g.items) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className =
+          "git-ctx-item" + (item.danger ? " is-danger" : item.warn ? " is-warn" : "");
+        btn.setAttribute("role", "menuitem");
+        btn.innerHTML = `<span>${escapeHtml(item.label)}</span>${
+          item.hint ? `<span class="git-ctx-hint mono">${escapeHtml(item.hint)}</span>` : ""
+        }`;
+        btn.addEventListener("click", () => {
+          hideCommitMenu();
+          runCommitAction(item.id, sha).catch((e) => showError(e.message || String(e)));
+        });
+        menu.appendChild(btn);
+      }
+    }
+    const pad = 8;
+    const mw = Math.min(320, window.innerWidth - pad * 2);
+    menu.style.width = mw + "px";
+    menu.style.left = "0px";
+    menu.style.top = "0px";
+    const rect = menu.getBoundingClientRect();
+    let left = clientX;
+    let top = clientY;
+    if (left + rect.width > window.innerWidth - pad) left = window.innerWidth - rect.width - pad;
+    if (top + rect.height > window.innerHeight - pad) top = window.innerHeight - rect.height - pad;
+    if (left < pad) left = pad;
+    if (top < pad) top = pad;
+    menu.style.left = left + "px";
+    menu.style.top = top + "px";
+  }
+
+  async function runCommitAction(id, sha) {
+    if (!repoPath) return showError("先打开一个仓库");
+    const full = String(sha || selectedSha || "").trim();
+    if (!full) return showError("先点选一笔提交");
+    const data = lastExplain?.hash === full ? lastExplain : null;
+    const short = (data?.short || full).slice(0, 7);
+    const subject = data?.subject || "";
+    const body = data?.body || "";
+
+    if (id === "copy-short") return copyText(short);
+    if (id === "copy-hash") return copyText(data?.hash || full);
+    if (id === "copy-subject") return copyText(subject || short);
+    if (id === "copy-message") {
+      const msg = subject + (body ? "\n\n" + body : "");
+      return copyText(msg.trim() || short);
+    }
+    if (id === "show") {
+      await runOp("show", { sha: full }, { skipConfirm: true });
+      showComfortSuccess("已在下方输出区显示改动摘要");
+      return;
+    }
+    if (id === "show-patch") {
+      await runOp("show-patch", { sha: full }, { skipConfirm: true });
+      showComfortSuccess("已在下方输出区显示完整补丁");
+      return;
+    }
+    if (id === "cherry-pick") {
+      if (!(await askConfirm(`把 ${short}「${subject || "无说明"}」拣到当前工作线？`))) return;
+      await runOp("cherry-pick", { sha: full }, { skipConfirm: true });
+      showComfortSuccess("已拣选。若有冲突请到上方处理。");
+      return;
+    }
+    if (id === "revert") {
+      if (!(await askConfirm(`新增一笔「反做」来撤销 ${short}？不会改写旧历史。`))) return;
+      await runOp("revert", { sha: full }, { skipConfirm: true });
+      showComfortSuccess("已反做。若有冲突请到上方处理。");
+      return;
+    }
+    if (id === "merge") {
+      if (!(await askConfirm(`把 ${short} 合进当前工作线？（可能产生合并提交）`))) return;
+      await runOp("merge", { branch: full, noFf: true }, { skipConfirm: true });
+      showComfortSuccess("合并完成（或请处理冲突）。");
+      return;
+    }
+    if (id === "branch" || id === "checkout-branch") {
+      const name = askPrompt("新工作线名字（例如 fix-from-here）", "");
+      if (!name) return;
+      if (id === "checkout-branch") {
+        if (!(await askConfirm(`创建并切换到「${name}」，起点是 ${short}？`))) return;
+        await runOp("checkout", { target: name, create: true, start: full }, { skipConfirm: true });
+        showComfortSuccess(`已在「${name}」上。`);
+      } else {
+        await runOp("branch-create", { name, start: full }, { skipConfirm: true });
+        showComfortSuccess(`已创建工作线「${name}」（还没切换）。`);
+      }
+      await syncBranchesUi().catch(() => {});
+      return;
+    }
+    if (id === "tag") {
+      const name = askPrompt("标签名（例如 v1.2.0）", "");
+      if (!name) return;
+      await runOp("tag-create", { name, sha: full }, { skipConfirm: true });
+      showComfortSuccess(`已打标签「${name}」。`);
+      return;
+    }
+    if (id === "checkout") {
+      if (
+        !(await askConfirm(
+          `切到 ${short} 查看？这会进入「游离 HEAD」（detached）。改完记得开新线或切回原线。`
+        ))
+      ) {
+        return;
+      }
+      await runOp("checkout", { target: full }, { skipConfirm: true });
+      showComfortSuccess("已切到该提交。");
+      return;
+    }
+    if (id === "reset-soft") {
+      if (
+        !(await askConfirm(
+          `软重置：当前线指针移到 ${short}，文件改动仍留着。已上传的历史可能分叉。确定？`
+        ))
+      ) {
+        return;
+      }
+      await runOp("reset", { sha: full, mode: "soft" }, { skipConfirm: true });
+      showComfortSuccess("已软重置。");
+      return;
+    }
+    if (id === "reset-hard") {
+      if (
+        !(await askConfirm(
+          `硬重置到 ${short} 会丢掉未保存改动，且当前线之后的本地提交不再指向这里。非常危险，确定？`
+        ))
+      ) {
+        return;
+      }
+      await runOp("reset", { sha: full, mode: "hard", confirmHard: true }, { skipConfirm: true });
+      showComfortSuccess("已硬重置。");
+      return;
+    }
+  }
+
+  function renderCommitActions(sha) {
+    const wrap = document.createElement("div");
+    wrap.className = "git-commit-actions";
+    const primary = [
+      { id: "show", label: "看摘要" },
+      { id: "show-patch", label: "看补丁" },
+      { id: "cherry-pick", label: "拣到当前" },
+      { id: "revert", label: "反做" },
+      { id: "branch", label: "开新线" },
+      { id: "copy-short", label: "复制号" },
+      { id: "menu", label: "更多…" },
+    ];
+    for (const a of primary) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "ghost-btn git-commit-action-btn";
+      btn.textContent = a.label;
+      btn.addEventListener("click", (ev) => {
+        if (a.id === "menu") {
+          const r = btn.getBoundingClientRect();
+          openCommitMenu(sha, r.left, r.bottom + 4);
+          return;
+        }
+        runCommitAction(a.id, sha).catch((e) => showError(e.message || String(e)));
+      });
+      wrap.appendChild(btn);
+    }
+    return wrap;
   }
 
   async function selectCommit(sha) {
     selectedSha = sha;
     $$(".git-row", graphEl).forEach((el) => el.classList.toggle("is-active", el.dataset.sha === sha));
-    $("#git-op-target").value = sha.slice(0, 12);
+    const targetEl = $("#git-op-target");
+    if (targetEl) targetEl.value = sha.slice(0, 12);
     explainEl.innerHTML = `<p class="hint">加载中…</p>`;
     const cmdsBox = $("#git-explain-cmds");
     const cmdsPre = $("#git-explain-cmds-pre");
     if (cmdsBox) cmdsBox.hidden = true;
     try {
       const data = await api(`/repo/explain?repo=${encodeURIComponent(repoPath)}&sha=${encodeURIComponent(sha)}`);
+      lastExplain = data;
       const cmds = (data.cmds || [])
         .map((c) => (Array.isArray(c) ? c.join(" ") : String(c)))
         .filter(Boolean);
-      explainEl.innerHTML = `
-        <p><strong class="mono">${escapeHtml(data.short || "")}</strong> · ${escapeHtml(data.subject || "")}</p>
-        <ul>${(data.bullets || []).map((b) => `<li>${escapeHtml(b.text)}</li>`).join("")}</ul>
+      const when = data.timestamp
+        ? new Date(data.timestamp * 1000).toLocaleString()
+        : "";
+      const files = Array.isArray(data.files) ? data.files : [];
+      const fileRows = files
+        .slice(0, 40)
+        .map((f) => {
+          const add =
+            typeof f.added === "number" ? `<span class="git-file-add">+${f.added}</span>` : "";
+          const del =
+            typeof f.deleted === "number" ? `<span class="git-file-del">-${f.deleted}</span>` : "";
+          return `<button type="button" class="git-file-row" data-commit-file="${escapeHtml(f.path)}" title="查看该文件在这笔里的内容">
+            <span class="git-change-badge mono">${escapeHtml(statusLabel(f.status))}</span>
+            <span class="mono git-file-path">${escapeHtml(f.path)}</span>
+            <span class="git-file-stat">${add}${del}</span>
+          </button>`;
+        })
+        .join("");
+      const moreFiles =
+        files.length > 40 ? `<p class="hint tight">还有 ${files.length - 40} 个文件未列出</p>` : "";
+      const bodyHtml = data.body
+        ? `<pre class="git-commit-body mono">${escapeHtml(data.body)}</pre>`
+        : "";
+      const statsBits = [];
+      if (data.shortstat) statsBits.push(escapeHtml(data.shortstat));
+      else if (data.insertions || data.deletions) {
+        statsBits.push(`+${data.insertions || 0} / -${data.deletions || 0}`);
+      }
+      if (files.length) statsBits.push(`${files.length} 个文件`);
+
+      explainEl.innerHTML = "";
+      const head = document.createElement("div");
+      head.className = "git-commit-head";
+      head.innerHTML = `
+        <p class="git-commit-title"><strong class="mono">${escapeHtml(data.short || "")}</strong>
+          <button type="button" class="ghost-btn git-copy-btn" data-copy="short" title="复制短号">复制</button>
+          <button type="button" class="ghost-btn git-copy-btn" data-copy="hash" title="复制完整号">完整号</button>
+        </p>
+        <p class="git-commit-subject">${escapeHtml(data.subject || "(无说明)")}</p>
+        <p class="hint tight git-commit-meta">${escapeHtml(data.author || "")}${
+          data.email ? ` &lt;${escapeHtml(data.email)}&gt;` : ""
+        }${when ? " · " + escapeHtml(when) : ""}</p>
+        ${bodyHtml}
+        ${statsBits.length ? `<p class="hint tight">${statsBits.join(" · ")}</p>` : ""}
       `;
+      explainEl.appendChild(head);
+      explainEl.appendChild(renderCommitActions(data.hash || sha));
+
+      const bullets = document.createElement("ul");
+      bullets.className = "git-commit-bullets";
+      for (const b of data.bullets || []) {
+        const li = document.createElement("li");
+        li.textContent = b.text || "";
+        if (b.sha) {
+          li.classList.add("is-linkish");
+          li.title = "点这里看父提交";
+          li.addEventListener("click", () => selectCommit(b.sha));
+        }
+        bullets.appendChild(li);
+      }
+      explainEl.appendChild(bullets);
+
+      if (files.length) {
+        const filesWrap = document.createElement("div");
+        filesWrap.className = "git-commit-files";
+        filesWrap.innerHTML = `<p class="hint tight" style="margin:0.45rem 0 0.25rem">改动文件（点文件名可看内容）</p>${fileRows}${moreFiles}`;
+        explainEl.appendChild(filesWrap);
+        filesWrap.querySelectorAll("[data-commit-file]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const path = btn.getAttribute("data-commit-file");
+            const pathInput = $("#git-op-path");
+            if (pathInput) pathInput.value = path;
+            runOp("show-file", { sha: data.hash || sha, path }, { skipConfirm: true }).catch((e) =>
+              showError(e.message)
+            );
+          });
+        });
+      }
+
+      head.querySelectorAll("[data-copy]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const kind = btn.getAttribute("data-copy");
+          if (kind === "hash") copyText(data.hash || sha);
+          else copyText(data.short || sha.slice(0, 7));
+        });
+      });
+
       if (cmdsPre && cmds.length) {
         cmdsPre.textContent = cmds.slice(0, 8).join("\n");
         if (cmdsBox) cmdsBox.hidden = false;
       }
     } catch (e) {
+      lastExplain = null;
       explainEl.innerHTML = `<p class="error">${escapeHtml(e.message)}</p>`;
     }
   }
@@ -2195,6 +2558,9 @@
       fillIf(p, "sha", sha || "HEAD");
       fillIf(p, "path", filePath);
     }
+    if (op === "tag-create") {
+      fillIf(p, "sha", sha);
+    }
     if (op === "blame" || op === "add" || op === "restore" || op === "checkout-ours" || op === "checkout-theirs") {
       fillIf(p, "path", filePath);
     }
@@ -2780,6 +3146,19 @@
   });
 
   wireDropzone();
+
+  document.addEventListener("click", (ev) => {
+    const menu = $("#git-commit-menu");
+    if (!menu || menu.hidden) return;
+    if (menu.contains(ev.target)) return;
+    if (ev.target?.closest?.(".git-commit-action-btn")) return;
+    hideCommitMenu();
+  });
+  document.addEventListener("keydown", (ev) => {
+    if (ev.key === "Escape") hideCommitMenu();
+  });
+  window.addEventListener("scroll", () => hideCommitMenu(), true);
+  window.addEventListener("resize", () => hideCommitMenu());
 
   bridgeShell.bind({
     onStatus: (kind, title, text) => setStatus(kind, title, text),

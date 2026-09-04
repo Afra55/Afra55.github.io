@@ -269,23 +269,23 @@
               </details>
 
               <details class="git-ops-details git-adv-block" id="git-graph-details">
-                <summary class="hint">保存历史图 + 人话解释</summary>
+                <summary class="hint">保存历史图 + 详情 / 右键菜单</summary>
                 <div class="git-adv-inner git-layout-inner">
                   <div class="git-graph-pane">
                     <div class="label-row" style="margin-top:0.45rem">
                       <h2 class="subhead">历史里的每一次保存</h2>
                       <label class="flag"><input type="checkbox" id="git-show-ascii" /> 对照终端图</label>
                     </div>
-                    <p class="hint tight">每一行是一次「保存」。点一行看右边白话；相关命令在图下方。</p>
+                    <p class="hint tight">点一行看右边详情；<strong>右键</strong>（触屏长按）可对这一笔做：复制、拣选、反做、开新线、重置等。</p>
                     <div class="git-graph" id="git-graph" role="list"></div>
                     <pre class="mono adb-pre" id="git-ascii" hidden style="margin-top:0.55rem;max-height:14rem;overflow:auto"></pre>
                   </div>
                   <div class="git-side-pane git-explain-pane">
                     <div class="label-row" style="margin-top:0.45rem">
-                      <h2 class="subhead">人话解释</h2>
+                      <h2 class="subhead">这笔详情</h2>
                     </div>
                     <div class="panel-card git-explain" id="git-explain">
-                      <p class="hint">点左侧某一行，这里用白话说明：这一笔是什么、本地有没有、网上有没有。</p>
+                      <p class="hint">点左侧某一行，这里显示作者、说明、改了哪些文件，以及可对这笔做的事。</p>
                     </div>
                   </div>
                 </div>
@@ -364,5 +364,6 @@
           </div>
         </div>
         <p class="error" id="git-error" hidden></p>
+        <div id="git-commit-menu" class="git-ctx-menu" hidden role="menu" aria-label="提交操作"></div>
       </div>
     </section>
