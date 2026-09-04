@@ -41,9 +41,9 @@ const ALLOWED_ORIGINS = new Set(
 
 const { buildOp, listOpsCatalog, assertPath } = require("./git-ops");
 
-const BRIDGE_VERSION = "0.2.12";
+const BRIDGE_VERSION = "0.2.13";
 const FEATURES = [
-  "fs-browse","repo-open","repo-init","repo-clone","graph","branches",
+  "fs-browse","fs-pick-dir","repo-open","repo-probe","repo-init","repo-clone","graph","branches",
   "status","commit-detail","explain","ops-catalog","ops-full","protocol-launch",
   "conflict-assist","read-write-file","beginner-plain-steps","beginner-sync-reset-patch",
   "diff-file","push-gerrit","gerrit-config-push","zero-difficulty","branch-track-stats",
@@ -172,6 +172,113 @@ function isGitDir(dir) {
     return false;
   } catch {
     return false;
+  }
+}
+
+function runExecFile(cmd, args, opts = {}) {
+  return new Promise((resolve, reject) => {
+    execFile(
+      cmd,
+      args,
+      {
+        encoding: "utf8",
+        timeout: opts.timeout || 120000,
+        maxBuffer: opts.maxBuffer || 2 * 1024 * 1024,
+        windowsHide: true,
+        env: { ...process.env, ...(opts.env || {}) },
+      },
+      (err, stdout, stderr) => {
+        if (err) {
+          err.stdout = stdout;
+          err.stderr = stderr;
+          reject(err);
+          return;
+        }
+        resolve({ stdout: String(stdout || ""), stderr: String(stderr || "") });
+      }
+    );
+  });
+}
+
+/** 弹出本机「选择文件夹」对话框，返回绝对路径；取消则 path 为空 */
+async function pickDirectory() {
+  if (process.platform === "darwin") {
+    const script =
+      'try\nPOSIX path of (choose folder with prompt "选择 Git 仓库文件夹")\non error number -128\n""\nend try';
+    const r = await runExecFile("osascript", ["-e", script], { timeout: 300000 });
+    return String(r.stdout || "").trim().replace(/\/+$/, "") || "";
+  }
+  if (process.platform === "win32") {
+    const ps = [
+      "Add-Type -AssemblyName System.Windows.Forms | Out-Null",
+      "$f = New-Object System.Windows.Forms.FolderBrowserDialog",
+      '$f.Description = "选择 Git 仓库文件夹"',
+      "$f.ShowNewFolderButton = $true",
+      "if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $f.SelectedPath }",
+    ].join("; ");
+    const r = await runExecFile(
+      "powershell.exe",
+      ["-NoProfile", "-STA", "-ExecutionPolicy", "Bypass", "-Command", ps],
+      { timeout: 300000 }
+    );
+    return String(r.stdout || "").trim() || "";
+  }
+  // Linux：优先 zenity，其次 kdialog
+  try {
+    const r = await runExecFile(
+      "zenity",
+      ["--file-selection", "--directory", "--title=选择 Git 仓库文件夹"],
+      { timeout: 300000 }
+    );
+    return String(r.stdout || "").trim() || "";
+  } catch (e) {
+    if (e && Number(e.code) === 1) return ""; // 用户取消
+    const missing = e && (e.code === "ENOENT" || /ENOENT|not found/i.test(String(e.message || "")));
+    if (!missing) {
+      throw Object.assign(new Error(e.message || "选择文件夹失败"), { status: 500 });
+    }
+  }
+  try {
+    const r = await runExecFile("kdialog", ["--getexistingdirectory", os.homedir()], {
+      timeout: 300000,
+    });
+    return String(r.stdout || "").trim() || "";
+  } catch (e) {
+    if (e && Number(e.code) === 1) return "";
+    if (e && (e.code === "ENOENT" || /ENOENT|not found/i.test(String(e.message || "")))) {
+      throw Object.assign(
+        new Error("本机没有可用的文件夹选择器（请安装 zenity 或 kdialog，或直接粘贴路径）"),
+        { status: 501 }
+      );
+    }
+    throw Object.assign(new Error(e.message || "选择文件夹失败"), { status: 500 });
+  }
+}
+
+async function probeRepoPath(inputPath) {
+  const dir = safePath(inputPath);
+  let st;
+  try {
+    st = fs.statSync(dir);
+  } catch {
+    throw Object.assign(new Error("路径不存在"), { status: 404 });
+  }
+  if (!st.isDirectory()) {
+    return { ok: true, path: dir, isDir: false, isRepo: false };
+  }
+  if (isGitDir(dir)) {
+    try {
+      const root = await resolveRepoRoot(dir);
+      return { ok: true, path: dir, repo: root, isDir: true, isRepo: true };
+    } catch {
+      return { ok: true, path: dir, repo: dir, isDir: true, isRepo: true };
+    }
+  }
+  try {
+    const root = await resolveRepoRoot(dir);
+    return { ok: true, path: dir, repo: root, isDir: true, isRepo: true };
+  } catch {
+    return { ok: true, path: dir, isDir: true, isRepo: false };
   }
 }
 
@@ -848,6 +955,22 @@ async function handleRequest(req, res, opts = {}) {
     if (pathname === "/fs/list" && req.method === "GET") {
       const dir = url.searchParams.get("path") || os.homedir();
       sendJson(res, 200, listDir(dir), origin);
+      return;
+    }
+
+    if (pathname === "/fs/pick-dir" && req.method === "POST") {
+      const picked = await pickDirectory();
+      sendJson(res, 200, { ok: true, path: picked, cancelled: !picked }, origin);
+      return;
+    }
+
+    if (pathname === "/repo/probe" && (req.method === "GET" || req.method === "POST")) {
+      let input = url.searchParams.get("path") || "";
+      if (req.method === "POST") {
+        const body = parseJsonBody(await readBody(req));
+        input = body.path || input;
+      }
+      sendJson(res, 200, await probeRepoPath(input), origin);
       return;
     }
 

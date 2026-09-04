@@ -95,8 +95,12 @@ async function main() {
 
     const health = await req("GET", "/health");
     if (!health.json.git) throw new Error("git missing on host");
-    if (health.json.version !== "0.2.11") {
-      throw new Error("unexpected version " + health.json.version);
+    const expectedVer =
+      String(fs.readFileSync(path.join(__dirname, "server.js"), "utf8")).match(
+        /const BRIDGE_VERSION = "([^"]+)"/
+      )?.[1] || "";
+    if (!expectedVer || health.json.version !== expectedVer) {
+      throw new Error(`unexpected version ${health.json.version} (want ${expectedVer})`);
     }
 
   const remoteOps = await req("GET", "/repo/ops");

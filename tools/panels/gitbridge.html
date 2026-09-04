@@ -70,26 +70,22 @@
         <div id="git-workspace" hidden>
           <div class="label-row" style="margin-top:1rem">
             <h2 class="subhead">选择仓库</h2>
-            <span class="hint tight" id="git-fs-meta">拖文件夹进来，或点带「仓库」标记的目录，或粘贴路径</span>
+            <span class="hint tight" id="git-fs-meta">粘贴路径回车，或点下方拖拽区选文件夹</span>
           </div>
-          <div class="adb-fs-shortcuts" id="git-roots" style="margin-bottom:0.45rem"></div>
-          <div class="adb-path-row">
-            <button type="button" class="ghost-btn" id="git-fs-up" title="上级目录">上级</button>
-            <input id="git-fs-path" class="mono" type="text" value="" spellcheck="false" autocomplete="off" />
-            <button type="button" class="secondary-btn" id="git-fs-go">打开目录</button>
-            <button type="button" class="primary-btn" id="git-open-repo">当作仓库打开</button>
+          <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.4rem">
+            <label for="git-fs-path">文件夹路径</label>
+            <input id="git-fs-path" class="mono" type="text" value="" placeholder="例如 /Users/你/项目 或 C:\work\repo" spellcheck="false" autocomplete="off" style="flex:1;min-width:12rem" />
           </div>
-          <p class="hint tight">浏览器通常给不出本机绝对路径。请<strong>粘贴</strong>文件夹路径，或从下方目录列表点选；拖拽在部分浏览器可用。</p>
-          <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
-            <button type="button" class="ghost-btn" id="git-init" title="git init">在此新建空仓库</button>
-            <input id="git-clone-url" class="mono" type="text" placeholder="仓库网址（https / git@ / ssh）" spellcheck="false" autocomplete="off" style="flex:1;min-width:12rem" />
-            <button type="button" class="ghost-btn" id="git-clone" title="git clone">从网址下载仓库</button>
+          <div class="git-dropzone" id="git-dropzone" tabindex="0" role="button" aria-label="拖入或点击选择文件夹">
+            <strong>拖文件夹到这里，或点这里选择</strong>
+            <p class="hint tight">自动判断是不是 Git 仓库；不是的话会出现「新建空仓库」。</p>
           </div>
-          <div class="git-dropzone" id="git-dropzone" tabindex="0" role="button" aria-label="拖拽文件夹到此处打开仓库">
-            <strong>把文件夹拖到这里</strong>
-            <p class="hint tight">从资源管理器 / Finder 拖入仓库文件夹；拿不到路径时请粘贴到上方输入框。</p>
+          <div id="git-init-box" class="git-init-box panel-card" hidden>
+            <p class="hint tight" id="git-pick-hint">这个文件夹还不是 Git 仓库。</p>
+            <div class="btn-row tool-actions" style="margin-top:0.35rem">
+              <button type="button" class="secondary-btn" id="git-init" title="git init">在此新建空仓库</button>
+            </div>
           </div>
-          <div class="ff-fs-list adb-fs-list" id="git-fs-list" role="list"></div>
 
           <div id="git-repo-panel" hidden>
             <div class="label-row" style="margin-top:1.1rem">

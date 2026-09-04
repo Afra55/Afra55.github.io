@@ -515,20 +515,18 @@
       await loadOpsCatalog();
       renderExecHistory();
       renderFavOps();
-      await loadRoots();
       const recent = recentRepos()[0];
       if (recent) {
-        fsPath = recent;
         $("#git-fs-path").value = recent;
+        setPickMeta("最近打开过，回车或点拖拽区可再选");
         try {
-          await loadFs(recent);
+          await tryOpenPath(recent, { quietFail: true });
         } catch (_) {
-          const roots = await api("/fs/roots");
-          await loadFs((roots.roots && roots.roots[0] && roots.roots[0].path) || ".");
+          /* 最近路径失效时留在输入框即可 */
         }
       } else {
-        const roots = await api("/fs/roots");
-        await loadFs((roots.roots && roots.roots[0] && roots.roots[0].path) || ".");
+        setPickMeta("粘贴路径回车，或点下方拖拽区选文件夹");
+        setInitVisible(false);
       }
       return true;
     } catch (e) {
@@ -542,51 +540,61 @@
     }
   }
 
-  async function loadRoots() {
-    const data = await api("/fs/roots");
-    const box = $("#git-roots");
-    box.innerHTML = "";
-    for (const r of data.roots || []) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "ghost-btn";
-      btn.textContent = r.label;
-      btn.addEventListener("click", () => loadFs(r.path));
-      box.appendChild(btn);
-    }
-    for (const p of recentRepos()) {
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "secondary-btn";
-      btn.textContent = "最近: " + p.split(/[/\\]/).filter(Boolean).slice(-2).join("/");
-      btn.title = p;
-      btn.addEventListener("click", () => openRepo(p));
-      box.appendChild(btn);
-    }
+  function setPickMeta(text) {
+    const el = $("#git-fs-meta");
+    if (el) el.textContent = text || "";
   }
 
-  async function loadFs(dir) {
-    const data = await api(`/fs/list?path=${encodeURIComponent(dir || ".")}`);
-    // If relative failed, try home via roots
-    fsPath = data.path;
-    $("#git-fs-path").value = fsPath;
-    $("#git-fs-meta").textContent = `${data.entries.length} 个文件夹`;
-    const list = $("#git-fs-list");
-    list.innerHTML = "";
-    for (const ent of data.entries) {
-      const row = document.createElement("div");
-      row.className = "adb-fs-item";
-      row.setAttribute("role", "listitem");
-      row.innerHTML = `<span class="mono">${escapeHtml(ent.name)}</span>${
-        ent.isRepo ? '<span class="git-repo-badge">仓库</span>' : ""
-      }`;
-      row.addEventListener("click", () => {
-        if (ent.isRepo) openRepo(ent.path);
-        else loadFs(ent.path);
-      });
-      row.addEventListener("dblclick", () => openRepo(ent.path));
-      list.appendChild(row);
+  function setInitVisible(on) {
+    const box = $("#git-init-box");
+    if (box) box.hidden = !on;
+  }
+
+  async function tryOpenPath(pathInput, opts = {}) {
+    const raw = String(pathInput || "").trim();
+    if (!raw) {
+      if (!opts.quietFail) showError("请填写文件夹路径，或点拖拽区选择");
+      return false;
     }
+    showError("");
+    if ($("#git-fs-path")) $("#git-fs-path").value = raw;
+    fsPath = raw;
+    let probe;
+    try {
+      probe = await api("/repo/probe", { method: "POST", body: { path: raw } });
+    } catch (e) {
+      setInitVisible(false);
+      if (opts.quietFail) return false;
+      throw e;
+    }
+    if (probe?.isRepo) {
+      setInitVisible(false);
+      setPickMeta("已识别为 Git 仓库");
+      await openRepo(probe.repo || probe.path || raw);
+      return true;
+    }
+    setInitVisible(true);
+    const hint = $("#git-pick-hint");
+    if (hint) {
+      hint.textContent = probe?.isDir === false
+        ? "这不是文件夹路径。"
+        : "这个文件夹还不是 Git 仓库。可以点下面「在此新建空仓库」。";
+    }
+    setPickMeta("不是仓库 · 可新建");
+    if (repoPanel) repoPanel.hidden = true;
+    repoPath = "";
+    return false;
+  }
+
+  async function pickFolderAndOpen() {
+    showError("");
+    setPickMeta("正在弹出本机文件夹选择…");
+    const data = await api("/fs/pick-dir", { method: "POST", body: {} });
+    if (data?.cancelled || !data?.path) {
+      setPickMeta("已取消选择");
+      return;
+    }
+    await tryOpenPath(data.path);
   }
 
   async function openRepo(pathInput) {
@@ -594,6 +602,10 @@
     const data = await api("/repo/open", { method: "POST", body: { path: pathInput } });
     repoPath = data.repo;
     rememberRepo(repoPath);
+    fsPath = repoPath;
+    if ($("#git-fs-path")) $("#git-fs-path").value = repoPath;
+    setInitVisible(false);
+    setPickMeta("仓库已打开");
     repoPanel.hidden = false;
     $("#git-repo-meta").textContent = repoPath;
     $("#git-repo-summary").textContent = `当前分支 ${data.head} · ${data.headSha.slice(0, 7)} · 未提交变更 ${
@@ -1848,17 +1860,10 @@
 
   async function handleDroppedPaths(paths) {
     if (!paths.length) {
-      showError("浏览器没给出文件夹绝对路径。请把路径粘贴到上方输入框，或用目录列表点开。");
+      showError("浏览器没给出文件夹绝对路径。请粘贴到上方输入框回车，或点拖拽区用本机对话框选择。");
       return;
     }
-    const target = paths[0];
-    $("#git-fs-path").value = target;
-    try {
-      await openRepo(target);
-    } catch (_) {
-      await loadFs(target);
-      showError("已打开该目录。若它是 git 仓库，再点「当作仓库打开」。");
-    }
+    await tryOpenPath(paths[0]);
   }
 
   function wireDropzone() {
@@ -1881,10 +1886,18 @@
       const paths = window.devtoolsBridgeToken?.pathsFromDataTransfer?.(e.dataTransfer) || [];
       handleDroppedPaths(paths).catch((err) => showError(err.message));
     });
-    const also = [$("#git-fs-path"), $("#git-fs-list"), workspace].filter(Boolean);
-    for (const el of also) {
-      el.addEventListener("dragover", (e) => e.preventDefault());
-      el.addEventListener("drop", (e) => {
+    zone.addEventListener("click", () => {
+      pickFolderAndOpen().catch((err) => showError(err.message));
+    });
+    zone.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      e.preventDefault();
+      pickFolderAndOpen().catch((err) => showError(err.message));
+    });
+    const pathInput = $("#git-fs-path");
+    if (pathInput) {
+      pathInput.addEventListener("dragover", (e) => e.preventDefault());
+      pathInput.addEventListener("drop", (e) => {
         e.preventDefault();
         const paths = window.devtoolsBridgeToken?.pathsFromDataTransfer?.(e.dataTransfer) || [];
         handleDroppedPaths(paths).catch((err) => showError(err.message));
@@ -2479,9 +2492,9 @@
   }
 
   async function initRepoHere() {
-    const dir = String($("#git-fs-path").value || "").trim();
+    const dir = String($("#git-fs-path").value || fsPath || "").trim();
     if (!dir) {
-      showError("先打开一个目录");
+      showError("先选择或填写一个文件夹路径");
       return;
     }
     if (!(await askConfirm(`在此目录新建空仓库？\n${dir}`))) return;
@@ -2489,39 +2502,17 @@
     const data = await api("/repo/init", { method: "POST", body: { path: dir } });
     await openRepo(data.repo || dir);
     opOut.hidden = false;
-    opOut.textContent = (Array.isArray(data.cmd) ? data.cmd.join(" ") : data.cmd || "git init");
-  }
-
-  async function cloneRepoHere() {
-    const url = String($("#git-clone-url")?.value || "").trim();
-    const dir = String($("#git-fs-path").value || "").trim();
-    if (!url) {
-      showError("填写仓库网址");
-      return;
-    }
-    if (!(await askConfirm(`从网址下载仓库到当前目录？\n${url}\n→ ${dir || "(默认 DevToolsRepos)"}`))) return;
-    showError("");
-    const data = await api("/repo/clone", { method: "POST", body: { url, dir: dir || undefined } });
-    await openRepo(data.repo);
-    opOut.hidden = false;
-    opOut.textContent = (Array.isArray(data.cmd) ? data.cmd.join(" ") : "") + "\n\n" + (data.stdout || "");
+    opOut.textContent = Array.isArray(data.cmd) ? data.cmd.join(" ") : data.cmd || "git init";
   }
 
   $("#git-connect").addEventListener("click", () => connectBridge());
   $("#git-refresh").addEventListener("click", () => refreshRepo().catch((e) => showError(e.message)));
-  $("#git-fs-go").addEventListener("click", () => {
-    loadFs($("#git-fs-path").value.trim()).catch((e) => showError(e.message));
-  });
-  $("#git-fs-up").addEventListener("click", () => {
-    if (!fsPath) return;
-    const parent = fsPath.replace(/[/\\]+$/, "").split(/[/\\]/).slice(0, -1).join(fsPath.includes("\\") ? "\\" : "/") || "/";
-    loadFs(parent || "/").catch((e) => showError(e.message));
-  });
-  $("#git-open-repo").addEventListener("click", () => {
-    openRepo($("#git-fs-path").value.trim()).catch((e) => showError(e.message));
+  $("#git-fs-path")?.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    tryOpenPath(e.target.value).catch((err) => showError(err.message));
   });
   $("#git-init")?.addEventListener("click", () => initRepoHere().catch((e) => showError(e.message)));
-  $("#git-clone")?.addEventListener("click", () => cloneRepoHere().catch((e) => showError(e.message)));
   $("#git-easy-refresh")?.addEventListener("click", () => refreshChanges().catch((e) => showError(e.message)));
   $("#git-easy-stage")?.addEventListener("click", () => easyStage(false).catch((e) => showError(e.message)));
   $("#git-easy-stage-all")?.addEventListener("click", () => easyStage(true).catch((e) => showError(e.message)));

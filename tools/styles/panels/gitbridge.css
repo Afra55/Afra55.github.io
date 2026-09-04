@@ -578,6 +578,11 @@
   margin-bottom: 0.2rem;
 }
 
+#gitbridge .git-init-box {
+  margin-top: 0.55rem;
+  padding: 0.65rem 0.75rem;
+}
+
 #gitbridge .git-beginner {
   margin-top: 0.85rem;
   padding: 0.75rem 0.85rem;
