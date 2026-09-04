@@ -36,13 +36,13 @@
           <div class="field-row" style="flex-wrap:wrap;align-items:center">
             <label for="adb-install-dir">桥解压目录</label>
             <input id="adb-install-dir" class="mono" type="text" placeholder="例如 C:\Tools\devtools-bridge 或 /Users/me/devtools-bridge" autocomplete="off" spellcheck="false" style="min-width:min(100%,22rem);flex:1" />
-            <button type="button" class="secondary-btn" id="adb-install-dir-save">记住目录</button>
+            <button type="button" class="secondary-btn" id="adb-install-dir-save" title="在本机资源管理器中打开该目录（填写时已自动记住）">打开目录</button>
           </div>
           <label class="flag" style="margin-top:0.35rem;display:inline-flex;gap:0.35rem;align-items:center">
             <input type="checkbox" id="adb-bridge-autostart" checked />
             进入本页时若未连接则尝试自动启动
           </label>
-          <p class="hint tight" id="adb-install-dir-hint">下载解压后把文件夹路径填在这里并「记住」。首次请手动双击启动脚本（会注册 <span class="mono">devtools-bridge://</span>）。之后网页可自动唤起：若已手动打开窗口，浏览器再弹出「打开 DevTools Bridge」请点取消，不要再开第二座。</p>
+          <p class="hint tight" id="adb-install-dir-hint">下载解压后把文件夹路径填在这里（输入即自动记住，各工具共用）。「打开目录」可在本机资源管理器查看。首次请手动双击启动脚本（会注册 <span class="mono">devtools-bridge://</span>）。之后网页可自动唤起：若已手动打开窗口，浏览器再弹出「打开 DevTools Bridge」请点取消，不要再开第二座。</p>
         </div>
         <div class="field-row bridge-conn-fields" style="flex-wrap:wrap;margin-top:0.65rem">
           <label for="adb-base">桥地址</label>

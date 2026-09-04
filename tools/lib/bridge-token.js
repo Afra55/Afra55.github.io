@@ -402,13 +402,52 @@
   }
 
   /**
-   * 绑定「桥解压目录 / 记住 / 启动 / 自动启动」控件（ADB 同款）。
+   * 在本机资源管理器中打开路径（需桥已启动，POST /local/reveal）。
+   */
+  async function revealLocalPath({ path: targetPath, preferredBase, token, kind = "unified" } = {}) {
+    const dir = String(targetPath || "").trim();
+    if (!dir) throw new Error("请先填写桥解压目录");
+    const cfg = kindConfig(kind);
+    const tok = String(token || read()).trim() || DEFAULT;
+    let base = normalizeBridgeBase(preferredBase || cfg.defaultBase);
+    let health = await probeHealth(base, tok, true).catch(() => null);
+    if (!health) {
+      const found = await discoverBase(base, tok, { kind }).catch(() => null);
+      if (found?.base) {
+        base = found.base;
+        health = found.health;
+      }
+    }
+    if (!health) {
+      throw new Error("本机桥未连接。请先启动并连接桥，再点「打开目录」。");
+    }
+    const res = await fetch(`${base}/local/reveal`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Adb-Token": tok,
+        "X-Ffmpeg-Token": tok,
+        "X-Git-Token": tok,
+      },
+      body: JSON.stringify({ path: dir }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.ok === false) {
+      throw new Error(data?.error || `打开目录失败（HTTP ${res.status}）`);
+    }
+    return data;
+  }
+
+  /**
+   * 绑定「桥解压目录 / 打开目录 / 启动 / 自动启动」控件（ADB 同款）。
+   * 填写目录时会自动记住并跨工具同步；按钮用于在本机打开该文件夹。
    * @returns {{ autoEnsure: Function }}
    */
   function bindBridgeLaunchUI({
     kind = "unified",
     dirInput,
     saveBtn,
+    openBtn,
     launchBtn,
     autoEl,
     getPreferredBase,
@@ -420,6 +459,7 @@
     const cfg = kindConfig(kind);
     const say = typeof toast === "function" ? toast : () => {};
     const status = typeof onStatus === "function" ? onStatus : () => {};
+    const openDirBtn = openBtn || saveBtn;
 
     try {
       if (dirInput) {
@@ -448,10 +488,21 @@
       dirInput.addEventListener("blur", persistFromInput);
     }
 
-    saveBtn?.addEventListener("click", () => {
+    openDirBtn?.addEventListener("click", () => {
       const dir = String(dirInput?.value || "").trim();
+      if (!dir) {
+        say("请先填写桥解压目录");
+        return;
+      }
       writeInstallDir(dir, kind);
-      say(dir ? "已记住桥目录（各工具共用，已自动同步）" : "已清除桥目录");
+      revealLocalPath({
+        path: dir,
+        preferredBase: getPreferredBase?.() || cfg.defaultBase,
+        token: getToken?.() || read(),
+        kind,
+      })
+        .then(() => say("已在本机打开该目录"))
+        .catch((err) => say(err?.message || String(err) || "打开目录失败"));
     });
 
     autoEl?.addEventListener("change", (e) => {
@@ -480,7 +531,7 @@
         status(
           "is-warn",
           "等待本机桥…",
-          "若未弹出启动，请到已记住的目录双击启动脚本，并保持窗口打开。"
+          "若未弹出启动，请到已填的桥目录双击启动脚本，并保持窗口打开。"
         );
       }
     });
@@ -556,6 +607,7 @@
     matchGit,
     readInstallDir,
     writeInstallDir,
+    revealLocalPath,
     readAutoStart,
     writeAutoStart,
     rememberFromHealth,
