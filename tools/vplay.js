@@ -367,13 +367,25 @@
     return { w: nw, h: nh };
   }
 
+  /** transform-origin:0 0 时，rotate 后 AABB 相对原点的补偿，使 (x,y) 表示画面左上角 */
+  function rotCompensation(nw, nh, rotDeg, scale) {
+    const r = ((rotDeg % 360) + 360) % 360;
+    const s = scale || 1;
+    if (r === 90) return { x: nh * s, y: 0 };
+    if (r === 180) return { x: nw * s, y: nh * s };
+    if (r === 270) return { x: 0, y: nw * s };
+    return { x: 0, y: 0 };
+  }
+
   function applyZoom() {
     if (!video) return;
     const nw = video.videoWidth || 1;
     const nh = video.videoHeight || 1;
+    const s = zoom.scale;
+    const c = rotCompensation(nw, nh, zoom.rotate, s);
     video.style.width = `${nw}px`;
     video.style.height = `${nh}px`;
-    video.style.transform = `translate(${zoom.x}px, ${zoom.y}px) rotate(${zoom.rotate}deg) scale(${zoom.scale})`;
+    video.style.transform = `translate(${zoom.x + c.x}px, ${zoom.y + c.y}px) rotate(${zoom.rotate}deg) scale(${s})`;
     zoomWrap?.classList.toggle("is-zoomed", zoom.scale > zoom.fit + 0.01);
     zoomWrap?.classList.toggle("is-panning", zoom.dragging);
     if (zoomPct) {
@@ -391,6 +403,7 @@
     const fit = Math.min(rw / w, rh / h) || 1;
     zoom.fit = fit;
     zoom.scale = fit;
+    // x/y = 旋转后可视矩形的左上角（补偿在 applyZoom 里加）
     zoom.x = (rw - w * fit) / 2;
     zoom.y = (rh - h * fit) / 2;
     applyZoom();
@@ -656,18 +669,24 @@
     flushScrubSeek();
     await ensureSeekReady();
     await waitVideoFrame();
-    const w = video.videoWidth;
-    const h = video.videoHeight;
+    const nw = video.videoWidth;
+    const nh = video.videoHeight;
+    const rot = ((zoom.rotate % 360) + 360) % 360;
+    const out = displayBox();
     const canvas = document.createElement("canvas");
-    canvas.width = w;
-    canvas.height = h;
+    canvas.width = out.w;
+    canvas.height = out.h;
     const ctx = canvas.getContext("2d");
     if (!ctx) {
       toast("无法创建画布");
       return;
     }
     try {
-      ctx.drawImage(video, 0, 0, w, h);
+      ctx.save();
+      ctx.translate(out.w / 2, out.h / 2);
+      ctx.rotate((rot * Math.PI) / 180);
+      ctx.drawImage(video, -nw / 2, -nh / 2, nw, nh);
+      ctx.restore();
     } catch (err) {
       toast(err?.message || "截图失败");
       return;

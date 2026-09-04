@@ -4696,13 +4696,25 @@
     return { w: nw, h: nh };
   }
 
+  /** transform-origin:0 0 时 rotate 后 AABB 补偿，使 (x,y) 表示画面左上角 */
+  function videoRotCompensation(nw, nh, rotDeg, scale) {
+    const r = ((rotDeg % 360) + 360) % 360;
+    const s = scale || 1;
+    if (r === 90) return { x: nh * s, y: 0 };
+    if (r === 180) return { x: nw * s, y: nh * s };
+    if (r === 270) return { x: 0, y: nw * s };
+    return { x: 0, y: 0 };
+  }
+
   function applyVideoZoom() {
     if (!lightboxVideo) return;
     const nw = lightboxVideo.videoWidth || 1;
     const nh = lightboxVideo.videoHeight || 1;
+    const s = vidZoom.scale;
+    const c = videoRotCompensation(nw, nh, vidZoom.rotate, s);
     lightboxVideo.style.width = `${nw}px`;
     lightboxVideo.style.height = `${nh}px`;
-    lightboxVideo.style.transform = `translate(${vidZoom.x}px, ${vidZoom.y}px) rotate(${vidZoom.rotate}deg) scale(${vidZoom.scale})`;
+    lightboxVideo.style.transform = `translate(${vidZoom.x + c.x}px, ${vidZoom.y + c.y}px) rotate(${vidZoom.rotate}deg) scale(${s})`;
     videoZoomWrap?.classList.toggle("is-zoomed", vidZoom.scale > vidZoom.fit + 0.01);
     videoZoomWrap?.classList.toggle("is-panning", vidZoom.dragging);
     if (videoZoomPct) {
