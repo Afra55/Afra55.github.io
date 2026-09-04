@@ -54,7 +54,10 @@
             <div class="git-beginner panel-card" id="git-beginner">
               <div class="label-row">
                 <h2 class="subhead">日常三步 · 跟着高亮走</h2>
-                <button type="button" class="ghost-btn" id="git-easy-refresh">刷新状态</button>
+                <div class="btn-row tool-actions" style="flex-wrap:wrap;gap:0.3rem">
+                  <button type="button" class="ghost-btn" id="git-open-history" title="展开历史图，可对某一笔右键操作">看历史 · 对某笔做事</button>
+                  <button type="button" class="ghost-btn" id="git-easy-refresh">刷新状态</button>
+                </div>
               </div>
 
               <div class="git-progress-rail" id="git-progress-rail" aria-label="日常三步进度">
@@ -257,7 +260,7 @@
                     <h2 class="subhead">工作线</h2>
                     <button type="button" class="ghost-btn" id="git-branch-refresh">刷新</button>
                   </div>
-                  <p class="hint tight" style="margin-top:0.25rem">当前线默认展开；其他本地线 / 网上线仍可再展开。</p>
+                  <p class="hint tight" style="margin-top:0.25rem">当前线默认展开；其他本地线 / 网上线仍可再展开。<strong>右键</strong>卡片可切换 / 合并 / 删除。</p>
                   <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.35rem">
                     <input id="git-easy-newbr" type="text" placeholder="新线名字，如 fix-login" spellcheck="false" autocomplete="off" style="flex:1;min-width:7rem" />
                     <button type="button" class="secondary-btn" id="git-easy-newbr-go">开新线</button>
@@ -300,27 +303,44 @@
                 <p class="hint tight" id="git-ops-whitelist-tip" style="margin-top:0.35rem">
                   每条<strong>第一行是命令</strong>，<strong>第二行是中文说明</strong>。带 <span class="git-op-gerrit-tag">Gerrit</span> 的只在 Gerrit 仓库用。右侧可「加到常用」。
                 </p>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
+                  <label for="git-ops-filter">搜索</label>
+                  <input id="git-ops-filter" type="search" placeholder="命令 / 中文 / 组别，例如 stash、送审" spellcheck="false" autocomplete="off" style="flex:1;min-width:12rem" />
+                </div>
+                <p class="hint tight" id="git-ops-filter-meta" style="margin-top:0.25rem" hidden></p>
                 <div id="git-ops-catalog" class="git-ops-catalog"></div>
               </details>
 
-              <details class="git-ops-details git-adv-block">
+              <details class="git-ops-details git-adv-block" id="git-adv-shortcuts">
                 <summary class="hint">进阶快捷钮</summary>
-                <p class="hint tight" style="margin-top:0.35rem">常用动作快捷入口；括号里是 git 原名。</p>
-                <div class="btn-row tool-actions" style="flex-wrap:wrap" id="git-ops-row">
-                  <button type="button" class="secondary-btn" data-git-op="fetch" title="只从网上刷新信息，不改你的文件&#10;git fetch">查有没有新的 (fetch)</button>
-                  <button type="button" class="secondary-btn" data-git-op="pull" title="把网上更新拉到本机（仅允许快进）&#10;git pull --ff-only">拉到最新 (pull)</button>
+                <p class="hint tight" style="margin-top:0.35rem">按场景分组；括号里是 git 原名。全部保留，方便熟练后快点。</p>
+
+                <p class="git-adv-sec-label hint tight">查阅</p>
+                <div class="btn-row tool-actions" style="flex-wrap:wrap" id="git-ops-row-lookup">
                   <button type="button" class="secondary-btn" data-git-op="status" title="看工作区改了哪些文件&#10;git status">看改了啥 (status)</button>
                   <button type="button" class="secondary-btn" data-git-op="diff" title="统计未保存改动&#10;git diff --stat">改动统计 (diff)</button>
                   <button type="button" class="secondary-btn" data-git-op="reflog" title="看 HEAD 最近去过哪，方便找回&#10;git reflog">后悔药 (reflog)</button>
                   <button type="button" class="secondary-btn" data-git-op="remote-list" title="列出远程地址&#10;git remote -v">远程地址 (remote)</button>
+                  <button type="button" class="secondary-btn" data-git-op="log-graph" title="终端风格分叉图&#10;git log --graph">终端分叉图</button>
+                  <button type="button" class="secondary-btn" data-git-op="worktree-list" title="列出额外工作目录&#10;git worktree list">额外工作目录</button>
+                </div>
+
+                <p class="git-adv-sec-label hint tight">同步</p>
+                <div class="btn-row tool-actions" style="flex-wrap:wrap" id="git-ops-row-sync">
+                  <button type="button" class="secondary-btn" data-git-op="fetch" title="只从网上刷新信息，不改你的文件&#10;git fetch">查有没有新的 (fetch)</button>
+                  <button type="button" class="secondary-btn" data-git-op="pull" title="把网上更新拉到本机（仅允许快进）&#10;git pull --ff-only">拉到最新 (pull)</button>
                   <button type="button" class="secondary-btn" data-git-op="stash-push" title="把未保存改动临时收起来&#10;git stash">收起改动 (stash)</button>
                   <button type="button" class="secondary-btn" data-git-op="stash-pop" title="取出最近一份收起&#10;git stash pop">取出收起 (stash pop)</button>
-                  <button type="button" class="secondary-btn" data-git-op="worktree-list" title="列出额外工作目录&#10;git worktree list">额外工作目录</button>
-                  <button type="button" class="secondary-btn" data-git-op="log-graph" title="终端风格分叉图&#10;git log --graph">终端分叉图</button>
+                </div>
+
+                <p class="git-adv-sec-label hint tight">Gerrit</p>
+                <div class="btn-row tool-actions" style="flex-wrap:wrap" id="git-ops-row-gerrit">
                   <button type="button" class="secondary-btn git-op-gerrit-btn" data-git-op="gerrit-config-push" title="【Gerrit】配置以后上传走评审 refs/for&#10;git config remote.origin.push">【Gerrit】配推送规则</button>
                   <button type="button" class="secondary-btn git-op-gerrit-btn" data-git-op="push-gerrit" title="【Gerrit】推到评审区，不是直推分支&#10;git push origin HEAD:refs/for/…">【Gerrit】送审</button>
                 </div>
-                <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center;gap:0.4rem">
+
+                <p class="git-adv-sec-label hint tight">改线 / 拣选</p>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
                   <label for="git-op-target">目标</label>
                   <input id="git-op-target" class="mono" type="text" placeholder="留空=当前选中提交 / 当前分支" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
                   <button type="button" class="ghost-btn" data-git-op="checkout" title="切换到目标分支或提交&#10;git checkout">切过去</button>
@@ -335,7 +355,9 @@
                   <button type="button" class="ghost-btn" data-git-op="branch-create" title="只创建，不切换&#10;git branch">创建</button>
                   <button type="button" class="ghost-btn" data-git-op="branch-create-co" title="创建并立刻切过去&#10;git checkout -b">创建并切过去</button>
                 </div>
-                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
+
+                <p class="git-adv-sec-label hint tight">文件与提交</p>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.4rem">
                   <label for="git-op-path">路径</label>
                   <input id="git-op-path" class="mono" type="text" placeholder="文件路径" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
                   <button type="button" class="ghost-btn" data-git-op="blame" title="看每一行最后是谁改的&#10;git blame">谁改的这行</button>
@@ -364,6 +386,16 @@
           </div>
         </div>
         <p class="error" id="git-error" hidden></p>
-        <div id="git-commit-menu" class="git-ctx-menu" hidden role="menu" aria-label="提交操作"></div>
+        <div id="git-auth-help" class="git-auth-help panel-card" hidden>
+          <p class="hint tight"><strong>登录失败时，在本机做这几步（本页不收密码）：</strong></p>
+          <ol class="git-auth-steps">
+            <li>确认远程地址没错（进阶快捷 →「远程地址」）。</li>
+            <li>GitHub / GitLab：用 <span class="mono">HTTPS + Personal Access Token</span>，或配好 <span class="mono">SSH</span> 钥匙。</li>
+            <li>用系统凭据：macOS 钥匙串 / Windows「Git Credential Manager」/ 已登录的 GitHub Desktop。</li>
+            <li>终端里对同一仓库先成功 <span class="mono">git fetch</span> 一次，再回本页点「上传」。</li>
+          </ol>
+          <p class="hint tight">也可看 <a href="#setup">安装指南</a> · <a href="#envkit">环境管家</a>。</p>
+        </div>
+        <div id="git-commit-menu" class="git-ctx-menu" hidden role="menu" aria-label="上下文菜单"></div>
       </div>
     </section>

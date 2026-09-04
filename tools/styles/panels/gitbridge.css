@@ -594,9 +594,46 @@
   background: color-mix(in srgb, #f31260 16%, transparent);
 }
 
-#gitbridge .git-ctx-hint {
-  font-size: 0.68rem;
-  opacity: 0.55;
+#gitbridge .git-adv-sec-label {
+  margin: 0.75rem 0 0.3rem;
+  font-weight: 600;
+  opacity: 0.8;
+}
+
+#gitbridge .git-auth-help {
+  margin-top: 0.55rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid color-mix(in srgb, #f5a524 40%, var(--line, #2a2f3a));
+  background: color-mix(in srgb, #f5a524 10%, transparent);
+}
+
+#gitbridge .git-auth-steps {
+  margin: 0.35rem 0 0.45rem;
+  padding-left: 1.2rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+#gitbridge .git-auth-steps li {
+  margin: 0.2rem 0;
+}
+
+#gitbridge .git-blame-btn {
+  font-size: 0.72rem;
+  padding: 0.12rem 0.4rem;
+  flex-shrink: 0;
+}
+
+#gitbridge .git-file-row-wrap {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.25rem;
+  align-items: center;
+  border-bottom: 1px solid color-mix(in srgb, var(--line, #2a2f3a) 55%, transparent);
+}
+
+#gitbridge .git-file-row-wrap .git-file-row {
+  border-bottom: 0;
 }
 
 #gitbridge .git-ops-catalog {

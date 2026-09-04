@@ -68,13 +68,49 @@
   }
 
   function showError(msg) {
+    const help = $("#git-auth-help");
     if (!msg) {
       errEl.hidden = true;
       errEl.textContent = "";
+      if (help) help.hidden = true;
       return;
     }
+    const text = humanizeGitError(msg);
     errEl.hidden = false;
-    errEl.textContent = humanizeGitError(msg);
+    errEl.textContent = text;
+    if (help) {
+      help.hidden = !/远程拒绝登录|Authentication failed|Permission denied \(publickey\)|401|403|could not read Username|terminal prompts disabled/i.test(
+        String(msg) + " " + text
+      );
+    }
+  }
+
+  function revealOpOut() {
+    if (!opOut) return;
+    opOut.hidden = false;
+    try {
+      opOut.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function openHistoryPanel() {
+    const details = $("#git-graph-details");
+    if (details) details.open = true;
+    try {
+      details?.scrollIntoView({ block: "start", behavior: "smooth" });
+    } catch (_) {
+      /* ignore */
+    }
+    if (selectedSha) {
+      void selectCommit(selectedSha);
+    } else if (graphCommits?.[0]?.hash) {
+      void selectCommit(graphCommits[0].hash);
+    } else {
+      void refreshRepo().catch((e) => showError(e.message));
+    }
+    showComfortSuccess("在历史图点一行看详情；右键可对这一笔做事。");
   }
 
   /** 面板内确认条，替代大部分 window.confirm */
@@ -698,11 +734,13 @@
     }
     if (id === "show") {
       await runOp("show", { sha: full }, { skipConfirm: true });
+      revealOpOut();
       showComfortSuccess("已在下方输出区显示改动摘要");
       return;
     }
     if (id === "show-patch") {
       await runOp("show-patch", { sha: full }, { skipConfirm: true });
+      revealOpOut();
       showComfortSuccess("已在下方输出区显示完整补丁");
       return;
     }
@@ -839,11 +877,14 @@
             typeof f.added === "number" ? `<span class="git-file-add">+${f.added}</span>` : "";
           const del =
             typeof f.deleted === "number" ? `<span class="git-file-del">-${f.deleted}</span>` : "";
-          return `<button type="button" class="git-file-row" data-commit-file="${escapeHtml(f.path)}" title="查看该文件在这笔里的内容">
+          return `<div class="git-file-row-wrap">
+            <button type="button" class="git-file-row" data-commit-file="${escapeHtml(f.path)}" title="查看该文件在这笔里的内容">
             <span class="git-change-badge mono">${escapeHtml(statusLabel(f.status))}</span>
             <span class="mono git-file-path">${escapeHtml(f.path)}</span>
             <span class="git-file-stat">${add}${del}</span>
-          </button>`;
+          </button>
+          <button type="button" class="ghost-btn git-blame-btn" data-blame-path="${escapeHtml(f.path)}" data-blame-sha="${escapeHtml(data.hash || sha)}" title="blame">谁改的</button>
+          </div>`;
         })
         .join("");
       const moreFiles =
@@ -893,16 +934,27 @@
       if (files.length) {
         const filesWrap = document.createElement("div");
         filesWrap.className = "git-commit-files";
-        filesWrap.innerHTML = `<p class="hint tight" style="margin:0.45rem 0 0.25rem">改动文件（点文件名可看内容）</p>${fileRows}${moreFiles}`;
+        filesWrap.innerHTML = `<p class="hint tight" style="margin:0.45rem 0 0.25rem">改动文件（点文件名看内容；「谁改的」看 blame）</p>${fileRows}${moreFiles}`;
         explainEl.appendChild(filesWrap);
         filesWrap.querySelectorAll("[data-commit-file]").forEach((btn) => {
           btn.addEventListener("click", () => {
             const path = btn.getAttribute("data-commit-file");
             const pathInput = $("#git-op-path");
             if (pathInput) pathInput.value = path;
-            runOp("show-file", { sha: data.hash || sha, path }, { skipConfirm: true }).catch((e) =>
-              showError(e.message)
-            );
+            runOp("show-file", { sha: data.hash || sha, path }, { skipConfirm: true })
+              .then(() => revealOpOut())
+              .catch((e) => showError(e.message));
+          });
+        });
+        filesWrap.querySelectorAll("[data-blame-path]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            const path = btn.getAttribute("data-blame-path");
+            const blameSha = btn.getAttribute("data-blame-sha") || data.hash || sha;
+            const pathInput = $("#git-op-path");
+            if (pathInput) pathInput.value = path;
+            runOp("blame", { path, sha: blameSha }, { skipConfirm: true })
+              .then(() => revealOpOut())
+              .catch((e) => showError(e.message));
           });
         });
       }
@@ -1300,7 +1352,110 @@
     card.appendChild(head);
     card.appendChild(subj);
     card.appendChild(actions);
+    card.addEventListener("contextmenu", (ev) => {
+      ev.preventDefault();
+      openBranchMenu(b, kind, ev.clientX, ev.clientY);
+    });
+    let pressTimer = 0;
+    card.addEventListener(
+      "touchstart",
+      (ev) => {
+        if (!ev.touches?.[0]) return;
+        const t = ev.touches[0];
+        pressTimer = window.setTimeout(() => openBranchMenu(b, kind, t.clientX, t.clientY), 520);
+      },
+      { passive: true }
+    );
+    const clearPress = () => {
+      if (pressTimer) window.clearTimeout(pressTimer);
+      pressTimer = 0;
+    };
+    card.addEventListener("touchend", clearPress);
+    card.addEventListener("touchmove", clearPress);
+    card.addEventListener("touchcancel", clearPress);
     return card;
+  }
+
+  function openBranchMenu(b, kind, clientX, clientY) {
+    const details = $("#git-branch-details");
+    if (details && !details.open) details.open = true;
+    const menu = $("#git-commit-menu");
+    if (!menu || !b?.name) return;
+    const items = [];
+    items.push({ id: "copy-name", label: "复制线名" });
+    if (b.sha) items.push({ id: "goto-commit", label: "看尖端提交详情" });
+    if (kind === "local") {
+      if (!b.current) {
+        items.push({ id: "switch", label: "切换到这条", warn: true });
+        items.push({ id: "merge", label: "合进我现在的线", warn: true });
+        items.push({ id: "delete", label: "删除这条线", danger: true });
+      } else {
+        items.push({ id: "noop", label: "（当前就在这条线上）", disabled: true });
+      }
+    } else {
+      items.push({ id: "checkout-remote", label: "检出为本地", warn: true });
+    }
+    menu.innerHTML = "";
+    menu.hidden = false;
+    const title = document.createElement("div");
+    title.className = "git-ctx-group";
+    title.textContent = kind === "remote" ? "网上的线" : "本地工作线";
+    menu.appendChild(title);
+    for (const item of items) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className =
+        "git-ctx-item" + (item.danger ? " is-danger" : item.warn ? " is-warn" : "");
+      btn.disabled = Boolean(item.disabled);
+      btn.textContent = item.label;
+      btn.addEventListener("click", () => {
+        hideCommitMenu();
+        runBranchAction(item.id, b, kind).catch((e) => showError(e.message || String(e)));
+      });
+      menu.appendChild(btn);
+    }
+    const pad = 8;
+    const mw = Math.min(280, window.innerWidth - pad * 2);
+    menu.style.width = mw + "px";
+    menu.style.left = "0px";
+    menu.style.top = "0px";
+    const rect = menu.getBoundingClientRect();
+    let left = clientX;
+    let top = clientY;
+    if (left + rect.width > window.innerWidth - pad) left = window.innerWidth - rect.width - pad;
+    if (top + rect.height > window.innerHeight - pad) top = window.innerHeight - rect.height - pad;
+    if (left < pad) left = pad;
+    if (top < pad) top = pad;
+    menu.style.left = left + "px";
+    menu.style.top = top + "px";
+  }
+
+  async function runBranchAction(id, b, kind) {
+    if (!repoPath) return showError("先打开一个仓库");
+    if (id === "copy-name") return copyText(b.name);
+    if (id === "goto-commit") {
+      if (!b.sha) return showError("没有提交号");
+      openHistoryPanel();
+      await selectCommit(b.sha);
+      return;
+    }
+    if (id === "switch") {
+      await switchToBranch(b.name);
+      showComfortSuccess(`已切到「${b.name}」`);
+      return;
+    }
+    if (id === "merge") {
+      await mergeBranchIntoCurrent(b.name);
+      return;
+    }
+    if (id === "delete") {
+      await deleteLocalBranch(b.name);
+      return;
+    }
+    if (id === "checkout-remote") {
+      await switchToBranch("remote:" + b.name);
+      showComfortSuccess(`已检出「${b.name}」`);
+    }
   }
 
   function updateBranchSummary(branches) {
@@ -1461,9 +1616,37 @@
         if (data.dirtyCount) bits.push({ t: `未保存 ${data.dirtyCount}`, k: "is-warn" });
         if (conflicts.length) bits.push({ t: `冲突 ${conflicts.length}`, k: "is-warn" });
         if (data.stashCount) bits.push({ t: `收起 ${data.stashCount}`, k: "" });
+        if (data.worktreeExtra > 0) bits.push({ t: `额外目录 ${data.worktreeExtra}`, k: "is-info" });
+        if (data.submoduleCount > 0) {
+          bits.push({
+            t: data.submoduleDirty
+              ? `子仓库 ${data.submoduleCount}（${data.submoduleDirty} 待关注）`
+              : `子仓库 ${data.submoduleCount}`,
+            k: data.submoduleDirty ? "is-warn" : "is-info",
+          });
+        }
         if (data.gerritPushConfigured) bits.push({ t: "Gerrit 推送已配", k: "is-ok" });
         if (!bits.length) bits.push({ t: "干净", k: "is-ok" });
         pills.innerHTML = bits.map((b) => `<span class="git-pill ${b.k}">${escapeHtml(b.t)}</span>`).join("");
+        pills.querySelectorAll(".git-pill").forEach((el) => {
+          const t = el.textContent || "";
+          if (t.startsWith("额外目录")) {
+            el.style.cursor = "pointer";
+            el.title = "点开进阶快捷 → 额外工作目录";
+            el.addEventListener("click", () => {
+              const d = $("#git-adv-shortcuts");
+              if (d) d.open = true;
+              runOp("worktree-list", {}, { skipConfirm: true }).catch((e) => showError(e.message));
+            });
+          }
+          if (t.startsWith("子仓库")) {
+            el.style.cursor = "pointer";
+            el.title = "查看子仓库状态";
+            el.addEventListener("click", () => {
+              runOp("submodule-status", {}, { skipConfirm: true }).catch((e) => showError(e.message));
+            });
+          }
+        });
       }
 
       const gerritHint = $("#git-easy-gerrit-hint");
@@ -1538,7 +1721,8 @@
           const checked = r.unstaged || !r.staged ? "checked" : "";
           row.innerHTML = `<input type="checkbox" data-git-path="${escapeHtml(r.path)}" ${checked} />
             <span class="git-change-badge mono">${escapeHtml(r.kind || "改")}</span>
-            <button type="button" class="ghost-btn git-change-path mono" data-diff-path="${escapeHtml(r.path)}" title="看改动">${escapeHtml(r.path)}</button>`;
+            <button type="button" class="ghost-btn git-change-path mono" data-diff-path="${escapeHtml(r.path)}" title="看改动">${escapeHtml(r.path)}</button>
+            <button type="button" class="ghost-btn git-blame-btn" data-blame-path="${escapeHtml(r.path)}" title="谁改的这行 (blame)">谁改的</button>`;
           box.appendChild(row);
         }
         box.querySelectorAll("[data-diff-path]").forEach((btn) => {
@@ -1548,7 +1732,17 @@
             showFileDiff(btn.getAttribute("data-diff-path")).catch((e) => showError(e.message));
           });
         });
-        if (hint) hint.textContent = `共 ${rows.length} 项。点文件名看对比 → 勾选 → 写说明 →「保存」→ 需要时「上传」。`;
+        box.querySelectorAll("[data-blame-path]").forEach((btn) => {
+          btn.addEventListener("click", (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            const path = btn.getAttribute("data-blame-path");
+            const pathInput = $("#git-op-path");
+            if (pathInput) pathInput.value = path;
+            runOp("blame", { path }, { skipConfirm: true }).then(() => revealOpOut()).catch((e) => showError(e.message));
+          });
+        });
+        if (hint) hint.textContent = `共 ${rows.length} 项。点文件名看对比；「谁改的」看 blame → 勾选 → 写说明 →「保存」。`;
       }
 
       // 分支下拉（隐藏兼容）+ 工作台卡片
@@ -2870,13 +3064,31 @@
   }
 
   function renderOpsCatalog(data) {
+    if (data && (Array.isArray(data.groups) || Array.isArray(data.ops))) {
+      opsCatalog = data;
+    }
     const box = $("#git-ops-catalog");
     const count = $("#git-ops-count");
+    const filterEl = $("#git-ops-filter");
+    const meta = $("#git-ops-filter-meta");
     if (!box) return;
-    const ops = data.ops || [];
-    if (count) count.textContent = `${ops.length} 条`;
+    const q = String(filterEl?.value || "")
+      .trim()
+      .toLowerCase();
+    const ops = opsCatalog?.ops || [];
+    const groups = opsCatalog?.groups || [];
+    let shown = 0;
     box.innerHTML = "";
-    for (const g of data.groups || []) {
+    for (const g of groups) {
+      const items = (g.items || []).filter((item) => {
+        if (!q) return true;
+        const hay = [item.id, item.title, item.plain, g.label, g.name]
+          .map((x) => String(x || "").toLowerCase())
+          .join(" ");
+        return hay.includes(q);
+      });
+      if (!items.length) continue;
+      shown += items.length;
       const wrap = document.createElement("div");
       wrap.className = "git-ops-group";
       const h = document.createElement("h3");
@@ -2892,11 +3104,28 @@
       wrap.appendChild(h);
       const row = document.createElement("div");
       row.className = "git-ops-plain-list";
-      for (const item of g.items || []) {
+      for (const item of items) {
         row.appendChild(makeOpRow(item));
       }
       wrap.appendChild(row);
       box.appendChild(wrap);
+    }
+    if (count) {
+      count.textContent = q ? `显示 ${shown} / ${ops.length}` : `${ops.length} 条`;
+    }
+    if (meta) {
+      if (q) {
+        meta.hidden = false;
+        meta.textContent = shown ? `已按「${q}」过滤` : `没有匹配「${q}」的命令`;
+      } else {
+        meta.hidden = true;
+        meta.textContent = "";
+      }
+    }
+    if (!shown && q) {
+      box.innerHTML = `<p class="hint tight">没有匹配。试试更短的关键词，或清空搜索。</p>`;
+    } else if (!shown && !q) {
+      box.innerHTML = `<p class="hint tight">命令目录为空（桥未返回目录）。</p>`;
     }
     renderFavOps();
   }
@@ -3004,6 +3233,14 @@
         ok: true,
         repo: repoPath,
       });
+      if (
+        opts.revealOut ||
+        /^(show|show-patch|show-file|blame|status|diff|log-graph|reflog|worktree-list|submodule-status|remote-list)$/.test(
+          op
+        )
+      ) {
+        revealOpOut();
+      }
       if (!opts.skipRefresh) await refreshRepo();
       return out;
     } catch (e) {
@@ -3015,6 +3252,7 @@
         (d.cmd ? (Array.isArray(d.cmd) ? d.cmd.join(" ") : d.cmd) + "\n\n" : "") +
         nice +
         (raw && raw !== nice ? "\n\n—— 原始信息 ——\n" + raw : "");
+      revealOpOut();
       recordExecHistory({
         op,
         plain,
@@ -3048,6 +3286,8 @@
     tryOpenPath(e.target.value).catch((err) => showError(err.message));
   });
   $("#git-init")?.addEventListener("click", () => initRepoHere().catch((e) => showError(e.message)));
+  $("#git-open-history")?.addEventListener("click", () => openHistoryPanel());
+  $("#git-ops-filter")?.addEventListener("input", () => renderOpsCatalog());
   $("#git-clone-go")?.addEventListener("click", () => easyClone().catch((e) => showError(e.message)));
   $("#git-clone-url")?.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter") {

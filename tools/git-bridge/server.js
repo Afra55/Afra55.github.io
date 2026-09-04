@@ -41,7 +41,7 @@ const ALLOWED_ORIGINS = new Set(
 
 const { buildOp, listOpsCatalog, assertPath } = require("./git-ops");
 
-const BRIDGE_VERSION = "0.2.15";
+const BRIDGE_VERSION = "0.2.16";
 const FEATURES = [
   "fs-browse","fs-pick-dir","repo-open","repo-probe","repo-init","repo-clone","graph","branches",
   "status","commit-detail","explain","ops-catalog","ops-full","protocol-launch",
@@ -676,6 +676,22 @@ async function repoStatus(repo) {
   if (stashCount > 0) plainSteps.push(`收起柜里还有 ${stashCount} 份临时改动`);
   if (!plainSteps.length) plainSteps.push("一切就绪。去改文件，改完回来刷新状态即可");
 
+  const worktreeRaw = await git(repo, ["worktree", "list", "--porcelain"]).catch(() => ({ stdout: "" }));
+  const worktreePaths = String(worktreeRaw.stdout || "")
+    .split("\n")
+    .filter((l) => l.startsWith("worktree "))
+    .map((l) => l.slice("worktree ".length).trim())
+    .filter(Boolean);
+  const worktreeExtra = Math.max(0, worktreePaths.length - 1);
+
+  const submoduleRaw = await git(repo, ["submodule", "status"]).catch(() => ({ stdout: "" }));
+  const submoduleLines = String(submoduleRaw.stdout || "")
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+  const submoduleCount = submoduleLines.length;
+  const submoduleDirty = submoduleLines.filter((l) => /^[+\-U]/.test(l)).length;
+
   return {
     porcelain: porcelain.stdout,
     stash: stashList,
@@ -692,6 +708,10 @@ async function repoStatus(repo) {
     dirtyCount: changes.length + conflicts.length,
     gerritPushConfigured,
     gerritPushValues,
+    worktreeCount: worktreePaths.length,
+    worktreeExtra,
+    submoduleCount,
+    submoduleDirty,
   };
 }
 
