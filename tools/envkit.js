@@ -13,42 +13,52 @@
   const installBtns = $("#env-install-btns");
   const upgradeBtns = $("#env-upgrade-btns");
 
+  /** 统一桥五大能力（均挂在 17888，勿再起独立端口） */
   const BRIDGES = [
     {
-      id: "unified",
-      name: "统一桥（ADB / FFmpeg / yt-dlp / Git / Everything）",
+      id: "adb",
+      name: "① ADB",
       url: "http://127.0.0.1:17888/health",
       token: "devtools-bridge",
       tokenHeader: "X-Adb-Token",
       link: "#adb",
-      primary: true,
+      kind: "adb",
     },
     {
       id: "ff-mount",
-      name: "统一桥 · FFmpeg 挂载 /ff",
+      name: "② FFmpeg · /ff",
       url: "http://127.0.0.1:17888/ff/health",
       token: "devtools-bridge",
       tokenHeader: "X-Ffmpeg-Token",
       link: "#ffbridge",
-      primary: true,
+      kind: "ff",
     },
     {
       id: "ytdlp-mount",
-      name: "统一桥 · yt-dlp 挂载 /ytdlp",
+      name: "③ yt-dlp · /ytdlp",
       url: "http://127.0.0.1:17888/ytdlp/health",
       token: "devtools-bridge",
       tokenHeader: "X-Ffmpeg-Token",
       link: "#ytdlp",
-      primary: true,
+      kind: "ytdlp",
     },
     {
       id: "git-mount",
-      name: "统一桥 · Git 挂载 /git",
+      name: "④ Git · /git",
       url: "http://127.0.0.1:17888/git/health",
       token: "devtools-bridge",
       tokenHeader: "X-Git-Token",
       link: "#gitbridge",
-      primary: true,
+      kind: "git",
+    },
+    {
+      id: "everything-mount",
+      name: "⑤ Everything · /everything",
+      url: "http://127.0.0.1:17888/everything/health",
+      token: "devtools-bridge",
+      tokenHeader: "X-Adb-Token",
+      link: "#everything",
+      kind: "everything",
     },
   ];
 
@@ -132,7 +142,7 @@
 
   async function probeOne(b) {
     const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), 2500);
+    const timer = setTimeout(() => ctrl.abort(), 3500);
     try {
       const res = await fetch(b.url, {
         signal: ctrl.signal,
@@ -144,20 +154,71 @@
       try {
         data = await res.json();
       } catch (_) {}
-      if (!res.ok) {
-        return { ok: false, title: b.name, text: `HTTP ${res.status}`, link: b.link };
+
+      if (b.kind === "adb") {
+        if (!res.ok || !data?.ok) {
+          return { ok: false, title: b.name, text: data?.error || `HTTP ${res.status}`, link: b.link };
+        }
+        const ver = data.version || "?";
+        const adbVer = data.adb?.version || data.adb?.path || "";
+        const adbOk = data.adb?.ok !== false;
+        return {
+          ok: adbOk,
+          warn: data.ok && !adbOk,
+          title: b.name,
+          text: adbOk
+            ? `统一桥在线 · v${ver}${adbVer ? " · " + String(adbVer).slice(0, 48) : ""}`
+            : `桥在线 · v${ver}，但本机未找到 adb`,
+          link: b.link,
+        };
       }
-      const ver = data.version || data.bridgeVersion || "?";
-      const extra = data.git || data.ffmpeg || data.adb || data.service || "";
+
+      if (b.kind === "everything") {
+        // 桥通了但本机 Everything HTTP 未开时仍会 502；区分「桥挂了」与「Everything 未开」
+        if (res.status === 502 || (res.ok && data && data.ok === false)) {
+          return {
+            ok: false,
+            warn: true,
+            title: b.name,
+            text: data?.error || "桥已挂载，但本机 Everything HTTP Server 未开/不可达",
+            link: b.link,
+          };
+        }
+        if (!res.ok || !data?.ok) {
+          return { ok: false, title: b.name, text: data?.error || `HTTP ${res.status}`, link: b.link };
+        }
+        return {
+          ok: true,
+          title: b.name,
+          text: `在线 · 经桥代理${data.target ? " · " + data.target : ""}`,
+          link: b.link,
+        };
+      }
+
+      if (!res.ok || (data && data.ok === false)) {
+        return {
+          ok: false,
+          title: b.name,
+          text: data?.error || `HTTP ${res.status}`,
+          link: b.link,
+        };
+      }
+      const ver = data?.version || data?.bridgeVersion || "";
+      const extra =
+        data?.git ||
+        data?.ffmpeg ||
+        data?.ytdlp ||
+        data?.service ||
+        (data?.ok ? "挂载正常" : "");
       return {
         ok: true,
         title: b.name,
-        text: `在线 · v${ver}${extra ? " · " + String(extra).slice(0, 60) : ""}`,
+        text: `在线${ver ? " · v" + ver : ""}${extra ? " · " + String(extra).slice(0, 56) : ""}`,
         link: b.link,
       };
     } catch (e) {
       clearTimeout(timer);
-      return { ok: false, title: b.name, text: "未连接（先跑脚本并启动桥）", link: b.link };
+      return { ok: false, title: b.name, text: "未连接（先启动 adb-bridge 统一桥 17888）", link: b.link };
     }
   }
 
@@ -165,9 +226,11 @@
     grid.innerHTML = "";
     for (const r of rows) {
       const card = document.createElement("div");
-      card.className = "env-probe-card " + (r.ok ? "is-ok" : "is-err");
+      const state = r.ok ? "is-ok" : r.warn ? "is-warn" : "is-err";
+      const dot = r.ok ? "is-ok" : r.warn ? "is-warn" : "is-err";
+      card.className = "env-probe-card " + state;
       card.innerHTML = `
-        <span class="adb-dot ${r.ok ? "is-ok" : "is-err"}" aria-hidden="true"></span>
+        <span class="adb-dot ${dot}" aria-hidden="true"></span>
         <div>
           <strong>${r.title}</strong>
           <p class="hint tight">${r.text}</p>
