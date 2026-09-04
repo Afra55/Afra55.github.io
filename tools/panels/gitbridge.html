@@ -285,13 +285,22 @@
                 </div>
 
                 <div class="label-row" style="margin-top:0.85rem">
+                  <h2 class="subhead">我的常用</h2>
+                  <span class="hint tight" id="git-fav-count"></span>
+                </div>
+                <div class="panel-card git-fav-box" id="git-fav-box">
+                  <p class="hint tight" id="git-fav-empty">还没有常用。在下面命令旁点「加到常用」。</p>
+                  <div id="git-fav-list" class="git-ops-plain-list" hidden></div>
+                </div>
+
+                <div class="label-row" style="margin-top:0.85rem">
                   <h2 class="subhead">命令（都有中文）</h2>
                   <span class="hint tight" id="git-ops-count"></span>
                 </div>
                 <details class="git-ops-details" id="git-ops-details" open>
                   <summary class="hint">展开 / 收起命令目录 —— 每条第一行人话，第二行才是 git 原名</summary>
                   <p class="hint tight" id="git-ops-whitelist-tip" style="margin-top:0.35rem">
-                    看不懂英文没关系：先读<strong>中文</strong>那一行。点下去前会弹出将要执行的命令预览。本页只会跑下面这些登记过的操作，不会执行任意终端命令。
+                    看不懂英文没关系：先读<strong>中文</strong>那一行。右侧「加到常用」可钉到上方。点下去前会弹出将要执行的命令预览。
                   </p>
                   <div id="git-ops-catalog" class="git-ops-catalog"></div>
                 </details>

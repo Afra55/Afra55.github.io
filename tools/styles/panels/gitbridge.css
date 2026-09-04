@@ -288,6 +288,54 @@
   font-size: 0.9rem;
 }
 
+#gitbridge .git-fav-box {
+  margin-top: 0.25rem;
+  padding: 0.55rem 0.7rem;
+}
+
+#gitbridge .git-fav-box #git-fav-empty {
+  margin: 0;
+}
+
+#gitbridge .git-op-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+
+#gitbridge .git-op-row .git-op-plain-btn {
+  flex: 1;
+  min-width: 0;
+}
+
+#gitbridge .git-op-fav-toggle {
+  flex: 0 0 auto;
+  align-self: stretch;
+  min-width: 5.5rem;
+  padding: 0.35rem 0.5rem;
+  border-radius: var(--radius-sm, 10px);
+  border: 1px solid var(--line, rgba(127, 140, 160, 0.35));
+  background: color-mix(in srgb, var(--bg-1, #121a28) 88%, transparent);
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.75rem;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+#gitbridge .git-op-fav-toggle:hover {
+  border-color: var(--accent, #5b8cff);
+}
+
+#gitbridge .git-op-fav-toggle.is-on {
+  border-color: color-mix(in srgb, #f5a524 55%, var(--line));
+  background: color-mix(in srgb, #f5a524 12%, transparent);
+}
+
+#gitbridge .git-fav-list .git-op-row .git-op-fav-toggle {
+  min-width: 4.6rem;
+}
+
 #gitbridge .ghost-btn.is-warn-text {
   color: color-mix(in srgb, #f5a524 85%, var(--text, #e8eaed));
 }
