@@ -11,54 +11,7 @@
         </div>
 
         <div id="ff-bridge-panel">
-        <div class="adb-status" id="ff-status">
-          <div class="adb-status-main">
-            <span class="adb-dot" id="ff-dot" aria-hidden="true"></span>
-            <div>
-              <strong id="ff-status-title">未连接本机桥</strong>
-              <p class="hint tight" id="ff-status-text">电脑推荐先连本机桥。未连接时，少量文件可用下方「网页保底」入口。</p>
-            </div>
-          </div>
-          <div class="btn-row tool-actions adb-status-actions">
-            <button type="button" class="primary-btn" id="ff-connect">连接本机桥</button>
-            <button type="button" class="secondary-btn" id="ff-bridge-launch">启动本机桥</button>
-            <button type="button" class="secondary-btn" id="ff-refresh" disabled>刷新</button>
-            <span class="adb-dl-bundle" id="ff-dl-bundle">
-              <button type="button" class="secondary-btn" id="ff-dl-mac" data-ff-bundle="mac">下载 macOS 完整包</button>
-              <button type="button" class="secondary-btn" id="ff-dl-win" data-ff-bundle="win">下载 Windows 完整包</button>
-              <button type="button" class="secondary-btn" id="ff-dl-linux" data-ff-bundle="linux">下载 Linux 完整包</button>
-            </span>
-          </div>
-        </div>
-
-        <div class="gif-progress bridge-dl-progress" id="ff-dl-progress" hidden>
-          <div class="gif-progress-head">
-            <p class="hint gif-progress-title" id="ff-dl-progress-text">准备下载包…</p>
-            <span class="mono gif-progress-pct" id="ff-dl-progress-pct">0%</span>
-          </div>
-          <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill is-busy" id="ff-dl-progress-fill" style="width:0%"></span></div>
-        </div>
-
-        <div class="field-block adb-install-dir" style="margin-top:0.65rem">
-          <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.4rem">
-            <label for="ff-install-dir">桥解压目录</label>
-            <input id="ff-install-dir" class="mono" type="text" placeholder="与 ADB 相同，例如 C:\Tools\devtools-bridge" autocomplete="off" spellcheck="false" style="min-width:min(100%,22rem);flex:1" />
-            <button type="button" class="secondary-btn" id="ff-install-dir-save" title="在本机资源管理器中打开该目录（填写时已自动记住）">打开目录</button>
-          </div>
-          <label class="flag" style="margin-top:0.35rem;display:inline-flex;align-items:center;gap:0.35rem">
-            <input type="checkbox" id="ff-bridge-autostart" checked />
-            进入本页时若未连接则尝试自动启动
-          </label>
-          <p class="hint tight">与 ADB 共用一座桥（<span class="mono">devtools-bridge://</span>）。下载按钮打的是<strong>统一完整包</strong>（含 FFmpeg/Git），不是独立 FFmpeg 包。</p>
-        </div>
-
-        <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
-          <label for="ff-base">桥地址</label>
-          <input id="ff-base" class="mono" type="text" value="http://127.0.0.1:17888" autocomplete="off" spellcheck="false" />
-          <label for="ff-token">Token</label>
-          <input id="ff-token" class="mono" type="text" value="devtools-bridge" autocomplete="off" spellcheck="false" />
-        </div>
-        <p class="hint">与 ADB <strong>共用一座本机桥</strong>：地址 <span class="mono">17888</span>、Token <span class="mono">devtools-bridge</span>。FFmpeg 接口在 <span class="mono">/ff/*</span>，视频下载见 <a href="#ytdlp">yt-dlp</a>（<span class="mono">/ytdlp/*</span>）。只需启动一次桥即可。</p>
+        <div id="ff-bridge-shell" class="bridge-shell-host"></div>
         <p class="hint tight mono" id="ff-tools-probe" hidden></p>
         </div><!-- /ff-bridge-panel -->
 

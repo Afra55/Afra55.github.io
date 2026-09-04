@@ -76,13 +76,28 @@
   const panel = $("#ffbridge");
   if (!panel) return;
 
-  const baseInput = $("#ff-base");
-  const tokenInput = $("#ff-token");
-  const statusTitle = $("#ff-status-title");
-  const statusText = $("#ff-status-text");
-  const dot = $("#ff-dot");
-  const connectBtn = $("#ff-connect");
-  const refreshBtn = $("#ff-refresh");
+  if (!window.devtoolsBridgeShell?.mount) {
+    console.error("devtoolsBridgeShell 未加载");
+    return;
+  }
+
+  const bridgeShell = window.devtoolsBridgeShell.mount({
+    host: "#ff-bridge-shell",
+    prefix: "ff",
+    kind: "unified",
+    collapseAdvanced: true,
+    refreshLabel: "刷新",
+    hintDisconnected: "电脑推荐先连本机桥。未连接时，少量文件可用下方「网页保底」入口。",
+    connHint: '与 ADB <strong>共用一座桥</strong>：17888 · Token <span class="mono">devtools-bridge</span> · API <span class="mono">/ff/*</span>。',
+  });
+
+  const baseInput = bridgeShell.els.base;
+  const tokenInput = bridgeShell.els.token;
+  const statusTitle = bridgeShell.els.title;
+  const statusText = bridgeShell.els.text;
+  const dot = bridgeShell.els.dot;
+  const connectBtn = bridgeShell.els.connect;
+  const refreshBtn = bridgeShell.els.refresh;
   const workspace = $("#ff-workspace");
   const toolsProbe = $("#ff-tools-probe");
   const rootsEl = $("#ff-roots");
@@ -259,12 +274,7 @@
   }
 
   function setStatus(kind, title, text) {
-    if (dot) {
-      dot.classList.remove("is-ok", "is-err", "is-warn");
-      if (kind) dot.classList.add(kind);
-    }
-    if (statusTitle) statusTitle.textContent = title;
-    if (statusText) statusText.textContent = text;
+    bridgeShell.setStatus(kind, title, text);
   }
 
   async function ffFetch(pathname, opts = {}) {
@@ -727,28 +737,9 @@
   }
 
   async function downloadBundle(platform) {
-    const api = window.devtoolsUnifiedBridgeBundle;
-    if (!api?.download) throw new Error("统一完整包模块未加载，请硬刷新页面");
-    const box = $("#ff-dl-progress");
-    const fill = $("#ff-dl-progress-fill");
-    const title = $("#ff-dl-progress-text");
-    const pctEl = $("#ff-dl-progress-pct");
-    const setProg = (on, p = {}) => {
-      if (!box) return;
-      box.hidden = !on;
-      if (fill) fill.style.width = `${Math.max(0, Math.min(100, Number(p.pct) || 0))}%`;
-      if (title && p.text) title.textContent = p.text;
-      if (pctEl) pctEl.textContent = `${Math.round(Number(p.pct) || 0)}%`;
-    };
-    toast("正在准备统一完整包…");
-    setProg(true, { pct: 4, text: "准备打包…" });
-    try {
-      await api.download(platform, { onProgress: (p) => setProg(true, p) });
-      toast("已下载完整包，解压运行 start-adb-bridge.* 后点连接");
-      startWaitPoll();
-    } finally {
-      setProg(false);
-    }
+    await bridgeShell.downloadBundle(platform, {
+      onDone: () => startWaitPoll(),
+    });
   }
 
   function outDirHintForOp(opId) {
@@ -856,28 +847,25 @@
     renderOpSelect();
   });
 
-  connectBtn?.addEventListener("click", () => connectBridge());
-  refreshBtn?.addEventListener("click", async () => {
-    try {
-      await openPath(cwd || pathInput?.value || "");
-      await refreshJobs();
-      await loadOpsCatalog();
-    } catch (err) {
-      setError(err.message || String(err));
-    }
-  });
-
-  window.devtoolsBridgeToken?.bindBridgeLaunchUI?.({
-    kind: "unified",
-    dirInput: $("#ff-install-dir"),
-    saveBtn: $("#ff-install-dir-save"),
-    launchBtn: $("#ff-bridge-launch"),
-    autoEl: $("#ff-bridge-autostart"),
-    getPreferredBase: () => baseUrl(),
-    getToken: () => token(),
+  bridgeShell.bind({
     onStatus: (kind, title, text) => setStatus(kind, title, text),
     onConnected: async () => {
       await connectBridge();
+    },
+    onConnect: () => connectBridge(),
+    onRefresh: async () => {
+      try {
+        await openPath(cwd || pathInput?.value || "");
+        await refreshJobs();
+        await loadOpsCatalog();
+      } catch (err) {
+        setError(err.message || String(err));
+      }
+    },
+    onDownloadDone: () => startWaitPoll(),
+    onDownloadError: (err) => {
+      setError(err.message || String(err));
+      toast(err.message || String(err));
     },
     toast: (msg) => setStatus("is-ok", "桥目录", msg),
   });
@@ -912,27 +900,6 @@
   $("#ff-run")?.addEventListener("click", () => runTask());
   $("#ff-probe-sel")?.addEventListener("click", () => probeSelected());
   $("#ff-jobs-refresh")?.addEventListener("click", () => refreshJobs().catch((err) => setError(err.message || String(err))));
-
-  ["mac", "win", "linux"].forEach((platform) => {
-    $(`#ff-dl-${platform}`)?.addEventListener("click", () => {
-      downloadBundle(platform).catch((err) => {
-        setError(err.message || String(err));
-        toast(err.message || String(err));
-      });
-    });
-  });
-
-  const ua = navigator.userAgent || "";
-  if (/Windows/i.test(ua)) {
-    $("#ff-dl-win")?.classList.add("primary-btn");
-    $("#ff-dl-win")?.classList.remove("secondary-btn");
-  } else if (/Mac/i.test(ua)) {
-    $("#ff-dl-mac")?.classList.add("primary-btn");
-    $("#ff-dl-mac")?.classList.remove("secondary-btn");
-  } else {
-    $("#ff-dl-linux")?.classList.add("primary-btn");
-    $("#ff-dl-linux")?.classList.remove("secondary-btn");
-  }
 
   applyDeviceMode();
   window.addEventListener("resize", () => {

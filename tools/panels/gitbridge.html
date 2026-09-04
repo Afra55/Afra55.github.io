@@ -4,70 +4,7 @@
         <p>本机调用系统 <span class="mono">git</span>。连上桥 → 打开仓库 → 按「更新 · 保存 · 上传」三步走。下面工作线 / 历史图 / 命令默认收起，需要再展开。<a href="#setup">安装指南</a> · <a href="#envkit">环境管家</a></p>
       </div>
       <div class="panel-body">
-        <div class="adb-status" id="git-status">
-          <div class="adb-status-main">
-            <span class="adb-dot" id="git-dot" aria-hidden="true"></span>
-            <div>
-              <strong id="git-status-title">未连接本机桥</strong>
-              <p class="hint tight" id="git-status-text">与 ADB / FFmpeg <strong>共用一座桥</strong>。点「一键启动并连接」即可；高级下载与 Token 在下方折叠里。</p>
-            </div>
-          </div>
-          <div class="btn-row tool-actions adb-status-actions">
-            <button type="button" class="primary-btn" id="git-ready-go">一键启动并连接</button>
-            <button type="button" class="secondary-btn" id="git-connect">连接本机桥</button>
-            <button type="button" class="secondary-btn" id="git-bridge-launch">启动本机桥</button>
-            <button type="button" class="secondary-btn" id="git-refresh" disabled>刷新仓库</button>
-          </div>
-        </div>
-
-        <div class="git-ready panel-card" id="git-ready" style="margin-top:0.65rem">
-          <h2 class="subhead">零难度就绪（约 2 分钟）</h2>
-          <ol class="git-beginner-steps hint">
-            <li>去 <a href="#envkit">环境管家</a> 一键安装 Node / Git，并同步桥文件。</li>
-            <li>或展开下方「连接与下载」，下载<strong>统一完整包</strong>，解压后运行启动脚本一次。</li>
-            <li>回到本页点「一键启动并连接」。</li>
-          </ol>
-          <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.35rem">
-            <a class="secondary-btn" href="#envkit">打开环境管家</a>
-            <a class="ghost-btn" href="#adb">去 ADB 页下完整包</a>
-          </div>
-          <p class="hint tight" id="git-ready-hint">账号登录请在本机 Git / 系统凭据里自行完成；本页只管点按钮操作仓库。</p>
-        </div>
-
-        <details class="git-ops-details git-eng-fold" id="git-eng-fold">
-          <summary class="hint">连接与下载（解压目录 · Token · 完整包）· 一般不用改</summary>
-          <div class="gif-progress bridge-dl-progress" id="git-dl-progress" hidden style="margin-top:0.55rem">
-            <div class="gif-progress-head">
-              <p class="hint gif-progress-title" id="git-dl-progress-text">准备下载包…</p>
-              <span class="mono gif-progress-pct" id="git-dl-progress-pct">0%</span>
-            </div>
-            <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill is-busy" id="git-dl-progress-fill" style="width:0%"></span></div>
-          </div>
-          <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem" id="git-dl-bundle">
-            <button type="button" class="secondary-btn" id="git-dl-mac" data-git-bundle="mac">下载 macOS 完整包</button>
-            <button type="button" class="secondary-btn" id="git-dl-win" data-git-bundle="win">下载 Windows 完整包</button>
-            <button type="button" class="secondary-btn" id="git-dl-linux" data-git-bundle="linux">下载 Linux 完整包</button>
-          </div>
-          <div class="field-block adb-install-dir" style="margin-top:0.65rem">
-            <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.4rem">
-              <label for="git-install-dir">桥解压目录</label>
-              <input id="git-install-dir" class="mono" type="text" placeholder="与 ADB 相同，例如 C:\Tools\devtools-bridge" autocomplete="off" spellcheck="false" style="min-width:min(100%,22rem);flex:1" />
-              <button type="button" class="secondary-btn" id="git-install-dir-save" title="在本机资源管理器中打开该目录（填写时已自动记住）">打开目录</button>
-            </div>
-            <label class="flag" style="margin-top:0.35rem;display:inline-flex;align-items:center;gap:0.35rem">
-              <input type="checkbox" id="git-bridge-autostart" checked />
-              进入本页时若未连接则尝试自动启动
-            </label>
-            <p class="hint tight" id="git-install-dir-hint">协议 <span class="mono">devtools-bridge://</span>。下载的是与 ADB 相同的<strong>统一完整包</strong>（含 Git）。</p>
-          </div>
-          <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
-            <label for="git-base">桥地址</label>
-            <input id="git-base" class="mono" type="text" value="http://127.0.0.1:17888" autocomplete="off" spellcheck="false" />
-            <label for="git-token">Token</label>
-            <input id="git-token" class="mono" type="text" value="devtools-bridge" autocomplete="off" spellcheck="false" />
-          </div>
-          <p class="hint tight">默认统一桥 <span class="mono">17888</span> · API <span class="mono">/git/*</span> · Token <span class="mono">devtools-bridge</span>。</p>
-        </details>
+        <div id="git-bridge-shell" class="bridge-shell-host"></div>
 
         <div id="git-workspace" hidden>
           <div class="label-row" style="margin-top:1rem">
@@ -90,6 +27,7 @@
           </div>
 
           <div id="git-repo-panel" hidden>
+            <!-- beginner + advanced content kept in original; loaded via remaining file -->
             <div class="label-row" style="margin-top:1.1rem">
               <h2 class="subhead">当前仓库</h2>
               <span class="hint tight mono" id="git-repo-meta"></span>

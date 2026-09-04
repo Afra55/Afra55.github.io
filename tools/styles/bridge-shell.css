@@ -1,0 +1,34 @@
+/* 统一本机桥连接壳（ADB / FFmpeg / yt-dlp / Git 共用） */
+.bridge-shell-host {
+  margin-bottom: 0.15rem;
+}
+
+.bridge-eng-fold {
+  margin-top: 0.65rem;
+  padding: 0.45rem 0.65rem;
+  border: 1px dashed color-mix(in srgb, var(--line, #2a2f3a) 85%, transparent);
+  border-radius: 10px;
+}
+
+.bridge-eng-open {
+  margin-top: 0.55rem;
+}
+
+.panel.has-bridge .bridge-eng-fold:not([open]) {
+  opacity: 0.72;
+}
+
+.bridge-ready {
+  padding: 0.65rem 0.75rem;
+}
+
+.bridge-ready-steps {
+  margin: 0.35rem 0 0;
+  padding-left: 1.2rem;
+  line-height: 1.5;
+  font-size: 0.88rem;
+}
+
+.bridge-ready-steps li {
+  margin: 0.2rem 0;
+}

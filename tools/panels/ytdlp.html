@@ -4,45 +4,7 @@
         <p>用本机已安装的 <span class="mono">yt-dlp</span> 解析并下载视频 / 播放列表 / 字幕 / 直播。走同一座本机桥（<span class="mono">/ytdlp</span>），文件只落在你电脑上。<a href="#setup-ytdlp">不会装？看安装教程</a></p>
       </div>
       <div class="panel-body">
-        <div class="adb-status" id="yd-status">
-          <div class="adb-status-main">
-            <span class="adb-dot" id="yd-dot" aria-hidden="true"></span>
-            <div>
-              <strong id="yd-status-title">未连接本机桥</strong>
-              <p class="hint tight" id="yd-status-text">请先下载完整 ZIP 并运行启动脚本，本机 PATH 中需有 yt-dlp；合并/抽音还需要 ffmpeg。</p>
-            </div>
-          </div>
-          <div class="btn-row tool-actions adb-status-actions">
-            <button type="button" class="primary-btn" id="yd-connect">连接本机桥</button>
-            <button type="button" class="secondary-btn" id="yd-bridge-launch">启动本机桥</button>
-            <button type="button" class="secondary-btn" id="yd-refresh" disabled>刷新</button>
-            <button type="button" class="ghost-btn" id="yd-update" disabled>更新 yt-dlp</button>
-            <span class="adb-dl-bundle" id="yd-dl-bundle">
-              <button type="button" class="secondary-btn" id="yd-dl-mac" data-yd-bundle="mac">下载 macOS 完整包</button>
-              <button type="button" class="secondary-btn" id="yd-dl-win" data-yd-bundle="win">下载 Windows 完整包</button>
-              <button type="button" class="secondary-btn" id="yd-dl-linux" data-yd-bundle="linux">下载 Linux 完整包</button>
-            </span>
-          </div>
-        </div>
-        <div class="field-block adb-install-dir" style="margin-top:0.65rem">
-          <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.4rem">
-            <label for="yd-install-dir">桥解压目录</label>
-            <input id="yd-install-dir" class="mono" type="text" placeholder="与 ADB 相同，例如 C:\Tools\devtools-bridge" autocomplete="off" spellcheck="false" style="min-width:min(100%,22rem);flex:1" />
-            <button type="button" class="secondary-btn" id="yd-install-dir-save" title="在本机资源管理器中打开该目录（填写时已自动记住）">打开目录</button>
-          </div>
-          <label class="flag" style="margin-top:0.35rem;display:inline-flex;align-items:center;gap:0.35rem">
-            <input type="checkbox" id="yd-bridge-autostart" checked />
-            进入本页时若未连接则尝试自动启动
-          </label>
-          <p class="hint tight">与 ADB / FFmpeg 共用一座桥（<span class="mono">devtools-bridge://</span>）。下载按钮打的是<strong>统一完整包</strong>；首次请手动运行启动脚本完成协议注册。</p>
-        </div>
-        <div class="field-row" style="flex-wrap:wrap;margin-top:0.75rem">
-          <label for="yd-base">桥地址</label>
-          <input id="yd-base" class="mono" type="text" value="http://127.0.0.1:17888" autocomplete="off" spellcheck="false" />
-          <label for="yd-token">Token</label>
-          <input id="yd-token" class="mono" type="text" value="devtools-bridge" autocomplete="off" spellcheck="false" />
-        </div>
-        <p class="hint">与 ADB / FFmpeg <strong>共用一座本机桥</strong>：地址 <span class="mono">17888</span>、Token <span class="mono">devtools-bridge</span>。yt-dlp 接口在 <span class="mono">/ytdlp/*</span>；完整包需含 <span class="mono">server.js</span> + <span class="mono">ytdlp-core.js</span>。</p>
+        <div id="yd-bridge-shell" class="bridge-shell-host"></div>
         <div class="adb-guide" id="yd-setup-guide">
           <div class="adb-guide-head">
             <strong>本机依赖怎么配？</strong>

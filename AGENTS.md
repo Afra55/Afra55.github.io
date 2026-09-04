@@ -27,7 +27,9 @@
 | `tools/ffmpeg-bridge/` | FFmpeg / yt-dlp 模块（由统一桥挂载；也可独立 `17889`） |
 | `tools/git-bridge/` | Git 模块（由统一桥挂载 `/git`；也可独立 `17890`） |
 | `tools/envkit/` | 一键检测/安装/升级脚本 |
-| `tools/theme.js` / `tools/lib/theme-presets.js` | 主题 |
+| `tools/lib/bridge-token.js` | Token / 解压目录 / 协议唤起 / `bindBridgeLaunchUI` |
+| `tools/lib/bridge-shell.js` | 统一连接壳 HTML+接线（ADB/FFmpeg/yt-dlp/Git） |
+| `tools/lib/unified-bridge-bundle.js` | 统一完整包 ZIP 下载 |
 
 ## 新增 / 改工具
 
@@ -45,6 +47,7 @@
 - 能力挂载：FFmpeg `/ff` · yt-dlp `/ytdlp` · Git `/git`；**用户只需启动一次**
 - 独立端口仅兼容旧包：FFmpeg `17889`、Git `17890`；**新功能不要默认新端口**
 - 面板一律：`bindBridgeLaunchUI({ kind: "unified" })`（`tools/lib/bridge-token.js`）；共用「记住解压目录 / 自动启动」
+- **连接壳**：新桥面板用 `devtoolsBridgeShell.mount`（`tools/lib/bridge-shell.js`）生成状态条/下载/目录/Token，再 `shell.bind(...)`；禁止再手抄四套连接 HTML
 - **下载入口**：各桥面板（ADB / FFmpeg / yt-dlp / Git）必须调用 `tools/lib/unified-bridge-bundle.js` 打**同一份统一完整包**；禁止再提供独立 Git / 独立 FFmpeg ZIP
 - 改桥逻辑必须同步：`BRIDGE_VERSION`（`adb-bridge/server.js`）+ 完整 ZIP 文件列表（`unified-bridge-bundle.js`）+ EnvKit `sync_bridges` / `Sync-Bridges`（sh+ps1）+ 启动脚本缺文件 WARN
 - bat/sh 缓存写在**脚本同目录**，勿写死用户主目录

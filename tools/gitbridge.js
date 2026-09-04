@@ -19,8 +19,26 @@
   const panel = $("#gitbridge");
   if (!panel) return;
 
-  const baseInput = $("#git-base");
-  const tokenInput = $("#git-token");
+  if (!window.devtoolsBridgeShell?.mount) {
+    console.error("devtoolsBridgeShell 未加载");
+    return;
+  }
+
+  const bridgeShell = window.devtoolsBridgeShell.mount({
+    host: "#git-bridge-shell",
+    prefix: "git",
+    kind: "unified",
+    collapseAdvanced: true,
+    showReadyCard: true,
+    primaryAction: "ready",
+    refreshLabel: "刷新仓库",
+    hintDisconnected: "与 ADB / FFmpeg 共用一座桥。点「一键启动并连接」即可；高级下载与 Token 在下方折叠里。",
+    connHint: '默认统一桥 <span class="mono">17888</span> · API <span class="mono">/git/*</span> · Token <span class="mono">devtools-bridge</span>。',
+    readyHint: "账号登录请在本机 Git / 系统凭据里自行完成；本页只管点按钮操作仓库。",
+  });
+
+  const baseInput = bridgeShell.els.base;
+  const tokenInput = bridgeShell.els.token;
   const workspace = $("#git-workspace");
   const repoPanel = $("#git-repo-panel");
   const errEl = $("#git-error");
@@ -43,8 +61,8 @@
   let confirmResolver = null;
 
   try {
-    baseInput.value = localStorage.getItem(BASE_KEY) || DEFAULT_BASE;
-    tokenInput.value = localStorage.getItem(TOKEN_KEY) || DEFAULT_TOKEN;
+    if (baseInput) baseInput.value = localStorage.getItem(BASE_KEY) || DEFAULT_BASE;
+    if (tokenInput) tokenInput.value = localStorage.getItem(TOKEN_KEY) || DEFAULT_TOKEN;
   } catch (_) {
     /* ignore */
   }
@@ -94,8 +112,7 @@
   }
 
   function setReadyVisible(show) {
-    const el = $("#git-ready");
-    if (el) el.hidden = !show;
+    bridgeShell.setReadyVisible(show);
     panel.classList.toggle("is-setup", Boolean(show));
     panel.classList.toggle("has-bridge", !show && connected);
   }
@@ -177,11 +194,7 @@
   }
 
   function setStatus(kind, title, text) {
-    const dot = $("#git-dot");
-    panel.classList.toggle("is-connected", kind === "is-ok");
-    dot.className = "adb-dot" + (kind === "is-ok" ? " is-ok" : kind === "is-err" ? " is-err" : "");
-    $("#git-status-title").textContent = title;
-    $("#git-status-text").textContent = text;
+    bridgeShell.setStatus(kind, title, text);
   }
 
   function baseUrl() {
@@ -545,7 +558,7 @@
       connected = true;
       workspace.hidden = false;
       setReadyVisible(false);
-      $("#git-refresh").disabled = false;
+      if (bridgeShell.els.refresh) bridgeShell.els.refresh.disabled = false;
       setStatus(
         "is-ok",
         `已连接 · 统一桥 v${health.version}`,
@@ -572,7 +585,7 @@
       connected = false;
       workspace.hidden = true;
       setReadyVisible(true);
-      $("#git-refresh").disabled = true;
+      if (bridgeShell.els.refresh) bridgeShell.els.refresh.disabled = true;
       setStatus("is-err", "未连接本机桥", e.message || "连接失败");
       showError(e.message);
       return false;
@@ -1966,33 +1979,7 @@
   }
 
   async function downloadBundle(platform) {
-    const api = window.devtoolsUnifiedBridgeBundle;
-    if (!api?.download) throw new Error("统一完整包模块未加载，请硬刷新页面");
-    const box = $("#git-dl-progress");
-    const fill = $("#git-dl-progress-fill");
-    const title = $("#git-dl-progress-text");
-    const pctEl = $("#git-dl-progress-pct");
-    const setProg = (on, p = {}) => {
-      if (!box) return;
-      box.hidden = !on;
-      if (fill) fill.style.width = `${Math.max(0, Math.min(100, Number(p.pct) || 0))}%`;
-      if (title && p.text) title.textContent = p.text;
-      if (pctEl) pctEl.textContent = `${Math.round(Number(p.pct) || 0)}%`;
-    };
-    setStatus("is-warn", "正在打包…", "下载统一完整包（含 Git），请稍候");
-    setProg(true, { pct: 4, text: "准备打包…" });
-    try {
-      await api.download(platform, {
-        onProgress: (p) => setProg(true, p),
-      });
-      setStatus(
-        "is-warn",
-        "等待本机桥启动…",
-        "完整包已下载。解压后运行 start-adb-bridge.*，保持窗口打开，再点连接。"
-      );
-    } finally {
-      setProg(false);
-    }
+    await bridgeShell.downloadBundle(platform);
   }
 
   let opsCatalog = { ops: [], groups: [] };
@@ -2552,8 +2539,6 @@
     opOut.textContent = Array.isArray(data.cmd) ? data.cmd.join(" ") : data.cmd || "git init";
   }
 
-  $("#git-connect").addEventListener("click", () => connectBridge());
-  $("#git-refresh").addEventListener("click", () => refreshRepo().catch((e) => showError(e.message)));
   $("#git-fs-path")?.addEventListener("keydown", (e) => {
     if (e.key !== "Enter") return;
     e.preventDefault();
@@ -2597,7 +2582,6 @@
   $("#git-branch-refresh")?.addEventListener("click", () => syncBranchesUi().catch((e) => showError(e.message)));
   $("#git-confirm-ok")?.addEventListener("click", () => settleConfirm(true));
   $("#git-confirm-cancel")?.addEventListener("click", () => settleConfirm(false));
-  $("#git-ready-go")?.addEventListener("click", () => easyReadyGo().catch((e) => showError(e.message)));
   $("#git-conflict-next")?.addEventListener("click", () => jumpConflictMarker(1));
   $("#git-conflict-prev")?.addEventListener("click", () => jumpConflictMarker(-1));
   $("#git-conflict-view-split")?.addEventListener("click", () => setConflictViewMode("split"));
@@ -2634,20 +2618,6 @@
     asciiEl.hidden = !ev.target.checked;
   });
 
-  $$("[data-git-bundle]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      downloadBundle(btn.getAttribute("data-git-bundle")).catch((e) => showError(e.message));
-    });
-  });
-  try {
-    const os = window.devtoolsUnifiedBridgeBundle?.detectOs?.() || "";
-    const prefer = os === "win" ? $("#git-dl-win") : os === "mac" ? $("#git-dl-mac") : $("#git-dl-linux");
-    prefer?.classList.add("primary-btn");
-    prefer?.classList.remove("secondary-btn");
-  } catch (_) {
-    /* ignore */
-  }
-
   $$("[data-git-op]").forEach((btn) => {
     btn.addEventListener("click", () => {
       runOp(btn.getAttribute("data-git-op")).catch((e) => showError(e.message));
@@ -2656,18 +2626,16 @@
 
   wireDropzone();
 
-  window.devtoolsBridgeToken?.bindBridgeLaunchUI?.({
-    kind: "unified",
-    dirInput: $("#git-install-dir"),
-    saveBtn: $("#git-install-dir-save"),
-    launchBtn: $("#git-bridge-launch"),
-    autoEl: $("#git-bridge-autostart"),
-    getPreferredBase: () => baseUrl() || DEFAULT_BASE,
-    getToken: () => token(),
+  bridgeShell.bind({
     onStatus: (kind, title, text) => setStatus(kind, title, text),
     onConnected: async () => {
       await connectBridge();
     },
+    onConnect: () => connectBridge(),
+    onRefresh: () => refreshRepo().catch((e) => showError(e.message)),
+    onReadyGo: () => easyReadyGo().catch((e) => showError(e.message)),
+    onPersist: () => persistConn(),
+    onDownloadError: (err) => showError(err.message || String(err)),
     toast: (msg) => {
       showError("");
       setStatus("is-ok", "桥目录", msg);

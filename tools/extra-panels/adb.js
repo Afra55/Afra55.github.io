@@ -64,12 +64,21 @@
       }
   
       let adbBundleBusy = false;
-  
+      let adbBridgeShell = null;
+
       function adbBundleButtons() {
         return ["#adb-dl-mac", "#adb-dl-win", "#adb-dl-linux"].map((sel) => $(sel)).filter(Boolean);
       }
-  
+
       function setAdbBundleProgress(visible, { pct = 0, text = "" } = {}) {
+        if (adbBridgeShell?.setProgress) {
+          adbBridgeShell.setProgress(visible, { pct, text });
+          adbBundleButtons().forEach((btn) => {
+            btn.disabled = visible;
+            btn.setAttribute("aria-busy", visible ? "true" : "false");
+          });
+          return;
+        }
         const box = $("#adb-dl-progress");
         const fill = $("#adb-dl-progress-fill");
         const title = $("#adb-dl-progress-text");
@@ -371,6 +380,10 @@
       }
   
       function setAdbStatus(kind, title, text) {
+        if (adbBridgeShell?.setStatus) {
+          adbBridgeShell.setStatus(kind, title, text);
+          return;
+        }
         if (adbDot) {
           adbDot.classList.remove("is-ok", "is-warn", "is-err");
           if (kind) adbDot.classList.add(kind);
@@ -2559,6 +2572,20 @@
           toast("正在准备下载包…");
           return;
         }
+        if (adbBridgeShell?.downloadBundle) {
+          adbBundleBusy = true;
+          try {
+            await adbBridgeShell.downloadBundle(platform, {
+              onDone: () => {
+                toast("已下载完整包，请解压后运行");
+                startAdbWaitPoll();
+              },
+            });
+          } finally {
+            adbBundleBusy = false;
+          }
+          return;
+        }
         adbBundleBusy = true;
         setError(adbError, "");
         setAdbBundleProgress(true, { pct: 4, text: "准备打包工具…" });
@@ -4464,11 +4491,26 @@
   
   
       bindPanel("adb", () => {
-        adbBaseInput = $("#adb-base");
-        adbTokenInput = $("#adb-token");
-        adbDot = $("#adb-dot");
-        adbStatusTitle = $("#adb-status-title");
-        adbStatusText = $("#adb-status-text");
+        if (window.devtoolsBridgeShell?.mount && !adbBridgeShell) {
+          adbBridgeShell = window.devtoolsBridgeShell.mount({
+            host: "#adb-bridge-shell",
+            prefix: "adb",
+            kind: "unified",
+            collapseAdvanced: true,
+            refreshLabel: "刷新设备",
+            hintDisconnected:
+              "请下载完整 ZIP（含 server.js 与启动脚本），解压后只运行一个启动脚本，再点「连接本机桥」。不要连续双击两次。",
+            advancedHint:
+              '下载解压后把文件夹路径填在这里（输入即自动记住，各工具共用）。「打开目录」可在本机资源管理器查看。首次请手动双击启动脚本（会注册 <span class="mono">devtools-bridge://</span>）。',
+            connHint:
+              '默认 Token <span class="mono">devtools-bridge</span>。一座桥同时提供 ADB、Scrcpy 与 FFmpeg（<span class="mono">/ff</span>）。',
+          });
+        }
+        adbBaseInput = adbBridgeShell?.els?.base || $("#adb-base");
+        adbTokenInput = adbBridgeShell?.els?.token || $("#adb-token");
+        adbDot = adbBridgeShell?.els?.dot || $("#adb-dot");
+        adbStatusTitle = adbBridgeShell?.els?.title || $("#adb-status-title");
+        adbStatusText = adbBridgeShell?.els?.text || $("#adb-status-text");
         adbError = $("#adb-error");
         adbSetupGuide = $("#adb-setup-guide");
         adbSetupGuideDismiss = $("#adb-setup-guide-dismiss");
@@ -4495,25 +4537,59 @@
         adbFsPreviewBody = $("#adb-fs-preview-body");
         adbFsBatch = $("#adb-fs-batch");
         adbFsBatchMeta = $("#adb-fs-batch-meta");
-  
-        $("#adb-connect")?.addEventListener("click", () => connectAdbBridge());
 
-        // 桥解压目录记忆 + 协议唤起启动（与 FF/Git 等同标准）
-        window.devtoolsBridgeToken?.bindBridgeLaunchUI?.({
-          kind: "unified",
-          dirInput: $("#adb-install-dir"),
-          saveBtn: $("#adb-install-dir-save"),
-          launchBtn: $("#adb-bridge-launch"),
-          autoEl: $("#adb-bridge-autostart"),
-          getPreferredBase: () => adbBase(),
-          getToken: () => adbToken(),
-          onStatus: (kind, title, text) => setAdbStatus(kind, title, text),
-          onConnected: async () => {
-            startAdbWaitPoll?.();
-            await connectAdbBridge();
-          },
-          toast: (msg) => toast(msg),
-        });
+        if (adbBridgeShell?.bind) {
+          adbBridgeShell.bind({
+            onStatus: (kind, title, text) => setAdbStatus(kind, title, text),
+            onConnected: async () => {
+              startAdbWaitPoll?.();
+              await connectAdbBridge();
+            },
+            onConnect: () => connectAdbBridge(),
+            onRefresh: () =>
+              refreshAdbDevices().catch((err) => setError(adbError, err.message || String(err))),
+            onDownloadDone: () => {
+              toast("已下载完整包，请解压后运行");
+              startAdbWaitPoll();
+            },
+            onDownloadError: (err) => {
+              setError(adbError, err.message || String(err));
+              setAdbStatus("is-err", "下载失败", err.message || String(err));
+            },
+            onPersist: () => persistAdbSettings(),
+            toast: (msg) => toast(msg),
+          });
+        } else {
+          $("#adb-connect")?.addEventListener("click", () => connectAdbBridge());
+          window.devtoolsBridgeToken?.bindBridgeLaunchUI?.({
+            kind: "unified",
+            dirInput: $("#adb-install-dir"),
+            saveBtn: $("#adb-install-dir-save"),
+            launchBtn: $("#adb-bridge-launch"),
+            autoEl: $("#adb-bridge-autostart"),
+            getPreferredBase: () => adbBase(),
+            getToken: () => adbToken(),
+            onStatus: (kind, title, text) => setAdbStatus(kind, title, text),
+            onConnected: async () => {
+              startAdbWaitPoll?.();
+              await connectAdbBridge();
+            },
+            toast: (msg) => toast(msg),
+          });
+          $("#adb-dl-mac")?.addEventListener("click", (e) => {
+            e.preventDefault();
+            downloadAdbScriptAndWait($("#adb-dl-mac"));
+          });
+          $("#adb-dl-win")?.addEventListener("click", (e) => {
+            e.preventDefault();
+            downloadAdbScriptAndWait($("#adb-dl-win"));
+          });
+          $("#adb-dl-linux")?.addEventListener("click", (e) => {
+            e.preventDefault();
+            downloadAdbScriptAndWait($("#adb-dl-linux"));
+          });
+        }
+
         // 进入面板时：未连接则按开关尝试自动启动
         void (async () => {
           if (adbConnected) return;
@@ -4532,25 +4608,13 @@
           }
         })();
 
-        $("#adb-refresh")?.addEventListener("click", () =>
-        refreshAdbDevices().catch((err) => setError(adbError, err.message || String(err)))
-        );
+        if (!adbBridgeShell?.bind) {
+          $("#adb-refresh")?.addEventListener("click", () =>
+            refreshAdbDevices().catch((err) => setError(adbError, err.message || String(err)))
+          );
+        }
         adbBaseInput?.addEventListener("change", persistAdbSettings);
         adbTokenInput?.addEventListener("change", persistAdbSettings);
-  
-        $("#adb-dl-mac")?.addEventListener("click", (e) => {
-        e.preventDefault();
-        downloadAdbScriptAndWait($("#adb-dl-mac"));
-        });
-        $("#adb-dl-win")?.addEventListener("click", (e) => {
-        e.preventDefault();
-        downloadAdbScriptAndWait($("#adb-dl-win"));
-        });
-        $("#adb-dl-linux")?.addEventListener("click", (e) => {
-        e.preventDefault();
-        downloadAdbScriptAndWait($("#adb-dl-linux"));
-        });
-  
         $$(".adb-tab[data-adb-tab]").forEach((btn) => {
         btn.addEventListener("click", () => switchAdbTab(btn.dataset.adbTab));
         });

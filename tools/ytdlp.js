@@ -6,17 +6,33 @@
   const panel = $("#ytdlp");
   if (!panel) return;
 
+  if (!window.devtoolsBridgeShell?.mount) {
+    console.error("devtoolsBridgeShell 未加载");
+    return;
+  }
+
+  const bridgeShell = window.devtoolsBridgeShell.mount({
+    host: "#yd-bridge-shell",
+    prefix: "yd",
+    kind: "unified",
+    collapseAdvanced: true,
+    refreshLabel: "刷新",
+    hintDisconnected: "请先下载完整 ZIP 并运行启动脚本；本机 PATH 需有 yt-dlp，合并/抽音还要 ffmpeg。",
+    connHint: '与 ADB / FFmpeg <strong>共用一座桥</strong>：17888 · Token <span class="mono">devtools-bridge</span> · API <span class="mono">/ytdlp/*</span>。',
+    extraActions: [{ id: "update", label: "更新 yt-dlp", disabled: true, className: "ghost-btn" }],
+  });
+
   const BASE_KEY = "devtools-ffmpeg-base";
   const TOKEN_KEY = "devtools-ffmpeg-token";
   const DIR_KEY = "devtools-ytdlp-outdir";
   const DEFAULT_BASE = "http://127.0.0.1:17888";
   const DEFAULT_TOKEN = "devtools-bridge";
 
-  const baseInput = $("#yd-base");
-  const tokenInput = $("#yd-token");
-  const dot = $("#yd-dot");
-  const statusTitle = $("#yd-status-title");
-  const statusText = $("#yd-status-text");
+  const baseInput = bridgeShell.els.base;
+  const tokenInput = bridgeShell.els.token;
+  const dot = bridgeShell.els.dot;
+  const statusTitle = bridgeShell.els.title;
+  const statusText = bridgeShell.els.text;
   const toolsProbe = $("#yd-tools-probe");
   const setupGuide = $("#yd-setup-guide");
   const setupGuideDismiss = $("#yd-setup-guide-dismiss");
@@ -24,8 +40,8 @@
   const installGuide = $("#yd-install-guide");
   const errorEl = $("#yd-error");
   const workspace = $("#yd-workspace");
-  const connectBtn = $("#yd-connect");
-  const refreshBtn = $("#yd-refresh");
+  const connectBtn = bridgeShell.els.connect;
+  const refreshBtn = bridgeShell.els.refresh;
   const updateBtn = $("#yd-update");
   const rootsEl = $("#yd-roots");
   const pathInput = $("#yd-fs-path");
@@ -111,12 +127,9 @@
   }
 
   async function downloadBundle(platform) {
-    const api = window.devtoolsUnifiedBridgeBundle;
-    if (!api?.download) throw new Error("统一完整包模块未加载，请硬刷新页面");
-    toast("正在准备统一完整包…");
-    await api.download(platform);
-    toast("已下载完整包，解压运行 start-adb-bridge.* 后点连接");
-    startWaitPoll();
+    await bridgeShell.downloadBundle(platform, {
+      onDone: () => startWaitPoll(),
+    });
   }
 
   let waitPollTimer = 0;
@@ -133,12 +146,6 @@
       }
     }, 2000);
   }
-
-  $$("[data-yd-bundle]").forEach((btn) => {
-    btn.addEventListener("click", () => {
-      downloadBundle(btn.dataset.ydBundle).catch((err) => setError(err.message || String(err)));
-    });
-  });
 
   function escapeHtml(s) {
     return String(s)
@@ -184,12 +191,7 @@
   }
 
   function setStatus(kind, title, text) {
-    if (dot) {
-      dot.classList.remove("is-ok", "is-err", "is-warn");
-      if (kind) dot.classList.add(kind);
-    }
-    if (statusTitle) statusTitle.textContent = title;
-    if (statusText) statusText.textContent = text;
+    bridgeShell.setStatus(kind, title, text);
   }
 
   function setError(msg) {
@@ -606,21 +608,16 @@
     }
   }
 
-  connectBtn?.addEventListener("click", () => connectBridge());
-  refreshBtn?.addEventListener("click", () => connectBridge());
-
-  window.devtoolsBridgeToken?.bindBridgeLaunchUI?.({
-    kind: "unified",
-    dirInput: $("#yd-install-dir"),
-    saveBtn: $("#yd-install-dir-save"),
-    launchBtn: $("#yd-bridge-launch"),
-    autoEl: $("#yd-bridge-autostart"),
-    getPreferredBase: () => baseUrl(),
-    getToken: () => token(),
+  bridgeShell.bind({
     onStatus: (kind, title, text) => setStatus(kind, title, text),
     onConnected: async () => {
       await connectBridge();
     },
+    onConnect: () => connectBridge(),
+    onRefresh: () => connectBridge(),
+    onDownloadDone: () => startWaitPoll(),
+    onDownloadError: (err) => setError(err.message || String(err)),
+    onPersist: () => savePrefs(),
     toast: (msg) => setStatus("is-ok", "桥目录", msg),
   });
 

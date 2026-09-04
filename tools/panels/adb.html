@@ -4,53 +4,8 @@
         <p>通过本机 ADB 桥管理多台设备：文件、安装、应用、网络、开发者、性能/进程/Shell/布局、Logcat、输入与截图录屏。使用前需本机已安装 <code class="mono">adb</code>，并启动本地桥接服务。<a href="#setup">不会装？看小白指南</a></p>
       </div>
       <div class="panel-body">
-        <div class="adb-status" id="adb-status">
-          <div class="adb-status-main">
-            <span class="adb-dot" id="adb-dot" aria-hidden="true"></span>
-            <div>
-              <strong id="adb-status-title">未连接本机桥</strong>
-              <p class="hint tight" id="adb-status-text">请下载完整 ZIP（含 server.js 与启动脚本），解压后只运行一个启动脚本，再点「连接本机桥」。不要连续双击两次。</p>
-            </div>
-          </div>
-          <div class="btn-row tool-actions adb-status-actions">
-            <button type="button" class="primary-btn" id="adb-connect">连接本机桥</button>
-            <button type="button" class="secondary-btn" id="adb-bridge-launch">启动本机桥</button>
-            <button type="button" class="secondary-btn" id="adb-refresh" disabled>刷新设备</button>
-            <span class="adb-dl-bundle" id="adb-dl-bundle">
-              <button type="button" class="secondary-btn" id="adb-dl-mac" data-adb-bundle="mac">下载 macOS 完整包</button>
-              <button type="button" class="secondary-btn" id="adb-dl-win" data-adb-bundle="win">下载 Windows 完整包</button>
-              <button type="button" class="secondary-btn" id="adb-dl-linux" data-adb-bundle="linux">下载 Linux 完整包</button>
-            </span>
-          </div>
-        </div>
-
-        <div class="gif-progress adb-dl-progress" id="adb-dl-progress" hidden>
-          <div class="gif-progress-head">
-            <p class="hint gif-progress-title" id="adb-dl-progress-text">准备下载包…</p>
-            <span class="mono gif-progress-pct" id="adb-dl-progress-pct">0%</span>
-          </div>
-          <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill is-busy" id="adb-dl-progress-fill" style="width:0%"></span></div>
-        </div>
-
-        <div class="field-block adb-install-dir" style="margin-top:0.65rem">
-          <div class="field-row" style="flex-wrap:wrap;align-items:center">
-            <label for="adb-install-dir">桥解压目录</label>
-            <input id="adb-install-dir" class="mono" type="text" placeholder="例如 C:\Tools\devtools-bridge 或 /Users/me/devtools-bridge" autocomplete="off" spellcheck="false" style="min-width:min(100%,22rem);flex:1" />
-            <button type="button" class="secondary-btn" id="adb-install-dir-save" title="在本机资源管理器中打开该目录（填写时已自动记住）">打开目录</button>
-          </div>
-          <label class="flag" style="margin-top:0.35rem;display:inline-flex;gap:0.35rem;align-items:center">
-            <input type="checkbox" id="adb-bridge-autostart" checked />
-            进入本页时若未连接则尝试自动启动
-          </label>
-          <p class="hint tight" id="adb-install-dir-hint">下载解压后把文件夹路径填在这里（输入即自动记住，各工具共用）。「打开目录」可在本机资源管理器查看。首次请手动双击启动脚本（会注册 <span class="mono">devtools-bridge://</span>）。之后网页可自动唤起：若已手动打开窗口，浏览器再弹出「打开 DevTools Bridge」请点取消，不要再开第二座。</p>
-        </div>
-        <div class="field-row bridge-conn-fields" style="flex-wrap:wrap;margin-top:0.65rem">
-          <label for="adb-base">桥地址</label>
-          <input id="adb-base" class="mono" type="text" value="http://127.0.0.1:17888" autocomplete="off" spellcheck="false" />
-          <label for="adb-token">Token</label>
-          <input id="adb-token" class="mono" type="text" value="devtools-bridge" autocomplete="off" spellcheck="false" />
-        </div>
-        <p class="hint">默认 Token 为 <span class="mono">devtools-bridge</span>（兼容旧 <span class="mono">devtools-adb</span>）。<strong>一座桥</strong>同时提供 ADB、Scrcpy 镜像与 FFmpeg（<span class="mono">/ff</span>）。完整包需含 <span class="mono">server.js</span> + <span class="mono">ffmpeg-bridge/</span>（桥 ≥0.8.0）。<button type="button" class="ghost-btn" id="adb-setup-guide-show" hidden style="margin-left:0.35rem">显示本机依赖说明</button></p>
+        <div id="adb-bridge-shell" class="bridge-shell-host"></div>
+        <p class="hint" style="margin-top:0.55rem">默认 Token 为 <span class="mono">devtools-bridge</span>（兼容旧 <span class="mono">devtools-adb</span>）。<strong>一座桥</strong>同时提供 ADB、Scrcpy 镜像与 FFmpeg（<span class="mono">/ff</span>）。完整包需含 <span class="mono">server.js</span> + <span class="mono">ffmpeg-bridge/</span>（桥 ≥0.8.0）。<button type="button" class="ghost-btn" id="adb-setup-guide-show" hidden style="margin-left:0.35rem">显示本机依赖说明</button></p>
         <div class="adb-guide" id="adb-setup-guide">
           <div class="adb-guide-head">
             <strong>本机依赖怎么配？</strong>
