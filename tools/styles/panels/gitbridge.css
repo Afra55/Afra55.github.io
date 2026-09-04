@@ -382,6 +382,25 @@
   overflow: auto;
 }
 
+#gitbridge .git-conflict-base {
+  padding: 0.45rem;
+  border: 1px solid var(--line, #2a2f3a);
+  border-radius: 12px;
+  background: color-mix(in srgb, #f5a524 10%, transparent);
+}
+
+#gitbridge .git-conflict-base pre {
+  margin: 0.25rem 0 0;
+  max-height: 8rem;
+  overflow: auto;
+  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 #gitbridge .git-conflict-hunk {
   display: grid;
   grid-template-columns: 1fr 1fr;

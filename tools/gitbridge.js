@@ -952,8 +952,11 @@
     }
   }
 
+  let conflictStagesCache = null; // { base, ours, theirs }
+
   async function openConflictEditor(filePath) {
     conflictEditPath = filePath;
+    conflictStagesCache = null;
     const editor = $("#git-conflict-editor");
     const pathEl = $("#git-conflict-path");
     const ta = $("#git-conflict-text");
@@ -961,13 +964,20 @@
     const data = await api(
       `/repo/read-file?repo=${encodeURIComponent(repoPath)}&path=${encodeURIComponent(filePath)}`
     );
+    try {
+      const sides = await api(
+        `/repo/conflict-sides?repo=${encodeURIComponent(repoPath)}&path=${encodeURIComponent(filePath)}`
+      );
+      if (sides?.hasStages) conflictStagesCache = sides;
+    } catch (_) {
+      conflictStagesCache = null;
+    }
     if (pathEl) pathEl.textContent = filePath;
     ta.value = data.content || "";
     editor.hidden = false;
-    setConflictViewMode(/<<<<<<</.test(ta.value) ? "split" : "raw");
+    setConflictViewMode(/<<<<<<</.test(ta.value) || conflictStagesCache?.hasStages ? "split" : "raw");
     renderConflictPreview();
     renderConflictSplit();
-    // 高级区路径自动带上冲突文件，方便 blame/add 等
     const pathInput = $("#git-op-path");
     if (pathInput && !pathInput.value.trim()) pathInput.value = filePath;
     $$(".git-conflict-item").forEach((el) => {
@@ -1047,15 +1057,46 @@
     const ta = $("#git-conflict-text");
     if (!box || !ta || conflictViewMode !== "split") return;
     const hunks = parseConflictHunks(ta.value || "");
+    const stages = conflictStagesCache;
+    const parts = [];
+
+    if (stages?.base != null) {
+      parts.push(`<div class="git-conflict-base">
+        <div class="git-conflict-side-head"><strong>共同祖先（base）</strong><span class="hint tight">三方对照参考</span></div>
+        <pre class="mono">${escapeHtml(stages.base || "（空）")}</pre>
+      </div>`);
+    }
+
     if (!hunks.length) {
-      box.innerHTML = `<p class="hint tight">没有冲突标记了。可切到「看全文」确认后保存。</p>`;
+      if (stages?.ours != null || stages?.theirs != null) {
+        parts.push(`<div class="git-conflict-hunk">
+          <div class="git-conflict-side is-ours">
+            <div class="git-conflict-side-head">
+              <strong>我的（整文件）</strong>
+              <button type="button" class="ghost-btn" data-conflict-stage-take="ours">整文件采用</button>
+            </div>
+            <pre class="mono">${escapeHtml(stages.ours ?? "（无）")}</pre>
+          </div>
+          <div class="git-conflict-side is-theirs">
+            <div class="git-conflict-side-head">
+              <strong>对方（整文件）</strong>
+              <button type="button" class="ghost-btn" data-conflict-stage-take="theirs">整文件采用</button>
+            </div>
+            <pre class="mono">${escapeHtml(stages.theirs ?? "（无）")}</pre>
+          </div>
+        </div>`);
+      } else {
+        parts.push(`<p class="hint tight">没有冲突标记了。可切到「看全文」确认后保存。</p>`);
+      }
+      box.innerHTML = parts.join("");
       box.hidden = false;
       return;
     }
-    box.hidden = false;
-    box.innerHTML = hunks
-      .map((h, idx) => {
-        return `<div class="git-conflict-hunk" data-hunk="${idx}">
+
+    parts.push(
+      hunks
+        .map((h, idx) => {
+          return `<div class="git-conflict-hunk" data-hunk="${idx}">
           <div class="git-conflict-side is-ours">
             <div class="git-conflict-side-head">
               <strong>我的</strong>
@@ -1071,8 +1112,11 @@
             <pre class="mono">${escapeHtml(h.theirs || "（空）")}</pre>
           </div>
         </div>`;
-      })
-      .join("");
+        })
+        .join("")
+    );
+    box.innerHTML = parts.join("");
+    box.hidden = false;
   }
 
   function renderConflictPreview() {
@@ -1510,7 +1554,7 @@
   async function mergeBranchIntoCurrent(name) {
     if (!repoPath) return showError("先打开一个仓库");
     if (!(await askConfirm(`把「${name}」合并进当前工作线？两边改同一处时会出现冲突。`))) return;
-    await runOp("merge", { target: name }, { skipConfirm: true });
+    await runOp("merge", { branch: name }, { skipConfirm: true });
     await refreshChanges();
     await refreshRepo();
   }
@@ -1793,6 +1837,8 @@
 
     if (op === "checkout" || op === "switch") fillIf(p, "target", target);
     if (op === "merge") {
+      // 兼容误传 target
+      if (!p.branch && p.target) p.branch = p.target;
       fillIf(p, "branch", typedTarget || selectedSha);
       if (p.noFf == null && p.ffOnly == null) p.noFf = true;
     }
@@ -2113,6 +2159,12 @@
   $("#git-conflict-view-split")?.addEventListener("click", () => setConflictViewMode("split"));
   $("#git-conflict-view-raw")?.addEventListener("click", () => setConflictViewMode("raw"));
   $("#git-conflict-split")?.addEventListener("click", (e) => {
+    const stageBtn = e.target.closest?.("[data-conflict-stage-take]");
+    if (stageBtn) {
+      const side = stageBtn.getAttribute("data-conflict-stage-take");
+      conflictTake(side).catch((err) => showError(err.message));
+      return;
+    }
     const btn = e.target.closest?.("[data-hunk-take]");
     if (!btn) return;
     const idx = Number(btn.getAttribute("data-hunk-idx"));

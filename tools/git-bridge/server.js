@@ -16,10 +16,10 @@ const os = require("os");
 const path = require("path");
 
 const HOST = "127.0.0.1";
-const PORT = Number(process.env.GIT_BRIDGE_PORT || 17890);
-const TOKEN = String(process.env.GIT_BRIDGE_TOKEN || "devtools-git");
+const PORT = Number(process.env.GIT_BRIDGE_PORT || 17888);
+const TOKEN = String(process.env.GIT_BRIDGE_TOKEN || "devtools-bridge");
 const ACCEPTED_TOKENS = new Set(
-  [TOKEN, "devtools-git", "devtools-bridge"].map(String).filter(Boolean)
+  [TOKEN, "devtools-bridge", "devtools-git"].map(String).filter(Boolean)
 );
 const ALLOWED_ORIGINS = new Set(
   String(
@@ -41,12 +41,13 @@ const ALLOWED_ORIGINS = new Set(
 
 const { buildOp, listOpsCatalog, assertPath } = require("./git-ops");
 
-const BRIDGE_VERSION = "0.2.7";
+const BRIDGE_VERSION = "0.2.8";
 const FEATURES = [
   "fs-browse","repo-open","repo-init","repo-clone","graph","branches",
   "status","commit-detail","explain","ops-catalog","ops-full","protocol-launch",
   "conflict-assist","read-write-file","beginner-plain-steps","beginner-sync-reset-patch",
-  "diff-file","push-gerrit","gerrit-config-push","zero-difficulty","branch-track-stats"
+  "diff-file","push-gerrit","gerrit-config-push","zero-difficulty","branch-track-stats",
+  "conflict-stages"
 ];
 
 const GIT_TIMEOUT_MS = 120000;
@@ -393,6 +394,26 @@ function assertInsideRepo(repo, relPath) {
     throw Object.assign(new Error("路径越出仓库"), { status: 400 });
   }
   return { rel, abs };
+}
+
+async function conflictStages(repo, relPath) {
+  const filePath = assertPath(relPath);
+  async function stage(n) {
+    try {
+      const r = await git(repo, ["show", `:${n}:${filePath}`], { maxBuffer: 2 * 1024 * 1024 });
+      return String(r.stdout || "");
+    } catch (_) {
+      return null;
+    }
+  }
+  const [base, ours, theirs] = await Promise.all([stage(1), stage(2), stage(3)]);
+  return {
+    path: filePath,
+    base,
+    ours,
+    theirs,
+    hasStages: ours != null || theirs != null || base != null,
+  };
 }
 
 async function readRepoFile(repo, relPath) {
@@ -800,6 +821,13 @@ async function handleRequest(req, res, opts = {}) {
       const repo = await resolveRepoRoot(url.searchParams.get("repo"));
       const filePath = url.searchParams.get("path");
       sendJson(res, 200, { ok: true, ...(await readRepoFile(repo, filePath)) }, origin);
+      return;
+    }
+
+    if (pathname === "/repo/conflict-sides" && req.method === "GET") {
+      const repo = await resolveRepoRoot(url.searchParams.get("repo"));
+      const filePath = url.searchParams.get("path");
+      sendJson(res, 200, { ok: true, ...(await conflictStages(repo, filePath)) }, origin);
       return;
     }
 

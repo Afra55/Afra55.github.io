@@ -82,13 +82,23 @@
       match: matchUnified,
     },
     git: {
-      installDirKey: "devtools-git-install-dir",
-      autoStartKey: "devtools-git-autostart",
-      protocol: "devtools-git://start",
-      launchAtKey: "devtools-git-protocol-launch-at",
-      defaultBase: "http://127.0.0.1:17890",
-      ports: [17890],
-      match: matchGit,
+      // Git 已挂载统一桥：发现逻辑对齐 unified，不再默认扫 17890
+      installDirKey: "devtools-bridge-install-dir",
+      autoStartKey: "devtools-bridge-autostart",
+      protocol: "devtools-bridge://start",
+      launchAtKey: "devtools-bridge-protocol-launch-at",
+      defaultBase: "http://127.0.0.1:17888",
+      ports: [17888],
+      match: (health) =>
+        Boolean(
+          health?.ok &&
+            (health.unified ||
+              health.capabilities?.git ||
+              health.gitMount === "/git" ||
+              health.service === "devtools-bridge" ||
+              health.service === "devtools-bridge-git" ||
+              health.service === "devtools-git-bridge")
+        ),
     },
   };
 

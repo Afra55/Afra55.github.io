@@ -9,8 +9,8 @@ const { spawn } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "../..");
 const SERVER = path.join(__dirname, "server.js");
-const PORT = 17991;
-const TOKEN = "devtools-git";
+const PORT = Number(process.env.GIT_BRIDGE_PORT || 17991);
+const TOKEN = process.env.GIT_BRIDGE_TOKEN || "devtools-bridge";
 
 const { listOps, listOpsCatalog, buildOp } = require("./git-ops");
 
@@ -92,7 +92,7 @@ async function main() {
 
     const health = await req("GET", "/health");
     if (!health.json.git) throw new Error("git missing on host");
-    if (health.json.version !== "0.2.7") {
+    if (health.json.version !== "0.2.8") {
       throw new Error("unexpected version " + health.json.version);
     }
 
