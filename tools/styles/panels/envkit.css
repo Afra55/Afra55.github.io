@@ -28,3 +28,7 @@
 #envkit .env-probe-card.is-warn {
   border-color: color-mix(in srgb, var(--accent-2, #f5a524) 45%, var(--line, #2a2f3a));
 }
+
+#envkit .env-probe-card.is-err {
+  border-color: color-mix(in srgb, var(--danger, #f07178) 40%, var(--line, #2a2f3a));
+}

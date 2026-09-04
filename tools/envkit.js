@@ -9,6 +9,7 @@
 
   const hint = $("#env-run-hint");
   const grid = $("#env-probe-grid");
+  const summaryEl = $("#env-probe-summary");
   const errEl = $("#env-error");
   const installBtns = $("#env-install-btns");
   const upgradeBtns = $("#env-upgrade-btns");
@@ -161,21 +162,21 @@
         }
         const ver = data.version || "?";
         const adbVer = data.adb?.version || data.adb?.path || "";
-        const adbOk = data.adb?.ok !== false;
+        const adbOk = data.adb?.ok === true;
         return {
           ok: adbOk,
           warn: data.ok && !adbOk,
           title: b.name,
           text: adbOk
             ? `统一桥在线 · v${ver}${adbVer ? " · " + String(adbVer).slice(0, 48) : ""}`
-            : `桥在线 · v${ver}，但本机未找到 adb`,
+            : data.adb?.error || data.adb?.setup || `桥在线 · v${ver}，但本机未找到 adb`,
           link: b.link,
         };
       }
 
       if (b.kind === "everything") {
         // 桥通了但本机 Everything HTTP 未开时仍会 502；区分「桥挂了」与「Everything 未开」
-        if (res.status === 502 || (res.ok && data && data.ok === false)) {
+        if (res.status === 502 || (data && data.ok === false)) {
           return {
             ok: false,
             warn: true,
@@ -195,6 +196,57 @@
         };
       }
 
+      if (b.kind === "ff") {
+        if (!res.ok) {
+          return { ok: false, title: b.name, text: data?.error || `HTTP ${res.status}`, link: b.link };
+        }
+        const binOk = data?.ffmpeg?.ok === true;
+        const ver = data?.version || "";
+        const ff = data?.ffmpeg?.version || data?.ffmpeg?.path || "";
+        return {
+          ok: binOk,
+          warn: !binOk && data?.ok !== false,
+          title: b.name,
+          text: binOk
+            ? `挂载在线${ver ? " · 桥 v" + ver : ""}${ff ? " · " + String(ff).split("\n")[0].slice(0, 48) : ""}`
+            : data?.ffmpeg?.error || data?.setup?.ffmpeg || "挂载在线，但本机未找到 ffmpeg",
+          link: b.link,
+        };
+      }
+
+      if (b.kind === "ytdlp") {
+        if (!res.ok) {
+          return { ok: false, title: b.name, text: data?.error || `HTTP ${res.status}`, link: b.link };
+        }
+        const binOk = data?.ytdlp?.ok === true;
+        return {
+          ok: binOk,
+          warn: !binOk,
+          title: b.name,
+          text: binOk
+            ? `挂载在线 · ${String(data.ytdlp.version || data.ytdlp.path || "yt-dlp").slice(0, 56)}`
+            : data?.ytdlp?.error || data?.setup?.ytdlp || "挂载在线，但本机未找到 yt-dlp",
+          link: b.link,
+        };
+      }
+
+      if (b.kind === "git") {
+        if (!res.ok || !data?.ok) {
+          return { ok: false, title: b.name, text: data?.error || `HTTP ${res.status}`, link: b.link };
+        }
+        const gitStr = typeof data.git === "string" ? data.git : data.git?.version || "";
+        const binOk = Boolean(gitStr) || data.git?.ok === true;
+        return {
+          ok: binOk,
+          warn: data.ok && !binOk,
+          title: b.name,
+          text: binOk
+            ? `挂载在线 · v${data.version || "?"}${gitStr ? " · " + String(gitStr).slice(0, 40) : ""}`
+            : "挂载在线，但本机未找到 git",
+          link: b.link,
+        };
+      }
+
       if (!res.ok || (data && data.ok === false)) {
         return {
           ok: false,
@@ -203,17 +255,10 @@
           link: b.link,
         };
       }
-      const ver = data?.version || data?.bridgeVersion || "";
-      const extra =
-        data?.git ||
-        data?.ffmpeg ||
-        data?.ytdlp ||
-        data?.service ||
-        (data?.ok ? "挂载正常" : "");
       return {
         ok: true,
         title: b.name,
-        text: `在线${ver ? " · v" + ver : ""}${extra ? " · " + String(extra).slice(0, 56) : ""}`,
+        text: "在线",
         link: b.link,
       };
     } catch (e) {
@@ -222,8 +267,30 @@
     }
   }
 
+  function overallSummary(rows) {
+    let ok = 0;
+    let warn = 0;
+    let fail = 0;
+    rows.forEach((r) => {
+      if (r.ok) ok += 1;
+      else if (r.warn) warn += 1;
+      else fail += 1;
+    });
+    if (ok === rows.length) return "统一桥在线，五项能力均已就绪。";
+    if (fail === rows.length) return "统一桥未启动或不可达。请先下载并运行 adb-bridge 启动脚本。";
+    if (warn > 0 && fail === 0) {
+      return "统一桥在线：" + ok + " 项就绪，" + warn + " 项需补本机工具（见下方黄灯）。";
+    }
+    if (ok > 0 || warn > 0) return "统一桥部分可达，仍有接口失败或依赖未就绪。";
+    return "请先启动统一桥后再检测。";
+  }
+
   function renderProbe(rows) {
     grid.innerHTML = "";
+    if (summaryEl) {
+      summaryEl.hidden = false;
+      summaryEl.textContent = overallSummary(rows);
+    }
     for (const r of rows) {
       const card = document.createElement("div");
       const state = r.ok ? "is-ok" : r.warn ? "is-warn" : "is-err";
@@ -243,6 +310,10 @@
 
   async function probeAll() {
     errEl.hidden = true;
+    if (summaryEl) {
+      summaryEl.hidden = true;
+      summaryEl.textContent = "";
+    }
     grid.innerHTML = `<p class="hint">探测中…</p>`;
     const rows = [];
     for (const b of BRIDGES) rows.push(await probeOne(b));

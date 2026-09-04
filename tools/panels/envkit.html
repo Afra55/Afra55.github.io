@@ -40,7 +40,8 @@
             <h2 class="subhead">统一桥在线状态</h2>
             <button type="button" class="secondary-btn" id="env-probe">重新探测</button>
           </div>
-          <p class="hint tight">列出统一桥 <strong>5 项能力</strong>：ADB · FFmpeg · yt-dlp · Git · Everything（均走 17888）。不要再单独启动 17889 / 17890。</p>
+          <p class="hint tight">列出统一桥 <strong>5 项能力</strong>：ADB · FFmpeg · yt-dlp · Git · Everything（均走 17888）。不要再单独启动 17889 / 17890。绿灯=工具就绪；黄灯=桥已挂载但本机工具未就绪；红灯=桥离线。</p>
+          <p class="hint tight" id="env-probe-summary" style="margin-top:0.45rem" hidden></p>
           <div class="env-probe-grid" id="env-probe-grid" style="margin-top:0.55rem"></div>
           <p class="error" id="env-error" hidden></p>
         </div>
