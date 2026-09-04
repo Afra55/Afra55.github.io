@@ -41,7 +41,7 @@ const ALLOWED_ORIGINS = new Set(
 
 const { buildOp, listOpsCatalog, assertPath } = require("./git-ops");
 
-const BRIDGE_VERSION = "0.2.8";
+const BRIDGE_VERSION = "0.2.9";
 const FEATURES = [
   "fs-browse","repo-open","repo-init","repo-clone","graph","branches",
   "status","commit-detail","explain","ops-catalog","ops-full","protocol-launch",
@@ -444,7 +444,7 @@ async function writeRepoFile(repo, relPath, content) {
 }
 
 async function repoStatus(repo) {
-  const porcelain = await git(repo, ["status", "--porcelain=v2", "-b", "--untracked-files=all"]);
+  const porcelain = await git(repo, ["status", "--porcelain=v2", "-b", "-z", "--untracked-files=all"]);
   const stash = await git(repo, ["stash", "list"]).catch(() => ({ stdout: "" }));
   const text = String(porcelain.stdout || "");
   const changes = [];
@@ -453,7 +453,7 @@ async function repoStatus(repo) {
   let upstream = "";
   let ahead = 0;
   let behind = 0;
-  for (const line of text.split("\n")) {
+  for (const line of text.split("\0")) {
     if (!line) continue;
     if (line.startsWith("# branch.head ")) {
       branch = line.slice("# branch.head ".length).trim();
@@ -473,23 +473,43 @@ async function repoStatus(repo) {
     }
     if (line.startsWith("#")) continue;
     if (line.startsWith("u ")) {
-      const parts = line.split(" ");
-      const path = parts[parts.length - 1];
-      conflicts.push({ path, label: path });
+      // u <XY> <sub> <m1> <m2> <m3> <mW> <h1> <h2> <h3> <path>
+      const m = line.match(/^u (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (.*)$/);
+      const path = m ? m[10] : line.slice(2).trim();
+      if (path) conflicts.push({ path, label: path });
       continue;
     }
-    if (line.startsWith("? ")) {
+    if (line.startsWith("? ") || line.startsWith("! ")) {
       const path = line.slice(2);
-      changes.push({ path, kind: "新", staged: false, unstaged: true, conflict: false });
+      if (path) changes.push({ path, kind: "新", staged: false, unstaged: true, conflict: false });
       continue;
     }
-    if (line.startsWith("1 ") || line.startsWith("2 ")) {
-      const parts = line.split(" ");
-      const xy = parts[1] || "..";
-      const path = parts[parts.length - 1];
+    if (line.startsWith("1 ")) {
+      // 1 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <path>
+      const m = line.match(/^1 (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (.*)$/);
+      const xy = m ? m[1] : "..";
+      const path = m ? m[8] : "";
+      if (!path) continue;
       changes.push({
         path,
-        kind: xy.includes("A") ? "加" : xy.includes("D") ? "删" : xy.includes("R") ? "改名" : "改",
+        kind: xy.includes("A") ? "加" : xy.includes("D") ? "删" : "改",
+        staged: xy[0] !== ".",
+        unstaged: xy[1] !== ".",
+        conflict: false,
+        xy,
+      });
+      continue;
+    }
+    if (line.startsWith("2 ")) {
+      // 2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <X><score> <path>\t<origPath>
+      const m = line.match(/^2 (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (.*)$/);
+      const xy = m ? m[1] : "R.";
+      let path = m ? m[9] : "";
+      if (path.includes("\t")) path = path.split("\t")[0];
+      if (!path) continue;
+      changes.push({
+        path,
+        kind: "改名",
         staged: xy[0] !== ".",
         unstaged: xy[1] !== ".",
         conflict: false,
@@ -757,7 +777,7 @@ async function handleRequest(req, res, opts = {}) {
           features: FEATURES,
           git: gitVer,
           port: embedded ? undefined : PORT,
-          defaultToken: embedded ? "devtools-bridge" : "devtools-git",
+          defaultToken: "devtools-bridge",
           installDir: process.env.GIT_BRIDGE_DIR || process.env.ADB_BRIDGE_DIR || __dirname,
           bridgeDir: process.env.GIT_BRIDGE_DIR || process.env.ADB_BRIDGE_DIR || __dirname,
           embedded,

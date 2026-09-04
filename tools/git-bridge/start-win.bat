@@ -49,12 +49,27 @@ reg add "HKCU\Software\Classes\devtools-git" /v "URL Protocol" /d "" /f >> "%LOG
 reg add "HKCU\Software\Classes\devtools-git\shell\open\command" /ve /d "\"%~f0\" \"%1\"" /f >> "%LOG_FILE%" 2>&1
 echo [OK] Registered protocol devtools-git:// >> "%LOG_FILE%"
 
-set "GIT_BRIDGE_TOKEN=devtools-git"
-set "GIT_BRIDGE_PORT=17890"
 set "GIT_BRIDGE_DIR=%~dp0"
+rem 独立 Git 桥已废弃：优先转到上级统一桥
+if not defined GIT_BRIDGE_FORCE_STANDALONE (
+  if exist "%~dp0..\start-win.bat" (
+    echo Git 已并入统一桥。正在启动上级 adb-bridge...
+    call "%~dp0..\start-win.bat" %*
+    exit /b %ERRORLEVEL%
+  )
+  if exist "%~dp0..\start-win.cmd" (
+    echo Git 已并入统一桥。正在启动上级 adb-bridge...
+    call "%~dp0..\start-win.cmd" %*
+    exit /b %ERRORLEVEL%
+  )
+)
+if not defined GIT_BRIDGE_TOKEN set "GIT_BRIDGE_TOKEN=devtools-bridge"
+if not defined GIT_BRIDGE_PORT set "GIT_BRIDGE_PORT=17888"
 if /i "%~1"=="devtools-git://start" set "DEVTOOLS_GIT_QUIET=1"
+if /i "%~1"=="devtools-bridge://start" set "DEVTOOLS_GIT_QUIET=1"
 echo Starting bridge on http://127.0.0.1:%GIT_BRIDGE_PORT%
 echo Token: %GIT_BRIDGE_TOKEN%
+echo 提示: 网页只连接统一桥 17888 /git。独立调试请设 GIT_BRIDGE_FORCE_STANDALONE=1
 echo.
 node server.js
 set "CODE=%ERRORLEVEL%"

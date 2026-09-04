@@ -595,24 +595,58 @@
   function parseStatusPayload(data) {
     const rows = [];
     const text = String(data?.porcelain || data?.stdout || "");
-    for (const line of text.split("\n")) {
+    const lines = text.includes("\0") ? text.split("\0") : text.split("\n");
+    for (const line of lines) {
       if (!line || line.startsWith("#")) continue;
-      if (line.startsWith("? ")) {
+      if (line.startsWith("? ") || line.startsWith("! ")) {
         const path = line.slice(2);
-        rows.push({ path, xy: "??", staged: false, unstaged: true, kind: "新", label: `?? ${path}` });
+        if (path) rows.push({ path, xy: "??", staged: false, unstaged: true, kind: "新", label: `?? ${path}` });
         continue;
       }
-      if (line.startsWith("1 ") || line.startsWith("2 ") || line.startsWith("u ")) {
-        const parts = line.split(" ");
-        const xy = (parts[1] || "..").replace(/\./g, " ");
-        const path = parts[parts.length - 1];
-        const xyRaw = parts[1] || "..";
+      if (line.startsWith("u ")) {
+        const m = line.match(/^u (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (.*)$/);
+        const path = m ? m[10] : "";
+        const xyRaw = m ? m[1] : "UU";
+        if (path) {
+          rows.push({
+            path,
+            xy: xyRaw,
+            staged: false,
+            unstaged: true,
+            kind: "冲突",
+            label: `${xyRaw} ${path}`,
+          });
+        }
+        continue;
+      }
+      if (line.startsWith("1 ")) {
+        const m = line.match(/^1 (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (.*)$/);
+        const xyRaw = m ? m[1] : "..";
+        const path = m ? m[8] : "";
+        if (!path) continue;
         rows.push({
           path,
           xy: xyRaw,
           staged: xyRaw[0] !== ".",
           unstaged: xyRaw[1] !== ".",
-          kind: xyRaw.includes("A") ? "加" : xyRaw.includes("D") ? "删" : xyRaw.includes("R") ? "改名" : "改",
+          kind: xyRaw.includes("A") ? "加" : xyRaw.includes("D") ? "删" : "改",
+          label: `${xyRaw} ${path}`,
+        });
+        continue;
+      }
+      if (line.startsWith("2 ")) {
+        // 2 <XY> <sub> <mH> <mI> <mW> <hH> <hI> <X><score> <path>\t<origPath>
+        const m = line.match(/^2 (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (\S+) (.*)$/);
+        const xyRaw = m ? m[1] : "R.";
+        let path = m ? m[9] : "";
+        if (path.includes("\t")) path = path.split("\t")[0];
+        if (!path) continue;
+        rows.push({
+          path,
+          xy: xyRaw,
+          staged: xyRaw[0] !== ".",
+          unstaged: xyRaw[1] !== ".",
+          kind: "改名",
           label: `${xyRaw} ${path}`,
         });
         continue;
@@ -1233,16 +1267,17 @@
   }
 
   async function conflictSaveResolved() {
-    if (!conflictEditPath) return showError("先打开一个冲突文件");
+    const filePath = conflictEditPath;
+    if (!filePath) return showError("先打开一个冲突文件");
     const ta = $("#git-conflict-text");
     await api("/repo/write-file", {
       method: "POST",
-      body: { repo: repoPath, file: conflictEditPath, content: ta?.value ?? "" },
+      body: { repo: repoPath, file: filePath, content: ta?.value ?? "" },
     });
-    await runOp("add", { path: conflictEditPath }, { skipConfirm: true, skipRefresh: true });
+    await runOp("add", { path: filePath }, { skipConfirm: true, skipRefresh: true });
     showError("");
     opOut.hidden = false;
-    opOut.textContent = `已保存并标记解决：${conflictEditPath}`;
+    opOut.textContent = `已保存并标记解决：${filePath}`;
     await refreshChanges();
   }
 
@@ -1519,29 +1554,40 @@
     if (!repoPath) return showError("先打开一个仓库");
     const raw = String(rawOverride != null ? rawOverride : $("#git-easy-branch")?.value || "").trim();
     if (!raw) return showError("先选一条工作线");
-    let params;
-    let label;
+
+    async function checkoutOnce(params, label) {
+      try {
+        await runOp("checkout", params, { skipConfirm: true });
+      } catch (e) {
+        const msg = String(e.message || "") + String(e.data?.stderr || "");
+        if (/local changes|would be overwritten|uncommitted/i.test(msg)) {
+          if (!(await askConfirm(`切换到「${label}」时有未保存改动挡着。先收起来再切换？`))) throw e;
+          await runOp("stash-push", {}, { skipConfirm: true, skipRefresh: true });
+          await runOp("checkout", params, { skipConfirm: true });
+          return;
+        }
+        throw e;
+      }
+    }
+
     if (raw.startsWith("remote:")) {
       const remoteRef = raw.slice("remote:".length);
       const local = remoteRef.includes("/") ? remoteRef.split("/").slice(1).join("/") : remoteRef;
       if (!local) return showError("远程分支名无效");
-      label = `基于 ${remoteRef} 开本地线 ${local}`;
-      params = { target: local, create: true, start: remoteRef };
-    } else {
-      label = raw;
-      params = { target: raw };
-    }
-    try {
-      await runOp("checkout", params, { skipConfirm: true });
-    } catch (e) {
-      const msg = String(e.message || "") + String(e.data?.stderr || "");
-      if (/local changes|would be overwritten|uncommitted/i.test(msg)) {
-        if (!(await askConfirm(`切换到「${label}」时有未保存改动挡着。先收起来再切换？`))) throw e;
-        await runOp("stash-push", {}, { skipConfirm: true, skipRefresh: true });
-        await runOp("checkout", params, { skipConfirm: true });
-      } else {
-        throw e;
+      const label = `远程 ${remoteRef} → 本地 ${local}`;
+      try {
+        await checkoutOnce({ target: local }, label);
+      } catch (e) {
+        const msg = String(e.message || "") + String(e.data?.stderr || "");
+        // 本地没有该线：从远程创建并检出
+        if (/pathspec|did not match|unknown revision|not a valid|invalid reference/i.test(msg)) {
+          await checkoutOnce({ target: local, create: true, start: remoteRef }, label);
+        } else {
+          throw e;
+        }
       }
+    } else {
+      await checkoutOnce({ target: raw }, raw);
     }
     await refreshChanges();
     await refreshRepo();
@@ -1795,6 +1841,10 @@
     return null;
   }
 
+  function looksLikeCommitId(s) {
+    return /^[0-9a-f]{7,40}$/i.test(String(s || "").trim());
+  }
+
   function fillIf(p, key, val) {
     if (val && (p[key] == null || p[key] === "")) p[key] = val;
   }
@@ -1906,9 +1956,24 @@
       fillIf(p, "oldName", typedTarget || "origin");
       fillIf(p, "newName", newBranch);
     }
-    if (op === "push" || op === "push-lease") fillIf(p, "branch", typedTarget || branch);
+    if (op === "push" || op === "push-lease") {
+      // 裸 git push / push --force-with-lease 不带参数（走 upstream / remote.*.push）
+      // 禁止只填 branch 或把分支名当 remote，否则会变成 `git push <branch>`
+      if (p.setUpstream) {
+        fillIf(p, "remote", "origin");
+        fillIf(p, "branch", typedTarget || branch);
+      } else if (p.remote) {
+        fillIf(p, "branch", typedTarget || branch);
+      }
+      // 目录里点「push」保持裸推（Gerrit 映射 / 已有 upstream）
+    }
     if (op === "push-gerrit") {
-      fillIf(p, "branch", typedTarget || branch || "master");
+      const gerritBranch =
+        (typedTarget && !looksLikeCommitId(typedTarget) ? typedTarget : "") ||
+        branch ||
+        lastStatus?.upstream?.split("/")?.pop() ||
+        "master";
+      fillIf(p, "branch", gerritBranch);
       fillIf(p, "remote", "origin");
     }
     if (op === "gerrit-config-push") fillIf(p, "remote", typedTarget || "origin");

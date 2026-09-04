@@ -92,7 +92,7 @@ async function main() {
 
     const health = await req("GET", "/health");
     if (!health.json.git) throw new Error("git missing on host");
-    if (health.json.version !== "0.2.8") {
+    if (health.json.version !== "0.2.9") {
       throw new Error("unexpected version " + health.json.version);
     }
 
@@ -143,6 +143,53 @@ async function main() {
     const st = await req("GET", `/repo/status?repo=${encodeURIComponent(opened.json.repo)}`);
     if (st.status !== 200 || !Array.isArray(st.json.plainSteps)) throw new Error("status plainSteps missing");
     if (!("conflicts" in st.json) || !("changes" in st.json)) throw new Error("status structured fields missing");
+
+    // 路径含空格 + 重命名：porcelain -z 解析必须正确
+    const spaceTmp = fs.mkdtempSync(path.join(os.tmpdir(), "gitbridge-space-"));
+    const spaceRepo = path.join(spaceTmp, "repo");
+    fs.mkdirSync(spaceRepo);
+    const { execFileSync } = require("child_process");
+    execFileSync("git", ["init"], { cwd: spaceRepo });
+    execFileSync("git", ["config", "user.email", "smoke@test"], { cwd: spaceRepo });
+    execFileSync("git", ["config", "user.name", "smoke"], { cwd: spaceRepo });
+    fs.writeFileSync(path.join(spaceRepo, "old name.txt"), "a\n");
+    execFileSync("git", ["add", "old name.txt"], { cwd: spaceRepo });
+    execFileSync("git", ["commit", "-m", "init"], { cwd: spaceRepo });
+    execFileSync("git", ["mv", "old name.txt", "new name.txt"], { cwd: spaceRepo });
+    fs.writeFileSync(path.join(spaceRepo, "file with spaces.txt"), "new\n");
+    const spaceOpen = await req("POST", "/repo/open", { path: spaceRepo });
+    if (spaceOpen.status !== 200) throw new Error("space repo open failed");
+    const spaceSt = await req("GET", `/repo/status?repo=${encodeURIComponent(spaceOpen.json.repo)}`);
+    if (spaceSt.status !== 200) throw new Error("space status failed");
+    const paths = (spaceSt.json.changes || []).map((c) => c.path);
+    if (!paths.includes("new name.txt")) {
+      throw new Error("rename path with spaces not parsed: " + JSON.stringify(spaceSt.json.changes));
+    }
+    if (!paths.includes("file with spaces.txt")) {
+      throw new Error("untracked path with spaces not parsed: " + JSON.stringify(spaceSt.json.changes));
+    }
+    if (paths.some((p) => p.includes("R100") || /^\d+$/.test(p))) {
+      throw new Error("rename score leaked into path: " + JSON.stringify(paths));
+    }
+    fs.rmSync(spaceTmp, { recursive: true, force: true });
+
+    // 裸 push 不得带 branch-only 参数
+    const barePush = buildOp("push", {});
+    if (barePush.argv.join(" ") !== "push") throw new Error("bare push should be just `push`: " + barePush.argv.join(" "));
+    const leaseBare = buildOp("push-lease", {});
+    if (leaseBare.argv.join(" ") !== "push --force-with-lease") {
+      throw new Error("bare push-lease wrong: " + leaseBare.argv.join(" "));
+    }
+    try {
+      buildOp("push", { branch: "main" });
+      throw new Error("push branch-only should be rejected");
+    } catch (e) {
+      if (String(e.message).includes("should be rejected")) throw e;
+    }
+    const gerritPush = buildOp("push-gerrit", { branch: "master", remote: "origin" });
+    if (!String(gerritPush.argv.join(" ")).includes("refs/for/master")) {
+      throw new Error("push-gerrit dest wrong: " + gerritPush.argv.join(" "));
+    }
 
     const readme = await req(
       "GET",

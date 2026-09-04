@@ -97,15 +97,22 @@ if [ ! -s "${OPS_JS}" ]; then
 fi
 
 cd "${SCRIPT_DIR}" || pause_exit 1
-export GIT_BRIDGE_TOKEN="${GIT_BRIDGE_TOKEN:-devtools-git}"
-export GIT_BRIDGE_PORT="${GIT_BRIDGE_PORT:-17890}"
-export GIT_BRIDGE_DIR="${SCRIPT_DIR}"
 
-# Register URL scheme helper (best-effort)
+PARENT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+if [ -z "${GIT_BRIDGE_FORCE_STANDALONE:-}" ] && [ -f "${PARENT}/start-mac.command" ]; then
+  echo "Git 已并入统一桥。正在启动：${PARENT}/start-mac.command"
+  exec bash "${PARENT}/start-mac.command" "$@"
+fi
+
+export GIT_BRIDGE_TOKEN="${GIT_BRIDGE_TOKEN:-devtools-bridge}"
+export GIT_BRIDGE_PORT="${GIT_BRIDGE_PORT:-17888}"
+export GIT_BRIDGE_DIR="${SCRIPT_DIR}"
+echo "提示：网页只连接统一桥 17888 /git。调试独立模块请设 GIT_BRIDGE_FORCE_STANDALONE=1"
+
+# Register URL scheme helper (best-effort)；每次刷新 launch，避免残留旧端口 17890
 PROTOCOL_APP="$SCRIPT_DIR/DevToolsGitBridge Protocol.app"
-if [ ! -d "$PROTOCOL_APP" ]; then
-  mkdir -p "$PROTOCOL_APP/Contents/MacOS" "$PROTOCOL_APP/Contents/Resources"
-  cat > "$PROTOCOL_APP/Contents/Info.plist" <<'PLIST'
+mkdir -p "$PROTOCOL_APP/Contents/MacOS" "$PROTOCOL_APP/Contents/Resources"
+cat > "$PROTOCOL_APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
@@ -119,12 +126,13 @@ if [ ! -d "$PROTOCOL_APP" ]; then
   </dict></array>
 </dict></plist>
 PLIST
-  cat > "$PROTOCOL_APP/Contents/MacOS/launch" <<'EOF'
+cat > "$PROTOCOL_APP/Contents/MacOS/launch" <<'EOF'
 #!/bin/bash
 DIR="$(cd "$(dirname "$0")/../../.." && pwd)"
 cd "$DIR" || exit 1
+PORT="${GIT_BRIDGE_PORT:-${DEVTOOLS_BRIDGE_PORT:-17888}}"
 if command -v curl >/dev/null 2>&1; then
-  if curl -fsS --connect-timeout 1 --max-time 2 "http://127.0.0.1:17890/health" >/dev/null 2>&1; then
+  if curl -fsS --connect-timeout 1 --max-time 2 "http://127.0.0.1:${PORT}/health" >/dev/null 2>&1; then
     exit 0
   fi
 fi
@@ -136,8 +144,7 @@ for s in start-git-bridge.command start-mac.command; do
 done
 exit 1
 EOF
-  chmod +x "$PROTOCOL_APP/Contents/MacOS/launch"
-fi
+chmod +x "$PROTOCOL_APP/Contents/MacOS/launch"
 if command -v lsregister >/dev/null 2>&1; then
   lsregister -f "$PROTOCOL_APP" >/dev/null 2>&1 || true
 elif [ -x "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister" ]; then

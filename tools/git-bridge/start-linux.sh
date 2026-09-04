@@ -100,9 +100,18 @@ if [ ! -s "${OPS_JS}" ]; then
 fi
 
 cd "${SCRIPT_DIR}" || pause_exit 1
-export GIT_BRIDGE_TOKEN="${GIT_BRIDGE_TOKEN:-devtools-git}"
-export GIT_BRIDGE_PORT="${GIT_BRIDGE_PORT:-17890}"
+
+# 独立 Git 桥已废弃：优先转到上级统一桥（17888，含 /git）
+PARENT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+if [ -z "${GIT_BRIDGE_FORCE_STANDALONE:-}" ] && [ -f "${PARENT}/start-linux.sh" ]; then
+  echo "Git 已并入统一桥。正在启动：${PARENT}/start-linux.sh"
+  exec bash "${PARENT}/start-linux.sh" "$@"
+fi
+
+export GIT_BRIDGE_TOKEN="${GIT_BRIDGE_TOKEN:-devtools-bridge}"
+export GIT_BRIDGE_PORT="${GIT_BRIDGE_PORT:-17888}"
 export GIT_BRIDGE_DIR="${SCRIPT_DIR}"
+echo "提示：网页只连接统一桥 17888 /git。调试独立模块请设 GIT_BRIDGE_FORCE_STANDALONE=1"
 
 # Register xdg URL handler (best-effort) so webpage can open devtools-git://start
 DESKTOP_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
@@ -114,7 +123,7 @@ DIR="$SCRIPT_DIR"
 cd "\$DIR" || exit 1
 export DEVTOOLS_GIT_QUIET=1
 if command -v curl >/dev/null 2>&1; then
-  if curl -fsS --connect-timeout 1 --max-time 2 "http://127.0.0.1:\${GIT_BRIDGE_PORT:-17890}/health" >/dev/null 2>&1; then
+  if curl -fsS --connect-timeout 1 --max-time 2 "http://127.0.0.1:\${GIT_BRIDGE_PORT:-17888}/health" >/dev/null 2>&1; then
     exit 0
   fi
 fi

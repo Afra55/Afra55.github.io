@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.13";
+const BRIDGE_VERSION = "0.9.14";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -140,7 +140,7 @@ function applyCors(headers, origin) {
     headers["Access-Control-Allow-Origin"] = origin;
     headers["Vary"] = "Origin";
     headers["Access-Control-Allow-Headers"] =
-      "Content-Type, X-Adb-Token, X-Ffmpeg-Token, X-Filename, Authorization";
+      "Content-Type, X-Adb-Token, X-Ffmpeg-Token, X-Git-Token, X-Filename, Authorization";
     headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
     headers["Access-Control-Expose-Headers"] = "Content-Disposition, X-Adb-Filename";
   }

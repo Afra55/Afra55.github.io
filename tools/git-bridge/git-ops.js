@@ -701,6 +701,13 @@ const OP_DEFS = {
     group: "远程",
     title: "push",
     build: (p) => {
+      // 禁止 `git push <branch>`（把分支名当远程）；要带 branch 必须同时有 remote，或保持裸 push
+      if (p.branch && !p.remote) {
+        throw Object.assign(
+          new Error("push 指定 branch 时必须同时指定 remote（或留空做裸 push）"),
+          { status: 400 }
+        );
+      }
       const argv = ["push"];
       if (p.setUpstream) argv.push("-u");
       if (p.remote) argv.push(assertRef(p.remote, "remote"));
@@ -759,6 +766,12 @@ const OP_DEFS = {
     group: "远程",
     title: "push --force-with-lease",
     build: (p) => {
+      if (p.branch && !p.remote) {
+        throw Object.assign(
+          new Error("push-lease 指定 branch 时必须同时指定 remote（或留空做裸 push）"),
+          { status: 400 }
+        );
+      }
       const argv = ["push", "--force-with-lease"];
       if (p.remote) argv.push(assertRef(p.remote, "remote"));
       if (p.branch) argv.push(assertRef(p.branch, "branch"));
