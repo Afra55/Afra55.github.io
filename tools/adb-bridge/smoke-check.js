@@ -77,6 +77,9 @@ async function main() {
   if (!/pendingConfig|packet_merger|wrapMirrorPacket/.test(mirrorJs)) {
     throw new Error("scrcpy-mirror.js should merge codec config into following media packets");
   }
+  if (!/isAvcDecoderConfig|shouldMergeConfigIntoMedia/.test(mirrorJs)) {
+    throw new Error("scrcpy-mirror.js should skip merging avcC into keyframes (WebCodecs black screen)");
+  }
   if (!/control=true|CTRL_RESET_VIDEO|injectTouch|encodeKeycode|TYPE_SET_CLIPBOARD/.test(mirrorJs + require("fs").readFileSync(require("path").join(__dirname, "scrcpy-ctrl.js"), "utf8"))) {
     throw new Error("scrcpy-mirror should expose full control surface (touch/key/clipboard/…)");
   }

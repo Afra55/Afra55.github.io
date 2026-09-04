@@ -977,6 +977,27 @@ class MirrorSession {
     return out;
   }
 
+  /** AVCDecoderConfigurationRecord：以 1 开头的短配置。并进关键帧会让 WebCodecs 黑屏。 */
+  isAvcDecoderConfig(buf) {
+    if (!buf || buf.length < 7 || buf.length > 2048) return false;
+    return buf[0] === 1;
+  }
+
+  /** 仅非 avcC 配置可并入下一媒体包；avcC 只单独发 configure */
+  shouldMergeConfigIntoMedia(cfg) {
+    if (!cfg || !cfg.length) return false;
+    return !this.isAvcDecoderConfig(cfg);
+  }
+
+  prependConfigIfNeeded(cfg, keyBody, pts) {
+    if (!cfg?.length || !keyBody?.length) return null;
+    if (this.isAvcDecoderConfig(cfg)) return null;
+    if (keyBody.length >= cfg.length && Buffer.compare(keyBody.subarray(0, cfg.length), cfg) === 0) {
+      return null; // 已含配置
+    }
+    return this.wrapMirrorPacket(2, pts, Buffer.concat([cfg, keyBody]));
+  }
+
   writeControl(buf) {
     if (!this.controlSock || this.controlSock.destroyed) return false;
     try {
@@ -1198,10 +1219,9 @@ class MirrorSession {
         if (this.lastConfig && this.lastConfig.length > 5) {
           const cfg = this.lastConfig.subarray(5);
           const keyBody = this.lastKeyFrame.subarray(5);
-          if (cfg.length && (keyBody.length < cfg.length || Buffer.compare(keyBody.subarray(0, cfg.length), cfg) !== 0)) {
-            const pts = this.lastKeyFrame.readUInt32BE(1);
-            keyPkt = this.wrapMirrorPacket(2, pts, Buffer.concat([cfg, keyBody]));
-          }
+          const pts = this.lastKeyFrame.readUInt32BE(1);
+          const merged = this.prependConfigIfNeeded(cfg, keyBody, pts);
+          if (merged) keyPkt = merged;
         }
         wsSendBinary(socket, Buffer.from(keyPkt));
       }
@@ -1235,8 +1255,11 @@ class MirrorSession {
       }
 
       let media = payload;
-      if (pendingConfig && pendingConfig.length) {
+      // Annex-B 配置可并入下一包（对齐 demuxer）；avcC 绝不能并——否则 WebCodecs 关键帧黑屏
+      if (pendingConfig && pendingConfig.length && this.shouldMergeConfigIntoMedia(pendingConfig)) {
         media = Buffer.concat([pendingConfig, payload]);
+        pendingConfig = null;
+      } else if (pendingConfig) {
         pendingConfig = null;
       }
       let flags = 0;

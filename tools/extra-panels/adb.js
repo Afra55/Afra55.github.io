@@ -3426,10 +3426,17 @@
         return u[0] === 0 && u[1] === 0 && (u[2] === 1 || (u[2] === 0 && u[3] === 1));
       }
 
+      function isAvcDecoderConfig(bytes) {
+        const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
+        return u.length >= 7 && u.length <= 2048 && u[0] === 1;
+      }
+
       /** 部分机型 MediaCodec 输出 length-prefixed NAL，WebCodecs 需要 Annex-B */
       function toAnnexB(bytes) {
         const u = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
-        if (!u.length || looksAnnexB(u) || u[0] === 1) return u;
+        if (!u.length || looksAnnexB(u)) return u;
+        // 短 avcC 留给 description；长大包若以 1 开头多半是误并的 avcC+帧，不能整包原样返回
+        if (isAvcDecoderConfig(u) && u.length < 512) return u;
         const parts = [];
         let i = 0;
         let ok = false;
@@ -3446,6 +3453,42 @@
         }
         if (!ok || i !== u.length) return u;
         return concatBytesMany(parts);
+      }
+
+      function startsWithBytes(hay, needle) {
+        const h = hay instanceof Uint8Array ? hay : new Uint8Array(hay || []);
+        const n = needle instanceof Uint8Array ? needle : new Uint8Array(needle || []);
+        if (!n.length || h.length < n.length) return false;
+        for (let i = 0; i < n.length; i++) if (h[i] !== n[i]) return false;
+        return true;
+      }
+
+      /** 去掉误并进关键帧的 codec config（尤其是 avcC） */
+      function stripLeadingConfig(payload, config) {
+        let data = payload instanceof Uint8Array ? payload : new Uint8Array(payload || []);
+        const cfg = config instanceof Uint8Array ? config : new Uint8Array(config || []);
+        if (cfg.length && startsWithBytes(data, cfg)) {
+          data = data.subarray(cfg.length);
+        } else if (isAvcDecoderConfig(data) && data.length > 64) {
+          // 启发式：avcC 后紧跟 Annex-B 或 length-prefixed NAL
+          for (let i = 7; i < Math.min(data.length - 4, 512); i++) {
+            if (data[i] === 0 && data[i + 1] === 0 && (data[i + 2] === 1 || (data[i + 2] === 0 && data[i + 3] === 1))) {
+              return data.subarray(i);
+            }
+          }
+        }
+        return data;
+      }
+
+      function prepareMirrorVideoData(payload, isKey) {
+        let data = stripLeadingConfig(payload, adbMirrorPendingConfig);
+        data = toAnnexB(data);
+        const cfg = adbMirrorPendingConfig;
+        const isAvcc = cfg && isAvcDecoderConfig(cfg);
+        if (isKey && cfg && !isAvcc && !payloadHasSps(data)) {
+          data = concatBytes(toAnnexB(cfg), data);
+        }
+        return data;
       }
 
       function concatBytesMany(chunks) {
@@ -3642,7 +3685,7 @@
         if (!adbMirrorDecoder || !adbMirrorMeta || !adbMirrorPendingConfig) return false;
         const payload = adbMirrorPendingConfig;
         const codec = codecStringFromConfig(payload, adbMirrorMeta.codec);
-        const isAvcc = payload[0] === 1;
+        const isAvcc = isAvcDecoderConfig(payload);
         const cfg = {
           codec,
           codedWidth: adbMirrorMeta.width || undefined,
@@ -3675,6 +3718,15 @@
         adbMirrorWaitTimer = setTimeout(() => {
           if (adbMirrorGotFrame) return;
           const p = adbMirrorPkt;
+          // 先要一帧关键帧（很多机型默认 I 间隔很长）
+          if ((p.config > 0 || p.key > 0) && p.decoded === 0) {
+            try {
+              adbMirrorWs?.readyState === 1 && adbMirrorWs.send(JSON.stringify({ type: "reset_video" }));
+            } catch {
+              /* ignore */
+            }
+            adbMirrorNeedKey = true;
+          }
           if ((p.config > 0 || p.key > 0) && p.decoded === 0 && !adbMirrorSoftTried && adbMirrorMeta) {
             adbMirrorSoftTried = true;
             adbMirrorHwPref = "prefer-software";
@@ -3692,6 +3744,11 @@
               if (configureMirrorFromPending() && savedKey) {
                 decodeMirrorKeyData(savedKey);
               }
+              try {
+                adbMirrorWs?.readyState === 1 && adbMirrorWs.send(JSON.stringify({ type: "reset_video" }));
+              } catch {
+                /* ignore */
+              }
             } catch (err) {
               if ($("#adb-input-meta")) {
                 $("#adb-input-meta").textContent = `软解重试失败：${err.message || err}`;
@@ -3704,10 +3761,10 @@
             $("#adb-input-meta").textContent =
               `仍无画面（config=${p.config} key=${p.key} delta=${p.delta} decoded=${p.decoded}）。` +
               (p.config === 0 && p.key === 0
-                ? "桥未收到视频帧：请更新本机桥 ZIP（≥0.9.12）、只开一座桥，并解锁亮屏后重试"
-                : "已收到码流但解不出画面：请换 Chrome/Edge 最新版，或更新桥 ZIP 后重试「开始镜像」");
+                ? "桥未收到视频帧：请更新本机桥 ZIP（≥0.9.15）、只开一座桥，并解锁亮屏后重试"
+                : "已收到码流但解不出画面：请换 Chrome/Edge 最新版，或更新桥 ZIP（≥0.9.15）后重试「开始镜像」");
           }
-        }, 3200);
+        }, 2800);
       }
   
       function handleMirrorAudioPacket(isConfig, _isKey, payload) {
@@ -3996,10 +4053,10 @@
               try {
                 if (isConfig) {
                   adbMirrorPkt.config += 1;
-                  payload = toAnnexB(payload);
+                  payload = isAvcDecoderConfig(payload) ? payload.slice() : toAnnexB(payload);
                   adbMirrorPendingConfig = payload.slice();
                   const codec = codecStringFromConfig(payload, adbMirrorMeta.codec);
-                  const isAvcc = payload[0] === 1;
+                  const isAvcc = isAvcDecoderConfig(payload);
                   if (adbMirrorDecoder.state === "configured") {
                     try {
                       adbMirrorDecoder.reset();
@@ -4025,6 +4082,12 @@
                   }
                   adbMirrorNeedKey = true;
                   adbMirrorFrameTs = 0;
+                  // 要一帧新 IDR，避免干等旧间隔
+                  try {
+                    adbMirrorWs?.readyState === 1 && adbMirrorWs.send(JSON.stringify({ type: "reset_video" }));
+                  } catch {
+                    /* ignore */
+                  }
                   return;
                 }
                 if (isKey) adbMirrorPkt.key += 1;
@@ -4032,11 +4095,8 @@
                 if (adbMirrorDecoder.state !== "configured") return;
                 if (adbMirrorNeedKey && !isKey) return;
                 if (!isKey && adbMirrorDecoder.decodeQueueSize > 2) return;
-                payload = toAnnexB(payload);
-                let data = payload;
-                if (isKey && adbMirrorPendingConfig && adbMirrorPendingConfig[0] !== 1 && !payloadHasSps(payload)) {
-                  data = concatBytes(toAnnexB(adbMirrorPendingConfig), payload);
-                }
+                const data = prepareMirrorVideoData(payload, isKey);
+                if (!data?.length) return;
                 if (isKey) adbMirrorLastKeyData = data.slice();
                 adbMirrorFrameTs += 33_333;
                 adbMirrorDecoder.decode(
