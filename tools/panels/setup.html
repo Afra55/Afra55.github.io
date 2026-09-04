@@ -244,7 +244,7 @@ adb devices</pre>
                 <a class="secondary-btn" href="#gitbridge">打开 Git 可视化</a>
               </span>
             </li>
-            <li>点击「下载 xxx 完整包」（含 <span class="mono">server.js</span> + 启动脚本；yt-dlp 还需 <span class="mono">ytdlp-core.js</span>）。请解压后<strong>放在同一文件夹</strong>。</li>
+            <li>点击「下载完整包」（统一桥：含 ADB / FFmpeg / yt-dlp / Git）。请解压后<strong>保留子目录结构</strong>。</li>
             <li>建议解压到固定目录，并在 <a href="#adb">ADB</a> 页「桥解压目录」里填入路径点「记住目录」。首次请手动运行启动脚本（会注册 <span class="mono">devtools-bridge://</span>）；之后进入相关工具页可自动尝试启动。</li>
             <li>运行启动脚本：
               <ul>
@@ -259,7 +259,7 @@ adb devices</pre>
                 <li>FFmpeg 接口前缀：<span class="mono">/ff</span>（例如 <span class="mono">/ff/ops</span>）</li>
                 <li>yt-dlp 接口前缀：<span class="mono">/ytdlp</span>（例如 <span class="mono">/ytdlp/health</span>）</li>
                 <li>统一桥：<span class="mono">http://127.0.0.1:17888</span>，Token <span class="mono">devtools-bridge</span>（含 ADB / FFmpeg / yt-dlp / Git / Everything）</li>
-                <li>Git API：统一桥上的 <span class="mono">/git/*</span>（旧独立包 17890 仍可用）</li>
+                <li>Git API：统一桥上的 <span class="mono">/git/*</span></li>
               </ul>
             </li>
           </ol>
@@ -284,7 +284,7 @@ adb devices</pre>
             <dt>下载视频只要 yt-dlp，要不要装 ADB？</dt>
             <dd>不用。装 Node.js + yt-dlp（合并建议 + FFmpeg），用 <a href="#ytdlp">yt-dlp 本机桥</a> 即可；与 ADB 共用同一座桥。</dd>
             <dt>只想看本地 Git 分支图？</dt>
-            <dd>装 Node.js + git，打开 <a href="#adb">ADB</a> 下载完整包（已含 Git）启动一次即可；也可只用 Git 独立包。</dd>
+            <dd>装 Node.js + git，任意桥页下载<strong>统一完整包</strong>（已含 Git）启动一次即可。</dd>
           </dl>
           <p class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.75rem">
             <a class="ghost-btn" href="#about">返回关于</a>

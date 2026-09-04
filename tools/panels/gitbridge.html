@@ -9,7 +9,7 @@
             <span class="adb-dot" id="git-dot" aria-hidden="true"></span>
             <div>
               <strong id="git-status-title">未连接本机桥</strong>
-              <p class="hint tight" id="git-status-text">与 ADB / FFmpeg <strong>共用一座桥</strong>。下载完整包并启动后点「连接」。默认端口 17888。</p>
+              <p class="hint tight" id="git-status-text">与 ADB / FFmpeg <strong>共用一座桥</strong>。下载<strong>统一完整包</strong>并启动后点「连接」。默认端口 17888。</p>
             </div>
           </div>
           <div class="btn-row tool-actions adb-status-actions">
@@ -17,9 +17,9 @@
             <button type="button" class="secondary-btn" id="git-bridge-launch">启动本机桥</button>
             <button type="button" class="secondary-btn" id="git-refresh" disabled>刷新仓库</button>
             <span class="adb-dl-bundle" id="git-dl-bundle">
-              <button type="button" class="secondary-btn" id="git-dl-mac" data-git-bundle="mac">下载 macOS 独立包</button>
-              <button type="button" class="secondary-btn" id="git-dl-win" data-git-bundle="win">下载 Windows 独立包</button>
-              <button type="button" class="secondary-btn" id="git-dl-linux" data-git-bundle="linux">下载 Linux 独立包</button>
+              <button type="button" class="secondary-btn" id="git-dl-mac" data-git-bundle="mac">下载 macOS 完整包</button>
+              <button type="button" class="secondary-btn" id="git-dl-win" data-git-bundle="win">下载 Windows 完整包</button>
+              <button type="button" class="secondary-btn" id="git-dl-linux" data-git-bundle="linux">下载 Linux 完整包</button>
             </span>
           </div>
         </div>
@@ -38,7 +38,7 @@
             <h2 class="subhead">零难度就绪（约 2 分钟）</h2>
             <ol class="git-beginner-steps hint">
               <li>去 <a href="#envkit">环境管家</a> 一键安装 Node / Git，并同步桥文件。</li>
-              <li>或到 <a href="#adb">ADB</a> 下载<strong>完整包</strong>（已含 Git），解压后运行启动脚本一次。</li>
+              <li>或在本页下载<strong>统一完整包</strong>，解压后运行启动脚本一次。</li>
               <li>回到本页点「一键启动并连接」。</li>
             </ol>
             <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.35rem">
@@ -48,7 +48,7 @@
             </div>
             <p class="hint tight" id="git-ready-hint">账号登录请在本机 Git / 系统凭据里自行完成；本页只管点按钮操作仓库。</p>
           </div>
-          <p class="hint tight" id="git-install-dir-hint">协议 <span class="mono">devtools-bridge://</span>。下方「独立包」仅给只想用 Git、不装统一桥的场景。</p>
+          <p class="hint tight" id="git-install-dir-hint">协议 <span class="mono">devtools-bridge://</span>。下载的是与 ADB 相同的<strong>统一完整包</strong>（含 Git），不要再用独立 Git 包。</p>
         </div>
 
         <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
@@ -57,7 +57,7 @@
           <label for="git-token">Token</label>
           <input id="git-token" class="mono" type="text" value="devtools-bridge" autocomplete="off" spellcheck="false" />
         </div>
-        <p class="hint tight">默认走统一桥 <span class="mono">17888</span> · API <span class="mono">/git/*</span> · Token <span class="mono">devtools-bridge</span>。若仍用旧独立 Git 桥，地址改 <span class="mono">17890</span>、Token <span class="mono">devtools-git</span>。</p>
+        <p class="hint tight">默认走统一桥 <span class="mono">17888</span> · API <span class="mono">/git/*</span> · Token <span class="mono">devtools-bridge</span>。完整包启动一次即可覆盖 ADB / FFmpeg / yt-dlp / Git。</p>
 
         <div id="git-workspace" hidden>
           <div class="label-row" style="margin-top:1rem">

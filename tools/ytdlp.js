@@ -111,80 +111,11 @@
   }
 
   async function downloadBundle(platform) {
-    if (typeof JSZip === "undefined") throw new Error("JSZip 未加载，无法打包下载");
-    const map = {
-      mac: {
-        scriptPath: "./ffmpeg-bridge/start-mac.command",
-        scriptName: "start-devtools-bridge.command",
-        zipName: "devtools-bridge-mac.zip",
-        runHint: "解压后执行：chmod +x start-devtools-bridge.command && ./start-devtools-bridge.command\n也可在 Finder 中双击。",
-      },
-      win: {
-        scriptPath: "./ffmpeg-bridge/start-win.bat",
-        scriptName: "start-devtools-bridge.bat",
-        zipName: "devtools-bridge-win.zip",
-        runHint: "解压后优先双击 start-devtools-bridge.cmd；也可双击 .bat。请保持窗口打开。",
-      },
-      linux: {
-        scriptPath: "./ffmpeg-bridge/start-linux.sh",
-        scriptName: "start-devtools-bridge.sh",
-        zipName: "devtools-bridge-linux.zip",
-        runHint: "解压后执行：chmod +x start-devtools-bridge.sh && ./start-devtools-bridge.sh",
-      },
-    };
-    const cfg = map[platform];
-    if (!cfg) throw new Error("未知平台");
-    const [serverJs, ytdlpJs, scriptRaw] = await Promise.all([
-      fetchTextAsset("./ffmpeg-bridge/server.js"),
-      fetchTextAsset("./ffmpeg-bridge/ytdlp-core.js"),
-      fetchTextAsset(cfg.scriptPath),
-    ]);
-    if (!ytdlpJs) throw new Error("缺少 ytdlp-core.js，请刷新页面后重试");
-    const scriptText = platform === "win" ? String(scriptRaw).replace(/\r?\n/g, "\r\n") : scriptRaw;
-    const readme = [
-      "DevTools 统一本机桥（含 yt-dlp）",
-      "",
-      "必须保留：",
-      "  - server.js",
-      "  - ytdlp-core.js",
-      "  - " + cfg.scriptName,
-      "",
-      "使用步骤：",
-      "1. 解压到同一文件夹",
-      "2. 本机已安装 Node.js、yt-dlp（合并视频建议同时装 ffmpeg）",
-      "3. " + cfg.runHint.replace(/\n/g, "\n   "),
-      "4. 回到网页 yt-dlp 页点「连接本机桥」",
-      "",
-      "默认地址 http://127.0.0.1:17888  Token: devtools-bridge",
-      "yt-dlp 接口 /ytdlp/* · FFmpeg /ff/*",
-      "",
-    ].join("\n");
-    const zip = new JSZip();
-    zip.file("server.js", serverJs);
-    zip.file("ytdlp-core.js", ytdlpJs);
-    zip.file(cfg.scriptName, scriptText, {
-      unixPermissions: platform === "win" ? undefined : 0o755,
-    });
-    if (platform === "win") {
-      const wrapper = [
-        "@echo off",
-        'cd /d "%~dp0"',
-        'cmd /d /c ""%~dp0start-devtools-bridge.bat" & echo. & echo Log: %USERPROFILE%\\.devtools-ffmpeg-bridge\\last-start.log & pause"',
-        "",
-      ].join("\r\n");
-      zip.file("start-devtools-bridge.cmd", wrapper);
-    }
-    zip.file(platform === "win" ? "README.txt" : "使用说明.txt", readme);
-    const blob = await zip.generateAsync({ type: "blob" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = cfg.zipName;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 2000);
-    toast("已下载完整包，解压运行后点连接");
+    const api = window.devtoolsUnifiedBridgeBundle;
+    if (!api?.download) throw new Error("统一完整包模块未加载，请硬刷新页面");
+    toast("正在准备统一完整包…");
+    await api.download(platform);
+    toast("已下载完整包，解压运行 start-adb-bridge.* 后点连接");
     startWaitPoll();
   }
 

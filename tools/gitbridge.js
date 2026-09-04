@@ -1341,86 +1341,16 @@
     await refreshChanges();
   }
 
-  async function ensureJsZip() {
-    if (typeof globalThis.JSZip === "function") return globalThis.JSZip;
-    await new Promise((resolve, reject) => {
-      const s = document.createElement("script");
-      const v = window.TOOLS_BUILD || "";
-      s.src = `./vendor/jszip.min.js${v ? `?v=${v}` : ""}`;
-      s.onload = () => resolve();
-      s.onerror = () => reject(new Error("JSZip 加载失败"));
-      document.head.appendChild(s);
-    });
-    if (typeof globalThis.JSZip !== "function") throw new Error("JSZip 未加载");
-    return globalThis.JSZip;
-  }
-
-  async function fetchTextAsset(path) {
-    const res = await fetch(path, { cache: "no-cache" });
-    if (!res.ok) throw new Error(`无法读取 ${path}（${res.status}）`);
-    return res.text();
-  }
-
   async function downloadBundle(platform) {
-    const JSZip = await ensureJsZip();
-    const map = {
-      mac: {
-        scriptPath: "./git-bridge/start-mac.command",
-        scriptName: "start-git-bridge.command",
-        zipName: "devtools-git-bridge-mac.zip",
-        runHint: "chmod +x start-git-bridge.command && ./start-git-bridge.command",
-      },
-      win: {
-        scriptPath: "./git-bridge/start-win.bat",
-        scriptName: "start-git-bridge.bat",
-        zipName: "devtools-git-bridge-win.zip",
-        runHint: "双击 start-git-bridge.cmd 或 .bat，保持窗口打开",
-      },
-      linux: {
-        scriptPath: "./git-bridge/start-linux.sh",
-        scriptName: "start-git-bridge.sh",
-        zipName: "devtools-git-bridge-linux.zip",
-        runHint: "chmod +x start-git-bridge.sh && ./start-git-bridge.sh",
-      },
-    };
-    const cfg = map[platform];
-    if (!cfg) throw new Error("未知平台");
-    const [serverJs, opsJs, scriptRaw, winCmd] = await Promise.all([
-      fetchTextAsset("./git-bridge/server.js"),
-      fetchTextAsset("./git-bridge/git-ops.js"),
-      fetchTextAsset(cfg.scriptPath),
-      platform === "win" ? fetchTextAsset("./git-bridge/start-win.cmd") : Promise.resolve(""),
-    ]);
-    if (!/devtools-git-bridge|GIT_BRIDGE_TOKEN/.test(serverJs)) {
-      throw new Error("server.js 异常，请刷新后重试");
-    }
-    if (!/OP_DEFS|buildOp/.test(opsJs)) {
-      throw new Error("git-ops.js 异常，请刷新后重试");
-    }
-    const scriptText = platform === "win" ? String(scriptRaw).replace(/\r?\n/g, "\r\n") : scriptRaw;
-    const readme = [
-      "DevTools Git Bridge",
-      "",
-      "保留：server.js + git-ops.js + 启动脚本 在同一文件夹",
-      "需要：Node.js + git",
-      "启动：" + cfg.runHint,
-      "默认 http://127.0.0.1:17890  Token: devtools-git",
-      "",
-    ].join("\n");
-    const zip = new JSZip();
-    zip.file("server.js", serverJs);
-    zip.file("git-ops.js", opsJs);
-    zip.file(cfg.scriptName, scriptText, platform === "win" ? {} : { unixPermissions: 0o755 });
-    if (platform === "win" && winCmd) {
-      zip.file("start-git-bridge.cmd", String(winCmd).replace(/\r?\n/g, "\r\n"));
-    }
-    zip.file(platform === "win" ? "README.txt" : "使用说明.txt", readme);
-    const blob = await zip.generateAsync({ type: "blob" });
-    const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob);
-    a.download = cfg.zipName;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    const api = window.devtoolsUnifiedBridgeBundle;
+    if (!api?.download) throw new Error("统一完整包模块未加载，请硬刷新页面");
+    setStatus("is-warn", "正在打包…", "下载统一完整包（含 Git），请稍候");
+    await api.download(platform);
+    setStatus(
+      "is-warn",
+      "等待本机桥启动…",
+      "完整包已下载。解压后运行 start-adb-bridge.*，保持窗口打开，再点连接。"
+    );
   }
 
   let opsCatalog = { ops: [], groups: [] };
@@ -1752,6 +1682,14 @@
       downloadBundle(btn.getAttribute("data-git-bundle")).catch((e) => showError(e.message));
     });
   });
+  try {
+    const os = window.devtoolsUnifiedBridgeBundle?.detectOs?.() || "";
+    const prefer = os === "win" ? $("#git-dl-win") : os === "mac" ? $("#git-dl-mac") : $("#git-dl-linux");
+    prefer?.classList.add("primary-btn");
+    prefer?.classList.remove("secondary-btn");
+  } catch (_) {
+    /* ignore */
+  }
 
   $$("[data-git-op]").forEach((btn) => {
     btn.addEventListener("click", () => {
