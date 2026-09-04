@@ -1,20 +1,20 @@
 <section id="feedbackhub" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>评价汇总</h1>
-        <p>汇集各工具底部 <strong>giscus</strong> 评论（GitHub Discussions）。按工具 / 时间查看，并可跳转回复。</p>
+        <p>汇集各工具页底部 giscus 评论（GitHub Discussions）。本页是总览，不再重复挂评论框。</p>
       </div>
       <div class="panel-body">
         <div class="panel-card">
-          <h2 class="subhead">评价系统说明</h2>
+          <h2 class="subhead">说明</h2>
           <ul class="hint" style="margin:0.35rem 0 0;padding-left:1.2rem;line-height:1.55">
-            <li>每个工具面板<strong>底部</strong>有评论区：用户发帖后，同一工具下其他人也能立刻看到。</li>
-            <li>评论存在仓库 Discussions（分类 Announcements），映射词为 <span class="mono">devtools/&lt;工具id&gt;</span>。</li>
-            <li>本页汇总全站评论线程，方便站长按工具浏览与到 GitHub 回复。</li>
+            <li>用户在<strong>其它工具页底部</strong>留言；本页按工具 / 时间汇总，方便查看与到 GitHub 回复。</li>
+            <li>列表默认读站点快照（由 CI / <span class="mono">fetch-giscus-discussions.cjs</span> 生成），避免浏览器直打 GitHub 被限流。</li>
+            <li>需要最新时可点「尝试实时刷新」；若遇限流会静默回退快照，也可直接打开 Discussions。</li>
           </ul>
           <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.55rem">
-            <button type="button" class="primary-btn" id="fb-refresh">刷新列表</button>
-            <a class="secondary-btn" href="https://github.com/Afra55/Afra55.github.io/discussions" target="_blank" rel="noopener noreferrer">打开 GitHub Discussions</a>
-            <a class="ghost-btn" href="#about">关于本站</a>
+            <button type="button" class="secondary-btn" id="fb-reload-snap">重新加载快照</button>
+            <button type="button" class="ghost-btn" id="fb-refresh">尝试实时刷新</button>
+            <a class="primary-btn" href="https://github.com/Afra55/Afra55.github.io/discussions" target="_blank" rel="noopener noreferrer">打开 GitHub Discussions</a>
           </div>
           <p class="hint tight" id="fb-meta" style="margin-top:0.45rem">尚未加载。</p>
           <p class="error" id="fb-error" hidden></p>
@@ -27,7 +27,7 @@
         </div>
 
         <div class="fb-list" id="fb-list" style="margin-top:0.75rem" aria-live="polite">
-          <p class="hint tight">点「刷新列表」从 GitHub 拉取 Discussions。</p>
+          <p class="hint tight">加载中…</p>
         </div>
       </div>
     </section>

@@ -60,9 +60,26 @@
     });
   }
 
+  function wrapEl() {
+    return document.querySelector(".devtools-giscus-wrap");
+  }
+
+  /** 评价汇总页本身就是列表，不再挂底部评论框 */
+  const HIDE_GISCUS_TOOLS = new Set(["feedbackhub"]);
+
   function mount(toolId) {
     const host = hostEl();
+    const wrap = wrapEl();
     if (!host) return;
+
+    if (HIDE_GISCUS_TOOLS.has(String(toolId || "").trim())) {
+      if (wrap) wrap.hidden = true;
+      host.innerHTML = "";
+      lastTerm = "";
+      return;
+    }
+    if (wrap) wrap.hidden = false;
+
     const c = cfg();
     if (!isReady()) {
       host.hidden = false;

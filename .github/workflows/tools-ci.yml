@@ -10,9 +10,14 @@ on:
     paths:
       - "tools/**"
       - ".github/workflows/tools-ci.yml"
+  schedule:
+    # 每天刷新评价快照，避免汇总页依赖浏览器直打 GitHub API
+    - cron: "17 2 * * *"
+  workflow_dispatch:
 
 jobs:
   test:
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,3 +28,41 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Run tools CI
         run: node tools/scripts/ci.cjs
+
+  sync-discussions:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      discussions: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Fetch Discussions snapshot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node tools/scripts/fetch-giscus-discussions.cjs
+      - name: Commit snapshot if discussions changed
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, subprocess, sys
+          p = pathlib.Path("tools/data/giscus-discussions.json")
+          # compare nodes only (ignore generatedAt churn)
+          old = subprocess.check_output(["git", "show", "HEAD:tools/data/giscus-discussions.json"], text=True)
+          new = p.read_text()
+          try:
+            o = json.loads(old).get("nodes") or []
+          except Exception:
+            o = None
+          n = json.loads(new).get("nodes") or []
+          if o == n:
+            print("nodes unchanged, skip commit")
+            sys.exit(0)
+          subprocess.check_call(["git", "config", "user.name", "github-actions[bot]"])
+          subprocess.check_call(["git", "config", "user.email", "41898282+github-actions[bot]@users.noreply.github.com"])
+          subprocess.check_call(["git", "add", "tools/data/giscus-discussions.json"])
+          subprocess.check_call(["git", "commit", "-m", "chore: 同步 giscus Discussions 评价快照"])
+          subprocess.check_call(["git", "push"])
+          PY

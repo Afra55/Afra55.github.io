@@ -75,7 +75,7 @@
     if (!listEl) return;
     const rows = filtered();
     if (!rows.length) {
-      listEl.innerHTML = `<p class="hint tight">暂无匹配的评价线程。用户在工具底部留言后会出现在这里；也可到 GitHub Discussions 查看。</p>`;
+      listEl.innerHTML = `<p class="hint tight">暂无评价线程。用户在<strong>其它工具页底部</strong>留言后，合入/同步快照会出现在这里；也可直接打开 GitHub Discussions。</p>`;
       if (metaEl) metaEl.textContent = `${sourceLabel || "已加载"} · 0 条`;
       return;
     }
@@ -120,6 +120,7 @@
     });
   }
 
+  /** 浏览器直打 GraphQL 易触发未认证限流；仅作可选增强 */
   async function fetchLive() {
     const query = `query($owner:String!,$name:String!){
       repository(owner:$owner,name:$name){
@@ -167,39 +168,70 @@
     };
   }
 
-  async function refresh() {
+  function isRateLimitMsg(msg) {
+    return /rate limit/i.test(String(msg || ""));
+  }
+
+  /** 默认用站点快照（CI/脚本生成），避免浏览器 API 限流红字 */
+  async function refresh({ tryLive = false } = {}) {
     showError("");
     if (metaEl) metaEl.textContent = "加载中…";
+
+    let snapRows = [];
+    let snapAt = "";
+    try {
+      const snap = await fetchSnapshot();
+      snapRows = snap.rows;
+      snapAt = snap.generatedAt || "";
+    } catch (snapErr) {
+      if (!tryLive) {
+        cache = [];
+        sourceLabel = "";
+        showError(`无法加载评价快照：${snapErr.message}`);
+        render();
+        return;
+      }
+    }
+
+    if (!tryLive) {
+      cache = snapRows;
+      sourceLabel = snapAt ? `站点快照 ${new Date(snapAt).toLocaleString()}` : "站点快照";
+      render();
+      return;
+    }
+
     try {
       const rows = await fetchLive();
       cache = rows;
       sourceLabel = "实时 GitHub";
+      showError("");
       render();
     } catch (liveErr) {
-      try {
-        const snap = await fetchSnapshot();
-        cache = snap.rows;
-        sourceLabel = snap.generatedAt ? `本地快照 ${snap.generatedAt}` : "本地快照";
-        showError(`实时拉取失败（${liveErr.message}），已改用本地快照。`);
+      cache = snapRows;
+      sourceLabel = snapAt ? `站点快照 ${new Date(snapAt).toLocaleString()}` : "站点快照";
+      if (isRateLimitMsg(liveErr.message)) {
+        showError("");
         render();
-      } catch (snapErr) {
-        cache = [];
-        sourceLabel = "";
-        showError(`无法加载评价：${liveErr.message}`);
+        if (metaEl) {
+          metaEl.textContent = `${sourceLabel} · 显示 ${filtered().length} / 共 ${cache.length}（GitHub 限流，已用快照）`;
+        }
+      } else {
+        showError(`实时刷新未成功，仍显示快照。${liveErr.message}`);
         render();
       }
     }
   }
 
-  $("#fb-refresh")?.addEventListener("click", () => refresh());
+  $("#fb-refresh")?.addEventListener("click", () => refresh({ tryLive: true }).catch(() => {}));
+  $("#fb-reload-snap")?.addEventListener("click", () => refresh({ tryLive: false }).catch(() => {}));
   filterEl?.addEventListener("input", () => render());
   onlyDev?.addEventListener("change", () => render());
 
   window.addEventListener("devtools:route", (ev) => {
-    if (ev.detail?.tool === "feedbackhub") refresh().catch(() => {});
+    if (ev.detail?.tool === "feedbackhub") refresh({ tryLive: false }).catch(() => {});
   });
 
   if (location.hash.replace(/^#/, "").split("?")[0] === "feedbackhub") {
-    refresh().catch(() => {});
+    refresh({ tryLive: false }).catch(() => {});
   }
 })();
