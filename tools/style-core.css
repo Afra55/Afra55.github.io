@@ -1553,8 +1553,9 @@ a.secondary-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 180px;
-  min-height: 180px;
+  min-width: 360px;
+  min-height: 360px;
+  max-width: min(100%, 720px);
   padding: 0.75rem;
   border-radius: 14px;
   border: 1px solid var(--line);
@@ -1565,6 +1566,9 @@ a.secondary-btn {
 .qr-box img,
 .qr-box canvas {
   display: block;
+  width: auto;
+  height: auto;
+  max-width: min(100%, 720px);
 }
 
 .meta-row .copy-btn {

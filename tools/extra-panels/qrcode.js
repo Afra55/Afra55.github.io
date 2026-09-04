@@ -38,10 +38,20 @@
       return qg.Ecc.MEDIUM;
     }
 
+    /** 按模块数放大：长文本格子更密，像素也要更大才方便手机扫 */
+    function qrTargetPx(moduleCount) {
+      const n = Math.max(21, Number(moduleCount) || 29);
+      const border = 4;
+      // 目标约 5～6px/模块，最短边至少 360，最长 720（屏上可扫）
+      const raw = (n + border * 2) * (n >= 57 ? 6 : 5);
+      return Math.min(720, Math.max(360, raw));
+    }
+
     function drawQrCanvas(parent, qr, px) {
       const border = 4;
       const n = qr.size;
-      const scale = Math.max(1, Math.floor(px / (n + border * 2)));
+      const target = px || qrTargetPx(n);
+      const scale = Math.max(2, Math.floor(target / (n + border * 2)));
       const size = (n + border * 2) * scale;
       const canvas = document.createElement("canvas");
       canvas.width = canvas.height = size;
@@ -92,7 +102,7 @@
             : globalThis.qrcodegen.QrSegment.makeSegments(text),
           ecc
         );
-        drawQrCanvas(el, qr, 180);
+        drawQrCanvas(el, qr);
         return el;
       }
       return renderQrBox(text, ecc);
@@ -114,15 +124,16 @@
       el.className = "qr-box";
       const utf8Qr = encodeQrUtf8(text, level);
       if (utf8Qr) {
-        drawQrCanvas(el, utf8Qr, 180);
+        drawQrCanvas(el, utf8Qr);
         return el;
       }
       if (typeof QRCode === "undefined") throw new Error("QRCode 库未加载");
+      const side = qrTargetPx(41);
       // eslint-disable-next-line no-new
       new QRCode(el, {
         text,
-        width: 180,
-        height: 180,
+        width: side,
+        height: side,
         colorDark: "#0b1220",
         colorLight: "#ffffff",
         correctLevel: level,
@@ -176,7 +187,13 @@
         for (const { level, label, qg } of tries) {
           try {
             wrap.appendChild(renderQrBoxWithEcc(text, level, { qgDirect: Boolean(qg) }));
-            if (meta) meta.textContent = `已生成 · ${label} · 约 ${text.length} 字`;
+            const canvas = wrap.querySelector("canvas, img");
+            const side = canvas?.width || canvas?.naturalWidth || 0;
+            if (meta) {
+              meta.textContent = side
+                ? `已生成 · ${label} · 约 ${text.length} 字 · 图 ${side}×${side}px（可放大屏扫）`
+                : `已生成 · ${label} · 约 ${text.length} 字`;
+            }
             setError($("#qr-error"), "");
             return;
           } catch (err) {
