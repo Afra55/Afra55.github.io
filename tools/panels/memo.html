@@ -219,6 +219,15 @@
             </div>
             <p class="hint tight" id="memo-filter-hint">点标签或类型即可筛选；正文 #标签 会自动识别；直接搜标签名也行。</p>
             <div class="memo-type-filter" id="memo-type-filter" aria-label="按类型筛选"></div>
+            <div class="memo-date-filter" id="memo-date-filter" aria-label="按日期筛选">
+              <span class="hint tight">日期筛选</span>
+              <label class="memo-date-filter-lab" for="memo-filter-to">今天到
+                <input id="memo-filter-to" type="date" />
+              </label>
+              <button type="button" class="secondary-btn" id="memo-filter-date-apply">按日期筛选</button>
+              <button type="button" class="ghost-btn" id="memo-filter-date-clear" hidden>清除日期</button>
+              <p class="hint tight">可选：按<strong>创建日</strong>显示「今天」到所选日期之间的条目；再配合上方类型 chips（图片/视频/文本/文件等）。</p>
+            </div>
             <p class="hint tight mono" id="memo-list-meta" hidden></p>
             <div class="memo-drop" id="memo-drop">
               <p class="hint tight">拖拽文件到本页任意区域添加 · 最新在上 · 滑到底部自动加载</p>

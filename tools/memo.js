@@ -681,6 +681,8 @@
     activeTagId: "all",
     activeType: "all", // all | text | image | gif | video | audio | file
     searchQuery: "",
+    /** @type {number | null} 日期筛选终点（本地日 0 点 ms）；与今天组成闭区间 */
+    dateFilterTo: null,
     groupByDay: readBoolPref(GROUP_BY_DAY_KEY, true),
     mdPreview: readBoolPref(MD_PREVIEW_KEY, false),
     listLimit: PAGE_SIZE,
@@ -1338,8 +1340,8 @@
     state.filterCache = { key: "", items: null };
   }
 
-  function filterCacheKey(type, tagId, query) {
-    return `${type || "all"}|${tagId || "all"}|${String(query || "").trim().toLowerCase()}`;
+  function filterCacheKey(type, tagId, query, dateTo) {
+    return `${type || "all"}|${tagId || "all"}|${String(query || "").trim().toLowerCase()}|d:${dateTo == null ? "-" : dateTo}`;
   }
 
   function ensureCountCache() {
@@ -1403,7 +1405,21 @@
     return hay.includes(q);
   }
 
-  function filterItems({ type = state.activeType, tagId = state.activeTagId, query = state.searchQuery } = {}) {
+  function dateFilterBounds() {
+    if (state.dateFilterTo == null) return null;
+    const today = startOfLocalDay(Date.now());
+    const toDay = startOfLocalDay(state.dateFilterTo);
+    const lo = Math.min(today, toDay);
+    const hi = endOfLocalDay(Math.max(today, toDay));
+    return { lo, hi };
+  }
+
+  function filterItems({
+    type = state.activeType,
+    tagId = state.activeTagId,
+    query = state.searchQuery,
+    dateTo = state.dateFilterTo,
+  } = {}) {
     // items 数组本身按 order 排列，不再每次 sort
     const src = state.index.items || [];
     const q = String(query || "").trim().toLowerCase();
@@ -1412,6 +1428,12 @@
     const tagDefault = tagId === DEFAULT_TAG_ID || tagId === "default";
     const tagTemp = tagId === TEMP_FILTER_ID;
     const tagArchive = tagId === ARCHIVE_FILTER_ID;
+    let dateBounds = null;
+    if (dateTo != null) {
+      const today = startOfLocalDay(Date.now());
+      const toDay = startOfLocalDay(dateTo);
+      dateBounds = { lo: Math.min(today, toDay), hi: endOfLocalDay(Math.max(today, toDay)) };
+    }
     for (let i = 0; i < src.length; i++) {
       const it = src[i];
       if (tagArchive) {
@@ -1430,13 +1452,17 @@
       }
       if (q && !itemMatchesSearch(it, q)) continue;
       if (type !== "all" && it.type !== type) continue;
+      if (dateBounds) {
+        const t = Number(it.createdAt) || 0;
+        if (t < dateBounds.lo || t > dateBounds.hi) continue;
+      }
       out.push(it);
     }
     return out;
   }
 
   function visibleItems() {
-    const key = filterCacheKey(state.activeType, state.activeTagId, state.searchQuery);
+    const key = filterCacheKey(state.activeType, state.activeTagId, state.searchQuery, state.dateFilterTo);
     if (state.filterCache.key === key && Array.isArray(state.filterCache.items)) {
       return state.filterCache.items;
     }
@@ -1462,13 +1488,24 @@
     return Boolean(
       String(state.searchQuery || "").trim() ||
         state.activeType !== "all" ||
-        (state.activeTagId && state.activeTagId !== "all")
+        (state.activeTagId && state.activeTagId !== "all") ||
+        state.dateFilterTo != null
     );
+  }
+
+  function formatFilterDay(ms) {
+    const d = new Date(ms);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
   }
 
   function syncFilterChrome() {
     const clearBtn = $("#memo-clear-filters");
     if (clearBtn) clearBtn.hidden = !hasActiveFilters();
+    const clearDate = $("#memo-filter-date-clear");
+    if (clearDate) clearDate.hidden = state.dateFilterTo == null;
     const hint = $("#memo-filter-hint");
     if (!hint) return;
     const parts = [];
@@ -1478,6 +1515,13 @@
     else if (state.activeTagId === DEFAULT_TAG_ID || state.activeTagId === "default") parts.push("标签：未分类");
     else parts.push(`标签：${tagById(state.activeTagId)?.name || "已选"}`);
     parts.push(`类型：${state.activeType === "all" ? "全部" : TYPE_LABELS[state.activeType] || state.activeType}`);
+    if (state.dateFilterTo != null) {
+      const today = startOfLocalDay(Date.now());
+      const toDay = startOfLocalDay(state.dateFilterTo);
+      const a = formatFilterDay(Math.min(today, toDay));
+      const b = formatFilterDay(Math.max(today, toDay));
+      parts.push(`日期：${a}～${b}`);
+    }
     const q = String(state.searchQuery || "").trim();
     if (q) parts.push(`关键词：「${q}」`);
     if (state.groupByDay) parts.push("按日分组");
@@ -1489,11 +1533,38 @@
     state.searchQuery = "";
     state.activeType = "all";
     state.activeTagId = "all";
+    state.dateFilterTo = null;
     const search = $("#memo-search");
     if (search) search.value = "";
+    const dateTo = $("#memo-filter-to");
+    if (dateTo) dateTo.value = "";
     resetListPaging();
     renderAll();
     toast("已清除筛选");
+  }
+
+  function applyDateFilterFromInput() {
+    const day = parseMemoDateInput($("#memo-filter-to"));
+    if (day == null) {
+      toast("请先选择结束日期");
+      return;
+    }
+    state.dateFilterTo = day;
+    resetListPaging();
+    renderAll();
+    const today = startOfLocalDay(Date.now());
+    const a = formatFilterDay(Math.min(today, day));
+    const b = formatFilterDay(Math.max(today, day));
+    toast(`已按日期筛选：${a}～${b}`);
+  }
+
+  function clearDateFilter() {
+    state.dateFilterTo = null;
+    const dateTo = $("#memo-filter-to");
+    if (dateTo) dateTo.value = "";
+    resetListPaging();
+    renderAll();
+    toast("已清除日期筛选");
   }
 
   function toggleTempFilter() {
@@ -4418,7 +4489,30 @@
     });
   }
 
+  async function ensureJsZip() {
+    if (typeof globalThis.JSZip === "function") return globalThis.JSZip;
+    await new Promise((resolve, reject) => {
+      const existing = document.querySelector('script[src*="jszip"]');
+      if (existing) {
+        existing.addEventListener("load", () => resolve(), { once: true });
+        existing.addEventListener("error", () => reject(new Error("JSZip 加载失败")), { once: true });
+        if (typeof globalThis.JSZip === "function") resolve();
+        return;
+      }
+      const s = document.createElement("script");
+      const v = window.TOOLS_BUILD || window.TOOLS_VERSION || "";
+      s.src = `./vendor/jszip.min.js${v ? `?v=${v}` : ""}`;
+      s.async = true;
+      s.onload = () => resolve();
+      s.onerror = () => reject(new Error("JSZip 加载失败"));
+      document.head.appendChild(s);
+    });
+    if (typeof globalThis.JSZip !== "function") throw new Error("JSZip 未加载");
+    return globalThis.JSZip;
+  }
+
   async function buildExportZip({ kinds, tagIds, password }) {
+    await ensureJsZip();
     if (typeof JSZip !== "function") throw new Error("JSZip 未加载");
     const kindSet = new Set(kinds);
     const tagSet = tagIds?.length ? new Set(tagIds) : null;
@@ -4456,6 +4550,24 @@
     }
     setProgress(false, 0, "");
     return { blob: outBlob, filename, count: picked.length };
+  }
+
+  async function buildShareExportFile({ kinds } = {}) {
+    await whenReadySafe();
+    const allKinds = Array.isArray(kinds) && kinds.length
+      ? kinds
+      : ["text", "image", "gif", "video", "audio", "file"];
+    const packed = await buildExportZip({ kinds: allKinds, tagIds: [], password: "" });
+    return {
+      file: new File([packed.blob], packed.filename, {
+        type: packed.blob.type || "application/zip",
+      }),
+      count: packed.count,
+    };
+  }
+
+  function whenReadySafe() {
+    return bootPromise || Promise.resolve();
   }
 
   function pickExportItems({ kinds, tagIds }) {
@@ -5713,6 +5825,11 @@
     }, delay);
   });
   $("#memo-clear-filters")?.addEventListener("click", () => clearAllFilters());
+  $("#memo-filter-date-apply")?.addEventListener("click", () => applyDateFilterFromInput());
+  $("#memo-filter-date-clear")?.addEventListener("click", () => clearDateFilter());
+  $("#memo-filter-to")?.addEventListener("keydown", (ev) => {
+    if (ev.key === "Enter") applyDateFilterFromInput();
+  });
   $("#memo-load-more")?.addEventListener("click", () => {
     state.listLimit = (state.listLimit || PAGE_SIZE) + PAGE_SIZE;
     renderItems();
@@ -6625,6 +6742,8 @@
     selectVisibleToday,
     selectVisibleTemp,
     selectVisibleDateRangeFromInputs,
+    buildShareExportFile,
+    hasItems: () => (state.index.items || []).some((it) => !isArchived(it)),
     isTempItem: (item) => isTempItem(item),
     isArchived: (item) => isArchived(item),
     markItemTemp: async (id, days) => {

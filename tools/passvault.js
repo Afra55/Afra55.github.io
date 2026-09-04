@@ -13,8 +13,6 @@
   const BLOB_FILENAME = "passvault-blob.json";
   const ITER = 600000;
   const AUTO_LOCK_MS = 5 * 60 * 1000;
-  const SITE_SHARE_KEY = "devtools-site-share-v1";
-
   let entries = [];
   let cryptoKey = null;
   let salt = null;
@@ -550,55 +548,11 @@
     return entries.find((e) => e.id === id);
   }
 
-  function queueLanShare(files, meta) {
-    if (window.DevToolsLanShare?.queueOutboundFiles) {
-      window.DevToolsLanShare.queueOutboundFiles(files, meta || {});
-      return;
-    }
-    window.__devtoolsSiteSharePending = {
-      meta: {
-        v: 1,
-        createdAt: Date.now(),
-        source: meta?.source || "passvault",
-        label: meta?.label || "站点数据",
-        note: meta?.note || "",
-      },
-      files: Array.from(files),
-    };
-    try {
-      sessionStorage.setItem(
-        SITE_SHARE_KEY,
-        JSON.stringify({
-          v: 1,
-          pending: true,
-          createdAt: Date.now(),
-          source: meta?.source || "passvault",
-          label: meta?.label || "站点数据",
-          note: meta?.note || "",
-          fileNames: Array.from(files).map((f) => f.name),
-        })
-      );
-    } catch (_) {
-      /* ignore */
-    }
-  }
-
-  function shareToLan() {
-    bumpActivity();
+  function getEncryptedBackupFile() {
     const blob = loadBlob();
-    if (!blob) {
-      showError("没有可共享的加密库");
-      return;
-    }
+    if (!blob) return null;
     const name = `passvault-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    const file = new File([JSON.stringify(blob, null, 2)], name, { type: "application/json" });
-    queueLanShare([file], {
-      source: "passvault",
-      label: "密码库加密备份",
-      note: "仅加密 blob，对方导入后仍需主密码",
-    });
-    toast("已放入互传队列，正在打开局域网互传…");
-    location.hash = "lanshare";
+    return new File([JSON.stringify(blob, null, 2)], name, { type: "application/json" });
   }
 
   async function bindDirectory(existing) {
@@ -708,7 +662,6 @@
   $("#pv-save")?.addEventListener("click", () => saveEntry().catch((e) => showError(e.message)));
   $("#pv-delete")?.addEventListener("click", () => deleteEntry().catch((e) => showError(e.message)));
   $("#pv-export")?.addEventListener("click", () => exportBackup());
-  $("#pv-share-lanshare")?.addEventListener("click", () => shareToLan());
   $("#pv-pick-dir")?.addEventListener("click", () => bindDirectory(null));
   $("#pv-reconnect-dir")?.addEventListener("click", async () => {
     try {
@@ -768,6 +721,11 @@
       if (cryptoKey) bumpActivity();
     });
   });
+
+  window.DevToolsPassvault = {
+    hasVault: () => Boolean(loadBlob()),
+    getEncryptedBackupFile,
+  };
 
   hydrateDir()
     .then(() => setGateMode(Boolean(loadBlob())))

@@ -67,6 +67,9 @@
     fileInput: $("#ls-file-input"),
     pickBtn: $("#ls-pick"),
     leaveBtn: $("#ls-leave"),
+    addPassvaultBtn: $("#ls-add-passvault"),
+    addMemoBtn: $("#ls-add-memo"),
+    siteDataMeta: $("#ls-site-data-meta"),
     errorEl: $("#ls-error"),
     progressEl: $("#ls-progress"),
     progressBar: $("#ls-progress-bar"),
@@ -2554,6 +2557,92 @@
     },
   };
 
+  function setSiteDataMeta(msg) {
+    if (!els.siteDataMeta) return;
+    if (!msg) {
+      els.siteDataMeta.hidden = true;
+      els.siteDataMeta.textContent = "";
+      return;
+    }
+    els.siteDataMeta.hidden = false;
+    els.siteDataMeta.textContent = msg;
+  }
+
+  async function ensureToolScript(toolId) {
+    if (window.DevToolsLazy?.ensureForTool) {
+      await window.DevToolsLazy.ensureForTool(toolId);
+      return;
+    }
+    throw new Error("脚本加载器未就绪，请刷新后重试");
+  }
+
+  async function addPassvaultToShare() {
+    setError("");
+    setSiteDataMeta("正在读取密码库…");
+    try {
+      await ensureToolScript("passvault");
+      const api = window.DevToolsPassvault;
+      if (!api?.getEncryptedBackupFile) throw new Error("密码库脚本未就绪");
+      if (!api.hasVault?.()) throw new Error("本机还没有密码库；请先到「本地密码库」创建");
+      const file = api.getEncryptedBackupFile();
+      if (!file) throw new Error("没有可添加的加密备份");
+      if (canUploadFiles()) {
+        await onFilesPicked([file]);
+        setSiteDataMeta(`已加入互传：${file.name}（仍需主密码才能打开）`);
+        setInfo("已添加密码库加密备份");
+      } else {
+        queueOutboundFiles([file], {
+          source: "passvault",
+          label: "密码库加密备份",
+          note: "仅加密 blob，对方导入后仍需主密码",
+        });
+        setSiteDataMeta(`已排队：${file.name} · 进房并连接就绪后会自动加入列表`);
+      }
+    } catch (err) {
+      setSiteDataMeta("");
+      setError(err.message || String(err));
+    }
+  }
+
+  function selectedMemoKinds() {
+    return [...document.querySelectorAll('#lanshare input[name="ls-memo-kind"]:checked')].map(
+      (el) => el.value
+    );
+  }
+
+  async function addMemoToShare() {
+    setError("");
+    const kinds = selectedMemoKinds();
+    if (!kinds.length) {
+      setError("请至少勾选一种备忘录类型");
+      return;
+    }
+    setSiteDataMeta("正在打包备忘录…");
+    try {
+      await ensureToolScript("memo");
+      const api = window.DevToolsMemo;
+      if (!api?.buildShareExportFile) throw new Error("备忘录脚本未就绪");
+      if (api.whenReady) await api.whenReady();
+      const packed = await api.buildShareExportFile({ kinds });
+      if (!packed?.file) throw new Error("打包失败");
+      if (canUploadFiles()) {
+        await onFilesPicked([packed.file]);
+        setSiteDataMeta(`已加入互传：${packed.file.name}（${packed.count} 条）`);
+        setInfo("已添加备忘录导出");
+      } else {
+        queueOutboundFiles([packed.file], {
+          source: "memo",
+          label: "备忘录导出",
+          note: `类型：${kinds.join(",")}`,
+        });
+        setSiteDataMeta(`已排队：${packed.file.name}（${packed.count} 条）· 进房连接后自动加入`);
+      }
+    } catch (err) {
+      setSiteDataMeta("");
+      setError(err.message || String(err));
+    }
+  }
+
   function removeFile(fileId) {
     const f = state.files.get(fileId);
     if (!f || f.ownerId !== state.peerId) return;
@@ -3318,6 +3407,12 @@
   els.fileInput?.addEventListener("change", () => {
     if (els.fileInput?.files?.length) onFilesPicked(els.fileInput.files);
     if (els.fileInput) els.fileInput.value = "";
+  });
+  els.addPassvaultBtn?.addEventListener("click", () => {
+    addPassvaultToShare().catch((err) => setError(err.message || String(err)));
+  });
+  els.addMemoBtn?.addEventListener("click", () => {
+    addMemoToShare().catch((err) => setError(err.message || String(err)));
   });
   els.nameInput?.addEventListener("change", saveName);
 

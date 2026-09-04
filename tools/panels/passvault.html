@@ -1,7 +1,7 @@
 <section id="passvault" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>本地密码库</h1>
-        <p>密文默认在本浏览器；可像备忘录一样<strong>绑定本机文件夹</strong>持久保存。可导出备份，或<strong>可选送到局域网互传</strong>（仍是加密文件）。</p>
+        <p>密文默认在本浏览器；可像备忘录一样<strong>绑定本机文件夹</strong>持久保存。可导出加密备份；需要发给别的设备时，到<strong>局域网互传</strong>页可选添加本库。</p>
       </div>
       <div class="panel-body">
         <div id="pv-locked" class="pv-gate panel-card">
@@ -41,7 +41,6 @@
             <div class="btn-row tool-actions" style="flex-wrap:wrap;gap:0.3rem">
               <button type="button" class="secondary-btn" id="pv-add">新增</button>
               <button type="button" class="ghost-btn" id="pv-export">导出加密备份</button>
-              <button type="button" class="ghost-btn" id="pv-share-lanshare" title="把当前加密库送到局域网互传（需进房后对方下载）">送到互传</button>
               <button type="button" class="ghost-btn" id="pv-lock">立即上锁</button>
             </div>
           </div>
@@ -88,6 +87,6 @@
         </div>
 
         <p class="error" id="pv-error" hidden></p>
-        <p class="hint tight" style="margin-top:0.65rem">说明：浏览器本地便利库。互传只送<strong>加密备份</strong>，对方仍需主密码。清站点数据前请确认已绑定文件夹或已导出。</p>
+        <p class="hint tight" style="margin-top:0.65rem">说明：浏览器本地便利库。局域网互传页可<strong>可选添加</strong>本库加密备份，对方导入后仍需主密码。清站点数据前请确认已绑定文件夹或已导出。</p>
       </div>
     </section>

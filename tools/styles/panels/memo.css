@@ -905,6 +905,35 @@
   margin: 0.15rem 0 0.55rem;
 }
 
+.memo-date-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.55rem;
+  margin: 0 0 0.55rem;
+  padding: 0.45rem 0.55rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--line, #2a2f3a) 75%, transparent);
+  background: color-mix(in srgb, var(--panel, #12141a) 55%, transparent);
+}
+
+.memo-date-filter > .hint.tight:last-child {
+  flex: 1 1 100%;
+  margin: 0;
+  opacity: 0.85;
+}
+
+.memo-date-filter-lab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.92rem;
+}
+
+.memo-date-filter-lab input[type="date"] {
+  min-width: 9.5rem;
+}
+
 .memo-type-chip {
   appearance: none;
   border: 1px solid var(--line);

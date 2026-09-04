@@ -1,7 +1,7 @@
 <section id="lanshare" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>局域网互传</h1>
-        <p>多设备同房间共享文件；下载时与上传者 WebRTC 直连，房主只做协调，不经手文件数据。站点工具（如密码库）也可<strong>可选</strong>把导出文件送入本页上传列表。</p>
+        <p>多设备同房间共享文件；下载时与上传者 WebRTC 直连，房主只做协调，不经手文件数据。可在下方<strong>可选添加</strong>本站密码库 / 备忘录导出文件。</p>
       </div>
       <div class="panel-body">
         <div class="adb-status panel-card" id="ls-status">
@@ -105,6 +105,24 @@
           <button type="button" class="secondary-btn" id="ls-pick" disabled>选择文件</button>
           <input id="ls-file-input" type="file" multiple accept="*/*" hidden />
           <button type="button" class="ghost-btn" id="ls-leave" hidden>退出房间</button>
+        </div>
+
+        <div class="panel-card" id="ls-site-data" style="margin-top:0.85rem">
+          <h2 class="subhead">添加站点数据（可选）</h2>
+          <p class="hint tight" style="margin-top:0.25rem">把本浏览器里的工具数据做成文件，加入上方互传列表。密码库只传<strong>加密备份</strong>（对方仍需主密码）；备忘录按所选类型打包 ZIP。</p>
+          <div class="btn-row tool-actions" style="margin-top:0.45rem;flex-wrap:wrap;gap:0.35rem">
+            <button type="button" class="secondary-btn" id="ls-add-passvault">添加密码库备份</button>
+            <button type="button" class="secondary-btn" id="ls-add-memo">添加备忘录导出</button>
+          </div>
+          <div class="ls-memo-kinds" id="ls-memo-kinds" style="margin-top:0.45rem;display:flex;flex-wrap:wrap;gap:0.45rem 0.75rem">
+            <label class="flag"><input type="checkbox" name="ls-memo-kind" value="text" checked /> 文本</label>
+            <label class="flag"><input type="checkbox" name="ls-memo-kind" value="image" checked /> 图片</label>
+            <label class="flag"><input type="checkbox" name="ls-memo-kind" value="gif" checked /> 动图</label>
+            <label class="flag"><input type="checkbox" name="ls-memo-kind" value="video" checked /> 视频</label>
+            <label class="flag"><input type="checkbox" name="ls-memo-kind" value="audio" checked /> 音频</label>
+            <label class="flag"><input type="checkbox" name="ls-memo-kind" value="file" checked /> 文件</label>
+          </div>
+          <p class="hint tight mono" id="ls-site-data-meta" style="margin-top:0.35rem" hidden></p>
         </div>
 
         <div class="label-row" style="margin-top:1rem">
