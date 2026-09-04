@@ -31,7 +31,7 @@
   let repoPath = "";
   let graphCommits = [];
   let selectedSha = "";
-  /** "" = 独立 Git 桥；"/git" = 统一桥挂载 */
+  /** apiPrefix：统一桥挂载为 "/git"（不再支持独立 17890） */
   let apiPrefix = "/git";
   let bridgeMode = "unified";
   let lastBranches = { local: [], remote: [], tags: [] };
@@ -478,31 +478,10 @@
         }
       }
 
-      // 2) 回退独立 Git 桥 17890
-      if (!health) {
-        const gitFound = await window.devtoolsBridgeToken?.discoverBase?.(
-          "http://127.0.0.1:17890",
-          token() === "devtools-bridge" ? "devtools-git" : token(),
-          { kind: "git" }
-        );
-        if (gitFound?.health) {
-          baseInput.value = gitFound.base;
-          if (tokenInput && token() === "devtools-bridge") tokenInput.value = "devtools-git";
-          persistConn();
-          apiPrefix = "";
-          bridgeMode = "standalone";
-          health = gitFound.health;
-          try {
-            window.devtoolsBridgeToken?.rememberFromHealth?.(health, "git");
-          } catch (_) {
-            /* ignore */
-          }
-        }
-      }
-
+      // 只认统一桥：不再回退独立 Git 桥 17890
       if (!health?.ok) {
         throw new Error(
-          "无法连接本机桥。请下载统一完整包，解压后运行 adb-bridge 启动脚本（17888，含 Git /ff）。"
+          "无法连接统一桥（17888 /git）。请下载统一完整包，运行 adb-bridge 启动脚本；勿再单独启动 17890。"
         );
       }
       if (!health.git) throw new Error("桥已启动，但本机找不到 git，请安装后重启桥");
@@ -510,9 +489,7 @@
       try {
         const dirInput = $("#git-install-dir");
         if (dirInput && !dirInput.value) {
-          dirInput.value =
-            window.devtoolsBridgeToken?.readInstallDir?.(bridgeMode === "git" ? "git" : "unified") ||
-            "";
+          dirInput.value = window.devtoolsBridgeToken?.readInstallDir?.("unified") || "";
         }
       } catch (_) {
         /* ignore */
@@ -522,11 +499,10 @@
       workspace.hidden = false;
       setReadyVisible(false);
       $("#git-refresh").disabled = false;
-      const modeLabel = bridgeMode === "unified" ? "统一桥" : "独立 Git 桥";
       setStatus(
         "is-ok",
-        `已连接 · ${modeLabel} v${health.version}`,
-        `${health.git} · ${bridgeMode === "unified" ? "API /git · 与 ADB/FFmpeg 同座" : "端口 17890"}`
+        `已连接 · 统一桥 v${health.version}`,
+        `${health.git} · API /git · 与 ADB/FFmpeg 同座`
       );
       await loadOpsCatalog();
       await loadRoots();
@@ -988,16 +964,125 @@
     if (pathEl) pathEl.textContent = filePath;
     ta.value = data.content || "";
     editor.hidden = false;
+    setConflictViewMode(/<<<<<<</.test(ta.value) ? "split" : "raw");
     renderConflictPreview();
+    renderConflictSplit();
+    // 高级区路径自动带上冲突文件，方便 blame/add 等
+    const pathInput = $("#git-op-path");
+    if (pathInput && !pathInput.value.trim()) pathInput.value = filePath;
     $$(".git-conflict-item").forEach((el) => {
       el.classList.toggle("is-active", el.textContent.includes(filePath));
     });
+  }
+
+  let conflictViewMode = "split"; // split | raw
+
+  function setConflictViewMode(mode) {
+    conflictViewMode = mode === "raw" ? "raw" : "split";
+    const split = $("#git-conflict-split");
+    const ta = $("#git-conflict-text");
+    const pre = $("#git-conflict-preview");
+    if (split) split.hidden = conflictViewMode !== "split";
+    if (ta) ta.hidden = conflictViewMode !== "raw";
+    if (pre && conflictViewMode !== "raw") {
+      pre.hidden = true;
+    }
+    if (conflictViewMode === "raw") renderConflictPreview();
+    else renderConflictSplit();
+  }
+
+  function parseConflictHunks(text) {
+    const lines = String(text || "").split("\n");
+    const hunks = [];
+    let i = 0;
+    while (i < lines.length) {
+      if (!/^<<<<<<< /.test(lines[i]) && lines[i] !== "<<<<<<<") {
+        i += 1;
+        continue;
+      }
+      const start = i;
+      i += 1;
+      const ours = [];
+      while (i < lines.length && lines[i] !== "=======") {
+        ours.push(lines[i]);
+        i += 1;
+      }
+      if (i >= lines.length) break;
+      i += 1; // skip =======
+      const theirs = [];
+      while (i < lines.length && !/^>>>>>>> /.test(lines[i]) && lines[i] !== ">>>>>>>") {
+        theirs.push(lines[i]);
+        i += 1;
+      }
+      const end = i < lines.length ? i : lines.length - 1;
+      hunks.push({
+        start,
+        end,
+        ours: ours.join("\n"),
+        theirs: theirs.join("\n"),
+      });
+      i += 1;
+    }
+    return hunks;
+  }
+
+  function applyConflictHunkChoice(hunkIndex, side) {
+    const ta = $("#git-conflict-text");
+    if (!ta) return;
+    const text = ta.value || "";
+    const hunks = parseConflictHunks(text);
+    const hunk = hunks[hunkIndex];
+    if (!hunk) return;
+    const lines = text.split("\n");
+    const chosen = side === "theirs" ? hunk.theirs : hunk.ours;
+    const replacement = chosen === "" ? [] : chosen.split("\n");
+    const next = [...lines.slice(0, hunk.start), ...replacement, ...lines.slice(hunk.end + 1)];
+    ta.value = next.join("\n");
+    renderConflictSplit();
+    renderConflictPreview();
+  }
+
+  function renderConflictSplit() {
+    const box = $("#git-conflict-split");
+    const ta = $("#git-conflict-text");
+    if (!box || !ta || conflictViewMode !== "split") return;
+    const hunks = parseConflictHunks(ta.value || "");
+    if (!hunks.length) {
+      box.innerHTML = `<p class="hint tight">没有冲突标记了。可切到「看全文」确认后保存。</p>`;
+      box.hidden = false;
+      return;
+    }
+    box.hidden = false;
+    box.innerHTML = hunks
+      .map((h, idx) => {
+        return `<div class="git-conflict-hunk" data-hunk="${idx}">
+          <div class="git-conflict-side is-ours">
+            <div class="git-conflict-side-head">
+              <strong>我的</strong>
+              <button type="button" class="ghost-btn" data-hunk-take="ours" data-hunk-idx="${idx}">采用左边</button>
+            </div>
+            <pre class="mono">${escapeHtml(h.ours || "（空）")}</pre>
+          </div>
+          <div class="git-conflict-side is-theirs">
+            <div class="git-conflict-side-head">
+              <strong>对方</strong>
+              <button type="button" class="ghost-btn" data-hunk-take="theirs" data-hunk-idx="${idx}">采用右边</button>
+            </div>
+            <pre class="mono">${escapeHtml(h.theirs || "（空）")}</pre>
+          </div>
+        </div>`;
+      })
+      .join("");
   }
 
   function renderConflictPreview() {
     const ta = $("#git-conflict-text");
     const pre = $("#git-conflict-preview");
     if (!ta || !pre) return;
+    if (conflictViewMode !== "raw") {
+      pre.hidden = true;
+      return;
+    }
     const text = ta.value || "";
     if (!/<<<<<<</.test(text)) {
       pre.hidden = true;
@@ -1672,19 +1757,46 @@
 
   function fillOpParams(op, params) {
     const p = { ...(params || {}) };
-    const target = String($("#git-op-target")?.value || "").trim();
+    const typedTarget = String($("#git-op-target")?.value || "").trim();
     const newBranch = String($("#git-new-branch")?.value || "").trim();
-    const filePath = String($("#git-op-path")?.value || "").trim();
-    const message = String($("#git-commit-msg")?.value || "").trim();
+    const typedPath = String($("#git-op-path")?.value || "").trim();
+    const message = String($("#git-commit-msg")?.value || $("#git-easy-msg")?.value || "").trim();
     const cloneUrl = String($("#git-clone-url")?.value || "").trim();
-    const sha = target || selectedSha;
+    const branch =
+      lastStatus?.branch && lastStatus.branch !== "(detached)" ? lastStatus.branch : "";
+    const changePath =
+      conflictEditPath ||
+      (Array.isArray(lastStatus?.changes) && lastStatus.changes[0]?.path) ||
+      (Array.isArray(lastStatus?.conflicts) && lastStatus.conflicts[0]?.path) ||
+      "";
+    const target = typedTarget || selectedSha || branch;
+    const filePath = typedPath || changePath;
+    const sha = typedTarget || selectedSha;
+
+    // 把推断值回填到输入框，避免用户以为没带上
+    const targetEl = $("#git-op-target");
+    const pathEl = $("#git-op-path");
+    if (targetEl && !typedTarget && target) targetEl.placeholder = `自动：${String(target).slice(0, 28)}`;
+    if (pathEl && !typedPath && filePath) pathEl.placeholder = `自动：${String(filePath).slice(0, 36)}`;
+
+    const hint = $("#git-op-autofill-hint");
+    if (hint) {
+      const bits = [];
+      if (selectedSha) bits.push(`提交 ${String(selectedSha).slice(0, 7)}`);
+      if (branch) bits.push(`分支 ${branch}`);
+      if (filePath) bits.push(`路径 ${filePath}`);
+      if (message) bits.push("有说明文字");
+      hint.textContent = bits.length
+        ? `自动带参：${bits.join(" · ")}（输入框有字时优先用手填）`
+        : "点命令时会自动带上：选中提交、当前分支、冲突/改动文件路径、说明文字。";
+    }
 
     if (op === "checkout" || op === "switch") fillIf(p, "target", target);
     if (op === "merge") {
-      fillIf(p, "branch", target);
+      fillIf(p, "branch", typedTarget || selectedSha);
       if (p.noFf == null && p.ffOnly == null) p.noFf = true;
     }
-    if (op === "rebase") fillIf(p, "onto", target);
+    if (op === "rebase") fillIf(p, "onto", typedTarget || selectedSha);
     if (
       op === "cherry-pick" ||
       op === "revert" ||
@@ -1699,13 +1811,13 @@
       fillIf(p, "sha", sha);
     }
     if (op === "show-file") {
-      fillIf(p, "sha", sha);
+      fillIf(p, "sha", sha || "HEAD");
       fillIf(p, "path", filePath);
     }
     if (op === "blame" || op === "add" || op === "restore" || op === "checkout-ours" || op === "checkout-theirs") {
       fillIf(p, "path", filePath);
     }
-    if (op === "blame") fillIf(p, "sha", target);
+    if (op === "blame") fillIf(p, "sha", typedTarget || selectedSha || "HEAD");
     if (op === "commit") fillIf(p, "message", message);
     if (op === "commit-amend") {
       if (message) fillIf(p, "message", message);
@@ -1719,40 +1831,50 @@
     if (op === "am" || op === "apply") fillIf(p, "path", filePath);
     if (op === "reset-soft-n" && p.count == null) p.count = 2;
     if (op === "stash-push") fillIf(p, "message", message);
-    if (op === "stash-apply" || op === "stash-drop" || op === "stash-show") fillIf(p, "ref", target);
+    if (op === "stash-apply" || op === "stash-drop" || op === "stash-show") fillIf(p, "ref", typedTarget || "stash@{0}");
     if (op === "stash-clear") p.confirmClear = true;
     if (op === "clean") p.confirmClean = true;
-    if (op === "rev-parse") fillIf(p, "ref", target);
-    if (op === "config-get") fillIf(p, "key", target);
+    if (op === "rev-parse") fillIf(p, "ref", target || "HEAD");
+    if (op === "config-get") fillIf(p, "key", typedTarget || "user.name");
     if (op === "branch-create") {
       fillIf(p, "name", newBranch);
-      fillIf(p, "start", target);
+      fillIf(p, "start", typedTarget || selectedSha);
     }
-    if (op === "branch-delete") fillIf(p, "name", target || newBranch);
+    if (op === "branch-delete") fillIf(p, "name", typedTarget || newBranch);
     if (op === "branch-rename") {
-      fillIf(p, "oldName", target);
+      fillIf(p, "oldName", typedTarget || branch);
       fillIf(p, "newName", newBranch);
     }
-    if (op === "tag-create" || op === "tag-delete") {
-      fillIf(p, "name", newBranch || target);
+    if (op === "tag-create" || op === "tag-annotate") {
+      fillIf(p, "name", newBranch || typedTarget);
       fillIf(p, "sha", selectedSha);
       fillIf(p, "message", message);
     }
-    if (op === "remote-add" || op === "remote-set-url") {
+    if (op === "tag-delete") fillIf(p, "name", newBranch || typedTarget);
+    if (op === "remote-add") {
       fillIf(p, "name", newBranch || "origin");
-      fillIf(p, "url", cloneUrl || target);
+      fillIf(p, "url", cloneUrl || typedTarget);
     }
-    if (op === "remote-remove") fillIf(p, "name", target || "origin");
+    if (op === "remote-remove") fillIf(p, "name", typedTarget || "origin");
     if (op === "remote-rename") {
-      fillIf(p, "oldName", target);
+      fillIf(p, "oldName", typedTarget || "origin");
       fillIf(p, "newName", newBranch);
     }
-    if (op === "push" || op === "push-lease") fillIf(p, "branch", target);
+    if (op === "push" || op === "push-lease") fillIf(p, "branch", typedTarget || branch);
+    if (op === "push-gerrit") {
+      fillIf(p, "branch", typedTarget || branch || "master");
+      fillIf(p, "remote", "origin");
+    }
+    if (op === "gerrit-config-push") fillIf(p, "remote", typedTarget || "origin");
+    if (op === "branch-set-upstream") {
+      fillIf(p, "upstream", typedTarget || (branch ? `origin/${branch}` : ""));
+      fillIf(p, "branch", branch);
+    }
     if (op === "worktree-add") {
       fillIf(p, "path", filePath);
-      fillIf(p, "ref", target);
+      fillIf(p, "ref", typedTarget || selectedSha || branch);
     }
-    if (op === "worktree-remove") fillIf(p, "path", filePath || target);
+    if (op === "worktree-remove") fillIf(p, "path", filePath || typedTarget);
     return p;
   }
 
@@ -1829,7 +1951,24 @@
     const item = catalogItem(op);
     const preview = item ? `git ${item.title}` : op;
     cmdPreview.hidden = false;
-    cmdPreview.textContent = "即将执行：\n" + preview;
+    const paramBits = Object.keys(p)
+      .filter((k) => p[k] != null && p[k] !== "")
+      .map((k) => `${k}=${String(p[k]).slice(0, 48)}`);
+    cmdPreview.textContent =
+      "即将执行：\n" + preview + (paramBits.length ? "\n参数：" + paramBits.join(" · ") : "");
+
+    // 常见缺参早失败，避免点了才报后端 400
+    const needMsg = [];
+    if ((op === "merge" || op === "rebase") && !(p.branch || p.onto)) needMsg.push("目标（选中提交或填目标框）");
+    if ((op === "cherry-pick" || op === "revert" || op === "show") && !p.sha) needMsg.push("提交 sha（点图选中或填目标）");
+    if ((op === "add" || op === "blame" || op === "checkout-ours" || op === "checkout-theirs") && !p.path)
+      needMsg.push("文件路径（打开冲突编辑或填路径框）");
+    if (op === "commit" && !p.message) needMsg.push("说明文字");
+    if (op === "branch-create" && !p.name) needMsg.push("新分支名");
+    if (needMsg.length) {
+      showError("还缺：" + needMsg.join("；"));
+      return;
+    }
 
     const fallbackDangerous = new Set([
       "merge",
@@ -1971,7 +2110,20 @@
   $("#git-ready-go")?.addEventListener("click", () => easyReadyGo().catch((e) => showError(e.message)));
   $("#git-conflict-next")?.addEventListener("click", () => jumpConflictMarker(1));
   $("#git-conflict-prev")?.addEventListener("click", () => jumpConflictMarker(-1));
-  $("#git-conflict-text")?.addEventListener("input", () => renderConflictPreview());
+  $("#git-conflict-view-split")?.addEventListener("click", () => setConflictViewMode("split"));
+  $("#git-conflict-view-raw")?.addEventListener("click", () => setConflictViewMode("raw"));
+  $("#git-conflict-split")?.addEventListener("click", (e) => {
+    const btn = e.target.closest?.("[data-hunk-take]");
+    if (!btn) return;
+    const idx = Number(btn.getAttribute("data-hunk-idx"));
+    const side = btn.getAttribute("data-hunk-take");
+    if (!Number.isFinite(idx) || (side !== "ours" && side !== "theirs")) return;
+    applyConflictHunkChoice(idx, side);
+  });
+  $("#git-conflict-text")?.addEventListener("input", () => {
+    renderConflictPreview();
+    if (conflictViewMode === "split") renderConflictSplit();
+  });
   $("#git-conflict-ours")?.addEventListener("click", () => conflictTake("ours").catch((e) => showError(e.message)));
   $("#git-conflict-theirs")?.addEventListener("click", () => conflictTake("theirs").catch((e) => showError(e.message)));
   $("#git-conflict-save")?.addEventListener("click", () => conflictSaveResolved().catch((e) => showError(e.message)));

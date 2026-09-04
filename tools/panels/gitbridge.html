@@ -155,16 +155,19 @@
                 <div id="git-conflict-list" class="git-change-list"></div>
                 <div id="git-conflict-editor" class="git-conflict-editor" hidden>
                   <p class="hint tight mono" id="git-conflict-path"></p>
-                  <p class="hint tight">绿块是一边、蓝块是另一边。可点「下一处冲突」跳转；删掉标记只留你要的内容再保存。</p>
+                  <p class="hint tight">左右对照：左=我的（<<<<<<<），右=对方（>>>>>>>）。可按块「采用左边/右边」，或直接改下方全文后保存。</p>
                   <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.25rem">
                     <button type="button" class="ghost-btn" id="git-conflict-next">下一处冲突标记</button>
                     <button type="button" class="ghost-btn" id="git-conflict-prev">上一处</button>
+                    <button type="button" class="ghost-btn" id="git-conflict-view-split">左右对照</button>
+                    <button type="button" class="ghost-btn" id="git-conflict-view-raw">看全文</button>
                   </div>
+                  <div id="git-conflict-split" class="git-conflict-split" hidden></div>
                   <textarea id="git-conflict-text" class="mono area" rows="12" spellcheck="false"></textarea>
                   <pre class="mono git-conflict-preview" id="git-conflict-preview" hidden></pre>
                   <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.35rem">
-                    <button type="button" class="ghost-btn" id="git-conflict-ours">留我的版本</button>
-                    <button type="button" class="ghost-btn" id="git-conflict-theirs">留对方版本</button>
+                    <button type="button" class="ghost-btn" id="git-conflict-ours">整文件留我的</button>
+                    <button type="button" class="ghost-btn" id="git-conflict-theirs">整文件留对方</button>
                     <button type="button" class="secondary-btn" id="git-conflict-save">保存并标记已解决</button>
                     <button type="button" class="ghost-btn" id="git-conflict-close">关闭编辑</button>
                   </div>
@@ -294,12 +297,13 @@
                   </div>
                   <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center;gap:0.4rem">
                     <label for="git-op-target">目标</label>
-                    <input id="git-op-target" class="mono" type="text" placeholder="分支名 / commit" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
+                    <input id="git-op-target" class="mono" type="text" placeholder="留空=当前选中提交 / 当前分支" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />
                     <button type="button" class="ghost-btn" data-git-op="checkout">checkout</button>
                     <button type="button" class="ghost-btn" data-git-op="merge">merge</button>
                     <button type="button" class="ghost-btn" data-git-op="rebase">rebase onto</button>
                     <button type="button" class="ghost-btn" data-git-op="cherry-pick">cherry-pick</button>
                   </div>
+                  <p class="hint tight" id="git-op-autofill-hint" style="margin-top:0.25rem">点命令时会自动带上：选中提交、当前分支、冲突/改动文件路径、说明文字。</p>
                   <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
                     <label for="git-new-branch">新分支</label>
                     <input id="git-new-branch" class="mono" type="text" placeholder="feature/foo" spellcheck="false" autocomplete="off" style="flex:1;min-width:8rem" />

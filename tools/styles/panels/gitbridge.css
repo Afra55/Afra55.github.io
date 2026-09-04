@@ -374,6 +374,62 @@
   font-weight: 600;
 }
 
+#gitbridge .git-conflict-split {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.35rem;
+  max-height: 22rem;
+  overflow: auto;
+}
+
+#gitbridge .git-conflict-hunk {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.45rem;
+  padding: 0.45rem;
+  border: 1px solid var(--line, #2a2f3a);
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--bg-0, #12141a) 70%, transparent);
+}
+
+#gitbridge .git-conflict-side {
+  min-width: 0;
+}
+
+#gitbridge .git-conflict-side-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  margin-bottom: 0.25rem;
+}
+
+#gitbridge .git-conflict-side pre {
+  margin: 0;
+  max-height: 10rem;
+  overflow: auto;
+  padding: 0.4rem 0.5rem;
+  border-radius: 8px;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+#gitbridge .git-conflict-side.is-ours pre {
+  background: color-mix(in srgb, #3dd68c 16%, transparent);
+}
+
+#gitbridge .git-conflict-side.is-theirs pre {
+  background: color-mix(in srgb, #5b8cff 16%, transparent);
+}
+
+@media (max-width: 720px) {
+  #gitbridge .git-conflict-hunk {
+    grid-template-columns: 1fr;
+  }
+}
+
 #gitbridge .git-change-item.is-diffing {
   outline: 1px solid color-mix(in srgb, var(--accent, #5b8cff) 50%, transparent);
 }
