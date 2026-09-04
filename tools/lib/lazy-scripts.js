@@ -54,7 +54,6 @@
     vidkit: "./vidkit.js",
     vplay: "./vplay.js",
     audio: "./audio.js",
-    everything: "./everything.js",
     ffbridge: "./ffbridge.js",
     ytdlp: "./ytdlp.js",
     gitbridge: "./gitbridge.js",
@@ -176,7 +175,6 @@
     "enspeak",
     "sandspiel",
     "lanshare",
-    "everything",
     "ffbridge",
     "ytdlp",
     "gitbridge",
@@ -185,7 +183,7 @@
   ]);
 
   const NO_PURE = new Set([
-    "acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "everything", "ffbridge", "ytdlp",
+    "acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp",
     "gitbridge", "envkit", "feedbackhub",
     "setup", "about", "xorenc", "morse", "countdown",
     "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "piano", "minigames", "ambient", "enspeak",

@@ -1058,6 +1058,7 @@
     pdfcraft: { tool: "sitenav" },
     insectworld: { tool: "sitenav" },
     prehmuseum: { tool: "sitenav" },
+    everything: { tool: "sitenav" },
   };
   const REG = window.DEVTOOLS_REGISTRY || {};
   const TOOL_GROUPS = REG.groups || [];

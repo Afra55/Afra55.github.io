@@ -83,11 +83,6 @@
       "bytes": 3534
     },
     {
-      "id": "everything",
-      "file": "./panels/everything.html",
-      "bytes": 8243
-    },
-    {
       "id": "eyedropper",
       "file": "./panels/eyedropper.html",
       "bytes": 1946

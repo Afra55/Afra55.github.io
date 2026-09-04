@@ -52,15 +52,6 @@
       link: "#gitbridge",
       kind: "git",
     },
-    {
-      id: "everything-mount",
-      name: "⑤ Everything · /everything",
-      url: "http://127.0.0.1:17888/everything/health",
-      token: "devtools-bridge",
-      tokenHeader: "X-Adb-Token",
-      link: "#everything",
-      kind: "everything",
-    },
   ];
 
   function detectOs() {
@@ -170,28 +161,6 @@
           text: adbOk
             ? `统一桥在线 · v${ver}${adbVer ? " · " + String(adbVer).slice(0, 48) : ""}`
             : data.adb?.error || data.adb?.setup || `桥在线 · v${ver}，但本机未找到 adb`,
-          link: b.link,
-        };
-      }
-
-      if (b.kind === "everything") {
-        // 桥通了但本机 Everything HTTP 未开时仍会 502；区分「桥挂了」与「Everything 未开」
-        if (res.status === 502 || (data && data.ok === false)) {
-          return {
-            ok: false,
-            warn: true,
-            title: b.name,
-            text: data?.error || "桥已挂载，但本机 Everything HTTP Server 未开/不可达",
-            link: b.link,
-          };
-        }
-        if (!res.ok || !data?.ok) {
-          return { ok: false, title: b.name, text: data?.error || `HTTP ${res.status}`, link: b.link };
-        }
-        return {
-          ok: true,
-          title: b.name,
-          text: `在线 · 经桥代理${data.target ? " · " + data.target : ""}`,
           link: b.link,
         };
       }

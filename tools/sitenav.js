@@ -4,6 +4,13 @@
   /** 外链卡片：只列站外服务；已在本站做成工具的不再单独展示 */
   const LINKS = [
     {
+      id: "everything",
+      title: "Everything",
+      desc: "Windows 瞬时全盘文件搜索（voidtools 官网）。本站不再内嵌，请用官方客户端。",
+      url: "https://www.voidtools.com/zh-cn/",
+      tags: ["windows", "搜索", "文件"],
+    },
+    {
       id: "pdfcraft",
       title: "PDF 工具箱",
       desc: "合并 / 拆分 / 压缩 / 转换等 100+ PDF 工具，浏览器本地处理。",

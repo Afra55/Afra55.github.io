@@ -1,7 +1,7 @@
 <section id="gitbridge" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>Git 可视化</h1>
-        <p>本机调用系统 <span class="mono">git</span>。开仓库后看「小白模式」：保存 → 上传就够。下面图和命令都可先不看。<a href="#setup">安装指南</a> · <a href="#adb">下载完整包</a></p>
+        <p>本机调用系统 <span class="mono">git</span>。连上桥 → 打开仓库 → 按「更新 · 保存 · 上传」三步走。下面工作线 / 历史图 / 命令默认收起，需要再展开。<a href="#setup">安装指南</a> · <a href="#envkit">环境管家</a></p>
       </div>
       <div class="panel-body">
         <div class="adb-status" id="git-status">
@@ -9,63 +9,65 @@
             <span class="adb-dot" id="git-dot" aria-hidden="true"></span>
             <div>
               <strong id="git-status-title">未连接本机桥</strong>
-              <p class="hint tight" id="git-status-text">与 ADB / FFmpeg <strong>共用一座桥</strong>。下载<strong>统一完整包</strong>并启动后点「连接」。默认端口 17888。</p>
+              <p class="hint tight" id="git-status-text">与 ADB / FFmpeg <strong>共用一座桥</strong>。点「一键启动并连接」即可；高级下载与 Token 在下方折叠里。</p>
             </div>
           </div>
           <div class="btn-row tool-actions adb-status-actions">
-            <button type="button" class="primary-btn" id="git-connect">连接本机桥</button>
+            <button type="button" class="primary-btn" id="git-ready-go">一键启动并连接</button>
+            <button type="button" class="secondary-btn" id="git-connect">连接本机桥</button>
             <button type="button" class="secondary-btn" id="git-bridge-launch">启动本机桥</button>
             <button type="button" class="secondary-btn" id="git-refresh" disabled>刷新仓库</button>
-            <span class="adb-dl-bundle" id="git-dl-bundle">
-              <button type="button" class="secondary-btn" id="git-dl-mac" data-git-bundle="mac">下载 macOS 完整包</button>
-              <button type="button" class="secondary-btn" id="git-dl-win" data-git-bundle="win">下载 Windows 完整包</button>
-              <button type="button" class="secondary-btn" id="git-dl-linux" data-git-bundle="linux">下载 Linux 完整包</button>
-            </span>
           </div>
         </div>
 
-        <div class="gif-progress bridge-dl-progress" id="git-dl-progress" hidden>
-          <div class="gif-progress-head">
-            <p class="hint gif-progress-title" id="git-dl-progress-text">准备下载包…</p>
-            <span class="mono gif-progress-pct" id="git-dl-progress-pct">0%</span>
+        <div class="git-ready panel-card" id="git-ready" style="margin-top:0.65rem">
+          <h2 class="subhead">零难度就绪（约 2 分钟）</h2>
+          <ol class="git-beginner-steps hint">
+            <li>去 <a href="#envkit">环境管家</a> 一键安装 Node / Git，并同步桥文件。</li>
+            <li>或展开下方「连接与下载」，下载<strong>统一完整包</strong>，解压后运行启动脚本一次。</li>
+            <li>回到本页点「一键启动并连接」。</li>
+          </ol>
+          <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.35rem">
+            <a class="secondary-btn" href="#envkit">打开环境管家</a>
+            <a class="ghost-btn" href="#adb">去 ADB 页下完整包</a>
           </div>
-          <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill is-busy" id="git-dl-progress-fill" style="width:0%"></span></div>
+          <p class="hint tight" id="git-ready-hint">账号登录请在本机 Git / 系统凭据里自行完成；本页只管点按钮操作仓库。</p>
         </div>
 
-        <div class="field-block adb-install-dir" style="margin-top:0.65rem">
-          <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.4rem">
-            <label for="git-install-dir">桥解压目录</label>
-            <input id="git-install-dir" class="mono" type="text" placeholder="与 ADB 相同，例如 C:\Tools\devtools-bridge" autocomplete="off" spellcheck="false" style="min-width:min(100%,22rem);flex:1" />
-            <button type="button" class="secondary-btn" id="git-install-dir-save" title="在本机资源管理器中打开该目录（填写时已自动记住）">打开目录</button>
-          </div>
-          <label class="flag" style="margin-top:0.35rem;display:inline-flex;align-items:center;gap:0.35rem">
-            <input type="checkbox" id="git-bridge-autostart" checked />
-            进入本页时若未连接则尝试自动启动
-          </label>
-          <div class="git-ready panel-card" id="git-ready" style="margin-top:0.55rem">
-            <h2 class="subhead">零难度就绪（约 2 分钟）</h2>
-            <ol class="git-beginner-steps hint">
-              <li>去 <a href="#envkit">环境管家</a> 一键安装 Node / Git，并同步桥文件。</li>
-              <li>或在本页下载<strong>统一完整包</strong>，解压后运行启动脚本一次。</li>
-              <li>回到本页点「一键启动并连接」。</li>
-            </ol>
-            <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.35rem">
-              <button type="button" class="primary-btn" id="git-ready-go">一键启动并连接</button>
-              <a class="secondary-btn" href="#envkit">打开环境管家</a>
-              <a class="ghost-btn" href="#adb">下载统一完整包</a>
+        <details class="git-ops-details git-eng-fold" id="git-eng-fold">
+          <summary class="hint">连接与下载（解压目录 · Token · 完整包）· 一般不用改</summary>
+          <div class="gif-progress bridge-dl-progress" id="git-dl-progress" hidden style="margin-top:0.55rem">
+            <div class="gif-progress-head">
+              <p class="hint gif-progress-title" id="git-dl-progress-text">准备下载包…</p>
+              <span class="mono gif-progress-pct" id="git-dl-progress-pct">0%</span>
             </div>
-            <p class="hint tight" id="git-ready-hint">账号登录请在本机 Git / 系统凭据里自行完成；本页只管点按钮操作仓库。</p>
+            <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill is-busy" id="git-dl-progress-fill" style="width:0%"></span></div>
           </div>
-          <p class="hint tight" id="git-install-dir-hint">协议 <span class="mono">devtools-bridge://</span>。下载的是与 ADB 相同的<strong>统一完整包</strong>（含 Git），不要再用独立 Git 包。</p>
-        </div>
-
-        <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
-          <label for="git-base">桥地址</label>
-          <input id="git-base" class="mono" type="text" value="http://127.0.0.1:17888" autocomplete="off" spellcheck="false" />
-          <label for="git-token">Token</label>
-          <input id="git-token" class="mono" type="text" value="devtools-bridge" autocomplete="off" spellcheck="false" />
-        </div>
-        <p class="hint tight">默认走统一桥 <span class="mono">17888</span> · API <span class="mono">/git/*</span> · Token <span class="mono">devtools-bridge</span>。完整包启动一次即可覆盖 ADB / FFmpeg / yt-dlp / Git。</p>
+          <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.45rem" id="git-dl-bundle">
+            <button type="button" class="secondary-btn" id="git-dl-mac" data-git-bundle="mac">下载 macOS 完整包</button>
+            <button type="button" class="secondary-btn" id="git-dl-win" data-git-bundle="win">下载 Windows 完整包</button>
+            <button type="button" class="secondary-btn" id="git-dl-linux" data-git-bundle="linux">下载 Linux 完整包</button>
+          </div>
+          <div class="field-block adb-install-dir" style="margin-top:0.65rem">
+            <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.4rem">
+              <label for="git-install-dir">桥解压目录</label>
+              <input id="git-install-dir" class="mono" type="text" placeholder="与 ADB 相同，例如 C:\Tools\devtools-bridge" autocomplete="off" spellcheck="false" style="min-width:min(100%,22rem);flex:1" />
+              <button type="button" class="secondary-btn" id="git-install-dir-save" title="在本机资源管理器中打开该目录（填写时已自动记住）">打开目录</button>
+            </div>
+            <label class="flag" style="margin-top:0.35rem;display:inline-flex;align-items:center;gap:0.35rem">
+              <input type="checkbox" id="git-bridge-autostart" checked />
+              进入本页时若未连接则尝试自动启动
+            </label>
+            <p class="hint tight" id="git-install-dir-hint">协议 <span class="mono">devtools-bridge://</span>。下载的是与 ADB 相同的<strong>统一完整包</strong>（含 Git）。</p>
+          </div>
+          <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
+            <label for="git-base">桥地址</label>
+            <input id="git-base" class="mono" type="text" value="http://127.0.0.1:17888" autocomplete="off" spellcheck="false" />
+            <label for="git-token">Token</label>
+            <input id="git-token" class="mono" type="text" value="devtools-bridge" autocomplete="off" spellcheck="false" />
+          </div>
+          <p class="hint tight">默认统一桥 <span class="mono">17888</span> · API <span class="mono">/git/*</span> · Token <span class="mono">devtools-bridge</span>。</p>
+        </details>
 
         <div id="git-workspace" hidden>
           <div class="label-row" style="margin-top:1rem">
@@ -99,46 +101,58 @@
                 <h2 class="subhead">小白模式 · 先别慌</h2>
                 <button type="button" class="ghost-btn" id="git-easy-refresh">刷新状态</button>
               </div>
-              <div class="git-calm-banner" id="git-calm-banner">
-                <p><strong>日常就这三步，其它先别管：</strong></p>
-                <ol class="git-calm-steps">
-                  <li><strong>更新</strong>（可选）——别人有新改动时先拉下来</li>
-                  <li><strong>保存</strong>——勾文件、写说明、点保存</li>
-                  <li><strong>上传</strong>——让别人也能看见</li>
-                </ol>
+
+              <div class="git-progress-rail" id="git-progress-rail" aria-label="日常三步进度">
+                <div class="git-progress-step" data-git-step="1" id="git-progress-1">
+                  <span class="git-progress-num">1</span>
+                  <span class="git-progress-label">更新</span>
+                </div>
+                <div class="git-progress-line" aria-hidden="true"></div>
+                <div class="git-progress-step" data-git-step="2" id="git-progress-2">
+                  <span class="git-progress-num">2</span>
+                  <span class="git-progress-label">保存</span>
+                </div>
+                <div class="git-progress-line" aria-hidden="true"></div>
+                <div class="git-progress-step" data-git-step="3" id="git-progress-3">
+                  <span class="git-progress-num">3</span>
+                  <span class="git-progress-label">上传</span>
+                </div>
               </div>
+
               <p class="hint tight" id="git-easy-now">打开仓库后，这里会告诉你现在适合做什么。</p>
               <div class="git-status-pills" id="git-status-pills" aria-live="polite"></div>
 
-              <div class="git-action-grid git-action-grid-main" id="git-action-grid">
-                <button type="button" class="git-action-tile" id="git-easy-pull" title="从远程拉最新（git pull）">
-                  <span class="git-action-step" aria-hidden="true">1</span>
-                  <strong>更新</strong>
-                  <span>把网上最新拉到本机</span>
-                </button>
-                <button type="button" class="git-action-tile is-primary" id="git-easy-push" title="推送到远程（git push）">
-                  <span class="git-action-step" aria-hidden="true">3</span>
-                  <strong>上传</strong>
-                  <span>把已保存的历史发上网</span>
-                </button>
-                <button type="button" class="git-action-tile git-action-tile-quiet" id="git-easy-fetch" title="只刷新远程信息（git fetch）">
-                  <span class="git-action-ico" aria-hidden="true">↻</span>
-                  <strong>查新</strong>
-                  <span>只看看有没有新的（不改文件）</span>
-                </button>
-              </div>
-              <details class="git-ops-details git-pull-mode-details">
-                <summary class="hint">更新遇到分叉时怎么处理？（一般不用改）</summary>
-                <div class="field-row git-pull-mode-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
-                  <label for="git-easy-pull-mode">策略</label>
-                  <select id="git-easy-pull-mode" class="select-input" style="min-width:12rem">
-                    <option value="auto">自动处理（推荐）</option>
-                    <option value="merge">两边合在一起</option>
-                    <option value="rebase">把我的接到最新后面</option>
-                    <option value="ff">只要能直接跟上才更新</option>
-                  </select>
+              <div class="git-flow-step" data-git-flow="1" id="git-flow-1">
+                <div class="git-flow-head">
+                  <span class="git-step-badge" aria-hidden="true">1</span>
+                  <h3 class="git-easy-sec">更新（可选）</h3>
                 </div>
-              </details>
+                <p class="hint tight">别人有新改动时先拉下来。没有「可更新」提示时可跳过。</p>
+                <div class="git-action-grid git-action-grid-main" id="git-action-grid">
+                  <button type="button" class="git-action-tile" id="git-easy-pull" title="从远程拉最新（git pull）">
+                    <span class="git-action-step" aria-hidden="true">1</span>
+                    <strong>更新</strong>
+                    <span>把网上最新拉到本机</span>
+                  </button>
+                  <button type="button" class="git-action-tile git-action-tile-quiet" id="git-easy-fetch" title="只刷新远程信息（git fetch）">
+                    <span class="git-action-ico" aria-hidden="true">↻</span>
+                    <strong>查新</strong>
+                    <span>只看看有没有新的（不改文件）</span>
+                  </button>
+                </div>
+                <details class="git-ops-details git-pull-mode-details">
+                  <summary class="hint">更新遇到分叉时怎么处理？（一般不用改）</summary>
+                  <div class="field-row git-pull-mode-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
+                    <label for="git-easy-pull-mode">策略</label>
+                    <select id="git-easy-pull-mode" class="select-input" style="min-width:12rem">
+                      <option value="auto">自动处理（推荐）</option>
+                      <option value="merge">两边合在一起</option>
+                      <option value="rebase">把我的接到最新后面</option>
+                      <option value="ff">只要能直接跟上才更新</option>
+                    </select>
+                  </div>
+                </details>
+              </div>
 
               <div id="git-confirm-bar" class="git-confirm-bar" hidden>
                 <p class="hint tight" id="git-confirm-text"></p>
@@ -180,25 +194,41 @@
                 </div>
               </div>
 
-              <div class="git-save-zone" id="git-save-zone">
-              <h3 class="git-easy-sec"><span class="git-step-badge" aria-hidden="true">2</span> 保存我的改动</h3>
-              <p class="hint tight">勾选文件 → 写一句说明 → 点「保存」。点文件名可看彩色对比。保存只记在本机，别人要看见再点上面的「上传」。</p>
-              <div id="git-change-list" class="git-change-list" aria-live="polite">
-                <p class="hint tight git-empty-hint">还没有改动 · 去改文件再回来</p>
-              </div>
-              <div class="git-diff-panel" id="git-diff-panel" hidden>
-                <div class="label-row">
-                  <span class="hint tight mono" id="git-diff-title"></span>
-                  <button type="button" class="ghost-btn" id="git-diff-close">关闭对比</button>
+              <div class="git-flow-step git-save-zone" data-git-flow="2" id="git-flow-2">
+                <div class="git-flow-head">
+                  <span class="git-step-badge" aria-hidden="true">2</span>
+                  <h3 class="git-easy-sec">保存我的改动</h3>
                 </div>
-                <div class="git-diff-view" id="git-diff-view" role="region" aria-label="文件改动对比"></div>
+                <p class="hint tight">勾选文件 → 写一句说明 → 点「保存」。点文件名可看彩色对比。保存只记在本机，别人要看见再点下面的「上传」。</p>
+                <div id="git-change-list" class="git-change-list" aria-live="polite">
+                  <p class="hint tight git-empty-hint">还没有改动 · 去改文件再回来</p>
+                </div>
+                <div class="git-diff-panel" id="git-diff-panel" hidden>
+                  <div class="label-row">
+                    <span class="hint tight mono" id="git-diff-title"></span>
+                    <button type="button" class="ghost-btn" id="git-diff-close">关闭对比</button>
+                  </div>
+                  <div class="git-diff-view" id="git-diff-view" role="region" aria-label="文件改动对比"></div>
+                </div>
+                <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
+                  <label for="git-easy-msg">说明</label>
+                  <input id="git-easy-msg" type="text" placeholder="例如：修好登录按钮样式" spellcheck="false" autocomplete="off" style="flex:1;min-width:10rem" />
+                  <button type="button" class="primary-btn" id="git-easy-commit">保存</button>
+                </div>
+                <p class="hint tight" id="git-easy-hint">「保存」= 记一笔历史；「上传」= 发给网上的仓库。</p>
               </div>
-              <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.4rem">
-                <label for="git-easy-msg">说明</label>
-                <input id="git-easy-msg" type="text" placeholder="例如：修好登录按钮样式" spellcheck="false" autocomplete="off" style="flex:1;min-width:10rem" />
-                <button type="button" class="primary-btn" id="git-easy-commit">保存</button>
-              </div>
-              <p class="hint tight" id="git-easy-hint">「保存」= 记一笔历史；「上传」= 发给网上的仓库。</p>
+
+              <div class="git-flow-step" data-git-flow="3" id="git-flow-3">
+                <div class="git-flow-head">
+                  <span class="git-step-badge" aria-hidden="true">3</span>
+                  <h3 class="git-easy-sec">上传到网上</h3>
+                </div>
+                <p class="hint tight">把已保存的历史发给远程。若提示登录失败，请到本机 Git / 系统钥匙串 / GitHub Desktop 先登好账号。</p>
+                <button type="button" class="git-action-tile is-primary" id="git-easy-push" title="推送到远程（git push）">
+                  <span class="git-action-step" aria-hidden="true">3</span>
+                  <strong>上传</strong>
+                  <span>把已保存的历史发上网</span>
+                </button>
               </div>
 
               <details class="git-ops-details git-more-details">
@@ -253,7 +283,7 @@
               </details>
             </div>
 
-            <p class="git-below-fold-hint hint tight" id="git-below-fold-hint">—— 日常三步在上面；下面是工作线、历史图与全部命令 ——</p>
+            <p class="git-below-fold-hint hint tight" id="git-below-fold-hint">—— 日常三步在上面；下面是工作线、历史图与全部命令（默认收起）——</p>
 
             <div class="label-row" style="margin-top:0.65rem">
               <h2 class="subhead">我的常用</h2>
@@ -265,7 +295,7 @@
             </div>
 
             <div class="git-layout git-layout-calm" id="git-advanced-layout">
-              <details class="git-ops-details git-adv-block" id="git-branch-details" open>
+              <details class="git-ops-details git-adv-block" id="git-branch-details">
                 <summary class="hint" id="git-branch-summary">工作线 · 当前：—</summary>
                 <div class="git-adv-inner" style="margin-top:0.45rem">
                   <div class="label-row">
@@ -283,7 +313,7 @@
                 </div>
               </details>
 
-              <details class="git-ops-details git-adv-block" id="git-graph-details" open>
+              <details class="git-ops-details git-adv-block" id="git-graph-details">
                 <summary class="hint">保存历史图 + 人话解释</summary>
                 <div class="git-adv-inner git-layout-inner">
                   <div class="git-graph-pane">
@@ -310,7 +340,7 @@
                 </div>
               </details>
 
-              <details class="git-ops-details git-adv-block" id="git-ops-details" open>
+              <details class="git-ops-details git-adv-block" id="git-ops-details">
                 <summary class="hint">全部命令 <span class="hint tight" id="git-ops-count"></span></summary>
                 <p class="hint tight" id="git-ops-whitelist-tip" style="margin-top:0.35rem">
                   每条<strong>第一行是命令</strong>，<strong>第二行是中文说明</strong>。带 <span class="git-op-gerrit-tag">Gerrit</span> 的只在 Gerrit 仓库用。右侧可「加到常用」。
@@ -318,7 +348,7 @@
                 <div id="git-ops-catalog" class="git-ops-catalog"></div>
               </details>
 
-              <details class="git-ops-details git-adv-block" open>
+              <details class="git-ops-details git-adv-block">
                 <summary class="hint">进阶快捷钮</summary>
                 <p class="hint tight" style="margin-top:0.35rem">常用动作快捷入口；括号里是 git 原名。</p>
                 <div class="btn-row tool-actions" style="flex-wrap:wrap" id="git-ops-row">

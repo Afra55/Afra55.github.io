@@ -96,6 +96,8 @@
   function setReadyVisible(show) {
     const el = $("#git-ready");
     if (el) el.hidden = !show;
+    panel.classList.toggle("is-setup", Boolean(show));
+    panel.classList.toggle("has-bridge", !show && connected);
   }
 
   function humanizeGitError(raw) {
@@ -108,13 +110,16 @@
       return "本地和网上各走各的了。请选「合并更新」或「变基更新」。";
     }
     if (/no upstream|no tracking information|has no upstream branch|set-upstream/i.test(s)) {
-      return "这条工作线还没绑定网上对应线。点「② 上传我的改动」会自动建立绑定；或先确认远程已有同名分支。";
+      return "这条工作线还没绑定网上对应线。点「③ 上传」会自动建立绑定；或先确认远程已有同名分支。";
     }
     if (/prohibited by Gerrit|not permitted to create|can not update|You need 'Create Change'|remote rejected.*refs\/heads|Push to refs\/for/i.test(s)) {
       return "远程像是 Gerrit，禁止直接推分支。请先点「配置推送规则」（remote.origin.push → refs/heads/*:refs/for/*），再用「上传」或「送审」。";
     }
-    if (/Authentication failed|could not read Username|Permission denied \(publickey\)|403 Forbidden|401 Unauthorized|terminal prompts disabled/i.test(s)) {
-      return "远程拒绝访问（账号/权限问题）。请在本机自行登录 Git 后再试本页操作。";
+    if (/Authentication failed|could not read Username|Permission denied \(publickey\)|403 Forbidden|401 Unauthorized|terminal prompts disabled|Invalid username or token|Support for password authentication was removed|remote:.*authentication/i.test(s)) {
+      return "远程拒绝登录。请先在本机完成凭据：GitHub/GitLab 用 Personal Access Token 或 SSH 钥匙；macOS 钥匙串 / Windows 凭据管理器 / Git Credential Manager 登录后，再回本页点「上传」。本页不能替你输入账号密码。";
+    }
+    if (/Could not resolve host|Failed to connect|unable to access|Network is unreachable|Connection refused/i.test(s)) {
+      return "连不上远程地址（网络或 URL 有问题）。在「进阶快捷钮」里点「远程地址」核对 origin，并确认本机能上网。";
     }
     if (/Your local changes|would be overwritten|uncommitted changes/i.test(s)) {
       return "有未保存的文件改动挡着了。先「收起改动」或先「保存到历史」，再重试。";
@@ -123,10 +128,10 @@
       return "出现冲突了。请到上方「两边改冲突了」区域：留我的 / 留对方 / 手改，然后继续合并。";
     }
     if (/not a git repository/i.test(s)) {
-      return "当前目录还不是仓库。可点「在此新建空仓库」或「从网址下载仓库」。";
+      return "当前目录还不是仓库。可点「在此新建空仓库」或换一个已有 .git 的文件夹。";
     }
     if (/pathspec|does not match any|ambiguous argument/i.test(s) && /reset|checkout/i.test(s)) {
-      return "找不到对应的网上跟踪线。请先「只看网上有没有新的」，确认已设置上游分支。";
+      return "找不到对应的网上跟踪线。请先「查新」，确认已设置上游分支。";
     }
     if (/Cannot rebase|no rebase in progress|no merge in progress/i.test(s)) {
       return "当前没有进行中的合并/变基，无需继续或中止。";
@@ -135,6 +140,40 @@
       return "补丁套不上或路径不对。请检查补丁文件路径，或改用「只改文件不记提交」。";
     }
     return s;
+  }
+
+  function updateFlowHighlight(data) {
+    const conflicts = Array.isArray(data?.conflicts) ? data.conflicts : [];
+    const behind = Number(data?.behind) || 0;
+    const dirty = Number(data?.dirtyCount) || (Array.isArray(data?.changes) ? data.changes.length : 0);
+    const ahead = Number(data?.ahead) || 0;
+    const inProgress = Boolean(data?.inProgress);
+
+    let focus = 0;
+    if (inProgress || conflicts.length) focus = 0;
+    else if (behind > 0) focus = 1;
+    else if (dirty > 0) focus = 2;
+    else if (ahead > 0) focus = 3;
+    else focus = 0;
+
+    for (let i = 1; i <= 3; i++) {
+      const rail = $(`#git-progress-${i}`);
+      const flow = $(`#git-flow-${i}`);
+      const on = focus === i;
+      const done =
+        (i === 1 && behind <= 0 && !inProgress && !conflicts.length) ||
+        (i === 2 && dirty <= 0 && !conflicts.length) ||
+        (i === 3 && ahead <= 0 && dirty <= 0 && behind <= 0 && !conflicts.length);
+      rail?.classList.toggle("is-focus", on);
+      rail?.classList.toggle("is-done", !on && done && focus !== 0);
+      flow?.classList.toggle("is-focus", on);
+    }
+
+    $("#git-easy-pull")?.classList.toggle("is-primary", focus === 1);
+    $("#git-easy-pull")?.classList.toggle("is-suggested", focus === 1);
+    $("#git-easy-commit")?.classList.toggle("is-suggested", focus === 2);
+    $("#git-easy-push")?.classList.toggle("is-suggested", focus === 3);
+    $("#git-easy-push")?.classList.toggle("is-primary", focus === 3 || focus === 0);
   }
 
   function setStatus(kind, title, text) {
@@ -931,6 +970,12 @@
         nowEl.textContent = "现在：" + (steps.join("；") || "一切正常");
         nowEl.classList.toggle("git-easy-now-warn", Boolean(data.inProgress || conflicts.length));
       }
+
+      updateFlowHighlight({
+        ...data,
+        dirtyCount: data.dirtyCount != null ? data.dirtyCount : rows.length,
+        conflicts,
+      });
 
       const pills = $("#git-status-pills");
       if (pills) {

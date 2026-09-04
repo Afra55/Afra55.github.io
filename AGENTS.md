@@ -23,7 +23,7 @@
 | `tools/extra-panels/*.js` | 额外面板逻辑 |
 | `tools/vendor/` | 浏览器第三方库 |
 | `tools/lib/oss-deps.js` | 关于页 OSS 清单（升级 vendor 后同步） |
-| `tools/adb-bridge/` | **统一本机桥**（`17888`）：ADB / Everything / FFmpeg(`/ff`) / yt-dlp(`/ytdlp`) / Git(`/git`) |
+| `tools/adb-bridge/` | **统一本机桥**（`17888`）：ADB / FFmpeg(`/ff`) / yt-dlp(`/ytdlp`) / Git(`/git`) |
 | `tools/ffmpeg-bridge/` | FFmpeg / yt-dlp 模块（由统一桥挂载；也可独立 `17889`） |
 | `tools/git-bridge/` | Git 模块（由统一桥挂载 `/git`；也可独立 `17890`） |
 | `tools/envkit/` | 一键检测/安装/升级脚本 |
@@ -42,12 +42,13 @@
 ## 本机桥（强制 · 统一桥优先）
 
 - **唯一默认入口**：`http://127.0.0.1:17888`，Token `devtools-bridge`，协议 `devtools-bridge://start`
-- 能力挂载：Everything（根）· FFmpeg `/ff` · yt-dlp `/ytdlp` · Git `/git`；**用户只需启动一次**
+- 能力挂载：FFmpeg `/ff` · yt-dlp `/ytdlp` · Git `/git`；**用户只需启动一次**
 - 独立端口仅兼容旧包：FFmpeg `17889`、Git `17890`；**新功能不要默认新端口**
 - 面板一律：`bindBridgeLaunchUI({ kind: "unified" })`（`tools/lib/bridge-token.js`）；共用「记住解压目录 / 自动启动」
 - **下载入口**：各桥面板（ADB / FFmpeg / yt-dlp / Git）必须调用 `tools/lib/unified-bridge-bundle.js` 打**同一份统一完整包**；禁止再提供独立 Git / 独立 FFmpeg ZIP
 - 改桥逻辑必须同步：`BRIDGE_VERSION`（`adb-bridge/server.js`）+ 完整 ZIP 文件列表（`unified-bridge-bundle.js`）+ EnvKit `sync_bridges` / `Sync-Bridges`（sh+ps1）+ 启动脚本缺文件 WARN
 - bat/sh 缓存写在**脚本同目录**，勿写死用户主目录
+- Everything 已改为外链（`#sitenav` → voidtools）；站内不再提供搜索面板（桥内 `/everything` 代理可保留兼容，勿再做成工具）
 
 ### 新增一座「桥能力」要对齐（一键装 / 一键更）
 
@@ -96,12 +97,12 @@
 ## 勿重复造轮子（易踩坑）
 
 - **ADB 镜像**：scrcpy-server v3.1，桥 ≥0.9.12；`scrcpy-ctrl.js` 须进 ZIP；勿默认 `i-frame-interval=1`
-- **Everything**：需同时开 ADB 桥 + Everything HTTP Server
 - **备忘录滚动**：桌面滚动根是 `main.shell`（非 `window`）
 - **视频拖进度**：串行等 `seeked`（`pumpScrubSeek`），勿密集 `fastSeek`
 - **导航**：仅显示分类时滚轮交给 `.nav-bar-scroll`；站点外链只在 `sitenav`
 - **Git 可视化**：统一桥 `/git`（完整包）；独立桥 `git-bridge` 17890 可选；面板 `#gitbridge`；小白模式含同步/冲突/补丁/对齐线上
 - **环境管家**：`#envkit` + `tools/envkit/install-devtools-env.{sh,ps1}`；缺啥装啥、可 upgrade/bridges
+- **Everything**：官方客户端外链（`#sitenav`），勿再做站内集成
 
 ## 不要硬塞
 

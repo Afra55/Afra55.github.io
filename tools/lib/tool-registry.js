@@ -151,7 +151,6 @@
       "tools": [
         "lanshare",
         "adb",
-        "everything",
         "ffbridge",
         "ytdlp",
         "gitbridge"
@@ -741,17 +740,6 @@
       ],
       "desktopOnly": true
     },
-    "everything": {
-      "name": "Everything 搜索",
-      "aliases": [
-        "everything",
-        "voidtools",
-        "文件搜索",
-        "全盘搜索",
-        "找文件"
-      ],
-      "desktopOnly": true
-    },
     "lanshare": {
       "name": "局域网互传",
       "aliases": [
@@ -945,18 +933,17 @@
     "acupoint": "361 经穴 + 51 奇穴：Wellcome 经络参考图可点击放大，搜索列表查看定位与主治。",
     "healthread": "养生功法等文章离线阅读：列表搜索、按需加载动图，记住阅读进度。",
     "adb": "网页侧 ADB：设备、文件、应用、性能/进程/Shell/布局、Logcat、输入与任务等。",
-    "everything": "Everything 经本机桥代理（/everything/*）：HTTPS 站点可搜全盘、实时过滤、下载；需同时启动桥与 Everything HTTP。",
     "lanshare": "局域网互传：多机同房间共享文件列表，下载时从上传者手机 WebRTC 直传，不经房主中转；房主可退出或解散，退出时最近加入者接任。",
     "ffbridge": "电脑批量用本机 FFmpeg 桥；手机请直接用视频/GIF 分类里的音频/修剪/动图（网页内处理）。",
     "ytdlp": "本机 yt-dlp 桥：解析/下载视频与播放列表、字幕、封面、直播、Cookies 与 SponsorBlock；含安装教程，文件只保存在电脑。",
-    "gitbridge": "零恐慌小白三步 + 我的常用；历史图/命令默认收起。统一桥 /git。",
+    "gitbridge": "小白三步（更新→保存→上传）为主舞台；工作线/历史图/命令默认收起。统一桥 /git。",
     "about": "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
     "setup": "小白向：如何下载安装 Node.js、ADB、FFmpeg；手机用网页保底、电脑用桥更优。",
-    "envkit": "一键安装/升级与统一桥探测：ADB、FFmpeg、yt-dlp、Git、Everything 五项均列在 17888。",
+    "envkit": "一键安装/升级与统一桥探测：ADB、FFmpeg、yt-dlp、Git 均列在 17888。",
     "feedbackhub": "汇集各工具 giscus 评价（站点快照，避免 API 限流）；本页不挂底部评论框。",
     "mathedit": "MathLive 在线数学公式编辑：可视化输入，导出 LaTeX / MathML / AsciiMath。",
     "mdslides": "把 Markdown 做成网页幻灯片（Reveal.js）；用 --- 分页，一键全屏演示。",
-    "sitenav": "外链导航：PDFCraft、图吧工具箱、昆虫世界、史前博物馆、Slidev、I Have ADHD 等站外服务；本站已有工具不重复列出。"
+    "sitenav": "外链导航：Everything、PDFCraft、图吧工具箱、昆虫世界、史前博物馆、Slidev、I Have ADHD 等站外服务；本站已有工具不重复列出。"
   }
 };
 })();
