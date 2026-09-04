@@ -38,6 +38,13 @@
       url: "https://sli.dev/",
       tags: ["ppt", "markdown", "vue"],
     },
+    {
+      id: "i-have-adhd",
+      title: "I Have ADHD",
+      desc: "给 AI 编程助手用的 Skill：先给结论、少绕弯，输出更适合 ADHD 阅读习惯（MIT）。",
+      url: "https://github.com/ayghri/i-have-adhd",
+      tags: ["ai", "skill", "github"],
+    },
   ];
 
   function $(sel, root) {
