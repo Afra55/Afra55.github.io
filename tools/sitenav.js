@@ -11,6 +11,13 @@
       tags: ["windows", "搜索", "文件"],
     },
     {
+      id: "myspeed",
+      title: "MySpeed",
+      desc: "自托管网速监控：定时测速、历史图表、多服务器；支持 LibreSpeed / Ookla / Cloudflare。需本机 Docker 或安装包（MIT）。",
+      url: "https://myspeed.dev/",
+      tags: ["测速", "监控", "自托管", "docker"],
+    },
+    {
       id: "pdfcraft",
       title: "PDF 工具箱",
       desc: "合并 / 拆分 / 压缩 / 转换等 100+ PDF 工具，浏览器本地处理。",
