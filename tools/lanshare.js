@@ -600,7 +600,12 @@
 
   function setInfo(msg) {
     clearTimeout(infoTimer);
-    if (!msg || !els.statusText || !state.roomId) return;
+    if (!msg || !els.statusText) return;
+    if (!state.roomId) {
+      els.statusText.textContent = msg;
+      infoTimer = setTimeout(() => paintStatus(), 6000);
+      return;
+    }
     const base = `${state.members.size} 人在线 · 文件从上传者直传`;
     els.statusText.textContent = `${base} · ${msg}`;
     infoTimer = setTimeout(() => paintStatus(), 4500);
@@ -886,6 +891,7 @@
     paintMembers();
     paintFiles();
     paintPairingGuide();
+    if (canUploadFiles()) tryFlushSiteShareQueue();
     if (els.roomCodeEl) {
       els.roomCodeEl.hidden = !inRoom || !state.isHost;
       if (inRoom && state.isHost) {
@@ -2472,6 +2478,82 @@
     }
   }
 
+  /** 站点工具可选把导出文件送入互传（仅文件，不解密业务数据） */
+  const SITE_SHARE_KEY = "devtools-site-share-v1";
+  /** @type {{ files: File[], meta: object } | null} */
+  let siteShareQueued = null;
+
+  function queueOutboundFiles(fileList, meta) {
+    const files = [...(fileList || [])].filter((f) => f instanceof Blob);
+    if (!files.length) return;
+    siteShareQueued = {
+      files,
+      meta: meta && typeof meta === "object" ? meta : {},
+    };
+    window.__devtoolsSiteSharePending = siteShareQueued;
+    try {
+      sessionStorage.setItem(
+        SITE_SHARE_KEY,
+        JSON.stringify({
+          v: 1,
+          pending: true,
+          createdAt: Date.now(),
+          source: meta?.source || "site",
+          label: meta?.label || "站点数据",
+          note: meta?.note || "",
+          fileNames: files.map((f) => f.name || "file"),
+        })
+      );
+    } catch (_) {
+      /* ignore */
+    }
+    setInfo(
+      `已排队 ${files.length} 个站点文件${meta?.label ? `（${meta.label}）` : ""}：进房并连接就绪后会自动加入上传列表`
+    );
+    tryFlushSiteShareQueue();
+  }
+
+  function takeSiteShareQueue() {
+    const fromWin = window.__devtoolsSiteSharePending;
+    if (fromWin?.files?.length) {
+      siteShareQueued = fromWin;
+      try {
+        delete window.__devtoolsSiteSharePending;
+      } catch (_) {
+        window.__devtoolsSiteSharePending = null;
+      }
+    }
+    const q = siteShareQueued;
+    siteShareQueued = null;
+    try {
+      sessionStorage.removeItem(SITE_SHARE_KEY);
+    } catch (_) {
+      /* ignore */
+    }
+    return q;
+  }
+
+  function tryFlushSiteShareQueue() {
+    if (!canUploadFiles()) return false;
+    const q = takeSiteShareQueue();
+    if (!q?.files?.length) return false;
+    onFilesPicked(q.files).then(() => {
+      const label = q.meta?.label || "站点数据";
+      setInfo(`已加入互传：${label}（${q.files.length} 个文件）`);
+    });
+    return true;
+  }
+
+  window.DevToolsLanShare = {
+    queueOutboundFiles,
+    tryFlushSiteShareQueue,
+    hasQueuedOutbound() {
+      return Boolean(
+        siteShareQueued?.files?.length || window.__devtoolsSiteSharePending?.files?.length
+      );
+    },
+  };
+
   function removeFile(fileId) {
     const f = state.files.get(fileId);
     if (!f || f.ownerId !== state.peerId) return;
@@ -3302,6 +3384,20 @@
         tryApplyHostAnswerFromHash().catch(() => {});
         tryAutoJoinFromHash().catch(() => {});
         tryAutoJoinFromPassword().catch(() => {});
+        tryFlushSiteShareQueue();
+        try {
+          const hint = sessionStorage.getItem(SITE_SHARE_KEY);
+          if (hint && !canUploadFiles()) {
+            const meta = JSON.parse(hint);
+            if (meta?.pending) {
+              setInfo(
+                `有待发送的站点文件${meta.label ? `（${meta.label}）` : ""}：请先创建或加入房间，连接就绪后会自动加入上传列表`
+              );
+            }
+          }
+        } catch (_) {
+          /* ignore */
+        }
       });
     }
   });

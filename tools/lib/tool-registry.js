@@ -893,7 +893,7 @@
     "color": "HEX / RGB / HSL 颜色格式互转与预览。",
     "eyedropper": "屏幕取色（需浏览器 EyeDropper 支持）。",
     "password": "可配置字符集与长度的本地随机密码。",
-    "passvault": "浏览器本地加密密码库（Web Crypto AES-GCM）：主密码解锁、条目增删改、加密备份导入导出；数据不出本机。",
+    "passvault": "浏览器本地加密密码库（Web Crypto AES-GCM）：可选绑定本机文件夹（仿备忘录）；可导出或送到局域网互传（仅加密备份，对方仍需主密码）。",
     "base64": "文本 Base64 编码与解码。",
     "imgb64": "图片与 Base64 Data URL 互转。",
     "url": "URL 编码 / 解码。",

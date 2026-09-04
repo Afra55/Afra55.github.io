@@ -1,7 +1,7 @@
 <section id="passvault" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>本地密码库</h1>
-        <p>密文只存在本浏览器（Web Crypto AES-GCM）。主密码解锁后可增删改查；可导出加密备份。不上传服务器。</p>
+        <p>密文默认在本浏览器；可像备忘录一样<strong>绑定本机文件夹</strong>持久保存。可导出备份，或<strong>可选送到局域网互传</strong>（仍是加密文件）。</p>
       </div>
       <div class="panel-body">
         <div id="pv-locked" class="pv-gate panel-card">
@@ -19,15 +19,29 @@
             <button type="button" class="ghost-btn" id="pv-import">导入加密备份</button>
             <input id="pv-import-file" type="file" accept="application/json,.json" hidden />
           </div>
-          <p class="hint tight" style="margin-top:0.45rem">忘记主密码 = 无法解密。请自行牢记，并定期导出备份到安全位置。</p>
+          <p class="hint tight" style="margin-top:0.45rem">忘记主密码 = 无法解密。请自行牢记，并定期导出或绑定文件夹。</p>
         </div>
 
         <div id="pv-open" hidden>
-          <div class="label-row">
+          <div class="panel-card pv-store-box" id="pv-store-box">
+            <div class="label-row">
+              <h2 class="subhead">存储位置</h2>
+              <span class="hint tight" id="pv-store-meta">浏览器内</span>
+            </div>
+            <p class="hint tight" style="margin-top:0.25rem">默认写入本站浏览器数据；绑定文件夹后，密文同步到该目录的 <span class="mono">passvault-blob.json</span>（需支持文件夹授权的浏览器，如 Chrome / Edge）。</p>
+            <div class="btn-row tool-actions" style="margin-top:0.4rem;flex-wrap:wrap">
+              <button type="button" class="secondary-btn" id="pv-pick-dir">选择存储文件夹</button>
+              <button type="button" class="ghost-btn" id="pv-reconnect-dir" hidden>重新连接文件夹</button>
+              <button type="button" class="ghost-btn" id="pv-clear-dir" hidden>改回仅浏览器</button>
+            </div>
+          </div>
+
+          <div class="label-row" style="margin-top:0.85rem">
             <h2 class="subhead">条目 <span class="hint tight" id="pv-count"></span></h2>
             <div class="btn-row tool-actions" style="flex-wrap:wrap;gap:0.3rem">
               <button type="button" class="secondary-btn" id="pv-add">新增</button>
               <button type="button" class="ghost-btn" id="pv-export">导出加密备份</button>
+              <button type="button" class="ghost-btn" id="pv-share-lanshare" title="把当前加密库送到局域网互传（需进房后对方下载）">送到互传</button>
               <button type="button" class="ghost-btn" id="pv-lock">立即上锁</button>
             </div>
           </div>
@@ -74,6 +88,6 @@
         </div>
 
         <p class="error" id="pv-error" hidden></p>
-        <p class="hint tight" style="margin-top:0.65rem">说明：这是浏览器本地便利库，不是银行级硬件金库。换设备/清站点数据会丢失，请导出备份。敏感公司密钥仍建议专用方案。</p>
+        <p class="hint tight" style="margin-top:0.65rem">说明：浏览器本地便利库。互传只送<strong>加密备份</strong>，对方仍需主密码。清站点数据前请确认已绑定文件夹或已导出。</p>
       </div>
     </section>

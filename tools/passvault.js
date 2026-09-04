@@ -6,14 +6,24 @@
 
   const $ = (sel, root = panel) => root.querySelector(sel);
   const STORE_KEY = "devtools-passvault-blob-v1";
+  const DIR_META_KEY = "devtools-passvault-dir-meta-v1";
+  const IDB_NAME = "devtools-passvault-fs";
+  const IDB_STORE = "handles";
+  const HANDLE_KEY = "dir";
+  const BLOB_FILENAME = "passvault-blob.json";
   const ITER = 600000;
   const AUTO_LOCK_MS = 5 * 60 * 1000;
+  const SITE_SHARE_KEY = "devtools-site-share-v1";
 
   let entries = [];
   let cryptoKey = null;
   let salt = null;
   let lockTimer = 0;
   let isNewVault = false;
+  /** @type {FileSystemDirectoryHandle | null} */
+  let dirHandle = null;
+  let dirName = "";
+  let dirPending = false;
 
   function showError(msg) {
     const el = $("#pv-error");
@@ -59,8 +69,176 @@
     }
   }
 
-  function saveBlob(obj) {
+  function saveBlobLocal(obj) {
     localStorage.setItem(STORE_KEY, JSON.stringify(obj));
+  }
+
+  function loadDirMeta() {
+    try {
+      return JSON.parse(localStorage.getItem(DIR_META_KEY) || "null");
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function saveDirMeta(meta) {
+    if (!meta) localStorage.removeItem(DIR_META_KEY);
+    else localStorage.setItem(DIR_META_KEY, JSON.stringify(meta));
+  }
+
+  function openIdb() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains(IDB_STORE)) db.createObjectStore(IDB_STORE);
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error || new Error("IndexedDB 打开失败"));
+    });
+  }
+
+  async function idbGet(key) {
+    const db = await openIdb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readonly");
+      const req = tx.objectStore(IDB_STORE).get(key);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function idbPut(key, value) {
+    const db = await openIdb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      tx.objectStore(IDB_STORE).put(value, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function idbDel(key) {
+    const db = await openIdb();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(IDB_STORE, "readwrite");
+      tx.objectStore(IDB_STORE).delete(key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  function fsSupported() {
+    return typeof window.showDirectoryPicker === "function";
+  }
+
+  async function ensureDirPermission(handle, mode) {
+    if (!handle) return false;
+    const opts = { mode: mode || "readwrite" };
+    try {
+      if (handle.queryPermission) {
+        const q = await handle.queryPermission(opts);
+        if (q === "granted") return true;
+      }
+      if (handle.requestPermission) {
+        const r = await handle.requestPermission(opts);
+        return r === "granted";
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function readBlobFromDir(handle) {
+    try {
+      const fileHandle = await handle.getFileHandle(BLOB_FILENAME);
+      const file = await fileHandle.getFile();
+      return JSON.parse(await file.text());
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function writeBlobToDir(handle, obj) {
+    const fileHandle = await handle.getFileHandle(BLOB_FILENAME, { create: true });
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(obj, null, 2));
+    await writable.close();
+  }
+
+  async function saveBlob(obj) {
+    saveBlobLocal(obj);
+    if (dirHandle && !dirPending) {
+      const ok = await ensureDirPermission(dirHandle, "readwrite");
+      if (!ok) {
+        dirPending = true;
+        paintStorageUi();
+        throw new Error("文件夹写入权限不足，请点「重新连接文件夹」");
+      }
+      await writeBlobToDir(dirHandle, obj);
+    }
+  }
+
+  function paintStorageUi() {
+    const meta = $("#pv-store-meta");
+    const reconnect = $("#pv-reconnect-dir");
+    const clearBtn = $("#pv-clear-dir");
+    const pick = $("#pv-pick-dir");
+    if (pick) pick.hidden = !fsSupported();
+    if (dirHandle && !dirPending) {
+      if (meta) meta.textContent = `文件夹「${dirName || dirHandle.name}」/${BLOB_FILENAME}`;
+      if (reconnect) reconnect.hidden = false;
+      if (clearBtn) clearBtn.hidden = false;
+    } else if (dirPending || (dirName && !dirHandle)) {
+      if (meta) meta.textContent = `曾绑定「${dirName}」，需重新授权`;
+      if (reconnect) reconnect.hidden = false;
+      if (clearBtn) clearBtn.hidden = false;
+    } else {
+      if (meta) meta.textContent = "浏览器内";
+      if (reconnect) reconnect.hidden = true;
+      if (clearBtn) clearBtn.hidden = true;
+    }
+  }
+
+  async function hydrateDir() {
+    const meta = loadDirMeta();
+    if (!meta?.name) {
+      paintStorageUi();
+      return;
+    }
+    dirName = meta.name;
+    try {
+      const handle = await idbGet(HANDLE_KEY);
+      if (!handle) {
+        dirPending = true;
+        paintStorageUi();
+        return;
+      }
+      const ok = await ensureDirPermission(handle, "readwrite");
+      if (!ok) {
+        dirHandle = handle;
+        dirPending = true;
+        paintStorageUi();
+        return;
+      }
+      dirHandle = handle;
+      dirPending = false;
+      const disk = await readBlobFromDir(handle);
+      if (disk?.salt && disk?.ciphertext) {
+        saveBlobLocal({
+          v: 1,
+          salt: disk.salt,
+          iter: disk.iter || ITER,
+          iv: disk.iv,
+          ciphertext: disk.ciphertext,
+          updatedAt: disk.updatedAt || Date.now(),
+        });
+      }
+    } catch (_) {
+      dirPending = true;
+    }
+    paintStorageUi();
   }
 
   async function deriveKey(password, saltBytes, iter) {
@@ -95,7 +273,7 @@
   async function persist() {
     if (!cryptoKey || !salt) throw new Error("未解锁");
     const { iv, ciphertext } = await encryptEntries(entries, cryptoKey);
-    saveBlob({
+    await saveBlob({
       v: 1,
       salt: b64(salt),
       iter: ITER,
@@ -110,7 +288,8 @@
     if (!cryptoKey) return;
     lockTimer = window.setTimeout(() => lockVault("已自动上锁（闲置超时）"), AUTO_LOCK_MS);
     const meta = $("#pv-session-meta");
-    if (meta) meta.textContent = `解锁中 · 约 ${Math.round(AUTO_LOCK_MS / 60000)} 分钟无操作会自动上锁 · 共 ${entries.length} 条`;
+    if (meta)
+      meta.textContent = `解锁中 · 约 ${Math.round(AUTO_LOCK_MS / 60000)} 分钟无操作会自动上锁 · 共 ${entries.length} 条`;
   }
 
   function setGateMode(hasVault) {
@@ -140,6 +319,7 @@
     if (m) m.value = "";
     if (m2) m2.value = "";
     setGateMode(Boolean(loadBlob()));
+    paintStorageUi();
     if (reason) toast(reason);
     showError("");
   }
@@ -275,6 +455,7 @@
       $("#pv-open").hidden = false;
       $("#pv-master").value = "";
       if ($("#pv-master2")) $("#pv-master2").value = "";
+      paintStorageUi();
       renderList();
       bumpActivity();
       toast("密码库已打开");
@@ -311,7 +492,7 @@
     $("#pv-editor").hidden = true;
     renderList();
     bumpActivity();
-    toast("条目已保存");
+    toast(dirHandle && !dirPending ? "条目已保存（含文件夹）" : "条目已保存");
   }
 
   async function deleteEntry() {
@@ -349,7 +530,7 @@
       const obj = JSON.parse(text);
       if (!obj?.salt || !obj?.iv || !obj?.ciphertext) throw new Error("不是有效的加密备份");
       if (loadBlob() && !window.confirm("本机已有密码库，导入将覆盖。确定？")) return;
-      saveBlob({
+      await saveBlob({
         v: 1,
         salt: obj.salt,
         iter: obj.iter || ITER,
@@ -369,6 +550,149 @@
     return entries.find((e) => e.id === id);
   }
 
+  function queueLanShare(files, meta) {
+    if (window.DevToolsLanShare?.queueOutboundFiles) {
+      window.DevToolsLanShare.queueOutboundFiles(files, meta || {});
+      return;
+    }
+    window.__devtoolsSiteSharePending = {
+      meta: {
+        v: 1,
+        createdAt: Date.now(),
+        source: meta?.source || "passvault",
+        label: meta?.label || "站点数据",
+        note: meta?.note || "",
+      },
+      files: Array.from(files),
+    };
+    try {
+      sessionStorage.setItem(
+        SITE_SHARE_KEY,
+        JSON.stringify({
+          v: 1,
+          pending: true,
+          createdAt: Date.now(),
+          source: meta?.source || "passvault",
+          label: meta?.label || "站点数据",
+          note: meta?.note || "",
+          fileNames: Array.from(files).map((f) => f.name),
+        })
+      );
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function shareToLan() {
+    bumpActivity();
+    const blob = loadBlob();
+    if (!blob) {
+      showError("没有可共享的加密库");
+      return;
+    }
+    const name = `passvault-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    const file = new File([JSON.stringify(blob, null, 2)], name, { type: "application/json" });
+    queueLanShare([file], {
+      source: "passvault",
+      label: "密码库加密备份",
+      note: "仅加密 blob，对方导入后仍需主密码",
+    });
+    toast("已放入互传队列，正在打开局域网互传…");
+    location.hash = "lanshare";
+  }
+
+  async function bindDirectory(existing) {
+    showError("");
+    if (!fsSupported()) {
+      showError("当前浏览器不支持选文件夹（请用最新 Chrome / Edge）");
+      return;
+    }
+    try {
+      let handle = existing || null;
+      if (!handle) handle = await window.showDirectoryPicker({ mode: "readwrite" });
+      const ok = await ensureDirPermission(handle, "readwrite");
+      if (!ok) {
+        showError("未获得文件夹权限");
+        return;
+      }
+      dirHandle = handle;
+      dirName = handle.name || "folder";
+      dirPending = false;
+      await idbPut(HANDLE_KEY, handle);
+      saveDirMeta({ name: dirName, boundAt: Date.now() });
+
+      const disk = await readBlobFromDir(handle);
+      const local = loadBlob();
+      if (disk?.salt && disk?.ciphertext) {
+        const same =
+          local &&
+          local.salt === disk.salt &&
+          local.iv === disk.iv &&
+          local.ciphertext === disk.ciphertext;
+        if (local && !same) {
+          const useDisk = window.confirm(
+            "文件夹里已有密码库备份。\n确定：用文件夹覆盖浏览器；\n取消：把浏览器内容写入文件夹。"
+          );
+          if (useDisk) {
+            await saveBlob({
+              v: 1,
+              salt: disk.salt,
+              iter: disk.iter || ITER,
+              iv: disk.iv,
+              ciphertext: disk.ciphertext,
+              updatedAt: disk.updatedAt || Date.now(),
+            });
+            if (cryptoKey) lockVault("已改用文件夹中的库，请重新解锁");
+            else {
+              setGateMode(true);
+              toast("已改用文件夹中的库，请用原主密码打开");
+            }
+          } else {
+            await writeBlobToDir(handle, local);
+            toast(`已将浏览器库写入「${dirName}」`);
+          }
+        } else {
+          if (!local) {
+            saveBlobLocal({
+              v: 1,
+              salt: disk.salt,
+              iter: disk.iter || ITER,
+              iv: disk.iv,
+              ciphertext: disk.ciphertext,
+              updatedAt: disk.updatedAt || Date.now(),
+            });
+            setGateMode(true);
+          }
+          toast(`已连接文件夹「${dirName}」`);
+        }
+      } else if (local) {
+        await writeBlobToDir(handle, local);
+        toast(`已绑定「${dirName}」，并写入现有库`);
+      } else {
+        toast(`已绑定「${dirName}」，创建库后会写入此目录`);
+      }
+      paintStorageUi();
+    } catch (err) {
+      if (err && err.name === "AbortError") return;
+      showError("绑定失败：" + (err.message || err));
+    }
+  }
+
+  async function clearDirectory() {
+    if (!window.confirm("改回仅浏览器存储？文件夹里的文件不会删除。")) return;
+    dirHandle = null;
+    dirName = "";
+    dirPending = false;
+    try {
+      await idbDel(HANDLE_KEY);
+    } catch (_) {
+      /* ignore */
+    }
+    saveDirMeta(null);
+    paintStorageUi();
+    toast("已改回仅浏览器本地");
+  }
+
   $("#pv-unlock")?.addEventListener("click", () => unlock());
   $("#pv-master")?.addEventListener("keydown", (ev) => {
     if (ev.key === "Enter") unlock();
@@ -384,6 +708,17 @@
   $("#pv-save")?.addEventListener("click", () => saveEntry().catch((e) => showError(e.message)));
   $("#pv-delete")?.addEventListener("click", () => deleteEntry().catch((e) => showError(e.message)));
   $("#pv-export")?.addEventListener("click", () => exportBackup());
+  $("#pv-share-lanshare")?.addEventListener("click", () => shareToLan());
+  $("#pv-pick-dir")?.addEventListener("click", () => bindDirectory(null));
+  $("#pv-reconnect-dir")?.addEventListener("click", async () => {
+    try {
+      const handle = await idbGet(HANDLE_KEY);
+      await bindDirectory(handle || null);
+    } catch (_) {
+      await bindDirectory(null);
+    }
+  });
+  $("#pv-clear-dir")?.addEventListener("click", () => clearDirectory());
   $("#pv-filter")?.addEventListener("input", () => {
     bumpActivity();
     renderList();
@@ -434,5 +769,7 @@
     });
   });
 
-  setGateMode(Boolean(loadBlob()));
+  hydrateDir()
+    .then(() => setGateMode(Boolean(loadBlob())))
+    .catch(() => setGateMode(Boolean(loadBlob())));
 })();

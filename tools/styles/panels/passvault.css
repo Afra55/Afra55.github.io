@@ -1,6 +1,10 @@
-/* 本地密码库 */
-#passvault .pv-gate {
-  padding: 0.85rem 0.9rem;
+#passvault .pv-store-box {
+  margin-bottom: 0.75rem;
+  padding: 0.7rem 0.8rem;
+}
+
+#passvault .pv-store-box .label-row {
+  align-items: baseline;
 }
 
 #passvault .pv-list {
