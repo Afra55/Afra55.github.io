@@ -389,6 +389,10 @@
   margin-top: 0.75rem;
 }
 
+#gitbridge .git-ready {
+  padding: 0.65rem 0.75rem;
+}
+
 #gitbridge .git-ops-details {
   margin-top: 0.35rem;
 }
