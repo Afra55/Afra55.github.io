@@ -2170,7 +2170,7 @@
         btn.title = item.dangerous
           ? `${plain}\n对应：git ${gitTitle}\n（会改仓库，执行前确认）`
           : `${plain}\n对应：git ${gitTitle}`;
-        btn.innerHTML = `<span class="git-op-plain-text">${escapeHtml(plain)}</span><span class="git-op-cmd mono">${escapeHtml(gitTitle)}</span>`;
+        btn.innerHTML = `<span class="git-op-plain-text">${escapeHtml(plain)}</span><span class="git-op-cmd mono">对应 git ${escapeHtml(gitTitle)}</span>`;
         btn.addEventListener("click", () => runOp(item.id).catch((e) => showError(e.message)));
         row.appendChild(btn);
       }

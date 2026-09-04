@@ -254,6 +254,49 @@
   margin-top: 0.45rem;
 }
 
+#gitbridge .git-calm-banner {
+  margin: 0.35rem 0 0.55rem;
+  padding: 0.65rem 0.8rem;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, #3dd68c 35%, var(--line, rgba(127, 140, 160, 0.35)));
+  background: color-mix(in srgb, #3dd68c 10%, transparent);
+}
+
+#gitbridge .git-calm-banner p {
+  margin: 0;
+  line-height: 1.45;
+  font-size: 0.9rem;
+}
+
+#gitbridge .git-action-grid-main {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 900px) {
+  #gitbridge .git-action-grid-main {
+    grid-template-columns: 1fr;
+  }
+}
+
+#gitbridge .git-op-cmd {
+  font-size: 0.72rem;
+  opacity: 0.58;
+  font-weight: 500;
+}
+
+#gitbridge .git-op-plain-btn .git-op-plain-text {
+  font-size: 0.9rem;
+}
+
+#gitbridge .ghost-btn.is-warn-text {
+  color: color-mix(in srgb, #f5a524 85%, var(--text, #e8eaed));
+}
+
+#gitbridge .git-more-details > summary,
+#gitbridge .git-pull-mode-details > summary {
+  opacity: 0.78;
+}
+
 #gitbridge .git-ops-group-title {
   margin: 0 0 0.35rem;
   font-size: 0.92rem;
