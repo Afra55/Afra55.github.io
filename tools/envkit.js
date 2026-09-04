@@ -24,6 +24,24 @@
       primary: true,
     },
     {
+      id: "ff-mount",
+      name: "统一桥 · FFmpeg 挂载 /ff",
+      url: "http://127.0.0.1:17888/ff/health",
+      token: "devtools-bridge",
+      tokenHeader: "X-Ffmpeg-Token",
+      link: "#ffbridge",
+      primary: true,
+    },
+    {
+      id: "ytdlp-mount",
+      name: "统一桥 · yt-dlp 挂载 /ytdlp",
+      url: "http://127.0.0.1:17888/ytdlp/health",
+      token: "devtools-bridge",
+      tokenHeader: "X-Ffmpeg-Token",
+      link: "#ytdlp",
+      primary: true,
+    },
+    {
       id: "git-mount",
       name: "统一桥 · Git 挂载 /git",
       url: "http://127.0.0.1:17888/git/health",
@@ -31,28 +49,6 @@
       tokenHeader: "X-Git-Token",
       link: "#gitbridge",
       primary: true,
-    },
-  ];
-
-  /** 遗留可选：仅探测展示，不再推荐新装 */
-  const LEGACY_BRIDGES = [
-    {
-      id: "ffmpeg-standalone",
-      name: "遗留 · FFmpeg 独立桥 17889",
-      url: "http://127.0.0.1:17889/health",
-      token: "devtools-ffmpeg",
-      tokenHeader: "X-Ffmpeg-Token",
-      link: "#ffbridge",
-      legacy: true,
-    },
-    {
-      id: "git-standalone",
-      name: "遗留 · Git 独立桥 17890",
-      url: "http://127.0.0.1:17890/health",
-      token: "devtools-git",
-      tokenHeader: "X-Git-Token",
-      link: "#gitbridge",
-      legacy: true,
     },
   ];
 
@@ -91,10 +87,10 @@
         linkBtn("./envkit/upgrade-devtools-env.ps1", "upgrade-devtools-env.ps1", "升级 PowerShell", false)
       );
       hint.textContent = [
-        "升级会处理：Node、Git、FFmpeg、ADB、yt-dlp（winget / yt-dlp -U）+ 全部桥文件。",
+        "升级会处理：Node、Git、FFmpeg、ADB、yt-dlp（winget / yt-dlp -U）+ 统一桥文件。",
         "1. 下载 upgrade-win.cmd（建议与 ps1 同目录）",
         "2. 双击运行，等对照表打印完成",
-        "3. 新开终端，再启动 DevToolsBridges 里的桥",
+        "3. 新开终端，再启动 DevToolsBridges/adb-bridge（统一桥 17888）",
         "仅检测：powershell -File install-devtools-env.ps1 -Mode check",
       ].join("\n");
     } else if (next === "mac") {
@@ -107,11 +103,11 @@
         linkBtn("./envkit/upgrade-devtools-env.sh", "upgrade-devtools-env.sh", "升级 Shell（联网拉最新）", false)
       );
       hint.textContent = [
-        "升级会处理：Node、Git、FFmpeg、ADB、yt-dlp（Homebrew 等）+ 全部桥文件。",
+        "升级会处理：Node、Git、FFmpeg、ADB、yt-dlp（Homebrew 等）+ 统一桥文件。",
         "1. 下载 upgrade-mac.command 并允许打开，或：",
         "   chmod +x upgrade-devtools-env.sh && ./upgrade-devtools-env.sh",
         "2. 看终端「升级后对照」；日志在 ~/DevToolsBridges/last-upgrade.log",
-        "3. 重新启动桥进程以加载新 server.js",
+        "3. 重新启动 adb-bridge（统一桥 17888）以加载新 server.js",
       ].join("\n");
     } else {
       installBtns.append(
@@ -122,10 +118,10 @@
         linkBtn("./envkit/install-devtools-env.sh", "install-devtools-env.sh", "完整脚本（再跑 upgrade）", false)
       );
       hint.textContent = [
-        "升级会处理：Node、Git、FFmpeg、ADB、yt-dlp（apt/dnf/pacman 等）+ 全部桥文件。",
+        "升级会处理：Node、Git、FFmpeg、ADB、yt-dlp（apt/dnf/pacman 等）+ 统一桥文件。",
         "chmod +x upgrade-devtools-env.sh && ./upgrade-devtools-env.sh",
         "或：./install-devtools-env.sh upgrade",
-        "需要 sudo 时会提示输入密码。",
+        "需要 sudo 时会提示输入密码。启动统一桥：adb-bridge/start-*",
       ].join("\n");
     }
 
@@ -165,18 +161,11 @@
     }
   }
 
-  function renderProbe(rows, { legacy = false } = {}) {
-    if (!legacy) grid.innerHTML = "";
-    if (legacy && rows.length) {
-      const h = document.createElement("p");
-      h.className = "hint tight env-probe-legacy-label";
-      h.textContent = "遗留可选（不必再装；工具页已统一走 17888）";
-      grid.appendChild(h);
-    }
+  function renderProbe(rows) {
+    grid.innerHTML = "";
     for (const r of rows) {
       const card = document.createElement("div");
-      card.className =
-        "env-probe-card " + (r.ok ? "is-ok" : "is-err") + (legacy ? " is-legacy" : "");
+      card.className = "env-probe-card " + (r.ok ? "is-ok" : "is-err");
       card.innerHTML = `
         <span class="adb-dot ${r.ok ? "is-ok" : "is-err"}" aria-hidden="true"></span>
         <div>
@@ -192,12 +181,9 @@
   async function probeAll() {
     errEl.hidden = true;
     grid.innerHTML = `<p class="hint">探测中…</p>`;
-    const primary = [];
-    for (const b of BRIDGES) primary.push(await probeOne(b));
-    renderProbe(primary);
-    const legacy = [];
-    for (const b of LEGACY_BRIDGES) legacy.push(await probeOne(b));
-    renderProbe(legacy, { legacy: true });
+    const rows = [];
+    for (const b of BRIDGES) rows.push(await probeOne(b));
+    renderProbe(rows);
   }
 
   $$("[data-env-os]", panel).forEach((btn) => {

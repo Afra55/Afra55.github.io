@@ -499,7 +499,7 @@
 
       if (!health?.ok) {
         throw new Error(
-          "无法连接本机桥。推荐：下载 ADB 完整包并启动一次（含 Git）。或单独启动 Git 桥（17890）。"
+          "无法连接本机桥。请下载统一完整包，解压后运行 adb-bridge 启动脚本（17888，含 Git /ff）。"
         );
       }
       if (!health.git) throw new Error("桥已启动，但本机找不到 git，请安装后重启桥");

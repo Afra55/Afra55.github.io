@@ -1,7 +1,7 @@
 <section id="envkit" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>环境管家</h1>
-        <p>一键安装或升级本机工具（Node、Git、FFmpeg、ADB、yt-dlp）并同步桥文件。已装则安装时跳过；升级会尝试把已装工具升到最新。<a href="#setup">图文指南</a></p>
+        <p>一键安装或升级本机工具（Node、Git、FFmpeg、ADB、yt-dlp），并同步<strong>统一桥</strong>文件。一座桥（17888）覆盖 ADB / FFmpeg / yt-dlp / Git / Everything。<a href="#setup">图文指南</a></p>
       </div>
       <div class="panel-body">
         <div class="field-row" style="flex-wrap:wrap;margin-bottom:0.75rem;gap:0.45rem;align-items:center">
@@ -21,7 +21,7 @@
 
         <div class="panel-card" style="margin-top:0.85rem">
           <h2 class="subhead">一键升级（系统工具 + 桥）</h2>
-          <p class="hint tight">把<strong>已安装</strong>的 Node、Git、FFmpeg、ADB、yt-dlp 升到包管理器最新版；未装的会顺手装上；同时刷新全部桥脚本。升级前后版本写入 <span class="mono">~/DevToolsBridges/last-upgrade.log</span>。</p>
+          <p class="hint tight">把<strong>已安装</strong>的 Node、Git、FFmpeg、ADB、yt-dlp 升到包管理器最新版；未装的会顺手装上；同时刷新<strong>统一桥</strong>所需文件（含嵌套的 ffmpeg-bridge / git-bridge 模块）。升级日志：<span class="mono">~/DevToolsBridges/last-upgrade.log</span>。</p>
           <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.55rem" id="env-upgrade-btns"></div>
           <pre class="mono adb-pre" id="env-run-hint" style="margin-top:0.55rem;white-space:pre-wrap"></pre>
         </div>
@@ -37,21 +37,23 @@
 
         <div class="panel-card" style="margin-top:0.85rem">
           <div class="label-row">
-            <h2 class="subhead">桥在线状态</h2>
+            <h2 class="subhead">统一桥在线状态</h2>
             <button type="button" class="secondary-btn" id="env-probe">重新探测</button>
           </div>
-          <p class="hint tight">优先看<strong>统一桥 17888</strong>。独立桥端口仅作遗留探测，新环境不必再装。</p>
+          <p class="hint tight">只探测 <strong>17888 统一桥</strong>及其挂载（/ff · /ytdlp · /git）。不要再单独启动 17889 / 17890。</p>
           <div class="env-probe-grid" id="env-probe-grid" style="margin-top:0.55rem"></div>
           <p class="error" id="env-error" hidden></p>
         </div>
 
         <div class="panel-card" style="margin-top:0.85rem">
           <h2 class="subhead">启动后去哪</h2>
+          <p class="hint tight" style="margin:0.25rem 0 0.45rem">先启动 <span class="mono">adb-bridge</span> 启动脚本（一座桥），再打开对应工具页。</p>
           <div class="btn-row tool-actions" style="flex-wrap:wrap">
-            <a class="ghost-btn" href="#adb">ADB / 统一桥 17888</a>
-            <a class="ghost-btn" href="#ffbridge">FFmpeg</a>
-            <a class="ghost-btn" href="#ytdlp">yt-dlp</a>
-            <a class="ghost-btn" href="#gitbridge">Git 可视化（统一桥 /git）</a>
+            <a class="ghost-btn" href="#adb">ADB · 统一桥</a>
+            <a class="ghost-btn" href="#ffbridge">FFmpeg · /ff</a>
+            <a class="ghost-btn" href="#ytdlp">yt-dlp · /ytdlp</a>
+            <a class="ghost-btn" href="#gitbridge">Git · /git</a>
+            <a class="ghost-btn" href="#everything">Everything</a>
             <a class="ghost-btn" href="#setup">图文指南</a>
           </div>
         </div>

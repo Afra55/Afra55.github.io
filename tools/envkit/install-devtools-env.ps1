@@ -185,11 +185,12 @@ function Sync-Bridges {
   @"
 DevTools 桥目录：$BridgeDir
 
-1) 统一桥（ADB+FFmpeg+yt-dlp+Git+Everything）：双击 adb-bridge\start-win.cmd
-   http://127.0.0.1:17888  Token: devtools-bridge
-   API: /ff · /ytdlp · /git · /everything
-2) （可选）独立 Git 桥：仅当不需要统一桥时，双击 git-bridge\start-win.cmd
-   http://127.0.0.1:17890  Token: devtools-git
+只需启动一座统一桥：
+  双击 adb-bridge\start-win.cmd
+  地址 http://127.0.0.1:17888  Token: devtools-bridge
+  API: /ff · /ytdlp · /git · /everything
+
+（ffmpeg-bridge / git-bridge 目录是统一桥的嵌套模块，请勿单独启动。）
 
 网页：https://afra55.github.io/tools/#envkit
 "@ | Set-Content -Encoding UTF8 (Join-Path $BridgeDir "start-all-hint.txt")

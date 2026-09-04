@@ -364,12 +364,12 @@ sync_bridges() {
   cat >"$BRIDGE_DIR/start-all-hint.txt" <<EOF
 DevTools 桥目录：${BRIDGE_DIR}
 
-推荐：
-  1) 统一桥（ADB + FFmpeg + yt-dlp + Git + Everything）：运行 adb-bridge/start-*
-     地址 http://127.0.0.1:17888  Token: devtools-bridge
-     API：/ff · /ytdlp · /git · /everything
-  2) （可选）独立 Git 桥：仅当不需要 ADB 时，运行 git-bridge/start-*
-     地址 http://127.0.0.1:17890  Token: devtools-git
+只需启动一座统一桥：
+  运行 adb-bridge/start-*
+  地址 http://127.0.0.1:17888  Token: devtools-bridge
+  API：/ff · /ytdlp · /git · /everything
+
+（ffmpeg-bridge / git-bridge 目录是统一桥的嵌套模块，请勿单独启动。）
 
 网页：${BASE_URL%/tools}/tools/#envkit
 EOF
@@ -447,8 +447,7 @@ main() {
   say ""
   say "下一步："
   say "  1. 启动 ${BRIDGE_DIR}/adb-bridge 启动脚本（统一桥 17888，含 FFmpeg/yt-dlp/Git）"
-  say "  2. 打开网页 ${BASE_URL%/tools}/tools/#envkit 探测；Git 用 #gitbridge（API /git）"
-  say "  3. （可选）仅当不用统一桥时，再跑 git-bridge/start-*"
+  say "  2. 打开网页 ${BASE_URL%/tools}/tools/#envkit 探测；各工具页共用同一座桥"
 }
 
 main

@@ -931,7 +931,7 @@
     "gitbridge": "分支工作台 + 冲突置顶 + 面板确认 + 小 GUI 美化；统一桥 /git。",
     "about": "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
     "setup": "小白向：如何下载安装 Node.js、ADB、FFmpeg；手机用网页保底、电脑用桥更优。",
-    "envkit": "一键安装/升级系统工具与统一桥文件；探测以 17888 统一桥为主（独立桥仅遗留可选）。",
+    "envkit": "一键安装/升级系统工具与统一桥（17888）；探测 /health、/ff、/ytdlp、/git；不再推荐独立桥。",
     "feedbackhub": "汇集各工具底部 giscus 评价：按工具/时间查看，并跳转 GitHub Discussions 回复。",
     "mathedit": "MathLive 在线数学公式编辑：可视化输入，导出 LaTeX / MathML / AsciiMath。",
     "mdslides": "把 Markdown 做成网页幻灯片（Reveal.js）；用 --- 分页，一键全屏演示。",
