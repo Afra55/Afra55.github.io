@@ -1221,8 +1221,8 @@ const OP_PLAIN = {
   "pull-rebase": "更新：把我的接到最新后面",
   "pull-merge": "更新：用合并方式接上最新",
   push: "把本地提交上传到网上",
-  "push-gerrit": "送到 Gerrit 评审（refs/for）",
-  "gerrit-config-push": "配置：以后上传默认走 Gerrit 评审",
+  "push-gerrit": "【Gerrit】送审：推到评审区 refs/for（不是直推分支）",
+  "gerrit-config-push": "【Gerrit】先配：以后「上传」默认走评审 refs/for",
   "branch-set-upstream": "设置当前线跟踪网上哪条",
   "push-lease": "安全强推：覆盖远程同名线（有保护）",
   "push-tags": "把标签上传到网上",
@@ -1259,6 +1259,7 @@ function listOpsCatalog() {
   for (const [id, def] of Object.entries(OP_DEFS)) {
     const groupKey = def.group;
     if (!groups[groupKey]) groups[groupKey] = [];
+    const gerrit = /gerrit/i.test(id) || id === "push-gerrit";
     groups[groupKey].push({
       id,
       title: def.title,
@@ -1266,6 +1267,7 @@ function listOpsCatalog() {
       group: groupKey,
       groupLabel: GROUP_LABEL[groupKey] || groupKey,
       dangerous: isDangerousOp(id, def),
+      gerrit,
     });
   }
   return {

@@ -71,6 +71,49 @@
   opacity: 0.8;
 }
 
+#gitbridge .git-branch-more {
+  margin-top: 0.45rem;
+  border: 1px dashed color-mix(in srgb, var(--line, #2a2f3a) 80%, transparent);
+  border-radius: 8px;
+  padding: 0.35rem 0.55rem;
+}
+
+#gitbridge .git-branch-more > summary {
+  cursor: pointer;
+  list-style: none;
+}
+
+#gitbridge .git-branch-more-list {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.4rem;
+}
+
+#gitbridge .git-explain-cmds {
+  grid-column: 1 / -1;
+}
+
+#gitbridge .git-op-gerrit-tag {
+  display: inline-block;
+  margin-right: 0.35rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  background: color-mix(in srgb, #e6a23c 28%, transparent);
+  color: inherit;
+  vertical-align: middle;
+}
+
+#gitbridge .git-op-gerrit-btn {
+  border-color: color-mix(in srgb, #e6a23c 55%, var(--line, #2a2f3a));
+}
+
+#gitbridge .git-op-row.is-gerrit .git-op-plain-btn {
+  border-left: 3px solid color-mix(in srgb, #e6a23c 70%, transparent);
+}
+
 #gitbridge .git-graph {
   border: 1px solid var(--border, #2a2f3a);
   border-radius: 8px;

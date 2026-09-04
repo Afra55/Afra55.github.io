@@ -41,7 +41,7 @@ const ALLOWED_ORIGINS = new Set(
 
 const { buildOp, listOpsCatalog, assertPath } = require("./git-ops");
 
-const BRIDGE_VERSION = "0.2.11";
+const BRIDGE_VERSION = "0.2.12";
 const FEATURES = [
   "fs-browse","repo-open","repo-init","repo-clone","graph","branches",
   "status","commit-detail","explain","ops-catalog","ops-full","protocol-launch",
@@ -680,6 +680,49 @@ async function explainCommit(repo, sha) {
   }
   cmds.push(contains.cmd);
 
+  const remoteContains = await git(repo, [
+    "branch",
+    "-r",
+    "--contains",
+    detail.hash,
+    "--format=%(refname:short)",
+  ]).catch(() => ({ stdout: "", cmd: null }));
+  const remoteList = String(remoteContains.stdout || "")
+    .trim()
+    .split("\n")
+    .filter(Boolean);
+  if (remoteContains.cmd) cmds.push(remoteContains.cmd);
+  if (remoteList.length) {
+    bullets.push({
+      kind: "remote",
+      text: `网上已有这条提交（出现在：${remoteList.slice(0, 8).join("、")}${
+        remoteList.length > 8 ? "…" : ""
+      }）→ 可以理解为「已经推上去 / 别人也能看到」。`,
+    });
+  } else {
+    bullets.push({
+      kind: "remote",
+      text: "网上远程分支里还没有它 → 多半还在你本机，别人看不见（未上传，或 Gerrit 仅送审未合入）。",
+    });
+  }
+
+  const upstreamRef = await git(repo, ["rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"]).catch(
+    () => ({ stdout: "", cmd: null })
+  );
+  if (upstreamRef.cmd) cmds.push(upstreamRef.cmd);
+  const up = String(upstreamRef.stdout || "").trim();
+  if (up) {
+    const onUp = await git(repo, ["merge-base", "--is-ancestor", detail.hash, up])
+      .then(() => true)
+      .catch(() => false);
+    bullets.push({
+      kind: "upstream",
+      text: onUp
+        ? `你当前跟踪的「${up}」已经包含它 → 相对这条线上线，可算「已同步」。`
+        : `你当前跟踪的「${up}」还没有它 → 本地多出来的笔；要让线上有，需「上传」或 Gerrit「送审」。`,
+    });
+  }
+
   const head = await git(repo, ["rev-parse", "HEAD"]);
   const headSha = String(head.stdout).trim();
   if (headSha === detail.hash) {
@@ -718,6 +761,7 @@ async function explainCommit(repo, sha) {
     ...detail,
     bullets,
     containingBranches: branchList,
+    containingRemotes: remoteList,
     cmds: cmds.filter(Boolean),
   };
 }

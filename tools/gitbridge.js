@@ -398,19 +398,22 @@
     $$(".git-row", graphEl).forEach((el) => el.classList.toggle("is-active", el.dataset.sha === sha));
     $("#git-op-target").value = sha.slice(0, 12);
     explainEl.innerHTML = `<p class="hint">加载中…</p>`;
+    const cmdsBox = $("#git-explain-cmds");
+    const cmdsPre = $("#git-explain-cmds-pre");
+    if (cmdsBox) cmdsBox.hidden = true;
     try {
       const data = await api(`/repo/explain?repo=${encodeURIComponent(repoPath)}&sha=${encodeURIComponent(sha)}`);
       const cmds = (data.cmds || [])
         .map((c) => (Array.isArray(c) ? c.join(" ") : String(c)))
         .filter(Boolean);
       explainEl.innerHTML = `
-        <p><strong class="mono">${data.short}</strong> · ${escapeHtml(data.subject || "")}</p>
+        <p><strong class="mono">${escapeHtml(data.short || "")}</strong> · ${escapeHtml(data.subject || "")}</p>
         <ul>${(data.bullets || []).map((b) => `<li>${escapeHtml(b.text)}</li>`).join("")}</ul>
-        <p class="hint tight" style="margin-top:0.55rem">用到的 git：</p>
-        <pre class="mono" style="white-space:pre-wrap;font-size:0.75rem;margin:0.25rem 0 0">${escapeHtml(
-          cmds.slice(0, 6).join("\n") || "(无)"
-        )}</pre>
       `;
+      if (cmdsPre && cmds.length) {
+        cmdsPre.textContent = cmds.slice(0, 8).join("\n");
+        if (cmdsBox) cmdsBox.hidden = false;
+      }
     } catch (e) {
       explainEl.innerHTML = `<p class="error">${escapeHtml(e.message)}</p>`;
     }
@@ -687,11 +690,12 @@
     return r;
   }
 
-  function branchActionBtn(label, className, onClick) {
+  function branchActionBtn(label, className, onClick, title) {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = className || "ghost-btn";
     btn.textContent = label;
+    if (title) btn.title = title;
     btn.addEventListener("click", (ev) => {
       ev.stopPropagation();
       Promise.resolve(onClick()).catch((e) => showError(e.message));
@@ -743,18 +747,27 @@
     actions.className = "git-branch-actions";
     if (kind === "local") {
       if (!b.current) {
-        actions.appendChild(branchActionBtn("切换", "secondary-btn", () => switchToBranch(b.name)));
-        actions.appendChild(branchActionBtn("并入当前", "ghost-btn", () => mergeBranchIntoCurrent(b.name)));
-        actions.appendChild(branchActionBtn("删除", "ghost-btn", () => deleteLocalBranch(b.name)));
+        actions.appendChild(
+          branchActionBtn("切换到这条", "secondary-btn", () => switchToBranch(b.name), "把你当前工作切到这条线（checkout）")
+        );
+        actions.appendChild(
+          branchActionBtn(
+            "合进我现在的线",
+            "ghost-btn",
+            () => mergeBranchIntoCurrent(b.name),
+            "不切换：把这条线上的提交合并进你现在所在的线（merge）。你还是停在当前线。"
+          )
+        );
+        actions.appendChild(branchActionBtn("删除这条线", "ghost-btn", () => deleteLocalBranch(b.name)));
       } else {
         const tip = document.createElement("span");
         tip.className = "hint tight";
-        tip.textContent = "正在这条线";
+        tip.textContent = "你现在就在这条线上";
         actions.appendChild(tip);
       }
     } else {
       actions.appendChild(
-        branchActionBtn("检出为本地", "secondary-btn", () => switchToBranch("remote:" + b.name))
+        branchActionBtn("检出为本地", "secondary-btn", () => switchToBranch("remote:" + b.name), "在本地建/切到对应线")
       );
     }
 
@@ -764,32 +777,78 @@
     return card;
   }
 
+  function updateBranchSummary(branches) {
+    const sum = $("#git-branch-summary");
+    if (!sum) return;
+    const cur = (branches?.local || []).find((b) => b.current);
+    const name = cur?.name || lastStatus?.branch || "—";
+    const track =
+      cur?.upstream != null
+        ? cur.upstream
+          ? ` · 跟踪 ${cur.upstream}`
+          : ""
+        : lastStatus?.upstream
+          ? ` · 跟踪 ${lastStatus.upstream}`
+          : "";
+    sum.textContent = `工作线 · 当前：${name}${track}（折叠，点开可切换/合线）`;
+  }
+
   function renderBranchWorkbench(branches) {
     if (!branchesEl) return;
     lastBranches = branches || { local: [], remote: [], tags: [] };
     branchesEl.innerHTML = "";
     const locals = lastBranches.local || [];
     const remotes = (lastBranches.remote || []).filter((b) => b.name && !/HEAD$/.test(b.name));
+    updateBranchSummary(lastBranches);
 
     if (!locals.length && !remotes.length) {
       branchesEl.innerHTML = `<p class="hint tight">无分支</p>`;
       return;
     }
 
-    const addSec = (title) => {
+    const current = locals.find((b) => b.current);
+    const others = locals.filter((b) => !b.current);
+
+    if (current) {
       const h = document.createElement("div");
       h.className = "git-branch-sec";
-      h.textContent = title;
+      h.textContent = "当前（你正在用的）";
       branchesEl.appendChild(h);
-    };
+      branchesEl.appendChild(makeBranchCard(current, "local"));
+    }
 
-    if (locals.length) {
-      addSec("本地");
+    if (others.length) {
+      const more = document.createElement("details");
+      more.className = "git-branch-more";
+      const sum = document.createElement("summary");
+      sum.className = "hint tight";
+      sum.textContent = `其他本地线（${others.length}）· 默认收起`;
+      more.appendChild(sum);
+      const wrap = document.createElement("div");
+      wrap.className = "git-branch-more-list";
+      for (const b of others) wrap.appendChild(makeBranchCard(b, "local"));
+      more.appendChild(wrap);
+      branchesEl.appendChild(more);
+    } else if (!current && locals.length) {
+      const h = document.createElement("div");
+      h.className = "git-branch-sec";
+      h.textContent = "本地";
+      branchesEl.appendChild(h);
       for (const b of locals) branchesEl.appendChild(makeBranchCard(b, "local"));
     }
+
     if (remotes.length) {
-      addSec("网上");
-      for (const b of remotes.slice(0, 48)) branchesEl.appendChild(makeBranchCard(b, "remote"));
+      const more = document.createElement("details");
+      more.className = "git-branch-more";
+      const sum = document.createElement("summary");
+      sum.className = "hint tight";
+      sum.textContent = `网上的线（${Math.min(remotes.length, 48)}）· 默认收起`;
+      more.appendChild(sum);
+      const wrap = document.createElement("div");
+      wrap.className = "git-branch-more-list";
+      for (const b of remotes.slice(0, 48)) wrap.appendChild(makeBranchCard(b, "remote"));
+      more.appendChild(wrap);
+      branchesEl.appendChild(more);
     }
   }
 
@@ -1639,7 +1698,13 @@
 
   async function mergeBranchIntoCurrent(name) {
     if (!repoPath) return showError("先打开一个仓库");
-    if (!(await askConfirm(`把「${name}」合并进当前工作线？两边改同一处时会出现冲突。`))) return;
+    if (
+      !(await askConfirm(
+        `把「${name}」上的提交合进你现在所在的工作线？\n\n· 不会切换过去，你还是停在当前线\n· 等于 git merge ${name}\n· 两边改同一处时会出现冲突`
+      ))
+    ) {
+      return;
+    }
     await runOp("merge", { branch: name }, { skipConfirm: true });
     await refreshChanges();
     await refreshRepo();
@@ -2183,18 +2248,29 @@
     return { id, title: id, plain: id, dangerous: false };
   }
 
+  function isGerritOp(item) {
+    const id = String(item?.id || "");
+    return item?.gerrit === true || /gerrit/i.test(id) || id === "push-gerrit";
+  }
+
   function makeOpRow(item, { favMode = false } = {}) {
     const row = document.createElement("div");
-    row.className = "git-op-row";
+    row.className = "git-op-row" + (isGerritOp(item) ? " is-gerrit" : "");
     const btn = document.createElement("button");
     btn.type = "button";
-    btn.className = item.dangerous ? "git-op-plain-btn is-danger" : "git-op-plain-btn";
+    btn.className =
+      (item.dangerous ? "git-op-plain-btn is-danger" : "git-op-plain-btn") +
+      (isGerritOp(item) ? " git-op-gerrit-btn" : "");
     const plain = item.plain || item.title || item.id;
     const gitTitle = item.title || item.id;
+    const gerritTip = isGerritOp(item) ? "【Gerrit 专用】" : "";
     btn.title = item.dangerous
-      ? `${plain}\n对应：git ${gitTitle}\n（会改仓库，执行前确认）`
-      : `${plain}\n对应：git ${gitTitle}`;
-    btn.innerHTML = `<span class="git-op-plain-text">${escapeHtml(plain)}</span><span class="git-op-cmd mono">对应 git ${escapeHtml(gitTitle)}</span>`;
+      ? `${gerritTip}${plain}\n对应：git ${gitTitle}\n（会改仓库，执行前确认）`
+      : `${gerritTip}${plain}\n对应：git ${gitTitle}`;
+    const tag = isGerritOp(item) ? `<span class="git-op-gerrit-tag">Gerrit</span>` : "";
+    btn.innerHTML = `${tag}<span class="git-op-plain-text">${escapeHtml(plain)}</span><span class="git-op-cmd mono">对应 git ${escapeHtml(
+      gitTitle
+    )}</span>`;
     btn.addEventListener("click", () => runOp(item.id).catch((e) => showError(e.message)));
 
     const star = document.createElement("button");
