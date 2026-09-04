@@ -191,6 +191,21 @@
 
   const scriptPromises = new Map();
   let extraCorePromise = null;
+  /** 本会话已完整加载过的工具：再次进入跳过下载与进度条 */
+  const readyTools = new Set();
+
+  function isToolReady(toolId) {
+    return readyTools.has(String(toolId || "").trim());
+  }
+
+  function markToolReady(toolId) {
+    const id = String(toolId || "").trim();
+    if (id) readyTools.add(id);
+  }
+
+  function clearReadyTools() {
+    readyTools.clear();
+  }
 
   function withVersion(src) {
     const url = new URL(src, document.baseURI || window.location.href);
@@ -336,19 +351,27 @@
   async function ensureForTool(toolId, opts = {}) {
     const id = String(toolId || "").trim();
     if (!id) return;
+    const force = Boolean(opts.force) || Boolean(window.DevToolsPanels?.isForceFreshLoad?.());
     const onProgress = typeof opts.onProgress === "function" ? opts.onProgress : null;
     const report = (ratio, label) => onProgress?.(Math.max(0, Math.min(1, Number(ratio) || 0)), label);
+
+    if (!force && readyTools.has(id)) {
+      report(1, "已缓存");
+      return;
+    }
 
     if (id === "about") {
       report(0.2, "加载关于页…");
       await loadScript("./about.js");
       report(1, "关于页已就绪");
+      markToolReady(id);
       return;
     }
     if (id === "diff") {
       report(0.2, "加载文本比对…");
       await loadDiffBundle();
       report(1, "文本比对已就绪");
+      markToolReady(id);
       return;
     }
 
@@ -386,11 +409,14 @@
       await loadToolScript(id);
     }
     report(1, "工具已就绪");
+    markToolReady(id);
   }
 
   window.DevToolsLazy = {
     BUILD,
     ensureForTool,
+    isToolReady,
+    clearReadyTools,
     loadExtraBundle,
     loadExtraCore,
     loadVendor,

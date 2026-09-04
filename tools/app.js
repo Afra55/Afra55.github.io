@@ -2752,6 +2752,19 @@
     const loadGen = ++toolLoadGen;
     toolLoadPanelId = String(toolId || "").trim();
     const name = toolName(toolId);
+    const alreadyReady = Boolean(window.DevToolsLazy?.isToolReady?.(toolId));
+
+    // 本会话已加载过：直接发路由事件，不展示加载条、不重复拉脚本
+    if (alreadyReady && !window.DevToolsPanels?.isForceFreshLoad?.()) {
+      if (gen === routeGen) setPanelAssetLoading(toolLoadPanelId, false);
+      window.dispatchEvent(
+        new CustomEvent("devtools:route", {
+          detail: { tool: currentTool, groupId: TOOL_TO_GROUP[currentTool] || null },
+        })
+      );
+      return;
+    }
+
     let overlayShown = false;
     if (gen === routeGen) setPanelAssetLoading(toolLoadPanelId, true);
     const showDelay = window.setTimeout(() => {
@@ -3569,6 +3582,8 @@
       b.disabled = true;
     });
     try {
+      window.DevToolsLazy?.clearReadyTools?.();
+      window.DevToolsPanels?.clearSessionCache?.();
       if (navigator.serviceWorker?.getRegistrations) {
         const regs = await navigator.serviceWorker.getRegistrations();
         await Promise.all(regs.map((r) => r.unregister()));

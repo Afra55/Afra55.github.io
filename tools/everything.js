@@ -24,6 +24,7 @@
   const bridgeInput = $("#ev-bridge");
   const tokenInput = $("#ev-token");
   const targetInput = $("#ev-target");
+  const userInput = $("#ev-user");
   const passInput = $("#ev-pass");
   const dot = $("#ev-dot");
   const statusTitle = $("#ev-status-title");
