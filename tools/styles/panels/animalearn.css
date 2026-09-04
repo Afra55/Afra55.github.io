@@ -1,0 +1,198 @@
+/* 认动物 */
+.animalearn-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.animalearn-tabs {
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.animalearn-tab.is-active {
+  border-color: var(--accent, #5b8cff);
+  color: var(--accent, #5b8cff);
+}
+
+.animalearn-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.55rem 0.65rem;
+}
+
+.animalearn-filter-btn.is-active {
+  border-color: var(--accent, #5b8cff);
+  color: var(--accent, #5b8cff);
+}
+
+.animalearn-pane[hidden] {
+  display: none !important;
+}
+
+.animalearn-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.animalearn-media {
+  position: relative;
+  width: min(100%, 28rem);
+  aspect-ratio: 4 / 3;
+  border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--line, #2a2f3a) 80%, transparent);
+  background: color-mix(in srgb, var(--panel, #12141a) 70%, #1a2230);
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+}
+
+.animalearn-media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.animalearn-emoji {
+  font-size: clamp(3.5rem, 18vw, 6rem);
+  line-height: 1;
+  user-select: none;
+}
+
+.animalearn-names {
+  text-align: center;
+}
+
+.animalearn-zh {
+  margin: 0;
+  font-size: clamp(1.6rem, 5vw, 2.2rem);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.animalearn-en {
+  margin: 0.15rem 0 0;
+  font-size: clamp(1.1rem, 3.5vw, 1.45rem);
+  opacity: 0.85;
+}
+
+.animalearn-credit {
+  max-width: 36rem;
+  text-align: center;
+  opacity: 0.75;
+}
+
+.animalearn-nav {
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  margin-top: 0.35rem;
+}
+
+.animalearn-choices,
+.animalearn-img-choices {
+  display: grid;
+  gap: 0.55rem;
+  margin-top: 0.55rem;
+}
+
+.animalearn-choices {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 640px) {
+  .animalearn-choices {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.animalearn-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0.75rem 0.6rem;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--line, #2a2f3a) 85%, transparent);
+  background: color-mix(in srgb, var(--panel, #12141a) 55%, transparent);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+
+.animalearn-choice:hover,
+.animalearn-choice:focus-visible {
+  border-color: var(--accent, #5b8cff);
+  outline: none;
+}
+
+.animalearn-choice.is-correct,
+.animalearn-img-choice.is-correct {
+  border-color: #34d399;
+  background: color-mix(in srgb, #34d399 18%, transparent);
+}
+
+.animalearn-choice.is-wrong,
+.animalearn-img-choice.is-wrong {
+  border-color: #f31260;
+  background: color-mix(in srgb, #f31260 14%, transparent);
+}
+
+.animalearn-choice-zh {
+  font-size: 1.15rem;
+  font-weight: 650;
+}
+
+.animalearn-choice-en {
+  font-size: 0.92rem;
+  opacity: 0.8;
+}
+
+.animalearn-img-choices {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.animalearn-img-choice {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 14px;
+  border: 2px solid color-mix(in srgb, var(--line, #2a2f3a) 80%, transparent);
+  background: color-mix(in srgb, var(--panel, #12141a) 60%, transparent);
+  overflow: hidden;
+  cursor: pointer;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  display: grid;
+  place-items: center;
+}
+
+.animalearn-img-choice img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.animalearn-img-choice .animalearn-emoji {
+  font-size: clamp(2rem, 8vw, 3rem);
+}
+
+.animalearn-feedback {
+  min-height: 1.4em;
+  margin: 0.45rem 0 0;
+  text-align: center;
+  font-weight: 600;
+}
+
+.animalearn-feedback.is-ok {
+  color: #34d399;
+}
+
+.animalearn-feedback.is-bad {
+  color: #f31260;
+}

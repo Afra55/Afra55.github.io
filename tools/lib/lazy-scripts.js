@@ -75,6 +75,7 @@
     minigames: "./minigames.js",
     ambient: "./ambient.js",
     enspeak: "./enspeak.js",
+    animalearn: "./animalearn.js",
     sandspiel: "./sandspiel.js",
     memo: "./memo.js",
     sitenav: "./sitenav.js",
@@ -174,6 +175,7 @@
     "minigames",
     "ambient",
     "enspeak",
+    "animalearn",
     "sandspiel",
     "lanshare",
     "ffbridge",
@@ -188,7 +190,7 @@
     "acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp",
     "gitbridge", "passvault", "envkit", "feedbackhub",
     "setup", "about", "xorenc", "morse", "countdown",
-    "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "piano", "minigames", "ambient", "enspeak",
+    "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "piano", "minigames", "ambient", "enspeak", "animalearn",
   ]);
 
   const scriptPromises = new Map();

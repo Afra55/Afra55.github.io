@@ -1,0 +1,506 @@
+{
+  "version": 1,
+  "credit": "配图优先 Wikimedia Commons（Special:FilePath）；缺图时用 Openverse CC 检索兜底。仅供学习展示，请保留许可署名。",
+  "groups": [
+    {
+      "id": "all",
+      "nameZh": "全部",
+      "nameEn": "All"
+    },
+    {
+      "id": "pet",
+      "nameZh": "宠物家畜",
+      "nameEn": "Pets & farm"
+    },
+    {
+      "id": "wild",
+      "nameZh": "野兽",
+      "nameEn": "Wild"
+    },
+    {
+      "id": "bird",
+      "nameZh": "鸟类",
+      "nameEn": "Birds"
+    },
+    {
+      "id": "sea",
+      "nameZh": "水族",
+      "nameEn": "Sea"
+    },
+    {
+      "id": "bug",
+      "nameZh": "昆虫",
+      "nameEn": "Bugs"
+    }
+  ],
+  "animals": [
+    {
+      "id": "cat",
+      "nameZh": "猫",
+      "nameEn": "Cat",
+      "group": "pet",
+      "emoji": "🐱",
+      "query": "cat",
+      "commons": "Cat_November_2010-1a.jpg"
+    },
+    {
+      "id": "dog",
+      "nameZh": "狗",
+      "nameEn": "Dog",
+      "group": "pet",
+      "emoji": "🐶",
+      "query": "dog",
+      "commons": "Golden_Retriever_Hund_Dog.JPG"
+    },
+    {
+      "id": "rabbit",
+      "nameZh": "兔子",
+      "nameEn": "Rabbit",
+      "group": "pet",
+      "emoji": "🐰",
+      "query": "rabbit",
+      "commons": "Oryctolagus_cuniculus_Rcdo.jpg"
+    },
+    {
+      "id": "cow",
+      "nameZh": "牛",
+      "nameEn": "Cow",
+      "group": "pet",
+      "emoji": "🐮",
+      "query": "cow",
+      "commons": "Cow_female_black_white.jpg"
+    },
+    {
+      "id": "sheep",
+      "nameZh": "羊",
+      "nameEn": "Sheep",
+      "group": "pet",
+      "emoji": "🐑",
+      "query": "sheep",
+      "commons": "Ovis_aries_in_Schottland.jpg"
+    },
+    {
+      "id": "horse",
+      "nameZh": "马",
+      "nameEn": "Horse",
+      "group": "pet",
+      "emoji": "🐴",
+      "query": "horse",
+      "commons": "Horse-and-pony.jpg"
+    },
+    {
+      "id": "pig",
+      "nameZh": "猪",
+      "nameEn": "Pig",
+      "group": "pet",
+      "emoji": "🐷",
+      "query": "pig",
+      "commons": "Sus_scrofa_domesticus.jpg"
+    },
+    {
+      "id": "chicken",
+      "nameZh": "鸡",
+      "nameEn": "Chicken",
+      "group": "pet",
+      "emoji": "🐔",
+      "query": "chicken",
+      "commons": "Red_Junglefowl.jpg"
+    },
+    {
+      "id": "duck",
+      "nameZh": "鸭子",
+      "nameEn": "Duck",
+      "group": "pet",
+      "emoji": "🦆",
+      "query": "duck",
+      "commons": "Mallard2.jpg"
+    },
+    {
+      "id": "goat",
+      "nameZh": "山羊",
+      "nameEn": "Goat",
+      "group": "pet",
+      "emoji": "🐐",
+      "query": "goat",
+      "commons": "Goat_portrait.jpg"
+    },
+    {
+      "id": "goose",
+      "nameZh": "鹅",
+      "nameEn": "Goose",
+      "group": "pet",
+      "emoji": "🪿",
+      "query": "goose",
+      "commons": "Anser_anser_1_%28Piotr_Kuczynski%29.jpg"
+    },
+    {
+      "id": "donkey",
+      "nameZh": "驴",
+      "nameEn": "Donkey",
+      "group": "pet",
+      "emoji": "🫏",
+      "query": "donkey",
+      "commons": "Donkey_1_arp_750px.jpg"
+    },
+    {
+      "id": "tiger",
+      "nameZh": "老虎",
+      "nameEn": "Tiger",
+      "group": "wild",
+      "emoji": "🐯",
+      "query": "tiger",
+      "commons": "Panthera_tigris_tigris.jpg"
+    },
+    {
+      "id": "lion",
+      "nameZh": "狮子",
+      "nameEn": "Lion",
+      "group": "wild",
+      "emoji": "🦁",
+      "query": "lion",
+      "commons": "Lion_waiting_in_Namibia.jpg"
+    },
+    {
+      "id": "elephant",
+      "nameZh": "大象",
+      "nameEn": "Elephant",
+      "group": "wild",
+      "emoji": "🐘",
+      "query": "elephant",
+      "commons": "African_Bush_Elephant.jpg"
+    },
+    {
+      "id": "panda",
+      "nameZh": "大熊猫",
+      "nameEn": "Giant panda",
+      "group": "wild",
+      "emoji": "🐼",
+      "query": "giant panda",
+      "commons": "Grosser_Panda.JPG"
+    },
+    {
+      "id": "bear",
+      "nameZh": "熊",
+      "nameEn": "Bear",
+      "group": "wild",
+      "emoji": "🐻",
+      "query": "brown bear",
+      "commons": "Ursus_arctos_-_Norway.jpg"
+    },
+    {
+      "id": "monkey",
+      "nameZh": "猴子",
+      "nameEn": "Monkey",
+      "group": "wild",
+      "emoji": "🐵",
+      "query": "monkey",
+      "commons": "Macaca_fuscata_male.jpg"
+    },
+    {
+      "id": "fox",
+      "nameZh": "狐狸",
+      "nameEn": "Fox",
+      "group": "wild",
+      "emoji": "🦊",
+      "query": "fox",
+      "commons": "Vulpes_vulpes_sitting.jpg"
+    },
+    {
+      "id": "wolf",
+      "nameZh": "狼",
+      "nameEn": "Wolf",
+      "group": "wild",
+      "emoji": "🐺",
+      "query": "wolf",
+      "commons": "Canis_lupus_laying.jpg"
+    },
+    {
+      "id": "deer",
+      "nameZh": "鹿",
+      "nameEn": "Deer",
+      "group": "wild",
+      "emoji": "🦌",
+      "query": "deer",
+      "commons": "Cervus_elaphus_Luc_Viatour_6.jpg"
+    },
+    {
+      "id": "zebra",
+      "nameZh": "斑马",
+      "nameEn": "Zebra",
+      "group": "wild",
+      "emoji": "🦓",
+      "query": "zebra",
+      "commons": "Equus_quagga.jpg"
+    },
+    {
+      "id": "giraffe",
+      "nameZh": "长颈鹿",
+      "nameEn": "Giraffe",
+      "group": "wild",
+      "emoji": "🦒",
+      "query": "giraffe",
+      "commons": "Giraffa_camelopardalis_reticulata.jpg"
+    },
+    {
+      "id": "kangaroo",
+      "nameZh": "袋鼠",
+      "nameEn": "Kangaroo",
+      "group": "wild",
+      "emoji": "🦘",
+      "query": "kangaroo",
+      "commons": "Kangaroo_and_joey_03.jpg"
+    },
+    {
+      "id": "koala",
+      "nameZh": "考拉",
+      "nameEn": "Koala",
+      "group": "wild",
+      "emoji": "🐨",
+      "query": "koala",
+      "commons": "Koala_climbing_tree.jpg"
+    },
+    {
+      "id": "hippo",
+      "nameZh": "河马",
+      "nameEn": "Hippo",
+      "group": "wild",
+      "emoji": "🦛",
+      "query": "hippopotamus",
+      "commons": "Hippopotamus_amphibius.jpg"
+    },
+    {
+      "id": "rhino",
+      "nameZh": "犀牛",
+      "nameEn": "Rhino",
+      "group": "wild",
+      "emoji": "🦏",
+      "query": "rhinoceros",
+      "commons": "Ceratotherium_simum_simum.jpg"
+    },
+    {
+      "id": "camel",
+      "nameZh": "骆驼",
+      "nameEn": "Camel",
+      "group": "wild",
+      "emoji": "🐪",
+      "query": "camel",
+      "commons": "07._Camel_Profile%2C_near_Silverton%2C_NSW%2C_07.07.2007.jpg"
+    },
+    {
+      "id": "squirrel",
+      "nameZh": "松鼠",
+      "nameEn": "Squirrel",
+      "group": "wild",
+      "emoji": "🐿️",
+      "query": "squirrel",
+      "commons": "Sciurus_vulgaris_sitting_on_a_tree.jpg"
+    },
+    {
+      "id": "hedgehog",
+      "nameZh": "刺猬",
+      "nameEn": "Hedgehog",
+      "group": "wild",
+      "emoji": "🦔",
+      "query": "hedgehog",
+      "commons": "Erinaceus_europaeus.jpg"
+    },
+    {
+      "id": "penguin",
+      "nameZh": "企鹅",
+      "nameEn": "Penguin",
+      "group": "bird",
+      "emoji": "🐧",
+      "query": "penguin",
+      "commons": "Aptenodytes_forsteri_-Snow_Hill_Island%2C_Antarctica_-adults_and_juvenile-8.jpg"
+    },
+    {
+      "id": "eagle",
+      "nameZh": "老鹰",
+      "nameEn": "Eagle",
+      "group": "bird",
+      "emoji": "🦅",
+      "query": "eagle",
+      "commons": "Bald_Eagle_Portrait.jpg"
+    },
+    {
+      "id": "owl",
+      "nameZh": "猫头鹰",
+      "nameEn": "Owl",
+      "group": "bird",
+      "emoji": "🦉",
+      "query": "owl",
+      "commons": "Athene_noctua_%28cropped%29.jpg"
+    },
+    {
+      "id": "parrot",
+      "nameZh": "鹦鹉",
+      "nameEn": "Parrot",
+      "group": "bird",
+      "emoji": "🦜",
+      "query": "parrot",
+      "commons": "Ara_ararauna_Luc_Viatour_1.jpg"
+    },
+    {
+      "id": "swan",
+      "nameZh": "天鹅",
+      "nameEn": "Swan",
+      "group": "bird",
+      "emoji": "🦢",
+      "query": "swan",
+      "commons": "Cygnus_olor_2_%28Marek_Szczepanek%29.jpg"
+    },
+    {
+      "id": "peacock",
+      "nameZh": "孔雀",
+      "nameEn": "Peacock",
+      "group": "bird",
+      "emoji": "🦚",
+      "query": "peacock",
+      "commons": "Peacock_Pleads_to_Peahen.jpg"
+    },
+    {
+      "id": "sparrow",
+      "nameZh": "麻雀",
+      "nameEn": "Sparrow",
+      "group": "bird",
+      "emoji": "🐦",
+      "query": "sparrow",
+      "commons": "House_Sparrow_%28Passer_domesticus%29_-_Flickr_-_Lip_Kee.jpg"
+    },
+    {
+      "id": "flamingo",
+      "nameZh": "火烈鸟",
+      "nameEn": "Flamingo",
+      "group": "bird",
+      "emoji": "🦩",
+      "query": "flamingo",
+      "commons": "Phoenicopterus_ruber_in_S%C3%A3o_Paulo_Zoo.jpg"
+    },
+    {
+      "id": "fish",
+      "nameZh": "鱼",
+      "nameEn": "Fish",
+      "group": "sea",
+      "emoji": "🐟",
+      "query": "fish underwater",
+      "commons": "Clownfish.jpg"
+    },
+    {
+      "id": "dolphin",
+      "nameZh": "海豚",
+      "nameEn": "Dolphin",
+      "group": "sea",
+      "emoji": "🐬",
+      "query": "dolphin",
+      "commons": "Bottlenose_dolphin_with_young.jpg"
+    },
+    {
+      "id": "whale",
+      "nameZh": "鲸鱼",
+      "nameEn": "Whale",
+      "group": "sea",
+      "emoji": "🐋",
+      "query": "whale",
+      "commons": "Humpback_stellwagen_edit.jpg"
+    },
+    {
+      "id": "shark",
+      "nameZh": "鲨鱼",
+      "nameEn": "Shark",
+      "group": "sea",
+      "emoji": "🦈",
+      "query": "shark",
+      "commons": "White_shark.jpg"
+    },
+    {
+      "id": "octopus",
+      "nameZh": "章鱼",
+      "nameEn": "Octopus",
+      "group": "sea",
+      "emoji": "🐙",
+      "query": "octopus",
+      "commons": "Octopus2.jpg"
+    },
+    {
+      "id": "crab",
+      "nameZh": "螃蟹",
+      "nameEn": "Crab",
+      "group": "sea",
+      "emoji": "🦀",
+      "query": "crab",
+      "commons": "Cancer_pagurus.jpg"
+    },
+    {
+      "id": "turtle",
+      "nameZh": "乌龟",
+      "nameEn": "Turtle",
+      "group": "sea",
+      "emoji": "🐢",
+      "query": "turtle",
+      "commons": "Florida_Box_Turtle_Digon3_re-edited.jpg"
+    },
+    {
+      "id": "seal",
+      "nameZh": "海豹",
+      "nameEn": "Seal",
+      "group": "sea",
+      "emoji": "🦭",
+      "query": "seal animal",
+      "commons": "Common_seal_%28Phoca_vitulina%29.jpg"
+    },
+    {
+      "id": "butterfly",
+      "nameZh": "蝴蝶",
+      "nameEn": "Butterfly",
+      "group": "bug",
+      "emoji": "🦋",
+      "query": "butterfly",
+      "commons": "Papilio_machaon_MHNT.jpg"
+    },
+    {
+      "id": "bee",
+      "nameZh": "蜜蜂",
+      "nameEn": "Bee",
+      "group": "bug",
+      "emoji": "🐝",
+      "query": "bee",
+      "commons": "Honey_bee_on_a_dandelion.jpg"
+    },
+    {
+      "id": "ladybug",
+      "nameZh": "瓢虫",
+      "nameEn": "Ladybug",
+      "group": "bug",
+      "emoji": "🐞",
+      "query": "ladybug",
+      "commons": "Coccinella_magnifica01.jpg"
+    },
+    {
+      "id": "ant",
+      "nameZh": "蚂蚁",
+      "nameEn": "Ant",
+      "group": "bug",
+      "emoji": "🐜",
+      "query": "ant",
+      "commons": "Meat_eater_ant_feeding_on_honey02.jpg"
+    },
+    {
+      "id": "dragonfly",
+      "nameZh": "蜻蜓",
+      "nameEn": "Dragonfly",
+      "group": "bug",
+      "emoji": "🪰",
+      "query": "dragonfly",
+      "commons": "Sympetrum_flaveolum_-_side_%28aka%29.jpg"
+    },
+    {
+      "id": "snail",
+      "nameZh": "蜗牛",
+      "nameEn": "Snail",
+      "group": "bug",
+      "emoji": "🐌",
+      "query": "snail",
+      "commons": "Helix_pomatia.jpg"
+    }
+  ]
+}

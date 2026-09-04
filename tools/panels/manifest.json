@@ -28,6 +28,11 @@
       "bytes": 2034
     },
     {
+      "id": "animalearn",
+      "file": "./panels/animalearn.html",
+      "bytes": 3816
+    },
+    {
       "id": "audio",
       "file": "./panels/audio.html",
       "bytes": 5089
