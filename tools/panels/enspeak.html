@@ -1,0 +1,133 @@
+<section id="enspeak" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>日常开口</h1>
+        <p>尽快能聊自己的生活：架子换词 · 话题岛 · 听跟 · <strong>当天说出口</strong>。不是考试/商务路径。</p>
+      </div>
+      <div class="panel-body enspeak-body">
+        <p class="enspeak-motto hint tight" id="enspeak-motto">没说出口，不算会。</p>
+
+        <nav class="enspeak-tabs btn-row tool-actions" role="tablist" aria-label="日常开口分区">
+          <button type="button" class="ghost-btn enspeak-tab is-active" data-tab="today" role="tab" aria-selected="true">今日</button>
+          <button type="button" class="ghost-btn enspeak-tab" data-tab="islands" role="tab" aria-selected="false">岛</button>
+          <button type="button" class="ghost-btn enspeak-tab" data-tab="frames" role="tab" aria-selected="false">架子</button>
+          <button type="button" class="ghost-btn enspeak-tab" data-tab="reply" role="tab" aria-selected="false">接话</button>
+          <button type="button" class="ghost-btn enspeak-tab" data-tab="profile" role="tab" aria-selected="false">档案</button>
+          <button type="button" class="ghost-btn enspeak-tab" data-tab="more" role="tab" aria-selected="false">更多</button>
+        </nav>
+
+        <div class="enspeak-panel is-active" data-panel="today" role="tabpanel">
+          <div class="panel-card enspeak-today-hero">
+            <div class="enspeak-today-meta" id="enspeak-today-meta"></div>
+            <div class="enspeak-blocks" id="enspeak-blocks" aria-label="今日四段"></div>
+            <div class="btn-row tool-actions">
+              <button type="button" class="primary-btn" id="enspeak-start-today">开始今日</button>
+              <button type="button" class="ghost-btn" id="enspeak-sos">卡壳急救</button>
+            </div>
+            <p class="hint tight" id="enspeak-today-hint"></p>
+          </div>
+
+          <div class="panel-card enspeak-drill" id="enspeak-drill" hidden>
+            <div class="enspeak-drill-head">
+              <h2 class="subhead" id="enspeak-drill-title">练习</h2>
+              <button type="button" class="ghost-btn" id="enspeak-drill-close">收起</button>
+            </div>
+            <div id="enspeak-drill-body"></div>
+          </div>
+
+          <div class="panel-card" id="enspeak-sos-box" hidden>
+            <h2 class="subhead">救命接话</h2>
+            <div id="enspeak-sos-list" class="enspeak-sent-list"></div>
+          </div>
+        </div>
+
+        <div class="enspeak-panel" data-panel="islands" role="tabpanel" hidden>
+          <div class="panel-card">
+            <div class="enspeak-island-map" id="enspeak-island-map"></div>
+          </div>
+          <div class="panel-card">
+            <div class="enspeak-island-toolbar btn-row tool-actions">
+              <h2 class="subhead" id="enspeak-island-title" style="margin:0;flex:1">句子</h2>
+              <button type="button" class="ghost-btn" id="enspeak-pseudo">伪对话</button>
+            </div>
+            <div id="enspeak-island-list" class="enspeak-sent-list"></div>
+          </div>
+        </div>
+
+        <div class="enspeak-panel" data-panel="frames" role="tabpanel" hidden>
+          <div class="panel-card">
+            <p class="hint tight">约 20 个万能架子：换进自己的词，跟读，当天说出去。</p>
+            <div id="enspeak-frame-grid" class="enspeak-frame-grid"></div>
+          </div>
+          <div class="panel-card" id="enspeak-frame-detail" hidden>
+            <h2 class="subhead" id="enspeak-frame-detail-title">架子</h2>
+            <div id="enspeak-frame-detail-body"></div>
+          </div>
+        </div>
+
+        <div class="enspeak-panel" data-panel="reply" role="tabpanel" hidden>
+          <div class="panel-card">
+            <div class="btn-row tool-actions">
+              <button type="button" class="primary-btn" id="enspeak-reply-draw">抽一张接话</button>
+              <button type="button" class="ghost-btn" id="enspeak-reply-all">看全部</button>
+            </div>
+            <div id="enspeak-reply-card" class="enspeak-reply-card"></div>
+            <div id="enspeak-reply-list" class="enspeak-sent-list" hidden></div>
+          </div>
+        </div>
+
+        <div class="enspeak-panel" data-panel="profile" role="tabpanel" hidden>
+          <div class="panel-card">
+            <p class="hint tight">填一次，全站句子尽量变成「你的生活」。可随时改。</p>
+            <form id="enspeak-profile-form" class="enspeak-profile-form"></form>
+            <div class="btn-row tool-actions">
+              <button type="submit" form="enspeak-profile-form" class="primary-btn">保存档案</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="enspeak-panel" data-panel="more" role="tabpanel" hidden>
+          <div class="panel-card">
+            <h2 class="subhead">本周复盘</h2>
+            <div id="enspeak-review" class="enspeak-review"></div>
+          </div>
+          <div class="panel-card">
+            <h2 class="subhead">进度</h2>
+            <div class="btn-row tool-actions">
+              <button type="button" class="ghost-btn" id="enspeak-export">导出 JSON</button>
+              <label class="ghost-btn enspeak-file-btn">导入 JSON<input type="file" id="enspeak-import" accept="application/json,.json" hidden /></label>
+              <button type="button" class="ghost-btn" id="enspeak-print">本周一页纸</button>
+              <button type="button" class="ghost-btn danger-btn" id="enspeak-reset">清空进度</button>
+            </div>
+            <p class="hint tight">数据只存在本机浏览器。换设备请先导出。</p>
+          </div>
+          <div class="panel-card">
+            <h2 class="subhead">方法备忘</h2>
+            <ul class="enspeak-method-list">
+              <li>每天 30～40 分钟：听跟 10′ · 换词 10′ · 接话 10′ · 输出 5～10′</li>
+              <li>新学 5～8 句/天；当天至少用真实情况说出 2～3 句</li>
+              <li>同一听跟段连用 3～5 天；一周主攻一个岛</li>
+              <li>有真人对话时，优先对着人说</li>
+            </ul>
+          </div>
+        </div>
+
+        <dialog class="enspeak-dialog" id="enspeak-sent-dialog">
+          <form method="dialog" class="enspeak-dialog-inner">
+            <h2 class="subhead" id="enspeak-dlg-en"></h2>
+            <p class="hint" id="enspeak-dlg-zh"></p>
+            <label class="enspeak-field">我的版本
+              <textarea id="enspeak-dlg-mine" rows="2" class="text-input" placeholder="换成你的真实情况"></textarea>
+            </label>
+            <div class="btn-row tool-actions">
+              <button type="button" class="ghost-btn" id="enspeak-dlg-speak">朗读</button>
+              <button type="button" class="ghost-btn" id="enspeak-dlg-rec">录音</button>
+              <button type="button" class="ghost-btn" id="enspeak-dlg-play" hidden>回放</button>
+              <button type="button" class="primary-btn" id="enspeak-dlg-spoken">已开口（真实情况）</button>
+              <button type="submit" class="ghost-btn" value="close">关闭</button>
+            </div>
+            <audio id="enspeak-dlg-audio" controls hidden></audio>
+            <p class="hint tight" id="enspeak-dlg-status"></p>
+          </form>
+        </dialog>
+      </div>
+    </section>

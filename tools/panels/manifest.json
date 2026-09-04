@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-03T13:09:07.493Z",
+  "generatedAt": "2026-09-04T05:01:27.364Z",
   "panels": [
     {
       "id": "about",
@@ -71,6 +71,11 @@
       "id": "diff",
       "file": "./panels/diff.html",
       "bytes": 3113
+    },
+    {
+      "id": "enspeak",
+      "file": "./panels/enspeak.html",
+      "bytes": 7479
     },
     {
       "id": "envkit",
