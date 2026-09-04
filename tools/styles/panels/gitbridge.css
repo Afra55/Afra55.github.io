@@ -79,12 +79,25 @@
   display: inline-block;
   padding: 0.05rem 0.35rem;
   border-radius: 4px;
+  border: none;
   background: color-mix(in srgb, var(--accent, #5b8cff) 22%, transparent);
+  color: inherit;
+  font: inherit;
   font-size: 0.72rem;
   max-width: 14rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+#gitbridge .git-ref:disabled {
+  cursor: default;
+  opacity: 0.85;
+}
+
+#gitbridge .git-ref:not(:disabled):hover {
+  background: color-mix(in srgb, var(--accent, #5b8cff) 38%, transparent);
 }
 
 #gitbridge .git-ref.is-head {
@@ -97,6 +110,94 @@
   gap: 0.25rem;
   max-height: 12rem;
   overflow: auto;
+}
+
+#gitbridge .git-branch-board {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  max-height: min(42vh, 22rem);
+  overflow: auto;
+  margin-top: 0.45rem;
+  padding: 0.15rem 0.1rem 0.35rem;
+}
+
+#gitbridge .git-branch-sec {
+  font-size: 0.75rem;
+  font-weight: 600;
+  opacity: 0.7;
+  margin: 0.2rem 0 0;
+  letter-spacing: 0.02em;
+}
+
+#gitbridge .git-branch-card {
+  border: 1px solid color-mix(in srgb, var(--border, #2a2f3a) 75%, transparent);
+  border-radius: 8px;
+  padding: 0.45rem 0.55rem 0.5rem;
+  background: color-mix(in srgb, var(--panel, #12141a) 88%, transparent);
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+#gitbridge .git-branch-card:hover {
+  border-color: color-mix(in srgb, var(--accent, #5b8cff) 45%, transparent);
+}
+
+#gitbridge .git-branch-card.is-current {
+  border-color: color-mix(in srgb, #3dd68c 55%, transparent);
+  background: color-mix(in srgb, #3dd68c 8%, transparent);
+}
+
+#gitbridge .git-branch-card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem 0.5rem;
+}
+
+#gitbridge .git-branch-name {
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: 600;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+
+#gitbridge .git-branch-name:hover {
+  color: var(--accent, #5b8cff);
+}
+
+#gitbridge .git-branch-pill {
+  font-size: 0.68rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, #3dd68c 28%, transparent);
+}
+
+#gitbridge .git-branch-track {
+  margin-left: auto;
+}
+
+#gitbridge .git-branch-subj {
+  margin-top: 0.2rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#gitbridge .git-branch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+}
+
+#gitbridge .git-branch-actions .ghost-btn,
+#gitbridge .git-branch-actions .secondary-btn {
+  font-size: 0.78rem;
+  padding: 0.2rem 0.45rem;
 }
 
 #gitbridge .git-branch-item {
@@ -115,6 +216,23 @@
 
 #gitbridge .git-branch-item.is-current {
   outline: 1px solid color-mix(in srgb, #3dd68c 55%, transparent);
+}
+
+#gitbridge .git-confirm-bar {
+  margin-top: 0.65rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, #f5a524 50%, transparent);
+  background: color-mix(in srgb, #f5a524 10%, transparent);
+}
+
+#gitbridge .git-confirm-bar[hidden] {
+  display: none !important;
+}
+
+#gitbridge .git-confirm-bar #git-confirm-text {
+  margin: 0 0 0.4rem;
+  white-space: pre-wrap;
 }
 
 #gitbridge .git-explain ul {

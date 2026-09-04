@@ -92,7 +92,7 @@ async function main() {
 
     const health = await req("GET", "/health");
     if (!health.json.git) throw new Error("git missing on host");
-    if (health.json.version !== "0.2.5") {
+    if (health.json.version !== "0.2.6") {
       throw new Error("unexpected version " + health.json.version);
     }
 
@@ -117,6 +117,15 @@ async function main() {
 
     const graph = await req("GET", `/repo/graph?repo=${encodeURIComponent(opened.json.repo)}&max=30`);
     if (!graph.json.commits || !graph.json.commits.length) throw new Error("empty graph");
+
+    const branches = await req("GET", `/repo/branches?repo=${encodeURIComponent(opened.json.repo)}`);
+    if (branches.status !== 200 || !Array.isArray(branches.json.local) || !branches.json.local.length) {
+      throw new Error("branches local missing: " + JSON.stringify(branches.json));
+    }
+    const cur = branches.json.local.find((b) => b.current) || branches.json.local[0];
+    if (!("ahead" in cur) || !("behind" in cur)) {
+      throw new Error("branch track stats missing: " + JSON.stringify(cur));
+    }
 
     const sha = graph.json.commits[0].hash;
     const explain = await req("GET", `/repo/explain?repo=${encodeURIComponent(opened.json.repo)}&sha=${sha}`);

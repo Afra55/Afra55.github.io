@@ -41,12 +41,12 @@ const ALLOWED_ORIGINS = new Set(
 
 const { buildOp, listOpsCatalog, assertPath } = require("./git-ops");
 
-const BRIDGE_VERSION = "0.2.5";
+const BRIDGE_VERSION = "0.2.6";
 const FEATURES = [
   "fs-browse","repo-open","repo-init","repo-clone","graph","branches",
   "status","commit-detail","explain","ops-catalog","ops-full","protocol-launch",
   "conflict-assist","read-write-file","beginner-plain-steps","beginner-sync-reset-patch",
-  "diff-file","push-gerrit","zero-difficulty"
+  "diff-file","push-gerrit","zero-difficulty","branch-track-stats"
 ];
 
 const GIT_TIMEOUT_MS = 120000;
@@ -252,7 +252,7 @@ async function repoBranches(repo) {
   const local = await git(repo, [
     "for-each-ref",
     "--sort=-committerdate",
-    "--format=%(refname:short)%00%(objectname)%00%(upstream:short)%00%(HEAD)%00%(subject)",
+    "--format=%(refname:short)%00%(objectname)%00%(upstream:short)%00%(HEAD)%00%(subject)%00%(upstream:track)",
     "refs/heads",
   ]);
   const remote = await git(repo, [
@@ -269,12 +269,20 @@ async function repoBranches(repo) {
     "--count=80",
   ]);
 
+  function parseTrack(track) {
+    const t = String(track || "");
+    const ahead = Number((t.match(/ahead\s+(\d+)/i) || [])[1] || 0);
+    const behind = Number((t.match(/behind\s+(\d+)/i) || [])[1] || 0);
+    return { ahead, behind };
+  }
+
   function parseLocal(text) {
     return String(text || "")
       .split("\n")
       .filter(Boolean)
       .map((line) => {
-        const [name, sha, upstream, headMark, subject] = line.split("\0");
+        const [name, sha, upstream, headMark, subject, track] = line.split("\0");
+        const ab = parseTrack(track);
         return {
           name,
           sha,
@@ -282,6 +290,9 @@ async function repoBranches(repo) {
           current: headMark === "*",
           subject: subject || "",
           kind: "local",
+          ahead: ab.ahead,
+          behind: ab.behind,
+          isRemote: false,
         };
       });
   }
@@ -291,7 +302,17 @@ async function repoBranches(repo) {
       .filter(Boolean)
       .map((line) => {
         const [name, sha, subject] = line.split("\0");
-        return { name, sha, subject: subject || "", kind: "remote" };
+        return {
+          name,
+          sha,
+          subject: subject || "",
+          kind: "remote",
+          ahead: 0,
+          behind: 0,
+          isRemote: true,
+          current: false,
+          upstream: "",
+        };
       });
   }
   function parseTags(text) {

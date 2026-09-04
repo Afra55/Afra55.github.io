@@ -34,6 +34,8 @@
   /** "" = 独立 Git 桥；"/git" = 统一桥挂载 */
   let apiPrefix = "/git";
   let bridgeMode = "unified";
+  let lastBranches = { local: [], remote: [], tags: [] };
+  let confirmResolver = null;
 
   try {
     baseInput.value = localStorage.getItem(BASE_KEY) || DEFAULT_BASE;
@@ -50,6 +52,45 @@
     }
     errEl.hidden = false;
     errEl.textContent = humanizeGitError(msg);
+  }
+
+  /** 面板内确认条，替代大部分 window.confirm */
+  function askConfirm(message) {
+    return new Promise((resolve) => {
+      const bar = $("#git-confirm-bar");
+      const text = $("#git-confirm-text");
+      if (!bar || !text) {
+        resolve(window.confirm(message));
+        return;
+      }
+      if (confirmResolver) {
+        const prev = confirmResolver;
+        confirmResolver = null;
+        prev(false);
+      }
+      confirmResolver = resolve;
+      text.textContent = message;
+      bar.hidden = false;
+      try {
+        bar.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      } catch (_) {
+        /* ignore */
+      }
+    });
+  }
+
+  function settleConfirm(ok) {
+    const bar = $("#git-confirm-bar");
+    if (bar) bar.hidden = true;
+    if (!confirmResolver) return;
+    const r = confirmResolver;
+    confirmResolver = null;
+    r(!!ok);
+  }
+
+  function setReadyVisible(show) {
+    const el = $("#git-ready");
+    if (el) el.hidden = !show;
   }
 
   function humanizeGitError(raw) {
@@ -313,9 +354,21 @@
       when.textContent = c.timestamp ? new Date(c.timestamp * 1000).toLocaleString() : "";
       sub.appendChild(when);
       for (const ref of c.refs || []) {
-        const chip = document.createElement("span");
+        const chip = document.createElement("button");
+        chip.type = "button";
         chip.className = "git-ref" + (/HEAD/.test(ref) ? " is-head" : "");
         chip.textContent = ref.replace(/^HEAD -> /, "HEAD→");
+        const switchTarget = refToSwitchTarget(ref);
+        if (switchTarget) {
+          chip.title = `切换到 ${switchTarget.replace(/^remote:/, "")}`;
+          chip.addEventListener("click", (ev) => {
+            ev.stopPropagation();
+            switchToBranch(switchTarget).catch((e) => showError(e.message));
+          });
+        } else {
+          chip.disabled = true;
+          chip.title = ref;
+        }
         sub.appendChild(chip);
       }
       meta.appendChild(subj);
@@ -460,6 +513,7 @@
 
       connected = true;
       workspace.hidden = false;
+      setReadyVisible(false);
       $("#git-refresh").disabled = false;
       const modeLabel = bridgeMode === "unified" ? "统一桥" : "独立 Git 桥";
       setStatus(
@@ -487,6 +541,7 @@
     } catch (e) {
       connected = false;
       workspace.hidden = true;
+      setReadyVisible(true);
       $("#git-refresh").disabled = true;
       setStatus("is-err", "未连接本机桥", e.message || "连接失败");
       showError(e.message);
@@ -597,6 +652,160 @@
     return rows;
   }
 
+  function refToSwitchTarget(ref) {
+    let r = String(ref || "").trim();
+    if (!r || r === "HEAD" || /^tag:/i.test(r)) return "";
+    r = r.replace(/^HEAD\s*->\s*/, "");
+    if (!r || r === "HEAD") return "";
+    if (/^(origin|upstream)\//.test(r)) return "remote:" + r;
+    return r;
+  }
+
+  function branchActionBtn(label, className, onClick) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = className || "ghost-btn";
+    btn.textContent = label;
+    btn.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      Promise.resolve(onClick()).catch((e) => showError(e.message));
+    });
+    return btn;
+  }
+
+  function makeBranchCard(b, kind) {
+    const card = document.createElement("div");
+    card.className = "git-branch-card" + (b.current ? " is-current" : "");
+
+    const head = document.createElement("div");
+    head.className = "git-branch-card-head";
+    const nameEl = document.createElement("button");
+    nameEl.type = "button";
+    nameEl.className = "git-branch-name mono";
+    nameEl.textContent = b.name;
+    nameEl.title = b.sha ? b.sha.slice(0, 12) : b.name;
+    nameEl.addEventListener("click", () => {
+      if ($("#git-op-target")) $("#git-op-target").value = b.name;
+      if (b.sha) selectCommit(b.sha);
+    });
+    head.appendChild(nameEl);
+    if (b.current) {
+      const pill = document.createElement("span");
+      pill.className = "git-branch-pill";
+      pill.textContent = "当前";
+      head.appendChild(pill);
+    }
+    const trackBits = [];
+    if (b.upstream) trackBits.push(b.upstream);
+    if (b.ahead) trackBits.push("↑" + b.ahead);
+    if (b.behind) trackBits.push("↓" + b.behind);
+    if (trackBits.length) {
+      const track = document.createElement("span");
+      track.className = "hint tight git-branch-track";
+      track.textContent = trackBits.join(" · ");
+      head.appendChild(track);
+    }
+
+    const subj = document.createElement("div");
+    subj.className = "hint tight git-branch-subj";
+    subj.textContent = (b.subject || "").slice(0, 72) || (b.sha ? b.sha.slice(0, 7) : "");
+
+    const actions = document.createElement("div");
+    actions.className = "git-branch-actions";
+    if (kind === "local") {
+      if (!b.current) {
+        actions.appendChild(branchActionBtn("切换", "secondary-btn", () => switchToBranch(b.name)));
+        actions.appendChild(branchActionBtn("并入当前", "ghost-btn", () => mergeBranchIntoCurrent(b.name)));
+        actions.appendChild(branchActionBtn("删除", "ghost-btn", () => deleteLocalBranch(b.name)));
+      } else {
+        const tip = document.createElement("span");
+        tip.className = "hint tight";
+        tip.textContent = "正在这条线";
+        actions.appendChild(tip);
+      }
+    } else {
+      actions.appendChild(
+        branchActionBtn("检出为本地", "secondary-btn", () => switchToBranch("remote:" + b.name))
+      );
+    }
+
+    card.appendChild(head);
+    card.appendChild(subj);
+    card.appendChild(actions);
+    return card;
+  }
+
+  function renderBranchWorkbench(branches) {
+    if (!branchesEl) return;
+    lastBranches = branches || { local: [], remote: [], tags: [] };
+    branchesEl.innerHTML = "";
+    const locals = lastBranches.local || [];
+    const remotes = (lastBranches.remote || []).filter((b) => b.name && !/HEAD$/.test(b.name));
+
+    if (!locals.length && !remotes.length) {
+      branchesEl.innerHTML = `<p class="hint tight">无分支</p>`;
+      return;
+    }
+
+    const addSec = (title) => {
+      const h = document.createElement("div");
+      h.className = "git-branch-sec";
+      h.textContent = title;
+      branchesEl.appendChild(h);
+    };
+
+    if (locals.length) {
+      addSec("本地");
+      for (const b of locals) branchesEl.appendChild(makeBranchCard(b, "local"));
+    }
+    if (remotes.length) {
+      addSec("网上");
+      for (const b of remotes.slice(0, 48)) branchesEl.appendChild(makeBranchCard(b, "remote"));
+    }
+  }
+
+  function fillBranchSelect(branches) {
+    const sel = $("#git-easy-branch");
+    if (!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = "";
+    const ogLocal = document.createElement("optgroup");
+    ogLocal.label = "本地";
+    for (const b of branches.local || []) {
+      const opt = document.createElement("option");
+      opt.value = b.name;
+      opt.textContent = (b.current ? "● " : "") + b.name;
+      if (b.current) opt.selected = true;
+      ogLocal.appendChild(opt);
+    }
+    sel.appendChild(ogLocal);
+    const remotes = (branches.remote || []).filter((b) => b.name && !/HEAD$/.test(b.name));
+    if (remotes.length) {
+      const ogRemote = document.createElement("optgroup");
+      ogRemote.label = "网上";
+      for (const b of remotes.slice(0, 80)) {
+        const opt = document.createElement("option");
+        opt.value = "remote:" + b.name;
+        opt.textContent = "☁ " + b.name;
+        ogRemote.appendChild(opt);
+      }
+      sel.appendChild(ogRemote);
+    }
+    if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
+  }
+
+  async function syncBranchesUi() {
+    if (!repoPath) return;
+    const branches = await api(`/repo/branches?repo=${encodeURIComponent(repoPath)}`).catch(() => ({
+      local: [],
+      remote: [],
+      tags: [],
+    }));
+    fillBranchSelect(branches);
+    renderBranchWorkbench(branches);
+    return branches;
+  }
+
   let conflictEditPath = "";
   let lastStatus = null;
 
@@ -700,39 +909,8 @@
         if (hint) hint.textContent = `共 ${rows.length} 项。点文件名看 diff → 勾选 → 写说明 →「保存到历史」→ 需要时「上传」。`;
       }
 
-      // branch select for 换工作线（本地 + 远程）
-      const sel = $("#git-easy-branch");
-      if (sel) {
-        const prev = sel.value;
-        const branches = await api(`/repo/branches?repo=${encodeURIComponent(repoPath)}`).catch(() => ({
-          local: [],
-          remote: [],
-        }));
-        sel.innerHTML = "";
-        const ogLocal = document.createElement("optgroup");
-        ogLocal.label = "本地";
-        for (const b of branches.local || []) {
-          const opt = document.createElement("option");
-          opt.value = b.name;
-          opt.textContent = (b.current ? "● " : "") + b.name;
-          if (b.current) opt.selected = true;
-          ogLocal.appendChild(opt);
-        }
-        sel.appendChild(ogLocal);
-        const remotes = (branches.remote || []).filter((b) => b.name && !/HEAD$/.test(b.name));
-        if (remotes.length) {
-          const ogRemote = document.createElement("optgroup");
-          ogRemote.label = "网上";
-          for (const b of remotes.slice(0, 80)) {
-            const opt = document.createElement("option");
-            opt.value = "remote:" + b.name;
-            opt.textContent = "☁ " + b.name;
-            ogRemote.appendChild(opt);
-          }
-          sel.appendChild(ogRemote);
-        }
-        if (prev && [...sel.options].some((o) => o.value === prev)) sel.value = prev;
-      }
+      // 分支下拉（隐藏兼容）+ 工作台卡片
+      await syncBranchesUi().catch(() => {});
 
       const stashSel = $("#git-easy-stash-sel");
       if (stashSel) {
@@ -932,7 +1110,7 @@
           : kind === "revert"
             ? "revert-abort"
             : "merge-abort";
-    if (!window.confirm("确定放弃这次合并/改写？工作区会回到操作前。")) return;
+    if (!(await askConfirm("确定放弃这次合并/改写？工作区会回到操作前。"))) return;
     await runOp(op, {}, { skipConfirm: true });
     await refreshChanges();
   }
@@ -984,10 +1162,6 @@
   async function easyPush() {
     if (!repoPath) return showError("先打开一个仓库");
     const needsU = lastStatus && !lastStatus.upstream;
-    const tip = needsU
-      ? "第一次上传：会绑定网上同名工作线并推送。继续？"
-      : "把本地已保存的改动上传到网上？";
-    if (!window.confirm(tip)) return;
     const params = needsU
       ? {
           setUpstream: true,
@@ -1002,13 +1176,6 @@
   async function easyPull() {
     if (!repoPath) return showError("先打开一个仓库");
     const mode = String($("#git-easy-pull-mode")?.value || "auto");
-    const labels = {
-      auto: "自动更新（能快进就快进，不行再合并）",
-      ff: "只要快进更新",
-      merge: "合并更新（可能产生冲突）",
-      rebase: "变基更新（可能产生冲突）",
-    };
-    if (!window.confirm(`${labels[mode] || "更新"}？`)) return;
 
     const runPull = async (op) => runOp(op, {}, { skipConfirm: true, skipRefresh: true });
 
@@ -1051,12 +1218,9 @@
   async function easyAlignRemote() {
     if (!repoPath) return showError("先打开一个仓库");
     if (
-      !window.confirm(
-        "把本地这条线强制对齐到「网上跟踪线」最新？\n\n" +
-          "· 本地多出来的提交会丢掉\n" +
-          "· 未保存的文件改动也会丢掉\n" +
-          "· 适合：Gerrit 已提交但未合入、想回到线上最新再重来\n\n确定继续？"
-      )
+      !(await askConfirm(
+        "把本地这条线强制对齐到「网上跟踪线」最新？本地多出来的提交和未保存改动都会丢掉。适合：线上已变、想回到最新再重来。"
+      ))
     ) {
       return;
     }
@@ -1070,12 +1234,12 @@
     const msg = String($("#git-easy-msg")?.value || "").trim();
     const maybePublished = Boolean(lastStatus?.upstream);
     if (
-      !window.confirm(
+      !(await askConfirm(
         msg
           ? "用当前说明改写「上一笔保存」？若还有勾选文件会一并补进去。"
           : "把勾选文件补进「上一笔保存」，说明文字不变？" +
-              (maybePublished ? "\n\n注意：若上一笔已上传过，之后需要「安全强推」才能更新网上。" : "")
-      )
+              (maybePublished ? " 若上一笔已上传，之后可能需要安全强推。" : "")
+      ))
     ) {
       return;
     }
@@ -1089,7 +1253,7 @@
     else await runOp("commit-amend", { noEdit: true }, { skipConfirm: true, skipRefresh: true });
     if (
       maybePublished &&
-      window.confirm("上一笔可能已在网上。要用「安全强推」覆盖远程同名线吗？\n（force-with-lease，别人若已有新提交会拒绝）")
+      (await askConfirm("上一笔可能已在网上。要用「安全强推」覆盖远程同名线吗？（force-with-lease）"))
     ) {
       await runOp("push-lease", {}, { skipConfirm: true });
     }
@@ -1097,9 +1261,9 @@
     await refreshRepo();
   }
 
-  async function easySwitch() {
+  async function switchToBranch(rawOverride) {
     if (!repoPath) return showError("先打开一个仓库");
-    const raw = String($("#git-easy-branch")?.value || "").trim();
+    const raw = String(rawOverride != null ? rawOverride : $("#git-easy-branch")?.value || "").trim();
     if (!raw) return showError("先选一条工作线");
     let params;
     let label;
@@ -1113,13 +1277,12 @@
       label = raw;
       params = { target: raw };
     }
-    if (!window.confirm(`切换到「${label}」？\n未保存的改动若冲突会先提示收起。`)) return;
     try {
       await runOp("checkout", params, { skipConfirm: true });
     } catch (e) {
       const msg = String(e.message || "") + String(e.data?.stderr || "");
       if (/local changes|would be overwritten|uncommitted/i.test(msg)) {
-        if (!window.confirm("有未保存改动挡着。先收起来再切换？")) throw e;
+        if (!(await askConfirm(`切换到「${label}」时有未保存改动挡着。先收起来再切换？`))) throw e;
         await runOp("stash-push", {}, { skipConfirm: true, skipRefresh: true });
         await runOp("checkout", params, { skipConfirm: true });
       } else {
@@ -1127,6 +1290,37 @@
       }
     }
     await refreshChanges();
+    await refreshRepo();
+  }
+
+  async function easySwitch() {
+    return switchToBranch();
+  }
+
+  async function mergeBranchIntoCurrent(name) {
+    if (!repoPath) return showError("先打开一个仓库");
+    if (!(await askConfirm(`把「${name}」合并进当前工作线？两边改同一处时会出现冲突。`))) return;
+    await runOp("merge", { target: name }, { skipConfirm: true });
+    await refreshChanges();
+    await refreshRepo();
+  }
+
+  async function deleteLocalBranch(name) {
+    if (!repoPath) return showError("先打开一个仓库");
+    if (!(await askConfirm(`删除本地线「${name}」？未合并内容会被 git 拒绝（除非再强制）。`))) return;
+    try {
+      await runOp("branch-delete", { name }, { skipConfirm: true, skipRefresh: true });
+    } catch (e) {
+      const msg = String(e.message || "") + " " + String(e.data?.stderr || "");
+      if (/not fully merged/i.test(msg)) {
+        if (!(await askConfirm(`「${name}」尚未完全合并进其他线。强制删除？`))) throw e;
+        await runOp("branch-delete", { name, force: true }, { skipConfirm: true, skipRefresh: true });
+      } else {
+        throw e;
+      }
+    }
+    await refreshChanges();
+    await refreshRepo();
   }
 
   async function easyReflog() {
@@ -1142,7 +1336,11 @@
     if (!repoPath) return showError("先打开一个仓库");
     const branch = String($("#git-easy-gerrit")?.value || "").trim() || lastStatus?.upstream?.split("/")?.pop() || "master";
     const topic = String($("#git-easy-gerrit-topic")?.value || "").trim();
-    if (!window.confirm(`送审到 Gerrit？\npush origin HEAD:refs/for/${branch}${topic ? "%topic=" + topic : ""}`)) {
+    if (
+      !(await askConfirm(
+        `送审到 Gerrit？push origin HEAD:refs/for/${branch}${topic ? "%topic=" + topic : ""}`
+      ))
+    ) {
       return;
     }
     await runOp("push-gerrit", { branch, topic: topic || undefined, remote: "origin" }, { skipConfirm: true });
@@ -1153,7 +1351,6 @@
     if (!repoPath) return showError("先打开一个仓库");
     const ref = String($("#git-easy-stash-sel")?.value || "").trim();
     if (!ref) return showError("收起柜是空的");
-    if (!window.confirm(`取出 ${ref}？（不删除柜中记录，用 apply）`)) return;
     await runOp("stash-apply", { ref }, { skipConfirm: true });
     await refreshChanges();
   }
@@ -1172,7 +1369,7 @@
     } catch (_) {
       /* connect 会给出更明确错误 */
     }
-    await connect();
+    await connectBridge();
   }
 
   async function easySquash() {
@@ -1183,9 +1380,9 @@
       String($("#git-easy-msg")?.value || "").trim() ||
       `合并最近 ${n} 笔`;
     if (
-      !window.confirm(
-        `把最近 ${n} 笔保存合成一笔？\n说明：${msg}\n（只动本地历史；若这些提交已上传，之后上传会变复杂）`
-      )
+      !(await askConfirm(
+        `把最近 ${n} 笔保存合成一笔？说明：${msg}（只动本地历史；若已上传，之后上传会变复杂）`
+      ))
     ) {
       return;
     }
@@ -1197,7 +1394,6 @@
   async function easyFormatPatch() {
     if (!repoPath) return showError("先打开一个仓库");
     const n = Math.min(50, Math.max(1, Number($("#git-easy-patch-n")?.value) || 1));
-    if (!window.confirm(`把最近 ${n} 笔打成补丁文件？\n会写到仓库内 .devtools-patches/`)) return;
     const out = await runOp("format-patch", { count: n, outdir: ".devtools-patches" }, { skipConfirm: true });
     const files = String(out?.stdout || "")
       .trim()
@@ -1214,7 +1410,7 @@
     if (!repoPath) return showError("先打开一个仓库");
     const path = String($("#git-easy-patch-path")?.value || "").trim();
     if (!path) return showError("先填补丁文件路径（相对仓库根目录）");
-    if (!window.confirm(`按提交方式应用补丁？\n${path}`)) return;
+    if (!(await askConfirm(`按提交方式应用补丁？\n${path}`))) return;
     await runOp("am", { path }, { skipConfirm: true });
     await refreshChanges();
   }
@@ -1223,28 +1419,27 @@
     if (!repoPath) return showError("先打开一个仓库");
     const path = String($("#git-easy-patch-path")?.value || "").trim();
     if (!path) return showError("先填补丁文件路径（相对仓库根目录）");
-    if (!window.confirm(`只改工作区文件、不自动记提交？\n${path}`)) return;
+    if (!(await askConfirm(`只改工作区文件、不自动记提交？\n${path}`))) return;
     await runOp("apply", { path }, { skipConfirm: true });
     await refreshChanges();
   }
 
   async function easyStash() {
     if (!repoPath) return showError("先打开一个仓库");
-    if (!window.confirm("先把未保存的改动临时收起来，让工作区变干净？\n之后可用「取出收起的改动」拿回来。")) return;
     await runOp("stash-push", {}, { skipConfirm: true });
     await refreshChanges();
   }
 
   async function easyStashPop() {
     if (!repoPath) return showError("先打开一个仓库");
-    if (!window.confirm("取出最近一次收起来的改动？\n若和当前文件打架，会出现冲突，按上方提示处理即可。")) return;
+    if (!(await askConfirm("取出最近一次收起来的改动？若和当前文件打架会出现冲突。"))) return;
     await runOp("stash-pop", {}, { skipConfirm: true });
     await refreshChanges();
   }
 
   async function easyUndo() {
     if (!repoPath) return showError("先打开一个仓库");
-    if (!window.confirm("撤销上一次「保存到历史」？改动还会留在文件里，只是从历史里拿掉最近一笔。")) return;
+    if (!(await askConfirm("撤销上一次「保存到历史」？改动还会留在文件里，只是从历史里拿掉最近一笔。"))) return;
     await runOp("reset-soft-1", {}, { skipConfirm: true });
     await refreshChanges();
   }
@@ -1253,10 +1448,11 @@
     if (!repoPath) return showError("先打开一个仓库");
     const name = String($("#git-easy-newbr")?.value || "").trim();
     if (!name) return showError("先填新工作线名字");
-    if (!window.confirm(`创建并切换到新工作线「${name}」？`)) return;
     if ($("#git-new-branch")) $("#git-new-branch").value = name;
     await runOp("branch-create-co", {}, { skipConfirm: true });
+    if ($("#git-easy-newbr")) $("#git-easy-newbr").value = "";
     await refreshChanges();
+    await refreshRepo();
   }
 
   async function handleDroppedPaths(paths) {
@@ -1308,32 +1504,11 @@
   async function refreshRepo() {
     if (!repoPath) return;
     showError("");
-    const [graph, branches] = await Promise.all([
-      api(`/repo/graph?repo=${encodeURIComponent(repoPath)}&max=150`),
-      api(`/repo/branches?repo=${encodeURIComponent(repoPath)}`),
-    ]);
+    const graph = await api(`/repo/graph?repo=${encodeURIComponent(repoPath)}&max=150`);
     renderGraph(graph.commits || []);
     asciiEl.textContent = graph.ascii || "";
     cmdPreview.hidden = false;
     cmdPreview.textContent = "图数据命令：\n" + (graph.cmd || []).join(" ");
-
-    branchesEl.innerHTML = "";
-    for (const b of branches.local || []) {
-      const row = document.createElement("div");
-      row.className = "git-branch-item" + (b.current ? " is-current" : "");
-      row.innerHTML = `<span class="mono">${escapeHtml(b.name)}</span>
-        <span class="hint tight">${escapeHtml(b.sha.slice(0, 7))}${b.upstream ? " → " + escapeHtml(b.upstream) : ""}</span>`;
-      row.title = b.subject || "";
-      row.addEventListener("click", () => {
-        $("#git-op-target").value = b.name;
-        selectCommit(b.sha);
-      });
-      row.addEventListener("dblclick", () => runOp("checkout", { target: b.name }));
-      branchesEl.appendChild(row);
-    }
-    if ((branches.local || []).length === 0) {
-      branchesEl.innerHTML = `<p class="hint">无本地分支</p>`;
-    }
 
     const headCommit = (graph.commits || []).find((c) => (c.refs || []).some((r) => /HEAD/.test(r)));
     if (headCommit) selectCommit(headCommit.hash);
@@ -1556,7 +1731,9 @@
       "rebase-abort",
     ]);
     const dangerous = !!(item && item.dangerous) || fallbackDangerous.has(op);
-    if (dangerous && !opts.skipConfirm && !window.confirm(`确认执行？\n\n${preview}\n操作：${op}`)) return;
+    if (dangerous && !opts.skipConfirm) {
+      if (!(await askConfirm(`确认执行？\n${preview}\n操作：${op}`))) return;
+    }
     if (op === "reset-hard-upstream") p.confirmHard = true;
     if (op === "reset" && p.mode === "hard") p.confirmHard = true;
 
@@ -1594,7 +1771,7 @@
       showError("先打开一个目录");
       return;
     }
-    if (!window.confirm(`在此目录新建空仓库？\n\n${dir}`)) return;
+    if (!(await askConfirm(`在此目录新建空仓库？\n${dir}`))) return;
     showError("");
     const data = await api("/repo/init", { method: "POST", body: { path: dir } });
     await openRepo(data.repo || dir);
@@ -1609,7 +1786,7 @@
       showError("填写仓库网址");
       return;
     }
-    if (!window.confirm(`从网址下载仓库到当前目录？\n\n${url}\n→ ${dir || "(默认 DevToolsRepos)"}`)) return;
+    if (!(await askConfirm(`从网址下载仓库到当前目录？\n${url}\n→ ${dir || "(默认 DevToolsRepos)"}`))) return;
     showError("");
     const data = await api("/repo/clone", { method: "POST", body: { url, dir: dir || undefined } });
     await openRepo(data.repo);
@@ -1659,6 +1836,9 @@
   $("#git-easy-apply")?.addEventListener("click", () => easyApply().catch((e) => showError(e.message)));
   $("#git-easy-switch")?.addEventListener("click", () => easySwitch().catch((e) => showError(e.message)));
   $("#git-easy-newbr-go")?.addEventListener("click", () => easyNewBranch().catch((e) => showError(e.message)));
+  $("#git-branch-refresh")?.addEventListener("click", () => syncBranchesUi().catch((e) => showError(e.message)));
+  $("#git-confirm-ok")?.addEventListener("click", () => settleConfirm(true));
+  $("#git-confirm-cancel")?.addEventListener("click", () => settleConfirm(false));
   $("#git-ready-go")?.addEventListener("click", () => easyReadyGo().catch((e) => showError(e.message)));
   $("#git-conflict-next")?.addEventListener("click", () => jumpConflictMarker(1));
   $("#git-conflict-prev")?.addEventListener("click", () => jumpConflictMarker(-1));
