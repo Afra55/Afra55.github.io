@@ -282,8 +282,8 @@
                   <h2 class="subhead">常用操作</h2>
                 </div>
                 <details class="git-ops-details">
-                  <summary class="hint">展开（会一点 git 的人）</summary>
-                  <p class="hint tight">执行前会预览完整 <span class="mono">git …</span>。</p>
+                  <summary class="hint">展开常用快捷按钮（会一点 git 也可用）</summary>
+                  <p class="hint tight">这些是常用操作的快捷入口；完整列表在下方「全部可点命令」，每条都有白话。</p>
                   <div class="btn-row tool-actions" style="flex-wrap:wrap" id="git-ops-row">
                     <button type="button" class="secondary-btn" data-git-op="fetch">fetch</button>
                     <button type="button" class="secondary-btn" data-git-op="pull">pull --ff-only</button>
@@ -325,11 +325,14 @@
                   </div>
                 </details>
                 <div class="label-row" style="margin-top:0.75rem">
-                  <h2 class="subhead">全部 git 命令</h2>
+                  <h2 class="subhead">全部可点命令</h2>
                   <span class="hint tight" id="git-ops-count"></span>
                 </div>
                 <details class="git-ops-details" id="git-ops-details">
-                  <summary class="hint">展开白名单命令目录（高级）</summary>
+                  <summary class="hint">展开命令目录（每条都有白话说明）</summary>
+                  <p class="hint tight" id="git-ops-whitelist-tip">
+                    「白名单」= 本页<strong>只允许</strong>执行下面这些 git 操作，不会跑任意终端命令。按钮上是人话，悬停可看对应的 <span class="mono">git …</span>；点下去前会预览。
+                  </p>
                   <div id="git-ops-catalog" class="git-ops-catalog"></div>
                 </details>
                 <pre class="mono adb-pre" id="git-cmd-preview" style="margin-top:0.55rem;max-height:6rem;overflow:auto" hidden></pre>

@@ -2047,16 +2047,27 @@
       wrap.className = "git-ops-group";
       const h = document.createElement("h3");
       h.className = "git-ops-group-title";
-      h.textContent = g.name;
+      h.textContent = g.label || g.name;
+      if (g.label && g.name && g.label !== g.name) {
+        const sub = document.createElement("span");
+        sub.className = "git-ops-group-sub hint tight";
+        sub.textContent = g.name;
+        h.appendChild(document.createTextNode(" "));
+        h.appendChild(sub);
+      }
       wrap.appendChild(h);
       const row = document.createElement("div");
-      row.className = "btn-row tool-actions";
+      row.className = "git-ops-plain-list";
       for (const item of g.items || []) {
         const btn = document.createElement("button");
         btn.type = "button";
-        btn.className = item.dangerous ? "ghost-btn" : "secondary-btn";
-        btn.textContent = item.title;
-        btn.title = item.dangerous ? `${item.id}（会改仓库，执行前确认）` : item.id;
+        btn.className = item.dangerous ? "git-op-plain-btn is-danger" : "git-op-plain-btn";
+        const plain = item.plain || item.title;
+        const gitTitle = item.title || item.id;
+        btn.title = item.dangerous
+          ? `${plain}\n对应：git ${gitTitle}\n（会改仓库，执行前确认）`
+          : `${plain}\n对应：git ${gitTitle}`;
+        btn.innerHTML = `<span class="git-op-plain-text">${escapeHtml(plain)}</span><span class="git-op-cmd mono">${escapeHtml(gitTitle)}</span>`;
         btn.addEventListener("click", () => runOp(item.id).catch((e) => showError(e.message)));
         row.appendChild(btn);
       }
@@ -2089,13 +2100,17 @@
     }
 
     const item = catalogItem(op);
+    const plain = item?.plain || "";
     const preview = item ? `git ${item.title}` : op;
     cmdPreview.hidden = false;
     const paramBits = Object.keys(p)
       .filter((k) => p[k] != null && p[k] !== "")
       .map((k) => `${k}=${String(p[k]).slice(0, 48)}`);
     cmdPreview.textContent =
-      "即将执行：\n" + preview + (paramBits.length ? "\n参数：" + paramBits.join(" · ") : "");
+      (plain ? `白话：${plain}\n` : "") +
+      "即将执行：\n" +
+      preview +
+      (paramBits.length ? "\n参数：" + paramBits.join(" · ") : "");
 
     // 常见缺参早失败，避免点了才报后端 400
     const needMsg = [];
@@ -2139,7 +2154,8 @@
     ]);
     const dangerous = !!(item && item.dangerous) || fallbackDangerous.has(op);
     if (dangerous && !opts.skipConfirm) {
-      if (!(await askConfirm(`确认执行？\n${preview}\n操作：${op}`))) return;
+      const confirmPlain = plain ? `${plain}\n` : "";
+      if (!(await askConfirm(`确认执行？\n${confirmPlain}对应命令：${preview}\n操作代号：${op}`))) return;
     }
     if (op === "reset-hard-upstream") p.confirmHard = true;
     if (op === "reset" && p.mode === "hard") p.confirmHard = true;

@@ -63,6 +63,9 @@ async function main() {
   }
   const catalog = listOpsCatalog();
   if (!catalog.groups || !catalog.groups.length) throw new Error("empty catalog groups");
+  const sample = catalog.groups[0]?.items?.[0];
+  if (!sample?.plain) throw new Error("catalog plain missing");
+  if (!sample?.groupLabel) throw new Error("catalog groupLabel missing");
 
   const child = spawn(process.execPath, [SERVER], {
     env: { ...process.env, GIT_BRIDGE_PORT: String(PORT), GIT_BRIDGE_TOKEN: TOKEN },
@@ -92,7 +95,7 @@ async function main() {
 
     const health = await req("GET", "/health");
     if (!health.json.git) throw new Error("git missing on host");
-    if (health.json.version !== "0.2.10") {
+    if (health.json.version !== "0.2.11") {
       throw new Error("unexpected version " + health.json.version);
     }
 
