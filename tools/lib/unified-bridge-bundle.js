@@ -140,7 +140,7 @@
         "  - server.js",
         "  - scrcpy-mirror.js / scrcpy-ctrl.js / everything-proxy.js / device-inspect.js / resolve-port.js",
         "  - ffmpeg-bridge/server.js + ytdlp-core.js",
-        "  - git-bridge/server.js + git-ops.js",
+        "  - git-bridge/server.js + git-ops.js + noop-editor.*",
         "  - vendor/scrcpy-server-v3.1（可选）",
         "  - " + cfg.scriptName,
         "",
@@ -167,6 +167,9 @@
       if (ytdlpJs) zip.file("ffmpeg-bridge/ytdlp-core.js", ytdlpJs);
       zip.file("git-bridge/server.js", gitServerJs);
       zip.file("git-bridge/git-ops.js", gitOpsJs);
+      if (gitNoopSh) zip.file("git-bridge/noop-editor.sh", gitNoopSh, { unixPermissions: 0o755 });
+      if (gitNoopCmd) zip.file("git-bridge/noop-editor.cmd", String(gitNoopCmd).replace(/\r?\n/g, "\r\n"));
+      if (gitNoopCjs) zip.file("git-bridge/noop-editor.cjs", gitNoopCjs);
       if (serverJar) zip.file("vendor/scrcpy-server-v3.1", serverJar);
       zip.file(cfg.scriptName, scriptText, {
         unixPermissions: platform === "win" ? undefined : 0o755,
