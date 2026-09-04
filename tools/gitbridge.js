@@ -65,7 +65,7 @@
       return "这条工作线还没绑定网上对应线。点「② 上传我的改动」会自动建立绑定；或先确认远程已有同名分支。";
     }
     if (/Authentication failed|could not read Username|Permission denied \(publickey\)|403 Forbidden|401 Unauthorized|terminal prompts disabled/i.test(s)) {
-      return "登录远程失败：请在本机配好 HTTPS 凭据或 SSH 密钥（Gerrit/GitHub 账号）。";
+      return "远程拒绝访问（账号/权限问题）。请在本机自行登录 Git 后再试本页操作。";
     }
     if (/Your local changes|would be overwritten|uncommitted changes/i.test(s)) {
       return "有未保存的文件改动挡着了。先「收起改动」或先「保存到历史」，再重试。";
@@ -622,6 +622,19 @@
         nowEl.classList.toggle("git-easy-now-warn", Boolean(data.inProgress || conflicts.length));
       }
 
+      const pills = $("#git-status-pills");
+      if (pills) {
+        const bits = [];
+        if (data.branch) bits.push({ t: `当前线 ${data.branch}`, k: "is-ok" });
+        if (data.ahead) bits.push({ t: `可上传 ${data.ahead}`, k: "is-info" });
+        if (data.behind) bits.push({ t: `可更新 ${data.behind}`, k: "is-info" });
+        if (data.dirtyCount) bits.push({ t: `未保存 ${data.dirtyCount}`, k: "is-warn" });
+        if (conflicts.length) bits.push({ t: `冲突 ${conflicts.length}`, k: "is-warn" });
+        if (data.stashCount) bits.push({ t: `收起 ${data.stashCount}`, k: "" });
+        if (!bits.length) bits.push({ t: "干净", k: "is-ok" });
+        pills.innerHTML = bits.map((b) => `<span class="git-pill ${b.k}">${escapeHtml(b.t)}</span>`).join("");
+      }
+
       if (conflictBox) {
         conflictBox.hidden = !(data.inProgress || conflicts.length);
         if (conflictMeta) {
@@ -836,7 +849,9 @@
 
   async function showFileDiff(filePath) {
     if (!repoPath || !filePath) return;
+    const panel = $("#git-diff-panel");
     const view = $("#git-diff-view");
+    const title = $("#git-diff-title");
     $$(".git-change-item").forEach((el) => {
       const hit = el.querySelector("[data-diff-path]");
       el.classList.toggle("is-diffing", hit?.getAttribute("data-diff-path") === filePath);
@@ -844,9 +859,23 @@
     const data = await api(
       `/repo/diff-file?repo=${encodeURIComponent(repoPath)}&path=${encodeURIComponent(filePath)}`
     );
+    if (title) title.textContent = filePath;
+    if (panel) panel.hidden = false;
     if (view) {
-      view.hidden = false;
-      view.textContent = `${filePath}\n\n${data.diff || "(空)"}`;
+      const raw = String(data.diff || "(无差异)");
+      view.innerHTML = raw
+        .split("\n")
+        .map((line) => {
+          const esc = escapeHtml(line || " ");
+          if (line.startsWith("+++") || line.startsWith("---") || line.startsWith("diff ") || line.startsWith("index ")) {
+            return `<div class="d-meta">${esc}</div>`;
+          }
+          if (line.startsWith("@@")) return `<div class="d-hunk">${esc}</div>`;
+          if (line.startsWith("+")) return `<div class="d-add">${esc}</div>`;
+          if (line.startsWith("-")) return `<div class="d-del">${esc}</div>`;
+          return `<div>${esc}</div>`;
+        })
+        .join("");
     }
   }
 
@@ -1100,30 +1129,13 @@
     await refreshChanges();
   }
 
-  async function easyAuthCheck() {
-    if (!repoPath) return showError("先打开一个仓库");
-    if (!window.confirm("试着访问远程（fetch），用来检查登录是否正常？")) return;
-    try {
-      await runOp("fetch", {}, { skipConfirm: true });
-      showError("");
-      opOut.hidden = false;
-      opOut.textContent = "登录体检通过：已能访问远程。\n若仍推送失败，检查分支权限或 Gerrit 项目 ACL。";
-    } catch (e) {
-      showError(
-        humanizeGitError(String(e.message || "") + "\n" + String(e.data?.stderr || "")) +
-          "\n\n建议：GitHub 用 HTTPS Personal Access Token 或 SSH；Gerrit 在本机配好 HTTP 密码 / SSH key。"
-      );
-      throw e;
-    }
-  }
-
   async function easyReflog() {
     if (!repoPath) return showError("先打开一个仓库");
     await runOp("reflog", {}, { skipConfirm: true, skipRefresh: true });
     opOut.hidden = false;
     opOut.textContent =
       (opOut.textContent || "") +
-      "\n\n—— 后悔药用法 ——\n上面每一行前面的短 SHA 可填到右侧「目标」后执行 reset（高级）。\n小白误点「对齐到网上最新」后，可找对齐前的那一行 SHA，在高级区 reset --soft 回去。";
+      "\n\n—— 后悔药 ——\n上面每行前面的短编号，可到右侧高级区填进「目标」后重置。误点「对齐线上」后，找对齐前那一行即可。";
   }
 
   async function easyGerrit() {
@@ -1700,9 +1712,13 @@
   $("#git-easy-pull")?.addEventListener("click", () => easyPull().catch((e) => showError(e.message)));
   $("#git-easy-fetch")?.addEventListener("click", () => easyFetch().catch((e) => showError(e.message)));
   $("#git-easy-align")?.addEventListener("click", () => easyAlignRemote().catch((e) => showError(e.message)));
-  $("#git-easy-auth")?.addEventListener("click", () => easyAuthCheck().catch((e) => showError(e.message)));
   $("#git-easy-reflog")?.addEventListener("click", () => easyReflog().catch((e) => showError(e.message)));
   $("#git-easy-gerrit-go")?.addEventListener("click", () => easyGerrit().catch((e) => showError(e.message)));
+  $("#git-diff-close")?.addEventListener("click", () => {
+    const panel = $("#git-diff-panel");
+    if (panel) panel.hidden = true;
+    $$(".git-change-item").forEach((el) => el.classList.remove("is-diffing"));
+  });
   $("#git-easy-stash")?.addEventListener("click", () => easyStash().catch((e) => showError(e.message)));
   $("#git-easy-stash-pop")?.addEventListener("click", () => easyStashPop().catch((e) => showError(e.message)));
   $("#git-easy-stash-apply")?.addEventListener("click", () => easyStashApplySel().catch((e) => showError(e.message)));
