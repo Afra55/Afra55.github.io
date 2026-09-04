@@ -154,6 +154,10 @@
   const PROTOCOL = KINDS.unified.protocol;
   const LAUNCH_AT_KEY = KINDS.unified.launchAtKey;
 
+  /** 各工具页「桥解压目录」输入框；填一处则全部同步 */
+  const DIR_INPUTS = new Set();
+  let syncingInstallDir = false;
+
   function recentlyLaunchedProtocol(key = LAUNCH_AT_KEY) {
     try {
       const at = Number(sessionStorage.getItem(key) || 0);
@@ -171,13 +175,66 @@
     }
   }
 
+  function collectInstallDirInputs() {
+    try {
+      document.querySelectorAll('input[id$="-install-dir"]').forEach((el) => DIR_INPUTS.add(el));
+    } catch (_) {
+      /* ignore */
+    }
+    return DIR_INPUTS;
+  }
+
+  function applyInstallDirToInputs(value, except = null) {
+    const v = String(value || "").trim();
+    syncingInstallDir = true;
+    try {
+      for (const el of collectInstallDirInputs()) {
+        if (!el || el === except) continue;
+        try {
+          if (el.isConnected === false) {
+            DIR_INPUTS.delete(el);
+            continue;
+          }
+        } catch (_) {
+          /* ignore */
+        }
+        if (String(el.value || "") !== v) el.value = v;
+      }
+    } finally {
+      syncingInstallDir = false;
+    }
+  }
+
+  function broadcastInstallDir(value) {
+    const v = String(value || "").trim();
+    applyInstallDirToInputs(v);
+    try {
+      window.dispatchEvent(
+        new CustomEvent("devtools-bridge-install-dir", { detail: { dir: v } })
+      );
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
   function readInstallDir(kind = "unified") {
     const key = kindConfig(kind).installDirKey;
     try {
-      return String(localStorage.getItem(key) || "").trim();
+      const stored = String(localStorage.getItem(key) || "").trim();
+      if (stored) return stored;
     } catch (_) {
-      return "";
+      /* ignore */
     }
+    // 任一已挂载输入框有值则回填（避免只填了未点「记住」）
+    try {
+      for (const el of collectInstallDirInputs()) {
+        const v = String(el?.value || "").trim();
+        if (v) return v;
+      }
+    } catch (_) {
+      /* ignore */
+    }
+    return "";
   }
 
   function writeInstallDir(dir, kind = "unified") {
@@ -189,7 +246,17 @@
     } catch (_) {
       /* ignore */
     }
+    broadcastInstallDir(value);
     return value;
+  }
+
+  try {
+    window.addEventListener("storage", (e) => {
+      if (!e || e.key !== INSTALL_DIR_KEY) return;
+      broadcastInstallDir(String(e.newValue || "").trim());
+    });
+  } catch (_) {
+    /* ignore */
   }
 
   function readAutoStart(kind = "unified") {
@@ -303,16 +370,36 @@
     const status = typeof onStatus === "function" ? onStatus : () => {};
 
     try {
-      if (dirInput) dirInput.value = readInstallDir(kind) || dirInput.value || "";
+      if (dirInput) {
+        DIR_INPUTS.add(dirInput);
+        const stored = readInstallDir(kind);
+        const typed = String(dirInput.value || "").trim();
+        if (stored) dirInput.value = stored;
+        else if (typed) writeInstallDir(typed, kind);
+        else dirInput.value = "";
+        // 其它面板已有值时拉齐本框
+        applyInstallDirToInputs(readInstallDir(kind));
+      }
       if (autoEl) autoEl.checked = readAutoStart(kind) !== false;
     } catch (_) {
       /* ignore */
     }
 
+    if (dirInput && !dirInput.dataset.bridgeDirSyncBound) {
+      dirInput.dataset.bridgeDirSyncBound = "1";
+      const persistFromInput = () => {
+        if (syncingInstallDir) return;
+        writeInstallDir(String(dirInput.value || "").trim(), kind);
+      };
+      dirInput.addEventListener("input", persistFromInput);
+      dirInput.addEventListener("change", persistFromInput);
+      dirInput.addEventListener("blur", persistFromInput);
+    }
+
     saveBtn?.addEventListener("click", () => {
       const dir = String(dirInput?.value || "").trim();
       writeInstallDir(dir, kind);
-      say(dir ? "已记住桥目录" : "已清除桥目录");
+      say(dir ? "已记住桥目录（各工具共用，已自动同步）" : "已清除桥目录");
     });
 
     autoEl?.addEventListener("change", (e) => {
