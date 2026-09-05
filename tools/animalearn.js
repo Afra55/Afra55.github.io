@@ -175,7 +175,7 @@
     if (!animal) return { url: "", credit: "" };
     // 会话级元数据命中（可能是 blob: 或热链）
     if (imgCache[animal.id]?.url && !String(imgCache[animal.id].url).startsWith("blob:")) {
-      // blob URL 刷新后会失效；非 blob 可直接复用
+      onProgress?.({ percent: 100 });
       return imgCache[animal.id];
     }
     try {
@@ -252,7 +252,7 @@
   async function paintMedia(mediaEl, emojiEl, imgEl, animal, opts = {}) {
     if (!animal) return null;
     const hideName = Boolean(opts.hideName);
-    setLoadingPlaceholder(mediaEl, animal, true, { hideName, percent: 0 });
+    setLoadingPlaceholder(mediaEl, animal, true, { hideName, percent: -1 });
     if (emojiEl) {
       emojiEl.hidden = true;
       emojiEl.textContent = animal.emoji || "🐾";

@@ -173,6 +173,7 @@
     async function resolveImage(item, onProgress) {
       if (!item) return { url: "", credit: "" };
       if (imgCache[item.id]?.url && !String(imgCache[item.id].url).startsWith("blob:")) {
+        onProgress?.({ percent: 100 });
         return imgCache[item.id];
       }
       try {
@@ -223,7 +224,7 @@
       }
       clearSpecialVisual(mediaEl);
       const hideName = Boolean(opts.hideName);
-      setLoadingPlaceholder(mediaEl, item, true, { hideName, percent: 0 });
+      setLoadingPlaceholder(mediaEl, item, true, { hideName, percent: -1 });
       if (emojiEl) {
         emojiEl.hidden = true;
         emojiEl.textContent = item.emoji || defaultEmoji;
