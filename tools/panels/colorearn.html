@@ -1,0 +1,87 @@
+    <section id="colorearn" class="panel tool-panel kidsflash-immerse" data-reveal>
+      <div class="panel-head kidsflash-head">
+        <div class="kidsflash-head-row">
+          <h1>认颜色</h1>
+          <button type="button" class="ghost-btn kidsflash-fs-btn" id="ce-fs-toggle" title="全屏沉浸" aria-pressed="false">全屏</button>
+        </div>
+      </div>
+      <div class="panel-body kidsflash-body">
+        <div class="kidsflash-toolbar">
+          <button type="button" class="secondary-btn kidsflash-cat-btn" id="ce-cat-open" aria-haspopup="dialog" aria-expanded="false">
+            <span class="kidsflash-cat-label" id="ce-cat-label">分类 · 全部</span>
+            <span class="kidsflash-cat-caret" aria-hidden="true">▾</span>
+          </button>
+          <div class="btn-row tool-actions kidsflash-tabs" role="tablist" aria-label="模式">
+            <button type="button" class="secondary-btn kidsflash-tab is-active" data-tab="cards" role="tab" aria-selected="true">闪卡</button>
+            <button type="button" class="ghost-btn kidsflash-tab" data-tab="quiz-look" role="tab" aria-selected="false">看图</button>
+            <button type="button" class="ghost-btn kidsflash-tab" data-tab="quiz-listen" role="tab" aria-selected="false">听名</button>
+          </div>
+        </div>
+
+        <div class="kidsflash-pane kidsflash-card-pane" data-pane="cards" id="ce-cards">
+          <div class="kidsflash-stage">
+            <div class="kidsflash-media kidsflash-media-tap" id="ce-card-media" role="button" tabindex="0" title="点击朗读" aria-label="点击朗读名称">
+              <span class="kidsflash-emoji" id="ce-card-emoji" aria-hidden="true">🎨</span>
+              <img id="ce-card-img" alt="" hidden />
+            </div>
+            <div class="kidsflash-names kidsflash-names-tap" title="点击朗读">
+              <p class="kidsflash-zh" id="ce-card-zh">—</p>
+              <p class="kidsflash-en" id="ce-card-en">—</p>
+            </div>
+          </div>
+          <div class="kidsflash-nav">
+            <div class="kidsflash-nav-row kidsflash-nav-speak">
+              <button type="button" class="primary-btn kidsflash-speak-btn" id="ce-speak">点读</button>
+            </div>
+            <div class="kidsflash-nav-row kidsflash-nav-step">
+              <button type="button" class="ghost-btn" id="ce-prev">上一张</button>
+              <button type="button" class="ghost-btn" id="ce-next">下一张</button>
+            </div>
+            <div class="kidsflash-nav-row kidsflash-nav-random">
+              <button type="button" class="secondary-btn kidsflash-random-btn" id="ce-random">随机</button>
+            </div>
+          </div>
+          <p class="kidsflash-progress" id="ce-card-meta" aria-live="polite"></p>
+        </div>
+
+        <div class="kidsflash-pane" data-pane="quiz-look" id="ce-quiz-look" hidden>
+          <p class="kidsflash-quiz-hint">看图，选出正确名字</p>
+          <div class="kidsflash-stage">
+            <div class="kidsflash-media" id="ce-look-media">
+              <span class="kidsflash-emoji" id="ce-look-emoji" aria-hidden="true">🎨</span>
+              <img id="ce-look-img" alt="" hidden />
+            </div>
+          </div>
+          <div class="kidsflash-choices" id="ce-look-choices"></div>
+          <p class="kidsflash-feedback" id="ce-look-feedback" aria-live="polite"></p>
+          <div class="kidsflash-quiz-actions">
+            <button type="button" class="primary-btn kidsflash-next-lg" id="ce-look-next">下一题</button>
+          </div>
+        </div>
+
+        <div class="kidsflash-pane" data-pane="quiz-listen" id="ce-quiz-listen" hidden>
+          <p class="kidsflash-quiz-hint">听名字，点对应的图</p>
+          <div class="btn-row tool-actions kidsflash-quiz-top">
+            <button type="button" class="primary-btn" id="ce-listen-replay">再听一遍</button>
+          </div>
+          <div class="kidsflash-img-choices" id="ce-listen-choices"></div>
+          <p class="kidsflash-feedback" id="ce-listen-feedback" aria-live="polite"></p>
+          <div class="kidsflash-quiz-actions">
+            <button type="button" class="primary-btn kidsflash-next-lg" id="ce-listen-next">下一题</button>
+          </div>
+        </div>
+
+        <p class="error" id="ce-error" hidden></p>
+      </div>
+
+      <div class="kidsflash-sheet" id="ce-cat-sheet" hidden>
+        <button type="button" class="kidsflash-sheet-backdrop" id="ce-cat-backdrop" aria-label="关闭分类"></button>
+        <div class="kidsflash-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="ce-cat-title">
+          <div class="kidsflash-sheet-head">
+            <h2 id="ce-cat-title">选择分类</h2>
+            <button type="button" class="ghost-btn kidsflash-sheet-close" id="ce-cat-close" aria-label="关闭">✕</button>
+          </div>
+          <div class="kidsflash-sheet-list" id="ce-filters"></div>
+        </div>
+      </div>
+    </section>

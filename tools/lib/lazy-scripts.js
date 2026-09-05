@@ -80,6 +80,10 @@
     ambient: "./ambient.js",
     enspeak: "./enspeak.js",
     animalearn: "./animalearn.js",
+    insectearn: "./insectearn.js",
+    plantearn: "./plantearn.js",
+    colorearn: "./colorearn.js",
+    numearn: "./numearn.js",
     ipgeo: "./ipgeo.js",
     sandspiel: "./sandspiel.js",
     memo: "./memo.js",
@@ -182,6 +186,10 @@
     "ambient",
     "enspeak",
     "animalearn",
+    "insectearn",
+    "plantearn",
+    "colorearn",
+    "numearn",
     "ipgeo",
     "sandspiel",
     "lanshare",
@@ -197,7 +205,8 @@
     "acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp",
     "gitbridge", "passvault", "envkit", "feedbackhub",
     "setup", "about", "xorenc", "morse", "countdown",
-    "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "piano", "minigames", "ambient", "enspeak", "animalearn", "ipgeo",
+    "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "piano", "minigames", "ambient", "enspeak", "animalearn",
+    "insectearn", "plantearn", "colorearn", "numearn", "ipgeo",
   ]);
 
   const scriptPromises = new Map();

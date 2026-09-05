@@ -22,6 +22,25 @@
   let zhVoice = null;
   let enVoice = null;
   let bootPromise = null;
+  let kidsImgReady = null;
+
+  function ensureKidsImg() {
+    if (window.DevToolsKidsImg) return Promise.resolve(window.DevToolsKidsImg);
+    if (kidsImgReady) return kidsImgReady;
+    kidsImgReady = new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      const v = encodeURIComponent(window.TOOLS_BUILD || window.TOOLS_VERSION || "");
+      s.src = `./lib/kids-img-cache.js${v ? `?v=${v}` : ""}`;
+      s.async = true;
+      s.onload = () => resolve(window.DevToolsKidsImg);
+      s.onerror = () => reject(new Error("kids-img-cache 加载失败"));
+      document.head.appendChild(s);
+    }).catch((err) => {
+      kidsImgReady = null;
+      throw err;
+    });
+    return kidsImgReady;
+  }
 
   function showError(msg) {
     const el = root && $("#ae-error", root);
@@ -71,6 +90,7 @@
   }
 
   function commonsUrl(file) {
+    if (window.DevToolsKidsImg?.commonsUrl) return window.DevToolsKidsImg.commonsUrl(file);
     if (!file) return "";
     return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=900`;
   }
@@ -151,40 +171,48 @@
     });
   }
 
-  async function resolveImage(animal) {
+  async function resolveImage(animal, onProgress) {
     if (!animal) return { url: "", credit: "" };
-    if (imgCache[animal.id]?.url) return imgCache[animal.id];
+    // 会话级元数据命中（可能是 blob: 或热链）
+    if (imgCache[animal.id]?.url && !String(imgCache[animal.id].url).startsWith("blob:")) {
+      // blob URL 刷新后会失效；非 blob 可直接复用
+      return imgCache[animal.id];
+    }
+    try {
+      await ensureKidsImg();
+      const hit = await window.DevToolsKidsImg.resolveItemImage(
+        {
+          id: animal.id,
+          commons: animal.commons,
+          query: animal.query || animal.nameEn || animal.id,
+          nameEn: animal.nameEn,
+        },
+        {
+          namespace: "animalearn",
+          onProgress,
+        }
+      );
+      if (hit?.url) {
+        const row = { url: hit.url, credit: hit.credit || "" };
+        imgCache[animal.id] = row;
+        // 只把可持久的热链/来源记进 session；blob 不写，下次走 Cache API
+        if (!String(hit.url).startsWith("blob:")) saveImgCache();
+        return row;
+      }
+    } catch (_) {
+      /* fall through legacy */
+    }
 
+    // 旧路径兜底
     if (animal.commons) {
       const url = commonsUrl(animal.commons);
       if (await probeImage(url)) {
         const hit = { url, credit: `Wikimedia Commons · ${animal.commons}` };
         imgCache[animal.id] = hit;
         saveImgCache();
+        onProgress?.({ percent: 100 });
         return hit;
       }
-    }
-
-    try {
-      const q = encodeURIComponent(animal.query || animal.nameEn || animal.id);
-      const api = `https://api.openverse.org/v1/images/?q=${q}&license=cc0,by,by-sa&page_size=5`;
-      const res = await fetch(api, { headers: { Accept: "application/json" } });
-      if (res.ok) {
-        const data = await res.json();
-        for (const item of data.results || []) {
-          const url = item.url || item.thumbnail || "";
-          if (!url || !(await probeImage(url))) continue;
-          const hit = {
-            url,
-            credit: [item.license, item.creator, "Openverse"].filter(Boolean).join(" · "),
-          };
-          imgCache[animal.id] = hit;
-          saveImgCache();
-          return hit;
-        }
-      }
-    } catch (_) {
-      /* ignore */
     }
     return { url: "", credit: "" };
   }
@@ -204,18 +232,27 @@
       mediaEl.appendChild(ph);
     }
     const emoji = animal?.emoji || "🐾";
-    // 答题模式不显示名字，避免孩子没看图就泄题
     const hideName = Boolean(opts.hideName);
     const label = hideName ? "" : [animal?.nameZh, animal?.nameEn].filter(Boolean).join(" ");
+    const pct = typeof opts.percent === "number" ? opts.percent : -1;
+    const pctText =
+      pct < 0 ? "加载中…" : pct >= 100 ? "即将完成…" : `加载 ${pct}%`;
+    const bar =
+      pct < 0
+        ? `<span class="animalearn-load-bar animalearn-load-bar-indeterminate"></span>`
+        : `<span class="animalearn-load-bar"><span class="animalearn-load-bar-fill" style="width:${Math.max(
+            4,
+            pct
+          )}%"></span></span>`;
     ph.innerHTML = `<span class="animalearn-placeholder-emoji">${emoji}</span>${
       label ? `<span class="animalearn-placeholder-text">${label}</span>` : ""
-    }`;
+    }<span class="animalearn-load-pct">${pctText}</span>${bar}`;
   }
 
   async function paintMedia(mediaEl, emojiEl, imgEl, animal, opts = {}) {
     if (!animal) return null;
     const hideName = Boolean(opts.hideName);
-    setLoadingPlaceholder(mediaEl, animal, true, { hideName });
+    setLoadingPlaceholder(mediaEl, animal, true, { hideName, percent: 0 });
     if (emojiEl) {
       emojiEl.hidden = true;
       emojiEl.textContent = animal.emoji || "🐾";
@@ -225,7 +262,6 @@
       imgEl.removeAttribute("src");
       imgEl.alt = hideName ? "动物图片" : `${animal.nameZh} ${animal.nameEn}`;
       imgEl.dataset.expectId = animal.id;
-      // 兜底：强制框内完整显示（禁止裁切下半截 / 撑破屏幕）
       imgEl.style.maxWidth = "100%";
       imgEl.style.maxHeight = "100%";
       imgEl.style.width = "100%";
@@ -236,7 +272,10 @@
       imgEl.style.inset = "0";
       imgEl.style.margin = "0";
     }
-    const hit = await resolveImage(animal);
+    const hit = await resolveImage(animal, (p) => {
+      const percent = typeof p?.percent === "number" ? p.percent : -1;
+      setLoadingPlaceholder(mediaEl, animal, true, { hideName, percent });
+    });
     if (!imgEl || !hit.url) {
       if (emojiEl) emojiEl.hidden = false;
       setLoadingPlaceholder(mediaEl, animal, false);

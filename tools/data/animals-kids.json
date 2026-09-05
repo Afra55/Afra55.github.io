@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "credit": "配图优先 Wikimedia Commons（Special:FilePath）；缺图时用 Openverse CC 检索兜底。仅供学习展示，请保留许可署名。",
   "groups": [
     {
@@ -501,6 +501,132 @@
       "emoji": "🐌",
       "query": "snail",
       "commons": "Helix_pomatia.jpg"
+    },
+    {
+      "id": "crow",
+      "nameZh": "乌鸦",
+      "nameEn": "Crow",
+      "group": "bird",
+      "emoji": "🐦‍⬛",
+      "query": "crow bird",
+      "commons": "Corvus_corone_-Scotland_-standing-8.jpg"
+    },
+    {
+      "id": "pigeon",
+      "nameZh": "鸽子",
+      "nameEn": "Pigeon",
+      "group": "bird",
+      "emoji": "🕊️",
+      "query": "pigeon",
+      "commons": "Columba_livia_2.jpg"
+    },
+    {
+      "id": "rooster",
+      "nameZh": "公鸡",
+      "nameEn": "Rooster",
+      "group": "bird",
+      "emoji": "🐓",
+      "query": "rooster",
+      "commons": "Rooster_portrait.jpg"
+    },
+    {
+      "id": "swallow",
+      "nameZh": "燕子",
+      "nameEn": "Swallow",
+      "group": "bird",
+      "emoji": "🐦",
+      "query": "barn swallow",
+      "commons": "Barn_Swallow_Hirundo_rustica.jpg"
+    },
+    {
+      "id": "seagull",
+      "nameZh": "海鸥",
+      "nameEn": "Seagull",
+      "group": "bird",
+      "emoji": "🪽",
+      "query": "seagull",
+      "commons": "Larus_argentatus_Bempton.jpg"
+    },
+    {
+      "id": "woodpecker",
+      "nameZh": "啄木鸟",
+      "nameEn": "Woodpecker",
+      "group": "bird",
+      "emoji": "🐦",
+      "query": "woodpecker",
+      "commons": "Dendrocopos_major_2_(Marek_Szczepanek).jpg"
+    },
+    {
+      "id": "toucan",
+      "nameZh": "巨嘴鸟",
+      "nameEn": "Toucan",
+      "group": "bird",
+      "emoji": "🦜",
+      "query": "toucan",
+      "commons": "Ramphastos_sulfuratus_-London_Zoo_-flying-8a.jpg"
+    },
+    {
+      "id": "chick",
+      "nameZh": "小鸡",
+      "nameEn": "Chick",
+      "group": "bird",
+      "emoji": "🐤",
+      "query": "baby chick",
+      "commons": "Day-old_chicks_in_box.jpg"
+    },
+    {
+      "id": "jellyfish",
+      "nameZh": "水母",
+      "nameEn": "Jellyfish",
+      "group": "sea",
+      "emoji": "🪼",
+      "query": "jellyfish",
+      "commons": "Aurelia_aurita_2.jpg"
+    },
+    {
+      "id": "seahorse",
+      "nameZh": "海马",
+      "nameEn": "Seahorse",
+      "group": "sea",
+      "emoji": "🌊",
+      "query": "seahorse",
+      "commons": "Hippocampus_kuda.jpg"
+    },
+    {
+      "id": "starfish",
+      "nameZh": "海星",
+      "nameEn": "Starfish",
+      "group": "sea",
+      "emoji": "⭐",
+      "query": "starfish",
+      "commons": "Fromia_indica_(Red_starfish).jpg"
+    },
+    {
+      "id": "rabbit_wild",
+      "nameZh": "野兔",
+      "nameEn": "Hare",
+      "group": "wild",
+      "emoji": "🐇",
+      "query": "hare",
+      "commons": "Lepus_europaeus_(aka).jpg"
+    },
+    {
+      "id": "raccoon",
+      "nameZh": "浣熊",
+      "nameEn": "Raccoon",
+      "group": "wild",
+      "emoji": "🦝",
+      "query": "raccoon",
+      "commons": "Raccoon_(Procyon_lotor)_2.jpg"
+    },
+    {
+      "id": "otter",
+      "nameZh": "水獭",
+      "nameEn": "Otter",
+      "group": "wild",
+      "emoji": "🦦",
+      "query": "otter",
+      "commons": "Otter_in_Southwold.jpg"
     }
   ]
 }

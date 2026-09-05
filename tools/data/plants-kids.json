@@ -1,0 +1,172 @@
+{
+  "version": 1,
+  "credit": "配图优先 Wikimedia Commons；缺图时 Openverse CC 兜底。",
+  "groups": [
+    {
+      "id": "all",
+      "nameZh": "全部",
+      "nameEn": "All"
+    },
+    {
+      "id": "flower",
+      "nameZh": "花朵",
+      "nameEn": "Flowers"
+    },
+    {
+      "id": "tree",
+      "nameZh": "树木",
+      "nameEn": "Trees"
+    },
+    {
+      "id": "food",
+      "nameZh": "蔬果",
+      "nameEn": "Food plants"
+    }
+  ],
+  "items": [
+    {
+      "id": "rose",
+      "nameZh": "玫瑰",
+      "nameEn": "Rose",
+      "group": "flower",
+      "emoji": "🌹",
+      "query": "rose flower",
+      "commons": "Red_rose.jpg"
+    },
+    {
+      "id": "sunflower",
+      "nameZh": "向日葵",
+      "nameEn": "Sunflower",
+      "group": "flower",
+      "emoji": "🌻",
+      "query": "sunflower",
+      "commons": "Sunflower_sky_backdrop.jpg"
+    },
+    {
+      "id": "tulip",
+      "nameZh": "郁金香",
+      "nameEn": "Tulip",
+      "group": "flower",
+      "emoji": "🌷",
+      "query": "tulip",
+      "commons": "Tulip_cv_Red_Present.jpg"
+    },
+    {
+      "id": "lotus",
+      "nameZh": "荷花",
+      "nameEn": "Lotus",
+      "group": "flower",
+      "emoji": "🪷",
+      "query": "lotus flower",
+      "commons": "Sacred_lotus_Nelumbo_nucifera.jpg"
+    },
+    {
+      "id": "cherry",
+      "nameZh": "樱花",
+      "nameEn": "Cherry blossom",
+      "group": "flower",
+      "emoji": "🌸",
+      "query": "cherry blossom",
+      "commons": "Cherry_blossoms_at_Bank_of_the_Yamato_River.jpg"
+    },
+    {
+      "id": "tree",
+      "nameZh": "大树",
+      "nameEn": "Tree",
+      "group": "tree",
+      "emoji": "🌳",
+      "query": "tree",
+      "commons": "European_beech.jpg"
+    },
+    {
+      "id": "pine",
+      "nameZh": "松树",
+      "nameEn": "Pine",
+      "group": "tree",
+      "emoji": "🌲",
+      "query": "pine tree",
+      "commons": "Pinus_sylvestris.jpg"
+    },
+    {
+      "id": "bamboo",
+      "nameZh": "竹子",
+      "nameEn": "Bamboo",
+      "group": "tree",
+      "emoji": "🎋",
+      "query": "bamboo",
+      "commons": "Bamboo_forest_Kyoto.jpg"
+    },
+    {
+      "id": "apple_tree",
+      "nameZh": "苹果树",
+      "nameEn": "Apple tree",
+      "group": "food",
+      "emoji": "🍎",
+      "query": "apple tree fruit",
+      "commons": "Honeycrisp.jpg"
+    },
+    {
+      "id": "banana",
+      "nameZh": "香蕉",
+      "nameEn": "Banana",
+      "group": "food",
+      "emoji": "🍌",
+      "query": "banana plant",
+      "commons": "Bananas.jpg"
+    },
+    {
+      "id": "carrot",
+      "nameZh": "胡萝卜",
+      "nameEn": "Carrot",
+      "group": "food",
+      "emoji": "🥕",
+      "query": "carrot",
+      "commons": "Carrots_of_different_colors.jpg"
+    },
+    {
+      "id": "corn",
+      "nameZh": "玉米",
+      "nameEn": "Corn",
+      "group": "food",
+      "emoji": "🌽",
+      "query": "corn maize",
+      "commons": "Corncobs.jpg"
+    },
+    {
+      "id": "mushroom",
+      "nameZh": "蘑菇",
+      "nameEn": "Mushroom",
+      "group": "food",
+      "emoji": "🍄",
+      "query": "mushroom",
+      "commons": "Amanita_muscaria_3_vliegenzwammen_op_rij.jpg"
+    },
+    {
+      "id": "cactus",
+      "nameZh": "仙人掌",
+      "nameEn": "Cactus",
+      "group": "tree",
+      "emoji": "🌵",
+      "query": "cactus",
+      "commons": "Carnegiea_gigantea_flower.jpg"
+    },
+    {
+      "id": "wheat",
+      "nameZh": "麦子",
+      "nameEn": "Wheat",
+      "group": "food",
+      "emoji": "🌾",
+      "query": "wheat field",
+      "commons": "Wheat_close-up.jpg"
+    },
+    {
+      "id": "lavender",
+      "nameZh": "薰衣草",
+      "nameEn": "Lavender",
+      "group": "flower",
+      "emoji": "💜",
+      "query": "lavender field",
+      "commons": "Lavandula_angustifolia.jpg"
+    }
+  ]
+}

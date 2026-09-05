@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "credit": "纯色色块本地绘制，无需外网图片。",
+  "visual": "color",
+  "groups": [
+    {
+      "id": "all",
+      "nameZh": "全部",
+      "nameEn": "All"
+    },
+    {
+      "id": "basic",
+      "nameZh": "基础色",
+      "nameEn": "Basic"
+    },
+    {
+      "id": "more",
+      "nameZh": "更多色",
+      "nameEn": "More"
+    }
+  ],
+  "items": [
+    {
+      "id": "red",
+      "nameZh": "红色",
+      "nameEn": "Red",
+      "group": "basic",
+      "emoji": "🔴",
+      "color": "#e11d48"
+    },
+    {
+      "id": "orange",
+      "nameZh": "橙色",
+      "nameEn": "Orange",
+      "group": "basic",
+      "emoji": "🟠",
+      "color": "#f97316"
+    },
+    {
+      "id": "yellow",
+      "nameZh": "黄色",
+      "nameEn": "Yellow",
+      "group": "basic",
+      "emoji": "🟡",
+      "color": "#eab308"
+    },
+    {
+      "id": "green",
+      "nameZh": "绿色",
+      "nameEn": "Green",
+      "group": "basic",
+      "emoji": "🟢",
+      "color": "#22c55e"
+    },
+    {
+      "id": "blue",
+      "nameZh": "蓝色",
+      "nameEn": "Blue",
+      "group": "basic",
+      "emoji": "🔵",
+      "color": "#3b82f6"
+    },
+    {
+      "id": "purple",
+      "nameZh": "紫色",
+      "nameEn": "Purple",
+      "group": "basic",
+      "emoji": "🟣",
+      "color": "#a855f7"
+    },
+    {
+      "id": "pink",
+      "nameZh": "粉色",
+      "nameEn": "Pink",
+      "group": "more",
+      "emoji": "💗",
+      "color": "#ec4899"
+    },
+    {
+      "id": "brown",
+      "nameZh": "棕色",
+      "nameEn": "Brown",
+      "group": "more",
+      "emoji": "🟤",
+      "color": "#92400e"
+    },
+    {
+      "id": "black",
+      "nameZh": "黑色",
+      "nameEn": "Black",
+      "group": "basic",
+      "emoji": "⚫",
+      "color": "#111827"
+    },
+    {
+      "id": "white",
+      "nameZh": "白色",
+      "nameEn": "White",
+      "group": "basic",
+      "emoji": "⚪",
+      "color": "#f8fafc"
+    },
+    {
+      "id": "gray",
+      "nameZh": "灰色",
+      "nameEn": "Gray",
+      "group": "more",
+      "emoji": "🩶",
+      "color": "#6b7280"
+    },
+    {
+      "id": "cyan",
+      "nameZh": "青色",
+      "nameEn": "Cyan",
+      "group": "more",
+      "emoji": "🩵",
+      "color": "#06b6d4"
+    }
+  ]
+}

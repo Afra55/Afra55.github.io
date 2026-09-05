@@ -137,7 +137,11 @@
       "label": "学习",
       "tools": [
         "enspeak",
-        "animalearn"
+        "animalearn",
+        "insectearn",
+        "plantearn",
+        "colorearn",
+        "numearn"
       ]
     },
     {
@@ -773,6 +777,54 @@
         "动物英语"
       ]
     },
+    "insectearn": {
+      "name": "认昆虫",
+      "aliases": [
+        "昆虫",
+        "认昆虫",
+        "insect",
+        "insects",
+        "insectearn",
+        "虫子",
+        "闪卡"
+      ]
+    },
+    "plantearn": {
+      "name": "认植物",
+      "aliases": [
+        "植物",
+        "认植物",
+        "plant",
+        "plants",
+        "plantearn",
+        "花草",
+        "闪卡"
+      ]
+    },
+    "colorearn": {
+      "name": "认颜色",
+      "aliases": [
+        "颜色",
+        "认颜色",
+        "color",
+        "colours",
+        "colorearn",
+        "色彩",
+        "闪卡"
+      ]
+    },
+    "numearn": {
+      "name": "认数字",
+      "aliases": [
+        "数字",
+        "认数字",
+        "number",
+        "numbers",
+        "numearn",
+        "数数",
+        "闪卡"
+      ]
+    },
     "adb": {
       "name": "ADB 工具",
       "aliases": [
@@ -976,6 +1028,10 @@
     "ambient": "环境音库：89 条单轨环境音，分类浏览、搜索、收藏与下载；封面为 Openverse 实景图，音效参考 remvze/moodist。",
     "enspeak": "日常开口：按「架子换词 + 话题岛 + 听跟 + 当天说出口」练生活英语。内置约 20 架子、起步四岛与扩展岛句库；进度与录音仅存本机。",
     "animalearn": "幼儿认动物：中英闪卡，点读先中文再英文；玩玩看含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",
+    "insectearn": "幼儿认昆虫：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",
+    "plantearn": "幼儿认植物：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",
+    "colorearn": "幼儿认颜色：大色块闪卡，点读中英名；含看色选名、听名选色。纯本地色块，无需外网图片。",
+    "numearn": "幼儿认数字：大号数字闪卡，点读中英名；含看数选名、听名选数。纯本地显示，无需外网图片。",
     "acupoint": "361 经穴 + 51 奇穴：Wellcome 经络参考图可点击放大，搜索列表查看定位与主治。",
     "healthread": "养生功法等文章离线阅读：列表搜索、按需加载动图，记住阅读进度。",
     "adb": "网页侧 ADB：设备、文件、应用、性能/进程/Shell/布局、Logcat、输入与任务等。",

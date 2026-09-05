@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-04T05:01:27.364Z",
+  "generatedAt": "2026-09-05T01:25:48.554Z",
   "panels": [
     {
       "id": "about",
@@ -51,6 +51,11 @@
       "id": "color",
       "file": "./panels/color.html",
       "bytes": 1258
+    },
+    {
+      "id": "colorearn",
+      "file": "./panels/colorearn.html",
+      "bytes": 4993
     },
     {
       "id": "coord",
@@ -173,6 +178,11 @@
       "bytes": 2798
     },
     {
+      "id": "insectearn",
+      "file": "./panels/insectearn.html",
+      "bytes": 4994
+    },
+    {
       "id": "ipgeo",
       "file": "./panels/ipgeo.html",
       "bytes": 2843
@@ -233,6 +243,11 @@
       "bytes": 1488
     },
     {
+      "id": "numearn",
+      "file": "./panels/numearn.html",
+      "bytes": 4991
+    },
+    {
       "id": "passvault",
       "file": "./panels/passvault.html",
       "bytes": 5350
@@ -251,6 +266,11 @@
       "id": "piano",
       "file": "./panels/piano.html",
       "bytes": 2448
+    },
+    {
+      "id": "plantearn",
+      "file": "./panels/plantearn.html",
+      "bytes": 4993
     },
     {
       "id": "qrcode",

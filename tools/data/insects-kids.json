@@ -1,0 +1,172 @@
+{
+  "version": 1,
+  "credit": "配图优先 Wikimedia Commons；缺图时 Openverse CC 兜底。",
+  "groups": [
+    {
+      "id": "all",
+      "nameZh": "全部",
+      "nameEn": "All"
+    },
+    {
+      "id": "fly",
+      "nameZh": "会飞的",
+      "nameEn": "Flying"
+    },
+    {
+      "id": "crawl",
+      "nameZh": "爬行的",
+      "nameEn": "Crawling"
+    },
+    {
+      "id": "pretty",
+      "nameZh": "好看的",
+      "nameEn": "Pretty"
+    }
+  ],
+  "items": [
+    {
+      "id": "butterfly",
+      "nameZh": "蝴蝶",
+      "nameEn": "Butterfly",
+      "group": "pretty",
+      "emoji": "🦋",
+      "query": "butterfly",
+      "commons": "Papilio_machaon_MHNT.jpg"
+    },
+    {
+      "id": "bee",
+      "nameZh": "蜜蜂",
+      "nameEn": "Bee",
+      "group": "fly",
+      "emoji": "🐝",
+      "query": "honey bee",
+      "commons": "Honey_bee_on_a_dandelion.jpg"
+    },
+    {
+      "id": "ladybug",
+      "nameZh": "瓢虫",
+      "nameEn": "Ladybug",
+      "group": "pretty",
+      "emoji": "🐞",
+      "query": "ladybug",
+      "commons": "Coccinella_magnifica01.jpg"
+    },
+    {
+      "id": "ant",
+      "nameZh": "蚂蚁",
+      "nameEn": "Ant",
+      "group": "crawl",
+      "emoji": "🐜",
+      "query": "ant",
+      "commons": "Meat_eater_ant_feeding_on_honey02.jpg"
+    },
+    {
+      "id": "dragonfly",
+      "nameZh": "蜻蜓",
+      "nameEn": "Dragonfly",
+      "group": "fly",
+      "emoji": "🦟",
+      "query": "dragonfly",
+      "commons": "Blue_dasher_dragonfly.jpg"
+    },
+    {
+      "id": "snail",
+      "nameZh": "蜗牛",
+      "nameEn": "Snail",
+      "group": "crawl",
+      "emoji": "🐌",
+      "query": "snail",
+      "commons": "Helix_pomatia.jpg"
+    },
+    {
+      "id": "grasshopper",
+      "nameZh": "蚂蚱",
+      "nameEn": "Grasshopper",
+      "group": "crawl",
+      "emoji": "🦗",
+      "query": "grasshopper",
+      "commons": "Caelifera.jpg"
+    },
+    {
+      "id": "mantis",
+      "nameZh": "螳螂",
+      "nameEn": "Mantis",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "praying mantis",
+      "commons": "Mantis_religiosa_MHNT.jpg"
+    },
+    {
+      "id": "mosquito",
+      "nameZh": "蚊子",
+      "nameEn": "Mosquito",
+      "group": "fly",
+      "emoji": "🦟",
+      "query": "mosquito",
+      "commons": "Aedes_aegypti_feeding.jpg"
+    },
+    {
+      "id": "fly",
+      "nameZh": "苍蝇",
+      "nameEn": "Fly",
+      "group": "fly",
+      "emoji": "🪰",
+      "query": "housefly",
+      "commons": "Housefly_on_a_leaf.jpg"
+    },
+    {
+      "id": "firefly",
+      "nameZh": "萤火虫",
+      "nameEn": "Firefly",
+      "group": "pretty",
+      "emoji": "✨",
+      "query": "firefly",
+      "commons": "Photuris_lucicrescens.jpg"
+    },
+    {
+      "id": "cicada",
+      "nameZh": "蝉",
+      "nameEn": "Cicada",
+      "group": "fly",
+      "emoji": "🦗",
+      "query": "cicada",
+      "commons": "Cicada_in_Japan.jpg"
+    },
+    {
+      "id": "spider",
+      "nameZh": "蜘蛛",
+      "nameEn": "Spider",
+      "group": "crawl",
+      "emoji": "🕷️",
+      "query": "spider",
+      "commons": "Araneus_diadematus.jpg"
+    },
+    {
+      "id": "centipede",
+      "nameZh": "蜈蚣",
+      "nameEn": "Centipede",
+      "group": "crawl",
+      "emoji": "🐛",
+      "query": "centipede",
+      "commons": "Lithobius_forficatus.jpg"
+    },
+    {
+      "id": "caterpillar",
+      "nameZh": "毛毛虫",
+      "nameEn": "Caterpillar",
+      "group": "crawl",
+      "emoji": "🐛",
+      "query": "caterpillar",
+      "commons": "Papilio_machaon_caterpillar.jpg"
+    },
+    {
+      "id": "moth",
+      "nameZh": "蛾子",
+      "nameEn": "Moth",
+      "group": "fly",
+      "emoji": "🦋",
+      "query": "moth",
+      "commons": "Biston_betularia.jpg"
+    }
+  ]
+}
