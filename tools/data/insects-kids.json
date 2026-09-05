@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "credit": "配图优先 Wikimedia Commons；缺图时 Openverse CC 兜底。",
   "groups": [
     {
@@ -167,6 +167,678 @@
       "emoji": "🦋",
       "query": "moth",
       "commons": "Biston_betularia.jpg"
+    },
+    {
+      "id": "wasp",
+      "nameZh": "黄蜂",
+      "nameEn": "Wasp",
+      "group": "fly",
+      "emoji": "🐝",
+      "query": "wasp insect"
+    },
+    {
+      "id": "hornet",
+      "nameZh": "大黄蜂",
+      "nameEn": "Hornet",
+      "group": "fly",
+      "emoji": "🐝",
+      "query": "hornet"
+    },
+    {
+      "id": "bumblebee",
+      "nameZh": "熊蜂",
+      "nameEn": "Bumblebee",
+      "group": "fly",
+      "emoji": "🐝",
+      "query": "bumblebee"
+    },
+    {
+      "id": "cricket",
+      "nameZh": "蟋蟀",
+      "nameEn": "Cricket",
+      "group": "crawl",
+      "emoji": "🦗",
+      "query": "cricket insect"
+    },
+    {
+      "id": "locust",
+      "nameZh": "蝗虫",
+      "nameEn": "Locust",
+      "group": "crawl",
+      "emoji": "🦗",
+      "query": "locust"
+    },
+    {
+      "id": "cockroach",
+      "nameZh": "蟑螂",
+      "nameEn": "Cockroach",
+      "group": "crawl",
+      "emoji": "🪳",
+      "query": "cockroach"
+    },
+    {
+      "id": "termite",
+      "nameZh": "白蚁",
+      "nameEn": "Termite",
+      "group": "crawl",
+      "emoji": "🐜",
+      "query": "termite"
+    },
+    {
+      "id": "flea",
+      "nameZh": "跳蚤",
+      "nameEn": "Flea",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "flea insect"
+    },
+    {
+      "id": "louse",
+      "nameZh": "虱子",
+      "nameEn": "Louse",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "louse insect"
+    },
+    {
+      "id": "earwig",
+      "nameZh": "蠼螋",
+      "nameEn": "Earwig",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "earwig"
+    },
+    {
+      "id": "silverfish",
+      "nameZh": "蠹虫",
+      "nameEn": "Silverfish",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "silverfish"
+    },
+    {
+      "id": "mayfly",
+      "nameZh": "蜉蝣",
+      "nameEn": "Mayfly",
+      "group": "fly",
+      "emoji": "🪰",
+      "query": "mayfly"
+    },
+    {
+      "id": "damselfly",
+      "nameZh": "豆娘",
+      "nameEn": "Damselfly",
+      "group": "fly",
+      "emoji": "🪰",
+      "query": "damselfly"
+    },
+    {
+      "id": "lacewing",
+      "nameZh": "草蛉",
+      "nameEn": "Lacewing",
+      "group": "fly",
+      "emoji": "🪲",
+      "query": "lacewing"
+    },
+    {
+      "id": "scorpionfly",
+      "nameZh": "蝎蛉",
+      "nameEn": "Scorpionfly",
+      "group": "fly",
+      "emoji": "🪲",
+      "query": "scorpionfly"
+    },
+    {
+      "id": "stonefly",
+      "nameZh": "石蝇",
+      "nameEn": "Stonefly",
+      "group": "fly",
+      "emoji": "🪰",
+      "query": "stonefly"
+    },
+    {
+      "id": "caddisfly",
+      "nameZh": "石蛾",
+      "nameEn": "Caddisfly",
+      "group": "fly",
+      "emoji": "🪰",
+      "query": "caddisfly"
+    },
+    {
+      "id": "aphid",
+      "nameZh": "蚜虫",
+      "nameEn": "Aphid",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "aphid"
+    },
+    {
+      "id": "leafhopper",
+      "nameZh": "叶蝉",
+      "nameEn": "Leafhopper",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "leafhopper"
+    },
+    {
+      "id": "planthopper",
+      "nameZh": "飞虱",
+      "nameEn": "Planthopper",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "planthopper"
+    },
+    {
+      "id": "stink_bug",
+      "nameZh": "椿象",
+      "nameEn": "Stink bug",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "stink bug"
+    },
+    {
+      "id": "assassin_bug",
+      "nameZh": "猎蝽",
+      "nameEn": "Assassin bug",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "assassin bug"
+    },
+    {
+      "id": "water_strider",
+      "nameZh": "水黾",
+      "nameEn": "Water strider",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "water strider"
+    },
+    {
+      "id": "backswimmer",
+      "nameZh": "仰泳蝽",
+      "nameEn": "Backswimmer",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "backswimmer"
+    },
+    {
+      "id": "diving_beetle",
+      "nameZh": "龙虱",
+      "nameEn": "Diving beetle",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "diving beetle"
+    },
+    {
+      "id": "whirligig",
+      "nameZh": "鼓甲",
+      "nameEn": "Whirligig beetle",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "whirligig beetle"
+    },
+    {
+      "id": "ground_beetle",
+      "nameZh": "步行虫",
+      "nameEn": "Ground beetle",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "ground beetle"
+    },
+    {
+      "id": "stag_beetle",
+      "nameZh": "锹甲",
+      "nameEn": "Stag beetle",
+      "group": "pretty",
+      "emoji": "🪲",
+      "query": "stag beetle"
+    },
+    {
+      "id": "rhinoceros_beetle",
+      "nameZh": "独角仙",
+      "nameEn": "Rhinoceros beetle",
+      "group": "pretty",
+      "emoji": "🪲",
+      "query": "rhinoceros beetle"
+    },
+    {
+      "id": "dung_beetle",
+      "nameZh": "屎壳郎",
+      "nameEn": "Dung beetle",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "dung beetle"
+    },
+    {
+      "id": "click_beetle",
+      "nameZh": "叩头虫",
+      "nameEn": "Click beetle",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "click beetle"
+    },
+    {
+      "id": "fire_beetle",
+      "nameZh": "萤火虫甲",
+      "nameEn": "Fire beetle",
+      "group": "pretty",
+      "emoji": "🪲",
+      "query": "fire beetle"
+    },
+    {
+      "id": "weevil",
+      "nameZh": "象鼻虫",
+      "nameEn": "Weevil",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "weevil"
+    },
+    {
+      "id": "longhorn",
+      "nameZh": "天牛",
+      "nameEn": "Longhorn beetle",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "longhorn beetle"
+    },
+    {
+      "id": "jewel_beetle",
+      "nameZh": "吉丁虫",
+      "nameEn": "Jewel beetle",
+      "group": "pretty",
+      "emoji": "🪲",
+      "query": "jewel beetle"
+    },
+    {
+      "id": "scarab",
+      "nameZh": "金龟子",
+      "nameEn": "Scarab",
+      "group": "pretty",
+      "emoji": "🪲",
+      "query": "scarab beetle"
+    },
+    {
+      "id": "rove_beetle",
+      "nameZh": "隐翅虫",
+      "nameEn": "Rove beetle",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "rove beetle"
+    },
+    {
+      "id": "soldier_beetle",
+      "nameZh": "萤叶甲",
+      "nameEn": "Soldier beetle",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "soldier beetle"
+    },
+    {
+      "id": "blister_beetle",
+      "nameZh": "芫菁",
+      "nameEn": "Blister beetle",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "blister beetle"
+    },
+    {
+      "id": "tiger_beetle",
+      "nameZh": "虎甲",
+      "nameEn": "Tiger beetle",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "tiger beetle"
+    },
+    {
+      "id": "sawfly",
+      "nameZh": "叶蜂",
+      "nameEn": "Sawfly",
+      "group": "fly",
+      "emoji": "🪲",
+      "query": "sawfly"
+    },
+    {
+      "id": "ichneumon",
+      "nameZh": "姬蜂",
+      "nameEn": "Ichneumon",
+      "group": "fly",
+      "emoji": "🐝",
+      "query": "ichneumon wasp"
+    },
+    {
+      "id": "chalcid",
+      "nameZh": "小蜂",
+      "nameEn": "Chalcid",
+      "group": "fly",
+      "emoji": "🐝",
+      "query": "chalcid wasp"
+    },
+    {
+      "id": "hoverfly",
+      "nameZh": "食蚜蝇",
+      "nameEn": "Hoverfly",
+      "group": "fly",
+      "emoji": "🪰",
+      "query": "hoverfly"
+    },
+    {
+      "id": "horsefly",
+      "nameZh": "虻",
+      "nameEn": "Horsefly",
+      "group": "fly",
+      "emoji": "🪰",
+      "query": "horsefly"
+    },
+    {
+      "id": "botfly",
+      "nameZh": "狂蝇",
+      "nameEn": "Botfly",
+      "group": "fly",
+      "emoji": "🪰",
+      "query": "botfly"
+    },
+    {
+      "id": "crane_fly",
+      "nameZh": "大蚊",
+      "nameEn": "Crane fly",
+      "group": "fly",
+      "emoji": "🪰",
+      "query": "crane fly"
+    },
+    {
+      "id": "midge",
+      "nameZh": "摇蚊",
+      "nameEn": "Midge",
+      "group": "fly",
+      "emoji": "🪰",
+      "query": "midge insect"
+    },
+    {
+      "id": "gnat",
+      "nameZh": "蚋",
+      "nameEn": "Gnat",
+      "group": "fly",
+      "emoji": "🪰",
+      "query": "gnat"
+    },
+    {
+      "id": "fruit_fly",
+      "nameZh": "果蝇",
+      "nameEn": "Fruit fly",
+      "group": "fly",
+      "emoji": "🪰",
+      "query": "fruit fly"
+    },
+    {
+      "id": "housefly",
+      "nameZh": "家蝇",
+      "nameEn": "Housefly",
+      "group": "fly",
+      "emoji": "🪰",
+      "query": "housefly"
+    },
+    {
+      "id": "swallowtail",
+      "nameZh": "凤蝶",
+      "nameEn": "Swallowtail",
+      "group": "pretty",
+      "emoji": "🦋",
+      "query": "swallowtail butterfly"
+    },
+    {
+      "id": "monarch",
+      "nameZh": "君主蝶",
+      "nameEn": "Monarch",
+      "group": "pretty",
+      "emoji": "🦋",
+      "query": "monarch butterfly"
+    },
+    {
+      "id": "cabbage_white",
+      "nameZh": "菜粉蝶",
+      "nameEn": "Cabbage white",
+      "group": "pretty",
+      "emoji": "🦋",
+      "query": "cabbage white butterfly"
+    },
+    {
+      "id": "blue_butterfly",
+      "nameZh": "灰蝶",
+      "nameEn": "Blue butterfly",
+      "group": "pretty",
+      "emoji": "🦋",
+      "query": "blue butterfly"
+    },
+    {
+      "id": "moth_luna",
+      "nameZh": "月神蛾",
+      "nameEn": "Luna moth",
+      "group": "pretty",
+      "emoji": "🦋",
+      "query": "luna moth"
+    },
+    {
+      "id": "silk_moth",
+      "nameZh": "蚕蛾",
+      "nameEn": "Silkmoth",
+      "group": "pretty",
+      "emoji": "🦋",
+      "query": "silkmoth"
+    },
+    {
+      "id": "hawk_moth",
+      "nameZh": "天蛾",
+      "nameEn": "Hawk moth",
+      "group": "pretty",
+      "emoji": "🦋",
+      "query": "hawk moth"
+    },
+    {
+      "id": "inchworm",
+      "nameZh": "尺蠖",
+      "nameEn": "Inchworm",
+      "group": "crawl",
+      "emoji": "🐛",
+      "query": "inchworm"
+    },
+    {
+      "id": "silkworm",
+      "nameZh": "蚕",
+      "nameEn": "Silkworm",
+      "group": "crawl",
+      "emoji": "🐛",
+      "query": "silkworm"
+    },
+    {
+      "id": "mealworm",
+      "nameZh": "黄粉虫",
+      "nameEn": "Mealworm",
+      "group": "crawl",
+      "emoji": "🐛",
+      "query": "mealworm"
+    },
+    {
+      "id": "millipede",
+      "nameZh": "马陆",
+      "nameEn": "Millipede",
+      "group": "crawl",
+      "emoji": "🐛",
+      "query": "millipede"
+    },
+    {
+      "id": "pillbug",
+      "nameZh": "鼠妇",
+      "nameEn": "Pillbug",
+      "group": "crawl",
+      "emoji": "🐛",
+      "query": "pillbug"
+    },
+    {
+      "id": "woodlouse",
+      "nameZh": "潮虫",
+      "nameEn": "Woodlouse",
+      "group": "crawl",
+      "emoji": "🐛",
+      "query": "woodlouse"
+    },
+    {
+      "id": "tick",
+      "nameZh": "蜱",
+      "nameEn": "Tick",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "tick insect"
+    },
+    {
+      "id": "mite",
+      "nameZh": "螨",
+      "nameEn": "Mite",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "mite insect"
+    },
+    {
+      "id": "scorpion",
+      "nameZh": "蝎子",
+      "nameEn": "Scorpion",
+      "group": "crawl",
+      "emoji": "🦂",
+      "query": "scorpion"
+    },
+    {
+      "id": "tarantula",
+      "nameZh": "狼蛛",
+      "nameEn": "Tarantula",
+      "group": "crawl",
+      "emoji": "🕷️",
+      "query": "tarantula"
+    },
+    {
+      "id": "harvestman",
+      "nameZh": "盲蛛",
+      "nameEn": "Harvestman",
+      "group": "crawl",
+      "emoji": "🕷️",
+      "query": "harvestman spider"
+    },
+    {
+      "id": "pseudoscorpion",
+      "nameZh": "伪蝎",
+      "nameEn": "Pseudoscorpion",
+      "group": "crawl",
+      "emoji": "🦂",
+      "query": "pseudoscorpion"
+    },
+    {
+      "id": "springtail",
+      "nameZh": "跳虫",
+      "nameEn": "Springtail",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "springtail"
+    },
+    {
+      "id": "thrips",
+      "nameZh": "蓟马",
+      "nameEn": "Thrips",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "thrips"
+    },
+    {
+      "id": "booklice",
+      "nameZh": "书虱",
+      "nameEn": "Booklice",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "booklice"
+    },
+    {
+      "id": "praying_mantis",
+      "nameZh": "螳螂",
+      "nameEn": "Praying mantis",
+      "group": "pretty",
+      "emoji": "🦗",
+      "query": "praying mantis"
+    },
+    {
+      "id": "walking_stick",
+      "nameZh": "竹节虫",
+      "nameEn": "Walking stick",
+      "group": "pretty",
+      "emoji": "🪲",
+      "query": "stick insect"
+    },
+    {
+      "id": "leaf_insect",
+      "nameZh": "叶䗛",
+      "nameEn": "Leaf insect",
+      "group": "pretty",
+      "emoji": "🍃",
+      "query": "leaf insect"
+    },
+    {
+      "id": "earwig2",
+      "nameZh": "蝤蛑",
+      "nameEn": "Giant earwig",
+      "group": "crawl",
+      "emoji": "🪲",
+      "query": "earwig insect"
+    },
+    {
+      "id": "net_winged",
+      "nameZh": "网翅目虫",
+      "nameEn": "Alderfly",
+      "group": "fly",
+      "emoji": "🪰",
+      "query": "alderfly"
+    },
+    {
+      "id": "dobsonfly",
+      "nameZh": "鱼蛉",
+      "nameEn": "Dobsonfly",
+      "group": "fly",
+      "emoji": "🪰",
+      "query": "dobsonfly"
+    },
+    {
+      "id": "snakefly",
+      "nameZh": "蛇蛉",
+      "nameEn": "Snakefly",
+      "group": "fly",
+      "emoji": "🪲",
+      "query": "snakefly"
+    },
+    {
+      "id": "owl_butterfly",
+      "nameZh": "猫头鹰蝶",
+      "nameEn": "Owl butterfly",
+      "group": "pretty",
+      "emoji": "🦋",
+      "query": "owl butterfly"
+    },
+    {
+      "id": "morpho",
+      "nameZh": "蓝闪蝶",
+      "nameEn": "Morpho",
+      "group": "pretty",
+      "emoji": "🦋",
+      "query": "morpho butterfly"
+    },
+    {
+      "id": "atlas_moth",
+      "nameZh": "皇蛾",
+      "nameEn": "Atlas moth",
+      "group": "pretty",
+      "emoji": "🦋",
+      "query": "atlas moth"
+    },
+    {
+      "id": "death_head",
+      "nameZh": "骷髅头天蛾",
+      "nameEn": "Death head moth",
+      "group": "pretty",
+      "emoji": "🦋",
+      "query": "death's-head hawkmoth"
     }
   ]
 }

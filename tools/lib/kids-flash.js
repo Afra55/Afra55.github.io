@@ -3,7 +3,7 @@
 
   /**
    * 幼儿闪卡工厂：window.DevToolsKidsFlash.mount(config)
-   * visual: image | color | digit（数据 data.visual 或 config.visual）
+   * visual: image | color | digit | shape（数据 data.visual 或 config.visual）
    */
   if (window.DevToolsKidsFlash?.mount) return;
 
@@ -151,8 +151,8 @@
     }
 
     function clearSpecialVisual(mediaEl) {
-      mediaEl?.querySelectorAll(".kidsflash-swatch, .kidsflash-digit").forEach((n) => n.remove());
-      mediaEl?.classList.remove("is-color", "is-digit");
+      mediaEl?.querySelectorAll(".kidsflash-swatch, .kidsflash-digit, .kidsflash-shape").forEach((n) => n.remove());
+      mediaEl?.classList.remove("is-color", "is-digit", "is-shape");
     }
 
     function setLoadingPlaceholder(mediaEl, item, loading, opts = {}) {
@@ -224,7 +224,7 @@
       });
     }
 
-    function paintColorOrDigit(mediaEl, emojiEl, imgEl, item) {
+    function paintLocalVisual(mediaEl, emojiEl, imgEl, item) {
       if (!mediaEl) return Promise.resolve({ url: "", credit: "" });
       if (imgEl) {
         imgEl.hidden = true;
@@ -235,9 +235,16 @@
       mediaEl.classList.remove("is-fallback", "is-loading", "has-preview");
       mediaEl.classList.toggle("is-color", visual === "color");
       mediaEl.classList.toggle("is-digit", visual === "digit");
+      mediaEl.classList.toggle("is-shape", visual === "shape");
+
+      mediaEl.querySelectorAll(":scope > .kidsflash-swatch, :scope > .kidsflash-digit, :scope > .kidsflash-shape").forEach((n) => {
+        if (visual === "color" && n.classList.contains("kidsflash-swatch")) return;
+        if (visual === "digit" && n.classList.contains("kidsflash-digit")) return;
+        if (visual === "shape" && n.classList.contains("kidsflash-shape")) return;
+        n.remove();
+      });
 
       if (visual === "color") {
-        mediaEl.querySelector(".kidsflash-digit")?.remove();
         let sw = mediaEl.querySelector(":scope > .kidsflash-swatch");
         if (!sw) {
           sw = document.createElement("div");
@@ -246,8 +253,7 @@
           mediaEl.appendChild(sw);
         }
         sw.style.background = item.color || "#888";
-      } else {
-        mediaEl.querySelector(".kidsflash-swatch")?.remove();
+      } else if (visual === "digit") {
         const text = item.digit != null ? String(item.digit) : item.nameZh || "";
         let dig = mediaEl.querySelector(":scope > .kidsflash-digit");
         if (!dig) {
@@ -258,14 +264,25 @@
         }
         dig.textContent = text;
         dig.classList.toggle("is-wide", text.length >= 3);
+      } else if (visual === "shape") {
+        const kind = item.shape || "circle";
+        let sh = mediaEl.querySelector(":scope > .kidsflash-shape");
+        if (!sh) {
+          sh = document.createElement("div");
+          sh.className = "kidsflash-shape";
+          sh.setAttribute("aria-hidden", "true");
+          mediaEl.appendChild(sh);
+        }
+        sh.className = `kidsflash-shape is-${kind}`;
+        sh.style.setProperty("--shape-color", item.color || "#3b82f6");
       }
       return Promise.resolve({ url: "", credit: "" });
     }
 
     async function paintMedia(mediaEl, emojiEl, imgEl, item, opts = {}) {
       if (!item || !mediaEl) return null;
-      if (visual === "color" || visual === "digit") {
-        return paintColorOrDigit(mediaEl, emojiEl, imgEl, item);
+      if (visual === "color" || visual === "digit" || visual === "shape") {
+        return paintLocalVisual(mediaEl, emojiEl, imgEl, item);
       }
       clearSpecialVisual(mediaEl);
       const hideName = Boolean(opts.hideName);
@@ -565,6 +582,11 @@
         const wide = text.length >= 3 ? " is-wide" : "";
         return `<span class="kidsflash-digit kidsflash-digit-sm${wide}" aria-hidden="true">${text}</span>`;
       }
+      if (visual === "shape") {
+        const kind = a.shape || "circle";
+        const color = a.color || "#3b82f6";
+        return `<span class="kidsflash-shape kidsflash-shape-sm is-${kind}" style="--shape-color:${color}" aria-hidden="true"></span>`;
+      }
       return `<span class="kidsflash-emoji" hidden>${a.emoji || defaultEmoji}</span><img alt="" hidden />`;
     }
 
@@ -751,6 +773,7 @@
         const groups = catalog.groups || [];
         if (groupId !== "all" && !groups.some((g) => g.id === groupId)) groupId = "all";
         if (!["cards", "quiz-look", "quiz-listen"].includes(tab)) tab = "cards";
+        // shape/color/digit 不走网络图
         renderFilters();
         setTab(tab || "cards");
       })().finally(() => {

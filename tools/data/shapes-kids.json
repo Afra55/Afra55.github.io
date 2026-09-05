@@ -1,0 +1,168 @@
+{
+  "version": 1,
+  "credit": "几何形状本地绘制，无需外网图片。",
+  "visual": "shape",
+  "groups": [
+    {
+      "id": "all",
+      "nameZh": "全部",
+      "nameEn": "All"
+    },
+    {
+      "id": "basic",
+      "nameZh": "基础",
+      "nameEn": "Basic"
+    },
+    {
+      "id": "more",
+      "nameZh": "更多",
+      "nameEn": "More"
+    }
+  ],
+  "items": [
+    {
+      "id": "circle",
+      "nameZh": "圆形",
+      "nameEn": "Circle",
+      "group": "basic",
+      "emoji": "⚪",
+      "shape": "circle",
+      "color": "#3b82f6"
+    },
+    {
+      "id": "square",
+      "nameZh": "正方形",
+      "nameEn": "Square",
+      "group": "basic",
+      "emoji": "⬜",
+      "shape": "square",
+      "color": "#22c55e"
+    },
+    {
+      "id": "triangle",
+      "nameZh": "三角形",
+      "nameEn": "Triangle",
+      "group": "basic",
+      "emoji": "🔺",
+      "shape": "triangle",
+      "color": "#ef4444"
+    },
+    {
+      "id": "rectangle",
+      "nameZh": "长方形",
+      "nameEn": "Rectangle",
+      "group": "basic",
+      "emoji": "▭",
+      "shape": "rectangle",
+      "color": "#a855f7"
+    },
+    {
+      "id": "oval",
+      "nameZh": "椭圆形",
+      "nameEn": "Oval",
+      "group": "basic",
+      "emoji": "⬭",
+      "shape": "oval",
+      "color": "#06b6d4"
+    },
+    {
+      "id": "diamond",
+      "nameZh": "菱形",
+      "nameEn": "Diamond",
+      "group": "more",
+      "emoji": "◆",
+      "shape": "diamond",
+      "color": "#f59e0b"
+    },
+    {
+      "id": "star",
+      "nameZh": "星形",
+      "nameEn": "Star",
+      "group": "more",
+      "emoji": "⭐",
+      "shape": "star",
+      "color": "#eab308"
+    },
+    {
+      "id": "heart",
+      "nameZh": "心形",
+      "nameEn": "Heart",
+      "group": "more",
+      "emoji": "❤️",
+      "shape": "heart",
+      "color": "#ec4899"
+    },
+    {
+      "id": "pentagon",
+      "nameZh": "五边形",
+      "nameEn": "Pentagon",
+      "group": "more",
+      "emoji": "⬠",
+      "shape": "pentagon",
+      "color": "#14b8a6"
+    },
+    {
+      "id": "hexagon",
+      "nameZh": "六边形",
+      "nameEn": "Hexagon",
+      "group": "more",
+      "emoji": "⬡",
+      "shape": "hexagon",
+      "color": "#6366f1"
+    },
+    {
+      "id": "octagon",
+      "nameZh": "八边形",
+      "nameEn": "Octagon",
+      "group": "more",
+      "emoji": "🛑",
+      "shape": "octagon",
+      "color": "#f43f5e"
+    },
+    {
+      "id": "cross",
+      "nameZh": "十字形",
+      "nameEn": "Cross",
+      "group": "more",
+      "emoji": "✚",
+      "shape": "cross",
+      "color": "#0ea5e9"
+    },
+    {
+      "id": "semicircle",
+      "nameZh": "半圆",
+      "nameEn": "Semicircle",
+      "group": "more",
+      "emoji": "◐",
+      "shape": "semicircle",
+      "color": "#84cc16"
+    },
+    {
+      "id": "trapezoid",
+      "nameZh": "梯形",
+      "nameEn": "Trapezoid",
+      "group": "more",
+      "emoji": "⏢",
+      "shape": "trapezoid",
+      "color": "#d946ef"
+    },
+    {
+      "id": "parallelogram",
+      "nameZh": "平行四边形",
+      "nameEn": "Parallelogram",
+      "group": "more",
+      "emoji": "▰",
+      "shape": "parallelogram",
+      "color": "#f97316"
+    },
+    {
+      "id": "crescent",
+      "nameZh": "月牙形",
+      "nameEn": "Crescent",
+      "group": "more",
+      "emoji": "🌙",
+      "shape": "crescent",
+      "color": "#64748b"
+    }
+  ]
+}
