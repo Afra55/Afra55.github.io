@@ -3,7 +3,8 @@
 
   const TOOL_ID = "animalearn";
   const DATA_URL = "./data/animals-kids.json";
-  const CACHE_KEY = "devtools-animalearn-img-v1";
+  const IMG_CACHE_KEY = "devtools-animalearn-img-v1";
+  const POS_KEY = "devtools-animalearn-pos-v1";
 
   const $ = (sel, el = document) => el.querySelector(sel);
   const $$ = (sel, el = document) => Array.from(el.querySelectorAll(sel));
@@ -36,7 +37,7 @@
 
   function loadImgCache() {
     try {
-      imgCache = JSON.parse(sessionStorage.getItem(CACHE_KEY) || "{}") || {};
+      imgCache = JSON.parse(sessionStorage.getItem(IMG_CACHE_KEY) || "{}") || {};
     } catch (_) {
       imgCache = {};
     }
@@ -44,7 +45,28 @@
 
   function saveImgCache() {
     try {
-      sessionStorage.setItem(CACHE_KEY, JSON.stringify(imgCache));
+      sessionStorage.setItem(IMG_CACHE_KEY, JSON.stringify(imgCache));
+    } catch (_) {}
+  }
+
+  function loadPosition() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(POS_KEY) || "null");
+      if (!raw || typeof raw !== "object") return;
+      if (typeof raw.groupId === "string") groupId = raw.groupId;
+      if (typeof raw.tab === "string") tab = raw.tab;
+      if (Number.isFinite(Number(raw.cardIndex))) {
+        cardIndex = Math.max(0, Number(raw.cardIndex) | 0);
+      }
+    } catch (_) {}
+  }
+
+  function savePosition() {
+    try {
+      localStorage.setItem(
+        POS_KEY,
+        JSON.stringify({ groupId, tab, cardIndex, at: Date.now() })
+      );
     } catch (_) {}
   }
 
@@ -167,10 +189,32 @@
     return { url: "", credit: "" };
   }
 
-  async function paintMedia(emojiEl, imgEl, animal) {
+  function setLoadingPlaceholder(mediaEl, animal, loading) {
+    if (!mediaEl) return;
+    mediaEl.classList.toggle("is-loading", Boolean(loading));
+    let ph = mediaEl.querySelector(".animalearn-placeholder");
+    if (!loading) {
+      if (ph) ph.remove();
+      return;
+    }
+    if (!ph) {
+      ph = document.createElement("div");
+      ph.className = "animalearn-placeholder";
+      ph.setAttribute("aria-hidden", "true");
+      mediaEl.appendChild(ph);
+    }
+    const emoji = animal?.emoji || "🐾";
+    const label = [animal?.nameZh, animal?.nameEn].filter(Boolean).join(" / ");
+    ph.innerHTML = `<span class="animalearn-placeholder-emoji">${emoji}</span>${
+      label ? `<span class="animalearn-placeholder-text">${label}</span>` : ""
+    }`;
+  }
+
+  async function paintMedia(mediaEl, emojiEl, imgEl, animal) {
     if (!animal) return null;
+    setLoadingPlaceholder(mediaEl, animal, true);
     if (emojiEl) {
-      emojiEl.hidden = false;
+      emojiEl.hidden = true;
       emojiEl.textContent = animal.emoji || "🐾";
     }
     if (imgEl) {
@@ -180,12 +224,19 @@
       imgEl.dataset.expectId = animal.id;
     }
     const hit = await resolveImage(animal);
-    if (!imgEl || !hit.url) return hit;
+    if (!imgEl || !hit.url) {
+      if (emojiEl) emojiEl.hidden = false;
+      setLoadingPlaceholder(mediaEl, animal, false);
+      mediaEl?.classList.add("is-fallback");
+      return hit;
+    }
     if (imgEl.dataset.expectId !== animal.id) return hit;
     imgEl.referrerPolicy = "no-referrer";
     imgEl.src = hit.url;
     imgEl.hidden = false;
     if (emojiEl) emojiEl.hidden = true;
+    setLoadingPlaceholder(mediaEl, animal, false);
+    mediaEl?.classList.remove("is-fallback");
     return hit;
   }
 
@@ -200,6 +251,14 @@
       .join("");
   }
 
+  function normalizeCardIndex(list) {
+    if (!list.length) {
+      cardIndex = 0;
+      return;
+    }
+    cardIndex = ((cardIndex % list.length) + list.length) % list.length;
+  }
+
   async function renderCard() {
     const list = filteredAnimals();
     if (!list.length) {
@@ -207,8 +266,7 @@
       return;
     }
     showError("");
-    if (cardIndex < 0) cardIndex = list.length - 1;
-    if (cardIndex >= list.length) cardIndex = 0;
+    normalizeCardIndex(list);
     const animal = list[cardIndex];
     const zh = $("#ae-card-zh", root);
     const en = $("#ae-card-en", root);
@@ -217,7 +275,12 @@
     if (zh) zh.textContent = animal.nameZh;
     if (en) en.textContent = animal.nameEn;
     if (meta) meta.textContent = `${cardIndex + 1} / ${list.length}`;
-    const hit = await paintMedia($("#ae-card-emoji", root), $("#ae-card-img", root), animal);
+    const hit = await paintMedia(
+      $("#ae-card-media", root),
+      $("#ae-card-emoji", root),
+      $("#ae-card-img", root),
+      animal
+    );
     if (credit) {
       if (hit?.credit) {
         credit.hidden = false;
@@ -227,6 +290,32 @@
         credit.textContent = "";
       }
     }
+    savePosition();
+  }
+
+  function stepCard(delta) {
+    const list = filteredAnimals();
+    if (!list.length) return;
+    cardIndex = (cardIndex + delta + list.length) % list.length;
+    renderCard();
+  }
+
+  function randomCard() {
+    const list = filteredAnimals();
+    if (!list.length) return;
+    if (list.length === 1) {
+      renderCard();
+      return;
+    }
+    let next = cardIndex;
+    while (next === cardIndex) next = Math.floor(Math.random() * list.length);
+    cardIndex = next;
+    renderCard();
+  }
+
+  function speakCurrentCard() {
+    const animal = filteredAnimals()[cardIndex];
+    if (animal) speakPair(animal);
   }
 
   function setTab(next) {
@@ -241,6 +330,7 @@
     $$(".animalearn-pane", root).forEach((pane) => {
       pane.hidden = pane.dataset.pane !== tab;
     });
+    savePosition();
     if (tab === "cards") renderCard();
     else if (tab === "quiz-look") nextLookQuiz();
     else if (tab === "quiz-listen") nextListenQuiz();
@@ -256,7 +346,12 @@
     showError("");
     lookAnswer = pool[Math.floor(Math.random() * pool.length)];
     const choices = pickChoices(lookAnswer, 3);
-    await paintMedia($("#ae-look-emoji", root), $("#ae-look-img", root), lookAnswer);
+    await paintMedia(
+      $("#ae-look-media", root),
+      $("#ae-look-emoji", root),
+      $("#ae-look-img", root),
+      lookAnswer
+    );
     const fb = $("#ae-look-feedback", root);
     if (fb) {
       fb.textContent = "";
@@ -293,17 +388,23 @@
     if (!host) return;
     host.innerHTML = choices
       .map(
-        (a) => `<button type="button" class="animalearn-img-choice" data-id="${a.id}" aria-label="${a.nameZh} ${a.nameEn}">
-        <span class="animalearn-emoji">${a.emoji || "🐾"}</span>
+        (a) => `<button type="button" class="animalearn-img-choice is-loading" data-id="${a.id}" aria-label="${a.nameZh} ${a.nameEn}">
+        <span class="animalearn-emoji" hidden>${a.emoji || "🐾"}</span>
         <img alt="" hidden />
       </button>`
       )
       .join("");
+    // 先塞居中占位
+    choices.forEach((a) => {
+      const btn = host.querySelector(`[data-id="${a.id}"]`);
+      setLoadingPlaceholder(btn, a, true);
+    });
     await Promise.all(
       choices.map(async (a) => {
         const btn = host.querySelector(`[data-id="${a.id}"]`);
         if (!btn) return;
-        await paintMedia(btn.querySelector(".animalearn-emoji"), btn.querySelector("img"), a);
+        await paintMedia(btn, btn.querySelector(".animalearn-emoji"), btn.querySelector("img"), a);
+        btn.classList.remove("is-loading");
       })
     );
     speakPair(listenAnswer);
@@ -366,6 +467,7 @@
         groupId = filterBtn.getAttribute("data-group") || "all";
         cardIndex = 0;
         renderFilters();
+        savePosition();
         if (tab === "cards") renderCard();
         else if (tab === "quiz-look") nextLookQuiz();
         else nextListenQuiz();
@@ -377,31 +479,41 @@
         return;
       }
       const listenBtn = t.closest?.("#ae-listen-choices .animalearn-img-choice");
-      if (listenBtn) onListenChoice(listenBtn.getAttribute("data-id"));
+      if (listenBtn) {
+        onListenChoice(listenBtn.getAttribute("data-id"));
+        return;
+      }
+      if (t.closest?.("#ae-card-media, #ae-card-zh, #ae-card-en")) {
+        speakCurrentCard();
+      }
     });
 
-    $("#ae-prev", root)?.addEventListener("click", () => {
-      cardIndex -= 1;
-      renderCard();
-    });
-    $("#ae-next", root)?.addEventListener("click", () => {
-      cardIndex += 1;
-      renderCard();
-    });
-    $("#ae-speak", root)?.addEventListener("click", () => {
-      const animal = filteredAnimals()[cardIndex];
-      if (animal) speakPair(animal);
-    });
+    $("#ae-prev", root)?.addEventListener("click", () => stepCard(-1));
+    $("#ae-next", root)?.addEventListener("click", () => stepCard(1));
+    $("#ae-random", root)?.addEventListener("click", () => randomCard());
+    $("#ae-speak", root)?.addEventListener("click", () => speakCurrentCard());
     $("#ae-look-next", root)?.addEventListener("click", () => nextLookQuiz());
     $("#ae-listen-next", root)?.addEventListener("click", () => nextListenQuiz());
     $("#ae-listen-replay", root)?.addEventListener("click", () => {
       if (listenAnswer) speakPair(listenAnswer);
     });
 
+    $("#ae-card-media", root)?.addEventListener("keydown", (ev) => {
+      if (ev.key === "Enter" || ev.key === " ") {
+        ev.preventDefault();
+        speakCurrentCard();
+      }
+    });
+
     if (window.speechSynthesis) {
       window.speechSynthesis.addEventListener("voiceschanged", primeVoices);
       primeVoices();
     }
+
+    window.addEventListener("pagehide", savePosition);
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "hidden") savePosition();
+    });
   }
 
   async function boot() {
@@ -411,12 +523,16 @@
       root = document.getElementById(TOOL_ID);
       if (!root) return;
       loadImgCache();
+      loadPosition();
       if (!catalog) {
         const v = window.TOOLS_BUILD || "";
         const res = await fetch(`${DATA_URL}${v ? `?v=${encodeURIComponent(v)}` : ""}`);
         if (!res.ok) throw new Error(`加载动物数据失败（${res.status}）`);
         catalog = await res.json();
       }
+      const groups = catalog.groups || [];
+      if (groupId !== "all" && !groups.some((g) => g.id === groupId)) groupId = "all";
+      if (!["cards", "quiz-look", "quiz-listen"].includes(tab)) tab = "cards";
       renderFilters();
       setTab(tab || "cards");
     })().finally(() => {
@@ -435,5 +551,6 @@
   window.addEventListener("devtools:route", () => {
     const head = location.hash.replace(/^#/, "").split(/[/?]/)[0];
     if (head === TOOL_ID) start();
+    else savePosition();
   });
 })();

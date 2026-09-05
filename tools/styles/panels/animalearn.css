@@ -50,21 +50,75 @@
   place-items: center;
 }
 
+.animalearn-media-tap {
+  cursor: pointer;
+}
+
+.animalearn-media-tap:focus-visible {
+  outline: 2px solid var(--accent, #5b8cff);
+  outline-offset: 2px;
+}
+
 .animalearn-media img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+  grid-area: 1 / 1;
+}
+
+.animalearn-media img[hidden],
+.animalearn-img-choice img[hidden],
+.animalearn-emoji[hidden] {
+  display: none !important;
 }
 
 .animalearn-emoji {
   font-size: clamp(3.5rem, 18vw, 6rem);
   line-height: 1;
   user-select: none;
+  grid-area: 1 / 1;
+  z-index: 1;
+}
+
+.animalearn-placeholder {
+  grid-area: 1 / 1;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.75rem;
+  text-align: center;
+  pointer-events: none;
+}
+
+.animalearn-placeholder-emoji {
+  font-size: clamp(3rem, 14vw, 5rem);
+  line-height: 1;
+}
+
+.animalearn-placeholder-text {
+  font-size: clamp(1rem, 3.6vw, 1.25rem);
+  font-weight: 650;
+  opacity: 0.92;
+  max-width: 90%;
 }
 
 .animalearn-names {
   text-align: center;
+}
+
+.animalearn-names-tap {
+  cursor: pointer;
+  border-radius: 10px;
+  padding: 0.15rem 0.5rem;
+}
+
+.animalearn-names-tap:hover .animalearn-zh,
+.animalearn-names-tap:hover .animalearn-en {
+  color: var(--accent, #5b8cff);
 }
 
 .animalearn-zh {
@@ -91,6 +145,27 @@
   flex-wrap: wrap;
   gap: 0.45rem;
   margin-top: 0.35rem;
+}
+
+.animalearn-quiz-top {
+  justify-content: center;
+  margin-bottom: 0.35rem;
+}
+
+.animalearn-quiz-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.85rem;
+  width: 100%;
+}
+
+.animalearn-next-lg {
+  width: min(100%, 22rem);
+  min-height: 3rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  border-radius: 14px;
+  padding: 0.75rem 1.2rem;
 }
 
 .animalearn-choices,
@@ -176,10 +251,25 @@
   height: 100%;
   object-fit: cover;
   display: block;
+  grid-area: 1 / 1;
+}
+
+.animalearn-img-choice .animalearn-emoji,
+.animalearn-img-choice .animalearn-placeholder {
+  grid-area: 1 / 1;
+  z-index: 1;
 }
 
 .animalearn-img-choice .animalearn-emoji {
   font-size: clamp(2rem, 8vw, 3rem);
+}
+
+.animalearn-img-choice .animalearn-placeholder-emoji {
+  font-size: clamp(2rem, 8vw, 3rem);
+}
+
+.animalearn-img-choice .animalearn-placeholder-text {
+  font-size: 0.78rem;
 }
 
 .animalearn-feedback {
