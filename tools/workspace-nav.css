@@ -10,6 +10,66 @@ html.is-pwa-standalone #pwa-install {
   }
 }
 
+/*
+ * iOS「添加到主屏幕」+ black-translucent：内容会画到状态栏下方。
+ * 只在独立 App / standalone 补 safe-area，避免普通 Safari 页被多余 padding 撑乱。
+ */
+html.is-pwa-standalone .site-header {
+  padding-top: calc(2.4rem + env(safe-area-inset-top, 0px));
+  padding-left: max(1.25rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1.25rem, env(safe-area-inset-right, 0px));
+}
+
+@media (max-width: 700px) {
+  html.is-pwa-standalone .site-header {
+    padding-top: calc(1.1rem + env(safe-area-inset-top, 0px));
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+}
+
+@media (max-width: 900px) {
+  html.is-pwa-standalone .site-header {
+    padding-top: calc(0.85rem + env(safe-area-inset-top, 0px));
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+
+  html.is-pwa-standalone .nav-drawer-head {
+    padding-top: max(0.35rem, env(safe-area-inset-top, 0px));
+  }
+}
+
+@media (display-mode: standalone), (display-mode: window-controls-overlay) {
+  .site-header {
+    padding-top: calc(2.4rem + env(safe-area-inset-top, 0px));
+    padding-left: max(1.25rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1.25rem, env(safe-area-inset-right, 0px));
+  }
+}
+
+@media (display-mode: standalone) and (max-width: 700px),
+  (display-mode: window-controls-overlay) and (max-width: 700px) {
+  .site-header {
+    padding-top: calc(1.1rem + env(safe-area-inset-top, 0px));
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+}
+
+@media (display-mode: standalone) and (max-width: 900px),
+  (display-mode: window-controls-overlay) and (max-width: 900px) {
+  .site-header {
+    padding-top: calc(0.85rem + env(safe-area-inset-top, 0px));
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+
+  .nav-drawer-head {
+    padding-top: max(0.35rem, env(safe-area-inset-top, 0px));
+  }
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -1550,4 +1610,55 @@ body.nav-open {
 .nav-virtual-row.is-filtered-out,
 .tool-nav-link.is-filtered-out {
   display: none !important;
+}
+
+
+/* === pwa-safe-area-final: keep after mobile .site-header shorthand === */
+html.is-pwa-standalone .site-header {
+  padding-top: calc(2.4rem + env(safe-area-inset-top, 0px)) !important;
+  padding-left: max(1.25rem, env(safe-area-inset-left, 0px));
+  padding-right: max(1.25rem, env(safe-area-inset-right, 0px));
+}
+@media (max-width: 700px) {
+  html.is-pwa-standalone .site-header {
+    padding-top: calc(1.1rem + env(safe-area-inset-top, 0px)) !important;
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+}
+@media (max-width: 900px) {
+  html.is-pwa-standalone .site-header {
+    padding-top: calc(0.85rem + env(safe-area-inset-top, 0px)) !important;
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+  html.is-pwa-standalone .nav-drawer-head {
+    padding-top: max(0.35rem, env(safe-area-inset-top, 0px));
+  }
+}
+@media (display-mode: standalone), (display-mode: window-controls-overlay) {
+  .site-header {
+    padding-top: calc(2.4rem + env(safe-area-inset-top, 0px)) !important;
+    padding-left: max(1.25rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1.25rem, env(safe-area-inset-right, 0px));
+  }
+}
+@media (display-mode: standalone) and (max-width: 700px),
+  (display-mode: window-controls-overlay) and (max-width: 700px) {
+  .site-header {
+    padding-top: calc(1.1rem + env(safe-area-inset-top, 0px)) !important;
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+}
+@media (display-mode: standalone) and (max-width: 900px),
+  (display-mode: window-controls-overlay) and (max-width: 900px) {
+  .site-header {
+    padding-top: calc(0.85rem + env(safe-area-inset-top, 0px)) !important;
+    padding-left: max(1rem, env(safe-area-inset-left, 0px));
+    padding-right: max(1rem, env(safe-area-inset-right, 0px));
+  }
+  .nav-drawer-head {
+    padding-top: max(0.35rem, env(safe-area-inset-top, 0px));
+  }
 }
