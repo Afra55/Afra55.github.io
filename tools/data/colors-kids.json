@@ -1,7 +1,7 @@
 {
-  "version": 1,
-  "credit": "纯色色块本地绘制，无需外网图片。",
+  "version": 3,
   "visual": "color",
+  "credit": "基础色为常用色；另收录 zhongguose.com 中国传统色共 526 种（中科院色谱），英文名为本地意译便于点读。",
   "groups": [
     {
       "id": "all",
@@ -14,9 +14,54 @@
       "nameEn": "Basic"
     },
     {
-      "id": "more",
-      "nameZh": "更多色",
-      "nameEn": "More"
+      "id": "yellow",
+      "nameZh": "黄",
+      "nameEn": "Yellow"
+    },
+    {
+      "id": "orange",
+      "nameZh": "橙",
+      "nameEn": "Orange"
+    },
+    {
+      "id": "red",
+      "nameZh": "红",
+      "nameEn": "Red"
+    },
+    {
+      "id": "purple",
+      "nameZh": "紫",
+      "nameEn": "Purple"
+    },
+    {
+      "id": "blue",
+      "nameZh": "蓝",
+      "nameEn": "Blue"
+    },
+    {
+      "id": "cyan",
+      "nameZh": "青",
+      "nameEn": "Cyan"
+    },
+    {
+      "id": "green",
+      "nameZh": "绿",
+      "nameEn": "Green"
+    },
+    {
+      "id": "white",
+      "nameZh": "白",
+      "nameEn": "White"
+    },
+    {
+      "id": "gray",
+      "nameZh": "灰褐",
+      "nameEn": "Gray & Brown"
+    },
+    {
+      "id": "black",
+      "nameZh": "黑",
+      "nameEn": "Black"
     }
   ],
   "items": [
@@ -72,7 +117,7 @@
       "id": "pink",
       "nameZh": "粉色",
       "nameEn": "Pink",
-      "group": "more",
+      "group": "basic",
       "emoji": "💗",
       "color": "#ec4899"
     },
@@ -80,7 +125,7 @@
       "id": "brown",
       "nameZh": "棕色",
       "nameEn": "Brown",
-      "group": "more",
+      "group": "basic",
       "emoji": "🟤",
       "color": "#92400e"
     },
@@ -104,7 +149,7 @@
       "id": "gray",
       "nameZh": "灰色",
       "nameEn": "Gray",
-      "group": "more",
+      "group": "basic",
       "emoji": "🩶",
       "color": "#6b7280"
     },
@@ -112,9 +157,4743 @@
       "id": "cyan",
       "nameZh": "青色",
       "nameEn": "Cyan",
-      "group": "more",
+      "group": "basic",
       "emoji": "🩵",
       "color": "#06b6d4"
+    },
+    {
+      "id": "rubai",
+      "nameZh": "乳白",
+      "nameEn": "Milky White",
+      "group": "white",
+      "emoji": "⚪",
+      "color": "#f9f4dc",
+      "pinyin": "rubai"
+    },
+    {
+      "id": "xingrenhuang",
+      "nameZh": "杏仁黄",
+      "nameEn": "Almond Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f7e8aa",
+      "pinyin": "xingrenhuang"
+    },
+    {
+      "id": "molihuang",
+      "nameZh": "茉莉黄",
+      "nameEn": "Jasmine Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f8df72",
+      "pinyin": "molihuang"
+    },
+    {
+      "id": "maiganhuang",
+      "nameZh": "麦秆黄",
+      "nameEn": "Straw Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f8df70",
+      "pinyin": "maiganhuang"
+    },
+    {
+      "id": "youcaihuahuang",
+      "nameZh": "油菜花黄",
+      "nameEn": "Rapeseed Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#fbda41",
+      "pinyin": "youcaihuahuang"
+    },
+    {
+      "id": "foshouhuang",
+      "nameZh": "佛手黄",
+      "nameEn": "Buddha's Hand Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#fed71a",
+      "pinyin": "foshouhuang"
+    },
+    {
+      "id": "miehuang",
+      "nameZh": "篾黄",
+      "nameEn": "Bamboo Strip Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f7de98",
+      "pinyin": "miehuang"
+    },
+    {
+      "id": "kuishanhuang",
+      "nameZh": "葵扇黄",
+      "nameEn": "Palm Fan Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f8d86a",
+      "pinyin": "kuishanhuang"
+    },
+    {
+      "id": "ningmenghuang",
+      "nameZh": "柠檬黄",
+      "nameEn": "Lemon Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#fcd337",
+      "pinyin": "ningmenghuang"
+    },
+    {
+      "id": "jinguahuang",
+      "nameZh": "金瓜黄",
+      "nameEn": "Golden Melon Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#fcd217",
+      "pinyin": "jinguahuang"
+    },
+    {
+      "id": "tenghuang",
+      "nameZh": "藤黄",
+      "nameEn": "Vine Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#ffd111",
+      "pinyin": "tenghuang"
+    },
+    {
+      "id": "laohuang",
+      "nameZh": "酪黄",
+      "nameEn": "Curd Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f6dead",
+      "pinyin": "laohuang"
+    },
+    {
+      "id": "xiangshuimeiguihuang",
+      "nameZh": "香水玫瑰黄",
+      "nameEn": "Perfume Rose Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f7da94",
+      "pinyin": "xiangshuimeiguihuang"
+    },
+    {
+      "id": "danmihuang",
+      "nameZh": "淡密黄",
+      "nameEn": "Pale Dense Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f9d367",
+      "pinyin": "danmihuang"
+    },
+    {
+      "id": "dadouhuang",
+      "nameZh": "大豆黄",
+      "nameEn": "Soybean Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#fbcd31",
+      "pinyin": "dadouhuang"
+    },
+    {
+      "id": "suxinhuang",
+      "nameZh": "素馨黄",
+      "nameEn": "Jasmine Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#fccb16",
+      "pinyin": "suxinhuang"
+    },
+    {
+      "id": "xiangrikuihuang",
+      "nameZh": "向日葵黄",
+      "nameEn": "Sunflower Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#fecc11",
+      "pinyin": "xiangrikuihuang"
+    },
+    {
+      "id": "yalihuang",
+      "nameZh": "雅梨黄",
+      "nameEn": "Elegant Pear Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#fbc82f",
+      "pinyin": "yalihuang"
+    },
+    {
+      "id": "huanglianhuang",
+      "nameZh": "黄连黄",
+      "nameEn": "Coptis Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#fcc515",
+      "pinyin": "huanglianhuang"
+    },
+    {
+      "id": "jinzhanhuang",
+      "nameZh": "金盏黄",
+      "nameEn": "Marigold Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#fcc307",
+      "pinyin": "jinzhanhuang"
+    },
+    {
+      "id": "dankehuang",
+      "nameZh": "蛋壳黄",
+      "nameEn": "Eggshell Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f8c387",
+      "pinyin": "dankehuang"
+    },
+    {
+      "id": "rouse",
+      "nameZh": "肉色",
+      "nameEn": "Flesh Tone",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f7c173",
+      "pinyin": "rouse"
+    },
+    {
+      "id": "ezhanghuang",
+      "nameZh": "鹅掌黄",
+      "nameEn": "Goose Foot Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#fbb929",
+      "pinyin": "ezhanghuang"
+    },
+    {
+      "id": "jidanhuang",
+      "nameZh": "鸡蛋黄",
+      "nameEn": "Egg Yolk Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#fbb612",
+      "pinyin": "jidanhuang"
+    },
+    {
+      "id": "youhuang",
+      "nameZh": "鼬黄",
+      "nameEn": "Weasel Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#fcb70a",
+      "pinyin": "youhuang"
+    },
+    {
+      "id": "liuehuang",
+      "nameZh": "榴萼黄",
+      "nameEn": "Pomegranate Calyx Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f9a633",
+      "pinyin": "liuehuang"
+    },
+    {
+      "id": "danjucheng",
+      "nameZh": "淡橘橙",
+      "nameEn": "Pale Tangerine Orange",
+      "group": "orange",
+      "emoji": "🟠",
+      "color": "#fba414",
+      "pinyin": "danjucheng"
+    },
+    {
+      "id": "pipahuang",
+      "nameZh": "枇杷黄",
+      "nameEn": "Loquat Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#fca106",
+      "pinyin": "pipahuang"
+    },
+    {
+      "id": "chengpihuang",
+      "nameZh": "橙皮黄",
+      "nameEn": "Orange Skin Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#fca104",
+      "pinyin": "chengpihuang"
+    },
+    {
+      "id": "beiguahuang",
+      "nameZh": "北瓜黄",
+      "nameEn": "Squash Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#fc8c23",
+      "pinyin": "beiguahuang"
+    },
+    {
+      "id": "xinghuang",
+      "nameZh": "杏黄",
+      "nameEn": "Apricot Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f28e16",
+      "pinyin": "xinghuang"
+    },
+    {
+      "id": "xionghuang",
+      "nameZh": "雄黄",
+      "nameEn": "Realgar",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#ff9900",
+      "pinyin": "xionghuang"
+    },
+    {
+      "id": "wanshoujuhuang",
+      "nameZh": "万寿菊黄",
+      "nameEn": "Marigold Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#fb8b05",
+      "pinyin": "wanshoujuhuang"
+    },
+    {
+      "id": "juleibai",
+      "nameZh": "菊蕾白",
+      "nameEn": "Chrysanthemum Bud White",
+      "group": "white",
+      "emoji": "⚪",
+      "color": "#e9ddb6",
+      "pinyin": "juleibai"
+    },
+    {
+      "id": "qiukuihuang",
+      "nameZh": "秋葵黄",
+      "nameEn": "Okra Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#eed045",
+      "pinyin": "qiukuihuang"
+    },
+    {
+      "id": "liuhuahuang",
+      "nameZh": "硫华黄",
+      "nameEn": "Sulfur Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f2ce2b",
+      "pinyin": "liuhuahuang"
+    },
+    {
+      "id": "youhuang_2",
+      "nameZh": "柚黄",
+      "nameEn": "Pomelo Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f1ca17",
+      "pinyin": "youhuang"
+    },
+    {
+      "id": "mangguohuang",
+      "nameZh": "芒果黄",
+      "nameEn": "Mango Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#ddc871",
+      "pinyin": "mangguohuang"
+    },
+    {
+      "id": "haohuang",
+      "nameZh": "蒿黄",
+      "nameEn": "Wormwood Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#dfc243",
+      "pinyin": "haohuang"
+    },
+    {
+      "id": "jianghuang",
+      "nameZh": "姜黄",
+      "nameEn": "Ginger Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#e2c027",
+      "pinyin": "jianghuang"
+    },
+    {
+      "id": "xiangjiaohuang",
+      "nameZh": "香蕉黄",
+      "nameEn": "Banana Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#e4bf11",
+      "pinyin": "xiangjiaohuang"
+    },
+    {
+      "id": "caohuang",
+      "nameZh": "草黄",
+      "nameEn": "Grass Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#d2b42c",
+      "pinyin": "caohuang"
+    },
+    {
+      "id": "xinhelv",
+      "nameZh": "新禾绿",
+      "nameEn": "Young Rice Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#d2b116",
+      "pinyin": "xinhelv"
+    },
+    {
+      "id": "yuehui",
+      "nameZh": "月灰",
+      "nameEn": "Moon Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#b7ae8f",
+      "pinyin": "yuehui"
+    },
+    {
+      "id": "danhuilv",
+      "nameZh": "淡灰绿",
+      "nameEn": "Pale Gray Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#ad9e5f",
+      "pinyin": "danhuilv"
+    },
+    {
+      "id": "caohuilv",
+      "nameZh": "草灰绿",
+      "nameEn": "Grass Gray Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#8e804b",
+      "pinyin": "caohuilv"
+    },
+    {
+      "id": "tailv",
+      "nameZh": "苔绿",
+      "nameEn": "Moss Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#887322",
+      "pinyin": "tailv"
+    },
+    {
+      "id": "biluochunlv",
+      "nameZh": "碧螺春绿",
+      "nameEn": "Biluochun Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#867018",
+      "pinyin": "biluochunlv"
+    },
+    {
+      "id": "yanyuhui",
+      "nameZh": "燕羽灰",
+      "nameEn": "Swallow Feather Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#685e48",
+      "pinyin": "yanyuhui"
+    },
+    {
+      "id": "xiekehui",
+      "nameZh": "蟹壳灰",
+      "nameEn": "Crab Shell Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#695e45",
+      "pinyin": "xiekehui"
+    },
+    {
+      "id": "tanshuilv",
+      "nameZh": "潭水绿",
+      "nameEn": "Pond Water Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#645822",
+      "pinyin": "tanshuilv"
+    },
+    {
+      "id": "ganlanlv",
+      "nameZh": "橄榄绿",
+      "nameEn": "Olive Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#5e5314",
+      "pinyin": "ganlanlv"
+    },
+    {
+      "id": "bangroubai",
+      "nameZh": "蚌肉白",
+      "nameEn": "Clam Flesh White",
+      "group": "white",
+      "emoji": "⚪",
+      "color": "#f9f1db",
+      "pinyin": "bangroubai"
+    },
+    {
+      "id": "douzhihuang",
+      "nameZh": "豆汁黄",
+      "nameEn": "Bean Juice Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f8e8c1",
+      "pinyin": "douzhihuang"
+    },
+    {
+      "id": "danjianhuang",
+      "nameZh": "淡茧黄",
+      "nameEn": "Pale Cocoon Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f9d770",
+      "pinyin": "danjianhuang"
+    },
+    {
+      "id": "ruyahuang",
+      "nameZh": "乳鸭黄",
+      "nameEn": "Milky Duck Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#ffc90c",
+      "pinyin": "ruyahuang"
+    },
+    {
+      "id": "liroubai",
+      "nameZh": "荔肉白",
+      "nameEn": "Lychee Flesh White",
+      "group": "white",
+      "emoji": "⚪",
+      "color": "#f2e6ce",
+      "pinyin": "liroubai"
+    },
+    {
+      "id": "xiangyahuang",
+      "nameZh": "象牙黄",
+      "nameEn": "Ivory Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f0d695",
+      "pinyin": "xiangyahuang"
+    },
+    {
+      "id": "chaomihuang",
+      "nameZh": "炒米黄",
+      "nameEn": "Roasted Rice Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f4ce69",
+      "pinyin": "chaomihuang"
+    },
+    {
+      "id": "yingwuguanhuang",
+      "nameZh": "鹦鹉冠黄",
+      "nameEn": "Parrot Crest Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f6c430",
+      "pinyin": "yingwuguanhuang"
+    },
+    {
+      "id": "muguahuang",
+      "nameZh": "木瓜黄",
+      "nameEn": "Wood Melon Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f9c116",
+      "pinyin": "muguahuang"
+    },
+    {
+      "id": "qianlaohuang",
+      "nameZh": "浅烙黄",
+      "nameEn": "Light Branded Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f9bd10",
+      "pinyin": "qianlaohuang"
+    },
+    {
+      "id": "lianzibai",
+      "nameZh": "莲子白",
+      "nameEn": "Lotus Seed White",
+      "group": "white",
+      "emoji": "⚪",
+      "color": "#e5d3aa",
+      "pinyin": "lianzibai"
+    },
+    {
+      "id": "guhuang",
+      "nameZh": "谷黄",
+      "nameEn": "Grain Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#e8b004",
+      "pinyin": "guhuang"
+    },
+    {
+      "id": "zhizihuang",
+      "nameZh": "栀子黄",
+      "nameEn": "Gardenia Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#ebb10d",
+      "pinyin": "zhizihuang"
+    },
+    {
+      "id": "jiehuang",
+      "nameZh": "芥黄",
+      "nameEn": "Mustard Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#d9a40e",
+      "pinyin": "jiehuang"
+    },
+    {
+      "id": "yinshuhui",
+      "nameZh": "银鼠灰",
+      "nameEn": "Silver Mouse Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#b5aa90",
+      "pinyin": "yinshuhui"
+    },
+    {
+      "id": "chenhui",
+      "nameZh": "尘灰",
+      "nameEn": "Dust Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#b6a476",
+      "pinyin": "chenhui"
+    },
+    {
+      "id": "kulv",
+      "nameZh": "枯绿",
+      "nameEn": "Withered Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#b78d12",
+      "pinyin": "kulv"
+    },
+    {
+      "id": "jiaoqing",
+      "nameZh": "鲛青",
+      "nameEn": "Shark Cyan",
+      "group": "cyan",
+      "emoji": "🩵",
+      "color": "#87723e",
+      "pinyin": "jiaoqing"
+    },
+    {
+      "id": "zongyelv",
+      "nameZh": "粽叶绿",
+      "nameEn": "Zongzi Leaf Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#876818",
+      "pinyin": "zongyelv"
+    },
+    {
+      "id": "huilv",
+      "nameZh": "灰绿",
+      "nameEn": "Gray Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#8a6913",
+      "pinyin": "huilv"
+    },
+    {
+      "id": "hehui",
+      "nameZh": "鹤灰",
+      "nameEn": "Crane Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#4a4035",
+      "pinyin": "hehui"
+    },
+    {
+      "id": "dansongyan",
+      "nameZh": "淡松烟",
+      "nameEn": "Pale Pine Smoke",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#4d4030",
+      "pinyin": "dansongyan"
+    },
+    {
+      "id": "anhaishuilv",
+      "nameZh": "暗海水绿",
+      "nameEn": "Dark Sea Water Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#584717",
+      "pinyin": "anhaishuilv"
+    },
+    {
+      "id": "zonglvlv",
+      "nameZh": "棕榈绿",
+      "nameEn": "Palm Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#5b4913",
+      "pinyin": "zonglvlv"
+    },
+    {
+      "id": "mise",
+      "nameZh": "米色",
+      "nameEn": "Beige",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#f9e9cd",
+      "pinyin": "mise"
+    },
+    {
+      "id": "danrouse",
+      "nameZh": "淡肉色",
+      "nameEn": "Pale Flesh Tone",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f8e0b0",
+      "pinyin": "danrouse"
+    },
+    {
+      "id": "maiyatanghuang",
+      "nameZh": "麦芽糖黄",
+      "nameEn": "Maltose Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f9d27d",
+      "pinyin": "maiyatanghuang"
+    },
+    {
+      "id": "hupohuang",
+      "nameZh": "琥珀黄",
+      "nameEn": "Amber Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#feba07",
+      "pinyin": "hupohuang"
+    },
+    {
+      "id": "gancaohuang",
+      "nameZh": "甘草黄",
+      "nameEn": "Licorice Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f3bf4c",
+      "pinyin": "gancaohuang"
+    },
+    {
+      "id": "chushuxinghuang",
+      "nameZh": "初熟杏黄",
+      "nameEn": "Just Ripe Apricot Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f8bc31",
+      "pinyin": "chushuxinghuang"
+    },
+    {
+      "id": "qiantuose",
+      "nameZh": "浅驼色",
+      "nameEn": "Light Camel",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#e2c17c",
+      "pinyin": "qiantuose"
+    },
+    {
+      "id": "shashihuang",
+      "nameZh": "沙石黄",
+      "nameEn": "Sandstone Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#e5b751",
+      "pinyin": "shashihuang"
+    },
+    {
+      "id": "hupihuang",
+      "nameZh": "虎皮黄",
+      "nameEn": "Tiger Skin Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#eaad1a",
+      "pinyin": "hupihuang"
+    },
+    {
+      "id": "tuhuang",
+      "nameZh": "土黄",
+      "nameEn": "Earth Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#d6a01d",
+      "pinyin": "tuhuang"
+    },
+    {
+      "id": "bailingniaohui",
+      "nameZh": "百灵鸟灰",
+      "nameEn": "Lark Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#b4a992",
+      "pinyin": "bailingniaohui"
+    },
+    {
+      "id": "shanjihuang",
+      "nameZh": "山鸡黄",
+      "nameEn": "Pheasant Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#b78b26",
+      "pinyin": "shanjihuang"
+    },
+    {
+      "id": "guibeihuang",
+      "nameZh": "龟背黄",
+      "nameEn": "Turtle Back Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#826b48",
+      "pinyin": "guibeihuang"
+    },
+    {
+      "id": "canghuang",
+      "nameZh": "苍黄",
+      "nameEn": "Ashen Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#806332",
+      "pinyin": "canghuang"
+    },
+    {
+      "id": "laiyanglihuang",
+      "nameZh": "莱阳梨黄",
+      "nameEn": "Laiyang Pear Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#815f25",
+      "pinyin": "laiyanglihuang"
+    },
+    {
+      "id": "yililv",
+      "nameZh": "蜴蜊绿",
+      "nameEn": "Lizard Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#835e1d",
+      "pinyin": "yililv"
+    },
+    {
+      "id": "songshuhui",
+      "nameZh": "松鼠灰",
+      "nameEn": "Pine Mouse Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#4f4032",
+      "pinyin": "songshuhui"
+    },
+    {
+      "id": "ganlanhui",
+      "nameZh": "橄榄灰",
+      "nameEn": "Olive Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#503e2a",
+      "pinyin": "ganlanhui"
+    },
+    {
+      "id": "xiekelv",
+      "nameZh": "蟹壳绿",
+      "nameEn": "Crab Shell Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#513c20",
+      "pinyin": "xiekelv"
+    },
+    {
+      "id": "gutonglv",
+      "nameZh": "古铜绿",
+      "nameEn": "Bronze Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#533c1b",
+      "pinyin": "gutonglv"
+    },
+    {
+      "id": "jiaochalv",
+      "nameZh": "焦茶绿",
+      "nameEn": "Burnt Tea Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#553b18",
+      "pinyin": "jiaochalv"
+    },
+    {
+      "id": "fenbai",
+      "nameZh": "粉白",
+      "nameEn": "Pink White",
+      "group": "white",
+      "emoji": "⚪",
+      "color": "#fbf2e3",
+      "pinyin": "fenbai"
+    },
+    {
+      "id": "luoyingdanfen",
+      "nameZh": "落英淡粉",
+      "nameEn": "Fallen Petal Pale Pink",
+      "group": "orange",
+      "emoji": "🟠",
+      "color": "#f9e8d0",
+      "pinyin": "luoyingdanfen"
+    },
+    {
+      "id": "guarangfen",
+      "nameZh": "瓜瓤粉",
+      "nameEn": "Melon Flesh Pink",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#f9cb8b",
+      "pinyin": "guarangfen"
+    },
+    {
+      "id": "mihuang",
+      "nameZh": "蜜黄",
+      "nameEn": "Honey Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#fbb957",
+      "pinyin": "mihuang"
+    },
+    {
+      "id": "jinyehuang",
+      "nameZh": "金叶黄",
+      "nameEn": "Gold Leaf Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#ffa60f",
+      "pinyin": "jinyehuang"
+    },
+    {
+      "id": "jinyinghuang",
+      "nameZh": "金莺黄",
+      "nameEn": "Oriole Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f4a83a",
+      "pinyin": "jinyinghuang"
+    },
+    {
+      "id": "lujiaozong",
+      "nameZh": "鹿角棕",
+      "nameEn": "Antler Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#e3bd8d",
+      "pinyin": "lujiaozong"
+    },
+    {
+      "id": "diaoyezong",
+      "nameZh": "凋叶棕",
+      "nameEn": "Withered Leaf Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#e7a23f",
+      "pinyin": "diaoyezong"
+    },
+    {
+      "id": "daimaohuang",
+      "nameZh": "玳瑁黄",
+      "nameEn": "Hawksbill Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#daa45a",
+      "pinyin": "daimaohuang"
+    },
+    {
+      "id": "ruanmuhuang",
+      "nameZh": "软木黄",
+      "nameEn": "Cork Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#de9e44",
+      "pinyin": "ruanmuhuang"
+    },
+    {
+      "id": "fengfanhuang",
+      "nameZh": "风帆黄",
+      "nameEn": "Sail Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#dc9123",
+      "pinyin": "fengfanhuang"
+    },
+    {
+      "id": "guipidanzong",
+      "nameZh": "桂皮淡棕",
+      "nameEn": "Osmanthus Skin Pale Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#c09351",
+      "pinyin": "guipidanzong"
+    },
+    {
+      "id": "houmaohui",
+      "nameZh": "猴毛灰",
+      "nameEn": "Monkey Fur Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#97846c",
+      "pinyin": "houmaohui"
+    },
+    {
+      "id": "shanjihe",
+      "nameZh": "山鸡褐",
+      "nameEn": "Pheasant Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#986524",
+      "pinyin": "shanjihe"
+    },
+    {
+      "id": "tuose",
+      "nameZh": "驼色",
+      "nameEn": "Camel",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#66462a",
+      "pinyin": "tuose"
+    },
+    {
+      "id": "chahe",
+      "nameZh": "茶褐",
+      "nameEn": "Tea Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#5d3d21",
+      "pinyin": "chahe"
+    },
+    {
+      "id": "gutonghe",
+      "nameZh": "古铜褐",
+      "nameEn": "Bronze Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#5c3719",
+      "pinyin": "gutonghe"
+    },
+    {
+      "id": "hehuabai",
+      "nameZh": "荷花白",
+      "nameEn": "Lotus Flower White",
+      "group": "white",
+      "emoji": "⚪",
+      "color": "#fbecde",
+      "pinyin": "hehuabai"
+    },
+    {
+      "id": "meiguifen",
+      "nameZh": "玫瑰粉",
+      "nameEn": "Rose Pink",
+      "group": "orange",
+      "emoji": "🟠",
+      "color": "#f8b37f",
+      "pinyin": "meiguifen"
+    },
+    {
+      "id": "jucheng",
+      "nameZh": "橘橙",
+      "nameEn": "Tangerine Orange",
+      "group": "orange",
+      "emoji": "🟠",
+      "color": "#f97d1c",
+      "pinyin": "jucheng"
+    },
+    {
+      "id": "meirenjiaocheng",
+      "nameZh": "美人焦橙",
+      "nameEn": "Beauty Canna Orange",
+      "group": "orange",
+      "emoji": "🟠",
+      "color": "#fa7e23",
+      "pinyin": "meirenjiaocheng"
+    },
+    {
+      "id": "runhong",
+      "nameZh": "润红",
+      "nameEn": "Moist Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f7cdbc",
+      "pinyin": "runhong"
+    },
+    {
+      "id": "dantaohong",
+      "nameZh": "淡桃红",
+      "nameEn": "Pale Peach Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f6cec1",
+      "pinyin": "dantaohong"
+    },
+    {
+      "id": "hailuocheng",
+      "nameZh": "海螺橙",
+      "nameEn": "Sea Snail Orange",
+      "group": "orange",
+      "emoji": "🟠",
+      "color": "#f0945d",
+      "pinyin": "hailuocheng"
+    },
+    {
+      "id": "taohong",
+      "nameZh": "桃红",
+      "nameEn": "Peach Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f0ada0",
+      "pinyin": "taohong"
+    },
+    {
+      "id": "jiahong",
+      "nameZh": "颊红",
+      "nameEn": "Cheek Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#eeaa9c",
+      "pinyin": "jiahong"
+    },
+    {
+      "id": "danyingsuhong",
+      "nameZh": "淡罂粟红",
+      "nameEn": "Pale Poppy Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#eea08c",
+      "pinyin": "danyingsuhong"
+    },
+    {
+      "id": "chenxihong",
+      "nameZh": "晨曦红",
+      "nameEn": "Dawn Light Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ea8958",
+      "pinyin": "chenxihong"
+    },
+    {
+      "id": "xiekehong",
+      "nameZh": "蟹壳红",
+      "nameEn": "Crab Shell Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f27635",
+      "pinyin": "xiekehong"
+    },
+    {
+      "id": "jinlianhuacheng",
+      "nameZh": "金莲花橙",
+      "nameEn": "Gold Lotus Flower Orange",
+      "group": "orange",
+      "emoji": "🟠",
+      "color": "#f86b1d",
+      "pinyin": "jinlianhuacheng"
+    },
+    {
+      "id": "caomeihong",
+      "nameZh": "草莓红",
+      "nameEn": "Strawberry Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ef6f48",
+      "pinyin": "caomeihong"
+    },
+    {
+      "id": "longjingyuhong",
+      "nameZh": "龙睛鱼红",
+      "nameEn": "Dragon Eye Fish Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ef632b",
+      "pinyin": "longjingyuhong"
+    },
+    {
+      "id": "qingtinghong",
+      "nameZh": "蜻蜓红",
+      "nameEn": "Dragonfly Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f1441d",
+      "pinyin": "qingtinghong"
+    },
+    {
+      "id": "dahong",
+      "nameZh": "大红",
+      "nameEn": "Great Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f04b22",
+      "pinyin": "dahong"
+    },
+    {
+      "id": "shihong",
+      "nameZh": "柿红",
+      "nameEn": "Persimmon Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f2481b",
+      "pinyin": "shihong"
+    },
+    {
+      "id": "liuhuahong",
+      "nameZh": "榴花红",
+      "nameEn": "Pomegranate Blossom Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f34718",
+      "pinyin": "liuhuahong"
+    },
+    {
+      "id": "yinzhu",
+      "nameZh": "银朱",
+      "nameEn": "Silver Vermilion",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f43e06",
+      "pinyin": "yinzhu"
+    },
+    {
+      "id": "zhuhong",
+      "nameZh": "朱红",
+      "nameEn": "Vermilion Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ed5126",
+      "pinyin": "zhuhong"
+    },
+    {
+      "id": "guiyuhong",
+      "nameZh": "鲑鱼红",
+      "nameEn": "Salmon Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f09c5a",
+      "pinyin": "guiyuhong"
+    },
+    {
+      "id": "jinhuang",
+      "nameZh": "金黄",
+      "nameEn": "Gold Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#f26b1f",
+      "pinyin": "jinhuang"
+    },
+    {
+      "id": "lupihe",
+      "nameZh": "鹿皮褐",
+      "nameEn": "Deer Hide Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#d99156",
+      "pinyin": "lupihe"
+    },
+    {
+      "id": "zuiguarou",
+      "nameZh": "醉瓜肉",
+      "nameEn": "Tipsy Melon Flesh",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#db8540",
+      "pinyin": "zuiguarou"
+    },
+    {
+      "id": "jizong",
+      "nameZh": "麂棕",
+      "nameEn": "Muntjac Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#de7622",
+      "pinyin": "jizong"
+    },
+    {
+      "id": "danyinhui",
+      "nameZh": "淡银灰",
+      "nameEn": "Pale Silver Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#c1b2a3",
+      "pinyin": "danyinhui"
+    },
+    {
+      "id": "danzhe",
+      "nameZh": "淡赭",
+      "nameEn": "Pale Ochre",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#be7e4a",
+      "pinyin": "danzhe"
+    },
+    {
+      "id": "binglangzong",
+      "nameZh": "槟榔综",
+      "nameEn": "Betel Nut Fiber",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#c1651a",
+      "pinyin": "binglangzong"
+    },
+    {
+      "id": "yinhui",
+      "nameZh": "银灰",
+      "nameEn": "Silver Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#918072",
+      "pinyin": "yinhui"
+    },
+    {
+      "id": "haiouhui",
+      "nameZh": "海鸥灰",
+      "nameEn": "Seagull Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#9a8878",
+      "pinyin": "haiouhui"
+    },
+    {
+      "id": "dankafei",
+      "nameZh": "淡咖啡",
+      "nameEn": "Pale Coffee",
+      "group": "orange",
+      "emoji": "🟠",
+      "color": "#945833",
+      "pinyin": "dankafei"
+    },
+    {
+      "id": "yanshizong",
+      "nameZh": "岩石棕",
+      "nameEn": "Rock Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#964d22",
+      "pinyin": "yanshizong"
+    },
+    {
+      "id": "mangguozong",
+      "nameZh": "芒果棕",
+      "nameEn": "Mango Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#954416",
+      "pinyin": "mangguozong"
+    },
+    {
+      "id": "shibanhui",
+      "nameZh": "石板灰",
+      "nameEn": "Slate Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#624941",
+      "pinyin": "shibanhui"
+    },
+    {
+      "id": "zhumuhui",
+      "nameZh": "珠母灰",
+      "nameEn": "Mother Of Pearl Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#64483d",
+      "pinyin": "zhumuhui"
+    },
+    {
+      "id": "dingxiangzong",
+      "nameZh": "丁香棕",
+      "nameEn": "Lilac Brown",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#71361d",
+      "pinyin": "dingxiangzong"
+    },
+    {
+      "id": "kafei",
+      "nameZh": "咖啡",
+      "nameEn": "Coffee",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#753117",
+      "pinyin": "kafei"
+    },
+    {
+      "id": "sunpizong",
+      "nameZh": "筍皮棕",
+      "nameEn": "Bamboo Shoot Skin Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#732e12",
+      "pinyin": "sunpizong"
+    },
+    {
+      "id": "yanhanhong",
+      "nameZh": "燕颔红",
+      "nameEn": "Swallow Jaw Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#fc6315",
+      "pinyin": "yanhanhong"
+    },
+    {
+      "id": "yufenhong",
+      "nameZh": "玉粉红",
+      "nameEn": "Jade Pink Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#e8b49a",
+      "pinyin": "yufenhong"
+    },
+    {
+      "id": "jintuo",
+      "nameZh": "金驼",
+      "nameEn": "Gold Camel",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#e46828",
+      "pinyin": "jintuo"
+    },
+    {
+      "id": "tiezong",
+      "nameZh": "铁棕",
+      "nameEn": "Iron Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#d85916",
+      "pinyin": "tiezong"
+    },
+    {
+      "id": "zhuwanghui",
+      "nameZh": "蛛网灰",
+      "nameEn": "Spider Web Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#b7a091",
+      "pinyin": "zhuwanghui"
+    },
+    {
+      "id": "dankekezong",
+      "nameZh": "淡可可棕",
+      "nameEn": "Pale Cocoa Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#b7511d",
+      "pinyin": "dankekezong"
+    },
+    {
+      "id": "zhonghonghui",
+      "nameZh": "中红灰",
+      "nameEn": "Medium Red Gray",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#8b614d",
+      "pinyin": "zhonghonghui"
+    },
+    {
+      "id": "dantuhuang",
+      "nameZh": "淡土黄",
+      "nameEn": "Pale Earth Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#8c4b31",
+      "pinyin": "dantuhuang"
+    },
+    {
+      "id": "dandousha",
+      "nameZh": "淡豆沙",
+      "nameEn": "Pale Bean Paste",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#873d24",
+      "pinyin": "dandousha"
+    },
+    {
+      "id": "yekezong",
+      "nameZh": "椰壳棕",
+      "nameEn": "Coconut Shell Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#883a1e",
+      "pinyin": "yekezong"
+    },
+    {
+      "id": "dantiehui",
+      "nameZh": "淡铁灰",
+      "nameEn": "Pale Iron Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#5b423a",
+      "pinyin": "dantiehui"
+    },
+    {
+      "id": "zhonghuituo",
+      "nameZh": "中灰驼",
+      "nameEn": "Medium Gray Camel",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#603d30",
+      "pinyin": "zhonghuituo"
+    },
+    {
+      "id": "danlizong",
+      "nameZh": "淡栗棕",
+      "nameEn": "Pale Chestnut Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#673424",
+      "pinyin": "danlizong"
+    },
+    {
+      "id": "kekezong",
+      "nameZh": "可可棕",
+      "nameEn": "Cocoa Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#652b1c",
+      "pinyin": "kekezong"
+    },
+    {
+      "id": "zhayezong",
+      "nameZh": "柞叶棕",
+      "nameEn": "Oak Leaf Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#692a1b",
+      "pinyin": "zhayezong"
+    },
+    {
+      "id": "yeqiangweihong",
+      "nameZh": "野蔷薇红",
+      "nameEn": "Wild Rose Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#fb9968",
+      "pinyin": "yeqiangweihong"
+    },
+    {
+      "id": "boluohong",
+      "nameZh": "菠萝红",
+      "nameEn": "Pineapple Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#fc7930",
+      "pinyin": "boluohong"
+    },
+    {
+      "id": "ouhe",
+      "nameZh": "藕荷",
+      "nameEn": "Lotus Root Lotus",
+      "group": "orange",
+      "emoji": "🟠",
+      "color": "#edc3ae",
+      "pinyin": "ouhe"
+    },
+    {
+      "id": "taocihong",
+      "nameZh": "陶瓷红",
+      "nameEn": "Pottery Porcelain Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#e16723",
+      "pinyin": "taocihong"
+    },
+    {
+      "id": "xiaohui",
+      "nameZh": "晓灰",
+      "nameEn": "Dawn Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#d4c4b7",
+      "pinyin": "xiaohui"
+    },
+    {
+      "id": "yujinhong",
+      "nameZh": "余烬红",
+      "nameEn": "Ember Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#cf7543",
+      "pinyin": "yujinhong"
+    },
+    {
+      "id": "huozhuanhong",
+      "nameZh": "火砖红",
+      "nameEn": "Fire Brick Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#cd6227",
+      "pinyin": "huozhuanhong"
+    },
+    {
+      "id": "huonizong",
+      "nameZh": "火泥棕",
+      "nameEn": "Fire Mud Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#aa6a4c",
+      "pinyin": "huonizong"
+    },
+    {
+      "id": "ganhong",
+      "nameZh": "绀红",
+      "nameEn": "Dark Blue Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#a6522c",
+      "pinyin": "ganhong"
+    },
+    {
+      "id": "xiangshuzong",
+      "nameZh": "橡树棕",
+      "nameEn": "Oak Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#773d31",
+      "pinyin": "xiangshuzong"
+    },
+    {
+      "id": "haibaohui",
+      "nameZh": "海报灰",
+      "nameEn": "Sea Report Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#483332",
+      "pinyin": "haibaohui"
+    },
+    {
+      "id": "meiguihui",
+      "nameZh": "玫瑰灰",
+      "nameEn": "Rose Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#4b2e2b",
+      "pinyin": "meiguihui"
+    },
+    {
+      "id": "huoshanzong",
+      "nameZh": "火山棕",
+      "nameEn": "Fire Mountain Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#482522",
+      "pinyin": "huoshanzong"
+    },
+    {
+      "id": "dousha",
+      "nameZh": "豆沙",
+      "nameEn": "Bean Paste",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#481e1c",
+      "pinyin": "dousha"
+    },
+    {
+      "id": "danmifen",
+      "nameZh": "淡米粉",
+      "nameEn": "Pale Rice Pink",
+      "group": "orange",
+      "emoji": "🟠",
+      "color": "#fbeee2",
+      "pinyin": "danmifen"
+    },
+    {
+      "id": "chutaofenhong",
+      "nameZh": "初桃粉红",
+      "nameEn": "First Peach Pink Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f6dcce",
+      "pinyin": "chutaofenhong"
+    },
+    {
+      "id": "jieqiaodanfenhong",
+      "nameZh": "介壳淡粉红",
+      "nameEn": "Shell Pale Pink Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f7cfba",
+      "pinyin": "jieqiaodanfenhong"
+    },
+    {
+      "id": "dancanghuahong",
+      "nameZh": "淡藏花红",
+      "nameEn": "Pale Saffron Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f6ad8f",
+      "pinyin": "dancanghuahong"
+    },
+    {
+      "id": "guaranghong",
+      "nameZh": "瓜瓤红",
+      "nameEn": "Melon Flesh Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f68c60",
+      "pinyin": "guaranghong"
+    },
+    {
+      "id": "furonghong",
+      "nameZh": "芙蓉红",
+      "nameEn": "Hibiscus Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f9723d",
+      "pinyin": "furonghong"
+    },
+    {
+      "id": "meijianghong",
+      "nameZh": "莓酱红",
+      "nameEn": "Berry Sauce Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#fa5d19",
+      "pinyin": "meijianghong"
+    },
+    {
+      "id": "faluohong",
+      "nameZh": "法螺红",
+      "nameEn": "Conch Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ee8055",
+      "pinyin": "faluohong"
+    },
+    {
+      "id": "luoxiahong",
+      "nameZh": "落霞红",
+      "nameEn": "Fallen Rosy Cloud Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#cf4813",
+      "pinyin": "luoxiahong"
+    },
+    {
+      "id": "danmeiguihui",
+      "nameZh": "淡玫瑰灰",
+      "nameEn": "Pale Rose Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#b89485",
+      "pinyin": "danmeiguihui"
+    },
+    {
+      "id": "xiemaohong",
+      "nameZh": "蟹蝥红",
+      "nameEn": "Crab Beetle Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#b14b28",
+      "pinyin": "xiemaohong"
+    },
+    {
+      "id": "huoyanzong",
+      "nameZh": "火岩棕",
+      "nameEn": "Fire Rock Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#863020",
+      "pinyin": "huoyanzong"
+    },
+    {
+      "id": "zheshi",
+      "nameZh": "赭石",
+      "nameEn": "Ochre",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#862617",
+      "pinyin": "zheshi"
+    },
+    {
+      "id": "antuozong",
+      "nameZh": "暗驼棕",
+      "nameEn": "Dark Camel Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#592620",
+      "pinyin": "antuozong"
+    },
+    {
+      "id": "jiangzong",
+      "nameZh": "酱棕",
+      "nameEn": "Sauce Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#5a1f1b",
+      "pinyin": "jiangzong"
+    },
+    {
+      "id": "lizong",
+      "nameZh": "栗棕",
+      "nameEn": "Chestnut Brown",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#5c1e19",
+      "pinyin": "lizong"
+    },
+    {
+      "id": "yangshuixianhong",
+      "nameZh": "洋水仙红",
+      "nameEn": "Western Water Immortal Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f4c7ba",
+      "pinyin": "yangshuixianhong"
+    },
+    {
+      "id": "guqiaohong",
+      "nameZh": "谷鞘红",
+      "nameEn": "Grain Sheath Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f17666",
+      "pinyin": "guqiaohong"
+    },
+    {
+      "id": "pingguohong",
+      "nameZh": "苹果红",
+      "nameEn": "Apple Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f15642",
+      "pinyin": "pingguohong"
+    },
+    {
+      "id": "tieshuihong",
+      "nameZh": "铁水红",
+      "nameEn": "Iron Water Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f5391c",
+      "pinyin": "tieshuihong"
+    },
+    {
+      "id": "guihong",
+      "nameZh": "桂红",
+      "nameEn": "Osmanthus Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f25a47",
+      "pinyin": "guihong"
+    },
+    {
+      "id": "jiguanghong",
+      "nameZh": "极光红",
+      "nameEn": "Aurora Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f33b1f",
+      "pinyin": "jiguanghong"
+    },
+    {
+      "id": "fenhong",
+      "nameZh": "粉红",
+      "nameEn": "Pink Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f2b9b2",
+      "pinyin": "fenhong"
+    },
+    {
+      "id": "shehong",
+      "nameZh": "舌红",
+      "nameEn": "Tongue Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f19790",
+      "pinyin": "shehong"
+    },
+    {
+      "id": "quhong",
+      "nameZh": "曲红",
+      "nameEn": "Curved Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f05a46",
+      "pinyin": "quhong"
+    },
+    {
+      "id": "honggonghong",
+      "nameZh": "红汞红",
+      "nameEn": "Red Mercury Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f23e23",
+      "pinyin": "honggonghong"
+    },
+    {
+      "id": "danfei",
+      "nameZh": "淡绯",
+      "nameEn": "Pale Scarlet",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f2cac9",
+      "pinyin": "danfei"
+    },
+    {
+      "id": "wuhuaguohong",
+      "nameZh": "无花果红",
+      "nameEn": "Fig Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#efafad",
+      "pinyin": "wuhuaguohong"
+    },
+    {
+      "id": "liuzihong",
+      "nameZh": "榴子红",
+      "nameEn": "Pomegranate Seed Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f1908c",
+      "pinyin": "liuzihong"
+    },
+    {
+      "id": "yanzhihong",
+      "nameZh": "胭脂红",
+      "nameEn": "Rouge Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f03f24",
+      "pinyin": "yanzhihong"
+    },
+    {
+      "id": "hehuanhong",
+      "nameZh": "合欢红",
+      "nameEn": "Silk Tree Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f0a1a8",
+      "pinyin": "hehuanhong"
+    },
+    {
+      "id": "chunmeihong",
+      "nameZh": "春梅红",
+      "nameEn": "Spring Plum Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f1939c",
+      "pinyin": "chunmeihong"
+    },
+    {
+      "id": "xiangyehong",
+      "nameZh": "香叶红",
+      "nameEn": "Fragrant Leaf Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f07c82",
+      "pinyin": "xiangyehong"
+    },
+    {
+      "id": "shanhuhong",
+      "nameZh": "珊瑚红",
+      "nameEn": "Coral Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f04a3a",
+      "pinyin": "shanhuhong"
+    },
+    {
+      "id": "luobohong",
+      "nameZh": "萝卜红",
+      "nameEn": "Turnip Radish Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f13c22",
+      "pinyin": "luobohong"
+    },
+    {
+      "id": "danqianhong",
+      "nameZh": "淡茜红",
+      "nameEn": "Pale Madder Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#e77c8e",
+      "pinyin": "danqianhong"
+    },
+    {
+      "id": "yanhong",
+      "nameZh": "艳红",
+      "nameEn": "Vivid Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ed5a65",
+      "pinyin": "yanhong"
+    },
+    {
+      "id": "danshuhong",
+      "nameZh": "淡菽红",
+      "nameEn": "Pale Bean Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ed4845",
+      "pinyin": "danshuhong"
+    },
+    {
+      "id": "yusaihong",
+      "nameZh": "鱼鳃红",
+      "nameEn": "Fish Gill Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ed3b2f",
+      "pinyin": "yusaihong"
+    },
+    {
+      "id": "yingtaohong",
+      "nameZh": "樱桃红",
+      "nameEn": "Cherry Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ed3321",
+      "pinyin": "yingtaohong"
+    },
+    {
+      "id": "danruixianghong",
+      "nameZh": "淡蕊香红",
+      "nameEn": "Pale Stamen Fragrant Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ee4866",
+      "pinyin": "danruixianghong"
+    },
+    {
+      "id": "shizhuhong",
+      "nameZh": "石竹红",
+      "nameEn": "Dianthus Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ee4863",
+      "pinyin": "shizhuhong"
+    },
+    {
+      "id": "caomolihong",
+      "nameZh": "草茉莉红",
+      "nameEn": "Grass Jasmine Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ef475d",
+      "pinyin": "caomolihong"
+    },
+    {
+      "id": "chahuahong",
+      "nameZh": "茶花红",
+      "nameEn": "Camellia Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ee3f4d",
+      "pinyin": "chahuahong"
+    },
+    {
+      "id": "goushuhong",
+      "nameZh": "枸枢红",
+      "nameEn": "Wolfberry Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ed3333",
+      "pinyin": "goushuhong"
+    },
+    {
+      "id": "qiuhaitanghong",
+      "nameZh": "秋海棠红",
+      "nameEn": "Autumn Begonia Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ec2b24",
+      "pinyin": "qiuhaitanghong"
+    },
+    {
+      "id": "lichunhong",
+      "nameZh": "丽春红",
+      "nameEn": "Beautiful Spring Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#eb261a",
+      "pinyin": "lichunhong"
+    },
+    {
+      "id": "xiyanghong",
+      "nameZh": "夕阳红",
+      "nameEn": "Sunset Sun Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#de2a18",
+      "pinyin": "xiyanghong"
+    },
+    {
+      "id": "hedinghong",
+      "nameZh": "鹤顶红",
+      "nameEn": "Crane Crest Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#d42517",
+      "pinyin": "hedinghong"
+    },
+    {
+      "id": "exueshihong",
+      "nameZh": "鹅血石红",
+      "nameEn": "Bloodstone Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ab372f",
+      "pinyin": "exueshihong"
+    },
+    {
+      "id": "fupenzihong",
+      "nameZh": "覆盆子红",
+      "nameEn": "Raspberry Seed Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ac1f18",
+      "pinyin": "fupenzihong"
+    },
+    {
+      "id": "diaozi",
+      "nameZh": "貂紫",
+      "nameEn": "Marten Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#5d3131",
+      "pinyin": "diaozi"
+    },
+    {
+      "id": "anyuzi",
+      "nameZh": "暗玉紫",
+      "nameEn": "Dark Jade Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#5c2223",
+      "pinyin": "anyuzi"
+    },
+    {
+      "id": "lizi",
+      "nameZh": "栗紫",
+      "nameEn": "Chestnut Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#5a191b",
+      "pinyin": "lizi"
+    },
+    {
+      "id": "putaojiangzi",
+      "nameZh": "葡萄酱紫",
+      "nameEn": "Grape Sauce Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#5a1216",
+      "pinyin": "putaojiangzi"
+    },
+    {
+      "id": "mudanfenhong",
+      "nameZh": "牡丹粉红",
+      "nameEn": "Peony Pink Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#eea2a4",
+      "pinyin": "mudanfenhong"
+    },
+    {
+      "id": "shanchahong",
+      "nameZh": "山茶红",
+      "nameEn": "Camellia Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ed556a",
+      "pinyin": "shanchahong"
+    },
+    {
+      "id": "haitanghong",
+      "nameZh": "海棠红",
+      "nameEn": "Begonia Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f03752",
+      "pinyin": "haitanghong"
+    },
+    {
+      "id": "yuhong",
+      "nameZh": "玉红",
+      "nameEn": "Jade Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#c04851",
+      "pinyin": "yuhong"
+    },
+    {
+      "id": "gaolianghong",
+      "nameZh": "高粱红",
+      "nameEn": "Sorghum Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#c02c38",
+      "pinyin": "gaolianghong"
+    },
+    {
+      "id": "manjianghong",
+      "nameZh": "满江红",
+      "nameEn": "Full River Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#a7535a",
+      "pinyin": "manjianghong"
+    },
+    {
+      "id": "zaohong",
+      "nameZh": "枣红",
+      "nameEn": "Jujube Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#7c1823",
+      "pinyin": "zaohong"
+    },
+    {
+      "id": "putaozi",
+      "nameZh": "葡萄紫",
+      "nameEn": "Grape Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#4c1f24",
+      "pinyin": "putaozi"
+    },
+    {
+      "id": "jiangzi",
+      "nameZh": "酱紫",
+      "nameEn": "Sauce Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#4d1018",
+      "pinyin": "jiangzi"
+    },
+    {
+      "id": "danshuhong_2",
+      "nameZh": "淡曙红",
+      "nameEn": "Pale Daybreak Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ee2746",
+      "pinyin": "danshuhong"
+    },
+    {
+      "id": "tangchangpuhong",
+      "nameZh": "唐菖蒲红",
+      "nameEn": "Tang Calamus Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#de1c31",
+      "pinyin": "tangchangpuhong"
+    },
+    {
+      "id": "eguanhong",
+      "nameZh": "鹅冠红",
+      "nameEn": "Goose Crest Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#d11a2d",
+      "pinyin": "eguanhong"
+    },
+    {
+      "id": "meihong",
+      "nameZh": "莓红",
+      "nameEn": "Berry Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#c45a65",
+      "pinyin": "meihong"
+    },
+    {
+      "id": "fengyehong",
+      "nameZh": "枫叶红",
+      "nameEn": "Maple Leaf Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#c21f30",
+      "pinyin": "fengyehong"
+    },
+    {
+      "id": "xiancaihong",
+      "nameZh": "苋菜红",
+      "nameEn": "Amaranth Vegetable Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#a61b29",
+      "pinyin": "xiancaihong"
+    },
+    {
+      "id": "yanhong_2",
+      "nameZh": "烟红",
+      "nameEn": "Smoke Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#894e54",
+      "pinyin": "yanhong"
+    },
+    {
+      "id": "anziyuanhong",
+      "nameZh": "暗紫苑红",
+      "nameEn": "Dark Purple Garden Red",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#82202b",
+      "pinyin": "anziyuanhong"
+    },
+    {
+      "id": "yanhong_3",
+      "nameZh": "殷红",
+      "nameEn": "Dark Crimson Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#82111f",
+      "pinyin": "yanhong"
+    },
+    {
+      "id": "zhuganzi",
+      "nameZh": "猪肝紫",
+      "nameEn": "Pork Liver Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#541e24",
+      "pinyin": "zhuganzi"
+    },
+    {
+      "id": "jinyuzi",
+      "nameZh": "金鱼紫",
+      "nameEn": "Gold Fish Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#500a16",
+      "pinyin": "jinyuzi"
+    },
+    {
+      "id": "caozhuhong",
+      "nameZh": "草珠红",
+      "nameEn": "Grass Pearl Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f8ebe6",
+      "pinyin": "caozhuhong"
+    },
+    {
+      "id": "danjianghong",
+      "nameZh": "淡绛红",
+      "nameEn": "Pale Crimson Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ec7696",
+      "pinyin": "danjianghong"
+    },
+    {
+      "id": "pinhong",
+      "nameZh": "品红",
+      "nameEn": "Fine Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ef3473",
+      "pinyin": "pinhong"
+    },
+    {
+      "id": "fengxianhuahong",
+      "nameZh": "凤仙花红",
+      "nameEn": "Phoenix Immortal Flower Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ea7293",
+      "pinyin": "fengxianhuahong"
+    },
+    {
+      "id": "fentuanhuahong",
+      "nameZh": "粉团花红",
+      "nameEn": "Pink Round Flower Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ec9bad",
+      "pinyin": "fentuanhuahong"
+    },
+    {
+      "id": "jiazhutaohong",
+      "nameZh": "夹竹桃红",
+      "nameEn": "Pinched Bamboo Peach Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#eb507e",
+      "pinyin": "jiazhutaohong"
+    },
+    {
+      "id": "wenpohong",
+      "nameZh": "榲桲红",
+      "nameEn": "Quince Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ed2f6a",
+      "pinyin": "wenpohong"
+    },
+    {
+      "id": "jianghong",
+      "nameZh": "姜红",
+      "nameEn": "Ginger Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#eeb8c3",
+      "pinyin": "jianghong"
+    },
+    {
+      "id": "lianbanhong",
+      "nameZh": "莲瓣红",
+      "nameEn": "Lotus Petal Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ea517f",
+      "pinyin": "lianbanhong"
+    },
+    {
+      "id": "shuihong",
+      "nameZh": "水红",
+      "nameEn": "Water Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f1c4cd",
+      "pinyin": "shuihong"
+    },
+    {
+      "id": "baochunhong",
+      "nameZh": "报春红",
+      "nameEn": "Primrose Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ec8aa4",
+      "pinyin": "baochunhong"
+    },
+    {
+      "id": "yuejihong",
+      "nameZh": "月季红",
+      "nameEn": "Moon Season Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ce5777",
+      "pinyin": "yuejihong"
+    },
+    {
+      "id": "jiangdouhong",
+      "nameZh": "豇豆红",
+      "nameEn": "Cowpea Bean Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ed9db2",
+      "pinyin": "jiangdouhong"
+    },
+    {
+      "id": "xiaguanghong",
+      "nameZh": "霞光红",
+      "nameEn": "Rosy Cloud Light Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ef82a0",
+      "pinyin": "xiaguanghong"
+    },
+    {
+      "id": "songyemudanhong",
+      "nameZh": "松叶牡丹红",
+      "nameEn": "Pine Leaf Peony Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#eb3c70",
+      "pinyin": "songyemudanhong"
+    },
+    {
+      "id": "xidanhong",
+      "nameZh": "喜蛋红",
+      "nameEn": "Red Egg Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ec2c64",
+      "pinyin": "xidanhong"
+    },
+    {
+      "id": "shubihong",
+      "nameZh": "鼠鼻红",
+      "nameEn": "Mouse Nose Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#e3b4b8",
+      "pinyin": "shubihong"
+    },
+    {
+      "id": "jianjingyuhong",
+      "nameZh": "尖晶玉红",
+      "nameEn": "Tip Crystal Jade Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#cc163a",
+      "pinyin": "jianjingyuhong"
+    },
+    {
+      "id": "shanlidouhong",
+      "nameZh": "山黎豆红",
+      "nameEn": "Mountain Dawn Bean Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#c27c88",
+      "pinyin": "shanlidouhong"
+    },
+    {
+      "id": "jinkuihong",
+      "nameZh": "锦葵红",
+      "nameEn": "Brocade Sunflower Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#bf3553",
+      "pinyin": "jinkuihong"
+    },
+    {
+      "id": "shubeihui",
+      "nameZh": "鼠背灰",
+      "nameEn": "Mouse Back Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#73575c",
+      "pinyin": "shubeihui"
+    },
+    {
+      "id": "ganzhezi",
+      "nameZh": "甘蔗紫",
+      "nameEn": "Sugarcane Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#621624",
+      "pinyin": "ganzhezi"
+    },
+    {
+      "id": "shizhuzi",
+      "nameZh": "石竹紫",
+      "nameEn": "Dianthus Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#63071c",
+      "pinyin": "shizhuzi"
+    },
+    {
+      "id": "cangyinghui",
+      "nameZh": "苍蝇灰",
+      "nameEn": "Ashen Fly Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#36282b",
+      "pinyin": "cangyinghui"
+    },
+    {
+      "id": "luanshizi",
+      "nameZh": "卵石紫",
+      "nameEn": "Pebble Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#30161c",
+      "pinyin": "luanshizi"
+    },
+    {
+      "id": "lizi_2",
+      "nameZh": "李紫",
+      "nameEn": "Plum Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#2b1216",
+      "pinyin": "lizi"
+    },
+    {
+      "id": "qiepizi",
+      "nameZh": "茄皮紫",
+      "nameEn": "Eggplant Skin Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#2d0c13",
+      "pinyin": "qiepizi"
+    },
+    {
+      "id": "diaozhonghuahong",
+      "nameZh": "吊钟花红",
+      "nameEn": "Bellflower Flower Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ce5e8a",
+      "pinyin": "diaozhonghuahong"
+    },
+    {
+      "id": "tuyanhong",
+      "nameZh": "兔眼红",
+      "nameEn": "Rabbit Eye Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ec4e8a",
+      "pinyin": "tuyanhong"
+    },
+    {
+      "id": "zijinghong",
+      "nameZh": "紫荆红",
+      "nameEn": "Purple Thorn Red",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#ee2c79",
+      "pinyin": "zijinghong"
+    },
+    {
+      "id": "caitouzi",
+      "nameZh": "菜头紫",
+      "nameEn": "Vegetable Head Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#951c48",
+      "pinyin": "caitouzi"
+    },
+    {
+      "id": "yaoguanzi",
+      "nameZh": "鹞冠紫",
+      "nameEn": "Harrier Crest Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#621d34",
+      "pinyin": "yaoguanzi"
+    },
+    {
+      "id": "putaojiuhong",
+      "nameZh": "葡萄酒红",
+      "nameEn": "Grape Wine Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#62102e",
+      "pinyin": "putaojiuhong"
+    },
+    {
+      "id": "moshizi",
+      "nameZh": "磨石紫",
+      "nameEn": "Whetstone Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#382129",
+      "pinyin": "moshizi"
+    },
+    {
+      "id": "tanzi",
+      "nameZh": "檀紫",
+      "nameEn": "Sandalwood Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#381924",
+      "pinyin": "tanzi"
+    },
+    {
+      "id": "huoezi",
+      "nameZh": "火鹅紫",
+      "nameEn": "Fire Goose Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#33141e",
+      "pinyin": "huoezi"
+    },
+    {
+      "id": "mozi",
+      "nameZh": "墨紫",
+      "nameEn": "Ink Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#310f1b",
+      "pinyin": "mozi"
+    },
+    {
+      "id": "jinghong",
+      "nameZh": "晶红",
+      "nameEn": "Crystal Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#eea6b7",
+      "pinyin": "jinghong"
+    },
+    {
+      "id": "biandouhuahong",
+      "nameZh": "扁豆花红",
+      "nameEn": "Flat Bean Flower Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ef498b",
+      "pinyin": "biandouhuahong"
+    },
+    {
+      "id": "baijihong",
+      "nameZh": "白芨红",
+      "nameEn": "White Spikenard Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#de7897",
+      "pinyin": "baijihong"
+    },
+    {
+      "id": "nenlinghong",
+      "nameZh": "嫩菱红",
+      "nameEn": "Tender Water Chestnut Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#de3f7c",
+      "pinyin": "nenlinghong"
+    },
+    {
+      "id": "bogenhong",
+      "nameZh": "菠根红",
+      "nameEn": "Pineapple Root Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#d13c74",
+      "pinyin": "bogenhong"
+    },
+    {
+      "id": "cujiangcaohong",
+      "nameZh": "酢酱草红",
+      "nameEn": "Oxalis Sauce Grass Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#c5708b",
+      "pinyin": "cujiangcaohong"
+    },
+    {
+      "id": "yangcongzi",
+      "nameZh": "洋葱紫",
+      "nameEn": "Western Scallion Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#a8456b",
+      "pinyin": "yangcongzi"
+    },
+    {
+      "id": "haixiangzi",
+      "nameZh": "海象紫",
+      "nameEn": "Sea Elephant Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#4b1e2f",
+      "pinyin": "haixiangzi"
+    },
+    {
+      "id": "ganzi",
+      "nameZh": "绀紫",
+      "nameEn": "Dark Blue Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#461629",
+      "pinyin": "ganzi"
+    },
+    {
+      "id": "gutongzi",
+      "nameZh": "古铜紫",
+      "nameEn": "Bronze Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#440e25",
+      "pinyin": "gutongzi"
+    },
+    {
+      "id": "shiruihong",
+      "nameZh": "石蕊红",
+      "nameEn": "Litmus Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#f0c9cf",
+      "pinyin": "shiruihong"
+    },
+    {
+      "id": "shaoyaogenghong",
+      "nameZh": "芍药耕红",
+      "nameEn": "Peony Plow Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#eba0b3",
+      "pinyin": "shaoyaogenghong"
+    },
+    {
+      "id": "canghuahong",
+      "nameZh": "藏花红",
+      "nameEn": "Saffron Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#ec2d7a",
+      "pinyin": "canghuahong"
+    },
+    {
+      "id": "chuhehong",
+      "nameZh": "初荷红",
+      "nameEn": "First Lotus Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#e16c96",
+      "pinyin": "chuhehong"
+    },
+    {
+      "id": "mabiancaozi",
+      "nameZh": "马鞭草紫",
+      "nameEn": "Horse Whip Grass Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#ede3e7",
+      "pinyin": "mabiancaozi"
+    },
+    {
+      "id": "dingxiangdanzi",
+      "nameZh": "丁香淡紫",
+      "nameEn": "Lilac Pale Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#e9d7df",
+      "pinyin": "dingxiangdanzi"
+    },
+    {
+      "id": "danzihong",
+      "nameZh": "丹紫红",
+      "nameEn": "Cinnabar Purple Red",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#d2568c",
+      "pinyin": "danzihong"
+    },
+    {
+      "id": "meiguihong",
+      "nameZh": "玫瑰红",
+      "nameEn": "Rose Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#d2357d",
+      "pinyin": "meiguihong"
+    },
+    {
+      "id": "danqianniuzi",
+      "nameZh": "淡牵牛紫",
+      "nameEn": "Pale Trailing Ox Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#d1c2d3",
+      "pinyin": "danqianniuzi"
+    },
+    {
+      "id": "fengxinzi",
+      "nameZh": "凤信紫",
+      "nameEn": "Phoenix True Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#c8adc4",
+      "pinyin": "fengxinzi"
+    },
+    {
+      "id": "luolanzi",
+      "nameZh": "萝兰紫",
+      "nameEn": "Turnip Orchid Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#c08eaf",
+      "pinyin": "luolanzi"
+    },
+    {
+      "id": "meiguizi",
+      "nameZh": "玫瑰紫",
+      "nameEn": "Rose Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#ba2f7b",
+      "pinyin": "meiguizi"
+    },
+    {
+      "id": "tengluozi",
+      "nameZh": "藤萝紫",
+      "nameEn": "Vine Turnip Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#8076a3",
+      "pinyin": "tengluozi"
+    },
+    {
+      "id": "jinzi",
+      "nameZh": "槿紫",
+      "nameEn": "Hibiscus Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#806d9e",
+      "pinyin": "jinzi"
+    },
+    {
+      "id": "xunzi",
+      "nameZh": "蕈紫",
+      "nameEn": "Mushroom Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#815c94",
+      "pinyin": "xunzi"
+    },
+    {
+      "id": "jiegengzi",
+      "nameZh": "桔梗紫",
+      "nameEn": "Balloon Flower Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#813c85",
+      "pinyin": "jiegengzi"
+    },
+    {
+      "id": "weizi",
+      "nameZh": "魏紫",
+      "nameEn": "Wei Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#7e1671",
+      "pinyin": "weizi"
+    },
+    {
+      "id": "zhilanzi",
+      "nameZh": "芝兰紫",
+      "nameEn": "Sesame Orchid Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#e9ccd3",
+      "pinyin": "zhilanzi"
+    },
+    {
+      "id": "lingmenghong",
+      "nameZh": "菱锰红",
+      "nameEn": "Water Chestnut Manganese Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#d276a3",
+      "pinyin": "lingmenghong"
+    },
+    {
+      "id": "longxuhong",
+      "nameZh": "龙须红",
+      "nameEn": "Dragon Whisker Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#cc5595",
+      "pinyin": "longxuhong"
+    },
+    {
+      "id": "jifenhong",
+      "nameZh": "蓟粉红",
+      "nameEn": "Thistle Pink Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#e6d2d5",
+      "pinyin": "jifenhong"
+    },
+    {
+      "id": "dianqishihong",
+      "nameZh": "电气石红",
+      "nameEn": "Tourmaline Red",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#c35691",
+      "pinyin": "dianqishihong"
+    },
+    {
+      "id": "yingcaozi",
+      "nameZh": "樱草紫",
+      "nameEn": "Cherry Grass Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#c06f98",
+      "pinyin": "yingcaozi"
+    },
+    {
+      "id": "lusuihui",
+      "nameZh": "芦穗灰",
+      "nameEn": "Reed Ear Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#bdaead",
+      "pinyin": "lusuihui"
+    },
+    {
+      "id": "yinhonghui",
+      "nameZh": "隐红灰",
+      "nameEn": "Hidden Red Gray",
+      "group": "red",
+      "emoji": "🔴",
+      "color": "#b598a1",
+      "pinyin": "yinhonghui"
+    },
+    {
+      "id": "xiancaizi",
+      "nameZh": "苋菜紫",
+      "nameEn": "Amaranth Vegetable Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#9b1e64",
+      "pinyin": "xiancaizi"
+    },
+    {
+      "id": "luhui",
+      "nameZh": "芦灰",
+      "nameEn": "Reed Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#856d72",
+      "pinyin": "luhui"
+    },
+    {
+      "id": "muyunhui",
+      "nameZh": "暮云灰",
+      "nameEn": "Dusk Cloud Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#4f383e",
+      "pinyin": "muyunhui"
+    },
+    {
+      "id": "banjiuhui",
+      "nameZh": "斑鸠灰",
+      "nameEn": "Dove Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#482936",
+      "pinyin": "banjiuhui"
+    },
+    {
+      "id": "dantengluozi",
+      "nameZh": "淡藤萝紫",
+      "nameEn": "Pale Vine Turnip Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#f2e7e5",
+      "pinyin": "dantengluozi"
+    },
+    {
+      "id": "danqingzi",
+      "nameZh": "淡青紫",
+      "nameEn": "Pale Cyan Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#e0c8d1",
+      "pinyin": "danqingzi"
+    },
+    {
+      "id": "qinghakezi",
+      "nameZh": "青蛤壳紫",
+      "nameEn": "Cyan Clam Shell Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#bc84a8",
+      "pinyin": "qinghakezi"
+    },
+    {
+      "id": "doukouzi",
+      "nameZh": "豆蔻紫",
+      "nameEn": "Bean Cardamom Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#ad6598",
+      "pinyin": "doukouzi"
+    },
+    {
+      "id": "biandouzi",
+      "nameZh": "扁豆紫",
+      "nameEn": "Flat Bean Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#a35c8f",
+      "pinyin": "biandouzi"
+    },
+    {
+      "id": "jiehuazi",
+      "nameZh": "芥花紫",
+      "nameEn": "Mustard Flower Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#983680",
+      "pinyin": "jiehuazi"
+    },
+    {
+      "id": "qinglian",
+      "nameZh": "青莲",
+      "nameEn": "Cyan Lotus",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#8b2671",
+      "pinyin": "qinglian"
+    },
+    {
+      "id": "zizi",
+      "nameZh": "芓紫",
+      "nameEn": "Seed Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#894276",
+      "pinyin": "zizi"
+    },
+    {
+      "id": "gejinzi",
+      "nameZh": "葛巾紫",
+      "nameEn": "Kudzu Scarf Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#7e2065",
+      "pinyin": "gejinzi"
+    },
+    {
+      "id": "qianniuzi",
+      "nameZh": "牵牛紫",
+      "nameEn": "Trailing Ox Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#681752",
+      "pinyin": "qianniuzi"
+    },
+    {
+      "id": "zihui",
+      "nameZh": "紫灰",
+      "nameEn": "Purple Gray",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#5d3f51",
+      "pinyin": "zihui"
+    },
+    {
+      "id": "longjingyuzi",
+      "nameZh": "龙睛鱼紫",
+      "nameEn": "Dragon Eye Fish Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#4e2a40",
+      "pinyin": "longjingyuzi"
+    },
+    {
+      "id": "biqizi",
+      "nameZh": "荸荠紫",
+      "nameEn": "Water Chestnut Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#411c35",
+      "pinyin": "biqizi"
+    },
+    {
+      "id": "gudinghui",
+      "nameZh": "古鼎灰",
+      "nameEn": "Ancient Tripod Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#36292f",
+      "pinyin": "gudinghui"
+    },
+    {
+      "id": "wumeizi",
+      "nameZh": "乌梅紫",
+      "nameEn": "Crow Plum Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#1e131d",
+      "pinyin": "wumeizi"
+    },
+    {
+      "id": "shenqianniuzi",
+      "nameZh": "深牵牛紫",
+      "nameEn": "Deep Trailing Ox Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#1c0d1a",
+      "pinyin": "shenqianniuzi"
+    },
+    {
+      "id": "yinbai",
+      "nameZh": "银白",
+      "nameEn": "Silver White",
+      "group": "white",
+      "emoji": "⚪",
+      "color": "#f1f0ed",
+      "pinyin": "yinbai"
+    },
+    {
+      "id": "qianshibai",
+      "nameZh": "芡食白",
+      "nameEn": "Foxnut Food White",
+      "group": "white",
+      "emoji": "⚪",
+      "color": "#e2e1e4",
+      "pinyin": "qianshibai"
+    },
+    {
+      "id": "yuanshanzi",
+      "nameZh": "远山紫",
+      "nameEn": "Distant Mountain Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#ccccd6",
+      "pinyin": "yuanshanzi"
+    },
+    {
+      "id": "danlanzi",
+      "nameZh": "淡蓝紫",
+      "nameEn": "Pale Blue Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#a7a8bd",
+      "pinyin": "danlanzi"
+    },
+    {
+      "id": "shangengzi",
+      "nameZh": "山梗紫",
+      "nameEn": "Stem Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#61649f",
+      "pinyin": "shangengzi"
+    },
+    {
+      "id": "luodianzi",
+      "nameZh": "螺甸紫",
+      "nameEn": "Snail Pasture Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#74759b",
+      "pinyin": "luodianzi"
+    },
+    {
+      "id": "manaohui",
+      "nameZh": "玛瑙灰",
+      "nameEn": "Agate Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#cfccc9",
+      "pinyin": "manaohui"
+    },
+    {
+      "id": "yejuzi",
+      "nameZh": "野菊紫",
+      "nameEn": "Wild Chrysanthemum Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#525288",
+      "pinyin": "yejuzi"
+    },
+    {
+      "id": "mantianxingzi",
+      "nameZh": "满天星紫",
+      "nameEn": "Full Sky Star Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#2e317c",
+      "pinyin": "mantianxingzi"
+    },
+    {
+      "id": "xinhui",
+      "nameZh": "锌灰",
+      "nameEn": "Zinc Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#7a7374",
+      "pinyin": "xinhui"
+    },
+    {
+      "id": "yeputaozi",
+      "nameZh": "野葡萄紫",
+      "nameEn": "Wild Grape Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#302f4b",
+      "pinyin": "yeputaozi"
+    },
+    {
+      "id": "jianfengzi",
+      "nameZh": "剑锋紫",
+      "nameEn": "Sword Edge Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#3e3841",
+      "pinyin": "jianfengzi"
+    },
+    {
+      "id": "longkuizi",
+      "nameZh": "龙葵紫",
+      "nameEn": "Dragon Sunflower Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#322f3b",
+      "pinyin": "longkuizi"
+    },
+    {
+      "id": "anlongdanzi",
+      "nameZh": "暗龙胆紫",
+      "nameEn": "Dark Dragon Gall Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#22202e",
+      "pinyin": "anlongdanzi"
+    },
+    {
+      "id": "jingshizi",
+      "nameZh": "晶石紫",
+      "nameEn": "Crystal-Stone Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#1f2040",
+      "pinyin": "jingshizi"
+    },
+    {
+      "id": "anlanzi",
+      "nameZh": "暗蓝紫",
+      "nameEn": "Dark Blue Purple",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#131124",
+      "pinyin": "anlanzi"
+    },
+    {
+      "id": "jingtailan",
+      "nameZh": "景泰蓝",
+      "nameEn": "Cloisonne",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#2775b6",
+      "pinyin": "jingtailan"
+    },
+    {
+      "id": "niluolan",
+      "nameZh": "尼罗蓝",
+      "nameEn": "Nile Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#2474b5",
+      "pinyin": "niluolan"
+    },
+    {
+      "id": "yuantianlan",
+      "nameZh": "远天蓝",
+      "nameEn": "Distant Sky Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#d0dfe6",
+      "pinyin": "yuantianlan"
+    },
+    {
+      "id": "xinglan",
+      "nameZh": "星蓝",
+      "nameEn": "Star Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#93b5cf",
+      "pinyin": "xinglan"
+    },
+    {
+      "id": "yushandoulan",
+      "nameZh": "羽扇豆蓝",
+      "nameEn": "Lupin Blue",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#619ac3",
+      "pinyin": "yushandoulan"
+    },
+    {
+      "id": "huaqing",
+      "nameZh": "花青",
+      "nameEn": "Flower Cyan",
+      "group": "cyan",
+      "emoji": "🩵",
+      "color": "#2376b7",
+      "pinyin": "huaqing"
+    },
+    {
+      "id": "jinglan",
+      "nameZh": "睛蓝",
+      "nameEn": "Eye Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#5698c3",
+      "pinyin": "jinglan"
+    },
+    {
+      "id": "honglan",
+      "nameZh": "虹蓝",
+      "nameEn": "Rainbow Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#2177b8",
+      "pinyin": "honglan"
+    },
+    {
+      "id": "hushuilan",
+      "nameZh": "湖水蓝",
+      "nameEn": "Lake Water Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#b0d5df",
+      "pinyin": "hushuilan"
+    },
+    {
+      "id": "qiubolan",
+      "nameZh": "秋波蓝",
+      "nameEn": "Autumn Wave Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#8abcd1",
+      "pinyin": "qiubolan"
+    },
+    {
+      "id": "jianshilan",
+      "nameZh": "涧石蓝",
+      "nameEn": "Stream-Stone Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#66a9c9",
+      "pinyin": "jianshilan"
+    },
+    {
+      "id": "chaolan",
+      "nameZh": "潮蓝",
+      "nameEn": "Tide Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#2983bb",
+      "pinyin": "chaolan"
+    },
+    {
+      "id": "qunqing",
+      "nameZh": "群青",
+      "nameEn": "Ultramarine",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#1772b4",
+      "pinyin": "qunqing"
+    },
+    {
+      "id": "jiqing",
+      "nameZh": "霁青",
+      "nameEn": "Clear Cyan",
+      "group": "cyan",
+      "emoji": "🩵",
+      "color": "#63bbd0",
+      "pinyin": "jiqing"
+    },
+    {
+      "id": "biqing",
+      "nameZh": "碧青",
+      "nameEn": "Jade Green Cyan",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#5cb3cc",
+      "pinyin": "biqing"
+    },
+    {
+      "id": "baoshilan",
+      "nameZh": "宝石蓝",
+      "nameEn": "Sapphire Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#2486b9",
+      "pinyin": "baoshilan"
+    },
+    {
+      "id": "tianlan",
+      "nameZh": "天蓝",
+      "nameEn": "Sky Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#1677b3",
+      "pinyin": "tianlan"
+    },
+    {
+      "id": "bolinlan",
+      "nameZh": "柏林蓝",
+      "nameEn": "Cypress Forest Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#126bae",
+      "pinyin": "bolinlan"
+    },
+    {
+      "id": "haiqing",
+      "nameZh": "海青",
+      "nameEn": "Sea Cyan",
+      "group": "cyan",
+      "emoji": "🩵",
+      "color": "#22a2c3",
+      "pinyin": "haiqing"
+    },
+    {
+      "id": "gulan",
+      "nameZh": "钴蓝",
+      "nameEn": "Cobalt Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#1a94bc",
+      "pinyin": "gulan"
+    },
+    {
+      "id": "yuanweilan",
+      "nameZh": "鸢尾蓝",
+      "nameEn": "Iris Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#158bb8",
+      "pinyin": "yuanweilan"
+    },
+    {
+      "id": "qianniuhualan",
+      "nameZh": "牵牛花蓝",
+      "nameEn": "Morning Glory Blue",
+      "group": "purple",
+      "emoji": "🟣",
+      "color": "#1177b0",
+      "pinyin": "qianniuhualan"
+    },
+    {
+      "id": "feiyancaolan",
+      "nameZh": "飞燕草蓝",
+      "nameEn": "Larkspur Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#0f59a4",
+      "pinyin": "feiyancaolan"
+    },
+    {
+      "id": "pinlan",
+      "nameZh": "品蓝",
+      "nameEn": "Brilliant Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#2b73af",
+      "pinyin": "pinlan"
+    },
+    {
+      "id": "yinyubai",
+      "nameZh": "银鱼白",
+      "nameEn": "Silver Fish White",
+      "group": "white",
+      "emoji": "⚪",
+      "color": "#cdd1d3",
+      "pinyin": "yinyubai"
+    },
+    {
+      "id": "ananlan",
+      "nameZh": "安安蓝",
+      "nameEn": "Anan Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#3170a7",
+      "pinyin": "ananlan"
+    },
+    {
+      "id": "yuweihui",
+      "nameZh": "鱼尾灰",
+      "nameEn": "Fish Tail Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#5e616d",
+      "pinyin": "yuweihui"
+    },
+    {
+      "id": "jingyuhui",
+      "nameZh": "鲸鱼灰",
+      "nameEn": "Whale Fish Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#475164",
+      "pinyin": "jingyuhui"
+    },
+    {
+      "id": "haishenhui",
+      "nameZh": "海参灰",
+      "nameEn": "Sea Ginseng Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#fffefa",
+      "pinyin": "haishenhui"
+    },
+    {
+      "id": "shayuhui",
+      "nameZh": "沙鱼灰",
+      "nameEn": "Sand Fish Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#35333c",
+      "pinyin": "shayuhui"
+    },
+    {
+      "id": "ganglan",
+      "nameZh": "钢蓝",
+      "nameEn": "Steel Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#0f1423",
+      "pinyin": "ganglan"
+    },
+    {
+      "id": "yunshuilan",
+      "nameZh": "云水蓝",
+      "nameEn": "Cloud Water Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#baccd9",
+      "pinyin": "yunshuilan"
+    },
+    {
+      "id": "qingshanlan",
+      "nameZh": "晴山蓝",
+      "nameEn": "Clear Mountain Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#8fb2c9",
+      "pinyin": "qingshanlan"
+    },
+    {
+      "id": "dianqing",
+      "nameZh": "靛青",
+      "nameEn": "Indigo",
+      "group": "cyan",
+      "emoji": "🩵",
+      "color": "#1661ab",
+      "pinyin": "dianqing"
+    },
+    {
+      "id": "dalishihui",
+      "nameZh": "大理石灰",
+      "nameEn": "Marble Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#c4cbcf",
+      "pinyin": "dalishihui"
+    },
+    {
+      "id": "haitaolan",
+      "nameZh": "海涛蓝",
+      "nameEn": "Sea Billow Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#15559a",
+      "pinyin": "haitaolan"
+    },
+    {
+      "id": "diechilan",
+      "nameZh": "蝶翅蓝",
+      "nameEn": "Butterfly Wing Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#4e7ca1",
+      "pinyin": "diechilan"
+    },
+    {
+      "id": "haijunlan",
+      "nameZh": "海军蓝",
+      "nameEn": "Sea Army Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#346c9c",
+      "pinyin": "haijunlan"
+    },
+    {
+      "id": "shuiniuhui",
+      "nameZh": "水牛灰",
+      "nameEn": "Water Ox Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#2f2f35",
+      "pinyin": "shuiniuhui"
+    },
+    {
+      "id": "niujiaohui",
+      "nameZh": "牛角灰",
+      "nameEn": "Ox Horn Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#2d2e36",
+      "pinyin": "niujiaohui"
+    },
+    {
+      "id": "yanhanlan",
+      "nameZh": "燕颔蓝",
+      "nameEn": "Swallow Jaw Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#131824",
+      "pinyin": "yanhanlan"
+    },
+    {
+      "id": "yunfengbai",
+      "nameZh": "云峰白",
+      "nameEn": "Cloud Peak White",
+      "group": "white",
+      "emoji": "⚪",
+      "color": "#d8e3e7",
+      "pinyin": "yunfengbai"
+    },
+    {
+      "id": "jingtianlan",
+      "nameZh": "井天蓝",
+      "nameEn": "Well Sky Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#c3d7df",
+      "pinyin": "jingtianlan"
+    },
+    {
+      "id": "yunshanlan",
+      "nameZh": "云山蓝",
+      "nameEn": "Cloud Mountain Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#2f90b9",
+      "pinyin": "yunshanlan"
+    },
+    {
+      "id": "youlan",
+      "nameZh": "釉蓝",
+      "nameEn": "Glaze Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#1781b5",
+      "pinyin": "youlan"
+    },
+    {
+      "id": "oulan",
+      "nameZh": "鸥蓝",
+      "nameEn": "Gull Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#c7d2d4",
+      "pinyin": "oulan"
+    },
+    {
+      "id": "tangcilan",
+      "nameZh": "搪磁蓝",
+      "nameEn": "Enamel Porcelain Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#11659a",
+      "pinyin": "tangcilan"
+    },
+    {
+      "id": "yueyingbai",
+      "nameZh": "月影白",
+      "nameEn": "Moon Shadow White",
+      "group": "white",
+      "emoji": "⚪",
+      "color": "#c0c4c3",
+      "pinyin": "yueyingbai"
+    },
+    {
+      "id": "xinghui",
+      "nameZh": "星灰",
+      "nameEn": "Star Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#b2bbbe",
+      "pinyin": "xinghui"
+    },
+    {
+      "id": "danlanhui",
+      "nameZh": "淡蓝灰",
+      "nameEn": "Pale Blue Gray",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#5e7987",
+      "pinyin": "danlanhui"
+    },
+    {
+      "id": "yanlan",
+      "nameZh": "鷃蓝",
+      "nameEn": "Quail Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#144a74",
+      "pinyin": "yanlan"
+    },
+    {
+      "id": "nenhui",
+      "nameZh": "嫩灰",
+      "nameEn": "Tender Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#74787a",
+      "pinyin": "nenhui"
+    },
+    {
+      "id": "zhanjianhui",
+      "nameZh": "战舰灰",
+      "nameEn": "Warship Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#495c69",
+      "pinyin": "zhanjianhui"
+    },
+    {
+      "id": "waguanhui",
+      "nameZh": "瓦罐灰",
+      "nameEn": "Tile Jar Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#47484c",
+      "pinyin": "waguanhui"
+    },
+    {
+      "id": "qinghui",
+      "nameZh": "青灰",
+      "nameEn": "Cyan Gray",
+      "group": "cyan",
+      "emoji": "🩵",
+      "color": "#2b333e",
+      "pinyin": "qinghui"
+    },
+    {
+      "id": "gelan",
+      "nameZh": "鸽蓝",
+      "nameEn": "Pigeon Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#1c2938",
+      "pinyin": "gelan"
+    },
+    {
+      "id": "gangqing",
+      "nameZh": "钢青",
+      "nameEn": "Steel Cyan",
+      "group": "cyan",
+      "emoji": "🩵",
+      "color": "#142334",
+      "pinyin": "gangqing"
+    },
+    {
+      "id": "anlan",
+      "nameZh": "暗蓝",
+      "nameEn": "Dark Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#101f30",
+      "pinyin": "anlan"
+    },
+    {
+      "id": "yuebai",
+      "nameZh": "月白",
+      "nameEn": "Moon White",
+      "group": "white",
+      "emoji": "⚪",
+      "color": "#eef7f2",
+      "pinyin": "yuebai"
+    },
+    {
+      "id": "haitianlan",
+      "nameZh": "海天蓝",
+      "nameEn": "Sea Sky Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#c6e6e8",
+      "pinyin": "haitianlan"
+    },
+    {
+      "id": "qingshuilan",
+      "nameZh": "清水蓝",
+      "nameEn": "Clear Water Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#93d5dc",
+      "pinyin": "qingshuilan"
+    },
+    {
+      "id": "pubulan",
+      "nameZh": "瀑布蓝",
+      "nameEn": "Waterfall Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#51c4d3",
+      "pinyin": "pubulan"
+    },
+    {
+      "id": "weilan",
+      "nameZh": "蔚蓝",
+      "nameEn": "Azure",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#29b7cb",
+      "pinyin": "weilan"
+    },
+    {
+      "id": "kongquelan",
+      "nameZh": "孔雀蓝",
+      "nameEn": "Peacock Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#0eb0c9",
+      "pinyin": "kongquelan"
+    },
+    {
+      "id": "dianzilan",
+      "nameZh": "甸子蓝",
+      "nameEn": "Pasture Seed Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#10aec2",
+      "pinyin": "dianzilan"
+    },
+    {
+      "id": "shilv",
+      "nameZh": "石绿",
+      "nameEn": "Malachite",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#57c3c2",
+      "pinyin": "shilv"
+    },
+    {
+      "id": "zhuhuanglv",
+      "nameZh": "竹篁绿",
+      "nameEn": "Bamboo Grove Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#b9dec9",
+      "pinyin": "zhuhuanglv"
+    },
+    {
+      "id": "fenlv",
+      "nameZh": "粉绿",
+      "nameEn": "Pink Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#83cbac",
+      "pinyin": "fenlv"
+    },
+    {
+      "id": "meidielv",
+      "nameZh": "美蝶绿",
+      "nameEn": "Butterfly Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#12aa9c",
+      "pinyin": "meidielv"
+    },
+    {
+      "id": "maolv",
+      "nameZh": "毛绿",
+      "nameEn": "Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#66c18c",
+      "pinyin": "maolv"
+    },
+    {
+      "id": "koushaolv",
+      "nameZh": "蔻梢绿",
+      "nameEn": "Cardamom Tip Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#5dbe8a",
+      "pinyin": "koushaolv"
+    },
+    {
+      "id": "maimiaolv",
+      "nameZh": "麦苗绿",
+      "nameEn": "Wheat Seedling Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#55bb8a",
+      "pinyin": "maimiaolv"
+    },
+    {
+      "id": "walv",
+      "nameZh": "蛙绿",
+      "nameEn": "Frog Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#45b787",
+      "pinyin": "walv"
+    },
+    {
+      "id": "tonglv",
+      "nameZh": "铜绿",
+      "nameEn": "Verdigris",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#2bae85",
+      "pinyin": "tonglv"
+    },
+    {
+      "id": "zhulv",
+      "nameZh": "竹绿",
+      "nameEn": "Bamboo Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#1ba784",
+      "pinyin": "zhulv"
+    },
+    {
+      "id": "lanlv",
+      "nameZh": "蓝绿",
+      "nameEn": "Blue Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#12a182",
+      "pinyin": "lanlv"
+    },
+    {
+      "id": "qionghui",
+      "nameZh": "穹灰",
+      "nameEn": "Vault Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#c4d7d6",
+      "pinyin": "qionghui"
+    },
+    {
+      "id": "cuilan",
+      "nameZh": "翠蓝",
+      "nameEn": "Blue",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#1e9eb3",
+      "pinyin": "cuilan"
+    },
+    {
+      "id": "danfanlan",
+      "nameZh": "胆矾蓝",
+      "nameEn": "Gall Blue",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#0f95b0",
+      "pinyin": "danfanlan"
+    },
+    {
+      "id": "jianniaolan",
+      "nameZh": "樫鸟蓝",
+      "nameEn": "Oak Bird Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#1491a8",
+      "pinyin": "jianniaolan"
+    },
+    {
+      "id": "shanlan",
+      "nameZh": "闪蓝",
+      "nameEn": "Flash Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#7cabb1",
+      "pinyin": "shanlan"
+    },
+    {
+      "id": "bingshanlan",
+      "nameZh": "冰山蓝",
+      "nameEn": "Ice Mountain Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#a4aca7",
+      "pinyin": "bingshanlan"
+    },
+    {
+      "id": "xiakeqing",
+      "nameZh": "虾壳青",
+      "nameEn": "Shrimp Shell Cyan",
+      "group": "cyan",
+      "emoji": "🩵",
+      "color": "#869d9d",
+      "pinyin": "xiakeqing"
+    },
+    {
+      "id": "wanbolan",
+      "nameZh": "晚波蓝",
+      "nameEn": "Evening Wave Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#648e93",
+      "pinyin": "wanbolan"
+    },
+    {
+      "id": "qingtinglan",
+      "nameZh": "蜻蜓蓝",
+      "nameEn": "Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#3b818c",
+      "pinyin": "qingtinglan"
+    },
+    {
+      "id": "yuqinlan",
+      "nameZh": "玉鈫蓝",
+      "nameEn": "Jade Metal Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#126e82",
+      "pinyin": "yuqinlan"
+    },
+    {
+      "id": "ehui",
+      "nameZh": "垩灰",
+      "nameEn": "Chalk Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#737c7b",
+      "pinyin": "ehui"
+    },
+    {
+      "id": "xiayunhui",
+      "nameZh": "夏云灰",
+      "nameEn": "Summer Cloud Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#617172",
+      "pinyin": "xiayunhui"
+    },
+    {
+      "id": "canglan",
+      "nameZh": "苍蓝",
+      "nameEn": "Ashen Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#134857",
+      "pinyin": "canglan"
+    },
+    {
+      "id": "huanghunhui",
+      "nameZh": "黄昏灰",
+      "nameEn": "Yellow Dusk Gray",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#474b4c",
+      "pinyin": "huanghunhui"
+    },
+    {
+      "id": "huilan",
+      "nameZh": "灰蓝",
+      "nameEn": "Gray Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#21373d",
+      "pinyin": "huilan"
+    },
+    {
+      "id": "shenhuilan",
+      "nameZh": "深灰蓝",
+      "nameEn": "Deep Gray Blue",
+      "group": "blue",
+      "emoji": "🔵",
+      "color": "#132c33",
+      "pinyin": "shenhuilan"
+    },
+    {
+      "id": "yuzanlv",
+      "nameZh": "玉簪绿",
+      "nameEn": "Jade Hairpin Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#a4cab6",
+      "pinyin": "yuzanlv"
+    },
+    {
+      "id": "qingfanlv",
+      "nameZh": "青矾绿",
+      "nameEn": "Vitriol Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#2c9678",
+      "pinyin": "qingfanlv"
+    },
+    {
+      "id": "caoyuanyuanlv",
+      "nameZh": "草原远绿",
+      "nameEn": "Grass Original Distant Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#9abeaf",
+      "pinyin": "caoyuanyuanlv"
+    },
+    {
+      "id": "wuzhilv",
+      "nameZh": "梧枝绿",
+      "nameEn": "Parasol Tree Branch Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#69a794",
+      "pinyin": "wuzhilv"
+    },
+    {
+      "id": "langhualv",
+      "nameZh": "浪花绿",
+      "nameEn": "Spray Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#92b3a5",
+      "pinyin": "langhualv"
+    },
+    {
+      "id": "haiwanglv",
+      "nameZh": "海王绿",
+      "nameEn": "Sea King Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#248067",
+      "pinyin": "haiwanglv"
+    },
+    {
+      "id": "yadinglv",
+      "nameZh": "亚丁绿",
+      "nameEn": "Aden Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#428675",
+      "pinyin": "yadinglv"
+    },
+    {
+      "id": "niehui",
+      "nameZh": "镍灰",
+      "nameEn": "Nickel Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#9fa39a",
+      "pinyin": "niehui"
+    },
+    {
+      "id": "minghui",
+      "nameZh": "明灰",
+      "nameEn": "Ming Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#8a988e",
+      "pinyin": "minghui"
+    },
+    {
+      "id": "danlvhui",
+      "nameZh": "淡绿灰",
+      "nameEn": "Pale Green Gray",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#70887d",
+      "pinyin": "danlvhui"
+    },
+    {
+      "id": "feiquanlv",
+      "nameZh": "飞泉绿",
+      "nameEn": "Flying Spring Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#497568",
+      "pinyin": "feiquanlv"
+    },
+    {
+      "id": "langyanhui",
+      "nameZh": "狼烟灰",
+      "nameEn": "Wolf Soot Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#5d655f",
+      "pinyin": "langyanhui"
+    },
+    {
+      "id": "lvhui",
+      "nameZh": "绿灰",
+      "nameEn": "Green Gray",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#314a43",
+      "pinyin": "lvhui"
+    },
+    {
+      "id": "canglv",
+      "nameZh": "苍绿",
+      "nameEn": "Ashen Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#223e36",
+      "pinyin": "canglv"
+    },
+    {
+      "id": "shenhailv",
+      "nameZh": "深海绿",
+      "nameEn": "Deep Sea Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#1a3b32",
+      "pinyin": "shenhailv"
+    },
+    {
+      "id": "changshihui",
+      "nameZh": "长石灰",
+      "nameEn": "Feldspar Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#363433",
+      "pinyin": "changshihui"
+    },
+    {
+      "id": "ganlanlv_2",
+      "nameZh": "苷蓝绿",
+      "nameEn": "Glycoside Blue Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#1f2623",
+      "pinyin": "ganlanlv"
+    },
+    {
+      "id": "mangconglv",
+      "nameZh": "莽丛绿",
+      "nameEn": "Bold Grove Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#141e1b",
+      "pinyin": "mangconglv"
+    },
+    {
+      "id": "dancuilv",
+      "nameZh": "淡翠绿",
+      "nameEn": "Pale Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#c6dfc8",
+      "pinyin": "dancuilv"
+    },
+    {
+      "id": "minglv",
+      "nameZh": "明绿",
+      "nameEn": "Ming Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#9eccab",
+      "pinyin": "minglv"
+    },
+    {
+      "id": "tianyuanlv",
+      "nameZh": "田园绿",
+      "nameEn": "Pastoral Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#68b88e",
+      "pinyin": "tianyuanlv"
+    },
+    {
+      "id": "cuilv",
+      "nameZh": "翠绿",
+      "nameEn": "Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#20a162",
+      "pinyin": "cuilv"
+    },
+    {
+      "id": "danlv",
+      "nameZh": "淡绿",
+      "nameEn": "Pale Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#61ac85",
+      "pinyin": "danlv"
+    },
+    {
+      "id": "conglv",
+      "nameZh": "葱绿",
+      "nameEn": "Scallion Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#40a070",
+      "pinyin": "conglv"
+    },
+    {
+      "id": "kongquelv",
+      "nameZh": "孔雀绿",
+      "nameEn": "Peacock Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#229453",
+      "pinyin": "kongquelv"
+    },
+    {
+      "id": "ailv",
+      "nameZh": "艾绿",
+      "nameEn": "Mugwort Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#cad3c3",
+      "pinyin": "ailv"
+    },
+    {
+      "id": "chanlv",
+      "nameZh": "蟾绿",
+      "nameEn": "Toad Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#3c9566",
+      "pinyin": "chanlv"
+    },
+    {
+      "id": "gongdianlv",
+      "nameZh": "宫殿绿",
+      "nameEn": "Palace Hall Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#20894d",
+      "pinyin": "gongdianlv"
+    },
+    {
+      "id": "songshuanglv",
+      "nameZh": "松霜绿",
+      "nameEn": "Pine Frost Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#83a78d",
+      "pinyin": "songshuanglv"
+    },
+    {
+      "id": "danbaishilv",
+      "nameZh": "蛋白石绿",
+      "nameEn": "White Malachite",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#579572",
+      "pinyin": "danbaishilv"
+    },
+    {
+      "id": "bohelv",
+      "nameZh": "薄荷绿",
+      "nameEn": "Thin Lotus Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#207f4c",
+      "pinyin": "bohelv"
+    },
+    {
+      "id": "wasonglv",
+      "nameZh": "瓦松绿",
+      "nameEn": "Roof Moss Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#6e8b74",
+      "pinyin": "wasonglv"
+    },
+    {
+      "id": "heyelv",
+      "nameZh": "荷叶绿",
+      "nameEn": "Lotus Leaf Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#1a6840",
+      "pinyin": "heyelv"
+    },
+    {
+      "id": "tianluolv",
+      "nameZh": "田螺绿",
+      "nameEn": "Field Snail Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#5e665b",
+      "pinyin": "tianluolv"
+    },
+    {
+      "id": "baiqucailv",
+      "nameZh": "白屈菜绿",
+      "nameEn": "White Bent Vegetable Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#485b4d",
+      "pinyin": "baiqucailv"
+    },
+    {
+      "id": "hetunhui",
+      "nameZh": "河豚灰",
+      "nameEn": "River Piglet Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#393733",
+      "pinyin": "hetunhui"
+    },
+    {
+      "id": "enyoulv",
+      "nameZh": "蒽油绿",
+      "nameEn": "Anthracene Oily Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#373834",
+      "pinyin": "enyoulv"
+    },
+    {
+      "id": "hujishenglv",
+      "nameZh": "槲寄生绿",
+      "nameEn": "Oak Parasite Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#2b312c",
+      "pinyin": "hujishenglv"
+    },
+    {
+      "id": "yunshanlv",
+      "nameZh": "云杉绿",
+      "nameEn": "Cloud Fir Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#15231b",
+      "pinyin": "yunshanlv"
+    },
+    {
+      "id": "nenjulv",
+      "nameZh": "嫩菊绿",
+      "nameEn": "Tender Chrysanthemum Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#f0f5e5",
+      "pinyin": "nenjulv"
+    },
+    {
+      "id": "aibeilv",
+      "nameZh": "艾背绿",
+      "nameEn": "Mugwort Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#dfecd5",
+      "pinyin": "aibeilv"
+    },
+    {
+      "id": "jialingshuilv",
+      "nameZh": "嘉陵水绿",
+      "nameEn": "Jialing Water Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#add5a2",
+      "pinyin": "jialingshuilv"
+    },
+    {
+      "id": "yusuilv",
+      "nameZh": "玉髓绿",
+      "nameEn": "Jade Marrow Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#41b349",
+      "pinyin": "yusuilv"
+    },
+    {
+      "id": "xianlv",
+      "nameZh": "鲜绿",
+      "nameEn": "Fresh Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#43b244",
+      "pinyin": "xianlv"
+    },
+    {
+      "id": "baoshilv",
+      "nameZh": "宝石绿",
+      "nameEn": "Precious Malachite",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#41ae3c",
+      "pinyin": "baoshilv"
+    },
+    {
+      "id": "haimolyu",
+      "nameZh": "海沫绿",
+      "nameEn": "Sea Foam Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#e2e7bf",
+      "pinyin": "haimolyu"
+    },
+    {
+      "id": "yaohuang",
+      "nameZh": "姚黄",
+      "nameEn": "Yao Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#d0deaa",
+      "pinyin": "yaohuang"
+    },
+    {
+      "id": "ganlanshilv",
+      "nameZh": "橄榄石绿",
+      "nameEn": "Olive Malachite",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#b2cf87",
+      "pinyin": "ganlanshilv"
+    },
+    {
+      "id": "shuilv",
+      "nameZh": "水绿",
+      "nameEn": "Water Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#8cc269",
+      "pinyin": "shuilv"
+    },
+    {
+      "id": "luweilv",
+      "nameZh": "芦苇绿",
+      "nameEn": "Reed Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#b7d07a",
+      "pinyin": "luweilv"
+    },
+    {
+      "id": "huaihuahuanglv",
+      "nameZh": "槐花黄绿",
+      "nameEn": "Pagoda Tree Flower Yellow Green",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#d2d97a",
+      "pinyin": "huaihuahuanglv"
+    },
+    {
+      "id": "pingguolv",
+      "nameZh": "苹果绿",
+      "nameEn": "Apple Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#bacf65",
+      "pinyin": "pingguolv"
+    },
+    {
+      "id": "yalv",
+      "nameZh": "芽绿",
+      "nameEn": "Sprout Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#96c24e",
+      "pinyin": "yalv"
+    },
+    {
+      "id": "diehuang",
+      "nameZh": "蝶黄",
+      "nameEn": "Butterfly Yellow",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#e2d849",
+      "pinyin": "diehuang"
+    },
+    {
+      "id": "ganlanhuanglv",
+      "nameZh": "橄榄黄绿",
+      "nameEn": "Olive Yellow Green",
+      "group": "yellow",
+      "emoji": "🟡",
+      "color": "#bec936",
+      "pinyin": "ganlanhuanglv"
+    },
+    {
+      "id": "yingwulv",
+      "nameZh": "鹦鹉绿",
+      "nameEn": "Parrot Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#5bae23",
+      "pinyin": "yingwulv"
+    },
+    {
+      "id": "youlv",
+      "nameZh": "油绿",
+      "nameEn": "Oily Green",
+      "group": "green",
+      "emoji": "🟢",
+      "color": "#253d24",
+      "pinyin": "youlv"
+    },
+    {
+      "id": "xiangyabai",
+      "nameZh": "象牙白",
+      "nameEn": "Ivory",
+      "group": "white",
+      "emoji": "⚪",
+      "color": "#fffef8",
+      "pinyin": "xiangyabai"
+    },
+    {
+      "id": "hanbaiyu",
+      "nameZh": "汉白玉",
+      "nameEn": "Han White Jade",
+      "group": "white",
+      "emoji": "⚪",
+      "color": "#f8f4ed",
+      "pinyin": "hanbaiyu"
+    },
+    {
+      "id": "xuebai",
+      "nameZh": "雪白",
+      "nameEn": "Snow White",
+      "group": "white",
+      "emoji": "⚪",
+      "color": "#fffef9",
+      "pinyin": "xuebai"
+    },
+    {
+      "id": "yudubai",
+      "nameZh": "鱼肚白",
+      "nameEn": "Fish Belly White",
+      "group": "white",
+      "emoji": "⚪",
+      "color": "#f7f4ed",
+      "pinyin": "yudubai"
+    },
+    {
+      "id": "zhenzhuhui",
+      "nameZh": "珍珠灰",
+      "nameEn": "Pearl Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#e4dfd7",
+      "pinyin": "zhenzhuhui"
+    },
+    {
+      "id": "qianhui",
+      "nameZh": "浅灰",
+      "nameEn": "Light Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#dad4cb",
+      "pinyin": "qianhui"
+    },
+    {
+      "id": "qianhui_2",
+      "nameZh": "铅灰",
+      "nameEn": "Lead Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#bbb5ac",
+      "pinyin": "qianhui"
+    },
+    {
+      "id": "zhonghui",
+      "nameZh": "中灰",
+      "nameEn": "Medium Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#a49c93",
+      "pinyin": "zhonghui"
+    },
+    {
+      "id": "wahui",
+      "nameZh": "瓦灰",
+      "nameEn": "Tile Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#867e76",
+      "pinyin": "wahui"
+    },
+    {
+      "id": "yehui",
+      "nameZh": "夜灰",
+      "nameEn": "Night Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#847c74",
+      "pinyin": "yehui"
+    },
+    {
+      "id": "yanhui",
+      "nameZh": "雁灰",
+      "nameEn": "Wild Goose Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#80766e",
+      "pinyin": "yanhui"
+    },
+    {
+      "id": "shenhui",
+      "nameZh": "深灰",
+      "nameEn": "Deep Gray",
+      "group": "gray",
+      "emoji": "🩶",
+      "color": "#81776e",
+      "pinyin": "shenhui"
     }
   ]
 }
