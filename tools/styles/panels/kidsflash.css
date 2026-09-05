@@ -751,9 +751,14 @@ body.kidsflash-fs-active {
   background:
     radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, var(--accent, #5b8cff) 16%, transparent), transparent 55%),
     var(--bg, #0b0d12);
-  padding: 0.65rem 0.85rem calc(0.9rem + env(safe-area-inset-bottom, 0px));
+  /* 左右贴边铺满，仅保留安全区；勿再加 0.85rem 侧边距 */
+  padding-top: 0.35rem;
+  padding-right: max(0.35rem, env(safe-area-inset-right, 0px));
+  padding-bottom: calc(0.55rem + env(safe-area-inset-bottom, 0px));
+  padding-left: max(0.35rem, env(safe-area-inset-left, 0px));
   display: flex;
   flex-direction: column;
+  box-sizing: border-box;
 }
 
 .kidsflash-immerse.is-fs .panel-head,
@@ -764,18 +769,50 @@ body.kidsflash-fs-active {
   background: color-mix(in srgb, var(--bg, #0b0d12) 88%, transparent);
   backdrop-filter: blur(8px);
   padding-top: max(0.35rem, env(safe-area-inset-top, 0px));
+  padding-left: 0.15rem;
+  padding-right: 0.15rem;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .kidsflash-immerse.is-fs .kidsflash-body {
   flex: 1 1 auto;
-  max-width: 36rem;
+  max-width: none;
   width: 100%;
-  margin: 0 auto;
+  margin: 0;
+  box-sizing: border-box;
+}
+
+.kidsflash-immerse.is-fs .kidsflash-card-pane,
+.kidsflash-immerse.is-fs .kidsflash-pane {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+  border-radius: 14px;
+  /* 全屏时减少左右内边距，让图文更贴边 */
+  padding-left: 0.45rem;
+  padding-right: 0.45rem;
+}
+
+.kidsflash-immerse.is-fs .kidsflash-stage {
+  width: 100%;
+  align-items: stretch;
 }
 
 .kidsflash-immerse.is-fs .kidsflash-media {
-  width: min(100%, 28rem, 58dvh, 26rem);
+  /* 竖屏：尽量吃满可用宽度；横屏受高度限制 */
+  width: 100%;
+  max-width: min(100%, 85dvh);
   min-height: 12rem;
+  margin-inline: auto;
+  border-radius: 14px;
+}
+
+.kidsflash-immerse.is-fs .kidsflash-names,
+.kidsflash-immerse.is-fs .kidsflash-nav,
+.kidsflash-immerse.is-fs .kidsflash-progress {
+  width: 100%;
+  max-width: none;
 }
 
 .kidsflash-immerse.is-fs .kidsflash-zh {
@@ -785,6 +822,12 @@ body.kidsflash-fs-active {
 .kidsflash-immerse.is-fs .kidsflash-fs-btn {
   border-color: var(--accent, #5b8cff);
   color: var(--accent, #5b8cff);
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .kidsflash-immerse.is-fs .kidsflash-media {
+    width: min(100%, 70dvh);
+  }
 }
 
 /* 色块 / 数字视觉：铺满媒体框，不留内边距空框 */
