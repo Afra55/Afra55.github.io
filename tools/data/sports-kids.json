@@ -1,0 +1,834 @@
+{
+  "version": 1,
+  "credit": "配图优先 Wikimedia Commons；缺图时 Openverse（CC）兜底。仅供学习展示。",
+  "visual": "image",
+  "groups": [
+    {
+      "id": "all",
+      "nameZh": "全部",
+      "nameEn": "All"
+    },
+    {
+      "id": "ball",
+      "nameZh": "球类",
+      "nameEn": "Ball"
+    },
+    {
+      "id": "water",
+      "nameZh": "水上",
+      "nameEn": "Water"
+    },
+    {
+      "id": "track",
+      "nameZh": "田径",
+      "nameEn": "Track"
+    },
+    {
+      "id": "other",
+      "nameZh": "其他",
+      "nameEn": "Other"
+    }
+  ],
+  "items": [
+    {
+      "id": "soccer",
+      "nameZh": "足球",
+      "nameEn": "Soccer",
+      "group": "ball",
+      "emoji": "⚽",
+      "query": "Soccer sport"
+    },
+    {
+      "id": "basketball",
+      "nameZh": "篮球",
+      "nameEn": "Basketball",
+      "group": "ball",
+      "emoji": "🏀",
+      "query": "Basketball sport"
+    },
+    {
+      "id": "volleyball",
+      "nameZh": "排球",
+      "nameEn": "Volleyball",
+      "group": "ball",
+      "emoji": "🏐",
+      "query": "Volleyball sport"
+    },
+    {
+      "id": "tennis",
+      "nameZh": "网球",
+      "nameEn": "Tennis",
+      "group": "ball",
+      "emoji": "🎾",
+      "query": "Tennis sport"
+    },
+    {
+      "id": "tabletennis",
+      "nameZh": "乒乓球",
+      "nameEn": "Table tennis",
+      "group": "ball",
+      "emoji": "🏓",
+      "query": "Table tennis sport"
+    },
+    {
+      "id": "badminton",
+      "nameZh": "羽毛球",
+      "nameEn": "Badminton",
+      "group": "ball",
+      "emoji": "🏸",
+      "query": "Badminton sport"
+    },
+    {
+      "id": "baseball",
+      "nameZh": "棒球",
+      "nameEn": "Baseball",
+      "group": "ball",
+      "emoji": "⚾",
+      "query": "Baseball sport"
+    },
+    {
+      "id": "softball",
+      "nameZh": "垒球",
+      "nameEn": "Softball",
+      "group": "ball",
+      "emoji": "🥎",
+      "query": "Softball sport"
+    },
+    {
+      "id": "golf",
+      "nameZh": "高尔夫",
+      "nameEn": "Golf",
+      "group": "ball",
+      "emoji": "⛳",
+      "query": "Golf sport"
+    },
+    {
+      "id": "rugby",
+      "nameZh": "橄榄球",
+      "nameEn": "Rugby",
+      "group": "ball",
+      "emoji": "🏉",
+      "query": "Rugby sport"
+    },
+    {
+      "id": "americanfb",
+      "nameZh": "美式足球",
+      "nameEn": "American football",
+      "group": "ball",
+      "emoji": "🏈",
+      "query": "American football sport"
+    },
+    {
+      "id": "hockey",
+      "nameZh": "冰球",
+      "nameEn": "Ice hockey",
+      "group": "ball",
+      "emoji": "🏒",
+      "query": "Ice hockey sport"
+    },
+    {
+      "id": "fieldhockey",
+      "nameZh": "曲棍球",
+      "nameEn": "Field hockey",
+      "group": "ball",
+      "emoji": "🏑",
+      "query": "Field hockey sport"
+    },
+    {
+      "id": "cricket",
+      "nameZh": "板球",
+      "nameEn": "Cricket",
+      "group": "ball",
+      "emoji": "🏏",
+      "query": "Cricket sport"
+    },
+    {
+      "id": "bowling",
+      "nameZh": "保龄球",
+      "nameEn": "Bowling",
+      "group": "ball",
+      "emoji": "🎳",
+      "query": "Bowling sport"
+    },
+    {
+      "id": "billiards",
+      "nameZh": "台球",
+      "nameEn": "Billiards",
+      "group": "ball",
+      "emoji": "🎱",
+      "query": "Billiards sport"
+    },
+    {
+      "id": "swimming",
+      "nameZh": "游泳",
+      "nameEn": "Swimming",
+      "group": "water",
+      "emoji": "🏊",
+      "query": "Swimming sport"
+    },
+    {
+      "id": "diving",
+      "nameZh": "跳水",
+      "nameEn": "Diving",
+      "group": "water",
+      "emoji": "🤿",
+      "query": "Diving sport"
+    },
+    {
+      "id": "surfing",
+      "nameZh": "冲浪",
+      "nameEn": "Surfing",
+      "group": "water",
+      "emoji": "🏄",
+      "query": "Surfing sport"
+    },
+    {
+      "id": "rowing",
+      "nameZh": "赛艇",
+      "nameEn": "Rowing",
+      "group": "water",
+      "emoji": "🚣",
+      "query": "Rowing sport"
+    },
+    {
+      "id": "canoe",
+      "nameZh": "皮划艇",
+      "nameEn": "Canoeing",
+      "group": "water",
+      "emoji": "🛶",
+      "query": "Canoeing sport"
+    },
+    {
+      "id": "sailing",
+      "nameZh": "帆船",
+      "nameEn": "Sailing",
+      "group": "water",
+      "emoji": "⛵",
+      "query": "Sailing sport"
+    },
+    {
+      "id": "waterpolo",
+      "nameZh": "水球",
+      "nameEn": "Water polo",
+      "group": "water",
+      "emoji": "🤽",
+      "query": "Water polo sport"
+    },
+    {
+      "id": "snorkeling",
+      "nameZh": "浮潜",
+      "nameEn": "Snorkeling",
+      "group": "water",
+      "emoji": "🤿",
+      "query": "Snorkeling sport"
+    },
+    {
+      "id": "running",
+      "nameZh": "跑步",
+      "nameEn": "Running",
+      "group": "track",
+      "emoji": "🏃",
+      "query": "Running sport"
+    },
+    {
+      "id": "sprint",
+      "nameZh": "短跑",
+      "nameEn": "Sprint",
+      "group": "track",
+      "emoji": "🏃",
+      "query": "Sprint sport"
+    },
+    {
+      "id": "marathon",
+      "nameZh": "马拉松",
+      "nameEn": "Marathon",
+      "group": "track",
+      "emoji": "🏅",
+      "query": "Marathon sport"
+    },
+    {
+      "id": "hurdles",
+      "nameZh": "跨栏",
+      "nameEn": "Hurdles",
+      "group": "track",
+      "emoji": "🏃",
+      "query": "Hurdles sport"
+    },
+    {
+      "id": "longjump",
+      "nameZh": "跳远",
+      "nameEn": "Long jump",
+      "group": "track",
+      "emoji": "🦘",
+      "query": "Long jump sport"
+    },
+    {
+      "id": "highjump",
+      "nameZh": "跳高",
+      "nameEn": "High jump",
+      "group": "track",
+      "emoji": "⬆️",
+      "query": "High jump sport"
+    },
+    {
+      "id": "polevault",
+      "nameZh": "撑杆跳",
+      "nameEn": "Pole vault",
+      "group": "track",
+      "emoji": "🏃",
+      "query": "Pole vault sport"
+    },
+    {
+      "id": "shotput",
+      "nameZh": "铅球",
+      "nameEn": "Shot put",
+      "group": "track",
+      "emoji": "🪨",
+      "query": "Shot put sport"
+    },
+    {
+      "id": "discus",
+      "nameZh": "铁饼",
+      "nameEn": "Discus",
+      "group": "track",
+      "emoji": "🥏",
+      "query": "Discus sport"
+    },
+    {
+      "id": "javelin",
+      "nameZh": "标枪",
+      "nameEn": "Javelin",
+      "group": "track",
+      "emoji": "🗡️",
+      "query": "Javelin sport"
+    },
+    {
+      "id": "relay",
+      "nameZh": "接力",
+      "nameEn": "Relay",
+      "group": "track",
+      "emoji": "🏃",
+      "query": "Relay sport"
+    },
+    {
+      "id": "walkrace",
+      "nameZh": "竞走",
+      "nameEn": "Race walking",
+      "group": "track",
+      "emoji": "🚶",
+      "query": "Race walking sport"
+    },
+    {
+      "id": "cycling",
+      "nameZh": "骑行",
+      "nameEn": "Cycling",
+      "group": "other",
+      "emoji": "🚴",
+      "query": "Cycling sport"
+    },
+    {
+      "id": "mountainbike",
+      "nameZh": "山地车",
+      "nameEn": "Mountain biking",
+      "group": "other",
+      "emoji": "🚵",
+      "query": "Mountain biking sport"
+    },
+    {
+      "id": "skateboard",
+      "nameZh": "滑板",
+      "nameEn": "Skateboarding",
+      "group": "other",
+      "emoji": "🛹",
+      "query": "Skateboarding sport"
+    },
+    {
+      "id": "roller",
+      "nameZh": "轮滑",
+      "nameEn": "Roller skating",
+      "group": "other",
+      "emoji": "🛼",
+      "query": "Roller skating sport"
+    },
+    {
+      "id": "ice_skate",
+      "nameZh": "滑冰",
+      "nameEn": "Ice skating",
+      "group": "other",
+      "emoji": "⛸️",
+      "query": "Ice skating sport"
+    },
+    {
+      "id": "skiing",
+      "nameZh": "滑雪",
+      "nameEn": "Skiing",
+      "group": "other",
+      "emoji": "⛷️",
+      "query": "Skiing sport"
+    },
+    {
+      "id": "snowboard",
+      "nameZh": "单板滑雪",
+      "nameEn": "Snowboarding",
+      "group": "other",
+      "emoji": "🏂",
+      "query": "Snowboarding sport"
+    },
+    {
+      "id": "climbing",
+      "nameZh": "攀岩",
+      "nameEn": "Climbing",
+      "group": "other",
+      "emoji": "🧗",
+      "query": "Climbing sport"
+    },
+    {
+      "id": "hiking",
+      "nameZh": "徒步",
+      "nameEn": "Hiking",
+      "group": "other",
+      "emoji": "🥾",
+      "query": "Hiking sport"
+    },
+    {
+      "id": "camping",
+      "nameZh": "露营",
+      "nameEn": "Camping",
+      "group": "other",
+      "emoji": "⛺",
+      "query": "Camping sport"
+    },
+    {
+      "id": "yoga",
+      "nameZh": "瑜伽",
+      "nameEn": "Yoga",
+      "group": "other",
+      "emoji": "🧘",
+      "query": "Yoga sport"
+    },
+    {
+      "id": "gymnastics",
+      "nameZh": "体操",
+      "nameEn": "Gymnastics",
+      "group": "other",
+      "emoji": "🤸",
+      "query": "Gymnastics sport"
+    },
+    {
+      "id": "dance_s",
+      "nameZh": "舞蹈",
+      "nameEn": "Dance",
+      "group": "other",
+      "emoji": "💃",
+      "query": "Dance sport"
+    },
+    {
+      "id": "boxing",
+      "nameZh": "拳击",
+      "nameEn": "Boxing",
+      "group": "other",
+      "emoji": "🥊",
+      "query": "Boxing sport"
+    },
+    {
+      "id": "wrestling",
+      "nameZh": "摔跤",
+      "nameEn": "Wrestling",
+      "group": "other",
+      "emoji": "🤼",
+      "query": "Wrestling sport"
+    },
+    {
+      "id": "judo",
+      "nameZh": "柔道",
+      "nameEn": "Judo",
+      "group": "other",
+      "emoji": "🥋",
+      "query": "Judo sport"
+    },
+    {
+      "id": "karate",
+      "nameZh": "空手道",
+      "nameEn": "Karate",
+      "group": "other",
+      "emoji": "🥋",
+      "query": "Karate sport"
+    },
+    {
+      "id": "taekwondo",
+      "nameZh": "跆拳道",
+      "nameEn": "Taekwondo",
+      "group": "other",
+      "emoji": "🦵",
+      "query": "Taekwondo sport"
+    },
+    {
+      "id": "fencing",
+      "nameZh": "击剑",
+      "nameEn": "Fencing",
+      "group": "other",
+      "emoji": "🤺",
+      "query": "Fencing sport"
+    },
+    {
+      "id": "archery",
+      "nameZh": "射箭",
+      "nameEn": "Archery",
+      "group": "other",
+      "emoji": "🏹",
+      "query": "Archery sport"
+    },
+    {
+      "id": "shooting",
+      "nameZh": "射击",
+      "nameEn": "Shooting",
+      "group": "other",
+      "emoji": "🎯",
+      "query": "Shooting sport"
+    },
+    {
+      "id": "weightlifting",
+      "nameZh": "举重",
+      "nameEn": "Weightlifting",
+      "group": "other",
+      "emoji": "🏋️",
+      "query": "Weightlifting sport"
+    },
+    {
+      "id": "crossfit",
+      "nameZh": "体能训练",
+      "nameEn": "Workout",
+      "group": "other",
+      "emoji": "💪",
+      "query": "Workout sport"
+    },
+    {
+      "id": "stretch",
+      "nameZh": "拉伸",
+      "nameEn": "Stretching",
+      "group": "other",
+      "emoji": "🙆",
+      "query": "Stretching sport"
+    },
+    {
+      "id": "jump_rope",
+      "nameZh": "跳绳",
+      "nameEn": "Jump rope",
+      "group": "other",
+      "emoji": "🪢",
+      "query": "Jump rope sport"
+    },
+    {
+      "id": "hula",
+      "nameZh": "呼啦圈",
+      "nameEn": "Hula hoop",
+      "group": "other",
+      "emoji": "⭕",
+      "query": "Hula hoop sport"
+    },
+    {
+      "id": "frisbee",
+      "nameZh": "飞盘",
+      "nameEn": "Frisbee",
+      "group": "ball",
+      "emoji": "🥏",
+      "query": "Frisbee sport"
+    },
+    {
+      "id": "handball",
+      "nameZh": "手球",
+      "nameEn": "Handball",
+      "group": "ball",
+      "emoji": "🤾",
+      "query": "Handball sport"
+    },
+    {
+      "id": "netball",
+      "nameZh": "无挡板篮球",
+      "nameEn": "Netball",
+      "group": "ball",
+      "emoji": "🏀",
+      "query": "Netball sport"
+    },
+    {
+      "id": "lacrosse",
+      "nameZh": "长曲棍球",
+      "nameEn": "Lacrosse",
+      "group": "ball",
+      "emoji": "🥍",
+      "query": "Lacrosse sport"
+    },
+    {
+      "id": "polo",
+      "nameZh": "马球",
+      "nameEn": "Polo",
+      "group": "other",
+      "emoji": "🐴",
+      "query": "Polo sport"
+    },
+    {
+      "id": "equestrian",
+      "nameZh": "马术",
+      "nameEn": "Equestrian",
+      "group": "other",
+      "emoji": "🏇",
+      "query": "Equestrian sport"
+    },
+    {
+      "id": "triathlon",
+      "nameZh": "铁人三项",
+      "nameEn": "Triathlon",
+      "group": "track",
+      "emoji": "🏅",
+      "query": "Triathlon sport"
+    },
+    {
+      "id": "decathlon",
+      "nameZh": "十项全能",
+      "nameEn": "Decathlon",
+      "group": "track",
+      "emoji": "🏅",
+      "query": "Decathlon sport"
+    },
+    {
+      "id": "parkour",
+      "nameZh": "跑酷",
+      "nameEn": "Parkour",
+      "group": "other",
+      "emoji": "🤸",
+      "query": "Parkour sport"
+    },
+    {
+      "id": "bmx",
+      "nameZh": "小轮车",
+      "nameEn": "BMX",
+      "group": "other",
+      "emoji": "🚲",
+      "query": "BMX sport"
+    },
+    {
+      "id": "motocross",
+      "nameZh": "越野摩托",
+      "nameEn": "Motocross",
+      "group": "other",
+      "emoji": "🏍️",
+      "query": "Motocross sport"
+    },
+    {
+      "id": "karting",
+      "nameZh": "卡丁车",
+      "nameEn": "Karting",
+      "group": "other",
+      "emoji": "🏎️",
+      "query": "Karting sport"
+    },
+    {
+      "id": "esports",
+      "nameZh": "电竞",
+      "nameEn": "Esports",
+      "group": "other",
+      "emoji": "🎮",
+      "query": "Esports sport"
+    },
+    {
+      "id": "chess",
+      "nameZh": "国际象棋",
+      "nameEn": "Chess",
+      "group": "other",
+      "emoji": "♟️",
+      "query": "Chess sport"
+    },
+    {
+      "id": "go",
+      "nameZh": "围棋",
+      "nameEn": "Go",
+      "group": "other",
+      "emoji": "⚫",
+      "query": "Go sport"
+    },
+    {
+      "id": "checkers",
+      "nameZh": "跳棋",
+      "nameEn": "Checkers",
+      "group": "other",
+      "emoji": "🟥",
+      "query": "Checkers sport"
+    },
+    {
+      "id": "cards",
+      "nameZh": "扑克",
+      "nameEn": "Cards",
+      "group": "other",
+      "emoji": "🃏",
+      "query": "Cards sport"
+    },
+    {
+      "id": "darts",
+      "nameZh": "飞镖",
+      "nameEn": "Darts",
+      "group": "other",
+      "emoji": "🎯",
+      "query": "Darts sport"
+    },
+    {
+      "id": "curling",
+      "nameZh": "冰壶",
+      "nameEn": "Curling",
+      "group": "other",
+      "emoji": "🥌",
+      "query": "Curling sport"
+    },
+    {
+      "id": "bobsled",
+      "nameZh": "雪车",
+      "nameEn": "Bobsled",
+      "group": "other",
+      "emoji": "🛷",
+      "query": "Bobsled sport"
+    },
+    {
+      "id": "luge",
+      "nameZh": "无舵雪橇",
+      "nameEn": "Luge",
+      "group": "other",
+      "emoji": "🛷",
+      "query": "Luge sport"
+    },
+    {
+      "id": "biathlon",
+      "nameZh": "冬季两项",
+      "nameEn": "Biathlon",
+      "group": "other",
+      "emoji": "🎿",
+      "query": "Biathlon sport"
+    },
+    {
+      "id": "synchronized",
+      "nameZh": "花样游泳",
+      "nameEn": "Artistic swimming",
+      "group": "water",
+      "emoji": "🏊",
+      "query": "Artistic swimming sport"
+    },
+    {
+      "id": "openwater",
+      "nameZh": "公开水域游泳",
+      "nameEn": "Open water swim",
+      "group": "water",
+      "emoji": "🌊",
+      "query": "Open water swim sport"
+    },
+    {
+      "id": "kayak",
+      "nameZh": "皮艇",
+      "nameEn": "Kayak",
+      "group": "water",
+      "emoji": "🛶",
+      "query": "Kayak sport"
+    },
+    {
+      "id": "rafting",
+      "nameZh": "漂流",
+      "nameEn": "Rafting",
+      "group": "water",
+      "emoji": "🚣",
+      "query": "Rafting sport"
+    },
+    {
+      "id": "wakeboard",
+      "nameZh": "尾波滑水",
+      "nameEn": "Wakeboarding",
+      "group": "water",
+      "emoji": "🏄",
+      "query": "Wakeboarding sport"
+    },
+    {
+      "id": "kitesurf",
+      "nameZh": "风筝冲浪",
+      "nameEn": "Kitesurfing",
+      "group": "water",
+      "emoji": "🪁",
+      "query": "Kitesurfing sport"
+    },
+    {
+      "id": "windsurf",
+      "nameZh": "帆板",
+      "nameEn": "Windsurfing",
+      "group": "water",
+      "emoji": "🏄",
+      "query": "Windsurfing sport"
+    },
+    {
+      "id": "soccer_extra_91",
+      "nameZh": "足球·",
+      "nameEn": "Soccer Alt",
+      "group": "ball",
+      "emoji": "⚽",
+      "query": "Soccer sport"
+    },
+    {
+      "id": "soccer_extra_92",
+      "nameZh": "足球·",
+      "nameEn": "Soccer Alt",
+      "group": "ball",
+      "emoji": "⚽",
+      "query": "Soccer sport"
+    },
+    {
+      "id": "soccer_extra_93",
+      "nameZh": "足球·",
+      "nameEn": "Soccer Alt",
+      "group": "ball",
+      "emoji": "⚽",
+      "query": "Soccer sport"
+    },
+    {
+      "id": "soccer_extra_94",
+      "nameZh": "足球·",
+      "nameEn": "Soccer Alt",
+      "group": "ball",
+      "emoji": "⚽",
+      "query": "Soccer sport"
+    },
+    {
+      "id": "soccer_extra_95",
+      "nameZh": "足球·",
+      "nameEn": "Soccer Alt",
+      "group": "ball",
+      "emoji": "⚽",
+      "query": "Soccer sport"
+    },
+    {
+      "id": "soccer_extra_96",
+      "nameZh": "足球·",
+      "nameEn": "Soccer Alt",
+      "group": "ball",
+      "emoji": "⚽",
+      "query": "Soccer sport"
+    },
+    {
+      "id": "soccer_extra_97",
+      "nameZh": "足球·",
+      "nameEn": "Soccer Alt",
+      "group": "ball",
+      "emoji": "⚽",
+      "query": "Soccer sport"
+    },
+    {
+      "id": "soccer_extra_98",
+      "nameZh": "足球·",
+      "nameEn": "Soccer Alt",
+      "group": "ball",
+      "emoji": "⚽",
+      "query": "Soccer sport"
+    },
+    {
+      "id": "soccer_extra_99",
+      "nameZh": "足球·",
+      "nameEn": "Soccer Alt",
+      "group": "ball",
+      "emoji": "⚽",
+      "query": "Soccer sport"
+    }
+  ]
+}

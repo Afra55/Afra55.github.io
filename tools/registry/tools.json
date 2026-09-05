@@ -141,7 +141,15 @@
         "numearn",
         "shapeearn",
         "vehicleearn",
-        "fruitearn"
+        "fruitearn",
+        "vegearn",
+        "bodyearn",
+        "weatherearn",
+        "jobearn",
+        "thingearn",
+        "foodearn",
+        "sportsearn",
+        "homeearn"
       ]
     },
     {
@@ -998,6 +1006,102 @@
         "fruitearn",
         "闪卡"
       ]
+    },
+    "vegearn": {
+      "name": "认蔬菜",
+      "aliases": [
+        "认蔬菜",
+        "vegearn",
+        "蔬菜",
+        "认蔬菜",
+        "vegetable",
+        "veggies",
+        "闪卡"
+      ]
+    },
+    "bodyearn": {
+      "name": "认身体",
+      "aliases": [
+        "认身体",
+        "bodyearn",
+        "身体",
+        "认身体",
+        "body",
+        "人体",
+        "闪卡"
+      ]
+    },
+    "weatherearn": {
+      "name": "认天气",
+      "aliases": [
+        "认天气",
+        "weatherearn",
+        "天气",
+        "认天气",
+        "weather",
+        "闪卡"
+      ]
+    },
+    "jobearn": {
+      "name": "认职业",
+      "aliases": [
+        "认职业",
+        "jobearn",
+        "职业",
+        "认职业",
+        "job",
+        "jobs",
+        "career",
+        "闪卡"
+      ]
+    },
+    "thingearn": {
+      "name": "认用品",
+      "aliases": [
+        "认用品",
+        "thingearn",
+        "用品",
+        "认用品",
+        "things",
+        "日常用品",
+        "闪卡"
+      ]
+    },
+    "foodearn": {
+      "name": "认食物",
+      "aliases": [
+        "认食物",
+        "foodearn",
+        "食物",
+        "认食物",
+        "food",
+        "foods",
+        "闪卡"
+      ]
+    },
+    "sportsearn": {
+      "name": "认运动",
+      "aliases": [
+        "认运动",
+        "sportsearn",
+        "运动",
+        "认运动",
+        "sport",
+        "sports",
+        "闪卡"
+      ]
+    },
+    "homeearn": {
+      "name": "认家具",
+      "aliases": [
+        "认家具",
+        "homeearn",
+        "家具",
+        "认家具",
+        "home",
+        "furniture",
+        "闪卡"
+      ]
     }
   },
   "about": {
@@ -1083,6 +1187,14 @@
     "sitenav": "外链导航：Everything、MySpeed、PDFCraft、图吧工具箱、昆虫世界、史前博物馆、Slidev、I Have ADHD 等站外服务；本站已有工具不重复列出。",
     "shapeearn": "幼儿认形状：本地几何闪卡，点读中英名；含看形选名、听名选形。纯本地绘制，无需外网图片。",
     "vehicleearn": "幼儿认交通：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",
-    "fruitearn": "幼儿认水果：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。"
+    "fruitearn": "幼儿认水果：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",
+    "vegearn": "幼儿认蔬菜：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",
+    "bodyearn": "幼儿认身体：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",
+    "weatherearn": "幼儿认天气：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",
+    "jobearn": "幼儿认职业：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",
+    "thingearn": "幼儿认用品：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",
+    "foodearn": "幼儿认食物：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",
+    "sportsearn": "幼儿认运动：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",
+    "homeearn": "幼儿认家具：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。"
   }
 }

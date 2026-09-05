@@ -1,0 +1,834 @@
+{
+  "version": 1,
+  "credit": "配图优先 Wikimedia Commons；缺图时 Openverse（CC）兜底。仅供学习展示。",
+  "visual": "image",
+  "groups": [
+    {
+      "id": "all",
+      "nameZh": "全部",
+      "nameEn": "All"
+    },
+    {
+      "id": "staple",
+      "nameZh": "主食",
+      "nameEn": "Staple"
+    },
+    {
+      "id": "dish",
+      "nameZh": "菜肴",
+      "nameEn": "Dish"
+    },
+    {
+      "id": "snack",
+      "nameZh": "小吃",
+      "nameEn": "Snack"
+    },
+    {
+      "id": "drink",
+      "nameZh": "饮品",
+      "nameEn": "Drink"
+    }
+  ],
+  "items": [
+    {
+      "id": "rice",
+      "nameZh": "米饭",
+      "nameEn": "Rice",
+      "group": "staple",
+      "emoji": "🍚",
+      "query": "Rice food"
+    },
+    {
+      "id": "noodles",
+      "nameZh": "面条",
+      "nameEn": "Noodles",
+      "group": "staple",
+      "emoji": "🍜",
+      "query": "Noodles food"
+    },
+    {
+      "id": "bread",
+      "nameZh": "面包",
+      "nameEn": "Bread",
+      "group": "staple",
+      "emoji": "🍞",
+      "query": "Bread food"
+    },
+    {
+      "id": "mantou",
+      "nameZh": "馒头",
+      "nameEn": "Steamed bun",
+      "group": "staple",
+      "emoji": "🥟",
+      "query": "Steamed bun food"
+    },
+    {
+      "id": "dumpling",
+      "nameZh": "饺子",
+      "nameEn": "Dumpling",
+      "group": "staple",
+      "emoji": "🥟",
+      "query": "Dumpling food"
+    },
+    {
+      "id": "bao",
+      "nameZh": "包子",
+      "nameEn": "Bao",
+      "group": "staple",
+      "emoji": "🥟",
+      "query": "Bao food"
+    },
+    {
+      "id": "wonton",
+      "nameZh": "馄饨",
+      "nameEn": "Wonton",
+      "group": "staple",
+      "emoji": "🥟",
+      "query": "Wonton food"
+    },
+    {
+      "id": "congee",
+      "nameZh": "粥",
+      "nameEn": "Congee",
+      "group": "staple",
+      "emoji": "🥣",
+      "query": "Congee food"
+    },
+    {
+      "id": "porridge",
+      "nameZh": "麦片粥",
+      "nameEn": "Porridge",
+      "group": "staple",
+      "emoji": "🥣",
+      "query": "Porridge food"
+    },
+    {
+      "id": "pasta",
+      "nameZh": "意大利面",
+      "nameEn": "Pasta",
+      "group": "staple",
+      "emoji": "🍝",
+      "query": "Pasta food"
+    },
+    {
+      "id": "pizza",
+      "nameZh": "披萨",
+      "nameEn": "Pizza",
+      "group": "staple",
+      "emoji": "🍕",
+      "query": "Pizza food"
+    },
+    {
+      "id": "burger",
+      "nameZh": "汉堡",
+      "nameEn": "Burger",
+      "group": "staple",
+      "emoji": "🍔",
+      "query": "Burger food"
+    },
+    {
+      "id": "sandwich",
+      "nameZh": "三明治",
+      "nameEn": "Sandwich",
+      "group": "staple",
+      "emoji": "🥪",
+      "query": "Sandwich food"
+    },
+    {
+      "id": "hotdog",
+      "nameZh": "热狗",
+      "nameEn": "Hot dog",
+      "group": "staple",
+      "emoji": "🌭",
+      "query": "Hot dog food"
+    },
+    {
+      "id": "taco",
+      "nameZh": "墨西哥卷",
+      "nameEn": "Taco",
+      "group": "staple",
+      "emoji": "🌮",
+      "query": "Taco food"
+    },
+    {
+      "id": "burrito",
+      "nameZh": "墨西哥卷饼",
+      "nameEn": "Burrito",
+      "group": "staple",
+      "emoji": "🌯",
+      "query": "Burrito food"
+    },
+    {
+      "id": "sushi",
+      "nameZh": "寿司",
+      "nameEn": "Sushi",
+      "group": "staple",
+      "emoji": "🍣",
+      "query": "Sushi food"
+    },
+    {
+      "id": "onigiri",
+      "nameZh": "饭团",
+      "nameEn": "Rice ball",
+      "group": "staple",
+      "emoji": "🍙",
+      "query": "Rice ball food"
+    },
+    {
+      "id": "friedrice",
+      "nameZh": "炒饭",
+      "nameEn": "Fried rice",
+      "group": "staple",
+      "emoji": "🍛",
+      "query": "Fried rice food"
+    },
+    {
+      "id": "noodlesoup",
+      "nameZh": "汤面",
+      "nameEn": "Noodle soup",
+      "group": "staple",
+      "emoji": "🍜",
+      "query": "Noodle soup food"
+    },
+    {
+      "id": "egg",
+      "nameZh": "鸡蛋",
+      "nameEn": "Egg",
+      "group": "dish",
+      "emoji": "🥚",
+      "query": "Egg food"
+    },
+    {
+      "id": "omelette",
+      "nameZh": "煎蛋",
+      "nameEn": "Omelette",
+      "group": "dish",
+      "emoji": "🍳",
+      "query": "Omelette food"
+    },
+    {
+      "id": "tofu",
+      "nameZh": "豆腐",
+      "nameEn": "Tofu",
+      "group": "dish",
+      "emoji": "🧈",
+      "query": "Tofu food"
+    },
+    {
+      "id": "soup",
+      "nameZh": "汤",
+      "nameEn": "Soup",
+      "group": "dish",
+      "emoji": "🥣",
+      "query": "Soup food"
+    },
+    {
+      "id": "salad",
+      "nameZh": "沙拉",
+      "nameEn": "Salad",
+      "group": "dish",
+      "emoji": "🥗",
+      "query": "Salad food"
+    },
+    {
+      "id": "steak",
+      "nameZh": "牛排",
+      "nameEn": "Steak",
+      "group": "dish",
+      "emoji": "🥩",
+      "query": "Steak food"
+    },
+    {
+      "id": "chicken",
+      "nameZh": "鸡肉",
+      "nameEn": "Chicken",
+      "group": "dish",
+      "emoji": "🍗",
+      "query": "Chicken food"
+    },
+    {
+      "id": "fish",
+      "nameZh": "鱼",
+      "nameEn": "Fish",
+      "group": "dish",
+      "emoji": "🐟",
+      "query": "Fish food"
+    },
+    {
+      "id": "shrimp",
+      "nameZh": "虾",
+      "nameEn": "Shrimp",
+      "group": "dish",
+      "emoji": "🦐",
+      "query": "Shrimp food"
+    },
+    {
+      "id": "crab",
+      "nameZh": "蟹",
+      "nameEn": "Crab",
+      "group": "dish",
+      "emoji": "🦀",
+      "query": "Crab food"
+    },
+    {
+      "id": "sausage",
+      "nameZh": "香肠",
+      "nameEn": "Sausage",
+      "group": "dish",
+      "emoji": "🌭",
+      "query": "Sausage food"
+    },
+    {
+      "id": "bacon",
+      "nameZh": "培根",
+      "nameEn": "Bacon",
+      "group": "dish",
+      "emoji": "🥓",
+      "query": "Bacon food"
+    },
+    {
+      "id": "cheese",
+      "nameZh": "奶酪",
+      "nameEn": "Cheese",
+      "group": "dish",
+      "emoji": "🧀",
+      "query": "Cheese food"
+    },
+    {
+      "id": "butter",
+      "nameZh": "黄油",
+      "nameEn": "Butter",
+      "group": "dish",
+      "emoji": "🧈",
+      "query": "Butter food"
+    },
+    {
+      "id": "yogurt",
+      "nameZh": "酸奶",
+      "nameEn": "Yogurt",
+      "group": "drink",
+      "emoji": "🥛",
+      "query": "Yogurt food"
+    },
+    {
+      "id": "milk",
+      "nameZh": "牛奶",
+      "nameEn": "Milk",
+      "group": "drink",
+      "emoji": "🥛",
+      "query": "Milk food"
+    },
+    {
+      "id": "soymilk",
+      "nameZh": "豆浆",
+      "nameEn": "Soy milk",
+      "group": "drink",
+      "emoji": "🧃",
+      "query": "Soy milk food"
+    },
+    {
+      "id": "juice",
+      "nameZh": "果汁",
+      "nameEn": "Juice",
+      "group": "drink",
+      "emoji": "🧃",
+      "query": "Juice food"
+    },
+    {
+      "id": "water",
+      "nameZh": "水",
+      "nameEn": "Water",
+      "group": "drink",
+      "emoji": "💧",
+      "query": "Water food"
+    },
+    {
+      "id": "tea",
+      "nameZh": "茶",
+      "nameEn": "Tea",
+      "group": "drink",
+      "emoji": "🍵",
+      "query": "Tea food"
+    },
+    {
+      "id": "coffee",
+      "nameZh": "咖啡",
+      "nameEn": "Coffee",
+      "group": "drink",
+      "emoji": "☕",
+      "query": "Coffee food"
+    },
+    {
+      "id": "cocoa",
+      "nameZh": "可可",
+      "nameEn": "Cocoa",
+      "group": "drink",
+      "emoji": "🍫",
+      "query": "Cocoa food"
+    },
+    {
+      "id": "smoothie",
+      "nameZh": "奶昔",
+      "nameEn": "Smoothie",
+      "group": "drink",
+      "emoji": "🥤",
+      "query": "Smoothie food"
+    },
+    {
+      "id": "soda",
+      "nameZh": "汽水",
+      "nameEn": "Soda",
+      "group": "drink",
+      "emoji": "🥤",
+      "query": "Soda food"
+    },
+    {
+      "id": "icecream",
+      "nameZh": "冰淇淋",
+      "nameEn": "Ice cream",
+      "group": "snack",
+      "emoji": "🍦",
+      "query": "Ice cream food"
+    },
+    {
+      "id": "cake",
+      "nameZh": "蛋糕",
+      "nameEn": "Cake",
+      "group": "snack",
+      "emoji": "🎂",
+      "query": "Cake food"
+    },
+    {
+      "id": "cookie",
+      "nameZh": "饼干",
+      "nameEn": "Cookie",
+      "group": "snack",
+      "emoji": "🍪",
+      "query": "Cookie food"
+    },
+    {
+      "id": "candy",
+      "nameZh": "糖果",
+      "nameEn": "Candy",
+      "group": "snack",
+      "emoji": "🍬",
+      "query": "Candy food"
+    },
+    {
+      "id": "chocolate",
+      "nameZh": "巧克力",
+      "nameEn": "Chocolate",
+      "group": "snack",
+      "emoji": "🍫",
+      "query": "Chocolate food"
+    },
+    {
+      "id": "donut",
+      "nameZh": "甜甜圈",
+      "nameEn": "Donut",
+      "group": "snack",
+      "emoji": "🍩",
+      "query": "Donut food"
+    },
+    {
+      "id": "pie",
+      "nameZh": "派",
+      "nameEn": "Pie",
+      "group": "snack",
+      "emoji": "🥧",
+      "query": "Pie food"
+    },
+    {
+      "id": "muffin",
+      "nameZh": "马芬",
+      "nameEn": "Muffin",
+      "group": "snack",
+      "emoji": "🧁",
+      "query": "Muffin food"
+    },
+    {
+      "id": "cupcake",
+      "nameZh": "纸杯蛋糕",
+      "nameEn": "Cupcake",
+      "group": "snack",
+      "emoji": "🧁",
+      "query": "Cupcake food"
+    },
+    {
+      "id": "pudding",
+      "nameZh": "布丁",
+      "nameEn": "Pudding",
+      "group": "snack",
+      "emoji": "🍮",
+      "query": "Pudding food"
+    },
+    {
+      "id": "jelly",
+      "nameZh": "果冻",
+      "nameEn": "Jelly",
+      "group": "snack",
+      "emoji": "🍮",
+      "query": "Jelly food"
+    },
+    {
+      "id": "popcorn",
+      "nameZh": "爆米花",
+      "nameEn": "Popcorn",
+      "group": "snack",
+      "emoji": "🍿",
+      "query": "Popcorn food"
+    },
+    {
+      "id": "chips",
+      "nameZh": "薯片",
+      "nameEn": "Chips",
+      "group": "snack",
+      "emoji": "🥔",
+      "query": "Chips food"
+    },
+    {
+      "id": "pretzel",
+      "nameZh": "椒盐卷",
+      "nameEn": "Pretzel",
+      "group": "snack",
+      "emoji": "🥨",
+      "query": "Pretzel food"
+    },
+    {
+      "id": "cracker",
+      "nameZh": "苏打饼",
+      "nameEn": "Cracker",
+      "group": "snack",
+      "emoji": "🍘",
+      "query": "Cracker food"
+    },
+    {
+      "id": "nuts",
+      "nameZh": "坚果",
+      "nameEn": "Nuts",
+      "group": "snack",
+      "emoji": "🥜",
+      "query": "Nuts food"
+    },
+    {
+      "id": "peanut",
+      "nameZh": "花生",
+      "nameEn": "Peanut",
+      "group": "snack",
+      "emoji": "🥜",
+      "query": "Peanut food"
+    },
+    {
+      "id": "honey",
+      "nameZh": "蜂蜜",
+      "nameEn": "Honey",
+      "group": "snack",
+      "emoji": "🍯",
+      "query": "Honey food"
+    },
+    {
+      "id": "jam",
+      "nameZh": "果酱",
+      "nameEn": "Jam",
+      "group": "snack",
+      "emoji": "🍓",
+      "query": "Jam food"
+    },
+    {
+      "id": "cereal",
+      "nameZh": "麦片",
+      "nameEn": "Cereal",
+      "group": "staple",
+      "emoji": "🥣",
+      "query": "Cereal food"
+    },
+    {
+      "id": "pancake",
+      "nameZh": "煎饼",
+      "nameEn": "Pancake",
+      "group": "staple",
+      "emoji": "🥞",
+      "query": "Pancake food"
+    },
+    {
+      "id": "waffle",
+      "nameZh": "华夫饼",
+      "nameEn": "Waffle",
+      "group": "staple",
+      "emoji": "🧇",
+      "query": "Waffle food"
+    },
+    {
+      "id": "toast",
+      "nameZh": "吐司",
+      "nameEn": "Toast",
+      "group": "staple",
+      "emoji": "🍞",
+      "query": "Toast food"
+    },
+    {
+      "id": "bagel",
+      "nameZh": "贝果",
+      "nameEn": "Bagel",
+      "group": "staple",
+      "emoji": "🥯",
+      "query": "Bagel food"
+    },
+    {
+      "id": "croissant",
+      "nameZh": "可颂",
+      "nameEn": "Croissant",
+      "group": "staple",
+      "emoji": "🥐",
+      "query": "Croissant food"
+    },
+    {
+      "id": "rice_noodle",
+      "nameZh": "米粉",
+      "nameEn": "Rice noodle",
+      "group": "staple",
+      "emoji": "🍜",
+      "query": "Rice noodle food"
+    },
+    {
+      "id": "udon",
+      "nameZh": "乌冬",
+      "nameEn": "Udon",
+      "group": "staple",
+      "emoji": "🍜",
+      "query": "Udon food"
+    },
+    {
+      "id": "ramen",
+      "nameZh": "拉面",
+      "nameEn": "Ramen",
+      "group": "staple",
+      "emoji": "🍜",
+      "query": "Ramen food"
+    },
+    {
+      "id": "pho",
+      "nameZh": "越南粉",
+      "nameEn": "Pho",
+      "group": "staple",
+      "emoji": "🍜",
+      "query": "Pho food"
+    },
+    {
+      "id": "curry",
+      "nameZh": "咖喱",
+      "nameEn": "Curry",
+      "group": "dish",
+      "emoji": "🍛",
+      "query": "Curry food"
+    },
+    {
+      "id": "stew",
+      "nameZh": "炖菜",
+      "nameEn": "Stew",
+      "group": "dish",
+      "emoji": "🍲",
+      "query": "Stew food"
+    },
+    {
+      "id": "bbq",
+      "nameZh": "烧烤",
+      "nameEn": "Barbecue",
+      "group": "dish",
+      "emoji": "🍖",
+      "query": "Barbecue food"
+    },
+    {
+      "id": "kebab",
+      "nameZh": "烤肉串",
+      "nameEn": "Kebab",
+      "group": "dish",
+      "emoji": "🍢",
+      "query": "Kebab food"
+    },
+    {
+      "id": "springroll",
+      "nameZh": "春卷",
+      "nameEn": "Spring roll",
+      "group": "snack",
+      "emoji": "🥟",
+      "query": "Spring roll food"
+    },
+    {
+      "id": "samosa",
+      "nameZh": "萨莫萨",
+      "nameEn": "Samosa",
+      "group": "snack",
+      "emoji": "🥟",
+      "query": "Samosa food"
+    },
+    {
+      "id": "hummus",
+      "nameZh": "鹰嘴豆泥",
+      "nameEn": "Hummus",
+      "group": "dish",
+      "emoji": "🥣",
+      "query": "Hummus food"
+    },
+    {
+      "id": "guacamole",
+      "nameZh": "牛油果泥",
+      "nameEn": "Guacamole",
+      "group": "dish",
+      "emoji": "🥑",
+      "query": "Guacamole food"
+    },
+    {
+      "id": "kimchi",
+      "nameZh": "泡菜",
+      "nameEn": "Kimchi",
+      "group": "dish",
+      "emoji": "🥬",
+      "query": "Kimchi food"
+    },
+    {
+      "id": "pickles",
+      "nameZh": "腌菜",
+      "nameEn": "Pickles",
+      "group": "dish",
+      "emoji": "🥒",
+      "query": "Pickles food"
+    },
+    {
+      "id": "sauce",
+      "nameZh": "酱汁",
+      "nameEn": "Sauce",
+      "group": "dish",
+      "emoji": "🫙",
+      "query": "Sauce food"
+    },
+    {
+      "id": "ketchup",
+      "nameZh": "番茄酱",
+      "nameEn": "Ketchup",
+      "group": "dish",
+      "emoji": "🍅",
+      "query": "Ketchup food"
+    },
+    {
+      "id": "mustard_s",
+      "nameZh": "芥末酱",
+      "nameEn": "Mustard",
+      "group": "dish",
+      "emoji": "🟡",
+      "query": "Mustard food"
+    },
+    {
+      "id": "mayo",
+      "nameZh": "蛋黄酱",
+      "nameEn": "Mayonnaise",
+      "group": "dish",
+      "emoji": "🤍",
+      "query": "Mayonnaise food"
+    },
+    {
+      "id": "salt",
+      "nameZh": "盐",
+      "nameEn": "Salt",
+      "group": "dish",
+      "emoji": "🧂",
+      "query": "Salt food"
+    },
+    {
+      "id": "sugar",
+      "nameZh": "糖",
+      "nameEn": "Sugar",
+      "group": "dish",
+      "emoji": "🍬",
+      "query": "Sugar food"
+    },
+    {
+      "id": "pepper_s",
+      "nameZh": "胡椒",
+      "nameEn": "Pepper",
+      "group": "dish",
+      "emoji": "🧂",
+      "query": "Pepper food"
+    },
+    {
+      "id": "vinegar",
+      "nameZh": "醋",
+      "nameEn": "Vinegar",
+      "group": "dish",
+      "emoji": "🫙",
+      "query": "Vinegar food"
+    },
+    {
+      "id": "oil",
+      "nameZh": "油",
+      "nameEn": "Oil",
+      "group": "dish",
+      "emoji": "🫒",
+      "query": "Oil food"
+    },
+    {
+      "id": "soy_sauce",
+      "nameZh": "酱油",
+      "nameEn": "Soy sauce",
+      "group": "dish",
+      "emoji": "🫙",
+      "query": "Soy sauce food"
+    },
+    {
+      "id": "rice_cake",
+      "nameZh": "年糕",
+      "nameEn": "Rice cake",
+      "group": "snack",
+      "emoji": "🍡",
+      "query": "Rice cake food"
+    },
+    {
+      "id": "tangyuan",
+      "nameZh": "汤圆",
+      "nameEn": "Tangyuan",
+      "group": "snack",
+      "emoji": "🍡",
+      "query": "Tangyuan food"
+    },
+    {
+      "id": "mochi",
+      "nameZh": "麻薯",
+      "nameEn": "Mochi",
+      "group": "snack",
+      "emoji": "🍡",
+      "query": "Mochi food"
+    },
+    {
+      "id": "brownie",
+      "nameZh": "布朗尼",
+      "nameEn": "Brownie",
+      "group": "snack",
+      "emoji": "🍫",
+      "query": "Brownie food"
+    },
+    {
+      "id": "cheesecake",
+      "nameZh": "芝士蛋糕",
+      "nameEn": "Cheesecake",
+      "group": "snack",
+      "emoji": "🍰",
+      "query": "Cheesecake food"
+    },
+    {
+      "id": "tiramisu",
+      "nameZh": "提拉米苏",
+      "nameEn": "Tiramisu",
+      "group": "snack",
+      "emoji": "🍰",
+      "query": "Tiramisu food"
+    },
+    {
+      "id": "parfait",
+      "nameZh": "帕菲",
+      "nameEn": "Parfait",
+      "group": "snack",
+      "emoji": "🍨",
+      "query": "Parfait food"
+    }
+  ]
+}

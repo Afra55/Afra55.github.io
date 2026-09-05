@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-09-05T02:00:41.745Z",
+  "generatedAt": "2026-09-05T02:37:39.719Z",
   "panels": [
     {
       "id": "about",
@@ -41,6 +41,11 @@
       "id": "base64",
       "file": "./panels/base64.html",
       "bytes": 1454
+    },
+    {
+      "id": "bodyearn",
+      "file": "./panels/bodyearn.html",
+      "bytes": 4992
     },
     {
       "id": "caseconv",
@@ -108,6 +113,11 @@
       "bytes": 6553
     },
     {
+      "id": "foodearn",
+      "file": "./panels/foodearn.html",
+      "bytes": 4992
+    },
+    {
       "id": "fruitearn",
       "file": "./panels/fruitearn.html",
       "bytes": 4993
@@ -158,6 +168,11 @@
       "bytes": 727
     },
     {
+      "id": "homeearn",
+      "file": "./panels/homeearn.html",
+      "bytes": 4998
+    },
+    {
       "id": "imgb64",
       "file": "./panels/imgb64.html",
       "bytes": 1074
@@ -191,6 +206,11 @@
       "id": "ipgeo",
       "file": "./panels/ipgeo.html",
       "bytes": 2843
+    },
+    {
+      "id": "jobearn",
+      "file": "./panels/jobearn.html",
+      "bytes": 5005
     },
     {
       "id": "json",
@@ -323,6 +343,11 @@
       "bytes": 707
     },
     {
+      "id": "sportsearn",
+      "file": "./panels/sportsearn.html",
+      "bytes": 4992
+    },
+    {
       "id": "text",
       "file": "./panels/text.html",
       "bytes": 1101
@@ -331,6 +356,11 @@
       "id": "textimg",
       "file": "./panels/textimg.html",
       "bytes": 7467
+    },
+    {
+      "id": "thingearn",
+      "file": "./panels/thingearn.html",
+      "bytes": 4993
     },
     {
       "id": "timediff",
@@ -368,6 +398,11 @@
       "bytes": 7980
     },
     {
+      "id": "vegearn",
+      "file": "./panels/vegearn.html",
+      "bytes": 4991
+    },
+    {
       "id": "vehicleearn",
       "file": "./panels/vehicleearn.html",
       "bytes": 4995
@@ -391,6 +426,11 @@
       "id": "vtrim",
       "file": "./panels/vtrim.html",
       "bytes": 9697
+    },
+    {
+      "id": "weatherearn",
+      "file": "./panels/weatherearn.html",
+      "bytes": 4999
     },
     {
       "id": "wheel",

@@ -1,0 +1,834 @@
+{
+  "version": 1,
+  "credit": "配图优先 Wikimedia Commons；缺图时 Openverse（CC）兜底。仅供学习展示。",
+  "visual": "image",
+  "groups": [
+    {
+      "id": "all",
+      "nameZh": "全部",
+      "nameEn": "All"
+    },
+    {
+      "id": "sleep",
+      "nameZh": "卧室",
+      "nameEn": "Bedroom"
+    },
+    {
+      "id": "live",
+      "nameZh": "客厅",
+      "nameEn": "Living"
+    },
+    {
+      "id": "kitchen",
+      "nameZh": "厨房",
+      "nameEn": "Kitchen"
+    },
+    {
+      "id": "bath",
+      "nameZh": "卫浴",
+      "nameEn": "Bath"
+    }
+  ],
+  "items": [
+    {
+      "id": "bed_h",
+      "nameZh": "床",
+      "nameEn": "Bed",
+      "group": "sleep",
+      "emoji": "🛏️",
+      "query": "Bed furniture home"
+    },
+    {
+      "id": "bunk",
+      "nameZh": "双层床",
+      "nameEn": "Bunk bed",
+      "group": "sleep",
+      "emoji": "🛏️",
+      "query": "Bunk bed furniture home"
+    },
+    {
+      "id": "crib",
+      "nameZh": "婴儿床",
+      "nameEn": "Crib",
+      "group": "sleep",
+      "emoji": "👶",
+      "query": "Crib furniture home"
+    },
+    {
+      "id": "mattress",
+      "nameZh": "床垫",
+      "nameEn": "Mattress",
+      "group": "sleep",
+      "emoji": "🛏️",
+      "query": "Mattress furniture home"
+    },
+    {
+      "id": "pillow_h",
+      "nameZh": "枕头",
+      "nameEn": "Pillow",
+      "group": "sleep",
+      "emoji": "🛏️",
+      "query": "Pillow furniture home"
+    },
+    {
+      "id": "duvet",
+      "nameZh": "羽绒被",
+      "nameEn": "Duvet",
+      "group": "sleep",
+      "emoji": "🛌",
+      "query": "Duvet furniture home"
+    },
+    {
+      "id": "sheet",
+      "nameZh": "床单",
+      "nameEn": "Bed sheet",
+      "group": "sleep",
+      "emoji": "🛏️",
+      "query": "Bed sheet furniture home"
+    },
+    {
+      "id": "wardrobe",
+      "nameZh": "衣柜",
+      "nameEn": "Wardrobe",
+      "group": "sleep",
+      "emoji": "🚪",
+      "query": "Wardrobe furniture home"
+    },
+    {
+      "id": "dresser",
+      "nameZh": "梳妆台",
+      "nameEn": "Dresser",
+      "group": "sleep",
+      "emoji": "🪞",
+      "query": "Dresser furniture home"
+    },
+    {
+      "id": "nightstand",
+      "nameZh": "床头柜",
+      "nameEn": "Nightstand",
+      "group": "sleep",
+      "emoji": "🪴",
+      "query": "Nightstand furniture home"
+    },
+    {
+      "id": "lamp_h",
+      "nameZh": "床头灯",
+      "nameEn": "Bedside lamp",
+      "group": "sleep",
+      "emoji": "💡",
+      "query": "Bedside lamp furniture home"
+    },
+    {
+      "id": "sofa_h",
+      "nameZh": "沙发",
+      "nameEn": "Sofa",
+      "group": "live",
+      "emoji": "🛋️",
+      "query": "Sofa furniture home"
+    },
+    {
+      "id": "armchair",
+      "nameZh": "扶手椅",
+      "nameEn": "Armchair",
+      "group": "live",
+      "emoji": "🪑",
+      "query": "Armchair furniture home"
+    },
+    {
+      "id": "recliner",
+      "nameZh": "躺椅",
+      "nameEn": "Recliner",
+      "group": "live",
+      "emoji": "🪑",
+      "query": "Recliner furniture home"
+    },
+    {
+      "id": "coffee_table",
+      "nameZh": "茶几",
+      "nameEn": "Coffee table",
+      "group": "live",
+      "emoji": "🪵",
+      "query": "Coffee table furniture home"
+    },
+    {
+      "id": "tv_stand",
+      "nameZh": "电视柜",
+      "nameEn": "TV stand",
+      "group": "live",
+      "emoji": "📺",
+      "query": "TV stand furniture home"
+    },
+    {
+      "id": "bookshelf",
+      "nameZh": "书架",
+      "nameEn": "Bookshelf",
+      "group": "live",
+      "emoji": "📚",
+      "query": "Bookshelf furniture home"
+    },
+    {
+      "id": "cabinet",
+      "nameZh": "柜子",
+      "nameEn": "Cabinet",
+      "group": "live",
+      "emoji": "🗄️",
+      "query": "Cabinet furniture home"
+    },
+    {
+      "id": "shelf",
+      "nameZh": "置物架",
+      "nameEn": "Shelf",
+      "group": "live",
+      "emoji": "📦",
+      "query": "Shelf furniture home"
+    },
+    {
+      "id": "rug",
+      "nameZh": "地毯",
+      "nameEn": "Rug",
+      "group": "live",
+      "emoji": "🟫",
+      "query": "Rug furniture home"
+    },
+    {
+      "id": "curtain",
+      "nameZh": "窗帘",
+      "nameEn": "Curtain",
+      "group": "live",
+      "emoji": "🪟",
+      "query": "Curtain furniture home"
+    },
+    {
+      "id": "blinds",
+      "nameZh": "百叶窗",
+      "nameEn": "Blinds",
+      "group": "live",
+      "emoji": "🪟",
+      "query": "Blinds furniture home"
+    },
+    {
+      "id": "cushion",
+      "nameZh": "靠垫",
+      "nameEn": "Cushion",
+      "group": "live",
+      "emoji": "🟧",
+      "query": "Cushion furniture home"
+    },
+    {
+      "id": "ottoman",
+      "nameZh": "脚凳",
+      "nameEn": "Ottoman",
+      "group": "live",
+      "emoji": "🟫",
+      "query": "Ottoman furniture home"
+    },
+    {
+      "id": "fireplace",
+      "nameZh": "壁炉",
+      "nameEn": "Fireplace",
+      "group": "live",
+      "emoji": "🔥",
+      "query": "Fireplace furniture home"
+    },
+    {
+      "id": "plantstand",
+      "nameZh": "花架",
+      "nameEn": "Plant stand",
+      "group": "live",
+      "emoji": "🪴",
+      "query": "Plant stand furniture home"
+    },
+    {
+      "id": "dining_table",
+      "nameZh": "餐桌",
+      "nameEn": "Dining table",
+      "group": "kitchen",
+      "emoji": "🍽️",
+      "query": "Dining table furniture home"
+    },
+    {
+      "id": "dining_chair",
+      "nameZh": "餐椅",
+      "nameEn": "Dining chair",
+      "group": "kitchen",
+      "emoji": "🪑",
+      "query": "Dining chair furniture home"
+    },
+    {
+      "id": "kitchen_cabinet",
+      "nameZh": "橱柜",
+      "nameEn": "Kitchen cabinet",
+      "group": "kitchen",
+      "emoji": "🗄️",
+      "query": "Kitchen cabinet furniture home"
+    },
+    {
+      "id": "counter",
+      "nameZh": "台面",
+      "nameEn": "Countertop",
+      "group": "kitchen",
+      "emoji": "🪨",
+      "query": "Countertop furniture home"
+    },
+    {
+      "id": "sink_k",
+      "nameZh": "厨房水槽",
+      "nameEn": "Kitchen sink",
+      "group": "kitchen",
+      "emoji": "🚰",
+      "query": "Kitchen sink furniture home"
+    },
+    {
+      "id": "dishwasher",
+      "nameZh": "洗碗机",
+      "nameEn": "Dishwasher",
+      "group": "kitchen",
+      "emoji": "🍽️",
+      "query": "Dishwasher furniture home"
+    },
+    {
+      "id": "fridge_h",
+      "nameZh": "冰箱",
+      "nameEn": "Fridge",
+      "group": "kitchen",
+      "emoji": "🧊",
+      "query": "Fridge furniture home"
+    },
+    {
+      "id": "freezer",
+      "nameZh": "冷冻柜",
+      "nameEn": "Freezer",
+      "group": "kitchen",
+      "emoji": "❄️",
+      "query": "Freezer furniture home"
+    },
+    {
+      "id": "stove_h",
+      "nameZh": "灶台",
+      "nameEn": "Stove",
+      "group": "kitchen",
+      "emoji": "🔥",
+      "query": "Stove furniture home"
+    },
+    {
+      "id": "rangehood",
+      "nameZh": "抽油烟机",
+      "nameEn": "Range hood",
+      "group": "kitchen",
+      "emoji": "🌬️",
+      "query": "Range hood furniture home"
+    },
+    {
+      "id": "microwave_h",
+      "nameZh": "微波炉",
+      "nameEn": "Microwave",
+      "group": "kitchen",
+      "emoji": "📦",
+      "query": "Microwave furniture home"
+    },
+    {
+      "id": "toaster",
+      "nameZh": "烤面包机",
+      "nameEn": "Toaster",
+      "group": "kitchen",
+      "emoji": "🍞",
+      "query": "Toaster furniture home"
+    },
+    {
+      "id": "kettle",
+      "nameZh": "水壶",
+      "nameEn": "Kettle",
+      "group": "kitchen",
+      "emoji": "🫖",
+      "query": "Kettle furniture home"
+    },
+    {
+      "id": "blender",
+      "nameZh": "搅拌机",
+      "nameEn": "Blender",
+      "group": "kitchen",
+      "emoji": "🥤",
+      "query": "Blender furniture home"
+    },
+    {
+      "id": "mixer",
+      "nameZh": "打蛋器",
+      "nameEn": "Mixer",
+      "group": "kitchen",
+      "emoji": "🧁",
+      "query": "Mixer furniture home"
+    },
+    {
+      "id": "rice_cooker",
+      "nameZh": "电饭煲",
+      "nameEn": "Rice cooker",
+      "group": "kitchen",
+      "emoji": "🍚",
+      "query": "Rice cooker furniture home"
+    },
+    {
+      "id": "pressure_cooker",
+      "nameZh": "高压锅",
+      "nameEn": "Pressure cooker",
+      "group": "kitchen",
+      "emoji": "🍲",
+      "query": "Pressure cooker furniture home"
+    },
+    {
+      "id": "cutting_board",
+      "nameZh": "砧板",
+      "nameEn": "Cutting board",
+      "group": "kitchen",
+      "emoji": "🪵",
+      "query": "Cutting board furniture home"
+    },
+    {
+      "id": "trash_k",
+      "nameZh": "厨房垃圾桶",
+      "nameEn": "Kitchen bin",
+      "group": "kitchen",
+      "emoji": "🗑️",
+      "query": "Kitchen bin furniture home"
+    },
+    {
+      "id": "pantry",
+      "nameZh": "储物间",
+      "nameEn": "Pantry",
+      "group": "kitchen",
+      "emoji": "🚪",
+      "query": "Pantry furniture home"
+    },
+    {
+      "id": "toilet",
+      "nameZh": "马桶",
+      "nameEn": "Toilet",
+      "group": "bath",
+      "emoji": "🚽",
+      "query": "Toilet furniture home"
+    },
+    {
+      "id": "bathtub",
+      "nameZh": "浴缸",
+      "nameEn": "Bathtub",
+      "group": "bath",
+      "emoji": "🛁",
+      "query": "Bathtub furniture home"
+    },
+    {
+      "id": "shower",
+      "nameZh": "淋浴",
+      "nameEn": "Shower",
+      "group": "bath",
+      "emoji": "🚿",
+      "query": "Shower furniture home"
+    },
+    {
+      "id": "sink_b",
+      "nameZh": "洗手盆",
+      "nameEn": "Bathroom sink",
+      "group": "bath",
+      "emoji": "🧼",
+      "query": "Bathroom sink furniture home"
+    },
+    {
+      "id": "faucet",
+      "nameZh": "水龙头",
+      "nameEn": "Faucet",
+      "group": "bath",
+      "emoji": "🚰",
+      "query": "Faucet furniture home"
+    },
+    {
+      "id": "mirror_b",
+      "nameZh": "浴室镜",
+      "nameEn": "Bathroom mirror",
+      "group": "bath",
+      "emoji": "🪞",
+      "query": "Bathroom mirror furniture home"
+    },
+    {
+      "id": "towel_rack",
+      "nameZh": "毛巾架",
+      "nameEn": "Towel rack",
+      "group": "bath",
+      "emoji": "🧺",
+      "query": "Towel rack furniture home"
+    },
+    {
+      "id": "soap_dish",
+      "nameZh": "皂盒",
+      "nameEn": "Soap dish",
+      "group": "bath",
+      "emoji": "🧼",
+      "query": "Soap dish furniture home"
+    },
+    {
+      "id": "toothbrush_h",
+      "nameZh": "牙刷架",
+      "nameEn": "Toothbrush holder",
+      "group": "bath",
+      "emoji": "🪥",
+      "query": "Toothbrush holder furniture home"
+    },
+    {
+      "id": "laundry",
+      "nameZh": "洗衣机",
+      "nameEn": "Washing machine",
+      "group": "bath",
+      "emoji": "🧺",
+      "query": "Washing machine furniture home"
+    },
+    {
+      "id": "dryer",
+      "nameZh": "烘干机",
+      "nameEn": "Dryer",
+      "group": "bath",
+      "emoji": "🌀",
+      "query": "Dryer furniture home"
+    },
+    {
+      "id": "hamper",
+      "nameZh": "脏衣篮",
+      "nameEn": "Laundry basket",
+      "group": "bath",
+      "emoji": "🧺",
+      "query": "Laundry basket furniture home"
+    },
+    {
+      "id": "scale",
+      "nameZh": "体重秤",
+      "nameEn": "Scale",
+      "group": "bath",
+      "emoji": "⚖️",
+      "query": "Scale furniture home"
+    },
+    {
+      "id": "stool",
+      "nameZh": "凳子",
+      "nameEn": "Stool",
+      "group": "live",
+      "emoji": "🪑",
+      "query": "Stool furniture home"
+    },
+    {
+      "id": "bench",
+      "nameZh": "长凳",
+      "nameEn": "Bench",
+      "group": "live",
+      "emoji": "🪑",
+      "query": "Bench furniture home"
+    },
+    {
+      "id": "rocking",
+      "nameZh": "摇椅",
+      "nameEn": "Rocking chair",
+      "group": "live",
+      "emoji": "🪑",
+      "query": "Rocking chair furniture home"
+    },
+    {
+      "id": "beanbag",
+      "nameZh": "懒人沙发",
+      "nameEn": "Bean bag",
+      "group": "live",
+      "emoji": "🟡",
+      "query": "Bean bag furniture home"
+    },
+    {
+      "id": "floor_lamp",
+      "nameZh": "落地灯",
+      "nameEn": "Floor lamp",
+      "group": "live",
+      "emoji": "💡",
+      "query": "Floor lamp furniture home"
+    },
+    {
+      "id": "chandelier",
+      "nameZh": "吊灯",
+      "nameEn": "Chandelier",
+      "group": "live",
+      "emoji": "💡",
+      "query": "Chandelier furniture home"
+    },
+    {
+      "id": "ceiling_fan",
+      "nameZh": "吊扇",
+      "nameEn": "Ceiling fan",
+      "group": "live",
+      "emoji": "🌀",
+      "query": "Ceiling fan furniture home"
+    },
+    {
+      "id": "air_purifier",
+      "nameZh": "空气净化器",
+      "nameEn": "Air purifier",
+      "group": "live",
+      "emoji": "💨",
+      "query": "Air purifier furniture home"
+    },
+    {
+      "id": "humidifier",
+      "nameZh": "加湿器",
+      "nameEn": "Humidifier",
+      "group": "live",
+      "emoji": "💧",
+      "query": "Humidifier furniture home"
+    },
+    {
+      "id": "dehumidifier",
+      "nameZh": "除湿机",
+      "nameEn": "Dehumidifier",
+      "group": "live",
+      "emoji": "💧",
+      "query": "Dehumidifier furniture home"
+    },
+    {
+      "id": "vacuum",
+      "nameZh": "吸尘器",
+      "nameEn": "Vacuum",
+      "group": "live",
+      "emoji": "🧹",
+      "query": "Vacuum furniture home"
+    },
+    {
+      "id": "iron",
+      "nameZh": "熨斗",
+      "nameEn": "Iron",
+      "group": "live",
+      "emoji": "👔",
+      "query": "Iron furniture home"
+    },
+    {
+      "id": "ironing_board",
+      "nameZh": "熨衣板",
+      "nameEn": "Ironing board",
+      "group": "live",
+      "emoji": "🧺",
+      "query": "Ironing board furniture home"
+    },
+    {
+      "id": "sewing",
+      "nameZh": "缝纫机",
+      "nameEn": "Sewing machine",
+      "group": "live",
+      "emoji": "🧵",
+      "query": "Sewing machine furniture home"
+    },
+    {
+      "id": "coat_rack",
+      "nameZh": "衣帽架",
+      "nameEn": "Coat rack",
+      "group": "live",
+      "emoji": "🧥",
+      "query": "Coat rack furniture home"
+    },
+    {
+      "id": "shoe_rack",
+      "nameZh": "鞋架",
+      "nameEn": "Shoe rack",
+      "group": "live",
+      "emoji": "👟",
+      "query": "Shoe rack furniture home"
+    },
+    {
+      "id": "umbrella_stand",
+      "nameZh": "伞架",
+      "nameEn": "Umbrella stand",
+      "group": "live",
+      "emoji": "☂️",
+      "query": "Umbrella stand furniture home"
+    },
+    {
+      "id": "entry_table",
+      "nameZh": "玄关桌",
+      "nameEn": "Entry table",
+      "group": "live",
+      "emoji": "🪵",
+      "query": "Entry table furniture home"
+    },
+    {
+      "id": "console",
+      "nameZh": "边柜",
+      "nameEn": "Console table",
+      "group": "live",
+      "emoji": "🪵",
+      "query": "Console table furniture home"
+    },
+    {
+      "id": "sideboard",
+      "nameZh": "餐边柜",
+      "nameEn": "Sideboard",
+      "group": "kitchen",
+      "emoji": "🗄️",
+      "query": "Sideboard furniture home"
+    },
+    {
+      "id": "bar_stool",
+      "nameZh": "吧台凳",
+      "nameEn": "Bar stool",
+      "group": "kitchen",
+      "emoji": "🪑",
+      "query": "Bar stool furniture home"
+    },
+    {
+      "id": "kitchen_island",
+      "nameZh": "中岛台",
+      "nameEn": "Kitchen island",
+      "group": "kitchen",
+      "emoji": "🪵",
+      "query": "Kitchen island furniture home"
+    },
+    {
+      "id": "wine_rack",
+      "nameZh": "酒架",
+      "nameEn": "Wine rack",
+      "group": "kitchen",
+      "emoji": "🍷",
+      "query": "Wine rack furniture home"
+    },
+    {
+      "id": "spice_rack",
+      "nameZh": "调料架",
+      "nameEn": "Spice rack",
+      "group": "kitchen",
+      "emoji": "🧂",
+      "query": "Spice rack furniture home"
+    },
+    {
+      "id": "dish_rack",
+      "nameZh": "沥水架",
+      "nameEn": "Dish rack",
+      "group": "kitchen",
+      "emoji": "🍽️",
+      "query": "Dish rack furniture home"
+    },
+    {
+      "id": "bidet",
+      "nameZh": "净身器",
+      "nameEn": "Bidet",
+      "group": "bath",
+      "emoji": "🚽",
+      "query": "Bidet furniture home"
+    },
+    {
+      "id": "shower_curtain",
+      "nameZh": "浴帘",
+      "nameEn": "Shower curtain",
+      "group": "bath",
+      "emoji": "🚿",
+      "query": "Shower curtain furniture home"
+    },
+    {
+      "id": "bath_mat",
+      "nameZh": "浴室垫",
+      "nameEn": "Bath mat",
+      "group": "bath",
+      "emoji": "🟫",
+      "query": "Bath mat furniture home"
+    },
+    {
+      "id": "medicine_cab",
+      "nameZh": "药柜",
+      "nameEn": "Medicine cabinet",
+      "group": "bath",
+      "emoji": "💊",
+      "query": "Medicine cabinet furniture home"
+    },
+    {
+      "id": "vanity",
+      "nameZh": "浴室柜",
+      "nameEn": "Vanity",
+      "group": "bath",
+      "emoji": "🪞",
+      "query": "Vanity furniture home"
+    },
+    {
+      "id": "toilet_paper",
+      "nameZh": "卷纸架",
+      "nameEn": "Toilet paper holder",
+      "group": "bath",
+      "emoji": "🧻",
+      "query": "Toilet paper holder furniture home"
+    },
+    {
+      "id": "bed_h_extra_90",
+      "nameZh": "床·",
+      "nameEn": "Bed Alt",
+      "group": "sleep",
+      "emoji": "🛏️",
+      "query": "Bed furniture home"
+    },
+    {
+      "id": "bed_h_extra_91",
+      "nameZh": "床·",
+      "nameEn": "Bed Alt",
+      "group": "sleep",
+      "emoji": "🛏️",
+      "query": "Bed furniture home"
+    },
+    {
+      "id": "bed_h_extra_92",
+      "nameZh": "床·",
+      "nameEn": "Bed Alt",
+      "group": "sleep",
+      "emoji": "🛏️",
+      "query": "Bed furniture home"
+    },
+    {
+      "id": "bed_h_extra_93",
+      "nameZh": "床·",
+      "nameEn": "Bed Alt",
+      "group": "sleep",
+      "emoji": "🛏️",
+      "query": "Bed furniture home"
+    },
+    {
+      "id": "bed_h_extra_94",
+      "nameZh": "床·",
+      "nameEn": "Bed Alt",
+      "group": "sleep",
+      "emoji": "🛏️",
+      "query": "Bed furniture home"
+    },
+    {
+      "id": "bed_h_extra_95",
+      "nameZh": "床·",
+      "nameEn": "Bed Alt",
+      "group": "sleep",
+      "emoji": "🛏️",
+      "query": "Bed furniture home"
+    },
+    {
+      "id": "bed_h_extra_96",
+      "nameZh": "床·",
+      "nameEn": "Bed Alt",
+      "group": "sleep",
+      "emoji": "🛏️",
+      "query": "Bed furniture home"
+    },
+    {
+      "id": "bed_h_extra_97",
+      "nameZh": "床·",
+      "nameEn": "Bed Alt",
+      "group": "sleep",
+      "emoji": "🛏️",
+      "query": "Bed furniture home"
+    },
+    {
+      "id": "bed_h_extra_98",
+      "nameZh": "床·",
+      "nameEn": "Bed Alt",
+      "group": "sleep",
+      "emoji": "🛏️",
+      "query": "Bed furniture home"
+    },
+    {
+      "id": "bed_h_extra_99",
+      "nameZh": "床·",
+      "nameEn": "Bed Alt",
+      "group": "sleep",
+      "emoji": "🛏️",
+      "query": "Bed furniture home"
+    }
+  ]
+}

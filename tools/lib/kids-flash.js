@@ -175,16 +175,22 @@
 
     function setLoadingPlaceholder(mediaEl, item, loading, opts = {}) {
       if (!mediaEl) return;
+      const optGen = opts.paintGen != null ? String(opts.paintGen) : null;
+      // 旧 paint 的开关不得动新卡 UI
+      if (optGen != null && (mediaEl.dataset.paintGen || "") !== optGen) return;
       cancelLoadClear(mediaEl);
-      mediaEl.classList.toggle("is-loading", Boolean(loading));
+      if (loading) mediaEl.classList.add("is-loading");
+      else if (optGen == null || (mediaEl.dataset.paintGen || "") === optGen) {
+        mediaEl.classList.remove("is-loading");
+      }
       let ph = mediaEl.querySelector(".kidsflash-placeholder");
       if (!loading) {
         const shownAt = Number(mediaEl.dataset.loadShownAt || 0);
         const wait = shownAt ? Math.max(0, MIN_LOAD_MS - (Date.now() - shownAt)) : 0;
-        const gen = mediaEl.dataset.paintGen || "";
+        const expectedGen = optGen != null ? optGen : mediaEl.dataset.paintGen || "";
         const clear = () => {
           // 切卡后旧请求不得拆掉新卡的加载框
-          if ((mediaEl.dataset.paintGen || "") !== gen) return;
+          if ((mediaEl.dataset.paintGen || "") !== expectedGen) return;
           mediaEl.querySelector(".kidsflash-placeholder")?.remove();
           delete mediaEl.dataset.loadShownAt;
           mediaEl._kfLoadClear = 0;
@@ -321,9 +327,10 @@
       const paintGen = String(Number(mediaEl.dataset.paintGen || 0) + 1);
       mediaEl.dataset.paintGen = paintGen;
       const hideName = Boolean(opts.hideName);
-      setLoadingPlaceholder(mediaEl, item, true, { hideName, percent: -1 });
+      setLoadingPlaceholder(mediaEl, item, true, { hideName, percent: -1, paintGen });
       if (emojiEl) {
-        emojiEl.hidden = true;
+        // 加载期间先留 emoji，避免白板空等
+        emojiEl.hidden = false;
         emojiEl.textContent = item.emoji || defaultEmoji;
       }
       if (imgEl) {
@@ -365,6 +372,7 @@
           setLoadingPlaceholder(mediaEl, item, true, {
             hideName,
             percent: typeof p?.percent === "number" ? p.percent : -1,
+            paintGen,
           });
         },
         (prev) => showPreview(prev?.url)
@@ -372,7 +380,7 @@
       if (mediaEl.dataset.paintGen !== paintGen) return hit;
       if (!imgEl || !hit.url) {
         if (emojiEl) emojiEl.hidden = false;
-        setLoadingPlaceholder(mediaEl, item, false);
+        setLoadingPlaceholder(mediaEl, item, false, { paintGen });
         mediaEl.classList.add("is-fallback");
         mediaEl.classList.remove("has-preview");
         return hit;
@@ -386,7 +394,7 @@
       if (!stillThis()) return hit;
       imgEl.classList.remove("is-preview");
       imgEl.classList.add("is-ready");
-      setLoadingPlaceholder(mediaEl, item, false);
+      setLoadingPlaceholder(mediaEl, item, false, { paintGen });
       mediaEl.classList.remove("is-fallback", "has-preview");
       return hit;
     }
@@ -533,6 +541,19 @@
         }
       }
       savePosition();
+      prefetchAround();
+    }
+
+    function prefetchAround() {
+      if (visual !== "image") return;
+      const list = filtered();
+      if (list.length < 2) return;
+      const idxs = [1, -1, 2].map((d) => (cardIndex + d + list.length) % list.length);
+      for (const i of idxs) {
+        const it = list[i];
+        if (!it || imgCache[it.id]?.url) continue;
+        resolveImage(it).catch(() => {});
+      }
     }
 
     function stepCard(delta) {

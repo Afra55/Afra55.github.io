@@ -1,0 +1,834 @@
+{
+  "version": 1,
+  "credit": "配图优先 Wikimedia Commons；缺图时 Openverse（CC）兜底。仅供学习展示。",
+  "visual": "image",
+  "groups": [
+    {
+      "id": "all",
+      "nameZh": "全部",
+      "nameEn": "All"
+    },
+    {
+      "id": "sky",
+      "nameZh": "天空",
+      "nameEn": "Sky"
+    },
+    {
+      "id": "precip",
+      "nameZh": "降水",
+      "nameEn": "Precip"
+    },
+    {
+      "id": "wind",
+      "nameZh": "风温",
+      "nameEn": "Wind"
+    },
+    {
+      "id": "season",
+      "nameZh": "季节",
+      "nameEn": "Season"
+    }
+  ],
+  "items": [
+    {
+      "id": "sunny",
+      "nameZh": "晴天",
+      "nameEn": "Sunny",
+      "group": "sky",
+      "emoji": "☀️",
+      "query": "Sunny weather"
+    },
+    {
+      "id": "cloudy",
+      "nameZh": "多云",
+      "nameEn": "Cloudy",
+      "group": "sky",
+      "emoji": "⛅",
+      "query": "Cloudy weather"
+    },
+    {
+      "id": "overcast",
+      "nameZh": "阴天",
+      "nameEn": "Overcast",
+      "group": "sky",
+      "emoji": "☁️",
+      "query": "Overcast weather"
+    },
+    {
+      "id": "rain",
+      "nameZh": "下雨",
+      "nameEn": "Rain",
+      "group": "precip",
+      "emoji": "🌧️",
+      "query": "Rain weather"
+    },
+    {
+      "id": "shower",
+      "nameZh": "阵雨",
+      "nameEn": "Shower",
+      "group": "precip",
+      "emoji": "🌦️",
+      "query": "Shower weather"
+    },
+    {
+      "id": "storm",
+      "nameZh": "暴风雨",
+      "nameEn": "Storm",
+      "group": "precip",
+      "emoji": "⛈️",
+      "query": "Storm weather"
+    },
+    {
+      "id": "thunder",
+      "nameZh": "打雷",
+      "nameEn": "Thunder",
+      "group": "precip",
+      "emoji": "⚡",
+      "query": "Thunder weather"
+    },
+    {
+      "id": "lightning",
+      "nameZh": "闪电",
+      "nameEn": "Lightning",
+      "group": "precip",
+      "emoji": "🌩️",
+      "query": "Lightning weather"
+    },
+    {
+      "id": "snow",
+      "nameZh": "下雪",
+      "nameEn": "Snow",
+      "group": "precip",
+      "emoji": "❄️",
+      "query": "Snow weather"
+    },
+    {
+      "id": "sleet",
+      "nameZh": "雨夹雪",
+      "nameEn": "Sleet",
+      "group": "precip",
+      "emoji": "🌨️",
+      "query": "Sleet weather"
+    },
+    {
+      "id": "hail",
+      "nameZh": "冰雹",
+      "nameEn": "Hail",
+      "group": "precip",
+      "emoji": "🧊",
+      "query": "Hail weather"
+    },
+    {
+      "id": "fog",
+      "nameZh": "雾",
+      "nameEn": "Fog",
+      "group": "sky",
+      "emoji": "🌫️",
+      "query": "Fog weather"
+    },
+    {
+      "id": "mist",
+      "nameZh": "薄雾",
+      "nameEn": "Mist",
+      "group": "sky",
+      "emoji": "🌁",
+      "query": "Mist weather"
+    },
+    {
+      "id": "haze",
+      "nameZh": "霾",
+      "nameEn": "Haze",
+      "group": "sky",
+      "emoji": "😶‍🌫️",
+      "query": "Haze weather"
+    },
+    {
+      "id": "windy",
+      "nameZh": "刮风",
+      "nameEn": "Windy",
+      "group": "wind",
+      "emoji": "💨",
+      "query": "Windy weather"
+    },
+    {
+      "id": "breeze",
+      "nameZh": "微风",
+      "nameEn": "Breeze",
+      "group": "wind",
+      "emoji": "🍃",
+      "query": "Breeze weather"
+    },
+    {
+      "id": "gale",
+      "nameZh": "大风",
+      "nameEn": "Gale",
+      "group": "wind",
+      "emoji": "🌬️",
+      "query": "Gale weather"
+    },
+    {
+      "id": "typhoon",
+      "nameZh": "台风",
+      "nameEn": "Typhoon",
+      "group": "wind",
+      "emoji": "🌀",
+      "query": "Typhoon weather"
+    },
+    {
+      "id": "hurricane",
+      "nameZh": "飓风",
+      "nameEn": "Hurricane",
+      "group": "wind",
+      "emoji": "🌀",
+      "query": "Hurricane weather"
+    },
+    {
+      "id": "tornado",
+      "nameZh": "龙卷风",
+      "nameEn": "Tornado",
+      "group": "wind",
+      "emoji": "🌪️",
+      "query": "Tornado weather"
+    },
+    {
+      "id": "hot",
+      "nameZh": "炎热",
+      "nameEn": "Hot",
+      "group": "wind",
+      "emoji": "🥵",
+      "query": "Hot weather"
+    },
+    {
+      "id": "warm",
+      "nameZh": "温暖",
+      "nameEn": "Warm",
+      "group": "wind",
+      "emoji": "😊",
+      "query": "Warm weather"
+    },
+    {
+      "id": "cool",
+      "nameZh": "凉爽",
+      "nameEn": "Cool",
+      "group": "wind",
+      "emoji": "😎",
+      "query": "Cool weather"
+    },
+    {
+      "id": "cold",
+      "nameZh": "寒冷",
+      "nameEn": "Cold",
+      "group": "wind",
+      "emoji": "🥶",
+      "query": "Cold weather"
+    },
+    {
+      "id": "freezing",
+      "nameZh": "冰冻",
+      "nameEn": "Freezing",
+      "group": "wind",
+      "emoji": "🧊",
+      "query": "Freezing weather"
+    },
+    {
+      "id": "humid",
+      "nameZh": "潮湿",
+      "nameEn": "Humid",
+      "group": "wind",
+      "emoji": "💧",
+      "query": "Humid weather"
+    },
+    {
+      "id": "dry",
+      "nameZh": "干燥",
+      "nameEn": "Dry",
+      "group": "wind",
+      "emoji": "🏜️",
+      "query": "Dry weather"
+    },
+    {
+      "id": "rainbow",
+      "nameZh": "彩虹",
+      "nameEn": "Rainbow",
+      "group": "sky",
+      "emoji": "🌈",
+      "query": "Rainbow weather"
+    },
+    {
+      "id": "sunrise",
+      "nameZh": "日出",
+      "nameEn": "Sunrise",
+      "group": "sky",
+      "emoji": "🌅",
+      "query": "Sunrise weather"
+    },
+    {
+      "id": "sunset",
+      "nameZh": "日落",
+      "nameEn": "Sunset",
+      "group": "sky",
+      "emoji": "🌇",
+      "query": "Sunset weather"
+    },
+    {
+      "id": "moon",
+      "nameZh": "月亮",
+      "nameEn": "Moon",
+      "group": "sky",
+      "emoji": "🌙",
+      "query": "Moon weather"
+    },
+    {
+      "id": "fullmoon",
+      "nameZh": "满月",
+      "nameEn": "Full moon",
+      "group": "sky",
+      "emoji": "🌕",
+      "query": "Full moon weather"
+    },
+    {
+      "id": "crescent",
+      "nameZh": "月牙",
+      "nameEn": "Crescent moon",
+      "group": "sky",
+      "emoji": "🌙",
+      "query": "Crescent moon weather"
+    },
+    {
+      "id": "star",
+      "nameZh": "星星",
+      "nameEn": "Star",
+      "group": "sky",
+      "emoji": "⭐",
+      "query": "Star weather"
+    },
+    {
+      "id": "meteor",
+      "nameZh": "流星",
+      "nameEn": "Meteor",
+      "group": "sky",
+      "emoji": "☄️",
+      "query": "Meteor weather"
+    },
+    {
+      "id": "aurora",
+      "nameZh": "极光",
+      "nameEn": "Aurora",
+      "group": "sky",
+      "emoji": "🌌",
+      "query": "Aurora weather"
+    },
+    {
+      "id": "spring",
+      "nameZh": "春天",
+      "nameEn": "Spring",
+      "group": "season",
+      "emoji": "🌸",
+      "query": "Spring weather"
+    },
+    {
+      "id": "summer",
+      "nameZh": "夏天",
+      "nameEn": "Summer",
+      "group": "season",
+      "emoji": "🌞",
+      "query": "Summer weather"
+    },
+    {
+      "id": "autumn",
+      "nameZh": "秋天",
+      "nameEn": "Autumn",
+      "group": "season",
+      "emoji": "🍂",
+      "query": "Autumn weather"
+    },
+    {
+      "id": "winter",
+      "nameZh": "冬天",
+      "nameEn": "Winter",
+      "group": "season",
+      "emoji": "⛄",
+      "query": "Winter weather"
+    },
+    {
+      "id": "dew",
+      "nameZh": "露水",
+      "nameEn": "Dew",
+      "group": "precip",
+      "emoji": "💧",
+      "query": "Dew weather"
+    },
+    {
+      "id": "frost",
+      "nameZh": "霜",
+      "nameEn": "Frost",
+      "group": "precip",
+      "emoji": "❄️",
+      "query": "Frost weather"
+    },
+    {
+      "id": "ice",
+      "nameZh": "冰",
+      "nameEn": "Ice",
+      "group": "precip",
+      "emoji": "🧊",
+      "query": "Ice weather"
+    },
+    {
+      "id": "icicle",
+      "nameZh": "冰锥",
+      "nameEn": "Icicle",
+      "group": "precip",
+      "emoji": "🧊",
+      "query": "Icicle weather"
+    },
+    {
+      "id": "snowman",
+      "nameZh": "雪人",
+      "nameEn": "Snowman",
+      "group": "precip",
+      "emoji": "⛄",
+      "query": "Snowman weather"
+    },
+    {
+      "id": "snowflake",
+      "nameZh": "雪花",
+      "nameEn": "Snowflake",
+      "group": "precip",
+      "emoji": "❄️",
+      "query": "Snowflake weather"
+    },
+    {
+      "id": "umbrella",
+      "nameZh": "雨伞",
+      "nameEn": "Umbrella",
+      "group": "precip",
+      "emoji": "☂️",
+      "query": "Umbrella weather"
+    },
+    {
+      "id": "raincoat",
+      "nameZh": "雨衣",
+      "nameEn": "Raincoat",
+      "group": "precip",
+      "emoji": "🧥",
+      "query": "Raincoat weather"
+    },
+    {
+      "id": "boots",
+      "nameZh": "雨靴",
+      "nameEn": "Rain boots",
+      "group": "precip",
+      "emoji": "🥾",
+      "query": "Rain boots weather"
+    },
+    {
+      "id": "thermometer",
+      "nameZh": "温度计",
+      "nameEn": "Thermometer",
+      "group": "wind",
+      "emoji": "🌡️",
+      "query": "Thermometer weather"
+    },
+    {
+      "id": "barometer",
+      "nameZh": "气压计",
+      "nameEn": "Barometer",
+      "group": "wind",
+      "emoji": "⏲️",
+      "query": "Barometer weather"
+    },
+    {
+      "id": "forecast",
+      "nameZh": "天气预报",
+      "nameEn": "Forecast",
+      "group": "sky",
+      "emoji": "📺",
+      "query": "Forecast weather"
+    },
+    {
+      "id": "clear_night",
+      "nameZh": "晴夜",
+      "nameEn": "Clear night",
+      "group": "sky",
+      "emoji": "🌃",
+      "query": "Clear night weather"
+    },
+    {
+      "id": "partly",
+      "nameZh": "少云",
+      "nameEn": "Partly cloudy",
+      "group": "sky",
+      "emoji": "🌤️",
+      "query": "Partly cloudy weather"
+    },
+    {
+      "id": "drizzle",
+      "nameZh": "毛毛雨",
+      "nameEn": "Drizzle",
+      "group": "precip",
+      "emoji": "🌦️",
+      "query": "Drizzle weather"
+    },
+    {
+      "id": "downpour",
+      "nameZh": "暴雨",
+      "nameEn": "Downpour",
+      "group": "precip",
+      "emoji": "🌧️",
+      "query": "Downpour weather"
+    },
+    {
+      "id": "blizzard",
+      "nameZh": "暴风雪",
+      "nameEn": "Blizzard",
+      "group": "precip",
+      "emoji": "🌨️",
+      "query": "Blizzard weather"
+    },
+    {
+      "id": "duststorm",
+      "nameZh": "沙尘暴",
+      "nameEn": "Dust storm",
+      "group": "wind",
+      "emoji": "🏜️",
+      "query": "Dust storm weather"
+    },
+    {
+      "id": "sandstorm",
+      "nameZh": "沙暴",
+      "nameEn": "Sandstorm",
+      "group": "wind",
+      "emoji": "🏜️",
+      "query": "Sandstorm weather"
+    },
+    {
+      "id": "smog",
+      "nameZh": "烟雾",
+      "nameEn": "Smog",
+      "group": "sky",
+      "emoji": "🏭",
+      "query": "Smog weather"
+    },
+    {
+      "id": "whirlwind",
+      "nameZh": "旋风",
+      "nameEn": "Whirlwind",
+      "group": "wind",
+      "emoji": "🌪️",
+      "query": "Whirlwind weather"
+    },
+    {
+      "id": "monsoon",
+      "nameZh": "季风",
+      "nameEn": "Monsoon",
+      "group": "wind",
+      "emoji": "🌊",
+      "query": "Monsoon weather"
+    },
+    {
+      "id": "el_nino",
+      "nameZh": "厄尔尼诺",
+      "nameEn": "El Niño",
+      "group": "season",
+      "emoji": "🌍",
+      "query": "El Niño weather"
+    },
+    {
+      "id": "tide",
+      "nameZh": "潮汐",
+      "nameEn": "Tide",
+      "group": "season",
+      "emoji": "🌊",
+      "query": "Tide weather"
+    },
+    {
+      "id": "wave",
+      "nameZh": "海浪",
+      "nameEn": "Wave",
+      "group": "season",
+      "emoji": "🌊",
+      "query": "Wave weather"
+    },
+    {
+      "id": "flood",
+      "nameZh": "洪水",
+      "nameEn": "Flood",
+      "group": "precip",
+      "emoji": "🌊",
+      "query": "Flood weather"
+    },
+    {
+      "id": "drought",
+      "nameZh": "干旱",
+      "nameEn": "Drought",
+      "group": "season",
+      "emoji": "🏜️",
+      "query": "Drought weather"
+    },
+    {
+      "id": "wildfire",
+      "nameZh": "山火烟",
+      "nameEn": "Wildfire smoke",
+      "group": "sky",
+      "emoji": "🔥",
+      "query": "Wildfire smoke weather"
+    },
+    {
+      "id": "pollen",
+      "nameZh": "花粉季",
+      "nameEn": "Pollen",
+      "group": "season",
+      "emoji": "🌼",
+      "query": "Pollen weather"
+    },
+    {
+      "id": "mud",
+      "nameZh": "泥",
+      "nameEn": "Mud",
+      "group": "precip",
+      "emoji": "🟤",
+      "query": "Mud weather"
+    },
+    {
+      "id": "puddle",
+      "nameZh": "水坑",
+      "nameEn": "Puddle",
+      "group": "precip",
+      "emoji": "💦",
+      "query": "Puddle weather"
+    },
+    {
+      "id": "wet",
+      "nameZh": "潮湿地面",
+      "nameEn": "Wet ground",
+      "group": "precip",
+      "emoji": "💧",
+      "query": "Wet ground weather"
+    },
+    {
+      "id": "icy_road",
+      "nameZh": "结冰路面",
+      "nameEn": "Icy road",
+      "group": "precip",
+      "emoji": "🛣️",
+      "query": "Icy road weather"
+    },
+    {
+      "id": "black_ice",
+      "nameZh": "薄冰",
+      "nameEn": "Black ice",
+      "group": "precip",
+      "emoji": "🧊",
+      "query": "Black ice weather"
+    },
+    {
+      "id": "windchill",
+      "nameZh": "体感寒冷",
+      "nameEn": "Wind chill",
+      "group": "wind",
+      "emoji": "🥶",
+      "query": "Wind chill weather"
+    },
+    {
+      "id": "heatwave",
+      "nameZh": "热浪",
+      "nameEn": "Heat wave",
+      "group": "wind",
+      "emoji": "🔥",
+      "query": "Heat wave weather"
+    },
+    {
+      "id": "coldfront",
+      "nameZh": "冷锋",
+      "nameEn": "Cold front",
+      "group": "wind",
+      "emoji": "❄️",
+      "query": "Cold front weather"
+    },
+    {
+      "id": "warmfront",
+      "nameZh": "暖锋",
+      "nameEn": "Warm front",
+      "group": "wind",
+      "emoji": "🌡️",
+      "query": "Warm front weather"
+    },
+    {
+      "id": "cumulus",
+      "nameZh": "积云",
+      "nameEn": "Cumulus",
+      "group": "sky",
+      "emoji": "☁️",
+      "query": "Cumulus weather"
+    },
+    {
+      "id": "cirrus",
+      "nameZh": "卷云",
+      "nameEn": "Cirrus",
+      "group": "sky",
+      "emoji": "☁️",
+      "query": "Cirrus weather"
+    },
+    {
+      "id": "stratus",
+      "nameZh": "层云",
+      "nameEn": "Stratus",
+      "group": "sky",
+      "emoji": "☁️",
+      "query": "Stratus weather"
+    },
+    {
+      "id": "nimbus",
+      "nameZh": "雨云",
+      "nameEn": "Nimbus",
+      "group": "sky",
+      "emoji": "☁️",
+      "query": "Nimbus weather"
+    },
+    {
+      "id": "foghorn",
+      "nameZh": "雾笛",
+      "nameEn": "Foghorn",
+      "group": "sky",
+      "emoji": "📢",
+      "query": "Foghorn weather"
+    },
+    {
+      "id": "weather_vane",
+      "nameZh": "风向标",
+      "nameEn": "Weather vane",
+      "group": "wind",
+      "emoji": "🧭",
+      "query": "Weather vane weather"
+    },
+    {
+      "id": "anemometer",
+      "nameZh": "风速计",
+      "nameEn": "Anemometer",
+      "group": "wind",
+      "emoji": "📟",
+      "query": "Anemometer weather"
+    },
+    {
+      "id": "rain_gauge",
+      "nameZh": "雨量计",
+      "nameEn": "Rain gauge",
+      "group": "precip",
+      "emoji": "📏",
+      "query": "Rain gauge weather"
+    },
+    {
+      "id": "snow_gauge",
+      "nameZh": "雪量",
+      "nameEn": "Snow depth",
+      "group": "precip",
+      "emoji": "📏",
+      "query": "Snow depth weather"
+    },
+    {
+      "id": "uv",
+      "nameZh": "紫外线",
+      "nameEn": "UV index",
+      "group": "sky",
+      "emoji": "☀️",
+      "query": "UV index weather"
+    },
+    {
+      "id": "air_quality",
+      "nameZh": "空气质量",
+      "nameEn": "Air quality",
+      "group": "sky",
+      "emoji": "🌫️",
+      "query": "Air quality weather"
+    },
+    {
+      "id": "visibility",
+      "nameZh": "能见度",
+      "nameEn": "Visibility",
+      "group": "sky",
+      "emoji": "👀",
+      "query": "Visibility weather"
+    },
+    {
+      "id": "humidity",
+      "nameZh": "湿度",
+      "nameEn": "Humidity",
+      "group": "wind",
+      "emoji": "💧",
+      "query": "Humidity weather"
+    },
+    {
+      "id": "pressure",
+      "nameZh": "气压",
+      "nameEn": "Pressure",
+      "group": "wind",
+      "emoji": "📉",
+      "query": "Pressure weather"
+    },
+    {
+      "id": "temperature",
+      "nameZh": "气温",
+      "nameEn": "Temperature",
+      "group": "wind",
+      "emoji": "🌡️",
+      "query": "Temperature weather"
+    },
+    {
+      "id": "climate",
+      "nameZh": "气候",
+      "nameEn": "Climate",
+      "group": "season",
+      "emoji": "🌍",
+      "query": "Climate weather"
+    },
+    {
+      "id": "sunny_extra_94",
+      "nameZh": "晴天·",
+      "nameEn": "Sunny Alt",
+      "group": "sky",
+      "emoji": "☀️",
+      "query": "Sunny weather"
+    },
+    {
+      "id": "sunny_extra_95",
+      "nameZh": "晴天·",
+      "nameEn": "Sunny Alt",
+      "group": "sky",
+      "emoji": "☀️",
+      "query": "Sunny weather"
+    },
+    {
+      "id": "sunny_extra_96",
+      "nameZh": "晴天·",
+      "nameEn": "Sunny Alt",
+      "group": "sky",
+      "emoji": "☀️",
+      "query": "Sunny weather"
+    },
+    {
+      "id": "sunny_extra_97",
+      "nameZh": "晴天·",
+      "nameEn": "Sunny Alt",
+      "group": "sky",
+      "emoji": "☀️",
+      "query": "Sunny weather"
+    },
+    {
+      "id": "sunny_extra_98",
+      "nameZh": "晴天·",
+      "nameEn": "Sunny Alt",
+      "group": "sky",
+      "emoji": "☀️",
+      "query": "Sunny weather"
+    },
+    {
+      "id": "sunny_extra_99",
+      "nameZh": "晴天·",
+      "nameEn": "Sunny Alt",
+      "group": "sky",
+      "emoji": "☀️",
+      "query": "Sunny weather"
+    }
+  ]
+}

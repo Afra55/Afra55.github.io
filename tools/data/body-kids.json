@@ -1,0 +1,834 @@
+{
+  "version": 1,
+  "credit": "配图优先 Wikimedia Commons；缺图时 Openverse（CC）兜底。仅供学习展示。",
+  "visual": "image",
+  "groups": [
+    {
+      "id": "all",
+      "nameZh": "全部",
+      "nameEn": "All"
+    },
+    {
+      "id": "head",
+      "nameZh": "头脸",
+      "nameEn": "Head"
+    },
+    {
+      "id": "limb",
+      "nameZh": "四肢",
+      "nameEn": "Limbs"
+    },
+    {
+      "id": "torso",
+      "nameZh": "躯干",
+      "nameEn": "Torso"
+    },
+    {
+      "id": "sense",
+      "nameZh": "感官",
+      "nameEn": "Senses"
+    }
+  ],
+  "items": [
+    {
+      "id": "head",
+      "nameZh": "头",
+      "nameEn": "Head",
+      "group": "head",
+      "emoji": "🗣️",
+      "query": "Head human body"
+    },
+    {
+      "id": "face",
+      "nameZh": "脸",
+      "nameEn": "Face",
+      "group": "head",
+      "emoji": "🙂",
+      "query": "Face human body"
+    },
+    {
+      "id": "hair",
+      "nameZh": "头发",
+      "nameEn": "Hair",
+      "group": "head",
+      "emoji": "💇",
+      "query": "Hair human body"
+    },
+    {
+      "id": "forehead",
+      "nameZh": "额头",
+      "nameEn": "Forehead",
+      "group": "head",
+      "emoji": "😊",
+      "query": "Forehead human body"
+    },
+    {
+      "id": "eyebrow",
+      "nameZh": "眉毛",
+      "nameEn": "Eyebrow",
+      "group": "head",
+      "emoji": "🤨",
+      "query": "Eyebrow human body"
+    },
+    {
+      "id": "eye",
+      "nameZh": "眼睛",
+      "nameEn": "Eye",
+      "group": "sense",
+      "emoji": "👁️",
+      "query": "Eye human body"
+    },
+    {
+      "id": "eyelash",
+      "nameZh": "睫毛",
+      "nameEn": "Eyelash",
+      "group": "head",
+      "emoji": "😊",
+      "query": "Eyelash human body"
+    },
+    {
+      "id": "ear",
+      "nameZh": "耳朵",
+      "nameEn": "Ear",
+      "group": "sense",
+      "emoji": "👂",
+      "query": "Ear human body"
+    },
+    {
+      "id": "nose",
+      "nameZh": "鼻子",
+      "nameEn": "Nose",
+      "group": "sense",
+      "emoji": "👃",
+      "query": "Nose human body"
+    },
+    {
+      "id": "mouth",
+      "nameZh": "嘴巴",
+      "nameEn": "Mouth",
+      "group": "sense",
+      "emoji": "👄",
+      "query": "Mouth human body"
+    },
+    {
+      "id": "lip",
+      "nameZh": "嘴唇",
+      "nameEn": "Lip",
+      "group": "head",
+      "emoji": "💋",
+      "query": "Lip human body"
+    },
+    {
+      "id": "tooth",
+      "nameZh": "牙齿",
+      "nameEn": "Tooth",
+      "group": "head",
+      "emoji": "🦷",
+      "query": "Tooth human body"
+    },
+    {
+      "id": "tongue",
+      "nameZh": "舌头",
+      "nameEn": "Tongue",
+      "group": "sense",
+      "emoji": "👅",
+      "query": "Tongue human body"
+    },
+    {
+      "id": "cheek",
+      "nameZh": "脸颊",
+      "nameEn": "Cheek",
+      "group": "head",
+      "emoji": "😊",
+      "query": "Cheek human body"
+    },
+    {
+      "id": "chin",
+      "nameZh": "下巴",
+      "nameEn": "Chin",
+      "group": "head",
+      "emoji": "😊",
+      "query": "Chin human body"
+    },
+    {
+      "id": "neck",
+      "nameZh": "脖子",
+      "nameEn": "Neck",
+      "group": "torso",
+      "emoji": "🧣",
+      "query": "Neck human body"
+    },
+    {
+      "id": "shoulder",
+      "nameZh": "肩膀",
+      "nameEn": "Shoulder",
+      "group": "limb",
+      "emoji": "💪",
+      "query": "Shoulder human body"
+    },
+    {
+      "id": "arm",
+      "nameZh": "手臂",
+      "nameEn": "Arm",
+      "group": "limb",
+      "emoji": "💪",
+      "query": "Arm human body"
+    },
+    {
+      "id": "elbow",
+      "nameZh": "肘",
+      "nameEn": "Elbow",
+      "group": "limb",
+      "emoji": "💪",
+      "query": "Elbow human body"
+    },
+    {
+      "id": "wrist",
+      "nameZh": "手腕",
+      "nameEn": "Wrist",
+      "group": "limb",
+      "emoji": "⌚",
+      "query": "Wrist human body"
+    },
+    {
+      "id": "hand",
+      "nameZh": "手",
+      "nameEn": "Hand",
+      "group": "limb",
+      "emoji": "✋",
+      "query": "Hand human body"
+    },
+    {
+      "id": "palm",
+      "nameZh": "手掌",
+      "nameEn": "Palm",
+      "group": "limb",
+      "emoji": "🖐️",
+      "query": "Palm human body"
+    },
+    {
+      "id": "finger",
+      "nameZh": "手指",
+      "nameEn": "Finger",
+      "group": "limb",
+      "emoji": "👆",
+      "query": "Finger human body"
+    },
+    {
+      "id": "thumb",
+      "nameZh": "拇指",
+      "nameEn": "Thumb",
+      "group": "limb",
+      "emoji": "👍",
+      "query": "Thumb human body"
+    },
+    {
+      "id": "nail",
+      "nameZh": "指甲",
+      "nameEn": "Nail",
+      "group": "limb",
+      "emoji": "💅",
+      "query": "Nail human body"
+    },
+    {
+      "id": "chest",
+      "nameZh": "胸部",
+      "nameEn": "Chest",
+      "group": "torso",
+      "emoji": "👕",
+      "query": "Chest human body"
+    },
+    {
+      "id": "back",
+      "nameZh": "背",
+      "nameEn": "Back",
+      "group": "torso",
+      "emoji": "🧍",
+      "query": "Back human body"
+    },
+    {
+      "id": "belly",
+      "nameZh": "肚子",
+      "nameEn": "Belly",
+      "group": "torso",
+      "emoji": "🤰",
+      "query": "Belly human body"
+    },
+    {
+      "id": "waist",
+      "nameZh": "腰",
+      "nameEn": "Waist",
+      "group": "torso",
+      "emoji": "👖",
+      "query": "Waist human body"
+    },
+    {
+      "id": "hip",
+      "nameZh": "髋",
+      "nameEn": "Hip",
+      "group": "torso",
+      "emoji": "🧍",
+      "query": "Hip human body"
+    },
+    {
+      "id": "leg",
+      "nameZh": "腿",
+      "nameEn": "Leg",
+      "group": "limb",
+      "emoji": "🦵",
+      "query": "Leg human body"
+    },
+    {
+      "id": "thigh",
+      "nameZh": "大腿",
+      "nameEn": "Thigh",
+      "group": "limb",
+      "emoji": "🦵",
+      "query": "Thigh human body"
+    },
+    {
+      "id": "knee",
+      "nameZh": "膝盖",
+      "nameEn": "Knee",
+      "group": "limb",
+      "emoji": "🦵",
+      "query": "Knee human body"
+    },
+    {
+      "id": "shin",
+      "nameZh": "小腿",
+      "nameEn": "Shin",
+      "group": "limb",
+      "emoji": "🦵",
+      "query": "Shin human body"
+    },
+    {
+      "id": "ankle",
+      "nameZh": "脚踝",
+      "nameEn": "Ankle",
+      "group": "limb",
+      "emoji": "🦶",
+      "query": "Ankle human body"
+    },
+    {
+      "id": "foot",
+      "nameZh": "脚",
+      "nameEn": "Foot",
+      "group": "limb",
+      "emoji": "🦶",
+      "query": "Foot human body"
+    },
+    {
+      "id": "heel",
+      "nameZh": "脚跟",
+      "nameEn": "Heel",
+      "group": "limb",
+      "emoji": "🦶",
+      "query": "Heel human body"
+    },
+    {
+      "id": "toe",
+      "nameZh": "脚趾",
+      "nameEn": "Toe",
+      "group": "limb",
+      "emoji": "🦶",
+      "query": "Toe human body"
+    },
+    {
+      "id": "skin",
+      "nameZh": "皮肤",
+      "nameEn": "Skin",
+      "group": "sense",
+      "emoji": "🤚",
+      "query": "Skin human body"
+    },
+    {
+      "id": "bone",
+      "nameZh": "骨头",
+      "nameEn": "Bone",
+      "group": "torso",
+      "emoji": "🦴",
+      "query": "Bone human body"
+    },
+    {
+      "id": "muscle",
+      "nameZh": "肌肉",
+      "nameEn": "Muscle",
+      "group": "limb",
+      "emoji": "💪",
+      "query": "Muscle human body"
+    },
+    {
+      "id": "heart",
+      "nameZh": "心脏",
+      "nameEn": "Heart",
+      "group": "torso",
+      "emoji": "❤️",
+      "query": "Heart human body"
+    },
+    {
+      "id": "lung",
+      "nameZh": "肺",
+      "nameEn": "Lung",
+      "group": "torso",
+      "emoji": "🫁",
+      "query": "Lung human body"
+    },
+    {
+      "id": "brain",
+      "nameZh": "大脑",
+      "nameEn": "Brain",
+      "group": "head",
+      "emoji": "🧠",
+      "query": "Brain human body"
+    },
+    {
+      "id": "stomach",
+      "nameZh": "胃",
+      "nameEn": "Stomach",
+      "group": "torso",
+      "emoji": "🫀",
+      "query": "Stomach human body"
+    },
+    {
+      "id": "liver",
+      "nameZh": "肝",
+      "nameEn": "Liver",
+      "group": "torso",
+      "emoji": "🧡",
+      "query": "Liver human body"
+    },
+    {
+      "id": "kidney",
+      "nameZh": "肾",
+      "nameEn": "Kidney",
+      "group": "torso",
+      "emoji": "🫘",
+      "query": "Kidney human body"
+    },
+    {
+      "id": "blood",
+      "nameZh": "血",
+      "nameEn": "Blood",
+      "group": "torso",
+      "emoji": "🩸",
+      "query": "Blood human body"
+    },
+    {
+      "id": "throat",
+      "nameZh": "喉咙",
+      "nameEn": "Throat",
+      "group": "head",
+      "emoji": "🗣️",
+      "query": "Throat human body"
+    },
+    {
+      "id": "jaw",
+      "nameZh": "下巴骨",
+      "nameEn": "Jaw",
+      "group": "head",
+      "emoji": "🦴",
+      "query": "Jaw human body"
+    },
+    {
+      "id": "temple",
+      "nameZh": "太阳穴",
+      "nameEn": "Temple",
+      "group": "head",
+      "emoji": "😊",
+      "query": "Temple human body"
+    },
+    {
+      "id": "nostril",
+      "nameZh": "鼻孔",
+      "nameEn": "Nostril",
+      "group": "sense",
+      "emoji": "👃",
+      "query": "Nostril human body"
+    },
+    {
+      "id": "pupil",
+      "nameZh": "瞳孔",
+      "nameEn": "Pupil",
+      "group": "sense",
+      "emoji": "👁️",
+      "query": "Pupil human body"
+    },
+    {
+      "id": "iris",
+      "nameZh": "虹膜",
+      "nameEn": "Iris",
+      "group": "sense",
+      "emoji": "👁️",
+      "query": "Iris human body"
+    },
+    {
+      "id": "gum",
+      "nameZh": "牙龈",
+      "nameEn": "Gum",
+      "group": "head",
+      "emoji": "🦷",
+      "query": "Gum human body"
+    },
+    {
+      "id": "uvula",
+      "nameZh": "小舌",
+      "nameEn": "Uvula",
+      "group": "head",
+      "emoji": "👅",
+      "query": "Uvula human body"
+    },
+    {
+      "id": "saliva",
+      "nameZh": "唾液",
+      "nameEn": "Saliva",
+      "group": "sense",
+      "emoji": "💧",
+      "query": "Saliva human body"
+    },
+    {
+      "id": "sweat",
+      "nameZh": "汗",
+      "nameEn": "Sweat",
+      "group": "sense",
+      "emoji": "💦",
+      "query": "Sweat human body"
+    },
+    {
+      "id": "tear",
+      "nameZh": "眼泪",
+      "nameEn": "Tear",
+      "group": "sense",
+      "emoji": "😢",
+      "query": "Tear human body"
+    },
+    {
+      "id": "smile",
+      "nameZh": "微笑",
+      "nameEn": "Smile",
+      "group": "sense",
+      "emoji": "😄",
+      "query": "Smile human body"
+    },
+    {
+      "id": "voice",
+      "nameZh": "嗓音",
+      "nameEn": "Voice",
+      "group": "sense",
+      "emoji": "🎤",
+      "query": "Voice human body"
+    },
+    {
+      "id": "breath",
+      "nameZh": "呼吸",
+      "nameEn": "Breath",
+      "group": "sense",
+      "emoji": "😮‍💨",
+      "query": "Breath human body"
+    },
+    {
+      "id": "pulse",
+      "nameZh": "脉搏",
+      "nameEn": "Pulse",
+      "group": "torso",
+      "emoji": "💓",
+      "query": "Pulse human body"
+    },
+    {
+      "id": "spine",
+      "nameZh": "脊柱",
+      "nameEn": "Spine",
+      "group": "torso",
+      "emoji": "🦴",
+      "query": "Spine human body"
+    },
+    {
+      "id": "rib",
+      "nameZh": "肋骨",
+      "nameEn": "Rib",
+      "group": "torso",
+      "emoji": "🦴",
+      "query": "Rib human body"
+    },
+    {
+      "id": "skull",
+      "nameZh": "头骨",
+      "nameEn": "Skull",
+      "group": "head",
+      "emoji": "💀",
+      "query": "Skull human body"
+    },
+    {
+      "id": "joint",
+      "nameZh": "关节",
+      "nameEn": "Joint",
+      "group": "limb",
+      "emoji": "🦴",
+      "query": "Joint human body"
+    },
+    {
+      "id": "knuckle",
+      "nameZh": "指节",
+      "nameEn": "Knuckle",
+      "group": "limb",
+      "emoji": "👊",
+      "query": "Knuckle human body"
+    },
+    {
+      "id": "calf",
+      "nameZh": "腓肠肌",
+      "nameEn": "Calf",
+      "group": "limb",
+      "emoji": "🦵",
+      "query": "Calf human body"
+    },
+    {
+      "id": "forearm",
+      "nameZh": "前臂",
+      "nameEn": "Forearm",
+      "group": "limb",
+      "emoji": "💪",
+      "query": "Forearm human body"
+    },
+    {
+      "id": "bicep",
+      "nameZh": "肱二头肌",
+      "nameEn": "Bicep",
+      "group": "limb",
+      "emoji": "💪",
+      "query": "Bicep human body"
+    },
+    {
+      "id": "abs",
+      "nameZh": "腹肌",
+      "nameEn": "Abs",
+      "group": "torso",
+      "emoji": "👕",
+      "query": "Abs human body"
+    },
+    {
+      "id": "navel",
+      "nameZh": "肚脐",
+      "nameEn": "Navel",
+      "group": "torso",
+      "emoji": "🟠",
+      "query": "Navel human body"
+    },
+    {
+      "id": "armpit",
+      "nameZh": "腋下",
+      "nameEn": "Armpit",
+      "group": "limb",
+      "emoji": "🦺",
+      "query": "Armpit human body"
+    },
+    {
+      "id": "collarbone",
+      "nameZh": "锁骨",
+      "nameEn": "Collarbone",
+      "group": "torso",
+      "emoji": "🦴",
+      "query": "Collarbone human body"
+    },
+    {
+      "id": "shoulderblade",
+      "nameZh": "肩胛",
+      "nameEn": "Shoulder blade",
+      "group": "torso",
+      "emoji": "🦴",
+      "query": "Shoulder blade human body"
+    },
+    {
+      "id": "pelvis",
+      "nameZh": "骨盆",
+      "nameEn": "Pelvis",
+      "group": "torso",
+      "emoji": "🦴",
+      "query": "Pelvis human body"
+    },
+    {
+      "id": "instep",
+      "nameZh": "脚背",
+      "nameEn": "Instep",
+      "group": "limb",
+      "emoji": "🦶",
+      "query": "Instep human body"
+    },
+    {
+      "id": "arch",
+      "nameZh": "足弓",
+      "nameEn": "Arch",
+      "group": "limb",
+      "emoji": "🦶",
+      "query": "Arch human body"
+    },
+    {
+      "id": "sole",
+      "nameZh": "脚底",
+      "nameEn": "Sole",
+      "group": "limb",
+      "emoji": "🦶",
+      "query": "Sole human body"
+    },
+    {
+      "id": "index",
+      "nameZh": "食指",
+      "nameEn": "Index finger",
+      "group": "limb",
+      "emoji": "☝️",
+      "query": "Index finger human body"
+    },
+    {
+      "id": "middle",
+      "nameZh": "中指",
+      "nameEn": "Middle finger",
+      "group": "limb",
+      "emoji": "🖕",
+      "query": "Middle finger human body"
+    },
+    {
+      "id": "ringf",
+      "nameZh": "无名指",
+      "nameEn": "Ring finger",
+      "group": "limb",
+      "emoji": "💍",
+      "query": "Ring finger human body"
+    },
+    {
+      "id": "pinky",
+      "nameZh": "小指",
+      "nameEn": "Pinky",
+      "group": "limb",
+      "emoji": "🤙",
+      "query": "Pinky human body"
+    },
+    {
+      "id": "fist",
+      "nameZh": "拳头",
+      "nameEn": "Fist",
+      "group": "limb",
+      "emoji": "✊",
+      "query": "Fist human body"
+    },
+    {
+      "id": "clap",
+      "nameZh": "拍手",
+      "nameEn": "Clap",
+      "group": "limb",
+      "emoji": "👏",
+      "query": "Clap human body"
+    },
+    {
+      "id": "wave",
+      "nameZh": "挥手",
+      "nameEn": "Wave",
+      "group": "limb",
+      "emoji": "👋",
+      "query": "Wave human body"
+    },
+    {
+      "id": "blink",
+      "nameZh": "眨眼",
+      "nameEn": "Blink",
+      "group": "sense",
+      "emoji": "😉",
+      "query": "Blink human body"
+    },
+    {
+      "id": "wink",
+      "nameZh": "使眼色",
+      "nameEn": "Wink",
+      "group": "sense",
+      "emoji": "😜",
+      "query": "Wink human body"
+    },
+    {
+      "id": "nod",
+      "nameZh": "点头",
+      "nameEn": "Nod",
+      "group": "head",
+      "emoji": "🙂‍↕️",
+      "query": "Nod human body"
+    },
+    {
+      "id": "shake_h",
+      "nameZh": "摇头",
+      "nameEn": "Shake head",
+      "group": "head",
+      "emoji": "🫨",
+      "query": "Shake head human body"
+    },
+    {
+      "id": "hug",
+      "nameZh": "拥抱",
+      "nameEn": "Hug",
+      "group": "limb",
+      "emoji": "🤗",
+      "query": "Hug human body"
+    },
+    {
+      "id": "kick",
+      "nameZh": "踢",
+      "nameEn": "Kick",
+      "group": "limb",
+      "emoji": "🦵",
+      "query": "Kick human body"
+    },
+    {
+      "id": "run",
+      "nameZh": "跑",
+      "nameEn": "Run",
+      "group": "limb",
+      "emoji": "🏃",
+      "query": "Run human body"
+    },
+    {
+      "id": "walk",
+      "nameZh": "走",
+      "nameEn": "Walk",
+      "group": "limb",
+      "emoji": "🚶",
+      "query": "Walk human body"
+    },
+    {
+      "id": "jump",
+      "nameZh": "跳",
+      "nameEn": "Jump",
+      "group": "limb",
+      "emoji": "🦘",
+      "query": "Jump human body"
+    },
+    {
+      "id": "sit",
+      "nameZh": "坐",
+      "nameEn": "Sit",
+      "group": "torso",
+      "emoji": "🪑",
+      "query": "Sit human body"
+    },
+    {
+      "id": "stand",
+      "nameZh": "站",
+      "nameEn": "Stand",
+      "group": "torso",
+      "emoji": "🧍",
+      "query": "Stand human body"
+    },
+    {
+      "id": "sleep",
+      "nameZh": "睡",
+      "nameEn": "Sleep",
+      "group": "sense",
+      "emoji": "😴",
+      "query": "Sleep human body"
+    },
+    {
+      "id": "taste",
+      "nameZh": "味觉",
+      "nameEn": "Taste",
+      "group": "sense",
+      "emoji": "👅",
+      "query": "Taste human body"
+    }
+  ]
+}

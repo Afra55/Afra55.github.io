@@ -266,15 +266,20 @@
 
   function setLoadingPlaceholder(mediaEl, animal, loading, opts = {}) {
     if (!mediaEl) return;
+    const optGen = opts.paintGen != null ? String(opts.paintGen) : null;
+    if (optGen != null && (mediaEl.dataset.paintGen || "") !== optGen) return;
     cancelLoadClear(mediaEl);
-    mediaEl.classList.toggle("is-loading", Boolean(loading));
+    if (loading) mediaEl.classList.add("is-loading");
+    else if (optGen == null || (mediaEl.dataset.paintGen || "") === optGen) {
+      mediaEl.classList.remove("is-loading");
+    }
     let ph = mediaEl.querySelector(".animalearn-placeholder");
     if (!loading) {
       const shownAt = Number(mediaEl.dataset.loadShownAt || 0);
       const wait = shownAt ? Math.max(0, MIN_LOAD_MS - (Date.now() - shownAt)) : 0;
-      const gen = mediaEl.dataset.paintGen || "";
+      const expectedGen = optGen != null ? optGen : mediaEl.dataset.paintGen || "";
       const clear = () => {
-        if ((mediaEl.dataset.paintGen || "") !== gen) return;
+        if ((mediaEl.dataset.paintGen || "") !== expectedGen) return;
         mediaEl.querySelector(".animalearn-placeholder")?.remove();
         delete mediaEl.dataset.loadShownAt;
         mediaEl._aeLoadClear = 0;
@@ -315,9 +320,9 @@
     const paintGen = String(Number(mediaEl.dataset.paintGen || 0) + 1);
     mediaEl.dataset.paintGen = paintGen;
     const hideName = Boolean(opts.hideName);
-    setLoadingPlaceholder(mediaEl, animal, true, { hideName, percent: -1 });
+    setLoadingPlaceholder(mediaEl, animal, true, { hideName, percent: -1, paintGen });
     if (emojiEl) {
-      emojiEl.hidden = true;
+      emojiEl.hidden = false;
       emojiEl.textContent = animal.emoji || "🐾";
     }
     if (imgEl) {
@@ -356,14 +361,14 @@
       (p) => {
         if (!stillThis()) return;
         const percent = typeof p?.percent === "number" ? p.percent : -1;
-        setLoadingPlaceholder(mediaEl, animal, true, { hideName, percent });
+        setLoadingPlaceholder(mediaEl, animal, true, { hideName, percent, paintGen });
       },
       (prev) => showPreview(prev?.url)
     );
     if (mediaEl.dataset.paintGen !== paintGen) return hit;
     if (!imgEl || !hit.url) {
       if (emojiEl) emojiEl.hidden = false;
-      setLoadingPlaceholder(mediaEl, animal, false);
+      setLoadingPlaceholder(mediaEl, animal, false, { paintGen });
       mediaEl.classList.add("is-fallback");
       mediaEl.classList.remove("has-preview");
       return hit;
@@ -377,7 +382,7 @@
     if (!stillThis()) return hit;
     imgEl.classList.remove("is-preview");
     imgEl.classList.add("is-ready");
-    setLoadingPlaceholder(mediaEl, animal, false);
+    setLoadingPlaceholder(mediaEl, animal, false, { paintGen });
     mediaEl.classList.remove("is-fallback", "has-preview");
     return hit;
   }

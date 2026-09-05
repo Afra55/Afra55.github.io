@@ -1,0 +1,834 @@
+{
+  "version": 1,
+  "credit": "配图优先 Wikimedia Commons；缺图时 Openverse（CC）兜底。仅供学习展示。",
+  "visual": "image",
+  "groups": [
+    {
+      "id": "all",
+      "nameZh": "全部",
+      "nameEn": "All"
+    },
+    {
+      "id": "help",
+      "nameZh": "服务",
+      "nameEn": "Service"
+    },
+    {
+      "id": "make",
+      "nameZh": "制造",
+      "nameEn": "Make"
+    },
+    {
+      "id": "care",
+      "nameZh": "照料",
+      "nameEn": "Care"
+    },
+    {
+      "id": "art",
+      "nameZh": "艺术",
+      "nameEn": "Art"
+    }
+  ],
+  "items": [
+    {
+      "id": "doctor",
+      "nameZh": "医生",
+      "nameEn": "Doctor",
+      "group": "care",
+      "emoji": "🧑‍⚕️",
+      "query": "Doctor profession occupation"
+    },
+    {
+      "id": "nurse",
+      "nameZh": "护士",
+      "nameEn": "Nurse",
+      "group": "care",
+      "emoji": "👩‍⚕️",
+      "query": "Nurse profession occupation"
+    },
+    {
+      "id": "dentist",
+      "nameZh": "牙医",
+      "nameEn": "Dentist",
+      "group": "care",
+      "emoji": "🦷",
+      "query": "Dentist profession occupation"
+    },
+    {
+      "id": "pharmacist",
+      "nameZh": "药剂师",
+      "nameEn": "Pharmacist",
+      "group": "care",
+      "emoji": "💊",
+      "query": "Pharmacist profession occupation"
+    },
+    {
+      "id": "vet",
+      "nameZh": "兽医",
+      "nameEn": "Veterinarian",
+      "group": "care",
+      "emoji": "🐾",
+      "query": "Veterinarian profession occupation"
+    },
+    {
+      "id": "teacher",
+      "nameZh": "老师",
+      "nameEn": "Teacher",
+      "group": "help",
+      "emoji": "👩‍🏫",
+      "query": "Teacher profession occupation"
+    },
+    {
+      "id": "professor",
+      "nameZh": "教授",
+      "nameEn": "Professor",
+      "group": "help",
+      "emoji": "👨‍🏫",
+      "query": "Professor profession occupation"
+    },
+    {
+      "id": "student",
+      "nameZh": "学生",
+      "nameEn": "Student",
+      "group": "help",
+      "emoji": "🧑‍🎓",
+      "query": "Student profession occupation"
+    },
+    {
+      "id": "firefighter",
+      "nameZh": "消防员",
+      "nameEn": "Firefighter",
+      "group": "help",
+      "emoji": "🧑‍🚒",
+      "query": "Firefighter profession occupation"
+    },
+    {
+      "id": "police",
+      "nameZh": "警察",
+      "nameEn": "Police officer",
+      "group": "help",
+      "emoji": "👮",
+      "query": "Police officer profession occupation"
+    },
+    {
+      "id": "paramedic",
+      "nameZh": "急救员",
+      "nameEn": "Paramedic",
+      "group": "care",
+      "emoji": "🚑",
+      "query": "Paramedic profession occupation"
+    },
+    {
+      "id": "pilot",
+      "nameZh": "飞行员",
+      "nameEn": "Pilot",
+      "group": "help",
+      "emoji": "🧑‍✈️",
+      "query": "Pilot profession occupation"
+    },
+    {
+      "id": "flight_att",
+      "nameZh": "空乘",
+      "nameEn": "Flight attendant",
+      "group": "help",
+      "emoji": "✈️",
+      "query": "Flight attendant profession occupation"
+    },
+    {
+      "id": "driver",
+      "nameZh": "司机",
+      "nameEn": "Driver",
+      "group": "help",
+      "emoji": "🚕",
+      "query": "Driver profession occupation"
+    },
+    {
+      "id": "busdriver",
+      "nameZh": "公交司机",
+      "nameEn": "Bus driver",
+      "group": "help",
+      "emoji": "🚌",
+      "query": "Bus driver profession occupation"
+    },
+    {
+      "id": "train_c",
+      "nameZh": "列车员",
+      "nameEn": "Conductor",
+      "group": "help",
+      "emoji": "🚆",
+      "query": "Conductor profession occupation"
+    },
+    {
+      "id": "sailor",
+      "nameZh": "水手",
+      "nameEn": "Sailor",
+      "group": "help",
+      "emoji": "🧑‍✈️",
+      "query": "Sailor profession occupation"
+    },
+    {
+      "id": "captain",
+      "nameZh": "船长",
+      "nameEn": "Captain",
+      "group": "help",
+      "emoji": "🚢",
+      "query": "Captain profession occupation"
+    },
+    {
+      "id": "chef",
+      "nameZh": "厨师",
+      "nameEn": "Chef",
+      "group": "make",
+      "emoji": "👨‍🍳",
+      "query": "Chef profession occupation"
+    },
+    {
+      "id": "baker",
+      "nameZh": "面包师",
+      "nameEn": "Baker",
+      "group": "make",
+      "emoji": "🥖",
+      "query": "Baker profession occupation"
+    },
+    {
+      "id": "waiter",
+      "nameZh": "服务员",
+      "nameEn": "Waiter",
+      "group": "help",
+      "emoji": "🍽️",
+      "query": "Waiter profession occupation"
+    },
+    {
+      "id": "barista",
+      "nameZh": "咖啡师",
+      "nameEn": "Barista",
+      "group": "help",
+      "emoji": "☕",
+      "query": "Barista profession occupation"
+    },
+    {
+      "id": "farmer",
+      "nameZh": "农民",
+      "nameEn": "Farmer",
+      "group": "make",
+      "emoji": "👨‍🌾",
+      "query": "Farmer profession occupation"
+    },
+    {
+      "id": "gardener",
+      "nameZh": "园丁",
+      "nameEn": "Gardener",
+      "group": "make",
+      "emoji": "🌱",
+      "query": "Gardener profession occupation"
+    },
+    {
+      "id": "fisher",
+      "nameZh": "渔民",
+      "nameEn": "Fisher",
+      "group": "make",
+      "emoji": "🎣",
+      "query": "Fisher profession occupation"
+    },
+    {
+      "id": "builder",
+      "nameZh": "建筑工",
+      "nameEn": "Builder",
+      "group": "make",
+      "emoji": "👷",
+      "query": "Builder profession occupation"
+    },
+    {
+      "id": "carpenter",
+      "nameZh": "木匠",
+      "nameEn": "Carpenter",
+      "group": "make",
+      "emoji": "🪚",
+      "query": "Carpenter profession occupation"
+    },
+    {
+      "id": "electrician",
+      "nameZh": "电工",
+      "nameEn": "Electrician",
+      "group": "make",
+      "emoji": "💡",
+      "query": "Electrician profession occupation"
+    },
+    {
+      "id": "plumber",
+      "nameZh": "水管工",
+      "nameEn": "Plumber",
+      "group": "make",
+      "emoji": "🔧",
+      "query": "Plumber profession occupation"
+    },
+    {
+      "id": "mechanic",
+      "nameZh": "机械师",
+      "nameEn": "Mechanic",
+      "group": "make",
+      "emoji": "🧑‍🔧",
+      "query": "Mechanic profession occupation"
+    },
+    {
+      "id": "engineer",
+      "nameZh": "工程师",
+      "nameEn": "Engineer",
+      "group": "make",
+      "emoji": "👩‍💻",
+      "query": "Engineer profession occupation"
+    },
+    {
+      "id": "architect",
+      "nameZh": "建筑师",
+      "nameEn": "Architect",
+      "group": "make",
+      "emoji": "🏗️",
+      "query": "Architect profession occupation"
+    },
+    {
+      "id": "scientist",
+      "nameZh": "科学家",
+      "nameEn": "Scientist",
+      "group": "make",
+      "emoji": "🧑‍🔬",
+      "query": "Scientist profession occupation"
+    },
+    {
+      "id": "astronaut",
+      "nameZh": "宇航员",
+      "nameEn": "Astronaut",
+      "group": "make",
+      "emoji": "👨‍🚀",
+      "query": "Astronaut profession occupation"
+    },
+    {
+      "id": "programmer",
+      "nameZh": "程序员",
+      "nameEn": "Programmer",
+      "group": "make",
+      "emoji": "💻",
+      "query": "Programmer profession occupation"
+    },
+    {
+      "id": "designer",
+      "nameZh": "设计师",
+      "nameEn": "Designer",
+      "group": "art",
+      "emoji": "🎨",
+      "query": "Designer profession occupation"
+    },
+    {
+      "id": "artist",
+      "nameZh": "画家",
+      "nameEn": "Artist",
+      "group": "art",
+      "emoji": "🧑‍🎨",
+      "query": "Artist profession occupation"
+    },
+    {
+      "id": "musician",
+      "nameZh": "音乐家",
+      "nameEn": "Musician",
+      "group": "art",
+      "emoji": "🎵",
+      "query": "Musician profession occupation"
+    },
+    {
+      "id": "singer",
+      "nameZh": "歌手",
+      "nameEn": "Singer",
+      "group": "art",
+      "emoji": "🎤",
+      "query": "Singer profession occupation"
+    },
+    {
+      "id": "dancer",
+      "nameZh": "舞者",
+      "nameEn": "Dancer",
+      "group": "art",
+      "emoji": "💃",
+      "query": "Dancer profession occupation"
+    },
+    {
+      "id": "actor",
+      "nameZh": "演员",
+      "nameEn": "Actor",
+      "group": "art",
+      "emoji": "🎭",
+      "query": "Actor profession occupation"
+    },
+    {
+      "id": "writer",
+      "nameZh": "作家",
+      "nameEn": "Writer",
+      "group": "art",
+      "emoji": "✍️",
+      "query": "Writer profession occupation"
+    },
+    {
+      "id": "journalist",
+      "nameZh": "记者",
+      "nameEn": "Journalist",
+      "group": "art",
+      "emoji": "📰",
+      "query": "Journalist profession occupation"
+    },
+    {
+      "id": "photographer",
+      "nameZh": "摄影师",
+      "nameEn": "Photographer",
+      "group": "art",
+      "emoji": "📷",
+      "query": "Photographer profession occupation"
+    },
+    {
+      "id": "filmmaker",
+      "nameZh": "导演",
+      "nameEn": "Director",
+      "group": "art",
+      "emoji": "🎬",
+      "query": "Director profession occupation"
+    },
+    {
+      "id": "lawyer",
+      "nameZh": "律师",
+      "nameEn": "Lawyer",
+      "group": "help",
+      "emoji": "⚖️",
+      "query": "Lawyer profession occupation"
+    },
+    {
+      "id": "judge",
+      "nameZh": "法官",
+      "nameEn": "Judge",
+      "group": "help",
+      "emoji": "👨‍⚖️",
+      "query": "Judge profession occupation"
+    },
+    {
+      "id": "soldier",
+      "nameZh": "军人",
+      "nameEn": "Soldier",
+      "group": "help",
+      "emoji": "🪖",
+      "query": "Soldier profession occupation"
+    },
+    {
+      "id": "postman",
+      "nameZh": "邮递员",
+      "nameEn": "Mail carrier",
+      "group": "help",
+      "emoji": "✉️",
+      "query": "Mail carrier profession occupation"
+    },
+    {
+      "id": "courier",
+      "nameZh": "快递员",
+      "nameEn": "Courier",
+      "group": "help",
+      "emoji": "📦",
+      "query": "Courier profession occupation"
+    },
+    {
+      "id": "cashier",
+      "nameZh": "收银员",
+      "nameEn": "Cashier",
+      "group": "help",
+      "emoji": "🧾",
+      "query": "Cashier profession occupation"
+    },
+    {
+      "id": "shopkeeper",
+      "nameZh": "店主",
+      "nameEn": "Shopkeeper",
+      "group": "help",
+      "emoji": "🏪",
+      "query": "Shopkeeper profession occupation"
+    },
+    {
+      "id": "hairdresser",
+      "nameZh": "理发师",
+      "nameEn": "Hairdresser",
+      "group": "help",
+      "emoji": "💇",
+      "query": "Hairdresser profession occupation"
+    },
+    {
+      "id": "tailor",
+      "nameZh": "裁缝",
+      "nameEn": "Tailor",
+      "group": "make",
+      "emoji": "🧵",
+      "query": "Tailor profession occupation"
+    },
+    {
+      "id": "cleaner",
+      "nameZh": "清洁工",
+      "nameEn": "Cleaner",
+      "group": "help",
+      "emoji": "🧹",
+      "query": "Cleaner profession occupation"
+    },
+    {
+      "id": "security",
+      "nameZh": "保安",
+      "nameEn": "Security guard",
+      "group": "help",
+      "emoji": "🛡️",
+      "query": "Security guard profession occupation"
+    },
+    {
+      "id": "lifeguard",
+      "nameZh": "救生员",
+      "nameEn": "Lifeguard",
+      "group": "care",
+      "emoji": "🛟",
+      "query": "Lifeguard profession occupation"
+    },
+    {
+      "id": "coach",
+      "nameZh": "教练",
+      "nameEn": "Coach",
+      "group": "care",
+      "emoji": "🏋️",
+      "query": "Coach profession occupation"
+    },
+    {
+      "id": "referee",
+      "nameZh": "裁判",
+      "nameEn": "Referee",
+      "group": "help",
+      "emoji": "🧑‍⚖️",
+      "query": "Referee profession occupation"
+    },
+    {
+      "id": "librarian",
+      "nameZh": "图书管理员",
+      "nameEn": "Librarian",
+      "group": "help",
+      "emoji": "📚",
+      "query": "Librarian profession occupation"
+    },
+    {
+      "id": "translator",
+      "nameZh": "翻译",
+      "nameEn": "Translator",
+      "group": "help",
+      "emoji": "🌐",
+      "query": "Translator profession occupation"
+    },
+    {
+      "id": "accountant",
+      "nameZh": "会计",
+      "nameEn": "Accountant",
+      "group": "help",
+      "emoji": "🧮",
+      "query": "Accountant profession occupation"
+    },
+    {
+      "id": "banker",
+      "nameZh": "银行员",
+      "nameEn": "Banker",
+      "group": "help",
+      "emoji": "🏦",
+      "query": "Banker profession occupation"
+    },
+    {
+      "id": "realtor",
+      "nameZh": "房产中介",
+      "nameEn": "Realtor",
+      "group": "help",
+      "emoji": "🏠",
+      "query": "Realtor profession occupation"
+    },
+    {
+      "id": "guide",
+      "nameZh": "导游",
+      "nameEn": "Tour guide",
+      "group": "help",
+      "emoji": "🗺️",
+      "query": "Tour guide profession occupation"
+    },
+    {
+      "id": "hotel",
+      "nameZh": "酒店前台",
+      "nameEn": "Receptionist",
+      "group": "help",
+      "emoji": "🛎️",
+      "query": "Receptionist profession occupation"
+    },
+    {
+      "id": "babysitter",
+      "nameZh": "保姆",
+      "nameEn": "Babysitter",
+      "group": "care",
+      "emoji": "👶",
+      "query": "Babysitter profession occupation"
+    },
+    {
+      "id": "nanny",
+      "nameZh": "保育员",
+      "nameEn": "Nanny",
+      "group": "care",
+      "emoji": "🧸",
+      "query": "Nanny profession occupation"
+    },
+    {
+      "id": "social",
+      "nameZh": "社工",
+      "nameEn": "Social worker",
+      "group": "care",
+      "emoji": "🤝",
+      "query": "Social worker profession occupation"
+    },
+    {
+      "id": "therapist",
+      "nameZh": "治疗师",
+      "nameEn": "Therapist",
+      "group": "care",
+      "emoji": "🧠",
+      "query": "Therapist profession occupation"
+    },
+    {
+      "id": "optometrist",
+      "nameZh": "验光师",
+      "nameEn": "Optometrist",
+      "group": "care",
+      "emoji": "👓",
+      "query": "Optometrist profession occupation"
+    },
+    {
+      "id": "radiologist",
+      "nameZh": "放射科",
+      "nameEn": "Radiologist",
+      "group": "care",
+      "emoji": "🩻",
+      "query": "Radiologist profession occupation"
+    },
+    {
+      "id": "surgeon",
+      "nameZh": "外科医生",
+      "nameEn": "Surgeon",
+      "group": "care",
+      "emoji": "🩺",
+      "query": "Surgeon profession occupation"
+    },
+    {
+      "id": "midwife",
+      "nameZh": "助产士",
+      "nameEn": "Midwife",
+      "group": "care",
+      "emoji": "👶",
+      "query": "Midwife profession occupation"
+    },
+    {
+      "id": "nutritionist",
+      "nameZh": "营养师",
+      "nameEn": "Nutritionist",
+      "group": "care",
+      "emoji": "🥗",
+      "query": "Nutritionist profession occupation"
+    },
+    {
+      "id": "miner",
+      "nameZh": "矿工",
+      "nameEn": "Miner",
+      "group": "make",
+      "emoji": "⛏️",
+      "query": "Miner profession occupation"
+    },
+    {
+      "id": "welder",
+      "nameZh": "焊工",
+      "nameEn": "Welder",
+      "group": "make",
+      "emoji": "🛠️",
+      "query": "Welder profession occupation"
+    },
+    {
+      "id": "painter_j",
+      "nameZh": "油漆工",
+      "nameEn": "Painter",
+      "group": "make",
+      "emoji": "🖌️",
+      "query": "Painter profession occupation"
+    },
+    {
+      "id": "roofer",
+      "nameZh": "屋顶工",
+      "nameEn": "Roofer",
+      "group": "make",
+      "emoji": "🏠",
+      "query": "Roofer profession occupation"
+    },
+    {
+      "id": "mason",
+      "nameZh": "泥瓦工",
+      "nameEn": "Mason",
+      "group": "make",
+      "emoji": "🧱",
+      "query": "Mason profession occupation"
+    },
+    {
+      "id": "blacksmith",
+      "nameZh": "铁匠",
+      "nameEn": "Blacksmith",
+      "group": "make",
+      "emoji": "⚒️",
+      "query": "Blacksmith profession occupation"
+    },
+    {
+      "id": "jeweler",
+      "nameZh": "珠宝匠",
+      "nameEn": "Jeweler",
+      "group": "make",
+      "emoji": "💎",
+      "query": "Jeweler profession occupation"
+    },
+    {
+      "id": "potter",
+      "nameZh": "陶艺家",
+      "nameEn": "Potter",
+      "group": "art",
+      "emoji": "🏺",
+      "query": "Potter profession occupation"
+    },
+    {
+      "id": "sculptor",
+      "nameZh": "雕塑家",
+      "nameEn": "Sculptor",
+      "group": "art",
+      "emoji": "🗿",
+      "query": "Sculptor profession occupation"
+    },
+    {
+      "id": "composer",
+      "nameZh": "作曲家",
+      "nameEn": "Composer",
+      "group": "art",
+      "emoji": "🎼",
+      "query": "Composer profession occupation"
+    },
+    {
+      "id": "dj",
+      "nameZh": "DJ",
+      "nameEn": "DJ",
+      "group": "art",
+      "emoji": "🎧",
+      "query": "DJ profession occupation"
+    },
+    {
+      "id": "magician",
+      "nameZh": "魔术师",
+      "nameEn": "Magician",
+      "group": "art",
+      "emoji": "🪄",
+      "query": "Magician profession occupation"
+    },
+    {
+      "id": "clown",
+      "nameZh": "小丑",
+      "nameEn": "Clown",
+      "group": "art",
+      "emoji": "🤡",
+      "query": "Clown profession occupation"
+    },
+    {
+      "id": "athlete",
+      "nameZh": "运动员",
+      "nameEn": "Athlete",
+      "group": "care",
+      "emoji": "🏅",
+      "query": "Athlete profession occupation"
+    },
+    {
+      "id": "swimmer",
+      "nameZh": "游泳运动员",
+      "nameEn": "Swimmer",
+      "group": "care",
+      "emoji": "🏊",
+      "query": "Swimmer profession occupation"
+    },
+    {
+      "id": "cyclist",
+      "nameZh": "骑手",
+      "nameEn": "Cyclist",
+      "group": "care",
+      "emoji": "🚴",
+      "query": "Cyclist profession occupation"
+    },
+    {
+      "id": "zookeeper",
+      "nameZh": "饲养员",
+      "nameEn": "Zookeeper",
+      "group": "care",
+      "emoji": "🦁",
+      "query": "Zookeeper profession occupation"
+    },
+    {
+      "id": "ranger",
+      "nameZh": "护林员",
+      "nameEn": "Park ranger",
+      "group": "help",
+      "emoji": "🌲",
+      "query": "Park ranger profession occupation"
+    },
+    {
+      "id": "meteorologist",
+      "nameZh": "气象员",
+      "nameEn": "Meteorologist",
+      "group": "help",
+      "emoji": "🌦️",
+      "query": "Meteorologist profession occupation"
+    },
+    {
+      "id": "geologist",
+      "nameZh": "地质学家",
+      "nameEn": "Geologist",
+      "group": "make",
+      "emoji": "🪨",
+      "query": "Geologist profession occupation"
+    },
+    {
+      "id": "biologist",
+      "nameZh": "生物学家",
+      "nameEn": "Biologist",
+      "group": "make",
+      "emoji": "🧬",
+      "query": "Biologist profession occupation"
+    },
+    {
+      "id": "chemist",
+      "nameZh": "化学家",
+      "nameEn": "Chemist",
+      "group": "make",
+      "emoji": "⚗️",
+      "query": "Chemist profession occupation"
+    },
+    {
+      "id": "physicist",
+      "nameZh": "物理学家",
+      "nameEn": "Physicist",
+      "group": "make",
+      "emoji": "⚛️",
+      "query": "Physicist profession occupation"
+    },
+    {
+      "id": "mathematician",
+      "nameZh": "数学家",
+      "nameEn": "Mathematician",
+      "group": "make",
+      "emoji": "➗",
+      "query": "Mathematician profession occupation"
+    },
+    {
+      "id": "historian",
+      "nameZh": "历史学家",
+      "nameEn": "Historian",
+      "group": "art",
+      "emoji": "📜",
+      "query": "Historian profession occupation"
+    }
+  ]
+}
