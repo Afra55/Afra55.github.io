@@ -4,12 +4,45 @@
   const TOOL_ID = "animalearn";
   let mounted = false;
 
+  function buildQs() {
+    const v = encodeURIComponent(window.TOOLS_BUILD || window.TOOLS_VERSION || "");
+    return v ? `?v=${v}` : "";
+  }
+
+  function warmAnimalsJson() {
+    try {
+      fetch(`./data/animals-kids.json${buildQs()}`, { credentials: "same-origin" }).catch(() => {});
+    } catch (_) {}
+  }
+  warmAnimalsJson();
+
+  function waitForPanel(ms = 5000) {
+    return new Promise((resolve) => {
+      if (document.getElementById(TOOL_ID)) return resolve(true);
+      const t0 = Date.now();
+      const tick = () => {
+        if (document.getElementById(TOOL_ID)) return resolve(true);
+        if (Date.now() - t0 >= ms) return resolve(false);
+        setTimeout(tick, 50);
+      };
+      tick();
+    });
+  }
+
+  function markStatus(zhText, enText) {
+    const root = document.getElementById(TOOL_ID);
+    if (!root) return;
+    const zh = root.querySelector("#ae-card-zh");
+    const en = root.querySelector("#ae-card-en");
+    if (zh && (!zh.textContent || /加载|—|Loading/.test(zh.textContent))) zh.textContent = zhText;
+    if (en && (!en.textContent || /加载|Loading|—/.test(en.textContent))) en.textContent = enText;
+  }
+
   async function ensureFlash() {
     if (window.DevToolsKidsFlash?.mount) return;
     await new Promise((res, rej) => {
       const s = document.createElement("script");
-      const v = encodeURIComponent(window.TOOLS_BUILD || window.TOOLS_VERSION || "");
-      s.src = `./lib/kids-flash.js${v ? `?v=${v}` : ""}`;
+      s.src = `./lib/kids-flash.js${buildQs()}`;
       s.async = true;
       s.onload = res;
       s.onerror = () => rej(new Error("kids-flash 加载失败"));
@@ -40,7 +73,10 @@
 
   async function boot() {
     if (mounted) return;
-    if (!document.getElementById(TOOL_ID)) return;
+    markStatus("正在载入…", "Loading pack");
+    const ready = await waitForPanel(5000);
+    if (!ready) return;
+    markStatus("正在载入…", "Loading pack");
     await ensureFlash();
     if (mounted) return;
     patchAnimalsCatalogFetch();
@@ -58,6 +94,7 @@
   const start = () => {
     boot().catch((err) => {
       mounted = false;
+      markStatus("加载失败", "Load failed");
       console.error("[animalearn]", err);
     });
   };
@@ -72,4 +109,7 @@
   window.addEventListener("devtools:panel-mounted", (ev) => {
     if (ev?.detail?.id === TOOL_ID) start();
   });
+  try {
+    window.DevToolsPanels?.bootReady?.then(() => start());
+  } catch (_) {}
 })();
