@@ -56,6 +56,7 @@
     let zhVoice = null;
     let enVoice = null;
     let bootPromise = null;
+    let speakGen = 0;
 
     function showError(msg) {
       const el = root && $(`#${id("error")}`, root);
@@ -125,21 +126,33 @@
     function speakPair(item) {
       if (!window.speechSynthesis || !item) return;
       window.speechSynthesis.cancel();
-      primeVoices();
-      const zh = new SpeechSynthesisUtterance(item.nameZh);
-      zh.lang = "zh-CN";
-      if (zhVoice) zh.voice = zhVoice;
-      zh.rate = 0.92;
-      const en = new SpeechSynthesisUtterance(item.nameEn);
-      en.lang = "en-US";
-      if (enVoice) en.voice = enVoice;
-      en.rate = 0.95;
-      zh.onend = () => window.setTimeout(() => window.speechSynthesis.speak(en), 160);
-      window.speechSynthesis.speak(zh);
+      const gen = ++speakGen;
+      // 延后到下一帧，避免点读卡住切卡/点按反馈
+      window.setTimeout(() => {
+        if (gen !== speakGen || !item) return;
+        primeVoices();
+        const zh = new SpeechSynthesisUtterance(item.nameZh);
+        zh.lang = "zh-CN";
+        if (zhVoice) zh.voice = zhVoice;
+        zh.rate = 0.92;
+        const en = new SpeechSynthesisUtterance(item.nameEn);
+        en.lang = "en-US";
+        if (enVoice) en.voice = enVoice;
+        en.rate = 0.95;
+        zh.onend = () => {
+          if (gen !== speakGen) return;
+          window.setTimeout(() => {
+            if (gen !== speakGen) return;
+            window.speechSynthesis.speak(en);
+          }, 160);
+        };
+        window.speechSynthesis.speak(zh);
+      }, 0);
     }
 
     function clearSpecialVisual(mediaEl) {
       mediaEl?.querySelectorAll(".kidsflash-swatch, .kidsflash-digit").forEach((n) => n.remove());
+      mediaEl?.classList.remove("is-color", "is-digit");
     }
 
     function setLoadingPlaceholder(mediaEl, item, loading, opts = {}) {
@@ -212,26 +225,39 @@
     }
 
     function paintColorOrDigit(mediaEl, emojiEl, imgEl, item) {
-      clearSpecialVisual(mediaEl);
+      if (!mediaEl) return Promise.resolve({ url: "", credit: "" });
       if (imgEl) {
         imgEl.hidden = true;
-        imgEl.removeAttribute("src");
+        if (imgEl.getAttribute("src")) imgEl.removeAttribute("src");
       }
       if (emojiEl) emojiEl.hidden = true;
       setLoadingPlaceholder(mediaEl, item, false);
-      mediaEl?.classList.remove("is-fallback", "is-loading");
+      mediaEl.classList.remove("is-fallback", "is-loading", "has-preview");
+      mediaEl.classList.toggle("is-color", visual === "color");
+      mediaEl.classList.toggle("is-digit", visual === "digit");
+
       if (visual === "color") {
-        const sw = document.createElement("div");
-        sw.className = "kidsflash-swatch";
+        mediaEl.querySelector(".kidsflash-digit")?.remove();
+        let sw = mediaEl.querySelector(":scope > .kidsflash-swatch");
+        if (!sw) {
+          sw = document.createElement("div");
+          sw.className = "kidsflash-swatch";
+          sw.setAttribute("aria-hidden", "true");
+          mediaEl.appendChild(sw);
+        }
         sw.style.background = item.color || "#888";
-        sw.setAttribute("aria-hidden", "true");
-        mediaEl.appendChild(sw);
       } else {
-        const dig = document.createElement("div");
-        dig.className = "kidsflash-digit";
-        dig.textContent = item.digit != null ? String(item.digit) : item.nameZh || "";
-        dig.setAttribute("aria-hidden", "true");
-        mediaEl.appendChild(dig);
+        mediaEl.querySelector(".kidsflash-swatch")?.remove();
+        const text = item.digit != null ? String(item.digit) : item.nameZh || "";
+        let dig = mediaEl.querySelector(":scope > .kidsflash-digit");
+        if (!dig) {
+          dig = document.createElement("div");
+          dig.className = "kidsflash-digit";
+          dig.setAttribute("aria-hidden", "true");
+          mediaEl.appendChild(dig);
+        }
+        dig.textContent = text;
+        dig.classList.toggle("is-wide", text.length >= 3);
       }
       return Promise.resolve({ url: "", credit: "" });
     }
@@ -433,18 +459,23 @@
       if (zh) zh.textContent = item.nameZh;
       if (en) en.textContent = item.nameEn;
       if (meta) meta.textContent = `${cardIndex + 1} · ${list.length}`;
-      const names = $(".kidsflash-names", root);
-      if (names) {
-        names.classList.remove("is-pop");
-        void names.offsetWidth;
-        names.classList.add("is-pop");
-      }
+      // 色块/数字先立刻画完，再播名字动画，避免同步重排卡顿
       await paintMedia(
         $(`#${id("card-media")}`, root),
         $(`#${id("card-emoji")}`, root),
         $(`#${id("card-img")}`, root),
         item
       );
+      const names = $(".kidsflash-names", root);
+      if (names) {
+        names.classList.remove("is-pop");
+        if (visual === "image") {
+          void names.offsetWidth;
+          names.classList.add("is-pop");
+        } else {
+          requestAnimationFrame(() => names.classList.add("is-pop"));
+        }
+      }
       savePosition();
     }
 
@@ -530,9 +561,9 @@
         return `<span class="kidsflash-swatch kidsflash-swatch-sm" style="background:${a.color || "#888"}" aria-hidden="true"></span>`;
       }
       if (visual === "digit") {
-        return `<span class="kidsflash-digit kidsflash-digit-sm" aria-hidden="true">${
-          a.digit != null ? a.digit : a.nameZh
-        }</span>`;
+        const text = a.digit != null ? String(a.digit) : a.nameZh || "";
+        const wide = text.length >= 3 ? " is-wide" : "";
+        return `<span class="kidsflash-digit kidsflash-digit-sm${wide}" aria-hidden="true">${text}</span>`;
       }
       return `<span class="kidsflash-emoji" hidden>${a.emoji || defaultEmoji}</span><img alt="" hidden />`;
     }
@@ -708,7 +739,6 @@
         bind();
         root = document.getElementById(toolId);
         if (!root) return;
-        loadImgCache();
         loadPosition();
         if (!catalog) {
           const v = window.TOOLS_BUILD || "";
@@ -717,6 +747,7 @@
           catalog = await res.json();
           visual = catalog.visual || config.visual || "image";
         }
+        if (visual === "image") loadImgCache();
         const groups = catalog.groups || [];
         if (groupId !== "all" && !groups.some((g) => g.id === groupId)) groupId = "all";
         if (!["cards", "quiz-look", "quiz-listen"].includes(tab)) tab = "cards";
