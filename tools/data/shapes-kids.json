@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "credit": "几何形状本地绘制，无需外网图片。",
   "visual": "shape",
   "groups": [
@@ -163,6 +163,222 @@
       "emoji": "🌙",
       "shape": "crescent",
       "color": "#64748b"
+    },
+    {
+      "id": "ring",
+      "nameZh": "圆环",
+      "nameEn": "Ring",
+      "group": "more",
+      "emoji": "⭕",
+      "shape": "ring",
+      "color": "#6366f1"
+    },
+    {
+      "id": "semicircle2",
+      "nameZh": "半圆",
+      "nameEn": "Semicircle",
+      "group": "more",
+      "emoji": "◐",
+      "shape": "semicircle",
+      "color": "#84cc16"
+    },
+    {
+      "id": "quarter",
+      "nameZh": "四分之一圆",
+      "nameEn": "Quarter circle",
+      "group": "more",
+      "emoji": "◔",
+      "shape": "quarter",
+      "color": "#06b6d4"
+    },
+    {
+      "id": "rhombus",
+      "nameZh": "菱形",
+      "nameEn": "Rhombus",
+      "group": "more",
+      "emoji": "◆",
+      "shape": "diamond",
+      "color": "#f59e0b"
+    },
+    {
+      "id": "kite",
+      "nameZh": "风筝形",
+      "nameEn": "Kite shape",
+      "group": "more",
+      "emoji": "🪁",
+      "shape": "kite",
+      "color": "#ec4899"
+    },
+    {
+      "id": "arrow",
+      "nameZh": "箭头",
+      "nameEn": "Arrow",
+      "group": "more",
+      "emoji": "➤",
+      "shape": "arrow",
+      "color": "#3b82f6"
+    },
+    {
+      "id": "cross2",
+      "nameZh": "十字",
+      "nameEn": "Cross",
+      "group": "more",
+      "emoji": "✚",
+      "shape": "cross",
+      "color": "#0ea5e9"
+    },
+    {
+      "id": "plus",
+      "nameZh": "加号",
+      "nameEn": "Plus",
+      "group": "basic",
+      "emoji": "➕",
+      "shape": "plus",
+      "color": "#22c55e"
+    },
+    {
+      "id": "minus",
+      "nameZh": "减号",
+      "nameEn": "Minus",
+      "group": "basic",
+      "emoji": "➖",
+      "shape": "minus",
+      "color": "#64748b"
+    },
+    {
+      "id": "oval2",
+      "nameZh": "椭圆",
+      "nameEn": "Ellipse",
+      "group": "basic",
+      "emoji": "⬭",
+      "shape": "oval",
+      "color": "#06b6d4"
+    },
+    {
+      "id": "teardrop",
+      "nameZh": "水滴形",
+      "nameEn": "Teardrop",
+      "group": "more",
+      "emoji": "💧",
+      "shape": "teardrop",
+      "color": "#3b82f6"
+    },
+    {
+      "id": "cloud",
+      "nameZh": "云朵形",
+      "nameEn": "Cloud",
+      "group": "more",
+      "emoji": "☁️",
+      "shape": "cloud",
+      "color": "#94a3b8"
+    },
+    {
+      "id": "moon",
+      "nameZh": "月牙",
+      "nameEn": "Crescent moon",
+      "group": "more",
+      "emoji": "🌙",
+      "shape": "crescent",
+      "color": "#64748b"
+    },
+    {
+      "id": "flower",
+      "nameZh": "花形",
+      "nameEn": "Flower",
+      "group": "more",
+      "emoji": "🌸",
+      "shape": "flower",
+      "color": "#ec4899"
+    },
+    {
+      "id": "leaf",
+      "nameZh": "叶子形",
+      "nameEn": "Leaf",
+      "group": "more",
+      "emoji": "🍃",
+      "shape": "leaf",
+      "color": "#22c55e"
+    },
+    {
+      "id": "shield",
+      "nameZh": "盾形",
+      "nameEn": "Shield",
+      "group": "more",
+      "emoji": "🛡️",
+      "shape": "shield",
+      "color": "#6366f1"
+    },
+    {
+      "id": "banner",
+      "nameZh": "旗帜形",
+      "nameEn": "Banner",
+      "group": "more",
+      "emoji": "🚩",
+      "shape": "banner",
+      "color": "#ef4444"
+    },
+    {
+      "id": "parallelogram2",
+      "nameZh": "平行四边形",
+      "nameEn": "Parallelogram",
+      "group": "more",
+      "emoji": "▰",
+      "shape": "parallelogram",
+      "color": "#f97316"
+    },
+    {
+      "id": "trapezoid2",
+      "nameZh": "梯形",
+      "nameEn": "Trapezoid",
+      "group": "more",
+      "emoji": "⏢",
+      "shape": "trapezoid",
+      "color": "#d946ef"
+    },
+    {
+      "id": "cube",
+      "nameZh": "立方体轮廓",
+      "nameEn": "Cube",
+      "group": "more",
+      "emoji": "⬜",
+      "shape": "cube",
+      "color": "#8b5cf6"
+    },
+    {
+      "id": "cylinder",
+      "nameZh": "圆柱",
+      "nameEn": "Cylinder",
+      "group": "more",
+      "emoji": "🛢️",
+      "shape": "cylinder",
+      "color": "#14b8a6"
+    },
+    {
+      "id": "cone",
+      "nameZh": "圆锥",
+      "nameEn": "Cone",
+      "group": "more",
+      "emoji": "🔺",
+      "shape": "cone",
+      "color": "#f43f5e"
+    },
+    {
+      "id": "pyramid",
+      "nameZh": "金字塔",
+      "nameEn": "Pyramid",
+      "group": "more",
+      "emoji": "🔺",
+      "shape": "pyramid",
+      "color": "#eab308"
+    },
+    {
+      "id": "sphere",
+      "nameZh": "球体",
+      "nameEn": "Sphere",
+      "group": "more",
+      "emoji": "🔵",
+      "shape": "sphere",
+      "color": "#3b82f6"
     }
   ]
 }

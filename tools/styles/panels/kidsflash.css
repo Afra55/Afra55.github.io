@@ -135,12 +135,14 @@
 }
 
 .kidsflash-media img.is-preview {
+  z-index: 1;
   filter: blur(14px);
   transform: scale(1.05);
   opacity: 0.9;
 }
 
 .kidsflash-media img.is-ready {
+  z-index: 1;
   filter: none;
   transform: none;
   opacity: 1;
@@ -148,11 +150,13 @@
 }
 
 .kidsflash-media.has-preview .kidsflash-placeholder {
-  background: color-mix(in srgb, var(--panel, #12141a) 35%, transparent);
+  /* 预览图时仍保持可读遮罩，勿过透 */
+  background: rgba(11, 13, 18, 0.72);
 }
 
 .kidsflash-media.has-preview .kidsflash-placeholder-emoji {
-  display: none;
+  opacity: 0.4;
+  font-size: clamp(2rem, 10vw, 3.2rem);
 }
 
 .kidsflash-media-tap:hover {
@@ -207,7 +211,7 @@
 .kidsflash-placeholder {
   position: absolute;
   inset: 0;
-  z-index: 2;
+  z-index: 6;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -216,6 +220,10 @@
   padding: 0.75rem;
   text-align: center;
   pointer-events: none;
+  /* 实色底：避免 color-mix 不支持时变成透明导致白字看不见 */
+  color: #f8fafc;
+  background: rgba(11, 13, 18, 0.84);
+  backdrop-filter: blur(2px);
   animation: kidsflash-fade-in 0.25s ease;
 }
 
@@ -227,26 +235,30 @@
 .kidsflash-placeholder-text {
   font-size: clamp(1rem, 3.6vw, 1.25rem);
   font-weight: 650;
-  opacity: 0.92;
+  opacity: 0.95;
   max-width: 90%;
+  color: #f4f7fb;
 }
 
 .kidsflash-load-pct {
   margin-top: 0.35rem;
-  font-size: 0.85rem;
-  font-weight: 600;
-  opacity: 0.8;
+  font-size: 0.9rem;
+  font-weight: 700;
+  opacity: 0.95;
   letter-spacing: 0.04em;
+  color: #f4f7fb;
+  text-shadow: 0 1px 2px color-mix(in srgb, #000 45%, transparent);
 }
 
 .kidsflash-load-bar {
   display: block;
   width: min(70%, 12rem);
-  height: 0.35rem;
+  height: 0.42rem;
   margin-top: 0.45rem;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--line, #2a2f3a) 55%, transparent);
+  background: color-mix(in srgb, #fff 22%, transparent);
   overflow: hidden;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, #fff 12%, transparent);
 }
 
 .kidsflash-load-bar-fill {
@@ -520,7 +532,7 @@ body.kidsflash-sheet-open {
 .kidsflash-img-choice .kidsflash-placeholder {
   position: absolute;
   inset: 0;
-  z-index: 1;
+  z-index: 6;
 }
 
 .kidsflash-img-choice .kidsflash-emoji {
@@ -927,6 +939,121 @@ body.kidsflash-fs-active {
   background: radial-gradient(circle at 35% 50%, transparent 0 42%, var(--shape-color, #64748b) 43% 70%, transparent 71%);
 }
 
+.kidsflash-shape.is-ring {
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: inset 0 0 0 18%;
+  border: clamp(10px, 8%, 22px) solid var(--shape-color, #3b82f6);
+  box-sizing: border-box;
+}
+
+.kidsflash-shape.is-quarter {
+  border-radius: 100% 0 0 0;
+  inset: 18% 18% 12% 12%;
+}
+
+.kidsflash-shape.is-kite {
+  clip-path: polygon(50% 0%, 80% 40%, 50% 100%, 20% 40%);
+}
+
+.kidsflash-shape.is-arrow {
+  clip-path: polygon(50% 0%, 100% 40%, 70% 40%, 70% 100%, 30% 100%, 30% 40%, 0% 40%);
+}
+
+.kidsflash-shape.is-plus {
+  clip-path: polygon(35% 0%, 65% 0%, 65% 35%, 100% 35%, 100% 65%, 65% 65%, 65% 100%, 35% 100%, 35% 65%, 0% 65%, 0% 35%, 35% 35%);
+}
+
+.kidsflash-shape.is-minus {
+  inset: 42% 14%;
+  border-radius: 12%;
+}
+
+.kidsflash-shape.is-teardrop {
+  border-radius: 50% 50% 50% 0;
+  transform: rotate(-45deg);
+  inset: 18%;
+}
+
+.kidsflash-shape.is-cloud {
+  background: transparent;
+  box-shadow: none;
+  background:
+    radial-gradient(circle at 28% 55%, var(--shape-color, #38bdf8) 0 28%, transparent 29%),
+    radial-gradient(circle at 52% 42%, var(--shape-color, #38bdf8) 0 34%, transparent 35%),
+    radial-gradient(circle at 74% 55%, var(--shape-color, #38bdf8) 0 26%, transparent 27%),
+    linear-gradient(var(--shape-color, #38bdf8), var(--shape-color, #38bdf8));
+  clip-path: inset(35% 8% 22% 8% round 40%);
+}
+
+.kidsflash-shape.is-flower {
+  clip-path: polygon(50% 8%, 61% 28%, 84% 22%, 72% 42%, 92% 50%, 72% 58%, 84% 78%, 61% 72%, 50% 92%, 39% 72%, 16% 78%, 28% 58%, 8% 50%, 28% 42%, 16% 22%, 39% 28%);
+}
+
+.kidsflash-shape.is-leaf {
+  border-radius: 0 70% 0 70%;
+  transform: rotate(-20deg);
+}
+
+.kidsflash-shape.is-shield {
+  clip-path: polygon(50% 0%, 95% 18%, 95% 55%, 50% 100%, 5% 55%, 5% 18%);
+}
+
+.kidsflash-shape.is-banner {
+  clip-path: polygon(8% 8%, 92% 8%, 92% 78%, 50% 100%, 8% 78%);
+}
+
+.kidsflash-shape.is-cube {
+  clip-path: polygon(25% 20%, 75% 20%, 90% 40%, 90% 80%, 50% 95%, 10% 80%, 10% 40%);
+}
+
+.kidsflash-shape.is-cylinder {
+  border-radius: 50% / 18%;
+  inset: 14% 22%;
+}
+
+.kidsflash-shape.is-cone {
+  clip-path: polygon(50% 6%, 92% 88%, 8% 88%);
+}
+
+.kidsflash-shape.is-pyramid {
+  clip-path: polygon(50% 8%, 92% 78%, 72% 92%, 28% 92%, 8% 78%);
+}
+
+.kidsflash-shape.is-sphere {
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 32% 28%, color-mix(in srgb, #fff 55%, transparent), transparent 42%),
+    var(--shape-color, #3b82f6);
+}
+
 .kidsflash-img-choice .kidsflash-shape {
   z-index: 1;
+}
+
+.kidsflash-credit {
+  margin: 0.85rem 0 0;
+  padding: 0 0.15rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  opacity: 0.72;
+  color: var(--muted, #8b93a7);
+}
+
+.kidsflash-immerse button,
+.kidsflash-immerse .kidsflash-media-tap,
+.kidsflash-immerse .kidsflash-names,
+.kidsflash-immerse .kidsflash-names-tap,
+.kidsflash-immerse .kidsflash-choice,
+.kidsflash-immerse .kidsflash-img-choice,
+.kidsflash-immerse .kidsflash-tab,
+.kidsflash-immerse .kidsflash-speak-btn {
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.kidsflash-names {
+  cursor: pointer;
+  -webkit-touch-callout: none;
 }
