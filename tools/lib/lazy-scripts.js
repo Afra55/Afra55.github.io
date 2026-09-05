@@ -43,6 +43,10 @@
       src: "./vendor/regulex.js",
       probe: () => typeof globalThis.require === "function",
     },
+    leaflet: {
+      src: "./vendor/leaflet/leaflet.js",
+      probe: () => typeof globalThis.L !== "undefined" || typeof globalThis.leaflet !== "undefined",
+    },
   };
 
   const EXTERNAL_SITE_TOOLS = new Set([]);
@@ -76,6 +80,7 @@
     ambient: "./ambient.js",
     enspeak: "./enspeak.js",
     animalearn: "./animalearn.js",
+    ipgeo: "./ipgeo.js",
     sandspiel: "./sandspiel.js",
     memo: "./memo.js",
     sitenav: "./sitenav.js",
@@ -146,6 +151,7 @@
     vbb: ["gif", "omggif"],
     gifbb: ["gif", "omggif"],
     dateremind: ["solarlunar"],
+    ipgeo: ["leaflet"],
   };
 
   /** 独立脚本，不走 extra 面板栈 */
@@ -176,6 +182,7 @@
     "ambient",
     "enspeak",
     "animalearn",
+    "ipgeo",
     "sandspiel",
     "lanshare",
     "ffbridge",
@@ -190,7 +197,7 @@
     "acupoint", "healthread", "textimg", "imgtext", "whiteboard", "lanshare", "ffbridge", "ytdlp",
     "gitbridge", "passvault", "envkit", "feedbackhub",
     "setup", "about", "xorenc", "morse", "countdown",
-    "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "piano", "minigames", "ambient", "enspeak", "animalearn",
+    "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "piano", "minigames", "ambient", "enspeak", "animalearn", "ipgeo",
   ]);
 
   const scriptPromises = new Map();
@@ -385,6 +392,7 @@
     solarlunar: "农历库",
     jsonrepair: "JSON 修复库",
     regulex: "正则结构图库",
+    leaflet: "地图库 Leaflet",
   };
 
   async function ensureForTool(toolId, opts = {}) {

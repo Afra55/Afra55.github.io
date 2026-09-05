@@ -173,6 +173,11 @@
       "bytes": 2798
     },
     {
+      "id": "ipgeo",
+      "file": "./panels/ipgeo.html",
+      "bytes": 2843
+    },
+    {
       "id": "json",
       "file": "./panels/json.html",
       "bytes": 1181

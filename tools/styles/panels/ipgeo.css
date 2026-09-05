@@ -1,0 +1,136 @@
+/* IP 信息 */
+.ipgeo-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ipgeo-hero {
+  padding: 0.85rem 1rem;
+}
+
+.ipgeo-hero-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.ipgeo-flag {
+  margin: 0;
+  font-size: 2.4rem;
+  line-height: 1;
+}
+
+.ipgeo-ip {
+  margin: 0;
+  font-size: clamp(1.35rem, 4.5vw, 1.85rem);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  word-break: break-all;
+}
+
+.ipgeo-place {
+  margin: 0.2rem 0 0;
+  font-size: 1.05rem;
+}
+
+.ipgeo-hero-meta {
+  margin-top: 0.65rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.85rem;
+  opacity: 0.85;
+  font-size: 0.85rem;
+}
+
+.ipgeo-map-wrap {
+  padding: 0.55rem;
+}
+
+.ipgeo-map {
+  width: 100%;
+  height: min(52vh, 28rem);
+  min-height: 16rem;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--line, #2a2f3a) 80%, transparent);
+  background: color-mix(in srgb, var(--panel, #12141a) 80%, #1a2230);
+  z-index: 0;
+}
+
+.ipgeo-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.ipgeo-section {
+  padding: 0.75rem 0.9rem;
+}
+
+.ipgeo-section h2 {
+  margin: 0 0 0.55rem;
+  font-size: 0.95rem;
+  font-weight: 650;
+}
+
+.ipgeo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
+  gap: 0.45rem 0.75rem;
+}
+
+.ipgeo-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+  padding: 0.35rem 0.45rem;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel, #12141a) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--line, #2a2f3a) 55%, transparent);
+}
+
+.ipgeo-field-label {
+  font-size: 0.72rem;
+  opacity: 0.7;
+  letter-spacing: 0.02em;
+}
+
+.ipgeo-field-value {
+  font-size: 0.92rem;
+  word-break: break-word;
+}
+
+.ipgeo-field-value.is-empty {
+  opacity: 0.45;
+}
+
+.ipgeo-raw {
+  padding: 0.55rem 0.85rem;
+}
+
+.ipgeo-raw summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.ipgeo-raw-pre {
+  margin: 0.55rem 0 0;
+  max-height: 22rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+#ipgeo .leaflet-container {
+  font: inherit;
+  background: transparent;
+}
+
+#ipgeo .leaflet-control-attribution {
+  font-size: 0.68rem;
+  max-width: 70%;
+}

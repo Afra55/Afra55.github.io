@@ -94,6 +94,14 @@
             path: "tools/vendor/regulex.js",
           },
           {
+            name: "Leaflet",
+            version: "1.9.4",
+            license: "BSD-2-Clause",
+            repo: "https://github.com/Leaflet/Leaflet",
+            usedIn: "IP 信息 · OpenStreetMap 地图钉点",
+            path: "tools/vendor/leaflet/",
+          },
+          {
             name: "Regex Vis",
             license: "MIT",
             repo: "https://github.com/Bowen7/regex-vis",
