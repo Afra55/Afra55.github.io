@@ -279,6 +279,51 @@
     window.setTimeout(() => $("#ae-cat-close", sheet)?.focus?.(), 30);
   }
 
+  function syncFsButton() {
+    const btn = root && $("#ae-fs-toggle", root);
+    if (!btn) return;
+    const on = root?.classList.contains("is-fs");
+    btn.textContent = on ? "退出全屏" : "全屏";
+    btn.setAttribute("aria-pressed", on ? "true" : "false");
+    btn.title = on ? "退出全屏 (Esc)" : "全屏沉浸";
+  }
+
+  function isFs() {
+    return Boolean(root?.classList.contains("is-fs"));
+  }
+
+  async function enterFullscreen() {
+    if (!root || isFs()) return;
+    root.classList.add("is-fs");
+    document.body.classList.add("animalearn-fs-active");
+    syncFsButton();
+    try {
+      if (!document.fullscreenElement && root.requestFullscreen) {
+        await root.requestFullscreen({ navigationUI: "hide" });
+      }
+    } catch (_) {
+      /* iOS 等不支持原生全屏时，仅用 CSS 沉浸 */
+    }
+    $("#ae-fs-toggle", root)?.focus?.();
+  }
+
+  async function exitFullscreen() {
+    if (!root) return;
+    root.classList.remove("is-fs");
+    document.body.classList.remove("animalearn-fs-active");
+    syncFsButton();
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function toggleFullscreen() {
+    if (isFs()) exitFullscreen();
+    else enterFullscreen();
+  }
+
   function closeCatSheet() {
     const sheet = getCatSheet();
     const openBtn = root && $("#ae-cat-open", root);
@@ -560,6 +605,7 @@
     });
 
     $("#ae-cat-open", root)?.addEventListener("click", () => openCatSheet());
+    $("#ae-fs-toggle", root)?.addEventListener("click", () => toggleFullscreen());
 
     $("#ae-card-media", root)?.addEventListener("keydown", (ev) => {
       if (ev.key === "Enter" || ev.key === " ") {
@@ -571,7 +617,21 @@
     document.addEventListener("keydown", (ev) => {
       if (ev.key !== "Escape") return;
       const s = getCatSheet();
-      if (s && !s.hidden) closeCatSheet();
+      if (s && !s.hidden) {
+        closeCatSheet();
+        return;
+      }
+      if (isFs()) exitFullscreen();
+    });
+
+    document.addEventListener("fullscreenchange", () => {
+      if (!root) return;
+      // 系统退出原生全屏时，同步关掉 CSS 沉浸
+      if (!document.fullscreenElement && isFs()) {
+        root.classList.remove("is-fs");
+        document.body.classList.remove("animalearn-fs-active");
+        syncFsButton();
+      }
     });
 
     if (window.speechSynthesis) {

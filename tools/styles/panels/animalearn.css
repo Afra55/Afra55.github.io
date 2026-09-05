@@ -4,10 +4,25 @@
   border-bottom: none;
 }
 
+.animalearn-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
 .animalearn-immerse .panel-head h1 {
   margin: 0;
   font-size: clamp(1.35rem, 4.5vw, 1.7rem);
   letter-spacing: 0.06em;
+}
+
+.animalearn-fs-btn {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 0.38rem 0.85rem;
+  font-weight: 650;
+  min-height: 2.2rem;
 }
 
 .animalearn-body {
@@ -630,4 +645,62 @@ body.animalearn-sheet-open {
       width: min(100%, 20.5rem, 50vh, 20.5rem);
     }
   }
+}
+
+/* 全屏沉浸（CSS 兜底，兼容 iOS；桌面另尝试原生 Fullscreen） */
+body.animalearn-fs-active {
+  overflow: hidden;
+}
+
+#animalearn.is-fs {
+  position: fixed;
+  inset: 0;
+  z-index: 11000;
+  margin: 0;
+  border-radius: 0;
+  border: 0;
+  box-shadow: none;
+  width: 100%;
+  max-width: none;
+  height: 100%;
+  max-height: none;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  background:
+    radial-gradient(120% 70% at 50% 0%, color-mix(in srgb, var(--accent, #5b8cff) 16%, transparent), transparent 55%),
+    var(--bg, #0b0d12);
+  padding: 0.65rem 0.85rem calc(0.9rem + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-direction: column;
+}
+
+#animalearn.is-fs .panel-head,
+#animalearn.is-fs .animalearn-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: color-mix(in srgb, var(--bg, #0b0d12) 88%, transparent);
+  backdrop-filter: blur(8px);
+  padding-top: max(0.35rem, env(safe-area-inset-top, 0px));
+}
+
+#animalearn.is-fs .animalearn-body {
+  flex: 1 1 auto;
+  max-width: 36rem;
+  width: 100%;
+  margin: 0 auto;
+}
+
+#animalearn.is-fs .animalearn-media {
+  width: min(100%, 28rem, 58dvh, 26rem);
+  min-height: 12rem;
+}
+
+#animalearn.is-fs .animalearn-zh {
+  font-size: clamp(1.85rem, 6vw, 2.6rem);
+}
+
+#animalearn.is-fs .animalearn-fs-btn {
+  border-color: var(--accent, #5b8cff);
+  color: var(--accent, #5b8cff);
 }
