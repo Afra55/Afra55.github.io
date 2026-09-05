@@ -222,15 +222,16 @@
       imgEl.removeAttribute("src");
       imgEl.alt = `${animal.nameZh} / ${animal.nameEn}`;
       imgEl.dataset.expectId = animal.id;
-      // 兜底：超大源图偶发撑破布局时仍强制框内完整显示
+      // 兜底：强制框内完整显示（禁止裁切下半截 / 撑破屏幕）
       imgEl.style.maxWidth = "100%";
       imgEl.style.maxHeight = "100%";
       imgEl.style.width = "100%";
       imgEl.style.height = "100%";
-      imgEl.style.objectFit = "contain";
-      imgEl.style.objectPosition = "center";
+      imgEl.style.setProperty("object-fit", "contain", "important");
+      imgEl.style.objectPosition = "center center";
       imgEl.style.position = "absolute";
       imgEl.style.inset = "0";
+      imgEl.style.margin = "0";
     }
     const hit = await resolveImage(animal);
     if (!imgEl || !hit.url) {

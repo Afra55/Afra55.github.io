@@ -78,23 +78,26 @@
   gap: 0.7rem;
 }
 
-/* 固定图框：完整显示动物（contain），翻页高度稳定、不乱跳；大图绝不能撑破 */
+/*
+ * 正方形固定图框（边长由宽度决定）：
+ * - object-fit:contain → 整只动物完整可见，绝不裁下半截
+ * - 框尺寸与图片无关 → 点「下一只」高度不跳
+ */
 .animalearn-media {
   position: relative;
   box-sizing: border-box;
-  width: 100%;
-  max-width: min(100%, 28rem);
-  height: min(46vh, 20rem);
-  max-height: min(46vh, 20rem);
+  width: min(100%, 26rem, 56dvh, 24rem);
+  max-width: 100%;
+  aspect-ratio: 1 / 1;
+  height: auto;
   min-width: 0;
-  min-height: 10rem;
+  min-height: 11rem;
   flex: 0 0 auto;
   border-radius: 18px;
   border: 1px solid color-mix(in srgb, var(--line, #2a2f3a) 75%, transparent);
   background:
     linear-gradient(160deg, color-mix(in srgb, #1a2230 80%, transparent), color-mix(in srgb, var(--panel, #12141a) 90%, #0e1218));
   overflow: hidden;
-  contain: strict;
   isolation: isolate;
   display: block;
   transition: box-shadow 0.2s ease, transform 0.2s ease;
@@ -125,13 +128,14 @@
   height: 100%;
   max-width: 100%;
   max-height: 100%;
-  margin: auto;
-  object-fit: contain;
-  object-position: center;
+  margin: 0;
+  border: 0;
+  object-fit: contain !important;
+  object-position: center center;
   display: block;
   background: transparent;
-  /* 防止超大 intrinsic 尺寸在部分 WebKit 上撑破 */
   -webkit-user-drag: none;
+  pointer-events: none;
 }
 
 .animalearn-media img[hidden],
@@ -376,9 +380,10 @@ body.animalearn-sheet-open {
   height: 100%;
   max-width: 100%;
   max-height: 100%;
-  object-fit: contain;
-  object-position: center;
+  object-fit: contain !important;
+  object-position: center center;
   display: block;
+  pointer-events: none;
 }
 
 .animalearn-img-choice .animalearn-emoji,
@@ -563,8 +568,21 @@ body.animalearn-sheet-open {
 
 @media (max-width: 480px) {
   .animalearn-media {
-    height: min(42vh, 16.5rem);
-    max-height: min(42vh, 16.5rem);
-    min-height: 9.5rem;
+    /* 手机仍保持正方形；略收边长，整页更稳，但不裁图 */
+    width: min(100%, 20.5rem, 50dvh, 20.5rem);
+    min-height: 10rem;
+  }
+}
+
+/* 旧浏览器无 dvh 时回退 vh */
+@supports not (height: 1dvh) {
+  .animalearn-media {
+    width: min(100%, 26rem, 56vh, 24rem);
+  }
+
+  @media (max-width: 480px) {
+    .animalearn-media {
+      width: min(100%, 20.5rem, 50vh, 20.5rem);
+    }
   }
 }
