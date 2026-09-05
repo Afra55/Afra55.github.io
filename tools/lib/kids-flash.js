@@ -125,37 +125,51 @@
 
     function speakPair(item, opts = {}) {
       if (!window.speechSynthesis || !item) return;
+      const zhText = String(item.nameZh || "").trim();
+      const enText = String(item.nameEn || "").trim();
+      if (!zhText && !enText) return;
       window.speechSynthesis.cancel();
       const gen = ++speakGen;
       const onDone = typeof opts.onDone === "function" ? opts.onDone : null;
-      // 延后到下一帧，避免点读卡住切卡/点按反馈
-      window.setTimeout(() => {
-        if (gen !== speakGen || !item) return;
-        primeVoices();
-        const zh = new SpeechSynthesisUtterance(item.nameZh);
-        zh.lang = "zh-CN";
-        if (zhVoice) zh.voice = zhVoice;
-        zh.rate = 0.92;
-        const en = new SpeechSynthesisUtterance(item.nameEn);
+      // 必须在用户手势同步调用 speak，否则 iOS 静音
+      primeVoices();
+      const finish = () => {
+        if (gen !== speakGen) return;
+        onDone?.();
+      };
+      const speakEn = () => {
+        if (gen !== speakGen || !enText) {
+          finish();
+          return;
+        }
+        const en = new SpeechSynthesisUtterance(enText);
         en.lang = "en-US";
         if (enVoice) en.voice = enVoice;
         en.rate = 0.95;
-        const finish = () => {
-          if (gen !== speakGen) return;
-          onDone?.();
-        };
         en.onend = finish;
         en.onerror = finish;
-        zh.onend = () => {
-          if (gen !== speakGen) return;
-          window.setTimeout(() => {
-            if (gen !== speakGen) return;
-            window.speechSynthesis.speak(en);
-          }, 160);
-        };
-        zh.onerror = finish;
-        window.speechSynthesis.speak(zh);
-      }, 0);
+        window.speechSynthesis.speak(en);
+        try {
+          window.speechSynthesis.resume();
+        } catch (_) {}
+      };
+      if (!zhText) {
+        speakEn();
+        return;
+      }
+      const zh = new SpeechSynthesisUtterance(zhText);
+      zh.lang = "zh-CN";
+      if (zhVoice) zh.voice = zhVoice;
+      zh.rate = 0.92;
+      zh.onend = () => {
+        if (gen !== speakGen) return;
+        window.setTimeout(speakEn, 160);
+      };
+      zh.onerror = finish;
+      window.speechSynthesis.speak(zh);
+      try {
+        window.speechSynthesis.resume();
+      } catch (_) {}
     }
 
     function clearSpecialVisual(mediaEl) {
@@ -604,8 +618,7 @@
       };
       const start = (ev) => {
         if (ev.pointerType === "mouse" && ev.button !== 0) return;
-        // 避免系统长按菜单 / 选中干扰连读
-        ev.preventDefault();
+        // 不 preventDefault：iOS 需保留用户手势才能出声
         holding = true;
         loopGen += 1;
         const myGen = loopGen;
@@ -871,15 +884,44 @@
       });
     }
 
+    function waitForRoot(timeoutMs = 10000) {
+      const existing = document.getElementById(toolId);
+      if (existing) return Promise.resolve(existing);
+      return new Promise((resolve) => {
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          window.clearTimeout(timer);
+          window.removeEventListener("devtools:panel-mounted", onMounted);
+          resolve(document.getElementById(toolId));
+        };
+        const onMounted = (ev) => {
+          if (ev?.detail?.id === toolId) finish();
+        };
+        const timer = window.setTimeout(finish, timeoutMs);
+        window.addEventListener("devtools:panel-mounted", onMounted);
+      });
+    }
+
     async function boot() {
       if (bootPromise) return bootPromise;
       bootPromise = (async () => {
+        root = document.getElementById(toolId) || (await waitForRoot());
+        if (!root) throw new Error(`面板 #${toolId} 未挂载`);
+        const zhEl = $(`#${id("card-zh")}`, root);
+        const enEl = $(`#${id("card-en")}`, root);
+        if (zhEl && (!zhEl.textContent || zhEl.textContent === "—" || zhEl.textContent === "－")) {
+          zhEl.textContent = "加载中…";
+        }
+        if (enEl && (!enEl.textContent || enEl.textContent === "—" || enEl.textContent === "－")) {
+          enEl.textContent = "Loading…";
+        }
         bind();
-        root = document.getElementById(toolId);
-        if (!root) return;
         loadPosition();
         if (!catalog) {
-          const v = window.TOOLS_BUILD || "";
+          const v = window.TOOLS_BUILD || window.TOOLS_VERSION || "";
+          if (!dataUrl) throw new Error("缺少 dataUrl");
           const res = await fetch(`${dataUrl}${v ? `?v=${encodeURIComponent(v)}` : ""}`);
           if (!res.ok) throw new Error(`加载数据失败（${res.status}）`);
           catalog = await res.json();
@@ -900,7 +942,10 @@
     }
 
     const start = () => {
-      boot().catch((err) => showError(err.message || String(err)));
+      boot().catch((err) => {
+        root = root || document.getElementById(toolId);
+        showError(err.message || String(err));
+      });
     };
 
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
@@ -913,6 +958,10 @@
         if (isFs()) exitFullscreen();
         savePosition();
       }
+    });
+
+    window.addEventListener("devtools:panel-mounted", (ev) => {
+      if (ev?.detail?.id === toolId) start();
     });
 
     return { boot, start };

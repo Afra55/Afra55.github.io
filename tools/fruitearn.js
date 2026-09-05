@@ -39,6 +39,10 @@
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
   else start();
 
+  window.addEventListener("devtools:panel-mounted", (ev) => {
+    if (ev?.detail?.id === TOOL_ID) start();
+  });
+
   window.addEventListener("devtools:route", () => {
     const head = location.hash.replace(/^#/, "").split(/[/?]/)[0];
     if (head === TOOL_ID) start();
