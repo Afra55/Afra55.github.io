@@ -1040,6 +1040,24 @@ body.kidsflash-fs-active {
   color: var(--muted, #8b93a7);
 }
 
+.kidsflash-immerse,
+.kidsflash-immerse * {
+  -webkit-touch-callout: none;
+}
+
+.kidsflash-immerse {
+  touch-action: manipulation;
+}
+
+.kidsflash-immerse,
+.kidsflash-immerse * {
+  -webkit-touch-callout: none;
+}
+
+.kidsflash-immerse {
+  touch-action: manipulation;
+}
+
 .kidsflash-immerse button,
 .kidsflash-immerse .kidsflash-media-tap,
 .kidsflash-immerse .kidsflash-names,
@@ -1047,10 +1065,25 @@ body.kidsflash-fs-active {
 .kidsflash-immerse .kidsflash-choice,
 .kidsflash-immerse .kidsflash-img-choice,
 .kidsflash-immerse .kidsflash-tab,
-.kidsflash-immerse .kidsflash-speak-btn {
+.kidsflash-immerse .kidsflash-speak-btn,
+.kidsflash-immerse [role="button"] {
   touch-action: manipulation;
   -webkit-user-select: none;
   user-select: none;
+}
+
+.kidsflash-speak-btn,
+.kidsflash-media-tap,
+.kidsflash-names-tap {
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+
+.kidsflash-speak-btn,
+.kidsflash-media-tap,
+.kidsflash-names-tap {
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
 }
 
 .kidsflash-names {

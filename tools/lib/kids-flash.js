@@ -123,10 +123,11 @@
       enVoice = voices.find((v) => /en[-_]?US/i.test(v.lang)) || voices.find((v) => /^en/i.test(v.lang)) || null;
     }
 
-    function speakPair(item) {
+    function speakPair(item, opts = {}) {
       if (!window.speechSynthesis || !item) return;
       window.speechSynthesis.cancel();
       const gen = ++speakGen;
+      const onDone = typeof opts.onDone === "function" ? opts.onDone : null;
       // 延后到下一帧，避免点读卡住切卡/点按反馈
       window.setTimeout(() => {
         if (gen !== speakGen || !item) return;
@@ -139,6 +140,12 @@
         en.lang = "en-US";
         if (enVoice) en.voice = enVoice;
         en.rate = 0.95;
+        const finish = () => {
+          if (gen !== speakGen) return;
+          onDone?.();
+        };
+        en.onend = finish;
+        en.onerror = finish;
         zh.onend = () => {
           if (gen !== speakGen) return;
           window.setTimeout(() => {
@@ -146,6 +153,7 @@
             window.speechSynthesis.speak(en);
           }, 160);
         };
+        zh.onerror = finish;
         window.speechSynthesis.speak(zh);
       }, 0);
     }
@@ -555,27 +563,40 @@
     function bindHoldSpeak(el, getItem) {
       if (!el || el.dataset.holdSpeakBound === "1") return;
       el.dataset.holdSpeakBound = "1";
-      let holdTimer = 0;
-      const stop = () => {
-        if (holdTimer) window.clearInterval(holdTimer);
-        holdTimer = 0;
+      let holding = false;
+      let loopGen = 0;
+      const stopHold = () => {
+        holding = false;
+        loopGen += 1;
+      };
+      const speakLoop = (myGen) => {
+        const item = getItem();
+        if (!item || myGen !== loopGen) return;
+        speakPair(item, {
+          onDone: () => {
+            if (!holding || myGen !== loopGen) return;
+            window.setTimeout(() => {
+              if (holding && myGen === loopGen) speakLoop(myGen);
+            }, 220);
+          },
+        });
       };
       const start = (ev) => {
         if (ev.pointerType === "mouse" && ev.button !== 0) return;
-        const item = getItem();
-        if (!item) return;
-        speakPair(item);
-        stop();
-        holdTimer = window.setInterval(() => {
-          const next = getItem();
-          if (next) speakPair(next);
-        }, 2600);
+        // 避免系统长按菜单 / 选中干扰连读
+        ev.preventDefault();
+        holding = true;
+        loopGen += 1;
+        const myGen = loopGen;
+        try {
+          el.setPointerCapture?.(ev.pointerId);
+        } catch (_) {}
+        speakLoop(myGen);
       };
       el.addEventListener("pointerdown", start);
-      el.addEventListener("pointerup", stop);
-      el.addEventListener("pointercancel", stop);
-      el.addEventListener("pointerleave", stop);
-      el.addEventListener("lostpointercapture", stop);
+      el.addEventListener("pointerup", stopHold);
+      el.addEventListener("pointercancel", stopHold);
+      el.addEventListener("lostpointercapture", stopHold);
       el.addEventListener("contextmenu", (ev) => ev.preventDefault());
     }
 
