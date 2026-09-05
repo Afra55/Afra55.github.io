@@ -238,17 +238,27 @@ body.animalearn-sheet-open {
 }
 
 .animalearn-nav {
-  justify-content: center;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-  margin-top: 0.45rem;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.55rem;
+  margin-top: 0.55rem;
+  width: 100%;
+  max-width: 26rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.animalearn-nav-row {
+  display: flex;
+  gap: 0.55rem;
+  width: 100%;
 }
 
 .animalearn-nav .primary-btn,
 .animalearn-nav .ghost-btn,
 .animalearn-nav .secondary-btn {
   border-radius: 999px;
-  min-width: 4.6rem;
   transition: transform 0.12s ease;
 }
 
@@ -256,6 +266,29 @@ body.animalearn-sheet-open {
 .animalearn-nav .ghost-btn:active,
 .animalearn-nav .secondary-btn:active {
   transform: scale(0.97);
+}
+
+.animalearn-speak-btn {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 2.85rem;
+  font-size: 1.08rem;
+  font-weight: 700;
+}
+
+.animalearn-nav-step .ghost-btn {
+  flex: 1 1 0;
+  min-height: 2.55rem;
+  font-weight: 600;
+}
+
+.animalearn-random-btn {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 3.15rem;
+  font-size: 1.12rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
 }
 
 .animalearn-quiz-hint {
