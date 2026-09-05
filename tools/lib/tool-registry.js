@@ -115,6 +115,7 @@
       "tools": [
         "units",
         "coord",
+        "ipgeo",
         "numbase"
       ]
     },
@@ -594,6 +595,21 @@
         "wgs"
       ]
     },
+    "ipgeo": {
+      "name": "IP 信息",
+      "aliases": [
+        "ip",
+        "ipgeo",
+        "ip地址",
+        "公网ip",
+        "地理位置",
+        "geoip",
+        "查ip",
+        "我的ip",
+        "asn",
+        "运营商"
+      ]
+    },
     "acupoint": {
       "name": "穴位图",
       "aliases": [
@@ -949,6 +965,7 @@
     "imgtext": "本地 OCR 图片转文字（Tesseract）。",
     "units": "长度、质量等常用单位换算。",
     "coord": "WGS84 / GCJ-02 / BD-09 等坐标系互转。",
+    "ipgeo": "查询本机公网 IP 或任意地址：国家/城市/邮编、运营商与 ASN、时区货币等详尽字段；Leaflet + OpenStreetMap 钉点（免 Key）。多源合并，会话缓存。",
     "numbase": "二、八、十、十六进制互转。",
     "wheel": "大转盘：自定义分块、比例与文字，按权重随机停针；可开关旋转音效与结果语音播报。",
     "ruler": "屏幕直尺：四边刻度、十字准线，可全屏；厘米/毫米按本机 PPI 自动估算，可手动微调。",

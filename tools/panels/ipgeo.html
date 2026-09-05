@@ -1,0 +1,50 @@
+<section id="ipgeo" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>IP 信息</h1>
+        <p>查询本机公网 IP 或任意地址：地理位置、运营商 / ASN、时区等详尽字段，并在 OpenStreetMap 上钉点（Leaflet，免 Key）。结果缓存在本页会话，不上传到本站服务器。</p>
+      </div>
+      <div class="panel-body ipgeo-body">
+        <div class="field-row" style="flex-wrap:wrap;gap:0.55rem;align-items:flex-end">
+          <div class="field-block" style="flex:1 1 14rem;margin:0">
+            <label for="ipgeo-input">IP 地址（留空则查本机公网）</label>
+            <input id="ipgeo-input" class="mono" type="text" inputmode="text" autocomplete="off" spellcheck="false" placeholder="例如 8.8.8.8 或 2001:4860:4860::8888" />
+          </div>
+          <div class="btn-row tool-actions" style="margin:0;flex-wrap:wrap">
+            <button type="button" class="primary-btn" id="ipgeo-lookup">查询</button>
+            <button type="button" class="secondary-btn" id="ipgeo-mine">查我的 IP</button>
+            <button type="button" class="ghost-btn" id="ipgeo-copy-ip" disabled>复制 IP</button>
+          </div>
+        </div>
+        <p class="hint tight" id="ipgeo-status">打开后会自动查询本机公网 IP。</p>
+        <p class="error" id="ipgeo-error" hidden></p>
+
+        <div class="ipgeo-hero panel-card" id="ipgeo-hero" hidden>
+          <div class="ipgeo-hero-main">
+            <p class="ipgeo-flag" id="ipgeo-flag" aria-hidden="true"></p>
+            <div>
+              <p class="ipgeo-ip mono" id="ipgeo-ip">—</p>
+              <p class="ipgeo-place" id="ipgeo-place">—</p>
+              <p class="hint tight mono" id="ipgeo-org">—</p>
+            </div>
+          </div>
+          <div class="ipgeo-hero-meta mono" id="ipgeo-hero-meta"></div>
+        </div>
+
+        <div class="ipgeo-map-wrap panel-card" id="ipgeo-map-card" hidden>
+          <div id="ipgeo-map" class="ipgeo-map" role="img" aria-label="IP 地理位置地图"></div>
+          <p class="hint tight" id="ipgeo-map-meta"></p>
+        </div>
+
+        <div class="ipgeo-sections" id="ipgeo-sections" hidden></div>
+
+        <details class="ipgeo-raw panel-card" id="ipgeo-raw-wrap" hidden>
+          <summary>原始 JSON（合并后）</summary>
+          <pre class="mono ipgeo-raw-pre" id="ipgeo-raw"></pre>
+          <div class="btn-row tool-actions" style="margin-top:0.55rem">
+            <button type="button" class="ghost-btn" id="ipgeo-copy-json">复制 JSON</button>
+          </div>
+        </details>
+
+        <p class="hint tight">说明：优先 ipwho.is，失败时依次尝试 ip.sb / ipinfo.io / ipapi.co。地图底图 © OpenStreetMap 贡献者。免费 API 有速率限制，请勿高频刷。</p>
+      </div>
+    </section>
