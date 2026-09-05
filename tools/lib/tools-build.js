@@ -1,7 +1,7 @@
 (() => {
   "use strict";
   /** 全站构建版本（北京时间后缀）。每次合入功能/修复必须递增此号，并运行 node tools/bump-version.cjs 同步 ?v=。 */
-  const BUILD = "2026.09.05-130052";
+  const BUILD = "2026.09.05-131159";
   window.TOOLS_BUILD = BUILD;
   window.TOOLS_VERSION = BUILD;
 
@@ -27,7 +27,8 @@
     }
   } catch (_) {}
 
-  // 仅修语音 API，不改 DOM/样式
+  // 仅修语音 API，不改 DOM/样式。
+  // 注意：iOS 上同一 SpeechSynthesisUtterance 只能 speak 一次；cancel 后延时重试会脱离用户手势 → 静音。
   try {
     const synth = window.speechSynthesis;
     if (synth && !synth.__devtoolsSpeakPatched) {
@@ -47,21 +48,10 @@
       };
       synth.speak = function patchedSpeak(utterance) {
         if (!utterance) return;
-        const kick = () => {
-          resume();
-          try {
-            origSpeak(utterance);
-          } catch (_) {}
-        };
-        kick();
-        [60, 180].forEach((ms) => {
-          window.setTimeout(() => {
-            try {
-              if (synth.speaking || synth.pending) return;
-              kick();
-            } catch (_) {}
-          }, ms);
-        });
+        resume();
+        try {
+          origSpeak(utterance);
+        } catch (_) {}
       };
     }
   } catch (_) {}

@@ -123,12 +123,56 @@
       enVoice = voices.find((v) => /en[-_]?US/i.test(v.lang)) || voices.find((v) => /^en/i.test(v.lang)) || null;
     }
 
+    function isIOSLike() {
+      const ua = navigator.userAgent || "";
+      if (/iP(hone|ad|od)/i.test(ua)) return true;
+      return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+    }
+
+    function unlockSpeech() {
+      if (!window.speechSynthesis || window.speechSynthesis.__kfUnlocked) return;
+      window.speechSynthesis.__kfUnlocked = true;
+      try {
+        window.speechSynthesis.getVoices();
+      } catch (_) {}
+      try {
+        if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+      } catch (_) {}
+      primeVoices();
+    }
+
+    // 仅在早期 touch 解锁；不要在 speak 前 cancel，否则同拍点读会被吞
+    if (isIOSLike()) {
+      document.addEventListener("touchstart", unlockSpeech, { capture: true, passive: true });
+    }
+
+    function speakUtterance(utterance) {
+      if (!window.speechSynthesis || !utterance) return;
+      try {
+        if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+      } catch (_) {}
+      try {
+        window.speechSynthesis.speak(utterance);
+      } catch (_) {}
+      try {
+        if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+      } catch (_) {}
+    }
+
     function speakPair(item, opts = {}) {
       if (!window.speechSynthesis || !item) return;
       const zhText = String(item.nameZh || "").trim();
       const enText = String(item.nameEn || "").trim();
       if (!zhText && !enText) return;
-      window.speechSynthesis.cancel();
+      // iOS：cancel 后立刻 speak 常被丢弃，且延时重试已脱离用户手势 → 全程静音
+      // 策略：iOS 不 cancel（靠 speakGen 丢弃旧 onend）；其它平台仅在忙碌时 cancel
+      if (!isIOSLike()) {
+        try {
+          if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
+            window.speechSynthesis.cancel();
+          }
+        } catch (_) {}
+      }
       const gen = ++speakGen;
       const onDone = typeof opts.onDone === "function" ? opts.onDone : null;
       // 必须在用户手势同步调用 speak，否则 iOS 静音
@@ -148,10 +192,7 @@
         en.rate = 0.95;
         en.onend = finish;
         en.onerror = finish;
-        window.speechSynthesis.speak(en);
-        try {
-          window.speechSynthesis.resume();
-        } catch (_) {}
+        speakUtterance(en);
       };
       if (!zhText) {
         speakEn();
@@ -166,11 +207,9 @@
         window.setTimeout(speakEn, 160);
       };
       zh.onerror = finish;
-      window.speechSynthesis.speak(zh);
-      try {
-        window.speechSynthesis.resume();
-      } catch (_) {}
+      speakUtterance(zh);
     }
+
 
     function clearSpecialVisual(mediaEl) {
       mediaEl?.querySelectorAll(".kidsflash-swatch, .kidsflash-digit, .kidsflash-shape").forEach((n) => n.remove());
@@ -600,6 +639,7 @@
       el.dataset.holdSpeakBound = "1";
       let holding = false;
       let loopGen = 0;
+      let spokeAt = 0;
       const stopHold = () => {
         holding = false;
         loopGen += 1;
@@ -607,6 +647,7 @@
       const speakLoop = (myGen) => {
         const item = getItem();
         if (!item || myGen !== loopGen) return;
+        spokeAt = Date.now();
         speakPair(item, {
           onDone: () => {
             if (!holding || myGen !== loopGen) return;
@@ -631,6 +672,12 @@
       el.addEventListener("pointerup", stopHold);
       el.addEventListener("pointercancel", stopHold);
       el.addEventListener("lostpointercapture", stopHold);
+      // iOS 部分场景 pointerdown 不触发 speak；click 兜底（刚 pointer 说过则跳过）
+      el.addEventListener("click", () => {
+        if (Date.now() - spokeAt < 500) return;
+        const item = getItem();
+        if (item) speakPair(item);
+      });
       el.addEventListener("contextmenu", (ev) => ev.preventDefault());
     }
 
