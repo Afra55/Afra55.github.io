@@ -130,8 +130,25 @@
   transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 
-.animalearn-media-tap {
-  cursor: pointer;
+.animalearn-media img.is-preview {
+  filter: blur(14px);
+  transform: scale(1.05);
+  opacity: 0.9;
+}
+
+.animalearn-media img.is-ready {
+  filter: none;
+  transform: none;
+  opacity: 1;
+  transition: filter 0.35s ease, transform 0.35s ease, opacity 0.35s ease;
+}
+
+.animalearn-media.has-preview .animalearn-placeholder {
+  background: color-mix(in srgb, var(--panel, #12141a) 35%, transparent);
+}
+
+.animalearn-media.has-preview .animalearn-placeholder-emoji {
+  display: none;
 }
 
 .animalearn-media-tap:hover {

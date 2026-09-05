@@ -134,6 +134,27 @@
   cursor: pointer;
 }
 
+.kidsflash-media img.is-preview {
+  filter: blur(14px);
+  transform: scale(1.05);
+  opacity: 0.9;
+}
+
+.kidsflash-media img.is-ready {
+  filter: none;
+  transform: none;
+  opacity: 1;
+  transition: filter 0.35s ease, transform 0.35s ease, opacity 0.35s ease;
+}
+
+.kidsflash-media.has-preview .kidsflash-placeholder {
+  background: color-mix(in srgb, var(--panel, #12141a) 35%, transparent);
+}
+
+.kidsflash-media.has-preview .kidsflash-placeholder-emoji {
+  display: none;
+}
+
 .kidsflash-media-tap:hover {
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent, #5b8cff) 35%, transparent);
 }

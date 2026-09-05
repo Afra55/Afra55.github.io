@@ -161,19 +161,33 @@
 
   /**
    * @param {object} item { id, commons?, query?, nameEn? }
-   * @param {object} opts { onProgress?, namespace? }
+   * @param {object} opts { onProgress?, onPreview?, namespace? }
+   * onPreview({ url }) — 小图先到时回调，用于模糊预览，避免长时间空白
    */
   async function resolveItemImage(item, opts = {}) {
     if (!item) return { url: "", credit: "", fromCache: false };
     const ns = opts.namespace || "kids";
     const cacheKey = `${ns}:${item.id}`;
+    const thumbKey = `${cacheKey}:thumb`;
     const m = loadMeta();
     const pump = createProgressPump(opts.onProgress);
+    let previewSent = false;
+
+    const sendPreview = (url) => {
+      if (previewSent || !url || typeof opts.onPreview !== "function") return;
+      previewSent = true;
+      try {
+        opts.onPreview({ url });
+      } catch (_) {
+        /* ignore */
+      }
+    };
 
     try {
-      // 1) Cache API 命中
+      // 1) 完整图 Cache 命中
       const cached = await getCachedBlobUrl(cacheKey);
       if (cached) {
+        sendPreview(cached);
         pump.done();
         return {
           url: cached,
@@ -182,10 +196,38 @@
         };
       }
 
+      // 2) 并行抢小图（Commons width=96），先糊一张出来
+      if (item.commons && opts.onPreview) {
+        const thumbCached = await getCachedBlobUrl(thumbKey);
+        if (thumbCached) {
+          sendPreview(thumbCached);
+        } else {
+          const thumbUrl = commonsUrl(item.commons, 96);
+          (async () => {
+            try {
+              const blob = await fetchBlobWithProgress(thumbUrl, null);
+              if (blob && blob.size) {
+                const type = blob.type || "image/jpeg";
+                const response = new Response(blob, {
+                  status: 200,
+                  headers: { "Content-Type": type.startsWith("image/") ? type : "image/jpeg" },
+                });
+                await putCache(thumbKey, response.clone());
+                sendPreview(URL.createObjectURL(blob));
+                return;
+              }
+            } catch (_) {
+              /* ignore */
+            }
+            if (await probeViaImage(thumbUrl, 5000)) sendPreview(thumbUrl);
+          })();
+        }
+      }
+
       const candidates = [];
       if (item.commons) {
         candidates.push({
-          url: commonsUrl(item.commons),
+          url: commonsUrl(item.commons, 900),
           credit: `Wikimedia Commons · ${item.commons}`,
         });
       }
@@ -204,6 +246,8 @@
               url,
               credit: [row.license, row.creator, "Openverse"].filter(Boolean).join(" · "),
             });
+            // Openverse 缩略图也可当预览
+            if (!previewSent && row.thumbnail) sendPreview(row.thumbnail);
           }
         } catch (_) {
           /* ignore */
@@ -211,7 +255,6 @@
       }
 
       const tryOne = async (cand) => {
-        // 优先 XHR 拉二进制（可缓存 + 可能有真进度）
         try {
           const blob = await fetchBlobWithProgress(cand.url, (p) => pump.onReal(p));
           if (blob && blob.size) {
@@ -226,15 +269,17 @@
             await putCache(cacheKey, response.clone());
             m[cacheKey] = { credit: cand.credit || "", at: Date.now(), src: cand.url };
             saveMeta();
+            const objUrl = URL.createObjectURL(blob);
+            sendPreview(objUrl);
             pump.done();
             return {
-              url: URL.createObjectURL(blob),
+              url: objUrl,
               credit: cand.credit || "",
               fromCache: false,
             };
           }
         } catch (_) {
-          /* CORS 等：改走 <img> 热链，模拟进度继续跑 */
+          /* CORS：改走 <img> 热链 */
         }
 
         if (await probeViaImage(cand.url)) {
@@ -245,6 +290,7 @@
             hotlink: true,
           };
           saveMeta();
+          sendPreview(cand.url);
           pump.done();
           return { url: cand.url, credit: cand.credit || "", fromCache: false };
         }

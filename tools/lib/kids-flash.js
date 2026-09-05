@@ -170,17 +170,18 @@
       }<span class="kidsflash-load-pct">${pctText}</span>${bar}`;
     }
 
-    async function resolveImage(item, onProgress) {
+    async function resolveImage(item, onProgress, onPreview) {
       if (!item) return { url: "", credit: "" };
       if (imgCache[item.id]?.url && !String(imgCache[item.id].url).startsWith("blob:")) {
         onProgress?.({ percent: 100 });
+        onPreview?.({ url: imgCache[item.id].url });
         return imgCache[item.id];
       }
       try {
         await ensureKidsImg();
         const hit = await window.DevToolsKidsImg.resolveItemImage(
           { id: item.id, commons: item.commons, query: item.query || item.nameEn || item.id, nameEn: item.nameEn },
-          { namespace, onProgress }
+          { namespace, onProgress, onPreview }
         );
         if (hit?.url) {
           const row = { url: hit.url, credit: hit.credit || "" };
@@ -190,6 +191,24 @@
         }
       } catch (_) {}
       return { url: "", credit: "" };
+    }
+
+    function waitImgReady(imgEl) {
+      if (!imgEl) return Promise.resolve();
+      if (typeof imgEl.decode === "function") return imgEl.decode().catch(() => {});
+      return new Promise((resolve) => {
+        if (imgEl.complete) {
+          resolve();
+          return;
+        }
+        const done = () => {
+          imgEl.removeEventListener("load", done);
+          imgEl.removeEventListener("error", done);
+          resolve();
+        };
+        imgEl.addEventListener("load", done);
+        imgEl.addEventListener("error", done);
+      });
     }
 
     function paintColorOrDigit(mediaEl, emojiEl, imgEl, item) {
@@ -234,6 +253,7 @@
         imgEl.removeAttribute("src");
         imgEl.alt = hideName ? "配图" : `${item.nameZh} ${item.nameEn}`;
         imgEl.dataset.expectId = item.id;
+        imgEl.classList.remove("is-preview", "is-ready");
         Object.assign(imgEl.style, {
           maxWidth: "100%",
           maxHeight: "100%",
@@ -246,25 +266,46 @@
         });
         imgEl.style.setProperty("object-fit", "contain", "important");
       }
-      const hit = await resolveImage(item, (p) => {
-        setLoadingPlaceholder(mediaEl, item, true, {
-          hideName,
-          percent: typeof p?.percent === "number" ? p.percent : -1,
-        });
-      });
+
+      const showPreview = (url) => {
+        if (!imgEl || !url || imgEl.dataset.expectId !== item.id) return;
+        imgEl.referrerPolicy = "no-referrer";
+        imgEl.classList.add("is-preview");
+        imgEl.classList.remove("is-ready");
+        imgEl.src = url;
+        imgEl.hidden = false;
+        if (emojiEl) emojiEl.hidden = true;
+        mediaEl.classList.add("has-preview");
+      };
+
+      const hit = await resolveImage(
+        item,
+        (p) => {
+          setLoadingPlaceholder(mediaEl, item, true, {
+            hideName,
+            percent: typeof p?.percent === "number" ? p.percent : -1,
+          });
+        },
+        (prev) => showPreview(prev?.url)
+      );
       if (!imgEl || !hit.url) {
         if (emojiEl) emojiEl.hidden = false;
         setLoadingPlaceholder(mediaEl, item, false);
         mediaEl.classList.add("is-fallback");
+        mediaEl.classList.remove("has-preview");
         return hit;
       }
       if (imgEl.dataset.expectId !== item.id) return hit;
       imgEl.referrerPolicy = "no-referrer";
-      imgEl.src = hit.url;
+      if (imgEl.src !== hit.url) imgEl.src = hit.url;
       imgEl.hidden = false;
       if (emojiEl) emojiEl.hidden = true;
+      await waitImgReady(imgEl);
+      if (imgEl.dataset.expectId !== item.id) return hit;
+      imgEl.classList.remove("is-preview");
+      imgEl.classList.add("is-ready");
       setLoadingPlaceholder(mediaEl, item, false);
-      mediaEl.classList.remove("is-fallback");
+      mediaEl.classList.remove("is-fallback", "has-preview");
       return hit;
     }
 

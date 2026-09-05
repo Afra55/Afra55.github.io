@@ -171,11 +171,12 @@
     });
   }
 
-  async function resolveImage(animal, onProgress) {
+  async function resolveImage(animal, onProgress, onPreview) {
     if (!animal) return { url: "", credit: "" };
     // 会话级元数据命中（可能是 blob: 或热链）
     if (imgCache[animal.id]?.url && !String(imgCache[animal.id].url).startsWith("blob:")) {
       onProgress?.({ percent: 100 });
+      onPreview?.({ url: imgCache[animal.id].url });
       return imgCache[animal.id];
     }
     try {
@@ -190,6 +191,7 @@
         {
           namespace: "animalearn",
           onProgress,
+          onPreview,
         }
       );
       if (hit?.url) {
@@ -210,11 +212,32 @@
         const hit = { url, credit: `Wikimedia Commons · ${animal.commons}` };
         imgCache[animal.id] = hit;
         saveImgCache();
+        onPreview?.({ url });
         onProgress?.({ percent: 100 });
         return hit;
       }
     }
     return { url: "", credit: "" };
+  }
+
+  function waitImgReady(imgEl) {
+    if (!imgEl) return Promise.resolve();
+    if (typeof imgEl.decode === "function") {
+      return imgEl.decode().catch(() => {});
+    }
+    return new Promise((resolve) => {
+      if (imgEl.complete) {
+        resolve();
+        return;
+      }
+      const done = () => {
+        imgEl.removeEventListener("load", done);
+        imgEl.removeEventListener("error", done);
+        resolve();
+      };
+      imgEl.addEventListener("load", done);
+      imgEl.addEventListener("error", done);
+    });
   }
 
   function setLoadingPlaceholder(mediaEl, animal, loading, opts = {}) {
@@ -262,6 +285,7 @@
       imgEl.removeAttribute("src");
       imgEl.alt = hideName ? "动物图片" : `${animal.nameZh} ${animal.nameEn}`;
       imgEl.dataset.expectId = animal.id;
+      imgEl.classList.remove("is-preview", "is-ready");
       imgEl.style.maxWidth = "100%";
       imgEl.style.maxHeight = "100%";
       imgEl.style.width = "100%";
@@ -272,23 +296,44 @@
       imgEl.style.inset = "0";
       imgEl.style.margin = "0";
     }
-    const hit = await resolveImage(animal, (p) => {
-      const percent = typeof p?.percent === "number" ? p.percent : -1;
-      setLoadingPlaceholder(mediaEl, animal, true, { hideName, percent });
-    });
+
+    const showPreview = (url) => {
+      if (!imgEl || !url || imgEl.dataset.expectId !== animal.id) return;
+      imgEl.referrerPolicy = "no-referrer";
+      imgEl.classList.add("is-preview");
+      imgEl.classList.remove("is-ready");
+      imgEl.src = url;
+      imgEl.hidden = false;
+      if (emojiEl) emojiEl.hidden = true;
+      mediaEl?.classList.add("has-preview");
+    };
+
+    const hit = await resolveImage(
+      animal,
+      (p) => {
+        const percent = typeof p?.percent === "number" ? p.percent : -1;
+        setLoadingPlaceholder(mediaEl, animal, true, { hideName, percent });
+      },
+      (prev) => showPreview(prev?.url)
+    );
     if (!imgEl || !hit.url) {
       if (emojiEl) emojiEl.hidden = false;
       setLoadingPlaceholder(mediaEl, animal, false);
       mediaEl?.classList.add("is-fallback");
+      mediaEl?.classList.remove("has-preview");
       return hit;
     }
     if (imgEl.dataset.expectId !== animal.id) return hit;
     imgEl.referrerPolicy = "no-referrer";
-    imgEl.src = hit.url;
+    if (imgEl.src !== hit.url) imgEl.src = hit.url;
     imgEl.hidden = false;
     if (emojiEl) emojiEl.hidden = true;
+    await waitImgReady(imgEl);
+    if (imgEl.dataset.expectId !== animal.id) return hit;
+    imgEl.classList.remove("is-preview");
+    imgEl.classList.add("is-ready");
     setLoadingPlaceholder(mediaEl, animal, false);
-    mediaEl?.classList.remove("is-fallback");
+    mediaEl?.classList.remove("is-fallback", "has-preview");
     return hit;
   }
 
