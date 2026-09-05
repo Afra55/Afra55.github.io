@@ -535,7 +535,7 @@ body.theme-reduce-glow .bg-grid {
   flex-shrink: 0;
   margin-top: auto;
   padding-top: 0.35rem;
-  padding-bottom: max(0.25rem, env(safe-area-inset-bottom, 0px));
+  padding-bottom: 0.25rem;
   border-top: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
   background: var(--nav-bg-solid, var(--panel-strong));
   position: relative;

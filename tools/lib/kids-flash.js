@@ -141,7 +141,7 @@
       primeVoices();
     }
 
-    // 仅在早期 touch 解锁；不要在 speak 前 cancel，否则同拍点读会被吞
+    // 尽早在 touch 里 resume/getVoices；真正出声仍须在 click/pointer 同步 speak
     if (isIOSLike()) {
       document.addEventListener("touchstart", unlockSpeech, { capture: true, passive: true });
     }
@@ -161,21 +161,21 @@
 
     function speakPair(item, opts = {}) {
       if (!window.speechSynthesis || !item) return;
-      const zhText = String(item.nameZh || "").trim();
-      const enText = String(item.nameEn || "").trim();
+      const zhText = String(item.nameZh || item.zh || "").trim();
+      const enText = String(item.nameEn || item.en || "").trim();
       if (!zhText && !enText) return;
-      // iOS：cancel 后立刻 speak 常被丢弃，且延时重试已脱离用户手势 → 全程静音
-      // 策略：iOS 不 cancel（靠 speakGen 丢弃旧 onend）；其它平台仅在忙碌时 cancel
+      // iOS：cancel 后立刻 speak 常被丢弃；也不要给 utterance 指定 voice（易静音）
       if (!isIOSLike()) {
         try {
           if (window.speechSynthesis.speaking || window.speechSynthesis.pending) {
             window.speechSynthesis.cancel();
           }
         } catch (_) {}
+      } else {
+        unlockSpeech();
       }
       const gen = ++speakGen;
       const onDone = typeof opts.onDone === "function" ? opts.onDone : null;
-      // 必须在用户手势同步调用 speak，否则 iOS 静音
       primeVoices();
       const finish = () => {
         if (gen !== speakGen) return;
@@ -188,7 +188,8 @@
         }
         const en = new SpeechSynthesisUtterance(enText);
         en.lang = "en-US";
-        if (enVoice) en.voice = enVoice;
+        // iOS 不绑 voice，只设 lang
+        if (!isIOSLike() && enVoice) en.voice = enVoice;
         en.rate = 0.95;
         en.onend = finish;
         en.onerror = finish;
@@ -200,7 +201,7 @@
       }
       const zh = new SpeechSynthesisUtterance(zhText);
       zh.lang = "zh-CN";
-      if (zhVoice) zh.voice = zhVoice;
+      if (!isIOSLike() && zhVoice) zh.voice = zhVoice;
       zh.rate = 0.92;
       zh.onend = () => {
         if (gen !== speakGen) return;
@@ -209,7 +210,6 @@
       zh.onerror = finish;
       speakUtterance(zh);
     }
-
 
     function clearSpecialVisual(mediaEl) {
       mediaEl?.querySelectorAll(".kidsflash-swatch, .kidsflash-digit, .kidsflash-shape").forEach((n) => n.remove());
@@ -657,9 +657,10 @@
           },
         });
       };
-      const start = (ev) => {
+      const startHold = (ev) => {
         if (ev.pointerType === "mouse" && ev.button !== 0) return;
-        // 不 preventDefault：iOS 需保留用户手势才能出声
+        // iOS Safari：speechSynthesis 更认 click；pointerdown 常失败且会挡住 click 兜底
+        if (isIOSLike()) return;
         holding = true;
         loopGen += 1;
         const myGen = loopGen;
@@ -668,18 +669,21 @@
         } catch (_) {}
         speakLoop(myGen);
       };
-      el.addEventListener("pointerdown", start);
+      el.addEventListener("pointerdown", startHold);
       el.addEventListener("pointerup", stopHold);
       el.addEventListener("pointercancel", stopHold);
       el.addEventListener("lostpointercapture", stopHold);
-      // iOS 部分场景 pointerdown 不触发 speak；click 兜底（刚 pointer 说过则跳过）
-      el.addEventListener("click", () => {
-        if (Date.now() - spokeAt < 500) return;
+      el.addEventListener("click", (ev) => {
+        if (!isIOSLike() && Date.now() - spokeAt < 500) return;
         const item = getItem();
-        if (item) speakPair(item);
+        if (!item) return;
+        spokeAt = Date.now();
+        // 短按点读；iOS 主路径走这里
+        speakPair(item);
       });
       el.addEventListener("contextmenu", (ev) => ev.preventDefault());
     }
+
 
     function updateCredit() {
       if (!root) return;

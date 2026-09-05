@@ -1662,3 +1662,62 @@ html.is-pwa-standalone .site-header {
     padding-top: max(0.35rem, env(safe-area-inset-top, 0px));
   }
 }
+
+
+/* === pwa-drawer-fill: full-bleed drawer safe-area === */
+@media (max-width: 900px) {
+  /* top+bottom 拉满，避免 100dvh 在 iOS PWA 偏短留下底缝；圆角只留右侧 */
+  .nav-bar,
+  .nav-bar.is-collapsed {
+    top: 0 !important;
+    bottom: 0 !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 100% !important;
+    min-height: -webkit-fill-available !important;
+    min-height: 100dvh !important;
+    border-radius: 0 16px 0 0 !important;
+    /* 底安全区只交给 footer，避免双重 padding 出现黑缝 */
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+    padding-left: 0.85rem !important;
+    padding-right: 0.85rem !important;
+  }
+
+  .nav-drawer-head {
+    padding-top: max(0.85rem, env(safe-area-inset-top, 0px)) !important;
+    padding-bottom: 0.35rem;
+  }
+
+  .nav-footer-actions {
+    padding-bottom: max(0.85rem, env(safe-area-inset-bottom, 0px)) !important;
+    margin-bottom: 0 !important;
+  }
+}
+
+html.is-pwa-standalone .nav-bar,
+html.is-pwa-standalone .nav-bar.is-collapsed {
+  /* 独立 App：背景铺满物理屏，含底部 Home 条区域 */
+  background: var(--nav-bg-solid, var(--panel-strong)) !important;
+}
+
+@media (display-mode: standalone), (display-mode: window-controls-overlay) {
+  @media (max-width: 900px) {
+    .nav-bar,
+    .nav-bar.is-collapsed {
+      top: 0 !important;
+      bottom: 0 !important;
+      height: auto !important;
+      max-height: none !important;
+      border-radius: 0 16px 0 0 !important;
+      padding-top: 0 !important;
+      padding-bottom: 0 !important;
+    }
+    .nav-drawer-head {
+      padding-top: max(0.85rem, env(safe-area-inset-top, 0px)) !important;
+    }
+    .nav-footer-actions {
+      padding-bottom: max(0.85rem, env(safe-area-inset-bottom, 0px)) !important;
+    }
+  }
+}
