@@ -784,16 +784,50 @@ body.animalearn-fs-active {
 }
 
 
+.animalearn-immerse,
+.animalearn-immerse * {
+  -webkit-touch-callout: none;
+}
+
+.animalearn-immerse {
+  touch-action: manipulation;
+}
+
+.animalearn-immerse,
+.animalearn-immerse * {
+  -webkit-touch-callout: none;
+}
+
+.animalearn-immerse {
+  touch-action: manipulation;
+}
+
 .animalearn-immerse button,
 .animalearn-immerse .animalearn-media-tap,
 .animalearn-immerse .animalearn-names,
+.animalearn-immerse .animalearn-names-tap,
 .animalearn-immerse .animalearn-choice,
 .animalearn-immerse .animalearn-img-choice,
 .animalearn-immerse .animalearn-tab,
-.animalearn-immerse .animalearn-speak-btn {
+.animalearn-immerse .animalearn-speak-btn,
+.animalearn-immerse [role="button"] {
   touch-action: manipulation;
   -webkit-user-select: none;
   user-select: none;
+}
+
+.animalearn-speak-btn,
+.animalearn-media-tap,
+.animalearn-names-tap {
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+}
+
+.animalearn-speak-btn,
+.animalearn-media-tap,
+.animalearn-names-tap {
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
 }
 
 .animalearn-credit {
