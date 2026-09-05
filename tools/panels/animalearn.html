@@ -1,18 +1,21 @@
-<section id="animalearn" class="panel tool-panel" data-reveal>
-      <div class="panel-head">
+<section id="animalearn" class="panel tool-panel animalearn-immerse" data-reveal>
+      <div class="panel-head animalearn-head">
         <h1>认动物</h1>
-        <p>常见动物闪卡：大图 + <strong>中英文</strong>；点读会<strong>先中文再英文</strong>。点图片或标题即可朗读。「玩玩看」含看图选名字、听名字选图。配图来自 Wikimedia / Openverse（CC）。</p>
       </div>
       <div class="panel-body animalearn-body">
-        <div class="btn-row tool-actions animalearn-tabs" role="tablist" aria-label="模式">
-          <button type="button" class="secondary-btn animalearn-tab is-active" data-tab="cards" role="tab" aria-selected="true">闪卡</button>
-          <button type="button" class="ghost-btn animalearn-tab" data-tab="quiz-look" role="tab" aria-selected="false">玩玩看 · 看图</button>
-          <button type="button" class="ghost-btn animalearn-tab" data-tab="quiz-listen" role="tab" aria-selected="false">玩玩看 · 听名</button>
+        <div class="animalearn-toolbar">
+          <div class="btn-row tool-actions animalearn-tabs" role="tablist" aria-label="模式">
+            <button type="button" class="secondary-btn animalearn-tab is-active" data-tab="cards" role="tab" aria-selected="true">闪卡</button>
+            <button type="button" class="ghost-btn animalearn-tab" data-tab="quiz-look" role="tab" aria-selected="false">看图</button>
+            <button type="button" class="ghost-btn animalearn-tab" data-tab="quiz-listen" role="tab" aria-selected="false">听名</button>
+          </div>
+          <button type="button" class="secondary-btn animalearn-cat-btn" id="ae-cat-open" aria-haspopup="dialog" aria-expanded="false">
+            <span class="animalearn-cat-label" id="ae-cat-label">分类 · 全部</span>
+            <span class="animalearn-cat-caret" aria-hidden="true">▾</span>
+          </button>
         </div>
 
-        <div class="animalearn-filters panel-card" id="ae-filters"></div>
-
-        <div class="animalearn-pane panel-card" data-pane="cards" id="ae-cards">
+        <div class="animalearn-pane animalearn-card-pane" data-pane="cards" id="ae-cards">
           <div class="animalearn-stage">
             <div class="animalearn-media animalearn-media-tap" id="ae-card-media" role="button" tabindex="0" title="点击朗读" aria-label="点击朗读动物名称">
               <span class="animalearn-emoji" id="ae-card-emoji" aria-hidden="true">🐾</span>
@@ -22,19 +25,18 @@
               <p class="animalearn-zh" id="ae-card-zh">—</p>
               <p class="animalearn-en" id="ae-card-en">—</p>
             </div>
-            <p class="hint tight animalearn-credit" id="ae-card-credit" hidden></p>
           </div>
           <div class="btn-row tool-actions animalearn-nav">
             <button type="button" class="ghost-btn" id="ae-prev">上一只</button>
-            <button type="button" class="primary-btn" id="ae-speak">点读（中+英）</button>
+            <button type="button" class="primary-btn" id="ae-speak">点读</button>
             <button type="button" class="ghost-btn" id="ae-next">下一只</button>
             <button type="button" class="secondary-btn" id="ae-random">随机</button>
           </div>
-          <p class="hint tight mono" id="ae-card-meta"></p>
+          <p class="animalearn-progress" id="ae-card-meta" aria-live="polite"></p>
         </div>
 
-        <div class="animalearn-pane panel-card" data-pane="quiz-look" id="ae-quiz-look" hidden>
-          <p class="hint tight">看图，选出正确名字（选项含中文 + 英文）。</p>
+        <div class="animalearn-pane" data-pane="quiz-look" id="ae-quiz-look" hidden>
+          <p class="animalearn-quiz-hint">看图，选出正确名字</p>
           <div class="animalearn-stage">
             <div class="animalearn-media" id="ae-look-media">
               <span class="animalearn-emoji" id="ae-look-emoji" aria-hidden="true">🐾</span>
@@ -48,10 +50,10 @@
           </div>
         </div>
 
-        <div class="animalearn-pane panel-card" data-pane="quiz-listen" id="ae-quiz-listen" hidden>
-          <p class="hint tight">先听中文再听英文，然后点对应的图。</p>
+        <div class="animalearn-pane" data-pane="quiz-listen" id="ae-quiz-listen" hidden>
+          <p class="animalearn-quiz-hint">听名字，点对应的图</p>
           <div class="btn-row tool-actions animalearn-quiz-top">
-            <button type="button" class="primary-btn" id="ae-listen-replay">再听一遍（中+英）</button>
+            <button type="button" class="primary-btn" id="ae-listen-replay">再听一遍</button>
           </div>
           <div class="animalearn-img-choices" id="ae-listen-choices"></div>
           <p class="animalearn-feedback" id="ae-listen-feedback" aria-live="polite"></p>
@@ -61,6 +63,16 @@
         </div>
 
         <p class="error" id="ae-error" hidden></p>
-        <p class="hint tight">说明：点读依赖系统语音；配图远程加载失败时会显示 emoji。阅读进度会记在本机，下次打开可继续。</p>
+      </div>
+
+      <div class="animalearn-sheet" id="ae-cat-sheet" hidden>
+        <button type="button" class="animalearn-sheet-backdrop" id="ae-cat-backdrop" aria-label="关闭分类"></button>
+        <div class="animalearn-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="ae-cat-title">
+          <div class="animalearn-sheet-head">
+            <h2 id="ae-cat-title">选择分类</h2>
+            <button type="button" class="ghost-btn animalearn-sheet-close" id="ae-cat-close" aria-label="关闭">✕</button>
+          </div>
+          <div class="animalearn-sheet-list" id="ae-filters"></div>
+        </div>
       </div>
     </section>

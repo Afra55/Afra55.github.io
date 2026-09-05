@@ -240,15 +240,49 @@
     return hit;
   }
 
+  function currentGroupLabel() {
+    const g = (catalog?.groups || []).find((x) => x.id === groupId);
+    if (!g) return "分类 · 全部";
+    return `分类 · ${g.nameZh}`;
+  }
+
+  function updateCatLabel() {
+    const el = root && $("#ae-cat-label", root);
+    if (el) el.textContent = currentGroupLabel();
+  }
+
+  function openCatSheet() {
+    const sheet = root && $("#ae-cat-sheet", root);
+    const openBtn = root && $("#ae-cat-open", root);
+    if (!sheet) return;
+    sheet.hidden = false;
+    openBtn?.setAttribute("aria-expanded", "true");
+    document.body.classList.add("animalearn-sheet-open");
+    window.setTimeout(() => $("#ae-cat-close", root)?.focus?.(), 30);
+  }
+
+  function closeCatSheet() {
+    const sheet = root && $("#ae-cat-sheet", root);
+    const openBtn = root && $("#ae-cat-open", root);
+    if (!sheet) return;
+    sheet.hidden = true;
+    openBtn?.setAttribute("aria-expanded", "false");
+    document.body.classList.remove("animalearn-sheet-open");
+  }
+
   function renderFilters() {
     const host = $("#ae-filters", root);
     if (!host || !catalog) return;
     host.innerHTML = (catalog.groups || [])
       .map((g) => {
         const on = g.id === groupId ? " is-active" : "";
-        return `<button type="button" class="ghost-btn animalearn-filter-btn${on}" data-group="${g.id}">${g.nameZh}<span class="hint tight"> · ${g.nameEn}</span></button>`;
+        return `<button type="button" class="ghost-btn animalearn-filter-btn${on}" data-group="${g.id}">
+          <span>${g.nameZh}<span class="hint tight"> · ${g.nameEn}</span></span>
+          <span class="animalearn-filter-check" aria-hidden="true">✓</span>
+        </button>`;
       })
       .join("");
+    updateCatLabel();
   }
 
   function normalizeCardIndex(list) {
@@ -271,25 +305,22 @@
     const zh = $("#ae-card-zh", root);
     const en = $("#ae-card-en", root);
     const meta = $("#ae-card-meta", root);
-    const credit = $("#ae-card-credit", root);
     if (zh) zh.textContent = animal.nameZh;
     if (en) en.textContent = animal.nameEn;
     if (meta) meta.textContent = `${cardIndex + 1} / ${list.length}`;
-    const hit = await paintMedia(
+    // 重播名字淡入
+    const names = $(".animalearn-names", root);
+    if (names) {
+      names.classList.remove("is-pop");
+      void names.offsetWidth;
+      names.classList.add("is-pop");
+    }
+    await paintMedia(
       $("#ae-card-media", root),
       $("#ae-card-emoji", root),
       $("#ae-card-img", root),
       animal
     );
-    if (credit) {
-      if (hit?.credit) {
-        credit.hidden = false;
-        credit.textContent = hit.credit;
-      } else {
-        credit.hidden = true;
-        credit.textContent = "";
-      }
-    }
     savePosition();
   }
 
@@ -467,6 +498,7 @@
         groupId = filterBtn.getAttribute("data-group") || "all";
         cardIndex = 0;
         renderFilters();
+        closeCatSheet();
         savePosition();
         if (tab === "cards") renderCard();
         else if (tab === "quiz-look") nextLookQuiz();
@@ -498,11 +530,21 @@
       if (listenAnswer) speakPair(listenAnswer);
     });
 
+    $("#ae-cat-open", root)?.addEventListener("click", () => openCatSheet());
+    $("#ae-cat-close", root)?.addEventListener("click", () => closeCatSheet());
+    $("#ae-cat-backdrop", root)?.addEventListener("click", () => closeCatSheet());
+
     $("#ae-card-media", root)?.addEventListener("keydown", (ev) => {
       if (ev.key === "Enter" || ev.key === " ") {
         ev.preventDefault();
         speakCurrentCard();
       }
+    });
+
+    document.addEventListener("keydown", (ev) => {
+      if (ev.key !== "Escape") return;
+      const sheet = root && $("#ae-cat-sheet", root);
+      if (sheet && !sheet.hidden) closeCatSheet();
     });
 
     if (window.speechSynthesis) {
