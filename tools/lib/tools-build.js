@@ -1,6 +1,7 @@
 (() => {
   "use strict";
-  const BUILD = "2026.09.05-113700";
+  /** 全站构建版本（北京时间后缀）。每次合入功能/修复必须递增此号，并运行 node tools/bump-version.cjs 同步 ?v=。 */
+  const BUILD = "2026.09.05-114100";
   window.TOOLS_BUILD = BUILD;
   window.TOOLS_VERSION = BUILD;
 
@@ -26,6 +27,7 @@
     }
   } catch (_) {}
 
+  // 仅修语音 API，不改 DOM/样式
   try {
     const synth = window.speechSynthesis;
     if (synth && !synth.__devtoolsSpeakPatched) {
@@ -61,26 +63,6 @@
           }, ms);
         });
       };
-    }
-  } catch (_) {}
-
-  if (!window.__devtoolsPanelRouteRelay) {
-    window.__devtoolsPanelRouteRelay = true;
-    window.addEventListener("devtools:panel-mounted", () => {
-      try {
-        window.dispatchEvent(new CustomEvent("devtools:route"));
-      } catch (_) {}
-    });
-  }
-
-  try {
-    const href = "./styles/panels/kidsflash.css?v=" + encodeURIComponent(BUILD);
-    if (!document.querySelector("link[data-kidsflash-css]")) {
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.href = href;
-      link.dataset.kidsflashCss = "1";
-      document.head.appendChild(link);
     }
   } catch (_) {}
 })();
