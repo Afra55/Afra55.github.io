@@ -1,1 +1,15 @@
 @import url("./kidsflash.css");
+
+.kidsflash-load-bar {
+  display: block;
+  min-height: 0.42rem;
+  background: rgba(255, 255, 255, 0.25);
+}
+.kidsflash-load-bar-indeterminate {
+  background: rgba(91, 140, 255, 0.38);
+}
+.kidsflash-load-bar-indeterminate::after {
+  transform: none;
+  left: 0;
+  width: 42%;
+}

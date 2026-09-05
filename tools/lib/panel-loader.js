@@ -27,22 +27,6 @@
     return url.href;
   }
 
-  function prefetchKidsRuntime() {
-    const scripts = ["./lib/kids-flash.js", "./lib/kids-img-cache.js"];
-    for (const src of scripts) {
-      const href = withVersion(src);
-      if ([...document.querySelectorAll("link[data-kids-preload]")].some((l) => l.href === href || l.getAttribute("href") === href)) {
-        continue;
-      }
-      const link = document.createElement("link");
-      link.rel = "preload";
-      link.as = "script";
-      link.href = href;
-      link.dataset.kidsPreload = "1";
-      document.head.appendChild(link);
-    }
-  }
-
   async function fetchText(url) {
     const res = await fetch(withVersion(url), fetchInit());
     if (!res.ok) throw new Error(`加载失败：${url} (${res.status})`);
@@ -65,23 +49,8 @@
     return promise;
   }
 
-  function injectCss(id, href) {
-    if ([...document.querySelectorAll("link[data-panel-css]")].some((l) => l.getAttribute("href") === href || l.href === href)) {
-      return;
-    }
-    const link = document.createElement("link");
-    link.rel = "stylesheet";
-    link.href = href;
-    link.dataset.panelCss = id;
-    document.head.appendChild(link);
-  }
-
   function ensurePanelCss(toolId) {
     const id = String(toolId || "").trim();
-    if (/earn$/.test(id)) {
-      injectCss("kidsflash", withVersion("./styles/panels/kidsflash.css"));
-      prefetchKidsRuntime();
-    }
     if (!id || cssLoaded.has(id)) return Promise.resolve();
     if (inflight.has(`css:${id}`)) return inflight.get(`css:${id}`);
 
