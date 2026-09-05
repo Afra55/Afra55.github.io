@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const BUILD = "2026.09.05-115100";
+  const BUILD = "2026.09.05-115400";
   window.TOOLS_BUILD = BUILD;
   window.TOOLS_VERSION = BUILD;
 
@@ -81,7 +81,7 @@
     const t = String(s || "").trim();
     if (!t) return "";
     if (t === "—" || t === "--" || t === "-") return "";
-    if (t === "加载中" || t === "Loading") return "";
+    if (t === "加载中" || t === "Loading" || t === "正在载入…" || t === "Loading pack") return "";
     return t;
   }
 
@@ -164,7 +164,10 @@
       "@media (max-width: 900px){" +
       ".site-header{padding-top:calc(0.85rem + env(safe-area-inset-top,0px))!important;" +
       "padding-left:max(1rem,env(safe-area-inset-left,0px));" +
-      "padding-right:max(1rem,env(safe-area-inset-right,0px));}}}";
+      "padding-right:max(1rem,env(safe-area-inset-right,0px));}}}" +
+      ".kidsflash-load-bar{display:block;min-height:0.42rem;background:rgba(255,255,255,.25);}" +
+      ".kidsflash-load-bar-indeterminate{background:rgba(91,140,255,.38);}" +
+      ".kidsflash-load-bar-indeterminate::after{transform:none;left:0;width:42%;}";
     document.head.appendChild(st);
   }
 })();
