@@ -1,7 +1,6 @@
 (() => {
   "use strict";
-  /** 全站构建版本（北京时间后缀）。每次合入功能/修复必须递增此号，并运行 node tools/bump-version.cjs 同步 ?v=。 */
-  const BUILD = "2026.09.05-111900";
+  const BUILD = "2026.09.05-112500";
   window.TOOLS_BUILD = BUILD;
   window.TOOLS_VERSION = BUILD;
 
@@ -27,38 +26,61 @@
     }
   } catch (_) {}
 
-  // Chromium: cancel() 后同拍 speak() 常被丢弃；paused 状态也会全程静音。
-  // 打在原型上，认动物 / kids-flash 各类目 / 日常开口 都会走这里。
   try {
     const synth = window.speechSynthesis;
     if (synth && !synth.__devtoolsSpeakPatched) {
       synth.__devtoolsSpeakPatched = true;
       const origSpeak = synth.speak.bind(synth);
       const origCancel = synth.cancel.bind(synth);
+      const resume = () => {
+        try {
+          if (synth.paused) synth.resume();
+        } catch (_) {}
+      };
       synth.cancel = function patchedCancel() {
         try {
           origCancel();
         } catch (_) {}
-        try {
-          if (this.paused) this.resume();
-        } catch (_) {}
+        resume();
       };
       synth.speak = function patchedSpeak(utterance) {
         if (!utterance) return;
-        try {
-          if (this.paused) this.resume();
-        } catch (_) {}
-        try {
-          origSpeak(utterance);
-        } catch (_) {}
-        window.setTimeout(() => {
+        const kick = () => {
+          resume();
           try {
-            if (this.speaking || this.pending) return;
-            if (this.paused) this.resume();
             origSpeak(utterance);
           } catch (_) {}
-        }, 50);
+        };
+        kick();
+        [60, 180].forEach((ms) => {
+          window.setTimeout(() => {
+            try {
+              if (synth.speaking || synth.pending) return;
+              kick();
+            } catch (_) {}
+          }, ms);
+        });
       };
+    }
+  } catch (_) {}
+
+  if (!window.__devtoolsPanelRouteRelay) {
+    window.__devtoolsPanelRouteRelay = true;
+    window.addEventListener("devtools:panel-mounted", () => {
+      try {
+        window.dispatchEvent(new CustomEvent("devtools:route"));
+      } catch (_) {}
+    });
+  }
+
+  try {
+    const href = "./styles/panels/kidsflash.css?v=" + encodeURIComponent(BUILD);
+    if (!document.querySelector('link[data-kidsflash-css]')) {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = href;
+      link.dataset.kidsflashCss = "1";
+      document.head.appendChild(link);
     }
   } catch (_) {}
 })();
