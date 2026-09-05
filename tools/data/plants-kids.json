@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "credit": "配图优先 Wikimedia Commons；缺图时 Openverse CC 兜底。",
   "groups": [
     {
@@ -167,6 +167,678 @@
       "emoji": "💜",
       "query": "lavender field",
       "commons": "Lavandula_angustifolia.jpg"
+    },
+    {
+      "id": "lily",
+      "nameZh": "百合",
+      "nameEn": "Lily",
+      "group": "flower",
+      "emoji": "🌺",
+      "query": "lily flower"
+    },
+    {
+      "id": "orchid",
+      "nameZh": "兰花",
+      "nameEn": "Orchid",
+      "group": "flower",
+      "emoji": "🌸",
+      "query": "orchid"
+    },
+    {
+      "id": "daisy",
+      "nameZh": "雏菊",
+      "nameEn": "Daisy",
+      "group": "flower",
+      "emoji": "🌼",
+      "query": "daisy flower"
+    },
+    {
+      "id": "dandelion",
+      "nameZh": "蒲公英",
+      "nameEn": "Dandelion",
+      "group": "flower",
+      "emoji": "🌼",
+      "query": "dandelion"
+    },
+    {
+      "id": "peony",
+      "nameZh": "牡丹",
+      "nameEn": "Peony",
+      "group": "flower",
+      "emoji": "🌸",
+      "query": "peony"
+    },
+    {
+      "id": "chrysanthemum",
+      "nameZh": "菊花",
+      "nameEn": "Chrysanthemum",
+      "group": "flower",
+      "emoji": "🌼",
+      "query": "chrysanthemum"
+    },
+    {
+      "id": "hibiscus",
+      "nameZh": "芙蓉",
+      "nameEn": "Hibiscus",
+      "group": "flower",
+      "emoji": "🌺",
+      "query": "hibiscus"
+    },
+    {
+      "id": "jasmine",
+      "nameZh": "茉莉",
+      "nameEn": "Jasmine",
+      "group": "flower",
+      "emoji": "🤍",
+      "query": "jasmine flower"
+    },
+    {
+      "id": "magnolia",
+      "nameZh": "玉兰",
+      "nameEn": "Magnolia",
+      "group": "flower",
+      "emoji": "🌸",
+      "query": "magnolia"
+    },
+    {
+      "id": "camellia",
+      "nameZh": "山茶",
+      "nameEn": "Camellia",
+      "group": "flower",
+      "emoji": "🌺",
+      "query": "camellia"
+    },
+    {
+      "id": "azalea",
+      "nameZh": "杜鹃",
+      "nameEn": "Azalea",
+      "group": "flower",
+      "emoji": "🌺",
+      "query": "azalea"
+    },
+    {
+      "id": "hydrangea",
+      "nameZh": "绣球",
+      "nameEn": "Hydrangea",
+      "group": "flower",
+      "emoji": "💙",
+      "query": "hydrangea"
+    },
+    {
+      "id": "iris",
+      "nameZh": "鸢尾",
+      "nameEn": "Iris",
+      "group": "flower",
+      "emoji": "💜",
+      "query": "iris flower"
+    },
+    {
+      "id": "violet",
+      "nameZh": "紫罗兰",
+      "nameEn": "Violet",
+      "group": "flower",
+      "emoji": "💜",
+      "query": "violet flower"
+    },
+    {
+      "id": "poppy",
+      "nameZh": "罂粟花",
+      "nameEn": "Poppy",
+      "group": "flower",
+      "emoji": "🌺",
+      "query": "poppy flower"
+    },
+    {
+      "id": "carnation",
+      "nameZh": "康乃馨",
+      "nameEn": "Carnation",
+      "group": "flower",
+      "emoji": "🌸",
+      "query": "carnation"
+    },
+    {
+      "id": "marigold",
+      "nameZh": "万寿菊",
+      "nameEn": "Marigold",
+      "group": "flower",
+      "emoji": "🧡",
+      "query": "marigold"
+    },
+    {
+      "id": "zinnia",
+      "nameZh": "百日草",
+      "nameEn": "Zinnia",
+      "group": "flower",
+      "emoji": "🌸",
+      "query": "zinnia"
+    },
+    {
+      "id": "petunia",
+      "nameZh": "矮牵牛",
+      "nameEn": "Petunia",
+      "group": "flower",
+      "emoji": "🌸",
+      "query": "petunia"
+    },
+    {
+      "id": "begonia",
+      "nameZh": "秋海棠",
+      "nameEn": "Begonia",
+      "group": "flower",
+      "emoji": "🌺",
+      "query": "begonia"
+    },
+    {
+      "id": "geranium",
+      "nameZh": "天竺葵",
+      "nameEn": "Geranium",
+      "group": "flower",
+      "emoji": "🌺",
+      "query": "geranium"
+    },
+    {
+      "id": "daffodil",
+      "nameZh": "水仙",
+      "nameEn": "Daffodil",
+      "group": "flower",
+      "emoji": "💛",
+      "query": "daffodil"
+    },
+    {
+      "id": "hyacinth",
+      "nameZh": "风信子",
+      "nameEn": "Hyacinth",
+      "group": "flower",
+      "emoji": "💜",
+      "query": "hyacinth"
+    },
+    {
+      "id": "lilac",
+      "nameZh": "丁香",
+      "nameEn": "Lilac",
+      "group": "flower",
+      "emoji": "💜",
+      "query": "lilac flower"
+    },
+    {
+      "id": "wisteria",
+      "nameZh": "紫藤",
+      "nameEn": "Wisteria",
+      "group": "flower",
+      "emoji": "💜",
+      "query": "wisteria"
+    },
+    {
+      "id": "plumeria",
+      "nameZh": "鸡蛋花",
+      "nameEn": "Plumeria",
+      "group": "flower",
+      "emoji": "🌸",
+      "query": "plumeria"
+    },
+    {
+      "id": "bougainvillea",
+      "nameZh": "叶子花",
+      "nameEn": "Bougainvillea",
+      "group": "flower",
+      "emoji": "🩷",
+      "query": "bougainvillea"
+    },
+    {
+      "id": "oak",
+      "nameZh": "橡树",
+      "nameEn": "Oak",
+      "group": "tree",
+      "emoji": "🌳",
+      "query": "oak tree"
+    },
+    {
+      "id": "maple",
+      "nameZh": "枫树",
+      "nameEn": "Maple",
+      "group": "tree",
+      "emoji": "🍁",
+      "query": "maple tree"
+    },
+    {
+      "id": "willow",
+      "nameZh": "柳树",
+      "nameEn": "Willow",
+      "group": "tree",
+      "emoji": "🌳",
+      "query": "willow tree"
+    },
+    {
+      "id": "birch",
+      "nameZh": "桦树",
+      "nameEn": "Birch",
+      "group": "tree",
+      "emoji": "🌳",
+      "query": "birch tree"
+    },
+    {
+      "id": "cedar",
+      "nameZh": "雪松",
+      "nameEn": "Cedar",
+      "group": "tree",
+      "emoji": "🌲",
+      "query": "cedar tree"
+    },
+    {
+      "id": "cypress",
+      "nameZh": "柏树",
+      "nameEn": "Cypress",
+      "group": "tree",
+      "emoji": "🌲",
+      "query": "cypress tree"
+    },
+    {
+      "id": "fir",
+      "nameZh": "冷杉",
+      "nameEn": "Fir",
+      "group": "tree",
+      "emoji": "🌲",
+      "query": "fir tree"
+    },
+    {
+      "id": "spruce",
+      "nameZh": "云杉",
+      "nameEn": "Spruce",
+      "group": "tree",
+      "emoji": "🌲",
+      "query": "spruce tree"
+    },
+    {
+      "id": "redwood",
+      "nameZh": "红杉",
+      "nameEn": "Redwood",
+      "group": "tree",
+      "emoji": "🌲",
+      "query": "redwood tree"
+    },
+    {
+      "id": "ginkgo",
+      "nameZh": "银杏",
+      "nameEn": "Ginkgo",
+      "group": "tree",
+      "emoji": "🟡",
+      "query": "ginkgo tree"
+    },
+    {
+      "id": "palm",
+      "nameZh": "棕榈",
+      "nameEn": "Palm",
+      "group": "tree",
+      "emoji": "🌴",
+      "query": "palm tree"
+    },
+    {
+      "id": "coconut_tree",
+      "nameZh": "椰子树",
+      "nameEn": "Coconut palm",
+      "group": "tree",
+      "emoji": "🥥",
+      "query": "coconut palm"
+    },
+    {
+      "id": "olive",
+      "nameZh": "橄榄树",
+      "nameEn": "Olive",
+      "group": "tree",
+      "emoji": "🫒",
+      "query": "olive tree"
+    },
+    {
+      "id": "eucalyptus",
+      "nameZh": "桉树",
+      "nameEn": "Eucalyptus",
+      "group": "tree",
+      "emoji": "🌳",
+      "query": "eucalyptus"
+    },
+    {
+      "id": "baobab",
+      "nameZh": "猴面包树",
+      "nameEn": "Baobab",
+      "group": "tree",
+      "emoji": "🌳",
+      "query": "baobab"
+    },
+    {
+      "id": "sakura",
+      "nameZh": "樱花树",
+      "nameEn": "Cherry blossom",
+      "group": "tree",
+      "emoji": "🌸",
+      "query": "sakura tree"
+    },
+    {
+      "id": "peach_tree",
+      "nameZh": "桃树",
+      "nameEn": "Peach tree",
+      "group": "tree",
+      "emoji": "🍑",
+      "query": "peach tree"
+    },
+    {
+      "id": "pear_tree",
+      "nameZh": "梨树",
+      "nameEn": "Pear tree",
+      "group": "tree",
+      "emoji": "🍐",
+      "query": "pear tree"
+    },
+    {
+      "id": "orange_tree",
+      "nameZh": "橙树",
+      "nameEn": "Orange tree",
+      "group": "tree",
+      "emoji": "🍊",
+      "query": "orange tree"
+    },
+    {
+      "id": "lemon_tree",
+      "nameZh": "柠檬树",
+      "nameEn": "Lemon tree",
+      "group": "tree",
+      "emoji": "🍋",
+      "query": "lemon tree"
+    },
+    {
+      "id": "mango_tree",
+      "nameZh": "芒果树",
+      "nameEn": "Mango tree",
+      "group": "tree",
+      "emoji": "🥭",
+      "query": "mango tree"
+    },
+    {
+      "id": "tomato",
+      "nameZh": "番茄",
+      "nameEn": "Tomato",
+      "group": "food",
+      "emoji": "🍅",
+      "query": "tomato plant"
+    },
+    {
+      "id": "potato",
+      "nameZh": "土豆",
+      "nameEn": "Potato",
+      "group": "food",
+      "emoji": "🥔",
+      "query": "potato plant"
+    },
+    {
+      "id": "onion",
+      "nameZh": "洋葱",
+      "nameEn": "Onion",
+      "group": "food",
+      "emoji": "🧅",
+      "query": "onion plant"
+    },
+    {
+      "id": "garlic",
+      "nameZh": "大蒜",
+      "nameEn": "Garlic",
+      "group": "food",
+      "emoji": "🧄",
+      "query": "garlic plant"
+    },
+    {
+      "id": "cabbage",
+      "nameZh": "卷心菜",
+      "nameEn": "Cabbage",
+      "group": "food",
+      "emoji": "🥬",
+      "query": "cabbage"
+    },
+    {
+      "id": "lettuce",
+      "nameZh": "生菜",
+      "nameEn": "Lettuce",
+      "group": "food",
+      "emoji": "🥬",
+      "query": "lettuce"
+    },
+    {
+      "id": "spinach",
+      "nameZh": "菠菜",
+      "nameEn": "Spinach",
+      "group": "food",
+      "emoji": "🥬",
+      "query": "spinach"
+    },
+    {
+      "id": "broccoli",
+      "nameZh": "西兰花",
+      "nameEn": "Broccoli",
+      "group": "food",
+      "emoji": "🥦",
+      "query": "broccoli"
+    },
+    {
+      "id": "cucumber",
+      "nameZh": "黄瓜",
+      "nameEn": "Cucumber",
+      "group": "food",
+      "emoji": "🥒",
+      "query": "cucumber plant"
+    },
+    {
+      "id": "pumpkin",
+      "nameZh": "南瓜",
+      "nameEn": "Pumpkin",
+      "group": "food",
+      "emoji": "🎃",
+      "query": "pumpkin plant"
+    },
+    {
+      "id": "eggplant",
+      "nameZh": "茄子",
+      "nameEn": "Eggplant",
+      "group": "food",
+      "emoji": "🍆",
+      "query": "eggplant"
+    },
+    {
+      "id": "pepper",
+      "nameZh": "辣椒",
+      "nameEn": "Pepper",
+      "group": "food",
+      "emoji": "🌶️",
+      "query": "chili pepper plant"
+    },
+    {
+      "id": "pea",
+      "nameZh": "豌豆",
+      "nameEn": "Pea",
+      "group": "food",
+      "emoji": "🟢",
+      "query": "pea plant"
+    },
+    {
+      "id": "bean",
+      "nameZh": "豆子",
+      "nameEn": "Bean",
+      "group": "food",
+      "emoji": "🫘",
+      "query": "bean plant"
+    },
+    {
+      "id": "rice",
+      "nameZh": "水稻",
+      "nameEn": "Rice",
+      "group": "food",
+      "emoji": "🌾",
+      "query": "rice plant"
+    },
+    {
+      "id": "strawberry",
+      "nameZh": "草莓",
+      "nameEn": "Strawberry",
+      "group": "food",
+      "emoji": "🍓",
+      "query": "strawberry plant"
+    },
+    {
+      "id": "grape",
+      "nameZh": "葡萄",
+      "nameEn": "Grape",
+      "group": "food",
+      "emoji": "🍇",
+      "query": "grape vine"
+    },
+    {
+      "id": "watermelon",
+      "nameZh": "西瓜",
+      "nameEn": "Watermelon",
+      "group": "food",
+      "emoji": "🍉",
+      "query": "watermelon plant"
+    },
+    {
+      "id": "pineapple",
+      "nameZh": "菠萝",
+      "nameEn": "Pineapple",
+      "group": "food",
+      "emoji": "🍍",
+      "query": "pineapple plant"
+    },
+    {
+      "id": "avocado",
+      "nameZh": "牛油果",
+      "nameEn": "Avocado",
+      "group": "food",
+      "emoji": "🥑",
+      "query": "avocado tree"
+    },
+    {
+      "id": "kiwi_fruit",
+      "nameZh": "猕猴桃",
+      "nameEn": "Kiwi",
+      "group": "food",
+      "emoji": "🥝",
+      "query": "kiwi fruit plant"
+    },
+    {
+      "id": "blueberry",
+      "nameZh": "蓝莓",
+      "nameEn": "Blueberry",
+      "group": "food",
+      "emoji": "🫐",
+      "query": "blueberry bush"
+    },
+    {
+      "id": "raspberry",
+      "nameZh": "覆盆子",
+      "nameEn": "Raspberry",
+      "group": "food",
+      "emoji": "🍇",
+      "query": "raspberry"
+    },
+    {
+      "id": "peach",
+      "nameZh": "桃子",
+      "nameEn": "Peach",
+      "group": "food",
+      "emoji": "🍑",
+      "query": "peach fruit"
+    },
+    {
+      "id": "pear",
+      "nameZh": "梨",
+      "nameEn": "Pear",
+      "group": "food",
+      "emoji": "🍐",
+      "query": "pear fruit"
+    },
+    {
+      "id": "plum",
+      "nameZh": "李子",
+      "nameEn": "Plum",
+      "group": "food",
+      "emoji": "🟣",
+      "query": "plum fruit"
+    },
+    {
+      "id": "cherry_fruit",
+      "nameZh": "樱桃",
+      "nameEn": "Cherry",
+      "group": "food",
+      "emoji": "🍒",
+      "query": "cherry fruit"
+    },
+    {
+      "id": "fig",
+      "nameZh": "无花果",
+      "nameEn": "Fig",
+      "group": "food",
+      "emoji": "🟤",
+      "query": "fig fruit"
+    },
+    {
+      "id": "pomegranate",
+      "nameZh": "石榴",
+      "nameEn": "Pomegranate",
+      "group": "food",
+      "emoji": "🔴",
+      "query": "pomegranate"
+    },
+    {
+      "id": "papaya",
+      "nameZh": "木瓜",
+      "nameEn": "Papaya",
+      "group": "food",
+      "emoji": "🧡",
+      "query": "papaya"
+    },
+    {
+      "id": "fern",
+      "nameZh": "蕨类",
+      "nameEn": "Fern",
+      "group": "tree",
+      "emoji": "🌿",
+      "query": "fern plant"
+    },
+    {
+      "id": "moss",
+      "nameZh": "苔藓",
+      "nameEn": "Moss",
+      "group": "tree",
+      "emoji": "🟢",
+      "query": "moss plant"
+    },
+    {
+      "id": "ivy",
+      "nameZh": "常春藤",
+      "nameEn": "Ivy",
+      "group": "tree",
+      "emoji": "🌿",
+      "query": "ivy plant"
+    },
+    {
+      "id": "succulent",
+      "nameZh": "多肉",
+      "nameEn": "Succulent",
+      "group": "tree",
+      "emoji": "🪴",
+      "query": "succulent plant"
+    },
+    {
+      "id": "aloe",
+      "nameZh": "芦荟",
+      "nameEn": "Aloe",
+      "group": "tree",
+      "emoji": "🪴",
+      "query": "aloe vera"
+    },
+    {
+      "id": "mint",
+      "nameZh": "薄荷",
+      "nameEn": "Mint",
+      "group": "food",
+      "emoji": "🌿",
+      "query": "mint plant"
     }
   ]
 }

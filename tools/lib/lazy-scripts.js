@@ -84,6 +84,9 @@
     plantearn: "./plantearn.js",
     colorearn: "./colorearn.js",
     numearn: "./numearn.js",
+    fruitearn: "./fruitearn.js",
+    vehicleearn: "./vehicleearn.js",
+    shapeearn: "./shapeearn.js",
     ipgeo: "./ipgeo.js",
     sandspiel: "./sandspiel.js",
     memo: "./memo.js",
@@ -190,6 +193,9 @@
     "plantearn",
     "colorearn",
     "numearn",
+    "fruitearn",
+    "vehicleearn",
+    "shapeearn",
     "ipgeo",
     "sandspiel",
     "lanshare",
@@ -206,7 +212,7 @@
     "gitbridge", "passvault", "envkit", "feedbackhub",
     "setup", "about", "xorenc", "morse", "countdown",
     "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "piano", "minigames", "ambient", "enspeak", "animalearn",
-    "insectearn", "plantearn", "colorearn", "numearn", "ipgeo",
+    "insectearn", "plantearn", "colorearn", "numearn", "shapeearn", "vehicleearn", "fruitearn", "ipgeo",
   ]);
 
   const scriptPromises = new Map();

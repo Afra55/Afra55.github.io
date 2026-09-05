@@ -141,7 +141,10 @@
         "insectearn",
         "plantearn",
         "colorearn",
-        "numearn"
+        "numearn",
+        "shapeearn",
+        "vehicleearn",
+        "fruitearn"
       ]
     },
     {
@@ -963,6 +966,41 @@
         "站点导航",
         "卡片"
       ]
+    },
+    "shapeearn": {
+      "name": "认形状",
+      "aliases": [
+        "形状",
+        "认形状",
+        "shape",
+        "shapes",
+        "shapeearn",
+        "几何",
+        "闪卡"
+      ]
+    },
+    "vehicleearn": {
+      "name": "认交通",
+      "aliases": [
+        "交通",
+        "认交通",
+        "vehicle",
+        "vehicles",
+        "vehicleearn",
+        "汽车",
+        "闪卡"
+      ]
+    },
+    "fruitearn": {
+      "name": "认水果",
+      "aliases": [
+        "水果",
+        "认水果",
+        "fruit",
+        "fruits",
+        "fruitearn",
+        "闪卡"
+      ]
     }
   },
   "about": {
@@ -1045,7 +1083,10 @@
     "feedbackhub": "汇集各工具 giscus 评价（站点快照，避免 API 限流）；本页不挂底部评论框。",
     "mathedit": "MathLive 在线数学公式编辑：可视化输入，导出 LaTeX / MathML / AsciiMath。",
     "mdslides": "把 Markdown 做成网页幻灯片（Reveal.js）；用 --- 分页，一键全屏演示。",
-    "sitenav": "外链导航：Everything、MySpeed、PDFCraft、图吧工具箱、昆虫世界、史前博物馆、Slidev、I Have ADHD 等站外服务；本站已有工具不重复列出。"
+    "sitenav": "外链导航：Everything、MySpeed、PDFCraft、图吧工具箱、昆虫世界、史前博物馆、Slidev、I Have ADHD 等站外服务；本站已有工具不重复列出。",
+    "shapeearn": "幼儿认形状：本地几何闪卡，点读中英名；含看形选名、听名选形。纯本地绘制，无需外网图片。",
+    "vehicleearn": "幼儿认交通：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",
+    "fruitearn": "幼儿认水果：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。"
   }
 };
 })();

@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "credit": "配图优先 Wikimedia Commons（Special:FilePath）；缺图时用 Openverse CC 检索兜底。仅供学习展示，请保留许可署名。",
   "groups": [
     {
@@ -627,6 +627,278 @@
       "emoji": "🦦",
       "query": "otter",
       "commons": "Otter_in_Southwold.jpg"
+    },
+    {
+      "id": "turkey",
+      "nameZh": "火鸡",
+      "nameEn": "Turkey",
+      "group": "pet",
+      "emoji": "🦃",
+      "query": "turkey bird"
+    },
+    {
+      "id": "guinea_pig",
+      "nameZh": "豚鼠",
+      "nameEn": "Guinea pig",
+      "group": "pet",
+      "emoji": "🐹",
+      "query": "guinea pig"
+    },
+    {
+      "id": "hamster",
+      "nameZh": "仓鼠",
+      "nameEn": "Hamster",
+      "group": "pet",
+      "emoji": "🐹",
+      "query": "hamster"
+    },
+    {
+      "id": "parrot_pet",
+      "nameZh": "虎皮鹦鹉",
+      "nameEn": "Budgie",
+      "group": "pet",
+      "emoji": "🦜",
+      "query": "budgerigar"
+    },
+    {
+      "id": "alpaca",
+      "nameZh": "羊驼",
+      "nameEn": "Alpaca",
+      "group": "pet",
+      "emoji": "🦙",
+      "query": "alpaca"
+    },
+    {
+      "id": "llama",
+      "nameZh": "美洲驼",
+      "nameEn": "Llama",
+      "group": "pet",
+      "emoji": "🦙",
+      "query": "llama"
+    },
+    {
+      "id": "leopard",
+      "nameZh": "豹",
+      "nameEn": "Leopard",
+      "group": "wild",
+      "emoji": "🐆",
+      "query": "leopard"
+    },
+    {
+      "id": "cheetah",
+      "nameZh": "猎豹",
+      "nameEn": "Cheetah",
+      "group": "wild",
+      "emoji": "🐆",
+      "query": "cheetah"
+    },
+    {
+      "id": "jaguar",
+      "nameZh": "美洲豹",
+      "nameEn": "Jaguar",
+      "group": "wild",
+      "emoji": "🐆",
+      "query": "jaguar animal"
+    },
+    {
+      "id": "lynx",
+      "nameZh": "猞猁",
+      "nameEn": "Lynx",
+      "group": "wild",
+      "emoji": "🐱",
+      "query": "lynx"
+    },
+    {
+      "id": "bison",
+      "nameZh": "野牛",
+      "nameEn": "Bison",
+      "group": "wild",
+      "emoji": "🦬",
+      "query": "bison"
+    },
+    {
+      "id": "buffalo",
+      "nameZh": "水牛",
+      "nameEn": "Buffalo",
+      "group": "wild",
+      "emoji": "🐃",
+      "query": "water buffalo"
+    },
+    {
+      "id": "moose",
+      "nameZh": "驼鹿",
+      "nameEn": "Moose",
+      "group": "wild",
+      "emoji": "🫎",
+      "query": "moose"
+    },
+    {
+      "id": "elk",
+      "nameZh": "麋鹿",
+      "nameEn": "Elk",
+      "group": "wild",
+      "emoji": "🦌",
+      "query": "elk deer"
+    },
+    {
+      "id": "boar",
+      "nameZh": "野猪",
+      "nameEn": "Boar",
+      "group": "wild",
+      "emoji": "🐗",
+      "query": "wild boar"
+    },
+    {
+      "id": "badger",
+      "nameZh": "獾",
+      "nameEn": "Badger",
+      "group": "wild",
+      "emoji": "🦡",
+      "query": "badger"
+    },
+    {
+      "id": "skunk",
+      "nameZh": "臭鼬",
+      "nameEn": "Skunk",
+      "group": "wild",
+      "emoji": "🦨",
+      "query": "skunk"
+    },
+    {
+      "id": "porcupine",
+      "nameZh": "豪猪",
+      "nameEn": "Porcupine",
+      "group": "wild",
+      "emoji": "🦔",
+      "query": "porcupine"
+    },
+    {
+      "id": "armadillo",
+      "nameZh": "犰狳",
+      "nameEn": "Armadillo",
+      "group": "wild",
+      "emoji": "🐾",
+      "query": "armadillo"
+    },
+    {
+      "id": "sloth",
+      "nameZh": "树懒",
+      "nameEn": "Sloth",
+      "group": "wild",
+      "emoji": "🦥",
+      "query": "sloth"
+    },
+    {
+      "id": "gorilla",
+      "nameZh": "大猩猩",
+      "nameEn": "Gorilla",
+      "group": "wild",
+      "emoji": "🦍",
+      "query": "gorilla"
+    },
+    {
+      "id": "orangutan",
+      "nameZh": "猩猩",
+      "nameEn": "Orangutan",
+      "group": "wild",
+      "emoji": "🦧",
+      "query": "orangutan"
+    },
+    {
+      "id": "chimpanzee",
+      "nameZh": "黑猩猩",
+      "nameEn": "Chimpanzee",
+      "group": "wild",
+      "emoji": "🐵",
+      "query": "chimpanzee"
+    },
+    {
+      "id": "meerkat",
+      "nameZh": "狐獴",
+      "nameEn": "Meerkat",
+      "group": "wild",
+      "emoji": "🐿️",
+      "query": "meerkat"
+    },
+    {
+      "id": "hyena",
+      "nameZh": "鬣狗",
+      "nameEn": "Hyena",
+      "group": "wild",
+      "emoji": "🐺",
+      "query": "hyena"
+    },
+    {
+      "id": "bat",
+      "nameZh": "蝙蝠",
+      "nameEn": "Bat",
+      "group": "wild",
+      "emoji": "🦇",
+      "query": "bat animal"
+    },
+    {
+      "id": "mole",
+      "nameZh": "鼹鼠",
+      "nameEn": "Mole",
+      "group": "wild",
+      "emoji": "🐾",
+      "query": "mole animal"
+    },
+    {
+      "id": "weasel",
+      "nameZh": "黄鼠狼",
+      "nameEn": "Weasel",
+      "group": "wild",
+      "emoji": "🦦",
+      "query": "weasel"
+    },
+    {
+      "id": "ferret",
+      "nameZh": "雪貂",
+      "nameEn": "Ferret",
+      "group": "pet",
+      "emoji": "🦦",
+      "query": "ferret"
+    },
+    {
+      "id": "yak",
+      "nameZh": "牦牛",
+      "nameEn": "Yak",
+      "group": "wild",
+      "emoji": "🐂",
+      "query": "yak"
+    },
+    {
+      "id": "crane",
+      "nameZh": "鹤",
+      "nameEn": "Crane",
+      "group": "bird",
+      "emoji": "🦩",
+      "query": "crane bird"
+    },
+    {
+      "id": "heron",
+      "nameZh": "苍鹭",
+      "nameEn": "Heron",
+      "group": "bird",
+      "emoji": "🐦",
+      "query": "heron"
+    },
+    {
+      "id": "pelican",
+      "nameZh": "鹈鹕",
+      "nameEn": "Pelican",
+      "group": "bird",
+      "emoji": "🐦",
+      "query": "pelican"
+    },
+    {
+      "id": "ostrich",
+      "nameZh": "鸵鸟",
+      "nameEn": "Ostrich",
+      "group": "bird",
+      "emoji": "🦢",
+      "query": "ostrich"
     }
   ]
 }
