@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const BUILD = "2026.09.05-112500";
+  const BUILD = "2026.09.05-113700";
   window.TOOLS_BUILD = BUILD;
   window.TOOLS_VERSION = BUILD;
 
@@ -75,7 +75,7 @@
 
   try {
     const href = "./styles/panels/kidsflash.css?v=" + encodeURIComponent(BUILD);
-    if (!document.querySelector('link[data-kidsflash-css]')) {
+    if (!document.querySelector("link[data-kidsflash-css]")) {
       const link = document.createElement("link");
       link.rel = "stylesheet";
       link.href = href;

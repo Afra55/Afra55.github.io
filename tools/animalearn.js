@@ -17,27 +17,42 @@
     });
   }
 
-  async function dataUrlWithItems() {
-    const v = window.TOOLS_BUILD || "";
-    const res = await fetch(`./data/animals-kids.json${v ? `?v=${encodeURIComponent(v)}` : ""}`);
-    if (!res.ok) throw new Error(`加载动物数据失败（${res.status}）`);
-    const data = await res.json();
-    if (!data.items) data.items = data.animals || [];
-    const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
-    return URL.createObjectURL(blob);
+  function patchAnimalsCatalogFetch() {
+    if (window.__aeAnimalsFetchPatched) return;
+    window.__aeAnimalsFetchPatched = true;
+    const orig = window.fetch.bind(window);
+    window.fetch = async (input, init) => {
+      const url = typeof input === "string" ? input : String(input && input.url ? input.url : input);
+      const res = await orig(input, init);
+      if (!/animals-kids\.json/i.test(url)) return res;
+      try {
+        const data = await res.clone().json();
+        if (!Array.isArray(data.items)) data.items = data.animals || [];
+        return new Response(JSON.stringify(data), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      } catch (_) {
+        return res;
+      }
+    };
   }
 
   async function boot() {
-    if (mounted) return;
     if (!document.getElementById(TOOL_ID)) return;
     await ensureFlash();
-    if (mounted) return;
+    patchAnimalsCatalogFetch();
+    if (mounted) {
+      try {
+        window.dispatchEvent(new CustomEvent("devtools:route"));
+      } catch (_) {}
+      return;
+    }
     mounted = true;
-    const dataUrl = await dataUrlWithItems();
     window.DevToolsKidsFlash.mount({
       toolId: TOOL_ID,
       title: "认动物",
-      dataUrl,
+      dataUrl: "./data/animals-kids.json",
       prefix: "ae",
       namespace: "animalearn",
       defaultEmoji: "🐾",
