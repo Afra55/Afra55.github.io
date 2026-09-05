@@ -189,7 +189,7 @@
     return { url: "", credit: "" };
   }
 
-  function setLoadingPlaceholder(mediaEl, animal, loading) {
+  function setLoadingPlaceholder(mediaEl, animal, loading, opts = {}) {
     if (!mediaEl) return;
     mediaEl.classList.toggle("is-loading", Boolean(loading));
     let ph = mediaEl.querySelector(".animalearn-placeholder");
@@ -204,15 +204,18 @@
       mediaEl.appendChild(ph);
     }
     const emoji = animal?.emoji || "🐾";
-    const label = [animal?.nameZh, animal?.nameEn].filter(Boolean).join(" ");
+    // 答题模式不显示名字，避免孩子没看图就泄题
+    const hideName = Boolean(opts.hideName);
+    const label = hideName ? "" : [animal?.nameZh, animal?.nameEn].filter(Boolean).join(" ");
     ph.innerHTML = `<span class="animalearn-placeholder-emoji">${emoji}</span>${
       label ? `<span class="animalearn-placeholder-text">${label}</span>` : ""
     }`;
   }
 
-  async function paintMedia(mediaEl, emojiEl, imgEl, animal) {
+  async function paintMedia(mediaEl, emojiEl, imgEl, animal, opts = {}) {
     if (!animal) return null;
-    setLoadingPlaceholder(mediaEl, animal, true);
+    const hideName = Boolean(opts.hideName);
+    setLoadingPlaceholder(mediaEl, animal, true, { hideName });
     if (emojiEl) {
       emojiEl.hidden = true;
       emojiEl.textContent = animal.emoji || "🐾";
@@ -220,7 +223,7 @@
     if (imgEl) {
       imgEl.hidden = true;
       imgEl.removeAttribute("src");
-      imgEl.alt = `${animal.nameZh} ${animal.nameEn}`;
+      imgEl.alt = hideName ? "动物图片" : `${animal.nameZh} ${animal.nameEn}`;
       imgEl.dataset.expectId = animal.id;
       // 兜底：强制框内完整显示（禁止裁切下半截 / 撑破屏幕）
       imgEl.style.maxWidth = "100%";
