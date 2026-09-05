@@ -204,7 +204,7 @@
       mediaEl.appendChild(ph);
     }
     const emoji = animal?.emoji || "🐾";
-    const label = [animal?.nameZh, animal?.nameEn].filter(Boolean).join(" / ");
+    const label = [animal?.nameZh, animal?.nameEn].filter(Boolean).join(" ");
     ph.innerHTML = `<span class="animalearn-placeholder-emoji">${emoji}</span>${
       label ? `<span class="animalearn-placeholder-text">${label}</span>` : ""
     }`;
@@ -220,7 +220,7 @@
     if (imgEl) {
       imgEl.hidden = true;
       imgEl.removeAttribute("src");
-      imgEl.alt = `${animal.nameZh} / ${animal.nameEn}`;
+      imgEl.alt = `${animal.nameZh} ${animal.nameEn}`;
       imgEl.dataset.expectId = animal.id;
       // 兜底：强制框内完整显示（禁止裁切下半截 / 撑破屏幕）
       imgEl.style.maxWidth = "100%";
@@ -261,18 +261,26 @@
     if (el) el.textContent = currentGroupLabel();
   }
 
+  function getCatSheet() {
+    return document.getElementById("ae-cat-sheet");
+  }
+
   function openCatSheet() {
-    const sheet = root && $("#ae-cat-sheet", root);
+    const sheet = getCatSheet();
     const openBtn = root && $("#ae-cat-open", root);
     if (!sheet) return;
+    // 面板有 transform/overflow，fixed 会被困在面板底；挂到 body 才是真弹层
+    if (sheet.parentElement !== document.body) {
+      document.body.appendChild(sheet);
+    }
     sheet.hidden = false;
     openBtn?.setAttribute("aria-expanded", "true");
     document.body.classList.add("animalearn-sheet-open");
-    window.setTimeout(() => $("#ae-cat-close", root)?.focus?.(), 30);
+    window.setTimeout(() => $("#ae-cat-close", sheet)?.focus?.(), 30);
   }
 
   function closeCatSheet() {
-    const sheet = root && $("#ae-cat-sheet", root);
+    const sheet = getCatSheet();
     const openBtn = root && $("#ae-cat-open", root);
     if (!sheet) return;
     sheet.hidden = true;
@@ -280,14 +288,25 @@
     document.body.classList.remove("animalearn-sheet-open");
   }
 
+  function applyGroup(nextId) {
+    groupId = nextId || "all";
+    cardIndex = 0;
+    renderFilters();
+    closeCatSheet();
+    savePosition();
+    if (tab === "cards") renderCard();
+    else if (tab === "quiz-look") nextLookQuiz();
+    else nextListenQuiz();
+  }
+
   function renderFilters() {
-    const host = $("#ae-filters", root);
+    const host = document.getElementById("ae-filters");
     if (!host || !catalog) return;
     host.innerHTML = (catalog.groups || [])
       .map((g) => {
         const on = g.id === groupId ? " is-active" : "";
         return `<button type="button" class="ghost-btn animalearn-filter-btn${on}" data-group="${g.id}">
-          <span>${g.nameZh}<span class="hint tight"> · ${g.nameEn}</span></span>
+          <span>${g.nameZh}</span>
           <span class="animalearn-filter-check" aria-hidden="true">✓</span>
         </button>`;
       })
@@ -317,7 +336,7 @@
     const meta = $("#ae-card-meta", root);
     if (zh) zh.textContent = animal.nameZh;
     if (en) en.textContent = animal.nameEn;
-    if (meta) meta.textContent = `${cardIndex + 1} / ${list.length}`;
+    if (meta) meta.textContent = `${cardIndex + 1} · ${list.length}`;
     // 重播名字淡入
     const names = $(".animalearn-names", root);
     if (names) {
@@ -465,8 +484,8 @@
     if (fb) {
       fb.className = `animalearn-feedback ${ok ? "is-ok" : "is-bad"}`;
       fb.textContent = ok
-        ? `对啦！${lookAnswer.nameZh} / ${lookAnswer.nameEn}`
-        : `是 ${lookAnswer.nameZh} / ${lookAnswer.nameEn}`;
+        ? `对啦！${lookAnswer.nameZh}`
+        : `是 ${lookAnswer.nameZh}`;
     }
     speakPair(lookAnswer);
   }
@@ -485,8 +504,8 @@
     if (fb) {
       fb.className = `animalearn-feedback ${ok ? "is-ok" : "is-bad"}`;
       fb.textContent = ok
-        ? `找对了！${listenAnswer.nameZh} / ${listenAnswer.nameEn}`
-        : `正确答案：${listenAnswer.nameZh} / ${listenAnswer.nameEn}`;
+        ? `找对了！${listenAnswer.nameZh}`
+        : `正确答案：${listenAnswer.nameZh}`;
     }
     speakPair(listenAnswer);
   }
@@ -501,18 +520,6 @@
       const tabBtn = t.closest?.(".animalearn-tab");
       if (tabBtn) {
         setTab(tabBtn.dataset.tab || "cards");
-        return;
-      }
-      const filterBtn = t.closest?.(".animalearn-filter-btn");
-      if (filterBtn) {
-        groupId = filterBtn.getAttribute("data-group") || "all";
-        cardIndex = 0;
-        renderFilters();
-        closeCatSheet();
-        savePosition();
-        if (tab === "cards") renderCard();
-        else if (tab === "quiz-look") nextLookQuiz();
-        else nextListenQuiz();
         return;
       }
       const lookBtn = t.closest?.("#ae-look-choices .animalearn-choice");
@@ -530,6 +537,18 @@
       }
     });
 
+    // 弹层挂到 body 后，点击不再冒泡到 root，单独绑定
+    const sheet = getCatSheet();
+    sheet?.addEventListener("click", (ev) => {
+      const t = ev.target;
+      if (t.closest?.("#ae-cat-backdrop") || t.closest?.("#ae-cat-close")) {
+        closeCatSheet();
+        return;
+      }
+      const filterBtn = t.closest?.(".animalearn-filter-btn");
+      if (filterBtn) applyGroup(filterBtn.getAttribute("data-group") || "all");
+    });
+
     $("#ae-prev", root)?.addEventListener("click", () => stepCard(-1));
     $("#ae-next", root)?.addEventListener("click", () => stepCard(1));
     $("#ae-random", root)?.addEventListener("click", () => randomCard());
@@ -541,8 +560,6 @@
     });
 
     $("#ae-cat-open", root)?.addEventListener("click", () => openCatSheet());
-    $("#ae-cat-close", root)?.addEventListener("click", () => closeCatSheet());
-    $("#ae-cat-backdrop", root)?.addEventListener("click", () => closeCatSheet());
 
     $("#ae-card-media", root)?.addEventListener("keydown", (ev) => {
       if (ev.key === "Enter" || ev.key === " ") {
@@ -553,8 +570,8 @@
 
     document.addEventListener("keydown", (ev) => {
       if (ev.key !== "Escape") return;
-      const sheet = root && $("#ae-cat-sheet", root);
-      if (sheet && !sheet.hidden) closeCatSheet();
+      const s = getCatSheet();
+      if (s && !s.hidden) closeCatSheet();
     });
 
     if (window.speechSynthesis) {

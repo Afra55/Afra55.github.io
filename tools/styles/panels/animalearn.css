@@ -430,7 +430,7 @@ body.animalearn-sheet-open {
 .animalearn-sheet {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 12000;
   display: grid;
   place-items: end center;
 }
