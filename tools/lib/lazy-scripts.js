@@ -85,6 +85,14 @@
     colorearn: "./colorearn.js",
     numearn: "./numearn.js",
     fruitearn: "./fruitearn.js",
+    homeearn: "./homeearn.js",
+    sportsearn: "./sportsearn.js",
+    foodearn: "./foodearn.js",
+    thingearn: "./thingearn.js",
+    jobearn: "./jobearn.js",
+    weatherearn: "./weatherearn.js",
+    bodyearn: "./bodyearn.js",
+    vegearn: "./vegearn.js",
     vehicleearn: "./vehicleearn.js",
     shapeearn: "./shapeearn.js",
     ipgeo: "./ipgeo.js",
@@ -193,7 +201,7 @@
     "plantearn",
     "colorearn",
     "numearn",
-    "fruitearn",
+    "fruitearn", "homeearn", "sportsearn", "foodearn", "thingearn", "jobearn", "weatherearn", "bodyearn", "vegearn",
     "vehicleearn",
     "shapeearn",
     "ipgeo",
@@ -212,7 +220,7 @@
     "gitbridge", "passvault", "envkit", "feedbackhub",
     "setup", "about", "xorenc", "morse", "countdown",
     "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "piano", "minigames", "ambient", "enspeak", "animalearn",
-    "insectearn", "plantearn", "colorearn", "numearn", "shapeearn", "vehicleearn", "fruitearn", "ipgeo",
+    "insectearn", "plantearn", "colorearn", "numearn", "shapeearn", "vehicleearn", "fruitearn", "homeearn", "sportsearn", "foodearn", "thingearn", "jobearn", "weatherearn", "bodyearn", "vegearn", "ipgeo",
   ]);
 
   const scriptPromises = new Map();

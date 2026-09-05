@@ -1,0 +1,834 @@
+{
+  "version": 1,
+  "credit": "配图优先 Wikimedia Commons；缺图时 Openverse（CC）兜底。仅供学习展示。",
+  "visual": "image",
+  "groups": [
+    {
+      "id": "all",
+      "nameZh": "全部",
+      "nameEn": "All"
+    },
+    {
+      "id": "school",
+      "nameZh": "学习",
+      "nameEn": "School"
+    },
+    {
+      "id": "home",
+      "nameZh": "居家",
+      "nameEn": "Home"
+    },
+    {
+      "id": "play",
+      "nameZh": "玩乐",
+      "nameEn": "Play"
+    },
+    {
+      "id": "care",
+      "nameZh": "洗护",
+      "nameEn": "Care"
+    }
+  ],
+  "items": [
+    {
+      "id": "pencil",
+      "nameZh": "铅笔",
+      "nameEn": "Pencil",
+      "group": "school",
+      "emoji": "✏️",
+      "query": "Pencil object"
+    },
+    {
+      "id": "pen",
+      "nameZh": "钢笔",
+      "nameEn": "Pen",
+      "group": "school",
+      "emoji": "🖊️",
+      "query": "Pen object"
+    },
+    {
+      "id": "crayon",
+      "nameZh": "蜡笔",
+      "nameEn": "Crayon",
+      "group": "school",
+      "emoji": "🖍️",
+      "query": "Crayon object"
+    },
+    {
+      "id": "marker",
+      "nameZh": "记号笔",
+      "nameEn": "Marker",
+      "group": "school",
+      "emoji": "🖋️",
+      "query": "Marker object"
+    },
+    {
+      "id": "eraser",
+      "nameZh": "橡皮",
+      "nameEn": "Eraser",
+      "group": "school",
+      "emoji": "🧽",
+      "query": "Eraser object"
+    },
+    {
+      "id": "ruler",
+      "nameZh": "尺子",
+      "nameEn": "Ruler",
+      "group": "school",
+      "emoji": "📏",
+      "query": "Ruler object"
+    },
+    {
+      "id": "scissors",
+      "nameZh": "剪刀",
+      "nameEn": "Scissors",
+      "group": "school",
+      "emoji": "✂️",
+      "query": "Scissors object"
+    },
+    {
+      "id": "glue",
+      "nameZh": "胶水",
+      "nameEn": "Glue",
+      "group": "school",
+      "emoji": "🧴",
+      "query": "Glue object"
+    },
+    {
+      "id": "notebook",
+      "nameZh": "本子",
+      "nameEn": "Notebook",
+      "group": "school",
+      "emoji": "📓",
+      "query": "Notebook object"
+    },
+    {
+      "id": "book",
+      "nameZh": "书",
+      "nameEn": "Book",
+      "group": "school",
+      "emoji": "📖",
+      "query": "Book object"
+    },
+    {
+      "id": "backpack",
+      "nameZh": "书包",
+      "nameEn": "Backpack",
+      "group": "school",
+      "emoji": "🎒",
+      "query": "Backpack object"
+    },
+    {
+      "id": "pencilcase",
+      "nameZh": "笔袋",
+      "nameEn": "Pencil case",
+      "group": "school",
+      "emoji": "🧰",
+      "query": "Pencil case object"
+    },
+    {
+      "id": "sharpener",
+      "nameZh": "卷笔刀",
+      "nameEn": "Sharpener",
+      "group": "school",
+      "emoji": "✏️",
+      "query": "Sharpener object"
+    },
+    {
+      "id": "stapler",
+      "nameZh": "订书机",
+      "nameEn": "Stapler",
+      "group": "school",
+      "emoji": "📎",
+      "query": "Stapler object"
+    },
+    {
+      "id": "clip",
+      "nameZh": "回形针",
+      "nameEn": "Paperclip",
+      "group": "school",
+      "emoji": "📎",
+      "query": "Paperclip object"
+    },
+    {
+      "id": "tape",
+      "nameZh": "胶带",
+      "nameEn": "Tape",
+      "group": "school",
+      "emoji": "📼",
+      "query": "Tape object"
+    },
+    {
+      "id": "calculator",
+      "nameZh": "计算器",
+      "nameEn": "Calculator",
+      "group": "school",
+      "emoji": "🧮",
+      "query": "Calculator object"
+    },
+    {
+      "id": "globe",
+      "nameZh": "地球仪",
+      "nameEn": "Globe",
+      "group": "school",
+      "emoji": "🌍",
+      "query": "Globe object"
+    },
+    {
+      "id": "blackboard",
+      "nameZh": "黑板",
+      "nameEn": "Blackboard",
+      "group": "school",
+      "emoji": "⬛",
+      "query": "Blackboard object"
+    },
+    {
+      "id": "chalk",
+      "nameZh": "粉笔",
+      "nameEn": "Chalk",
+      "group": "school",
+      "emoji": "🤍",
+      "query": "Chalk object"
+    },
+    {
+      "id": "desk",
+      "nameZh": "课桌",
+      "nameEn": "Desk",
+      "group": "school",
+      "emoji": "🪑",
+      "query": "Desk object"
+    },
+    {
+      "id": "chair",
+      "nameZh": "椅子",
+      "nameEn": "Chair",
+      "group": "home",
+      "emoji": "🪑",
+      "query": "Chair object"
+    },
+    {
+      "id": "table",
+      "nameZh": "桌子",
+      "nameEn": "Table",
+      "group": "home",
+      "emoji": "🪵",
+      "query": "Table object"
+    },
+    {
+      "id": "bed",
+      "nameZh": "床",
+      "nameEn": "Bed",
+      "group": "home",
+      "emoji": "🛏️",
+      "query": "Bed object"
+    },
+    {
+      "id": "pillow",
+      "nameZh": "枕头",
+      "nameEn": "Pillow",
+      "group": "home",
+      "emoji": "🛏️",
+      "query": "Pillow object"
+    },
+    {
+      "id": "blanket",
+      "nameZh": "被子",
+      "nameEn": "Blanket",
+      "group": "home",
+      "emoji": "🛌",
+      "query": "Blanket object"
+    },
+    {
+      "id": "lamp",
+      "nameZh": "台灯",
+      "nameEn": "Lamp",
+      "group": "home",
+      "emoji": "💡",
+      "query": "Lamp object"
+    },
+    {
+      "id": "clock",
+      "nameZh": "时钟",
+      "nameEn": "Clock",
+      "group": "home",
+      "emoji": "🕐",
+      "query": "Clock object"
+    },
+    {
+      "id": "alarm",
+      "nameZh": "闹钟",
+      "nameEn": "Alarm clock",
+      "group": "home",
+      "emoji": "⏰",
+      "query": "Alarm clock object"
+    },
+    {
+      "id": "mirror",
+      "nameZh": "镜子",
+      "nameEn": "Mirror",
+      "group": "home",
+      "emoji": "🪞",
+      "query": "Mirror object"
+    },
+    {
+      "id": "sofa",
+      "nameZh": "沙发",
+      "nameEn": "Sofa",
+      "group": "home",
+      "emoji": "🛋️",
+      "query": "Sofa object"
+    },
+    {
+      "id": "tv",
+      "nameZh": "电视",
+      "nameEn": "Television",
+      "group": "home",
+      "emoji": "📺",
+      "query": "Television object"
+    },
+    {
+      "id": "remote",
+      "nameZh": "遥控器",
+      "nameEn": "Remote",
+      "group": "home",
+      "emoji": "📱",
+      "query": "Remote object"
+    },
+    {
+      "id": "phone",
+      "nameZh": "电话",
+      "nameEn": "Phone",
+      "group": "home",
+      "emoji": "☎️",
+      "query": "Phone object"
+    },
+    {
+      "id": "mobile",
+      "nameZh": "手机",
+      "nameEn": "Mobile phone",
+      "group": "home",
+      "emoji": "📱",
+      "query": "Mobile phone object"
+    },
+    {
+      "id": "computer",
+      "nameZh": "电脑",
+      "nameEn": "Computer",
+      "group": "home",
+      "emoji": "💻",
+      "query": "Computer object"
+    },
+    {
+      "id": "keyboard",
+      "nameZh": "键盘",
+      "nameEn": "Keyboard",
+      "group": "home",
+      "emoji": "⌨️",
+      "query": "Keyboard object"
+    },
+    {
+      "id": "mouse",
+      "nameZh": "鼠标",
+      "nameEn": "Mouse",
+      "group": "home",
+      "emoji": "🖱️",
+      "query": "Mouse object"
+    },
+    {
+      "id": "fan",
+      "nameZh": "风扇",
+      "nameEn": "Fan",
+      "group": "home",
+      "emoji": "🌀",
+      "query": "Fan object"
+    },
+    {
+      "id": "ac",
+      "nameZh": "空调",
+      "nameEn": "Air conditioner",
+      "group": "home",
+      "emoji": "❄️",
+      "query": "Air conditioner object"
+    },
+    {
+      "id": "heater",
+      "nameZh": "暖气",
+      "nameEn": "Heater",
+      "group": "home",
+      "emoji": "🔥",
+      "query": "Heater object"
+    },
+    {
+      "id": "fridge",
+      "nameZh": "冰箱",
+      "nameEn": "Refrigerator",
+      "group": "home",
+      "emoji": "🧊",
+      "query": "Refrigerator object"
+    },
+    {
+      "id": "microwave",
+      "nameZh": "微波炉",
+      "nameEn": "Microwave",
+      "group": "home",
+      "emoji": "📻",
+      "query": "Microwave object"
+    },
+    {
+      "id": "oven",
+      "nameZh": "烤箱",
+      "nameEn": "Oven",
+      "group": "home",
+      "emoji": "🔥",
+      "query": "Oven object"
+    },
+    {
+      "id": "stove",
+      "nameZh": "炉灶",
+      "nameEn": "Stove",
+      "group": "home",
+      "emoji": "🍳",
+      "query": "Stove object"
+    },
+    {
+      "id": "pot",
+      "nameZh": "锅",
+      "nameEn": "Pot",
+      "group": "home",
+      "emoji": "🍲",
+      "query": "Pot object"
+    },
+    {
+      "id": "pan",
+      "nameZh": "平底锅",
+      "nameEn": "Pan",
+      "group": "home",
+      "emoji": "🍳",
+      "query": "Pan object"
+    },
+    {
+      "id": "bowl",
+      "nameZh": "碗",
+      "nameEn": "Bowl",
+      "group": "home",
+      "emoji": "🥣",
+      "query": "Bowl object"
+    },
+    {
+      "id": "plate",
+      "nameZh": "盘子",
+      "nameEn": "Plate",
+      "group": "home",
+      "emoji": "🍽️",
+      "query": "Plate object"
+    },
+    {
+      "id": "cup",
+      "nameZh": "杯子",
+      "nameEn": "Cup",
+      "group": "home",
+      "emoji": "☕",
+      "query": "Cup object"
+    },
+    {
+      "id": "spoon",
+      "nameZh": "勺子",
+      "nameEn": "Spoon",
+      "group": "home",
+      "emoji": "🥄",
+      "query": "Spoon object"
+    },
+    {
+      "id": "fork",
+      "nameZh": "叉子",
+      "nameEn": "Fork",
+      "group": "home",
+      "emoji": "🍴",
+      "query": "Fork object"
+    },
+    {
+      "id": "knife",
+      "nameZh": "餐刀",
+      "nameEn": "Knife",
+      "group": "home",
+      "emoji": "🔪",
+      "query": "Knife object"
+    },
+    {
+      "id": "chopsticks",
+      "nameZh": "筷子",
+      "nameEn": "Chopsticks",
+      "group": "home",
+      "emoji": "🥢",
+      "query": "Chopsticks object"
+    },
+    {
+      "id": "bottle",
+      "nameZh": "瓶子",
+      "nameEn": "Bottle",
+      "group": "home",
+      "emoji": "🍾",
+      "query": "Bottle object"
+    },
+    {
+      "id": "bag",
+      "nameZh": "袋子",
+      "nameEn": "Bag",
+      "group": "home",
+      "emoji": "👜",
+      "query": "Bag object"
+    },
+    {
+      "id": "umbrella",
+      "nameZh": "伞",
+      "nameEn": "Umbrella",
+      "group": "home",
+      "emoji": "☂️",
+      "query": "Umbrella object"
+    },
+    {
+      "id": "key",
+      "nameZh": "钥匙",
+      "nameEn": "Key",
+      "group": "home",
+      "emoji": "🔑",
+      "query": "Key object"
+    },
+    {
+      "id": "lock",
+      "nameZh": "锁",
+      "nameEn": "Lock",
+      "group": "home",
+      "emoji": "🔒",
+      "query": "Lock object"
+    },
+    {
+      "id": "door",
+      "nameZh": "门",
+      "nameEn": "Door",
+      "group": "home",
+      "emoji": "🚪",
+      "query": "Door object"
+    },
+    {
+      "id": "window",
+      "nameZh": "窗",
+      "nameEn": "Window",
+      "group": "home",
+      "emoji": "🪟",
+      "query": "Window object"
+    },
+    {
+      "id": "broom",
+      "nameZh": "扫帚",
+      "nameEn": "Broom",
+      "group": "home",
+      "emoji": "🧹",
+      "query": "Broom object"
+    },
+    {
+      "id": "mop",
+      "nameZh": "拖把",
+      "nameEn": "Mop",
+      "group": "home",
+      "emoji": "🧹",
+      "query": "Mop object"
+    },
+    {
+      "id": "bucket",
+      "nameZh": "水桶",
+      "nameEn": "Bucket",
+      "group": "home",
+      "emoji": "🪣",
+      "query": "Bucket object"
+    },
+    {
+      "id": "trash",
+      "nameZh": "垃圾桶",
+      "nameEn": "Trash can",
+      "group": "home",
+      "emoji": "🗑️",
+      "query": "Trash can object"
+    },
+    {
+      "id": "ball",
+      "nameZh": "球",
+      "nameEn": "Ball",
+      "group": "play",
+      "emoji": "⚽",
+      "query": "Ball object"
+    },
+    {
+      "id": "doll",
+      "nameZh": "娃娃",
+      "nameEn": "Doll",
+      "group": "play",
+      "emoji": "🧸",
+      "query": "Doll object"
+    },
+    {
+      "id": "teddy",
+      "nameZh": "泰迪熊",
+      "nameEn": "Teddy bear",
+      "group": "play",
+      "emoji": "🧸",
+      "query": "Teddy bear object"
+    },
+    {
+      "id": "blocks",
+      "nameZh": "积木",
+      "nameEn": "Blocks",
+      "group": "play",
+      "emoji": "🧱",
+      "query": "Blocks object"
+    },
+    {
+      "id": "puzzle",
+      "nameZh": "拼图",
+      "nameEn": "Puzzle",
+      "group": "play",
+      "emoji": "🧩",
+      "query": "Puzzle object"
+    },
+    {
+      "id": "kite",
+      "nameZh": "风筝",
+      "nameEn": "Kite",
+      "group": "play",
+      "emoji": "🪁",
+      "query": "Kite object"
+    },
+    {
+      "id": "yo_yo",
+      "nameZh": "悠悠球",
+      "nameEn": "Yo-yo",
+      "group": "play",
+      "emoji": "🪀",
+      "query": "Yo-yo object"
+    },
+    {
+      "id": "robot",
+      "nameZh": "机器人",
+      "nameEn": "Robot",
+      "group": "play",
+      "emoji": "🤖",
+      "query": "Robot object"
+    },
+    {
+      "id": "car_toy",
+      "nameZh": "玩具车",
+      "nameEn": "Toy car",
+      "group": "play",
+      "emoji": "🚗",
+      "query": "Toy car object"
+    },
+    {
+      "id": "train_toy",
+      "nameZh": "玩具火车",
+      "nameEn": "Toy train",
+      "group": "play",
+      "emoji": "🚂",
+      "query": "Toy train object"
+    },
+    {
+      "id": "drum",
+      "nameZh": "鼓",
+      "nameEn": "Drum",
+      "group": "play",
+      "emoji": "🥁",
+      "query": "Drum object"
+    },
+    {
+      "id": "guitar",
+      "nameZh": "吉他",
+      "nameEn": "Guitar",
+      "group": "play",
+      "emoji": "🎸",
+      "query": "Guitar object"
+    },
+    {
+      "id": "piano_t",
+      "nameZh": "玩具琴",
+      "nameEn": "Toy piano",
+      "group": "play",
+      "emoji": "🎹",
+      "query": "Toy piano object"
+    },
+    {
+      "id": "whistle",
+      "nameZh": "哨子",
+      "nameEn": "Whistle",
+      "group": "play",
+      "emoji": " annoncer",
+      "query": "Whistle object"
+    },
+    {
+      "id": "balloon",
+      "nameZh": "气球",
+      "nameEn": "Balloon",
+      "group": "play",
+      "emoji": "🎈",
+      "query": "Balloon object"
+    },
+    {
+      "id": "bubble",
+      "nameZh": "泡泡",
+      "nameEn": "Bubbles",
+      "group": "play",
+      "emoji": "🫧",
+      "query": "Bubbles object"
+    },
+    {
+      "id": "toothbrush",
+      "nameZh": "牙刷",
+      "nameEn": "Toothbrush",
+      "group": "care",
+      "emoji": "🪥",
+      "query": "Toothbrush object"
+    },
+    {
+      "id": "toothpaste",
+      "nameZh": "牙膏",
+      "nameEn": "Toothpaste",
+      "group": "care",
+      "emoji": "🦷",
+      "query": "Toothpaste object"
+    },
+    {
+      "id": "soap",
+      "nameZh": "肥皂",
+      "nameEn": "Soap",
+      "group": "care",
+      "emoji": "🧼",
+      "query": "Soap object"
+    },
+    {
+      "id": "shampoo",
+      "nameZh": "洗发水",
+      "nameEn": "Shampoo",
+      "group": "care",
+      "emoji": "🧴",
+      "query": "Shampoo object"
+    },
+    {
+      "id": "towel",
+      "nameZh": "毛巾",
+      "nameEn": "Towel",
+      "group": "care",
+      "emoji": "🧺",
+      "query": "Towel object"
+    },
+    {
+      "id": "comb",
+      "nameZh": "梳子",
+      "nameEn": "Comb",
+      "group": "care",
+      "emoji": "💇",
+      "query": "Comb object"
+    },
+    {
+      "id": "brush",
+      "nameZh": "刷子",
+      "nameEn": "Brush",
+      "group": "care",
+      "emoji": "🖌️",
+      "query": "Brush object"
+    },
+    {
+      "id": "tissue",
+      "nameZh": "纸巾",
+      "nameEn": "Tissue",
+      "group": "care",
+      "emoji": "🧻",
+      "query": "Tissue object"
+    },
+    {
+      "id": "bandaid",
+      "nameZh": "创可贴",
+      "nameEn": "Bandage",
+      "group": "care",
+      "emoji": "🩹",
+      "query": "Bandage object"
+    },
+    {
+      "id": "medicine",
+      "nameZh": "药",
+      "nameEn": "Medicine",
+      "group": "care",
+      "emoji": "💊",
+      "query": "Medicine object"
+    },
+    {
+      "id": "thermometer_t",
+      "nameZh": "体温计",
+      "nameEn": "Thermometer",
+      "group": "care",
+      "emoji": "🌡️",
+      "query": "Thermometer object"
+    },
+    {
+      "id": "mask",
+      "nameZh": "口罩",
+      "nameEn": "Face mask",
+      "group": "care",
+      "emoji": "😷",
+      "query": "Face mask object"
+    },
+    {
+      "id": "glasses",
+      "nameZh": "眼镜",
+      "nameEn": "Glasses",
+      "group": "care",
+      "emoji": "👓",
+      "query": "Glasses object"
+    },
+    {
+      "id": "hat",
+      "nameZh": "帽子",
+      "nameEn": "Hat",
+      "group": "care",
+      "emoji": "🎩",
+      "query": "Hat object"
+    },
+    {
+      "id": "shoes",
+      "nameZh": "鞋子",
+      "nameEn": "Shoes",
+      "group": "care",
+      "emoji": "👟",
+      "query": "Shoes object"
+    },
+    {
+      "id": "socks",
+      "nameZh": "袜子",
+      "nameEn": "Socks",
+      "group": "care",
+      "emoji": "🧦",
+      "query": "Socks object"
+    },
+    {
+      "id": "shirt",
+      "nameZh": "衬衫",
+      "nameEn": "Shirt",
+      "group": "care",
+      "emoji": "👕",
+      "query": "Shirt object"
+    },
+    {
+      "id": "pants",
+      "nameZh": "裤子",
+      "nameEn": "Pants",
+      "group": "care",
+      "emoji": "👖",
+      "query": "Pants object"
+    },
+    {
+      "id": "pencil_extra_99",
+      "nameZh": "铅笔·",
+      "nameEn": "Pencil Alt",
+      "group": "school",
+      "emoji": "✏️",
+      "query": "Pencil object"
+    }
+  ]
+}

@@ -1,0 +1,834 @@
+{
+  "version": 1,
+  "credit": "配图优先 Wikimedia Commons；缺图时 Openverse（CC）兜底。仅供学习展示。",
+  "visual": "image",
+  "groups": [
+    {
+      "id": "all",
+      "nameZh": "全部",
+      "nameEn": "All"
+    },
+    {
+      "id": "leaf",
+      "nameZh": "叶菜",
+      "nameEn": "Leafy"
+    },
+    {
+      "id": "root",
+      "nameZh": "根茎",
+      "nameEn": "Root"
+    },
+    {
+      "id": "fruitveg",
+      "nameZh": "瓜果菜",
+      "nameEn": "Fruit veg"
+    },
+    {
+      "id": "bean",
+      "nameZh": "豆类",
+      "nameEn": "Beans"
+    }
+  ],
+  "items": [
+    {
+      "id": "cabbage",
+      "nameZh": "白菜",
+      "nameEn": "Chinese cabbage",
+      "group": "leaf",
+      "emoji": "🥬",
+      "query": "Chinese cabbage vegetable"
+    },
+    {
+      "id": "lettuce",
+      "nameZh": "生菜",
+      "nameEn": "Lettuce",
+      "group": "leaf",
+      "emoji": "🥬",
+      "query": "Lettuce vegetable"
+    },
+    {
+      "id": "spinach",
+      "nameZh": "菠菜",
+      "nameEn": "Spinach",
+      "group": "leaf",
+      "emoji": "🥬",
+      "query": "Spinach vegetable"
+    },
+    {
+      "id": "kale",
+      "nameZh": "羽衣甘蓝",
+      "nameEn": "Kale",
+      "group": "leaf",
+      "emoji": "🥬",
+      "query": "Kale vegetable"
+    },
+    {
+      "id": "bokchoy",
+      "nameZh": "青菜",
+      "nameEn": "Bok choy",
+      "group": "leaf",
+      "emoji": "🥬",
+      "query": "Bok choy vegetable"
+    },
+    {
+      "id": "celery",
+      "nameZh": "芹菜",
+      "nameEn": "Celery",
+      "group": "leaf",
+      "emoji": "🥬",
+      "query": "Celery vegetable"
+    },
+    {
+      "id": "cilantro",
+      "nameZh": "香菜",
+      "nameEn": "Cilantro",
+      "group": "leaf",
+      "emoji": "🌿",
+      "query": "Cilantro vegetable"
+    },
+    {
+      "id": "parsley",
+      "nameZh": "欧芹",
+      "nameEn": "Parsley",
+      "group": "leaf",
+      "emoji": "🌿",
+      "query": "Parsley vegetable"
+    },
+    {
+      "id": "basil",
+      "nameZh": "罗勒",
+      "nameEn": "Basil",
+      "group": "leaf",
+      "emoji": "🌿",
+      "query": "Basil vegetable"
+    },
+    {
+      "id": "mint",
+      "nameZh": "薄荷",
+      "nameEn": "Mint",
+      "group": "leaf",
+      "emoji": "🌿",
+      "query": "Mint vegetable"
+    },
+    {
+      "id": "chive",
+      "nameZh": "韭菜",
+      "nameEn": "Chives",
+      "group": "leaf",
+      "emoji": "🌱",
+      "query": "Chives vegetable"
+    },
+    {
+      "id": "scallion",
+      "nameZh": "葱",
+      "nameEn": "Scallion",
+      "group": "leaf",
+      "emoji": "🌱",
+      "query": "Scallion vegetable"
+    },
+    {
+      "id": "garlic_s",
+      "nameZh": "蒜苗",
+      "nameEn": "Garlic sprouts",
+      "group": "leaf",
+      "emoji": "🌱",
+      "query": "Garlic sprouts vegetable"
+    },
+    {
+      "id": "watercress",
+      "nameZh": "西洋菜",
+      "nameEn": "Watercress",
+      "group": "leaf",
+      "emoji": "🥬",
+      "query": "Watercress vegetable"
+    },
+    {
+      "id": "cabbage_r",
+      "nameZh": "卷心菜",
+      "nameEn": "Cabbage",
+      "group": "leaf",
+      "emoji": "🥬",
+      "query": "Cabbage vegetable"
+    },
+    {
+      "id": "napa",
+      "nameZh": "娃娃菜",
+      "nameEn": "Baby bok choy",
+      "group": "leaf",
+      "emoji": "🥬",
+      "query": "Baby bok choy vegetable"
+    },
+    {
+      "id": "endive",
+      "nameZh": "菊苣",
+      "nameEn": "Endive",
+      "group": "leaf",
+      "emoji": "🥬",
+      "query": "Endive vegetable"
+    },
+    {
+      "id": "arugula",
+      "nameZh": "芝麻菜",
+      "nameEn": "Arugula",
+      "group": "leaf",
+      "emoji": "🥬",
+      "query": "Arugula vegetable"
+    },
+    {
+      "id": "carrot",
+      "nameZh": "胡萝卜",
+      "nameEn": "Carrot",
+      "group": "root",
+      "emoji": "🥕",
+      "query": "Carrot vegetable"
+    },
+    {
+      "id": "potato",
+      "nameZh": "土豆",
+      "nameEn": "Potato",
+      "group": "root",
+      "emoji": "🥔",
+      "query": "Potato vegetable"
+    },
+    {
+      "id": "sweetpotato",
+      "nameZh": "红薯",
+      "nameEn": "Sweet potato",
+      "group": "root",
+      "emoji": "🍠",
+      "query": "Sweet potato vegetable"
+    },
+    {
+      "id": "radish",
+      "nameZh": "萝卜",
+      "nameEn": "Radish",
+      "group": "root",
+      "emoji": "大根",
+      "query": "Radish vegetable"
+    },
+    {
+      "id": "daikon",
+      "nameZh": "白萝卜",
+      "nameEn": "Daikon",
+      "group": "root",
+      "emoji": "🤍",
+      "query": "Daikon vegetable"
+    },
+    {
+      "id": "beet",
+      "nameZh": "甜菜",
+      "nameEn": "Beet",
+      "group": "root",
+      "emoji": "🟣",
+      "query": "Beet vegetable"
+    },
+    {
+      "id": "turnip",
+      "nameZh": "芜菁",
+      "nameEn": "Turnip",
+      "group": "root",
+      "emoji": "🟣",
+      "query": "Turnip vegetable"
+    },
+    {
+      "id": "ginger",
+      "nameZh": "姜",
+      "nameEn": "Ginger",
+      "group": "root",
+      "emoji": "🫚",
+      "query": "Ginger vegetable"
+    },
+    {
+      "id": "garlic",
+      "nameZh": "大蒜",
+      "nameEn": "Garlic",
+      "group": "root",
+      "emoji": "🧄",
+      "query": "Garlic vegetable"
+    },
+    {
+      "id": "onion",
+      "nameZh": "洋葱",
+      "nameEn": "Onion",
+      "group": "root",
+      "emoji": "🧅",
+      "query": "Onion vegetable"
+    },
+    {
+      "id": "shallot",
+      "nameZh": "红葱",
+      "nameEn": "Shallot",
+      "group": "root",
+      "emoji": "🧅",
+      "query": "Shallot vegetable"
+    },
+    {
+      "id": "taro",
+      "nameZh": "芋头",
+      "nameEn": "Taro",
+      "group": "root",
+      "emoji": "🟤",
+      "query": "Taro vegetable"
+    },
+    {
+      "id": "yam",
+      "nameZh": "山药",
+      "nameEn": "Yam",
+      "group": "root",
+      "emoji": "🟤",
+      "query": "Yam vegetable"
+    },
+    {
+      "id": "lotus",
+      "nameZh": "莲藕",
+      "nameEn": "Lotus root",
+      "group": "root",
+      "emoji": "🪷",
+      "query": "Lotus root vegetable"
+    },
+    {
+      "id": "bamboo",
+      "nameZh": "竹笋",
+      "nameEn": "Bamboo shoot",
+      "group": "root",
+      "emoji": "🎋",
+      "query": "Bamboo shoot vegetable"
+    },
+    {
+      "id": "cassava",
+      "nameZh": "木薯",
+      "nameEn": "Cassava",
+      "group": "root",
+      "emoji": "🟤",
+      "query": "Cassava vegetable"
+    },
+    {
+      "id": "parsnip",
+      "nameZh": "欧防风",
+      "nameEn": "Parsnip",
+      "group": "root",
+      "emoji": "🥕",
+      "query": "Parsnip vegetable"
+    },
+    {
+      "id": "tomato",
+      "nameZh": "番茄",
+      "nameEn": "Tomato",
+      "group": "fruitveg",
+      "emoji": "🍅",
+      "query": "Tomato vegetable"
+    },
+    {
+      "id": "cucumber",
+      "nameZh": "黄瓜",
+      "nameEn": "Cucumber",
+      "group": "fruitveg",
+      "emoji": "🥒",
+      "query": "Cucumber vegetable"
+    },
+    {
+      "id": "eggplant",
+      "nameZh": "茄子",
+      "nameEn": "Eggplant",
+      "group": "fruitveg",
+      "emoji": "🍆",
+      "query": "Eggplant vegetable"
+    },
+    {
+      "id": "pepper",
+      "nameZh": "青椒",
+      "nameEn": "Green pepper",
+      "group": "fruitveg",
+      "emoji": "🫑",
+      "query": "Green pepper vegetable"
+    },
+    {
+      "id": "chili",
+      "nameZh": "辣椒",
+      "nameEn": "Chili pepper",
+      "group": "fruitveg",
+      "emoji": "🌶️",
+      "query": "Chili pepper vegetable"
+    },
+    {
+      "id": "pumpkin",
+      "nameZh": "南瓜",
+      "nameEn": "Pumpkin",
+      "group": "fruitveg",
+      "emoji": "🎃",
+      "query": "Pumpkin vegetable"
+    },
+    {
+      "id": "zucchini",
+      "nameZh": "西葫芦",
+      "nameEn": "Zucchini",
+      "group": "fruitveg",
+      "emoji": "🥒",
+      "query": "Zucchini vegetable"
+    },
+    {
+      "id": "squash",
+      "nameZh": "倭瓜",
+      "nameEn": "Squash",
+      "group": "fruitveg",
+      "emoji": "🎃",
+      "query": "Squash vegetable"
+    },
+    {
+      "id": "bittergourd",
+      "nameZh": "苦瓜",
+      "nameEn": "Bitter melon",
+      "group": "fruitveg",
+      "emoji": "🥒",
+      "query": "Bitter melon vegetable"
+    },
+    {
+      "id": "loofah",
+      "nameZh": "丝瓜",
+      "nameEn": "Luffa",
+      "group": "fruitveg",
+      "emoji": "🥒",
+      "query": "Luffa vegetable"
+    },
+    {
+      "id": "wintermelon",
+      "nameZh": "冬瓜",
+      "nameEn": "Winter melon",
+      "group": "fruitveg",
+      "emoji": "🍈",
+      "query": "Winter melon vegetable"
+    },
+    {
+      "id": "okra",
+      "nameZh": "秋葵",
+      "nameEn": "Okra",
+      "group": "fruitveg",
+      "emoji": "🟢",
+      "query": "Okra vegetable"
+    },
+    {
+      "id": "corn",
+      "nameZh": "玉米",
+      "nameEn": "Corn",
+      "group": "fruitveg",
+      "emoji": "🌽",
+      "query": "Corn vegetable"
+    },
+    {
+      "id": "pea",
+      "nameZh": "豌豆",
+      "nameEn": "Pea",
+      "group": "bean",
+      "emoji": "🟢",
+      "query": "Pea vegetable"
+    },
+    {
+      "id": "snowpea",
+      "nameZh": "荷兰豆",
+      "nameEn": "Snow pea",
+      "group": "bean",
+      "emoji": "🟢",
+      "query": "Snow pea vegetable"
+    },
+    {
+      "id": "edamame",
+      "nameZh": "毛豆",
+      "nameEn": "Edamame",
+      "group": "bean",
+      "emoji": "🫘",
+      "query": "Edamame vegetable"
+    },
+    {
+      "id": "soybean",
+      "nameZh": "黄豆",
+      "nameEn": "Soybean",
+      "group": "bean",
+      "emoji": "🫘",
+      "query": "Soybean vegetable"
+    },
+    {
+      "id": "greenbean",
+      "nameZh": "四季豆",
+      "nameEn": "Green bean",
+      "group": "bean",
+      "emoji": "🟢",
+      "query": "Green bean vegetable"
+    },
+    {
+      "id": "broadbean",
+      "nameZh": "蚕豆",
+      "nameEn": "Broad bean",
+      "group": "bean",
+      "emoji": "🫘",
+      "query": "Broad bean vegetable"
+    },
+    {
+      "id": "lentil",
+      "nameZh": "扁豆",
+      "nameEn": "Lentil",
+      "group": "bean",
+      "emoji": "🫘",
+      "query": "Lentil vegetable"
+    },
+    {
+      "id": "chickpea",
+      "nameZh": "鹰嘴豆",
+      "nameEn": "Chickpea",
+      "group": "bean",
+      "emoji": "🫘",
+      "query": "Chickpea vegetable"
+    },
+    {
+      "id": "kidney",
+      "nameZh": "红豆",
+      "nameEn": "Kidney bean",
+      "group": "bean",
+      "emoji": "🫘",
+      "query": "Kidney bean vegetable"
+    },
+    {
+      "id": "mung",
+      "nameZh": "绿豆",
+      "nameEn": "Mung bean",
+      "group": "bean",
+      "emoji": "🟢",
+      "query": "Mung bean vegetable"
+    },
+    {
+      "id": "broccoli",
+      "nameZh": "西兰花",
+      "nameEn": "Broccoli",
+      "group": "leaf",
+      "emoji": "🥦",
+      "query": "Broccoli vegetable"
+    },
+    {
+      "id": "cauliflower",
+      "nameZh": "花菜",
+      "nameEn": "Cauliflower",
+      "group": "leaf",
+      "emoji": "🥦",
+      "query": "Cauliflower vegetable"
+    },
+    {
+      "id": "asparagus",
+      "nameZh": "芦笋",
+      "nameEn": "Asparagus",
+      "group": "leaf",
+      "emoji": "🌱",
+      "query": "Asparagus vegetable"
+    },
+    {
+      "id": "artichoke",
+      "nameZh": "洋蓟",
+      "nameEn": "Artichoke",
+      "group": "fruitveg",
+      "emoji": "🟢",
+      "query": "Artichoke vegetable"
+    },
+    {
+      "id": "mushroom",
+      "nameZh": "蘑菇",
+      "nameEn": "Mushroom",
+      "group": "fruitveg",
+      "emoji": "🍄",
+      "query": "Mushroom vegetable"
+    },
+    {
+      "id": "shiitake",
+      "nameZh": "香菇",
+      "nameEn": "Shiitake",
+      "group": "fruitveg",
+      "emoji": "🍄",
+      "query": "Shiitake vegetable"
+    },
+    {
+      "id": "enoki",
+      "nameZh": "金针菇",
+      "nameEn": "Enoki",
+      "group": "fruitveg",
+      "emoji": "🍄",
+      "query": "Enoki vegetable"
+    },
+    {
+      "id": "oyster_m",
+      "nameZh": "平菇",
+      "nameEn": "Oyster mushroom",
+      "group": "fruitveg",
+      "emoji": "🍄",
+      "query": "Oyster mushroom vegetable"
+    },
+    {
+      "id": "wood_ear",
+      "nameZh": "木耳",
+      "nameEn": "Wood ear",
+      "group": "fruitveg",
+      "emoji": "🖤",
+      "query": "Wood ear vegetable"
+    },
+    {
+      "id": "seaweed",
+      "nameZh": "海带",
+      "nameEn": "Kelp",
+      "group": "leaf",
+      "emoji": "🌊",
+      "query": "Kelp vegetable"
+    },
+    {
+      "id": "nori",
+      "nameZh": "紫菜",
+      "nameEn": "Nori",
+      "group": "leaf",
+      "emoji": "🖤",
+      "query": "Nori vegetable"
+    },
+    {
+      "id": "sprout",
+      "nameZh": "豆芽",
+      "nameEn": "Bean sprout",
+      "group": "bean",
+      "emoji": "🌱",
+      "query": "Bean sprout vegetable"
+    },
+    {
+      "id": "alfalfa",
+      "nameZh": "苜蓿芽",
+      "nameEn": "Alfalfa",
+      "group": "bean",
+      "emoji": "🌱",
+      "query": "Alfalfa vegetable"
+    },
+    {
+      "id": "fennel",
+      "nameZh": "茴香",
+      "nameEn": "Fennel",
+      "group": "leaf",
+      "emoji": "🌿",
+      "query": "Fennel vegetable"
+    },
+    {
+      "id": "leek",
+      "nameZh": "韭葱",
+      "nameEn": "Leek",
+      "group": "leaf",
+      "emoji": "🌱",
+      "query": "Leek vegetable"
+    },
+    {
+      "id": "brussels",
+      "nameZh": "球芽甘蓝",
+      "nameEn": "Brussels sprout",
+      "group": "leaf",
+      "emoji": "🟢",
+      "query": "Brussels sprout vegetable"
+    },
+    {
+      "id": "chard",
+      "nameZh": "甜菜叶",
+      "nameEn": "Chard",
+      "group": "leaf",
+      "emoji": "🥬",
+      "query": "Chard vegetable"
+    },
+    {
+      "id": "collard",
+      "nameZh": "芥蓝",
+      "nameEn": "Collard greens",
+      "group": "leaf",
+      "emoji": "🥬",
+      "query": "Collard greens vegetable"
+    },
+    {
+      "id": "mustard",
+      "nameZh": "芥菜",
+      "nameEn": "Mustard greens",
+      "group": "leaf",
+      "emoji": "🥬",
+      "query": "Mustard greens vegetable"
+    },
+    {
+      "id": "amaranth",
+      "nameZh": "苋菜",
+      "nameEn": "Amaranth",
+      "group": "leaf",
+      "emoji": "🥬",
+      "query": "Amaranth vegetable"
+    },
+    {
+      "id": "water_spinach",
+      "nameZh": "空心菜",
+      "nameEn": "Water spinach",
+      "group": "leaf",
+      "emoji": "🥬",
+      "query": "Water spinach vegetable"
+    },
+    {
+      "id": "chayote",
+      "nameZh": "佛手瓜",
+      "nameEn": "Chayote",
+      "group": "fruitveg",
+      "emoji": "🟢",
+      "query": "Chayote vegetable"
+    },
+    {
+      "id": "pattypan",
+      "nameZh": "飞碟瓜",
+      "nameEn": "Pattypan",
+      "group": "fruitveg",
+      "emoji": "🟡",
+      "query": "Pattypan vegetable"
+    },
+    {
+      "id": "habanero",
+      "nameZh": "哈瓦那椒",
+      "nameEn": "Habanero",
+      "group": "fruitveg",
+      "emoji": "🌶️",
+      "query": "Habanero vegetable"
+    },
+    {
+      "id": "jalapeno",
+      "nameZh": "墨西哥辣椒",
+      "nameEn": "Jalapeño",
+      "group": "fruitveg",
+      "emoji": "🌶️",
+      "query": "Jalapeño vegetable"
+    },
+    {
+      "id": "poblano",
+      "nameZh": "普韦布洛椒",
+      "nameEn": "Poblano",
+      "group": "fruitveg",
+      "emoji": "🌶️",
+      "query": "Poblano vegetable"
+    },
+    {
+      "id": "tomatillo",
+      "nameZh": "粘果酸浆",
+      "nameEn": "Tomatillo",
+      "group": "fruitveg",
+      "emoji": "🟢",
+      "query": "Tomatillo vegetable"
+    },
+    {
+      "id": "jicama",
+      "nameZh": "豆薯",
+      "nameEn": "Jicama",
+      "group": "root",
+      "emoji": "🤎",
+      "query": "Jicama vegetable"
+    },
+    {
+      "id": "rutabaga",
+      "nameZh": "芜菁甘蓝",
+      "nameEn": "Rutabaga",
+      "group": "root",
+      "emoji": "🟣",
+      "query": "Rutabaga vegetable"
+    },
+    {
+      "id": "celeriac",
+      "nameZh": "根芹菜",
+      "nameEn": "Celeriac",
+      "group": "root",
+      "emoji": "🟤",
+      "query": "Celeriac vegetable"
+    },
+    {
+      "id": "horseradish",
+      "nameZh": "辣根",
+      "nameEn": "Horseradish",
+      "group": "root",
+      "emoji": "🤍",
+      "query": "Horseradish vegetable"
+    },
+    {
+      "id": "wasabi",
+      "nameZh": "山葵",
+      "nameEn": "Wasabi",
+      "group": "root",
+      "emoji": "🟢",
+      "query": "Wasabi vegetable"
+    },
+    {
+      "id": "burdock",
+      "nameZh": "牛蒡",
+      "nameEn": "Burdock",
+      "group": "root",
+      "emoji": "🟤",
+      "query": "Burdock vegetable"
+    },
+    {
+      "id": "konjac",
+      "nameZh": "魔芋",
+      "nameEn": "Konjac",
+      "group": "root",
+      "emoji": "🟤",
+      "query": "Konjac vegetable"
+    },
+    {
+      "id": "arrowhead",
+      "nameZh": "慈姑",
+      "nameEn": "Arrowhead",
+      "group": "root",
+      "emoji": "⚪",
+      "query": "Arrowhead vegetable"
+    },
+    {
+      "id": "water_chestnut",
+      "nameZh": "荸荠",
+      "nameEn": "Water chestnut",
+      "group": "root",
+      "emoji": "🟤",
+      "query": "Water chestnut vegetable"
+    },
+    {
+      "id": "chinese_yam",
+      "nameZh": "淮山",
+      "nameEn": "Chinese yam",
+      "group": "root",
+      "emoji": "🤎",
+      "query": "Chinese yam vegetable"
+    },
+    {
+      "id": "kohlrabi",
+      "nameZh": "苤蓝",
+      "nameEn": "Kohlrabi",
+      "group": "root",
+      "emoji": "🟢",
+      "query": "Kohlrabi vegetable"
+    },
+    {
+      "id": "romanesco",
+      "nameZh": "宝塔花菜",
+      "nameEn": "Romanesco",
+      "group": "leaf",
+      "emoji": "🥦",
+      "query": "Romanesco vegetable"
+    },
+    {
+      "id": "savoy",
+      "nameZh": "皱叶甘蓝",
+      "nameEn": "Savoy cabbage",
+      "group": "leaf",
+      "emoji": "🥬",
+      "query": "Savoy cabbage vegetable"
+    },
+    {
+      "id": "radicchio",
+      "nameZh": "红菊苣",
+      "nameEn": "Radicchio",
+      "group": "leaf",
+      "emoji": "💜",
+      "query": "Radicchio vegetable"
+    },
+    {
+      "id": "sorrel",
+      "nameZh": "酸模",
+      "nameEn": "Sorrel",
+      "group": "leaf",
+      "emoji": "🌿",
+      "query": "Sorrel vegetable"
+    }
+  ]
+}
