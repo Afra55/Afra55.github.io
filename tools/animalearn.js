@@ -719,7 +719,7 @@
     };
     const start = (ev) => {
       if (ev.pointerType === "mouse" && ev.button !== 0) return;
-      ev.preventDefault();
+      // 不 preventDefault：保留 iOS 用户手势以便出声
       holding = true;
       loopGen += 1;
       const myGen = loopGen;
@@ -874,6 +874,10 @@
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
   else start();
+
+  window.addEventListener("devtools:panel-mounted", (ev) => {
+    if (ev?.detail?.id === TOOL_ID) start();
+  });
 
   window.addEventListener("devtools:route", () => {
     const head = location.hash.replace(/^#/, "").split(/[/?]/)[0];

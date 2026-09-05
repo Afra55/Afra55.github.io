@@ -49,37 +49,60 @@
     return promise;
   }
 
+  function loadStylesheet(id, href) {
+    const existing = [...document.querySelectorAll("link[data-panel-css]")].find(
+      (l) => l.dataset.panelCss === id || l.href === href || l.getAttribute("href") === href
+    );
+    if (existing) {
+      cssLoaded.add(id);
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      const link = document.createElement("link");
+      link.rel = "stylesheet";
+      link.href = href;
+      link.dataset.panelCss = id;
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        cssLoaded.add(id);
+        resolve();
+      };
+      link.addEventListener("load", done);
+      link.addEventListener("error", done);
+      document.head.appendChild(link);
+      // 兜底：避免个别环境不触发 load
+      window.setTimeout(done, 2000);
+    });
+  }
+
   function ensurePanelCss(toolId) {
     const id = String(toolId || "").trim();
     if (!id || cssLoaded.has(id)) return Promise.resolve();
     if (inflight.has(`css:${id}`)) return inflight.get(`css:${id}`);
 
     const href = withVersion(`./styles/panels/${id}.css`);
-    const existing = [...document.querySelectorAll('link[data-panel-css]')].find(
-      (l) => l.href === href || l.getAttribute("href") === href
-    );
-    if (existing) {
-      cssLoaded.add(id);
-      return Promise.resolve();
-    }
-
-    const promise = fetch(withVersion(`./styles/panels/${id}.css`), fetchInit({ method: "HEAD" }))
-      .then((res) => {
+    const promise = (async () => {
+      // 认物闪卡面板 CSS 多为 @import kidsflash；WebKit 上 link.onload 可能早于 @import 完成
+      if (/earn$/.test(id) && id !== "animalearn") {
+        const sharedId = "kidsflash-shared";
+        if (!cssLoaded.has(sharedId)) {
+          await loadStylesheet(sharedId, withVersion("./styles/panels/kidsflash.css"));
+        }
+      }
+      try {
+        const res = await fetch(withVersion(`./styles/panels/${id}.css`), fetchInit({ method: "HEAD" }));
         if (!res.ok) {
           cssLoaded.add(id);
           return;
         }
-        const link = document.createElement("link");
-        link.rel = "stylesheet";
-        link.href = href;
-        link.dataset.panelCss = id;
-        document.head.appendChild(link);
+      } catch (_) {
         cssLoaded.add(id);
-      })
-      .catch(() => {
-        cssLoaded.add(id);
-      })
-      .finally(() => inflight.delete(`css:${id}`));
+        return;
+      }
+      await loadStylesheet(id, href);
+    })().finally(() => inflight.delete(`css:${id}`));
     inflight.set(`css:${id}`, promise);
     return promise;
   }
