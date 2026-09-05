@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "credit": "配图优先 Wikimedia Commons；缺图时 Openverse CC 兜底。",
+  "version": 2,
+  "credit": "配图优先 Wikimedia Commons；缺图时 Openverse（CC）兜底。仅供学习展示。",
   "groups": [
     {
       "id": "all",
@@ -263,6 +263,566 @@
       "group": "water",
       "emoji": "🛶",
       "query": "canoe"
+    },
+    {
+      "id": "pickup",
+      "nameZh": "皮卡",
+      "nameEn": "Pickup",
+      "group": "road",
+      "emoji": "🛻",
+      "query": "pickup truck"
+    },
+    {
+      "id": "suv",
+      "nameZh": "越野车",
+      "nameEn": "SUV",
+      "group": "road",
+      "emoji": "🚙",
+      "query": "SUV car"
+    },
+    {
+      "id": "jeep",
+      "nameZh": "吉普",
+      "nameEn": "Jeep",
+      "group": "road",
+      "emoji": "🚙",
+      "query": "jeep vehicle"
+    },
+    {
+      "id": "firetruck",
+      "nameZh": "消防车",
+      "nameEn": "Fire truck",
+      "group": "road",
+      "emoji": "🚒",
+      "query": "fire truck"
+    },
+    {
+      "id": "policecar",
+      "nameZh": "警车",
+      "nameEn": "Police car",
+      "group": "road",
+      "emoji": "🚓",
+      "query": "police car"
+    },
+    {
+      "id": "crane",
+      "nameZh": "吊车",
+      "nameEn": "Crane",
+      "group": "road",
+      "emoji": "🏗️",
+      "query": "mobile crane truck"
+    },
+    {
+      "id": "forklift",
+      "nameZh": "叉车",
+      "nameEn": "Forklift",
+      "group": "road",
+      "emoji": "🏭",
+      "query": "forklift"
+    },
+    {
+      "id": "bike",
+      "nameZh": "自行车",
+      "nameEn": "Bicycle",
+      "group": "road",
+      "emoji": "🚲",
+      "query": "bicycle"
+    },
+    {
+      "id": "tricycle",
+      "nameZh": "三轮车",
+      "nameEn": "Tricycle",
+      "group": "road",
+      "emoji": "🚲",
+      "query": "tricycle"
+    },
+    {
+      "id": "skateboard",
+      "nameZh": "滑板",
+      "nameEn": "Skateboard",
+      "group": "road",
+      "emoji": "🛹",
+      "query": "skateboard"
+    },
+    {
+      "id": "roller",
+      "nameZh": "轮滑",
+      "nameEn": "Roller skates",
+      "group": "road",
+      "emoji": "🛼",
+      "query": "roller skates"
+    },
+    {
+      "id": "wheelchair",
+      "nameZh": "轮椅",
+      "nameEn": "Wheelchair",
+      "group": "road",
+      "emoji": "♿",
+      "query": "wheelchair"
+    },
+    {
+      "id": "stroller",
+      "nameZh": "婴儿车",
+      "nameEn": "Stroller",
+      "group": "road",
+      "emoji": "🍼",
+      "query": "baby stroller"
+    },
+    {
+      "id": "cart",
+      "nameZh": "手推车",
+      "nameEn": "Cart",
+      "group": "road",
+      "emoji": "🛒",
+      "query": "hand cart"
+    },
+    {
+      "id": "carriage",
+      "nameZh": "马车",
+      "nameEn": "Carriage",
+      "group": "road",
+      "emoji": "🐴",
+      "query": "horse carriage"
+    },
+    {
+      "id": "trolley",
+      "nameZh": "无轨电车",
+      "nameEn": "Trolleybus",
+      "group": "road",
+      "emoji": "🚎",
+      "query": "trolleybus"
+    },
+    {
+      "id": "metro",
+      "nameZh": "地铁",
+      "nameEn": "Subway",
+      "group": "road",
+      "emoji": "🚇",
+      "query": "subway train"
+    },
+    {
+      "id": "highspeed",
+      "nameZh": "高铁",
+      "nameEn": "High-speed rail",
+      "group": "road",
+      "emoji": "🚄",
+      "query": "high speed train"
+    },
+    {
+      "id": "steamtrain",
+      "nameZh": "蒸汽火车",
+      "nameEn": "Steam train",
+      "group": "road",
+      "emoji": "🚂",
+      "query": "steam locomotive"
+    },
+    {
+      "id": "monorail",
+      "nameZh": "单轨",
+      "nameEn": "Monorail",
+      "group": "road",
+      "emoji": "🚝",
+      "query": "monorail"
+    },
+    {
+      "id": "cablecar",
+      "nameZh": "缆车",
+      "nameEn": "Cable car",
+      "group": "air",
+      "emoji": "🚡",
+      "query": "cable car"
+    },
+    {
+      "id": "gondola",
+      "nameZh": "观光缆车",
+      "nameEn": "Gondola",
+      "group": "air",
+      "emoji": "🚠",
+      "query": "gondola lift"
+    },
+    {
+      "id": "jet",
+      "nameZh": "喷气机",
+      "nameEn": "Jet",
+      "group": "air",
+      "emoji": "🛩️",
+      "query": "jet airplane"
+    },
+    {
+      "id": "balloon",
+      "nameZh": "热气球",
+      "nameEn": "Hot air balloon",
+      "group": "air",
+      "emoji": "🎈",
+      "query": "hot air balloon"
+    },
+    {
+      "id": "seaplane",
+      "nameZh": "水上飞机",
+      "nameEn": "Seaplane",
+      "group": "air",
+      "emoji": "✈️",
+      "query": "seaplane"
+    },
+    {
+      "id": "spaceship",
+      "nameZh": "宇宙飞船",
+      "nameEn": "Spaceship",
+      "group": "air",
+      "emoji": "🛸",
+      "query": "spaceship"
+    },
+    {
+      "id": "ufo",
+      "nameZh": "飞碟",
+      "nameEn": "UFO",
+      "group": "air",
+      "emoji": "🛸",
+      "query": "flying saucer"
+    },
+    {
+      "id": "parachute",
+      "nameZh": "降落伞",
+      "nameEn": "Parachute",
+      "group": "air",
+      "emoji": "🪂",
+      "query": "parachute"
+    },
+    {
+      "id": "hangglider",
+      "nameZh": "悬挂滑翔",
+      "nameEn": "Hang glider",
+      "group": "air",
+      "emoji": "🪁",
+      "query": "hang glider"
+    },
+    {
+      "id": "kite",
+      "nameZh": "风筝",
+      "nameEn": "Kite",
+      "group": "air",
+      "emoji": "🪁",
+      "query": "kite flying"
+    },
+    {
+      "id": "yacht",
+      "nameZh": "游艇",
+      "nameEn": "Yacht",
+      "group": "water",
+      "emoji": "🛥️",
+      "query": "yacht"
+    },
+    {
+      "id": "kayak",
+      "nameZh": "皮划艇",
+      "nameEn": "Kayak",
+      "group": "water",
+      "emoji": "🛶",
+      "query": "kayak"
+    },
+    {
+      "id": "raft",
+      "nameZh": "竹筏",
+      "nameEn": "Raft",
+      "group": "water",
+      "emoji": "🛶",
+      "query": "bamboo raft"
+    },
+    {
+      "id": "hovercraft",
+      "nameZh": "气垫船",
+      "nameEn": "Hovercraft",
+      "group": "water",
+      "emoji": "🚤",
+      "query": "hovercraft"
+    },
+    {
+      "id": "speedboat",
+      "nameZh": "快艇",
+      "nameEn": "Speedboat",
+      "group": "water",
+      "emoji": "🚤",
+      "query": "speedboat"
+    },
+    {
+      "id": "fishingboat",
+      "nameZh": "渔船",
+      "nameEn": "Fishing boat",
+      "group": "water",
+      "emoji": "🎣",
+      "query": "fishing boat"
+    },
+    {
+      "id": "cargoship",
+      "nameZh": "货轮",
+      "nameEn": "Cargo ship",
+      "group": "water",
+      "emoji": "🚢",
+      "query": "cargo ship"
+    },
+    {
+      "id": "lifeboat",
+      "nameZh": "救生艇",
+      "nameEn": "Lifeboat",
+      "group": "water",
+      "emoji": "🛟",
+      "query": "lifeboat"
+    },
+    {
+      "id": "paddleboat",
+      "nameZh": "脚踏船",
+      "nameEn": "Paddle boat",
+      "group": "water",
+      "emoji": "🛶",
+      "query": "paddle boat"
+    },
+    {
+      "id": "houseboat",
+      "nameZh": "船屋",
+      "nameEn": "Houseboat",
+      "group": "water",
+      "emoji": "🏠",
+      "query": "houseboat"
+    },
+    {
+      "id": "rowboat",
+      "nameZh": "划艇",
+      "nameEn": "Rowboat",
+      "group": "water",
+      "emoji": "🚣",
+      "query": "rowboat"
+    },
+    {
+      "id": "jetski",
+      "nameZh": "水上摩托",
+      "nameEn": "Jet ski",
+      "group": "water",
+      "emoji": "🚤",
+      "query": "jet ski"
+    },
+    {
+      "id": "snowmobile",
+      "nameZh": "雪地摩托",
+      "nameEn": "Snowmobile",
+      "group": "road",
+      "emoji": "❄️",
+      "query": "snowmobile"
+    },
+    {
+      "id": "sled",
+      "nameZh": "雪橇",
+      "nameEn": "Sled",
+      "group": "road",
+      "emoji": "🛷",
+      "query": "sled"
+    },
+    {
+      "id": "bus_school",
+      "nameZh": "校车",
+      "nameEn": "School bus",
+      "group": "road",
+      "emoji": "🚌",
+      "query": "school bus"
+    },
+    {
+      "id": "minibus",
+      "nameZh": "小巴",
+      "nameEn": "Minibus",
+      "group": "road",
+      "emoji": "🚐",
+      "query": "minibus"
+    },
+    {
+      "id": "doubledecker",
+      "nameZh": "双层巴士",
+      "nameEn": "Double-decker",
+      "group": "road",
+      "emoji": "🚌",
+      "query": "double decker bus"
+    },
+    {
+      "id": "rickshaw",
+      "nameZh": "人力车",
+      "nameEn": "Rickshaw",
+      "group": "road",
+      "emoji": "🛺",
+      "query": "rickshaw"
+    },
+    {
+      "id": "tuk_tuk",
+      "nameZh": "嘟嘟车",
+      "nameEn": "Tuk-tuk",
+      "group": "road",
+      "emoji": "🛺",
+      "query": "tuk tuk"
+    },
+    {
+      "id": "segway",
+      "nameZh": "平衡车",
+      "nameEn": "Segway",
+      "group": "road",
+      "emoji": "🛵",
+      "query": "self balancing scooter"
+    },
+    {
+      "id": "ebike",
+      "nameZh": "电动车",
+      "nameEn": "E-bike",
+      "group": "road",
+      "emoji": "🛵",
+      "query": "electric bike"
+    },
+    {
+      "id": "moped",
+      "nameZh": "轻摩",
+      "nameEn": "Moped",
+      "group": "road",
+      "emoji": "🛵",
+      "query": "moped"
+    },
+    {
+      "id": "atv",
+      "nameZh": "沙滩车",
+      "nameEn": "ATV",
+      "group": "road",
+      "emoji": "🏍️",
+      "query": "ATV quad bike"
+    },
+    {
+      "id": "tank",
+      "nameZh": "坦克",
+      "nameEn": "Tank",
+      "group": "road",
+      "emoji": "🛡️",
+      "query": "military tank"
+    },
+    {
+      "id": "armor",
+      "nameZh": "装甲车",
+      "nameEn": "Armored car",
+      "group": "road",
+      "emoji": "🚛",
+      "query": "armored vehicle"
+    },
+    {
+      "id": "towtruck",
+      "nameZh": "拖车",
+      "nameEn": "Tow truck",
+      "group": "road",
+      "emoji": "🚚",
+      "query": "tow truck"
+    },
+    {
+      "id": "garbagetruck",
+      "nameZh": "垃圾车",
+      "nameEn": "Garbage truck",
+      "group": "road",
+      "emoji": "🗑️",
+      "query": "garbage truck"
+    },
+    {
+      "id": "mailtruck",
+      "nameZh": "邮车",
+      "nameEn": "Mail truck",
+      "group": "road",
+      "emoji": "📬",
+      "query": "mail truck"
+    },
+    {
+      "id": "icecream",
+      "nameZh": "冰淇淋车",
+      "nameEn": "Ice cream truck",
+      "group": "road",
+      "emoji": "🍦",
+      "query": "ice cream truck"
+    },
+    {
+      "id": "mixer",
+      "nameZh": "搅拌车",
+      "nameEn": "Cement mixer",
+      "group": "road",
+      "emoji": "🧱",
+      "query": "cement mixer truck"
+    },
+    {
+      "id": "dumptruck",
+      "nameZh": "自卸车",
+      "nameEn": "Dump truck",
+      "group": "road",
+      "emoji": "🚛",
+      "query": "dump truck"
+    },
+    {
+      "id": "tanktruck",
+      "nameZh": "油罐车",
+      "nameEn": "Tanker",
+      "group": "road",
+      "emoji": "🛢️",
+      "query": "tanker truck"
+    },
+    {
+      "id": "flatbed",
+      "nameZh": "平板车",
+      "nameEn": "Flatbed",
+      "group": "road",
+      "emoji": "🚚",
+      "query": "flatbed truck"
+    },
+    {
+      "id": "rv",
+      "nameZh": "房车",
+      "nameEn": "RV",
+      "group": "road",
+      "emoji": "🚐",
+      "query": "recreational vehicle"
+    },
+    {
+      "id": "camper",
+      "nameZh": "露营车",
+      "nameEn": "Camper",
+      "group": "road",
+      "emoji": "🏕️",
+      "query": "camper van"
+    },
+    {
+      "id": "limo",
+      "nameZh": "豪华车",
+      "nameEn": "Limousine",
+      "group": "road",
+      "emoji": "🚘",
+      "query": "limousine"
+    },
+    {
+      "id": "racecar",
+      "nameZh": "赛车",
+      "nameEn": "Race car",
+      "group": "road",
+      "emoji": "🏎️",
+      "query": "race car"
+    },
+    {
+      "id": "formula",
+      "nameZh": "方程式",
+      "nameEn": "Formula car",
+      "group": "road",
+      "emoji": "🏎️",
+      "query": "formula one car"
+    },
+    {
+      "id": "go_kart",
+      "nameZh": "卡丁车",
+      "nameEn": "Go-kart",
+      "group": "road",
+      "emoji": "🏎️",
+      "query": "go kart"
+    },
+    {
+      "id": "unicycle",
+      "nameZh": "独轮车",
+      "nameEn": "Unicycle",
+      "group": "road",
+      "emoji": "🎪",
+      "query": "unicycle"
     }
   ]
 }

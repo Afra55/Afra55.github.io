@@ -240,12 +240,33 @@
     });
   }
 
+  const MIN_LOAD_MS = 650;
+
+  function cancelLoadClear(mediaEl) {
+    const t = mediaEl && mediaEl._aeLoadClear;
+    if (t) {
+      window.clearTimeout(t);
+      mediaEl._aeLoadClear = 0;
+    }
+  }
+
   function setLoadingPlaceholder(mediaEl, animal, loading, opts = {}) {
     if (!mediaEl) return;
+    cancelLoadClear(mediaEl);
     mediaEl.classList.toggle("is-loading", Boolean(loading));
     let ph = mediaEl.querySelector(".animalearn-placeholder");
     if (!loading) {
-      if (ph) ph.remove();
+      const shownAt = Number(mediaEl.dataset.loadShownAt || 0);
+      const wait = shownAt ? Math.max(0, MIN_LOAD_MS - (Date.now() - shownAt)) : 0;
+      const gen = mediaEl.dataset.paintGen || "";
+      const clear = () => {
+        if ((mediaEl.dataset.paintGen || "") !== gen) return;
+        mediaEl.querySelector(".animalearn-placeholder")?.remove();
+        delete mediaEl.dataset.loadShownAt;
+        mediaEl._aeLoadClear = 0;
+      };
+      if (wait > 0) mediaEl._aeLoadClear = window.setTimeout(clear, wait);
+      else clear();
       return;
     }
     if (!ph) {
@@ -253,6 +274,9 @@
       ph.className = "animalearn-placeholder";
       ph.setAttribute("aria-hidden", "true");
       mediaEl.appendChild(ph);
+      mediaEl.dataset.loadShownAt = String(Date.now());
+    } else if (!mediaEl.dataset.loadShownAt) {
+      mediaEl.dataset.loadShownAt = String(Date.now());
     }
     const emoji = animal?.emoji || "🐾";
     const hideName = Boolean(opts.hideName);
@@ -273,7 +297,9 @@
   }
 
   async function paintMedia(mediaEl, emojiEl, imgEl, animal, opts = {}) {
-    if (!animal) return null;
+    if (!animal || !mediaEl) return null;
+    const paintGen = String(Number(mediaEl.dataset.paintGen || 0) + 1);
+    mediaEl.dataset.paintGen = paintGen;
     const hideName = Boolean(opts.hideName);
     setLoadingPlaceholder(mediaEl, animal, true, { hideName, percent: -1 });
     if (emojiEl) {
@@ -297,43 +323,48 @@
       imgEl.style.margin = "0";
     }
 
+    const stillThis = () =>
+      mediaEl.dataset.paintGen === paintGen && (!imgEl || imgEl.dataset.expectId === animal.id);
+
     const showPreview = (url) => {
-      if (!imgEl || !url || imgEl.dataset.expectId !== animal.id) return;
+      if (!imgEl || !url || !stillThis()) return;
       imgEl.referrerPolicy = "no-referrer";
       imgEl.classList.add("is-preview");
       imgEl.classList.remove("is-ready");
       imgEl.src = url;
       imgEl.hidden = false;
       if (emojiEl) emojiEl.hidden = true;
-      mediaEl?.classList.add("has-preview");
+      mediaEl.classList.add("has-preview");
     };
 
     const hit = await resolveImage(
       animal,
       (p) => {
+        if (!stillThis()) return;
         const percent = typeof p?.percent === "number" ? p.percent : -1;
         setLoadingPlaceholder(mediaEl, animal, true, { hideName, percent });
       },
       (prev) => showPreview(prev?.url)
     );
+    if (mediaEl.dataset.paintGen !== paintGen) return hit;
     if (!imgEl || !hit.url) {
       if (emojiEl) emojiEl.hidden = false;
       setLoadingPlaceholder(mediaEl, animal, false);
-      mediaEl?.classList.add("is-fallback");
-      mediaEl?.classList.remove("has-preview");
+      mediaEl.classList.add("is-fallback");
+      mediaEl.classList.remove("has-preview");
       return hit;
     }
-    if (imgEl.dataset.expectId !== animal.id) return hit;
+    if (!stillThis()) return hit;
     imgEl.referrerPolicy = "no-referrer";
     if (imgEl.src !== hit.url) imgEl.src = hit.url;
     imgEl.hidden = false;
     if (emojiEl) emojiEl.hidden = true;
     await waitImgReady(imgEl);
-    if (imgEl.dataset.expectId !== animal.id) return hit;
+    if (!stillThis()) return hit;
     imgEl.classList.remove("is-preview");
     imgEl.classList.add("is-ready");
     setLoadingPlaceholder(mediaEl, animal, false);
-    mediaEl?.classList.remove("is-fallback", "has-preview");
+    mediaEl.classList.remove("is-fallback", "has-preview");
     return hit;
   }
 
@@ -423,6 +454,7 @@
   function applyGroup(nextId) {
     groupId = nextId || "all";
     cardIndex = 0;
+    updateCredit();
     renderFilters();
     closeCatSheet();
     savePosition();
@@ -645,6 +677,50 @@
     speakPair(listenAnswer);
   }
 
+  function bindHoldSpeak(el, getItem) {
+    if (!el || el.dataset.holdSpeakBound === "1") return;
+    el.dataset.holdSpeakBound = "1";
+    let holdTimer = 0;
+    const stop = () => {
+      if (holdTimer) window.clearInterval(holdTimer);
+      holdTimer = 0;
+    };
+    const start = (ev) => {
+      if (ev.pointerType === "mouse" && ev.button !== 0) return;
+      const item = getItem();
+      if (!item) return;
+      speakPair(item);
+      stop();
+      holdTimer = window.setInterval(() => {
+        const next = getItem();
+        if (next) speakPair(next);
+      }, 2600);
+    };
+    el.addEventListener("pointerdown", start);
+    el.addEventListener("pointerup", stop);
+    el.addEventListener("pointercancel", stop);
+    el.addEventListener("pointerleave", stop);
+    el.addEventListener("lostpointercapture", stop);
+    el.addEventListener("contextmenu", (ev) => ev.preventDefault());
+  }
+
+
+  function updateCredit() {
+    if (!root) return;
+    let el = $("#ae-credit", root);
+    if (!el) {
+      el = document.createElement("p");
+      el.id = "ae-credit";
+      el.className = "animalearn-credit";
+      const body = root.querySelector(".animalearn-body") || root;
+      body.appendChild(el);
+    }
+    const text = String(catalog?.credit || "").trim();
+    el.textContent = text;
+    el.hidden = !text;
+  }
+
+
   function bind() {
     root = document.getElementById(TOOL_ID);
     if (!root || root.dataset.bound === "1") return;
@@ -667,9 +743,7 @@
         onListenChoice(listenBtn.getAttribute("data-id"));
         return;
       }
-      if (t.closest?.("#ae-card-media, #ae-card-zh, #ae-card-en")) {
-        speakCurrentCard();
-      }
+      // 卡片点读由 bindHoldSpeak（短按/长按）处理
     });
 
     // 弹层挂到 body 后，点击不再冒泡到 root，单独绑定
@@ -687,7 +761,10 @@
     $("#ae-prev", root)?.addEventListener("click", () => stepCard(-1));
     $("#ae-next", root)?.addEventListener("click", () => stepCard(1));
     $("#ae-random", root)?.addEventListener("click", () => randomCard());
-    $("#ae-speak", root)?.addEventListener("click", () => speakCurrentCard());
+    // 点读：短按一次；长按循环朗读
+    bindHoldSpeak($("#ae-speak", root), () => filteredAnimals()[cardIndex]);
+    bindHoldSpeak($("#ae-card-media", root), () => filteredAnimals()[cardIndex]);
+    bindHoldSpeak($(".animalearn-names", root), () => filteredAnimals()[cardIndex]);
     $("#ae-look-next", root)?.addEventListener("click", () => nextLookQuiz());
     $("#ae-listen-next", root)?.addEventListener("click", () => nextListenQuiz());
     $("#ae-listen-replay", root)?.addEventListener("click", () => {

@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "credit": "配图优先 Wikimedia Commons；缺图时 Openverse CC 兜底。",
+  "version": 2,
+  "credit": "配图优先 Wikimedia Commons；缺图时 Openverse（CC）兜底。仅供学习展示。",
   "groups": [
     {
       "id": "all",
@@ -263,6 +263,566 @@
       "group": "tropical",
       "emoji": "🟣",
       "query": "passion fruit"
+    },
+    {
+      "id": "pear",
+      "nameZh": "梨",
+      "nameEn": "Pear",
+      "group": "common",
+      "emoji": "🍐",
+      "query": "pear fruit"
+    },
+    {
+      "id": "peach",
+      "nameZh": "桃子",
+      "nameEn": "Peach",
+      "group": "common",
+      "emoji": "🍑",
+      "query": "peach fruit"
+    },
+    {
+      "id": "plum",
+      "nameZh": "李子",
+      "nameEn": "Plum",
+      "group": "common",
+      "emoji": "🟣",
+      "query": "plum fruit"
+    },
+    {
+      "id": "cherry",
+      "nameZh": "樱桃",
+      "nameEn": "Cherry",
+      "group": "berry",
+      "emoji": "🍒",
+      "query": "cherries"
+    },
+    {
+      "id": "grape",
+      "nameZh": "葡萄",
+      "nameEn": "Grape",
+      "group": "berry",
+      "emoji": "🍇",
+      "query": "grapes"
+    },
+    {
+      "id": "strawberry",
+      "nameZh": "草莓",
+      "nameEn": "Strawberry",
+      "group": "berry",
+      "emoji": "🍓",
+      "query": "strawberry"
+    },
+    {
+      "id": "blueberry",
+      "nameZh": "蓝莓",
+      "nameEn": "Blueberry",
+      "group": "berry",
+      "emoji": "🫐",
+      "query": "blueberries"
+    },
+    {
+      "id": "raspberry",
+      "nameZh": "覆盆子",
+      "nameEn": "Raspberry",
+      "group": "berry",
+      "emoji": "🍇",
+      "query": "raspberries"
+    },
+    {
+      "id": "cranberry",
+      "nameZh": "蔓越莓",
+      "nameEn": "Cranberry",
+      "group": "berry",
+      "emoji": "🔴",
+      "query": "cranberries"
+    },
+    {
+      "id": "gooseberry",
+      "nameZh": "醋栗",
+      "nameEn": "Gooseberry",
+      "group": "berry",
+      "emoji": "🟢",
+      "query": "gooseberry"
+    },
+    {
+      "id": "mulberry",
+      "nameZh": "桑葚",
+      "nameEn": "Mulberry",
+      "group": "berry",
+      "emoji": "🟣",
+      "query": "mulberry"
+    },
+    {
+      "id": "watermelon",
+      "nameZh": "西瓜",
+      "nameEn": "Watermelon",
+      "group": "common",
+      "emoji": "🍉",
+      "query": "watermelon"
+    },
+    {
+      "id": "cantaloupe",
+      "nameZh": "哈密瓜",
+      "nameEn": "Cantaloupe",
+      "group": "common",
+      "emoji": "🍈",
+      "query": "cantaloupe"
+    },
+    {
+      "id": "honeydew",
+      "nameZh": "蜜瓜",
+      "nameEn": "Honeydew",
+      "group": "common",
+      "emoji": "🍈",
+      "query": "honeydew melon"
+    },
+    {
+      "id": "banana",
+      "nameZh": "香蕉",
+      "nameEn": "Banana",
+      "group": "tropical",
+      "emoji": "🍌",
+      "query": "banana"
+    },
+    {
+      "id": "mango",
+      "nameZh": "芒果",
+      "nameEn": "Mango",
+      "group": "tropical",
+      "emoji": "🥭",
+      "query": "mango fruit"
+    },
+    {
+      "id": "pineapple",
+      "nameZh": "菠萝",
+      "nameEn": "Pineapple",
+      "group": "tropical",
+      "emoji": "🍍",
+      "query": "pineapple"
+    },
+    {
+      "id": "coconut",
+      "nameZh": "椰子",
+      "nameEn": "Coconut",
+      "group": "tropical",
+      "emoji": "🥥",
+      "query": "coconut"
+    },
+    {
+      "id": "papaya",
+      "nameZh": "木瓜",
+      "nameEn": "Papaya",
+      "group": "tropical",
+      "emoji": "🧡",
+      "query": "papaya"
+    },
+    {
+      "id": "guava",
+      "nameZh": "番石榴",
+      "nameEn": "Guava",
+      "group": "tropical",
+      "emoji": "🟢",
+      "query": "guava fruit"
+    },
+    {
+      "id": "rambutan",
+      "nameZh": "红毛丹",
+      "nameEn": "Rambutan",
+      "group": "tropical",
+      "emoji": "🔴",
+      "query": "rambutan"
+    },
+    {
+      "id": "mangosteen",
+      "nameZh": "山竹",
+      "nameEn": "Mangosteen",
+      "group": "tropical",
+      "emoji": "🟣",
+      "query": "mangosteen"
+    },
+    {
+      "id": "kiwi",
+      "nameZh": "猕猴桃",
+      "nameEn": "Kiwi",
+      "group": "common",
+      "emoji": "🥝",
+      "query": "kiwi fruit"
+    },
+    {
+      "id": "fig",
+      "nameZh": "无花果",
+      "nameEn": "Fig",
+      "group": "common",
+      "emoji": "🟤",
+      "query": "fig fruit"
+    },
+    {
+      "id": "pomegranate",
+      "nameZh": "石榴",
+      "nameEn": "Pomegranate",
+      "group": "common",
+      "emoji": "🔴",
+      "query": "pomegranate"
+    },
+    {
+      "id": "jujube",
+      "nameZh": "红枣",
+      "nameEn": "Jujube",
+      "group": "common",
+      "emoji": "🟤",
+      "query": "jujube dates"
+    },
+    {
+      "id": "date",
+      "nameZh": "椰枣",
+      "nameEn": "Date",
+      "group": "tropical",
+      "emoji": "🟤",
+      "query": "date fruit"
+    },
+    {
+      "id": "olive",
+      "nameZh": "橄榄",
+      "nameEn": "Olive",
+      "group": "common",
+      "emoji": "🫒",
+      "query": "olives"
+    },
+    {
+      "id": "avocado",
+      "nameZh": "牛油果",
+      "nameEn": "Avocado",
+      "group": "tropical",
+      "emoji": "🥑",
+      "query": "avocado"
+    },
+    {
+      "id": "tomato",
+      "nameZh": "番茄",
+      "nameEn": "Tomato",
+      "group": "common",
+      "emoji": "🍅",
+      "query": "tomato"
+    },
+    {
+      "id": "orange",
+      "nameZh": "橙子",
+      "nameEn": "Orange",
+      "group": "common",
+      "emoji": "🍊",
+      "query": "orange fruit"
+    },
+    {
+      "id": "tangerine",
+      "nameZh": "橘子",
+      "nameEn": "Tangerine",
+      "group": "common",
+      "emoji": "🍊",
+      "query": "tangerine"
+    },
+    {
+      "id": "mandarin",
+      "nameZh": "蜜橘",
+      "nameEn": "Mandarin",
+      "group": "common",
+      "emoji": "🍊",
+      "query": "mandarin orange"
+    },
+    {
+      "id": "clementine",
+      "nameZh": "小柑橘",
+      "nameEn": "Clementine",
+      "group": "common",
+      "emoji": "🍊",
+      "query": "clementine"
+    },
+    {
+      "id": "grapefruit",
+      "nameZh": "葡萄柚",
+      "nameEn": "Grapefruit",
+      "group": "common",
+      "emoji": "🩷",
+      "query": "grapefruit"
+    },
+    {
+      "id": "lemon",
+      "nameZh": "柠檬",
+      "nameEn": "Lemon",
+      "group": "common",
+      "emoji": "🍋",
+      "query": "lemon"
+    },
+    {
+      "id": "lime",
+      "nameZh": "青柠",
+      "nameEn": "Lime",
+      "group": "common",
+      "emoji": "🟢",
+      "query": "lime fruit"
+    },
+    {
+      "id": "pomelo",
+      "nameZh": "柚子",
+      "nameEn": "Pomelo",
+      "group": "common",
+      "emoji": "🟡",
+      "query": "pomelo"
+    },
+    {
+      "id": "kumquat",
+      "nameZh": "金桔",
+      "nameEn": "Kumquat",
+      "group": "common",
+      "emoji": "🟠",
+      "query": "kumquat"
+    },
+    {
+      "id": "starfruit",
+      "nameZh": "杨桃",
+      "nameEn": "Starfruit",
+      "group": "tropical",
+      "emoji": "⭐",
+      "query": "starfruit"
+    },
+    {
+      "id": "jackfruit",
+      "nameZh": "菠萝蜜",
+      "nameEn": "Jackfruit",
+      "group": "tropical",
+      "emoji": "🟡",
+      "query": "jackfruit"
+    },
+    {
+      "id": "breadfruit",
+      "nameZh": "面包果",
+      "nameEn": "Breadfruit",
+      "group": "tropical",
+      "emoji": "🟢",
+      "query": "breadfruit"
+    },
+    {
+      "id": "soursop",
+      "nameZh": "刺果番荔枝",
+      "nameEn": "Soursop",
+      "group": "tropical",
+      "emoji": "🟢",
+      "query": "soursop"
+    },
+    {
+      "id": "custardapple",
+      "nameZh": "释迦",
+      "nameEn": "Custard apple",
+      "group": "tropical",
+      "emoji": "🟢",
+      "query": "custard apple"
+    },
+    {
+      "id": "sugarapple",
+      "nameZh": "番荔枝",
+      "nameEn": "Sugar apple",
+      "group": "tropical",
+      "emoji": "🟢",
+      "query": "sugar apple"
+    },
+    {
+      "id": "waxapple",
+      "nameZh": "莲雾",
+      "nameEn": "Wax apple",
+      "group": "tropical",
+      "emoji": "🔴",
+      "query": "wax apple"
+    },
+    {
+      "id": "loquat",
+      "nameZh": "枇杷",
+      "nameEn": "Loquat",
+      "group": "common",
+      "emoji": "🟠",
+      "query": "loquat"
+    },
+    {
+      "id": "hawthorn",
+      "nameZh": "山楂",
+      "nameEn": "Hawthorn",
+      "group": "common",
+      "emoji": "🔴",
+      "query": "hawthorn fruit"
+    },
+    {
+      "id": "quince",
+      "nameZh": "榅桲",
+      "nameEn": "Quince",
+      "group": "common",
+      "emoji": "🟡",
+      "query": "quince fruit"
+    },
+    {
+      "id": "nectarine",
+      "nameZh": "油桃",
+      "nameEn": "Nectarine",
+      "group": "common",
+      "emoji": "🍑",
+      "query": "nectarine"
+    },
+    {
+      "id": "donutpeach",
+      "nameZh": "蟠桃",
+      "nameEn": "Donut peach",
+      "group": "common",
+      "emoji": "🍑",
+      "query": "donut peach"
+    },
+    {
+      "id": "whitepeach",
+      "nameZh": "白桃",
+      "nameEn": "White peach",
+      "group": "common",
+      "emoji": "🍑",
+      "query": "white peach"
+    },
+    {
+      "id": "greengage",
+      "nameZh": "青梅",
+      "nameEn": "Greengage",
+      "group": "common",
+      "emoji": "🟢",
+      "query": "greengage plum"
+    },
+    {
+      "id": "damson",
+      "nameZh": "西洋李",
+      "nameEn": "Damson",
+      "group": "common",
+      "emoji": "🟣",
+      "query": "damson plum"
+    },
+    {
+      "id": "mirabelle",
+      "nameZh": "黄香李",
+      "nameEn": "Mirabelle",
+      "group": "common",
+      "emoji": "🟡",
+      "query": "mirabelle plum"
+    },
+    {
+      "id": "acerola",
+      "nameZh": "针叶樱桃",
+      "nameEn": "Acerola",
+      "group": "berry",
+      "emoji": "🔴",
+      "query": "acerola cherry"
+    },
+    {
+      "id": "goji",
+      "nameZh": "枸杞",
+      "nameEn": "Goji",
+      "group": "berry",
+      "emoji": "🔴",
+      "query": "goji berries"
+    },
+    {
+      "id": "elderberry",
+      "nameZh": "接骨木果",
+      "nameEn": "Elderberry",
+      "group": "berry",
+      "emoji": "🟣",
+      "query": "elderberries"
+    },
+    {
+      "id": "currant_red",
+      "nameZh": "红醋栗",
+      "nameEn": "Red currant",
+      "group": "berry",
+      "emoji": "🔴",
+      "query": "red currants"
+    },
+    {
+      "id": "currant_black",
+      "nameZh": "黑醋栗",
+      "nameEn": "Black currant",
+      "group": "berry",
+      "emoji": "⚫",
+      "query": "black currants"
+    },
+    {
+      "id": "cloudberry",
+      "nameZh": "云莓",
+      "nameEn": "Cloudberry",
+      "group": "berry",
+      "emoji": "🟠",
+      "query": "cloudberry"
+    },
+    {
+      "id": "boysenberry",
+      "nameZh": "波森莓",
+      "nameEn": "Boysenberry",
+      "group": "berry",
+      "emoji": "🟣",
+      "query": "boysenberry"
+    },
+    {
+      "id": "huckleberry",
+      "nameZh": "越橘",
+      "nameEn": "Huckleberry",
+      "group": "berry",
+      "emoji": "🔵",
+      "query": "huckleberry"
+    },
+    {
+      "id": "lingonberry",
+      "nameZh": "越橘红",
+      "nameEn": "Lingonberry",
+      "group": "berry",
+      "emoji": "🔴",
+      "query": "lingonberry"
+    },
+    {
+      "id": "salal",
+      "nameZh": "萨拉果",
+      "nameEn": "Salal",
+      "group": "berry",
+      "emoji": "🔵",
+      "query": "salal berry"
+    },
+    {
+      "id": "sea_buckthorn",
+      "nameZh": "沙棘",
+      "nameEn": "Sea buckthorn",
+      "group": "berry",
+      "emoji": "🟠",
+      "query": "sea buckthorn"
+    },
+    {
+      "id": "rosehip",
+      "nameZh": "玫瑰果",
+      "nameEn": "Rose hip",
+      "group": "berry",
+      "emoji": "🔴",
+      "query": "rose hip"
+    },
+    {
+      "id": "rowan",
+      "nameZh": "花楸果",
+      "nameEn": "Rowan",
+      "group": "berry",
+      "emoji": "🟠",
+      "query": "rowan berries"
+    },
+    {
+      "id": "serviceberry",
+      "nameZh": "唐棣",
+      "nameEn": "Serviceberry",
+      "group": "berry",
+      "emoji": "🟣",
+      "query": "serviceberry"
+    },
+    {
+      "id": "chokeberry",
+      "nameZh": "野樱莓",
+      "nameEn": "Chokeberry",
+      "group": "berry",
+      "emoji": "⚫",
+      "query": "chokeberry"
     }
   ]
 }

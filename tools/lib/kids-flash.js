@@ -155,12 +155,34 @@
       mediaEl?.classList.remove("is-color", "is-digit", "is-shape");
     }
 
+    const MIN_LOAD_MS = 650;
+
+    function cancelLoadClear(mediaEl) {
+      const t = mediaEl && mediaEl._kfLoadClear;
+      if (t) {
+        window.clearTimeout(t);
+        mediaEl._kfLoadClear = 0;
+      }
+    }
+
     function setLoadingPlaceholder(mediaEl, item, loading, opts = {}) {
       if (!mediaEl) return;
+      cancelLoadClear(mediaEl);
       mediaEl.classList.toggle("is-loading", Boolean(loading));
       let ph = mediaEl.querySelector(".kidsflash-placeholder");
       if (!loading) {
-        if (ph) ph.remove();
+        const shownAt = Number(mediaEl.dataset.loadShownAt || 0);
+        const wait = shownAt ? Math.max(0, MIN_LOAD_MS - (Date.now() - shownAt)) : 0;
+        const gen = mediaEl.dataset.paintGen || "";
+        const clear = () => {
+          // 切卡后旧请求不得拆掉新卡的加载框
+          if ((mediaEl.dataset.paintGen || "") !== gen) return;
+          mediaEl.querySelector(".kidsflash-placeholder")?.remove();
+          delete mediaEl.dataset.loadShownAt;
+          mediaEl._kfLoadClear = 0;
+        };
+        if (wait > 0) mediaEl._kfLoadClear = window.setTimeout(clear, wait);
+        else clear();
         return;
       }
       if (!ph) {
@@ -168,6 +190,9 @@
         ph.className = "kidsflash-placeholder";
         ph.setAttribute("aria-hidden", "true");
         mediaEl.appendChild(ph);
+        mediaEl.dataset.loadShownAt = String(Date.now());
+      } else if (!mediaEl.dataset.loadShownAt) {
+        mediaEl.dataset.loadShownAt = String(Date.now());
       }
       const emoji = item?.emoji || defaultEmoji;
       const hideName = Boolean(opts.hideName);
@@ -285,6 +310,8 @@
         return paintLocalVisual(mediaEl, emojiEl, imgEl, item);
       }
       clearSpecialVisual(mediaEl);
+      const paintGen = String(Number(mediaEl.dataset.paintGen || 0) + 1);
+      mediaEl.dataset.paintGen = paintGen;
       const hideName = Boolean(opts.hideName);
       setLoadingPlaceholder(mediaEl, item, true, { hideName, percent: -1 });
       if (emojiEl) {
@@ -310,8 +337,10 @@
         imgEl.style.setProperty("object-fit", "contain", "important");
       }
 
+      const stillThis = () => mediaEl.dataset.paintGen === paintGen && imgEl?.dataset.expectId === item.id;
+
       const showPreview = (url) => {
-        if (!imgEl || !url || imgEl.dataset.expectId !== item.id) return;
+        if (!imgEl || !url || !stillThis()) return;
         imgEl.referrerPolicy = "no-referrer";
         imgEl.classList.add("is-preview");
         imgEl.classList.remove("is-ready");
@@ -324,6 +353,7 @@
       const hit = await resolveImage(
         item,
         (p) => {
+          if (!stillThis()) return;
           setLoadingPlaceholder(mediaEl, item, true, {
             hideName,
             percent: typeof p?.percent === "number" ? p.percent : -1,
@@ -331,6 +361,7 @@
         },
         (prev) => showPreview(prev?.url)
       );
+      if (mediaEl.dataset.paintGen !== paintGen) return hit;
       if (!imgEl || !hit.url) {
         if (emojiEl) emojiEl.hidden = false;
         setLoadingPlaceholder(mediaEl, item, false);
@@ -338,13 +369,13 @@
         mediaEl.classList.remove("has-preview");
         return hit;
       }
-      if (imgEl.dataset.expectId !== item.id) return hit;
+      if (!stillThis()) return hit;
       imgEl.referrerPolicy = "no-referrer";
       if (imgEl.src !== hit.url) imgEl.src = hit.url;
       imgEl.hidden = false;
       if (emojiEl) emojiEl.hidden = true;
       await waitImgReady(imgEl);
-      if (imgEl.dataset.expectId !== item.id) return hit;
+      if (!stillThis()) return hit;
       imgEl.classList.remove("is-preview");
       imgEl.classList.add("is-ready");
       setLoadingPlaceholder(mediaEl, item, false);
@@ -521,6 +552,48 @@
       if (item) speakPair(item);
     }
 
+    function bindHoldSpeak(el, getItem) {
+      if (!el || el.dataset.holdSpeakBound === "1") return;
+      el.dataset.holdSpeakBound = "1";
+      let holdTimer = 0;
+      const stop = () => {
+        if (holdTimer) window.clearInterval(holdTimer);
+        holdTimer = 0;
+      };
+      const start = (ev) => {
+        if (ev.pointerType === "mouse" && ev.button !== 0) return;
+        const item = getItem();
+        if (!item) return;
+        speakPair(item);
+        stop();
+        holdTimer = window.setInterval(() => {
+          const next = getItem();
+          if (next) speakPair(next);
+        }, 2600);
+      };
+      el.addEventListener("pointerdown", start);
+      el.addEventListener("pointerup", stop);
+      el.addEventListener("pointercancel", stop);
+      el.addEventListener("pointerleave", stop);
+      el.addEventListener("lostpointercapture", stop);
+      el.addEventListener("contextmenu", (ev) => ev.preventDefault());
+    }
+
+    function updateCredit() {
+      if (!root) return;
+      let el = $(`#${id("credit")}`, root);
+      if (!el) {
+        el = document.createElement("p");
+        el.id = id("credit");
+        el.className = "kidsflash-credit";
+        const body = root.querySelector(".kidsflash-body") || root;
+        body.appendChild(el);
+      }
+      const text = String(catalog?.credit || "").trim();
+      el.textContent = text;
+      el.hidden = !text;
+    }
+
     function setTab(next) {
       tab = next || "cards";
       $$(".kidsflash-tab", root).forEach((btn) => {
@@ -692,9 +765,7 @@
           onListenChoice(listenBtn.getAttribute("data-id"));
           return;
         }
-        if (t.closest?.(`#${id("card-media")}, #${id("card-zh")}, #${id("card-en")}`)) {
-          speakCurrentCard();
-        }
+        // 卡片点读由 bindHoldSpeak（短按/长按）处理
       });
 
       const sheet = getCatSheet();
@@ -711,7 +782,10 @@
       $(`#${id("prev")}`, root)?.addEventListener("click", () => stepCard(-1));
       $(`#${id("next")}`, root)?.addEventListener("click", () => stepCard(1));
       $(`#${id("random")}`, root)?.addEventListener("click", () => randomCard());
-      $(`#${id("speak")}`, root)?.addEventListener("click", () => speakCurrentCard());
+      // 点读：短按一次；长按循环朗读（不再绑 click，避免与 pointerdown 双触发）
+      bindHoldSpeak($(`#${id("speak")}`, root), () => filtered()[cardIndex]);
+      bindHoldSpeak($(`#${id("card-media")}`, root), () => filtered()[cardIndex]);
+      bindHoldSpeak($(".kidsflash-names", root), () => filtered()[cardIndex]);
       $(`#${id("look-next")}`, root)?.addEventListener("click", () => nextLookQuiz());
       $(`#${id("listen-next")}`, root)?.addEventListener("click", () => nextListenQuiz());
       $(`#${id("listen-replay")}`, root)?.addEventListener("click", () => {
@@ -774,6 +848,7 @@
         if (groupId !== "all" && !groups.some((g) => g.id === groupId)) groupId = "all";
         if (!["cards", "quiz-look", "quiz-listen"].includes(tab)) tab = "cards";
         // shape/color/digit 不走网络图
+        updateCredit();
         renderFilters();
         setTab(tab || "cards");
       })().finally(() => {
