@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "credit": "数字本地大号显示，无需外网图片。",
   "visual": "digit",
   "groups": [
@@ -9,14 +9,24 @@
       "nameEn": "All"
     },
     {
-      "id": "small",
-      "nameZh": "1-10",
-      "nameEn": "1-10"
+      "id": "g0_10",
+      "nameZh": "0-10",
+      "nameEn": "0-10"
     },
     {
-      "id": "teen",
+      "id": "g11_20",
       "nameZh": "11-20",
       "nameEn": "11-20"
+    },
+    {
+      "id": "g21_50",
+      "nameZh": "21-50",
+      "nameEn": "21-50"
+    },
+    {
+      "id": "g51_100",
+      "nameZh": "51-100",
+      "nameEn": "51-100"
     }
   ],
   "items": [
@@ -24,7 +34,7 @@
       "id": "n0",
       "nameZh": "零",
       "nameEn": "Zero",
-      "group": "small",
+      "group": "g0_10",
       "emoji": "0⃣",
       "digit": "0"
     },
@@ -32,7 +42,7 @@
       "id": "n1",
       "nameZh": "一",
       "nameEn": "One",
-      "group": "small",
+      "group": "g0_10",
       "emoji": "1⃣",
       "digit": "1"
     },
@@ -40,7 +50,7 @@
       "id": "n2",
       "nameZh": "二",
       "nameEn": "Two",
-      "group": "small",
+      "group": "g0_10",
       "emoji": "2⃣",
       "digit": "2"
     },
@@ -48,7 +58,7 @@
       "id": "n3",
       "nameZh": "三",
       "nameEn": "Three",
-      "group": "small",
+      "group": "g0_10",
       "emoji": "3⃣",
       "digit": "3"
     },
@@ -56,7 +66,7 @@
       "id": "n4",
       "nameZh": "四",
       "nameEn": "Four",
-      "group": "small",
+      "group": "g0_10",
       "emoji": "4⃣",
       "digit": "4"
     },
@@ -64,7 +74,7 @@
       "id": "n5",
       "nameZh": "五",
       "nameEn": "Five",
-      "group": "small",
+      "group": "g0_10",
       "emoji": "5⃣",
       "digit": "5"
     },
@@ -72,7 +82,7 @@
       "id": "n6",
       "nameZh": "六",
       "nameEn": "Six",
-      "group": "small",
+      "group": "g0_10",
       "emoji": "6⃣",
       "digit": "6"
     },
@@ -80,7 +90,7 @@
       "id": "n7",
       "nameZh": "七",
       "nameEn": "Seven",
-      "group": "small",
+      "group": "g0_10",
       "emoji": "7⃣",
       "digit": "7"
     },
@@ -88,7 +98,7 @@
       "id": "n8",
       "nameZh": "八",
       "nameEn": "Eight",
-      "group": "small",
+      "group": "g0_10",
       "emoji": "8⃣",
       "digit": "8"
     },
@@ -96,7 +106,7 @@
       "id": "n9",
       "nameZh": "九",
       "nameEn": "Nine",
-      "group": "small",
+      "group": "g0_10",
       "emoji": "9⃣",
       "digit": "9"
     },
@@ -104,15 +114,15 @@
       "id": "n10",
       "nameZh": "十",
       "nameEn": "Ten",
-      "group": "small",
-      "emoji": "🔢",
+      "group": "g0_10",
+      "emoji": "🔟",
       "digit": "10"
     },
     {
       "id": "n11",
       "nameZh": "十一",
       "nameEn": "Eleven",
-      "group": "teen",
+      "group": "g11_20",
       "emoji": "🔢",
       "digit": "11"
     },
@@ -120,7 +130,7 @@
       "id": "n12",
       "nameZh": "十二",
       "nameEn": "Twelve",
-      "group": "teen",
+      "group": "g11_20",
       "emoji": "🔢",
       "digit": "12"
     },
@@ -128,7 +138,7 @@
       "id": "n13",
       "nameZh": "十三",
       "nameEn": "Thirteen",
-      "group": "teen",
+      "group": "g11_20",
       "emoji": "🔢",
       "digit": "13"
     },
@@ -136,7 +146,7 @@
       "id": "n14",
       "nameZh": "十四",
       "nameEn": "Fourteen",
-      "group": "teen",
+      "group": "g11_20",
       "emoji": "🔢",
       "digit": "14"
     },
@@ -144,7 +154,7 @@
       "id": "n15",
       "nameZh": "十五",
       "nameEn": "Fifteen",
-      "group": "teen",
+      "group": "g11_20",
       "emoji": "🔢",
       "digit": "15"
     },
@@ -152,7 +162,7 @@
       "id": "n16",
       "nameZh": "十六",
       "nameEn": "Sixteen",
-      "group": "teen",
+      "group": "g11_20",
       "emoji": "🔢",
       "digit": "16"
     },
@@ -160,7 +170,7 @@
       "id": "n17",
       "nameZh": "十七",
       "nameEn": "Seventeen",
-      "group": "teen",
+      "group": "g11_20",
       "emoji": "🔢",
       "digit": "17"
     },
@@ -168,7 +178,7 @@
       "id": "n18",
       "nameZh": "十八",
       "nameEn": "Eighteen",
-      "group": "teen",
+      "group": "g11_20",
       "emoji": "🔢",
       "digit": "18"
     },
@@ -176,7 +186,7 @@
       "id": "n19",
       "nameZh": "十九",
       "nameEn": "Nineteen",
-      "group": "teen",
+      "group": "g11_20",
       "emoji": "🔢",
       "digit": "19"
     },
@@ -184,9 +194,649 @@
       "id": "n20",
       "nameZh": "二十",
       "nameEn": "Twenty",
-      "group": "teen",
+      "group": "g11_20",
       "emoji": "🔢",
       "digit": "20"
+    },
+    {
+      "id": "n21",
+      "nameZh": "二十一",
+      "nameEn": "Twenty-one",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "21"
+    },
+    {
+      "id": "n22",
+      "nameZh": "二十二",
+      "nameEn": "Twenty-two",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "22"
+    },
+    {
+      "id": "n23",
+      "nameZh": "二十三",
+      "nameEn": "Twenty-three",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "23"
+    },
+    {
+      "id": "n24",
+      "nameZh": "二十四",
+      "nameEn": "Twenty-four",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "24"
+    },
+    {
+      "id": "n25",
+      "nameZh": "二十五",
+      "nameEn": "Twenty-five",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "25"
+    },
+    {
+      "id": "n26",
+      "nameZh": "二十六",
+      "nameEn": "Twenty-six",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "26"
+    },
+    {
+      "id": "n27",
+      "nameZh": "二十七",
+      "nameEn": "Twenty-seven",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "27"
+    },
+    {
+      "id": "n28",
+      "nameZh": "二十八",
+      "nameEn": "Twenty-eight",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "28"
+    },
+    {
+      "id": "n29",
+      "nameZh": "二十九",
+      "nameEn": "Twenty-nine",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "29"
+    },
+    {
+      "id": "n30",
+      "nameZh": "三十",
+      "nameEn": "Thirty",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "30"
+    },
+    {
+      "id": "n31",
+      "nameZh": "三十一",
+      "nameEn": "Thirty-one",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "31"
+    },
+    {
+      "id": "n32",
+      "nameZh": "三十二",
+      "nameEn": "Thirty-two",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "32"
+    },
+    {
+      "id": "n33",
+      "nameZh": "三十三",
+      "nameEn": "Thirty-three",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "33"
+    },
+    {
+      "id": "n34",
+      "nameZh": "三十四",
+      "nameEn": "Thirty-four",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "34"
+    },
+    {
+      "id": "n35",
+      "nameZh": "三十五",
+      "nameEn": "Thirty-five",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "35"
+    },
+    {
+      "id": "n36",
+      "nameZh": "三十六",
+      "nameEn": "Thirty-six",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "36"
+    },
+    {
+      "id": "n37",
+      "nameZh": "三十七",
+      "nameEn": "Thirty-seven",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "37"
+    },
+    {
+      "id": "n38",
+      "nameZh": "三十八",
+      "nameEn": "Thirty-eight",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "38"
+    },
+    {
+      "id": "n39",
+      "nameZh": "三十九",
+      "nameEn": "Thirty-nine",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "39"
+    },
+    {
+      "id": "n40",
+      "nameZh": "四十",
+      "nameEn": "Forty",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "40"
+    },
+    {
+      "id": "n41",
+      "nameZh": "四十一",
+      "nameEn": "Forty-one",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "41"
+    },
+    {
+      "id": "n42",
+      "nameZh": "四十二",
+      "nameEn": "Forty-two",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "42"
+    },
+    {
+      "id": "n43",
+      "nameZh": "四十三",
+      "nameEn": "Forty-three",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "43"
+    },
+    {
+      "id": "n44",
+      "nameZh": "四十四",
+      "nameEn": "Forty-four",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "44"
+    },
+    {
+      "id": "n45",
+      "nameZh": "四十五",
+      "nameEn": "Forty-five",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "45"
+    },
+    {
+      "id": "n46",
+      "nameZh": "四十六",
+      "nameEn": "Forty-six",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "46"
+    },
+    {
+      "id": "n47",
+      "nameZh": "四十七",
+      "nameEn": "Forty-seven",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "47"
+    },
+    {
+      "id": "n48",
+      "nameZh": "四十八",
+      "nameEn": "Forty-eight",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "48"
+    },
+    {
+      "id": "n49",
+      "nameZh": "四十九",
+      "nameEn": "Forty-nine",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "49"
+    },
+    {
+      "id": "n50",
+      "nameZh": "五十",
+      "nameEn": "Fifty",
+      "group": "g21_50",
+      "emoji": "🔢",
+      "digit": "50"
+    },
+    {
+      "id": "n51",
+      "nameZh": "五十一",
+      "nameEn": "Fifty-one",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "51"
+    },
+    {
+      "id": "n52",
+      "nameZh": "五十二",
+      "nameEn": "Fifty-two",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "52"
+    },
+    {
+      "id": "n53",
+      "nameZh": "五十三",
+      "nameEn": "Fifty-three",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "53"
+    },
+    {
+      "id": "n54",
+      "nameZh": "五十四",
+      "nameEn": "Fifty-four",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "54"
+    },
+    {
+      "id": "n55",
+      "nameZh": "五十五",
+      "nameEn": "Fifty-five",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "55"
+    },
+    {
+      "id": "n56",
+      "nameZh": "五十六",
+      "nameEn": "Fifty-six",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "56"
+    },
+    {
+      "id": "n57",
+      "nameZh": "五十七",
+      "nameEn": "Fifty-seven",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "57"
+    },
+    {
+      "id": "n58",
+      "nameZh": "五十八",
+      "nameEn": "Fifty-eight",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "58"
+    },
+    {
+      "id": "n59",
+      "nameZh": "五十九",
+      "nameEn": "Fifty-nine",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "59"
+    },
+    {
+      "id": "n60",
+      "nameZh": "六十",
+      "nameEn": "Sixty",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "60"
+    },
+    {
+      "id": "n61",
+      "nameZh": "六十一",
+      "nameEn": "Sixty-one",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "61"
+    },
+    {
+      "id": "n62",
+      "nameZh": "六十二",
+      "nameEn": "Sixty-two",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "62"
+    },
+    {
+      "id": "n63",
+      "nameZh": "六十三",
+      "nameEn": "Sixty-three",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "63"
+    },
+    {
+      "id": "n64",
+      "nameZh": "六十四",
+      "nameEn": "Sixty-four",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "64"
+    },
+    {
+      "id": "n65",
+      "nameZh": "六十五",
+      "nameEn": "Sixty-five",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "65"
+    },
+    {
+      "id": "n66",
+      "nameZh": "六十六",
+      "nameEn": "Sixty-six",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "66"
+    },
+    {
+      "id": "n67",
+      "nameZh": "六十七",
+      "nameEn": "Sixty-seven",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "67"
+    },
+    {
+      "id": "n68",
+      "nameZh": "六十八",
+      "nameEn": "Sixty-eight",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "68"
+    },
+    {
+      "id": "n69",
+      "nameZh": "六十九",
+      "nameEn": "Sixty-nine",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "69"
+    },
+    {
+      "id": "n70",
+      "nameZh": "七十",
+      "nameEn": "Seventy",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "70"
+    },
+    {
+      "id": "n71",
+      "nameZh": "七十一",
+      "nameEn": "Seventy-one",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "71"
+    },
+    {
+      "id": "n72",
+      "nameZh": "七十二",
+      "nameEn": "Seventy-two",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "72"
+    },
+    {
+      "id": "n73",
+      "nameZh": "七十三",
+      "nameEn": "Seventy-three",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "73"
+    },
+    {
+      "id": "n74",
+      "nameZh": "七十四",
+      "nameEn": "Seventy-four",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "74"
+    },
+    {
+      "id": "n75",
+      "nameZh": "七十五",
+      "nameEn": "Seventy-five",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "75"
+    },
+    {
+      "id": "n76",
+      "nameZh": "七十六",
+      "nameEn": "Seventy-six",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "76"
+    },
+    {
+      "id": "n77",
+      "nameZh": "七十七",
+      "nameEn": "Seventy-seven",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "77"
+    },
+    {
+      "id": "n78",
+      "nameZh": "七十八",
+      "nameEn": "Seventy-eight",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "78"
+    },
+    {
+      "id": "n79",
+      "nameZh": "七十九",
+      "nameEn": "Seventy-nine",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "79"
+    },
+    {
+      "id": "n80",
+      "nameZh": "八十",
+      "nameEn": "Eighty",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "80"
+    },
+    {
+      "id": "n81",
+      "nameZh": "八十一",
+      "nameEn": "Eighty-one",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "81"
+    },
+    {
+      "id": "n82",
+      "nameZh": "八十二",
+      "nameEn": "Eighty-two",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "82"
+    },
+    {
+      "id": "n83",
+      "nameZh": "八十三",
+      "nameEn": "Eighty-three",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "83"
+    },
+    {
+      "id": "n84",
+      "nameZh": "八十四",
+      "nameEn": "Eighty-four",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "84"
+    },
+    {
+      "id": "n85",
+      "nameZh": "八十五",
+      "nameEn": "Eighty-five",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "85"
+    },
+    {
+      "id": "n86",
+      "nameZh": "八十六",
+      "nameEn": "Eighty-six",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "86"
+    },
+    {
+      "id": "n87",
+      "nameZh": "八十七",
+      "nameEn": "Eighty-seven",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "87"
+    },
+    {
+      "id": "n88",
+      "nameZh": "八十八",
+      "nameEn": "Eighty-eight",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "88"
+    },
+    {
+      "id": "n89",
+      "nameZh": "八十九",
+      "nameEn": "Eighty-nine",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "89"
+    },
+    {
+      "id": "n90",
+      "nameZh": "九十",
+      "nameEn": "Ninety",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "90"
+    },
+    {
+      "id": "n91",
+      "nameZh": "九十一",
+      "nameEn": "Ninety-one",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "91"
+    },
+    {
+      "id": "n92",
+      "nameZh": "九十二",
+      "nameEn": "Ninety-two",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "92"
+    },
+    {
+      "id": "n93",
+      "nameZh": "九十三",
+      "nameEn": "Ninety-three",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "93"
+    },
+    {
+      "id": "n94",
+      "nameZh": "九十四",
+      "nameEn": "Ninety-four",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "94"
+    },
+    {
+      "id": "n95",
+      "nameZh": "九十五",
+      "nameEn": "Ninety-five",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "95"
+    },
+    {
+      "id": "n96",
+      "nameZh": "九十六",
+      "nameEn": "Ninety-six",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "96"
+    },
+    {
+      "id": "n97",
+      "nameZh": "九十七",
+      "nameEn": "Ninety-seven",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "97"
+    },
+    {
+      "id": "n98",
+      "nameZh": "九十八",
+      "nameEn": "Ninety-eight",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "98"
+    },
+    {
+      "id": "n99",
+      "nameZh": "九十九",
+      "nameEn": "Ninety-nine",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "99"
+    },
+    {
+      "id": "n100",
+      "nameZh": "一百",
+      "nameEn": "One hundred",
+      "group": "g51_100",
+      "emoji": "🔢",
+      "digit": "100"
     }
   ]
 }
