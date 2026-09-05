@@ -1,21 +1,23 @@
 (() => {
   "use strict";
-  const COMMIT = "a668e2158e5c70059c43ed51c515d916aef81ca9";
-  const PATH = "tools/animalearn.js";
-  const urls = [
-    "https://cdn.jsdelivr.net/gh/Afra55/Afra55.github.io@" + COMMIT + "/" + PATH,
-    "https://raw.githack.com/Afra55/Afra55.github.io/" + COMMIT + "/" + PATH
-  ];
-  function load(i) {
-    if (i >= urls.length) {
-      console.error("[animalearn] failed to restore script");
-      return;
-    }
-    const s = document.createElement("script");
-    s.src = urls[i];
-    s.async = false;
-    s.onerror = () => load(i + 1);
-    document.head.appendChild(s);
+  const parts = ["animalearn.p1.js", "animalearn.p2.js", "animalearn.p3.js", "animalearn.p4.js"];
+  const v = encodeURIComponent(window.TOOLS_BUILD || window.TOOLS_VERSION || "");
+  function loadOne(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "./" + src + (v ? "?v=" + v : "");
+      s.onload = resolve;
+      s.onerror = () => reject(new Error("load " + src));
+      document.head.appendChild(s);
+    });
   }
-  load(0);
+  (async () => {
+    try {
+      for (const p of parts) await loadOne(p);
+      const js = decodeURIComponent(escape(atob(window.__AE_B64 || "")));
+      (0, eval)(js);
+    } catch (err) {
+      console.error("[animalearn]", err);
+    }
+  })();
 })();

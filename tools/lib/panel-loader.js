@@ -49,8 +49,23 @@
     return promise;
   }
 
+  function injectCss(id, href) {
+    if ([...document.querySelectorAll("link[data-panel-css]")].some((l) => l.getAttribute("href") === href || l.href === href)) {
+      return;
+    }
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = href;
+    link.dataset.panelCss = id;
+    document.head.appendChild(link);
+  }
+
   function ensurePanelCss(toolId) {
     const id = String(toolId || "").trim();
+    if (/earn$/.test(id)) {
+      const shared = withVersion("./styles/panels/kidsflash.css");
+      injectCss("kidsflash", shared);
+    }
     if (!id || cssLoaded.has(id)) return Promise.resolve();
     if (inflight.has(`css:${id}`)) return inflight.get(`css:${id}`);
 
@@ -106,14 +121,10 @@
     if (!id) return;
     try {
       window.DevToolsExtraBind?.bind?.(id);
-    } catch (_) {
-      /* extra.js 尚未加载 */
-    }
+    } catch (_) {}
     try {
       window.dispatchEvent(new CustomEvent("devtools:panel-mounted", { detail: { id } }));
-    } catch (_) {
-      /* ignore */
-    }
+    } catch (_) {}
   }
 
   async function ensure(toolId) {
