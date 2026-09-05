@@ -39,15 +39,11 @@
   }
 
   async function boot() {
+    if (mounted) return;
     if (!document.getElementById(TOOL_ID)) return;
     await ensureFlash();
+    if (mounted) return;
     patchAnimalsCatalogFetch();
-    if (mounted) {
-      try {
-        window.dispatchEvent(new CustomEvent("devtools:route"));
-      } catch (_) {}
-      return;
-    }
     mounted = true;
     window.DevToolsKidsFlash.mount({
       toolId: TOOL_ID,
@@ -60,7 +56,10 @@
   }
 
   const start = () => {
-    boot().catch((err) => console.error("[animalearn]", err));
+    boot().catch((err) => {
+      mounted = false;
+      console.error("[animalearn]", err);
+    });
   };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
