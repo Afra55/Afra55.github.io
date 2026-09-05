@@ -458,7 +458,8 @@
       $("#ae-look-media", root),
       $("#ae-look-emoji", root),
       $("#ae-look-img", root),
-      lookAnswer
+      lookAnswer,
+      { hideName: true }
     );
     const fb = $("#ae-look-feedback", root);
     if (fb) {
@@ -496,22 +497,24 @@
     if (!host) return;
     host.innerHTML = choices
       .map(
-        (a) => `<button type="button" class="animalearn-img-choice is-loading" data-id="${a.id}" aria-label="${a.nameZh} ${a.nameEn}">
+        (a) => `<button type="button" class="animalearn-img-choice is-loading" data-id="${a.id}" aria-label="选项">
         <span class="animalearn-emoji" hidden>${a.emoji || "🐾"}</span>
         <img alt="" hidden />
       </button>`
       )
       .join("");
-    // 先塞居中占位
+    // 先塞居中占位（不显示名字，避免泄题）
     choices.forEach((a) => {
       const btn = host.querySelector(`[data-id="${a.id}"]`);
-      setLoadingPlaceholder(btn, a, true);
+      setLoadingPlaceholder(btn, a, true, { hideName: true });
     });
     await Promise.all(
       choices.map(async (a) => {
         const btn = host.querySelector(`[data-id="${a.id}"]`);
         if (!btn) return;
-        await paintMedia(btn, btn.querySelector(".animalearn-emoji"), btn.querySelector("img"), a);
+        await paintMedia(btn, btn.querySelector(".animalearn-emoji"), btn.querySelector("img"), a, {
+          hideName: true,
+        });
         btn.classList.remove("is-loading");
       })
     );
