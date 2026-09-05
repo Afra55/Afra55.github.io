@@ -680,6 +680,9 @@
   window.addEventListener("devtools:route", () => {
     const head = location.hash.replace(/^#/, "").split(/[/?]/)[0];
     if (head === TOOL_ID) start();
-    else savePosition();
+    else {
+      if (isFs()) exitFullscreen();
+      savePosition();
+    }
   });
 })();
