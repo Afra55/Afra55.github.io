@@ -694,6 +694,13 @@
   gap: 0.35rem;
   max-height: min(62vh, 28rem);
   overflow: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.memo-tag-list::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
 }
 
 .memo-temp-zone {
