@@ -168,6 +168,22 @@
     return out;
   }
 
+  // 自动从文本 #标签 建标签：默认关闭，避免误把 #色值/#标题 等变成标签
+  const AUTO_TAG_KEY = "devtools-memo-auto-tags-v1";
+  function memoAutoTagsEnabled() {
+    try {
+      return localStorage.getItem(AUTO_TAG_KEY) === "1";
+    } catch (_) {
+      return false;
+    }
+  }
+  function setMemoAutoTags(on) {
+    try {
+      localStorage.setItem(AUTO_TAG_KEY, on ? "1" : "0");
+    } catch (_) {}
+    return memoAutoTagsEnabled();
+  }
+
   function firstHttpUrl(text) {
     const m = String(text || "").match(/https?:\/\/[^\s<>"'）】」』]+/i);
     if (!m) return "";
@@ -2920,6 +2936,8 @@
 
   async function attachHashTagsFromText(item, text) {
     if (!item) return false;
+    // 默认不自动建标签；仅用户开启后才从 #标签 提取
+    if (!memoAutoTagsEnabled()) return false;
     const names = extractHashTags(text);
     if (!names.length) return false;
     let changed = false;
@@ -6163,6 +6181,21 @@
     toast("已取消全部选中");
   });
   $("#memo-clear-temp")?.addEventListener("click", () => clearTempItems());
+  (function bindAutoTagToggle() {
+    const btn = $("#memo-auto-tag-toggle");
+    if (!btn) return;
+    const sync = () => {
+      const on = memoAutoTagsEnabled();
+      btn.textContent = `自动标签：${on ? "开" : "关"}`;
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    };
+    btn.addEventListener("click", () => {
+      const on = setMemoAutoTags(!memoAutoTagsEnabled());
+      sync();
+      toast(on ? "已开启：从文本 #标签 自动建标签" : "已关闭自动建标签");
+    });
+    sync();
+  })();
   $("#memo-scroll-top")?.addEventListener("click", () => memoScrollToY(0, { behavior: "smooth" }));
   (function bindScrollTopFab() {
     const fab = $("#memo-scroll-top-fab");
