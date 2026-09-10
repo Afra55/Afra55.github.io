@@ -174,6 +174,31 @@
     return m[0].replace(/[),.;!?，。；！？]+$/g, "");
   }
 
+  // 识别文本中的所有链接（原来只识别第一个）
+  function allHttpUrls(text) {
+    const out = [];
+    const re = /https?:\/\/[^\s<>"'）】」』]+/gi;
+    let m;
+    while ((m = re.exec(String(text || "")))) {
+      const url = m[0].replace(/[),.;!?，。；！？]+$/g, "");
+      if (url && !out.includes(url)) out.push(url);
+    }
+    return out;
+  }
+
+  // 识别内嵌 data:image base64（可能被引号/括号/【】包裹），返回可渲染的图片
+  function extractDataImages(text) {
+    const out = [];
+    const re = /data:image\/(png|jpe?g|gif|webp|bmp|svg\+xml);base64,([A-Za-z0-9+/=\s]+)/gi;
+    let m;
+    while ((m = re.exec(String(text || "")))) {
+      const b64 = m[2].replace(/\s+/g, "");
+      if (b64.length < 24) continue;
+      out.push({ mime: `image/${m[1].toLowerCase()}`, b64 });
+    }
+    return out;
+  }
+
   function highlightEscaped(escaped, query) {
     const q = String(query || "").trim();
     if (!q || !escaped) return escaped;
@@ -975,6 +1000,7 @@
   const previewEditBtn = $("#memo-preview-edit");
   const previewNoteBtn = $("#memo-preview-note");
   const previewCopyBtn = $("#memo-preview-copy");
+  const previewB64Btn = $("#memo-preview-b64");
   const previewPathBtn = $("#memo-preview-path");
   const previewLocBtn = $("#memo-preview-loc");
   const previewDelBtn = $("#memo-preview-del");
@@ -2246,10 +2272,13 @@
     if (item.type === "text") {
       const full = item.textPreview || "";
       const formatted = formatCardTextBody(full);
-      const link = linkCardHtml(firstHttpUrl(full));
+      const links = allHttpUrls(full).map((u) => linkCardHtml(u)).join("");
+      const inlineImgs = extractDataImages(full)
+        .map((d) => `<img class="memo-inline-img" alt="内嵌图片" src="data:${d.mime};base64,${d.b64}" loading="lazy" decoding="async" />`)
+        .join("");
       const textTag = formatted.md ? "div" : "pre";
       const textCls = `memo-text mono${formatted.truncated ? " is-truncated" : ""}${formatted.md ? " is-md" : ""}`;
-      body = `<${textTag} class="${textCls}" data-memo-expand="${item.id}" draggable="false" title="${escapeHtml(formatted.title)}">${formatted.html}</${textTag}>${link}`;
+      body = `<${textTag} class="${textCls}" data-memo-expand="${item.id}" draggable="false" title="${escapeHtml(formatted.title)}">${formatted.html}</${textTag}>${inlineImgs}${links}`;
     } else if (item.type === "image" || item.type === "gif") {
       const badge = item.type === "gif" ? `<span class="memo-anim-badge">动图</span>` : "";
       body = `<div class="memo-thumb-wrap memo-media-hit" data-memo-preview="${item.id}">${badge}<img class="memo-thumb" data-memo-thumb="${item.id}" alt="" loading="lazy" decoding="async" /></div>`;
@@ -5127,6 +5156,7 @@
     if (previewShareBtn) previewShareBtn.hidden = !item || !canOfferItemShare(item);
     if (previewEditBtn) previewEditBtn.hidden = !canEdit;
     if (previewCopyBtn) previewCopyBtn.hidden = !item || !canClipboardCopy(item);
+    if (previewB64Btn) previewB64Btn.hidden = !item || !(item.type === "image" || item.type === "gif");
     if (previewPathBtn) {
       previewPathBtn.hidden = !(item && state.mode === "dir" && !state.dirPending);
     }
@@ -6545,6 +6575,26 @@
   previewDlBtn?.addEventListener("click", () => {
     if (!previewItem || !previewBlob) return;
     downloadBlob(previewBlob, previewItem.name || previewItem.fileName || previewItem.id);
+  });
+  previewB64Btn?.addEventListener("click", () => {
+    const blob = previewBlob;
+    if (!blob) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = String(reader.result || "");
+      const done = () => toast(`已复制 Base64（${Math.round(dataUrl.length / 1024)}KB）`);
+      if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(dataUrl).then(done).catch(() => setError(memoError, "复制失败"));
+      } else {
+        const ta = document.createElement("textarea");
+        ta.value = dataUrl;
+        document.body.appendChild(ta);
+        ta.select();
+        try { document.execCommand("copy"); done(); } catch (_) { setError(memoError, "复制失败"); }
+        ta.remove();
+      }
+    };
+    reader.readAsDataURL(blob);
   });
   previewShareBtn?.addEventListener("click", () => {
     const item = previewItem;

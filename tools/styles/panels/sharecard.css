@@ -16,3 +16,14 @@
   flex: 1;
   min-width: 0;
 }
+
+/* 桌面：编辑框左、预览右；手机：上下 */
+#sharecard .convert-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+}
+@media (max-width: 820px) {
+  #sharecard .convert-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

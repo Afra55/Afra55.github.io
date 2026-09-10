@@ -1635,8 +1635,13 @@ a.secondary-btn {
 .share-dots {
   display: inline-flex;
   align-items: center;
+  gap: 6px;
   margin-right: 0.55rem;
   flex: 0 0 auto;
+}
+
+.share-dots[hidden] {
+  display: none !important;
 }
 
 .share-dot {
