@@ -175,6 +175,10 @@
       }
       return { url: item.local, credit: item.credit || "本站内置图", fromCache: false, local: true };
     }
+    // 明确不外链：直接返回空，交由闪卡显示 emoji 兜底（避免拉到错图）
+    if (item.noRemote) {
+      return { url: "", credit: "", fromCache: false };
+    }
     const ns = opts.namespace || "kids";
     const cacheKey = `${ns}:${item.id}`;
     const thumbKey = `${cacheKey}:thumb`;
