@@ -89,7 +89,8 @@
       "label": "黑盒",
       "tools": [
         "vbb",
-        "gifbb"
+        "gifbb",
+        "giftest"
       ]
     },
     {
@@ -1122,6 +1123,15 @@
         "弹簧",
         "spring"
       ]
+    },
+    "giftest": {
+      "name": "测试 GIF",
+      "aliases": [
+        "测试gif",
+        "黑盒测试",
+        "giftest",
+        "体积测试"
+      ]
     }
   },
   "about": {
@@ -1216,7 +1226,8 @@
     "foodearn": "幼儿认食物：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",
     "sportsearn": "幼儿认运动：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",
     "homeearn": "幼儿认家具：中英闪卡，点读先中文再英文；含看图选名、听名选图。配图 Wikimedia / Openverse（CC）。",
-    "interpolator": "Android 动画插值器调参：曲线实时显示超调、A/B 对比、生成/反解 Java/Kotlin 代码、JSON 导出导入与预设收藏。"
+    "interpolator": "Android 动画插值器调参：曲线实时显示超调、A/B 对比、生成/反解 Java/Kotlin 代码、JSON 导出导入与预设收藏。",
+    "giftest": "生成纯颜色变化的 GIF，体积可调，用于测试黑盒能容纳的最大文件体积；生成后显示实际大小。"
   }
 };
 })();

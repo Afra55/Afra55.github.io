@@ -15,7 +15,8 @@
     encodeAnimatedWebpFromStillFrames, isAutoPackZipEnabled, setAutoPackZipEnabled, syncAutoPackZipToggles,
     bindAutoPackZipToggles, canEncodeStillWebp, gifQualityToWebpQuality, gifQualityToMaxColors,
     terminateFfmpegInstance, paintFfmpegWarmHint, prewarmFfmpegEngine, scheduleFfmpegPrewarm,
-    TOOLS_VERSION, GIF_TOOL_VERSION, compressExistingGifToBlackbox,
+    TOOLS_VERSION, GIF_TOOL_VERSION, compressExistingGifToBlackbox, blackboxUseMaxBytes,
+    blackboxMaxMb, setBlackboxMaxMb,
     AUTO_PACK_ZIP_KEY,
   } = M;
   const FFMPEG_SEG_FILE_BYTES = M.FFMPEG_SEG_FILE_BYTES ?? 48 * 1024 * 1024;
@@ -56,9 +57,14 @@
       let v2gCompressLevel;
       const MAX_V2G_FRAMES = 300;
       const MAX_V2G_SECONDS = 600;
-      const V2G_BLACKBOX_MAX_BYTES = 6 * 1024 * 1024;
-      /** 体积有余（<5MB）时尝试加宽，把预算用在清晰度上 */
-      const V2G_BLACKBOX_WIDEN_BYTES = 5 * 1024 * 1024;
+      // 黑盒体积上限：可配置并持久化（默认 6MB），全局通用
+      let V2G_BLACKBOX_MAX_BYTES = (M.blackboxUseMaxBytes ? M.blackboxUseMaxBytes() : 6 * 1024 * 1024);
+      /** 体积有余（约上限 5/6）时尝试加宽，把预算用在清晰度上 */
+      let V2G_BLACKBOX_WIDEN_BYTES = Math.round(V2G_BLACKBOX_MAX_BYTES * (5 / 6));
+      window.addEventListener("devtools:blackbox-size", () => {
+        V2G_BLACKBOX_MAX_BYTES = M.blackboxUseMaxBytes ? M.blackboxUseMaxBytes() : V2G_BLACKBOX_MAX_BYTES;
+        V2G_BLACKBOX_WIDEN_BYTES = Math.round(V2G_BLACKBOX_MAX_BYTES * (5 / 6));
+      });
       /** 黑盒：起点宽 420 + quality 5；优先保住 12FPS；够小时再加宽 */
       const V2G_BLACKBOX_FPS_LIST = [15, 12, 10];
       const V2G_BLACKBOX_BASE_W = 420;
@@ -6820,6 +6826,15 @@
         vbbFile = $("#vbb-file", root);
         vbbVideo = $("#vbb-video", root);
         vbbMeta = $("#vbb-meta", root);
+        const vbbMaxMb = $("#vbb-max-mb", root);
+        if (vbbMaxMb) {
+          try { vbbMaxMb.value = String(blackboxMaxMb()); } catch (_) {}
+          vbbMaxMb.addEventListener("change", () => {
+            const v = setBlackboxMaxMb(vbbMaxMb.value);
+            vbbMaxMb.value = String(v);
+            toast(`黑盒上限已设为 ${v} MB`);
+          });
+        }
         vbbError = $("#vbb-error", root);
         vbbAnalyze = $("#vbb-analyze", root);
         vbbRun = $("#vbb-run", root);

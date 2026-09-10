@@ -16,6 +16,7 @@
     bindAutoPackZipToggles, canEncodeStillWebp, gifQualityToWebpQuality, gifQualityToMaxColors,
     terminateFfmpegInstance, paintFfmpegWarmHint, prewarmFfmpegEngine, TOOLS_VERSION, GIF_TOOL_VERSION,
     AUTO_PACK_ZIP_KEY, blackboxUseMaxBytes, compressExistingGifToBlackbox,
+    blackboxMaxMb, setBlackboxMaxMb,
   } = M;
   const formatLocalPickMeta = K.formatLocalPickMeta;
   const attachLocalVideoPreview = K.attachLocalVideoPreview;
@@ -484,9 +485,20 @@
           } catch (_) {}
           if (gifbbMeta) {
             gifbbMeta.textContent = allowScaleEl.checked
-              ? "已开启：必要时缩小尺寸/画质以保证压进 6MB"
-              : "已关闭：保持原始尺寸，仅降色/压缩，可能无法压进 6MB";
+              ? "已开启：必要时缩小尺寸/画质以保证压进上限"
+              : "已关闭：保持原始尺寸，仅降色/压缩，可能无法压进上限";
           }
+        });
+      }
+      const maxMbEl = $("#gifbb-max-mb");
+      if (maxMbEl) {
+        try {
+          maxMbEl.value = String(blackboxMaxMb());
+        } catch (_) {}
+        maxMbEl.addEventListener("change", () => {
+          const v = setBlackboxMaxMb(maxMbEl.value);
+          maxMbEl.value = String(v);
+          toast(`黑盒上限已设为 ${v} MB`);
         });
       }
       gifbbClear?.addEventListener("click", clearGifbb);

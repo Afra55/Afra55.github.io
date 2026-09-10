@@ -153,6 +153,11 @@
       "bytes": 2565
     },
     {
+      "id": "giftest",
+      "file": "./panels/giftest.html",
+      "bytes": 1574
+    },
+    {
       "id": "gitbridge",
       "file": "./panels/gitbridge.html",
       "bytes": 7764

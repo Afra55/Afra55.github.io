@@ -137,13 +137,14 @@
     vsplit: "./extra-panels/v2g-suite.js",
     vbb: "./extra-panels/v2g-suite.js",
     interpolator: "./extra-panels/interpolator.js",
+    giftest: "./extra-panels/giftest.js",
   };
 
   const EXTRA_PANEL_IDS = new Set([
     "timediff", "color", "url", "query", "uuid", "hash", "text", "caseconv", "coord",
     "yaml", "imgb64", "qrcode", "cron", "units", "sharecard", "numbase", "markdown",
     "eyedropper", "password", "gifmaker", "gifx", "v2g", "gifbb", "gifc", "gife", "gifm",
-    "adb", "vsplit", "vbb", "interpolator",
+    "adb", "vsplit", "vbb", "interpolator", "giftest",
   ]);
 
   const EXTRA_MEDIA_TOOLS = new Set([
@@ -166,6 +167,7 @@
     vsplit: ["gif", "omggif"],
     vbb: ["gif", "omggif"],
     gifbb: ["gif", "omggif"],
+    giftest: ["omggif"],
     dateremind: ["solarlunar"],
     ipgeo: ["leaflet"],
   };

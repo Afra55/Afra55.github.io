@@ -1,0 +1,29 @@
+<section id="giftest" class="panel tool-panel" data-reveal>
+  <div class="panel-head">
+    <h1>测试 GIF</h1>
+    <p>生成纯颜色变化的 GIF，体积可调，用于测试黑盒能容纳的最大文件体积；生成后显示实际大小。</p>
+  </div>
+  <div class="panel-body">
+    <div class="field-row" style="flex-wrap:wrap;align-items:center">
+      <label for="gt-mb">目标大小</label>
+      <input id="gt-mb" class="mono meta-input" type="number" min="0.2" max="60" step="0.5" value="6" />
+      <span class="hint tight">MB</span>
+      <label for="gt-w">宽</label>
+      <input id="gt-w" class="mono meta-input" type="number" min="16" max="1280" step="2" value="320" />
+      <label for="gt-h">高</label>
+      <input id="gt-h" class="mono meta-input" type="number" min="16" max="1280" step="2" value="240" />
+      <button type="button" class="primary-btn" id="gt-run">生成</button>
+      <button type="button" class="ghost-btn" id="gt-dl" disabled>下载</button>
+    </div>
+    <p class="hint" id="gt-meta">未生成</p>
+    <div class="gif-progress" id="gt-progress" hidden>
+      <div class="gif-progress-head">
+        <p class="hint gif-progress-title" id="gt-progress-text">准备中…</p>
+        <span class="mono gif-progress-pct" id="gt-progress-pct">0%</span>
+      </div>
+      <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="gt-progress-fill"></span></div>
+    </div>
+    <div id="gt-preview" class="gif-frame-list" hidden></div>
+    <p class="error" id="gt-error" hidden></p>
+  </div>
+</section>

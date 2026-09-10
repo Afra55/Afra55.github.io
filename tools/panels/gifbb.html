@@ -18,6 +18,11 @@
             允许缩小尺寸/画质以保证压进 6MB（关闭则保持原始尺寸）
           </label>
         </div>
+        <div class="field-row" style="flex-wrap:wrap;margin-top:0.4rem;align-items:center">
+          <label for="gifbb-max-mb">黑盒上限</label>
+          <input id="gifbb-max-mb" class="mono meta-input" type="number" min="1" max="200" step="1" value="6" />
+          <span class="hint tight">MB（全站黑盒通用，自动保存）</span>
+        </div>
         <p class="hint" id="gifbb-meta">未选择 GIF</p>
         <div class="gif-progress" id="gifbb-progress" hidden>
           <div class="gif-progress-head">

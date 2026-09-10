@@ -1,0 +1,7 @@
+@import url("./gif-shared.css");
+
+#giftest .gif-frame-list img {
+  max-width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}

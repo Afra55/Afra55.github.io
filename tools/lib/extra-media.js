@@ -1009,8 +1009,26 @@
   }
 
 
+  const BLACKBOX_MAX_MB_KEY = "devtools-blackbox-max-mb-v1";
+  function blackboxMaxMb() {
+    try {
+      const v = Number(localStorage.getItem(BLACKBOX_MAX_MB_KEY));
+      if (v > 0 && v <= 200) return v;
+    } catch (_) {}
+    return 6;
+  }
   function blackboxUseMaxBytes() {
-    return 6 * 1024 * 1024;
+    return Math.round(blackboxMaxMb() * 1024 * 1024);
+  }
+  function setBlackboxMaxMb(mb) {
+    const v = Math.max(1, Math.min(200, Number(mb) || 6));
+    try {
+      localStorage.setItem(BLACKBOX_MAX_MB_KEY, String(v));
+    } catch (_) {}
+    try {
+      window.dispatchEvent(new CustomEvent("devtools:blackbox-size", { detail: { mb: v } }));
+    } catch (_) {}
+    return v;
   }
   function blackboxMaxRounds() {
     return 10;
@@ -1080,7 +1098,7 @@
     buildBlackboxHardCompressArgs, gifCompressSummary, readGifWatermarkOptions,
     drawGifTextWatermark, compressGifBlob, mergeGifBlobs, TOOLS_VERSION, GIF_TOOL_VERSION,
     AUTO_PACK_ZIP_KEY, FFMPEG_SEG_FILE_BYTES, blackboxUseMaxBytes, blackboxMaxRounds,
-    compressExistingGifToBlackbox,
+    blackboxMaxMb, setBlackboxMaxMb, compressExistingGifToBlackbox,
     formatLocalPickMeta: K.formatLocalPickMeta,
     attachLocalVideoPreview: K.attachLocalVideoPreview,
     waitVideoMetadata: K.waitVideoMetadata,
