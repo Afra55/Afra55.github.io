@@ -2509,13 +2509,14 @@
       } else if (mode === "rebase") {
         await runPull("pull-rebase");
       } else {
+        // 自动：优先 rebase 更新（保持线性历史），冲突/分叉再回退合并
         try {
-          await runPull("pull");
+          await runPull("pull-rebase");
         } catch (e) {
           const msg = String(e.message || "") + " " + String(e.data?.stderr || "");
-          if (/fast-forward|divergent|reconcile|non-fast-forward/i.test(msg)) {
+          if (/conflict|rebase|fast-forward|divergent|reconcile|non-fast-forward/i.test(msg)) {
             opOut.hidden = false;
-            opOut.textContent = "快进失败，改为合并更新…\n" + msg;
+            opOut.textContent = "rebase 更新失败，改为合并更新…\n" + msg;
             await runPull("pull-merge");
           } else {
             throw e;
