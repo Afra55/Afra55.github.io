@@ -35,6 +35,7 @@
       let gifbbBusy = false;
       let abortGifbb = false;
       let gifbbZipUrl = "";
+      let gifbbPreviewIdx = -1;
       /** @type {string[]} */
       let gifbbPreviewUrls = [];
   
@@ -56,9 +57,43 @@
         }
       }
 
+      // 原图信息：尺寸(头部解析) + 时长/帧数(ImageDecoder 尽力而为)
+      async function readGifInfo(file) {
+        const dim = await readGifDim(file);
+        const info = { w: dim?.w || 0, h: dim?.h || 0, ms: 0, frames: 0 };
+        try {
+          if (typeof ImageDecoder === "function") {
+            const dec = new ImageDecoder({ data: await file.arrayBuffer(), type: "image/gif" });
+            await dec.completed;
+            const n = dec.tracks?.selectedTrack?.frameCount || 0;
+            let ms = 0;
+            for (let i = 0; i < n; i++) {
+              const { image } = await dec.decode({ frameIndex: i });
+              ms += Number(image.duration) || 0;
+            }
+            info.frames = n;
+            info.ms = ms;
+            dec.close?.();
+          }
+        } catch (_) {}
+        return info;
+      }
+
+      function fmtDur(ms) {
+        const s = Math.max(0, Number(ms) || 0) / 1000;
+        if (!s) return "";
+        if (s < 10) return `${s.toFixed(1)}s`;
+        const m = Math.floor(s / 60);
+        const r = Math.round(s % 60);
+        return m > 0 ? `${m}:${String(r).padStart(2, "0")}` : `${Math.round(s)}s`;
+      }
+
       function gifbbMetaText(item) {
         const bits = [];
-        if (item.dim) bits.push(`${item.dim.w}×${item.dim.h}`);
+        const info = item.info;
+        if (info && (info.w || info.h)) bits.push(`${info.w}×${info.h}`);
+        const dur = fmtDur(info?.ms);
+        if (dur) bits.push(dur);
         bits.push(formatKb(item.file.size));
         if (item.note) bits.push(item.note);
         if (item.error) bits.push(item.error);
@@ -87,7 +122,8 @@
       function syncGifbbProgressDom(box, job) {
         if (!box) return;
         const status = job?.jobStatus || "";
-        const show = status === "pending" || status === "running" || status === "done" || status === "error";
+        // 与黑盒 GIF 一致：成功后隐藏进度条，只保留文案信息
+        const show = status === "pending" || status === "running" || status === "error";
         box.hidden = !show;
         if (!show) return;
         box.dataset.status = status;
@@ -129,12 +165,12 @@
   
       function renderGifbbList() {
         if (!gifbbList) return;
-        gifbbPreviewUrls.forEach((u) => {
-          try {
-            URL.revokeObjectURL(u);
-          } catch (_) {}
+        gifbbItems.forEach((it) => {
+          if (it.gifUrl) {
+            try { URL.revokeObjectURL(it.gifUrl); } catch (_) {}
+            it.gifUrl = "";
+          }
         });
-        gifbbPreviewUrls = [];
         gifbbList.innerHTML = "";
         if (!gifbbItems.length) {
           gifbbList.hidden = true;
@@ -145,7 +181,7 @@
         gifbbList.hidden = false;
         const total = gifbbItems.reduce((s, it) => s + (it.file.size || 0), 0);
         if (gifbbMeta) {
-          gifbbMeta.textContent = `已选 ${gifbbItems.length} 个 · 共 ${formatKb(total)} · 点「压黑盒」批量处理（≤6MB 的会跳过）`;
+          gifbbMeta.textContent = `已选 ${gifbbItems.length} 个 · 共 ${formatKb(total)} · 自动开始压黑盒（≤6MB 的会跳过）`;
         }
         gifbbItems.forEach((item, idx) => {
           const row = document.createElement("div");
@@ -153,60 +189,68 @@
           row.dataset.gifbbIdx = String(idx);
           const top = document.createElement("div");
           top.className = "vsplit-clip-top";
+          const head = document.createElement("div");
+          head.className = "vbb-clip-head";
           const title = document.createElement("strong");
+          title.className = "vbb-clip-title";
           title.textContent = item.file.name;
-          const meta = document.createElement("span");
-          meta.className = "hint tight";
-          meta.textContent = gifbbMetaText(item);
+          head.appendChild(title);
+          const metaText = gifbbMetaText(item);
+          if (metaText) {
+            const meta = document.createElement("span");
+            meta.className = "hint tight vbb-clip-meta";
+            meta.textContent = metaText;
+            head.appendChild(meta);
+          }
           const actions = document.createElement("div");
           actions.className = "btn-row";
           if (item.outBlob) {
             const dlBtn = document.createElement("button");
             dlBtn.type = "button";
             dlBtn.className = "secondary-btn";
-            dlBtn.textContent = "下载";
+            dlBtn.textContent = "下载 GIF";
             dlBtn.addEventListener("click", () => {
               triggerLocalDownload(item.outBlob, gifbbOutName(item));
             });
             actions.appendChild(dlBtn);
+            const previewBtn = document.createElement("button");
+            previewBtn.type = "button";
+            previewBtn.className = "ghost-btn vbb-preview-btn";
+            previewBtn.textContent = gifbbPreviewIdx === idx ? "收起预览" : "预览";
+            previewBtn.addEventListener("click", () => toggleGifbbPreview(idx));
+            actions.appendChild(previewBtn);
           }
-          top.append(title, meta, actions);
+          top.append(head, actions);
           row.appendChild(top);
-          if (item.status === "working") {
-            const progressBox = buildGifbbProgressDom();
-            row.appendChild(progressBox);
-            syncGifbbProgressDom(progressBox, {
-              jobStatus: "working",
-              jobProgress: item.jobProgress || 0,
-              jobText: item.jobText || "处理中…",
-            });
-          }
-          // 与黑盒 GIF(vbb) 结果卡片一致：成功后默认展示缩略图
-          if (item.outBlob) {
-            const url = URL.createObjectURL(item.outBlob);
-            gifbbPreviewUrls.push(url);
+          const progressBox = buildGifbbProgressDom();
+          row.appendChild(progressBox);
+          syncGifbbProgressDom(progressBox, {
+            jobStatus: item.jobStatus || "",
+            jobProgress: item.jobProgress || 0,
+            jobText: item.jobText || "",
+          });
+          if (item.outBlob && gifbbPreviewIdx === idx) {
+            const wrap = document.createElement("div");
+            wrap.className = "vbb-clip-preview-wrap";
+            if (!item.gifUrl) item.gifUrl = URL.createObjectURL(item.outBlob);
             const img = document.createElement("img");
             img.className = "vsplit-clip-gif";
             img.alt = item.file.name;
             img.loading = "lazy";
             img.decoding = "async";
-            img.src = url;
-            row.appendChild(img);
+            img.src = item.gifUrl;
+            wrap.appendChild(img);
+            row.appendChild(wrap);
           }
           gifbbList.appendChild(row);
-          if (item.outBlob && !item.dim) {
-            readGifDim(item.outBlob)
-              .then((d) => {
-                if (d) {
-                  item.dim = d;
-                  const m = row.querySelector(".hint.tight");
-                  if (m) m.textContent = gifbbMetaText(item);
-                }
-              })
-              .catch(() => {});
-          }
         });
         setGifbbButtons();
+      }
+
+      function toggleGifbbPreview(idx) {
+        const next = gifbbPreviewIdx === idx ? -1 : idx;
+        gifbbPreviewIdx = next;
+        renderGifbbList();
       }
   
       function clearGifbb() {
@@ -237,14 +281,31 @@
           return;
         }
         setError(gifbbError, "");
+        gifbbPreviewIdx = -1;
         gifbbItems = files.map((file) => ({
           file,
           status: "pending",
+          jobStatus: "",
+          jobProgress: 0,
+          jobText: "",
           note: "",
-          previewIdx: false,
+          info: null,
         }));
         renderGifbbList();
-        toast(`已添加 ${files.length} 个 GIF`);
+        toast(`已添加 ${files.length} 个 GIF，自动开始压黑盒`);
+        // 先补原图尺寸/时长/大小信息，再自动压缩
+        Promise.all(
+          gifbbItems.map((item) =>
+            readGifInfo(item.file)
+              .then((info) => {
+                item.info = info;
+              })
+              .catch(() => {})
+          )
+        ).then(() => {
+          renderGifbbList();
+          runGifbbCompress().catch((err) => setError(gifbbError, err.message || String(err)));
+        });
       }
   
       // 顶部总进度条（与黑盒 GIF(vbb) 同款 gif-progress 样式）
@@ -297,6 +358,7 @@
             if (abortGifbb) throw new Error("已取消");
             const item = gifbbItems[i];
             item.status = "working";
+            item.jobStatus = "running";
             item.jobProgress = 0;
             item.jobText = "准备…";
             item.note = "";
@@ -308,6 +370,7 @@
               if (before <= blackboxUseMaxBytes()) {
                 item.outBlob = item.file;
                 item.status = "skip";
+                item.jobStatus = "done";
                 item.note = `已符合黑盒 · ${formatKb(before)} · 未压缩`;
                 skip++;
               } else {
@@ -321,6 +384,7 @@
                 }, () => abortGifbb);
                 item.outBlob = result.blob;
                 item.status = result.ok ? "done" : "warn";
+                item.jobStatus = "done";
                 const after = result.blob.size;
                 const saved =
                   before > 0 ? Math.max(0, Math.round((1 - after / before) * 100)) : 0;
@@ -343,10 +407,11 @@
               }
             } catch (err) {
               item.status = "error";
+              item.jobStatus = "error";
               item.error = err.message || String(err);
               fail++;
             }
-            item.status = item.status === "working" ? "done" : item.status;
+            if (item.jobStatus === "running") item.jobStatus = "done";
             setGifbbProgress(true, (i + 1) / total, `压缩 ${Math.min(i + 1, total)}/${total}`, { busy: i + 1 < total });
             renderGifbbList();
           }

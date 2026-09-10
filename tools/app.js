@@ -552,6 +552,19 @@
   const jsonError = $("#json-error");
   const jsonMeta = $("#json-meta");
   const JSON_AREA_MIN_PX = 192;
+  const JSON_DRAFT_KEY = "devtools-json-draft-v1";
+  // 记忆上次输入，下次进来直接显示
+  try {
+    if (!jsonInput.value) {
+      const saved = localStorage.getItem(JSON_DRAFT_KEY);
+      if (saved) jsonInput.value = saved;
+    }
+  } catch (_) {}
+  jsonInput.addEventListener("input", () => {
+    try {
+      localStorage.setItem(JSON_DRAFT_KEY, jsonInput.value);
+    } catch (_) {}
+  });
 
   function parseJsonInput() {
     const raw = jsonInput.value.trim();
