@@ -2365,3 +2365,21 @@
   border-radius: 10px;
   border: 1px solid var(--line);
 }
+
+.memo-scroll-top-fab {
+  position: fixed;
+  right: 1.1rem;
+  bottom: 5.5rem;
+  z-index: 40;
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+  background: var(--panel-strong, rgba(12, 18, 30, 0.92));
+  color: var(--ink);
+  font-size: 1.1rem;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.35);
+}
+.memo-scroll-top-fab[hidden] { display: none !important; }
+.memo-scroll-top-fab:hover { background: color-mix(in srgb, var(--accent) 20%, var(--panel-strong, #101828)); }

@@ -6164,6 +6164,21 @@
   });
   $("#memo-clear-temp")?.addEventListener("click", () => clearTempItems());
   $("#memo-scroll-top")?.addEventListener("click", () => memoScrollToY(0, { behavior: "smooth" }));
+  (function bindScrollTopFab() {
+    const fab = $("#memo-scroll-top-fab");
+    if (!fab) return;
+    const root = memoScrollRoot();
+    const getTop = () => (root ? root.scrollTop : window.scrollY || 0);
+    const sync = () => {
+      fab.hidden = getTop() < 320;
+    };
+    (root || window).addEventListener("scroll", sync, { passive: true });
+    fab.addEventListener("click", () => {
+      memoScrollToY(0, { behavior: "smooth" });
+      window.setTimeout(sync, 400);
+    });
+    sync();
+  })();
   $("#memo-temp-filter")?.addEventListener("click", () => toggleTempFilter());
   $("#memo-archive-filter")?.addEventListener("click", () => toggleArchiveFilter());
   $("#memo-toggle-day")?.addEventListener("click", () => {
