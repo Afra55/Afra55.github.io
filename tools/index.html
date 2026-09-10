@@ -11,12 +11,12 @@
   <link rel="manifest" href="./manifest.webmanifest" />
   <title>DevTools · 本地实用小工具合集</title>
   <script>try{if(navigator.standalone||matchMedia('(display-mode: standalone)').matches)document.documentElement.classList.add('is-pwa-standalone')}catch(e){}</script>
-  <script src="./lib/tools-build.js?v=2026.09.10-220619"></script>
-  <link rel="stylesheet" href="./style.css?v=2026.09.10-220619" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.09.10-220619" />
-  <link rel="stylesheet" href="./styles/bridge-shell.css?v=2026.09.10-220619" />
-  <script src="./lib/theme-presets.js?v=2026.09.10-220619"></script>
-  <script src="./lib/boot-loader.js?v=2026.09.10-220619"></script>
+  <script src="./lib/tools-build.js?v=2026.09.10-221327"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.09.10-221327" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.09.10-221327" />
+  <link rel="stylesheet" href="./styles/bridge-shell.css?v=2026.09.10-221327" />
+  <script src="./lib/theme-presets.js?v=2026.09.10-221327"></script>
+  <script src="./lib/boot-loader.js?v=2026.09.10-221327"></script>
   <script>
   (function(){try{var raw=String(location.hash||'').replace(/^#/,'').trim();var head=raw.split(/[/?]/)[0]||'';var last=localStorage.getItem('devtools-tool-last-v1');var id='timestamp';if(head&&head!=='timestamp')id=head;else if(last&&last!=='timestamp')id=last;document.documentElement.dataset.bootPanel=id;}catch(e){document.documentElement.dataset.bootPanel='timestamp'}})();
   </script>
@@ -26,7 +26,7 @@
     <div class="header-row">
       <div class="header-brand-block">
         <a class="brand" href="./"><span class="brand-mark"></span><span class="brand-name">DevTools</span></a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version">v2026.09.10-220619</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version">v2026.09.10-221327</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn header-action-collapse" id="site-force-refresh">强制刷新</button>
@@ -116,11 +116,11 @@
           </div>
         </div>
       </div>
+      <section class="devtools-giscus-wrap" hidden aria-label="评论区">
+        <div id="devtools-giscus"></div>
+      </section>
     </main>
   </div>
-  <section class="devtools-giscus-wrap" hidden aria-label="评论区">
-    <div id="devtools-giscus"></div>
-  </section>
   <div id="toast" hidden></div>
   <button type="button" id="pwa-install" hidden></button>
   <dialog class="memo-dialog theme-dlg" id="theme-dlg" aria-label="主题设置">
@@ -154,16 +154,147 @@
       </div>
     </div>
   </dialog>
-  <script src="./lib/bridge-token.js?v=2026.09.10-220619"></script>
-  <script src="./lib/unified-bridge-bundle.js?v=2026.09.10-220619"></script>
-  <script src="./lib/bridge-shell.js?v=2026.09.10-220619"></script>
-  <script src="./lib/giscus-config.js?v=2026.09.10-220619"></script>
-  <script src="./lib/giscus.js?v=2026.09.10-220619"></script>
-  <script src="./lib/tool-registry.js?v=2026.09.10-220619"></script>
-  <script src="./lib/nav-scale.js?v=2026.09.10-220619"></script>
-  <script src="./lib/lazy-scripts.js?v=2026.09.10-220619"></script>
-  <script src="./lib/panel-loader.js?v=2026.09.10-220619"></script>
-  <script src="./theme.js?v=2026.09.10-220619"></script>
-  <script src="./app.js?v=2026.09.10-220619"></script>
+  <dialog class="memo-dialog adb-getprop-dlg" id="adb-getprop-dlg" aria-label="系统属性 getprop">
+    <div class="memo-dialog-body adb-getprop-dlg-body">
+      <div class="label-row">
+        <h2 class="subhead">系统属性</h2>
+        <span class="hint tight" id="adb-getprop-meta">打开后加载</span>
+      </div>
+      <div class="field-row adb-getprop-toolbar">
+        <input id="adb-getprop-search" class="mono" type="search" placeholder="搜索 key 或 value…" autocomplete="off" spellcheck="false" />
+        <button type="button" class="ghost-btn" id="adb-getprop-reload">刷新</button>
+      </div>
+      <div class="channel-meta adb-info adb-getprop-list" id="adb-getprop-list" hidden></div>
+      <p class="hint tight" id="adb-getprop-empty" hidden>无匹配项</p>
+      <div class="btn-row tool-actions adb-getprop-dlg-actions">
+        <button type="button" class="primary-btn" id="adb-getprop-close">关闭</button>
+      </div>
+    </div>
+  </dialog>
+  <dialog class="nav-recent-dlg" id="nav-recent-dlg" aria-labelledby="nav-recent-dlg-title">
+    <div class="nav-recent-dlg-head">
+      <h2 id="nav-recent-dlg-title">最近使用</h2>
+      <button type="button" class="ghost-btn nav-recent-dlg-close" id="nav-recent-dlg-close" aria-label="关闭">×</button>
+    </div>
+    <div class="nav-recent-dlg-body" id="nav-recent-dlg-list" role="list"></div>
+  </dialog>
+  <dialog class="nav-organize-dlg" id="nav-organize" aria-labelledby="nav-organize-title">
+    <div class="nav-organize-head">
+      <div class="nav-organize-head-text">
+        <h2 id="nav-organize-title">整理菜单</h2>
+        <p class="hint tight nav-organize-sub">长按名称或拖 ⠿ 排序。</p>
+      </div>
+      <button type="button" class="ghost-btn nav-organize-close" id="nav-organize-close" aria-label="关闭">×</button>
+    </div>
+    <div class="nav-organize-tabs" role="tablist">
+      <button type="button" class="nav-organize-tab is-active" role="tab" id="nav-org-tab-groups" data-nav-org-tab="groups" aria-selected="true">分类</button>
+      <button type="button" class="nav-organize-tab" role="tab" id="nav-org-tab-tools" data-nav-org-tab="tools" aria-selected="false">工具</button>
+      <button type="button" class="nav-organize-tab" role="tab" id="nav-org-tab-favorites" data-nav-org-tab="favorites" aria-selected="false">常用</button>
+    </div>
+    <label class="nav-organize-search-wrap" for="nav-org-search">
+      <input type="search" id="nav-org-search" class="nav-organize-search text-input" placeholder="搜索分类或工具…" />
+    </label>
+    <div class="nav-organize-body">
+      <div class="nav-organize-panel" id="nav-org-panel-groups" data-nav-org-panel="groups" role="tabpanel"></div>
+      <div class="nav-organize-panel" id="nav-org-panel-tools" data-nav-org-panel="tools" role="tabpanel" hidden>
+        <label class="nav-organize-group-pick" for="nav-org-tool-group">
+          <span>所属分类</span>
+          <select id="nav-org-tool-group" class="text-input"></select>
+        </label>
+        <div class="nav-organize-list" id="nav-org-tool-list"></div>
+      </div>
+      <div class="nav-organize-panel" id="nav-org-panel-favorites" data-nav-org-panel="favorites" role="tabpanel" hidden></div>
+    </div>
+    <div class="nav-organize-foot btn-row">
+      <button type="button" class="ghost-btn" id="nav-organize-reset">恢复默认</button>
+      <button type="button" class="ghost-btn" id="nav-organize-cancel">取消</button>
+      <button type="button" class="primary-btn" id="nav-organize-done">完成</button>
+    </div>
+  </dialog>
+  <div class="nav-tool-ctx" id="nav-tool-ctx" role="menu" hidden>
+    <button type="button" class="nav-tool-ctx-item" data-nav-ctx="open">打开</button>
+    <button type="button" class="nav-tool-ctx-item" data-nav-ctx="fav-add">添加到常用工具</button>
+    <button type="button" class="nav-tool-ctx-item" data-nav-ctx="fav-remove" hidden>从常用移除</button>
+  </div>
+  <div class="memo-temp-prompt-stack" id="memo-temp-prompt-stack" aria-live="polite"></div>
+  <div class="vsplit-fs" id="vsplit-fs" hidden>
+    <div class="vsplit-fs-top">
+      <button type="button" class="ghost-btn vsplit-fs-close" id="vsplit-fs-close">退出</button>
+      <div class="vsplit-fs-meta">
+        <strong class="vsplit-fs-status" id="vsplit-fs-status">已完成 0 段</strong>
+        <span class="mono vsplit-fs-now" id="vsplit-fs-now">0:00 / 0:00</span>
+      </div>
+    </div>
+    <div class="vsplit-fs-host" id="vsplit-fs-host">
+      <div class="vsplit-fs-flash" id="vsplit-fs-flash" aria-hidden="true"></div>
+    </div>
+    <p class="vsplit-fs-note" id="vsplit-fs-note" hidden></p>
+    <div class="vsplit-fs-scrub" id="vsplit-fs-scrub-slot"></div>
+    <div class="vsplit-fs-bottom">
+      <button type="button" class="secondary-btn" id="vsplit-fs-play">播放</button>
+      <button type="button" class="ghost-btn" id="vsplit-fs-mute" aria-pressed="true">开声音</button>
+      <button type="button" class="ghost-btn" id="vsplit-fs-undo" disabled>取消上一段</button>
+      <button type="button" class="primary-btn vsplit-fs-mark" id="vsplit-fs-mark">打起点</button>
+    </div>
+  </div>
+  <div id="countdown-fs" class="countdown-fs" hidden>
+    <button type="button" class="countdown-fs-close ghost-btn" id="cd-fs-close">退出</button>
+    <p class="countdown-fs-kicker hint" id="cd-fs-kicker">进行中</p>
+    <p class="countdown-fs-step hint" id="cd-fs-step"></p>
+    <p class="countdown-fs-content" id="cd-fs-content"></p>
+    <p class="countdown-fs-time mono" id="cd-fs-time">00:00</p>
+    <div class="btn-row countdown-fs-actions">
+      <button type="button" class="primary-btn" id="cd-fs-next" hidden>下一步</button>
+      <button type="button" class="primary-btn" id="cd-fs-done" hidden>完成</button>
+    </div>
+  </div>
+  <div id="dateremind-fs" class="dateremind-fs" hidden>
+    <button type="button" class="dateremind-fs-close ghost-btn" id="dr-fs-close">关闭</button>
+    <p class="dateremind-fs-kicker hint">日期提醒</p>
+    <h2 class="dateremind-fs-heading">临近的重要日期</h2>
+    <div id="dr-fs-list" class="dr-fs-list"></div>
+    <div class="btn-row dateremind-fs-actions">
+      <button type="button" class="ghost-btn" id="dr-fs-dismiss-today">今日不再提醒</button>
+      <button type="button" class="secondary-btn" id="dr-fs-goto">管理提醒</button>
+      <button type="button" class="primary-btn" id="dr-fs-ok">知道了</button>
+    </div>
+  </div>
+  <div id="muyu-fs" class="muyu-fs" data-muyu-theme="zen" hidden>
+    <canvas id="muyu-fs-bg" class="muyu-fs-bg" aria-hidden="true"></canvas>
+    <div class="muyu-fs-moon" aria-hidden="true"></div>
+    <div class="muyu-fs-pulse" id="muyu-fs-pulse" aria-hidden="true"></div>
+    <button type="button" class="muyu-fs-close ghost-btn" id="muyu-fs-close">退出全屏</button>
+    <label class="muyu-fs-sound flag" for="muyu-sound-fs">
+      <input type="checkbox" id="muyu-sound-fs" checked /> 音效
+    </label>
+    <header class="muyu-fs-head">
+      <p class="muyu-fs-title">电子木鱼</p>
+      <p class="muyu-fs-count-label hint">累计敲击</p>
+      <p class="muyu-fs-count mono" id="muyu-fs-count">0</p>
+    </header>
+    <div class="muyu-fs-stage" id="muyu-fs-stage">
+      <div class="muyu-fs-halo" aria-hidden="true"></div>
+      <div class="muyu-fs-ripple" id="muyu-fs-ripple" aria-hidden="true"></div>
+      <button type="button" class="muyu-fish-btn muyu-fish-btn-fs" id="muyu-fish-fs" aria-label="敲木鱼"></button>
+      <div class="muyu-fs-fx" id="muyu-fs-fx" aria-hidden="true"></div>
+    </div>
+    <div class="muyu-fs-floats" id="muyu-fs-floats" aria-hidden="true"></div>
+  </div>
+  <div id="ruler-fs" class="ruler-fs" hidden>
+    <canvas id="ruler-fs-canvas" class="ruler-fs-canvas" aria-label="全屏直尺"></canvas>
+    <button type="button" class="ruler-fs-close ghost-btn" id="ruler-fs-close">退出全屏</button>
+    <p class="ruler-fs-hud mono hint" id="ruler-coord-fs"></p>
+  </div>
+  <script src="./lib/bridge-token.js?v=2026.09.10-221327"></script>
+  <script src="./lib/unified-bridge-bundle.js?v=2026.09.10-221327"></script>
+  <script src="./lib/bridge-shell.js?v=2026.09.10-221327"></script>
+  <script src="./lib/giscus-config.js?v=2026.09.10-221327"></script>
+  <script src="./lib/giscus.js?v=2026.09.10-221327"></script>
+  <script src="./lib/tool-registry.js?v=2026.09.10-221327"></script>
+  <script src="./lib/nav-scale.js?v=2026.09.10-221327"></script>
+  <script src="./lib/lazy-scripts.js?v=2026.09.10-221327"></script>
+  <script src="./lib/panel-loader.js?v=2026.09.10-221327"></script>
+  <script src="./theme.js?v=2026.09.10-221327"></script>
+  <script src="./app.js?v=2026.09.10-221327"></script>
 </body>
 </html>

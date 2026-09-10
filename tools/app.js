@@ -2774,6 +2774,8 @@
     // 本会话已加载 / 依赖已在内存：直接发路由事件，不遮挡、不重拉
     if (alreadyReady) {
       if (gen === routeGen) setPanelAssetLoading(toolLoadPanelId, false);
+      // 上一次加载留下的进度条可能还挂着，这里一并隐藏，避免「XX 已就绪」不消失
+      hideToolLoadProgress(loadGen);
       // warm 但未 mark 时补一次静默 ensure（极快）
       void window.DevToolsLazy?.ensureForTool?.(toolId).catch(() => {});
       window.dispatchEvent(
