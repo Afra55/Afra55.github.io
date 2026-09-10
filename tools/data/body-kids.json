@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "credit": "部分配图为本站内置（Wikimedia Commons，CC）；其余以 emoji 展示，避免外链错图。仅供学习。",
+  "credit": "配图取维基百科页面主图（Wikimedia，CC）；失败时用 emoji 兜底。仅供学习。",
   "visual": "image",
   "groups": [
     {
@@ -32,7 +32,7 @@
       "group": "head",
       "emoji": "🙂",
       "query": "Head",
-      "noRemote": true
+      "wiki": "Human head"
     },
     {
       "id": "face",
@@ -41,7 +41,7 @@
       "group": "head",
       "emoji": "😀",
       "query": "Face",
-      "noRemote": true
+      "wiki": "Face"
     },
     {
       "id": "hair",
@@ -50,6 +50,7 @@
       "group": "head",
       "emoji": "💇",
       "query": "Hair",
+      "wiki": "Hair",
       "local": "./data/bodyearn/hair.jpg"
     },
     {
@@ -59,7 +60,7 @@
       "group": "head",
       "emoji": "😌",
       "query": "Forehead",
-      "noRemote": true
+      "wiki": "Forehead"
     },
     {
       "id": "eyebrow",
@@ -68,7 +69,7 @@
       "group": "head",
       "emoji": "🤨",
       "query": "Eyebrow",
-      "noRemote": true
+      "wiki": "Eyebrow"
     },
     {
       "id": "eye",
@@ -77,6 +78,7 @@
       "group": "head",
       "emoji": "👁️",
       "query": "Eye",
+      "wiki": "Human eye",
       "local": "./data/bodyearn/eye.jpg"
     },
     {
@@ -86,7 +88,7 @@
       "group": "head",
       "emoji": "😉",
       "query": "Eyelash",
-      "noRemote": true
+      "wiki": "Eyelash"
     },
     {
       "id": "nose",
@@ -95,6 +97,7 @@
       "group": "head",
       "emoji": "👃",
       "query": "Nose",
+      "wiki": "Human nose",
       "local": "./data/bodyearn/nose.jpg"
     },
     {
@@ -104,7 +107,7 @@
       "group": "head",
       "emoji": "😊",
       "query": "Cheek",
-      "noRemote": true
+      "wiki": "Cheek"
     },
     {
       "id": "ear",
@@ -113,7 +116,7 @@
       "group": "head",
       "emoji": "👂",
       "query": "Ear",
-      "noRemote": true
+      "wiki": "Ear"
     },
     {
       "id": "mouth",
@@ -122,6 +125,7 @@
       "group": "head",
       "emoji": "👄",
       "query": "Mouth",
+      "wiki": "Mouth",
       "local": "./data/bodyearn/mouth.jpg"
     },
     {
@@ -131,7 +135,7 @@
       "group": "head",
       "emoji": "💋",
       "query": "Lip",
-      "noRemote": true
+      "wiki": "Lip"
     },
     {
       "id": "tooth",
@@ -140,7 +144,7 @@
       "group": "head",
       "emoji": "🦷",
       "query": "Tooth",
-      "noRemote": true
+      "wiki": "Human tooth"
     },
     {
       "id": "tongue",
@@ -149,7 +153,7 @@
       "group": "head",
       "emoji": "👅",
       "query": "Tongue",
-      "noRemote": true
+      "wiki": "Tongue"
     },
     {
       "id": "chin",
@@ -158,7 +162,7 @@
       "group": "head",
       "emoji": "🙂",
       "query": "Chin",
-      "noRemote": true
+      "wiki": "Chin"
     },
     {
       "id": "neck",
@@ -167,7 +171,7 @@
       "group": "head",
       "emoji": "🧣",
       "query": "Neck",
-      "noRemote": true
+      "wiki": "Neck"
     },
     {
       "id": "shoulder",
@@ -176,7 +180,7 @@
       "group": "torso",
       "emoji": "🙂",
       "query": "Shoulder",
-      "noRemote": true
+      "wiki": "Shoulder"
     },
     {
       "id": "chest",
@@ -185,7 +189,7 @@
       "group": "torso",
       "emoji": "🙂",
       "query": "Chest",
-      "noRemote": true
+      "wiki": "Thorax"
     },
     {
       "id": "belly",
@@ -194,7 +198,7 @@
       "group": "torso",
       "emoji": "🍎",
       "query": "Belly",
-      "noRemote": true
+      "wiki": "Abdomen"
     },
     {
       "id": "waist",
@@ -203,7 +207,7 @@
       "group": "torso",
       "emoji": "🙂",
       "query": "Waist",
-      "noRemote": true
+      "wiki": "Waist"
     },
     {
       "id": "back",
@@ -212,7 +216,7 @@
       "group": "torso",
       "emoji": "🙂",
       "query": "Back",
-      "noRemote": true
+      "wiki": "Human back"
     },
     {
       "id": "navel",
@@ -221,7 +225,7 @@
       "group": "torso",
       "emoji": "😮",
       "query": "Navel",
-      "noRemote": true
+      "wiki": "Navel"
     },
     {
       "id": "hip",
@@ -230,7 +234,7 @@
       "group": "torso",
       "emoji": "🍑",
       "query": "Hip",
-      "noRemote": true
+      "wiki": "Hip"
     },
     {
       "id": "arm",
@@ -239,7 +243,7 @@
       "group": "limb",
       "emoji": "💪",
       "query": "Arm",
-      "noRemote": true
+      "wiki": "Arm"
     },
     {
       "id": "elbow",
@@ -248,7 +252,7 @@
       "group": "limb",
       "emoji": "🙂",
       "query": "Elbow",
-      "noRemote": true
+      "wiki": "Elbow"
     },
     {
       "id": "forearm",
@@ -257,7 +261,7 @@
       "group": "limb",
       "emoji": "🙂",
       "query": "Forearm",
-      "noRemote": true
+      "wiki": "Forearm"
     },
     {
       "id": "wrist",
@@ -266,7 +270,7 @@
       "group": "limb",
       "emoji": "⌚",
       "query": "Wrist",
-      "noRemote": true
+      "wiki": "Wrist"
     },
     {
       "id": "hand",
@@ -275,7 +279,7 @@
       "group": "limb",
       "emoji": "✋",
       "query": "Hand",
-      "noRemote": true
+      "wiki": "Hand"
     },
     {
       "id": "palm",
@@ -284,7 +288,7 @@
       "group": "limb",
       "emoji": "🤲",
       "query": "Palm",
-      "noRemote": true
+      "wiki": "Hand"
     },
     {
       "id": "finger",
@@ -293,7 +297,7 @@
       "group": "limb",
       "emoji": "☝️",
       "query": "Finger",
-      "noRemote": true
+      "wiki": "Finger"
     },
     {
       "id": "thumb",
@@ -302,7 +306,7 @@
       "group": "limb",
       "emoji": "👍",
       "query": "Thumb",
-      "noRemote": true
+      "wiki": "Thumb"
     },
     {
       "id": "nail",
@@ -311,7 +315,7 @@
       "group": "limb",
       "emoji": "💅",
       "query": "Nail",
-      "noRemote": true
+      "wiki": "Nail (anatomy)"
     },
     {
       "id": "fist",
@@ -320,7 +324,7 @@
       "group": "limb",
       "emoji": "✊",
       "query": "Fist",
-      "noRemote": true
+      "wiki": "Fist"
     },
     {
       "id": "leg",
@@ -329,7 +333,7 @@
       "group": "limb",
       "emoji": "🦵",
       "query": "Leg",
-      "noRemote": true
+      "wiki": "Human leg"
     },
     {
       "id": "thigh",
@@ -338,7 +342,7 @@
       "group": "limb",
       "emoji": "🙂",
       "query": "Thigh",
-      "noRemote": true
+      "wiki": "Thigh"
     },
     {
       "id": "knee",
@@ -347,7 +351,7 @@
       "group": "limb",
       "emoji": "🦵",
       "query": "Knee",
-      "noRemote": true
+      "wiki": "Knee"
     },
     {
       "id": "calf",
@@ -356,7 +360,7 @@
       "group": "limb",
       "emoji": "🦵",
       "query": "Calf",
-      "noRemote": true
+      "wiki": "Calf (leg)"
     },
     {
       "id": "ankle",
@@ -365,7 +369,7 @@
       "group": "limb",
       "emoji": "🦶",
       "query": "Ankle",
-      "noRemote": true
+      "wiki": "Ankle"
     },
     {
       "id": "foot",
@@ -374,7 +378,7 @@
       "group": "limb",
       "emoji": "🦶",
       "query": "Foot",
-      "noRemote": true
+      "wiki": "Foot"
     },
     {
       "id": "heel",
@@ -383,7 +387,7 @@
       "group": "limb",
       "emoji": "🦶",
       "query": "Heel",
-      "noRemote": true
+      "wiki": "Heel"
     },
     {
       "id": "toe",
@@ -392,7 +396,7 @@
       "group": "limb",
       "emoji": "🦶",
       "query": "Toe",
-      "noRemote": true
+      "wiki": "Toe"
     }
   ]
 }

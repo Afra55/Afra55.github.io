@@ -36,6 +36,42 @@
     return `https://commons.wikimedia.org/wiki/Special:FilePath/${encodeURIComponent(file)}?width=${width}`;
   }
 
+  // 维基百科页面主图（pageimages），确定性优于全文搜图；结果本地缓存
+  const WIKI_IMG_KEY = "devtools-kids-wikiimg-v1";
+  function loadWikiImgCache() {
+    try {
+      return JSON.parse(localStorage.getItem(WIKI_IMG_KEY) || "{}") || {};
+    } catch (_) {
+      return {};
+    }
+  }
+  function saveWikiImgCache(m) {
+    try {
+      localStorage.setItem(WIKI_IMG_KEY, JSON.stringify(m));
+    } catch (_) {}
+  }
+  async function wikiPageImage(title) {
+    const t = String(title || "").trim();
+    if (!t) return "";
+    const cache = loadWikiImgCache();
+    if (cache[t]) return cache[t];
+    const url =
+      "https://en.wikipedia.org/w/api.php?action=query&format=json&origin=*" +
+      "&prop=pageimages&piprop=thumbnail&pithumbsize=400&redirects=1&titles=" +
+      encodeURIComponent(t);
+    const res = await fetch(url, { mode: "cors", cache: "force-cache" });
+    if (!res.ok) return "";
+    const j = await res.json();
+    const pages = j?.query?.pages || {};
+    const page = pages[Object.keys(pages)[0]];
+    const src = page?.thumbnail?.source || "";
+    if (src) {
+      cache[t] = src;
+      saveWikiImgCache(cache);
+    }
+    return src;
+  }
+
   async function openCache() {
     if (!("caches" in window)) return null;
     try {
@@ -174,6 +210,21 @@
         } catch (_) {}
       }
       return { url: item.local, credit: item.credit || "本站内置图", fromCache: false, local: true };
+    }
+    // 维基百科页面主图（人工维护的代表图，比全文搜图准）：取到即用，取不到回退 emoji
+    if (item.wiki) {
+      try {
+        const u = await wikiPageImage(item.wiki);
+        if (u) {
+          if (typeof opts.onPreview === "function") {
+            try {
+              opts.onPreview({ url: u });
+            } catch (_) {}
+          }
+          return { url: u, credit: `维基百科 · ${item.wiki}`, fromCache: false, wiki: true };
+        }
+      } catch (_) {}
+      return { url: "", credit: "", fromCache: false };
     }
     // 明确不外链：直接返回空，交由闪卡显示 emoji 兜底（避免拉到错图）
     if (item.noRemote) {
