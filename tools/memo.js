@@ -6200,17 +6200,30 @@
   (function bindScrollTopFab() {
     const fab = $("#memo-scroll-top-fab");
     if (!fab) return;
-    const root = memoScrollRoot();
-    const getTop = () => (root ? root.scrollTop : window.scrollY || 0);
-    const sync = () => {
-      fab.hidden = getTop() < 320;
+    const root = memoScrollRoot() || window;
+    const getTop = () => (root === window ? window.scrollY || 0 : root.scrollTop || 0);
+    let hideTimer = 0;
+    const hideLater = () => {
+      window.clearTimeout(hideTimer);
+      hideTimer = window.setTimeout(() => {
+        fab.hidden = true;
+      }, 3000);
     };
-    (root || window).addEventListener("scroll", sync, { passive: true });
+    const onScroll = () => {
+      if (getTop() < 40) {
+        window.clearTimeout(hideTimer);
+        fab.hidden = true;
+        return;
+      }
+      fab.hidden = false;
+      hideLater();
+    };
+    root.addEventListener("scroll", onScroll, { passive: true });
     fab.addEventListener("click", () => {
+      window.clearTimeout(hideTimer);
+      fab.hidden = true;
       memoScrollToY(0, { behavior: "smooth" });
-      window.setTimeout(sync, 400);
     });
-    sync();
   })();
   $("#memo-temp-filter")?.addEventListener("click", () => toggleTempFilter());
   $("#memo-archive-filter")?.addEventListener("click", () => toggleArchiveFilter());
