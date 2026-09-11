@@ -6020,23 +6020,27 @@
         setError(adbError, err.message || String(err));
         }
         });
-        $("#adb-input-refresh-shot")?.addEventListener("click", () => {
-        if (adbInputLiveTimer) {
-        clearInterval(adbInputLiveTimer);
-        adbInputLiveTimer = 0;
-        adbInputLive = false;
-        }
-        stopMirrorPreview({ notifyBridge: true });
-        const _m = $("#adb-input-mirror");
-        if (_m) _m.hidden = true;
-        toast("正在刷新截图…");
-        refreshInputScreencap()
-        .then(() => toast("已刷新截图"))
-        .catch((err) => {
+        $("#adb-input-refresh-shot")?.addEventListener("click", async () => {
+        try {
+        const serial = requireCurrentSerial();
+        toast("正在截图…");
+        const res = await adbFetch(`/media/screencap?serial=${encodeURIComponent(serial)}`);
+        const blob = await res.blob();
+        if (!blob || !blob.size) throw new Error("截图为空");
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `adb-${serial}-${Date.now()}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 15000);
+        toast("已下载截图");
+        } catch (err) {
         const msg = err.message || String(err);
         setError(adbError, msg);
         toast(`截图失败：${msg}`);
-        });
+        }
         });
         $("#adb-input-mirror-start")?.addEventListener("click", () => {
         const meta = $("#adb-input-meta");

@@ -84,19 +84,20 @@
 
       if (next === "win") {
         installBtns.append(
-          linkBtn("./envkit/install-win.cmd", "install-win.cmd", "下载安装（双击 .cmd）", true),
+          linkBtn("./envkit/install-win.bat", "install-win.bat", "下载安装（双击 .bat）", true),
+          linkBtn("./envkit/install-win.cmd", "install-win.cmd", "备用 .cmd", false),
           linkBtn("./envkit/install-devtools-env.ps1", "install-devtools-env.ps1", "PowerShell 脚本", false)
         );
         upgradeBtns.append(
-          linkBtn("./envkit/upgrade-win.cmd", "upgrade-win.cmd", "下载一键升级（双击）", true),
+          linkBtn("./envkit/upgrade-win.bat", "upgrade-win.bat", "下载一键升级（双击 .bat）", true),
+          linkBtn("./envkit/upgrade-win.cmd", "upgrade-win.cmd", "备用 .cmd", false),
           linkBtn("./envkit/upgrade-devtools-env.ps1", "upgrade-devtools-env.ps1", "升级 PowerShell", false)
         );
         hint.textContent = [
+          "推荐下载 upgrade-win.bat（与 install-devtools-env.ps1 放同一目录，双击运行）。",
           "升级会处理：Node、Git、FFmpeg、ADB、yt-dlp（winget / yt-dlp -U）+ 统一桥文件。",
-          "1. 下载 upgrade-win.cmd（建议与 ps1 同目录）",
-          "2. 双击运行，等对照表打印完成",
-          "3. 新开终端，再启动 DevToolsBridges/adb-bridge（统一桥 17888）",
           "仅检测：powershell -File install-devtools-env.ps1 -Mode check",
+          "完成后新开终端，再启动 DevToolsBridges/adb-bridge（统一桥 17888）",
         ].join("\n");
       } else if (next === "mac") {
         installBtns.append(
