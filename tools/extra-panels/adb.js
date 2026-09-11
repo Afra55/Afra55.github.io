@@ -6093,7 +6093,14 @@
           if (sendMirrorCtrl({ type: "expand_notification" })) toast("已展开通知栏");
         });
         ["adb-mirror-quality", "adb-mirror-audio", "adb-mirror-show-touches"].forEach((id) => {
-          $(`#${id}`)?.addEventListener("change", () => persistMirrorOptions());
+          $(`#${id}`)?.addEventListener("change", () => {
+            persistMirrorOptions();
+            // 画质/音频/显示触摸点都是 scrcpy 启动参数：镜像进行中改动需重启镜像才生效
+            if (adbInputPreviewMode === "mirror" && adbMirrorWs && adbMirrorWs.readyState <= 1) {
+              toast("正在按新设置重启镜像…");
+              startMirrorPreview().catch((err) => setError(adbError, err.message || String(err)));
+            }
+          });
         });
         restoreMirrorOptions();
         {
