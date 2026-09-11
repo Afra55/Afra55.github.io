@@ -49,6 +49,16 @@ function cacheDir() {
   return bridgeDataDir();
 }
 
+// 镜像运行时日志（写入桥目录，便于排查黑屏/协议问题）
+function mirrorLog(line) {
+  try {
+    const file = path.join(bridgeDataDir(), "scrcpy-mirror.log");
+    fs.appendFileSync(file, `[${new Date().toISOString()}] ${line}\n`);
+  } catch (_) {
+    /* ignore */
+  }
+}
+
 function vendorJarPath() {
   return path.join(bridgeDataDir(), "vendor", SCRCPY_SERVER_NAME);
 }
@@ -356,6 +366,7 @@ class SocketReader {
     if (this.total > w.maxTotal) {
       this.wait = null;
       clearTimeout(w.timer);
+      mirrorLog(`protocol-desync expect=${w.n} buffered=${this.total} total=${this.total}`);
       w.reject(new Error(`镜像数据流协议错位（期望 ${w.n} 字节，缓冲已达 ${this.total}）`));
       return;
     }
@@ -413,6 +424,7 @@ async function readMirrorHandshake(reader, serial) {
   const deviceName = nameBuf.toString("utf8").replace(/\0+$/g, "") || serial;
   const header = await reader.read(12, { timeoutMs: 45000 });
   const { codecId, width, height, codec } = parseVideoMeta(header);
+  mirrorLog(`handshake serial=${serial} device=${deviceName} codec=${codec} ${width}x${height}`);
   return { deviceName, codec, codecId, width, height, version: SCRCPY_VERSION };
 }
 

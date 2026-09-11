@@ -3832,8 +3832,12 @@
             return;
           }
           if ($("#adb-input-meta")) {
+            const diag =
+              `config=${p.config} key=${p.key} delta=${p.delta} decoded=${p.decoded}` +
+              ` codec=${adbMirrorMeta?.codec || "?"} dec=${adbMirrorDecoder?.state || "-"}` +
+              ` ws=${adbMirrorWs?.readyState ?? "-"}`;
             $("#adb-input-meta").textContent =
-              `仍无画面（config=${p.config} key=${p.key} delta=${p.delta} decoded=${p.decoded}）。` +
+              `仍无画面（${diag}）。` +
               (p.config === 0 && p.key === 0
                 ? "桥未收到视频帧：请更新本机桥 ZIP（≥0.9.15）、只开一座桥，并解锁亮屏后重试"
                 : "已收到码流但解不出画面：请硬刷新网页后重试；仍黑屏请换 Chrome/Edge 最新版，或更新桥 ZIP（≥0.9.15）");
