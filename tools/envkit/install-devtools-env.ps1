@@ -14,6 +14,9 @@ param(
   [string]$Mode = "install"
 )
 
+try { chcp 65001 > $null } catch {}
+try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
+
 $ErrorActionPreference = "Continue"
 $BaseUrl = if ($env:DEVTOOLS_BASE_URL) { $env:DEVTOOLS_BASE_URL } else { "https://afra55.github.io/tools" }
 $BridgeDir = if ($env:DEVTOOLS_BRIDGE_DIR) { $env:DEVTOOLS_BRIDGE_DIR } else { Join-Path $HOME "DevToolsBridges" }
