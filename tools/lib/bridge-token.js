@@ -488,10 +488,44 @@
       dirInput.addEventListener("blur", persistFromInput);
     }
 
-    openDirBtn?.addEventListener("click", () => {
+    openDirBtn?.addEventListener("click", async () => {
       const dir = String(dirInput?.value || "").trim();
       if (!dir) {
-        say("请先填写桥解压目录");
+        // 未填写 → 打开系统文件夹选择器，让用户定位桥解压目录
+        // 注：浏览器出于安全不暴露所选文件夹的绝对路径，只能让用户手动粘贴完整路径
+        try {
+          if (typeof window.showDirectoryPicker === "function") {
+            const handle = await window.showDirectoryPicker({ mode: "read" });
+            const name = handle?.name || "";
+            say(
+              name
+                ? `已选择文件夹「${name}」。浏览器无法读取完整路径，请把该文件夹的完整路径粘贴到输入框（例：C:\\Tools\\devtools-bridge）`
+                : "请把桥解压目录的完整路径粘贴到输入框"
+            );
+            dirInput?.focus();
+            return;
+          }
+          // 不支持 File System Access API：退回目录选择 input（同样拿不到绝对路径）
+          const inp = document.createElement("input");
+          inp.type = "file";
+          inp.webkitdirectory = true;
+          inp.style.display = "none";
+          inp.addEventListener("change", () => {
+            const rel = inp.files?.[0]?.webkitRelativePath || "";
+            const name = rel.split("/")[0] || "";
+            say(
+              name
+                ? `已选择文件夹「${name}」，请把它的完整路径粘贴到输入框`
+                : "请把桥解压目录的完整路径粘贴到输入框"
+            );
+            dirInput?.focus();
+            inp.remove();
+          });
+          document.body.appendChild(inp);
+          inp.click();
+        } catch (_) {
+          /* 用户取消选择 */
+        }
         return;
       }
       writeInstallDir(dir, kind);
