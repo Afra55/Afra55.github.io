@@ -2,12 +2,15 @@
 chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
-echo DevTools EnvKit - upgrade (tools + bridge)
-echo.
-if exist "%~dp0install-devtools-env.ps1" (
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0install-devtools-env.ps1" -Mode upgrade
-) else (
-  powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0upgrade-devtools-env.ps1"
+set "BASE=https://afra55.github.io/tools/envkit"
+set "PS1=%~dp0install-devtools-env.ps1"
+echo Fetching latest install-devtools-env.ps1 ...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "try { Invoke-WebRequest -UseBasicParsing -Uri '%BASE%/install-devtools-env.ps1' -OutFile '%PS1%' } catch { Write-Host ('download failed: ' + $_.Exception.Message); exit 1 }"
+if not exist "%PS1%" (
+  echo [ERROR] could not fetch install-devtools-env.ps1
+  pause
+  exit /b 1
 )
+powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%" -Mode upgrade
 echo.
 pause

@@ -94,9 +94,9 @@
           linkBtn("./envkit/upgrade-devtools-env.ps1", "upgrade-devtools-env.ps1", "升级 PowerShell", false)
         );
         hint.textContent = [
-          "推荐下载 upgrade-win.bat（与 install-devtools-env.ps1 放同一目录，双击运行）。",
+          "推荐下载 upgrade-win.bat，双击即可（缺的 ps1 会自动联网下载，无需手动配同目录）。",
           "升级会处理：Node、Git、FFmpeg、ADB、yt-dlp（winget / yt-dlp -U）+ 统一桥文件。",
-          "仅检测：powershell -File install-devtools-env.ps1 -Mode check",
+          "仅检测：下载 install-win.bat 后运行 install-win.bat -Mode check",
           "完成后新开终端，再启动 DevToolsBridges/adb-bridge（统一桥 17888）",
         ].join("\n");
       } else if (next === "mac") {
