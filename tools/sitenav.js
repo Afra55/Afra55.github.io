@@ -94,6 +94,27 @@
       url: "https://github.com/refactoringhq/tolaria",
       tags: ["markdown", "知识库", "desktop"],
     },
+    {
+      id: "firecrawl",
+      title: "Firecrawl",
+      desc: "把网站转成 LLM 友好数据的抓取/搜索/爬取引擎与 API，输出干净 Markdown 喂给 AI（TypeScript）。",
+      url: "https://github.com/firecrawl/firecrawl",
+      tags: ["爬虫", "ai", "api", "github"],
+    },
+    {
+      id: "crawl4ai",
+      title: "Crawl4AI",
+      desc: "开源、面向 LLM 的网页爬虫/抓取器（Python）：输出 Markdown 等结构化数据，便于喂给 AI。",
+      url: "https://github.com/unclecode/crawl4ai",
+      tags: ["爬虫", "ai", "python"],
+    },
+    {
+      id: "scrapling",
+      title: "Scrapling",
+      desc: "自适应网页抓取框架（Python）：从单请求到全站爬取，抗反爬、自动适配页面结构变化。",
+      url: "https://github.com/D4Vinci/Scrapling",
+      tags: ["爬虫", "python", "scraping"],
+    },
   ];
 
   function $(sel, root) {
