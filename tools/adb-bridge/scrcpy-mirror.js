@@ -321,8 +321,10 @@ class SocketReader {
 
   read(n, opts = {}) {
     const timeoutMs = opts.timeoutMs ?? (n > 65536 ? 120_000 : 30_000);
-    const slack = opts.slack ?? 0;
-    const maxTotal = Math.min(opts.maxTotal ?? n + slack, MAX_READ_BUFFER);
+    // 只做内存上限保护：socket 会一次性把「帧头+payload(+后续帧)」都灌进来，
+    // 用「已缓冲总量 > 本次需要的 n」判定错位是错的（正常突发也会超），会误报协议错位。
+    // 真正的错位由帧大小校验（size>MAX_FRAME_BYTES）与超时兜底。
+    const maxTotal = MAX_READ_BUFFER;
     return new Promise((resolve, reject) => {
       if (this.wait) {
         reject(new Error("SocketReader 重叠读取"));
