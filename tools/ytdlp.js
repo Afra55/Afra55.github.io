@@ -686,6 +686,68 @@
   document.addEventListener("devtools:route", (e) => {
     if (e.detail?.tool === "ytdlp" && !connected) connectBridge().catch(() => {});
   });
+
+  // 自动检测本机代理（7890 等），有则填入 #yd-proxy（不覆盖用户已填/已保存）
+  (function bindProxyAutoDetect() {
+    const el = $("#yd-proxy");
+    if (!el) return;
+    try {
+      const saved = localStorage.getItem("devtools-ytdlp-proxy");
+      if (saved && !String(el.value || "").trim()) el.value = saved;
+    } catch (_) {}
+    el.addEventListener("change", () => {
+      try {
+        localStorage.setItem("devtools-ytdlp-proxy", String(el.value || "").trim());
+      } catch (_) {}
+    });
+    if (String(el.value || "").trim()) return;
+    const say = (m) => {
+      try {
+        (window.DevToolsToast || window.showToast || function () {})(m);
+      } catch (_) {}
+    };
+    const probe = (port) =>
+      new Promise((resolve) => {
+        try {
+          const ctrl = new AbortController();
+          const t = setTimeout(() => {
+            ctrl.abort();
+            resolve(false);
+          }, 700);
+          fetch(`http://127.0.0.1:${port}/`, { mode: "no-cors", signal: ctrl.signal, cache: "no-store" })
+            .then(() => {
+              clearTimeout(t);
+              resolve(true);
+            })
+            .catch(() => {
+              clearTimeout(t);
+              resolve(false);
+            });
+        } catch (_) {
+          resolve(false);
+        }
+      });
+    void (async () => {
+      const candidates = [
+        [7890, "http"],
+        [7897, "http"],
+        [10809, "http"],
+        [1080, "socks5"],
+        [8118, "http"],
+        [20171, "http"],
+      ];
+      for (const [port, scheme] of candidates) {
+        if (await probe(port)) {
+          el.value = `${scheme}://127.0.0.1:${port}`;
+          try {
+            localStorage.setItem("devtools-ytdlp-proxy", el.value);
+          } catch (_) {}
+          say(`已检测到本机代理，已填入 ${el.value}`);
+          break;
+        }
+      }
+    })();
+  })();
   void (async () => {
     if (window.devtoolsBridgeToken?.readAutoStart?.("unified") === false) return;
     try {
