@@ -73,6 +73,27 @@
       url: "https://github.com/DeusData/codebase-memory-mcp",
       tags: ["ai", "mcp", "代码库", "graph", "本地"],
     },
+    {
+      id: "ponytail",
+      title: "Ponytail",
+      desc: "给 AI 编程 Agent 的「懒惰资深工程师」技能：让 agent 少造轮子、能不写就不写，专治过度工程（MIT）。",
+      url: "https://github.com/DietrichGebert/ponytail",
+      tags: ["ai", "agent", "skill", "github"],
+    },
+    {
+      id: "hallmark",
+      title: "Hallmark",
+      desc: "给 Claude Code / Cursor / Codex 的「反 AI 味」设计技能：让 agent 生成的前端界面不那么像模板（CSS）。",
+      url: "https://github.com/Nutlope/hallmark",
+      tags: ["ai", "design", "skill", "css"],
+    },
+    {
+      id: "tolaria",
+      title: "Tolaria",
+      desc: "桌面应用：管理 Markdown 知识库（TypeScript，refactoringhq）。",
+      url: "https://github.com/refactoringhq/tolaria",
+      tags: ["markdown", "知识库", "desktop"],
+    },
   ];
 
   function $(sel, root) {

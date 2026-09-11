@@ -24,13 +24,19 @@
   }
 
   function resolveScheme() {
-    return themeUtil()?.resolveScheme?.() || "dark";
+    try {
+      const s = document.documentElement.dataset.themeScheme;
+      if (s === "light" || s === "dark") return s;
+    } catch (_) {}
+    // 兜底：跟随系统
+    try {
+      if (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) return "light";
+    } catch (_) {}
+    return "dark";
   }
 
   function resolveTheme() {
-    const util = themeUtil();
-    if (!util) return resolveScheme() === "light" ? "noborder_light" : "noborder_dark";
-    return util.themeCssUrl(resolveScheme(), window.TOOLS_BUILD || util.THEME_VER);
+    return resolveScheme() === "light" ? "noborder_light" : "noborder_dark";
   }
 
   function termForTool(toolId) {

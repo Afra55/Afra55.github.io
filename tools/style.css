@@ -4156,3 +4156,16 @@ html[data-boot-loading="1"] body {
 .devtools-giscus-wrap[hidden] {
   display: none !important;
 }
+
+/* iOS/Safari PWA 独立模式：避免与状态栏重叠 */
+@supports (padding: env(safe-area-inset-top)) {
+  .is-pwa-standalone body {
+    padding-top: env(safe-area-inset-top);
+  }
+  .is-pwa-standalone .site-header {
+    padding-top: calc(env(safe-area-inset-top) + 0.8rem);
+  }
+  .is-pwa-standalone .workspace-top {
+    padding-top: env(safe-area-inset-top);
+  }
+}
