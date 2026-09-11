@@ -1,4 +1,4 @@
-# 一键升级：拉取最新 EnvKit 后升级本机工具 + 桥
+﻿# 一键升级：拉取最新 EnvKit 后升级本机工具 + 桥
 # Node / Git / FFmpeg / ADB / yt-dlp
 
 $ErrorActionPreference = "Continue"

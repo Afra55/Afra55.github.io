@@ -1,4 +1,4 @@
-# DevTools EnvKit — Windows 一键检测 / 安装 / 升级
+﻿# DevTools EnvKit — Windows 一键检测 / 安装 / 升级
 # 用法（PowerShell）：
 #   Set-ExecutionPolicy -Scope Process Bypass
 #   .\install-devtools-env.ps1
