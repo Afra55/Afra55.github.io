@@ -5737,8 +5737,11 @@
         body: JSON.stringify({ serials }),
         });
         await trackJob(data.job);
+        toast(`已提交截图：${serials.length} 台`);
         } catch (err) {
-        setError(adbError, err.message || String(err));
+        const msg = err.message || String(err);
+        setError(adbError, msg);
+        toast(`截图失败：${msg}`);
         }
         });
         $("#adb-shot-current")?.addEventListener("click", async () => {
@@ -5750,8 +5753,11 @@
         body: JSON.stringify({ serials: [adbSelected] }),
         });
         await trackJob(data.job);
+        toast("已提交当前设备截图");
         } catch (err) {
-        setError(adbError, err.message || String(err));
+        const msg = err.message || String(err);
+        setError(adbError, msg);
+        toast(`截图失败：${msg}`);
         }
         });
         $("#adb-record-current")?.addEventListener("click", async () => {
@@ -5769,8 +5775,11 @@
         body: JSON.stringify({ serial: adbSelected, seconds }),
         });
         await trackJob(data.job);
+        if (seconds !== 0) toast("录屏任务已开始");
         } catch (err) {
-        setError(adbError, err.message || String(err));
+        const msg = err.message || String(err);
+        setError(adbError, msg);
+        toast(`录屏失败：${msg}`);
         }
         });
         $("#adb-record-sec")?.addEventListener("input", updateRecordTip);
@@ -6018,7 +6027,16 @@
         adbInputLive = false;
         }
         stopMirrorPreview({ notifyBridge: true });
-        refreshInputScreencap().catch((err) => setError(adbError, err.message || String(err)));
+        const _m = $("#adb-input-mirror");
+        if (_m) _m.hidden = true;
+        toast("正在刷新截图…");
+        refreshInputScreencap()
+        .then(() => toast("已刷新截图"))
+        .catch((err) => {
+        const msg = err.message || String(err);
+        setError(adbError, msg);
+        toast(`截图失败：${msg}`);
+        });
         });
         $("#adb-input-mirror-start")?.addEventListener("click", () => {
         const meta = $("#adb-input-meta");
