@@ -2036,6 +2036,12 @@
         const show = status === "pending" || status === "running" || status === "error";
         box.hidden = !show;
         if (!show) return;
+        // 运行中节流 DOM 写入（≤90ms 一次），状态切换(完成/失败)始终刷新
+        if (status === "running") {
+          const now = Date.now();
+          if (now - (box._lastSync || 0) < 90) return;
+          box._lastSync = now;
+        }
         box.dataset.status = status;
         const ratio = Math.max(0, Math.min(1, Number(job.jobProgress) || 0));
         const pct = Math.round(ratio * 100);
@@ -5089,6 +5095,12 @@
   
       function setVbbProgress(visible, ratio, text, opts = {}) {
         if (!vbbProgress) return;
+        // 进度 UI 节流：中间态最多 ~90ms 刷一次，隐藏/0/100% 等重要更新不节流（省手机 CPU/防卡顿）
+        const r = Number(ratio) || 0;
+        const important = !visible || r <= 0 || r >= 1;
+        const now = Date.now();
+        if (!important && now - (setVbbProgress._last || 0) < 90) return;
+        setVbbProgress._last = now;
         const pin = Boolean(visible && vbbProgress.hidden);
         runVbbLayoutUpdate(() => {
           vbbProgress.hidden = !visible;
