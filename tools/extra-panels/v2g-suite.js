@@ -5285,7 +5285,8 @@
           return c.error || "";
         }
         const bits = [];
-        const videoSec = Number(c.span) || 0;
+        // 时长按「最终处理后的视频时长」为准（压缩时长/加速后），无则回退原始 span
+        const videoSec = Number(c.gifDuration) > 0 ? Number(c.gifDuration) : Number(c.span) || 0;
         if (videoSec > 0) bits.push(`时长 ${formatVsplitSpanSec(videoSec)}`);
         const w = Number(c.gifOutW) || 0;
         const h = Number(c.gifOutH) || 0;
