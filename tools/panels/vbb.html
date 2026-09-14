@@ -16,11 +16,6 @@
           <input id="vbb-max-mb" class="mono meta-input" type="number" min="1" max="200" step="1" value="6" />
           <span class="hint tight">MB（全站黑盒通用，自动保存）</span>
         </div>
-        <div class="field-row" id="vbb-speed-row" style="flex-wrap:wrap;align-items:center;margin-top:0.4rem">
-          <label class="flag" for="vbb-speed-limit"><input type="checkbox" id="vbb-speed-limit" /> 压缩时长到</label>
-          <input id="vbb-speed-sec" class="mono meta-input" type="number" min="3" max="120" step="1" value="20" />
-          <span class="hint tight">秒（默认 20，会加速播放；源更短则跳过。只影响黑盒 GIF）</span>
-        </div>
         <p class="hint tight" id="vbb-ffmpeg-warm" aria-live="polite">首次进入将准备本地视频编码器（约 30MB，仅下载一次，不上传视频）</p>
         <div class="gif-progress" id="vbb-ffmpeg-warm-progress" hidden>
           <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="vbb-ffmpeg-warm-progress-fill"></span></div>
@@ -112,6 +107,11 @@
           <label class="flag" style="margin-left:0.15rem" title="默认关闭。开启后转 GIF 成功时自动打 zip 并下载；与视频切片共用，会记住选择">
             <input type="checkbox" id="vbb-auto-pack" data-auto-pack-zip /> 产出后自动打包下载
           </label>
+        </div>
+        <div class="field-row" id="vbb-speed-row" style="flex-wrap:wrap;align-items:center;margin-top:0.55rem">
+          <label class="flag" for="vbb-speed-limit"><input type="checkbox" id="vbb-speed-limit" /> 压缩时长到</label>
+          <input id="vbb-speed-sec" class="mono meta-input" type="number" min="3" max="120" step="1" value="20" />
+          <span class="hint tight">秒</span>
         </div>
         <div class="gif-progress" id="vbb-progress" hidden>
           <div class="gif-progress-head">
