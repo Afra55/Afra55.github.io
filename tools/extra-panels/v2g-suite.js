@@ -6378,7 +6378,7 @@
         }));
         renderVbbResults();
         let ok = 0;
-        // 沿用上一个成功视频的编码方案(fps/宽)，跳过 15/12/10 全量探测 → 第 2 个起更快
+        // 沿用上一个成功视频的编码方案(fps/宽)：仅在「时长一致(±0.08s)」时复用，且按 span 缓存
         let reuseSeed = null;
         try {
           await prewarmFfmpegEngine().catch(() => {});
@@ -6391,8 +6391,15 @@
               sub: item.file.name,
               busy: true,
             });
+            // 仅同时长才复用：优先按时长缓存，其次复用上一个（时长一致时）
+            const cachedSeed = loadVbbSpanScheme(item.duration);
+            const seedForItem =
+              cachedSeed ||
+              (reuseSeed && Math.abs((Number(reuseSeed.span) || 0) - (Number(item.duration) || 0)) < 0.08
+                ? reuseSeed
+                : null);
             const t0 = performance.now();
-            const usedSeed = Boolean(reuseSeed);
+            const usedSeed = Boolean(seedForItem);
             try {
               const encoded = await encodeBlackboxClip({
                 file: item.file,
@@ -6400,7 +6407,7 @@
                 span: item.duration,
                 srcW: item.srcW,
                 srcH: item.srcH,
-                seed: reuseSeed,
+                seed: seedForItem,
                 speedLimitSec: vbbSpeedLimitSec(),
                 isAborted: () => abortVbb,
                 onProgress: (local, text) => {
@@ -6415,7 +6422,10 @@
               });
               if (abortVbb) throw new Error("已取消");
               applyVbbClipEncoded(vbbClips[i], encoded);
-              if (encoded && encoded.fps) reuseSeed = { fps: encoded.fps, maxW: encoded.maxW };
+              if (encoded && encoded.fps) {
+                reuseSeed = { fps: encoded.fps, maxW: encoded.maxW, span: item.duration };
+                saveVbbSpanScheme(item.duration, reuseSeed, "blackbox");
+              }
               setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
               ok += 1;
               refreshVbbClipRow(i);
