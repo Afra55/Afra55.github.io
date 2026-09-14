@@ -6304,15 +6304,14 @@
           bytes.set(raw);
           const blob = new Blob([bytes], { type: "video/mp4" });
           if (!blob.size) throw new Error("拼接结果为空");
-          const a = document.createElement("a");
-          a.href = URL.createObjectURL(blob);
-          a.download = `merged-${Date.now()}.mp4`;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          setTimeout(() => URL.revokeObjectURL(a.href), 20000);
-          setVbbProgress(true, 1, `拼接完成 · ${formatKb(blob.size)}`);
-          toast("已拼接为一个视频并下载");
+          const mergedFile = new File([blob], `merged-${Date.now()}.mp4`, { type: "video/mp4" });
+          setVbbProgress(true, 0.92, `拼接完成 · ${formatKb(blob.size)} · 开始转黑盒 GIF…`);
+          // 合并结果当作一个视频：设为当前源视频，直接走单视频黑盒流程
+          vbbBusy = false;
+          if (vbbAbort) vbbAbort.hidden = true;
+          await loadVbbFile(mergedFile);
+          toast("已拼接，开始生成黑盒 GIF…");
+          await runVbbSingleBlackbox();
         } catch (err) {
           if (String(err?.message) !== "已取消") setError(vbbError, err.message || String(err));
           else toast("已取消");
