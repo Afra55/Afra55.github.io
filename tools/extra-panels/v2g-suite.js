@@ -874,7 +874,7 @@
         const scale = srcW > maxW && srcW > 0 ? maxW / srcW : 1;
         const outW = srcW ? Math.max(2, Math.round((srcW * scale) / 2) * 2) : maxW;
         const outH = srcH ? Math.max(2, Math.round((srcH * scale) / 2) * 2) : Math.round(outW * 0.75);
-        const stageLabel = opts.stageLabel ? `${opts.stageLabel} · ` : "";
+        const stageLabel = (speed > 1 ? `加速${speed.toFixed(2)}× · ` : "") + (opts.stageLabel ? `${opts.stageLabel} · ` : "");
   
         const mapProgress = (local, text) => {
           if (typeof opts.onProgress === "function") opts.onProgress(local, text);
@@ -5298,7 +5298,7 @@
               if (!mobile) bits.push(part.replace(/\s+/g, ""));
               return;
             }
-            if (/^沿用|^超限|^已压|^降宽|^已抽稀|^宽≤|^耗时|^已重启/.test(part) || (mobile && /^\d+宽$/.test(part))) {
+            if (/^沿用|^超限|^已压|^降宽|^已抽稀|^宽≤|^耗时|^已重启|^加速/.test(part) || (mobile && /^\d+宽$/.test(part))) {
               bits.push(part);
             }
           });
@@ -6430,7 +6430,11 @@
               }
               // 耗时直接显示在卡片里（手机端无需 DevTools）
               const elapsedSec = (performance.now() - t0) / 1000;
-              vbbClips[i].gifNote = [vbbClips[i].gifNote, `耗时${elapsedSec.toFixed(1)}s${usedSeed ? "·沿用" : ""}`]
+              vbbClips[i].gifNote = [
+                vbbClips[i].gifNote,
+                encoded.speed > 1 ? `加速${Number(encoded.speed).toFixed(1)}×` : "",
+                `耗时${elapsedSec.toFixed(1)}s${usedSeed ? "·沿用" : ""}`,
+              ]
                 .filter(Boolean)
                 .join(" · ");
               // 引擎累积变慢：本条「每帧耗时」明显高于基准 → 重启引擎（资源已缓存，重启快）
@@ -6539,6 +6543,9 @@
           });
           if (abortVbb) throw new Error("已取消");
           applyVbbClipEncoded(vbbClips[0], encoded);
+          if (encoded.speed > 1) {
+            vbbClips[0].gifNote = [vbbClips[0].gifNote, `加速${Number(encoded.speed).toFixed(1)}×`].filter(Boolean).join(" · ");
+          }
           setVbbClipJob(0, { status: "done", progress: 1, text: "完成" });
           refreshVbbClipRow(0);
           const doneBits = [
