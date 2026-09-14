@@ -5380,6 +5380,9 @@
             : VBB_WORKFLOW_HINTS[vbbWorkflow] || VBB_WORKFLOW_HINTS.single;
         }
         if (vbbAdvanced) vbbAdvanced.hidden = isVbbManualMode() || batch;
+        // 压时长仅在「整段视频」生效/显示（批量里的「拼接后转黑盒」也是整段流程）
+        const speedRow = $("#vbb-speed-row");
+        if (speedRow) speedRow.hidden = vbbWorkflow !== "single";
         paintVbbManualUi();
         setVbbButtons();
       }

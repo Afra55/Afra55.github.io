@@ -35,6 +35,7 @@
           <div class="vidkit-side">
             <div class="label-row">
               <h2 class="subhead">视频列表</h2>
+              <button type="button" class="secondary-btn" id="vidkit-merge" disabled title="把列表里的多个视频按顺序拼成一个视频，预览后手动下载">拼接为一个视频</button>
             </div>
             <div class="vidkit-list" id="vidkit-list"></div>
           </div>
@@ -43,6 +44,7 @@
             <div class="label-row">
               <h2 class="subhead">预览</h2>
               <span class="hint tight" id="vidkit-preview-meta">添加后可预览</span>
+              <button type="button" class="secondary-btn" id="vidkit-merge-dl" hidden>下载拼接结果</button>
             </div>
             <div class="vidkit-preview-wrap">
               <video id="vidkit-preview" class="vidkit-preview" controls playsinline preload="metadata" hidden></video>

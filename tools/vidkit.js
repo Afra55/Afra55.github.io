@@ -69,6 +69,8 @@
     compressPreset: "quality",
     bridge: { ok: false, base: "", prefix: "/ff", token: DEFAULT_TOKEN, version: "" },
     previewUrl: "",
+    mergedBlob: null,
+    mergedUrl: "",
     abort: false,
     busy: false,
   };
@@ -92,6 +94,8 @@
     scale: $("#vidkit-scale"),
     compressHint: $("#vidkit-compress-hint"),
     actionHint: $("#vidkit-action-hint"),
+    merge: $("#vidkit-merge"),
+    mergeDl: $("#vidkit-merge-dl"),
   };
 
   function toast(msg) {
@@ -318,6 +322,7 @@
 
   function renderList() {
     if (!els.list) return;
+    if (els.merge) els.merge.disabled = state.items.length < 2 || state.busy;
     if (!state.items.length) {
       els.list.innerHTML = `<div class="vidkit-empty">尚未添加视频</div>`;
       return;
@@ -568,6 +573,88 @@
     return { blob, ext: outExt };
   }
 
+  async function mergeVidkit() {
+    if (state.items.length < 2 || state.busy) return;
+    const eng = window.DevToolsFfmpeg;
+    if (!eng?.getInstance) {
+      setError("网页 FFmpeg 未加载，请稍后重试或硬刷新");
+      return;
+    }
+    state.busy = true;
+    state.abort = false;
+    setError("");
+    const items = state.items.slice();
+    const names = [];
+    try {
+      setProgress(true, 0.02, "加载网页编码器…");
+      await eng.prewarm?.().catch(() => {});
+      const ffmpeg = await eng.getInstance((r, t) => setProgress(true, 0.02 + (Number(r) || 0) * 0.15, t || "加载编码器…"));
+      for (let i = 0; i < items.length; i++) {
+        if (state.abort) throw new Error("已取消");
+        const ext = (String(items[i].name).split(".").pop() || "mp4").toLowerCase();
+        const nm = `mj${i}.${ext}`;
+        setProgress(true, 0.18 + (i / items.length) * 0.3, `写入 ${i + 1}/${items.length}`);
+        await ffmpeg.writeFile(nm, new Uint8Array(await items[i].file.arrayBuffer()));
+        names.push(nm);
+      }
+      const W = 1280;
+      const H = 720;
+      const vparts = names
+        .map(
+          (_, i) =>
+            `[${i}:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30[v${i}]`
+        )
+        .join(";");
+      const vlist = names.map((_, i) => `[v${i}]`).join("");
+      const baseArgs = [];
+      names.forEach((nm) => baseArgs.push("-i", nm));
+      const enc = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-y", "merged.mp4"];
+      const runConcat = async (withAudio) => {
+        const aparts = withAudio
+          ? ";" + names.map((_, i) => `[${i}:a]aresample=async=1:first_pts=0[a${i}]`).join(";")
+          : "";
+        const alist = withAudio ? names.map((_, i) => `[a${i}]`).join("") : "";
+        const filter = `${vparts}${aparts};${vlist}${alist}concat=n=${names.length}:v=1:a=${withAudio ? 1 : 0}[v]${withAudio ? "[a]" : ""}`;
+        const mapArgs = withAudio ? ["-map", "[v]", "-map", "[a]", "-c:a", "aac", "-b:a", "160k"] : ["-map", "[v]"];
+        return ffmpeg.exec([...baseArgs, "-filter_complex", filter, ...mapArgs, ...enc]);
+      };
+      setProgress(true, 0.52, "拼接编码中…");
+      let code = await runConcat(true).catch(() => 1);
+      if (code !== 0 && !state.abort) code = await runConcat(false).catch(() => 1);
+      if (state.abort) throw new Error("已取消");
+      if (code !== 0) throw new Error(`拼接失败（code=${code}）`);
+      const data = await ffmpeg.readFile("merged.mp4");
+      const raw = data instanceof Uint8Array ? data : new Uint8Array(data);
+      const bytes = new Uint8Array(raw.byteLength);
+      bytes.set(raw);
+      const blob = new Blob([bytes], { type: "video/mp4" });
+      if (!blob.size) throw new Error("拼接结果为空");
+      if (state.mergedUrl) {
+        try { URL.revokeObjectURL(state.mergedUrl); } catch (_) {}
+      }
+      state.mergedBlob = blob;
+      state.mergedUrl = URL.createObjectURL(blob);
+      if (els.preview) {
+        els.preview.src = state.mergedUrl;
+        els.preview.hidden = false;
+      }
+      if (els.previewMeta) els.previewMeta.textContent = `拼接结果 · ${formatBytes(blob.size)} · 预览后手动下载`;
+      if (els.mergeDl) els.mergeDl.hidden = false;
+      setProgress(true, 1, `拼接完成 · ${formatBytes(blob.size)}`);
+      toast("已拼接，预览后点「下载拼接结果」");
+      try {
+        for (const nm of names) await ffmpeg.deleteFile(nm);
+        await ffmpeg.deleteFile("merged.mp4");
+      } catch (_) {}
+    } catch (err) {
+      setError(err.message || String(err));
+      setProgress(false, 0, "");
+    } finally {
+      state.busy = false;
+      renderList();
+    }
+  }
+
   async function encodeViaBridge(item, { mode, format, compressKey, scaleHeight, onProgress }) {
     const profile = COMPRESS[compressKey] || COMPRESS.balanced;
     const preset = mode === "convert" ? FORMAT_BRIDGE[format] || "mp4-hq" : profile.bridgePreset;
@@ -730,6 +817,12 @@
   );
   $("#vidkit-run")?.addEventListener("click", () => {
     runSelected().catch((err) => setError(err.message || String(err)));
+  });
+  $("#vidkit-merge")?.addEventListener("click", () => {
+    mergeVidkit().catch((err) => setError(err.message || String(err)));
+  });
+  $("#vidkit-merge-dl")?.addEventListener("click", () => {
+    if (state.mergedBlob) downloadBlob(state.mergedBlob, `merged-${Date.now()}.mp4`);
   });
   $("#vidkit-run-all")?.addEventListener("click", () => {
     runAll().catch((err) => setError(err.message || String(err)));
