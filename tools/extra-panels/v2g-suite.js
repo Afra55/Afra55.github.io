@@ -5298,7 +5298,7 @@
               if (!mobile) bits.push(part.replace(/\s+/g, ""));
               return;
             }
-            if (/^沿用|^超限|^已压|^降宽|^已抽稀|^宽≤/.test(part) || (mobile && /^\d+宽$/.test(part))) {
+            if (/^沿用|^超限|^已压|^降宽|^已抽稀|^宽≤|^耗时/.test(part) || (mobile && /^\d+宽$/.test(part))) {
               bits.push(part);
             }
           });
@@ -6426,18 +6426,24 @@
                 reuseSeed = { fps: encoded.fps, maxW: encoded.maxW, span: item.duration };
                 saveVbbSpanScheme(item.duration, reuseSeed, "blackbox");
               }
+              // 耗时直接显示在卡片里（手机端无需 DevTools）
+              const elapsedSec = (performance.now() - t0) / 1000;
+              vbbClips[i].gifNote = [vbbClips[i].gifNote, `耗时${elapsedSec.toFixed(1)}s${usedSeed ? "·沿用" : ""}`]
+                .filter(Boolean)
+                .join(" · ");
               setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
               ok += 1;
               refreshVbbClipRow(i);
               try {
                 console.log(
-                  `[vbb] #${i + 1} ${usedSeed ? "seed" : "ladder"} ${Math.round(performance.now() - t0)}ms · ${encoded.fps}FPS · ${encoded.outW}×${encoded.outH} · ${formatKb(encoded.blob.size)} · 压${encoded.compressRounds || 0}轮`
+                  `[vbb] #${i + 1} ${usedSeed ? "seed" : "ladder"} ${Math.round(elapsedSec * 1000)}ms · ${encoded.fps}FPS · ${encoded.outW}×${encoded.outH} · ${formatKb(encoded.blob.size)} · 压${encoded.compressRounds || 0}轮`
                 );
               } catch (_) {}
             } catch (err) {
               if (String(err?.message) === "已取消") throw err;
+              const elapsedSec = (performance.now() - t0) / 1000;
               try {
-                console.log(`[vbb] #${i + 1} FAIL ${Math.round(performance.now() - t0)}ms · ${err?.message || err}`);
+                console.log(`[vbb] #${i + 1} FAIL ${Math.round(elapsedSec * 1000)}ms · ${err?.message || err}`);
               } catch (_) {}
               vbbClips[i].error = err.message || String(err);
               setVbbClipJob(i, { status: "error", progress: 0, text: "失败" });
