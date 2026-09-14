@@ -866,8 +866,10 @@
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
         const speed = Math.max(1, Math.min(16, Number(opts.speed) || 1));
         const effSpan = span / speed;
-        const naturalFrames = Math.max(2, Math.floor(effSpan * fps) + 1);
-        const framesCapped = naturalFrames > MAX_V2G_FRAMES;
+        // 帧数上限：改为「降帧率覆盖整段」而不是截断尾部（否则长视频后段会丢）
+        const fpsOut = Math.max(2, Math.min(fps, MAX_V2G_FRAMES / Math.max(0.05, effSpan)));
+        const naturalFrames = Math.max(2, Math.floor(effSpan * fpsOut) + 1);
+        const framesCapped = fpsOut < fps - 0.01;
         const frameCount = Math.min(MAX_V2G_FRAMES, naturalFrames);
         const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
         const srcH = Number(opts.srcH) || v2gVideo?.videoHeight || 0;
@@ -969,7 +971,7 @@
             await ffmpeg.writeFile(wmName, wmBytes);
             filterArgs = [
               "-filter_complex",
-              `[0:v]${speedFilter}fps=${fps},scale=${maxW}:-2:flags=lanczos${brightFilter}[base];` +
+              `[0:v]${speedFilter}fps=${fpsOut},scale=${maxW}:-2:flags=lanczos${brightFilter}[base];` +
                 `[1:v]format=rgba[wm];[base][wm]overlay=0:0:format=auto[v];` +
                 `[v]split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=diff[p];` +
                 `[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`,
@@ -977,7 +979,7 @@
           } else {
             filterArgs = [
               "-vf",
-              `${speedFilter}fps=${fps},scale=${maxW}:-2:flags=lanczos${brightFilter},` +
+              `${speedFilter}fps=${fpsOut},scale=${maxW}:-2:flags=lanczos${brightFilter},` +
                 `split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=diff[p];` +
                 `[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`,
             ];
@@ -1016,7 +1018,7 @@
             blob,
             frameCount,
             span: effSpan,
-            fps,
+            fps: fpsOut,
             speed,
             outW,
             outH,
