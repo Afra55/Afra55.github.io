@@ -71,6 +71,8 @@
     previewUrl: "",
     mergedBlob: null,
     mergedUrl: "",
+    speedBlob: null,
+    speedUrl: "",
     abort: false,
     busy: false,
   };
@@ -96,6 +98,9 @@
     actionHint: $("#vidkit-action-hint"),
     merge: $("#vidkit-merge"),
     mergeDl: $("#vidkit-merge-dl"),
+    speedSec: $("#vidkit-speed-sec"),
+    speedRun: $("#vidkit-speed-run"),
+    speedDl: $("#vidkit-speed-dl"),
   };
 
   function toast(msg) {
@@ -380,7 +385,7 @@
   }
 
   function switchTab(tab) {
-    state.tab = tab === "compress" ? "compress" : "convert";
+    state.tab = tab === "compress" ? "compress" : tab === "speed" ? "speed" : "convert";
     $$(".vidkit-tab").forEach((btn) => {
       const on = btn.dataset.vidkitTab === state.tab;
       btn.classList.toggle("is-active", on);
@@ -391,7 +396,88 @@
       panel.classList.toggle("is-active", on);
       panel.hidden = !on;
     });
+    // 「时长压缩」页用自己的按钮，隐藏通用「处理/批量」按钮
+    const actions = document.querySelector(".vidkit-actions");
+    if (actions) actions.hidden = state.tab === "speed";
     updateHints();
+  }
+
+  async function speedVidkit() {
+    const item = selectedItem();
+    if (!item) {
+      setError("请先在列表里选择一个视频");
+      return;
+    }
+    const eng = window.DevToolsFfmpeg;
+    if (!eng?.getInstance) {
+      setError("网页 FFmpeg 未加载，请稍后重试或硬刷新");
+      return;
+    }
+    const target = Math.max(1, Math.min(600, Number(els.speedSec?.value) || 20));
+    state.busy = true;
+    state.abort = false;
+    setError("");
+    try {
+      setProgress(true, 0.03, "读取视频信息…");
+      const meta = await fileVideoDims(item.file);
+      const dur = Number(meta.d) || 0;
+      if (!(dur > 0)) throw new Error("无法读取视频时长");
+      if (dur <= target + 0.05) {
+        setProgress(false, 0, "");
+        toast(`视频约 ${dur.toFixed(1)}s，已短于目标 ${target}s，跳过压缩`);
+        return;
+      }
+      const speed = Math.max(1, Math.min(16, dur / target));
+      await eng.prewarm?.().catch(() => {});
+      const ffmpeg = await eng.getInstance((r, t) => setProgress(true, 0.05 + (Number(r) || 0) * 0.2, t || "加载编码器…"));
+      const inName = await eng.ensureInputWritten(ffmpeg, item.file, (r, t) =>
+        setProgress(true, 0.25 + (Number(r) || 0) * 0.15, t || "写入输入…")
+      );
+      const vf = `setpts=PTS/${speed}`;
+      const atempo = [];
+      let s = speed;
+      while (s > 2) { atempo.push("atempo=2.0"); s /= 2; }
+      while (s < 0.5) { atempo.push("atempo=0.5"); s /= 0.5; }
+      atempo.push(`atempo=${s.toFixed(4)}`);
+      const af = atempo.join(",");
+      setProgress(true, 0.55, `加速 ${speed.toFixed(2)}× 编码中…`);
+      let code = await ffmpeg
+        .exec(["-i", inName, "-filter_complex", `[0:v]${vf}[v];[0:a]${af}[a]`, "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-movflags", "+faststart", "-y", "out.mp4"])
+        .catch(() => 1);
+      if (code !== 0 && !state.abort) {
+        code = await ffmpeg
+          .exec(["-i", inName, "-vf", vf, "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-y", "out.mp4"])
+          .catch(() => 1);
+      }
+      if (state.abort) throw new Error("已取消");
+      if (code !== 0) throw new Error(`编码失败（code=${code}）`);
+      const data = await ffmpeg.readFile("out.mp4");
+      const raw = data instanceof Uint8Array ? data : new Uint8Array(data);
+      const bytes = new Uint8Array(raw.byteLength);
+      bytes.set(raw);
+      const blob = new Blob([bytes], { type: "video/mp4" });
+      if (!blob.size) throw new Error("压缩结果为空");
+      if (state.speedUrl) {
+        try { URL.revokeObjectURL(state.speedUrl); } catch (_) {}
+      }
+      state.speedBlob = blob;
+      state.speedUrl = URL.createObjectURL(blob);
+      if (els.preview) {
+        els.preview.src = state.speedUrl;
+        els.preview.hidden = false;
+      }
+      if (els.previewMeta) els.previewMeta.textContent = `压缩结果 · ${dur.toFixed(1)}s → 约 ${target}s（${speed.toFixed(2)}×）· ${formatBytes(blob.size)}`;
+      if (els.speedDl) els.speedDl.hidden = false;
+      setProgress(true, 1, `压缩完成 · ${formatBytes(blob.size)}`);
+      toast(`已加速到约 ${target}s，预览后手动下载`);
+      try { await ffmpeg.deleteFile("out.mp4"); } catch (_) {}
+    } catch (err) {
+      setError(err.message || String(err));
+      setProgress(false, 0, "");
+    } finally {
+      state.busy = false;
+      renderList();
+    }
   }
 
   function setCompressPreset(key) {
@@ -578,13 +664,13 @@
       const v = document.createElement("video");
       v.preload = "metadata";
       v.muted = true;
-      const done = (w, h) => {
+      const done = (w, h, d) => {
         try { URL.revokeObjectURL(v.src); } catch (_) {}
-        resolve({ w: w || 1280, h: h || 720 });
+        resolve({ w: w || 1280, h: h || 720, d: d || 0 });
       };
-      v.onloadedmetadata = () => done(v.videoWidth, v.videoHeight);
-      v.onerror = () => done(1280, 720);
-      try { v.src = URL.createObjectURL(file); } catch (_) { done(1280, 720); }
+      v.onloadedmetadata = () => done(v.videoWidth, v.videoHeight, v.duration);
+      v.onerror = () => done(1280, 720, 0);
+      try { v.src = URL.createObjectURL(file); } catch (_) { done(1280, 720, 0); }
     });
   }
 
@@ -842,6 +928,23 @@
   $("#vidkit-merge-dl")?.addEventListener("click", () => {
     if (state.mergedBlob) downloadBlob(state.mergedBlob, `merged-${Date.now()}.mp4`);
   });
+  $("#vidkit-speed-run")?.addEventListener("click", () => {
+    speedVidkit().catch((err) => setError(err.message || String(err)));
+  });
+  $("#vidkit-speed-dl")?.addEventListener("click", () => {
+    if (state.speedBlob) downloadBlob(state.speedBlob, `speed-${Date.now()}.mp4`);
+  });
+  if (els.speedSec) {
+    try {
+      const sv = localStorage.getItem("devtools-vidkit-speed-sec");
+      if (sv) els.speedSec.value = sv;
+    } catch (_) {}
+    els.speedSec.addEventListener("change", () => {
+      const v = Math.max(1, Math.min(600, Number(els.speedSec.value) || 20));
+      els.speedSec.value = String(v);
+      try { localStorage.setItem("devtools-vidkit-speed-sec", String(v)); } catch (_) {}
+    });
+  }
   $("#vidkit-run-all")?.addEventListener("click", () => {
     runAll().catch((err) => setError(err.message || String(err)));
   });

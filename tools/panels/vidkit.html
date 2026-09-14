@@ -45,6 +45,7 @@
               <h2 class="subhead">预览</h2>
               <span class="hint tight" id="vidkit-preview-meta">添加后可预览</span>
               <button type="button" class="secondary-btn" id="vidkit-merge-dl" hidden>下载拼接结果</button>
+              <button type="button" class="secondary-btn" id="vidkit-speed-dl" hidden>下载压缩结果</button>
             </div>
             <div class="vidkit-preview-wrap">
               <video id="vidkit-preview" class="vidkit-preview" controls playsinline preload="metadata" hidden></video>
@@ -54,6 +55,7 @@
               <div class="vidkit-tabs" role="tablist" aria-label="视频工具模式">
                 <button type="button" class="vidkit-tab is-active" role="tab" aria-selected="true" data-vidkit-tab="convert">格式转换</button>
                 <button type="button" class="vidkit-tab" role="tab" aria-selected="false" data-vidkit-tab="compress">高观感压缩</button>
+                <button type="button" class="vidkit-tab" role="tab" aria-selected="false" data-vidkit-tab="speed">时长压缩</button>
               </div>
 
               <div class="vidkit-tab-panels">
@@ -85,6 +87,19 @@
                       <button type="button" class="ghost-btn" data-vidkit-preset="extreme-hevc" id="vidkit-preset-hevc">极致·H.265</button>
                     </div>
                     <p class="hint" id="vidkit-compress-hint">画质优先 ≈ CRF 20；均衡 CRF 23；强压 CRF 28。极致档需本机桥（慢预设 + 低 CRF，观感优先）。</p>
+                  </div>
+                </div>
+
+                <div class="vidkit-tab-panel" data-vidkit-panel="speed" role="tabpanel" hidden>
+                  <div class="field-block">
+                    <h2 class="subhead">时长压缩（加速）</h2>
+                    <div class="field-row" style="flex-wrap:wrap;align-items:center">
+                      <label for="vidkit-speed-sec">压缩到</label>
+                      <input id="vidkit-speed-sec" class="mono meta-input" type="number" min="1" max="600" step="1" value="20" />
+                      <span class="hint tight">秒（默认 20，自动记忆；视频更短则跳过）</span>
+                      <button type="button" class="primary-btn" id="vidkit-speed-run">压缩时长并生成</button>
+                    </div>
+                    <p class="hint tight">把当前视频加速到目标时长内（视频+音频一起加速），完成后在预览区查看并手动下载。</p>
                   </div>
                 </div>
               </div>
