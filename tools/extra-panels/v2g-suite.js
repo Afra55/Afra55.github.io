@@ -5298,7 +5298,7 @@
               if (!mobile) bits.push(part.replace(/\s+/g, ""));
               return;
             }
-            if (/^沿用|^超限|^已压|^降宽|^已抽稀|^宽≤|^耗时/.test(part) || (mobile && /^\d+宽$/.test(part))) {
+            if (/^沿用|^超限|^已压|^降宽|^已抽稀|^宽≤|^耗时|^已重启/.test(part) || (mobile && /^\d+宽$/.test(part))) {
               bits.push(part);
             }
           });
@@ -6380,6 +6380,8 @@
         let ok = 0;
         // 沿用上一个成功视频的编码方案(fps/宽)：仅在「时长一致(±0.08s)」时复用，且按 span 缓存
         let reuseSeed = null;
+        // 引擎变慢检测：记录基准「每帧耗时」，明显变慢则重启引擎
+        let baselineRate = 0;
         try {
           await prewarmFfmpegEngine().catch(() => {});
           for (let i = 0; i < total; i++) {
@@ -6431,6 +6433,16 @@
               vbbClips[i].gifNote = [vbbClips[i].gifNote, `耗时${elapsedSec.toFixed(1)}s${usedSeed ? "·沿用" : ""}`]
                 .filter(Boolean)
                 .join(" · ");
+              // 引擎累积变慢：本条「每帧耗时」明显高于基准 → 重启引擎（资源已缓存，重启快）
+              const frames = Math.max(1, Number(encoded.frameCount) || 1);
+              const rate = (elapsedSec * 1000) / frames;
+              if (!baselineRate) {
+                baselineRate = rate;
+              } else if (rate > baselineRate * 1.6 && i < total - 1) {
+                try { terminateFfmpegInstance({ revokeAssets: false }); } catch (_) {}
+                vbbClips[i].gifNote = [vbbClips[i].gifNote, "已重启引擎"].filter(Boolean).join(" · ");
+                try { console.log(`[vbb] 变慢 ${rate.toFixed(1)} vs ${baselineRate.toFixed(1)} ms/帧 → 重启引擎`); } catch (_) {}
+              }
               setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
               ok += 1;
               refreshVbbClipRow(i);
