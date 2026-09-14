@@ -6377,6 +6377,8 @@
               sub: item.file.name,
               busy: true,
             });
+            const t0 = performance.now();
+            const usedSeed = Boolean(reuseSeed);
             try {
               const encoded = await encodeBlackboxClip({
                 file: item.file,
@@ -6403,8 +6405,16 @@
               setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
               ok += 1;
               refreshVbbClipRow(i);
+              try {
+                console.log(
+                  `[vbb] #${i + 1} ${usedSeed ? "seed" : "ladder"} ${Math.round(performance.now() - t0)}ms · ${encoded.fps}FPS · ${encoded.outW}×${encoded.outH} · ${formatKb(encoded.blob.size)} · 压${encoded.compressRounds || 0}轮`
+                );
+              } catch (_) {}
             } catch (err) {
               if (String(err?.message) === "已取消") throw err;
+              try {
+                console.log(`[vbb] #${i + 1} FAIL ${Math.round(performance.now() - t0)}ms · ${err?.message || err}`);
+              } catch (_) {}
               vbbClips[i].error = err.message || String(err);
               setVbbClipJob(i, { status: "error", progress: 0, text: "失败" });
               refreshVbbClipRow(i);
