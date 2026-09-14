@@ -16,6 +16,11 @@
           <input id="vbb-max-mb" class="mono meta-input" type="number" min="1" max="200" step="1" value="6" />
           <span class="hint tight">MB（全站黑盒通用，自动保存）</span>
         </div>
+        <div class="field-row" style="flex-wrap:wrap;align-items:center;margin-top:0.4rem">
+          <label class="flag" for="vbb-speed-limit"><input type="checkbox" id="vbb-speed-limit" /> 压缩时长到</label>
+          <input id="vbb-speed-sec" class="mono meta-input" type="number" min="3" max="120" step="1" value="20" />
+          <span class="hint tight">秒（默认 20，会加速播放；源更短则跳过。只影响黑盒 GIF）</span>
+        </div>
         <p class="hint tight" id="vbb-ffmpeg-warm" aria-live="polite">首次进入将准备本地视频编码器（约 30MB，仅下载一次，不上传视频）</p>
         <div class="gif-progress" id="vbb-ffmpeg-warm-progress" hidden>
           <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="vbb-ffmpeg-warm-progress-fill"></span></div>
@@ -99,6 +104,7 @@
 
         <div class="btn-row tool-actions vbb-main-actions" style="margin-top:1rem;flex-wrap:wrap">
           <button type="button" class="primary-btn" id="vbb-oneclick" disabled>一键黑盒</button>
+          <button type="button" class="secondary-btn" id="vbb-merge-video" disabled title="把已选的多个视频按顺序拼成一个视频（MP4）">拼接为一个视频</button>
           <button type="button" class="secondary-btn" id="vbb-merge" disabled title="合并各段 GIF，不重新调色板；超限会自动压黑盒">合并 GIF</button>
           <button type="button" class="ghost-btn" id="vbb-abort" hidden>取消</button>
           <button type="button" class="secondary-btn" id="vbb-zip" disabled title="把已生成的 GIF 打成一个 zip">打包下载</button>

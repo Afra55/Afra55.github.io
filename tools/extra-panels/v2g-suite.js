@@ -862,7 +862,9 @@
           ({ startSec, span } = resolveV2gSpan());
         }
         const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
-        const naturalFrames = Math.max(2, Math.floor(span * fps) + 1);
+        const speed = Math.max(1, Math.min(16, Number(opts.speed) || 1));
+        const effSpan = span / speed;
+        const naturalFrames = Math.max(2, Math.floor(effSpan * fps) + 1);
         const framesCapped = naturalFrames > MAX_V2G_FRAMES;
         const frameCount = Math.min(MAX_V2G_FRAMES, naturalFrames);
         const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
@@ -958,13 +960,14 @@
           }
   
           const wmBytes = skipWm ? null : await buildV2gWatermarkPng(outW, outH);
+          const speedFilter = speed > 1 ? `setpts=PTS/${speed},` : "";
           let filterArgs;
           if (wmBytes && wmBytes.length) {
             usedWm = true;
             await ffmpeg.writeFile(wmName, wmBytes);
             filterArgs = [
               "-filter_complex",
-              `[0:v]fps=${fps},scale=${maxW}:-2:flags=lanczos${brightFilter}[base];` +
+              `[0:v]${speedFilter}fps=${fps},scale=${maxW}:-2:flags=lanczos${brightFilter}[base];` +
                 `[1:v]format=rgba[wm];[base][wm]overlay=0:0:format=auto[v];` +
                 `[v]split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=diff[p];` +
                 `[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`,
@@ -972,7 +975,7 @@
           } else {
             filterArgs = [
               "-vf",
-              `fps=${fps},scale=${maxW}:-2:flags=lanczos${brightFilter},` +
+              `${speedFilter}fps=${fps},scale=${maxW}:-2:flags=lanczos${brightFilter},` +
                 `split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=diff[p];` +
                 `[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`,
             ];
@@ -1010,8 +1013,9 @@
           return {
             blob,
             frameCount,
-            span,
+            span: effSpan,
             fps,
+            speed,
             outW,
             outH,
             framesCapped,
@@ -1328,9 +1332,15 @@
         const span = clipOpts.span;
         const srcW = clipOpts.srcW;
         const srcH = clipOpts.srcH;
+        // 目标时长（秒，0=不压缩时长）：源比目标长则加速到目标时长内
+        const speedLimitSec = Math.max(0, Number(clipOpts.speedLimitSec) || 0);
+        const speed =
+          speedLimitSec > 0 && span > speedLimitSec
+            ? Math.max(1, Math.min(16, span / speedLimitSec))
+            : 1;
         const isAborted = clipOpts.isAborted || (() => abortV2g);
         const onProgress = clipOpts.onProgress || (() => {});
-        const fpsList = resolveBlackboxFpsList(span);
+        const fpsList = resolveBlackboxFpsList(span / speed);
         if (!fpsList.length) throw new Error("没有可用的黑盒帧率方案");
         const tried = [];
         const common = {
@@ -1339,6 +1349,7 @@
           span,
           srcW,
           srcH,
+          speed,
           skipWatermark: true,
           skipBright: true,
           brightness: 0,
@@ -5343,6 +5354,8 @@
           }
         }
         if (vbbAnalyze) vbbAnalyze.disabled = !hasVideo || vbbBusy || isVbbBatchMode() || isVbbManualMode();
+        const mergeVideoBtn = $("#vbb-merge-video");
+        if (mergeVideoBtn) mergeVideoBtn.disabled = !isVbbBatchMode() || vbbBusy;
         if (vbbRun) {
           vbbRun.disabled = !hasPlan || vbbBusy || isVbbBatchMode() || isVbbManualMode();
           vbbRun.classList.toggle("is-ready", hasPlan && !vbbBusy && isVbbSplitMode());
@@ -6218,8 +6231,106 @@
         }
       }
   
-      async function runVbbBatchBlackbox() {
+      // 目标时长（秒）：0=不压缩时长；源更长则加速到该时长内
+      function vbbSpeedLimitSec() {
+        try {
+          if (!$("#vbb-speed-limit")?.checked) return 0;
+          const sec = Number($("#vbb-speed-sec")?.value);
+          if (!(sec > 0)) return 0;
+          return Math.max(3, Math.min(120, sec));
+        } catch (_) {
+          return 0;
+        }
+      }
+
+      // 把已选的多个视频按顺序拼接成一个 MP4（先试视频+音频，失败回退纯视频）
+      async function mergeVbbVideosToOne() {
         if (!isVbbBatchMode() || vbbBusy) return;
+        abortVbb = false;
+        vbbBusy = true;
+        setVbbButtons();
+        if (vbbAbort) vbbAbort.hidden = false;
+        setError(vbbError, "");
+        const items = vbbBatchFiles.slice();
+        const total = items.length;
+        const names = [];
+        try {
+          await prewarmFfmpegEngine().catch(() => {});
+          const ffmpeg = await getFfmpegInstance();
+          for (let i = 0; i < total; i++) {
+            if (abortVbb) throw new Error("已取消");
+            setVbbProgress(true, (i / total) * 0.45, `拼接 · 写入 ${i + 1}/${total}`, {
+              sub: items[i].file.name,
+              busy: true,
+            });
+            const ext = v2gSourceExt(items[i].file);
+            const nm = `mj${i}.${ext}`;
+            await ffmpeg.writeFile(nm, await fetchFileBytes(items[i].file));
+            names.push(nm);
+          }
+          const W = Math.max(2, Math.round((items[0].srcW || 1280) / 2) * 2);
+          const H = Math.max(2, Math.round((items[0].srcH || 720) / 2) * 2);
+          const vparts = names
+            .map(
+              (_, i) =>
+                `[${i}:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30[v${i}]`
+            )
+            .join(";");
+          const vlist = names.map((_, i) => `[v${i}]`).join("");
+          const baseArgs = [];
+          names.forEach((nm) => baseArgs.push("-i", nm));
+          const enc = ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-y", "merged.mp4"];
+          const runConcat = async (withAudio) => {
+            const aparts = withAudio
+              ? ";" +
+                names
+                  .map((_, i) => `[${i}:a]aresample=async=1:first_pts=0[a${i}]`)
+                  .join(";")
+              : "";
+            const alist = withAudio ? names.map((_, i) => `[a${i}]`).join("") : "";
+            const filter = `${vparts}${aparts};${vlist}${alist}concat=n=${total}:v=1:a=${withAudio ? 1 : 0}[v]${withAudio ? "[a]" : ""}`;
+            const mapArgs = withAudio ? ["-map", "[v]", "-map", "[a]", "-c:a", "aac", "-b:a", "160k"] : ["-map", "[v]"];
+            const args = [...baseArgs, "-filter_complex", filter, ...mapArgs, ...enc];
+            return ffmpeg.exec(args);
+          };
+          setVbbProgress(true, 0.5, "拼接编码中…", { busy: true });
+          let code = await runConcat(true).catch(() => 1);
+          if (code !== 0 && !abortVbb) code = await runConcat(false).catch(() => 1);
+          if (abortVbb) throw new Error("已取消");
+          if (code !== 0) throw new Error(`拼接失败（code=${code}）`);
+          const data = await ffmpeg.readFile("merged.mp4");
+          const raw = data instanceof Uint8Array ? data : new Uint8Array(data);
+          const bytes = new Uint8Array(raw.byteLength);
+          bytes.set(raw);
+          const blob = new Blob([bytes], { type: "video/mp4" });
+          if (!blob.size) throw new Error("拼接结果为空");
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = `merged-${Date.now()}.mp4`;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => URL.revokeObjectURL(a.href), 20000);
+          setVbbProgress(true, 1, `拼接完成 · ${formatKb(blob.size)}`);
+          toast("已拼接为一个视频并下载");
+        } catch (err) {
+          if (String(err?.message) !== "已取消") setError(vbbError, err.message || String(err));
+          else toast("已取消");
+          setVbbProgress(false, 0, "");
+        } finally {
+          try {
+            for (const nm of names) await getFfmpegInstance().then((ff) => ff.deleteFile(nm)).catch(() => {});
+            const ff = await getFfmpegInstance();
+            await ff.deleteFile("merged.mp4");
+          } catch (_) {}
+          vbbBusy = false;
+          resetVbbAbort();
+          if (vbbAbort) vbbAbort.hidden = true;
+          setVbbButtons();
+        }
+      }
+
+      async function runVbbBatchBlackbox() {        if (!isVbbBatchMode() || vbbBusy) return;
         abortVbb = false;
         vbbBusy = true;
         setVbbButtons();
@@ -6243,6 +6354,8 @@
         }));
         renderVbbResults();
         let ok = 0;
+        // 沿用上一个成功视频的编码方案(fps/宽)，跳过 15/12/10 全量探测 → 第 2 个起更快
+        let reuseSeed = null;
         try {
           await prewarmFfmpegEngine().catch(() => {});
           for (let i = 0; i < total; i++) {
@@ -6261,6 +6374,8 @@
                 span: item.duration,
                 srcW: item.srcW,
                 srcH: item.srcH,
+                seed: reuseSeed,
+                speedLimitSec: vbbSpeedLimitSec(),
                 isAborted: () => abortVbb,
                 onProgress: (local, text) => {
                   const p = base + Math.min(0.96, 0.04 + local * 0.92);
@@ -6274,6 +6389,7 @@
               });
               if (abortVbb) throw new Error("已取消");
               applyVbbClipEncoded(vbbClips[i], encoded);
+              if (encoded && encoded.fps) reuseSeed = { fps: encoded.fps, maxW: encoded.maxW };
               setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
               ok += 1;
               refreshVbbClipRow(i);
@@ -6347,6 +6463,7 @@
             span: duration,
             srcW,
             srcH,
+            speedLimitSec: vbbSpeedLimitSec(),
             isAborted: () => abortVbb,
             onProgress: (local, text) => {
               const p = Math.min(0.98, 0.05 + Math.min(0.93, local) * 0.93);
@@ -6835,6 +6952,25 @@
             toast(`黑盒上限已设为 ${v} MB`);
           });
         }
+        const vbbSpeedChk = $("#vbb-speed-limit", root);
+        const vbbSpeedSec = $("#vbb-speed-sec", root);
+        if (vbbSpeedChk) {
+          try { vbbSpeedChk.checked = localStorage.getItem("devtools-vbb-speed-on") === "1"; } catch (_) {}
+          vbbSpeedChk.addEventListener("change", () => {
+            try { localStorage.setItem("devtools-vbb-speed-on", vbbSpeedChk.checked ? "1" : "0"); } catch (_) {}
+          });
+        }
+        if (vbbSpeedSec) {
+          try {
+            const sv = localStorage.getItem("devtools-vbb-speed-sec");
+            if (sv) vbbSpeedSec.value = sv;
+          } catch (_) {}
+          vbbSpeedSec.addEventListener("change", () => {
+            const v = Math.max(3, Math.min(120, Number(vbbSpeedSec.value) || 20));
+            vbbSpeedSec.value = String(v);
+            try { localStorage.setItem("devtools-vbb-speed-sec", String(v)); } catch (_) {}
+          });
+        }
         vbbError = $("#vbb-error", root);
         vbbAnalyze = $("#vbb-analyze", root);
         vbbRun = $("#vbb-run", root);
@@ -6974,7 +7110,10 @@
           .catch((err) => setError(vbbError, err.message || String(err)))
           .finally(() => blurVbbActionButton(btn));
       });
-      vbbOneclick?.addEventListener("click", () => runVbbOneClick().catch((err) => setError(vbbError, err.message || String(err))));
+        vbbOneclick?.addEventListener("click", () => runVbbOneClick().catch((err) => setError(vbbError, err.message || String(err))));
+        $("#vbb-merge-video")?.addEventListener("click", () =>
+          mergeVbbVideosToOne().catch((err) => setError(vbbError, err.message || String(err)))
+        );
       vbbRun?.addEventListener("click", (e) => {
         const btn = e.currentTarget;
         runVbbExecute()
