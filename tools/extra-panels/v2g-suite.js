@@ -6295,7 +6295,11 @@
                   .join(";")
               : "";
             const alist = withAudio ? names.map((_, i) => `[a${i}]`).join("") : "";
-            const filter = `${vparts}${aparts};${vlist}${alist}concat=n=${total}:v=1:a=${withAudio ? 1 : 0}[v]${withAudio ? "[a]" : ""}`;
+            // concat 输入必须按段交错：[v0][a0][v1][a1]…
+            const concatInputs = withAudio
+              ? names.map((_, i) => `[v${i}][a${i}]`).join("")
+              : vlist;
+            const filter = `${vparts}${aparts};${concatInputs}concat=n=${total}:v=1:a=${withAudio ? 1 : 0}[v]${withAudio ? "[a]" : ""}`;
             const mapArgs = withAudio ? ["-map", "[v]", "-map", "[a]", "-c:a", "aac", "-b:a", "160k"] : ["-map", "[v]"];
             const args = [...baseArgs, "-filter_complex", filter, ...mapArgs, ...enc];
             return ffmpeg.exec(args);

@@ -573,6 +573,21 @@
     return { blob, ext: outExt };
   }
 
+  function fileVideoDims(file) {
+    return new Promise((resolve) => {
+      const v = document.createElement("video");
+      v.preload = "metadata";
+      v.muted = true;
+      const done = (w, h) => {
+        try { URL.revokeObjectURL(v.src); } catch (_) {}
+        resolve({ w: w || 1280, h: h || 720 });
+      };
+      v.onloadedmetadata = () => done(v.videoWidth, v.videoHeight);
+      v.onerror = () => done(1280, 720);
+      try { v.src = URL.createObjectURL(file); } catch (_) { done(1280, 720); }
+    });
+  }
+
   async function mergeVidkit() {
     if (state.items.length < 2 || state.busy) return;
     const eng = window.DevToolsFfmpeg;
@@ -597,9 +612,10 @@
         await ffmpeg.writeFile(nm, new Uint8Array(await items[i].file.arrayBuffer()));
         names.push(nm);
       }
-      const W = 1280;
-      const H = 720;
-      const vparts = names
+      const first = await fileVideoDims(items[0].file);
+      const down = first.w > 1280 ? 1280 / first.w : 1;
+      const W = Math.max(2, Math.round((first.w * down) / 2) * 2);
+      const H = Math.max(2, Math.round((first.h * down) / 2) * 2);      const vparts = names
         .map(
           (_, i) =>
             `[${i}:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30[v${i}]`
@@ -614,7 +630,9 @@
           ? ";" + names.map((_, i) => `[${i}:a]aresample=async=1:first_pts=0[a${i}]`).join(";")
           : "";
         const alist = withAudio ? names.map((_, i) => `[a${i}]`).join("") : "";
-        const filter = `${vparts}${aparts};${vlist}${alist}concat=n=${names.length}:v=1:a=${withAudio ? 1 : 0}[v]${withAudio ? "[a]" : ""}`;
+        // concat 输入必须按段交错：[v0][a0][v1][a1]…
+        const concatInputs = withAudio ? names.map((_, i) => `[v${i}][a${i}]`).join("") : vlist;
+        const filter = `${vparts}${aparts};${concatInputs}concat=n=${names.length}:v=1:a=${withAudio ? 1 : 0}[v]${withAudio ? "[a]" : ""}`;
         const mapArgs = withAudio ? ["-map", "[v]", "-map", "[a]", "-c:a", "aac", "-b:a", "160k"] : ["-map", "[v]"];
         return ffmpeg.exec([...baseArgs, "-filter_complex", filter, ...mapArgs, ...enc]);
       };
