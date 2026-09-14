@@ -5355,7 +5355,11 @@
         }
         if (vbbAnalyze) vbbAnalyze.disabled = !hasVideo || vbbBusy || isVbbBatchMode() || isVbbManualMode();
         const mergeVideoBtn = $("#vbb-merge-video");
-        if (mergeVideoBtn) mergeVideoBtn.disabled = !isVbbBatchMode() || vbbBusy;
+        if (mergeVideoBtn) {
+          // 仅在「整段视频」流程（含多选整段）出现；切片/打点模式隐藏
+          mergeVideoBtn.hidden = isVbbSplitMode() || isVbbManualMode();
+          mergeVideoBtn.disabled = !isVbbBatchMode() || vbbBusy;
+        }
         if (vbbRun) {
           vbbRun.disabled = !hasPlan || vbbBusy || isVbbBatchMode() || isVbbManualMode();
           vbbRun.classList.toggle("is-ready", hasPlan && !vbbBusy && isVbbSplitMode());
