@@ -56,9 +56,7 @@
       let v2gCompressAgain;
       let v2gCompressLevel;
       const MAX_V2G_SECONDS = 600;
-      // 移动端：降低帧数/帧率/分辨率上限 → 编码更快、更省内存（小屏观感影响小）
-      const IS_MOBILE_ENC = isLikelyMobileBrowser();
-      let MAX_V2G_FRAMES = IS_MOBILE_ENC ? 200 : 300;
+      const MAX_V2G_FRAMES = 300;
       // 黑盒体积上限：可配置并持久化（默认 6MB），全局通用
       let V2G_BLACKBOX_MAX_BYTES = (M.blackboxUseMaxBytes ? M.blackboxUseMaxBytes() : 6 * 1024 * 1024);
       /** 体积有余（约上限 5/6）时尝试加宽，把预算用在清晰度上 */
@@ -67,11 +65,11 @@
         V2G_BLACKBOX_MAX_BYTES = M.blackboxUseMaxBytes ? M.blackboxUseMaxBytes() : V2G_BLACKBOX_MAX_BYTES;
         V2G_BLACKBOX_WIDEN_BYTES = Math.round(V2G_BLACKBOX_MAX_BYTES * (5 / 6));
       });
-      /** 黑盒：起点宽 420 + quality 5；优先保住 12FPS；够小时再加宽（移动端降一档） */
-      const V2G_BLACKBOX_FPS_LIST = IS_MOBILE_ENC ? [12, 10, 8] : [15, 12, 10];
-      const V2G_BLACKBOX_BASE_W = IS_MOBILE_ENC ? 360 : 420;
+      /** 黑盒：起点宽 420 + quality 5；优先保住 12FPS；够小时再加宽 */
+      const V2G_BLACKBOX_FPS_LIST = [15, 12, 10];
+      const V2G_BLACKBOX_BASE_W = 420;
       const V2G_BLACKBOX_WIDTH_STEP = 60;
-      const V2G_BLACKBOX_WIDTH_CAP = IS_MOBILE_ENC ? 540 : 720;
+      const V2G_BLACKBOX_WIDTH_CAP = 720;
       const V2G_BLACKBOX_QUALITY = 5;
       const V2G_BLACKBOX_MAX_COMPRESS_ROUNDS = 10;
       /** 非最后一档：每轮轻lossy（对齐 -l），最多 3 轮不减色；多给高帧档机会再降 FPS */
@@ -1072,11 +1070,10 @@
           .join(" · ");
       }
   
-      /** 长片跳过 15：触顶 300 帧后名义 15 无意义，且更慢 */
+      /** 只有 15 会被帧数上限压到 ≤12（与 12 档结果相同）时才跳过 15，否则保留 15 */
       function resolveBlackboxFpsList(span) {
         const s = Number(span) || 0;
-        const framesAt15 = Math.floor(s * 15) + 1;
-        if (s > V2G_BLACKBOX_LONG_SPAN_SEC || framesAt15 > MAX_V2G_FRAMES) {
+        if (s > 0 && MAX_V2G_FRAMES / s <= 12) {
           return V2G_BLACKBOX_FPS_LIST.filter((fps) => fps <= 12);
         }
         return V2G_BLACKBOX_FPS_LIST.slice();
