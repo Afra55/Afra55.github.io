@@ -70,6 +70,8 @@
       const V2G_BLACKBOX_BASE_W = 420;
       const V2G_BLACKBOX_WIDTH_STEP = 60;
       const V2G_BLACKBOX_WIDTH_CAP = 720;
+      /** 源宽未知时的加宽兜底（等同不设上限） */
+      const V2G_BLACKBOX_WIDTH_HARD_FALLBACK = 4096;
       const V2G_BLACKBOX_QUALITY = 5;
       const V2G_BLACKBOX_MAX_COMPRESS_ROUNDS = 10;
       /** 非最后一档：每轮轻lossy（对齐 -l），最多 3 轮不减色；多给高帧档机会再降 FPS */
@@ -1092,8 +1094,8 @@
   
       function resolveBlackboxWidthCap() {
         const srcW = Number(v2gVideo?.videoWidth) || 0;
-        if (srcW > 0) return Math.min(V2G_BLACKBOX_WIDTH_CAP, srcW);
-        return V2G_BLACKBOX_WIDTH_CAP;
+        if (srcW > 0) return srcW;
+        return V2G_BLACKBOX_WIDTH_HARD_FALLBACK;
       }
   
       /**
@@ -1171,7 +1173,7 @@
         const spanShare = 1 / Math.max(1, tierTotal);
         const isLastTier = tierIndex >= tierTotal - 1;
         const maxRounds = isLastTier ? V2G_BLACKBOX_MAX_COMPRESS_ROUNDS : V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS;
-        const width = Math.min(V2G_BLACKBOX_WIDTH_CAP, Math.max(64, Number(maxW) || V2G_BLACKBOX_BASE_W));
+        const width = Math.max(64, Number(maxW) || V2G_BLACKBOX_BASE_W);
   
         setV2gProgress(true, base + 0.02 * spanShare, `黑盒编码 · ${fps}FPS`, {
           sub: `宽≤${width} · 档位 ${tierIndex + 1}/${tierTotal}`,
@@ -1399,7 +1401,7 @@
           if (!candidate?.blob || candidate.blob.size >= V2G_BLACKBOX_WIDEN_BYTES) return candidate;
           if (candidate.blob.size > V2G_BLACKBOX_MAX_BYTES) return candidate;
           let best = candidate;
-          const hardMax = srcW > 0 ? Math.min(V2G_BLACKBOX_WIDTH_CAP, srcW) : V2G_BLACKBOX_WIDTH_CAP;
+          const hardMax = srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK;
           let nextW = (Number(best.maxW) || V2G_BLACKBOX_BASE_W) + V2G_BLACKBOX_WIDTH_STEP;
           while (nextW <= hardMax) {
             if (isAborted()) throw new Error("已取消");
@@ -1472,7 +1474,7 @@
           if (candidate.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
             if (candidate.blob.size < V2G_BLACKBOX_WIDEN_BYTES) {
               let best = candidate;
-              const hardMax = srcW > 0 ? Math.min(V2G_BLACKBOX_WIDTH_CAP, srcW) : V2G_BLACKBOX_WIDTH_CAP;
+              const hardMax = srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK;
               let nextW = (Number(best.maxW) || V2G_BLACKBOX_BASE_W) + V2G_BLACKBOX_WIDTH_STEP;
               while (nextW <= hardMax) {
                 if (isAborted()) throw new Error("已取消");
@@ -5516,7 +5518,7 @@
       }
   
       function vbbWidthLadder(srcW) {
-        const hard = Math.min(V2G_BLACKBOX_WIDTH_CAP, srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_CAP);
+        const hard = srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK;
         const start = Math.min(V2G_BLACKBOX_BASE_W, hard);
         const list = [];
         for (let w = start; w <= hard + 0.1; w += V2G_BLACKBOX_WIDTH_STEP) {
@@ -6812,7 +6814,7 @@
                   encoded = { ...encoded, compressRounds: 0, maxW: usedWidth };
                 }
                 if (reuseSeed && encoded?.blob?.size < V2G_BLACKBOX_WIDEN_BYTES && encoded?.blob?.size <= V2G_BLACKBOX_MAX_BYTES) {
-                  const hardMax = srcW > 0 ? Math.min(V2G_BLACKBOX_WIDTH_CAP, srcW) : V2G_BLACKBOX_WIDTH_CAP;
+                  const hardMax = srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK;
                   let nextW = usedWidth + V2G_BLACKBOX_WIDTH_STEP;
                   while (nextW <= hardMax) {
                     if (isAborted()) throw new Error("已取消");
