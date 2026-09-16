@@ -5394,9 +5394,9 @@
             : VBB_WORKFLOW_HINTS[vbbWorkflow] || VBB_WORKFLOW_HINTS.single;
         }
         if (vbbAdvanced) vbbAdvanced.hidden = isVbbManualMode() || batch;
-        // 压时长仅在「整段视频」生效/显示（批量里的「拼接后转黑盒」也是整段流程）
+        // 压时长对所有流程生效/显示（整段 / 手动打点 / 长视频切片 / 拼接后转黑盒）
         const speedRow = $("#vbb-speed-row");
-        if (speedRow) speedRow.hidden = vbbWorkflow !== "single";
+        if (speedRow) speedRow.hidden = false;
         paintVbbManualUi();
         setVbbButtons();
       }
@@ -6214,6 +6214,7 @@
               srcH,
               isAborted: () => abortVbb,
               seed: reuse.seed || undefined,
+              speedLimitSec: vbbSpeedLimitSec(),
               onProgress: (local, text) => {
                 const p = (i + Math.min(0.98, local)) / ranges.length;
                 const stage = bumpVbbEncodeProgress(p, vbbClipProgressLine(i, ranges.length, { reuse: Boolean(reuse.fromCache) }), text);
@@ -6373,12 +6374,15 @@
         let ok = 0;
         // 沿用上一个成功视频的编码方案(fps/宽)：仅在「时长一致(±0.08s)」时复用，且按 span 缓存
         let reuseSeed = null;
-        // 引擎变慢检测：记录基准「每帧耗时」，明显变慢则重启引擎
-        let baselineRate = 0;
         try {
           await prewarmFfmpegEngine().catch(() => {});
           for (let i = 0; i < total; i++) {
             if (abortVbb) throw new Error("已取消");
+            // 每个视频都用全新引擎：避免 WASM 实例累积导致后续视频明显变慢（资源已缓存，重启很快）
+            if (i > 0) {
+              try { terminateFfmpegInstance({ revokeAssets: false }); } catch (_) {}
+              await new Promise((r) => setTimeout(r, 50));
+            }
             const item = vbbBatchFiles[i];
             setVbbClipJob(i, { status: "running", progress: 0.02, text: "准备编码…" });
             const base = i / total;
@@ -6430,16 +6434,6 @@
               ]
                 .filter(Boolean)
                 .join(" · ");
-              // 引擎累积变慢：本条「每帧耗时」明显高于基准 → 重启引擎（资源已缓存，重启快）
-              const frames = Math.max(1, Number(encoded.frameCount) || 1);
-              const rate = (elapsedSec * 1000) / frames;
-              if (!baselineRate) {
-                baselineRate = rate;
-              } else if (rate > baselineRate * 1.6 && i < total - 1) {
-                try { terminateFfmpegInstance({ revokeAssets: false }); } catch (_) {}
-                vbbClips[i].gifNote = [vbbClips[i].gifNote, "已重启引擎"].filter(Boolean).join(" · ");
-                try { console.log(`[vbb] 变慢 ${rate.toFixed(1)} vs ${baselineRate.toFixed(1)} ms/帧 → 重启引擎`); } catch (_) {}
-              }
               setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
               ok += 1;
               refreshVbbClipRow(i);
@@ -6828,6 +6822,7 @@
                     srcH,
                     isAborted,
                     seed: reuseSeed || null,
+                    speedLimitSec: vbbSpeedLimitSec(),
                     onProgress: (local, text) => {
                       const p = 0.8 + Math.min(0.18, local) * 0.18;
                       const stage = vbbTickerLine(text) || "压缩";
@@ -6846,6 +6841,7 @@
                   srcH,
                   isAborted,
                   seed: reuseSeed || null,
+                  speedLimitSec: vbbSpeedLimitSec(),
                   onProgress: (local, text) => {
                     const p = Math.min(0.98, Number(local) || 0);
                     const stage = vbbTickerLine(text) || "编码…";

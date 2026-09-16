@@ -1254,7 +1254,7 @@
     const el = document.createElement("div");
     el.className = "memo-temp-prompt";
     el.dataset.memoTempPrompt = itemId;
-    el.innerHTML = `<p class="memo-temp-prompt-title">已加入列表</p>
+    el.innerHTML = `<p class="memo-temp-prompt-title">已加入列表 · 点此跳转</p>
       <div class="memo-temp-prompt-preview" data-memo-temp-prompt-preview></div>
       <p class="hint tight memo-temp-prompt-sub"><span data-memo-temp-prompt-sec>${TEMP_PROMPT_SEC}</span> 秒后将标为临时</p>
       <button type="button" class="ghost-btn" data-memo-temp-prompt-skip>不标记临时</button>`;
@@ -1332,6 +1332,11 @@
     const item = state.index.items.find((x) => x.id === itemId);
     const el = createTempPromptEl(itemId);
     stack.appendChild(el);
+    el.classList.add("is-clickable");
+    el.addEventListener("click", (e) => {
+      if (e.target.closest?.("[data-memo-temp-prompt-skip]")) return;
+      jumpToMemoItem(itemId);
+    });
     let remaining = TEMP_PROMPT_SEC;
     const secEl = el.querySelector("[data-memo-temp-prompt-sec]");
     const prompt = {
@@ -3510,6 +3515,27 @@
     if (location.hash.replace(/^#/, "").split(/[/?]/)[0] !== "memo") {
       location.hash = "memo";
     }
+  }
+
+  /** 跳到备忘录里的某个条目：清筛选 → 切到备忘录 → 滚动并高亮 */
+  function jumpToMemoItem(itemId) {
+    if (!itemId) return;
+    goMemoPanel();
+    const run = () => {
+      state.searchQuery = "";
+      state.activeType = "all";
+      state.activeTagId = "all";
+      state.dateFilterTo = null;
+      const search = $("#memo-search");
+      if (search) search.value = "";
+      const dateTo = $("#memo-filter-to");
+      if (dateTo) dateTo.value = "";
+      state.filterCache = { key: "", items: null };
+      resetListPaging();
+      revealClipboardItem(itemId, { noScroll: false });
+    };
+    if (isMemoActive()) run();
+    else window.setTimeout(run, 320);
   }
 
   function markClipPendingHint() {
@@ -6200,30 +6226,20 @@
   (function bindScrollTopFab() {
     const fab = $("#memo-scroll-top-fab");
     if (!fab) return;
+    // 挂到 body，避免面板祖先的 transform 让 position:fixed 变成相对内容定位
+    if (fab.parentElement !== document.body) document.body.appendChild(fab);
     const root = memoScrollRoot() || window;
     const getTop = () => (root === window ? window.scrollY || 0 : root.scrollTop || 0);
-    let hideTimer = 0;
-    const hideLater = () => {
-      window.clearTimeout(hideTimer);
-      hideTimer = window.setTimeout(() => {
-        fab.hidden = true;
-      }, 3000);
+    const sync = () => {
+      fab.hidden = !(isMemoActive() && getTop() >= 40);
     };
-    const onScroll = () => {
-      if (getTop() < 40) {
-        window.clearTimeout(hideTimer);
-        fab.hidden = true;
-        return;
-      }
-      fab.hidden = false;
-      hideLater();
-    };
-    root.addEventListener("scroll", onScroll, { passive: true });
+    root.addEventListener("scroll", sync, { passive: true });
+    window.addEventListener("hashchange", sync);
     fab.addEventListener("click", () => {
-      window.clearTimeout(hideTimer);
       fab.hidden = true;
       memoScrollToY(0, { behavior: "smooth" });
     });
+    sync();
   })();
   $("#memo-temp-filter")?.addEventListener("click", () => toggleTempFilter());
   $("#memo-archive-filter")?.addEventListener("click", () => toggleArchiveFilter());
