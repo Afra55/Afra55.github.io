@@ -498,7 +498,7 @@
     if (ffmpegWarmState === "warming") {
       text = ffmpegWarmDetail.text || "引擎预热中…";
     } else if (ffmpegWarmState === "ready") {
-      text = "本地编码器已就绪（约 30MB 引擎缓存可在侧栏一键清理）";
+      text = "本地编码器已就绪";
     } else if (ffmpegWarmState === "error") {
       text = ffmpegWarmError || "引擎预热失败，转换时会重试";
     } else if (ffmpegSkipAutoPrewarm) {

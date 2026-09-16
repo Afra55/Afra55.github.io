@@ -4475,8 +4475,7 @@
       const VBB_BLACKBOX_LONG_SPAN_SEC = 20;
       /** Soft keep≈0.72 对应约 1–2 轮 --lossy 轻压 */
       const VBB_SOFT_COMPRESS_KEEP = 0.72;
-      const VBB_DEFAULT_META =
-        "支持 MP4 / WebM / MOV。可多选已裁好的短片，一次性全部转黑盒 GIF；仅本机读取，不会上传。";
+      const VBB_DEFAULT_META = "";
       const VBB_WORKFLOW_HINTS = {
         single: "整段视频将输出一个 GIF，选视频后点「一键黑盒」即可。",
         split: "长视频切片：先点「① 分析切分方案」查看段数与预估，调整满意后点「② 按方案生成 GIF」。",

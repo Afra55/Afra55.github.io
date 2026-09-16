@@ -1,7 +1,6 @@
 <section id="vbb" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>黑盒 GIF</h1>
-        <p>预制参数（宽 420 · ≤6MB · 自动压帧/加宽），全程本地处理。短片选视频后点<strong>一键黑盒</strong>；长视频请用<strong>切片模式</strong>先分析方案再生成；也可<strong>手动打点</strong>自选片段。</p>
       </div>
       <div class="panel-body">
         <div class="vbb-scroll-anchor" aria-hidden="true"></div>
@@ -10,11 +9,11 @@
           <input id="vbb-file" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" multiple hidden />
           <button type="button" class="ghost-btn" id="vbb-clear">清空</button>
         </div>
-        <p class="hint" id="vbb-meta">支持 MP4 / WebM / MOV。可多选已裁好的短片，一次性全部转黑盒 GIF；仅本机读取，不会上传。</p>
+        <p class="hint" id="vbb-meta"></p>
         <div class="field-row" style="flex-wrap:wrap;align-items:center;margin-top:0.4rem">
           <label for="vbb-max-mb">黑盒上限</label>
           <input id="vbb-max-mb" class="mono meta-input" type="number" min="1" max="200" step="1" value="6" />
-          <span class="hint tight">MB（全站黑盒通用，自动保存）</span>
+          <span class="hint tight">MB</span>
         </div>
         <p class="hint tight" id="vbb-ffmpeg-warm" aria-live="polite">首次进入将准备本地视频编码器（约 30MB，仅下载一次，不上传视频）</p>
         <div class="gif-progress" id="vbb-ffmpeg-warm-progress" hidden>
