@@ -363,6 +363,7 @@
       if (!window.DevToolsExtraBind) await loadScript("./lib/extra-bind.js");
       onProgress?.(0.22, "加载工具基础库…");
       if (!window.DevToolsExtraKit) await loadScript("./lib/extra-kit.js");
+      if (!window.DevToolsDeviceNotify) await loadScript("./lib/device-notify.js");
       if (!window.__devtoolsExtraBootstrap) {
         await loadScript("./lib/extra-bootstrap.js");
         window.__devtoolsExtraBootstrap = true;

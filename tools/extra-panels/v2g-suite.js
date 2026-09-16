@@ -8,6 +8,7 @@
   const escapeHtml = P.escapeHtml;
 
   const M = window.DevToolsExtraMedia || {};
+  const DN = window.DevToolsDeviceNotify || {};
   const {
     mergeGifBlobs, compressGifBlob, getFfmpegInstance, ensureFfmpegAssets, fetchFileBytes,
     ensureFfmpegInputWritten, loadGifsicle, buildGifCompressArgs, buildBlackboxSoftCompressArgs,
@@ -6226,6 +6227,7 @@
             applyVbbClipEncoded(vbbClips[i], encoded, reuse.fromCache ? ["沿用方案"] : []);
             if (!vbbClips[i].error) saveVbbSpanScheme(r.span, snapshotVbbEncodeSeed(encoded, {}), "blackbox");
             setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
+            notifyVbbProgress(i, ranges.length);
             refreshVbbClipRow(i);
             if (mobile && i < ranges.length - 1) {
               await new Promise((r) => setTimeout(r, hugeFile ? 180 : 80));
@@ -6255,6 +6257,28 @@
         } catch (_) {
           return 0;
         }
+      }
+
+      /** 完成通知：按范围设置决定「每个」还是「仅全部完成」 */
+      function notifyVbbProgress(index, total) {
+        try {
+          if (DN.scope?.() === "done") {
+            if (Number(index) >= Number(total) - 1) DN.notifyDone?.();
+          } else {
+            DN.notifyDone?.();
+          }
+        } catch (_) {}
+      }
+
+      /** 处理期间防息屏 + 首次点击解锁提示音，结束后释放 */
+      function withVbbWake(fn) {
+        try { DN.unlockAudio?.(); } catch (_) {}
+        try { DN.acquire?.(); } catch (_) {}
+        return Promise.resolve()
+          .then(fn)
+          .finally(() => {
+            try { DN.release?.(); } catch (_) {}
+          });
       }
 
       // 把已选的多个视频按顺序拼接成一个 MP4（先试视频+音频，失败回退纯视频）
@@ -6434,6 +6458,7 @@
                 .filter(Boolean)
                 .join(" · ");
               setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
+              notifyVbbProgress(i, total);
               ok += 1;
               refreshVbbClipRow(i);
               try {
@@ -6533,6 +6558,7 @@
             vbbClips[0].gifNote = [vbbClips[0].gifNote, `加速${Number(encoded.speed).toFixed(1)}×`].filter(Boolean).join(" · ");
           }
           setVbbClipJob(0, { status: "done", progress: 1, text: "完成" });
+          notifyVbbProgress(0, 1);
           refreshVbbClipRow(0);
           const doneBits = [
             formatKb(encoded.blob.size),
@@ -6884,6 +6910,7 @@
                 progress: 1,
                 text: clip.error ? "完成（超限）" : "完成",
               });
+              if (!clip.error) notifyVbbProgress(i, plan.ranges.length);
             } catch (err) {
               if (String(err && err.message) === "已取消") throw err;
               clip.error = err.message || String(err);
@@ -7028,6 +7055,35 @@
             try { localStorage.setItem("devtools-vbb-speed-sec", String(v)); } catch (_) {}
           });
         }
+        // 完成通知 / 防息屏设置（默认全开，范围默认「每个都提示」）
+        const vbbWakeChk = $("#vbb-wake-lock", root);
+        const vbbSoundChk = $("#vbb-notify-sound", root);
+        const vbbVibChk = $("#vbb-notify-vibrate", root);
+        const vbbScopeSel = $("#vbb-notify-scope", root);
+        if (vbbWakeChk) {
+          vbbWakeChk.checked = DN.wakeEnabled?.() ?? true;
+          vbbWakeChk.addEventListener("change", () => DN.setWakeEnabled?.(vbbWakeChk.checked));
+        }
+        if (vbbSoundChk) {
+          vbbSoundChk.checked = DN.soundEnabled?.() ?? true;
+          vbbSoundChk.addEventListener("change", () => {
+            DN.setSound?.(vbbSoundChk.checked);
+            if (vbbSoundChk.checked) DN.unlockAudio?.();
+          });
+        }
+        if (vbbVibChk) {
+          vbbVibChk.checked = DN.vibrateEnabled?.() ?? true;
+          vbbVibChk.addEventListener("change", () => {
+            DN.setVibrate?.(vbbVibChk.checked);
+            if (vbbVibChk.checked) {
+              try { navigator.vibrate?.([80]); } catch (_) {}
+            }
+          });
+        }
+        if (vbbScopeSel) {
+          vbbScopeSel.value = DN.scope?.() === "done" ? "done" : "each";
+          vbbScopeSel.addEventListener("change", () => DN.setScope?.(vbbScopeSel.value));
+        }
         vbbError = $("#vbb-error", root);
         vbbAnalyze = $("#vbb-analyze", root);
         vbbRun = $("#vbb-run", root);
@@ -7163,21 +7219,21 @@
       };
       vbbAnalyze?.addEventListener("click", (e) => {
         const btn = e.currentTarget;
-        runVbbAnalyze()
+        withVbbWake(() => runVbbAnalyze())
           .catch((err) => setError(vbbError, err.message || String(err)))
           .finally(() => blurVbbActionButton(btn));
       });
-        vbbOneclick?.addEventListener("click", () => runVbbOneClick().catch((err) => setError(vbbError, err.message || String(err))));
+        vbbOneclick?.addEventListener("click", () => withVbbWake(() => runVbbOneClick()).catch((err) => setError(vbbError, err.message || String(err))));
         $("#vbb-merge-video")?.addEventListener("click", () =>
-          mergeVbbVideosToOne().catch((err) => setError(vbbError, err.message || String(err)))
+          withVbbWake(() => mergeVbbVideosToOne()).catch((err) => setError(vbbError, err.message || String(err)))
         );
       vbbRun?.addEventListener("click", (e) => {
         const btn = e.currentTarget;
-        runVbbExecute()
+        withVbbWake(() => runVbbExecute())
           .catch((err) => setError(vbbError, err.message || String(err)))
           .finally(() => blurVbbActionButton(btn));
       });
-      vbbMerge?.addEventListener("click", () => runVbbMerge().catch((err) => setError(vbbError, err.message || String(err))));
+      vbbMerge?.addEventListener("click", () => withVbbWake(() => runVbbMerge()).catch((err) => setError(vbbError, err.message || String(err))));
       vbbZip?.addEventListener("click", () => {
         packDownloadVbbGifs().catch((err) => setError(vbbError, err.message || String(err)));
       });
