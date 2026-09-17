@@ -841,6 +841,20 @@
       /**
        * FFmpeg palettegen/paletteuse 出 GIF（默认引擎）。
        */
+      function normalizeV2gCrop(crop, srcW, srcH) {
+        if (!crop || !(crop.w > 0) || !(crop.h > 0)) return null;
+        const x = Math.max(0, Math.round(Number(crop.x) || 0));
+        const y = Math.max(0, Math.round(Number(crop.y) || 0));
+        let w = Math.round(Number(crop.w));
+        let h = Math.round(Number(crop.h));
+        if (srcW > 0) w = Math.min(w, srcW - x);
+        if (srcH > 0) h = Math.min(h, srcH - y);
+        w -= w % 2;
+        h -= h % 2;
+        if (w < 8 || h < 8) return null;
+        return { x, y, w, h };
+      }
+
       async function encodeV2gGifFfmpeg(opts) {
         const file = opts.file || v2gSourceFile;
         if (!file) throw new Error("缺少原始视频文件，请重新选择视频");
@@ -872,9 +886,13 @@
         const frameCount = naturalFrames;
         const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
         const srcH = Number(opts.srcH) || v2gVideo?.videoHeight || 0;
-        const scale = srcW > maxW && srcW > 0 ? maxW / srcW : 1;
-        const outW = srcW ? Math.max(2, Math.round((srcW * scale) / 2) * 2) : maxW;
-        const outH = srcH ? Math.max(2, Math.round((srcH * scale) / 2) * 2) : Math.round(outW * 0.75);
+        const crop = normalizeV2gCrop(opts.crop, srcW, srcH);
+        const cropFilter = crop ? `crop=${crop.w}:${crop.h}:${crop.x}:${crop.y},` : "";
+        const effW = crop ? crop.w : srcW;
+        const effH = crop ? crop.h : srcH;
+        const scale = effW > maxW && effW > 0 ? maxW / effW : 1;
+        const outW = effW ? Math.max(2, Math.round((effW * scale) / 2) * 2) : maxW;
+        const outH = effH ? Math.max(2, Math.round((effH * scale) / 2) * 2) : Math.round(outW * 0.75);
         const stageLabel = (speed > 1 ? `加速${speed.toFixed(2)}× · ` : "") + (opts.stageLabel ? `${opts.stageLabel} · ` : "");
   
         const mapProgress = (local, text) => {
@@ -970,7 +988,7 @@
             await ffmpeg.writeFile(wmName, wmBytes);
             filterArgs = [
               "-filter_complex",
-              `[0:v]${speedFilter}fps=${fps},scale=${maxW}:-2:flags=lanczos${brightFilter}[base];` +
+              `[0:v]${cropFilter}${speedFilter}fps=${fps},scale=${maxW}:-2:flags=lanczos${brightFilter}[base];` +
                 `[1:v]format=rgba[wm];[base][wm]overlay=0:0:format=auto[v];` +
                 `[v]split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=diff[p];` +
                 `[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`,
@@ -978,7 +996,7 @@
           } else {
             filterArgs = [
               "-vf",
-              `${speedFilter}fps=${fps},scale=${maxW}:-2:flags=lanczos${brightFilter},` +
+              `${cropFilter}${speedFilter}fps=${fps},scale=${maxW}:-2:flags=lanczos${brightFilter},` +
                 `split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=diff[p];` +
                 `[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`,
             ];
@@ -1353,6 +1371,7 @@
           brightness: 0,
           isAborted,
           quality: V2G_BLACKBOX_QUALITY,
+          crop: clipOpts.crop || null,
         };
   
         const encodeAt = async (fps, maxW, progressBase, progressSpan, stageLabel) => {
@@ -6196,6 +6215,7 @@
               await ensureFfmpegInputWritten(ff, vbbSourceFile, () => {});
             } catch (_) {}
           }
+          const vbbCrop = await vbbResolveCrop(vbbSourceFile);
           for (let i = 0; i < ranges.length; i++) {
             if (abortVbb) throw new Error("已取消");
             const r = ranges[i];
@@ -6215,6 +6235,7 @@
               isAborted: () => abortVbb,
               seed: reuse.seed || undefined,
               speedLimitSec: vbbSpeedLimitSec(),
+              crop: vbbCrop,
               onProgress: (local, text) => {
                 const p = (i + Math.min(0.98, local)) / ranges.length;
                 const stage = bumpVbbEncodeProgress(p, vbbClipProgressLine(i, ranges.length, { reuse: Boolean(reuse.fromCache) }), text);
@@ -6279,6 +6300,143 @@
           .finally(() => {
             try { DN.release?.(); } catch (_) {}
           });
+      }
+
+      // ---- 自动裁剪纯色边框（视频版「去色边」） ----
+      const vbbCropCache = new Map();
+
+      function vbbAutoCropEnabled() {
+        return Boolean($("#vbb-auto-crop")?.checked);
+      }
+
+      function vbbColorsNear(a, b, tol) {
+        return Math.abs(a.r - b.r) <= tol && Math.abs(a.g - b.g) <= tol && Math.abs(a.b - b.b) <= tol;
+      }
+
+      /** 从一帧里估算纯色边框，返回保留区域（不含边框）；无边则 null */
+      function detectFrameContentRect(img, tol) {
+        const w = img.width;
+        const h = img.height;
+        const data = img.data;
+        const px = (x, y) => {
+          const i = (y * w + x) * 4;
+          return { r: data[i], g: data[i + 1], b: data[i + 2] };
+        };
+        const bucket = (p) => `${p.r >> 4}|${p.g >> 4}|${p.b >> 4}`;
+        const counts = new Map();
+        const sample = (x, y) => {
+          const k = bucket(px(x, y));
+          counts.set(k, (counts.get(k) || 0) + 1);
+        };
+        for (let x = 0; x < w; x++) { sample(x, 0); sample(x, h - 1); }
+        for (let y = 0; y < h; y++) { sample(0, y); sample(w - 1, y); }
+        let border = px(0, 0);
+        let bestN = 0;
+        counts.forEach((n, k) => {
+          if (n > bestN) {
+            bestN = n;
+            const [r, g, b] = k.split("|").map(Number);
+            border = { r: (r << 4) + 8, g: (g << 4) + 8, b: (b << 4) + 8 };
+          }
+        });
+        const rowMatch = (y, x0, x1) => {
+          for (let x = x0; x <= x1; x++) if (!vbbColorsNear(px(x, y), border, tol)) return false;
+          return true;
+        };
+        const colMatch = (x, y0, y1) => {
+          for (let y = y0; y <= y1; y++) if (!vbbColorsNear(px(x, y), border, tol)) return false;
+          return true;
+        };
+        let top = 0;
+        let bottom = h - 1;
+        let left = 0;
+        let right = w - 1;
+        while (top < bottom && rowMatch(top, left, right)) top++;
+        while (bottom > top && rowMatch(bottom, left, right)) bottom--;
+        while (left < right && colMatch(left, top, bottom)) left++;
+        while (right > left && colMatch(right, top, bottom)) right--;
+        if (right <= left || bottom <= top) return null;
+        return { left, top, right, bottom, w, h };
+      }
+
+      /** 采样多帧取交集，得到源像素坐标的裁剪矩形；无边框返回 null */
+      async function detectVideoCrop(file) {
+        if (!file) return null;
+        const cacheKey = `${file.name}|${file.size}|${file.lastModified || 0}`;
+        if (vbbCropCache.has(cacheKey)) return vbbCropCache.get(cacheKey);
+        let result = null;
+        const url = URL.createObjectURL(file);
+        const v = document.createElement("video");
+        v.muted = true;
+        v.playsInline = true;
+        v.preload = "auto";
+        v.src = url;
+        try {
+          await new Promise((resolve, reject) => {
+            const to = setTimeout(() => reject(new Error("读取视频超时")), 15000);
+            v.onloadeddata = () => { clearTimeout(to); resolve(); };
+            v.onerror = () => { clearTimeout(to); reject(new Error("无法读取视频")); };
+          });
+          const vw = v.videoWidth || 0;
+          const vh = v.videoHeight || 0;
+          if (vw < 16 || vh < 16) throw new Error("视频尺寸无效");
+          const cw = Math.min(360, vw);
+          const ch = Math.max(1, Math.round(vh * (cw / vw)));
+          const canvas = document.createElement("canvas");
+          canvas.width = cw;
+          canvas.height = ch;
+          const ctx = canvas.getContext("2d", { willReadFrequently: true });
+          const dur = Number.isFinite(v.duration) ? v.duration : 0;
+          const marks = dur > 0.6 ? [0.2, 0.5, 0.8].map((r) => Math.min(dur * r, Math.max(0, dur - 0.05))) : [0];
+          let acc = null;
+          for (const t of marks) {
+            await new Promise((resolve) => {
+              if (Math.abs(v.currentTime - t) < 0.02) { resolve(); return; }
+              const to = setTimeout(resolve, 3000);
+              v.onseeked = () => { clearTimeout(to); resolve(); };
+              try { v.currentTime = t; } catch (_) { clearTimeout(to); resolve(); }
+            });
+            ctx.drawImage(v, 0, 0, cw, ch);
+            const rect = detectFrameContentRect(ctx.getImageData(0, 0, cw, ch), 24);
+            if (!rect) { acc = null; break; }
+            acc = acc
+              ? {
+                  left: Math.max(acc.left, rect.left),
+                  top: Math.max(acc.top, rect.top),
+                  right: Math.min(acc.right, rect.right),
+                  bottom: Math.min(acc.bottom, rect.bottom),
+                  w: rect.w,
+                  h: rect.h,
+                }
+              : rect;
+          }
+          if (acc && acc.right > acc.left && acc.bottom > acc.top) {
+            const sx = vw / acc.w;
+            const sy = vh / acc.h;
+            const x = Math.round(acc.left * sx);
+            const y = Math.round(acc.top * sy);
+            const w = Math.round((acc.right - acc.left + 1) * sx);
+            const h = Math.round((acc.bottom - acc.top + 1) * sy);
+            if (w < vw - 4 || h < vh - 4) result = { x, y, w, h };
+          }
+        } catch (_) {
+          result = null;
+        } finally {
+          try { URL.revokeObjectURL(url); } catch (_) {}
+          try { v.removeAttribute("src"); v.load(); } catch (_) {}
+        }
+        vbbCropCache.set(cacheKey, result);
+        return result;
+      }
+
+      /** 按开关取裁剪矩形（关闭时 null） */
+      async function vbbResolveCrop(file) {
+        if (!vbbAutoCropEnabled()) return null;
+        try {
+          return await detectVideoCrop(file);
+        } catch (_) {
+          return null;
+        }
       }
 
       // 把已选的多个视频按顺序拼接成一个 MP4（先试视频+音频，失败回退纯视频）
@@ -6423,6 +6581,7 @@
             const t0 = performance.now();
             const usedSeed = Boolean(seedForItem);
             try {
+              const vbbCrop = await vbbResolveCrop(item.file);
               const encoded = await encodeBlackboxClip({
                 file: item.file,
                 startSec: 0,
@@ -6431,6 +6590,7 @@
                 srcH: item.srcH,
                 seed: seedForItem,
                 speedLimitSec: vbbSpeedLimitSec(),
+                crop: vbbCrop,
                 isAborted: () => abortVbb,
                 onProgress: (local, text) => {
                   const p = base + Math.min(0.96, 0.04 + local * 0.92);
@@ -6534,6 +6694,7 @@
           await prewarmFfmpegEngine().catch(() => {});
           bumpVbbEncodeProgress(0.03, "整段转换", "准备编码器…");
           setVbbClipJob(0, { status: "running", progress: 0.02, text: "准备编码…" });
+          const vbbCrop = await vbbResolveCrop(vbbSourceFile);
           const encoded = await encodeBlackboxClip({
             file: vbbSourceFile,
             startSec: 0,
@@ -6541,6 +6702,7 @@
             srcW,
             srcH,
             speedLimitSec: vbbSpeedLimitSec(),
+            crop: vbbCrop,
             isAborted: () => abortVbb,
             onProgress: (local, text) => {
               const p = Math.min(0.98, 0.05 + Math.min(0.93, local) * 0.93);
@@ -6763,6 +6925,7 @@
             jobText: "等待中…",
           }));
           renderVbbResults();
+          const vbbCrop = await vbbResolveCrop(vbbSourceFile);
           for (let i = 0; i < plan.ranges.length; i++) {
             if (abortVbb) throw new Error("已取消");
             const r = plan.ranges[i];
@@ -6800,6 +6963,7 @@
                     span: r.span,
                     srcW,
                     srcH,
+                    crop: vbbCrop,
                     skipWatermark: true,
                     skipBright: true,
                     brightness: 0,
@@ -6848,6 +7012,7 @@
                     isAborted,
                     seed: reuseSeed || null,
                     speedLimitSec: vbbSpeedLimitSec(),
+                    crop: vbbCrop,
                     onProgress: (local, text) => {
                       const p = 0.8 + Math.min(0.18, local) * 0.18;
                       const stage = vbbTickerLine(text) || "压缩";
@@ -6867,6 +7032,7 @@
                   isAborted,
                   seed: reuseSeed || null,
                   speedLimitSec: vbbSpeedLimitSec(),
+                  crop: vbbCrop,
                   onProgress: (local, text) => {
                     const p = Math.min(0.98, Number(local) || 0);
                     const stage = vbbTickerLine(text) || "编码…";
@@ -7083,6 +7249,14 @@
         if (vbbScopeSel) {
           vbbScopeSel.value = DN.scope?.() === "done" ? "done" : "each";
           vbbScopeSel.addEventListener("change", () => DN.setScope?.(vbbScopeSel.value));
+        }
+        const vbbCropChk = $("#vbb-auto-crop", root);
+        if (vbbCropChk) {
+          try { vbbCropChk.checked = localStorage.getItem("devtools-vbb-auto-crop") === "1"; } catch (_) {}
+          vbbCropChk.addEventListener("change", () => {
+            try { localStorage.setItem("devtools-vbb-auto-crop", vbbCropChk.checked ? "1" : "0"); } catch (_) {}
+            toast(vbbCropChk.checked ? "已开启：自动裁剪纯色边框" : "已关闭自动裁剪");
+          });
         }
         vbbError = $("#vbb-error", root);
         vbbAnalyze = $("#vbb-analyze", root);

@@ -8,6 +8,8 @@
   const escapeHtml = P.escapeHtml;
 
   const VS = [0, 1];
+  // 面板 id 用的小写后缀（interp-params-a），lane 键是大写 A/B；选择器必须小写
+  const lc = (l) => String(l).toLowerCase();
 
   function bezierY(x1, y1, x2, y2, x) {
     const cx = 3 * x1, bx = 3 * (x2 - x1) - cx, ax = 1 - cx - bx;
@@ -246,6 +248,9 @@
   // ---- param inputs ----
   function paramInputs(l) {
     const tool = toolOf(l);
+    if (!tool.params.length) {
+      return `<p class="hint tight">该插值器没有可调参数，切换上方类型即可对比曲线。</p>`;
+    }
     return tool.params
       .map((pp) => {
         const val = getParam(l, pp.key);
@@ -268,11 +273,11 @@
   }
 
   function refreshLane(l) {
-    const laneEl = $(`#interp-params-${l}`);
+    const laneEl = $(`#interp-params-${lc(l)}`);
     if (laneEl) laneEl.innerHTML = paramInputs(l);
-    const descEl = $(`#interp-desc-${l}`);
+    const descEl = $(`#interp-desc-${lc(l)}`);
     if (descEl) descEl.innerHTML = laneDesc(l);
-    const classEl = $(`#interp-class-${l}`);
+    const classEl = $(`#interp-class-${lc(l)}`);
     if (classEl) classEl.textContent = toolOf(l).name;
     syncTypeSelect(l);
     drawCurve();
@@ -280,7 +285,7 @@
   }
 
   function syncTypeSelect(l) {
-    const sel = $(`#interp-type-${l}`);
+    const sel = $(`#interp-type-${lc(l)}`);
     if (!sel) return;
     sel.value = lane(l).type;
     $$(`#interp-preset option`).forEach(() => {});
@@ -288,7 +293,7 @@
 
   function fillTypeOptions() {
     ["A", "B"].forEach((l) => {
-      const sel = $(`#interp-type-${l}`);
+      const sel = $(`#interp-type-${lc(l)}`);
       if (!sel) return;
       const cur = lane(l).type;
       sel.innerHTML = INTERPOLATORS.map((i) => `<option value="${i.id}">${escapeHtml(i.cn)} · ${escapeHtml(i.name)}</option>`).join("");
@@ -375,7 +380,7 @@
   }
 
   function setDot(l, t, y) {
-    const dot = $(`#interp-dot-${l}`);
+    const dot = $(`#interp-dot-${lc(l)}`);
     if (!dot) return;
     if (mapped) {
       dot.setAttribute("cx", mapped.xAt(t));
@@ -384,9 +389,9 @@
   }
 
   function setVal(l, y) {
-    const el = $(`#interp-val-${l}`);
+    const el = $(`#interp-val-${lc(l)}`);
     if (el) el.textContent = (Math.round(y * 100) / 100).toFixed(2);
-    const row = $(`#interp-preview-row-${l}`) || $(`#interp-preview [data-lane="${l}"]`);
+    const row = $(`#interp-preview-row-${lc(l)}`) || $(`#interp-preview [data-lane="${l}"]`);
     if (row) {
       const dot = row.querySelector(".interp-preview-dot");
       if (dot) dot.style.left = `${Math.min(100, Math.max(0, y * 100))}%`;

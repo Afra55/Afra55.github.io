@@ -1,21 +1,33 @@
 <section id="json" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>JSON 格式化</h1>
-        <p>校验、修复、美化与压缩，全部在本地完成。输入与结果共用同一编辑框。</p>
+        <p>校验、修复、美化与压缩，全部在本地完成。桌面可开「双栏」：左右各一个编辑框，底部按钮同时作用于两框。</p>
       </div>
       <div class="panel-body">
-        <div class="field-block">
-          <div class="label-row">
-            <label for="json-input">JSON</label>
-            <button type="button" class="copy-btn" data-copy-value="json-input">复制</button>
+        <div class="json-panes" id="json-panes">
+          <div class="json-pane" id="json-pane-a">
+            <div class="label-row">
+              <label for="json-input">JSON A</label>
+              <button type="button" class="copy-btn" data-copy-value="json-input">复制</button>
+            </div>
+            <textarea id="json-input" class="mono area json-area" rows="12" placeholder='{"hello":"world"}' spellcheck="false"></textarea>
           </div>
-          <textarea id="json-input" class="mono area json-area" rows="12" placeholder='{"hello":"world"}' spellcheck="false"></textarea>
+          <div class="json-split" id="json-split" hidden role="separator" aria-orientation="vertical" title="左右拖动调整两栏宽度"></div>
+          <div class="json-pane" id="json-pane-b" hidden>
+            <div class="label-row">
+              <label for="json-input-b">JSON B</label>
+              <button type="button" class="copy-btn" data-copy-value="json-input-b">复制</button>
+            </div>
+            <textarea id="json-input-b" class="mono area json-area" rows="12" placeholder='{"hello":"world"}' spellcheck="false"></textarea>
+          </div>
         </div>
+        <div class="json-resize" id="json-resize" role="separator" aria-orientation="horizontal" title="上下拖动调整高度（两框同步，无上限）"></div>
         <div class="btn-row tool-actions">
           <button type="button" class="secondary-btn" id="json-repair">修复</button>
           <button type="button" class="primary-btn" id="json-pretty">美化</button>
           <button type="button" class="secondary-btn" id="json-minify">压缩</button>
           <button type="button" class="secondary-btn" id="json-validate">仅校验</button>
+          <button type="button" class="secondary-btn" id="json-dual">双栏</button>
           <button type="button" class="ghost-btn" id="json-clear">清空</button>
         </div>
         <p class="hint" id="json-meta"></p>

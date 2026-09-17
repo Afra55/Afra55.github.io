@@ -1509,6 +1509,21 @@
     return items;
   }
 
+  // 行结构缓存：滚动时每帧重建 buildTimelineRows 是 O(n)，缓存后只在筛选/数据变化时重建
+  let memoRowsCacheOwner = null;
+  let memoRowsCacheGroup = null;
+  let memoRowsCache = null;
+  function visibleRows() {
+    const items = visibleItems();
+    if (memoRowsCacheOwner === state.filterCache && memoRowsCacheGroup === state.groupByDay && memoRowsCache) {
+      return memoRowsCache;
+    }
+    memoRowsCache = buildTimelineRows(items);
+    memoRowsCacheOwner = state.filterCache;
+    memoRowsCacheGroup = state.groupByDay;
+    return memoRowsCache;
+  }
+
   function canDragReorder() {
     // 虚拟列表也可排序；仅移动端关闭（触摸与滚动冲突）
     return !isLikelyMobile();
@@ -2501,7 +2516,7 @@
         renderItems();
         return;
       }
-      paintVirtualWindow(buildTimelineRows(items));
+      paintVirtualWindow(visibleRows());
     });
   }
 
@@ -2553,7 +2568,7 @@
 
   function paintVirtualWindow(rowsIn, { force = false, preferId = "", skipMeasure = false } = {}) {
     if (!itemList) return;
-    const rows = Array.isArray(rowsIn) ? rowsIn : buildTimelineRows(visibleItems());
+    const rows = Array.isArray(rowsIn) ? rowsIn : visibleRows();
     const prefix = buildHeightPrefix(rows);
     const totalH = prefix[rows.length] || 0;
     const { viewTop, viewH } = memoListViewMetrics(itemList);
@@ -2615,7 +2630,7 @@
     requestAnimationFrame(() => {
       if (!state.virtualMode) return;
       if (!measureVisibleCardHeights()) return;
-      const next = buildTimelineRows(visibleItems());
+      const next = visibleRows();
       if (visibleItems().length < VIRTUAL_MIN) return;
       const keepId = preferId || itemList.querySelector(".memo-card")?.dataset?.memoId || "";
       paintVirtualWindow(next, { force: true, preferId: keepId, skipMeasure: true });
@@ -6230,13 +6245,28 @@
     if (fab.parentElement !== document.body) document.body.appendChild(fab);
     const root = memoScrollRoot() || window;
     const getTop = () => (root === window ? window.scrollY || 0 : root.scrollTop || 0);
+    let hideTimer = 0;
+    const hideNow = () => {
+      window.clearTimeout(hideTimer);
+      hideTimer = 0;
+      fab.hidden = true;
+    };
     const sync = () => {
-      fab.hidden = !(isMemoActive() && getTop() >= 40);
+      if (!isMemoActive() || getTop() < 40) {
+        hideNow();
+        return;
+      }
+      fab.hidden = false;
+      window.clearTimeout(hideTimer);
+      hideTimer = window.setTimeout(() => {
+        hideTimer = 0;
+        fab.hidden = true;
+      }, 3000);
     };
     root.addEventListener("scroll", sync, { passive: true });
-    window.addEventListener("hashchange", sync);
+    window.addEventListener("hashchange", hideNow);
     fab.addEventListener("click", () => {
-      fab.hidden = true;
+      hideNow();
       memoScrollToY(0, { behavior: "smooth" });
     });
     sync();
@@ -6338,13 +6368,20 @@
       $$("details.memo-more[open]", itemList || document).forEach((d) => d.removeAttribute("open"));
     }
   });
+  let memoScrollCleanupTimer = 0;
+  function closeOpenMemoMenus() {
+    const open = $$("details.memo-more[open]", itemList || document);
+    for (let i = 0; i < open.length; i++) open[i].removeAttribute("open");
+  }
   window.addEventListener("scroll", () => {
     hideMemoCtx();
-    $$("details.memo-more[open]", itemList || document).forEach((d) => d.removeAttribute("open"));
-  }, true);
+    // 全量查 details[open] 很贵：滚动期间不查，停下 120ms 再清一次
+    window.clearTimeout(memoScrollCleanupTimer);
+    memoScrollCleanupTimer = window.setTimeout(closeOpenMemoMenus, 120);
+  }, { capture: true, passive: true });
   window.addEventListener("resize", () => {
     hideMemoCtx();
-    $$("details.memo-more[open]", itemList || document).forEach((d) => d.removeAttribute("open"));
+    closeOpenMemoMenus();
   });
 
   // item drag reorder (仅拖左侧把手，避免与文本框选冲突)

@@ -1294,9 +1294,48 @@ a.secondary-btn {
 
 .json-area {
   min-height: 12rem;
-  max-height: min(42vh, 28rem);
+  max-height: none;
   overflow: auto;
-  resize: vertical;
+  resize: none;
+}
+
+.json-panes {
+  display: flex;
+  align-items: stretch;
+  gap: 0.6rem;
+}
+.json-pane {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.json-pane[hidden] { display: none !important; }
+.json-split {
+  flex: 0 0 10px;
+  align-self: stretch;
+  border-radius: 6px;
+  cursor: col-resize;
+  touch-action: none;
+  background: linear-gradient(var(--line), var(--line)) center / 2px 100% no-repeat;
+}
+.json-split:hover {
+  background: linear-gradient(var(--accent), var(--accent)) center / 3px 100% no-repeat;
+}
+.json-split[hidden] { display: none !important; }
+.json-resize {
+  height: 12px;
+  margin: 0.4rem 0;
+  border-radius: 6px;
+  cursor: row-resize;
+  touch-action: none;
+  background: linear-gradient(var(--line), var(--line)) center / 100% 2px no-repeat;
+}
+.json-resize:hover {
+  background: linear-gradient(var(--accent), var(--accent)) center / 100% 3px no-repeat;
+}
+@media (max-width: 720px) {
+  .json-panes { flex-direction: column; }
+  .json-split { display: none !important; }
+  .json-resize { display: none !important; }
 }
 
 .primary-btn:disabled {
@@ -4157,7 +4196,7 @@ html[data-boot-loading="1"] body {
   display: none !important;
 }
 
-/* iOS/Safari PWA ¶ÀÁ¢Ä£Ê½£º±ÜÃâÓë×´Ì¬À¸ÖØµþ */
+/* iOS/Safari PWA ï¿½ï¿½ï¿½ï¿½Ä£Ê½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½×´Ì¬ï¿½ï¿½ï¿½Øµï¿½ */
 @supports (padding: env(safe-area-inset-top)) {
   .is-pwa-standalone body {
     padding-top: env(safe-area-inset-top);

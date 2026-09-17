@@ -549,75 +549,221 @@
   // ---- JSON ----
   const jsonInput = $("#json-input");
   if (!jsonInput) return;
+  const jsonInputB = $("#json-input-b");
   const jsonError = $("#json-error");
   const jsonMeta = $("#json-meta");
-  const JSON_AREA_MIN_PX = 192;
+  const paneA = $("#json-pane-a");
+  const paneB = $("#json-pane-b");
+  const splitEl = $("#json-split");
+  const resizeEl = $("#json-resize");
+  const dualBtn = $("#json-dual");
+
   const JSON_DRAFT_KEY = "devtools-json-draft-v1";
+  const JSON_DRAFT_B_KEY = "devtools-json-draft-b-v1";
+  const JSON_HEIGHT_KEY = "devtools-json-height-v1";
+  const JSON_DUAL_KEY = "devtools-json-dual-v1";
+  const JSON_SPLIT_KEY = "devtools-json-split-v1";
+  const JSON_MIN_H = 120;
+  const JSON_DEFAULT_H = 300;
+  const isJsonDesktop = () => window.matchMedia("(min-width: 721px)").matches;
+
+  function saveJsonDraft(el) {
+    if (!el) return;
+    try { localStorage.setItem(el === jsonInput ? JSON_DRAFT_KEY : JSON_DRAFT_B_KEY, el.value); } catch (_) {}
+  }
+  function readJsonNum(key, def) {
+    try {
+      const n = Number(localStorage.getItem(key));
+      return Number.isFinite(n) && n > 0 ? n : def;
+    } catch (_) {
+      return def;
+    }
+  }
+
   // 记忆上次输入，下次进来直接显示
   try {
     if (!jsonInput.value) {
       const saved = localStorage.getItem(JSON_DRAFT_KEY);
       if (saved) jsonInput.value = saved;
     }
+    if (jsonInputB && !jsonInputB.value) {
+      const savedB = localStorage.getItem(JSON_DRAFT_B_KEY);
+      if (savedB) jsonInputB.value = savedB;
+    }
   } catch (_) {}
-  jsonInput.addEventListener("input", () => {
-    try {
-      localStorage.setItem(JSON_DRAFT_KEY, jsonInput.value);
-    } catch (_) {}
+  jsonInput.addEventListener("input", () => saveJsonDraft(jsonInput));
+  jsonInputB?.addEventListener("input", () => saveJsonDraft(jsonInputB));
+
+  // ---- 高度：两框同步，拖拽调整，无最高限制 ----
+  let jsonHeight = readJsonNum(JSON_HEIGHT_KEY, JSON_DEFAULT_H);
+  function applyJsonHeight() {
+    jsonHeight = Math.max(JSON_MIN_H, Math.round(jsonHeight));
+    [jsonInput, jsonInputB].forEach((el) => {
+      if (!el) return;
+      el.style.height = `${jsonHeight}px`;
+      el.style.maxHeight = "none";
+      el.style.overflowY = "auto";
+      el.style.resize = "none";
+    });
+  }
+
+  // ---- 双栏 + 宽度 ----
+  let jsonDual = false;
+  try { jsonDual = localStorage.getItem(JSON_DUAL_KEY) === "1"; } catch (_) {}
+  let jsonSplit = 0.5;
+  try {
+    const r = Number(localStorage.getItem(JSON_SPLIT_KEY));
+    if (r >= 0.2 && r <= 0.8) jsonSplit = r;
+  } catch (_) {}
+
+  function jsonDualActive() {
+    return Boolean(jsonDual && jsonInputB && isJsonDesktop());
+  }
+
+  function applyJsonLayout() {
+    const on = jsonDualActive();
+    if (paneB) paneB.hidden = !on;
+    if (splitEl) splitEl.hidden = !on;
+    if (dualBtn) {
+      const canDual = Boolean(jsonInputB) && isJsonDesktop();
+      dualBtn.classList.toggle("is-active", on);
+      dualBtn.textContent = on ? "单栏" : "双栏";
+      dualBtn.disabled = !canDual;
+      dualBtn.hidden = !canDual;
+    }
+    const r = Math.max(0.2, Math.min(0.8, jsonSplit));
+    if (on) {
+      if (paneA) paneA.style.flex = `${r} 1 0`;
+      if (paneB) paneB.style.flex = `${1 - r} 1 0`;
+    } else {
+      if (paneA) paneA.style.flex = "";
+      if (paneB) paneB.style.flex = "";
+    }
+    applyJsonHeight();
+  }
+  applyJsonLayout();
+
+  /** 当前生效的编辑框：单栏=只有 A；双栏=A+B */
+  function jsonEditors() {
+    const list = [jsonInput];
+    if (jsonDualActive()) list.push(jsonInputB);
+    return list.filter(Boolean);
+  }
+
+  (function bindJsonHeightDrag() {
+    if (!resizeEl) return;
+    let dragging = false;
+    let startY = 0;
+    let startH = 0;
+    const onMove = (e) => {
+      if (!dragging) return;
+      e.preventDefault();
+      jsonHeight = Math.max(JSON_MIN_H, startH + (e.clientY - startY));
+      applyJsonHeight();
+    };
+    const onUp = () => {
+      if (!dragging) return;
+      dragging = false;
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      try { localStorage.setItem(JSON_HEIGHT_KEY, String(Math.round(jsonHeight))); } catch (_) {}
+    };
+    resizeEl.addEventListener("pointerdown", (e) => {
+      dragging = true;
+      startY = e.clientY;
+      startH = jsonHeight;
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      e.preventDefault();
+    });
+  })();
+
+  (function bindJsonSplitDrag() {
+    if (!splitEl || !paneB) return;
+    let dragging = false;
+    const onMove = (e) => {
+      if (!dragging) return;
+      e.preventDefault();
+      const host = $("#json-panes");
+      const rect = host?.getBoundingClientRect();
+      if (!rect || !rect.width) return;
+      jsonSplit = Math.max(0.2, Math.min(0.8, (e.clientX - rect.left) / rect.width));
+      applyJsonLayout();
+    };
+    const onUp = () => {
+      if (!dragging) return;
+      dragging = false;
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      try { localStorage.setItem(JSON_SPLIT_KEY, String(jsonSplit)); } catch (_) {}
+    };
+    splitEl.addEventListener("pointerdown", (e) => {
+      dragging = true;
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      e.preventDefault();
+    });
+  })();
+
+  window.addEventListener("resize", applyJsonLayout);
+
+  dualBtn?.addEventListener("click", () => {
+    jsonDual = !jsonDual;
+    try { localStorage.setItem(JSON_DUAL_KEY, jsonDual ? "1" : "0"); } catch (_) {}
+    applyJsonLayout();
   });
 
-  function parseJsonInput() {
-    const raw = jsonInput.value.trim();
+  function parseJsonEditor(el) {
+    const raw = el.value.trim();
     if (!raw) throw new Error("请先输入 JSON");
     return JSON.parse(raw);
   }
 
-  /** 按内容适度撑高，但留出按钮区域，超出则框内滚动 */
-  function fitJsonArea() {
-    if (!jsonInput) return;
-    const maxPx = Math.max(JSON_AREA_MIN_PX, Math.min(448, Math.floor(window.innerHeight * 0.42)));
-    jsonInput.style.height = "auto";
-    const needed = Math.ceil(jsonInput.scrollHeight + 2);
-    const next = Math.min(maxPx, Math.max(JSON_AREA_MIN_PX, needed));
-    jsonInput.style.height = `${next}px`;
-    jsonInput.style.overflowY = needed > maxPx ? "auto" : "hidden";
-  }
-
-  function resetJsonAreaHeight() {
-    if (!jsonInput) return;
-    jsonInput.style.height = "";
-    jsonInput.style.overflowY = "";
-  }
-
+  /** 对当前所有生效的编辑框执行同一操作（有内容的才处理） */
   function runJson(mode) {
-    try {
-      const data = parseJsonInput();
-      setToolError(jsonError, "");
-      if (mode === "validate") {
-        // 校验通过时顺带美化，便于完整预览
-        const pretty = JSON.stringify(data, null, 2);
-        jsonInput.value = pretty;
-        jsonMeta.textContent = `校验通过 · 根类型 ${Array.isArray(data) ? "array" : typeof data} · ${pretty.split("\n").length} 行`;
-        fitJsonArea();
-        showToast("JSON 合法");
-        return;
-      }
-      const out = mode === "pretty" ? JSON.stringify(data, null, 2) : JSON.stringify(data);
-      jsonInput.value = out;
-      jsonMeta.textContent =
-        mode === "pretty"
-          ? `已美化 · ${out.split("\n").length} 行 · ${out.length} 字符`
-          : `已压缩 · ${out.length} 字符`;
-      fitJsonArea();
-    } catch (err) {
+    const editors = jsonEditors().filter((el) => el.value.trim());
+    if (!editors.length) {
       jsonMeta.textContent = "";
-      setToolError(jsonError, `JSON 无效：${err.message || err}`);
+      setToolError(jsonError, "请先输入 JSON");
+      return;
+    }
+    let ok = 0;
+    let firstErr = "";
+    const bits = [];
+    editors.forEach((el) => {
+      const label = el === jsonInput ? "A" : "B";
+      try {
+        const data = parseJsonEditor(el);
+        const out = mode === "minify" ? JSON.stringify(data) : JSON.stringify(data, null, 2);
+        el.value = out;
+        saveJsonDraft(el);
+        ok += 1;
+        bits.push(
+          mode === "minify"
+            ? `${label} ${out.length} 字符`
+            : `${label} ${out.split("\n").length} 行`
+        );
+      } catch (err) {
+        if (!firstErr) firstErr = `${label}：${err.message || err}`;
+      }
+    });
+    if (firstErr) {
+      setToolError(jsonError, `JSON 无效：${firstErr}`);
+    } else {
+      setToolError(jsonError, "");
+    }
+    if (ok) {
+      const verb = mode === "validate" ? "校验通过" : mode === "pretty" ? "已美化" : "已压缩";
+      jsonMeta.textContent = `${verb} · ${bits.join(" · ")}`;
+      if (mode === "validate") showToast("JSON 合法");
+    } else {
+      jsonMeta.textContent = "";
     }
   }
 
   async function runJsonRepair() {
-    const raw = jsonInput.value.trim();
-    if (!raw) {
+    const editors = jsonEditors().filter((el) => el.value.trim());
+    if (!editors.length) {
       jsonMeta.textContent = "";
       setToolError(jsonError, "请先输入 JSON");
       return;
@@ -630,13 +776,25 @@
       await window.DevToolsLazy?.loadVendor("jsonrepair");
       const jsonrepair = globalThis.JSONRepair?.jsonrepair;
       if (typeof jsonrepair !== "function") throw new Error("JSON 修复库未就绪");
-      const repaired = jsonrepair(raw);
-      const data = JSON.parse(repaired);
-      const pretty = JSON.stringify(data, null, 2);
-      jsonInput.value = pretty;
-      jsonMeta.textContent = `已修复并美化 · 根类型 ${Array.isArray(data) ? "array" : typeof data} · ${pretty.split("\n").length} 行 · ${pretty.length} 字符`;
-      fitJsonArea();
-      showToast(repaired.replace(/\s/g, "") === raw.replace(/\s/g, "") ? "JSON 已是合法格式" : "JSON 已修复");
+      const bits = [];
+      let firstErr = "";
+      editors.forEach((el) => {
+        const label = el === jsonInput ? "A" : "B";
+        try {
+          const raw = el.value.trim();
+          const repaired = jsonrepair(raw);
+          const data = JSON.parse(repaired);
+          const pretty = JSON.stringify(data, null, 2);
+          el.value = pretty;
+          saveJsonDraft(el);
+          bits.push(`${label} ${pretty.split("\n").length} 行`);
+        } catch (err) {
+          if (!firstErr) firstErr = `${label}：${err?.message || err}`;
+        }
+      });
+      if (firstErr) setToolError(jsonError, `修复失败：${firstErr}`);
+      jsonMeta.textContent = bits.length ? `已修复并美化 · ${bits.join(" · ")}` : "";
+      if (bits.length) showToast("JSON 已修复");
     } catch (err) {
       jsonMeta.textContent = "";
       const msg = err?.position != null ? `${err.message}` : String(err?.message || err);
@@ -654,9 +812,13 @@
   $("#json-validate").addEventListener("click", () => runJson("validate"));
   $("#json-clear").addEventListener("click", () => {
     jsonInput.value = "";
+    if (jsonInputB) jsonInputB.value = "";
     jsonMeta.textContent = "";
     setToolError(jsonError, "");
-    resetJsonAreaHeight();
+    try {
+      localStorage.removeItem(JSON_DRAFT_KEY);
+      localStorage.removeItem(JSON_DRAFT_B_KEY);
+    } catch (_) {}
   });
   }
 
