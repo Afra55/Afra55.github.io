@@ -757,6 +757,8 @@
     filterCache: { key: "", items: null },
     persistTimer: 0,
     persistWaiters: [],
+    mediaUrlCache: new Map(), // itemId -> objectURL（列表缩略图复用，避免滚动反复解码）
+    mediaFailCache: new Set(),
   };
 
   function trackUrl(url) {
@@ -2385,6 +2387,42 @@
     }
   }
 
+  const MEDIA_URL_CACHE_MAX = 60;
+
+  function mediaCacheGet(id) {
+    const c = state.mediaUrlCache;
+    if (!c.has(id)) return undefined;
+    const url = c.get(id);
+    c.delete(id);
+    c.set(id, url); // LRU touch
+    return url;
+  }
+
+  function mediaCacheSet(id, url) {
+    const c = state.mediaUrlCache;
+    if (c.has(id)) c.delete(id);
+    c.set(id, url);
+    while (c.size > MEDIA_URL_CACHE_MAX) {
+      const oldest = c.keys().next().value;
+      const oldUrl = c.get(oldest);
+      c.delete(oldest);
+      if (oldUrl) {
+        try { URL.revokeObjectURL(oldUrl); } catch (_) {}
+      }
+    }
+  }
+
+  function dropMediaCache(id) {
+    const c = state.mediaUrlCache;
+    if (!c.has(id)) return;
+    const url = c.get(id);
+    c.delete(id);
+    if (url) {
+      try { URL.revokeObjectURL(url); } catch (_) {}
+    }
+    state.mediaFailCache.delete(id);
+  }
+
   async function hydrateOneMedia(el) {
     if (!el || el.dataset.hydrated === "1") return;
     el.dataset.hydrated = "1";
@@ -2392,10 +2430,33 @@
     const id = isImg ? el.dataset.memoThumb : el.dataset.memoMedia;
     const item = state.index.items.find((x) => x.id === id);
     if (!item) return;
+    const cached = mediaCacheGet(id);
+    if (cached) {
+      el.src = cached;
+      return;
+    }
+    if (state.mediaFailCache.has(id)) {
+      const tip = state.dirPending ? "需重新连接目录后才能预览" : isImg ? "预览失败" : "无法加载媒体";
+      el.replaceWith(Object.assign(document.createElement("p"), { className: "hint tight", textContent: tip }));
+      return;
+    }
     try {
       const blob = await loadBlob(item);
-      el.src = trackUrl(URL.createObjectURL(blob));
+      const url = URL.createObjectURL(blob);
+      mediaCacheSet(id, url);
+      if (isImg && typeof createImageBitmap === "function") {
+        // 先用真实宽高占位，避免图片加载后卡片高度跳变触发重排
+        try {
+          const bmp = await createImageBitmap(blob);
+          if (bmp && bmp.width && bmp.height) {
+            el.style.aspectRatio = `${bmp.width} / ${bmp.height}`;
+          }
+          bmp?.close?.();
+        } catch (_) {}
+      }
+      el.src = url;
     } catch (_) {
+      state.mediaFailCache.add(id);
       const tip = state.dirPending ? "需重新连接目录后才能预览" : isImg ? "预览失败" : "无法加载媒体";
       el.replaceWith(Object.assign(document.createElement("p"), { className: "hint tight", textContent: tip }));
     }
@@ -4106,6 +4167,7 @@
       removed.push(state.index.items[idx]);
       state.index.items.splice(idx, 1);
       state.selected.delete(id);
+      dropMediaCache(id);
     }
     if (!removed.length) return;
     removed.forEach(forgetHash);
