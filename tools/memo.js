@@ -2387,27 +2387,29 @@
     }
   }
 
-  const MEDIA_URL_CACHE_MAX = 60;
-
   function mediaCacheGet(id) {
-    const c = state.mediaUrlCache;
-    if (!c.has(id)) return undefined;
-    const url = c.get(id);
-    c.delete(id);
-    c.set(id, url); // LRU touch
-    return url;
+    return state.mediaUrlCache.get(id);
   }
 
   function mediaCacheSet(id, url) {
     const c = state.mediaUrlCache;
-    if (c.has(id)) c.delete(id);
+    const prev = c.get(id);
+    if (prev && prev !== url) {
+      try { URL.revokeObjectURL(prev); } catch (_) {}
+    }
     c.set(id, url);
-    while (c.size > MEDIA_URL_CACHE_MAX) {
-      const oldest = c.keys().next().value;
-      const oldUrl = c.get(oldest);
-      c.delete(oldest);
-      if (oldUrl) {
-        try { URL.revokeObjectURL(oldUrl); } catch (_) {}
+  }
+
+  /** 只保留当前渲染窗口内的图片 URL，滚出视野的才撤销（避免撤销正在显示的图） */
+  function pruneMediaCache(keepIds) {
+    const c = state.mediaUrlCache;
+    if (!c.size) return;
+    for (const id of [...c.keys()]) {
+      if (keepIds.has(id)) continue;
+      const url = c.get(id);
+      c.delete(id);
+      if (url) {
+        try { URL.revokeObjectURL(url); } catch (_) {}
       }
     }
   }
@@ -2444,16 +2446,6 @@
       const blob = await loadBlob(item);
       const url = URL.createObjectURL(blob);
       mediaCacheSet(id, url);
-      if (isImg && typeof createImageBitmap === "function") {
-        // 先用真实宽高占位，避免图片加载后卡片高度跳变触发重排
-        try {
-          const bmp = await createImageBitmap(blob);
-          if (bmp && bmp.width && bmp.height) {
-            el.style.aspectRatio = `${bmp.width} / ${bmp.height}`;
-          }
-          bmp?.close?.();
-        } catch (_) {}
-      }
       el.src = url;
     } catch (_) {
       state.mediaFailCache.add(id);
@@ -2682,6 +2674,13 @@
     itemList.dataset.virtEnd = String(end);
     const itemOffset = itemIndexBeforeRow(rows, start);
     itemList.innerHTML = `<div class="memo-virt-spacer" data-memo-virt-top style="height:${topPad}px" aria-hidden="true"></div>${rowsHtmlWithUndo(slice, itemOffset)}<div class="memo-virt-spacer" data-memo-virt-bottom style="height:${bottomPad}px" aria-hidden="true"></div>`;
+    // 图片 objectURL 只保留本窗口内条目，滚出视野的才释放
+    const keepMediaIds = new Set();
+    for (let i = 0; i < slice.length; i++) {
+      const r = slice[i];
+      if (r.kind === "item" && r.item?.id) keepMediaIds.add(r.item.id);
+    }
+    pruneMediaCache(keepMediaIds);
     const itemTotal = visibleItems().length;
     const shown = slice.reduce((n, r) => n + (r.kind === "item" ? 1 : 0), 0);
     renderListMeta(itemTotal, shown);
