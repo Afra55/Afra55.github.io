@@ -3761,6 +3761,8 @@
     state.dirHandle = handle;
     state.mode = "dir";
     state.dirPending = false;
+    // 目录重连后清空失败缓存，让之前失败的预览可以重试
+    state.mediaFailCache.clear();
     if (existing) {
       state.index = existing;
       toast(isNew ? `已切换到目录「${handle.name}」` : `已连接「${handle.name}」`);
