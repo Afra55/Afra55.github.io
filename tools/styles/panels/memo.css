@@ -1516,6 +1516,8 @@
   background: color-mix(in srgb, var(--bg-0) 70%, transparent);
   cursor: zoom-in;
 }
+/* 未加载前先占位，避免加载后卡片高度跳变 */
+.memo-thumb:not([src]) { min-height: 120px; }
 
 .memo-media {
   width: min(100%, 420px);

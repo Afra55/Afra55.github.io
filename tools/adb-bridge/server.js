@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.26";
+const BRIDGE_VERSION = "0.9.27";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -633,12 +633,34 @@ async function deviceInfo(serial) {
   const imei = await readImei(serial);
 
   let tradein = "";
+  let tradeinData = null;
   try {
     const out = await shellCapture(serial, "tradeinmode getstatus", 8000);
-    tradein = String(out || "").trim().slice(0, 500);
+    tradein = String(out || "").trim();
+    try {
+      tradeinData = JSON.parse(tradein);
+    } catch {
+      tradeinData = null;
+    }
   } catch {
     tradein = "";
   }
+  const imeisFromTradein = Array.isArray(tradeinData?.imeis)
+    ? tradeinData.imeis.map((x) => String(x || "").trim()).filter(Boolean)
+    : [];
+  const imeiFinal = imei || imeisFromTradein.join(" / ");
+  const cycleCount = Number.isFinite(Number(tradeinData?.battery?.cycle_count))
+    ? Number(tradeinData.battery.cycle_count)
+    : null;
+  const capacityBytes = Number(tradeinData?.storage?.capacity_bytes);
+  const capacity = Number.isFinite(capacityBytes) && capacityBytes > 0 ? `${Math.round(capacityBytes / 1e9)} GB` : "";
+  const usefulLife = Number.isFinite(Number(tradeinData?.storage?.useful_lifetime_remaining))
+    ? Number(tradeinData.storage.useful_lifetime_remaining)
+    : null;
+  const frp = tradeinData?.locks?.factory_reset_protection;
+  const launchLevel = tradeinData?.launch_level != null ? String(tradeinData.launch_level) : "";
+  const tradeinProduct =
+    tradeinData?.product && typeof tradeinData.product === "object" ? tradeinData.product : null;
 
   let ram = "";
   try {
@@ -733,7 +755,14 @@ async function deviceInfo(serial) {
     screen,
     density,
     storage,
-    imei,
+    imei: imeiFinal,
+    imeis: imeisFromTradein,
+    cycleCount,
+    capacity,
+    usefulLife,
+    frp: typeof frp === "boolean" ? frp : null,
+    launchLevel,
+    tradeinProduct,
     brand: props["ro.product.brand"] || "",
     productName: props["ro.product.name"] || "",
     board: props["ro.product.board"] || "",
@@ -3825,7 +3854,7 @@ async function handleApi(req, res, url) {
         sendJson(res, 503, { ok: false, error: "未找到文件占用模块（请用完整 ZIP，含 fileunlock-bridge）" }, origin);
         return;
       }
-      const stripped = url.pathname === "/unlock" ? "/" : url.pathname.slice(8) || "/";
+      const stripped = url.pathname === "/unlock" ? "/" : url.pathname.slice(7) || "/";
       const isUnlockHealth = stripped === "/health" && req.method === "GET";
       if (!isUnlockHealth && req.method !== "OPTIONS") requireToken(req);
       await fileUnlockBridge.handleRequest(req, res, {

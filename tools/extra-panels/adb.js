@@ -885,7 +885,8 @@
           "#adb-info-screen", "#adb-info-battery", "#adb-info-storage", "#adb-info-build",
           "#adb-info-imei", "#adb-info-brand", "#adb-info-platform", "#adb-info-baseband",
           "#adb-info-patch", "#adb-info-ram", "#adb-info-kernel", "#adb-info-locale",
-          "#adb-info-fingerprint", "#adb-info-tradein",
+          "#adb-info-fingerprint", "#adb-info-cycle", "#adb-info-capacity", "#adb-info-frp",
+          "#adb-info-launch",
         ];
         if (!info) {
           ALL.forEach((id) => set(id, "—"));
@@ -895,7 +896,11 @@
         }
         set("#adb-info-serial", info.serial || info.serialno);
         set("#adb-info-state", info.state);
-        set("#adb-info-model", [info.manufacturer, info.model].filter(Boolean).join(" / "));
+        const tp = info.tradeinProduct || {};
+        set(
+          "#adb-info-model",
+          [info.manufacturer || tp.manufacturer, info.model || tp.model].filter(Boolean).join(" / ")
+        );
         set(
           "#adb-info-android",
           [info.androidVersion && `Android ${info.androidVersion}`, info.sdk && `SDK ${info.sdk}`]
@@ -915,7 +920,13 @@
         set("#adb-info-kernel", [info.kernel, info.uptime].filter(Boolean).join(" / "));
         set("#adb-info-locale", info.locale);
         set("#adb-info-fingerprint", info.fingerprint);
-        set("#adb-info-tradein", info.tradein ? String(info.tradein).replace(/\s*\n+\s*/g, " | ") : "");
+        const cycleBits = [];
+        if (info.cycleCount != null) cycleBits.push(`循环 ${info.cycleCount} 次`);
+        if (info.usefulLife != null) cycleBits.push(`寿命剩 ${info.usefulLife}%`);
+        set("#adb-info-cycle", cycleBits.join(" / "));
+        set("#adb-info-capacity", info.capacity);
+        set("#adb-info-frp", info.frp === true ? "已开启" : info.frp === false ? "未开启" : "");
+        set("#adb-info-launch", info.launchLevel);
         if (adbInfoMeta) {
           adbInfoMeta.textContent = info.ready === false ? info.message || "设备未就绪" : "已加载";
         }

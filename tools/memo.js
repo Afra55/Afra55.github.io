@@ -2320,7 +2320,7 @@
       body = `<${textTag} class="${textCls}" data-memo-expand="${item.id}" draggable="false" title="${escapeHtml(formatted.title)}">${formatted.html}</${textTag}>${inlineImgs}${links}`;
     } else if (item.type === "image" || item.type === "gif") {
       const badge = item.type === "gif" ? `<span class="memo-anim-badge">动图</span>` : "";
-      body = `<div class="memo-thumb-wrap memo-media-hit" data-memo-preview="${item.id}">${badge}<img class="memo-thumb" data-memo-thumb="${item.id}" alt="" loading="lazy" decoding="async" /></div>`;
+      body = `<div class="memo-thumb-wrap memo-media-hit" data-memo-preview="${item.id}">${badge}<img class="memo-thumb" data-memo-thumb="${item.id}" ${memoMediaAttrs(item.id)} alt="" decoding="async" /></div>`;
     } else if (item.type === "video") {
       body = `<div class="memo-media-hit" data-memo-preview="${item.id}"><video class="memo-media" data-memo-media="${item.id}" muted playsinline preload="none"></video></div>`;
     } else if (item.type === "audio") {
@@ -2391,7 +2391,7 @@
   // 列表缩略图 / 媒体 URL 缓存：LRU，容量远大于可见窗口，滚回来不再重读重解码
   const MEDIA_THUMB_CACHE_MAX = 400;
   const MEDIA_URL_CACHE_MAX = 80;
-  const MEDIA_THUMB_W = 480;
+  const MEDIA_THUMB_W = 360;
 
   function lruGet(cache, id) {
     if (!cache.has(id)) return undefined;
@@ -2401,12 +2401,21 @@
     return v;
   }
 
-  function lruSet(cache, id, url, max) {
-    if (cache.has(id)) cache.delete(id);
-    cache.set(id, url);
+  function lruSet(cache, id, value, max) {
+    if (cache.has(id)) {
+      const prev = cache.get(id);
+      const prevUrl = typeof prev === "string" ? prev : prev?.url;
+      const nextUrl = typeof value === "string" ? value : value?.url;
+      if (prevUrl && prevUrl !== nextUrl) {
+        try { URL.revokeObjectURL(prevUrl); } catch (_) {}
+      }
+      cache.delete(id);
+    }
+    cache.set(id, value);
     while (cache.size > max) {
       const oldest = cache.keys().next().value;
-      const oldUrl = cache.get(oldest);
+      const old = cache.get(oldest);
+      const oldUrl = typeof old === "string" ? old : old?.url;
       cache.delete(oldest);
       if (oldUrl) {
         try { URL.revokeObjectURL(oldUrl); } catch (_) {}
@@ -2417,7 +2426,8 @@
   function dropMediaCache(id) {
     for (const cache of [state.mediaThumbCache, state.mediaUrlCache]) {
       if (!cache.has(id)) continue;
-      const url = cache.get(id);
+      const v = cache.get(id);
+      const url = typeof v === "string" ? v : v?.url;
       cache.delete(id);
       if (url) {
         try { URL.revokeObjectURL(url); } catch (_) {}
@@ -2426,13 +2436,53 @@
     state.mediaFailCache.delete(id);
   }
 
-  /** 静态图片生成小缩略图：列表解码原图是大图卡顿主因 */
-  async function makeThumbUrl(blob) {
+  /** 已缓存的图片信息：优先缩略图，其次原图 URL */
+  function memoMediaInfo(id) {
+    const t = state.mediaThumbCache.get(id);
+    if (t?.url) return t;
+    const u = state.mediaUrlCache.get(id);
+    if (u) return { url: u, w: 0, h: 0 };
+    return null;
+  }
+
+  /** 卡片 HTML 直接用已缓存 src（关键：避免每次重绘都从空 src 开始导致闪烁） */
+  function memoMediaAttrs(id) {
+    const info = memoMediaInfo(id);
+    if (!info) return "";
+    const ar = info.w > 0 && info.h > 0 ? ` style="aspect-ratio:${info.w}/${info.h}"` : "";
+    return `src="${escapeAttr(info.url)}" data-hydrated="1"${ar}`;
+  }
+
+  // 缩略图生成限并发，避免滚动时多个大图同时解码卡住主线程
+  const thumbLimiter = (() => {
+    let active = 0;
+    const queue = [];
+    const next = () => {
+      if (active >= 2 || !queue.length) return;
+      active += 1;
+      const { fn, resolve, reject } = queue.shift();
+      Promise.resolve()
+        .then(fn)
+        .then(resolve, reject)
+        .finally(() => {
+          active -= 1;
+          next();
+        });
+    };
+    return (fn) =>
+      new Promise((resolve, reject) => {
+        queue.push({ fn, resolve, reject });
+        next();
+      });
+  })();
+
+  /** 静态图片生成小缩略图（返回 {url,w,h}）：列表解码原图是大图卡顿主因 */
+  async function makeThumb(blob) {
     if (typeof createImageBitmap !== "function") return null;
     let bmp = null;
     try {
       try {
-        bmp = await createImageBitmap(blob, { resizeWidth: MEDIA_THUMB_W, resizeQuality: "medium" });
+        bmp = await createImageBitmap(blob, { resizeWidth: MEDIA_THUMB_W, resizeQuality: "low" });
       } catch (_) {
         bmp = await createImageBitmap(blob);
       }
@@ -2449,15 +2499,20 @@
       const ctx = canvas.getContext("2d");
       if (!ctx) return null;
       ctx.drawImage(bmp, 0, 0, cw, ch);
-      let out = await new Promise((r) => canvas.toBlob(r, "image/webp", 0.85));
+      let out = await new Promise((r) => canvas.toBlob(r, "image/webp", 0.82));
       if (!out) out = await new Promise((r) => canvas.toBlob(r, "image/png"));
       if (!out) return null;
-      return URL.createObjectURL(out);
+      return { url: URL.createObjectURL(out), w: cw, h: ch };
     } catch (_) {
       return null;
     } finally {
       bmp?.close?.();
     }
+  }
+
+  function failMedia(el, isImg) {
+    const tip = state.dirPending ? "需重新连接目录后才能预览" : isImg ? "预览失败" : "无法加载媒体";
+    el.replaceWith(Object.assign(document.createElement("p"), { className: "hint tight", textContent: tip }));
   }
 
   async function hydrateOneMedia(el) {
@@ -2467,31 +2522,25 @@
     const id = isImg ? el.dataset.memoThumb : el.dataset.memoMedia;
     const item = state.index.items.find((x) => x.id === id);
     if (!item) return;
-    const isStaticImg = isImg && item.type === "image";
-    if (isStaticImg) {
-      const cachedThumb = lruGet(state.mediaThumbCache, id);
-      if (cachedThumb) {
-        el.src = cachedThumb;
-        return;
-      }
-    }
-    const cachedUrl = lruGet(state.mediaUrlCache, id);
-    if (cachedUrl) {
-      el.src = cachedUrl;
+    const cached = memoMediaInfo(id);
+    if (cached) {
+      el.src = cached.url;
+      if (cached.w > 0 && cached.h > 0) el.style.aspectRatio = `${cached.w} / ${cached.h}`;
       return;
     }
     if (state.mediaFailCache.has(id)) {
-      const tip = state.dirPending ? "需重新连接目录后才能预览" : isImg ? "预览失败" : "无法加载媒体";
-      el.replaceWith(Object.assign(document.createElement("p"), { className: "hint tight", textContent: tip }));
+      failMedia(el, isImg);
       return;
     }
+    const isStaticImg = isImg && item.type === "image";
     try {
       const blob = await loadBlob(item);
       if (isStaticImg) {
-        const thumb = await makeThumbUrl(blob);
+        const thumb = await thumbLimiter(() => makeThumb(blob));
         if (thumb) {
           lruSet(state.mediaThumbCache, id, thumb, MEDIA_THUMB_CACHE_MAX);
-          el.src = thumb;
+          el.src = thumb.url;
+          el.style.aspectRatio = `${thumb.w} / ${thumb.h}`;
           return;
         }
       }
@@ -2500,8 +2549,7 @@
       el.src = url;
     } catch (_) {
       state.mediaFailCache.add(id);
-      const tip = state.dirPending ? "需重新连接目录后才能预览" : isImg ? "预览失败" : "无法加载媒体";
-      el.replaceWith(Object.assign(document.createElement("p"), { className: "hint tight", textContent: tip }));
+      failMedia(el, isImg);
     }
   }
 
