@@ -169,9 +169,11 @@
         setError(gifmError, "");
         revokeMerged();
         try {
+          const padColor = String($("#gifm-pad")?.value || "black") === "white" ? "white" : "black";
           const blob = await mergeGifBlobs(
             items.map((it) => it.blob),
-            (ratio, text) => setGifmProgress(true, ratio, text)
+            (ratio, text) => setGifmProgress(true, ratio, text),
+            { padColor }
           );
           mergedUrl = URL.createObjectURL(blob);
           if (gifmPreview) {

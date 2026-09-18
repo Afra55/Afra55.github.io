@@ -955,16 +955,92 @@
    * 用 gifsicle --merge 拼接已有 GIF，不重新调色板编码。
    * 各段尺寸宜一致，否则可能失败。
    */
-  async function mergeGifBlobs(blobs, onProgress) {
-    const list = (blobs || []).filter(Boolean);
+  async function gifDims(blob) {
+    try {
+      if (typeof createImageBitmap === "function") {
+        const bmp = await createImageBitmap(blob);
+        const w = bmp.width;
+        const h = bmp.height;
+        bmp.close?.();
+        if (w > 0 && h > 0) return { w, h };
+      }
+    } catch (_) {}
+    return new Promise((resolve) => {
+      const url = URL.createObjectURL(blob);
+      const img = new Image();
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        resolve({ w: img.naturalWidth || 0, h: img.naturalHeight || 0 });
+      };
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve({ w: 0, h: 0 });
+      };
+      img.src = url;
+    });
+  }
+
+  /**
+   * 尺寸不一致时：用 ffmpeg 把各 GIF 等比缩放 + 居中补边到「首个 GIF 的尺寸」。
+   * 尺寸一致或探测失败 → 返回 null（走原来的直接合并）。
+   */
+  async function normalizeGifsForMerge(list, onProgress, padColor) {
+    const dims = [];
+    for (const b of list) dims.push(await gifDims(b));
+    const target = dims[0];
+    if (!(target?.w > 0 && target?.h > 0)) return null;
+    const same = dims.every((d) => Math.abs(d.w - target.w) <= 1 && Math.abs(d.h - target.h) <= 1);
+    if (same) return null;
+    const W = Math.max(2, Math.round(target.w / 2) * 2);
+    const H = Math.max(2, Math.round(target.h / 2) * 2);
+    const color = String(padColor || "black").replace(/[^a-z0-9#x]/gi, "") || "black";
+    onProgress?.(0.06, `各段尺寸不一致 · 统一为 ${W}×${H}…`);
+    const ffmpeg = await getFfmpegInstance((ratio, text) =>
+      onProgress?.(0.06 + (Number(ratio) || 0) * 0.1, text || "加载编码器…")
+    );
+    const out = [];
+    for (let i = 0; i < list.length; i++) {
+      onProgress?.(0.16 + (i / list.length) * 0.5, `统一尺寸 ${i + 1}/${list.length}`);
+      const inName = `gm-in-${i}.gif`;
+      const outName = `gm-out-${i}.gif`;
+      try {
+        await ffmpeg.writeFile(inName, await fetchFileBytes(list[i]));
+        const code = await ffmpeg.exec([
+          "-i",
+          inName,
+          "-filter_complex",
+          `[0:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=${color},split[s0][s1];[s0]palettegen=max_colors=256:stats_mode=diff[p];[s1][p]paletteuse=dither=bayer`,
+          "-loop",
+          "0",
+          "-y",
+          outName,
+        ]);
+        if (code !== 0) throw new Error(`统一尺寸失败（第 ${i + 1} 段，code=${code}）`);
+        const data = await ffmpeg.readFile(outName);
+        const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+        const copy = new Uint8Array(bytes.byteLength);
+        copy.set(bytes);
+        out.push(new Blob([copy], { type: "image/gif" }));
+      } finally {
+        try { await ffmpeg.deleteFile(inName); } catch (_) {}
+        try { await ffmpeg.deleteFile(outName); } catch (_) {}
+      }
+    }
+    return out;
+  }
+
+  async function mergeGifBlobs(blobs, onProgress, opts = {}) {
+    let list = (blobs || []).filter(Boolean);
     if (list.length < 2) throw new Error("至少需要 2 个 GIF 才能合并");
-    onProgress?.(0.06, "加载合并引擎…");
+    const normalized = await normalizeGifsForMerge(list, onProgress, opts.padColor);
+    if (normalized) list = normalized;
+    onProgress?.(normalized ? 0.72 : 0.06, "加载合并引擎…");
     const gifsicle = await loadGifsicle();
     if (!gifsicle || typeof gifsicle.run !== "function") throw new Error("合并引擎未加载");
     const input = list.map((file, i) => ({ file, name: `in${i}.gif` }));
     const names = input.map((x) => x.name).join(" ");
     const startedAt = Date.now();
-    let tick = 0.2;
+    let tick = normalized ? 0.76 : 0.2;
     let timer = null;
     const pushBusy = (forceRatio) => {
       if (typeof forceRatio === "number") tick = forceRatio;
@@ -972,7 +1048,7 @@
       const elapsed = Math.max(1, Math.round((Date.now() - startedAt) / 1000));
       onProgress?.(tick, `拼接 ${list.length} 段 · 已用时 ${elapsed}s`);
     };
-    pushBusy(0.22);
+    pushBusy();
     timer = setInterval(() => pushBusy(), 700);
     const commands = [`--merge ${names} -o /out/out.gif`, `${names} -o /out/out.gif`];
     try {
