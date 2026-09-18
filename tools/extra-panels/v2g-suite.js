@@ -1388,6 +1388,89 @@
           quality: V2G_BLACKBOX_QUALITY,
           crop: clipOpts.crop || null,
         };
+
+        /** 探测源视频帧率（缓存）：用于「剩余预算提帧率」时不产生重复帧 */
+        const fpsProbeCache = (encodeBlackboxClipCore._fpsCache =
+          encodeBlackboxClipCore._fpsCache || new Map());
+        async function detectSourceFps(srcFile) {
+          if (!srcFile) return 0;
+          const key = `${srcFile.name || ""}|${srcFile.size || 0}|${srcFile.lastModified || 0}`;
+          if (fpsProbeCache.has(key)) return fpsProbeCache.get(key);
+          let fps = 0;
+          const url = URL.createObjectURL(srcFile);
+          const v = document.createElement("video");
+          v.muted = true;
+          v.playsInline = true;
+          v.preload = "auto";
+          try {
+            v.src = url;
+            await new Promise((resolve, reject) => {
+              const to = setTimeout(() => reject(new Error("probe timeout")), 8000);
+              v.onloadeddata = () => { clearTimeout(to); resolve(); };
+              v.onerror = () => { clearTimeout(to); reject(new Error("probe error")); };
+            });
+            if (typeof v.requestVideoFrameCallback === "function") {
+              const times = [];
+              await new Promise((resolve) => {
+                const to = setTimeout(resolve, 2500);
+                const onFrame = (_now, meta) => {
+                  times.push(Number(meta?.mediaTime) || 0);
+                  if (times.length >= 2 && times[times.length - 1] - times[0] >= 0.6) {
+                    clearTimeout(to);
+                    resolve();
+                    return;
+                  }
+                  if (times.length >= 240) { clearTimeout(to); resolve(); return; }
+                  v.requestVideoFrameCallback(onFrame);
+                };
+                v.requestVideoFrameCallback(onFrame);
+                v.play().catch(() => { clearTimeout(to); resolve(); });
+              });
+              if (times.length >= 3) {
+                const spanT = times[times.length - 1] - times[0];
+                if (spanT > 0.15) {
+                  const est = (times.length - 1) / spanT;
+                  if (Number.isFinite(est) && est >= 5 && est <= 240) fps = Math.round(est);
+                }
+              }
+            }
+          } catch (_) {
+            fps = 0;
+          } finally {
+            try { v.pause(); } catch (_) {}
+            try { URL.revokeObjectURL(url); } catch (_) {}
+            try { v.removeAttribute("src"); v.load(); } catch (_) {}
+          }
+          fpsProbeCache.set(key, fps);
+          return fps;
+        }
+
+        /** 宽度已到顶且仍有预算时，把剩余预算换成更高帧率（不降清晰度） */
+        async function raiseBlackboxFps(best, curFps, encodeAtWidthFps, srcFps) {
+          const cap = Math.min(30, srcFps > 0 ? srcFps : 0);
+          if (!(cap > curFps)) return best;
+          const width = Number(best.maxW) || V2G_BLACKBOX_BASE_W;
+          let out = best;
+          for (const f of [18, 20, 24, 30]) {
+            if (f <= curFps || f > cap) continue;
+            if (isAborted()) throw new Error("已取消");
+            onProgress(0.96, `提帧率试探 ${f}fps`);
+            const enc = await encodeAtWidthFps(f, width);
+            if (!enc?.blob || enc.blob.size > V2G_BLACKBOX_MAX_BYTES) break;
+            out = { ...enc, compressRounds: 0, maxW: width };
+          }
+          return out;
+        }
+
+        async function finishBlackbox(best, curFps, encodeAtWidthFps, hardMax) {
+          if (!best?.blob) return best;
+          if (best.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return best;
+          const atCap =
+            (srcW > 0 && best.outW >= srcW - 2) || (Number(best.maxW) || 0) >= Number(hardMax) - 2;
+          if (!atCap) return best;
+          const srcFps = await detectSourceFps(file).catch(() => 0);
+          return await raiseBlackboxFps(best, curFps, encodeAtWidthFps, srcFps);
+        }
   
         const encodeAt = async (fps, maxW, progressBase, progressSpan, stageLabel) => {
           const encoded = await encodeV2gGifFfmpeg({
@@ -1477,7 +1560,14 @@
             candidate = await compressAt(candidate, fps, isLastFps, 0.84);
           }
           if (candidate.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
-            return widenFrom(candidate, fps);
+            const seedHardMax = srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK;
+            const widened = await widenFrom(candidate, fps);
+            return await finishBlackbox(
+              widened,
+              fps,
+              (f, w) => encodeAt(f, w, 0.96, 0.03, `${f}FPS·宽${w}`),
+              seedHardMax
+            );
           }
           // 沿用失败再走完整探测
         }
@@ -1519,22 +1609,23 @@
           }
           tried.push(candidate);
           if (candidate.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
+            const hardMax = srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK;
+            const encodeAtWidthFps = (f, w) =>
+              encodeV2gGifFfmpeg({
+                ...common,
+                fps: f,
+                maxW: w,
+                stageLabel: `${f}FPS·宽${w}`,
+                onProgress: (local, text) => onProgress(0.92 + local * 0.05, text),
+              });
+            let best = candidate;
             if (candidate.blob.size < V2G_BLACKBOX_WIDEN_BYTES) {
-              const hardMax = srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK;
-              return await blackboxWidenBest(
-                candidate,
-                (w) =>
-                  encodeV2gGifFfmpeg({
-                    ...common,
-                    fps,
-                    maxW: w,
-                    stageLabel: `${fps}FPS·宽${w}`,
-                    onProgress: (local, text) => onProgress(0.92 + local * 0.05, text),
-                  }),
-                { minW: V2G_BLACKBOX_BASE_W, maxW: hardMax }
-              );
+              best = await blackboxWidenBest(candidate, (w) => encodeAtWidthFps(fps, w), {
+                minW: V2G_BLACKBOX_BASE_W,
+                maxW: hardMax,
+              });
             }
-            return candidate;
+            return await finishBlackbox(best, fps, encodeAtWidthFps, hardMax);
           }
         }
         return tried.slice().sort((a, b) => a.blob.size - b.blob.size)[0] || null;
