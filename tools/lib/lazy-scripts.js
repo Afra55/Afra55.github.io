@@ -138,13 +138,14 @@
     vbb: "./extra-panels/v2g-suite.js",
     interpolator: "./extra-panels/interpolator.js",
     giftest: "./extra-panels/giftest.js",
+    fileunlock: "./extra-panels/fileunlock.js",
   };
 
   const EXTRA_PANEL_IDS = new Set([
     "timediff", "color", "url", "query", "uuid", "hash", "text", "caseconv", "coord",
     "yaml", "imgb64", "qrcode", "cron", "units", "sharecard", "numbase", "markdown",
     "eyedropper", "password", "gifmaker", "gifx", "v2g", "gifbb", "gifc", "gife", "gifm",
-    "adb", "vsplit", "vbb", "interpolator", "giftest",
+    "adb", "vsplit", "vbb", "interpolator", "giftest", "fileunlock",
   ]);
 
   const EXTRA_MEDIA_TOOLS = new Set([
@@ -224,6 +225,7 @@
     "setup", "about", "xorenc", "morse", "countdown",
     "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "piano", "minigames", "ambient", "enspeak", "animalearn",
     "insectearn", "plantearn", "colorearn", "numearn", "shapeearn", "vehicleearn", "fruitearn", "homeearn", "sportsearn", "foodearn", "thingearn", "jobearn", "weatherearn", "bodyearn", "vegearn", "ipgeo",
+    "fileunlock",
   ]);
 
   const scriptPromises = new Map();

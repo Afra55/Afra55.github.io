@@ -1,0 +1,25 @@
+<section id="fileunlock" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>文件占用解锁</h1>
+        <p>查出「哪个程序占用了这个文件 / 文件夹」，并可直接关闭该程序释放占用。仅 Windows 可用，检测全程在本机完成（走统一桥 <span class="mono">/unlock</span>）。</p>
+      </div>
+      <div class="panel-body">
+        <div id="fu-bridge-shell" class="bridge-shell-host"></div>
+        <p class="error" id="fu-error" hidden></p>
+        <div id="fu-workspace" hidden>
+          <div class="label-row" style="margin-top:1rem">
+            <h2 class="subhead">要检查的路径</h2>
+            <span class="hint tight">可粘贴路径，或点右侧按钮在本机选择</span>
+          </div>
+          <input id="fu-path" class="mono fu-path" type="text" placeholder="例如 D:\Downloads\被占用的文件.zip 或 D:\某文件夹" spellcheck="false" autocomplete="off" />
+          <div class="btn-row tool-actions" style="margin-top:0.55rem;flex-wrap:wrap">
+            <button type="button" class="primary-btn" id="fu-check">检查占用</button>
+            <button type="button" class="secondary-btn" id="fu-pick-file">选择文件</button>
+            <button type="button" class="secondary-btn" id="fu-pick-dir">选择文件夹</button>
+          </div>
+          <p class="hint tight" id="fu-meta"></p>
+          <div id="fu-result" class="fu-result" hidden></div>
+          <p class="hint tight" style="margin-top:0.8rem">说明：检测用 Windows Restart Manager；关闭程序会丢失未保存内容，请先保存。文件夹过大时只扫描前 600 个文件。</p>
+        </div>
+      </div>
+    </section>

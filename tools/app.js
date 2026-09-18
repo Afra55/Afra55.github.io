@@ -1503,9 +1503,18 @@
     return false;
   }
 
+  function isWindowsClient() {
+    const ua = navigator.userAgent || "";
+    if (/Android|iPhone|iPad|iPod|Mobile/i.test(ua)) return false;
+    const platform = navigator.userAgentData?.platform || navigator.platform || "";
+    if (/Windows|Win32|Win64/i.test(platform)) return true;
+    return /Windows/i.test(ua);
+  }
+
   function isNavToolVisible(id) {
     const meta = TOOL_META[id];
     if (meta?.desktopOnly && isPhoneLikeClient()) return false;
+    if (meta?.winOnly && !isWindowsClient()) return false;
     return true;
   }
 

@@ -163,6 +163,11 @@
       "bytes": 7764
     },
     {
+      "id": "fileunlock",
+      "file": "./panels/fileunlock.html",
+      "bytes": 1712
+    },
+    {
       "id": "hash",
       "file": "./panels/hash.html",
       "bytes": 1111

@@ -301,7 +301,7 @@ download_file() {
 sync_bridges() {
   say ""
   say "== 同步本机桥文件 → ${BRIDGE_DIR} =="
-  mkdir -p "$BRIDGE_DIR/adb-bridge" "$BRIDGE_DIR/ffmpeg-bridge" "$BRIDGE_DIR/git-bridge"
+  mkdir -p "$BRIDGE_DIR/adb-bridge" "$BRIDGE_DIR/ffmpeg-bridge" "$BRIDGE_DIR/git-bridge" "$BRIDGE_DIR/fileunlock-bridge"
 
   # ADB 统一桥核心文件
   local adb_files=(server.js resolve-port.js scrcpy-mirror.js scrcpy-ctrl.js device-inspect.js)
@@ -326,6 +326,12 @@ sync_bridges() {
     download_file "${BASE_URL}/git-bridge/$f" "$BRIDGE_DIR/git-bridge/$f" || warn "下载失败 $f"
   done
   chmod +x "$BRIDGE_DIR/git-bridge/start-linux.sh" "$BRIDGE_DIR/git-bridge/start-mac.command" "$BRIDGE_DIR/git-bridge/noop-editor.sh" 2>/dev/null || true
+
+  # 文件占用解锁（Windows 专用；其他平台下载后不生效）
+  for f in server.js lock-ops.js; do
+    info "fileunlock-bridge/$f"
+    download_file "${BASE_URL}/fileunlock-bridge/$f" "$BRIDGE_DIR/fileunlock-bridge/$f" || warn "下载失败 $f"
+  done
 
   # ADB / FFmpeg 补齐 Windows 启动脚本
   for f in start-win.bat start-win.cmd; do

@@ -95,6 +95,8 @@
         gitNoopSh,
         gitNoopCmd,
         gitNoopCjs,
+        unlockServerJs,
+        unlockOpsJs,
         scriptRaw,
         resolvePortJs,
         serverJar,
@@ -110,6 +112,8 @@
         fetchTextAsset("./git-bridge/noop-editor.sh").catch(() => "#!/bin/sh\nexit 0\n"),
         fetchTextAsset("./git-bridge/noop-editor.cmd").catch(() => "@echo off\r\nexit /b 0\r\n"),
         fetchTextAsset("./git-bridge/noop-editor.cjs").catch(() => "process.exit(0);\n"),
+        fetchTextAsset("./fileunlock-bridge/server.js").catch(() => ""),
+        fetchTextAsset("./fileunlock-bridge/lock-ops.js").catch(() => ""),
         fetchTextAsset(cfg.scriptPath),
         fetchTextAsset("./adb-bridge/resolve-port.js").catch(() => ""),
         fetch("./adb-bridge/vendor/scrcpy-server-v3.1", { cache: "no-cache" })
@@ -139,6 +143,7 @@
         "  - scrcpy-mirror.js / scrcpy-ctrl.js / device-inspect.js / resolve-port.js",
         "  - ffmpeg-bridge/server.js + ytdlp-core.js",
         "  - git-bridge/server.js + git-ops.js + noop-editor.*",
+        "  - fileunlock-bridge/server.js + lock-ops.js（Windows 文件占用解锁）",
         "  - vendor/scrcpy-server-v3.1（可选）",
         "  - " + cfg.scriptName,
         "",
@@ -167,6 +172,8 @@
       if (gitNoopSh) zip.file("git-bridge/noop-editor.sh", gitNoopSh, { unixPermissions: 0o755 });
       if (gitNoopCmd) zip.file("git-bridge/noop-editor.cmd", String(gitNoopCmd).replace(/\r?\n/g, "\r\n"));
       if (gitNoopCjs) zip.file("git-bridge/noop-editor.cjs", gitNoopCjs);
+      if (unlockServerJs) zip.file("fileunlock-bridge/server.js", unlockServerJs);
+      if (unlockOpsJs) zip.file("fileunlock-bridge/lock-ops.js", unlockOpsJs);
       if (serverJar) zip.file("vendor/scrcpy-server-v3.1", serverJar);
       zip.file(cfg.scriptName, scriptText, {
         unixPermissions: platform === "win" ? undefined : 0o755,

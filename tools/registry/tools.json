@@ -169,7 +169,8 @@
         "adb",
         "ffbridge",
         "ytdlp",
-        "gitbridge"
+        "gitbridge",
+        "fileunlock"
       ]
     },
     {
@@ -895,6 +896,21 @@
       ],
       "desktopOnly": true
     },
+    "fileunlock": {
+      "name": "文件占用解锁",
+      "aliases": [
+        "占用",
+        "被占用",
+        "解锁",
+        "文件被占用",
+        "解除占用",
+        "unlock",
+        "handle",
+        "lock"
+      ],
+      "desktopOnly": true,
+      "winOnly": true
+    },
     "feedbackhub": {
       "name": "评价汇总",
       "aliases": [
@@ -1205,6 +1221,7 @@
     "ffbridge": "电脑批量用本机 FFmpeg 桥；手机请直接用视频/GIF 分类里的音频/修剪/动图（网页内处理）。",
     "ytdlp": "本机 yt-dlp 桥：解析/下载视频与播放列表、字幕、封面、直播、Cookies 与 SponsorBlock；含安装教程，文件只保存在电脑。",
     "gitbridge": "今日交码看板 + 说明模板 + Gerrit 视角 + 历史/工作线右键；统一桥 /git。",
+    "fileunlock": "找出 Windows 上占用某文件/文件夹的程序，并可一键关闭释放占用（Restart Manager 检测，仅 Windows）。",
     "about": "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
     "setup": "小白向：如何下载安装 Node.js、ADB、FFmpeg；手机用网页保底、电脑用桥更优。",
     "envkit": "一键安装/升级与统一桥探测：ADB、FFmpeg、yt-dlp、Git 均列在 17888。",

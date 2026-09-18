@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.25";
+const BRIDGE_VERSION = "0.9.26";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -79,6 +79,24 @@ if (!ffmpegBridge) {
 const gitBridge = loadGitBridge();
 if (!gitBridge) {
   console.warn("未找到 Git 模块：统一桥仍可提供 ADB；完整 ZIP 请包含 git-bridge/server.js + git-ops.js");
+}
+function loadFileUnlockBridge() {
+  const candidates = [
+    path.join(__dirname, "fileunlock-bridge", "server.js"),
+    path.join(__dirname, "..", "fileunlock-bridge", "server.js"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return require(candidate);
+    } catch (err) {
+      console.warn("加载文件占用模块失败:", candidate, err.message || err);
+    }
+  }
+  return null;
+}
+const fileUnlockBridge = loadFileUnlockBridge();
+if (!fileUnlockBridge) {
+  console.warn("未找到文件占用模块（可选）：完整 ZIP 请包含 fileunlock-bridge/server.js + lock-ops.js");
 }
 
 /** Preferred quick roots shown in UI (reads are not limited to these) */
@@ -3801,6 +3819,23 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    // 统一桥：文件占用解锁 API 挂在 /unlock/*（仅 Windows 生效）
+    if (url.pathname === "/unlock" || url.pathname.startsWith("/unlock/")) {
+      if (!fileUnlockBridge?.handleRequest) {
+        sendJson(res, 503, { ok: false, error: "未找到文件占用模块（请用完整 ZIP，含 fileunlock-bridge）" }, origin);
+        return;
+      }
+      const stripped = url.pathname === "/unlock" ? "/" : url.pathname.slice(8) || "/";
+      const isUnlockHealth = stripped === "/health" && req.method === "GET";
+      if (!isUnlockHealth && req.method !== "OPTIONS") requireToken(req);
+      await fileUnlockBridge.handleRequest(req, res, {
+        pathname: stripped,
+        alreadyAuthed: !isUnlockHealth,
+        embedded: true,
+      });
+      return;
+    }
+
     if (url.pathname === "/health" && req.method === "GET") {
       const adbInfo = await checkAdb();
       const hostTools = await probeHostTools();
@@ -3914,6 +3949,7 @@ async function handleApi(req, res, url) {
             "ytdlp",
             "ytdlp-mount",
             "git-mount",
+            "unlock-mount",
             "device-perf",
             "device-processes",
             "device-shell",
@@ -3940,8 +3976,9 @@ async function handleApi(req, res, url) {
           ffmpegMount: "/ff",
           ytdlpMount: "/ytdlp",
           gitMount: "/git",
+          unlockMount: "/unlock",
           note:
-            "统一本机桥：ADB + Scrcpy + FFmpeg(/ff) + yt-dlp(/ytdlp) + Git(/git)。Token 默认 devtools-bridge。只需启动一次。",
+            "统一本机桥：ADB + Scrcpy + FFmpeg(/ff) + yt-dlp(/ytdlp) + Git(/git) + 文件占用(/unlock)。Token 默认 devtools-bridge。只需启动一次。",
         },
         origin
       );
@@ -4572,7 +4609,7 @@ function printBanner(activePort) {
   console.log(` 版本: ${BRIDGE_VERSION}`);
   console.log(` 地址: http://${HOST}:${activePort}`);
   console.log(` Token: ${TOKEN}（兼容旧 Token: devtools-adb / devtools-ffmpeg）`);
-  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / yt-dlp(/ytdlp) / Git(/git) / 任务");
+  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / yt-dlp(/ytdlp) / Git(/git) / 文件占用(/unlock) / 任务");
   console.log(" 请保持此窗口打开，然后回到网页点「连接」——ADB 与 FFmpeg 共用这一座桥");
   if (activePort !== PORT) {
     console.log(` 注意: 默认端口 ${PORT} 被占用，已改用 ${activePort}`);

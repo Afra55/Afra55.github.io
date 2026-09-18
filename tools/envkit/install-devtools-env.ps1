@@ -170,6 +170,11 @@ function Sync-Bridges {
     try { Download-File "$BaseUrl/git-bridge/$f" (Join-Path $BridgeDir "git-bridge\$f") }
     catch { Write-Miss "下载失败 $f" }
   }
+  foreach ($f in @("server.js", "lock-ops.js")) {
+    Write-Info "fileunlock-bridge/$f"
+    try { Download-File "$BaseUrl/fileunlock-bridge/$f" (Join-Path $BridgeDir "fileunlock-bridge\$f") }
+    catch { Write-Miss "下载失败 $f" }
+  }
   foreach ($f in @("start-win.bat", "start-win.cmd", "start-linux.sh", "start-mac.command")) {
     try { Download-File "$BaseUrl/adb-bridge/$f" (Join-Path $BridgeDir "adb-bridge\$f") } catch {}
     try { Download-File "$BaseUrl/ffmpeg-bridge/$f" (Join-Path $BridgeDir "ffmpeg-bridge\$f") } catch {}
@@ -191,7 +196,7 @@ DevTools 桥目录：$BridgeDir
 只需启动一座统一桥：
   双击 adb-bridge\start-win.cmd
   地址 http://127.0.0.1:17888  Token: devtools-bridge
-  API: /ff · /ytdlp · /git
+  API: /ff · /ytdlp · /git · /unlock
 
 （ffmpeg-bridge / git-bridge 目录是统一桥的嵌套模块，请勿单独启动。）
 

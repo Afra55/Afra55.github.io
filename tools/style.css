@@ -1338,6 +1338,28 @@ a.secondary-btn {
   .json-resize { display: none !important; }
 }
 
+.fu-path {
+  width: 100%;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-strong, transparent);
+  color: var(--ink);
+}
+.fu-result { margin-top: 0.55rem; }
+.fu-proc {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+.fu-proc-name { flex: 1 1 12rem; min-width: 0; }
+.fu-proc-meta { color: var(--muted); font-size: 0.8rem; }
+
 .primary-btn:disabled {
   opacity: 0.55;
   cursor: not-allowed;

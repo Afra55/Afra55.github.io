@@ -42,6 +42,16 @@
       link: "#gitbridge",
       kind: "git",
     },
+    {
+      id: "unlock-mount",
+      name: "⑤ 文件占用 · /unlock（仅 Windows）",
+      url: "http://127.0.0.1:17888/unlock/health",
+      token: "devtools-bridge",
+      tokenHeader: "X-Adb-Token",
+      link: "#fileunlock",
+      kind: "unlock",
+      winOnly: true,
+    },
   ];
 
   function detectOs() {
@@ -289,7 +299,11 @@
       }
       grid.innerHTML = `<p class="hint">探测中…</p>`;
       const rows = [];
-      for (const b of BRIDGES) rows.push(await probeOne(b));
+      const isWinClient = /Windows/i.test(navigator.userAgent || "");
+      for (const b of BRIDGES) {
+        if (b.winOnly && !isWinClient) continue;
+        rows.push(await probeOne(b));
+      }
       renderProbe(rows);
     }
 
