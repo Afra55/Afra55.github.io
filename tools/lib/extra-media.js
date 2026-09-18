@@ -863,7 +863,8 @@
     const lossy = Math.min(200, baseLossy + (r - 1) * 30);
     const parts = ["-O3", `--lossy=${lossy}`];
     if (level === "strong" || r >= 2) {
-      parts.push(`--colors ${r >= 4 ? 64 : 128}`);
+      // 不再降到 64 色（会明显「掉色」）；最低 128
+      parts.push("--colors 128");
     }
     if (r >= 7) parts.push("--scale 0.85");
     else if (r >= 5) parts.push("--scale 0.9");

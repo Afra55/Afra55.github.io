@@ -988,17 +988,17 @@
             await ffmpeg.writeFile(wmName, wmBytes);
             filterArgs = [
               "-filter_complex",
-              `[0:v]${cropFilter}${speedFilter}fps=${fps},scale=${maxW}:-2:flags=lanczos${brightFilter}[base];` +
+              `[0:v]${cropFilter}${speedFilter}fps=${fps},scale=${maxW}:-2:flags=bicubic${brightFilter}[base];` +
                 `[1:v]format=rgba[wm];[base][wm]overlay=0:0:format=auto[v];` +
-                `[v]split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=diff[p];` +
-                `[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`,
+                `[v]split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=full[p];` +
+                `[s1][p]paletteuse=dither=sierra2:diff_mode=rectangle`,
             ];
           } else {
             filterArgs = [
               "-vf",
-              `${cropFilter}${speedFilter}fps=${fps},scale=${maxW}:-2:flags=lanczos${brightFilter},` +
-                `split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=diff[p];` +
-                `[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle`,
+              `${cropFilter}${speedFilter}fps=${fps},scale=${maxW}:-2:flags=bicubic${brightFilter},` +
+                `split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=full[p];` +
+                `[s1][p]paletteuse=dither=sierra2:diff_mode=rectangle`,
             ];
           }
   
@@ -1342,7 +1342,22 @@
         };
       }
   
+      /** 黑盒编码对外入口：选优后再做一次 gifsicle -O3 无损收尾（只优化帧结构，不改画质） */
       async function encodeBlackboxClip(clipOpts) {
+        const result = await encodeBlackboxClipCore(clipOpts);
+        if (!result?.blob || !(result.blob.size > 0)) return result;
+        try {
+          const optimized = await compressGifBlob(result.blob, "standard", null, {
+            plan: { label: "优化", args: "-O3", round: 1, lossy: 0 },
+          });
+          if (optimized && optimized.size && optimized.size < result.blob.size) {
+            return { ...result, blob: optimized };
+          }
+        } catch (_) {}
+        return result;
+      }
+
+      async function encodeBlackboxClipCore(clipOpts) {
         const file = clipOpts.file;
         const startSec = clipOpts.startSec;
         const span = clipOpts.span;
@@ -1411,22 +1426,40 @@
           return cur;
         };
   
-        const widenFrom = async (candidate, fps) => {
-          if (!candidate?.blob || candidate.blob.size >= V2G_BLACKBOX_WIDEN_BYTES) return candidate;
+        /** 二分找「最大且 ≤ 预算」的宽度：比线性 +60 步进更满、编码次数更少 */
+        const blackboxWidenBest = async (candidate, encodeAtWidth, { minW, maxW }) => {
+          if (!candidate?.blob) return candidate;
           if (candidate.blob.size > V2G_BLACKBOX_MAX_BYTES) return candidate;
           let best = candidate;
-          const hardMax = srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK;
-          let nextW = (Number(best.maxW) || V2G_BLACKBOX_BASE_W) + V2G_BLACKBOX_WIDTH_STEP;
-          while (nextW <= hardMax) {
+          let lo = Math.max(64, Number(candidate.maxW) || minW || V2G_BLACKBOX_BASE_W);
+          let hi = Math.max(lo, Number(maxW) || lo);
+          for (let i = 0; i < 6 && hi - lo > 16; i++) {
             if (isAborted()) throw new Error("已取消");
-            onProgress(0.92, `加宽至 ${nextW}px`);
-            const wider = await encodeAt(fps, nextW, 0.92, 0.05, `${fps}FPS·宽${nextW}`);
-            if (wider.blob.size > V2G_BLACKBOX_MAX_BYTES) break;
-            best = wider;
-            if (best.outW > 0 && best.outW < nextW - 2) break;
-            nextW += V2G_BLACKBOX_WIDTH_STEP;
+            const mid = Math.max(lo + 2, Math.round((lo + hi) / 4) * 2);
+            if (mid >= hi) break;
+            onProgress(0.92, `加宽试探 ${mid}px`);
+            const wider = await encodeAtWidth(mid);
+            if (!wider?.blob) break;
+            const cand = { ...wider, compressRounds: 0, maxW: mid };
+            if (cand.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
+              best = cand;
+              lo = mid;
+              if (best.outW > 0 && best.outW < mid - 2) break; // 已是源宽
+            } else {
+              hi = mid;
+            }
           }
           return best;
+        };
+
+        const widenFrom = async (candidate, fps) => {
+          if (!candidate?.blob || candidate.blob.size >= V2G_BLACKBOX_WIDEN_BYTES) return candidate;
+          const hardMax = srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK;
+          return blackboxWidenBest(
+            candidate,
+            (w) => encodeAt(fps, w, 0.92, 0.05, `${fps}FPS·宽${w}`),
+            { minW: V2G_BLACKBOX_BASE_W, maxW: hardMax }
+          );
         };
   
         const seed = clipOpts.seed;
@@ -1487,26 +1520,19 @@
           tried.push(candidate);
           if (candidate.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
             if (candidate.blob.size < V2G_BLACKBOX_WIDEN_BYTES) {
-              let best = candidate;
               const hardMax = srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK;
-              let nextW = (Number(best.maxW) || V2G_BLACKBOX_BASE_W) + V2G_BLACKBOX_WIDTH_STEP;
-              while (nextW <= hardMax) {
-                if (isAborted()) throw new Error("已取消");
-                onProgress(0.92, `加宽至 ${nextW}px`);
-                const wider = await encodeV2gGifFfmpeg({
-                  ...common,
-                  fps,
-                  maxW: nextW,
-                  stageLabel: `${fps}FPS·宽${nextW}`,
-                  onProgress: (local, text) => onProgress(0.92 + local * 0.05, text),
-                });
-                const cand = { ...wider, compressRounds: 0, maxW: nextW };
-                if (cand.blob.size > V2G_BLACKBOX_MAX_BYTES) break;
-                best = cand;
-                if (best.outW > 0 && best.outW < nextW - 2) break;
-                nextW += V2G_BLACKBOX_WIDTH_STEP;
-              }
-              return best;
+              return await blackboxWidenBest(
+                candidate,
+                (w) =>
+                  encodeV2gGifFfmpeg({
+                    ...common,
+                    fps,
+                    maxW: w,
+                    stageLabel: `${fps}FPS·宽${w}`,
+                    onProgress: (local, text) => onProgress(0.92 + local * 0.05, text),
+                  }),
+                { minW: V2G_BLACKBOX_BASE_W, maxW: hardMax }
+              );
             }
             return candidate;
           }
