@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.24";
+const BRIDGE_VERSION = "0.9.25";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -527,6 +527,47 @@ async function getAllGetprop(serial) {
   return parseGetpropOutput(stdout);
 }
 
+async function readImei(serial) {
+  // 1) 常见 IMEI 属性（部分机型/厂商可读）
+  const propKeys = [
+    "persist.radio.imei",
+    "ro.ril.oem.imei",
+    "gsm.sim.imei",
+    "ro.phone.imei",
+    "persist.vendor.radio.imei",
+    "ril.gsm.imei",
+  ];
+  for (const k of propKeys) {
+    try {
+      const v = await getprop(serial, k);
+      const digits = String(v || "").replace(/\D/g, "");
+      if (digits.length >= 14) return digits;
+    } catch {
+      /* ignore */
+    }
+  }
+  // 2) service call iphonesubinfo（返回 Parcel，含 UTF-16 文本）
+  for (const idx of ["1", "2", "3", "4"]) {
+    try {
+      const { stdout } = await adbSerial(serial, ["shell", "service", "call", "iphonesubinfo", idx], { timeout: 8000 });
+      const q = String(stdout || "").match(/'([^']*)'/);
+      const digits = q ? q[1].replace(/\D/g, "") : "";
+      if (digits.length >= 14) return digits;
+    } catch {
+      /* ignore */
+    }
+  }
+  // 3) dumpsys iphonesubinfo
+  try {
+    const { stdout } = await adbSerial(serial, ["shell", "dumpsys", "iphonesubinfo"], { timeout: 8000 });
+    const m = String(stdout || "").match(/\b(\d{15})\b/);
+    if (m) return m[1];
+  } catch {
+    /* ignore */
+  }
+  return "";
+}
+
 async function deviceInfo(serial) {
   const devices = await listDevices();
   const base = devices.find((d) => d.serial === serial);
@@ -548,6 +589,21 @@ async function deviceInfo(serial) {
     "ro.build.display.id",
     "ro.serialno",
     "ro.product.cpu.abi",
+    "ro.product.brand",
+    "ro.product.name",
+    "ro.product.board",
+    "ro.board.platform",
+    "ro.boot.hardware",
+    "ro.bootloader",
+    "ro.build.fingerprint",
+    "ro.build.version.security_patch",
+    "ro.build.type",
+    "ro.build.tags",
+    "ro.build.date",
+    "ro.build.description",
+    "gsm.version.baseband",
+    "persist.sys.locale",
+    "ro.product.locale",
   ];
   const props = {};
   await Promise.all(
@@ -555,6 +611,56 @@ async function deviceInfo(serial) {
       props[key] = await getprop(serial, key);
     })
   );
+
+  const imei = await readImei(serial);
+
+  let tradein = "";
+  try {
+    const out = await shellCapture(serial, "tradeinmode getstatus", 8000);
+    tradein = String(out || "").trim().slice(0, 500);
+  } catch {
+    tradein = "";
+  }
+
+  let ram = "";
+  try {
+    const out = await shellCapture(serial, "cat /proc/meminfo | head -n 1", 8000);
+    const m = String(out || "").match(/MemTotal:\s*(\d+)\s*kB/i);
+    if (m) ram = `${Math.round(Number(m[1]) / 1024 / 1024 * 10) / 10} GB`;
+  } catch {
+    ram = "";
+  }
+
+  let cpuCores = "";
+  try {
+    const out = await shellCapture(serial, "cat /proc/cpuinfo | grep -c '^processor'", 8000);
+    const n = Number(String(out || "").trim());
+    if (n > 0) cpuCores = `${n} 核`;
+  } catch {
+    cpuCores = "";
+  }
+
+  let kernel = "";
+  try {
+    const out = await shellCapture(serial, "uname -r", 8000);
+    kernel = String(out || "").trim().split(/\r?\n/)[0].slice(0, 120);
+  } catch {
+    kernel = "";
+  }
+
+  let uptime = "";
+  try {
+    const out = await shellCapture(serial, "cat /proc/uptime", 8000);
+    const sec = Number(String(out || "").trim().split(/\s+/)[0]);
+    if (Number.isFinite(sec) && sec > 0) {
+      const d = Math.floor(sec / 86400);
+      const h = Math.floor((sec % 86400) / 3600);
+      const mi = Math.floor((sec % 3600) / 60);
+      uptime = d > 0 ? `${d}天${h}小时` : h > 0 ? `${h}小时${mi}分` : `${mi}分`;
+    }
+  } catch {
+    uptime = "";
+  }
 
   let battery = "";
   try {
@@ -609,6 +715,25 @@ async function deviceInfo(serial) {
     screen,
     density,
     storage,
+    imei,
+    brand: props["ro.product.brand"] || "",
+    productName: props["ro.product.name"] || "",
+    board: props["ro.product.board"] || "",
+    platform: props["ro.board.platform"] || "",
+    hardware: props["ro.boot.hardware"] || "",
+    bootloader: props["ro.bootloader"] || "",
+    fingerprint: props["ro.build.fingerprint"] || "",
+    securityPatch: props["ro.build.version.security_patch"] || "",
+    buildType: props["ro.build.type"] || "",
+    buildTags: props["ro.build.tags"] || "",
+    buildDate: props["ro.build.date"] || "",
+    baseband: props["gsm.version.baseband"] || "",
+    locale: props["persist.sys.locale"] || props["ro.product.locale"] || "",
+    ram,
+    cpuCores,
+    kernel,
+    uptime,
+    tradein,
   };
 }
 

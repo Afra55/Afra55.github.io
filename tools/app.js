@@ -3137,6 +3137,31 @@
 
     const routeToolId = currentTool;
 
+    const switchActivePanel = () => {
+      $$(".tool-panel").forEach((panel) => {
+        const id = panel.id;
+        const active = id === currentTool;
+        panel.classList.toggle("is-workspace-active", active);
+        panel.hidden = !active;
+        if (active) panel.removeAttribute("aria-hidden");
+        else {
+          panel.setAttribute("aria-hidden", "true");
+          panel.classList.remove("is-tool-assets-loading");
+          panel.removeAttribute("aria-busy");
+        }
+      });
+    };
+    // 先切页 + 显示加载条，不等面板 HTML / 脚本（点菜单立刻有反馈）
+    switchActivePanel();
+    toolLoadPanelId = routeToolId;
+    mountToolLoadBar(routeToolId);
+    if (
+      !window.DevToolsLazy?.isToolReady?.(routeToolId) &&
+      !window.DevToolsLazy?.isToolWarm?.(routeToolId)
+    ) {
+      setToolLoadProgress(8, `正在加载「${toolName(routeToolId)}」…`, toolLoadGen);
+    }
+
     try {
       await window.DevToolsPanels?.bootReady;
       window.DevToolsBoot?.bump?.(22, "加载面板…");
@@ -3151,18 +3176,7 @@
       showToast(`加载「${toolName(routeToolId)}」失败，请点顶栏「强制刷新」后重试`);
     }
 
-    $$(".tool-panel").forEach((panel) => {
-      const id = panel.id;
-      const active = id === currentTool;
-      panel.classList.toggle("is-workspace-active", active);
-      panel.hidden = !active;
-      if (active) panel.removeAttribute("aria-hidden");
-      else {
-        panel.setAttribute("aria-hidden", "true");
-        panel.classList.remove("is-tool-assets-loading");
-        panel.removeAttribute("aria-busy");
-      }
-    });
+    switchActivePanel();
     mountToolLoadBar(routeToolId);
 
     // 首屏 boot：data-boot-panel 仅用于 panel-loader 决定预拉哪个面板

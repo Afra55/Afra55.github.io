@@ -880,8 +880,15 @@
           const el = $(id);
           if (el) el.textContent = value || "—";
         };
+        const ALL = [
+          "#adb-info-serial", "#adb-info-state", "#adb-info-model", "#adb-info-android",
+          "#adb-info-screen", "#adb-info-battery", "#adb-info-storage", "#adb-info-build",
+          "#adb-info-imei", "#adb-info-brand", "#adb-info-platform", "#adb-info-baseband",
+          "#adb-info-patch", "#adb-info-ram", "#adb-info-kernel", "#adb-info-locale",
+          "#adb-info-fingerprint", "#adb-info-tradein",
+        ];
         if (!info) {
-          ["#adb-info-serial", "#adb-info-state", "#adb-info-model", "#adb-info-android", "#adb-info-screen", "#adb-info-battery", "#adb-info-storage", "#adb-info-build"].forEach((id) => set(id, "—"));
+          ALL.forEach((id) => set(id, "—"));
           if (adbInfoMeta) adbInfoMeta.textContent = "未选择设备";
           resetGetpropPanel();
           return;
@@ -899,6 +906,16 @@
         set("#adb-info-battery", info.battery);
         set("#adb-info-storage", info.storage);
         set("#adb-info-build", [info.abi, info.buildId].filter(Boolean).join(" · "));
+        set("#adb-info-imei", info.imei);
+        set("#adb-info-brand", [info.brand, info.board].filter(Boolean).join(" / "));
+        set("#adb-info-platform", [info.platform, info.hardware].filter(Boolean).join(" / "));
+        set("#adb-info-baseband", [info.baseband, info.bootloader].filter(Boolean).join(" / "));
+        set("#adb-info-patch", info.securityPatch);
+        set("#adb-info-ram", [info.ram, info.cpuCores].filter(Boolean).join(" / "));
+        set("#adb-info-kernel", [info.kernel, info.uptime].filter(Boolean).join(" / "));
+        set("#adb-info-locale", info.locale);
+        set("#adb-info-fingerprint", info.fingerprint);
+        set("#adb-info-tradein", info.tradein ? String(info.tradein).replace(/\s*\n+\s*/g, " | ") : "");
         if (adbInfoMeta) {
           adbInfoMeta.textContent = info.ready === false ? info.message || "设备未就绪" : "已加载";
         }

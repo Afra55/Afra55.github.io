@@ -208,7 +208,7 @@
     const re = /data:image\/(png|jpe?g|gif|webp|bmp|svg\+xml);base64,([A-Za-z0-9+/=\s]+)/gi;
     let m;
     while ((m = re.exec(String(text || "")))) {
-      const b64 = m[2].replace(/\s+/g, "");
+      const b64 = normalizeB64(m[2]);
       if (b64.length < 24) continue;
       out.push({ mime: `image/${m[1].toLowerCase()}`, b64 });
     }
@@ -757,7 +757,8 @@
     filterCache: { key: "", items: null },
     persistTimer: 0,
     persistWaiters: [],
-    mediaUrlCache: new Map(), // itemId -> objectURL（列表缩略图复用，避免滚动反复解码）
+    mediaUrlCache: new Map(), // itemId -> objectURL（gif/视频，LRU）
+    mediaThumbCache: new Map(), // itemId -> 静态图片缩略图 objectURL（LRU）
     mediaFailCache: new Set(),
   };
 
@@ -2387,42 +2388,76 @@
     }
   }
 
-  function mediaCacheGet(id) {
-    return state.mediaUrlCache.get(id);
+  // 列表缩略图 / 媒体 URL 缓存：LRU，容量远大于可见窗口，滚回来不再重读重解码
+  const MEDIA_THUMB_CACHE_MAX = 400;
+  const MEDIA_URL_CACHE_MAX = 80;
+  const MEDIA_THUMB_W = 480;
+
+  function lruGet(cache, id) {
+    if (!cache.has(id)) return undefined;
+    const v = cache.get(id);
+    cache.delete(id);
+    cache.set(id, v);
+    return v;
   }
 
-  function mediaCacheSet(id, url) {
-    const c = state.mediaUrlCache;
-    const prev = c.get(id);
-    if (prev && prev !== url) {
-      try { URL.revokeObjectURL(prev); } catch (_) {}
-    }
-    c.set(id, url);
-  }
-
-  /** 只保留当前渲染窗口内的图片 URL，滚出视野的才撤销（避免撤销正在显示的图） */
-  function pruneMediaCache(keepIds) {
-    const c = state.mediaUrlCache;
-    if (!c.size) return;
-    for (const id of [...c.keys()]) {
-      if (keepIds.has(id)) continue;
-      const url = c.get(id);
-      c.delete(id);
-      if (url) {
-        try { URL.revokeObjectURL(url); } catch (_) {}
+  function lruSet(cache, id, url, max) {
+    if (cache.has(id)) cache.delete(id);
+    cache.set(id, url);
+    while (cache.size > max) {
+      const oldest = cache.keys().next().value;
+      const oldUrl = cache.get(oldest);
+      cache.delete(oldest);
+      if (oldUrl) {
+        try { URL.revokeObjectURL(oldUrl); } catch (_) {}
       }
     }
   }
 
   function dropMediaCache(id) {
-    const c = state.mediaUrlCache;
-    if (!c.has(id)) return;
-    const url = c.get(id);
-    c.delete(id);
-    if (url) {
-      try { URL.revokeObjectURL(url); } catch (_) {}
+    for (const cache of [state.mediaThumbCache, state.mediaUrlCache]) {
+      if (!cache.has(id)) continue;
+      const url = cache.get(id);
+      cache.delete(id);
+      if (url) {
+        try { URL.revokeObjectURL(url); } catch (_) {}
+      }
     }
     state.mediaFailCache.delete(id);
+  }
+
+  /** 静态图片生成小缩略图：列表解码原图是大图卡顿主因 */
+  async function makeThumbUrl(blob) {
+    if (typeof createImageBitmap !== "function") return null;
+    let bmp = null;
+    try {
+      try {
+        bmp = await createImageBitmap(blob, { resizeWidth: MEDIA_THUMB_W, resizeQuality: "medium" });
+      } catch (_) {
+        bmp = await createImageBitmap(blob);
+      }
+      if (!bmp) return null;
+      const w = bmp.width;
+      const h = bmp.height;
+      if (!w || !h) return null;
+      const scale = w > MEDIA_THUMB_W ? MEDIA_THUMB_W / w : 1;
+      const cw = Math.max(1, Math.round(w * scale));
+      const ch = Math.max(1, Math.round(h * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = cw;
+      canvas.height = ch;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return null;
+      ctx.drawImage(bmp, 0, 0, cw, ch);
+      let out = await new Promise((r) => canvas.toBlob(r, "image/webp", 0.85));
+      if (!out) out = await new Promise((r) => canvas.toBlob(r, "image/png"));
+      if (!out) return null;
+      return URL.createObjectURL(out);
+    } catch (_) {
+      return null;
+    } finally {
+      bmp?.close?.();
+    }
   }
 
   async function hydrateOneMedia(el) {
@@ -2432,9 +2467,17 @@
     const id = isImg ? el.dataset.memoThumb : el.dataset.memoMedia;
     const item = state.index.items.find((x) => x.id === id);
     if (!item) return;
-    const cached = mediaCacheGet(id);
-    if (cached) {
-      el.src = cached;
+    const isStaticImg = isImg && item.type === "image";
+    if (isStaticImg) {
+      const cachedThumb = lruGet(state.mediaThumbCache, id);
+      if (cachedThumb) {
+        el.src = cachedThumb;
+        return;
+      }
+    }
+    const cachedUrl = lruGet(state.mediaUrlCache, id);
+    if (cachedUrl) {
+      el.src = cachedUrl;
       return;
     }
     if (state.mediaFailCache.has(id)) {
@@ -2444,8 +2487,16 @@
     }
     try {
       const blob = await loadBlob(item);
+      if (isStaticImg) {
+        const thumb = await makeThumbUrl(blob);
+        if (thumb) {
+          lruSet(state.mediaThumbCache, id, thumb, MEDIA_THUMB_CACHE_MAX);
+          el.src = thumb;
+          return;
+        }
+      }
       const url = URL.createObjectURL(blob);
-      mediaCacheSet(id, url);
+      lruSet(state.mediaUrlCache, id, url, MEDIA_URL_CACHE_MAX);
       el.src = url;
     } catch (_) {
       state.mediaFailCache.add(id);
@@ -2674,13 +2725,6 @@
     itemList.dataset.virtEnd = String(end);
     const itemOffset = itemIndexBeforeRow(rows, start);
     itemList.innerHTML = `<div class="memo-virt-spacer" data-memo-virt-top style="height:${topPad}px" aria-hidden="true"></div>${rowsHtmlWithUndo(slice, itemOffset)}<div class="memo-virt-spacer" data-memo-virt-bottom style="height:${bottomPad}px" aria-hidden="true"></div>`;
-    // 图片 objectURL 只保留本窗口内条目，滚出视野的才释放
-    const keepMediaIds = new Set();
-    for (let i = 0; i < slice.length; i++) {
-      const r = slice[i];
-      if (r.kind === "item" && r.item?.id) keepMediaIds.add(r.item.id);
-    }
-    pruneMediaCache(keepMediaIds);
     const itemTotal = visibleItems().length;
     const shown = slice.reduce((n, r) => n + (r.kind === "item" ? 1 : 0), 0);
     renderListMeta(itemTotal, shown);
@@ -3094,23 +3138,39 @@
     return /^\s*data:image\/[a-z0-9+.-]+;base64,/i.test(String(text || ""));
   }
 
+  /** 校正 base64：去空白 + 补/修 padding（长度 %4==1 视为末位多余） */
+  function normalizeB64(s) {
+    let b = String(s || "").replace(/\s+/g, "");
+    const rem = b.length % 4;
+    if (rem === 1) b = b.slice(0, -1);
+    else if (rem === 2) b += "==";
+    else if (rem === 3) b += "=";
+    return b;
+  }
+
   async function dataUrlToImageFile(text) {
     const raw = String(text || "").trim();
-    const m = raw.match(/^data:image\/([a-z0-9+.-]+);base64,([a-z0-9+/=\s]+)$/i);
+    let m = raw.match(/^data:image\/([a-z0-9+.-]+);base64,([a-z0-9+/=\s]+)$/i);
+    if (!m) {
+      // 被引号/括号/【】包裹，或带少量前后缀时也当图片
+      const inner = raw.match(/^[\s"'`（(【\[]*data:image\/([a-z0-9+.-]+);base64,([a-z0-9+/=\s]+?)[\s"'`）)】\]]*$/i);
+      if (inner) m = inner;
+    }
     if (!m) return null;
     const sub = String(m[1] || "png").toLowerCase();
     const ext = sub === "jpeg" ? "jpg" : sub;
-    const b64 = m[2].replace(/\s+/g, "");
-    if (b64.length < 32) return null;
+    const b64 = normalizeB64(m[2]);
+    if (b64.length < 24) return null;
+    let bytes;
     try {
       const bin = atob(b64);
-      const bytes = new Uint8Array(bin.length);
+      bytes = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-      const mime = `image/${sub === "jpg" ? "jpeg" : sub}`;
-      return new File([bytes], `剪贴板.${ext}`, { type: mime });
     } catch (_) {
       return null;
     }
+    const mime = `image/${sub === "jpg" ? "jpeg" : sub}`;
+    return new File([bytes], `剪贴板.${ext}`, { type: mime });
   }
 
   function extractDataUrlFromHtml(html) {
