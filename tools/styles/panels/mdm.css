@@ -66,8 +66,8 @@
 }
 .mdm-item:hover { border-color: var(--line); }
 .mdm-item.is-active { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); }
-.mdm-item-title { font-size: 0.88rem; }
-.mdm-item-meta { color: var(--muted); }
+.mdm-item-title { font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mdm-item-meta { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .mdm-main { display: flex; flex-direction: column; }
 .mdm-main-toolbar { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.55rem; border-bottom: 1px solid var(--line); }

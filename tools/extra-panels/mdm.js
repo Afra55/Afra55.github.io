@@ -171,7 +171,6 @@
       modePreview: $("#mdm-mode-preview"),
       title: $("#mdm-title"),
       del: $("#mdm-delete"),
-      insertImg: $("#mdm-insert-img"),
       fileInput: $("#mdm-file-input"),
       insertToggle: $("#mdm-insert-toggle"),
       insertDropdown: $("#mdm-insert-dropdown"),
@@ -418,11 +417,6 @@
       items.forEach((it, i) => { it.order = i; });
     }
 
-    function nextOrder() {
-      const orders = (state.index.items || []).map((x) => Number(x.order) || 0);
-      return orders.length ? Math.min(...orders) - 1 : 0;
-    }
-
     function normalizeOrders() {
       (state.index.items || []).forEach((it, i) => { it.order = i; });
     }
@@ -465,6 +459,11 @@
       }
       if (state.search.trim().toLowerCase() !== q) return;
       state.searchMatches = matched;
+      // 控制正文缓存规模（简单 LRU：保留最近 300 篇）
+      if (state.bodyCache.size > 400) {
+        const keys = [...state.bodyCache.keys()];
+        for (let i = 0; i < keys.length - 300; i++) state.bodyCache.delete(keys[i]);
+      }
       renderSidebar();
       setSaveStatus(`全文匹配 ${matched.size} 篇`);
     }
@@ -2206,7 +2205,6 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       const b = e.target.closest?.("[data-tag-rm]");
       if (b) removeTag(b.dataset.tagRm);
     });
-    els.insertImg?.addEventListener("click", () => els.imgInput?.click());
     els.fileInput?.addEventListener("change", (e) => {
       const files = [...(e.target.files || [])];
       e.target.value = "";
