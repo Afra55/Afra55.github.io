@@ -79,8 +79,16 @@
       const tx = db.transaction(store, "readwrite");
       tx.objectStore(store).put(val, key);
       tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
+      tx.onerror = () => reject(quotaErr(tx.error));
+      tx.onabort = () => reject(quotaErr(tx.error));
     });
+  }
+
+  function quotaErr(err) {
+    if (err && (err.name === "QuotaExceededError" || err.code === 22)) {
+      return new Error("浏览器存储空间不足（配额超限）：请清理或改用「文件夹」模式");
+    }
+    return err || new Error("存储写入失败");
   }
 
   async function idbDel(store, key) {
@@ -1716,10 +1724,35 @@
           .join("")}</div></div>` +
         `<button type="button" data-ctx="delete" class="is-danger">删除</button>`;
       document.body.appendChild(el);
+      if (!x && !y) {
+        const btn = els.list?.querySelector(`[data-id="${item.id}"]`);
+        const r = btn?.getBoundingClientRect();
+        if (r) {
+          x = r.left + 8;
+          y = r.top + 8;
+        }
+      }
       const rect = el.getBoundingClientRect();
       el.style.left = `${Math.max(4, Math.min(x, window.innerWidth - rect.width - 8))}px`;
       el.style.top = `${Math.max(4, Math.min(y, window.innerHeight - rect.height - 8))}px`;
       listCtxEl = el;
+      // 键盘可达
+      el.tabIndex = -1;
+      el.focus();
+      el.addEventListener("keydown", (e) => {
+        const btns = [...el.querySelectorAll("button")].filter((b) => b.offsetParent !== null);
+        const idx = btns.indexOf(document.activeElement);
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          (btns[idx + 1] || btns[0])?.focus();
+        } else if (e.key === "ArrowUp") {
+          e.preventDefault();
+          (btns[idx - 1] || btns[btns.length - 1])?.focus();
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          closeListCtx();
+        }
+      });
       el.addEventListener("click", async (e) => {
         const exp = e.target.closest?.("[data-ctx-export]");
         if (exp) {
@@ -2285,6 +2318,45 @@ a{color:${v.accent}}
       saveIndexToStorage().then(() => renderSidebar());
     });
     els.list?.addEventListener("dragend", () => { dragId = ""; });
+    // 触屏拖拽排序（HTML5 DnD 在触屏无效）
+    (function bindTouchReorder() {
+      const list = els.list;
+      if (!list) return;
+      let touchId = "";
+      let dragging = false;
+      let startY = 0;
+      list.addEventListener("pointerdown", (e) => {
+        if (e.pointerType !== "touch") return;
+        const b = e.target.closest?.("[data-id]");
+        if (!b) return;
+        touchId = b.dataset.id;
+        startY = e.clientY;
+      });
+      list.addEventListener(
+        "pointermove",
+        (e) => {
+          if (e.pointerType !== "touch" || !touchId) return;
+          if (!dragging && Math.abs(e.clientY - startY) > 12) dragging = true;
+          if (!dragging) return;
+          e.preventDefault();
+          const over = document.elementFromPoint(e.clientX, e.clientY)?.closest?.("[data-id]");
+          if (over && over.dataset.id !== touchId) {
+            reorderItem(touchId, over.dataset.id);
+            renderList();
+          }
+        },
+        { passive: false }
+      );
+      const end = () => {
+        if (dragging) {
+          saveIndexToStorage().then(() => renderSidebar());
+        }
+        touchId = "";
+        dragging = false;
+      };
+      list.addEventListener("pointerup", end);
+      list.addEventListener("pointercancel", end);
+    })();
     els.listWrap?.addEventListener(
       "scroll",
       () => {
@@ -2656,5 +2728,13 @@ a{color:${v.accent}}
     })();
 
     applyViewMode();
+
+    // 错误边界：面板激活时的未处理异常给出可见提示，避免「静默失败」
+    window.addEventListener("unhandledrejection", (e) => {
+      const p = document.getElementById("mdm");
+      if (!p || !p.classList.contains("is-workspace-active")) return;
+      const msg = e?.reason?.message || String(e?.reason || "");
+      if (msg) toast(`出错了：${msg}`);
+    });
   });
 })();
