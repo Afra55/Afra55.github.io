@@ -1669,6 +1669,98 @@
       }
     }
 
+    // ---- 运维：回收站/历史自动过期（30 天） ----
+    const EXPIRE_DAYS = 30;
+    async function autoExpireTrash() {
+      const cutoff = Date.now() - EXPIRE_DAYS * 86400000;
+      if (state.mode === "dir" && state.dirHandle) {
+        try {
+          const trash = await state.dirHandle.getDirectoryHandle(".trash");
+          const del = [];
+          for await (const [n, h] of trash.entries()) {
+            if (h.kind !== "file") continue;
+            const ts = parseInt(String(n).split("-")[0], 36);
+            if (Number.isFinite(ts) && ts < cutoff) del.push(n);
+          }
+          for (const n of del) {
+            try {
+              await trash.removeEntry(n);
+            } catch (_) {}
+          }
+        } catch (_) {}
+        try {
+          const root = await state.dirHandle.getDirectoryHandle(".history");
+          for await (const [, dh] of root.entries()) {
+            if (dh.kind !== "directory") continue;
+            const del = [];
+            for await (const [n, h] of dh.entries()) {
+              if (h.kind !== "file") continue;
+              const ts = Number(String(n).replace(/\.md$/, ""));
+              if (Number.isFinite(ts) && ts < cutoff) del.push(n);
+            }
+            for (const n of del) {
+              try {
+                await dh.removeEntry(n);
+              } catch (_) {}
+            }
+          }
+        } catch (_) {}
+      } else {
+        for (const [store, field] of [["trash", "deletedAt"], ["history", "ts"]]) {
+          try {
+            const db = await idbOpen();
+            const del = [];
+            await new Promise((resolve) => {
+              const tx = db.transaction(store, "readonly");
+              const req = tx.objectStore(store).openCursor();
+              req.onsuccess = () => {
+                const c = req.result;
+                if (c) {
+                  if ((c.value?.[field] || 0) < cutoff) del.push(c.key);
+                  c.continue();
+                } else resolve();
+              };
+              req.onerror = () => resolve();
+            });
+            for (const k of del) await idbDel(store, k);
+          } catch (_) {}
+        }
+      }
+    }
+
+    function fmtBytes(n) {
+      const b = Number(n) || 0;
+      if (b < 1024) return `${b} B`;
+      if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+      if (b < 1024 * 1024 * 1024) return `${(b / 1024 / 1024).toFixed(1)} MB`;
+      return `${(b / 1024 / 1024 / 1024).toFixed(2)} GB`;
+    }
+
+    async function showUsage() {
+      try {
+        const docs = (state.index.items || []).length;
+        const assets = await listAssetNames();
+        let bytes = 0;
+        for (const rel of assets) {
+          try {
+            bytes += (await readAssetBlob(rel)).size;
+          } catch (_) {}
+        }
+        let quota = "";
+        if (navigator.storage?.estimate) {
+          try {
+            const est = await navigator.storage.estimate();
+            quota = ` · 浏览器用量 ${fmtBytes(est.usage || 0)} / 配额 ${fmtBytes(est.quota || 0)}`;
+          } catch (_) {}
+        }
+        const msg = `文档 ${docs} 篇 · 资源 ${assets.length} 个（${fmtBytes(bytes)}）${quota}`;
+        setSaveStatus(msg);
+        toast(msg);
+      } catch (err) {
+        setErr(`统计失败：${err.message || err}`);
+      }
+    }
+
     function hasRichHtml(html) {
       return /<(p|h[1-6]|ul|ol|li|table|thead|tbody|tr|td|th|strong|b|em|i|a\s|pre|code|blockquote|img|hr)\b/i.test(
         String(html || "")
@@ -2602,6 +2694,7 @@ a{color:${v.accent}}
       bindEditorMedia();
       bindEditorScroll();
       warmBodyCache();
+      void autoExpireTrash();
       if (state.view && CMresize) CMresize();
       toast(`已连接：${label}`);
     }
@@ -3044,6 +3137,10 @@ a{color:${v.accent}}
       }
       if (kind === "history") {
         void openHistory(findItem(state.currentId));
+        return;
+      }
+      if (kind === "usage") {
+        void showUsage();
         return;
       }
       if (kind === "keys") {

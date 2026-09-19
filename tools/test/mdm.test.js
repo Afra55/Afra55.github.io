@@ -64,4 +64,11 @@ t("slugify 中文/空格", () => {
   assert.strictEqual(P.slugify("我的 文档"), "我的-文档");
 });
 
+t("front-matter head 保留其它键", () => {
+  const r = P.parseFrontMatter("---\ntitle: T\ndate: 2024-01-01\n---\nbody");
+  assert.strictEqual(r.title, "T");
+  assert.ok(r.head.includes("date: 2024-01-01"));
+  assert.strictEqual(r.body.trim(), "body");
+});
+
 console.log(`mdm.test: ${n} passed`);
