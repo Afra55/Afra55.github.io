@@ -1159,8 +1159,20 @@
     function parseTableAt(lines, idx) {
       return MP.parseTableAt ? MP.parseTableAt(lines, idx) : null;
     }
-    function buildTable(grid) {
-      return MP.buildTable ? MP.buildTable(grid) : "";
+    function buildTable(grid, opts) {
+      if (MP.buildTable) return MP.buildTable(grid, opts);
+      const rows = (grid || []).map((r) => [...r]);
+      if (!rows.length) return "";
+      const cols = Math.max(...rows.map((r) => r.length), 1);
+      for (const r of rows) while (r.length < cols) r.push("");
+      return (
+        `| ${rows[0].join(" | ")} |\n` +
+        `| ${Array.from({ length: cols }, () => "---").join(" | ")} |\n` +
+        rows
+          .slice(1)
+          .map((r) => `| ${r.join(" | ")} |`)
+          .join("\n")
+      );
     }
     function replaceDocRefs(text, oldName, newName) {
       return MP.replaceDocRefs ? MP.replaceDocRefs(text, oldName, newName) : { text, count: 0 };

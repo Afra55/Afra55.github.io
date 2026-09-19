@@ -109,7 +109,7 @@ function chromePath() {
 }
 
 const TITLE = "冒烟文档 A";
-const BODY = "第一行 hello\n\n- [ ] 待办一\n- [x] 待办二";
+const BODY = "第一行 hello\n\n- [ ] 待办一\n- [x] 待办二\n\n| A | B |\n| --- | --- |\n| 1 | 2 |";
 
 async function browserChecks() {
   const executablePath = chromePath();
@@ -270,8 +270,31 @@ async function browserChecks() {
     await page.waitForSelector('#mdm-modal:not([hidden]) .mdm-keys', { timeout: 10000 });
     await page.click('#mdm-modal [data-mdl="close"]');
 
+    // 9) 表格编辑：对齐应写回 :---:
+    await page.click("#mdm-mode-edit");
+    const tableEl = await page.evaluateHandle(() => {
+      const ls = [...document.querySelectorAll("#mdm-editor .cm-line")];
+      return ls.find((l) => /^\|\s*A\s*\|/.test(l.textContent || "")) || null;
+    });
+    const te = tableEl.asElement();
+    assert(te, "table line not found in editor");
+    {
+      const b = await te.boundingBox();
+      await page.mouse.click(b.x + 12, b.y + b.height / 2);
+    }
+    await page.click("#mdm-insert-toggle");
+    await page.click('[data-insert="tableedit"]');
+    await page.waitForSelector("#mdm-modal:not([hidden]) .mdm-grid", { timeout: 10000 });
+    await page.select('#mdm-modal select[data-align="1"]', "center");
+    await page.click('#mdm-modal [data-mdl="ok"]');
+    await page.waitForFunction(
+      () => [...document.querySelectorAll("#mdm-editor .cm-line")].some((l) => /:---:/.test(l.textContent || "")),
+      { timeout: 10000 }
+    );
+    console.log("STEP table-align-ok");
+
     assert(!errors.length, `pageerror: ${errors.join("; ")}`);
-    console.log("mdm-smoke ok (idb/new/save/list/search/preview)");
+    console.log("mdm-smoke ok (idb/new/save/list/search/preview/table)");
   } finally {
     if (browser) await browser.close().catch(() => {});
     await new Promise((r) => server.close(r));
