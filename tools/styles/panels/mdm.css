@@ -167,7 +167,9 @@
 .mdm-grid input { border: none; background: transparent; color: var(--ink); padding: 0.35rem 0.45rem; min-width: 6rem; font: inherit; outline: none; }
 .mdm-grid input.is-head { font-weight: 600; }
 .mdm-grid input:focus { background: color-mix(in srgb, var(--accent) 16%, transparent); }
-.mdm-modal-foot { display: flex; gap: 0.5rem; margin-top: 0.7rem; flex-wrap: wrap; }
+.mdm-modal-foot { display: flex; gap: 0.5rem; margin-top: 0.7rem; flex-wrap: wrap; align-items: center; }
+.mdm-align-sel { display: block; width: 100%; margin-top: 0.15rem; background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; font-size: 0.72rem; padding: 0.1rem; }
+.mdm-hdr-toggle { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.82rem; color: var(--muted); margin-right: auto; }
 
 /* 预览排版 */
 .markdown-body { line-height: 1.7; color: var(--ink); word-wrap: break-word; }

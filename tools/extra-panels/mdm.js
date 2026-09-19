@@ -1111,8 +1111,11 @@
         return;
       }
       const grid = t.grid.map((r) => [...r]);
+      const align = Array.isArray(t.align) ? [...t.align] : [];
+      let header = true;
       const box = els.modalBox;
       const colCount = () => Math.max(...grid.map((r) => r.length), 1);
+      const ALIGN_LABEL = { "": "默认", left: "左", center: "中", right: "右" };
       const render = () => {
         box.innerHTML =
           `<div class="mdm-modal-head"><strong>表格编辑</strong><button type="button" class="ghost-btn" data-mdl="close">关闭</button></div>` +
@@ -1125,8 +1128,21 @@
                   .map(
                     (c, ci) =>
                       `<td><input data-r="${ri}" data-c="${ci}" value="${escapeHtml(c)}"${
-                        ri === 0 ? ' class="is-head"' : ""
-                      } /></td>`
+                        ri === 0 && header ? ' class="is-head"' : ""
+                      } />` +
+                      (ri === 0 && header
+                        ? `<select class="mdm-align-sel" data-align="${ci}">` +
+                          ["", "left", "center", "right"]
+                            .map(
+                              (v) =>
+                                `<option value="${v}"${(align[ci] || "") === v ? " selected" : ""}>${
+                                  ALIGN_LABEL[v]
+                                }</option>`
+                            )
+                            .join("") +
+                          `</select>`
+                        : "") +
+                      `</td>`
                   )
                   .join("") +
                 `</tr>`
@@ -1138,6 +1154,9 @@
           `<button type="button" class="ghost-btn" data-mdl="delrow">- 行</button>` +
           `<button type="button" class="ghost-btn" data-mdl="addcol">+ 列</button>` +
           `<button type="button" class="ghost-btn" data-mdl="delcol">- 列</button>` +
+          `<label class="mdm-hdr-toggle"><input type="checkbox" id="mdm-tbl-header"${
+            header ? " checked" : ""
+          } /> 首行为表头</label>` +
           `<button type="button" class="primary-btn" data-mdl="ok">确定</button>` +
           `</div>`;
       };
@@ -1147,6 +1166,11 @@
           const c = Number(inp.dataset.c);
           if (grid[r]) grid[r][c] = inp.value;
         });
+        box.querySelectorAll("select[data-align]").forEach((sel) => {
+          align[Number(sel.dataset.align)] = sel.value;
+        });
+        const cb = box.querySelector("#mdm-tbl-header");
+        if (cb) header = Boolean(cb.checked);
       };
       render();
       els.modal.hidden = false;
@@ -1162,15 +1186,20 @@
         if (act === "addrow") grid.push(new Array(colCount()).fill(""));
         else if (act === "delrow") {
           if (grid.length > 1) grid.pop();
-        } else if (act === "addcol") grid.forEach((r) => r.push(""));
-        else if (act === "delcol") {
-          if (colCount() > 1) grid.forEach((r) => r.pop());
+        } else if (act === "addcol") {
+          grid.forEach((r) => r.push(""));
+          align.push("");
+        } else if (act === "delcol") {
+          if (colCount() > 1) {
+            grid.forEach((r) => r.pop());
+            align.pop();
+          }
         } else if (act === "ok") {
           view.dispatch({
             changes: {
               from: doc.line(t.start + 1).from,
               to: doc.line(t.end + 1).to,
-              insert: buildTable(grid),
+              insert: buildTable(grid, { align, header }),
             },
           });
           closeModal();

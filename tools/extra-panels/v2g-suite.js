@@ -7,6 +7,22 @@
   const { $, $$, setError, toast, bindPanel, flushPendingFileInput, formatKb, EBind } = K;
   const escapeHtml = P.escapeHtml;
 
+  // 调试日志：URL 带 ?debug 或 localStorage 设 devtools-vbb-debug=1 时输出
+  const VBB_DEBUG = (() => {
+    try {
+      if (/[?&]debug\b/.test(location.search)) return true;
+      return localStorage.getItem("devtools-vbb-debug") === "1";
+    } catch (_) {
+      return false;
+    }
+  })();
+  const vbbLog = (...args) => {
+    if (!VBB_DEBUG) return;
+    try {
+      console.log(...args);
+    } catch (_) {}
+  };
+
   const M = window.DevToolsExtraMedia || {};
   const DN = window.DevToolsDeviceNotify || {};
   const {
@@ -6738,17 +6754,13 @@
               notifyVbbProgress(i, total);
               ok += 1;
               refreshVbbClipRow(i);
-              try {
-                console.log(
-                  `[vbb] #${i + 1} ${usedSeed ? "seed" : "ladder"} ${Math.round(elapsedSec * 1000)}ms · ${encoded.fps}FPS · ${encoded.outW}×${encoded.outH} · ${formatKb(encoded.blob.size)} · 压${encoded.compressRounds || 0}轮`
-                );
-              } catch (_) {}
+              vbbLog(
+                `[vbb] #${i + 1} ${usedSeed ? "seed" : "ladder"} ${Math.round(elapsedSec * 1000)}ms · ${encoded.fps}FPS · ${encoded.outW}×${encoded.outH} · ${formatKb(encoded.blob.size)} · ${encoded.compressRounds || 0}轮`
+              );
             } catch (err) {
               if (String(err?.message) === "已取消") throw err;
               const elapsedSec = (performance.now() - t0) / 1000;
-              try {
-                console.log(`[vbb] #${i + 1} FAIL ${Math.round(elapsedSec * 1000)}ms · ${err?.message || err}`);
-              } catch (_) {}
+              vbbLog(`[vbb] #${i + 1} FAIL ${Math.round(elapsedSec * 1000)}ms · ${err?.message || err}`);
               vbbClips[i].error = err.message || String(err);
               setVbbClipJob(i, { status: "error", progress: 0, text: "失败" });
               refreshVbbClipRow(i);

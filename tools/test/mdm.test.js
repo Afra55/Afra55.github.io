@@ -93,4 +93,18 @@ t("改名后更新引用", () => {
   assert.strictEqual(P.replaceDocRefs("[c](a.md.bak)", "a.md", "b.md").count, 0);
 });
 
+t("表格对齐与无表头", () => {
+  const lines = ["| 左 | 中 | 右 |", "| :--- | :---: | ---: |", "| 1 | 2 | 3 |"];
+  const r = P.parseTableAt(lines, 0);
+  assert.deepStrictEqual(r.align, ["left", "center", "right"]);
+  assert.strictEqual(
+    P.buildTable(r.grid, { align: r.align }),
+    "| 左 | 中 | 右 |\n| :--- | :---: | ---: |\n| 1 | 2 | 3 |"
+  );
+  assert.strictEqual(
+    P.buildTable([["1", "2"]], { header: false }),
+    "|  |  |\n| --- | --- |\n| 1 | 2 |"
+  );
+});
+
 console.log(`mdm.test: ${n} passed`);

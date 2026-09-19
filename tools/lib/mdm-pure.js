@@ -71,8 +71,25 @@
     while (start > 0 && isRow(lines[start - 1])) start--;
     while (end < lines.length - 1 && isRow(lines[end + 1])) end++;
     const grid = [];
+    let align = [];
     for (let i = start; i <= end; i++) {
-      if (isSep(lines[i])) continue;
+      if (isSep(lines[i])) {
+        align = String(lines[i])
+          .trim()
+          .replace(/^\|/, "")
+          .replace(/\|$/, "")
+          .split("|")
+          .map((c) => {
+            const t = c.trim();
+            const l = t.startsWith(":");
+            const r = t.endsWith(":");
+            if (l && r) return "center";
+            if (r) return "right";
+            if (l) return "left";
+            return "";
+          });
+        continue;
+      }
       const cells = String(lines[i])
         .trim()
         .replace(/^\|/, "")
@@ -84,21 +101,42 @@
     if (!grid.length) return null;
     const cols = Math.max(...grid.map((r) => r.length));
     for (const r of grid) while (r.length < cols) r.push("");
-    return { start, end, grid, cols };
+    return { start, end, grid, cols, align };
   }
 
-  /** 由二维数组生成 Markdown 表格（首行为表头） */
-  function buildTable(grid) {
+  /**
+   * 由二维数组生成 Markdown 表格。
+   * opts.header !== false 时首行作为表头；否则表头留空、首行降为正文。
+   * opts.align 为每列对齐："" | "left" | "center" | "right"。
+   */
+  function buildTable(grid, opts) {
     if (!grid || !grid.length) return "";
-    const cols = Math.max(...grid.map((r) => r.length));
+    const o = opts || {};
+    const align = Array.isArray(o.align) ? o.align : [];
+    const header = o.header !== false;
+    const cols = Math.max(...grid.map((r) => r.length), 1);
     const pad = (r) => {
       const c = [...r];
       while (c.length < cols) c.push("");
       return c;
     };
-    const head = pad(grid[0]);
-    const out = [`| ${head.join(" | ")} |`, `| ${head.map(() => "---").join(" | ")} |`];
-    for (let i = 1; i < grid.length; i++) out.push(`| ${pad(grid[i]).join(" | ")} |`);
+    const sep = (i) => {
+      const a = align[i] || "";
+      if (a === "center") return ":---:";
+      if (a === "right") return "---:";
+      if (a === "left") return ":---";
+      return "---";
+    };
+    const rows = grid.map(pad);
+    const sepRow = `| ${Array.from({ length: cols }, (_, i) => sep(i)).join(" | ")} |`;
+    const out = [];
+    if (header) {
+      out.push(`| ${rows[0].join(" | ")} |`, sepRow);
+      for (let i = 1; i < rows.length; i++) out.push(`| ${rows[i].join(" | ")} |`);
+    } else {
+      out.push(`| ${Array.from({ length: cols }, () => "").join(" | ")} |`, sepRow);
+      for (const r of rows) out.push(`| ${r.join(" | ")} |`);
+    }
     return out.join("\n");
   }
 
