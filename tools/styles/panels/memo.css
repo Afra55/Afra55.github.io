@@ -765,6 +765,12 @@
   color: color-mix(in srgb, #e8a317 55%, var(--muted));
 }
 
+/* 在 Markdown 文档管理面板时不显示备忘录浮层（剪贴板提示 / 临时卡片）；
+   切回备忘录面板会自动恢复，浮层本身逻辑不变 */
+body:has(#mdm.tool-panel.is-workspace-active) #memo-temp-prompt-stack {
+  display: none !important;
+}
+
 .memo-temp-prompt-stack {
   position: fixed;
   right: max(0.75rem, env(safe-area-inset-right, 0px));
