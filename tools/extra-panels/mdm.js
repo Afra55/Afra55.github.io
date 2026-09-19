@@ -7,7 +7,7 @@
   const MP = window.DevToolsMdmPure || {};
 
   const IDB_NAME = "devtools-mdm";
-  const IDB_VER = 2;
+  const IDB_VER = 3;
   const DIR_KEY = "mdm-dir-handle";
   const BASE_KEY = "devtools-mdm-base";
   const TOKEN_KEY = "devtools-mdm-token";
@@ -58,6 +58,8 @@
         if (!db.objectStoreNames.contains("kv")) db.createObjectStore("kv");
         if (!db.objectStoreNames.contains("docs")) db.createObjectStore("docs");
         if (!db.objectStoreNames.contains("assets")) db.createObjectStore("assets");
+        if (!db.objectStoreNames.contains("trash")) db.createObjectStore("trash");
+        if (!db.objectStoreNames.contains("history")) db.createObjectStore("history");
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -130,6 +132,7 @@
     historyEntries: [],
     historyItem: null,
     lastSnap: new Map(),
+    lastSnapText: new Map(),
     splitRatio: 0.5,
   };
   try {
@@ -541,10 +544,10 @@
                   .map(
                     (t) =>
                       `<div class="mdm-item" data-trash-row><span class="mdm-item-title">${escapeHtml(
-                        t.name.replace(/^[0-9a-z]+-/, "")
+                        t.title || String(t.name).replace(/^[0-9a-z]+-/, "")
                       )}</span><span class="mdm-item-meta"><button type="button" class="ghost-btn" data-trash-restore="${escapeHtml(
-                        t.name
-                      )}">恢复</button><button type="button" class="ghost-btn" data-trash-purge="${escapeHtml(t.name)}">彻底删除</button></span></div>`
+                        t.key
+                      )}">恢复</button><button type="button" class="ghost-btn" data-trash-purge="${escapeHtml(t.key)}">彻底删除</button></span></div>`
                   )
                   .join("")
               : `<span class="hint tight">回收站为空</span>`);
@@ -562,11 +565,11 @@
             (state.historyEntries.length
               ? state.historyEntries
                   .map(
-                    (n) =>
+                    (e) =>
                       `<div class="mdm-item" data-hist-row><span class="mdm-item-title">${escapeHtml(
-                        new Date(Number(String(n).replace(/\.md$/, "")) || 0).toLocaleString()
+                        new Date(e.ts || 0).toLocaleString()
                       )}</span><span class="mdm-item-meta"><button type="button" class="ghost-btn" data-hist-restore="${escapeHtml(
-                        n
+                        e.key
                       )}">恢复</button></span></div>`
                   )
                   .join("")
@@ -1331,7 +1334,7 @@
       }
     }
 
-    // ---- 回收站 ----
+    // ---- 回收站（文件夹：.trash/ ；IDB：trash 存储） ----
     async function trashDoc(item) {
       if (state.mode === "dir" && state.dirHandle) {
         try {
@@ -1349,7 +1352,16 @@
           return false;
         }
       }
-      await idbDel("docs", item.id);
+      try {
+        const text = await readDocText(item).catch(() => "");
+        await idbSet("trash", item.id, {
+          fileName: item.fileName,
+          title: item.title,
+          text,
+          deletedAt: Date.now(),
+        });
+        await idbDel("docs", item.id);
+      } catch (_) {}
       return false;
     }
 
@@ -1359,9 +1371,28 @@
         try {
           const trash = await state.dirHandle.getDirectoryHandle(".trash");
           for await (const [name, handle] of trash.entries()) {
-            if (handle.kind === "file") out.push({ name });
+            if (handle.kind === "file") out.push({ key: name, name });
           }
         } catch (_) {}
+      } else {
+        const db = await idbOpen();
+        await new Promise((resolve) => {
+          const tx = db.transaction("trash", "readonly");
+          const req = tx.objectStore("trash").openCursor();
+          req.onsuccess = () => {
+            const c = req.result;
+            if (c) {
+              const v = c.value || {};
+              out.push({
+                key: String(c.key),
+                name: `${(Number(v.deletedAt) || 0).toString(36)}-${v.fileName || c.key}`,
+                title: v.title || "",
+              });
+              c.continue();
+            } else resolve();
+          };
+          req.onerror = () => resolve();
+        });
       }
       return out;
     }
@@ -1372,19 +1403,28 @@
       renderSidebar();
     }
 
-    async function restoreTrash(name) {
-      if (state.mode !== "dir" || !state.dirHandle) return;
+    async function restoreTrash(key) {
       try {
-        const trash = await state.dirHandle.getDirectoryHandle(".trash");
-        const src = await trash.getFileHandle(name);
-        const text = await (await src.getFile()).text();
-        const orig = name.replace(/^[0-9a-z]+-/, "");
+        let text = "";
+        let orig = "";
+        let title = "";
+        if (state.mode === "dir" && state.dirHandle) {
+          const trash = await state.dirHandle.getDirectoryHandle(".trash");
+          const src = await trash.getFileHandle(key);
+          text = await (await src.getFile()).text();
+          orig = key.replace(/^[0-9a-z]+-/, "");
+        } else {
+          const rec = await idbGet("trash", key);
+          if (!rec) throw new Error("回收站记录不存在");
+          text = rec.text || "";
+          orig = rec.fileName || "restored.md";
+          title = rec.title || "";
+        }
         const fm = parseFrontMatter(text);
-        const title = fm.title || orig.replace(/\.[^.]+$/, "");
         const item = {
           id: uid(),
-          title,
-          titleSaved: title,
+          title: title || fm.title || orig.replace(/\.[^.]+$/, ""),
+          titleSaved: title || fm.title || orig.replace(/\.[^.]+$/, ""),
           fileName: uniqueFileName(orig, ""),
           catId: ensureCat(fm.category),
           tagIds: (fm.tags || []).map((t) => ensureTag(t)).filter(Boolean),
@@ -1397,7 +1437,12 @@
         state.index.items.push(item);
         normalizeOrders();
         await saveIndexToStorage();
-        await trash.removeEntry(name);
+        if (state.mode === "dir" && state.dirHandle) {
+          const trash = await state.dirHandle.getDirectoryHandle(".trash");
+          await trash.removeEntry(key);
+        } else {
+          await idbDel("trash", key);
+        }
         await openTrash();
         toast("已恢复");
       } catch (err) {
@@ -1405,78 +1450,128 @@
       }
     }
 
-    async function purgeTrash(name) {
-      if (state.mode !== "dir" || !state.dirHandle) return;
+    async function purgeTrash(key) {
       try {
-        const trash = await state.dirHandle.getDirectoryHandle(".trash");
-        await trash.removeEntry(name);
+        if (state.mode === "dir" && state.dirHandle) {
+          const trash = await state.dirHandle.getDirectoryHandle(".trash");
+          await trash.removeEntry(key);
+        } else {
+          await idbDel("trash", key);
+        }
         await openTrash();
       } catch (_) {}
     }
 
     async function emptyTrash() {
-      if (state.mode !== "dir" || !state.dirHandle) return;
       try {
-        const trash = await state.dirHandle.getDirectoryHandle(".trash");
-        for (const t of state.trashEntries) {
-          try {
-            await trash.removeEntry(t.name);
-          } catch (_) {}
+        if (state.mode === "dir" && state.dirHandle) {
+          const trash = await state.dirHandle.getDirectoryHandle(".trash");
+          for (const t of state.trashEntries) {
+            try {
+              await trash.removeEntry(t.key);
+            } catch (_) {}
+          }
+        } else {
+          for (const t of state.trashEntries) {
+            try {
+              await idbDel("trash", t.key);
+            } catch (_) {}
+          }
         }
         await openTrash();
         toast("回收站已清空");
       } catch (_) {}
     }
 
-    // ---- 版本历史（.history/<fileName>/<ts>.md，保留最近 20） ----
+    // ---- 版本历史（文件夹：.history/ ；IDB：history 存储；各留最近 20） ----
     const SNAP_MIN_MS = 5 * 60 * 1000;
     async function snapshotHistory(item) {
-      if (state.mode !== "dir" || !state.dirHandle) return;
+      if (!state.mode) return;
       if (Date.now() - (state.lastSnap.get(item.id) || 0) < SNAP_MIN_MS) return;
       try {
         const cur = await readDocText(item);
-        const root = await state.dirHandle.getDirectoryHandle(".history", { create: true });
-        const dir = await root.getDirectoryHandle(item.fileName, { create: true });
-        const fh = await dir.getFileHandle(`${Date.now()}.md`, { create: true });
-        const w = await fh.createWritable();
-        await w.write(cur);
-        await w.close();
-        const names = [];
-        for await (const [n, h] of dir.entries()) if (h.kind === "file") names.push(n);
-        names.sort();
-        while (names.length > 20) {
-          try {
-            await dir.removeEntry(names.shift());
-          } catch (_) {}
+        // 去重：内容与上次快照相同则跳过
+        if (state.lastSnapText.get(item.id) === cur) {
+          state.lastSnap.set(item.id, Date.now());
+          return;
+        }
+        if (state.mode === "dir" && state.dirHandle) {
+          const root = await state.dirHandle.getDirectoryHandle(".history", { create: true });
+          const dir = await root.getDirectoryHandle(item.fileName, { create: true });
+          const fh = await dir.getFileHandle(`${Date.now()}.md`, { create: true });
+          const w = await fh.createWritable();
+          await w.write(cur);
+          await w.close();
+          const names = [];
+          for await (const [n, h] of dir.entries()) if (h.kind === "file") names.push(n);
+          names.sort();
+          while (names.length > 20) {
+            try {
+              await dir.removeEntry(names.shift());
+            } catch (_) {}
+          }
+        } else {
+          await idbSet("history", `${item.id}|${Date.now()}`, {
+            id: item.id,
+            fileName: item.fileName,
+            ts: Date.now(),
+            text: cur,
+          });
         }
         state.lastSnap.set(item.id, Date.now());
+        state.lastSnapText.set(item.id, cur);
       } catch (_) {}
     }
 
     async function openHistory(item) {
-      if (state.mode !== "dir" || !state.dirHandle || !item) {
-        setErr("历史版本仅「文件夹」模式可用");
+      if (!state.mode || !item) {
+        setErr("历史版本需先连接存储");
         return;
       }
       const entries = [];
-      try {
-        const root = await state.dirHandle.getDirectoryHandle(".history");
-        const dir = await root.getDirectoryHandle(item.fileName);
-        for await (const [n, h] of dir.entries()) if (h.kind === "file") entries.push(n);
-      } catch (_) {}
-      entries.sort().reverse();
+      if (state.mode === "dir" && state.dirHandle) {
+        try {
+          const root = await state.dirHandle.getDirectoryHandle(".history");
+          const dir = await root.getDirectoryHandle(item.fileName);
+          for await (const [n, h] of dir.entries()) {
+            if (h.kind === "file") entries.push({ key: n, ts: Number(String(n).replace(/\.md$/, "")) || 0 });
+          }
+        } catch (_) {}
+      } else {
+        const db = await idbOpen();
+        await new Promise((resolve) => {
+          const tx = db.transaction("history", "readonly");
+          const req = tx.objectStore("history").openCursor();
+          req.onsuccess = () => {
+            const c = req.result;
+            if (c) {
+              const v = c.value || {};
+              if (v.id === item.id) entries.push({ key: String(c.key), ts: Number(v.ts) || 0 });
+              c.continue();
+            } else resolve();
+          };
+          req.onerror = () => resolve();
+        });
+      }
+      entries.sort((a, b) => b.ts - a.ts);
       state.historyEntries = entries;
       state.historyMode = true;
       state.historyItem = item;
       renderSidebar();
     }
 
-    async function restoreHistory(item, name) {
+    async function restoreHistory(item, key) {
       try {
-        const root = await state.dirHandle.getDirectoryHandle(".history");
-        const dir = await root.getDirectoryHandle(item.fileName);
-        const f = await (await dir.getFileHandle(name)).getFile();
-        setEditorText(await f.text());
+        let text = "";
+        if (state.mode === "dir" && state.dirHandle) {
+          const root = await state.dirHandle.getDirectoryHandle(".history");
+          const dir = await root.getDirectoryHandle(item.fileName);
+          text = await (await (await dir.getFileHandle(key)).getFile()).text();
+        } else {
+          const rec = await idbGet("history", key);
+          text = rec?.text || "";
+        }
+        setEditorText(text);
         state.dirty = true;
         updateSaveBtn();
         renderPreview();
