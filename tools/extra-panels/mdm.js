@@ -137,6 +137,14 @@
     dragFromHandle: false,
     conflictItem: null,
     lastDeleted: null,
+    recentIds: (() => {
+      try {
+        const v = JSON.parse(localStorage.getItem("devtools-mdm-recent") || "[]");
+        return Array.isArray(v) ? v : [];
+      } catch (_) {
+        return [];
+      }
+    })(),
     keys: { bold: "Mod-b", italic: "Mod-i", link: "Mod-k" },
     trashMode: false,
     trashEntries: [],
@@ -531,6 +539,12 @@
           return true;
         })
         .sort((a, b) => {
+          if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1;
+          if (state.sort === "recent") {
+            const ia = state.recentIds.indexOf(a.id);
+            const ib = state.recentIds.indexOf(b.id);
+            return (ia < 0 ? 1e9 : ia) - (ib < 0 ? 1e9 : ib);
+          }
           if (state.sort === "title") return String(a.title || "").localeCompare(String(b.title || ""), "zh");
           if (state.sort === "updated") return (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0);
           if (state.sort === "size") return (Number(b.size) || 0) - (Number(a.size) || 0);
@@ -801,7 +815,14 @@
         }
         <span class="mdm-item-body">
           <span class="mdm-item-title">${hl(it.title || "未命名", q)}</span>
-          <span class="mdm-item-meta hint tight">${cat ? escapeHtml(cat.name) + " · " : ""}${tags}</span>
+          <span class="mdm-item-meta hint tight">${[
+            it.pinned ? "📌" : "",
+            cat ? escapeHtml(cat.name) : "",
+            tags,
+            fmtWhen(it.updatedAt),
+          ]
+            .filter(Boolean)
+            .join(" · ")}</span>
         </span>
       </button>`;
     }
@@ -1029,13 +1050,28 @@
       const src = getEditorText();
       els.preview.innerHTML = renderMarkdown(src);
       els.preview.querySelectorAll("a[href]").forEach((a) => {
+        const href = a.getAttribute("href") || "";
+        if (href.startsWith("#")) return;
         a.setAttribute("target", "_blank");
         a.setAttribute("rel", "noopener noreferrer");
       });
       applyTaskLists(els.preview);
+      applyHeadingAnchors(els.preview);
       updateDocStats(src, state.view?.state.selection.main);
       void resolvePreviewAssets();
       void renderMermaidBlocks();
+    }
+
+    function fmtWhen(ts) {
+      const t = Number(ts) || 0;
+      if (!t) return "";
+      const d = Date.now() - t;
+      if (d < 60000) return "刚刚";
+      if (d < 3600000) return `${Math.floor(d / 60000)} 分钟前`;
+      if (d < 86400000) return `${Math.floor(d / 3600000)} 小时前`;
+      if (d < 7 * 86400000) return `${Math.floor(d / 86400000)} 天前`;
+      const dt = new Date(t);
+      return `${dt.getMonth() + 1}-${dt.getDate()}`;
     }
 
     function updateDocStats(src, sel) {
@@ -1045,7 +1081,10 @@
       const words = (s.match(/[\u4e00-\u9fa5]|[A-Za-z0-9_'-]+/g) || []).length;
       const lines = s ? s.split("\n").length : 0;
       const selN = sel && sel.to > sel.from ? sel.to - sel.from : 0;
-      els.docStats.textContent = `${words} 词 · ${chars} 字符 · ${lines} 行${selN ? ` · 选中 ${selN} 字符` : ""}`;
+      const mins = words ? Math.max(1, Math.round(words / 300)) : 0;
+      els.docStats.textContent = `${words} 词 · ${chars} 字符 · ${lines} 行${
+        mins ? ` · 约 ${mins} 分钟` : ""
+      }${selN ? ` · 选中 ${selN} 字符` : ""}`;
     }
 
     // ---- 本地资源（图片/视频/音频/附件，存在所选文件夹里，相对路径引用） ----
@@ -2231,6 +2270,19 @@
       view.dispatch({ changes: { from: at, to: at + 1, insert: next } });
     }
 
+    /** 给预览里的标题生成锚点 id，使 `[x](#标题)` 可跳转 */
+    function applyHeadingAnchors(root) {
+      const used = new Set();
+      root.querySelectorAll("h1,h2,h3,h4,h5,h6").forEach((h) => {
+        const base = slugify(h.textContent || "", "h");
+        let id = base;
+        let i = 2;
+        while (used.has(id)) id = `${base}-${i++}`;
+        used.add(id);
+        h.id = id;
+      });
+    }
+
     function renderOutline() {
       if (!els.outline) return;
       const heads = [...els.preview.querySelectorAll("h1,h2,h3,h4,h5,h6")];
@@ -2354,6 +2406,10 @@
       setErr("");
       state.currentId = id;
       state.dirty = false;
+      try {
+        state.recentIds = [id, ...state.recentIds.filter((x) => x !== id)].slice(0, 30);
+        localStorage.setItem("devtools-mdm-recent", JSON.stringify(state.recentIds));
+      } catch (_) {}
       updateSaveBtn();
       if (els.title) els.title.value = item.title || "";
       try {
@@ -2533,6 +2589,14 @@
       await deleteItemById(findItem(state.currentId));
     }
 
+    async function togglePin(item) {
+      if (!item) return;
+      item.pinned = !item.pinned;
+      await saveIndexToStorage();
+      renderSidebar();
+      toast(item.pinned ? "已置顶" : "已取消置顶");
+    }
+
     async function duplicateItem(item) {
       try {
         const text = await readDocText(item).catch(() => "");
@@ -2631,6 +2695,7 @@
       const fmts = [...LOCAL_FORMATS, ...PANDOC_FORMATS];
       el.innerHTML =
         `<button type="button" data-ctx="open">打开</button>` +
+        `<button type="button" data-ctx="pin">${item.pinned ? "取消置顶" : "置顶"}</button>` +
         `<button type="button" data-ctx="duplicate">复制</button>` +
         `<button type="button" data-ctx="rename">重命名</button>` +
         `<div class="mdm-ctx-sub"><button type="button" data-ctx="export-toggle">导出 ▸</button>` +
@@ -2686,6 +2751,7 @@
         }
         closeListCtx();
         if (act === "open") void openDoc(item.id);
+        else if (act === "pin") void togglePin(item);
         else if (act === "duplicate") void duplicateItem(item);
         else if (act === "rename") startInlineRename(item.id);
         else if (act === "delete") void deleteItemById(item);
@@ -2983,7 +3049,7 @@ a{color:${v.accent}}
 .toc{border:1px solid ${v.line};border-radius:8px;padding:.6rem .9rem;margin-bottom:1.4rem}
 .toc ul{margin:.35rem 0 0;padding-left:1.2rem}
 .toc-l2{padding-left:.8rem}.toc-l3,.toc-l4,.toc-l5,.toc-l6{padding-left:1.6rem}
-@media print{body{max-width:none;margin:0;padding:0}pre,table,blockquote,img{page-break-inside:avoid}h1,h2,h3{page-break-after:avoid}.toc{page-break-after:always}}
+@media print{@page{margin:18mm 16mm}body{max-width:none;margin:0;padding:0}pre,table,blockquote,img{page-break-inside:avoid}h1,h2,h3{page-break-after:avoid}.toc{page-break-after:always}}
 </style></head><body>${buildToc(bodyHtml)}${bodyHtml}</body></html>`;
     }
 
@@ -3529,6 +3595,16 @@ a{color:${v.accent}}
       if (e.key === "Enter" || e.key === " ") outlineGo(e);
     });
     els.preview?.addEventListener("click", (e) => {
+      const anchor = e.target.closest?.('a[href^="#"]');
+      if (anchor) {
+        const id = decodeURIComponent((anchor.getAttribute("href") || "").slice(1));
+        const target = id ? document.getElementById(id) : null;
+        if (target && els.preview.contains(target)) {
+          e.preventDefault();
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+        return;
+      }
       const cb = e.target.closest?.("input.mdm-task-cb");
       if (cb) {
         e.preventDefault();
