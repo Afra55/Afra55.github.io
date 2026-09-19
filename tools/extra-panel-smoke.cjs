@@ -8,11 +8,37 @@
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 const { execSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
 if (!fs.existsSync(path.join(ROOT, "tools/index.html"))) {
   throw new Error(`extra-panel-smoke: bad ROOT ${ROOT}`);
+}
+
+// 跨平台 Chrome/Edge 探测；找不到就跳过（不判失败），可用 DEVTOOLS_CHROME_PATH 指定
+const CHROME_CANDIDATES = [
+  process.env.DEVTOOLS_CHROME_PATH,
+  process.env.CHROME_PATH,
+  "/usr/bin/google-chrome-stable",
+  "/usr/bin/google-chrome",
+  "/usr/bin/chromium",
+  "/usr/bin/chromium-browser",
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+  "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+  "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+  "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+].filter(Boolean);
+
+function findChrome() {
+  return CHROME_CANDIDATES.find((p) => {
+    try {
+      return fs.existsSync(p);
+    } catch (_) {
+      return false;
+    }
+  });
 }
 
 const MIME = {
@@ -50,8 +76,9 @@ async function getPuppeteer() {
   try {
     return require("puppeteer-core");
   } catch (_) {
-    execSync("npm install --no-save puppeteer-core@23", { stdio: "pipe", cwd: "/tmp" });
-    return require("/tmp/node_modules/puppeteer-core");
+    const dir = os.tmpdir();
+    execSync("npm install --no-save puppeteer-core@23", { stdio: "pipe", cwd: dir });
+    return require(path.join(dir, "node_modules", "puppeteer-core"));
   }
 }
 
@@ -161,13 +188,24 @@ async function testHash(page) {
 }
 
 async function main() {
+  const chrome = findChrome();
+  if (!chrome) {
+    console.log("extra-panel-smoke SKIP: 未找到 Chrome/Edge（可用 DEVTOOLS_CHROME_PATH 指定）");
+    return;
+  }
+  let puppeteer;
+  try {
+    puppeteer = await getPuppeteer();
+  } catch (err) {
+    console.log(`extra-panel-smoke SKIP: puppeteer-core 不可用（${err.message || err}）`);
+    return;
+  }
   const server = await startServer();
   const port = serverPort(server);
   let browser;
   try {
-    const puppeteer = await getPuppeteer();
     browser = await puppeteer.launch({
-      executablePath: "/usr/bin/google-chrome-stable",
+      executablePath: chrome,
       headless: true,
       args: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
     });

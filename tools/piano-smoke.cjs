@@ -4,6 +4,7 @@
 const fs = require("fs");
 const http = require("http");
 const path = require("path");
+const os = require("os");
 const { execSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
@@ -69,28 +70,53 @@ async function getPuppeteer() {
   try {
     return require("puppeteer-core");
   } catch (_) {
-    execSync("npm install --no-save puppeteer-core@23", { stdio: "pipe", cwd: "/tmp" });
-    return require("/tmp/node_modules/puppeteer-core");
+    const dir = os.tmpdir();
+    execSync("npm install --no-save puppeteer-core@23", { stdio: "pipe", cwd: dir });
+    return require(path.join(dir, "node_modules", "puppeteer-core"));
   }
 }
 
 function chromePath() {
   const cands = [
+    process.env.DEVTOOLS_CHROME_PATH,
+    process.env.CHROME_PATH,
     "/usr/bin/google-chrome-stable",
     "/usr/bin/google-chrome",
     "/usr/local/bin/google-chrome",
-  ];
-  return cands.find((p) => fs.existsSync(p));
+    "/usr/bin/chromium",
+    "/usr/bin/chromium-browser",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+    "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+  ].filter(Boolean);
+  return cands.find((p) => {
+    try {
+      return fs.existsSync(p);
+    } catch (_) {
+      return false;
+    }
+  });
 }
 
 async function browserChecks() {
+  const executablePath = chromePath();
+  if (!executablePath) {
+    console.log("piano-smoke SKIP: 未找到 Chrome/Edge（可用 DEVTOOLS_CHROME_PATH 指定）");
+    return;
+  }
+  let puppeteer;
+  try {
+    puppeteer = await getPuppeteer();
+  } catch (err) {
+    console.log(`piano-smoke SKIP: puppeteer-core 不可用（${err.message || err}）`);
+    return;
+  }
   const server = await startServer();
   const port = server.address().port;
   let browser;
   try {
-    const puppeteer = await getPuppeteer();
-    const executablePath = chromePath();
-    if (!executablePath) throw new Error("chrome not found");
     browser = await puppeteer.launch({
       executablePath,
       headless: true,
