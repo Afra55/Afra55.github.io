@@ -860,6 +860,7 @@
       const item = {
         id: uid(),
         title: "未命名",
+        titleSaved: "未命名",
         fileName: "",
         catId: "",
         tagIds: [],
@@ -892,14 +893,15 @@
       if (!item) return;
       const text = getEditorText();
       const title = String(els.title?.value || item.title || "未命名").trim() || "未命名";
-      // 标题变化 → 文件名跟随
-      if (title !== item.title) {
+      item.title = title;
+      // 标题变化 → 文件名跟随（用 titleSaved 记录上次写盘时的标题）
+      if (item.titleSaved !== title) {
         const oldName = item.fileName;
         item.fileName = uniqueFileName(title, item.id);
         if (oldName && oldName !== item.fileName) {
           try { await removeDocFile({ ...item, fileName: oldName }); } catch (_) {}
         }
-        item.title = title;
+        item.titleSaved = title;
       }
       item.updatedAt = Date.now();
       item.size = new Blob([text]).size;
@@ -1027,29 +1029,48 @@
 
     // ---- import ----
     async function importFiles(files) {
-      const list = [...(files || [])].filter((f) => /\.(md|markdown|txt)$/i.test(f.name) || /markdown/.test(f.type || ""));
+      const all = [...(files || [])];
+      const list = all.filter((f) => /\.(md|markdown|txt)$/i.test(f.name) || /markdown/.test(f.type || ""));
       if (!list.length) {
         toast("没有可导入的 Markdown 文件");
         return;
       }
+      // 相对路径 → File（用于把 .md 引用的图片一起导入）
+      const assetMap = new Map();
+      for (const f of all) {
+        const rel = String(f.webkitRelativePath || f.__relPath || f.name || "").replace(/\\/g, "/");
+        if (!rel) continue;
+        if (!assetMap.has(rel)) assetMap.set(rel, f);
+        const base = rel.split("/").pop();
+        if (base && !assetMap.has(base)) assetMap.set(base, f);
+      }
       let n = 0;
+      let imgN = 0;
       for (const f of list) {
         const text = await f.text();
         const fm = parseFrontMatter(text);
         const title = fm.title || f.name.replace(/\.[^.]+$/, "");
+        const baseDir = String(f.webkitRelativePath || f.__relPath || f.name || "")
+          .replace(/\\/g, "/")
+          .split("/")
+          .slice(0, -1)
+          .join("/");
+        const res = await importDocImages(fm.body, baseDir, assetMap);
+        imgN += res.imported;
         const item = {
           id: uid(),
           title,
+          titleSaved: title,
           fileName: uniqueFileName(title, ""),
           catId: ensureCat(fm.category),
           tagIds: (fm.tags || []).map((t) => ensureTag(t)).filter(Boolean),
           createdAt: Date.now(),
           updatedAt: Date.now(),
-          size: new Blob([fm.body]).size,
-          excerpt: fm.body.replace(/\s+/g, " ").trim().slice(0, 160),
+          size: new Blob([res.text]).size,
+          excerpt: res.text.replace(/\s+/g, " ").trim().slice(0, 160),
         };
         try {
-          await writeDocText(item, fm.body);
+          await writeDocText(item, res.text);
           state.index.items.unshift(item);
           n += 1;
         } catch (err) {
@@ -1058,7 +1079,48 @@
       }
       await saveIndexToStorage();
       renderSidebar();
-      if (n) toast(`已导入 ${n} 篇`);
+      if (n) toast(imgN ? `已导入 ${n} 篇 · 含 ${imgN} 张图片` : `已导入 ${n} 篇`);
+    }
+
+    /** 把 .md 引用的本地图片一并写入目标文件夹（保留相对路径） */
+    async function importDocImages(body, baseDir, assetMap) {
+      if (state.mode !== "dir" || !state.dirHandle || !assetMap.size) return { text: body, imported: 0 };
+      let imported = 0;
+      const tasks = [];
+      const re = /!\[([^\]]*)\]\(([^)\s]+)(\s+"[^"]*")?\)/g;
+      const text = String(body || "").replace(re, (full, _alt, ref) => {
+        if (/^(https?:|data:|blob:)/i.test(ref)) return full;
+        const clean = String(ref).replace(/^\.\//, "").replace(/^\/+/, "");
+        const cands = [];
+        if (baseDir) cands.push(`${baseDir}/${clean}`);
+        cands.push(clean, clean.split("/").pop());
+        let file = null;
+        for (const c of cands) {
+          if (assetMap.has(c)) {
+            file = assetMap.get(c);
+            break;
+          }
+        }
+        if (!file) return full;
+        tasks.push(writeAssetFile(clean, file));
+        imported += 1;
+        return full;
+      });
+      await Promise.all(tasks);
+      return { text, imported };
+    }
+
+    async function writeAssetFile(rel, file) {
+      if (state.mode !== "dir" || !state.dirHandle) return false;
+      const parts = String(rel || "").split("/").filter((p) => p && p !== ".");
+      if (!parts.length) return false;
+      let dir = state.dirHandle;
+      for (let i = 0; i < parts.length - 1; i++) dir = await dir.getDirectoryHandle(parts[i], { create: true });
+      const fh = await dir.getFileHandle(parts[parts.length - 1], { create: true });
+      const w = await fh.createWritable();
+      await w.write(file);
+      await w.close();
+      return true;
     }
 
     function parseFrontMatter(text) {
@@ -1309,6 +1371,11 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       if (b) void openDoc(b.dataset.id);
     });
     els.title?.addEventListener("input", () => {
+      const item = findItem(state.currentId);
+      if (item) {
+        item.title = String(els.title.value || "").trim() || "未命名";
+        renderSidebar();
+      }
       state.dirty = true;
       updateSaveBtn();
       scheduleAutoSave();
@@ -1365,22 +1432,29 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       }
       if (!entries.length) return Promise.resolve(files);
       const out = [];
-      const walk = (entry) =>
+      const walk = (entry, prefix) =>
         new Promise((resolve) => {
           if (entry.isFile) {
-            entry.file((f) => { out.push(f); resolve(); }, () => resolve());
+            entry.file(
+              (f) => {
+                try { f.__relPath = `${prefix}${f.name}`; } catch (_) {}
+                out.push(f);
+                resolve();
+              },
+              () => resolve()
+            );
           } else if (entry.isDirectory) {
             const reader = entry.createReader();
             const readAll = () =>
               reader.readEntries(async (batch) => {
                 if (!batch.length) { resolve(); return; }
-                for (const e of batch) await walk(e);
+                for (const e of batch) await walk(e, `${prefix}${entry.name}/`);
                 readAll();
               }, () => resolve());
             readAll();
           } else resolve();
         });
-      return Promise.all(entries.map(walk)).then(() => out);
+      return Promise.all(entries.map((e) => walk(e, ""))).then(() => out);
     }
     if (panelEl) {
       const setHover = (on) => panelEl.classList.toggle("is-mdm-drop", on);
