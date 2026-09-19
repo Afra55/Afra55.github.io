@@ -70,6 +70,9 @@
 .mdm-item-meta { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .mdm-main { display: flex; flex-direction: column; }
+.mdm-conflict { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding: 0.4rem 0.6rem; margin: 0 0 0.4rem; border: 1px solid #e0a020; border-left: 3px solid #e0a020; border-radius: 8px; background: color-mix(in srgb, #e0a020 12%, transparent); font-size: 0.85rem; }
+.mdm-conflict[hidden] { display: none !important; }
+.mdm-trash-actions { display: flex; gap: 0.3rem; margin-bottom: 0.35rem; }
 .mdm-main-toolbar { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.55rem; border-bottom: 1px solid var(--line); }
 .mdm-title { flex: 1 1 auto; min-width: 0; padding: 0.35rem 0.5rem; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 0.9rem; }
 .mdm-meta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.35rem 0.55rem; border-bottom: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }

@@ -112,6 +112,9 @@
     bodyCache: new Map(),
     syncing: false,
     selected: new Set(),
+    conflictItem: null,
+    trashMode: false,
+    trashEntries: [],
     splitRatio: 0.5,
   };
   try {
@@ -158,6 +161,7 @@
       exportBtn: $("#mdm-export"),
       dirLabel: $("#mdm-dir-label"),
       error: $("#mdm-error"),
+      conflict: $("#mdm-conflict"),
       layout: $("#mdm-layout"),
       search: $("#mdm-search"),
       batchbar: $("#mdm-batchbar"),
@@ -325,9 +329,11 @@
       if (state.mode === "dir" && state.dirHandle) {
         const fh = await state.dirHandle.getFileHandle(item.fileName);
         const file = await fh.getFile();
+        item.fileMtime = file.lastModified || 0;
         return file.text();
       }
       const rec = await idbGet("docs", item.id);
+      item.fileMtime = rec?.updatedAt || 0;
       return rec?.text || "";
     }
 
@@ -337,8 +343,15 @@
         const w = await fh.createWritable();
         await w.write(text);
         await w.close();
+        try {
+          const f = await (await state.dirHandle.getFileHandle(item.fileName)).getFile();
+          item.fileMtime = f.lastModified || Date.now();
+        } catch (_) {
+          item.fileMtime = Date.now();
+        }
       } else {
         await idbSet("docs", item.id, { text, updatedAt: Date.now() });
+        item.fileMtime = Date.now();
       }
     }
 
@@ -469,6 +482,29 @@
     }
 
     function renderSidebar() {
+      if (state.trashMode) {
+        if (els.cats) els.cats.innerHTML = "";
+        if (els.tags) els.tags.innerHTML = "";
+        if (els.list) {
+          els.list.innerHTML =
+            `<div class="mdm-group-title">回收站 (${state.trashEntries.length})</div>` +
+            `<div class="mdm-trash-actions"><button type="button" class="ghost-btn" data-trash="back">返回文档</button><button type="button" class="ghost-btn" data-trash="empty">清空回收站</button></div>` +
+            (state.trashEntries.length
+              ? state.trashEntries
+                  .map(
+                    (t) =>
+                      `<div class="mdm-item" data-trash-row><span class="mdm-item-title">${escapeHtml(
+                        t.name.replace(/^[0-9a-z]+-/, "")
+                      )}</span><span class="mdm-item-meta"><button type="button" class="ghost-btn" data-trash-restore="${escapeHtml(
+                        t.name
+                      )}">恢复</button><button type="button" class="ghost-btn" data-trash-purge="${escapeHtml(t.name)}">彻底删除</button></span></div>`
+                  )
+                  .join("")
+              : `<span class="hint tight">回收站为空</span>`);
+        }
+        if (els.batchbar) els.batchbar.hidden = true;
+        return;
+      }
       const items = filteredItems();
       if (els.cats) {
         const cats = state.index.cats || [];
@@ -1163,6 +1199,103 @@
       }
     }
 
+    // ---- 回收站 ----
+    async function trashDoc(item) {
+      if (state.mode === "dir" && state.dirHandle) {
+        try {
+          const trash = await state.dirHandle.getDirectoryHandle(".trash", { create: true });
+          const src = await state.dirHandle.getFileHandle(item.fileName);
+          const f = await src.getFile();
+          const name = `${Date.now().toString(36)}-${item.fileName}`;
+          const dst = await trash.getFileHandle(name, { create: true });
+          const w = await dst.createWritable();
+          await w.write(f);
+          await w.close();
+          await state.dirHandle.removeEntry(item.fileName);
+          return true;
+        } catch (_) {
+          return false;
+        }
+      }
+      await idbDel("docs", item.id);
+      return false;
+    }
+
+    async function listTrash() {
+      const out = [];
+      if (state.mode === "dir" && state.dirHandle) {
+        try {
+          const trash = await state.dirHandle.getDirectoryHandle(".trash");
+          for await (const [name, handle] of trash.entries()) {
+            if (handle.kind === "file") out.push({ name });
+          }
+        } catch (_) {}
+      }
+      return out;
+    }
+
+    async function openTrash() {
+      state.trashEntries = await listTrash();
+      state.trashMode = true;
+      renderSidebar();
+    }
+
+    async function restoreTrash(name) {
+      if (state.mode !== "dir" || !state.dirHandle) return;
+      try {
+        const trash = await state.dirHandle.getDirectoryHandle(".trash");
+        const src = await trash.getFileHandle(name);
+        const text = await (await src.getFile()).text();
+        const orig = name.replace(/^[0-9a-z]+-/, "");
+        const fm = parseFrontMatter(text);
+        const title = fm.title || orig.replace(/\.[^.]+$/, "");
+        const item = {
+          id: uid(),
+          title,
+          titleSaved: title,
+          fileName: uniqueFileName(orig, ""),
+          catId: ensureCat(fm.category),
+          tagIds: (fm.tags || []).map((t) => ensureTag(t)).filter(Boolean),
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          size: new Blob([fm.body]).size,
+          excerpt: fm.body.replace(/\s+/g, " ").trim().slice(0, 160),
+        };
+        await writeDocText(item, text);
+        state.index.items.push(item);
+        normalizeOrders();
+        await saveIndexToStorage();
+        await trash.removeEntry(name);
+        await openTrash();
+        toast("已恢复");
+      } catch (err) {
+        setErr(`恢复失败：${err.message || err}`);
+      }
+    }
+
+    async function purgeTrash(name) {
+      if (state.mode !== "dir" || !state.dirHandle) return;
+      try {
+        const trash = await state.dirHandle.getDirectoryHandle(".trash");
+        await trash.removeEntry(name);
+        await openTrash();
+      } catch (_) {}
+    }
+
+    async function emptyTrash() {
+      if (state.mode !== "dir" || !state.dirHandle) return;
+      try {
+        const trash = await state.dirHandle.getDirectoryHandle(".trash");
+        for (const t of state.trashEntries) {
+          try {
+            await trash.removeEntry(t.name);
+          } catch (_) {}
+        }
+        await openTrash();
+        toast("回收站已清空");
+      } catch (_) {}
+    }
+
     function hasRichHtml(html) {
       return /<(p|h[1-6]|ul|ol|li|table|thead|tbody|tr|td|th|strong|b|em|i|a\s|pre|code|blockquote|img|hr)\b/i.test(
         String(html || "")
@@ -1381,6 +1514,13 @@
       if (els.saveStatus) els.saveStatus.textContent = text || "";
     }
 
+    function showConflict(item) {
+      state.conflictItem = item;
+      if (els.conflict) els.conflict.hidden = false;
+      window.clearTimeout(state.autoSaveTimer);
+      setSaveStatus("检测到外部修改，已暂停保存");
+    }
+
     async function saveCurrent(opts = {}) {
       const silent = Boolean(opts.silent);
       const item = findItem(state.currentId);
@@ -1400,6 +1540,16 @@
       item.updatedAt = Date.now();
       item.size = new Blob([text]).size;
       item.excerpt = text.replace(/\s+/g, " ").trim().slice(0, 160);
+      // 冲突检测：文件被外部改过 → 暂停本次保存并提示（不静默覆盖）
+      if (state.mode === "dir" && state.dirHandle && item.fileMtime) {
+        try {
+          const cur = await (await state.dirHandle.getFileHandle(item.fileName)).getFile();
+          if (cur.lastModified && Math.abs(cur.lastModified - item.fileMtime) > 1500) {
+            showConflict(item);
+            return;
+          }
+        } catch (_) {}
+      }
       try {
         await writeDocText(item, text);
         await saveIndexToStorage();
@@ -1430,9 +1580,9 @@
 
     async function deleteItemById(item) {
       if (!item) return;
-      if (!window.confirm(`删除「${item.title}」？此操作会删除对应 .md 文件。`)) return;
+      if (!window.confirm(`删除「${item.title}」？（会移入回收站，可恢复）`)) return;
       try {
-        await removeDocFile(item);
+        await trashDoc(item);
       } catch (_) {}
       state.index.items = state.index.items.filter((x) => x.id !== item.id);
       state.bodyCache.delete(item.id);
@@ -2126,11 +2276,11 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
         return;
       }
       if (act === "delete") {
-        if (!window.confirm(`删除选中的 ${ids.length} 篇？会删除对应 .md 文件。`)) return;
+        if (!window.confirm(`删除选中的 ${ids.length} 篇？（会移入回收站）`)) return;
         for (const id of ids) {
           const it = findItem(id);
           if (it) {
-            try { await removeDocFile(it); } catch (_) {}
+            try { await trashDoc(it); } catch (_) {}
             state.bodyCache.delete(id);
           }
         }
@@ -2178,6 +2328,63 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
     els.outline?.addEventListener("click", outlineGo);
     els.outline?.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") outlineGo(e);
+    });
+    els.list?.addEventListener("click", (e) => {
+      const back = e.target.closest?.('[data-trash="back"]');
+      if (back) {
+        state.trashMode = false;
+        renderSidebar();
+        return;
+      }
+      const empty = e.target.closest?.('[data-trash="empty"]');
+      if (empty) {
+        if (window.confirm("清空回收站？不可恢复")) void emptyTrash();
+        return;
+      }
+      const restore = e.target.closest?.("[data-trash-restore]");
+      if (restore) {
+        void restoreTrash(restore.dataset.trashRestore);
+        return;
+      }
+      const purge = e.target.closest?.("[data-trash-purge]");
+      if (purge) {
+        void purgeTrash(purge.dataset.trashPurge);
+      }
+    });
+    els.conflict?.addEventListener("click", async (e) => {
+      const b = e.target.closest?.("[data-conflict]");
+      if (!b) return;
+      const item = state.conflictItem;
+      if (els.conflict) els.conflict.hidden = true;
+      state.conflictItem = null;
+      if (!item) return;
+      const act = b.dataset.conflict;
+      try {
+        if (act === "overwrite") {
+          item.fileMtime = 0;
+          await saveCurrent({ silent: true });
+        } else if (act === "reload") {
+          const text = await readDocText(item);
+          setEditorText(text);
+          state.dirty = false;
+          updateSaveBtn();
+          renderPreview();
+          renderOutline();
+          setSaveStatus("已重新加载外部版本");
+        } else if (act === "copy") {
+          const text = getEditorText();
+          const title = `${item.title}（副本）`;
+          const copy = { ...item, id: uid(), title, titleSaved: title, fileName: uniqueFileName(title, ""), fileMtime: 0, order: undefined };
+          await writeDocText(copy, text);
+          state.index.items.push(copy);
+          normalizeOrders();
+          await saveIndexToStorage();
+          renderSidebar();
+          setSaveStatus("已另存为副本");
+        }
+      } catch (err) {
+        setErr(`处理冲突失败：${err.message || err}`);
+      }
     });
     els.title?.addEventListener("input", () => {
       const item = findItem(state.currentId);
@@ -2232,6 +2439,10 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       }
       if (kind === "rescan") {
         void rescanFolder();
+        return;
+      }
+      if (kind === "trash") {
+        void openTrash();
         return;
       }
       insertTemplate(kind);
