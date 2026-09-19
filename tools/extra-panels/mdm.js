@@ -123,6 +123,10 @@
     searchMatches: null,
     bodyCache: new Map(),
     mermaidCache: new Map(),
+    warmCap: (() => {
+      const n = Number(localStorage.getItem("devtools-mdm-warmcap"));
+      return Number.isFinite(n) && n >= 0 ? n : 3000;
+    })(),
     syncing: false,
     selected: new Set(),
     conflictItem: null,
@@ -520,7 +524,7 @@
     /** 后台预热正文缓存：连接后静默读取，首次全文搜索即快（大库限量） */
     function warmBodyCache() {
       const items = state.index.items || [];
-      if (items.length < 40 || items.length > 3000) return;
+      if (!state.warmCap || items.length < 40 || items.length > state.warmCap) return;
       let i = 0;
       const worker = async () => {
         while (i < items.length) {
@@ -536,7 +540,36 @@
           await new Promise((r) => setTimeout(r, 0));
         }
       };
-      Promise.all(Array.from({ length: 2 }, worker)).catch(() => {});
+      Promise.all(Array.from({ length: 2 }, worker))
+        .then(() => persistSearchIdx())
+        .catch(() => {});
+    }
+
+    // ---- #16 跨会话持久化搜索索引（IDB kv，限量 2MB） ----
+    const SEARCH_IDX_KEY = "searchIdx";
+    async function persistSearchIdx() {
+      try {
+        const obj = {};
+        let bytes = 0;
+        for (const [id, text] of state.bodyCache) {
+          const t = String(text || "");
+          if (!t) continue;
+          bytes += t.length;
+          if (bytes > 2 * 1024 * 1024) break;
+          obj[id] = t;
+        }
+        await idbSet("kv", SEARCH_IDX_KEY, { v: 1, ts: Date.now(), map: obj });
+      } catch (_) {}
+    }
+    async function loadSearchIdx() {
+      try {
+        const rec = await idbGet("kv", SEARCH_IDX_KEY);
+        if (!rec || rec.v !== 1 || !rec.map) return;
+        const ids = new Set((state.index.items || []).map((x) => x.id));
+        for (const [id, text] of Object.entries(rec.map)) {
+          if (ids.has(id) && !state.bodyCache.has(id)) state.bodyCache.set(id, text);
+        }
+      } catch (_) {}
     }
     function scheduleFullTextSearch() {
       window.clearTimeout(state.ftTimer);
@@ -2815,6 +2848,7 @@ a{color:${v.accent}}
       ensureKatexCss();
       bindEditorMedia();
       bindEditorScroll();
+      await loadSearchIdx();
       warmBodyCache();
       void autoExpireTrash();
       if (state.view && CMresize) CMresize();
@@ -3294,6 +3328,22 @@ a{color:${v.accent}}
       }
       if (kind === "checklinks") {
         void checkLinks();
+        return;
+      }
+      if (kind === "warm") {
+        const got = window.prompt("全文搜索预热上限（文档数；0 = 关闭预热）", String(state.warmCap));
+        if (got == null) return;
+        const n = Number(got);
+        if (!Number.isFinite(n) || n < 0) {
+          setErr("请输入 0 或正整数");
+          return;
+        }
+        state.warmCap = n;
+        try {
+          localStorage.setItem("devtools-mdm-warmcap", String(n));
+        } catch (_) {}
+        toast(n === 0 ? "已关闭搜索预热" : `预热上限：${n} 篇`);
+        if (n > 0) warmBodyCache();
         return;
       }
       if (kind === "help") {
