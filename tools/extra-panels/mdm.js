@@ -113,6 +113,7 @@
     view: null,
     suppressEditorChange: false,
     search: "",
+    sort: "order",
     activeCat: "all",
     activeTag: "",
     viewMode: "edit",
@@ -142,6 +143,10 @@
   try {
     const k = JSON.parse(localStorage.getItem("devtools-mdm-keys") || "null");
     if (k && typeof k === "object") state.keys = { ...state.keys, ...k };
+  } catch (_) {}
+  try {
+    const s = localStorage.getItem("devtools-mdm-sort");
+    if (s) state.sort = s;
   } catch (_) {}
 
   function emptyIndex() {
@@ -186,6 +191,7 @@
       conflict: $("#mdm-conflict"),
       layout: $("#mdm-layout"),
       search: $("#mdm-search"),
+      sort: $("#mdm-sort"),
       batchbar: $("#mdm-batchbar"),
       batchCount: $("#mdm-batch-count"),
       cats: $("#mdm-cats"),
@@ -433,6 +439,46 @@
       return t.id;
     }
 
+    async function manageTag(id) {
+      const tag = state.index.tags.find((t) => t.id === id);
+      if (!tag) return;
+      const name = window.prompt(`标签「${tag.name}」：改名字（留空取消，输入 - 删除）`, tag.name);
+      if (name === null) return;
+      const v = name.trim();
+      if (!v || v === tag.name) return;
+      if (v === "-") {
+        if (!window.confirm(`删除标签「${tag.name}」？`)) return;
+        state.index.tags = state.index.tags.filter((t) => t.id !== id);
+        for (const it of state.index.items) it.tagIds = (it.tagIds || []).filter((x) => x !== id);
+        if (state.activeTag === id) state.activeTag = "";
+      } else {
+        tag.name = v;
+      }
+      await saveIndexToStorage();
+      renderSidebar();
+      renderMeta();
+    }
+
+    async function manageCat(id) {
+      const cat = state.index.cats.find((c) => c.id === id);
+      if (!cat) return;
+      const name = window.prompt(`分类「${cat.name}」：改名字（留空取消，输入 - 删除）`, cat.name);
+      if (name === null) return;
+      const v = name.trim();
+      if (!v || v === cat.name) return;
+      if (v === "-") {
+        if (!window.confirm(`删除分类「${cat.name}」？其文档会变为未分类`)) return;
+        state.index.cats = state.index.cats.filter((c) => c.id !== id);
+        for (const it of state.index.items) if (it.catId === id) it.catId = "";
+        if (state.activeCat === id) state.activeCat = "all";
+      } else {
+        cat.name = v;
+      }
+      await saveIndexToStorage();
+      renderSidebar();
+      renderMeta();
+    }
+
     // ---- rendering: sidebar ----
     function filteredItems() {
       const q = state.search.trim().toLowerCase();
@@ -447,7 +493,12 @@
           }
           return true;
         })
-        .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+        .sort((a, b) => {
+          if (state.sort === "title") return String(a.title || "").localeCompare(String(b.title || ""), "zh");
+          if (state.sort === "updated") return (Number(b.updatedAt) || 0) - (Number(a.updatedAt) || 0);
+          if (state.sort === "size") return (Number(b.size) || 0) - (Number(a.size) || 0);
+          return (Number(a.order) || 0) - (Number(b.order) || 0);
+        });
     }
 
     function reorderItem(fromId, toId) {
@@ -613,7 +664,23 @@
       renderMeta();
     }
 
+    /** 搜索命中高亮（先转义再包 mark） */
+    function hl(text, q) {
+      const t = String(text || "");
+      if (!q) return escapeHtml(t);
+      const idx = t.toLowerCase().indexOf(q);
+      if (idx < 0) return escapeHtml(t);
+      return (
+        escapeHtml(t.slice(0, idx)) +
+        "<mark>" +
+        escapeHtml(t.slice(idx, idx + q.length)) +
+        "</mark>" +
+        escapeHtml(t.slice(idx + q.length))
+      );
+    }
+
     function itemHtml(it) {
+      const q = state.search.trim().toLowerCase();
       const cat = state.index.cats.find((c) => c.id === it.catId);
       const tags = (it.tagIds || [])
         .map((tid) => state.index.tags.find((t) => t.id === tid)?.name)
@@ -623,7 +690,7 @@
       return `<button type="button" class="mdm-item${it.id === state.currentId ? " is-active" : ""}${state.selected.has(it.id) ? " is-selected" : ""}" data-id="${escapeHtml(it.id)}" draggable="true">
         <span class="mdm-drag-handle" title="拖动排序" aria-hidden="true">⋮⋮</span>
         <span class="mdm-item-body">
-          <span class="mdm-item-title">${escapeHtml(it.title || "未命名")}</span>
+          <span class="mdm-item-title">${hl(it.title || "未命名", q)}</span>
           <span class="mdm-item-meta hint tight">${cat ? escapeHtml(cat.name) + " · " : ""}${tags}</span>
         </span>
       </button>`;
@@ -2582,6 +2649,38 @@ a{color:${v.accent}}
       state.activeTag = state.activeTag === b.dataset.tag ? "" : b.dataset.tag;
       renderSidebar();
     });
+    els.tags?.addEventListener("contextmenu", (e) => {
+      const b = e.target.closest?.("[data-tag]");
+      if (!b) return;
+      e.preventDefault();
+      void manageTag(b.dataset.tag);
+    });
+    els.cats?.addEventListener("contextmenu", (e) => {
+      const b = e.target.closest?.("[data-cat]");
+      if (!b || b.dataset.cat === "all") return;
+      e.preventDefault();
+      void manageCat(b.dataset.cat);
+    });
+    els.list?.addEventListener("keydown", (e) => {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      const items = [...els.list.querySelectorAll("[data-id]")];
+      const cur = items.indexOf(document.activeElement);
+      const next = e.key === "ArrowDown" ? cur + 1 : cur - 1;
+      if (items[next]) {
+        e.preventDefault();
+        items[next].focus();
+      }
+    });
+    if (els.sort) {
+      els.sort.value = state.sort;
+      els.sort.addEventListener("change", () => {
+        state.sort = els.sort.value;
+        try {
+          localStorage.setItem("devtools-mdm-sort", state.sort);
+        } catch (_) {}
+        renderSidebar();
+      });
+    }
     els.list?.addEventListener("click", (e) => {
       const b = e.target.closest?.("[data-id]");
       if (!b) return;

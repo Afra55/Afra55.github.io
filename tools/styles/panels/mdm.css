@@ -22,6 +22,9 @@
 .mdm-export-group { display: inline-flex; align-items: center; gap: 0.35rem; }
 .mdm-export-group .select-input { min-height: var(--btn-min-h, 2.5rem); }
 .mdm-search { width: 100%; padding: 0.45rem 0.6rem; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-strong, transparent); color: var(--ink); }
+.mdm-side-tools { display: flex; gap: 0.4rem; }
+.mdm-side-tools .select-input { flex: 1 1 auto; min-height: var(--btn-min-h, 2.5rem); }
+.mdm-item mark { background: color-mix(in srgb, var(--accent) 45%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
 
 .mdm-layout {
   display: grid;
