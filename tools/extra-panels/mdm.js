@@ -4,6 +4,7 @@
   const K = window.DevToolsExtraKit;
   if (!K) return;
   const { $, $$, setError, toast, bindPanel, escapeHtml } = K;
+  const MP = window.DevToolsMdmPure || {};
 
   const IDB_NAME = "devtools-mdm";
   const IDB_VER = 2;
@@ -39,15 +40,15 @@
     return `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
   }
 
-  function slugify(name, fallback = "doc") {
-    const s = String(name || "")
-      .trim()
-      .replace(/[\\/:*?"<>|]+/g, " ")
-      .replace(/\s+/g, "-")
-      .replace(/^[.\-]+|[.\-]+$/g, "")
-      .slice(0, 60);
-    return s || fallback;
-  }
+  const slugify = (name, fallback = "doc") =>
+    MP.slugify
+      ? MP.slugify(name, fallback)
+      : String(name || "")
+          .trim()
+          .replace(/[\\/:*?"<>|]+/g, " ")
+          .replace(/\s+/g, "-")
+          .replace(/^[.\-]+|[.\-]+$/g, "")
+          .slice(0, 60) || fallback;
 
   function idbOpen() {
     return new Promise((resolve, reject) => {
@@ -122,6 +123,7 @@
     syncing: false,
     selected: new Set(),
     conflictItem: null,
+    keys: { bold: "Mod-b", italic: "Mod-i", link: "Mod-k" },
     trashMode: false,
     trashEntries: [],
     historyMode: false,
@@ -133,6 +135,10 @@
   try {
     const r = Number(localStorage.getItem("devtools-mdm-split"));
     if (r >= 0.15 && r <= 0.85) state.splitRatio = r;
+  } catch (_) {}
+  try {
+    const k = JSON.parse(localStorage.getItem("devtools-mdm-keys") || "null");
+    if (k && typeof k === "object") state.keys = { ...state.keys, ...k };
   } catch (_) {}
 
   function emptyIndex() {
@@ -675,6 +681,26 @@
       );
     }
 
+    function buildKeymap(CM) {
+      return CM.keymap.of([
+        { key: "Enter", run: CM.insertNewlineContinueMarkup },
+        { key: "Backspace", run: CM.deleteMarkupBackward },
+        { key: state.keys.bold || "Mod-b", run: (v) => wrapSelection(v, "**", "**") },
+        { key: state.keys.italic || "Mod-i", run: (v) => wrapSelection(v, "*", "*") },
+        { key: state.keys.link || "Mod-k", run: (v) => wrapSelection(v, "[", "](https://)") },
+        { key: "Mod-s", run: () => { void saveCurrent(); return true; } },
+        ...(CM.historyKeymap || []),
+      ]);
+    }
+
+    function syncKeys() {
+      const CM = window.DevToolsCM6;
+      if (!state.view || !CM || !state.keyCompartment) return;
+      try {
+        state.view.dispatch({ effects: state.keyCompartment.reconfigure(buildKeymap(CM)) });
+      } catch (_) {}
+    }
+
     function wrapSelection(view, before, after) {
       const { from, to } = view.state.selection.main;
       const sel = view.state.sliceDoc(from, to);
@@ -725,17 +751,8 @@
         state.themeCompartment.of(buildEditorTheme(CM)),
         state.hlCompartment.of(CM.syntaxHighlighting(buildHighlightStyle(CM))),
       ];
-      exts.push(
-        CM.keymap.of([
-          { key: "Enter", run: CM.insertNewlineContinueMarkup },
-          { key: "Backspace", run: CM.deleteMarkupBackward },
-          { key: "Mod-b", run: (v) => wrapSelection(v, "**", "**") },
-          { key: "Mod-i", run: (v) => wrapSelection(v, "*", "*") },
-          { key: "Mod-k", run: (v) => wrapSelection(v, "[", "](https://)") },
-          { key: "Mod-s", run: () => { void saveCurrent(); return true; } },
-          ...(CM.historyKeymap || []),
-        ])
-      );
+      state.keyCompartment = state.keyCompartment || new CM.Compartment();
+      exts.push(state.keyCompartment.of(buildKeymap(CM)));
       exts.push(
         CM.EditorView.updateListener.of((u) => {
           if (u.docChanged && !state.suppressEditorChange) {
@@ -843,7 +860,9 @@
       return rec instanceof Blob ? rec : new Blob([rec]);
     }
     function isRelativeRef(v) {
-      return v && !/^(https?:|data:|blob:|#|mailto:|tel:|\/\/)/i.test(v);
+      return MP.isRelativeRef
+        ? MP.isRelativeRef(v)
+        : Boolean(v) && !/^(https?:|data:|blob:|#|mailto:|tel:|\/\/)/i.test(v);
     }
     async function resolvePreviewAssets() {
       if (!state.mode || !els.preview) return;
@@ -877,6 +896,7 @@
     }
     /** 收集正文里引用的本地资源（图/视频/音频/附件链接） */
     function collectReferencedAssets(text) {
+      if (MP.collectRefs) return MP.collectRefs(text);
       const refs = new Set();
       const s = String(text || "");
       for (const re of [/!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, /(?:src|href)\s*=\s*["']([^"']+)["']/gi]) {
@@ -2084,29 +2104,10 @@
     }
 
     function parseFrontMatter(text) {
+      if (MP.parseFrontMatter) return MP.parseFrontMatter(text);
       const m = String(text || "").match(/^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
       if (!m) return { title: "", category: "", tags: [], body: text };
-      const head = m[1];
-      const body = m[2];
-      let title = "";
-      let category = "";
-      let tags = [];
-      head.split(/\r?\n/).forEach((line) => {
-        const mm = line.match(/^([A-Za-z_-]+):\s*(.*)$/);
-        if (!mm) return;
-        const key = mm[1].toLowerCase();
-        let val = mm[2].trim().replace(/^["']|["']$/g, "");
-        if (key === "title") title = val;
-        else if (key === "category" || key === "cat") category = val;
-        else if (key === "tags") {
-          tags = val
-            .replace(/^\[|\]$/g, "")
-            .split(/[,，]/)
-            .map((x) => x.trim().replace(/^["']|["']$/g, ""))
-            .filter(Boolean);
-        }
-      });
-      return { title, category, tags, body };
+      return { title: "", category: "", tags: [], body: m[2] };
     }
 
     // ---- export ----
@@ -2733,6 +2734,22 @@ a{color:${v.accent}}
       }
       if (kind === "history") {
         void openHistory(findItem(state.currentId));
+        return;
+      }
+      if (kind === "keys") {
+        const cur = state.keys;
+        const b = window.prompt("加粗快捷键（如 Mod-b）：", cur.bold);
+        if (b === null) return;
+        const i = window.prompt("斜体快捷键（如 Mod-i）：", cur.italic);
+        if (i === null) return;
+        const l = window.prompt("链接快捷键（如 Mod-k）：", cur.link);
+        if (l === null) return;
+        state.keys = { bold: b.trim() || "Mod-b", italic: i.trim() || "Mod-i", link: l.trim() || "Mod-k" };
+        try {
+          localStorage.setItem("devtools-mdm-keys", JSON.stringify(state.keys));
+        } catch (_) {}
+        syncKeys();
+        toast("快捷键已更新");
         return;
       }
       if (kind === "img-url") {

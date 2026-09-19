@@ -59,6 +59,7 @@
     jszip: { src: "./vendor/jszip.min.js", probe: () => typeof globalThis.JSZip === "function" },
     turndown: { src: "./vendor/turndown/turndown.js", probe: () => typeof globalThis.TurndownService === "function" },
     mdext: { src: "./vendor/mdext/mdext.js", probe: () => typeof globalThis.markdownItExtras === "object" },
+    mdmpure: { src: "./lib/mdm-pure.js", probe: () => typeof globalThis.DevToolsMdmPure === "object" },
   };
 
   const EXTERNAL_SITE_TOOLS = new Set([]);
@@ -184,7 +185,7 @@
     giftest: ["omggif"],
     dateremind: ["solarlunar"],
     ipgeo: ["leaflet"],
-    mdm: ["markdownit", "purify", "hljs", "cm6", "katexmd", "jszip", "turndown", "mdext"],
+    mdm: ["markdownit", "purify", "hljs", "cm6", "katexmd", "jszip", "turndown", "mdext", "mdmpure"],
   };
 
   /** 独立脚本，不走 extra 面板栈 */
