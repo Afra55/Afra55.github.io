@@ -97,6 +97,8 @@
 .markdown-body img { max-width: 100%; }
 .markdown-body blockquote { border-left: 3px solid var(--line); margin: 0; padding-left: 0.9rem; color: var(--muted); }
 .markdown-body a { color: var(--accent); }
+.markdown-body li.mdm-task { list-style: none; margin-left: -1.1em; }
+.markdown-body .mdm-task-cb { margin-right: 0.4em; accent-color: var(--accent); vertical-align: middle; }
 
 /* highlight.js 主题（github 精简版） */
 .hljs { color: #24292e; }

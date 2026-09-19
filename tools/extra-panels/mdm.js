@@ -391,14 +391,73 @@
     }
 
     // ---- editor (CM6) ----
+    function isDarkScheme() {
+      return document.documentElement.dataset.themeScheme !== "light";
+    }
+
+    function buildHighlightStyle(CM) {
+      const dark = isDarkScheme();
+      return CM.HighlightStyle.define([
+        { tag: CM.tags.heading, color: "var(--accent)", fontWeight: "700" },
+        { tag: CM.tags.strong, fontWeight: "700" },
+        { tag: CM.tags.emphasis, fontStyle: "italic" },
+        { tag: [CM.tags.link, CM.tags.url], color: "var(--accent)", textDecoration: "underline" },
+        { tag: [CM.tags.keyword, CM.tags.operator], color: dark ? "#c678dd" : "#a626a4" },
+        { tag: [CM.tags.string, CM.tags.special(CM.tags.string)], color: dark ? "#98c379" : "#50a14f" },
+        { tag: [CM.tags.number, CM.tags.bool], color: dark ? "#d19a66" : "#986801" },
+        { tag: CM.tags.comment, color: "var(--muted)", fontStyle: "italic" },
+        { tag: CM.tags.monospace, color: dark ? "#e5c07b" : "#c18401" },
+        { tag: [CM.tags.tagName, CM.tags.attributeName], color: dark ? "#e06c75" : "#e45649" },
+        { tag: CM.tags.strikethrough, textDecoration: "line-through" },
+      ]);
+    }
+
+    function buildEditorTheme(CM) {
+      return CM.EditorView.theme(
+        {
+          "&": { height: "100%", fontSize: "14px", backgroundColor: "transparent", color: "var(--ink)" },
+          ".cm-scroller": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace", lineHeight: "1.7" },
+          ".cm-content": { caretColor: "var(--ink)" },
+          ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--ink)" },
+          "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection": {
+            backgroundColor: "color-mix(in srgb, var(--accent) 28%, transparent)",
+          },
+          ".cm-activeLine": { backgroundColor: "color-mix(in srgb, var(--accent) 7%, transparent)" },
+          ".cm-gutters": { backgroundColor: "transparent", color: "var(--muted)", border: "none" },
+          ".cm-activeLineGutter": {
+            backgroundColor: "color-mix(in srgb, var(--accent) 7%, transparent)",
+            color: "var(--ink)",
+          },
+          ".cm-lineNumbers .cm-gutterElement": { color: "var(--muted)" },
+          ".cm-foldPlaceholder": { backgroundColor: "transparent", border: "none", color: "var(--muted)" },
+          ".cm-panels": { backgroundColor: "var(--panel-strong, var(--bg-0))", color: "var(--ink)" },
+          ".cm-searchMatch": { backgroundColor: "color-mix(in srgb, var(--accent) 30%, transparent)" },
+          ".cm-searchMatch.cm-searchMatch-selected": {
+            backgroundColor: "color-mix(in srgb, var(--accent) 55%, transparent)",
+          },
+          ".cm-tooltip": {
+            backgroundColor: "var(--panel-strong, var(--bg-0))",
+            color: "var(--ink)",
+            border: "1px solid var(--line)",
+          },
+        },
+        { dark: isDarkScheme() }
+      );
+    }
+
     function ensureEditor() {
       if (state.view) return state.view;
       const CM = window.DevToolsCM6;
       if (!CM?.EditorView || !els.editor) return null;
-      const exts = [CM.basicSetup, CM.markdown(), CM.oneDark];
-      try {
-        exts.push(CM.EditorView.theme({ "&": { height: "100%", fontSize: "14px" }, ".cm-scroller": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" } }));
-      } catch (_) {}
+      state.themeCompartment = state.themeCompartment || new CM.Compartment();
+      state.hlCompartment = state.hlCompartment || new CM.Compartment();
+      const exts = [
+        CM.basicSetup,
+        CM.markdown(),
+        CM.EditorView.lineWrapping,
+        state.themeCompartment.of(buildEditorTheme(CM)),
+        state.hlCompartment.of(CM.syntaxHighlighting(buildHighlightStyle(CM))),
+      ];
       exts.push(
         CM.keymap.of([
           { key: "Mod-s", run: () => { void saveCurrent(); return true; } },
@@ -420,6 +479,27 @@
       });
       return state.view;
     }
+
+    /** 主题切换时让编辑器跟随站点主题 */
+    function syncEditorTheme() {
+      const CM = window.DevToolsCM6;
+      if (!state.view || !CM || !state.themeCompartment) return;
+      try {
+        state.view.dispatch({
+          effects: [
+            state.themeCompartment.reconfigure(buildEditorTheme(CM)),
+            state.hlCompartment.reconfigure(CM.syntaxHighlighting(buildHighlightStyle(CM))),
+          ],
+        });
+      } catch (_) {}
+    }
+    try {
+      new MutationObserver(syncEditorTheme).observe(document.documentElement, {
+        attributes: true,
+        attributeFilter: ["data-theme-scheme", "data-theme-bg"],
+      });
+    } catch (_) {}
+
 
     function setEditorText(text) {
       const v = ensureEditor();
@@ -452,6 +532,26 @@
       els.preview.querySelectorAll("a[href]").forEach((a) => {
         a.setAttribute("target", "_blank");
         a.setAttribute("rel", "noopener noreferrer");
+      });
+      applyTaskLists(els.preview);
+    }
+
+    /** `- [ ]` / `- [x]` → 复选框（markdown-it 默认不支持任务列表） */
+    function applyTaskLists(root) {
+      root.querySelectorAll("li").forEach((li) => {
+        const holder = li.firstElementChild && li.firstElementChild.tagName === "P" ? li.firstElementChild : li;
+        const node = holder.firstChild;
+        if (!node || node.nodeType !== 3) return;
+        const m = node.nodeValue.match(/^\[([ xX])\]\s+/);
+        if (!m) return;
+        node.nodeValue = node.nodeValue.slice(m[0].length);
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.disabled = true;
+        cb.checked = m[1].toLowerCase() === "x";
+        cb.className = "mdm-task-cb";
+        holder.insertBefore(cb, holder.firstChild);
+        li.classList.add("mdm-task");
       });
     }
 
