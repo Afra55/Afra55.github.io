@@ -675,7 +675,7 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       }
     }
 
-    async function exportViaPandoc(text, to, title) {
+    async function exportViaPandoc(text, to, title, retried = false) {
       const res = await fetch(`${baseUrl()}/pandoc/convert`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
@@ -683,10 +683,34 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok) {
-        throw new Error(data?.error || `本机桥未响应（HTTP ${res.status}）· 请确认桥已启动且装了 pandoc`);
+        const msg = data?.error || `本机桥未响应（HTTP ${res.status}）· 请确认桥已启动且装了 pandoc`;
+        if (!retried && /pandoc/i.test(msg) && /未找到|not found|ENOENT|未安装/i.test(msg)) {
+          if (window.confirm("导出该格式需要 pandoc，当前未安装。\n现在用本机桥自动安装？（Windows/macOS 支持，约 100–150MB）")) {
+            await runPandocInstall();
+            return await exportViaPandoc(text, to, title, true);
+          }
+        }
+        throw new Error(msg);
       }
       const bytes = Uint8Array.from(atob(data.dataBase64 || ""), (c) => c.charCodeAt(0));
       downloadBlob(new Blob([bytes]), data.filename || `${slugify(title)}.${to}`);
+    }
+
+    async function runPandocInstall() {
+      toast("正在安装 pandoc，请稍候（可能 1–3 分钟）…");
+      const res = await fetch(`${baseUrl()}/pandoc/install`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
+        body: "{}",
+      });
+      const data = await res.json().catch(() => null);
+      if (!data?.ok) throw new Error(data?.error || "安装请求失败");
+      if (data.installed) {
+        toast("pandoc 已安装，正在重试导出…");
+        return;
+      }
+      if (data.needsManual) throw new Error(`请手动安装：${data.command || "pandoc"}`);
+      throw new Error(data.message || data.output || "安装未完成，请手动安装 pandoc");
     }
 
     // ---- dir picking ----

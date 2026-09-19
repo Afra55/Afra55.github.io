@@ -5,7 +5,7 @@
  * 把 Markdown 转成 docx/odt/epub/rtf/rst/latex/pptx/html 等任意格式。
  */
 
-const { checkPandoc, convert } = require("./pandoc-ops");
+const { checkPandoc, convert, installPandoc } = require("./pandoc-ops");
 
 const BRIDGE_VERSION = "0.1.0";
 const FEATURES = { pandoc: true };
@@ -54,6 +54,11 @@ async function handleRequest(req, res, opts = {}) {
     if (pathname === "/convert" && req.method === "POST") {
       const body = parseJsonBody(await readBody(req));
       const data = await convert(body);
+      sendJson(res, 200, { ok: true, ...data });
+      return;
+    }
+    if (pathname === "/install" && req.method === "POST") {
+      const data = await installPandoc();
       sendJson(res, 200, { ok: true, ...data });
       return;
     }

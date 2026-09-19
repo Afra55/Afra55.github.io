@@ -133,6 +133,15 @@ install_one() {
           ;;
       esac
       ;;
+    pandoc)
+      case "$pm" in
+        brew) brew install pandoc ;;
+        apt) sudo apt-get update -y && sudo apt-get install -y pandoc ;;
+        dnf) sudo dnf install -y pandoc ;;
+        pacman) sudo pacman -Sy --noconfirm pandoc ;;
+        *) warn "请手动安装 pandoc：https://pandoc.org/installing.html"; return 1 ;;
+      esac
+      ;;
   esac
 }
 
@@ -419,6 +428,7 @@ need_install_list() {
   [[ "${DEVTOOLS_SKIP_FFMPEG:-0}" == "1" ]] || have ffmpeg || out+=(ffmpeg)
   [[ "${DEVTOOLS_SKIP_ADB:-0}" == "1" ]] || have adb || out+=(adb)
   [[ "${DEVTOOLS_SKIP_YTDLP:-0}" == "1" ]] || have yt-dlp || out+=(yt-dlp)
+  [[ "${DEVTOOLS_SKIP_PANDOC:-0}" == "1" ]] || have pandoc || out+=(pandoc)
   printf '%s\n' "${out[@]+"${out[@]}"}"
 }
 

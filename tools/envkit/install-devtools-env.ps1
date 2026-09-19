@@ -56,6 +56,7 @@ function Install-One([string]$Name) {
     "ffmpeg" { winget install -e --id Gyan.FFmpeg --accept-package-agreements --accept-source-agreements }
     "adb" { winget install -e --id Google.PlatformTools --accept-package-agreements --accept-source-agreements }
     "yt-dlp" { winget install -e --id yt-dlp.yt-dlp --accept-package-agreements --accept-source-agreements }
+    "pandoc" { winget install -e --id JohnMacFarlane.Pandoc --accept-package-agreements --accept-source-agreements }
   }
 }
 
@@ -78,6 +79,7 @@ function Upgrade-One([string]$Name) {
     "ffmpeg" { "Gyan.FFmpeg" }
     "adb" { "Google.PlatformTools" }
     "yt-dlp" { "yt-dlp.yt-dlp" }
+    "pandoc" { "JohnMacFarlane.Pandoc" }
   }
   if ($id) {
     winget upgrade -e --id $id --include-unknown --accept-package-agreements --accept-source-agreements
@@ -90,7 +92,7 @@ function Upgrade-One([string]$Name) {
 
 function Snapshot-Versions {
   $map = [ordered]@{}
-  foreach ($n in @("node", "git", "ffmpeg", "adb", "yt-dlp")) {
+  foreach ($n in @("node", "git", "ffmpeg", "adb", "yt-dlp", "pandoc")) {
     $v = Get-Ver $n
     if ($v) { $map[$n] = [string]$v } else { $map[$n] = "(missing)" }
   }
@@ -104,7 +106,7 @@ function Do-Upgrade {
   Write-Host "-- 升级前 --"
   foreach ($k in $before.Keys) { Write-Info "$k=$($before[$k])" }
 
-  foreach ($n in @("node", "git", "ffmpeg", "adb", "yt-dlp")) {
+  foreach ($n in @("node", "git", "ffmpeg", "adb", "yt-dlp", "pandoc")) {
     if (Have-Cmd $n) {
       Write-Info "升级 $n …"
       Upgrade-One $n
@@ -221,7 +223,7 @@ DevTools 桥目录：$BridgeDir
 function Show-Report {
   Write-Host ""
   Write-Host "== 本机工具检测 =="
-  foreach ($n in @("node", "git", "ffmpeg", "adb", "yt-dlp")) {
+  foreach ($n in @("node", "git", "ffmpeg", "adb", "yt-dlp", "pandoc")) {
     $v = Get-Ver $n
     if ($v) { Write-Ok "$n · $v" } else { Write-Miss "$n 未安装" }
   }
