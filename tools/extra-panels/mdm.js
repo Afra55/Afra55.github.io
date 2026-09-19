@@ -749,23 +749,62 @@
       renderMeta();
     }
 
-    /** 文件夹专属功能在本地存储模式下置灰（避免点了只报错） */
+    /** 模式按钮互斥：只显示「切换到另一种模式」的那一个；未选存储时两个都显示供选择 */
     function applyModeUI() {
       const dirOnly = state.mode === "dir";
       if (els.importDirBtn) {
         els.importDirBtn.disabled = !dirOnly;
-        els.importDirBtn.title = dirOnly ? "" : "仅「文件夹」模式可用";
+        els.importDirBtn.title = dirOnly
+          ? "选择一个文件夹，把里面所有 .md 连同引用的图片一起导入"
+          : "仅「文件夹」模式可用";
+      }
+      const hasMode = Boolean(state.mode);
+      if (els.pickDir) {
+        els.pickDir.hidden = hasMode && state.mode === "dir";
+        els.pickDir.textContent = state.mode === "idb" ? "改用文件夹" : "选择文件夹";
+        els.pickDir.title =
+          state.mode === "idb"
+            ? "切换回文件夹模式：文档以真实 .md 文件保存，可用 VS Code / Obsidian / Git 直接编辑"
+            : "选择本机文件夹作为存储：文档以真实 .md 文件保存，可用 VS Code / Obsidian / Git 直接编辑";
       }
       if (els.useIdb) {
-        els.useIdb.disabled = state.mode === "idb";
-        els.useIdb.title = state.mode === "idb" ? "当前已在本地存储模式" : "改用浏览器本地存储（不写文件夹）";
+        els.useIdb.hidden = state.mode === "idb";
+        els.useIdb.disabled = false;
       }
-      if (els.pickDir && state.mode === "idb") els.pickDir.textContent = "改用文件夹";
+      const changeDir = els.insertDropdown?.querySelector('[data-insert="change-dir"]');
+      if (changeDir) changeDir.hidden = state.mode !== "dir";
       const rescan = els.insertDropdown?.querySelector('[data-insert="rescan"]');
       if (rescan) {
         rescan.disabled = !dirOnly;
         rescan.title = dirOnly ? "" : "仅「文件夹」模式可用";
       }
+    }
+
+    /** 站内风格确认弹窗（替代 window.confirm），返回 Promise<boolean> */
+    function confirmModal({ title, body, okText = "确定", danger = false }) {
+      return new Promise((resolve) => {
+        const box = els.modalBox;
+        box.innerHTML =
+          `<div class="mdm-modal-head"><strong>${escapeHtml(title)}</strong></div>` +
+          `<p class="mdm-modal-body">${escapeHtml(body)}</p>` +
+          `<div class="mdm-modal-foot"><button type="button" class="ghost-btn" data-cf="no">取消</button>` +
+          `<button type="button" class="secondary-btn${danger ? " is-danger" : ""}" data-cf="yes">${escapeHtml(
+            okText
+          )}</button></div>`;
+        els.modal.hidden = false;
+        const done = (v) => {
+          closeModal();
+          resolve(v);
+        };
+        els.modal.onclick = (e) => {
+          if (e.target === els.modal) done(false);
+        };
+        box.onclick = (e) => {
+          const b = e.target.closest?.("[data-cf]");
+          if (!b) return;
+          done(b.dataset.cf === "yes");
+        };
+      });
     }
 
     /** 批量栏状态（不重建列表，供细粒度更新复用） */
@@ -1121,17 +1160,26 @@
     }
 
     /** 改名后同步其它文档里的引用（当前文档若未保存则直接改编辑器，避免覆盖编辑） */
-    async function updateIncomingRefs(oldName, newName) {
-      if (!oldName || !newName || oldName === newName) return 0;
+    async function updateIncomingRefsBatch(pairs) {
+      const list = (pairs || []).filter((p) => p && p[0] && p[1] && p[0] !== p[1]);
+      if (!list.length) return 0;
       let updated = 0;
       let currentWritten = false;
       for (const it of state.index.items || []) {
         try {
           const isCur = it.id === state.currentId;
           if (isCur && state.dirty && state.view) {
-            const rr = replaceDocRefs(getEditorText(), oldName, newName);
-            if (rr.count) {
-              setEditorText(rr.text);
+            let text = getEditorText();
+            let changed = 0;
+            for (const [o, n] of list) {
+              const rr = replaceDocRefs(text, o, n);
+              if (rr.count) {
+                text = rr.text;
+                changed += rr.count;
+              }
+            }
+            if (changed) {
+              setEditorText(text);
               state.dirty = true;
               updateSaveBtn();
               updated++;
@@ -1140,33 +1188,42 @@
           }
           const raw = await readDocText(it);
           const fm = parseFrontMatter(raw);
-          const rr = replaceDocRefs(fm.body, oldName, newName);
-          if (!rr.count) continue;
+          let body = fm.body;
+          let changed = 0;
+          for (const [o, n] of list) {
+            const rr = replaceDocRefs(body, o, n);
+            if (rr.count) {
+              body = rr.text;
+              changed += rr.count;
+            }
+          }
+          if (!changed) continue;
           const hadFm = /^\uFEFF?---\r?\n/.test(String(raw));
-          const rebuilt = hadFm ? buildFrontMatterBlock({ ...it, fmHead: fm.head }, rr.text) : rr.text;
-          await writeDocText(it, rebuilt);
-          state.bodyCache.set(it.id, rr.text);
+          await writeDocText(it, hadFm ? buildFrontMatterBlock({ ...it, fmHead: fm.head }, body) : body);
+          state.bodyCache.set(it.id, body);
           state.persistedIdx.delete(it.id);
           it.updatedAt = Date.now();
           updated++;
           if (isCur) currentWritten = true;
         } catch (_) {}
       }
-      if (updated) {
-        await saveIndexToStorage();
-        if (currentWritten && !state.dirty) {
-          const cur = findItem(state.currentId);
-          if (cur && state.view) {
-            const raw = await readDocText(cur).catch(() => "");
+      if (currentWritten && !state.dirty) {
+        const cur = findItem(state.currentId);
+        if (cur && state.view) {
+          try {
+            const raw = await readDocText(cur);
             const fm = parseFrontMatter(raw);
             cur.fmHead = fm.head || "";
             setEditorText(fm.body);
             renderPreview();
-          }
+          } catch (_) {}
         }
-        renderSidebar();
       }
       return updated;
+    }
+
+    function updateIncomingRefs(oldName, newName) {
+      return updateIncomingRefsBatch([[oldName, newName]]);
     }
 
     /** 快捷键帮助（弹窗，读取当前自定义键位） */
@@ -3384,11 +3441,17 @@ a{color:${v.accent}}
 
     // ---- events ----
     els.pickDir?.addEventListener("click", () => void pickDir());
-    els.useIdb?.addEventListener("click", () => {
+    els.useIdb?.addEventListener("click", async () => {
       if (state.mode === "idb") return;
-      const ok = window.confirm(
-        "切换到「浏览器本地存储」模式？\n\n文档会存在浏览器里（不写入文件夹），适合没有文件夹权限或想快速试用。可随时点「改用文件夹」切回。"
-      );
+      const ok = await confirmModal({
+        title: "切换到本地存储模式？",
+        body:
+          "文档会存进浏览器（IndexedDB），不再写入文件夹。\n\n" +
+          "· 不需要文件夹权限，任何浏览器都能用\n" +
+          "· 清除浏览器数据会丢失，建议先用「导出库」备份\n" +
+          "· 与当前文件夹里的库相互独立，可随时点「改用文件夹」切回",
+        okText: "切换",
+      });
       if (ok) void useIdbMode();
     });
     els.newBtn?.addEventListener("click", newDoc);
@@ -3667,6 +3730,7 @@ a{color:${v.accent}}
         if (pre === null) return;
         const suf = window.prompt("标题后缀（可留空）：", "");
         if (suf === null) return;
+        const pairs = [];
         for (const id of ids) {
           const it = findItem(id);
           if (!it) continue;
@@ -3678,12 +3742,16 @@ a{color:${v.accent}}
           try {
             const t = await readDocText({ ...it, fileName: oldName }).catch(() => "");
             await writeDocText(it, t);
-            if (oldName && oldName !== it.fileName) await removeDocFile({ ...it, fileName: oldName });
+            if (oldName && oldName !== it.fileName) {
+              await removeDocFile({ ...it, fileName: oldName });
+              pairs.push([oldName, it.fileName]);
+            }
           } catch (_) {}
         }
+        const refs = await updateIncomingRefsBatch(pairs);
         await saveIndexToStorage();
         renderSidebar();
-        toast(`已重命名 ${ids.length} 篇`);
+        toast(refs ? `已重命名 ${ids.length} 篇，并更新 ${refs} 篇文档中的引用` : `已重命名 ${ids.length} 篇`);
         return;
       }
       if (act === "export") {
@@ -3875,6 +3943,10 @@ a{color:${v.accent}}
       }
       if (kind === "clean-assets") {
         void cleanOrphanAssets();
+        return;
+      }
+      if (kind === "change-dir") {
+        void pickDir();
         return;
       }
       if (kind === "rescan") {

@@ -4,20 +4,20 @@
       </div>
       <div class="panel-body mdm-body">
         <div class="mdm-topbar">
-          <button type="button" class="primary-btn" id="mdm-pick-dir">选择文件夹</button>
-          <button type="button" class="secondary-btn" id="mdm-use-idb">本地存储模式</button>
-          <button type="button" class="secondary-btn" id="mdm-new" disabled>新建</button>
-          <label class="file-btn" for="mdm-import">导入 MD</label>
+          <button type="button" class="primary-btn" id="mdm-pick-dir" title="选择本机文件夹作为存储：文档以真实 .md 文件保存，可用 VS Code / Obsidian / Git 直接编辑">选择文件夹</button>
+          <button type="button" class="secondary-btn" id="mdm-use-idb" title="改用浏览器本地存储（IndexedDB）：不需要文件夹权限，数据存在浏览器里；清除浏览器数据会丢失，建议配合「导出库」备份">本地存储模式</button>
+          <button type="button" class="secondary-btn" id="mdm-new" disabled title="新建一篇空白文档（在标题框输入即可改名）">新建</button>
+          <label class="file-btn" for="mdm-import" title="导入本机的 .md / .markdown / .txt 文件，可多选；正文里引用的图片会一并导入">导入 MD</label>
           <input id="mdm-import" type="file" accept=".md,.markdown,.txt,text/markdown" multiple hidden />
-          <button type="button" class="secondary-btn" id="mdm-import-dir" disabled>导入文件夹</button>
+          <button type="button" class="secondary-btn" id="mdm-import-dir" disabled title="选择一个文件夹，把里面所有 .md 连同引用的图片一起导入（仅文件夹模式可用）">导入文件夹</button>
           <input id="mdm-import-dir-input" type="file" webkitdirectory directory multiple hidden />
-          <button type="button" class="secondary-btn" id="mdm-export-lib" disabled>导出库</button>
-          <button type="button" class="secondary-btn" id="mdm-import-lib" disabled>导入库</button>
+          <button type="button" class="secondary-btn" id="mdm-export-lib" disabled title="把整个库（索引 + 所有 .md + assets 资源）打包成一个 ZIP 下载，用于备份或迁移">导出库</button>
+          <button type="button" class="secondary-btn" id="mdm-import-lib" disabled title="读取「导出库」生成的 ZIP，把文档、分类标签和资源合并进当前存储（同名文件跳过）">导入库</button>
           <input id="mdm-import-lib-input" type="file" accept=".zip,application/zip" hidden />
-          <button type="button" class="primary-btn" id="mdm-save" disabled>保存</button>
+          <button type="button" class="primary-btn" id="mdm-save" disabled title="保存当前文档（Ctrl/⌘ + S）；开启自动保存后基本无需手动点">保存</button>
           <span class="mdm-export-group">
-            <select id="mdm-export-fmt" class="select-input" disabled aria-label="导出格式"></select>
-            <button type="button" class="secondary-btn" id="mdm-export" disabled>导出</button>
+            <select id="mdm-export-fmt" class="select-input" disabled aria-label="导出格式" title="选择导出格式：Markdown / HTML / PDF / 长图，或 Pandoc 支持的其它格式"></select>
+            <button type="button" class="secondary-btn" id="mdm-export" disabled title="按左侧选择的格式导出当前文档">导出</button>
           </span>
           <span class="hint tight" id="mdm-dir-label"></span>
         </div>
@@ -38,13 +38,13 @@
             </div>
             <div class="mdm-batchbar" id="mdm-batchbar" hidden>
               <span class="hint tight" id="mdm-batch-count"></span>
-              <button type="button" class="ghost-btn" data-batch="all">全选</button>
-              <button type="button" class="ghost-btn" data-batch="tag">加标签</button>
-              <button type="button" class="ghost-btn" data-batch="cat">分类</button>
-              <button type="button" class="ghost-btn" data-batch="rename">重命名</button>
-              <button type="button" class="ghost-btn" data-batch="export">导出</button>
-              <button type="button" class="ghost-btn" data-batch="delete">删除</button>
-              <button type="button" class="ghost-btn" data-batch="clear">取消</button>
+              <button type="button" class="ghost-btn" data-batch="all" title="选中当前筛选结果里的全部文档">全选</button>
+              <button type="button" class="ghost-btn" data-batch="tag" title="给选中的文档批量添加标签">加标签</button>
+              <button type="button" class="ghost-btn" data-batch="cat" title="给选中的文档批量设置分类">分类</button>
+              <button type="button" class="ghost-btn" data-batch="rename" title="批量重命名：统一给选中文档的标题加前缀 / 后缀">重命名</button>
+              <button type="button" class="ghost-btn" data-batch="export" title="把选中的文档导出为一个 ZIP">导出</button>
+              <button type="button" class="ghost-btn" data-batch="delete" title="把选中的文档移入回收站">删除</button>
+              <button type="button" class="ghost-btn" data-batch="clear" title="取消所有选中">取消</button>
             </div>
             <div class="mdm-group" id="mdm-cats"></div>
             <div class="mdm-group" id="mdm-tags"></div>
@@ -84,6 +84,7 @@
                   <button type="button" data-insert="img-url">图片 URL…</button>
                   <button type="button" data-insert="clean-assets">清理未引用资源</button>
                   <button type="button" data-insert="rescan">重新扫描文件夹</button>
+                  <button type="button" data-insert="change-dir">更换文件夹…</button>
                   <button type="button" data-insert="trash">回收站…</button>
                   <button type="button" data-insert="history">历史版本…</button>
                   <button type="button" data-insert="keys">自定义快捷键…</button>
