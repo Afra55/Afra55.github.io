@@ -82,4 +82,15 @@ t("表格解析与生成", () => {
   assert.strictEqual(P.parseTableAt(["foo", "bar", "baz"], 1), null);
 });
 
+t("改名后更新引用", () => {
+  const r = P.replaceDocRefs('[见](a.md) 和 ![x](./a.md#h) 与 <a href="a.md">看</a>', "a.md", "b.md");
+  assert.strictEqual(r.count, 3);
+  assert.ok(r.text.includes("](b.md)"));
+  assert.ok(r.text.includes("./b.md#h"));
+  assert.ok(r.text.includes('href="b.md"'));
+  assert.strictEqual(P.replaceDocRefs("没有引用", "a.md", "b.md").count, 0);
+  assert.strictEqual(P.replaceDocRefs("[c](sub/a.md)", "a.md", "b.md").text, "[c](sub/b.md)");
+  assert.strictEqual(P.replaceDocRefs("[c](a.md.bak)", "a.md", "b.md").count, 0);
+});
+
 console.log(`mdm.test: ${n} passed`);

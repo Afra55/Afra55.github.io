@@ -708,6 +708,20 @@
       renderMeta();
     }
 
+    /** 文件夹专属功能在本地存储模式下置灰（避免点了只报错） */
+    function applyModeUI() {
+      const dirOnly = state.mode === "dir";
+      if (els.importDirBtn) {
+        els.importDirBtn.disabled = !dirOnly;
+        els.importDirBtn.title = dirOnly ? "" : "仅「文件夹」模式可用";
+      }
+      const rescan = els.insertDropdown?.querySelector('[data-insert="rescan"]');
+      if (rescan) {
+        rescan.disabled = !dirOnly;
+        rescan.title = dirOnly ? "" : "仅「文件夹」模式可用";
+      }
+    }
+
     /** 批量栏状态（不重建列表，供细粒度更新复用） */
     function updateBatchBar() {
       if (!els.batchbar) return;
@@ -1020,6 +1034,58 @@
     }
     function buildTable(grid) {
       return MP.buildTable ? MP.buildTable(grid) : "";
+    }
+    function replaceDocRefs(text, oldName, newName) {
+      return MP.replaceDocRefs ? MP.replaceDocRefs(text, oldName, newName) : { text, count: 0 };
+    }
+
+    /** 改名后同步其它文档里的引用（当前文档若未保存则直接改编辑器，避免覆盖编辑） */
+    async function updateIncomingRefs(oldName, newName) {
+      if (!oldName || !newName || oldName === newName) return 0;
+      let updated = 0;
+      let currentWritten = false;
+      for (const it of state.index.items || []) {
+        try {
+          const isCur = it.id === state.currentId;
+          if (isCur && state.dirty && state.view) {
+            const rr = replaceDocRefs(getEditorText(), oldName, newName);
+            if (rr.count) {
+              setEditorText(rr.text);
+              state.dirty = true;
+              updateSaveBtn();
+              updated++;
+            }
+            continue;
+          }
+          const raw = await readDocText(it);
+          const fm = parseFrontMatter(raw);
+          const rr = replaceDocRefs(fm.body, oldName, newName);
+          if (!rr.count) continue;
+          const hadFm = /^\uFEFF?---\r?\n/.test(String(raw));
+          const rebuilt = hadFm ? buildFrontMatterBlock({ ...it, fmHead: fm.head }, rr.text) : rr.text;
+          await writeDocText(it, rebuilt);
+          state.bodyCache.set(it.id, rr.text);
+          state.persistedIdx.delete(it.id);
+          it.updatedAt = Date.now();
+          updated++;
+          if (isCur) currentWritten = true;
+        } catch (_) {}
+      }
+      if (updated) {
+        await saveIndexToStorage();
+        if (currentWritten && !state.dirty) {
+          const cur = findItem(state.currentId);
+          if (cur && state.view) {
+            const raw = await readDocText(cur).catch(() => "");
+            const fm = parseFrontMatter(raw);
+            cur.fmHead = fm.head || "";
+            setEditorText(fm.body);
+            renderPreview();
+          }
+        }
+        renderSidebar();
+      }
+      return updated;
     }
 
     // ---- #2 表格可视化编辑（光标所在表格 → 网格弹窗） ----
@@ -2390,17 +2456,19 @@
       item.fileName = uniqueFileName(title, item.id);
       item.titleSaved = title;
       item.updatedAt = Date.now();
+      let refs = 0;
       try {
         if (oldName && oldName !== item.fileName) {
           const text = await readDocText({ ...item, fileName: oldName }).catch(() => "");
           await writeDocText(item, text);
           await removeDocFile({ ...item, fileName: oldName });
+          refs = await updateIncomingRefs(oldName, item.fileName);
         }
       } catch (_) {}
       await saveIndexToStorage();
       renderSidebar();
       if (state.currentId === item.id && els.title) els.title.value = title;
-      toast("已重命名");
+      toast(refs ? `已重命名，并更新 ${refs} 篇文档中的引用` : "已重命名");
     }
 
     function startInlineRename(id) {
@@ -2981,6 +3049,7 @@ a{color:${v.accent}}
       const total = (state.index.items || []).length;
       if (total > 3000 && els.dirLabel) els.dirLabel.textContent += ` · ${total} 篇（库较大，建议分库或筛选）`;
       [els.newBtn, els.importDirBtn].forEach((b) => b && (b.disabled = false));
+      applyModeUI();
       [els.exportLib, els.importLib].forEach((b) => b && (b.disabled = false));
       els.importBtn && (els.importBtn.disabled = false);
       renderSidebar();

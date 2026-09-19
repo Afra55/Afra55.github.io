@@ -102,7 +102,50 @@
     return out.join("\n");
   }
 
-  const api = { slugify, parseFrontMatter, isRelativeRef, collectRefs, parseTableAt, buildTable };
+  /**
+   * 文档改名后，把其它正文里指向 oldName 的引用改成 newName。
+   * 覆盖 Markdown 链接/图片（含 <...> 与 #锚点、可选标题）与 HTML href/src。
+   * 返回 { text, count }；count 为替换处数。
+   */
+  function replaceDocRefs(text, oldName, newName) {
+    const s = String(text || "");
+    const from = String(oldName || "");
+    const to = String(newName || "");
+    if (!from || !to || from === to) return { text: s, count: 0 };
+    let count = 0;
+    const swap = (target) => {
+      const parts = String(target).split("#");
+      const pathPart = parts[0];
+      const hash = parts.length > 1 ? parts.slice(1).join("#") : "";
+      const base = pathPart.split("/").pop();
+      if (base !== from) return null;
+      count++;
+      const dir = pathPart.slice(0, pathPart.length - base.length);
+      return `${dir}${to}${hash ? `#${hash}` : ""}`;
+    };
+    let out = s.replace(
+      /(\]\(\s*)(<)?([^)\s>]+)(>)?(\s+(?:"[^"]*"|'[^']*'))?(\s*\))/g,
+      (m, pre, lt, tgt, gt, title, post) => {
+        const r = swap(tgt);
+        return r == null ? m : `${pre}${lt || ""}${r}${gt || ""}${title || ""}${post}`;
+      }
+    );
+    out = out.replace(/(\b(?:href|src)\s*=\s*)(["'])([^"']+)\2/gi, (m, pre, q, tgt) => {
+      const r = swap(tgt);
+      return r == null ? m : `${pre}${q}${r}${q}`;
+    });
+    return { text: out, count };
+  }
+
+  const api = {
+    slugify,
+    parseFrontMatter,
+    isRelativeRef,
+    collectRefs,
+    parseTableAt,
+    buildTable,
+    replaceDocRefs,
+  };
   if (typeof window !== "undefined") window.DevToolsMdmPure = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })();
