@@ -4703,10 +4703,10 @@ function clearInstanceLock() {
   }
 }
 
-function probeOurBridge(port) {
+function probeOurBridge(port, timeoutMs = 900) {
   return new Promise((resolve) => {
     const req = http.get(
-      { host: HOST, port, path: "/health", timeout: 900 },
+      { host: HOST, port, path: "/health", timeout: timeoutMs },
       (res) => {
         let raw = "";
         res.setEncoding("utf8");
@@ -4739,6 +4739,15 @@ function probeOurBridge(port) {
   });
 }
 
+/** 首座桥可能正忙（大文件传输/ffmpeg 任务），单次探测容易误判 → 重试两次 */
+async function probeOurBridgeRetry(port, tries = 3) {
+  for (let i = 0; i < tries; i += 1) {
+    if (await probeOurBridge(port, 2000)) return true;
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  return false;
+}
+
 function listenWithFallback(startPort, maxTries = 12) {
   let port = startPort;
   let tries = 0;
@@ -4749,7 +4758,7 @@ function listenWithFallback(startPort, maxTries = 12) {
       void (async () => {
         if (err && err.code === "EADDRINUSE") {
           await new Promise((r) => setTimeout(r, 400));
-          if (await probeOurBridge(port)) {
+          if (await probeOurBridgeRetry(port)) {
             console.log("");
             console.log(`[OK] 本机桥已在端口 ${port} 运行，本窗口不重复启动。`);
             console.log("请关掉这个多余窗口，使用先打开的那一座。");
