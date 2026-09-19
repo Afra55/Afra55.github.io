@@ -12,10 +12,10 @@
     return s || fallback;
   }
 
-  /** 解析 YAML front-matter（title/category/tags） */
+  /** 解析 YAML front-matter（title/category/tags；head=原始头部） */
   function parseFrontMatter(text) {
     const m = String(text || "").match(/^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-    if (!m) return { title: "", category: "", tags: [], body: text };
+    if (!m) return { title: "", category: "", tags: [], body: text, head: "" };
     const head = m[1];
     const body = m[2];
     let title = "";
@@ -36,7 +36,7 @@
           .filter(Boolean);
       }
     });
-    return { title, category, tags, body };
+    return { title, category, tags, body, head };
   }
 
   function isRelativeRef(v) {

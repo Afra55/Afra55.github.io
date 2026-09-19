@@ -1231,6 +1231,7 @@
             title,
             titleSaved: title,
             fileName: name,
+            fmHead: fm.head || "",
             catId: ensureCat(fm.category),
             tagIds: (fm.tags || []).map((t) => ensureTag(t)).filter(Boolean),
             createdAt: Date.now(),
@@ -1774,7 +1775,9 @@
       if (els.title) els.title.value = item.title || "";
       try {
         const text = await readDocText(item);
-        setEditorText(text);
+        const fm = parseFrontMatter(text);
+        item.fmHead = fm.head || "";
+        setEditorText(fm.body);
         renderPreview();
         renderOutline();
       } catch (err) {
@@ -1863,8 +1866,10 @@
           }
         } catch (_) {}
       }
+      // 写回 front-matter（标题/分类/标签），正文为编辑器内容
+      const full = buildFrontMatterBlock(item, text);
       try {
-        await writeDocText(item, text);
+        await writeDocText(item, full);
         await saveIndexToStorage();
         state.bodyCache.set(item.id, text);
         try { mdmChannel?.postMessage({ type: "saved", mode: state.mode }); } catch (_) {}
@@ -2181,8 +2186,9 @@
           size: new Blob([res.text]).size,
           excerpt: res.text.replace(/\s+/g, " ").trim().slice(0, 160),
         };
+        item.fmHead = fm.head || "";
         try {
-          await writeDocText(item, res.text);
+          await writeDocText(item, buildFrontMatterBlock(item, res.text));
           state.index.items.push(item);
           n += 1;
         } catch (err) {
@@ -2241,6 +2247,26 @@
       }
       await idbSet("assets", clean, file);
       return true;
+    }
+
+    /** 生成写回文件的完整内容：front-matter（标题/分类/标签 + 保留原有其它键）+ 正文 */
+    function buildFrontMatterBlock(item, body) {
+      const extra = [];
+      for (const line of String(item.fmHead || "").split(/\r?\n/)) {
+        if (/^(title|category|cat|tags)\s*:/i.test(line)) continue;
+        if (line.trim()) extra.push(line);
+      }
+      const cat = state.index.cats.find((c) => c.id === item.catId);
+      const tags = (item.tagIds || [])
+        .map((t) => state.index.tags.find((x) => x.id === t)?.name)
+        .filter(Boolean);
+      const head = [
+        `title: ${item.title || "未命名"}`,
+        `category: ${cat ? cat.name : ""}`,
+        `tags: [${tags.join(", ")}]`,
+        ...extra,
+      ].join("\n");
+      return `---\n${head}\n---\n\n${String(body || "").replace(/^\s*\n+/, "")}`;
     }
 
     function parseFrontMatter(text) {
@@ -2355,8 +2381,7 @@ a{color:${v.accent}}
       const html = await inlineAssetsForExport(renderMarkdown(text));
       try {
         if (fmt === "md") {
-          const fm = `---\ntitle: ${title}\ncategory: ${state.index.cats.find((c) => c.id === item.catId)?.name || ""}\ntags: [${(item.tagIds || []).map((t) => state.index.tags.find((x) => x.id === t)?.name).filter(Boolean).join(", ")}]\n---\n\n`;
-          const mdText = fm + text;
+          const mdText = buildFrontMatterBlock(item, text);
           const images = await collectReferencedAssetsWithData(text).catch(() => []);
           if (images.length && window.JSZip) {
             const zip = new window.JSZip();
