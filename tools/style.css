@@ -1321,6 +1321,7 @@ a.secondary-btn {
   background: linear-gradient(var(--accent), var(--accent)) center / 3px 100% no-repeat;
 }
 .json-split[hidden] { display: none !important; }
+#json-dual[hidden] { display: none !important; }
 .json-resize {
   height: 12px;
   margin: 0.4rem 0;
