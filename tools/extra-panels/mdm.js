@@ -199,6 +199,7 @@
       useIdb: $("#mdm-use-idb"),
       newBtn: $("#mdm-new"),
       importBtn: $("#mdm-import"),
+      importLabel: $("#mdm-import-label"),
       importDirBtn: $("#mdm-import-dir"),
       importDirInput: $("#mdm-import-dir-input"),
       exportLib: $("#mdm-export-lib"),
@@ -770,6 +771,12 @@
       if (els.useIdb) {
         els.useIdb.hidden = state.mode === "idb";
         els.useIdb.disabled = false;
+      }
+      if (els.importLabel) {
+        els.importLabel.classList.toggle("is-disabled", !hasMode);
+        els.importLabel.title = hasMode
+          ? "导入本机的 .md / .markdown / .txt 文件，可多选；正文里引用的图片会一并导入"
+          : "请先选择存储位置再导入";
       }
       const changeDir = els.insertDropdown?.querySelector('[data-insert="change-dir"]');
       if (changeDir) changeDir.hidden = state.mode !== "dir";
@@ -3020,6 +3027,10 @@
 
     // ---- import ----
     async function importFiles(files) {
+      if (!state.mode) {
+        setErr("请先选择存储位置（顶栏「选择文件夹」或「本地存储模式」）再导入");
+        return;
+      }
       const all = [...(files || [])];
       const list = all.filter((f) => /\.(md|markdown|txt)$/i.test(f.name) || /markdown/.test(f.type || ""));
       if (!list.length) {
@@ -3478,6 +3489,7 @@ a{color:${v.accent}}
 
     // ---- events ----
     els.pickDir?.addEventListener("click", () => void pickDir());
+    applyModeUI();
     els.useIdb?.addEventListener("click", async () => {
       if (state.mode === "idb") return;
       const ok = await confirmModal({

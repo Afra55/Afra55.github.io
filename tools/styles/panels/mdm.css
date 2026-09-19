@@ -104,6 +104,7 @@
 }
 .mdm-insert-dropdown button:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .mdm-insert-dropdown button:disabled, .mdm-topbar button:disabled { opacity: 0.4; cursor: not-allowed; }
+.file-btn.is-disabled { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
 .mdm-rename-input { width: 100%; padding: 0.2rem 0.4rem; border-radius: 6px; border: 1px solid var(--accent); background: var(--panel-strong, transparent); color: var(--ink); font-size: 0.88rem; }
 .mdm-ctxmenu {
   position: fixed; z-index: 13000; min-width: 10rem;

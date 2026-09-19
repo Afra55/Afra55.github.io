@@ -7,7 +7,7 @@
           <button type="button" class="primary-btn" id="mdm-pick-dir" title="选择本机文件夹作为存储：文档以真实 .md 文件保存，可用 VS Code / Obsidian / Git 直接编辑">选择文件夹</button>
           <button type="button" class="secondary-btn" id="mdm-use-idb" title="改用浏览器本地存储（IndexedDB）：不需要文件夹权限，数据存在浏览器里；清除浏览器数据会丢失，建议配合「导出库」备份">本地存储模式</button>
           <button type="button" class="secondary-btn" id="mdm-new" disabled title="新建一篇空白文档（在标题框输入即可改名）">新建</button>
-          <label class="file-btn" for="mdm-import" title="导入本机的 .md / .markdown / .txt 文件，可多选；正文里引用的图片会一并导入">导入 MD</label>
+          <label class="file-btn" id="mdm-import-label" for="mdm-import" title="导入本机的 .md / .markdown / .txt 文件，可多选；正文里引用的图片会一并导入">导入 MD</label>
           <input id="mdm-import" type="file" accept=".md,.markdown,.txt,text/markdown" multiple hidden />
           <button type="button" class="secondary-btn" id="mdm-import-dir" disabled title="选择一个文件夹，把里面所有 .md 连同引用的图片一起导入（仅文件夹模式可用）">导入文件夹</button>
           <input id="mdm-import-dir-input" type="file" webkitdirectory directory multiple hidden />
