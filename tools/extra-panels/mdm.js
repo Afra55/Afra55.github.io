@@ -1799,33 +1799,35 @@
     }
 
     /** 整库导出：ZIP（mdindex.json + 全部 .md + assets/） */
-    async function exportLibrary() {
-      if (typeof window.JSZip !== "function") {
-        setErr("ZIP 库未就绪");
-        return;
+    /** 打包整库为 ZIP Blob（导出库 / 切换模式迁移共用） */
+    async function buildLibraryZip() {
+      if (typeof window.JSZip !== "function") throw new Error("ZIP 库未就绪");
+      const zip = new window.JSZip();
+      zip.file(INDEX_FILE, JSON.stringify(state.index, null, 2));
+      for (const it of state.index.items || []) {
+        let text = state.bodyCache.get(it.id);
+        if (text == null) {
+          try {
+            text = await readDocText(it);
+            state.bodyCache.set(it.id, text);
+          } catch (_) {
+            text = "";
+          }
+        }
+        zip.file(it.fileName || `${slugify(it.title)}.md`, text);
       }
+      for (const rel of await listAssetNames()) {
+        try {
+          zip.file(rel, await readAssetBlob(rel));
+        } catch (_) {}
+      }
+      return zip.generateAsync({ type: "blob" });
+    }
+
+    async function exportLibrary() {
       setSaveStatus("打包整库…");
       try {
-        const zip = new window.JSZip();
-        zip.file(INDEX_FILE, JSON.stringify(state.index, null, 2));
-        for (const it of state.index.items || []) {
-          let text = state.bodyCache.get(it.id);
-          if (text == null) {
-            try {
-              text = await readDocText(it);
-              state.bodyCache.set(it.id, text);
-            } catch (_) {
-              text = "";
-            }
-          }
-          zip.file(it.fileName || `${slugify(it.title)}.md`, text);
-        }
-        for (const rel of await listAssetNames()) {
-          try {
-            zip.file(rel, await readAssetBlob(rel));
-          } catch (_) {}
-        }
-        const blob = await zip.generateAsync({ type: "blob" });
+        const blob = await buildLibraryZip();
         downloadBlob(blob, `markdown-library-${Date.now()}.zip`);
         setSaveStatus("整库已导出");
         toast("整库已导出");
@@ -3373,23 +3375,58 @@ a{color:${v.accent}}
     }
 
     // ---- dir picking ----
+    /**
+     * 切换存储模式：切换前先给当前库拍个 ZIP 快照；若切换后目标库为空，
+     * 询问是否把原库迁移过来（不迁移时原数据仍留在旧存储里，不会被删）。
+     */
+    async function withOptionalMigration(switchFn) {
+      const prevCount = (state.index?.items || []).length;
+      let snap = null;
+      if (prevCount) {
+        try {
+          snap = await buildLibraryZip();
+        } catch (_) {}
+      }
+      await switchFn();
+      const nowCount = (state.index?.items || []).length;
+      if (snap && !nowCount) {
+        const yes = await confirmModal({
+          title: "迁移原来的文档？",
+          body: `目标存储里是空的。是否把切换前的 ${prevCount} 篇文档（含分类、标签、图片资源）复制过来？\n\n选「不迁移」也不会删除原数据，只是当前看不到。`,
+          okText: "迁移过来",
+        });
+        if (yes) {
+          try {
+            await importLibrary(snap);
+            toast("已迁移到当前存储");
+          } catch (err) {
+            setErr(`迁移失败：${err.message || err}`);
+          }
+        }
+      }
+    }
+
     async function pickDir() {
       if (!window.showDirectoryPicker) {
         setErr("当前浏览器不支持选择文件夹（请用 Chrome / Edge）。已切换到浏览器本地存储模式。");
-        await useIdbMode();
+        await withOptionalMigration(() => useIdbMode());
         return;
       }
+      let handle;
       try {
-        const handle = await window.showDirectoryPicker({ mode: "readwrite" });
+        handle = await window.showDirectoryPicker({ mode: "readwrite" });
         const perm = await handle.requestPermission?.({ mode: "readwrite" });
         if (perm && perm !== "granted") throw new Error("未获得文件夹读写权限");
+      } catch (err) {
+        if (String(err?.name) !== "AbortError") setErr(err.message || String(err));
+        return;
+      }
+      await withOptionalMigration(async () => {
         state.dirHandle = handle;
         state.mode = "dir";
         await idbSet("kv", DIR_KEY, handle);
         await initAfterStorage(handle.name);
-      } catch (err) {
-        if (String(err?.name) !== "AbortError") setErr(err.message || String(err));
-      }
+      });
     }
 
     async function useIdbMode() {
@@ -3452,7 +3489,7 @@ a{color:${v.accent}}
           "· 与当前文件夹里的库相互独立，可随时点「改用文件夹」切回",
         okText: "切换",
       });
-      if (ok) void useIdbMode();
+      if (ok) await withOptionalMigration(() => useIdbMode());
     });
     els.newBtn?.addEventListener("click", newDoc);
     els.save?.addEventListener("click", () => void saveCurrent());
