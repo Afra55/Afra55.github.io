@@ -171,6 +171,18 @@
 .mdm-align-sel { display: block; width: 100%; margin-top: 0.15rem; background: transparent; color: var(--muted); border: 1px solid var(--line); border-radius: 4px; font-size: 0.72rem; padding: 0.1rem; }
 .mdm-hdr-toggle { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.82rem; color: var(--muted); margin-right: auto; }
 
+.mdm-keys { border-collapse: collapse; width: 100%; min-width: 22rem; }
+.mdm-keys td { border: none; border-bottom: 1px solid var(--line); padding: 0.3rem 0.5rem; font-size: 0.85rem; }
+.mdm-keys .mdm-key { color: var(--accent); white-space: nowrap; }
+
+/* CM6 查找/替换面板跟随站点主题 */
+.mdm-editor .cm-panel { background: var(--panel, #1b1b1f); color: var(--ink); border-top: 1px solid var(--line); padding: 0.35rem 0.5rem; }
+.mdm-editor .cm-panel input,
+.mdm-editor .cm-panel button { background: transparent; color: var(--ink); border: 1px solid var(--line); border-radius: 5px; padding: 0.15rem 0.35rem; }
+.mdm-editor .cm-panel button:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.mdm-editor .cm-searchMatch { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+.mdm-editor .cm-searchMatch-selected { background: var(--accent); color: #fff; }
+
 /* 预览排版 */
 .markdown-body { line-height: 1.7; color: var(--ink); word-wrap: break-word; }
 .markdown-body h1, .markdown-body h2 { border-bottom: 1px solid var(--line); padding-bottom: 0.3rem; }

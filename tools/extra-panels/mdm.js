@@ -215,6 +215,7 @@
       sort: $("#mdm-sort"),
       batchbar: $("#mdm-batchbar"),
       batchCount: $("#mdm-batch-count"),
+      count: $("#mdm-count"),
       cats: $("#mdm-cats"),
       tags: $("#mdm-tags"),
       list: $("#mdm-list"),
@@ -470,6 +471,7 @@
       if (name === null) return;
       const v = name.trim();
       if (!v || v === tag.name) return;
+      const affected = state.index.items.filter((it) => (it.tagIds || []).includes(id));
       if (v === "-") {
         if (!window.confirm(`删除标签「${tag.name}」？`)) return;
         state.index.tags = state.index.tags.filter((t) => t.id !== id);
@@ -479,7 +481,7 @@
         tag.name = v;
       }
       await saveIndexToStorage();
-      const n = await refreshFrontMatter(state.index.items.filter((it) => (it.tagIds || []).includes(id)));
+      const n = await refreshFrontMatter(affected);
       renderSidebar();
       renderMeta();
       if (n) toast(`已同步 ${n} 篇文档的标签`);
@@ -835,6 +837,10 @@
     function renderList() {
       if (!els.list) return;
       const items = filteredItems();
+      if (els.count) {
+        const total = (state.index.items || []).length;
+        els.count.textContent = items.length === total ? `${total} 篇` : `${items.length} / ${total} 篇`;
+      }
       const wrap = els.listWrap;
       if (!wrap || items.length <= 60) {
         els.list.innerHTML = items.length
@@ -1163,7 +1169,50 @@
       return updated;
     }
 
-    // ---- #2 表格可视化编辑（光标所在表格 → 网格弹窗） ----
+    /** 快捷键帮助（弹窗，读取当前自定义键位） */
+    function fmtKey(k) {
+      return String(k || "")
+        .replace(/^Mod-/i, "Ctrl/⌘ + ")
+        .replace(/^Ctrl-/i, "Ctrl + ")
+        .replace(/^Alt-/i, "Alt + ")
+        .replace(/^Shift-/i, "Shift + ")
+        .toUpperCase();
+    }
+    function openShortcutHelp() {
+      const k = state.keys || {};
+      const rows = [
+        ["Ctrl/⌘ + S", "保存"],
+        [fmtKey(k.bold || "Mod-b"), "加粗"],
+        [fmtKey(k.italic || "Mod-i"), "斜体"],
+        [fmtKey(k.link || "Mod-k"), "插入链接"],
+        ["Ctrl/⌘ + F", "文档内查找 / 替换"],
+        ["Ctrl/⌘ + Z", "撤销（焦点在列表时 = 撤销删除）"],
+        ["双击列表项", "重命名"],
+        ["右键列表项", "更多：置顶 / 复制 / 导出 / 删除"],
+        ["Ctrl/⌘ + 单击", "多选（批量操作）"],
+        ["↑ / ↓", "列表导航"],
+      ];
+      const box = els.modalBox;
+      box.innerHTML =
+        `<div class="mdm-modal-head"><strong>快捷键</strong><button type="button" class="ghost-btn" data-mdl="close">关闭</button></div>` +
+        `<table class="mdm-keys"><tbody>` +
+        rows
+          .map(
+            ([a, b]) =>
+              `<tr><td class="mdm-key mono">${escapeHtml(a)}</td><td>${escapeHtml(b)}</td></tr>`
+          )
+          .join("") +
+        `</tbody></table>`;
+      els.modal.hidden = false;
+      els.modal.onclick = (e) => {
+        if (e.target === els.modal) closeModal();
+      };
+      box.onclick = (e) => {
+        if (e.target.closest?.('[data-mdl="close"]')) closeModal();
+      };
+    }
+
+    /** #2 表格可视化编辑（光标所在表格 → 网格弹窗） */
     function closeModal() {
       if (!els.modal) return;
       els.modal.hidden = true;
@@ -1335,6 +1384,13 @@
           const blob = await readAssetBlob(rel);
           const url = URL.createObjectURL(blob);
           assetUrlCache.set(rel, url);
+          if (assetUrlCache.size > 80) {
+            const first = assetUrlCache.keys().next().value;
+            try {
+              URL.revokeObjectURL(assetUrlCache.get(first));
+            } catch (_) {}
+            assetUrlCache.delete(first);
+          }
           el.setAttribute(attr, url);
           if (el.tagName === "A") {
             el.setAttribute("download", rel.split("/").pop() || "");
@@ -1927,6 +1983,11 @@
     }
 
     async function emptyTrash() {
+      if (!state.trashEntries.length) {
+        toast("回收站已是空的");
+        return;
+      }
+      if (!window.confirm(`清空回收站？将永久删除 ${state.trashEntries.length} 个文件，无法恢复。`)) return;
       try {
         if (state.mode === "dir" && state.dirHandle) {
           const trash = await state.dirHandle.getDirectoryHandle(".trash");
@@ -2502,10 +2563,13 @@
       } catch (_) {}
     }
 
+    let watchBound = false;
     function watchExternalChanges() {
       window.clearInterval(state.watchTimer);
       if (state.mode !== "dir") return;
       state.watchTimer = window.setInterval(() => void checkExternalChange(), 60000);
+      if (watchBound) return;
+      watchBound = true;
       document.addEventListener("visibilitychange", () => {
         if (document.visibilityState === "visible") void checkExternalChange();
       });
@@ -2586,9 +2650,13 @@
       if (!item) return;
       if (!window.confirm(`删除「${item.title}」？（会移入回收站，可恢复）`)) return;
       let raw = "";
-      try {
-        raw = await readDocText(item);
-      } catch (_) {}
+      if (item.id === state.currentId && state.dirty && state.view) {
+        raw = getEditorText();
+      } else {
+        try {
+          raw = await readDocText(item);
+        } catch (_) {}
+      }
       try {
         await trashDoc(item);
       } catch (_) {}
@@ -3374,13 +3442,21 @@ a{color:${v.accent}}
     });
     els.list?.addEventListener("keydown", (e) => {
       if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-      const items = [...els.list.querySelectorAll("[data-id]")];
-      const cur = items.indexOf(document.activeElement);
-      const next = e.key === "ArrowDown" ? cur + 1 : cur - 1;
-      if (items[next]) {
-        e.preventDefault();
-        items[next].focus();
+      const all = filteredItems();
+      const curId = document.activeElement?.dataset?.id || "";
+      let idx = all.findIndex((x) => x.id === curId);
+      if (idx < 0) idx = e.key === "ArrowDown" ? -1 : all.length;
+      const nextIdx = e.key === "ArrowDown" ? idx + 1 : idx - 1;
+      const nextItem = all[nextIdx];
+      if (!nextItem) return;
+      e.preventDefault();
+      const wrap = els.listWrap;
+      const rowTop = nextIdx * LIST_ROW_H;
+      if (wrap && (rowTop < wrap.scrollTop || rowTop + LIST_ROW_H > wrap.scrollTop + wrap.clientHeight)) {
+        wrap.scrollTop = Math.max(0, rowTop - Math.floor(wrap.clientHeight / 2) + Math.floor(LIST_ROW_H / 2));
+        renderList();
       }
+      els.list?.querySelector(`[data-id="${nextItem.id}"]`)?.focus();
     });
     if (els.sort) {
       els.sort.value = state.sort;
@@ -3842,7 +3918,7 @@ a{color:${v.accent}}
         return;
       }
       if (kind === "help") {
-        toast("Ctrl+S 保存 · Ctrl+B 加粗 · Ctrl+I 斜体 · Ctrl+K 链接 · Ctrl+Z 撤销 · 双击列表改名 · 右键列表更多");
+        openShortcutHelp();
         return;
       }
       if (kind === "keys") {
