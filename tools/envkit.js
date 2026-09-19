@@ -52,6 +52,15 @@
       kind: "unlock",
       winOnly: true,
     },
+    {
+      id: "pandoc-mount",
+      name: "⑥ Pandoc · /pandoc（可选）",
+      url: "http://127.0.0.1:17888/pandoc/health",
+      token: "devtools-bridge",
+      tokenHeader: "X-Adb-Token",
+      link: "#mdm",
+      kind: "pandoc",
+    },
   ];
 
   function detectOs() {

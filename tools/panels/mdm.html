@@ -1,0 +1,52 @@
+<section id="mdm" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>Markdown 文档管理</h1>
+      </div>
+      <div class="panel-body mdm-body">
+        <div class="mdm-topbar">
+          <button type="button" class="primary-btn" id="mdm-pick-dir">选择文件夹</button>
+          <button type="button" class="secondary-btn" id="mdm-new" disabled>新建</button>
+          <label class="file-btn" for="mdm-import">导入 MD</label>
+          <input id="mdm-import" type="file" accept=".md,.markdown,.txt,text/markdown" multiple hidden />
+          <button type="button" class="secondary-btn" id="mdm-import-dir" disabled>导入文件夹</button>
+          <input id="mdm-import-dir-input" type="file" webkitdirectory directory multiple hidden />
+          <button type="button" class="primary-btn" id="mdm-save" disabled>保存</button>
+          <span class="mdm-export-group">
+            <select id="mdm-export-fmt" class="select-input" disabled aria-label="导出格式"></select>
+            <button type="button" class="secondary-btn" id="mdm-export" disabled>导出</button>
+          </span>
+          <span class="hint tight" id="mdm-dir-label"></span>
+        </div>
+        <p class="error" id="mdm-error" hidden></p>
+
+        <div class="mdm-layout" id="mdm-layout" hidden>
+          <aside class="mdm-side">
+            <input id="mdm-search" class="mono mdm-search" type="search" placeholder="搜索标题 / 正文…" autocomplete="off" />
+            <div class="mdm-side-scroll">
+              <div class="mdm-group" id="mdm-cats"></div>
+              <div class="mdm-group" id="mdm-tags"></div>
+              <div class="mdm-list" id="mdm-list" aria-live="polite"></div>
+            </div>
+          </aside>
+
+          <main class="mdm-main">
+            <div class="mdm-main-toolbar">
+              <span class="seg" role="group" aria-label="视图">
+                <button type="button" class="seg-btn is-active" id="mdm-mode-edit">编辑</button>
+                <button type="button" class="seg-btn" id="mdm-mode-split">分屏</button>
+                <button type="button" class="seg-btn" id="mdm-mode-preview">预览</button>
+              </span>
+              <input id="mdm-title" class="mdm-title mono" placeholder="标题" autocomplete="off" />
+              <button type="button" class="ghost-btn" id="mdm-delete" title="删除当前文档">删除</button>
+            </div>
+            <div class="mdm-editor-wrap" id="mdm-editor-wrap">
+              <div class="mdm-editor" id="mdm-editor"></div>
+              <div class="mdm-preview markdown-body" id="mdm-preview"></div>
+            </div>
+            <p class="hint tight mdm-empty-hint" id="mdm-empty">左侧选择或新建一个文档开始。</p>
+          </main>
+
+          <aside class="mdm-outline" id="mdm-outline"></aside>
+        </div>
+      </div>
+    </section>

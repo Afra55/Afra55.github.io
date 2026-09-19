@@ -97,6 +97,8 @@
         gitNoopCjs,
         unlockServerJs,
         unlockOpsJs,
+        pandocServerJs,
+        pandocOpsJs,
         scriptRaw,
         resolvePortJs,
         serverJar,
@@ -114,6 +116,8 @@
         fetchTextAsset("./git-bridge/noop-editor.cjs").catch(() => "process.exit(0);\n"),
         fetchTextAsset("./fileunlock-bridge/server.js").catch(() => ""),
         fetchTextAsset("./fileunlock-bridge/lock-ops.js").catch(() => ""),
+        fetchTextAsset("./pandoc-bridge/server.js").catch(() => ""),
+        fetchTextAsset("./pandoc-bridge/pandoc-ops.js").catch(() => ""),
         fetchTextAsset(cfg.scriptPath),
         fetchTextAsset("./adb-bridge/resolve-port.js").catch(() => ""),
         fetch("./adb-bridge/vendor/scrcpy-server-v3.1", { cache: "no-cache" })
@@ -144,6 +148,7 @@
         "  - ffmpeg-bridge/server.js + ytdlp-core.js",
         "  - git-bridge/server.js + git-ops.js + noop-editor.*",
         "  - fileunlock-bridge/server.js + lock-ops.js（Windows 文件占用解锁）",
+        "  - pandoc-bridge/server.js + pandoc-ops.js（Markdown → 任意格式，需本机装 pandoc）",
         "  - vendor/scrcpy-server-v3.1（可选）",
         "  - " + cfg.scriptName,
         "",
@@ -174,6 +179,8 @@
       if (gitNoopCjs) zip.file("git-bridge/noop-editor.cjs", gitNoopCjs);
       if (unlockServerJs) zip.file("fileunlock-bridge/server.js", unlockServerJs);
       if (unlockOpsJs) zip.file("fileunlock-bridge/lock-ops.js", unlockOpsJs);
+      if (pandocServerJs) zip.file("pandoc-bridge/server.js", pandocServerJs);
+      if (pandocOpsJs) zip.file("pandoc-bridge/pandoc-ops.js", pandocOpsJs);
       if (serverJar) zip.file("vendor/scrcpy-server-v3.1", serverJar);
       zip.file(cfg.scriptName, scriptText, {
         unixPermissions: platform === "win" ? undefined : 0o755,

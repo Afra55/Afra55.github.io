@@ -1,0 +1,93 @@
+/* Markdown 文档管理 */
+.mdm-body { display: flex; flex-direction: column; gap: 0.55rem; min-height: 0; }
+.mdm-topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.mdm-export-group { display: inline-flex; align-items: center; gap: 0.35rem; }
+.mdm-export-group .select-input { min-height: var(--btn-min-h, 2.5rem); }
+.mdm-search { width: 100%; padding: 0.45rem 0.6rem; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-strong, transparent); color: var(--ink); }
+
+.mdm-layout {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr) 190px;
+  gap: 0.6rem;
+  min-height: 62vh;
+  height: 72vh;
+}
+@media (max-width: 1100px) {
+  .mdm-layout { grid-template-columns: 210px minmax(0, 1fr); }
+  .mdm-outline { display: none; }
+}
+
+.mdm-side, .mdm-main, .mdm-outline {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel-strong, rgba(12, 18, 30, 0.35));
+  min-height: 0;
+  overflow: hidden;
+}
+.mdm-side { display: flex; flex-direction: column; padding: 0.5rem; gap: 0.45rem; }
+.mdm-side-scroll { overflow: auto; min-height: 0; flex: 1 1 auto; }
+.mdm-group { margin-bottom: 0.4rem; }
+.mdm-group-title { font-size: 0.75rem; color: var(--muted); margin: 0.35rem 0 0.25rem; }
+.mdm-chip {
+  display: inline-block; margin: 0 0.25rem 0.25rem 0; padding: 0.15rem 0.5rem;
+  border: 1px solid var(--line); border-radius: 999px; background: transparent;
+  color: var(--muted); font-size: 0.78rem; cursor: pointer;
+}
+.mdm-chip:hover { color: var(--ink); border-color: var(--accent); }
+.mdm-chip.is-active { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--ink); border-color: var(--accent); }
+.mdm-list { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.35rem; }
+.mdm-item {
+  display: flex; flex-direction: column; gap: 0.1rem; text-align: left;
+  padding: 0.45rem 0.55rem; border: 1px solid transparent; border-radius: 8px;
+  background: transparent; color: var(--ink); cursor: pointer;
+}
+.mdm-item:hover { border-color: var(--line); }
+.mdm-item.is-active { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); }
+.mdm-item-title { font-size: 0.88rem; }
+.mdm-item-meta { color: var(--muted); }
+
+.mdm-main { display: flex; flex-direction: column; }
+.mdm-main-toolbar { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.55rem; border-bottom: 1px solid var(--line); }
+.mdm-title { flex: 1 1 auto; min-width: 0; padding: 0.35rem 0.5rem; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 0.9rem; }
+.mdm-editor-wrap { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; }
+.mdm-editor-wrap[data-mode="edit"] { grid-template-columns: 1fr; }
+.mdm-editor-wrap[data-mode="edit"] .mdm-preview { display: none; }
+.mdm-editor-wrap[data-mode="preview"] { grid-template-columns: 1fr; }
+.mdm-editor-wrap[data-mode="preview"] .mdm-editor { display: none; }
+.mdm-editor { overflow: auto; min-height: 0; border-right: 1px solid var(--line); }
+.mdm-editor-wrap[data-mode="edit"] .mdm-editor { border-right: none; }
+.mdm-editor .cm-editor { height: 100%; }
+.mdm-editor .cm-scroller { overflow: auto; }
+.mdm-preview { overflow: auto; min-height: 0; padding: 0.8rem 1rem; }
+.mdm-empty-hint { padding: 0 0.6rem 0.5rem; }
+
+.mdm-outline { padding: 0.6rem 0.7rem; overflow: auto; }
+.mdm-outline-item { font-size: 0.82rem; color: var(--muted); padding: 0.12rem 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mdm-outline-item.lv1 { color: var(--ink); font-weight: 600; }
+.mdm-outline-item.lv2 { padding-left: 0.5rem; }
+.mdm-outline-item.lv3 { padding-left: 1rem; }
+.mdm-outline-item.lv4, .mdm-outline-item.lv5, .mdm-outline-item.lv6 { padding-left: 1.4rem; }
+
+/* 预览排版 */
+.markdown-body { line-height: 1.7; color: var(--ink); word-wrap: break-word; }
+.markdown-body h1, .markdown-body h2 { border-bottom: 1px solid var(--line); padding-bottom: 0.3rem; }
+.markdown-body pre { background: rgba(0,0,0,0.25); padding: 0.7rem 0.8rem; border-radius: 8px; overflow: auto; }
+.markdown-body code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.86em; }
+.markdown-body :not(pre) > code { background: rgba(127,127,127,0.18); padding: 0.1em 0.35em; border-radius: 5px; }
+.markdown-body table { border-collapse: collapse; }
+.markdown-body th, .markdown-body td { border: 1px solid var(--line); padding: 0.3rem 0.55rem; }
+.markdown-body img { max-width: 100%; }
+.markdown-body blockquote { border-left: 3px solid var(--line); margin: 0; padding-left: 0.9rem; color: var(--muted); }
+.markdown-body a { color: var(--accent); }
+
+/* highlight.js 主题（github 精简版） */
+.hljs { color: #24292e; }
+.hljs-comment, .hljs-quote { color: #6a737d; font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-type { color: #d73a49; }
+.hljs-string, .hljs-attr, .hljs-addition { color: #032f62; }
+.hljs-number, .hljs-built_in, .hljs-builtin-name, .hljs-variable, .hljs-template-variable { color: #005cc5; }
+.hljs-title, .hljs-section, .hljs-name { color: #6f42c1; }
+.hljs-tag { color: #22863a; }
+.hljs-meta, .hljs-deletion { color: #b31d28; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }

@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.27";
+const BRIDGE_VERSION = "0.9.28";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -97,6 +97,24 @@ function loadFileUnlockBridge() {
 const fileUnlockBridge = loadFileUnlockBridge();
 if (!fileUnlockBridge) {
   console.warn("未找到文件占用模块（可选）：完整 ZIP 请包含 fileunlock-bridge/server.js + lock-ops.js");
+}
+function loadPandocBridge() {
+  const candidates = [
+    path.join(__dirname, "pandoc-bridge", "server.js"),
+    path.join(__dirname, "..", "pandoc-bridge", "server.js"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return require(candidate);
+    } catch (err) {
+      console.warn("加载 Pandoc 模块失败:", candidate, err.message || err);
+    }
+  }
+  return null;
+}
+const pandocBridge = loadPandocBridge();
+if (!pandocBridge) {
+  console.warn("未找到 Pandoc 模块（可选）：完整 ZIP 请包含 pandoc-bridge/server.js + pandoc-ops.js");
 }
 
 /** Preferred quick roots shown in UI (reads are not limited to these) */
@@ -3865,6 +3883,23 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    // 统一桥：Pandoc 转换 API 挂在 /pandoc/*
+    if (url.pathname === "/pandoc" || url.pathname.startsWith("/pandoc/")) {
+      if (!pandocBridge?.handleRequest) {
+        sendJson(res, 503, { ok: false, error: "未找到 Pandoc 模块（请用完整 ZIP，含 pandoc-bridge）" }, origin);
+        return;
+      }
+      const stripped = url.pathname === "/pandoc" ? "/" : url.pathname.slice(7) || "/";
+      const isPandocHealth = stripped === "/health" && req.method === "GET";
+      if (!isPandocHealth && req.method !== "OPTIONS") requireToken(req);
+      await pandocBridge.handleRequest(req, res, {
+        pathname: stripped,
+        alreadyAuthed: !isPandocHealth,
+        embedded: true,
+      });
+      return;
+    }
+
     if (url.pathname === "/health" && req.method === "GET") {
       const adbInfo = await checkAdb();
       const hostTools = await probeHostTools();
@@ -3979,6 +4014,7 @@ async function handleApi(req, res, url) {
             "ytdlp-mount",
             "git-mount",
             "unlock-mount",
+            "pandoc-mount",
             "device-perf",
             "device-processes",
             "device-shell",
@@ -4006,8 +4042,9 @@ async function handleApi(req, res, url) {
           ytdlpMount: "/ytdlp",
           gitMount: "/git",
           unlockMount: "/unlock",
+          pandocMount: "/pandoc",
           note:
-            "统一本机桥：ADB + Scrcpy + FFmpeg(/ff) + yt-dlp(/ytdlp) + Git(/git) + 文件占用(/unlock)。Token 默认 devtools-bridge。只需启动一次。",
+            "统一本机桥：ADB + Scrcpy + FFmpeg(/ff) + yt-dlp(/ytdlp) + Git(/git) + 文件占用(/unlock) + Pandoc(/pandoc)。Token 默认 devtools-bridge。只需启动一次。",
         },
         origin
       );
@@ -4638,7 +4675,7 @@ function printBanner(activePort) {
   console.log(` 版本: ${BRIDGE_VERSION}`);
   console.log(` 地址: http://${HOST}:${activePort}`);
   console.log(` Token: ${TOKEN}（兼容旧 Token: devtools-adb / devtools-ffmpeg）`);
-  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / yt-dlp(/ytdlp) / Git(/git) / 文件占用(/unlock) / 任务");
+  console.log(" 能力: 文件 / 安装 / 应用 / Scrcpy镜像 / FFmpeg(/ff) / yt-dlp(/ytdlp) / Git(/git) / 文件占用(/unlock) / Pandoc(/pandoc) / 任务");
   console.log(" 请保持此窗口打开，然后回到网页点「连接」——ADB 与 FFmpeg 共用这一座桥");
   if (activePort !== PORT) {
     console.log(` 注意: 默认端口 ${PORT} 被占用，已改用 ${activePort}`);

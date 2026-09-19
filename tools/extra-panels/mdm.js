@@ -1,0 +1,825 @@
+(() => {
+  "use strict";
+
+  const K = window.DevToolsExtraKit;
+  if (!K) return;
+  const { $, $$, setError, toast, bindPanel, escapeHtml } = K;
+
+  const IDB_NAME = "devtools-mdm";
+  const IDB_VER = 1;
+  const DIR_KEY = "mdm-dir-handle";
+  const BASE_KEY = "devtools-mdm-base";
+  const TOKEN_KEY = "devtools-mdm-token";
+  const DEFAULT_BASE = "http://127.0.0.1:17888";
+  const DEFAULT_TOKEN = "devtools-bridge";
+  const INDEX_FILE = "mdindex.json";
+
+  const PANDOC_FORMATS = [
+    ["docx", "Word (.docx)"],
+    ["odt", "OpenDocument (.odt)"],
+    ["epub", "EPUB (.epub)"],
+    ["rtf", "RTF (.rtf)"],
+    ["rst", "reStructuredText (.rst)"],
+    ["latex", "LaTeX (.tex)"],
+    ["pptx", "PowerPoint (.pptx)"],
+    ["mediawiki", "MediaWiki (.wiki)"],
+    ["org", "Org-mode (.org)"],
+    ["opml", "OPML (.opml)"],
+    ["html", "HTML（Pandoc）"],
+  ];
+  const LOCAL_FORMATS = [
+    ["md", "Markdown (.md)"],
+    ["html-standalone", "HTML（单文件）"],
+    ["pdf", "PDF（打印）"],
+    ["png", "长图 PNG"],
+  ];
+
+  function uid() {
+    return `m${Date.now().toString(36)}${Math.random().toString(36).slice(2, 7)}`;
+  }
+
+  function slugify(name, fallback = "doc") {
+    const s = String(name || "")
+      .trim()
+      .replace(/[\\/:*?"<>|]+/g, " ")
+      .replace(/\s+/g, "-")
+      .replace(/^[.\-]+|[.\-]+$/g, "")
+      .slice(0, 60);
+    return s || fallback;
+  }
+
+  function idbOpen() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(IDB_NAME, IDB_VER);
+      req.onupgradeneeded = () => {
+        const db = req.result;
+        if (!db.objectStoreNames.contains("kv")) db.createObjectStore("kv");
+        if (!db.objectStoreNames.contains("docs")) db.createObjectStore("docs");
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function idbGet(store, key) {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(store, "readonly");
+      const req = tx.objectStore(store).get(key);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function idbSet(store, key, val) {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(store, "readwrite");
+      tx.objectStore(store).put(val, key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  async function idbDel(store, key) {
+    const db = await idbOpen();
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(store, "readwrite");
+      tx.objectStore(store).delete(key);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+  }
+
+  const state = {
+    mode: "", // dir | idb
+    dirHandle: null,
+    index: null,
+    currentId: "",
+    dirty: false,
+    view: null,
+    suppressEditorChange: false,
+    search: "",
+    activeCat: "all",
+    activeTag: "",
+    viewMode: "edit",
+    previewTimer: 0,
+  };
+
+  function emptyIndex() {
+    return { version: 1, cats: [], tags: [], items: [] };
+  }
+
+  function readIndexRaw() {
+    try {
+      const raw = localStorage.getItem("devtools-mdm-index-cache");
+      if (raw) return JSON.parse(raw);
+    } catch (_) {}
+    return null;
+  }
+
+  function cacheIndex() {
+    try {
+      localStorage.setItem("devtools-mdm-index-cache", JSON.stringify(state.index || emptyIndex()));
+    } catch (_) {}
+  }
+
+  bindPanel("mdm", () => {
+    const els = {
+      pickDir: $("#mdm-pick-dir"),
+      newBtn: $("#mdm-new"),
+      importBtn: $("#mdm-import"),
+      importDirBtn: $("#mdm-import-dir"),
+      importDirInput: $("#mdm-import-dir-input"),
+      save: $("#mdm-save"),
+      exportFmt: $("#mdm-export-fmt"),
+      exportBtn: $("#mdm-export"),
+      dirLabel: $("#mdm-dir-label"),
+      error: $("#mdm-error"),
+      layout: $("#mdm-layout"),
+      search: $("#mdm-search"),
+      cats: $("#mdm-cats"),
+      tags: $("#mdm-tags"),
+      list: $("#mdm-list"),
+      modeEdit: $("#mdm-mode-edit"),
+      modeSplit: $("#mdm-mode-split"),
+      modePreview: $("#mdm-mode-preview"),
+      title: $("#mdm-title"),
+      del: $("#mdm-delete"),
+      editorWrap: $("#mdm-editor-wrap"),
+      editor: $("#mdm-editor"),
+      preview: $("#mdm-preview"),
+      empty: $("#mdm-empty"),
+      outline: $("#mdm-outline"),
+    };
+    if (!els.pickDir) return;
+
+    const setErr = (m) => setError(els.error, m);
+
+    function baseUrl() {
+      return String(localStorage.getItem(BASE_KEY) || DEFAULT_BASE).replace(/\/$/, "");
+    }
+    function token() {
+      return String(localStorage.getItem(TOKEN_KEY) || DEFAULT_TOKEN).trim();
+    }
+
+    // ---- markdown render ----
+    let md = null;
+    function getMd() {
+      if (md) return md;
+      if (typeof window.markdownit !== "function") return null;
+      md = window.markdownit({
+        html: true,
+        linkify: true,
+        breaks: false,
+        highlight(str, lang) {
+          const hljs = window.hljs;
+          if (lang && hljs?.getLanguage?.(lang)) {
+            try {
+              return `<pre class="hljs"><code>${hljs.highlight(str, { language: lang, ignoreIllegals: true }).value}</code></pre>`;
+            } catch (_) {}
+          }
+          return `<pre class="hljs"><code>${escapeHtml(str)}</code></pre>`;
+        },
+      });
+      return md;
+    }
+
+    function renderMarkdown(text) {
+      const inst = getMd();
+      const rawHtml = inst ? inst.render(String(text || "")) : `<pre>${escapeHtml(text || "")}</pre>`;
+      const safe = window.DOMPurify ? window.DOMPurify.sanitize(rawHtml, { USE_PROFILES: { html: true } }) : rawHtml;
+      return safe;
+    }
+
+    // ---- storage layer ----
+    async function loadIndexFromStorage() {
+      if (state.mode === "dir" && state.dirHandle) {
+        try {
+          const fh = await state.dirHandle.getFileHandle(INDEX_FILE);
+          const file = await fh.getFile();
+          const text = await file.text();
+          if (text.trim()) return JSON.parse(text);
+        } catch (_) {
+          return emptyIndex();
+        }
+      }
+      if (state.mode === "idb") {
+        const val = await idbGet("kv", "index");
+        if (val) return val;
+      }
+      return emptyIndex();
+    }
+
+    async function saveIndexToStorage() {
+      cacheIndex();
+      if (state.mode === "dir" && state.dirHandle) {
+        const fh = await state.dirHandle.getFileHandle(INDEX_FILE, { create: true });
+        const w = await fh.createWritable();
+        await w.write(JSON.stringify(state.index, null, 2));
+        await w.close();
+      } else if (state.mode === "idb") {
+        await idbSet("kv", "index", state.index);
+      }
+    }
+
+    async function readDocText(item) {
+      if (state.mode === "dir" && state.dirHandle) {
+        const fh = await state.dirHandle.getFileHandle(item.fileName);
+        const file = await fh.getFile();
+        return file.text();
+      }
+      const rec = await idbGet("docs", item.id);
+      return rec?.text || "";
+    }
+
+    async function writeDocText(item, text) {
+      if (state.mode === "dir" && state.dirHandle) {
+        const fh = await state.dirHandle.getFileHandle(item.fileName, { create: true });
+        const w = await fh.createWritable();
+        await w.write(text);
+        await w.close();
+      } else {
+        await idbSet("docs", item.id, { text, updatedAt: Date.now() });
+      }
+    }
+
+    async function removeDocFile(item) {
+      if (state.mode === "dir" && state.dirHandle) {
+        try {
+          await state.dirHandle.removeEntry(item.fileName);
+        } catch (_) {}
+      } else {
+        await idbDel("docs", item.id);
+      }
+    }
+
+    function uniqueFileName(title, excludeId) {
+      const used = new Set(
+        (state.index.items || []).filter((x) => x.id !== excludeId).map((x) => x.fileName)
+      );
+      const base = slugify(title, "doc");
+      let name = `${base}.md`;
+      let n = 2;
+      while (used.has(name)) name = `${base}-${n++}.md`;
+      return name;
+    }
+
+    // ---- index helpers ----
+    function findItem(id) {
+      return (state.index?.items || []).find((x) => x.id === id) || null;
+    }
+
+    function ensureCat(name) {
+      const n = String(name || "").trim();
+      if (!n) return "";
+      let c = state.index.cats.find((x) => x.name === n);
+      if (!c) {
+        c = { id: uid(), name: n };
+        state.index.cats.push(c);
+      }
+      return c.id;
+    }
+
+    function ensureTag(name) {
+      const n = String(name || "").trim();
+      if (!n) return "";
+      let t = state.index.tags.find((x) => x.name === n);
+      if (!t) {
+        t = { id: uid(), name: n };
+        state.index.tags.push(t);
+      }
+      return t.id;
+    }
+
+    // ---- rendering: sidebar ----
+    function filteredItems() {
+      const q = state.search.trim().toLowerCase();
+      return (state.index.items || []).filter((it) => {
+        if (state.activeCat !== "all" && it.catId !== state.activeCat) return false;
+        if (state.activeTag && !(it.tagIds || []).includes(state.activeTag)) return false;
+        if (q) {
+          const hay = `${it.title} ${it.excerpt || ""}`.toLowerCase();
+          if (!hay.includes(q)) return false;
+        }
+        return true;
+      });
+    }
+
+    function renderSidebar() {
+      const items = filteredItems();
+      if (els.cats) {
+        const cats = state.index.cats || [];
+        els.cats.innerHTML =
+          `<div class="mdm-group-title">分类</div>` +
+          `<button type="button" class="mdm-chip${state.activeCat === "all" ? " is-active" : ""}" data-cat="all">全部 (${(state.index.items || []).length})</button>` +
+          cats
+            .map((c) => {
+              const n = (state.index.items || []).filter((x) => x.catId === c.id).length;
+              return `<button type="button" class="mdm-chip${state.activeCat === c.id ? " is-active" : ""}" data-cat="${escapeHtml(c.id)}">${escapeHtml(c.name)} (${n})</button>`;
+            })
+            .join("");
+      }
+      if (els.tags) {
+        const tags = state.index.tags || [];
+        els.tags.innerHTML =
+          `<div class="mdm-group-title">标签</div>` +
+          (tags.length
+            ? tags
+                .map(
+                  (t) =>
+                    `<button type="button" class="mdm-chip${state.activeTag === t.id ? " is-active" : ""}" data-tag="${escapeHtml(t.id)}">#${escapeHtml(t.name)}</button>`
+                )
+                .join("")
+            : `<span class="hint tight">暂无标签</span>`);
+      }
+      if (els.list) {
+        els.list.innerHTML = items.length
+          ? items
+              .map((it) => {
+                const cat = state.index.cats.find((c) => c.id === it.catId);
+                const tags = (it.tagIds || [])
+                  .map((tid) => state.index.tags.find((t) => t.id === tid)?.name)
+                  .filter(Boolean)
+                  .map((n) => `#${escapeHtml(n)}`)
+                  .join(" ");
+                return `<button type="button" class="mdm-item${it.id === state.currentId ? " is-active" : ""}" data-id="${escapeHtml(it.id)}">
+                  <span class="mdm-item-title">${escapeHtml(it.title || "未命名")}</span>
+                  <span class="mdm-item-meta hint tight">${cat ? escapeHtml(cat.name) + " · " : ""}${tags}</span>
+                </button>`;
+              })
+              .join("")
+          : `<span class="hint tight">没有匹配的文档</span>`;
+      }
+    }
+
+    // ---- editor (CM6) ----
+    function ensureEditor() {
+      if (state.view) return state.view;
+      const CM = window.DevToolsCM6;
+      if (!CM?.EditorView || !els.editor) return null;
+      const exts = [CM.basicSetup, CM.markdown(), CM.oneDark];
+      try {
+        exts.push(CM.EditorView.theme({ "&": { height: "100%", fontSize: "14px" }, ".cm-scroller": { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" } }));
+      } catch (_) {}
+      exts.push(
+        CM.keymap.of([
+          { key: "Mod-s", run: () => { void saveCurrent(); return true; } },
+          ...(CM.historyKeymap || []),
+        ])
+      );
+      exts.push(
+        CM.EditorView.updateListener.of((u) => {
+          if (u.docChanged && !state.suppressEditorChange) {
+            state.dirty = true;
+            updateSaveBtn();
+            schedulePreview();
+          }
+        })
+      );
+      state.view = new CM.EditorView({
+        state: CM.EditorState.create({ doc: "", extensions: exts }),
+        parent: els.editor,
+      });
+      return state.view;
+    }
+
+    function setEditorText(text) {
+      const v = ensureEditor();
+      if (!v) {
+        if (els.editor) els.editor.textContent = text;
+        return;
+      }
+      state.suppressEditorChange = true;
+      v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: String(text || "") } });
+      state.suppressEditorChange = false;
+    }
+
+    function getEditorText() {
+      if (state.view) return state.view.state.doc.toString();
+      return els.editor?.textContent || "";
+    }
+
+    // ---- preview + outline ----
+    function schedulePreview() {
+      window.clearTimeout(state.previewTimer);
+      state.previewTimer = window.setTimeout(() => {
+        renderPreview();
+        renderOutline();
+      }, 260);
+    }
+
+    function renderPreview() {
+      if (!els.preview) return;
+      els.preview.innerHTML = renderMarkdown(getEditorText());
+      els.preview.querySelectorAll("a[href]").forEach((a) => {
+        a.setAttribute("target", "_blank");
+        a.setAttribute("rel", "noopener noreferrer");
+      });
+    }
+
+    function renderOutline() {
+      if (!els.outline) return;
+      const heads = [...els.preview.querySelectorAll("h1,h2,h3,h4,h5,h6")];
+      els.outline.innerHTML = heads.length
+        ? `<div class="mdm-group-title">大纲</div>` +
+          heads
+            .map((h) => {
+              const lvl = Number(h.tagName.slice(1));
+              const text = h.textContent || "";
+              return `<div class="mdm-outline-item lv${lvl}">${escapeHtml(text)}</div>`;
+            })
+            .join("")
+        : "";
+    }
+
+    function applyViewMode() {
+      const wrap = els.editorWrap;
+      if (!wrap) return;
+      wrap.dataset.mode = state.viewMode;
+      [els.modeEdit, els.modeSplit, els.modePreview].forEach((b) => b?.classList.remove("is-active"));
+      ({ edit: els.modeEdit, split: els.modeSplit, preview: els.modePreview }[state.viewMode] || els.modeEdit)?.classList.add("is-active");
+      if (state.viewMode !== "edit") renderPreview();
+      if (state.viewMode !== "edit") renderOutline();
+    }
+
+    // ---- current doc ----
+    async function openDoc(id) {
+      if (state.dirty && !window.confirm("当前文档未保存，切换将丢失改动。继续？")) return;
+      const item = findItem(id);
+      if (!item) return;
+      setErr("");
+      state.currentId = id;
+      state.dirty = false;
+      updateSaveBtn();
+      if (els.title) els.title.value = item.title || "";
+      try {
+        const text = await readDocText(item);
+        setEditorText(text);
+        renderPreview();
+        renderOutline();
+      } catch (err) {
+        setErr(`读取失败：${err.message || err}`);
+      }
+      els.empty && (els.empty.hidden = true);
+      renderSidebar();
+    }
+
+    function newDoc() {
+      const item = {
+        id: uid(),
+        title: "未命名",
+        fileName: "",
+        catId: "",
+        tagIds: [],
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        size: 0,
+        excerpt: "",
+      };
+      item.fileName = uniqueFileName(item.title, item.id);
+      state.index.items.unshift(item);
+      state.currentId = item.id;
+      state.dirty = true;
+      if (els.title) els.title.value = item.title;
+      setEditorText("");
+      renderPreview();
+      renderSidebar();
+      updateSaveBtn();
+      els.empty && (els.empty.hidden = true);
+      els.title?.focus();
+      els.title?.select?.();
+    }
+
+    async function saveCurrent() {
+      const item = findItem(state.currentId);
+      if (!item) return;
+      const text = getEditorText();
+      const title = String(els.title?.value || item.title || "未命名").trim() || "未命名";
+      // 标题变化 → 文件名跟随
+      if (title !== item.title) {
+        const oldName = item.fileName;
+        item.fileName = uniqueFileName(title, item.id);
+        if (oldName && oldName !== item.fileName) {
+          try { await removeDocFile({ ...item, fileName: oldName }); } catch (_) {}
+        }
+        item.title = title;
+      }
+      item.updatedAt = Date.now();
+      item.size = new Blob([text]).size;
+      item.excerpt = text.replace(/\s+/g, " ").trim().slice(0, 160);
+      try {
+        await writeDocText(item, text);
+        await saveIndexToStorage();
+        state.dirty = false;
+        updateSaveBtn();
+        renderSidebar();
+        toast("已保存");
+      } catch (err) {
+        setErr(`保存失败：${err.message || err}`);
+      }
+    }
+
+    async function deleteCurrent() {
+      const item = findItem(state.currentId);
+      if (!item) return;
+      if (!window.confirm(`删除「${item.title}」？此操作会删除对应 .md 文件。`)) return;
+      try {
+        await removeDocFile(item);
+      } catch (_) {}
+      state.index.items = state.index.items.filter((x) => x.id !== item.id);
+      state.currentId = "";
+      state.dirty = false;
+      setEditorText("");
+      if (els.title) els.title.value = "";
+      renderPreview();
+      renderOutline();
+      renderSidebar();
+      updateSaveBtn();
+      els.empty && (els.empty.hidden = false);
+      await saveIndexToStorage();
+      toast("已删除");
+    }
+
+    function updateSaveBtn() {
+      const has = Boolean(findItem(state.currentId));
+      if (els.save) {
+        els.save.disabled = !has || !state.dirty;
+        els.save.textContent = state.dirty ? "保存 *" : "保存";
+      }
+      if (els.exportBtn) els.exportBtn.disabled = !has;
+      if (els.exportFmt) els.exportFmt.disabled = !has;
+      if (els.del) els.del.disabled = !has;
+    }
+
+    // ---- import ----
+    async function importFiles(files) {
+      const list = [...(files || [])].filter((f) => /\.(md|markdown|txt)$/i.test(f.name) || /markdown/.test(f.type || ""));
+      if (!list.length) {
+        toast("没有可导入的 Markdown 文件");
+        return;
+      }
+      let n = 0;
+      for (const f of list) {
+        const text = await f.text();
+        const fm = parseFrontMatter(text);
+        const title = fm.title || f.name.replace(/\.[^.]+$/, "");
+        const item = {
+          id: uid(),
+          title,
+          fileName: uniqueFileName(title, ""),
+          catId: ensureCat(fm.category),
+          tagIds: (fm.tags || []).map((t) => ensureTag(t)).filter(Boolean),
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          size: new Blob([fm.body]).size,
+          excerpt: fm.body.replace(/\s+/g, " ").trim().slice(0, 160),
+        };
+        try {
+          await writeDocText(item, fm.body);
+          state.index.items.unshift(item);
+          n += 1;
+        } catch (err) {
+          setErr(`导入失败（${f.name}）：${err.message || err}`);
+        }
+      }
+      await saveIndexToStorage();
+      renderSidebar();
+      if (n) toast(`已导入 ${n} 篇`);
+    }
+
+    function parseFrontMatter(text) {
+      const m = String(text || "").match(/^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
+      if (!m) return { title: "", category: "", tags: [], body: text };
+      const head = m[1];
+      const body = m[2];
+      let title = "";
+      let category = "";
+      let tags = [];
+      head.split(/\r?\n/).forEach((line) => {
+        const mm = line.match(/^([A-Za-z_-]+):\s*(.*)$/);
+        if (!mm) return;
+        const key = mm[1].toLowerCase();
+        let val = mm[2].trim().replace(/^["']|["']$/g, "");
+        if (key === "title") title = val;
+        else if (key === "category" || key === "cat") category = val;
+        else if (key === "tags") {
+          tags = val
+            .replace(/^\[|\]$/g, "")
+            .split(/[,，]/)
+            .map((x) => x.trim().replace(/^["']|["']$/g, ""))
+            .filter(Boolean);
+        }
+      });
+      return { title, category, tags, body };
+    }
+
+    // ---- export ----
+    function downloadBlob(blob, name) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    }
+
+    function standaloneHtml(title, bodyHtml) {
+      return `<!doctype html><html lang="zh"><head><meta charset="utf-8" /><title>${escapeHtml(title)}</title>
+<style>
+body{max-width:820px;margin:2rem auto;padding:0 1rem;line-height:1.7;font-family:-apple-system,Segoe UI,Roboto,"PingFang SC","Microsoft YaHei",sans-serif;color:#1f2328}
+pre{background:#f6f8fa;padding:.8rem;border-radius:8px;overflow:auto}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+pre code{background:none}
+table{border-collapse:collapse}th,td{border:1px solid #d0d7de;padding:.35rem .6rem}
+img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-left:1rem;color:#57606a}
+</style></head><body>${bodyHtml}</body></html>`;
+    }
+
+    async function exportCurrent(fmt) {
+      const item = findItem(state.currentId);
+      if (!item) return;
+      const text = getEditorText();
+      const title = item.title || "document";
+      const html = renderMarkdown(text);
+      try {
+        if (fmt === "md") {
+          const fm = `---\ntitle: ${title}\ncategory: ${state.index.cats.find((c) => c.id === item.catId)?.name || ""}\ntags: [${(item.tagIds || []).map((t) => state.index.tags.find((x) => x.id === t)?.name).filter(Boolean).join(", ")}]\n---\n\n`;
+          downloadBlob(new Blob([fm + text], { type: "text/markdown;charset=utf-8" }), `${slugify(title)}.md`);
+          return;
+        }
+        if (fmt === "html-standalone") {
+          downloadBlob(new Blob([standaloneHtml(title, html)], { type: "text/html;charset=utf-8" }), `${slugify(title)}.html`);
+          return;
+        }
+        if (fmt === "pdf") {
+          const w = window.open("", "_blank");
+          if (!w) throw new Error("弹窗被拦截，无法打印");
+          w.document.write(standaloneHtml(title, html));
+          w.document.close();
+          w.focus();
+          setTimeout(() => w.print(), 300);
+          return;
+        }
+        if (fmt === "png") {
+          if (typeof window.html2canvas !== "function") throw new Error("截图库未就绪");
+          const canvas = await window.html2canvas(els.preview, { backgroundColor: "#ffffff", scale: 2 });
+          canvas.toBlob((b) => b && downloadBlob(b, `${slugify(title)}.png`), "image/png");
+          return;
+        }
+        await exportViaPandoc(text, fmt, title);
+      } catch (err) {
+        setErr(`导出失败：${err.message || err}`);
+      }
+    }
+
+    async function exportViaPandoc(text, to, title) {
+      const res = await fetch(`${baseUrl()}/pandoc/convert`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
+        body: JSON.stringify({ text, to, title }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        throw new Error(data?.error || `本机桥未响应（HTTP ${res.status}）· 请确认桥已启动且装了 pandoc`);
+      }
+      const bytes = Uint8Array.from(atob(data.dataBase64 || ""), (c) => c.charCodeAt(0));
+      downloadBlob(new Blob([bytes]), data.filename || `${slugify(title)}.${to}`);
+    }
+
+    // ---- dir picking ----
+    async function pickDir() {
+      if (!window.showDirectoryPicker) {
+        setErr("当前浏览器不支持选择文件夹（请用 Chrome / Edge）。已切换到浏览器本地存储模式。");
+        await useIdbMode();
+        return;
+      }
+      try {
+        const handle = await window.showDirectoryPicker({ mode: "readwrite" });
+        const perm = await handle.requestPermission?.({ mode: "readwrite" });
+        if (perm && perm !== "granted") throw new Error("未获得文件夹读写权限");
+        state.dirHandle = handle;
+        state.mode = "dir";
+        await idbSet("kv", DIR_KEY, handle);
+        await initAfterStorage(handle.name);
+      } catch (err) {
+        if (String(err?.name) !== "AbortError") setErr(err.message || String(err));
+      }
+    }
+
+    async function useIdbMode() {
+      state.mode = "idb";
+      state.dirHandle = null;
+      await initAfterStorage("浏览器本地存储");
+    }
+
+    async function initAfterStorage(label) {
+      setErr("");
+      state.index = await loadIndexFromStorage();
+      if (!state.index || typeof state.index !== "object") state.index = emptyIndex();
+      state.index.cats = state.index.cats || [];
+      state.index.tags = state.index.tags || [];
+      state.index.items = state.index.items || [];
+      cacheIndex();
+      els.layout && (els.layout.hidden = false);
+      els.dirLabel && (els.dirLabel.textContent = `存储：${label}`);
+      [els.newBtn, els.importDirBtn].forEach((b) => b && (b.disabled = false));
+      els.importBtn && (els.importBtn.disabled = false);
+      renderSidebar();
+      updateSaveBtn();
+      els.empty && (els.empty.hidden = Boolean(state.currentId));
+      ensureEditor();
+      if (state.view && CMresize) CMresize();
+      toast(`已连接：${label}`);
+    }
+
+    function CMresize() {
+      try { state.view?.requestMeasure?.(); } catch (_) {}
+    }
+
+    // ---- events ----
+    els.pickDir?.addEventListener("click", () => void pickDir());
+    els.newBtn?.addEventListener("click", newDoc);
+    els.save?.addEventListener("click", () => void saveCurrent());
+    els.del?.addEventListener("click", () => void deleteCurrent());
+    els.importBtn?.addEventListener("change", (e) => {
+      void importFiles(e.target.files);
+      e.target.value = "";
+    });
+    els.importDirBtn?.addEventListener("click", () => els.importDirInput?.click());
+    els.importDirInput?.addEventListener("change", (e) => {
+      void importFiles(e.target.files);
+      e.target.value = "";
+    });
+    els.search?.addEventListener("input", () => {
+      state.search = els.search.value;
+      renderSidebar();
+    });
+    els.cats?.addEventListener("click", (e) => {
+      const b = e.target.closest?.("[data-cat]");
+      if (!b) return;
+      state.activeCat = b.dataset.cat;
+      renderSidebar();
+    });
+    els.tags?.addEventListener("click", (e) => {
+      const b = e.target.closest?.("[data-tag]");
+      if (!b) return;
+      state.activeTag = state.activeTag === b.dataset.tag ? "" : b.dataset.tag;
+      renderSidebar();
+    });
+    els.list?.addEventListener("click", (e) => {
+      const b = e.target.closest?.("[data-id]");
+      if (b) void openDoc(b.dataset.id);
+    });
+    els.title?.addEventListener("input", () => {
+      state.dirty = true;
+      updateSaveBtn();
+    });
+    els.modeEdit?.addEventListener("click", () => { state.viewMode = "edit"; applyViewMode(); });
+    els.modeSplit?.addEventListener("click", () => { state.viewMode = "split"; applyViewMode(); });
+    els.modePreview?.addEventListener("click", () => { state.viewMode = "preview"; applyViewMode(); });
+    els.exportBtn?.addEventListener("click", () => void exportCurrent(els.exportFmt?.value || "md"));
+
+    // export format options
+    if (els.exportFmt) {
+      const mk = (list) => list.map(([v, l]) => `<option value="${v}">${escapeHtml(l)}</option>`).join("");
+      els.exportFmt.innerHTML =
+        `<optgroup label="本地">${mk(LOCAL_FORMATS)}</optgroup>` +
+        `<optgroup label="本机桥 · Pandoc（任意格式）">${mk(PANDOC_FORMATS)}</optgroup>`;
+      els.exportFmt.value = "md";
+    }
+
+    // restore dir handle
+    (async () => {
+      try {
+        const handle = await idbGet("kv", DIR_KEY);
+        if (handle) {
+          state.dirHandle = handle;
+          state.mode = "dir";
+          const perm = await handle.queryPermission?.({ mode: "readwrite" });
+          if (perm === "granted") {
+            await initAfterStorage(handle.name);
+            return;
+          }
+          els.dirLabel && (els.dirLabel.textContent = `存储：${handle.name}（需重新授权）`);
+          els.pickDir && (els.pickDir.textContent = "重新连接文件夹");
+        }
+      } catch (_) {}
+      // 未绑定目录：显示上次缓存索引（若有），等用户选择
+      const cached = readIndexRaw();
+      if (cached) {
+        state.index = cached;
+        state.index.items = state.index.items || [];
+        state.index.cats = state.index.cats || [];
+        state.index.tags = state.index.tags || [];
+        els.layout && (els.layout.hidden = false);
+        els.dirLabel && (els.dirLabel.textContent = "存储：未连接（点「选择文件夹」）");
+        renderSidebar();
+      }
+    })();
+
+    applyViewMode();
+  });
+})();

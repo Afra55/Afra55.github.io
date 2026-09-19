@@ -47,6 +47,10 @@
       src: "./vendor/leaflet/leaflet.js",
       probe: () => typeof globalThis.L !== "undefined" || typeof globalThis.leaflet !== "undefined",
     },
+    markdownit: { src: "./vendor/markdown-it.min.js", probe: () => typeof globalThis.markdownit === "function" },
+    purify: { src: "./vendor/purify.min.js", probe: () => typeof globalThis.DOMPurify === "object" },
+    hljs: { src: "./vendor/highlight/highlight.min.js", probe: () => typeof globalThis.hljs === "object" },
+    cm6: { src: "./vendor/cm6/cm6.bundle.js", probe: () => typeof globalThis.DevToolsCM6 === "object" },
   };
 
   const EXTERNAL_SITE_TOOLS = new Set([]);
@@ -139,13 +143,14 @@
     interpolator: "./extra-panels/interpolator.js",
     giftest: "./extra-panels/giftest.js",
     fileunlock: "./extra-panels/fileunlock.js",
+    mdm: "./extra-panels/mdm.js",
   };
 
   const EXTRA_PANEL_IDS = new Set([
     "timediff", "color", "url", "query", "uuid", "hash", "text", "caseconv", "coord",
     "yaml", "imgb64", "qrcode", "cron", "units", "sharecard", "numbase", "markdown",
     "eyedropper", "password", "gifmaker", "gifx", "v2g", "gifbb", "gifc", "gife", "gifm",
-    "adb", "vsplit", "vbb", "interpolator", "giftest", "fileunlock",
+    "adb", "vsplit", "vbb", "interpolator", "giftest", "fileunlock", "mdm",
   ]);
 
   const EXTRA_MEDIA_TOOLS = new Set([
@@ -171,6 +176,7 @@
     giftest: ["omggif"],
     dateremind: ["solarlunar"],
     ipgeo: ["leaflet"],
+    mdm: ["markdownit", "purify", "hljs", "cm6"],
   };
 
   /** 独立脚本，不走 extra 面板栈 */
@@ -225,7 +231,7 @@
     "setup", "about", "xorenc", "morse", "countdown",
     "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "piano", "minigames", "ambient", "enspeak", "animalearn",
     "insectearn", "plantearn", "colorearn", "numearn", "shapeearn", "vehicleearn", "fruitearn", "homeearn", "sportsearn", "foodearn", "thingearn", "jobearn", "weatherearn", "bodyearn", "vegearn", "ipgeo",
-    "fileunlock",
+    "fileunlock", "mdm",
   ]);
 
   const scriptPromises = new Map();
@@ -434,6 +440,10 @@
     jsonrepair: "JSON 修复库",
     regulex: "正则结构图库",
     leaflet: "地图库 Leaflet",
+    markdownit: "Markdown 解析库",
+    purify: "HTML 净化库",
+    hljs: "代码高亮库",
+    cm6: "编辑器（CodeMirror）",
   };
 
   async function ensureForTool(toolId, opts = {}) {

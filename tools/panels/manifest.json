@@ -168,6 +168,11 @@
       "bytes": 1712
     },
     {
+      "id": "mdm",
+      "file": "./panels/mdm.html",
+      "bytes": 2900
+    },
+    {
       "id": "hash",
       "file": "./panels/hash.html",
       "bytes": 1111

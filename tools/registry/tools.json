@@ -55,7 +55,8 @@
         "markdown",
         "mathedit",
         "mdslides",
-        "memo"
+        "memo",
+        "mdm"
       ]
     },
     {
@@ -911,6 +912,19 @@
       "desktopOnly": true,
       "winOnly": true
     },
+    "mdm": {
+      "name": "Markdown 文档管理",
+      "aliases": [
+        "markdown",
+        "md",
+        "文档",
+        "笔记",
+        "mdm",
+        "docs",
+        "知识库"
+      ],
+      "desktopOnly": true
+    },
     "feedbackhub": {
       "name": "评价汇总",
       "aliases": [
@@ -1222,6 +1236,7 @@
     "ytdlp": "本机 yt-dlp 桥：解析/下载视频与播放列表、字幕、封面、直播、Cookies 与 SponsorBlock；含安装教程，文件只保存在电脑。",
     "gitbridge": "今日交码看板 + 说明模板 + Gerrit 视角 + 历史/工作线右键；统一桥 /git。",
     "fileunlock": "找出 Windows 上占用某文件/文件夹的程序，并可一键关闭释放占用（Restart Manager 检测，仅 Windows）。",
+    "mdm": "Markdown 文档管理：选本机文件夹存储、分类/标签/搜索、实时预览、导入导出 MD，并可经本机桥 Pandoc 导出 docx/epub 等任意格式（仅电脑端）。",
     "about": "站点总览与能力目录；可分享/复制链接给他人，并进入主题设置。",
     "setup": "小白向：如何下载安装 Node.js、ADB、FFmpeg；手机用网页保底、电脑用桥更优。",
     "envkit": "一键安装/升级与统一桥探测：ADB、FFmpeg、yt-dlp、Git 均列在 17888。",

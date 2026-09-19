@@ -175,6 +175,11 @@ function Sync-Bridges {
     try { Download-File "$BaseUrl/fileunlock-bridge/$f" (Join-Path $BridgeDir "fileunlock-bridge\$f") }
     catch { Write-Miss "下载失败 $f" }
   }
+  foreach ($f in @("server.js", "pandoc-ops.js")) {
+    Write-Info "pandoc-bridge/$f"
+    try { Download-File "$BaseUrl/pandoc-bridge/$f" (Join-Path $BridgeDir "pandoc-bridge\$f") }
+    catch { Write-Miss "下载失败 $f" }
+  }
   foreach ($f in @("start-win.bat", "start-win.cmd", "start-linux.sh", "start-mac.command")) {
     try { Download-File "$BaseUrl/adb-bridge/$f" (Join-Path $BridgeDir "adb-bridge\$f") } catch {}
     try { Download-File "$BaseUrl/ffmpeg-bridge/$f" (Join-Path $BridgeDir "ffmpeg-bridge\$f") } catch {}

@@ -333,6 +333,12 @@ sync_bridges() {
     download_file "${BASE_URL}/fileunlock-bridge/$f" "$BRIDGE_DIR/fileunlock-bridge/$f" || warn "下载失败 $f"
   done
 
+  # Pandoc 转换（可选；需本机装 pandoc）
+  for f in server.js pandoc-ops.js; do
+    info "pandoc-bridge/$f"
+    download_file "${BASE_URL}/pandoc-bridge/$f" "$BRIDGE_DIR/pandoc-bridge/$f" || warn "下载失败 $f"
+  done
+
   # ADB / FFmpeg 补齐 Windows 启动脚本
   for f in start-win.bat start-win.cmd; do
     download_file "${BASE_URL}/adb-bridge/$f" "$BRIDGE_DIR/adb-bridge/$f" || true
