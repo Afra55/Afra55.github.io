@@ -1121,11 +1121,12 @@
       return { rel };
     }
 
-    function markdownForAsset(file, rel) {
+    function markdownForAsset(file, rel, altOverride) {
       const mime = String(file.type || "");
       const label = String(file.name || rel.split("/").pop() || "文件");
       const noExt = label.replace(/\.[^.]+$/, "");
-      if (/^image\//.test(mime) || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(label)) return `![${noExt}](${rel})`;
+      if (/^image\//.test(mime) || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(label))
+        return `![${altOverride != null ? altOverride : noExt}](${rel})`;
       if (/^video\//.test(mime) || /\.(mp4|webm|mov|m4v|ogv)$/i.test(label)) return `<video src="${rel}" controls playsinline></video>`;
       if (/^audio\//.test(mime) || /\.(mp3|wav|ogg|m4a|flac|aac)$/i.test(label)) return `<audio src="${rel}" controls></audio>`;
       return `[${label}](${rel})`;
@@ -1168,11 +1169,18 @@
         setErr("插入文件需要先「选择文件夹」或进入本地存储模式");
         return true;
       }
+      const singleImg = list.length === 1 && /^image\//.test(list[0].type || "");
+      let alt = null;
+      if (singleImg) {
+        const dflt = String(list[0].name || "").replace(/\.[^.]+$/, "");
+        const got = window.prompt("图片描述（alt，可留空）", dflt);
+        alt = got == null ? dflt : got;
+      }
       const parts = [];
       for (const f of list) {
         try {
           const a = await saveAsset(f);
-          parts.push(markdownForAsset(f, a.rel));
+          parts.push(markdownForAsset(f, a.rel, singleImg ? alt : undefined));
         } catch (err) {
           setErr(`插入失败（${f.name}）：${err.message || err}`);
         }
@@ -1742,6 +1750,30 @@
           } catch (_) {}
         }
       }
+    }
+
+    async function checkLinks() {
+      const text = getEditorText();
+      const refs = collectReferencedAssets(text);
+      if (!refs.length) {
+        toast("链接检查：本篇无本地引用");
+        return;
+      }
+      let names = new Set();
+      try {
+        names = new Set(await listAssetNames());
+      } catch (_) {}
+      const missing = [];
+      for (const rel of refs) {
+        const n = rel.split("/").pop();
+        if (names.has(rel) || names.has(n) || findItemByFileName(rel)) continue;
+        missing.push(rel);
+      }
+      if (!missing.length) {
+        toast(`链接检查：${refs.length} 个本地引用全部有效`);
+        return;
+      }
+      setErr(`发现 ${missing.length} 个失效引用：${missing.slice(0, 5).join("、")}${missing.length > 5 ? " …" : ""}`);
     }
 
     function fmtBytes(n) {
@@ -3258,6 +3290,10 @@ a{color:${v.accent}}
       }
       if (kind === "usage") {
         void showUsage();
+        return;
+      }
+      if (kind === "checklinks") {
+        void checkLinks();
         return;
       }
       if (kind === "help") {
