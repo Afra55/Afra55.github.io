@@ -461,6 +461,27 @@
     }
 
     // ---- 全文搜索（按需读取正文，带缓存） ----
+    /** 后台预热正文缓存：连接后静默读取，首次全文搜索即快（大库限量） */
+    function warmBodyCache() {
+      const items = state.index.items || [];
+      if (items.length < 40 || items.length > 3000) return;
+      let i = 0;
+      const worker = async () => {
+        while (i < items.length) {
+          const it = items[i++];
+          if (state.bodyCache.has(it.id)) continue;
+          try {
+            state.bodyCache.set(it.id, await readDocText(it));
+          } catch (_) {}
+          if (state.bodyCache.size > 600) {
+            const keys = [...state.bodyCache.keys()];
+            for (let k = 0; k < keys.length - 400; k++) state.bodyCache.delete(keys[k]);
+          }
+          await new Promise((r) => setTimeout(r, 0));
+        }
+      };
+      Promise.all(Array.from({ length: 2 }, worker)).catch(() => {});
+    }
     function scheduleFullTextSearch() {
       window.clearTimeout(state.ftTimer);
       const q = state.search.trim().toLowerCase();
@@ -2351,6 +2372,7 @@ a{color:${v.accent}}
       ensureKatexCss();
       bindEditorMedia();
       bindEditorScroll();
+      warmBodyCache();
       if (state.view && CMresize) CMresize();
       toast(`已连接：${label}`);
     }
