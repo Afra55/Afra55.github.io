@@ -207,6 +207,7 @@
       catList: $("#mdm-cat-list"),
       tagChips: $("#mdm-tag-chips"),
       tagInput: $("#mdm-tag-input"),
+      tagList: $("#mdm-tag-list"),
       editorWrap: $("#mdm-editor-wrap"),
       editor: $("#mdm-editor"),
       splitter: $("#mdm-splitter"),
@@ -620,8 +621,11 @@
         .map((n) => `#${escapeHtml(n)}`)
         .join(" ");
       return `<button type="button" class="mdm-item${it.id === state.currentId ? " is-active" : ""}${state.selected.has(it.id) ? " is-selected" : ""}" data-id="${escapeHtml(it.id)}" draggable="true">
-        <span class="mdm-item-title">${escapeHtml(it.title || "未命名")}</span>
-        <span class="mdm-item-meta hint tight">${cat ? escapeHtml(cat.name) + " · " : ""}${tags}</span>
+        <span class="mdm-drag-handle" title="拖动排序" aria-hidden="true">⋮⋮</span>
+        <span class="mdm-item-body">
+          <span class="mdm-item-title">${escapeHtml(it.title || "未命名")}</span>
+          <span class="mdm-item-meta hint tight">${cat ? escapeHtml(cat.name) + " · " : ""}${tags}</span>
+        </span>
       </button>`;
     }
 
@@ -785,6 +789,9 @@
             schedulePreview();
             scheduleAutoSave();
           }
+          if (u.docChanged || u.selectionSet) {
+            updateDocStats(u.state.doc.toString(), u.state.selection.main);
+          }
         })
       );
       state.view = new CM.EditorView({
@@ -849,14 +856,19 @@
         a.setAttribute("rel", "noopener noreferrer");
       });
       applyTaskLists(els.preview);
-      if (els.docStats) {
-        const chars = src.length;
-        const words = (src.match(/[\u4e00-\u9fa5]|[A-Za-z0-9_'-]+/g) || []).length;
-        const lines = src ? src.split("\n").length : 0;
-        els.docStats.textContent = `${words} 词 · ${chars} 字符 · ${lines} 行`;
-      }
+      updateDocStats(src, state.view?.state.selection.main);
       void resolvePreviewAssets();
       void renderMermaidBlocks();
+    }
+
+    function updateDocStats(src, sel) {
+      if (!els.docStats) return;
+      const s = String(src || "");
+      const chars = s.length;
+      const words = (s.match(/[\u4e00-\u9fa5]|[A-Za-z0-9_'-]+/g) || []).length;
+      const lines = s ? s.split("\n").length : 0;
+      const selN = sel && sel.to > sel.from ? sel.to - sel.from : 0;
+      els.docStats.textContent = `${words} 词 · ${chars} 字符 · ${lines} 行${selN ? ` · 选中 ${selN} 字符` : ""}`;
     }
 
     // ---- 本地资源（图片/视频/音频/附件，存在所选文件夹里，相对路径引用） ----
@@ -2050,6 +2062,11 @@
           .map((c) => `<option value="${escapeHtml(c.name)}"></option>`)
           .join("");
       }
+      if (els.tagList) {
+        els.tagList.innerHTML = (state.index.tags || [])
+          .map((t) => `<option value="${escapeHtml(t.name)}"></option>`)
+          .join("");
+      }
       const cat = item ? (state.index.cats || []).find((c) => c.id === item.catId) : null;
       if (els.cat) els.cat.value = cat ? cat.name : "";
       if (els.tagChips) {
@@ -2528,10 +2545,18 @@ a{color:${v.accent}}
       void openDoc(b.dataset.id);
     });
     let dragId = "";
+    els.list?.addEventListener("pointerdown", (e) => {
+      state.dragFromHandle = Boolean(e.target.closest?.(".mdm-drag-handle"));
+    });
     els.list?.addEventListener("dragstart", (e) => {
       const b = e.target.closest?.("[data-id]");
       if (!b) return;
+      if (!state.dragFromHandle) {
+        e.preventDefault();
+        return;
+      }
       dragId = b.dataset.id;
+      b.classList.add("is-dragging");
       try {
         e.dataTransfer.setData("text/plain", dragId);
         e.dataTransfer.effectAllowed = "move";
@@ -2541,9 +2566,13 @@ a{color:${v.accent}}
       if (!dragId) return;
       e.preventDefault();
       try { e.dataTransfer.dropEffect = "move"; } catch (_) {}
+      const b = e.target.closest?.("[data-id]");
+      els.list?.querySelectorAll(".is-drop-target").forEach((el) => el.classList.remove("is-drop-target"));
+      if (b && b.dataset.id !== dragId) b.classList.add("is-drop-target");
     });
     els.list?.addEventListener("drop", (e) => {
       const b = e.target.closest?.("[data-id]");
+      els.list?.querySelectorAll(".is-drop-target,.is-dragging").forEach((el) => el.classList.remove("is-drop-target", "is-dragging"));
       if (!b || !dragId) return;
       e.preventDefault();
       const targetId = b.dataset.id;
@@ -2553,7 +2582,10 @@ a{color:${v.accent}}
       reorderItem(from, targetId);
       saveIndexToStorage().then(() => renderSidebar());
     });
-    els.list?.addEventListener("dragend", () => { dragId = ""; });
+    els.list?.addEventListener("dragend", () => {
+      dragId = "";
+      els.list?.querySelectorAll(".is-drop-target,.is-dragging").forEach((el) => el.classList.remove("is-drop-target", "is-dragging"));
+    });
     // 触屏拖拽排序（HTML5 DnD 在触屏无效）
     (function bindTouchReorder() {
       const list = els.list;
@@ -2572,18 +2604,25 @@ a{color:${v.accent}}
         "pointermove",
         (e) => {
           if (e.pointerType !== "touch" || !touchId) return;
-          if (!dragging && Math.abs(e.clientY - startY) > 12) dragging = true;
+          if (!dragging && Math.abs(e.clientY - startY) > 12) {
+            dragging = true;
+            els.list?.querySelector(`[data-id="${touchId}"]`)?.classList.add("is-dragging");
+          }
           if (!dragging) return;
           e.preventDefault();
           const over = document.elementFromPoint(e.clientX, e.clientY)?.closest?.("[data-id]");
+          els.list?.querySelectorAll(".is-drop-target").forEach((el) => el.classList.remove("is-drop-target"));
           if (over && over.dataset.id !== touchId) {
+            over.classList.add("is-drop-target");
             reorderItem(touchId, over.dataset.id);
             renderList();
+            els.list?.querySelector(`[data-id="${touchId}"]`)?.classList.add("is-dragging");
           }
         },
         { passive: false }
       );
       const end = () => {
+        els.list?.querySelectorAll(".is-drop-target,.is-dragging").forEach((el) => el.classList.remove("is-drop-target", "is-dragging"));
         if (dragging) {
           saveIndexToStorage().then(() => renderSidebar());
         }

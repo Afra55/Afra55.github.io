@@ -59,11 +59,15 @@
 .mdm-item.is-selected { background: color-mix(in srgb, var(--accent) 30%, transparent); border-color: var(--accent); }
 .mdm-item[draggable="true"] { cursor: grab; }
 .mdm-item {
-  display: flex; flex-direction: column; gap: 0.1rem; text-align: left;
+  display: flex; flex-direction: row; align-items: center; gap: 0.4rem; text-align: left;
   height: 56px; overflow: hidden;
   padding: 0.45rem 0.55rem; border: 1px solid transparent; border-radius: 8px;
   background: transparent; color: var(--ink); cursor: pointer;
 }
+.mdm-item-body { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; flex: 1 1 auto; }
+.mdm-drag-handle { flex: 0 0 auto; color: var(--muted); cursor: grab; font-size: 0.8rem; line-height: 1; user-select: none; }
+.mdm-item.is-dragging { opacity: 0.5; }
+.mdm-item.is-drop-target { border-color: var(--accent); }
 .mdm-item:hover { border-color: var(--line); }
 .mdm-item.is-active { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); }
 .mdm-item-title { font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
