@@ -225,6 +225,8 @@
       empty: $("#mdm-empty"),
       outline: $("#mdm-outline-body"),
       backlinks: $("#mdm-backlinks"),
+      modal: $("#mdm-modal"),
+      modalBox: $("#mdm-modal-box"),
     };
     if (!els.pickDir) return;
 
@@ -985,6 +987,99 @@
     function findItemByFileName(name) {
       const n = String(name || "").split("/").pop();
       return (state.index.items || []).find((x) => x.fileName === n) || null;
+    }
+
+    function parseTableAt(lines, idx) {
+      return MP.parseTableAt ? MP.parseTableAt(lines, idx) : null;
+    }
+    function buildTable(grid) {
+      return MP.buildTable ? MP.buildTable(grid) : "";
+    }
+
+    // ---- #2 表格可视化编辑（光标所在表格 → 网格弹窗） ----
+    function closeModal() {
+      if (!els.modal) return;
+      els.modal.hidden = true;
+      els.modalBox.innerHTML = "";
+    }
+
+    function openTableEditor() {
+      const view = state.view;
+      if (!view) return;
+      const doc = view.state.doc;
+      const pos = view.state.selection.main.head;
+      const lineIdx = doc.lineAt(pos).number - 1;
+      const t = parseTableAt(doc.toString().split("\n"), lineIdx);
+      if (!t) {
+        setErr("光标不在表格内：请把光标放到表格任意一行再试");
+        return;
+      }
+      const grid = t.grid.map((r) => [...r]);
+      const box = els.modalBox;
+      const colCount = () => Math.max(...grid.map((r) => r.length), 1);
+      const render = () => {
+        box.innerHTML =
+          `<div class="mdm-modal-head"><strong>表格编辑</strong><button type="button" class="ghost-btn" data-mdl="close">关闭</button></div>` +
+          `<div class="mdm-grid-wrap"><table class="mdm-grid"><tbody>` +
+          grid
+            .map(
+              (row, ri) =>
+                `<tr>` +
+                row
+                  .map(
+                    (c, ci) =>
+                      `<td><input data-r="${ri}" data-c="${ci}" value="${escapeHtml(c)}"${
+                        ri === 0 ? ' class="is-head"' : ""
+                      } /></td>`
+                  )
+                  .join("") +
+                `</tr>`
+            )
+            .join("") +
+          `</tbody></table></div>` +
+          `<div class="mdm-modal-foot">` +
+          `<button type="button" class="ghost-btn" data-mdl="addrow">+ 行</button>` +
+          `<button type="button" class="ghost-btn" data-mdl="delrow">- 行</button>` +
+          `<button type="button" class="ghost-btn" data-mdl="addcol">+ 列</button>` +
+          `<button type="button" class="ghost-btn" data-mdl="delcol">- 列</button>` +
+          `<button type="button" class="primary-btn" data-mdl="ok">确定</button>` +
+          `</div>`;
+      };
+      const collect = () => {
+        box.querySelectorAll("input[data-r]").forEach((inp) => {
+          const r = Number(inp.dataset.r);
+          const c = Number(inp.dataset.c);
+          if (grid[r]) grid[r][c] = inp.value;
+        });
+      };
+      render();
+      els.modal.hidden = false;
+      box.onclick = (e) => {
+        const b = e.target.closest?.("[data-mdl]");
+        if (!b) return;
+        const act = b.dataset.mdl;
+        if (act === "close") return closeModal();
+        collect();
+        if (act === "addrow") grid.push(new Array(colCount()).fill(""));
+        else if (act === "delrow") {
+          if (grid.length > 1) grid.pop();
+        } else if (act === "addcol") grid.forEach((r) => r.push(""));
+        else if (act === "delcol") {
+          if (colCount() > 1) grid.forEach((r) => r.pop());
+        } else if (act === "ok") {
+          view.dispatch({
+            changes: {
+              from: doc.line(t.start + 1).from,
+              to: doc.line(t.end + 1).to,
+              insert: buildTable(grid),
+            },
+          });
+          closeModal();
+          toast("表格已更新");
+          return;
+        }
+        render();
+      };
     }
 
     async function readAssetBlob(rel) {
@@ -3320,6 +3415,10 @@ a{color:${v.accent}}
       }
       if (kind === "history") {
         void openHistory(findItem(state.currentId));
+        return;
+      }
+      if (kind === "tableedit") {
+        openTableEditor();
         return;
       }
       if (kind === "usage") {

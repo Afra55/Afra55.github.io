@@ -155,6 +155,19 @@
 .mdm-backlink { display: block; width: 100%; text-align: left; padding: 0.25rem 0.4rem; border: none; background: transparent; color: var(--accent); border-radius: 6px; cursor: pointer; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mdm-backlink:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 
+/* 表格编辑弹窗 */
+.mdm-modal { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, 0.45); display: flex; align-items: center; justify-content: center; padding: 1rem; }
+.mdm-modal[hidden] { display: none; }
+.mdm-modal-box { background: var(--panel, #1b1b1f); border: 1px solid var(--line); border-radius: 12px; max-width: min(92vw, 900px); max-height: 86vh; overflow: auto; padding: 0.9rem; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4); }
+.mdm-modal-head { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; margin-bottom: 0.6rem; }
+.mdm-grid-wrap { overflow: auto; max-height: 60vh; }
+.mdm-grid { border-collapse: collapse; }
+.mdm-grid td { border: 1px solid var(--line); padding: 0; }
+.mdm-grid input { border: none; background: transparent; color: var(--ink); padding: 0.35rem 0.45rem; min-width: 6rem; font: inherit; outline: none; }
+.mdm-grid input.is-head { font-weight: 600; }
+.mdm-grid input:focus { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.mdm-modal-foot { display: flex; gap: 0.5rem; margin-top: 0.7rem; flex-wrap: wrap; }
+
 /* 预览排版 */
 .markdown-body { line-height: 1.7; color: var(--ink); word-wrap: break-word; }
 .markdown-body h1, .markdown-body h2 { border-bottom: 1px solid var(--line); padding-bottom: 0.3rem; }

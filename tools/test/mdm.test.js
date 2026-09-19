@@ -71,4 +71,15 @@ t("front-matter head 保留其它键", () => {
   assert.strictEqual(r.body.trim(), "body");
 });
 
+t("表格解析与生成", () => {
+  const lines = ["前文", "| A | B |", "| --- | --- |", "| 1 | 2 |", "后文"];
+  const r = P.parseTableAt(lines, 3);
+  assert.strictEqual(r.start, 1);
+  assert.strictEqual(r.end, 3);
+  assert.deepStrictEqual(r.grid, [["A", "B"], ["1", "2"]]);
+  assert.strictEqual(P.buildTable(r.grid), "| A | B |\n| --- | --- |\n| 1 | 2 |");
+  assert.strictEqual(P.parseTableAt(lines, 0).start, 1);
+  assert.strictEqual(P.parseTableAt(["foo", "bar", "baz"], 1), null);
+});
+
 console.log(`mdm.test: ${n} passed`);

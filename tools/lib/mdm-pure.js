@@ -61,7 +61,48 @@
     return [...refs];
   }
 
-  const api = { slugify, parseFrontMatter, isRelativeRef, collectRefs };
+  /** 解析光标所在行的 Markdown 表格 → {start,end,grid,cols}；不在表格内返回 null */
+  function parseTableAt(lines, idx) {
+    const isRow = (l) => /^\s*\|.*\|\s*$/.test(String(l || ""));
+    const isSep = (l) => /^\s*\|[\s:|-]+\|\s*$/.test(String(l || "")) && /-/.test(String(l));
+    if (!isRow(lines[idx]) && !isRow(lines[idx - 1]) && !isRow(lines[idx + 1])) return null;
+    let start = isRow(lines[idx]) ? idx : isRow(lines[idx + 1]) ? idx + 1 : idx - 1;
+    let end = start;
+    while (start > 0 && isRow(lines[start - 1])) start--;
+    while (end < lines.length - 1 && isRow(lines[end + 1])) end++;
+    const grid = [];
+    for (let i = start; i <= end; i++) {
+      if (isSep(lines[i])) continue;
+      const cells = String(lines[i])
+        .trim()
+        .replace(/^\|/, "")
+        .replace(/\|$/, "")
+        .split("|")
+        .map((c) => c.trim());
+      grid.push(cells);
+    }
+    if (!grid.length) return null;
+    const cols = Math.max(...grid.map((r) => r.length));
+    for (const r of grid) while (r.length < cols) r.push("");
+    return { start, end, grid, cols };
+  }
+
+  /** 由二维数组生成 Markdown 表格（首行为表头） */
+  function buildTable(grid) {
+    if (!grid || !grid.length) return "";
+    const cols = Math.max(...grid.map((r) => r.length));
+    const pad = (r) => {
+      const c = [...r];
+      while (c.length < cols) c.push("");
+      return c;
+    };
+    const head = pad(grid[0]);
+    const out = [`| ${head.join(" | ")} |`, `| ${head.map(() => "---").join(" | ")} |`];
+    for (let i = 1; i < grid.length; i++) out.push(`| ${pad(grid[i]).join(" | ")} |`);
+    return out.join("\n");
+  }
+
+  const api = { slugify, parseFrontMatter, isRelativeRef, collectRefs, parseTableAt, buildTable };
   if (typeof window !== "undefined") window.DevToolsMdmPure = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })();
