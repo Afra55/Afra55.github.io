@@ -107,4 +107,15 @@ t("表格对齐与无表头", () => {
   );
 });
 
+t("搜索语法 tag:/cat:", () => {
+  const a = P.parseSearch("tag:工作 报告");
+  assert.deepStrictEqual(a.tags, ["工作"]);
+  assert.strictEqual(a.q, "报告");
+  const b = P.parseSearch("cat:笔记 tag:\"a b\"");
+  assert.deepStrictEqual(b.cats, ["笔记"]);
+  assert.deepStrictEqual(b.tags, ["a b"]);
+  assert.strictEqual(b.q, "");
+  assert.strictEqual(P.parseSearch("普通搜索").q, "普通搜索");
+});
+
 console.log(`mdm.test: ${n} passed`);

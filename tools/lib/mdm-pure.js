@@ -175,6 +175,23 @@
     return { text: out, count };
   }
 
+  /** 解析搜索串：支持 tag:xxx / cat:xxx（也接受 标签:/分类:），返回 { q, tags, cats } */
+  function parseSearch(raw) {
+    const s = String(raw || "").trim();
+    const tags = [];
+    const cats = [];
+    const rest = s
+      .replace(/(^|\s)(tag|cat|标签|分类):("[^"]*"|\S+)/gi, (m, sp, kind, val) => {
+        const v = String(val).replace(/^"|"$/g, "").toLowerCase();
+        if (!v) return sp;
+        if (/^(tag|标签)$/i.test(kind)) tags.push(v);
+        else cats.push(v);
+        return sp;
+      })
+      .trim();
+    return { q: rest.toLowerCase(), tags, cats };
+  }
+
   const api = {
     slugify,
     parseFrontMatter,
@@ -183,6 +200,7 @@
     parseTableAt,
     buildTable,
     replaceDocRefs,
+    parseSearch,
   };
   if (typeof window !== "undefined") window.DevToolsMdmPure = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;

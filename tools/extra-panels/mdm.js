@@ -136,6 +136,7 @@
     selected: new Set(),
     dragFromHandle: false,
     conflictItem: null,
+    lastDeleted: null,
     keys: { bold: "Mod-b", italic: "Mod-i", link: "Mod-k" },
     trashMode: false,
     trashEntries: [],
@@ -186,6 +187,7 @@
   bindPanel("mdm", () => {
     const els = {
       pickDir: $("#mdm-pick-dir"),
+      useIdb: $("#mdm-use-idb"),
       newBtn: $("#mdm-new"),
       importBtn: $("#mdm-import"),
       importDirBtn: $("#mdm-import-dir"),
@@ -468,8 +470,10 @@
         tag.name = v;
       }
       await saveIndexToStorage();
+      const n = await refreshFrontMatter(state.index.items.filter((it) => (it.tagIds || []).includes(id)));
       renderSidebar();
       renderMeta();
+      if (n) toast(`已同步 ${n} 篇文档的标签`);
     }
 
     async function manageCat(id) {
@@ -479,6 +483,7 @@
       if (name === null) return;
       const v = name.trim();
       if (!v || v === cat.name) return;
+      const affected = state.index.items.filter((it) => it.catId === id);
       if (v === "-") {
         if (!window.confirm(`删除分类「${cat.name}」？其文档会变为未分类`)) return;
         state.index.cats = state.index.cats.filter((c) => c.id !== id);
@@ -488,18 +493,37 @@
         cat.name = v;
       }
       await saveIndexToStorage();
+      const n = await refreshFrontMatter(affected);
       renderSidebar();
       renderMeta();
+      if (n) toast(`已同步 ${n} 篇文档的分类`);
+    }
+
+    /** 解析搜索串：支持 tag:xxx / cat:xxx（也接受 标签:/分类:），其余为正文关键词 */
+    function parseSearch(raw) {
+      if (MP.parseSearch) return MP.parseSearch(raw);
+      const s = String(raw || "").trim();
+      return { q: s.toLowerCase(), tags: [], cats: [] };
     }
 
     // ---- rendering: sidebar ----
     function filteredItems() {
-      const q = state.search.trim().toLowerCase();
+      const { q, tags, cats } = parseSearch(state.search);
       const ft = state.searchMatches;
       return (state.index.items || [])
         .filter((it) => {
           if (state.activeCat !== "all" && it.catId !== state.activeCat) return false;
           if (state.activeTag && !(it.tagIds || []).includes(state.activeTag)) return false;
+          if (cats.length) {
+            const name = (state.index.cats.find((c) => c.id === it.catId)?.name || "").toLowerCase();
+            if (!cats.some((c) => name.includes(c))) return false;
+          }
+          if (tags.length) {
+            const names = (it.tagIds || []).map((t) =>
+              String(state.index.tags.find((x) => x.id === t)?.name || "").toLowerCase()
+            );
+            if (!tags.every((t) => names.some((n) => n.includes(t)))) return false;
+          }
           if (q) {
             const hay = `${it.title} ${it.excerpt || ""}`.toLowerCase();
             if (!hay.includes(q) && !(ft && ft.has(it.id))) return false;
@@ -585,7 +609,7 @@
     }
     function scheduleFullTextSearch() {
       window.clearTimeout(state.ftTimer);
-      const q = state.search.trim().toLowerCase();
+      const q = parseSearch(state.search).q;
       if (q.length < 2) {
         state.searchMatches = null;
         renderSidebar();
@@ -715,6 +739,11 @@
         els.importDirBtn.disabled = !dirOnly;
         els.importDirBtn.title = dirOnly ? "" : "仅「文件夹」模式可用";
       }
+      if (els.useIdb) {
+        els.useIdb.disabled = state.mode === "idb";
+        els.useIdb.title = state.mode === "idb" ? "当前已在本地存储模式" : "改用浏览器本地存储（不写文件夹）";
+      }
+      if (els.pickDir && state.mode === "idb") els.pickDir.textContent = "改用文件夹";
       const rescan = els.insertDropdown?.querySelector('[data-insert="rescan"]');
       if (rescan) {
         rescan.disabled = !dirOnly;
@@ -756,15 +785,20 @@
     }
 
     function itemHtml(it) {
-      const q = state.search.trim().toLowerCase();
+      const q = parseSearch(state.search).q;
       const cat = state.index.cats.find((c) => c.id === it.catId);
       const tags = (it.tagIds || [])
         .map((tid) => state.index.tags.find((t) => t.id === tid)?.name)
         .filter(Boolean)
         .map((n) => `#${escapeHtml(n)}`)
         .join(" ");
-      return `<button type="button" class="mdm-item${it.id === state.currentId ? " is-active" : ""}${state.selected.has(it.id) ? " is-selected" : ""}" data-id="${escapeHtml(it.id)}" draggable="true">
-        <span class="mdm-drag-handle" title="拖动排序" aria-hidden="true">⋮⋮</span>
+      const canDrag = state.sort === "order";
+      return `<button type="button" class="mdm-item${it.id === state.currentId ? " is-active" : ""}${state.selected.has(it.id) ? " is-selected" : ""}" data-id="${escapeHtml(it.id)}" draggable="${canDrag}">
+        ${
+          canDrag
+            ? `<span class="mdm-drag-handle" title="拖动排序" aria-hidden="true">⋮⋮</span>`
+            : `<span class="mdm-drag-handle is-off" aria-hidden="true"></span>`
+        }
         <span class="mdm-item-body">
           <span class="mdm-item-title">${hl(it.title || "未命名", q)}</span>
           <span class="mdm-item-meta hint tight">${cat ? escapeHtml(cat.name) + " · " : ""}${tags}</span>
@@ -1097,6 +1131,12 @@
 
     document.addEventListener("keydown", (e) => {
       if (e.key === "Escape" && els.modal && !els.modal.hidden) closeModal();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.shiftKey || String(e.key).toLowerCase() !== "z") return;
+      const t = e.target;
+      if (t && (t.closest?.(".cm-editor") || t.tagName === "INPUT" || t.tagName === "TEXTAREA")) return;
+      if (state.lastDeleted && undoDelete()) e.preventDefault();
     });
 
     function openTableEditor() {
@@ -2158,12 +2198,37 @@
         node.nodeValue = node.nodeValue.slice(m[0].length);
         const cb = document.createElement("input");
         cb.type = "checkbox";
-        cb.disabled = true;
         cb.checked = m[1].toLowerCase() === "x";
         cb.className = "mdm-task-cb";
+        cb.title = "点击切换完成状态";
         holder.insertBefore(cb, holder.firstChild);
         li.classList.add("mdm-task");
       });
+    }
+
+    /** 预览里点击任务复选框 → 回写编辑器里第 n 个 `- [ ]` 状态 */
+    function toggleTaskCheckbox(cb) {
+      const view = state.view;
+      if (!view || !els.preview) return;
+      const all = [...els.preview.querySelectorAll("input.mdm-task-cb")];
+      const n = all.indexOf(cb);
+      if (n < 0) return;
+      const text = getEditorText();
+      const re = /^(\s*(?:[-*+]|\d+[.)])\s+)\[([ xX])\]/gm;
+      let i = 0;
+      let m;
+      let target = null;
+      while ((m = re.exec(text))) {
+        if (i === n) {
+          target = m;
+          break;
+        }
+        i++;
+      }
+      if (!target) return;
+      const at = target.index + target[1].length + 1;
+      const next = String(text[at]).toLowerCase() === "x" ? " " : "x";
+      view.dispatch({ changes: { from: at, to: at + 1, insert: next } });
     }
 
     function renderOutline() {
@@ -2420,9 +2485,14 @@
     async function deleteItemById(item) {
       if (!item) return;
       if (!window.confirm(`删除「${item.title}」？（会移入回收站，可恢复）`)) return;
+      let raw = "";
+      try {
+        raw = await readDocText(item);
+      } catch (_) {}
       try {
         await trashDoc(item);
       } catch (_) {}
+      state.lastDeleted = { item: { ...item }, raw };
       state.index.items = state.index.items.filter((x) => x.id !== item.id);
       state.bodyCache.delete(item.id);
       state.persistedIdx.delete(item.id);
@@ -2440,7 +2510,23 @@
       renderSidebar();
       updateSaveBtn();
       await saveIndexToStorage();
-      toast("已删除");
+      toast("已删除（Ctrl+Z 撤销）");
+    }
+
+    /** 撤销最近一次删除（Ctrl+Z） */
+    async function undoDelete() {
+      const rec = state.lastDeleted;
+      if (!rec) return false;
+      state.lastDeleted = null;
+      try {
+        await writeDocText(rec.item, rec.raw);
+      } catch (_) {}
+      state.index.items.push(rec.item);
+      normalizeOrders();
+      await saveIndexToStorage();
+      renderSidebar();
+      toast(`已恢复「${rec.item.title}」`);
+      return true;
     }
 
     async function deleteCurrent() {
@@ -2820,6 +2906,24 @@
       return `---\n${head}\n---\n\n${String(body || "").replace(/^\s*\n+/, "")}`;
     }
 
+    /** 分类/标签改名后，把受影响文档的 front-matter 重写为新名（仅原本就有 front-matter 的文件） */
+    async function refreshFrontMatter(items) {
+      let n = 0;
+      for (const it of items) {
+        try {
+          const raw = await readDocText(it);
+          const fm = parseFrontMatter(raw);
+          if (!/^\uFEFF?---\r?\n/.test(String(raw))) continue;
+          await writeDocText(it, buildFrontMatterBlock({ ...it, fmHead: fm.head }, fm.body));
+          state.bodyCache.set(it.id, fm.body);
+          state.persistedIdx.delete(it.id);
+          it.updatedAt = Date.now();
+          n++;
+        } catch (_) {}
+      }
+      return n;
+    }
+
     function parseFrontMatter(text) {
       if (MP.parseFrontMatter) return MP.parseFrontMatter(text);
       const m = String(text || "").match(/^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
@@ -3101,6 +3205,13 @@ a{color:${v.accent}}
 
     // ---- events ----
     els.pickDir?.addEventListener("click", () => void pickDir());
+    els.useIdb?.addEventListener("click", () => {
+      if (state.mode === "idb") return;
+      const ok = window.confirm(
+        "切换到「浏览器本地存储」模式？\n\n文档会存在浏览器里（不写入文件夹），适合没有文件夹权限或想快速试用。可随时点「改用文件夹」切回。"
+      );
+      if (ok) void useIdbMode();
+    });
     els.newBtn?.addEventListener("click", newDoc);
     els.save?.addEventListener("click", () => void saveCurrent());
     els.del?.addEventListener("click", () => void deleteCurrent());
@@ -3213,6 +3324,11 @@ a{color:${v.accent}}
       els.list?.querySelectorAll(".is-drop-target,.is-dragging").forEach((el) => el.classList.remove("is-drop-target", "is-dragging"));
       if (!b || !dragId) return;
       e.preventDefault();
+      if (state.sort !== "order") {
+        dragId = "";
+        toast("拖拽排序仅在「自定义顺序」下可用");
+        return;
+      }
       const targetId = b.dataset.id;
       const from = dragId;
       dragId = "";
@@ -3232,7 +3348,7 @@ a{color:${v.accent}}
       let dragging = false;
       let startY = 0;
       list.addEventListener("pointerdown", (e) => {
-        if (e.pointerType !== "touch") return;
+        if (e.pointerType !== "touch" || state.sort !== "order") return;
         const b = e.target.closest?.("[data-id]");
         if (!b) return;
         touchId = b.dataset.id;
@@ -3318,7 +3434,14 @@ a{color:${v.accent}}
         for (const id of ids) {
           const it = findItem(id);
           if (it) {
-            try { await trashDoc(it); } catch (_) {}
+            let raw = "";
+            try {
+              raw = await readDocText(it);
+            } catch (_) {}
+            try {
+              await trashDoc(it);
+            } catch (_) {}
+            state.lastDeleted = { item: { ...it }, raw };
             state.bodyCache.delete(id);
             state.persistedIdx.delete(id);
           }
@@ -3406,6 +3529,12 @@ a{color:${v.accent}}
       if (e.key === "Enter" || e.key === " ") outlineGo(e);
     });
     els.preview?.addEventListener("click", (e) => {
+      const cb = e.target.closest?.("input.mdm-task-cb");
+      if (cb) {
+        e.preventDefault();
+        toggleTaskCheckbox(cb);
+        return;
+      }
       const a = e.target.closest?.("a[data-mdm-open]");
       if (!a) return;
       e.preventDefault();
