@@ -10,6 +10,7 @@
   const DIR_KEY = "mdm-dir-handle";
   const BASE_KEY = "devtools-mdm-base";
   const TOKEN_KEY = "devtools-mdm-token";
+  const SPLIT_KEY = "devtools-mdm-split";
   const DEFAULT_BASE = "http://127.0.0.1:17888";
   const DEFAULT_TOKEN = "devtools-bridge";
   const INDEX_FILE = "mdindex.json";
@@ -104,7 +105,12 @@
     activeTag: "",
     viewMode: "edit",
     previewTimer: 0,
+    splitRatio: 0.5,
   };
+  try {
+    const r = Number(localStorage.getItem("devtools-mdm-split"));
+    if (r >= 0.15 && r <= 0.85) state.splitRatio = r;
+  } catch (_) {}
 
   function emptyIndex() {
     return { version: 1, cats: [], tags: [], items: [] };
@@ -148,6 +154,7 @@
       del: $("#mdm-delete"),
       editorWrap: $("#mdm-editor-wrap"),
       editor: $("#mdm-editor"),
+      splitter: $("#mdm-splitter"),
       preview: $("#mdm-preview"),
       empty: $("#mdm-empty"),
       outline: $("#mdm-outline"),
@@ -219,7 +226,20 @@
           alt: ["paragraph", "reference", "blockquote", "list"],
         });
       } catch (_) {}
+      try {
+        if (typeof window.markdownItKatex === "function") md.use(window.markdownItKatex);
+      } catch (_) {}
       return md;
+    }
+
+    /** 注入 KaTeX 样式（字体相对 CSS 解析） */
+    function ensureKatexCss() {
+      if (document.getElementById("mdm-katex-css")) return;
+      const link = document.createElement("link");
+      link.id = "mdm-katex-css";
+      link.rel = "stylesheet";
+      link.href = `./vendor/katex/katex.min.css?v=${encodeURIComponent(window.TOOLS_BUILD || "")}`;
+      document.head.appendChild(link);
     }
 
     function renderMarkdown(text) {
@@ -534,6 +554,164 @@
         a.setAttribute("rel", "noopener noreferrer");
       });
       applyTaskLists(els.preview);
+      void resolvePreviewImages();
+      void renderMermaidBlocks();
+    }
+
+    // ---- 本地图片（存在所选文件夹里，相对路径引用） ----
+    const imgUrlCache = new Map();
+    function blobToDataUrl(blob) {
+      return new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(String(r.result || ""));
+        r.onerror = () => reject(r.error);
+        r.readAsDataURL(blob);
+      });
+    }
+    async function readAssetBlob(rel) {
+      const parts = String(rel || "").split("/").filter((p) => p && p !== ".");
+      if (!parts.length) throw new Error("空路径");
+      let dir = state.dirHandle;
+      for (let i = 0; i < parts.length - 1; i++) dir = await dir.getDirectoryHandle(parts[i]);
+      const fh = await dir.getFileHandle(parts[parts.length - 1]);
+      return await fh.getFile();
+    }
+    async function resolvePreviewImages() {
+      if (state.mode !== "dir" || !state.dirHandle || !els.preview) return;
+      const imgs = [...els.preview.querySelectorAll("img")].filter((im) => {
+        const s = im.getAttribute("src") || "";
+        return s && !/^(https?:|data:|blob:)/i.test(s);
+      });
+      for (const im of imgs) {
+        const rel = (im.getAttribute("src") || "").replace(/^\.\//, "");
+        if (imgUrlCache.has(rel)) {
+          im.src = imgUrlCache.get(rel);
+          continue;
+        }
+        try {
+          const blob = await readAssetBlob(rel);
+          const url = URL.createObjectURL(blob);
+          imgUrlCache.set(rel, url);
+          im.src = url;
+        } catch (_) {
+          im.classList.add("mdm-img-missing");
+          im.alt = im.alt || `图片缺失：${rel}`;
+        }
+      }
+    }
+    async function inlineImagesForExport(html) {
+      if (state.mode !== "dir" || !state.dirHandle) return html;
+      let root;
+      try {
+        root = new DOMParser().parseFromString(`<div id="__mdmroot">${html}</div>`, "text/html").getElementById("__mdmroot");
+      } catch (_) {
+        return html;
+      }
+      if (!root) return html;
+      for (const im of [...root.querySelectorAll("img")]) {
+        const rel = (im.getAttribute("src") || "").replace(/^\.\//, "");
+        if (!rel || /^(https?:|data:|blob:)/i.test(rel)) continue;
+        try {
+          im.setAttribute("src", await blobToDataUrl(await readAssetBlob(rel)));
+        } catch (_) {}
+      }
+      return root.innerHTML;
+    }
+
+    // ---- Mermaid（按需懒加载，5MB+ 只在出现 mermaid 代码块时加载） ----
+    let mermaidLoading = null;
+    async function renderMermaidBlocks() {
+      if (!els.preview) return;
+      const codes = [...els.preview.querySelectorAll("pre > code.language-mermaid, code.language-mermaid")];
+      if (!codes.length) return;
+      if (!window.mermaid) {
+        try {
+          if (!mermaidLoading) mermaidLoading = window.DevToolsLazy?.loadVendor?.("mermaid");
+          await mermaidLoading;
+        } catch (_) {
+          return;
+        }
+      }
+      if (!window.mermaid) return;
+      try {
+        window.mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: "strict",
+          theme: document.documentElement.dataset.themeScheme === "light" ? "default" : "dark",
+        });
+      } catch (_) {}
+      for (const code of codes) {
+        const pre = code.closest("pre") || code.parentElement;
+        const src = code.textContent || "";
+        try {
+          const { svg } = await window.mermaid.render(`mmd${Math.random().toString(36).slice(2, 9)}`, src);
+          const div = document.createElement("div");
+          div.className = "mdm-mermaid";
+          div.innerHTML = svg;
+          pre.replaceWith(div);
+        } catch (_) {
+          pre.classList.add("mdm-mermaid-error");
+        }
+      }
+    }
+
+    // ---- 编辑器内插入图片：粘贴/拖入图片 → 存到 assets/ → 插入相对路径 ----
+    function bindEditorMedia() {
+      const view = state.view;
+      if (!view) return;
+      const dom = view.dom;
+      const insertImage = async (file) => {
+        if (state.mode !== "dir" || !state.dirHandle) {
+          setErr("插入图片需要先「选择文件夹」（图片会存到该文件夹的 assets/ 子目录）");
+          return;
+        }
+        try {
+          const ext = (String(file.name || "img").split(".").pop() || "png").toLowerCase();
+          const name = `${Date.now().toString(36)}-${slugify(String(file.name || "img").replace(/\.[^.]+$/, ""), "img")}.${ext}`;
+          const dir = await state.dirHandle.getDirectoryHandle("assets", { create: true });
+          const fh = await dir.getFileHandle(name, { create: true });
+          const w = await fh.createWritable();
+          await w.write(file);
+          await w.close();
+          const alt = String(file.name || "图片").replace(/\.[^.]+$/, "");
+          view.dispatch(view.state.replaceSelection(`![${alt}](assets/${name})`));
+          toast("已插入图片");
+        } catch (err) {
+          setErr(`插入图片失败：${err.message || err}`);
+        }
+      };
+      const takeImages = (files) => {
+        const imgs = [...(files || [])].filter(
+          (f) => /^image\//.test(f.type || "") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name || "")
+        );
+        imgs.forEach((f) => void insertImage(f));
+        return imgs.length > 0;
+      };
+      dom.addEventListener(
+        "paste",
+        (e) => {
+          const files = [];
+          for (const it of e.clipboardData?.items || []) {
+            if (it.kind === "file") {
+              const f = it.getAsFile?.();
+              if (f) files.push(f);
+            }
+          }
+          if (takeImages(files)) e.preventDefault();
+        },
+        true
+      );
+      dom.addEventListener(
+        "drop",
+        (e) => {
+          const files = [...(e.dataTransfer?.files || [])];
+          if (takeImages(files)) {
+            e.preventDefault();
+            e.stopPropagation();
+          }
+        },
+        true
+      );
     }
 
     /** `- [ ]` / `- [x]` → 复选框（markdown-it 默认不支持任务列表） */
@@ -570,15 +748,56 @@
         : "";
     }
 
+    function applySplit() {
+      const wrap = els.editorWrap;
+      if (!wrap) return;
+      if (state.viewMode === "split") {
+        const r = Math.max(0.15, Math.min(0.85, state.splitRatio));
+        wrap.style.gridTemplateColumns = `${(r * 100).toFixed(2)}% 6px minmax(0, 1fr)`;
+      } else {
+        wrap.style.gridTemplateColumns = "";
+      }
+    }
+
     function applyViewMode() {
       const wrap = els.editorWrap;
       if (!wrap) return;
       wrap.dataset.mode = state.viewMode;
       [els.modeEdit, els.modeSplit, els.modePreview].forEach((b) => b?.classList.remove("is-active"));
       ({ edit: els.modeEdit, split: els.modeSplit, preview: els.modePreview }[state.viewMode] || els.modeEdit)?.classList.add("is-active");
+      applySplit();
       if (state.viewMode !== "edit") renderPreview();
       if (state.viewMode !== "edit") renderOutline();
+      CMresize();
     }
+
+    (function bindSplitter() {
+      const sp = els.splitter;
+      const wrap = els.editorWrap;
+      if (!sp || !wrap) return;
+      let dragging = false;
+      const onMove = (e) => {
+        if (!dragging) return;
+        e.preventDefault();
+        const rect = wrap.getBoundingClientRect();
+        if (!rect.width) return;
+        state.splitRatio = Math.max(0.15, Math.min(0.85, (e.clientX - rect.left) / rect.width));
+        applySplit();
+      };
+      const onUp = () => {
+        if (!dragging) return;
+        dragging = false;
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        try { localStorage.setItem(SPLIT_KEY, String(state.splitRatio)); } catch (_) {}
+      };
+      sp.addEventListener("pointerdown", (e) => {
+        dragging = true;
+        document.addEventListener("pointermove", onMove);
+        document.addEventListener("pointerup", onUp);
+        e.preventDefault();
+      });
+    })();
 
     // ---- current doc ----
     async function openDoc(id) {
@@ -789,7 +1008,7 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       if (!item) return;
       const text = getEditorText();
       const title = item.title || "document";
-      const html = renderMarkdown(text);
+      const html = await inlineImagesForExport(renderMarkdown(text));
       try {
         if (fmt === "md") {
           const fm = `---\ntitle: ${title}\ncategory: ${state.index.cats.find((c) => c.id === item.catId)?.name || ""}\ntags: [${(item.tagIds || []).map((t) => state.index.tags.find((x) => x.id === t)?.name).filter(Boolean).join(", ")}]\n---\n\n`;
@@ -901,6 +1120,8 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       updateSaveBtn();
       els.empty && (els.empty.hidden = Boolean(state.currentId));
       ensureEditor();
+      ensureKatexCss();
+      bindEditorMedia();
       if (state.view && CMresize) CMresize();
       toast(`已连接：${label}`);
     }

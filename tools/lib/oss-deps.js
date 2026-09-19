@@ -54,6 +54,22 @@
             path: "tools/vendor/cm6/cm6.bundle.js",
           },
           {
+            name: "KaTeX (+ @vscode/markdown-it-katex)",
+            version: "0.16.x",
+            license: "MIT",
+            repo: "https://github.com/KaTeX/KaTeX",
+            usedIn: "Markdown 文档管理 · 数学公式",
+            path: "tools/vendor/katex/",
+          },
+          {
+            name: "Mermaid",
+            version: "11.x",
+            license: "MIT",
+            repo: "https://github.com/mermaid-js/mermaid",
+            usedIn: "Markdown 文档管理 · 图表（按需加载）",
+            path: "tools/vendor/mermaid/mermaid.min.js",
+          },
+          {
             name: "JSZip (+ pako)",
             version: "3.10.1",
             license: "MIT / GPLv3",

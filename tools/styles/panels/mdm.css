@@ -67,15 +67,23 @@
 .mdm-main { display: flex; flex-direction: column; }
 .mdm-main-toolbar { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.55rem; border-bottom: 1px solid var(--line); }
 .mdm-title { flex: 1 1 auto; min-width: 0; padding: 0.35rem 0.5rem; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 0.9rem; }
-.mdm-editor-wrap { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; }
-.mdm-editor-wrap[data-mode="edit"] { grid-template-columns: 1fr; }
+.mdm-editor-wrap { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1fr; }
 .mdm-editor-wrap[data-mode="edit"] .mdm-preview { display: none; }
-.mdm-editor-wrap[data-mode="preview"] { grid-template-columns: 1fr; }
+.mdm-editor-wrap[data-mode="edit"] .mdm-splitter { display: none; }
 .mdm-editor-wrap[data-mode="preview"] .mdm-editor { display: none; }
-.mdm-editor { overflow: auto; min-height: 0; border-right: 1px solid var(--line); }
-.mdm-editor-wrap[data-mode="edit"] .mdm-editor { border-right: none; }
+.mdm-editor-wrap[data-mode="preview"] .mdm-splitter { display: none; }
+.mdm-editor { overflow: auto; min-height: 0; }
 .mdm-editor .cm-editor { height: 100%; }
 .mdm-editor .cm-scroller { overflow: auto; }
+.mdm-splitter {
+  display: none;
+  cursor: col-resize;
+  touch-action: none;
+  border-radius: 6px;
+  background: linear-gradient(var(--line), var(--line)) center / 2px 100% no-repeat;
+}
+.mdm-editor-wrap[data-mode="split"] .mdm-splitter { display: block; }
+.mdm-splitter:hover { background: linear-gradient(var(--accent), var(--accent)) center / 3px 100% no-repeat; }
 .mdm-preview { overflow: auto; min-height: 0; padding: 0.8rem 1rem; }
 .mdm-empty-hint { padding: 0 0.6rem 0.5rem; }
 
@@ -99,6 +107,11 @@
 .markdown-body a { color: var(--accent); }
 .markdown-body li.mdm-task { list-style: none; margin-left: -1.1em; }
 .markdown-body .mdm-task-cb { margin-right: 0.4em; accent-color: var(--accent); vertical-align: middle; }
+.markdown-body .mdm-mermaid { margin: 0.6rem 0; overflow: auto; text-align: center; }
+.markdown-body .mdm-mermaid svg { max-width: 100%; height: auto; }
+.markdown-body .mdm-mermaid-error { border: 1px solid var(--line); border-left: 3px solid #e06c75; }
+.markdown-body img.mdm-img-missing { min-height: 28px; border: 1px dashed var(--line); }
+.markdown-body .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.2rem 0; }
 
 /* highlight.js 主题（github 精简版） */
 .hljs { color: #24292e; }
