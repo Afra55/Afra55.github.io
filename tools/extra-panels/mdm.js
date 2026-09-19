@@ -122,13 +122,19 @@
     ftTimer: 0,
     searchMatches: null,
     bodyCache: new Map(),
+    persistedIdx: new Map(),
     mermaidCache: new Map(),
     warmCap: (() => {
-      const n = Number(localStorage.getItem("devtools-mdm-warmcap"));
-      return Number.isFinite(n) && n >= 0 ? n : 3000;
+      try {
+        const n = Number(localStorage.getItem("devtools-mdm-warmcap"));
+        return Number.isFinite(n) && n >= 0 ? n : 3000;
+      } catch (_) {
+        return 3000;
+      }
     })(),
     syncing: false,
     selected: new Set(),
+    dragFromHandle: false,
     conflictItem: null,
     keys: { bold: "Mod-b", italic: "Mod-i", link: "Mod-k" },
     trashMode: false,
@@ -543,7 +549,10 @@
         }
       };
       Promise.all(Array.from({ length: 2 }, worker))
-        .then(() => persistSearchIdx())
+        .then(() => {
+          renderBacklinks();
+          return persistSearchIdx();
+        })
         .catch(() => {});
     }
 
@@ -553,7 +562,8 @@
       try {
         const obj = {};
         let bytes = 0;
-        for (const [id, text] of state.bodyCache) {
+        const merged = new Map([...state.persistedIdx, ...state.bodyCache]);
+        for (const [id, text] of merged) {
           const t = String(text || "");
           if (!t) continue;
           bytes += t.length;
@@ -569,7 +579,7 @@
         if (!rec || rec.v !== 1 || !rec.map) return;
         const ids = new Set((state.index.items || []).map((x) => x.id));
         for (const [id, text] of Object.entries(rec.map)) {
-          if (ids.has(id) && !state.bodyCache.has(id)) state.bodyCache.set(id, text);
+          if (ids.has(id)) state.persistedIdx.set(id, text);
         }
       } catch (_) {}
     }
@@ -588,8 +598,9 @@
       const matched = new Set();
       const need = [];
       for (const it of items) {
-        if (state.bodyCache.has(it.id)) {
-          if (state.bodyCache.get(it.id).toLowerCase().includes(q)) matched.add(it.id);
+        const cached = state.bodyCache.has(it.id) ? state.bodyCache.get(it.id) : state.persistedIdx.get(it.id);
+        if (cached != null) {
+          if (String(cached).toLowerCase().includes(q)) matched.add(it.id);
         } else need.push(it);
       }
       if (need.length) {
@@ -1018,6 +1029,10 @@
       els.modalBox.innerHTML = "";
     }
 
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && els.modal && !els.modal.hidden) closeModal();
+    });
+
     function openTableEditor() {
       const view = state.view;
       if (!view) return;
@@ -1069,6 +1084,9 @@
       };
       render();
       els.modal.hidden = false;
+      els.modal.onclick = (e) => {
+        if (e.target === els.modal) closeModal();
+      };
       box.onclick = (e) => {
         const b = e.target.closest?.("[data-mdl]");
         if (!b) return;
@@ -2086,7 +2104,7 @@
       const hits = [];
       for (const it of state.index.items || []) {
         if (it.id === cur.id) continue;
-        const text = state.bodyCache.get(it.id);
+        const text = state.bodyCache.has(it.id) ? state.bodyCache.get(it.id) : state.persistedIdx.get(it.id);
         if (text == null) continue;
         if (collectReferencedAssets(text).some((r) => r.split("/").pop() === target)) hits.push(it);
       }
@@ -2268,6 +2286,8 @@
         await writeDocText(item, full);
         await saveIndexToStorage();
         state.bodyCache.set(item.id, text);
+        state.persistedIdx.delete(item.id);
+        renderBacklinks();
         try { mdmChannel?.postMessage({ type: "saved", mode: state.mode }); } catch (_) {}
         state.dirty = false;
         updateSaveBtn();
@@ -2300,6 +2320,7 @@
       } catch (_) {}
       state.index.items = state.index.items.filter((x) => x.id !== item.id);
       state.bodyCache.delete(item.id);
+      state.persistedIdx.delete(item.id);
       state.searchMatches = null;
       normalizeOrders();
       if (state.currentId === item.id) {
@@ -2487,7 +2508,6 @@
       if (els.exportBtn) els.exportBtn.disabled = !has;
       if (els.exportFmt) els.exportFmt.disabled = !has;
       if (els.del) els.del.disabled = !has;
-      if (els.insertImg) els.insertImg.disabled = !has;
     }
 
     // ---- 分类 / 标签 ----
@@ -2934,6 +2954,8 @@ a{color:${v.accent}}
 
     async function initAfterStorage(label) {
       setErr("");
+      state.bodyCache.clear();
+      state.persistedIdx.clear();
       state.index = await loadIndexFromStorage();
       if (!state.index || typeof state.index !== "object") state.index = emptyIndex();
       state.index.cats = state.index.cats || [];
@@ -3190,6 +3212,7 @@ a{color:${v.accent}}
           if (it) {
             try { await trashDoc(it); } catch (_) {}
             state.bodyCache.delete(id);
+            state.persistedIdx.delete(id);
           }
         }
         const sel = new Set(ids);
