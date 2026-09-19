@@ -124,6 +124,10 @@
     conflictItem: null,
     trashMode: false,
     trashEntries: [],
+    historyMode: false,
+    historyEntries: [],
+    historyItem: null,
+    lastSnap: new Map(),
     splitRatio: 0.5,
   };
   try {
@@ -187,6 +191,7 @@
       fileInput: $("#mdm-file-input"),
       insertToggle: $("#mdm-insert-toggle"),
       insertDropdown: $("#mdm-insert-dropdown"),
+      imgCompress: $("#mdm-img-compress"),
       saveStatus: $("#mdm-save-status"),
       docStats: $("#mdm-doc-stats"),
       cat: $("#mdm-cat"),
@@ -516,6 +521,29 @@
                   )
                   .join("")
               : `<span class="hint tight">回收站为空</span>`);
+        }
+        if (els.batchbar) els.batchbar.hidden = true;
+        return;
+      }
+      if (state.historyMode) {
+        if (els.cats) els.cats.innerHTML = "";
+        if (els.tags) els.tags.innerHTML = "";
+        if (els.list) {
+          els.list.innerHTML =
+            `<div class="mdm-group-title">历史版本 (${state.historyEntries.length})</div>` +
+            `<div class="mdm-trash-actions"><button type="button" class="ghost-btn" data-hist="back">返回文档</button></div>` +
+            (state.historyEntries.length
+              ? state.historyEntries
+                  .map(
+                    (n) =>
+                      `<div class="mdm-item" data-hist-row><span class="mdm-item-title">${escapeHtml(
+                        new Date(Number(String(n).replace(/\.md$/, "")) || 0).toLocaleString()
+                      )}</span><span class="mdm-item-meta"><button type="button" class="ghost-btn" data-hist-restore="${escapeHtml(
+                        n
+                      )}">恢复</button></span></div>`
+                  )
+                  .join("")
+              : `<span class="hint tight">暂无历史版本</span>`);
         }
         if (els.batchbar) els.batchbar.hidden = true;
         return;
@@ -938,6 +966,7 @@
 
     // ---- 编辑器内插入资源：图片/视频/音频/任意文件 → 存到 assets/ → 插入对应 Markdown ----
     async function saveAsset(file) {
+      file = await maybeCompressImage(file);
       const ext = (String(file.name || "file").split(".").pop() || "bin").toLowerCase();
       const base = slugify(String(file.name || "file").replace(/\.[^.]+$/, ""), "file");
       const name = `${Date.now().toString(36)}-${base}.${ext}`;
@@ -962,6 +991,34 @@
       if (/^video\//.test(mime) || /\.(mp4|webm|mov|m4v|ogv)$/i.test(label)) return `<video src="${rel}" controls playsinline></video>`;
       if (/^audio\//.test(mime) || /\.(mp3|wav|ogg|m4a|flac|aac)$/i.test(label)) return `<audio src="${rel}" controls></audio>`;
       return `[${label}](${rel})`;
+    }
+
+    async function maybeCompressImage(file) {
+      const on = els.imgCompress ? els.imgCompress.checked : true;
+      if (!on || !/^image\//.test(file.type || "")) return file;
+      if (/gif|svg/i.test(file.type || "")) return file;
+      if (typeof createImageBitmap !== "function") return file;
+      try {
+        const bmp = await createImageBitmap(file);
+        const maxW = 1600;
+        if (bmp.width <= maxW && file.size < 800 * 1024) {
+          bmp.close?.();
+          return file;
+        }
+        const scale = Math.min(1, maxW / bmp.width);
+        const w = Math.max(1, Math.round(bmp.width * scale));
+        const h = Math.max(1, Math.round(bmp.height * scale));
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext("2d").drawImage(bmp, 0, 0, w, h);
+        bmp.close?.();
+        const blob = await new Promise((r) => canvas.toBlob(r, "image/webp", 0.9));
+        if (!blob || blob.size >= file.size) return file;
+        return new File([blob], String(file.name || "img").replace(/\.[^.]+$/, "") + ".webp", { type: "image/webp" });
+      } catch (_) {
+        return file;
+      }
     }
 
     async function insertAssetFiles(files) {
@@ -1330,6 +1387,65 @@
       } catch (_) {}
     }
 
+    // ---- 版本历史（.history/<fileName>/<ts>.md，保留最近 20） ----
+    const SNAP_MIN_MS = 5 * 60 * 1000;
+    async function snapshotHistory(item) {
+      if (state.mode !== "dir" || !state.dirHandle) return;
+      if (Date.now() - (state.lastSnap.get(item.id) || 0) < SNAP_MIN_MS) return;
+      try {
+        const cur = await readDocText(item);
+        const root = await state.dirHandle.getDirectoryHandle(".history", { create: true });
+        const dir = await root.getDirectoryHandle(item.fileName, { create: true });
+        const fh = await dir.getFileHandle(`${Date.now()}.md`, { create: true });
+        const w = await fh.createWritable();
+        await w.write(cur);
+        await w.close();
+        const names = [];
+        for await (const [n, h] of dir.entries()) if (h.kind === "file") names.push(n);
+        names.sort();
+        while (names.length > 20) {
+          try {
+            await dir.removeEntry(names.shift());
+          } catch (_) {}
+        }
+        state.lastSnap.set(item.id, Date.now());
+      } catch (_) {}
+    }
+
+    async function openHistory(item) {
+      if (state.mode !== "dir" || !state.dirHandle || !item) {
+        setErr("历史版本仅「文件夹」模式可用");
+        return;
+      }
+      const entries = [];
+      try {
+        const root = await state.dirHandle.getDirectoryHandle(".history");
+        const dir = await root.getDirectoryHandle(item.fileName);
+        for await (const [n, h] of dir.entries()) if (h.kind === "file") entries.push(n);
+      } catch (_) {}
+      entries.sort().reverse();
+      state.historyEntries = entries;
+      state.historyMode = true;
+      state.historyItem = item;
+      renderSidebar();
+    }
+
+    async function restoreHistory(item, name) {
+      try {
+        const root = await state.dirHandle.getDirectoryHandle(".history");
+        const dir = await root.getDirectoryHandle(item.fileName);
+        const f = await (await dir.getFileHandle(name)).getFile();
+        setEditorText(await f.text());
+        state.dirty = true;
+        updateSaveBtn();
+        renderPreview();
+        renderOutline();
+        toast("已载入历史版本（保存后生效）");
+      } catch (err) {
+        setErr(`载入历史失败：${err.message || err}`);
+      }
+    }
+
     function hasRichHtml(html) {
       return /<(p|h[1-6]|ul|ol|li|table|thead|tbody|tr|td|th|strong|b|em|i|a\s|pre|code|blockquote|img|hr)\b/i.test(
         String(html || "")
@@ -1580,6 +1696,8 @@
       item.updatedAt = Date.now();
       item.size = new Blob([text]).size;
       item.excerpt = text.replace(/\s+/g, " ").trim().slice(0, 160);
+      // 版本快照（节流：每 5 分钟最多一次）
+      await snapshotHistory(item);
       // 冲突检测：文件被外部改过 → 暂停本次保存并提示（不静默覆盖）
       if (state.mode === "dir" && state.dirHandle && item.fileMtime) {
         try {
@@ -2506,6 +2624,17 @@ a{color:${v.accent}}
       const purge = e.target.closest?.("[data-trash-purge]");
       if (purge) {
         void purgeTrash(purge.dataset.trashPurge);
+        return;
+      }
+      const hback = e.target.closest?.('[data-hist="back"]');
+      if (hback) {
+        state.historyMode = false;
+        renderSidebar();
+        return;
+      }
+      const hrestore = e.target.closest?.("[data-hist-restore]");
+      if (hrestore) {
+        void restoreHistory(state.historyItem, hrestore.dataset.histRestore);
       }
     });
     els.conflict?.addEventListener("click", async (e) => {
@@ -2602,6 +2731,10 @@ a{color:${v.accent}}
         void openTrash();
         return;
       }
+      if (kind === "history") {
+        void openHistory(findItem(state.currentId));
+        return;
+      }
       if (kind === "img-url") {
         const url = window.prompt("图片 URL：");
         if (url && state.view) state.view.dispatch(state.view.state.replaceSelection(`![](${url.trim()})`));
@@ -2609,6 +2742,17 @@ a{color:${v.accent}}
       }
       insertTemplate(kind);
     });
+    if (els.imgCompress) {
+      try {
+        const v = localStorage.getItem("devtools-mdm-img-compress");
+        if (v != null) els.imgCompress.checked = v === "1";
+      } catch (_) {}
+      els.imgCompress.addEventListener("change", () => {
+        try {
+          localStorage.setItem("devtools-mdm-img-compress", els.imgCompress.checked ? "1" : "0");
+        } catch (_) {}
+      });
+    }
     els.modeEdit?.addEventListener("click", () => { state.viewMode = "edit"; applyViewMode(); });
     els.modeSplit?.addEventListener("click", () => { state.viewMode = "split"; applyViewMode(); });
     els.modePreview?.addEventListener("click", () => { state.viewMode = "preview"; applyViewMode(); });
