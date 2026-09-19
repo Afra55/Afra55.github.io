@@ -43,7 +43,7 @@
   overflow: hidden;
 }
 .mdm-side { display: flex; flex-direction: column; padding: 0.5rem; gap: 0.45rem; }
-.mdm-side-scroll { overflow: auto; min-height: 0; flex: 1 1 auto; }
+.mdm-list-wrap { flex: 1 1 auto; min-height: 0; overflow: auto; }
 .mdm-group { margin-bottom: 0.4rem; }
 .mdm-group-title { font-size: 0.75rem; color: var(--muted); margin: 0.35rem 0 0.25rem; }
 .mdm-chip {
@@ -54,8 +54,13 @@
 .mdm-chip:hover { color: var(--ink); border-color: var(--accent); }
 .mdm-chip.is-active { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--ink); border-color: var(--accent); }
 .mdm-list { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.35rem; }
+.mdm-batchbar { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; padding: 0.3rem 0.4rem; border: 1px solid var(--accent); border-radius: 8px; margin-top: 0.35rem; }
+.mdm-batchbar[hidden] { display: none !important; }
+.mdm-item.is-selected { background: color-mix(in srgb, var(--accent) 30%, transparent); border-color: var(--accent); }
+.mdm-item[draggable="true"] { cursor: grab; }
 .mdm-item {
   display: flex; flex-direction: column; gap: 0.1rem; text-align: left;
+  height: 56px; overflow: hidden;
   padding: 0.45rem 0.55rem; border: 1px solid transparent; border-radius: 8px;
   background: transparent; color: var(--ink); cursor: pointer;
 }

@@ -58,6 +58,7 @@
     mermaid: { src: "./vendor/mermaid/mermaid.min.js", probe: () => typeof globalThis.mermaid === "object" },
     jszip: { src: "./vendor/jszip.min.js", probe: () => typeof globalThis.JSZip === "function" },
     turndown: { src: "./vendor/turndown/turndown.js", probe: () => typeof globalThis.TurndownService === "function" },
+    mdext: { src: "./vendor/mdext/mdext.js", probe: () => typeof globalThis.markdownItExtras === "object" },
   };
 
   const EXTERNAL_SITE_TOOLS = new Set([]);
@@ -183,7 +184,7 @@
     giftest: ["omggif"],
     dateremind: ["solarlunar"],
     ipgeo: ["leaflet"],
-    mdm: ["markdownit", "purify", "hljs", "cm6", "katexmd", "jszip", "turndown"],
+    mdm: ["markdownit", "purify", "hljs", "cm6", "katexmd", "jszip", "turndown", "mdext"],
   };
 
   /** 独立脚本，不走 extra 面板栈 */
@@ -454,6 +455,7 @@
     mermaid: "图表（Mermaid）",
     jszip: "ZIP 打包库",
     turndown: "富文本转 Markdown",
+    mdext: "Markdown 扩展（脚注/定义列表）",
   };
 
   async function ensureForTool(toolId, opts = {}) {

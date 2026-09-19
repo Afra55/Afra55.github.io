@@ -110,6 +110,8 @@
     ftTimer: 0,
     searchMatches: null,
     bodyCache: new Map(),
+    syncing: false,
+    selected: new Set(),
     splitRatio: 0.5,
   };
   try {
@@ -148,6 +150,9 @@
       importBtn: $("#mdm-import"),
       importDirBtn: $("#mdm-import-dir"),
       importDirInput: $("#mdm-import-dir-input"),
+      exportLib: $("#mdm-export-lib"),
+      importLib: $("#mdm-import-lib"),
+      importLibInput: $("#mdm-import-lib-input"),
       save: $("#mdm-save"),
       exportFmt: $("#mdm-export-fmt"),
       exportBtn: $("#mdm-export"),
@@ -155,9 +160,12 @@
       error: $("#mdm-error"),
       layout: $("#mdm-layout"),
       search: $("#mdm-search"),
+      batchbar: $("#mdm-batchbar"),
+      batchCount: $("#mdm-batch-count"),
       cats: $("#mdm-cats"),
       tags: $("#mdm-tags"),
       list: $("#mdm-list"),
+      listWrap: $("#mdm-list-wrap"),
       modeEdit: $("#mdm-mode-edit"),
       modeSplit: $("#mdm-mode-split"),
       modePreview: $("#mdm-mode-preview"),
@@ -168,6 +176,7 @@
       insertToggle: $("#mdm-insert-toggle"),
       insertDropdown: $("#mdm-insert-dropdown"),
       saveStatus: $("#mdm-save-status"),
+      docStats: $("#mdm-doc-stats"),
       cat: $("#mdm-cat"),
       catList: $("#mdm-cat-list"),
       tagChips: $("#mdm-tag-chips"),
@@ -248,6 +257,10 @@
       } catch (_) {}
       try {
         if (typeof window.markdownItKatex === "function") md.use(window.markdownItKatex);
+      } catch (_) {}
+      try {
+        if (window.markdownItExtras?.footnote) md.use(window.markdownItExtras.footnote);
+        if (window.markdownItExtras?.deflist) md.use(window.markdownItExtras.deflist);
       } catch (_) {}
       return md;
     }
@@ -382,15 +395,36 @@
     function filteredItems() {
       const q = state.search.trim().toLowerCase();
       const ft = state.searchMatches;
-      return (state.index.items || []).filter((it) => {
-        if (state.activeCat !== "all" && it.catId !== state.activeCat) return false;
-        if (state.activeTag && !(it.tagIds || []).includes(state.activeTag)) return false;
-        if (q) {
-          const hay = `${it.title} ${it.excerpt || ""}`.toLowerCase();
-          if (!hay.includes(q) && !(ft && ft.has(it.id))) return false;
-        }
-        return true;
-      });
+      return (state.index.items || [])
+        .filter((it) => {
+          if (state.activeCat !== "all" && it.catId !== state.activeCat) return false;
+          if (state.activeTag && !(it.tagIds || []).includes(state.activeTag)) return false;
+          if (q) {
+            const hay = `${it.title} ${it.excerpt || ""}`.toLowerCase();
+            if (!hay.includes(q) && !(ft && ft.has(it.id))) return false;
+          }
+          return true;
+        })
+        .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
+    }
+
+    function reorderItem(fromId, toId) {
+      const items = state.index.items;
+      const fromIdx = items.findIndex((x) => x.id === fromId);
+      if (fromIdx < 0) return;
+      const [moved] = items.splice(fromIdx, 1);
+      const toIdx = items.findIndex((x) => x.id === toId);
+      items.splice(toIdx < 0 ? items.length : toIdx, 0, moved);
+      items.forEach((it, i) => { it.order = i; });
+    }
+
+    function nextOrder() {
+      const orders = (state.index.items || []).map((x) => Number(x.order) || 0);
+      return orders.length ? Math.min(...orders) - 1 : 0;
+    }
+
+    function normalizeOrders() {
+      (state.index.items || []).forEach((it, i) => { it.order = i; });
     }
 
     // ---- 全文搜索（按需读取正文，带缓存） ----
@@ -462,25 +496,50 @@
                 .join("")
             : `<span class="hint tight">暂无标签</span>`);
       }
-      if (els.list) {
-        els.list.innerHTML = items.length
-          ? items
-              .map((it) => {
-                const cat = state.index.cats.find((c) => c.id === it.catId);
-                const tags = (it.tagIds || [])
-                  .map((tid) => state.index.tags.find((t) => t.id === tid)?.name)
-                  .filter(Boolean)
-                  .map((n) => `#${escapeHtml(n)}`)
-                  .join(" ");
-                return `<button type="button" class="mdm-item${it.id === state.currentId ? " is-active" : ""}" data-id="${escapeHtml(it.id)}">
-                  <span class="mdm-item-title">${escapeHtml(it.title || "未命名")}</span>
-                  <span class="mdm-item-meta hint tight">${cat ? escapeHtml(cat.name) + " · " : ""}${tags}</span>
-                </button>`;
-              })
-              .join("")
-          : `<span class="hint tight">没有匹配的文档</span>`;
+      renderList();
+      if (els.batchbar) {
+        els.batchbar.hidden = state.selected.size === 0;
+        if (els.batchCount) els.batchCount.textContent = `已选 ${state.selected.size} 项`;
       }
       renderMeta();
+    }
+
+    function itemHtml(it) {
+      const cat = state.index.cats.find((c) => c.id === it.catId);
+      const tags = (it.tagIds || [])
+        .map((tid) => state.index.tags.find((t) => t.id === tid)?.name)
+        .filter(Boolean)
+        .map((n) => `#${escapeHtml(n)}`)
+        .join(" ");
+      return `<button type="button" class="mdm-item${it.id === state.currentId ? " is-active" : ""}${state.selected.has(it.id) ? " is-selected" : ""}" data-id="${escapeHtml(it.id)}" draggable="true">
+        <span class="mdm-item-title">${escapeHtml(it.title || "未命名")}</span>
+        <span class="mdm-item-meta hint tight">${cat ? escapeHtml(cat.name) + " · " : ""}${tags}</span>
+      </button>`;
+    }
+
+    const LIST_ROW_H = 56;
+    let listRaf = 0;
+    /** 列表虚拟化：条目多时只渲染可视区，避免万级 DOM 卡顿 */
+    function renderList() {
+      if (!els.list) return;
+      const items = filteredItems();
+      const wrap = els.listWrap;
+      if (!wrap || items.length <= 60) {
+        els.list.innerHTML = items.length
+          ? items.map(itemHtml).join("")
+          : `<span class="hint tight">没有匹配的文档</span>`;
+        return;
+      }
+      const viewH = wrap.clientHeight || 400;
+      const total = items.length;
+      const start = Math.max(0, Math.floor(wrap.scrollTop / LIST_ROW_H) - 6);
+      const end = Math.min(total, start + Math.ceil(viewH / LIST_ROW_H) + 12);
+      const topPad = start * LIST_ROW_H;
+      const bottomPad = Math.max(0, (total - end) * LIST_ROW_H);
+      els.list.innerHTML =
+        `<div style="height:${topPad}px" aria-hidden="true"></div>` +
+        items.slice(start, end).map(itemHtml).join("") +
+        `<div style="height:${bottomPad}px" aria-hidden="true"></div>`;
     }
 
     // ---- editor (CM6) ----
@@ -538,6 +597,43 @@
       );
     }
 
+    function wrapSelection(view, before, after) {
+      const { from, to } = view.state.selection.main;
+      const sel = view.state.sliceDoc(from, to);
+      view.dispatch({
+        changes: { from, to, insert: `${before}${sel}${after}` },
+        selection: { anchor: from + before.length, head: from + before.length + sel.length },
+      });
+      return true;
+    }
+
+    function bindEditorScroll() {
+      const view = state.view;
+      const pv = els.preview;
+      if (!view || !pv || !view.scrollDOM) return;
+      const sc = view.scrollDOM;
+      const onEditor = () => {
+        if (state.syncing) return;
+        const eMax = sc.scrollHeight - sc.clientHeight;
+        const pMax = pv.scrollHeight - pv.clientHeight;
+        if (eMax <= 0 || pMax <= 0) return;
+        state.syncing = true;
+        pv.scrollTop = (sc.scrollTop / eMax) * pMax;
+        window.requestAnimationFrame(() => { state.syncing = false; });
+      };
+      const onPreview = () => {
+        if (state.syncing) return;
+        const eMax = sc.scrollHeight - sc.clientHeight;
+        const pMax = pv.scrollHeight - pv.clientHeight;
+        if (eMax <= 0 || pMax <= 0) return;
+        state.syncing = true;
+        sc.scrollTop = (pv.scrollTop / pMax) * eMax;
+        window.requestAnimationFrame(() => { state.syncing = false; });
+      };
+      sc.addEventListener("scroll", onEditor, { passive: true });
+      pv.addEventListener("scroll", onPreview, { passive: true });
+    }
+
     function ensureEditor() {
       if (state.view) return state.view;
       const CM = window.DevToolsCM6;
@@ -553,6 +649,11 @@
       ];
       exts.push(
         CM.keymap.of([
+          { key: "Enter", run: CM.insertNewlineContinueMarkup },
+          { key: "Backspace", run: CM.deleteMarkupBackward },
+          { key: "Mod-b", run: (v) => wrapSelection(v, "**", "**") },
+          { key: "Mod-i", run: (v) => wrapSelection(v, "*", "*") },
+          { key: "Mod-k", run: (v) => wrapSelection(v, "[", "](https://)") },
           { key: "Mod-s", run: () => { void saveCurrent(); return true; } },
           ...(CM.historyKeymap || []),
         ])
@@ -622,12 +723,19 @@
 
     function renderPreview() {
       if (!els.preview) return;
-      els.preview.innerHTML = renderMarkdown(getEditorText());
+      const src = getEditorText();
+      els.preview.innerHTML = renderMarkdown(src);
       els.preview.querySelectorAll("a[href]").forEach((a) => {
         a.setAttribute("target", "_blank");
         a.setAttribute("rel", "noopener noreferrer");
       });
       applyTaskLists(els.preview);
+      if (els.docStats) {
+        const chars = src.length;
+        const words = (src.match(/[\u4e00-\u9fa5]|[A-Za-z0-9_'-]+/g) || []).length;
+        const lines = src ? src.split("\n").length : 0;
+        els.docStats.textContent = `${words} 词 · ${chars} 字符 · ${lines} 行`;
+      }
       void resolvePreviewAssets();
       void renderMermaidBlocks();
     }
@@ -917,6 +1025,145 @@
       }
     }
 
+    /** 重新扫描文件夹：把目录里已有但未纳入索引的 .md 加进来 */
+    async function rescanFolder() {
+      if (state.mode !== "dir" || !state.dirHandle) {
+        setErr("仅「文件夹」模式支持重新扫描");
+        return;
+      }
+      setSaveStatus("扫描文件夹…");
+      try {
+        const known = new Set((state.index.items || []).map((x) => x.fileName));
+        let added = 0;
+        for await (const [name, handle] of state.dirHandle.entries()) {
+          if (handle.kind !== "file" || !/\.(md|markdown)$/i.test(name)) continue;
+          if (name === INDEX_FILE || known.has(name)) continue;
+          let text = "";
+          try {
+            text = await (await handle.getFile()).text();
+          } catch (_) {}
+          const fm = parseFrontMatter(text);
+          const title = fm.title || name.replace(/\.[^.]+$/, "");
+          state.index.items.push({
+            id: uid(),
+            title,
+            titleSaved: title,
+            fileName: name,
+            catId: ensureCat(fm.category),
+            tagIds: (fm.tags || []).map((t) => ensureTag(t)).filter(Boolean),
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+            size: new Blob([fm.body]).size,
+            excerpt: fm.body.replace(/\s+/g, " ").trim().slice(0, 160),
+          });
+          added += 1;
+        }
+        normalizeOrders();
+        await saveIndexToStorage();
+        renderSidebar();
+        setSaveStatus("");
+        toast(added ? `已纳入 ${added} 篇已有文档` : "没有新的 .md 文件");
+      } catch (err) {
+        setErr(`扫描失败：${err.message || err}`);
+      }
+    }
+
+    /** 整库导出：ZIP（mdindex.json + 全部 .md + assets/） */
+    async function exportLibrary() {
+      if (typeof window.JSZip !== "function") {
+        setErr("ZIP 库未就绪");
+        return;
+      }
+      setSaveStatus("打包整库…");
+      try {
+        const zip = new window.JSZip();
+        zip.file(INDEX_FILE, JSON.stringify(state.index, null, 2));
+        for (const it of state.index.items || []) {
+          let text = state.bodyCache.get(it.id);
+          if (text == null) {
+            try {
+              text = await readDocText(it);
+              state.bodyCache.set(it.id, text);
+            } catch (_) {
+              text = "";
+            }
+          }
+          zip.file(it.fileName || `${slugify(it.title)}.md`, text);
+        }
+        for (const rel of await listAssetNames()) {
+          try {
+            zip.file(rel, await readAssetBlob(rel));
+          } catch (_) {}
+        }
+        const blob = await zip.generateAsync({ type: "blob" });
+        downloadBlob(blob, `markdown-library-${Date.now()}.zip`);
+        setSaveStatus("整库已导出");
+        toast("整库已导出");
+      } catch (err) {
+        setErr(`导出库失败：${err.message || err}`);
+      }
+    }
+
+    async function writeDocFileByName(name, text) {
+      const fh = await state.dirHandle.getFileHandle(name, { create: true });
+      const w = await fh.createWritable();
+      await w.write(text);
+      await w.close();
+    }
+
+    /** 整库导入：读取 ZIP，写入 .md 与 assets，合并索引 */
+    async function importLibrary(file) {
+      if (typeof window.JSZip !== "function") {
+        setErr("ZIP 库未就绪");
+        return;
+      }
+      if (state.mode !== "dir" || !state.dirHandle) {
+        setErr("导入整库需要「文件夹」模式");
+        return;
+      }
+      setSaveStatus("读取整库…");
+      try {
+        const zip = await window.JSZip.loadAsync(file);
+        let indexJson = null;
+        if (zip.file(INDEX_FILE)) {
+          try {
+            indexJson = JSON.parse(await zip.file(INDEX_FILE).async("string"));
+          } catch (_) {
+            indexJson = null;
+          }
+        }
+        for (const entry of Object.values(zip.files)) {
+          if (entry.dir) continue;
+          const name = entry.name;
+          if (name === INDEX_FILE) continue;
+          if (/^assets\//i.test(name)) {
+            await writeAssetFile(name, await entry.async("blob"));
+          } else if (/\.(md|markdown)$/i.test(name)) {
+            await writeDocFileByName(name, await entry.async("string"));
+          }
+        }
+        if (indexJson && Array.isArray(indexJson.items)) {
+          const known = new Set((state.index.items || []).map((x) => x.fileName));
+          for (const c of indexJson.cats || []) if (c?.id && !state.index.cats.find((x) => x.id === c.id)) state.index.cats.push(c);
+          for (const t of indexJson.tags || []) if (t?.id && !state.index.tags.find((x) => x.id === t.id)) state.index.tags.push(t);
+          for (const it of indexJson.items) {
+            if (!it?.fileName || known.has(it.fileName)) continue;
+            state.index.items.push({ ...it, id: it.id || uid(), order: undefined });
+            known.add(it.fileName);
+          }
+          normalizeOrders();
+          await saveIndexToStorage();
+          renderSidebar();
+          setSaveStatus("");
+          toast("整库已导入");
+        } else {
+          await rescanFolder();
+        }
+      } catch (err) {
+        setErr(`导入库失败：${err.message || err}`);
+      }
+    }
+
     function hasRichHtml(html) {
       return /<(p|h[1-6]|ul|ol|li|table|thead|tbody|tr|td|th|strong|b|em|i|a\s|pre|code|blockquote|img|hr)\b/i.test(
         String(html || "")
@@ -1118,6 +1365,7 @@
       };
       item.fileName = uniqueFileName(item.title, item.id);
       state.index.items.unshift(item);
+      normalizeOrders();
       state.currentId = item.id;
       state.dirty = true;
       if (els.title) els.title.value = item.title;
@@ -1157,6 +1405,7 @@
         await writeDocText(item, text);
         await saveIndexToStorage();
         state.bodyCache.set(item.id, text);
+        try { mdmChannel?.postMessage({ type: "saved", mode: state.mode }); } catch (_) {}
         state.dirty = false;
         updateSaveBtn();
         renderSidebar();
@@ -1189,6 +1438,7 @@
       state.index.items = state.index.items.filter((x) => x.id !== item.id);
       state.bodyCache.delete(item.id);
       state.searchMatches = null;
+      normalizeOrders();
       if (state.currentId === item.id) {
         state.currentId = "";
         state.dirty = false;
@@ -1353,6 +1603,17 @@
       saveIndexToStorage().catch(() => {});
     }
 
+    // 多标签页冲突提示
+    let mdmChannel = null;
+    try {
+      mdmChannel = new BroadcastChannel("devtools-mdm");
+      mdmChannel.onmessage = (e) => {
+        if (e.data?.type === "saved" && state.mode && e.data.mode === state.mode) {
+          setSaveStatus("⚠ 另一个标签页也在用同一存储，注意冲突");
+        }
+      };
+    } catch (_) {}
+
     function setCategory(name) {
       const item = findItem(state.currentId);
       if (!item) return;
@@ -1430,12 +1691,13 @@
         };
         try {
           await writeDocText(item, res.text);
-          state.index.items.unshift(item);
+          state.index.items.push(item);
           n += 1;
         } catch (err) {
           setErr(`导入失败（${f.name}）：${err.message || err}`);
         }
       }
+      normalizeOrders();
       await saveIndexToStorage();
       renderSidebar();
       if (n) toast(imgN ? `已导入 ${n} 篇 · 含 ${imgN} 张图片` : `已导入 ${n} 篇`);
@@ -1537,6 +1799,47 @@ pre code{background:none}
 table{border-collapse:collapse}th,td{border:1px solid #d0d7de;padding:.35rem .6rem}
 img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-left:1rem;color:#57606a}
 </style></head><body>${bodyHtml}</body></html>`;
+    }
+
+    async function exportItemsToZip(ids) {
+      if (typeof window.JSZip !== "function") {
+        setErr("ZIP 库未就绪，请稍后重试");
+        return;
+      }
+      const zip = new window.JSZip();
+      const usedNames = new Set();
+      let n = 0;
+      for (const id of ids) {
+        const it = findItem(id);
+        if (!it) continue;
+        let text = state.bodyCache.get(id);
+        if (text == null) {
+          try {
+            text = await readDocText(it);
+            state.bodyCache.set(id, text);
+          } catch (_) {
+            text = "";
+          }
+        }
+        let name = `${slugify(it.title)}.md`;
+        let k = 2;
+        while (usedNames.has(name)) name = `${slugify(it.title)}-${k++}.md`;
+        usedNames.add(name);
+        zip.file(name, text);
+        for (const rel of collectReferencedAssets(text)) {
+          try {
+            zip.file(rel, await readAssetBlob(rel));
+          } catch (_) {}
+        }
+        n += 1;
+      }
+      if (!n) {
+        toast("没有可导出的文档");
+        return;
+      }
+      const blob = await zip.generateAsync({ type: "blob" });
+      downloadBlob(blob, `markdown-${Date.now()}.zip`);
+      toast(`已导出 ${n} 篇（含资源）`);
     }
 
     async function exportCurrent(fmt, target) {
@@ -1690,6 +1993,7 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       els.layout && (els.layout.hidden = false);
       els.dirLabel && (els.dirLabel.textContent = `存储：${label}`);
       [els.newBtn, els.importDirBtn].forEach((b) => b && (b.disabled = false));
+      [els.exportLib, els.importLib].forEach((b) => b && (b.disabled = false));
       els.importBtn && (els.importBtn.disabled = false);
       renderSidebar();
       updateSaveBtn();
@@ -1697,6 +2001,7 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       ensureEditor();
       ensureKatexCss();
       bindEditorMedia();
+      bindEditorScroll();
       if (state.view && CMresize) CMresize();
       toast(`已连接：${label}`);
     }
@@ -1719,6 +2024,13 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       void importFiles(e.target.files);
       e.target.value = "";
     });
+    els.exportLib?.addEventListener("click", () => void exportLibrary());
+    els.importLib?.addEventListener("click", () => els.importLibInput?.click());
+    els.importLibInput?.addEventListener("change", (e) => {
+      const f = e.target.files?.[0];
+      e.target.value = "";
+      if (f) void importLibrary(f);
+    });
     els.search?.addEventListener("input", () => {
       state.search = els.search.value;
       state.searchMatches = null;
@@ -1739,7 +2051,109 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
     });
     els.list?.addEventListener("click", (e) => {
       const b = e.target.closest?.("[data-id]");
-      if (b) void openDoc(b.dataset.id);
+      if (!b) return;
+      if (e.ctrlKey || e.metaKey) {
+        const id = b.dataset.id;
+        if (state.selected.has(id)) state.selected.delete(id);
+        else state.selected.add(id);
+        renderSidebar();
+        return;
+      }
+      void openDoc(b.dataset.id);
+    });
+    let dragId = "";
+    els.list?.addEventListener("dragstart", (e) => {
+      const b = e.target.closest?.("[data-id]");
+      if (!b) return;
+      dragId = b.dataset.id;
+      try {
+        e.dataTransfer.setData("text/plain", dragId);
+        e.dataTransfer.effectAllowed = "move";
+      } catch (_) {}
+    });
+    els.list?.addEventListener("dragover", (e) => {
+      if (!dragId) return;
+      e.preventDefault();
+      try { e.dataTransfer.dropEffect = "move"; } catch (_) {}
+    });
+    els.list?.addEventListener("drop", (e) => {
+      const b = e.target.closest?.("[data-id]");
+      if (!b || !dragId) return;
+      e.preventDefault();
+      const targetId = b.dataset.id;
+      const from = dragId;
+      dragId = "";
+      if (targetId === from) return;
+      reorderItem(from, targetId);
+      saveIndexToStorage().then(() => renderSidebar());
+    });
+    els.list?.addEventListener("dragend", () => { dragId = ""; });
+    els.listWrap?.addEventListener(
+      "scroll",
+      () => {
+        if (listRaf) return;
+        listRaf = window.requestAnimationFrame(() => {
+          listRaf = 0;
+          renderList();
+        });
+      },
+      { passive: true }
+    );
+    els.batchbar?.addEventListener("click", async (e) => {
+      const b = e.target.closest?.("[data-batch]");
+      if (!b) return;
+      const act = b.dataset.batch;
+      const ids = [...state.selected];
+      if (act === "clear") {
+        state.selected.clear();
+        renderSidebar();
+        return;
+      }
+      if (!ids.length) return;
+      if (act === "tag") {
+        const name = window.prompt("给选中文档添加标签：");
+        if (!name) return;
+        const tid = ensureTag(String(name).replace(/^#/, ""));
+        for (const id of ids) {
+          const it = findItem(id);
+          if (it) {
+            it.tagIds = it.tagIds || [];
+            if (tid && !it.tagIds.includes(tid)) it.tagIds.push(tid);
+          }
+        }
+        await saveIndexToStorage();
+        renderSidebar();
+        toast(`已给 ${ids.length} 篇加标签`);
+        return;
+      }
+      if (act === "delete") {
+        if (!window.confirm(`删除选中的 ${ids.length} 篇？会删除对应 .md 文件。`)) return;
+        for (const id of ids) {
+          const it = findItem(id);
+          if (it) {
+            try { await removeDocFile(it); } catch (_) {}
+            state.bodyCache.delete(id);
+          }
+        }
+        const sel = new Set(ids);
+        state.index.items = state.index.items.filter((x) => !sel.has(x.id));
+        normalizeOrders();
+        if (sel.has(state.currentId)) {
+          state.currentId = "";
+          setEditorText("");
+          renderPreview();
+          els.empty && (els.empty.hidden = false);
+        }
+        state.selected.clear();
+        await saveIndexToStorage();
+        renderSidebar();
+        updateSaveBtn();
+        toast(`已删除 ${ids.length} 篇`);
+        return;
+      }
+      if (act === "export") {
+        await exportItemsToZip(ids);
+      }
     });
     els.list?.addEventListener("dblclick", (e) => {
       const b = e.target.closest?.("[data-id]");
@@ -1816,6 +2230,10 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       }
       if (kind === "clean-assets") {
         void cleanOrphanAssets();
+        return;
+      }
+      if (kind === "rescan") {
+        void rescanFolder();
         return;
       }
       insertTemplate(kind);

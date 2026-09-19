@@ -78,6 +78,14 @@
             path: "tools/vendor/turndown/turndown.js",
           },
           {
+            name: "markdown-it-footnote / markdown-it-deflist",
+            version: "4.x / 3.x",
+            license: "MIT",
+            repo: "https://github.com/markdown-it/markdown-it-footnote",
+            usedIn: "Markdown 文档管理 · 脚注 / 定义列表",
+            path: "tools/vendor/mdext/mdext.js",
+          },
+          {
             name: "JSZip (+ pako)",
             version: "3.10.1",
             license: "MIT / GPLv3",

@@ -10,6 +10,9 @@
           <input id="mdm-import" type="file" accept=".md,.markdown,.txt,text/markdown" multiple hidden />
           <button type="button" class="secondary-btn" id="mdm-import-dir" disabled>导入文件夹</button>
           <input id="mdm-import-dir-input" type="file" webkitdirectory directory multiple hidden />
+          <button type="button" class="secondary-btn" id="mdm-export-lib" disabled>导出库</button>
+          <button type="button" class="secondary-btn" id="mdm-import-lib" disabled>导入库</button>
+          <input id="mdm-import-lib-input" type="file" accept=".zip,application/zip" hidden />
           <button type="button" class="primary-btn" id="mdm-save" disabled>保存</button>
           <span class="mdm-export-group">
             <select id="mdm-export-fmt" class="select-input" disabled aria-label="导出格式"></select>
@@ -22,9 +25,16 @@
         <div class="mdm-layout" id="mdm-layout" hidden>
           <aside class="mdm-side">
             <input id="mdm-search" class="mono mdm-search" type="search" placeholder="搜索标题 / 正文…" autocomplete="off" />
-            <div class="mdm-side-scroll">
-              <div class="mdm-group" id="mdm-cats"></div>
-              <div class="mdm-group" id="mdm-tags"></div>
+            <div class="mdm-batchbar" id="mdm-batchbar" hidden>
+              <span class="hint tight" id="mdm-batch-count"></span>
+              <button type="button" class="ghost-btn" data-batch="tag">加标签</button>
+              <button type="button" class="ghost-btn" data-batch="export">导出</button>
+              <button type="button" class="ghost-btn" data-batch="delete">删除</button>
+              <button type="button" class="ghost-btn" data-batch="clear">取消</button>
+            </div>
+            <div class="mdm-group" id="mdm-cats"></div>
+            <div class="mdm-group" id="mdm-tags"></div>
+            <div class="mdm-list-wrap" id="mdm-list-wrap">
               <div class="mdm-list" id="mdm-list" aria-live="polite"></div>
             </div>
           </aside>
@@ -50,9 +60,11 @@
                   <button type="button" data-insert="divider">分隔线</button>
                   <button type="button" data-insert="file">文件 / 图片附件…</button>
                   <button type="button" data-insert="clean-assets">清理未引用资源</button>
+                  <button type="button" data-insert="rescan">重新扫描文件夹</button>
                 </div>
               </span>
               <span class="hint tight" id="mdm-save-status"></span>
+              <span class="hint tight" id="mdm-doc-stats" style="margin-left:auto"></span>
               <button type="button" class="ghost-btn" id="mdm-delete" title="删除当前文档">删除</button>
               <input id="mdm-file-input" type="file" multiple hidden />
             </div>
