@@ -6,7 +6,7 @@
   const { $, $$, setError, toast, bindPanel, escapeHtml } = K;
 
   const IDB_NAME = "devtools-mdm";
-  const IDB_VER = 1;
+  const IDB_VER = 2;
   const DIR_KEY = "mdm-dir-handle";
   const BASE_KEY = "devtools-mdm-base";
   const TOKEN_KEY = "devtools-mdm-token";
@@ -56,6 +56,7 @@
         const db = req.result;
         if (!db.objectStoreNames.contains("kv")) db.createObjectStore("kv");
         if (!db.objectStoreNames.contains("docs")) db.createObjectStore("docs");
+        if (!db.objectStoreNames.contains("assets")) db.createObjectStore("assets");
       };
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
@@ -106,6 +107,9 @@
     viewMode: "edit",
     previewTimer: 0,
     autoSaveTimer: 0,
+    ftTimer: 0,
+    searchMatches: null,
+    bodyCache: new Map(),
     splitRatio: 0.5,
   };
   try {
@@ -127,7 +131,13 @@
 
   function cacheIndex() {
     try {
-      localStorage.setItem("devtools-mdm-index-cache", JSON.stringify(state.index || emptyIndex()));
+      const json = JSON.stringify(state.index || emptyIndex());
+      // 大索引不写 localStorage（约 5MB 上限），避免写失败/变慢；只靠 mdindex.json
+      if (json.length > 900 * 1024) {
+        try { localStorage.removeItem("devtools-mdm-index-cache"); } catch (_) {}
+        return;
+      }
+      localStorage.setItem("devtools-mdm-index-cache", json);
     } catch (_) {}
   }
 
@@ -371,15 +381,58 @@
     // ---- rendering: sidebar ----
     function filteredItems() {
       const q = state.search.trim().toLowerCase();
+      const ft = state.searchMatches;
       return (state.index.items || []).filter((it) => {
         if (state.activeCat !== "all" && it.catId !== state.activeCat) return false;
         if (state.activeTag && !(it.tagIds || []).includes(state.activeTag)) return false;
         if (q) {
           const hay = `${it.title} ${it.excerpt || ""}`.toLowerCase();
-          if (!hay.includes(q)) return false;
+          if (!hay.includes(q) && !(ft && ft.has(it.id))) return false;
         }
         return true;
       });
+    }
+
+    // ---- 全文搜索（按需读取正文，带缓存） ----
+    function scheduleFullTextSearch() {
+      window.clearTimeout(state.ftTimer);
+      const q = state.search.trim().toLowerCase();
+      if (q.length < 2) {
+        state.searchMatches = null;
+        renderSidebar();
+        return;
+      }
+      state.ftTimer = window.setTimeout(() => void runFullTextSearch(q), 350);
+    }
+    async function runFullTextSearch(q) {
+      const items = state.index.items || [];
+      const matched = new Set();
+      const need = [];
+      for (const it of items) {
+        if (state.bodyCache.has(it.id)) {
+          if (state.bodyCache.get(it.id).toLowerCase().includes(q)) matched.add(it.id);
+        } else need.push(it);
+      }
+      if (need.length) {
+        let i = 0;
+        let done = 0;
+        const worker = async () => {
+          while (i < need.length) {
+            const it = need[i++];
+            try {
+              const t = await readDocText(it);
+              state.bodyCache.set(it.id, t);
+              if (t.toLowerCase().includes(q)) matched.add(it.id);
+            } catch (_) {}
+            done += 1;
+          }
+        };
+        await Promise.all(Array.from({ length: 6 }, worker));
+      }
+      if (state.search.trim().toLowerCase() !== q) return;
+      state.searchMatches = matched;
+      renderSidebar();
+      setSaveStatus(`全文匹配 ${matched.size} 篇`);
     }
 
     function renderSidebar() {
@@ -592,16 +645,22 @@
     async function readAssetBlob(rel) {
       const parts = String(rel || "").split("/").filter((p) => p && p !== ".");
       if (!parts.length) throw new Error("空路径");
-      let dir = state.dirHandle;
-      for (let i = 0; i < parts.length - 1; i++) dir = await dir.getDirectoryHandle(parts[i]);
-      const fh = await dir.getFileHandle(parts[parts.length - 1]);
-      return await fh.getFile();
+      const clean = parts.join("/");
+      if (state.mode === "dir" && state.dirHandle) {
+        let dir = state.dirHandle;
+        for (let i = 0; i < parts.length - 1; i++) dir = await dir.getDirectoryHandle(parts[i]);
+        const fh = await dir.getFileHandle(parts[parts.length - 1]);
+        return await fh.getFile();
+      }
+      const rec = await idbGet("assets", clean);
+      if (!rec) throw new Error("找不到资源");
+      return rec instanceof Blob ? rec : new Blob([rec]);
     }
     function isRelativeRef(v) {
       return v && !/^(https?:|data:|blob:|#|mailto:|tel:|\/\/)/i.test(v);
     }
     async function resolvePreviewAssets() {
-      if (state.mode !== "dir" || !state.dirHandle || !els.preview) return;
+      if (!state.mode || !els.preview) return;
       const nodes = [...els.preview.querySelectorAll("img, video, audio, source, a[href]")];
       for (const el of nodes) {
         const attr = el.tagName === "A" ? "href" : "src";
@@ -641,7 +700,7 @@
       return [...refs];
     }
     async function inlineAssetsForExport(html) {
-      if (state.mode !== "dir" || !state.dirHandle) return html;
+      if (!state.mode) return html;
       let root;
       try {
         root = new DOMParser().parseFromString(`<div id="__mdmroot">${html}</div>`, "text/html").getElementById("__mdmroot");
@@ -705,12 +764,17 @@
       const ext = (String(file.name || "file").split(".").pop() || "bin").toLowerCase();
       const base = slugify(String(file.name || "file").replace(/\.[^.]+$/, ""), "file");
       const name = `${Date.now().toString(36)}-${base}.${ext}`;
-      const dir = await state.dirHandle.getDirectoryHandle("assets", { create: true });
-      const fh = await dir.getFileHandle(name, { create: true });
-      const w = await fh.createWritable();
-      await w.write(file);
-      await w.close();
-      return { rel: `assets/${name}` };
+      const rel = `assets/${name}`;
+      if (state.mode === "dir" && state.dirHandle) {
+        const dir = await state.dirHandle.getDirectoryHandle("assets", { create: true });
+        const fh = await dir.getFileHandle(name, { create: true });
+        const w = await fh.createWritable();
+        await w.write(file);
+        await w.close();
+      } else {
+        await idbSet("assets", rel, file);
+      }
+      return { rel };
     }
 
     function markdownForAsset(file, rel) {
@@ -728,8 +792,8 @@
       if (!list.length) return false;
       const view = state.view;
       if (!view) return false;
-      if (state.mode !== "dir" || !state.dirHandle) {
-        setErr("插入文件需要先「选择文件夹」（会存到该文件夹的 assets/ 子目录）");
+      if (!state.mode) {
+        setErr("插入文件需要先「选择文件夹」或进入本地存储模式");
         return true;
       }
       const parts = [];
@@ -766,6 +830,91 @@
       if (!tpl) return;
       view.dispatch(view.state.replaceSelection(tpl()));
       view.focus();
+    }
+
+    async function listAssetNames() {
+      const out = [];
+      if (state.mode === "dir" && state.dirHandle) {
+        let dir;
+        try {
+          dir = await state.dirHandle.getDirectoryHandle("assets");
+        } catch (_) {
+          return out;
+        }
+        try {
+          for await (const [name, handle] of dir.entries()) {
+            if (handle.kind === "file") out.push(`assets/${name}`);
+          }
+        } catch (_) {}
+      } else {
+        const db = await idbOpen();
+        await new Promise((resolve) => {
+          const tx = db.transaction("assets", "readonly");
+          const req = tx.objectStore("assets").openKeyCursor();
+          req.onsuccess = () => {
+            const c = req.result;
+            if (c) {
+              out.push(String(c.key));
+              c.continue();
+            } else resolve();
+          };
+          req.onerror = () => resolve();
+        });
+      }
+      return out;
+    }
+
+    async function removeAsset(rel) {
+      if (state.mode === "dir" && state.dirHandle) {
+        const parts = String(rel || "").split("/").filter(Boolean);
+        if (!parts.length) return;
+        let dir = state.dirHandle;
+        for (let i = 0; i < parts.length - 1; i++) dir = await dir.getDirectoryHandle(parts[i]);
+        try {
+          await dir.removeEntry(parts[parts.length - 1]);
+        } catch (_) {}
+      } else {
+        await idbDel("assets", rel);
+      }
+    }
+
+    async function cleanOrphanAssets() {
+      if (!state.mode) {
+        setErr("请先选择文件夹或进入本地存储模式");
+        return;
+      }
+      setSaveStatus("清理中…");
+      try {
+        const used = new Set();
+        for (const it of state.index.items || []) {
+          let text = state.bodyCache.get(it.id);
+          if (text == null) {
+            try {
+              text = await readDocText(it);
+              state.bodyCache.set(it.id, text);
+            } catch (_) {
+              text = "";
+            }
+          }
+          for (const rel of collectReferencedAssets(text)) used.add(rel);
+        }
+        const all = await listAssetNames();
+        const orphans = all.filter((n) => !used.has(n));
+        if (!orphans.length) {
+          setSaveStatus("");
+          toast("没有可清理的未引用资源");
+          return;
+        }
+        if (!window.confirm(`发现 ${orphans.length} 个未被引用的资源，删除？`)) {
+          setSaveStatus("");
+          return;
+        }
+        for (const n of orphans) await removeAsset(n);
+        setSaveStatus(`已清理 ${orphans.length} 个未引用资源`);
+        toast(`已清理 ${orphans.length} 个`);
+      } catch (err) {
+        setErr(`清理失败：${err.message || err}`);
+      }
     }
 
     function hasRichHtml(html) {
@@ -859,10 +1008,10 @@
       els.outline.innerHTML = heads.length
         ? `<div class="mdm-group-title">大纲</div>` +
           heads
-            .map((h) => {
+            .map((h, i) => {
               const lvl = Number(h.tagName.slice(1));
               const text = h.textContent || "";
-              return `<div class="mdm-outline-item lv${lvl}">${escapeHtml(text)}</div>`;
+              return `<div class="mdm-outline-item lv${lvl}" data-h="${i}" role="button" tabindex="0" title="${escapeHtml(text)}">${escapeHtml(text)}</div>`;
             })
             .join("")
         : "";
@@ -1007,6 +1156,7 @@
       try {
         await writeDocText(item, text);
         await saveIndexToStorage();
+        state.bodyCache.set(item.id, text);
         state.dirty = false;
         updateSaveBtn();
         renderSidebar();
@@ -1037,6 +1187,8 @@
         await removeDocFile(item);
       } catch (_) {}
       state.index.items = state.index.items.filter((x) => x.id !== item.id);
+      state.bodyCache.delete(item.id);
+      state.searchMatches = null;
       if (state.currentId === item.id) {
         state.currentId = "";
         state.dirty = false;
@@ -1291,7 +1443,7 @@
 
     /** 把 .md 引用的本地资源（图/视频/音频/附件）一并写入目标文件夹（保留相对路径） */
     async function importDocImages(body, baseDir, assetMap) {
-      if (state.mode !== "dir" || !state.dirHandle || !assetMap.size) return { text: body, imported: 0 };
+      if (!state.mode || !assetMap.size) return { text: body, imported: 0 };
       let imported = 0;
       const tasks = [];
       const text = String(body || "");
@@ -1321,15 +1473,19 @@
     }
 
     async function writeAssetFile(rel, file) {
-      if (state.mode !== "dir" || !state.dirHandle) return false;
       const parts = String(rel || "").split("/").filter((p) => p && p !== ".");
       if (!parts.length) return false;
-      let dir = state.dirHandle;
-      for (let i = 0; i < parts.length - 1; i++) dir = await dir.getDirectoryHandle(parts[i], { create: true });
-      const fh = await dir.getFileHandle(parts[parts.length - 1], { create: true });
-      const w = await fh.createWritable();
-      await w.write(file);
-      await w.close();
+      const clean = parts.join("/");
+      if (state.mode === "dir" && state.dirHandle) {
+        let dir = state.dirHandle;
+        for (let i = 0; i < parts.length - 1; i++) dir = await dir.getDirectoryHandle(parts[i], { create: true });
+        const fh = await dir.getFileHandle(parts[parts.length - 1], { create: true });
+        const w = await fh.createWritable();
+        await w.write(file);
+        await w.close();
+        return true;
+      }
+      await idbSet("assets", clean, file);
       return true;
     }
 
@@ -1435,7 +1591,7 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
     }
 
     async function collectReferencedAssetsWithData(text) {
-      if (state.mode !== "dir" || !state.dirHandle) return [];
+      if (!state.mode) return [];
       const refs = new Set();
       const s = String(text || "");
       for (const re of [/!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, /(?:src|href)\s*=\s*["']([^"']+)["']/gi]) {
@@ -1525,7 +1681,11 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       if (!state.index || typeof state.index !== "object") state.index = emptyIndex();
       state.index.cats = state.index.cats || [];
       state.index.tags = state.index.tags || [];
-      state.index.items = state.index.items || [];
+      state.index.items = (state.index.items || []).map((it, i) => ({
+        ...it,
+        titleSaved: it.titleSaved == null ? it.title : it.titleSaved,
+        order: Number.isFinite(it.order) ? it.order : i,
+      }));
       cacheIndex();
       els.layout && (els.layout.hidden = false);
       els.dirLabel && (els.dirLabel.textContent = `存储：${label}`);
@@ -1561,7 +1721,9 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
     });
     els.search?.addEventListener("input", () => {
       state.search = els.search.value;
+      state.searchMatches = null;
       renderSidebar();
+      scheduleFullTextSearch();
     });
     els.cats?.addEventListener("click", (e) => {
       const b = e.target.closest?.("[data-cat]");
@@ -1592,11 +1754,26 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
     });
     document.addEventListener("click", closeListCtx);
     window.addEventListener("scroll", closeListCtx, true);
+    const outlineGo = (e) => {
+      const item = e.target.closest?.("[data-h]");
+      if (!item) return;
+      const idx = Number(item.dataset.h);
+      const heads = [...(els.preview?.querySelectorAll("h1,h2,h3,h4,h5,h6") || [])];
+      const h = heads[idx];
+      if (h) h.scrollIntoView({ behavior: "smooth", block: "start" });
+    };
+    els.outline?.addEventListener("click", outlineGo);
+    els.outline?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") outlineGo(e);
+    });
     els.title?.addEventListener("input", () => {
       const item = findItem(state.currentId);
       if (item) {
         item.title = String(els.title.value || "").trim() || "未命名";
-        renderSidebar();
+        // 只更新该条目标题，避免每次按键全量重建侧栏
+        const titleEl = els.list?.querySelector(`[data-id="${item.id}"] .mdm-item-title`);
+        if (titleEl) titleEl.textContent = item.title;
+        else renderSidebar();
       }
       state.dirty = true;
       updateSaveBtn();
@@ -1635,6 +1812,10 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       const kind = b.dataset.insert;
       if (kind === "file") {
         els.fileInput?.click();
+        return;
+      }
+      if (kind === "clean-assets") {
+        void cleanOrphanAssets();
         return;
       }
       insertTemplate(kind);
