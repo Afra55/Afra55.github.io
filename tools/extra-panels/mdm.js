@@ -137,6 +137,7 @@
     dragFromHandle: false,
     conflictItem: null,
     lastDeleted: null,
+    watchTimer: 0,
     recentIds: (() => {
       try {
         const v = JSON.parse(localStorage.getItem("devtools-mdm-recent") || "[]");
@@ -779,6 +780,7 @@
         const id = el.dataset.id;
         el.classList.toggle("is-active", id === state.currentId);
         el.classList.toggle("is-selected", state.selected.has(id));
+        el.setAttribute("aria-selected", state.selected.has(id) ? "true" : "false");
       });
       updateBatchBar();
     }
@@ -807,7 +809,7 @@
         .map((n) => `#${escapeHtml(n)}`)
         .join(" ");
       const canDrag = state.sort === "order";
-      return `<button type="button" class="mdm-item${it.id === state.currentId ? " is-active" : ""}${state.selected.has(it.id) ? " is-selected" : ""}" data-id="${escapeHtml(it.id)}" draggable="${canDrag}">
+      return `<button type="button" role="option" aria-selected="${state.selected.has(it.id)}" class="mdm-item${it.id === state.currentId ? " is-active" : ""}${state.selected.has(it.id) ? " is-selected" : ""}" data-id="${escapeHtml(it.id)}" draggable="${canDrag}">
         ${
           canDrag
             ? `<span class="mdm-drag-handle" title="拖动排序" aria-hidden="true">⋮⋮</span>`
@@ -1602,18 +1604,24 @@
       setSaveStatus("清理中…");
       try {
         const used = new Set();
-        for (const it of state.index.items || []) {
-          let text = state.bodyCache.get(it.id);
-          if (text == null) {
-            try {
-              text = await readDocText(it);
-              state.bodyCache.set(it.id, text);
-            } catch (_) {
-              text = "";
+        const items = state.index.items || [];
+        let i = 0;
+        const worker = async () => {
+          while (i < items.length) {
+            const it = items[i++];
+            let text = state.bodyCache.has(it.id) ? state.bodyCache.get(it.id) : state.persistedIdx.get(it.id);
+            if (text == null) {
+              try {
+                text = await readDocText(it);
+                state.bodyCache.set(it.id, text);
+              } catch (_) {
+                text = "";
+              }
             }
+            for (const rel of collectReferencedAssets(text)) used.add(rel);
           }
-          for (const rel of collectReferencedAssets(text)) used.add(rel);
-        }
+        };
+        await Promise.all(Array.from({ length: 6 }, worker));
         const all = await listAssetNames();
         const orphans = all.filter((n) => !used.has(n));
         if (!orphans.length) {
@@ -2468,6 +2476,42 @@
       if (els.saveStatus) els.saveStatus.textContent = text || "";
     }
 
+    /** #16 外部改动监测：聚焦/回到前台/每分钟检查当前文档 mtime（仅文件夹模式） */
+    async function checkExternalChange() {
+      if (state.mode !== "dir" || !state.dirHandle || !state.currentId) return;
+      const item = findItem(state.currentId);
+      if (!item || !item.fileName) return;
+      try {
+        const fh = await state.dirHandle.getFileHandle(item.fileName);
+        const f = await fh.getFile();
+        const mt = f.lastModified || 0;
+        if (!item.fileMtime || mt <= item.fileMtime + 1500) return;
+        if (state.dirty) {
+          showConflict(item);
+          return;
+        }
+        const text = await f.text();
+        const fm = parseFrontMatter(text);
+        item.fmHead = fm.head || "";
+        item.fileMtime = mt;
+        setEditorText(fm.body);
+        renderPreview();
+        renderOutline();
+        renderBacklinks();
+        toast("检测到外部修改，已重新加载");
+      } catch (_) {}
+    }
+
+    function watchExternalChanges() {
+      window.clearInterval(state.watchTimer);
+      if (state.mode !== "dir") return;
+      state.watchTimer = window.setInterval(() => void checkExternalChange(), 60000);
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "visible") void checkExternalChange();
+      });
+      window.addEventListener("focus", () => void checkExternalChange());
+    }
+
     function showConflict(item) {
       state.conflictItem = item;
       if (els.conflict) els.conflict.hidden = false;
@@ -3261,6 +3305,7 @@ a{color:${v.accent}}
       await loadSearchIdx();
       warmBodyCache();
       void autoExpireTrash();
+      watchExternalChanges();
       if (state.view && CMresize) CMresize();
       toast(`已连接：${label}`);
     }
