@@ -1,5 +1,23 @@
 /* Markdown 文档管理 */
 .mdm-body { display: flex; flex-direction: column; gap: 0.55rem; min-height: 0; }
+
+/* 拖拽导入高亮 */
+#mdm.is-mdm-drop { position: relative; }
+#mdm.is-mdm-drop::after {
+  content: "松开导入 Markdown";
+  position: absolute;
+  inset: 0.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--accent);
+  border-radius: 12px;
+  color: var(--accent);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  pointer-events: none;
+  z-index: 5;
+}
 .mdm-topbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .mdm-export-group { display: inline-flex; align-items: center; gap: 0.35rem; }
 .mdm-export-group .select-input { min-height: var(--btn-min-h, 2.5rem); }

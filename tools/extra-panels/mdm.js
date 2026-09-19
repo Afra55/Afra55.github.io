@@ -815,6 +815,72 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       els.exportFmt.value = "md";
     }
 
+    // ---- 拖拽导入：拖 md 文件（或整个文件夹）进来 = 导入 ----
+    const panelEl = $("#mdm");
+    function collectDroppedFiles(dt) {
+      const files = [];
+      const entries = [];
+      const items = dt?.items;
+      if (items && items.length) {
+        for (const it of items) {
+          if (it.kind !== "file") continue;
+          const entry = it.webkitGetAsEntry?.();
+          if (entry) entries.push(entry);
+          else {
+            const f = it.getAsFile?.();
+            if (f) files.push(f);
+          }
+        }
+      }
+      if (!entries.length) return Promise.resolve(files);
+      const out = [];
+      const walk = (entry) =>
+        new Promise((resolve) => {
+          if (entry.isFile) {
+            entry.file((f) => { out.push(f); resolve(); }, () => resolve());
+          } else if (entry.isDirectory) {
+            const reader = entry.createReader();
+            const readAll = () =>
+              reader.readEntries(async (batch) => {
+                if (!batch.length) { resolve(); return; }
+                for (const e of batch) await walk(e);
+                readAll();
+              }, () => resolve());
+            readAll();
+          } else resolve();
+        });
+      return Promise.all(entries.map(walk)).then(() => out);
+    }
+    if (panelEl) {
+      const setHover = (on) => panelEl.classList.toggle("is-mdm-drop", on);
+      panelEl.addEventListener("dragover", (e) => {
+        const types = e.dataTransfer?.types ? [...e.dataTransfer.types] : [];
+        if (!types.includes("Files")) return;
+        e.preventDefault();
+        setHover(true);
+      });
+      panelEl.addEventListener("dragleave", (e) => {
+        if (e.target === panelEl) setHover(false);
+      });
+      panelEl.addEventListener("drop", (e) => {
+        if (!e.dataTransfer) return;
+        e.preventDefault();
+        setHover(false);
+        if (!state.index) {
+          setErr("请先点「选择文件夹」再拖入文档");
+          return;
+        }
+        void (async () => {
+          try {
+            const files = await collectDroppedFiles(e.dataTransfer);
+            await importFiles(files);
+          } catch (err) {
+            setErr(`拖入导入失败：${err.message || err}`);
+          }
+        })();
+      });
+    }
+
     // restore dir handle
     (async () => {
       try {
