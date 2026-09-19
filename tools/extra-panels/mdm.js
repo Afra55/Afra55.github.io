@@ -1539,21 +1539,14 @@
       }
     }
 
-    async function writeDocFileByName(name, text) {
-      const fh = await state.dirHandle.getFileHandle(name, { create: true });
-      const w = await fh.createWritable();
-      await w.write(text);
-      await w.close();
-    }
-
     /** 整库导入：读取 ZIP，写入 .md 与 assets，合并索引 */
     async function importLibrary(file) {
       if (typeof window.JSZip !== "function") {
         setErr("ZIP 库未就绪");
         return;
       }
-      if (state.mode !== "dir" || !state.dirHandle) {
-        setErr("导入整库需要「文件夹」模式");
+      if (!state.mode) {
+        setErr("请先选择文件夹或进入本地存储模式");
         return;
       }
       setSaveStatus("读取整库…");
@@ -1567,6 +1560,11 @@
             indexJson = null;
           }
         }
+        const byName = new Map();
+        if (indexJson && Array.isArray(indexJson.items)) {
+          for (const it of indexJson.items) if (it?.fileName) byName.set(it.fileName, it);
+        }
+        const seen = [];
         for (const entry of Object.values(zip.files)) {
           if (entry.dir) continue;
           const name = entry.name;
@@ -1574,26 +1572,38 @@
           if (/^assets\//i.test(name)) {
             await writeAssetFile(name, await entry.async("blob"));
           } else if (/\.(md|markdown)$/i.test(name)) {
-            await writeDocFileByName(name, await entry.async("string"));
+            const text = await entry.async("string");
+            const idx = byName.get(name);
+            const it = idx
+              ? { ...idx, order: undefined }
+              : { id: uid(), fileName: name, title: name.replace(/\.[^.]+$/, "") };
+            await writeDocText(it, text);
+            seen.push(it);
           }
         }
+        const known = new Set((state.index.items || []).map((x) => x.fileName));
         if (indexJson && Array.isArray(indexJson.items)) {
-          const known = new Set((state.index.items || []).map((x) => x.fileName));
-          for (const c of indexJson.cats || []) if (c?.id && !state.index.cats.find((x) => x.id === c.id)) state.index.cats.push(c);
-          for (const t of indexJson.tags || []) if (t?.id && !state.index.tags.find((x) => x.id === t.id)) state.index.tags.push(t);
+          for (const c of indexJson.cats || [])
+            if (c?.id && !state.index.cats.find((x) => x.id === c.id)) state.index.cats.push(c);
+          for (const t of indexJson.tags || [])
+            if (t?.id && !state.index.tags.find((x) => x.id === t.id)) state.index.tags.push(t);
           for (const it of indexJson.items) {
             if (!it?.fileName || known.has(it.fileName)) continue;
             state.index.items.push({ ...it, id: it.id || uid(), order: undefined });
             known.add(it.fileName);
           }
-          normalizeOrders();
-          await saveIndexToStorage();
-          renderSidebar();
-          setSaveStatus("");
-          toast("整库已导入");
         } else {
-          await rescanFolder();
+          for (const it of seen) {
+            if (known.has(it.fileName)) continue;
+            state.index.items.push({ ...it, order: undefined });
+            known.add(it.fileName);
+          }
         }
+        normalizeOrders();
+        await saveIndexToStorage();
+        renderSidebar();
+        setSaveStatus("");
+        toast("整库已导入");
       } catch (err) {
         setErr(`导入库失败：${err.message || err}`);
       }
