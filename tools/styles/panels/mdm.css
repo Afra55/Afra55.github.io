@@ -88,6 +88,24 @@
   border-radius: 7px; cursor: pointer; font-size: 0.85rem;
 }
 .mdm-insert-dropdown button:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.mdm-rename-input { width: 100%; padding: 0.2rem 0.4rem; border-radius: 6px; border: 1px solid var(--accent); background: var(--panel-strong, transparent); color: var(--ink); font-size: 0.88rem; }
+.mdm-ctxmenu {
+  position: fixed; z-index: 13000; min-width: 10rem;
+  display: flex; flex-direction: column; padding: 0.25rem;
+  background: var(--panel-strong, var(--bg-0)); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+.mdm-ctxmenu button { text-align: left; padding: 0.35rem 0.6rem; border: none; background: transparent; color: var(--ink); border-radius: 7px; cursor: pointer; font-size: 0.85rem; }
+.mdm-ctxmenu button:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.mdm-ctxmenu button.is-danger:hover { background: color-mix(in srgb, #e06c75 25%, transparent); }
+.mdm-ctx-sub { position: relative; }
+.mdm-ctx-submenu {
+  position: absolute; left: 100%; top: 0; min-width: 12rem; max-height: 60vh; overflow: auto;
+  display: flex; flex-direction: column; padding: 0.25rem;
+  background: var(--panel-strong, var(--bg-0)); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+}
+.mdm-ctx-submenu[hidden] { display: none !important; }
 .mdm-editor-wrap { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1fr; }
 .mdm-editor-wrap[data-mode="edit"] .mdm-preview { display: none; }
 .mdm-editor-wrap[data-mode="edit"] .mdm-splitter { display: none; }

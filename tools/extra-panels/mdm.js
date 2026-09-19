@@ -154,7 +154,6 @@
       title: $("#mdm-title"),
       del: $("#mdm-delete"),
       insertImg: $("#mdm-insert-img"),
-      imgInput: $("#mdm-img-input"),
       fileInput: $("#mdm-file-input"),
       insertToggle: $("#mdm-insert-toggle"),
       insertDropdown: $("#mdm-insert-dropdown"),
@@ -1031,25 +1030,134 @@
       }, AUTO_SAVE_MS);
     }
 
-    async function deleteCurrent() {
-      const item = findItem(state.currentId);
+    async function deleteItemById(item) {
       if (!item) return;
       if (!window.confirm(`删除「${item.title}」？此操作会删除对应 .md 文件。`)) return;
       try {
         await removeDocFile(item);
       } catch (_) {}
       state.index.items = state.index.items.filter((x) => x.id !== item.id);
-      state.currentId = "";
-      state.dirty = false;
-      setEditorText("");
-      if (els.title) els.title.value = "";
-      renderPreview();
-      renderOutline();
+      if (state.currentId === item.id) {
+        state.currentId = "";
+        state.dirty = false;
+        setEditorText("");
+        if (els.title) els.title.value = "";
+        renderPreview();
+        renderOutline();
+        els.empty && (els.empty.hidden = false);
+      }
       renderSidebar();
       updateSaveBtn();
-      els.empty && (els.empty.hidden = false);
       await saveIndexToStorage();
       toast("已删除");
+    }
+
+    async function deleteCurrent() {
+      await deleteItemById(findItem(state.currentId));
+    }
+
+    async function renameItem(item, newTitle) {
+      if (!item) return;
+      const title = String(newTitle || "").trim() || "未命名";
+      if (title === item.title) {
+        renderSidebar();
+        return;
+      }
+      const oldName = item.fileName;
+      item.title = title;
+      item.fileName = uniqueFileName(title, item.id);
+      item.titleSaved = title;
+      item.updatedAt = Date.now();
+      try {
+        if (oldName && oldName !== item.fileName) {
+          const text = await readDocText({ ...item, fileName: oldName }).catch(() => "");
+          await writeDocText(item, text);
+          await removeDocFile({ ...item, fileName: oldName });
+        }
+      } catch (_) {}
+      await saveIndexToStorage();
+      renderSidebar();
+      if (state.currentId === item.id && els.title) els.title.value = title;
+      toast("已重命名");
+    }
+
+    function startInlineRename(id) {
+      const btn = els.list?.querySelector(`[data-id="${id}"]`);
+      const span = btn?.querySelector(".mdm-item-title");
+      const item = findItem(id);
+      if (!span || !item) return;
+      const input = document.createElement("input");
+      input.className = "mdm-rename-input mono";
+      input.value = item.title || "";
+      span.replaceWith(input);
+      input.focus();
+      input.select();
+      let done = false;
+      const commit = async (save) => {
+        if (done) return;
+        done = true;
+        if (save) await renameItem(item, input.value);
+        else renderSidebar();
+      };
+      input.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          void commit(true);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          void commit(false);
+        }
+      });
+      input.addEventListener("blur", () => void commit(true));
+      input.addEventListener("click", (e) => e.stopPropagation());
+    }
+
+    let listCtxEl = null;
+    function closeListCtx() {
+      if (listCtxEl) {
+        listCtxEl.remove();
+        listCtxEl = null;
+      }
+    }
+    function showListCtx(x, y, item) {
+      closeListCtx();
+      const el = document.createElement("div");
+      el.className = "mdm-ctxmenu";
+      const fmts = [...LOCAL_FORMATS, ...PANDOC_FORMATS];
+      el.innerHTML =
+        `<button type="button" data-ctx="open">打开</button>` +
+        `<button type="button" data-ctx="rename">重命名</button>` +
+        `<div class="mdm-ctx-sub"><button type="button" data-ctx="export-toggle">导出 ▸</button>` +
+        `<div class="mdm-ctx-submenu" hidden>${fmts
+          .map(([v, l]) => `<button type="button" data-ctx-export="${v}">${escapeHtml(l)}</button>`)
+          .join("")}</div></div>` +
+        `<button type="button" data-ctx="delete" class="is-danger">删除</button>`;
+      document.body.appendChild(el);
+      const rect = el.getBoundingClientRect();
+      el.style.left = `${Math.max(4, Math.min(x, window.innerWidth - rect.width - 8))}px`;
+      el.style.top = `${Math.max(4, Math.min(y, window.innerHeight - rect.height - 8))}px`;
+      listCtxEl = el;
+      el.addEventListener("click", async (e) => {
+        const exp = e.target.closest?.("[data-ctx-export]");
+        if (exp) {
+          closeListCtx();
+          const text = await readDocText(item).catch(() => "");
+          await exportCurrent(exp.dataset.ctxExport, { item, text });
+          return;
+        }
+        const b = e.target.closest?.("[data-ctx]");
+        if (!b) return;
+        const act = b.dataset.ctx;
+        if (act === "export-toggle") {
+          const sub = el.querySelector(".mdm-ctx-submenu");
+          if (sub) sub.hidden = !sub.hidden;
+          return;
+        }
+        closeListCtx();
+        if (act === "open") void openDoc(item.id);
+        else if (act === "rename") startInlineRename(item.id);
+        else if (act === "delete") void deleteItemById(item);
+      });
     }
 
     function updateSaveBtn() {
@@ -1275,10 +1383,10 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
 </style></head><body>${bodyHtml}</body></html>`;
     }
 
-    async function exportCurrent(fmt) {
-      const item = findItem(state.currentId);
+    async function exportCurrent(fmt, target) {
+      const item = target?.item || findItem(state.currentId);
       if (!item) return;
-      const text = getEditorText();
+      const text = target && target.text != null ? target.text : getEditorText();
       const title = item.title || "document";
       const html = await inlineAssetsForExport(renderMarkdown(text));
       try {
@@ -1471,6 +1579,19 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       const b = e.target.closest?.("[data-id]");
       if (b) void openDoc(b.dataset.id);
     });
+    els.list?.addEventListener("dblclick", (e) => {
+      const b = e.target.closest?.("[data-id]");
+      if (b) startInlineRename(b.dataset.id);
+    });
+    els.list?.addEventListener("contextmenu", (e) => {
+      const b = e.target.closest?.("[data-id]");
+      if (!b) return;
+      e.preventDefault();
+      const item = findItem(b.dataset.id);
+      if (item) showListCtx(e.clientX, e.clientY, item);
+    });
+    document.addEventListener("click", closeListCtx);
+    window.addEventListener("scroll", closeListCtx, true);
     els.title?.addEventListener("input", () => {
       const item = findItem(state.currentId);
       if (item) {
@@ -1495,11 +1616,6 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       if (b) removeTag(b.dataset.tagRm);
     });
     els.insertImg?.addEventListener("click", () => els.imgInput?.click());
-    els.imgInput?.addEventListener("change", (e) => {
-      const files = [...(e.target.files || [])];
-      e.target.value = "";
-      void insertAssetFiles(files);
-    });
     els.fileInput?.addEventListener("change", (e) => {
       const files = [...(e.target.files || [])];
       e.target.value = "";
@@ -1517,10 +1633,6 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       if (!b) return;
       els.insertDropdown.hidden = true;
       const kind = b.dataset.insert;
-      if (kind === "image") {
-        els.imgInput?.click();
-        return;
-      }
       if (kind === "file") {
         els.fileInput?.click();
         return;
