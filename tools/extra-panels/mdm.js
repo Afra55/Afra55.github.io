@@ -164,6 +164,38 @@
     }
 
     // ---- markdown render ----
+    /** 宽松 ATX 标题：允许 `#标题`（# 后无空格），兼容常见中文写法 */
+    function headingLoose(state, startLine, endLine, silent) {
+      let pos = state.bMarks[startLine] + state.tShift[startLine];
+      let max = state.eMarks[startLine];
+      if (state.sCount[startLine] - state.blkIndent >= 4) return false;
+      if (state.src.charCodeAt(pos) !== 0x23 || pos >= max) return false;
+      let level = 1;
+      let ch = state.src.charCodeAt(++pos);
+      while (ch === 0x23 && pos < max && level <= 6) {
+        level++;
+        ch = state.src.charCodeAt(++pos);
+      }
+      if (level > 6) return false;
+      if (silent) return true;
+      max = state.skipSpacesBack(max, pos);
+      const tmp = state.skipCharsBack(max, 0x23, pos);
+      if (tmp > pos && (state.src.charCodeAt(tmp - 1) === 0x20 || state.src.charCodeAt(tmp - 1) === 0x09)) {
+        max = tmp;
+      }
+      state.line = startLine + 1;
+      const tokenO = state.push("heading_open", `h${level}`, 1);
+      tokenO.markup = "########".slice(0, level);
+      tokenO.map = [startLine, state.line];
+      const tokenI = state.push("inline", "", 0);
+      tokenI.content = state.src.slice(pos, max).trim();
+      tokenI.map = [startLine, state.line];
+      tokenI.children = [];
+      const tokenC = state.push("heading_close", `h${level}`, -1);
+      tokenC.markup = "########".slice(0, level);
+      return true;
+    }
+
     let md = null;
     function getMd() {
       if (md) return md;
@@ -182,6 +214,11 @@
           return `<pre class="hljs"><code>${escapeHtml(str)}</code></pre>`;
         },
       });
+      try {
+        md.block.ruler.at("heading", headingLoose, {
+          alt: ["paragraph", "reference", "blockquote", "list"],
+        });
+      } catch (_) {}
       return md;
     }
 
@@ -459,7 +496,16 @@
         renderPreview();
         renderOutline();
       } catch (err) {
-        setErr(`读取失败：${err.message || err}`);
+        const msg = String(err?.message || err);
+        if (/could not be found|NotFound|not found|找不到|不存在/i.test(msg)) {
+          // 索引里的文件缺失（被移动/删除/换目录）：按空文档打开，保存会重新创建
+          setEditorText("");
+          renderPreview();
+          renderOutline();
+          setErr(`「${item.title}」的 .md 文件不存在（可能被移动或删除）。已按空文档打开，保存会重新创建。`);
+        } else {
+          setErr(`读取失败：${msg}`);
+        }
       }
       els.empty && (els.empty.hidden = true);
       renderSidebar();
