@@ -109,7 +109,7 @@ function chromePath() {
 }
 
 const TITLE = "冒烟文档 A";
-const BODY = "第一行 hello\n\n- [ ] 待办一\n- [x] 待办二\n\n| A | B |\n| --- | --- |\n| 1 | 2 |";
+const BODY = "第一行 hello\n\n- [ ] 待办一\n- [x] 待办二\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n\n```mermaid\nflowchart TD\n  A[开始] --> B[结束]\n```";
 
 async function browserChecks() {
   const executablePath = chromePath();
@@ -198,9 +198,13 @@ async function browserChecks() {
     );
     console.log("STEP title-ok");
 
-    // 3) 编辑正文（CM6）
+    // 3) 编辑正文（CM6）：用一次性插入避开自动续行对表格的干扰
     await page.click("#mdm-editor .cm-content");
-    await page.keyboard.type(BODY);
+    await page.evaluate((body) => {
+      const ed = document.querySelector("#mdm-editor .cm-content");
+      ed.focus();
+      document.execCommand("insertText", false, body);
+    }, BODY);
     console.log("STEP body-typed");
     await page.waitForFunction(
       (b) => (document.querySelector("#mdm-editor .cm-content")?.innerText || "").includes(b),
@@ -263,6 +267,15 @@ async function browserChecks() {
       (await page.$$eval("#mdm-preview input.mdm-task-cb", (els) => els.filter((e) => e.disabled).length)) === 0,
       "task checkboxes should be clickable"
     );
+    assert(
+      (await page.$$eval("#mdm-preview table", (els) => els.length)) >= 1,
+      "table should render in preview"
+    );
+    // Mermaid 需懒加载 5MB vendor，给足时间
+    await page.waitForFunction(() => Boolean(document.querySelector("#mdm-preview .mdm-mermaid svg")), {
+      timeout: 60000,
+    });
+    console.log("STEP mermaid-ok");
 
     // 8) 侧栏大纲 & 快捷键弹窗
     await page.click("#mdm-insert-toggle");
@@ -294,7 +307,7 @@ async function browserChecks() {
     console.log("STEP table-align-ok");
 
     assert(!errors.length, `pageerror: ${errors.join("; ")}`);
-    console.log("mdm-smoke ok (idb/new/save/list/search/preview/table)");
+    console.log("mdm-smoke ok (idb/new/save/list/search/preview/mermaid/table)");
   } finally {
     if (browser) await browser.close().catch(() => {});
     await new Promise((r) => server.close(r));

@@ -301,9 +301,18 @@
         breaks: false,
         highlight(str, lang) {
           const hljs = window.hljs;
-          if (lang && hljs?.getLanguage?.(lang)) {
+          const L = String(lang || "").trim().toLowerCase();
+          // mermaid 交给 renderMermaidBlocks：必须保留 language-mermaid 类
+          if (L === "mermaid") {
+            return `<pre class="mdm-mermaid-pre"><code class="language-mermaid">${escapeHtml(str)}</code></pre>`;
+          }
+          const safe = /^[a-z0-9_+-]+$/.test(L) ? L : "";
+          if (safe && hljs?.getLanguage?.(safe)) {
             try {
-              return `<pre class="hljs"><code>${hljs.highlight(str, { language: lang, ignoreIllegals: true }).value}</code></pre>`;
+              return `<pre class="hljs"><code class="language-${safe}">${hljs.highlight(str, {
+                language: safe,
+                ignoreIllegals: true,
+              }).value}</code></pre>`;
             } catch (_) {}
           }
           return `<pre class="hljs"><code>${escapeHtml(str)}</code></pre>`;
