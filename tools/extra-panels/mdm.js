@@ -1183,6 +1183,7 @@
         "math-block": () => `$$\n${selected || ""}\n$$`,
         mermaid: () => "```mermaid\nflowchart TD\n  A[开始] --> B{判断}\n  B -->|是| C[结束]\n```",
         divider: () => "\n---\n",
+        date: () => new Date().toLocaleDateString(),
       }[kind];
       if (!tpl) return;
       view.dispatch(view.state.replaceSelection(tpl()));
@@ -2084,6 +2085,32 @@
       await deleteItemById(findItem(state.currentId));
     }
 
+    async function duplicateItem(item) {
+      try {
+        const text = await readDocText(item).catch(() => "");
+        const title = `${item.title}（副本）`;
+        const copy = {
+          ...item,
+          id: uid(),
+          title,
+          titleSaved: title,
+          fileName: uniqueFileName(title, ""),
+          fileMtime: 0,
+          order: undefined,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+        await writeDocText(copy, text);
+        state.index.items.push(copy);
+        normalizeOrders();
+        await saveIndexToStorage();
+        renderSidebar();
+        toast("已复制");
+      } catch (err) {
+        setErr(`复制失败：${err.message || err}`);
+      }
+    }
+
     async function renameItem(item, newTitle) {
       if (!item) return;
       const title = String(newTitle || "").trim() || "未命名";
@@ -2154,6 +2181,7 @@
       const fmts = [...LOCAL_FORMATS, ...PANDOC_FORMATS];
       el.innerHTML =
         `<button type="button" data-ctx="open">打开</button>` +
+        `<button type="button" data-ctx="duplicate">复制</button>` +
         `<button type="button" data-ctx="rename">重命名</button>` +
         `<div class="mdm-ctx-sub"><button type="button" data-ctx="export-toggle">导出 ▸</button>` +
         `<div class="mdm-ctx-submenu" hidden>${fmts
@@ -2208,6 +2236,7 @@
         }
         closeListCtx();
         if (act === "open") void openDoc(item.id);
+        else if (act === "duplicate") void duplicateItem(item);
         else if (act === "rename") startInlineRename(item.id);
         else if (act === "delete") void deleteItemById(item);
       });
@@ -2895,6 +2924,11 @@ a{color:${v.accent}}
         renderSidebar();
         return;
       }
+      if (act === "all") {
+        for (const it of filteredItems()) state.selected.add(it.id);
+        renderSidebar();
+        return;
+      }
       if (!ids.length) return;
       if (act === "tag") {
         const name = window.prompt("给选中文档添加标签：");
@@ -3141,6 +3175,10 @@ a{color:${v.accent}}
       }
       if (kind === "usage") {
         void showUsage();
+        return;
+      }
+      if (kind === "help") {
+        toast("Ctrl+S 保存 · Ctrl+B 加粗 · Ctrl+I 斜体 · Ctrl+K 链接 · Ctrl+Z 撤销 · 双击列表改名 · 右键列表更多");
         return;
       }
       if (kind === "keys") {
