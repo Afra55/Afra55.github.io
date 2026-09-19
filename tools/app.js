@@ -2987,6 +2987,7 @@
         if (gen === routeGen) {
           showToast(`「${name}」加载失败，可切换其他工具或稍后重试`);
           setPanelAssetLoading(toolLoadPanelId, false);
+          hideToolLoadProgress(loadGen);
         }
         return;
       } finally {
@@ -3008,7 +3009,11 @@
 
       scheduleToolPrefetch(toolId);
 
-      if (!overlayShown) return;
+      if (!overlayShown) {
+        // 加载很快：清掉「立即切页」时可能提前显示的进度条，避免一直挂「正在加载」
+        hideToolLoadProgress(loadGen);
+        return;
+      }
 
       setToolLoadProgress(100, `${name} 已就绪`, loadGen);
       window.setTimeout(() => {

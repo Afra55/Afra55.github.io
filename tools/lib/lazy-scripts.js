@@ -48,7 +48,10 @@
       probe: () => typeof globalThis.L !== "undefined" || typeof globalThis.leaflet !== "undefined",
     },
     markdownit: { src: "./vendor/markdown-it.min.js", probe: () => typeof globalThis.markdownit === "function" },
-    purify: { src: "./vendor/purify.min.js", probe: () => typeof globalThis.DOMPurify === "object" },
+    purify: {
+      src: "./vendor/purify.min.js",
+      probe: () => typeof globalThis.DOMPurify === "object" || typeof globalThis.DOMPurify === "function",
+    },
     hljs: { src: "./vendor/highlight/highlight.min.js", probe: () => typeof globalThis.hljs === "object" },
     cm6: { src: "./vendor/cm6/cm6.bundle.js", probe: () => typeof globalThis.DevToolsCM6 === "object" },
   };
@@ -231,7 +234,6 @@
     "setup", "about", "xorenc", "morse", "countdown",
     "dateremind", "phlogo", "nokiasms", "sandspiel", "wheel", "ruler", "muyu", "piano", "minigames", "ambient", "enspeak", "animalearn",
     "insectearn", "plantearn", "colorearn", "numearn", "shapeearn", "vehicleearn", "fruitearn", "homeearn", "sportsearn", "foodearn", "thingearn", "jobearn", "weatherearn", "bodyearn", "vegearn", "ipgeo",
-    "fileunlock", "mdm",
   ]);
 
   const scriptPromises = new Map();
