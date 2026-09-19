@@ -110,6 +110,7 @@
     ftTimer: 0,
     searchMatches: null,
     bodyCache: new Map(),
+    mermaidCache: new Map(),
     syncing: false,
     selected: new Set(),
     conflictItem: null,
@@ -262,8 +263,14 @@
         if (typeof window.markdownItKatex === "function") md.use(window.markdownItKatex);
       } catch (_) {}
       try {
-        if (window.markdownItExtras?.footnote) md.use(window.markdownItExtras.footnote);
-        if (window.markdownItExtras?.deflist) md.use(window.markdownItExtras.deflist);
+        const ex = window.markdownItExtras || {};
+        if (ex.footnote) md.use(ex.footnote);
+        if (ex.deflist) md.use(ex.deflist);
+        if (ex.emoji) md.use(ex.emoji);
+        if (ex.mark) md.use(ex.mark);
+        if (ex.abbr) md.use(ex.abbr);
+        if (ex.sub) md.use(ex.sub);
+        if (ex.sup) md.use(ex.sup);
       } catch (_) {}
       return md;
     }
@@ -871,6 +878,22 @@
       if (!els.preview) return;
       const codes = [...els.preview.querySelectorAll("pre > code.language-mermaid, code.language-mermaid")];
       if (!codes.length) return;
+      // 先看缓存：源码没变就直接用缓存 SVG，避免每次编辑重渲所有图表
+      const pending = [];
+      for (const code of codes) {
+        const src = code.textContent || "";
+        const cached = state.mermaidCache.get(src);
+        const pre = code.closest("pre") || code.parentElement;
+        if (cached) {
+          const div = document.createElement("div");
+          div.className = "mdm-mermaid";
+          div.innerHTML = cached;
+          pre.replaceWith(div);
+        } else {
+          pending.push({ pre, src });
+        }
+      }
+      if (!pending.length) return;
       if (!window.mermaid) {
         try {
           if (!mermaidLoading) mermaidLoading = window.DevToolsLazy?.loadVendor?.("mermaid");
@@ -887,11 +910,14 @@
           theme: document.documentElement.dataset.themeScheme === "light" ? "default" : "dark",
         });
       } catch (_) {}
-      for (const code of codes) {
-        const pre = code.closest("pre") || code.parentElement;
-        const src = code.textContent || "";
+      for (const { pre, src } of pending) {
         try {
           const { svg } = await window.mermaid.render(`mmd${Math.random().toString(36).slice(2, 9)}`, src);
+          state.mermaidCache.set(src, svg);
+          if (state.mermaidCache.size > 80) {
+            const first = state.mermaidCache.keys().next().value;
+            state.mermaidCache.delete(first);
+          }
           const div = document.createElement("div");
           div.className = "mdm-mermaid";
           div.innerHTML = svg;
@@ -1334,6 +1360,12 @@
           if (files.length) {
             e.preventDefault();
             void insertAssetFiles(files);
+            return;
+          }
+          const plain = e.clipboardData?.getData?.("text/plain") || "";
+          if (/^https?:\/\/\S+\.(png|jpe?g|gif|webp|bmp|svg)(\?\S*)?$/i.test(plain.trim())) {
+            e.preventDefault();
+            view.dispatch(view.state.replaceSelection(`![](${plain.trim()})`));
             return;
           }
           // 富文本 → Markdown
@@ -1938,15 +1970,31 @@
       setTimeout(() => URL.revokeObjectURL(url), 2000);
     }
 
+    function themeVars() {
+      const cs = getComputedStyle(document.documentElement);
+      const g = (n, d) => (cs.getPropertyValue(n) || d).trim();
+      return {
+        bg: g("--bg-0", "#ffffff"),
+        ink: g("--ink", "#1f2328"),
+        line: g("--line", "#d0d7de"),
+        accent: g("--accent", "#2ec4b6"),
+        panel: g("--panel-strong", "#f6f8fa"),
+        muted: g("--muted", "#57606a"),
+      };
+    }
+
     function standaloneHtml(title, bodyHtml) {
+      const v = themeVars();
       return `<!doctype html><html lang="zh"><head><meta charset="utf-8" /><title>${escapeHtml(title)}</title>
 <style>
-body{max-width:820px;margin:2rem auto;padding:0 1rem;line-height:1.7;font-family:-apple-system,Segoe UI,Roboto,"PingFang SC","Microsoft YaHei",sans-serif;color:#1f2328}
-pre{background:#f6f8fa;padding:.8rem;border-radius:8px;overflow:auto}
+:root{color-scheme:${isDarkScheme() ? "dark" : "light"}}
+body{max-width:820px;margin:2rem auto;padding:0 1rem;line-height:1.7;background:${v.bg};color:${v.ink};font-family:-apple-system,Segoe UI,Roboto,"PingFang SC","Microsoft YaHei",sans-serif}
+pre{background:${v.panel};padding:.8rem;border-radius:8px;overflow:auto}
 code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
 pre code{background:none}
-table{border-collapse:collapse}th,td{border:1px solid #d0d7de;padding:.35rem .6rem}
-img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-left:1rem;color:#57606a}
+table{border-collapse:collapse}th,td{border:1px solid ${v.line};padding:.35rem .6rem}
+img{max-width:100%}blockquote{border-left:3px solid ${v.line};margin:0;padding-left:1rem;color:${v.muted}}
+a{color:${v.accent}}
 </style></head><body>${bodyHtml}</body></html>`;
     }
 
@@ -2300,6 +2348,43 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
         toast(`已删除 ${ids.length} 篇`);
         return;
       }
+      if (act === "cat") {
+        const name = window.prompt("移动到分类（留空=未分类）：");
+        if (name === null) return;
+        const cid = name.trim() ? ensureCat(name) : "";
+        for (const id of ids) {
+          const it = findItem(id);
+          if (it) it.catId = cid;
+        }
+        await saveIndexToStorage();
+        renderSidebar();
+        toast(`已移动 ${ids.length} 篇`);
+        return;
+      }
+      if (act === "rename") {
+        const pre = window.prompt("标题前缀（可留空）：", "");
+        if (pre === null) return;
+        const suf = window.prompt("标题后缀（可留空）：", "");
+        if (suf === null) return;
+        for (const id of ids) {
+          const it = findItem(id);
+          if (!it) continue;
+          const nt = `${pre}${it.title}${suf}`;
+          const oldName = it.fileName;
+          it.title = nt;
+          it.fileName = uniqueFileName(nt, it.id);
+          it.titleSaved = nt;
+          try {
+            const t = await readDocText({ ...it, fileName: oldName }).catch(() => "");
+            await writeDocText(it, t);
+            if (oldName && oldName !== it.fileName) await removeDocFile({ ...it, fileName: oldName });
+          } catch (_) {}
+        }
+        await saveIndexToStorage();
+        renderSidebar();
+        toast(`已重命名 ${ids.length} 篇`);
+        return;
+      }
       if (act === "export") {
         await exportItemsToZip(ids);
       }
@@ -2443,6 +2528,11 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       }
       if (kind === "trash") {
         void openTrash();
+        return;
+      }
+      if (kind === "img-url") {
+        const url = window.prompt("图片 URL：");
+        if (url && state.view) state.view.dispatch(state.view.state.replaceSelection(`![](${url.trim()})`));
         return;
       }
       insertTemplate(kind);
