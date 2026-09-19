@@ -1517,6 +1517,10 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       if (!b) return;
       els.insertDropdown.hidden = true;
       const kind = b.dataset.insert;
+      if (kind === "image") {
+        els.imgInput?.click();
+        return;
+      }
       if (kind === "file") {
         els.fileInput?.click();
         return;
