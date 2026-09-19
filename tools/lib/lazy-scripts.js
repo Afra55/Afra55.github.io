@@ -56,6 +56,7 @@
     cm6: { src: "./vendor/cm6/cm6.bundle.js", probe: () => typeof globalThis.DevToolsCM6 === "object" },
     katexmd: { src: "./vendor/katex/markdown-it-katex.js", probe: () => typeof globalThis.markdownItKatex === "function" },
     mermaid: { src: "./vendor/mermaid/mermaid.min.js", probe: () => typeof globalThis.mermaid === "object" },
+    jszip: { src: "./vendor/jszip.min.js", probe: () => typeof globalThis.JSZip === "function" },
   };
 
   const EXTERNAL_SITE_TOOLS = new Set([]);
@@ -181,7 +182,7 @@
     giftest: ["omggif"],
     dateremind: ["solarlunar"],
     ipgeo: ["leaflet"],
-    mdm: ["markdownit", "purify", "hljs", "cm6", "katexmd"],
+    mdm: ["markdownit", "purify", "hljs", "cm6", "katexmd", "jszip"],
   };
 
   /** 独立脚本，不走 extra 面板栈 */
@@ -450,6 +451,7 @@
     cm6: "编辑器（CodeMirror）",
     katexmd: "数学公式（KaTeX）",
     mermaid: "图表（Mermaid）",
+    jszip: "ZIP 打包库",
   };
 
   async function ensureForTool(toolId, opts = {}) {

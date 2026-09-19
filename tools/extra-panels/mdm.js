@@ -105,6 +105,7 @@
     activeTag: "",
     viewMode: "edit",
     previewTimer: 0,
+    autoSaveTimer: 0,
     splitRatio: 0.5,
   };
   try {
@@ -154,6 +155,7 @@
       del: $("#mdm-delete"),
       insertImg: $("#mdm-insert-img"),
       imgInput: $("#mdm-img-input"),
+      saveStatus: $("#mdm-save-status"),
       cat: $("#mdm-cat"),
       catList: $("#mdm-cat-list"),
       tagChips: $("#mdm-tag-chips"),
@@ -497,6 +499,7 @@
             state.dirty = true;
             updateSaveBtn();
             schedulePreview();
+            scheduleAutoSave();
           }
         })
       );
@@ -820,7 +823,11 @@
 
     // ---- current doc ----
     async function openDoc(id) {
-      if (state.dirty && !window.confirm("当前文档未保存，切换将丢失改动。继续？")) return;
+      // 自动保存：切换前先把未保存的写入
+      if (state.dirty && findItem(state.currentId)) {
+        window.clearTimeout(state.autoSaveTimer);
+        try { await saveCurrent({ silent: true }); } catch (_) {}
+      }
       const item = findItem(id);
       if (!item) return;
       setErr("");
@@ -875,7 +882,12 @@
       els.title?.select?.();
     }
 
-    async function saveCurrent() {
+    function setSaveStatus(text) {
+      if (els.saveStatus) els.saveStatus.textContent = text || "";
+    }
+
+    async function saveCurrent(opts = {}) {
+      const silent = Boolean(opts.silent);
       const item = findItem(state.currentId);
       if (!item) return;
       const text = getEditorText();
@@ -898,10 +910,24 @@
         state.dirty = false;
         updateSaveBtn();
         renderSidebar();
-        toast("已保存");
+        if (silent) {
+          setSaveStatus(`已自动保存 ${new Date().toLocaleTimeString()}`);
+        } else {
+          setSaveStatus("已保存");
+          toast("已保存");
+        }
       } catch (err) {
         setErr(`保存失败：${err.message || err}`);
       }
+    }
+
+    // ---- 自动保存（停止输入后 ~1.8s） ----
+    const AUTO_SAVE_MS = 1800;
+    function scheduleAutoSave() {
+      window.clearTimeout(state.autoSaveTimer);
+      state.autoSaveTimer = window.setTimeout(() => {
+        if (state.dirty && findItem(state.currentId)) void saveCurrent({ silent: true });
+      }, AUTO_SAVE_MS);
     }
 
     async function deleteCurrent() {
@@ -1094,7 +1120,21 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       try {
         if (fmt === "md") {
           const fm = `---\ntitle: ${title}\ncategory: ${state.index.cats.find((c) => c.id === item.catId)?.name || ""}\ntags: [${(item.tagIds || []).map((t) => state.index.tags.find((x) => x.id === t)?.name).filter(Boolean).join(", ")}]\n---\n\n`;
-          downloadBlob(new Blob([fm + text], { type: "text/markdown;charset=utf-8" }), `${slugify(title)}.md`);
+          const mdText = fm + text;
+          const images = await collectReferencedImages(text).catch(() => []);
+          if (images.length && window.JSZip) {
+            const zip = new window.JSZip();
+            zip.file(`${slugify(title)}.md`, mdText);
+            for (const im of images) {
+              const rel = String(im.path || "").replace(/^\.\//, "").replace(/^\/+/, "");
+              if (rel) zip.file(rel, im.dataBase64, { base64: true });
+            }
+            const blob = await zip.generateAsync({ type: "blob" });
+            downloadBlob(blob, `${slugify(title)}.zip`);
+            toast(`已打包导出（含 ${images.length} 张图片）`);
+            return;
+          }
+          downloadBlob(new Blob([mdText], { type: "text/markdown;charset=utf-8" }), `${slugify(title)}.md`);
           return;
         }
         if (fmt === "html-standalone") {
@@ -1271,6 +1311,7 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
     els.title?.addEventListener("input", () => {
       state.dirty = true;
       updateSaveBtn();
+      scheduleAutoSave();
     });
     els.cat?.addEventListener("change", () => setCategory(els.cat.value));
     els.cat?.addEventListener("blur", () => setCategory(els.cat.value));
