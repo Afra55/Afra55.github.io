@@ -219,7 +219,8 @@
       splitter: $("#mdm-splitter"),
       preview: $("#mdm-preview"),
       empty: $("#mdm-empty"),
-      outline: $("#mdm-outline"),
+      outline: $("#mdm-outline-body"),
+      backlinks: $("#mdm-backlinks"),
     };
     if (!els.pickDir) return;
 
@@ -948,6 +949,11 @@
         r.readAsDataURL(blob);
       });
     }
+    function findItemByFileName(name) {
+      const n = String(name || "").split("/").pop();
+      return (state.index.items || []).find((x) => x.fileName === n) || null;
+    }
+
     async function readAssetBlob(rel) {
       const parts = String(rel || "").split("/").filter((p) => p && p !== ".");
       if (!parts.length) throw new Error("空路径");
@@ -975,6 +981,15 @@
         const v = el.getAttribute(attr) || "";
         if (!isRelativeRef(v)) continue;
         const rel = v.replace(/^\.\//, "").replace(/^\/+/, "");
+        if (el.tagName === "A" && /\.(md|markdown)$/i.test(rel)) {
+          const target = findItemByFileName(rel);
+          if (target) {
+            el.setAttribute("data-mdm-open", target.id);
+            el.setAttribute("href", "#");
+            el.removeAttribute("download");
+            continue;
+          }
+        }
         if (assetUrlCache.has(rel)) {
           el.setAttribute(attr, assetUrlCache.get(rel));
           continue;
@@ -1866,6 +1881,51 @@
             })
             .join("")
         : "";
+      syncOutlineActive();
+    }
+
+    function syncOutlineActive() {
+      if (!els.outline || !els.preview) return;
+      const heads = [...els.preview.querySelectorAll("h1,h2,h3,h4,h5,h6")];
+      const items = els.outline.querySelectorAll(".mdm-outline-item");
+      if (!heads.length || !items.length) return;
+      const top = els.preview.scrollTop + 8;
+      let active = 0;
+      for (let i = 0; i < heads.length; i++) {
+        if (heads[i].offsetTop <= top) active = i;
+        else break;
+      }
+      items.forEach((el, i) => el.classList.toggle("is-active", i === active));
+    }
+
+    /** 反向链接：哪些文档引用了当前文档（仅用已缓存正文，不阻塞） */
+    function renderBacklinks() {
+      const box = els.backlinks;
+      if (!box) return;
+      const cur = findItem(state.currentId);
+      if (!cur || !cur.fileName) {
+        box.innerHTML = "";
+        return;
+      }
+      const target = cur.fileName;
+      const hits = [];
+      for (const it of state.index.items || []) {
+        if (it.id === cur.id) continue;
+        const text = state.bodyCache.get(it.id);
+        if (text == null) continue;
+        if (collectReferencedAssets(text).some((r) => r.split("/").pop() === target)) hits.push(it);
+      }
+      box.innerHTML = hits.length
+        ? `<div class="mdm-group-title">反向链接 (${hits.length})</div>` +
+          hits
+            .map(
+              (it) =>
+                `<button type="button" class="mdm-backlink" data-backlink="${escapeHtml(it.id)}">${escapeHtml(
+                  it.title || "未命名"
+                )}</button>`
+            )
+            .join("")
+        : "";
     }
 
     function applySplit() {
@@ -1940,6 +2000,7 @@
         setEditorText(fm.body);
         renderPreview();
         renderOutline();
+        renderBacklinks();
       } catch (err) {
         const msg = String(err?.message || err);
         if (/could not be found|NotFound|not found|找不到|不存在/i.test(msg)) {
@@ -3037,6 +3098,28 @@ a{color:${v.accent}}
     els.outline?.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === " ") outlineGo(e);
     });
+    els.preview?.addEventListener("click", (e) => {
+      const a = e.target.closest?.("a[data-mdm-open]");
+      if (!a) return;
+      e.preventDefault();
+      void openDoc(a.dataset.mdmOpen);
+    });
+    els.backlinks?.addEventListener("click", (e) => {
+      const b = e.target.closest?.("[data-backlink]");
+      if (b) void openDoc(b.dataset.backlink);
+    });
+    let outlineRaf = 0;
+    els.preview?.addEventListener(
+      "scroll",
+      () => {
+        if (outlineRaf) return;
+        outlineRaf = window.requestAnimationFrame(() => {
+          outlineRaf = 0;
+          syncOutlineActive();
+        });
+      },
+      { passive: true }
+    );
     els.list?.addEventListener("click", (e) => {
       const back = e.target.closest?.('[data-trash="back"]');
       if (back) {

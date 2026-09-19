@@ -147,6 +147,13 @@
 .mdm-outline-item.lv2 { padding-left: 0.5rem; }
 .mdm-outline-item.lv3 { padding-left: 1rem; }
 .mdm-outline-item.lv4, .mdm-outline-item.lv5, .mdm-outline-item.lv6 { padding-left: 1.4rem; }
+.mdm-outline-item { cursor: pointer; border-radius: 5px; }
+.mdm-outline-item:hover { color: var(--ink); }
+.mdm-outline-item.is-active { color: var(--accent); font-weight: 600; }
+
+.mdm-backlinks { margin-top: 0.7rem; border-top: 1px solid var(--line); padding-top: 0.5rem; }
+.mdm-backlink { display: block; width: 100%; text-align: left; padding: 0.25rem 0.4rem; border: none; background: transparent; color: var(--accent); border-radius: 6px; cursor: pointer; font-size: 0.82rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mdm-backlink:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 
 /* 预览排版 */
 .markdown-body { line-height: 1.7; color: var(--ink); word-wrap: break-word; }
