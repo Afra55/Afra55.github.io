@@ -693,11 +693,26 @@
             : `<span class="hint tight">暂无标签</span>`);
       }
       renderList();
-      if (els.batchbar) {
-        els.batchbar.hidden = state.selected.size === 0;
-        if (els.batchCount) els.batchCount.textContent = `已选 ${state.selected.size} 项`;
-      }
+      updateBatchBar();
       renderMeta();
+    }
+
+    /** 批量栏状态（不重建列表，供细粒度更新复用） */
+    function updateBatchBar() {
+      if (!els.batchbar) return;
+      els.batchbar.hidden = state.selected.size === 0;
+      if (els.batchCount) els.batchCount.textContent = `已选 ${state.selected.size} 项`;
+    }
+
+    /** #17 细粒度更新：仅同步列表项的选中/当前态，避免整表重建 */
+    function updateItemClasses() {
+      if (!els.list) return;
+      els.list.querySelectorAll(".mdm-item[data-id]").forEach((el) => {
+        const id = el.dataset.id;
+        el.classList.toggle("is-active", id === state.currentId);
+        el.classList.toggle("is-selected", state.selected.has(id));
+      });
+      updateBatchBar();
     }
 
     /** 搜索命中高亮（先转义再包 mark） */
@@ -3032,7 +3047,7 @@ a{color:${v.accent}}
         const id = b.dataset.id;
         if (state.selected.has(id)) state.selected.delete(id);
         else state.selected.add(id);
-        renderSidebar();
+        updateItemClasses();
         return;
       }
       void openDoc(b.dataset.id);
@@ -3143,12 +3158,12 @@ a{color:${v.accent}}
       const ids = [...state.selected];
       if (act === "clear") {
         state.selected.clear();
-        renderSidebar();
+        updateItemClasses();
         return;
       }
       if (act === "all") {
         for (const it of filteredItems()) state.selected.add(it.id);
-        renderSidebar();
+        updateItemClasses();
         return;
       }
       if (!ids.length) return;
