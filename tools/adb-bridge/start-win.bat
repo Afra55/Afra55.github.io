@@ -209,6 +209,20 @@ if not exist "%SCRIPT_DIR%git-bridge\server.js" (
   )
 )
 
+if not exist "%SCRIPT_DIR%fileunlock-bridge\server.js" (
+  if not exist "%SCRIPT_DIR%..\fileunlock-bridge\server.js" (
+    echo [WARN] fileunlock-bridge/server.js not found - File unlock API disabled until full ZIP is used.
+    echo [WARN] missing fileunlock-bridge>> "%LOG_FILE%"
+  )
+)
+
+if not exist "%SCRIPT_DIR%pandoc-bridge\server.js" (
+  if not exist "%SCRIPT_DIR%..\pandoc-bridge\server.js" (
+    echo [WARN] pandoc-bridge/server.js not found - Pandoc export disabled until full ZIP is used.
+    echo [WARN] missing pandoc-bridge>> "%LOG_FILE%"
+  )
+)
+
 if "%ADB_BRIDGE_TOKEN%"=="" set "ADB_BRIDGE_TOKEN=devtools-bridge"
 set "ADB_BRIDGE_DIR=%CD%"
 

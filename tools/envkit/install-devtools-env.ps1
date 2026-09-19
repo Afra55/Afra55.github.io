@@ -188,7 +188,7 @@ function Sync-Bridges {
   }
 
   $bad = $false
-  foreach ($rel in @("adb-bridge\server.js", "ffmpeg-bridge\server.js", "git-bridge\server.js", "git-bridge\git-ops.js")) {
+  foreach ($rel in @("adb-bridge\server.js", "ffmpeg-bridge\server.js", "git-bridge\server.js", "git-bridge\git-ops.js", "fileunlock-bridge\server.js", "fileunlock-bridge\lock-ops.js", "pandoc-bridge\server.js", "pandoc-bridge\pandoc-ops.js")) {
     $p = Join-Path $BridgeDir $rel
     if (-not (Test-Path $p) -or (Get-Item $p).Length -lt 10) {
       Write-Miss "缺失或空：$rel"

@@ -310,7 +310,7 @@ download_file() {
 sync_bridges() {
   say ""
   say "== 同步本机桥文件 → ${BRIDGE_DIR} =="
-  mkdir -p "$BRIDGE_DIR/adb-bridge" "$BRIDGE_DIR/ffmpeg-bridge" "$BRIDGE_DIR/git-bridge" "$BRIDGE_DIR/fileunlock-bridge"
+  mkdir -p "$BRIDGE_DIR/adb-bridge" "$BRIDGE_DIR/ffmpeg-bridge" "$BRIDGE_DIR/git-bridge" "$BRIDGE_DIR/fileunlock-bridge" "$BRIDGE_DIR/pandoc-bridge"
 
   # ADB 统一桥核心文件
   local adb_files=(server.js resolve-port.js scrcpy-mirror.js scrcpy-ctrl.js device-inspect.js)
@@ -360,7 +360,11 @@ sync_bridges() {
     "$BRIDGE_DIR/adb-bridge/server.js" \
     "$BRIDGE_DIR/ffmpeg-bridge/server.js" \
     "$BRIDGE_DIR/git-bridge/server.js" \
-    "$BRIDGE_DIR/git-bridge/git-ops.js"
+    "$BRIDGE_DIR/git-bridge/git-ops.js" \
+    "$BRIDGE_DIR/fileunlock-bridge/server.js" \
+    "$BRIDGE_DIR/fileunlock-bridge/lock-ops.js" \
+    "$BRIDGE_DIR/pandoc-bridge/server.js" \
+    "$BRIDGE_DIR/pandoc-bridge/pandoc-ops.js"
   do
     if [[ ! -s "$f" ]]; then
       warn "缺失或空文件：$f"

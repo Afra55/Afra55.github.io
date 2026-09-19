@@ -164,6 +164,12 @@ if [ ! -f "${SCRIPT_DIR}/scrcpy-ctrl.js" ]; then
   fi
 fi
 
+for mod in ffmpeg-bridge git-bridge fileunlock-bridge pandoc-bridge; do
+  if [ ! -f "${SCRIPT_DIR}/${mod}/server.js" ] && [ ! -f "${SCRIPT_DIR}/../${mod}/server.js" ]; then
+    echo "[WARN] ${mod}/server.js 缺失——对应能力不可用（请使用完整 ZIP 包）"
+  fi
+done
+
 cd "${BRIDGE_DIR}" || pause_exit 1
 export ADB_BRIDGE_TOKEN="${ADB_BRIDGE_TOKEN:-devtools-bridge}"
 export ADB_BRIDGE_DIR="${BRIDGE_DIR}"
