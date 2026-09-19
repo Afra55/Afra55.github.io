@@ -37,10 +37,25 @@
                 <button type="button" class="seg-btn" id="mdm-mode-preview">预览</button>
               </span>
               <input id="mdm-title" class="mdm-title mono" placeholder="标题" autocomplete="off" />
+              <span class="mdm-insert-menu">
+                <button type="button" class="secondary-btn" id="mdm-insert-toggle" title="插入内容">插入 ▾</button>
+                <div class="mdm-insert-dropdown" id="mdm-insert-dropdown" hidden>
+                  <button type="button" data-insert="link">链接</button>
+                  <button type="button" data-insert="code">代码块</button>
+                  <button type="button" data-insert="table">表格</button>
+                  <button type="button" data-insert="task">任务列表</button>
+                  <button type="button" data-insert="math-inline">行内公式</button>
+                  <button type="button" data-insert="math-block">块级公式</button>
+                  <button type="button" data-insert="mermaid">Mermaid 图</button>
+                  <button type="button" data-insert="divider">分隔线</button>
+                  <button type="button" data-insert="file">文件附件…</button>
+                </div>
+              </span>
               <button type="button" class="secondary-btn" id="mdm-insert-img" title="插入图片（会存到所选文件夹的 assets/）">图片</button>
               <span class="hint tight" id="mdm-save-status"></span>
               <button type="button" class="ghost-btn" id="mdm-delete" title="删除当前文档">删除</button>
               <input id="mdm-img-input" type="file" accept="image/*" multiple hidden />
+              <input id="mdm-file-input" type="file" multiple hidden />
             </div>
             <div class="mdm-meta-row">
               <label for="mdm-cat">分类</label>

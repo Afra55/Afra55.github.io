@@ -155,6 +155,9 @@
       del: $("#mdm-delete"),
       insertImg: $("#mdm-insert-img"),
       imgInput: $("#mdm-img-input"),
+      fileInput: $("#mdm-file-input"),
+      insertToggle: $("#mdm-insert-toggle"),
+      insertDropdown: $("#mdm-insert-dropdown"),
       saveStatus: $("#mdm-save-status"),
       cat: $("#mdm-cat"),
       catList: $("#mdm-cat-list"),
@@ -253,7 +256,16 @@
     function renderMarkdown(text) {
       const inst = getMd();
       const rawHtml = inst ? inst.render(String(text || "")) : `<pre>${escapeHtml(text || "")}</pre>`;
-      const safe = window.DOMPurify ? window.DOMPurify.sanitize(rawHtml, { USE_PROFILES: { html: true } }) : rawHtml;
+      const safe = window.DOMPurify
+        ? window.DOMPurify.sanitize(rawHtml, {
+            USE_PROFILES: { html: true },
+            ADD_TAGS: ["video", "audio", "source", "track", "figure", "figcaption", "mark", "details", "summary"],
+            ADD_ATTR: [
+              "controls", "playsinline", "poster", "preload", "loop", "muted", "download",
+              "target", "rel", "start", "type",
+            ],
+          })
+        : rawHtml;
       return safe;
     }
 
@@ -564,12 +576,12 @@
         a.setAttribute("rel", "noopener noreferrer");
       });
       applyTaskLists(els.preview);
-      void resolvePreviewImages();
+      void resolvePreviewAssets();
       void renderMermaidBlocks();
     }
 
-    // ---- 本地图片（存在所选文件夹里，相对路径引用） ----
-    const imgUrlCache = new Map();
+    // ---- 本地资源（图片/视频/音频/附件，存在所选文件夹里，相对路径引用） ----
+    const assetUrlCache = new Map();
     function blobToDataUrl(blob) {
       return new Promise((resolve, reject) => {
         const r = new FileReader();
@@ -586,30 +598,50 @@
       const fh = await dir.getFileHandle(parts[parts.length - 1]);
       return await fh.getFile();
     }
-    async function resolvePreviewImages() {
+    function isRelativeRef(v) {
+      return v && !/^(https?:|data:|blob:|#|mailto:|tel:|\/\/)/i.test(v);
+    }
+    async function resolvePreviewAssets() {
       if (state.mode !== "dir" || !state.dirHandle || !els.preview) return;
-      const imgs = [...els.preview.querySelectorAll("img")].filter((im) => {
-        const s = im.getAttribute("src") || "";
-        return s && !/^(https?:|data:|blob:)/i.test(s);
-      });
-      for (const im of imgs) {
-        const rel = (im.getAttribute("src") || "").replace(/^\.\//, "");
-        if (imgUrlCache.has(rel)) {
-          im.src = imgUrlCache.get(rel);
+      const nodes = [...els.preview.querySelectorAll("img, video, audio, source, a[href]")];
+      for (const el of nodes) {
+        const attr = el.tagName === "A" ? "href" : "src";
+        const v = el.getAttribute(attr) || "";
+        if (!isRelativeRef(v)) continue;
+        const rel = v.replace(/^\.\//, "").replace(/^\/+/, "");
+        if (assetUrlCache.has(rel)) {
+          el.setAttribute(attr, assetUrlCache.get(rel));
           continue;
         }
         try {
           const blob = await readAssetBlob(rel);
           const url = URL.createObjectURL(blob);
-          imgUrlCache.set(rel, url);
-          im.src = url;
+          assetUrlCache.set(rel, url);
+          el.setAttribute(attr, url);
+          if (el.tagName === "A") {
+            el.setAttribute("download", rel.split("/").pop() || "");
+            el.setAttribute("target", "_blank");
+            el.setAttribute("rel", "noopener noreferrer");
+          }
         } catch (_) {
-          im.classList.add("mdm-img-missing");
-          im.alt = im.alt || `图片缺失：${rel}`;
+          if (el.tagName === "IMG") {
+            el.classList.add("mdm-img-missing");
+            el.alt = el.alt || `图片缺失：${rel}`;
+          }
         }
       }
     }
-    async function inlineImagesForExport(html) {
+    /** 收集正文里引用的本地资源（图/视频/音频/附件链接） */
+    function collectReferencedAssets(text) {
+      const refs = new Set();
+      const s = String(text || "");
+      for (const re of [/!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, /(?:src|href)\s*=\s*["']([^"']+)["']/gi]) {
+        let m;
+        while ((m = re.exec(s))) if (isRelativeRef(m[1])) refs.add(m[1].replace(/^\.\//, "").replace(/^\/+/, ""));
+      }
+      return [...refs];
+    }
+    async function inlineAssetsForExport(html) {
       if (state.mode !== "dir" || !state.dirHandle) return html;
       let root;
       try {
@@ -618,11 +650,15 @@
         return html;
       }
       if (!root) return html;
-      for (const im of [...root.querySelectorAll("img")]) {
-        const rel = (im.getAttribute("src") || "").replace(/^\.\//, "");
-        if (!rel || /^(https?:|data:|blob:)/i.test(rel)) continue;
+      for (const el of [...root.querySelectorAll("img, video, audio, source, a[href]")]) {
+        const attr = el.tagName === "A" ? "href" : "src";
+        const v = el.getAttribute(attr) || "";
+        if (!isRelativeRef(v)) continue;
+        const rel = v.replace(/^\.\//, "").replace(/^\/+/, "");
         try {
-          im.setAttribute("src", await blobToDataUrl(await readAssetBlob(rel)));
+          const blob = await readAssetBlob(rel);
+          if (blob.size > 12 * 1024 * 1024) continue; // 过大不内联
+          el.setAttribute(attr, await blobToDataUrl(blob));
         } catch (_) {}
       }
       return root.innerHTML;
@@ -665,36 +701,93 @@
       }
     }
 
-    // ---- 编辑器内插入图片：粘贴/拖入/按钮 → 存到 assets/ → 插入相对路径 ----
-    async function insertImageFile(file) {
-      if (state.mode !== "dir" || !state.dirHandle) {
-        setErr("插入图片需要先「选择文件夹」（图片会存到该文件夹的 assets/ 子目录）");
-        return;
-      }
-      const view = state.view;
-      if (!view) return;
-      try {
-        const ext = (String(file.name || "img").split(".").pop() || "png").toLowerCase();
-        const name = `${Date.now().toString(36)}-${slugify(String(file.name || "img").replace(/\.[^.]+$/, ""), "img")}.${ext}`;
-        const dir = await state.dirHandle.getDirectoryHandle("assets", { create: true });
-        const fh = await dir.getFileHandle(name, { create: true });
-        const w = await fh.createWritable();
-        await w.write(file);
-        await w.close();
-        const alt = String(file.name || "图片").replace(/\.[^.]+$/, "");
-        view.dispatch(view.state.replaceSelection(`![${alt}](assets/${name})`));
-        toast("已插入图片");
-      } catch (err) {
-        setErr(`插入图片失败：${err.message || err}`);
-      }
+    // ---- 编辑器内插入资源：图片/视频/音频/任意文件 → 存到 assets/ → 插入对应 Markdown ----
+    async function saveAsset(file) {
+      const ext = (String(file.name || "file").split(".").pop() || "bin").toLowerCase();
+      const base = slugify(String(file.name || "file").replace(/\.[^.]+$/, ""), "file");
+      const name = `${Date.now().toString(36)}-${base}.${ext}`;
+      const dir = await state.dirHandle.getDirectoryHandle("assets", { create: true });
+      const fh = await dir.getFileHandle(name, { create: true });
+      const w = await fh.createWritable();
+      await w.write(file);
+      await w.close();
+      return { rel: `assets/${name}` };
     }
 
-    async function insertImages(files) {
-      const imgs = [...(files || [])].filter(
-        (f) => /^image\//.test(f.type || "") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name || "")
+    function markdownForAsset(file, rel) {
+      const mime = String(file.type || "");
+      const label = String(file.name || rel.split("/").pop() || "文件");
+      const noExt = label.replace(/\.[^.]+$/, "");
+      if (/^image\//.test(mime) || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(label)) return `![${noExt}](${rel})`;
+      if (/^video\//.test(mime) || /\.(mp4|webm|mov|m4v|ogv)$/i.test(label)) return `<video src="${rel}" controls playsinline></video>`;
+      if (/^audio\//.test(mime) || /\.(mp3|wav|ogg|m4a|flac|aac)$/i.test(label)) return `<audio src="${rel}" controls></audio>`;
+      return `[${label}](${rel})`;
+    }
+
+    async function insertAssetFiles(files) {
+      const list = [...(files || [])].filter(Boolean);
+      if (!list.length) return false;
+      const view = state.view;
+      if (!view) return false;
+      if (state.mode !== "dir" || !state.dirHandle) {
+        setErr("插入文件需要先「选择文件夹」（会存到该文件夹的 assets/ 子目录）");
+        return true;
+      }
+      const parts = [];
+      for (const f of list) {
+        try {
+          const a = await saveAsset(f);
+          parts.push(markdownForAsset(f, a.rel));
+        } catch (err) {
+          setErr(`插入失败（${f.name}）：${err.message || err}`);
+        }
+      }
+      if (parts.length) {
+        view.dispatch(view.state.replaceSelection(parts.join("\n\n") + "\n"));
+        toast(`已插入 ${parts.length} 个`);
+      }
+      return true;
+    }
+
+    function insertTemplate(kind) {
+      const view = state.view;
+      if (!view) return;
+      const sel = view.state.selection.main;
+      const selected = view.state.sliceDoc(sel.from, sel.to);
+      const tpl = {
+        link: () => `[${selected || "文字"}](https://)`,
+        code: () => "```\n" + (selected || "") + "\n```",
+        table: () => "| 列1 | 列2 | 列3 |\n| --- | --- | --- |\n|  |  |  |\n|  |  |  |",
+        task: () => (selected ? selected.split("\n").map((l) => `- [ ] ${l}`).join("\n") : "- [ ] "),
+        "math-inline": () => `$${selected || ""}$`,
+        "math-block": () => `$$\n${selected || ""}\n$$`,
+        mermaid: () => "```mermaid\nflowchart TD\n  A[开始] --> B{判断}\n  B -->|是| C[结束]\n```",
+        divider: () => "\n---\n",
+      }[kind];
+      if (!tpl) return;
+      view.dispatch(view.state.replaceSelection(tpl()));
+      view.focus();
+    }
+
+    function hasRichHtml(html) {
+      return /<(p|h[1-6]|ul|ol|li|table|thead|tbody|tr|td|th|strong|b|em|i|a\s|pre|code|blockquote|img|hr)\b/i.test(
+        String(html || "")
       );
-      for (const f of imgs) await insertImageFile(f);
-      return imgs.length > 0;
+    }
+
+    function htmlToMarkdown(html) {
+      if (typeof window.TurndownService !== "function") return "";
+      try {
+        const svc = new window.TurndownService({
+          headingStyle: "atx",
+          codeBlockStyle: "fenced",
+          bulletListMarker: "-",
+          emDelimiter: "*",
+        });
+        return svc.turndown(String(html || ""));
+      } catch (_) {
+        return "";
+      }
     }
 
     function bindEditorMedia() {
@@ -704,17 +797,26 @@
       dom.addEventListener(
         "paste",
         (e) => {
-          const files = [];
+          const files = [...(e.clipboardData?.files || [])];
           for (const it of e.clipboardData?.items || []) {
             if (it.kind === "file") {
               const f = it.getAsFile?.();
-              if (f) files.push(f);
+              if (f && !files.includes(f)) files.push(f);
             }
           }
-          const imgs = files.filter((f) => /^image\//.test(f.type || ""));
-          if (imgs.length) {
+          if (files.length) {
             e.preventDefault();
-            void insertImages(imgs);
+            void insertAssetFiles(files);
+            return;
+          }
+          // 富文本 → Markdown
+          const html = e.clipboardData?.getData?.("text/html") || "";
+          if (html && hasRichHtml(html) && typeof window.TurndownService === "function") {
+            const md = htmlToMarkdown(html);
+            if (md.trim()) {
+              e.preventDefault();
+              view.dispatch(view.state.replaceSelection(md));
+            }
           }
         },
         true
@@ -723,13 +825,10 @@
         "drop",
         (e) => {
           const files = [...(e.dataTransfer?.files || [])];
-          const imgs = files.filter(
-            (f) => /^image\//.test(f.type || "") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name || "")
-          );
-          if (imgs.length) {
+          if (files.length) {
             e.preventDefault();
             e.stopPropagation();
-            void insertImages(imgs);
+            void insertAssetFiles(files);
           }
         },
         true
@@ -1082,14 +1181,18 @@
       if (n) toast(imgN ? `已导入 ${n} 篇 · 含 ${imgN} 张图片` : `已导入 ${n} 篇`);
     }
 
-    /** 把 .md 引用的本地图片一并写入目标文件夹（保留相对路径） */
+    /** 把 .md 引用的本地资源（图/视频/音频/附件）一并写入目标文件夹（保留相对路径） */
     async function importDocImages(body, baseDir, assetMap) {
       if (state.mode !== "dir" || !state.dirHandle || !assetMap.size) return { text: body, imported: 0 };
       let imported = 0;
       const tasks = [];
-      const re = /!\[([^\]]*)\]\(([^)\s]+)(\s+"[^"]*")?\)/g;
-      const text = String(body || "").replace(re, (full, _alt, ref) => {
-        if (/^(https?:|data:|blob:)/i.test(ref)) return full;
+      const text = String(body || "");
+      const refs = new Set();
+      for (const re of [/!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, /(?:src|href)\s*=\s*["']([^"']+)["']/gi]) {
+        let m;
+        while ((m = re.exec(text))) if (isRelativeRef(m[1])) refs.add(m[1]);
+      }
+      for (const ref of refs) {
         const clean = String(ref).replace(/^\.\//, "").replace(/^\/+/, "");
         const cands = [];
         if (baseDir) cands.push(`${baseDir}/${clean}`);
@@ -1101,11 +1204,10 @@
             break;
           }
         }
-        if (!file) return full;
+        if (!file) continue;
         tasks.push(writeAssetFile(clean, file));
         imported += 1;
-        return full;
-      });
+      }
       await Promise.all(tasks);
       return { text, imported };
     }
@@ -1178,12 +1280,12 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       if (!item) return;
       const text = getEditorText();
       const title = item.title || "document";
-      const html = await inlineImagesForExport(renderMarkdown(text));
+      const html = await inlineAssetsForExport(renderMarkdown(text));
       try {
         if (fmt === "md") {
           const fm = `---\ntitle: ${title}\ncategory: ${state.index.cats.find((c) => c.id === item.catId)?.name || ""}\ntags: [${(item.tagIds || []).map((t) => state.index.tags.find((x) => x.id === t)?.name).filter(Boolean).join(", ")}]\n---\n\n`;
           const mdText = fm + text;
-          const images = await collectReferencedImages(text).catch(() => []);
+          const images = await collectReferencedAssetsWithData(text).catch(() => []);
           if (images.length && window.JSZip) {
             const zip = new window.JSZip();
             zip.file(`${slugify(title)}.md`, mdText);
@@ -1224,20 +1326,19 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       }
     }
 
-    async function collectReferencedImages(text) {
+    async function collectReferencedAssetsWithData(text) {
       if (state.mode !== "dir" || !state.dirHandle) return [];
+      const refs = new Set();
+      const s = String(text || "");
+      for (const re of [/!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g, /(?:src|href)\s*=\s*["']([^"']+)["']/gi]) {
+        let m;
+        while ((m = re.exec(s))) if (isRelativeRef(m[1])) refs.add(m[1].replace(/^\.\//, "").replace(/^\/+/, ""));
+      }
       const out = [];
-      const seen = new Set();
-      const re = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
-      let m;
-      while ((m = re.exec(String(text || "")))) {
-        let rel = m[1];
-        if (!rel || /^(https?:|data:|blob:)/i.test(rel)) continue;
-        rel = rel.replace(/^\.\//, "");
-        if (seen.has(rel)) continue;
-        seen.add(rel);
+      for (const rel of refs) {
         try {
           const blob = await readAssetBlob(rel);
+          if (blob.size > 64 * 1024 * 1024) continue;
           const dataUrl = await blobToDataUrl(blob);
           out.push({ path: rel, dataBase64: dataUrl.split(",")[1] || "" });
         } catch (_) {}
@@ -1246,7 +1347,7 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
     }
 
     async function exportViaPandoc(text, to, title, retried = false) {
-      const images = await collectReferencedImages(text).catch(() => []);
+      const images = await collectReferencedAssetsWithData(text).catch(() => []);
       const res = await fetch(`${baseUrl()}/pandoc/convert`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
@@ -1397,7 +1498,30 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
     els.imgInput?.addEventListener("change", (e) => {
       const files = [...(e.target.files || [])];
       e.target.value = "";
-      void insertImages(files);
+      void insertAssetFiles(files);
+    });
+    els.fileInput?.addEventListener("change", (e) => {
+      const files = [...(e.target.files || [])];
+      e.target.value = "";
+      void insertAssetFiles(files);
+    });
+    els.insertToggle?.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (els.insertDropdown) els.insertDropdown.hidden = !els.insertDropdown.hidden;
+    });
+    document.addEventListener("click", () => {
+      if (els.insertDropdown) els.insertDropdown.hidden = true;
+    });
+    els.insertDropdown?.addEventListener("click", (e) => {
+      const b = e.target.closest?.("[data-insert]");
+      if (!b) return;
+      els.insertDropdown.hidden = true;
+      const kind = b.dataset.insert;
+      if (kind === "file") {
+        els.fileInput?.click();
+        return;
+      }
+      insertTemplate(kind);
     });
     els.modeEdit?.addEventListener("click", () => { state.viewMode = "edit"; applyViewMode(); });
     els.modeSplit?.addEventListener("click", () => { state.viewMode = "split"; applyViewMode(); });
@@ -1478,9 +1602,11 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
         void (async () => {
           try {
             const files = await collectDroppedFiles(e.dataTransfer);
-            await importFiles(files);
+            const hasMd = files.some((f) => /\.(md|markdown|txt)$/i.test(f.name) || /markdown/.test(f.type || ""));
+            if (hasMd) await importFiles(files);
+            else await insertAssetFiles(files);
           } catch (err) {
-            setErr(`拖入导入失败：${err.message || err}`);
+            setErr(`拖入失败：${err.message || err}`);
           }
         })();
       });

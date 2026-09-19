@@ -75,6 +75,19 @@
 .mdm-tag-x { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0 0.1rem; }
 .mdm-tag-x:hover { color: #e06c75; }
 .mdm-tag-input { min-width: 8rem; padding: 0.25rem 0.45rem; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--ink); }
+.mdm-insert-menu { position: relative; display: inline-flex; }
+.mdm-insert-dropdown {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 20;
+  display: flex; flex-direction: column; min-width: 9.5rem;
+  background: var(--panel-strong, var(--bg-0)); border: 1px solid var(--line); border-radius: 10px;
+  padding: 0.25rem; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+}
+.mdm-insert-dropdown[hidden] { display: none !important; }
+.mdm-insert-dropdown button {
+  text-align: left; padding: 0.35rem 0.55rem; border: none; background: transparent; color: var(--ink);
+  border-radius: 7px; cursor: pointer; font-size: 0.85rem;
+}
+.mdm-insert-dropdown button:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .mdm-editor-wrap { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1fr; }
 .mdm-editor-wrap[data-mode="edit"] .mdm-preview { display: none; }
 .mdm-editor-wrap[data-mode="edit"] .mdm-splitter { display: none; }

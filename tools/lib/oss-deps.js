@@ -70,6 +70,14 @@
             path: "tools/vendor/mermaid/mermaid.min.js",
           },
           {
+            name: "Turndown",
+            version: "7.x",
+            license: "MIT",
+            repo: "https://github.com/mixmark-io/turndown",
+            usedIn: "Markdown 文档管理 · 富文本粘贴转 Markdown",
+            path: "tools/vendor/turndown/turndown.js",
+          },
+          {
             name: "JSZip (+ pako)",
             version: "3.10.1",
             license: "MIT / GPLv3",
