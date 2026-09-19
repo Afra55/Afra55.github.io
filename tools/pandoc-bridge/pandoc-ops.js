@@ -33,12 +33,12 @@ const EXT = {
   native: "native",
 };
 
-function runCmd(file, args, { input, timeout = 90000 } = {}) {
+function runCmd(file, args, { input, timeout = 90000, cwd } = {}) {
   return new Promise((resolve, reject) => {
     const child = execFile(
       file,
       args,
-      { timeout, maxBuffer: 128 * 1024 * 1024, windowsHide: true, encoding: "buffer" },
+      { timeout, maxBuffer: 128 * 1024 * 1024, windowsHide: true, encoding: "buffer", cwd },
       (err, stdout, stderr) => {
         if (err) {
           err.stdout = Buffer.isBuffer(stdout) ? stdout.toString("utf8") : String(stdout || "");
@@ -114,7 +114,7 @@ function safeBase(title) {
   return String(title || "document").replace(/[\\/:*?"<>|]+/g, "_").slice(0, 80) || "document";
 }
 
-async function convert({ text, to, from = "markdown", title }) {
+async function convert({ text, to, from = "markdown", title, images }) {
   const toFmt = String(to || "").trim().toLowerCase();
   if (!toFmt) throw new Error("缺少目标格式");
   if (toFmt === "pdf") throw new Error("PDF 请用前端打印（Pandoc 出 PDF 需额外 LaTeX 引擎）");
@@ -122,8 +122,20 @@ async function convert({ text, to, from = "markdown", title }) {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "mdm-pandoc-"));
   const outPath = path.join(tmp, `out.${ext}`);
   try {
+    // 写入图片，让 Pandoc 能解析相对路径
+    if (Array.isArray(images)) {
+      for (const im of images.slice(0, 200)) {
+        const rel = String(im?.path || "").replace(/\\/g, "/").replace(/\.\.+/g, "").replace(/^\/+/, "");
+        if (!rel || !im?.dataBase64) continue;
+        const dest = path.join(tmp, rel);
+        if (!dest.startsWith(tmp)) continue;
+        fs.mkdirSync(path.dirname(dest), { recursive: true });
+        fs.writeFileSync(dest, Buffer.from(String(im.dataBase64), "base64"));
+      }
+    }
     await runCmd(resolvePandocBin(), ["-f", String(from || "markdown"), "-t", toFmt, "-o", outPath], {
       input: Buffer.from(String(text || ""), "utf8"),
+      cwd: tmp,
     });
     const buf = fs.readFileSync(outPath);
     return { dataBase64: buf.toString("base64"), filename: `${safeBase(title)}.${ext}` };

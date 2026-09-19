@@ -152,6 +152,12 @@
       modePreview: $("#mdm-mode-preview"),
       title: $("#mdm-title"),
       del: $("#mdm-delete"),
+      insertImg: $("#mdm-insert-img"),
+      imgInput: $("#mdm-img-input"),
+      cat: $("#mdm-cat"),
+      catList: $("#mdm-cat-list"),
+      tagChips: $("#mdm-tag-chips"),
+      tagInput: $("#mdm-tag-input"),
       editorWrap: $("#mdm-editor-wrap"),
       editor: $("#mdm-editor"),
       splitter: $("#mdm-splitter"),
@@ -408,6 +414,7 @@
               .join("")
           : `<span class="hint tight">没有匹配的文档</span>`;
       }
+      renderMeta();
     }
 
     // ---- editor (CM6) ----
@@ -655,38 +662,42 @@
       }
     }
 
-    // ---- 编辑器内插入图片：粘贴/拖入图片 → 存到 assets/ → 插入相对路径 ----
+    // ---- 编辑器内插入图片：粘贴/拖入/按钮 → 存到 assets/ → 插入相对路径 ----
+    async function insertImageFile(file) {
+      if (state.mode !== "dir" || !state.dirHandle) {
+        setErr("插入图片需要先「选择文件夹」（图片会存到该文件夹的 assets/ 子目录）");
+        return;
+      }
+      const view = state.view;
+      if (!view) return;
+      try {
+        const ext = (String(file.name || "img").split(".").pop() || "png").toLowerCase();
+        const name = `${Date.now().toString(36)}-${slugify(String(file.name || "img").replace(/\.[^.]+$/, ""), "img")}.${ext}`;
+        const dir = await state.dirHandle.getDirectoryHandle("assets", { create: true });
+        const fh = await dir.getFileHandle(name, { create: true });
+        const w = await fh.createWritable();
+        await w.write(file);
+        await w.close();
+        const alt = String(file.name || "图片").replace(/\.[^.]+$/, "");
+        view.dispatch(view.state.replaceSelection(`![${alt}](assets/${name})`));
+        toast("已插入图片");
+      } catch (err) {
+        setErr(`插入图片失败：${err.message || err}`);
+      }
+    }
+
+    async function insertImages(files) {
+      const imgs = [...(files || [])].filter(
+        (f) => /^image\//.test(f.type || "") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name || "")
+      );
+      for (const f of imgs) await insertImageFile(f);
+      return imgs.length > 0;
+    }
+
     function bindEditorMedia() {
       const view = state.view;
       if (!view) return;
       const dom = view.dom;
-      const insertImage = async (file) => {
-        if (state.mode !== "dir" || !state.dirHandle) {
-          setErr("插入图片需要先「选择文件夹」（图片会存到该文件夹的 assets/ 子目录）");
-          return;
-        }
-        try {
-          const ext = (String(file.name || "img").split(".").pop() || "png").toLowerCase();
-          const name = `${Date.now().toString(36)}-${slugify(String(file.name || "img").replace(/\.[^.]+$/, ""), "img")}.${ext}`;
-          const dir = await state.dirHandle.getDirectoryHandle("assets", { create: true });
-          const fh = await dir.getFileHandle(name, { create: true });
-          const w = await fh.createWritable();
-          await w.write(file);
-          await w.close();
-          const alt = String(file.name || "图片").replace(/\.[^.]+$/, "");
-          view.dispatch(view.state.replaceSelection(`![${alt}](assets/${name})`));
-          toast("已插入图片");
-        } catch (err) {
-          setErr(`插入图片失败：${err.message || err}`);
-        }
-      };
-      const takeImages = (files) => {
-        const imgs = [...(files || [])].filter(
-          (f) => /^image\//.test(f.type || "") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name || "")
-        );
-        imgs.forEach((f) => void insertImage(f));
-        return imgs.length > 0;
-      };
       dom.addEventListener(
         "paste",
         (e) => {
@@ -697,7 +708,11 @@
               if (f) files.push(f);
             }
           }
-          if (takeImages(files)) e.preventDefault();
+          const imgs = files.filter((f) => /^image\//.test(f.type || ""));
+          if (imgs.length) {
+            e.preventDefault();
+            void insertImages(imgs);
+          }
         },
         true
       );
@@ -705,9 +720,13 @@
         "drop",
         (e) => {
           const files = [...(e.dataTransfer?.files || [])];
-          if (takeImages(files)) {
+          const imgs = files.filter(
+            (f) => /^image\//.test(f.type || "") || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(f.name || "")
+          );
+          if (imgs.length) {
             e.preventDefault();
             e.stopPropagation();
+            void insertImages(imgs);
           }
         },
         true
@@ -915,6 +934,69 @@
       if (els.exportBtn) els.exportBtn.disabled = !has;
       if (els.exportFmt) els.exportFmt.disabled = !has;
       if (els.del) els.del.disabled = !has;
+      if (els.insertImg) els.insertImg.disabled = !has;
+    }
+
+    // ---- 分类 / 标签 ----
+    function renderMeta() {
+      const item = findItem(state.currentId);
+      if (els.catList) {
+        els.catList.innerHTML = (state.index.cats || [])
+          .map((c) => `<option value="${escapeHtml(c.name)}"></option>`)
+          .join("");
+      }
+      const cat = item ? (state.index.cats || []).find((c) => c.id === item.catId) : null;
+      if (els.cat) els.cat.value = cat ? cat.name : "";
+      if (els.tagChips) {
+        const tags = item
+          ? (item.tagIds || []).map((tid) => (state.index.tags || []).find((t) => t.id === tid)).filter(Boolean)
+          : [];
+        els.tagChips.innerHTML = tags.length
+          ? tags
+              .map(
+                (t) =>
+                  `<span class="mdm-tag">#${escapeHtml(t.name)}<button type="button" class="mdm-tag-x" data-tag-rm="${escapeHtml(t.id)}" aria-label="移除标签">×</button></span>`
+              )
+              .join("")
+          : `<span class="hint tight">暂无</span>`;
+      }
+    }
+
+    function persistIndexSoon() {
+      saveIndexToStorage().catch(() => {});
+    }
+
+    function setCategory(name) {
+      const item = findItem(state.currentId);
+      if (!item) return;
+      const n = String(name || "").trim();
+      item.catId = n ? ensureCat(n) : "";
+      persistIndexSoon();
+      renderSidebar();
+      renderMeta();
+    }
+
+    function addTag(name) {
+      const item = findItem(state.currentId);
+      if (!item) return;
+      const n = String(name || "").trim().replace(/^#/, "");
+      if (!n) return;
+      const id = ensureTag(n);
+      if (!id) return;
+      item.tagIds = item.tagIds || [];
+      if (!item.tagIds.includes(id)) item.tagIds.push(id);
+      persistIndexSoon();
+      renderSidebar();
+      renderMeta();
+    }
+
+    function removeTag(id) {
+      const item = findItem(state.currentId);
+      if (!item) return;
+      item.tagIds = (item.tagIds || []).filter((x) => x !== id);
+      persistIndexSoon();
+      renderSidebar();
+      renderMeta();
     }
 
     // ---- import ----
@@ -1040,11 +1122,33 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
       }
     }
 
+    async function collectReferencedImages(text) {
+      if (state.mode !== "dir" || !state.dirHandle) return [];
+      const out = [];
+      const seen = new Set();
+      const re = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+      let m;
+      while ((m = re.exec(String(text || "")))) {
+        let rel = m[1];
+        if (!rel || /^(https?:|data:|blob:)/i.test(rel)) continue;
+        rel = rel.replace(/^\.\//, "");
+        if (seen.has(rel)) continue;
+        seen.add(rel);
+        try {
+          const blob = await readAssetBlob(rel);
+          const dataUrl = await blobToDataUrl(blob);
+          out.push({ path: rel, dataBase64: dataUrl.split(",")[1] || "" });
+        } catch (_) {}
+      }
+      return out;
+    }
+
     async function exportViaPandoc(text, to, title, retried = false) {
+      const images = await collectReferencedImages(text).catch(() => []);
       const res = await fetch(`${baseUrl()}/pandoc/convert`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
-        body: JSON.stringify({ text, to, title }),
+        body: JSON.stringify({ text, to, title, images }),
       });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok) {
@@ -1167,6 +1271,25 @@ img{max-width:100%}blockquote{border-left:3px solid #d0d7de;margin:0;padding-lef
     els.title?.addEventListener("input", () => {
       state.dirty = true;
       updateSaveBtn();
+    });
+    els.cat?.addEventListener("change", () => setCategory(els.cat.value));
+    els.cat?.addEventListener("blur", () => setCategory(els.cat.value));
+    els.tagInput?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === "," || e.key === "，") {
+        e.preventDefault();
+        addTag(els.tagInput.value);
+        els.tagInput.value = "";
+      }
+    });
+    els.tagChips?.addEventListener("click", (e) => {
+      const b = e.target.closest?.("[data-tag-rm]");
+      if (b) removeTag(b.dataset.tagRm);
+    });
+    els.insertImg?.addEventListener("click", () => els.imgInput?.click());
+    els.imgInput?.addEventListener("change", (e) => {
+      const files = [...(e.target.files || [])];
+      e.target.value = "";
+      void insertImages(files);
     });
     els.modeEdit?.addEventListener("click", () => { state.viewMode = "edit"; applyViewMode(); });
     els.modeSplit?.addEventListener("click", () => { state.viewMode = "split"; applyViewMode(); });

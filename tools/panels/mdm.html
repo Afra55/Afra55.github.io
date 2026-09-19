@@ -37,7 +37,17 @@
                 <button type="button" class="seg-btn" id="mdm-mode-preview">预览</button>
               </span>
               <input id="mdm-title" class="mdm-title mono" placeholder="标题" autocomplete="off" />
+              <button type="button" class="secondary-btn" id="mdm-insert-img" title="插入图片（会存到所选文件夹的 assets/）">图片</button>
               <button type="button" class="ghost-btn" id="mdm-delete" title="删除当前文档">删除</button>
+              <input id="mdm-img-input" type="file" accept="image/*" multiple hidden />
+            </div>
+            <div class="mdm-meta-row">
+              <label for="mdm-cat">分类</label>
+              <input id="mdm-cat" class="mono mdm-cat" list="mdm-cat-list" placeholder="选择或输入分类" autocomplete="off" />
+              <datalist id="mdm-cat-list"></datalist>
+              <label>标签</label>
+              <span class="mdm-tag-chips" id="mdm-tag-chips"></span>
+              <input id="mdm-tag-input" class="mono mdm-tag-input" placeholder="输入标签后回车" autocomplete="off" />
             </div>
             <div class="mdm-editor-wrap" id="mdm-editor-wrap">
               <div class="mdm-editor" id="mdm-editor"></div>
