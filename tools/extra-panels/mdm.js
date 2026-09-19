@@ -539,7 +539,7 @@
         if (els.list) {
           els.list.innerHTML =
             `<div class="mdm-group-title">回收站 (${state.trashEntries.length})</div>` +
-            `<div class="mdm-trash-actions"><button type="button" class="ghost-btn" data-trash="back">返回文档</button><button type="button" class="ghost-btn" data-trash="empty">清空回收站</button></div>` +
+            `<div class="mdm-trash-actions"><button type="button" class="ghost-btn" data-trash="back">返回文档</button><button type="button" class="ghost-btn" data-trash="restore-all">全部恢复</button><button type="button" class="ghost-btn" data-trash="empty">清空回收站</button></div>` +
             (state.trashEntries.length
               ? state.trashEntries
                   .map(
@@ -1474,6 +1474,13 @@
       } catch (_) {}
     }
 
+    async function restoreAllTrash() {
+      const keys = state.trashEntries.map((t) => t.key);
+      if (!keys.length) return;
+      for (const k of keys) await restoreTrash(k);
+      toast(`已恢复 ${keys.length} 篇`);
+    }
+
     async function emptyTrash() {
       try {
         if (state.mode === "dir" && state.dirHandle) {
@@ -2268,6 +2275,18 @@
       };
     }
 
+    function buildToc(bodyHtml) {
+      const heads = [...String(bodyHtml).matchAll(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi)];
+      if (heads.length < 3) return "";
+      return (
+        `<nav class="toc"><strong>目录</strong><ul>` +
+        heads
+          .map((m) => `<li class="toc-l${m[1]}">${m[2].replace(/<[^>]+>/g, "").trim()}</li>`)
+          .join("") +
+        `</ul></nav>`
+      );
+    }
+
     function standaloneHtml(title, bodyHtml) {
       const v = themeVars();
       return `<!doctype html><html lang="zh"><head><meta charset="utf-8" /><title>${escapeHtml(title)}</title>
@@ -2280,7 +2299,11 @@ pre code{background:none}
 table{border-collapse:collapse}th,td{border:1px solid ${v.line};padding:.35rem .6rem}
 img{max-width:100%}blockquote{border-left:3px solid ${v.line};margin:0;padding-left:1rem;color:${v.muted}}
 a{color:${v.accent}}
-</style></head><body>${bodyHtml}</body></html>`;
+.toc{border:1px solid ${v.line};border-radius:8px;padding:.6rem .9rem;margin-bottom:1.4rem}
+.toc ul{margin:.35rem 0 0;padding-left:1.2rem}
+.toc-l2{padding-left:.8rem}.toc-l3,.toc-l4,.toc-l5,.toc-l6{padding-left:1.6rem}
+@media print{body{max-width:none;margin:0;padding:0}pre,table,blockquote,img{page-break-inside:avoid}h1,h2,h3{page-break-after:avoid}.toc{page-break-after:always}}
+</style></head><body>${buildToc(bodyHtml)}${bodyHtml}</body></html>`;
     }
 
     async function exportItemsToZip(ids) {
@@ -2474,6 +2497,8 @@ a{color:${v.accent}}
       cacheIndex();
       els.layout && (els.layout.hidden = false);
       els.dirLabel && (els.dirLabel.textContent = `存储：${label}`);
+      const total = (state.index.items || []).length;
+      if (total > 3000 && els.dirLabel) els.dirLabel.textContent += ` · ${total} 篇（库较大，建议分库或筛选）`;
       [els.newBtn, els.importDirBtn].forEach((b) => b && (b.disabled = false));
       [els.exportLib, els.importLib].forEach((b) => b && (b.disabled = false));
       els.importBtn && (els.importBtn.disabled = false);
@@ -2771,6 +2796,11 @@ a{color:${v.accent}}
       const empty = e.target.closest?.('[data-trash="empty"]');
       if (empty) {
         if (window.confirm("清空回收站？不可恢复")) void emptyTrash();
+        return;
+      }
+      const all = e.target.closest?.('[data-trash="restore-all"]');
+      if (all) {
+        void restoreAllTrash();
         return;
       }
       const restore = e.target.closest?.("[data-trash-restore]");

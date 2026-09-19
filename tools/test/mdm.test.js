@@ -47,4 +47,21 @@ t("collectRefs", () => {
   assert.deepStrictEqual(P.collectRefs(text).sort(), ["assets/a.png", "assets/v.mp4", "files/x.zip"]);
 });
 
+t("front-matter CRLF + 引号", () => {
+  const r = P.parseFrontMatter('---\r\ntitle: "A B"\r\ntags: [x, y]\r\n---\r\nbody');
+  assert.strictEqual(r.title, "A B");
+  assert.deepStrictEqual(r.tags, ["x", "y"]);
+});
+
+t("collectRefs HTML src/href", () => {
+  assert.deepStrictEqual(P.collectRefs('<img src="a/b.png"><a href="c/d.pdf">x</a>').sort(), [
+    "a/b.png",
+    "c/d.pdf",
+  ]);
+});
+
+t("slugify 中文/空格", () => {
+  assert.strictEqual(P.slugify("我的 文档"), "我的-文档");
+});
+
 console.log(`mdm.test: ${n} passed`);
