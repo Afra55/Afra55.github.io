@@ -30,6 +30,8 @@
     },
     html2canvas: {
       src: "./vendor/html2canvas.min.js",
+      // 页面存在 AMD define 时它的 UMD 初始化会抛错 → 加载期间临时屏蔽 define
+      noAmd: true,
       probe: () => typeof globalThis.html2canvas === "function",
     },
     gif: { src: "./vendor/gif.js", probe: () => typeof globalThis.GIF === "function" },
@@ -319,6 +321,7 @@
         if (settled) return;
         settled = true;
         window.clearTimeout(timer);
+        scriptPromises.delete(key); // 失败不缓存，允许重试
         reject(err || new Error(`脚本加载失败：${src}`));
       };
       const timer = window.setTimeout(() => finishErr(new Error(`脚本加载超时：${src}`)), timeoutMs);
@@ -419,7 +422,17 @@
     const spec = VENDOR_FILES[id];
     if (!spec) return;
     if (spec.probe()) return;
-    await loadScript(spec.src);
+    if (spec.noAmd) {
+      const saved = window.define;
+      try {
+        window.define = undefined;
+        await loadScript(spec.src);
+      } finally {
+        window.define = saved;
+      }
+    } else {
+      await loadScript(spec.src);
+    }
     if (!spec.probe()) throw new Error(`依赖未就绪：${id}`);
   }
 

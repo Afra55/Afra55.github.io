@@ -25,6 +25,8 @@ exit /b !EXIT_CODE!
 cd /d "%~dp0" 2>nul
 set "SCRIPT_DIR=%~dp0"
 set "BRIDGE_DIR=%SCRIPT_DIR%"
+rem 标记：由启动脚本拉起 → 自动更新重启后可安全关闭本窗口
+set "DEVTOOLS_BRIDGE_FROM_SCRIPT=1"
 set "LOG_FILE=%SCRIPT_DIR%last-start.log"
 
 echo ==== %DATE% %TIME% ==== > "%LOG_FILE%"

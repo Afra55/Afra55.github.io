@@ -4901,7 +4901,21 @@ function findStartScript() {
 /**
  * 更新后重启：优先走启动脚本，这样仍会走「检测是否已有桥 + 让用户选复用/重启/取消」的正常启动流程。
  * 没有启动脚本时退回直接重启（server 自身的 listenWithFallback 会处理端口占用）。
+ * 若本次是由启动脚本拉起的（DEVTOOLS_BRIDGE_FROM_SCRIPT=1），新窗口起来后自动关掉本窗口。
  */
+function closeOldWindowAfterRelaunch() {
+  if (process.platform !== "win32") return;
+  if (String(process.env.DEVTOOLS_BRIDGE_FROM_SCRIPT || "") !== "1") return;
+  const ppid = Number(process.ppid) || 0;
+  if (!ppid) return;
+  try {
+    // 延迟几秒再关（等新窗口完成启动），只关父进程 cmd（= 启动脚本窗口）
+    const code = `setTimeout(()=>{try{require("child_process").execFileSync("taskkill",["/PID","${ppid}","/F"],{stdio:"ignore"})}catch(e){}},3000)`;
+    const child = spawn(process.execPath, ["-e", code], { detached: true, stdio: "ignore" });
+    child.unref();
+  } catch (_) {}
+}
+
 function relaunchBridge() {
   try {
     const script = findStartScript();
@@ -4916,6 +4930,7 @@ function relaunchBridge() {
             })
           : spawn(script, [], { detached: true, stdio: "ignore", cwd: path.dirname(script), env: process.env });
       child.unref();
+      closeOldWindowAfterRelaunch();
       process.exit(0);
     }
     const child = spawn(process.execPath, [process.argv[1], ...process.argv.slice(2)], {

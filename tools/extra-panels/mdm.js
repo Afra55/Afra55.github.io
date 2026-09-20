@@ -901,7 +901,7 @@
         .map((n) => `#${escapeHtml(n)}`)
         .join(" ");
       const canDrag = state.sort === "order";
-      return `<button type="button" role="option" aria-selected="${state.selected.has(it.id)}" class="mdm-item${it.id === state.currentId ? " is-active" : ""}${state.selected.has(it.id) ? " is-selected" : ""}" data-id="${escapeHtml(it.id)}" draggable="${canDrag}">
+      return `<button type="button" role="option" aria-selected="${state.selected.has(it.id)}" class="mdm-item${it.id === state.currentId ? " is-active" : ""}${state.selected.has(it.id) ? " is-selected" : ""}" data-id="${escapeHtml(it.id)}" draggable="${canDrag}" title="${escapeHtml(it.title || "")}">
         ${
           canDrag
             ? `<span class="mdm-drag-handle" title="拖动排序" aria-hidden="true">⋮⋮</span>`
@@ -1844,6 +1844,57 @@
     }
 
     /** 重新扫描文件夹：把目录里已有但未纳入索引的 .md 加进来 */
+    /** 改名识别：索引里缺失的条目 ↔ 文件夹里未索引的新文件，按内容（或唯一匹配）判定为改名 */
+    async function reconcileRenames(folderFiles) {
+      const items = state.index.items || [];
+      const missing = items.filter((it) => it.fileName && !folderFiles.has(it.fileName));
+      const fresh = [...folderFiles].filter((n) => !items.some((x) => x.fileName === n));
+      if (!missing.length || !fresh.length) return { renamed: 0, remaining: fresh };
+      const norm = (s) => String(s || "").replace(/\s+/g, " ").trim();
+      const used = new Set();
+      let renamed = 0;
+      const remaining = [];
+      for (const name of fresh) {
+        let text = "";
+        try {
+          const fh = await state.dirHandle.getFileHandle(name);
+          text = await (await fh.getFile()).text();
+        } catch (_) {}
+        const fm0 = parseFrontMatter(text);
+        const body = norm(fm0.body);
+        let target = null;
+        if (body) {
+          target = missing.find((it) => {
+            if (used.has(it.id)) return false;
+            const cached = state.bodyCache.get(it.id) || state.persistedIdx.get(it.id);
+            return cached != null && norm(parseFrontMatter(cached).body) === body;
+          });
+        }
+        if (!target && missing.filter((it) => !used.has(it.id)).length === 1) {
+          target = missing.find((it) => !used.has(it.id));
+        }
+        if (!target) {
+          remaining.push(name);
+          continue;
+        }
+        used.add(target.id);
+        target.fileName = name;
+        const derived = name.replace(/\.[^.]+$/, "");
+        target.title = fm0.title || derived;
+        target.titleSaved = target.title;
+        target.fmHead = fm0.head || target.fmHead || "";
+        if (text) {
+          state.bodyCache.set(target.id, fm0.body);
+          state.persistedIdx.delete(target.id);
+          target.size = new Blob([fm0.body]).size;
+          target.excerpt = norm(fm0.body).slice(0, 160);
+        }
+        target.updatedAt = Date.now();
+        renamed += 1;
+      }
+      return { renamed, remaining };
+    }
+
     async function rescanFolder() {
       if (state.mode !== "dir" || !state.dirHandle) {
         setErr("仅「文件夹」模式支持重新扫描");
@@ -1852,13 +1903,19 @@
       setSaveStatus("扫描文件夹…");
       try {
         const known = new Set((state.index.items || []).map((x) => x.fileName));
-        let added = 0;
+        const folderFiles = new Set();
         for await (const [name, handle] of state.dirHandle.entries()) {
-          if (handle.kind !== "file" || !/\.(md|markdown)$/i.test(name)) continue;
-          if (name === INDEX_FILE || known.has(name)) continue;
+          if (handle.kind === "file" && /\.(md|markdown)$/i.test(name) && name !== INDEX_FILE) folderFiles.add(name);
+        }
+        // 先做改名识别，避免外部改名后出现重复文档
+        const rec = await reconcileRenames(folderFiles);
+        let added = 0;
+        for (const name of rec.remaining) {
+          if (known.has(name)) continue;
           let text = "";
           try {
-            text = await (await handle.getFile()).text();
+            const fh = await state.dirHandle.getFileHandle(name);
+            text = await (await fh.getFile()).text();
           } catch (_) {}
           const fm = parseFrontMatter(text);
           const title = fm.title || name.replace(/\.[^.]+$/, "");
@@ -1881,7 +1938,10 @@
         await saveIndexToStorage();
         renderSidebar();
         setSaveStatus("");
-        toast(added ? `已纳入 ${added} 篇已有文档` : "没有新的 .md 文件");
+        const parts = [];
+        if (rec.renamed) parts.push(`识别改名 ${rec.renamed} 篇`);
+        if (added) parts.push(`新增 ${added} 篇`);
+        toast(parts.length ? `已同步：${parts.join(" · ")}` : "没有变化");
       } catch (err) {
         setErr(`扫描失败：${err.message || err}`);
       }
@@ -2882,7 +2942,22 @@
         renderOutline();
         renderBacklinks();
         toast("检测到外部修改，已重新加载");
-      } catch (_) {}
+      } catch (_) {
+        // 文件不在了 → 可能被外部改名：尝试识别并同步
+        try {
+          const folderFiles = new Set();
+          for await (const [n, h] of state.dirHandle.entries()) {
+            if (h.kind === "file" && /\.(md|markdown)$/i.test(n) && n !== INDEX_FILE) folderFiles.add(n);
+          }
+          if (folderFiles.has(item.fileName)) return;
+          const rec = await reconcileRenames(folderFiles);
+          if (rec.renamed) {
+            await saveIndexToStorage();
+            renderSidebar();
+            toast("检测到外部改名，已同步文档名");
+          }
+        } catch (_) {}
+      }
     }
 
     let watchBound = false;
@@ -3126,12 +3201,13 @@
         return p;
       };
       const revealByPath = async (dir) => {
-        await api.revealLocalPath({ path: joinPath(dir) });
+        const res = await api.revealLocalPath({ path: joinPath(dir) });
         try {
           localStorage.setItem(dirPathKey(folderName), String(dir).trim());
         } catch (_) {}
         setErr("");
-        toast("已在本机打开所在位置");
+        const shown = res?.path || joinPath(dir);
+        toast(`已在本机打开：${shown}`);
       };
       // 1) 之前记住过文件夹路径 → 直接精确定位（最快最稳）
       let saved = "";
@@ -3152,9 +3228,9 @@
       if (folderName) {
         setSaveStatus("正在本机定位…");
         try {
-          await api.revealMdmDoc({ folderName, fileName: item.fileName });
+          const res = await api.revealMdmDoc({ folderName, fileName: item.fileName });
           setSaveStatus("");
-          toast("已在本机打开所在位置");
+          toast(`已在本机打开：${res?.path || item.fileName}`);
           return;
         } catch (err) {
           setSaveStatus("");
@@ -3743,9 +3819,26 @@ a{color:${v.accent}}
           return;
         }
         if (fmt === "png") {
-          if (typeof window.html2canvas !== "function") throw new Error("截图库未就绪");
-          const canvas = await window.html2canvas(els.preview, { backgroundColor: "#ffffff", scale: 2 });
-          canvas.toBlob((b) => b && downloadBlob(b, `${slugify(title)}.png`), "image/png");
+          await ensureVendor("html2canvas");
+          if (typeof window.html2canvas !== "function") throw new Error("截图库加载失败（请检查网络后重试）");
+          // 预览不可见时（纯编辑模式）克隆到屏幕外再截图，否则会得到空白图
+          let target = els.preview;
+          let tmp = null;
+          const invisible = !els.preview || els.preview.offsetParent === null || els.preview.clientWidth < 10;
+          if (invisible) {
+            tmp = document.createElement("div");
+            tmp.className = "markdown-body";
+            tmp.style.cssText = "position:fixed;left:-10000px;top:0;width:820px;background:#fff;color:#111;padding:16px";
+            tmp.innerHTML = els.preview ? els.preview.innerHTML : "";
+            document.body.appendChild(tmp);
+            target = tmp;
+          }
+          try {
+            const canvas = await window.html2canvas(target, { backgroundColor: "#ffffff", scale: 2 });
+            canvas.toBlob((b) => b && downloadBlob(b, `${slugify(title)}.png`), "image/png");
+          } finally {
+            if (tmp) tmp.remove();
+          }
           return;
         }
         await exportViaPandoc(text, fmt, title);

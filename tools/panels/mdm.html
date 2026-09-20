@@ -3,10 +3,6 @@
         <h1>Markdown 文档管理</h1>
       </div>
       <div class="panel-body mdm-body">
-        <div class="mdm-focus-toggles">
-          <button type="button" id="mdm-toggle-side" title="隐藏 / 显示左侧文件列表">◧</button>
-          <button type="button" id="mdm-toggle-top" title="隐藏 / 显示顶部按钮">▭</button>
-        </div>
         <div class="mdm-topbar">
           <button type="button" class="primary-btn" id="mdm-pick-dir" title="选择本机文件夹作为存储：文档以真实 .md 文件保存，可用 VS Code / Obsidian / Git 直接编辑">选择文件夹</button>
           <button type="button" class="secondary-btn" id="mdm-use-idb" title="改用浏览器本地存储（IndexedDB）：不需要文件夹权限，数据存在浏览器里；清除浏览器数据会丢失，建议配合「导出库」备份">本地存储模式</button>
@@ -72,6 +68,8 @@
                 <button type="button" class="seg-btn" id="mdm-mode-preview">预览</button>
               </span>
               <button type="button" class="ghost-btn mdm-max-btn" id="mdm-max" title="全屏编辑（Esc 退出）">⛶</button>
+              <button type="button" class="ghost-btn mdm-max-btn" id="mdm-toggle-side" title="隐藏 / 显示左侧文件列表">◧</button>
+              <button type="button" class="ghost-btn mdm-max-btn" id="mdm-toggle-top" title="隐藏 / 显示顶部按钮">▭</button>
               <input id="mdm-title" class="mdm-title mono" placeholder="标题" autocomplete="off" />
               <span class="mdm-insert-menu">
                 <button type="button" class="secondary-btn" id="mdm-insert-toggle" title="插入内容">插入 ▾</button>
