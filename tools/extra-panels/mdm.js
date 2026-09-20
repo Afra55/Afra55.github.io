@@ -538,25 +538,11 @@
       if (n) toast(`已同步 ${n} 篇文档的标签`);
     }
 
-    /** 解析搜索串：支持 tag:xxx（也接受 标签:），其余为正文关键词 */
-    function parseSearch(raw) {
-      if (MP.parseSearch) return MP.parseSearch(raw);
-      const s = String(raw || "").trim();
-      return { q: s.toLowerCase(), tags: [] };
-    }
-
     // ---- rendering: sidebar ----
     function filteredItems() {
-      const { tags } = parseSearch(state.search);
       return (state.index.items || [])
         .filter((it) => {
           if (state.activeTag && !(it.tagIds || []).includes(state.activeTag)) return false;
-          if (tags.length) {
-            const names = (it.tagIds || []).map((t) =>
-              String(state.index.tags.find((x) => x.id === t)?.name || "").toLowerCase()
-            );
-            if (!tags.every((t) => names.some((n) => n.includes(t)))) return false;
-          }
           return true;
         })
         .sort((a, b) => {
@@ -941,7 +927,7 @@
       const el = els.list?.querySelector(`.mdm-item[data-id="${item.id}"]`);
       if (!el) return false;
       const t = el.querySelector(".mdm-item-title");
-      if (t) t.innerHTML = hl(item.title || "未命名", parseSearch(state.search).q);
+      if (t) t.innerHTML = escapeHtml(item.title || "未命名");
       const m = el.querySelector(".mdm-item-meta");
       if (m) m.textContent = itemMetaText(item);
       el.title = item.title || "";
@@ -949,7 +935,6 @@
     }
 
     function itemHtml(it) {
-      const q = parseSearch(state.search).q;
       const tags = (it.tagIds || [])
         .map((tid) => state.index.tags.find((t) => t.id === tid)?.name)
         .filter(Boolean)
@@ -963,7 +948,7 @@
             : `<span class="mdm-drag-handle is-off" aria-hidden="true"></span>`
         }
         <span class="mdm-item-body">
-          <span class="mdm-item-title">${hl(it.title || "未命名", q)}</span>
+          <span class="mdm-item-title">${escapeHtml(it.title || "未命名")}</span>
           <span class="mdm-item-meta hint tight">${[
             it.pinned ? "📌" : "",
             tags,
