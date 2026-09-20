@@ -208,8 +208,10 @@
       importLib: $("#mdm-import-lib"),
       importLibInput: $("#mdm-import-lib-input"),
       save: $("#mdm-save"),
-      exportFmt: $("#mdm-export-fmt"),
-      exportBtn: $("#mdm-export"),
+      exportToggle: $("#mdm-export-toggle"),
+      exportDropdown: $("#mdm-export-dropdown"),
+      toggleSide: $("#mdm-toggle-side"),
+      toggleTop: $("#mdm-toggle-top"),
       dirLabel: $("#mdm-dir-label"),
       error: $("#mdm-error"),
       conflict: $("#mdm-conflict"),
@@ -2793,7 +2795,9 @@
         }
       }
       els.empty && (els.empty.hidden = true);
-      renderSidebar();
+      // 只更新选中态，别整表重建：否则单击会把列表 DOM 换掉，双击事件凑不起来（无法双击改名）
+      updateItemClasses();
+      renderMeta();
     }
 
     function newDoc() {
@@ -3037,6 +3041,45 @@
       };
     }
 
+    /** 让用户填一次文件夹完整路径（FSA 不暴露路径），之后记住 */
+    function askDirPathModal(folderName) {
+      return new Promise((resolve) => {
+        const box = els.modalBox;
+        box.innerHTML =
+          `<div class="mdm-modal-head"><strong>打开文件位置</strong></div>` +
+          `<p class="mdm-modal-body">浏览器出于安全不会把所选文件夹的完整路径交给网页，所以没法自动定位。\n\n请粘贴「${escapeHtml(
+            folderName
+          )}」这个文件夹的完整路径（例如 D:\\notes）。会记住它，之后可直接打开。</p>` +
+          `<input class="mdm-path-input mono" id="mdm-dirpath-input" placeholder="D:\\notes" spellcheck="false" />` +
+          `<div class="mdm-modal-foot">` +
+          `<button type="button" class="ghost-btn" data-dp="cancel">取消</button>` +
+          `<button type="button" class="primary-btn" data-dp="ok">打开并记住</button>` +
+          `</div>`;
+        els.modal.hidden = false;
+        const input = box.querySelector("#mdm-dirpath-input");
+        setTimeout(() => input?.focus(), 30);
+        const done = (v) => {
+          closeModal();
+          resolve(v);
+        };
+        els.modal.onclick = (e) => {
+          if (e.target === els.modal) done("");
+        };
+        box.onclick = (e) => {
+          const b = e.target.closest?.("[data-dp]");
+          if (!b) return;
+          done(b.dataset.dp === "ok" ? String(input?.value || "").trim() : "");
+        };
+        input?.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") done(String(input.value || "").trim());
+        });
+      });
+    }
+
+    function dirPathKey(name) {
+      return `devtools-mdm-dirpath:${String(name || "").toLowerCase()}`;
+    }
+
     /** 在本机资源管理器定位该文档（走本机桥；浏览器 FSA 不暴露绝对路径，按文件夹名+文件名反查） */
     async function revealItemLocation(item) {
       if (!item) return;
@@ -3049,11 +3092,42 @@
         showBridgeHelpModal("打开文件位置");
         return;
       }
+      const folderName = state.dirHandle.name;
+      const joinPath = (dir) => {
+        const base = String(dir).trim().replace(/[\\/]+$/, "");
+        const sep = base.includes("\\") ? "\\" : "/";
+        return `${base}${sep}${item.fileName}`;
+      };
+      const revealByPath = async (dir) => {
+        await api.revealLocalPath({ path: joinPath(dir) });
+        try {
+          localStorage.setItem(dirPathKey(folderName), String(dir).trim());
+        } catch (_) {}
+        setErr("");
+        toast("已在本机打开所在位置");
+      };
+      // 1) 之前记住过文件夹路径 → 直接精确定位（最快最稳）
+      let saved = "";
+      try {
+        saved = localStorage.getItem(dirPathKey(folderName)) || "";
+      } catch (_) {}
+      if (saved) {
+        setSaveStatus("正在本机定位…");
+        try {
+          await revealByPath(saved);
+          setSaveStatus("");
+          return;
+        } catch (_) {
+          setSaveStatus("");
+        }
+      }
+      // 2) 让桥按「文件夹名 + 文件名」在常见目录里反查
       setSaveStatus("正在本机定位…");
       try {
-        await api.revealMdmDoc({ folderName: state.dirHandle.name, fileName: item.fileName });
+        await api.revealMdmDoc({ folderName, fileName: item.fileName });
         setSaveStatus("");
         toast("已在本机打开所在位置");
+        return;
       } catch (err) {
         setSaveStatus("");
         const msg = err?.message || String(err);
@@ -3061,24 +3135,14 @@
           showBridgeHelpModal("打开文件位置");
           return;
         }
-        // 按名字没搜到 → 让用户直接给文件夹路径，用 /local/reveal 精确定位
-        const manual = window.prompt(
-          `未自动找到：${msg}\n\n可粘贴该文件夹的完整路径（例如 D:\\notes），直接在本机打开：`,
-          ""
-        );
-        if (!manual) {
-          setErr(`打开文件位置失败：${msg}`);
-          return;
-        }
-        try {
-          const base = String(manual).trim().replace(/[\\/]+$/, "");
-          const sep = base.includes("\\") ? "\\" : "/";
-          await api.revealLocalPath({ path: `${base}${sep}${item.fileName}` });
-          setErr("");
-          toast("已在本机打开所在位置");
-        } catch (err2) {
-          setErr(`打开文件位置失败：${err2.message || err2}`);
-        }
+      }
+      // 3) 兜底：让用户填一次文件夹路径并记住
+      const manual = await askDirPathModal(folderName);
+      if (!manual) return;
+      try {
+        await revealByPath(manual);
+      } catch (err2) {
+        setErr(`打开文件位置失败：${err2.message || err2}`);
       }
     }
 
@@ -3170,7 +3234,19 @@
           void commit(false);
         }
       });
-      input.addEventListener("blur", () => void commit(true));
+      const createdAt = Date.now();
+      input.addEventListener("blur", () => {
+        // 刚创建就失焦多半是异步渲染抢焦点（不是用户点走）→ 抢回来，避免改名瞬间被提交
+        if (Date.now() - createdAt < 350 && document.body.contains(input)) {
+          setTimeout(() => {
+            try {
+              if (document.body.contains(input) && document.activeElement !== input) input.focus();
+            } catch (_) {}
+          }, 60);
+          return;
+        }
+        void commit(true);
+      });
       input.addEventListener("click", (e) => e.stopPropagation());
     }
 
@@ -3259,8 +3335,7 @@
         els.save.disabled = !has || !state.dirty;
         els.save.textContent = state.dirty ? "保存 *" : "保存";
       }
-      if (els.exportBtn) els.exportBtn.disabled = !has;
-      if (els.exportFmt) els.exportFmt.disabled = !has;
+      if (els.exportToggle) els.exportToggle.disabled = !has;
       if (els.del) els.del.disabled = !has;
     }
 
@@ -3915,15 +3990,27 @@ a{color:${v.accent}}
     els.list?.addEventListener("click", (e) => {
       const b = e.target.closest?.("[data-id]");
       if (!b) return;
+      const id = b.dataset.id;
       if (e.ctrlKey || e.metaKey) {
-        const id = b.dataset.id;
+        lastListClick = { id: "", at: 0 };
         if (state.selected.has(id)) state.selected.delete(id);
         else state.selected.add(id);
         updateItemClasses();
         return;
       }
-      void openDoc(b.dataset.id);
+      // 手动判定双击改名：不依赖 dblclick 事件（列表重渲会打断它）
+      const now = Date.now();
+      if (lastListClick.id === id && now - lastListClick.at < 420) {
+        lastListClick = { id: "", at: 0 };
+        startInlineRename(id);
+        return;
+      }
+      lastListClick = { id, at: now };
+      // 已是当前文档就不重开：避免重建列表
+      if (id === state.currentId) return;
+      void openDoc(id);
     });
+    let lastListClick = { id: "", at: 0 };
     let dragId = "";
     els.list?.addEventListener("pointerdown", (e) => {
       state.dragFromHandle = Boolean(e.target.closest?.(".mdm-drag-handle"));
@@ -4150,7 +4237,11 @@ a{color:${v.accent}}
       const item = findItem(b.dataset.id);
       if (item) showListCtx(e.clientX, e.clientY, item);
     });
-    document.addEventListener("click", closeListCtx);
+    document.addEventListener("click", (e) => {
+      // 点右键菜单内部（含「导出」子菜单）不关闭菜单
+      if (e.target?.closest?.(".mdm-ctxmenu")) return;
+      closeListCtx();
+    });
     window.addEventListener("scroll", closeListCtx, true);
     /** 把编辑器滚动到第 idx 个标题（预览隐藏时大纲也能跳转） */
     function jumpEditorToHeading(idx, text) {
@@ -4355,6 +4446,7 @@ a{color:${v.accent}}
     const menus = [
       [els.insertToggle, els.insertDropdown],
       [els.toolsToggle, els.toolsDropdown],
+      [els.exportToggle, els.exportDropdown],
     ].filter(([t, m]) => t && m);
     const closeMenus = () => menus.forEach(([, m]) => (m.hidden = true));
     for (const [toggle, menu] of menus) {
@@ -4458,6 +4550,12 @@ a{color:${v.accent}}
 
     for (const [toggle, menu] of menus) {
       menu.addEventListener("click", (e) => {
+        const ex = e.target.closest?.("[data-export-fmt]");
+        if (ex) {
+          menu.hidden = true;
+          void exportCurrent(ex.dataset.exportFmt);
+          return;
+        }
         const b = e.target.closest?.("[data-insert]");
         if (!b) return;
         menu.hidden = true;
@@ -4533,15 +4631,47 @@ a{color:${v.accent}}
       maxMode = false;
       applyMaxMode();
     });
-    els.exportBtn?.addEventListener("click", () => void exportCurrent(els.exportFmt?.value || "md"));
+    // 专注：隐藏左侧列表 / 顶部按钮（持久化）
+    (function bindFocusToggles() {
+      const panel = $("#mdm");
+      if (!panel) return;
+      let sideHidden = false;
+      let topHidden = false;
+      try {
+        sideHidden = localStorage.getItem("devtools-mdm-hide-side") === "1";
+        topHidden = localStorage.getItem("devtools-mdm-hide-top") === "1";
+      } catch (_) {}
+      const apply = () => {
+        panel.classList.toggle("is-side-hidden", sideHidden);
+        panel.classList.toggle("is-topbar-hidden", topHidden);
+        els.toggleSide?.classList.toggle("is-on", sideHidden);
+        els.toggleTop?.classList.toggle("is-on", topHidden);
+        if (els.toggleSide) els.toggleSide.title = sideHidden ? "显示左侧文件列表" : "隐藏左侧文件列表";
+        if (els.toggleTop) els.toggleTop.title = topHidden ? "显示顶部按钮" : "隐藏顶部按钮";
+      };
+      apply();
+      els.toggleSide?.addEventListener("click", () => {
+        sideHidden = !sideHidden;
+        try {
+          localStorage.setItem("devtools-mdm-hide-side", sideHidden ? "1" : "0");
+        } catch (_) {}
+        apply();
+      });
+      els.toggleTop?.addEventListener("click", () => {
+        topHidden = !topHidden;
+        try {
+          localStorage.setItem("devtools-mdm-hide-top", topHidden ? "1" : "0");
+        } catch (_) {}
+        apply();
+      });
+    })();
 
-    // export format options
-    if (els.exportFmt) {
-      const mk = (list) => list.map(([v, l]) => `<option value="${v}">${escapeHtml(l)}</option>`).join("");
-      els.exportFmt.innerHTML =
-        `<optgroup label="本地">${mk(LOCAL_FORMATS)}</optgroup>` +
-        `<optgroup label="本机桥 · Pandoc（任意格式）">${mk(PANDOC_FORMATS)}</optgroup>`;
-      els.exportFmt.value = "md";
+    // 导出菜单：点「导出」弹格式菜单（本地 + Pandoc 分组）
+    if (els.exportDropdown) {
+      const mk = (list) => list.map(([v, l]) => `<button type="button" data-export-fmt="${v}">${escapeHtml(l)}</button>`).join("");
+      els.exportDropdown.innerHTML =
+        `<div class="mdm-menu-label">本地</div>${mk(LOCAL_FORMATS)}` +
+        `<div class="mdm-menu-label">本机桥 · Pandoc（任意格式）</div>${mk(PANDOC_FORMATS)}`;
     }
 
     // ---- 拖拽导入：拖 md 文件（或整个文件夹）进来 = 导入 ----

@@ -106,6 +106,26 @@
 .mdm-insert-dropdown { max-height: min(70vh, 30rem); overflow-y: auto; }
 .mdm-menu-flag { padding: 0.35rem 0.55rem; }
 
+/* 专注：隐藏左侧列表 / 顶部按钮 */
+#mdm { position: relative; }
+.mdm-focus-toggles { position: absolute; top: 0.3rem; right: 0.35rem; z-index: 30; display: flex; gap: 0.3rem; }
+.mdm-focus-toggles button {
+  width: 1.7rem; height: 1.7rem; line-height: 1;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel, rgba(12, 18, 30, 0.6)); color: var(--muted); cursor: pointer;
+}
+.mdm-focus-toggles button:hover,
+.mdm-focus-toggles button.is-on { color: var(--accent); border-color: var(--accent); }
+#mdm.is-side-hidden .mdm-side { display: none; }
+#mdm.is-side-hidden .mdm-layout { grid-template-columns: minmax(0, 1fr) 190px; }
+#mdm.is-side-hidden .mdm-layout:has(.mdm-outline.is-collapsed) { grid-template-columns: minmax(0, 1fr) 2.4rem; }
+#mdm.is-topbar-hidden .mdm-topbar { display: none; }
+@media (max-width: 1100px) {
+  #mdm.is-side-hidden .mdm-layout { grid-template-columns: minmax(0, 1fr); }
+}
+.mdm-menu-label { padding: 0.25rem 0.5rem 0.1rem; font-size: 0.72rem; color: var(--muted); }
+.mdm-path-input { width: 100%; box-sizing: border-box; padding: 0.5rem 0.65rem; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-strong, transparent); color: var(--ink); margin: 0.2rem 0 0.4rem; }
+
 /* 沉浸（全屏）：隐藏站点外壳，让工具铺满屏幕；只有编辑器 / 预览自己滚 */
 .mdm-max-btn { padding: 0.15rem 0.5rem; line-height: 1.2; }
 body.mdm-immersive .site-header,

@@ -442,6 +442,42 @@ async function browserChecks() {
     await page.click('#mdm-modal [data-mdl="close"]');
     console.log("STEP rate-modal-ok");
 
+    // 14) 双击改名 / 导出菜单 / 专注开关
+    await page.click("#mdm-mode-edit");
+    const li = await page.$("#mdm-list [data-id]");
+    const lb = await li.boundingBox();
+    await page.mouse.click(lb.x + 40, lb.y + lb.height / 2);
+    await new Promise((r) => setTimeout(r, 500));
+    await page.mouse.click(lb.x + 40, lb.y + lb.height / 2);
+    await new Promise((r) => setTimeout(r, 90));
+    await page.mouse.click(lb.x + 40, lb.y + lb.height / 2);
+    await page.waitForSelector("#mdm-list .mdm-rename-input", { timeout: 5000 });
+    await page.keyboard.press("Escape");
+    console.log("STEP rename-ok");
+
+    await page.click("#mdm-export-toggle");
+    await page.waitForSelector("#mdm-export-dropdown:not([hidden]) [data-export-fmt]", { timeout: 5000 });
+    const fmtCount = await page.$$eval("#mdm-export-dropdown [data-export-fmt]", (els) => els.length);
+    assert(fmtCount >= 10, `export menu items ${fmtCount}`);
+    await page.keyboard.press("Escape");
+    console.log("STEP export-menu-ok");
+
+    await page.click("#mdm-toggle-side");
+    await page.click("#mdm-toggle-top");
+    await page.waitForFunction(
+      () =>
+        getComputedStyle(document.querySelector("#mdm .mdm-side")).display === "none" &&
+        getComputedStyle(document.querySelector("#mdm .mdm-topbar")).display === "none",
+      { timeout: 5000 }
+    );
+    await page.click("#mdm-toggle-side");
+    await page.click("#mdm-toggle-top");
+    await page.waitForFunction(
+      () => getComputedStyle(document.querySelector("#mdm .mdm-side")).display !== "none",
+      { timeout: 5000 }
+    );
+    console.log("STEP focus-toggle-ok");
+
     assert(!errors.length, `pageerror: ${errors.join("; ")}`);
     console.log("mdm-smoke ok (idb/new/save/list/search/preview/mermaid/table)");
   } finally {
