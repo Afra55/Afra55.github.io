@@ -4,17 +4,22 @@
       </div>
       <div class="panel-body">
         <div class="vbb-scroll-anchor" aria-hidden="true"></div>
+        <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.55rem">
+          <span class="seg" role="group" aria-label="输入类型">
+            <button type="button" class="seg-btn is-active" id="vbb-input-video">视频</button>
+            <button type="button" class="seg-btn" id="vbb-input-images">多图</button>
+          </span>
+          <label for="vbb-max-mb">黑盒上限</label>
+          <input id="vbb-max-mb" class="mono meta-input" type="number" min="1" max="200" step="1" value="6" />
+          <span class="hint tight">MB</span>
+        </div>
+        <div data-vbb-video>
         <div class="btn-row tool-actions">
           <label class="file-btn" for="vbb-file">选择视频（可多选）</label>
           <input id="vbb-file" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" multiple hidden />
           <button type="button" class="ghost-btn" id="vbb-clear">清空</button>
         </div>
         <p class="hint" id="vbb-meta"></p>
-        <div class="field-row" style="flex-wrap:wrap;align-items:center;margin-top:0.4rem">
-          <label for="vbb-max-mb">黑盒上限</label>
-          <input id="vbb-max-mb" class="mono meta-input" type="number" min="1" max="200" step="1" value="6" />
-          <span class="hint tight">MB</span>
-        </div>
         <div class="field-row" id="vbb-notify-row" style="flex-wrap:wrap;align-items:center;margin-top:0.4rem;gap:0.85rem">
           <label class="flag" for="vbb-wake-lock"><input type="checkbox" id="vbb-wake-lock" /> 处理时防止息屏</label>
           <label class="flag" for="vbb-notify-sound"><input type="checkbox" id="vbb-notify-sound" /> 完成提示音</label>
@@ -145,6 +150,38 @@
               <img id="vbb-merged-preview" class="img-preview gif-preview" alt="合并 GIF 预览" hidden />
             </div>
           </div>
+        </div>
+        </div>
+        <div id="vbb-images-panel" hidden>
+          <input id="vbb-img-file" type="file" accept="image/*" multiple hidden />
+          <div class="btn-row tool-actions">
+            <label class="file-btn" for="vbb-img-file">选择图片（可多选）</label>
+            <button type="button" class="ghost-btn" id="vbb-img-clear">清空</button>
+          </div>
+          <div class="vbb-img-drop" id="vbb-img-drop">把图片拖到这里（也可点上方按钮选择）</div>
+          <div class="vbb-img-list" id="vbb-img-list" aria-live="polite"></div>
+          <div class="vbb-hold-row">
+            <label for="vbb-hold">每张时长</label>
+            <input type="range" id="vbb-hold" class="vbb-hold-range" min="0.1" max="5" step="0.1" value="1" aria-label="每张时长（秒）" />
+            <input type="number" id="vbb-hold-num" class="mono meta-input" min="0.1" max="5" step="0.1" value="1" inputmode="decimal" aria-label="每张时长数值" />
+            <span class="hint tight">秒 / 张</span>
+          </div>
+          <div class="gif-preview-wrap vbb-img-preview-wrap">
+            <img id="vbb-img-preview" class="img-preview gif-preview" alt="多图 GIF 预览" hidden />
+          </div>
+          <p class="hint tight" id="vbb-img-meta">拖入图片即可预览；宽度、帧率、颜色由黑盒规则自动决定，不用填。</p>
+          <div class="gif-progress" id="vbb-img-progress" hidden>
+            <div class="gif-progress-head">
+              <p class="hint gif-progress-title" id="vbb-img-progress-text">准备中…</p>
+              <span class="mono gif-progress-pct" id="vbb-img-progress-pct">0%</span>
+            </div>
+            <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="vbb-img-progress-fill"></span></div>
+          </div>
+          <div class="btn-row tool-actions">
+            <button type="button" class="primary-btn" id="vbb-img-generate" disabled>生成 GIF</button>
+            <a class="secondary-btn" id="vbb-img-download" href="#" download="images.gif" hidden>下载 GIF</a>
+          </div>
+          <p class="error" id="vbb-img-error" hidden></p>
         </div>
         <p class="error" id="vbb-error" hidden></p>
       </div>

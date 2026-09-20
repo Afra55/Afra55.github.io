@@ -7331,6 +7331,394 @@
             toast(`黑盒上限已设为 ${v} MB`);
           });
         }
+        // ---- 多图 → GIF：只有一个「每张时长」输入，宽度/质量按黑盒规则自动 ----
+        (function bindVbbImages() {
+          const imagesPanel = $("#vbb-images-panel", root);
+          const videoBtn = $("#vbb-input-video", root);
+          const imagesBtn = $("#vbb-input-images", root);
+          const fileInput = $("#vbb-img-file", root);
+          const dropEl = $("#vbb-img-drop", root);
+          const listEl = $("#vbb-img-list", root);
+          const holdRange = $("#vbb-hold", root);
+          const holdNum = $("#vbb-hold-num", root);
+          const previewEl = $("#vbb-img-preview", root);
+          const metaEl = $("#vbb-img-meta", root);
+          const genBtn = $("#vbb-img-generate", root);
+          const dlEl = $("#vbb-img-download", root);
+          const errEl = $("#vbb-img-error", root);
+          const progEl = $("#vbb-img-progress", root);
+          const progFill = $("#vbb-img-progress-fill", root);
+          const progPct = $("#vbb-img-progress-pct", root);
+          const progText = $("#vbb-img-progress-text", root);
+          if (!imagesPanel || !holdRange || !fileInput) return;
+
+          const MAX_IMAGES = 60;
+          const st = {
+            items: [],
+            hold: 1,
+            blob: null,
+            url: "",
+            playTimer: 0,
+            playIdx: 0,
+            encTimer: 0,
+            gen: 0,
+            busy: false,
+            autoNote: "",
+          };
+          const setErr = (m) => setError(errEl, m || "");
+          const setMeta = (m) => {
+            if (metaEl) metaEl.textContent = m || "";
+          };
+          const setProg = (on, ratio, text) => {
+            if (!progEl) return;
+            progEl.hidden = !on;
+            const r = Math.max(0, Math.min(1, Number(ratio) || 0));
+            if (progFill) progFill.style.width = `${Math.round(r * 100)}%`;
+            if (progPct) progPct.textContent = `${Math.round(r * 100)}%`;
+            if (progText && text) progText.textContent = text;
+          };
+          const bytesOf = (data) => {
+            const src = data instanceof Uint8Array ? data : new Uint8Array(data);
+            const copy = new Uint8Array(src.byteLength);
+            copy.set(src);
+            return copy;
+          };
+          const fmt = (n) => (typeof formatKb === "function" ? formatKb(n) : `${Math.round(n / 1024)}KB`);
+
+          function updateButtons() {
+            const has = st.items.length > 0;
+            if (genBtn) genBtn.disabled = !has || st.busy;
+            if (dlEl) dlEl.hidden = !st.url;
+          }
+
+          function stopPlay() {
+            if (st.playTimer) {
+              clearInterval(st.playTimer);
+              st.playTimer = 0;
+            }
+          }
+          function startPlay() {
+            stopPlay();
+            if (!previewEl || st.items.length === 0) return;
+            if (!st.blob) {
+              previewEl.hidden = false;
+              previewEl.src = st.items[0].url;
+            }
+            if (st.items.length < 2) return;
+            st.playIdx = 0;
+            st.playTimer = setInterval(() => {
+              if (st.blob) return; // 已有真 GIF 预览就交给它自己播放
+              st.playIdx = (st.playIdx + 1) % st.items.length;
+              try {
+                previewEl.src = st.items[st.playIdx].url;
+              } catch (_) {}
+            }, Math.max(100, Math.round(st.hold * 1000)));
+          }
+
+          function renderList() {
+            if (!listEl) return;
+            listEl.innerHTML = st.items
+              .map(
+                (it, i) =>
+                  `<div class="vbb-img-item" data-i="${i}">` +
+                  `<img src="${it.url}" alt="" loading="lazy" />` +
+                  `<span class="vbb-img-name">${escapeHtml(String(it.file.name || "").slice(0, 18))}</span>` +
+                  `<span class="vbb-img-ops">` +
+                  `<button type="button" class="ghost-btn" data-img-move="-1" data-i="${i}" title="前移">‹</button>` +
+                  `<button type="button" class="ghost-btn" data-img-move="1" data-i="${i}" title="后移">›</button>` +
+                  `<button type="button" class="ghost-btn" data-img-rm="${i}" title="移除">✕</button>` +
+                  `</span></div>`
+              )
+              .join("");
+          }
+
+          function scheduleEncode(delay = 520) {
+            window.clearTimeout(st.encTimer);
+            if (!st.items.length) return;
+            st.encTimer = window.setTimeout(() => void encode(false), delay);
+          }
+
+          async function normalizePng(item, W, H) {
+            const bmp = await createImageBitmap(item.file);
+            const canvas = document.createElement("canvas");
+            canvas.width = W;
+            canvas.height = H;
+            const ctx = canvas.getContext("2d");
+            ctx.fillStyle = "#000";
+            ctx.fillRect(0, 0, W, H);
+            const scale = Math.min(W / bmp.width, H / bmp.height);
+            const dw = Math.max(1, Math.round(bmp.width * scale));
+            const dh = Math.max(1, Math.round(bmp.height * scale));
+            ctx.drawImage(bmp, Math.round((W - dw) / 2), Math.round((H - dh) / 2), dw, dh);
+            bmp.close?.();
+            return await new Promise((res) => canvas.toBlob((b) => res(b), "image/png"));
+          }
+
+          /** 一次编码：多图 concat → 调色板 GIF */
+          async function encodeOnce(ff, W, H, colors, onRatio) {
+            const names = [];
+            for (let i = 0; i < st.items.length; i += 1) {
+              const nm = `vim-${i}.png`;
+              const png = await normalizePng(st.items[i], W, H);
+              await ff.writeFile(nm, await fetchFileBytes(png));
+              names.push(nm);
+              onRatio?.(0.1 + (i / st.items.length) * 0.35, `处理图片 ${i + 1}/${st.items.length}`);
+            }
+            const hold = Math.max(0.1, st.hold);
+            onRatio?.(0.5, "编码 GIF…");
+            const vf =
+              `scale=${W}:${H}:flags=bicubic,split[a][b];` +
+              `[a]palettegen=max_colors=${colors}:stats_mode=full[p];` +
+              `[b][p]paletteuse=dither=sierra2:diff_mode=rectangle`;
+            // 用 image2 定帧率：每帧时长 = hold（精确，不会像 concat 那样多算末帧）
+            const fps = Math.max(0.02, 1 / hold);
+            const code = await ff.exec([
+              "-framerate", fps.toFixed(6),
+              "-start_number", "0",
+              "-i", "vim-%d.png",
+              "-vf", vf,
+              "-loop", "0", "-y", "vim-out.gif",
+            ]);
+            if (code !== 0) throw new Error(`编码失败（code=${code}）`);
+            const data = await ff.readFile("vim-out.gif");
+            let blob = new Blob([bytesOf(data)], { type: "image/gif" });
+            onRatio?.(0.75, "优化 GIF…");
+            try {
+              blob = await compressGifBlob(blob, "standard", () => {});
+            } catch (_) {}
+            for (const nm of names) {
+              try {
+                await ff.deleteFile(nm);
+              } catch (_) {}
+            }
+            try {
+              await ff.deleteFile("vim-out.gif");
+            } catch (_) {}
+            return blob;
+          }
+
+          async function encode(isManual) {
+            if (!st.items.length) return;
+            if (st.busy && !isManual) return;
+            const myGen = ++st.gen;
+            st.busy = true;
+            updateButtons();
+            setErr("");
+            if (isManual) setProg(true, 0.02, "准备…");
+            try {
+              const W0 = V2G_BLACKBOX_BASE_W;
+              const colors0 = gifQualityToMaxColors(V2G_BLACKBOX_QUALITY);
+              const first = st.items[0];
+              const ratio0 = first.w > 0 && first.h > 0 ? first.h / first.w : 0.5625;
+              const H0 = Math.max(2, Math.round((W0 * ratio0) / 2) * 2);
+              const ff = await getFfmpegInstance((ratio, text) => {
+                if (isManual) setProg(true, 0.02 + (Number(ratio) || 0) * 0.08, text || "加载编码器…");
+              });
+              let blob = await encodeOnce(ff, W0, H0, colors0, (r, t) => {
+                if (isManual) setProg(true, r, t);
+              });
+              // 超黑盒上限 → 自动降级（先降宽度，再降色数）
+              const budget = blackboxMaxMb() * 1024 * 1024;
+              let W = W0;
+              let colors = colors0;
+              let round = 0;
+              while (blob.size > budget && round < 5) {
+                round += 1;
+                W = Math.max(120, Math.round(W0 * Math.pow(0.82, round)));
+                colors = round >= 3 ? Math.max(96, Math.round(colors0 / 2)) : colors0;
+                const H = Math.max(2, Math.round((W * ratio0) / 2) * 2);
+                if (isManual) setProg(true, 0.8, `超上限，自动降到 ${W}px / ${colors} 色…`);
+                blob = await encodeOnce(ff, W, H, colors, () => {});
+              }
+              if (myGen !== st.gen) return; // 期间又改了时长 → 丢弃这次结果
+              if (st.url) {
+                try {
+                  URL.revokeObjectURL(st.url);
+                } catch (_) {}
+              }
+              st.blob = blob;
+              st.url = URL.createObjectURL(blob);
+              if (previewEl) {
+                previewEl.hidden = false;
+                previewEl.src = st.url;
+              }
+              stopPlay();
+              if (dlEl) {
+                dlEl.hidden = false;
+                dlEl.href = st.url;
+                dlEl.download = `images-${st.items.length}x${String(st.hold).replace(".", "_")}s.gif`;
+              }
+              st.autoNote = `自动：宽 ${W} · ${colors} 色`;
+              setMeta(
+                `${st.items.length} 张 · 每张 ${st.hold}s · 共 ${(st.items.length * st.hold).toFixed(1)}s · ${st.autoNote} · ${fmt(
+                  blob.size
+                )}${round ? ` · 已自动降级 ${round} 次` : ""}`
+              );
+              setProg(false, 0);
+            } catch (err) {
+              if (isManual) setErr(err?.message || String(err));
+              setProg(false, 0);
+            } finally {
+              st.busy = false;
+              updateButtons();
+            }
+          }
+
+          function syncHold(v, fromRange) {
+            let n = Number(v);
+            if (!Number.isFinite(n)) n = 1;
+            n = Math.max(0.1, Math.min(5, Math.round(n * 10) / 10));
+            st.hold = n;
+            if (fromRange && holdNum) holdNum.value = String(n);
+            if (!fromRange && holdRange) holdRange.value = String(n);
+            startPlay();
+            scheduleEncode();
+          }
+
+          function setMode(mode) {
+            const images = mode === "images";
+            root.classList.toggle("is-images-mode", images);
+            imagesPanel.hidden = !images;
+            videoBtn?.classList.toggle("is-active", !images);
+            imagesBtn?.classList.toggle("is-active", images);
+            if (images) {
+              startPlay();
+              scheduleEncode();
+            } else {
+              stopPlay();
+            }
+          }
+
+          videoBtn?.addEventListener("click", () => setMode("video"));
+          imagesBtn?.addEventListener("click", () => setMode("images"));
+
+          fileInput.addEventListener("change", () => {
+            void addFiles(fileInput.files);
+            fileInput.value = "";
+          });
+          $("#vbb-img-clear", root)?.addEventListener("click", () => {
+            clearItems();
+            setMeta("拖入图片即可预览；宽度、颜色由黑盒规则自动决定，不用填。");
+          });
+          holdRange.addEventListener("input", () => syncHold(holdRange.value, true));
+          holdNum?.addEventListener("input", () => syncHold(holdNum.value, false));
+          genBtn?.addEventListener("click", () => void encode(true));
+          listEl?.addEventListener("click", (e) => {
+            const rm = e.target.closest?.("[data-img-rm]");
+            if (rm) {
+              const i = Number(rm.dataset.imgRm);
+              const it = st.items[i];
+              if (it) {
+                try {
+                  URL.revokeObjectURL(it.url);
+                } catch (_) {}
+                st.items.splice(i, 1);
+              }
+              renderList();
+              updateButtons();
+              startPlay();
+              scheduleEncode(200);
+              return;
+            }
+            const mv = e.target.closest?.("[data-img-move]");
+            if (mv) {
+              const i = Number(mv.dataset.i);
+              const dir = Number(mv.dataset.imgMove);
+              const j = i + dir;
+              if (j >= 0 && j < st.items.length) {
+                const [it] = st.items.splice(i, 1);
+                st.items.splice(j, 0, it);
+                renderList();
+                startPlay();
+                scheduleEncode(200);
+              }
+            }
+          });
+          // 拖拽排序（桌面）
+          listEl?.addEventListener("dragover", (e) => {
+            if (e.target.closest?.(".vbb-img-item")) e.preventDefault();
+          });
+          listEl?.addEventListener("drop", (e) => {
+            e.preventDefault();
+            const from = Number(e.dataTransfer?.getData("text/plain"));
+            const to = Number(e.target.closest?.(".vbb-img-item")?.dataset?.i);
+            if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return;
+            const [it] = st.items.splice(from, 1);
+            st.items.splice(to, 0, it);
+            renderList();
+            scheduleEncode(200);
+          });
+          listEl?.addEventListener("dragstart", (e) => {
+            const it = e.target.closest?.(".vbb-img-item");
+            if (!it) return;
+            try {
+              e.dataTransfer.setData("text/plain", it.dataset.i);
+            } catch (_) {}
+          });
+
+          // 面板拖入图片
+          const panelEl = $("#vbb", root) || root;
+          ["dragenter", "dragover"].forEach((ev) =>
+            panelEl.addEventListener(ev, (e) => {
+              if (!e.dataTransfer) return;
+              e.preventDefault();
+              dropEl?.classList.add("is-over");
+            })
+          );
+          panelEl.addEventListener("dragleave", (e) => {
+            if (e.target === panelEl || e.target === dropEl) dropEl?.classList.remove("is-over");
+          });
+          panelEl.addEventListener("drop", (e) => {
+            dropEl?.classList.remove("is-over");
+            const files = [...(e.dataTransfer?.files || [])];
+            if (!files.length) return;
+            const onlyImages = files.every(
+              (f) => /^image\//.test(f.type || "") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name || "")
+            );
+            if (!onlyImages) return; // 视频交给原流程
+            e.preventDefault();
+            setMode("images");
+            void addFiles(files);
+          });
+
+          async function addFiles(fileList) {
+            const files = [...(fileList || [])].filter(
+              (f) => /^image\//.test(f.type || "") || /\.(png|jpe?g|webp|gif|bmp)$/i.test(f.name || "")
+            );
+            if (!files.length) {
+              setErr("没有可用的图片（支持 PNG / JPG / WebP / GIF / BMP）");
+              return;
+            }
+            setErr("");
+            const room = MAX_IMAGES - st.items.length;
+            if (room <= 0) {
+              setErr(`最多 ${MAX_IMAGES} 张`);
+              return;
+            }
+            if (files.length > room) setErr(`最多 ${MAX_IMAGES} 张，已忽略多余的 ${files.length - room} 张`);
+            for (const f of files.slice(0, room)) {
+              const url = URL.createObjectURL(f);
+              let w = 0;
+              let h = 0;
+              try {
+                const bmp = await createImageBitmap(f);
+                w = bmp.width;
+                h = bmp.height;
+                bmp.close?.();
+              } catch (_) {}
+              st.items.push({ file: f, url, w, h });
+            }
+            renderList();
+            updateButtons();
+            startPlay();
+            scheduleEncode();
+          }
+
+          // 初始：按黑盒默认值
+          syncHold(holdRange.value, true);
+          setMeta("拖入图片即可预览；宽度、颜色由黑盒规则自动决定，不用填。");
+        })();
+
         const vbbSpeedChk = $("#vbb-speed-limit", root);
         const vbbSpeedSec = $("#vbb-speed-sec", root);
         if (vbbSpeedChk) {
