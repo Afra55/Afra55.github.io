@@ -118,6 +118,7 @@
     activeTag: "",
     viewMode: "edit",
     previewTimer: 0,
+    previewStale: false,
     autoSaveTimer: 0,
     ftTimer: 0,
     searchMatches: null,
@@ -676,7 +677,7 @@
         renderSidebar();
         return;
       }
-      state.ftTimer = window.setTimeout(() => void runFullTextSearch(q), 350);
+      state.ftTimer = window.setTimeout(() => void runFullTextSearch(q), 500);
     }
     async function runFullTextSearch(q) {
       const items = state.index.items || [];
@@ -691,8 +692,15 @@
       if (need.length) {
         let i = 0;
         let done = 0;
+        const total = need.length;
+        const tick = () => {
+          if (els.count) els.count.textContent = `扫描 ${done}/${total}…`;
+        };
+        tick();
         const worker = async () => {
           while (i < need.length) {
+            // 查询已变 → 立刻停止这次扫描
+            if (parseSearch(state.search).q !== q) return;
             const it = need[i++];
             try {
               const t = await readDocText(it);
@@ -700,6 +708,7 @@
               if (t.toLowerCase().includes(q)) matched.add(it.id);
             } catch (_) {}
             done += 1;
+            if (done % 20 === 0) tick();
           }
         };
         await Promise.all(Array.from({ length: 6 }, worker));
@@ -890,6 +899,30 @@
         "</mark>" +
         escapeHtml(t.slice(idx + q.length))
       );
+    }
+
+    /** 列表项 meta 文案（细粒度更新用，与 itemHtml 保持一致） */
+    function itemMetaText(it) {
+      const cat = state.index.cats.find((c) => c.id === it.catId);
+      const tags = (it.tagIds || [])
+        .map((tid) => state.index.tags.find((t) => t.id === tid)?.name)
+        .filter(Boolean)
+        .map((n) => `#${n}`)
+        .join(" ");
+      return [it.pinned ? "📌" : "", cat ? cat.name : "", tags, fmtWhen(it.updatedAt)].filter(Boolean).join(" · ");
+    }
+
+    /** 只更新某一行的标题/副标题/悬停名（保存时不整表重建） */
+    function updateItemRow(item) {
+      if (!item) return false;
+      const el = els.list?.querySelector(`.mdm-item[data-id="${item.id}"]`);
+      if (!el) return false;
+      const t = el.querySelector(".mdm-item-title");
+      if (t) t.innerHTML = hl(item.title || "未命名", parseSearch(state.search).q);
+      const m = el.querySelector(".mdm-item-meta");
+      if (m) m.textContent = itemMetaText(item);
+      el.title = item.title || "";
+      return true;
     }
 
     function itemHtml(it) {
@@ -1137,10 +1170,19 @@
     // ---- preview + outline ----
     function schedulePreview() {
       window.clearTimeout(state.previewTimer);
+      // 按文档大小自适应去抖：长文渲染更贵，延长等待
+      const len = state.view?.state?.doc ? state.view.state.doc.length : 0;
+      const delay = len > 20000 ? 700 : len > 8000 ? 450 : 260;
       state.previewTimer = window.setTimeout(() => {
+        if (state.viewMode === "edit") {
+          state.previewStale = true; // 纯编辑模式不渲染预览，切回分屏/预览时再补
+          renderOutline(); // 大纲走源码解析，编辑时仍实时更新
+          return;
+        }
+        state.previewStale = false;
         renderPreview();
         renderOutline();
-      }, 260);
+      }, delay);
     }
 
     function renderPreview() {
@@ -2683,17 +2725,49 @@
       });
     }
 
+    /** 从源码解析标题（跳过代码块）——大纲不再依赖预览 DOM，纯编辑模式也能实时更新 */
+    function outlineItemsFromSource() {
+      const src = state.view?.state?.doc ? state.view.state.doc.toString() : getEditorText();
+      const lines = String(src || "").split("\n");
+      const out = [];
+      let inFence = false;
+      let fenceMark = "";
+      for (let i = 0; i < lines.length; i += 1) {
+        const fence = /^\s*(```|~~~)/.exec(lines[i]);
+        if (fence) {
+          if (!inFence) {
+            inFence = true;
+            fenceMark = fence[1];
+          } else if (lines[i].trim().startsWith(fenceMark)) {
+            inFence = false;
+          }
+          continue;
+        }
+        if (inFence) continue;
+        const m = /^(#{1,6})\s+(.*)$/.exec(lines[i]);
+        if (m) {
+          out.push({ lvl: m[1].length, text: m[2].trim() });
+          continue;
+        }
+        if (i > 0 && /^\s*(=+|-{2,})\s*$/.test(lines[i]) && lines[i - 1].trim()) {
+          out.push({ lvl: lines[i].includes("=") ? 1 : 2, text: lines[i - 1].trim() });
+        }
+      }
+      return out;
+    }
+
     function renderOutline() {
       if (!els.outline) return;
-      const heads = [...els.preview.querySelectorAll("h1,h2,h3,h4,h5,h6")];
+      const heads = outlineItemsFromSource();
       els.outline.innerHTML = heads.length
         ? `<div class="mdm-group-title">大纲</div>` +
           heads
-            .map((h, i) => {
-              const lvl = Number(h.tagName.slice(1));
-              const text = h.textContent || "";
-              return `<div class="mdm-outline-item lv${lvl}" data-h="${i}" role="button" tabindex="0" title="${escapeHtml(text)}">${escapeHtml(text)}</div>`;
-            })
+            .map(
+              (h, i) =>
+                `<div class="mdm-outline-item lv${h.lvl}" data-h="${i}" role="button" tabindex="0" title="${escapeHtml(
+                  h.text
+                )}">${escapeHtml(h.text)}</div>`
+            )
             .join("")
         : "";
       syncOutlineActive();
@@ -2730,6 +2804,22 @@
     }
 
     /** 反向链接：哪些文档引用了当前文档（仅用已缓存正文，不阻塞） */
+    /** 引用集合缓存：反链渲染不再每次跑正则 */
+    const refsCache = new Map();
+    function refsOf(it) {
+      if (refsCache.has(it.id)) return refsCache.get(it.id);
+      const text = state.bodyCache.has(it.id) ? state.bodyCache.get(it.id) : state.persistedIdx.get(it.id);
+      if (text == null) return null;
+      const set = new Set(collectReferencedAssets(text).map((r) => String(r).split("/").pop()));
+      refsCache.set(it.id, set);
+      return set;
+    }
+    let backlinksTimer = 0;
+    function scheduleBacklinks() {
+      window.clearTimeout(backlinksTimer);
+      backlinksTimer = window.setTimeout(() => renderBacklinks(), 400);
+    }
+
     function renderBacklinks() {
       const box = els.backlinks;
       if (!box) return;
@@ -2742,9 +2832,9 @@
       const hits = [];
       for (const it of state.index.items || []) {
         if (it.id === cur.id) continue;
-        const text = state.bodyCache.has(it.id) ? state.bodyCache.get(it.id) : state.persistedIdx.get(it.id);
-        if (text == null) continue;
-        if (collectReferencedAssets(text).some((r) => r.split("/").pop() === target)) hits.push(it);
+        const set = refsOf(it);
+        if (!set) continue;
+        if (set.has(target)) hits.push(it);
       }
       box.innerHTML = hits.length
         ? `<div class="mdm-group-title">反向链接 (${hits.length})</div>` +
@@ -2777,8 +2867,13 @@
       [els.modeEdit, els.modeSplit, els.modePreview].forEach((b) => b?.classList.remove("is-active"));
       ({ edit: els.modeEdit, split: els.modeSplit, preview: els.modePreview }[state.viewMode] || els.modeEdit)?.classList.add("is-active");
       applySplit();
-      if (state.viewMode !== "edit") renderPreview();
-      if (state.viewMode !== "edit") renderOutline();
+      if (state.viewMode !== "edit") {
+        if (state.previewStale) state.previewStale = false;
+        renderPreview();
+        renderOutline();
+      } else {
+        renderOutline();
+      }
       CMresize();
     }
 
@@ -3018,11 +3113,14 @@
         await saveIndexToStorage();
         state.bodyCache.set(item.id, text);
         state.persistedIdx.delete(item.id);
-        renderBacklinks();
+        refsCache.delete(item.id);
+        scheduleBacklinks();
         try { mdmChannel?.postMessage({ type: "saved", mode: state.mode }); } catch (_) {}
         state.dirty = false;
         updateSaveBtn();
-        renderSidebar();
+        // 细粒度更新：只改当前行；按修改时间排序时顺序会变，才整表重建
+        if (state.sort === "updated") renderSidebar();
+        else if (!updateItemRow(item)) renderSidebar();
         if (silent) {
           setSaveStatus(`已自动保存 ${new Date().toLocaleTimeString()}`);
         } else {
@@ -3834,8 +3932,38 @@ a{color:${v.accent}}
             target = tmp;
           }
           try {
-            const canvas = await window.html2canvas(target, { backgroundColor: "#ffffff", scale: 2 });
-            canvas.toBlob((b) => b && downloadBlob(b, `${slugify(title)}.png`), "image/png");
+            // 长文：按高度自适应缩放；超过单张画布上限则分片导出
+            const fullH = target.scrollHeight || target.clientHeight || 0;
+            const fullW = target.clientWidth || 820;
+            const MAX_CANVAS = 16000;
+            let scale = 2;
+            if (fullH * scale > MAX_CANVAS) scale = Math.max(1, Math.floor((MAX_CANVAS / fullH) * 10) / 10);
+            const chunkH = Math.max(400, Math.floor(MAX_CANVAS / scale));
+            const chunks = Math.min(6, Math.max(1, Math.ceil(fullH / chunkH)));
+            const per = Math.ceil(fullH / chunks);
+            for (let k = 0; k < chunks; k += 1) {
+              let shot = target;
+              let holder = null;
+              if (chunks > 1) {
+                holder = document.createElement("div");
+                holder.style.cssText = `position:fixed;left:-10000px;top:0;width:${fullW}px;height:${per}px;overflow:hidden;background:#fff;color:#111`;
+                const inner = target.cloneNode(true);
+                inner.style.width = `${fullW}px`;
+                inner.style.marginTop = `-${k * per}px`;
+                holder.appendChild(inner);
+                document.body.appendChild(holder);
+                shot = holder;
+              }
+              const canvas = await window.html2canvas(shot, { backgroundColor: "#ffffff", scale });
+              await new Promise((res) =>
+                canvas.toBlob((b) => {
+                  if (b) downloadBlob(b, chunks > 1 ? `${slugify(title)}-${k + 1}.png` : `${slugify(title)}.png`);
+                  res();
+                }, "image/png")
+              );
+              if (holder) holder.remove();
+            }
+            if (chunks > 1) toast(`长文较长，已分成 ${chunks} 张 PNG 导出`);
           } finally {
             if (tmp) tmp.remove();
           }
@@ -3980,6 +4108,7 @@ a{color:${v.accent}}
     async function initAfterStorage(label) {
       setErr("");
       state.bodyCache.clear();
+      refsCache.clear();
       state.persistedIdx.clear();
       state.index = await loadIndexFromStorage();
       if (!state.index || typeof state.index !== "object") state.index = emptyIndex();
