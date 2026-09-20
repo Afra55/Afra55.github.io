@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.30";
+const BRIDGE_VERSION = "0.9.31";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -4136,6 +4136,33 @@ async function handleApi(req, res, url) {
       return;
     }
 
+    if (url.pathname === "/bridge/update-check" && req.method === "GET") {
+      try {
+        const info = await checkBridgeUpdate();
+        sendJson(res, 200, { ok: true, ...info, base: SELF_BASE }, origin);
+      } catch (err) {
+        sendJson(res, 200, { ok: false, current: BRIDGE_VERSION, error: err?.message || String(err) }, origin);
+      }
+      return;
+    }
+
+    if (url.pathname === "/bridge/self-update" && req.method === "POST") {
+      try {
+        requireToken(req);
+      } catch (err) {
+        sendJson(res, err.status || 401, { ok: false, error: err.message }, origin);
+        return;
+      }
+      try {
+        const r = await selfUpdateBridge((f) => console.log("[bridge]   +", f));
+        sendJson(res, 200, { ok: true, ...r }, origin);
+        setTimeout(() => relaunchBridge(), 600);
+      } catch (err) {
+        sendJson(res, 500, { ok: false, error: err?.message || String(err) }, origin);
+      }
+      return;
+    }
+
     if (url.pathname === "/local/reveal-doc" && req.method === "POST") {
       if (!ffmpegBridge?.findMdmDocFile || !ffmpegBridge?.revealLocalPath) {
         sendJson(res, 503, { ok: false, error: "未找到本机 reveal 模块" }, origin);
@@ -4763,6 +4790,130 @@ async function probeOurBridgeRetry(port, tries = 3) {
   return false;
 }
 
+// ---- 桥自动更新（从站点拉取最新桥文件；仅当远端 BRIDGE_VERSION 更高） ----
+const SELF_BASE = String(process.env.DEVTOOLS_BRIDGE_BASE_URL || "https://afra55.github.io/tools").replace(/\/+$/, "");
+const AUTO_UPDATE_OFF = String(process.env.DEVTOOLS_BRIDGE_NO_AUTO_UPDATE || "") === "1";
+const UPDATE_ATTEMPT_FILE = path.join(__dirname, ".bridge-update-attempt.json");
+
+function cmpVersion(a, b) {
+  const pa = String(a || "").split(".").map((n) => Number(n) || 0);
+  const pb = String(b || "").split(".").map((n) => Number(n) || 0);
+  for (let i = 0; i < 3; i += 1) {
+    const d = (pa[i] || 0) - (pb[i] || 0);
+    if (d) return d > 0 ? 1 : -1;
+  }
+  return 0;
+}
+
+async function fetchRemote(url, { timeoutMs = 20000, binary = false } = {}) {
+  if (typeof fetch !== "function") throw new Error("当前 Node 不支持 fetch（需 Node 18+）");
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: ac.signal, cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return binary ? Buffer.from(await res.arrayBuffer()) : await res.text();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 远端 server.js 的版本（拿不到就抛错，调用方自行忽略） */
+async function fetchRemoteBridgeVersion() {
+  const src = await fetchRemote(`${SELF_BASE}/adb-bridge/server.js`);
+  const m = String(src).match(/const BRIDGE_VERSION = "([^"]+)"/);
+  if (!m) throw new Error("远端版本号读取失败");
+  return m[1];
+}
+
+async function checkBridgeUpdate() {
+  const latest = await fetchRemoteBridgeVersion();
+  return { current: BRIDGE_VERSION, latest, updateAvailable: cmpVersion(latest, BRIDGE_VERSION) > 0 };
+}
+
+/** 仓库相对路径 → 本机实际路径（兼容 ZIP 扁平布局与 EnvKit 嵌套布局） */
+function localPathForRepoPath(repoPath) {
+  const rel = String(repoPath).replace(/^\.\//, "");
+  if (rel.startsWith("adb-bridge/")) return path.join(__dirname, rel.slice("adb-bridge/".length));
+  return path.join(path.dirname(__dirname), rel);
+}
+
+async function selfUpdateBridge(onLog = () => {}) {
+  const manifest = JSON.parse(await fetchRemote(`${SELF_BASE}/bridge-files.json`));
+  const files = Array.isArray(manifest.files) ? manifest.files : [];
+  const skipIfPresent = new Set(Array.isArray(manifest.skipIfPresent) ? manifest.skipIfPresent : []);
+  if (!files.length) throw new Error("远端清单为空");
+  let written = 0;
+  let skipped = 0;
+  for (const rel of files) {
+    const dest = localPathForRepoPath(rel);
+    if (skipIfPresent.has(rel)) {
+      try {
+        await fs.promises.access(dest);
+        skipped += 1;
+        continue;
+      } catch (_) {
+        /* 缺失则下载 */
+      }
+    }
+    const buf = await fetchRemote(`${SELF_BASE}/${rel}`, { binary: true, timeoutMs: 120000 });
+    await fs.promises.mkdir(path.dirname(dest), { recursive: true });
+    try {
+      const cur = await fs.promises.readFile(dest);
+      if (cur.length === buf.length && cur.equals(buf)) {
+        skipped += 1;
+        continue;
+      }
+    } catch (_) {}
+    await fs.promises.writeFile(dest, buf);
+    written += 1;
+    onLog(rel);
+  }
+  return { written, skipped, total: files.length };
+}
+
+/** 更新后脱离父进程重启，保持控制台/协议启动都能继续用 */
+function relaunchBridge() {
+  try {
+    const child = spawn(process.execPath, [process.argv[1], ...process.argv.slice(2)], {
+      detached: true,
+      stdio: "ignore",
+      cwd: __dirname,
+      env: process.env,
+    });
+    child.unref();
+  } catch (_) {}
+  process.exit(0);
+}
+
+async function autoUpdateOnBoot() {
+  if (AUTO_UPDATE_OFF) return;
+  try {
+    const info = await checkBridgeUpdate();
+    if (!info.updateAvailable) return;
+    // 防重启风暴：同一版本 10 分钟内只尝试一次
+    let last = {};
+    try {
+      last = JSON.parse(await fs.promises.readFile(UPDATE_ATTEMPT_FILE, "utf8"));
+    } catch (_) {}
+    if (last.version === info.latest && Date.now() - (Number(last.at) || 0) < 10 * 60 * 1000) {
+      console.warn(`[bridge] 新版本 ${info.latest} 上次更新未生效（目录可能不可写），本次跳过自动更新`);
+      return;
+    }
+    console.log("");
+    console.log(`[bridge] 发现新版本 ${info.latest}（当前 ${info.current}），正在自动更新…`);
+    const r = await selfUpdateBridge((f) => console.log("[bridge]   +", f));
+    try {
+      await fs.promises.writeFile(UPDATE_ATTEMPT_FILE, JSON.stringify({ version: info.latest, at: Date.now() }));
+    } catch (_) {}
+    console.log(`[bridge] 更新完成（写入 ${r.written} 个，跳过 ${r.skipped} 个），正在重启…`);
+    console.log("");
+    relaunchBridge();
+  } catch (err) {
+    console.warn("[bridge] 自动更新检查失败：", err?.message || err);
+  }
+}
+
 function listenWithFallback(startPort, maxTries = 12) {
   let port = startPort;
   let tries = 0;
@@ -4806,6 +4957,8 @@ function listenWithFallback(startPort, maxTries = 12) {
       ACTIVE_PORT = bound && typeof bound.port === "number" ? bound.port : port;
       writeInstanceLock();
       printBanner(ACTIVE_PORT);
+      // 启动后静默检查版本，更高则自动更新并重启（可用 DEVTOOLS_BRIDGE_NO_AUTO_UPDATE=1 关闭）
+      setTimeout(() => void autoUpdateOnBoot(), 1200);
     };
 
     server.once("error", onError);

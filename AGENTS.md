@@ -49,7 +49,7 @@
 - 面板一律：`bindBridgeLaunchUI({ kind: "unified" })`（`tools/lib/bridge-token.js`）；共用「记住解压目录 / 自动启动」
 - **连接壳**：新桥面板用 `devtoolsBridgeShell.mount`（`tools/lib/bridge-shell.js`）生成状态条/下载/目录/Token，再 `shell.bind(...)`；禁止再手抄四套连接 HTML
 - **下载入口**：各桥面板（ADB / FFmpeg / yt-dlp / Git）必须调用 `tools/lib/unified-bridge-bundle.js` 打**同一份统一完整包**；禁止再提供独立 Git / 独立 FFmpeg ZIP
-- 改桥逻辑必须同步：`BRIDGE_VERSION`（`adb-bridge/server.js`）+ 完整 ZIP 文件列表（`unified-bridge-bundle.js`）+ EnvKit `sync_bridges` / `Sync-Bridges`（sh+ps1）+ 启动脚本缺文件 WARN
+- 改桥逻辑必须同步：`BRIDGE_VERSION`（`adb-bridge/server.js`）+ 完整 ZIP 文件列表（`unified-bridge-bundle.js`）+ EnvKit `sync_bridges` / `Sync-Bridges`（sh+ps1）+ 启动脚本缺文件 WARN + **桥文件清单 `tools/bridge-files.json`**（桥启动时据此自动更新：远端 `BRIDGE_VERSION` 更高就下载全部文件并重启；`DEVTOOLS_BRIDGE_NO_AUTO_UPDATE=1` 可关）
 - bat/sh 缓存写在**脚本同目录**，勿写死用户主目录
 
 ### 新增一座「桥能力」要对齐（一键装 / 一键更）
