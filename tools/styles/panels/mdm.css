@@ -360,3 +360,10 @@ body.mdm-immersive #mdm .mdm-main { min-height: 0; }
   border-radius: 3px; pointer-events: none;
 }
 @media (max-width: 900px) { .mdm-minimap { display: none; } }
+
+/* 分组头 + 显示更多 */
+.mdm-group-head {
+  padding: 0.35rem 0.5rem 0.15rem; font-size: 0.75rem; color: var(--muted);
+  border-bottom: 1px solid var(--line); margin-top: 0.35rem;
+}
+.mdm-more-btn { display: block; width: calc(100% - 0.6rem); margin: 0.4rem 0.3rem; }

@@ -113,7 +113,15 @@
     view: null,
     suppressEditorChange: false,
     search: "",
-    sort: "order",
+      sort: "order",
+      groupBy: (() => {
+        try {
+          return localStorage.getItem("devtools-mdm-group") === "cat" ? "cat" : "none";
+        } catch (_) {
+          return "none";
+        }
+      })(),
+      listLimit: 300,
     activeCat: "all",
     activeTag: "",
     viewMode: "edit",
@@ -223,6 +231,7 @@
       layout: $("#mdm-layout"),
       search: $("#mdm-search"),
       sort: $("#mdm-sort"),
+      group: $("#mdm-group"),
       batchbar: $("#mdm-batchbar"),
       batchCount: $("#mdm-batch-count"),
       count: $("#mdm-count"),
@@ -971,22 +980,54 @@
         els.count.textContent = items.length === total ? `${total} 篇` : `${items.length} / ${total} 篇`;
       }
       const wrap = els.listWrap;
-      if (!wrap || items.length <= 60) {
+      // 搜索时结果分页（避免一次渲染上千行）
+      const searching = Boolean(parseSearch(state.search).q);
+      const limited = searching && items.length > state.listLimit;
+      const shown = limited ? items.slice(0, state.listLimit) : items;
+      const moreHtml = limited
+        ? `<button type="button" class="ghost-btn mdm-more-btn" data-more-list="1">显示更多（还有 ${
+            items.length - state.listLimit
+          } 条）</button>`
+        : "";
+      // 按分类分组：有分组头，行高不再固定 → 不虚拟化，并限制总量
+      if (state.groupBy === "cat") {
+        const MAX_GROUPED = 800;
+        const cap = shown.slice(0, MAX_GROUPED);
+        const groups = new Map();
+        for (const it of cap) {
+          const key = it.catId || "";
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(it);
+        }
+        const parts = [];
+        for (const [key, list] of groups) {
+          const cat = state.index.cats.find((c) => c.id === key);
+          parts.push(`<div class="mdm-group-head">${escapeHtml(cat ? cat.name : "未分类")} · ${list.length}</div>`);
+          parts.push(list.map(itemHtml).join(""));
+        }
+        if (cap.length < shown.length || shown.length < items.length) {
+          parts.push(`<div class="hint tight">仅显示前 ${cap.length} 条，可用搜索缩小范围</div>`);
+        }
+        els.list.innerHTML = parts.join("");
+        return;
+      }
+      if (!wrap || shown.length <= 60) {
         els.list.innerHTML = items.length
           ? items.map(itemHtml).join("")
           : `<span class="hint tight">没有匹配的文档</span>`;
         return;
       }
       const viewH = wrap.clientHeight || 400;
-      const total = items.length;
+      const total = shown.length;
       const start = Math.max(0, Math.floor(wrap.scrollTop / LIST_ROW_H) - 6);
       const end = Math.min(total, start + Math.ceil(viewH / LIST_ROW_H) + 12);
       const topPad = start * LIST_ROW_H;
       const bottomPad = Math.max(0, (total - end) * LIST_ROW_H);
       els.list.innerHTML =
         `<div style="height:${topPad}px" aria-hidden="true"></div>` +
-        items.slice(start, end).map(itemHtml).join("") +
-        `<div style="height:${bottomPad}px" aria-hidden="true"></div>`;
+        shown.slice(start, end).map(itemHtml).join("") +
+        `<div style="height:${bottomPad}px" aria-hidden="true"></div>` +
+        moreHtml;
     }
 
     // ---- editor (CM6) ----
@@ -1425,6 +1466,36 @@
       if (state.lastDeleted && undoDelete()) e.preventDefault();
     });
 
+    /** 有合并单元格时输出 HTML 表格（Markdown 语法不支持合并） */
+    function buildHtmlTable(grid, spans, hidden, align, header) {
+      const esc = (s) => escapeHtml(String(s == null ? "" : s));
+      const al = (i) => {
+        const a = align[i] || "";
+        return a ? ` style="text-align:${a}"` : "";
+      };
+      // 表头行若有 rowspan 跨到正文，thead/tbody 会不合法 → 整体不用 thead
+      const headSpansDown = header && spans[0] && spans[0].some((sp, c) => !hidden[0][c] && sp.rs > 1);
+      const useHead = header && !headSpansDown;
+      const rowHtml = (r) => {
+        const cells = [];
+        for (let c = 0; c < grid[r].length; c += 1) {
+          if (hidden[r] && hidden[r][c]) continue;
+          const sp = (spans[r] && spans[r][c]) || { cs: 1, rs: 1 };
+          const tag = useHead && r === 0 ? "th" : "td";
+          cells.push(
+            `<${tag}${sp.cs > 1 ? ` colspan="${sp.cs}"` : ""}${sp.rs > 1 ? ` rowspan="${sp.rs}"` : ""}${al(
+              c
+            )}>${esc(grid[r][c])}</${tag}>`
+          );
+        }
+        return `<tr>${cells.join("")}</tr>`;
+      };
+      const head = useHead ? `<thead>${rowHtml(0)}</thead>` : "";
+      const bodyRows = [];
+      for (let r = useHead ? 1 : 0; r < grid.length; r += 1) bodyRows.push(rowHtml(r));
+      return `<table>${head}<tbody>${bodyRows.join("")}</tbody></table>`;
+    }
+
     function openTableEditor() {
       const view = state.view;
       if (!view) return;
@@ -1438,6 +1509,10 @@
       }
       const grid = t.grid.map((r) => [...r]);
       const align = Array.isArray(t.align) ? [...t.align] : [];
+      // 合并单元格：Markdown 无此语法 → 有合并时改用 HTML 表格输出
+      const spans = grid.map((r) => r.map(() => ({ cs: 1, rs: 1 })));
+      const hidden = grid.map((r) => r.map(() => false));
+      let sel = { r: 0, c: 0 };
       let header = true;
       const box = els.modalBox;
       const colCount = () => Math.max(...grid.map((r) => r.length), 1);
@@ -1453,22 +1528,26 @@
                 row
                   .map(
                     (c, ci) =>
-                      `<td><input data-r="${ri}" data-c="${ci}" value="${escapeHtml(c)}"${
-                        ri === 0 && header ? ' class="is-head"' : ""
-                      } />` +
-                      (ri === 0 && header
-                        ? `<select class="mdm-align-sel" data-align="${ci}">` +
-                          ["", "left", "center", "right"]
-                            .map(
-                              (v) =>
-                                `<option value="${v}"${(align[ci] || "") === v ? " selected" : ""}>${
-                                  ALIGN_LABEL[v]
-                                }</option>`
-                            )
-                            .join("") +
-                          `</select>`
-                        : "") +
-                      `</td>`
+                      hidden[ri] && hidden[ri][ci]
+                        ? ""
+                        : `<td${spans[ri][ci].cs > 1 ? ` colspan="${spans[ri][ci].cs}"` : ""}${
+                            spans[ri][ci].rs > 1 ? ` rowspan="${spans[ri][ci].rs}"` : ""
+                          }${sel.r === ri && sel.c === ci ? ' class="is-sel"' : ""}><input data-r="${ri}" data-c="${ci}" value="${escapeHtml(c)}"${
+                            ri === 0 && header ? ' class="is-head"' : ""
+                          } />` +
+                          (ri === 0 && header
+                            ? `<select class="mdm-align-sel" data-align="${ci}">` +
+                              ["", "left", "center", "right"]
+                                .map(
+                                  (v) =>
+                                    `<option value="${v}"${(align[ci] || "") === v ? " selected" : ""}>${
+                                      ALIGN_LABEL[v]
+                                    }</option>`
+                                )
+                                .join("") +
+                              `</select>`
+                            : "") +
+                          `</td>`
                   )
                   .join("") +
                 `</tr>`
@@ -1483,6 +1562,9 @@
           `<label class="mdm-hdr-toggle"><input type="checkbox" id="mdm-tbl-header"${
             header ? " checked" : ""
           } /> 首行为表头</label>` +
+          `<button type="button" class="ghost-btn" data-mdl="merge-right">合并右</button>` +
+          `<button type="button" class="ghost-btn" data-mdl="merge-down">合并下</button>` +
+          `<button type="button" class="ghost-btn" data-mdl="unmerge">拆分</button>` +
           `<button type="button" class="primary-btn" data-mdl="ok">确定</button>` +
           `</div>`;
       };
@@ -1498,6 +1580,44 @@
         const cb = box.querySelector("#mdm-tbl-header");
         if (cb) header = Boolean(cb.checked);
       };
+      // 选中单元格（合并/拆分以它为基准）
+      box.addEventListener("focusin", (e) => {
+        const inp = e.target.closest?.("input[data-r]");
+        if (inp) sel = { r: Number(inp.dataset.r), c: Number(inp.dataset.c) };
+      });
+      const mergeRight = () => {
+        const { r, c } = sel;
+        if (hidden[r]?.[c]) return;
+        let j = c + 1;
+        while (j < grid[r].length && hidden[r][j]) j += 1;
+        if (j >= grid[r].length) return;
+        spans[r][c].cs += spans[r][j].cs;
+        grid[r][c] = `${grid[r][c]} ${grid[r][j]}`.trim();
+        hidden[r][j] = true;
+      };
+      const mergeDown = () => {
+        const { r, c } = sel;
+        if (hidden[r]?.[c]) return;
+        let k = r + 1;
+        while (k < grid.length && hidden[k][c]) k += 1;
+        if (k >= grid.length) return;
+        spans[r][c].rs += spans[k][c].rs;
+        grid[r][c] = `${grid[r][c]} ${grid[k][c]}`.trim();
+        hidden[k][c] = true;
+      };
+      const unmerge = () => {
+        const { r, c } = sel;
+        if (hidden[r]?.[c]) return;
+        const sp = spans[r][c];
+        for (let i = r; i < r + sp.rs; i += 1) {
+          for (let j = c; j < c + sp.cs; j += 1) {
+            if (i === r && j === c) continue;
+            hidden[i][j] = false;
+          }
+        }
+        sp.cs = 1;
+        sp.rs = 1;
+      };
       render();
       els.modal.hidden = false;
       els.modal.onclick = (e) => {
@@ -1509,23 +1629,42 @@
         const act = b.dataset.mdl;
         if (act === "close") return closeModal();
         collect();
-        if (act === "addrow") grid.push(new Array(colCount()).fill(""));
-        else if (act === "delrow") {
-          if (grid.length > 1) grid.pop();
+        if (act === "addrow") {
+          grid.push(new Array(colCount()).fill(""));
+          spans.push(new Array(colCount()).fill(null).map(() => ({ cs: 1, rs: 1 })));
+          hidden.push(new Array(colCount()).fill(false));
+        } else if (act === "delrow") {
+          if (grid.length > 1) {
+            grid.pop();
+            spans.pop();
+            hidden.pop();
+          }
         } else if (act === "addcol") {
           grid.forEach((r) => r.push(""));
           align.push("");
+          spans.forEach((r) => r.push({ cs: 1, rs: 1 }));
+          hidden.forEach((r) => r.push(false));
         } else if (act === "delcol") {
           if (colCount() > 1) {
             grid.forEach((r) => r.pop());
             align.pop();
+            spans.forEach((r) => r.pop());
+            hidden.forEach((r) => r.pop());
           }
+        } else if (act === "merge-right") {
+          mergeRight();
+        } else if (act === "merge-down") {
+          mergeDown();
+        } else if (act === "unmerge") {
+          unmerge();
         } else if (act === "ok") {
+          const hasMerge = spans.some((row, ri) => row.some((sp, ci) => !hidden[ri][ci] && (sp.cs > 1 || sp.rs > 1)));
+          const insert = hasMerge ? buildHtmlTable(grid, spans, hidden, align, header) : buildTable(grid, { align, header });
           view.dispatch({
             changes: {
               from: doc.line(t.start + 1).from,
               to: doc.line(t.end + 1).to,
-              insert: buildTable(grid, { align, header }),
+              insert,
             },
           });
           closeModal();
@@ -4281,6 +4420,7 @@ a{color:${v.accent}}
     els.search?.addEventListener("input", () => {
       state.search = els.search.value;
       state.searchMatches = null;
+      state.listLimit = 300; // 新查询重置分页
       renderSidebar();
       scheduleFullTextSearch();
     });
@@ -4336,7 +4476,22 @@ a{color:${v.accent}}
         renderSidebar();
       });
     }
+    if (els.group) {
+      els.group.value = state.groupBy;
+      els.group.addEventListener("change", () => {
+        state.groupBy = els.group.value === "cat" ? "cat" : "none";
+        try {
+          localStorage.setItem("devtools-mdm-group", state.groupBy);
+        } catch (_) {}
+        renderList();
+      });
+    }
     els.list?.addEventListener("click", (e) => {
+      if (e.target.closest?.("[data-more-list]")) {
+        state.listLimit += 300;
+        renderList();
+        return;
+      }
       const b = e.target.closest?.("[data-id]");
       if (!b) return;
       const id = b.dataset.id;
