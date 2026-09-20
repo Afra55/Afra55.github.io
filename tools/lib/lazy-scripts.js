@@ -422,7 +422,12 @@
     const spec = VENDOR_FILES[id];
     if (!spec) return;
     if (spec.probe()) return;
-    if (spec.noAmd) {
+    // regulex 自带 RequireJS 并会创建全局 AMD define，其它 UMD 库会被它带崩（初始化抛错）。
+    // 除 regulex 外，加载期间一律临时屏蔽 define，避免误入 AMD 分支。
+    const keepAmd = id === "regulex" && !spec.noAmd;
+    if (keepAmd) {
+      await loadScript(spec.src);
+    } else {
       const saved = window.define;
       try {
         window.define = undefined;
@@ -430,8 +435,6 @@
       } finally {
         window.define = saved;
       }
-    } else {
-      await loadScript(spec.src);
     }
     if (!spec.probe()) throw new Error(`依赖未就绪：${id}`);
   }
