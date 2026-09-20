@@ -126,4 +126,15 @@ t("joinDocPath 拼接文档路径", () => {
   assert.strictEqual(P.joinDocPath("D:\\notes", ""), "");
 });
 
+t("front-matter tags 多行 YAML 列表", () => {
+  const r = P.parseFrontMatter("---\ntitle: T\ntags:\n  - a\n  - b\ncategory: C\n---\nbody");
+  assert.deepStrictEqual(r.tags, ["a", "b"]);
+  assert.strictEqual(r.title, "T");
+  assert.strictEqual(r.category, "C");
+  const r2 = P.parseFrontMatter("---\ntags: a, b\ntag: c\n---\nx");
+  assert.deepStrictEqual(r2.tags, ["c"]);
+  const r3 = P.parseFrontMatter("---\ntags: [a, b]\n---\nx");
+  assert.deepStrictEqual(r3.tags, ["a", "b"]);
+});
+
 console.log(`mdm.test: ${n} passed`);

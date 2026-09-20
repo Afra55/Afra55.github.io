@@ -3972,8 +3972,16 @@
     /** 生成写回文件的完整内容：front-matter（标题/分类/标签 + 保留原有其它键）+ 正文 */
     function buildFrontMatterBlock(item, body) {
       const extra = [];
-      for (const line of String(item.fmHead || "").split(/\r?\n/)) {
-        if (/^(title|category|cat|tags)\s*:/i.test(line)) continue;
+      const headLines = String(item.fmHead || "").split(/\r?\n/);
+      for (let i = 0; i < headLines.length; i += 1) {
+        const line = headLines[i];
+        if (/^(title|category|cat|tags|tag)\s*:/i.test(line)) {
+          // 多行列表（tags:\n  - a\n  - b）的续行也要跳过，否则会被当成额外键重复写入
+          if (!/:\s*\S/.test(line)) {
+            while (i + 1 < headLines.length && /^\s*-\s+/.test(headLines[i + 1])) i += 1;
+          }
+          continue;
+        }
         if (line.trim()) extra.push(line);
       }
       const cat = state.index.cats.find((c) => c.id === item.catId);

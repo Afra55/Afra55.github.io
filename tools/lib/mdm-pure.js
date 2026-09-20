@@ -21,21 +21,37 @@
     let title = "";
     let category = "";
     let tags = [];
-    head.split(/\r?\n/).forEach((line) => {
-      const mm = line.match(/^([A-Za-z_-]+):\s*(.*)$/);
-      if (!mm) return;
+    const clean = (v) => String(v).trim().replace(/^["']|["']$/g, "");
+    const lines = head.split(/\r?\n/);
+    for (let i = 0; i < lines.length; i += 1) {
+      const mm = lines[i].match(/^([A-Za-z_-]+):\s*(.*)$/);
+      if (!mm) continue;
       const key = mm[1].toLowerCase();
-      const val = mm[2].trim().replace(/^["']|["']$/g, "");
-      if (key === "title") title = val;
-      else if (key === "category" || key === "cat") category = val;
-      else if (key === "tags") {
-        tags = val
-          .replace(/^\[|\]$/g, "")
-          .split(/[,，]/)
-          .map((x) => x.trim().replace(/^["']|["']$/g, ""))
-          .filter(Boolean);
+      const val = mm[2].trim();
+      if (key === "title") title = clean(val);
+      else if (key === "category" || key === "cat") category = clean(val);
+      else if (key === "tags" || key === "tag") {
+        if (val) {
+          // 行内：tags: [a, b] / tags: a, b / tags: a
+          tags = val
+            .replace(/^\[|\]$/g, "")
+            .split(/[,，]/)
+            .map(clean)
+            .filter(Boolean);
+        } else {
+          // 多行 YAML 列表：tags:\n  - a\n  - b
+          const list = [];
+          for (let j = i + 1; j < lines.length; j += 1) {
+            const li = lines[j].match(/^\s*-\s+(.*)$/);
+            if (!li) break;
+            const v = clean(li[1]);
+            if (v) list.push(v);
+            i = j;
+          }
+          tags = list;
+        }
       }
-    });
+    }
     return { title, category, tags, body, head };
   }
 
