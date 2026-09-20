@@ -7531,6 +7531,33 @@
                 blob = await encodeOnce(ff, W, H, colors, () => {});
               }
               if (myGen !== st.gen) return; // 期间又改了时长 → 丢弃这次结果
+              // 体积有余（< 上限的 5/6）→ 与黑盒视频一致：自动加宽，把预算用在清晰度上
+              const widenGate = Math.round(budget * (5 / 6));
+              let srcMinW = 0;
+              try {
+                const ws = st.items.map((i) => Number(i.w) || 0).filter((w) => w > 0);
+                srcMinW = ws.length ? Math.min(...ws) : 0;
+              } catch (_) {}
+              if (blob.size < widenGate && srcMinW > W) {
+                let lo = W;
+                let hi = srcMinW;
+                for (let i = 0; i < 6 && hi - lo > 16; i += 1) {
+                  const mid = Math.max(lo + 2, Math.round((lo + hi) / 4) * 2);
+                  if (mid >= hi) break;
+                  if (isManual) setProg(true, 0.86, `有余量，加宽试探 ${mid}px…`);
+                  const Hm = Math.max(2, Math.round((mid * ratio0) / 2) * 2);
+                  const cand = await encodeOnce(ff, mid, Hm, colors, () => {});
+                  if (myGen !== st.gen) return;
+                  if (cand.size <= budget) {
+                    blob = cand;
+                    W = mid;
+                    lo = mid;
+                  } else {
+                    hi = mid;
+                  }
+                }
+              }
+              if (myGen !== st.gen) return; // 期间又改了时长 → 丢弃这次结果
               if (st.url) {
                 try {
                   URL.revokeObjectURL(st.url);
