@@ -71,7 +71,7 @@
   }
 
   /** 评价汇总页本身就是列表，不再挂底部评论框 */
-  const HIDE_GISCUS_TOOLS = new Set(["feedbackhub"]);
+  const HIDE_GISCUS_TOOLS = new Set(["feedbackhub", "mdm"]);
 
   function mount(toolId) {
     const host = hostEl();
@@ -86,20 +86,23 @@
     }
     if (wrap) wrap.hidden = false;
 
-    const c = cfg();
-    if (!isReady()) {
-      host.hidden = false;
-      host.innerHTML = `<p class="hint giscus-setup-note">${SETUP_HTML}</p>`;
-      lastTerm = "";
-      return;
-    }
-
     const term = termForTool(toolId);
     if (term === lastTerm && host.querySelector("script[data-giscus]")) return;
     lastTerm = term;
+    renderInto(host, toolId);
+  }
 
-    host.hidden = false;
+  /** 把 giscus 渲染进指定容器（供弹框复用） */
+  function renderInto(host, toolId) {
+    if (!host) return;
+    const c = cfg();
     host.innerHTML = "";
+    if (!isReady()) {
+      host.hidden = false;
+      host.innerHTML = `<p class="hint giscus-setup-note">${SETUP_HTML}</p>`;
+      return;
+    }
+    host.hidden = false;
     const script = document.createElement("script");
     script.src = "https://giscus.app/client.js";
     script.async = true;
@@ -130,5 +133,5 @@
     }
   }
 
-  window.DevToolsGiscus = { sync, setTheme, termForTool, isReady, resolveTheme };
+  window.DevToolsGiscus = { sync, setTheme, termForTool, isReady, resolveTheme, mountInto: renderInto };
 })();

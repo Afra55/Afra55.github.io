@@ -371,19 +371,24 @@ async function browserChecks() {
     await page.waitForFunction(() => Boolean(document.querySelector("#mdm-preview .katex")), { timeout: 60000 });
     console.log("STEP katex-ok");
 
-    // 11) 全屏编辑：加类 + 锁页面滚动，Esc 退出
+    // 11) 全屏（沉浸）：隐藏站点外壳铺满屏幕，Esc 退出
     await page.click("#mdm-max");
-    await page.waitForFunction(() => document.getElementById("mdm-layout")?.classList.contains("is-max"), {
-      timeout: 5000,
+    await page.waitForFunction(() => document.body.classList.contains("mdm-immersive"), { timeout: 5000 });
+    const immersive = await page.evaluate(() => {
+      const header = document.querySelector(".site-header");
+      const nav = document.getElementById("nav-bar");
+      const shell = document.querySelector("main.shell");
+      return {
+        headerHidden: !header || getComputedStyle(header).display === "none",
+        navHidden: !nav || getComputedStyle(nav).display === "none",
+        shellScrolls: shell ? shell.scrollHeight - shell.clientHeight : -1,
+      };
     });
-    assert(
-      await page.evaluate(() => document.body.classList.contains("mdm-max-on")),
-      "body should lock scroll in fullscreen"
-    );
+    assert(immersive.headerHidden, "site header should be hidden in immersive mode");
+    assert(immersive.navHidden, "nav bar should be hidden in immersive mode");
+    assert(immersive.shellScrolls <= 2, `page should not scroll in immersive mode (delta ${immersive.shellScrolls})`);
     await page.keyboard.press("Escape");
-    await page.waitForFunction(() => !document.getElementById("mdm-layout")?.classList.contains("is-max"), {
-      timeout: 5000,
-    });
+    await page.waitForFunction(() => !document.body.classList.contains("mdm-immersive"), { timeout: 5000 });
     console.log("STEP fullscreen-ok");
 
     // 12) 导入 md 后应自动打开该文档
@@ -396,6 +401,18 @@ async function browserChecks() {
       { timeout: 30000 }
     );
     console.log("STEP import-open-ok");
+
+    // 13) 评价弹框（页面底部不再有评论）
+    const bottomGiscus = await page.evaluate(() => {
+      const wrap = document.querySelector(".devtools-giscus-wrap");
+      return { hidden: !wrap || wrap.hidden, display: wrap ? getComputedStyle(wrap).display : "none" };
+    });
+    assert(bottomGiscus.hidden || bottomGiscus.display === "none", "mdm should not show bottom comments");
+    await page.click("#mdm-tools-toggle");
+    await page.click('[data-insert="rate"]');
+    await page.waitForSelector("#mdm-modal:not([hidden]) .mdm-rate-host", { timeout: 10000 });
+    await page.click('#mdm-modal [data-mdl="close"]');
+    console.log("STEP rate-modal-ok");
 
     assert(!errors.length, `pageerror: ${errors.join("; ")}`);
     console.log("mdm-smoke ok (idb/new/save/list/search/preview/mermaid/table)");

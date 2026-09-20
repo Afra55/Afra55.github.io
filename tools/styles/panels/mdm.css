@@ -106,16 +106,43 @@
 .mdm-insert-dropdown { max-height: min(70vh, 30rem); overflow-y: auto; }
 .mdm-menu-flag { padding: 0.35rem 0.55rem; }
 
-/* 全屏编辑：铺满视口，页面锁滚，只有编辑器/预览滚动 */
+/* 沉浸（全屏）：隐藏站点外壳，让工具铺满屏幕；只有编辑器 / 预览自己滚 */
 .mdm-max-btn { padding: 0.15rem 0.5rem; line-height: 1.2; }
-.mdm-layout.is-max {
-  position: fixed; inset: 0; z-index: 45;
-  height: 100vh; max-height: 100vh;
-  padding: 0.6rem; margin: 0; border-radius: 0;
-  background: var(--bg);
+body.mdm-immersive .site-header,
+body.mdm-immersive #nav-bar,
+body.mdm-immersive .nav-backdrop,
+body.mdm-immersive .workspace-top,
+body.mdm-immersive .site-footer,
+body.mdm-immersive .devtools-giscus-wrap {
+  display: none !important;
 }
-.mdm-layout.is-max .mdm-editor-wrap { height: 100%; min-height: 0; }
-body.mdm-max-on { overflow: hidden; }
+body.mdm-immersive .app-layout { display: block; }
+body.mdm-immersive .shell {
+  flex: 1 1 100% !important;
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+  padding: 0;
+  margin: 0;
+}
+body.mdm-immersive #workspace-panels { height: 100%; min-height: 0; }
+body.mdm-immersive #mdm { height: 100%; box-sizing: border-box; }
+body.mdm-immersive #mdm .mdm-body {
+  height: 100%;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0.6rem;
+}
+body.mdm-immersive #mdm > .panel-head { display: none; }
+body.mdm-immersive #mdm .mdm-layout { flex: 1 1 0; height: auto; min-height: 0; margin: 0; }
+body.mdm-immersive #mdm .mdm-side,
+body.mdm-immersive #mdm .mdm-main { min-height: 0; }
+
+.mdm-rate-host { min-height: 10rem; min-width: min(90vw, 40rem); }
 
 /* 弹框行列表（回收站 / 历史版本 / 存储占用） */
 .mdm-row-list { display: grid; gap: 0.3rem; max-height: 52vh; overflow-y: auto; min-width: min(88vw, 26rem); }

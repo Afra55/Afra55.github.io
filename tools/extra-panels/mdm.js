@@ -1335,6 +1335,25 @@
       };
     }
 
+    /** 评价 / 留言：把 giscus 评论渲染进弹框（页面底部不再挂评论） */
+    function openRateModal() {
+      const box = els.modalBox;
+      box.innerHTML =
+        `<div class="mdm-modal-head"><strong>评价 / 留言 · Markdown 文档管理</strong>` +
+        `<button type="button" class="ghost-btn" data-mdl="close">关闭</button></div>` +
+        `<div class="mdm-rate-host" id="mdm-rate-host"></div>`;
+      els.modal.hidden = false;
+      els.modal.onclick = (e) => {
+        if (e.target === els.modal) closeModal();
+      };
+      box.onclick = (e) => {
+        if (e.target.closest?.('[data-mdl="close"]')) closeModal();
+      };
+      try {
+        window.DevToolsGiscus?.mountInto?.(box.querySelector("#mdm-rate-host"), "mdm");
+      } catch (_) {}
+    }
+
     /** #2 表格可视化编辑（光标所在表格 → 网格弹窗） */
     function closeModal() {
       if (!els.modal) return;
@@ -4287,6 +4306,10 @@ a{color:${v.accent}}
         openShortcutHelp();
         return;
       }
+      if (kind === "rate") {
+        openRateModal();
+        return;
+      }
       if (kind === "keys") {
         const cur = state.keys;
         const b = window.prompt("加粗快捷键（如 Mod-b）：", cur.bold);
@@ -4366,15 +4389,13 @@ a{color:${v.accent}}
     els.modeSplit?.addEventListener("click", () => { state.viewMode = "split"; applyViewMode(); });
     els.modePreview?.addEventListener("click", () => { state.viewMode = "preview"; applyViewMode(); });
 
-    // 全屏编辑：铺满视口并锁住页面滚动，只让编辑器/预览自己滚
+    // 沉浸（全屏）：隐藏站点外壳让工具铺满屏幕，只有编辑器/预览滚动
     let maxMode = false;
     function applyMaxMode() {
-      if (!els.layout) return;
-      els.layout.classList.toggle("is-max", maxMode);
-      document.body.classList.toggle("mdm-max-on", maxMode);
+      document.body.classList.toggle("mdm-immersive", maxMode);
       if (els.max) {
         els.max.textContent = maxMode ? "⤡" : "⛶";
-        els.max.title = maxMode ? "退出全屏（Esc）" : "全屏编辑（Esc 退出）";
+        els.max.title = maxMode ? "退出全屏（Esc）" : "全屏：隐藏侧栏与顶栏，铺满屏幕";
       }
       try {
         state.view?.requestMeasure?.();
