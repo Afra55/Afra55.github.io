@@ -2993,6 +2993,50 @@
       await deleteItemById(findItem(state.currentId));
     }
 
+    /** 需要本机桥但没启动时：弹框指引怎么启动 */
+    function showBridgeHelpModal(feature) {
+      const box = els.modalBox;
+      box.innerHTML =
+        `<div class="mdm-modal-head"><strong>需要本机桥</strong></div>` +
+        `<p class="mdm-modal-body">「${escapeHtml(feature)}」需要 <strong>本机桥</strong>（一个只在你电脑本地运行的服务，不上传任何数据）。现在没有检测到桥。</p>` +
+        `<ol class="mdm-bridge-steps">` +
+        `<li>点下方「下载完整包」，解压到任意目录</li>` +
+        `<li>双击 <span class="mono">start-adb-bridge.cmd</span>（macOS/Linux 为 .command / .sh），保持窗口打开</li>` +
+        `<li>回到本页再点一次该功能</li>` +
+        `</ol>` +
+        `<div class="mdm-modal-foot">` +
+        `<button type="button" class="ghost-btn" data-bh="close">知道了</button>` +
+        `<a class="ghost-btn" href="#envkit" data-bh="envkit">环境管家</a>` +
+        `<button type="button" class="secondary-btn" data-bh="launch">尝试启动桥</button>` +
+        `<button type="button" class="primary-btn" data-bh="download">下载完整包</button>` +
+        `</div>`;
+      els.modal.hidden = false;
+      els.modal.onclick = (e) => {
+        if (e.target === els.modal) closeModal();
+      };
+      box.onclick = (e) => {
+        const b = e.target.closest?.("[data-bh]");
+        if (!b) return;
+        const act = b.dataset.bh;
+        if (act === "close") return closeModal();
+        if (act === "envkit") return closeModal();
+        if (act === "launch") {
+          try {
+            window.devtoolsBridgeToken?.tryLaunchBridge?.("unified");
+            toast("已尝试唤起桥；若没弹出，请手动双击启动脚本");
+          } catch (_) {}
+          return closeModal();
+        }
+        if (act === "download") {
+          try {
+            window.devtoolsUnifiedBridgeBundle?.download?.();
+            toast("开始下载完整包…");
+          } catch (_) {}
+          return closeModal();
+        }
+      };
+    }
+
     /** 在本机资源管理器定位该文档（走本机桥；浏览器 FSA 不暴露绝对路径，按文件夹名+文件名反查） */
     async function revealItemLocation(item) {
       if (!item) return;
@@ -3002,7 +3046,7 @@
       }
       const api = window.devtoolsBridgeToken;
       if (!api?.revealMdmDoc) {
-        setErr("需要本机桥 0.9.30+ 支持；请更新桥或重新下载完整包");
+        showBridgeHelpModal("打开文件位置");
         return;
       }
       setSaveStatus("正在本机定位…");
@@ -3013,6 +3057,10 @@
       } catch (err) {
         setSaveStatus("");
         const msg = err?.message || String(err);
+        if (/未连接|未启动|Failed to fetch|超时/.test(msg)) {
+          showBridgeHelpModal("打开文件位置");
+          return;
+        }
         // 按名字没搜到 → 让用户直接给文件夹路径，用 /local/reveal 精确定位
         const manual = window.prompt(
           `未自动找到：${msg}\n\n可粘贴该文件夹的完整路径（例如 D:\\notes），直接在本机打开：`,
@@ -3622,14 +3670,24 @@ a{color:${v.accent}}
 
     async function exportViaPandoc(text, to, title, retried = false) {
       const images = await collectReferencedAssetsWithData(text).catch(() => []);
-      const res = await fetch(`${baseUrl()}/pandoc/convert`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
-        body: JSON.stringify({ text, to, title, images }),
-      });
+      let res;
+      try {
+        res = await fetch(`${baseUrl()}/pandoc/convert`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
+          body: JSON.stringify({ text, to, title, images }),
+        });
+      } catch (_) {
+        showBridgeHelpModal("导出为 Pandoc 格式");
+        throw new Error("本机桥未启动");
+      }
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok) {
-        const msg = data?.error || `本机桥未响应（HTTP ${res.status}）· 请确认桥已启动且装了 pandoc`;
+        const msg = data?.error || `本机桥未响应（HTTP ${res.status}），请确认桥已启动且装了 pandoc`;
+        if (/未找到本机桥|未启动|Failed to fetch/i.test(msg)) {
+          showBridgeHelpModal("导出为 Pandoc 格式");
+          throw new Error(msg);
+        }
         if (!retried && /pandoc/i.test(msg) && /未找到|not found|ENOENT|未安装/i.test(msg)) {
           if (window.confirm("导出该格式需要 pandoc，当前未安装。\n现在用本机桥自动安装？（Windows/macOS 支持，约 100–150MB）")) {
             await runPandocInstall();

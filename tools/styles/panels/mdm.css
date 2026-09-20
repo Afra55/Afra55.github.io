@@ -144,6 +144,36 @@ body.mdm-immersive #mdm .mdm-main { min-height: 0; }
 
 .mdm-rate-host { min-height: 10rem; min-width: min(90vw, 40rem); }
 
+/* 非全屏也锁页面滚动：面板自适应高度，只有编辑器 / 预览滚 */
+@media (min-width: 901px) {
+  body:has(#mdm.tool-panel.is-workspace-active) .shell {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+  }
+  body:has(#mdm.tool-panel.is-workspace-active) #workspace-panels { flex: 1 1 0; min-height: 0; }
+  body:has(#mdm.tool-panel.is-workspace-active) #mdm {
+    height: 100%;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+  }
+  body:has(#mdm.tool-panel.is-workspace-active) #mdm .mdm-body {
+    flex: 1 1 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  body:has(#mdm.tool-panel.is-workspace-active) #mdm .mdm-layout {
+    flex: 1 1 0;
+    height: auto;
+    min-height: 0;
+  }
+}
+
+.mdm-bridge-steps { margin: 0.3rem 0 0.2rem 1.1rem; padding: 0; color: var(--muted); font-size: 0.86rem; line-height: 1.75; }
+
 /* 弹框行列表（回收站 / 历史版本 / 存储占用） */
 .mdm-row-list { display: grid; gap: 0.3rem; max-height: 52vh; overflow-y: auto; min-width: min(88vw, 26rem); }
 .mdm-row { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.32rem 0.45rem; border: 1px solid var(--line); border-radius: 6px; }
