@@ -7342,6 +7342,8 @@
           const holdRange = $("#vbb-hold", root);
           const holdNum = $("#vbb-hold-num", root);
           const previewEl = $("#vbb-img-preview", root);
+          const resultEl = $("#vbb-img-result", root);
+          const fillSel = $("#vbb-fill", root);
           const metaEl = $("#vbb-img-meta", root);
           const genBtn = $("#vbb-img-generate", root);
           const dlEl = $("#vbb-img-download", root);
@@ -7364,6 +7366,8 @@
             gen: 0,
             busy: false,
             autoNote: "",
+            fill: "auto",
+            manualDone: false,
           };
           const setErr = (m) => setError(errEl, m || "");
           const setMeta = (m) => {
@@ -7406,6 +7410,20 @@
               } catch (_) {}
             });
             st.items = [];
+            invalidateResult();
+            if (previewEl) {
+              previewEl.hidden = true;
+              previewEl.removeAttribute("src");
+            }
+            setPreviewNote("");
+            setProg(false, 0);
+            renderList();
+            updateButtons();
+          }
+
+          /** 图片集合变化 → 作废旧结果（并恢复自动预览编码） */
+          function invalidateResult() {
+            st.manualDone = false;
             if (st.url) {
               try {
                 URL.revokeObjectURL(st.url);
@@ -7413,18 +7431,14 @@
             }
             st.url = "";
             st.blob = null;
-            if (previewEl) {
-              previewEl.hidden = true;
-              previewEl.removeAttribute("src");
+            if (resultEl) {
+              resultEl.hidden = true;
+              resultEl.removeAttribute("src");
             }
             if (dlEl) {
               dlEl.hidden = true;
               dlEl.removeAttribute("href");
             }
-            setPreviewNote("");
-            setProg(false, 0);
-            renderList();
-            updateButtons();
           }
 
           function stopPlay() {
@@ -7436,19 +7450,17 @@
           function startPlay() {
             stopPlay();
             if (!previewEl || st.items.length === 0) return;
-            if (!st.blob) {
-              previewEl.hidden = false;
-              previewEl.src = st.items[0].url;
-              setPreviewNote("预览：按每张时长轮播原图（还没编码，不是最终 GIF）");
-            }
+            previewEl.hidden = false;
+            st.playIdx = Math.min(st.playIdx, st.items.length - 1);
+            previewEl.src = st.items[st.playIdx].url;
+            setPreviewNote(`第 ${st.playIdx + 1}/${st.items.length} 张 · 每张 ${st.hold}s`);
             if (st.items.length < 2) return;
-            st.playIdx = 0;
             st.playTimer = setInterval(() => {
-              if (st.blob) return; // 已有真 GIF 预览就交给它自己播放
               st.playIdx = (st.playIdx + 1) % st.items.length;
               try {
                 previewEl.src = st.items[st.playIdx].url;
               } catch (_) {}
+              setPreviewNote(`第 ${st.playIdx + 1}/${st.items.length} 张 · 每张 ${st.hold}s`);
             }, Math.max(100, Math.round(st.hold * 1000)));
           }
 
@@ -7476,6 +7488,8 @@
           function scheduleEncode(delay = 520) {
             window.clearTimeout(st.encTimer);
             if (!st.items.length) return;
+            // 点过「生成」后不再自动重编码：改时长只影响下次手动生成，预览保持不动
+            if (st.manualDone) return;
             st.encTimer = window.setTimeout(() => void requestEncode(false), delay);
           }
 
@@ -7508,21 +7522,27 @@
             }
           }
 
-          async function normalizePng(item, W, H) {
+          async function normalizePng(item, W, H, fill) {
             const bmp = await createImageBitmap(item.file);
             const canvas = document.createElement("canvas");
             canvas.width = W;
             canvas.height = H;
             const ctx = canvas.getContext("2d");
-            // 先把原图画进临时画布取边缘色
-            const tmp = document.createElement("canvas");
-            tmp.width = bmp.width;
-            tmp.height = bmp.height;
-            const tctx = tmp.getContext("2d");
-            tctx.drawImage(bmp, 0, 0);
-            const pad = edgeColorOf(tctx, bmp.width, bmp.height);
-            ctx.fillStyle = pad;
-            ctx.fillRect(0, 0, W, H);
+            if (fill !== "transparent") {
+              // 填充色：自动 = 该图边缘平均色（比纯黑边好看）；黑/白按选择
+              let pad = "#000";
+              if (fill === "white") pad = "#fff";
+              else if (fill !== "black") {
+                const tmp = document.createElement("canvas");
+                tmp.width = bmp.width;
+                tmp.height = bmp.height;
+                const tctx = tmp.getContext("2d");
+                tctx.drawImage(bmp, 0, 0);
+                pad = edgeColorOf(tctx, bmp.width, bmp.height);
+              }
+              ctx.fillStyle = pad;
+              ctx.fillRect(0, 0, W, H);
+            }
             const scale = Math.min(W / bmp.width, H / bmp.height);
             const dw = Math.max(1, Math.round(bmp.width * scale));
             const dh = Math.max(1, Math.round(bmp.height * scale));
@@ -7532,22 +7552,27 @@
           }
 
           /** 一次编码：多图 → 调色板 GIF（temp 文件名带 runId，避免并发互相覆盖） */
-          async function encodeOnce(ff, W, H, colors, onRatio, runId) {
+          async function encodeOnce(ff, W, H, colors, onRatio, runId, fill) {
             const rid = String(runId || 0);
             const names = [];
             for (let i = 0; i < st.items.length; i += 1) {
               const nm = `vim-${rid}-${i}.png`;
-              const png = await normalizePng(st.items[i], W, H);
+              const png = await normalizePng(st.items[i], W, H, fill);
               await ff.writeFile(nm, await fetchFileBytes(png));
               names.push(nm);
               onRatio?.(0.1 + (i / st.items.length) * 0.35, `处理图片 ${i + 1}/${st.items.length}`);
             }
             const hold = Math.max(0.1, st.hold);
             onRatio?.(0.5, "编码 GIF…");
+            // 透明填充需保留 alpha（GIF 只支持 1-bit 透明）
             const vf =
-              `scale=${W}:${H}:flags=bicubic,split[a][b];` +
-              `[a]palettegen=max_colors=${colors}:stats_mode=full[p];` +
-              `[b][p]paletteuse=dither=sierra2:diff_mode=rectangle`;
+              fill === "transparent"
+                ? `scale=${W}:${H}:flags=bicubic,split[a][b];` +
+                  `[a]palettegen=max_colors=${colors}:stats_mode=full:reserve_transparent=1[p];` +
+                  `[b][p]paletteuse=dither=sierra2:alpha_threshold=128:diff_mode=rectangle`
+                : `scale=${W}:${H}:flags=bicubic,split[a][b];` +
+                  `[a]palettegen=max_colors=${colors}:stats_mode=full[p];` +
+                  `[b][p]paletteuse=dither=sierra2:diff_mode=rectangle`;
             // 用 image2 定帧率：每帧时长 = hold（精确，不会像 concat 那样多算末帧）
             const fps = Math.max(0.02, 1 / hold);
             const outName = `vim-out-${rid}.gif`;
@@ -7604,7 +7629,7 @@
               });
               let blob = await encodeOnce(ff, W0, H0, colors0, (r, t) => {
                 if (isManual) setProg(true, r, t);
-              }, myGen);
+              }, myGen, st.fill);
               // 超黑盒上限 → 自动降级（先降宽度，再降色数）
               const budget = blackboxMaxMb() * 1024 * 1024;
               let W = W0;
@@ -7616,7 +7641,7 @@
                 colors = round >= 3 ? Math.max(96, Math.round(colors0 / 2)) : colors0;
                 const H = Math.max(2, Math.round((W * ratio0) / 2) * 2);
                 if (isManual) setProg(true, 0.8, `超上限，自动降到 ${W}px / ${colors} 色…`);
-                blob = await encodeOnce(ff, W, H, colors, () => {}, myGen);
+                blob = await encodeOnce(ff, W, H, colors, () => {}, myGen, st.fill);
               }
               if (myGen !== st.gen) return; // 期间又改了时长 → 丢弃这次结果
               // 体积有余（< 上限的 5/6）→ 与黑盒视频一致：自动加宽，把预算用在清晰度上
@@ -7634,7 +7659,7 @@
                   if (mid >= hi) break;
                   if (isManual) setProg(true, 0.86, `有余量，加宽试探 ${mid}px…`);
                   const Hm = Math.max(2, Math.round((mid * ratio0) / 2) * 2);
-                  const cand = await encodeOnce(ff, mid, Hm, colors, () => {}, myGen);
+                  const cand = await encodeOnce(ff, mid, Hm, colors, () => {}, myGen, st.fill);
                   if (myGen !== st.gen) return;
                   if (cand.size <= budget) {
                     blob = cand;
@@ -7655,9 +7680,12 @@
               st.url = URL.createObjectURL(blob);
               if (previewEl) {
                 previewEl.hidden = false;
-                previewEl.src = st.url;
               }
-              setPreviewNote("预览：这就是生成好的 GIF（自动循环播放）");
+              if (resultEl) {
+                resultEl.hidden = false;
+                resultEl.src = st.url;
+              }
+              setPreviewNote(`第 ${(st.playIdx || 0) + 1}/${st.items.length} 张 · 每张 ${st.hold}s`);
               stopPlay();
               if (dlEl) {
                 dlEl.hidden = false;
@@ -7718,12 +7746,29 @@
           });
           holdRange.addEventListener("input", () => syncHold(holdRange.value, true));
           holdNum?.addEventListener("input", () => syncHold(holdNum.value, false));
+          // 填充方式：自动色（默认）/ 黑 / 白 / 透明
+          if (fillSel) {
+            try {
+              const v = localStorage.getItem("devtools-vbb-img-fill");
+              if (v) fillSel.value = v;
+            } catch (_) {}
+            st.fill = fillSel.value || "auto";
+            fillSel.addEventListener("change", () => {
+              st.fill = fillSel.value || "auto";
+              try {
+                localStorage.setItem("devtools-vbb-img-fill", st.fill);
+              } catch (_) {}
+              invalidateResult();
+              if (!st.manualDone) scheduleEncode(200);
+            });
+          }
           genBtn?.addEventListener("click", () => {
             if (!st.items.length) {
               setErr("先拖入图片再生成");
               return;
             }
             if (st.busy) toast("正在生成，请稍候…");
+            st.manualDone = true; // 之后改时长不再自动重编码
             void requestEncode(true);
           });
           listEl?.addEventListener("click", (e) => {
@@ -7737,6 +7782,7 @@
                 } catch (_) {}
                 st.items.splice(i, 1);
               }
+              invalidateResult();
               renderList();
               updateButtons();
               startPlay();
@@ -7751,6 +7797,7 @@
               if (j >= 0 && j < st.items.length) {
                 const [it] = st.items.splice(i, 1);
                 st.items.splice(j, 0, it);
+                invalidateResult();
                 renderList();
                 startPlay();
                 scheduleEncode(200);
@@ -7768,6 +7815,7 @@
             if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return;
             const [it] = st.items.splice(from, 1);
             st.items.splice(to, 0, it);
+            invalidateResult();
             renderList();
             scheduleEncode(200);
           });
@@ -7831,6 +7879,7 @@
               } catch (_) {}
               st.items.push({ file: f, url, w, h });
             }
+            invalidateResult();
             renderList();
             updateButtons();
             startPlay();

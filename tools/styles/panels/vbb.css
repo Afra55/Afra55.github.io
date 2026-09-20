@@ -314,3 +314,21 @@
   .vbb-img-item { width: 76px; }
   .vbb-img-item img { height: 54px; }
 }
+
+/* 多图：单行横向滑动（手机友好） */
+.vbb-img-list {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+  padding-bottom: 0.3rem;
+}
+.vbb-img-item { flex: 0 0 auto; }
+.vbb-img-previews { display: grid; gap: 0.7rem; grid-template-columns: 1fr 1fr; margin-top: 0.7rem; }
+.vbb-img-preview-box { min-width: 0; }
+.vbb-img-preview-box > .hint { margin: 0 0 0.25rem; }
+.vbb-img-preview-wrap img { max-height: 46vh; }
+@media (max-width: 900px) {
+  .vbb-img-previews { grid-template-columns: 1fr; }
+}

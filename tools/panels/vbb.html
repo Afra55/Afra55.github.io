@@ -166,10 +166,31 @@
             <input type="number" id="vbb-hold-num" class="mono meta-input" min="0.1" max="5" step="0.1" value="1" inputmode="decimal" aria-label="每张时长数值" />
             <span class="hint tight">秒 / 张</span>
           </div>
-          <div class="gif-preview-wrap vbb-img-preview-wrap">
-            <img id="vbb-img-preview" class="img-preview gif-preview" alt="多图 GIF 预览" hidden />
+          <div class="vbb-hold-row">
+            <label for="vbb-fill">填充</label>
+            <select id="vbb-fill" class="mono meta-input" title="图片尺寸不一样时的填充方式">
+              <option value="auto" selected>自动色</option>
+              <option value="black">黑</option>
+              <option value="white">白</option>
+              <option value="transparent">透明</option>
+            </select>
+            <span class="hint tight">仅尺寸不一致时使用</span>
           </div>
-          <p class="hint tight" id="vbb-img-preview-note"></p>
+          <div class="vbb-img-previews">
+            <div class="vbb-img-preview-box">
+              <p class="hint tight">时长预览（原图轮播，不是最终 GIF）</p>
+              <div class="gif-preview-wrap vbb-img-preview-wrap">
+                <img id="vbb-img-preview" class="img-preview gif-preview" alt="时长预览" hidden />
+              </div>
+              <p class="hint tight" id="vbb-img-preview-note"></p>
+            </div>
+            <div class="vbb-img-preview-box">
+              <p class="hint tight">生成结果 GIF</p>
+              <div class="gif-preview-wrap vbb-img-preview-wrap">
+                <img id="vbb-img-result" class="img-preview gif-preview" alt="生成结果" hidden />
+              </div>
+            </div>
+          </div>
           <p class="hint tight" id="vbb-img-meta">拖入图片即可预览；宽度、帧率、颜色由黑盒规则自动决定，不用填。</p>
           <div class="gif-progress" id="vbb-img-progress" hidden>
             <div class="gif-progress-head">
