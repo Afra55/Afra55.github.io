@@ -51,7 +51,7 @@
 .mdm-side > .mdm-group { flex: 0 1 auto; max-height: 22%; overflow-y: auto; scrollbar-width: thin; }
 .mdm-side > .mdm-group:not(:empty) { min-height: 1.6rem; }
 .mdm-side > .mdm-group > .mdm-group-title { position: sticky; top: 0; z-index: 1; background: var(--panel, rgba(12, 18, 30, 0.92)); }
-.mdm-list-wrap { flex: 1 1 auto; min-height: 8rem; overflow: auto; }
+.mdm-list-wrap { flex: 1 1 0; min-height: 8rem; overflow: auto; }
 .mdm-group { margin-bottom: 0.4rem; }
 .mdm-group-title { font-size: 0.75rem; color: var(--muted); margin: 0.35rem 0 0.25rem; }
 .mdm-chip {
