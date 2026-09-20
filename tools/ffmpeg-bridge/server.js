@@ -420,17 +420,34 @@ async function findMdmDocFile({ folderName, fileName }) {
   const addSeed = (p) => {
     if (p) seeds.add(path.resolve(p));
   };
-  addSeed(os.homedir());
+  // 优先常见文档位置（home 里 AppData 等目录很大，容易把扫描预算耗尽）
   addSeed(path.join(os.homedir(), "Desktop"));
   addSeed(path.join(os.homedir(), "Documents"));
   addSeed(path.join(os.homedir(), "Downloads"));
   addSeed(path.join(os.homedir(), "OneDrive"));
+  addSeed(path.join(os.homedir(), "OneDrive", "Desktop"));
+  addSeed(path.join(os.homedir(), "OneDrive", "Documents"));
+  addSeed(os.homedir());
   for (const r of localFsRoots()) addSeed(r.path);
 
   const maxDepth = 6;
-  const maxScan = 12000;
+  const maxScan = 40000;
   let scanned = 0;
   const seen = new Set();
+  const SKIP_DIRS = new Set([
+    "node_modules",
+    "AppData",
+    "Application Data",
+    "Windows",
+    "Program Files",
+    "Program Files (x86)",
+    "ProgramData",
+    "$Recycle.Bin",
+    "$WinREAgent",
+    "System Volume Information",
+    "Library",
+    ".cache",
+  ]);
 
   async function walk(dir, depth) {
     if (depth > maxDepth || scanned > maxScan) return null;
@@ -461,7 +478,7 @@ async function findMdmDocFile({ folderName, fileName }) {
     }
     for (const e of entries) {
       if (!e.isDirectory()) continue;
-      if (e.name === "node_modules" || e.name === ".git" || e.name.startsWith(".")) continue;
+      if (e.name.startsWith(".") || SKIP_DIRS.has(e.name)) continue;
       const hit = await walk(path.join(real, e.name), depth + 1);
       if (hit) return hit;
     }

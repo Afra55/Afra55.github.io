@@ -3012,7 +3012,25 @@
         toast("已在本机打开所在位置");
       } catch (err) {
         setSaveStatus("");
-        setErr(`打开文件位置失败：${err.message || err}`);
+        const msg = err?.message || String(err);
+        // 按名字没搜到 → 让用户直接给文件夹路径，用 /local/reveal 精确定位
+        const manual = window.prompt(
+          `未自动找到：${msg}\n\n可粘贴该文件夹的完整路径（例如 D:\\notes），直接在本机打开：`,
+          ""
+        );
+        if (!manual) {
+          setErr(`打开文件位置失败：${msg}`);
+          return;
+        }
+        try {
+          const base = String(manual).trim().replace(/[\\/]+$/, "");
+          const sep = base.includes("\\") ? "\\" : "/";
+          await api.revealLocalPath({ path: `${base}${sep}${item.fileName}` });
+          setErr("");
+          toast("已在本机打开所在位置");
+        } catch (err2) {
+          setErr(`打开文件位置失败：${err2.message || err2}`);
+        }
       }
     }
 
@@ -4076,13 +4094,59 @@ a{color:${v.accent}}
     });
     document.addEventListener("click", closeListCtx);
     window.addEventListener("scroll", closeListCtx, true);
+    /** 把编辑器滚动到第 idx 个标题（预览隐藏时大纲也能跳转） */
+    function jumpEditorToHeading(idx, text) {
+      const view = state.view;
+      if (!view) return false;
+      const lines = view.state.doc.toString().split("\n");
+      const spots = [];
+      for (let i = 0; i < lines.length; i += 1) {
+        const m = /^(#{1,6})\s+(.*)$/.exec(lines[i]);
+        if (m) {
+          spots.push({ i, text: m[2].trim() });
+          continue;
+        }
+        if (i > 0 && /^\s*(=+|-{2,})\s*$/.test(lines[i]) && lines[i - 1].trim()) {
+          spots.push({ i: i - 1, text: lines[i - 1].trim() });
+        }
+      }
+      let hit = spots[idx];
+      const want = String(text || "").trim();
+      if (want && (!hit || hit.text !== want)) {
+        const found = spots.find((s) => s.text === want);
+        if (found) hit = found;
+      }
+      if (!hit) return false;
+      const pos = view.state.doc.line(hit.i + 1).from;
+      try {
+        const CM = window.DevToolsCM6;
+        view.dispatch({
+          selection: { anchor: pos },
+          effects: CM.EditorView.scrollIntoView(pos, { y: "start" }),
+        });
+        view.focus();
+      } catch (_) {}
+      return true;
+    }
+
     const outlineGo = (e) => {
       const item = e.target.closest?.("[data-h]");
       if (!item) return;
       const idx = Number(item.dataset.h);
+      const text = item.textContent || "";
       const heads = [...(els.preview?.querySelectorAll("h1,h2,h3,h4,h5,h6") || [])];
       const h = heads[idx];
-      if (h) h.scrollIntoView({ behavior: "smooth", block: "start" });
+      const previewVisible = state.viewMode !== "edit";
+      // 一次跳两个窗格：先锁住同步，避免互相把位置拉回去
+      state.syncing = true;
+      jumpEditorToHeading(idx, text);
+      if (previewVisible && h && els.preview) {
+        els.preview.scrollTop = Math.max(0, h.offsetTop - 8);
+      }
+      window.requestAnimationFrame(() => {
+        state.syncing = false;
+        syncOutlineActive();
+      });
     };
     els.outline?.addEventListener("click", outlineGo);
     els.outline?.addEventListener("keydown", (e) => {

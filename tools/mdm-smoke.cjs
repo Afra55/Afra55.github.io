@@ -371,6 +371,34 @@ async function browserChecks() {
     await page.waitForFunction(() => Boolean(document.querySelector("#mdm-preview .katex")), { timeout: 60000 });
     console.log("STEP katex-ok");
 
+    // 10b) 大纲跳转：编辑模式下点大纲应把光标移到对应标题
+    await page.click("#mdm-mode-edit");
+    await page.evaluate(() => {
+      const ed = document.querySelector("#mdm-editor .cm-content");
+      ed.focus();
+      document.execCommand("insertText", false, "\n\n# 大纲标题甲\n\n正文若干行\n\n## 大纲标题乙\n\n更多正文\n");
+    });
+    await page.waitForFunction(
+      () => document.querySelectorAll("#mdm-outline-body .mdm-outline-item").length >= 2,
+      { timeout: 10000 }
+    );
+    const headingText = await page.evaluate(() => {
+      const items = [...document.querySelectorAll("#mdm-outline-body .mdm-outline-item")];
+      const target = items[1] || items[0];
+      const text = target?.textContent || "";
+      target?.click();
+      return text;
+    });
+    await page.waitForFunction(
+      (t) => {
+        const line = document.querySelector("#mdm-editor .cm-activeLine")?.textContent || "";
+        return Boolean(t) && line.includes(t);
+      },
+      { timeout: 10000 },
+      headingText
+    );
+    console.log("STEP outline-jump-ok");
+
     // 11) 全屏（沉浸）：隐藏站点外壳铺满屏幕，Esc 退出
     await page.click("#mdm-max");
     await page.waitForFunction(() => document.body.classList.contains("mdm-immersive"), { timeout: 5000 });

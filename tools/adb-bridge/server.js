@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.32";
+const BRIDGE_VERSION = "0.9.33";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -4874,9 +4874,50 @@ async function selfUpdateBridge(onLog = () => {}) {
   return { written, skipped, total: files.length };
 }
 
-/** 更新后脱离父进程重启，保持控制台/协议启动都能继续用 */
+/** 找到平台启动脚本（它内部会跑 resolve-port：检测已运行并给出复用/重启/取消选项） */
+function findStartScript() {
+  const dir = __dirname;
+  const parent = path.dirname(__dirname);
+  const names =
+    process.platform === "win32"
+      ? ["start-adb-bridge.cmd", "start-win.cmd", "start-win.bat"]
+      : process.platform === "darwin"
+        ? ["start-adb-bridge.command", "start-mac.command"]
+        : ["start-adb-bridge.sh", "start-linux.sh"];
+  const cands = [];
+  for (const n of names) {
+    cands.push(path.join(dir, n));
+    cands.push(path.join(parent, n));
+  }
+  return cands.find((p) => {
+    try {
+      return fs.existsSync(p);
+    } catch (_) {
+      return false;
+    }
+  });
+}
+
+/**
+ * 更新后重启：优先走启动脚本，这样仍会走「检测是否已有桥 + 让用户选复用/重启/取消」的正常启动流程。
+ * 没有启动脚本时退回直接重启（server 自身的 listenWithFallback 会处理端口占用）。
+ */
 function relaunchBridge() {
   try {
+    const script = findStartScript();
+    if (script) {
+      const child =
+        process.platform === "win32"
+          ? spawn("cmd.exe", ["/c", "start", "", script], {
+              detached: true,
+              stdio: "ignore",
+              cwd: path.dirname(script),
+              env: process.env,
+            })
+          : spawn(script, [], { detached: true, stdio: "ignore", cwd: path.dirname(script), env: process.env });
+      child.unref();
+      process.exit(0);
+    }
     const child = spawn(process.execPath, [process.argv[1], ...process.argv.slice(2)], {
       detached: true,
       stdio: "ignore",

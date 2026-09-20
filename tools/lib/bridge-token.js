@@ -460,16 +460,26 @@
     if (!health) {
       throw new Error("本机桥未连接。请先启动并连接桥，再点「打开文件位置」。");
     }
-    const res = await fetch(`${base}/local/reveal-doc`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Adb-Token": tok,
-        "X-Ffmpeg-Token": tok,
-        "X-Git-Token": tok,
-      },
-      body: JSON.stringify({ folderName: dirName, fileName: fName }),
-    });
+    const ac = typeof AbortController === "function" ? new AbortController() : null;
+    const timer = ac ? setTimeout(() => ac.abort(), 30000) : null;
+    let res;
+    try {
+      res = await fetch(`${base}/local/reveal-doc`, {
+        method: "POST",
+        signal: ac ? ac.signal : undefined,
+        headers: {
+          "Content-Type": "application/json",
+          "X-Adb-Token": tok,
+          "X-Ffmpeg-Token": tok,
+          "X-Git-Token": tok,
+        },
+        body: JSON.stringify({ folderName: dirName, fileName: fName }),
+      });
+    } catch (err) {
+      throw new Error(String(err?.name) === "AbortError" ? "本机搜索超时（可改用完整路径）" : err.message || String(err));
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
     const data = await res.json().catch(() => ({}));
     if (!res.ok || data?.ok === false) {
       throw new Error(data?.error || `打开文件位置失败（HTTP ${res.status}）`);
