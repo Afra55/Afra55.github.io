@@ -98,11 +98,11 @@
 .mdm-main-toolbar > .mdm-insert-menu,
 .mdm-main-toolbar > #mdm-delete { flex: none; }
 .mdm-main-toolbar .seg-btn { white-space: nowrap; }
-.mdm-main-toolbar > #mdm-save-status,
-.mdm-main-toolbar > #mdm-doc-stats { flex: none; white-space: nowrap; }
+.mdm-main-toolbar > #mdm-save-status { flex: none; white-space: nowrap; }
 .mdm-title { flex: 1 1 12rem; min-width: 8rem; padding: 0.35rem 0.5rem; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 0.9rem; }
 .mdm-meta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.35rem 0.55rem; border-bottom: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
 .mdm-meta-row > label { color: var(--muted); }
+.mdm-meta-row #mdm-doc-stats { flex: 0 0 auto; margin-left: auto; white-space: nowrap; }
 .mdm-cat { min-width: 9rem; padding: 0.25rem 0.45rem; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--ink); }
 .mdm-tag-chips { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; }
 .mdm-tag { display: inline-flex; align-items: center; gap: 0.15rem; padding: 0.05rem 0.4rem; border-radius: 999px; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--ink); font-size: 0.78rem; }
