@@ -185,9 +185,10 @@ async function browserChecks() {
       { timeout: 30000 }
     );
 
-    // 2) 新建 + 命名
+    // 2) 新建 + 命名（空库进入时已自动新建一篇，直接用；否则点新建）
     console.log("STEP new");
-    await page.click("#mdm-new");
+    const preCount = await page.$$eval("#mdm-list [data-id]", (els) => els.length);
+    if (preCount === 0) await page.click("#mdm-new");
     await page.click("#mdm-title", { clickCount: 3 });
     await page.keyboard.type(TITLE);
     console.log("STEP new:typed");

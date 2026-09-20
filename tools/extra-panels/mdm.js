@@ -615,16 +615,6 @@
         });
     }
 
-    function reorderItem(fromId, toId) {
-      const items = state.index.items;
-      const fromIdx = items.findIndex((x) => x.id === fromId);
-      if (fromIdx < 0) return;
-      const [moved] = items.splice(fromIdx, 1);
-      const toIdx = items.findIndex((x) => x.id === toId);
-      items.splice(toIdx < 0 ? items.length : toIdx, 0, moved);
-      items.forEach((it, i) => { it.order = i; });
-    }
-
     function normalizeOrders() {
       (state.index.items || []).forEach((it, i) => { it.order = i; });
     }
@@ -3233,11 +3223,34 @@
       if (els.title) els.title.value = item.title;
       setEditorText("");
       renderPreview();
+      renderOutline();
+      renderBacklinks();
       renderSidebar();
       updateSaveBtn();
       els.empty && (els.empty.hidden = true);
       els.title?.focus();
       els.title?.select?.();
+    }
+
+    /** 面板打开时恢复上次文档：上次打开的（存在才用）→ 列表第一篇 → 都没有就自动新建 */
+    async function openInitialDoc() {
+      if (state.currentId && findItem(state.currentId)) return;
+      const last = (state.recentIds || []).find((id) => findItem(id));
+      if (last) {
+        await openDoc(last);
+        return;
+      }
+      const items = filteredItems();
+      if (items.length) {
+        await openDoc(items[0].id);
+        return;
+      }
+      const all = state.index.items || [];
+      if (all.length) {
+        await openDoc(all[0].id);
+        return;
+      }
+      newDoc();
     }
 
     function setSaveStatus(text) {
@@ -4380,6 +4393,7 @@ a{color:${v.accent}}
       bindEditorScroll();
       bindMinimap();
       await loadSearchIdx();
+      await openInitialDoc();
       warmBodyCache();
       void autoExpireTrash();
       watchExternalChanges();
@@ -4525,13 +4539,51 @@ a{color:${v.accent}}
     });
     let lastListClick = { id: "", at: 0 };
     let dragId = "";
+    let dropTarget = { id: "", place: "" };
+    const clearDropMarks = () => {
+      els.list?.querySelectorAll(".is-drop-target,.is-drop-before,.is-drop-after,.is-dragging").forEach((el) =>
+        el.classList.remove("is-drop-target", "is-drop-before", "is-drop-after", "is-dragging")
+      );
+    };
+    const markDrop = (el, place) => {
+      els.list?.querySelectorAll(".is-drop-before,.is-drop-after").forEach((n) => n.classList.remove("is-drop-before", "is-drop-after"));
+      if (el) el.classList.add(place === "after" ? "is-drop-after" : "is-drop-before");
+    };
+    /** 落点判定：指针在目标行上半 → 插到它前面；下半 → 插到后面 */
+    const placeFor = (clientY, el) => {
+      const r = el.getBoundingClientRect();
+      return clientY < r.top + r.height / 2 ? "before" : "after";
+    };
+    /** 把 fromId 移动到 toId 前/后（含「移到末尾」），松手才调用 */
+    function moveItemTo(fromId, toId, place) {
+      const items = state.index.items;
+      const fromIdx = items.findIndex((x) => x.id === fromId);
+      if (fromIdx < 0) return;
+      const [moved] = items.splice(fromIdx, 1);
+      let toIdx = items.findIndex((x) => x.id === toId);
+      if (toIdx < 0) toIdx = items.length;
+      else if (place === "after") toIdx += 1;
+      items.splice(toIdx, 0, moved);
+      items.forEach((it, i) => { it.order = i; });
+    }
+    const commitDrop = async () => {
+      const from = dragId;
+      const t = dropTarget;
+      dragId = "";
+      dropTarget = { id: "", place: "" };
+      clearDropMarks();
+      if (!from || !t.id || t.id === from) return;
+      moveItemTo(from, t.id, t.place);
+      await saveIndexToStorage();
+      renderSidebar();
+      els.list?.querySelector(`[data-id="${from}"]`)?.scrollIntoView({ block: "nearest" });
+    };
     els.list?.addEventListener("pointerdown", (e) => {
-      state.dragFromHandle = Boolean(e.target.closest?.(".mdm-drag-handle"));
+      state.dragFromHandle = Boolean(e.target.closest?.(".mdm-drag-handle:not(.is-off)"));
     });
     els.list?.addEventListener("dragstart", (e) => {
       const b = e.target.closest?.("[data-id]");
-      if (!b) return;
-      if (!state.dragFromHandle) {
+      if (!b || !state.dragFromHandle || state.sort !== "order") {
         e.preventDefault();
         return;
       }
@@ -4547,31 +4599,25 @@ a{color:${v.accent}}
       e.preventDefault();
       try { e.dataTransfer.dropEffect = "move"; } catch (_) {}
       const b = e.target.closest?.("[data-id]");
-      els.list?.querySelectorAll(".is-drop-target").forEach((el) => el.classList.remove("is-drop-target"));
-      if (b && b.dataset.id !== dragId) b.classList.add("is-drop-target");
+      if (!b || b.dataset.id === dragId) return;
+      const place = placeFor(e.clientY, b);
+      if (dropTarget.id !== b.dataset.id || dropTarget.place !== place) {
+        dropTarget = { id: b.dataset.id, place };
+        markDrop(b, place);
+      }
     });
     els.list?.addEventListener("drop", (e) => {
-      const b = e.target.closest?.("[data-id]");
-      els.list?.querySelectorAll(".is-drop-target,.is-dragging").forEach((el) => el.classList.remove("is-drop-target", "is-dragging"));
-      if (!b || !dragId) return;
+      if (!dragId) return;
       e.preventDefault();
-      if (state.sort !== "order") {
-        dragId = "";
-        toast("拖拽排序仅在「自定义顺序」下可用");
-        return;
-      }
-      const targetId = b.dataset.id;
-      const from = dragId;
-      dragId = "";
-      if (targetId === from) return;
-      reorderItem(from, targetId);
-      saveIndexToStorage().then(() => renderSidebar());
+      void commitDrop();
     });
     els.list?.addEventListener("dragend", () => {
       dragId = "";
-      els.list?.querySelectorAll(".is-drop-target,.is-dragging").forEach((el) => el.classList.remove("is-drop-target", "is-dragging"));
+      dropTarget = { id: "", place: "" };
+      state.dragFromHandle = false;
+      clearDropMarks();
     });
-    // 触屏拖拽排序（HTML5 DnD 在触屏无效）
+    // 触屏拖拽排序（HTML5 DnD 在触屏无效）：实时显示落点，松手才落位
     (function bindTouchReorder() {
       const list = els.list;
       if (!list) return;
@@ -4591,28 +4637,32 @@ a{color:${v.accent}}
           if (e.pointerType !== "touch" || !touchId) return;
           if (!dragging && Math.abs(e.clientY - startY) > 12) {
             dragging = true;
+            dragId = touchId;
             els.list?.querySelector(`[data-id="${touchId}"]`)?.classList.add("is-dragging");
           }
           if (!dragging) return;
           e.preventDefault();
           const over = document.elementFromPoint(e.clientX, e.clientY)?.closest?.("[data-id]");
-          els.list?.querySelectorAll(".is-drop-target").forEach((el) => el.classList.remove("is-drop-target"));
-          if (over && over.dataset.id !== touchId) {
-            over.classList.add("is-drop-target");
-            reorderItem(touchId, over.dataset.id);
-            renderList();
-            els.list?.querySelector(`[data-id="${touchId}"]`)?.classList.add("is-dragging");
+          if (!over || over.dataset.id === touchId) return;
+          const place = placeFor(e.clientY, over);
+          if (dropTarget.id !== over.dataset.id || dropTarget.place !== place) {
+            dropTarget = { id: over.dataset.id, place };
+            markDrop(over, place);
           }
         },
         { passive: false }
       );
       const end = () => {
-        els.list?.querySelectorAll(".is-drop-target,.is-dragging").forEach((el) => el.classList.remove("is-drop-target", "is-dragging"));
-        if (dragging) {
-          saveIndexToStorage().then(() => renderSidebar());
-        }
+        if (!touchId) return;
+        const wasDragging = dragging;
         touchId = "";
         dragging = false;
+        if (wasDragging) void commitDrop();
+        else {
+          dragId = "";
+          dropTarget = { id: "", place: "" };
+          clearDropMarks();
+        }
       };
       list.addEventListener("pointerup", end);
       list.addEventListener("pointercancel", end);
@@ -5504,8 +5554,18 @@ a{color:${v.accent}}
         setHover(true);
       });
       panelEl.addEventListener("dragleave", (e) => {
-        if (e.target === panelEl) setHover(false);
+        // 只在真正离开面板时收起：在面板内子元素之间移动不收起
+        if (e.relatedTarget && panelEl.contains(e.relatedTarget)) return;
+        setHover(false);
       });
+      // 兜底：拖拽结束 / 取消 / 拖出窗口 / 子元素拦截了 drop，也一定收起遮罩
+      const hideDrop = () => setHover(false);
+      window.addEventListener("dragend", hideDrop, true);
+      window.addEventListener("drop", hideDrop, true);
+      document.addEventListener("dragleave", (e) => {
+        if (!e.relatedTarget) setHover(false);
+      });
+      window.addEventListener("blur", hideDrop);
       panelEl.addEventListener("drop", (e) => {
         if (!e.dataTransfer) return;
         e.preventDefault();
@@ -5543,6 +5603,17 @@ a{color:${v.accent}}
           els.pickDir && (els.pickDir.textContent = "重新连接文件夹");
         }
       } catch (_) {}
+      // 没有文件夹句柄：若本地存储（IndexedDB）里已有库，自动恢复本地存储模式
+      if (!state.dirHandle) {
+        try {
+          const idbIdx = await idbGet("kv", "index");
+          if (idbIdx) {
+            state.mode = "idb";
+            await initAfterStorage("浏览器本地存储");
+            return;
+          }
+        } catch (_) {}
+      }
       // 未绑定目录：显示上次缓存索引（若有），等用户选择
       const cached = readIndexRaw();
       if (cached) {

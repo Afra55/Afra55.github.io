@@ -68,9 +68,19 @@
   background: transparent; color: var(--ink); cursor: pointer;
 }
 .mdm-item-body { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; flex: 1 1 auto; }
-.mdm-drag-handle { flex: 0 0 auto; color: var(--muted); cursor: grab; font-size: 0.8rem; line-height: 1; user-select: none; }
-.mdm-item.is-dragging { opacity: 0.5; }
+.mdm-drag-handle {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  width: 1.2rem; align-self: stretch; margin-right: 0.1rem;
+  color: var(--muted); cursor: grab; font-size: 1rem; line-height: 1;
+  letter-spacing: -1px; user-select: none; touch-action: none; border-radius: 5px;
+}
+.mdm-drag-handle:hover { color: var(--ink); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.mdm-drag-handle:active { cursor: grabbing; }
+.mdm-drag-handle.is-off { width: 0; margin: 0; pointer-events: none; }
+.mdm-item.is-dragging { opacity: 0.45; }
 .mdm-item.is-drop-target { border-color: var(--accent); }
+.mdm-item.is-drop-before { box-shadow: inset 0 2px 0 0 var(--accent); }
+.mdm-item.is-drop-after { box-shadow: inset 0 -2px 0 0 var(--accent); }
 .mdm-item:hover { border-color: var(--line); }
 .mdm-item.is-active { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); }
 .mdm-item-title { font-size: 0.88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -345,7 +355,7 @@ body.mdm-immersive #mdm .mdm-main { min-height: 0; }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 700; }
 
-/* ÎÄµµ¸ÅÀÀÌõ£¨±à¼­Æ÷ÓÒ²à£© */
+/* ï¿½Äµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½à¼­ï¿½ï¿½ï¿½Ò²à£© */
 #mdm-editor { position: relative; }
 .mdm-minimap {
   position: absolute; top: 0; bottom: 0; right: 10px; width: 9px; z-index: 5;
@@ -361,7 +371,7 @@ body.mdm-immersive #mdm .mdm-main { min-height: 0; }
 }
 @media (max-width: 900px) { .mdm-minimap { display: none; } }
 
-/* ·Ö×éÍ· + ÏÔÊ¾¸ü¶à */
+/* ï¿½ï¿½ï¿½ï¿½Í· + ï¿½ï¿½Ê¾ï¿½ï¿½ï¿½ï¿½ */
 .mdm-group-head {
   padding: 0.35rem 0.5rem 0.15rem; font-size: 0.75rem; color: var(--muted);
   border-bottom: 1px solid var(--line); margin-top: 0.35rem;
