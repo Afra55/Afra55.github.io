@@ -137,6 +137,8 @@
     dragFromHandle: false,
     conflictItem: null,
     lastDeleted: null,
+    autosave: true,
+    outlineCollapsed: false,
     watchTimer: 0,
     recentIds: (() => {
       try {
@@ -229,6 +231,11 @@
       fileInput: $("#mdm-file-input"),
       insertToggle: $("#mdm-insert-toggle"),
       insertDropdown: $("#mdm-insert-dropdown"),
+      toolsToggle: $("#mdm-tools-toggle"),
+      toolsDropdown: $("#mdm-tools-dropdown"),
+      autosave: $("#mdm-autosave"),
+      outlineAside: $("#mdm-outline-aside"),
+      outlineToggle: $("#mdm-outline-toggle"),
       imgCompress: $("#mdm-img-compress"),
       saveStatus: $("#mdm-save-status"),
       docStats: $("#mdm-doc-stats"),
@@ -1998,9 +2005,49 @@
     }
 
     async function openTrash() {
+      if (!state.mode) {
+        setErr("请先选择存储位置");
+        return;
+      }
       state.trashEntries = await listTrash();
-      state.trashMode = true;
-      renderSidebar();
+      renderTrashModal();
+    }
+
+    function renderTrashModal() {
+      const box = els.modalBox;
+      const rows = state.trashEntries.length
+        ? state.trashEntries
+            .map(
+              (t) =>
+                `<div class="mdm-row"><span class="mdm-row-name mono">${escapeHtml(t.key)}</span>` +
+                `<span class="mdm-row-actions"><button type="button" class="ghost-btn" data-trash-restore="${escapeHtml(
+                  t.key
+                )}">恢复</button>` +
+                `<button type="button" class="ghost-btn" data-trash-purge="${escapeHtml(t.key)}">彻底删除</button></span></div>`
+            )
+            .join("")
+        : `<p class="hint tight">回收站是空的</p>`;
+      box.innerHTML =
+        `<div class="mdm-modal-head"><strong>回收站（${state.trashEntries.length}）</strong><button type="button" class="ghost-btn" data-mdl="close">关闭</button></div>` +
+        `<div class="mdm-row-list">${rows}</div>` +
+        `<div class="mdm-modal-foot">` +
+        `<button type="button" class="ghost-btn" data-trash="restore-all">全部恢复</button>` +
+        `<button type="button" class="secondary-btn is-danger" data-trash="empty">清空回收站</button>` +
+        `</div>`;
+      els.modal.hidden = false;
+      els.modal.onclick = (e) => {
+        if (e.target === els.modal) closeModal();
+      };
+      box.onclick = async (e) => {
+        if (e.target.closest?.('[data-mdl="close"]')) return closeModal();
+        const restore = e.target.closest?.("[data-trash-restore]");
+        if (restore) return void (await restoreTrash(restore.dataset.trashRestore));
+        const purge = e.target.closest?.("[data-trash-purge]");
+        if (purge) return void (await purgeTrash(purge.dataset.trashPurge));
+        const act = e.target.closest?.("[data-trash]")?.dataset?.trash;
+        if (act === "empty") return void (await emptyTrash());
+        if (act === "restore-all") return void (await restoreAllTrash());
+      };
     }
 
     async function restoreTrash(key) {
@@ -2167,9 +2214,44 @@
       }
       entries.sort((a, b) => b.ts - a.ts);
       state.historyEntries = entries;
-      state.historyMode = true;
       state.historyItem = item;
-      renderSidebar();
+      renderHistoryModal();
+    }
+
+    function renderHistoryModal() {
+      const item = state.historyItem;
+      const entries = state.historyEntries || [];
+      const box = els.modalBox;
+      const fmt = (ts) => (ts ? new Date(ts).toLocaleString() : "(未知时间)");
+      const rows = entries.length
+        ? entries
+            .map(
+              (e, i) =>
+                `<div class="mdm-row"><span class="mdm-row-name">${escapeHtml(fmt(e.ts))}${
+                  i === 0 ? " · 最新" : ""
+                }</span><span class="mdm-row-actions">` +
+                `<button type="button" class="ghost-btn" data-hist-restore="${escapeHtml(e.key)}">载入</button>` +
+                `</span></div>`
+            )
+            .join("")
+        : `<p class="hint tight">还没有历史版本（保存约 5 分钟后自动生成）</p>`;
+      box.innerHTML =
+        `<div class="mdm-modal-head"><strong>历史版本 · ${escapeHtml(item?.title || "")}（${entries.length}）</strong>` +
+        `<button type="button" class="ghost-btn" data-mdl="close">关闭</button></div>` +
+        `<div class="mdm-row-list">${rows}</div>` +
+        `<p class="hint tight">载入只会填进编辑器，点「保存」后才写回文件。</p>`;
+      els.modal.hidden = false;
+      els.modal.onclick = (e) => {
+        if (e.target === els.modal) closeModal();
+      };
+      box.onclick = async (e) => {
+        if (e.target.closest?.('[data-mdl="close"]')) return closeModal();
+        const restore = e.target.closest?.("[data-hist-restore]");
+        if (restore) {
+          await restoreHistory(item, restore.dataset.histRestore);
+          closeModal();
+        }
+      };
     }
 
     async function restoreHistory(item, key) {
@@ -2303,8 +2385,27 @@
           } catch (_) {}
         }
         const msg = `文档 ${docs} 篇 · 资源 ${assets.length} 个（${fmtBytes(bytes)}）${quota}`;
-        setSaveStatus(msg);
-        toast(msg);
+        setSaveStatus("");
+        const rows = [
+          ["文档数量", `${docs} 篇`],
+          ["资源文件", `${assets.length} 个 · ${fmtBytes(bytes)}`],
+          ["当前模式", state.mode === "dir" ? "文件夹" : "浏览器本地存储"],
+        ];
+        if (quota) rows.push(["浏览器存储", String(quota).replace(/^\s*·\s*/, "")]);
+        els.modalBox.innerHTML =
+          `<div class="mdm-modal-head"><strong>存储占用</strong><button type="button" class="ghost-btn" data-mdl="close">关闭</button></div>` +
+          `<div class="mdm-row-list">` +
+          rows
+            .map(([k, v]) => `<div class="mdm-row"><span class="mdm-row-name">${k}</span><span>${escapeHtml(v)}</span></div>`)
+            .join("") +
+          `</div>`;
+        els.modal.hidden = false;
+        els.modal.onclick = (e) => {
+          if (e.target === els.modal) closeModal();
+        };
+        els.modalBox.onclick = (e) => {
+          if (e.target.closest?.('[data-mdl="close"]')) closeModal();
+        };
       } catch (err) {
         setErr(`统计失败：${err.message || err}`);
       }
@@ -2551,11 +2652,44 @@
     })();
 
     // ---- current doc ----
+    /** 关闭自动保存时，切换文档前询问：保存 / 不保存 / 取消 */
+    function askUnsavedModal() {
+      return new Promise((resolve) => {
+        const box = els.modalBox;
+        box.innerHTML =
+          `<div class="mdm-modal-head"><strong>有未保存的修改</strong></div>` +
+          `<p class="mdm-modal-body">当前文档还没保存。切换前要保存吗？</p>` +
+          `<div class="mdm-modal-foot"><button type="button" class="ghost-btn" data-ask="cancel">取消</button>` +
+          `<button type="button" class="secondary-btn is-danger" data-ask="discard">不保存</button>` +
+          `<button type="button" class="primary-btn" data-ask="save">保存并切换</button></div>`;
+        els.modal.hidden = false;
+        const done = (v) => {
+          closeModal();
+          resolve(v);
+        };
+        els.modal.onclick = (e) => {
+          if (e.target === els.modal) done("cancel");
+        };
+        box.onclick = (e) => {
+          const b = e.target.closest?.("[data-ask]");
+          if (b) done(b.dataset.ask);
+        };
+      });
+    }
+
     async function openDoc(id) {
-      // 自动保存：切换前先把未保存的写入
+      // 自动保存开：切换前静默写入；关：询问保存 / 不保存 / 取消
       if (state.dirty && findItem(state.currentId)) {
         window.clearTimeout(state.autoSaveTimer);
-        try { await saveCurrent({ silent: true }); } catch (_) {}
+        if (state.autosave) {
+          try { await saveCurrent({ silent: true }); } catch (_) {}
+        } else {
+          const choice = await askUnsavedModal();
+          if (choice === "cancel") return;
+          if (choice === "save") {
+            try { await saveCurrent({ silent: true }); } catch (_) {}
+          }
+        }
       }
       const item = findItem(id);
       if (!item) return;
@@ -2728,6 +2862,7 @@
     const AUTO_SAVE_MS = 1800;
     function scheduleAutoSave() {
       window.clearTimeout(state.autoSaveTimer);
+      if (!state.autosave) return;
       state.autoSaveTimer = window.setTimeout(() => {
         if (state.dirty && findItem(state.currentId)) void saveCurrent({ silent: true });
       }, AUTO_SAVE_MS);
@@ -2786,6 +2921,29 @@
 
     async function deleteCurrent() {
       await deleteItemById(findItem(state.currentId));
+    }
+
+    /** 在本机资源管理器定位该文档（走本机桥；浏览器 FSA 不暴露绝对路径，按文件夹名+文件名反查） */
+    async function revealItemLocation(item) {
+      if (!item) return;
+      if (state.mode !== "dir" || !state.dirHandle) {
+        setErr("仅「文件夹」模式能定位本机文件；本地存储模式下文件在浏览器里");
+        return;
+      }
+      const api = window.devtoolsBridgeToken;
+      if (!api?.revealMdmDoc) {
+        setErr("需要本机桥 0.9.30+ 支持；请更新桥或重新下载完整包");
+        return;
+      }
+      setSaveStatus("正在本机定位…");
+      try {
+        await api.revealMdmDoc({ folderName: state.dirHandle.name, fileName: item.fileName });
+        setSaveStatus("");
+        toast("已在本机打开所在位置");
+      } catch (err) {
+        setSaveStatus("");
+        setErr(`打开文件位置失败：${err.message || err}`);
+      }
     }
 
     async function togglePin(item) {
@@ -2894,6 +3052,7 @@
       const fmts = [...LOCAL_FORMATS, ...PANDOC_FORMATS];
       el.innerHTML =
         `<button type="button" data-ctx="open">打开</button>` +
+        `<button type="button" data-ctx="reveal">打开文件位置</button>` +
         `<button type="button" data-ctx="pin">${item.pinned ? "取消置顶" : "置顶"}</button>` +
         `<button type="button" data-ctx="duplicate">复制</button>` +
         `<button type="button" data-ctx="rename">重命名</button>` +
@@ -2950,6 +3109,7 @@
         }
         closeListCtx();
         if (act === "open") void openDoc(item.id);
+        else if (act === "reveal") void revealItemLocation(item);
         else if (act === "pin") void togglePin(item);
         else if (act === "duplicate") void duplicateItem(item);
         else if (act === "rename") startInlineRename(item.id);
@@ -3995,18 +4155,26 @@ a{color:${v.accent}}
       e.target.value = "";
       void insertAssetFiles(files);
     });
-    els.insertToggle?.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (els.insertDropdown) els.insertDropdown.hidden = !els.insertDropdown.hidden;
+    const menus = [
+      [els.insertToggle, els.insertDropdown],
+      [els.toolsToggle, els.toolsDropdown],
+    ].filter(([t, m]) => t && m);
+    const closeMenus = () => menus.forEach(([, m]) => (m.hidden = true));
+    for (const [toggle, menu] of menus) {
+      toggle.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const wasHidden = menu.hidden;
+        closeMenus();
+        menu.hidden = !wasHidden;
+      });
+    }
+    document.addEventListener("click", (e) => {
+      // 点在下拉菜单内部（例如勾选「自动保存」）不关闭菜单
+      if (e.target?.closest?.(".mdm-insert-dropdown")) return;
+      closeMenus();
     });
-    document.addEventListener("click", () => {
-      if (els.insertDropdown) els.insertDropdown.hidden = true;
-    });
-    els.insertDropdown?.addEventListener("click", (e) => {
-      const b = e.target.closest?.("[data-insert]");
-      if (!b) return;
-      els.insertDropdown.hidden = true;
-      const kind = b.dataset.insert;
+
+    function handleInsertAction(kind) {
       if (kind === "file") {
         els.fileInput?.click();
         return;
@@ -4085,7 +4253,16 @@ a{color:${v.accent}}
         return;
       }
       insertTemplate(kind);
-    });
+    }
+
+    for (const [toggle, menu] of menus) {
+      menu.addEventListener("click", (e) => {
+        const b = e.target.closest?.("[data-insert]");
+        if (!b) return;
+        menu.hidden = true;
+        handleInsertAction(b.dataset.insert);
+      });
+    }
     if (els.imgCompress) {
       try {
         const v = localStorage.getItem("devtools-mdm-img-compress");
@@ -4095,6 +4272,38 @@ a{color:${v.accent}}
         try {
           localStorage.setItem("devtools-mdm-img-compress", els.imgCompress.checked ? "1" : "0");
         } catch (_) {}
+      });
+    }
+    if (els.autosave) {
+      try {
+        if (localStorage.getItem("devtools-mdm-autosave") === "0") els.autosave.checked = false;
+      } catch (_) {}
+      state.autosave = els.autosave.checked;
+      els.autosave.addEventListener("change", () => {
+        state.autosave = els.autosave.checked;
+        try {
+          localStorage.setItem("devtools-mdm-autosave", state.autosave ? "1" : "0");
+        } catch (_) {}
+        if (!state.autosave) window.clearTimeout(state.autoSaveTimer);
+        toast(state.autosave ? "已开启自动保存" : "已关闭自动保存（用 Ctrl/⌘ + S 手动保存）");
+      });
+    }
+    if (els.outlineToggle) {
+      try {
+        state.outlineCollapsed = localStorage.getItem("devtools-mdm-outline") === "0";
+      } catch (_) {}
+      const applyOutline = () => {
+        if (els.outlineAside) els.outlineAside.classList.toggle("is-collapsed", state.outlineCollapsed);
+        els.outlineToggle.textContent = state.outlineCollapsed ? "⇤" : "⇥";
+        els.outlineToggle.title = state.outlineCollapsed ? "展开大纲" : "收起大纲";
+      };
+      applyOutline();
+      els.outlineToggle.addEventListener("click", () => {
+        state.outlineCollapsed = !state.outlineCollapsed;
+        try {
+          localStorage.setItem("devtools-mdm-outline", state.outlineCollapsed ? "0" : "1");
+        } catch (_) {}
+        applyOutline();
       });
     }
     els.modeEdit?.addEventListener("click", () => { state.viewMode = "edit"; applyViewMode(); });

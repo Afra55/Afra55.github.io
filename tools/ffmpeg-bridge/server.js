@@ -404,6 +404,77 @@ const MEMO_INDEX_NAME = "memo-index.json";
 const MEMO_BLOBS_DIR = "blobs";
 const MEMO_FIND_SKIP = new Set(["node_modules", ".git", "Library", "AppData", "Application Data"]);
 
+const MDM_INDEX_NAME = "mdindex.json";
+
+/**
+ * 按「文件夹名 + 文件名」在常见目录里定位 Markdown 文档管理(mdm)的 .md 文件。
+ * 浏览器 FSA 不暴露绝对路径，只能靠名字反查；限定深度/扫描量避免卡死。
+ */
+async function findMdmDocFile({ folderName, fileName }) {
+  const name = String(fileName || "").trim();
+  if (!name || /[\\/\0]/.test(name)) throw new Error("非法文件名");
+  const wantDir = String(folderName || "").trim();
+  if (!wantDir) throw new Error("缺少文件夹名");
+
+  const seeds = new Set();
+  const addSeed = (p) => {
+    if (p) seeds.add(path.resolve(p));
+  };
+  addSeed(os.homedir());
+  addSeed(path.join(os.homedir(), "Desktop"));
+  addSeed(path.join(os.homedir(), "Documents"));
+  addSeed(path.join(os.homedir(), "Downloads"));
+  addSeed(path.join(os.homedir(), "OneDrive"));
+  for (const r of localFsRoots()) addSeed(r.path);
+
+  const maxDepth = 6;
+  const maxScan = 12000;
+  let scanned = 0;
+  const seen = new Set();
+
+  async function walk(dir, depth) {
+    if (depth > maxDepth || scanned > maxScan) return null;
+    let real;
+    try {
+      real = await fs.promises.realpath(dir);
+    } catch {
+      return null;
+    }
+    if (seen.has(real)) return null;
+    seen.add(real);
+    scanned += 1;
+    if (path.basename(real) === wantDir) {
+      try {
+        await fs.promises.access(path.join(real, MDM_INDEX_NAME));
+        const target = path.join(real, name);
+        await fs.promises.access(target);
+        return target;
+      } catch {
+        /* 继续找 */
+      }
+    }
+    let entries = [];
+    try {
+      entries = await fs.promises.readdir(real, { withFileTypes: true });
+    } catch {
+      return null;
+    }
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      if (e.name === "node_modules" || e.name === ".git" || e.name.startsWith(".")) continue;
+      const hit = await walk(path.join(real, e.name), depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  for (const seed of seeds) {
+    const hit = await walk(seed, 0);
+    if (hit) return hit;
+  }
+  throw new Error("未在常见目录找到该文档文件夹（可在桥的目录范围内手动打开）");
+}
+
 async function revealLocalPath(inputPath) {
   const real = await resolveLocalPath(inputPath);
   const st = await fs.promises.stat(real);
@@ -3638,6 +3709,7 @@ try {
     ensureWritableDir,
     mkdirpAllowed,
     revealLocalPath,
+    findMdmDocFile,
     localFsRoots,
     sendJson,
     readBody,
@@ -3968,6 +4040,7 @@ module.exports = {
   checkBinary,
   revealLocalPath,
   findMemoStorageFile,
+  findMdmDocFile,
   checkYtdlp: (...args) => (ytdlpApi ? ytdlpApi.checkYtdlp(...args) : Promise.resolve({ ok: false, error: "模块未加载" })),
 };
 

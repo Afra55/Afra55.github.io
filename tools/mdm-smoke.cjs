@@ -277,11 +277,65 @@ async function browserChecks() {
     });
     console.log("STEP mermaid-ok");
 
-    // 8) 侧栏大纲 & 快捷键弹窗
-    await page.click("#mdm-insert-toggle");
+    // 8) 工具菜单（已拆到「工具」下拉）：快捷键帮助弹窗 + 存储占用弹窗 + 回收站弹窗
+    await page.click("#mdm-tools-toggle");
     await page.click('[data-insert="help"]');
     await page.waitForSelector('#mdm-modal:not([hidden]) .mdm-keys', { timeout: 10000 });
     await page.click('#mdm-modal [data-mdl="close"]');
+    await page.click("#mdm-tools-toggle");
+    await page.click('[data-insert="usage"]');
+    await page.waitForFunction(
+      () => /存储占用/.test(document.querySelector("#mdm-modal-box")?.textContent || ""),
+      { timeout: 10000 }
+    );
+    await page.click('#mdm-modal [data-mdl="close"]');
+    await page.click("#mdm-tools-toggle");
+    await page.click('[data-insert="trash"]');
+    await page.waitForFunction(
+      () => /回收站/.test(document.querySelector("#mdm-modal-box")?.textContent || ""),
+      { timeout: 10000 }
+    );
+    await page.click('#mdm-modal [data-mdl="close"]');
+    console.log("STEP tools-modal-ok");
+
+    // 8b) 大纲收起 / 展开
+    await page.click("#mdm-outline-toggle");
+    await page.waitForFunction(
+      () => document.getElementById("mdm-outline-aside")?.classList.contains("is-collapsed"),
+      { timeout: 5000 }
+    );
+    await page.click("#mdm-outline-toggle");
+    await page.waitForFunction(
+      () => !document.getElementById("mdm-outline-aside")?.classList.contains("is-collapsed"),
+      { timeout: 5000 }
+    );
+    console.log("STEP outline-toggle-ok");
+
+    // 8c) 自动保存开关存在且可切换（在「工具」下拉里）
+    await page.click("#mdm-tools-toggle");
+    await new Promise((r) => setTimeout(r, 200));
+    const menuState = await page.evaluate(() => {
+      const el = document.getElementById("mdm-autosave");
+      const b = el?.getBoundingClientRect();
+      const cx = b ? b.x + b.width / 2 : 0;
+      const cy = b ? b.y + b.height / 2 : 0;
+      const top = b ? document.elementFromPoint(cx, cy) : null;
+      return {
+        hidden: document.getElementById("mdm-tools-dropdown")?.hidden,
+        cbRect: b ? { w: Math.round(b.width), h: Math.round(b.height), y: Math.round(b.y) } : null,
+        topAt: top ? `${top.tagName}.${top.className}`.slice(0, 60) : null,
+        topIsCb: top === el,
+        cbPe: el ? getComputedStyle(el).pointerEvents : null,
+        labelPe: el?.closest("label") ? getComputedStyle(el.closest("label")).pointerEvents : null,
+      };
+    });
+    console.log("STEP autosave-menu", JSON.stringify(menuState));
+    const autoBefore = await page.$eval("#mdm-autosave", (e) => e.checked);
+    await page.$eval("#mdm-autosave", (el) => el.click());
+    const autoAfter = await page.$eval("#mdm-autosave", (e) => e.checked);
+    assert(autoBefore !== autoAfter, "autosave toggle should flip");
+    await page.$eval("#mdm-autosave", (el) => el.click());
+    console.log("STEP autosave-toggle-ok");
 
     // 9) 表格编辑：对齐应写回 :---:
     await page.click("#mdm-mode-edit");

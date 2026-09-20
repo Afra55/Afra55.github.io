@@ -439,6 +439,45 @@
   }
 
   /**
+   * 按「文件夹名 + 文件名」在本机定位 Markdown 文档并打开所在位置（POST /local/reveal-doc）。
+   * 浏览器拿不到 FSA 的绝对路径，所以交给桥按名字反查。
+   */
+  async function revealMdmDoc({ folderName, fileName, preferredBase, token, kind = "unified" } = {}) {
+    const dirName = String(folderName || "").trim();
+    const fName = String(fileName || "").trim();
+    if (!dirName || !fName) throw new Error("缺少文件夹名或文件名");
+    const cfg = kindConfig(kind);
+    const tok = String(token || read()).trim() || DEFAULT;
+    let base = normalizeBridgeBase(preferredBase || cfg.defaultBase);
+    let health = await probeHealth(base, tok, true).catch(() => null);
+    if (!health) {
+      const found = await discoverBase(base, tok, { kind }).catch(() => null);
+      if (found?.base) {
+        base = found.base;
+        health = found.health;
+      }
+    }
+    if (!health) {
+      throw new Error("本机桥未连接。请先启动并连接桥，再点「打开文件位置」。");
+    }
+    const res = await fetch(`${base}/local/reveal-doc`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Adb-Token": tok,
+        "X-Ffmpeg-Token": tok,
+        "X-Git-Token": tok,
+      },
+      body: JSON.stringify({ folderName: dirName, fileName: fName }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data?.ok === false) {
+      throw new Error(data?.error || `打开文件位置失败（HTTP ${res.status}）`);
+    }
+    return data;
+  }
+
+  /**
    * 绑定「桥解压目录 / 打开目录 / 启动 / 自动启动」控件（ADB 同款）。
    * 填写目录时会自动记住并跨工具同步；按钮用于在本机打开该文件夹。
    * @returns {{ autoEnsure: Function }}
@@ -642,6 +681,7 @@
     readInstallDir,
     writeInstallDir,
     revealLocalPath,
+    revealMdmDoc,
     readAutoStart,
     writeAutoStart,
     rememberFromHealth,

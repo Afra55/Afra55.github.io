@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.29";
+const BRIDGE_VERSION = "0.9.30";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -4133,6 +4133,21 @@ async function handleApi(req, res, url) {
       const revealed = await ffmpegBridge.revealLocalPath(body.path || "");
       const dirAbsPath = revealed.isDir ? revealed.path : path.dirname(revealed.path);
       sendJson(res, 200, { ok: true, revealed: true, path: revealed.path, dirAbsPath }, origin);
+      return;
+    }
+
+    if (url.pathname === "/local/reveal-doc" && req.method === "POST") {
+      if (!ffmpegBridge?.findMdmDocFile || !ffmpegBridge?.revealLocalPath) {
+        sendJson(res, 503, { ok: false, error: "未找到本机 reveal 模块" }, origin);
+        return;
+      }
+      const body = parseJsonBody(await readBody(req, 1024 * 1024));
+      const found = await ffmpegBridge.findMdmDocFile({
+        folderName: body.folderName,
+        fileName: body.fileName || body.name,
+      });
+      const revealed = await ffmpegBridge.revealLocalPath(found);
+      sendJson(res, 200, { ok: true, revealed: true, path: revealed.path, dirAbsPath: path.dirname(found) }, origin);
       return;
     }
 

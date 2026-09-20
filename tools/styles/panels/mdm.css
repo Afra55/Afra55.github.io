@@ -103,6 +103,30 @@
   border-radius: 7px; cursor: pointer; font-size: 0.85rem;
 }
 .mdm-insert-dropdown button:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.mdm-insert-dropdown { max-height: min(70vh, 30rem); overflow-y: auto; }
+.mdm-menu-flag { padding: 0.35rem 0.55rem; }
+
+/* 弹框行列表（回收站 / 历史版本 / 存储占用） */
+.mdm-row-list { display: grid; gap: 0.3rem; max-height: 52vh; overflow-y: auto; min-width: min(88vw, 26rem); }
+.mdm-row { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; padding: 0.32rem 0.45rem; border: 1px solid var(--line); border-radius: 6px; }
+.mdm-row-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.85rem; }
+.mdm-row-actions { display: inline-flex; gap: 0.3rem; flex: none; }
+
+/* 大纲可收起 */
+.mdm-outline { position: relative; }
+.mdm-outline-toggle {
+  position: absolute; top: 0.3rem; right: 0.3rem; z-index: 2;
+  width: 1.6rem; height: 1.6rem; line-height: 1;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel, rgba(12, 18, 30, 0.6)); color: var(--muted); cursor: pointer;
+}
+.mdm-outline-toggle:hover { color: var(--accent); border-color: var(--accent); }
+.mdm-outline.is-collapsed { padding: 0; }
+.mdm-outline.is-collapsed .mdm-outline-inner { display: none; }
+.mdm-layout:has(.mdm-outline.is-collapsed) { grid-template-columns: 250px minmax(0, 1fr) 2.4rem; }
+@media (max-width: 1100px) {
+  .mdm-layout:has(.mdm-outline.is-collapsed) { grid-template-columns: 210px minmax(0, 1fr); }
+}
 .mdm-insert-dropdown button:disabled, .mdm-topbar button:disabled { opacity: 0.4; cursor: not-allowed; }
 .file-btn.is-disabled { opacity: 0.4; pointer-events: none; cursor: not-allowed; }
 .mdm-rename-input { width: 100%; padding: 0.2rem 0.4rem; border-radius: 6px; border: 1px solid var(--accent); background: var(--panel-strong, transparent); color: var(--ink); font-size: 0.88rem; }
