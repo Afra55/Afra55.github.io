@@ -820,9 +820,10 @@
           ? "导入本机的 .md / .markdown / .txt 文件，可多选；正文里引用的图片会一并导入"
           : "请先选择存储位置再导入";
       }
-      const changeDir = els.insertDropdown?.querySelector('[data-insert="change-dir"]');
+      const inMenus = (sel) => els.toolsDropdown?.querySelector(sel) || els.insertDropdown?.querySelector(sel);
+      const changeDir = inMenus('[data-insert="change-dir"]');
       if (changeDir) changeDir.hidden = state.mode !== "dir";
-      const rescan = els.insertDropdown?.querySelector('[data-insert="rescan"]');
+      const rescan = inMenus('[data-insert="rescan"]');
       if (rescan) {
         rescan.disabled = !dirOnly;
         rescan.title = dirOnly ? "" : "仅「文件夹」模式可用";
