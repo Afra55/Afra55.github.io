@@ -254,6 +254,7 @@
       tagList: $("#mdm-tag-list"),
       editorWrap: $("#mdm-editor-wrap"),
       editor: $("#mdm-editor"),
+      minimap: $("#mdm-minimap"),
       splitter: $("#mdm-splitter"),
       preview: $("#mdm-preview"),
       empty: $("#mdm-empty"),
@@ -397,6 +398,8 @@
             ADD_ATTR: [
               "controls", "playsinline", "poster", "preload", "loop", "muted", "download",
               "target", "rel", "start", "type",
+              // 图片尺寸/对齐用（DOMPurify 会净化 style 内容）
+              "style", "width", "height", "align",
             ],
           })
         : rawHtml;
@@ -1096,6 +1099,8 @@
       };
       sc.addEventListener("scroll", onEditor, { passive: true });
       pv.addEventListener("scroll", onPreview, { passive: true });
+      sc.addEventListener("scroll", scheduleMinimap, { passive: true });
+      window.addEventListener("resize", scheduleMinimap);
     }
 
     function ensureEditor() {
@@ -1583,6 +1588,7 @@
             assetUrlCache.delete(first);
           }
           el.setAttribute(attr, url);
+          el.setAttribute("data-mdm-asset", rel);
           if (el.tagName === "A") {
             el.setAttribute("download", rel.split("/").pop() || "");
             el.setAttribute("target", "_blank");
@@ -2769,14 +2775,74 @@
         if (inFence) continue;
         const m = /^(#{1,6})\s+(.*)$/.exec(lines[i]);
         if (m) {
-          out.push({ lvl: m[1].length, text: m[2].trim() });
+          out.push({ lvl: m[1].length, text: m[2].trim(), line: i });
           continue;
         }
         if (i > 0 && /^\s*(=+|-{2,})\s*$/.test(lines[i]) && lines[i - 1].trim()) {
-          out.push({ lvl: lines[i].includes("=") ? 1 : 2, text: lines[i - 1].trim() });
+          out.push({ lvl: lines[i].includes("=") ? 1 : 2, text: lines[i - 1].trim(), line: i - 1 });
         }
       }
       return out;
+    }
+
+    /** 文档概览条：标题刻度 + 视窗指示，点/拖跳转 */
+    function renderMinimap() {
+      const mm = els.minimap;
+      const sc = state.view?.scrollDOM;
+      if (!mm || !sc) return;
+      const total = Math.max(1, sc.scrollHeight);
+      const src = state.view?.state?.doc ? state.view.state.doc.toString() : "";
+      const lines = Math.max(1, src.split("\n").length);
+      const ticks = outlineItemsFromSource()
+        .map((h) => {
+          const top = Math.min(99, Math.max(0, (h.line / lines) * 100));
+          const w = h.lvl === 1 ? 100 : h.lvl === 2 ? 72 : 48;
+          return `<span class="mdm-minimap-tick" style="top:${top.toFixed(2)}%;width:${w}%"></span>`;
+        })
+        .join("");
+      const vh = Math.max(3, (sc.clientHeight / total) * 100);
+      const vt = Math.min(100 - vh, Math.max(0, (sc.scrollTop / total) * 100));
+      mm.innerHTML = `${ticks}<span class="mdm-minimap-view" style="top:${vt.toFixed(2)}%;height:${vh.toFixed(2)}%"></span>`;
+    }
+
+    let minimapRaf = 0;
+    function scheduleMinimap() {
+      if (minimapRaf) return;
+      minimapRaf = window.requestAnimationFrame(() => {
+        minimapRaf = 0;
+        renderMinimap();
+      });
+    }
+
+    function bindMinimap() {
+      const mm = els.minimap;
+      if (!mm || mm.__bound) return;
+      mm.__bound = true;
+      const jump = (clientY) => {
+        const sc = state.view?.scrollDOM;
+        if (!sc) return;
+        const r = mm.getBoundingClientRect();
+        if (!r.height) return;
+        const ratio = Math.min(1, Math.max(0, (clientY - r.top) / r.height));
+        sc.scrollTop = Math.max(0, ratio * sc.scrollHeight - sc.clientHeight / 2);
+        scheduleMinimap();
+      };
+      let dragging = false;
+      mm.addEventListener("pointerdown", (e) => {
+        dragging = true;
+        mm.setPointerCapture?.(e.pointerId);
+        jump(e.clientY);
+      });
+      mm.addEventListener("pointermove", (e) => {
+        if (dragging) jump(e.clientY);
+      });
+      mm.addEventListener("pointerup", () => {
+        dragging = false;
+      });
+      mm.addEventListener("pointercancel", () => {
+        dragging = false;
+      });
+      scheduleMinimap();
     }
 
     function renderOutline() {
@@ -2794,6 +2860,7 @@
             .join("")
         : "";
       syncOutlineActive();
+      scheduleMinimap();
     }
 
     let outlineHeads = [];
@@ -4163,6 +4230,7 @@ a{color:${v.accent}}
       ensureKatexCss();
       bindEditorMedia();
       bindEditorScroll();
+      bindMinimap();
       await loadSearchIdx();
       warmBodyCache();
       void autoExpireTrash();
@@ -4584,6 +4652,12 @@ a{color:${v.accent}}
       if (e.key === "Enter" || e.key === " ") outlineGo(e);
     });
     els.preview?.addEventListener("click", (e) => {
+      const img = e.target.closest?.("img[data-mdm-asset]");
+      if (img) {
+        e.preventDefault();
+        openImageTools(img);
+        return;
+      }
       const anchor = e.target.closest?.('a[href^="#"]');
       if (anchor) {
         const id = decodeURIComponent((anchor.getAttribute("href") || "").slice(1));
@@ -4786,6 +4860,10 @@ a{color:${v.accent}}
       }
       if (kind === "usage") {
         void showUsage();
+        return;
+      }
+      if (kind === "replace") {
+        openReplaceModal();
         return;
       }
       if (kind === "checklinks") {
@@ -5023,6 +5101,170 @@ a{color:${v.accent}}
         });
       return Promise.all(entries.map((e) => walk(e, ""))).then(() => out);
     }
+    /** 查找替换：当前文档 / 整库 */
+    function openReplaceModal() {
+      const box = els.modalBox;
+      box.innerHTML =
+        `<div class="mdm-modal-head"><strong>查找替换</strong><button type="button" class="ghost-btn" data-mdl="close">关闭</button></div>` +
+        `<input id="mdm-find" class="mdm-path-input mono" placeholder="查找内容" />` +
+        `<input id="mdm-repl" class="mdm-path-input mono" placeholder="替换为（留空＝删除）" />` +
+        `<label class="flag"><input type="checkbox" id="mdm-repl-lib" /> 作用于整库（所有文档，会直接写盘）</label>` +
+        `<p class="hint tight" id="mdm-repl-note"></p>` +
+        `<div class="mdm-modal-foot"><button type="button" class="ghost-btn" data-repl="close">取消</button>` +
+        `<button type="button" class="primary-btn" data-repl="all">全部替换</button></div>`;
+      els.modal.hidden = false;
+      const findEl = box.querySelector("#mdm-find");
+      const replEl = box.querySelector("#mdm-repl");
+      const libEl = box.querySelector("#mdm-repl-lib");
+      const noteEl = box.querySelector("#mdm-repl-note");
+      setTimeout(() => findEl?.focus(), 30);
+      const note = (m) => {
+        if (noteEl) noteEl.textContent = m || "";
+      };
+      els.modal.onclick = (e) => {
+        if (e.target === els.modal) closeModal();
+      };
+      box.onclick = async (e) => {
+        const b = e.target.closest?.("[data-repl]");
+        if (!b) return;
+        const act = b.dataset.repl;
+        if (act === "close") return closeModal();
+        if (act !== "all") return;
+        const find = String(findEl?.value || "");
+        const repl = String(replEl?.value || "");
+        if (!find) {
+          note("请输入要查找的内容");
+          return;
+        }
+        if (libEl?.checked) {
+          if (!window.confirm(`在整库所有文档里把「${find}」替换为「${repl}」？\n会直接写入文件，建议先「导出库」备份。`)) return;
+          const items = state.index.items || [];
+          let docs = 0;
+          let total = 0;
+          for (let i = 0; i < items.length; i += 1) {
+            const it = items[i];
+            try {
+              const raw = await readDocText(it);
+              const fm = parseFrontMatter(raw);
+              const cnt = fm.body.split(find).length - 1;
+              if (!cnt) continue;
+              const body = fm.body.split(find).join(repl);
+              const hadFm = /^\uFEFF?---\r?\n/.test(String(raw));
+              await writeDocText(it, hadFm ? buildFrontMatterBlock({ ...it, fmHead: fm.head }, body) : body);
+              state.bodyCache.set(it.id, body);
+              state.persistedIdx.delete(it.id);
+              refsCache.delete(it.id);
+              it.updatedAt = Date.now();
+              docs += 1;
+              total += cnt;
+            } catch (_) {}
+            if (i % 10 === 0) note(`已处理 ${i + 1}/${items.length}…`);
+          }
+          await saveIndexToStorage();
+          renderSidebar();
+          renderBacklinks();
+          note(`整库替换完成：${docs} 篇 / ${total} 处`);
+          toast(`已替换 ${docs} 篇（${total} 处）`);
+          return;
+        }
+        const text = getEditorText();
+        const cnt = text.split(find).length - 1;
+        if (!cnt) {
+          note("当前文档未找到该内容");
+          return;
+        }
+        setEditorText(text.split(find).join(repl));
+        state.dirty = true;
+        updateSaveBtn();
+        renderPreview();
+        renderOutline();
+        scheduleAutoSave();
+        note(`当前文档替换 ${cnt} 处（保存后生效）`);
+      };
+    }
+
+    const escRe = (s) => String(s || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    /** 生成带尺寸/对齐的 <img>（Markdown 无此语法，用 HTML 形式，多数查看器都认） */
+    function imgTagFor(rel, alt, widthPct, align) {
+      const parts = [`src="${rel}"`];
+      if (alt) parts.push(`alt="${String(alt).replace(/"/g, "&quot;")}"`);
+      if (widthPct) parts.push(`width="${widthPct}%"`);
+      const margin = align === "left" ? "0 auto 0 0" : align === "right" ? "0 0 0 auto" : "0 auto";
+      parts.push(`style="display:block;margin:${margin}"`);
+      return `<img ${parts.join(" ")}>`;
+    }
+
+    /** 把正文里该图片改成指定尺寸/对齐（支持 ![..](rel) 与已有 <img>） */
+    function applyImageStyle(rel, alt, opts = {}) {
+      const view = state.view;
+      if (!view || !rel) return false;
+      const text = getEditorText();
+      const tag = imgTagFor(rel, alt, opts.width, opts.align);
+      const htmlRe = new RegExp(`<img[^>]*src=["']${escRe(rel)}["'][^>]*>`, "i");
+      const mdRe = new RegExp(`!\\[[^\\]]*\\]\\(\\s*${escRe(rel)}(?:\\s+"[^"]*")?\\s*\\)`);
+      let next = "";
+      if (htmlRe.test(text)) next = text.replace(htmlRe, tag);
+      else if (mdRe.test(text)) next = text.replace(mdRe, tag);
+      else return false;
+      setEditorText(next);
+      state.dirty = true;
+      updateSaveBtn();
+      renderPreview();
+      scheduleAutoSave();
+      return true;
+    }
+
+    /** 点预览里的图片 → 小工具条改尺寸/对齐 */
+    function openImageTools(img) {
+      const rel = img.getAttribute("data-mdm-asset") || "";
+      const alt = img.getAttribute("alt") || "";
+      if (!rel) return;
+      document.querySelectorAll(".mdm-imgtools").forEach((n) => n.remove());
+      const box = document.createElement("div");
+      box.className = "mdm-imgtools";
+      box.innerHTML =
+        `<span class="mdm-imgtools-label">尺寸</span>` +
+        `<button type="button" data-img-w="25">小</button>` +
+        `<button type="button" data-img-w="50">中</button>` +
+        `<button type="button" data-img-w="75">大</button>` +
+        `<button type="button" data-img-w="">原始</button>` +
+        `<span class="mdm-imgtools-label">对齐</span>` +
+        `<button type="button" data-img-a="left">左</button>` +
+        `<button type="button" data-img-a="center">中</button>` +
+        `<button type="button" data-img-a="right">右</button>` +
+        `<button type="button" data-img-close="1" title="关闭">✕</button>`;
+      document.body.appendChild(box);
+      const r = img.getBoundingClientRect();
+      box.style.left = `${Math.max(6, Math.min(r.left, window.innerWidth - box.offsetWidth - 8))}px`;
+      box.style.top = `${Math.max(6, r.top - box.offsetHeight - 8)}px`;
+      const cur = { width: "", align: "center" };
+      box.addEventListener("click", (e) => {
+        const w = e.target.closest?.("[data-img-w]");
+        const a = e.target.closest?.("[data-img-a]");
+        if (e.target.closest?.("[data-img-close]")) {
+          box.remove();
+          return;
+        }
+        if (w) cur.width = w.dataset.imgW;
+        if (a) cur.align = a.dataset.imgA;
+        if (w || a) {
+          const ok = applyImageStyle(rel, alt, cur);
+          if (ok) toast(`已设为：${cur.width ? cur.width + "%" : "原始"} · ${({ left: "左", center: "中", right: "右" })[cur.align]}`);
+          box.remove();
+        }
+      });
+      setTimeout(() => {
+        const off = (ev) => {
+          if (!box.contains(ev.target)) {
+            box.remove();
+            document.removeEventListener("mousedown", off, true);
+          }
+        };
+        document.addEventListener("mousedown", off, true);
+      }, 0);
+    }
+
     /** 复制预览到剪贴板：HTML（带格式，媒体内联为 data URL）+ 纯文本（Markdown 源码） */
     async function copyPreviewToClipboard() {
       if (!els.preview) return;

@@ -126,6 +126,20 @@
 }
 .mdm-path-input { width: 100%; box-sizing: border-box; padding: 0.5rem 0.65rem; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-strong, transparent); color: var(--ink); margin: 0.2rem 0 0.4rem; }
 
+/* 预览里点图片弹出的小工具条 */
+.mdm-imgtools {
+  position: fixed; z-index: 70; display: flex; align-items: center; gap: 0.25rem;
+  padding: 0.3rem 0.45rem; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel-strong, var(--bg-0)); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
+  font-size: 0.8rem; color: var(--muted);
+}
+.mdm-imgtools button {
+  border: 1px solid var(--line); border-radius: 6px; background: transparent; color: var(--ink);
+  padding: 0.1rem 0.45rem; cursor: pointer; font-size: 0.8rem;
+}
+.mdm-imgtools button:hover { color: var(--accent); border-color: var(--accent); }
+.mdm-imgtools-label { margin: 0 0.15rem 0 0.35rem; color: var(--muted); font-size: 0.72rem; }
+
 /* 沉浸（全屏）：隐藏站点外壳，让工具铺满屏幕；只有编辑器 / 预览自己滚 */
 .mdm-max-btn { padding: 0.15rem 0.5rem; line-height: 1.2; }
 body.mdm-immersive .site-header,
@@ -330,3 +344,19 @@ body.mdm-immersive #mdm .mdm-main { min-height: 0; }
 .hljs-meta, .hljs-deletion { color: #b31d28; }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 700; }
+
+/* �ĵ����������༭���Ҳࣩ */
+#mdm-editor { position: relative; }
+.mdm-minimap {
+  position: absolute; top: 0; bottom: 0; right: 10px; width: 9px; z-index: 5;
+  background: color-mix(in srgb, var(--line) 32%, transparent);
+  border-radius: 4px; cursor: pointer; overflow: hidden; touch-action: none;
+}
+.mdm-minimap-tick { position: absolute; left: 1px; height: 2px; background: var(--muted); border-radius: 1px; opacity: 0.85; }
+.mdm-minimap-view {
+  position: absolute; left: 0; right: 0;
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  border-radius: 3px; pointer-events: none;
+}
+@media (max-width: 900px) { .mdm-minimap { display: none; } }
