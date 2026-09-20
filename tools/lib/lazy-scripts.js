@@ -16,8 +16,8 @@
   }
 
   const VENDOR_FILES = {
-    "js-yaml": { src: "./vendor/js-yaml.min.js", probe: () => typeof globalThis.jsyaml !== "undefined" },
-    "spark-md5": { src: "./vendor/spark-md5.min.js", probe: () => typeof globalThis.SparkMD5 !== "undefined" },
+    "js-yaml": { src: "./vendor/js-yaml.min.js", noAmd: true, probe: () => typeof globalThis.jsyaml !== "undefined" },
+    "spark-md5": { src: "./vendor/spark-md5.min.js", noAmd: true, probe: () => typeof globalThis.SparkMD5 !== "undefined" },
     qrcodegen: {
       src: "./vendor/qrcodegen.js",
       probe: () => typeof globalThis.qrcodegen?.QrCode !== "undefined",
@@ -34,7 +34,7 @@
       noAmd: true,
       probe: () => typeof globalThis.html2canvas === "function",
     },
-    gif: { src: "./vendor/gif.js", probe: () => typeof globalThis.GIF === "function" },
+    gif: { src: "./vendor/gif.js", noAmd: true, probe: () => typeof globalThis.GIF === "function" },
     omggif: { src: "./vendor/omggif.js", probe: () => typeof globalThis.GifReader === "function" },
     solarlunar: {
       src: "./vendor/solarlunar.min.js",
@@ -61,7 +61,7 @@
     cm6: { src: "./vendor/cm6/cm6.bundle.js", probe: () => typeof globalThis.DevToolsCM6 === "object" },
     katexmd: { src: "./vendor/katex/markdown-it-katex.js", probe: () => typeof globalThis.markdownItKatex === "function" },
     mermaid: { src: "./vendor/mermaid/mermaid.min.js", probe: () => typeof globalThis.mermaid === "object" },
-    jszip: { src: "./vendor/jszip.min.js", probe: () => typeof globalThis.JSZip === "function" },
+    jszip: { src: "./vendor/jszip.min.js", noAmd: true, probe: () => typeof globalThis.JSZip === "function" },
     turndown: { src: "./vendor/turndown/turndown.js", probe: () => typeof globalThis.TurndownService === "function" },
     mdext: { src: "./vendor/mdext/mdext.js", probe: () => typeof globalThis.markdownItExtras === "object" },
     mdmpure: { src: "./lib/mdm-pure.js", probe: () => typeof globalThis.DevToolsMdmPure === "object" },

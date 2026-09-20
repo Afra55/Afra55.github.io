@@ -2417,6 +2417,7 @@
           await idbDel("trash", key);
         }
         await openTrash();
+        renderSidebar(); // 恢复后列表要立刻显示（之前只刷新了回收站弹框）
         toast("已恢复");
       } catch (err) {
         setErr(`恢复失败：${err.message || err}`);
