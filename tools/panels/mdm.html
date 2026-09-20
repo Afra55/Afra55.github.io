@@ -9,17 +9,28 @@
           <button type="button" class="secondary-btn" id="mdm-new" disabled title="新建一篇空白文档（在标题框输入即可改名）">新建</button>
           <label class="file-btn" id="mdm-import-label" for="mdm-import" title="导入本机的 .md / .markdown / .txt 文件，可多选；正文里引用的图片会一并导入">导入 MD</label>
           <input id="mdm-import" type="file" accept=".md,.markdown,.txt,text/markdown" multiple hidden />
-          <button type="button" class="secondary-btn" id="mdm-import-dir" disabled title="选择一个文件夹，把里面所有 .md 连同引用的图片一起导入（仅文件夹模式可用）">导入文件夹</button>
+          <button type="button" class="secondary-btn mdm-wide-only" id="mdm-import-dir" disabled title="选择一个文件夹，把里面所有 .md 连同引用的图片一起导入（仅文件夹模式可用）">导入文件夹</button>
           <input id="mdm-import-dir-input" type="file" webkitdirectory directory multiple hidden />
-          <button type="button" class="secondary-btn" id="mdm-export-lib" disabled title="把整个库（索引 + 所有 .md + assets 资源）打包成一个 ZIP 下载，用于备份或迁移">导出库</button>
-          <button type="button" class="secondary-btn" id="mdm-import-lib" disabled title="读取「导出库」生成的 ZIP，把文档、分类标签和资源合并进当前存储（同名文件跳过）">导入库</button>
+          <button type="button" class="secondary-btn mdm-wide-only" id="mdm-export-lib" disabled title="把整个库（索引 + 所有 .md + assets 资源）打包成一个 ZIP 下载，用于备份或迁移">导出库</button>
+          <button type="button" class="secondary-btn mdm-wide-only" id="mdm-import-lib" disabled title="读取「导出库」生成的 ZIP，把文档、分类标签和资源合并进当前存储（同名文件跳过）">导入库</button>
           <input id="mdm-import-lib-input" type="file" accept=".zip,application/zip" hidden />
           <button type="button" class="primary-btn" id="mdm-save" disabled title="保存当前文档（Ctrl/⌘ + S）；开启自动保存后基本无需手动点">保存</button>
-          <span class="mdm-insert-menu">
+          <span class="mdm-insert-menu mdm-wide-only">
             <button type="button" class="secondary-btn" id="mdm-export-toggle" disabled title="导出当前文档（点开选格式）">导出 ▾</button>
             <div class="mdm-insert-dropdown mdm-export-dropdown" id="mdm-export-dropdown" hidden></div>
           </span>
-          <button type="button" class="secondary-btn" id="mdm-copy" disabled title="复制预览内容到剪贴板（带格式；图片会内联，可直接粘到微信/Word）">复制</button>
+          <span class="mdm-insert-menu mdm-narrow-only">
+            <button type="button" class="secondary-btn" id="mdm-more-toggle" title="更多操作">更多 ▾</button>
+            <div class="mdm-insert-dropdown" id="mdm-more-dropdown" hidden>
+              <button type="button" data-more="import-dir">导入文件夹</button>
+              <button type="button" data-more="export-lib">导出库</button>
+              <button type="button" data-more="import-lib">导入库</button>
+              <button type="button" data-more="copy">复制到剪贴板</button>
+              <div class="mdm-menu-label">导出为</div>
+              <div id="mdm-more-formats"></div>
+            </div>
+          </span>
+          <button type="button" class="secondary-btn mdm-wide-only" id="mdm-copy" disabled title="复制预览内容到剪贴板（带格式；图片会内联，可直接粘到微信/Word）">复制</button>
           <span class="hint tight" id="mdm-dir-label"></span>
         </div>
         <p class="error" id="mdm-error" hidden></p>

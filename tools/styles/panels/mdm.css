@@ -119,6 +119,11 @@
   #mdm.is-side-hidden .mdm-layout { grid-template-columns: minmax(0, 1fr); }
 }
 .mdm-menu-label { padding: 0.25rem 0.5rem 0.1rem; font-size: 0.72rem; color: var(--muted); }
+.mdm-narrow-only { display: none !important; }
+@media (max-width: 900px) {
+  #mdm .mdm-wide-only { display: none !important; }
+  #mdm .mdm-narrow-only { display: inline-flex !important; }
+}
 .mdm-path-input { width: 100%; box-sizing: border-box; padding: 0.5rem 0.65rem; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-strong, transparent); color: var(--ink); margin: 0.2rem 0 0.4rem; }
 
 /* 沉浸（全屏）：隐藏站点外壳，让工具铺满屏幕；只有编辑器 / 预览自己滚 */

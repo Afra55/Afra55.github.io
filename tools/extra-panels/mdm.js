@@ -211,6 +211,9 @@
       save: $("#mdm-save"),
       exportToggle: $("#mdm-export-toggle"),
       copyBtn: $("#mdm-copy"),
+      moreToggle: $("#mdm-more-toggle"),
+      moreDropdown: $("#mdm-more-dropdown"),
+      moreFormats: $("#mdm-more-formats"),
       exportDropdown: $("#mdm-export-dropdown"),
       toggleSide: $("#mdm-toggle-side"),
       toggleTop: $("#mdm-toggle-top"),
@@ -1898,9 +1901,12 @@
       const remaining = [];
       for (const name of fresh) {
         let text = "";
+        let mtime = 0;
         try {
           const fh = await state.dirHandle.getFileHandle(name);
-          text = await (await fh.getFile()).text();
+          const f = await fh.getFile();
+          mtime = f.lastModified || 0;
+          text = await f.text();
         } catch (_) {}
         const fm0 = parseFrontMatter(text);
         const body = norm(fm0.body);
@@ -1912,6 +1918,23 @@
             return cached != null && norm(parseFrontMatter(cached).body) === body;
           });
         }
+        // 2) 时间邻近匹配（外部改名后 mtime 通常与原记录接近）
+        if (!target) {
+          let best = null;
+          let bestDiff = Infinity;
+          for (const it of missing) {
+            if (used.has(it.id)) continue;
+            const t = Number(it.fileMtime || it.updatedAt || 0);
+            if (!t) continue;
+            const d = Math.abs((mtime || 0) - t);
+            if (d < bestDiff) {
+              bestDiff = d;
+              best = it;
+            }
+          }
+          if (best && mtime && bestDiff <= 10 * 60 * 1000) target = best;
+        }
+        // 3) 只剩一对一 → 直接判定改名
         if (!target && missing.filter((it) => !used.has(it.id)).length === 1) {
           target = missing.find((it) => !used.has(it.id));
         }
@@ -3156,7 +3179,7 @@
       try {
         await trashDoc(item);
       } catch (_) {}
-      state.lastDeleted = { item: { ...item }, raw };
+      state.lastDeleted = [{ item: { ...item }, raw }];
       state.index.items = state.index.items.filter((x) => x.id !== item.id);
       state.bodyCache.delete(item.id);
       state.persistedIdx.delete(item.id);
@@ -3179,17 +3202,22 @@
 
     /** 撤销最近一次删除（Ctrl+Z） */
     async function undoDelete() {
-      const rec = state.lastDeleted;
-      if (!rec) return false;
+      const list = state.lastDeleted;
+      if (!list || !list.length) return false;
       state.lastDeleted = null;
-      try {
-        await writeDocText(rec.item, rec.raw);
-      } catch (_) {}
-      state.index.items.push(rec.item);
+      let n = 0;
+      for (const rec of list) {
+        try {
+          await writeDocText(rec.item, rec.raw);
+          state.index.items.push(rec.item);
+          n += 1;
+        } catch (_) {}
+      }
+      if (!n) return false;
       normalizeOrders();
       await saveIndexToStorage();
       renderSidebar();
-      toast(`已恢复「${rec.item.title}」`);
+      toast(n > 1 ? `已恢复 ${n} 篇` : `已恢复「${list[0].item.title}」`);
       return true;
     }
 
@@ -4402,6 +4430,7 @@ a{color:${v.accent}}
       }
       if (act === "delete") {
         if (!window.confirm(`删除选中的 ${ids.length} 篇？（会移入回收站）`)) return;
+        state.lastDeleted = []; // 批量删除：整体作为一次可撤销操作
         for (const id of ids) {
           const it = findItem(id);
           if (it) {
@@ -4412,7 +4441,7 @@ a{color:${v.accent}}
             try {
               await trashDoc(it);
             } catch (_) {}
-            state.lastDeleted = { item: { ...it }, raw };
+            state.lastDeleted = (state.lastDeleted || []).concat([{ item: { ...it }, raw }]);
             state.bodyCache.delete(id);
             state.persistedIdx.delete(id);
           }
@@ -4700,6 +4729,7 @@ a{color:${v.accent}}
       [els.insertToggle, els.insertDropdown],
       [els.toolsToggle, els.toolsDropdown],
       [els.exportToggle, els.exportDropdown],
+      [els.moreToggle, els.moreDropdown],
     ].filter(([t, m]) => t && m);
     const closeMenus = () => menus.forEach(([, m]) => (m.hidden = true));
     for (const [toggle, menu] of menus) {
@@ -4812,6 +4842,16 @@ a{color:${v.accent}}
 
     for (const [toggle, menu] of menus) {
       menu.addEventListener("click", (e) => {
+        const mo = e.target.closest?.("[data-more]");
+        if (mo) {
+          menu.hidden = true;
+          const act = mo.dataset.more;
+          if (act === "import-dir") els.importDirBtn?.click();
+          else if (act === "export-lib") void exportLibrary();
+          else if (act === "import-lib") els.importLibInput?.click();
+          else if (act === "copy") void copyPreviewToClipboard();
+          return;
+        }
         const ex = e.target.closest?.("[data-export-fmt]");
         if (ex) {
           menu.hidden = true;
@@ -4930,12 +4970,14 @@ a{color:${v.accent}}
 
     els.copyBtn?.addEventListener("click", () => void copyPreviewToClipboard());
 
-    // 导出菜单：点「导出」弹格式菜单（本地 + Pandoc 分组）
-    if (els.exportDropdown) {
+    // 导出菜单：点「导出」弹格式菜单（本地 + Pandoc 分组）；移动端「更多」里复用同一份格式
+    if (els.exportDropdown || els.moreFormats) {
       const mk = (list) => list.map(([v, l]) => `<button type="button" data-export-fmt="${v}">${escapeHtml(l)}</button>`).join("");
-      els.exportDropdown.innerHTML =
+      const html =
         `<div class="mdm-menu-label">本地</div>${mk(LOCAL_FORMATS)}` +
         `<div class="mdm-menu-label">本机桥 · Pandoc（任意格式）</div>${mk(PANDOC_FORMATS)}`;
+      if (els.exportDropdown) els.exportDropdown.innerHTML = html;
+      if (els.moreFormats) els.moreFormats.innerHTML = html;
     }
 
     // ---- 拖拽导入：拖 md 文件（或整个文件夹）进来 = 导入 ----
