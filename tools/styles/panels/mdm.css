@@ -22,8 +22,9 @@
 .mdm-export-group { display: inline-flex; align-items: center; gap: 0.35rem; }
 .mdm-export-group .select-input { min-height: var(--btn-min-h, 2.5rem); }
 .mdm-search { width: 100%; padding: 0.45rem 0.6rem; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-strong, transparent); color: var(--ink); }
-.mdm-side-tools { display: flex; gap: 0.4rem; }
-.mdm-side-tools .select-input { flex: 1 1 auto; min-height: var(--btn-min-h, 2.5rem); }
+.mdm-side-tools { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.mdm-side-tools .select-input { flex: 1 1 6.5rem; min-width: 6.5rem; min-height: var(--btn-min-h, 2.5rem); }
+.mdm-side-tools #mdm-count { flex: 0 0 auto; margin-left: auto; white-space: nowrap; text-align: right; }
 .mdm-item mark { background: color-mix(in srgb, var(--accent) 45%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
 
 .mdm-layout {
@@ -90,8 +91,16 @@
 .mdm-conflict { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; padding: 0.4rem 0.6rem; margin: 0 0 0.4rem; border: 1px solid #e0a020; border-left: 3px solid #e0a020; border-radius: 8px; background: color-mix(in srgb, #e0a020 12%, transparent); font-size: 0.85rem; }
 .mdm-conflict[hidden] { display: none !important; }
 .mdm-trash-actions { display: flex; gap: 0.3rem; margin-bottom: 0.35rem; }
-.mdm-main-toolbar { display: flex; align-items: center; gap: 0.5rem; padding: 0.45rem 0.55rem; border-bottom: 1px solid var(--line); }
-.mdm-title { flex: 1 1 auto; min-width: 0; padding: 0.35rem 0.5rem; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 0.9rem; }
+.mdm-main-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.45rem 0.55rem; border-bottom: 1px solid var(--line); }
+/* 工具条永不被挤压：固定件 flex:none，标题给最小宽度，装不下就整块换行 */
+.mdm-main-toolbar > .seg,
+.mdm-main-toolbar > .mdm-max-btn,
+.mdm-main-toolbar > .mdm-insert-menu,
+.mdm-main-toolbar > #mdm-delete { flex: none; }
+.mdm-main-toolbar .seg-btn { white-space: nowrap; }
+.mdm-main-toolbar > #mdm-save-status,
+.mdm-main-toolbar > #mdm-doc-stats { flex: none; white-space: nowrap; }
+.mdm-title { flex: 1 1 12rem; min-width: 8rem; padding: 0.35rem 0.5rem; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--ink); font-size: 0.9rem; }
 .mdm-meta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.35rem 0.55rem; border-bottom: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
 .mdm-meta-row > label { color: var(--muted); }
 .mdm-cat { min-width: 9rem; padding: 0.25rem 0.45rem; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--ink); }
@@ -133,6 +142,18 @@
 @media (max-width: 900px) {
   #mdm .mdm-wide-only { display: none !important; }
   #mdm .mdm-narrow-only { display: inline-flex !important; }
+}
+/* 窄屏：左侧列表改成浮层抽屉，宽度全部让给编辑区；标题独占一行 */
+@media (max-width: 760px) {
+  .mdm-layout { grid-template-columns: minmax(0, 1fr); position: relative; }
+  .mdm-side {
+    position: absolute; left: 0; top: 0; bottom: 0; z-index: 12;
+    width: min(82vw, 320px);
+    background: var(--panel, #1b1b1f);
+    box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
+  }
+  .mdm-title { flex-basis: 100%; }
+  #mdm-dir-label { flex-basis: 100%; }
 }
 .mdm-path-input { width: 100%; box-sizing: border-box; padding: 0.5rem 0.65rem; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-strong, transparent); color: var(--ink); margin: 0.2rem 0 0.4rem; }
 

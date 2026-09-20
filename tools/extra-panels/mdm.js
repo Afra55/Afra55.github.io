@@ -3200,6 +3200,7 @@
       // 只更新选中态，别整表重建：否则单击会把列表 DOM 换掉，双击事件凑不起来（无法双击改名）
       updateItemClasses();
       renderMeta();
+      closeSideDrawer();
     }
 
     function newDoc() {
@@ -3228,6 +3229,7 @@
       renderSidebar();
       updateSaveBtn();
       els.empty && (els.empty.hidden = true);
+      closeSideDrawer();
       els.title?.focus();
       els.title?.select?.();
     }
@@ -5226,15 +5228,21 @@ a{color:${v.accent}}
       applyMaxMode();
     });
     // 专注：隐藏左侧列表 / 顶部按钮（持久化）
+    let closeSideDrawer = () => {};
     (function bindFocusToggles() {
       const panel = $("#mdm");
       if (!panel) return;
-      let sideHidden = false;
+      const narrowMQ = window.matchMedia("(max-width: 760px)");
+      let prefRaw = null;
       let topHidden = false;
       try {
-        sideHidden = localStorage.getItem("devtools-mdm-hide-side") === "1";
+        prefRaw = localStorage.getItem("devtools-mdm-hide-side");
         topHidden = localStorage.getItem("devtools-mdm-hide-top") === "1";
       } catch (_) {}
+      let sideHidden = prefRaw === "1";
+      let explicit = prefRaw != null; // 用户手动选过就不再被屏宽覆盖
+      // 窄屏默认收起左侧列表（抽屉），把宽度让给编辑区
+      if (narrowMQ.matches && !explicit) sideHidden = true;
       const apply = () => {
         panel.classList.toggle("is-side-hidden", sideHidden);
         panel.classList.toggle("is-topbar-hidden", topHidden);
@@ -5244,8 +5252,20 @@ a{color:${v.accent}}
         if (els.toggleTop) els.toggleTop.title = topHidden ? "显示顶部按钮" : "隐藏顶部按钮";
       };
       apply();
+      narrowMQ.addEventListener?.("change", (e) => {
+        if (explicit) return;
+        sideHidden = e.matches;
+        apply();
+      });
+      // 窄屏点开文档后自动收起抽屉，直接看正文
+      closeSideDrawer = () => {
+        if (!narrowMQ.matches || sideHidden) return;
+        sideHidden = true;
+        apply();
+      };
       els.toggleSide?.addEventListener("click", () => {
         sideHidden = !sideHidden;
+        explicit = true;
         try {
           localStorage.setItem("devtools-mdm-hide-side", sideHidden ? "1" : "0");
         } catch (_) {}
