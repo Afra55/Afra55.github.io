@@ -1347,6 +1347,21 @@ a.secondary-btn {
   background: var(--panel-strong, transparent);
   color: var(--ink);
 }
+.fu-drop {
+  margin-top: 0.5rem;
+  padding: 0.7rem 0.9rem;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 0.84rem;
+  text-align: center;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.fu-drop.is-over {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
 .fu-result { margin-top: 0.55rem; }
 .fu-proc {
   display: flex;

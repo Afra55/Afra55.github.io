@@ -8,9 +8,79 @@
 
 const fs = require("fs");
 const path = require("path");
+const os = require("os");
 const { execFile } = require("child_process");
 
 const MAX_FILES = 600;
+
+/** 浏览器拖拽拿不到完整路径，只能按名称在常见目录里反查 */
+async function resolveByName(inputName) {
+  const name = String(inputName || "").trim();
+  if (!name || /[\\/\0]/.test(name)) throw new Error("非法名称");
+  const seeds = [];
+  const add = (p) => {
+    if (p) seeds.push(path.resolve(p));
+  };
+  add(path.join(os.homedir(), "Desktop"));
+  add(path.join(os.homedir(), "Documents"));
+  add(path.join(os.homedir(), "Downloads"));
+  add(path.join(os.homedir(), "OneDrive"));
+  add(os.homedir());
+  if (process.platform === "win32") {
+    for (const L of "CDEFGHIJKLMNOPQRSTUVWXYZ") {
+      const d = `${L}:\\`;
+      try {
+        if (fs.existsSync(d)) seeds.push(d);
+      } catch (_) {}
+    }
+  }
+  const SKIP = new Set([
+    "node_modules",
+    "AppData",
+    "Application Data",
+    "Windows",
+    "Program Files",
+    "Program Files (x86)",
+    "ProgramData",
+    "$Recycle.Bin",
+    "System Volume Information",
+    ".cache",
+  ]);
+  const seen = new Set();
+  let scanned = 0;
+  const MAX_SCAN = 40000;
+  async function walk(dir, depth) {
+    if (depth > 6 || scanned > MAX_SCAN) return null;
+    let real;
+    try {
+      real = await fs.promises.realpath(dir);
+    } catch (_) {
+      return null;
+    }
+    if (seen.has(real)) return null;
+    seen.add(real);
+    scanned += 1;
+    let entries = [];
+    try {
+      entries = await fs.promises.readdir(real, { withFileTypes: true });
+    } catch (_) {
+      return null;
+    }
+    for (const e of entries) if (e.name === name) return path.join(real, e.name);
+    for (const e of entries) {
+      if (!e.isDirectory()) continue;
+      if (e.name.startsWith(".") || SKIP.has(e.name)) continue;
+      const hit = await walk(path.join(real, e.name), depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  for (const s of seeds) {
+    const hit = await walk(s, 0);
+    if (hit) return hit;
+  }
+  throw new Error("未在常见目录找到该名称；请改用「选择文件」按钮或粘贴完整路径");
+}
 
 function isWindows() {
   return process.platform === "win32";
@@ -241,4 +311,4 @@ async function pickPath(kind = "file") {
   return { path: picked };
 }
 
-module.exports = { isWindows, checkLocks, killProcess, pickPath };
+module.exports = { isWindows, checkLocks, killProcess, pickPath, resolveByName };

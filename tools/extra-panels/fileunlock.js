@@ -147,6 +147,52 @@
     }
 
     $("#fu-check")?.addEventListener("click", () => void doCheck());
+
+    // ---- 拖拽：文件 / 文件夹拖进来即填入并检查 ----
+    const dropEl = $("#fu-drop");
+    const panelEl = $("#fileunlock");
+    async function handleDrop(e) {
+      if (!e.dataTransfer) return;
+      e.preventDefault();
+      dropEl?.classList.remove("is-over");
+      let p = "";
+      try {
+        const list = window.devtoolsBridgeToken?.pathsFromDataTransfer?.(e.dataTransfer) || [];
+        if (list.length) p = String(list[0]);
+      } catch (_) {}
+      if (!p) {
+        const name = [...(e.dataTransfer.files || [])][0]?.name || "";
+        if (name) {
+          setMeta(`按名称在本机定位「${name}」…`);
+          try {
+            const r = await api("/resolve", { method: "POST", body: { name } });
+            p = r?.path || "";
+          } catch (err) {
+            setMeta("");
+            setError(err.message || String(err));
+            return;
+          }
+        }
+      }
+      if (!p) {
+        setError("浏览器出于安全不会把本地完整路径交给网页。请把路径粘到输入框，或用「选择文件」按钮。");
+        return;
+      }
+      if (pathInput) pathInput.value = p;
+      setError("");
+      void doCheck();
+    }
+    ["dragenter", "dragover"].forEach((ev) =>
+      panelEl?.addEventListener(ev, (e) => {
+        if (!e.dataTransfer) return;
+        e.preventDefault();
+        dropEl?.classList.add("is-over");
+      })
+    );
+    panelEl?.addEventListener("dragleave", (e) => {
+      if (e.target === panelEl || e.target === dropEl) dropEl?.classList.remove("is-over");
+    });
+    panelEl?.addEventListener("drop", (e) => void handleDrop(e));
     $("#fu-pick-file")?.addEventListener("click", () => void doPick("file"));
     $("#fu-pick-dir")?.addEventListener("click", () => void doPick("dir"));
     pathInput?.addEventListener("keydown", (e) => {

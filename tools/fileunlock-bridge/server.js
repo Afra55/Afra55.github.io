@@ -5,7 +5,7 @@
  * 仅 Windows 生效；其他平台 /health 会返回 isWin=false，前端据此隐藏。
  */
 
-const { isWindows, checkLocks, killProcess, pickPath } = require("./lock-ops");
+const { isWindows, checkLocks, killProcess, pickPath, resolveByName } = require("./lock-ops");
 
 const BRIDGE_VERSION = "0.1.0";
 const FEATURES = { unlock: true, winOnly: true };
@@ -70,6 +70,12 @@ async function handleRequest(req, res, opts = {}) {
       const body = parseJsonBody(await readBody(req));
       const data = await killProcess(body.pid, { force: Boolean(body.force) });
       sendJson(res, 200, { ok: true, ...data });
+      return;
+    }
+    if (pathname === "/resolve" && req.method === "POST") {
+      const body = parseJsonBody(await readBody(req));
+      const found = await resolveByName(body.name);
+      sendJson(res, 200, { ok: true, path: found });
       return;
     }
     if (pathname === "/pick" && req.method === "POST") {
