@@ -3048,9 +3048,9 @@
         const box = els.modalBox;
         box.innerHTML =
           `<div class="mdm-modal-head"><strong>打开文件位置</strong></div>` +
-          `<p class="mdm-modal-body">浏览器出于安全不会把所选文件夹的完整路径交给网页，所以没法自动定位。\n\n请粘贴「${escapeHtml(
-            folderName
-          )}」这个文件夹的完整路径（例如 D:\\notes）。会记住它，之后可直接打开。</p>` +
+          `<p class="mdm-modal-body">浏览器出于安全不会把所选文件夹的完整路径交给网页，所以没法自动定位。\n\n请粘贴${
+            folderName ? `「${escapeHtml(folderName)}」` : "当前文档所在"
+          }文件夹的完整路径（例如 D:\\notes）。会记住它，之后可直接打开。</p>` +
           `<input class="mdm-path-input mono" id="mdm-dirpath-input" placeholder="D:\\notes" spellcheck="false" />` +
           `<div class="mdm-modal-foot">` +
           `<button type="button" class="ghost-btn" data-dp="cancel">取消</button>` +
@@ -3095,9 +3095,9 @@
       }
       const folderName = state.dirHandle.name;
       const joinPath = (dir) => {
-        const base = String(dir).trim().replace(/[\\/]+$/, "");
-        const sep = base.includes("\\") ? "\\" : "/";
-        return `${base}${sep}${item.fileName}`;
+        const p = MP.joinDocPath ? MP.joinDocPath(dir, item.fileName) : "";
+        if (!p) throw new Error("文件夹路径或文件名无效");
+        return p;
       };
       const revealByPath = async (dir) => {
         await api.revealLocalPath({ path: joinPath(dir) });
@@ -3122,19 +3122,21 @@
           setSaveStatus("");
         }
       }
-      // 2) 让桥按「文件夹名 + 文件名」在常见目录里反查
-      setSaveStatus("正在本机定位…");
-      try {
-        await api.revealMdmDoc({ folderName, fileName: item.fileName });
-        setSaveStatus("");
-        toast("已在本机打开所在位置");
-        return;
-      } catch (err) {
-        setSaveStatus("");
-        const msg = err?.message || String(err);
-        if (/未连接|未启动|Failed to fetch|超时/.test(msg)) {
-          showBridgeHelpModal("打开文件位置");
+      // 2) 让桥按「文件夹名 + 文件名」在常见目录里反查（文件夹名为空则跳过）
+      if (folderName) {
+        setSaveStatus("正在本机定位…");
+        try {
+          await api.revealMdmDoc({ folderName, fileName: item.fileName });
+          setSaveStatus("");
+          toast("已在本机打开所在位置");
           return;
+        } catch (err) {
+          setSaveStatus("");
+          const msg = err?.message || String(err);
+          if (/未连接|未启动|Failed to fetch|超时/.test(msg)) {
+            showBridgeHelpModal("打开文件位置");
+            return;
+          }
         }
       }
       // 3) 兜底：让用户填一次文件夹路径并记住
@@ -4479,6 +4481,15 @@ a{color:${v.accent}}
       }
       if (kind === "rescan") {
         void rescanFolder();
+        return;
+      }
+      if (kind === "reveal-current") {
+        const cur = findItem(state.currentId);
+        if (!cur) {
+          setErr("请先打开一篇文档");
+          return;
+        }
+        void revealItemLocation(cur);
         return;
       }
       if (kind === "trash") {

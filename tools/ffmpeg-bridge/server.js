@@ -496,10 +496,11 @@ async function revealLocalPath(inputPath) {
   const real = await resolveLocalPath(inputPath);
   const st = await fs.promises.stat(real);
   if (process.platform === "win32") {
-    if (st.isDirectory()) {
-      await execFileAsync("explorer.exe", [real], { timeout: 15000 });
-    } else {
-      await execFileAsync("explorer.exe", [`/select,${real}`], { timeout: 15000 });
+    // 注意：explorer.exe 即使成功也常返回退出码 1，不能当失败
+    try {
+      await execFileAsync("explorer.exe", st.isDirectory() ? [real] : [`/select,${real}`], { timeout: 15000 });
+    } catch (_) {
+      /* 忽略退出码：路径已校验存在 */
     }
   } else if (process.platform === "darwin") {
     if (st.isDirectory()) {

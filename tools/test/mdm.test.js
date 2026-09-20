@@ -118,4 +118,12 @@ t("搜索语法 tag:/cat:", () => {
   assert.strictEqual(P.parseSearch("普通搜索").q, "普通搜索");
 });
 
+t("joinDocPath 拼接文档路径", () => {
+  assert.strictEqual(P.joinDocPath("D:\\notes", "a.md"), "D:\\notes\\a.md");
+  assert.strictEqual(P.joinDocPath("D:\\notes\\", "a.md"), "D:\\notes\\a.md");
+  assert.strictEqual(P.joinDocPath("/home/me/notes", "a.md"), "/home/me/notes/a.md");
+  assert.strictEqual(P.joinDocPath("", "a.md"), "");
+  assert.strictEqual(P.joinDocPath("D:\\notes", ""), "");
+});
+
 console.log(`mdm.test: ${n} passed`);

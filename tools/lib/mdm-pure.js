@@ -192,6 +192,15 @@
     return { q: rest.toLowerCase(), tags, cats };
   }
 
+  /** 拼出文档在所选文件夹里的完整路径（dir 可为 Windows 或 POSIX 风格） */
+  function joinDocPath(dir, fileName) {
+    const base = String(dir || "").trim().replace(/[\\/]+$/, "");
+    const name = String(fileName || "").trim().replace(/^[\\/]+/, "");
+    if (!base || !name) return "";
+    const sep = base.includes("\\") ? "\\" : "/";
+    return `${base}${sep}${name}`;
+  }
+
   const api = {
     slugify,
     parseFrontMatter,
@@ -201,6 +210,7 @@
     buildTable,
     replaceDocRefs,
     parseSearch,
+    joinDocPath,
   };
   if (typeof window !== "undefined") window.DevToolsMdmPure = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
