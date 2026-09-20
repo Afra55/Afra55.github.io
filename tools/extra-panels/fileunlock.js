@@ -174,7 +174,40 @@
       }
     });
 
-    shell.bind({
+    let shellApi = null;
+    async function connectBridge() {
+      try {
+        localStorage.setItem(BASE_KEY, baseUrl());
+        localStorage.setItem(TOKEN_KEY, token());
+      } catch (_) {}
+      setError("");
+      try {
+        shellApi?.setStatus?.("is-warn", "正在连接本机桥…", baseUrl());
+      } catch (_) {}
+      try {
+        const h = await api("/health", { auth: false });
+        if (!h?.ok) throw new Error("本机桥无响应");
+        if (!h.isWin) {
+          if (workspace) workspace.hidden = true;
+          try {
+            shellApi?.setStatus?.("is-err", "非 Windows 系统", "此工具仅 Windows 可用");
+          } catch (_) {}
+          return;
+        }
+        if (workspace) workspace.hidden = false;
+        try {
+          shellApi?.setStatus?.("is-ok", "已连接本机桥", `统一桥 ${baseUrl()} · API /unlock`);
+        } catch (_) {}
+      } catch (err) {
+        const msg = err?.message || String(err);
+        setError(msg);
+        try {
+          shellApi?.setStatus?.("is-err", "未连接本机桥", msg);
+        } catch (_) {}
+      }
+    }
+
+    shellApi = shell.bind({
       onStatus: () => {},
       onConnected: async () => {
         setError("");
@@ -190,8 +223,12 @@
           setError(err.message || String(err));
         }
       },
-      onConnect: () => {},
-      onRefresh: () => {},
+      onConnect: () => {
+        void connectBridge();
+      },
+      onRefresh: () => {
+        void connectBridge();
+      },
       onPersist: () => {
         try {
           localStorage.setItem(BASE_KEY, baseUrl());
@@ -200,5 +237,8 @@
       },
       toast: (msg) => setMeta(msg),
     });
+
+    // 打开面板先自动尝试连接一次
+    void connectBridge();
   });
 })();

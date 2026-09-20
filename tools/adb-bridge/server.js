@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.31";
+const BRIDGE_VERSION = "0.9.32";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -3875,6 +3875,7 @@ async function handleApi(req, res, url) {
       const stripped = url.pathname === "/unlock" ? "/" : url.pathname.slice(7) || "/";
       const isUnlockHealth = stripped === "/health" && req.method === "GET";
       if (!isUnlockHealth && req.method !== "OPTIONS") requireToken(req);
+      wrapResWithCors(res, origin);
       await fileUnlockBridge.handleRequest(req, res, {
         pathname: stripped,
         alreadyAuthed: !isUnlockHealth,
@@ -3892,6 +3893,7 @@ async function handleApi(req, res, url) {
       const stripped = url.pathname === "/pandoc" ? "/" : url.pathname.slice(7) || "/";
       const isPandocHealth = stripped === "/health" && req.method === "GET";
       if (!isPandocHealth && req.method !== "OPTIONS") requireToken(req);
+      wrapResWithCors(res, origin);
       await pandocBridge.handleRequest(req, res, {
         pathname: stripped,
         alreadyAuthed: !isPandocHealth,
@@ -4912,6 +4914,17 @@ async function autoUpdateOnBoot() {
   } catch (err) {
     console.warn("[bridge] 自动更新检查失败：", err?.message || err);
   }
+}
+
+/** 子模块自己 writeHead，不带 CORS 头 → 浏览器判为跨域失败。在挂载点统一注入。 */
+function wrapResWithCors(res, origin) {
+  const orig = res.writeHead.bind(res);
+  res.writeHead = (status, headers) => {
+    const h = { ...(headers || {}) };
+    applyCors(h, origin);
+    return orig(status, h);
+  };
+  return res;
 }
 
 function listenWithFallback(startPort, maxTries = 12) {
