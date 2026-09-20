@@ -46,8 +46,12 @@
   min-height: 0;
   overflow: hidden;
 }
-.mdm-side { display: flex; flex-direction: column; padding: 0.5rem; gap: 0.45rem; }
-.mdm-list-wrap { flex: 1 1 auto; min-height: 0; overflow: auto; }
+.mdm-side { display: flex; flex-direction: column; padding: 0.5rem; gap: 0.45rem; overflow-y: auto; }
+/* 分类 / 标签：各自封顶内部滚动，永远不把下面的文件列表挤没 */
+.mdm-side > .mdm-group { flex: 0 1 auto; max-height: 22%; overflow-y: auto; scrollbar-width: thin; }
+.mdm-side > .mdm-group:not(:empty) { min-height: 1.6rem; }
+.mdm-side > .mdm-group > .mdm-group-title { position: sticky; top: 0; z-index: 1; background: var(--panel, rgba(12, 18, 30, 0.92)); }
+.mdm-list-wrap { flex: 1 1 auto; min-height: 8rem; overflow: auto; }
 .mdm-group { margin-bottom: 0.4rem; }
 .mdm-group-title { font-size: 0.75rem; color: var(--muted); margin: 0.35rem 0 0.25rem; }
 .mdm-chip {
