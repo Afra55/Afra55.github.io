@@ -209,6 +209,7 @@
       importLibInput: $("#mdm-import-lib-input"),
       save: $("#mdm-save"),
       exportToggle: $("#mdm-export-toggle"),
+      copyBtn: $("#mdm-copy"),
       exportDropdown: $("#mdm-export-dropdown"),
       toggleSide: $("#mdm-toggle-side"),
       toggleTop: $("#mdm-toggle-top"),
@@ -2530,11 +2531,36 @@
         "drop",
         (e) => {
           const files = [...(e.dataTransfer?.files || [])];
-          if (files.length) {
-            e.preventDefault();
-            e.stopPropagation();
-            void insertAssetFiles(files);
+          if (!files.length) return;
+          e.preventDefault();
+          e.stopPropagation();
+          if (!state.mode) {
+            setErr("请先选择存储位置再拖入");
+            return;
           }
+          void (async () => {
+            try {
+              const isDoc = (f) => /\.(md|markdown|txt)$/i.test(f.name || "") || /markdown/.test(f.type || "");
+              const docs = files.filter(isDoc);
+              const assets = files.filter((f) => !isDoc(f));
+              if (assets.length) await insertAssetFiles(assets);
+              if (docs.length) {
+                // md 文件：① 导入进库（不切换当前文档）② 在当前文档插入引用链接
+                const before = new Set((state.index.items || []).map((x) => x.id));
+                await importFiles(docs, { open: false });
+                const added = (state.index.items || []).filter((x) => !before.has(x.id));
+                if (added.length && state.view) {
+                  const links = added.map((it) => `[${it.title}](${it.fileName})`).join("\n");
+                  state.view.dispatch(state.view.state.replaceSelection(`${links}\n`));
+                }
+                toast(added.length ? `已导入 ${added.length} 篇并插入引用` : "已导入（同名已存在，未插入引用）");
+              } else if (assets.length) {
+                toast(`已插入 ${assets.length} 个附件`);
+              }
+            } catch (err) {
+              setErr(`拖入失败：${err.message || err}`);
+            }
+          })();
         },
         true
       );
@@ -3339,6 +3365,7 @@
         els.save.textContent = state.dirty ? "保存 *" : "保存";
       }
       if (els.exportToggle) els.exportToggle.disabled = !has;
+      if (els.copyBtn) els.copyBtn.disabled = !has;
       if (els.del) els.del.disabled = !has;
     }
 
@@ -3421,7 +3448,8 @@
     }
 
     // ---- import ----
-    async function importFiles(files) {
+    async function importFiles(files, opts = {}) {
+      const openAfter = opts.open !== false;
       if (!state.mode) {
         setErr("请先选择存储位置（顶栏「选择文件夹」或「本地存储模式」）再导入");
         return;
@@ -3482,7 +3510,7 @@
       renderSidebar();
       if (n) toast(imgN ? `已导入 ${n} 篇 · 含 ${imgN} 张图片` : `已导入 ${n} 篇`);
       // 导入后直接打开（多篇则打开最后一篇）
-      if (lastImported) await openDoc(lastImported);
+      if (lastImported && openAfter) await openDoc(lastImported);
     }
 
     /** 把 .md 引用的本地资源（图/视频/音频/附件）一并写入目标文件夹（保留相对路径） */
@@ -4678,6 +4706,8 @@ a{color:${v.accent}}
       });
     })();
 
+    els.copyBtn?.addEventListener("click", () => void copyPreviewToClipboard());
+
     // 导出菜单：点「导出」弹格式菜单（本地 + Pandoc 分组）
     if (els.exportDropdown) {
       const mk = (list) => list.map(([v, l]) => `<button type="button" data-export-fmt="${v}">${escapeHtml(l)}</button>`).join("");
@@ -4729,6 +4759,72 @@ a{color:${v.accent}}
         });
       return Promise.all(entries.map((e) => walk(e, ""))).then(() => out);
     }
+    /** 复制预览到剪贴板：HTML（带格式，媒体内联为 data URL）+ 纯文本（Markdown 源码） */
+    async function copyPreviewToClipboard() {
+      if (!els.preview) return;
+      try {
+        const inv = new Map();
+        for (const [rel, url] of assetUrlCache) inv.set(url, rel);
+        const clone = els.preview.cloneNode(true);
+        clone.querySelectorAll("a[data-mdm-open]").forEach((a) => a.removeAttribute("href"));
+        let mediaN = 0;
+        for (const el of clone.querySelectorAll("img[src],video[src],audio[src],source[src]")) {
+          const src = el.getAttribute("src") || "";
+          if (!src.startsWith("blob:")) continue;
+          const rel = inv.get(src);
+          if (!rel) continue;
+          try {
+            const blob = await readAssetBlob(rel);
+            if (blob.size > 6 * 1024 * 1024) continue; // 单张过大就跳过，避免剪贴板超限
+            el.setAttribute("src", await blobToDataUrl(blob));
+            mediaN += 1;
+          } catch (_) {}
+        }
+        const html = clone.innerHTML;
+        const text = getEditorText();
+        const ok = await writeRichClipboard(html, text);
+        if (ok) toast(mediaN ? `已复制（含 ${mediaN} 个图片/媒体）` : "已复制到剪贴板");
+        else setErr("复制失败：当前浏览器不支持写入剪贴板");
+      } catch (err) {
+        setErr(`复制失败：${err.message || err}`);
+      }
+    }
+
+    async function writeRichClipboard(html, text) {
+      try {
+        if (navigator.clipboard?.write && typeof window.ClipboardItem === "function") {
+          await navigator.clipboard.write([
+            new window.ClipboardItem({
+              "text/html": new Blob([html], { type: "text/html" }),
+              "text/plain": new Blob([text], { type: "text/plain" }),
+            }),
+          ]);
+          return true;
+        }
+      } catch (_) {}
+      // 兜底：临时 contenteditable + execCommand
+      try {
+        const box = document.createElement("div");
+        box.contentEditable = "true";
+        box.style.position = "fixed";
+        box.style.left = "-9999px";
+        box.style.top = "0";
+        box.innerHTML = html;
+        document.body.appendChild(box);
+        const range = document.createRange();
+        range.selectNodeContents(box);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+        const ok = document.execCommand("copy");
+        sel.removeAllRanges();
+        box.remove();
+        return ok;
+      } catch (_) {
+        return false;
+      }
+    }
+
     if (panelEl) {
       const setHover = (on) => panelEl.classList.toggle("is-mdm-drop", on);
       panelEl.addEventListener("dragover", (e) => {
