@@ -226,6 +226,7 @@
       modeEdit: $("#mdm-mode-edit"),
       modeSplit: $("#mdm-mode-split"),
       modePreview: $("#mdm-mode-preview"),
+      max: $("#mdm-max"),
       title: $("#mdm-title"),
       del: $("#mdm-delete"),
       fileInput: $("#mdm-file-input"),
@@ -295,6 +296,29 @@
       tokenI.children = [];
       const tokenC = state.push("heading_close", `h${level}`, -1);
       tokenC.markup = "########".slice(0, level);
+      return true;
+    }
+
+    /** 按需加载可选 vendor（不进 TOOL_VENDORS，避免每次开工具都下载） */
+    const vendorLoading = new Map();
+    function ensureVendor(id) {
+      if (vendorLoading.has(id)) return vendorLoading.get(id);
+      const p = Promise.resolve(window.DevToolsLazy?.loadVendor?.(id)).catch(() => null);
+      vendorLoading.set(id, p);
+      return p;
+    }
+
+    let katexReady = false;
+    async function ensureKatex() {
+      if (window.markdownItKatex) {
+        ensureKatexCss();
+        return true;
+      }
+      await ensureVendor("katexmd");
+      if (!window.markdownItKatex) return false;
+      ensureKatexCss();
+      katexReady = true;
+      md = null; // 重建 markdown-it 以注册 KaTeX 插件
       return true;
     }
 
@@ -1118,6 +1142,12 @@
     function renderPreview() {
       if (!els.preview) return;
       const src = getEditorText();
+      // 含公式且 KaTeX 尚未加载：按需加载后重渲一次（避免开工具就下载 KaTeX）
+      if (!katexReady && !window.markdownItKatex && /\$[^$\n]+\$|\$\$[\s\S]*?\$\$/.test(src)) {
+        void ensureKatex().then((ok) => {
+          if (ok) renderPreview();
+        });
+      }
       els.preview.innerHTML = renderMarkdown(src);
       els.preview.querySelectorAll("a[href]").forEach((a) => {
         const href = a.getAttribute("href") || "";
@@ -1127,6 +1157,7 @@
       });
       applyTaskLists(els.preview);
       applyHeadingAnchors(els.preview);
+      refreshOutlineHeads();
       updateDocStats(src, state.view?.state.selection.main);
       void resolvePreviewAssets();
       void renderMermaidBlocks();
@@ -1836,6 +1867,7 @@
     /** 整库导出：ZIP（mdindex.json + 全部 .md + assets/） */
     /** 打包整库为 ZIP Blob（导出库 / 切换模式迁移共用） */
     async function buildLibraryZip() {
+      if (typeof window.JSZip !== "function") await ensureVendor("jszip");
       if (typeof window.JSZip !== "function") throw new Error("ZIP 库未就绪");
       const zip = new window.JSZip();
       zip.file(INDEX_FILE, JSON.stringify(state.index, null, 2));
@@ -1873,6 +1905,7 @@
 
     /** 整库导入：读取 ZIP，写入 .md 与 assets，合并索引 */
     async function importLibrary(file) {
+      if (typeof window.JSZip !== "function") await ensureVendor("jszip");
       if (typeof window.JSZip !== "function") {
         setErr("ZIP 库未就绪");
         return;
@@ -2438,7 +2471,7 @@
       const dom = view.dom;
       dom.addEventListener(
         "paste",
-        (e) => {
+        async (e) => {
           const files = [...(e.clipboardData?.files || [])];
           for (const it of e.clipboardData?.items || []) {
             if (it.kind === "file") {
@@ -2459,7 +2492,9 @@
           }
           // 富文本 → Markdown
           const html = e.clipboardData?.getData?.("text/html") || "";
-          if (html && hasRichHtml(html) && typeof window.TurndownService === "function") {
+          if (html && hasRichHtml(html)) {
+            if (typeof window.TurndownService !== "function") await ensureVendor("turndown");
+            if (typeof window.TurndownService !== "function") return;
             const md = htmlToMarkdown(html);
             if (md.trim()) {
               e.preventDefault();
@@ -2556,16 +2591,32 @@
       syncOutlineActive();
     }
 
+    let outlineHeads = [];
+    function refreshOutlineHeads() {
+      if (!els.preview) return;
+      outlineHeads = [...els.preview.querySelectorAll("h1,h2,h3,h4,h5,h6")];
+    }
+
+    /** 预览滚动时高亮当前标题：缓存标题列表 + 二分查找，避免每帧 querySelector/O(n) */
     function syncOutlineActive() {
       if (!els.outline || !els.preview) return;
-      const heads = [...els.preview.querySelectorAll("h1,h2,h3,h4,h5,h6")];
       const items = els.outline.querySelectorAll(".mdm-outline-item");
-      if (!heads.length || !items.length) return;
+      if (!items.length) return;
+      if (outlineHeads.length !== items.length) refreshOutlineHeads();
+      const heads = outlineHeads;
+      if (!heads.length) return;
       const top = els.preview.scrollTop + 8;
+      let lo = 0;
+      let hi = heads.length - 1;
       let active = 0;
-      for (let i = 0; i < heads.length; i++) {
-        if (heads[i].offsetTop <= top) active = i;
-        else break;
+      while (lo <= hi) {
+        const mid = (lo + hi) >> 1;
+        if (heads[mid].offsetTop <= top) {
+          active = mid;
+          lo = mid + 1;
+        } else {
+          hi = mid - 1;
+        }
       }
       items.forEach((el, i) => el.classList.toggle("is-active", i === active));
     }
@@ -3229,6 +3280,7 @@
       }
       let n = 0;
       let imgN = 0;
+      let lastImported = "";
       for (const f of list) {
         const text = await f.text();
         const fm = parseFrontMatter(text);
@@ -3257,6 +3309,7 @@
           await writeDocText(item, buildFrontMatterBlock(item, res.text));
           state.index.items.push(item);
           n += 1;
+          lastImported = item.id;
         } catch (err) {
           setErr(`导入失败（${f.name}）：${err.message || err}`);
         }
@@ -3265,6 +3318,8 @@
       await saveIndexToStorage();
       renderSidebar();
       if (n) toast(imgN ? `已导入 ${n} 篇 · 含 ${imgN} 张图片` : `已导入 ${n} 篇`);
+      // 导入后直接打开（多篇则打开最后一篇）
+      if (lastImported) await openDoc(lastImported);
     }
 
     /** 把 .md 引用的本地资源（图/视频/音频/附件）一并写入目标文件夹（保留相对路径） */
@@ -3417,6 +3472,7 @@ a{color:${v.accent}}
     }
 
     async function exportItemsToZip(ids) {
+      if (typeof window.JSZip !== "function") await ensureVendor("jszip");
       if (typeof window.JSZip !== "function") {
         setErr("ZIP 库未就绪，请稍后重试");
         return;
@@ -4309,6 +4365,31 @@ a{color:${v.accent}}
     els.modeEdit?.addEventListener("click", () => { state.viewMode = "edit"; applyViewMode(); });
     els.modeSplit?.addEventListener("click", () => { state.viewMode = "split"; applyViewMode(); });
     els.modePreview?.addEventListener("click", () => { state.viewMode = "preview"; applyViewMode(); });
+
+    // 全屏编辑：铺满视口并锁住页面滚动，只让编辑器/预览自己滚
+    let maxMode = false;
+    function applyMaxMode() {
+      if (!els.layout) return;
+      els.layout.classList.toggle("is-max", maxMode);
+      document.body.classList.toggle("mdm-max-on", maxMode);
+      if (els.max) {
+        els.max.textContent = maxMode ? "⤡" : "⛶";
+        els.max.title = maxMode ? "退出全屏（Esc）" : "全屏编辑（Esc 退出）";
+      }
+      try {
+        state.view?.requestMeasure?.();
+      } catch (_) {}
+    }
+    els.max?.addEventListener("click", () => {
+      maxMode = !maxMode;
+      applyMaxMode();
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape" || !maxMode) return;
+      if (els.modal && !els.modal.hidden) return; // 弹框优先
+      maxMode = false;
+      applyMaxMode();
+    });
     els.exportBtn?.addEventListener("click", () => void exportCurrent(els.exportFmt?.value || "md"));
 
     // export format options

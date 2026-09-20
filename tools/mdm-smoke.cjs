@@ -360,6 +360,43 @@ async function browserChecks() {
     );
     console.log("STEP table-align-ok");
 
+    // 10) 公式：KaTeX 按需加载
+    await page.click("#mdm-mode-edit");
+    await page.evaluate(() => {
+      const ed = document.querySelector("#mdm-editor .cm-content");
+      ed.focus();
+      document.execCommand("insertText", false, "\n\n$E=mc^2$\n");
+    });
+    await page.click("#mdm-mode-preview");
+    await page.waitForFunction(() => Boolean(document.querySelector("#mdm-preview .katex")), { timeout: 60000 });
+    console.log("STEP katex-ok");
+
+    // 11) 全屏编辑：加类 + 锁页面滚动，Esc 退出
+    await page.click("#mdm-max");
+    await page.waitForFunction(() => document.getElementById("mdm-layout")?.classList.contains("is-max"), {
+      timeout: 5000,
+    });
+    assert(
+      await page.evaluate(() => document.body.classList.contains("mdm-max-on")),
+      "body should lock scroll in fullscreen"
+    );
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => !document.getElementById("mdm-layout")?.classList.contains("is-max"), {
+      timeout: 5000,
+    });
+    console.log("STEP fullscreen-ok");
+
+    // 12) 导入 md 后应自动打开该文档
+    const tmp = path.join(os.tmpdir(), "mdm-import-smoke.md");
+    fs.writeFileSync(tmp, "# 导入的文档\n\n导入内容标记 ABC123\n");
+    const fileInput = await page.$("#mdm-import");
+    await fileInput.uploadFile(tmp);
+    await page.waitForFunction(
+      () => (document.querySelector("#mdm-editor .cm-content")?.innerText || "").includes("导入内容标记 ABC123"),
+      { timeout: 30000 }
+    );
+    console.log("STEP import-open-ok");
+
     assert(!errors.length, `pageerror: ${errors.join("; ")}`);
     console.log("mdm-smoke ok (idb/new/save/list/search/preview/mermaid/table)");
   } finally {

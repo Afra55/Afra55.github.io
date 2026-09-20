@@ -2,6 +2,9 @@
   "use strict";
 
   const BUILD = window.TOOLS_BUILD || "2026.08.30-232500";
+  // 第三方库单独版本号：不随站点构建变化，浏览器缓存才能跨发布复用（升级 vendor 时手动 +1）
+  const VENDOR_V = "1";
+  const isVendorSrc = (src) => /(^|\/)vendor\//.test(String(src || ""));
 
   function getMqttConnect() {
     const m = globalThis.mqtt;
@@ -185,7 +188,7 @@
     giftest: ["omggif"],
     dateremind: ["solarlunar"],
     ipgeo: ["leaflet"],
-    mdm: ["markdownit", "purify", "hljs", "cm6", "katexmd", "jszip", "turndown", "mdext", "mdmpure"],
+    mdm: ["markdownit", "purify", "hljs", "cm6", "mdext", "mdmpure"],
   };
 
   /** 独立脚本，不走 extra 面板栈 */
@@ -297,7 +300,7 @@
 
   function withVersion(src) {
     const url = new URL(src, document.baseURI || window.location.href);
-    url.searchParams.set("v", BUILD);
+    url.searchParams.set("v", isVendorSrc(src) ? VENDOR_V : BUILD);
     return url.pathname + url.search;
   }
 
