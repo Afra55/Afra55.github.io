@@ -37,32 +37,21 @@
 
         <div class="mdm-layout" id="mdm-layout" hidden>
           <aside class="mdm-side">
-            <input id="mdm-search" class="mono mdm-search" type="search" placeholder="搜索标题/正文，或 tag:xx cat:xx" autocomplete="off" />
-            <div class="mdm-side-tools">
-              <select id="mdm-sort" class="select-input" title="排序">
-                <option value="order">自定义顺序</option>
-                <option value="recent">最近打开</option>
-                <option value="title">按标题</option>
-                <option value="updated">最近修改</option>
-                <option value="size">按大小</option>
-              </select>
-              <span class="hint tight" id="mdm-count"></span>
-              <select id="mdm-group" class="select-input" title="列表分组">
-                <option value="none">不分组</option>
-                <option value="cat">按分类分组</option>
-              </select>
+            <div class="mdm-side-icons">
+              <button type="button" class="ghost-btn mdm-icon-btn" id="mdm-search-toggle" title="搜索标题与正文（Ctrl+Shift+F）" aria-label="搜索">⌕</button>
+              <button type="button" class="ghost-btn mdm-icon-btn" id="mdm-sort-toggle" title="排序" aria-label="排序" aria-haspopup="menu">⇅</button>
+              <button type="button" class="ghost-btn mdm-icon-btn" id="mdm-group-toggle" title="分组" aria-label="分组" aria-haspopup="menu">⊞</button>
             </div>
             <div class="mdm-batchbar" id="mdm-batchbar" hidden>
               <span class="hint tight" id="mdm-batch-count"></span>
               <button type="button" class="ghost-btn" data-batch="all" title="选中当前筛选结果里的全部文档">全选</button>
               <button type="button" class="ghost-btn" data-batch="tag" title="给选中的文档批量添加标签">加标签</button>
-              <button type="button" class="ghost-btn" data-batch="cat" title="给选中的文档批量设置分类">分类</button>
+              <button type="button" class="ghost-btn" data-batch="untag" title="从选中的文档里移除某个标签">移除标签</button>
               <button type="button" class="ghost-btn" data-batch="rename" title="批量重命名：统一给选中文档的标题加前缀 / 后缀">重命名</button>
               <button type="button" class="ghost-btn" data-batch="export" title="把选中的文档导出为一个 ZIP">导出</button>
               <button type="button" class="ghost-btn" data-batch="delete" title="把选中的文档移入回收站">删除</button>
               <button type="button" class="ghost-btn" data-batch="clear" title="取消所有选中">取消</button>
             </div>
-            <div class="mdm-group" id="mdm-cats"></div>
             <div class="mdm-group" id="mdm-tags"></div>
             <div class="mdm-list-wrap" id="mdm-list-wrap">
               <div class="mdm-list" id="mdm-list" role="listbox" aria-label="文档列表" aria-live="polite"></div>
@@ -128,9 +117,6 @@
               <input id="mdm-file-input" type="file" multiple hidden />
             </div>
             <div class="mdm-meta-row">
-              <label for="mdm-cat">分类</label>
-              <input id="mdm-cat" class="mono mdm-cat" list="mdm-cat-list" placeholder="选择或输入分类" autocomplete="off" />
-              <datalist id="mdm-cat-list"></datalist>
               <label>标签</label>
               <span class="mdm-tag-chips" id="mdm-tag-chips"></span>
               <input id="mdm-tag-input" class="mono mdm-tag-input" list="mdm-tag-list" placeholder="输入标签后回车" autocomplete="off" />
@@ -155,6 +141,13 @@
           </aside>
         </div>
       </div>
+      <div class="mdm-pop" id="mdm-search-pop" hidden>
+        <input id="mdm-search" class="mono mdm-search" type="search" placeholder="搜索标题与正文…" autocomplete="off" />
+        <div class="mdm-search-meta hint tight" id="mdm-search-meta"></div>
+        <div class="mdm-search-results" id="mdm-search-results" role="listbox" aria-label="搜索结果"></div>
+      </div>
+      <div class="mdm-pop mdm-menu-pop" id="mdm-sort-menu" hidden role="menu"></div>
+      <div class="mdm-pop mdm-menu-pop" id="mdm-group-menu" hidden role="menu"></div>
       <div class="mdm-modal" id="mdm-modal" hidden>
         <div class="mdm-modal-box" id="mdm-modal-box" role="dialog" aria-modal="true"></div>
       </div>

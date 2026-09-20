@@ -12,14 +12,13 @@
     return s || fallback;
   }
 
-  /** 解析 YAML front-matter（title/category/tags；head=原始头部） */
+  /** 解析 YAML front-matter（title/tags；head=原始头部） */
   function parseFrontMatter(text) {
     const m = String(text || "").match(/^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-    if (!m) return { title: "", category: "", tags: [], body: text, head: "" };
+    if (!m) return { title: "", tags: [], body: text, head: "" };
     const head = m[1];
     const body = m[2];
     let title = "";
-    let category = "";
     let tags = [];
     const clean = (v) => String(v).trim().replace(/^["']|["']$/g, "");
     const lines = head.split(/\r?\n/);
@@ -29,7 +28,6 @@
       const key = mm[1].toLowerCase();
       const val = mm[2].trim();
       if (key === "title") title = clean(val);
-      else if (key === "category" || key === "cat") category = clean(val);
       else if (key === "tags" || key === "tag") {
         if (val) {
           // 行内：tags: [a, b] / tags: a, b / tags: a
@@ -52,7 +50,7 @@
         }
       }
     }
-    return { title, category, tags, body, head };
+    return { title, tags, body, head };
   }
 
   function isRelativeRef(v) {
@@ -191,21 +189,19 @@
     return { text: out, count };
   }
 
-  /** 解析搜索串：支持 tag:xxx / cat:xxx（也接受 标签:/分类:），返回 { q, tags, cats } */
+  /** 解析搜索串：支持 tag:xxx（也接受 标签:），返回 { q, tags } */
   function parseSearch(raw) {
     const s = String(raw || "").trim();
     const tags = [];
-    const cats = [];
     const rest = s
-      .replace(/(^|\s)(tag|cat|标签|分类):("[^"]*"|\S+)/gi, (m, sp, kind, val) => {
+      .replace(/(^|\s)(tag|标签):("[^"]*"|\S+)/gi, (m, sp, kind, val) => {
         const v = String(val).replace(/^"|"$/g, "").toLowerCase();
         if (!v) return sp;
-        if (/^(tag|标签)$/i.test(kind)) tags.push(v);
-        else cats.push(v);
+        tags.push(v);
         return sp;
       })
       .trim();
-    return { q: rest.toLowerCase(), tags, cats };
+    return { q: rest.toLowerCase(), tags };
   }
 
   /** 拼出文档在所选文件夹里的完整路径（dir 可为 Windows 或 POSIX 风格） */

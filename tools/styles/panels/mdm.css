@@ -22,9 +22,40 @@
 .mdm-export-group { display: inline-flex; align-items: center; gap: 0.35rem; }
 .mdm-export-group .select-input { min-height: var(--btn-min-h, 2.5rem); }
 .mdm-search { width: 100%; padding: 0.45rem 0.6rem; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-strong, transparent); color: var(--ink); }
-.mdm-side-tools { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
-.mdm-side-tools .select-input { flex: 1 1 6.5rem; min-width: 6.5rem; min-height: var(--btn-min-h, 2.5rem); }
-.mdm-side-tools #mdm-count { flex: 0 0 auto; margin-left: auto; white-space: nowrap; text-align: right; }
+/* 侧栏顶部：搜索 / 排序 / 分组 一行图标，几乎不占高度 */
+.mdm-side-icons { display: flex; align-items: center; gap: 0.3rem; flex: none; }
+.mdm-icon-btn {
+  flex: none; width: 2rem; height: 2rem; padding: 0; line-height: 1;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 1rem; border: 1px solid var(--line); border-radius: 8px;
+}
+.mdm-icon-btn.is-on { color: var(--accent); border-color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, transparent); }
+/* 浮层（搜索 / 排序 / 分组）：fixed 定位，由 JS 摆到按钮下方，避免被侧栏 overflow 裁掉 */
+.mdm-pop {
+  position: fixed; z-index: 80;
+  background: var(--panel-strong, var(--bg-0)); border: 1px solid var(--line); border-radius: 10px;
+  padding: 0.35rem; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+.mdm-pop[hidden] { display: none !important; }
+.mdm-menu-pop { display: flex; flex-direction: column; min-width: 9rem; }
+.mdm-menu-pop button {
+  text-align: left; padding: 0.35rem 0.6rem; border: none; background: transparent; color: var(--ink);
+  border-radius: 7px; cursor: pointer; font-size: 0.85rem; white-space: nowrap;
+}
+.mdm-menu-pop button:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
+.mdm-menu-pop button[aria-checked="true"] { color: var(--accent); }
+.mdm-search-meta { padding: 0.25rem 0.4rem 0.1rem; }
+.mdm-search-results { display: flex; flex-direction: column; gap: 0.15rem; max-height: min(60vh, 22rem); overflow-y: auto; }
+.mdm-sr {
+  display: flex; flex-direction: column; gap: 0.1rem; text-align: left; width: 100%;
+  padding: 0.35rem 0.45rem; border: 1px solid transparent; border-radius: 7px;
+  background: transparent; color: var(--ink); cursor: pointer;
+}
+.mdm-sr:hover { border-color: var(--line); }
+.mdm-sr.is-sel { background: color-mix(in srgb, var(--accent) 16%, transparent); border-color: var(--accent); }
+.mdm-sr-title { font-size: 0.86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mdm-sr-snippet { font-size: 0.78rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mdm-sr mark { background: color-mix(in srgb, var(--accent) 45%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
 .mdm-item mark { background: color-mix(in srgb, var(--accent) 45%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
 
 .mdm-layout {
@@ -60,6 +91,13 @@
   color: var(--muted); font-size: 0.78rem; cursor: pointer;
 }
 .mdm-chip:hover { color: var(--ink); border-color: var(--accent); }
+.mdm-tag-item { display: inline-flex; align-items: center; gap: 0.1rem; margin: 0 0.25rem 0.25rem 0; }
+.mdm-tag-item .mdm-chip { margin: 0; }
+.mdm-chip-more {
+  border: 1px solid transparent; border-radius: 999px; background: transparent; color: var(--muted);
+  cursor: pointer; font-size: 0.78rem; line-height: 1; padding: 0.15rem 0.35rem;
+}
+.mdm-chip-more:hover { color: var(--accent); border-color: var(--accent); }
 .mdm-chip.is-active { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--ink); border-color: var(--accent); }
 .mdm-list { display: flex; flex-direction: column; gap: 0.25rem; margin-top: 0.35rem; }
 .mdm-batchbar { display: flex; flex-wrap: wrap; gap: 0.3rem; align-items: center; padding: 0.3rem 0.4rem; border: 1px solid var(--accent); border-radius: 8px; margin-top: 0.35rem; }
@@ -107,7 +145,6 @@
 .mdm-meta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding: 0.35rem 0.55rem; border-bottom: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
 .mdm-meta-row > label { color: var(--muted); }
 .mdm-meta-row #mdm-doc-stats { flex: 0 0 auto; margin-left: auto; white-space: nowrap; }
-.mdm-cat { min-width: 9rem; padding: 0.25rem 0.45rem; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--ink); }
 .mdm-tag-chips { display: inline-flex; flex-wrap: wrap; gap: 0.25rem; }
 .mdm-tag { display: inline-flex; align-items: center; gap: 0.15rem; padding: 0.05rem 0.4rem; border-radius: 999px; background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--ink); font-size: 0.78rem; }
 .mdm-tag-x { border: none; background: none; color: var(--muted); cursor: pointer; font-size: 0.9rem; line-height: 1; padding: 0 0.1rem; }

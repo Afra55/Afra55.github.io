@@ -20,9 +20,8 @@ t("slugify 基本", () => {
 });
 
 t("parseFrontMatter", () => {
-  const r = P.parseFrontMatter("---\ntitle: 标题\ncategory: 分类\ntags: [a, b]\n---\n\n正文");
+  const r = P.parseFrontMatter("---\ntitle: 标题\ntags: [a, b]\n---\n\n正文");
   assert.strictEqual(r.title, "标题");
-  assert.strictEqual(r.category, "分类");
   assert.deepStrictEqual(r.tags, ["a", "b"]);
   assert.strictEqual(r.body.trim(), "正文");
 
@@ -107,12 +106,11 @@ t("表格对齐与无表头", () => {
   );
 });
 
-t("搜索语法 tag:/cat:", () => {
+t("搜索语法 tag:", () => {
   const a = P.parseSearch("tag:工作 报告");
   assert.deepStrictEqual(a.tags, ["工作"]);
   assert.strictEqual(a.q, "报告");
-  const b = P.parseSearch("cat:笔记 tag:\"a b\"");
-  assert.deepStrictEqual(b.cats, ["笔记"]);
+  const b = P.parseSearch("tag:\"a b\"");
   assert.deepStrictEqual(b.tags, ["a b"]);
   assert.strictEqual(b.q, "");
   assert.strictEqual(P.parseSearch("普通搜索").q, "普通搜索");
@@ -127,10 +125,9 @@ t("joinDocPath 拼接文档路径", () => {
 });
 
 t("front-matter tags 多行 YAML 列表", () => {
-  const r = P.parseFrontMatter("---\ntitle: T\ntags:\n  - a\n  - b\ncategory: C\n---\nbody");
+  const r = P.parseFrontMatter("---\ntitle: T\ntags:\n  - a\n  - b\n---\nbody");
   assert.deepStrictEqual(r.tags, ["a", "b"]);
   assert.strictEqual(r.title, "T");
-  assert.strictEqual(r.category, "C");
   const r2 = P.parseFrontMatter("---\ntags: a, b\ntag: c\n---\nx");
   assert.deepStrictEqual(r2.tags, ["c"]);
   const r3 = P.parseFrontMatter("---\ntags: [a, b]\n---\nx");

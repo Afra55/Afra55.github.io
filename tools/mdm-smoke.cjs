@@ -225,29 +225,30 @@ async function browserChecks() {
     const listCount = await page.$$eval("#mdm-list [data-id]", (els) => els.length);
     assert(listCount === 1, `list count ${listCount}`);
 
-    // 6) 搜索：命中 1 篇；无结果时列表显示空提示
+    // 6) 搜索浮层：全库搜标题/正文，出结果（标题 + 命中片段），列表本身不被筛选
+    await page.click("#mdm-search-toggle");
+    await page.waitForSelector("#mdm-search-pop:not([hidden]) #mdm-search", { timeout: 10000 });
     await page.click("#mdm-search");
     await page.keyboard.type("冒烟文档");
     await page.waitForFunction(
       () => {
-        const items = document.querySelectorAll("#mdm-list [data-id]").length;
-        const c = document.getElementById("mdm-count")?.textContent || "";
-        return items === 1 && /\b1\b/.test(c);
+        const hits = document.querySelectorAll("#mdm-search-results [data-sr]").length;
+        const meta = document.getElementById("mdm-search-meta")?.textContent || "";
+        return hits === 1 && /匹配\s*1\s*篇/.test(meta);
       },
-      { timeout: 15000 }
+      { timeout: 20000 }
     );
     console.log("STEP search-hit");
+    const listAfterSearch = await page.$$eval("#mdm-list [data-id]", (els) => els.length);
+    assert(listAfterSearch === 1, `list should stay unfiltered, got ${listAfterSearch}`);
     await page.click("#mdm-search", { clickCount: 3 });
     await page.keyboard.type("zzz不存在zzz");
     await page.waitForFunction(
-      () => {
-        const items = document.querySelectorAll("#mdm-list [data-id]").length;
-        const t = document.getElementById("mdm-list")?.textContent || "";
-        return items === 0 && /没有匹配/.test(t);
-      },
-      { timeout: 15000 }
+      () => /无匹配/.test(document.getElementById("mdm-search-results")?.textContent || ""),
+      { timeout: 20000 }
     );
     console.log("STEP search-empty");
+    await page.keyboard.press("Escape");
     await page.evaluate(() => {
       const s = document.getElementById("mdm-search");
       if (s) {

@@ -116,20 +116,20 @@
       sort: "order",
       groupBy: (() => {
         try {
-          return localStorage.getItem("devtools-mdm-group") === "cat" ? "cat" : "none";
+          return localStorage.getItem("devtools-mdm-group") === "tag" ? "tag" : "none";
         } catch (_) {
           return "none";
         }
       })(),
-      listLimit: 300,
-    activeCat: "all",
     activeTag: "",
     viewMode: "edit",
     previewTimer: 0,
     previewStale: false,
     autoSaveTimer: 0,
     ftTimer: 0,
-    searchMatches: null,
+    searchHits: null,
+    searchQuery: "",
+    searchSel: 0,
     bodyCache: new Map(),
     persistedIdx: new Map(),
     mermaidCache: new Map(),
@@ -181,7 +181,7 @@
   } catch (_) {}
 
   function emptyIndex() {
-    return { version: 1, cats: [], tags: [], items: [] };
+    return { version: 1, tags: [], items: [] };
   }
 
   function readIndexRaw() {
@@ -229,13 +229,17 @@
       error: $("#mdm-error"),
       conflict: $("#mdm-conflict"),
       layout: $("#mdm-layout"),
+      searchToggle: $("#mdm-search-toggle"),
+      searchPop: $("#mdm-search-pop"),
       search: $("#mdm-search"),
-      sort: $("#mdm-sort"),
-      group: $("#mdm-group"),
+      searchMeta: $("#mdm-search-meta"),
+      searchResults: $("#mdm-search-results"),
+      sortToggle: $("#mdm-sort-toggle"),
+      sortMenu: $("#mdm-sort-menu"),
+      groupToggle: $("#mdm-group-toggle"),
+      groupMenu: $("#mdm-group-menu"),
       batchbar: $("#mdm-batchbar"),
       batchCount: $("#mdm-batch-count"),
-      count: $("#mdm-count"),
-      cats: $("#mdm-cats"),
       tags: $("#mdm-tags"),
       list: $("#mdm-list"),
       listWrap: $("#mdm-list-wrap"),
@@ -256,8 +260,6 @@
       imgCompress: $("#mdm-img-compress"),
       saveStatus: $("#mdm-save-status"),
       docStats: $("#mdm-doc-stats"),
-      cat: $("#mdm-cat"),
-      catList: $("#mdm-cat-list"),
       tagChips: $("#mdm-tag-chips"),
       tagInput: $("#mdm-tag-input"),
       tagList: $("#mdm-tag-list"),
@@ -502,17 +504,6 @@
       return (state.index?.items || []).find((x) => x.id === id) || null;
     }
 
-    function ensureCat(name) {
-      const n = String(name || "").trim();
-      if (!n) return "";
-      let c = state.index.cats.find((x) => x.name === n);
-      if (!c) {
-        c = { id: uid(), name: n };
-        state.index.cats.push(c);
-      }
-      return c.id;
-    }
-
     function ensureTag(name) {
       const n = String(name || "").trim();
       if (!n) return "";
@@ -547,57 +538,24 @@
       if (n) toast(`已同步 ${n} 篇文档的标签`);
     }
 
-    async function manageCat(id) {
-      const cat = state.index.cats.find((c) => c.id === id);
-      if (!cat) return;
-      const name = window.prompt(`分类「${cat.name}」：改名字（留空取消，输入 - 删除）`, cat.name);
-      if (name === null) return;
-      const v = name.trim();
-      if (!v || v === cat.name) return;
-      const affected = state.index.items.filter((it) => it.catId === id);
-      if (v === "-") {
-        if (!window.confirm(`删除分类「${cat.name}」？其文档会变为未分类`)) return;
-        state.index.cats = state.index.cats.filter((c) => c.id !== id);
-        for (const it of state.index.items) if (it.catId === id) it.catId = "";
-        if (state.activeCat === id) state.activeCat = "all";
-      } else {
-        cat.name = v;
-      }
-      await saveIndexToStorage();
-      const n = await refreshFrontMatter(affected);
-      renderSidebar();
-      renderMeta();
-      if (n) toast(`已同步 ${n} 篇文档的分类`);
-    }
-
-    /** 解析搜索串：支持 tag:xxx / cat:xxx（也接受 标签:/分类:），其余为正文关键词 */
+    /** 解析搜索串：支持 tag:xxx（也接受 标签:），其余为正文关键词 */
     function parseSearch(raw) {
       if (MP.parseSearch) return MP.parseSearch(raw);
       const s = String(raw || "").trim();
-      return { q: s.toLowerCase(), tags: [], cats: [] };
+      return { q: s.toLowerCase(), tags: [] };
     }
 
     // ---- rendering: sidebar ----
     function filteredItems() {
-      const { q, tags, cats } = parseSearch(state.search);
-      const ft = state.searchMatches;
+      const { tags } = parseSearch(state.search);
       return (state.index.items || [])
         .filter((it) => {
-          if (state.activeCat !== "all" && it.catId !== state.activeCat) return false;
           if (state.activeTag && !(it.tagIds || []).includes(state.activeTag)) return false;
-          if (cats.length) {
-            const name = (state.index.cats.find((c) => c.id === it.catId)?.name || "").toLowerCase();
-            if (!cats.some((c) => name.includes(c))) return false;
-          }
           if (tags.length) {
             const names = (it.tagIds || []).map((t) =>
               String(state.index.tags.find((x) => x.id === t)?.name || "").toLowerCase()
             );
             if (!tags.every((t) => names.some((n) => n.includes(t)))) return false;
-          }
-          if (q) {
-            const hay = `${it.title} ${it.excerpt || ""}`.toLowerCase();
-            if (!hay.includes(q) && !(ft && ft.has(it.id))) return false;
           }
           return true;
         })
@@ -674,24 +632,41 @@
         }
       } catch (_) {}
     }
-    function scheduleFullTextSearch() {
+    // ---- 搜索浮层：全库搜标题 + 正文，出结果（标题 + 命中片段） ----
+    function scheduleSearch() {
       window.clearTimeout(state.ftTimer);
-      const q = parseSearch(state.search).q;
-      if (q.length < 2) {
-        state.searchMatches = null;
-        renderSidebar();
+      const q = state.search.trim();
+      if (!q) {
+        state.searchHits = null;
+        state.searchQuery = "";
+        state.searchSel = 0;
+        renderSearchResults();
         return;
       }
-      state.ftTimer = window.setTimeout(() => void runFullTextSearch(q), 500);
+      els.searchMeta && (els.searchMeta.textContent = "搜索中…");
+      state.ftTimer = window.setTimeout(() => void runSearch(q), 300);
     }
-    async function runFullTextSearch(q) {
+    function searchSnippet(text, ql) {
+      const body = String(text || "");
+      const bi = body.toLowerCase().indexOf(ql);
+      if (bi < 0) return body.replace(/\s+/g, " ").trim().slice(0, 70);
+      const start = Math.max(0, bi - 24);
+      return (start > 0 ? "…" : "") + body.slice(start, bi + ql.length + 46).replace(/\s+/g, " ").trim();
+    }
+    async function runSearch(q) {
+      const ql = q.toLowerCase();
       const items = state.index.items || [];
-      const matched = new Set();
+      const hits = [];
       const need = [];
+      const push = (it, text) => {
+        const title = String(it.title || "");
+        const inTitle = title.toLowerCase().includes(ql);
+        hits.push({ id: it.id, title, inTitle, snippet: searchSnippet(text, ql) });
+      };
       for (const it of items) {
         const cached = state.bodyCache.has(it.id) ? state.bodyCache.get(it.id) : state.persistedIdx.get(it.id);
         if (cached != null) {
-          if (String(cached).toLowerCase().includes(q)) matched.add(it.id);
+          if (String(it.title || "").toLowerCase().includes(ql) || String(cached).toLowerCase().includes(ql)) push(it, cached);
         } else need.push(it);
       }
       if (need.length) {
@@ -699,18 +674,17 @@
         let done = 0;
         const total = need.length;
         const tick = () => {
-          if (els.count) els.count.textContent = `扫描 ${done}/${total}…`;
+          if (state.search.trim() === q) els.searchMeta && (els.searchMeta.textContent = `扫描 ${done}/${total}…`);
         };
         tick();
         const worker = async () => {
           while (i < need.length) {
-            // 查询已变 → 立刻停止这次扫描
-            if (parseSearch(state.search).q !== q) return;
+            if (state.search.trim() !== q) return;
             const it = need[i++];
             try {
               const t = await readDocText(it);
               state.bodyCache.set(it.id, t);
-              if (t.toLowerCase().includes(q)) matched.add(it.id);
+              if (String(it.title || "").toLowerCase().includes(ql) || t.toLowerCase().includes(ql)) push(it, t);
             } catch (_) {}
             done += 1;
             if (done % 20 === 0) tick();
@@ -718,20 +692,72 @@
         };
         await Promise.all(Array.from({ length: 6 }, worker));
       }
-      if (state.search.trim().toLowerCase() !== q) return;
-      state.searchMatches = matched;
+      if (state.search.trim() !== q) return;
+      hits.sort((a, b) => (a.inTitle === b.inTitle ? 0 : a.inTitle ? -1 : 1));
+      state.searchHits = hits;
+      state.searchQuery = ql;
+      state.searchSel = 0;
       // 控制正文缓存规模（简单 LRU：保留最近 300 篇）
       if (state.bodyCache.size > 400) {
         const keys = [...state.bodyCache.keys()];
         for (let i = 0; i < keys.length - 300; i++) state.bodyCache.delete(keys[i]);
       }
-      renderSidebar();
-      setSaveStatus(`全文匹配 ${matched.size} 篇`);
+      renderSearchResults();
+    }
+    const SEARCH_MAX = 50;
+    function renderSearchResults() {
+      const box = els.searchResults;
+      if (!box) return;
+      if (!state.search.trim()) {
+        if (els.searchMeta) els.searchMeta.textContent = "输入关键词，搜标题与正文";
+        box.innerHTML = "";
+        return;
+      }
+      const q = state.searchQuery || "";
+      const hits = state.searchHits;
+      if (!hits) {
+        box.innerHTML = `<div class="hint tight">搜索中…</div>`;
+        return;
+      }
+      if (els.searchMeta) els.searchMeta.textContent = `匹配 ${hits.length} 篇`;
+      if (!hits.length) {
+        box.innerHTML = `<div class="hint tight">无匹配</div>`;
+        return;
+      }
+      const shown = hits.slice(0, SEARCH_MAX);
+      box.innerHTML =
+        shown
+          .map(
+            (h, i) =>
+              `<button type="button" role="option" aria-selected="${i === state.searchSel}" class="mdm-sr${
+                i === state.searchSel ? " is-sel" : ""
+              }" data-sr="${escapeHtml(h.id)}">
+                <span class="mdm-sr-title">${hl(h.title || "未命名", q)}</span>
+                <span class="mdm-sr-snippet">${hl(h.snippet || "", q)}</span>
+              </button>`
+          )
+          .join("") +
+        (hits.length > SEARCH_MAX ? `<div class="hint tight">仅显示前 ${SEARCH_MAX} 条，继续输入可缩小范围</div>` : "");
+      const sel = box.querySelector(".is-sel");
+      if (sel) sel.scrollIntoView({ block: "nearest" });
+    }
+    /** 打开搜索结果：切到该文档并把编辑器定位到命中处 */
+    async function openSearchHit(id) {
+      const q = state.searchQuery;
+      closePopovers();
+      await openDoc(id);
+      if (!q) return;
+      const view = state.view;
+      if (!view) return;
+      const text = view.state.doc.toString();
+      const idx = text.toLowerCase().indexOf(q);
+      if (idx < 0) return;
+      view.dispatch({ selection: { anchor: idx, head: idx + q.length }, scrollIntoView: true });
+      view.focus();
     }
 
     function renderSidebar() {
       if (state.trashMode) {
-        if (els.cats) els.cats.innerHTML = "";
         if (els.tags) els.tags.innerHTML = "";
         if (els.list) {
           els.list.innerHTML =
@@ -754,7 +780,6 @@
         return;
       }
       if (state.historyMode) {
-        if (els.cats) els.cats.innerHTML = "";
         if (els.tags) els.tags.innerHTML = "";
         if (els.list) {
           els.list.innerHTML =
@@ -777,18 +802,6 @@
         return;
       }
       const items = filteredItems();
-      if (els.cats) {
-        const cats = state.index.cats || [];
-        els.cats.innerHTML =
-          `<div class="mdm-group-title">分类</div>` +
-          `<button type="button" class="mdm-chip${state.activeCat === "all" ? " is-active" : ""}" data-cat="all">全部 (${(state.index.items || []).length})</button>` +
-          cats
-            .map((c) => {
-              const n = (state.index.items || []).filter((x) => x.catId === c.id).length;
-              return `<button type="button" class="mdm-chip${state.activeCat === c.id ? " is-active" : ""}" data-cat="${escapeHtml(c.id)}">${escapeHtml(c.name)} (${n})</button>`;
-            })
-            .join("");
-      }
       if (els.tags) {
         const tags = state.index.tags || [];
         els.tags.innerHTML =
@@ -797,7 +810,13 @@
             ? tags
                 .map(
                   (t) =>
-                    `<button type="button" class="mdm-chip${state.activeTag === t.id ? " is-active" : ""}" data-tag="${escapeHtml(t.id)}">#${escapeHtml(t.name)}</button>`
+                    `<span class="mdm-tag-item"><button type="button" class="mdm-chip${
+                      state.activeTag === t.id ? " is-active" : ""
+                    }" data-tag="${escapeHtml(t.id)}">#${escapeHtml(
+                      t.name
+                    )}</button><button type="button" class="mdm-chip-more" data-tag-manage="${escapeHtml(
+                      t.id
+                    )}" title="改名 / 删除标签" aria-label="管理标签">⋯</button></span>`
                 )
                 .join("")
             : `<span class="hint tight">暂无标签</span>`);
@@ -908,13 +927,12 @@
 
     /** 列表项 meta 文案（细粒度更新用，与 itemHtml 保持一致） */
     function itemMetaText(it) {
-      const cat = state.index.cats.find((c) => c.id === it.catId);
       const tags = (it.tagIds || [])
         .map((tid) => state.index.tags.find((t) => t.id === tid)?.name)
         .filter(Boolean)
         .map((n) => `#${n}`)
         .join(" ");
-      return [it.pinned ? "📌" : "", cat ? cat.name : "", tags, fmtWhen(it.updatedAt)].filter(Boolean).join(" · ");
+      return [it.pinned ? "📌" : "", tags, fmtWhen(it.updatedAt)].filter(Boolean).join(" · ");
     }
 
     /** 只更新某一行的标题/副标题/悬停名（保存时不整表重建） */
@@ -932,7 +950,6 @@
 
     function itemHtml(it) {
       const q = parseSearch(state.search).q;
-      const cat = state.index.cats.find((c) => c.id === it.catId);
       const tags = (it.tagIds || [])
         .map((tid) => state.index.tags.find((t) => t.id === tid)?.name)
         .filter(Boolean)
@@ -949,7 +966,6 @@
           <span class="mdm-item-title">${hl(it.title || "未命名", q)}</span>
           <span class="mdm-item-meta hint tight">${[
             it.pinned ? "📌" : "",
-            cat ? escapeHtml(cat.name) : "",
             tags,
             fmtWhen(it.updatedAt),
           ]
@@ -965,59 +981,66 @@
     function renderList() {
       if (!els.list) return;
       const items = filteredItems();
-      if (els.count) {
-        const total = (state.index.items || []).length;
-        els.count.textContent = items.length === total ? `${total} 篇` : `${items.length} / ${total} 篇`;
-      }
       const wrap = els.listWrap;
-      // 搜索时结果分页（避免一次渲染上千行）
-      const searching = Boolean(parseSearch(state.search).q);
-      const limited = searching && items.length > state.listLimit;
-      const shown = limited ? items.slice(0, state.listLimit) : items;
-      const moreHtml = limited
-        ? `<button type="button" class="ghost-btn mdm-more-btn" data-more-list="1">显示更多（还有 ${
-            items.length - state.listLimit
-          } 条）</button>`
-        : "";
-      // 按分类分组：有分组头，行高不再固定 → 不虚拟化，并限制总量
-      if (state.groupBy === "cat") {
+      // 按标签分组：多标签文档在每个标签下都出现；行高不固定 → 不虚拟化，并限制总量
+      if (state.groupBy === "tag") {
         const MAX_GROUPED = 800;
-        const cap = shown.slice(0, MAX_GROUPED);
-        const groups = new Map();
-        for (const it of cap) {
-          const key = it.catId || "";
-          if (!groups.has(key)) groups.set(key, []);
-          groups.get(key).push(it);
+        const groups = new Map(); // tagId -> items[]
+        for (const t of state.index.tags || []) groups.set(t.id, []);
+        const untagged = [];
+        for (const it of items) {
+          const ids = [...new Set(it.tagIds || [])];
+          if (!ids.length) {
+            untagged.push(it);
+            continue;
+          }
+          for (const tid of ids) {
+            if (!groups.has(tid)) groups.set(tid, []);
+            groups.get(tid).push(it);
+          }
         }
         const parts = [];
-        for (const [key, list] of groups) {
-          const cat = state.index.cats.find((c) => c.id === key);
-          parts.push(`<div class="mdm-group-head">${escapeHtml(cat ? cat.name : "未分类")} · ${list.length}</div>`);
+        let rows = 0;
+        let truncated = false;
+        for (const [tid, list] of groups) {
+          if (!list.length) continue;
+          if (rows + list.length > MAX_GROUPED) {
+            truncated = true;
+            break;
+          }
+          rows += list.length;
+          const tag = (state.index.tags || []).find((t) => t.id === tid);
+          parts.push(
+            `<div class="mdm-group-head" data-group-tag="${escapeHtml(tid)}">#${escapeHtml(
+              tag ? tag.name : "未知"
+            )} · ${list.length}</div>`
+          );
           parts.push(list.map(itemHtml).join(""));
         }
-        if (cap.length < shown.length || shown.length < items.length) {
-          parts.push(`<div class="hint tight">仅显示前 ${cap.length} 条，可用搜索缩小范围</div>`);
+        if (untagged.length && rows < MAX_GROUPED) {
+          parts.push(`<div class="mdm-group-head">未标签 · ${untagged.length}</div>`);
+          parts.push(untagged.map(itemHtml).join(""));
         }
-        els.list.innerHTML = parts.join("");
+        if (truncated) parts.push(`<div class="hint tight">分组内容过多，仅显示前 ${rows} 条，可用标签筛选缩小范围</div>`);
+        els.list.innerHTML = parts.length ? parts.join("") : `<span class="hint tight">还没有文档</span>`;
         return;
       }
-      if (!wrap || shown.length <= 60) {
+      if (!wrap || items.length <= 60) {
         els.list.innerHTML = items.length
           ? items.map(itemHtml).join("")
-          : `<span class="hint tight">没有匹配的文档</span>`;
+          : `<span class="hint tight">还没有文档</span>`;
         return;
       }
       const viewH = wrap.clientHeight || 400;
-      const total = shown.length;
+      const total = items.length;
       const start = Math.max(0, Math.floor(wrap.scrollTop / LIST_ROW_H) - 6);
       const end = Math.min(total, start + Math.ceil(viewH / LIST_ROW_H) + 12);
       const topPad = start * LIST_ROW_H;
       const bottomPad = Math.max(0, (total - end) * LIST_ROW_H);
       els.list.innerHTML =
         `<div style="height:${topPad}px" aria-hidden="true"></div>` +
-        shown.slice(start, end).map(itemHtml).join("") +
-        `<div style="height:${bottomPad}px" aria-hidden="true"></div>` +
-        moreHtml;
+        items.slice(start, end).map(itemHtml).join("") +
+        `<div style="height:${bottomPad}px" aria-hidden="true"></div>`;
     }
 
     // ---- editor (CM6) ----
@@ -2124,9 +2147,8 @@
             title,
             titleSaved: title,
             fileName: name,
-            fmHead: fm.head || "",
-            catId: ensureCat(fm.category),
-            tagIds: (fm.tags || []).map((t) => ensureTag(t)).filter(Boolean),
+              fmHead: fm.head || "",
+              tagIds: (fm.tags || []).map((t) => ensureTag(t)).filter(Boolean),
             createdAt: Date.now(),
             updatedAt: Date.now(),
             size: new Blob([fm.body]).size,
@@ -2230,10 +2252,8 @@
           }
         }
         const known = new Set((state.index.items || []).map((x) => x.fileName));
-        if (indexJson && Array.isArray(indexJson.items)) {
-          for (const c of indexJson.cats || [])
-            if (c?.id && !state.index.cats.find((x) => x.id === c.id)) state.index.cats.push(c);
-          for (const t of indexJson.tags || [])
+          if (indexJson && Array.isArray(indexJson.items)) {
+            for (const t of indexJson.tags || [])
             if (t?.id && !state.index.tags.find((x) => x.id === t.id)) state.index.tags.push(t);
           for (const it of indexJson.items) {
             if (!it?.fileName || known.has(it.fileName)) continue;
@@ -2388,9 +2408,8 @@
           id: uid(),
           title: title || fm.title || orig.replace(/\.[^.]+$/, ""),
           titleSaved: title || fm.title || orig.replace(/\.[^.]+$/, ""),
-          fileName: uniqueFileName(orig, ""),
-          catId: ensureCat(fm.category),
-          tagIds: (fm.tags || []).map((t) => ensureTag(t)).filter(Boolean),
+            fileName: uniqueFileName(orig, ""),
+            tagIds: (fm.tags || []).map((t) => ensureTag(t)).filter(Boolean),
           createdAt: Date.now(),
           updatedAt: Date.now(),
           size: new Blob([fm.body]).size,
@@ -3207,10 +3226,9 @@
       const item = {
         id: uid(),
         title: "未命名",
-        titleSaved: "未命名",
-        fileName: "",
-        catId: "",
-        tagIds: [],
+          titleSaved: "未命名",
+          fileName: "",
+          tagIds: [],
         createdAt: Date.now(),
         updatedAt: Date.now(),
         size: 0,
@@ -3405,7 +3423,7 @@
       state.index.items = state.index.items.filter((x) => x.id !== item.id);
       state.bodyCache.delete(item.id);
       state.persistedIdx.delete(item.id);
-      state.searchMatches = null;
+      if (state.search.trim()) scheduleSearch();
       normalizeOrders();
       if (state.currentId === item.id) {
         state.currentId = "";
@@ -3796,18 +3814,11 @@
     // ---- 分类 / 标签 ----
     function renderMeta() {
       const item = findItem(state.currentId);
-      if (els.catList) {
-        els.catList.innerHTML = (state.index.cats || [])
-          .map((c) => `<option value="${escapeHtml(c.name)}"></option>`)
-          .join("");
-      }
       if (els.tagList) {
         els.tagList.innerHTML = (state.index.tags || [])
           .map((t) => `<option value="${escapeHtml(t.name)}"></option>`)
           .join("");
       }
-      const cat = item ? (state.index.cats || []).find((c) => c.id === item.catId) : null;
-      if (els.cat) els.cat.value = cat ? cat.name : "";
       if (els.tagChips) {
         const tags = item
           ? (item.tagIds || []).map((tid) => (state.index.tags || []).find((t) => t.id === tid)).filter(Boolean)
@@ -3838,14 +3849,16 @@
       };
     } catch (_) {}
 
-    function setCategory(name) {
-      const item = findItem(state.currentId);
-      if (!item) return;
-      const n = String(name || "").trim();
-      item.catId = n ? ensureCat(n) : "";
-      persistIndexSoon();
-      renderSidebar();
-      renderMeta();
+    /** 标签变化后立即把 front-matter 写回文档（否则外部编辑器会看到旧的 tags） */
+    async function syncTagToFile(item) {
+      try {
+        const raw = await readDocText(item);
+        const fm = parseFrontMatter(raw);
+        await writeDocText(item, buildFrontMatterBlock({ ...item, fmHead: fm.head }, fm.body));
+        state.bodyCache.set(item.id, fm.body);
+        state.persistedIdx.delete(item.id);
+        refsCache.delete(item.id);
+      } catch (_) {}
     }
 
     function addTag(name) {
@@ -3856,8 +3869,10 @@
       const id = ensureTag(n);
       if (!id) return;
       item.tagIds = item.tagIds || [];
-      if (!item.tagIds.includes(id)) item.tagIds.push(id);
+      if (item.tagIds.includes(id)) return;
+      item.tagIds.push(id);
       persistIndexSoon();
+      void syncTagToFile(item);
       renderSidebar();
       renderMeta();
     }
@@ -3865,8 +3880,11 @@
     function removeTag(id) {
       const item = findItem(state.currentId);
       if (!item) return;
+      const before = (item.tagIds || []).length;
       item.tagIds = (item.tagIds || []).filter((x) => x !== id);
+      if (item.tagIds.length === before) return;
       persistIndexSoon();
+      void syncTagToFile(item);
       renderSidebar();
       renderMeta();
     }
@@ -3911,9 +3929,8 @@
           id: uid(),
           title,
           titleSaved: title,
-          fileName: uniqueFileName(title, ""),
-          catId: ensureCat(fm.category),
-          tagIds: (fm.tags || []).map((t) => ensureTag(t)).filter(Boolean),
+            fileName: uniqueFileName(title, ""),
+            tagIds: (fm.tags || []).map((t) => ensureTag(t)).filter(Boolean),
           createdAt: Date.now(),
           updatedAt: Date.now(),
           size: new Blob([res.text]).size,
@@ -4000,20 +4017,18 @@
         }
         if (line.trim()) extra.push(line);
       }
-      const cat = state.index.cats.find((c) => c.id === item.catId);
       const tags = (item.tagIds || [])
         .map((t) => state.index.tags.find((x) => x.id === t)?.name)
         .filter(Boolean);
       const head = [
         `title: ${item.title || "未命名"}`,
-        `category: ${cat ? cat.name : ""}`,
         `tags: [${tags.join(", ")}]`,
         ...extra,
       ].join("\n");
       return `---\n${head}\n---\n\n${String(body || "").replace(/^\s*\n+/, "")}`;
     }
 
-    /** 分类/标签改名后，把受影响文档的 front-matter 重写为新名（仅原本就有 front-matter 的文件） */
+    /** 标签改名后，把受影响文档的 front-matter 重写为新名（仅原本就有 front-matter 的文件） */
     async function refreshFrontMatter(items) {
       let n = 0;
       for (const it of items) {
@@ -4034,8 +4049,8 @@
     function parseFrontMatter(text) {
       if (MP.parseFrontMatter) return MP.parseFrontMatter(text);
       const m = String(text || "").match(/^\uFEFF?---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-      if (!m) return { title: "", category: "", tags: [], body: text };
-      return { title: "", category: "", tags: [], body: m[2] };
+      if (!m) return { title: "", tags: [], body: text };
+      return { title: "", tags: [], body: m[2] };
     }
 
     // ---- export ----
@@ -4368,10 +4383,9 @@ a{color:${v.accent}}
       state.bodyCache.clear();
       refsCache.clear();
       state.persistedIdx.clear();
-      state.index = await loadIndexFromStorage();
-      if (!state.index || typeof state.index !== "object") state.index = emptyIndex();
-      state.index.cats = state.index.cats || [];
-      state.index.tags = state.index.tags || [];
+        state.index = await loadIndexFromStorage();
+        if (!state.index || typeof state.index !== "object") state.index = emptyIndex();
+        state.index.tags = state.index.tags || [];
       state.index.items = (state.index.items || []).map((it, i) => ({
         ...it,
         titleSaved: it.titleSaved == null ? it.title : it.titleSaved,
@@ -4442,20 +4456,150 @@ a{color:${v.accent}}
       e.target.value = "";
       if (f) void importLibrary(f);
     });
+    // ---- 侧栏图标：搜索浮层 / 排序 / 分组（fixed 定位，避免被侧栏 overflow 裁掉） ----
+    const SORT_OPTIONS = [
+      ["order", "自定义顺序"],
+      ["recent", "最近打开"],
+      ["title", "按标题"],
+      ["updated", "最近修改"],
+      ["size", "按大小"],
+    ];
+    const GROUP_OPTIONS = [
+      ["none", "不分组"],
+      ["tag", "按标签分组"],
+    ];
+    function closePopovers() {
+      [els.searchPop, els.sortMenu, els.groupMenu].forEach((p) => {
+        if (p) p.hidden = true;
+      });
+      els.searchToggle?.classList.remove("is-on");
+      els.sortToggle?.classList.remove("is-on");
+      els.groupToggle?.classList.remove("is-on");
+    }
+    function placePopover(pop, btn, minW) {
+      pop.hidden = false;
+      pop.style.minWidth = (minW || 200) + "px";
+      const r = btn.getBoundingClientRect();
+      const w = pop.offsetWidth || minW || 200;
+      const h = pop.offsetHeight || 0;
+      pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + "px";
+      const below = r.bottom + 6;
+      pop.style.top = (below + h > window.innerHeight - 8 && r.top - h - 6 > 8 ? r.top - h - 6 : below) + "px";
+    }
+    function buildMenus() {
+      if (els.sortMenu) {
+        els.sortMenu.innerHTML = SORT_OPTIONS.map(
+          ([v, l]) =>
+            `<button type="button" role="menuitemradio" aria-checked="${state.sort === v}" data-sort="${v}">${
+              state.sort === v ? "✓ " : ""
+            }${l}</button>`
+        ).join("");
+      }
+      if (els.groupMenu) {
+        els.groupMenu.innerHTML = GROUP_OPTIONS.map(
+          ([v, l]) =>
+            `<button type="button" role="menuitemradio" aria-checked="${state.groupBy === v}" data-group="${v}">${
+              state.groupBy === v ? "✓ " : ""
+            }${l}</button>`
+        ).join("");
+      }
+    }
+    function updateIconTitles() {
+      const s = (SORT_OPTIONS.find(([v]) => v === state.sort) || [])[1] || "";
+      const g = (GROUP_OPTIONS.find(([v]) => v === state.groupBy) || [])[1] || "";
+      if (els.sortToggle) els.sortToggle.title = `排序：${s}`;
+      if (els.groupToggle) els.groupToggle.title = `分组：${g}`;
+    }
+    function togglePopover(pop, btn, minW) {
+      const wasOpen = pop && !pop.hidden;
+      closePopovers();
+      if (!pop || wasOpen) return;
+      buildMenus();
+      placePopover(pop, btn, minW);
+      btn.classList.add("is-on");
+      if (pop === els.searchPop) {
+        renderSearchResults();
+        els.search?.focus();
+        els.search?.select?.();
+      }
+    }
+    els.searchToggle?.addEventListener("click", () => togglePopover(els.searchPop, els.searchToggle, 320));
+    els.sortToggle?.addEventListener("click", () => togglePopover(els.sortMenu, els.sortToggle, 160));
+    els.groupToggle?.addEventListener("click", () => togglePopover(els.groupMenu, els.groupToggle, 160));
+    els.sortMenu?.addEventListener("click", (e) => {
+      const b = e.target.closest?.("[data-sort]");
+      if (!b) return;
+      state.sort = b.dataset.sort;
+      try {
+        localStorage.setItem("devtools-mdm-sort", state.sort);
+      } catch (_) {}
+      updateIconTitles();
+      renderSidebar();
+      closePopovers();
+    });
+    els.groupMenu?.addEventListener("click", (e) => {
+      const b = e.target.closest?.("[data-group]");
+      if (!b) return;
+      state.groupBy = b.dataset.group === "tag" ? "tag" : "none";
+      try {
+        localStorage.setItem("devtools-mdm-group", state.groupBy);
+      } catch (_) {}
+      updateIconTitles();
+      renderList();
+      closePopovers();
+    });
     els.search?.addEventListener("input", () => {
       state.search = els.search.value;
-      state.searchMatches = null;
-      state.listLimit = 300; // 新查询重置分页
-      renderSidebar();
-      scheduleFullTextSearch();
+      state.searchSel = 0;
+      scheduleSearch();
     });
-    els.cats?.addEventListener("click", (e) => {
-      const b = e.target.closest?.("[data-cat]");
-      if (!b) return;
-      state.activeCat = b.dataset.cat;
-      renderSidebar();
+    els.search?.addEventListener("keydown", (e) => {
+      const hits = state.searchHits || [];
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        if (!hits.length) return;
+        const n = Math.min(hits.length, SEARCH_MAX);
+        state.searchSel = e.key === "ArrowDown" ? (state.searchSel + 1) % n : (state.searchSel - 1 + n) % n;
+        renderSearchResults();
+      } else if (e.key === "Enter") {
+        const h = hits[state.searchSel];
+        if (h) void openSearchHit(h.id);
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        closePopovers();
+      }
     });
-    els.tags?.addEventListener("click", (e) => {
+    els.searchResults?.addEventListener("click", (e) => {
+      const b = e.target.closest?.("[data-sr]");
+      if (b) void openSearchHit(b.dataset.sr);
+    });
+    document.addEventListener("click", (e) => {
+      if (e.target.closest?.("#mdm-search-pop, #mdm-sort-menu, #mdm-group-menu, #mdm-search-toggle, #mdm-sort-toggle, #mdm-group-toggle"))
+        return;
+      closePopovers();
+    });
+    window.addEventListener("resize", () => closePopovers());
+    document.addEventListener("keydown", (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "F" || e.key === "f")) {
+        e.preventDefault();
+        closePopovers();
+        if (!els.searchPop) return;
+        placePopover(els.searchPop, els.searchToggle, 320);
+        els.searchToggle?.classList.add("is-on");
+        renderSearchResults();
+        els.search?.focus();
+        els.search?.select?.();
+      } else if (e.key === "Escape" && els.searchPop && !els.searchPop.hidden) {
+        closePopovers();
+      }
+    });
+    updateIconTitles();
+      els.tags?.addEventListener("click", (e) => {
+      const m = e.target.closest?.("[data-tag-manage]");
+      if (m) {
+        void manageTag(m.dataset.tagManage);
+        return;
+      }
       const b = e.target.closest?.("[data-tag]");
       if (!b) return;
       state.activeTag = state.activeTag === b.dataset.tag ? "" : b.dataset.tag;
@@ -4466,12 +4610,6 @@ a{color:${v.accent}}
       if (!b) return;
       e.preventDefault();
       void manageTag(b.dataset.tag);
-    });
-    els.cats?.addEventListener("contextmenu", (e) => {
-      const b = e.target.closest?.("[data-cat]");
-      if (!b || b.dataset.cat === "all") return;
-      e.preventDefault();
-      void manageCat(b.dataset.cat);
     });
     els.list?.addEventListener("keydown", (e) => {
       if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
@@ -4491,32 +4629,7 @@ a{color:${v.accent}}
       }
       els.list?.querySelector(`[data-id="${nextItem.id}"]`)?.focus();
     });
-    if (els.sort) {
-      els.sort.value = state.sort;
-      els.sort.addEventListener("change", () => {
-        state.sort = els.sort.value;
-        try {
-          localStorage.setItem("devtools-mdm-sort", state.sort);
-        } catch (_) {}
-        renderSidebar();
-      });
-    }
-    if (els.group) {
-      els.group.value = state.groupBy;
-      els.group.addEventListener("change", () => {
-        state.groupBy = els.group.value === "cat" ? "cat" : "none";
-        try {
-          localStorage.setItem("devtools-mdm-group", state.groupBy);
-        } catch (_) {}
-        renderList();
-      });
-    }
     els.list?.addEventListener("click", (e) => {
-      if (e.target.closest?.("[data-more-list]")) {
-        state.listLimit += 300;
-        renderList();
-        return;
-      }
       const b = e.target.closest?.("[data-id]");
       if (!b) return;
       const id = b.dataset.id;
@@ -4746,17 +4859,29 @@ a{color:${v.accent}}
         toast(`已删除 ${ids.length} 篇`);
         return;
       }
-      if (act === "cat") {
-        const name = window.prompt("移动到分类（留空=未分类）：");
+      if (act === "untag") {
+        const name = window.prompt("要移除的标签名（留空取消）：");
         if (name === null) return;
-        const cid = name.trim() ? ensureCat(name) : "";
+        const v = String(name).trim().replace(/^#/, "").toLowerCase();
+        if (!v) return;
+        const tag = (state.index.tags || []).find((t) => String(t.name).toLowerCase() === v);
+        if (!tag) {
+          toast(`没有找到标签「${String(name).trim()}」`);
+          return;
+        }
+        let n = 0;
         for (const id of ids) {
           const it = findItem(id);
-          if (it) it.catId = cid;
+          if (it && (it.tagIds || []).includes(tag.id)) {
+            it.tagIds = it.tagIds.filter((x) => x !== tag.id);
+            n += 1;
+            void syncTagToFile(it);
+          }
         }
         await saveIndexToStorage();
         renderSidebar();
-        toast(`已移动 ${ids.length} 篇`);
+        renderMeta();
+        toast(`已从 ${n} 篇移除标签 #${tag.name}`);
         return;
       }
       if (act === "rename") {
@@ -4997,9 +5122,7 @@ a{color:${v.accent}}
       updateSaveBtn();
       scheduleAutoSave();
     });
-    els.cat?.addEventListener("change", () => setCategory(els.cat.value));
-    els.cat?.addEventListener("blur", () => setCategory(els.cat.value));
-    els.tagInput?.addEventListener("keydown", (e) => {
+      els.tagInput?.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === "," || e.key === "，") {
         e.preventDefault();
         addTag(els.tagInput.value);
@@ -5637,10 +5760,9 @@ a{color:${v.accent}}
       // 未绑定目录：显示上次缓存索引（若有），等用户选择
       const cached = readIndexRaw();
       if (cached) {
-        state.index = cached;
-        state.index.items = state.index.items || [];
-        state.index.cats = state.index.cats || [];
-        state.index.tags = state.index.tags || [];
+          state.index = cached;
+          state.index.items = state.index.items || [];
+          state.index.tags = state.index.tags || [];
         els.layout && (els.layout.hidden = false);
         els.dirLabel && (els.dirLabel.textContent = "存储：未连接（点「选择文件夹」）");
         renderSidebar();
