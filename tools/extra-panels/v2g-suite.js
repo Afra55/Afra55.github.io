@@ -1707,6 +1707,7 @@
         );
         let chosen = null;
         for (const f of fpsList) {
+          if (f < 12) continue; // 12fps 是流畅底线：主循环也不低于它（宁可多压一轮）
           const afford = Math.round(
             V2G_BLACKBOX_BASE_W *
               Math.min(4, Math.sqrt(rawTarget / Math.max(1, estBytesAt(f, V2G_BLACKBOX_BASE_W))))
