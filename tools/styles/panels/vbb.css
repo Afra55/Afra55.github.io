@@ -230,6 +230,7 @@
 .vbb-result-list .vsplit-clip-top .btn-row > * {
   flex: 1 1 0;
   min-width: 0;
+  box-sizing: border-box;
   text-align: center;
   white-space: nowrap;
 }
