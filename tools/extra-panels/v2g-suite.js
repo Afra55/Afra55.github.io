@@ -88,8 +88,8 @@
         const V2G_BLACKBOX_WIDTH_CAP = 720;
         /** 黑盒编码的硬宽度上限（一键黑盒可放宽到这里，短视频预算用不完时可换更高清晰度） */
         const V2G_ENCODE_HARD_W = 1280;
-        /** 智能分配的分辨率底线：某帧率若只能做到比这更窄，就换更低帧率 */
-        const V2G_BLACKBOX_MIN_ACCEPT_W = 480;
+        /** 智能分配的分辨率底线：某帧率若只能做到比这更窄，就换更低帧率（360 已够手机看清，别为了清晰把帧率压太低） */
+        const V2G_BLACKBOX_MIN_ACCEPT_W = 360;
       /** 源宽未知时的加宽兜底（等同不设上限） */
       const V2G_BLACKBOX_WIDTH_HARD_FALLBACK = 4096;
       const V2G_BLACKBOX_QUALITY = 5;
@@ -1510,15 +1510,21 @@
           if (!(cap > curFps)) return best;
           const width = Number(best.maxW) || V2G_BLACKBOX_BASE_W;
           let out = best;
-          // 帧率越高越流畅：预算有余就往更高帧率试
-          for (const f of [18, 20, 24, 30]) {
-            if (f <= curFps + 0.01 || f > cap) continue;
-            if (isAborted()) throw new Error("已取消");
-            onProgress(0.96, `提帧率试探 ${f}fps`);
-            const enc = await encodeAtWidthFps(f, width);
-            if (!enc?.blob || enc.blob.size > V2G_BLACKBOX_MAX_BYTES) break;
-            out = { ...enc, compressRounds: 0, maxW: width };
-          }
+          // 压缩后体积基本随帧率线性 → 直接算出能负担的最高帧率，只编一次
+          const curSize = best.blob.size || 1;
+          const maxF = curFps * ((V2G_BLACKBOX_MAX_BYTES * 0.98) / curSize);
+          const cands = fpsList
+            .filter((f) => f > curFps + 0.01 && f <= Math.min(cap, maxF + 0.01))
+            .sort((a, b) => b - a);
+          if (!cands.length) return best;
+          const f = cands[0];
+          if (isAborted()) throw new Error("已取消");
+          onProgress(0.96, `提帧率到 ${f}fps`);
+          const enc = await encodeAtWidthFps(f, width);
+          if (!enc?.blob) return best;
+          let cand = { ...enc, compressRounds: 0, maxW: width };
+          if (cand.blob.size > V2G_BLACKBOX_MAX_BYTES) cand = await compressAt(cand, f, true, 0.96);
+          if (cand.blob.size <= V2G_BLACKBOX_MAX_BYTES) out = cand;
           return out;
         }
 
@@ -1527,7 +1533,8 @@
           if (best.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return best;
           const atCap =
             (srcW > 0 && best.outW >= srcW - 2) || (Number(best.maxW) || 0) >= Number(hardMax) - 2;
-          if (!atCap) return best;
+          // 没到宽度上限时，只有体积明显偏小（<70%）才提帧率，避免为提帧率牺牲清晰度
+          if (!atCap && best.blob.size > V2G_BLACKBOX_MAX_BYTES * 0.7) return best;
           const srcFps = await detectSourceFps(file).catch(() => 0);
           return await raiseBlackboxFps(best, curFps, encodeAtWidthFps, srcFps);
         }
@@ -1657,7 +1664,8 @@
         }
   
         // ---- 智能分配：一次标定 → 预测各帧率能负担的宽度 → 选「帧率最高且宽度≥底线」的档 ----
-        const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.98);
+        // 压缩(gifsicle 减色/lossy)通常还能再省 ~2×，所以预算按 2 倍估算，避免过早放弃高帧率
+        const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 2);
         const srcCap = Math.min(srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK, V2G_ENCODE_HARD_W);
         const floorW = Math.min(V2G_BLACKBOX_MIN_ACCEPT_W, srcCap);
         const encodeAtWidthFps = (f, w) =>
@@ -1668,10 +1676,10 @@
             stageLabel: `${f}FPS·宽${w}`,
             onProgress: (local, text) => onProgress(0.92 + local * 0.05, text),
           });
-        const fpsTop = fpsList[0];
+        const fpsCalib = fpsList[fpsList.length - 1]; // 用最低帧率标定（帧数最少、最快），体积按帧数线性外推
         vbbLog(`[vbb-phase] 阶梯 fpsList=${JSON.stringify(fpsList)} srcFps=${srcFps} srcW=${srcW} seed=${Boolean(clipOpts.seed)}`);
-        onProgress(0.04, `标定 ${fpsTop} 帧/秒`);
-        const calib = await encodeAt(fpsTop, V2G_BLACKBOX_BASE_W, 0.04, 0.4, `标定${fpsTop}FPS`);
+        onProgress(0.04, `标定 ${fpsCalib} 帧/秒`);
+        const calib = await encodeAt(fpsCalib, V2G_BLACKBOX_BASE_W, 0.04, 0.4, `标定${fpsCalib}FPS`);
         tried.push(calib);
         // 体积近似 ∝ 帧数 × 像素数 → 一次标定即可预测其它帧率的可用宽度
         const calibW = Math.max(1, calib.outW || V2G_BLACKBOX_BASE_W);
@@ -1687,13 +1695,21 @@
             V2G_BLACKBOX_BASE_W *
               Math.min(4, Math.sqrt(targetBytes / Math.max(1, estBytesAt(f, V2G_BLACKBOX_BASE_W))))
           );
-          const width = Math.max(V2G_BLACKBOX_BASE_W, Math.min(srcCap, afford));
-          if (width >= floorW - 0.5) {
-            chosen = { fps: f, width };
+          // 用「实际能负担的宽度」判底线（不能先抬到 420 再判，否则高帧率永远胜出但需要暴力压缩）
+          if (afford >= floorW - 0.5) {
+            chosen = { fps: f, width: Math.max(V2G_BLACKBOX_BASE_W, Math.min(srcCap, afford)) };
             break;
           }
         }
-        if (!chosen) chosen = { fps: fpsList[fpsList.length - 1], width: V2G_BLACKBOX_BASE_W };
+        if (!chosen) {
+          // 连最低帧率都达不到底线（真实画面熵高时常见）→ 取最低帧率，并把预算尽量换成宽度
+          const fLow = fpsList[fpsList.length - 1];
+          const affordLow = Math.round(
+            V2G_BLACKBOX_BASE_W *
+              Math.min(4, Math.sqrt(targetBytes / Math.max(1, estBytesAt(fLow, V2G_BLACKBOX_BASE_W))))
+          );
+          chosen = { fps: fLow, width: Math.max(V2G_BLACKBOX_BASE_W, Math.min(srcCap, affordLow)) };
+        }
         vbbLog(
           `[vbb-phase] 选定 ${chosen.fps}fps 宽${chosen.width} · 标定 ${formatKb(
             calib.blob.size
@@ -1701,7 +1717,7 @@
         );
         onProgress(0.5, `${chosen.fps}FPS · 宽${chosen.width}`);
         let candidate =
-          chosen.fps === fpsTop && chosen.width <= V2G_BLACKBOX_BASE_W + 2
+          chosen.fps === fpsCalib && chosen.width <= V2G_BLACKBOX_BASE_W + 2
             ? calib
             : await encodeAt(chosen.fps, chosen.width, 0.5, 0.36, `${chosen.fps}FPS·宽${chosen.width}`);
         tried.push(candidate);
