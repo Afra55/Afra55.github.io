@@ -1530,13 +1530,24 @@
 
         async function finishBlackbox(best, curFps, encodeAtWidthFps, hardMax) {
           if (!best?.blob) return best;
-          if (best.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return best;
-          const atCap =
-            (srcW > 0 && best.outW >= srcW - 2) || (Number(best.maxW) || 0) >= Number(hardMax) - 2;
-          // 没到宽度上限时，只有体积明显偏小（<70%）才提帧率，避免为提帧率牺牲清晰度
-          if (!atCap && best.blob.size > V2G_BLACKBOX_MAX_BYTES * 0.7) return best;
+          if (best.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return best; // 已用满预算
+          let cur = best;
+          const atCap = () =>
+            (srcW > 0 && cur.outW >= srcW - 2) || (Number(cur.maxW) || 0) >= Number(hardMax) - 2;
+          // 1) 体积明显偏小（<70%）且没到宽度上限 → 先「自动增宽」（不加压缩轮数）
+          if (!atCap() && cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.7) {
+            onProgress(0.95, "体积有余 · 自动增宽");
+            const wider = await blackboxWidenBest(cur, (w) => encodeAtWidthFps(curFps, w), {
+              minW: Math.max(64, Number(cur.maxW) || V2G_BLACKBOX_BASE_W),
+              maxW: hardMax,
+            });
+            if (wider?.blob?.size) cur = wider;
+          }
+          if (cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return cur;
+          if (!atCap() && cur.blob.size > V2G_BLACKBOX_MAX_BYTES * 0.7) return cur;
+          // 2) 已到宽度上限（或增宽后仍有余额）→ 「自动提帧率」
           const srcFps = await detectSourceFps(file).catch(() => 0);
-          return await raiseBlackboxFps(best, curFps, encodeAtWidthFps, srcFps);
+          return await raiseBlackboxFps(cur, curFps, encodeAtWidthFps, srcFps);
         }
   
         const encodeAt = async (fps, maxW, progressBase, progressSpan, stageLabel, quality) => {
