@@ -89,7 +89,7 @@
         /** 黑盒编码的硬宽度上限（一键黑盒可放宽到这里，短视频预算用不完时可换更高清晰度） */
         const V2G_ENCODE_HARD_W = 1280;
         /** 智能分配的分辨率底线：某帧率若只能做到比这更窄，就换更低帧率（340 兼顾"少压缩"与录屏文字可读） */
-        const V2G_BLACKBOX_MIN_ACCEPT_W = 330;
+        const V2G_BLACKBOX_MIN_ACCEPT_W = 290;
       /** 源宽未知时的加宽兜底（等同不设上限） */
       const V2G_BLACKBOX_WIDTH_HARD_FALLBACK = 4096;
       const V2G_BLACKBOX_QUALITY = 5;
@@ -1723,7 +1723,7 @@
           // 用户优先流畅度：12fps 明显比 10fps 顺，宁可窄一点。
           const CREDIT = 2.5; // 硬压缩大约能省到这个倍数（实测 5 轮约 3.4×，取保守值）
           const capRaw = V2G_BLACKBOX_MAX_BYTES * CREDIT;
-          const hardMin = 300; // 再窄就太小了
+          const hardMin = 290; // 再窄就太小了
           const fpsFloor = 12; // 12fps 是流畅底线；够了就不再往上追（往上要拿压缩轮数换，画质掉得快）
           for (const f of fpsList.slice().sort((a, b) => a - b)) {
             if (f < fpsFloor) continue;
