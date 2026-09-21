@@ -1680,7 +1680,8 @@ a.secondary-btn {
 }
 
 .theme-midnight {
-  color: var(--ink);
+  /* 固定浅色字：不能用 var(--ink)（浅色主题下会变深色，与深色底同色看不清） */
+  color: #e6edf3;
   background: linear-gradient(160deg, #1a2234 0%, #121826 55%, #0d1320 100%);
 }
 

@@ -220,6 +220,19 @@
   align-items: flex-start;
   justify-content: space-between;
 }
+/* 结果卡片：下载 / 预览 两个按钮一行平铺，各占一半，界面更整齐 */
+.vbb-result-list .vsplit-clip-top .btn-row {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.45rem;
+  width: 100%;
+}
+.vbb-result-list .vsplit-clip-top .btn-row > * {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+  white-space: nowrap;
+}
 
 .vbb-result-list .vsplit-clip-progress {
   margin-top: 0.45rem;

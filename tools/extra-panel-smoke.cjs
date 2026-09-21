@@ -131,31 +131,25 @@ async function openPage(browser, hash, port) {
   return page;
 }
 
-async function testQrcode(page) {
-  await page.waitForFunction(
-    () => {
-      const meta = document.querySelector("#qr-meta")?.textContent || "";
-      const n = document.querySelector("#qr-box-wrap")?.children?.length || 0;
-      return /已生成/.test(meta) || n > 0;
-    },
-    { timeout: 90000 }
-  );
-  await page.evaluate(() => {
-    const wrap = document.querySelector("#qr-box-wrap");
-    if (wrap) wrap.innerHTML = "";
-    const meta = document.querySelector("#qr-meta");
-    if (meta) meta.textContent = "";
-  });
-  await page.click("#qr-gen");
-  await page.waitForFunction(
-    () => {
-      const n = document.querySelector("#qr-box-wrap")?.children?.length || 0;
-      const meta = document.querySelector("#qr-meta")?.textContent || "";
-      return n > 0 && /已生成/.test(meta);
-    },
-    { timeout: 30000 }
-  );
-}
+  async function testQrcode(page) {
+    // 面板默认不再预填内容（原来是默认值，现在是 placeholder）→ 先输入文本再生成
+    await page.evaluate(() => {
+      const t = document.getElementById("qr-text");
+      if (t) {
+        t.value = "https://afra55.github.io/tools/";
+        t.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+    await page.click("#qr-gen");
+    await page.waitForFunction(
+      () => {
+        const n = document.querySelector("#qr-box-wrap")?.children?.length || 0;
+        const meta = document.querySelector("#qr-meta")?.textContent || "";
+        return n > 0 && /已生成/.test(meta);
+      },
+      { timeout: 90000 }
+    );
+  }
 
 async function testUuid(page) {
   await page.waitForFunction(

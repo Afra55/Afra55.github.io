@@ -460,23 +460,24 @@
       return rec?.text || "";
     }
 
-    async function writeDocText(item, text) {
-      if (state.mode === "dir" && state.dirHandle) {
-        const fh = await state.dirHandle.getFileHandle(item.fileName, { create: true });
-        const w = await fh.createWritable();
-        await w.write(text);
-        await w.close();
-        try {
-          const f = await (await state.dirHandle.getFileHandle(item.fileName)).getFile();
-          item.fileMtime = f.lastModified || Date.now();
-        } catch (_) {
-          item.fileMtime = Date.now();
-        }
-      } else {
-        await idbSet("docs", item.id, { text, updatedAt: Date.now() });
+  async function writeDocText(item, text) {
+    if (state.mode === "dir" && state.dirHandle) {
+      const fh = await state.dirHandle.getFileHandle(item.fileName, { create: true });
+      const w = await fh.createWritable();
+      await w.write(text);
+      await w.close();
+      try {
+        const f = await (await state.dirHandle.getFileHandle(item.fileName)).getFile();
+        item.fileMtime = f.lastModified || Date.now();
+      } catch (_) {
         item.fileMtime = Date.now();
       }
+    } else {
+      await idbSet("docs", item.id, { text, updatedAt: Date.now() });
+      item.fileMtime = Date.now();
     }
+    item.selfWriteAt = Date.now(); // 记录「自己刚写过」，避免冲突检测把自己写的当外部改动
+  }
 
     async function removeDocFile(item) {
       if (state.mode === "dir" && state.dirHandle) {
@@ -3396,7 +3397,27 @@
       setSaveStatus("检测到外部修改，已暂停保存");
     }
 
+    let savingNow = false;
+    let saveQueued = false;
+    /** 防并发：保存进行中再触发就排队，结束后补存一次（避免并发写导致冲突误判/漏存） */
     async function saveCurrent(opts = {}) {
+      if (savingNow) {
+        saveQueued = true;
+        return;
+      }
+      savingNow = true;
+      try {
+        await saveCurrentInner(opts);
+      } finally {
+        savingNow = false;
+        if (saveQueued) {
+          saveQueued = false;
+          void saveCurrent({ silent: true });
+        }
+      }
+    }
+
+    async function saveCurrentInner(opts = {}) {
       const silent = Boolean(opts.silent);
       const item = findItem(state.currentId);
       if (!item) return;
@@ -3418,7 +3439,9 @@
       // 版本快照（节流：每 5 分钟最多一次）
       await snapshotHistory(item);
       // 冲突检测：文件被外部改过 → 暂停本次保存并提示（不静默覆盖）
-      if (state.mode === "dir" && state.dirHandle && item.fileMtime) {
+      // 自己刚写过（3 秒内）不算外部改动，避免误判导致「偶发没保存成功」
+      const selfWriteRecent = item.selfWriteAt && Date.now() - item.selfWriteAt < 3000;
+      if (!selfWriteRecent && state.mode === "dir" && state.dirHandle && item.fileMtime) {
         try {
           const cur = await (await state.dirHandle.getFileHandle(item.fileName)).getFile();
           if (cur.lastModified && Math.abs(cur.lastModified - item.fileMtime) > 1500) {
@@ -3607,6 +3630,30 @@
     }
 
     /** 在本机资源管理器定位该文档（走本机桥；浏览器 FSA 不暴露绝对路径，按文件夹名+文件名反查） */
+    /** 浏览器原生兜底：用已授权目录句柄唤起系统选择器并定位到该文件（无需本机桥，秒开） */
+    async function revealInBrowser(item) {
+      if (state.mode !== "dir" || !state.dirHandle) throw new Error("仅文件夹模式可用");
+      try {
+        const perm = await state.dirHandle.queryPermission?.({ mode: "read" });
+        if (perm !== "granted") {
+          const req = await state.dirHandle.requestPermission?.({ mode: "read" });
+          if (req !== "granted") throw new Error("没有目录读取权限，请重新连接文件夹");
+        }
+      } catch (err) {
+        if (err?.name === "AbortError") throw err;
+      }
+      const fh = await state.dirHandle.getFileHandle(item.fileName);
+      if (typeof window.showOpenFilePicker === "function") {
+        await window.showOpenFilePicker({ startIn: fh, multiple: false });
+        return { mode: "file-picker" };
+      }
+      if (typeof window.showDirectoryPicker === "function") {
+        await window.showDirectoryPicker({ startIn: state.dirHandle, mode: "read" });
+        return { mode: "dir-picker" };
+      }
+      throw new Error("当前浏览器不支持文件夹定位");
+    }
+
     async function revealItemLocation(item) {
       if (!item) return;
       if (state.mode !== "dir" || !state.dirHandle) {
@@ -3614,10 +3661,6 @@
         return;
       }
       const api = window.devtoolsBridgeToken;
-      if (!api?.revealMdmDoc) {
-        showBridgeHelpModal("打开文件位置");
-        return;
-      }
       const folderName = state.dirHandle.name;
       const joinPath = (dir) => {
         const p = MP.joinDocPath ? MP.joinDocPath(dir, item.fileName) : "";
@@ -3638,7 +3681,7 @@
       try {
         saved = localStorage.getItem(dirPathKey(folderName)) || "";
       } catch (_) {}
-      if (saved) {
+      if (saved && api?.revealLocalPath) {
         setSaveStatus("正在本机定位…");
         try {
           await revealByPath(saved);
@@ -3648,8 +3691,20 @@
           setSaveStatus("");
         }
       }
-      // 2) 让桥按「文件夹名 + 文件名」在常见目录里反查（文件夹名为空则跳过）
-      if (folderName) {
+      // 2) 浏览器原生兜底：直接唤起系统选择器定位到该文件（不需要桥，秒开）
+      setSaveStatus("正在定位…");
+      try {
+        await revealInBrowser(item);
+        setSaveStatus("");
+        setErr("");
+        toast(`已定位：${item.fileName}`);
+        return;
+      } catch (err) {
+        setSaveStatus("");
+        if (err?.name === "AbortError") return; // 用户自己取消了
+      }
+      // 3) 让桥按「文件夹名 + 文件名」在常见目录里反查
+      if (api?.revealMdmDoc && folderName) {
         setSaveStatus("正在本机定位…");
         try {
           const res = await api.revealMdmDoc({ folderName, fileName: item.fileName });

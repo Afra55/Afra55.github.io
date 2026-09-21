@@ -56,9 +56,18 @@
 .mdm-sr-title { font-size: 0.86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mdm-sr-snippet { font-size: 0.78rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mdm-sr mark { background: color-mix(in srgb, var(--accent) 45%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
-/* 搜索：全屏遮罩弹框（复用 .mdm-modal 的遮罩，内容居中） */
-.mdm-search-modal .mdm-search-box { width: min(92vw, 40rem); max-height: 80vh; display: flex; flex-direction: column; }
-.mdm-search-modal .mdm-search { margin-bottom: 0.25rem; }
+/* 搜索：全屏遮罩弹框 —— 靠上对齐（结果增多时不上下跳），输入框固定，只有结果列表滚动 */
+.mdm-modal.mdm-search-modal { align-items: flex-start; padding-top: 6vh; }
+.mdm-search-modal .mdm-search-box {
+  width: min(94vw, 46rem);
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.mdm-search-modal .mdm-search { flex: none; margin-bottom: 0.3rem; }
+.mdm-search-modal .mdm-search-meta { flex: none; }
+.mdm-search-modal .mdm-search-results { flex: 1 1 auto; min-height: 0; max-height: none; overflow-y: auto; }
 .mdm-item mark { background: color-mix(in srgb, var(--accent) 45%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
 
 .mdm-layout {
@@ -167,7 +176,8 @@
 }
 .mdm-insert-dropdown button:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .mdm-insert-dropdown { max-height: min(70vh, 30rem); overflow-y: auto; }
-.mdm-menu-flag { padding: 0.35rem 0.55rem; }
+.mdm-menu-flag { padding: 0.35rem 0.55rem; white-space: nowrap; }
+.mdm-insert-dropdown .mdm-menu-label { white-space: nowrap; }
 
 /* 专注：隐藏左侧列表 / 顶部按钮 */
 #mdm { position: relative; }
