@@ -1718,13 +1718,25 @@
           }
         }
         if (!chosen) {
-          // 连最低帧率都达不到底线（真实画面熵高时常见）→ 取最低帧率，并把预算尽量换成宽度
-          const fLow = fpsList[fpsList.length - 1];
-          const affordLow = Math.round(
-            V2G_BLACKBOX_BASE_W *
-              Math.min(4, Math.sqrt(rawTarget / Math.max(1, estBytesAt(fLow, V2G_BLACKBOX_BASE_W))))
-          );
-          chosen = { fps: fLow, width: Math.max(floorW, Math.min(srcCap, affordLow)) };
+          // 没有任何帧率能做到「1 轮」→ 用「重压也压得进」的估算，挑最高帧率（必要时收窄到 280px）。
+          // 用户优先流畅度：12fps 明显比 10fps 顺，宁可窄一点。
+          const CREDIT = 2.5; // 硬压缩大约能省到这个倍数（实测 5 轮约 3.4×，取保守值）
+          const capRaw = V2G_BLACKBOX_MAX_BYTES * CREDIT;
+          const hardMin = 300; // 再窄就太小了
+          const fpsFloor = 12; // 12fps 是流畅底线；够了就不再往上追（往上要拿压缩轮数换，画质掉得快）
+          for (const f of fpsList.slice().sort((a, b) => a - b)) {
+            if (f < fpsFloor) continue;
+            const afford = Math.round(
+              V2G_BLACKBOX_BASE_W *
+                Math.min(4, Math.sqrt(capRaw / Math.max(1, estBytesAt(f, V2G_BLACKBOX_BASE_W))))
+            );
+            if (afford >= hardMin) {
+              // 宽度不超过底线，避免"为了更高帧率把宽度拉大→反而多压好几轮"
+              chosen = { fps: f, width: Math.max(hardMin, Math.min(floorW, afford)) };
+              break;
+            }
+          }
+          if (!chosen) chosen = { fps: fpsList[fpsList.length - 1], width: hardMin };
         }
         // 实验/排查用（仅 ?debug）：localStorage devtools-vbb-force="fps:宽" 强制指定档位
         try {
