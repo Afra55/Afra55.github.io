@@ -1398,18 +1398,24 @@
         }
       }
   
+      /** 「沿用方案」缓存版本：编码参数/分配算法变更时递增，旧缓存自动失效（避免沿用旧的低帧率） */
+      const VBB_SPAN_SCHEME_VER = 3;
+
       function loadVbbSpanScheme(span) {
         const hit = loadVbbSpanSchemes()[vbbSpanSchemeKey(span)];
         if (!hit || !(Number(hit.fps) > 0)) return null;
+        // 旧版本（编码参数不同）算出的档位不再沿用
+        if (Number(hit.ver) !== VBB_SPAN_SCHEME_VER) return null;
         return hit;
       }
-  
+
       function saveVbbSpanScheme(span, seed, encode) {
         if (!seed?.fps) return;
         try {
           const map = loadVbbSpanSchemes();
           const key = vbbSpanSchemeKey(span);
           map[key] = {
+            ver: VBB_SPAN_SCHEME_VER,
             fps: Number(seed.fps) || 15,
             maxW: Math.max(64, Number(seed.maxW) || V2G_BLACKBOX_BASE_W),
             compressRounds: Number(seed.compressRounds) || 0,
