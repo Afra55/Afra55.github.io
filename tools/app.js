@@ -1886,6 +1886,45 @@
     if (navToolCtx.parentElement !== document.body) document.body.appendChild(navToolCtx);
   }
 
+  /** 在新窗口/新标签打开某个工具（PWA 下配合 manifest 的 launch_handler 会开独立窗口） */
+  function openToolInNewWindow(id) {
+    if (!id) return false;
+    try {
+      const url = new URL(`./index.html#${encodeURIComponent(id)}`, location.href).href;
+      const w = window.open(url, "_blank");
+      if (w) {
+        try {
+          w.opener = null;
+        } catch (_) {}
+        return true;
+      }
+      // 被弹窗拦截 → 退回当前页跳转
+      location.hash = `#${id}`;
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /** 给面板标题栏注入「⧉ 新窗口」按钮（一次注入，所有工具通用） */
+  function ensurePanelNewWindowBtn(toolId) {
+    const panel = document.getElementById(toolId);
+    const head = panel?.querySelector?.(".panel-head");
+    if (!panel || !head) return;
+    if (head.querySelector(".panel-newwin-btn")) return;
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ghost-btn panel-newwin-btn";
+    btn.title = "在新窗口打开（可同时使用多个工具）";
+    btn.textContent = "⧉ 新窗口";
+    btn.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      openToolInNewWindow(toolId);
+    });
+    head.appendChild(btn);
+  }
+
   function showNavToolCtx(x, y, toolId) {
     if (!navToolCtx || !toolId || !DEFAULT_ORDER.includes(toolId)) return;
     const host = navToolCtxHost();
@@ -1930,6 +1969,7 @@
       hideNavToolCtx();
       if (action === "fav-add") addFavorite(id);
       else if (action === "fav-remove") removeFavorite(id);
+      else if (action === "open-window") openToolInNewWindow(id);
       else if (action === "open") {
         closeRecentDialog();
         navigateTo(id);
@@ -3157,8 +3197,10 @@
         const active = id === currentTool;
         panel.classList.toggle("is-workspace-active", active);
         panel.hidden = !active;
-        if (active) panel.removeAttribute("aria-hidden");
-        else {
+        if (active) {
+          panel.removeAttribute("aria-hidden");
+          ensurePanelNewWindowBtn(id); // 标题栏加「⧉ 新窗口」
+        } else {
           panel.setAttribute("aria-hidden", "true");
           panel.classList.remove("is-tool-assets-loading");
           panel.removeAttribute("aria-busy");

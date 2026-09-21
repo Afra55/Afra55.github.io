@@ -734,10 +734,26 @@ body.theme-reduce-glow .bg-grid {
   }
 }
 
-.panel-head {
-  padding: 1.35rem 1.4rem 0.85rem;
-  border-bottom: 1px solid var(--line);
-}
+  .panel-head {
+    position: relative;
+    padding: 1.35rem 1.4rem 0.85rem;
+    border-bottom: 1px solid var(--line);
+  }
+
+  /* 面板标题栏「在新窗口打开」按钮（app.js 一次注入，所有工具通用） */
+  .panel-newwin-btn {
+    float: right;
+    font-size: 0.78rem;
+    padding: 0.2rem 0.55rem;
+    white-space: nowrap;
+  }
+
+  @media (max-width: 700px) {
+    .panel-newwin-btn {
+      font-size: 0.72rem;
+      padding: 0.15rem 0.45rem;
+    }
+  }
 
 .panel-head h1 {
   margin: 0;

@@ -9,6 +9,7 @@
   "scope": "./",
   "display": "standalone",
   "display_override": ["standalone", "browser"],
+  "launch_handler": { "client_mode": ["navigate-new", "auto"] },
   "orientation": "any",
   "background_color": "#0b1320",
   "theme_color": "#0b1320",
