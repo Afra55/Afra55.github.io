@@ -1593,7 +1593,7 @@
           let best = candidate;
           const lo = Math.max(64, Number(candidate.maxW) || minW || V2G_BLACKBOX_BASE_W);
           const hi = Math.max(lo, Number(maxW) || lo);
-          const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.98);
+        const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.9);
           for (let i = 0; i < 3; i++) {
             if (isAborted()) throw new Error("已取消");
             const curW = Number(best.maxW) || lo;
@@ -1663,9 +1663,9 @@
           // 沿用失败再走完整探测
         }
   
-        // ---- 智能分配：一次标定 → 预测各帧率能负担的宽度 → 选「帧率最高且宽度≥底线」的档 ----
-        // 压缩(gifsicle 减色/lossy)通常还能再省 ~2×，所以预算按 2 倍估算，避免过早放弃高帧率
-        const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 2);
+        // ---- 智能分配：标定一次 + 压缩一轮量出「压缩比」→ 目标只压 1 轮（画质最优）----
+        // 实测：同体积下「收窄一点 + 只压 1 轮」比「宽度拉满 + 压 4 轮」PSNR 高 9dB。
+        const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.98);
         const srcCap = Math.min(srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK, V2G_ENCODE_HARD_W);
         const floorW = Math.min(V2G_BLACKBOX_MIN_ACCEPT_W, srcCap);
         const encodeAtWidthFps = (f, w) =>
@@ -1689,15 +1689,30 @@
         const aspect = Math.max(1, calib.outH || 1) / calibW;
         const effSpan = Math.max(0.1, span / speed);
         const estBytesAt = (f, w) => costPerFramePixel * Math.max(1, Math.round(effSpan * f)) * w * w * aspect;
+        // 只压「一轮」量出单轮压缩比（同内容同参数下大致恒定）→ 反推原始体积目标，让最终只压 1 轮
+        let cRatio = 1;
+        try {
+          const one = await compressGifBlob(calib.blob, "standard", () => {}, {
+            round: 1,
+            plan: buildBlackboxHardCompressArgs(1),
+          });
+          cRatio = Math.max(1, calib.blob.size / Math.max(1, one.size));
+        } catch (_) {}
+        const rawTarget = targetBytes * cRatio;
+        vbbLog(
+          `[vbb-phase] 压缩比 ${cRatio.toFixed(2)}× · 原始体积目标 ${formatKb(rawTarget)}（标定 ${formatKb(
+            calib.blob.size
+          )}）`
+        );
         let chosen = null;
         for (const f of fpsList) {
           const afford = Math.round(
             V2G_BLACKBOX_BASE_W *
-              Math.min(4, Math.sqrt(targetBytes / Math.max(1, estBytesAt(f, V2G_BLACKBOX_BASE_W))))
+              Math.min(4, Math.sqrt(rawTarget / Math.max(1, estBytesAt(f, V2G_BLACKBOX_BASE_W))))
           );
-          // 用「实际能负担的宽度」判底线（不能先抬到 420 再判，否则高帧率永远胜出但需要暴力压缩）
+          // 用「实际能负担的宽度」判底线；宽度可以低于起点 420（420 只是起点，底线才是下限）
           if (afford >= floorW - 0.5) {
-            chosen = { fps: f, width: Math.max(V2G_BLACKBOX_BASE_W, Math.min(srcCap, afford)) };
+            chosen = { fps: f, width: Math.max(floorW, Math.min(srcCap, afford)) };
             break;
           }
         }
@@ -1706,10 +1721,17 @@
           const fLow = fpsList[fpsList.length - 1];
           const affordLow = Math.round(
             V2G_BLACKBOX_BASE_W *
-              Math.min(4, Math.sqrt(targetBytes / Math.max(1, estBytesAt(fLow, V2G_BLACKBOX_BASE_W))))
+              Math.min(4, Math.sqrt(rawTarget / Math.max(1, estBytesAt(fLow, V2G_BLACKBOX_BASE_W))))
           );
-          chosen = { fps: fLow, width: Math.max(V2G_BLACKBOX_BASE_W, Math.min(srcCap, affordLow)) };
+          chosen = { fps: fLow, width: Math.max(floorW, Math.min(srcCap, affordLow)) };
         }
+        // 实验/排查用（仅 ?debug）：localStorage devtools-vbb-force="fps:宽" 强制指定档位
+        try {
+          if (VBB_DEBUG) {
+            const m = /^(\d+(?:\.\d+)?)(?::(\d+))?$/.exec(String(localStorage.getItem("devtools-vbb-force") || "").trim());
+            if (m) chosen = { fps: Number(m[1]), width: m[2] ? Number(m[2]) : V2G_BLACKBOX_BASE_W };
+          }
+        } catch (_) {}
         vbbLog(
           `[vbb-phase] 选定 ${chosen.fps}fps 宽${chosen.width} · 标定 ${formatKb(
             calib.blob.size
