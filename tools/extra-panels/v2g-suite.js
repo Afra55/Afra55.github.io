@@ -1739,8 +1739,8 @@
         );
         onProgress(0.5, `${chosen.fps}FPS · 宽${chosen.width}`);
         let candidate =
-          chosen.fps === fpsCalib && chosen.width <= V2G_BLACKBOX_BASE_W + 2
-            ? calib
+          chosen.fps === fpsCalib && chosen.width >= V2G_BLACKBOX_BASE_W - 2
+            ? calib // 只有「帧率和宽度都等于标定点」才复用，否则必须按选定宽度重编
             : await encodeAt(chosen.fps, chosen.width, 0.5, 0.36, `${chosen.fps}FPS·宽${chosen.width}`);
         tried.push(candidate);
         // 超预算 → 按比例回缩一次
