@@ -88,8 +88,8 @@
         const V2G_BLACKBOX_WIDTH_CAP = 720;
         /** 黑盒编码的硬宽度上限（一键黑盒可放宽到这里，短视频预算用不完时可换更高清晰度） */
         const V2G_ENCODE_HARD_W = 1280;
-        /** 智能分配的分辨率底线：某帧率若只能做到比这更窄，就换更低帧率（360 已够手机看清，别为了清晰把帧率压太低） */
-        const V2G_BLACKBOX_MIN_ACCEPT_W = 360;
+        /** 智能分配的分辨率底线：某帧率若只能做到比这更窄，就换更低帧率（340 兼顾"少压缩"与录屏文字可读） */
+        const V2G_BLACKBOX_MIN_ACCEPT_W = 330;
       /** 源宽未知时的加宽兜底（等同不设上限） */
       const V2G_BLACKBOX_WIDTH_HARD_FALLBACK = 4096;
       const V2G_BLACKBOX_QUALITY = 5;
@@ -1593,7 +1593,8 @@
           let best = candidate;
           const lo = Math.max(64, Number(candidate.maxW) || minW || V2G_BLACKBOX_BASE_W);
           const hi = Math.max(lo, Number(maxW) || lo);
-        const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.9);
+        // 目标定在「只压 1 轮」：留足余量，宁可略窄也不要重压（实测轮数比分辨率更决定画质）
+          const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.98);
           for (let i = 0; i < 3; i++) {
             if (isAborted()) throw new Error("已取消");
             const curW = Number(best.maxW) || lo;
@@ -1665,7 +1666,7 @@
   
         // ---- 智能分配：标定一次 + 压缩一轮量出「压缩比」→ 目标只压 1 轮（画质最优）----
         // 实测：同体积下「收窄一点 + 只压 1 轮」比「宽度拉满 + 压 4 轮」PSNR 高 9dB。
-        const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.98);
+        const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.82);
         const srcCap = Math.min(srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK, V2G_ENCODE_HARD_W);
         const floorW = Math.min(V2G_BLACKBOX_MIN_ACCEPT_W, srcCap);
         const encodeAtWidthFps = (f, w) =>
