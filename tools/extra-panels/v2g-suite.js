@@ -4610,6 +4610,8 @@
       let vbbMergedMeta;
       let vbbResultSummary;
       let vbbProgress;
+      /** 一键黑盒：只显示每个 GIF 卡片的进度，隐藏总进度条 */
+      let vbbSuppressGlobalProgress = false;
       let vbbProgressFill;
       let vbbProgressText;
       let vbbProgressSub;
@@ -5272,6 +5274,22 @@
   
       function setVbbProgress(visible, ratio, text, opts = {}) {
         if (!vbbProgress) return;
+        // 一键黑盒：进度只放在每个 GIF 卡片里，总进度条不显示
+        if (vbbSuppressGlobalProgress) {
+          if (!vbbProgress.hidden) {
+            vbbProgress.hidden = true;
+            if (vbbProgressFill) {
+              vbbProgressFill.style.width = "0%";
+              vbbProgressFill.classList.remove("is-active", "is-busy");
+            }
+            if (vbbProgressPct) vbbProgressPct.hidden = true;
+            if (vbbProgressSub) {
+              vbbProgressSub.hidden = true;
+              vbbProgressSub.classList.remove("is-empty");
+            }
+          }
+          return;
+        }
         // 进度 UI 节流：中间态最多 ~90ms 刷一次，隐藏/0/100% 等重要更新不节流（省手机 CPU/防卡顿）
         const r = Number(ratio) || 0;
         const important = !visible || r <= 0 || r >= 1;
@@ -5453,32 +5471,40 @@
         return `${n}  ${formatVbbClock(c.start)}–${formatVbbClock(c.start + c.span)}`;
       }
   
+      /** 紧凑体积：6.00 MB → 6MB / 55.7 KB → 56KB */
+      function fmtShortBytes(n) {
+        const b = Math.max(0, Number(n) || 0);
+        if (b >= 1024 * 1024) {
+          const mb = b / 1024 / 1024;
+          return `${mb >= 10 ? Math.round(mb) : Math.round(mb * 10) / 10}`.replace(/\.0$/, "") + "MB";
+        }
+        return `${Math.max(1, Math.round(b / 1024))}KB`;
+      }
+
       function formatVbbClipMeta(c, { mobile = false } = {}) {
         if (c.error && !c.gifBlob) return c.error;
         if (!c.gifBlob) {
           if (c.jobStatus === "running" || c.jobStatus === "pending") return c.jobText || "";
           return c.error || "";
         }
+        // 顺序固定：帧率 · 尺寸 · 体积 · 时长（其余附加信息尽量少）
         const bits = [];
-        // 时长按「最终处理后的视频时长」为准（压缩时长/加速后），无则回退原始 span
-        const videoSec = Number(c.gifDuration) > 0 ? Number(c.gifDuration) : Number(c.span) || 0;
-        if (videoSec > 0) bits.push(`时长 ${formatVsplitSpanSec(videoSec)}`);
+        const fps = Number(c.gifFps) || 0;
+        if (fps) bits.push(`${fps}FPS`);
         const w = Number(c.gifOutW) || 0;
         const h = Number(c.gifOutH) || 0;
-        if (w && h) bits.push(`GIF ${w}×${h}`);
-        bits.push(formatKb(c.gifBlob.size));
+        if (w && h) bits.push(`${w}×${h}`);
+        bits.push(fmtShortBytes(c.gifBlob.size));
+        const videoSec = Number(c.gifDuration) > 0 ? Number(c.gifDuration) : Number(c.span) || 0;
+        if (videoSec > 0) bits.push(formatVsplitSpanSec(videoSec));
         const extra = simplifyVbbGifNote(c.gifNote, { mobile });
         if (extra) {
           extra.split(" · ").forEach((part) => {
             if (!part) return;
-            if (/^\d+×\d+$/.test(part) || /^GIF \d+×\d+$/.test(part)) return;
-            if (/^\d+\s*FPS$/i.test(part)) {
-              if (!mobile) bits.push(part.replace(/\s+/g, ""));
-              return;
-            }
-            if (/^沿用|^超限|^已压|^降宽|^已抽稀|^宽≤|^耗时|^已重启|^加速/.test(part) || (mobile && /^\d+宽$/.test(part))) {
-              bits.push(part);
-            }
+            if (/^\d+\s*×\s*\d+$/.test(part) || /^GIF\s*\d+×\d+$/.test(part)) return; // 尺寸已在前面
+            if (/^\d+\s*FPS$/i.test(part)) return; // 帧率已在最前
+            if (/^宽/.test(part)) return; // 宽度不再展示
+            if (/^已压|^超限|^已抽稀|^降宽|^沿用|^耗时|^加速|^已重启/.test(part)) bits.push(part);
           });
         }
         if (c.error) bits.push(c.error);
@@ -6696,6 +6722,7 @@
       async function runVbbBatchBlackbox() {        if (!isVbbBatchMode() || vbbBusy) return;
         abortVbb = false;
         vbbBusy = true;
+        vbbSuppressGlobalProgress = true; // 只留卡片进度
         setVbbButtons();
         if (vbbAbort) vbbAbort.hidden = false;
         setError(vbbError, "");
@@ -6815,21 +6842,23 @@
           setVbbProgress(false, 0, "");
         } finally {
           vbbBusy = false;
+          vbbSuppressGlobalProgress = false;
           resetVbbAbort();
           if (vbbAbort) vbbAbort.hidden = true;
           setVbbButtons();
         }
       }
-  
-      async function runVbbSingleBlackbox() {
-        if (!vbbSourceFile || !vbbVideo?.src || vbbBusy) return;
-        const duration = Number(vbbVideo.duration) || 0;
-        if (!(duration >= VBB_MIN_SPAN)) throw new Error(`视频太短，至少约 ${VBB_MIN_SPAN} 秒`);
-        const srcW = vbbVideo.videoWidth || 0;
-        const srcH = vbbVideo.videoHeight || 0;
-        abortVbb = false;
-        vbbBusy = true;
-        setVbbButtons();
+
+        async function runVbbSingleBlackbox() {
+          if (!vbbSourceFile || !vbbVideo?.src || vbbBusy) return;
+          const duration = Number(vbbVideo.duration) || 0;
+          if (!(duration >= VBB_MIN_SPAN)) throw new Error(`视频太短，至少约 ${VBB_MIN_SPAN} 秒`);
+          const srcW = vbbVideo.videoWidth || 0;
+          const srcH = vbbVideo.videoHeight || 0;
+          abortVbb = false;
+          vbbBusy = true;
+          vbbSuppressGlobalProgress = true; // 只留卡片进度
+          setVbbButtons();
         if (vbbAbort) vbbAbort.hidden = false;
         setError(vbbError, "");
         clearVbbResults();
@@ -6895,12 +6924,13 @@
           setVbbProgress(false, 0, "");
         } finally {
           vbbBusy = false;
+          vbbSuppressGlobalProgress = false;
           resetVbbAbort();
           if (vbbAbort) vbbAbort.hidden = true;
           setVbbButtons();
         }
       }
-  
+
       async function runVbbOneClick() {
         if (vbbBusy) return;
         if (isVbbBatchMode()) {
