@@ -5738,7 +5738,8 @@
           vbbRun.disabled = !hasPlan || vbbBusy || isVbbBatchMode() || isVbbManualMode();
           vbbRun.classList.toggle("is-ready", hasPlan && !vbbBusy && isVbbSplitMode());
         }
-        if (vbbMerge) vbbMerge.disabled = gifCount < 2 || vbbBusy || isVbbBatchMode();
+        // 合并 GIF：只要有 ≥2 个已生成的 GIF 就能合并（批量模式下同样可用）
+        if (vbbMerge) vbbMerge.disabled = gifCount < 2 || vbbBusy;
         if (vbbZip) vbbZip.disabled = gifCount < 1 || vbbBusy;
         if (isVbbManualMode()) paintVbbManualControls();
       }
@@ -7609,7 +7610,8 @@
 
           function updateButtons() {
             const has = st.items.length > 0;
-            if (genBtn) genBtn.disabled = !has || st.busy;
+            // 生成按钮始终可点：自动预览编码期间点了就作废自动任务、立刻手动生成（不再等它跑完）
+            if (genBtn) genBtn.disabled = !has;
             if (dlEl) dlEl.hidden = !(st.url && st.manualDone);
           }
 
@@ -7991,7 +7993,7 @@
               setErr("先拖入图片再生成");
               return;
             }
-            if (st.busy) toast("正在生成，请稍候…");
+            // 自动预览编码还在跑 → 直接作废它并立刻手动生成（requestEncode 会 ++gen 作废旧任务）
             st.manualDone = true; // 之后改时长不再自动重编码
             void requestEncode(true);
           });

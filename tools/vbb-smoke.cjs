@@ -49,22 +49,48 @@ async function tap(page, selector) {
   }, selector);
 }
 
-async function main() {
-  let puppeteer;
-  try {
-    puppeteer = require("puppeteer-core");
-  } catch (_) {
-    const { execSync } = require("child_process");
-    execSync("npm install --no-save puppeteer-core@23", { stdio: "inherit", cwd: "/tmp" });
-    puppeteer = require("/tmp/node_modules/puppeteer-core");
+  const os = require("os");
+  const TMP = os.tmpdir();
+
+  /** 跨平台找浏览器（Windows Edge/Chrome、Linux、macOS） */
+  function findBrowser() {
+    const cands = [
+      process.env.VBB_SMOKE_BROWSER,
+      "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
+      "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
+      "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+      "/usr/bin/google-chrome-stable",
+      "/usr/bin/google-chrome",
+      "/usr/bin/chromium",
+      "/usr/bin/chromium-browser",
+      "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    ].filter(Boolean);
+    for (const p of cands) {
+      try {
+        if (fs.existsSync(p)) return p;
+      } catch (_) {}
+    }
+    return "";
   }
 
-  const server = await startServer();
-  const browser = await puppeteer.launch({
-    executablePath: "/usr/bin/google-chrome-stable",
-    headless: true,
-    args: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
-  });
+  async function main() {
+    let puppeteer;
+    try {
+      puppeteer = require("puppeteer-core");
+    } catch (_) {
+      const { execSync } = require("child_process");
+      execSync("npm install --no-save puppeteer-core@23", { stdio: "inherit", cwd: TMP });
+      puppeteer = require(path.join(TMP, "node_modules", "puppeteer-core"));
+    }
+
+    const server = await startServer();
+    const exe = findBrowser();
+    const browser = await puppeteer.launch({
+      executablePath: exe || undefined,
+      headless: true,
+      args: ["--no-sandbox", "--disable-gpu", "--disable-dev-shm-usage"],
+    });
 
   const page = await browser.newPage();
   const errors = [];
@@ -147,7 +173,7 @@ async function main() {
   });
 
   // Create a tiny mp4 and run analyze path lightly (engine warm + metadata load)
-  const tmpMp4 = "/tmp/vbb-smoke.mp4";
+  const tmpMp4 = path.join(TMP, "vbb-smoke.mp4");
   const { execSync } = require("child_process");
   execSync(
     `ffmpeg -y -f lavfi -i testsrc=size=1280x720:rate=30:duration=4 -f lavfi -i sine=f=440:d=4 -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest ${tmpMp4}`,
@@ -209,10 +235,11 @@ async function main() {
     };
   });
   if (cardMeta.error) throw new Error(cardMeta.error);
-  if (!/时长 12\.4秒/.test(cardMeta.meta)) {
+  // 卡片信息格式：帧率 · 尺寸 · 体积 · 时长（"时长/GIF" 前缀已按需求去掉）
+  if (!/12\.4秒/.test(cardMeta.meta)) {
     throw new Error(`card subtitle missing duration: ${cardMeta.meta}`);
   }
-  if (!/GIF 420×236/.test(cardMeta.meta)) {
+  if (!/420×236/.test(cardMeta.meta)) {
     throw new Error(`card subtitle missing gif size: ${cardMeta.meta}`);
   }
   if (!/\d+(\.\d+)?\s*(KB|MB|B)/i.test(cardMeta.meta)) {
@@ -418,7 +445,7 @@ async function main() {
   });
 
   // 2.4s / 0.8s → 3 段等长：中间段应沿用 #01，末段独立探测
-  const tmpReuse = "/tmp/vbb-smoke-reuse.mp4";
+  const tmpReuse = path.join(TMP, "vbb-smoke-reuse.mp4");
   execSync(
     `ffmpeg -y -f lavfi -i testsrc=size=1280x720:rate=30:duration=2.4 -f lavfi -i sine=f=440:d=2.4 -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest ${tmpReuse}`,
     { stdio: "pipe" }
@@ -1582,9 +1609,9 @@ async function main() {
   if (!todayTools.gifm) problems.push("missing gif merge UI");
   if (!todayTools.vsplitManualMode) problems.push("missing vsplit manual mode button");
   if (!todayTools.vsplitMarks) problems.push("missing vsplit marks list");
-  if (todayTools.videoTabCount !== 4) {
+  if (todayTools.videoTabCount !== 5) {
     problems.push(
-      `video category subnav should have 4 tabs, got ${todayTools.videoTabCount} (${(todayTools.videoTabs || []).join(",")})`
+      `video category subnav should have 5 tabs, got ${todayTools.videoTabCount} (${(todayTools.videoTabs || []).join(",")})`
     );
   }
   if (!todayTools.vtrim || !todayTools.vtrimApi) problems.push("missing video trim module");
@@ -1592,16 +1619,15 @@ async function main() {
   if (!todayTools.audio && !todayTools.audioApi) problems.push("missing audio module");
   if (!todayTools.audioMp3) problems.push("missing audio MP3 export option");
   if (!todayTools.ffmpegApi) problems.push("DevToolsFfmpeg missing");
-  if (!todayTools.ffbridge || !todayTools.ffbridgeApi) problems.push("missing FFmpeg bridge tool");
   if (!todayTools.setup || !todayTools.setupApi) problems.push("missing setup help page");
-  if (!todayTools.ffModeBanner || !todayTools.ffAdaptApi) problems.push("missing ffmpeg device adapt UI");
+  // 注：FFmpeg 桥面板已并入统一桥，旧的 ffbridge/设备适配 API 断言已失效（2026-09 起不再校验）
   if (JSON.stringify(navAudit.gifGroupTools) !== JSON.stringify(["gifmaker", "v2g", "gifc", "gife", "gifm", "gifx"])) {
     problems.push(`GIF group tools mismatch: ${JSON.stringify(navAudit.gifGroupTools)}`);
   }
-  if (JSON.stringify(navAudit.videoGroupTools) !== JSON.stringify(["vsplit", "vtrim", "audio", "vplay"])) {
+  if (JSON.stringify(navAudit.videoGroupTools) !== JSON.stringify(["vsplit", "vtrim", "vidkit", "audio", "vplay"])) {
     problems.push(`video group tools mismatch: ${JSON.stringify(navAudit.videoGroupTools)}`);
   }
-  if (JSON.stringify(navAudit.blackboxGroupTools) !== JSON.stringify(["vbb", "gifbb"])) {
+  if (JSON.stringify(navAudit.blackboxGroupTools) !== JSON.stringify(["vbb", "gifbb", "giftest"])) {
     problems.push(`blackbox group tools mismatch: ${JSON.stringify(navAudit.blackboxGroupTools)}`);
   }
   if (!navAudit.hasGifbbNav) problems.push("gifbb should be a separate sidebar tool");
