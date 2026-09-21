@@ -1732,8 +1732,20 @@
           }
         }
         if (!chosen) {
-          // 没有任何帧率能做到「1 轮」→ 用「重压也压得进」的估算，挑最高帧率（必要时收窄到 290px）。
-          // 用户优先流畅度：12fps 明显比 10fps 顺，宁可窄一点。
+          // 底线宽度(290)做不到「1 轮」→ 若「最低帧率 12fps」也明显够不到 290，才继续收窄去找 1 轮。
+          // 实测(30s 横屏, 统一显示尺寸): 290px/2轮 30.58dB < 250px/1轮 32.36dB —— 少压一轮胜过窄一点。
+          const HARD_MIN_W = 220; // 绝对下限：再窄就真糊了
+          const afford12 = Math.round(
+            V2G_BLACKBOX_BASE_W *
+              Math.min(4, Math.sqrt(rawTarget / Math.max(1, estBytesAt(12, V2G_BLACKBOX_BASE_W))))
+          );
+          // 只收窄 12fps 这一档；且必须"明显够不到底线"（估算有误差，收窄过多反而多压一轮）
+          if (afford12 >= HARD_MIN_W && afford12 <= floorW - 20) {
+            chosen = { fps: 12, width: Math.min(floorW, afford12) };
+          }
+        }
+        if (!chosen) {
+          // 连 220px 都做不到 1 轮 → 重压兜底：12fps 底线 + 290px + 减色到 124
           const CREDIT = 2.5; // 硬压缩大约能省到这个倍数（实测 5 轮约 3.4×，取保守值）
           const capRaw = V2G_BLACKBOX_MAX_BYTES * CREDIT;
           const hardMin = 290; // 再窄就太小了
@@ -1751,7 +1763,7 @@
             }
           }
           if (!chosen) chosen = { fps: fpsList[fpsList.length - 1], width: hardMin };
-          // 兜底说明预算吃紧 → 降色数(234→124)换「1 轮压缩」：少压一轮约 +3dB，减色仅约 -1.1dB，净赚
+          // 预算吃紧 → 降色数(234→124)换「1 轮压缩」：少压一轮约 +3dB，减色仅约 -1.1dB，净赚
           if (chosen.fps >= 12) chosen.quality = 25;
         }
         // 实验/排查用（仅 ?debug）：localStorage devtools-vbb-force="fps:宽" 强制指定档位
