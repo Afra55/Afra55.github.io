@@ -1161,23 +1161,20 @@
       }
 
       /**
-       * 黑盒帧率候选：优先取源帧率的「整数分之一」。
-       * 这样每输出一帧恰好跳过固定数量的源帧，运动速度恒定；
-       * 否则（如 30fps 源抽 12fps，比例 2.5）会出现隔 2 帧 / 隔 3 帧交替 → 一卡一卡。
-       * 源帧率未知时退回 15/12/10。
+       * 黑盒帧率候选：帧率越高越流畅，所以优先保留 15/12/10 全部档位（12 不能少）。
+       * 额外：若源帧率能被 2/3/4 整除且结果**高于 15**，补入该档（例如 60fps→20fps）——
+       * 这样既帧率更高、抽帧又均匀，是纯增益。
        */
       function blackboxFpsCandidates(srcFps) {
+        const out = new Set(V2G_BLACKBOX_FPS_LIST); // [15, 12, 10]
         const src = Number(srcFps) || 0;
         if (src >= 20 && src <= 240) {
-          const out = [];
-          for (const div of [2, 3, 4, 5, 6, 8]) {
+          for (const div of [2, 3, 4]) {
             const f = src / div;
-            if (f < 8 || f > 20) continue;
-            out.push(Math.round(f * 100) / 100);
+            if (f > 15.01 && f <= 24) out.add(Math.round(f * 100) / 100);
           }
-          if (out.length) return [...new Set(out)].sort((a, b) => b - a);
         }
-        return V2G_BLACKBOX_FPS_LIST.slice();
+        return [...out].sort((a, b) => b - a);
       }
 
       /** 不因帧数上限跳过最高档：始终从最高档起试，体积由压缩(减色/缩放)兜底 */
@@ -1462,9 +1459,12 @@
             : 1;
         const isAborted = clipOpts.isAborted || (() => abortV2g);
         const onProgress = clipOpts.onProgress || (() => {});
-        // 并行探测源帧率（不挡引擎加载），用于挑「整数分之一」帧率避免抽帧不匀
+        // 并行探测源帧率（不挡引擎加载；最多等 1.5s，超时就用默认档位）
         const srcFpsProbe = detectSourceFps(file).catch(() => 0);
-        const srcFps = await srcFpsProbe;
+        const srcFps = await Promise.race([
+          srcFpsProbe,
+          new Promise((r) => setTimeout(() => r(0), 1500)),
+        ]);
         const fpsList = resolveBlackboxFpsList(span / speed, srcFps);
         if (!fpsList.length) throw new Error("没有可用的黑盒帧率方案");
         const tried = [];
@@ -1485,17 +1485,13 @@
 
         /** 宽度已到顶且仍有预算时，把剩余预算换成更高帧率（不降清晰度） */
         async function raiseBlackboxFps(best, curFps, encodeAtWidthFps, srcFps) {
-          const cap = Math.min(30, srcFps > 0 ? srcFps : 0);
+          const cap = Math.min(30, srcFps > 0 ? srcFps : 30);
           if (!(cap > curFps)) return best;
           const width = Number(best.maxW) || V2G_BLACKBOX_BASE_W;
           let out = best;
-          // 同样只取整数分之一，避免提帧率后又不匀
-          const cands = [1, 2, 3, 4]
-            .map((d) => srcFps / d)
-            .filter((f) => f > curFps + 0.01 && f <= cap)
-            .map((f) => Math.round(f * 100) / 100)
-            .sort((a, b) => a - b);
-          for (const f of cands) {
+          // 帧率越高越流畅：预算有余就往更高帧率试
+          for (const f of [18, 20, 24, 30]) {
+            if (f <= curFps + 0.01 || f > cap) continue;
             if (isAborted()) throw new Error("已取消");
             onProgress(0.96, `提帧率试探 ${f}fps`);
             const enc = await encodeAtWidthFps(f, width);
@@ -1819,11 +1815,14 @@
         });
   
         try {
-          // 并行探测源帧率（挑「整数分之一」帧率，抽帧均匀不卡顿）
+          // 并行探测源帧率（挑「整数分之一」帧率，最多等 1.5s）
           const srcFpsProbe = detectSourceFps(v2gSourceFile).catch(() => 0);
           await prewarmFfmpegEngine().catch(() => {});
           const { span } = resolveV2gSpan();
-          const srcFps = await srcFpsProbe;
+          const srcFps = await Promise.race([
+            srcFpsProbe,
+            new Promise((r) => setTimeout(() => r(0), 1500)),
+          ]);
           const fpsList = resolveBlackboxFpsList(span, srcFps);
           if (!fpsList.length) throw new Error("没有可用的黑盒帧率方案");
   
