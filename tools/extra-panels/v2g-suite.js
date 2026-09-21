@@ -1539,11 +1539,12 @@
           return await raiseBlackboxFps(best, curFps, encodeAtWidthFps, srcFps);
         }
   
-        const encodeAt = async (fps, maxW, progressBase, progressSpan, stageLabel) => {
+        const encodeAt = async (fps, maxW, progressBase, progressSpan, stageLabel, quality) => {
           const encoded = await encodeV2gGifFfmpeg({
             ...common,
             fps,
             maxW,
+            quality: quality || common.quality,
             stageLabel,
             onProgress: (local, text) => onProgress(progressBase + Math.min(1, local) * progressSpan, text),
           });
@@ -1669,11 +1670,12 @@
         const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.82);
         const srcCap = Math.min(srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK, V2G_ENCODE_HARD_W);
         const floorW = Math.min(V2G_BLACKBOX_MIN_ACCEPT_W, srcCap);
-        const encodeAtWidthFps = (f, w) =>
+        const encodeAtWidthFps = (f, w, quality) =>
           encodeV2gGifFfmpeg({
             ...common,
             fps: f,
             maxW: w,
+            quality: quality || common.quality,
             stageLabel: `${f}FPS·宽${w}`,
             onProgress: (local, text) => onProgress(0.92 + local * 0.05, text),
           });
@@ -1719,7 +1721,7 @@
           }
         }
         if (!chosen) {
-          // 没有任何帧率能做到「1 轮」→ 用「重压也压得进」的估算，挑最高帧率（必要时收窄到 280px）。
+          // 没有任何帧率能做到「1 轮」→ 用「重压也压得进」的估算，挑最高帧率（必要时收窄到 290px）。
           // 用户优先流畅度：12fps 明显比 10fps 顺，宁可窄一点。
           const CREDIT = 2.5; // 硬压缩大约能省到这个倍数（实测 5 轮约 3.4×，取保守值）
           const capRaw = V2G_BLACKBOX_MAX_BYTES * CREDIT;
@@ -1738,6 +1740,8 @@
             }
           }
           if (!chosen) chosen = { fps: fpsList[fpsList.length - 1], width: hardMin };
+          // 兜底说明预算吃紧 → 降色数(234→124)换「1 轮压缩」：少压一轮约 +3dB，减色仅约 -1.1dB，净赚
+          if (chosen.fps >= 12) chosen.quality = 25;
         }
         // 实验/排查用（仅 ?debug）：localStorage devtools-vbb-force="fps:宽" 强制指定档位
         try {
@@ -1746,16 +1750,24 @@
             if (m) chosen = { fps: Number(m[1]), width: m[2] ? Number(m[2]) : V2G_BLACKBOX_BASE_W };
           }
         } catch (_) {}
+        const chosenQuality = chosen.quality || 0;
         vbbLog(
-          `[vbb-phase] 选定 ${chosen.fps}fps 宽${chosen.width} · 标定 ${formatKb(
+          `[vbb-phase] 选定 ${chosen.fps}fps 宽${chosen.width}${chosenQuality ? ` 色数档${chosenQuality}` : ""} · 标定 ${formatKb(
             calib.blob.size
           )}@${calib.outW}x${calib.outH} ${calib.frameCount}帧`
         );
         onProgress(0.5, `${chosen.fps}FPS · 宽${chosen.width}`);
         let candidate =
-          chosen.fps === fpsCalib && chosen.width >= V2G_BLACKBOX_BASE_W - 2
+          chosen.fps === fpsCalib && chosen.width >= V2G_BLACKBOX_BASE_W - 2 && !chosenQuality
             ? calib // 只有「帧率和宽度都等于标定点」才复用，否则必须按选定宽度重编
-            : await encodeAt(chosen.fps, chosen.width, 0.5, 0.36, `${chosen.fps}FPS·宽${chosen.width}`);
+            : await encodeAt(
+                chosen.fps,
+                chosen.width,
+                0.5,
+                0.36,
+                `${chosen.fps}FPS·宽${chosen.width}`,
+                chosenQuality
+              );
         tried.push(candidate);
         // 超预算 → 按比例回缩一次
         if (candidate.blob.size > V2G_BLACKBOX_MAX_BYTES && (candidate.maxW || 0) > V2G_BLACKBOX_BASE_W) {
@@ -1765,7 +1777,7 @@
           );
           if (back < candidate.maxW - 2) {
             onProgress(0.88, `回缩 ${back}px`);
-            const shrunk = await encodeAt(chosen.fps, back, 0.88, 0.06, `${chosen.fps}FPS·宽${back}`);
+            const shrunk = await encodeAt(chosen.fps, back, 0.88, 0.06, `${chosen.fps}FPS·宽${back}`, chosenQuality);
             tried.push(shrunk);
             if (shrunk.blob.size <= V2G_BLACKBOX_MAX_BYTES) candidate = shrunk;
           }
@@ -1776,7 +1788,12 @@
           tried.push(candidate);
         }
         if (candidate.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
-          return await finishBlackbox(candidate, chosen.fps, encodeAtWidthFps, srcCap);
+          return await finishBlackbox(
+            candidate,
+            chosen.fps,
+            (f, w) => encodeAtWidthFps(f, w, chosenQuality),
+            srcCap
+          );
         }
         return tried.slice().sort((a, b) => a.blob.size - b.blob.size)[0] || null;
       }
