@@ -6416,6 +6416,7 @@
       /** 完成通知：按范围设置决定「每个」还是「仅全部完成」 */
       function notifyVbbProgress(index, total) {
         try {
+          DN.unlockAudio?.(); // 长任务后音频常被挂起，响前再解锁一次
           if (DN.scope?.() === "done") {
             if (Number(index) >= Number(total) - 1) DN.notifyDone?.();
           } else {
@@ -7343,6 +7344,7 @@
           const holdNum = $("#vbb-hold-num", root);
           const previewEl = $("#vbb-img-preview", root);
           const resultEl = $("#vbb-img-result", root);
+          const resultWrap = $("#vbb-img-result-wrap", root);
           const fillSel = $("#vbb-fill", root);
           const metaEl = $("#vbb-img-meta", root);
           const genBtn = $("#vbb-img-generate", root);
@@ -7392,7 +7394,7 @@
           function updateButtons() {
             const has = st.items.length > 0;
             if (genBtn) genBtn.disabled = !has || st.busy;
-            if (dlEl) dlEl.hidden = !st.url;
+            if (dlEl) dlEl.hidden = !(st.url && st.manualDone);
           }
 
           const previewNoteEl = $("#vbb-img-preview-note", root);
@@ -7431,6 +7433,7 @@
             }
             st.url = "";
             st.blob = null;
+            if (resultWrap) resultWrap.hidden = true;
             if (resultEl) {
               resultEl.hidden = true;
               resultEl.removeAttribute("src");
@@ -7681,20 +7684,25 @@
               if (previewEl) {
                 previewEl.hidden = false;
               }
-              if (resultEl) {
-                resultEl.hidden = false;
-                resultEl.src = st.url;
+              // 只有点「生成」才显示结果图（自动预览编码不出结果，避免提前出现）
+              if (isManual) {
+                if (resultWrap) resultWrap.hidden = false;
+                if (resultEl) {
+                  resultEl.hidden = false;
+                  resultEl.src = st.url;
+                }
+                stopPlay(); // 生成后停止轮播，省电；改时长会重新开始
+                if (dlEl) {
+                  dlEl.hidden = false;
+                  dlEl.href = st.url;
+                  dlEl.download = `images-${st.items.length}x${String(st.hold).replace(".", "_")}s.gif`;
+                }
               }
               setPreviewNote(`第 ${(st.playIdx || 0) + 1}/${st.items.length} 张 · 每张 ${st.hold}s`);
-              stopPlay();
-              if (dlEl) {
-                dlEl.hidden = false;
-                dlEl.href = st.url;
-                dlEl.download = `images-${st.items.length}x${String(st.hold).replace(".", "_")}s.gif`;
-              }
               st.autoNote = `自动：宽 ${W} · ${colors} 色`;
+              const fpsTxt = String(Math.round((1 / Math.max(0.1, st.hold)) * 10) / 10);
               setMeta(
-                `${st.items.length} 张 · 每张 ${st.hold}s · 共 ${(st.items.length * st.hold).toFixed(1)}s · ${st.autoNote} · ${fmt(
+                `${st.items.length} 张 · 每张 ${st.hold}s · ${fpsTxt} fps · 共 ${(st.items.length * st.hold).toFixed(1)}s · ${st.autoNote} · ${fmt(
                   blob.size
                 )}${round ? ` · 已自动降级 ${round} 次` : ""}`
               );

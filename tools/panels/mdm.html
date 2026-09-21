@@ -8,7 +8,7 @@
           <button type="button" class="secondary-btn" id="mdm-use-idb" title="改用浏览器本地存储（IndexedDB）：不需要文件夹权限，数据存在浏览器里；清除浏览器数据会丢失，建议配合「导出库」备份">本地存储模式</button>
           <button type="button" class="secondary-btn" id="mdm-new" disabled title="新建一篇空白文档（在标题框输入即可改名）">新建</button>
           <label class="file-btn" id="mdm-import-label" for="mdm-import" title="导入本机的 .md / .markdown / .txt 文件，可多选；正文里引用的图片会一并导入">导入 MD</label>
-          <input id="mdm-import" type="file" accept=".md,.markdown,.txt,text/markdown" multiple hidden />
+          <input id="mdm-import" type="file" accept=".md,.markdown,text/markdown" multiple hidden />
           <button type="button" class="secondary-btn mdm-wide-only" id="mdm-import-dir" disabled title="选择一个文件夹，把里面所有 .md 连同引用的图片一起导入（仅文件夹模式可用）">导入文件夹</button>
           <input id="mdm-import-dir-input" type="file" webkitdirectory directory multiple hidden />
           <button type="button" class="secondary-btn mdm-wide-only" id="mdm-export-lib" disabled title="把整个库（索引 + 所有 .md + assets 资源）打包成一个 ZIP 下载，用于备份或迁移">导出库</button>
@@ -141,10 +141,12 @@
           </aside>
         </div>
       </div>
-      <div class="mdm-pop" id="mdm-search-pop" hidden>
-        <input id="mdm-search" class="mono mdm-search" type="search" placeholder="搜索标题与正文…" autocomplete="off" />
-        <div class="mdm-search-meta hint tight" id="mdm-search-meta"></div>
-        <div class="mdm-search-results" id="mdm-search-results" role="listbox" aria-label="搜索结果"></div>
+      <div class="mdm-modal mdm-search-modal" id="mdm-search-modal" hidden>
+        <div class="mdm-modal-box mdm-search-box" role="dialog" aria-modal="true" aria-label="搜索文档">
+          <input id="mdm-search" class="mono mdm-search" type="search" placeholder="搜索标题与正文…" autocomplete="off" />
+          <div class="mdm-search-meta hint tight" id="mdm-search-meta"></div>
+          <div class="mdm-search-results" id="mdm-search-results" role="listbox" aria-label="搜索结果"></div>
+        </div>
       </div>
       <div class="mdm-pop mdm-menu-pop" id="mdm-sort-menu" hidden role="menu"></div>
       <div class="mdm-pop mdm-menu-pop" id="mdm-group-menu" hidden role="menu"></div>

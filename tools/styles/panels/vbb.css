@@ -282,7 +282,7 @@
   }
 }
 
-/* ---- ��ͼ �� GIF ---- */
+/* ---- ��ͼ �� GIF ---- */
 #vbb.is-images-mode [data-vbb-video] { display: none !important; }
 .vbb-img-drop {
   margin-top: 0.55rem;
@@ -309,13 +309,21 @@
 .vbb-hold-range { flex: 1 1 9rem; min-width: 8rem; accent-color: var(--accent); height: 1.8rem; }
 .vbb-hold-row .meta-input { width: 4.6rem; }
 .vbb-img-preview-wrap { margin-top: 0.7rem; }
-.vbb-img-preview-wrap img { max-width: 100%; height: auto; display: block; margin: 0 auto; border-radius: 8px; }
+/* 统一高度：原图尺寸不一致时预览框不跳变（contain 保比例，留边用淡底） */
+.vbb-img-preview-wrap img {
+  width: 100%; height: min(46vh, 380px); object-fit: contain;
+  display: block; margin: 0 auto; border-radius: 8px;
+  background: rgba(127, 127, 127, 0.12);
+}
+.vbb-img-result-wrap { margin-top: 0.8rem; }
+/* 生成信息始终一行（手机上尤其） */
+#vbb-img-meta { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 900px) {
   .vbb-img-item { width: 76px; }
   .vbb-img-item img { height: 54px; }
 }
 
-/* ��ͼ�����к��򻬶����ֻ��Ѻã� */
+/* ��ͼ�����к��򻬶����ֻ��Ѻã� */
 .vbb-img-list {
   flex-wrap: nowrap;
   overflow-x: auto;
@@ -325,10 +333,6 @@
   padding-bottom: 0.3rem;
 }
 .vbb-img-item { flex: 0 0 auto; }
-.vbb-img-previews { display: grid; gap: 0.7rem; grid-template-columns: 1fr 1fr; margin-top: 0.7rem; }
+.vbb-img-previews { display: grid; gap: 0.7rem; grid-template-columns: 1fr; margin-top: 0.7rem; }
 .vbb-img-preview-box { min-width: 0; }
 .vbb-img-preview-box > .hint { margin: 0 0 0.25rem; }
-.vbb-img-preview-wrap img { max-height: 46vh; }
-@media (max-width: 900px) {
-  .vbb-img-previews { grid-template-columns: 1fr; }
-}

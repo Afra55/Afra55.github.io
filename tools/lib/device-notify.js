@@ -97,12 +97,20 @@
     return audioCtx;
   }
 
-  /** 用户手势里调用一次，解锁 iOS 音频 */
+  /** 用户手势里调用一次，解锁音频（必须真的播一次静音，iOS 才认） */
   function unlockAudio() {
     const ctx = ensureCtx();
     if (!ctx) return;
     try {
       if (ctx.state === "suspended") ctx.resume();
+      const t0 = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      gain.gain.setValueAtTime(0.0001, t0);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(t0);
+      osc.stop(t0 + 0.02);
     } catch (_) {}
   }
 
@@ -110,21 +118,27 @@
     if (!readBool(SOUND_KEY, true)) return;
     const ctx = ensureCtx();
     if (!ctx) return;
+    const play = () => {
+      try {
+        const t0 = ctx.currentTime + 0.01;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(880, t0);
+        osc.frequency.setValueAtTime(1318.5, t0 + 0.1);
+        gain.gain.setValueAtTime(0.0001, t0);
+        gain.gain.exponentialRampToValueAtTime(0.28, t0 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.3);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t0);
+        osc.stop(t0 + 0.32);
+      } catch (_) {}
+    };
     try {
-      if (ctx.state === "suspended") ctx.resume();
-      const t0 = ctx.currentTime + 0.01;
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.setValueAtTime(880, t0);
-      osc.frequency.setValueAtTime(1318.5, t0 + 0.1);
-      gain.gain.setValueAtTime(0.0001, t0);
-      gain.gain.exponentialRampToValueAtTime(0.28, t0 + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.3);
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.start(t0);
-      osc.stop(t0 + 0.32);
+      // 长任务后上下文常被挂起：等 resume 完成再排音，否则静默
+      if (ctx.state === "suspended") ctx.resume().then(play).catch(() => {});
+      else play();
     } catch (_) {}
   }
 
@@ -141,9 +155,24 @@
     } catch (_) {}
   }
 
+  let pendingNotify = false;
   function notifyDone() {
+    // 后台完成时先不响（响也听不到），回到前台再补一次
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") {
+      pendingNotify = true;
+      vibrate();
+      return;
+    }
     beep();
     vibrate();
+  }
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", () => {
+      if (pendingNotify && document.visibilityState === "visible") {
+        pendingNotify = false;
+        beep();
+      }
+    });
   }
 
   function scope() {

@@ -230,7 +230,7 @@
       conflict: $("#mdm-conflict"),
       layout: $("#mdm-layout"),
       searchToggle: $("#mdm-search-toggle"),
-      searchPop: $("#mdm-search-pop"),
+      searchModal: $("#mdm-search-modal"),
       search: $("#mdm-search"),
       searchMeta: $("#mdm-search-meta"),
       searchResults: $("#mdm-search-results"),
@@ -837,7 +837,7 @@
       if (els.importLabel) {
         els.importLabel.classList.toggle("is-disabled", !hasMode);
         els.importLabel.title = hasMode
-          ? "导入本机的 .md / .markdown / .txt 文件，可多选；正文里引用的图片会一并导入"
+          ? "导入本机的 .md / .markdown 文件，可多选；正文里引用的图片会一并导入"
           : "请先选择存储位置再导入";
       }
       const inMenus = (sel) => els.toolsDropdown?.querySelector(sel) || els.insertDropdown?.querySelector(sel);
@@ -1215,6 +1215,65 @@
     }
 
     // ---- preview + outline ----
+    /** 复制纯文本到剪贴板（带回退） */
+    async function copyText(text) {
+      const s = String(text ?? "");
+      try {
+        await navigator.clipboard.writeText(s);
+        return true;
+      } catch (_) {}
+      try {
+        const ta = document.createElement("textarea");
+        ta.value = s;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        const ok = document.execCommand("copy");
+        ta.remove();
+        return ok;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    /** 给预览里的每个代码块加「复制」按钮 */
+    function addCodeCopyButtons() {
+      if (!els.preview) return;
+      els.preview.querySelectorAll("pre").forEach((pre) => {
+        if (pre.querySelector(".mdm-copy-code")) return;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "mdm-copy-code";
+        btn.textContent = "复制";
+        btn.title = "复制这段代码";
+        btn.setAttribute("data-html2canvas-ignore", "true");
+        btn.addEventListener("click", async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const code = pre.querySelector("code");
+          const ok = await copyText((code || pre).innerText);
+          btn.textContent = ok ? "已复制" : "失败";
+          window.setTimeout(() => {
+            btn.textContent = "复制";
+          }, 1200);
+          toast(ok ? "已复制代码" : "复制失败");
+        });
+        pre.appendChild(btn);
+      });
+    }
+
+    /** 超大文档：暂停自动预览，避免 markdown-it + 高亮 + 大纲把页面卡死 */
+    const LARGE_DOC_CHARS = 120000;
+    function largeDocHint(len) {
+      if (!els.preview) return;
+      els.preview.innerHTML =
+        `<p class="hint mdm-large-doc">文档较大（${Number(len).toLocaleString()} 字符），已暂停实时预览以免卡顿。` +
+        `<button type="button" class="secondary-btn" data-render-now>仍然渲染一次</button></p>`;
+    }
+    els.preview?.addEventListener("click", (e) => {
+      if (e.target.closest?.("[data-render-now]")) renderPreview(true);
+    });
     function schedulePreview() {
       window.clearTimeout(state.previewTimer);
       // 按文档大小自适应去抖：长文渲染更贵，延长等待
@@ -1227,14 +1286,23 @@
           return;
         }
         state.previewStale = false;
+        if (len > LARGE_DOC_CHARS) {
+          largeDocHint(len);
+          renderOutline();
+          return;
+        }
         renderPreview();
         renderOutline();
       }, delay);
     }
 
-    function renderPreview() {
+    function renderPreview(force) {
       if (!els.preview) return;
       const src = getEditorText();
+      if (!force && src.length > LARGE_DOC_CHARS) {
+        largeDocHint(src.length);
+        return;
+      }
       // 含公式且 KaTeX 尚未加载：按需加载后重渲一次（避免开工具就下载 KaTeX）
       if (!katexReady && !window.markdownItKatex && /\$[^$\n]+\$|\$\$[\s\S]*?\$\$/.test(src)) {
         void ensureKatex().then((ok) => {
@@ -1250,6 +1318,7 @@
       });
       applyTaskLists(els.preview);
       applyHeadingAnchors(els.preview);
+      addCodeCopyButtons();
       refreshOutlineHeads();
       updateDocStats(src, state.view?.state.selection.main);
       void resolvePreviewAssets();
@@ -2805,7 +2874,7 @@
           }
           void (async () => {
             try {
-              const isDoc = (f) => /\.(md|markdown|txt)$/i.test(f.name || "") || /markdown/.test(f.type || "");
+              const isDoc = (f) => /\.(md|markdown)$/i.test(f.name || "") || /markdown/.test(f.type || "");
               const docs = files.filter(isDoc);
               const assets = files.filter((f) => !isDoc(f));
               if (assets.length) await insertAssetFiles(assets);
@@ -2924,6 +2993,10 @@
       const mm = els.minimap;
       const sc = state.view?.scrollDOM;
       if (!mm || !sc) return;
+      if (state.view?.state?.doc && state.view.state.doc.length > LARGE_DOC_CHARS) {
+        mm.innerHTML = "";
+        return;
+      }
       const total = Math.max(1, sc.scrollHeight);
       const src = state.view?.state?.doc ? state.view.state.doc.toString() : "";
       const lines = Math.max(1, src.split("\n").length);
@@ -3772,7 +3845,21 @@
         const act = b.dataset.ctx;
         if (act === "export-toggle") {
           const sub = el.querySelector(".mdm-ctx-submenu");
-          if (sub) sub.hidden = !sub.hidden;
+          if (!sub) return;
+          sub.hidden = !sub.hidden;
+          if (!sub.hidden) {
+            // 靠右就翻到左边、靠下就上移，避免子菜单跑到屏幕外
+            sub.style.left = "";
+            sub.style.right = "";
+            sub.style.top = "0";
+            const sr = sub.getBoundingClientRect();
+            if (sr.right > window.innerWidth - 8) {
+              sub.style.left = "auto";
+              sub.style.right = "100%";
+            }
+            const overflowY = sr.bottom - (window.innerHeight - 8);
+            if (overflowY > 0) sub.style.top = `${-Math.round(overflowY)}px`;
+          }
           return;
         }
         closeListCtx();
@@ -3882,7 +3969,7 @@
         return;
       }
       const all = [...(files || [])];
-      const list = all.filter((f) => /\.(md|markdown|txt)$/i.test(f.name) || /markdown/.test(f.type || ""));
+      const list = all.filter((f) => /\.(md|markdown)$/i.test(f.name) || /markdown/.test(f.type || ""));
       if (!list.length) {
         toast("没有可导入的 Markdown 文件");
         return;
@@ -4454,22 +4541,38 @@ a{color:${v.accent}}
       ["tag", "按标签分组"],
     ];
     function closePopovers() {
-      [els.searchPop, els.sortMenu, els.groupMenu].forEach((p) => {
+      [els.searchModal, els.sortMenu, els.groupMenu].forEach((p) => {
         if (p) p.hidden = true;
       });
       els.searchToggle?.classList.remove("is-on");
       els.sortToggle?.classList.remove("is-on");
       els.groupToggle?.classList.remove("is-on");
     }
+    /** 面板祖先有 transform / backdrop-filter 时，position:fixed 会相对祖先定位 → 移到 body 才准 */
+    function ensureInBody(el) {
+      if (el && el.parentElement !== document.body) document.body.appendChild(el);
+    }
+    /** 打开搜索：全屏遮罩弹框，聚焦输入框 */
+    function openSearchModal() {
+      closePopovers();
+      if (!els.searchModal) return;
+      ensureInBody(els.searchModal);
+      els.searchModal.hidden = false;
+      els.searchToggle?.classList.add("is-on");
+      renderSearchResults();
+      els.search?.focus();
+      els.search?.select?.();
+    }
     function placePopover(pop, btn, minW) {
+      ensureInBody(pop);
       pop.hidden = false;
       pop.style.minWidth = (minW || 200) + "px";
       const r = btn.getBoundingClientRect();
       const w = pop.offsetWidth || minW || 200;
       const h = pop.offsetHeight || 0;
       pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8)) + "px";
-      const below = r.bottom + 6;
-      pop.style.top = (below + h > window.innerHeight - 8 && r.top - h - 6 > 8 ? r.top - h - 6 : below) + "px";
+      const below = r.bottom + 2;
+      pop.style.top = (below + h > window.innerHeight - 8 && r.top - h - 2 > 8 ? r.top - h - 2 : below) + "px";
     }
     function buildMenus() {
       if (els.sortMenu) {
@@ -4502,13 +4605,8 @@ a{color:${v.accent}}
       buildMenus();
       placePopover(pop, btn, minW);
       btn.classList.add("is-on");
-      if (pop === els.searchPop) {
-        renderSearchResults();
-        els.search?.focus();
-        els.search?.select?.();
-      }
     }
-    els.searchToggle?.addEventListener("click", () => togglePopover(els.searchPop, els.searchToggle, 320));
+    els.searchToggle?.addEventListener("click", () => openSearchModal());
     els.sortToggle?.addEventListener("click", () => togglePopover(els.sortMenu, els.sortToggle, 160));
     els.groupToggle?.addEventListener("click", () => togglePopover(els.groupMenu, els.groupToggle, 160));
     els.sortMenu?.addEventListener("click", (e) => {
@@ -4559,22 +4657,20 @@ a{color:${v.accent}}
       if (b) void openSearchHit(b.dataset.sr);
     });
     document.addEventListener("click", (e) => {
-      if (e.target.closest?.("#mdm-search-pop, #mdm-sort-menu, #mdm-group-menu, #mdm-search-toggle, #mdm-sort-toggle, #mdm-group-toggle"))
+      if (e.target.closest?.("#mdm-sort-menu, #mdm-group-menu, #mdm-sort-toggle, #mdm-group-toggle, #mdm-search-toggle, #mdm-search-modal"))
         return;
       closePopovers();
     });
     window.addEventListener("resize", () => closePopovers());
+    // 搜索弹框：点遮罩（非内容区）关闭
+    els.searchModal?.addEventListener("click", (e) => {
+      if (e.target === els.searchModal) closePopovers();
+    });
     document.addEventListener("keydown", (e) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === "F" || e.key === "f")) {
         e.preventDefault();
-        closePopovers();
-        if (!els.searchPop) return;
-        placePopover(els.searchPop, els.searchToggle, 320);
-        els.searchToggle?.classList.add("is-on");
-        renderSearchResults();
-        els.search?.focus();
-        els.search?.select?.();
-      } else if (e.key === "Escape" && els.searchPop && !els.searchPop.hidden) {
+        openSearchModal();
+      } else if (e.key === "Escape" && els.searchModal && !els.searchModal.hidden) {
         closePopovers();
       }
     });
@@ -5705,7 +5801,7 @@ a{color:${v.accent}}
         void (async () => {
           try {
             const files = await collectDroppedFiles(e.dataTransfer);
-            const hasMd = files.some((f) => /\.(md|markdown|txt)$/i.test(f.name) || /markdown/.test(f.type || ""));
+            const hasMd = files.some((f) => /\.(md|markdown)$/i.test(f.name) || /markdown/.test(f.type || ""));
             if (hasMd) await importFiles(files);
             else await insertAssetFiles(files);
           } catch (err) {

@@ -187,6 +187,10 @@ async function browserChecks() {
 
     // 2) 新建 + 命名（空库进入时已自动新建一篇，直接用；否则点新建）
     console.log("STEP new");
+    // 等自动打开/自动新建落定（空库会自动建一篇，避免与下面的新建重复）
+    await page
+      .waitForFunction(() => document.querySelectorAll("#mdm-list [data-id]").length > 0, { timeout: 15000 })
+      .catch(() => {});
     const preCount = await page.$$eval("#mdm-list [data-id]", (els) => els.length);
     if (preCount === 0) await page.click("#mdm-new");
     await page.click("#mdm-title", { clickCount: 3 });
@@ -227,7 +231,7 @@ async function browserChecks() {
 
     // 6) 搜索浮层：全库搜标题/正文，出结果（标题 + 命中片段），列表本身不被筛选
     await page.click("#mdm-search-toggle");
-    await page.waitForSelector("#mdm-search-pop:not([hidden]) #mdm-search", { timeout: 10000 });
+    await page.waitForSelector("#mdm-search-modal:not([hidden]) #mdm-search", { timeout: 10000 });
     await page.click("#mdm-search");
     await page.keyboard.type("冒烟文档");
     await page.waitForFunction(

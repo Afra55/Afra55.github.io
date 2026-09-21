@@ -184,12 +184,6 @@
               </div>
               <p class="hint tight" id="vbb-img-preview-note"></p>
             </div>
-            <div class="vbb-img-preview-box">
-              <p class="hint tight">生成结果 GIF</p>
-              <div class="gif-preview-wrap vbb-img-preview-wrap">
-                <img id="vbb-img-result" class="img-preview gif-preview" alt="生成结果" hidden />
-              </div>
-            </div>
           </div>
           <p class="hint tight" id="vbb-img-meta">拖入图片即可预览；宽度、帧率、颜色由黑盒规则自动决定，不用填。</p>
           <div class="gif-progress" id="vbb-img-progress" hidden>
@@ -202,6 +196,12 @@
           <div class="btn-row tool-actions">
             <button type="button" class="primary-btn" id="vbb-img-generate" disabled>生成 GIF</button>
             <a class="secondary-btn" id="vbb-img-download" href="#" download="images.gif" hidden>下载 GIF</a>
+          </div>
+          <div class="vbb-img-result-wrap" id="vbb-img-result-wrap" hidden>
+            <p class="hint tight">生成结果 GIF</p>
+            <div class="gif-preview-wrap vbb-img-preview-wrap">
+              <img id="vbb-img-result" class="img-preview gif-preview" alt="生成结果" hidden />
+            </div>
           </div>
           <p class="error" id="vbb-img-error" hidden></p>
         </div>

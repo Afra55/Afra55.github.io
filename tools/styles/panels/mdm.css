@@ -25,7 +25,7 @@
 /* 侧栏顶部：搜索 / 排序 / 分组 一行图标，几乎不占高度 */
 .mdm-side-icons { display: flex; align-items: center; gap: 0.3rem; flex: none; }
 .mdm-icon-btn {
-  flex: none; width: 2rem; height: 2rem; padding: 0; line-height: 1;
+  flex: 1 1 0; min-width: 2rem; height: 2rem; padding: 0; line-height: 1;
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 1rem; border: 1px solid var(--line); border-radius: 8px;
 }
@@ -56,6 +56,9 @@
 .mdm-sr-title { font-size: 0.86rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mdm-sr-snippet { font-size: 0.78rem; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mdm-sr mark { background: color-mix(in srgb, var(--accent) 45%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+/* 搜索：全屏遮罩弹框（复用 .mdm-modal 的遮罩，内容居中） */
+.mdm-search-modal .mdm-search-box { width: min(92vw, 40rem); max-height: 80vh; display: flex; flex-direction: column; }
+.mdm-search-modal .mdm-search { margin-bottom: 0.25rem; }
 .mdm-item mark { background: color-mix(in srgb, var(--accent) 45%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
 
 .mdm-layout {
@@ -153,14 +156,14 @@
 .mdm-insert-menu { position: relative; display: inline-flex; }
 .mdm-insert-dropdown {
   position: absolute; top: calc(100% + 4px); left: 0; z-index: 20;
-  display: flex; flex-direction: column; min-width: 9.5rem;
+  display: flex; flex-direction: column; min-width: 11.5rem;
   background: var(--panel-strong, var(--bg-0)); border: 1px solid var(--line); border-radius: 10px;
   padding: 0.25rem; box-shadow: 0 10px 26px rgba(0, 0, 0, 0.35);
 }
 .mdm-insert-dropdown[hidden] { display: none !important; }
 .mdm-insert-dropdown button {
   text-align: left; padding: 0.35rem 0.55rem; border: none; background: transparent; color: var(--ink);
-  border-radius: 7px; cursor: pointer; font-size: 0.85rem;
+  border-radius: 7px; cursor: pointer; font-size: 0.85rem; white-space: nowrap;
 }
 .mdm-insert-dropdown button:hover { background: color-mix(in srgb, var(--accent) 18%, transparent); }
 .mdm-insert-dropdown { max-height: min(70vh, 30rem); overflow-y: auto; }
@@ -405,17 +408,49 @@ body.mdm-immersive #mdm .mdm-main { min-height: 0; }
 .markdown-body img.mdm-img-missing { min-height: 28px; border: 1px dashed var(--line); }
 .markdown-body .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.2rem 0; }
 
-/* highlight.js 主题（github 精简版） */
-.hljs { color: #24292e; }
-.hljs-comment, .hljs-quote { color: #6a737d; font-style: italic; }
-.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-type { color: #d73a49; }
-.hljs-string, .hljs-attr, .hljs-addition { color: #032f62; }
-.hljs-number, .hljs-built_in, .hljs-builtin-name, .hljs-variable, .hljs-template-variable { color: #005cc5; }
-.hljs-title, .hljs-section, .hljs-name { color: #6f42c1; }
-.hljs-tag { color: #22863a; }
-.hljs-meta, .hljs-deletion { color: #b31d28; }
+/* 预览代码高亮：深色主题配浅色字（原来用浅色主题配色，深色底上看不清） */
+.markdown-body pre { background: rgba(0, 0, 0, 0.3); position: relative; }
+.hljs { color: #e6edf3; }
+.hljs-comment, .hljs-quote { color: #8b949e; font-style: italic; }
+.hljs-keyword, .hljs-selector-tag, .hljs-literal, .hljs-type { color: #ff7b72; }
+.hljs-string, .hljs-attr, .hljs-addition { color: #a5d6ff; }
+.hljs-number, .hljs-built_in, .hljs-builtin-name, .hljs-variable, .hljs-template-variable { color: #79c0ff; }
+.hljs-title, .hljs-section, .hljs-name { color: #d2a8ff; }
+.hljs-tag { color: #7ee787; }
+.hljs-meta, .hljs-deletion { color: #ffa657; }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 700; }
+/* 浅色主题：换回 GitHub 浅色配色 */
+html[data-theme-scheme="light"] .markdown-body pre { background: rgba(0, 0, 0, 0.06); }
+html[data-theme-scheme="light"] .hljs { color: #24292e; }
+html[data-theme-scheme="light"] .hljs-comment, html[data-theme-scheme="light"] .hljs-quote { color: #6a737d; }
+html[data-theme-scheme="light"] .hljs-keyword, html[data-theme-scheme="light"] .hljs-selector-tag,
+html[data-theme-scheme="light"] .hljs-literal, html[data-theme-scheme="light"] .hljs-type { color: #d73a49; }
+html[data-theme-scheme="light"] .hljs-string, html[data-theme-scheme="light"] .hljs-attr,
+html[data-theme-scheme="light"] .hljs-addition { color: #032f62; }
+html[data-theme-scheme="light"] .hljs-number, html[data-theme-scheme="light"] .hljs-built_in,
+html[data-theme-scheme="light"] .hljs-builtin-name, html[data-theme-scheme="light"] .hljs-variable,
+html[data-theme-scheme="light"] .hljs-template-variable { color: #005cc5; }
+html[data-theme-scheme="light"] .hljs-title, html[data-theme-scheme="light"] .hljs-section,
+html[data-theme-scheme="light"] .hljs-name { color: #6f42c1; }
+html[data-theme-scheme="light"] .hljs-tag { color: #22863a; }
+html[data-theme-scheme="light"] .hljs-meta, html[data-theme-scheme="light"] .hljs-deletion { color: #b31d28; }
+
+/* 代码块一键复制 */
+.mdm-copy-code {
+  position: absolute; top: 0.35rem; right: 0.35rem; z-index: 2;
+  padding: 0.1rem 0.5rem; font-size: 0.72rem; line-height: 1.5;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: var(--panel, rgba(0, 0, 0, 0.35)); color: var(--muted); cursor: pointer;
+  opacity: 0; transition: opacity 0.15s;
+}
+.markdown-body pre:hover .mdm-copy-code { opacity: 1; }
+.mdm-copy-code:hover { color: var(--accent); border-color: var(--accent); }
+@media (hover: none) {
+  .mdm-copy-code { opacity: 1; }
+}
+.mdm-large-doc { padding: 0.6rem; line-height: 1.8; }
+.mdm-large-doc button { margin-left: 0.4rem; }
 
 /* �ĵ����������༭���Ҳࣩ */
 #mdm-editor { position: relative; }

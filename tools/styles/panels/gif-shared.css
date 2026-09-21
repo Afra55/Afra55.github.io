@@ -91,6 +91,9 @@
   margin: 0;
   flex: 1 1 auto;
   min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .gif-progress-pct {
@@ -132,6 +135,9 @@
 
 .gif-progress-sub {
   margin: 0.35rem 0 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .gif-progress-sub[hidden] {

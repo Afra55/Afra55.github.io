@@ -6414,8 +6414,11 @@
     if (!fab) return;
     // 挂到 body，避免面板祖先的 transform 让 position:fixed 变成相对内容定位
     if (fab.parentElement !== document.body) document.body.appendChild(fab);
-    const root = memoScrollRoot() || window;
-    const getTop = () => (root === window ? window.scrollY || 0 : root.scrollTop || 0);
+    // 滚动根每次动态解析（绑定时可能还没挂上 main.shell），并用捕获监听接住任意滚动容器
+    const getTop = () => {
+      const r = memoScrollRoot();
+      return r ? r.scrollTop || 0 : window.scrollY || 0;
+    };
     let hideTimer = 0;
     const hideNow = () => {
       window.clearTimeout(hideTimer);
@@ -6434,7 +6437,7 @@
         fab.hidden = true;
       }, 3000);
     };
-    root.addEventListener("scroll", sync, { passive: true });
+    document.addEventListener("scroll", sync, { passive: true, capture: true });
     window.addEventListener("hashchange", hideNow);
     fab.addEventListener("click", () => {
       hideNow();
