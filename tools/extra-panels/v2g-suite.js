@@ -1105,9 +1105,84 @@
           .join(" · ");
       }
   
-      /** 不因帧数上限跳过 15：始终从 15 起试，体积由压缩(减色/缩放)兜底 */
-      function resolveBlackboxFpsList(_span) {
+      /** 探测源视频帧率（缓存）：挑选「整数分之一」帧率用，保证抽帧步长恒定 */
+      async function detectSourceFps(srcFile) {
+        if (!srcFile) return 0;
+        const cache = (detectSourceFps._cache = detectSourceFps._cache || new Map());
+        const key = `${srcFile.name || ""}|${srcFile.size || 0}|${srcFile.lastModified || 0}`;
+        if (cache.has(key)) return cache.get(key);
+        let fps = 0;
+        const url = URL.createObjectURL(srcFile);
+        const v = document.createElement("video");
+        v.muted = true;
+        v.playsInline = true;
+        v.preload = "auto";
+        try {
+          v.src = url;
+          await new Promise((resolve, reject) => {
+            const to = setTimeout(() => reject(new Error("probe timeout")), 8000);
+            v.onloadeddata = () => { clearTimeout(to); resolve(); };
+            v.onerror = () => { clearTimeout(to); reject(new Error("probe error")); };
+          });
+          if (typeof v.requestVideoFrameCallback === "function") {
+            const times = [];
+            await new Promise((resolve) => {
+              const to = setTimeout(resolve, 2500);
+              const onFrame = (_now, meta) => {
+                times.push(Number(meta?.mediaTime) || 0);
+                if (times.length >= 2 && times[times.length - 1] - times[0] >= 0.6) {
+                  clearTimeout(to);
+                  resolve();
+                  return;
+                }
+                if (times.length >= 240) { clearTimeout(to); resolve(); return; }
+                v.requestVideoFrameCallback(onFrame);
+              };
+              v.requestVideoFrameCallback(onFrame);
+              v.play().catch(() => { clearTimeout(to); resolve(); });
+            });
+            if (times.length >= 3) {
+              const spanT = times[times.length - 1] - times[0];
+              if (spanT > 0.15) {
+                const est = (times.length - 1) / spanT;
+                if (Number.isFinite(est) && est >= 5 && est <= 240) fps = Math.round(est);
+              }
+            }
+          }
+        } catch (_) {
+          fps = 0;
+        } finally {
+          try { v.pause(); } catch (_) {}
+          try { URL.revokeObjectURL(url); } catch (_) {}
+          try { v.removeAttribute("src"); v.load(); } catch (_) {}
+        }
+        cache.set(key, fps);
+        return fps;
+      }
+
+      /**
+       * 黑盒帧率候选：优先取源帧率的「整数分之一」。
+       * 这样每输出一帧恰好跳过固定数量的源帧，运动速度恒定；
+       * 否则（如 30fps 源抽 12fps，比例 2.5）会出现隔 2 帧 / 隔 3 帧交替 → 一卡一卡。
+       * 源帧率未知时退回 15/12/10。
+       */
+      function blackboxFpsCandidates(srcFps) {
+        const src = Number(srcFps) || 0;
+        if (src >= 20 && src <= 240) {
+          const out = [];
+          for (const div of [2, 3, 4, 5, 6, 8]) {
+            const f = src / div;
+            if (f < 8 || f > 20) continue;
+            out.push(Math.round(f * 100) / 100);
+          }
+          if (out.length) return [...new Set(out)].sort((a, b) => b - a);
+        }
         return V2G_BLACKBOX_FPS_LIST.slice();
+      }
+
+      /** 不因帧数上限跳过最高档：始终从最高档起试，体积由压缩(减色/缩放)兜底 */
+      function resolveBlackboxFpsList(_span, srcFps) {
+        return blackboxFpsCandidates(srcFps);
       }
   
       function applyBlackboxSuccess(candidate, note) {
@@ -1387,7 +1462,10 @@
             : 1;
         const isAborted = clipOpts.isAborted || (() => abortV2g);
         const onProgress = clipOpts.onProgress || (() => {});
-        const fpsList = resolveBlackboxFpsList(span / speed);
+        // 并行探测源帧率（不挡引擎加载），用于挑「整数分之一」帧率避免抽帧不匀
+        const srcFpsProbe = detectSourceFps(file).catch(() => 0);
+        const srcFps = await srcFpsProbe;
+        const fpsList = resolveBlackboxFpsList(span / speed, srcFps);
         if (!fpsList.length) throw new Error("没有可用的黑盒帧率方案");
         const tried = [];
         const common = {
@@ -1405,70 +1483,19 @@
           crop: clipOpts.crop || null,
         };
 
-        /** 探测源视频帧率（缓存）：用于「剩余预算提帧率」时不产生重复帧 */
-        const fpsProbeCache = (encodeBlackboxClipCore._fpsCache =
-          encodeBlackboxClipCore._fpsCache || new Map());
-        async function detectSourceFps(srcFile) {
-          if (!srcFile) return 0;
-          const key = `${srcFile.name || ""}|${srcFile.size || 0}|${srcFile.lastModified || 0}`;
-          if (fpsProbeCache.has(key)) return fpsProbeCache.get(key);
-          let fps = 0;
-          const url = URL.createObjectURL(srcFile);
-          const v = document.createElement("video");
-          v.muted = true;
-          v.playsInline = true;
-          v.preload = "auto";
-          try {
-            v.src = url;
-            await new Promise((resolve, reject) => {
-              const to = setTimeout(() => reject(new Error("probe timeout")), 8000);
-              v.onloadeddata = () => { clearTimeout(to); resolve(); };
-              v.onerror = () => { clearTimeout(to); reject(new Error("probe error")); };
-            });
-            if (typeof v.requestVideoFrameCallback === "function") {
-              const times = [];
-              await new Promise((resolve) => {
-                const to = setTimeout(resolve, 2500);
-                const onFrame = (_now, meta) => {
-                  times.push(Number(meta?.mediaTime) || 0);
-                  if (times.length >= 2 && times[times.length - 1] - times[0] >= 0.6) {
-                    clearTimeout(to);
-                    resolve();
-                    return;
-                  }
-                  if (times.length >= 240) { clearTimeout(to); resolve(); return; }
-                  v.requestVideoFrameCallback(onFrame);
-                };
-                v.requestVideoFrameCallback(onFrame);
-                v.play().catch(() => { clearTimeout(to); resolve(); });
-              });
-              if (times.length >= 3) {
-                const spanT = times[times.length - 1] - times[0];
-                if (spanT > 0.15) {
-                  const est = (times.length - 1) / spanT;
-                  if (Number.isFinite(est) && est >= 5 && est <= 240) fps = Math.round(est);
-                }
-              }
-            }
-          } catch (_) {
-            fps = 0;
-          } finally {
-            try { v.pause(); } catch (_) {}
-            try { URL.revokeObjectURL(url); } catch (_) {}
-            try { v.removeAttribute("src"); v.load(); } catch (_) {}
-          }
-          fpsProbeCache.set(key, fps);
-          return fps;
-        }
-
         /** 宽度已到顶且仍有预算时，把剩余预算换成更高帧率（不降清晰度） */
         async function raiseBlackboxFps(best, curFps, encodeAtWidthFps, srcFps) {
           const cap = Math.min(30, srcFps > 0 ? srcFps : 0);
           if (!(cap > curFps)) return best;
           const width = Number(best.maxW) || V2G_BLACKBOX_BASE_W;
           let out = best;
-          for (const f of [18, 20, 24, 30]) {
-            if (f <= curFps || f > cap) continue;
+          // 同样只取整数分之一，避免提帧率后又不匀
+          const cands = [1, 2, 3, 4]
+            .map((d) => srcFps / d)
+            .filter((f) => f > curFps + 0.01 && f <= cap)
+            .map((f) => Math.round(f * 100) / 100)
+            .sort((a, b) => a - b);
+          for (const f of cands) {
             if (isAborted()) throw new Error("已取消");
             onProgress(0.96, `提帧率试探 ${f}fps`);
             const enc = await encodeAtWidthFps(f, width);
@@ -1792,9 +1819,12 @@
         });
   
         try {
+          // 并行探测源帧率（挑「整数分之一」帧率，抽帧均匀不卡顿）
+          const srcFpsProbe = detectSourceFps(v2gSourceFile).catch(() => 0);
           await prewarmFfmpegEngine().catch(() => {});
           const { span } = resolveV2gSpan();
-          const fpsList = resolveBlackboxFpsList(span);
+          const srcFps = await srcFpsProbe;
+          const fpsList = resolveBlackboxFpsList(span, srcFps);
           if (!fpsList.length) throw new Error("没有可用的黑盒帧率方案");
   
           const skipTip =
