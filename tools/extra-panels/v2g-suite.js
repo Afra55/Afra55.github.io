@@ -872,6 +872,7 @@
       }
 
       async function encodeV2gGifFfmpeg(opts) {
+        const tPhase = performance.now();
         const file = opts.file || v2gSourceFile;
         if (!file) throw new Error("缺少原始视频文件，请重新选择视频");
         const fps = Math.min(15, Math.max(2, Number(opts.fps) || 8));
@@ -953,8 +954,11 @@
           ticker.setPhase(`${stageLabel}本地载入`);
           mapProgress(0.16, `${stageLabel}载入本地编码器（不上传）…`);
           inName = await ensureFfmpegInputWritten(ffmpeg, file, (_r, text) => {
-            mapProgress(0.16, `${stageLabel}${text || "载入本地编码器（不上传）…"}`);
+            mapProgress(0.16, `${stageLabel}载入本地编码器（不上传）…`);
           });
+          vbbLog(
+            `[vbb-phase] 写入输入 ${Math.round(performance.now() - tPhase)}ms · ${(file.size / 1048576).toFixed(1)}MB`
+          );
           encodeInput = inName;
           if (aborted()) throw new Error("已取消");
   
@@ -988,6 +992,7 @@
               encodeInput = segName;
               encodeSs = 0;
               encodeT = span;
+              vbbLog(`[vbb-phase] 抽片段 ${Math.round(performance.now() - tPhase)}ms`);
             } else {
               try {
                 await ffmpeg.deleteFile(segName);
@@ -1034,6 +1039,9 @@
             outName
           );
           const code = await ffmpeg.exec(args);
+          vbbLog(
+            `[vbb-phase] ffmpeg编码 ${Math.round(performance.now() - tPhase)}ms(累计) · ${fps}fps 宽${maxW} ${outW}x${outH} ${frameCount}帧`
+          );
           if (aborted()) throw new Error("已取消");
           if (code !== 0) throw new Error(`FFmpeg 失败（code=${code}）`);
   
@@ -1434,14 +1442,20 @@
       async function encodeBlackboxClip(clipOpts) {
         const result = await encodeBlackboxClipCore(clipOpts);
         if (!result?.blob || !(result.blob.size > 0)) return result;
-        try {
-          const optimized = await compressGifBlob(result.blob, "standard", null, {
-            plan: { label: "优化", args: "-O3", round: 1, lossy: 0 },
-          });
-          if (optimized && optimized.size && optimized.size < result.blob.size) {
-            return { ...result, blob: optimized };
-          }
-        } catch (_) {}
+          try {
+            const tO3 = performance.now();
+            const optimized = await compressGifBlob(result.blob, "standard", null, {
+              plan: { label: "优化", args: "-O3", round: 1, lossy: 0 },
+            });
+            vbbLog(
+              `[vbb-phase] gifsicle-O3 ${Math.round(performance.now() - tO3)}ms ${formatKb(
+                result.blob.size
+              )}→${formatKb(optimized?.size || 0)}`
+            );
+            if (optimized && optimized.size && optimized.size < result.blob.size) {
+              return { ...result, blob: optimized };
+            }
+          } catch (_) {}
         return result;
       }
 
@@ -1530,17 +1544,23 @@
             if (isAborted()) throw new Error("已取消");
             const before = cur.blob.size;
             const plan = isLastFps ? buildBlackboxHardCompressArgs(round) : buildBlackboxSoftCompressArgs(round);
-            const out = await compressGifBlob(
-              cur.blob,
-              "standard",
-              (ratio, text) => {
-                onProgress(
-                  progressBase + ((round - 1 + ratio) / (maxRounds + 1)) * 0.18,
-                  `压缩 ${fps} FPS · ${text || plan.label}`
-                );
-              },
-              { round, plan }
-            );
+          const tComp = performance.now();
+          const out = await compressGifBlob(
+            cur.blob,
+            "standard",
+            (ratio, text) => {
+              onProgress(
+                progressBase + ((round - 1 + ratio) / (maxRounds + 1)) * 0.18,
+                `压缩 ${fps} FPS · ${text || plan.label}`
+              );
+            },
+            { round, plan }
+          );
+          vbbLog(
+            `[vbb-phase] gifsicle ${fps}fps 第${round}轮 ${Math.round(
+              performance.now() - tComp
+            )}ms ${formatKb(before)}→${formatKb(out.size)}`
+          );
             cur = { ...cur, blob: out, compressRounds: round };
             if (out.size <= V2G_BLACKBOX_MAX_BYTES) break;
             if (out.size >= before * 0.99) break;
@@ -1548,27 +1568,45 @@
           return cur;
         };
   
-        /** 二分找「最大且 ≤ 预算」的宽度：比线性 +60 步进更满、编码次数更少 */
+        /**
+         * 找「最大且 ≤ 预算」的宽度。
+         * 不再二分（6 次全量编码，20s 视频要 ~66s）：体积近似 ∝ 宽度²，
+         * 所以用一次测量就能解析算出目标宽度，1~2 次编码即可收敛。
+         */
         const blackboxWidenBest = async (candidate, encodeAtWidth, { minW, maxW }) => {
           if (!candidate?.blob) return candidate;
           if (candidate.blob.size > V2G_BLACKBOX_MAX_BYTES) return candidate;
           let best = candidate;
-          let lo = Math.max(64, Number(candidate.maxW) || minW || V2G_BLACKBOX_BASE_W);
-          let hi = Math.max(lo, Number(maxW) || lo);
-          for (let i = 0; i < 6 && hi - lo > 16; i++) {
+          const lo = Math.max(64, Number(candidate.maxW) || minW || V2G_BLACKBOX_BASE_W);
+          const hi = Math.max(lo, Number(maxW) || lo);
+          const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.98);
+          for (let i = 0; i < 3; i++) {
             if (isAborted()) throw new Error("已取消");
-            const mid = Math.max(lo + 2, Math.round((lo + hi) / 4) * 2);
-            if (mid >= hi) break;
-            onProgress(0.92, `加宽试探 ${mid}px`);
-            const wider = await encodeAtWidth(mid);
+            const curW = Number(best.maxW) || lo;
+            const curSize = best.blob.size || 0;
+            if (!(curSize > 0) || curW >= hi - 2) break;
+            // 按 体积 ∝ 宽度² 解析求解；限制放大倍数，避免估飞
+            const ratio = Math.min(3, Math.sqrt(targetBytes / curSize));
+            let target = Math.round((curW * ratio) / 2) * 2;
+            target = Math.max(lo + 2, Math.min(hi, target));
+            if (target <= curW + 2) break;
+            onProgress(0.92, `加宽试探 ${target}px`);
+            const wider = await encodeAtWidth(target);
             if (!wider?.blob) break;
-            const cand = { ...wider, compressRounds: 0, maxW: mid };
+            const cand = { ...wider, compressRounds: 0, maxW: target };
             if (cand.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
               best = cand;
-              lo = mid;
-              if (best.outW > 0 && best.outW < mid - 2) break; // 已是源宽
+              if (best.outW > 0 && best.outW < target - 2) break; // 已是源宽
+              if (target >= hi) break;
             } else {
-              hi = mid;
+              // 估过头：按实际比例回缩一半再试一次
+              const back = Math.round((curW + (target - curW) * 0.45) / 2) * 2;
+              if (back <= curW + 2) break;
+              onProgress(0.94, `回缩试探 ${back}px`);
+              const mid = await encodeAtWidth(back);
+              if (!mid?.blob) break;
+              if (mid.blob.size <= V2G_BLACKBOX_MAX_BYTES) best = { ...mid, compressRounds: 0, maxW: back };
+              break;
             }
           }
           return best;
