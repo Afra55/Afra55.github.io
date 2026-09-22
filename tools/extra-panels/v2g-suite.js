@@ -93,6 +93,9 @@
       /** 实测超预算时「无损重编」的绝对下限（宽度 px / 帧率）：宁可到这两个底线，也不轻易用 gifsicle --lossy */
       const V2G_BLACKBOX_RETRY_MIN_W = 220;
       const V2G_BLACKBOX_RETRY_MIN_FPS = 12;
+      /** 帧率已到 12fps 底线但体积还超 → 优先减色（quality 18 ≈ 162 色）。
+       *  实测 30s：256→160 色省 12% 只损约 1.1dB；12→10fps 省 17% 但明显更卡。 */
+      const V2G_BLACKBOX_RETRY_QUALITY = 18;
       /** 源宽未知时的加宽兜底（等同不设上限） */
       const V2G_BLACKBOX_WIDTH_HARD_FALLBACK = 4096;
       // 色数档位：1 → gifQualityToMaxColors(1) = 256 色（GIF 上限）。实测 234→256 仅 +1% 体积，几乎免费。
@@ -1339,6 +1342,9 @@ const V2G_BLACKBOX_QUALITY = 1;
           const k = Math.min(1, Math.sqrt(target / Math.max(1, candidate.blob.size)));
           const rw = Math.max(V2G_BLACKBOX_RETRY_MIN_W, Math.floor((width * k) / 2) * 2);
           const rf = Math.max(V2G_BLACKBOX_RETRY_MIN_FPS, Math.round(fps * k * 2) / 2);
+          // 帧率已到 12fps 底线、体积还不够 → 优先「减色」（比降帧率便宜得多）
+          const retryQuality =
+            rf <= V2G_BLACKBOX_RETRY_MIN_FPS + 0.01 && k < 0.92 ? V2G_BLACKBOX_RETRY_QUALITY : V2G_BLACKBOX_QUALITY;
           if (rw < width - 4 || rf < fps - 0.4) {
             setV2gProgress(true, base + 0.3 * spanShare, `黑盒重编 · ${rf}FPS`, {
               sub: `${formatKb(candidate.blob.size)} 超预算 → 无损重编 宽${rw}`,
@@ -1348,7 +1354,7 @@ const V2G_BLACKBOX_QUALITY = 1;
               file: v2gSourceFile,
               fps: rf,
               maxW: rw,
-              quality: V2G_BLACKBOX_QUALITY,
+              quality: retryQuality,
               stageLabel: `${rf}FPS·宽${rw}`,
               onProgress: (local, text) => {
                 setV2gProgress(true, base + 0.3 * spanShare, `黑盒重编 · ${rf}FPS`, {
@@ -1627,11 +1633,19 @@ const V2G_BLACKBOX_QUALITY = 1;
               const k = Math.min(1, Math.sqrt(target / Math.max(1, candidate.blob.size)));
               const rw = Math.max(V2G_BLACKBOX_RETRY_MIN_W, Math.floor((width * k) / 2) * 2);
               const rf = Math.max(V2G_BLACKBOX_RETRY_MIN_FPS, Math.round(fps * k * 2) / 2);
+              // 帧率已到 12fps 底线、体积还不够 → 优先「减色」而不是继续掉帧率
+              // （减色比降帧率便宜得多：见 V2G_BLACKBOX_RETRY_QUALITY 注释）
+              const retryQuality =
+                rf <= V2G_BLACKBOX_RETRY_MIN_FPS + 0.01 && k < 0.92
+                  ? V2G_BLACKBOX_RETRY_QUALITY
+                  : quality || common.quality;
               if (rw < width - 4 || rf < fps - 0.4) {
                 vbbLog(
-                  `[vbb-phase] 超预算 ${formatKb(candidate.blob.size)} → 无损重编 ${rf}fps 宽${rw}（避免 --lossy）`
+                  `[vbb-phase] 超预算 ${formatKb(candidate.blob.size)} → 无损重编 ${rf}fps 宽${rw}${
+                    retryQuality !== (quality || common.quality) ? " 减色" : ""
+                  }（避免 --lossy）`
                 );
-                const retry = await encodeAt(rf, rw, progressBase, 0.18, `${rf}FPS·宽${rw}·无损重编`);
+                const retry = await encodeAt(rf, rw, progressBase, 0.18, `${rf}FPS·宽${rw}·无损重编`, retryQuality);
                 if (!(retry.blob.size > V2G_BLACKBOX_MAX_BYTES)) return retry;
                 candidate = retry;
                 fps = rf;
