@@ -74,6 +74,13 @@
       tags: ["ai", "mcp", "代码库", "graph", "本地"],
     },
     {
+      id: "claude-mem",
+      title: "Claude Mem",
+      desc: "给 AI 编程助手（Claude Code / OpenCode / Cursor / Copilot 等）的跨会话记忆：自动记录每次会话、AI 压缩成结构化记忆，下次会话注入相关上下文（TypeScript，Apache-2.0）。",
+      url: "https://github.com/thedotmack/claude-mem",
+      tags: ["ai", "memory", "agent", "github"],
+    },
+    {
       id: "ponytail",
       title: "Ponytail",
       desc: "给 AI 编程 Agent 的「懒惰资深工程师」技能：让 agent 少造轮子、能不写就不写，专治过度工程（MIT）。",
