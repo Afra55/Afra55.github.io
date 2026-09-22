@@ -183,7 +183,7 @@
           {
             name: "gifski (gifski-wasm)",
             version: "wasm 292KB",
-            license: "AGPL-3.0",
+            license: "AGPL-3.0-or-later",
             repo: "https://github.com/kornelski/gifski",
             usedIn: "黑盒 GIF 编码（体积更小 / 画质更好，失败回退 ffmpeg 管线）",
             path: "tools/vendor/gifski/（LICENSE.txt 随附）",

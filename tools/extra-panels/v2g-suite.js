@@ -103,8 +103,10 @@
       // ffmpeg 回退路径 → gifQualityToMaxColors(1) = 256 色（GIF 上限）。实测 234→256 仅 +1% 体积，几乎免费。
       const V2G_BLACKBOX_QUALITY = 1;
       /** gifski wasm 单次编码需在内存里一次性持有全部 RGBA 帧（帧数×宽×高×4）。
-       *  超过这个原始体积就退回 ffmpeg 流式管线，避免手机 OOM（基准：240 帧 242×210 ≈ 49MB 实测可用）。 */
-      const V2G_GIFSKI_MAX_RAW_BYTES = 160 * 1024 * 1024;
+       *  超过这个原始体积就退回 ffmpeg 流式管线，避免手机 OOM（基准：240 帧 242×210 ≈ 49MB 实测可用）。
+       *  256MB 可覆盖常见 8~20s 片段（实测 20s/15fps/532px ≈ 182MB、8s/24fps/426px ≈ 238MB）；
+       *  wasm 分配失败会抛异常 → encodeBlackboxGif 自动回退，不会静默出错。 */
+      const V2G_GIFSKI_MAX_RAW_BYTES = 256 * 1024 * 1024;
       const V2G_BLACKBOX_MAX_COMPRESS_ROUNDS = 10;
       /** 非最后一档：每轮轻lossy（对齐 -l），最多 3 轮不减色；多给高帧档机会再降 FPS */
       const V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS = 3;
@@ -1196,6 +1198,9 @@
           throw new Error(`gifski 帧数据过大（约 ${formatKb(rawBytes)}），改用 ffmpeg 引擎`);
         }
         if (aborted()) throw new Error("已取消");
+        // 先加载 gifski：wasm 不可用就立刻抛错回退，不白跑一趟 ffmpeg 预处理
+        const mod = await loadGifskiMods();
+        if (aborted()) throw new Error("已取消");
 
         mapProgress(0.03, `${stageLabel}准备 FFmpeg 引擎…`);
         const ffmpeg = await getFfmpegInstance((ratio, text) => {
@@ -1329,8 +1334,6 @@
           ticker.stop();
           // gifski.encode 是同步 wasm 调用，期间主线程会卡住（不再走 ticker）
           mapProgress(0.68, `${stageLabel}gifski 编码 ${actualFrames} 帧…`);
-          const mod = await loadGifskiMods();
-          if (aborted()) throw new Error("已取消");
           const gifBytes = mod.encode(framesView, actualFrames, outW, outH, fps, undefined, gifskiQuality);
           if (!gifBytes || !gifBytes.length) throw new Error("gifski 未产出 GIF");
           const blob = new Blob([gifBytes], { type: "image/gif" });
