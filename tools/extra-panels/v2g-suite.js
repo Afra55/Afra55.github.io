@@ -102,11 +102,26 @@
       // 质量档位：1 = 最高画质。gifski 路径 → gifQualityToGifskiQuality(1) = 92（近无损）；
       // ffmpeg 回退路径 → gifQualityToMaxColors(1) = 256 色（GIF 上限）。实测 234→256 仅 +1% 体积，几乎免费。
       const V2G_BLACKBOX_QUALITY = 1;
-      /** gifski wasm 单次编码需在内存里一次性持有全部 RGBA 帧（帧数×宽×高×4）。
-       *  超过这个原始体积就退回 ffmpeg 流式管线，避免手机 OOM（基准：240 帧 242×210 ≈ 49MB 实测可用）。
-       *  256MB 可覆盖常见 8~20s 片段（实测 20s/15fps/532px ≈ 182MB、8s/24fps/426px ≈ 238MB）；
-       *  wasm 分配失败会抛异常 → encodeBlackboxGif 自动回退，不会静默出错。 */
-      const V2G_GIFSKI_MAX_RAW_BYTES = 256 * 1024 * 1024;
+      /** gifski wasm 单次编码要在内存里一次性持有全部 RGBA 帧（帧数×宽×高×4），
+       *  且 JS 副本 + wasm 副本 + 解码峰值约 3×。手机 OOM 会直接杀标签页（表现为「处理到一半页面被刷新」）。
+       *  实测：240 帧 242×210 ≈ 49MB 可用；20s≈168MB 可用；30s≈250MB 在手机上被系统杀掉。
+       *  → 预算按设备内存自适应，超了就退回 ffmpeg 流式管线（它不一次性持有全部帧）。 */
+      function gifskiRawBudget() {
+        try {
+          const dm = navigator.deviceMemory; // Chrome/Edge；iOS Safari 无此字段
+          if (typeof dm === "number") {
+            if (dm <= 2) return 64 * 1024 * 1024;
+            if (dm <= 4) return 96 * 1024 * 1024;
+            if (dm <= 8) return 160 * 1024 * 1024;
+            return 256 * 1024 * 1024;
+          }
+        } catch (_) {}
+        return 128 * 1024 * 1024; // 未知设备：保守
+      }
+      /** gifski 内部会为时序优化一次性持有全部帧（不止一份输入 RGBA），内存随「帧数」超线性增长。
+       *  实测（手机）：20s@15fps ≈ 301 帧可用；30s@15fps ≈ 451 帧、33s ≈ 505 帧会被系统杀（页面被刷新）。
+       *  → 帧数也设上限，超了退回 ffmpeg 流式管线（逐帧处理，不一次性持有全部帧）。 */
+      const V2G_GIFSKI_MAX_FRAMES = 320;
       const V2G_BLACKBOX_MAX_COMPRESS_ROUNDS = 10;
       /** 非最后一档：每轮轻lossy（对齐 -l），最多 3 轮不减色；多给高帧档机会再降 FPS */
       const V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS = 3;
@@ -1194,7 +1209,10 @@
         };
 
         const rawBytes = frameCount * outW * outH * 4;
-        if (rawBytes > V2G_GIFSKI_MAX_RAW_BYTES) {
+        if (frameCount > V2G_GIFSKI_MAX_FRAMES) {
+          throw new Error(`gifski 帧数过多（${frameCount} 帧），改用 ffmpeg 引擎`);
+        }
+        if (rawBytes > gifskiRawBudget()) {
           throw new Error(`gifski 帧数据过大（约 ${formatKb(rawBytes)}），改用 ffmpeg 引擎`);
         }
         if (aborted()) throw new Error("已取消");
@@ -1882,8 +1900,12 @@
             const effSpanSec = Math.max(0.1, span / speed);
             const frames = Math.max(2, Math.round(effSpanSec * curFps) + 1);
             const aspect = srcW > 0 ? srcH / srcW : 0.75;
-            const gifskiMaxW =
-              Math.floor(Math.sqrt(V2G_GIFSKI_MAX_RAW_BYTES / Math.max(1, frames * aspect * 4)) / 2) * 2;
+            // gifski 一次要持有全部 RGBA 帧：帧数超限或宽度超过内存护栏都会直接回退 ffmpeg（白跑一趟）。
+            // 帧数超限时 gifski 本就不会被用 → 增宽不设 gifski 上限，直接用 ffmpeg 的宽度上限。
+            const useGifski = frames <= V2G_GIFSKI_MAX_FRAMES;
+            const gifskiMaxW = useGifski
+              ? Math.floor(Math.sqrt(gifskiRawBudget() / Math.max(1, frames * aspect * 4)) / 2) * 2
+              : hardMax;
             const widenMax = Math.max(V2G_BLACKBOX_BASE_W, Math.min(hardMax, gifskiMaxW));
             const wider = await blackboxWidenBest(cur, (w) => encodeAtWidthFps(curFps, w), {
               minW: Math.max(64, Number(cur.maxW) || V2G_BLACKBOX_BASE_W),
