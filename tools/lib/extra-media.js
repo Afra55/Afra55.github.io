@@ -113,8 +113,11 @@
   const FFMPEG_IDB_NAME = "devtools-persist-ffmpeg";
   const FFMPEG_IDB_STORE = "assets";
   const FFMPEG_IDB_VERSION = 1;
-  const FFMPEG_ASSET_KEY_CORE = "core-js-0.12.6";
-  const FFMPEG_ASSET_KEY_WASM = "core-wasm-0.12.6";
+  // 注意：这两个 key 是 IndexedDB 里 ffmpeg core 的缓存键。vendor 里的 core 一旦被替换
+  // （哪怕版本号没变），必须同时改这两个 key，否则老用户会一直用旧缓存里的 core，
+  // 表现为「同一份源、同一套参数、同一版本代码，但输出画质不一样」（曾出现：手机端 GIF 颗粒明显更重）。
+  const FFMPEG_ASSET_KEY_CORE = "core-js-0.12.6-2";
+  const FFMPEG_ASSET_KEY_WASM = "core-wasm-0.12.6-2";
   let ffmpegModsPromise = null;
   let ffmpegInstance = null;
   /** 预热后的资源 blob（持久，不计入临时占用，也不随清理撤销） */
