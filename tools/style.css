@@ -283,6 +283,7 @@ body.theme-reduce-glow .bg-grid {
   display: none !important;
 }
 
+.workspace-newwin { white-space: nowrap; }
 .workspace-share {
   display: inline-flex;
 }

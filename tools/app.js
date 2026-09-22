@@ -1261,6 +1261,7 @@
   const chromeToggleFloat = $("#site-chrome-toggle-float");
   const workspaceSwitch = $("#workspace-switch");
   const workspaceShare = $("#workspace-share");
+  const workspaceNewWin = $("#workspace-newwin");
   const headerMoreToggle = $("#header-more-toggle");
   const headerMoreMenu = $("#header-more-menu");
   const workspaceTitle = $("#workspace-title");
@@ -1904,25 +1905,6 @@
     } catch (_) {
       return false;
     }
-  }
-
-  /** 给面板标题栏注入「⧉ 新窗口」按钮（一次注入，所有工具通用） */
-  function ensurePanelNewWindowBtn(toolId) {
-    const panel = document.getElementById(toolId);
-    const head = panel?.querySelector?.(".panel-head");
-    if (!panel || !head) return;
-    if (head.querySelector(".panel-newwin-btn")) return;
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "ghost-btn panel-newwin-btn";
-    btn.title = "在新窗口打开（可同时使用多个工具）";
-    btn.textContent = "⧉ 新窗口";
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      openToolInNewWindow(toolId);
-    });
-    head.appendChild(btn);
   }
 
   function showNavToolCtx(x, y, toolId) {
@@ -3199,7 +3181,6 @@
         panel.hidden = !active;
         if (active) {
           panel.removeAttribute("aria-hidden");
-          ensurePanelNewWindowBtn(id); // 标题栏加「⧉ 新窗口」
         } else {
           panel.setAttribute("aria-hidden", "true");
           panel.classList.remove("is-tool-assets-loading");
@@ -3964,6 +3945,11 @@
   workspaceShare?.addEventListener("click", (e) => {
     e.preventDefault();
     shareCurrentTool().catch((err) => showToast(err?.message || "分享失败"));
+  });
+
+  workspaceNewWin?.addEventListener("click", (e) => {
+    e.preventDefault();
+    if (!openToolInNewWindow(currentTool)) showToast("新窗口被浏览器拦截，已在本页打开");
   });
 
   navOpenBtn?.addEventListener("click", (e) => {

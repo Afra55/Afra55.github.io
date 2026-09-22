@@ -1275,6 +1275,21 @@
     els.preview?.addEventListener("click", (e) => {
       if (e.target.closest?.("[data-render-now]")) renderPreview(true);
     });
+    // 预览内的锚点链接（如目录 #标题）：拦截掉，避免改 location.hash 被 SPA 路由当成「切换工具」
+    els.preview?.addEventListener("click", (e) => {
+      const a = e.target.closest?.('a[href^="#"]');
+      if (!a) return;
+      const raw = (a.getAttribute("href") || "").slice(1);
+      if (!raw) return;
+      e.preventDefault();
+      e.stopPropagation();
+      let target = null;
+      try {
+        target = els.preview.querySelector(`#${CSS.escape(decodeURIComponent(raw))}`);
+      } catch (_) {}
+      if (!target) target = els.preview.querySelector(`[id="${raw}"]`);
+      if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
     function schedulePreview() {
       window.clearTimeout(state.previewTimer);
       // 按文档大小自适应去抖：长文渲染更贵，延长等待
@@ -2877,12 +2892,11 @@
             try {
               const isDoc = (f) => /\.(md|markdown)$/i.test(f.name || "") || /markdown/.test(f.type || "");
               const docs = files.filter(isDoc);
-              const assets = files.filter((f) => !isDoc(f));
-              if (assets.length) await insertAssetFiles(assets);
               if (docs.length) {
                 // md 文件：① 导入进库（不切换当前文档）② 在当前文档插入引用链接
                 const before = new Set((state.index.items || []).map((x) => x.id));
-                await importFiles(docs, { open: false });
+                // 传全部文件：importFiles 只取 .md，并只导入正文真正引用到的资源（不会把文件夹里其它文件全塞进来）
+                await importFiles(files, { open: false });
                 const added = (state.index.items || []).filter((x) => !before.has(x.id));
                 if (added.length && state.view) {
                   const links = added.map((it) => `[${it.title}](${it.fileName})`).join("\n");
