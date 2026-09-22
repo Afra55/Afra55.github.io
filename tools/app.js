@@ -2810,7 +2810,17 @@
     const name = toolName(currentTool);
     const title = activeToolShareTitle();
     const text = `打开 DevTools「${name}」：`;
-    const clip = `${title}\n${url}`;
+
+    // 桌面端（含触屏笔记本、窄窗口）只复制链接并提示。
+    // 注意：不用 isPhoneLikeClient() 判断——它含 pointer:coarse / 窗口宽度启发式，
+    // 在触屏本或窄窗口下会误判成手机，从而弹出系统分享面板。
+    const phoneUA = /Android|iPhone|iPod|Mobile/i.test(navigator.userAgent || "");
+    if (!phoneUA) {
+      if (await copyTextFallback(url)) showToast("链接已复制到剪贴板");
+      else showToast("复制失败，请手动复制地址栏链接");
+      return;
+    }
+
     const prevTitle = document.title;
     document.title = title;
     const restoreTitle = () => {
@@ -2818,14 +2828,6 @@
         document.title = prevTitle;
       } catch (_) {}
     };
-
-    // 电脑端系统分享基本无用：直接复制标题+链接并提示
-    if (!isPhoneLikeClient()) {
-      restoreTitle();
-      if (await copyTextFallback(clip)) showToast("已复制标题和链接到剪贴板");
-      else showToast("复制失败，请手动复制地址栏链接");
-      return;
-    }
 
     if (typeof navigator.share === "function") {
       const data = { title, text, url };
@@ -2856,7 +2858,7 @@
     }
 
     restoreTitle();
-    if (await copyTextFallback(clip)) showToast("已复制标题和链接到剪贴板");
+    if (await copyTextFallback(url)) showToast("链接已复制到剪贴板");
     else showToast("复制失败，请手动复制地址栏链接");
   }
 
