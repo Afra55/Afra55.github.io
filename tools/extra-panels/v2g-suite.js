@@ -100,7 +100,12 @@ const V2G_BLACKBOX_QUALITY = 1;
       const V2G_BLACKBOX_MAX_COMPRESS_ROUNDS = 10;
       /** 非最后一档：每轮轻lossy（对齐 -l），最多 3 轮不减色；多给高帧档机会再降 FPS */
       const V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS = 3;
-      const V2G_BLACKBOX_LONG_SPAN_SEC = 20;
+      const V2G_BLACKBOX_LONG_SPAN_SEC = 12;
+      /** 长视频的帧率上限：6MB 硬约束下帧率比宽度"贵"得多
+       *  （实测同宽 262px：24fps 11.20MB / 15fps 7.59MB / 12fps 6.13MB，差 45%；
+       *    而 15→24fps 的观感提升很弱，颗粒度几乎不变）
+       *  → 时长 ≥ LONG_SPAN_SEC 时封顶 15fps，把预算让给宽度（约 242px → 295px）。 */
+      const V2G_BLACKBOX_LONG_FPS_CAP = 15;
       const V2G_FFMPEG_WARN_BYTES = 40 * 1024 * 1024;
       /** 滑块默认上限；数字框可更高，滑块 max 会跟着扩展 */
       const V2G_BRIGHT_SLIDER_MAX = 200;
@@ -1199,8 +1204,13 @@ const V2G_BLACKBOX_QUALITY = 1;
       }
 
       /** 不因帧数上限跳过最高档：始终从最高档起试，体积由压缩(减色/缩放)兜底 */
-      function resolveBlackboxFpsList(_span, srcFps) {
-        return blackboxFpsCandidates(srcFps);
+      function resolveBlackboxFpsList(span, srcFps) {
+        const list = blackboxFpsCandidates(srcFps);
+        if ((Number(span) || 0) >= V2G_BLACKBOX_LONG_SPAN_SEC) {
+          const capped = list.filter((f) => f <= V2G_BLACKBOX_LONG_FPS_CAP + 0.01);
+          if (capped.length) return capped;
+        }
+        return list;
       }
   
       function applyBlackboxSuccess(candidate, note) {
@@ -5967,9 +5977,14 @@ const V2G_BLACKBOX_QUALITY = 1;
         return Math.round(estimateVbbBytesAtWidth(bps15, span, width, srcW) * (f / 15));
       }
   
-        function resolveBlackboxEstimateFpsList(_span) {
-          // 与 resolveBlackboxFpsList 一致：帧率从高到低
-          return V2G_BLACKBOX_FPS_LIST.slice();
+        function resolveBlackboxEstimateFpsList(span) {
+          // 与 resolveBlackboxFpsList 保持一致（含长视频 15fps 封顶），否则预估与实际不符
+          const list = V2G_BLACKBOX_FPS_LIST.slice();
+          if ((Number(span) || 0) >= V2G_BLACKBOX_LONG_SPAN_SEC) {
+            const capped = list.filter((f) => f <= V2G_BLACKBOX_LONG_FPS_CAP + 0.01);
+            if (capped.length) return capped;
+          }
+          return list;
         }
   
       /**

@@ -12,6 +12,7 @@ const STEPS = [
   { name: "syntax extra-media", cmd: "node", args: ["--check", "lib/extra-media.js"] },
   { name: "syntax extra-bootstrap", cmd: "node", args: ["--check", "lib/extra-bootstrap.js"] },
   { name: "syntax lazy-scripts", cmd: "node", args: ["--check", "lib/lazy-scripts.js"] },
+  { name: "syntax all js", cmd: "node", args: ["scripts/check-syntax.cjs"] },
   { name: "extra bind audit", cmd: "node", args: ["scripts/extra-bind-audit.cjs"] },
   { name: "extra media import audit", cmd: "node", args: ["scripts/extra-media-import-audit.cjs"] },
   { name: "extra panel smoke", cmd: "node", args: ["extra-panel-smoke.cjs"] },
