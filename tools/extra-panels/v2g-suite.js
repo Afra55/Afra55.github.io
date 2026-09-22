@@ -5668,6 +5668,9 @@ const V2G_BLACKBOX_QUALITY = 1;
           });
         }
         if (c.error) bits.push(c.error);
+        // 版本标记：用于确认「实际执行的 JS 是哪一版」（排查旧 SW 缓存导致的问题）
+        const buildTag = String((typeof window !== "undefined" && window.TOOLS_BUILD) || "").slice(5); // 2026.09.22-190341 -> 09.22-190341
+        if (buildTag) bits.push(`v${buildTag}`);
         return bits.join(" · ");
       }
   
