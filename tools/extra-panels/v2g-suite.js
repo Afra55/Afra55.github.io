@@ -1608,6 +1608,26 @@ const V2G_BLACKBOX_QUALITY = 1;
   
         const compressAt = async (candidate, fps, isLastFps, progressBase) => {
           if (!(candidate?.blob?.size > V2G_BLACKBOX_MAX_BYTES)) return candidate;
+          // 先做一次「无损重编」：按实测体积把宽度/帧率一起缩（体积 ∝ 宽度²×帧数），
+          // 尽量不走到 gifsicle --lossy —— 它是「有损优化」，会改动像素，画面会出颗粒。
+          {
+            const width = Number(candidate.maxW) || 0;
+            if (width > 0) {
+              const target = V2G_BLACKBOX_MAX_BYTES * 0.9;
+              const k = Math.min(1, Math.sqrt(target / Math.max(1, candidate.blob.size)));
+              const rw = Math.max(V2G_BLACKBOX_RETRY_MIN_W, Math.floor((width * k) / 2) * 2);
+              const rf = Math.max(V2G_BLACKBOX_RETRY_MIN_FPS, Math.round(fps * k * 2) / 2);
+              if (rw < width - 4 || rf < fps - 0.4) {
+                vbbLog(
+                  `[vbb-phase] 超预算 ${formatKb(candidate.blob.size)} → 无损重编 ${rf}fps 宽${rw}（避免 --lossy）`
+                );
+                const retry = await encodeAt(rf, rw, progressBase, 0.18, `${rf}FPS·宽${rw}·无损重编`);
+                if (!(retry.blob.size > V2G_BLACKBOX_MAX_BYTES)) return retry;
+                candidate = retry;
+                fps = rf;
+              }
+            }
+          }
           const maxRounds = isLastFps ? V2G_BLACKBOX_MAX_COMPRESS_ROUNDS : V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS;
           let cur = candidate;
           for (let round = 1; round <= maxRounds; round++) {
