@@ -11,13 +11,16 @@
           <label for="interp-duration">时长</label>
           <input id="interp-duration" class="mono meta-input" type="number" min="120" max="3000" step="60" value="600" />
           <span class="hint tight">ms</span>
-          <button type="button" class="primary-btn" id="interp-play">播放 A <span id="interp-play-mode">· 仅 A</span></button>
-          <button type="button" class="ghost-btn" id="interp-reset">重置</button>
         </div>
 
         <div class="interp-curve-box">
           <div class="interp-curve-title">实时曲线 <span class="hint tight">纵轴含超调</span></div>
           <svg class="interp-curve" id="interp-curve" viewBox="0 0 420 240" preserveAspectRatio="none" aria-label="插值器曲线"></svg>
+        </div>
+
+        <div class="field-row" style="flex-wrap:wrap;align-items:center">
+          <button type="button" class="primary-btn" id="interp-play">播放 A <span id="interp-play-mode">· 仅 A</span></button>
+          <button type="button" class="ghost-btn" id="interp-reset">重置</button>
         </div>
 
         <div class="interp-lane" data-lane="A">

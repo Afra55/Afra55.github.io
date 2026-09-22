@@ -380,7 +380,8 @@
   }
 
   function setDot(l, t, y) {
-    const dot = $(`#interp-dot-${lc(l)}`);
+    // 曲线上的 SVG 圆点（不是 lane 里预览条的 span）——预览条由 setVal 用 style.left 驱动
+    const dot = $(`#interp-curve-dot-${lc(l)}`);
     if (!dot) return;
     if (mapped) {
       dot.setAttribute("cx", mapped.xAt(t));
@@ -391,7 +392,7 @@
   function setVal(l, y) {
     const el = $(`#interp-val-${lc(l)}`);
     if (el) el.textContent = (Math.round(y * 100) / 100).toFixed(2);
-    const row = $(`#interp-preview-row-${lc(l)}`) || $(`#interp-preview [data-lane="${l}"]`);
+    const row = $(`.interp-preview-row[data-lane="${l}"]`);
     if (row) {
       const dot = row.querySelector(".interp-preview-dot");
       if (dot) dot.style.left = `${Math.min(100, Math.max(0, y * 100))}%`;

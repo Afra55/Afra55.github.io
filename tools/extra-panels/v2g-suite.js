@@ -1874,18 +1874,26 @@
           let cur = best;
           const atCap = () =>
             (srcW > 0 && cur.outW >= srcW - 2) || (Number(cur.maxW) || 0) >= Number(hardMax) - 2;
-          // 1) 体积明显偏小（<70%）且没到宽度上限 → 先「自动增宽」（不加压缩轮数）
-          if (!atCap() && cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.7) {
+          // 1) 没到宽度上限 → 用剩余预算自动增宽（只要 <95% 就补，不再只补 <70%）
+          if (!atCap()) {
             onProgress(0.95, "体积有余 · 自动增宽");
+            // gifski 一次要持有全部 RGBA 帧：宽度超过内存护栏会直接回退 ffmpeg（白跑一趟）。
+            // 先把二分探测上限压到「gifski 可行宽度」，避免这种无效回退。
+            const effSpanSec = Math.max(0.1, span / speed);
+            const frames = Math.max(2, Math.round(effSpanSec * curFps) + 1);
+            const aspect = srcW > 0 ? srcH / srcW : 0.75;
+            const gifskiMaxW =
+              Math.floor(Math.sqrt(V2G_GIFSKI_MAX_RAW_BYTES / Math.max(1, frames * aspect * 4)) / 2) * 2;
+            const widenMax = Math.max(V2G_BLACKBOX_BASE_W, Math.min(hardMax, gifskiMaxW));
             const wider = await blackboxWidenBest(cur, (w) => encodeAtWidthFps(curFps, w), {
               minW: Math.max(64, Number(cur.maxW) || V2G_BLACKBOX_BASE_W),
-              maxW: hardMax,
+              maxW: widenMax,
             });
             if (wider?.blob?.size) cur = wider;
           }
           if (cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return cur;
-          if (!atCap() && cur.blob.size > V2G_BLACKBOX_MAX_BYTES * 0.7) return cur;
-          // 2) 已到宽度上限（或增宽后仍有余额）→ 「自动提帧率」
+          if (!atCap()) return cur;
+          // 2) 已到宽度上限 → 用剩余预算「自动提帧率」
           const srcFps = await detectSourceFps(file).catch(() => 0);
           return await raiseBlackboxFps(cur, curFps, encodeAtWidthFps, srcFps);
         }
@@ -1963,45 +1971,34 @@
         };
   
         /**
-         * 找「最大且 ≤ 预算」的宽度。
-         * 不再二分（6 次全量编码，20s 视频要 ~66s）：体积近似 ∝ 宽度²，
-         * 所以用一次测量就能解析算出目标宽度，1~2 次编码即可收敛。
+         * 找「最大且 ≤ 预算」的宽度：体积近似 ∝ 宽度²，先用解析式估起点，再二分收敛。
+         * 目标贴到 0.99×预算（≤4 次编码）。旧实现「超一点就回退 45% 且只试 3 次」会卡在预算下方，
+         * 实测 7 个真实录屏里 6 个只用掉 71~86% 预算（同帧率下宽度本可再大 8~22%）。
          */
         const blackboxWidenBest = async (candidate, encodeAtWidth, { minW, maxW }) => {
           if (!candidate?.blob) return candidate;
           if (candidate.blob.size > V2G_BLACKBOX_MAX_BYTES) return candidate;
           let best = candidate;
-          const lo = Math.max(64, Number(candidate.maxW) || minW || V2G_BLACKBOX_BASE_W);
+          let lo = Math.max(64, Number(candidate.maxW) || minW || V2G_BLACKBOX_BASE_W);
           const hi = Math.max(lo, Number(maxW) || lo);
-        // 目标定在「只压 1 轮」：留足余量，宁可略窄也不要重压（实测轮数比分辨率更决定画质）
-          const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.98);
-          for (let i = 0; i < 3; i++) {
+          if (lo >= hi - 2) return best;
+          const capBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.99);
+          const fits = (c) => Boolean(c?.blob) && c.blob.size <= capBytes;
+          let guess = Math.round((lo * Math.min(4, Math.sqrt(capBytes / Math.max(1, best.blob.size)))) / 2) * 2;
+          guess = Math.max(lo + 2, Math.min(hi, guess));
+          let hiW = hi;
+          for (let i = 0; i < 4 && hiW - lo > 16; i++) {
             if (isAborted()) throw new Error("已取消");
-            const curW = Number(best.maxW) || lo;
-            const curSize = best.blob.size || 0;
-            if (!(curSize > 0) || curW >= hi - 2) break;
-            // 按 体积 ∝ 宽度² 解析求解；限制放大倍数，避免估飞
-            const ratio = Math.min(3, Math.sqrt(targetBytes / curSize));
-            let target = Math.round((curW * ratio) / 2) * 2;
-            target = Math.max(lo + 2, Math.min(hi, target));
-            if (target <= curW + 2) break;
-            onProgress(0.92, `加宽试探 ${target}px`);
-            const wider = await encodeAtWidth(target);
-            if (!wider?.blob) break;
-            const cand = { ...wider, compressRounds: 0, maxW: target };
-            if (cand.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
-              best = cand;
-              if (best.outW > 0 && best.outW < target - 2) break; // 已是源宽
-              if (target >= hi) break;
+            const w = i === 0 ? guess : Math.round((lo + hiW) / 2 / 2) * 2;
+            if (w <= lo || w >= hiW) break;
+            onProgress(0.92, `加宽试探 ${w}px`);
+            const enc = await encodeAtWidth(w);
+            if (fits(enc)) {
+              best = { ...enc, compressRounds: 0, maxW: w };
+              lo = w;
+              if (best.outW > 0 && best.outW < w - 2) break; // 已达源宽
             } else {
-              // 估过头：按实际比例回缩一半再试一次
-              const back = Math.round((curW + (target - curW) * 0.45) / 2) * 2;
-              if (back <= curW + 2) break;
-              onProgress(0.94, `回缩试探 ${back}px`);
-              const mid = await encodeAtWidth(back);
-              if (!mid?.blob) break;
-              if (mid.blob.size <= V2G_BLACKBOX_MAX_BYTES) best = { ...mid, compressRounds: 0, maxW: back };
-              break;
+              hiW = w;
             }
           }
           return best;

@@ -5165,6 +5165,21 @@ a{color:${v.accent}}
         toggleTaskCheckbox(cb);
         return;
       }
+      // 点预览里的标题 → 编辑器跳到对应标题（分屏时同步高亮大纲）
+      const head = e.target.closest?.("h1,h2,h3,h4,h5,h6");
+      if (head && els.preview.contains(head)) {
+        const heads = [...els.preview.querySelectorAll("h1,h2,h3,h4,h5,h6")];
+        const idx = heads.indexOf(head);
+        if (idx >= 0) {
+          state.syncing = true;
+          jumpEditorToHeading(idx, head.textContent || "");
+          window.requestAnimationFrame(() => {
+            state.syncing = false;
+            syncOutlineActive();
+          });
+        }
+        return;
+      }
       const a = e.target.closest?.("a[data-mdm-open]");
       if (!a) return;
       e.preventDefault();
