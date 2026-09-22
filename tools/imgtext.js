@@ -80,7 +80,7 @@
     if (window.Tesseract) return window.Tesseract;
     await new Promise((resolve, reject) => {
       const s = document.createElement("script");
-      s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@5.1.1/dist/tesseract.min.js";
+      s.src = "https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js";
       s.async = true;
       s.onload = resolve;
       s.onerror = () => reject(new Error("无法加载 Tesseract.js（需网络）"));

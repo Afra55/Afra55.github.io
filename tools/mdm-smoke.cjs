@@ -79,7 +79,7 @@ async function getPuppeteer() {
     return require("puppeteer-core");
   } catch (_) {
     const dir = os.tmpdir();
-    execSync("npm install --no-save puppeteer-core@23", { stdio: "pipe", cwd: dir });
+    execSync("npm install --no-save puppeteer-core@25", { stdio: "pipe", cwd: dir });
     return require(path.join(dir, "node_modules", "puppeteer-core"));
   }
 }
@@ -193,7 +193,7 @@ async function browserChecks() {
       .catch(() => {});
     const preCount = await page.$$eval("#mdm-list [data-id]", (els) => els.length);
     if (preCount === 0) await page.click("#mdm-new");
-    await page.click("#mdm-title", { clickCount: 3 });
+    await page.click("#mdm-title", { count: 3 });
     await page.keyboard.type(TITLE);
     console.log("STEP new:typed");
     await page.waitForFunction(
@@ -245,7 +245,7 @@ async function browserChecks() {
     console.log("STEP search-hit");
     const listAfterSearch = await page.$$eval("#mdm-list [data-id]", (els) => els.length);
     assert(listAfterSearch === 1, `list should stay unfiltered, got ${listAfterSearch}`);
-    await page.click("#mdm-search", { clickCount: 3 });
+    await page.click("#mdm-search", { count: 3 });
     await page.keyboard.type("zzz不存在zzz");
     await page.waitForFunction(
       () => /无匹配/.test(document.getElementById("mdm-search-results")?.textContent || ""),

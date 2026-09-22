@@ -12,7 +12,9 @@
         $("#yaml-to-json")?.addEventListener("click", () => {
       try {
         if (typeof jsyaml === "undefined") throw new Error("js-yaml 未加载");
-        const data = jsyaml.load($("#yaml-in").value);
+        const src = String($("#yaml-in").value || "");
+        if (!src.trim()) throw new Error("请输入 YAML 内容");
+        const data = jsyaml.load(src);
         $("#json-from-yaml").value = JSON.stringify(data, null, 2);
         setError($("#yaml-error"), "");
       } catch (err) {

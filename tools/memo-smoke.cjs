@@ -42,7 +42,7 @@ async function loadPuppeteer() {
     return require("puppeteer-core");
   } catch (_) {
     const { execSync } = require("child_process");
-    execSync("npm install --no-save puppeteer-core@23", { stdio: "inherit", cwd: "/tmp" });
+    execSync("npm install --no-save puppeteer-core@25", { stdio: "inherit", cwd: "/tmp" });
     return require("/tmp/node_modules/puppeteer-core");
   }
 }

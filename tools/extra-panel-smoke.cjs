@@ -77,7 +77,7 @@ async function getPuppeteer() {
     return require("puppeteer-core");
   } catch (_) {
     const dir = os.tmpdir();
-    execSync("npm install --no-save puppeteer-core@23", { stdio: "pipe", cwd: dir });
+    execSync("npm install --no-save puppeteer-core@25", { stdio: "pipe", cwd: dir });
     return require(path.join(dir, "node_modules", "puppeteer-core"));
   }
 }

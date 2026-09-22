@@ -113,8 +113,8 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>MD 幻灯片 · DevTools</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.css" />
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/theme/black.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@6.0.2/dist/reveal.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/reveal.js@6.0.2/dist/theme/black.css" />
   <style>
     .reveal { font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
     .reveal h1, .reveal h2, .reveal h3 { text-transform: none; }
@@ -127,7 +127,7 @@
 ${sections}
     </div>
   </div>
-  <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.1.0/dist/reveal.js"><\/script>
+  <script src="https://cdn.jsdelivr.net/npm/reveal.js@6.0.2/dist/reveal.js"><\/script>
   <script>
     Reveal.initialize({
       hash: true,

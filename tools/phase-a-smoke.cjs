@@ -39,7 +39,7 @@ async function getPuppeteer() {
   try {
     return require("puppeteer-core");
   } catch (_) {
-    execSync("npm install --no-save puppeteer-core@23", { stdio: "pipe", cwd: "/tmp" });
+    execSync("npm install --no-save puppeteer-core@25", { stdio: "pipe", cwd: "/tmp" });
     return require("/tmp/node_modules/puppeteer-core");
   }
 }

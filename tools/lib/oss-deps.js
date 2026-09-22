@@ -15,7 +15,7 @@
         items: [
           {
             name: "js-yaml",
-            version: "4.1.0",
+            version: "5.4.2",
             license: "MIT",
             repo: "https://github.com/nodeca/js-yaml",
             usedIn: "YAML ↔ JSON",
@@ -79,7 +79,7 @@
           },
           {
             name: "markdown-it-footnote / markdown-it-deflist",
-            version: "4.x / 3.x",
+            version: "4.0.0 / 4.0.0",
             license: "MIT",
             repo: "https://github.com/markdown-it/markdown-it-footnote",
             usedIn: "Markdown 文档管理 · 脚注 / 定义列表",
@@ -212,19 +212,19 @@
           },
           {
             name: "Reveal.js",
-            version: "5.1.0",
+            version: "6.0.2",
             license: "MIT",
             repo: "https://github.com/hakimel/reveal.js",
             usedIn: "MD 幻灯片演示",
-            path: "cdn.jsdelivr.net/npm/reveal.js@5.1.0",
+            path: "cdn.jsdelivr.net/npm/reveal.js@6.0.2",
           },
           {
             name: "Tesseract.js",
-            version: "5.1.1",
+            version: "7.0.0",
             license: "Apache-2.0",
             repo: "https://github.com/naptha/tesseract.js",
             usedIn: "图片转文字 OCR",
-            path: "cdn.jsdelivr.net/npm/tesseract.js@5.1.1",
+            path: "cdn.jsdelivr.net/npm/tesseract.js@7.0.0",
           },
           {
             name: "soundfont-player",
@@ -438,7 +438,7 @@
         items: [
           {
             name: "Puppeteer",
-            version: "23.11.1",
+            version: "25.8.0",
             license: "Apache-2.0",
             repo: "https://github.com/puppeteer/puppeteer",
             usedIn: "memo-smoke / lanshare-smoke 等",

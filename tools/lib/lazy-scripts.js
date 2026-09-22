@@ -3,7 +3,7 @@
 
   const BUILD = window.TOOLS_BUILD || "2026.08.30-232500";
   // 第三方库单独版本号：不随站点构建变化，浏览器缓存才能跨发布复用（升级 vendor 时手动 +1）
-  const VENDOR_V = "1";
+  const VENDOR_V = "3";
   const isVendorSrc = (src) => /(^|\/)vendor\//.test(String(src || ""));
 
   function getMqttConnect() {

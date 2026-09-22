@@ -55,7 +55,7 @@ async function main() {
   try {
     puppeteer = require("/tmp/node_modules/puppeteer-core");
   } catch (_) {
-    execSync("npm install --no-save puppeteer-core@23", { stdio: "inherit", cwd: "/tmp" });
+    execSync("npm install --no-save puppeteer-core@25", { stdio: "inherit", cwd: "/tmp" });
     puppeteer = require("/tmp/node_modules/puppeteer-core");
   }
 

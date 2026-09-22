@@ -80,7 +80,7 @@ async function tap(page, selector) {
       puppeteer = require("puppeteer-core");
     } catch (_) {
       const { execSync } = require("child_process");
-      execSync("npm install --no-save puppeteer-core@23", { stdio: "inherit", cwd: TMP });
+      execSync("npm install --no-save puppeteer-core@25", { stdio: "inherit", cwd: TMP });
       puppeteer = require(path.join(TMP, "node_modules", "puppeteer-core"));
     }
 
