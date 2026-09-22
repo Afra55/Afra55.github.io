@@ -31,6 +31,7 @@
     buildBlackboxHardCompressArgs, gifCompressSummary, readGifWatermarkOptions, drawGifTextWatermark,
     encodeAnimatedWebpFromStillFrames, isAutoPackZipEnabled, setAutoPackZipEnabled, syncAutoPackZipToggles,
     bindAutoPackZipToggles, canEncodeStillWebp, gifQualityToWebpQuality, gifQualityToMaxColors,
+    gifQualityToGifskiQuality,
     terminateFfmpegInstance, paintFfmpegWarmHint, prewarmFfmpegEngine, scheduleFfmpegPrewarm,
     TOOLS_VERSION, GIF_TOOL_VERSION, compressExistingGifToBlackbox, blackboxUseMaxBytes,
     blackboxMaxMb, setBlackboxMaxMb,
@@ -93,13 +94,17 @@
       /** 实测超预算时「无损重编」的绝对下限（宽度 px / 帧率）：宁可到这两个底线，也不轻易用 gifsicle --lossy */
       const V2G_BLACKBOX_RETRY_MIN_W = 220;
       const V2G_BLACKBOX_RETRY_MIN_FPS = 12;
-      /** 帧率已到 12fps 底线但体积还超 → 优先减色（quality 18 ≈ 162 色）。
-       *  实测 30s：256→160 色省 12% 只损约 1.1dB；12→10fps 省 17% 但明显更卡。 */
+      /** 帧率已到 12fps 底线但体积还超 → 优先降编码质量而不是继续降帧率。
+       *  gifski：quality 档 18 → gifski 70（约省 20% 体积，观感损失远小于 12→10fps 的卡顿）。 */
       const V2G_BLACKBOX_RETRY_QUALITY = 18;
       /** 源宽未知时的加宽兜底（等同不设上限） */
       const V2G_BLACKBOX_WIDTH_HARD_FALLBACK = 4096;
-      // 色数档位：1 → gifQualityToMaxColors(1) = 256 色（GIF 上限）。实测 234→256 仅 +1% 体积，几乎免费。
-const V2G_BLACKBOX_QUALITY = 1;
+      // 质量档位：1 = 最高画质。gifski 路径 → gifQualityToGifskiQuality(1) = 92（近无损）；
+      // ffmpeg 回退路径 → gifQualityToMaxColors(1) = 256 色（GIF 上限）。实测 234→256 仅 +1% 体积，几乎免费。
+      const V2G_BLACKBOX_QUALITY = 1;
+      /** gifski wasm 单次编码需在内存里一次性持有全部 RGBA 帧（帧数×宽×高×4）。
+       *  超过这个原始体积就退回 ffmpeg 流式管线，避免手机 OOM（基准：240 帧 242×210 ≈ 49MB 实测可用）。 */
+      const V2G_GIFSKI_MAX_RAW_BYTES = 160 * 1024 * 1024;
       const V2G_BLACKBOX_MAX_COMPRESS_ROUNDS = 10;
       /** 非最后一档：每轮轻lossy（对齐 -l），最多 3 轮不减色；多给高帧档机会再降 FPS */
       const V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS = 3;
@@ -1117,6 +1122,278 @@ const V2G_BLACKBOX_QUALITY = 1;
         }
       }
   
+      let gifskiModPromise = null;
+      /** 懒加载 gifski wasm（ES module）；失败不缓存，下次重试 */
+      function loadGifskiMods() {
+        if (!gifskiModPromise) {
+          const entry = new URL("./vendor/gifski/gifski_wasm.js", document.baseURI || window.location.href).href;
+          gifskiModPromise = import(entry)
+            .then(async (mod) => {
+              await mod.default();
+              return mod;
+            })
+            .catch((err) => {
+              gifskiModPromise = null;
+              throw err;
+            });
+        }
+        return gifskiModPromise;
+      }
+
+      /**
+       * ffmpeg 预处理（裁剪 / 加速 / 帧率 / 降噪 / 缩放 / 调亮 / 水印）→ 原始 RGBA 帧 → gifski wasm 编码。
+       * gifski 自带调色板量化：同规格比 palettegen 管线体积更小、画质更好（实测 -7%）。
+       * 失败（wasm 未加载 / 内存不足 / 帧数据过大）由 encodeBlackboxGif 回退 ffmpeg 管线。
+       */
+      async function encodeV2gGifGifski(opts) {
+        const tPhase = performance.now();
+        const file = opts.file || v2gSourceFile;
+        if (!file) throw new Error("缺少原始视频文件，请重新选择视频");
+        const fpsCap = opts.allowWide ? 30 : 15;
+        const fps = Math.min(fpsCap, Math.max(2, Number(opts.fps) || 8));
+        const hardCapW = opts.allowWide ? V2G_ENCODE_HARD_W : 720;
+        const maxW = Math.min(hardCapW, Math.max(64, Number(opts.maxW) || 360));
+        const quality = Math.min(30, Math.max(1, Number(opts.quality) || 12));
+        const gifskiQuality = gifQualityToGifskiQuality(quality);
+        const skipWm = Boolean(opts.skipWatermark);
+        const bright = opts.skipBright
+          ? 0
+          : Number.isFinite(opts.brightness)
+            ? Number(opts.brightness)
+            : readV2gBrightness();
+        const brightFilter = v2gBrightFfmpegFilter(bright);
+        let startSec;
+        let span;
+        if (Number.isFinite(opts.startSec) && Number.isFinite(opts.span)) {
+          startSec = Math.max(0, Number(opts.startSec));
+          span = Math.max(0.05, Number(opts.span));
+        } else {
+          ({ startSec, span } = resolveV2gSpan());
+        }
+        const aborted = () => abortV2g || (typeof opts.isAborted === "function" && opts.isAborted());
+        const speed = Math.max(1, Math.min(16, Number(opts.speed) || 1));
+        const effSpan = span / speed;
+        const frameCount = Math.max(2, Math.floor(effSpan * fps) + 1);
+        const framesCapped = false;
+        const srcW = Number(opts.srcW) || v2gVideo?.videoWidth || 0;
+        const srcH = Number(opts.srcH) || v2gVideo?.videoHeight || 0;
+        const crop = normalizeV2gCrop(opts.crop, srcW, srcH);
+        const cropFilter = crop ? `crop=${crop.w}:${crop.h}:${crop.x}:${crop.y},` : "";
+        const effW = crop ? crop.w : srcW;
+        const effH = crop ? crop.h : srcH;
+        const scale = effW > maxW && effW > 0 ? maxW / effW : 1;
+        const outW = effW ? Math.max(2, Math.round((effW * scale) / 2) * 2) : maxW;
+        const outH = effH ? Math.max(2, Math.round((effH * scale) / 2) * 2) : Math.round(outW * 0.75);
+        const stageLabel = (speed > 1 ? `加速${speed.toFixed(2)}× · ` : "") + (opts.stageLabel ? `${opts.stageLabel} · ` : "");
+
+        const mapProgress = (local, text) => {
+          if (typeof opts.onProgress === "function") opts.onProgress(local, text);
+          else setV2gProgress(true, local, text);
+        };
+
+        const rawBytes = frameCount * outW * outH * 4;
+        if (rawBytes > V2G_GIFSKI_MAX_RAW_BYTES) {
+          throw new Error(`gifski 帧数据过大（约 ${formatKb(rawBytes)}），改用 ffmpeg 引擎`);
+        }
+        if (aborted()) throw new Error("已取消");
+
+        mapProgress(0.03, `${stageLabel}准备 FFmpeg 引擎…`);
+        const ffmpeg = await getFfmpegInstance((ratio, text) => {
+          mapProgress(0.03 + Math.min(0.12, (ratio || 0) * 0.12), `${stageLabel}${text || "加载引擎…"}`);
+        });
+        if (aborted()) throw new Error("已取消");
+
+        const ticker = createEncodeProgressTicker(mapProgress, 0.2, 0.45, `${stageLabel}导出 RGBA 帧`, aborted);
+        const onFfmpegProgress = ({ progress }) => {
+          if (aborted()) return;
+          ticker.setProgress(Math.max(0, Math.min(1, Number(progress) || 0)));
+        };
+        const onFfmpegLog = () => ticker.bump();
+        ffmpeg.on("progress", onFfmpegProgress);
+        try {
+          ffmpeg.on("log", onFfmpegLog);
+        } catch (_) {}
+
+        const ext = v2gSourceExt(file);
+        const rawName = "out.rgba";
+        const wmName = "wm.png";
+        let usedWm = false;
+        let inName = `in.${ext}`;
+        let segName = null;
+        let encodeInput = inName;
+        let encodeSs = startSec;
+        let encodeT = span;
+
+        try {
+          ticker.setPhase(`${stageLabel}本地载入`);
+          mapProgress(0.16, `${stageLabel}载入本地编码器（不上传）…`);
+          inName = await ensureFfmpegInputWritten(ffmpeg, file, () => {
+            mapProgress(0.16, `${stageLabel}载入本地编码器（不上传）…`);
+          });
+          encodeInput = inName;
+          if (aborted()) throw new Error("已取消");
+
+          // 大文件先按段 remux（同 ffmpeg 管线），避免整片反复解复用
+          const wantSeg =
+            file.size >= FFMPEG_SEG_FILE_BYTES &&
+            Number.isFinite(opts.startSec) &&
+            Number.isFinite(opts.span);
+          if (wantSeg) {
+            segName = `seg-${Date.now().toString(36)}.${ext}`;
+            ticker.setPhase(`${stageLabel}抽取片段`);
+            mapProgress(0.18, `${stageLabel}抽取片段…`);
+            const cutCode = await ffmpeg.exec([
+              "-ss",
+              String(startSec),
+              "-t",
+              String(Math.min(span + 0.15, span * 1.05 + 0.05)),
+              "-i",
+              inName,
+              "-c",
+              "copy",
+              "-avoid_negative_ts",
+              "make_zero",
+              "-movflags",
+              "+faststart",
+              "-y",
+              segName,
+            ]);
+            if (aborted()) throw new Error("已取消");
+            if (cutCode === 0) {
+              encodeInput = segName;
+              encodeSs = 0;
+              encodeT = span;
+            } else {
+              try {
+                await ffmpeg.deleteFile(segName);
+              } catch (_) {}
+              segName = null;
+            }
+          }
+
+          const wmBytes = skipWm ? null : await buildV2gWatermarkPng(outW, outH);
+          const speedFilter = speed > 1 ? `setpts=PTS/${speed},` : "";
+          const DENOISE = "hqdn3d=1.5:1.5:6:6,";
+          const buildRawArgs = (denoise) => {
+            const chain =
+              `${cropFilter}${speedFilter}fps=${fps},${denoise ? DENOISE : ""}` +
+              `scale=${outW}:${outH}:flags=lanczos${brightFilter},format=rgba`;
+            if (wmBytes && wmBytes.length) {
+              return [
+                "-filter_complex",
+                `[0:v]${chain}[base];` +
+                  `[1:v]format=rgba[wm];[base][wm]overlay=0:0:format=auto,format=rgba[v]`,
+                "-map",
+                "[v]",
+              ];
+            }
+            return ["-vf", chain];
+          };
+          if (wmBytes && wmBytes.length) {
+            usedWm = true;
+            await ffmpeg.writeFile(wmName, wmBytes);
+          }
+
+          ticker.setPhase(`${stageLabel}导出 RGBA 帧`);
+          ticker.setProgress(0.05);
+          const baseArgs = [];
+          if (encodeSs > 0.001) baseArgs.push("-ss", String(encodeSs));
+          baseArgs.push("-t", String(encodeT), "-i", encodeInput);
+          if (usedWm) baseArgs.push("-i", wmName);
+          const outArgs = ["-frames:v", String(frameCount), "-f", "rawvideo", "-pix_fmt", "rgba", "-y", rawName];
+          let code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(true), ...outArgs]);
+          if (code !== 0) {
+            vbbLog("[vbb] gifski 前置 rawvideo（带降噪）失败，回退无降噪重跑");
+            code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(false), ...outArgs]);
+          }
+          if (aborted()) throw new Error("已取消");
+          if (code !== 0) throw new Error(`FFmpeg 导出 RGBA 失败（code=${code}）`);
+          vbbLog(
+            `[vbb-phase] gifski rawvideo ${Math.round(performance.now() - tPhase)}ms · ${fps}fps 宽${outW} ${frameCount}帧`
+          );
+
+          ticker.setPhase(`${stageLabel}读取帧`);
+          const data = await ffmpeg.readFile(rawName);
+          const frames = data instanceof Uint8Array ? data : new Uint8Array(data);
+          // 先释放 ffmpeg 侧文件，降低 gifski 拷贝帧时的峰值内存
+          try {
+            await ffmpeg.deleteFile(rawName);
+          } catch (_) {}
+          const frameStride = outW * outH * 4;
+          let actualFrames = Math.floor(frames.length / frameStride);
+          if (actualFrames < 2) throw new Error("导出的 RGBA 帧不足");
+          if (actualFrames > frameCount) actualFrames = frameCount;
+          const framesView =
+            actualFrames * frameStride === frames.length ? frames : frames.subarray(0, actualFrames * frameStride);
+
+          ticker.stop();
+          // gifski.encode 是同步 wasm 调用，期间主线程会卡住（不再走 ticker）
+          mapProgress(0.68, `${stageLabel}gifski 编码 ${actualFrames} 帧…`);
+          const mod = await loadGifskiMods();
+          if (aborted()) throw new Error("已取消");
+          const gifBytes = mod.encode(framesView, actualFrames, outW, outH, fps, undefined, gifskiQuality);
+          if (!gifBytes || !gifBytes.length) throw new Error("gifski 未产出 GIF");
+          const blob = new Blob([gifBytes], { type: "image/gif" });
+          mapProgress(1, `${stageLabel}完成`);
+          vbbLog(
+            `[vbb-phase] gifski编码 ${Math.round(performance.now() - tPhase)}ms(累计) · ${formatKb(blob.size)} q=${gifskiQuality}`
+          );
+          return {
+            blob,
+            frameCount: actualFrames,
+            span: effSpan,
+            fps,
+            speed,
+            outW,
+            outH,
+            framesCapped,
+            quality,
+            maxW,
+            maxColors: 0,
+            engine: "gifski",
+            gifskiQuality,
+            watermark: usedWm,
+            brightness: bright,
+          };
+        } finally {
+          if (ticker) ticker.stop();
+          try {
+            ffmpeg.off("progress", onFfmpegProgress);
+          } catch (_) {}
+          try {
+            ffmpeg.off("log", onFfmpegLog);
+          } catch (_) {}
+          if (segName) {
+            try {
+              await ffmpeg.deleteFile(segName);
+            } catch (_) {}
+          }
+          try {
+            await ffmpeg.deleteFile(rawName);
+          } catch (_) {}
+          if (usedWm) {
+            try {
+              await ffmpeg.deleteFile(wmName);
+            } catch (_) {}
+          }
+        }
+      }
+
+      /**
+       * 黑盒 GIF 编码入口：优先 gifski（更小更清晰），失败回退 ffmpeg palettegen 管线。
+       * 取消不算失败，直接抛出（不触发回退）。
+       */
+      async function encodeBlackboxGif(opts) {
+        if (opts && opts.forceFfmpeg) return encodeV2gGifFfmpeg(opts);
+        try {
+          return await encodeV2gGifGifski(opts);
+        } catch (err) {
+          if (String(err && err.message) === "已取消") throw err;
+          vbbLog(`[vbb] gifski 引擎不可用，回退 ffmpeg：${err && err.message ? err.message : err}`);
+          return await encodeV2gGifFfmpeg(opts);
+        }
+      }
+
       function describeBlackboxCandidate(c) {
         if (!c) return "";
         const compressTip = c.compressRounds > 0 ? ` · 已压 ${c.compressRounds} 轮` : " · 未压缩";
@@ -1260,7 +1537,7 @@ const V2G_BLACKBOX_QUALITY = 1;
             `黑盒加宽 · ${fps}FPS`,
             { sub: `${formatKb(best.blob.size)} → 试宽 ${nextW}`, busy: true }
           );
-          const encoded = await encodeV2gGifFfmpeg({
+          const encoded = await encodeBlackboxGif({
             file: v2gSourceFile,
             fps,
             maxW: nextW,
@@ -1314,7 +1591,7 @@ const V2G_BLACKBOX_QUALITY = 1;
           sub: `宽≤${width} · 档位 ${tierIndex + 1}/${tierTotal}`,
         });
   
-        const encoded = await encodeV2gGifFfmpeg({
+        const encoded = await encodeBlackboxGif({
           file: v2gSourceFile,
           fps,
           maxW: width,
@@ -1350,7 +1627,7 @@ const V2G_BLACKBOX_QUALITY = 1;
               sub: `${formatKb(candidate.blob.size)} 超预算 → 无损重编 宽${rw}`,
               busy: true,
             });
-            const retry = await encodeV2gGifFfmpeg({
+            const retry = await encodeBlackboxGif({
               file: v2gSourceFile,
               fps: rf,
               maxW: rw,
@@ -1611,7 +1888,7 @@ const V2G_BLACKBOX_QUALITY = 1;
         }
   
         const encodeAt = async (fps, maxW, progressBase, progressSpan, stageLabel, quality) => {
-          const encoded = await encodeV2gGifFfmpeg({
+          const encoded = await encodeBlackboxGif({
             ...common,
             fps,
             maxW,
@@ -1770,7 +2047,7 @@ const V2G_BLACKBOX_QUALITY = 1;
         const srcCap = Math.min(srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK, V2G_ENCODE_HARD_W);
         const floorW = Math.min(V2G_BLACKBOX_MIN_ACCEPT_W, srcCap);
         const encodeAtWidthFps = (f, w, quality) =>
-          encodeV2gGifFfmpeg({
+          encodeBlackboxGif({
             ...common,
             fps: f,
             maxW: w,
@@ -7242,7 +7519,7 @@ const V2G_BLACKBOX_QUALITY = 1;
           });
           if (vbbMeta) vbbMeta.textContent = `分析中 · 样片 ${sampleSpan.toFixed(1)}s…`;
           await prewarmFfmpegEngine().catch(() => {});
-          const sample = await encodeV2gGifFfmpeg({
+          const sample = await encodeBlackboxGif({
             file: vbbSourceFile,
             fps: 15,
             maxW: V2G_BLACKBOX_BASE_W,
@@ -7414,7 +7691,7 @@ const V2G_BLACKBOX_QUALITY = 1;
                 : plan.maxW || V2G_BLACKBOX_BASE_W;
               if (isWide && !(reuseSeed && reuseSeed.usedFallback)) {
                 const tryEncodeWide = async (maxW, localBase, localSpan) =>
-                  encodeV2gGifFfmpeg({
+                  encodeBlackboxGif({
                     file: vbbSourceFile,
                     fps: reuseSeed?.fps || 15,
                     maxW,

@@ -96,6 +96,19 @@
     return Math.max(96, Math.min(256, Math.round(256 - (gq - 1) * (160 / 29))));
   }
 
+  /**
+   * gif.js quality(1好–30差) → gifski wasm quality(1–100，越大越好)。
+   *
+   * gifski 自带调色板量化，没有 max_colors 旋钮：quality 越高越接近无损、体积越大，
+   * 官方默认甜点 90。黑盒「无损优先」→ q=1(最高档) 用 92；预算吃紧才沿曲线降到 ~55。
+   * 标定曲线（按体积近似线性回推，替换旧的 palettegen 色数标定）：
+   *   1→92, 8→83, 15→73, 18→70, 25→61, 30→55
+   */
+  function gifQualityToGifskiQuality(q) {
+    const gq = Math.min(30, Math.max(1, Number(q) || 12));
+    return Math.max(50, Math.min(100, Math.round(92 - (gq - 1) * ((92 - 55) / 29))));
+  }
+
   /** 视频转 GIF：ffmpeg.wasm（本地 vendor），进入 GIF 工具时预热并持久保存 */
   function resolveFfmpegVendorBase() {
     const nodes = document.getElementsByTagName("script");
@@ -1172,7 +1185,8 @@
 
   window.DevToolsExtraMedia = {
     isAutoPackZipEnabled, setAutoPackZipEnabled, syncAutoPackZipToggles, bindAutoPackZipToggles,
-    canEncodeStillWebp, gifQualityToWebpQuality, gifQualityToMaxColors, resolveFfmpegVendorBase,
+    canEncodeStillWebp, gifQualityToWebpQuality, gifQualityToMaxColors, gifQualityToGifskiQuality,
+    resolveFfmpegVendorBase,
     loadFfmpegMods, fetchFileBytes, ffmpegInputKey, guessVideoExt, ensureFfmpegInputWritten,
     clearFfmpegInputCache, openFfmpegIdb, idbGetAsset, idbPutAsset, deleteFfmpegIndexedDb,
     purgePersistedEngine, createEngineObjectURL, fetchArrayBufferProgress, loadEngineBuffer,
