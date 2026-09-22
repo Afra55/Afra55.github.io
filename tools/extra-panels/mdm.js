@@ -5502,6 +5502,7 @@ a{color:${v.accent}}
     });
     // 专注：隐藏左侧列表 / 顶部按钮（持久化）
     let closeSideDrawer = () => {};
+    let toggleBothChrome = () => {};
     (function bindFocusToggles() {
       const panel = $("#mdm");
       if (!panel) return;
@@ -5516,6 +5517,13 @@ a{color:${v.accent}}
       let explicit = prefRaw != null; // 用户手动选过就不再被屏宽覆盖
       // 窄屏默认收起左侧列表（抽屉），把宽度让给编辑区
       if (narrowMQ.matches && !explicit) sideHidden = true;
+      const toggleBothBtn = $("#mdm-toggle-both");
+      const syncBothBtn = () => {
+        if (!toggleBothBtn) return;
+        const hidden = sideHidden && topHidden;
+        toggleBothBtn.classList.toggle("is-on", hidden);
+        toggleBothBtn.title = hidden ? "显示侧边栏和顶部按钮" : "隐藏侧边栏和顶部按钮";
+      };
       const apply = () => {
         panel.classList.toggle("is-side-hidden", sideHidden);
         panel.classList.toggle("is-topbar-hidden", topHidden);
@@ -5523,6 +5531,7 @@ a{color:${v.accent}}
         els.toggleTop?.classList.toggle("is-on", topHidden);
         if (els.toggleSide) els.toggleSide.title = sideHidden ? "显示左侧文件列表" : "隐藏左侧文件列表";
         if (els.toggleTop) els.toggleTop.title = topHidden ? "显示顶部按钮" : "隐藏顶部按钮";
+        syncBothBtn();
       };
       apply();
       narrowMQ.addEventListener?.("change", (e) => {
@@ -5551,6 +5560,19 @@ a{color:${v.accent}}
         } catch (_) {}
         apply();
       });
+      // 一键隐藏/显示「侧边栏 + 顶部按钮」（两个都藏起来 = 纯写作视图）
+      toggleBothChrome = () => {
+        const hide = !(sideHidden && topHidden);
+        sideHidden = hide;
+        topHidden = hide;
+        explicit = true;
+        try {
+          localStorage.setItem("devtools-mdm-hide-side", sideHidden ? "1" : "0");
+          localStorage.setItem("devtools-mdm-hide-top", topHidden ? "1" : "0");
+        } catch (_) {}
+        apply();
+      };
+      toggleBothBtn?.addEventListener("click", () => toggleBothChrome());
     })();
 
     els.copyBtn?.addEventListener("click", () => void copyPreviewToClipboard());

@@ -258,7 +258,7 @@
           <span class="interp-param-controls">
             <input class="interp-range" type="range" min="${pp.min}" max="${pp.max}" step="${pp.step}"
               data-lane="${l}" data-key="${pp.key}" value="${val}" aria-label="${escapeHtml(pp.label)}" />
-            <input class="mono meta-input interp-number" type="number" min="${pp.min}" max="${pp.max}" step="${pp.step}"
+            <input class="mono meta-input interp-number" type="number" step="${pp.step}"
               data-lane="${l}" data-key="${pp.key}" value="${val}" aria-label="${escapeHtml(pp.label)} 数值" />
           </span>
           <span class="hint tight">${escapeHtml(pp.desc || "")}</span></label>`;
@@ -441,50 +441,6 @@
     return `${start}\nanimator.start();`;
   }
 
-  // ---- parse ----
-  function parseCode(text) {
-    const s = String(text || "").trim();
-    let m = s.match(/new\s+(\w+Interpolator|PathInterpolator)\(\s*([^)]*)\)/) || s.match(/(\w+Interpolator|PathInterpolator)\(\s*([^)]*)\)/);
-    if (m) {
-      const cls = m[1];
-      const tool = byClazz[cls];
-      if (!tool) return { ok: false, msg: `未识别的插值器：${cls}` };
-      const args = (m[2] || "").split(",").map((x) => parseFloat(x.replace(/f|d|L|_/gi, ""))).filter((n) => Number.isFinite(n));
-      const params = {};
-      if (tool.id === "path") {
-        ["x1", "y1", "x2", "y2"].forEach((k, i) => { if (args[i] != null) params[k] = args[i]; });
-      } else if (tool.id === "spring") {
-        params.stiffness = args[0] != null ? args[0] : 200;
-        params.dampingRatio = args[1] != null ? args[1] : 0.5;
-      } else {
-        tool.params.forEach((pp, i) => { if (args[i] != null) params[pp.key] = args[i]; });
-      }
-      return { ok: true, type: tool.id, params };
-    }
-    const sm = s.match(/SpringAnimation/);
-    if (sm) {
-      const params = {};
-      const st = s.match(/setStiffness\(\s*([0-9.]+)/i) || s.match(/stiffness\s*=\s*([0-9.]+)/i);
-      const dr = s.match(/setDampingRatio\(\s*([0-9.]+)/i) || s.match(/dampingRatio\s*=\s*([0-9.]+)/i);
-      if (st) params.stiffness = parseFloat(st[1]);
-      if (dr) params.dampingRatio = parseFloat(dr[1]);
-      params.stiffness = params.stiffness || 200;
-      params.dampingRatio = params.dampingRatio || 0.5;
-      return { ok: true, type: "spring", params };
-    }
-    return { ok: false, msg: "未识别到插值器/弹簧代码" };
-  }
-
-  function applyParsed(res) {
-    if (!res.ok) throw new Error(res.msg);
-    setLaneType(activeLane(), res.type);
-    const tool = byId[res.type];
-    const cur = { ...defParams(tool), ...(lane(activeLane()).params || {}) };
-    lane(activeLane()).params = { ...cur, ...res.params };
-    refreshLane(activeLane());
-    toast(`已解析：${tool.name}`);
-  }
-
   // ---- JSON ----
   function snapshot() {
     const l = activeLane();
@@ -615,11 +571,6 @@
     $("#interp-copy-code")?.addEventListener("click", () => {
       copyText($("#interp-code")?.value || "").then(() => toast("代码已复制")).catch(() => toast("复制失败"));
     });
-    $("#interp-parse-btn")?.addEventListener("click", () => {
-      try { applyParsed(parseCode($("#interp-parse")?.value || "")); }
-      catch (err) { setError($("#interp-error"), err.message || String(err)); }
-    });
-
     $("#interp-copy-json")?.addEventListener("click", () => copyText(exportJson()).then(() => toast("JSON 已复制")).catch(() => toast("复制失败")));
     $("#interp-export-json")?.addEventListener("click", () => download("interpolator.json", exportJson()));
     $("#interp-import-json")?.addEventListener("click", () => {

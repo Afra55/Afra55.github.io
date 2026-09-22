@@ -1,34 +1,12 @@
 <section id="interpolator" class="panel tool-panel" data-reveal>
   <div class="panel-head">
     <h1>动画插值器</h1>
-    <p>Android 动画插值器调参：曲线实时显示超调，A/B 对比，一键生成 / 反解 Java、Kotlin 代码，支持 JSON 与预设收藏。</p>
-    <p class="hint tight">怎么用：选一个插值器 → 拖滑杆或直接输入数值调参数 → 看曲线与预览 → 复制代码。新手可直接用右侧「常用预设」。</p>
+    <p>Android 动画插值器调参：曲线实时显示超调，A/B 对比，一键生成 Java / Kotlin 代码，支持 JSON 与预设收藏。</p>
+    <p class="hint tight">怎么用：选一个插值器 → 拖滑杆或直接输入数值（不限范围）→ 看曲线与预览 → 复制代码。</p>
   </div>
   <div class="panel-body">
     <div class="interp-layout">
       <div class="interp-main">
-        <div class="interp-lane" data-lane="A">
-          <div class="interp-lane-head">
-            <span class="interp-lane-tag interp-tag-a">A</span>
-            <select id="interp-type-a" class="select-input interp-type" aria-label="A 插值器类型"></select>
-            <span class="hint tight" id="interp-class-a"></span>
-            <button type="button" class="ghost-btn" id="interp-compar">对比</button>
-          </div>
-          <div class="interp-params" id="interp-params-a"></div>
-          <div class="interp-desc" id="interp-desc-a"></div>
-        </div>
-
-        <div class="interp-lane" id="interp-lane-b" data-lane="B" hidden>
-          <div class="interp-lane-head">
-            <span class="interp-lane-tag interp-tag-b">B</span>
-            <select id="interp-type-b" class="select-input interp-type" aria-label="B 插值器类型"></select>
-            <span class="hint tight" id="interp-class-b"></span>
-            <button type="button" class="ghost-btn" id="interp-rm-b">移除</button>
-          </div>
-          <div class="interp-params" id="interp-params-b"></div>
-          <div class="interp-desc" id="interp-desc-b"></div>
-        </div>
-
         <div class="field-row" style="flex-wrap:wrap;align-items:center">
           <label for="interp-duration">时长</label>
           <input id="interp-duration" class="mono meta-input" type="number" min="120" max="3000" step="60" value="600" />
@@ -42,17 +20,36 @@
           <svg class="interp-curve" id="interp-curve" viewBox="0 0 420 240" preserveAspectRatio="none" aria-label="插值器曲线"></svg>
         </div>
 
-        <div class="interp-preview-rows" id="interp-preview">
+        <div class="interp-lane" data-lane="A">
+          <div class="interp-lane-head">
+            <span class="interp-lane-tag interp-tag-a">A</span>
+            <select id="interp-type-a" class="select-input interp-type" aria-label="A 插值器类型"></select>
+            <span class="hint tight" id="interp-class-a"></span>
+            <button type="button" class="ghost-btn" id="interp-compar">对比</button>
+          </div>
+          <div class="interp-params" id="interp-params-a"></div>
           <div class="interp-preview-row" data-lane="A">
             <span class="interp-lane-tag interp-tag-a">A</span>
             <div class="interp-preview-track"><span class="interp-preview-dot interp-dot-a" id="interp-dot-a"></span></div>
             <strong class="interp-preview-val mono" id="interp-val-a">0</strong>
           </div>
+          <div class="interp-desc" id="interp-desc-a"></div>
+        </div>
+
+        <div class="interp-lane" id="interp-lane-b" data-lane="B" hidden>
+          <div class="interp-lane-head">
+            <span class="interp-lane-tag interp-tag-b">B</span>
+            <select id="interp-type-b" class="select-input interp-type" aria-label="B 插值器类型"></select>
+            <span class="hint tight" id="interp-class-b"></span>
+            <button type="button" class="ghost-btn" id="interp-rm-b">移除</button>
+          </div>
+          <div class="interp-params" id="interp-params-b"></div>
           <div class="interp-preview-row" id="interp-preview-row-b" data-lane="B" hidden>
             <span class="interp-lane-tag interp-tag-b">B</span>
             <div class="interp-preview-track"><span class="interp-preview-dot interp-dot-b" id="interp-dot-b"></span></div>
             <strong class="interp-preview-val mono" id="interp-val-b">0</strong>
           </div>
+          <div class="interp-desc" id="interp-desc-b"></div>
         </div>
       </div>
 
@@ -65,10 +62,7 @@
           </select>
           <button type="button" class="primary-btn" id="interp-copy-code" style="margin-top:0.5rem">复制代码</button>
           <textarea id="interp-code" class="mono meta-input interp-code" rows="9" readonly></textarea>
-          <label for="interp-parse" style="margin-top:0.6rem">粘贴代码反解为参数</label>
-          <textarea id="interp-parse" class="mono meta-input" rows="4" placeholder="例如：new OvershootInterpolator(2f) / SpringAnimation..."></textarea>
           <div class="btn-row" style="margin-top:0.5rem">
-            <button type="button" class="ghost-btn" id="interp-parse-btn">解析</button>
             <button type="button" class="ghost-btn" id="interp-copy-json">复制 JSON</button>
             <button type="button" class="ghost-btn" id="interp-import-json">读取 JSON</button>
             <input id="interp-import-file" type="file" hidden accept="application/json,.json" />

@@ -53,6 +53,11 @@
 }
 .interp-param .interp-number {
   width: 5rem;
+  justify-self: stretch;
+  text-align: left;
+}
+.interp-code {
+  text-align: left;
 }
 .interp-desc {
   margin-top: 0.6rem;
@@ -84,6 +89,13 @@
 
 .interp-preview-rows { margin-top: 0.8rem; display: flex; flex-direction: column; gap: 0.5rem; }
 .interp-preview-row { display: flex; align-items: center; gap: 0.6rem; }
+.interp-lane > .interp-preview-row {
+  margin-top: 0.6rem;
+  padding: 0.4rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent, #2ec4b6) 6%, transparent);
+}
 .interp-preview-track {
   position: relative;
   flex: 1;

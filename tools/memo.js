@@ -5364,18 +5364,91 @@
     return TYPE_LABELS[item?.type] || item?.type || "文件";
   }
 
+  let previewDims = null;
+
+  function gcdNum(a, b) {
+    let x = Math.abs(a) || 1;
+    let y = Math.abs(b) || 1;
+    while (y) {
+      const t = x % y;
+      x = y;
+      y = t;
+    }
+    return x || 1;
+  }
+
+  /** 量出图片 / GIF / 视频的像素尺寸（同一份预览只量一次） */
+  async function measurePreviewDims(blob, kind) {
+    if (!blob) return null;
+    if (kind === "video") {
+      return await new Promise((resolve) => {
+        const v = document.createElement("video");
+        v.preload = "metadata";
+        v.muted = true;
+        const done = (r) => {
+          v.removeAttribute("src");
+          resolve(r);
+        };
+        v.onloadedmetadata = () => done(v.videoWidth && v.videoHeight ? { w: v.videoWidth, h: v.videoHeight } : null);
+        v.onerror = () => done(null);
+        v.src = URL.createObjectURL(blob);
+      });
+    }
+    try {
+      const bmp = await createImageBitmap(blob);
+      const r = { w: bmp.width, h: bmp.height };
+      bmp.close?.();
+      return r.w && r.h ? r : null;
+    } catch (_) {
+      return await new Promise((resolve) => {
+        const img = new Image();
+        img.onload = () =>
+          resolve(img.naturalWidth && img.naturalHeight ? { w: img.naturalWidth, h: img.naturalHeight } : null);
+        img.onerror = () => resolve(null);
+        img.src = URL.createObjectURL(blob);
+      });
+    }
+  }
+
+  /** 预览副标题：类型 · MIME · 体积 · 尺寸(含宽高比) · 修改时间 · 位置 */
+  async function fillPreviewSub(item, kind) {
+    if (!previewSub || !item) return;
+    const k = kind || item.type || "file";
+    const bits = [previewTypeLabel(item, k)];
+    const mime = String(previewBlob?.type || item.mime || "").trim();
+    if (mime && mime !== "application/octet-stream") bits.push(mime);
+    bits.push(formatBytes(item.size || 0));
+    if (["image", "gif", "video"].includes(k)) {
+      if (!previewDims) previewDims = await measurePreviewDims(previewBlob, k);
+      if (previewDims) {
+        const d = gcdNum(previewDims.w, previewDims.h);
+        const ratio = `${previewDims.w / d}:${previewDims.h / d}`;
+        const mp = ((previewDims.w * previewDims.h) / 1e6).toFixed(2);
+        bits.push(`${previewDims.w}×${previewDims.h}（${ratio}，${mp}MP）`);
+      }
+    }
+    const when =
+      item.updatedAt && item.updatedAt !== item.createdAt
+        ? `修改 ${formatTime(item.updatedAt)}`
+        : `创建 ${formatTime(item.createdAt)}`;
+    bits.push(when);
+    const p = pathHint(item);
+    if (p) bits.push(p);
+    previewSub.textContent = bits.filter(Boolean).join(" · ");
+  }
+
   function setPreviewChrome(item, { kind = "", canFs = false, canNewTab = false, canDl = true, canEdit = false } = {}) {
     previewItem = item;
     const k = kind || item?.type || "file";
     setPreviewKind(k);
     syncPreviewDialogWidth(k);
     if (previewTitle) previewTitle.textContent = item?.name || "预览";
-    if (previewSub) {
-      const typeLab = previewTypeLabel(item, k);
-      previewSub.textContent = item
-        ? `${typeLab} · ${formatBytes(item.size || 0)} · ${formatTime(item.createdAt)}`
-        : "";
-    }
+  if (previewSub) {
+    previewSub.textContent = item
+      ? `${previewTypeLabel(item, k)} · ${formatBytes(item.size || 0)} · ${formatTime(item.createdAt)}`
+      : "";
+    void fillPreviewSub(item, k);
+  }
     syncPreviewNoteLine(item);
     if (previewFsBtn) {
       previewFsBtn.hidden = !canFs;
@@ -5420,9 +5493,10 @@
     hidePreviewParts();
     revokePreviewUrl();
     lightbox.classList.remove("is-fs");
-    const blob = await loadBlob(item);
-    previewBlob = blob;
-    previewObjectUrl = URL.createObjectURL(blob);
+  const blob = await loadBlob(item);
+  previewBlob = blob;
+  previewDims = null;
+  previewObjectUrl = URL.createObjectURL(blob);
     const url = previewObjectUrl;
 
     const showEl = (el) => {
