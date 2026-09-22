@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>gifski 手机性能基准测试</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 16px; background: #0d1117; color: #e6edf3;
+         font: 16px/1.6 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif; }
+  h1 { font-size: 1.15rem; margin: 0 0 4px; }
+  p.sub { color: #8b949e; font-size: 0.85rem; margin: 0 0 14px; }
+  button { width: 100%; padding: 14px; font-size: 1.05rem; border: 0; border-radius: 10px;
+           background: #238636; color: #fff; font-weight: 600; }
+  button:disabled { opacity: .55; }
+  #out { margin-top: 14px; font: 0.9rem/1.7 ui-monospace, Consolas, monospace;
+         white-space: pre-wrap; background: #161b22; border: 1px solid #30363d;
+         border-radius: 10px; padding: 12px; min-height: 120px; }
+  .big { font-size: 1.5rem; font-weight: 700; color: #3fb950; }
+  .warn { color: #d29922; }
+  canvas { width: 100%; height: auto; margin-top: 12px; border-radius: 8px; }
+</style>
+</head>
+<body>
+<h1>gifski 手机性能基准测试</h1>
+<p class="sub">量一下：手机上用 gifski(wasm) 把 240 帧 242×210 编成 GIF 要多久。当前黑盒用 ffmpeg 约 1 分钟。</p>
+<button id="go">开始测试</button>
+<div id="out">点上面的按钮开始…</div>
+<canvas id="cv" width="242" height="210"></canvas>
+<script type="module">
+const out = document.getElementById("out");
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d", { willReadFrequently: true });
+const go = document.getElementById("go");
+const log = (s) => { out.innerHTML += s + "\n"; };
+const setBig = (s) => { out.innerHTML += `<span class="big">${s}</span>\n`; };
+
+const W = 242, H = 210, N = 240, FPS = 12, QUALITY = 90;
+
+function buildFrames() {
+  // 合成「有运动 + 有渐变」的画面，接近录屏内容的复杂度
+  const frames = new Uint8Array(N * W * H * 4);
+  for (let f = 0; f < N; f++) {
+    const t = f / N;
+    const img = ctx.createImageData(W, H);
+    const d = img.data;
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const i = (y * W + x) * 4;
+        d[i] = (x * 255 / W + t * 120) % 256;
+        d[i + 1] = (y * 255 / H + t * 60) % 256;
+        d[i + 2] = (Math.sin((x + y) / 18 + t * 12) * 100 + 128) | 0;
+        d[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    frames.set(d, f * W * H * 4);
+  }
+  return frames;
+}
+
+go.addEventListener("click", async () => {
+  go.disabled = true;
+  out.innerHTML = "";
+  try {
+    log("① 加载 gifski wasm…");
+    const t0 = performance.now();
+    const mod = await import("./vendor/gifski/gifski_wasm.js");
+    await mod.default();
+    const t1 = performance.now();
+    log(`   wasm 加载完成：${(t1 - t0).toFixed(0)} ms`);
+
+    log(`② 生成 ${N} 帧 ${W}×${H}（约 ${((N * W * H * 4) / 1048576).toFixed(0)}MB 内存）…`);
+    const t2 = performance.now();
+    const frames = buildFrames();
+    const t3 = performance.now();
+    log(`   生成完成：${(t3 - t2).toFixed(0)} ms`);
+
+    log("③ gifski 编码中（这一步是关键，可能要几分钟）…");
+    await new Promise((r) => setTimeout(r, 50));
+    const t4 = performance.now();
+    const gif = mod.encode(frames, N, W, H, FPS, undefined, QUALITY);
+    const t5 = performance.now();
+    const ms = t5 - t4;
+    log(`   编码完成：${(ms / 1000).toFixed(1)} 秒`);
+    log(`   GIF 体积：${(gif.length / 1048576).toFixed(2)} MB`);
+    setBig(`结论：手机 gifski 编码 ${(ms / 1000).toFixed(1)} 秒`);
+    log(`对比：现在黑盒（ffmpeg）同规格约 60 秒左右`);
+    log(`\n把这一屏截图发给开发者即可。`);
+
+    // 显示结果预览
+    const blob = new Blob([gif], { type: "image/gif" });
+    const img = new Image();
+    img.src = URL.createObjectURL(blob);
+    img.style.width = "100%";
+    img.style.marginTop = "12px";
+    img.style.borderRadius = "8px";
+    document.body.appendChild(img);
+  } catch (err) {
+    log(`<span class="warn">失败：${err && err.message ? err.message : err}</span>`);
+    log("（若提示内存不足，说明手机跑不动这条路）");
+  }
+  go.disabled = false;
+  go.textContent = "再测一次";
+});
+</script>
+</body>
+</html>
