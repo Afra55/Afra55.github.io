@@ -15,7 +15,20 @@ const ROOT = __dirname;
 const TOOLS_BUILD = path.join(ROOT, "lib/tools-build.js");
 
 function chinaVersionStamp() {
-  return execSync("TZ=Asia/Shanghai date +%Y.%m.%d-%H%M%S", { encoding: "utf8" }).trim();
+  // 纯 JS 计算北京时间（原来用 `TZ=Asia/Shanghai date`，在 Windows 上会直接失败）
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const p = {};
+  for (const x of parts) p[x.type] = x.value;
+  return `${p.year}.${p.month}.${p.day}-${p.hour}${p.minute}${p.second}`;
 }
 
 function readCurrentVersion() {
@@ -62,6 +75,19 @@ function main() {
     if (!text.includes(oldVer)) continue;
     fs.writeFileSync(file, text.split(oldVer).join(newVer));
     changed += 1;
+  }
+  // service worker 的 shell 缓存名必须随版本变化，否则缓存优先策略会一直发旧的 index.html
+  // （进而引到旧的 ?v= 资源，用户永远拿不到新代码）。格式：devtools-shell-YYYYMMDD-HHMMSS
+  const swPath = path.join(ROOT, "sw.js");
+  const cacheStamp = `devtools-shell-${newVer.replace(/\./g, "")}`;
+  if (fs.existsSync(swPath)) {
+    const sw = fs.readFileSync(swPath, "utf8");
+    const next = sw.replace(/devtools-shell-[0-9]{8}-[0-9]{6}/, cacheStamp);
+    if (next !== sw) {
+      fs.writeFileSync(swPath, next);
+      changed += 1;
+      console.log(`[bump-version] sw.js SHELL_CACHE -> ${cacheStamp}`);
+    }
   }
   console.log(JSON.stringify({ ok: true, oldVer, newVer, changed, timezone: "Asia/Shanghai" }, null, 2));
 }
