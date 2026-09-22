@@ -71,7 +71,7 @@
                       <label for="imgkit-target-kb">目标 KB</label>
                       <input id="imgkit-target-kb" class="mono meta-input" type="number" min="0" step="1" value="0" title="0 表示不限制；JPEG/WebP/AVIF 有效" />
                     </div>
-                    <p class="hint" id="imgkit-encode-hint">高质量编码用 Squoosh 系 WASM：JPG 仍是 JPG（mozjpeg），PNG 仍是 PNG（oxipng）。点「尽量小」才会改成 AVIF。预览 / 导出 / 批量 ZIP 共用同一编码器；批量逐张排队，不经本机桥。</p>
+                    <p class="hint" id="imgkit-encode-hint">点「尽量小」才会改成 AVIF；批量逐张排队，不经本机桥。</p>
                   </div>
                   <div class="field-block" style="margin-top:0.85rem">
                     <h2 class="subhead">尺寸</h2>
@@ -134,7 +134,7 @@
                       <input id="imgkit-crop-h" class="mono meta-input" type="number" min="1" max="100" value="100" />
                     </div>
                     <div class="imgkit-crop-editor" id="imgkit-crop-editor">
-                      <p class="hint tight">拖动绿框平移，拖角点/边点调整范围；调好后直接点底部「导出当前」，无需再往下翻。</p>
+                      <p class="hint tight">调好后直接点底部「导出当前」。</p>
                       <div class="imgkit-crop-stage" id="imgkit-crop-stage">
                         <canvas id="imgkit-crop-canvas" width="1" height="1"></canvas>
                         <div class="imgkit-crop-box" id="imgkit-crop-box" hidden>
@@ -198,7 +198,7 @@
                 <div class="imgkit-tab-panel" data-imgkit-panel="stitch" role="tabpanel" hidden>
                   <div class="field-block">
                     <h2 class="subhead">拼接</h2>
-                    <p class="hint">横向齐高、竖向齐宽。上方/左侧为整体预览，右侧取景区独立滚动，裁剪时预览始终可见；调好后点底部「拼接导出」。</p>
+                    <p class="hint">裁剪时预览始终可见；调好后点底部「拼接导出」。</p>
                     <div class="field-row" style="flex-wrap:wrap">
                       <label for="imgkit-stitch-mode">方式</label>
                       <select id="imgkit-stitch-mode" class="mono select-input">

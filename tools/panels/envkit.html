@@ -15,13 +15,13 @@
 
         <div class="panel-card">
           <h2 class="subhead">一键安装（缺啥装啥）</h2>
-          <p class="hint tight">第一次用：装缺失的 Node / Git / FFmpeg / ADB / yt-dlp，并下载桥到 <span class="mono">~/DevToolsBridges</span>。已存在的包不会重装。</p>
+          <p class="hint tight">已存在的包不会重装。</p>
           <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.55rem" id="env-install-btns"></div>
         </div>
 
         <div class="panel-card" style="margin-top:0.85rem">
           <h2 class="subhead">一键升级（系统工具 + 桥）</h2>
-          <p class="hint tight">把<strong>已安装</strong>的 Node、Git、FFmpeg、ADB、yt-dlp 升到包管理器最新版；未装的会顺手装上；同时刷新<strong>统一桥</strong>所需文件（含嵌套的 ffmpeg-bridge / git-bridge 模块）。升级日志：<span class="mono">~/DevToolsBridges/last-upgrade.log</span>。</p>
+          <p class="hint tight">未装的会顺手装上；同时刷新统一桥文件。升级日志：~/DevToolsBridges/last-upgrade.log。</p>
           <div class="btn-row tool-actions" style="flex-wrap:wrap;margin-top:0.55rem" id="env-upgrade-btns"></div>
           <pre class="mono adb-pre" id="env-run-hint" style="margin-top:0.55rem;white-space:pre-wrap"></pre>
         </div>
@@ -40,7 +40,7 @@
             <h2 class="subhead">统一桥在线状态</h2>
             <button type="button" class="secondary-btn" id="env-probe">重新探测</button>
           </div>
-          <p class="hint tight">列出统一桥 <strong>4 项能力</strong>：ADB · FFmpeg · yt-dlp · Git（均走 17888）。不要再单独启动 17889 / 17890。绿灯=工具就绪；黄灯=桥已挂载但本机工具未就绪；红灯=桥离线。</p>
+          <p class="hint tight">绿灯=工具就绪；黄灯=桥已挂载但工具未就绪；红灯=桥离线。</p>
           <p class="hint tight" id="env-probe-summary" style="margin-top:0.45rem" hidden></p>
           <div class="env-probe-grid" id="env-probe-grid" style="margin-top:0.55rem"></div>
           <p class="error" id="env-error" hidden></p>

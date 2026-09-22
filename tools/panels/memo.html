@@ -91,7 +91,7 @@
                 <h2 class="subhead">标签</h2>
                 <button type="button" class="ghost-btn" id="memo-tag-new">新建</button>
               </div>
-              <p class="hint tight memo-tag-tip">点标签名筛选；自定义标签可点「删除」（只删标签，不删条目）。</p>
+              <p class="hint tight memo-tag-tip">自定义标签可点「删除」（只删标签，不删条目）。</p>
               <div class="memo-tag-list" id="memo-tag-list"></div>
               <div class="memo-temp-zone" id="memo-temp-zone">
                 <div class="memo-temp-head label-row">
@@ -142,7 +142,7 @@
               <div class="memo-dialog-body">
                 <div class="label-row">
                   <h2 class="subhead">编辑文本</h2>
-                  <p class="hint tight" id="memo-text-edit-sub">修改后点保存，覆盖原条目</p>
+                  <p class="hint tight" id="memo-text-edit-sub">保存会覆盖原条目</p>
                 </div>
                 <label class="memo-ti-src-lab" for="memo-text-edit-src">内容
                   <textarea id="memo-text-edit-src" class="area mono" rows="20" placeholder="编辑备忘录文本…"></textarea>
@@ -163,7 +163,7 @@
               <div class="memo-dialog-body">
                 <div class="label-row">
                   <h2 class="subhead">备注</h2>
-                  <p class="hint tight" id="memo-note-edit-sub">说明这条用来干什么，可搜索</p>
+                  <p class="hint tight" id="memo-note-edit-sub">可搜索</p>
                 </div>
                 <label class="memo-ti-src-lab" for="memo-note-edit-src">备注内容
                   <textarea id="memo-note-edit-src" class="area" rows="4" maxlength="500" placeholder="例如：登录页截图、周一要用的合同…"></textarea>
@@ -229,11 +229,11 @@
               </label>
               <button type="button" class="secondary-btn" id="memo-filter-date-apply">按日期筛选</button>
               <button type="button" class="ghost-btn" id="memo-filter-date-clear" hidden>清除日期</button>
-              <p class="hint tight">可选：按<strong>创建日</strong>显示「今天」到所选日期之间的条目；再配合上方类型 chips（图片/视频/文本/文件等）。</p>
+              <p class="hint tight">按创建日显示「今天」到所选日期。</p>
             </div>
             <p class="hint tight mono" id="memo-list-meta" hidden></p>
             <div class="memo-drop" id="memo-drop">
-              <p class="hint tight">拖拽文件到本页任意区域添加 · 最新在上 · 滑到底部自动加载</p>
+              <p class="hint tight">最新在上 · 滑到底部自动加载</p>
               <div class="memo-list" id="memo-list"></div>
               <div class="memo-scroll-sentinel" id="memo-scroll-sentinel" hidden aria-hidden="true"></div>
               <p class="hint tight mono memo-loading-more" id="memo-loading-more" hidden>正在加载更多…</p>

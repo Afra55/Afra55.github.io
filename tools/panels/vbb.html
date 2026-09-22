@@ -90,7 +90,7 @@
 
         <div class="vbb-split-panel" id="vbb-split-panel" hidden>
           <h2 class="subhead">长视频切片</h2>
-          <p class="hint tight" id="vbb-split-intro">先分析视频并确认切分方案（段数、时长、预估体积），满意后再按方案逐段生成黑盒 GIF。</p>
+          <p class="hint tight" id="vbb-split-intro">先分析出方案，满意后再按方案逐段生成。</p>
           <div class="btn-row tool-actions vbb-split-actions" style="margin-top:0.65rem;flex-wrap:wrap">
             <button type="button" class="primary-btn" id="vbb-analyze" disabled>① 分析切分方案</button>
             <button type="button" class="primary-btn" id="vbb-run" disabled>② 按方案生成 GIF</button>
@@ -109,7 +109,7 @@
           </div>
           <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.55rem 0.9rem">
             <label class="flag"><input type="checkbox" id="vbb-equalize" /> 均分各段</label>
-            <span class="hint tight" id="vbb-equalize-hint">默认关：前面按目标时长切，末段吃剩余</span>
+            <span class="hint tight" id="vbb-equalize-hint">默认关：末段吃剩余</span>
           </div>
           <p class="hint" id="vbb-plan-summary"></p>
         </div>
