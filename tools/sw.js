@@ -2,7 +2,7 @@
 /* eslint-disable no-restricted-globals */
 "use strict";
 
-const SHELL_CACHE = "devtools-shell-20260922-190341";
+const SHELL_CACHE = "devtools-shell-20260922-191348";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -96,7 +96,22 @@ self.addEventListener("fetch", (event) => {
   }
   if (shouldBypass(url)) return;
 
-  // 缓存优先：命中即返回，后台 stale-while-revalidate；强制刷新会清空 SW 缓存
+  // 导航请求（HTML 文档）走网络优先：否则缓存的 index.html 会一直引到旧的 ?v= 资源，
+  // 用户永远拿不到新代码（曾导致「发了版手机上还是旧版」）。离线时才回退缓存。
+  const isDoc =
+    req.mode === "navigate" ||
+    (req.headers.get("accept") || "").includes("text/html");
+  if (isDoc) {
+    event.respondWith(
+      networkFetch(req, url).catch(() =>
+        caches.match(req).then((c) => c || caches.match("./index.html").then((r) => r || caches.match("./")))
+      )
+    );
+    return;
+  }
+
+  // 其余静态资源缓存优先：命中即返回，后台 stale-while-revalidate
+  // （JS/CSS 都带 ?v=<BUILD>，新版本 = 新 URL，所以不会拿到旧文件）
   event.respondWith(
     caches.match(req).then((cached) => {
       const network = networkFetch(req, url);
