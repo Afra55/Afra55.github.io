@@ -89,7 +89,10 @@
         /** 黑盒编码的硬宽度上限（一键黑盒可放宽到这里，短视频预算用不完时可换更高清晰度） */
         const V2G_ENCODE_HARD_W = 1280;
         /** 智能分配的分辨率底线：某帧率若只能做到比这更窄，就换更低帧率（340 兼顾"少压缩"与录屏文字可读） */
-        const V2G_BLACKBOX_MIN_ACCEPT_W = 290;
+      const V2G_BLACKBOX_MIN_ACCEPT_W = 290;
+      /** 实测超预算时「无损重编」的绝对下限（宽度 px / 帧率）：宁可到这两个底线，也不轻易用 gifsicle --lossy */
+      const V2G_BLACKBOX_RETRY_MIN_W = 220;
+      const V2G_BLACKBOX_RETRY_MIN_FPS = 12;
       /** 源宽未知时的加宽兜底（等同不设上限） */
       const V2G_BLACKBOX_WIDTH_HARD_FALLBACK = 4096;
       // 色数档位：1 → gifQualityToMaxColors(1) = 256 色（GIF 上限）。实测 234→256 仅 +1% 体积，几乎免费。
@@ -1317,6 +1320,37 @@ const V2G_BLACKBOX_QUALITY = 1;
         let candidate = { ...encoded, compressRounds: 0, maxW: width };
         if (candidate.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
           return { candidate, underBudget: true };
+        }
+
+        // 实测超预算（标定估偏）→ 先做一次「无损重编」：按实测体积把宽度/帧率一起缩。
+        // 尽量不走到 gifsicle --lossy —— 它是「有损优化」，会改动像素，画面会出颗粒。
+        {
+          const target = V2G_BLACKBOX_MAX_BYTES * 0.9;
+          const k = Math.min(1, Math.sqrt(target / Math.max(1, candidate.blob.size)));
+          const rw = Math.max(V2G_BLACKBOX_RETRY_MIN_W, Math.floor((width * k) / 2) * 2);
+          const rf = Math.max(V2G_BLACKBOX_RETRY_MIN_FPS, Math.round(fps * k * 2) / 2);
+          if (rw < width - 4 || rf < fps - 0.4) {
+            setV2gProgress(true, base + 0.3 * spanShare, `黑盒重编 · ${rf}FPS`, {
+              sub: `${formatKb(candidate.blob.size)} 超预算 → 无损重编 宽${rw}`,
+              busy: true,
+            });
+            const retry = await encodeV2gGifFfmpeg({
+              file: v2gSourceFile,
+              fps: rf,
+              maxW: rw,
+              quality: V2G_BLACKBOX_QUALITY,
+              stageLabel: `${rf}FPS·宽${rw}`,
+              onProgress: (local, text) => {
+                setV2gProgress(true, base + 0.3 * spanShare, `黑盒重编 · ${rf}FPS`, {
+                  sub: text || `编码宽 ${rw}…`,
+                  busy: local > 0 && local < 1,
+                });
+              },
+            });
+            const rc = { ...retry, compressRounds: 0, maxW: rw };
+            if (rc.blob.size <= V2G_BLACKBOX_MAX_BYTES) return { candidate: rc, underBudget: true };
+            candidate = rc;
+          }
         }
   
         for (let round = 1; round <= maxRounds; round++) {

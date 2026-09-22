@@ -854,14 +854,19 @@
    */
   function buildBlackboxSoftCompressArgs(round = 1) {
     const r = Math.max(1, Math.round(Number(round) || 1));
-    const lossy = Math.min(75, 25 + (r - 1) * 22); // 1→25, 2→47, 3→69
+    // 第 1 轮用纯无损 -O3：--lossy 是 gifsicle 的「有损优化」，会改动像素、画面出颗粒。
+    // 体积优先靠「无损重编更小」（见 v2g-suite.js 的 encodeAndCompressBlackboxTier），实在不行才 lossy。
+    if (r === 1) return { label: "无损优化", args: "-O3", round: 1, lossy: 0 };
+    const lossy = Math.min(75, 25 + (r - 2) * 22); // 2轮25, 3轮47, 4轮69
     return { label: "轻柔", args: `-O3 --lossy=${lossy}`, round: r, lossy };
   }
 
   /** 黑盒最后一档：每轮都有 lossy（对齐 -l 力度），避免首轮纯 O3 白占一轮 */
   function buildBlackboxHardCompressArgs(round = 1) {
     const r = Math.max(1, Math.round(Number(round) || 1));
-    const level = r <= 2 ? "standard" : "strong";
+    // 第 1 轮同样先纯无损（原因见 buildBlackboxSoftCompressArgs）
+    if (r === 1) return { label: "无损优化", args: "-O3", round: 1, lossy: 0 };
+    const level = r <= 3 ? "standard" : "strong";
     const baseLossy = level === "strong" ? 100 : 60;
     const lossy = Math.min(200, baseLossy + (r - 1) * 30);
     const parts = ["-O3", `--lossy=${lossy}`];
