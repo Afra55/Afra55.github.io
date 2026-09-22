@@ -1009,42 +1009,45 @@
   
           const wmBytes = skipWm ? null : await buildV2gWatermarkPng(outW, outH);
           const speedFilter = speed > 1 ? `setpts=PTS/${speed},` : "";
-          let filterArgs;
+          // 噪点：源有颗粒 + 大幅下采样（如 1170→300 是 4 倍）时，bicubic 会混叠、GIF 看着全是噪点。
+          // 先轻度 hqdn3d 降噪、再用 lanczos 缩放。若 wasm 核心未编入 hqdn3d，exec 返回非 0，下面自动回退重跑。
+          const DENOISE = "hqdn3d=1.5:1.5:6:6,";
+          const buildFilterArgs = (denoise) => {
+            const chain =
+              `${cropFilter}${speedFilter}fps=${fps},${denoise ? DENOISE : ""}` +
+              `scale=${maxW}:-2:flags=lanczos${brightFilter}`;
+            if (wmBytes && wmBytes.length) {
+              return [
+                "-filter_complex",
+                `[0:v]${chain}[base];` +
+                  `[1:v]format=rgba[wm];[base][wm]overlay=0:0:format=auto[v];` +
+                  `[v]split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=full[p];` +
+                  `[s1][p]paletteuse=dither=none:diff_mode=rectangle`,
+              ];
+            }
+            return [
+              "-vf",
+              `${chain},split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=full[p];` +
+                `[s1][p]paletteuse=dither=none:diff_mode=rectangle`,
+            ];
+          };
           if (wmBytes && wmBytes.length) {
             usedWm = true;
             await ffmpeg.writeFile(wmName, wmBytes);
-            filterArgs = [
-              "-filter_complex",
-              `[0:v]${cropFilter}${speedFilter}fps=${fps},scale=${maxW}:-2:flags=bicubic${brightFilter}[base];` +
-                `[1:v]format=rgba[wm];[base][wm]overlay=0:0:format=auto[v];` +
-                `[v]split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=full[p];` +
-                `[s1][p]paletteuse=dither=none:diff_mode=rectangle`,
-            ];
-          } else {
-            filterArgs = [
-              "-vf",
-              `${cropFilter}${speedFilter}fps=${fps},scale=${maxW}:-2:flags=bicubic${brightFilter},` +
-                `split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=full[p];` +
-                `[s1][p]paletteuse=dither=none:diff_mode=rectangle`,
-            ];
           }
-  
+
           ticker.setPhase(`${stageLabel}双通道调色板编码`);
           ticker.setProgress(0.05);
-          const args = [];
-          if (encodeSs > 0.001) args.push("-ss", String(encodeSs));
-          args.push("-t", String(encodeT), "-i", encodeInput);
-          if (usedWm) args.push("-i", wmName);
-          args.push(
-            ...filterArgs,
-            "-frames:v",
-            String(frameCount),
-            "-loop",
-            "0",
-            "-y",
-            outName
-          );
-          const code = await ffmpeg.exec(args);
+          const baseArgs = [];
+          if (encodeSs > 0.001) baseArgs.push("-ss", String(encodeSs));
+          baseArgs.push("-t", String(encodeT), "-i", encodeInput);
+          if (usedWm) baseArgs.push("-i", wmName);
+          const outArgs = ["-frames:v", String(frameCount), "-loop", "0", "-y", outName];
+          let code = await ffmpeg.exec([...baseArgs, ...buildFilterArgs(true), ...outArgs]);
+          if (code !== 0) {
+            vbbLog("[vbb] 带降噪编码失败（可能 hqdn3d 未编入核心），回退无降噪重跑");
+            code = await ffmpeg.exec([...baseArgs, ...buildFilterArgs(false), ...outArgs]);
+          }
           vbbLog(
             `[vbb-phase] ffmpeg编码 ${Math.round(performance.now() - tPhase)}ms(累计) · ${fps}fps 宽${maxW} ${outW}x${outH} ${frameCount}帧`
           );
@@ -6660,7 +6663,9 @@
         return Math.abs(a.r - b.r) <= tol && Math.abs(a.g - b.g) <= tol && Math.abs(a.b - b.b) <= tol;
       }
 
-      /** 从一帧里估算纯色边框，返回保留区域（不含边框）；无边则 null */
+      /** 从一帧里估算纯色边框，返回保留区域（不含边框）；无边则 null
+       *  四边各自独立判定：只有一边是纯色边也能裁掉（旧版用「整条周长最多的颜色」当边框色，
+       *  单边边框时会被内容色挤掉导致整条扫描失败）。 */
       function detectFrameContentRect(img, tol) {
         const w = img.width;
         const h = img.height;
@@ -6669,39 +6674,62 @@
           const i = (y * w + x) * 4;
           return { r: data[i], g: data[i + 1], b: data[i + 2] };
         };
-        const bucket = (p) => `${p.r >> 4}|${p.g >> 4}|${p.b >> 4}`;
-        const counts = new Map();
-        const sample = (x, y) => {
-          const k = bucket(px(x, y));
-          counts.set(k, (counts.get(k) || 0) + 1);
-        };
-        for (let x = 0; x < w; x++) { sample(x, 0); sample(x, h - 1); }
-        for (let y = 0; y < h; y++) { sample(0, y); sample(w - 1, y); }
-        let border = px(0, 0);
-        let bestN = 0;
-        counts.forEach((n, k) => {
-          if (n > bestN) {
-            bestN = n;
-            const [r, g, b] = k.split("|").map(Number);
-            border = { r: (r << 4) + 8, g: (g << 4) + 8, b: (b << 4) + 8 };
+        const near = (a, b) => Math.abs(a.r - b.r) <= tol && Math.abs(a.g - b.g) <= tol && Math.abs(a.b - b.b) <= tol;
+        /** 该行/该列是否「纯色」，是则返回平均色，否则 null */
+        const lineColor = (get, n) => {
+          let r = 0;
+          let g = 0;
+          let b = 0;
+          for (let i = 0; i < n; i++) {
+            const p = get(i);
+            r += p.r;
+            g += p.g;
+            b += p.b;
           }
-        });
-        const rowMatch = (y, x0, x1) => {
-          for (let x = x0; x <= x1; x++) if (!vbbColorsNear(px(x, y), border, tol)) return false;
-          return true;
+          const avg = { r: r / n, g: g / n, b: b / n };
+          for (let i = 0; i < n; i++) {
+            if (!near(get(i), avg)) return null;
+          }
+          return avg;
         };
-        const colMatch = (x, y0, y1) => {
-          for (let y = y0; y <= y1; y++) if (!vbbColorsNear(px(x, y), border, tol)) return false;
-          return true;
-        };
+        const rowAt = (y) => (i) => px(i, y);
+        const colAt = (x) => (i) => px(x, i);
         let top = 0;
         let bottom = h - 1;
         let left = 0;
         let right = w - 1;
-        while (top < bottom && rowMatch(top, left, right)) top++;
-        while (bottom > top && rowMatch(bottom, left, right)) bottom--;
-        while (left < right && colMatch(left, top, bottom)) left++;
-        while (right > left && colMatch(right, top, bottom)) right--;
+        const cTop = lineColor(rowAt(0), w);
+        if (cTop) {
+          while (top < bottom) {
+            const c = lineColor(rowAt(top), w);
+            if (!c || !near(c, cTop)) break;
+            top++;
+          }
+        }
+        const cBottom = lineColor(rowAt(h - 1), w);
+        if (cBottom) {
+          while (bottom > top) {
+            const c = lineColor(rowAt(bottom), w);
+            if (!c || !near(c, cBottom)) break;
+            bottom--;
+          }
+        }
+        const cLeft = lineColor(colAt(0), h);
+        if (cLeft) {
+          while (left < right) {
+            const c = lineColor(colAt(left), h);
+            if (!c || !near(c, cLeft)) break;
+            left++;
+          }
+        }
+        const cRight = lineColor(colAt(w - 1), h);
+        if (cRight) {
+          while (right > left) {
+            const c = lineColor(colAt(right), h);
+            if (!c || !near(c, cRight)) break;
+            right--;
+          }
+        }
         if (right <= left || bottom <= top) return null;
         return { left, top, right, bottom, w, h };
       }
@@ -6745,7 +6773,8 @@
             });
             ctx.drawImage(v, 0, 0, cw, ch);
             const rect = detectFrameContentRect(ctx.getImageData(0, 0, cw, ch), 24);
-            if (!rect) { acc = null; break; }
+            // 某帧没检出边框就跳过（不整体作废）：仍用其余帧的交集，避免场景切换导致完全不裁
+            if (!rect) continue;
             acc = acc
               ? {
                   left: Math.max(acc.left, rect.left),
@@ -7788,10 +7817,10 @@
             // 透明填充需保留 alpha（GIF 只支持 1-bit 透明）
             const vf =
               fill === "transparent"
-                ? `scale=${W}:${H}:flags=bicubic,split[a][b];` +
+                ? `scale=${W}:${H}:flags=lanczos,split[a][b];` +
                   `[a]palettegen=max_colors=${colors}:stats_mode=full:reserve_transparent=1[p];` +
                   `[b][p]paletteuse=dither=sierra2:alpha_threshold=128:diff_mode=rectangle`
-                : `scale=${W}:${H}:flags=bicubic,split[a][b];` +
+                : `scale=${W}:${H}:flags=lanczos,split[a][b];` +
                   `[a]palettegen=max_colors=${colors}:stats_mode=full[p];` +
                   `[b][p]paletteuse=dither=sierra2:diff_mode=rectangle`;
             // 用 image2 定帧率：每帧时长 = hold（精确，不会像 concat 那样多算末帧）
