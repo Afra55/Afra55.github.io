@@ -1023,13 +1023,13 @@ const V2G_BLACKBOX_QUALITY = 1;
                 `[0:v]${chain}[base];` +
                   `[1:v]format=rgba[wm];[base][wm]overlay=0:0:format=auto[v];` +
                   `[v]split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=full[p];` +
-                  `[s1][p]paletteuse=dither=sierra2:diff_mode=rectangle`,
+                  `[s1][p]paletteuse=dither=none:diff_mode=rectangle`,
               ];
             }
             return [
               "-vf",
               `${chain},split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=full[p];` +
-                `[s1][p]paletteuse=dither=sierra2:diff_mode=rectangle`,
+                `[s1][p]paletteuse=dither=none:diff_mode=rectangle`,
             ];
           };
           if (wmBytes && wmBytes.length) {
