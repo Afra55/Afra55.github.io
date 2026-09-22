@@ -92,7 +92,8 @@
         const V2G_BLACKBOX_MIN_ACCEPT_W = 290;
       /** 源宽未知时的加宽兜底（等同不设上限） */
       const V2G_BLACKBOX_WIDTH_HARD_FALLBACK = 4096;
-      const V2G_BLACKBOX_QUALITY = 5;
+      // 色数档位：1 → gifQualityToMaxColors(1) = 256 色（GIF 上限）。实测 234→256 仅 +1% 体积，几乎免费。
+const V2G_BLACKBOX_QUALITY = 1;
       const V2G_BLACKBOX_MAX_COMPRESS_ROUNDS = 10;
       /** 非最后一档：每轮轻lossy（对齐 -l），最多 3 轮不减色；多给高帧档机会再降 FPS */
       const V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS = 3;
@@ -1022,13 +1023,13 @@
                 `[0:v]${chain}[base];` +
                   `[1:v]format=rgba[wm];[base][wm]overlay=0:0:format=auto[v];` +
                   `[v]split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=full[p];` +
-                  `[s1][p]paletteuse=dither=none:diff_mode=rectangle`,
+                  `[s1][p]paletteuse=dither=sierra2:diff_mode=rectangle`,
               ];
             }
             return [
               "-vf",
               `${chain},split[s0][s1];[s0]palettegen=max_colors=${maxColors}:stats_mode=full[p];` +
-                `[s1][p]paletteuse=dither=none:diff_mode=rectangle`,
+                `[s1][p]paletteuse=dither=sierra2:diff_mode=rectangle`,
             ];
           };
           if (wmBytes && wmBytes.length) {
@@ -1772,7 +1773,7 @@
             }
           }
           if (!chosen) chosen = { fps: fpsList[fpsList.length - 1], width: hardMin };
-          // 预算吃紧 → 降色数(234→124)换「1 轮压缩」：少压一轮约 +3dB，减色仅约 -1.1dB，净赚
+          // 预算吃紧 → 降色数(256→124)换「1 轮压缩」：少压一轮约 +3dB，减色仅约 -1.1dB，净赚
           if (chosen.fps >= 12) chosen.quality = 25;
         }
         // 实验/排查用（仅 ?debug）：localStorage devtools-vbb-force="fps:宽" 强制指定档位
