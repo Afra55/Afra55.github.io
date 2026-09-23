@@ -1283,10 +1283,17 @@
       if (!raw) return;
       e.preventDefault();
       e.stopPropagation();
+      let decoded = raw;
+      try { decoded = decodeURIComponent(raw); } catch (_) {}
       let target = null;
       try {
-        target = els.preview.querySelector(`#${CSS.escape(decodeURIComponent(raw))}`);
+        target = els.preview.querySelector(`#${CSS.escape(decoded)}`);
       } catch (_) {}
+      // 目录链接的 #标题 可能与 slugify 后的 id 不一致（如标题含空格/标点）→ 按标题文本兜底匹配
+      if (!target) {
+        const want = decoded.trim();
+        target = [...els.preview.querySelectorAll("h1,h2,h3,h4,h5,h6")].find((h) => (h.textContent || "").trim() === want);
+      }
       if (!target) target = els.preview.querySelector(`[id="${raw}"]`);
       if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -4430,7 +4437,12 @@ a{color:${v.accent}}
           throw new Error(msg);
         }
         if (!retried && /pandoc/i.test(msg) && /未找到|not found|ENOENT|未安装/i.test(msg)) {
-          if (window.confirm("导出该格式需要 pandoc，当前未安装。\n现在用本机桥自动安装？（Windows/macOS 支持，约 100–150MB）")) {
+          const ok = await confirmModal({
+            title: "安装 pandoc",
+            body: "导出该格式需要 pandoc，当前未安装。现在用本机桥自动安装？（Windows/macOS 支持，约 100–150MB）",
+            okText: "自动安装",
+          });
+          if (ok) {
             await runPandocInstall();
             return await exportViaPandoc(text, to, title, true);
           }
@@ -4442,20 +4454,37 @@ a{color:${v.accent}}
     }
 
     async function runPandocInstall() {
-      toast("正在安装 pandoc，请稍候（可能 1–3 分钟）…");
-      const res = await fetch(`${baseUrl()}/pandoc/install`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
-        body: "{}",
-      });
-      const data = await res.json().catch(() => null);
-      if (!data?.ok) throw new Error(data?.error || "安装请求失败");
-      if (data.installed) {
-        toast("pandoc 已安装，正在重试导出…");
-        return;
+      // 安装走本机桥，可能阻塞 1–3 分钟：用弹框 + 已用时秒数展示进度，替代一闪而过的 toast
+      const box = els.modalBox;
+      const t0 = Date.now();
+      els.modal.hidden = false;
+      box.innerHTML =
+        `<div class="mdm-modal-head"><strong>正在安装 pandoc</strong></div>` +
+        `<p class="mdm-modal-body">本机桥正在下载并安装 pandoc（约 100–150MB，通常 1–3 分钟，最长 15 分钟）。请勿关闭本页。</p>` +
+        `<div class="mdm-modal-foot"><p class="hint tight" id="mdm-pandoc-install-progress">已用时 0 秒 · 安装中…</p></div>`;
+      els.modal.onclick = null; // 安装中禁止点遮罩关闭
+      const timer = setInterval(() => {
+        const el = document.getElementById("mdm-pandoc-install-progress");
+        if (el) el.textContent = `已用时 ${Math.round((Date.now() - t0) / 1000)} 秒 · 安装中请稍候…`;
+      }, 1000);
+      try {
+        const res = await fetch(`${baseUrl()}/pandoc/install`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-Adb-Token": token(), "X-Ffmpeg-Token": token() },
+          body: "{}",
+        });
+        const data = await res.json().catch(() => null);
+        if (!data?.ok) throw new Error(data?.error || "安装请求失败");
+        if (data.installed) {
+          toast("pandoc 已安装，正在重试导出…");
+          return;
+        }
+        if (data.needsManual) throw new Error(`请手动安装：${data.command || "pandoc"}`);
+        throw new Error(data.message || data.output || "安装未完成，请手动安装 pandoc");
+      } finally {
+        clearInterval(timer);
+        closeModal();
       }
-      if (data.needsManual) throw new Error(`请手动安装：${data.command || "pandoc"}`);
-      throw new Error(data.message || data.output || "安装未完成，请手动安装 pandoc");
     }
 
     // ---- dir picking ----
@@ -5151,8 +5180,13 @@ a{color:${v.accent}}
       }
       const anchor = e.target.closest?.('a[href^="#"]');
       if (anchor) {
-        const id = decodeURIComponent((anchor.getAttribute("href") || "").slice(1));
-        const target = id ? document.getElementById(id) : null;
+        let id = (anchor.getAttribute("href") || "").slice(1);
+        try { id = decodeURIComponent(id); } catch (_) {}
+        let target = id ? document.getElementById(id) : null;
+        if (!target) {
+          const want = id.trim();
+          target = [...els.preview.querySelectorAll("h1,h2,h3,h4,h5,h6")].find((h) => (h.textContent || "").trim() === want);
+        }
         if (target && els.preview.contains(target)) {
           e.preventDefault();
           target.scrollIntoView({ behavior: "smooth", block: "start" });

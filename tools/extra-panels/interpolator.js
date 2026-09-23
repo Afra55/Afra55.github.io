@@ -51,6 +51,15 @@
     return Number.isFinite(n) ? n : 0;
   }
 
+  function bezParams(x1, y1, x2, y2) {
+    return [
+      { key: "x1", label: "x1", min: 0, max: 1, step: 0.01, def: x1, desc: "起点横坐标（0~1）。" },
+      { key: "y1", label: "y1", min: -1, max: 2, step: 0.01, def: y1, desc: "起点纵坐标，可 >1 表示超调。" },
+      { key: "x2", label: "x2", min: 0, max: 1, step: 0.01, def: x2, desc: "终点横坐标（0~1）。" },
+      { key: "y2", label: "y2", min: -1, max: 2, step: 0.01, def: y2, desc: "终点纵坐标，可 >1 表示超调。" },
+    ];
+  }
+
   const INTERPOLATORS = [
     {
       id: "linear", name: "LinearInterpolator", cn: "线性",
@@ -142,21 +151,27 @@
     },
     {
       id: "fastOutSlowIn", name: "FastOutSlowInInterpolator", cn: "快进慢出",
-      params: [], calc: (t) => bezierY(0.4, 0, 0.2, 1, t),
-      java: () => "new FastOutSlowInInterpolator()", kotlin: () => "FastOutSlowInInterpolator()",
-      clazz: "FastOutSlowInInterpolator", desc: "快进慢出：Material 常驻过渡，先快后慢，顺滑结束。",
+      params: bezParams(0.4, 0, 0.2, 1),
+      calc: (t, p) => bezierY(num(p.x1), num(p.y1), num(p.x2), num(p.y2), t),
+      java: (p) => `new PathInterpolator(${fmt(p.x1)}, ${fmt(p.y1)}, ${fmt(p.x2)}, ${fmt(p.y2)})`,
+      kotlin: (p) => `PathInterpolator(${fmt(p.x1)}f, ${fmt(p.y1)}f, ${fmt(p.x2)}f, ${fmt(p.y2)}f)`,
+      clazz: "FastOutSlowInInterpolator", desc: "快进慢出：Material 常驻过渡，先快后慢（默认即 FastOutSlowIn），可拖动控制点自定义。",
     },
     {
       id: "linearOutSlowIn", name: "LinearOutSlowInInterpolator", cn: "线性出·慢入",
-      params: [], calc: (t) => bezierY(0, 0, 0.4, 1, t),
-      java: () => "new LinearOutSlowInInterpolator()", kotlin: () => "LinearOutSlowInInterpolator()",
-      clazz: "LinearOutSlowInInterpolator", desc: "线性出·慢入：匀速伴随缓慢收尾，接近自然停止。",
+      params: bezParams(0, 0, 0.4, 1),
+      calc: (t, p) => bezierY(num(p.x1), num(p.y1), num(p.x2), num(p.y2), t),
+      java: (p) => `new PathInterpolator(${fmt(p.x1)}, ${fmt(p.y1)}, ${fmt(p.x2)}, ${fmt(p.y2)})`,
+      kotlin: (p) => `PathInterpolator(${fmt(p.x1)}f, ${fmt(p.y1)}f, ${fmt(p.x2)}f, ${fmt(p.y2)}f)`,
+      clazz: "LinearOutSlowInInterpolator", desc: "线性出·慢入：匀速伴随缓慢收尾（默认即 LinearOutSlowIn），可拖动控制点自定义。",
     },
     {
       id: "fastOutLinearIn", name: "FastOutLinearInInterpolator", cn: "快出·线性入",
-      params: [], calc: (t) => bezierY(0.4, 0, 1, 1, t),
-      java: () => "new FastOutLinearInInterpolator()", kotlin: () => "FastOutLinearInInterpolator()",
-      clazz: "FastOutLinearInInterpolator", desc: "快出·线性入：快速起步后匀速，末尾收束。",
+      params: bezParams(0.4, 0, 1, 1),
+      calc: (t, p) => bezierY(num(p.x1), num(p.y1), num(p.x2), num(p.y2), t),
+      java: (p) => `new PathInterpolator(${fmt(p.x1)}, ${fmt(p.y1)}, ${fmt(p.x2)}, ${fmt(p.y2)})`,
+      kotlin: (p) => `PathInterpolator(${fmt(p.x1)}f, ${fmt(p.y1)}f, ${fmt(p.x2)}f, ${fmt(p.y2)}f)`,
+      clazz: "FastOutLinearInInterpolator", desc: "快出·线性入：快速起步后匀速（默认即 FastOutLinearIn），可拖动控制点自定义。",
     },
     {
       id: "spring", name: "SpringAnimation", cn: "弹簧(物理)",
