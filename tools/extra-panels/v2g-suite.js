@@ -118,9 +118,9 @@
         } catch (_) {}
         return 128 * 1024 * 1024; // 未知设备：保守
       }
-      /** gifski 内部会为时序优化一次性持有全部帧（不止一份输入 RGBA），内存随「帧数」超线性增长。
+      /** 单段 gifski 编码的帧数上限：gifski 一次性持有全部帧，内存随「帧数」超线性增长。
        *  实测（手机）：20s@15fps ≈ 301 帧可用；30s@15fps ≈ 451 帧、33s ≈ 505 帧会被系统杀（页面被刷新）。
-       *  → 帧数也设上限，超了退回 ffmpeg 流式管线（逐帧处理，不一次性持有全部帧）。 */
+       *  超过上限的片段不再整片回退 ffmpeg，而是「切成 ≤320 帧的多段分别 gifski 再合并」（见 encodeV2gGifGifski）。 */
       const V2G_GIFSKI_MAX_FRAMES = 320;
       const V2G_BLACKBOX_MAX_COMPRESS_ROUNDS = 10;
       /** 非最后一档：每轮轻lossy（对齐 -l），最多 3 轮不减色；多给高帧档机会再降 FPS */
@@ -1208,13 +1208,13 @@
           else setV2gProgress(true, local, text);
         };
 
-        const rawBytes = frameCount * outW * outH * 4;
-        if (frameCount > V2G_GIFSKI_MAX_FRAMES) {
-          throw new Error(`gifski 帧数过多（${frameCount} 帧），改用 ffmpeg 引擎`);
-        }
-        if (rawBytes > gifskiRawBudget()) {
-          throw new Error(`gifski 帧数据过大（约 ${formatKb(rawBytes)}），改用 ffmpeg 引擎`);
-        }
+        // 单次 gifski 要一次性持有全部帧（JS + wasm 各一份）。超过单次上限就「分段编码 + 合并」：
+        // 每段帧数 ≤ min(320, 内存预算可容纳的帧数)，逐段 gifski 后用 gifsicle --merge 拼回一个 GIF。
+        // 这样长视频也能吃 gifski 的画质/体积，同时每段内存可控（不再整片 OOM）。
+        const perFrameBytes = outW * outH * 4;
+        const budgetFrames = Math.max(1, Math.floor(gifskiRawBudget() / perFrameBytes));
+        const chunkMax = Math.max(1, Math.min(V2G_GIFSKI_MAX_FRAMES, budgetFrames));
+        const chunkCount = Math.ceil(frameCount / chunkMax);
         if (aborted()) throw new Error("已取消");
         // 先加载 gifski：wasm 不可用就立刻抛错回退，不白跑一趟 ffmpeg 预处理
         const mod = await loadGifskiMods();
@@ -1317,47 +1317,76 @@
             await ffmpeg.writeFile(wmName, wmBytes);
           }
 
-          ticker.setPhase(`${stageLabel}导出 RGBA 帧`);
-          ticker.setProgress(0.05);
-          const baseArgs = [];
-          if (encodeSs > 0.001) baseArgs.push("-ss", String(encodeSs));
-          baseArgs.push("-t", String(encodeT), "-i", encodeInput);
-          if (usedWm) baseArgs.push("-i", wmName);
-          const outArgs = ["-frames:v", String(frameCount), "-f", "rawvideo", "-pix_fmt", "rgba", "-y", rawName];
-          let code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(true), ...outArgs]);
-          if (code !== 0) {
-            vbbLog("[vbb] gifski 前置 rawvideo（带降噪）失败，回退无降噪重跑");
-            code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(false), ...outArgs]);
+          const encodeChunk = async (chunkStartFrame, chunkFrames) => {
+            const startEff = chunkStartFrame / fps; // effSpan 时间轴（秒）
+            const ss = encodeSs + startEff * speed; // 原始时间轴
+            const dur = (chunkFrames / fps) * speed + 0.15; // 略多给一点，避免末帧被切
+            const baseArgs = [];
+            if (ss > 0.001) baseArgs.push("-ss", String(ss));
+            baseArgs.push("-t", String(dur), "-i", encodeInput);
+            if (usedWm) baseArgs.push("-i", wmName);
+            const outArgs = ["-frames:v", String(chunkFrames), "-f", "rawvideo", "-pix_fmt", "rgba", "-y", rawName];
+            let code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(true), ...outArgs]);
+            if (code !== 0) {
+              code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(false), ...outArgs]);
+            }
+            if (aborted()) throw new Error("已取消");
+            if (code !== 0) throw new Error(`FFmpeg 导出 RGBA 失败（code=${code}）`);
+            const data = await ffmpeg.readFile(rawName);
+            const frames = data instanceof Uint8Array ? data : new Uint8Array(data);
+            // 先释放 ffmpeg 侧文件，降低 gifski 拷贝帧时的峰值内存
+            try {
+              await ffmpeg.deleteFile(rawName);
+            } catch (_) {}
+            const stride = outW * outH * 4;
+            let n = Math.floor(frames.length / stride);
+            if (n < 2) throw new Error("导出的 RGBA 帧不足");
+            if (n > chunkFrames) n = chunkFrames;
+            const view = n * stride === frames.length ? frames : frames.subarray(0, n * stride);
+            // gifski.encode 是同步 wasm 调用，期间主线程会卡住
+            const gifBytes = mod.encode(view, n, outW, outH, fps, undefined, gifskiQuality);
+            if (!gifBytes || !gifBytes.length) throw new Error("gifski 未产出 GIF");
+            return { blob: new Blob([gifBytes], { type: "image/gif" }), n };
+          };
+
+          let blob;
+          let actualFrames;
+          if (chunkCount <= 1) {
+            ticker.setPhase(`${stageLabel}导出 RGBA 帧`);
+            ticker.setProgress(0.05);
+            const { blob: b, n } = await encodeChunk(0, frameCount);
+            blob = b;
+            actualFrames = n;
+            ticker.stop();
+            vbbLog(
+              `[vbb-phase] gifski rawvideo ${Math.round(performance.now() - tPhase)}ms · ${fps}fps 宽${outW} ${n}帧`
+            );
+          } else {
+            ticker.stop();
+            const chunks = [];
+            let totalFrames = 0;
+            for (let k = 0; k < chunkCount; k++) {
+              if (aborted()) throw new Error("已取消");
+              const startFrame = k * chunkMax;
+              const cFrames = Math.min(chunkMax, frameCount - startFrame);
+              const base = 0.2 + (k / chunkCount) * 0.45;
+              mapProgress(base, `${stageLabel}分段 ${k + 1}/${chunkCount} · 导出 RGBA…`);
+              const { blob: cb, n } = await encodeChunk(startFrame, cFrames);
+              totalFrames += n;
+              chunks.push(cb);
+              mapProgress(base + 0.4 / chunkCount, `${stageLabel}分段 ${k + 1}/${chunkCount} · gifski 编码完成`);
+              vbbLog(
+                `[vbb-phase] gifski 分段 ${k + 1}/${chunkCount} · ${n}帧 ${formatKb(cb.size)}（累计 ${Math.round(performance.now() - tPhase)}ms）`
+              );
+            }
+            mapProgress(0.66, `${stageLabel}合并 ${chunkCount} 段…`);
+            blob = await mergeGifBlobs(chunks, () => {});
+            actualFrames = totalFrames;
+            if (!blob?.size) throw new Error("分段合并未产出 GIF");
           }
-          if (aborted()) throw new Error("已取消");
-          if (code !== 0) throw new Error(`FFmpeg 导出 RGBA 失败（code=${code}）`);
+          mapProgress(0.99, `${stageLabel}完成`);
           vbbLog(
-            `[vbb-phase] gifski rawvideo ${Math.round(performance.now() - tPhase)}ms · ${fps}fps 宽${outW} ${frameCount}帧`
-          );
-
-          ticker.setPhase(`${stageLabel}读取帧`);
-          const data = await ffmpeg.readFile(rawName);
-          const frames = data instanceof Uint8Array ? data : new Uint8Array(data);
-          // 先释放 ffmpeg 侧文件，降低 gifski 拷贝帧时的峰值内存
-          try {
-            await ffmpeg.deleteFile(rawName);
-          } catch (_) {}
-          const frameStride = outW * outH * 4;
-          let actualFrames = Math.floor(frames.length / frameStride);
-          if (actualFrames < 2) throw new Error("导出的 RGBA 帧不足");
-          if (actualFrames > frameCount) actualFrames = frameCount;
-          const framesView =
-            actualFrames * frameStride === frames.length ? frames : frames.subarray(0, actualFrames * frameStride);
-
-          ticker.stop();
-          // gifski.encode 是同步 wasm 调用，期间主线程会卡住（不再走 ticker）
-          mapProgress(0.68, `${stageLabel}gifski 编码 ${actualFrames} 帧…`);
-          const gifBytes = mod.encode(framesView, actualFrames, outW, outH, fps, undefined, gifskiQuality);
-          if (!gifBytes || !gifBytes.length) throw new Error("gifski 未产出 GIF");
-          const blob = new Blob([gifBytes], { type: "image/gif" });
-          mapProgress(1, `${stageLabel}完成`);
-          vbbLog(
-            `[vbb-phase] gifski编码 ${Math.round(performance.now() - tPhase)}ms(累计) · ${formatKb(blob.size)} q=${gifskiQuality}`
+            `[vbb-phase] gifski编码 ${Math.round(performance.now() - tPhase)}ms(累计) · ${formatKb(blob.size)} q=${gifskiQuality}${chunkCount > 1 ? ` · ${chunkCount}段` : ""}`
           );
           return {
             blob,
@@ -1895,18 +1924,9 @@
           // 1) 没到宽度上限 → 用剩余预算自动增宽（只要 <95% 就补，不再只补 <70%）
           if (!atCap()) {
             onProgress(0.95, "体积有余 · 自动增宽");
-            // gifski 一次要持有全部 RGBA 帧：宽度超过内存护栏会直接回退 ffmpeg（白跑一趟）。
-            // 先把二分探测上限压到「gifski 可行宽度」，避免这种无效回退。
-            const effSpanSec = Math.max(0.1, span / speed);
-            const frames = Math.max(2, Math.round(effSpanSec * curFps) + 1);
-            const aspect = srcW > 0 ? srcH / srcW : 0.75;
-            // gifski 一次要持有全部 RGBA 帧：帧数超限或宽度超过内存护栏都会直接回退 ffmpeg（白跑一趟）。
-            // 帧数超限时 gifski 本就不会被用 → 增宽不设 gifski 上限，直接用 ffmpeg 的宽度上限。
-            const useGifski = frames <= V2G_GIFSKI_MAX_FRAMES;
-            const gifskiMaxW = useGifski
-              ? Math.floor(Math.sqrt(gifskiRawBudget() / Math.max(1, frames * aspect * 4)) / 2) * 2
-              : hardMax;
-            const widenMax = Math.max(V2G_BLACKBOX_BASE_W, Math.min(hardMax, gifskiMaxW));
+            // gifski 已支持分段编码（内部自动切段），不再有「帧数/内存超限回退」问题；
+            // 这里只把二分探测上限压到 2× 当前宽度，避免长视频对超预算宽度做整段（分段）编码白跑。
+            const widenMax = Math.min(hardMax, Math.max(V2G_BLACKBOX_BASE_W, Math.round((Number(cur.maxW) || V2G_BLACKBOX_BASE_W) * 2)));
             const wider = await blackboxWidenBest(cur, (w) => encodeAtWidthFps(curFps, w), {
               minW: Math.max(64, Number(cur.maxW) || V2G_BLACKBOX_BASE_W),
               maxW: widenMax,
