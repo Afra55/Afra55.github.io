@@ -1873,7 +1873,9 @@
           srcFpsProbe,
           new Promise((r) => setTimeout(() => r(0), 1500)),
         ]);
-        const fpsList = resolveBlackboxFpsList(span / speed, srcFps);
+        // 加速后的内容运动更快：若沿用长视频的低帧率上限（≥12s 封顶 15fps）会显得「一卡一卡」。
+        // 加速时改用完整帧率候选（最高 24fps），让黑盒按 6MB 预算尽量挑更高帧率。
+        const fpsList = speed > 1 ? blackboxFpsCandidates(srcFps) : resolveBlackboxFpsList(span / speed, srcFps);
         if (!fpsList.length) throw new Error("没有可用的黑盒帧率方案");
         const tried = [];
         const common = {
