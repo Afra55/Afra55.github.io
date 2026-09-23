@@ -2090,7 +2090,9 @@
         // 实测：同体积下「收窄一点 + 只压 1 轮」比「宽度拉满 + 压 4 轮」PSNR 高 9dB。
         const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.82);
         const srcCap = Math.min(srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK, V2G_ENCODE_HARD_W);
-        const floorW = Math.min(V2G_BLACKBOX_MIN_ACCEPT_W, srcCap);
+        // 加速场景优先「流畅」：内容运动快，宁可画面小一点也要保住更高帧率——把宽度底线从 290 降到 240，
+        // 让 15/20fps 这类更高档位在「可负担宽度略窄」时也能被选中（不再一路掉到 12fps）。
+        const floorW = Math.min(speed > 1 ? 240 : V2G_BLACKBOX_MIN_ACCEPT_W, srcCap);
         const encodeAtWidthFps = (f, w, quality) =>
           encodeBlackboxGif({
             ...common,
