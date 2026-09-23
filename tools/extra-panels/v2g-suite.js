@@ -102,21 +102,22 @@
       // 质量档位：1 = 最高画质。gifski 路径 → gifQualityToGifskiQuality(1) = 92（近无损）；
       // ffmpeg 回退路径 → gifQualityToMaxColors(1) = 256 色（GIF 上限）。实测 234→256 仅 +1% 体积，几乎免费。
       const V2G_BLACKBOX_QUALITY = 1;
-      /** gifski wasm 单次编码要在内存里一次性持有全部 RGBA 帧（帧数×宽×高×4），
-       *  且 JS 副本 + wasm 副本 + 解码峰值约 3×。手机 OOM 会直接杀标签页（表现为「处理到一半页面被刷新」）。
-       *  实测：240 帧 242×210 ≈ 49MB 可用；20s≈168MB 可用；30s≈250MB 在手机上被系统杀掉。
-       *  → 预算按设备内存自适应，超了就退回 ffmpeg 流式管线（它不一次性持有全部帧）。 */
+      /** 单段 gifski 编码的原始 RGBA 内存预算（帧数×宽×高×4）。
+       *  手机 OOM 会直接杀标签页（表现为「处理到一半页面被刷新」）。
+       *  实测：240 帧 242×210 ≈ 49MB 可用；20s≈127MB 可用；30s 分段后每段≈160MB 仍被杀。
+       *  → 预算按设备内存自适应，且定得很保守（宁可多分几段、慢一点，也不 OOM）。
+       *  超出预算的片段走「切段」而非整片回退（见 encodeV2gGifGifski）。 */
       function gifskiRawBudget() {
         try {
           const dm = navigator.deviceMemory; // Chrome/Edge；iOS Safari 无此字段
           if (typeof dm === "number") {
-            if (dm <= 2) return 64 * 1024 * 1024;
-            if (dm <= 4) return 96 * 1024 * 1024;
-            if (dm <= 8) return 160 * 1024 * 1024;
-            return 256 * 1024 * 1024;
+            if (dm <= 2) return 24 * 1024 * 1024;
+            if (dm <= 4) return 40 * 1024 * 1024;
+            if (dm <= 8) return 64 * 1024 * 1024;
+            return 96 * 1024 * 1024;
           }
         } catch (_) {}
-        return 128 * 1024 * 1024; // 未知设备：保守
+        return 40 * 1024 * 1024; // 未知设备：保守
       }
       /** 单段 gifski 编码的帧数上限：gifski 一次性持有全部帧，内存随「帧数」超线性增长。
        *  实测（手机）：20s@15fps ≈ 301 帧可用；30s@15fps ≈ 451 帧、33s ≈ 505 帧会被系统杀（页面被刷新）。
