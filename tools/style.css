@@ -1784,7 +1784,7 @@ a.secondary-btn {
 }
 
 .theme-midnight {
-  color: var(--ink);
+  color: #e6edf3;
   background: linear-gradient(160deg, #1a2234 0%, #121826 55%, #0d1320 100%);
 }
 
