@@ -23,7 +23,7 @@
   let multi = false;
   let mask = null; // Uint8Array 1=person
   let detectMode = "color";
-  let aiState = { mp: null, rmbg: null, loading: false };
+  let aiState = { mpSeg: null, rmbg: null };
   let crop = null; // {x,y,w,h,aspect|null}
   let raf = 0;
 
@@ -285,31 +285,54 @@
 
   function setDetectStatus(t) { if (els.detectStatus) els.detectStatus.textContent = t || ""; }
 
-  async function runDetect() {
-    if (!img) return;
+  let detectGen = 0;
+  let detectChain = Promise.resolve();
+
+  /** 切换识别方式时串行执行、旧的自动作废（避免「正在加载中」卡死） */
+  function runDetect() {
+    if (!img) return Promise.resolve();
+    const gen = ++detectGen;
+    detectChain = detectChain
+      .catch(() => {})
+      .then(() => (gen === detectGen ? detectOnce(gen) : null))
+      .catch(() => {});
+    return detectChain;
+  }
+
+  async function detectOnce(gen) {
     const mode = els.detect?.value || "color";
     detectMode = mode;
     mask = null;
-    if (mode === "color") { setDetectStatus("① 点图上取背景色 → ② 设下方「替换为」的颜色"); render(); return; }
-    setDetectStatus("加载 AI 模型…（首次较慢，请稍候）");
+    if (mode === "color") {
+      setDetectStatus("① 点图上取背景色 → ② 设下方「替换为」的颜色");
+      render();
+      return;
+    }
+    setDetectStatus(
+      mode === "mp" ? "加载 AI 模型（MediaPipe）…" : "加载 AI 模型（RMBG，首次约 40MB，请稍候）…"
+    );
     try {
       const t0 = performance.now();
-      if (mode === "mp") mask = await segmentMP();
-      else mask = await segmentRMBG();
+      const m = mode === "mp" ? await segmentMP() : await segmentRMBG();
+      if (gen !== detectGen) return; // 期间又切了模式 → 丢弃
+      mask = m;
       const sec = ((performance.now() - t0) / 1000).toFixed(1);
-      const personRatio = mask ? (mask.reduce((a, b) => a + b, 0) / mask.length / 255) : 0;
-      if (!mask || personRatio < 0.004) {
+      const ratio = m ? m.reduce((a, b) => a + b, 0) / m.length / 255 : 0;
+      if (!m || ratio < 0.004) {
         mask = null;
-        setDetectStatus(`未检测到人像（${sec}s）→ 已回退「按颜色」：请点图上取背景色`);
+        setDetectStatus(`未检测到人像（${sec}s）→ 已按「按颜色」处理：请点图上取背景色`);
       } else {
-        setDetectStatus(`✓ 已识别人像（${(personRatio * 100).toFixed(0)}% · ${sec}s）。直接设「替换为」颜色即可换背景（不用选源色）`);
+        setDetectStatus(
+          `✓ 已识别人像（${(ratio * 100).toFixed(0)}% · ${sec}s）。直接设「替换为」颜色即可换背景（不用选源色）`
+        );
       }
       render();
     } catch (err) {
+      if (gen !== detectGen) return;
       mask = null;
       detectMode = "color";
       if (els.detect) els.detect.value = "color";
-      setDetectStatus("AI 不可用，已回退「按颜色」：" + (err?.message || err));
+      setDetectStatus(`AI 加载失败：${err?.message || err}（已回退「按颜色」，可再选 AI 重试）`);
       render();
     }
   }
@@ -326,58 +349,66 @@
     });
   }
 
+  async function getMPSeg() {
+    if (aiState.mpSeg) return aiState.mpSeg;
+    await ensureScript(MP_BASE + "selfie_segmentation.js");
+    const SS = window.SelfieSegmentation;
+    if (!SS) throw new Error("MediaPipe 初始化失败");
+    const seg = new SS({ locateFile: (f) => MP_BASE + f });
+    seg.setOptions({ modelSelection: 1 });
+    aiState.mpSeg = seg;
+    return seg;
+  }
+
   async function segmentMP() {
-    if (aiState.loading) throw new Error("正在加载中");
-    aiState.loading = true;
-    try {
-      await ensureScript(MP_BASE + "selfie_segmentation.js");
-      const SS = window.SelfieSegmentation;
-      if (!SS) throw new Error("MediaPipe 初始化失败");
-      const seg = new SS({ locateFile: (f) => MP_BASE + f });
-      seg.setOptions({ modelSelection: 1 });
-      const res = await new Promise((resolve, reject) => {
+    const seg = await getMPSeg();
+    const res = await Promise.race([
+      new Promise((resolve, reject) => {
         seg.onResults((r) => resolve(r));
-        seg.send({ image: img }).catch(reject);
-      });
-      const mc = document.createElement("canvas");
-      mc.width = workW; mc.height = workH;
-      const mctx = mc.getContext("2d");
-      mctx.drawImage(res.segmentationMask, 0, 0, workW, workH);
-      const data = mctx.getImageData(0, 0, workW, workH).data;
-      const out = new Uint8Array(workW * workH);
-      for (let i = 0; i < out.length; i++) out[i] = data[i * 4];
-      return out;
-    } finally {
-      aiState.loading = false;
-    }
+        Promise.resolve(seg.send({ image: img })).catch(reject);
+      }),
+      new Promise((_, reject) => setTimeout(() => reject(new Error("MediaPipe 超时（60s）")), 60000)),
+    ]);
+    const mc = document.createElement("canvas");
+    mc.width = workW; mc.height = workH;
+    const mctx = mc.getContext("2d");
+    mctx.drawImage(res.segmentationMask, 0, 0, workW, workH);
+    const data = mctx.getImageData(0, 0, workW, workH).data;
+    const out = new Uint8Array(workW * workH);
+    for (let i = 0; i < out.length; i++) out[i] = data[i * 4];
+    return out;
+  }
+
+  async function getRMBG() {
+    if (aiState.rmbg) return aiState.rmbg;
+    // 切到 RMBG 前释放 MediaPipe 实例，避免两套 WASM 抢资源
+    try { aiState.mpSeg?.close?.(); } catch (_) {}
+    aiState.mpSeg = null;
+    const mod = await import(/* webpackIgnore: true */ RMBG_URL);
+    const removeBg = mod.default || mod.removeBackground;
+    if (typeof removeBg !== "function") throw new Error("RMBG 加载失败");
+    aiState.rmbg = removeBg;
+    return removeBg;
   }
 
   async function segmentRMBG() {
-    if (aiState.loading) throw new Error("正在加载中");
-    aiState.loading = true;
-    try {
-      const mod = await import(/* webpackIgnore: true */ RMBG_URL);
-      const removeBg = mod.default || mod.removeBackground;
-      if (typeof removeBg !== "function") throw new Error("RMBG 加载失败");
-      const srcBlob = await new Promise((r) => els.canvas.toBlob(r, "image/png"));
-      const maskBlob = await removeBg(srcBlob, {
-        model: "isnet_quint8",
-        device: "cpu",
-        output: { format: "image/png", type: "mask" },
-      });
-      const bmp = await createImageBitmap(maskBlob);
-      const mc = document.createElement("canvas");
-      mc.width = workW; mc.height = workH;
-      const mctx = mc.getContext("2d");
-      mctx.drawImage(bmp, 0, 0, workW, workH);
-      bmp.close?.();
-      const data = mctx.getImageData(0, 0, workW, workH).data;
-      const out = new Uint8Array(workW * workH);
-      for (let i = 0; i < out.length; i++) out[i] = data[i * 4];
-      return out;
-    } finally {
-      aiState.loading = false;
-    }
+    const removeBg = await getRMBG();
+    const srcBlob = await new Promise((r) => els.canvas.toBlob(r, "image/png"));
+    const maskBlob = await removeBg(srcBlob, {
+      model: "isnet_quint8",
+      device: "cpu",
+      output: { format: "image/png", type: "mask" },
+    });
+    const bmp = await createImageBitmap(maskBlob);
+    const mc = document.createElement("canvas");
+    mc.width = workW; mc.height = workH;
+    const mctx = mc.getContext("2d");
+    mctx.drawImage(bmp, 0, 0, workW, workH);
+    bmp.close?.();
+    const data = mctx.getImageData(0, 0, workW, workH).data;
+    const out = new Uint8Array(workW * workH);
+    for (let i = 0; i < out.length; i++) out[i] = data[i * 4];
+    return out;
   }
 
   function download() {
