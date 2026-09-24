@@ -50,11 +50,10 @@
     return list;
   }
 
-  // 计算「可替换区域」：按规则匹配 + 可选从四边泛洪
-  function computeRegion(ruleList, tol, flood) {
+  /** 每个像素命中的颜色规则（-1=无） */
+  function buildLabel(ruleList, tol2) {
     const n = workW * workH;
     const label = new Int16Array(n).fill(-1);
-    const tol2 = tol * tol;
     for (let i = 0, px = 0; px < n; px++, i += 4) {
       const r = baseData[i], g = baseData[i + 1], b = baseData[i + 2];
       for (let k = 0; k < ruleList.length; k++) {
@@ -64,11 +63,13 @@
         if (dr * dr + dg * dg + db * db <= tol2) { label[px] = k; break; }
       }
     }
+    return label;
+  }
+
+  /** 从四条边泛洪，返回 label>=0 且连通到边的区域 */
+  function floodFromEdges(label) {
+    const n = workW * workH;
     const region = new Uint8Array(n);
-    if (!flood) {
-      for (let px = 0; px < n; px++) if (label[px] >= 0) region[px] = 1;
-      return region;
-    }
     const stack = [];
     const push = (x, y) => { const px = y * workW + x; if (px >= 0 && px < n && label[px] >= 0 && !region[px]) { region[px] = 1; stack.push(px); } };
     for (let x = 0; x < workW; x++) { push(x, 0); push(x, workH - 1); }
@@ -87,56 +88,71 @@
       raf = 0;
       const canvas = els.canvas;
       if (!canvas || !baseData) return;
-      const ruleList = effRules();
-      if (!ruleList.length || !ruleList.some((r) => r.src)) {
+      const n = workW * workH;
+      const tol = Number(els.tol?.value) || 0;
+      const feather = Math.max(0, Number(els.feather?.value) || 0);
+      const flood = (els.flood?.value || "1") === "1";
+      const useMask = detectMode !== "color" && !!mask;
+      const colorRules = (multi ? rules : rules.slice(0, 1)).filter((r) => r.src);
+      const curTarget = hexToRgb(els.targetHex?.value || els.target?.value || "#ffffff") || { r: 255, g: 255, b: 255 };
+      const curTransparent = !!els.transparent?.checked;
+
+      // AI 模式：不需要选源色，掩码(背景)即区域；选了源色则只替换该色的背景部分
+      if (!useMask && !colorRules.length) {
         canvas.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(baseData), workW, workH), 0, 0);
         updateStatus();
         return;
       }
-      const tol = Number(els.tol?.value) || 0;
-      const feather = Number(els.feather?.value) || 0;
-      const flood = (els.flood?.value || "1") === "1";
-      const useMask = detectMode !== "color" && mask;
-      const region = computeRegion(ruleList, tol, flood);
-      const out = new Uint8ClampedArray(baseData);
-      const f = Math.max(0, feather);
+
       const tol2 = tol * tol;
-      for (let i = 0, px = 0; px < workW * workH; px++, i += 4) {
-        if (!region[px]) continue;
-        if (useMask && mask[px]) continue; // AI：人像区域跳过
-        const k = labelOf(ruleList, baseData[i], baseData[i + 1], baseData[i + 2], tol2);
-        if (k < 0) continue;
-        const rule = ruleList[k];
-        const r = baseData[i], g = baseData[i + 1], b = baseData[i + 2];
-        let a = 1;
-        if (f > 0) {
-          const dr = r - rule.src.r, dg = g - rule.src.g, db = b - rule.src.b;
-          const d = Math.sqrt(dr * dr + dg * dg + db * db);
-          let x = (tol - d) / f;
-          if (x > 1) x = 1; else if (x < 0) x = 0;
-          a = x * x * (3 - 2 * x);
+      const label = colorRules.length ? buildLabel(colorRules, tol2) : null;
+      const region = new Uint8Array(n);
+      if (useMask) {
+        for (let px = 0; px < n; px++) {
+          if (mask[px] >= 250) continue; // 人像（含软边阈值）
+          if (label && label[px] < 0) continue;
+          region[px] = 1;
         }
-        if (rule.transparent) {
-          out[i + 3] = clamp255(baseData[i + 3] * (1 - a));
+      } else if (flood) {
+        region.set(floodFromEdges(label));
+      } else {
+        for (let px = 0; px < n; px++) region[px] = label[px] >= 0 ? 1 : 0;
+      }
+
+      const out = new Uint8ClampedArray(baseData);
+      for (let i = 0, px = 0; px < n; px++, i += 4) {
+        if (!region[px]) continue;
+        let tgt = curTarget;
+        let transparent = curTransparent;
+        let a = 1;
+        if (useMask) {
+          // 掩码软边：人像=255 → a=0，背景=0 → a=1
+          a = 1 - mask[px] / 255;
+          if (feather === 0) a = a >= 0.5 ? 1 : 0;
         } else {
-          out[i] = clamp255(r + (rule.target.r - r) * a);
-          out[i + 1] = clamp255(g + (rule.target.g - g) * a);
-          out[i + 2] = clamp255(b + (rule.target.b - b) * a);
+          const k = label[px];
+          if (k < 0) continue;
+          const rule = unified ? { target: curTarget, transparent: curTransparent } : colorRules[k];
+          tgt = rule.target;
+          transparent = rule.transparent;
+          if (feather > 0) {
+            const s = colorRules[k].src;
+            const dr = baseData[i] - s.r, dg = baseData[i + 1] - s.g, db = baseData[i + 2] - s.b;
+            let x = (tol - Math.sqrt(dr * dr + dg * dg + db * db)) / feather;
+            if (x > 1) x = 1; else if (x < 0) x = 0;
+            a = x * x * (3 - 2 * x);
+          }
+        }
+        if (transparent) out[i + 3] = clamp255(baseData[i + 3] * (1 - a));
+        else {
+          out[i] = clamp255(baseData[i] + (tgt.r - baseData[i]) * a);
+          out[i + 1] = clamp255(baseData[i + 1] + (tgt.g - baseData[i + 1]) * a);
+          out[i + 2] = clamp255(baseData[i + 2] + (tgt.b - baseData[i + 2]) * a);
         }
       }
       canvas.getContext("2d").putImageData(new ImageData(out, workW, workH), 0, 0);
       updateStatus();
     });
-  }
-
-  function labelOf(ruleList, r, g, b, tol2) {
-    for (let k = 0; k < ruleList.length; k++) {
-      const s = ruleList[k].src;
-      if (!s) continue;
-      const dr = r - s.r, dg = g - s.g, db = b - s.b;
-      if (dr * dr + dg * dg + db * db <= tol2) return k;
-    }
-    return -1;
   }
 
   function refreshSwatches() {
@@ -274,19 +290,19 @@
     const mode = els.detect?.value || "color";
     detectMode = mode;
     mask = null;
-    if (mode === "color") { setDetectStatus("按颜色匹配（可从四条边泛洪排除孤立同色）"); render(); return; }
-    setDetectStatus("加载 AI 模型…");
+    if (mode === "color") { setDetectStatus("① 点图上取背景色 → ② 设下方「替换为」的颜色"); render(); return; }
+    setDetectStatus("加载 AI 模型…（首次较慢，请稍候）");
     try {
       const t0 = performance.now();
       if (mode === "mp") mask = await segmentMP();
       else mask = await segmentRMBG();
       const sec = ((performance.now() - t0) / 1000).toFixed(1);
-      const personRatio = mask ? (mask.reduce((a, b) => a + b, 0) / mask.length) : 0;
+      const personRatio = mask ? (mask.reduce((a, b) => a + b, 0) / mask.length / 255) : 0;
       if (!mask || personRatio < 0.004) {
         mask = null;
-        setDetectStatus(`未检测到人像（${sec}s）→ 已回退「按颜色」`);
+        setDetectStatus(`未检测到人像（${sec}s）→ 已回退「按颜色」：请点图上取背景色`);
       } else {
-        setDetectStatus(`已识别人像（占比 ${(personRatio * 100).toFixed(0)}% · ${sec}s）；只替换背景`);
+        setDetectStatus(`✓ 已识别人像（${(personRatio * 100).toFixed(0)}% · ${sec}s）。直接设「替换为」颜色即可换背景（不用选源色）`);
       }
       render();
     } catch (err) {
@@ -329,7 +345,7 @@
       mctx.drawImage(res.segmentationMask, 0, 0, workW, workH);
       const data = mctx.getImageData(0, 0, workW, workH).data;
       const out = new Uint8Array(workW * workH);
-      for (let i = 0; i < out.length; i++) out[i] = data[i * 4] > 127 ? 1 : 0;
+      for (let i = 0; i < out.length; i++) out[i] = data[i * 4];
       return out;
     } finally {
       aiState.loading = false;
@@ -357,7 +373,7 @@
       bmp.close?.();
       const data = mctx.getImageData(0, 0, workW, workH).data;
       const out = new Uint8Array(workW * workH);
-      for (let i = 0; i < out.length; i++) out[i] = data[i * 4] > 127 ? 1 : 0;
+      for (let i = 0; i < out.length; i++) out[i] = data[i * 4];
       return out;
     } finally {
       aiState.loading = false;
