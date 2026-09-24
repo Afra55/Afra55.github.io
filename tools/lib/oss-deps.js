@@ -7,7 +7,7 @@
 
   /** @type {{ updated: string, groups: Array<{ id: string, label: string, items: OssItem[] }> }} */
   const OSS_DEPS = {
-    updated: "2026-09-22",
+    updated: "2026-09-24",
     groups: [
       {
         id: "vendor",
@@ -257,6 +257,22 @@
             repo: "https://fonts.google.com/",
             usedIn: "站点 UI 字体；文转图按需加载 Noto Serif SC",
             path: "fonts.googleapis.com",
+          },
+          {
+            name: "MediaPipe Selfie Segmentation (@mediapipe/selfie_segmentation)",
+            version: "0.1.1675465747",
+            license: "Apache-2.0",
+            repo: "https://github.com/google-ai-edge/mediapipe",
+            usedIn: "图片换色 · AI 抠人像（本地 WASM，按需加载）",
+            path: "cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation",
+          },
+          {
+            name: "@imgly/background-removal",
+            version: "1.7.0",
+            license: "AGPL-3.0",
+            repo: "https://github.com/imgly/background-removal-js",
+            usedIn: "图片换色 · AI 高质量抠图（RMBG/isnet，本地 ONNX，首次需下载约 40MB）",
+            path: "cdn.jsdelivr.net/npm/@imgly/background-removal",
           },
         ],
       },

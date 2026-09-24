@@ -1,7 +1,7 @@
 <section id="imgrecolor" class="panel tool-panel" data-reveal>
       <div class="panel-head">
         <h1>图片换色</h1>
-        <p>选一张图 → 点图上取一个颜色（或从调色板选）→ 设新颜色即可替换；适合证件照换底色，并可裁剪一寸 / 两寸。</p>
+        <p>点图上取色（可多色）→ 替换为新色或透明；支持 AI 抠人像只换背景，可自由/证件照裁剪，导出 PNG。</p>
       </div>
       <div class="panel-body">
         <div class="btn-row tool-actions">
@@ -14,24 +14,50 @@
             <div class="irc-stage" id="irc-stage">
               <canvas id="irc-canvas"></canvas>
               <div class="irc-crop" id="irc-crop" hidden>
-                <span class="irc-crop-handle" id="irc-crop-handle" title="拖动改大小"></span>
+                <span class="irc-crop-handle" data-h="nw"></span>
+                <span class="irc-crop-handle" data-h="ne"></span>
+                <span class="irc-crop-handle" data-h="sw"></span>
+                <span class="irc-crop-handle" data-h="se"></span>
               </div>
             </div>
-            <p class="hint tight" id="irc-meta">点图片取色；选了裁剪尺寸后，拖动裁剪框移动、拖右下角改大小。</p>
+            <p class="hint tight" id="irc-meta">点图片取色；选了裁剪后拖动裁剪框移动、拖四角改大小。</p>
           </div>
           <div class="field-block">
-            <h2 class="subhead">取色（要替换掉的底色）</h2>
+            <h2 class="subhead">识别方式</h2>
+            <div class="irc-row">
+              <select id="irc-detect" class="mono select-input">
+                <option value="color">按颜色（含泛洪排除孤立同色）</option>
+                <option value="mp">AI 抠人像（MediaPipe · 轻）</option>
+                <option value="rmbg">AI 抠图·高质量（RMBG · 需下载 ~40MB）</option>
+              </select>
+              <button type="button" class="ghost-btn" id="irc-detect-run" hidden>重新识别</button>
+            </div>
+            <p class="hint tight" id="irc-detect-status"></p>
+
+            <h2 class="subhead">要替换的颜色</h2>
+            <div class="irc-row">
+              <span class="irc-seg" id="irc-multi" role="group">
+                <button type="button" class="seg-btn is-active" data-multi="0">单色</button>
+                <button type="button" class="seg-btn" data-multi="1">多色</button>
+              </span>
+              <button type="button" class="ghost-btn" id="irc-add-rule" hidden>+ 把当前取色加一条</button>
+            </div>
             <div class="irc-swatches" id="irc-swatches"></div>
+            <div class="irc-rules" id="irc-rules"></div>
             <div class="irc-row">
               <span class="irc-chip" id="irc-src-chip"></span>
               <span class="mono" id="irc-src-hex">未选（点图片或上面的色块）</span>
             </div>
+
             <h2 class="subhead">替换为</h2>
+            <label class="flag"><input type="checkbox" id="irc-unified" /> 统一目标色（多色时所有源都换成它）</label>
             <div class="irc-row">
               <input type="color" id="irc-target" value="#ffffff" />
               <input id="irc-target-hex" class="mono meta-input" type="text" value="#ffffff" spellcheck="false" maxlength="7" />
+              <label class="flag"><input type="checkbox" id="irc-transparent" /> 透明</label>
               <button type="button" class="ghost-btn" id="irc-eyedrop" title="从屏幕任意位置取色（需浏览器支持 EyeDropper）">屏幕吸管</button>
             </div>
+
             <div class="irc-sliders">
               <label class="irc-slider">容差
                 <input type="range" id="irc-tol" min="0" max="120" step="1" value="36" />
@@ -41,16 +67,24 @@
                 <input type="range" id="irc-feather" min="0" max="48" step="1" value="10" />
                 <span class="mono" id="irc-feather-val">10</span>
               </label>
+              <label class="irc-slider">泛洪起点
+                <select id="irc-flood" class="mono select-input">
+                  <option value="1" selected>从四条边起（排除孤立同色）</option>
+                  <option value="0">全图（不排除）</option>
+                </select>
+              </label>
             </div>
-            <h2 class="subhead">证件照裁剪</h2>
+
+            <h2 class="subhead">裁剪 / 导出</h2>
             <div class="irc-row">
               <select id="irc-size" class="mono select-input">
-                <option value="">不裁剪（输出原图尺寸）</option>
+                <option value="">不裁剪（原图尺寸）</option>
                 <option value="295x413">一寸 25×35mm · 295×413</option>
                 <option value="413x579">两寸 35×49mm · 413×579</option>
                 <option value="260x378">小一寸 22×32mm · 260×378</option>
                 <option value="390x567">大一寸 33×48mm · 390×567</option>
                 <option value="358x441">护照 33×48mm · 358×441</option>
+                <option value="free">自由裁剪（不限比例）</option>
               </select>
               <button type="button" class="ghost-btn" id="irc-crop-center" hidden>居中</button>
             </div>
