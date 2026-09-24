@@ -271,8 +271,17 @@
             version: "1.7.0",
             license: "AGPL-3.0",
             repo: "https://github.com/imgly/background-removal-js",
-            usedIn: "图片换色 · AI 高质量抠图（RMBG/isnet，本地 ONNX，首次需下载约 40MB）",
+            usedIn: "图片换色 · AI 抠图（RMBG-1.4/isnet，本地 ONNX，首次需下载约 40MB）",
             path: "cdn.jsdelivr.net/npm/@imgly/background-removal",
+          },
+          {
+            name: "Transformers.js (@huggingface/transformers)",
+            version: "3.8.1",
+            license: "Apache-2.0",
+            repo: "https://github.com/huggingface/transformers.js",
+            usedIn:
+              "图片换色 · AI 抠图多模型（MODNet / RMBG-2.0 / BEN2 / BiRefNet，本地 ONNX 经 background-removal 管线；权重来自 Hugging Face，国内走 hf-mirror.com 镜像）",
+            path: "cdn.jsdelivr.net/npm/@huggingface/transformers",
           },
         ],
       },

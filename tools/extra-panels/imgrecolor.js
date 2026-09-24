@@ -10,6 +10,18 @@
   const PALETTE_MAX = 12;
   const MP_BASE = "https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation@0.1.1675465747/";
   const RMBG_URL = "https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.7.0/+esm";
+  const TJ_URL = "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/+esm";
+
+  // 识别方式 → 加载策略。kind：mp=MediaPipe / imgly=@imgly isnet / tj=transformers.js 通用管线
+  const AI_MODELS = {
+    mp: { label: "MediaPipe（人像 · 秒开）", kind: "mp", size: "~0.3MB", mb: 0.3 },
+    modnet: { label: "MODNet（人像 · 精细发丝）", kind: "tj", model: "Xenova/modnet", dtype: "q8", size: "~6MB", mb: 6 },
+    isnet: { label: "RMBG-1.4（通用 · 均衡）", kind: "imgly", size: "~40MB", mb: 40 },
+    rmbg2: { label: "RMBG-2.0（通用 · 新）", kind: "tj", model: "kn4666/bria-rmbg-2.0-web", dtype: "q8", size: "~350MB", mb: 350 },
+    ben2: { label: "BEN2（通用 · 强）", kind: "tj", model: "onnx-community/BEN2-ONNX", dtype: "fp16", size: "~210MB", mb: 210 },
+    birefnet: { label: "BiRefNet（通用 · 最强）", kind: "tj", model: "onnx-community/BiRefNet-ONNX", dtype: "fp16", size: "~470MB", mb: 470 },
+  };
+  const HEAVY_MB = 150; // 首次下载超过该体积先让用户确认
 
   let els = {};
   let img = null;
@@ -23,7 +35,7 @@
   let multi = false;
   let mask = null; // Uint8Array 1=person
   let detectMode = "color";
-  let aiState = { mpSeg: null, rmbg: null };
+  let aiState = { mpSeg: null, rmbg: null, tj: Object.create(null) };
   let crop = null; // {x,y,w,h,aspect|null}
   let raf = 0;
 
@@ -308,22 +320,30 @@
       render();
       return;
     }
-    setDetectStatus(
-      mode === "mp" ? "加载 AI 模型（MediaPipe）…" : "加载 AI 模型（RMBG，首次约 40MB，请稍候）…"
-    );
+    const spec = AI_MODELS[mode] || AI_MODELS.mp;
+    if (spec.mb >= HEAVY_MB && !window.confirm(`${spec.label} 首次需下载约 ${spec.size}，较慢且占内存，确定继续？`)) {
+      detectMode = "color";
+      if (els.detect) els.detect.value = "color";
+      setDetectStatus("已取消下载。可换「MODNet / RMBG-1.4」更轻的模型");
+      render();
+      return;
+    }
+    setDetectStatus(`加载 AI 模型（${spec.label} · 首次约 ${spec.size || "较大"}，请稍候）…`);
     try {
       const t0 = performance.now();
-      const m = mode === "mp" ? await segmentMP() : await segmentRMBG();
+      const keep = spec.kind === "mp" ? "mpSeg" : spec.kind === "imgly" ? "rmbg" : "tj:" + spec.model;
+      releaseAI(keep);
+      const m = spec.kind === "mp" ? await segmentMP() : spec.kind === "imgly" ? await segmentRMBG() : await segmentTJ(spec);
       if (gen !== detectGen) return; // 期间又切了模式 → 丢弃
       mask = m;
       const sec = ((performance.now() - t0) / 1000).toFixed(1);
       const ratio = m ? m.reduce((a, b) => a + b, 0) / m.length / 255 : 0;
       if (!m || ratio < 0.004) {
         mask = null;
-        setDetectStatus(`未检测到人像（${sec}s）→ 已按「按颜色」处理：请点图上取背景色`);
+        setDetectStatus(`未检测到前景（${sec}s）→ 已按「按颜色」处理：请点图上取背景色`);
       } else {
         setDetectStatus(
-          `✓ 已识别人像（${(ratio * 100).toFixed(0)}% · ${sec}s）。直接设「替换为」颜色即可换背景（不用选源色）`
+          `✓ 已识别前景（${(ratio * 100).toFixed(0)}% · ${sec}s）。直接设「替换为」颜色即可换背景（不用选源色）`
         );
       }
       render();
@@ -332,8 +352,17 @@
       mask = null;
       detectMode = "color";
       if (els.detect) els.detect.value = "color";
-      setDetectStatus(`AI 加载失败：${err?.message || err}（已回退「按颜色」，可再选 AI 重试）`);
+      setDetectStatus(`${spec.label} 加载失败：${err?.message || err}（已回退「按颜色」，可再选 AI 重试）`);
       render();
+    }
+  }
+
+  /** 释放不再使用的 AI 资源（切模型/切方式时），避免多套 WASM 抢内存 */
+  function releaseAI(keep) {
+    if (keep !== "mpSeg") { try { aiState.mpSeg?.close?.(); } catch (_) {} aiState.mpSeg = null; }
+    if (keep !== "rmbg") aiState.rmbg = null;
+    for (const k of Object.keys(aiState.tj)) {
+      if (k !== keep) { try { aiState.tj[k]?.dispose?.(); } catch (_) {} delete aiState.tj[k]; }
     }
   }
 
@@ -408,6 +437,91 @@
     const data = mctx.getImageData(0, 0, workW, workH).data;
     const out = new Uint8Array(workW * workH);
     for (let i = 0; i < out.length; i++) out[i] = data[i * 4];
+    return out;
+  }
+
+  let tjMod = null;
+  let tjHost = 0; // 0=hf-mirror（国内可达），1=huggingface.co（官方）
+  const TJ_HOSTS = ["https://hf-mirror.com", "https://huggingface.co"];
+
+  async function getTJ() {
+    if (tjMod) return tjMod;
+    tjMod = await import(/* webpackIgnore: true */ TJ_URL);
+    if (tjMod.env) {
+      tjMod.env.allowLocalModels = false;
+      tjMod.env.useBrowserCache = true;
+      tjMod.env.remoteHost = TJ_HOSTS[tjHost];
+    }
+    return tjMod;
+  }
+
+  async function getTJPipe(spec) {
+    const mod = await getTJ();
+    const key = "tj:" + spec.model;
+    if (aiState.tj[key]) return aiState.tj[key];
+    let lastErr;
+    for (let i = 0; i < TJ_HOSTS.length; i++) {
+      const host = TJ_HOSTS[(tjHost + i) % TJ_HOSTS.length];
+      if (mod.env) mod.env.remoteHost = host;
+      try {
+        const pipe = await mod.pipeline("background-removal", spec.model, { dtype: spec.dtype || "fp32" });
+        if (mod.env) tjHost = TJ_HOSTS.indexOf(host);
+        aiState.tj[key] = pipe;
+        return pipe;
+      } catch (e) {
+        lastErr = e;
+        console.warn("[imgrecolor] pipeline 加载失败", host, spec.model, e);
+      }
+    }
+    throw new Error(lastErr?.message || String(lastErr || "未知错误"));
+  }
+
+  /** transformers.js RawImage → canvas（灰度/掩码或 RGBA 前景） */
+  function rawToCanvas(raw) {
+    const c = document.createElement("canvas");
+    c.width = raw.width;
+    c.height = raw.height;
+    const ctx = c.getContext("2d", { willReadFrequently: true });
+    const id = ctx.createImageData(raw.width, raw.height);
+    const src = raw.data;
+    const ch = raw.channels || 4;
+    if (ch === 4) id.data.set(src.length >= id.data.length ? src.subarray(0, id.data.length) : src);
+    else if (ch === 3) {
+      for (let i = 0, j = 0; i < id.data.length; i += 4, j += 3) {
+        id.data[i] = src[j]; id.data[i + 1] = src[j + 1]; id.data[i + 2] = src[j + 2]; id.data[i + 3] = 255;
+      }
+    } else {
+      for (let i = 0, j = 0; i < id.data.length; i += 4, j++) {
+        const v = src[j]; id.data[i] = id.data[i + 1] = id.data[i + 2] = v; id.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(id, 0, 0);
+    return c;
+  }
+
+  async function segmentTJ(spec) {
+    const pipe = await getTJPipe(spec);
+    const srcBlob = await new Promise((r) => els.canvas.toBlob(r, "image/png"));
+    const url = URL.createObjectURL(srcBlob);
+    let res;
+    try {
+      res = await pipe(url);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+    const raw = Array.isArray(res) ? res[0] : res;
+    if (!raw || !raw.data) throw new Error("模型未返回结果");
+    // 管线输出为「前景（RGBA，alpha=主体）」或灰度掩码
+    const useAlpha = (raw.channels || 4) >= 4;
+    const scaled = rawToCanvas(raw);
+    const mc = document.createElement("canvas");
+    mc.width = workW;
+    mc.height = workH;
+    const mctx = mc.getContext("2d", { willReadFrequently: true });
+    mctx.drawImage(scaled, 0, 0, workW, workH);
+    const d = mctx.getImageData(0, 0, workW, workH).data;
+    const out = new Uint8Array(workW * workH);
+    for (let i = 0; i < out.length; i++) out[i] = useAlpha ? d[i * 4 + 3] : d[i * 4];
     return out;
   }
 

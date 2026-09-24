@@ -27,8 +27,12 @@
             <div class="irc-row">
               <select id="irc-detect" class="mono select-input">
                 <option value="color">按颜色（含泛洪排除孤立同色）</option>
-                <option value="mp">AI 抠人像（MediaPipe · 轻）</option>
-                <option value="rmbg">AI 抠图·高质量（RMBG · 需下载 ~40MB）</option>
+                <option value="mp">AI·MediaPipe　｜人像 · 秒开 · ~0.3MB</option>
+                <option value="modnet">AI·MODNet　｜人像 · 精细发丝 · ~6MB</option>
+                <option value="isnet">AI·RMBG-1.4（isnet）　｜通用 · 均衡 · ~40MB</option>
+                <option value="rmbg2">AI·RMBG-2.0　｜通用 · 新 · ~350MB ⚠慢</option>
+                <option value="ben2">AI·BEN2　｜通用 · 强 · ~210MB ⚠慢</option>
+                <option value="birefnet">AI·BiRefNet　｜通用 · 最强 · ~470MB ⚠很慢</option>
               </select>
               <button type="button" class="ghost-btn" id="irc-detect-run" hidden>重新识别</button>
             </div>
