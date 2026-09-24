@@ -741,10 +741,14 @@ body.theme-reduce-glow .bg-grid {
     border-bottom: 1px solid var(--line);
   }
 
-  /* 面板头没有说明文字（<p>）时：去掉分割线与多余留白，别空占一行 */
+  /* 面板头没有说明文字（<p>）时：去掉分割线，并收紧与下方内容的留白（避免顶部空一行）。
+     注意用 ~ 而非 +：面板里 panel-head 与 panel-body 之间可能插了隐藏的加载条。 */
   .panel-head:not(:has(p)) {
     border-bottom: none;
-    padding-bottom: 0.5rem;
+    padding-bottom: 0.1rem;
+  }
+  .panel-head:not(:has(p)) ~ .panel-body {
+    padding-top: 0.5rem;
   }
 
   /* 面板标题栏「在新窗口打开」按钮（app.js 一次注入，所有工具通用） */

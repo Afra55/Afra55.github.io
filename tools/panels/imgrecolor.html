@@ -1,0 +1,66 @@
+<section id="imgrecolor" class="panel tool-panel" data-reveal>
+      <div class="panel-head">
+        <h1>图片换色</h1>
+        <p>选一张图 → 点图上取一个颜色（或从调色板选）→ 设新颜色即可替换；适合证件照换底色，并可裁剪一寸 / 两寸。</p>
+      </div>
+      <div class="panel-body">
+        <div class="btn-row tool-actions">
+          <label class="file-btn" for="irc-file">选择图片</label>
+          <input id="irc-file" type="file" accept="image/*" hidden />
+          <button type="button" class="ghost-btn" id="irc-clear" hidden>清空</button>
+        </div>
+        <div class="convert-grid" style="margin-top:1rem">
+          <div class="field-block">
+            <div class="irc-stage" id="irc-stage">
+              <canvas id="irc-canvas"></canvas>
+              <div class="irc-crop" id="irc-crop" hidden>
+                <span class="irc-crop-handle" id="irc-crop-handle" title="拖动改大小"></span>
+              </div>
+            </div>
+            <p class="hint tight" id="irc-meta">点图片取色；选了裁剪尺寸后，拖动裁剪框移动、拖右下角改大小。</p>
+          </div>
+          <div class="field-block">
+            <h2 class="subhead">取色（要替换掉的底色）</h2>
+            <div class="irc-swatches" id="irc-swatches"></div>
+            <div class="irc-row">
+              <span class="irc-chip" id="irc-src-chip"></span>
+              <span class="mono" id="irc-src-hex">未选（点图片或上面的色块）</span>
+            </div>
+            <h2 class="subhead">替换为</h2>
+            <div class="irc-row">
+              <input type="color" id="irc-target" value="#ffffff" />
+              <input id="irc-target-hex" class="mono meta-input" type="text" value="#ffffff" spellcheck="false" maxlength="7" />
+              <button type="button" class="ghost-btn" id="irc-eyedrop" title="从屏幕任意位置取色（需浏览器支持 EyeDropper）">屏幕吸管</button>
+            </div>
+            <div class="irc-sliders">
+              <label class="irc-slider">容差
+                <input type="range" id="irc-tol" min="0" max="120" step="1" value="36" />
+                <span class="mono" id="irc-tol-val">36</span>
+              </label>
+              <label class="irc-slider">边缘羽化
+                <input type="range" id="irc-feather" min="0" max="48" step="1" value="10" />
+                <span class="mono" id="irc-feather-val">10</span>
+              </label>
+            </div>
+            <h2 class="subhead">证件照裁剪</h2>
+            <div class="irc-row">
+              <select id="irc-size" class="mono select-input">
+                <option value="">不裁剪（输出原图尺寸）</option>
+                <option value="295x413">一寸 25×35mm · 295×413</option>
+                <option value="413x579">两寸 35×49mm · 413×579</option>
+                <option value="260x378">小一寸 22×32mm · 260×378</option>
+                <option value="390x567">大一寸 33×48mm · 390×567</option>
+                <option value="358x441">护照 33×48mm · 358×441</option>
+              </select>
+              <button type="button" class="ghost-btn" id="irc-crop-center" hidden>居中</button>
+            </div>
+            <div class="btn-row tool-actions">
+              <button type="button" class="primary-btn" id="irc-download" disabled>下载 PNG</button>
+              <button type="button" class="ghost-btn" id="irc-reset" disabled>还原</button>
+            </div>
+            <p class="hint" id="irc-status"></p>
+            <p class="error" id="irc-error" hidden></p>
+          </div>
+        </div>
+      </div>
+    </section>

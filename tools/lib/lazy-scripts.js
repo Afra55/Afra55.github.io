@@ -136,6 +136,7 @@
     coord: "./extra-panels/coord.js",
     yaml: "./extra-panels/yaml.js",
     imgb64: "./extra-panels/imgb64.js",
+    imgrecolor: "./extra-panels/imgrecolor.js",
     qrcode: "./extra-panels/qrcode.js",
     cron: "./extra-panels/cron.js",
     units: "./extra-panels/units.js",
@@ -162,7 +163,7 @@
 
   const EXTRA_PANEL_IDS = new Set([
     "timediff", "color", "url", "query", "uuid", "hash", "text", "caseconv", "coord",
-    "yaml", "imgb64", "qrcode", "cron", "units", "sharecard", "numbase", "markdown",
+    "yaml", "imgb64", "imgrecolor", "qrcode", "cron", "units", "sharecard", "numbase", "markdown",
     "eyedropper", "password", "gifmaker", "gifx", "v2g", "gifbb", "gifc", "gife", "gifm",
     "adb", "vsplit", "vbb", "interpolator", "giftest", "fileunlock", "mdm",
   ]);

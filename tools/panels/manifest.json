@@ -193,6 +193,11 @@
       "bytes": 1074
     },
     {
+      "id": "imgrecolor",
+      "file": "./panels/imgrecolor.html",
+      "bytes": 3719
+    },
+    {
       "id": "imgkit",
       "file": "./panels/imgkit.html",
       "bytes": 16959

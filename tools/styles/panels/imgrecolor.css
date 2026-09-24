@@ -1,0 +1,101 @@
+#imgrecolor .irc-stage {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  line-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  background: repeating-conic-gradient(color-mix(in srgb, var(--muted) 18%, transparent) 0% 25%, transparent 0% 50%) 50% / 18px 18px;
+}
+#imgrecolor #irc-canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  cursor: crosshair;
+  touch-action: none;
+}
+#imgrecolor .irc-crop {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  outline: 1px solid rgba(0, 0, 0, 0.55);
+  box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.42);
+  cursor: move;
+  touch-action: none;
+}
+#imgrecolor .irc-crop-handle {
+  position: absolute;
+  right: -7px;
+  bottom: -7px;
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.5);
+  cursor: nwse-resize;
+}
+#imgrecolor .irc-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0.35rem 0 0.6rem;
+  min-height: 26px;
+}
+#imgrecolor .irc-swatch {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  cursor: pointer;
+}
+#imgrecolor .irc-swatch:hover {
+  outline: 2px solid var(--accent);
+}
+#imgrecolor .irc-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+  margin: 0.35rem 0 0.7rem;
+}
+#imgrecolor .irc-chip {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  display: inline-block;
+  background: transparent;
+}
+#imgrecolor #irc-target {
+  width: 42px;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-strong);
+  cursor: pointer;
+}
+#imgrecolor #irc-target-hex {
+  width: 8.5rem;
+}
+#imgrecolor .irc-sliders {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.2rem 0 0.6rem;
+}
+#imgrecolor .irc-slider {
+  display: grid;
+  grid-template-columns: 5rem minmax(0, 1fr) 2.6rem;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+#imgrecolor .irc-slider input[type="range"] {
+  width: 100%;
+}
+#imgrecolor #irc-size {
+  min-width: 12rem;
+}

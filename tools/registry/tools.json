@@ -99,6 +99,7 @@
         "whiteboard",
         "imgkit",
         "imgtrim",
+        "imgrecolor",
         "textimg",
         "imgtext",
         "sharecard",
@@ -290,6 +291,15 @@
       "name": "图片 Base64",
       "aliases": [
         "图片编码"
+      ]
+    },
+    "imgrecolor": {
+      "name": "图片换色",
+      "aliases": [
+        "换底色",
+        "证件照",
+        "背景替换",
+        "recolor"
       ]
     },
     "url": {
@@ -1174,6 +1184,7 @@
     "passvault": "浏览器本地加密密码库（Web Crypto AES-GCM）：可选绑定本机文件夹（仿备忘录）；可导出加密备份；局域网互传页可可选添加本库。",
     "base64": "文本 Base64 编码与解码。",
     "imgb64": "图片与 Base64 Data URL 互转。",
+    "imgrecolor": "图片换色 / 证件照换底色：点图取色（或调色板）→ 替换为新色，实时预览，支持一寸/两寸等裁剪并导出 PNG。",
     "url": "URL 编码 / 解码。",
     "hash": "本地计算 MD5、SHA-256。",
     "xorenc": "半段 XOR 加解密：文本与文件，可自定义两个密钥（默认 4/7）。",
