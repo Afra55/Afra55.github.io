@@ -350,3 +350,10 @@
 .vbb-img-previews { display: grid; gap: 0.7rem; grid-template-columns: 1fr; margin-top: 0.7rem; }
 .vbb-img-preview-box { min-width: 0; }
 .vbb-img-preview-box > .hint { margin: 0 0 0.25rem; }
+
+/* 「分块编码」只在触屏（手机）显示：桌面内存够，不需要分块 */
+@media (pointer: fine) {
+  #vbb .only-coarse { display: none !important; }
+}
+.vbb-chunk-row #vbb-chunk-count { width: 5rem; }
+.vbb-chunk-row #vbb-chunk-count:disabled { opacity: 0.5; }
