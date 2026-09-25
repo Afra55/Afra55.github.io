@@ -8,7 +8,14 @@
   if (!panel) return;
 
   const PROTO = "devtools-lanshare:v1";
-  const STUN = [{ urls: "stun:stun.l.google.com:19302" }, { urls: "stun:stun1.l.google.com:19302" }];
+  // STUN：国内可直连的排在前面（Google STUN 在国内多被墙，仅作兜底）
+  const STUN = [
+    { urls: "stun:stun.miwifi.com:3478" },
+    { urls: "stun:stun.chat.bilibili.com:3478" },
+    { urls: "stun:stun.hitv.com:3478" },
+    { urls: "stun:stun.l.google.com:19302" },
+    { urls: "stun:stun1.l.google.com:19302" },
+  ];
   const CHUNK_SIZE = 32 * 1024;
   const DC_BUFFER_LIMIT = 512 * 1024;
   const NAME_KEY = "devtools-lanshare-name";
@@ -18,6 +25,7 @@
   const OFFER_RELAY_PREFIX = "devtools-lanshare-offer";
   const HOST_ANSWER_RELAY_PREFIX = "devtools-lanshare-host-answer";
   const MQTT_BROKERS = [
+    "wss://broker-cn.emqx.io:8084/mqtt",
     "wss://broker.emqx.io:8084/mqtt",
     "wss://broker.hivemq.com:8884/mqtt",
     "wss://test.mosquitto.org:8081/mqtt",
