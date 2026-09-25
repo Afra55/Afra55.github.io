@@ -368,8 +368,10 @@
       const t0 = performance.now();
       const keep = spec.kind === "mp" ? "mpSeg" : spec.kind === "imgly" ? "rmbg" : "tj:" + spec.model;
       releaseAI(keep);
-      const m = spec.kind === "mp" ? await segmentMP() : spec.kind === "imgly" ? await segmentRMBG() : await segmentTJ(spec);
+      const raw = spec.kind === "mp" ? await segmentMP() : spec.kind === "imgly" ? await segmentRMBG() : await segmentTJ(spec);
       if (gen !== detectGen) return; // 期间又切了模式 → 丢弃
+      const refineOn = els.refine ? els.refine.checked : true;
+      const m = refineOn ? refineMask(raw) : raw;
       mask = m;
       const sec = ((performance.now() - t0) / 1000).toFixed(1);
       const ratio = m ? m.reduce((a, b) => a + b, 0) / m.length / 255 : 0;
@@ -378,7 +380,7 @@
         setDetectStatus(`未检测到前景（${sec}s）→ 已按「按颜色」处理：请点图上取背景色`);
       } else {
         setDetectStatus(
-          `✓ 已识别前景（${(ratio * 100).toFixed(0)}% · ${sec}s）。直接设「替换为」颜色即可换背景（不用选源色）`
+          `✓ 已识别前景（${(ratio * 100).toFixed(0)}% · ${sec}s${refineOn ? " · 边缘已精修" : ""}）。直接设「替换为」颜色即可换背景（不用选源色）`
         );
       }
       hideProgress();
@@ -462,16 +464,26 @@
   async function segmentRMBG() {
     const removeBg = await getRMBG();
     const srcBlob = await new Promise((r) => els.canvas.toBlob(r, "image/png"));
-    setProgress(0, "准备下载 RMBG-1.4 模型…");
-    const maskBlob = await removeBg(srcBlob, {
+    const gpu = await hasWebGPU();
+    const cfg = () => ({
       model: "isnet_quint8",
-      device: "cpu",
+      device: gpu ? "gpu" : "cpu",
       output: { format: "image/png", type: "mask" },
       progress: (key, current, total) => {
         if (total) setProgress(Math.round((current / total) * 100), `下载 ${String(key || "model").split("/").pop()} ${fmtMB(current)}/${fmtMB(total)} MB`);
         else setProgress(null, "处理中…");
       },
     });
+    setProgress(0, `准备下载 RMBG-1.4 模型${gpu ? "（GPU）" : ""}…`);
+    let maskBlob;
+    try {
+      maskBlob = await removeBg(srcBlob, cfg());
+    } catch (e) {
+      if (!gpu) throw e;
+      console.warn("[imgrecolor] @imgly GPU 失败，回退 CPU", e);
+      gpuSupport = false; // 后续都走 CPU
+      maskBlob = await removeBg(srcBlob, cfg());
+    }
     const bmp = await createImageBitmap(maskBlob);
     const mc = document.createElement("canvas");
     mc.width = workW; mc.height = workH;
@@ -487,6 +499,18 @@
   let tjMod = null;
   let tjHost = 0; // 0=hf-mirror（国内可达），1=huggingface.co（官方）
   const TJ_HOSTS = ["https://hf-mirror.com", "https://huggingface.co"];
+
+  let gpuSupport = null; // null=未探测
+  /** 探测 WebGPU：有就走 GPU 推理（大模型快数倍），没有则纯 wasm */
+  async function hasWebGPU() {
+    if (gpuSupport !== null) return gpuSupport;
+    try {
+      gpuSupport = typeof navigator !== "undefined" && !!navigator.gpu && !!(await navigator.gpu.requestAdapter());
+    } catch (_) {
+      gpuSupport = false;
+    }
+    return gpuSupport;
+  }
 
   async function getTJ() {
     if (tjMod) return tjMod;
@@ -515,24 +539,31 @@
     const mod = await getTJ();
     const key = "tj:" + spec.model;
     if (aiState.tj[key]) return aiState.tj[key];
+    const gpu = await hasWebGPU();
+    const devices = gpu ? ["webgpu", "wasm"] : ["wasm"];
     let lastErr;
     for (let i = 0; i < TJ_HOSTS.length; i++) {
       const host = TJ_HOSTS[(tjHost + i) % TJ_HOSTS.length];
       if (mod.env) mod.env.remoteHost = host;
-      try {
-        setProgress(0, `连接 ${host.replace(/^https?:\/\//, "")} …`);
-        const pipe = await mod.pipeline("background-removal", spec.model, {
-          dtype: spec.dtype || "fp32",
-          progress_callback: tjProgress,
-        });
-        if (mod.env) tjHost = TJ_HOSTS.indexOf(host);
-        aiState.tj[key] = pipe;
-        return pipe;
-      } catch (e) {
-        lastErr = e;
-        console.warn("[imgrecolor] pipeline 加载失败", host, spec.model, e);
+      for (const device of devices) {
+        try {
+          setProgress(0, `连接 ${host.replace(/^https?:\/\//, "")}${device === "webgpu" ? " · WebGPU" : ""} …`);
+          const pipe = await mod.pipeline("background-removal", spec.model, {
+            dtype: spec.dtype || "fp32",
+            device,
+            progress_callback: tjProgress,
+          });
+          if (mod.env) tjHost = TJ_HOSTS.indexOf(host);
+          if (device === "webgpu") console.info("[imgrecolor] WebGPU 推理已启用");
+          aiState.tj[key] = pipe;
+          return pipe;
+        } catch (e) {
+          lastErr = e;
+          console.warn("[imgrecolor] pipeline 加载失败", host, device, spec.model, e);
+        }
       }
     }
+    delete aiState.tj[key]; // 半成品清掉，允许重试
     throw lastErr || new Error("模型加载失败");
   }
 
@@ -583,6 +614,90 @@
     const out = new Uint8Array(workW * workH);
     for (let i = 0; i < out.length; i++) out[i] = useAlpha ? d[i * 4 + 3] : d[i * 4];
     return out;
+  }
+
+  /** 盒滤波（积分图，O(n)）：导向滤波的内核 */
+  function boxBlurMean(src, w, h, r) {
+    const integ = new Float64Array((w + 1) * (h + 1));
+    for (let y = 0; y < h; y++) {
+      let rowSum = 0;
+      const row = y * w;
+      const iRow = (y + 1) * (w + 1);
+      const iPrev = y * (w + 1);
+      for (let x = 0; x < w; x++) {
+        rowSum += src[row + x];
+        integ[iRow + x + 1] = integ[iPrev + x + 1] + rowSum;
+      }
+    }
+    const out = new Float32Array(w * h);
+    for (let y = 0; y < h; y++) {
+      const y0 = Math.max(0, y - r);
+      const y1 = Math.min(h - 1, y + r);
+      const iy0 = y0 * (w + 1);
+      const iy1 = (y1 + 1) * (w + 1);
+      for (let x = 0; x < w; x++) {
+        const x0 = Math.max(0, x - r);
+        const x1 = Math.min(w - 1, x + r);
+        const A = integ[iy0 + x0];
+        const B = integ[iy0 + x1 + 1];
+        const C = integ[iy1 + x0];
+        const D = integ[iy1 + x1 + 1];
+        out[y * w + x] = (D - B - C + A) / ((x1 - x0 + 1) * (y1 - y0 + 1));
+      }
+    }
+    return out;
+  }
+
+  /**
+   * 导向滤波精修 alpha（He et al.）：以原图灰度为引导，把掩码边缘对齐到图像边缘，
+   * 发丝/轮廓更干净、去锯齿与背景色晕。O(n)，一次到位。
+   */
+  function guidedFilterMask(rgba, alpha, w, h, radius, eps) {
+    const n = w * h;
+    const guide = new Float32Array(n);
+    const p = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      guide[i] = (rgba[i * 4] * 0.299 + rgba[i * 4 + 1] * 0.587 + rgba[i * 4 + 2] * 0.114) / 255;
+      p[i] = alpha[i] / 255;
+    }
+    const meanI = boxBlurMean(guide, w, h, radius);
+    const meanP = boxBlurMean(p, w, h, radius);
+    const II = new Float32Array(n);
+    const IP = new Float32Array(n);
+    for (let i = 0; i < n; i++) { II[i] = guide[i] * guide[i]; IP[i] = guide[i] * p[i]; }
+    const meanII = boxBlurMean(II, w, h, radius);
+    const meanIP = boxBlurMean(IP, w, h, radius);
+    const a = new Float32Array(n);
+    const b = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const varI = meanII[i] - meanI[i] * meanI[i];
+      const cov = meanIP[i] - meanI[i] * meanP[i];
+      a[i] = cov / (varI + eps);
+      b[i] = meanP[i] - a[i] * meanI[i];
+    }
+    const meanA = boxBlurMean(a, w, h, radius);
+    const meanB = boxBlurMean(b, w, h, radius);
+    const out = new Uint8Array(n);
+    for (let i = 0; i < n; i++) {
+      const q = meanA[i] * guide[i] + meanB[i];
+      out[i] = q <= 0 ? 0 : q >= 1 ? 255 : Math.round(q * 255);
+    }
+    return out;
+  }
+
+  /** 对掩码做边缘精修（失败则原样返回） */
+  function refineMask(m) {
+    if (!m || !baseData) return m;
+    try {
+      const r = Math.max(2, Math.round(Math.min(workW, workH) / 200));
+      // 迭代 2 次：第 1 次把边缘对齐图像，第 2 次进一步收紧过渡带（发丝更挺）
+      let cur = m;
+      for (let k = 0; k < 2; k++) cur = guidedFilterMask(baseData, cur, workW, workH, r, 1e-4);
+      return cur;
+    } catch (e) {
+      console.warn("[imgrecolor] 边缘精修失败，用原始掩码", e);
+      return m;
+    }
   }
 
   function download() {
@@ -638,6 +753,7 @@
       srcChip: $("#irc-src-chip"), srcHex: $("#irc-src-hex"), target: $("#irc-target"), targetHex: $("#irc-target-hex"),
       transparent: $("#irc-transparent"), unified: $("#irc-unified"), multiEl: $("#irc-multi"), addRule: $("#irc-add-rule"),
       detect: $("#irc-detect"), detectRun: $("#irc-detect-run"), detectStatus: $("#irc-detect-status"),
+      refine: $("#irc-refine"),
       progress: $("#irc-progress"), progressFill: $("#irc-progress-fill"), progressText: $("#irc-progress-text"),
       eyedrop: $("#irc-eyedrop"), tol: $("#irc-tol"), tolVal: $("#irc-tol-val"), feather: $("#irc-feather"),
       featherVal: $("#irc-feather-val"), flood: $("#irc-flood"), size: $("#irc-size"), cropCenter: $("#irc-crop-center"),
@@ -726,6 +842,8 @@
 
     els.detect?.addEventListener("change", () => { if (els.detectRun) els.detectRun.hidden = els.detect.value === "color"; runDetect(); });
     els.detectRun?.addEventListener("click", () => runDetect());
+    // 切换边缘精修：掩码缓存仍在，重跑一次（模型已加载，很快）以应用/去掉精修
+    els.refine?.addEventListener("change", () => { if (detectMode !== "color") runDetect(); });
 
     els.size?.addEventListener("change", setCropFromSize);
     els.cropCenter?.addEventListener("click", () => { if (crop) { crop.x = Math.round((workW - crop.w) / 2); crop.y = Math.round((workH - crop.h) / 2); drawCropOverlay(); } });
