@@ -143,6 +143,33 @@
     return c.measureText(text || " ").width;
   }
 
+  const CJK_RE = /[\u2e80-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef]/;
+  const LATIN_RE = /[A-Za-z0-9]/;
+  /** 纯中文：含中文字形且不含英文字母/数字 */
+  function isPureCJK(text) {
+    const t = String(text || "");
+    return !!t && CJK_RE.test(t) && !LATIN_RE.test(t);
+  }
+  /**
+   * 纯中文时 textBaseline="middle" 会偏高：middle 按字体的拉丁 ascent/descent 算，
+   * 而中文字形在 em 框里近乎居中，于是视觉偏上。这里用实际墨迹盒把中文压回视觉居中；
+   * 含英文/数字则返回 0（保持现状）。
+   */
+  function cjkCenterShift(c, text, size) {
+    if (!isPureCJK(text)) return 0;
+    try {
+      c.font = FONT.replace("1px", `${size}px`);
+      c.textBaseline = "middle";
+      const m = c.measureText(String(text));
+      const a = m.actualBoundingBoxAscent || 0;
+      const d = m.actualBoundingBoxDescent || 0;
+      if (!a && !d) return 0;
+      return (a - d) / 2;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   function computeLayout(c, s) {
     const left = s.left || " ";
     const right = s.right || " ";
@@ -166,6 +193,8 @@
     const boxY = y0 + (contentH - boxH) / 2;
     const plainColor = s.reverse ? s.rightColor : s.leftColor;
     const boxFg = s.reverse ? s.leftColor : s.rightColor;
+    const plainShift = cjkCenterShift(c, plainText, s.size);
+    const boxShift = cjkCenterShift(c, boxText, s.size);
     return {
       w,
       h,
@@ -180,6 +209,8 @@
       boxY,
       plainColor,
       boxFg,
+      plainShift,
+      boxShift,
     };
   }
 
@@ -198,13 +229,13 @@
     c.textAlign = "left";
 
     c.fillStyle = layout.plainColor;
-    c.fillText(layout.plainText, layout.plainX, layout.plainY);
+    c.fillText(layout.plainText, layout.plainX, layout.plainY + (layout.plainShift || 0));
 
     c.fillStyle = s.box;
     roundRect(c, layout.boxX, layout.boxY, layout.boxW, layout.boxH, s.radius);
     c.fill();
     c.fillStyle = layout.boxFg;
-    c.fillText(layout.boxText, layout.boxX + layout.boxPadX, layout.boxY + layout.boxH / 2);
+    c.fillText(layout.boxText, layout.boxX + layout.boxPadX, layout.boxY + layout.boxH / 2 + (layout.boxShift || 0));
   }
 
   function paint() {
@@ -251,9 +282,9 @@
     return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="${layout.w}" height="${layout.h}" viewBox="0 0 ${layout.w} ${layout.h}">
   ${bg}
-  <text x="${layout.plainX}" y="${layout.plainY}" fill="${layout.plainColor}" font-size="${s.size}" font-weight="900" font-family="Arial Black, Arial, Impact, sans-serif" dominant-baseline="middle">${escapeXml(layout.plainText)}</text>
+  <text x="${layout.plainX}" y="${layout.plainY + (layout.plainShift || 0)}" fill="${layout.plainColor}" font-size="${s.size}" font-weight="900" font-family="Arial Black, Arial, Impact, sans-serif" dominant-baseline="middle">${escapeXml(layout.plainText)}</text>
   <rect x="${layout.boxX}" y="${layout.boxY}" width="${layout.boxW}" height="${layout.boxH}" rx="${s.radius}" ry="${s.radius}" fill="${s.box}"/>
-  <text x="${layout.boxX + layout.boxPadX}" y="${layout.boxY + layout.boxH / 2}" fill="${layout.boxFg}" font-size="${s.size}" font-weight="900" font-family="Arial Black, Arial, Impact, sans-serif" dominant-baseline="middle">${escapeXml(layout.boxText)}</text>
+  <text x="${layout.boxX + layout.boxPadX}" y="${layout.boxY + layout.boxH / 2 + (layout.boxShift || 0)}" fill="${layout.boxFg}" font-size="${s.size}" font-weight="900" font-family="Arial Black, Arial, Impact, sans-serif" dominant-baseline="middle">${escapeXml(layout.boxText)}</text>
 </svg>`;
   }
 
