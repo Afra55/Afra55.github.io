@@ -82,18 +82,20 @@
         V2G_BLACKBOX_MAX_BYTES = M.blackboxUseMaxBytes ? M.blackboxUseMaxBytes() : V2G_BLACKBOX_MAX_BYTES;
         V2G_BLACKBOX_WIDEN_BYTES = Math.round(V2G_BLACKBOX_MAX_BYTES * (5 / 6));
       });
-      /** 黑盒：起点宽 420 + quality 5；优先保住 12FPS；够小时再加宽 */
-      const V2G_BLACKBOX_FPS_LIST = [24, 20, 15, 12, 10];
+      /** 黑盒：起点 420 宽 / 12FPS；进得了 6MB 就上 15FPS；宽度底线 380（录屏文字可读优先于帧率） */
+      const V2G_BLACKBOX_MAX_FPS = 15;
+      const V2G_BLACKBOX_FPS_LIST = [15, 12, 10];
       const V2G_BLACKBOX_BASE_W = 420;
-        const V2G_BLACKBOX_WIDTH_STEP = 60;
+        /** 收窄/加宽步进：要细，否则 420 一步就掉到 380，白白少给 20–40px */
+        const V2G_BLACKBOX_WIDTH_STEP = 20;
         const V2G_BLACKBOX_WIDTH_CAP = 720;
         /** 黑盒编码的硬宽度上限（一键黑盒可放宽到这里，短视频预算用不完时可换更高清晰度） */
         const V2G_ENCODE_HARD_W = 1280;
-        /** 智能分配的分辨率底线：某帧率若只能做到比这更窄，就换更低帧率（340 兼顾"少压缩"与录屏文字可读） */
-      const V2G_BLACKBOX_MIN_ACCEPT_W = 290;
+        /** 智能分配的分辨率底线：某帧率若只能做到比这更窄，就换更低帧率 */
+      const V2G_BLACKBOX_MIN_ACCEPT_W = 380;
       /** 实测超预算时「无损重编」的绝对下限（宽度 px / 帧率）：宁可到这两个底线，也不轻易用 gifsicle --lossy */
-      const V2G_BLACKBOX_RETRY_MIN_W = 220;
-      const V2G_BLACKBOX_RETRY_MIN_FPS = 12;
+      const V2G_BLACKBOX_RETRY_MIN_W = 380;
+      const V2G_BLACKBOX_RETRY_MIN_FPS = 10;
       /** 帧率已到 12fps 底线但体积还超 → 优先降编码质量而不是继续降帧率。
        *  gifski：quality 档 18 → gifski 70（约省 20% 体积，观感损失远小于 12→10fps 的卡顿）。 */
       const V2G_BLACKBOX_RETRY_QUALITY = 18;
@@ -102,6 +104,10 @@
       // 质量档位：1 = 最高画质。gifski 路径 → gifQualityToGifskiQuality(1) = 92（近无损）；
       // ffmpeg 回退路径 → gifQualityToMaxColors(1) = 256 色（GIF 上限）。实测 234→256 仅 +1% 体积，几乎免费。
       const V2G_BLACKBOX_QUALITY = 1;
+      /** 超预算时的质量让渡阶梯（gifski quality：92→83→73→66→55；ffmpeg 路径等价降色 256→…→96）。
+       *  让渡顺序：先收窄宽度 → 再降质量 → 再降帧率 → 最后才动 gifsicle lossy。
+       *  降 gifski quality 是「自适应量化」，比固定降到 32 色耐看得多。 */
+      const V2G_BLACKBOX_QUALITY_LADDER = [1, 8, 15, 22, 30];
       /** 单段 gifski 编码的原始 RGBA 内存预算（帧数×宽×高×4）。
        *  手机 OOM 会直接杀标签页（表现为「处理到一半页面被刷新」）。
        *  实测：240 帧 242×210 ≈ 49MB 可用；20s≈127MB 可用；30s 分段后每段≈160MB 仍被杀。
@@ -1163,6 +1169,60 @@
        * gifski 自带调色板量化：同规格比 palettegen 管线体积更小、画质更好（实测 -7%）。
        * 失败（wasm 未加载 / 内存不足 / 帧数据过大）由 encodeBlackboxGif 回退 ffmpeg 管线。
        */
+      /** 逐 32 位比较两帧 RGBA 是否完全相同（静止帧判定；比逐字节快 ~4×） */
+      function makeFrameComparer(view) {
+        const aligned = view.byteOffset % 4 === 0;
+        const w32 = aligned ? new Uint32Array(view.buffer, view.byteOffset, view.byteLength >> 2) : null;
+        return (offA, offB, stride) => {
+          if (w32) {
+            const a = offA >> 2;
+            const b = offB >> 2;
+            const words = stride >> 2;
+            for (let i = 0; i < words; i++) if (w32[a + i] !== w32[b + i]) return false;
+            return true;
+          }
+          for (let i = 0; i < stride; i++) if (view[offA + i] !== view[offB + i]) return false;
+          return true;
+        };
+      }
+
+      /**
+       * 合并连续相同的静止帧（屏幕录制常有大段静止）：原地压缩帧数据，重复帧只留一帧、
+       * 时长叠加到该帧 → 体积大降且零画质损失。返回 null 表示没有可合并的帧。
+       * durations 单位=毫秒（已实测），且长度必须等于帧数。
+       */
+      function mergeStaticFramesInPlace(view, n, stride, fps) {
+        if (n < 3) return null;
+        const eq = makeFrameComparer(view);
+        const counts = [];
+        let write = 0;
+        let prevOff = 0;
+        for (let f = 0; f < n; f++) {
+          const off = f * stride;
+          if (f > 0 && eq(prevOff, off, stride)) {
+            counts[counts.length - 1] += 1;
+            continue;
+          }
+          if (write !== f) view.copyWithin(write * stride, off, off + stride);
+          prevOff = write * stride;
+          counts.push(1);
+          write += 1;
+        }
+        if (write >= n) return null;
+        // 累计取整到 10ms（GIF 时基为厘秒），避免逐帧四舍五入造成整体时长漂移
+        const durations = new Uint32Array(write);
+        const perFrameCs = 100 / Math.max(1, fps);
+        let accCs = 0;
+        let prevCs = 0;
+        for (let i = 0; i < write; i++) {
+          accCs += counts[i] * perFrameCs;
+          const cs = Math.round(accCs);
+          durations[i] = Math.max(1, cs - prevCs) * 10;
+          prevCs = cs;
+        }
+        return { count: write, durations, saved: n - write };
+      }
+
       async function encodeV2gGifGifski(opts) {
         const tPhase = performance.now();
         const file = opts.file || v2gSourceFile;
@@ -1344,10 +1404,25 @@
             if (n < 2) throw new Error("导出的 RGBA 帧不足");
             if (n > chunkFrames) n = chunkFrames;
             const view = n * stride === frames.length ? frames : frames.subarray(0, n * stride);
-            // gifski.encode 是同步 wasm 调用，期间主线程会卡住
-            const gifBytes = mod.encode(view, n, outW, outH, fps, undefined, gifskiQuality);
+            // 静止帧合并（零画质损失）：屏幕录制静止段的重复帧只留一帧，时长叠加到该帧
+            let encodedFrames = n;
+            let durations = null;
+            try {
+              const merged = mergeStaticFramesInPlace(view, n, stride, fps);
+              if (merged && merged.count >= 2) {
+                encodedFrames = merged.count;
+                durations = merged.durations;
+                vbbLog(`[vbb-phase] gifski 静止帧合并 ${n} → ${merged.count} 帧（省 ${merged.saved} 帧）`);
+              }
+            } catch (_) {}
+            const mergedView = durations ? view.subarray(0, encodedFrames * stride) : view;
+            // gifski.encode 是同步 wasm 调用，期间主线程会卡住。
+            // 有合并 → 传逐帧时长（单位 ms）；无合并 → 沿用 fps（gifski 自己摊帧时更稳）
+            const gifBytes = durations
+              ? mod.encode(mergedView, encodedFrames, outW, outH, undefined, durations, gifskiQuality)
+              : mod.encode(mergedView, encodedFrames, outW, outH, fps, undefined, gifskiQuality);
             if (!gifBytes || !gifBytes.length) throw new Error("gifski 未产出 GIF");
-            return { blob: new Blob([gifBytes], { type: "image/gif" }), n };
+            return { blob: new Blob([gifBytes], { type: "image/gif" }), n, mergedOut: encodedFrames };
           };
 
           let blob;
@@ -1523,15 +1598,8 @@
        * 这样既帧率更高、抽帧又均匀，是纯增益。
        */
       function blackboxFpsCandidates(srcFps) {
-        const out = new Set(V2G_BLACKBOX_FPS_LIST); // [15, 12, 10]
-        const src = Number(srcFps) || 0;
-        if (src >= 20 && src <= 240) {
-          for (const div of [2, 3, 4]) {
-            const f = src / div;
-            if (f > 15.01 && f <= 24) out.add(Math.round(f * 100) / 100);
-          }
-        }
-        return [...out].sort((a, b) => b - a);
+        void srcFps; // 帧率档固定为 [15, 12, 10]：15 是天花板，10 是底线，12 是基准
+        return V2G_BLACKBOX_FPS_LIST.slice();
       }
 
       /** 不因帧数上限跳过最高档：始终从最高档起试，体积由压缩(减色/缩放)兜底 */
@@ -2090,9 +2158,8 @@
         // 实测：同体积下「收窄一点 + 只压 1 轮」比「宽度拉满 + 压 4 轮」PSNR 高 9dB。
         const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.82);
         const srcCap = Math.min(srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK, V2G_ENCODE_HARD_W);
-        // 加速场景优先「流畅」：内容运动快，宁可画面小一点也要保住更高帧率——把宽度底线从 290 降到 200，
-        // 让 15/20fps 这类更高档位在「可负担宽度偏窄」时也能被选中（不再一路掉到 12fps）。
-        const floorW = Math.min(speed > 1 ? 200 : V2G_BLACKBOX_MIN_ACCEPT_W, srcCap);
+        // 宽度底线统一 380（含加速场景）：录屏文字可读优先，不再为帧率把宽度降到 200/290
+        const floorW = Math.min(V2G_BLACKBOX_MIN_ACCEPT_W, srcCap);
         const encodeAtWidthFps = (f, w, quality) =>
           encodeBlackboxGif({
             ...common,
@@ -2132,7 +2199,7 @@
         );
         let chosen = null;
         for (const f of fpsList) {
-          if (f < 12) continue; // 12fps 是流畅底线：主循环也不低于它（宁可多压一轮）
+          if (f < 10) continue; // 10fps 是流畅底线：主循环也不低于它（宁可多压/降色）
           const afford = Math.round(
             V2G_BLACKBOX_BASE_W *
               Math.min(4, Math.sqrt(rawTarget / Math.max(1, estBytesAt(f, V2G_BLACKBOX_BASE_W))))
@@ -2144,9 +2211,8 @@
           }
         }
         if (!chosen) {
-          // 底线宽度(290)做不到「1 轮」→ 若「最低帧率 12fps」也明显够不到 290，才继续收窄去找 1 轮。
-          // 实测(30s 横屏, 统一显示尺寸): 290px/2轮 30.58dB < 250px/1轮 32.36dB —— 少压一轮胜过窄一点。
-          const HARD_MIN_W = 220; // 绝对下限：再窄就真糊了
+          // 底线宽度(380)做不到「1 轮」→ 若 12fps 也明显够不到 380，才收窄去找「少压一轮」。
+          const HARD_MIN_W = V2G_BLACKBOX_MIN_ACCEPT_W; // 绝对下限 380：再窄就违背底线
           const afford12 = Math.round(
             V2G_BLACKBOX_BASE_W *
               Math.min(4, Math.sqrt(rawTarget / Math.max(1, estBytesAt(12, V2G_BLACKBOX_BASE_W))))
@@ -2157,11 +2223,11 @@
           }
         }
         if (!chosen) {
-          // 连 220px 都做不到 1 轮 → 重压兜底：12fps 底线 + 290px + 减色到 124
+          // 连 380px 都做不到 1 轮 → 重压兜底：12fps 底线 + 380px + 降质量
           const CREDIT = 2.5; // 硬压缩大约能省到这个倍数（实测 5 轮约 3.4×，取保守值）
           const capRaw = V2G_BLACKBOX_MAX_BYTES * CREDIT;
-          const hardMin = 290; // 再窄就太小了
-          const fpsFloor = 12; // 12fps 是流畅底线；够了就不再往上追（往上要拿压缩轮数换，画质掉得快）
+          const hardMin = V2G_BLACKBOX_MIN_ACCEPT_W; // 380
+          const fpsFloor = 10; // 10fps 是流畅底线
           for (const f of fpsList.slice().sort((a, b) => a - b)) {
             if (f < fpsFloor) continue;
             const afford = Math.round(
@@ -2175,8 +2241,8 @@
             }
           }
           if (!chosen) chosen = { fps: fpsList[fpsList.length - 1], width: hardMin };
-          // 预算吃紧 → 降色数(256→124)换「1 轮压缩」：少压一轮约 +3dB，减色仅约 -1.1dB，净赚
-          if (chosen.fps >= 12) chosen.quality = 25;
+          // 预算吃紧 → 降质量档（gifski 自适应量化 / ffmpeg 等价降色）换「少压一轮」
+          chosen.quality = V2G_BLACKBOX_QUALITY_LADDER[1];
         }
         // 实验/排查用（仅 ?debug）：localStorage devtools-vbb-force="fps:宽" 强制指定档位
         try {
@@ -2215,6 +2281,21 @@
             const shrunk = await encodeAt(chosen.fps, back, 0.88, 0.06, `${chosen.fps}FPS·宽${back}`, chosenQuality);
             tried.push(shrunk);
             if (shrunk.blob.size <= V2G_BLACKBOX_MAX_BYTES) candidate = shrunk;
+          }
+        }
+        // 仍超 → 先降质量档重编（gifski 自适应量化 / ffmpeg 等价降色），比直接上 gifsicle lossy 耐看
+        if (candidate.blob.size > V2G_BLACKBOX_MAX_BYTES) {
+          const wNow = Number(candidate.maxW) || chosen.width;
+          const baseQ = chosenQuality || V2G_BLACKBOX_QUALITY;
+          const at = V2G_BLACKBOX_QUALITY_LADDER.indexOf(baseQ);
+          for (let qi = (at >= 0 ? at : 0) + 1; qi < V2G_BLACKBOX_QUALITY_LADDER.length; qi++) {
+            if (abortV2g) throw new Error("已取消");
+            const q = V2G_BLACKBOX_QUALITY_LADDER[qi];
+            onProgress(0.9, `降质量档重编（q${q} · ${formatKb(candidate.blob.size)}）`);
+            const qc = await encodeAt(chosen.fps, wNow, 0.9, 0.05, `${chosen.fps}FPS·宽${wNow}·q${q}`, q);
+            tried.push(qc);
+            candidate = qc;
+            if (qc.blob.size <= V2G_BLACKBOX_MAX_BYTES) break;
           }
         }
         // 仍超 → 压缩兜底
@@ -2373,7 +2454,7 @@
         setV2gCompressEnabled(false);
         if (v2gAbort) v2gAbort.hidden = false;
         setV2gProgress(true, 0.02, "黑盒准备中", {
-          sub: `起点宽 ${V2G_BLACKBOX_BASE_W} · 24→20→15→12→10 · 智能分配`,
+          sub: `起点宽 ${V2G_BLACKBOX_BASE_W} · 宽底线 ${V2G_BLACKBOX_MIN_ACCEPT_W} · 15→12→10 · 智能分配`,
           busy: true,
         });
   
