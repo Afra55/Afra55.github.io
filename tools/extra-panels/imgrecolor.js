@@ -297,6 +297,28 @@
 
   function setDetectStatus(t) { if (els.detectStatus) els.detectStatus.textContent = t || ""; }
 
+  const fmtMB = (n) => (typeof n === "number" ? (n / 1048576).toFixed(1) : "?");
+  function setProgress(pct, text) {
+    const wrap = els.progress;
+    if (!wrap) return;
+    wrap.hidden = false;
+    if (pct == null) {
+      wrap.classList.add("is-indeterminate");
+    } else {
+      wrap.classList.remove("is-indeterminate");
+      if (els.progressFill) els.progressFill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+    }
+    if (els.progressText) els.progressText.textContent = text || "";
+  }
+  function hideProgress() {
+    const wrap = els.progress;
+    if (!wrap) return;
+    wrap.hidden = true;
+    wrap.classList.remove("is-indeterminate");
+    if (els.progressFill) els.progressFill.style.width = "0%";
+    if (els.progressText) els.progressText.textContent = "";
+  }
+
   let detectGen = 0;
   let detectChain = Promise.resolve();
 
@@ -311,11 +333,22 @@
     return detectChain;
   }
 
+  /** 把加载错误翻译成用户能处理的提示 */
+  function describeErr(err) {
+    const msg = String((err && err.message) || err || "未知错误");
+    if (/failed to fetch|networkerror|load failed|network error|err_/i.test(msg))
+      return "网络中断（模型托管在 Hugging Face，已自动尝试国内镜像 hf-mirror；请检查网络或换更小的模型）";
+    if (/out of memory|oom|allocation|array buffer/i.test(msg)) return "内存不足（该模型太大，建议换 MODNet / RMBG-1.4）";
+    if (/timeout|超时|aborted/i.test(msg)) return "超时（模型较大、网络太慢）";
+    return msg;
+  }
+
   async function detectOnce(gen) {
     const mode = els.detect?.value || "color";
     detectMode = mode;
     mask = null;
     if (mode === "color") {
+      hideProgress();
       setDetectStatus("① 点图上取背景色 → ② 设下方「替换为」的颜色");
       render();
       return;
@@ -324,11 +357,13 @@
     if (spec.mb >= HEAVY_MB && !window.confirm(`${spec.label} 首次需下载约 ${spec.size}，较慢且占内存，确定继续？`)) {
       detectMode = "color";
       if (els.detect) els.detect.value = "color";
+      hideProgress();
       setDetectStatus("已取消下载。可换「MODNet / RMBG-1.4」更轻的模型");
       render();
       return;
     }
     setDetectStatus(`加载 AI 模型（${spec.label} · 首次约 ${spec.size || "较大"}，请稍候）…`);
+    setProgress(spec.kind === "mp" ? null : 0, "准备下载模型…");
     try {
       const t0 = performance.now();
       const keep = spec.kind === "mp" ? "mpSeg" : spec.kind === "imgly" ? "rmbg" : "tj:" + spec.model;
@@ -346,13 +381,15 @@
           `✓ 已识别前景（${(ratio * 100).toFixed(0)}% · ${sec}s）。直接设「替换为」颜色即可换背景（不用选源色）`
         );
       }
+      hideProgress();
       render();
     } catch (err) {
       if (gen !== detectGen) return;
+      hideProgress();
       mask = null;
       detectMode = "color";
       if (els.detect) els.detect.value = "color";
-      setDetectStatus(`${spec.label} 加载失败：${err?.message || err}（已回退「按颜色」，可再选 AI 重试）`);
+      setDetectStatus(`${spec.label} 加载失败：${describeErr(err)}（已回退「按颜色」，可再选 AI 重试）`);
       render();
     }
   }
@@ -390,7 +427,9 @@
   }
 
   async function segmentMP() {
+    setProgress(null, "加载 MediaPipe 模型（~0.3MB）…");
     const seg = await getMPSeg();
+    setProgress(null, "MediaPipe 推理中…");
     const res = await Promise.race([
       new Promise((resolve, reject) => {
         seg.onResults((r) => resolve(r));
@@ -423,10 +462,15 @@
   async function segmentRMBG() {
     const removeBg = await getRMBG();
     const srcBlob = await new Promise((r) => els.canvas.toBlob(r, "image/png"));
+    setProgress(0, "准备下载 RMBG-1.4 模型…");
     const maskBlob = await removeBg(srcBlob, {
       model: "isnet_quint8",
       device: "cpu",
       output: { format: "image/png", type: "mask" },
+      progress: (key, current, total) => {
+        if (total) setProgress(Math.round((current / total) * 100), `下载 ${String(key || "model").split("/").pop()} ${fmtMB(current)}/${fmtMB(total)} MB`);
+        else setProgress(null, "处理中…");
+      },
     });
     const bmp = await createImageBitmap(maskBlob);
     const mc = document.createElement("canvas");
@@ -455,6 +499,18 @@
     return tjMod;
   }
 
+  /** transformers.js 下载进度 → 进度条 */
+  function tjProgress(p) {
+    try {
+      if (!p) return;
+      const base = String(p.file || "").split("/").pop();
+      const isModel = /\.onnx$/i.test(p.file || "");
+      if (p.status === "done" && isModel) { setProgress(null, "模型就绪，正在推理…"); return; }
+      if (p.total) setProgress(Math.round((p.loaded / p.total) * 100), `下载 ${base || "model"} ${fmtMB(p.loaded)}/${fmtMB(p.total)} MB`);
+      else if (base) setProgress(null, `${p.status === "done" ? "已就绪" : "获取"} ${base}`);
+    } catch (_) {}
+  }
+
   async function getTJPipe(spec) {
     const mod = await getTJ();
     const key = "tj:" + spec.model;
@@ -464,7 +520,11 @@
       const host = TJ_HOSTS[(tjHost + i) % TJ_HOSTS.length];
       if (mod.env) mod.env.remoteHost = host;
       try {
-        const pipe = await mod.pipeline("background-removal", spec.model, { dtype: spec.dtype || "fp32" });
+        setProgress(0, `连接 ${host.replace(/^https?:\/\//, "")} …`);
+        const pipe = await mod.pipeline("background-removal", spec.model, {
+          dtype: spec.dtype || "fp32",
+          progress_callback: tjProgress,
+        });
         if (mod.env) tjHost = TJ_HOSTS.indexOf(host);
         aiState.tj[key] = pipe;
         return pipe;
@@ -473,7 +533,7 @@
         console.warn("[imgrecolor] pipeline 加载失败", host, spec.model, e);
       }
     }
-    throw new Error(lastErr?.message || String(lastErr || "未知错误"));
+    throw lastErr || new Error("模型加载失败");
   }
 
   /** transformers.js RawImage → canvas（灰度/掩码或 RGBA 前景） */
@@ -566,6 +626,7 @@
     if (els.clear) els.clear.hidden = false;
     setError(els.error, "");
     setDetectStatus("");
+    hideProgress();
     requestAnimationFrame(drawCropOverlay);
     if (detectMode !== "color") runDetect();
   }
@@ -577,6 +638,7 @@
       srcChip: $("#irc-src-chip"), srcHex: $("#irc-src-hex"), target: $("#irc-target"), targetHex: $("#irc-target-hex"),
       transparent: $("#irc-transparent"), unified: $("#irc-unified"), multiEl: $("#irc-multi"), addRule: $("#irc-add-rule"),
       detect: $("#irc-detect"), detectRun: $("#irc-detect-run"), detectStatus: $("#irc-detect-status"),
+      progress: $("#irc-progress"), progressFill: $("#irc-progress-fill"), progressText: $("#irc-progress-text"),
       eyedrop: $("#irc-eyedrop"), tol: $("#irc-tol"), tolVal: $("#irc-tol-val"), feather: $("#irc-feather"),
       featherVal: $("#irc-feather-val"), flood: $("#irc-flood"), size: $("#irc-size"), cropCenter: $("#irc-crop-center"),
       download: $("#irc-download"), reset: $("#irc-reset"), status: $("#irc-status"), error: $("#irc-error"),
@@ -594,7 +656,7 @@
       if (els.download) els.download.disabled = true;
       if (els.reset) els.reset.disabled = true;
       els.clear.hidden = true;
-      setError(els.error, ""); setStatus(""); setDetectStatus("");
+      setError(els.error, ""); setStatus(""); setDetectStatus(""); hideProgress();
     });
 
     els.canvas.addEventListener("click", (e) => {
