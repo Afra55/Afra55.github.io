@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GIF 宽度对比测试 200→480</title>
+<style>
+  :root { --bg:#0f1216; --panel:#171b21; --line:#2a313a; --fg:#e8edf3; --muted:#9aa6b4; --accent:#5aa9ff; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+  header { position: sticky; top: 0; z-index: 5; background: rgba(15,18,22,.94); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); padding: 10px 12px; }
+  h1 { margin: 0 0 4px; font-size: 16px; }
+  h1 small { color: var(--muted); font-weight: 400; }
+  header p { margin: 0 0 8px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+  nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  nav a { display: inline-block; padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; color: var(--fg); text-decoration: none; font-size: 12px; font-variant-numeric: tabular-nums; }
+  nav a:active { background: var(--accent); border-color: var(--accent); color: #04121f; }
+  .modes { display: flex; gap: 6px; }
+  .modes button { flex: 1; padding: 7px 10px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); border-radius: 9px; font-size: 13px; }
+  .modes button.on { background: var(--accent); border-color: var(--accent); color: #04121f; font-weight: 600; }
+  main { padding: 10px 12px 60px; display: grid; gap: 14px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+  .card h2 { margin: 0 0 8px; font-size: 15px; display: flex; align-items: baseline; gap: 8px; }
+  .card h2 .px { color: var(--accent); font-variant-numeric: tabular-nums; }
+  .card h2 .sz { color: var(--muted); font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; }
+  .shots { display: grid; gap: 8px; }
+  figure { margin: 0; }
+  figure figcaption { margin-top: 4px; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  img { display: block; border-radius: 8px; background: #000; }
+  /* 铺满屏宽：所有档都拉到同一显示宽度，比清晰度更公平 */
+  body.fill img { width: 100%; height: auto; }
+  /* 原始像素：按真实像素显示，超过屏宽横向滚动 */
+  body.native main { padding-left: 0; padding-right: 0; }
+  body.native .card { border-radius: 0; border-left: 0; border-right: 0; }
+  body.native .shots { overflow-x: auto; }
+  body.native img { width: auto; max-width: none; }
+  .lg { display: grid; gap: 6px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+  .lg div { display: flex; justify-content: space-between; gap: 10px; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body class="fill">
+<header>
+  <h1>GIF 宽度对比 <small>200 → 480 · 步进 20</small></h1>
+  <p>源 ScreenRecording 742×644 · 取 5s · 12fps · 256 色 · dither=none · hqdn3d+lanczos。体积（无文字 / 有文字）单位 MB。</p>
+  <nav id="nav"></nav>
+  <div class="modes">
+    <button type="button" data-mode="fill" class="on">铺满屏宽</button>
+    <button type="button" data-mode="native">原始像素</button>
+  </div>
+</header>
+<main id="main"></main>
+<script>
+  const DATA = [
+    [200, 0.99, 0.98], [220, 1.14, 1.12], [240, 1.29, 1.28], [260, 1.47, 1.46],
+    [280, 1.65, 1.64], [300, 1.84, 1.82], [320, 2.04, 2.01], [340, 2.22, 2.21],
+    [360, 2.45, 2.41], [380, 2.67, 2.63], [400, 2.91, 2.87], [420, 3.14, 3.08],
+    [440, 3.42, 3.33], [460, 3.69, 3.61], [480, 3.96, 3.85],
+  ];
+  const nav = document.getElementById("nav");
+  const main = document.getElementById("main");
+  for (const [w, a, b] of DATA) {
+    const link = document.createElement("a");
+    link.href = "#w" + w; link.textContent = w;
+    nav.appendChild(link);
+
+    const card = document.createElement("section");
+    card.className = "card"; card.id = "w" + w;
+    card.innerHTML =
+      `<h2><span class="px">${w} px</span><span class="sz">无文字 ${a} MB · 有文字 ${b} MB</span></h2>` +
+      `<div class="shots">` +
+      `<figure><img loading="lazy" src="notxt-${w}.gif" alt="${w}px 无文字"><figcaption>无文字 · ${a} MB</figcaption></figure>` +
+      `<figure><img loading="lazy" src="txt-${w}.gif" alt="${w}px 有文字"><figcaption>有文字 · ${b} MB</figcaption></figure>` +
+      `</div>`;
+    main.appendChild(card);
+  }
+  document.querySelectorAll(".modes button").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      document.body.className = btn.dataset.mode;
+      document.querySelectorAll(".modes button").forEach((x) => x.classList.toggle("on", x === btn));
+    });
+  });
+</script>
+</body>
+</html>
