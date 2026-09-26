@@ -117,22 +117,23 @@
        *  实测：240 帧 242×210 ≈ 49MB 可用；20s≈127MB 可用；30s 分段后每段≈160MB 仍被杀。
        *  → 手机保持保守；桌面内存充足，放宽以便一次编码（跨帧优化不丢，画质/体积更好）。 */
       function gifskiRawBudget() {
-        const coarse = isCoarsePointer();
+        // 手机：一律保守。iOS Safari 不暴露 deviceMemory；且 gifski 的 wasm 堆只增不减
+        // （每次 encode 都往上要内存），预算放大反而更早被系统杀掉（iPhone 13 实测 5s 视频即触发页面刷新）。
+        if (isCoarsePointer()) return 32 * 1024 * 1024;
         try {
-          const dm = navigator.deviceMemory; // Chrome/Edge；iOS Safari 无此字段
+          const dm = navigator.deviceMemory;
           if (typeof dm === "number") {
-            if (dm <= 2) return 24 * 1024 * 1024;
-            if (dm <= 4) return 48 * 1024 * 1024;
-            if (dm <= 8) return coarse ? 96 * 1024 * 1024 : 192 * 1024 * 1024;
-            return coarse ? 128 * 1024 * 1024 : 320 * 1024 * 1024;
+            if (dm <= 4) return 96 * 1024 * 1024;
+            if (dm <= 8) return 192 * 1024 * 1024;
+            return 320 * 1024 * 1024;
           }
         } catch (_) {}
-        return coarse ? 48 * 1024 * 1024 : 192 * 1024 * 1024; // 未知设备：触屏保守，桌面给中等
+        return 192 * 1024 * 1024;
       }
       /** 单段 gifski 编码的帧数上限：gifski 一次性持有全部帧，内存随「帧数」超线性增长。
        *  实测（手机）：20s@15fps ≈ 301 帧可用；30s@15fps ≈ 451 帧、33s ≈ 505 帧会被系统杀（页面被刷新）。
-       *  → 手机沿用保守 320；桌面放宽（内存够），尽量一次编码完。 */
-      const V2G_GIFSKI_MAX_FRAMES = 320;
+       *  手机取 240（比 320 更留余量）；桌面放宽（内存够），尽量一次编码完。 */
+      const V2G_GIFSKI_MAX_FRAMES = 240;
       const V2G_GIFSKI_MAX_FRAMES_DESKTOP = 1500;
       function gifskiMaxFrames() {
         return isCoarsePointer() ? V2G_GIFSKI_MAX_FRAMES : V2G_GIFSKI_MAX_FRAMES_DESKTOP;
@@ -1589,14 +1590,21 @@
        * 黑盒 GIF 编码入口：优先 gifski（更小更清晰），失败回退 ffmpeg palettegen 管线。
        * 取消不算失败，直接抛出（不触发回退）。
        */
+      const VBB_RUN_KEY = "devtools-vbb-running";
       async function encodeBlackboxGif(opts) {
-        if (opts && opts.forceFfmpeg) return encodeV2gGifFfmpeg(opts);
+        // 处理中途被系统杀掉（OOM）时该标记会留下 → 下次进面板自动调大分块数
+        try { localStorage.setItem(VBB_RUN_KEY, "1"); } catch (_) {}
         try {
-          return await encodeV2gGifGifski(opts);
-        } catch (err) {
-          if (String(err && err.message) === "已取消") throw err;
-          vbbLog(`[vbb] gifski 引擎不可用，回退 ffmpeg：${err && err.message ? err.message : err}`);
-          return await encodeV2gGifFfmpeg(opts);
+          if (opts && opts.forceFfmpeg) return await encodeV2gGifFfmpeg(opts);
+          try {
+            return await encodeV2gGifGifski(opts);
+          } catch (err) {
+            if (String(err && err.message) === "已取消") throw err;
+            vbbLog(`[vbb] gifski 引擎不可用，回退 ffmpeg：${err && err.message ? err.message : err}`);
+            return await encodeV2gGifFfmpeg(opts);
+          }
+        } finally {
+          try { localStorage.removeItem(VBB_RUN_KEY); } catch (_) {}
         }
       }
 
@@ -2092,7 +2100,8 @@
           cur = await raiseBlackboxFps(cur, curFps, encodeAtWidthFps, srcFps);
           if (!cur?.blob) return cur;
           // 3) 帧率也到顶、预算仍有富余 → gifski 质量从 92 上探到 100（源很窄/很短时用得上）
-          if (cur.blob.size < V2G_BLACKBOX_WIDEN_BYTES && (Number(cur.gifskiQuality) || 0) < 100) {
+          //    手机不做：多一次编码就多一份 wasm 堆占用，得不偿失
+          if (!isCoarsePointer() && cur.blob.size < V2G_BLACKBOX_WIDEN_BYTES && (Number(cur.gifskiQuality) || 0) < 100) {
             onProgress(0.97, "体积有余 · 画质上探");
             const hi = await encodeAtWidthFps(
               Number(cur.fps) || curFps,
@@ -2195,7 +2204,9 @@
           let guess = Math.round((lo * Math.min(4, Math.sqrt(capBytes / Math.max(1, best.blob.size)))) / 2) * 2;
           guess = Math.max(lo + 2, Math.min(hi, guess));
           let hiW = hi;
-          for (let i = 0; i < 4 && hiW - lo > 16; i++) {
+          // 手机只探 2 次：每次试探都是一整次 gifski 编码，wasm 堆只增不减，探多了更容易被系统杀
+          const maxProbes = isCoarsePointer() ? 2 : 4;
+          for (let i = 0; i < maxProbes && hiW - lo > 16; i++) {
             if (isAborted()) throw new Error("已取消");
             const w = i === 0 ? guess : Math.round((lo + hiW) / 2 / 2) * 2;
             if (w <= lo || w >= hiW) break;
@@ -8184,6 +8195,16 @@
           const countEl = $("#vbb-chunk-count", root);
           const hintEl = $("#vbb-chunk-hint", root);
           if (!enable && !countEl) return;
+          // 上次编码中途被系统杀掉（OOM）→ 自动调大分块数，避免再撞同一堵墙
+          try {
+            if (localStorage.getItem("devtools-vbb-running")) {
+              localStorage.removeItem("devtools-vbb-running");
+              const prev = readVbbChunkCfg();
+              const next = Math.min(64, Math.max(2, (prev.count || 1) * 2));
+              saveVbbChunkCfg({ on: true, count: next });
+              setTimeout(() => toast(`上次处理因内存不足被系统中断，已把分块数调到 ${next}`), 400);
+            }
+          } catch (_) {}
           const cfg = readVbbChunkCfg();
           let userSet = cfg.count != null; // 用户手动改过 → 不再跟随建议值
           if (enable) enable.checked = cfg.on;

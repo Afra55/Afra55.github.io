@@ -14,12 +14,6 @@
           <span class="hint tight">MB</span>
         </div>
         <div data-vbb-video>
-        <div class="field-row vbb-chunk-row only-coarse" style="flex-wrap:wrap;align-items:center;gap:0.55rem;margin-top:0.1rem">
-          <label class="flag" for="vbb-chunk-enable"><input type="checkbox" id="vbb-chunk-enable" checked /> 分块编码</label>
-          <label for="vbb-chunk-count">块数</label>
-          <input id="vbb-chunk-count" class="mono meta-input" type="number" min="1" max="64" step="1" inputmode="numeric" />
-          <span class="hint tight" id="vbb-chunk-hint">块数越少画质/体积越好，但越吃内存</span>
-        </div>
         <div class="btn-row tool-actions">
           <label class="file-btn" for="vbb-file">选择视频（可多选）</label>
           <input id="vbb-file" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" multiple hidden />
@@ -136,6 +130,12 @@
           <label class="flag" for="vbb-speed-limit"><input type="checkbox" id="vbb-speed-limit" /> 压缩时长到</label>
           <input id="vbb-speed-sec" class="mono meta-input" type="number" min="3" max="120" step="1" value="20" />
           <span class="hint tight">秒</span>
+        </div>
+        <div class="field-row vbb-chunk-row only-coarse" style="flex-wrap:wrap;align-items:center;margin-top:0.4rem;gap:0.55rem">
+          <label class="flag" for="vbb-chunk-enable"><input type="checkbox" id="vbb-chunk-enable" checked /> 分块编码</label>
+          <label for="vbb-chunk-count">块数</label>
+          <input id="vbb-chunk-count" class="mono meta-input" type="number" min="1" max="64" step="1" inputmode="numeric" />
+          <span class="hint tight" id="vbb-chunk-hint">块数越少画质/体积越好，但越吃内存</span>
         </div>
         <div class="gif-progress" id="vbb-progress" hidden>
           <div class="gif-progress-head">
