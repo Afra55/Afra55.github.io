@@ -71,9 +71,28 @@ async function getPuppeteer() {
     return require("puppeteer-core");
   } catch (_) {
     const dir = os.tmpdir();
-    execSync("npm install --no-save puppeteer-core@25", { stdio: "pipe", cwd: dir });
+    installPuppeteerCore(dir);
     return require(path.join(dir, "node_modules", "puppeteer-core"));
   }
+}
+
+/** 运行时装 puppeteer-core：走网络，容易偶发失败 → 重试 3 次 + 优先用 npm 缓存 */
+function installPuppeteerCore(dir) {
+  let lastErr;
+  for (let i = 1; i <= 3; i++) {
+    try {
+      execSync("npm install --no-save --prefer-offline puppeteer-core@25", {
+        stdio: "pipe",
+        cwd: dir,
+        env: { ...process.env, npm_config_fetch_retries: "5", npm_config_fetch_retry_maxtimeout: "60000" },
+      });
+      return;
+    } catch (e) {
+      lastErr = e;
+      console.log(`piano-smoke: puppeteer-core 安装第 ${i} 次失败，重试…`);
+    }
+  }
+  throw lastErr;
 }
 
 function chromePath() {
