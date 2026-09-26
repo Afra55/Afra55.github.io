@@ -2315,13 +2315,13 @@
           return null;
         };
         let chosen = null;
-        // 1) 12fps 基准探针（宽度 420）
+        // 1) 12fps 基准探针（宽度 420）：常见情况一步到位，同时留作 12fps 的回退结果
         const p12 = await trial(12, Math.max(floorW, Math.min(srcCap, V2G_BLACKBOX_BASE_W)), V2G_BLACKBOX_QUALITY);
-        if (p12) {
-          // 12fps 有空间 → 认真试 15fps（宽度 420→380，再质量档）
-          const c15 = await fitFps(15);
-          if (c15) chosen = { enc: c15, fps: 15 };
-        }
+        // 2) 认真试 15fps（宽度 420→380，再质量档）。
+        //    不拿 p12 当门槛：12fps@420 超预算时，15fps 仍可能在更窄宽度/更低质量档下进得来——
+        //    用户要的是「帧率优先」，所谓「有空间」指的是 12fps 在任一合法档位能进预算。
+        const c15 = await fitFps(15);
+        if (c15) chosen = { enc: c15, fps: 15 };
         if (!chosen && p12) {
           // 15fps 各种尝试都不行 → 回到 12fps 的探针结果
           chosen = { enc: p12, fps: 12 };
