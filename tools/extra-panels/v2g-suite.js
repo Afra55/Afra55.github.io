@@ -2086,7 +2086,26 @@
           let cur = best;
           const atCap = () =>
             (srcW > 0 && cur.outW >= srcW - 2) || (Number(cur.maxW) || 0) >= Number(hardMax) - 2;
-          // 1) 没到宽度上限 → 用剩余预算自动增宽（只要 <95% 就补，不再只补 <70%）
+          // 0) 帧率优先：规则是「12 基准、15 封顶，够就上 15」，宁可为此把宽度收到 380。
+          //    选择阶段的估算对高帧率偏保守（会把 15 误判成「负担不起」），所以这里用真实编码验证：
+          //    先试当前宽度，不行再试宽度底线（380）。
+          const maxFps = V2G_BLACKBOX_FPS_LIST[0];
+          if (curFps < maxFps - 0.01) {
+            const widths = [Number(cur.maxW) || V2G_BLACKBOX_BASE_W];
+            if (widths[0] > V2G_BLACKBOX_MIN_ACCEPT_W + 2) widths.push(V2G_BLACKBOX_MIN_ACCEPT_W);
+            for (const w of widths) {
+              if (isAborted()) throw new Error("已取消");
+              onProgress(0.94, `试 ${maxFps}FPS · 宽${w}`);
+              const hi = await encodeAtWidthFps(maxFps, w, V2G_BLACKBOX_QUALITY);
+              if (hi?.blob?.size && hi.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
+                cur = hi;
+                curFps = maxFps;
+                vbbLog(`[vbb-phase] 帧率提升到 ${maxFps}（宽${w} · ${formatKb(hi.blob.size)}）`);
+                break;
+              }
+            }
+          }
+          // 1) 帧率定下来后，没到宽度上限 → 用剩余预算自动增宽（只要 <95% 就补）
           if (!atCap()) {
             onProgress(0.95, "体积有余 · 自动增宽");
             // gifski 已支持分段编码（内部自动切段），不再有「帧数/内存超限回退」问题；
