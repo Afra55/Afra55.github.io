@@ -1690,6 +1690,11 @@
         return V2G_BLACKBOX_FPS_LIST.slice();
       }
 
+      /** 帧率底线：时长 ≤20s 保 12fps（超预算靠降质量兜）；更长才允许降到 10fps */
+      function blackboxFpsFloor(span) {
+        return (Number(span) || 0) > 20.5 ? 10 : 12;
+      }
+
       /** 不因帧数上限跳过最高档：始终从最高档起试，体积由压缩(减色/缩放)兜底 */
       function resolveBlackboxFpsList(span, srcFps) {
         const list = blackboxFpsCandidates(srcFps);
@@ -2137,7 +2142,8 @@
               const target = V2G_BLACKBOX_MAX_BYTES * 0.9;
               const k = Math.min(1, Math.sqrt(target / Math.max(1, candidate.blob.size)));
               const rw = Math.max(V2G_BLACKBOX_RETRY_MIN_W, Math.floor((width * k) / 2) * 2);
-              const rf = Math.max(V2G_BLACKBOX_RETRY_MIN_FPS, Math.round(fps * k * 2) / 2);
+              // 帧率底线跟时长走：≤20s 不许掉到 12 以下，宁可靠压缩/减色兜
+              const rf = Math.max(blackboxFpsFloor(span / speed), Math.round(fps * k * 2) / 2);
               // 帧率已到 12fps 底线、体积还不够 → 优先「减色」而不是继续掉帧率
               // （减色比降帧率便宜得多：见 V2G_BLACKBOX_RETRY_QUALITY 注释）
               const retryQuality =
@@ -2288,6 +2294,7 @@
         const costPerFramePixel = calib.blob.size / (calibFrames * calibPixels);
         const aspect = Math.max(1, calib.outH || 1) / calibW;
         const effSpan = Math.max(0.1, span / speed);
+        const fpsFloor = blackboxFpsFloor(effSpan);
         const estBytesAt = (f, w) => costPerFramePixel * Math.max(1, Math.round(effSpan * f)) * w * w * aspect;
         // 只压「一轮」量出单轮压缩比（同内容同参数下大致恒定）→ 反推原始体积目标，让最终只压 1 轮
         let cRatio = 1;
@@ -2306,7 +2313,7 @@
         );
         let chosen = null;
         for (const f of fpsList) {
-          if (f < 10) continue; // 10fps 是流畅底线：主循环也不低于它（宁可多压/降色）
+          if (f < fpsFloor) continue; // 底线：≤20s 不低于 12fps（超预算靠降质量兜）
           const afford = Math.round(
             V2G_BLACKBOX_BASE_W *
               Math.min(4, Math.sqrt(rawTarget / Math.max(1, estBytesAt(f, V2G_BLACKBOX_BASE_W))))
@@ -2330,25 +2337,12 @@
           }
         }
         if (!chosen) {
-          // 连 380px 都做不到 1 轮 → 重压兜底：12fps 底线 + 380px + 降质量
-          const CREDIT = 2.5; // 硬压缩大约能省到这个倍数（实测 5 轮约 3.4×，取保守值）
-          const capRaw = V2G_BLACKBOX_MAX_BYTES * CREDIT;
+          // 连底线宽度在「质量档 1」都进不了 6MB → 保基准帧率（≤20s: 12fps；>20s: 10fps）+ 底线宽度，
+          // 靠质量阶梯 / 压缩把体积压进去。这就是「20s 及以内保 12fps」的兜底：
+          // 不再为了体积一路掉到 10fps（宽度底线 380 抬高后，这一步变得很常用）。
           const hardMin = V2G_BLACKBOX_MIN_ACCEPT_W; // 380
-          const fpsFloor = 10; // 10fps 是流畅底线
-          for (const f of fpsList.slice().sort((a, b) => a - b)) {
-            if (f < fpsFloor) continue;
-            const afford = Math.round(
-              V2G_BLACKBOX_BASE_W *
-                Math.min(4, Math.sqrt(capRaw / Math.max(1, estBytesAt(f, V2G_BLACKBOX_BASE_W))))
-            );
-            if (afford >= hardMin) {
-              // 宽度不超过底线，避免"为了更高帧率把宽度拉大→反而多压好几轮"
-              chosen = { fps: f, width: Math.max(hardMin, Math.min(floorW, afford)) };
-              break;
-            }
-          }
-          if (!chosen) chosen = { fps: fpsList[fpsList.length - 1], width: hardMin };
-          // 预算吃紧 → 降质量档（gifski 自适应量化 / ffmpeg 等价降色）换「少压一轮」
+          chosen = { fps: Math.max(fpsFloor, fpsList[fpsList.length - 1]), width: hardMin };
+          // 预算吃紧 → 直接从中档起步（gifski 自适应量化 / ffmpeg 等价降色）
           chosen.quality = V2G_BLACKBOX_QUALITY_LADDER[1];
         }
         // 实验/排查用（仅 ?debug）：localStorage devtools-vbb-force="fps:宽" 强制指定档位
