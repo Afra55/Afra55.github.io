@@ -1616,7 +1616,17 @@
           ? ` · 已抽稀到 ${c.frameCount} 帧（约 ${effFps.toFixed(1)} FPS）`
           : "";
         const widthTip = c.maxW ? ` · 宽≤${c.maxW}` : "";
-        return `${c.fps} FPS${widthTip} · ${c.outW}×${c.outH} · ${formatKb(c.blob.size)}${compressTip}${capTip}`;
+        // 质量档位：gifski 显示其自适应量化 quality（1-100），ffmpeg 回退显示色数
+        let qTip = "";
+        if (c.engine === "gifski") {
+          const gq = Number(c.gifskiQuality);
+          qTip = Number.isFinite(gq)
+            ? ` · 画质 ${gq}${c.quality && c.quality > 1 ? `（档${c.quality}）` : ""}`
+            : "";
+        } else if (c.maxColors) {
+          qTip = ` · ${c.maxColors} 色`;
+        }
+        return `${c.fps} FPS${widthTip} · ${c.outW}×${c.outH} · ${formatKb(c.blob.size)}${qTip}${compressTip}${capTip}`;
       }
   
       function summarizeBlackboxCandidates(list) {
@@ -6201,6 +6211,11 @@
             continue;
           }
           if (/^宽≤/.test(part) || /^已压 /.test(part)) continue;
+          const qm = part.match(/^画质\s*(\d+)/);
+          if (qm) {
+            out.push(`画质${qm[1]}`);
+            continue;
+          }
           if (/^已降宽/.test(part)) {
             out.push(part.replace("已降宽", "降宽"));
             continue;
@@ -6253,7 +6268,7 @@
             if (/^\d+\s*×\s*\d+$/.test(part) || /^GIF\s*\d+×\d+$/.test(part)) return; // 尺寸已在前面
             if (/^\d+\s*FPS$/i.test(part)) return; // 帧率已在最前
             if (/^宽/.test(part)) return; // 宽度不再展示
-            if (/^已压|^超限|^已抽稀|^降宽|^沿用|^耗时|^加速|^已重启/.test(part)) bits.push(part);
+            if (/^已压|^超限|^已抽稀|^降宽|^沿用|^耗时|^加速|^已重启|^画质|^\d+\s*色/.test(part)) bits.push(part);
           });
         }
         if (c.error) bits.push(c.error);
@@ -6271,6 +6286,12 @@
         });
         if (encoded.fps) bits.push(`${encoded.fps} FPS`);
         if (encoded.outW && encoded.outH) bits.push(`${encoded.outW}×${encoded.outH}`);
+        // 质量档位：gifski 显示自适应量化 quality，ffmpeg 回退显示色数
+        if (encoded.engine === "gifski" && Number.isFinite(Number(encoded.gifskiQuality))) {
+          bits.push(`画质 ${Number(encoded.gifskiQuality)}${encoded.quality > 1 ? `(档${encoded.quality})` : ""}`);
+        } else if (encoded.maxColors) {
+          bits.push(`${encoded.maxColors} 色`);
+        }
         if (encoded.compressRounds > 0) bits.push(`已压 ${encoded.compressRounds} 轮`);
         if (encoded.maxW) bits.push(`宽≤${encoded.maxW}`);
         if (encoded.framesCapped && encoded.frameCount) bits.push(`已抽稀 ${encoded.frameCount} 帧`);
