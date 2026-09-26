@@ -969,6 +969,19 @@
         return { x, y, w, h };
       }
 
+      /**
+       * 是否需要轻度降噪：只有「极大倍率下采样（≥4×）」时才开 hqdn3d。
+       * 实测它不是无损的——会抹掉约 20% 的数据量（就是细节），对录屏/干净源纯粹是模糊。
+       * 你的 1170→380 是 3.08×，属于「lanczos 已能抗混叠」的区间，所以默认不降噪、画面更清晰。
+       * 若遇到噪点很重的实拍源，把 4 调回 3 即可。
+       */
+      const V2G_DENOISE_MIN_DOWNSCALE = 4;
+      function needDenoise(srcEffW, outW) {
+        const s = Number(srcEffW);
+        const o = Number(outW);
+        return s > 0 && o > 0 && s / o >= V2G_DENOISE_MIN_DOWNSCALE;
+      }
+
       async function encodeV2gGifFfmpeg(opts) {
         const tPhase = performance.now();
         const file = opts.file || v2gSourceFile;
@@ -1137,8 +1150,9 @@
           baseArgs.push("-t", String(encodeT), "-i", encodeInput);
           if (usedWm) baseArgs.push("-i", wmName);
           const outArgs = ["-frames:v", String(frameCount), "-loop", "0", "-y", outName];
-          let code = await ffmpeg.exec([...baseArgs, ...buildFilterArgs(true), ...outArgs]);
-          if (code !== 0) {
+          const useDenoise = needDenoise(effW, outW);
+          let code = await ffmpeg.exec([...baseArgs, ...buildFilterArgs(useDenoise), ...outArgs]);
+          if (code !== 0 && useDenoise) {
             vbbLog("[vbb] 带降噪编码失败（可能 hqdn3d 未编入核心），回退无降噪重跑");
             code = await ffmpeg.exec([...baseArgs, ...buildFilterArgs(false), ...outArgs]);
           }
@@ -1468,8 +1482,9 @@
             baseArgs.push("-t", String(dur), "-i", encodeInput);
             if (usedWm) baseArgs.push("-i", wmName);
             const outArgs = ["-frames:v", String(chunkFrames), "-f", "rawvideo", "-pix_fmt", "rgba", "-y", rawName];
-            let code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(true), ...outArgs]);
-            if (code !== 0) {
+            const useDenoise = needDenoise(effW, outW);
+            let code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(useDenoise), ...outArgs]);
+            if (code !== 0 && useDenoise) {
               code = await ffmpeg.exec([...baseArgs, ...buildRawArgs(false), ...outArgs]);
             }
             if (aborted()) throw new Error("已取消");
@@ -2318,7 +2333,10 @@
             if (e) return e;
             if (w - V2G_BLACKBOX_WIDTH_STEP < floorW) break;
           }
-          for (let qi = 1; qi < V2G_BLACKBOX_QUALITY_LADDER.length; qi++) {
+          // 15fps 只允许让渡到档 15（gifski 73）：再往下不如用 12fps 的高质量，
+          // 免得「为 3fps 把画质 92→55 全让光」（55 档抖动/色带很明显）
+          const maxQi = fps >= V2G_BLACKBOX_FPS_LIST[0] - 0.01 ? 2 : V2G_BLACKBOX_QUALITY_LADDER.length - 1;
+          for (let qi = 1; qi <= maxQi; qi++) {
             const e = await trial(fps, floorW, V2G_BLACKBOX_QUALITY_LADDER[qi]);
             if (e) return e;
           }
