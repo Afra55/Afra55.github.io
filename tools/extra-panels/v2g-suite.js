@@ -2310,13 +2310,13 @@
           );
           return enc.blob.size <= V2G_BLACKBOX_MAX_BYTES ? enc : null;
         };
-        // 对某帧率做「宽度 420→380 → 质量档」梯度尝试，返回第一个进预算的
+        // 对某帧率做「宽度 420→400→380（步进 20）→ 底线宽度上降质量档」梯度尝试，返回第一个进预算的
         const fitFps = async (fps) => {
-          const widths = [Math.max(floorW, Math.min(srcCap, V2G_BLACKBOX_BASE_W))];
-          if (widths[0] > floorW + 2) widths.push(floorW);
-          for (const w of widths) {
+          const wTop = Math.max(floorW, Math.min(srcCap, V2G_BLACKBOX_BASE_W));
+          for (let w = wTop; w >= floorW; w -= V2G_BLACKBOX_WIDTH_STEP) {
             const e = await trial(fps, w, V2G_BLACKBOX_QUALITY);
             if (e) return e;
+            if (w - V2G_BLACKBOX_WIDTH_STEP < floorW) break;
           }
           for (let qi = 1; qi < V2G_BLACKBOX_QUALITY_LADDER.length; qi++) {
             const e = await trial(fps, floorW, V2G_BLACKBOX_QUALITY_LADDER[qi]);
@@ -2325,19 +2325,11 @@
           return null;
         };
         let chosen = null;
-        // 1) 12fps 基准探针（宽度 420）：常见情况一步到位，同时留作 12fps 的回退结果
-        const p12 = await trial(12, Math.max(floorW, Math.min(srcCap, V2G_BLACKBOX_BASE_W)), V2G_BLACKBOX_QUALITY);
-        // 2) 认真试 15fps（宽度 420→380，再质量档）。
-        //    不拿 p12 当门槛：12fps@420 超预算时，15fps 仍可能在更窄宽度/更低质量档下进得来——
-        //    用户要的是「帧率优先」，所谓「有空间」指的是 12fps 在任一合法档位能进预算。
+        // 先认真试 15fps（宽度 420→400→380，再底线宽度上降质量档）——帧率优先、少编一次；
+        // 只有 15fps 各种档位都进不了 6MB，才退到 12fps；再不行（>20s）才降 10fps。
         const c15 = await fitFps(15);
         if (c15) chosen = { enc: c15, fps: 15 };
-        if (!chosen && p12) {
-          // 15fps 各种尝试都不行 → 回到 12fps 的探针结果
-          chosen = { enc: p12, fps: 12 };
-        }
         if (!chosen) {
-          // 12fps@420 就超预算 → 12fps 认真尝试（宽度 380 + 质量档）
           const c12 = await fitFps(12);
           if (c12) chosen = { enc: c12, fps: 12 };
         }
