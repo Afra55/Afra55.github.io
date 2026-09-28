@@ -1,7 +1,7 @@
 <section id="vtrim" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-vtrim">
       <div class="panel-head">
         <h1>视频修剪</h1>
-        <p>浏览器内 FFmpeg：修剪片头片尾、裁边框（接近系统相册的基础剪辑，非原生级流畅）。手机可直接用；安卓导出后可系统分享存相册。<span class="ff-desktop-only-hint">电脑批量可选 <a href="#ffbridge">本机桥</a>。</span><span id="vtrim-adapt-tip" class="hint tight"></span></p>
+        <p>浏览器内 FFmpeg：修剪片头片尾、裁边框。胶片与预览分离、拖动手势气泡、跟手 scrub；仍非 iOS 原生级流畅。手机可直接用；安卓导出后可系统分享存相册。<span class="ff-desktop-only-hint">电脑批量可选 <a href="#ffbridge">本机桥</a>。</span><span id="vtrim-adapt-tip" class="hint tight"></span></p>
       </div>
       <div class="panel-body">
         <div class="btn-row tool-actions">
@@ -58,12 +58,16 @@
             <canvas id="vtrim-filmstrip" class="vtrim-filmstrip" width="640" height="56" aria-hidden="true"></canvas>
             <div class="vtrim-sel" id="vtrim-sel">
               <span class="vtrim-window" id="vtrim-window" aria-hidden="true"></span>
-              <span class="vtrim-handle vtrim-handle-start" id="vtrim-handle-start" role="slider" aria-label="片头" tabindex="0"></span>
-              <span class="vtrim-handle vtrim-handle-end" id="vtrim-handle-end" role="slider" aria-label="片尾" tabindex="0"></span>
+              <span class="vtrim-handle vtrim-handle-start" id="vtrim-handle-start" role="slider" aria-label="片头" tabindex="0">
+                <span class="vtrim-handle-tip" id="vtrim-tip-start" hidden>0:00</span>
+              </span>
+              <span class="vtrim-handle vtrim-handle-end" id="vtrim-handle-end" role="slider" aria-label="片尾" tabindex="0">
+                <span class="vtrim-handle-tip" id="vtrim-tip-end" hidden>0:00</span>
+              </span>
               <span class="vtrim-playhead" id="vtrim-playhead" aria-hidden="true"></span>
             </div>
           </div>
-          <p class="hint tight">黄框两端拖片头/片尾 · 拖中间整体平移 · 点胶片跳转 · 播放只在保留区间循环</p>
+          <p class="hint tight">黄框两端拖片头/片尾（松手贴头尾会吸附）· 拖中间平移 · 点胶片跳转 · 预览区左右滑 scrub · 区间循环播</p>
           </div>
 
           <div class="vtrim-crop-tools" id="vtrim-crop-panel" hidden>

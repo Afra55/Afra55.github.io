@@ -62,16 +62,24 @@
     return w / h;
   }
 
-  function waitSeek(video) {
+  function waitSeek(videoEl) {
     return new Promise((resolve) => {
-      if (!video) return resolve();
+      if (!videoEl) return resolve();
       const done = () => {
-        video.removeEventListener("seeked", done);
+        videoEl.removeEventListener("seeked", done);
         resolve();
       };
-      video.addEventListener("seeked", done);
+      videoEl.addEventListener("seeked", done);
       setTimeout(done, 800);
     });
+  }
+
+  function hapticLight() {
+    try {
+      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+        navigator.vibrate(8);
+      }
+    } catch (_) {}
   }
 
   const fileInput = $("#vtrim-file");
@@ -97,8 +105,23 @@
   const selEl = $("#vtrim-sel");
   const handleStart = $("#vtrim-handle-start");
   const handleEnd = $("#vtrim-handle-end");
+  const tipStart = $("#vtrim-tip-start");
+  const tipEnd = $("#vtrim-tip-end");
   const playhead = $("#vtrim-playhead");
   const windowEl = $("#vtrim-window");
+
+  // 独立胶片探针：抽帧不打断主预览（接近系统相册「边看边出条」）
+  const filmVideo = document.createElement("video");
+  filmVideo.muted = true;
+  filmVideo.preload = "auto";
+  filmVideo.playsInline = true;
+  filmVideo.setAttribute("playsinline", "");
+  filmVideo.setAttribute("webkit-playsinline", "");
+  filmVideo.setAttribute("aria-hidden", "true");
+  filmVideo.tabIndex = -1;
+  filmVideo.style.cssText =
+    "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1";
+  document.body.appendChild(filmVideo);
   const nudgeStartM = $("#vtrim-nudge-start-m");
   const nudgeStartP = $("#vtrim-nudge-start-p");
   const nudgeEndM = $("#vtrim-nudge-end-m");
@@ -378,6 +401,7 @@
     flipH = false;
     aspect = "free";
     filmReady = false;
+    filmGen += 1;
     playing = false;
     editMode = "trim";
     history = [];
@@ -396,13 +420,23 @@
     const audioFmtSeg = $("#vtrim-audio-fmt-seg");
     if (audioFmtSeg) audioFmtSeg.hidden = true;
     if (cropLive) cropLive.hidden = true;
-    if (filmLoading) filmLoading.hidden = true;
+    if (filmLoading) {
+      filmLoading.hidden = true;
+      filmLoading.textContent = "正在生成胶片预览…";
+    }
     previewWrap?.classList.remove("is-film-loading", "is-playing");
+    timeline?.classList.remove("is-dragging", "is-dragging-window", "is-min-span", "is-pulse");
+    if (tipStart) tipStart.hidden = true;
+    if (tipEnd) tipEnd.hidden = true;
     if (exportBar) exportBar.hidden = true;
     revokeResult();
     video.removeAttribute("src");
     try {
       video.load();
+    } catch (_) {}
+    filmVideo.removeAttribute("src");
+    try {
+      filmVideo.load();
     } catch (_) {}
     if (stage) stage.hidden = true;
     if (meta) meta.textContent = DEFAULT_META;
@@ -479,7 +513,7 @@
       modeHint.textContent =
         editMode === "crop"
           ? "拖绿框裁边框 · 双击重置 · 预览区左右滑 scrub"
-          : "拖黄框两端 · 预览区点按播放 · 左右滑 scrub";
+          : "拖黄框两端看时间气泡 · 预览区点按播放 · 左右滑 scrub";
     }
     // crop overlay only in crop mode (and when enabled)
     syncCropBoxVisibility();
@@ -670,6 +704,21 @@
     layoutCropBox();
   }
 
+  function syncHandleTips() {
+    if (tipStart) tipStart.textContent = formatClock(startSec);
+    if (tipEnd) tipEnd.textContent = formatClock(endSec);
+    const dragging = Boolean(drag);
+    const showStart = dragging && (drag.kind === "start" || drag.kind === "window");
+    const showEnd = dragging && (drag.kind === "end" || drag.kind === "window");
+    if (tipStart) tipStart.hidden = !showStart;
+    if (tipEnd) tipEnd.hidden = !showEnd;
+  }
+
+  function previewSeek(t) {
+    scrubSeekWanted = clamp(t, 0, Math.max(0, duration - 0.04));
+    pumpPreviewScrubSeek();
+  }
+
   function updateLabels() {
     const now = video.currentTime || startSec;
     if (clockEl) clockEl.textContent = `${formatClock(now)} / ${formatClock(duration)}`;
@@ -677,6 +726,7 @@
     if (rangeLabel) {
       rangeLabel.textContent = `保留 ${formatClock(span)}（${formatClock(startSec)}–${formatClock(endSec)}）`;
     }
+    syncHandleTips();
     updateSummary();
   }
 
@@ -802,15 +852,51 @@
     }
   }
 
+  async function ensureFilmProbe() {
+    if (!objectUrl) return false;
+    if (filmVideo.src !== objectUrl) {
+      filmVideo.src = objectUrl;
+    }
+    if (filmVideo.videoWidth > 0 && filmVideo.readyState >= 1) return true;
+    try {
+      await new Promise((resolve, reject) => {
+        const onMeta = () => {
+          cleanup();
+          resolve();
+        };
+        const onErr = () => {
+          cleanup();
+          reject(new Error("film meta"));
+        };
+        const cleanup = () => {
+          filmVideo.removeEventListener("loadedmetadata", onMeta);
+          filmVideo.removeEventListener("error", onErr);
+        };
+        filmVideo.addEventListener("loadedmetadata", onMeta);
+        filmVideo.addEventListener("error", onErr);
+        if (filmVideo.readyState >= 1 && filmVideo.videoWidth) {
+          cleanup();
+          resolve();
+        }
+      });
+      return filmVideo.videoWidth > 0;
+    } catch (_) {
+      return false;
+    }
+  }
+
   async function buildFilmstrip() {
-    if (!filmstrip || !video.videoWidth || !duration) return;
+    if (!filmstrip || !duration) return;
     const gen = ++filmGen;
     filmReady = false;
-    if (filmLoading) filmLoading.hidden = false;
+    if (filmLoading) {
+      filmLoading.hidden = false;
+      filmLoading.textContent = "正在生成胶片预览…";
+    }
     previewWrap?.classList.add("is-film-loading");
     const dpr = Math.min(2, window.devicePixelRatio || 1);
     const cssW = timeline?.clientWidth || 640;
-    const cssH = Math.max(56, timeline?.clientHeight || 64);
+    const cssH = Math.max(56, Math.min(72, timeline?.clientHeight || 64));
     filmstrip.width = Math.round(cssW * dpr);
     filmstrip.height = Math.round(cssH * dpr);
     filmstrip.style.width = "100%";
@@ -825,37 +911,56 @@
     const n =
       duration > 900 ? Math.min(nBase, 10) : duration > 300 ? Math.min(nBase, 14) : duration > 120 ? Math.min(nBase, 20) : nBase;
     const tw = cssW / n;
-    const wasTime = video.currentTime;
-    const wasPaused = video.paused;
-    try {
-      video.pause();
-    } catch (_) {}
+
+    const probeOk = await ensureFilmProbe();
+    if (gen !== filmGen) return;
+    // 探针失败时回退主视频（会短暂打断预览，但保证胶片仍能出）
+    const probe = probeOk ? filmVideo : video;
+    const pauseMain = probe === video;
+    const wasTime = pauseMain ? video.currentTime : 0;
+    const wasPaused = pauseMain ? video.paused : true;
+    if (pauseMain) {
+      try {
+        video.pause();
+      } catch (_) {}
+    }
+
     for (let i = 0; i < n; i++) {
       if (gen !== filmGen) return;
       const t = (duration * i) / Math.max(1, n - 1);
       try {
-        video.currentTime = Math.min(duration - 0.05, Math.max(0, t));
-        await waitSeek(video);
+        probe.currentTime = Math.min(duration - 0.05, Math.max(0, t));
+        await waitSeek(probe);
         if (gen !== filmGen) return;
-        const vw = video.videoWidth;
-        const vh = video.videoHeight;
+        const vw = probe.videoWidth || video.videoWidth;
+        const vh = probe.videoHeight || video.videoHeight;
+        if (!(vw > 0 && vh > 0)) throw new Error("no frame");
         const scale = Math.max(tw / vw, cssH / vh);
         const dw = vw * scale;
         const dh = vh * scale;
-        ctx.drawImage(video, i * tw + (tw - dw) / 2, (cssH - dh) / 2, dw, dh);
+        ctx.drawImage(probe, i * tw + (tw - dw) / 2, (cssH - dh) / 2, dw, dh);
       } catch (_) {
         ctx.fillStyle = window.DevToolsTheme?.cssVar?.("--bg-1") || window.DevToolsTheme?.stageBg?.() || "#1a2436";
         ctx.fillRect(i * tw, 0, tw, cssH);
       }
+      if (filmLoading) filmLoading.textContent = `胶片预览 ${i + 1}/${n}`;
+      // 让出一帧，选片后仍可点播放 / 拖黄框
+      await new Promise((r) => requestAnimationFrame(r));
     }
-    try {
-      video.currentTime = clamp(wasTime, startSec, Math.max(startSec, endSec - 0.04));
-      await waitSeek(video);
-      if (!wasPaused) video.play().catch(() => {});
-    } catch (_) {}
+
+    if (pauseMain) {
+      try {
+        video.currentTime = clamp(wasTime, startSec, Math.max(startSec, endSec - 0.04));
+        await waitSeek(video);
+        if (!wasPaused) video.play().catch(() => {});
+      } catch (_) {}
+    }
     if (gen !== filmGen) return;
     filmReady = true;
-    if (filmLoading) filmLoading.hidden = true;
+    if (filmLoading) {
+      filmLoading.hidden = true;
+      filmLoading.textContent = "正在生成胶片预览…";
+    }
     previewWrap?.classList.remove("is-film-loading");
     paintTimeline();
   }
@@ -910,10 +1015,16 @@
 
   function snapTime(t, which) {
     if (which === "start") {
-      if (t <= SNAP_SEC) return 0;
+      if (t <= SNAP_SEC) {
+        if (t > 0) hapticLight();
+        return 0;
+      }
       return t;
     }
-    if (t >= duration - SNAP_SEC) return duration;
+    if (t >= duration - SNAP_SEC) {
+      if (t < duration) hapticLight();
+      return duration;
+    }
     return t;
   }
 
@@ -924,9 +1035,12 @@
     syncActiveHandleUi();
     const atMin = Math.abs(endSec - startSec - MIN_SPAN) < 0.02;
     timeline?.classList.toggle("is-min-span", atMin);
-    if (atMin && Math.abs(prev - startSec) > 0.001) timeline?.classList.add("is-pulse");
-    if (preview) seekTo(startSec, { force: true });
-    else if (video.currentTime < startSec) seekTo(startSec);
+    if (atMin && Math.abs(prev - startSec) > 0.001) {
+      timeline?.classList.add("is-pulse");
+      hapticLight();
+    }
+    if (preview) previewSeek(startSec);
+    else if (video.currentTime < startSec) previewSeek(startSec);
     paintTimeline();
     updateLabels();
     if (record) pushHistory();
@@ -939,9 +1053,12 @@
     syncActiveHandleUi();
     const atMin = Math.abs(endSec - startSec - MIN_SPAN) < 0.02;
     timeline?.classList.toggle("is-min-span", atMin);
-    if (atMin && Math.abs(prev - endSec) > 0.001) timeline?.classList.add("is-pulse");
-    if (preview) seekTo(Math.max(startSec, endSec - 0.04), { force: true });
-    else if (video.currentTime > endSec) seekTo(endSec - 0.04);
+    if (atMin && Math.abs(prev - endSec) > 0.001) {
+      timeline?.classList.add("is-pulse");
+      hapticLight();
+    }
+    if (preview) previewSeek(Math.max(startSec, endSec - 0.04));
+    else if (video.currentTime > endSec) previewSeek(endSec - 0.04);
     paintTimeline();
     updateLabels();
     if (record) pushHistory();
@@ -997,7 +1114,7 @@
     }
     startSec = nextStart;
     endSec = nextEnd;
-    seekTo(clamp(video.currentTime || startSec, startSec, Math.max(startSec, endSec - 0.04)));
+    previewSeek(clamp(video.currentTime || startSec, startSec, Math.max(startSec, endSec - 0.04)));
     paintTimeline();
     updateLabels();
   }
@@ -1325,6 +1442,7 @@
     sourceFile = file;
     objectUrl = URL.createObjectURL(file);
     video.src = objectUrl;
+    filmVideo.src = objectUrl;
     video.muted = true;
     muted = true;
     syncMuteUi();
@@ -1366,7 +1484,8 @@
       setButtons();
       toast("已选择，仅本机处理，不会上传");
       engine()?.prewarm?.().catch(() => {});
-      await buildFilmstrip();
+      // 胶片与预览并行：不阻塞首帧预览
+      buildFilmstrip().catch(() => {});
       seekTo(0);
     } catch (err) {
       setError(errorEl, err?.message || String(err));
@@ -1539,6 +1658,7 @@
     const ratio = ratioFromClientX(e.clientX);
     const t = ratio * duration;
     const kind = hitKind(ratio, e.target);
+    timeline?.classList.add("is-dragging");
     if (kind === "start") {
       drag = { kind: "start", pointerId: e.pointerId };
       handleStart?.setPointerCapture?.(e.pointerId);
@@ -1557,8 +1677,9 @@
       };
       timeline?.classList.add("is-dragging-window");
       windowEl?.setPointerCapture?.(e.pointerId);
+      syncHandleTips();
     } else {
-      seekTo(t);
+      previewSeek(clamp(t, startSec, Math.max(startSec, endSec - 0.04)));
       drag = { kind: "seek", pointerId: e.pointerId };
     }
     e.preventDefault();
@@ -1571,18 +1692,20 @@
       startSec = drag.originStart;
       endSec = drag.originEnd;
       shiftWindow(deltaSec);
+      syncHandleTips();
       return;
     }
     const t = ratioFromClientX(e.clientX) * duration;
     if (drag.kind === "start") setStart(t);
     else if (drag.kind === "end") setEnd(t);
-    else seekTo(clamp(t, startSec, endSec));
+    else previewSeek(clamp(t, startSec, Math.max(startSec, endSec - 0.04)));
   }
   function onTimelinePointerUp(e) {
     if (!drag || drag.pointerId !== e.pointerId) return;
     finishTrimDrag();
-    timeline?.classList.remove("is-dragging-window");
+    timeline?.classList.remove("is-dragging-window", "is-dragging");
     drag = null;
+    syncHandleTips();
   }
   timeline?.addEventListener("pointerdown", onTimelinePointerDown);
   timeline?.addEventListener("pointermove", onTimelinePointerMove);
@@ -1701,6 +1824,7 @@
     }
     displayRectToCrop(x, y, w, h);
     layoutCropBox();
+    scheduleCropLive();
   }
   function onCropPointerUp(e) {
     if (!cropDrag || cropDrag.pointerId !== e.pointerId) return;
