@@ -66,6 +66,242 @@
     }
   }
 
+  /**
+   * 网页无法静默写入安卓 MediaStore/相册。
+   * 可行路径：Web Share API 调起系统分享，用户再选「相册 / 图库 / 文件」。
+   * 长任务后可能丢用户手势 → share 失败时退回下载，并提示手动点「分享」。
+   */
+  const AUTO_SHARE_GALLERY_KEY = "devtools-auto-share-gallery-v1";
+
+  function isLikelyMobileMedia() {
+    try {
+      if (window.matchMedia("(max-width: 900px)").matches) return true;
+    } catch (_) {}
+    return /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || "");
+  }
+
+  function canShareMediaFiles() {
+    if (typeof navigator.share !== "function") return false;
+    if (typeof File === "undefined") return false;
+    try {
+      if (typeof navigator.canShare !== "function") {
+        // 旧 WebView 只有 share、没有 canShare：仍允许尝试
+        return isLikelyMobileMedia();
+      }
+      const probe = new File([new Uint8Array([71, 73, 70, 56])], "probe.gif", {
+        type: "image/gif",
+      });
+      return Boolean(navigator.canShare({ files: [probe] }));
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function preferShareToGallery() {
+    return isLikelyMobileMedia() && canShareMediaFiles();
+  }
+
+  function isAutoShareGalleryEnabled() {
+    try {
+      const v = localStorage.getItem(AUTO_SHARE_GALLERY_KEY);
+      if (v === "1") return true;
+      if (v === "0") return false;
+      // 未设置：手机且支持文件分享时默认开
+      return preferShareToGallery();
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function setAutoShareGalleryEnabled(on) {
+    try {
+      localStorage.setItem(AUTO_SHARE_GALLERY_KEY, on ? "1" : "0");
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function syncAutoShareGalleryToggles(checked) {
+    document.querySelectorAll("[data-auto-share-gallery]").forEach((el) => {
+      if (el instanceof HTMLInputElement) el.checked = checked;
+    });
+  }
+
+  function revealAutoShareGalleryUi() {
+    const show = preferShareToGallery();
+    document.querySelectorAll("[data-auto-share-gallery-wrap]").forEach((el) => {
+      if (el instanceof HTMLElement) el.hidden = !show;
+    });
+  }
+
+  function bindAutoShareGalleryToggles() {
+    revealAutoShareGalleryUi();
+    const boxes = [...document.querySelectorAll("[data-auto-share-gallery]")].filter(
+      (el) => el instanceof HTMLInputElement
+    );
+    const initial = isAutoShareGalleryEnabled();
+    syncAutoShareGalleryToggles(initial);
+    boxes.forEach((el) => {
+      el.addEventListener("change", () => {
+        const on = Boolean(el.checked);
+        setAutoShareGalleryEnabled(on);
+        syncAutoShareGalleryToggles(on);
+        toast(
+          on
+            ? "已开启：完成后弹出系统分享（可选存到相册）"
+            : "已关闭：完成后不自动分享"
+        );
+      });
+    });
+    try {
+      window.DevToolsAutoShareGallery = {
+        isEnabled: isAutoShareGalleryEnabled,
+        setEnabled: (on) => {
+          setAutoShareGalleryEnabled(on);
+          syncAutoShareGalleryToggles(Boolean(on));
+        },
+        canShare: canShareMediaFiles,
+        preferShare: preferShareToGallery,
+      };
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  function guessMediaShareMime(filename, blob) {
+    const fromBlob = String(blob?.type || "").trim();
+    if (fromBlob && fromBlob !== "application/octet-stream") return fromBlob;
+    const name = String(filename || "").toLowerCase();
+    if (name.endsWith(".gif")) return "image/gif";
+    if (name.endsWith(".webp")) return "image/webp";
+    if (name.endsWith(".png")) return "image/png";
+    if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+    if (name.endsWith(".mp4")) return "video/mp4";
+    if (name.endsWith(".webm")) return "video/webm";
+    if (name.endsWith(".zip")) return "application/zip";
+    return fromBlob || "application/octet-stream";
+  }
+
+  function triggerBlobDownload(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename || "download.bin";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => {
+      try {
+        URL.revokeObjectURL(url);
+      } catch (_) {}
+    }, 2000);
+  }
+
+  /**
+   * @returns {Promise<{ ok: boolean, shared: boolean, cancelled: boolean, downloaded: boolean, reason?: string }>}
+   */
+  async function shareMediaBlob(blob, filename, opts = {}) {
+    const name = String(filename || "file.bin").replace(/[\\/:*?"<>|]+/g, "_") || "file.bin";
+    const title = opts.title || name;
+    if (!blob) return { ok: false, shared: false, cancelled: false, downloaded: false, reason: "empty" };
+    if (!preferShareToGallery()) {
+      if (opts.fallbackDownload !== false) {
+        triggerBlobDownload(blob, name);
+        return { ok: true, shared: false, cancelled: false, downloaded: true };
+      }
+      return { ok: false, shared: false, cancelled: false, downloaded: false, reason: "no-share" };
+    }
+    try {
+      const mime = guessMediaShareMime(name, blob);
+      const file = new File([blob], name, { type: mime });
+      const payload = { files: [file], title };
+      if (typeof navigator.canShare === "function" && !navigator.canShare(payload)) {
+        if (opts.fallbackDownload !== false) {
+          triggerBlobDownload(blob, name);
+          return { ok: true, shared: false, cancelled: false, downloaded: true, reason: "canShare-false" };
+        }
+        return { ok: false, shared: false, cancelled: false, downloaded: false, reason: "canShare-false" };
+      }
+      await navigator.share(payload);
+      return { ok: true, shared: true, cancelled: false, downloaded: false };
+    } catch (err) {
+      const msg = String(err && (err.message || err.name) || "");
+      if (err && (err.name === "AbortError" || /abort|cancel|取消/i.test(msg))) {
+        return { ok: false, shared: false, cancelled: true, downloaded: false, reason: "abort" };
+      }
+      // 常见：长任务后丢失用户手势 NotAllowedError
+      if (opts.fallbackDownload !== false) {
+        triggerBlobDownload(blob, name);
+        return {
+          ok: true,
+          shared: false,
+          cancelled: false,
+          downloaded: true,
+          reason: msg || "share-failed",
+        };
+      }
+      return { ok: false, shared: false, cancelled: false, downloaded: false, reason: msg || "share-failed" };
+    }
+  }
+
+  /**
+   * 产出后自动分享（若勾选）。单文件直接分享；多文件打成 zip 再分享。
+   * @param {{ name: string, blob: Blob }[]} entries
+   * @param {{ zipName?: string, title?: string, zipBlobs?: Function }} opts
+   */
+  async function maybeAutoShareGallery(entries, opts = {}) {
+    if (!isAutoShareGalleryEnabled() || !preferShareToGallery()) {
+      return { attempted: false, shared: false };
+    }
+    const list = (entries || []).filter((e) => e && e.blob && e.blob.size > 0);
+    if (!list.length) return { attempted: false, shared: false };
+    try {
+      if (list.length === 1) {
+        const r = await shareMediaBlob(list[0].blob, list[0].name, {
+          title: opts.title || list[0].name,
+          fallbackDownload: false,
+        });
+        if (r.shared) {
+          toast("已调起系统分享 · 选「相册 / 图库」即可保存");
+          return { attempted: true, shared: true };
+        }
+        if (r.cancelled) return { attempted: true, shared: false, cancelled: true };
+        toast("自动分享未弹出（可能超时丢手势）· 请点「分享到相册」");
+        return { attempted: true, shared: false, reason: r.reason };
+      }
+      // 多段：优先分享 zip（一次选相册）
+      let zipBlob = null;
+      let zipName = opts.zipName || "gifs.zip";
+      if (typeof opts.zipBlobs === "function") {
+        const packed = await opts.zipBlobs(list, zipName);
+        zipBlob = packed?.blob || packed;
+        if (packed?.name) zipName = packed.name;
+      } else if (typeof JSZip === "function") {
+        const zip = new JSZip();
+        list.forEach((e) => zip.file(e.name, e.blob));
+        zipBlob = await zip.generateAsync({ type: "blob" });
+      }
+      if (!zipBlob) {
+        toast("请点各段「分享到相册」逐个保存");
+        return { attempted: true, shared: false, reason: "no-zip" };
+      }
+      const r = await shareMediaBlob(zipBlob, zipName, {
+        title: opts.title || zipName,
+        fallbackDownload: false,
+      });
+      if (r.shared) {
+        toast("已调起系统分享 · 选「文件 / 相册」保存整包");
+        return { attempted: true, shared: true };
+      }
+      if (r.cancelled) return { attempted: true, shared: false, cancelled: true };
+      toast("自动分享未弹出 · 请点「打包下载」或各段「分享到相册」");
+      return { attempted: true, shared: false, reason: r.reason };
+    } catch (err) {
+      toast("自动分享失败 · 请手动点「分享到相册」");
+      return { attempted: true, shared: false, reason: String(err && err.message) || "error" };
+    }
+  }
+
   const GIF_COMPRESS_PRESETS = {
     light: { label: "轻度", baseLossy: 35 },
     standard: { label: "标准", baseLossy: 55 },
@@ -1310,6 +1546,10 @@
 
   window.DevToolsExtraMedia = {
     isAutoPackZipEnabled, setAutoPackZipEnabled, syncAutoPackZipToggles, bindAutoPackZipToggles,
+    AUTO_SHARE_GALLERY_KEY, isLikelyMobileMedia, canShareMediaFiles, preferShareToGallery,
+    isAutoShareGalleryEnabled, setAutoShareGalleryEnabled, syncAutoShareGalleryToggles,
+    revealAutoShareGalleryUi, bindAutoShareGalleryToggles, shareMediaBlob, triggerBlobDownload,
+    maybeAutoShareGallery, guessMediaShareMime,
     canEncodeStillWebp, gifQualityToWebpQuality, gifQualityToMaxColors, gifQualityToGifskiQuality,
     resolveFfmpegVendorBase,
     loadFfmpegMods, fetchFileBytes, ffmpegInputKey, guessVideoExt, ensureFfmpegInputWritten,
@@ -1331,6 +1571,7 @@
     escapeHtml,
   };
   bindAutoPackZipToggles?.();
+  bindAutoShareGalleryToggles?.();
   bindFfmpegPrewarmTriggers?.();
   paintToolsVersion?.();
 })();
