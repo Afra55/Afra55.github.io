@@ -7301,7 +7301,10 @@
           return { r: data[i], g: data[i + 1], b: data[i + 2] };
         };
         const near = (a, b) => Math.abs(a.r - b.r) <= tol && Math.abs(a.g - b.g) <= tol && Math.abs(a.b - b.b) <= tol;
-        /** 该行/该列是否「纯色」，是则返回平均色，否则 null */
+        /** 该行/该列是否「纯色」，是则返回平均色，否则 null。
+         *  允许极少量离群像素（≤3%）：黑边上的压缩噪点、字幕/进度条的零星像素
+         *  不该让整条边判成「非纯色」——这正是「有时候去黑边不生效」的主因。 */
+        const OUTLIER_RATIO = 0.03;
         const lineColor = (get, n) => {
           let r = 0;
           let g = 0;
@@ -7313,8 +7316,13 @@
             b += p.b;
           }
           const avg = { r: r / n, g: g / n, b: b / n };
+          const limit = Math.max(1, Math.floor(n * OUTLIER_RATIO));
+          let bad = 0;
           for (let i = 0; i < n; i++) {
-            if (!near(get(i), avg)) return null;
+            if (!near(get(i), avg)) {
+              bad += 1;
+              if (bad > limit) return null;
+            }
           }
           return avg;
         };
@@ -7374,7 +7382,7 @@
         v.src = url;
         try {
           await new Promise((resolve, reject) => {
-            const to = setTimeout(() => reject(new Error("读取视频超时")), 15000);
+            const to = setTimeout(() => reject(new Error("读取视频超时")), 30000);
             v.onloadeddata = () => { clearTimeout(to); resolve(); };
             v.onerror = () => { clearTimeout(to); reject(new Error("无法读取视频")); };
           });
@@ -7393,7 +7401,7 @@
           for (const t of marks) {
             await new Promise((resolve) => {
               if (Math.abs(v.currentTime - t) < 0.02) { resolve(); return; }
-              const to = setTimeout(resolve, 3000);
+              const to = setTimeout(resolve, 8000);
               v.onseeked = () => { clearTimeout(to); resolve(); };
               try { v.currentTime = t; } catch (_) { clearTimeout(to); resolve(); }
             });
@@ -8141,7 +8149,13 @@
   
       async function runVbbMerge() {
         const blobs = vbbClips.map((c) => c.gifBlob).filter(Boolean);
-        if (blobs.length < 2 || vbbBusy) return;
+        if (vbbBusy) return;
+        if (blobs.length < 2) {
+          // 原来是静默 return，点了像没反应 → 给出明确提示
+          toast("至少要 2 条已生成的 GIF 才能合并");
+          setError(vbbError, "至少要 2 条已生成的 GIF 才能合并");
+          return;
+        }
         vbbBusy = true;
         setVbbButtons();
         setError(vbbError, "");
@@ -8228,7 +8242,8 @@
             const rec = vbbRecommendChunkCount();
             if (countEl) {
               countEl.disabled = enable ? !enable.checked : false;
-              if (!userSet) countEl.value = rec ? String(rec) : ""; // 预填建议值
+              // 自动填写：没有视频时给默认值（上次的/2），有视频时给建议块数
+              if (!userSet) countEl.value = rec ? String(rec) : String(cfg.count || 2);
             }
             if (hintEl) {
               hintEl.textContent = rec
@@ -8247,7 +8262,8 @@
             if (userSet) countEl.value = String(Math.max(1, Math.min(64, Math.floor(Number(countEl.value) || 1))));
             persist();
           });
-          vbbVideo?.addEventListener("loadedmetadata", sync);
+          // 每换一支视频都重新按「当前视频」自动填写建议块数（上一支手改的值不沿用到新视频）
+          vbbVideo?.addEventListener("loadedmetadata", () => { userSet = false; sync(); });
           sync();
         })();
         // ---- 多图 → GIF：只有一个「每张时长」输入，宽度/质量按黑盒规则自动 ----

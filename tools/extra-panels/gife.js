@@ -25,8 +25,11 @@
       let gifeFile;
       let gifeMeta;
       let gifeError;
-      let gifeTrimHead;
-      let gifeTrimTail;
+  let gifeTrimHead;
+  let gifeTrimTail;
+  let gifeTrimStrip;
+  let gifeTrimTrack;
+  let gifeTrimHint;
       let gifeCropX;
       let gifeCropY;
       let gifeCropW;
@@ -277,6 +280,7 @@
         setError(gifeError, "");
         if (gifeMeta) gifeMeta.textContent = GIFE_DEFAULT_META;
         gifeBusy = false;
+        renderGifeTrimStrip();
         setGifeButtons();
       }
   
@@ -287,6 +291,109 @@
         const remain = Math.max(0, gifeFrames.length - head - tail);
         const totalMs = gifeFrames.reduce((s, f) => s + f.delay, 0);
         gifeMeta.textContent = `${gifeSourceName.replace(/\.gif$/i, "")} · ${gifeSrcW}×${gifeSrcH} · ${gifeFrames.length} 帧 · 约 ${(totalMs / 1000).toFixed(2)}s · 导出约 ${remain} 帧`;
+      }
+
+      // ---- 首尾帧可视化裁剪（缩略图条 + 两端滑块，和数字输入双向同步） ----
+      function gifeTrimValues() {
+        const n = gifeFrames.length;
+        const head = Math.max(0, Math.min(n, Number(gifeTrimHead?.value) || 0));
+        const tail = Math.max(0, Math.min(n - head, Number(gifeTrimTail?.value) || 0));
+        return { head, tail, n };
+      }
+
+      function positionGifeTrimHandles() {
+        if (!gifeTrimTrack) return;
+        const cells = gifeTrimTrack.querySelectorAll(".gife-trim-frame");
+        if (!cells.length) return;
+        const { head, tail, n } = gifeTrimValues();
+        const headCell = cells[Math.min(n - 1, head)];
+        const tailCell = cells[Math.max(0, n - tail - 1)];
+        const a = document.getElementById("gife-trim-handle-head");
+        const b = document.getElementById("gife-trim-handle-tail");
+        if (a && headCell) a.style.left = headCell.offsetLeft - 5 + "px";
+        if (b && tailCell) b.style.left = tailCell.offsetLeft + tailCell.offsetWidth + 5 + "px";
+      }
+
+      function renderGifeTrimStrip() {
+        if (!gifeTrimStrip || !gifeTrimTrack) return;
+        if (!gifeFrames.length) {
+          gifeTrimStrip.hidden = true;
+          if (gifeTrimHint) gifeTrimHint.hidden = true;
+          return;
+        }
+        gifeTrimStrip.hidden = false;
+        if (gifeTrimHint) gifeTrimHint.hidden = false;
+        const { head, tail, n } = gifeTrimValues();
+        gifeTrimTrack.querySelectorAll(".gife-trim-frame").forEach((el) => el.remove());
+        const ref = gifeTrimTrack.firstChild;
+        for (let i = 0; i < n; i++) {
+          const cell = document.createElement("div");
+          cell.className = "gife-trim-frame";
+          cell.dataset.i = String(i);
+          if (i < head || i >= n - tail) cell.classList.add("is-cut");
+          const src = gifeFrames[i].canvas;
+          const c = document.createElement("canvas");
+          c.width = 44;
+          c.height = 34;
+          c.getContext("2d").drawImage(src, 0, 0, src.width, src.height, 0, 0, 44, 34);
+          cell.appendChild(c);
+          gifeTrimTrack.insertBefore(cell, ref);
+        }
+        requestAnimationFrame(positionGifeTrimHandles);
+      }
+
+      function bindGifeTrimStrip() {
+        if (!gifeTrimTrack || gifeTrimTrack.dataset.trimBound) return;
+        gifeTrimTrack.dataset.trimBound = "1";
+        let drag = null;
+        const boundaryAt = (clientX) => {
+          const cells = gifeTrimTrack.querySelectorAll(".gife-trim-frame");
+          if (!cells.length) return null;
+          const x = clientX - gifeTrimTrack.getBoundingClientRect().left;
+          let idx = 0;
+          for (let i = 0; i < cells.length; i++) {
+            const mid = cells[i].offsetLeft + cells[i].offsetWidth / 2;
+            if (x >= mid) idx = i + 1;
+            else break;
+          }
+          return idx; // 0..n（边界序号）
+        };
+        const apply = (edge, idx) => {
+          const { n } = gifeTrimValues();
+          const cur = gifeTrimValues();
+          let head = cur.head;
+          let tail = cur.tail;
+          if (edge === "head") head = Math.max(0, Math.min(n - tail - 1, idx));
+          else tail = Math.max(0, Math.min(n - head - 1, n - idx));
+          if (gifeTrimHead) gifeTrimHead.value = String(head);
+          if (gifeTrimTail) gifeTrimTail.value = String(tail);
+          syncGifeMeta();
+          renderGifeTrimStrip();
+        };
+        gifeTrimTrack.addEventListener("pointerdown", (e) => {
+          const idx = boundaryAt(e.clientX);
+          if (idx == null) return;
+          const handle = e.target.closest?.(".gife-trim-handle");
+          if (handle) drag = handle.dataset.edge;
+          else {
+            const { head, tail, n } = gifeTrimValues();
+            drag = Math.abs(idx - head) <= Math.abs(idx - (n - tail)) ? "head" : "tail";
+          }
+          e.preventDefault();
+          apply(drag, idx);
+          try { gifeTrimTrack.setPointerCapture(e.pointerId); } catch (_) {}
+        });
+        gifeTrimTrack.addEventListener("pointermove", (e) => {
+          if (!drag) return;
+          const idx = boundaryAt(e.clientX);
+          if (idx != null) apply(drag, idx);
+        });
+        const end = (e) => {
+          drag = null;
+          try { gifeTrimTrack.releasePointerCapture(e.pointerId); } catch (_) {}
+        };
+        gifeTrimTrack.addEventListener("pointerup", end);
+        gifeTrimTrack.addEventListener("pointercancel", end);
       }
   
       async function loadGifeFile(file) {
@@ -312,6 +419,7 @@
           setGifeCropPct(0, 0, 100, 100);
           paintGifeCropEditor();
           syncGifeMeta();
+          renderGifeTrimStrip();
           setGifeButtons();
           setGifeProgress(true, 1, `已加载 ${frames.length} 帧`);
           toast(`GIF 已加载 · ${frames.length} 帧`);
@@ -442,6 +550,9 @@
             gifeError = $("#gife-error");
             gifeTrimHead = $("#gife-trim-head");
             gifeTrimTail = $("#gife-trim-tail");
+            gifeTrimStrip = $("#gife-trim-strip");
+            gifeTrimTrack = $("#gife-trim-track");
+            gifeTrimHint = $("#gife-trim-hint");
             gifeCropX = $("#gife-crop-x");
             gifeCropY = $("#gife-crop-y");
             gifeCropW = $("#gife-crop-w");
@@ -475,9 +586,11 @@
       [gifeTrimHead, gifeTrimTail, gifeCropX, gifeCropY, gifeCropW, gifeCropH].forEach((el) => {
         el?.addEventListener("input", () => {
           syncGifeMeta();
+          renderGifeTrimStrip();
           paintGifeCropEditor();
         });
       });
+      bindGifeTrimStrip();
       gifeCropStage?.addEventListener("pointerdown", (e) => {
         const box = e.target.closest("#gife-crop-box");
         if (!box || box.hidden || !gifeFrames.length) return;

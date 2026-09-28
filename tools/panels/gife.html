@@ -21,6 +21,13 @@
             <input id="gife-trim-tail" class="mono meta-input" type="number" min="0" max="999" step="1" value="0" title="去掉后几帧" />
             <span class="hint tight">帧</span>
           </div>
+          <div class="gife-trim-strip" id="gife-trim-strip" hidden aria-label="拖动两端滑块选择要保留的帧">
+            <div class="gife-trim-track" id="gife-trim-track">
+              <span class="gife-trim-handle" id="gife-trim-handle-head" data-edge="head" title="拖动设置保留起点"></span>
+              <span class="gife-trim-handle" id="gife-trim-handle-tail" data-edge="tail" title="拖动设置保留终点"></span>
+            </div>
+          </div>
+          <p class="hint tight" id="gife-trim-hint" hidden>拖动两端的滑块选保留范围；带斜纹的帧会被删掉（也可直接点某一帧）。</p>
           <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
             <label for="gife-crop-x">裁剪 X%</label>
             <input id="gife-crop-x" class="mono meta-input" type="number" min="0" max="99" value="0" />

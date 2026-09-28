@@ -1,1 +1,61 @@
 @import url("./gif-shared.css");
+
+/* 首尾帧可视化裁剪：缩略图条 + 两端滑块 */
+.gife-trim-strip {
+  margin: 0.5rem 0 0.35rem;
+  padding: 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-0) 45%, transparent);
+  -webkit-overflow-scrolling: touch;
+}
+.gife-trim-track {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 10px;
+  min-height: 36px;
+}
+.gife-trim-frame {
+  position: relative;
+  flex: 0 0 auto;
+  width: 44px;
+  height: 34px;
+  border-radius: 4px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  background: #000;
+}
+.gife-trim-frame canvas { width: 100%; height: 100%; display: block; }
+.gife-trim-frame.is-cut { opacity: 0.3; filter: grayscale(1); }
+.gife-trim-frame.is-cut::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(45deg, rgba(255, 70, 70, 0.45) 0 3px, transparent 3px 7px);
+}
+.gife-trim-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  margin-left: -5px;
+  border-radius: 4px;
+  background: var(--accent);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4);
+  cursor: ew-resize;
+  touch-action: none;
+}
+.gife-trim-handle::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2px;
+  height: 12px;
+  margin: -6px 0 0 -1px;
+  background: rgba(0, 0, 0, 0.5);
+}

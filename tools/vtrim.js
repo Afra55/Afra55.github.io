@@ -4,6 +4,9 @@
   const $ = (sel, root = document) => root.querySelector(sel);
   const P = window.DevToolsPure;
   const MIN_SPAN = 0.5;
+  /** 少于这个时长的剪切不走「-c copy 快速剪切」：copy 只能按关键帧切，
+   *  请求 0.8s 也可能导出 2s（整段 GOP）。重编码的输入定位是精确的，短片段必须走它。 */
+  const COPY_MIN_SPAN = 2;
   const FILM_THUMBS = 18;
 
   function toast(msg) {
@@ -1058,7 +1061,7 @@
           });
         }
       } else {
-        if (!reencode && !videoOnly) {
+        if (!reencode && !videoOnly && span >= COPY_MIN_SPAN) {
           attempts.push({
             label: "快速剪切",
             args: [
@@ -1079,7 +1082,7 @@
             ],
           });
         }
-        if (!reencode && videoOnly) {
+        if (!reencode && videoOnly && span >= COPY_MIN_SPAN) {
           attempts.push({
             label: "快速无声剪切",
             args: [
