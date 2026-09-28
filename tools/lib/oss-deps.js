@@ -362,8 +362,16 @@
             version: "—",
             license: "CC BY 4.0",
             repo: "https://wellcomecollection.org/",
-            usedIn: "穴位图 · 经络参考图（wellcome/*.jpg）",
+            usedIn: "穴位图 · 史料参考图（折叠区 wellcome/*.jpg）",
             path: "tools/lib/acupoint/wellcome/",
+          },
+          {
+            name: "人体穴位示意图（rtxw）",
+            version: "import-rtxw-charts",
+            license: "第三方 App 资源导入（仅工具展示，见 ATTRIBUTION.txt）",
+            repo: "",
+            usedIn: "穴位图 · 经络分段图 / 总图 / 奇穴示意图",
+            path: "tools/lib/acupoint/rtxw/（由 tools/scripts/import-rtxw-charts.cjs 生成）",
           },
           {
             name: "GB/T 40997-2021",

@@ -1,0 +1,4 @@
+Charts imported from a local decompiled Android/Flutter package
+(com.myapp.li.rentixuewei / 人体穴位图) for personal tool UI.
+Files were header-deobfuscated (swap first two bytes).
+Do not redistribute commercially without rights clearance.

@@ -1,0 +1,796 @@
+{
+  "version": 1,
+  "generated": "2026-09-28T10:24:58.023Z",
+  "source": "com.myapp.li.rentixuewei flutter_assets (deobfuscated header swap)",
+  "basePath": "./lib/acupoint/rtxw/",
+  "abbrMap": {
+    "lu": "LU",
+    "li": "LI",
+    "st": "ST",
+    "sp": "SP",
+    "ht": "HT",
+    "si": "SI",
+    "bl": "BL",
+    "ki": "KI",
+    "pc": "PC",
+    "tw": "TE",
+    "gb": "GB",
+    "lr": "LR",
+    "cv": "CV",
+    "gv": "GV"
+  },
+  "labels": {
+    "LU": "手太阴肺经",
+    "LI": "手阳明大肠经",
+    "ST": "足阳明胃经",
+    "SP": "足太阴脾经",
+    "HT": "手少阴心经",
+    "SI": "手太阳小肠经",
+    "BL": "足太阳膀胱经",
+    "KI": "足少阴肾经",
+    "PC": "手厥阴心包经",
+    "TE": "手少阳三焦经",
+    "GB": "足少阳胆经",
+    "LR": "足厥阴肝经",
+    "CV": "任脉",
+    "GV": "督脉",
+    "EX": "经外奇穴"
+  },
+  "meridians": [
+    {
+      "abbr": "LU",
+      "appKey": "lu",
+      "nameZh": "手太阴肺经",
+      "overview": "meridians/lu/lu_meridian.png",
+      "segments": [
+        {
+          "id": "lu_01",
+          "file": "meridians/lu/lu_01.png"
+        },
+        {
+          "id": "lu_02",
+          "file": "meridians/lu/lu_02.png"
+        },
+        {
+          "id": "lu_03",
+          "file": "meridians/lu/lu_03.png"
+        }
+      ],
+      "icon": "cate/fei.png"
+    },
+    {
+      "abbr": "LI",
+      "appKey": "li",
+      "nameZh": "手阳明大肠经",
+      "overview": "meridians/li/li_meridian.png",
+      "segments": [
+        {
+          "id": "li_01",
+          "file": "meridians/li/li_01.png"
+        },
+        {
+          "id": "li_02",
+          "file": "meridians/li/li_02.png"
+        },
+        {
+          "id": "li_03",
+          "file": "meridians/li/li_03.png"
+        },
+        {
+          "id": "li_04",
+          "file": "meridians/li/li_04.png"
+        },
+        {
+          "id": "li_05",
+          "file": "meridians/li/li_05.png"
+        },
+        {
+          "id": "li_06",
+          "file": "meridians/li/li_06.png"
+        }
+      ],
+      "icon": "cate/dc.png"
+    },
+    {
+      "abbr": "ST",
+      "appKey": "st",
+      "nameZh": "足阳明胃经",
+      "overview": "meridians/st/st_meridian.png",
+      "segments": [
+        {
+          "id": "st_01",
+          "file": "meridians/st/st_01.png"
+        },
+        {
+          "id": "st_02",
+          "file": "meridians/st/st_02.png"
+        },
+        {
+          "id": "st_03",
+          "file": "meridians/st/st_03.png"
+        },
+        {
+          "id": "st_04",
+          "file": "meridians/st/st_04.png"
+        },
+        {
+          "id": "st_05",
+          "file": "meridians/st/st_05.png"
+        },
+        {
+          "id": "st_06",
+          "file": "meridians/st/st_06.png"
+        },
+        {
+          "id": "st_07",
+          "file": "meridians/st/st_07.png"
+        },
+        {
+          "id": "st_08",
+          "file": "meridians/st/st_08.png"
+        }
+      ],
+      "icon": "cate/wei.png"
+    },
+    {
+      "abbr": "SP",
+      "appKey": "sp",
+      "nameZh": "足太阴脾经",
+      "overview": "meridians/sp/sp_meridian.png",
+      "segments": [
+        {
+          "id": "sp_01",
+          "file": "meridians/sp/sp_01.png"
+        },
+        {
+          "id": "sp_02",
+          "file": "meridians/sp/sp_02.png"
+        },
+        {
+          "id": "sp_03",
+          "file": "meridians/sp/sp_03.png"
+        },
+        {
+          "id": "sp_04",
+          "file": "meridians/sp/sp_04.png"
+        },
+        {
+          "id": "sp_05",
+          "file": "meridians/sp/sp_05.png"
+        }
+      ],
+      "icon": "cate/pi.png"
+    },
+    {
+      "abbr": "HT",
+      "appKey": "ht",
+      "nameZh": "手少阴心经",
+      "overview": "meridians/ht/ht_meridian.png",
+      "segments": [
+        {
+          "id": "ht_01",
+          "file": "meridians/ht/ht_01.png"
+        },
+        {
+          "id": "ht_02",
+          "file": "meridians/ht/ht_02.png"
+        },
+        {
+          "id": "ht_03",
+          "file": "meridians/ht/ht_03.png"
+        }
+      ],
+      "icon": "cate/xin.png"
+    },
+    {
+      "abbr": "SI",
+      "appKey": "si",
+      "nameZh": "手太阳小肠经",
+      "overview": "meridians/si/si_meridian.png",
+      "segments": [
+        {
+          "id": "si_01",
+          "file": "meridians/si/si_01.png"
+        },
+        {
+          "id": "si_02",
+          "file": "meridians/si/si_02.png"
+        },
+        {
+          "id": "si_03",
+          "file": "meridians/si/si_03.png"
+        },
+        {
+          "id": "si_04",
+          "file": "meridians/si/si_04.png"
+        },
+        {
+          "id": "si_05",
+          "file": "meridians/si/si_05.png"
+        }
+      ],
+      "icon": "cate/xb.png"
+    },
+    {
+      "abbr": "BL",
+      "appKey": "bl",
+      "nameZh": "足太阳膀胱经",
+      "overview": "meridians/bl/bl_meridian.png",
+      "segments": [
+        {
+          "id": "bl_01",
+          "file": "meridians/bl/bl_01.png"
+        },
+        {
+          "id": "bl_02",
+          "file": "meridians/bl/bl_02.png"
+        },
+        {
+          "id": "bl_03",
+          "file": "meridians/bl/bl_03.png"
+        },
+        {
+          "id": "bl_04",
+          "file": "meridians/bl/bl_04.png"
+        },
+        {
+          "id": "bl_06",
+          "file": "meridians/bl/bl_06.png"
+        },
+        {
+          "id": "bl_07",
+          "file": "meridians/bl/bl_07.png"
+        },
+        {
+          "id": "bl_08",
+          "file": "meridians/bl/bl_08.png"
+        },
+        {
+          "id": "bl_09",
+          "file": "meridians/bl/bl_09.png"
+        }
+      ],
+      "icon": "cate/pg.png"
+    },
+    {
+      "abbr": "KI",
+      "appKey": "ki",
+      "nameZh": "足少阴肾经",
+      "overview": "meridians/ki/ki_meridian.png",
+      "segments": [
+        {
+          "id": "ki_01",
+          "file": "meridians/ki/ki_01.png"
+        },
+        {
+          "id": "ki_02",
+          "file": "meridians/ki/ki_02.png"
+        },
+        {
+          "id": "ki_03",
+          "file": "meridians/ki/ki_03.png"
+        },
+        {
+          "id": "ki_04",
+          "file": "meridians/ki/ki_04.png"
+        },
+        {
+          "id": "ki_05",
+          "file": "meridians/ki/ki_05.png"
+        }
+      ],
+      "icon": "cate/shen.png"
+    },
+    {
+      "abbr": "PC",
+      "appKey": "pc",
+      "nameZh": "手厥阴心包经",
+      "overview": "meridians/pc/pc_meridian.png",
+      "segments": [
+        {
+          "id": "pc_01",
+          "file": "meridians/pc/pc_01.png"
+        },
+        {
+          "id": "pc_02",
+          "file": "meridians/pc/pc_02.png"
+        },
+        {
+          "id": "pc_03",
+          "file": "meridians/pc/pc_03.png"
+        },
+        {
+          "id": "pc_04",
+          "file": "meridians/pc/pc_04.png"
+        }
+      ],
+      "icon": "cate/xb.png"
+    },
+    {
+      "abbr": "TE",
+      "appKey": "tw",
+      "nameZh": "手少阳三焦经",
+      "overview": "meridians/te/tw_meridian.png",
+      "segments": [
+        {
+          "id": "tw_01",
+          "file": "meridians/te/tw_01.png"
+        },
+        {
+          "id": "tw_02",
+          "file": "meridians/te/tw_02.png"
+        },
+        {
+          "id": "tw_03",
+          "file": "meridians/te/tw_03.png"
+        },
+        {
+          "id": "tw_04",
+          "file": "meridians/te/tw_04.png"
+        },
+        {
+          "id": "tw_05",
+          "file": "meridians/te/tw_05.png"
+        },
+        {
+          "id": "tw_06",
+          "file": "meridians/te/tw_06.png"
+        }
+      ],
+      "icon": "cate/sj.png"
+    },
+    {
+      "abbr": "GB",
+      "appKey": "gb",
+      "nameZh": "足少阳胆经",
+      "overview": "meridians/gb/gb_meridian.png",
+      "segments": [
+        {
+          "id": "gb_01",
+          "file": "meridians/gb/gb_01.png"
+        },
+        {
+          "id": "gb_02",
+          "file": "meridians/gb/gb_02.png"
+        },
+        {
+          "id": "gb_03",
+          "file": "meridians/gb/gb_03.png"
+        },
+        {
+          "id": "gb_04",
+          "file": "meridians/gb/gb_04.png"
+        },
+        {
+          "id": "gb_05",
+          "file": "meridians/gb/gb_05.png"
+        },
+        {
+          "id": "gb_06",
+          "file": "meridians/gb/gb_06.png"
+        },
+        {
+          "id": "gb_07",
+          "file": "meridians/gb/gb_07.png"
+        },
+        {
+          "id": "gb_08",
+          "file": "meridians/gb/gb_08.png"
+        },
+        {
+          "id": "gb_09",
+          "file": "meridians/gb/gb_09.png"
+        },
+        {
+          "id": "gb_10",
+          "file": "meridians/gb/gb_10.png"
+        }
+      ],
+      "icon": "cate/dan.png"
+    },
+    {
+      "abbr": "LR",
+      "appKey": "lr",
+      "nameZh": "足厥阴肝经",
+      "overview": "meridians/lr/lr_meridian.png",
+      "segments": [
+        {
+          "id": "lr_01",
+          "file": "meridians/lr/lr_01.png"
+        },
+        {
+          "id": "lr_02",
+          "file": "meridians/lr/lr_02.png"
+        },
+        {
+          "id": "lr_03",
+          "file": "meridians/lr/lr_03.png"
+        },
+        {
+          "id": "lr_04",
+          "file": "meridians/lr/lr_04.png"
+        },
+        {
+          "id": "lr_05",
+          "file": "meridians/lr/lr_05.png"
+        }
+      ],
+      "icon": "cate/gan.png"
+    },
+    {
+      "abbr": "CV",
+      "appKey": "cv",
+      "nameZh": "任脉",
+      "overview": "meridians/cv/cv_meridian.png",
+      "segments": [
+        {
+          "id": "cv_01",
+          "file": "meridians/cv/cv_01.png"
+        },
+        {
+          "id": "cv_02",
+          "file": "meridians/cv/cv_02.png"
+        },
+        {
+          "id": "cv_03",
+          "file": "meridians/cv/cv_03.png"
+        },
+        {
+          "id": "cv_04",
+          "file": "meridians/cv/cv_04.png"
+        }
+      ],
+      "icon": "cate/rm.png"
+    },
+    {
+      "abbr": "GV",
+      "appKey": "gv",
+      "nameZh": "督脉",
+      "overview": "meridians/gv/gv_meridian.png",
+      "segments": [
+        {
+          "id": "gv_01",
+          "file": "meridians/gv/gv_01.png"
+        },
+        {
+          "id": "gv_02",
+          "file": "meridians/gv/gv_02.png"
+        },
+        {
+          "id": "gv_03",
+          "file": "meridians/gv/gv_03.png"
+        }
+      ],
+      "icon": "cate/dm.png"
+    }
+  ],
+  "body": [
+    {
+      "id": "a",
+      "file": "body/a.png",
+      "label": "人体总图 A"
+    },
+    {
+      "id": "b",
+      "file": "body/b.png",
+      "label": "人体总图 B"
+    },
+    {
+      "id": "c",
+      "file": "body/c.png",
+      "label": "人体总图 C"
+    },
+    {
+      "id": "d",
+      "file": "body/d.jpg",
+      "label": "人体总图 D"
+    },
+    {
+      "id": "e",
+      "file": "body/e.png",
+      "label": "人体总图 E"
+    }
+  ],
+  "extra": [
+    {
+      "id": "JWQX_1",
+      "file": "extra/JWQX_1.jpg",
+      "index": 1
+    },
+    {
+      "id": "JWQX_2",
+      "file": "extra/JWQX_2.jpg",
+      "index": 2
+    },
+    {
+      "id": "JWQX_3",
+      "file": "extra/JWQX_3.jpg",
+      "index": 3
+    },
+    {
+      "id": "JWQX_4",
+      "file": "extra/JWQX_4.jpg",
+      "index": 4
+    },
+    {
+      "id": "JWQX_5",
+      "file": "extra/JWQX_5.jpg",
+      "index": 5
+    },
+    {
+      "id": "JWQX_6",
+      "file": "extra/JWQX_6.jpg",
+      "index": 6
+    },
+    {
+      "id": "JWQX_7",
+      "file": "extra/JWQX_7.jpg",
+      "index": 7
+    },
+    {
+      "id": "JWQX_8",
+      "file": "extra/JWQX_8.jpg",
+      "index": 8
+    },
+    {
+      "id": "JWQX_9",
+      "file": "extra/JWQX_9.jpg",
+      "index": 9
+    },
+    {
+      "id": "JWQX_10",
+      "file": "extra/JWQX_10.jpg",
+      "index": 10
+    },
+    {
+      "id": "JWQX_11",
+      "file": "extra/JWQX_11.jpg",
+      "index": 11
+    },
+    {
+      "id": "JWQX_12",
+      "file": "extra/JWQX_12.jpg",
+      "index": 12
+    },
+    {
+      "id": "JWQX_13",
+      "file": "extra/JWQX_13.jpg",
+      "index": 13
+    },
+    {
+      "id": "JWQX_14",
+      "file": "extra/JWQX_14.jpg",
+      "index": 14
+    },
+    {
+      "id": "JWQX_15",
+      "file": "extra/JWQX_15.jpg",
+      "index": 15
+    },
+    {
+      "id": "JWQX_16",
+      "file": "extra/JWQX_16.jpg",
+      "index": 16
+    },
+    {
+      "id": "JWQX_17",
+      "file": "extra/JWQX_17.jpg",
+      "index": 17
+    },
+    {
+      "id": "JWQX_18",
+      "file": "extra/JWQX_18.jpg",
+      "index": 18
+    },
+    {
+      "id": "JWQX_19",
+      "file": "extra/JWQX_19.jpg",
+      "index": 19
+    },
+    {
+      "id": "JWQX_20",
+      "file": "extra/JWQX_20.jpg",
+      "index": 20
+    },
+    {
+      "id": "JWQX_21",
+      "file": "extra/JWQX_21.jpg",
+      "index": 21
+    },
+    {
+      "id": "JWQX_22",
+      "file": "extra/JWQX_22.jpg",
+      "index": 22
+    },
+    {
+      "id": "JWQX_23",
+      "file": "extra/JWQX_23.jpg",
+      "index": 23
+    },
+    {
+      "id": "JWQX_24",
+      "file": "extra/JWQX_24.jpg",
+      "index": 24
+    },
+    {
+      "id": "JWQX_25",
+      "file": "extra/JWQX_25.jpg",
+      "index": 25
+    },
+    {
+      "id": "JWQX_26",
+      "file": "extra/JWQX_26.jpg",
+      "index": 26
+    },
+    {
+      "id": "JWQX_27",
+      "file": "extra/JWQX_27.jpg",
+      "index": 27
+    },
+    {
+      "id": "JWQX_28",
+      "file": "extra/JWQX_28.jpg",
+      "index": 28
+    },
+    {
+      "id": "JWQX_29",
+      "file": "extra/JWQX_29.jpg",
+      "index": 29
+    },
+    {
+      "id": "JWQX_30",
+      "file": "extra/JWQX_30.jpg",
+      "index": 30
+    },
+    {
+      "id": "JWQX_31",
+      "file": "extra/JWQX_31.jpg",
+      "index": 31
+    },
+    {
+      "id": "JWQX_32",
+      "file": "extra/JWQX_32.jpg",
+      "index": 32
+    },
+    {
+      "id": "JWQX_33",
+      "file": "extra/JWQX_33.jpg",
+      "index": 33
+    },
+    {
+      "id": "JWQX_34",
+      "file": "extra/JWQX_34.jpg",
+      "index": 34
+    },
+    {
+      "id": "JWQX_35",
+      "file": "extra/JWQX_35.jpg",
+      "index": 35
+    },
+    {
+      "id": "JWQX_36",
+      "file": "extra/JWQX_36.jpg",
+      "index": 36
+    },
+    {
+      "id": "JWQX_37",
+      "file": "extra/JWQX_37.jpg",
+      "index": 37
+    },
+    {
+      "id": "JWQX_38",
+      "file": "extra/JWQX_38.jpg",
+      "index": 38
+    },
+    {
+      "id": "JWQX_39",
+      "file": "extra/JWQX_39.jpg",
+      "index": 39
+    },
+    {
+      "id": "JWQX_40",
+      "file": "extra/JWQX_40.jpg",
+      "index": 40
+    },
+    {
+      "id": "JWQX_41",
+      "file": "extra/JWQX_41.jpg",
+      "index": 41
+    },
+    {
+      "id": "JWQX_42",
+      "file": "extra/JWQX_42.jpg",
+      "index": 42
+    },
+    {
+      "id": "JWQX_43",
+      "file": "extra/JWQX_43.jpg",
+      "index": 43
+    },
+    {
+      "id": "JWQX_44",
+      "file": "extra/JWQX_44.jpg",
+      "index": 44
+    },
+    {
+      "id": "JWQX_45",
+      "file": "extra/JWQX_45.jpg",
+      "index": 45
+    },
+    {
+      "id": "JWQX_46",
+      "file": "extra/JWQX_46.jpg",
+      "index": 46
+    }
+  ],
+  "qjbm": [
+    {
+      "id": "QJBM_a",
+      "file": "qjbm/QJBM_a.jpg"
+    },
+    {
+      "id": "QJBM_b",
+      "file": "qjbm/QJBM_b.jpg"
+    },
+    {
+      "id": "QJBM_c",
+      "file": "qjbm/QJBM_c.jpg"
+    },
+    {
+      "id": "QJBM_d",
+      "file": "qjbm/QJBM_d.jpg"
+    },
+    {
+      "id": "QJBM_e",
+      "file": "qjbm/QJBM_e.jpg"
+    },
+    {
+      "id": "QJBM_f",
+      "file": "qjbm/QJBM_f.jpg"
+    },
+    {
+      "id": "QJBM_g",
+      "file": "qjbm/QJBM_g.jpg"
+    },
+    {
+      "id": "QJBM_h",
+      "file": "qjbm/QJBM_h.jpg"
+    }
+  ],
+  "cate": {
+    "all": "cate/all.png",
+    "dan": "cate/dan.png",
+    "dc": "cate/dc.png",
+    "dm": "cate/dm.png",
+    "fei": "cate/fei.png",
+    "gan": "cate/gan.png",
+    "jwqx": "cate/jwqx.png",
+    "pg": "cate/pg.png",
+    "pi": "cate/pi.png",
+    "qjbm": "cate/qjbm.png",
+    "rm": "cate/rm.png",
+    "shen": "cate/shen.png",
+    "sj": "cate/sj.png",
+    "wei": "cate/wei.png",
+    "xb": "cate/xb.png",
+    "xc": "cate/xc.png",
+    "xin": "cate/xin.png"
+  },
+  "cateByAbbr": {
+    "LU": "cate/fei.png",
+    "LI": "cate/dc.png",
+    "ST": "cate/wei.png",
+    "SP": "cate/pi.png",
+    "HT": "cate/xin.png",
+    "SI": "cate/xb.png",
+    "BL": "cate/pg.png",
+    "KI": "cate/shen.png",
+    "PC": "cate/xb.png",
+    "TE": "cate/sj.png",
+    "GB": "cate/dan.png",
+    "LR": "cate/gan.png",
+    "CV": "cate/rm.png",
+    "GV": "cate/dm.png",
+    "EX": "cate/jwqx.png"
+  }
+}

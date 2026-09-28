@@ -3245,7 +3245,7 @@ li a:not([class*="btn"]) {
 }
 
 .acu-chart-img {
-  max-width: min(100%, 320px);
+  max-width: min(100%, 420px);
   height: auto;
   border-radius: 8px;
   background: var(--panel-strong);
@@ -3548,6 +3548,148 @@ li a:not([class*="btn"]) {
 .acu-attrib {
   margin: 0;
   opacity: 0.85;
+}
+
+.acu-mer-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  padding: 0.55rem 0.65rem;
+}
+
+.acu-mer-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  border: 1px solid var(--line);
+  border-bottom: 2px solid var(--acu-mer-color, var(--accent));
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 0.32rem 0.55rem;
+  font: inherit;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+
+.acu-mer-btn.is-active {
+  border-color: var(--acu-mer-color, var(--accent));
+  background: color-mix(in srgb, var(--acu-mer-color, var(--accent)) 18%, var(--panel));
+}
+
+.acu-mer-icon {
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  border-radius: 2px;
+}
+
+.acu-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 0.85rem;
+  align-items: start;
+}
+
+.acu-chart-pane {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.65rem 0.75rem;
+}
+
+.acu-chart-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35rem 0.75rem;
+}
+
+.acu-seg-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.acu-seg-btn {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.acu-seg-btn.is-active {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 18%, var(--panel));
+}
+
+.acu-main-zoom {
+  width: 100%;
+  display: grid;
+  place-items: center;
+  min-height: 12rem;
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+
+.acu-main-img {
+  max-width: 100%;
+  max-height: min(52vh, 420px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  border-radius: 6px;
+  background: transparent;
+}
+
+.acu-side {
+  display: grid;
+  gap: 0.65rem;
+  min-width: 0;
+}
+
+.acu-layout-compact {
+  grid-template-columns: 1fr;
+}
+
+.acu-layout-compact .acu-list-wrap {
+  max-height: min(36vh, 18rem);
+}
+
+.acu-layout-compact .acu-detail-wrap {
+  max-height: min(42vh, 22rem);
+  overflow: auto;
+}
+
+.acu-more {
+  padding: 0.55rem 0.75rem;
+}
+
+.acu-more > summary {
+  cursor: pointer;
+  font-weight: 600;
+  list-style: none;
+}
+
+.acu-more > summary::-webkit-details-marker {
+  display: none;
+}
+
+.acu-more[open] > summary {
+  margin-bottom: 0.55rem;
+}
+
+@media (max-width: 900px) {
+  .acu-workspace {
+    grid-template-columns: 1fr;
+  }
+  .acu-main-img {
+    max-height: min(42vh, 320px);
+  }
 }
 
 .cd-toolbar {

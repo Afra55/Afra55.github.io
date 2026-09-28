@@ -20,9 +20,22 @@
     CV: "#ffd6a5",
     GV: "#ffe066",
     EX: "#c9a0ff",
+    BODY: "#9aa7b8",
   };
 
-  const EXTRA_REGIONS = ["头颈部", "胸腹部", "背部", "肩胛部", "上肢", "下肢"];
+  const RTXW_BASE = "./lib/acupoint/rtxw/";
+
+  function assetUrl(rel) {
+    if (!rel) return "";
+    return RTXW_BASE + String(rel).replace(/^\.?\//, "");
+  }
+
+  function cacheBust(url) {
+    const v = window.TOOLS_BUILD || window.TOOLS_VERSION || "1";
+    if (!url) return url;
+    const join = url.includes("?") ? "&" : "?";
+    return `${url}${join}v=${encodeURIComponent(v)}`;
+  }
 
   function norm(s) {
     return String(s || "")
@@ -98,13 +111,13 @@
     const actions = ap.actions || [];
     $("#acu-detail-actions").innerHTML = actions.length
       ? actions.map((a) => `<li>${a}</li>`).join("")
-      : "<li class=\"muted\">暂无</li>";
+      : '<li class="muted">暂无</li>';
     $("#acu-detail-actions-wrap").hidden = ap.type === "extra" && !actions.length;
 
     const inds = ap.indications || [];
     $("#acu-detail-indications").innerHTML = inds.length
       ? inds.map((a) => `<li>${a}</li>`).join("")
-      : "<li class=\"muted\">暂无</li>";
+      : '<li class="muted">暂无</li>';
 
     const richBadge = $("#acu-detail-rich");
     if (richBadge) richBadge.hidden = !ap.rich;
@@ -130,9 +143,9 @@
     return norm(hay).includes(n);
   }
 
-  function bindChartTabs() {
-    const tabs = $$("[data-acu-chart]");
-    const panels = $$("[data-acu-chart-panel]");
+  function bindWellcomeTabs() {
+    const tabs = $$(".acu-more [data-acu-chart]");
+    const panels = $$(".acu-more [data-acu-chart-panel]");
     tabs.forEach((tab) => {
       tab.addEventListener("click", () => {
         const id = tab.dataset.acuChart;
@@ -142,20 +155,13 @@
           t.setAttribute("aria-selected", on ? "true" : "false");
         });
         panels.forEach((p) => {
-          const show = p.dataset.acuChartPanel === id;
-          p.hidden = !show;
-          if (show) {
-            p.querySelectorAll("img").forEach((img) => {
-              if (img.loading === "lazy") img.loading = "eager";
-              img.decode?.().catch(() => {});
-            });
-          }
+          p.hidden = p.dataset.acuChartPanel !== id;
         });
       });
     });
   }
 
-  function bindChartPreview() {
+  function bindLightbox() {
     const dlg = $("#acu-lightbox");
     const stage = $("#acu-lightbox-stage");
     const img = $("#acu-lightbox-img");
@@ -165,7 +171,7 @@
     const zoomInBtn = $("#acu-lightbox-zoom-in");
     const zoomOutBtn = $("#acu-lightbox-zoom-out");
     const zoomResetBtn = $("#acu-lightbox-zoom-reset");
-    if (!dlg || !stage || !img) return;
+    if (!dlg || !stage || !img) return { openPreview() {} };
 
     const view = { scale: 1, x: 0, y: 0, dragging: false, lastX: 0, lastY: 0 };
 
@@ -224,12 +230,13 @@
       resetView();
     }
 
-    $$(".acu-chart-zoom").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const inner = btn.querySelector("img");
-        const src = btn.dataset.acuZoomSrc || inner?.currentSrc || inner?.src || "";
-        openPreview(src, inner?.alt || btn.getAttribute("aria-label") || "");
-      });
+    // event delegation for all zoom buttons (including dynamic main chart)
+    document.addEventListener("click", (e) => {
+      const btn = e.target.closest?.(".acu-chart-zoom");
+      if (!btn || !btn.closest("#acupoint")) return;
+      const inner = btn.querySelector("img");
+      const src = btn.dataset.acuZoomSrc || inner?.currentSrc || inner?.src || "";
+      openPreview(src, inner?.alt || btn.getAttribute("aria-label") || "");
     });
 
     closeBtn?.addEventListener("click", closePreview);
@@ -283,11 +290,12 @@
     stage.addEventListener("pointercancel", () => {
       view.dragging = false;
     });
-
     stage.addEventListener("dblclick", (e) => {
       if (view.scale > 1.05) resetView();
       else zoomAt(e.clientX, e.clientY, clampScale(view.scale * 1.8));
     });
+
+    return { openPreview };
   }
 
   async function initAcupoint() {
@@ -296,18 +304,30 @@
     root.dataset.bound = "1";
 
     const search = $("#acu-search");
-    const meridianFilter = $("#acu-meridian");
     const listEl = $("#acu-list");
     const listTitle = $("#acu-list-title");
     const countEl = $("#acu-count");
     const metaEl = $("#acu-meta");
-    const typeSeg = $("#acu-type-seg");
+    const merNav = $("#acu-mer-nav");
+    const segStrip = $("#acu-seg-strip");
+    const mainZoom = $("#acu-main-zoom");
+    const mainImg = $("#acu-main-img");
+    const chartTitle = $("#acu-chart-title");
+    const chartSub = $("#acu-chart-sub");
+    const chartEmpty = $("#acu-chart-empty");
+    const openZoomBtn = $("#acu-open-zoom");
 
     let bundle;
+    let charts;
     try {
-      const res = await fetch("./lib/acupoints-bundle.json?v=2026.08.29-151523");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      bundle = await res.json();
+      const [bRes, cRes] = await Promise.all([
+        fetch(cacheBust("./lib/acupoints-bundle.json")),
+        fetch(cacheBust("./lib/acupoint/rtxw/rtxw-manifest.json")),
+      ]);
+      if (!bRes.ok) throw new Error(`穴位数据 HTTP ${bRes.status}`);
+      bundle = await bRes.json();
+      if (cRes.ok) charts = await cRes.json();
+      else charts = { meridians: [], body: [], extra: [], labels: {} };
     } catch (err) {
       if (metaEl) metaEl.textContent = `数据加载失败：${err.message}`;
       return;
@@ -317,42 +337,174 @@
     const acupoints = bundle.acupoints || [];
     const meridianCount = bundle.counts?.acupoints || acupoints.filter((x) => x.type !== "extra").length;
     const extraCount = bundle.counts?.extraPoints || acupoints.filter((x) => x.type === "extra").length;
-    let selectedId = acupoints[0]?.id || "";
-    let query = "";
-    let scopeFilter = "";
-    let typeFilter = "all";
+    const chartByAbbr = Object.fromEntries((charts.meridians || []).map((m) => [m.abbr, m]));
+    const labels = charts.labels || {};
 
-    if (meridianFilter) {
-      const regionOpts = EXTRA_REGIONS.map(
-        (r) => `<option value="reg:${r}">奇穴 · ${r}</option>`
-      ).join("");
-      meridianFilter.innerHTML =
-        `<option value="">全部（${meridianCount + extraCount} 穴）</option>` +
-        `<optgroup label="十四经">${(bundle.meridians || [])
-          .map((m) => `<option value="mer:${m.key}">${m.abbreviation} · ${m.nameZh}</option>`)
-          .join("")}</optgroup>` +
-        `<optgroup label="经外奇穴">${regionOpts}</optgroup>`;
-    }
+    let scope = (charts.meridians && charts.meridians[0]?.abbr) || "LU";
+    let segKey = "overview";
+    let selectedId = "";
+    let query = "";
 
     if (metaEl) {
-      metaEl.textContent = `共 ${meridianCount} 经穴 + ${extraCount} 奇穴 · ${bundle.counts?.richDetail || 0} 条经穴含本草典详细字段 · 参考图来自 Wellcome Collection（CC BY 4.0）`;
+      const nSeg = (charts.meridians || []).reduce((n, m) => n + (m.segments?.length || 0), 0);
+      metaEl.textContent = `共 ${meridianCount} 经穴 + ${extraCount} 奇穴 · 示意图 ${nSeg} 段 / 总图 ${(charts.body || []).length} · 奇穴图 ${(charts.extra || []).length}`;
     }
 
-    function syncTypeSeg() {
-      if (!typeSeg) return;
-      $$(".acu-type-btn", typeSeg).forEach((btn) => {
-        btn.classList.toggle("is-active", btn.dataset.acuType === typeFilter);
+    const lightbox = bindLightbox();
+    bindWellcomeTabs();
+
+    function currentChartFrames() {
+      if (scope === "BODY") {
+        return (charts.body || []).map((b, i) => ({
+          key: `body:${b.id}`,
+          label: b.label || `总图 ${i + 1}`,
+          file: b.file,
+          alt: b.label || "人体总图",
+        }));
+      }
+      if (scope === "EX") {
+        return (charts.extra || []).map((x, i) => ({
+          key: `ex:${x.id}`,
+          label: `奇穴 ${x.index || i + 1}`,
+          file: x.file,
+          alt: `经外奇穴示意图 ${x.index || i + 1}`,
+        }));
+      }
+      const m = chartByAbbr[scope];
+      if (!m) return [];
+      const frames = [];
+      if (m.overview) {
+        frames.push({
+          key: "overview",
+          label: "本经总览",
+          file: m.overview,
+          alt: `${m.nameZh || labels[scope] || scope}总览`,
+        });
+      }
+      (m.segments || []).forEach((s, i) => {
+        frames.push({
+          key: s.id || `seg-${i}`,
+          label: `第 ${i + 1} 段`,
+          file: s.file,
+          alt: `${m.nameZh || scope} 第 ${i + 1} 段示意图`,
+        });
       });
+      return frames;
+    }
+
+    function setMainImage(frame) {
+      if (!mainImg || !mainZoom) return;
+      if (!frame?.file) {
+        mainImg.removeAttribute("src");
+        mainZoom.dataset.acuZoomSrc = "";
+        mainZoom.hidden = true;
+        if (chartEmpty) chartEmpty.hidden = false;
+        if (openZoomBtn) openZoomBtn.hidden = true;
+        return;
+      }
+      const url = cacheBust(assetUrl(frame.file));
+      mainImg.src = url;
+      mainImg.alt = frame.alt || frame.label || "";
+      mainZoom.dataset.acuZoomSrc = url;
+      mainZoom.hidden = false;
+      if (chartEmpty) chartEmpty.hidden = true;
+      if (openZoomBtn) {
+        openZoomBtn.hidden = false;
+        openZoomBtn.onclick = () => lightbox.openPreview(url, mainImg.alt);
+      }
+    }
+
+    function renderSegStrip() {
+      const frames = currentChartFrames();
+      if (!frames.length) {
+        if (segStrip) segStrip.innerHTML = "";
+        setMainImage(null);
+        if (chartSub) chartSub.textContent = "无图";
+        return;
+      }
+      if (!frames.some((f) => f.key === segKey)) segKey = frames[0].key;
+      const active = frames.find((f) => f.key === segKey) || frames[0];
+      if (segStrip) {
+        segStrip.innerHTML = frames
+          .map((f) => {
+            const on = f.key === active.key ? " is-active" : "";
+            return `<button type="button" class="acu-seg-btn${on}" role="tab" data-acu-seg="${f.key}" aria-selected="${f.key === active.key}">${f.label}</button>`;
+          })
+          .join("");
+        segStrip.querySelectorAll("[data-acu-seg]").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            segKey = btn.dataset.acuSeg;
+            renderSegStrip();
+          });
+        });
+      }
+      setMainImage(active);
+      if (chartSub) chartSub.textContent = `${active.label} · ${frames.length} 张`;
+    }
+
+    function renderMerNav() {
+      if (!merNav) return;
+      const items = [
+        ...(charts.meridians || []).map((m) => ({
+          id: m.abbr,
+          label: m.abbr,
+          title: m.nameZh || labels[m.abbr] || m.abbr,
+          color: MERIDIAN_COLORS[m.abbr] || "var(--accent)",
+          icon: m.icon ? assetUrl(m.icon) : "",
+        })),
+        {
+          id: "EX",
+          label: "奇穴",
+          title: "经外奇穴",
+          color: MERIDIAN_COLORS.EX,
+          icon: charts.cateByAbbr?.EX ? assetUrl(charts.cateByAbbr.EX) : "",
+        },
+        {
+          id: "BODY",
+          label: "总图",
+          title: "人体总图",
+          color: MERIDIAN_COLORS.BODY,
+          icon: "",
+        },
+      ];
+      merNav.innerHTML = items
+        .map((it) => {
+          const on = it.id === scope ? " is-active" : "";
+          const icon = it.icon
+            ? `<img class="acu-mer-icon" src="${cacheBust(it.icon)}" alt="" width="18" height="18" loading="lazy" />`
+            : "";
+          return `<button type="button" class="acu-mer-btn${on}" data-acu-scope="${it.id}" title="${it.title}" style="--acu-mer-color:${it.color}">${icon}<span>${it.label}</span></button>`;
+        })
+        .join("");
+      merNav.querySelectorAll("[data-acu-scope]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          scope = btn.dataset.acuScope;
+          segKey = "overview";
+          selectedId = "";
+          renderMerNav();
+          renderSegStrip();
+          renderList();
+          updateChartTitle();
+        });
+      });
+    }
+
+    function updateChartTitle() {
+      if (!chartTitle) return;
+      if (scope === "BODY") chartTitle.textContent = "人体总图";
+      else if (scope === "EX") chartTitle.textContent = "经外奇穴示意图";
+      else chartTitle.textContent = labels[scope] || chartByAbbr[scope]?.nameZh || scope;
     }
 
     function filtered() {
       return acupoints.filter((ap) => {
-        if (typeFilter === "meridian" && ap.type === "extra") return false;
-        if (typeFilter === "extra" && ap.type !== "extra") return false;
-        if (scopeFilter.startsWith("mer:") && ap.meridianKey !== scopeFilter.slice(4)) return false;
-        if (scopeFilter.startsWith("reg:") && (ap.type !== "extra" || ap.region !== scopeFilter.slice(4))) {
-          return false;
+        if (scope === "BODY") return matchesQuery(ap, query);
+        if (scope === "EX") {
+          if (ap.type !== "extra") return false;
+          return matchesQuery(ap, query);
         }
+        if (ap.type === "extra") return false;
+        if ((ap.meridianAbbr || "") !== scope) return false;
         return matchesQuery(ap, query);
       });
     }
@@ -362,12 +514,12 @@
       if (countEl) countEl.textContent = `${rows.length} 条`;
       if (listTitle) {
         listTitle.textContent =
-          typeFilter === "extra" ? "奇穴列表" : typeFilter === "meridian" ? "经穴列表" : "穴位列表";
+          scope === "EX" ? "奇穴列表" : scope === "BODY" ? (query ? "搜索结果" : "全部穴位") : "本经穴位";
       }
       if (!listEl) return;
 
       if (!rows.length) {
-        listEl.innerHTML = `<p class="hint acu-list-empty">没有匹配的穴位，试试换关键字或筛选条件。</p>`;
+        listEl.innerHTML = `<p class="hint acu-list-empty">没有匹配的穴位。</p>`;
         renderDetail(null, meridianByKey, query);
         return;
       }
@@ -404,25 +556,16 @@
 
     search?.addEventListener("input", () => {
       query = search.value.trim();
+      // 有搜索词时切到总览范围便于跨经检索
+      if (query && scope !== "BODY" && scope !== "EX") {
+        // keep current meridian filter for in-meridian search
+      }
       renderList();
     });
 
-    meridianFilter?.addEventListener("change", () => {
-      scopeFilter = meridianFilter.value;
-      renderList();
-    });
-
-    typeSeg?.addEventListener("click", (e) => {
-      const btn = e.target.closest("[data-acu-type]");
-      if (!btn) return;
-      typeFilter = btn.dataset.acuType || "all";
-      syncTypeSeg();
-      renderList();
-    });
-
-    syncTypeSeg();
-    bindChartTabs();
-    bindChartPreview();
+    renderMerNav();
+    updateChartTitle();
+    renderSegStrip();
     renderList();
   }
 
