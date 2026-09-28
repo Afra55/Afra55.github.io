@@ -90,6 +90,10 @@
       const V2G_BLACKBOX_SHORT_SPAN_SEC = 20;
       /** 产品优化目标：单段 ≤30s 拉满；更长走切片，不额外放宽内存 */
       const V2G_BLACKBOX_OPT_MAX_SPAN_SEC = 30;
+      /** 余量提帧：≤8s 且宽≥420、体积很松时，可冲到 20fps（源 fps≥20） */
+      const V2G_BLACKBOX_HIGH_FPS = 20;
+      const V2G_BLACKBOX_HIGH_FPS_MAX_SPAN = 8;
+      const V2G_BLACKBOX_HIGH_FPS_MIN_W = 420;
       const V2G_BLACKBOX_BASE_W = 420;
         /** 收窄/加宽步进：要细，否则 420 一步就掉到 380，白白少给 20–40px */
         const V2G_BLACKBOX_WIDTH_STEP = 20;
@@ -1723,12 +1727,11 @@
       }
 
       /**
-       * 黑盒帧率候选：帧率越高越流畅，所以优先保留 15/12/10 全部档位（12 不能少）。
-       * 额外：若源帧率能被 2/3/4 整除且结果**高于 15**，补入该档（例如 60fps→20fps）——
-       * 这样既帧率更高、抽帧又均匀，是纯增益。
+       * 黑盒主决策帧率：固定 [15, 12, 10]。更高帧率（20）只在「宽够 + 体积有余」时提帧，
+       * 避免一上来枚举高帧浪费编码次数、挤掉宽度。
        */
       function blackboxFpsCandidates(srcFps) {
-        void srcFps; // 帧率档固定为 [15, 12, 10]：15 是天花板，10 是底线，12 是基准
+        void srcFps;
         return V2G_BLACKBOX_FPS_LIST.slice();
       }
 
@@ -1743,6 +1746,28 @@
         if ((Number(span) || 0) >= V2G_BLACKBOX_LONG_SPAN_SEC) {
           const capped = list.filter((f) => f <= V2G_BLACKBOX_LONG_FPS_CAP + 0.01);
           if (capped.length) return capped;
+        }
+        return list;
+      }
+
+      /**
+       * 余量提帧候选：主列表之上，短片可追加 20fps。
+       * 条件：时长≤8s、当前宽≥420、源 fps≥20（避免硬插帧白费体积）。
+       */
+      function blackboxRaiseFpsCandidates(span, srcFps, width) {
+        const list = resolveBlackboxFpsList(span, srcFps).slice();
+        const s = Number(span) || 0;
+        const w = Number(width) || 0;
+        const src = Number(srcFps) || 0;
+        if (
+          s > 0.05 &&
+          s <= V2G_BLACKBOX_HIGH_FPS_MAX_SPAN + 0.01 &&
+          w >= V2G_BLACKBOX_HIGH_FPS_MIN_W - 0.5 &&
+          (src <= 0 || src >= V2G_BLACKBOX_HIGH_FPS - 0.5)
+        ) {
+          if (!list.some((f) => Math.abs(f - V2G_BLACKBOX_HIGH_FPS) < 0.01)) {
+            list.unshift(V2G_BLACKBOX_HIGH_FPS);
+          }
         }
         return list;
       }
@@ -2098,8 +2123,11 @@
           chunkCount: clipOpts.chunkCount != null ? clipOpts.chunkCount : readVbbChunkCount(),
         };
 
-        /** 宽度已到顶且仍有预算时，把剩余预算换成更高帧率（不降清晰度） */
-        async function raiseBlackboxFps(best, curFps, encodeAtWidthFps, srcFps) {
+        /**
+         * 宽度够用且仍有预算时，把剩余预算换成更高帧率（不降清晰度）。
+         * 短片（≤8s、宽≥420）可冲到 20fps；更长片段仍只在 15/12/10 内抬。
+         */
+        async function raiseBlackboxFps(best, curFps, encodeAtWidthFps, srcFps, effSpan) {
           const cap = Math.min(30, srcFps > 0 ? srcFps : 30);
           if (!(cap > curFps)) return best;
           const width = Number(best.maxW) || V2G_BLACKBOX_BASE_W;
@@ -2107,13 +2135,21 @@
           // 压缩后体积基本随帧率线性 → 直接算出能负担的最高帧率，只编一次
           const curSize = best.blob.size || 1;
           const maxF = curFps * ((V2G_BLACKBOX_MAX_BYTES * 0.98) / curSize);
-          const cands = fpsList
+          const raiseList = blackboxRaiseFpsCandidates(effSpan, srcFps, width);
+          const cands = raiseList
             .filter((f) => f > curFps + 0.01 && f <= Math.min(cap, maxF + 0.01))
             .sort((a, b) => b - a);
           if (!cands.length) return best;
           const f = cands[0];
+          // 冲 20 时要求宽仍 ≥420：宁可留在 15+更宽，也不为高帧掉到糊字区
+          if (f >= V2G_BLACKBOX_HIGH_FPS - 0.01 && width < V2G_BLACKBOX_HIGH_FPS_MIN_W - 0.5) {
+            return best;
+          }
           if (isAborted()) throw new Error("已取消");
           onProgress(0.96, `提帧率到 ${f}fps`);
+          vbbLog(
+            `[vbb-phase] 余量提帧 ${curFps}→${f}fps 宽${width} span=${Number(effSpan).toFixed(1)}s ${formatKb(curSize)}`
+          );
           const enc = await encodeAtWidthFps(f, width);
           if (!enc?.blob) return best;
           let cand = { ...enc, compressRounds: 0, maxW: width };
@@ -2126,6 +2162,7 @@
           if (!best?.blob) return best;
           if (best.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return best; // 已用满预算
           let cur = best;
+          const effSpan = span / speed;
           const atCap = () =>
             (srcW > 0 && cur.outW >= srcW - 2) || (Number(cur.maxW) || 0) >= Number(hardMax) - 2;
           // 1) 帧率已在决策阶段用真实编码定好，这里只用剩余预算自动增宽（只要 <95% 就补）
@@ -2141,10 +2178,14 @@
             if (wider?.blob?.size) cur = wider;
           }
           if (cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return cur;
-          if (!atCap()) return cur;
-          // 2) 已到宽度上限 → 用剩余预算「自动提帧率」
-          const srcFps = await detectSourceFps(file).catch(() => 0);
-          cur = await raiseBlackboxFps(cur, curFps, encodeAtWidthFps, srcFps);
+          // 2) 宽已够可读（≥420）或已到源宽上限 → 用剩余预算提帧（短片可到 20）
+          //    以前要求 must atCap 才会提帧：短片宽停在 480/720、源却是 1170 时永远冲不到 20。
+          const widthNow = Number(cur.maxW) || V2G_BLACKBOX_BASE_W;
+          const widthOkForRaise = widthNow >= V2G_BLACKBOX_HIGH_FPS_MIN_W - 0.5 || atCap();
+          if (widthOkForRaise) {
+            const srcFpsNow = await detectSourceFps(file).catch(() => 0);
+            cur = await raiseBlackboxFps(cur, Number(cur.fps) || curFps, encodeAtWidthFps, srcFpsNow, effSpan);
+          }
           if (!cur?.blob) return cur;
           // 3) 帧率也到顶、预算仍有富余 → gifski 质量从 92 上探到 100（源很窄/很短时用得上）
           //    省电/均衡不做：多一次编码就多一份 wasm 堆占用
