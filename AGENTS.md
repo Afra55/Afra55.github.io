@@ -21,6 +21,7 @@
 | `tools/bump-version.cjs` | 递增版本并同步 `?v=` |
 | `tools/panels/*.html` | 面板 HTML |
 | `tools/extra-panels/*.js` | 额外面板逻辑 |
+| `tools/extra-panels/v2g-suite-src/` | 视频/黑盒源分片（改完跑 `build-v2g-suite.cjs`） |
 | `tools/vendor/` | 浏览器第三方库 |
 | `tools/lib/oss-deps.js` | 关于页 OSS 清单（升级 vendor 后同步） |
 | `tools/adb-bridge/` | **统一本机桥**（`17888`）：ADB / FFmpeg(`/ff`) / yt-dlp(`/ytdlp`) / Git(`/git`) |
@@ -98,6 +99,7 @@
 
 ## 勿重复造轮子（易踩坑）
 
+- **视频/黑盒分片**：改 `tools/extra-panels/v2g-suite-src/*` 后执行 `node tools/scripts/build-v2g-suite.cjs`；合入前 `node tools/scripts/verify-arch.cjs`
 - **ADB 镜像**：scrcpy-server v3.1，桥 ≥0.9.12；`scrcpy-ctrl.js` 须进 ZIP；勿默认 `i-frame-interval=1`
 - **备忘录滚动**：桌面滚动根是 `main.shell`（非 `window`）
 - **视频拖进度**：串行等 `seeked`（`pumpScrubSeek`），勿密集 `fastSeek`

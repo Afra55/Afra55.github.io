@@ -9,7 +9,16 @@ const path = require("path");
 const { execFileSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
-const SKIP_DIRS = new Set(["vendor", "node_modules", "excalidraw", "ffmpeg", "sandspiel", ".git"]);
+const SKIP_DIRS = new Set([
+  "vendor",
+  "node_modules",
+  "excalidraw",
+  "ffmpeg",
+  "sandspiel",
+  ".git",
+  // 分片源不是独立合法 JS，仅拼接后检查 v2g-suite.js
+  "v2g-suite-src",
+]);
 
 function walk(dir, out = []) {
   for (const name of fs.readdirSync(dir)) {

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "generatedFrom": "extra-panels/v2g-suite.js",
+  "parts": [
+    "00-prelude.js",
+    "10-shared-encode.js",
+    "20-v2g-ui.js",
+    "30-vsplit.js",
+    "40-vbb.js",
+    "99-epilogue.js"
+  ],
+  "sizes": {
+    "00-prelude.js": 2092,
+    "10-shared-encode.js": 118138,
+    "20-v2g-ui.js": 17412,
+    "30-vsplit.js": 107855,
+    "40-vbb.js": 170221,
+    "99-epilogue.js": 99
+  },
+  "note": "编辑 src 分片后执行 node tools/scripts/build-v2g-suite.cjs；勿直接改拼接产物除非临时热修。"
+}

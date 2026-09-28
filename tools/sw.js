@@ -2,7 +2,7 @@
 /* eslint-disable no-restricted-globals */
 "use strict";
 
-const SHELL_CACHE = "devtools-shell-20260928-160346";
+const SHELL_CACHE = "devtools-shell-20260928-163105";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -21,6 +21,10 @@ function shouldBypass(url) {
   if (/\/ffmpeg\//i.test(path)) return true;
   if (/\/excalidraw\//i.test(path)) return true;
   if (/\/sandspiel\//i.test(path)) return true;
+  // 大体积内容资源：不进 SW 缓存（养生 GIF / 白噪音等，打开工具时再拉）
+  if (/\/health-articles\//i.test(path)) return true;
+  if (/\/assets\/ambient\//i.test(path)) return true;
+  if (/\/lib\/health-articles\//i.test(path)) return true;
   return false;
 }
 
@@ -30,6 +34,9 @@ function shouldCacheResponse(url) {
   if (/\.wasm$/i.test(path)) return false;
   if (/\/vendor\/(ffmpeg|gifsicle|gif\.worker|omggif)/i.test(path)) return false;
   if (/\/ffmpeg\//i.test(path)) return false;
+  if (/\/health-articles\//i.test(path)) return false;
+  if (/\/assets\/ambient\//i.test(path)) return false;
+  if (/\/lib\/health-articles\//i.test(path)) return false;
   if (path.includes("/tools")) return true;
   if (/\/index\.html$/i.test(path) || path.endsWith("/tools/") || path.endsWith("/tools")) return true;
   if (/\/icons\//i.test(path)) return true;
