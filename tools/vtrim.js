@@ -148,6 +148,19 @@
   const cropLive = $("#vtrim-crop-live");
   const errorEl = $("#vtrim-error");
   const shareTip = $("#vtrim-share-tip");
+  const bridgeWrap = $("#vtrim-bridge");
+  const bridgeDot = $("#vtrim-bridge-dot");
+  const bridgeTitle = $("#vtrim-bridge-title");
+  const bridgeText = $("#vtrim-bridge-text");
+  const preferBridgeEl = $("#vtrim-prefer-bridge");
+  const bridgeReconnectBtn = $("#vtrim-bridge-reconnect");
+
+  const DEFAULT_BRIDGE_TOKEN = "devtools-bridge";
+  const PREFER_BRIDGE_KEY = "devtools-vtrim-prefer-bridge";
+
+  /** @type {{ ok: boolean, base: string, prefix: string, token: string, version: string }} */
+  let bridge = { ok: false, base: "", prefix: "/ff", token: DEFAULT_BRIDGE_TOKEN, version: "" };
+  let bridgeJobId = "";
 
   /** @type {Blob|null} */
   let latestExportBlob = null;
@@ -160,6 +173,187 @@
   function preferGalleryShare() {
     const M = mediaApi();
     return typeof M.preferShareToGallery === "function" && M.preferShareToGallery();
+  }
+
+  /** 电脑侧展示桥加速；手机仍用网页编码 */
+  function isDesktopExportTarget() {
+    const M = mediaApi();
+    if (typeof M.isLikelyMobileMedia === "function" && M.isLikelyMobileMedia()) return false;
+    try {
+      if (window.matchMedia("(pointer: coarse)").matches && !window.matchMedia("(pointer: fine)").matches) {
+        return false;
+      }
+    } catch (_) {}
+    return true;
+  }
+
+  function storedBridgeToken() {
+    try {
+      return (
+        localStorage.getItem("devtools-ffmpeg-token") ||
+        localStorage.getItem("devtools-bridge-token") ||
+        DEFAULT_BRIDGE_TOKEN
+      );
+    } catch {
+      return DEFAULT_BRIDGE_TOKEN;
+    }
+  }
+
+  function storedBridgeBase() {
+    try {
+      return (localStorage.getItem("devtools-ffmpeg-base") || "http://127.0.0.1:17888").replace(/\/$/, "");
+    } catch {
+      return "http://127.0.0.1:17888";
+    }
+  }
+
+  function prefixFromHealth(health) {
+    if (!health) return "/ff";
+    if (health.service === "devtools-ffmpeg-bridge") return "";
+    if (
+      health.unified ||
+      health.service === "devtools-bridge" ||
+      health.ffmpegMount === "/ff" ||
+      health.capabilities?.ffmpeg ||
+      health.embedded
+    ) {
+      return "/ff";
+    }
+    if (health.service === "devtools-bridge-ffmpeg") return "/ff";
+    return "/ff";
+  }
+
+  function readPreferBridge() {
+    try {
+      const v = localStorage.getItem(PREFER_BRIDGE_KEY);
+      if (v === "0") return false;
+      if (v === "1") return true;
+    } catch (_) {}
+    return true;
+  }
+
+  function writePreferBridge(on) {
+    try {
+      localStorage.setItem(PREFER_BRIDGE_KEY, on ? "1" : "0");
+    } catch (_) {}
+  }
+
+  function paintBridge() {
+    const desktop = isDesktopExportTarget();
+    if (bridgeWrap) bridgeWrap.hidden = !desktop;
+    if (!desktop) return;
+    const ok = bridge.ok;
+    bridgeDot?.classList.toggle("is-ok", ok);
+    bridgeDot?.classList.toggle("is-err", !ok);
+    if (bridgeTitle) {
+      bridgeTitle.textContent = ok ? `本机桥已连接 · v${bridge.version || "?"}` : "未连接本机桥";
+    }
+    if (bridgeText) {
+      bridgeText.textContent = ok
+        ? "导出可走系统 FFmpeg（仅 127.0.0.1，不上传公网）"
+        : "启动统一桥后点「重新连接」，大文件/重编码会快很多";
+    }
+    if (preferBridgeEl) preferBridgeEl.checked = readPreferBridge();
+  }
+
+  async function probeBridge({ launch = false } = {}) {
+    if (!isDesktopExportTarget()) {
+      bridge.ok = false;
+      paintBridge();
+      return false;
+    }
+    const token = storedBridgeToken();
+    bridge.token = token;
+    let base = storedBridgeBase();
+    let prefix = "/ff";
+    let rootHealth = null;
+    try {
+      const discovered = await window.devtoolsBridgeToken?.discoverBase?.(base, token, { kind: "unified" });
+      if (discovered?.base) base = String(discovered.base).replace(/\/$/, "");
+      rootHealth = discovered?.health || null;
+      prefix = prefixFromHealth(rootHealth);
+    } catch (_) {}
+
+    const candidates = [
+      { base, prefix },
+      { base: "http://127.0.0.1:17888", prefix: "/ff" },
+      { base: "http://127.0.0.1:17889", prefix: "" },
+    ];
+    const seen = new Set();
+    for (const c of candidates) {
+      const key = `${c.base}|${c.prefix}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      try {
+        const res = await fetch(`${c.base}${c.prefix}/health`, {
+          headers: { "X-Ffmpeg-Token": token, "X-Adb-Token": token },
+          cache: "no-store",
+          mode: "cors",
+        });
+        if (!res.ok) continue;
+        const data = await res.json();
+        if (!data?.ok) continue;
+        bridge = {
+          ok: true,
+          base: c.base,
+          prefix: c.prefix,
+          token,
+          version: data.version || rootHealth?.version || "",
+        };
+        paintBridge();
+        return true;
+      } catch (_) {}
+    }
+
+    if (launch && window.devtoolsBridgeToken?.readAutoStart?.() !== false) {
+      try {
+        const found = await window.devtoolsBridgeToken.ensureBridgeRunning?.({
+          preferredBase: storedBridgeBase(),
+          token,
+          timeoutMs: 10000,
+          launch: true,
+          kind: "unified",
+        });
+        if (found?.health) {
+          bridge = {
+            ok: true,
+            base: found.base,
+            prefix: prefixFromHealth(found.health),
+            token,
+            version: found.health.version || "",
+          };
+          paintBridge();
+          return true;
+        }
+      } catch (_) {}
+    }
+    bridge.ok = false;
+    paintBridge();
+    return false;
+  }
+
+  async function bridgeFetch(pathname, opts = {}) {
+    if (!bridge.ok) throw new Error("本机桥未连接");
+    const headers = Object.assign({}, opts.headers || {});
+    headers["X-Ffmpeg-Token"] = bridge.token;
+    headers["X-Adb-Token"] = bridge.token;
+    const res = await fetch(`${bridge.base}${bridge.prefix}${pathname}`, { ...opts, headers });
+    if (!res.ok) {
+      let msg = `桥请求失败 HTTP ${res.status}`;
+      try {
+        const j = await res.json();
+        if (j?.error) msg = j.error;
+      } catch (_) {}
+      throw new Error(msg);
+    }
+    return res;
+  }
+
+  function shouldUseBridge() {
+    if (!isDesktopExportTarget()) return false;
+    if (!bridge.ok) return false;
+    if (preferBridgeEl) return Boolean(preferBridgeEl.checked);
+    return readPreferBridge();
   }
 
   function syncShareUi() {
@@ -1199,137 +1393,161 @@
     return filters.join(",");
   }
 
-  async function exportVideo() {
-    const eng = engine();
-    if (!eng?.getInstance) {
-      setError(errorEl, "编码器未就绪，请刷新页面后重试");
-      return;
-    }
-    if (!sourceFile || busy) return;
-    const span = endSec - startSec;
-    if (!(span >= MIN_SPAN)) {
-      toast(`保留时长至少 ${MIN_SPAN} 秒`);
-      return;
-    }
-    abortFlag = false;
-    busy = true;
-    setButtons();
-    setError(errorEl, "");
-    revokeResult();
-    if (abortBtn) abortBtn.hidden = false;
-    setProgress(true, 0.02, "准备导出…", { busy: true });
-    try {
-      await eng.prewarm?.().catch(() => {});
-      const ffmpeg = await eng.getInstance((r, t) => setProgress(true, 0.05 + r * 0.2, t || "加载编码器…", { busy: true }));
-      if (abortFlag) throw new Error("已取消");
-      const inName = await eng.ensureInputWritten(ffmpeg, sourceFile, (r, t) =>
-        setProgress(true, 0.25 + r * 0.15, t || "写入视频…", { busy: true })
-      );
-      const ss = String(Math.max(0, startSec));
-      const tt = String(Math.max(MIN_SPAN, span));
-      const track = exportTrack === "audio" || exportTrack === "video" ? exportTrack : "av";
-      const audioOnly = track === "audio";
-      const videoOnly = track === "video";
-      const audioMp3 = audioOnly && exportAudioFmt === "mp3";
-      const outExt = audioOnly ? (audioMp3 ? "mp3" : "m4a") : "mp4";
-      const outName = `vtrim-out-${Date.now()}.${outExt}`;
-      const reencode = audioOnly ? false : needsReencode();
-      const crf = exportQuality === "hq" ? "20" : "23";
-      const preset = exportQuality === "hq" ? "veryfast" : "ultrafast";
-      const attempts = [];
+  async function exportViaBridge({ span, track, audioOnly, videoOnly, audioMp3, reencode }) {
+    const vf = reencode ? buildVf() : "";
+    const q = new URLSearchParams({
+      op: "vtrim",
+      filename: sourceFile.name || "video.mp4",
+      startSec: String(Math.max(0, startSec)),
+      durationSec: String(Math.max(MIN_SPAN, span)),
+      track,
+      quality: exportQuality === "hq" ? "hq" : "fast",
+      audioFmt: audioMp3 ? "mp3" : "m4a",
+    });
+    if (vf) q.set("vf", vf);
+    if (reencode) q.set("reencode", "1");
 
-      if (audioOnly) {
-        if (audioMp3) {
-          attempts.push({
-            label: "抽取 MP3",
-            args: ["-ss", ss, "-t", tt, "-i", inName, "-vn", "-c:a", "copy", "-f", "mp3", "-y", outName],
-          });
-          attempts.push({
-            label: "MP3 重编码",
-            args: ["-ss", ss, "-t", tt, "-i", inName, "-vn", "-c:a", "libmp3lame", "-b:a", "192k", "-y", outName],
-          });
-        } else {
-          attempts.push({
-            label: "抽取音轨",
-            args: ["-ss", ss, "-t", tt, "-i", inName, "-vn", "-c:a", "copy", "-y", outName],
-          });
-          attempts.push({
-            label: "AAC 重编码",
-            args: ["-ss", ss, "-t", tt, "-i", inName, "-vn", "-c:a", "aac", "-b:a", "192k", "-y", outName],
-          });
-        }
+    setProgress(true, 0.08, "上传到本机桥…", { busy: true });
+    const startRes = await bridgeFetch(`/jobs/browser-run?${q}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "X-Filename": sourceFile.name || "video.mp4",
+      },
+      body: sourceFile,
+    });
+    const started = await startRes.json();
+    const jobId = started?.job?.id;
+    if (!jobId) throw new Error("本机桥未返回任务 ID");
+    bridgeJobId = jobId;
+
+    setProgress(true, 0.2, "本机 FFmpeg 处理中…", { busy: true, sub: `${formatClock(startSec)}–${formatClock(endSec)}` });
+    for (;;) {
+      if (abortFlag) {
+        try {
+          await bridgeFetch(`/jobs/${jobId}/cancel`, { method: "POST", body: "{}" });
+        } catch (_) {}
+        throw new Error("已取消");
+      }
+      await new Promise((r) => setTimeout(r, 650));
+      const stRes = await bridgeFetch(`/jobs/${jobId}`);
+      const st = await stRes.json();
+      const job = st.job;
+      const prog = 0.2 + (Number(job?.progress) || 0) * 0.7;
+      setProgress(true, prog, job?.message || "本机 FFmpeg 处理中…", {
+        busy: true,
+        sub: `${formatClock(startSec)}–${formatClock(endSec)}`,
+      });
+      if (job?.status === "done" || job?.status === "success") break;
+      if (job?.status === "error" || job?.status === "failed") {
+        throw new Error(job?.error || job?.message || "本机桥导出失败");
+      }
+      if (job?.status === "cancelled") throw new Error("已取消");
+    }
+
+    setProgress(true, 0.92, "下载结果…", { busy: true });
+    const dl = await bridgeFetch(`/jobs/${jobId}/download`);
+    const buf = await dl.arrayBuffer();
+    if (!(buf.byteLength > 32)) throw new Error("本机桥返回空文件");
+    const mime = audioOnly ? (audioMp3 ? "audio/mpeg" : "audio/mp4") : "video/mp4";
+    bridgeJobId = "";
+    return {
+      outBlob: new Blob([buf], { type: mime }),
+      viaBridge: true,
+      audioOnly,
+      videoOnly,
+      audioMp3,
+      reencode,
+      span,
+    };
+  }
+
+  async function exportViaWasm({ span, track, audioOnly, videoOnly, audioMp3, reencode }) {
+    const eng = engine();
+    if (!eng?.getInstance) throw new Error("编码器未就绪，请刷新页面后重试");
+    await eng.prewarm?.().catch(() => {});
+    const ffmpeg = await eng.getInstance((r, t) => setProgress(true, 0.05 + r * 0.2, t || "加载编码器…", { busy: true }));
+    if (abortFlag) throw new Error("已取消");
+    const inName = await eng.ensureInputWritten(ffmpeg, sourceFile, (r, t) =>
+      setProgress(true, 0.25 + r * 0.15, t || "写入视频…", { busy: true })
+    );
+    const ss = String(Math.max(0, startSec));
+    const tt = String(Math.max(MIN_SPAN, span));
+    const outExt = audioOnly ? (audioMp3 ? "mp3" : "m4a") : "mp4";
+    const outName = `vtrim-out-${Date.now()}.${outExt}`;
+    const crf = exportQuality === "hq" ? "20" : "23";
+    const preset = exportQuality === "hq" ? "veryfast" : "ultrafast";
+    const attempts = [];
+
+    if (audioOnly) {
+      if (audioMp3) {
+        attempts.push({
+          label: "抽取 MP3",
+          args: ["-ss", ss, "-t", tt, "-i", inName, "-vn", "-c:a", "copy", "-f", "mp3", "-y", outName],
+        });
+        attempts.push({
+          label: "MP3 重编码",
+          args: ["-ss", ss, "-t", tt, "-i", inName, "-vn", "-c:a", "libmp3lame", "-b:a", "192k", "-y", outName],
+        });
       } else {
-        if (!reencode && !videoOnly && span >= COPY_MIN_SPAN) {
-          attempts.push({
-            label: "快速剪切",
-            args: [
-              "-ss",
-              ss,
-              "-t",
-              tt,
-              "-i",
-              inName,
-              "-c",
-              "copy",
-              "-avoid_negative_ts",
-              "make_zero",
-              "-movflags",
-              "+faststart",
-              "-y",
-              outName,
-            ],
-          });
-        }
-        if (!reencode && videoOnly && span >= COPY_MIN_SPAN) {
-          attempts.push({
-            label: "快速无声剪切",
-            args: [
-              "-ss",
-              ss,
-              "-t",
-              tt,
-              "-i",
-              inName,
-              "-an",
-              "-c:v",
-              "copy",
-              "-avoid_negative_ts",
-              "make_zero",
-              "-movflags",
-              "+faststart",
-              "-y",
-              outName,
-            ],
-          });
-        }
-        const vf = buildVf();
-        if (!videoOnly) {
-          const encArgs = ["-ss", ss, "-t", tt, "-i", inName];
-          if (vf) encArgs.push("-vf", vf);
-          encArgs.push(
-            "-c:v",
-            "libx264",
-            "-preset",
-            preset,
-            "-crf",
-            crf,
-            "-pix_fmt",
-            "yuv420p",
-            "-c:a",
-            "aac",
-            "-b:a",
-            exportQuality === "hq" ? "160k" : "128k",
+        attempts.push({
+          label: "抽取音轨",
+          args: ["-ss", ss, "-t", tt, "-i", inName, "-vn", "-c:a", "copy", "-y", outName],
+        });
+        attempts.push({
+          label: "AAC 重编码",
+          args: ["-ss", ss, "-t", tt, "-i", inName, "-vn", "-c:a", "aac", "-b:a", "192k", "-y", outName],
+        });
+      }
+    } else {
+      if (!reencode && !videoOnly && span >= COPY_MIN_SPAN) {
+        attempts.push({
+          label: "快速剪切",
+          args: [
+            "-ss",
+            ss,
+            "-t",
+            tt,
+            "-i",
+            inName,
+            "-c",
+            "copy",
+            "-avoid_negative_ts",
+            "make_zero",
             "-movflags",
             "+faststart",
             "-y",
-            outName
-          );
-          attempts.push({ label: reencode ? "裁剪重编码" : "重编码", args: encArgs });
-        }
-        const encNoA = ["-ss", ss, "-t", tt, "-i", inName];
-        if (vf) encNoA.push("-vf", vf);
-        encNoA.push(
-          "-an",
+            outName,
+          ],
+        });
+      }
+      if (!reencode && videoOnly && span >= COPY_MIN_SPAN) {
+        attempts.push({
+          label: "快速无声剪切",
+          args: [
+            "-ss",
+            ss,
+            "-t",
+            tt,
+            "-i",
+            inName,
+            "-an",
+            "-c:v",
+            "copy",
+            "-avoid_negative_ts",
+            "make_zero",
+            "-movflags",
+            "+faststart",
+            "-y",
+            outName,
+          ],
+        });
+      }
+      const vf = buildVf();
+      if (!videoOnly) {
+        const encArgs = ["-ss", ss, "-t", tt, "-i", inName];
+        if (vf) encArgs.push("-vf", vf);
+        encArgs.push(
           "-c:v",
           "libx264",
           "-preset",
@@ -1338,98 +1556,167 @@
           crf,
           "-pix_fmt",
           "yuv420p",
+          "-c:a",
+          "aac",
+          "-b:a",
+          exportQuality === "hq" ? "160k" : "128k",
           "-movflags",
           "+faststart",
           "-y",
           outName
         );
-        attempts.push({ label: videoOnly ? "无声重编码" : "无音轨重编码", args: encNoA });
+        attempts.push({ label: reencode ? "裁剪重编码" : "重编码", args: encArgs });
       }
+      const encNoA = ["-ss", ss, "-t", tt, "-i", inName];
+      if (vf) encNoA.push("-vf", vf);
+      encNoA.push(
+        "-an",
+        "-c:v",
+        "libx264",
+        "-preset",
+        preset,
+        "-crf",
+        crf,
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
+        "-y",
+        outName
+      );
+      attempts.push({ label: videoOnly ? "无声重编码" : "无音轨重编码", args: encNoA });
+    }
 
-      let outBlob = null;
-      const mime = audioOnly ? (audioMp3 ? "audio/mpeg" : "audio/mp4") : "video/mp4";
-      for (const attempt of attempts) {
-        if (abortFlag) throw new Error("已取消");
-        setProgress(true, 0.45, `${attempt.label}…`, {
-          busy: true,
-          sub: `${formatClock(startSec)}–${formatClock(endSec)}`,
-        });
-        try {
-          await ffmpeg.deleteFile(outName);
-        } catch (_) {}
-        try {
-          const code = await ffmpeg.exec(attempt.args);
-          if (code !== 0) continue;
-          const data = await ffmpeg.readFile(outName);
-          const raw = data instanceof Uint8Array ? data : new Uint8Array(data);
-          if (raw.byteLength > 32) {
-            const bytes = new Uint8Array(raw.byteLength);
-            bytes.set(raw);
-            outBlob = new Blob([bytes], { type: mime });
-            break;
-          }
-        } catch (err) {
-          if (String(err?.message) === "已取消") throw err;
-        }
-      }
+    let outBlob = null;
+    const mime = audioOnly ? (audioMp3 ? "audio/mpeg" : "audio/mp4") : "video/mp4";
+    for (const attempt of attempts) {
+      if (abortFlag) throw new Error("已取消");
+      setProgress(true, 0.45, `${attempt.label}…`, {
+        busy: true,
+        sub: `${formatClock(startSec)}–${formatClock(endSec)}`,
+      });
       try {
         await ffmpeg.deleteFile(outName);
       } catch (_) {}
-      if (!outBlob) throw new Error("导出失败，可尝试缩短时长或关闭裁剪后重试");
-      resultUrl = URL.createObjectURL(outBlob);
-      if (resultBlock) resultBlock.hidden = false;
-      if (audioOnly) {
-        if (resultAudio) {
-          resultAudio.src = resultUrl;
-          resultAudio.hidden = false;
-        }
-        if (resultVideo) resultVideo.hidden = true;
-      } else if (resultVideo) {
-        resultVideo.src = resultUrl;
-        resultVideo.hidden = false;
-        if (resultAudio) resultAudio.hidden = true;
-      }
-      const trackLabel = audioOnly ? "仅音频" : videoOnly ? "仅视频" : "音视频";
-      const modeLabel = audioOnly
-        ? audioMp3
-          ? "MP3"
-          : "M4A"
-        : reencode
-          ? exportQuality === "hq"
-            ? "清晰重编码"
-            : "快速重编码"
-          : "快速剪切";
-      if (resultMeta) {
-        const mb = (outBlob.size / (1024 * 1024)).toFixed(2);
-        resultMeta.textContent = `约 ${mb} MB · ${formatClock(span)} · ${trackLabel} · ${modeLabel}`;
-      }
-      const fname = audioOnly
-        ? `trimmed-${Date.now()}.${audioMp3 ? "mp3" : "m4a"}`
-        : `trimmed-${Date.now()}.mp4`;
-      latestExportBlob = outBlob;
-      latestExportName = fname;
-      if (downloadA) {
-        downloadA.href = resultUrl;
-        downloadA.download = fname;
-        downloadA.hidden = false;
-      }
-      syncShareUi();
-      const delivered = await deliverExportBlob(outBlob, fname, { auto: true });
-      setProgress(true, 1, "导出完成");
-      if (!delivered?.shared && !delivered?.cancelled) {
-        toast(`已导出 · ${trackLabel} · 保留 ${formatClock(span)}`);
-      } else if (delivered?.shared) {
-        toast(`已导出 · ${trackLabel} · 保留 ${formatClock(span)}`);
-      }
       try {
-        resultBlock?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      } catch (_) {}
+        const code = await ffmpeg.exec(attempt.args);
+        if (code !== 0) continue;
+        const data = await ffmpeg.readFile(outName);
+        const raw = data instanceof Uint8Array ? data : new Uint8Array(data);
+        if (raw.byteLength > 32) {
+          const bytes = new Uint8Array(raw.byteLength);
+          bytes.set(raw);
+          outBlob = new Blob([bytes], { type: mime });
+          break;
+        }
+      } catch (err) {
+        if (String(err?.message) === "已取消") throw err;
+      }
+    }
+    try {
+      await ffmpeg.deleteFile(outName);
+    } catch (_) {}
+    if (!outBlob) throw new Error("导出失败，可尝试缩短时长或关闭裁剪后重试");
+    return { outBlob, viaBridge: false, audioOnly, videoOnly, audioMp3, reencode, span };
+  }
+
+  async function presentExportResult({ outBlob, viaBridge, audioOnly, videoOnly, audioMp3, reencode, span }) {
+    resultUrl = URL.createObjectURL(outBlob);
+    if (resultBlock) resultBlock.hidden = false;
+    if (audioOnly) {
+      if (resultAudio) {
+        resultAudio.src = resultUrl;
+        resultAudio.hidden = false;
+      }
+      if (resultVideo) resultVideo.hidden = true;
+    } else if (resultVideo) {
+      resultVideo.src = resultUrl;
+      resultVideo.hidden = false;
+      if (resultAudio) resultAudio.hidden = true;
+    }
+    const trackLabel = audioOnly ? "仅音频" : videoOnly ? "仅视频" : "音视频";
+    const modeLabel = audioOnly
+      ? audioMp3
+        ? "MP3"
+        : "M4A"
+      : reencode
+        ? exportQuality === "hq"
+          ? "清晰重编码"
+          : "快速重编码"
+        : "快速剪切";
+    const engineLabel = viaBridge ? "本机桥" : "网页";
+    if (resultMeta) {
+      const mb = (outBlob.size / (1024 * 1024)).toFixed(2);
+      resultMeta.textContent = `约 ${mb} MB · ${formatClock(span)} · ${trackLabel} · ${modeLabel} · ${engineLabel}`;
+    }
+    const fname = audioOnly
+      ? `trimmed-${Date.now()}.${audioMp3 ? "mp3" : "m4a"}`
+      : `trimmed-${Date.now()}.mp4`;
+    latestExportBlob = outBlob;
+    latestExportName = fname;
+    if (downloadA) {
+      downloadA.href = resultUrl;
+      downloadA.download = fname;
+      downloadA.hidden = false;
+    }
+    syncShareUi();
+    const delivered = await deliverExportBlob(outBlob, fname, { auto: true });
+    setProgress(true, 1, viaBridge ? "本机桥导出完成" : "导出完成");
+    if (!delivered?.shared && !delivered?.cancelled) {
+      toast(`已导出 · ${trackLabel} · ${engineLabel} · 保留 ${formatClock(span)}`);
+    } else if (delivered?.shared) {
+      toast(`已导出 · ${trackLabel} · 保留 ${formatClock(span)}`);
+    }
+    try {
+      resultBlock?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } catch (_) {}
+  }
+
+  async function exportVideo() {
+    if (!sourceFile || busy) return;
+    const span = endSec - startSec;
+    if (!(span >= MIN_SPAN)) {
+      toast(`保留时长至少 ${MIN_SPAN} 秒`);
+      return;
+    }
+    abortFlag = false;
+    bridgeJobId = "";
+    busy = true;
+    setButtons();
+    setError(errorEl, "");
+    revokeResult();
+    if (abortBtn) abortBtn.hidden = false;
+    setProgress(true, 0.02, "准备导出…", { busy: true });
+
+    const track = exportTrack === "audio" || exportTrack === "video" ? exportTrack : "av";
+    const audioOnly = track === "audio";
+    const videoOnly = track === "video";
+    const audioMp3 = audioOnly && exportAudioFmt === "mp3";
+    const reencode = audioOnly ? false : needsReencode();
+    const ctx = { span, track, audioOnly, videoOnly, audioMp3, reencode };
+
+    try {
+      let result = null;
+      if (shouldUseBridge()) {
+        try {
+          result = await exportViaBridge(ctx);
+        } catch (err) {
+          if (String(err?.message) === "已取消") throw err;
+          console.warn("[vtrim] 本机桥失败，回退网页编码", err);
+          setProgress(true, 0.05, "桥失败，改用网页编码…", { busy: true });
+          result = await exportViaWasm(ctx);
+        }
+      } else {
+        result = await exportViaWasm(ctx);
+      }
+      await presentExportResult(result);
     } catch (err) {
       if (String(err?.message) === "已取消") toast("已取消导出");
       else setError(errorEl, err?.message || String(err));
       setProgress(false, 0, "");
     } finally {
       busy = false;
+      bridgeJobId = "";
       if (abortBtn) abortBtn.hidden = true;
       setButtons();
     }
@@ -1591,6 +1878,19 @@
     try {
       engine()?.terminate?.({ revokeAssets: false });
     } catch (_) {}
+    const id = bridgeJobId;
+    if (id && bridge.ok) {
+      bridgeFetch(`/jobs/${id}/cancel`, { method: "POST", body: "{}" }).catch(() => {});
+    }
+  });
+
+  preferBridgeEl?.addEventListener("change", () => {
+    writePreferBridge(Boolean(preferBridgeEl.checked));
+  });
+  bridgeReconnectBtn?.addEventListener("click", () => {
+    probeBridge({ launch: true }).then((ok) => {
+      toast(ok ? "本机桥已连接" : "未连上本机桥，请先在「本机桥」面板启动");
+    });
   });
 
   function tickPlayhead() {
@@ -1927,6 +2227,8 @@
   syncAspectUi();
   syncModeUi();
   syncShareUi();
+  paintBridge();
+  probeBridge({ launch: false }).catch(() => {});
 
   if (downloadA && !downloadA.dataset.shareBound) {
     downloadA.dataset.shareBound = "1";

@@ -37,7 +37,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.5.1";
+const BRIDGE_VERSION = "0.5.2";
 const FEATURES = [
   "local-fs",
   "probe",
@@ -1283,6 +1283,50 @@ const OPS_CATALOG = [
     ],
   },
   {
+    id: "vtrim",
+    label: "网页修剪加速",
+    group: "时间",
+    tier: "more",
+    desc: "供网页「视频修剪」经本机桥加速：精确起点/时长 + 可选 vf 裁切旋转",
+    accept: "media",
+    webHref: "#vtrim",
+    fields: [
+      { key: "startSec", type: "number", label: "起点(秒)", min: 0, max: 86400, step: 0.01, default: 0 },
+      { key: "durationSec", type: "number", label: "时长(秒)", min: 0.2, max: 86400, step: 0.01, default: 10 },
+      {
+        key: "track",
+        type: "select",
+        label: "轨道",
+        options: [
+          { value: "av", label: "音视频" },
+          { value: "video", label: "仅视频" },
+          { value: "audio", label: "仅音频" },
+        ],
+        default: "av",
+      },
+      {
+        key: "quality",
+        type: "select",
+        label: "画质",
+        options: [
+          { value: "fast", label: "快速" },
+          { value: "hq", label: "清晰" },
+        ],
+        default: "fast",
+      },
+      {
+        key: "audioFmt",
+        type: "select",
+        label: "音频格式",
+        options: [
+          { value: "m4a", label: "M4A" },
+          { value: "mp3", label: "MP3" },
+        ],
+        default: "m4a",
+      },
+    ],
+  },
+  {
     id: "split",
     label: "切片 / 均分",
     group: "时间",
@@ -1589,6 +1633,15 @@ function atempoChain(speed) {
 function even(n) {
   const x = Math.max(2, Math.round(Number(n) || 2));
   return x % 2 === 0 ? x : x - 1;
+}
+
+/** 仅允许网页修剪传来的安全滤镜串（transpose/hflip/crop 等） */
+function sanitizeVf(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+  if (s.length > 800) throw new Error("滤镜过长");
+  if (!/^[a-zA-Z0-9_,=:.\-\\]+$/.test(s)) throw new Error("非法滤镜参数");
+  return s;
 }
 
 function defaultFontPath() {
@@ -3134,6 +3187,131 @@ function planOp(op, optsIn = {}) {
     };
   }
 
+  if (id === "vtrim") {
+    const start = Math.max(0, Number(opts.startSec) || 0);
+    const dur = Math.max(0.2, Number(opts.durationSec) || 1);
+    const track = String(opts.track || "av").toLowerCase();
+    const quality = String(opts.quality || "fast").toLowerCase();
+    const audioFmt = String(opts.audioFmt || "m4a").toLowerCase();
+    const vf = sanitizeVf(opts.vf || "");
+    const reencode =
+      Boolean(vf) ||
+      opts.reencode === true ||
+      opts.reencode === "1" ||
+      opts.reencode === 1;
+    const crf = quality === "hq" ? "20" : "23";
+    const preset = quality === "hq" ? "veryfast" : "ultrafast";
+    const aBitrate = quality === "hq" ? "160k" : "128k";
+    const COPY_MIN_SPAN = 2;
+    const ss = String(start);
+    const tt = String(dur);
+    const audioOnly = track === "audio";
+    const videoOnly = track === "video";
+
+    if (audioOnly) {
+      const fmt = audioArgsForFormat(audioFmt === "mp3" ? "mp3" : "m4a", "192k");
+      return {
+        ext: fmt.ext,
+        mime: fmt.mime,
+        suffix: "-vtrim",
+        buildArgs: (src, dest) => {
+          const attempts = [];
+          if (fmt.ext === "m4a" || fmt.ext === "mp3") {
+            attempts.push(["-y", "-ss", ss, "-t", tt, "-i", src, "-vn", "-c:a", "copy", dest]);
+          }
+          attempts.push(["-y", "-ss", ss, "-t", tt, "-i", src, ...fmt.args, dest]);
+          return attempts;
+        },
+      };
+    }
+
+    return {
+      ext: "mp4",
+      mime: "video/mp4",
+      suffix: "-vtrim",
+      buildArgs: (src, dest) => {
+        const attempts = [];
+        if (!reencode && !videoOnly && dur >= COPY_MIN_SPAN) {
+          attempts.push([
+            "-y",
+            "-ss",
+            ss,
+            "-t",
+            tt,
+            "-i",
+            src,
+            "-c",
+            "copy",
+            "-avoid_negative_ts",
+            "make_zero",
+            "-movflags",
+            "+faststart",
+            dest,
+          ]);
+        }
+        if (!reencode && videoOnly && dur >= COPY_MIN_SPAN) {
+          attempts.push([
+            "-y",
+            "-ss",
+            ss,
+            "-t",
+            tt,
+            "-i",
+            src,
+            "-an",
+            "-c:v",
+            "copy",
+            "-avoid_negative_ts",
+            "make_zero",
+            "-movflags",
+            "+faststart",
+            dest,
+          ]);
+        }
+        if (!videoOnly) {
+          const enc = ["-y", "-ss", ss, "-t", tt, "-i", src];
+          if (vf) enc.push("-vf", vf);
+          enc.push(
+            "-c:v",
+            "libx264",
+            "-preset",
+            preset,
+            "-crf",
+            crf,
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            "-b:a",
+            aBitrate,
+            "-movflags",
+            "+faststart",
+            dest
+          );
+          attempts.push(enc);
+        }
+        const encNoA = ["-y", "-ss", ss, "-t", tt, "-i", src];
+        if (vf) encNoA.push("-vf", vf);
+        encNoA.push(
+          "-an",
+          "-c:v",
+          "libx264",
+          "-preset",
+          preset,
+          "-crf",
+          crf,
+          "-pix_fmt",
+          "yuv420p",
+          "-movflags",
+          "+faststart",
+          dest
+        );
+        attempts.push(encNoA);
+        return attempts;
+      },
+    };
+  }
+
   // special ops handled by dedicated runners
   if (id === "split-parts" || id === "replace-audio" || id === "slideshow") {
     return { ext: "mp4", mime: "video/mp4", suffix: "", buildArgs: () => [], special: id };
@@ -3964,7 +4142,7 @@ async function handleRequest(req, res, opts = {}) {
     }
 
     if (req.method === "POST" && pathname === "/jobs/browser-run") {
-      // Browser File → temp → convert/compress. Query: op, preset, scaleHeight
+      // Browser File → temp → op. Query: op, preset, scaleHeight, 以及 vtrim 参数
       const q = url.searchParams;
       const op = String(q.get("op") || "convert");
       const preset = String(q.get("preset") || "keep-quality");
@@ -3987,9 +4165,26 @@ async function handleRequest(req, res, opts = {}) {
         preset,
       };
       if (scaleHeight > 0) {
-        // Optional: chain via convert then note; for v1 apply scale in preset path only when op=scale
         if (op === "scale") body.height = String(scaleHeight);
         else body.scaleHeight = scaleHeight;
+      }
+      const passKeys = [
+        "startSec",
+        "durationSec",
+        "tailSec",
+        "trimMode",
+        "vf",
+        "track",
+        "quality",
+        "audioFmt",
+        "reencode",
+        "cropRatio",
+      ];
+      for (const key of passKeys) {
+        if (!q.has(key)) continue;
+        const val = q.get(key);
+        if (val == null || val === "") continue;
+        body[key] = val;
       }
       const job = await startJobFromBody(body);
       job.meta = { ...(job.meta || {}), browserUpload: true, uploadBytes: size, uploadName: filename };

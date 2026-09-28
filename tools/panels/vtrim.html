@@ -1,9 +1,26 @@
 <section id="vtrim" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-vtrim">
       <div class="panel-head">
         <h1>视频修剪</h1>
-        <p>浏览器内 FFmpeg：修剪片头片尾、裁边框。胶片与预览分离、拖动手势气泡、跟手 scrub；仍非 iOS 原生级流畅。手机可直接用；安卓导出后可系统分享存相册。<span class="ff-desktop-only-hint">电脑批量可选 <a href="#ffbridge">本机桥</a>。</span><span id="vtrim-adapt-tip" class="hint tight"></span></p>
+        <p>修剪片头片尾、裁切画面。电脑连上<a href="#ffbridge">本机桥</a>后导出走系统 FFmpeg（更快）；手机用网页编码，安卓可分享存相册。<span id="vtrim-adapt-tip" class="hint tight"></span></p>
       </div>
       <div class="panel-body">
+        <div class="vtrim-bridge" id="vtrim-bridge" hidden aria-live="polite">
+          <div class="vtrim-bridge-main">
+            <span class="adb-dot" id="vtrim-bridge-dot" aria-hidden="true"></span>
+            <div>
+              <strong id="vtrim-bridge-title">本机桥</strong>
+              <p class="hint tight" id="vtrim-bridge-text">电脑可加速导出</p>
+            </div>
+          </div>
+          <div class="btn-row tool-actions" style="flex-wrap:wrap;align-items:center;gap:0.45rem">
+            <label class="flag" title="勾选且桥在线时，导出上传到 127.0.0.1 用系统 FFmpeg；失败自动回退网页">
+              <input type="checkbox" id="vtrim-prefer-bridge" checked /> 优先本机桥加速
+            </label>
+            <button type="button" class="ghost-btn" id="vtrim-bridge-reconnect">重新连接</button>
+            <a class="ghost-btn" href="#ffbridge">打开本机桥</a>
+          </div>
+        </div>
+
         <div class="btn-row tool-actions">
           <label class="file-btn" for="vtrim-file">选择视频</label>
           <input id="vtrim-file" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" hidden />

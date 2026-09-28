@@ -4,6 +4,37 @@
   gap: 0.65rem;
 }
 
+.vtrim-bridge {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+  margin-bottom: 0.75rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel, #121826) 88%, #1e2a3d);
+}
+.vtrim-bridge-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.55rem;
+  min-width: min(100%, 16rem);
+}
+.vtrim-bridge-main strong { display: block; }
+.vtrim-bridge-main .hint { margin: 0.15rem 0 0; }
+.vtrim-bridge .adb-dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-top: 0.35rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--ink, #ccc) 35%, transparent);
+}
+.vtrim-bridge .adb-dot.is-ok { background: #3ecf8e; box-shadow: 0 0 0 3px color-mix(in srgb, #3ecf8e 28%, transparent); }
+.vtrim-bridge .adb-dot.is-err { background: #ff8f6b; }
+
 .vtrim-preview-wrap {
   position: relative;
   width: 100%;
