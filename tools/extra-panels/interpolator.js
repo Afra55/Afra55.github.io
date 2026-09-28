@@ -146,31 +146,43 @@
       ],
       calc: (t, p) => bezierY(num(p.x1), num(p.y1), num(p.x2), num(p.y2), t),
       java: (p) => `new PathInterpolator(${fmt(p.x1)}, ${fmt(p.y1)}, ${fmt(p.x2)}, ${fmt(p.y2)})`,
-      kotlin: (p) => `PathInterpolator(${fmt(p.x1)}f, ${fmt(p.y1)}f, ${fmt(p.x2)}f, ${fmt(p.y2)}f)`,
+      kotlin: (p) => `PathInterpolator(${fmt(p.x1)}, ${fmt(p.y1)}, ${fmt(p.x2)}, ${fmt(p.y2)})`,
       clazz: "PathInterpolator", desc: "贝塞尔路径：用两个控制点定义完整动画曲线（y 可 >1 表示超调）。",
     },
     {
       id: "fastOutSlowIn", name: "FastOutSlowInInterpolator", cn: "快进慢出",
       params: bezParams(0.4, 0, 0.2, 1),
       calc: (t, p) => bezierY(num(p.x1), num(p.y1), num(p.x2), num(p.y2), t),
-      java: (p) => `new PathInterpolator(${fmt(p.x1)}, ${fmt(p.y1)}, ${fmt(p.x2)}, ${fmt(p.y2)})`,
-      kotlin: (p) => `PathInterpolator(${fmt(p.x1)}f, ${fmt(p.y1)}f, ${fmt(p.x2)}f, ${fmt(p.y2)}f)`,
+      java: (p, tool) => paramsMatchDefs(tool, p)
+        ? "new FastOutSlowInInterpolator()"
+        : `new PathInterpolator(${fmt(p.x1)}, ${fmt(p.y1)}, ${fmt(p.x2)}, ${fmt(p.y2)})`,
+      kotlin: (p, tool) => paramsMatchDefs(tool, p)
+        ? "FastOutSlowInInterpolator()"
+        : `PathInterpolator(${fmt(p.x1)}, ${fmt(p.y1)}, ${fmt(p.x2)}, ${fmt(p.y2)})`,
       clazz: "FastOutSlowInInterpolator", desc: "快进慢出：Material 常驻过渡，先快后慢（默认即 FastOutSlowIn），可拖动控制点自定义。",
     },
     {
       id: "linearOutSlowIn", name: "LinearOutSlowInInterpolator", cn: "线性出·慢入",
       params: bezParams(0, 0, 0.4, 1),
       calc: (t, p) => bezierY(num(p.x1), num(p.y1), num(p.x2), num(p.y2), t),
-      java: (p) => `new PathInterpolator(${fmt(p.x1)}, ${fmt(p.y1)}, ${fmt(p.x2)}, ${fmt(p.y2)})`,
-      kotlin: (p) => `PathInterpolator(${fmt(p.x1)}f, ${fmt(p.y1)}f, ${fmt(p.x2)}f, ${fmt(p.y2)}f)`,
+      java: (p, tool) => paramsMatchDefs(tool, p)
+        ? "new LinearOutSlowInInterpolator()"
+        : `new PathInterpolator(${fmt(p.x1)}, ${fmt(p.y1)}, ${fmt(p.x2)}, ${fmt(p.y2)})`,
+      kotlin: (p, tool) => paramsMatchDefs(tool, p)
+        ? "LinearOutSlowInInterpolator()"
+        : `PathInterpolator(${fmt(p.x1)}, ${fmt(p.y1)}, ${fmt(p.x2)}, ${fmt(p.y2)})`,
       clazz: "LinearOutSlowInInterpolator", desc: "线性出·慢入：匀速伴随缓慢收尾（默认即 LinearOutSlowIn），可拖动控制点自定义。",
     },
     {
       id: "fastOutLinearIn", name: "FastOutLinearInInterpolator", cn: "快出·线性入",
       params: bezParams(0.4, 0, 1, 1),
       calc: (t, p) => bezierY(num(p.x1), num(p.y1), num(p.x2), num(p.y2), t),
-      java: (p) => `new PathInterpolator(${fmt(p.x1)}, ${fmt(p.y1)}, ${fmt(p.x2)}, ${fmt(p.y2)})`,
-      kotlin: (p) => `PathInterpolator(${fmt(p.x1)}f, ${fmt(p.y1)}f, ${fmt(p.x2)}f, ${fmt(p.y2)}f)`,
+      java: (p, tool) => paramsMatchDefs(tool, p)
+        ? "new FastOutLinearInInterpolator()"
+        : `new PathInterpolator(${fmt(p.x1)}, ${fmt(p.y1)}, ${fmt(p.x2)}, ${fmt(p.y2)})`,
+      kotlin: (p, tool) => paramsMatchDefs(tool, p)
+        ? "FastOutLinearInInterpolator()"
+        : `PathInterpolator(${fmt(p.x1)}, ${fmt(p.y1)}, ${fmt(p.x2)}, ${fmt(p.y2)})`,
       clazz: "FastOutLinearInInterpolator", desc: "快出·线性入：快速起步后匀速（默认即 FastOutLinearIn），可拖动控制点自定义。",
     },
     {
@@ -180,17 +192,26 @@
         { key: "dampingRatio", label: "dampingRatio", min: 0.05, max: 1, step: 0.01, def: 0.5, desc: "阻尼比：越小振得越久（接近 0 则停在目标即回弹）。" },
       ],
       calc: (t, p) => springVal(t, num(p.dampingRatio), num(p.stiffness)),
-      java: (p) => `SpringAnimation anim = new SpringAnimation(view, SpringAnimation.TRANSLATION_Y, 0f);\n    anim.getSpring().setStiffness(${fmt(p.stiffness)}f);\n    anim.getSpring().setDampingRatio(${fmt(p.dampingRatio)}f);\n    anim.start();`,
-      kotlin: (p) => `SpringAnimation(view, SpringAnimation.TRANSLATION_Y, 0f).apply {\n    spring.stiffness = ${fmt(p.stiffness)}f\n    spring.dampingRatio = ${fmt(p.dampingRatio)}f\n    start()\n}`,
+      java: (p) => `SpringAnimation anim = new SpringAnimation(view, SpringAnimation.TRANSLATION_Y, 0f);\n    anim.getSpring().setStiffness(${fmt(p.stiffness)});\n    anim.getSpring().setDampingRatio(${fmt(p.dampingRatio)});\n    anim.start();`,
+      kotlin: (p) => `SpringAnimation(view, SpringAnimation.TRANSLATION_Y, 0f).apply {\n    spring.stiffness = ${fmt(p.stiffness)}\n    spring.dampingRatio = ${fmt(p.dampingRatio)}\n    start()\n}`,
       clazz: "SpringAnimation", desc: "弹簧(物理)：用刚度+阻尼比模拟真实弹簧，回弹自然（androidx.dynamicanimation）。",
     },
   ];
 
+  /** 数值字面量（带 f）；勿再在模板里追加 f，否则会变成 0.4ff */
   function fmt(v) {
     const n = Number(v);
     if (!Number.isFinite(n)) return "0f";
     const s = String(Math.round(n * 1000) / 1000);
-    return s.indexOf(".") >= 0 ? `${s}f` : `${s}f`;
+    return `${s}f`;
+  }
+
+  function paramsMatchDefs(tool, p) {
+    return (tool.params || []).every((pp) => {
+      const a = Number(p?.[pp.key]);
+      const b = Number(pp.def);
+      return Number.isFinite(a) && Math.abs(a - b) < 1e-6;
+    });
   }
 
   const byId = Object.fromEntries(INTERPOLATORS.map((x) => [x.id, x]));
@@ -257,7 +278,19 @@
     const tool = byId[id];
     if (!tool) return;
     lane(l).type = id;
-    lane(l).params = { ...defParams(tool), ...(lane(l).params || {}) };
+    // 切换类型时用新默认值，不把旧类型的参数带过去（否则贝塞尔/弹簧曲线会脏）
+    lane(l).params = defParams(tool);
+  }
+
+  /** 给 calc/codegen 用：缺省键回落到 def，避免 undefined → 0 把曲线算成常数 */
+  function resolvedParams(l) {
+    const tool = toolOf(l);
+    const out = defParams(tool);
+    const cur = lane(l).params || {};
+    tool.params.forEach((pp) => {
+      if (cur[pp.key] != null && Number.isFinite(Number(cur[pp.key]))) out[pp.key] = Number(cur[pp.key]);
+    });
+    return out;
   }
 
   // ---- param inputs ----
@@ -295,7 +328,7 @@
     const classEl = $(`#interp-class-${lc(l)}`);
     if (classEl) classEl.textContent = toolOf(l).name;
     syncTypeSelect(l);
-    drawCurve();
+    refreshCurve();
     refreshCode();
   }
 
@@ -319,20 +352,29 @@
   // ---- curve ----
   function sampleCurve(l) {
     const tool = toolOf(l);
+    const p = resolvedParams(l);
     const pts = [];
     for (let i = 0; i <= 160; i++) {
       const t = i / 160;
-      pts.push({ t, y: tool.calc(t, lane(l).params) });
+      pts.push({ t, y: tool.calc(t, p) });
     }
     return pts;
   }
 
+  function curveLanes() {
+    if (stateRef.compareOn) return ["A", "B"];
+    // 非对比时始终画/播 A（避免移除 B 后 active 仍停在 B）
+    return ["A"];
+  }
+
   function drawCurve() {
     const svg = $("#interp-curve");
-    if (!svg) return;
+    if (!svg) {
+      mapped = null;
+      return null;
+    }
     const W = 420, H = 240, pad = 24;
-    const lan = activeLane();
-    const lans = stateRef.compareOn ? ["A", "B"] : [lan];
+    const lans = curveLanes();
     let ymin = 0, ymax = 1;
     const curves = lans.map((l) => ({ l, pts: sampleCurve(l) }));
     curves.forEach((c) => {
@@ -348,9 +390,8 @@
     const xAt = (t) => pad + t * (W - 2 * pad);
     const yAt = (y) => H - pad - ((y - ymin) / (ymax - ymin)) * (H - 2 * pad);
 
-    const grid0 = ymin, grid1 = ymax;
     const gridYs = [];
-    for (let g = Math.ceil(grid0); g <= Math.floor(grid1); g++) gridYs.push(g);
+    for (let g = Math.ceil(ymin); g <= Math.floor(ymax); g++) gridYs.push(g);
 
     let path = "";
     curves.forEach((c) => {
@@ -364,34 +405,51 @@
 
     const grid = gridYs.map((gY) => `<line x1="${pad}" y1="${yAt(gY)}" x2="${W - pad}" y2="${yAt(gY)}" class="interp-grid" /><text x="${pad - 4}" y="${yAt(gY) + 4}" class="interp-y-label">${gY}</text>`).join("");
     const zeroY = yAt(0);
+    const showB = stateRef.compareOn;
     svg.innerHTML =
       `<rect x="0" y="0" width="${W}" height="${H}" class="interp-curve-bg" />` +
       grid +
       `<line x1="${pad}" y1="${zeroY}" x2="${W - pad}" y2="${zeroY}" class="interp-axis" />` +
       `<line x1="${pad}" y1="${pad}" x2="${pad}" y2="${H - pad}" class="interp-axis" />` +
       path +
-      `<circle id="interp-curve-dot-a" cx="${xAt(0)}" cy="${yAt(0)}" r="5" class="interp-curve-dot is-a" />` +
-      (stateRef.compareOn ? `<circle id="interp-curve-dot-b" cx="${xAt(0)}" cy="${yAt(0)}" r="5" class="interp-curve-dot is-b" />` : "");
-    // repaint dot positions is handled by preview
-    return { xAt, yAt };
+      `<circle id="interp-curve-dot-a" cx="${xAt(0)}" cy="${yAt(curves[0]?.pts[0]?.y ?? 0)}" r="5" class="interp-curve-dot is-a" />` +
+      (showB ? `<circle id="interp-curve-dot-b" cx="${xAt(0)}" cy="${yAt(curves[1]?.pts[0]?.y ?? 0)}" r="5" class="interp-curve-dot is-b" />` : "");
+    mapped = { xAt, yAt };
+    return mapped;
   }
 
   let mapped = null;
   function refreshCurve() {
-    mapped = drawCurve();
+    return drawCurve();
+  }
+
+  function syncDurationFromUi() {
+    const n = Math.max(120, Number($("#interp-duration")?.value) || 600);
+    stateRef.duration = n;
+    return n;
+  }
+
+  function updatePlayLabel() {
+    const btn = $("#interp-play");
+    if (!btn) return;
+    btn.textContent = stateRef.compareOn ? "播放 A+B" : "播放";
   }
 
   // ---- preview ----
   function lanePoint(l) {
     const tool = toolOf(l);
-    return { pts: sampleCurve(l), tool, params: lane(l).params };
+    return { pts: sampleCurve(l), tool, params: resolvedParams(l) };
   }
 
   function resetDots() {
-    setDot("A", 0, 0);
-    if (stateRef.compareOn || !$("#interp-lane-b").hidden) setDot("B", 0, 0);
-    setVal("A", 0);
-    if (stateRef.compareOn || !$("#interp-lane-b").hidden) setVal("B", 0);
+    const pA = sampleCurve("A")[0];
+    setDot("A", 0, pA?.y ?? 0);
+    setVal("A", pA?.y ?? 0);
+    if (stateRef.compareOn) {
+      const pB = sampleCurve("B")[0];
+      setDot("B", 0, pB?.y ?? 0);
+      setVal("B", pB?.y ?? 0);
+    }
   }
 
   function setDot(l, t, y) {
@@ -410,15 +468,19 @@
     const row = $(`.interp-preview-row[data-lane="${l}"]`);
     if (row) {
       const dot = row.querySelector(".interp-preview-dot");
-      if (dot) dot.style.left = `${Math.min(100, Math.max(0, y * 100))}%`;
+      if (dot) {
+        // 超调可 >1 / 回退可 <0：条上夹紧，数值照实显示
+        const pct = Math.min(100, Math.max(0, y * 100));
+        dot.style.left = `${pct}%`;
+      }
     }
   }
 
   function play() {
-    if (animating) { cancelAnimationFrame(animRaf); animating = true; }
-    const dur = Math.max(120, Number($("#interp-duration")?.value) || 600);
+    if (animRaf) cancelAnimationFrame(animRaf);
+    const dur = syncDurationFromUi();
     const start = performance.now();
-    const lans = stateRef.compareOn ? ["A", "B"] : [activeLane()];
+    const lans = curveLanes();
     const snap = lans.map((l) => ({ l, pts: lanePoint(l) }));
     animating = true;
     const step = (now) => {
@@ -430,22 +492,36 @@
         setVal(s.l, pt.y);
       });
       if (el < 1) animRaf = requestAnimationFrame(step);
-      else { animating = false; }
+      else {
+        animating = false;
+        animRaf = 0;
+      }
     };
     animRaf = requestAnimationFrame(step);
+  }
+
+  /** 调参后自动重播，兑现「调参即看效果」 */
+  let playTimer = 0;
+  function schedulePlay() {
+    if (playTimer) clearTimeout(playTimer);
+    playTimer = setTimeout(() => {
+      playTimer = 0;
+      play();
+    }, 40);
   }
 
   // ---- codegen ----
   function refreshCode() {
     const el = $("#interp-code");
     if (!el) return;
-    el.value = generateCode(activeLane());
+    syncDurationFromUi();
+    el.value = generateCode(stateRef.compareOn ? activeLane() : "A");
   }
 
   function generateCode(l) {
     const tool = toolOf(l);
-    const p = lane(l).params;
-    const body = stateRef.lang === "kotlin" ? tool.kotlin(p) : tool.java(p);
+    const p = resolvedParams(l);
+    const body = stateRef.lang === "kotlin" ? tool.kotlin(p, tool) : tool.java(p, tool);
     if (tool.id === "spring") {
       return stateRef.lang === "kotlin"
         ? `// import androidx.dynamicanimation.animation.SpringAnimation\nval view: View = ...\nval anim = ${body.trim()}\n// 调节：anim.spring.stiffness / anim.spring.dampingRatio`
@@ -459,8 +535,13 @@
 
   // ---- JSON ----
   function snapshot() {
-    const l = activeLane();
-    return { name: toolOf(l).name, type: lane(l).type, params: { ...lane(l).params }, duration: Number($("#interp-duration")?.value) || 600 };
+    const l = stateRef.compareOn ? activeLane() : "A";
+    return {
+      name: toolOf(l).name,
+      type: lane(l).type,
+      params: resolvedParams(l),
+      duration: syncDurationFromUi(),
+    };
   }
 
   function exportJson() {
@@ -472,7 +553,10 @@
     if (!o || !o.type) throw new Error("JSON 缺少 type");
     setLaneType(activeLane(), o.type);
     lane(activeLane()).params = { ...defParams(byId[o.type]), ...(o.params || {}) };
-    if (o.duration) $("#interp-duration").value = o.duration;
+    if (o.duration) {
+      $("#interp-duration").value = o.duration;
+      syncDurationFromUi();
+    }
     refreshLane(activeLane());
     toast("已导入 JSON");
   }
@@ -537,9 +621,21 @@
     });
 
     $$("#interp-lane-b, #interp-preview-row-b").forEach((el) => { el.hidden = !stateRef.compareOn; });
+    updatePlayLabel();
+    syncDurationFromUi();
 
-    $("#interp-type-a")?.addEventListener("change", (e) => { setLaneType("A", e.target.value); drawCurve(); refreshLane("A"); resetDots(); });
-    $("#interp-type-b")?.addEventListener("change", (e) => { setLaneType("B", e.target.value); drawCurve(); refreshLane("B"); resetDots(); });
+    $("#interp-type-a")?.addEventListener("change", (e) => {
+      stateRef.active = "A";
+      setLaneType("A", e.target.value);
+      refreshLane("A");
+      schedulePlay();
+    });
+    $("#interp-type-b")?.addEventListener("change", (e) => {
+      stateRef.active = "B";
+      setLaneType("B", e.target.value);
+      refreshLane("B");
+      schedulePlay();
+    });
 
     document.addEventListener("input", (e) => {
       const inp = e.target.closest?.(".interp-param input[data-key]");
@@ -555,29 +651,39 @@
           if (o !== inp) o.value = inp.value;
         });
       }
-      drawCurve();
-      resetDots();
-      if (activeLane() === l) refreshCode();
+      refreshCurve();
+      refreshCode();
+      schedulePlay();
     });
 
-    $("#interp-duration")?.addEventListener("change", () => refreshCode());
+    $("#interp-duration")?.addEventListener("input", () => {
+      syncDurationFromUi();
+      refreshCode();
+    });
+    $("#interp-duration")?.addEventListener("change", () => {
+      syncDurationFromUi();
+      refreshCode();
+      schedulePlay();
+    });
 
     $("#interp-compar")?.addEventListener("click", () => {
       stateRef.compareOn = true;
       $("#interp-lane-b").hidden = false;
       $("#interp-preview-row-b").hidden = false;
-      $("#interp-play").textContent = "播放 A+B";
+      updatePlayLabel();
       refreshLane("B");
       refreshCurve();
-      resetDots();
+      schedulePlay();
     });
     $("#interp-rm-b")?.addEventListener("click", () => {
       stateRef.compareOn = false;
+      stateRef.active = "A";
       $("#interp-lane-b").hidden = true;
       $("#interp-preview-row-b").hidden = true;
-      $("#interp-play").textContent = "播放 A";
+      updatePlayLabel();
       refreshCurve();
-      resetDots();
+      refreshCode();
+      schedulePlay();
     });
 
     $("#interp-play")?.addEventListener("click", play);
@@ -598,7 +704,7 @@
       if (!f) return;
       const r = new FileReader();
       r.onload = () => {
-        try { importJson(String(r.result)); } catch (err) { setError($("#interp-error"), err.message || String(err)); }
+        try { importJson(String(r.result)); schedulePlay(); } catch (err) { setError($("#interp-error"), err.message || String(err)); }
       };
       r.readAsText(f);
       e.target.value = "";
@@ -610,7 +716,7 @@
       setLaneType(activeLane(), preset.type);
       lane(activeLane()).params = { ...defParams(byId[preset.type]), ...(preset.params || {}) };
       refreshLane(activeLane());
-      resetDots();
+      schedulePlay();
     });
 
     $("#interp-fav")?.addEventListener("click", addFavorite);
@@ -630,8 +736,13 @@
         const f = stateRef.favorites[idx];
         if (f) {
           setLaneType(activeLane(), f.type);
-          lane(activeLane()).params = { ...f.params || {} };
+          lane(activeLane()).params = { ...defParams(byId[f.type] || INTERPOLATORS[0]), ...(f.params || {}) };
+          if (f.duration) {
+            $("#interp-duration").value = f.duration;
+            syncDurationFromUi();
+          }
           refreshLane(activeLane());
+          schedulePlay();
           toast(`已载入「${f.name}」`);
         }
       } else if (del != null) {
@@ -640,13 +751,18 @@
         renderFavs();
       }
     });
+    $("#interp-lane-a")?.addEventListener("click", (e) => {
+      if (e.target.closest?.("button")) return;
+      stateRef.active = "A";
+      refreshCurve();
+      refreshCode();
+    });
     $("#interp-lane-b")?.addEventListener("click", (e) => {
-      if (e.target.closest?.("select")) return;
+      if (e.target.closest?.("button")) return;
       stateRef.active = "B";
       refreshCurve();
       refreshCode();
     });
-    $("#interp-type-a")?.addEventListener("click", () => { stateRef.active = "A"; refreshCurve(); refreshCode(); });
 
     const presetSel = $("#interp-preset");
     if (presetSel) {
@@ -657,12 +773,9 @@
     renderFavs();
     refreshCurve();
     refreshCode();
-    resetDots();
-    bindFavClick();
+    schedulePlay();
   });
 
-  function bindFavClick() { /* keep DOM ready */ }
-
   window.DevToolsExtraBoot = window.DevToolsExtraBoot || {};
-  window.DevToolsExtraBoot["interpolator"] = () => { try { refreshCurve(); } catch (_) {} };
+  window.DevToolsExtraBoot["interpolator"] = () => { try { refreshCurve(); schedulePlay(); } catch (_) {} };
 })();

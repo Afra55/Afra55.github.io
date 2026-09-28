@@ -76,7 +76,14 @@
   background: var(--panel, transparent);
 }
 .interp-curve-title { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.4rem; }
-.interp-curve { display: block; width: 100%; height: auto; border-radius: 8px; }
+.interp-curve {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 420 / 240;
+  min-height: 160px;
+  border-radius: 8px;
+}
 .interp-curve-bg { fill: none; }
 .interp-grid { stroke: color-mix(in srgb, var(--muted) 22%, transparent); }
 .interp-axis { stroke: color-mix(in srgb, var(--muted) 60%, transparent); }

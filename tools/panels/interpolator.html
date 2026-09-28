@@ -2,7 +2,7 @@
   <div class="panel-head">
     <h1>动画插值器</h1>
     <p>Android 动画插值器调参：曲线实时显示超调，A/B 对比，一键生成 Java / Kotlin 代码，支持 JSON 与预设收藏。</p>
-    <p class="hint tight">怎么用：选一个插值器 → 拖滑杆或直接输入数值（不限范围）→ 看曲线与预览 → 复制代码。</p>
+    <p class="hint tight">怎么用：选插值器 → 拖滑杆（调参会自动重播）→ 复制 Java / Kotlin 代码。点「对比」可叠两条曲线。</p>
   </div>
   <div class="panel-body">
     <div class="interp-layout">
@@ -19,11 +19,11 @@
         </div>
 
         <div class="field-row" style="flex-wrap:wrap;align-items:center">
-          <button type="button" class="primary-btn" id="interp-play">播放 A <span id="interp-play-mode">· 仅 A</span></button>
+          <button type="button" class="primary-btn" id="interp-play">播放</button>
           <button type="button" class="ghost-btn" id="interp-reset">重置</button>
         </div>
 
-        <div class="interp-lane" data-lane="A">
+        <div class="interp-lane" id="interp-lane-a" data-lane="A">
           <div class="interp-lane-head">
             <span class="interp-lane-tag interp-tag-a">A</span>
             <select id="interp-type-a" class="select-input interp-type" aria-label="A 插值器类型"></select>
