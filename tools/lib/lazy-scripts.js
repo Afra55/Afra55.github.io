@@ -170,6 +170,7 @@
 
   const EXTRA_MEDIA_TOOLS = new Set([
     "sharecard", "gifmaker", "gifx", "v2g", "vsplit", "vbb", "gifbb", "gifc", "gife", "gifm", "adb",
+    "vtrim", "vidkit", "vplay", "audio",
   ]);
 
   const TOOL_VENDORS = {

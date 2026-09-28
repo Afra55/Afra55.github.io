@@ -1,7 +1,7 @@
 <section id="vtrim" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-vtrim">
       <div class="panel-head">
         <h1>视频修剪</h1>
-        <p>浏览器内 FFmpeg：修剪片头片尾、裁边框。手机可直接用。<span class="ff-desktop-only-hint">电脑批量可选 <a href="#ffbridge">本机桥</a>。</span><span id="vtrim-adapt-tip" class="hint tight"></span></p>
+        <p>浏览器内 FFmpeg：修剪片头片尾、裁边框（接近系统相册的基础剪辑，非原生级流畅）。手机可直接用；安卓导出后可系统分享存相册。<span class="ff-desktop-only-hint">电脑批量可选 <a href="#ffbridge">本机桥</a>。</span><span id="vtrim-adapt-tip" class="hint tight"></span></p>
       </div>
       <div class="panel-body">
         <div class="btn-row tool-actions">
@@ -111,7 +111,11 @@
           <button type="button" class="primary-btn" id="vtrim-export" disabled>导出视频</button>
           <button type="button" class="ghost-btn" id="vtrim-abort" hidden>取消</button>
           <a class="secondary-btn" id="vtrim-download" href="#" download="trimmed.mp4" hidden>下载结果</a>
+          <label class="flag" data-auto-share-gallery-wrap hidden style="margin-left:0.15rem" title="网页不能静默写入相册。开启后导出完成会调起系统分享，可在列表里选相册/图库">
+            <input type="checkbox" id="vtrim-auto-share" data-auto-share-gallery /> 完成后分享到相册
+          </label>
         </div>
+        <p class="hint tight only-coarse" id="vtrim-share-tip" hidden>安卓：导出后点「分享到相册」，在系统分享里选图库即可保存（浏览器无法静默写入相册）。</p>
         <div class="gif-progress" id="vtrim-progress" hidden>
           <div class="gif-progress-head">
             <p class="hint gif-progress-title" id="vtrim-progress-text">准备中…</p>

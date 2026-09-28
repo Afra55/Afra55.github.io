@@ -124,6 +124,83 @@
   const resultAudio = $("#vtrim-result-audio");
   const cropLive = $("#vtrim-crop-live");
   const errorEl = $("#vtrim-error");
+  const shareTip = $("#vtrim-share-tip");
+
+  /** @type {Blob|null} */
+  let latestExportBlob = null;
+  let latestExportName = "trimmed.mp4";
+
+  function mediaApi() {
+    return window.DevToolsExtraMedia || {};
+  }
+
+  function preferGalleryShare() {
+    const M = mediaApi();
+    return typeof M.preferShareToGallery === "function" && M.preferShareToGallery();
+  }
+
+  function syncShareUi() {
+    try {
+      mediaApi().revealAutoShareGalleryUi?.();
+    } catch (_) {}
+    const shareOk = preferGalleryShare();
+    if (shareTip) shareTip.hidden = !shareOk;
+    if (downloadA && !downloadA.hidden) {
+      if (shareOk) {
+        downloadA.textContent = latestExportName.endsWith(".mp3") || latestExportName.endsWith(".m4a")
+          ? "分享/保存音频"
+          : "分享到相册";
+        downloadA.title = "调起系统分享，可选存到相册或文件";
+      } else {
+        downloadA.textContent = "下载结果";
+        downloadA.removeAttribute("title");
+      }
+    }
+  }
+
+  async function deliverExportBlob(blob, fname, { auto = false } = {}) {
+    const M = mediaApi();
+    const shareOk = preferGalleryShare();
+    const autoShare =
+      auto &&
+      typeof M.isAutoShareGalleryEnabled === "function" &&
+      M.isAutoShareGalleryEnabled() &&
+      shareOk &&
+      typeof M.shareMediaBlob === "function";
+
+    if (autoShare || (shareOk && !auto && typeof M.shareMediaBlob === "function")) {
+      const r = await M.shareMediaBlob(blob, fname, {
+        title: fname,
+        fallbackDownload: true,
+      });
+      if (r.shared) {
+        toast("已调起系统分享 · 可选存到相册");
+        return { shared: true };
+      }
+      if (r.cancelled) {
+        toast("已取消分享");
+        return { cancelled: true };
+      }
+      if (r.downloaded) {
+        toast(auto ? `已下载 · ${fname}` : `无法分享，已改为下载`);
+        return { downloaded: true };
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = fname;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => {
+      try {
+        URL.revokeObjectURL(url);
+      } catch (_) {}
+    }, 2000);
+    return { downloaded: true };
+  }
 
   if (!fileInput || !video) return;
 
@@ -215,7 +292,11 @@
     if (downloadA) {
       downloadA.hidden = true;
       downloadA.removeAttribute("href");
+      downloadA.textContent = "下载结果";
+      downloadA.removeAttribute("title");
     }
+    latestExportBlob = null;
+    latestExportName = "trimmed.mp4";
     if (resultBlock) resultBlock.hidden = true;
     if (resultMeta) resultMeta.textContent = "";
   }
@@ -1208,19 +1289,21 @@
       const fname = audioOnly
         ? `trimmed-${Date.now()}.${audioMp3 ? "mp3" : "m4a"}`
         : `trimmed-${Date.now()}.mp4`;
+      latestExportBlob = outBlob;
+      latestExportName = fname;
       if (downloadA) {
         downloadA.href = resultUrl;
         downloadA.download = fname;
         downloadA.hidden = false;
       }
-      const a = document.createElement("a");
-      a.href = resultUrl;
-      a.download = fname;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      syncShareUi();
+      const delivered = await deliverExportBlob(outBlob, fname, { auto: true });
       setProgress(true, 1, "导出完成");
-      toast(`已导出 · ${trackLabel} · 保留 ${formatClock(span)}`);
+      if (!delivered?.shared && !delivered?.cancelled) {
+        toast(`已导出 · ${trackLabel} · 保留 ${formatClock(span)}`);
+      } else if (delivered?.shared) {
+        toast(`已导出 · ${trackLabel} · 保留 ${formatClock(span)}`);
+      }
       try {
         resultBlock?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       } catch (_) {}
@@ -1719,4 +1802,16 @@
   syncMuteUi();
   syncAspectUi();
   syncModeUi();
+  syncShareUi();
+
+  if (downloadA && !downloadA.dataset.shareBound) {
+    downloadA.dataset.shareBound = "1";
+    downloadA.addEventListener("click", (e) => {
+      if (!preferGalleryShare() || !latestExportBlob) return;
+      e.preventDefault();
+      deliverExportBlob(latestExportBlob, latestExportName, { auto: false }).catch((err) => {
+        setError(errorEl, err?.message || String(err));
+      });
+    });
+  }
 })();
