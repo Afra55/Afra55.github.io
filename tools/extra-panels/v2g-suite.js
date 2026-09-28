@@ -35,6 +35,7 @@
     terminateFfmpegInstance, paintFfmpegWarmHint, prewarmFfmpegEngine, scheduleFfmpegPrewarm,
     TOOLS_VERSION, GIF_TOOL_VERSION, compressExistingGifToBlackbox, blackboxUseMaxBytes,
     blackboxMaxMb, setBlackboxMaxMb,
+    readMediaPerfMode, setMediaPerfMode, mediaPerfProfile, isCoarsePointerMedia,
     AUTO_PACK_ZIP_KEY,
   } = M;
   const FFMPEG_SEG_FILE_BYTES = M.FFMPEG_SEG_FILE_BYTES ?? 48 * 1024 * 1024;
@@ -82,9 +83,13 @@
         V2G_BLACKBOX_MAX_BYTES = M.blackboxUseMaxBytes ? M.blackboxUseMaxBytes() : V2G_BLACKBOX_MAX_BYTES;
         V2G_BLACKBOX_WIDEN_BYTES = Math.round(V2G_BLACKBOX_MAX_BYTES * (5 / 6));
       });
-      /** 黑盒：起点 420 宽 / 12FPS；进得了 6MB 就上 15FPS；宽度底线 380（录屏文字可读优先于帧率） */
+      /** 黑盒：起点 420 宽；决策 15/12/10；宽度底线 380（录屏文字可读） */
       const V2G_BLACKBOX_MAX_FPS = 15;
       const V2G_BLACKBOX_FPS_LIST = [15, 12, 10];
+      /** 短片（≤20s）优先保 15fps；20–30s 先保宽再视预算冲 15 */
+      const V2G_BLACKBOX_SHORT_SPAN_SEC = 20;
+      /** 产品优化目标：单段 ≤30s 拉满；更长走切片，不额外放宽内存 */
+      const V2G_BLACKBOX_OPT_MAX_SPAN_SEC = 30;
       const V2G_BLACKBOX_BASE_W = 420;
         /** 收窄/加宽步进：要细，否则 420 一步就掉到 380，白白少给 20–40px */
         const V2G_BLACKBOX_WIDTH_STEP = 20;
@@ -108,38 +113,42 @@
        *  让渡顺序：先收窄宽度 → 再降质量 → 再降帧率 → 最后才动 gifsicle lossy。
        *  降 gifski quality 是「自适应量化」，比固定降到 32 色耐看得多。 */
       const V2G_BLACKBOX_QUALITY_LADDER = [1, 8, 15, 22, 30];
-      /** 是否触屏（手机/平板）：分块 UI 与保守内存都以它为准 */
+      /** 是否触屏（手机/平板）：分块 UI 显示仍以它为准；内存预算改走性能档 */
       function isCoarsePointer() {
-        try { return window.matchMedia("(pointer: coarse)").matches; } catch (_) { return false; }
+        return typeof isCoarsePointerMedia === "function"
+          ? isCoarsePointerMedia()
+          : (() => {
+              try { return window.matchMedia("(pointer: coarse)").matches; } catch (_) { return false; }
+            })();
       }
-      /** 单段 gifski 编码的原始 RGBA 内存预算（帧数×宽×高×4）。
-       *  手机 OOM 会直接杀标签页（表现为「处理到一半页面被刷新」）。
-       *  实测：240 帧 242×210 ≈ 49MB 可用；20s≈127MB 可用；30s 分段后每段≈160MB 仍被杀。
-       *  → 手机保持保守；桌面内存充足，放宽以便一次编码（跨帧优化不丢，画质/体积更好）。 */
+      function currentMediaPerf() {
+        return typeof mediaPerfProfile === "function"
+          ? mediaPerfProfile()
+          : {
+              tier: isCoarsePointer() ? "eco" : "desktop",
+              gifskiRawBudget: isCoarsePointer() ? 32 * 1024 * 1024 : 320 * 1024 * 1024,
+              gifskiMaxFrames: isCoarsePointer() ? 240 : 1500,
+              widenProbes: isCoarsePointer() ? 2 : 4,
+              allowQualityBoost: !isCoarsePointer(),
+              preferChunkByDefault: isCoarsePointer(),
+              singlePassPeakBytes: isCoarsePointer() ? 0.2 * 1024 * 1024 * 1024 : 1.5 * 1024 * 1024 * 1024,
+              manualFpsCap: isCoarsePointer() ? 15 : 30,
+              manualWidthCap: isCoarsePointer() ? 720 : 1280,
+              label: isCoarsePointer() ? "省电" : "桌面",
+            };
+      }
+      /** 单段 gifski 编码的原始 RGBA 内存预算（帧数×宽×高×4）。按性能档，不再「触屏=一律弱机」。 */
       function gifskiRawBudget() {
-        // 手机：一律保守。iOS Safari 不暴露 deviceMemory；且 gifski 的 wasm 堆只增不减
-        // （每次 encode 都往上要内存），预算放大反而更早被系统杀掉（iPhone 13 实测 5s 视频即触发页面刷新）。
-        if (isCoarsePointer()) return 32 * 1024 * 1024;
-        try {
-          const dm = navigator.deviceMemory;
-          if (typeof dm === "number") {
-            if (dm <= 4) return 96 * 1024 * 1024;
-            if (dm <= 8) return 192 * 1024 * 1024;
-            return 320 * 1024 * 1024;
-          }
-        } catch (_) {}
-        return 192 * 1024 * 1024;
+        return currentMediaPerf().gifskiRawBudget;
       }
-      /** 单段 gifski 编码的帧数上限：gifski 一次性持有全部帧，内存随「帧数」超线性增长。
-       *  实测（手机）：20s@15fps ≈ 301 帧可用；30s@15fps ≈ 451 帧、33s ≈ 505 帧会被系统杀（页面被刷新）。
-       *  手机取 240（比 320 更留余量）；桌面放宽（内存够），尽量一次编码完。 */
-      const V2G_GIFSKI_MAX_FRAMES = 240;
-      const V2G_GIFSKI_MAX_FRAMES_DESKTOP = 1500;
+      /** 单段 gifski 编码的帧数上限：拉满档约 600，可覆盖 ≤30s@15fps 单次编码。 */
       function gifskiMaxFrames() {
-        return isCoarsePointer() ? V2G_GIFSKI_MAX_FRAMES : V2G_GIFSKI_MAX_FRAMES_DESKTOP;
+        return currentMediaPerf().gifskiMaxFrames;
       }
-      /** 桌面单次编码的峰值上限（帧数据 ×3：JS 一份 + wasm 一份 + gifski 工作区）；超了才自动分块 */
-      const GIFSKI_SINGLE_PASS_BYTES = 1.5 * 1024 * 1024 * 1024;
+      /** 桌面/拉满：峰值估算超上限才自动分块；峰值 = 帧数据 ×3（JS + wasm + 工作区） */
+      function gifskiSinglePassPeakBytes() {
+        return currentMediaPerf().singlePassPeakBytes;
+      }
 
       /** 分块设置（手机端）持久化：记住用户改过的块数 */
       const VBB_CHUNK_KEY = "devtools-vbb-chunk-v1";
@@ -631,8 +640,8 @@
       async function sampleV2gFrames(opts) {
         const video = opts.video || v2gVideo;
         if (!video) throw new Error("视频未找到");
-        const fps = Math.min(15, Math.max(2, Number(opts.fps) || 8));
-        const maxW = Math.min(720, Math.max(64, Number(opts.maxW) || 360));
+        const fps = Math.min(30, Math.max(2, Number(opts.fps) || 8));
+        const maxW = Math.min(1280, Math.max(64, Number(opts.maxW) || 360));
         const quality = Math.min(30, Math.max(1, Number(opts.quality) || 12));
         const progressBase = Number(opts.progressBase) || 0;
         const progressSpan = Number(opts.progressSpan) || 1;
@@ -787,7 +796,7 @@
                 });
                 activeV2gGifs.add(gif);
               }
-              const delay = Math.round(1000 / Math.min(15, Math.max(2, Number(opts.fps) || 8)));
+              const delay = Math.round(1000 / Math.min(30, Math.max(2, Number(opts.fps) || 8)));
               gif.addFrame(ctx, { delay, copy: true });
             },
           });
@@ -986,9 +995,11 @@
         const tPhase = performance.now();
         const file = opts.file || v2gSourceFile;
         if (!file) throw new Error("缺少原始视频文件，请重新选择视频");
-        const fpsCap = opts.allowWide ? 30 : 15; // 一键黑盒允许 >15fps（帧率越高越流畅）
+        const fpsCap = opts.allowWide ? 30 : Math.max(15, Number(currentMediaPerf().manualFpsCap) || 15);
         const fps = Math.min(fpsCap, Math.max(2, Number(opts.fps) || 8));
-        const hardCapW = opts.allowWide ? V2G_ENCODE_HARD_W : 720;
+        const hardCapW = opts.allowWide
+          ? V2G_ENCODE_HARD_W
+          : Math.max(720, Number(currentMediaPerf().manualWidthCap) || 720);
         const maxW = Math.min(hardCapW, Math.max(64, Number(opts.maxW) || 360));
         const quality = Math.min(30, Math.max(1, Number(opts.quality) || 12));
         const maxColors = gifQualityToMaxColors(quality);
@@ -1294,9 +1305,11 @@
         const tPhase = performance.now();
         const file = opts.file || v2gSourceFile;
         if (!file) throw new Error("缺少原始视频文件，请重新选择视频");
-        const fpsCap = opts.allowWide ? 30 : 15;
+        const fpsCap = opts.allowWide ? 30 : Math.max(15, Number(currentMediaPerf().manualFpsCap) || 15);
         const fps = Math.min(fpsCap, Math.max(2, Number(opts.fps) || 8));
-        const hardCapW = opts.allowWide ? V2G_ENCODE_HARD_W : 720;
+        const hardCapW = opts.allowWide
+          ? V2G_ENCODE_HARD_W
+          : Math.max(720, Number(currentMediaPerf().manualWidthCap) || 720);
         const maxW = Math.min(hardCapW, Math.max(64, Number(opts.maxW) || 360));
         const quality = Math.min(30, Math.max(1, Number(opts.quality) || 12));
         const rawGifski = Number(opts.gifskiQuality);
@@ -1346,22 +1359,26 @@
         const forcedChunks = Math.max(0, Math.floor(Number(opts.chunkCount) || 0));
         let chunkMax;
         let chunkCount;
+        const perf = currentMediaPerf();
+        const preferSingle =
+          !perf.preferChunkByDefault || perf.tier === "desktop" || perf.tier === "max";
         if (forcedChunks >= 1) {
           // 用户显式指定块数（手机端输入框）：完全尊重，1 = 单次编码（可能因内存不足失败）
           chunkMax = Math.max(1, Math.ceil(frameCount / Math.min(forcedChunks, frameCount)));
           chunkCount = Math.ceil(frameCount / chunkMax);
-        } else if (!isCoarsePointer()) {
-          // 桌面：内存够 → 默认单次编码；仅当峰值估算超上限才自动分块
-          const desktopMax = Math.max(1, Math.floor(GIFSKI_SINGLE_PASS_BYTES / (perFrameBytes * 3)));
-          if (frameCount <= desktopMax) {
+        } else if (preferSingle) {
+          // 桌面 / 拉满 / 关闭默认分块：尽量单次；仅当峰值估算超上限才自动分块
+          const peakCap = Math.max(1, Math.floor(gifskiSinglePassPeakBytes() / (perFrameBytes * 3)));
+          const hardMax = Math.max(1, Math.min(gifskiMaxFrames(), peakCap));
+          if (frameCount <= hardMax) {
             chunkMax = frameCount;
             chunkCount = 1;
           } else {
-            chunkMax = Math.max(1, Math.min(gifskiMaxFrames(), desktopMax));
+            chunkMax = hardMax;
             chunkCount = Math.ceil(frameCount / chunkMax);
           }
         } else {
-          // 手机默认：按内存预算保守分块（防 OOM）
+          // 省电 / 均衡默认：按内存预算保守分块（防 OOM）
           const budgetFrames = Math.max(1, Math.floor(gifskiRawBudget() / perFrameBytes));
           chunkMax = Math.max(1, Math.min(gifskiMaxFrames(), budgetFrames));
           chunkCount = Math.ceil(frameCount / chunkMax);
@@ -1369,7 +1386,7 @@
         vbbLog(
           `[vbb-phase] gifski 分块 chunkCount=${chunkCount} chunkMax=${chunkMax} 帧${frameCount} 每帧${formatKb(
             perFrameBytes
-          )}（${forcedChunks >= 1 ? "用户指定" : isCoarsePointer() ? "手机自动" : "桌面自动"}）`
+          )}（${forcedChunks >= 1 ? "用户指定" : preferSingle ? `单次优先·${perf.label}` : `分块优先·${perf.label}`}）`
         );
         if (aborted()) throw new Error("已取消");
         // 先加载 gifski：wasm 不可用就立刻抛错回退，不白跑一趟 ffmpeg 预处理
@@ -2130,8 +2147,8 @@
           cur = await raiseBlackboxFps(cur, curFps, encodeAtWidthFps, srcFps);
           if (!cur?.blob) return cur;
           // 3) 帧率也到顶、预算仍有富余 → gifski 质量从 92 上探到 100（源很窄/很短时用得上）
-          //    手机不做：多一次编码就多一份 wasm 堆占用，得不偿失
-          if (!isCoarsePointer() && cur.blob.size < V2G_BLACKBOX_WIDEN_BYTES && (Number(cur.gifskiQuality) || 0) < 100) {
+          //    省电/均衡不做：多一次编码就多一份 wasm 堆占用
+          if (currentMediaPerf().allowQualityBoost && cur.blob.size < V2G_BLACKBOX_WIDEN_BYTES && (Number(cur.gifskiQuality) || 0) < 100) {
             onProgress(0.97, "体积有余 · 画质上探");
             const hi = await encodeAtWidthFps(
               Number(cur.fps) || curFps,
@@ -2235,8 +2252,8 @@
           let guess = Math.round((lo * Math.min(4, Math.sqrt(capBytes / Math.max(1, best.blob.size)))) / 2) * 2;
           guess = Math.max(lo + 2, Math.min(hi, guess));
           let hiW = hi;
-          // 手机只探 2 次：每次试探都是一整次 gifski 编码，wasm 堆只增不减，探多了更容易被系统杀
-          const maxProbes = isCoarsePointer() ? 2 : 4;
+          // 探次按性能档：拉满/桌面 4，均衡 3，省电 2（每次试探都是一整次 gifski）
+          const maxProbes = Math.max(2, Math.min(6, Number(currentMediaPerf().widenProbes) || 2));
           for (let i = 0; i < maxProbes && hiW - lo > 16; i++) {
             if (isAborted()) throw new Error("已取消");
             const w = i === 0 ? guess : Math.round((lo + hiW) / 2 / 2) * 2;
@@ -2308,12 +2325,14 @@
             onProgress: (local, text) => onProgress(0.92 + local * 0.05, text),
           });
         const fpsFloor = blackboxFpsFloor(span / speed);
+        const effSpanForPick = span / speed;
         vbbLog(
-          `[vbb-phase] 决策 fpsList=${JSON.stringify(fpsList)} srcFps=${srcFps} srcW=${srcW} floorW=${floorW} · 全程真实编码判定（无估算）`
+          `[vbb-phase] 决策 fpsList=${JSON.stringify(fpsList)} srcFps=${srcFps} srcW=${srcW} floorW=${floorW} span=${effSpanForPick.toFixed(1)}s · 全程真实编码判定（无估算）· ${currentMediaPerf().label}`
         );
         // ---- 决策：全部用「真实编码」判定，不用估算 ----
-        // 规则：先 12fps 基准；有空间就直接试 15fps；15fps 各种尝试都不行 → 回到 12fps；
-        //       12fps 也不行 → 允许的话降 10fps；再不行才走 gifsicle 硬压。
+        // ≤20s：先 15 再 12/10（流畅优先）
+        // 20–30s：先 12 拉宽空间；若基准体积够小再冲同宽 15
+        // >30s：仍同一套决策（产品优化目标是 ≤30s 单段）
         const trial = async (fps, w, q) => {
           if (isAborted()) throw new Error("已取消");
           const label = `${fps}FPS·宽${w}${q && q > 1 ? `·q${q}` : ""}`;
@@ -2343,18 +2362,39 @@
           return null;
         };
         let chosen = null;
-        // 先认真试 15fps（宽度 420→400→380，再底线宽度上降质量档）——帧率优先、少编一次；
-        // 只有 15fps 各种档位都进不了 6MB，才退到 12fps；再不行（>20s）才降 10fps。
-        const c15 = await fitFps(15);
-        if (c15) chosen = { enc: c15, fps: 15 };
-        if (!chosen) {
+        const preferWidthFirst = effSpanForPick > V2G_BLACKBOX_SHORT_SPAN_SEC + 0.01;
+        if (preferWidthFirst) {
+          // 20s+：先 12fps（宽度预算更够）；体积很松再冲 15
           const c12 = await fitFps(12);
-          if (c12) chosen = { enc: c12, fps: 12 };
-        }
-        if (!chosen && fpsFloor <= 10) {
-          // 12fps 全不行 → 允许的话降 10fps
-          const c10 = await fitFps(10);
-          if (c10) chosen = { enc: c10, fps: 10 };
+          if (c12) {
+            chosen = { enc: c12, fps: 12 };
+            const raiseGate = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.75);
+            if (c12.blob.size < raiseGate) {
+              const w15 = Number(c12.maxW) || floorW;
+              const at15 = await trial(15, w15, V2G_BLACKBOX_QUALITY);
+              if (at15) chosen = { enc: at15, fps: 15 };
+            }
+          }
+          if (!chosen) {
+            const c15 = await fitFps(15);
+            if (c15) chosen = { enc: c15, fps: 15 };
+          }
+          if (!chosen && fpsFloor <= 10) {
+            const c10 = await fitFps(10);
+            if (c10) chosen = { enc: c10, fps: 10 };
+          }
+        } else {
+          // ≤20s：先认真试 15fps —— 帧率优先
+          const c15 = await fitFps(15);
+          if (c15) chosen = { enc: c15, fps: 15 };
+          if (!chosen) {
+            const c12 = await fitFps(12);
+            if (c12) chosen = { enc: c12, fps: 12 };
+          }
+          if (!chosen && fpsFloor <= 10) {
+            const c10 = await fitFps(10);
+            if (c10) chosen = { enc: c10, fps: 10 };
+          }
         }
         if (!chosen) {
           // 全都不行 → 取最小的一档走 gifsicle 硬压兜底
@@ -2464,10 +2504,18 @@
             toast(`视频约 ${formatKb(v2gSourceFile.size)}，手机上可能较慢或内存不足`);
           }
           await prewarmFfmpegEngine().catch(() => {});
-          const fps = Math.min(15, Math.max(2, Number(v2gFps?.value) || 8));
-          const maxW = Math.min(720, Math.max(64, Number(v2gWidth?.value) || 360));
+          const perf = currentMediaPerf();
+          const fps = Math.min(perf.manualFpsCap || 30, Math.max(2, Number(v2gFps?.value) || 8));
+          const maxW = Math.min(perf.manualWidthCap || 1280, Math.max(64, Number(v2gWidth?.value) || 360));
           const quality = Math.min(30, Math.max(1, Number(v2gQuality?.value) || 12));
-          const result = await encodeV2gGifFfmpeg({ fps, maxW, quality, file: v2gSourceFile });
+          // 非黑盒也走 gifski 优先（画质/体积更好），失败回退 ffmpeg；allowWide 放开 UI 上限
+          const result = await encodeBlackboxGif({
+            fps,
+            maxW,
+            quality,
+            file: v2gSourceFile,
+            allowWide: true,
+          });
           applyV2gOutput(result.blob, { resetCompress: true, format: "gif" });
           setV2gProgress(
             true,
@@ -2481,7 +2529,8 @@
               : "";
             const wmTip = result.watermark ? " · 含水印" : "";
             const brightTip = formatV2gBrightTip(result.brightness);
-            v2gMeta.textContent = `已转换 GIF（FFmpeg） ${result.frameCount} 帧 · ${result.span.toFixed(1)}s · ${result.fps} FPS · ${result.outW}×${result.outH} · ${result.maxColors}色 · ${formatKb(result.blob.size)}${wmTip}${brightTip}${capTip}`;
+            const eng = result.engine === "gifski" ? "gifski" : "FFmpeg";
+            v2gMeta.textContent = `已转换 GIF（${eng}） ${result.frameCount} 帧 · ${result.span.toFixed(1)}s · ${result.fps} FPS · ${result.outW}×${result.outH} · ${formatKb(result.blob.size)}${wmTip}${brightTip}${capTip}`;
           }
           toast("GIF 已生成");
         } catch (err) {
@@ -2525,8 +2574,9 @@
         setV2gProgress(true, 0.02, "准备抽帧并编码 WebP…");
   
         try {
-          const fps = Math.min(15, Math.max(2, Number(v2gFps?.value) || 8));
-          const maxW = Math.min(720, Math.max(64, Number(v2gWidth?.value) || 360));
+          const perf = currentMediaPerf();
+          const fps = Math.min(perf.manualFpsCap || 30, Math.max(2, Number(v2gFps?.value) || 8));
+          const maxW = Math.min(perf.manualWidthCap || 1280, Math.max(64, Number(v2gWidth?.value) || 360));
           const quality = Math.min(30, Math.max(1, Number(v2gQuality?.value) || 12));
           const result = await encodeV2gWebp({ fps, maxW, quality });
           applyV2gOutput(result.blob, { resetCompress: true, format: "webp" });
@@ -2717,6 +2767,18 @@
         v2gMaxsec = $("#v2g-maxsec", root);
         v2gStart = $("#v2g-start", root);
         v2gQuality = $("#v2g-quality", root);
+        const v2gPerf = $("#v2g-perf", root);
+        if (v2gPerf && typeof readMediaPerfMode === "function") {
+          try { v2gPerf.value = readMediaPerfMode(); } catch (_) { v2gPerf.value = "auto"; }
+          v2gPerf.addEventListener("change", () => {
+            const mode = setMediaPerfMode(v2gPerf.value);
+            v2gPerf.value = mode;
+            try {
+              const p = mediaPerfProfile();
+              toast(`性能：${p.label} · 帧上限 ${p.gifskiMaxFrames}`);
+            } catch (_) {}
+          });
+        }
         v2gBrightEnable = $("#v2g-bright-enable", root);
         v2gBrightPanel = $("#v2g-bright-panel", root);
         v2gBrightPresets = $("#v2g-bright-presets", root);
@@ -4876,8 +4938,9 @@
         if (vsplitAbort) vsplitAbort.hidden = false;
         setError(vsplitError, "");
         revokeVsplitGifOutputs();
-        const fps = Math.min(15, Math.max(2, Number(vsplitFps?.value) || 15));
-        const maxW = Math.min(720, Math.max(64, Number(vsplitWidth?.value) || 480));
+        const perf = currentMediaPerf();
+        const fps = Math.min(perf.manualFpsCap || 30, Math.max(2, Number(vsplitFps?.value) || 15));
+        const maxW = Math.min(perf.manualWidthCap || 1280, Math.max(64, Number(vsplitWidth?.value) || 480));
         const quality = Math.min(30, Math.max(1, Number(vsplitQuality?.value) || 5));
         const srcW = vsplitVideo?.videoWidth || 0;
         const srcH = vsplitVideo?.videoHeight || 0;
@@ -4925,7 +4988,7 @@
                         });
                       },
                     })
-                  : await encodeV2gGifFfmpeg({
+                  : await encodeBlackboxGif({
                       file: vsplitSourceFile,
                       fps,
                       maxW,
@@ -4937,6 +5000,7 @@
                       skipWatermark: true,
                       skipBright: true,
                       brightness: 0,
+                      allowWide: true,
                       isAborted,
                       stageLabel: `#${i + 1}`,
                       onProgress: (local, text) => {
@@ -8218,8 +8282,25 @@
             toast(`黑盒上限已设为 ${v} MB`);
           });
         }
-        // ---- 分块编码（仅手机显示）：建议值预填 + 记住用户改过的值 ----
-        (function bindVbbChunk() {
+        // ---- 性能档 + 分块编码（仅手机显示分块）：建议值预填 + 记住用户改过的值 ----
+        (function bindVbbPerfAndChunk() {
+          const perfEl = $("#vbb-perf", root);
+          if (perfEl && typeof readMediaPerfMode === "function") {
+            try { perfEl.value = readMediaPerfMode(); } catch (_) { perfEl.value = "auto"; }
+            const tipPerf = () => {
+              try {
+                const p = mediaPerfProfile();
+                toast(`性能：${p.label}（${p.tier}）· 帧上限 ${p.gifskiMaxFrames} · 加宽探 ${p.widenProbes} 次`);
+              } catch (_) {}
+            };
+            perfEl.addEventListener("change", () => {
+              const mode = setMediaPerfMode(perfEl.value);
+              perfEl.value = mode;
+              tipPerf();
+              // 切换档位后刷新分块建议
+              try { vbbVideo?.dispatchEvent(new Event("loadedmetadata")); } catch (_) {}
+            });
+          }
           const enable = $("#vbb-chunk-enable", root);
           const countEl = $("#vbb-chunk-count", root);
           const hintEl = $("#vbb-chunk-hint", root);
@@ -8236,19 +8317,33 @@
           } catch (_) {}
           const cfg = readVbbChunkCfg();
           let userSet = cfg.count != null; // 用户手动改过 → 不再跟随建议值
-          if (enable) enable.checked = cfg.on;
+          const hasSavedOn = (() => {
+            try {
+              const raw = localStorage.getItem(VBB_CHUNK_KEY);
+              if (!raw) return false;
+              const j = JSON.parse(raw);
+              return Object.prototype.hasOwnProperty.call(j, "on");
+            } catch (_) {
+              return false;
+            }
+          })();
+          if (enable) {
+            if (hasSavedOn) enable.checked = cfg.on;
+            else enable.checked = Boolean(currentMediaPerf().preferChunkByDefault);
+          }
           if (countEl && userSet) countEl.value = String(cfg.count);
           const sync = () => {
             const rec = vbbRecommendChunkCount();
             if (countEl) {
               countEl.disabled = enable ? !enable.checked : false;
               // 自动填写：没有视频时给默认值（上次的/2），有视频时给建议块数
-              if (!userSet) countEl.value = rec ? String(rec) : String(cfg.count || 2);
+              if (!userSet) countEl.value = rec ? String(rec) : String(cfg.count || (currentMediaPerf().preferChunkByDefault ? 2 : 1));
             }
             if (hintEl) {
+              const p = currentMediaPerf();
               hintEl.textContent = rec
-                ? `本视频建议 ${rec} 块 · 越少画质/体积越好，越多越省内存`
-                : "越少画质/体积越好，但越吃内存";
+                ? `本视频建议 ${rec} 块 · ${p.label}档 · 越少画质/体积越好`
+                : `${p.label}档 · 越少画质/体积越好，但越吃内存`;
             }
           };
           const persist = () => {

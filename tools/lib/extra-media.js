@@ -1132,6 +1132,131 @@
     return 10;
   }
 
+  /** GIF / 视频转码性能档：炸干旗舰机，旧机仍可省电 */
+  const MEDIA_PERF_KEY = "devtools-media-perf-v1";
+  const MEDIA_PERF_MODES = ["auto", "eco", "balanced", "max"];
+  const MB = 1024 * 1024;
+  const GB = 1024 * MB;
+
+  function isCoarsePointerMedia() {
+    try {
+      return window.matchMedia("(pointer: coarse)").matches;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  function readMediaPerfMode() {
+    try {
+      const v = String(localStorage.getItem(MEDIA_PERF_KEY) || "auto").toLowerCase();
+      if (MEDIA_PERF_MODES.includes(v)) return v;
+    } catch (_) {}
+    return "auto";
+  }
+
+  function setMediaPerfMode(mode) {
+    const v = MEDIA_PERF_MODES.includes(mode) ? mode : "auto";
+    try {
+      localStorage.setItem(MEDIA_PERF_KEY, v);
+    } catch (_) {}
+    try {
+      window.dispatchEvent(new CustomEvent("devtools:media-perf", { detail: { mode: v } }));
+    } catch (_) {}
+    return v;
+  }
+
+  /** @returns {"desktop"|"max"|"balanced"|"eco"} */
+  function resolveMediaPerfTier(mode = readMediaPerfMode()) {
+    if (mode === "eco") return "eco";
+    if (mode === "balanced") return "balanced";
+    if (mode === "max") return "max";
+    // auto
+    if (!isCoarsePointerMedia()) return "desktop";
+    try {
+      const dm = navigator.deviceMemory;
+      if (typeof dm === "number") {
+        if (dm >= 8) return "max";
+        if (dm >= 4) return "balanced";
+        return "eco";
+      }
+    } catch (_) {}
+    try {
+      const cores = Number(navigator.hardwareConcurrency) || 0;
+      // 骁龙 8 系常见 ≥8 逻辑核；触屏无 deviceMemory 时用核数抬档
+      if (cores >= 8) return "max";
+      if (cores >= 6) return "balanced";
+    } catch (_) {}
+    // 触屏未知机型：默认均衡（不再一律当弱机）
+    return "balanced";
+  }
+
+  /**
+   * gifski / 加宽探测 / 分块默认值。
+   * 黑盒优化目标按「单段 ≤30s」拉满；更长片段仍可编码，但内存策略不额外放宽。
+   */
+  function mediaPerfProfile(mode = readMediaPerfMode()) {
+    const tier = resolveMediaPerfTier(mode);
+    if (tier === "desktop") {
+      return {
+        tier,
+        mode,
+        label: "桌面",
+        gifskiRawBudget: 320 * MB,
+        gifskiMaxFrames: 1500,
+        widenProbes: 4,
+        allowQualityBoost: true,
+        preferChunkByDefault: false,
+        singlePassPeakBytes: 1.5 * GB,
+        manualFpsCap: 30,
+        manualWidthCap: 1280,
+      };
+    }
+    if (tier === "max") {
+      return {
+        tier,
+        mode,
+        label: "拉满",
+        // 旗舰机：30s@15fps≈451 帧，尽量单次 gifski（跨帧调色板最好）
+        gifskiRawBudget: 256 * MB,
+        gifskiMaxFrames: 600,
+        widenProbes: 4,
+        allowQualityBoost: true,
+        preferChunkByDefault: false,
+        singlePassPeakBytes: 1.0 * GB,
+        manualFpsCap: 30,
+        manualWidthCap: 1280,
+      };
+    }
+    if (tier === "balanced") {
+      return {
+        tier,
+        mode,
+        label: "均衡",
+        gifskiRawBudget: 128 * MB,
+        gifskiMaxFrames: 450,
+        widenProbes: 3,
+        allowQualityBoost: false,
+        preferChunkByDefault: true,
+        singlePassPeakBytes: 0.65 * GB,
+        manualFpsCap: 24,
+        manualWidthCap: 960,
+      };
+    }
+    return {
+      tier: "eco",
+      mode,
+      label: "省电",
+      gifskiRawBudget: 32 * MB,
+      gifskiMaxFrames: 240,
+      widenProbes: 2,
+      allowQualityBoost: false,
+      preferChunkByDefault: true,
+      singlePassPeakBytes: 0.2 * GB,
+      manualFpsCap: 15,
+      manualWidthCap: 720,
+    };
+  }
+
   async function compressExistingGifToBlackbox(blob, onProgress, shouldAbort) {
     const MAX = blackboxUseMaxBytes();
     if (!blob) throw new Error("没有可压缩的 GIF");
@@ -1198,6 +1323,8 @@
     drawGifTextWatermark, compressGifBlob, mergeGifBlobs, TOOLS_VERSION, GIF_TOOL_VERSION,
     AUTO_PACK_ZIP_KEY, FFMPEG_SEG_FILE_BYTES, blackboxUseMaxBytes, blackboxMaxRounds,
     blackboxMaxMb, setBlackboxMaxMb, compressExistingGifToBlackbox,
+    MEDIA_PERF_KEY, MEDIA_PERF_MODES, readMediaPerfMode, setMediaPerfMode,
+    resolveMediaPerfTier, mediaPerfProfile, isCoarsePointerMedia,
     formatLocalPickMeta: K.formatLocalPickMeta,
     attachLocalVideoPreview: K.attachLocalVideoPreview,
     waitVideoMetadata: K.waitVideoMetadata,

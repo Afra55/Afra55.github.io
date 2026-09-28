@@ -14,15 +14,22 @@
           </div>
           <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
             <label for="v2g-fps">帧率 FPS</label>
-            <input id="v2g-fps" class="mono meta-input" type="number" min="2" max="15" step="1" value="15" />
+            <input id="v2g-fps" class="mono meta-input" type="number" min="2" max="30" step="1" value="15" />
             <label for="v2g-width">最大宽度</label>
-            <input id="v2g-width" class="mono meta-input" type="number" min="64" max="720" step="1" value="480" />
+            <input id="v2g-width" class="mono meta-input" type="number" min="64" max="1280" step="1" value="480" />
             <label for="v2g-maxsec">最长秒数</label>
             <input id="v2g-maxsec" class="mono meta-input" type="number" min="0.5" max="600" step="0.1" value="" placeholder="自动=全长" title="选择后自动填入视频时长，可手动缩短" />
             <label for="v2g-start">起始秒</label>
             <input id="v2g-start" class="mono meta-input" type="number" min="0" max="600" step="0.1" value="0" />
             <label for="v2g-quality">质量 (1–30)</label>
             <input id="v2g-quality" class="mono meta-input" type="number" min="1" max="30" step="1" value="5" />
+            <label for="v2g-perf">性能</label>
+            <select id="v2g-perf" class="mono meta-input" title="与黑盒共用：拉满尽量单次 gifski">
+              <option value="auto">自动</option>
+              <option value="max">拉满</option>
+              <option value="balanced">均衡</option>
+              <option value="eco">省电</option>
+            </select>
           </div>
           <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
             <label class="flag"><input type="checkbox" id="v2g-wm-enable" /> 右上角文字水印</label>
