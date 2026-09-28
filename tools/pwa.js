@@ -6,6 +6,8 @@
   const btn = document.getElementById("pwa-install");
   let deferredPrompt = null;
 
+  if (btn && !btn.textContent.trim()) btn.textContent = "安装应用";
+
   function isStandalone() {
     try {
       if (window.matchMedia("(display-mode: standalone)").matches) return true;
@@ -55,8 +57,8 @@
     else if (typeof mq.addListener === "function") mq.addListener(onMode);
   } catch (_) {}
 
-  btn?.addEventListener("click", async () => {
-    if (!deferredPrompt) return;
+  async function promptInstall() {
+    if (!deferredPrompt) return false;
     try {
       deferredPrompt.prompt();
       await deferredPrompt.userChoice;
@@ -65,6 +67,14 @@
     }
     deferredPrompt = null;
     setInstallVisible(false);
+    return true;
+  }
+
+  btn?.addEventListener("click", () => {
+    promptInstall();
+  });
+  document.getElementById("header-more-pwa")?.addEventListener("click", () => {
+    promptInstall();
   });
 
   /**
@@ -122,6 +132,7 @@
     isStandalone,
     setInstallVisible,
     canPromptInstall: () => Boolean(deferredPrompt),
+    promptInstall,
     openExternal,
   };
 

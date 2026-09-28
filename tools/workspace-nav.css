@@ -10,6 +10,15 @@ html.is-pwa-standalone #pwa-install {
   }
 }
 
+/* 可安装时露出的「安装应用」悬浮按钮（安卓 Chrome beforeinstallprompt） */
+#pwa-install:not([hidden]) {
+  position: fixed;
+  z-index: 80;
+  right: max(0.85rem, env(safe-area-inset-right, 0px));
+  bottom: max(0.85rem, env(safe-area-inset-bottom, 0px));
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
 /*
  * iOS「添加到主屏幕」+ black-translucent：内容会画到状态栏下方。
  * 只在独立 App / standalone 补 safe-area，避免普通 Safari 页被多余 padding 撑乱。

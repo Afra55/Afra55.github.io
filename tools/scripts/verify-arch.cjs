@@ -55,7 +55,7 @@ function main() {
 
   // 3) SW 旁路大资源（源码是正则字面量：\/health-articles\/ 等）
   const sw = read("sw.js");
-  for (const needle of ["health-articles", "assets\\/ambient", "lib\\/health-articles"]) {
+  for (const needle of ["health-articles", "assets\\/ambient", "lib\\/health-articles", "qrscan"]) {
     if (!sw.includes(needle)) fail(`sw.js missing bypass marker: ${needle}`);
   }
   if (!/function shouldBypass[\s\S]*health-articles[\s\S]*function shouldCacheResponse/.test(sw)) {

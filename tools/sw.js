@@ -2,7 +2,7 @@
 /* eslint-disable no-restricted-globals */
 "use strict";
 
-const SHELL_CACHE = "devtools-shell-20260928-163105";
+const SHELL_CACHE = "devtools-shell-20260928-170300";
 const PRECACHE = [
   "./",
   "./index.html",
@@ -21,6 +21,8 @@ function shouldBypass(url) {
   if (/\/ffmpeg\//i.test(path)) return true;
   if (/\/excalidraw\//i.test(path)) return true;
   if (/\/sandspiel\//i.test(path)) return true;
+  // 独立扫码 PWA 自有 SW，主站壳不要接管
+  if (/\/qrscan\//i.test(path)) return true;
   // 大体积内容资源：不进 SW 缓存（养生 GIF / 白噪音等，打开工具时再拉）
   if (/\/health-articles\//i.test(path)) return true;
   if (/\/assets\/ambient\//i.test(path)) return true;

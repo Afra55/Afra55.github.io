@@ -11,12 +11,12 @@
   <link rel="manifest" href="./manifest.webmanifest" />
   <title>DevTools · 本地实用小工具合集</title>
   <script>try{if(navigator.standalone||matchMedia('(display-mode: standalone)').matches)document.documentElement.classList.add('is-pwa-standalone')}catch(e){}</script>
-  <script src="./lib/tools-build.js?v=2026.09.28-163105"></script>
-  <link rel="stylesheet" href="./style.css?v=2026.09.28-163105" />
-  <link rel="stylesheet" href="./workspace-nav.css?v=2026.09.28-163105" />
-  <link rel="stylesheet" href="./styles/bridge-shell.css?v=2026.09.28-163105" />
-  <script src="./lib/theme-presets.js?v=2026.09.28-163105"></script>
-  <script src="./lib/boot-loader.js?v=2026.09.28-163105"></script>
+  <script src="./lib/tools-build.js?v=2026.09.28-170300"></script>
+  <link rel="stylesheet" href="./style.css?v=2026.09.28-170300" />
+  <link rel="stylesheet" href="./workspace-nav.css?v=2026.09.28-170300" />
+  <link rel="stylesheet" href="./styles/bridge-shell.css?v=2026.09.28-170300" />
+  <script src="./lib/theme-presets.js?v=2026.09.28-170300"></script>
+  <script src="./lib/boot-loader.js?v=2026.09.28-170300"></script>
   <script>
   (function(){try{var raw=String(location.hash||'').replace(/^#/,'').trim();var head=raw.split(/[/?]/)[0]||'';var last=localStorage.getItem('devtools-tool-last-v1');var id='timestamp';if(head&&head!=='timestamp')id=head;else if(last&&last!=='timestamp')id=last;document.documentElement.dataset.bootPanel=id;}catch(e){document.documentElement.dataset.bootPanel='timestamp'}})();
   </script>
@@ -26,7 +26,7 @@
     <div class="header-row">
       <div class="header-brand-block">
         <a class="brand" href="./"><span class="brand-mark"></span><span class="brand-name">DevTools</span></a>
-        <span class="tool-ver site-tools-ver mono" id="site-tools-version">v2026.09.28-163105</span>
+        <span class="tool-ver site-tools-ver mono" id="site-tools-version">v2026.09.28-170300</span>
       </div>
       <div class="header-actions">
         <button type="button" class="ghost-btn header-action-collapse" id="site-force-refresh">强制刷新</button>
@@ -41,6 +41,8 @@
             <button type="button" class="header-more-item" data-header-proxy="site-force-refresh">强制刷新</button>
             <a class="header-more-item" href="#about">关于</a>
             <a class="header-more-item" href="#setup">安装帮助</a>
+            <a class="header-more-item" href="./qrscan/" target="_blank" rel="noopener">独立扫码（加桌面）</a>
+            <button type="button" class="header-more-item" id="header-more-pwa" hidden>安装 DevTools 到桌面</button>
           </div>
         </div>
       </div>
@@ -123,7 +125,7 @@
     </main>
   </div>
   <div id="toast" class="toast" hidden></div>
-  <button type="button" id="pwa-install" hidden></button>
+  <button type="button" class="primary-btn" id="pwa-install" hidden>安装应用</button>
   <dialog class="memo-dialog theme-dlg" id="theme-dlg" aria-label="主题设置">
     <div class="theme-dlg-shell">
       <div class="memo-dialog-body theme-dlg-body">
@@ -287,16 +289,16 @@
     <button type="button" class="ruler-fs-close ghost-btn" id="ruler-fs-close">退出全屏</button>
     <p class="ruler-fs-hud mono hint" id="ruler-coord-fs"></p>
   </div>
-  <script src="./lib/bridge-token.js?v=2026.09.28-163105"></script>
-  <script src="./lib/unified-bridge-bundle.js?v=2026.09.28-163105"></script>
-  <script src="./lib/bridge-shell.js?v=2026.09.28-163105"></script>
-  <script src="./lib/giscus-config.js?v=2026.09.28-163105"></script>
-  <script src="./lib/giscus.js?v=2026.09.28-163105"></script>
-  <script src="./lib/tool-registry.js?v=2026.09.28-163105"></script>
-  <script src="./lib/nav-scale.js?v=2026.09.28-163105"></script>
-  <script src="./lib/lazy-scripts.js?v=2026.09.28-163105"></script>
-  <script src="./lib/panel-loader.js?v=2026.09.28-163105"></script>
-  <script src="./theme.js?v=2026.09.28-163105"></script>
-  <script src="./app.js?v=2026.09.28-163105"></script>
+  <script src="./lib/bridge-token.js?v=2026.09.28-170300"></script>
+  <script src="./lib/unified-bridge-bundle.js?v=2026.09.28-170300"></script>
+  <script src="./lib/bridge-shell.js?v=2026.09.28-170300"></script>
+  <script src="./lib/giscus-config.js?v=2026.09.28-170300"></script>
+  <script src="./lib/giscus.js?v=2026.09.28-170300"></script>
+  <script src="./lib/tool-registry.js?v=2026.09.28-170300"></script>
+  <script src="./lib/nav-scale.js?v=2026.09.28-170300"></script>
+  <script src="./lib/lazy-scripts.js?v=2026.09.28-170300"></script>
+  <script src="./lib/panel-loader.js?v=2026.09.28-170300"></script>
+  <script src="./theme.js?v=2026.09.28-170300"></script>
+  <script src="./app.js?v=2026.09.28-170300"></script>
 </body>
 </html>

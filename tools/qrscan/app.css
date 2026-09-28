@@ -1,0 +1,217 @@
+:root {
+  color-scheme: dark;
+  --bg: #070b14;
+  --panel: #0e1626;
+  --ink: #e8eef8;
+  --muted: #93a0b8;
+  --accent: #2ec4b6;
+  --danger: #f07178;
+  --ok: #7bd88f;
+  --radius: 14px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--ink);
+  font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+body {
+  min-height: 100dvh;
+  padding: calc(0.75rem + var(--safe-top)) 0.85rem calc(0.85rem + var(--safe-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.brand {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.brand strong {
+  font-size: 1.15rem;
+  letter-spacing: 0.02em;
+}
+
+.brand span {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.top-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  justify-content: flex-end;
+}
+
+button,
+.file-btn {
+  appearance: none;
+  border: 0;
+  border-radius: 999px;
+  padding: 0.55rem 0.95rem;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  background: #1a2438;
+  color: var(--ink);
+}
+
+button.primary,
+.file-btn.primary {
+  background: var(--accent);
+  color: #06241f;
+}
+
+button.ghost {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid #243049;
+}
+
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.file-btn {
+  display: inline-flex;
+  align-items: center;
+}
+
+.file-btn input {
+  display: none;
+}
+
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 52vh;
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: #000;
+  border: 1px solid #1d2a40;
+}
+
+.stage video,
+.stage img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  background: #000;
+}
+
+.stage video[hidden],
+.stage img[hidden] {
+  display: none;
+}
+
+.reticle {
+  pointer-events: none;
+  position: absolute;
+  inset: 18% 14%;
+  border: 2px solid rgba(46, 196, 182, 0.85);
+  border-radius: 18px;
+  box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.35);
+}
+
+.hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.hint.error {
+  color: var(--danger);
+}
+
+.hint.ok {
+  color: var(--ok);
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid #1d2a40;
+  border-radius: var(--radius);
+  padding: 0.85rem;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+.panel label {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.panel textarea {
+  width: 100%;
+  min-height: 5.5rem;
+  resize: vertical;
+  border-radius: 10px;
+  border: 1px solid #243049;
+  background: #0a1220;
+  color: var(--ink);
+  padding: 0.65rem 0.75rem;
+  font: 0.95rem/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.install-card {
+  background: linear-gradient(160deg, #102033, #0c1524 55%);
+  border: 1px solid #2a3d5c;
+}
+
+.install-card h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.install-card ol {
+  margin: 0;
+  padding-left: 1.15rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.install-card li + li {
+  margin-top: 0.25rem;
+}
+
+.footer-link {
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.footer-link a {
+  color: var(--accent);
+}
