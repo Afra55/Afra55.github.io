@@ -3577,11 +3577,48 @@ li a:not([class*="btn"]) {
   background: color-mix(in srgb, var(--acu-mer-color, var(--accent)) 18%, var(--panel));
 }
 
+.acu-mer-short {
+  font-weight: 600;
+}
+
+.acu-mer-abbr {
+  font-size: 0.72em;
+  opacity: 0.65;
+}
+
 .acu-mer-icon {
   width: 16px;
   height: 16px;
   object-fit: contain;
   border-radius: 2px;
+}
+
+.acu-ex-regions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.acu-ex-region-btn {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--ink);
+  border-radius: 999px;
+  padding: 0.2rem 0.55rem;
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.acu-ex-region-btn.is-active {
+  border-color: var(--acu-mer-color, var(--accent));
+  background: color-mix(in srgb, #c9a0ff 18%, var(--panel));
+}
+
+.acu-chart-caption {
+  text-align: center;
+  margin: 0.15rem 0 0;
+  min-height: 1.2em;
 }
 
 .acu-workspace {
@@ -3619,6 +3656,10 @@ li a:not([class*="btn"]) {
   font: inherit;
   font-size: 0.82rem;
   cursor: pointer;
+  max-width: 7.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .acu-seg-btn.is-active {

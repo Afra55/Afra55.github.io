@@ -1,0 +1,20 @@
+{
+  "note": "JWQX 局部图 → 穴位 id。App 奇穴包混有经穴示意；未列出的 JWQX 由运行时按剩余奇穴（头颈→胸腹→背→肩胛→上肢→下肢）自动补齐。",
+  "byImage": {
+    "JWQX_1": { "id": "yong_quan", "nameZh": "涌泉" },
+    "JWQX_2": { "id": "印堂", "nameZh": "印堂" },
+    "JWQX_3": { "id": "zhong_fu", "nameZh": "中府" },
+    "JWQX_4": { "id": "膝眼", "nameZh": "膝眼" },
+    "JWQX_5": { "id": "zu_san_li", "nameZh": "足三里" },
+    "JWQX_6": { "id": "tai_xi", "nameZh": "太溪" },
+    "JWQX_7": { "id": "kun_lun", "nameZh": "昆仑" },
+    "JWQX_8": { "id": "zu_san_li", "nameZh": "足三里" },
+    "JWQX_9": { "id": "内膝眼", "nameZh": "内膝眼" },
+    "JWQX_11": { "id": "百虫窝", "nameZh": "百虫窝" },
+    "JWQX_12": { "id": "里内庭", "nameZh": "里内庭" },
+    "JWQX_13": { "id": "胆囊", "nameZh": "胆囊" },
+    "JWQX_14": { "id": "肘尖", "nameZh": "肘尖" },
+    "JWQX_15": { "id": "中泉", "nameZh": "中泉" },
+    "JWQX_16": { "id": "中魁", "nameZh": "中魁" }
+  }
+}
