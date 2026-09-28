@@ -275,9 +275,10 @@
   function scriptLikelyLoaded(src) {
     if (!src) return true;
     const key = withVersion(src);
-    if (scriptPromises.has(key)) return true;
+    // 仅「已成功执行」算 loaded；in-flight / 失败标签不算（否则 isToolWarm 会跳过 await）
     return [...document.scripts].some((s) => {
       try {
+        if (s.dataset.devtoolsLoaded !== "1") return false;
         const attr = s.getAttribute("src") || "";
         return withVersion(attr) === key;
       } catch (_) {
@@ -327,21 +328,27 @@
         reject(err || new Error(`脚本加载失败：${src}`));
       };
       const timer = window.setTimeout(() => finishErr(new Error(`脚本加载超时：${src}`)), timeoutMs);
-      const existing = [...document.scripts].find((s) => {
+      // 能走到这里说明没有 in-flight promise：未成功的旧标签（含已 error）一律拆掉重建，
+      // 否则 addEventListener("error") 等不到重放事件，会一直卡到超时。
+      [...document.scripts].forEach((s) => {
         try {
           const attr = s.getAttribute("src") || "";
-          return withVersion(attr) === key || s.src.endsWith(src.replace(/^\.\//, ""));
+          const same = withVersion(attr) === key || s.src.endsWith(src.replace(/^\.\//, ""));
+          if (!same) return;
+          if (s.dataset.devtoolsLoaded === "1") return;
+          s.remove();
+        } catch (_) {}
+      });
+      const ready = [...document.scripts].find((s) => {
+        try {
+          const attr = s.getAttribute("src") || "";
+          return s.dataset.devtoolsLoaded === "1" && withVersion(attr) === key;
         } catch (_) {
           return false;
         }
       });
-      if (existing) {
-        if (existing.dataset.devtoolsLoaded === "1") {
-          finishOk();
-          return;
-        }
-        existing.addEventListener("load", finishOk, { once: true });
-        existing.addEventListener("error", () => finishErr(new Error(`脚本加载失败：${src}`)), { once: true });
+      if (ready) {
+        finishOk();
         return;
       }
       const node = document.createElement("script");
@@ -351,7 +358,12 @@
         node.dataset.devtoolsLoaded = "1";
         finishOk();
       };
-      node.onerror = () => finishErr(new Error(`脚本加载失败：${src}`));
+      node.onerror = () => {
+        try {
+          node.remove();
+        } catch (_) {}
+        finishErr(new Error(`脚本加载失败：${src}`));
+      };
       document.head.appendChild(node);
     }).catch((err) => {
       scriptPromises.delete(key);

@@ -437,10 +437,16 @@
 
   function bootIfNeeded() {
     if (booted) return;
+    // 面板 HTML 未挂载时不要标记 booted，否则 renderList 空跑后永远不重试
+    if (!$("#hr-list") || !$("#hr-reader")) return;
     booted = true;
     $("#hr-back")?.addEventListener("click", () => showList());
     void init();
   }
+
+  document.addEventListener("devtools:panel-mounted", (e) => {
+    if (String(e.detail?.id || "").trim() === "healthread") bootIfNeeded();
+  });
 
   document.addEventListener("devtools:route", (e) => {
     const d = e.detail || {};
