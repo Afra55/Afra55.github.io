@@ -378,9 +378,10 @@
   let ffmpegWarmDetail = { ratio: 0, text: "" };
   /**
    * 当前引擎实例里已写入的源视频，避免大文件每段都 arrayBuffer+writeFile（手机易白屏）。
-   * @type {null|{key:string,name:string}}
+   * 按 FFmpeg 实例隔离，支持旗舰机多路并行时各写各的输入文件。
+   * @type {WeakMap<object, {key:string,name:string}>}
    */
-  let ffmpegCachedInput = null;
+  const ffmpegInputCacheByInstance = new WeakMap();
   const FFMPEG_SEG_FILE_BYTES = 48 * 1024 * 1024;
   /** 用户点「一键清理缓存」后，不再自动预热，以免马上重新占空间 */
   let ffmpegSkipAutoPrewarm = false;
@@ -446,24 +447,34 @@
     const ext = guessVideoExt(file);
     const inName = `in.${ext}`;
     const key = ffmpegInputKey(file);
-    if (ffmpegCachedInput?.key === key && ffmpegCachedInput?.name === inName) {
+    const cached = ffmpegInputCacheByInstance.get(ffmpeg);
+    if (cached?.key === key && cached?.name === inName) {
       return inName;
     }
-    if (ffmpegCachedInput?.name) {
+    if (cached?.name) {
       try {
-        await ffmpeg.deleteFile(ffmpegCachedInput.name);
+        await ffmpeg.deleteFile(cached.name);
       } catch (_) {}
-      ffmpegCachedInput = null;
     }
     onWrite?.(0, "载入本地编码器（不上传）…");
     await ffmpeg.writeFile(inName, await fetchFileBytes(file, onWrite));
     onWrite?.(1, "已载入本地编码器（未上传）");
-    ffmpegCachedInput = { key, name: inName };
+    ffmpegInputCacheByInstance.set(ffmpeg, { key, name: inName });
     return inName;
   }
 
-  function clearFfmpegInputCache() {
-    ffmpegCachedInput = null;
+  function clearFfmpegInputCache(ffmpeg) {
+    if (ffmpeg) {
+      try {
+        ffmpegInputCacheByInstance.delete(ffmpeg);
+      } catch (_) {}
+      return;
+    }
+    if (ffmpegInstance) {
+      try {
+        ffmpegInputCacheByInstance.delete(ffmpegInstance);
+      } catch (_) {}
+    }
   }
 
   function openFfmpegIdb() {
@@ -695,9 +706,9 @@
       } catch (_) {
         /* ignore */
       }
+      clearFfmpegInputCache(ffmpegInstance);
       ffmpegInstance = null;
     }
-    clearFfmpegInputCache();
     // 默认永不 revoke 引擎 blob：IndexedDB 仍在，内存 URL 也可复用；且不进临时占用清理
     if (revokeAssets && ffmpegAssetBlobs) {
       const revoke =
@@ -718,6 +729,50 @@
     if (ffmpegWarmState === "ready") ffmpegWarmState = "idle";
     ffmpegWarmPromise = null;
     paintFfmpegWarmHint();
+  }
+
+  /**
+   * 另开一路 FFmpeg Worker（与单例并行）。资源 blob 共用，不替换 getFfmpegInstance 单例。
+   * 批处理并行时用；用完必须 destroyFfmpegInstance。
+   */
+  async function createFfmpegInstance(onProgress) {
+    ffmpegSkipAutoPrewarm = false;
+    onProgress?.(0.02, "加载 FFmpeg 模块…");
+    const { FFmpeg } = await loadFfmpegMods();
+    const assets = await ensureFfmpegAssets(onProgress);
+    onProgress?.(0.19, "初始化并行 FFmpeg Worker…");
+    const ffmpeg = new FFmpeg();
+    try {
+      await ffmpeg.load({
+        classWorkerURL: assets.workerURL,
+        coreURL: assets.coreBlob,
+        wasmURL: assets.wasmBlob,
+      });
+    } catch (err) {
+      try {
+        ffmpeg.terminate();
+      } catch (_) {}
+      const msg = err?.message || String(err);
+      throw new Error(
+        /NetworkError|Failed to fetch|Aborted|memory|OOM|out of memory/i.test(msg)
+          ? `并行 FFmpeg 加载失败（内存或网络）：${msg}`
+          : `并行 FFmpeg 加载失败：${msg}`
+      );
+    }
+    onProgress?.(0.22, "并行 FFmpeg 就绪");
+    return ffmpeg;
+  }
+
+  function destroyFfmpegInstance(ffmpeg) {
+    if (!ffmpeg) return;
+    if (ffmpeg === ffmpegInstance) {
+      terminateFfmpegInstance({ revokeAssets: false });
+      return;
+    }
+    clearFfmpegInputCache(ffmpeg);
+    try {
+      ffmpeg.terminate();
+    } catch (_) {}
   }
 
   const FFMPEG_WARM_UI = [
@@ -1063,6 +1118,17 @@
   }
 
   let gifsicleModulePromise = null;
+  /** gifsicle wasm 非重入：并行批处理时串行化 run */
+  let gifsicleRunChain = Promise.resolve();
+
+  function withGifsicleLock(fn) {
+    const run = gifsicleRunChain.then(fn, fn);
+    gifsicleRunChain = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
+  }
 
   function loadGifsicle() {
     if (!gifsicleModulePromise) {
@@ -1196,10 +1262,12 @@
     pushBusy(0.2);
     timer = setInterval(() => pushBusy(), 700);
     try {
-      const out = await gifsicle.run({
-        input: [{ file: blob, name: "in.gif" }],
-        command: [`${plan.args} in.gif -o /out/out.gif`],
-      });
+      const out = await withGifsicleLock(() =>
+        gifsicle.run({
+          input: [{ file: blob, name: "in.gif" }],
+          command: [`${plan.args} in.gif -o /out/out.gif`],
+        })
+      );
       const file = Array.isArray(out) ? out[0] : null;
       if (!file) throw new Error("压缩失败，未得到输出");
       onProgress?.(1, "压缩完成");
@@ -1314,10 +1382,12 @@
       let lastErr = "";
       for (const cmd of commands) {
         try {
-          const out = await gifsicle.run({
-            input,
-            command: [cmd],
-          });
+          const out = await withGifsicleLock(() =>
+            gifsicle.run({
+              input,
+              command: [cmd],
+            })
+          );
           const file = Array.isArray(out) ? out[0] : null;
           if (!file) {
             lastErr = "合并失败：请确认各 GIF 宽高一致";
@@ -1445,6 +1515,7 @@
         singlePassPeakBytes: 1.5 * GB,
         manualFpsCap: 30,
         manualWidthCap: 1280,
+        batchConcurrency: 2,
       };
     }
     if (tier === "max") {
@@ -1461,6 +1532,8 @@
         singlePassPeakBytes: 1.0 * GB,
         manualFpsCap: 30,
         manualWidthCap: 1280,
+        // 多选批处理：2 路并行（各一路 FFmpeg Worker；gifski/gifsicle 共享 wasm 上锁）
+        batchConcurrency: 2,
       };
     }
     if (tier === "balanced") {
@@ -1476,6 +1549,7 @@
         singlePassPeakBytes: 0.65 * GB,
         manualFpsCap: 24,
         manualWidthCap: 960,
+        batchConcurrency: 1,
       };
     }
     return {
@@ -1490,6 +1564,7 @@
       singlePassPeakBytes: 0.2 * GB,
       manualFpsCap: 15,
       manualWidthCap: 720,
+      batchConcurrency: 1,
     };
   }
 
@@ -1555,7 +1630,8 @@
     loadFfmpegMods, fetchFileBytes, ffmpegInputKey, guessVideoExt, ensureFfmpegInputWritten,
     clearFfmpegInputCache, openFfmpegIdb, idbGetAsset, idbPutAsset, deleteFfmpegIndexedDb,
     purgePersistedEngine, createEngineObjectURL, fetchArrayBufferProgress, loadEngineBuffer,
-    ensureFfmpegAssets, getFfmpegInstance, terminateFfmpegInstance, paintFfmpegWarmHint,
+    ensureFfmpegAssets, getFfmpegInstance, createFfmpegInstance, destroyFfmpegInstance,
+    terminateFfmpegInstance, paintFfmpegWarmHint,
     setFfmpegWarmProgress, injectFfmpegPreloadLinks, isGifmakerActive, prewarmFfmpegEngine,
     scheduleFfmpegPrewarm, bindFfmpegPrewarmTriggers, encodeAnimatedWebpFromStillFrames,
     paintToolsVersion, loadGifsicle, buildGifCompressArgs, buildBlackboxSoftCompressArgs,

@@ -39,6 +39,7 @@
     AUTO_PACK_ZIP_KEY,
     preferShareToGallery, isAutoShareGalleryEnabled, shareMediaBlob, maybeAutoShareGallery,
     revealAutoShareGalleryUi,
+    createFfmpegInstance, destroyFfmpegInstance,
   } = M;
   const FFMPEG_SEG_FILE_BYTES = M.FFMPEG_SEG_FILE_BYTES ?? 48 * 1024 * 1024;
   const formatLocalPickMeta = K.formatLocalPickMeta;
@@ -140,8 +141,13 @@
               singlePassPeakBytes: isCoarsePointer() ? 0.2 * 1024 * 1024 * 1024 : 1.5 * 1024 * 1024 * 1024,
               manualFpsCap: isCoarsePointer() ? 15 : 30,
               manualWidthCap: isCoarsePointer() ? 720 : 1280,
+              batchConcurrency: isCoarsePointer() ? 1 : 2,
               label: isCoarsePointer() ? "省电" : "桌面",
             };
+      }
+      function resolveBatchConcurrency(total) {
+        const n = Math.max(1, Math.min(3, Math.floor(Number(currentMediaPerf().batchConcurrency) || 1)));
+        return Math.max(1, Math.min(n, Math.max(1, Number(total) || 1)));
       }
       /** 单段 gifski 编码的原始 RGBA 内存预算（帧数×宽×高×4）。按性能档，不再「触屏=一律弱机」。 */
       function gifskiRawBudget() {
@@ -1058,9 +1064,11 @@
         if (aborted()) throw new Error("已取消");
         mapProgress(0.03, `${stageLabel}准备 FFmpeg 引擎…`);
         let ticker = null;
-        const ffmpeg = await getFfmpegInstance((ratio, text) => {
-          mapProgress(0.03 + Math.min(0.12, (ratio || 0) * 0.12), `${stageLabel}${text || "加载引擎…"}`);
-        });
+        const ffmpeg =
+          opts.ffmpeg ||
+          (await getFfmpegInstance((ratio, text) => {
+            mapProgress(0.03 + Math.min(0.12, (ratio || 0) * 0.12), `${stageLabel}${text || "加载引擎…"}`);
+          }));
         if (aborted()) throw new Error("已取消");
   
         ticker = createEncodeProgressTicker(mapProgress, 0.2, 0.72, `${stageLabel}准备编码`, aborted);
@@ -1239,6 +1247,16 @@
       }
   
       let gifskiModPromise = null;
+      /** gifski 共享 wasm.memory，并行批处理必须串行 encode */
+      let gifskiEncodeChain = Promise.resolve();
+      function withGifskiEncodeLock(fn) {
+        const run = gifskiEncodeChain.then(fn, fn);
+        gifskiEncodeChain = run.then(
+          () => undefined,
+          () => undefined
+        );
+        return run;
+      }
       /** 懒加载 gifski wasm（ES module）；失败不缓存，下次重试 */
       function loadGifskiMods() {
         if (!gifskiModPromise) {
@@ -1408,9 +1426,11 @@
         if (aborted()) throw new Error("已取消");
 
         mapProgress(0.03, `${stageLabel}准备 FFmpeg 引擎…`);
-        const ffmpeg = await getFfmpegInstance((ratio, text) => {
-          mapProgress(0.03 + Math.min(0.12, (ratio || 0) * 0.12), `${stageLabel}${text || "加载引擎…"}`);
-        });
+        const ffmpeg =
+          opts.ffmpeg ||
+          (await getFfmpegInstance((ratio, text) => {
+            mapProgress(0.03 + Math.min(0.12, (ratio || 0) * 0.12), `${stageLabel}${text || "加载引擎…"}`);
+          }));
         if (aborted()) throw new Error("已取消");
 
         const ticker = createEncodeProgressTicker(mapProgress, 0.2, 0.45, `${stageLabel}导出 RGBA 帧`, aborted);
@@ -1543,11 +1563,12 @@
               }
             } catch (_) {}
             const mergedView = durations ? view.subarray(0, encodedFrames * stride) : view;
-            // gifski.encode 是同步 wasm 调用，期间主线程会卡住。
-            // 有合并 → 传逐帧时长（单位 ms）；无合并 → 沿用 fps（gifski 自己摊帧时更稳）
-            const gifBytes = durations
-              ? mod.encode(mergedView, encodedFrames, outW, outH, undefined, durations, gifskiQuality)
-              : mod.encode(mergedView, encodedFrames, outW, outH, fps, undefined, gifskiQuality);
+            // gifski.encode 是同步 wasm 调用，期间主线程会卡住；共享 memory 不可并发 → 上锁
+            const gifBytes = await withGifskiEncodeLock(() =>
+              durations
+                ? mod.encode(mergedView, encodedFrames, outW, outH, undefined, durations, gifskiQuality)
+                : mod.encode(mergedView, encodedFrames, outW, outH, fps, undefined, gifskiQuality)
+            );
             if (!gifBytes || !gifBytes.length) throw new Error("gifski 未产出 GIF");
             return { blob: new Blob([gifBytes], { type: "image/gif" }), n, mergedOut: encodedFrames };
           };
@@ -2199,6 +2220,7 @@
           crop: clipOpts.crop || null,
           allowWide: true, // 一键黑盒允许超过 720px（预算用不完时换清晰度）
           chunkCount: clipOpts.chunkCount != null ? clipOpts.chunkCount : readVbbChunkCount(),
+          ffmpeg: clipOpts.ffmpeg || null,
         };
 
         /**
@@ -6572,7 +6594,7 @@
         if (vbbSplitPanel) vbbSplitPanel.hidden = !showSplit;
         if (vbbWorkflowHint) {
           vbbWorkflowHint.textContent = batch
-            ? "多选短片时将逐个转换，无需切换模式。"
+            ? `多选短片时旗舰/桌面可并行 ${Math.max(1, Number(currentMediaPerf().batchConcurrency) || 1)} 路（均衡/省电仍逐个）。`
             : VBB_WORKFLOW_HINTS[vbbWorkflow] || VBB_WORKFLOW_HINTS.single;
         }
         if (vbbAdvanced) vbbAdvanced.hidden = isVbbManualMode() || batch;
@@ -7743,7 +7765,13 @@
         }
       }
 
-      async function runVbbBatchBlackbox() {        if (!isVbbBatchMode() || vbbBusy) return;
+      function isLikelyMemoryError(err) {
+        const msg = String(err && (err.message || err) || "");
+        return /memory|OOM|out of memory|Allocation failed|Array buffer allocation|Cannot allocate|oom/i.test(msg);
+      }
+
+      async function runVbbBatchBlackbox() {
+        if (!isVbbBatchMode() || vbbBusy) return;
         abortVbb = false;
         vbbBusy = true;
         vbbSuppressGlobalProgress = true; // 只留卡片进度
@@ -7768,25 +7796,40 @@
         }));
         renderVbbResults();
         let ok = 0;
-        // 沿用上一个成功视频的编码方案(fps/宽)：仅在「时长一致(±0.08s)」时复用，且按 span 缓存
+        let doneCount = 0;
+        const finishedIdx = new Set();
+        // 沿用成功方案(fps/宽)：时长一致(±0.08s)时复用；并行时靠 span 缓存共享
         let reuseSeed = null;
+        const pool = [];
+        let conc = 1;
         try {
           await prewarmFfmpegEngine().catch(() => {});
-          for (let i = 0; i < total; i++) {
-            if (abortVbb) throw new Error("已取消");
-            // 每个视频都用全新引擎：避免 WASM 实例累积导致后续视频明显变慢（资源已缓存，重启很快）
-            if (i > 0) {
-              try { terminateFfmpegInstance({ revokeAssets: false }); } catch (_) {}
-              await new Promise((r) => setTimeout(r, 50));
+          conc = resolveBatchConcurrency(total);
+          // 旗舰/桌面：预开 N 路独立 FFmpeg Worker；gifski/gifsicle 仍上锁串行
+          if (conc > 1 && typeof createFfmpegInstance === "function") {
+            try {
+              for (let s = 0; s < conc; s++) {
+                if (abortVbb) throw new Error("已取消");
+                pool.push(await createFfmpegInstance());
+              }
+              toast(`并行 ${conc} 路转换 · ${currentMediaPerf().label}`);
+              vbbLog(`[vbb] batch parallel concurrency=${conc} total=${total}`);
+            } catch (err) {
+              vbbLog(`[vbb] parallel pool fail → serial: ${err?.message || err}`);
+              while (pool.length) {
+                try {
+                  destroyFfmpegInstance?.(pool.pop());
+                } catch (_) {}
+              }
+              conc = 1;
+              toast("并行引擎启动失败 · 改为逐个转换");
             }
+          }
+
+          const encodeOne = async (i, ffmpegLease) => {
+            if (abortVbb) throw new Error("已取消");
             const item = vbbBatchFiles[i];
-            setVbbClipJob(i, { status: "running", progress: 0.02, text: "准备编码…" });
-            const base = i / total;
-            setVbbProgress(true, base + 0.02, `批量转换 · ${i + 1}/${total}`, {
-              sub: item.file.name,
-              busy: true,
-            });
-            // 仅同时长才复用：优先按时长缓存，其次复用上一个（时长一致时）
+            setVbbClipJob(i, { status: "running", progress: 0.02, text: conc > 1 ? `并行编码…` : "准备编码…" });
             const cachedSeed = loadVbbSpanScheme(item.duration);
             const seedForItem =
               cachedSeed ||
@@ -7796,6 +7839,13 @@
             const t0 = performance.now();
             const usedSeed = Boolean(seedForItem);
             try {
+              // 串行才重启单例：并行用租赁实例，避免互踢
+              if (conc <= 1 && i > 0 && !ffmpegLease) {
+                try {
+                  terminateFfmpegInstance({ revokeAssets: false });
+                } catch (_) {}
+                await new Promise((r) => setTimeout(r, 50));
+              }
               const vbbCrop = await vbbResolveCrop(item.file);
               const encoded = await encodeBlackboxClip({
                 file: item.file,
@@ -7806,14 +7856,19 @@
                 seed: seedForItem,
                 speedLimitSec: vbbSpeedLimitSec(),
                 crop: vbbCrop,
+                ffmpeg: ffmpegLease || null,
                 isAborted: () => abortVbb,
                 onProgress: (local, text) => {
-                  const p = base + Math.min(0.96, 0.04 + local * 0.92);
-                  const stage = bumpVbbEncodeProgress(p, `批量转换 · ${i + 1}/${total}`, text);
+                  const stage = vbbTickerLine(text) || (conc > 1 ? "并行编码" : "编码");
                   setVbbClipJob(i, {
                     status: "running",
                     progress: Math.min(0.98, 0.05 + Math.min(0.9, local) * 0.9),
                     text: stage,
+                  });
+                  const overall = (doneCount + Math.min(0.95, Number(local) || 0)) / total;
+                  setVbbProgress(true, overall, `批量转换 · ${doneCount}/${total}${conc > 1 ? ` · ${conc}路` : ""}`, {
+                    sub: item.file.name,
+                    busy: true,
                   });
                 },
               });
@@ -7823,11 +7878,11 @@
                 reuseSeed = { fps: encoded.fps, maxW: encoded.maxW, span: item.duration };
                 saveVbbSpanScheme(item.duration, reuseSeed, "blackbox");
               }
-              // 耗时直接显示在卡片里（手机端无需 DevTools）
               const elapsedSec = (performance.now() - t0) / 1000;
               vbbClips[i].gifNote = [
                 vbbClips[i].gifNote,
                 encoded.speed > 1 ? `加速${Number(encoded.speed).toFixed(1)}×` : "",
+                conc > 1 ? `${conc}路并行` : "",
                 `耗时${elapsedSec.toFixed(1)}s${usedSeed ? "·沿用" : ""}`,
               ]
                 .filter(Boolean)
@@ -7837,8 +7892,9 @@
               ok += 1;
               refreshVbbClipRow(i);
               vbbLog(
-                `[vbb] #${i + 1} ${usedSeed ? "seed" : "ladder"} ${Math.round(elapsedSec * 1000)}ms · ${encoded.fps}FPS · ${encoded.outW}×${encoded.outH} · ${formatKb(encoded.blob.size)} · ${encoded.compressRounds || 0}轮`
+                `[vbb] #${i + 1} ${usedSeed ? "seed" : "ladder"} ${Math.round(elapsedSec * 1000)}ms · ${encoded.fps}FPS · ${encoded.outW}×${encoded.outH} · ${formatKb(encoded.blob.size)} · ${encoded.compressRounds || 0}轮 · conc=${conc}`
               );
+              return { ok: true };
             } catch (err) {
               if (String(err?.message) === "已取消") throw err;
               const elapsedSec = (performance.now() - t0) / 1000;
@@ -7846,8 +7902,67 @@
               vbbClips[i].error = err.message || String(err);
               setVbbClipJob(i, { status: "error", progress: 0, text: "失败" });
               refreshVbbClipRow(i);
+              return { ok: false, memory: isLikelyMemoryError(err), err };
+            } finally {
+              if (!finishedIdx.has(i)) {
+                finishedIdx.add(i);
+                doneCount += 1;
+              }
+              setVbbProgress(true, doneCount / total, `批量转换 · ${doneCount}/${total}${conc > 1 ? ` · ${conc}路` : ""}`, {
+                busy: doneCount < total,
+              });
+            }
+          };
+
+          if (conc <= 1) {
+            for (let i = 0; i < total; i++) {
+              if (abortVbb) throw new Error("已取消");
+              await encodeOne(i, null);
+            }
+          } else {
+            let nextIdx = 0;
+            let forceSerialRest = false;
+            const workers = Array.from({ length: conc }, (_, slot) =>
+              (async () => {
+                const lease = pool[slot] || null;
+                while (true) {
+                  if (abortVbb) throw new Error("已取消");
+                  if (forceSerialRest) return;
+                  const i = nextIdx++;
+                  if (i >= total) return;
+                  const result = await encodeOne(i, lease);
+                  // 并行中途 OOM：停掉后续并行，剩余改串行（本 worker 退出；主流程再扫失败项）
+                  if (result && result.memory) {
+                    forceSerialRest = true;
+                    vbbLog(`[vbb] parallel OOM at #${i + 1} → stop new parallel work`);
+                    return;
+                  }
+                }
+              })()
+            );
+            await Promise.all(workers);
+            // 若 OOM 中断：对仍 pending 的条目串行补跑
+            if (forceSerialRest) {
+              toast("内存紧张 · 剩余改为逐个转换");
+              while (pool.length) {
+                try {
+                  destroyFfmpegInstance?.(pool.pop());
+                } catch (_) {}
+              }
+              conc = 1;
+              for (let i = 0; i < total; i++) {
+                if (abortVbb) throw new Error("已取消");
+                if (vbbClips[i]?.gifBlob || vbbClips[i]?.jobStatus === "done") continue;
+                if (vbbClips[i]?.error && !isLikelyMemoryError({ message: vbbClips[i].error })) continue;
+                // 内存失败或未跑的：清错重试
+                vbbClips[i].error = "";
+                finishedIdx.delete(i);
+                setVbbClipJob(i, { status: "pending", progress: 0, text: "串行补跑…" });
+                await encodeOne(i, null);
+              }
             }
           }
+
           if (abortVbb) throw new Error("已取消");
           renderVbbResults();
           setVbbProgress(true, 1, `批量完成 · ${ok}/${total}`);
@@ -7865,6 +7980,11 @@
           else toast("已取消");
           setVbbProgress(false, 0, "");
         } finally {
+          while (pool.length) {
+            try {
+              destroyFfmpegInstance?.(pool.pop());
+            } catch (_) {}
+          }
           vbbBusy = false;
           vbbSuppressGlobalProgress = false;
           resetVbbAbort();
