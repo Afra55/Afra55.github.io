@@ -6246,9 +6246,31 @@
         return vbbResolveCrop(file);
       }
 
+      function paintVbbEditStatusLabel(el, { badge, name, batch }) {
+        if (!el) return;
+        el.replaceChildren();
+        if (badge) {
+          const tag = document.createElement("span");
+          tag.className = "vbb-edit-badge";
+          tag.textContent = `已编辑 · ${badge}`;
+          if (batch) {
+            el.append(`「${name || "视频"}」 `, tag);
+          } else {
+            el.append(tag, " · 可选裁时长 / 裁画面");
+          }
+        } else if (batch) {
+          el.textContent = `「${name || "视频"}」 · 未编辑`;
+        } else {
+          el.textContent = "未编辑 · 可选裁时长 / 裁画面";
+        }
+      }
+
       function syncVbbEditUi() {
         const show = canShowVbbFileEdit();
-        if (vbbFileEdit) vbbFileEdit.hidden = !show;
+        if (vbbFileEdit) {
+          vbbFileEdit.hidden = !show;
+          if (!show) vbbFileEdit.classList.remove("is-edited");
+        }
         if (!show) return;
         const item = getActiveVbbEditItem();
         if (!item) return;
@@ -6256,11 +6278,13 @@
         clampVbbEdit(edit, item.duration, item.srcW, item.srcH);
         const badge = vbbEditBadge(edit, item.duration, item.srcW, item.srcH);
         const name = item.file?.name || "视频";
-        if (vbbFileEditLabel) {
-          vbbFileEditLabel.textContent = isVbbBatchMode()
-            ? `「${name}」${badge ? ` · ${badge}` : " · 未编辑"}`
-            : `${badge ? `已编辑 · ${badge}` : "未编辑"} · 可选裁时长 / 裁画面`;
-        }
+        const dirty = Boolean(badge);
+        if (vbbFileEdit) vbbFileEdit.classList.toggle("is-edited", dirty);
+        paintVbbEditStatusLabel(vbbFileEditLabel, {
+          badge,
+          name,
+          batch: isVbbBatchMode(),
+        });
         const enabled = !vbbBusy && !vbbEditOpening;
         if (vbbEditOpen) vbbEditOpen.disabled = !enabled;
         if (vbbEditReset) vbbEditReset.disabled = !enabled || !vbbEditIsDirty(edit, item.duration, item.srcW, item.srcH);
@@ -6612,14 +6636,21 @@
           const markCount =
             idx === vbbEditBatchIdx ? completeVbbMarks().length : completeMarksList(item.marks).length;
           const markBadge = markCount > 0 ? `${markCount} 段打点` : "";
-          meta.textContent = [
-            `${item.duration.toFixed(1)}s`,
-            formatKb(item.file.size),
-            `${item.srcW}×${item.srcH}`,
-            markBadge || badge || "未编辑",
-          ]
+          const baseMeta = [`${item.duration.toFixed(1)}s`, formatKb(item.file.size), `${item.srcW}×${item.srcH}`]
             .filter(Boolean)
             .join(" · ");
+          meta.append(baseMeta);
+          if (markBadge) {
+            meta.append(" · ", markBadge);
+          } else if (badge) {
+            const tag = document.createElement("span");
+            tag.className = "vbb-edit-badge";
+            tag.textContent = `已编辑 · ${badge}`;
+            meta.append(" · ", tag);
+            row.classList.add("is-edited");
+          } else if (!isVbbManualMode()) {
+            meta.append(" · 未编辑");
+          }
           main.appendChild(name);
           main.appendChild(meta);
           const btn = document.createElement("button");
@@ -6682,9 +6713,17 @@
         const tip = isVbbManualMode()
           ? ` · 打点仅作用于当前视频${marked ? ` · 共 ${marked} 段` : ""} · 点 × 可移除`
           : ` · 点「编辑」裁时长/画面，再「一键黑盒」· 点 × 可移除`;
-        vbbMeta.textContent = `已选 ${vbbBatchFiles.length} 个视频 · 共 ${totalDur.toFixed(1)}s · ${formatKb(totalSize)}${
-          edited && !isVbbManualMode() ? ` · 已编辑 ${edited} 个` : ""
-        }${tip}`;
+        vbbMeta.replaceChildren();
+        vbbMeta.append(
+          `已选 ${vbbBatchFiles.length} 个视频 · 共 ${totalDur.toFixed(1)}s · ${formatKb(totalSize)}`
+        );
+        if (edited && !isVbbManualMode()) {
+          const tag = document.createElement("span");
+          tag.className = "vbb-edit-badge";
+          tag.textContent = `已编辑 ${edited} 个`;
+          vbbMeta.append(" · ", tag);
+        }
+        vbbMeta.append(tip);
       }
   
       /** 总进度条与各片段进度并存 */
@@ -7138,8 +7177,10 @@
         if (workflowRow) workflowRow.hidden = false;
         const splitBtn = $("#vbb-workflow-split");
         if (splitBtn) {
-          splitBtn.disabled = batch;
-          splitBtn.title = batch ? "多选时不支持长视频自动切片，请用整段或手动打点" : "";
+          // 多选时隐藏「长视频切片」入口（非 disabled）；单文件长视频仍显示
+          splitBtn.hidden = batch;
+          splitBtn.disabled = false;
+          splitBtn.title = "";
           if (batch && vbbWorkflow === "split") vbbWorkflow = "single";
         }
         $("#vbb-workflow-single")?.classList.toggle("is-active", vbbWorkflow === "single");
@@ -7151,7 +7192,7 @@
           if (batch && isVbbManualMode()) {
             vbbWorkflowHint.textContent = VBB_BATCH_MANUAL_HINT;
           } else if (batch) {
-            vbbWorkflowHint.textContent = `多选短片：点「编辑」单独裁时长/裁画面；可切到「手动打点」按当前视频打点。旗舰/桌面可并行 ${Math.max(1, Number(currentMediaPerf().batchConcurrency) || 1)} 路（均衡/省电仍逐个）。`;
+            vbbWorkflowHint.textContent = `多选下请用整段或手动打点。点「编辑」单独裁时长/裁画面；可切到「手动打点」按当前视频打点。旗舰/桌面可并行 ${Math.max(1, Number(currentMediaPerf().batchConcurrency) || 1)} 路（均衡/省电仍逐个）。`;
           } else {
             vbbWorkflowHint.textContent = VBB_WORKFLOW_HINTS[vbbWorkflow] || VBB_WORKFLOW_HINTS.single;
           }
