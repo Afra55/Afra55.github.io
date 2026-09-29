@@ -1713,46 +1713,57 @@ body:has(#mdm.tool-panel.is-workspace-active) #memo-temp-prompt-stack {
 
 .memo-lightbox-inner {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 0.55rem;
   padding: 0.75rem 0.85rem 0.9rem;
   width: 100%;
   max-width: 100%;
+  height: 100%;
+  min-height: 0;
   box-sizing: border-box;
 }
 
+/* 桌面大弹层：约 94vw × 92vh，留遮罩边；手机近全屏 */
 .memo-preview-dlg {
-  max-width: min(96vw, 1100px);
-  width: min(96vw, 1100px);
+  width: min(94vw, 1400px);
+  max-width: min(94vw, 1400px);
+  height: min(92vh, 960px);
+  max-height: min(92vh, 960px);
+  margin: auto;
   padding: 0;
   border: 1px solid var(--line);
+  border-radius: 14px;
   background: var(--panel-strong);
+  box-shadow: 0 22px 64px rgba(0, 0, 0, 0.45);
 }
 
 .memo-preview-dlg[data-preview-kind="text"] {
-  width: min(96vw, 980px);
-  max-width: min(96vw, 980px);
+  width: min(94vw, 1200px);
+  max-width: min(94vw, 1200px);
 }
 
 .memo-preview-dlg[data-preview-kind="audio"],
 .memo-preview-dlg[data-preview-kind="file"] {
   width: min(92vw, 440px);
   max-width: min(92vw, 440px);
+  height: auto;
+  max-height: min(92vh, 520px);
 }
 
 .memo-preview-dlg[data-preview-kind="image"],
 .memo-preview-dlg[data-preview-kind="gif"] {
-  width: min(96vw, 960px);
-  max-width: min(96vw, 960px);
+  width: min(94vw, 1400px);
+  max-width: min(94vw, 1400px);
 }
 
 .memo-preview-dlg[data-preview-kind="video"],
 .memo-preview-dlg[data-preview-kind="pdf"] {
-  width: min(96vw, 1080px);
-  max-width: min(96vw, 1080px);
+  width: min(94vw, 1400px);
+  max-width: min(94vw, 1400px);
 }
 
 .memo-preview-dlg[open] {
-  display: block;
+  display: grid;
 }
 
 .memo-preview-dlg.is-fs {
@@ -1801,7 +1812,8 @@ body:has(#mdm.tool-panel.is-workspace-active) #memo-temp-prompt-stack {
 .memo-preview-stage {
   display: grid;
   place-items: center;
-  min-height: min(52vh, 420px);
+  min-height: 0;
+  height: 100%;
   background: color-mix(in srgb, var(--bg-0) 55%, transparent);
   border-radius: 12px;
   overflow: hidden;
@@ -1814,7 +1826,7 @@ body:has(#mdm.tool-panel.is-workspace-active) #memo-temp-prompt-stack {
 .memo-preview-dlg[data-preview-kind="text"] .memo-preview-stage {
   place-items: stretch;
   align-content: start;
-  min-height: min(58vh, 520px);
+  min-height: 0;
   background:
     linear-gradient(
       180deg,
@@ -1827,14 +1839,14 @@ body:has(#mdm.tool-panel.is-workspace-active) #memo-temp-prompt-stack {
 .memo-preview-dlg[data-preview-kind="image"] .memo-preview-stage,
 .memo-preview-dlg[data-preview-kind="gif"] .memo-preview-stage {
   background: #07090e;
-  min-height: min(58vh, 520px);
+  min-height: 0;
   place-items: stretch;
 }
 
 .memo-zoom-wrap {
   position: relative;
   width: 100%;
-  min-height: min(58vh, 520px);
+  min-height: 0;
   height: 100%;
   overflow: hidden;
   touch-action: none;
@@ -1908,14 +1920,15 @@ body:has(#mdm.tool-panel.is-workspace-active) #memo-temp-prompt-stack {
 
 .memo-preview-dlg[data-preview-kind="video"] .memo-preview-stage {
   background: #000;
-  min-height: min(56vh, 480px);
+  min-height: 0;
   border-radius: 14px;
   place-items: stretch;
 }
 
 .memo-video-zoom-wrap {
   background: #000;
-  min-height: min(56vh, 480px);
+  min-height: 0;
+  height: 100%;
 }
 
 .memo-preview-dlg.is-fs .memo-video-zoom-wrap {
@@ -1951,7 +1964,8 @@ body:has(#mdm.tool-panel.is-workspace-active) #memo-temp-prompt-stack {
 
 .memo-preview-dlg[data-preview-kind="pdf"] .memo-preview-stage {
   place-items: stretch;
-  min-height: min(78vh, 740px);
+  min-height: 0;
+  height: 100%;
   background: #11151c;
 }
 
@@ -2012,7 +2026,8 @@ body:has(#mdm.tool-panel.is-workspace-active) #memo-temp-prompt-stack {
 .memo-preview-text {
   margin: 0;
   width: 100%;
-  max-height: min(78vh, 860px);
+  max-height: none;
+  height: 100%;
   overflow: auto;
   white-space: pre-wrap;
   word-break: break-word;
@@ -2049,18 +2064,21 @@ body:has(#mdm.tool-panel.is-workspace-active) #memo-temp-prompt-stack {
 
 .memo-preview-frame {
   width: 100%;
-  height: min(72vh, 720px);
+  height: 100%;
+  min-height: min(62vh, 520px);
   border: 0;
   background: #fff;
   border-radius: 10px;
 }
 
 .memo-preview-dlg[data-preview-kind="pdf"] .memo-preview-frame {
-  height: min(78vh, 740px);
+  height: 100%;
+  min-height: 0;
 }
 
 .memo-preview-dlg.is-fs .memo-preview-frame {
-  height: calc(100vh - 5.5rem);
+  height: 100%;
+  min-height: 0;
   border-radius: 0;
 }
 
@@ -2155,6 +2173,43 @@ body:has(#mdm.tool-panel.is-workspace-active) #memo-temp-prompt-stack {
 
 .memo-lightbox-close {
   justify-self: end;
+}
+
+@media (max-width: 900px) {
+  .memo-preview-dlg:not(.is-fs) {
+    width: min(96vw, 100%);
+    max-width: 96vw;
+    height: min(94vh, 100%);
+    max-height: 94dvh;
+    border-radius: 12px;
+  }
+  .memo-preview-dlg[data-preview-kind="audio"]:not(.is-fs),
+  .memo-preview-dlg[data-preview-kind="file"]:not(.is-fs) {
+    height: auto;
+    max-height: min(94dvh, 520px);
+  }
+}
+
+@media (max-width: 640px) {
+  .memo-preview-dlg:not(.is-fs) {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100dvh;
+    max-height: 100dvh;
+    margin: 0;
+    border-radius: 0;
+    border: 0;
+  }
+  .memo-preview-dlg[data-preview-kind="audio"]:not(.is-fs),
+  .memo-preview-dlg[data-preview-kind="file"]:not(.is-fs) {
+    width: min(96vw, 100%);
+    max-width: 96vw;
+    height: auto;
+    max-height: min(94dvh, 520px);
+    margin: auto;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+  }
 }
 
 @media (max-width: 900px) {

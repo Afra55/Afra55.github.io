@@ -357,13 +357,8 @@
         }
         displayRectToCrop(x, y, w, h);
       } else {
-        const P = window.DevToolsPure;
-        if (P?.calcCropRect) {
-          const rect = P.calcCropRect(srcW, srcH, { aspect: "free", center: true });
-          crop = { x: rect.x, y: rect.y, w: rect.width, h: rect.height };
-        } else {
-          crop = { x: 0, y: 0, w: srcW, h: srcH };
-        }
+        // 自由比例默认整幅可选中框，避免小框难拖
+        crop = { x: 0, y: 0, w: srcW, h: srcH };
       }
       layoutCropBox();
     }
@@ -944,6 +939,7 @@
     window.addEventListener("pointercancel", onCropPointerUp);
 
     previewWrap?.addEventListener("pointerdown", (e) => {
+      // 拖绿框/把手时不触发播放切换；点按再 toggle，左右滑才 scrub
       if (!duration || e.target?.closest?.(".vtrim-crop-box")) return;
       previewScrub = {
         pointerId: e.pointerId,
@@ -951,15 +947,19 @@
         startT: video.currentTime || startSec,
         moved: false,
       };
-      try {
-        video.pause();
-      } catch (_) {}
       previewWrap.setPointerCapture?.(e.pointerId);
     });
     previewWrap?.addEventListener("pointermove", (e) => {
       if (!previewScrub || previewScrub.pointerId !== e.pointerId) return;
       const dx = e.clientX - previewScrub.startX;
-      if (Math.abs(dx) > 8) previewScrub.moved = true;
+      if (Math.abs(dx) > 8) {
+        if (!previewScrub.moved) {
+          previewScrub.moved = true;
+          try {
+            video.pause();
+          } catch (_) {}
+        }
+      }
       if (!previewScrub.moved) return;
       const geom = previewWrap.getBoundingClientRect();
       const span = Math.max(MIN_SPAN, endSec - startSec);

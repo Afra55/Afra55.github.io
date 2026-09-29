@@ -884,12 +884,8 @@
         x = 0;
         y = (dh - h) / 2;
       }
-    } else if (P?.calcCropRect) {
-      const rect = P.calcCropRect(srcW, srcH, { aspect: "free", center: true });
-      crop = { x: rect.x, y: rect.y, w: rect.width, h: rect.height };
-      layoutCropBox();
-      return;
     } else {
+      // 自由比例默认整幅可选中框，避免小框难拖
       crop = { x: 0, y: 0, w: srcW, h: srcH };
       layoutCropBox();
       return;
@@ -2149,7 +2145,7 @@
   window.addEventListener("pointerup", onCropPointerUp);
   window.addEventListener("pointercancel", onCropPointerUp);
 
-  // preview area: horizontal scrub; short tap toggles play
+  // preview area: 点按播放/暂停；左右滑 scrub；拖绿框不触发
   previewWrap?.addEventListener("pointerdown", (e) => {
     if (!sourceFile || busy || e.target?.closest?.(".vtrim-crop-box")) return;
     previewScrub = {
@@ -2158,15 +2154,19 @@
       startT: video.currentTime || startSec,
       moved: false,
     };
-    try {
-      video.pause();
-    } catch (_) {}
     previewWrap.setPointerCapture?.(e.pointerId);
   });
   previewWrap?.addEventListener("pointermove", (e) => {
     if (!previewScrub || previewScrub.pointerId !== e.pointerId) return;
     const dx = e.clientX - previewScrub.startX;
-    if (Math.abs(dx) > 8) previewScrub.moved = true;
+    if (Math.abs(dx) > 8) {
+      if (!previewScrub.moved) {
+        previewScrub.moved = true;
+        try {
+          video.pause();
+        } catch (_) {}
+      }
+    }
     if (!previewScrub.moved) return;
     const geom = previewWrap.getBoundingClientRect();
     const span = Math.max(MIN_SPAN, endSec - startSec);

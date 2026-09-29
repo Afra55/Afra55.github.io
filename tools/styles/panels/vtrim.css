@@ -96,24 +96,38 @@
 
 .vtrim-crop-handle {
   position: absolute;
-  width: 18px;
-  height: 18px;
-  margin: -9px 0 0 -9px;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
   border: 2px solid #fff;
-  border-radius: 4px;
+  border-radius: 3px;
   background: var(--accent);
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
   z-index: 3;
+  /* 视觉小把手；::before 扩大命中区 ≥44px（手机可用） */
+}
+.vtrim-crop-handle::before {
+  content: "";
+  position: absolute;
+  inset: -15px;
 }
 
-.vtrim-crop-handle[data-vtrim-handle="nw"] { left: 0; top: 0; cursor: nwse-resize; }
-.vtrim-crop-handle[data-vtrim-handle="n"]  { left: 50%; top: 0; cursor: ns-resize; }
-.vtrim-crop-handle[data-vtrim-handle="ne"] { left: 100%; top: 0; cursor: nesw-resize; }
-.vtrim-crop-handle[data-vtrim-handle="e"]  { left: 100%; top: 50%; cursor: ew-resize; }
-.vtrim-crop-handle[data-vtrim-handle="se"] { left: 100%; top: 100%; cursor: nwse-resize; }
-.vtrim-crop-handle[data-vtrim-handle="s"]  { left: 50%; top: 100%; cursor: ns-resize; }
-.vtrim-crop-handle[data-vtrim-handle="sw"] { left: 0; top: 100%; cursor: nesw-resize; }
-.vtrim-crop-handle[data-vtrim-handle="w"]  { left: 0; top: 50%; cursor: ew-resize; }
+.vtrim-crop-handle[data-vtrim-handle="nw"],
+.vtrim-crop-handle[data-vte-handle="nw"] { left: 0; top: 0; cursor: nwse-resize; }
+.vtrim-crop-handle[data-vtrim-handle="n"],
+.vtrim-crop-handle[data-vte-handle="n"]  { left: 50%; top: 0; cursor: ns-resize; }
+.vtrim-crop-handle[data-vtrim-handle="ne"],
+.vtrim-crop-handle[data-vte-handle="ne"] { left: 100%; top: 0; cursor: nesw-resize; }
+.vtrim-crop-handle[data-vtrim-handle="e"],
+.vtrim-crop-handle[data-vte-handle="e"]  { left: 100%; top: 50%; cursor: ew-resize; }
+.vtrim-crop-handle[data-vtrim-handle="se"],
+.vtrim-crop-handle[data-vte-handle="se"] { left: 100%; top: 100%; cursor: nwse-resize; }
+.vtrim-crop-handle[data-vtrim-handle="s"],
+.vtrim-crop-handle[data-vte-handle="s"]  { left: 50%; top: 100%; cursor: ns-resize; }
+.vtrim-crop-handle[data-vtrim-handle="sw"],
+.vtrim-crop-handle[data-vte-handle="sw"] { left: 0; top: 100%; cursor: nesw-resize; }
+.vtrim-crop-handle[data-vtrim-handle="w"],
+.vtrim-crop-handle[data-vte-handle="w"]  { left: 0; top: 50%; cursor: ew-resize; }
 
 .vtrim-transport {
   display: flex;
@@ -287,28 +301,48 @@
   position: absolute;
   inset: 0;
   margin: auto;
-  width: 64px;
-  height: 64px;
+  width: 52px;
+  height: 52px;
   border: 0;
   border-radius: 999px;
-  background: var(--control-bg, color-mix(in srgb, var(--bg-0) 58%, transparent));
-  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.55);
+  /* 半透明深底 + 实心三角，避免空心白圈观感 */
+  background: rgba(8, 14, 26, 0.68);
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.4);
   pointer-events: none;
   opacity: 1;
-  transition: opacity 0.18s ease;
+  transition: opacity 0.18s ease, background 0.18s ease;
   z-index: 1;
 }
 .vtrim-tap-play::before {
   content: "";
   position: absolute;
-  top: 50%; left: 54%;
-  width: 0; height: 0;
-  margin: -10px 0 0 -6px;
+  top: 50%;
+  left: 54%;
+  width: 0;
+  height: 0;
+  margin: -9px 0 0 -5px;
   border-style: solid;
-  border-width: 10px 0 10px 16px;
+  border-width: 9px 0 9px 15px;
   border-color: transparent transparent transparent #fff;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
-.vtrim-preview-wrap.is-playing .vtrim-tap-play { opacity: 0; }
+/* 播放中显示半透明暂停图标（点画面仍可切换） */
+.vtrim-preview-wrap.is-playing .vtrim-tap-play {
+  opacity: 0.55;
+  background: rgba(8, 14, 26, 0.55);
+}
+.vtrim-preview-wrap.is-playing .vtrim-tap-play::before {
+  left: 50%;
+  width: 5px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  border: 0;
+  border-radius: 1px;
+  background: #fff;
+  box-shadow: 13px 0 0 #fff;
+}
 
 .vtrim-film-loading {
   position: absolute;
@@ -407,15 +441,37 @@ body.vtrim-editor-open {
   justify-content: flex-end;
   gap: 0.55rem;
   padding: 0.7rem 1rem;
+  padding-bottom: max(0.7rem, env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
   background: color-mix(in srgb, var(--panel, #121826) 88%, #1e2a3d);
+  z-index: 2;
 }
 @media (max-width: 640px) {
   .vtrim-editor-overlay { padding: 0; }
   .vtrim-editor-sheet {
     width: 100%;
     max-height: 100%;
+    height: 100%;
     border-radius: 0;
     border: 0;
+  }
+  /* 底栏固定完成/关闭；模式分段减少与预览打架 */
+  .vtrim-editor-foot {
+    position: sticky;
+    bottom: 0;
+    flex-wrap: nowrap;
+    justify-content: stretch;
+  }
+  .vtrim-editor-foot .ghost-btn,
+  .vtrim-editor-foot .primary-btn {
+    flex: 1 1 0;
+    min-height: 2.75rem;
+  }
+  .vtrim-editor-body .field-row .seg {
+    width: 100%;
+  }
+  .vtrim-editor-body .field-row .seg .seg-btn {
+    flex: 1 1 0;
+    min-height: 2.4rem;
   }
 }

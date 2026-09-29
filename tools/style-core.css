@@ -3190,11 +3190,15 @@ li a:not([class*="btn"]) {
 .acu-lightbox {
   border: 0;
   padding: 0;
-  max-width: min(96vw, 980px);
-  width: min(96vw, 980px);
+  /* 与备忘录预览同级大弹层：约 94vw × 92vh，留遮罩边 */
+  max-width: min(94vw, 1400px);
+  width: min(94vw, 1400px);
+  height: min(92vh, 960px);
+  max-height: min(92vh, 960px);
   background: var(--panel-strong);
   color: var(--ink);
   border-radius: 14px;
+  box-shadow: 0 22px 64px rgba(0, 0, 0, 0.45);
 }
 
 .acu-lightbox::backdrop {
@@ -3203,8 +3207,12 @@ li a:not([class*="btn"]) {
 
 .acu-lightbox-inner {
   display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 0.55rem;
   padding: 0.75rem;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
 }
 
 .acu-lightbox-head {
@@ -3222,8 +3230,9 @@ li a:not([class*="btn"]) {
 .acu-lightbox-stage {
   position: relative;
   overflow: hidden;
-  min-height: min(62vh, 520px);
-  max-height: min(72vh, 680px);
+  min-height: 0;
+  height: 100%;
+  max-height: none;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: color-mix(in srgb, var(--ink) 4%, transparent);
