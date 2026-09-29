@@ -8,7 +8,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="扫码" />
-  <meta name="description" content="本地摄像头二维码扫描，可单独加到安卓桌面" />
+  <meta name="description" content="本地摄像头扫二维码与条形码，可单独加到安卓桌面" />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="apple-touch-icon" href="../icons/icon-180.png" />
   <link rel="icon" href="../icons/icon-192.png" />
@@ -22,20 +22,21 @@
       <span>本地识别 · 不上传</span>
     </div>
     <div class="top-actions">
-      <button type="button" class="primary" id="qs-start">开始扫码</button>
+      <button type="button" class="primary" id="qs-start" hidden>开始扫码</button>
       <button type="button" class="ghost" id="qs-stop" hidden>关闭摄像头</button>
       <label class="file-btn ghost">选图识别<input id="qs-file" type="file" accept="image/*" /></label>
     </div>
   </header>
 
   <section class="stage" aria-label="取景框">
-    <video id="qs-video" playsinline muted hidden></video>
+    <video id="qs-video" playsinline webkit-playsinline muted hidden></video>
     <img id="qs-preview" alt="待识别图片" hidden />
     <div class="reticle" aria-hidden="true"></div>
     <canvas id="qs-canvas" hidden></canvas>
   </section>
 
-  <p class="hint" id="qs-status">点「开始扫码」打开后置摄像头</p>
+  <p class="hint" id="qs-status">正在打开后置摄像头…</p>
+  <p class="hint support" id="qs-support"></p>
   <p class="hint error" id="qs-error" hidden></p>
 
   <section class="panel" id="qs-result" hidden>

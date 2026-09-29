@@ -234,6 +234,7 @@
         qrDecodeError = $("#qr-decode-error");
         qrCamStart = $("#qr-cam-start");
         qrCamStop = $("#qr-cam-stop");
+        const qrSupportHint = $("#qr-support-hint");
   
         $("#qr-gen")?.addEventListener("click", generateQr);
     if ($("#qr-text")) generateQr();
@@ -241,22 +242,45 @@
     let qrStream = null;
     let qrScanTimer = 0;
     let qrScanning = false;
-  
-    function decodeImageData(imageData) {
-      if (typeof jsQR !== "function") throw new Error("jsQR 库未加载");
-      return jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: "attemptBoth",
+    let qrDecodeBusy = false;
+    let qrFrameSkip = 0;
+    let qrUserStopped = false;
+    let qrLibsReady = null;
+
+    const Scan = () => window.DevToolsCodeScan;
+
+    function ensureScanLibs() {
+      if (qrLibsReady) return qrLibsReady;
+      qrLibsReady = (async () => {
+        if (!window.DevToolsCodeScan) {
+          await window.DevToolsLazy.loadScript("./lib/code-scan.js");
+        }
+        if (window.DevToolsLazy?.loadVendor) {
+          try {
+            await window.DevToolsLazy.loadVendor("zxing");
+          } catch (_) {}
+          try {
+            await window.DevToolsLazy.loadVendor("jsQR");
+          } catch (_) {}
+        }
+        if (!window.DevToolsCodeScan) throw new Error("扫码模块未就绪");
+        await window.DevToolsCodeScan.ensureBarcodeDetector();
+        if (qrSupportHint) qrSupportHint.textContent = window.DevToolsCodeScan.supportedHint();
+      })().catch((err) => {
+        qrLibsReady = null;
+        throw err;
       });
+      return qrLibsReady;
     }
   
-    function showDecoded(text, meta) {
+    function showDecoded(text, metaText) {
       qrDecoded.value = text;
-      qrDecodeMeta.textContent = meta || "";
+      qrDecodeMeta.textContent = metaText || "";
       setError(qrDecodeError, "");
-      toast("已识别二维码");
+      toast("已识别");
     }
   
-    function decodeFromImageElement(img, meta) {
+    async function decodeFromImageElement(img, metaText) {
       const canvas = qrCanvas;
       const ctx = canvas.getContext("2d", { willReadFrequently: true });
       const maxSide = 1200;
@@ -269,14 +293,20 @@
       canvas.width = w;
       canvas.height = h;
       ctx.drawImage(img, 0, 0, w, h);
-      const code = decodeImageData(ctx.getImageData(0, 0, w, h));
-      if (!code) throw new Error("未识别到二维码，请换更清晰的图片试试");
-      showDecoded(code.data, meta || `已识别 · ${w}×${h}`);
-      return code.data;
+      const hit = await Scan().decodeImageData(ctx.getImageData(0, 0, w, h), {
+        bitmapSource: canvas,
+        preferNative: true,
+      });
+      if (!hit?.text) throw new Error("未识别到条码/二维码，请换更清晰的图片试试");
+      const eng = hit.engine ? ` · ${hit.engine}` : "";
+      showDecoded(hit.text, metaText || `已识别 · ${hit.format || "码"}${eng} · ${w}×${h}`);
+      return hit.text;
     }
   
-    function stopCamera() {
+    function stopCamera({ fromUser } = {}) {
+      if (fromUser) qrUserStopped = true;
       qrScanning = false;
+      qrDecodeBusy = false;
       if (qrScanTimer) {
         cancelAnimationFrame(qrScanTimer);
         qrScanTimer = 0;
@@ -293,44 +323,90 @@
       if (qrCamStop) qrCamStop.hidden = true;
       if (qrCamStart) qrCamStart.hidden = false;
     }
+
+    function drawScanFrame() {
+      if (!qrVideo || !qrCanvas) return null;
+      const w0 = qrVideo.videoWidth;
+      const h0 = qrVideo.videoHeight;
+      if (!w0 || !h0) return null;
+      const maxSide = 960;
+      const scale = Math.min(1, maxSide / Math.max(w0, h0));
+      const w = Math.max(1, Math.round(w0 * scale));
+      const h = Math.max(1, Math.round(h0 * scale));
+      const ctx = qrCanvas.getContext("2d", { willReadFrequently: true });
+      qrCanvas.width = w;
+      qrCanvas.height = h;
+      ctx.drawImage(qrVideo, 0, 0, w, h);
+      return { imageData: ctx.getImageData(0, 0, w, h), w, h };
+    }
   
     function scanCameraFrame() {
       if (!qrScanning || !qrVideo) return;
-      if (qrVideo.readyState >= 2) {
-        try {
-          const canvas = qrCanvas;
-          const ctx = canvas.getContext("2d", { willReadFrequently: true });
-          const w = qrVideo.videoWidth;
-          const h = qrVideo.videoHeight;
-          if (w && h) {
-            canvas.width = w;
-            canvas.height = h;
-            ctx.drawImage(qrVideo, 0, 0, w, h);
-            const code = decodeImageData(ctx.getImageData(0, 0, w, h));
-            if (code) {
-              showDecoded(code.data, `摄像头识别 · ${w}×${h}`);
+      qrFrameSkip = (qrFrameSkip + 1) % 2;
+      if (!qrDecodeBusy && qrFrameSkip === 0 && qrVideo.readyState >= 2) {
+        const drawn = drawScanFrame();
+        if (drawn) {
+          qrDecodeBusy = true;
+          Promise.resolve()
+            .then(() =>
+              Scan().decodeImageData(drawn.imageData, {
+                bitmapSource: qrCanvas,
+                preferNative: true,
+              })
+            )
+            .then((hit) => {
+              if (!qrScanning || !hit?.text) return;
+              const eng = hit.engine ? ` · ${hit.engine}` : "";
+              showDecoded(hit.text, `摄像头 · ${hit.format || "码"}${eng} · ${drawn.w}×${drawn.h}`);
               stopCamera();
-              return;
-            }
-          }
-        } catch (_) {
-          // keep scanning
+            })
+            .catch(() => {})
+            .finally(() => {
+              qrDecodeBusy = false;
+            });
         }
       }
-      qrScanTimer = requestAnimationFrame(scanCameraFrame);
+      if (qrScanning) qrScanTimer = requestAnimationFrame(scanCameraFrame);
+    }
+
+    async function startCamera() {
+      qrUserStopped = false;
+      setError(qrDecodeError, "");
+      await ensureScanLibs();
+      try {
+        stopCamera();
+        qrUserStopped = false;
+        qrStream = await Scan().getRearCameraStream();
+        if (qrPreview) qrPreview.hidden = true;
+        qrVideo.hidden = false;
+        qrVideo.setAttribute("playsinline", "");
+        qrVideo.muted = true;
+        qrVideo.srcObject = qrStream;
+        await qrVideo.play();
+        qrScanning = true;
+        if (qrCamStart) qrCamStart.hidden = true;
+        if (qrCamStop) qrCamStop.hidden = false;
+        qrDecodeMeta.textContent = `摄像头扫描中…对准条码/二维码（${Scan().engineStatusText()}）`;
+        scanCameraFrame();
+      } catch (err) {
+        stopCamera();
+        if (qrCamStart) qrCamStart.hidden = false;
+        setError(qrDecodeError, Scan()?.cameraErrorMessage(err) || err.message || String(err));
+      }
     }
   
-    $("#qr-file")?.addEventListener("change", (e) => {
+    $("#qr-file")?.addEventListener("change", async (e) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      stopCamera();
+      stopCamera({ fromUser: true });
       const url = URL.createObjectURL(file);
       const img = new Image();
-      img.onload = () => {
+      img.onload = async () => {
         try {
+          await ensureScanLibs();
           qrPreview.hidden = false;
           qrPreview.src = url;
-          decodeFromImageElement(img, `图片识别 · ${file.name}`);
+          await decodeFromImageElement(img, `图片识别 · ${file.name}`);
         } catch (err) {
           setError(qrDecodeError, err.message || String(err));
         }
@@ -343,41 +419,22 @@
       e.target.value = "";
     });
   
-    qrCamStart?.addEventListener("click", async () => {
-      setError(qrDecodeError, "");
-      if (!navigator.mediaDevices?.getUserMedia) {
-        setError(qrDecodeError, "当前浏览器不支持摄像头");
-        return;
-      }
-      try {
-        stopCamera();
-        qrStream = await navigator.mediaDevices.getUserMedia({
-          audio: false,
-          video: { facingMode: { ideal: "environment" } },
-        });
-        qrPreview.hidden = true;
-        qrVideo.hidden = false;
-        qrVideo.srcObject = qrStream;
-        await qrVideo.play();
-        qrScanning = true;
-        qrCamStart.hidden = true;
-        qrCamStop.hidden = false;
-        qrDecodeMeta.textContent = "摄像头扫描中…对准二维码即可";
-        scanCameraFrame();
-      } catch (err) {
-        stopCamera();
-        setError(qrDecodeError, `无法打开摄像头：${err.message || err}`);
-      }
+    qrCamStart?.addEventListener("click", () => {
+      startCamera().catch((err) => {
+        setError(qrDecodeError, Scan()?.cameraErrorMessage(err) || err.message || String(err));
+      });
     });
   
     qrCamStop?.addEventListener("click", () => {
-      stopCamera();
+      stopCamera({ fromUser: true });
       qrDecodeMeta.textContent = "已关闭摄像头";
     });
   
-    window.addEventListener("pagehide", stopCamera);
-  
-    
+    window.addEventListener("pagehide", () => stopCamera());
+
+    startCamera().catch(() => {
+      if (qrCamStart) qrCamStart.hidden = false;
+    });
     });
 
   window.DevToolsExtraBoot = window.DevToolsExtraBoot || {};

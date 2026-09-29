@@ -149,6 +149,11 @@ button:disabled {
   color: var(--ok);
 }
 
+.hint.support {
+  font-size: 0.82rem;
+  opacity: 0.9;
+}
+
 .panel {
   background: var(--panel);
   border: 1px solid #1d2a40;

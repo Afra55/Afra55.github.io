@@ -114,8 +114,16 @@
             version: "—",
             license: "Apache-2.0",
             repo: "https://github.com/cozmo/jsQR",
-            usedIn: "二维码识别",
+            usedIn: "二维码识别（备用）",
             path: "tools/vendor/jsQR.js",
+          },
+          {
+            name: "@zxing/library",
+            version: "0.21.3",
+            license: "Apache-2.0",
+            repo: "https://github.com/zxing-js/library",
+            usedIn: "二维码 / 条形码识别",
+            path: "tools/vendor/zxing-library.min.js",
           },
           {
             name: "html2canvas",

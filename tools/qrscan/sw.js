@@ -1,7 +1,7 @@
-/* 独立扫码 PWA · 仅缓存本目录壳与 jsQR */
+/* 独立扫码 PWA · 缓存本目录壳；解码库走网络优先 */
 "use strict";
 
-const CACHE = "qrscan-shell-v1";
+const CACHE = "qrscan-shell-v2";
 const PRECACHE = ["./", "./index.html", "./app.js", "./app.css", "./manifest.webmanifest"];
 
 self.addEventListener("install", (event) => {

@@ -2,7 +2,7 @@
   "id": "/tools/qrscan/",
   "name": "扫码",
   "short_name": "扫码",
-  "description": "本地摄像头二维码扫描 · 可单独加到安卓桌面",
+  "description": "本地摄像头扫二维码与条形码 · 可单独加到安卓桌面",
   "lang": "zh-CN",
   "dir": "ltr",
   "start_url": "./index.html",

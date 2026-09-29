@@ -3,7 +3,7 @@
 
   const BUILD = window.TOOLS_BUILD || "2026.08.30-232500";
   // 第三方库单独版本号：不随站点构建变化，浏览器缓存才能跨发布复用（升级 vendor 时手动 +1）
-  const VENDOR_V = "3";
+  const VENDOR_V = "4";
   const isVendorSrc = (src) => /(^|\/)vendor\//.test(String(src || ""));
 
   function getMqttConnect() {
@@ -24,6 +24,11 @@
     },
     qrcode: { src: "./vendor/qrcode.min.js", probe: () => typeof globalThis.QRCode !== "undefined" },
     jsQR: { src: "./vendor/jsQR.js", probe: () => typeof globalThis.jsQR === "function" },
+    zxing: {
+      src: "./vendor/zxing-library.min.js",
+      noAmd: true,
+      probe: () => typeof globalThis.ZXing?.MultiFormatReader === "function",
+    },
     mqtt: {
       src: "./vendor/mqtt.min.js",
       probe: () => typeof globalThis.mqtt !== "undefined" && !!getMqttConnect(),
@@ -177,7 +182,7 @@
     regex: ["regulex"],
     yaml: ["js-yaml"],
     hash: ["spark-md5"],
-    qrcode: ["qrcodegen", "qrcode", "jsQR"],
+    qrcode: ["qrcodegen", "qrcode", "zxing", "jsQR"],
     lanshare: ["qrcode", "jsQR"],
     sharecard: ["html2canvas"],
     gifmaker: ["gif", "omggif"],
@@ -300,6 +305,7 @@
     if (EXTRA_PANEL_IDS.has(id) && !window.__devtoolsExtraCore) return false;
     if (id === "diff" && !(window.DiffCore && scriptLikelyLoaded("./diff.js"))) return false;
     if (TOOL_FILES[id] && !scriptLikelyLoaded(TOOL_FILES[id])) return false;
+    if (id === "qrcode" && !window.DevToolsCodeScan && !scriptLikelyLoaded("./lib/code-scan.js")) return false;
     return true;
   }
 
@@ -472,7 +478,8 @@
     "js-yaml": "YAML 库",
     "spark-md5": "MD5 库",
     qrcode: "二维码库",
-    jsQR: "扫码库",
+    jsQR: "扫码库(QR)",
+    zxing: "扫码库(ZXing)",
     mqtt: "MQTT 库",
     html2canvas: "截图库",
     gif: "GIF 编码库",
@@ -557,6 +564,9 @@
 
     if (TOOL_FILES[id]) {
       report(0.94, `加载${id} 模块…`);
+      if (id === "qrcode") {
+        await loadScript("./lib/code-scan.js");
+      }
       await loadToolScript(id);
     }
     report(1, "工具已就绪");
@@ -606,6 +616,7 @@
     loadExtraCore,
     loadVendor,
     loadToolScript,
+    loadScript,
     loadPwa,
   };
 })();
