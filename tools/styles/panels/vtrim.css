@@ -355,3 +355,67 @@
 @media (max-width: 640px) {
   .vtrim-crop-live { max-width: 36vw; }
 }
+
+/* 独立编辑层（黑盒等工具复用） */
+body.vtrim-editor-open {
+  overflow: hidden;
+}
+.vtrim-editor-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9200;
+  display: grid;
+  place-items: stretch;
+  background: color-mix(in srgb, var(--bg-0, #0b1220) 72%, transparent);
+  padding: max(0.5rem, env(safe-area-inset-top)) max(0.5rem, env(safe-area-inset-right))
+    max(0.5rem, env(safe-area-inset-bottom)) max(0.5rem, env(safe-area-inset-left));
+}
+.vtrim-editor-sheet {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(920px, 100%);
+  max-height: 100%;
+  margin: 0 auto;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel, #121826);
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+}
+.vtrim-editor-head {
+  padding: 0.85rem 1rem 0.55rem;
+  border-bottom: 1px solid var(--line);
+}
+.vtrim-editor-title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 650;
+  line-height: 1.35;
+  word-break: break-word;
+}
+.vtrim-editor-sub {
+  margin: 0.25rem 0 0;
+}
+.vtrim-editor-body {
+  overflow: auto;
+  padding: 0.75rem 1rem 0.35rem;
+  -webkit-overflow-scrolling: touch;
+}
+.vtrim-editor-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.55rem;
+  padding: 0.7rem 1rem;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel, #121826) 88%, #1e2a3d);
+}
+@media (max-width: 640px) {
+  .vtrim-editor-overlay { padding: 0; }
+  .vtrim-editor-sheet {
+    width: 100%;
+    max-height: 100%;
+    border-radius: 0;
+    border: 0;
+  }
+}

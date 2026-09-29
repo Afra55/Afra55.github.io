@@ -71,7 +71,7 @@
       const VBB_SOFT_COMPRESS_KEEP = 0.72;
       const VBB_DEFAULT_META = "";
       const VBB_WORKFLOW_HINTS = {
-        single: "整段视频将输出一个 GIF；选视频后可先裁时长/画面，再点「一键黑盒」。",
+        single: "整段视频将输出一个 GIF；选视频后可点「编辑」裁时长/画面，再点「一键黑盒」。",
         split: "长视频切片：先点「① 分析切分方案」查看段数与预估，调整满意后点「② 按方案生成 GIF」。",
         manual: "手动打点：拖到起点/终点点「打起点」「打终点」，标记多段后点「一键黑盒」。",
       };
@@ -85,22 +85,11 @@
       let vbbSingleEdit = null;
       let vbbObjectUrl = "";
       let vbbBusy = false;
-      let vbbCropBox = null;
       let vbbFileEdit = null;
       let vbbFileEditLabel = null;
+      let vbbEditOpen = null;
       let vbbEditReset = null;
-      let vbbTrimStart = null;
-      let vbbTrimEnd = null;
-      let vbbTrimSpan = null;
-      let vbbTrimStartRange = null;
-      let vbbTrimEndRange = null;
-      let vbbTrimSetIn = null;
-      let vbbTrimSetOut = null;
-      let vbbTrimPlay = null;
-      let vbbCropEnable = null;
-      let vbbCropReset = null;
-      let vbbCropDrag = null;
-      let vbbTrimLoop = null;
+      let vbbEditOpening = false;
       let vbbPreviewWrap = null;
       let vbbScrubSeekWanted = null;
       let vbbScrubSeekInflight = false;
@@ -181,7 +170,7 @@
         } catch (_) {}
         if (!opts.fromScrub) syncVbbScrubFromVideo();
         paintVbbNow();
-        if (opts.fromEdit) syncVbbEditUi({ skipRanges: true });
+        if (opts.fromEdit) syncVbbEditUi();
       }
 
       function pumpVbbScrubSeek() {
@@ -581,8 +570,8 @@
 
       function canShowVbbFileEdit() {
         if (vbbBusy) return false;
-        if (isVbbBatchMode()) return vbbEditBatchIdx >= 0 && Boolean(vbbVideo?.src);
-        return Boolean(vbbSourceFile && vbbVideo?.src) && vbbWorkflow === "single";
+        if (isVbbBatchMode()) return vbbEditBatchIdx >= 0 && Boolean(vbbBatchFiles[vbbEditBatchIdx]);
+        return Boolean(vbbSourceFile) && vbbWorkflow === "single";
       }
 
       function clampVbbEdit(edit, duration, srcW, srcH) {
@@ -639,132 +628,88 @@
         return vbbResolveCrop(file);
       }
 
-      function vbbVideoContentRect() {
-        const wrap = vbbPreviewWrap || $("#vbb-preview-wrap");
-        if (!wrap || !vbbVideo?.videoWidth) return null;
-        const rect = wrap.getBoundingClientRect();
-        const vw = vbbVideo.videoWidth;
-        const vh = vbbVideo.videoHeight;
-        const scale = Math.min(rect.width / vw, rect.height / vh);
-        const width = vw * scale;
-        const height = vh * scale;
-        const left = (rect.width - width) / 2;
-        const top = (rect.height - height) / 2;
-        return { left, top, width, height, scale, vw, vh, wrap };
-      }
-
-      function layoutVbbCropBox() {
-        if (!vbbCropBox || vbbCropBox.hidden) return;
-        const item = getActiveVbbEditItem();
-        const edit = item?.edit;
-        if (!edit?.cropOn || !edit.crop) return;
-        const geom = vbbVideoContentRect();
-        if (!geom) return;
-        const c = edit.crop;
-        vbbCropBox.style.left = `${geom.left + (c.x / geom.vw) * geom.width}px`;
-        vbbCropBox.style.top = `${geom.top + (c.y / geom.vh) * geom.height}px`;
-        vbbCropBox.style.width = `${(c.w / geom.vw) * geom.width}px`;
-        vbbCropBox.style.height = `${(c.h / geom.vh) * geom.height}px`;
-      }
-
-      function syncVbbCropOverlay() {
-        const show = canShowVbbFileEdit() && Boolean(vbbCropEnable?.checked);
-        if (vbbCropBox) vbbCropBox.hidden = !show;
-        vbbPreviewWrap?.classList.toggle("is-cropping", show);
-        if (show) layoutVbbCropBox();
-      }
-
-      function syncVbbEditUi(opts = {}) {
+      function syncVbbEditUi() {
         const show = canShowVbbFileEdit();
         if (vbbFileEdit) vbbFileEdit.hidden = !show;
-        if (!show) {
-          if (vbbCropBox) vbbCropBox.hidden = true;
-          vbbPreviewWrap?.classList.remove("is-cropping");
+        if (!show) return;
+        const item = getActiveVbbEditItem();
+        if (!item) return;
+        const edit = ensureVbbItemEdit(item);
+        clampVbbEdit(edit, item.duration, item.srcW, item.srcH);
+        const badge = vbbEditBadge(edit, item.duration, item.srcW, item.srcH);
+        const name = item.file?.name || "视频";
+        if (vbbFileEditLabel) {
+          vbbFileEditLabel.textContent = isVbbBatchMode()
+            ? `「${name}」${badge ? ` · ${badge}` : " · 未编辑"}`
+            : `${badge ? `已编辑 · ${badge}` : "未编辑"} · 可选裁时长 / 裁画面`;
+        }
+        const enabled = !vbbBusy && !vbbEditOpening;
+        if (vbbEditOpen) vbbEditOpen.disabled = !enabled;
+        if (vbbEditReset) vbbEditReset.disabled = !enabled || !vbbEditIsDirty(edit, item.duration, item.srcW, item.srcH);
+      }
+
+      async function ensureVbbVtrimEditor() {
+        if (window.DevToolsVtrimEditor?.open) return window.DevToolsVtrimEditor;
+        const load = window.DevToolsLazy?.loadScript;
+        if (typeof load !== "function") throw new Error("脚本加载器不可用");
+        await load("./lib/vtrim-editor.js");
+        if (!window.DevToolsVtrimEditor?.open) throw new Error("视频编辑器加载失败");
+        return window.DevToolsVtrimEditor;
+      }
+
+      async function openVbbEditEditor(targetItem) {
+        if (vbbBusy || vbbEditOpening) return;
+        const item = targetItem || getActiveVbbEditItem();
+        if (!item?.file) {
+          toast("请先选择视频");
           return;
         }
-        const item = getActiveVbbEditItem();
-        if (!item) return;
-        const edit = ensureVbbItemEdit(item);
-        clampVbbEdit(edit, item.duration, item.srcW, item.srcH);
-        const d = item.duration;
-        const steps = 1000;
-        if (vbbFileEditLabel) {
-          const name = item.file?.name || "视频";
-          const badge = vbbEditBadge(edit, d, item.srcW, item.srcH);
-          vbbFileEditLabel.textContent = isVbbBatchMode()
-            ? `编辑「${name}」${badge ? ` · ${badge}` : ""} · 裁完再点一键黑盒`
-            : `可选编辑${badge ? ` · ${badge}` : ""} · 裁时长 / 裁画面后再转 GIF`;
-        }
-        const enabled = !vbbBusy;
-        [
-          vbbEditReset,
-          vbbTrimStart,
-          vbbTrimEnd,
-          vbbTrimStartRange,
-          vbbTrimEndRange,
-          vbbTrimSetIn,
-          vbbTrimSetOut,
-          vbbTrimPlay,
-          vbbCropEnable,
-          vbbCropReset,
-        ].forEach((el) => {
-          if (el) el.disabled = !enabled;
-        });
-        if (!opts.skipInputs) {
-          if (vbbTrimStart) vbbTrimStart.value = edit.trimStart.toFixed(1);
-          if (vbbTrimEnd) vbbTrimEnd.value = edit.trimEnd.toFixed(1);
-        }
-        if (!opts.skipRanges) {
-          if (vbbTrimStartRange) {
-            vbbTrimStartRange.max = String(steps);
-            vbbTrimStartRange.value = String(d > 0 ? Math.round((edit.trimStart / d) * steps) : 0);
-          }
-          if (vbbTrimEndRange) {
-            vbbTrimEndRange.max = String(steps);
-            vbbTrimEndRange.value = String(d > 0 ? Math.round((edit.trimEnd / d) * steps) : steps);
-          }
-        }
-        if (vbbTrimSpan) {
-          vbbTrimSpan.textContent = `${Math.max(0, edit.trimEnd - edit.trimStart).toFixed(1)}s`;
-        }
-        if (vbbCropEnable) vbbCropEnable.checked = Boolean(edit.cropOn);
-        syncVbbCropOverlay();
-      }
-
-      function commitVbbTrimFromInputs() {
-        const item = getActiveVbbEditItem();
-        if (!item) return;
-        const edit = ensureVbbItemEdit(item);
-        edit.trimStart = Number(vbbTrimStart?.value) || 0;
-        edit.trimEnd = Number(vbbTrimEnd?.value) || item.duration;
-        clampVbbEdit(edit, item.duration, item.srcW, item.srcH);
+        ensureVbbItemEdit(item);
+        clampVbbEdit(item.edit, item.duration, item.srcW, item.srcH);
+        const draft = {
+          trimStart: item.edit.trimStart,
+          trimEnd: item.edit.trimEnd,
+          cropOn: Boolean(item.edit.cropOn),
+          crop: item.edit.crop ? { ...item.edit.crop } : { x: 0, y: 0, w: item.srcW, h: item.srcH },
+        };
+        vbbEditOpening = true;
         syncVbbEditUi();
         renderVbbBatchList({ keepSelection: true });
-        syncVbbBatchMeta();
-        scheduleVbbScrubSeek(edit.trimStart);
-      }
-
-      function commitVbbTrimFromRanges(which) {
-        const item = getActiveVbbEditItem();
-        if (!item) return;
-        const edit = ensureVbbItemEdit(item);
-        const d = item.duration;
-        const steps = 1000;
-        const startV = Number(vbbTrimStartRange?.value) || 0;
-        const endV = Number(vbbTrimEndRange?.value) || steps;
-        let start = (startV / steps) * d;
-        let end = (endV / steps) * d;
-        if (which === "start" && start > end - VBB_MIN_SPAN) start = Math.max(0, end - VBB_MIN_SPAN);
-        if (which === "end" && end < start + VBB_MIN_SPAN) end = Math.min(d, start + VBB_MIN_SPAN);
-        edit.trimStart = start;
-        edit.trimEnd = end;
-        clampVbbEdit(edit, d, item.srcW, item.srcH);
-        if (vbbTrimStart) vbbTrimStart.value = edit.trimStart.toFixed(1);
-        if (vbbTrimEnd) vbbTrimEnd.value = edit.trimEnd.toFixed(1);
-        if (vbbTrimSpan) vbbTrimSpan.textContent = `${(edit.trimEnd - edit.trimStart).toFixed(1)}s`;
-        renderVbbBatchList({ keepSelection: true });
-        syncVbbBatchMeta();
-        scheduleVbbScrubSeek(which === "end" ? Math.max(edit.trimStart, edit.trimEnd - 0.04) : edit.trimStart);
+        try {
+          const editor = await ensureVbbVtrimEditor();
+          pauseVbbPreview();
+          const next = await editor.open({
+            file: item.file,
+            title: item.file.name || "视频",
+            initial: draft,
+          });
+          if (next) {
+            item.edit = {
+              trimStart: Number(next.trimStart) || 0,
+              trimEnd: Number(next.trimEnd) || item.duration,
+              cropOn: Boolean(next.cropOn),
+              crop: next.crop
+                ? { ...next.crop }
+                : { x: 0, y: 0, w: item.srcW, h: item.srcH },
+            };
+            clampVbbEdit(item.edit, item.duration, item.srcW, item.srcH);
+            if (!isVbbBatchMode()) vbbSingleEdit = item.edit;
+            toast(
+              vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)
+                ? "已保存编辑"
+                : "已恢复为原片范围"
+            );
+          } else {
+            toast("已关闭，未保存本次改动");
+          }
+        } catch (err) {
+          setError(vbbError, err?.message || String(err));
+        } finally {
+          vbbEditOpening = false;
+          syncVbbEditUi();
+          renderVbbBatchList({ keepSelection: true });
+          syncVbbBatchMeta();
+        }
       }
 
       function resetActiveVbbEdit() {
@@ -772,40 +717,10 @@
         if (!item) return;
         item.edit = makeVbbEditState(item.duration, item.srcW, item.srcH);
         if (!isVbbBatchMode()) vbbSingleEdit = item.edit;
-        stopVbbTrimLoop();
         syncVbbEditUi();
-        renderVbbBatchList();
+        renderVbbBatchList({ keepSelection: true });
+        syncVbbBatchMeta();
         toast("已重置该视频的编辑");
-      }
-
-      function stopVbbTrimLoop() {
-        if (vbbTrimLoop) {
-          try {
-            vbbVideo?.removeEventListener("timeupdate", vbbTrimLoop);
-          } catch (_) {}
-          vbbTrimLoop = null;
-        }
-      }
-
-      function playVbbTrimPreview() {
-        const item = getActiveVbbEditItem();
-        if (!item || !vbbVideo?.src) return;
-        const edit = ensureVbbItemEdit(item);
-        clampVbbEdit(edit, item.duration, item.srcW, item.srcH);
-        stopVbbTrimLoop();
-        const start = edit.trimStart;
-        const end = edit.trimEnd;
-        const onTick = () => {
-          if (!vbbVideo || vbbVideo.paused) return;
-          if ((Number(vbbVideo.currentTime) || 0) >= end - 0.04) {
-            pauseVbbPreview();
-            applyVbbSeek(start, { keepPlaying: false });
-          }
-        };
-        vbbTrimLoop = onTick;
-        vbbVideo.addEventListener("timeupdate", onTick);
-        applyVbbSeek(start, { keepPlaying: true });
-        vbbVideo.play().catch(() => {});
       }
 
       async function selectVbbBatchItem(idx, { force = false } = {}) {
@@ -816,7 +731,6 @@
         }
         const item = vbbBatchFiles[idx];
         if (!item) return;
-        stopVbbTrimLoop();
         pauseVbbPreview();
         if (vbbObjectUrl) {
           try {
@@ -1009,15 +923,28 @@
           main.appendChild(meta);
           const btn = document.createElement("button");
           btn.type = "button";
-          btn.className = "ghost-btn";
-          btn.textContent = idx === vbbEditBatchIdx ? "预览中" : "预览/编辑";
-          btn.disabled = vbbBusy;
+          btn.className = "secondary-btn";
+          btn.textContent = "编辑";
+          btn.disabled = vbbBusy || vbbEditOpening;
           btn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            openVbbEditEditor(item).catch((err) => setError(vbbError, err.message || String(err)));
+          });
+          const previewBtn = document.createElement("button");
+          previewBtn.type = "button";
+          previewBtn.className = "ghost-btn";
+          previewBtn.textContent = idx === vbbEditBatchIdx ? "预览中" : "预览";
+          previewBtn.disabled = vbbBusy;
+          previewBtn.addEventListener("click", (e) => {
             e.stopPropagation();
             selectVbbBatchItem(idx).catch((err) => setError(vbbError, err.message || String(err)));
           });
+          const actions = document.createElement("div");
+          actions.className = "vbb-batch-row-actions";
+          actions.appendChild(previewBtn);
+          actions.appendChild(btn);
           row.appendChild(main);
-          row.appendChild(btn);
+          row.appendChild(actions);
           row.addEventListener("click", () => {
             if (vbbBusy) return;
             selectVbbBatchItem(idx).catch((err) => setError(vbbError, err.message || String(err)));
@@ -1039,7 +966,7 @@
         ).length;
         vbbMeta.textContent = `已选 ${vbbBatchFiles.length} 个视频 · 共 ${totalDur.toFixed(1)}s · ${formatKb(totalSize)}${
           edited ? ` · 已编辑 ${edited} 个` : ""
-        } · 点列表预览/编辑，再「一键黑盒」`;
+        } · 点「编辑」裁时长/画面，再「一键黑盒」`;
       }
   
       /** 总进度条与各片段进度并存 */
@@ -1490,7 +1417,7 @@
         if (vbbSplitPanel) vbbSplitPanel.hidden = !showSplit;
         if (vbbWorkflowHint) {
           vbbWorkflowHint.textContent = batch
-            ? `多选短片：点列表可单独预览并可选裁时长/裁画面；旗舰/桌面可并行 ${Math.max(1, Number(currentMediaPerf().batchConcurrency) || 1)} 路（均衡/省电仍逐个）。`
+            ? `多选短片：点「编辑」单独裁时长/裁画面；旗舰/桌面可并行 ${Math.max(1, Number(currentMediaPerf().batchConcurrency) || 1)} 路（均衡/省电仍逐个）。`
             : VBB_WORKFLOW_HINTS[vbbWorkflow] || VBB_WORKFLOW_HINTS.single;
         }
         if (vbbAdvanced) vbbAdvanced.hidden = isVbbManualMode() || batch;
@@ -2191,7 +2118,6 @@
         vbbBatchFiles = [];
         vbbEditBatchIdx = -1;
         vbbSingleEdit = null;
-        stopVbbTrimLoop();
         vbbAnalysis = null;
         clearVbbResults();
         if (vbbObjectUrl) {
@@ -2250,7 +2176,7 @@
         syncVbbBatchMeta();
         setVbbButtons();
         await selectVbbBatchItem(0, { force: true });
-        toast("全部视频已就绪 · 可逐个预览/编辑，再点「一键黑盒」");
+        toast("全部视频已就绪 · 可逐个点「编辑」，再「一键黑盒」");
       }
   
       async function loadVbbFile(file) {
@@ -2283,7 +2209,7 @@
         syncVbbWorkflowUi();
         syncVbbEditUi();
         setVbbButtons();
-        toast(vbbWorkflow === "single" ? "视频已就绪 · 可先裁时长/画面，再点「一键黑盒」" : "视频已就绪，点「一键黑盒」即可");
+        toast(vbbWorkflow === "single" ? "视频已就绪 · 可点「编辑」裁时长/画面，再「一键黑盒」" : "视频已就绪，点「一键黑盒」即可");
       }
   
       async function runVbbManualBlackbox() {
@@ -4233,152 +4159,14 @@
         vbbJumpGo = $("#vbb-jump-go", root);
         vbbLongHint = $("#vbb-long-hint", root);
         vbbPreviewWrap = $("#vbb-preview-wrap", root);
-        vbbCropBox = $("#vbb-crop-box", root);
         vbbFileEdit = $("#vbb-file-edit", root);
         vbbFileEditLabel = $("#vbb-file-edit-label", root);
+        vbbEditOpen = $("#vbb-edit-open", root);
         vbbEditReset = $("#vbb-edit-reset", root);
-        vbbTrimStart = $("#vbb-trim-start", root);
-        vbbTrimEnd = $("#vbb-trim-end", root);
-        vbbTrimSpan = $("#vbb-trim-span", root);
-        vbbTrimStartRange = $("#vbb-trim-start-range", root);
-        vbbTrimEndRange = $("#vbb-trim-end-range", root);
-        vbbTrimSetIn = $("#vbb-trim-set-in", root);
-        vbbTrimSetOut = $("#vbb-trim-set-out", root);
-        vbbTrimPlay = $("#vbb-trim-play", root);
-        vbbCropEnable = $("#vbb-crop-enable", root);
-        vbbCropReset = $("#vbb-crop-reset", root);
+        vbbEditOpen?.addEventListener("click", () => {
+          openVbbEditEditor().catch((err) => setError(vbbError, err?.message || String(err)));
+        });
         vbbEditReset?.addEventListener("click", () => resetActiveVbbEdit());
-        vbbTrimStart?.addEventListener("change", () => commitVbbTrimFromInputs());
-        vbbTrimEnd?.addEventListener("change", () => commitVbbTrimFromInputs());
-        vbbTrimStartRange?.addEventListener("input", () => commitVbbTrimFromRanges("start"));
-        vbbTrimEndRange?.addEventListener("input", () => commitVbbTrimFromRanges("end"));
-        vbbTrimSetIn?.addEventListener("click", () => {
-          const item = getActiveVbbEditItem();
-          if (!item) return;
-          const edit = ensureVbbItemEdit(item);
-          edit.trimStart = Number(vbbVideo?.currentTime) || 0;
-          clampVbbEdit(edit, item.duration, item.srcW, item.srcH);
-          syncVbbEditUi();
-          renderVbbBatchList({ keepSelection: true });
-          syncVbbBatchMeta();
-        });
-        vbbTrimSetOut?.addEventListener("click", () => {
-          const item = getActiveVbbEditItem();
-          if (!item) return;
-          const edit = ensureVbbItemEdit(item);
-          edit.trimEnd = Number(vbbVideo?.currentTime) || item.duration;
-          clampVbbEdit(edit, item.duration, item.srcW, item.srcH);
-          syncVbbEditUi();
-          renderVbbBatchList({ keepSelection: true });
-          syncVbbBatchMeta();
-        });
-        vbbTrimPlay?.addEventListener("click", () => playVbbTrimPreview());
-        vbbCropEnable?.addEventListener("change", () => {
-          const item = getActiveVbbEditItem();
-          if (!item) return;
-          const edit = ensureVbbItemEdit(item);
-          edit.cropOn = Boolean(vbbCropEnable.checked);
-          if (edit.cropOn && (!edit.crop || edit.crop.w >= item.srcW - 1)) {
-            edit.crop = {
-              x: Math.round(item.srcW * 0.05),
-              y: Math.round(item.srcH * 0.05),
-              w: Math.max(2, Math.round(item.srcW * 0.9)),
-              h: Math.max(2, Math.round(item.srcH * 0.9)),
-            };
-          }
-          syncVbbEditUi();
-          renderVbbBatchList({ keepSelection: true });
-          syncVbbBatchMeta();
-        });
-        vbbCropReset?.addEventListener("click", () => {
-          const item = getActiveVbbEditItem();
-          if (!item) return;
-          const edit = ensureVbbItemEdit(item);
-          edit.crop = { x: 0, y: 0, w: item.srcW, h: item.srcH };
-          layoutVbbCropBox();
-          renderVbbBatchList({ keepSelection: true });
-          syncVbbBatchMeta();
-          toast("已重置裁剪框为全画幅");
-        });
-        vbbCropBox?.addEventListener("pointerdown", (e) => {
-          const item = getActiveVbbEditItem();
-          if (!item || !vbbCropEnable?.checked || vbbBusy) return;
-          const edit = ensureVbbItemEdit(item);
-          const geom = vbbVideoContentRect();
-          if (!geom) return;
-          e.preventDefault();
-          e.stopPropagation();
-          const handle = e.target?.closest?.("[data-vbb-handle]")?.getAttribute("data-vbb-handle") || "move";
-          const c = edit.crop;
-          vbbCropDrag = {
-            pointerId: e.pointerId,
-            handle,
-            startX: e.clientX,
-            startY: e.clientY,
-            box: { ...c },
-            geom,
-          };
-          vbbPreviewWrap?.classList.add("is-dragging");
-          try {
-            vbbCropBox.setPointerCapture?.(e.pointerId);
-          } catch (_) {}
-        });
-        const onVbbCropPointerMove = (e) => {
-          if (!vbbCropDrag || vbbCropDrag.pointerId !== e.pointerId) return;
-          const item = getActiveVbbEditItem();
-          if (!item) return;
-          const edit = ensureVbbItemEdit(item);
-          const { geom, box, handle, startX, startY } = vbbCropDrag;
-          const dx = ((e.clientX - startX) / geom.width) * geom.vw;
-          const dy = ((e.clientY - startY) / geom.height) * geom.vh;
-          let x = box.x;
-          let y = box.y;
-          let w = box.w;
-          let h = box.h;
-          const minSide = 16;
-          if (handle === "move") {
-            x = box.x + dx;
-            y = box.y + dy;
-            x = Math.max(0, Math.min(geom.vw - w, x));
-            y = Math.max(0, Math.min(geom.vh - h, y));
-          } else {
-            if (handle.includes("w")) {
-              const nx = Math.max(0, Math.min(box.x + box.w - minSide, box.x + dx));
-              w = box.w + (box.x - nx);
-              x = nx;
-            }
-            if (handle.includes("e")) {
-              w = Math.max(minSide, Math.min(geom.vw - box.x, box.w + dx));
-            }
-            if (handle.includes("n")) {
-              const ny = Math.max(0, Math.min(box.y + box.h - minSide, box.y + dy));
-              h = box.h + (box.y - ny);
-              y = ny;
-            }
-            if (handle.includes("s")) {
-              h = Math.max(minSide, Math.min(geom.vh - box.y, box.h + dy));
-            }
-          }
-          edit.crop = {
-            x: Math.round(x),
-            y: Math.round(y),
-            w: Math.round(w),
-            h: Math.round(h),
-          };
-          clampVbbEdit(edit, item.duration, item.srcW, item.srcH);
-          layoutVbbCropBox();
-        };
-        const onVbbCropPointerUp = (e) => {
-          if (!vbbCropDrag || vbbCropDrag.pointerId !== e.pointerId) return;
-          vbbCropDrag = null;
-          vbbPreviewWrap?.classList.remove("is-dragging");
-          renderVbbBatchList({ keepSelection: true });
-          syncVbbBatchMeta();
-        };
-        window.addEventListener("pointermove", onVbbCropPointerMove);
-        window.addEventListener("pointerup", onVbbCropPointerUp);
-        window.addEventListener("pointercancel", onVbbCropPointerUp);
-        window.addEventListener("resize", () => layoutVbbCropBox());
         const syncCustomTarget = (raw) => {
           if (!vbbAnalysis) return;
           const min = Number(vbbTargetRange?.min) || VBB_MIN_SPAN;
@@ -4529,7 +4317,6 @@
         if (!vbbVideo?.src) return;
         vbbScrubbing = true;
         pauseVbbPreview();
-        stopVbbTrimLoop();
         const t = vbbScrubValueToTime(vbbScrub.value);
         paintVbbNow();
         scheduleVbbSeek(t, { fromScrub: true, keepPlaying: false });

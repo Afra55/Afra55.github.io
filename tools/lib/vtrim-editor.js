@@ -1,0 +1,1076 @@
+(() => {
+  "use strict";
+
+  /**
+   * 可挂载的视频修剪/裁画面编辑器（复用 #vtrim 交互：胶片黄框 + 绿裁剪框）。
+   * 供黑盒 GIF 等工具以全屏层打开；不含导出/旋转/翻转。
+   */
+  if (window.DevToolsVtrimEditor?.open) return;
+
+  const MIN_SPAN = 0.5;
+  const SNAP_SEC = 0.12;
+  let uidSeq = 0;
+
+  function toast(msg) {
+    const el = document.getElementById("toast");
+    if (!el) return;
+    el.textContent = msg;
+    el.hidden = false;
+    el.classList.add("is-show");
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => {
+      el.classList.remove("is-show");
+      setTimeout(() => {
+        el.hidden = true;
+      }, 200);
+    }, 2000);
+  }
+
+  function clamp(n, lo, hi) {
+    return Math.min(hi, Math.max(lo, n));
+  }
+
+  function formatClock(sec) {
+    const s = Math.max(0, Number(sec) || 0);
+    const m = Math.floor(s / 60);
+    const r = s - m * 60;
+    const whole = Math.floor(r);
+    const frac = Math.round((r - whole) * 10);
+    if (frac > 0 && frac < 10) return `${m}:${String(whole).padStart(2, "0")}.${frac}`;
+    return `${m}:${String(whole).padStart(2, "0")}`;
+  }
+
+  function parseAspect(aspect) {
+    const a = String(aspect || "free");
+    if (a === "free") return null;
+    const [w, h] = a.split(":").map(Number);
+    if (!(w > 0 && h > 0)) return null;
+    return w / h;
+  }
+
+  function waitSeek(videoEl) {
+    return new Promise((resolve) => {
+      if (!videoEl) return resolve();
+      const done = () => {
+        videoEl.removeEventListener("seeked", done);
+        resolve();
+      };
+      videoEl.addEventListener("seeked", done);
+      setTimeout(done, 800);
+    });
+  }
+
+  function hapticLight() {
+    try {
+      if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+        navigator.vibrate(8);
+      }
+    } catch (_) {}
+  }
+
+  function ensureVtrimCss() {
+    if (document.querySelector('link[data-panel-css="vtrim"]')) return;
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    const build = window.TOOLS_BUILD || window.DevToolsLazy?.BUILD || "";
+    const url = new URL("./styles/panels/vtrim.css", document.baseURI || window.location.href);
+    if (build) url.searchParams.set("v", build);
+    link.href = url.pathname + url.search;
+    link.dataset.panelCss = "vtrim";
+    document.head.appendChild(link);
+  }
+
+  function buildOverlayHtml(id) {
+    const p = (name) => `${id}-${name}`;
+    return `
+<div class="vtrim-editor-overlay" id="${p("overlay")}" role="dialog" aria-modal="true" aria-labelledby="${p("title")}">
+  <div class="vtrim-editor-sheet">
+    <header class="vtrim-editor-head">
+      <h2 class="vtrim-editor-title" id="${p("title")}">编辑视频</h2>
+      <p class="hint tight vtrim-editor-sub" id="${p("sub")}">修剪时长 · 裁切画面</p>
+    </header>
+    <div class="vtrim-editor-body">
+      <div class="vtrim-stage is-mode-trim" id="${p("stage")}">
+        <div class="vtrim-preview-wrap" id="${p("preview-wrap")}">
+          <video id="${p("video")}" class="vtrim-video" playsinline muted preload="metadata"></video>
+          <button type="button" class="vtrim-tap-play" id="${p("tap-play")}" hidden aria-label="播放或暂停"></button>
+          <p class="vtrim-film-loading hint" id="${p("film-loading")}" hidden>正在生成胶片预览…</p>
+          <div class="vtrim-crop-box" id="${p("crop-box")}" hidden>
+            <span class="vtrim-crop-grid" aria-hidden="true"></span>
+            <span class="vtrim-crop-handle" data-vte-handle="nw"></span>
+            <span class="vtrim-crop-handle" data-vte-handle="n"></span>
+            <span class="vtrim-crop-handle" data-vte-handle="ne"></span>
+            <span class="vtrim-crop-handle" data-vte-handle="e"></span>
+            <span class="vtrim-crop-handle" data-vte-handle="se"></span>
+            <span class="vtrim-crop-handle" data-vte-handle="s"></span>
+            <span class="vtrim-crop-handle" data-vte-handle="sw"></span>
+            <span class="vtrim-crop-handle" data-vte-handle="w"></span>
+          </div>
+        </div>
+        <div class="vtrim-transport">
+          <button type="button" class="secondary-btn" id="${p("play")}">播放</button>
+          <button type="button" class="ghost-btn" id="${p("mute")}" aria-pressed="true">开声音</button>
+          <span class="mono vtrim-clock" id="${p("clock")}">0:00 / 0:00</span>
+          <span class="hint tight" id="${p("range-label")}">保留全程</span>
+        </div>
+        <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.55rem">
+          <span class="seg" role="group" aria-label="编辑模式">
+            <button type="button" class="seg-btn is-active" data-vte-mode="trim">修剪时长</button>
+            <button type="button" class="seg-btn" data-vte-mode="crop">裁切画面</button>
+          </span>
+          <span class="hint tight" id="${p("mode-hint")}"></span>
+        </div>
+        <div class="vtrim-trim-tools" id="${p("trim-tools")}">
+          <div class="btn-row tool-actions vtrim-nudge" aria-label="微调时长">
+            <button type="button" class="ghost-btn" id="${p("nudge-start-m")}" title="片头 −0.1s">片头 −0.1</button>
+            <button type="button" class="ghost-btn" id="${p("nudge-start-p")}" title="片头 +0.1s">片头 +0.1</button>
+            <button type="button" class="ghost-btn" id="${p("nudge-end-m")}" title="片尾 −0.1s">片尾 −0.1</button>
+            <button type="button" class="ghost-btn" id="${p("nudge-end-p")}" title="片尾 +0.1s">片尾 +0.1</button>
+          </div>
+          <div class="vtrim-timeline" id="${p("timeline")}" aria-label="修剪片头片尾">
+            <canvas id="${p("filmstrip")}" class="vtrim-filmstrip" width="640" height="56" aria-hidden="true"></canvas>
+            <div class="vtrim-sel" id="${p("sel")}">
+              <span class="vtrim-window" id="${p("window")}" aria-hidden="true"></span>
+              <span class="vtrim-handle vtrim-handle-start" id="${p("handle-start")}" role="slider" aria-label="片头" tabindex="0">
+                <span class="vtrim-handle-tip" id="${p("tip-start")}" hidden>0:00</span>
+              </span>
+              <span class="vtrim-handle vtrim-handle-end" id="${p("handle-end")}" role="slider" aria-label="片尾" tabindex="0">
+                <span class="vtrim-handle-tip" id="${p("tip-end")}" hidden>0:00</span>
+              </span>
+              <span class="vtrim-playhead" id="${p("playhead")}" aria-hidden="true"></span>
+            </div>
+          </div>
+        </div>
+        <div class="vtrim-crop-tools" id="${p("crop-panel")}" hidden>
+          <div class="field-row vtrim-crop-tools-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center">
+            <span class="seg" role="group" aria-label="裁剪比例">
+              <button type="button" class="seg-btn is-active" data-vte-aspect="free">自由</button>
+              <button type="button" class="seg-btn" data-vte-aspect="1:1">1:1</button>
+              <button type="button" class="seg-btn" data-vte-aspect="16:9">16:9</button>
+              <button type="button" class="seg-btn" data-vte-aspect="4:3">4:3</button>
+              <button type="button" class="seg-btn" data-vte-aspect="9:16">9:16</button>
+            </span>
+            <button type="button" class="ghost-btn" id="${p("crop-reset")}" title="恢复为当前比例下的最大裁剪">重置裁剪</button>
+            <label class="flag"><input type="checkbox" id="${p("crop-enable")}" checked /> 启用裁剪框</label>
+          </div>
+          <p class="hint tight">拖绿框或角点裁边框 · 双击绿框重置 · 关闭裁剪框则只保留修剪时长</p>
+          <canvas id="${p("crop-live")}" class="vtrim-crop-live" width="160" height="90" hidden aria-label="裁剪成片预览"></canvas>
+        </div>
+      </div>
+    </div>
+    <footer class="vtrim-editor-foot">
+      <button type="button" class="ghost-btn" id="${p("close")}">关闭</button>
+      <button type="button" class="primary-btn" id="${p("done")}">完成</button>
+    </footer>
+  </div>
+</div>`;
+  }
+
+  function openEditor(opts = {}) {
+    ensureVtrimCss();
+    const file = opts.file;
+    if (!file) return Promise.reject(new Error("缺少视频文件"));
+
+    const id = `vte${++uidSeq}`;
+    const wrap = document.createElement("div");
+    wrap.innerHTML = buildOverlayHtml(id);
+    const overlay = wrap.firstElementChild;
+    document.body.appendChild(overlay);
+    document.body.classList.add("vtrim-editor-open");
+
+    const $ = (name) => overlay.querySelector(`#${id}-${name}`);
+    const stage = $("stage");
+    const previewWrap = $("preview-wrap");
+    const video = $("video");
+    const cropBox = $("crop-box");
+    const tapPlay = $("tap-play");
+    const filmLoading = $("film-loading");
+    const playBtn = $("play");
+    const muteBtn = $("mute");
+    const clockEl = $("clock");
+    const rangeLabel = $("range-label");
+    const modeHint = $("mode-hint");
+    const trimTools = $("trim-tools");
+    const cropPanel = $("crop-panel");
+    const timeline = $("timeline");
+    const filmstrip = $("filmstrip");
+    const selEl = $("sel");
+    const handleStart = $("handle-start");
+    const handleEnd = $("handle-end");
+    const tipStart = $("tip-start");
+    const tipEnd = $("tip-end");
+    const windowEl = $("window");
+    const cropEnable = $("crop-enable");
+    const cropResetBtn = $("crop-reset");
+    const cropLive = $("crop-live");
+    const titleEl = $("title");
+    const subEl = $("sub");
+
+    const filmVideo = document.createElement("video");
+    filmVideo.muted = true;
+    filmVideo.preload = "auto";
+    filmVideo.playsInline = true;
+    filmVideo.setAttribute("playsinline", "");
+    filmVideo.setAttribute("aria-hidden", "true");
+    filmVideo.style.cssText =
+      "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;pointer-events:none;z-index:-1";
+    document.body.appendChild(filmVideo);
+
+    let objectUrl = "";
+    let duration = 0;
+    let startSec = 0;
+    let endSec = 0;
+    let muted = true;
+    let aspect = "free";
+    let crop = { x: 0, y: 0, w: 1, h: 1 };
+    let editMode = "trim";
+    let drag = null;
+    let cropDrag = null;
+    let previewScrub = null;
+    let activeHandle = "start";
+    let scrubSeekWanted = null;
+    let scrubSeekInflight = false;
+    let playheadRaf = 0;
+    let cropLiveRaf = 0;
+    let filmGen = 0;
+    let closed = false;
+    let settled = false;
+    /** @type {((v: any) => void) | null} */
+    let resolveOpen = null;
+
+    const fileName = String(opts.title || file.name || "视频");
+    if (titleEl) titleEl.textContent = `编辑 · ${fileName}`;
+    if (subEl) subEl.textContent = "修剪时长 · 裁切画面（与「视频修剪」相同交互）";
+
+    function syncActiveHandleUi() {
+      handleStart?.classList.toggle("is-active", activeHandle === "start");
+      handleEnd?.classList.toggle("is-active", activeHandle === "end");
+    }
+
+    function syncModeUi() {
+      overlay.querySelectorAll("[data-vte-mode]").forEach((btn) => {
+        btn.classList.toggle("is-active", btn.dataset.vteMode === editMode);
+      });
+      if (trimTools) trimTools.hidden = editMode !== "trim";
+      if (cropPanel) cropPanel.hidden = editMode !== "crop";
+      if (modeHint) {
+        modeHint.textContent =
+          editMode === "crop"
+            ? "拖绿框裁边框 · 双击重置 · 预览区左右滑 scrub"
+            : "拖黄框两端看时间气泡 · 预览区点按播放 · 左右滑 scrub";
+      }
+      syncCropBoxVisibility();
+      stage?.classList.toggle("is-mode-crop", editMode === "crop");
+      stage?.classList.toggle("is-mode-trim", editMode === "trim");
+      scheduleCropLive();
+    }
+
+    function syncMuteUi() {
+      video.muted = muted;
+      if (muteBtn) {
+        muteBtn.textContent = muted ? "开声音" : "静音";
+        muteBtn.setAttribute("aria-pressed", muted ? "true" : "false");
+      }
+    }
+
+    function syncAspectUi() {
+      overlay.querySelectorAll("[data-vte-aspect]").forEach((btn) => {
+        btn.classList.toggle("is-active", btn.dataset.vteAspect === aspect);
+      });
+    }
+
+    function syncCropBoxVisibility() {
+      const on = editMode === "crop" && Boolean(cropEnable?.checked) && duration > 0;
+      if (cropBox) cropBox.hidden = !on;
+      previewWrap?.classList.toggle("is-cropping", on);
+    }
+
+    function displaySize() {
+      const vw = video.videoWidth || 1;
+      const vh = video.videoHeight || 1;
+      return { w: vw, h: vh, srcW: vw, srcH: vh };
+    }
+
+    function cropToDisplayRect() {
+      const { w: dw, h: dh } = displaySize();
+      return {
+        x: clamp(crop.x, 0, dw),
+        y: clamp(crop.y, 0, dh),
+        w: clamp(crop.w, 1, dw),
+        h: clamp(crop.h, 1, dh),
+        dw,
+        dh,
+      };
+    }
+
+    function displayRectToCrop(dx, dy, dwBox, dhBox) {
+      const { srcW, srcH } = displaySize();
+      let x = clamp(dx, 0, srcW - 1);
+      let y = clamp(dy, 0, srcH - 1);
+      let w = clamp(dwBox, 1, srcW - x);
+      let h = clamp(dhBox, 1, srcH - y);
+      crop = { x, y, w, h };
+    }
+
+    function videoContentRect() {
+      const wrap = previewWrap.getBoundingClientRect();
+      const { w: dw, h: dh } = displaySize();
+      const scale = Math.min(wrap.width / dw, wrap.height / dh);
+      const rw = dw * scale;
+      const rh = dh * scale;
+      const left = (wrap.width - rw) / 2;
+      const top = (wrap.height - rh) / 2;
+      return { left, top, width: rw, height: rh, scale, dw, dh };
+    }
+
+    function layoutCropBox() {
+      if (!cropBox || cropBox.hidden || !video.videoWidth) {
+        scheduleCropLive();
+        return;
+      }
+      const geom = videoContentRect();
+      const d = cropToDisplayRect();
+      cropBox.style.left = `${geom.left + (d.x / d.dw) * geom.width}px`;
+      cropBox.style.top = `${geom.top + (d.y / d.dh) * geom.height}px`;
+      cropBox.style.width = `${(d.w / d.dw) * geom.width}px`;
+      cropBox.style.height = `${(d.h / d.dh) * geom.height}px`;
+      scheduleCropLive();
+    }
+
+    function fitCropToAspect() {
+      if (!video.videoWidth) return;
+      const { w: dw, h: dh, srcW, srcH } = displaySize();
+      let x = 0;
+      let y = 0;
+      let w = dw;
+      let h = dh;
+      const ratio = parseAspect(aspect);
+      if (ratio) {
+        if (dw / dh > ratio) {
+          h = dh;
+          w = h * ratio;
+          x = (dw - w) / 2;
+        } else {
+          w = dw;
+          h = w / ratio;
+          y = (dh - h) / 2;
+        }
+        displayRectToCrop(x, y, w, h);
+      } else {
+        const P = window.DevToolsPure;
+        if (P?.calcCropRect) {
+          const rect = P.calcCropRect(srcW, srcH, { aspect: "free", center: true });
+          crop = { x: rect.x, y: rect.y, w: rect.width, h: rect.height };
+        } else {
+          crop = { x: 0, y: 0, w: srcW, h: srcH };
+        }
+      }
+      layoutCropBox();
+    }
+
+    function syncHandleTips() {
+      if (tipStart) tipStart.textContent = formatClock(startSec);
+      if (tipEnd) tipEnd.textContent = formatClock(endSec);
+      const dragging = Boolean(drag);
+      const showStart = dragging && (drag.kind === "start" || drag.kind === "window");
+      const showEnd = dragging && (drag.kind === "end" || drag.kind === "window");
+      if (tipStart) tipStart.hidden = !showStart;
+      if (tipEnd) tipEnd.hidden = !showEnd;
+    }
+
+    function pumpPreviewScrubSeek() {
+      if (!video?.src || scrubSeekInflight) return;
+      if (scrubSeekWanted == null) return;
+      const t = Math.max(0, Math.min(duration || 0, scrubSeekWanted));
+      scrubSeekWanted = null;
+      if (Math.abs((Number(video.currentTime) || 0) - t) < 0.03 && !video.seeking) {
+        paintTimeline();
+        updateLabels();
+        return;
+      }
+      scrubSeekInflight = true;
+      const onSeeked = () => {
+        video.removeEventListener("seeked", onSeeked);
+        scrubSeekInflight = false;
+        paintTimeline();
+        updateLabels();
+        pumpPreviewScrubSeek();
+      };
+      video.addEventListener("seeked", onSeeked, { once: true });
+      try {
+        video.currentTime = t;
+      } catch (_) {}
+    }
+
+    function previewSeek(t) {
+      scrubSeekWanted = clamp(t, 0, Math.max(0, duration - 0.04));
+      pumpPreviewScrubSeek();
+    }
+
+    function updateLabels() {
+      const now = video.currentTime || startSec;
+      if (clockEl) clockEl.textContent = `${formatClock(now)} / ${formatClock(duration)}`;
+      const span = Math.max(0, endSec - startSec);
+      if (rangeLabel) {
+        rangeLabel.textContent = `保留 ${formatClock(span)}（${formatClock(startSec)}–${formatClock(endSec)}）`;
+      }
+      syncHandleTips();
+    }
+
+    function paintTimeline() {
+      if (!selEl || !duration) {
+        if (selEl) {
+          selEl.style.setProperty("--vtrim-start", "0%");
+          selEl.style.setProperty("--vtrim-end", "100%");
+          selEl.style.setProperty("--vtrim-play", "0%");
+        }
+        return;
+      }
+      const sPct = (startSec / duration) * 100;
+      const ePct = (endSec / duration) * 100;
+      const pPct = ((video.currentTime || 0) / duration) * 100;
+      selEl.style.setProperty("--vtrim-start", `${sPct}%`);
+      selEl.style.setProperty("--vtrim-end", `${ePct}%`);
+      selEl.style.setProperty("--vtrim-play", `${clamp(pPct, 0, 100)}%`);
+    }
+
+    function paintCropLive() {
+      if (!cropLive || !video?.videoWidth) {
+        if (cropLive) cropLive.hidden = true;
+        return;
+      }
+      const show = editMode === "crop" && Boolean(cropEnable?.checked);
+      cropLive.hidden = !show;
+      if (!show) return;
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const maxW = 160;
+      const maxH = 90;
+      const sx = Math.max(0, crop.x);
+      const sy = Math.max(0, crop.y);
+      const sw = Math.max(2, crop.w);
+      const sh = Math.max(2, crop.h);
+      const scale = Math.min(maxW / sw, maxH / sh, 1);
+      const cssW = Math.max(48, Math.round(sw * scale));
+      const cssH = Math.max(28, Math.round(sh * scale));
+      cropLive.width = Math.round(cssW * dpr);
+      cropLive.height = Math.round(cssH * dpr);
+      cropLive.style.width = `${cssW}px`;
+      cropLive.style.height = `${cssH}px`;
+      const ctx = cropLive.getContext("2d");
+      if (!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.clearRect(0, 0, cssW, cssH);
+      ctx.fillStyle = window.DevToolsTheme?.stageBg?.() || "#0a101c";
+      ctx.fillRect(0, 0, cssW, cssH);
+      try {
+        ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cssW, cssH);
+      } catch (_) {}
+    }
+
+    function scheduleCropLive() {
+      cancelAnimationFrame(cropLiveRaf);
+      cropLiveRaf = requestAnimationFrame(() => paintCropLive());
+    }
+
+    async function ensureFilmProbe() {
+      if (!objectUrl) return false;
+      if (filmVideo.src === objectUrl && filmVideo.readyState >= 1) return true;
+      try {
+        filmVideo.src = objectUrl;
+        await new Promise((resolve, reject) => {
+          const ok = () => {
+            cleanup();
+            resolve();
+          };
+          const fail = () => {
+            cleanup();
+            reject(new Error("film probe"));
+          };
+          const cleanup = () => {
+            filmVideo.removeEventListener("loadedmetadata", ok);
+            filmVideo.removeEventListener("error", fail);
+          };
+          filmVideo.addEventListener("loadedmetadata", ok);
+          filmVideo.addEventListener("error", fail);
+          setTimeout(fail, 8000);
+        });
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    async function buildFilmstrip() {
+      if (!filmstrip || !duration || !video.videoWidth) return;
+      const gen = ++filmGen;
+      if (filmLoading) {
+        filmLoading.hidden = false;
+        filmLoading.textContent = "正在生成胶片预览…";
+      }
+      previewWrap?.classList.add("is-film-loading");
+      const dpr = Math.min(2, window.devicePixelRatio || 1);
+      const cssW = Math.max(320, Math.round(timeline?.clientWidth || 640));
+      const cssH = 56;
+      filmstrip.width = Math.round(cssW * dpr);
+      filmstrip.height = Math.round(cssH * dpr);
+      filmstrip.style.width = `${cssW}px`;
+      filmstrip.style.height = `${cssH}px`;
+      const ctx = filmstrip.getContext("2d");
+      if (!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.fillStyle = window.DevToolsTheme?.stageBg?.() || "#0a101c";
+      ctx.fillRect(0, 0, cssW, cssH);
+      const nBase = Math.min(36, Math.max(12, Math.round(cssW / 36)));
+      const n =
+        duration > 900 ? Math.min(nBase, 10) : duration > 300 ? Math.min(nBase, 14) : duration > 120 ? Math.min(nBase, 20) : nBase;
+      const tw = cssW / n;
+      const probeOk = await ensureFilmProbe();
+      if (gen !== filmGen) return;
+      const probe = probeOk ? filmVideo : video;
+      const pauseMain = probe === video;
+      const wasTime = pauseMain ? video.currentTime : 0;
+      const wasPaused = pauseMain ? video.paused : true;
+      if (pauseMain) {
+        try {
+          video.pause();
+        } catch (_) {}
+      }
+      for (let i = 0; i < n; i++) {
+        if (gen !== filmGen || closed) return;
+        const t = (duration * i) / Math.max(1, n - 1);
+        try {
+          probe.currentTime = Math.min(duration - 0.05, Math.max(0, t));
+          await waitSeek(probe);
+          if (gen !== filmGen) return;
+          const vw = probe.videoWidth || video.videoWidth;
+          const vh = probe.videoHeight || video.videoHeight;
+          if (!(vw > 0 && vh > 0)) throw new Error("no frame");
+          const scale = Math.max(tw / vw, cssH / vh);
+          const dw = vw * scale;
+          const dh = vh * scale;
+          ctx.drawImage(probe, i * tw + (tw - dw) / 2, (cssH - dh) / 2, dw, dh);
+        } catch (_) {
+          ctx.fillStyle = "#1a2436";
+          ctx.fillRect(i * tw, 0, tw, cssH);
+        }
+        if (filmLoading) filmLoading.textContent = `胶片预览 ${i + 1}/${n}`;
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+      if (pauseMain) {
+        try {
+          video.currentTime = clamp(wasTime, startSec, Math.max(startSec, endSec - 0.04));
+          await waitSeek(video);
+          if (!wasPaused) video.play().catch(() => {});
+        } catch (_) {}
+      }
+      if (gen !== filmGen) return;
+      if (filmLoading) {
+        filmLoading.hidden = true;
+        filmLoading.textContent = "正在生成胶片预览…";
+      }
+      previewWrap?.classList.remove("is-film-loading");
+      paintTimeline();
+    }
+
+    function snapTime(t, which) {
+      if (which === "start") {
+        if (t <= SNAP_SEC) {
+          if (t > 0) hapticLight();
+          return 0;
+        }
+        return t;
+      }
+      if (t >= duration - SNAP_SEC) {
+        if (t < duration) hapticLight();
+        return duration;
+      }
+      return t;
+    }
+
+    function setStart(t, { preview = true } = {}) {
+      const prev = startSec;
+      startSec = clamp(t, 0, endSec - MIN_SPAN);
+      activeHandle = "start";
+      syncActiveHandleUi();
+      const atMin = Math.abs(endSec - startSec - MIN_SPAN) < 0.02;
+      timeline?.classList.toggle("is-min-span", atMin);
+      if (atMin && Math.abs(prev - startSec) > 0.001) {
+        timeline?.classList.add("is-pulse");
+        hapticLight();
+      }
+      if (preview) previewSeek(startSec);
+      paintTimeline();
+      updateLabels();
+    }
+
+    function setEnd(t, { preview = true } = {}) {
+      const prev = endSec;
+      endSec = clamp(t, startSec + MIN_SPAN, duration);
+      activeHandle = "end";
+      syncActiveHandleUi();
+      const atMin = Math.abs(endSec - startSec - MIN_SPAN) < 0.02;
+      timeline?.classList.toggle("is-min-span", atMin);
+      if (atMin && Math.abs(prev - endSec) > 0.001) {
+        timeline?.classList.add("is-pulse");
+        hapticLight();
+      }
+      if (preview) previewSeek(Math.max(startSec, endSec - 0.04));
+      paintTimeline();
+      updateLabels();
+    }
+
+    function shiftWindow(deltaSec) {
+      const span = endSec - startSec;
+      let nextStart = startSec + deltaSec;
+      nextStart = clamp(nextStart, 0, duration - span);
+      startSec = nextStart;
+      endSec = nextStart + span;
+      previewSeek(startSec);
+      paintTimeline();
+      updateLabels();
+    }
+
+    function finishTrimDrag() {
+      if (!drag) return;
+      if (drag.kind === "start") {
+        const snapped = snapTime(startSec, "start");
+        if (snapped !== startSec) setStart(snapped, { preview: true });
+      } else if (drag.kind === "end") {
+        const snapped = snapTime(endSec, "end");
+        if (snapped !== endSec) setEnd(snapped, { preview: true });
+      }
+    }
+
+    function ratioFromClientX(clientX) {
+      const rect = timeline.getBoundingClientRect();
+      return clamp((clientX - rect.left) / Math.max(1, rect.width), 0, 1);
+    }
+
+    function hitKind(ratio, target) {
+      if (target === handleStart || target?.classList?.contains("vtrim-handle-start")) return "start";
+      if (target === handleEnd || target?.classList?.contains("vtrim-handle-end")) return "end";
+      if (target === windowEl || target?.classList?.contains("vtrim-window")) return "window";
+      const startR = startSec / duration;
+      const endR = endSec / duration;
+      const pxPad = 0.045;
+      if (Math.abs(ratio - startR) <= pxPad) return "start";
+      if (Math.abs(ratio - endR) <= pxPad) return "end";
+      if (ratio < startR) return "start";
+      if (ratio > endR) return "end";
+      return "seek";
+    }
+
+    async function togglePlay() {
+      if (!video.src) return;
+      if (video.paused) {
+        if (video.currentTime < startSec || video.currentTime >= endSec - 0.04) {
+          previewSeek(startSec);
+          await waitSeek(video);
+        }
+        await video.play().catch(() => {});
+      } else {
+        video.pause();
+      }
+    }
+
+    function getEditState() {
+      const srcW = video.videoWidth || 1;
+      const srcH = video.videoHeight || 1;
+      const enabled = Boolean(cropEnable?.checked);
+      const full =
+        Math.abs(crop.x) < 2 &&
+        Math.abs(crop.y) < 2 &&
+        Math.abs(crop.w - srcW) < 2 &&
+        Math.abs(crop.h - srcH) < 2;
+      return {
+        trimStart: startSec,
+        trimEnd: endSec,
+        // 勾选但全幅仍记 cropOn=false，避免误标「已编辑」
+        cropOn: enabled && !full,
+        crop: {
+          x: Math.round(clamp(crop.x, 0, srcW)),
+          y: Math.round(clamp(crop.y, 0, srcH)),
+          w: Math.round(clamp(crop.w, 2, srcW)),
+          h: Math.round(clamp(crop.h, 2, srcH)),
+        },
+      };
+    }
+
+    function cleanup() {
+      if (closed) return;
+      closed = true;
+      filmGen += 1;
+      cancelAnimationFrame(playheadRaf);
+      cancelAnimationFrame(cropLiveRaf);
+      try {
+        video.pause();
+      } catch (_) {}
+      try {
+        filmVideo.removeAttribute("src");
+        filmVideo.load();
+      } catch (_) {}
+      filmVideo.remove();
+      if (objectUrl) {
+        try {
+          URL.revokeObjectURL(objectUrl);
+        } catch (_) {}
+        objectUrl = "";
+      }
+      document.body.classList.remove("vtrim-editor-open");
+      overlay.remove();
+      window.removeEventListener("pointermove", onCropPointerMove);
+      window.removeEventListener("pointerup", onCropPointerUp);
+      window.removeEventListener("pointercancel", onCropPointerUp);
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("resize", onResize);
+    }
+
+    function finish(ok) {
+      if (settled) return;
+      settled = true;
+      const edit = ok ? getEditState() : null;
+      cleanup();
+      if (ok) {
+        try {
+          opts.onComplete?.(edit);
+        } catch (_) {}
+      } else {
+        try {
+          opts.onCancel?.();
+        } catch (_) {}
+      }
+      try {
+        resolveOpen?.(edit);
+      } catch (_) {}
+      resolveOpen = null;
+    }
+
+    function onKeyDown(e) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        finish(false);
+      }
+    }
+
+    let resizeFilmTimer = 0;
+    function onResize() {
+      layoutCropBox();
+      if (duration) {
+        clearTimeout(resizeFilmTimer);
+        resizeFilmTimer = setTimeout(() => buildFilmstrip().catch(() => {}), 180);
+      }
+    }
+
+    // --- events ---
+    overlay.querySelectorAll("[data-vte-mode]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        editMode = btn.dataset.vteMode === "crop" ? "crop" : "trim";
+        syncModeUi();
+        layoutCropBox();
+      });
+    });
+    overlay.querySelectorAll("[data-vte-aspect]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        aspect = btn.dataset.vteAspect || "free";
+        syncAspectUi();
+        if (cropEnable && !cropEnable.checked) cropEnable.checked = true;
+        if (editMode !== "crop") {
+          editMode = "crop";
+          syncModeUi();
+        }
+        syncCropBoxVisibility();
+        fitCropToAspect();
+      });
+    });
+    cropEnable?.addEventListener("change", () => {
+      syncCropBoxVisibility();
+      layoutCropBox();
+    });
+    cropResetBtn?.addEventListener("click", () => {
+      fitCropToAspect();
+      toast("已重置裁剪框");
+    });
+    $("nudge-start-m")?.addEventListener("click", () => setStart(startSec - 0.1));
+    $("nudge-start-p")?.addEventListener("click", () => setStart(startSec + 0.1));
+    $("nudge-end-m")?.addEventListener("click", () => setEnd(endSec - 0.1));
+    $("nudge-end-p")?.addEventListener("click", () => setEnd(endSec + 0.1));
+    playBtn?.addEventListener("click", () => togglePlay().catch(() => {}));
+    muteBtn?.addEventListener("click", () => {
+      muted = !muted;
+      syncMuteUi();
+    });
+    $("close")?.addEventListener("click", () => finish(false));
+    $("done")?.addEventListener("click", () => finish(true));
+
+    function onTimelinePointerDown(e) {
+      if (!duration) return;
+      try {
+        video.pause();
+      } catch (_) {}
+      const ratio = ratioFromClientX(e.clientX);
+      const t = ratio * duration;
+      const kind = hitKind(ratio, e.target);
+      timeline?.classList.add("is-dragging");
+      if (kind === "start") {
+        drag = { kind: "start", pointerId: e.pointerId };
+        handleStart?.setPointerCapture?.(e.pointerId);
+        setStart(t);
+      } else if (kind === "end") {
+        drag = { kind: "end", pointerId: e.pointerId };
+        handleEnd?.setPointerCapture?.(e.pointerId);
+        setEnd(t);
+      } else if (kind === "window") {
+        drag = {
+          kind: "window",
+          pointerId: e.pointerId,
+          originX: e.clientX,
+          originStart: startSec,
+          originEnd: endSec,
+        };
+        timeline?.classList.add("is-dragging-window");
+        windowEl?.setPointerCapture?.(e.pointerId);
+        syncHandleTips();
+      } else {
+        previewSeek(clamp(t, startSec, Math.max(startSec, endSec - 0.04)));
+        drag = { kind: "seek", pointerId: e.pointerId };
+      }
+      e.preventDefault();
+    }
+    function onTimelinePointerMove(e) {
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      if (drag.kind === "window") {
+        const rect = timeline.getBoundingClientRect();
+        const deltaSec = ((e.clientX - drag.originX) / Math.max(1, rect.width)) * duration;
+        startSec = drag.originStart;
+        endSec = drag.originEnd;
+        shiftWindow(deltaSec);
+        syncHandleTips();
+        return;
+      }
+      const t = ratioFromClientX(e.clientX) * duration;
+      if (drag.kind === "start") setStart(t);
+      else if (drag.kind === "end") setEnd(t);
+      else previewSeek(clamp(t, startSec, Math.max(startSec, endSec - 0.04)));
+    }
+    function onTimelinePointerUp(e) {
+      if (!drag || drag.pointerId !== e.pointerId) return;
+      finishTrimDrag();
+      timeline?.classList.remove("is-dragging-window", "is-dragging");
+      drag = null;
+      syncHandleTips();
+    }
+    timeline?.addEventListener("pointerdown", onTimelinePointerDown);
+    timeline?.addEventListener("pointermove", onTimelinePointerMove);
+    timeline?.addEventListener("pointerup", onTimelinePointerUp);
+    timeline?.addEventListener("pointercancel", onTimelinePointerUp);
+    timeline?.addEventListener("animationend", () => timeline.classList.remove("is-pulse"));
+
+    function onCropPointerDown(e) {
+      if (cropBox?.hidden) return;
+      const handle = e.target?.closest?.("[data-vte-handle]");
+      const geom = videoContentRect();
+      const d = cropToDisplayRect();
+      cropDrag = {
+        pointerId: e.pointerId,
+        handle: handle?.dataset?.vteHandle || "move",
+        startX: e.clientX,
+        startY: e.clientY,
+        box: { ...d },
+        geom,
+      };
+      cropBox.setPointerCapture?.(e.pointerId);
+      previewWrap?.classList.add("is-dragging");
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    function onCropPointerMove(e) {
+      if (!cropDrag || cropDrag.pointerId !== e.pointerId) return;
+      const { geom, box, handle } = cropDrag;
+      const dx = (e.clientX - cropDrag.startX) / geom.scale;
+      const dy = (e.clientY - cropDrag.startY) / geom.scale;
+      let x = box.x;
+      let y = box.y;
+      let w = box.w;
+      let h = box.h;
+      const ratio = parseAspect(aspect);
+      const minSide = 16;
+      if (handle === "move") {
+        x = clamp(box.x + dx, 0, box.dw - w);
+        y = clamp(box.y + dy, 0, box.dh - h);
+      } else {
+        if (handle.includes("w")) {
+          const nx = clamp(box.x + dx, 0, box.x + box.w - minSide);
+          w = box.x + box.w - nx;
+          x = nx;
+        }
+        if (handle.includes("e")) w = clamp(box.w + dx, minSide, box.dw - box.x);
+        if (handle.includes("n")) {
+          const ny = clamp(box.y + dy, 0, box.y + box.h - minSide);
+          h = box.y + box.h - ny;
+          y = ny;
+        }
+        if (handle.includes("s")) h = clamp(box.h + dy, minSide, box.dh - box.y);
+        if (ratio) {
+          if (handle === "n" || handle === "s") w = h * ratio;
+          else h = w / ratio;
+          if (x + w > box.dw) {
+            w = box.dw - x;
+            h = w / ratio;
+          }
+          if (y + h > box.dh) {
+            h = box.dh - y;
+            w = h * ratio;
+          }
+        }
+        x = clamp(x, 0, box.dw - w);
+        y = clamp(y, 0, box.dh - h);
+      }
+      displayRectToCrop(x, y, w, h);
+      layoutCropBox();
+    }
+    function onCropPointerUp(e) {
+      if (!cropDrag || cropDrag.pointerId !== e.pointerId) return;
+      cropDrag = null;
+      previewWrap?.classList.remove("is-dragging");
+    }
+    cropBox?.addEventListener("pointerdown", onCropPointerDown);
+    cropBox?.addEventListener("dblclick", (e) => {
+      e.preventDefault();
+      fitCropToAspect();
+      toast("已重置裁剪框");
+    });
+    window.addEventListener("pointermove", onCropPointerMove);
+    window.addEventListener("pointerup", onCropPointerUp);
+    window.addEventListener("pointercancel", onCropPointerUp);
+
+    previewWrap?.addEventListener("pointerdown", (e) => {
+      if (!duration || e.target?.closest?.(".vtrim-crop-box")) return;
+      previewScrub = {
+        pointerId: e.pointerId,
+        startX: e.clientX,
+        startT: video.currentTime || startSec,
+        moved: false,
+      };
+      try {
+        video.pause();
+      } catch (_) {}
+      previewWrap.setPointerCapture?.(e.pointerId);
+    });
+    previewWrap?.addEventListener("pointermove", (e) => {
+      if (!previewScrub || previewScrub.pointerId !== e.pointerId) return;
+      const dx = e.clientX - previewScrub.startX;
+      if (Math.abs(dx) > 8) previewScrub.moved = true;
+      if (!previewScrub.moved) return;
+      const geom = previewWrap.getBoundingClientRect();
+      const span = Math.max(MIN_SPAN, endSec - startSec);
+      const delta = (dx / Math.max(1, geom.width)) * span;
+      const target = clamp(previewScrub.startT + delta, startSec, Math.max(startSec, endSec - 0.04));
+      scrubSeekWanted = target;
+      pumpPreviewScrubSeek();
+    });
+    previewWrap?.addEventListener("pointerup", (e) => {
+      if (!previewScrub || previewScrub.pointerId !== e.pointerId) return;
+      const wasMove = previewScrub.moved;
+      previewScrub = null;
+      if (!wasMove) togglePlay().catch(() => {});
+    });
+    previewWrap?.addEventListener("pointercancel", () => {
+      previewScrub = null;
+    });
+
+    function tickPlayhead() {
+      if (closed) {
+        playheadRaf = 0;
+        return;
+      }
+      paintTimeline();
+      updateLabels();
+      if (!video.paused) playheadRaf = requestAnimationFrame(tickPlayhead);
+      else playheadRaf = 0;
+    }
+    video.addEventListener("timeupdate", () => {
+      if (!duration) return;
+      if (!video.paused && video.currentTime >= endSec - 0.05) {
+        previewSeek(startSec);
+        video.play().catch(() => {});
+      }
+      if (!playheadRaf) {
+        paintTimeline();
+        updateLabels();
+      }
+      scheduleCropLive();
+    });
+    video.addEventListener("pause", () => {
+      if (playBtn) playBtn.textContent = "播放";
+      previewWrap?.classList.remove("is-playing");
+      if (playheadRaf) {
+        cancelAnimationFrame(playheadRaf);
+        playheadRaf = 0;
+      }
+      paintTimeline();
+    });
+    video.addEventListener("play", () => {
+      if (playBtn) playBtn.textContent = "暂停";
+      previewWrap?.classList.add("is-playing");
+      if (!playheadRaf) playheadRaf = requestAnimationFrame(tickPlayhead);
+    });
+
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("resize", onResize);
+
+    // load file
+    objectUrl = URL.createObjectURL(file);
+    video.src = objectUrl;
+    video.muted = true;
+    if (tapPlay) tapPlay.hidden = false;
+
+    return new Promise((resolve, reject) => {
+      resolveOpen = resolve;
+      const onMeta = () => {
+        video.removeEventListener("loadedmetadata", onMeta);
+        video.removeEventListener("error", onErr);
+        duration = Number(video.duration) || 0;
+        const srcW = video.videoWidth || 1;
+        const srcH = video.videoHeight || 1;
+        const initial = opts.initial || {};
+        startSec = clamp(Number(initial.trimStart) || 0, 0, Math.max(0, duration - MIN_SPAN));
+        endSec = clamp(Number(initial.trimEnd) || duration, startSec + MIN_SPAN, duration || MIN_SPAN);
+        if (initial.crop && initial.cropOn) {
+          crop = {
+            x: Number(initial.crop.x) || 0,
+            y: Number(initial.crop.y) || 0,
+            w: Number(initial.crop.w) || srcW,
+            h: Number(initial.crop.h) || srcH,
+          };
+          if (cropEnable) cropEnable.checked = true;
+        } else {
+          crop = { x: 0, y: 0, w: srcW, h: srcH };
+          if (cropEnable) cropEnable.checked = Boolean(initial.cropOn);
+        }
+        syncMuteUi();
+        syncAspectUi();
+        syncModeUi();
+        previewSeek(startSec);
+        paintTimeline();
+        updateLabels();
+        layoutCropBox();
+        buildFilmstrip().catch(() => {});
+        $("done")?.focus?.();
+      };
+      const onErr = () => {
+        video.removeEventListener("loadedmetadata", onMeta);
+        video.removeEventListener("error", onErr);
+        cleanup();
+        resolveOpen = null;
+        reject(new Error("无法读取该视频"));
+      };
+      video.addEventListener("loadedmetadata", onMeta);
+      video.addEventListener("error", onErr);
+    });
+  }
+
+  window.DevToolsVtrimEditor = {
+    open: openEditor,
+    ensureCss: ensureVtrimCss,
+  };
+})();

@@ -57,48 +57,14 @@
         <p class="hint tight" id="vbb-workflow-hint"></p>
         <div class="gif-preview-wrap vbb-preview-wrap" id="vbb-preview-wrap">
           <video id="vbb-video" class="img-preview gif-preview" controls playsinline muted preload="metadata" hidden></video>
-          <div class="vbb-crop-box" id="vbb-crop-box" hidden>
-            <span class="vbb-crop-grid" aria-hidden="true"></span>
-            <span class="vbb-crop-handle" data-vbb-handle="nw"></span>
-            <span class="vbb-crop-handle" data-vbb-handle="n"></span>
-            <span class="vbb-crop-handle" data-vbb-handle="ne"></span>
-            <span class="vbb-crop-handle" data-vbb-handle="e"></span>
-            <span class="vbb-crop-handle" data-vbb-handle="se"></span>
-            <span class="vbb-crop-handle" data-vbb-handle="s"></span>
-            <span class="vbb-crop-handle" data-vbb-handle="sw"></span>
-            <span class="vbb-crop-handle" data-vbb-handle="w"></span>
-          </div>
         </div>
         <div class="vbb-file-edit" id="vbb-file-edit" hidden>
           <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.55rem">
             <p class="hint tight" id="vbb-file-edit-label" style="margin:0;flex:1 1 auto">可选编辑 · 裁时长 / 裁画面后再转 GIF</p>
+            <button type="button" class="secondary-btn" id="vbb-edit-open" disabled>编辑</button>
             <button type="button" class="ghost-btn" id="vbb-edit-reset" disabled>重置编辑</button>
           </div>
-          <div class="vbb-edit-trim" id="vbb-edit-trim">
-            <div class="field-row" style="flex-wrap:wrap;align-items:center;margin-top:0.45rem">
-              <label for="vbb-trim-start">入点(s)</label>
-              <input id="vbb-trim-start" class="mono meta-input" type="number" min="0" step="0.1" value="0" disabled />
-              <label for="vbb-trim-end">出点(s)</label>
-              <input id="vbb-trim-end" class="mono meta-input" type="number" min="0" step="0.1" value="0" disabled />
-              <span class="hint tight mono" id="vbb-trim-span">0.0s</span>
-            </div>
-            <div class="vbb-trim-ranges" aria-label="裁剪时长">
-              <label class="visually-hidden" for="vbb-trim-start-range">入点</label>
-              <input id="vbb-trim-start-range" class="vsplit-scrub" type="range" min="0" max="1000" value="0" step="1" disabled />
-              <label class="visually-hidden" for="vbb-trim-end-range">出点</label>
-              <input id="vbb-trim-end-range" class="vsplit-scrub" type="range" min="0" max="1000" value="1000" step="1" disabled />
-            </div>
-            <div class="btn-row tool-actions" style="margin-top:0.35rem;flex-wrap:wrap">
-              <button type="button" class="ghost-btn" id="vbb-trim-set-in" disabled>当前位置→入点</button>
-              <button type="button" class="ghost-btn" id="vbb-trim-set-out" disabled>当前位置→出点</button>
-              <button type="button" class="ghost-btn" id="vbb-trim-play" disabled>预览片段</button>
-            </div>
-          </div>
-          <div class="field-row" style="flex-wrap:wrap;align-items:center;margin-top:0.45rem;gap:0.75rem">
-            <label class="flag" for="vbb-crop-enable"><input type="checkbox" id="vbb-crop-enable" disabled /> 裁剪画面</label>
-            <button type="button" class="ghost-btn" id="vbb-crop-reset" disabled>重置裁剪框</button>
-            <span class="hint tight" id="vbb-crop-hint">拖绿框或角点；未开则用原片（或上方「自动裁边」）</span>
-          </div>
+          <p class="hint tight" id="vbb-edit-hint">点「编辑」打开与「视频修剪」相同的修剪/裁画面页；未编辑则用原片（或上方自动裁边）。</p>
         </div>
         <div class="vsplit-manual-transport vbb-manual-transport" id="vbb-manual-panel" hidden>
           <div class="vsplit-transport">
