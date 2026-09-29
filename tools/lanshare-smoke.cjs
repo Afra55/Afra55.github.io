@@ -138,7 +138,11 @@ async function main() {
   assert(/relayMemberEvent/.test(js), "缺少成员事件转发");
   assert(/canUploadFiles/.test(js), "缺少上传前连接校验");
   assert(/sessionStorage/.test(js) && /PENDING_JOIN_KEY/.test(js), "缺少 join token 缓存");
-  assert(/preserveLanshareJoin/.test(fs.readFileSync(path.join(root, "app.js"), "utf8")), "app.js 应保护 lanshare 深链");
+  assert(/ls-known-limits/.test(lansharePanel), "缺少已知限制说明");
+  assert(/使用注意/.test(lansharePanel), "缺少使用注意文案");
+  assert(/AbortError/.test(js), "取消分享应回落下载");
+  assert(/connectionState === "failed"/.test(js), "下载端应处理 WebRTC failed");
+  assert(/isSecureContext/.test(js), "应提示非安全上下文");
 
   let puppeteer;
   try {

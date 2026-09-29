@@ -803,15 +803,22 @@
       return;
     }
     const parts = [];
-    parts.push("推荐：房主创建时设置房间密码，成员输入密码即可自动加入。");
+    if (typeof window.isSecureContext !== "undefined" && !window.isSecureContext) {
+      parts.push(
+        "当前页面不是 HTTPS/localhost，部分浏览器会禁用 WebRTC。请打开 https://afra55.github.io/tools/#lanshare 或本机 localhost。"
+      );
+    }
+    parts.push("推荐：房主创建时设置房间密码，成员输入密码即可自动加入（密码通道需能访问公网信令）。");
     if (isIOS()) {
-      parts.push("iOS：请用 Safari；可用相机扫电脑上的邀请二维码（会自动打开链接），或让电脑复制链接发给你。");
+      parts.push(
+        "iOS：请用 Safari（勿用微信内置浏览器）；可用相机扫电脑邀请码，或粘贴链接；保存文件时若弹出分享面板可点「存储到文件」。"
+      );
     } else if (isAndroid()) {
       parts.push("Android：推荐 Chrome；可用微信/相机扫邀请码，或粘贴链接加入。");
     } else {
       parts.push("电脑作房主：手机扫邀请码或打开链接加入，再把手机上的连接码链接发回电脑粘贴即可（不必对着扫）。");
     }
-    parts.push("所有设备需在同一局域网。");
+    parts.push("所有设备需同一 WiFi；互传无断点续传，失败请重试。切到后台可能断连。");
     els.platformHint.hidden = false;
     els.platformHint.textContent = parts.join(" ");
   }
@@ -2466,7 +2473,15 @@
       return;
     }
     setError("");
-    for (const file of [...fileList]) {
+    const files = [...fileList];
+    const warnBytes = isMobileClient() ? 80 * 1024 * 1024 : 400 * 1024 * 1024;
+    const big = files.filter((f) => f.size >= warnBytes);
+    if (big.length) {
+      setInfo(
+        `已选 ${big.length} 个较大文件（≥${fmtSize(warnBytes)}）：接收端需在内存中拼完整文件，手机端易卡顿或失败；建议拆小或分批传。`
+      );
+    }
+    for (const file of files) {
       const id = uid(10);
       state.localFiles.set(id, file);
       const meta = {
@@ -2854,7 +2869,10 @@
           return;
         }
       } catch (err) {
-        if (err?.name === "AbortError") return;
+        // 取消分享/不允许时不要直接丢弃，改走浏览器下载
+        if (err?.name === "AbortError" || err?.name === "NotAllowedError") {
+          setInfo("未完成系统分享，改为浏览器下载…");
+        }
       }
     }
     const url = URL.createObjectURL(blob);
@@ -2873,8 +2891,9 @@
           /* ignore */
         }
       }, 300);
+      setInfo("若未自动保存：在新开页长按图片/文件 →「存储到文件」，或用分享面板保存。");
     }
-    setTimeout(() => URL.revokeObjectURL(url), 15000);
+    setTimeout(() => URL.revokeObjectURL(url), isIOS() ? 60000 : 15000);
   }
 
   async function acceptFileOffer(from, fileId, sdp) {
@@ -2889,33 +2908,60 @@
       let meta = null;
       const chunks = [];
       let total = 0;
-      const timer = setTimeout(() => reject(new Error("连接超时")), 120000);
+      let got = 0;
+      let settled = false;
+      const fail = (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        reject(err instanceof Error ? err : new Error(String(err || "传输失败")));
+      };
+      const ok = (value) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      };
+      const timer = setTimeout(() => fail(new Error("连接超时")), 120000);
+
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === "failed") {
+          fail(new Error("与上传者连接失败，请确认同一 WiFi 后重试"));
+        }
+      };
 
       pc.ondatachannel = (ev) => {
         const dc = ev.channel;
         dc.binaryType = "arraybuffer";
         dc.onmessage = (e) => {
           if (typeof e.data === "string") {
-            const msg = JSON.parse(e.data);
+            let msg;
+            try {
+              msg = JSON.parse(e.data);
+            } catch (_) {
+              fail(new Error("传输协议异常"));
+              return;
+            }
             if (msg.type === "meta") {
               meta = msg;
               total = msg.size || 0;
+              got = 0;
               setDownloadProgress(fileId, 0, total ? `0 / ${fmtSize(total)}` : "下载中…", "downloading");
             } else if (msg.type === "done") {
-              clearTimeout(timer);
-              resolve({ meta, chunks });
+              ok({ meta, chunks });
             } else if (msg.type === "error") {
-              clearTimeout(timer);
-              reject(new Error(msg.message || "传输失败"));
+              fail(new Error(msg.message || "传输失败"));
             }
           } else {
-            chunks.push(new Uint8Array(e.data));
+            const buf = e.data;
+            chunks.push(buf);
+            got += buf.byteLength || 0;
             if (total > 0) {
-              const got = chunks.reduce((s, c) => s + c.byteLength, 0);
               setDownloadProgress(fileId, (got / total) * 100, `${fmtSize(got)} / ${fmtSize(total)}`, "downloading");
             }
           }
         };
+        dc.onerror = () => fail(new Error("传输通道异常，请重试"));
       };
 
       pc.onicecandidate = (ev) => {
