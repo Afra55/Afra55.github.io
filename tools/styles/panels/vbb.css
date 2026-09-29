@@ -163,6 +163,18 @@
   align-items: center;
 }
 
+.vbb-batch-row-remove {
+  min-width: 2rem;
+  padding-inline: 0.45rem;
+  font-size: 1.15rem;
+  line-height: 1;
+  color: var(--muted);
+}
+
+.vbb-batch-row-remove:hover:not(:disabled) {
+  color: var(--danger, #c44);
+}
+
 .vbb-preview-wrap {
   position: relative;
   overflow: hidden;

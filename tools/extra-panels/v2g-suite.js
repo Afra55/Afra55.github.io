@@ -5650,9 +5650,11 @@
         split: "长视频切片：先点「① 分析切分方案」查看段数与预估，调整满意后点「② 按方案生成 GIF」。",
         manual: "手动打点：拖到起点/终点点「打起点」「打终点」，标记多段后点「一键黑盒」。",
       };
+      const VBB_BATCH_MANUAL_HINT =
+        "多选 · 打点仅作用于当前预览视频；切换列表条目会保留各自的点。未打点的条目按整段/编辑范围转 GIF。";
   
       let vbbSourceFile = null;
-      /** @type {{ file: File, duration: number, srcW: number, srcH: number }[]} */
+      /** @type {{ file: File, duration: number, srcW: number, srcH: number, edit?: object, marks?: {start:number,end:number}[], draftStart?: number|null }[]} */
       let vbbBatchFiles = [];
       /** 批量模式当前预览/编辑的下标；单文件模式为 -1 */
       let vbbEditBatchIdx = -1;
@@ -5934,21 +5936,55 @@
           vbbMarkUndo.textContent = vbbDraftStart != null ? "取消起点" : "取消上一段";
         }
         if (vbbMarkClear) vbbMarkClear.disabled = !canMark || (!vbbMarks.length && vbbDraftStart == null);
-        if (vbbOneclick && isVbbManualMode()) {
+        if (vbbOneclick && isVbbManualMode() && !isVbbBatchMode()) {
           const count = completeVbbMarks().length;
           vbbOneclick.textContent = count > 0 ? `一键黑盒（${count} 段）` : "一键黑盒";
         }
+        const batchHint = $("#vbb-manual-batch-hint");
+        if (batchHint) batchHint.hidden = !(manual && isVbbBatchMode());
         paintVbbNow();
         paintVbbScrubMarks();
         paintVbbMarkChips();
       }
   
       function isVbbManualMode() {
-        return vbbWorkflow === "manual" && !isVbbBatchMode();
+        return vbbWorkflow === "manual";
       }
   
       function isVbbSplitMode() {
         return vbbWorkflow === "split" && !isVbbBatchMode();
+      }
+
+      function completeMarksList(marks) {
+        return (Array.isArray(marks) ? marks : []).filter(
+          (m) => m && m.start != null && m.end != null && m.end - m.start >= VBB_MIN_SPAN - 0.001
+        );
+      }
+
+      /** 把当前全局打点写回多选当前条目 */
+      function persistActiveVbbMarks() {
+        if (!isVbbBatchMode()) return;
+        if (vbbEditBatchIdx < 0 || vbbEditBatchIdx >= vbbBatchFiles.length) return;
+        const item = vbbBatchFiles[vbbEditBatchIdx];
+        if (!item) return;
+        item.marks = vbbMarks.map((m) => ({ start: m.start, end: m.end }));
+        item.draftStart = vbbDraftStart;
+      }
+
+      function loadItemVbbMarks(item) {
+        const marks = Array.isArray(item?.marks) ? item.marks.map((m) => ({ start: m.start, end: m.end })) : [];
+        vbbMarks = marks;
+        vbbDraftStart = item?.draftStart != null && Number.isFinite(Number(item.draftStart)) ? Number(item.draftStart) : null;
+      }
+
+      function countVbbBatchManualSegments() {
+        let n = 0;
+        vbbBatchFiles.forEach((item, idx) => {
+          const marks =
+            idx === vbbEditBatchIdx ? completeVbbMarks() : completeMarksList(item?.marks);
+          n += marks.length;
+        });
+        return n;
       }
   
       function vbbVideoDuration() {
@@ -6003,6 +6039,7 @@
       function clearVbbMarks() {
         vbbMarks = [];
         vbbDraftStart = null;
+        persistActiveVbbMarks();
         paintVbbManualUi();
       }
   
@@ -6014,6 +6051,7 @@
         const t = vbbMarkTime();
         if (vbbDraftStart == null) {
           vbbDraftStart = t;
+          persistActiveVbbMarks();
           paintVbbManualUi();
           toast(`起点 ${formatVbbClock(t)}`);
           return;
@@ -6030,6 +6068,7 @@
         vbbMarks.push(next);
         vbbMarks.sort((a, b) => a.start - b.start);
         vbbDraftStart = null;
+        persistActiveVbbMarks();
         paintVbbManualUi();
         toast(`已添加 · ${(next.end - next.start).toFixed(1)}s`);
       }
@@ -6037,6 +6076,7 @@
       function undoVbbMark() {
         if (vbbDraftStart != null) {
           vbbDraftStart = null;
+          persistActiveVbbMarks();
           paintVbbManualUi();
           toast("已取消起点");
           return;
@@ -6049,11 +6089,13 @@
         if (last?.end != null && last?.start != null) {
           vbbMarks.pop();
           vbbDraftStart = last.start;
+          persistActiveVbbMarks();
           paintVbbManualUi();
           toast("已取消上一段终点");
           return;
         }
         vbbMarks.pop();
+        persistActiveVbbMarks();
         paintVbbManualUi();
         toast("已删除上一段");
       }
@@ -6145,6 +6187,7 @@
 
       function canShowVbbFileEdit() {
         if (vbbBusy) return false;
+        if (isVbbManualMode() || isVbbSplitMode()) return false;
         if (isVbbBatchMode()) return vbbEditBatchIdx >= 0 && Boolean(vbbBatchFiles[vbbEditBatchIdx]);
         return Boolean(vbbSourceFile) && vbbWorkflow === "single";
       }
@@ -6302,10 +6345,12 @@
         if (!isVbbBatchMode()) return;
         if (!force && idx === vbbEditBatchIdx && vbbVideo?.src) {
           syncVbbEditUi();
+          paintVbbManualUi();
           return;
         }
         const item = vbbBatchFiles[idx];
         if (!item) return;
+        persistActiveVbbMarks();
         pauseVbbPreview();
         if (vbbObjectUrl) {
           try {
@@ -6314,20 +6359,96 @@
           vbbObjectUrl = "";
         }
         vbbEditBatchIdx = idx;
+        vbbSourceFile = item.file;
         ensureVbbItemEdit(item);
+        loadItemVbbMarks(item);
         vbbObjectUrl = URL.createObjectURL(item.file);
         attachLocalVideoPreview(vbbVideo, vbbObjectUrl);
         await waitVideoMetadata(vbbVideo);
         if (vbbVideo) {
           vbbVideo.hidden = false;
-          vbbVideo.controls = true;
+          vbbVideo.controls = !isVbbManualMode();
         }
         const edit = item.edit;
         clampVbbEdit(edit, item.duration, item.srcW, item.srcH);
-        applyVbbSeek(edit.trimStart, { keepPlaying: false });
+        const seekTo = isVbbManualMode()
+          ? vbbDraftStart != null
+            ? vbbDraftStart
+            : completeVbbMarks()[0]?.start ?? 0
+          : edit.trimStart;
+        applyVbbSeek(seekTo, { keepPlaying: false });
         renderVbbBatchList({ keepSelection: true });
         syncVbbEditUi();
+        paintVbbManualUi();
         setVbbButtons();
+      }
+
+      /** 从多选列表移除一条：释放预览 URL、清 edit/marks；余 1 条时退回单文件模式 */
+      async function removeVbbBatchItem(idx) {
+        if (vbbBusy || vbbEditOpening) return;
+        if (idx < 0 || idx >= vbbBatchFiles.length) return;
+        const removing = vbbBatchFiles[idx];
+        if (!removing) return;
+        const wasActive = idx === vbbEditBatchIdx;
+        if (!wasActive) persistActiveVbbMarks();
+        else {
+          pauseVbbPreview();
+          if (vbbObjectUrl) {
+            try {
+              URL.revokeObjectURL(vbbObjectUrl);
+            } catch (_) {}
+            vbbObjectUrl = "";
+          }
+          vbbMarks = [];
+          vbbDraftStart = null;
+        }
+        removing.edit = null;
+        removing.marks = null;
+        removing.draftStart = null;
+        vbbBatchFiles.splice(idx, 1);
+
+        if (!vbbBatchFiles.length) {
+          clearVbb();
+          toast("已移除该视频");
+          return;
+        }
+
+        if (vbbBatchFiles.length === 1) {
+          const only = vbbBatchFiles[0];
+          const savedEdit = only.edit ? { ...only.edit, crop: only.edit.crop ? { ...only.edit.crop } : null } : null;
+          const savedMarks = Array.isArray(only.marks) ? only.marks.map((m) => ({ start: m.start, end: m.end })) : [];
+          const savedDraft = only.draftStart != null ? Number(only.draftStart) : null;
+          const keepWorkflow = vbbWorkflow === "manual" ? "manual" : "single";
+          const file = only.file;
+          await loadVbbFile(file);
+          vbbWorkflow = keepWorkflow;
+          if (savedEdit) {
+            vbbSingleEdit = {
+              trimStart: Number(savedEdit.trimStart) || 0,
+              trimEnd: Number(savedEdit.trimEnd) || Number(vbbVideo?.duration) || 0,
+              cropOn: Boolean(savedEdit.cropOn),
+              crop: savedEdit.crop
+                ? { ...savedEdit.crop }
+                : makeVbbEditState(Number(vbbVideo?.duration) || 0, vbbVideo?.videoWidth || 0, vbbVideo?.videoHeight || 0).crop,
+            };
+          }
+          vbbMarks = savedMarks;
+          vbbDraftStart = Number.isFinite(savedDraft) ? savedDraft : null;
+          syncVbbWorkflowUi();
+          syncVbbEditUi();
+          setVbbButtons();
+          toast("已移除 · 余 1 个视频");
+          return;
+        }
+
+        let nextIdx = vbbEditBatchIdx;
+        if (wasActive) nextIdx = Math.min(idx, vbbBatchFiles.length - 1);
+        else if (idx < vbbEditBatchIdx) nextIdx = vbbEditBatchIdx - 1;
+        vbbEditBatchIdx = -1;
+        await selectVbbBatchItem(Math.max(0, nextIdx), { force: true });
+        syncVbbBatchMeta();
+        syncVbbWorkflowUi();
+        toast("已移除该视频");
       }
   
       function vbbGifBaseName(file) {
@@ -6488,19 +6609,25 @@
           const meta = document.createElement("span");
           meta.className = "vbb-batch-row-meta";
           const badge = vbbEditBadge(item.edit, item.duration, item.srcW, item.srcH);
+          const markCount =
+            idx === vbbEditBatchIdx ? completeVbbMarks().length : completeMarksList(item.marks).length;
+          const markBadge = markCount > 0 ? `${markCount} 段打点` : "";
           meta.textContent = [
             `${item.duration.toFixed(1)}s`,
             formatKb(item.file.size),
             `${item.srcW}×${item.srcH}`,
-            badge || "未编辑",
-          ].join(" · ");
+            markBadge || badge || "未编辑",
+          ]
+            .filter(Boolean)
+            .join(" · ");
           main.appendChild(name);
           main.appendChild(meta);
           const btn = document.createElement("button");
           btn.type = "button";
           btn.className = "secondary-btn";
           btn.textContent = "编辑";
-          btn.disabled = vbbBusy || vbbEditOpening;
+          btn.disabled = vbbBusy || vbbEditOpening || isVbbManualMode();
+          btn.hidden = isVbbManualMode();
           btn.addEventListener("click", (e) => {
             e.stopPropagation();
             openVbbEditEditor(item).catch((err) => setError(vbbError, err.message || String(err)));
@@ -6514,10 +6641,22 @@
             e.stopPropagation();
             selectVbbBatchItem(idx).catch((err) => setError(vbbError, err.message || String(err)));
           });
+          const removeBtn = document.createElement("button");
+          removeBtn.type = "button";
+          removeBtn.className = "ghost-btn vbb-batch-row-remove";
+          removeBtn.setAttribute("aria-label", `移除 ${item.file.name || "视频"}`);
+          removeBtn.title = "从多选中移除";
+          removeBtn.textContent = "×";
+          removeBtn.disabled = vbbBusy || vbbEditOpening;
+          removeBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            removeVbbBatchItem(idx).catch((err) => setError(vbbError, err.message || String(err)));
+          });
           const actions = document.createElement("div");
           actions.className = "vbb-batch-row-actions";
           actions.appendChild(previewBtn);
-          actions.appendChild(btn);
+          if (!isVbbManualMode()) actions.appendChild(btn);
+          actions.appendChild(removeBtn);
           row.appendChild(main);
           row.appendChild(actions);
           row.addEventListener("click", () => {
@@ -6539,9 +6678,13 @@
         const edited = vbbBatchFiles.filter((item) =>
           vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)
         ).length;
+        const marked = countVbbBatchManualSegments();
+        const tip = isVbbManualMode()
+          ? ` · 打点仅作用于当前视频${marked ? ` · 共 ${marked} 段` : ""} · 点 × 可移除`
+          : ` · 点「编辑」裁时长/画面，再「一键黑盒」· 点 × 可移除`;
         vbbMeta.textContent = `已选 ${vbbBatchFiles.length} 个视频 · 共 ${totalDur.toFixed(1)}s · ${formatKb(totalSize)}${
-          edited ? ` · 已编辑 ${edited} 个` : ""
-        } · 点「编辑」裁时长/画面，再「一键黑盒」`;
+          edited && !isVbbManualMode() ? ` · 已编辑 ${edited} 个` : ""
+        }${tip}`;
       }
   
       /** 总进度条与各片段进度并存 */
@@ -6953,11 +7096,19 @@
         const manualCount = completeVbbMarks().length;
         const gifCount = vbbClips.filter((c) => c.gifBlob).length;
         if (vbbOneclick) {
-          const manualNeedMarks = isVbbManualMode() && manualCount < 1;
+          // 多选不强制每条都有打点（未打点的走整段/编辑）；单文件手动模式仍需至少一段
+          const manualNeedMarks = isVbbManualMode() && !isVbbBatchMode() && manualCount < 1;
           vbbOneclick.hidden = isVbbSplitMode();
           vbbOneclick.disabled = !hasVideo || vbbBusy || manualNeedMarks || isVbbSplitMode();
           if (isVbbBatchMode()) {
-            vbbOneclick.textContent = `一键黑盒（${vbbBatchFiles.length} 个）`;
+            if (isVbbManualMode()) {
+              const segs = countVbbBatchManualSegments();
+              vbbOneclick.textContent = segs > 0
+                ? `一键黑盒（${vbbBatchFiles.length} 个 · ${segs} 段）`
+                : `一键黑盒（${vbbBatchFiles.length} 个）`;
+            } else {
+              vbbOneclick.textContent = `一键黑盒（${vbbBatchFiles.length} 个）`;
+            }
           } else if (isVbbManualMode()) {
             vbbOneclick.textContent = manualCount > 0 ? `一键黑盒（${manualCount} 段）` : "一键黑盒";
           } else {
@@ -6984,16 +7135,26 @@
       function syncVbbWorkflowUi() {
         const batch = isVbbBatchMode();
         const workflowRow = document.querySelector(".blackbox-workflow-row");
-        if (workflowRow) workflowRow.hidden = batch;
+        if (workflowRow) workflowRow.hidden = false;
+        const splitBtn = $("#vbb-workflow-split");
+        if (splitBtn) {
+          splitBtn.disabled = batch;
+          splitBtn.title = batch ? "多选时不支持长视频自动切片，请用整段或手动打点" : "";
+          if (batch && vbbWorkflow === "split") vbbWorkflow = "single";
+        }
         $("#vbb-workflow-single")?.classList.toggle("is-active", vbbWorkflow === "single");
         $("#vbb-workflow-split")?.classList.toggle("is-active", vbbWorkflow === "split");
         $("#vbb-workflow-manual")?.classList.toggle("is-active", vbbWorkflow === "manual");
         const showSplit = isVbbSplitMode();
         if (vbbSplitPanel) vbbSplitPanel.hidden = !showSplit;
         if (vbbWorkflowHint) {
-          vbbWorkflowHint.textContent = batch
-            ? `多选短片：点「编辑」单独裁时长/裁画面；旗舰/桌面可并行 ${Math.max(1, Number(currentMediaPerf().batchConcurrency) || 1)} 路（均衡/省电仍逐个）。`
-            : VBB_WORKFLOW_HINTS[vbbWorkflow] || VBB_WORKFLOW_HINTS.single;
+          if (batch && isVbbManualMode()) {
+            vbbWorkflowHint.textContent = VBB_BATCH_MANUAL_HINT;
+          } else if (batch) {
+            vbbWorkflowHint.textContent = `多选短片：点「编辑」单独裁时长/裁画面；可切到「手动打点」按当前视频打点。旗舰/桌面可并行 ${Math.max(1, Number(currentMediaPerf().batchConcurrency) || 1)} 路（均衡/省电仍逐个）。`;
+          } else {
+            vbbWorkflowHint.textContent = VBB_WORKFLOW_HINTS[vbbWorkflow] || VBB_WORKFLOW_HINTS.single;
+          }
         }
         if (vbbAdvanced) vbbAdvanced.hidden = isVbbManualMode() || batch;
         // 压时长对所有流程生效/显示（整段 / 手动打点 / 长视频切片 / 拼接后转黑盒）
@@ -7001,6 +7162,10 @@
         if (speedRow) speedRow.hidden = false;
         paintVbbManualUi();
         syncVbbEditUi();
+        if (batch) {
+          renderVbbBatchList({ keepSelection: true });
+          syncVbbBatchMeta();
+        }
         setVbbButtons();
       }
   
@@ -7751,7 +7916,7 @@
         syncVbbBatchMeta();
         setVbbButtons();
         await selectVbbBatchItem(0, { force: true });
-        toast("全部视频已就绪 · 可逐个点「编辑」，再「一键黑盒」");
+        toast("全部视频已就绪 · 可逐个预览/打点或「编辑」，点 × 可移除，再「一键黑盒」");
       }
   
       async function loadVbbFile(file) {
@@ -8181,6 +8346,7 @@
 
       async function runVbbBatchBlackbox() {
         if (!isVbbBatchMode() || vbbBusy) return;
+        persistActiveVbbMarks();
         abortVbb = false;
         vbbBusy = true;
         vbbSuppressGlobalProgress = true; // 只留卡片进度
@@ -8188,25 +8354,57 @@
         if (vbbAbort) vbbAbort.hidden = false;
         setError(vbbError, "");
         clearVbbResults();
-        const total = vbbBatchFiles.length;
-        vbbClips = vbbBatchFiles.map((item) => {
+        /** @type {{ item: any, startSec: number, span: number, edit: any, sourceName: string, fromMark: boolean }[]} */
+        const jobs = [];
+        vbbBatchFiles.forEach((item) => {
           ensureVbbItemEdit(item);
+          const marks = completeMarksList(item.marks);
+          if (vbbWorkflow === "manual" && marks.length) {
+            marks.forEach((m, mi) => {
+              jobs.push({
+                item,
+                startSec: m.start,
+                span: Math.max(VBB_MIN_SPAN, m.end - m.start),
+                edit: item.edit,
+                sourceName: `${vbbGifBaseName(item.file)}-${String(mi + 1).padStart(2, "0")}`,
+                fromMark: true,
+              });
+            });
+            return;
+          }
           const win = resolveVbbEncodeEdits(item, item.file, item.duration, item.srcW, item.srcH);
-          return {
-            start: win.startSec,
+          jobs.push({
+            item,
+            startSec: win.startSec,
             span: win.span,
+            edit: win.edit,
             sourceName: vbbGifBaseName(item.file),
-            sourceFile: item.file.name || "video",
-            gifBlob: null,
-            gifUrl: "",
-            gifNote: "",
-            gifDuration: 0,
-            error: "",
-            jobStatus: "pending",
-            jobProgress: 0,
-            jobText: "等待中…",
-          };
+            fromMark: false,
+          });
         });
+        const total = jobs.length;
+        if (!total) {
+          vbbBusy = false;
+          vbbSuppressGlobalProgress = false;
+          if (vbbAbort) vbbAbort.hidden = true;
+          setVbbButtons();
+          toast("没有可转换的片段");
+          return;
+        }
+        vbbClips = jobs.map((job) => ({
+          start: job.startSec,
+          span: job.span,
+          sourceName: job.sourceName,
+          sourceFile: job.item.file.name || "video",
+          gifBlob: null,
+          gifUrl: "",
+          gifNote: "",
+          gifDuration: 0,
+          error: "",
+          jobStatus: "pending",
+          jobProgress: 0,
+          jobText: "等待中…",
+        }));
         renderVbbResults();
         let ok = 0;
         let doneCount = 0;
@@ -8241,9 +8439,10 @@
 
           const encodeOne = async (i, ffmpegLease) => {
             if (abortVbb) throw new Error("已取消");
-            const item = vbbBatchFiles[i];
+            const job = jobs[i];
+            const item = job.item;
             setVbbClipJob(i, { status: "running", progress: 0.02, text: conc > 1 ? `并行编码…` : "准备编码…" });
-              const win = resolveVbbEncodeEdits(item, item.file, item.duration, item.srcW, item.srcH);
+              const win = { startSec: job.startSec, span: job.span, edit: job.edit };
               const cachedSeed = loadVbbSpanScheme(win.span);
               const seedForItem =
                 cachedSeed ||
@@ -8294,6 +8493,7 @@
                 }
                 const elapsedSec = (performance.now() - t0) / 1000;
                 const editBits = [];
+                if (job.fromMark) editBits.push("打点");
                 if (win.startSec > 0.05 || Math.abs(win.span - item.duration) > 0.05) {
                   editBits.push(`裁 ${win.span.toFixed(1)}s`);
                 }
@@ -9783,15 +9983,27 @@
           workflowRow.addEventListener("click", (e) => {
             const btn = e.target.closest("[data-vbb-workflow]");
             if (!btn || !workflowRow.contains(btn)) return;
+            if (btn.disabled) return;
             const next = String(btn.dataset.vbbWorkflow || "").trim();
             if (!next || next === vbbWorkflow) return;
+            if (isVbbBatchMode() && next === "split") {
+              toast("多选时请用「整段视频」或「手动打点」");
+              return;
+            }
+            if (isVbbBatchMode() && vbbWorkflow === "manual") persistActiveVbbMarks();
             vbbWorkflow = next;
+            if (isVbbBatchMode() && next === "manual") {
+              const cur = vbbBatchFiles[vbbEditBatchIdx];
+              if (cur) loadItemVbbMarks(cur);
+            }
             if (next === "manual") pauseVbbPreview();
             syncVbbWorkflowUi();
             if (next === "manual") {
               const d = vbbVideoDuration();
               if (d >= VBB_LONG_VIDEO_SEC) {
                 toast("长视频：拖动定位即可，播放会占用更多内存");
+              } else if (isVbbBatchMode()) {
+                toast("打点仅作用于当前预览视频");
               }
             }
           });
