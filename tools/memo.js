@@ -876,16 +876,36 @@
     state.objectUrls.clear();
   }
 
-  async function ensureDirPermission(handle, mode = "readwrite") {
+  /**
+   * @param {FileSystemHandle} handle
+   * @param {"read"|"readwrite"} [mode]
+   * @param {{ interactive?: boolean }} [opts] interactive=false 时只 query，不弹授权
+   *   （boot 无用户手势时 requestPermission 可能永不 settle，页面会卡在「正在检测存储能力…」）
+   */
+  async function ensureDirPermission(handle, mode = "readwrite", opts = {}) {
     if (!handle) return false;
+    const interactive = opts.interactive !== false;
     try {
       const q = await handle.queryPermission?.({ mode });
       if (q === "granted") return true;
+      if (!interactive) return false;
       const r = await handle.requestPermission?.({ mode });
       return r === "granted";
     } catch (_) {
       return false;
     }
+  }
+
+  function withTimeout(promise, ms, fallback) {
+    let timer = 0;
+    return Promise.race([
+      Promise.resolve(promise).finally(() => {
+        if (timer) clearTimeout(timer);
+      }),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve(fallback), ms);
+      }),
+    ]);
   }
 
   async function getBlobsDir(create = true) {
@@ -4146,12 +4166,27 @@
     await connectDirectory(handle, { isNew: true });
   }
 
+  /** 用户手势下重新授权已保存的目录句柄；失败再走选目录 */
+  async function reconnectDirectory() {
+    if (state.dirHandle) {
+      try {
+        const ok = await ensureDirPermission(state.dirHandle, "readwrite", { interactive: true });
+        if (ok) {
+          await connectDirectory(state.dirHandle, { isNew: false });
+          return;
+        }
+      } catch (_) {}
+    }
+    await pickDirectory();
+  }
+
   async function tryRestoreDirHandle() {
     if (!canDirPicker()) return false;
     try {
       const handle = await idbGet("meta", "dirHandle");
       if (!handle) return false;
-      const ok = await ensureDirPermission(handle);
+      // boot 无手势：只 query。未授权则 dirPending，等用户点「重新连接」再 request
+      const ok = await ensureDirPermission(handle, "readwrite", { interactive: false });
       if (!ok) {
         state.dirHandle = handle;
         state.dirPending = true;
@@ -4174,14 +4209,24 @@
     } catch (_) {
       state.index = emptyIndex();
     }
-    const restored = await tryRestoreDirHandle();
-    if (!restored && !state.dirPending) state.mode = "idb";
+    // 先用 IndexedDB 索引画出列表，避免目录恢复挂死时一直停在「正在检测存储能力…」
+    // 停用剪贴板检测也不应挡住列表：此处与 memoCaptureEnabled 无关
     rebuildHashIndex();
     rebuildTagMap();
     invalidateCountCache();
-    await purgeExpiredTempItems();
+    renderAll();
+
+    const restored = await withTimeout(tryRestoreDirHandle(), 4000, false);
+    if (!restored && !state.dirPending && state.mode !== "dir") state.mode = "idb";
+    rebuildHashIndex();
+    rebuildTagMap();
+    invalidateCountCache();
+    try {
+      await withTimeout(purgeExpiredTempItems(), 3000, 0);
+    } catch (_) {}
     state.bootReady = true;
     renderAll();
+    // 剪贴板检测与列表加载解耦：停用只跳过这里
     maybeCaptureClipboard();
     if (isMemoActive()) queueMicrotask(() => focusQuickCapture());
     // 首屏不在备忘录时：等一次用户手势后再试读（浏览器常拦无手势的 clipboard.read）
@@ -6046,10 +6091,10 @@
     pickDirectory().catch((err) => setError(memoError, err.message || String(err)));
   });
   reconnectBtn?.addEventListener("click", () => {
-    pickDirectory().catch((err) => setError(memoError, err.message || String(err)));
+    reconnectDirectory().catch((err) => setError(memoError, err.message || String(err)));
   });
   $("#memo-reconnect-banner-btn")?.addEventListener("click", () => {
-    pickDirectory().catch((err) => setError(memoError, err.message || String(err)));
+    reconnectDirectory().catch((err) => setError(memoError, err.message || String(err)));
   });
   $("#memo-file")?.addEventListener("change", (e) => {
     ingestFiles(e.target.files, { offerTemp: false }).catch((err) => setError(memoError, err.message || String(err)));
@@ -7363,5 +7408,12 @@
     },
   };
 
-  const bootPromise = boot().catch((err) => setError(memoError, err.message || String(err)));
+  const bootPromise = boot().catch((err) => {
+    setError(memoError, err.message || String(err));
+    // 即使 boot 中途失败，也尽量用已加载的索引刷新 UI，勿永久停在「正在检测…」
+    try {
+      state.bootReady = true;
+      renderAll();
+    } catch (_) {}
+  });
 })();
