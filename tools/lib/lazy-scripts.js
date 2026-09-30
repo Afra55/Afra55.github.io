@@ -305,8 +305,23 @@
     if (EXTRA_PANEL_IDS.has(id) && !window.__devtoolsExtraCore) return false;
     if (id === "diff" && !(window.DiffCore && scriptLikelyLoaded("./diff.js"))) return false;
     if (TOOL_FILES[id] && !scriptLikelyLoaded(TOOL_FILES[id])) return false;
+    // memo.js 若在 #memo 挂载前执行会静默 return，脚本标签仍算 loaded，但 DevToolsMemo 未创建
+    if (id === "memo" && !window.DevToolsMemo) return false;
     if (id === "qrcode" && !window.DevToolsCodeScan && !scriptLikelyLoaded("./lib/code-scan.js")) return false;
     return true;
+  }
+
+  function bustToolScript(src) {
+    if (!src) return;
+    const key = withVersion(src);
+    scriptPromises.delete(key);
+    [...document.scripts].forEach((s) => {
+      try {
+        const attr = s.getAttribute("src") || "";
+        const same = withVersion(attr) === key || s.src.endsWith(src.replace(/^\.\//, ""));
+        if (same) s.remove();
+      } catch (_) {}
+    });
   }
 
   function withVersion(src) {
@@ -507,8 +522,13 @@
     const report = (ratio, label) => onProgress?.(Math.max(0, Math.min(1, Number(ratio) || 0)), label);
 
     if (!force && readyTools.has(id)) {
-      report(1, "已缓存");
-      return;
+      if (id === "memo" && !window.DevToolsMemo) {
+        readyTools.delete("memo");
+        bustToolScript(TOOL_FILES.memo);
+      } else {
+        report(1, "已缓存");
+        return;
+      }
     }
 
     // 依赖已在内存：静默标记，避免重复进度条
@@ -567,7 +587,23 @@
       if (id === "qrcode") {
         await loadScript("./lib/code-scan.js");
       }
+      // 备忘录：必须先有面板节点，否则 memo.js 会空跑且不再初始化
+      if (id === "memo") {
+        try {
+          await window.DevToolsPanels?.ensure?.("memo");
+        } catch (_) {}
+        if (scriptLikelyLoaded(TOOL_FILES.memo) && !window.DevToolsMemo) {
+          bustToolScript(TOOL_FILES.memo);
+          readyTools.delete("memo");
+        }
+      }
       await loadToolScript(id);
+      if (id === "memo" && !window.DevToolsMemo) {
+        // 仍未挂上：再强制重载一次（面板已在 DOM）
+        bustToolScript(TOOL_FILES.memo);
+        readyTools.delete("memo");
+        await loadToolScript(id);
+      }
     }
     report(1, "工具已就绪");
     markToolReady(id);

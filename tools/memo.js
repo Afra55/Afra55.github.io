@@ -256,7 +256,8 @@
       push(`image/${m[1].toLowerCase()}`, m[2]);
     }
     // 无 data: 前缀的长纯 base64（魔数可识别）
-    const bare = /(?:^|[^A-Za-z0-9+/=])((?:iVBORw0KGgo|/9j/|R0lGOD|UklGR|Qk)[A-Za-z0-9+/=\s]{200,})(?![A-Za-z0-9+/=])/g;
+    // 注意：JPEG 魔数含 `/9j/`，必须转义，否则会提前结束正则字面量（整文件 SyntaxError，备忘录永久卡在检测中）
+    const bare = /(?:^|[^A-Za-z0-9+/=])((?:iVBORw0KGgo|\/9j\/|R0lGOD|UklGR|Qk)[A-Za-z0-9+/=\s]{200,})(?![A-Za-z0-9+/=])/g;
     let bm;
     while ((bm = bare.exec(src))) {
       const mime = sniffImageMimeFromB64(bm[1]);
@@ -281,7 +282,7 @@
         b64,
       });
     }
-    const bare = /(?:^|[^A-Za-z0-9+/=])((?:iVBORw0KGgo|/9j/|R0lGOD|UklGR|Qk)[A-Za-z0-9+/=\s]{200,})(?![A-Za-z0-9+/=])/g;
+    const bare = /(?:^|[^A-Za-z0-9+/=])((?:iVBORw0KGgo|\/9j\/|R0lGOD|UklGR|Qk)[A-Za-z0-9+/=\s]{200,})(?![A-Za-z0-9+/=])/g;
     let bm;
     while ((bm = bare.exec(src))) {
       const lead = bm[0].length - bm[1].length;
@@ -576,17 +577,45 @@
   }
 
   let dbPromise = null;
-  function openDb() {
+  /** IndexedDB open 在个别浏览器/多标签下可能永不 settle；必须带超时，否则 boot 会永久卡在检测文案 */
+  function openDb({ timeoutMs = 2500 } = {}) {
     if (dbPromise) return dbPromise;
     dbPromise = new Promise((resolve, reject) => {
-      const req = indexedDB.open(DB_NAME, DB_VER);
+      let settled = false;
+      const fail = (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        dbPromise = null;
+        reject(err || new Error("打开备忘录数据库失败"));
+      };
+      const timer = setTimeout(() => fail(new Error("打开备忘录数据库超时")), Math.max(500, timeoutMs));
+      let req;
+      try {
+        req = indexedDB.open(DB_NAME, DB_VER);
+      } catch (err) {
+        fail(err);
+        return;
+      }
       req.onupgradeneeded = () => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta");
-        if (!db.objectStoreNames.contains("blobs")) db.createObjectStore("blobs");
-        if (!db.objectStoreNames.contains("index")) db.createObjectStore("index");
+        try {
+          const db = req.result;
+          if (!db.objectStoreNames.contains("meta")) db.createObjectStore("meta");
+          if (!db.objectStoreNames.contains("blobs")) db.createObjectStore("blobs");
+          if (!db.objectStoreNames.contains("index")) db.createObjectStore("index");
+        } catch (err) {
+          fail(err);
+        }
       };
       req.onsuccess = () => {
+        if (settled) {
+          try {
+            req.result?.close?.();
+          } catch (_) {}
+          return;
+        }
+        settled = true;
+        clearTimeout(timer);
         const db = req.result;
         db.onclose = () => {
           dbPromise = null;
@@ -599,9 +628,9 @@
         };
         resolve(db);
       };
-      req.onerror = () => {
-        dbPromise = null;
-        reject(req.error || new Error("打开备忘录数据库失败"));
+      req.onerror = () => fail(req.error || new Error("打开备忘录数据库失败"));
+      req.onblocked = () => {
+        /* 另一标签占着升级时可能 blocked；等超时兜底 */
       };
     });
     return dbPromise;
@@ -1204,8 +1233,18 @@
     if (exportOkBtn) exportOkBtn.textContent = share ? "导出并分享" : "导出";
   }
 
+  function paintStoreMetaFallback() {
+    const el = storeMeta || $("#memo-store-meta");
+    if (!el) return;
+    el.textContent = canDirPicker()
+      ? "存储：应用内数据。可在上方选择磁盘文件夹，清缓存后文件仍在。"
+      : "存储：应用内数据（手机端）。换机前请先「导出」备份。";
+  }
+
   function updateStoreMeta() {
-    if (!storeMeta) return;
+    // 面板可能晚于脚本挂载：勿只信 IIFE 启动时缓存的 null 引用
+    const el = storeMeta || $("#memo-store-meta");
+    if (!el) return;
     syncExportButtonLabels();
     const pickBtn = $("#memo-pick-dir");
     const switchDirBtn = $("#memo-switch-dir");
@@ -1231,11 +1270,11 @@
     const banner = $("#memo-reconnect-banner");
     if (banner) banner.hidden = !state.dirPending;
     if (state.dirPending && state.dirHandle) {
-      storeMeta.textContent = `曾绑定文件夹「${state.dirHandle.name}」，连接已失效。请重新连接同一路径以恢复。`;
+      el.textContent = `曾绑定文件夹「${state.dirHandle.name}」，连接已失效。请重新连接同一路径以恢复。`;
     } else if (state.mode === "dir" && state.dirHandle) {
-      storeMeta.textContent = `存储：文件夹「${state.dirHandle.name}」· 可更换并选择是否带走当前内容；原文件夹文件不会被删除。`;
+      el.textContent = `存储：文件夹「${state.dirHandle.name}」· 可更换并选择是否带走当前内容；原文件夹文件不会被删除。`;
     } else {
-      storeMeta.textContent = canDirPicker()
+      el.textContent = canDirPicker()
         ? "存储：应用内数据。可在上方选择磁盘文件夹，清缓存后文件仍在。"
         : "存储：应用内数据（手机端）。换机前请先「导出」备份。";
     }
@@ -3992,8 +4031,8 @@
     return { files, textBody, got };
   }
 
-  async function connectDirectory(handle, { isNew = false, migrateSnapshot = null, forceEmpty = false } = {}) {
-    const ok = await ensureDirPermission(handle);
+  async function connectDirectory(handle, { isNew = false, migrateSnapshot = null, forceEmpty = false, interactive = true } = {}) {
+    const ok = await ensureDirPermission(handle, "readwrite", { interactive });
     if (!ok) throw new Error("未获得目录权限");
     const existing = await readIndexFromDir(handle);
     state.dirHandle = handle;
@@ -4183,49 +4222,111 @@
   async function tryRestoreDirHandle() {
     if (!canDirPicker()) return false;
     try {
-      const handle = await idbGet("meta", "dirHandle");
+      const handle = await withTimeout(idbGet("meta", "dirHandle"), 2000, null);
       if (!handle) return false;
       // boot 无手势：只 query。未授权则 dirPending，等用户点「重新连接」再 request
-      const ok = await ensureDirPermission(handle, "readwrite", { interactive: false });
+      const ok = await withTimeout(
+        ensureDirPermission(handle, "readwrite", { interactive: false }),
+        1500,
+        false
+      );
       if (!ok) {
         state.dirHandle = handle;
         state.dirPending = true;
         state.mode = "idb";
         return false;
       }
-      await connectDirectory(handle, { isNew: false });
+      // 恢复路径禁止 requestPermission，避免无手势挂死
+      await connectDirectory(handle, { isNew: false, interactive: false });
       return true;
     } catch (_) {
       return false;
     }
   }
 
+  function finishBootUi() {
+    if (state.bootReady) {
+      try {
+        renderAll();
+      } catch (_) {
+        paintStoreMetaFallback();
+      }
+      return;
+    }
+    state.bootReady = true;
+    if (state.mode !== "dir") state.mode = "idb";
+    try {
+      rebuildHashIndex();
+      rebuildTagMap();
+      invalidateCountCache();
+      renderAll();
+    } catch (_) {
+      paintStoreMetaFallback();
+    }
+  }
+
   async function boot() {
+    // 打开面板后立刻离开「正在检测…」；任何后续 await 都不得永久挡住文案/列表
+    paintStoreMetaFallback();
+    const bootWatchdog = setTimeout(() => {
+      finishBootUi();
+    }, 1600);
+
     setError(memoError, "");
     loadTempDays();
+    const indexPromise = idbGet("index", "main").catch(() => null);
     try {
-      const saved = await idbGet("index", "main");
+      const saved = await withTimeout(indexPromise, 1500, null);
       if (saved) state.index = normalizeIndex(saved);
+      else {
+        // 超时或暂无索引：后台继续等 IDB，有数据再刷（不删用户数据）
+        void indexPromise.then((late) => {
+          if (!late) return;
+          state.index = normalizeIndex(late);
+          rebuildHashIndex();
+          rebuildTagMap();
+          invalidateCountCache();
+          renderAll();
+        });
+      }
     } catch (_) {
       state.index = emptyIndex();
+      void indexPromise.then((late) => {
+        if (!late) return;
+        state.index = normalizeIndex(late);
+        rebuildHashIndex();
+        rebuildTagMap();
+        invalidateCountCache();
+        renderAll();
+      });
     }
-    // 先用 IndexedDB 索引画出列表，避免目录恢复挂死时一直停在「正在检测存储能力…」
-    // 停用剪贴板检测也不应挡住列表：此处与 memoCaptureEnabled 无关
-    rebuildHashIndex();
-    rebuildTagMap();
-    invalidateCountCache();
-    renderAll();
 
-    const restored = await withTimeout(tryRestoreDirHandle(), 4000, false);
-    if (!restored && !state.dirPending && state.mode !== "dir") state.mode = "idb";
-    rebuildHashIndex();
-    rebuildTagMap();
-    invalidateCountCache();
-    try {
-      await withTimeout(purgeExpiredTempItems(), 3000, 0);
-    } catch (_) {}
-    state.bootReady = true;
-    renderAll();
+    // 列表与目录权限完全解耦：先用 IndexedDB 索引出列表
+    if (state.mode !== "dir") state.mode = "idb";
+    finishBootUi();
+    clearTimeout(bootWatchdog);
+
+    // 目录恢复放后台；失败/超时不影响已画出的列表
+    void (async () => {
+      try {
+        const restored = await withTimeout(tryRestoreDirHandle(), 4000, false);
+        if (!restored && !state.dirPending && state.mode !== "dir") state.mode = "idb";
+        rebuildHashIndex();
+        rebuildTagMap();
+        invalidateCountCache();
+        renderAll();
+      } catch (_) {
+        if (!state.dirPending && state.mode !== "dir") state.mode = "idb";
+        try {
+          renderAll();
+        } catch (__) {
+          paintStoreMetaFallback();
+        }
+      }
+    })();
+
+    void withTimeout(purgeExpiredTempItems(), 3000, 0).catch(() => {});
+
     // 剪贴板检测与列表加载解耦：停用只跳过这里
     maybeCaptureClipboard();
     if (isMemoActive()) queueMicrotask(() => focusQuickCapture());
@@ -7412,8 +7513,9 @@
     setError(memoError, err.message || String(err));
     // 即使 boot 中途失败，也尽量用已加载的索引刷新 UI，勿永久停在「正在检测…」
     try {
-      state.bootReady = true;
-      renderAll();
-    } catch (_) {}
+      finishBootUi();
+    } catch (_) {
+      paintStoreMetaFallback();
+    }
   });
 })();
