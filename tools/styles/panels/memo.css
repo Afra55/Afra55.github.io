@@ -1303,12 +1303,25 @@ body:has(#mdm.tool-panel.is-workspace-active) #memo-temp-prompt-stack {
 }
 
 .memo-text-edit-dlg {
-  max-width: min(96vw, 64rem) !important;
-  width: min(96vw, 64rem);
+  max-width: min(98vw, 1400px) !important;
+  width: min(98vw, 1400px);
+  height: min(96vh, 960px);
+  max-height: min(96vh, 960px);
+  margin: auto;
+  box-sizing: border-box;
+}
+
+.memo-text-edit-dlg .memo-dialog-body {
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 0;
+  box-sizing: border-box;
 }
 
 .memo-text-edit-dlg .area {
-  min-height: 22rem;
+  min-height: min(70vh, 36rem);
+  height: 100%;
   width: 100%;
   box-sizing: border-box;
   resize: vertical;
@@ -1723,12 +1736,12 @@ body:has(#mdm.tool-panel.is-workspace-active) #memo-temp-prompt-stack {
   box-sizing: border-box;
 }
 
-/* 桌面大弹层：约 94vw × 92vh，留遮罩边；手机近全屏 */
+/* 桌面大弹层：约 98vw × 96vh，只留少许边距表明是弹框；手机近全屏 */
 .memo-preview-dlg {
-  width: min(94vw, 1400px);
-  max-width: min(94vw, 1400px);
-  height: min(92vh, 960px);
-  max-height: min(92vh, 960px);
+  width: min(98vw, 1600px);
+  max-width: min(98vw, 1600px);
+  height: min(96vh, 1100px);
+  max-height: min(96vh, 1100px);
   margin: auto;
   padding: 0;
   border: 1px solid var(--line);
@@ -1738,8 +1751,8 @@ body:has(#mdm.tool-panel.is-workspace-active) #memo-temp-prompt-stack {
 }
 
 .memo-preview-dlg[data-preview-kind="text"] {
-  width: min(94vw, 1200px);
-  max-width: min(94vw, 1200px);
+  width: min(98vw, 1400px);
+  max-width: min(98vw, 1400px);
 }
 
 .memo-preview-dlg[data-preview-kind="audio"],
@@ -1747,19 +1760,19 @@ body:has(#mdm.tool-panel.is-workspace-active) #memo-temp-prompt-stack {
   width: min(92vw, 440px);
   max-width: min(92vw, 440px);
   height: auto;
-  max-height: min(92vh, 520px);
+  max-height: min(96vh, 520px);
 }
 
 .memo-preview-dlg[data-preview-kind="image"],
 .memo-preview-dlg[data-preview-kind="gif"] {
-  width: min(94vw, 1400px);
-  max-width: min(94vw, 1400px);
+  width: min(98vw, 1600px);
+  max-width: min(98vw, 1600px);
 }
 
 .memo-preview-dlg[data-preview-kind="video"],
 .memo-preview-dlg[data-preview-kind="pdf"] {
-  width: min(94vw, 1400px);
-  max-width: min(94vw, 1400px);
+  width: min(98vw, 1600px);
+  max-width: min(98vw, 1600px);
 }
 
 .memo-preview-dlg[open] {
@@ -2177,16 +2190,22 @@ body:has(#mdm.tool-panel.is-workspace-active) #memo-temp-prompt-stack {
 
 @media (max-width: 900px) {
   .memo-preview-dlg:not(.is-fs) {
-    width: min(96vw, 100%);
-    max-width: 96vw;
-    height: min(94vh, 100%);
-    max-height: 94dvh;
+    width: min(98vw, 100%);
+    max-width: 98vw;
+    height: min(96vh, 100%);
+    max-height: 96dvh;
     border-radius: 12px;
   }
   .memo-preview-dlg[data-preview-kind="audio"]:not(.is-fs),
   .memo-preview-dlg[data-preview-kind="file"]:not(.is-fs) {
     height: auto;
-    max-height: min(94dvh, 520px);
+    max-height: min(96dvh, 520px);
+  }
+  .memo-text-edit-dlg {
+    width: min(98vw, 100%) !important;
+    max-width: 98vw !important;
+    height: min(96dvh, 100%);
+    max-height: 96dvh;
   }
 }
 
@@ -2430,12 +2449,37 @@ body:has(#mdm.tool-panel.is-workspace-active) #memo-temp-prompt-stack {
   margin-top: 0.15rem;
 }
 
+.memo-inline-img-btn {
+  display: inline-block;
+  margin: 0.35rem 0.25rem 0.15rem 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+  vertical-align: middle;
+  max-width: min(100%, 14rem);
+}
+
 .memo-inline-img {
   display: block;
   max-width: 100%;
-  margin-top: 0.45rem;
+  max-height: 7.5rem;
+  width: auto;
+  height: auto;
+  object-fit: contain;
   border-radius: 10px;
   border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 80%, transparent);
+}
+
+.memo-inline-img-btn:focus-visible .memo-inline-img,
+.memo-inline-img-btn:hover .memo-inline-img {
+  outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent);
+  outline-offset: 2px;
+}
+
+#memo.is-memo-disabled .memo-capture-bar {
+  opacity: 0.72;
 }
 
 .memo-scroll-top-fab {

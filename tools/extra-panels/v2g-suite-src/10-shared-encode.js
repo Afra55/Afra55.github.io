@@ -31,29 +31,33 @@
       let v2gCompressAgain;
       let v2gCompressLevel;
       const MAX_V2G_SECONDS = 600;
-      // 黑盒体积上限：可配置并持久化（默认 6MB），全局通用
-      let V2G_BLACKBOX_MAX_BYTES = (M.blackboxUseMaxBytes ? M.blackboxUseMaxBytes() : 6 * 1024 * 1024);
-      /** 体积有余（约上限 5/6）时尝试加宽，把预算用在清晰度上 */
+      // 黑盒体积上限：可配置并持久化（默认 10MB），全局通用
+      let V2G_BLACKBOX_MAX_BYTES = (M.blackboxUseMaxBytes ? M.blackboxUseMaxBytes() : 10 * 1024 * 1024);
+      /** 体积有余（约上限 5/6 ≈ 8.3MB）时尝试加宽，把预算用在清晰度上 */
       let V2G_BLACKBOX_WIDEN_BYTES = Math.round(V2G_BLACKBOX_MAX_BYTES * (5 / 6));
       window.addEventListener("devtools:blackbox-size", () => {
         V2G_BLACKBOX_MAX_BYTES = M.blackboxUseMaxBytes ? M.blackboxUseMaxBytes() : V2G_BLACKBOX_MAX_BYTES;
         V2G_BLACKBOX_WIDEN_BYTES = Math.round(V2G_BLACKBOX_MAX_BYTES * (5 / 6));
       });
+      function blackboxBudgetLabel() {
+        return `${Math.max(1, Math.round(V2G_BLACKBOX_MAX_BYTES / (1024 * 1024)))}MB`;
+      }
       /** 黑盒：起点 420 宽；决策 15/12/10；宽度底线 380（录屏文字可读） */
       const V2G_BLACKBOX_MAX_FPS = 15;
       const V2G_BLACKBOX_FPS_LIST = [15, 12, 10];
-      /** 短片（≤20s）优先保 15fps；20–30s 先保宽再视预算冲 15 */
-      const V2G_BLACKBOX_SHORT_SPAN_SEC = 20;
-      /** 产品优化目标：单段 ≤30s 拉满；更长走切片，不额外放宽内存 */
-      const V2G_BLACKBOX_OPT_MAX_SPAN_SEC = 30;
-      /** 余量提帧：≤8s 且宽≥420、体积很松时，可冲到 20fps（源 fps≥20） */
+      /** 短片（≤24s）优先保 15fps；更长先保宽再视预算冲 15（10MB 预算可略放宽） */
+      const V2G_BLACKBOX_SHORT_SPAN_SEC = 24;
+      /** 产品优化目标：单段 ≤36s 拉满；更长走切片 */
+      const V2G_BLACKBOX_OPT_MAX_SPAN_SEC = 36;
+      /** 余量提帧：≤14s 且宽≥420、体积很松时，可冲到 20fps（源 fps≥20） */
       const V2G_BLACKBOX_HIGH_FPS = 20;
-      const V2G_BLACKBOX_HIGH_FPS_MAX_SPAN = 8;
+      const V2G_BLACKBOX_HIGH_FPS_MAX_SPAN = 14;
       const V2G_BLACKBOX_HIGH_FPS_MIN_W = 420;
       const V2G_BLACKBOX_BASE_W = 420;
         /** 收窄/加宽步进：要细，否则 420 一步就掉到 380，白白少给 20–40px */
         const V2G_BLACKBOX_WIDTH_STEP = 20;
-        const V2G_BLACKBOX_WIDTH_CAP = 720;
+        /** 10MB 预算下加宽上限抬到 900，短片更清晰 */
+        const V2G_BLACKBOX_WIDTH_CAP = 900;
         /** 黑盒编码的硬宽度上限（一键黑盒可放宽到这里，短视频预算用不完时可换更高清晰度） */
         const V2G_ENCODE_HARD_W = 1280;
         /** 智能分配的分辨率底线：某帧率若只能做到比这更窄，就换更低帧率 */
@@ -159,11 +163,10 @@
       const V2G_BLACKBOX_MAX_COMPRESS_ROUNDS = 10;
       /** 非最后一档：每轮轻lossy（对齐 -l），最多 3 轮不减色；多给高帧档机会再降 FPS */
       const V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS = 3;
-      const V2G_BLACKBOX_LONG_SPAN_SEC = 12;
-      /** 长视频的帧率上限：6MB 硬约束下帧率比宽度"贵"得多
-       *  （实测同宽 262px：24fps 11.20MB / 15fps 7.59MB / 12fps 6.13MB，差 45%；
-       *    而 15→24fps 的观感提升很弱，颗粒度几乎不变）
-       *  → 时长 ≥ LONG_SPAN_SEC 时封顶 15fps，把预算让给宽度（约 242px → 295px）。 */
+      const V2G_BLACKBOX_LONG_SPAN_SEC = 16;
+      /** 长视频的帧率上限：10MB 预算下帧率仍比宽度"贵"
+       *  （实测同宽：更高帧率体积涨得更快，观感提升有限）
+       *  → 时长 ≥ LONG_SPAN_SEC 时封顶 15fps，把预算让给宽度。 */
       const V2G_BLACKBOX_LONG_FPS_CAP = 15;
       const V2G_FFMPEG_WARN_BYTES = 40 * 1024 * 1024;
       /** 滑块默认上限；数字框可更高，滑块 max 会跟着扩展 */
@@ -1779,7 +1782,7 @@
       }
   
       /**
-       * 体积有余（<5MB）时按步进加宽；某档超过 6MB 则回退上一档。
+       * 体积有余（<5MB）时按步进加宽；某档超过预算 则回退上一档。
        * 加宽只重编码、不压缩，避免牺牲刚换来的清晰度。
        */
       async function tryWidenBlackboxCandidate(baseCandidate, fps) {
@@ -1842,9 +1845,9 @@
       }
   
       /**
-       * 单档：编码后若超 6MB 再压缩。
+       * 单档：编码后若超预算再压缩。
        * 非最后一档：轻柔 lossy（对齐 -l，不减色），不够则降帧。
-       * 最后一档：标准/强力多轮（每轮都有 lossy），尽量挤进 6MB。
+       * 最后一档：标准/强力多轮（每轮都有 lossy），尽量挤进预算。
        * @returns {{ candidate: object, underBudget: boolean }}
        */
       async function encodeAndCompressBlackboxTier(fps, tierIndex, tierTotal, maxW = V2G_BLACKBOX_BASE_W) {
@@ -1965,7 +1968,7 @@
           setV2gProgress(
             true,
             base + 0.98 * spanShare,
-            `黑盒 · ${fps}FPS 仍超 6MB`,
+            `黑盒 · ${fps}FPS 仍超 ${blackboxBudgetLabel()}`,
             { sub: `${formatKb(candidate.blob.size)} · 改试更低帧率` }
           );
         }
@@ -2154,7 +2157,7 @@
           new Promise((r) => setTimeout(() => r(0), 1500)),
         ]);
         // 加速后的内容运动更快：若沿用长视频的低帧率上限（≥12s 封顶 15fps）会显得「一卡一卡」。
-        // 加速时改用完整帧率候选（最高 24fps），让黑盒按 6MB 预算尽量挑更高帧率。
+        // 加速时改用完整帧率候选（最高 24fps），让黑盒按预算尽量挑更高帧率。
         const fpsList = speed > 1 ? blackboxFpsCandidates(srcFps) : resolveBlackboxFpsList(span / speed, srcFps);
         if (!fpsList.length) throw new Error("没有可用的黑盒帧率方案");
         const tried = [];
@@ -2404,7 +2407,8 @@
   
         // ---- 智能分配：标定一次 + 压缩一轮量出「压缩比」→ 目标只压 1 轮（画质最优）----
         // 实测：同体积下「收窄一点 + 只压 1 轮」比「宽度拉满 + 压 4 轮」PSNR 高 9dB。
-        const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.82);
+        // 10MB 预算：编码目标略抬高，少浪费余量；仍留一点给封装/抖动
+        const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.88);
         const srcCap = Math.min(srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK, V2G_ENCODE_HARD_W);
         // 宽度底线统一 380（含加速场景）：录屏文字可读优先，不再为帧率把宽度降到 200/290
         const floorW = Math.min(V2G_BLACKBOX_MIN_ACCEPT_W, srcCap);

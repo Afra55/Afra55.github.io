@@ -2689,9 +2689,17 @@
     if (wantOpen) {
       lastFocusBeforeDrawer = document.activeElement;
       window.clearTimeout(drawerFocusTimer);
+      // 手机勿自动 focus 搜索框（会弹键盘）；用户点搜索再聚焦
       drawerFocusTimer = window.setTimeout(() => {
         try {
-          (toolSearch || navCloseBtn || drawerFocusables()[0])?.focus?.({ preventScroll: true });
+          const coarse = isCoarsePointer() || isMobileDrawer();
+          if (coarse) {
+            (navCloseBtn || drawerFocusables().find((el) => el !== toolSearch) || navCloseBtn)?.focus?.(
+              { preventScroll: true }
+            );
+          } else {
+            (toolSearch || navCloseBtn || drawerFocusables()[0])?.focus?.({ preventScroll: true });
+          }
         } catch (_) {}
       }, 50);
       window.DevToolsTemp?.refresh?.();
@@ -3121,7 +3129,7 @@
 
   let routeSettled = Promise.resolve();
 
-  async function applyRoute({ skipRecent, keepDrawer, deferAssets = false } = {}) {
+  async function applyRoute({ skipRecent, keepDrawer, deferAssets = false, preserveScroll = false } = {}) {
     const gen = ++routeGen;
     const run = async () => {
     let route = parseRoute();
@@ -3248,10 +3256,16 @@
     try {
       window.DevToolsGiscus?.sync?.(currentTool);
     } catch (_) {}
-    // 手机分类拖拽排序后需保持抽屉打开
+    // 手机分类拖拽排序后需保持抽屉打开；后台回前台时保留滚动位置
     if (!keepDrawer) {
       setDrawerOpen(false);
-      window.scrollTo(0, 0);
+      if (!preserveScroll) {
+        window.scrollTo(0, 0);
+        try {
+          const shell = document.querySelector("main.shell");
+          if (shell) shell.scrollTop = 0;
+        } catch (_) {}
+      }
     }
 
     if (!window.__devtoolsShellBoot) {
@@ -4040,24 +4054,49 @@
     if (shouldRestoreLastTool()) restoreLastToolOnStartup();
     applyRoute();
   });
-  // Safari：bfcache / 后台回收后恢复时强制关闭菜单，并重新套用路由（手机常回到 start_url）
-  window.addEventListener("pageshow", () => {
+  function captureShellScroll() {
+    try {
+      const shell = document.querySelector("main.shell");
+      if (shell) return { el: shell, y: shell.scrollTop || 0, win: false };
+    } catch (_) {}
+    return { el: null, y: window.scrollY || window.pageYOffset || 0, win: true };
+  }
+
+  function restoreShellScroll(snap) {
+    if (!snap) return;
+    const apply = () => {
+      try {
+        if (snap.win) window.scrollTo(0, snap.y);
+        else if (snap.el) snap.el.scrollTop = snap.y;
+      } catch (_) {}
+    };
+    apply();
+    requestAnimationFrame(() => {
+      apply();
+      requestAnimationFrame(apply);
+    });
+  }
+
+  async function resumeFromBackground() {
+    const snap = captureShellScroll();
     forceDrawerClosed();
     if (shouldRestoreLastTool()) restoreLastToolOnStartup();
-    applyRoute({ skipRecent: true });
+    await applyRoute({ skipRecent: true, preserveScroll: true });
+    restoreShellScroll(snap);
     window.DevToolsDateRemind?.reload?.();
     window.DevToolsDateRemind?.checkOnVisit?.();
+  }
+
+  // Safari：bfcache / 后台回收后恢复时强制关闭菜单，并重新套用路由（不强制滚顶）
+  window.addEventListener("pageshow", () => {
+    resumeFromBackground().catch(() => {});
   });
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       persistActiveTool();
       return;
     }
-    forceDrawerClosed();
-    if (shouldRestoreLastTool()) restoreLastToolOnStartup();
-    applyRoute({ skipRecent: true });
-    window.DevToolsDateRemind?.reload?.();
-    window.DevToolsDateRemind?.checkOnVisit?.();
+    resumeFromBackground().catch(() => {});
   });
   window.addEventListener("pagehide", () => {
     persistActiveTool();

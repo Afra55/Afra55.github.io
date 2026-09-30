@@ -1,7 +1,7 @@
 <section id="vsplit" class="panel tool-panel" data-reveal role="tabpanel" aria-labelledby="media-tab-vsplit">
       <div class="panel-head">
         <h1>视频切分</h1>
-        <p>选择视频后可等分、按固定时长，或手动标记多段起止点；全程本地处理，不会上传。支持<strong>切成视频片段</strong>、批量转高清 GIF，并一键打包下载。<a href="#vbb">≤6MB 黑盒 GIF</a> 请用侧栏「黑盒」。</p>
+        <p>选择视频后可等分、按固定时长，或手动标记多段起止点；全程本地处理，不会上传。支持<strong>切成视频片段</strong>、批量转高清 GIF，并一键打包下载。<a href="#vbb">≤10MB 黑盒 GIF</a> 请用侧栏「黑盒」。</p>
       </div>
       <div class="panel-body">
         <div class="btn-row tool-actions">
@@ -111,7 +111,7 @@
         <div class="btn-row tool-actions" style="margin-top:1rem;flex-wrap:wrap">
           <button type="button" class="primary-btn" id="vsplit-cut" disabled title="把视频切成多个片段文件">切成视频</button>
           <button type="button" class="secondary-btn" id="vsplit-gif-hq" disabled>全部转高清 GIF</button>
-          <a class="ghost-btn" href="#vbb" title="预制参数 ≤6MB 黑盒">黑盒 GIF →</a>
+          <a class="ghost-btn" href="#vbb" title="预制参数 ≤10MB 黑盒">黑盒 GIF →</a>
           <button type="button" class="secondary-btn" id="vsplit-merge" disabled title="用 gifsicle 拼接各段 GIF；宽高不一致会自动统一尺寸并补边">合并 GIF</button>
           <button type="button" class="ghost-btn" id="vsplit-abort" hidden>取消</button>
           <button type="button" class="secondary-btn" id="vsplit-zip-video" disabled title="把已切好的视频片段打成一个 zip">打包下载全部视频</button>

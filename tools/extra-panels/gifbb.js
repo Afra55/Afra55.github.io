@@ -16,7 +16,7 @@
     bindAutoPackZipToggles, canEncodeStillWebp, gifQualityToWebpQuality, gifQualityToMaxColors,
     terminateFfmpegInstance, paintFfmpegWarmHint, prewarmFfmpegEngine, TOOLS_VERSION, GIF_TOOL_VERSION,
     AUTO_PACK_ZIP_KEY, blackboxUseMaxBytes, compressExistingGifToBlackbox,
-    blackboxMaxMb, setBlackboxMaxMb,
+    blackboxMaxMb, blackboxMaxLabel, setBlackboxMaxMb,
   } = M;
   const formatLocalPickMeta = K.formatLocalPickMeta;
   const attachLocalVideoPreview = K.attachLocalVideoPreview;
@@ -182,7 +182,7 @@
         gifbbList.hidden = false;
         const total = gifbbItems.reduce((s, it) => s + (it.file.size || 0), 0);
         if (gifbbMeta) {
-          gifbbMeta.textContent = `已选 ${gifbbItems.length} 个 · 共 ${formatKb(total)} · 自动开始压黑盒（≤6MB 的会跳过）`;
+          gifbbMeta.textContent = `已选 ${gifbbItems.length} 个 · 共 ${formatKb(total)} · 自动开始压黑盒（≤${blackboxMaxLabel()} 的会跳过）`;
         }
         gifbbItems.forEach((item, idx) => {
           const row = document.createElement("div");
@@ -397,12 +397,12 @@
                   ok++;
                 } else if (after >= before) {
                   // 压不动：绝不返回更大的文件，保留原图
-                  item.note = `未能压小 · 已保留原图（${formatKb(after)}，超 6MB）`;
-                  item.error = "未压进 6MB";
+                  item.note = `未能压小 · 已保留原图（${formatKb(after)}，超 ${blackboxMaxLabel()}）`;
+                  item.error = `未压进 ${blackboxMaxLabel()}`;
                   fail++;
                 } else {
-                  item.note = `仍 ${formatKb(after)}（超 6MB）· 已压 ${result.compressRounds} 轮`;
-                  item.error = "未压进 6MB";
+                  item.note = `仍 ${formatKb(after)}（超 ${blackboxMaxLabel()}）· 已压 ${result.compressRounds} 轮`;
+                  item.error = `未压进 ${blackboxMaxLabel()}`;
                   fail++;
                 }
               }

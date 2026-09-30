@@ -34,7 +34,7 @@
     gifQualityToGifskiQuality,
     terminateFfmpegInstance, paintFfmpegWarmHint, prewarmFfmpegEngine, scheduleFfmpegPrewarm,
     TOOLS_VERSION, GIF_TOOL_VERSION, compressExistingGifToBlackbox, blackboxUseMaxBytes,
-    blackboxMaxMb, setBlackboxMaxMb,
+    blackboxMaxMb, blackboxMaxLabel, setBlackboxMaxMb,
     readMediaPerfMode, setMediaPerfMode, mediaPerfProfile, isCoarsePointerMedia,
     AUTO_PACK_ZIP_KEY,
     preferShareToGallery, isAutoShareGalleryEnabled, shareMediaBlob, maybeAutoShareGallery,

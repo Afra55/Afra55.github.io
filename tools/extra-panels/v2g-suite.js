@@ -34,7 +34,7 @@
     gifQualityToGifskiQuality,
     terminateFfmpegInstance, paintFfmpegWarmHint, prewarmFfmpegEngine, scheduleFfmpegPrewarm,
     TOOLS_VERSION, GIF_TOOL_VERSION, compressExistingGifToBlackbox, blackboxUseMaxBytes,
-    blackboxMaxMb, setBlackboxMaxMb,
+    blackboxMaxMb, blackboxMaxLabel, setBlackboxMaxMb,
     readMediaPerfMode, setMediaPerfMode, mediaPerfProfile, isCoarsePointerMedia,
     AUTO_PACK_ZIP_KEY,
     preferShareToGallery, isAutoShareGalleryEnabled, shareMediaBlob, maybeAutoShareGallery,
@@ -78,29 +78,33 @@
       let v2gCompressAgain;
       let v2gCompressLevel;
       const MAX_V2G_SECONDS = 600;
-      // 黑盒体积上限：可配置并持久化（默认 6MB），全局通用
-      let V2G_BLACKBOX_MAX_BYTES = (M.blackboxUseMaxBytes ? M.blackboxUseMaxBytes() : 6 * 1024 * 1024);
-      /** 体积有余（约上限 5/6）时尝试加宽，把预算用在清晰度上 */
+      // 黑盒体积上限：可配置并持久化（默认 10MB），全局通用
+      let V2G_BLACKBOX_MAX_BYTES = (M.blackboxUseMaxBytes ? M.blackboxUseMaxBytes() : 10 * 1024 * 1024);
+      /** 体积有余（约上限 5/6 ≈ 8.3MB）时尝试加宽，把预算用在清晰度上 */
       let V2G_BLACKBOX_WIDEN_BYTES = Math.round(V2G_BLACKBOX_MAX_BYTES * (5 / 6));
       window.addEventListener("devtools:blackbox-size", () => {
         V2G_BLACKBOX_MAX_BYTES = M.blackboxUseMaxBytes ? M.blackboxUseMaxBytes() : V2G_BLACKBOX_MAX_BYTES;
         V2G_BLACKBOX_WIDEN_BYTES = Math.round(V2G_BLACKBOX_MAX_BYTES * (5 / 6));
       });
+      function blackboxBudgetLabel() {
+        return `${Math.max(1, Math.round(V2G_BLACKBOX_MAX_BYTES / (1024 * 1024)))}MB`;
+      }
       /** 黑盒：起点 420 宽；决策 15/12/10；宽度底线 380（录屏文字可读） */
       const V2G_BLACKBOX_MAX_FPS = 15;
       const V2G_BLACKBOX_FPS_LIST = [15, 12, 10];
-      /** 短片（≤20s）优先保 15fps；20–30s 先保宽再视预算冲 15 */
-      const V2G_BLACKBOX_SHORT_SPAN_SEC = 20;
-      /** 产品优化目标：单段 ≤30s 拉满；更长走切片，不额外放宽内存 */
-      const V2G_BLACKBOX_OPT_MAX_SPAN_SEC = 30;
-      /** 余量提帧：≤8s 且宽≥420、体积很松时，可冲到 20fps（源 fps≥20） */
+      /** 短片（≤24s）优先保 15fps；更长先保宽再视预算冲 15（10MB 预算可略放宽） */
+      const V2G_BLACKBOX_SHORT_SPAN_SEC = 24;
+      /** 产品优化目标：单段 ≤36s 拉满；更长走切片 */
+      const V2G_BLACKBOX_OPT_MAX_SPAN_SEC = 36;
+      /** 余量提帧：≤14s 且宽≥420、体积很松时，可冲到 20fps（源 fps≥20） */
       const V2G_BLACKBOX_HIGH_FPS = 20;
-      const V2G_BLACKBOX_HIGH_FPS_MAX_SPAN = 8;
+      const V2G_BLACKBOX_HIGH_FPS_MAX_SPAN = 14;
       const V2G_BLACKBOX_HIGH_FPS_MIN_W = 420;
       const V2G_BLACKBOX_BASE_W = 420;
         /** 收窄/加宽步进：要细，否则 420 一步就掉到 380，白白少给 20–40px */
         const V2G_BLACKBOX_WIDTH_STEP = 20;
-        const V2G_BLACKBOX_WIDTH_CAP = 720;
+        /** 10MB 预算下加宽上限抬到 900，短片更清晰 */
+        const V2G_BLACKBOX_WIDTH_CAP = 900;
         /** 黑盒编码的硬宽度上限（一键黑盒可放宽到这里，短视频预算用不完时可换更高清晰度） */
         const V2G_ENCODE_HARD_W = 1280;
         /** 智能分配的分辨率底线：某帧率若只能做到比这更窄，就换更低帧率 */
@@ -206,11 +210,10 @@
       const V2G_BLACKBOX_MAX_COMPRESS_ROUNDS = 10;
       /** 非最后一档：每轮轻lossy（对齐 -l），最多 3 轮不减色；多给高帧档机会再降 FPS */
       const V2G_BLACKBOX_SOFT_COMPRESS_ROUNDS = 3;
-      const V2G_BLACKBOX_LONG_SPAN_SEC = 12;
-      /** 长视频的帧率上限：6MB 硬约束下帧率比宽度"贵"得多
-       *  （实测同宽 262px：24fps 11.20MB / 15fps 7.59MB / 12fps 6.13MB，差 45%；
-       *    而 15→24fps 的观感提升很弱，颗粒度几乎不变）
-       *  → 时长 ≥ LONG_SPAN_SEC 时封顶 15fps，把预算让给宽度（约 242px → 295px）。 */
+      const V2G_BLACKBOX_LONG_SPAN_SEC = 16;
+      /** 长视频的帧率上限：10MB 预算下帧率仍比宽度"贵"
+       *  （实测同宽：更高帧率体积涨得更快，观感提升有限）
+       *  → 时长 ≥ LONG_SPAN_SEC 时封顶 15fps，把预算让给宽度。 */
       const V2G_BLACKBOX_LONG_FPS_CAP = 15;
       const V2G_FFMPEG_WARN_BYTES = 40 * 1024 * 1024;
       /** 滑块默认上限；数字框可更高，滑块 max 会跟着扩展 */
@@ -1826,7 +1829,7 @@
       }
   
       /**
-       * 体积有余（<5MB）时按步进加宽；某档超过 6MB 则回退上一档。
+       * 体积有余（<5MB）时按步进加宽；某档超过预算 则回退上一档。
        * 加宽只重编码、不压缩，避免牺牲刚换来的清晰度。
        */
       async function tryWidenBlackboxCandidate(baseCandidate, fps) {
@@ -1889,9 +1892,9 @@
       }
   
       /**
-       * 单档：编码后若超 6MB 再压缩。
+       * 单档：编码后若超预算再压缩。
        * 非最后一档：轻柔 lossy（对齐 -l，不减色），不够则降帧。
-       * 最后一档：标准/强力多轮（每轮都有 lossy），尽量挤进 6MB。
+       * 最后一档：标准/强力多轮（每轮都有 lossy），尽量挤进预算。
        * @returns {{ candidate: object, underBudget: boolean }}
        */
       async function encodeAndCompressBlackboxTier(fps, tierIndex, tierTotal, maxW = V2G_BLACKBOX_BASE_W) {
@@ -2012,7 +2015,7 @@
           setV2gProgress(
             true,
             base + 0.98 * spanShare,
-            `黑盒 · ${fps}FPS 仍超 6MB`,
+            `黑盒 · ${fps}FPS 仍超 ${blackboxBudgetLabel()}`,
             { sub: `${formatKb(candidate.blob.size)} · 改试更低帧率` }
           );
         }
@@ -2201,7 +2204,7 @@
           new Promise((r) => setTimeout(() => r(0), 1500)),
         ]);
         // 加速后的内容运动更快：若沿用长视频的低帧率上限（≥12s 封顶 15fps）会显得「一卡一卡」。
-        // 加速时改用完整帧率候选（最高 24fps），让黑盒按 6MB 预算尽量挑更高帧率。
+        // 加速时改用完整帧率候选（最高 24fps），让黑盒按预算尽量挑更高帧率。
         const fpsList = speed > 1 ? blackboxFpsCandidates(srcFps) : resolveBlackboxFpsList(span / speed, srcFps);
         if (!fpsList.length) throw new Error("没有可用的黑盒帧率方案");
         const tried = [];
@@ -2451,7 +2454,8 @@
   
         // ---- 智能分配：标定一次 + 压缩一轮量出「压缩比」→ 目标只压 1 轮（画质最优）----
         // 实测：同体积下「收窄一点 + 只压 1 轮」比「宽度拉满 + 压 4 轮」PSNR 高 9dB。
-        const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.82);
+        // 10MB 预算：编码目标略抬高，少浪费余量；仍留一点给封装/抖动
+        const targetBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.88);
         const srcCap = Math.min(srcW > 0 ? srcW : V2G_BLACKBOX_WIDTH_HARD_FALLBACK, V2G_ENCODE_HARD_W);
         // 宽度底线统一 380（含加速场景）：录屏文字可读优先，不再为帧率把宽度降到 200/290
         const floorW = Math.min(V2G_BLACKBOX_MIN_ACCEPT_W, srcCap);
@@ -2816,11 +2820,11 @@
           v2gCompressRound = result.compressRounds || 0;
           setV2gCompressEnabled(true);
           if (v2gMeta) {
-            v2gMeta.textContent = `黑盒已尽力 · 仍超过 6MB · 已保留 ${describeBlackboxCandidate(result)} · 建议缩短「最长秒数」`;
+            v2gMeta.textContent = `黑盒已尽力 · 仍超过 ${blackboxBudgetLabel()} · 已保留 ${describeBlackboxCandidate(result)} · 建议缩短「最长秒数」`;
           }
-          setV2gProgress(true, 1, `仍超 6MB · ${formatKb(result.blob.size)}`);
-          setError(v2gError, "自动压到 6MB 失败：片段可能过长或画面过复杂，请缩短「最长秒数」后重试");
-          toast(`黑盒未达 6MB，已保留 ${formatKb(result.blob.size)}`);
+          setV2gProgress(true, 1, `仍超 ${blackboxBudgetLabel()} · ${formatKb(result.blob.size)}`);
+          setError(v2gError, `自动压到 ${blackboxBudgetLabel()} 失败：片段可能过长或画面过复杂，请缩短「最长秒数」后重试`);
+          toast(`黑盒未达 ${blackboxBudgetLabel()}，已保留 ${formatKb(result.blob.size)}`);
         } catch (err) {
           if (String(err && err.message) !== "已取消") {
             setError(v2gError, err.message || String(err));
@@ -5634,7 +5638,7 @@
       const VBB_MANUAL_SEEK_DEBOUNCE_MS = 120;
       const VBB_SAMPLE_SPAN = 2.5;
       const VBB_SAFETY = 0.85;
-      /** 清晰优先：按接近 6MB 规划段长（略留余量，避免实测偶发超限） */
+      /** 清晰优先：按接近预算规划段长（略留余量，避免实测偶发超限） */
       const VBB_CLARITY_FILL = 0.97;
       const VBB_MAX_CLIPS = 50;
       const VBB_MIN_SPAN = 0.5;
@@ -6933,7 +6937,7 @@
             bits.push(`${formatKb(info.beforeSize)} → ${formatKb(blob.size)}`);
           }
           if (info.compressRounds > 0) bits.push(`已压 ${info.compressRounds} 轮`);
-          bits.push(blob.size <= V2G_BLACKBOX_MAX_BYTES ? "≤6MB" : "仍超 6MB");
+          bits.push(blob.size <= V2G_BLACKBOX_MAX_BYTES ? `≤${blackboxBudgetLabel()}` : `仍超 ${blackboxBudgetLabel()}`);
           vbbMergedMeta.textContent = bits.join(" · ");
         }
         if (vbbResultBlock) vbbResultBlock.hidden = false;
@@ -7040,7 +7044,7 @@
         return `${n}  ${formatVbbClock(c.start)}–${formatVbbClock(c.start + c.span)}`;
       }
   
-      /** 紧凑体积：6.00 MB → 6MB / 55.7 KB → 56KB */
+      /** 紧凑体积：6.00 MB → 10MB / 55.7 KB → 56KB */
       function fmtShortBytes(n) {
         const b = Math.max(0, Number(n) || 0);
         if (b >= 1024 * 1024) {
@@ -7362,7 +7366,7 @@
   
       /**
        * 对齐 encodeBlackboxClip 加宽：仅当当前体积 < 5MB 才尝试加宽，
-       * 并取仍 ≤6MB 的最大宽（加宽重编码不带压缩）。
+       * 并取仍 ≤预算的最大宽（加宽重编码不带压缩）。
        */
       function resolveVbbWidenWidthForEst(bps15, span, fps, srcW, startBytes, startW) {
         const budget = V2G_BLACKBOX_MAX_BYTES;
@@ -7384,7 +7388,7 @@
       /**
        * 对齐 encodeBlackboxClip：
        * - 长段/触顶帧从 12FPS 起
-       * - 每档先 420 宽；超限轻柔压缩；体积 <5MB 再加宽到 ≤6MB 最大宽
+       * - 每档先 420 宽；超限轻柔压缩；体积 <5MB 再加宽到 ≤预算最大宽
        */
       function estimateVbbBlackboxPlan(bps15, span, srcW) {
         const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
@@ -7473,9 +7477,9 @@
       function describeVbbExpect(mode, targetSpan, clarityMax, durationMax, maxW, estFps, compressRounds) {
         const fps = estFps || 15;
         const compressTip = compressRounds > 0 ? `，预计压${compressRounds}轮` : "";
-        if (mode === "clarity") return "不压缩 · ≤6MB";
-        if (mode === "sharp") return "缩短加宽 · 不压缩 · ≤6MB";
-        if (mode === "duration") return `优先保 15FPS（超限先轻压再 12→10）${compressTip} · ≤6MB`;
+        if (mode === "clarity") return `不压缩 · ≤${blackboxBudgetLabel()}`;
+        if (mode === "sharp") return `缩短加宽 · 不压缩 · ≤${blackboxBudgetLabel()}`;
+        if (mode === "duration") return `优先保 15FPS（超限先轻压再 12→10）${compressTip} · ≤${blackboxBudgetLabel()}`;
         if (targetSpan < clarityMax - 0.05) {
           return `短于清晰档 · 目标宽${maxW || "?"} · 不压缩`;
         }
@@ -7483,7 +7487,7 @@
         if (targetSpan <= durationMax + 0.05) {
           return `超过清晰安全时长 · 走黑盒（预计 ${fps}FPS${compressTip}）`;
         }
-        return `目标偏长 · 走黑盒（预计 ${fps}FPS${compressTip}），个别段可能接近 6MB 上限`;
+        return `目标偏长 · 走黑盒（预计 ${fps}FPS${compressTip}），个别段可能接近 ${blackboxBudgetLabel()} 上限`;
       }
   
       function annotateVbbPlan(plan, bps15, srcW) {
@@ -7515,7 +7519,7 @@
         }
         if ((encode === "clarity" || encode === "sharp") && estBytes > V2G_BLACKBOX_MAX_BYTES) {
           unsafe = true;
-          note = `${note} · 预估超 6MB`;
+          note = `${note} · 预估超 ${blackboxBudgetLabel()}`;
         }
         if ((encode === "clarity" || encode === "sharp") && typicalSpan > plan.maxSpan * 1.05) {
           unsafe = true;
@@ -7583,7 +7587,7 @@
           duration,
           targetSpan,
           bps15,
-          `宽${maxW} · 缩短加宽 · 不压缩 · ≤6MB`,
+          `宽${maxW} · 缩短加宽 · 不压缩 · ≤${blackboxBudgetLabel()}`,
           { encode: "sharp", maxW, srcW }
         );
       }
@@ -7598,7 +7602,7 @@
           duration,
           clarityMax,
           bps15,
-          "宽420 · 贴紧6MB · 不压缩",
+          `宽420 · 贴紧${blackboxBudgetLabel()} · 不压缩`,
           { encode: "clarity", maxW: V2G_BLACKBOX_BASE_W, srcW }
         );
         vbbAnalysis.sharp = makeSharpPlan(duration, bps15, srcW, clarityMax);
@@ -8829,7 +8833,7 @@
             duration,
             clarityMax,
             bps15,
-            "宽420 · 贴紧6MB · 不压缩",
+            `宽420 · 贴紧${blackboxBudgetLabel()} · 不压缩`,
             { encode: "clarity", maxW: V2G_BLACKBOX_BASE_W, srcW }
           );
           const sharp = makeSharpPlan(duration, bps15, srcW, clarityMax);
@@ -9065,7 +9069,7 @@
               clip.gifBlob = encoded.blob;
               clip.gifNote = bits.join(" · ");
               if (encoded.blob.size > V2G_BLACKBOX_MAX_BYTES) {
-                clip.error = `仍超 6MB（${formatKb(encoded.blob.size)}）`;
+                clip.error = `仍超 ${blackboxBudgetLabel()}（${formatKb(encoded.blob.size)}）`;
               }
               if (i === 0) firstSeed = snapshotVbbEncodeSeed(encoded, { usedWidth, usedFallback });
               if (!clip.error) {
@@ -9176,7 +9180,7 @@
             if (!compressed.ok) {
               setError(
                 vbbError,
-                `合并后仍超 6MB（${formatKb(blob.size)}）· 已压 ${compressRounds} 轮，建议减少段数或缩短片段`
+                `合并后仍超 ${blackboxBudgetLabel()}（${formatKb(blob.size)}）· 已压 ${compressRounds} 轮，建议减少段数或缩短片段`
               );
             }
           }
@@ -9185,9 +9189,9 @@
             compressRounds,
             downloadName: "blackbox-merged.gif",
           });
-          const okTip = blob.size <= V2G_BLACKBOX_MAX_BYTES ? "≤6MB" : "仍超 6MB";
+          const okTip = blob.size <= V2G_BLACKBOX_MAX_BYTES ? `≤${blackboxBudgetLabel()}` : `仍超 ${blackboxBudgetLabel()}`;
           setVbbProgress(true, 1, `合并完成 · ${formatKb(blob.size)} · ${okTip}`);
-          toast(blob.size <= V2G_BLACKBOX_MAX_BYTES ? "已合并为一条 GIF" : `已合并，但体积仍超 6MB（${formatKb(blob.size)}）`);
+          toast(blob.size <= V2G_BLACKBOX_MAX_BYTES ? "已合并为一条 GIF" : `已合并，但体积仍超 ${blackboxBudgetLabel()}（${formatKb(blob.size)}）`);
         } catch (err) {
           setVbbProgress(false, 0, "");
           setError(vbbError, err.message || String(err));

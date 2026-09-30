@@ -7,38 +7,37 @@
           <div class="field-block">
             <h2 class="subhead">生成</h2>
             <label for="qr-text">内容</label>
-            <textarea id="qr-text" class="mono area" rows="4" placeholder="输入文本或网址，例如 https://afra55.github.io/tools/" spellcheck="false"></textarea>
+            <textarea id="qr-text" class="mono area" rows="4" placeholder="输入文本或网址" spellcheck="false"></textarea>
             <div class="btn-row tool-actions">
               <button type="button" class="primary-btn" id="qr-gen">生成</button>
             </div>
-            <p class="hint tight">长文本会自动放大二维码（约 360～720px），方便手机扫；仍建议控制在约 300 字内更稳。</p>
             <div id="qr-box-wrap" class="qr-box-wrap" aria-live="polite"></div>
             <p class="hint tight" id="qr-meta"></p>
             <p class="error" id="qr-error" hidden></p>
           </div>
 
           <div class="field-block">
-            <h2 class="subhead">识别</h2>
+            <h2 class="subhead">扫码</h2>
             <div class="btn-row tool-actions">
-              <a class="primary-btn" href="./qrscan/" target="_blank" rel="noopener" title="独立扫码页，可单独加到安卓桌面">打开独立扫码（可加桌面）</a>
-              <label class="file-btn" for="qr-file">选择图片识别</label>
+              <button type="button" class="primary-btn" id="qr-cam-start" hidden>继续扫</button>
+              <button type="button" class="ghost-btn" id="qr-cam-stop" hidden>关闭</button>
+              <label class="file-btn" for="qr-file">选图</label>
               <input id="qr-file" type="file" accept="image/*" hidden />
-              <button type="button" class="secondary-btn" id="qr-cam-start" hidden>打开摄像头</button>
-              <button type="button" class="ghost-btn" id="qr-cam-stop" hidden>关闭摄像头</button>
+              <a class="ghost-btn" href="./qrscan/" target="_blank" rel="noopener">独立页</a>
             </div>
-            <p class="hint">进入本面板会尝试直接打开后置摄像头。安卓桌面图标：上方「独立扫码」→ Chrome ⋮ → 安装应用。需 HTTPS 授权。</p>
-            <p class="hint tight" id="qr-support-hint">支持：QR、EAN-13/8、UPC-A/E、Code128/39/93、Codabar、ITF、Data Matrix、PDF417、Aztec。不支持：MaxiCode / 部分 GS1 DataBar。</p>
-            <div class="qr-scan-wrap">
+            <div class="qr-scan-wrap" id="qr-scan-stage">
               <video id="qr-video" class="qr-video" playsinline webkit-playsinline muted hidden></video>
+              <div class="qr-scan-reticle" aria-hidden="true"></div>
               <canvas id="qr-scan-canvas" hidden></canvas>
-              <img id="qr-scan-preview" class="img-preview" alt="待识别图片预览" hidden />
+              <img id="qr-scan-preview" class="img-preview" alt="" hidden />
             </div>
-            <div class="label-row" style="margin-top:0.8rem">
-              <label for="qr-decoded">识别结果</label>
+            <div class="label-row" style="margin-top:0.8rem" id="qr-result-head" hidden>
+              <label for="qr-decoded">扫描结果</label>
               <button type="button" class="copy-btn" data-copy-value="qr-decoded">复制</button>
             </div>
-            <textarea id="qr-decoded" class="mono area" rows="4" readonly placeholder="识别结果会显示在这里" spellcheck="false"></textarea>
-            <p class="hint" id="qr-decode-meta"></p>
+            <textarea id="qr-decoded" class="mono area" rows="4" readonly placeholder="" spellcheck="false" hidden></textarea>
+            <p class="hint" id="qr-decode-meta" hidden></p>
+            <p class="hint tight" id="qr-support-hint" hidden></p>
             <p class="error" id="qr-decode-error" hidden></p>
           </div>
         </div>

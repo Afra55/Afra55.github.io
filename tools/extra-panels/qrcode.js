@@ -273,11 +273,27 @@
       return qrLibsReady;
     }
   
+    function showResultUi(on) {
+      const stage = $("#qr-scan-stage");
+      const head = $("#qr-result-head");
+      stage?.classList.toggle("is-result-only", !!on);
+      if (head) head.hidden = !on;
+      if (qrDecoded) qrDecoded.hidden = !on;
+      if (qrDecodeMeta) qrDecodeMeta.hidden = true;
+      if (qrCamStart) {
+        qrCamStart.hidden = !on;
+        qrCamStart.textContent = "继续扫";
+      }
+      if (qrCamStop) qrCamStop.hidden = true;
+    }
+
     function showDecoded(text, metaText) {
-      qrDecoded.value = text;
-      qrDecodeMeta.textContent = metaText || "";
+      if (qrDecoded) qrDecoded.value = text;
+      if (qrDecodeMeta) qrDecodeMeta.textContent = "";
       setError(qrDecodeError, "");
+      showResultUi(true);
       toast("已识别");
+      void metaText;
     }
   
     async function decodeFromImageElement(img, metaText) {
@@ -321,7 +337,11 @@
         qrVideo.hidden = true;
       }
       if (qrCamStop) qrCamStop.hidden = true;
-      if (qrCamStart) qrCamStart.hidden = false;
+      const hasResult = qrDecoded && !qrDecoded.hidden && String(qrDecoded.value || "").trim();
+      if (qrCamStart) {
+        qrCamStart.hidden = !hasResult;
+        qrCamStart.textContent = hasResult ? "继续扫" : "扫码";
+      }
     }
 
     function drawScanFrame() {
@@ -372,6 +392,8 @@
     async function startCamera() {
       qrUserStopped = false;
       setError(qrDecodeError, "");
+      if (qrDecoded) qrDecoded.value = "";
+      showResultUi(false);
       await ensureScanLibs();
       try {
         stopCamera();
@@ -386,11 +408,14 @@
         qrScanning = true;
         if (qrCamStart) qrCamStart.hidden = true;
         if (qrCamStop) qrCamStop.hidden = false;
-        qrDecodeMeta.textContent = `摄像头扫描中…对准条码/二维码（${Scan().engineStatusText()}）`;
+        if (qrDecodeMeta) qrDecodeMeta.textContent = "";
         scanCameraFrame();
       } catch (err) {
         stopCamera();
-        if (qrCamStart) qrCamStart.hidden = false;
+        if (qrCamStart) {
+          qrCamStart.hidden = false;
+          qrCamStart.textContent = "扫码";
+        }
         setError(qrDecodeError, Scan()?.cameraErrorMessage(err) || err.message || String(err));
       }
     }
@@ -427,13 +452,15 @@
   
     qrCamStop?.addEventListener("click", () => {
       stopCamera({ fromUser: true });
-      qrDecodeMeta.textContent = "已关闭摄像头";
     });
   
     window.addEventListener("pagehide", () => stopCamera());
 
     startCamera().catch(() => {
-      if (qrCamStart) qrCamStart.hidden = false;
+      if (qrCamStart) {
+        qrCamStart.hidden = false;
+        qrCamStart.textContent = "扫码";
+      }
     });
     });
 

@@ -8,7 +8,7 @@
   <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="扫码" />
-  <meta name="description" content="本地摄像头扫二维码与条形码，可单独加到安卓桌面" />
+  <meta name="description" content="本地摄像头扫二维码与条形码" />
   <link rel="manifest" href="./manifest.webmanifest" />
   <link rel="apple-touch-icon" href="../icons/icon-180.png" />
   <link rel="icon" href="../icons/icon-192.png" />
@@ -17,52 +17,39 @@
 </head>
 <body>
   <header class="top">
-    <div class="brand">
-      <strong>扫码</strong>
-      <span>本地识别 · 不上传</span>
-    </div>
+    <strong class="brand-title">扫码</strong>
     <div class="top-actions">
-      <button type="button" class="primary" id="qs-start" hidden>开始扫码</button>
-      <button type="button" class="ghost" id="qs-stop" hidden>关闭摄像头</button>
-      <label class="file-btn ghost">选图识别<input id="qs-file" type="file" accept="image/*" /></label>
+      <button type="button" class="primary" id="qs-start" hidden>扫码</button>
+      <button type="button" class="ghost" id="qs-stop" hidden>关闭</button>
+      <label class="file-btn ghost">选图<input id="qs-file" type="file" accept="image/*" /></label>
     </div>
   </header>
 
-  <section class="stage" aria-label="取景框">
+  <section class="stage" id="qs-stage" aria-label="扫描框">
     <video id="qs-video" playsinline webkit-playsinline muted hidden></video>
-    <img id="qs-preview" alt="待识别图片" hidden />
+    <img id="qs-preview" alt="" hidden />
     <div class="reticle" aria-hidden="true"></div>
     <canvas id="qs-canvas" hidden></canvas>
   </section>
 
-  <p class="hint" id="qs-status">正在打开后置摄像头…</p>
-  <p class="hint support" id="qs-support"></p>
   <p class="hint error" id="qs-error" hidden></p>
+  <p class="hint" id="qs-status" hidden></p>
+  <p class="hint support" id="qs-support" hidden></p>
 
-  <section class="panel" id="qs-result" hidden>
-    <label for="qs-text">识别结果</label>
+  <section class="panel result" id="qs-result" hidden>
+    <label for="qs-text">扫描结果</label>
     <textarea id="qs-text" readonly spellcheck="false"></textarea>
     <div class="row">
       <button type="button" class="primary" id="qs-copy">复制</button>
       <button type="button" id="qs-open" hidden>打开链接</button>
-      <button type="button" class="ghost" id="qs-again">继续扫</button>
+      <button type="button" class="primary" id="qs-again">继续扫</button>
     </div>
   </section>
 
-  <section class="panel install-card" id="qs-install">
-    <h2>加到安卓桌面</h2>
-    <p class="hint" id="qs-install-hint">用 Chrome 打开本页后，可把「扫码」单独装成桌面图标。</p>
-    <ol>
-      <li>优先点下方「添加到桌面」（Chrome 弹出安装时会出现）</li>
-      <li>若没有按钮：右上角 <strong>⋮</strong> → <strong>安装应用</strong> / <strong>添加到主屏幕</strong></li>
-      <li>桌面出现「扫码」图标后，点开即扫，不再进工具站</li>
-    </ol>
-    <div class="row">
-      <button type="button" class="primary" id="qs-install-btn" hidden>添加到桌面</button>
-    </div>
+  <section class="panel install-card" id="qs-install" hidden>
+    <button type="button" class="primary" id="qs-install-btn" hidden>添加到桌面</button>
+    <p class="hint" id="qs-install-hint" hidden></p>
   </section>
-
-  <p class="footer-link">也可从工具站 <a href="../#qrcode">二维码</a> 页进入本扫码器</p>
 
   <script src="./app.js" defer></script>
 </body>

@@ -170,6 +170,20 @@
 
   // 自动从文本 #标签 建标签：默认关闭，避免误把 #色值/#标题 等变成标签
   const AUTO_TAG_KEY = "devtools-memo-auto-tags-v1";
+  // 备忘录总开关：停用后不检测剪贴板；手机默认停用，桌面默认启用
+  const MEMO_ENABLED_KEY = "devtools-memo-enabled-v1";
+  function memoCaptureEnabled() {
+    try {
+      const v = localStorage.getItem(MEMO_ENABLED_KEY);
+      if (v === "1" || v === "true") return true;
+      if (v === "0" || v === "false") return false;
+    } catch (_) {}
+    return !isLikelyMobile();
+  }
+  function setMemoCaptureEnabled(on) {
+    writeBoolPref(MEMO_ENABLED_KEY, !!on);
+    return memoCaptureEnabled();
+  }
   function memoAutoTagsEnabled() {
     try {
       return localStorage.getItem(AUTO_TAG_KEY) === "1";
@@ -202,17 +216,92 @@
     return out;
   }
 
-  // 识别内嵌 data:image base64（可能被引号/括号/【】包裹），返回可渲染的图片
+  function sniffImageMimeFromB64(b64) {
+    const s = String(b64 || "").replace(/\s+/g, "");
+    if (s.startsWith("iVBORw0KGgo")) return "image/png";
+    if (s.startsWith("/9j/")) return "image/jpeg";
+    if (s.startsWith("R0lGOD")) return "image/gif";
+    if (s.startsWith("UklGR")) return "image/webp";
+    if (s.startsWith("Qk")) return "image/bmp";
+    return "";
+  }
+
+  // 识别内嵌 data:image / 可识别的长纯 base64 图片段，返回可渲染的图片
   function extractDataImages(text) {
     const out = [];
-    const re = /data:image\/(png|jpe?g|gif|webp|bmp|svg\+xml);base64,([A-Za-z0-9+/=\s]+)/gi;
+    const seen = new Set();
+    const push = (mime, b64) => {
+      const nb = normalizeB64(b64);
+      if (nb.length < 64) return;
+      const key = `${mime}:${nb.slice(0, 48)}:${nb.length}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      out.push({ mime, b64: nb });
+    };
+    const src = String(text || "");
+    const re = /data:image\/(png|jpe?g|gif|webp|bmp|svg\+xml);base64,([A-Za-z0-9+/=\s]{64,})/gi;
     let m;
-    while ((m = re.exec(String(text || "")))) {
-      const b64 = normalizeB64(m[2]);
-      if (b64.length < 24) continue;
-      out.push({ mime: `image/${m[1].toLowerCase()}`, b64 });
+    while ((m = re.exec(src))) {
+      push(`image/${m[1].toLowerCase()}`, m[2]);
+    }
+    // 无 data: 前缀的长纯 base64（魔数可识别）
+    const bare = /(?:^|[^A-Za-z0-9+/=])((?:iVBORw0KGgo|/9j/|R0lGOD|UklGR|Qk)[A-Za-z0-9+/=\s]{200,})(?![A-Za-z0-9+/=])/g;
+    let bm;
+    while ((bm = bare.exec(src))) {
+      const mime = sniffImageMimeFromB64(bm[1]);
+      if (mime) push(mime, bm[1]);
     }
     return out;
+  }
+
+  /** 把文本里的 base64 图片段替换为紧挨着的缩略图，普通文字照常显示 */
+  function renderTextWithInlineImages(raw, q) {
+    const src = String(raw || "");
+    const hits = [];
+    const re = /data:image\/(png|jpe?g|gif|webp|bmp|svg\+xml);base64,([A-Za-z0-9+/=\s]{64,})/gi;
+    let m;
+    while ((m = re.exec(src))) {
+      const b64 = normalizeB64(m[2]);
+      if (b64.length < 64) continue;
+      hits.push({
+        start: m.index,
+        end: m.index + m[0].length,
+        mime: `image/${m[1].toLowerCase()}`,
+        b64,
+      });
+    }
+    const bare = /(?:^|[^A-Za-z0-9+/=])((?:iVBORw0KGgo|/9j/|R0lGOD|UklGR|Qk)[A-Za-z0-9+/=\s]{200,})(?![A-Za-z0-9+/=])/g;
+    let bm;
+    while ((bm = bare.exec(src))) {
+      const lead = bm[0].length - bm[1].length;
+      const start = bm.index + lead;
+      const end = start + bm[1].length;
+      const mime = sniffImageMimeFromB64(bm[1]);
+      if (!mime) continue;
+      hits.push({ start, end, mime, b64: normalizeB64(bm[1]) });
+    }
+    hits.sort((a, b) => a.start - b.start);
+    const merged = [];
+    for (const h of hits) {
+      const last = merged[merged.length - 1];
+      if (last && h.start < last.end) continue;
+      merged.push(h);
+    }
+    if (!merged.length) {
+      return { html: highlightEscaped(escapeHtml(src), q), hasImg: false };
+    }
+    let html = "";
+    let cursor = 0;
+    for (const h of merged) {
+      if (h.start > cursor) {
+        html += highlightEscaped(escapeHtml(src.slice(cursor, h.start)), q);
+      }
+      const srcUrl = `data:${h.mime};base64,${h.b64}`;
+      html += `<button type="button" class="memo-inline-img-btn" title="点击查看大图"><img class="memo-inline-img" alt="内嵌图片" src="${escapeAttr(srcUrl)}" loading="lazy" decoding="async" /></button>`;
+      cursor = h.end;
+    }
+    if (cursor < src.length) html += highlightEscaped(escapeHtml(src.slice(cursor)), q);
+    return { html, hasImg: true };
   }
 
   function highlightEscaped(escaped, query) {
@@ -1776,17 +1865,19 @@
       };
     }
     if (lineCount <= TEXT_CARD_LINES) {
+      const inline = renderTextWithInlineImages(raw, q);
       return {
-        html: highlightEscaped(escapeHtml(raw), q),
+        html: inline.html,
         truncated: false,
         lineCount,
-        title: "拖选复制 · 双击编辑",
+        title: inline.hasImg ? "文字旁可点缩略图看大图 · 双击编辑" : "拖选复制 · 双击编辑",
         md: false,
       };
     }
     const shown = lines.slice(0, TEXT_CARD_LINES).join("\n");
+    const inline = renderTextWithInlineImages(shown, q);
     return {
-      html: `${highlightEscaped(escapeHtml(shown), q)}\n<span class="memo-text-more">…共 ${lineCount} 行，点此预览全文</span>`,
+      html: `${inline.html}\n<span class="memo-text-more">…共 ${lineCount} 行，点此预览全文</span>`,
       truncated: true,
       lineCount,
       title: `已截断前 ${TEXT_CARD_LINES} 行 · 单击预览全文 · 双击编辑`,
@@ -2312,12 +2403,19 @@
       const full = item.textPreview || "";
       const formatted = formatCardTextBody(full);
       const links = allHttpUrls(full).map((u) => linkCardHtml(u)).join("");
-      const inlineImgs = extractDataImages(full)
-        .map((d) => `<img class="memo-inline-img" alt="内嵌图片" src="data:${d.mime};base64,${d.b64}" loading="lazy" decoding="async" />`)
-        .join("");
+      // Markdown 模式：正文不拆段时，在文末补缩略图；纯文本模式已在 formatCardTextBody 内联
+      const trailingImgs =
+        formatted.md
+          ? extractDataImages(full)
+              .map(
+                (d) =>
+                  `<button type="button" class="memo-inline-img-btn" title="点击查看大图"><img class="memo-inline-img" alt="内嵌图片" src="data:${d.mime};base64,${d.b64}" loading="lazy" decoding="async" /></button>`
+              )
+              .join("")
+          : "";
       const textTag = formatted.md ? "div" : "pre";
       const textCls = `memo-text mono${formatted.truncated ? " is-truncated" : ""}${formatted.md ? " is-md" : ""}`;
-      body = `<${textTag} class="${textCls}" data-memo-expand="${item.id}" draggable="false" title="${escapeHtml(formatted.title)}">${formatted.html}</${textTag}>${inlineImgs}${links}`;
+      body = `<${textTag} class="${textCls}" data-memo-expand="${item.id}" draggable="false" title="${escapeHtml(formatted.title)}">${formatted.html}</${textTag}>${trailingImgs}${links}`;
     } else if (item.type === "image" || item.type === "gif") {
       const badge = item.type === "gif" ? `<span class="memo-anim-badge">动图</span>` : "";
       body = `<div class="memo-thumb-wrap memo-media-hit" data-memo-preview="${item.id}">${badge}<img class="memo-thumb" data-memo-thumb="${item.id}" ${memoMediaAttrs(item.id)} alt="" decoding="async" /></div>`;
@@ -3739,6 +3837,7 @@
 
   function maybeCaptureClipboard() {
     if (!state.bootReady) return;
+    if (!memoCaptureEnabled()) return;
     if (shouldSkipClipCapture()) return;
     if (isIOS()) {
       if (state.clipPendingHint) showClipOffer();
@@ -5487,6 +5586,36 @@
     return /\.(txt|md|markdown|json|csv|log|xml|html?|css|js|ts|yml|yaml|ini|conf)$/i.test(name);
   }
 
+  function openInlineDataImage(dataUrl) {
+    if (!lightbox || !dataUrl) return;
+    setError(memoError, "");
+    hidePreviewParts();
+    revokePreviewUrl();
+    lightbox.classList.remove("is-fs");
+    const showEl = (el) => {
+      if (!el) return;
+      el.hidden = false;
+      el.style.display = "";
+      el.removeAttribute("hidden");
+    };
+    setPreviewChrome(
+      { name: "内嵌图片", type: "image", size: String(dataUrl).length, mime: "image/*" },
+      { kind: "image", canFs: true, canNewTab: true, canDl: true }
+    );
+    bindImageZoom();
+    showEl(zoomWrap);
+    showEl(lightboxImg);
+    lightboxImg.alt = "内嵌图片预览";
+    const afterLoad = () => {
+      requestAnimationFrame(() => requestAnimationFrame(() => fitImageZoom()));
+    };
+    if (lightboxImg.complete && lightboxImg.naturalWidth) afterLoad();
+    else lightboxImg.addEventListener("load", afterLoad, { once: true });
+    lightboxImg.src = dataUrl;
+    lightbox.showModal();
+    if (lightboxImg.complete && lightboxImg.naturalWidth) afterLoad();
+  }
+
   async function openItemPreview(item) {
     if (!item || !lightbox) return;
     setError(memoError, "");
@@ -6368,6 +6497,15 @@
         if (item) await openItemPreview(item);
         return;
       }
+      const inlineBtn = t.closest?.(".memo-inline-img-btn");
+      if (inlineBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const img = inlineBtn.querySelector("img.memo-inline-img");
+        const src = img?.currentSrc || img?.src || "";
+        if (src) openInlineDataImage(src);
+        return;
+      }
       const previewId = t.closest?.("[data-memo-preview]")?.dataset?.memoPreview;
       if (previewId) {
         const item = state.index.items.find((x) => x.id === previewId);
@@ -6467,6 +6605,26 @@
     toast("已取消全部选中");
   });
   $("#memo-clear-temp")?.addEventListener("click", () => clearTempItems());
+  (function bindMemoEnabledToggle() {
+    const btn = $("#memo-enabled-toggle");
+    if (!btn) return;
+    const sync = () => {
+      const on = memoCaptureEnabled();
+      btn.textContent = `备忘录：${on ? "启用" : "停用"}`;
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+      btn.title = on
+        ? "已启用：会检测剪贴板（再点可停用）"
+        : "已停用：不再检测剪贴板（再点可启用）";
+      document.getElementById("memo")?.classList.toggle("is-memo-disabled", !on);
+    };
+    btn.addEventListener("click", () => {
+      const on = setMemoCaptureEnabled(!memoCaptureEnabled());
+      sync();
+      toast(on ? "已启用备忘录剪贴板检测" : "已停用：不再检测剪贴板");
+      if (on) maybeCaptureClipboard();
+    });
+    sync();
+  })();
   (function bindAutoTagToggle() {
     const btn = $("#memo-auto-tag-toggle");
     if (!btn) return;

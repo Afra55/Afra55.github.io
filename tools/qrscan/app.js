@@ -109,9 +109,15 @@
 
   function showResult(text, meta) {
     resultPanel.hidden = false;
+    document.body.classList.add("has-result");
     resultText.value = text;
-    setStatus(meta || "已识别", "ok");
+    setStatus("");
     setError("");
+    if (startBtn) {
+      startBtn.hidden = false;
+      startBtn.textContent = "继续扫";
+    }
+    if (stopBtn) stopBtn.hidden = true;
     if (openBtn) {
       const ok = looksLikeUrl(text);
       openBtn.hidden = !ok;
@@ -120,6 +126,7 @@
     try {
       if (navigator.vibrate) navigator.vibrate(40);
     } catch (_) {}
+    void meta;
   }
 
   function stopCamera({ fromUser } = {}) {
@@ -141,7 +148,11 @@
       video.srcObject = null;
       video.hidden = true;
     }
-    if (startBtn) startBtn.hidden = false;
+    const showingResult = resultPanel && !resultPanel.hidden;
+    if (startBtn) {
+      startBtn.hidden = false;
+      startBtn.textContent = showingResult ? "继续扫" : "扫码";
+    }
     if (stopBtn) stopBtn.hidden = true;
   }
 
@@ -195,9 +206,11 @@
   async function startCamera() {
     userStopped = false;
     setError("");
-    setStatus("正在打开摄像头…");
+    setStatus("");
+    if (resultPanel) resultPanel.hidden = true;
+    document.body.classList.remove("has-result");
+    if (resultText) resultText.value = "";
     await ensureLibs();
-    if (supportEl && Scan()) supportEl.textContent = Scan().supportedHint();
     stopCamera();
     userStopped = false;
     if (preview) {
@@ -228,8 +241,7 @@
     scanning = true;
     if (startBtn) startBtn.hidden = true;
     if (stopBtn) stopBtn.hidden = false;
-    const engine = Scan().engineStatusText();
-    setStatus(`对准条码/二维码，自动识别…（${engine}）`);
+    setStatus("");
     scanFrame();
   }
 
@@ -328,7 +340,6 @@
     setStatus("已关闭摄像头");
   });
   againBtn?.addEventListener("click", () => {
-    resultPanel.hidden = true;
     startCamera().catch((err) => setError(Scan()?.cameraErrorMessage(err) || err.message || String(err)));
   });
   copyBtn?.addEventListener("click", async () => {
@@ -383,18 +394,13 @@
   }
 
   syncInstallUi();
-  if (supportEl) {
-    supportEl.textContent =
-      "支持：QR、EAN/UPC、Code128/39、Data Matrix、PDF417、Aztec 等常见码。需 HTTPS 授权摄像头。";
-  }
-  setStatus("正在打开后置摄像头…");
   ensureLibs()
-    .then(() => {
-      if (supportEl && Scan()) supportEl.textContent = Scan().supportedHint();
-      return startCamera();
-    })
+    .then(() => startCamera())
     .catch((err) => {
       setError(Scan()?.cameraErrorMessage?.(err) || err.message || String(err));
-      setStatus("点「开始扫码」打开摄像头", "error");
+      if (startBtn) {
+        startBtn.hidden = false;
+        startBtn.textContent = "扫码";
+      }
     });
 })();

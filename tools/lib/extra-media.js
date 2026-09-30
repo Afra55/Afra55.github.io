@@ -1419,13 +1419,16 @@
       const v = Number(localStorage.getItem(BLACKBOX_MAX_MB_KEY));
       if (v > 0 && v <= 200) return v;
     } catch (_) {}
-    return 6;
+    return 10;
   }
   function blackboxUseMaxBytes() {
     return Math.round(blackboxMaxMb() * 1024 * 1024);
   }
+  function blackboxMaxLabel() {
+    return `${blackboxMaxMb()}MB`;
+  }
   function setBlackboxMaxMb(mb) {
-    const v = Math.max(1, Math.min(200, Number(mb) || 6));
+    const v = Math.max(1, Math.min(200, Number(mb) || 10));
     try {
       localStorage.setItem(BLACKBOX_MAX_MB_KEY, String(v));
     } catch (_) {}
@@ -1638,7 +1641,7 @@
     buildBlackboxHardCompressArgs, gifCompressSummary, readGifWatermarkOptions,
     drawGifTextWatermark, compressGifBlob, mergeGifBlobs, TOOLS_VERSION, GIF_TOOL_VERSION,
     AUTO_PACK_ZIP_KEY, FFMPEG_SEG_FILE_BYTES, blackboxUseMaxBytes, blackboxMaxRounds,
-    blackboxMaxMb, setBlackboxMaxMb, compressExistingGifToBlackbox,
+    blackboxMaxMb, blackboxMaxLabel, setBlackboxMaxMb, compressExistingGifToBlackbox,
     MEDIA_PERF_KEY, MEDIA_PERF_MODES, readMediaPerfMode, setMediaPerfMode,
     resolveMediaPerfTier, mediaPerfProfile, isCoarsePointerMedia,
     formatLocalPickMeta: K.formatLocalPickMeta,

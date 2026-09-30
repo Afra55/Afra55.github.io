@@ -194,11 +194,11 @@
           v2gCompressRound = result.compressRounds || 0;
           setV2gCompressEnabled(true);
           if (v2gMeta) {
-            v2gMeta.textContent = `黑盒已尽力 · 仍超过 6MB · 已保留 ${describeBlackboxCandidate(result)} · 建议缩短「最长秒数」`;
+            v2gMeta.textContent = `黑盒已尽力 · 仍超过 ${blackboxBudgetLabel()} · 已保留 ${describeBlackboxCandidate(result)} · 建议缩短「最长秒数」`;
           }
-          setV2gProgress(true, 1, `仍超 6MB · ${formatKb(result.blob.size)}`);
-          setError(v2gError, "自动压到 6MB 失败：片段可能过长或画面过复杂，请缩短「最长秒数」后重试");
-          toast(`黑盒未达 6MB，已保留 ${formatKb(result.blob.size)}`);
+          setV2gProgress(true, 1, `仍超 ${blackboxBudgetLabel()} · ${formatKb(result.blob.size)}`);
+          setError(v2gError, `自动压到 ${blackboxBudgetLabel()} 失败：片段可能过长或画面过复杂，请缩短「最长秒数」后重试`);
+          toast(`黑盒未达 ${blackboxBudgetLabel()}，已保留 ${formatKb(result.blob.size)}`);
         } catch (err) {
           if (String(err && err.message) !== "已取消") {
             setError(v2gError, err.message || String(err));

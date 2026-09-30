@@ -27,33 +27,24 @@ body {
 
 body {
   min-height: 100dvh;
-  padding: calc(0.75rem + var(--safe-top)) 0.85rem calc(0.85rem + var(--safe-bottom));
+  padding: calc(0.65rem + var(--safe-top)) 0.75rem calc(0.75rem + var(--safe-bottom));
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  align-items: center;
+  gap: 0.65rem;
 }
 
 .top {
+  width: min(100%, 28rem);
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
 }
 
-.brand {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1rem;
-}
-
-.brand strong {
-  font-size: 1.15rem;
+.brand-title {
+  font-size: 1.1rem;
   letter-spacing: 0.02em;
-}
-
-.brand span {
-  color: var(--muted);
-  font-size: 0.82rem;
 }
 
 .top-actions {
@@ -68,7 +59,7 @@ button,
   appearance: none;
   border: 0;
   border-radius: 999px;
-  padding: 0.55rem 0.95rem;
+  padding: 0.5rem 0.9rem;
   font: inherit;
   font-weight: 600;
   cursor: pointer;
@@ -104,12 +95,17 @@ button:disabled {
 
 .stage {
   position: relative;
-  flex: 1;
-  min-height: 52vh;
+  width: min(92vw, 28rem);
+  aspect-ratio: 1 / 1;
+  flex: 0 0 auto;
   border-radius: var(--radius);
   overflow: hidden;
   background: #000;
   border: 1px solid #1d2a40;
+}
+
+body.has-result .stage {
+  display: none;
 }
 
 .stage video,
@@ -129,16 +125,18 @@ button:disabled {
 .reticle {
   pointer-events: none;
   position: absolute;
-  inset: 18% 14%;
-  border: 2px solid rgba(46, 196, 182, 0.85);
-  border-radius: 18px;
-  box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.35);
+  inset: 14%;
+  border: 2px solid rgba(46, 196, 182, 0.9);
+  border-radius: 16px;
+  box-shadow: 0 0 0 999px rgba(0, 0, 0, 0.38);
 }
 
 .hint {
   margin: 0;
+  width: min(100%, 28rem);
   color: var(--muted);
   font-size: 0.9rem;
+  text-align: center;
 }
 
 .hint.error {
@@ -149,12 +147,8 @@ button:disabled {
   color: var(--ok);
 }
 
-.hint.support {
-  font-size: 0.82rem;
-  opacity: 0.9;
-}
-
 .panel {
+  width: min(100%, 28rem);
   background: var(--panel);
   border: 1px solid #1d2a40;
   border-radius: var(--radius);
@@ -167,6 +161,11 @@ button:disabled {
   display: none;
 }
 
+.panel.result {
+  flex: 1 1 auto;
+  align-content: start;
+}
+
 .panel label {
   font-size: 0.82rem;
   color: var(--muted);
@@ -174,7 +173,7 @@ button:disabled {
 
 .panel textarea {
   width: 100%;
-  min-height: 5.5rem;
+  min-height: 8rem;
   resize: vertical;
   border-radius: 10px;
   border: 1px solid #243049;
@@ -191,32 +190,5 @@ button:disabled {
 }
 
 .install-card {
-  background: linear-gradient(160deg, #102033, #0c1524 55%);
-  border: 1px solid #2a3d5c;
-}
-
-.install-card h2 {
-  margin: 0;
-  font-size: 1rem;
-}
-
-.install-card ol {
-  margin: 0;
-  padding-left: 1.15rem;
-  color: var(--muted);
-  font-size: 0.9rem;
-}
-
-.install-card li + li {
-  margin-top: 0.25rem;
-}
-
-.footer-link {
-  color: var(--muted);
-  font-size: 0.85rem;
-  text-align: center;
-}
-
-.footer-link a {
-  color: var(--accent);
+  width: min(100%, 28rem);
 }

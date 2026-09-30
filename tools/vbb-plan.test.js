@@ -2,8 +2,8 @@
 "use strict";
 
 /** 纯函数自测：一键黑盒切片规划逻辑（与 extra.js 对齐） */
-const V2G_BLACKBOX_MAX_BYTES = 6 * 1024 * 1024;
-const V2G_BLACKBOX_WIDEN_BYTES = 5 * 1024 * 1024;
+const V2G_BLACKBOX_MAX_BYTES = 10 * 1024 * 1024;
+const V2G_BLACKBOX_WIDEN_BYTES = Math.round(10 * 1024 * 1024 * (5/6));
 const V2G_BLACKBOX_BASE_W = 420;
 const V2G_BLACKBOX_WIDTH_STEP = 60;
 const V2G_BLACKBOX_WIDTH_CAP = 720;
@@ -319,8 +319,8 @@ function almost(a, b, eps = 1e-6) {
   const e4 = estimateVbbBytes(bps, 4, "duration");
   const e20 = estimateVbbBytes(bps, 20, "duration");
   // 短段会加宽、长段会降帧/轻压，体积不必随秒数单调递增
-  assert(e4 <= V2G_BLACKBOX_MAX_BYTES, "short blackbox under 6MB");
-  assert(e20 <= V2G_BLACKBOX_MAX_BYTES, "long blackbox under 6MB");
+  assert(e4 <= V2G_BLACKBOX_MAX_BYTES, "short blackbox under 10MB");
+  assert(e20 <= V2G_BLACKBOX_MAX_BYTES, "long blackbox under 10MB");
   assert(e20 >= 4 * 1024 * 1024, `long blackbox should be sizable, got ${e20}`);
   assert(estimateVbbFps(bps, 4, "duration") === 15, "short blackbox stays 15fps");
   assert(estimateVbbFps(bps, 20, "duration") <= 12, "long blackbox drops fps");
@@ -329,12 +329,12 @@ function almost(a, b, eps = 1e-6) {
 }
 
 {
-  // 12s：未压超 6MB、轻压可进预算 → 仍应预估 15FPS（与实装「先压再降帧」一致）
-  const bps = (7.2 * 1024 * 1024) / 12; // 12s 原始约 7.2MB
+  // 12s：未压超 10MB、轻压可进预算 → 仍应预估 15FPS（与实装「先压再降帧」一致）
+  const bps = (11.5 * 1024 * 1024) / 12; // 12s 原始约 11.5MB（超 10MB 上限）
   const plan = estimateVbbBlackboxPlan(bps, 12);
   assert(plan.fps === 15, `12s soft-fit should stay 15fps, got ${plan.fps}`);
   assert(plan.compressRounds >= 1, "12s over raw should expect compress");
-  assert(plan.bytes <= V2G_BLACKBOX_MAX_BYTES, "soft plan under 6MB");
+  assert(plan.bytes <= V2G_BLACKBOX_MAX_BYTES, "soft plan under 10MB");
 }
 
 {
@@ -345,12 +345,12 @@ function almost(a, b, eps = 1e-6) {
   assert(plan.compressRounds === 0, "small 4s no compress");
   assert(plan.maxW > 420, `small 4s should widen, got maxW=${plan.maxW}`);
   assert(plan.bytes > 2 * 1024 * 1024, "widened estimate > base");
-  assert(plan.bytes <= V2G_BLACKBOX_MAX_BYTES, "widened under 6MB");
+  assert(plan.bytes <= V2G_BLACKBOX_MAX_BYTES, "widened under 10MB");
 }
 
 {
-  // 贴近 5–6MB 不应加宽
-  const bps = (5.4 * 1024 * 1024) / 8;
+  // 已接近加宽门槛时不应再加宽（8s @420 ≈ 门槛以上）
+  const bps = (V2G_BLACKBOX_WIDEN_BYTES * 1.05) / 8;
   const plan = estimateVbbBlackboxPlan(bps, 8, 1280);
   assert(plan.maxW === 420, `near-cap should stay 420, got ${plan.maxW}`);
 }
@@ -374,7 +374,8 @@ function almost(a, b, eps = 1e-6) {
   assert(avg7 > avg8, "7 clips should be longer each");
   const est8 = estimateVbbBytes(bps15, avg8, "duration");
   const est7 = estimateVbbBytes(bps15, avg7, "duration");
-  assert(est7 >= est8, `7 clips est should >= 8 clips (${est7} vs ${est8})`);
+  // 10MB 预算下短段可能加宽，体积不必随单段时长严格单调
+  assert(est7 <= V2G_BLACKBOX_MAX_BYTES && est8 <= V2G_BLACKBOX_MAX_BYTES, "both plans under 10MB");
 }
 
 {
@@ -385,7 +386,7 @@ function almost(a, b, eps = 1e-6) {
 }
 
 {
-  // 清晰优先：按 CLARITY_FILL 贴紧 6MB，而不是 0.85 安全系数
+  // 清晰优先：按 CLARITY_FILL 贴紧 10MB，而不是 0.85 安全系数
   const bps15 = (4.93 * 1024 * 1024) / 8.3;
   const clarityMax = Math.max(
     VBB_MIN_SPAN,
@@ -394,8 +395,8 @@ function almost(a, b, eps = 1e-6) {
   const oldMax = (V2G_BLACKBOX_MAX_BYTES * VBB_SAFETY) / bps15;
   assert(clarityMax > oldMax + 0.5, `clarity span should extend vs 0.85 safety (${clarityMax} vs ${oldMax})`);
   const est = estimateVbbBytes(bps15, clarityMax, "clarity", 420);
-  assert(est >= V2G_BLACKBOX_MAX_BYTES * 0.94, `clarity est should near 6MB, got ${est}`);
-  assert(est <= V2G_BLACKBOX_MAX_BYTES * 1.02, `clarity est should not far exceed 6MB, got ${est}`);
+  assert(est >= V2G_BLACKBOX_MAX_BYTES * 0.94, `clarity est should near 10MB, got ${est}`);
+  assert(est <= V2G_BLACKBOX_MAX_BYTES * 1.02, `clarity est should not far exceed 10MB, got ${est}`);
 }
 
 {
@@ -424,7 +425,7 @@ function almost(a, b, eps = 1e-6) {
 }
 
 {
-  const bps15 = (5.5 * 1024 * 1024) / 10;
+  const bps15 = V2G_BLACKBOX_WIDEN_BYTES / 10;
   const wAt10 = resolveVbbWidthForSpan(bps15, 10, 1280);
   const wAt5 = resolveVbbWidthForSpan(bps15, 5, 1280);
   assert(wAt10 === 420, `10s should stay near base, got ${wAt10}`);
@@ -467,7 +468,7 @@ function almost(a, b, eps = 1e-6) {
   assert(Math.abs(e25 - cal.bytes) < 64 * 1024, `same span should match cal, got ${e25}`);
   const e10 = estimateVbbBlackboxBytesCalibrated(bps, 10, cal, 1280);
   assert(e10 > cal.bytes * 3 && e10 < cal.bytes * 4.2, `10s should scale ~4x, got ${e10}`);
-  assert(e10 <= V2G_BLACKBOX_MAX_BYTES, "scaled est under 6MB");
+  assert(e10 <= V2G_BLACKBOX_MAX_BYTES, "scaled est under 10MB");
 }
 
 console.log("vbb-plan.test.js: all passed");

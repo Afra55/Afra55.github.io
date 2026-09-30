@@ -59,7 +59,7 @@
       const VBB_MANUAL_SEEK_DEBOUNCE_MS = 120;
       const VBB_SAMPLE_SPAN = 2.5;
       const VBB_SAFETY = 0.85;
-      /** 清晰优先：按接近 6MB 规划段长（略留余量，避免实测偶发超限） */
+      /** 清晰优先：按接近预算规划段长（略留余量，避免实测偶发超限） */
       const VBB_CLARITY_FILL = 0.97;
       const VBB_MAX_CLIPS = 50;
       const VBB_MIN_SPAN = 0.5;
@@ -1358,7 +1358,7 @@
             bits.push(`${formatKb(info.beforeSize)} → ${formatKb(blob.size)}`);
           }
           if (info.compressRounds > 0) bits.push(`已压 ${info.compressRounds} 轮`);
-          bits.push(blob.size <= V2G_BLACKBOX_MAX_BYTES ? "≤6MB" : "仍超 6MB");
+          bits.push(blob.size <= V2G_BLACKBOX_MAX_BYTES ? `≤${blackboxBudgetLabel()}` : `仍超 ${blackboxBudgetLabel()}`);
           vbbMergedMeta.textContent = bits.join(" · ");
         }
         if (vbbResultBlock) vbbResultBlock.hidden = false;
@@ -1465,7 +1465,7 @@
         return `${n}  ${formatVbbClock(c.start)}–${formatVbbClock(c.start + c.span)}`;
       }
   
-      /** 紧凑体积：6.00 MB → 6MB / 55.7 KB → 56KB */
+      /** 紧凑体积：6.00 MB → 10MB / 55.7 KB → 56KB */
       function fmtShortBytes(n) {
         const b = Math.max(0, Number(n) || 0);
         if (b >= 1024 * 1024) {
@@ -1787,7 +1787,7 @@
   
       /**
        * 对齐 encodeBlackboxClip 加宽：仅当当前体积 < 5MB 才尝试加宽，
-       * 并取仍 ≤6MB 的最大宽（加宽重编码不带压缩）。
+       * 并取仍 ≤预算的最大宽（加宽重编码不带压缩）。
        */
       function resolveVbbWidenWidthForEst(bps15, span, fps, srcW, startBytes, startW) {
         const budget = V2G_BLACKBOX_MAX_BYTES;
@@ -1809,7 +1809,7 @@
       /**
        * 对齐 encodeBlackboxClip：
        * - 长段/触顶帧从 12FPS 起
-       * - 每档先 420 宽；超限轻柔压缩；体积 <5MB 再加宽到 ≤6MB 最大宽
+       * - 每档先 420 宽；超限轻柔压缩；体积 <5MB 再加宽到 ≤预算最大宽
        */
       function estimateVbbBlackboxPlan(bps15, span, srcW) {
         const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
@@ -1898,9 +1898,9 @@
       function describeVbbExpect(mode, targetSpan, clarityMax, durationMax, maxW, estFps, compressRounds) {
         const fps = estFps || 15;
         const compressTip = compressRounds > 0 ? `，预计压${compressRounds}轮` : "";
-        if (mode === "clarity") return "不压缩 · ≤6MB";
-        if (mode === "sharp") return "缩短加宽 · 不压缩 · ≤6MB";
-        if (mode === "duration") return `优先保 15FPS（超限先轻压再 12→10）${compressTip} · ≤6MB`;
+        if (mode === "clarity") return `不压缩 · ≤${blackboxBudgetLabel()}`;
+        if (mode === "sharp") return `缩短加宽 · 不压缩 · ≤${blackboxBudgetLabel()}`;
+        if (mode === "duration") return `优先保 15FPS（超限先轻压再 12→10）${compressTip} · ≤${blackboxBudgetLabel()}`;
         if (targetSpan < clarityMax - 0.05) {
           return `短于清晰档 · 目标宽${maxW || "?"} · 不压缩`;
         }
@@ -1908,7 +1908,7 @@
         if (targetSpan <= durationMax + 0.05) {
           return `超过清晰安全时长 · 走黑盒（预计 ${fps}FPS${compressTip}）`;
         }
-        return `目标偏长 · 走黑盒（预计 ${fps}FPS${compressTip}），个别段可能接近 6MB 上限`;
+        return `目标偏长 · 走黑盒（预计 ${fps}FPS${compressTip}），个别段可能接近 ${blackboxBudgetLabel()} 上限`;
       }
   
       function annotateVbbPlan(plan, bps15, srcW) {
@@ -1940,7 +1940,7 @@
         }
         if ((encode === "clarity" || encode === "sharp") && estBytes > V2G_BLACKBOX_MAX_BYTES) {
           unsafe = true;
-          note = `${note} · 预估超 6MB`;
+          note = `${note} · 预估超 ${blackboxBudgetLabel()}`;
         }
         if ((encode === "clarity" || encode === "sharp") && typicalSpan > plan.maxSpan * 1.05) {
           unsafe = true;
@@ -2008,7 +2008,7 @@
           duration,
           targetSpan,
           bps15,
-          `宽${maxW} · 缩短加宽 · 不压缩 · ≤6MB`,
+          `宽${maxW} · 缩短加宽 · 不压缩 · ≤${blackboxBudgetLabel()}`,
           { encode: "sharp", maxW, srcW }
         );
       }
@@ -2023,7 +2023,7 @@
           duration,
           clarityMax,
           bps15,
-          "宽420 · 贴紧6MB · 不压缩",
+          `宽420 · 贴紧${blackboxBudgetLabel()} · 不压缩`,
           { encode: "clarity", maxW: V2G_BLACKBOX_BASE_W, srcW }
         );
         vbbAnalysis.sharp = makeSharpPlan(duration, bps15, srcW, clarityMax);
@@ -3254,7 +3254,7 @@
             duration,
             clarityMax,
             bps15,
-            "宽420 · 贴紧6MB · 不压缩",
+            `宽420 · 贴紧${blackboxBudgetLabel()} · 不压缩`,
             { encode: "clarity", maxW: V2G_BLACKBOX_BASE_W, srcW }
           );
           const sharp = makeSharpPlan(duration, bps15, srcW, clarityMax);
@@ -3490,7 +3490,7 @@
               clip.gifBlob = encoded.blob;
               clip.gifNote = bits.join(" · ");
               if (encoded.blob.size > V2G_BLACKBOX_MAX_BYTES) {
-                clip.error = `仍超 6MB（${formatKb(encoded.blob.size)}）`;
+                clip.error = `仍超 ${blackboxBudgetLabel()}（${formatKb(encoded.blob.size)}）`;
               }
               if (i === 0) firstSeed = snapshotVbbEncodeSeed(encoded, { usedWidth, usedFallback });
               if (!clip.error) {
@@ -3601,7 +3601,7 @@
             if (!compressed.ok) {
               setError(
                 vbbError,
-                `合并后仍超 6MB（${formatKb(blob.size)}）· 已压 ${compressRounds} 轮，建议减少段数或缩短片段`
+                `合并后仍超 ${blackboxBudgetLabel()}（${formatKb(blob.size)}）· 已压 ${compressRounds} 轮，建议减少段数或缩短片段`
               );
             }
           }
@@ -3610,9 +3610,9 @@
             compressRounds,
             downloadName: "blackbox-merged.gif",
           });
-          const okTip = blob.size <= V2G_BLACKBOX_MAX_BYTES ? "≤6MB" : "仍超 6MB";
+          const okTip = blob.size <= V2G_BLACKBOX_MAX_BYTES ? `≤${blackboxBudgetLabel()}` : `仍超 ${blackboxBudgetLabel()}`;
           setVbbProgress(true, 1, `合并完成 · ${formatKb(blob.size)} · ${okTip}`);
-          toast(blob.size <= V2G_BLACKBOX_MAX_BYTES ? "已合并为一条 GIF" : `已合并，但体积仍超 6MB（${formatKb(blob.size)}）`);
+          toast(blob.size <= V2G_BLACKBOX_MAX_BYTES ? "已合并为一条 GIF" : `已合并，但体积仍超 ${blackboxBudgetLabel()}（${formatKb(blob.size)}）`);
         } catch (err) {
           setVbbProgress(false, 0, "");
           setError(vbbError, err.message || String(err));
