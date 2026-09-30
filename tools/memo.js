@@ -39,6 +39,7 @@
   const CARD_EST_DEFAULT = 210;
   const CARD_EST_NOTE = 28;
   const CARD_EST_LINK = 52;
+  const CARD_EST_EMBED_IMG = 118;
   const CARD_EST_MD_EXTRA = 24;
   const CARD_EST_BY_TYPE = {
     text: 200,
@@ -237,60 +238,42 @@
     return "";
   }
 
-  // 识别内嵌 data:image / 可识别的长纯 base64 图片段，返回可渲染的图片
-  function extractDataImages(text) {
-    const out = [];
-    const seen = new Set();
-    const push = (mime, b64) => {
-      const nb = normalizeB64(b64);
-      if (nb.length < 64) return;
-      const key = `${mime}:${nb.slice(0, 48)}:${nb.length}`;
-      if (seen.has(key)) return;
-      seen.add(key);
-      out.push({ mime, b64: nb });
-    };
+  /**
+   * 找出文本中完整的 data:image / 纯 base64 图段（含起止位置）。
+   * JPEG 魔数用 RegExp 构造，避免 `/9j/` 拆开正则字面量。
+   */
+  function findDataImageRanges(text) {
     const src = String(text || "");
-    const re = /data:image\/(png|jpe?g|gif|webp|bmp|svg\+xml);base64,([A-Za-z0-9+/=\s]{64,})/gi;
-    let m;
-    while ((m = re.exec(src))) {
-      push(`image/${m[1].toLowerCase()}`, m[2]);
-    }
-    // 无 data: 前缀的长纯 base64（魔数可识别）
-    // 注意：JPEG 魔数含 `/9j/`，必须转义，否则会提前结束正则字面量（整文件 SyntaxError，备忘录永久卡在检测中）
-    const bare = /(?:^|[^A-Za-z0-9+/=])((?:iVBORw0KGgo|\/9j\/|R0lGOD|UklGR|Qk)[A-Za-z0-9+/=\s]{200,})(?![A-Za-z0-9+/=])/g;
-    let bm;
-    while ((bm = bare.exec(src))) {
-      const mime = sniffImageMimeFromB64(bm[1]);
-      if (mime) push(mime, bm[1]);
-    }
-    return out;
-  }
-
-  /** 把文本里的 base64 图片段替换为紧挨着的缩略图，普通文字照常显示 */
-  function renderTextWithInlineImages(raw, q) {
-    const src = String(raw || "");
     const hits = [];
-    const re = /data:image\/(png|jpe?g|gif|webp|bmp|svg\+xml);base64,([A-Za-z0-9+/=\s]{64,})/gi;
+    // 允许 base64 中间换行/空格，但不吞掉段落后的换行（留给正文）
+    const dataRe =
+      /data:image\/(png|jpe?g|gif|webp|bmp|svg\+xml);base64,([A-Za-z0-9+/=]+(?:\s+[A-Za-z0-9+/=]+)*)/gi;
     let m;
-    while ((m = re.exec(src))) {
+    while ((m = dataRe.exec(src))) {
       const b64 = normalizeB64(m[2]);
       if (b64.length < 64) continue;
+      const sub = String(m[1] || "png").toLowerCase();
       hits.push({
         start: m.index,
         end: m.index + m[0].length,
-        mime: `image/${m[1].toLowerCase()}`,
+        mime: `image/${sub === "jpg" ? "jpeg" : sub}`,
         b64,
       });
     }
-    const bare = /(?:^|[^A-Za-z0-9+/=])((?:iVBORw0KGgo|\/9j\/|R0lGOD|UklGR|Qk)[A-Za-z0-9+/=\s]{200,})(?![A-Za-z0-9+/=])/g;
+    // 无 data: 前缀的长纯 base64（魔数可识别）；\/9j\/ 必须转义
+    const bareRe = new RegExp(
+      "(?:^|[^A-Za-z0-9+/=])((?:iVBORw0KGgo|\\/9j\\/|R0lGOD|UklGR|Qk)[A-Za-z0-9+/=]+(?:\\s+[A-Za-z0-9+/=]+)*)",
+      "g"
+    );
     let bm;
-    while ((bm = bare.exec(src))) {
+    while ((bm = bareRe.exec(src))) {
       const lead = bm[0].length - bm[1].length;
       const start = bm.index + lead;
       const end = start + bm[1].length;
-      const mime = sniffImageMimeFromB64(bm[1]);
-      if (!mime) continue;
-      hits.push({ start, end, mime, b64: normalizeB64(bm[1]) });
+      const b64 = normalizeB64(bm[1]);
+      const mime = sniffImageMimeFromB64(b64);
+      if (!mime || b64.length < 80) continue;
+      hits.push({ start, end, mime, b64 });
     }
     hits.sort((a, b) => a.start - b.start);
     const merged = [];
@@ -299,21 +282,131 @@
       if (last && h.start < last.end) continue;
       merged.push(h);
     }
-    if (!merged.length) {
-      return { html: highlightEscaped(escapeHtml(src), q), hasImg: false };
-    }
-    let html = "";
+    return merged;
+  }
+
+  function extractDataImages(text) {
+    return findDataImageRanges(text).map((h) => ({ mime: h.mime, b64: h.b64 }));
+  }
+
+  /** 正文保留文字：base64 段换成 [图片N]，完整图交给下方预览区 */
+  function foldDataImagesInText(text) {
+    const src = String(text || "");
+    const ranges = findDataImageRanges(src);
+    if (!ranges.length) return { displayText: src, images: [] };
+    let out = "";
     let cursor = 0;
-    for (const h of merged) {
-      if (h.start > cursor) {
-        html += highlightEscaped(escapeHtml(src.slice(cursor, h.start)), q);
-      }
-      const srcUrl = `data:${h.mime};base64,${h.b64}`;
-      html += `<button type="button" class="memo-inline-img-btn" title="点击查看大图"><img class="memo-inline-img" alt="内嵌图片" src="${escapeAttr(srcUrl)}" loading="lazy" decoding="async" /></button>`;
-      cursor = h.end;
+    const images = [];
+    for (const r of ranges) {
+      out += src.slice(cursor, r.start);
+      images.push({ mime: r.mime, b64: r.b64 });
+      out += `[图片${images.length}]`;
+      cursor = r.end;
     }
-    if (cursor < src.length) html += highlightEscaped(escapeHtml(src.slice(cursor)), q);
-    return { html, hasImg: true };
+    out += src.slice(cursor);
+    return { displayText: out, images };
+  }
+
+  function textLooksLikeEmbeddedImages(text) {
+    const s = String(text || "");
+    if (/\[图片\d+\]/.test(s)) return true;
+    if (/data:image\/[a-z0-9+.-]+;base64,/i.test(s)) return true;
+    if (/iVBORw0KGgo|R0lGOD|UklGR/.test(s)) return true;
+    if (s.includes("/9j/")) return true;
+    return false;
+  }
+
+  function textLooksTruncatedMidImage(text) {
+    const s = String(text || "");
+    if (!s) return false;
+    if (/…|\.\.\.$/.test(s) && /data:image\/|iVBORw0KGgo|\/9j\/|R0lGOD|UklGR/.test(s)) return true;
+    // 预览截断后 base64 往往以非 = 结尾且贴着省略号
+    if (/data:image\/[a-z0-9+.-]+;base64,[A-Za-z0-9+/=\s]{64,}…/i.test(s)) return true;
+    return false;
+  }
+
+  function rememberCardImages(itemId, images) {
+    if (!itemId || !images?.length) return;
+    state.cardImageCache.set(itemId, images.map((d) => ({ mime: d.mime, b64: d.b64 })));
+  }
+
+  function forgetCardImages(itemId) {
+    if (!itemId) return;
+    state.cardImageCache.delete(itemId);
+    state.cardImageHydrating.delete(itemId);
+  }
+
+  function scheduleCardImageHydrate(item) {
+    if (!item?.id || item.type !== "text") return;
+    if (state.cardImageCache.has(item.id)) return;
+    if (state.cardImageHydrating.has(item.id)) return;
+    if (!textLooksLikeEmbeddedImages(item.textPreview || "") && !textLooksTruncatedMidImage(item.textPreview || "")) {
+      return;
+    }
+    state.cardImageHydrating.add(item.id);
+    loadBlob(item)
+      .then((blob) => blob.text())
+      .then((full) => {
+        const folded = foldDataImagesInText(full);
+        if (!folded.images.length) return;
+        rememberCardImages(item.id, folded.images);
+        // 旧条目 textPreview 里还塞着残缺 base64：改成占位，完整图在下方
+        const nextPreview = clipTextPreview(folded.displayText);
+        const prev = String(item.textPreview || "");
+        if (nextPreview !== prev && (textLooksTruncatedMidImage(prev) || /data:image\/|iVBORw0KGgo|\/9j\//.test(prev))) {
+          item.textPreview = nextPreview;
+          persistIndex().catch(() => {});
+        }
+        state.filterCache = { key: "", items: null };
+        renderItems();
+      })
+      .catch(() => {})
+      .finally(() => {
+        state.cardImageHydrating.delete(item.id);
+      });
+  }
+
+  function cardImagesForItem(item) {
+    if (!item?.id) return [];
+    if (state.cardImageCache.has(item.id)) return state.cardImageCache.get(item.id) || [];
+    const preview = String(item.textPreview || "");
+    // 已是占位符：必须从 blob 回填完整图，避免用残缺预览解码
+    if (/\[图片\d+\]/.test(preview) || textLooksTruncatedMidImage(preview)) {
+      scheduleCardImageHydrate(item);
+      return [];
+    }
+    const folded = foldDataImagesInText(preview);
+    if (folded.images.length) {
+      // 预览里已是完整段（短图）：缓存后直接用
+      if (!textLooksTruncatedMidImage(preview)) rememberCardImages(item.id, folded.images);
+      else scheduleCardImageHydrate(item);
+      return folded.images;
+    }
+    if (textLooksLikeEmbeddedImages(preview)) scheduleCardImageHydrate(item);
+    return [];
+  }
+
+  function embedImgCardHtml(img, index) {
+    if (!img?.b64) return "";
+    const n = index + 1;
+    const src = `data:${img.mime || "image/png"};base64,${img.b64}`;
+    return `<button type="button" class="memo-embed-img-card memo-inline-img-btn" title="点击查看大图" draggable="false">
+      <span class="memo-link-card-kicker">图片 ${n}</span>
+      <img class="memo-inline-img memo-embed-img-thumb" alt="图片${n}" src="${escapeAttr(src)}" loading="lazy" decoding="async" />
+    </button>`;
+  }
+
+  function linkCardHtml(url) {
+    if (!url) return "";
+    let host = url;
+    try {
+      host = new URL(url).hostname.replace(/^www\./, "");
+    } catch (_) {}
+    return `<a class="memo-link-card" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer" draggable="false">
+      <span class="memo-link-card-kicker">链接</span>
+      <span class="memo-link-card-host">${escapeHtml(host)}</span>
+      <span class="memo-link-card-url mono">${escapeHtml(url)}</span>
+    </a>`;
   }
 
   function highlightEscaped(escaped, query) {
@@ -350,19 +443,6 @@
     html = html.replace(/<p>\s*(<(?:h[1-6]|pre|ul))/g, "$1").replace(/(<\/(?:h[1-6]|pre|ul)>)\s*<\/p>/g, "$1");
     html = html.replace(/<p>\s*<\/p>/g, "");
     return html;
-  }
-
-  function linkCardHtml(url) {
-    if (!url) return "";
-    let host = url;
-    try {
-      host = new URL(url).hostname.replace(/^www\./, "");
-    } catch (_) {}
-    return `<a class="memo-link-card" href="${escapeAttr(url)}" target="_blank" rel="noopener noreferrer" draggable="false">
-      <span class="memo-link-card-kicker">链接</span>
-      <span class="memo-link-card-host">${escapeHtml(host)}</span>
-      <span class="memo-link-card-url mono">${escapeHtml(url)}</span>
-    </a>`;
   }
 
   function formatTime(ts) {
@@ -889,6 +969,8 @@
     mediaUrlCache: new Map(), // itemId -> objectURL（gif/视频，LRU）
     mediaThumbCache: new Map(), // itemId -> 静态图片缩略图 objectURL（LRU）
     mediaFailCache: new Set(),
+    cardImageCache: new Map(), // itemId -> [{mime,b64}] 完整内嵌图（不进索引，避免膨胀）
+    cardImageHydrating: new Set(),
   };
 
   function trackUrl(url) {
@@ -1917,9 +1999,10 @@
       .split("\n");
   }
 
-  /** 卡片内文本：≤50 行完整展示；超过则截断，点预览看全文（无滚动条） */
+  /** 卡片内文本：≤50 行完整展示；超过则截断，点预览看全文（无滚动条）。base64 图不内联，只留 [图片N] 占位。 */
   function formatCardTextBody(full) {
-    const raw = String(full || "");
+    const folded = foldDataImagesInText(String(full || ""));
+    const raw = folded.displayText;
     const q = String(state.searchQuery || "").trim();
     const lines = splitTextLines(raw);
     const lineCount = lines.length;
@@ -1932,26 +2015,27 @@
         lineCount,
         title: "Markdown 预览 · 双击编辑",
         md: true,
+        hasImgPlaceholders: folded.images.length > 0 || /\[图片\d+\]/.test(raw),
       };
     }
     if (lineCount <= TEXT_CARD_LINES) {
-      const inline = renderTextWithInlineImages(raw, q);
       return {
-        html: inline.html,
+        html: highlightEscaped(escapeHtml(raw), q),
         truncated: false,
         lineCount,
-        title: inline.hasImg ? "文字旁可点缩略图看大图 · 双击编辑" : "拖选复制 · 双击编辑",
+        title: folded.images.length || /\[图片\d+\]/.test(raw) ? "下方可点图片预览 · 双击编辑" : "拖选复制 · 双击编辑",
         md: false,
+        hasImgPlaceholders: folded.images.length > 0 || /\[图片\d+\]/.test(raw),
       };
     }
     const shown = lines.slice(0, TEXT_CARD_LINES).join("\n");
-    const inline = renderTextWithInlineImages(shown, q);
     return {
-      html: `${inline.html}\n<span class="memo-text-more">…共 ${lineCount} 行，点此预览全文</span>`,
+      html: `${highlightEscaped(escapeHtml(shown), q)}\n<span class="memo-text-more">…共 ${lineCount} 行，点此预览全文</span>`,
       truncated: true,
       lineCount,
       title: `已截断前 ${TEXT_CARD_LINES} 行 · 单击预览全文 · 双击编辑`,
       md: false,
+      hasImgPlaceholders: folded.images.length > 0 || /\[图片\d+\]/.test(raw),
     };
   }
 
@@ -2123,7 +2207,10 @@
       const lines = Math.min(TEXT_CARD_LINES, splitTextLines(item.textPreview || "").length || 1);
       h = 118 + Math.min(420, Math.round(lines * 18.5));
       if (state.mdPreview) h += CARD_EST_MD_EXTRA;
-      if (firstHttpUrl(item.textPreview || "")) h += CARD_EST_LINK;
+      const urls = allHttpUrls(item.textPreview || "");
+      if (urls.length) h += CARD_EST_LINK * Math.min(3, urls.length);
+      const imgN = state.cardImageCache.get(item.id)?.length || (textLooksLikeEmbeddedImages(item.textPreview || "") ? 1 : 0);
+      if (imgN) h += CARD_EST_EMBED_IMG * Math.min(3, imgN);
     }
     const hasNote = String(item?.note || "").trim();
     if (hasNote || (item?.type && item.type !== "text")) h += CARD_EST_NOTE;
@@ -2473,19 +2560,10 @@
       const full = item.textPreview || "";
       const formatted = formatCardTextBody(full);
       const links = allHttpUrls(full).map((u) => linkCardHtml(u)).join("");
-      // Markdown 模式：正文不拆段时，在文末补缩略图；纯文本模式已在 formatCardTextBody 内联
-      const trailingImgs =
-        formatted.md
-          ? extractDataImages(full)
-              .map(
-                (d) =>
-                  `<button type="button" class="memo-inline-img-btn" title="点击查看大图"><img class="memo-inline-img" alt="内嵌图片" src="data:${d.mime};base64,${d.b64}" loading="lazy" decoding="async" /></button>`
-              )
-              .join("")
-          : "";
+      const imgs = cardImagesForItem(item).map((d, i) => embedImgCardHtml(d, i)).join("");
       const textTag = formatted.md ? "div" : "pre";
       const textCls = `memo-text mono${formatted.truncated ? " is-truncated" : ""}${formatted.md ? " is-md" : ""}`;
-      body = `<${textTag} class="${textCls}" data-memo-expand="${item.id}" draggable="false" title="${escapeHtml(formatted.title)}">${formatted.html}</${textTag}>${trailingImgs}${links}`;
+      body = `<${textTag} class="${textCls}" data-memo-expand="${item.id}" draggable="false" title="${escapeHtml(formatted.title)}">${formatted.html}</${textTag}>${imgs}${links}`;
     } else if (item.type === "image" || item.type === "gif") {
       const badge = item.type === "gif" ? `<span class="memo-anim-badge">动图</span>` : "";
       body = `<div class="memo-thumb-wrap memo-media-hit" data-memo-preview="${item.id}">${badge}<img class="memo-thumb" data-memo-thumb="${item.id}" ${memoMediaAttrs(item.id)} alt="" decoding="async" /></div>`;
@@ -2602,6 +2680,7 @@
       }
     }
     state.mediaFailCache.delete(id);
+    forgetCardImages(id);
   }
 
   /** 已缓存的图片信息：优先缩略图，其次原图 URL */
@@ -3223,6 +3302,13 @@
         },
       });
       if (!quiet) setProgress(true, 0.96, "写入索引…", { cancellable: false });
+      let previewOut = "";
+      if (type === "text") {
+        // 完整图段从全文提取并缓存；textPreview 只留 [图片N] 占位，避免 4000 字截断切坏 base64
+        const folded = foldDataImagesInText(textPreview);
+        if (folded.images.length) rememberCardImages(id, folded.images);
+        previewOut = clipTextPreview(folded.displayText);
+      }
       const item = {
         id,
         type,
@@ -3234,7 +3320,7 @@
         mime: blob.type || "",
         size: blob.size || 0,
         fileName,
-        textPreview: type === "text" ? clipTextPreview(textPreview) : "",
+        textPreview: previewOut,
         contentHash: contentHash || undefined,
       };
       state.index.items.splice(firstUnpinnedIndex(), 0, item);
@@ -3626,7 +3712,10 @@
       const isJson = isMemoJsonItem(item);
       const mime = isJson ? "application/json;charset=utf-8" : "text/plain;charset=utf-8";
       const blob = new Blob([body], { type: mime });
-      item.textPreview = clipTextPreview(body);
+      const folded = foldDataImagesInText(body);
+      forgetCardImages(item.id);
+      if (folded.images.length) rememberCardImages(item.id, folded.images);
+      item.textPreview = clipTextPreview(folded.displayText);
       item.updatedAt = Date.now();
       item.size = blob.size;
       item.mime = mime;
