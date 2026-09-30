@@ -171,14 +171,25 @@
   // 自动从文本 #标签 建标签：默认关闭，避免误把 #色值/#标题 等变成标签
   const AUTO_TAG_KEY = "devtools-memo-auto-tags-v1";
   // 备忘录总开关：停用后不检测剪贴板；手机默认停用，桌面默认启用
+  // 默认值只按「真实移动设备」判断，不用窗口宽度——否则桌面窄窗/半屏会被当成手机而默认停用
   const MEMO_ENABLED_KEY = "devtools-memo-enabled-v1";
+  function isMobileDeviceForClipDefault() {
+    const ua = navigator.userAgent || "";
+    if (/iPhone|iPod|Android/i.test(ua)) return true;
+    if (/iPad/i.test(ua)) return true;
+    // iPadOS 13+ 常伪装成 Macintosh，用多点触控区分
+    if (/Macintosh/i.test(ua) && typeof navigator.maxTouchPoints === "number" && navigator.maxTouchPoints > 1) {
+      return true;
+    }
+    return false;
+  }
   function memoCaptureEnabled() {
     try {
       const v = localStorage.getItem(MEMO_ENABLED_KEY);
       if (v === "1" || v === "true") return true;
       if (v === "0" || v === "false") return false;
     } catch (_) {}
-    return !isLikelyMobile();
+    return !isMobileDeviceForClipDefault();
   }
   function setMemoCaptureEnabled(on) {
     writeBoolPref(MEMO_ENABLED_KEY, !!on);
