@@ -908,6 +908,41 @@
         if (clip?.sourceName) return `${clip.sourceName}.gif`;
         return `bb-${String((idx ?? 0) + 1).padStart(2, "0")}.gif`;
       }
+
+      /** 每个 GIF 编码完成后立刻下载（默认关；与打包 zip / 合并不冲突） */
+      const VBB_AUTO_DL_EACH_KEY = "devtools-vbb-auto-dl-each-v1";
+
+      function isVbbAutoDlEachEnabled() {
+        try {
+          return localStorage.getItem(VBB_AUTO_DL_EACH_KEY) === "1";
+        } catch (_) {
+          return false;
+        }
+      }
+
+      function setVbbAutoDlEachEnabled(on) {
+        try {
+          localStorage.setItem(VBB_AUTO_DL_EACH_KEY, on ? "1" : "0");
+        } catch (_) {}
+      }
+
+      function maybeAutoDownloadVbbGif(clip, idx) {
+        if (!isVbbAutoDlEachEnabled() || !clip?.gifBlob) return false;
+        try {
+          triggerLocalDownload(clip.gifBlob, vbbGifDownloadName(clip, idx));
+          return true;
+        } catch (_) {
+          return false;
+        }
+      }
+
+      /** 当前「压缩时长」对应的加速倍率（相对该段 span） */
+      function vbbSpeedFactorForSpan(span) {
+        const lim = vbbSpeedLimitSec();
+        const s = Number(span) || 0;
+        if (lim > 0 && s > lim) return Math.max(1, Math.min(16, s / lim));
+        return 1;
+      }
   
       function isLikelyVideoFile(file) {
         if (!file) return false;
@@ -2455,7 +2490,7 @@
           for (let i = 0; i < ranges.length; i++) {
             if (abortVbb) throw new Error("已取消");
             const r = ranges[i];
-            const reuse = resolveVbbSegmentReuse(ranges, i, null, "blackbox");
+            const reuse = resolveVbbSegmentReuse(ranges, i, null, "blackbox", vbbSpeedFactorForSpan(r.span));
             const followTip = reuse.fromCache ? " · 沿用方案" : "";
             setVbbClipJob(i, { status: "running", progress: 0.02, text: "准备编码…" });
             setVbbProgress(true, i / ranges.length, vbbClipProgressLine(i, ranges.length, { reuse: Boolean(reuse.fromCache) }), {
@@ -2485,13 +2520,18 @@
             if (!vbbClips[i].error) saveVbbSpanScheme(r.span, snapshotVbbEncodeSeed(encoded, {}), "blackbox");
             setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
             notifyVbbProgress(i, ranges.length);
+            maybeAutoDownloadVbbGif(vbbClips[i], i);
             refreshVbbClipRow(i);
             if (mobile && i < ranges.length - 1) {
               await new Promise((r) => setTimeout(r, hugeFile ? 180 : 80));
             }
           }
           setVbbProgress(true, 1, `完成 · ${ranges.length} 段`);
-          toast(`已完成 ${ranges.length} 段 · 可逐条下载或打包`);
+          toast(
+            isVbbAutoDlEachEnabled()
+              ? `已完成 ${ranges.length} 段 · 已逐个自动下载`
+              : `已完成 ${ranges.length} 段 · 可逐条下载或打包`
+          );
         } catch (err) {
           if (String(err?.message) !== "已取消") setError(vbbError, err.message || String(err));
           else toast("已取消");
@@ -2904,10 +2944,11 @@
             const item = job.item;
             setVbbClipJob(i, { status: "running", progress: 0.02, text: conc > 1 ? `并行编码…` : "准备编码…" });
               const win = { startSec: job.startSec, span: job.span, edit: job.edit };
-              const cachedSeed = loadVbbSpanScheme(win.span);
+              const cachedSeed = loadVbbSpanScheme(win.span, vbbSpeedFactorForSpan(win.span));
               const seedForItem =
                 cachedSeed ||
                 (reuseSeed && Math.abs((Number(reuseSeed.span) || 0) - (Number(win.span) || 0)) < 0.08
+                  && Math.abs((Number(reuseSeed.speed) || 1) - vbbSpeedFactorForSpan(win.span)) < 0.05
                   ? reuseSeed
                   : null);
               const t0 = performance.now();
@@ -2949,7 +2990,12 @@
                 if (abortVbb) throw new Error("已取消");
                 applyVbbClipEncoded(vbbClips[i], encoded);
                 if (encoded && encoded.fps) {
-                  reuseSeed = { fps: encoded.fps, maxW: encoded.maxW, span: win.span };
+                  reuseSeed = {
+                    fps: encoded.fps,
+                    maxW: encoded.maxW,
+                    span: win.span,
+                    speed: Math.max(1, Number(encoded.speed) || 1),
+                  };
                   saveVbbSpanScheme(win.span, reuseSeed, "blackbox");
                 }
                 const elapsedSec = (performance.now() - t0) / 1000;
@@ -2971,6 +3017,7 @@
                 setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
                 notifyVbbProgress(i, total);
                 ok += 1;
+                maybeAutoDownloadVbbGif(vbbClips[i], i);
                 refreshVbbClipRow(i);
                 vbbLog(
                   `[vbb] #${i + 1} ${usedSeed ? "seed" : "ladder"} ${Math.round(elapsedSec * 1000)}ms · ${encoded.fps}FPS · ${encoded.outW}×${encoded.outH} · ${formatKb(encoded.blob.size)} · ${encoded.compressRounds || 0}轮 · conc=${conc}`
@@ -3048,10 +3095,15 @@
           renderVbbResults();
           setVbbProgress(true, 1, `批量完成 · ${ok}/${total}`);
           if (ok > 0) {
+            const autoDl = isVbbAutoDlEachEnabled();
             toast(
               ok === total
-                ? `批量完成 · ${ok} 个 · 可在下方逐条下载或点「打包下载」`
-                : `批量完成 · 成功 ${ok}/${total} · 可在下方逐条下载或点「打包下载」`
+                ? autoDl
+                  ? `批量完成 · ${ok} 个 · 已逐个自动下载（仍可合并/打包）`
+                  : `批量完成 · ${ok} 个 · 可在下方逐条下载或点「打包下载」`
+                : autoDl
+                  ? `批量完成 · 成功 ${ok}/${total} · 成功项已自动下载`
+                  : `批量完成 · 成功 ${ok}/${total} · 可在下方逐条下载或点「打包下载」`
             );
           } else {
             throw new Error("全部转换失败，请查看各条错误信息");
@@ -3144,6 +3196,7 @@
             .join(" · ");
           setVbbClipJob(0, { status: "done", progress: 1, text: "完成" });
           notifyVbbProgress(0, 1);
+          maybeAutoDownloadVbbGif(vbbClips[0], 0);
           refreshVbbClipRow(0);
           const doneBits = [
             formatKb(encoded.blob.size),
@@ -3151,7 +3204,11 @@
             encoded.outW && encoded.outH ? `${encoded.outW}×${encoded.outH}` : "",
           ].filter(Boolean);
           setVbbProgress(true, 1, `完成 · ${doneBits.join(" · ")}`, { sub: `时长 ${durationLabel}` });
-          toast(`已完成 · ${formatKb(encoded.blob.size)} · 可点下方「下载 GIF」`);
+          toast(
+            isVbbAutoDlEachEnabled()
+              ? `已完成 · ${formatKb(encoded.blob.size)} · 已自动下载`
+              : `已完成 · ${formatKb(encoded.blob.size)} · 可点下方「下载 GIF」`
+          );
         } catch (err) {
           if (String(err?.message) !== "已取消") setError(vbbError, err.message || String(err));
           else toast("已取消");
@@ -3354,7 +3411,13 @@
             if (abortVbb) throw new Error("已取消");
             const r = plan.ranges[i];
             const clip = vbbClips[i];
-            const reuse = resolveVbbSegmentReuse(plan.ranges, i, firstSeed, plan.encode);
+            const reuse = resolveVbbSegmentReuse(
+              plan.ranges,
+              i,
+              firstSeed,
+              plan.encode,
+              vbbSpeedFactorForSpan(r.span)
+            );
             const reuseSeed = reuse.seed;
             const activeEncode = reuse.fromCache && reuse.encode ? reuse.encode : plan.encode;
             const isWide = activeEncode === "clarity" || activeEncode === "sharp";
@@ -3387,6 +3450,7 @@
                     span: r.span,
                     srcW,
                     srcH,
+                    speed: vbbSpeedFactorForSpan(r.span),
                     crop: vbbCrop,
                     skipWatermark: true,
                     skipBright: true,
@@ -3501,6 +3565,7 @@
                 text: clip.error ? "完成（超限）" : "完成",
               });
               if (!clip.error) notifyVbbProgress(i, plan.ranges.length);
+              if (clip.gifBlob) maybeAutoDownloadVbbGif(clip, i);
             } catch (err) {
               if (String(err && err.message) === "已取消") throw err;
               clip.error = err.message || String(err);
@@ -4310,6 +4375,17 @@
 
         const vbbSpeedChk = $("#vbb-speed-limit", root);
         const vbbSpeedSec = $("#vbb-speed-sec", root);
+        const vbbAutoDlEach = $("#vbb-auto-dl-each", root);
+        if (vbbAutoDlEach) {
+          try {
+            vbbAutoDlEach.checked = isVbbAutoDlEachEnabled();
+          } catch (_) {}
+          vbbAutoDlEach.addEventListener("change", () => {
+            const on = Boolean(vbbAutoDlEach.checked);
+            setVbbAutoDlEachEnabled(on);
+            toast(on ? "已开启：每段 GIF 完成后立刻下载" : "已关闭：需手动下载或打包");
+          });
+        }
         if (vbbSpeedChk) {
           try { vbbSpeedChk.checked = localStorage.getItem("devtools-vbb-speed-on") === "1"; } catch (_) {}
           vbbSpeedChk.addEventListener("change", () => {
@@ -4528,9 +4604,9 @@
         formatClipTitle: (c, idx) => formatVbbClipTitle(c, idx),
         formatClipMeta: (c, opts) => formatVbbClipMeta(c, opts || {}),
         shouldReuseFirstPlan: (ranges, index) => shouldReuseVbbFirstPlan(ranges, index),
-        loadSpanScheme: (span) => loadVbbSpanScheme(span),
+        loadSpanScheme: (span, speed) => loadVbbSpanScheme(span, speed),
         saveSpanScheme: (span, seed, enc) => saveVbbSpanScheme(span, seed, enc),
-        spanSchemeKey: (span) => vbbSpanSchemeKey(span),
+        spanSchemeKey: (span, speed) => vbbSpanSchemeKey(span, speed),
         estimateBlackbox: (span) => {
           if (!vbbAnalysis) return null;
           return estimateVbbBlackboxPlan(vbbAnalysis.bps15, span, vbbAnalysis.srcW);

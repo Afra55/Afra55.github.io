@@ -464,13 +464,17 @@ function almost(a, b, eps = 1e-6) {
 }
 
 {
-  function vbbSpanSchemeKey(span) {
+  function vbbSpanSchemeKey(span, speed = 1) {
     const s = Math.max(0.5, Number(span) || 0.5);
+    const sp = Math.max(1, Number(speed) || 1);
+    if (sp > 1.02) return `${s.toFixed(1)}@x${sp.toFixed(2)}`;
     return s.toFixed(1);
   }
   assert(vbbSpanSchemeKey(12.04) === "12.0", "span scheme key rounds to 0.1s");
   assert(vbbSpanSchemeKey(12.06) === "12.1", "span scheme key rounds");
   assert(vbbSpanSchemeKey(12.02) === vbbSpanSchemeKey(12.04), "same 0.1s bucket shares key");
+  assert(vbbSpanSchemeKey(40, 2) === "40.0@x2.00", "speed buckets separate from plain span");
+  assert(vbbSpanSchemeKey(40, 1) !== vbbSpanSchemeKey(40, 2), "speed on/off must not collide");
 }
 
 {

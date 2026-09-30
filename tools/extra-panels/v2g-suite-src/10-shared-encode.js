@@ -2013,8 +2013,11 @@
       const VBB_SPAN_SCHEME_KEY = "devtools-vbb-span-scheme-v1";
       const VBB_SPAN_SCHEME_MAX = 48;
   
-      function vbbSpanSchemeKey(span) {
+      function vbbSpanSchemeKey(span, speed = 1) {
         const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
+        const sp = Math.max(1, Number(speed) || 1);
+        // 加速与否分桶，避免「压时长开/关」互相沿用错误档位
+        if (sp > 1.02) return `${s.toFixed(1)}@x${sp.toFixed(2)}`;
         return s.toFixed(1);
       }
   
@@ -2028,10 +2031,10 @@
       }
   
       /** 「沿用方案」缓存版本：编码参数/分配算法变更时递增，旧缓存自动失效（避免沿用旧的低帧率） */
-      const VBB_SPAN_SCHEME_VER = 4;
+      const VBB_SPAN_SCHEME_VER = 5;
 
-      function loadVbbSpanScheme(span) {
-        const hit = loadVbbSpanSchemes()[vbbSpanSchemeKey(span)];
+      function loadVbbSpanScheme(span, speed = 1) {
+        const hit = loadVbbSpanSchemes()[vbbSpanSchemeKey(span, speed)];
         if (!hit || !(Number(hit.fps) > 0)) return null;
         // 旧版本（编码参数不同）算出的档位不再沿用
         if (Number(hit.ver) !== VBB_SPAN_SCHEME_VER) return null;
@@ -2042,13 +2045,15 @@
         if (!seed?.fps) return;
         try {
           const map = loadVbbSpanSchemes();
-          const key = vbbSpanSchemeKey(span);
+          const speed = Math.max(1, Number(seed.speed) || 1);
+          const key = vbbSpanSchemeKey(span, speed);
           map[key] = {
             ver: VBB_SPAN_SCHEME_VER,
             fps: Number(seed.fps) || 15,
             maxW: Math.max(64, Number(seed.maxW) || V2G_BLACKBOX_BASE_W),
             compressRounds: Number(seed.compressRounds) || 0,
             usedFallback: Boolean(seed.usedFallback),
+            speed,
             encode: encode || "blackbox",
             at: Date.now(),
           };
@@ -2058,12 +2063,14 @@
         } catch (_) {}
       }
   
-      function resolveVbbSegmentReuse(ranges, index, firstSeed, planEncode) {
-        const cached = loadVbbSpanScheme(ranges[index]?.span);
+      function resolveVbbSegmentReuse(ranges, index, firstSeed, planEncode, speed = 1) {
+        const sp = Math.max(1, Number(speed) || 1);
+        const cached = loadVbbSpanScheme(ranges[index]?.span, sp);
         if (cached) {
           return { seed: cached, fromCache: true, encode: cached.encode || planEncode };
         }
-        if (firstSeed && shouldReuseVbbFirstPlan(ranges, index)) {
+        const seedSp = Math.max(1, Number(firstSeed?.speed) || 1);
+        if (firstSeed && shouldReuseVbbFirstPlan(ranges, index) && Math.abs(seedSp - sp) < 0.05) {
           return { seed: firstSeed, fromCache: false, encode: planEncode };
         }
         return { seed: null, fromCache: false, encode: planEncode };
@@ -2076,6 +2083,7 @@
           maxW: Math.max(64, Number(encoded.maxW || extras.usedWidth || encoded.outW) || V2G_BLACKBOX_BASE_W),
           compressRounds: Number(encoded.compressRounds) || 0,
           usedFallback: Boolean(extras.usedFallback),
+          speed: Math.max(1, Number(encoded.speed) || 1),
         };
       }
   
@@ -2109,6 +2117,8 @@
           let curW = Math.max(64, Number(result.maxW) || Number(result.outW) || V2G_BLACKBOX_BASE_W);
           if (curW >= hardMax - 2) return result;
           const fps = Number(result.fps) || 15;
+          // 必须沿用核心阶段的加速倍率：clipOpts 只有 speedLimitSec，直接展开会丢掉 speed → 缩时长失效
+          const speed = Math.max(1, Number(result.speed) || 1);
           const quality = Number(result.quality) || V2G_BLACKBOX_QUALITY;
           const gifskiQuality = Number.isFinite(Number(result.gifskiQuality))
             ? Number(result.gifskiQuality)
@@ -2132,7 +2142,16 @@
             if (w <= lo || w >= hiW + 1) break;
             onProgress(0.985, `O3后加宽试探 ${w}px`);
             const enc = await encodeBlackboxGif({
-              ...clipOpts,
+              file: clipOpts.file,
+              startSec: clipOpts.startSec,
+              span: clipOpts.span,
+              srcW: clipOpts.srcW,
+              srcH: clipOpts.srcH,
+              crop: clipOpts.crop || null,
+              chunkCount: clipOpts.chunkCount,
+              ffmpeg: clipOpts.ffmpeg || null,
+              isAborted: clipOpts.isAborted,
+              speed,
               fps,
               maxW: w,
               quality,
@@ -2145,7 +2164,7 @@
               onProgress: (local, text) => onProgress(0.985 + Math.min(0.01, (local || 0) * 0.01), text),
             });
             if (enc?.blob && enc.blob.size <= capBytes) {
-              best = { ...enc, compressRounds: 0, maxW: w };
+              best = { ...enc, compressRounds: 0, maxW: w, speed };
               lo = w;
               if (best.outW > 0 && best.outW < w - 2) break;
             } else {
