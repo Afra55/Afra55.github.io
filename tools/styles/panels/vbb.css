@@ -1,5 +1,18 @@
 @import url("./gif-shared.css");
 
+/* 数字档位：点选弹出列表（手机友好），比自由填数更稳 */
+select.meta-input.num-choice {
+  appearance: auto;
+  -webkit-appearance: menulist;
+  width: auto;
+  min-width: 4.6rem;
+  max-width: 7.5rem;
+  text-align: right;
+  text-align-last: right;
+  cursor: pointer;
+  padding-right: 0.35rem;
+}
+
 .vbb-split-actions {
   gap: 0.55rem;
 }

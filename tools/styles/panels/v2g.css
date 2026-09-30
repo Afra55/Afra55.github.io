@@ -1,1 +1,13 @@
 @import url("./gif-shared.css");
+
+select.meta-input.num-choice {
+  appearance: auto;
+  -webkit-appearance: menulist;
+  width: auto;
+  min-width: 4.6rem;
+  max-width: 7.5rem;
+  text-align: right;
+  text-align-last: right;
+  cursor: pointer;
+  padding-right: 0.35rem;
+}

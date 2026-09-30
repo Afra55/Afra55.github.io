@@ -65,13 +65,12 @@
       const VBB_MIN_SPAN = 0.5;
       const VBB_CLARITY_MAX_SPAN = 20;
       const VBB_DURATION_MAX_SPAN = 30;
-      /** 与 V2G_BLACKBOX_LONG_SPAN_SEC 对齐：超过该秒数（或 15FPS 触顶帧）黑盒从 12FPS 起试 */
-      const VBB_BLACKBOX_LONG_SPAN_SEC = 20;
       /** Soft keep≈0.72 对应约 1–2 轮 --lossy 轻压 */
       const VBB_SOFT_COMPRESS_KEEP = 0.72;
       const VBB_DEFAULT_META = "";
       const VBB_WORKFLOW_HINTS = {
-        single: "整段视频将输出一个 GIF；选视频后可点「编辑」裁时长/画面，再点「一键黑盒」。",
+        single:
+          "整段视频输出一个 GIF（≈20s 主 15fps、≈30s 主 12fps、更短可冲 20；有余量先加宽再提帧；不为 30s 自动切两段）。选视频后可点「编辑」裁时长/画面，再点「一键黑盒」。",
         split: "长视频切片：先点「① 分析切分方案」查看段数与预估，调整满意后点「② 按方案生成 GIF」。",
         manual: "手动打点：拖到起点/终点点「打起点」「打终点」，标记多段后点「一键黑盒」。",
       };
@@ -1776,13 +1775,8 @@
       }
   
         function resolveBlackboxEstimateFpsList(span) {
-          // 与 resolveBlackboxFpsList 保持一致（含长视频 15fps 封顶），否则预估与实际不符
-          const list = V2G_BLACKBOX_FPS_LIST.slice();
-          if ((Number(span) || 0) >= V2G_BLACKBOX_LONG_SPAN_SEC) {
-            const capped = list.filter((f) => f <= V2G_BLACKBOX_LONG_FPS_CAP + 0.01);
-            if (capped.length) return capped;
-          }
-          return list;
+          // 与 resolveBlackboxFpsList 保持一致，否则预估与实际不符
+          return resolveBlackboxFpsList(span, 0);
         }
   
       /**
@@ -1808,8 +1802,8 @@
   
       /**
        * 对齐 encodeBlackboxClip：
-       * - 长段/触顶帧从 12FPS 起
-       * - 每档先 420 宽；超限轻柔压缩；体积 <5MB 再加宽到 ≤预算最大宽
+       * - ≤16s 从 20 起；≈20s 从 15 起；≈30s 从 12 起
+       * - 每档先 420 宽；超限轻柔压缩；体积有余再加宽
        */
       function estimateVbbBlackboxPlan(bps15, span, srcW) {
         const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
@@ -1829,7 +1823,7 @@
   
           const soft = Math.round(atBase * VBB_SOFT_COMPRESS_KEEP);
           if (soft <= maxBytes) {
-            // 实装：轻压进预算后若 <5MB，会用不带压缩的更宽重编码加宽（compressRounds 归零）
+            // 实装：轻压进预算后若有余量，会用不带压缩的更宽重编码加宽（compressRounds 归零）
             if (soft < V2G_BLACKBOX_WIDEN_BYTES) {
               const wide = resolveVbbWidenWidthForEst(bps15, s, fps, srcW, soft, baseW);
               if (wide.maxW > baseW) {
@@ -1849,7 +1843,7 @@
           }
         }
   
-        return { bytes: maxBytes, fps: 10, compressRounds: 2, maxW: baseW };
+        return { bytes: maxBytes, fps: 12, compressRounds: 2, maxW: baseW };
       }
   
       function estimateVbbBytesBlackbox(bps15, span, srcW) {
@@ -1901,7 +1895,7 @@
         if (mode === "clarity") return `不压缩 · ≤${blackboxBudgetLabel()}`;
         if (mode === "sharp") return `缩短加宽 · 不压缩 · ≤${blackboxBudgetLabel()}`;
         if (mode === "duration")
-          return `优先保 15FPS，短片有余量可冲 20（超限先轻压再 12→10）${compressTip} · ≤${blackboxBudgetLabel()}`;
+          return `≈20s 主 15fps、≈30s 主 12fps、更短可冲 20；有余量先加宽再提帧（超限缩宽→降质→12，不用 10fps）${compressTip} · ≤${blackboxBudgetLabel()}`;
         if (targetSpan < clarityMax - 0.05) {
           return `短于清晰档 · 目标宽${maxW || "?"} · 不压缩`;
         }
@@ -3640,9 +3634,28 @@
         vbbMeta = $("#vbb-meta", root);
         const vbbMaxMb = $("#vbb-max-mb", root);
         if (vbbMaxMb) {
-          try { vbbMaxMb.value = String(blackboxMaxMb()); } catch (_) {}
+          const snapMb = (raw) => {
+            const n = Math.max(1, Math.min(200, Number(raw) || 10));
+            if (vbbMaxMb.tagName === "SELECT") {
+              const opts = [...vbbMaxMb.options].map((o) => Number(o.value)).filter((x) => x > 0);
+              if (!opts.includes(n)) {
+                let best = opts[0] || 10;
+                let bestD = Math.abs(best - n);
+                for (const o of opts) {
+                  const d = Math.abs(o - n);
+                  if (d < bestD) {
+                    best = o;
+                    bestD = d;
+                  }
+                }
+                return best;
+              }
+            }
+            return n;
+          };
+          try { vbbMaxMb.value = String(snapMb(blackboxMaxMb())); } catch (_) {}
           vbbMaxMb.addEventListener("change", () => {
-            const v = setBlackboxMaxMb(vbbMaxMb.value);
+            const v = setBlackboxMaxMb(snapMb(vbbMaxMb.value));
             vbbMaxMb.value = String(v);
             toast(`黑盒上限已设为 ${v} MB`);
           });
@@ -3701,14 +3714,14 @@
             const rec = vbbRecommendChunkCount();
             if (countEl) {
               countEl.disabled = enable ? !enable.checked : false;
-              // 自动填写：没有视频时给默认值（上次的/2），有视频时给建议块数
-              if (!userSet) countEl.value = rec ? String(rec) : String(cfg.count || (currentMediaPerf().preferChunkByDefault ? 2 : 1));
+              // 未手改 → 用「自动」档，由编码器按内存预算分块
+              if (!userSet) countEl.value = "";
             }
             if (hintEl) {
               const p = currentMediaPerf();
               hintEl.textContent = rec
-                ? `本视频建议 ${rec} 块 · ${p.label}档 · 越少画质/体积越好`
-                : `${p.label}档 · 越少画质/体积越好，但越吃内存`;
+                ? `自动约 ${rec} 块 · ${p.label}档 · 点选可强制块数`
+                : `${p.label}档 · 选「自动」按内存预算；越少画质/体积越好`;
             }
           };
           const persist = () => {
@@ -3718,8 +3731,7 @@
           };
           enable?.addEventListener("change", () => { persist(); sync(); });
           countEl?.addEventListener("change", () => {
-            userSet = countEl.value !== "";
-            if (userSet) countEl.value = String(Math.max(1, Math.min(64, Math.floor(Number(countEl.value) || 1))));
+            userSet = String(countEl.value || "").trim() !== "";
             persist();
           });
           // 每换一支视频都重新按「当前视频」自动填写建议块数（上一支手改的值不沿用到新视频）
@@ -4114,7 +4126,8 @@
           function syncHold(v, fromRange) {
             let n = Number(v);
             if (!Number.isFinite(n)) n = 1;
-            n = Math.max(0.1, Math.min(5, Math.round(n * 10) / 10));
+            // 白名单 0.5 步进（与下拉档位一致）
+            n = Math.max(0.5, Math.min(5, Math.round(n * 2) / 2));
             st.hold = n;
             if (fromRange && holdNum) holdNum.value = String(n);
             if (!fromRange && holdRange) holdRange.value = String(n);
@@ -4148,6 +4161,7 @@
             setMeta("拖入图片即可预览；宽度、颜色由黑盒规则自动决定，不用填。");
           });
           holdRange.addEventListener("input", () => syncHold(holdRange.value, true));
+          holdNum?.addEventListener("change", () => syncHold(holdNum.value, false));
           holdNum?.addEventListener("input", () => syncHold(holdNum.value, false));
           // 填充方式：自动色（默认）/ 黑 / 白 / 透明
           if (fillSel) {
@@ -4303,12 +4317,28 @@
           });
         }
         if (vbbSpeedSec) {
+          const snapSpeed = (raw) => {
+            const n = Math.max(3, Math.min(120, Number(raw) || 20));
+            if (vbbSpeedSec.tagName !== "SELECT") return n;
+            const opts = [...vbbSpeedSec.options].map((o) => Number(o.value)).filter((x) => x > 0);
+            if (opts.includes(n)) return n;
+            let best = opts[0] || 20;
+            let bestD = Math.abs(best - n);
+            for (const o of opts) {
+              const d = Math.abs(o - n);
+              if (d < bestD) {
+                best = o;
+                bestD = d;
+              }
+            }
+            return best;
+          };
           try {
             const sv = localStorage.getItem("devtools-vbb-speed-sec");
-            if (sv) vbbSpeedSec.value = sv;
+            if (sv) vbbSpeedSec.value = String(snapSpeed(sv));
           } catch (_) {}
           vbbSpeedSec.addEventListener("change", () => {
-            const v = Math.max(3, Math.min(120, Number(vbbSpeedSec.value) || 20));
+            const v = snapSpeed(vbbSpeedSec.value);
             vbbSpeedSec.value = String(v);
             try { localStorage.setItem("devtools-vbb-speed-sec", String(v)); } catch (_) {}
           });
@@ -4411,12 +4441,25 @@
         vbbEditReset?.addEventListener("click", () => resetActiveVbbEdit());
         const syncCustomTarget = (raw) => {
           if (!vbbAnalysis) return;
-          const min = Number(vbbTargetRange?.min) || VBB_MIN_SPAN;
-          const max = Number(vbbTargetRange?.max) || VBB_DURATION_MAX_SPAN;
-          const val = Math.max(min, Math.min(max, Number(raw) || min));
+          const choices = [8, 10, 12, 15, 16, 20, 24, 30];
+          const min = Number(vbbTargetRange?.min) || choices[0];
+          const max = Number(vbbTargetRange?.max) || choices[choices.length - 1];
+          let val = Math.max(min, Math.min(max, Number(raw) || min));
+          // 白名单就近吸附，手机点选更稳
+          let best = choices[0];
+          let bestD = Math.abs(best - val);
+          for (const c of choices) {
+            if (c < min - 0.01 || c > max + 0.01) continue;
+            const d = Math.abs(c - val);
+            if (d < bestD) {
+              best = c;
+              bestD = d;
+            }
+          }
+          val = best;
           vbbSegmentTarget = val;
-          if (vbbTargetSpan) vbbTargetSpan.value = String(Number(val.toFixed(1)));
-          if (vbbTargetRange) vbbTargetRange.value = String(Number(val.toFixed(1)));
+          if (vbbTargetSpan) vbbTargetSpan.value = String(val);
+          if (vbbTargetRange) vbbTargetRange.value = String(val);
           if (vbbMode !== "custom") vbbMode = "custom";
           paintVbbPlan();
         };

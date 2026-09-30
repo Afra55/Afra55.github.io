@@ -10,7 +10,17 @@
             <button type="button" class="seg-btn" id="vbb-input-images">多图</button>
           </span>
           <label for="vbb-max-mb">黑盒上限</label>
-          <input id="vbb-max-mb" class="mono meta-input" type="number" min="1" max="200" step="1" value="10" />
+          <select id="vbb-max-mb" class="mono meta-input num-choice" title="点击选择上限 MB" aria-label="黑盒上限 MB">
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="8">8</option>
+            <option value="10" selected>10</option>
+            <option value="12">12</option>
+            <option value="15">15</option>
+            <option value="20">20</option>
+            <option value="30">30</option>
+            <option value="50">50</option>
+          </select>
           <span class="hint tight">MB</span>
           <label for="vbb-perf">性能</label>
           <select id="vbb-perf" class="mono meta-input" title="自动按手机能力选档；拉满尽量单次 gifski，多选时并行 2 路">
@@ -120,8 +130,21 @@
           </div>
           <div class="field-row" id="vbb-custom-row" hidden style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
             <label for="vbb-target-span" id="vbb-target-label">目标段时长（秒）</label>
-            <input id="vbb-target-span" class="mono meta-input" type="number" min="0.5" max="60" step="0.1" value="12" />
-            <input id="vbb-target-range" class="v2g-bright-range" type="range" min="5" max="30" step="0.1" value="12" aria-label="目标段时长滑块" />
+            <select id="vbb-target-span" class="mono meta-input num-choice" title="点击选择目标段时长" aria-label="目标段时长秒">
+              <option value="8">8</option>
+              <option value="10">10</option>
+              <option value="12" selected>12</option>
+              <option value="15">15</option>
+              <option value="16">16</option>
+              <option value="20">20</option>
+              <option value="24">24</option>
+              <option value="30">30</option>
+            </select>
+            <input id="vbb-target-range" class="v2g-bright-range" type="range" min="8" max="30" step="1" value="12" list="vbb-target-ticks" aria-label="目标段时长滑块" />
+            <datalist id="vbb-target-ticks">
+              <option value="8"></option><option value="10"></option><option value="12"></option><option value="15"></option>
+              <option value="16"></option><option value="20"></option><option value="24"></option><option value="30"></option>
+            </datalist>
           </div>
           <div class="field-row" style="flex-wrap:wrap;margin-top:0.45rem;align-items:center;gap:0.55rem 0.9rem">
             <label class="flag"><input type="checkbox" id="vbb-equalize" /> 均分各段</label>
@@ -147,13 +170,31 @@
         </div>
         <div class="field-row" id="vbb-speed-row" style="flex-wrap:wrap;align-items:center;margin-top:0.55rem">
           <label class="flag" for="vbb-speed-limit"><input type="checkbox" id="vbb-speed-limit" /> 压缩时长到</label>
-          <input id="vbb-speed-sec" class="mono meta-input" type="number" min="3" max="120" step="1" value="20" />
+          <select id="vbb-speed-sec" class="mono meta-input num-choice" title="点击选择压缩目标秒数" aria-label="压缩时长到秒">
+            <option value="10">10</option>
+            <option value="12">12</option>
+            <option value="15">15</option>
+            <option value="16">16</option>
+            <option value="20" selected>20</option>
+            <option value="24">24</option>
+            <option value="30">30</option>
+          </select>
           <span class="hint tight">秒</span>
         </div>
         <div class="field-row vbb-chunk-row only-coarse" style="flex-wrap:wrap;align-items:center;margin-top:0.4rem;gap:0.55rem">
           <label class="flag" for="vbb-chunk-enable"><input type="checkbox" id="vbb-chunk-enable" checked /> 分块编码</label>
           <label for="vbb-chunk-count">块数</label>
-          <input id="vbb-chunk-count" class="mono meta-input" type="number" min="1" max="64" step="1" inputmode="numeric" />
+          <select id="vbb-chunk-count" class="mono meta-input num-choice" title="点击选择分块数；留空档=自动" aria-label="分块数">
+            <option value="" selected>自动</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="6">6</option>
+            <option value="8">8</option>
+            <option value="12">12</option>
+            <option value="16">16</option>
+          </select>
           <span class="hint tight" id="vbb-chunk-hint">块数越少画质/体积越好，但越吃内存</span>
         </div>
         <div class="gif-progress" id="vbb-progress" hidden>
@@ -187,8 +228,20 @@
           <div class="vbb-img-list" id="vbb-img-list" aria-live="polite"></div>
           <div class="vbb-hold-row">
             <label for="vbb-hold">每张时长</label>
-            <input type="range" id="vbb-hold" class="vbb-hold-range" min="0.1" max="5" step="0.1" value="1" aria-label="每张时长（秒）" />
-            <input type="number" id="vbb-hold-num" class="mono meta-input" min="0.1" max="5" step="0.1" value="1" inputmode="decimal" aria-label="每张时长数值" />
+            <input type="range" id="vbb-hold" class="vbb-hold-range" min="0.5" max="5" step="0.5" value="1" list="vbb-hold-ticks" aria-label="每张时长（秒）" />
+            <select id="vbb-hold-num" class="mono meta-input num-choice" title="点击选择每张时长" aria-label="每张时长数值">
+              <option value="0.5">0.5</option>
+              <option value="1" selected>1</option>
+              <option value="1.5">1.5</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
+            <datalist id="vbb-hold-ticks">
+              <option value="0.5"></option><option value="1"></option><option value="1.5"></option>
+              <option value="2"></option><option value="3"></option><option value="4"></option><option value="5"></option>
+            </datalist>
             <span class="hint tight">秒 / 张</span>
           </div>
           <div class="vbb-hold-row">

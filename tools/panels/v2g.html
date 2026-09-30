@@ -2,7 +2,7 @@
   <div class="panel-head gif-tool-head">
     <p class="gif-tool-kicker">GIF</p>
     <h1>视频转 GIF</h1>
-    <p class="gif-tool-lead">本地把视频转为 GIF 或动画 WebP，可调帧率、宽度与亮度。≤10MB 黑盒见「黑盒」分类。</p>
+    <p class="gif-tool-lead">本地把视频转为 GIF 或动画 WebP，可调帧率、宽度与亮度。默认 20FPS / 宽480 / 最好质量。≤10MB 黑盒见「黑盒」分类。</p>
   </div>
   <div class="panel-body gif-tool-body">
     <div class="gif-tool-card">
@@ -14,15 +14,40 @@
           </div>
           <div class="field-row" style="flex-wrap:wrap;margin-top:0.85rem">
             <label for="v2g-fps">帧率 FPS</label>
-            <input id="v2g-fps" class="mono meta-input" type="number" min="2" max="30" step="1" value="15" />
+            <select id="v2g-fps" class="mono meta-input num-choice" title="点击选择帧率" aria-label="帧率 FPS">
+              <option value="8">8</option>
+              <option value="10">10</option>
+              <option value="12">12</option>
+              <option value="15">15</option>
+              <option value="20" selected>20</option>
+              <option value="24">24</option>
+              <option value="30">30</option>
+            </select>
             <label for="v2g-width">最大宽度</label>
-            <input id="v2g-width" class="mono meta-input" type="number" min="64" max="1280" step="1" value="480" />
+            <select id="v2g-width" class="mono meta-input num-choice" title="点击选择最大宽度" aria-label="最大宽度">
+              <option value="320">320</option>
+              <option value="380">380</option>
+              <option value="420">420</option>
+              <option value="480" selected>480</option>
+              <option value="540">540</option>
+              <option value="640">640</option>
+              <option value="720">720</option>
+              <option value="960">960</option>
+              <option value="1280">1280</option>
+            </select>
             <label for="v2g-maxsec">最长秒数</label>
             <input id="v2g-maxsec" class="mono meta-input" type="number" min="0.5" max="600" step="0.1" value="" placeholder="自动=全长" title="选择后自动填入视频时长，可手动缩短" />
             <label for="v2g-start">起始秒</label>
             <input id="v2g-start" class="mono meta-input" type="number" min="0" max="600" step="0.1" value="0" />
-            <label for="v2g-quality">质量 (1–30)</label>
-            <input id="v2g-quality" class="mono meta-input" type="number" min="1" max="30" step="1" value="5" />
+            <label for="v2g-quality">质量</label>
+            <select id="v2g-quality" class="mono meta-input num-choice" title="1=最好质量（体积更大）" aria-label="质量档">
+              <option value="1" selected>1 最好</option>
+              <option value="5">5</option>
+              <option value="8">8</option>
+              <option value="15">15</option>
+              <option value="22">22</option>
+              <option value="30">30 更小</option>
+            </select>
             <label for="v2g-perf">性能</label>
             <select id="v2g-perf" class="mono meta-input" title="与黑盒共用：拉满尽量单次 gifski">
               <option value="auto">自动</option>
