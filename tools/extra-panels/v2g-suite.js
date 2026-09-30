@@ -96,9 +96,9 @@
       const V2G_BLACKBOX_SHORT_SPAN_SEC = 24;
       /** 产品优化目标：单段 ≤36s 拉满；更长走切片 */
       const V2G_BLACKBOX_OPT_MAX_SPAN_SEC = 36;
-      /** 余量提帧：≤14s 且宽≥420、体积很松时，可冲到 20fps（源 fps≥20） */
+      /** 余量提帧：≤16s 且宽≥420、体积有余时，可冲到 20fps（源 fps≥20） */
       const V2G_BLACKBOX_HIGH_FPS = 20;
-      const V2G_BLACKBOX_HIGH_FPS_MAX_SPAN = 14;
+      const V2G_BLACKBOX_HIGH_FPS_MAX_SPAN = 16;
       const V2G_BLACKBOX_HIGH_FPS_MIN_W = 420;
       const V2G_BLACKBOX_BASE_W = 420;
         /** 收窄/加宽步进：要细，否则 420 一步就掉到 380，白白少给 20–40px */
@@ -1786,7 +1786,7 @@
 
       /**
        * 余量提帧候选：主列表之上，短片可追加 20fps。
-       * 条件：时长≤8s、当前宽≥420、源 fps≥20（避免硬插帧白费体积）。
+       * 条件：时长≤HIGH_FPS_MAX_SPAN、当前宽≥420、源 fps≥20（避免硬插帧白费体积）。
        */
       function blackboxRaiseFpsCandidates(span, srcFps, width) {
         const list = resolveBlackboxFpsList(span, srcFps).slice();
@@ -2228,7 +2228,7 @@
 
         /**
          * 宽度够用且仍有预算时，把剩余预算换成更高帧率（不降清晰度）。
-         * 短片（≤8s、宽≥420）可冲到 20fps；更长片段仍只在 15/12/10 内抬。
+         * 短片（≤HIGH_FPS_MAX_SPAN、宽≥420）可冲到 20fps；更长片段仍只在 15/12/10 内抬。
          */
         async function raiseBlackboxFps(best, curFps, encodeAtWidthFps, srcFps, effSpan) {
           const cap = Math.min(30, srcFps > 0 ? srcFps : 30);
@@ -2265,29 +2265,48 @@
           if (!best?.blob) return best;
           if (best.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return best; // 已用满预算
           let cur = best;
+          let fpsNow = Number(cur.fps) || curFps;
           const effSpan = span / speed;
           const atCap = () =>
             (srcW > 0 && cur.outW >= srcW - 2) || (Number(cur.maxW) || 0) >= Number(hardMax) - 2;
-          // 1) 帧率已在决策阶段用真实编码定好，这里只用剩余预算自动增宽（只要 <95% 就补）
+          const widthOkForRaise = () => {
+            const w = Number(cur.maxW) || V2G_BLACKBOX_BASE_W;
+            return w >= V2G_BLACKBOX_HIGH_FPS_MIN_W - 0.5 || atCap();
+          };
+          // 短片冲 20：先提帧再加宽。旧顺序「先加宽吃满 → 再提帧」会让 8s 左右录屏
+          // 停在 15fps@宽图，明明 20@420 仍远低于 10MB。
+          const preferRaiseFirst =
+            effSpan > 0.05 &&
+            effSpan <= V2G_BLACKBOX_HIGH_FPS_MAX_SPAN + 0.01 &&
+            widthOkForRaise() &&
+            cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.9;
+          if (preferRaiseFirst) {
+            const srcFpsEarly = await detectSourceFps(file).catch(() => 0);
+            const raised = await raiseBlackboxFps(cur, fpsNow, encodeAtWidthFps, srcFpsEarly, effSpan);
+            if (raised?.blob) {
+              cur = raised;
+              fpsNow = Number(cur.fps) || fpsNow;
+            }
+          }
+          if (cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return cur;
+          // 1) 帧率定好后，用剩余预算自动增宽（只要 <95% 就补）
           if (!atCap()) {
             onProgress(0.95, "体积有余 · 自动增宽");
             // gifski 已支持分段编码（内部自动切段），不再有「帧数/内存超限回退」问题；
             // 这里只把二分探测上限压到 2× 当前宽度，避免长视频对超预算宽度做整段（分段）编码白跑。
             const widenMax = Math.min(hardMax, Math.max(V2G_BLACKBOX_BASE_W, Math.round((Number(cur.maxW) || V2G_BLACKBOX_BASE_W) * 2)));
-            const wider = await blackboxWidenBest(cur, (w) => encodeAtWidthFps(curFps, w), {
+            const wider = await blackboxWidenBest(cur, (w) => encodeAtWidthFps(fpsNow, w), {
               minW: Math.max(64, Number(cur.maxW) || V2G_BLACKBOX_BASE_W),
               maxW: widenMax,
             });
             if (wider?.blob?.size) cur = wider;
           }
           if (cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return cur;
-          // 2) 宽已够可读（≥420）或已到源宽上限 → 用剩余预算提帧（短片可到 20）
-          //    以前要求 must atCap 才会提帧：短片宽停在 480/720、源却是 1170 时永远冲不到 20。
-          const widthNow = Number(cur.maxW) || V2G_BLACKBOX_BASE_W;
-          const widthOkForRaise = widthNow >= V2G_BLACKBOX_HIGH_FPS_MIN_W - 0.5 || atCap();
-          if (widthOkForRaise) {
+          // 2) 未先提帧的路径（更长片段 / 早期提帧失败）→ 宽够可读后再抬帧
+          if (!preferRaiseFirst && widthOkForRaise()) {
             const srcFpsNow = await detectSourceFps(file).catch(() => 0);
-            cur = await raiseBlackboxFps(cur, Number(cur.fps) || curFps, encodeAtWidthFps, srcFpsNow, effSpan);
+            cur = await raiseBlackboxFps(cur, Number(cur.fps) || fpsNow, encodeAtWidthFps, srcFpsNow, effSpan);
+            fpsNow = Number(cur.fps) || fpsNow;
           }
           if (!cur?.blob) return cur;
           // 3) 帧率也到顶、预算仍有富余 → gifski 质量从 92 上探到 100（源很窄/很短时用得上）
@@ -2295,7 +2314,7 @@
           if (currentMediaPerf().allowQualityBoost && cur.blob.size < V2G_BLACKBOX_WIDEN_BYTES && (Number(cur.gifskiQuality) || 0) < 100) {
             onProgress(0.97, "体积有余 · 画质上探");
             const hi = await encodeAtWidthFps(
-              Number(cur.fps) || curFps,
+              Number(cur.fps) || fpsNow,
               Number(cur.maxW) || V2G_BLACKBOX_BASE_W,
               V2G_BLACKBOX_QUALITY,
               100
@@ -7479,7 +7498,8 @@
         const compressTip = compressRounds > 0 ? `，预计压${compressRounds}轮` : "";
         if (mode === "clarity") return `不压缩 · ≤${blackboxBudgetLabel()}`;
         if (mode === "sharp") return `缩短加宽 · 不压缩 · ≤${blackboxBudgetLabel()}`;
-        if (mode === "duration") return `优先保 15FPS（超限先轻压再 12→10）${compressTip} · ≤${blackboxBudgetLabel()}`;
+        if (mode === "duration")
+          return `优先保 15FPS，短片有余量可冲 20（超限先轻压再 12→10）${compressTip} · ≤${blackboxBudgetLabel()}`;
         if (targetSpan < clarityMax - 0.05) {
           return `短于清晰档 · 目标宽${maxW || "?"} · 不压缩`;
         }

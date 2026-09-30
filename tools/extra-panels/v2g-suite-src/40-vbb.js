@@ -1900,7 +1900,8 @@
         const compressTip = compressRounds > 0 ? `，预计压${compressRounds}轮` : "";
         if (mode === "clarity") return `不压缩 · ≤${blackboxBudgetLabel()}`;
         if (mode === "sharp") return `缩短加宽 · 不压缩 · ≤${blackboxBudgetLabel()}`;
-        if (mode === "duration") return `优先保 15FPS（超限先轻压再 12→10）${compressTip} · ≤${blackboxBudgetLabel()}`;
+        if (mode === "duration")
+          return `优先保 15FPS，短片有余量可冲 20（超限先轻压再 12→10）${compressTip} · ≤${blackboxBudgetLabel()}`;
         if (targetSpan < clarityMax - 0.05) {
           return `短于清晰档 · 目标宽${maxW || "?"} · 不压缩`;
         }
