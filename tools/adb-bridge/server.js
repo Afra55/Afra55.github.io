@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.39";
+const BRIDGE_VERSION = "0.9.40";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -2385,10 +2385,114 @@ function normalizeFingerprint(value) {
     .toUpperCase();
 }
 
+/** Compare key: lowercase hex, strip spaces/colons (avoids AA:BB vs aabb false mismatch). */
+function fingerprintCompareKey(value) {
+  return String(value || "")
+    .replace(/[\s:_-]/g, "")
+    .toLowerCase();
+}
+
 function formatFingerprint(value) {
   const hex = normalizeFingerprint(value);
   if (!hex || hex.length % 2) return String(value || "").trim();
   return hex.match(/.{1,2}/g).join(":");
+}
+
+function collectSignerDigestSet(signers, algo) {
+  const set = new Set();
+  for (const s of signers || []) {
+    const raw = algo === "sha256" ? s.sha256 : s.sha1;
+    const key = fingerprintCompareKey(raw);
+    if (key && /^[0-9a-f]+$/.test(key) && key.length >= 16) set.add(key);
+  }
+  return set;
+}
+
+function formatSignerDigestLines(signers) {
+  return (signers || [])
+    .map((s, i) => {
+      const n = s.index || i + 1;
+      const bits = [];
+      if (s.sha256) bits.push(`SHA256=${formatFingerprint(s.sha256)}`);
+      if (s.sha1) bits.push(`SHA1=${formatFingerprint(s.sha1)}`);
+      if (s.cn) bits.push(`CN=${s.cn}`);
+      return bits.length ? `#${n} ${bits.join(" ")}` : "";
+    })
+    .filter(Boolean);
+}
+
+/**
+ * Compare signer certificate digests as unordered sets.
+ * Prefer SHA-256 when both sides have it; else SHA-1. Multi-signer → full set equality.
+ */
+function compareSignerFingerprints(packageSigners, installedSigners) {
+  const pkgFmt = formatSignerDigestLines(packageSigners);
+  const instFmt = formatSignerDigestLines(installedSigners);
+  const a256 = collectSignerDigestSet(packageSigners, "sha256");
+  const b256 = collectSignerDigestSet(installedSigners, "sha256");
+  let algo = "sha256";
+  let a = a256;
+  let b = b256;
+  if (!a.size || !b.size) {
+    const a1 = collectSignerDigestSet(packageSigners, "sha1");
+    const b1 = collectSignerDigestSet(installedSigners, "sha1");
+    if (a1.size && b1.size) {
+      algo = "sha1";
+      a = a1;
+      b = b1;
+    } else {
+      return {
+        comparable: false,
+        match: null,
+        algo: null,
+        packageDigests: [...(a256.size ? a256 : collectSignerDigestSet(packageSigners, "sha1"))].sort(),
+        installedDigests: [...(b256.size ? b256 : collectSignerDigestSet(installedSigners, "sha1"))].sort(),
+        packageFormatted: pkgFmt,
+        installedFormatted: instFmt,
+      };
+    }
+  }
+  const match = a.size === b.size && [...a].every((k) => b.has(k));
+  return {
+    comparable: true,
+    match,
+    algo,
+    packageDigests: [...a].sort(),
+    installedDigests: [...b].sort(),
+    packageFormatted: pkgFmt,
+    installedFormatted: instFmt,
+  };
+}
+
+function isSignatureIncompatibleError(text) {
+  return /INSTALL_FAILED_UPDATE_INCOMPATIBLE|signatures?\s+do\s+not\s+match|Existing package .+ signatures|签名.*(?:不一|不同|冲突)|证书.*(?:不一|不同)/i.test(
+    String(text || "")
+  );
+}
+
+function formatSignatureMismatchMessage(cmp, extra = {}) {
+  const lines = ["签名与设备已装版本不一致（无法覆盖安装）"];
+  if (cmp?.packageFormatted?.length) {
+    lines.push(`将安装指纹: ${cmp.packageFormatted.join("；")}`);
+  } else if (cmp?.packageDigests?.length) {
+    lines.push(`将安装指纹(${cmp.algo || "?"}): ${cmp.packageDigests.join(", ")}`);
+  }
+  if (cmp?.installedFormatted?.length) {
+    lines.push(`设备已装指纹: ${cmp.installedFormatted.join("；")}`);
+  } else if (cmp?.installedDigests?.length) {
+    lines.push(`设备已装指纹(${cmp.algo || "?"}): ${cmp.installedDigests.join(", ")}`);
+  }
+  if (extra.aabFormatted?.length && extra.aabDiffersFromInstall) {
+    lines.push(`AAB 原包指纹: ${extra.aabFormatted.join("；")}（与将安装的 universal APK 不同）`);
+    lines.push(
+      "原因：bundletool build-apks 未指定 --ks 时默认用 debug.keystore 重签 universal APK；「分析」读的是 AAB 原签，安装用的是重签后的 APK，二者不是同一证书。"
+    );
+    lines.push("处理：先卸载旧版再装，或安装用同 keystore 签过的 APK。");
+  } else {
+    lines.push("处理：先卸载旧版再装，或使用与已装应用相同证书签名的包。");
+  }
+  if (extra.rawError) lines.push(`adb: ${String(extra.rawError).replace(/\s+/g, " ").trim().slice(0, 240)}`);
+  return lines.join("\n");
 }
 
 function parseDnField(dn, field) {
@@ -4174,7 +4278,7 @@ async function zipRemotePath(serial, remotePath) {
   }
 }
 
-async function resolvePackageApkPath(serial, packageName) {
+async function resolvePackageApkPaths(serial, packageName) {
   const pkg = String(packageName || "").trim();
   if (!pkg || !/^[A-Za-z0-9._]+$/.test(pkg)) throw new Error("包名无效");
   let stdout = "";
@@ -4189,8 +4293,76 @@ async function resolvePackageApkPath(serial, packageName) {
       throw new Error(err.message || "无法查询包路径");
     }
   }
-  const m = String(stdout || "").match(/package:(.+)/);
-  return m ? m[1].trim() : "";
+  const paths = [...String(stdout || "").matchAll(/package:(.+)/g)]
+    .map((m) => m[1].trim())
+    .filter(Boolean);
+  paths.sort((a, b) => {
+    const score = (p) => (/\/base\.apk$/i.test(p) ? 0 : /base\.apk/i.test(p) ? 1 : 2);
+    return score(a) - score(b) || a.localeCompare(b);
+  });
+  return paths;
+}
+
+async function resolvePackageApkPath(serial, packageName) {
+  const paths = await resolvePackageApkPaths(serial, packageName);
+  return paths[0] || "";
+}
+
+/** Pull installed base APK and analyze with the same analyzeApkSigning as local packages. */
+async function analyzeInstalledPackageSigning(serial, packageName) {
+  const pkg = String(packageName || "").trim();
+  if (!pkg) return { ok: false, installed: false, signers: [], error: "包名为空" };
+  let paths = [];
+  try {
+    paths = await resolvePackageApkPaths(serial, pkg);
+  } catch (err) {
+    return { ok: false, installed: false, signers: [], error: err.message || String(err) };
+  }
+  if (!paths.length) return { ok: false, installed: false, signers: [], error: "未安装" };
+  const remotePath = paths[0];
+  const local = tempName("inst-apk", "base.apk");
+  try {
+    await adbSerial(serial, ["pull", remotePath, local], { timeout: 300000 });
+    const signing = await analyzeApkSigning(local);
+    return {
+      ok: true,
+      installed: true,
+      remotePath,
+      paths,
+      signing,
+      signers: signing.signers || [],
+    };
+  } catch (err) {
+    return {
+      ok: false,
+      installed: true,
+      remotePath,
+      paths,
+      signers: [],
+      error: err.message || String(err),
+    };
+  } finally {
+    try {
+      fs.unlinkSync(local);
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+async function dumpPackageNameFromApk(filePath) {
+  for (const bin of ["aapt", "aapt2"]) {
+    try {
+      const { stdout } = await execFileAsync(bin, ["dump", "badging", filePath], {
+        timeout: 30000,
+        maxBuffer: 10 * 1024 * 1024,
+      });
+      return (String(stdout || "").match(/package: name='([^']+)'/) || [])[1] || "";
+    } catch {
+      /* try next */
+    }
+  }
+  return "";
 }
 
 /**
@@ -4265,6 +4437,7 @@ async function runInstallJob(job, upload, serials, opts = {}) {
 
   let installPaths = [upload.path];
   let cleanupDir = "";
+  let aabSigners = [];
   if (isAab) {
     touchJob(job, {
       status: "running",
@@ -4273,6 +4446,13 @@ async function runInstallJob(job, upload, serials, opts = {}) {
       items: [],
     });
     try {
+      // Capture AAB original signing before/while build (same extractor as analyze UI).
+      try {
+        const aabSigning = await analyzeApkSigning(upload.path);
+        aabSigners = aabSigning.signers || [];
+      } catch {
+        aabSigners = [];
+      }
       const built = await buildUniversalApksFromAab(upload.path);
       cleanupDir = built.workDir;
       installPaths = built.apks;
@@ -4293,6 +4473,38 @@ async function runInstallJob(job, upload, serials, opts = {}) {
     touchJob(job, { status: "running", message: "开始安装", progress: 0, items: [] });
   }
 
+  // Signing of the artifact that will actually be installed (universal APK for AAB).
+  let installSigners = [];
+  let packageName = "";
+  try {
+    const installSigning = await analyzeApkSigning(installPaths[0]);
+    installSigners = installSigning.signers || [];
+  } catch {
+    installSigners = [];
+  }
+  try {
+    packageName = await dumpPackageNameFromApk(installPaths[0]);
+  } catch {
+    packageName = "";
+  }
+  if (!packageName && isAab) {
+    try {
+      const aabInfo = await analyzeLocalAab(upload.path, upload.filename);
+      packageName = aabInfo.packageName || "";
+      if (!aabSigners.length) aabSigners = aabInfo.signatures || aabInfo.signing?.signers || [];
+    } catch {
+      /* ignore */
+    }
+  }
+
+  const aabCmpToInstall =
+    isAab && aabSigners.length && installSigners.length
+      ? compareSignerFingerprints(aabSigners, installSigners)
+      : null;
+  const aabDiffersFromInstall = Boolean(
+    aabCmpToInstall?.comparable && aabCmpToInstall.match === false
+  );
+
   const total = serials.length || 1;
   try {
     for (let i = 0; i < serials.length; i++) {
@@ -4304,6 +4516,22 @@ async function runInstallJob(job, upload, serials, opts = {}) {
         message: `安装到 ${serial}（${i + 1}/${total}）`,
       });
       try {
+        let preCmp = null;
+        if (packageName && installSigners.length) {
+          const installed = await analyzeInstalledPackageSigning(serial, packageName);
+          if (installed.installed && installed.signers?.length) {
+            preCmp = compareSignerFingerprints(installSigners, installed.signers);
+            if (preCmp.comparable && preCmp.match === false) {
+              throw new Error(
+                formatSignatureMismatchMessage(preCmp, {
+                  aabFormatted: formatSignerDigestLines(aabSigners),
+                  aabDiffersFromInstall,
+                })
+              );
+            }
+          }
+        }
+
         const args = [];
         if (installPaths.length > 1) {
           args.push("install-multiple");
@@ -4318,7 +4546,32 @@ async function runInstallJob(job, upload, serials, opts = {}) {
         }
         const { stdout, stderr } = await adbSerial(serial, args, { timeout: 600000 });
         const text = `${stdout}\n${stderr}`;
-        if (/Failure|Error/i.test(text) && !/Success/i.test(text)) throw new Error(text.trim() || "安装失败");
+        if (/Failure|Error/i.test(text) && !/Success/i.test(text)) {
+          const raw = text.trim() || "安装失败";
+          if (isSignatureIncompatibleError(raw) && packageName) {
+            let cmp = preCmp;
+            if (!cmp?.comparable) {
+              try {
+                const installed = await analyzeInstalledPackageSigning(serial, packageName);
+                if (installed.signers?.length && installSigners.length) {
+                  cmp = compareSignerFingerprints(installSigners, installed.signers);
+                }
+              } catch {
+                /* keep raw */
+              }
+            }
+            if (cmp) {
+              throw new Error(
+                formatSignatureMismatchMessage(cmp, {
+                  aabFormatted: formatSignerDigestLines(aabSigners),
+                  aabDiffersFromInstall,
+                  rawError: raw,
+                })
+              );
+            }
+          }
+          throw new Error(raw);
+        }
         item.status = "ok";
         item.message = isAab ? "Success（AAB→universal）" : "Success";
       } catch (err) {
@@ -4882,6 +5135,7 @@ async function handleApi(req, res, url) {
             "apk-signing",
             "aab-info",
             "aab-install",
+            "apk-sign-compare",
             "host-tools",
             "fs-preview",
             "host-tools-probe",
@@ -5275,7 +5529,45 @@ async function handleApi(req, res, url) {
       const body = parseJsonBody(await readBody(req, 1024 * 1024));
       const upload = UPLOADS.get(body.uploadId);
       if (!upload) throw new Error("找不到已上传的包，请先上传 APK/AAB");
-      sendJson(res, 200, await analyzeLocalPackage(upload.path, upload.filename), origin);
+      const info = await analyzeLocalPackage(upload.path, upload.filename);
+      const serial = String(body.serial || "").trim();
+      if (serial && info.packageName) {
+        const installed = await analyzeInstalledPackageSigning(serial, info.packageName);
+        const pkgSigners = info.signatures || info.signing?.signers || [];
+        if (installed.installed && (installed.signers || []).length) {
+          const cmp = compareSignerFingerprints(pkgSigners, installed.signers);
+          info.installedSigning = {
+            ok: installed.ok,
+            remotePath: installed.remotePath,
+            tool: installed.signing?.tool || "",
+            signers: installed.signers,
+          };
+          info.signatureCompare = {
+            ...cmp,
+            note:
+              info.kind === "aab"
+                ? cmp.match
+                  ? "AAB 原包签名与设备已装一致。注意：安装时 bundletool 会生成 universal APK，未指定 --ks 时默认 debug 重签，实际安装指纹可能与这里不同。"
+                  : "AAB 原包签名与设备已装不一致（上方指纹即比较所用值）。"
+                : cmp.match
+                  ? "上传包签名与设备已装一致（已规范化比较 SHA 指纹集合）。"
+                  : "上传包签名与设备已装不一致（上方指纹即比较所用值）。",
+          };
+        } else if (!installed.installed) {
+          info.signatureCompare = {
+            comparable: false,
+            match: null,
+            note: "设备未安装该包，跳过签名比较",
+          };
+        } else {
+          info.signatureCompare = {
+            comparable: false,
+            match: null,
+            note: `已装包签名未能解析：${installed.error || "未知错误"}`,
+          };
+        }
+      }
+      sendJson(res, 200, info, origin);
       return;
     }
 

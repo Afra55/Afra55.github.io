@@ -46,6 +46,15 @@ function req(method, urlPath, { headers = {}, body } = {}) {
 }
 
 async function main() {
+  // Fingerprint normalize: colon/case must not cause false mismatch (mirrors server.js)
+  const fpKey = (v) =>
+    String(v || "")
+      .replace(/[\s:_-]/g, "")
+      .toLowerCase();
+  if (fpKey("AA:BB:CC:DD:EE:FF:11:22:33:44:55:66:77:88:99:00") !== fpKey("aabbccddeeff11223344556677889900")) {
+    throw new Error("fingerprintCompareKey must ignore case/colons");
+  }
+
   const mirrorSrc = fs.readFileSync(path.join(__dirname, "scrcpy-mirror.js"), "utf8");
   if (/waitForLocalListen/.test(mirrorSrc)) {
     throw new Error("scrcpy-mirror.js must not probe-connect adb forward before device listen");
@@ -178,6 +187,9 @@ async function main() {
       "device-control",
       "apk-info",
       "apk-signing",
+      "apk-sign-compare",
+      "aab-info",
+      "aab-install",
       "proxy",
       "forward",
       "developer",

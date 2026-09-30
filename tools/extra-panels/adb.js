@@ -1948,7 +1948,10 @@
   
       function jobCardHtml(job) {
         const items = (job.items || [])
-          .map((it) => `<li>${escapeHtml(it.serial || "")}: ${escapeHtml(it.status)} ${escapeHtml(it.message || "")}</li>`)
+          .map((it) => {
+            const msg = escapeHtml(it.message || "").replace(/\n/g, "<br>");
+            return `<li style="white-space:pre-wrap">${escapeHtml(it.serial || "")}: ${escapeHtml(it.status)} ${msg}</li>`;
+          })
           .join("");
         const arts = (job.artifacts || [])
           .map(
@@ -3181,10 +3184,12 @@
           body: buffer,
         });
         adbApkUploadId = uploaded.uploadId;
+        const infoBody = { uploadId: uploaded.uploadId };
+        if (adbSelected) infoBody.serial = adbSelected;
         const data = await adbFetch("/apk/info", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ uploadId: uploaded.uploadId }),
+          body: JSON.stringify(infoBody),
         });
         adbApkInfo = data;
         const kind = data.kind === "aab" || isAabFile(adbApkFile) ? "aab" : "apk";
@@ -3223,6 +3228,8 @@
           "",
           ...formatApkSigningLines(data),
           "",
+          ...formatSignatureCompareLines(data),
+          "",
           `权限 (${(data.permissions || []).length}):`,
           ...(data.permissions || []).slice(0, 60),
           "",
@@ -3232,6 +3239,36 @@
           .join("\n");
         if ($("#adb-apk-pkg") && data.packageName) $("#adb-apk-pkg").value = data.packageName;
         toast(kind === "aab" ? "AAB 信息已解析" : "APK 信息已解析");
+      }
+
+      function formatSignatureCompareLines(data) {
+        const cmp = data?.signatureCompare;
+        if (!cmp) {
+          return adbSelected
+            ? []
+            : ["签名比较: 未选设备，跳过与已装应用比较"];
+        }
+        const lines = ["—— 与已装应用签名比较 ——"];
+        if (cmp.match === true) lines.push("结果: 一致（规范化指纹集合相等）");
+        else if (cmp.match === false) lines.push("结果: 不一致");
+        else lines.push(`结果: 无法比较${cmp.note ? `（${cmp.note}）` : ""}`);
+        if (cmp.algo) lines.push(`比较算法: ${String(cmp.algo).toUpperCase()}（去冒号/大小写后集合比较）`);
+        if ((cmp.packageFormatted || []).length) {
+          lines.push(`上传包指纹: ${(cmp.packageFormatted || []).join("；")}`);
+        }
+        if ((cmp.installedFormatted || []).length) {
+          lines.push(`设备已装指纹: ${(cmp.installedFormatted || []).join("；")}`);
+        }
+        const inst = data?.installedSigning;
+        if (inst?.remotePath) lines.push(`已装 APK 路径: ${inst.remotePath}`);
+        if (inst?.tool) lines.push(`已装签名工具: ${inst.tool}`);
+        if (cmp.note && cmp.match != null) lines.push(`说明: ${cmp.note}`);
+        if (data?.kind === "aab") {
+          lines.push(
+            "提醒: 安装 AAB 时会先 build-apks(universal)；未指定 keystore 时 bundletool 可能用 debug 重签，届时「将安装指纹」可能与上方 AAB 原签不同。"
+          );
+        }
+        return lines;
       }
   
       function formatApkSigningLines(data) {

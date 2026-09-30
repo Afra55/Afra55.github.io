@@ -237,7 +237,7 @@
                 <label class="flag"><input type="checkbox" id="adb-apk-replace" checked /> 覆盖安装 (-r)</label>
                 <label class="flag"><input type="checkbox" id="adb-apk-downgrade" /> 允许降级 (-d)</label>
               </div>
-              <p class="hint" id="adb-apk-debug-hint">APK：可直接分析与安装；签名不一致通常要先卸载。AAB：可分析包名/版本/签名（有 bundletool 更准）；安装需本机 java + bundletool，桥会 <span class="mono">build-apks --mode=universal</span> 后再装——体积更大，签名可能变为调试签，与 Play 包不同。系统路径推送仅支持 APK。</p>
+              <p class="hint" id="adb-apk-debug-hint">APK：可直接分析与安装；签名不一致通常要先卸载。AAB：分析读的是原包签名；安装会 <span class="mono">build-apks --mode=universal</span>，未指定 keystore 时可能被 debug 重签——分析显示「与已装一致」不等于能覆盖安装。系统路径推送仅支持 APK。</p>
               <div class="adb-guide" id="adb-signing-guide" hidden>
                 <strong>签名工具未就绪？</strong>
                 <ul>
