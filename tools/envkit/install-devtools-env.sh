@@ -420,6 +420,20 @@ print_report() {
     else miss "$name 未安装"
     fi
   done
+  # AAB 安装可选：探测 bundletool（不自动安装）
+  if have java; then
+    if have bundletool; then
+      ok "bundletool · $(command -v bundletool)"
+    elif [[ -n "${DEVTOOLS_BUNDLETOOL:-}" && -f "${DEVTOOLS_BUNDLETOOL}" ]]; then
+      ok "bundletool · ${DEVTOOLS_BUNDLETOOL}"
+    elif [[ -f "${BRIDGE_DIR}/adb-bridge/vendor/bundletool.jar" ]]; then
+      ok "bundletool · ${BRIDGE_DIR}/adb-bridge/vendor/bundletool.jar"
+    else
+      info "bundletool 未安装（可选；装 AAB 才需要）：https://github.com/google/bundletool/releases"
+    fi
+  else
+    info "java 未安装（可选；AAB/部分签名分析需要 JDK）"
+  fi
   say ""
   say "包管理器：$(detect_pm) · 系统：$OS"
   say "桥目录：${BRIDGE_DIR}"

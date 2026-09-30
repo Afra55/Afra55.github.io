@@ -15,6 +15,7 @@
             <li><strong>ADB（必装）</strong>：安装 Android SDK <span class="mono">platform-tools</span>，终端能跑 <span class="mono">adb devices</span>。macOS：<span class="mono">brew install android-platform-tools</span>；Windows：从 Google 下载 Platform-Tools 并把目录加入 PATH；Linux：发行版包或官网 zip。</li>
             <li><strong>本机桥</strong>：下载上方完整 ZIP → 解压（同目录保留 <span class="mono">server.js</span>）→ 运行启动脚本 → 点「连接本机桥」。桥已启动但提示找不到 adb 时，先修好 PATH 再重启桥。</li>
             <li><strong>APK 签名分析（可选）</strong>：装 JDK（提供 <span class="mono">keytool</span>），或装 Android <span class="mono">build-tools</span>（提供 <span class="mono">apksigner</span>）并加入 PATH；也可装 <span class="mono">openssl</span> 作证书回退。</li>
+            <li><strong>AAB 安装（可选）</strong>：需本机 <span class="mono">java</span> + <a href="https://github.com/google/bundletool/releases" target="_blank" rel="noopener">bundletool</a> jar。分析 AAB 可尽力做；安装会走 <span class="mono">build-apks --mode=universal</span> 再 <span class="mono">adb install</span>。AAB 不能直接 <span class="mono">adb install</span>，也不能推系统路径。</li>
           </ol>
           <p class="hint tight" id="adb-tools-probe" style="margin:0.55rem 0 0">连接桥后会显示本机工具探测结果。</p>
         </div>
@@ -227,32 +228,40 @@
 
             <div class="adb-tab-panel" data-adb-panel="install" hidden>
               <div class="label-row">
-                <h2 class="subhead">APK 安装</h2>
+                <h2 class="subhead">APK / AAB 安装</h2>
                 <span class="hint tight" id="adb-install-meta">可安装到当前设备或勾选的多台设备</span>
               </div>
               <div class="btn-row tool-actions">
-                <label class="file-btn" for="adb-apk-file">选择 APK</label>
-                <input id="adb-apk-file" type="file" accept=".apk,application/vnd.android.package-archive" hidden />
+                <label class="file-btn" for="adb-apk-file">选择 APK / AAB</label>
+                <input id="adb-apk-file" type="file" accept=".apk,.aab,application/vnd.android.package-archive,application/octet-stream" hidden />
                 <label class="flag"><input type="checkbox" id="adb-apk-replace" checked /> 覆盖安装 (-r)</label>
                 <label class="flag"><input type="checkbox" id="adb-apk-downgrade" /> 允许降级 (-d)</label>
               </div>
-              <p class="hint" id="adb-apk-debug-hint">普通/调试包：勾选覆盖；装更低版本再勾「允许降级」。签名不一致通常要先卸载。分析会尽量给出别名/CN/SHA1/SHA256（需本机 keytool 或 apksigner）。系统预装应用：分析后填包名，点「推送到系统路径」会按包名查找现有 APK 路径并同名覆盖。</p>
+              <p class="hint" id="adb-apk-debug-hint">APK：可直接分析与安装；签名不一致通常要先卸载。AAB：可分析包名/版本/签名（有 bundletool 更准）；安装需本机 java + bundletool，桥会 <span class="mono">build-apks --mode=universal</span> 后再装——体积更大，签名可能变为调试签，与 Play 包不同。系统路径推送仅支持 APK。</p>
               <div class="adb-guide" id="adb-signing-guide" hidden>
                 <strong>签名工具未就绪？</strong>
                 <ul>
                   <li>安装 JDK 17+，确认终端里 <span class="mono">keytool -help</span> 可用；若只用 GUI 启动桥，请<strong>重启桥</span>（新版启动脚本会自动补 JAVA_HOME / Homebrew OpenJDK 路径）。</li>
                   <li>解析仅有 v2/v3 的 APK 需要 <span class="mono">apksigner</span>：安装 Android SDK build-tools 并加入 PATH（仅有 keytool 不够）。</li>
                   <li>可选：安装 <span class="mono">openssl</span>，用于解析 META-INF 证书。</li>
-                  <li>配好后<strong>重启本机 ADB 桥</strong>（完整 ZIP 包需 ≥0.6.10）再点「分析 APK 信息」。失败时看分析结果里的「工具路径 / 错误」行，对照连接区 keytool✓/✗、apksigner✓/✗。</li>
+                  <li>配好后<strong>重启本机 ADB 桥</strong>（完整 ZIP 包需 ≥0.6.10）再点「分析包信息」。失败时看分析结果里的「工具路径 / 错误」行，对照连接区 keytool✓/✗、apksigner✓/✗。</li>
                 </ul>
               </div>
-              <p class="hint" id="adb-apk-name">尚未选择 APK</p>
+              <div class="adb-guide" id="adb-aab-guide" hidden>
+                <strong>要安装 AAB？需要 bundletool</strong>
+                <ul>
+                  <li>下载 <a href="https://github.com/google/bundletool/releases" target="_blank" rel="noopener">bundletool-all-*.jar</a>，放到桥目录 <span class="mono">vendor/bundletool.jar</span>、用户目录，或加入 PATH；也可设环境变量 <span class="mono">DEVTOOLS_BUNDLETOOL</span> 指向 jar。</li>
+                  <li>确认终端 <span class="mono">java -version</span> 可用，然后<strong>重启本机桥</strong>（≥0.9.39）。连接区应显示 <span class="mono">bundletool✓</span>。</li>
+                  <li>无 bundletool 时仍可「分析」AAB（尽力读包名/模块/签名），但不能安装。</li>
+                </ul>
+              </div>
+              <p class="hint" id="adb-apk-name">尚未选择 APK / AAB</p>
               <div class="field-row" style="flex-wrap:wrap;margin-top:0.55rem">
                 <label for="adb-apk-pkg">包名</label>
                 <input id="adb-apk-pkg" class="mono" type="text" placeholder="分析后自动填入，系统推送必填" autocomplete="off" spellcheck="false" />
               </div>
               <div class="btn-row tool-actions" style="margin-top:0.75rem">
-                <button type="button" class="secondary-btn" id="adb-apk-analyze" disabled>分析 APK 信息</button>
+                <button type="button" class="secondary-btn" id="adb-apk-analyze" disabled>分析包信息</button>
                 <button type="button" class="primary-btn" id="adb-apk-install-selected" disabled>安装到勾选设备</button>
                 <button type="button" class="secondary-btn" id="adb-apk-install-current" disabled>仅安装到当前设备</button>
                 <button type="button" class="ghost-btn" id="adb-apk-push-system" disabled>推送到系统路径</button>

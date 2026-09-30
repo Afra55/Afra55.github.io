@@ -2086,18 +2086,21 @@
         const el = $("#adb-tools-probe");
         if (!el) return;
         const tools = health?.tools || {};
-        const bits = ["adb", "keytool", "apksigner", "openssl", "aapt"]
+        const bits = ["adb", "keytool", "apksigner", "openssl", "aapt", "bundletool"]
           .map((name) => {
             const t = tools[name];
             if (!t) return null;
             const pathHint = t.ok && t.path ? `（${String(t.path).split(/[/\\]/).slice(-2).join("/")}）` : "";
-            return `${name}${t.ok ? "✓" : "✗"}${name === "keytool" && t.ok ? pathHint : ""}`;
+            return `${name}${t.ok ? "✓" : "✗"}${name === "keytool" || name === "bundletool" ? (t.ok ? pathHint : "") : ""}`;
           })
           .filter(Boolean);
         const ver = health?.version ? `桥 ${health.version}` : "";
         const setupBits = [];
         if (health?.setup?.adb) setupBits.push(health.setup.adb);
         if (health?.setup?.signing) setupBits.push(health.setup.signing);
+        if (health?.setup?.bundletool && tools.bundletool && !tools.bundletool.ok) {
+          // only surface when selecting AAB / guide open — keep probe short
+        }
         el.textContent = [
           bits.length ? `本机工具：${bits.join(" · ")}` : "连接桥后显示本机工具探测",
           ver,
@@ -2114,6 +2117,11 @@
             tools.openssl?.ok;
           // Show guide when connected and signing tools missing; keep hidden until we know
           if (health?.tools) signGuide.hidden = Boolean(signingOk);
+        }
+        const aabGuide = $("#adb-aab-guide");
+        if (aabGuide && health?.tools) {
+          // Show AAB guide when connected and bundletool missing (install needs it)
+          aabGuide.hidden = Boolean(tools.bundletool?.ok);
         }
         syncLocalSaveMeta();
         applyAdbFeatureGates(health);
@@ -3067,9 +3075,28 @@
         watchJobs();
       }
   
+      function isAabFile(file) {
+        return /\.aab$/i.test(String(file?.name || ""));
+      }
+
+      function syncApkActionButtons() {
+        const has = Boolean(adbApkFile);
+        const aab = isAabFile(adbApkFile);
+        if ($("#adb-apk-analyze")) $("#adb-apk-analyze").disabled = !has;
+        if ($("#adb-apk-install-selected")) $("#adb-apk-install-selected").disabled = !has;
+        if ($("#adb-apk-install-current")) $("#adb-apk-install-current").disabled = !has;
+        if ($("#adb-apk-push-system")) {
+          $("#adb-apk-push-system").disabled = !has || aab;
+          $("#adb-apk-push-system").title = aab ? "AAB 不能推送到系统路径，请先转成 APK" : "";
+        }
+      }
+
       async function startInstall(serials) {
-        if (!adbApkFile) throw new Error("请先选择 APK");
+        if (!adbApkFile) throw new Error("请先选择 APK 或 AAB");
         if (!serials.length) throw new Error("请选择设备");
+        if (isAabFile(adbApkFile) && !bridgeAtLeast("0.9.39") && !bridgeHas("aab-install")) {
+          throw new Error("安装 AAB 需桥 ≥0.9.39，请更新并重启本机桥");
+        }
         const buffer = new Uint8Array(await adbApkFile.arrayBuffer());
         const uploaded = await adbFetch(`/upload?name=${encodeURIComponent(adbApkFile.name)}`, {
           method: "POST",
@@ -3095,12 +3122,16 @@
         });
         await trackJob(data.job);
       }
-  
+
       function setApkButtonsEnabled(on) {
-        if ($("#adb-apk-install-selected")) $("#adb-apk-install-selected").disabled = !on;
-        if ($("#adb-apk-install-current")) $("#adb-apk-install-current").disabled = !on;
-        if ($("#adb-apk-analyze")) $("#adb-apk-analyze").disabled = !on;
-        if ($("#adb-apk-push-system")) $("#adb-apk-push-system").disabled = !on;
+        if (!on) {
+          if ($("#adb-apk-install-selected")) $("#adb-apk-install-selected").disabled = true;
+          if ($("#adb-apk-install-current")) $("#adb-apk-install-current").disabled = true;
+          if ($("#adb-apk-analyze")) $("#adb-apk-analyze").disabled = true;
+          if ($("#adb-apk-push-system")) $("#adb-apk-push-system").disabled = true;
+          return;
+        }
+        syncApkActionButtons();
       }
   
       function setPermTarget(pkg) {
@@ -3139,7 +3170,7 @@
       }
   
       async function analyzeSelectedApk() {
-        if (!adbApkFile) throw new Error("请先选择 APK");
+        if (!adbApkFile) throw new Error("请先选择 APK 或 AAB");
         const buffer = new Uint8Array(await adbApkFile.arrayBuffer());
         const uploaded = await adbFetch(`/upload?name=${encodeURIComponent(adbApkFile.name)}`, {
           method: "POST",
@@ -3156,31 +3187,39 @@
           body: JSON.stringify({ uploadId: uploaded.uploadId }),
         });
         adbApkInfo = data;
+        const kind = data.kind === "aab" || isAabFile(adbApkFile) ? "aab" : "apk";
         let installedLine = "";
         if (data.packageName && adbSelected) {
           try {
             const installed = await adbFetch(
               `/apps/info?serial=${encodeURIComponent(adbSelected)}&package=${encodeURIComponent(data.packageName)}`
             );
-            installedLine = `已安装版本: ${installed.versionName || "—"} (${installed.versionCode || "—"}) · APK: ${data.versionName || "—"} (${data.versionCode || "—"})`;
+            installedLine = `已安装版本: ${installed.versionName || "—"} (${installed.versionCode || "—"}) · 包: ${data.versionName || "—"} (${data.versionCode || "—"})`;
           } catch (_) {
-            installedLine = `已安装版本: 未安装或无法读取 · APK: ${data.versionName || "—"} (${data.versionCode || "—"})`;
+            installedLine = `已安装版本: 未安装或无法读取 · 包: ${data.versionName || "—"} (${data.versionCode || "—"})`;
           }
         }
         const el = $("#adb-apk-info");
         if (!el) return;
         el.hidden = false;
         el.textContent = [
+          `类型: ${kind === "aab" ? "AAB（Android App Bundle）" : "APK"}`,
           `文件: ${data.filename || adbApkFile.name}`,
           `大小: ${formatBytes(data.size || adbApkFile.size)}`,
           `解析工具: ${data.tool || "无"}`,
           data.note || "",
+          kind === "aab" && (data.modules || []).length
+            ? `模块: ${(data.modules || []).join(", ")}`
+            : "",
+          kind === "aab"
+            ? `bundletool: ${data.bundletool?.ok ? data.bundletool.path || "已找到" : "未找到（安装不可用）"}`
+            : "",
           `应用名: ${data.label || "—"}`,
           `包名: ${data.packageName || "—"}`,
           `版本: ${data.versionName || "—"} (${data.versionCode || "—"})`,
           installedLine,
           `SDK: min ${data.minSdk || "—"} / target ${data.targetSdk || "—"}`,
-          `启动: ${data.launchActivity || "—"}`,
+          kind === "apk" ? `启动: ${data.launchActivity || "—"}` : "",
           "",
           ...formatApkSigningLines(data),
           "",
@@ -3192,7 +3231,7 @@
           .filter((line) => line !== "")
           .join("\n");
         if ($("#adb-apk-pkg") && data.packageName) $("#adb-apk-pkg").value = data.packageName;
-        toast("APK 信息已解析");
+        toast(kind === "aab" ? "AAB 信息已解析" : "APK 信息已解析");
       }
   
       function formatApkSigningLines(data) {
@@ -3268,6 +3307,9 @@
   
       async function pushSystemApk() {
         if (!adbApkFile) throw new Error("请先选择 APK");
+        if (isAabFile(adbApkFile)) {
+          throw new Error("AAB 不能推送到系统路径。请先用 bundletool 转成 APK，或用「安装」走 universal。");
+        }
         const serial = requireCurrentSerial();
         let uploadId = adbApkUploadId;
         let packageName = String($("#adb-apk-pkg")?.value || adbApkInfo?.packageName || "").trim();
@@ -5501,10 +5543,12 @@
         if ($("#adb-apk-pkg")) $("#adb-apk-pkg").value = "";
         if (adbApkName) {
         adbApkName.textContent = adbApkFile
-        ? `${adbApkFile.name}（${formatBytes(adbApkFile.size)}）`
-        : "尚未选择 APK";
+        ? `${adbApkFile.name}（${formatBytes(adbApkFile.size)}）${isAabFile(adbApkFile) ? " · AAB" : " · APK"}`
+        : "尚未选择 APK / AAB";
         }
         setApkButtonsEnabled(Boolean(adbApkFile));
+        const aabGuide = $("#adb-aab-guide");
+        if (aabGuide && isAabFile(adbApkFile)) aabGuide.hidden = false;
         const infoEl = $("#adb-apk-info");
         if (infoEl) {
         infoEl.hidden = true;

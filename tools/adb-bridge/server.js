@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.38";
+const BRIDGE_VERSION = "0.9.39";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -497,16 +497,26 @@ async function probeOneTool(name) {
 }
 
 async function probeHostTools() {
-  const names = ["adb", "keytool", "openssl", "apksigner", "aapt", "aapt2", "jarsigner"];
+  const names = ["adb", "keytool", "openssl", "apksigner", "aapt", "aapt2", "jarsigner", "java"];
   const tools = {};
   for (const name of names) {
     tools[name] = await probeOneTool(name);
   }
+  const bt = resolveBundletool();
+  tools.bundletool = {
+    ok: Boolean(bt.ok),
+    path: bt.display || bt.jar || bt.bin || "",
+    mode: bt.mode || "",
+    setup: bt.ok
+      ? ""
+      : "安装 AAB 需本机 bundletool（Java jar）。下载 https://github.com/google/bundletool/releases 的 bundletool-all-*.jar，放到 PATH、ADB 桥目录 vendor/、或设环境变量 DEVTOOLS_BUNDLETOOL 指向 jar，并确保 java 可用；然后重启桥。",
+  };
   const signingOk = tools.keytool.ok || tools.apksigner.ok || tools.openssl.ok;
   return {
     tools,
     signingOk,
     adbOk: tools.adb.ok,
+    bundletoolOk: Boolean(bt.ok),
     setup: {
       adb: tools.adb.ok
         ? ""
@@ -514,6 +524,7 @@ async function probeHostTools() {
       signing: signingOk
         ? ""
         : "未找到签名工具：安装 JDK（提供 keytool），或安装 Android build-tools（提供 apksigner）并加入 PATH。也可安装 openssl 作为证书解析回退。配好后请重启 ADB 桥。",
+      bundletool: tools.bundletool.setup || "",
     },
   };
 }
@@ -1845,6 +1856,526 @@ async function analyzeLocalApk(filePath, filename) {
     signatures: signing.signers || [],
     rawPreview: badging.split(/\r?\n/).slice(0, 80).join("\n"),
   };
+}
+
+const BUNDLETOOL_SETUP =
+  "下载 bundletool-all-*.jar（https://github.com/google/bundletool/releases），放到 PATH、桥目录 vendor/bundletool.jar，或设置 DEVTOOLS_BUNDLETOOL 指向该 jar；需本机 java。配好后重启桥。";
+
+function isAabFilename(filename) {
+  return /\.aab$/i.test(String(filename || ""));
+}
+
+async function listZipEntryNames(filePath) {
+  try {
+    const { stdout } = await execFileAsync("unzip", ["-Z1", filePath], {
+      timeout: 30000,
+      maxBuffer: 16 * 1024 * 1024,
+    });
+    const list = String(stdout || "")
+      .split(/\r?\n/)
+      .map((s) => s.trim().replace(/\\/g, "/"))
+      .filter(Boolean);
+    if (list.length) return list;
+  } catch {
+    /* try jar */
+  }
+  try {
+    const jar = resolveTool("jar");
+    const { stdout } = await execFileAsync(jar, ["tf", filePath], {
+      timeout: 60000,
+      maxBuffer: 16 * 1024 * 1024,
+      env: toolProcessEnv(),
+    });
+    return String(stdout || "")
+      .split(/\r?\n/)
+      .map((s) => s.trim().replace(/\\/g, "/"))
+      .filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+async function extractZipEntryToFile(zipPath, entry, destFile) {
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "adb-zip-entry-"));
+  try {
+    const normalized = String(entry || "").replace(/\\/g, "/");
+    let extracted = "";
+    try {
+      await execFileAsync("unzip", ["-o", "-j", "-d", tmpDir, zipPath, normalized], {
+        timeout: 60000,
+        maxBuffer: 32 * 1024 * 1024,
+      });
+      const flat = path.join(tmpDir, path.basename(normalized));
+      if (fs.existsSync(flat)) extracted = flat;
+    } catch {
+      extracted = "";
+    }
+    if (!extracted) {
+      const jar = resolveTool("jar");
+      await execFileAsync(jar, ["xf", zipPath, normalized], {
+        timeout: 90000,
+        maxBuffer: 32 * 1024 * 1024,
+        cwd: tmpDir,
+        env: toolProcessEnv(),
+      });
+      const nested = path.join(tmpDir, normalized.replace(/\//g, path.sep));
+      if (fs.existsSync(nested)) extracted = nested;
+    }
+    if (!extracted || !fs.existsSync(extracted)) {
+      throw new Error(`无法从 ZIP 提取 ${normalized}（需本机 unzip 或 jar）`);
+    }
+    fs.mkdirSync(path.dirname(destFile), { recursive: true });
+    fs.copyFileSync(extracted, destFile);
+    return destFile;
+  } finally {
+    try {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+async function looksLikeAabArchive(filePath) {
+  const entries = await listZipEntryNames(filePath);
+  return entries.some((e) => /(^|\/)BundleConfig\.pb$/i.test(e) || /(^|\/)base\/manifest\/AndroidManifest\.xml$/i.test(e));
+}
+
+function resolveBundletool() {
+  const envPath = String(process.env.DEVTOOLS_BUNDLETOOL || process.env.BUNDLETOOL_JAR || "").trim();
+  const candidates = [];
+  if (envPath) candidates.push(envPath);
+  const whichBt = whichSync("bundletool");
+  if (whichBt) candidates.push(whichBt);
+  const home = os.homedir();
+  candidates.push(
+    path.join(__dirname, "vendor", "bundletool.jar"),
+    path.join(__dirname, "vendor", "bundletool-all.jar"),
+    path.join(__dirname, "..", "vendor", "bundletool.jar"),
+    path.join(home, "bundletool.jar"),
+    path.join(home, "Downloads", "bundletool.jar"),
+    path.join(home, "下载", "bundletool.jar")
+  );
+  for (const root of listAndroidSdkRoots()) {
+    candidates.push(path.join(root, "bundletool.jar"), path.join(root, "cmdline-tools", "latest", "bin", "bundletool"));
+  }
+  // Prefer newest bundletool-all-*.jar under vendor / Downloads
+  const globDirs = [
+    path.join(__dirname, "vendor"),
+    path.join(home, "Downloads"),
+    path.join(home, "下载"),
+    home,
+  ];
+  for (const dir of globDirs) {
+    try {
+      if (!fs.existsSync(dir)) continue;
+      const hits = fs
+        .readdirSync(dir)
+        .filter((n) => /^bundletool(.*)?\.jar$/i.test(n) || /^bundletool-all-.*\.jar$/i.test(n))
+        .map((n) => path.join(dir, n));
+      candidates.push(...hits);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  for (const raw of candidates) {
+    const p = String(raw || "").trim();
+    if (!p || !fs.existsSync(p)) continue;
+    if (/\.jar$/i.test(p)) {
+      const java = resolveTool("java");
+      const javaOk = java && (java !== "java" ? fs.existsSync(java) : Boolean(whichSync("java")));
+      if (!javaOk) {
+        return {
+          ok: false,
+          mode: "jar",
+          jar: p,
+          java: "",
+          display: p,
+          error: `找到 ${p}，但本机无 java。请安装 JDK 并加入 PATH。`,
+        };
+      }
+      return {
+        ok: true,
+        mode: "jar",
+        jar: p,
+        java: java !== "java" ? java : whichSync("java") || "java",
+        display: p,
+      };
+    }
+    // script / binary named bundletool
+    return { ok: true, mode: "bin", bin: p, jar: "", java: "", display: p };
+  }
+  return { ok: false, mode: "", jar: "", bin: "", java: "", display: "", error: BUNDLETOOL_SETUP };
+}
+
+async function execBundletool(args, opts = {}) {
+  const inv = resolveBundletool();
+  if (!inv.ok) throw new Error(inv.error || BUNDLETOOL_SETUP);
+  const env = opts.env || toolProcessEnv();
+  if (inv.mode === "jar") {
+    return execFileAsync(inv.java || "java", ["-jar", inv.jar, ...args], {
+      ...opts,
+      env,
+      maxBuffer: opts.maxBuffer || 32 * 1024 * 1024,
+    });
+  }
+  return execFileAsync(inv.bin, args, { ...opts, env, maxBuffer: opts.maxBuffer || 32 * 1024 * 1024 });
+}
+
+function scanPrintableStrings(buf, minLen = 2) {
+  const out = [];
+  const data = Buffer.isBuffer(buf) ? buf : Buffer.from(buf || []);
+  let i = 0;
+  while (i < data.length) {
+    // Prefer protobuf length-delimited UTF-8 (wire type 2): tag byte + varint len + bytes
+    if (i + 2 < data.length && (data[i] & 7) === 2) {
+      let j = i + 1;
+      let len = 0;
+      let shift = 0;
+      let okVar = false;
+      while (j < data.length && shift <= 28) {
+        const v = data[j++];
+        len |= (v & 0x7f) << shift;
+        if ((v & 0x80) === 0) {
+          okVar = true;
+          break;
+        }
+        shift += 7;
+      }
+      if (okVar && len >= minLen && len <= 512 && j + len <= data.length) {
+        const slice = data.subarray(j, j + len);
+        let printable = true;
+        for (let k = 0; k < slice.length; k++) {
+          const c = slice[k];
+          if (c < 0x09 || (c > 0x0d && c < 0x20) || c === 0x7f) {
+            printable = false;
+            break;
+          }
+        }
+        if (printable) {
+          try {
+            const s = slice.toString("utf8");
+            if (s && !s.includes("\uFFFD")) out.push(s);
+          } catch {
+            /* ignore */
+          }
+          i = j + len;
+          continue;
+        }
+      }
+    }
+    i++;
+  }
+  return out;
+}
+
+function guessAabIdentityFromStrings(strings) {
+  const skip =
+    /^(android\.|androidx\.|com\.android\.|java\.|javax\.|kotlin\.|dalvik\.|org\.apache\.|org\.json\.|META-INF|http:|https:|schema\.|www\.)/i;
+  const pkgs = [];
+  const seen = new Set();
+  for (const s of strings) {
+    if (!/^[a-zA-Z][\w]*(?:\.[\w]+){1,12}$/.test(s)) continue;
+    if (skip.test(s) || s.length > 120) continue;
+    if (seen.has(s)) continue;
+    seen.add(s);
+    pkgs.push(s);
+  }
+  pkgs.sort((a, b) => b.split(".").length - a.split(".").length || a.length - b.length);
+  let packageName = "";
+  const pkgKey = strings.findIndex((s) => s === "package" || s === "packageName");
+  if (pkgKey >= 0) {
+    for (let i = pkgKey + 1; i < Math.min(pkgKey + 6, strings.length); i++) {
+      if (/^[a-zA-Z][\w]*(?:\.[\w]+){1,12}$/.test(strings[i]) && !skip.test(strings[i])) {
+        packageName = strings[i];
+        break;
+      }
+    }
+  }
+  if (!packageName) packageName = pkgs[0] || "";
+
+  let versionName = "";
+  const vnKey = strings.findIndex((s) => s === "versionName" || s === "android:versionName");
+  if (vnKey >= 0) {
+    for (let i = vnKey + 1; i < Math.min(vnKey + 6, strings.length); i++) {
+      if (/^\d+\.\d+(\.\d+){0,3}([-._+][A-Za-z0-9._+-]+)?$/.test(strings[i])) {
+        versionName = strings[i];
+        break;
+      }
+    }
+  }
+  if (!versionName) {
+    for (const s of strings) {
+      if (/^\d+\.\d+(\.\d+){0,3}([-._+][A-Za-z0-9._+-]+)?$/.test(s) && s.length <= 40) {
+        versionName = s;
+        break;
+      }
+    }
+  }
+
+  let versionCode = "";
+  const idx = strings.findIndex((s) => s === "versionCode" || s === "android:versionCode");
+  if (idx >= 0) {
+    for (let i = idx + 1; i < Math.min(idx + 8, strings.length); i++) {
+      if (/^\d{1,10}$/.test(strings[i])) {
+        versionCode = strings[i];
+        break;
+      }
+    }
+  }
+
+  let label = "";
+  const labelKeys = ["application-label", "app_name", "app_label"];
+  for (let i = 0; i < strings.length; i++) {
+    if (labelKeys.includes(strings[i]) && strings[i + 1] && /[^\x00-\x1f]/.test(strings[i + 1])) {
+      label = strings[i + 1];
+      break;
+    }
+  }
+
+  return { packageName, versionName, versionCode, label };
+}
+
+function parseManifestXmlDump(text) {
+  const src = String(text || "");
+  const packageName =
+    (src.match(/\bpackage\s*=\s*"([^"]+)"/) || src.match(/\bpackage='([^']+)'/) || [])[1] || "";
+  const versionName =
+    (src.match(/android:versionName\s*=\s*"([^"]+)"/) ||
+      src.match(/android:versionName='([^']+)'/) ||
+      [])[1] || "";
+  const versionCode =
+    (src.match(/android:versionCode\s*=\s*"([^"]+)"/) ||
+      src.match(/android:versionCode='([^']+)'/) ||
+      [])[1] || "";
+  const minSdk =
+    (src.match(/android:minSdkVersion\s*=\s*"([^"]+)"/) ||
+      src.match(/android:minSdkVersion='([^']+)'/) ||
+      [])[1] || "";
+  const targetSdk =
+    (src.match(/android:targetSdkVersion\s*=\s*"([^"]+)"/) ||
+      src.match(/android:targetSdkVersion='([^']+)'/) ||
+      [])[1] || "";
+  const permissions = [
+    ...src.matchAll(/android:name\s*=\s*"(android\.permission\.[^"]+)"/g),
+  ].map((m) => m[1]);
+  const label =
+    (src.match(/android:label\s*=\s*"([^"]+)"/) || src.match(/android:label='([^']+)'/) || [])[1] || "";
+  return {
+    packageName,
+    versionName,
+    versionCode,
+    minSdk,
+    targetSdk,
+    label: label.startsWith("@") ? "" : label,
+    permissions: [...new Set(permissions)].slice(0, 100),
+  };
+}
+
+async function analyzeLocalAab(filePath, filename) {
+  const size = fs.statSync(filePath).size;
+  const entries = await listZipEntryNames(filePath);
+  const modules = [
+    ...new Set(
+      entries
+        .map((e) => {
+          const m = e.match(/^([^/]+)\/manifest\/AndroidManifest\.xml$/i);
+          return m ? m[1] : "";
+        })
+        .filter(Boolean)
+    ),
+  ];
+  const hasBundleConfig = entries.some((e) => /(^|\/)BundleConfig\.pb$/i.test(e));
+  const signing = await analyzeApkSigning(filePath);
+
+  let tool = "";
+  let note = "";
+  let packageName = "";
+  let versionName = "";
+  let versionCode = "";
+  let minSdk = "";
+  let targetSdk = "";
+  let label = "";
+  let permissions = [];
+  let rawPreview = "";
+
+  const bt = resolveBundletool();
+  if (bt.ok) {
+    try {
+      const { stdout, stderr } = await execBundletool(["dump", "manifest", `--bundle=${filePath}`], {
+        timeout: 120000,
+      });
+      const dump = `${stdout || ""}${stderr || ""}`;
+      const parsed = parseManifestXmlDump(dump);
+      packageName = parsed.packageName;
+      versionName = parsed.versionName;
+      versionCode = parsed.versionCode;
+      minSdk = parsed.minSdk;
+      targetSdk = parsed.targetSdk;
+      label = parsed.label;
+      permissions = parsed.permissions;
+      tool = "bundletool dump manifest";
+      rawPreview = dump.split(/\r?\n/).slice(0, 80).join("\n");
+    } catch (err) {
+      note = `bundletool dump 失败：${clipDiag(err?.stderr || err?.message || err)}；改用 ZIP/清单启发式。`;
+    }
+  } else {
+    note = `本机未找到 bundletool：分析仅能尽力读取包名/模块/签名。${BUNDLETOOL_SETUP}`;
+  }
+
+  if (!packageName) {
+    const manifestEntry =
+      entries.find((e) => /^base\/manifest\/AndroidManifest\.xml$/i.test(e)) ||
+      entries.find((e) => /\/manifest\/AndroidManifest\.xml$/i.test(e));
+    if (manifestEntry) {
+      const tmpManifest = tempName("aab-manifest", "AndroidManifest.xml");
+      try {
+        await extractZipEntryToFile(filePath, manifestEntry, tmpManifest);
+        const buf = fs.readFileSync(tmpManifest);
+        const strings = scanPrintableStrings(buf, 2);
+        const guessed = guessAabIdentityFromStrings(strings);
+        packageName = packageName || guessed.packageName;
+        versionName = versionName || guessed.versionName;
+        versionCode = versionCode || guessed.versionCode;
+        label = label || guessed.label;
+        if (!tool) tool = "aab-manifest-scan";
+        if (!rawPreview) {
+          rawPreview = strings.filter((s) => s.length <= 80).slice(0, 60).join("\n");
+        }
+      } catch (err) {
+        note = [note, `提取/扫描 manifest 失败：${clipDiag(err?.message || err)}`].filter(Boolean).join(" ");
+      } finally {
+        try {
+          fs.unlinkSync(tmpManifest);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+  }
+
+  if (!hasBundleConfig && !modules.length) {
+    note = [note, "警告：未检测到 BundleConfig.pb / module manifest，可能不是标准 AAB。"]
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  return {
+    ok: true,
+    kind: "aab",
+    filename,
+    tool,
+    note:
+      note ||
+      "AAB 不能直接 adb install。安装需 bundletool build-apks（universal）后再装；系统路径推送仅支持 APK。",
+    packageName,
+    label,
+    versionName,
+    versionCode,
+    minSdk,
+    targetSdk,
+    launchActivity: "",
+    permissions,
+    modules,
+    hasBundleConfig,
+    size,
+    signing,
+    signatures: signing.signers || [],
+    bundletool: { ok: bt.ok, path: bt.display || "" },
+    rawPreview,
+  };
+}
+
+async function analyzeLocalPackage(filePath, filename) {
+  const name = filename || path.basename(filePath);
+  if (isAabFilename(name) || (await looksLikeAabArchive(filePath))) {
+    return analyzeLocalAab(filePath, name);
+  }
+  const result = await analyzeLocalApk(filePath, name);
+  return { ...result, kind: "apk" };
+}
+
+async function extractApksArchive(apksPath, destDir) {
+  fs.mkdirSync(destDir, { recursive: true });
+  try {
+    await execFileAsync("unzip", ["-o", "-d", destDir, apksPath], {
+      timeout: 180000,
+      maxBuffer: 64 * 1024 * 1024,
+    });
+    return;
+  } catch {
+    /* jar fallback */
+  }
+  const jar = resolveTool("jar");
+  await execFileAsync(jar, ["xf", apksPath], {
+    timeout: 180000,
+    maxBuffer: 64 * 1024 * 1024,
+    cwd: destDir,
+    env: toolProcessEnv(),
+  });
+}
+
+function collectApkFiles(dir) {
+  const out = [];
+  const walk = (d) => {
+    let names = [];
+    try {
+      names = fs.readdirSync(d);
+    } catch {
+      return;
+    }
+    for (const name of names) {
+      const full = path.join(d, name);
+      let st;
+      try {
+        st = fs.statSync(full);
+      } catch {
+        continue;
+      }
+      if (st.isDirectory()) walk(full);
+      else if (/\.apk$/i.test(name)) out.push(full);
+    }
+  };
+  walk(dir);
+  out.sort((a, b) => {
+    const ua = /universal/i.test(a) ? 0 : 1;
+    const ub = /universal/i.test(b) ? 0 : 1;
+    return ua - ub || a.localeCompare(b);
+  });
+  return out;
+}
+
+async function buildUniversalApksFromAab(aabPath) {
+  const bt = resolveBundletool();
+  if (!bt.ok) throw new Error(bt.error || BUNDLETOOL_SETUP);
+  const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "adb-aab-build-"));
+  const apksPath = path.join(workDir, "out.apks");
+  const extractDir = path.join(workDir, "extracted");
+  try {
+    await execBundletool(
+      [
+        "build-apks",
+        `--bundle=${aabPath}`,
+        `--output=${apksPath}`,
+        "--mode=universal",
+        "--overwrite",
+      ],
+      { timeout: 600000 }
+    );
+    if (!fs.existsSync(apksPath)) throw new Error("bundletool 未生成 .apks");
+    await extractApksArchive(apksPath, extractDir);
+    const apks = collectApkFiles(extractDir);
+    if (!apks.length) throw new Error("从 .apks 中未找到 APK（请确认本机 unzip/jar 可用）");
+    return { workDir, apksPath, apks, bundletool: bt.display || bt.jar || "" };
+  } catch (err) {
+    try {
+      fs.rmSync(workDir, { recursive: true, force: true });
+    } catch {
+      /* ignore */
+    }
+    throw err;
+  }
 }
 
 function normalizeFingerprint(value) {
@@ -3671,6 +4202,9 @@ async function resolvePackageApkPath(serial, packageName) {
 async function pushSystemApk(serial, uploadId, packageName, remoteDir) {
   const upload = UPLOADS.get(uploadId);
   if (!upload) throw new Error("找不到已上传的 APK，请先上传");
+  if (isAabFilename(upload.filename) || (await looksLikeAabArchive(upload.path))) {
+    throw new Error("AAB 不能直接推送到系统路径。请先用 bundletool 转成 APK，或改用「安装」走 universal APK。");
+  }
   if (!serial) throw new Error("缺少设备 serial");
 
   const pkg = String(packageName || "").trim();
@@ -3727,39 +4261,88 @@ async function runInstallJob(job, upload, serials, opts = {}) {
   // allowDowngrade: explicit true enables -d; if omitted, keep legacy (-d with replace)
   const allowDowngrade =
     opts.allowDowngrade != null ? Boolean(opts.allowDowngrade) : replace;
-  touchJob(job, { status: "running", message: "开始安装", progress: 0, items: [] });
-  const total = serials.length || 1;
-  for (let i = 0; i < serials.length; i++) {
-    const serial = serials[i];
-    const item = { serial, status: "running", message: "安装中" };
-    job.items.push(item);
+  const isAab = isAabFilename(upload.filename) || (await looksLikeAabArchive(upload.path));
+
+  let installPaths = [upload.path];
+  let cleanupDir = "";
+  if (isAab) {
     touchJob(job, {
-      progress: Math.round((i / total) * 100),
-      message: `安装到 ${serial}（${i + 1}/${total}）`,
+      status: "running",
+      message: "AAB → bundletool build-apks（universal）…",
+      progress: 0,
+      items: [],
     });
     try {
-      const args = ["install"];
-      if (replace) args.push("-r");
-      if (allowDowngrade) args.push("-d");
-      args.push(upload.path);
-      const { stdout, stderr } = await adbSerial(serial, args, { timeout: 600000 });
-      const text = `${stdout}\n${stderr}`;
-      if (/Failure|Error/i.test(text) && !/Success/i.test(text)) throw new Error(text.trim() || "安装失败");
-      item.status = "ok";
-      item.message = "Success";
+      const built = await buildUniversalApksFromAab(upload.path);
+      cleanupDir = built.workDir;
+      installPaths = built.apks;
+      touchJob(job, {
+        message: `已生成 ${installPaths.length} 个 APK，开始安装`,
+        progress: 5,
+      });
     } catch (err) {
-      item.status = "error";
-      item.message = err.message || String(err);
+      touchJob(job, {
+        status: "error",
+        error: err.message || String(err),
+        message: "AAB 转换失败（需本机 bundletool + java）",
+        progress: 100,
+      });
+      return;
     }
-    touchJob(job, { progress: Math.round(((i + 1) / total) * 100) });
+  } else {
+    touchJob(job, { status: "running", message: "开始安装", progress: 0, items: [] });
   }
-  const failed = job.items.filter((x) => x.status === "error").length;
-  touchJob(job, {
-    status: failed && failed === job.items.length ? "error" : "done",
-    message: failed ? `完成，失败 ${failed}/${job.items.length}` : "全部安装成功",
-    error: failed ? `${failed} 台失败` : "",
-    progress: 100,
-  });
+
+  const total = serials.length || 1;
+  try {
+    for (let i = 0; i < serials.length; i++) {
+      const serial = serials[i];
+      const item = { serial, status: "running", message: isAab ? "安装 AAB(universal)" : "安装中" };
+      job.items.push(item);
+      touchJob(job, {
+        progress: Math.round(5 + (i / total) * 90),
+        message: `安装到 ${serial}（${i + 1}/${total}）`,
+      });
+      try {
+        const args = [];
+        if (installPaths.length > 1) {
+          args.push("install-multiple");
+          if (replace) args.push("-r");
+          if (allowDowngrade) args.push("-d");
+          args.push(...installPaths);
+        } else {
+          args.push("install");
+          if (replace) args.push("-r");
+          if (allowDowngrade) args.push("-d");
+          args.push(installPaths[0]);
+        }
+        const { stdout, stderr } = await adbSerial(serial, args, { timeout: 600000 });
+        const text = `${stdout}\n${stderr}`;
+        if (/Failure|Error/i.test(text) && !/Success/i.test(text)) throw new Error(text.trim() || "安装失败");
+        item.status = "ok";
+        item.message = isAab ? "Success（AAB→universal）" : "Success";
+      } catch (err) {
+        item.status = "error";
+        item.message = err.message || String(err);
+      }
+      touchJob(job, { progress: Math.round(5 + ((i + 1) / total) * 90) });
+    }
+    const failed = job.items.filter((x) => x.status === "error").length;
+    touchJob(job, {
+      status: failed && failed === job.items.length ? "error" : "done",
+      message: failed ? `完成，失败 ${failed}/${job.items.length}` : "全部安装成功",
+      error: failed ? `${failed} 台失败` : "",
+      progress: 100,
+    });
+  } finally {
+    if (cleanupDir) {
+      try {
+        fs.rmSync(cleanupDir, { recursive: true, force: true });
+      } catch {
+        /* ignore */
+      }
+    }
+  }
 }
 
 async function screenshotOne(serial) {
@@ -4297,6 +4880,8 @@ async function handleApi(req, res, url) {
             "device-control",
             "apk-info",
             "apk-signing",
+            "aab-info",
+            "aab-install",
             "host-tools",
             "fs-preview",
             "host-tools-probe",
@@ -4601,24 +5186,32 @@ async function handleApi(req, res, url) {
     if (url.pathname === "/install" && req.method === "POST") {
       const body = parseJsonBody(await readBody(req, 1024 * 1024));
       const upload = UPLOADS.get(body.uploadId);
-      if (!upload) throw new Error("找不到已上传的 APK，请先上传");
+      if (!upload) throw new Error("找不到已上传的包，请先上传 APK/AAB");
       const serials = parseSerials(body.serials || body.serial);
       if (!serials.length) throw new Error("请选择至少一台设备");
       const replace = body.replace !== false;
       const allowDowngrade =
         body.allowDowngrade != null ? Boolean(body.allowDowngrade) : replace;
+      const kind =
+        isAabFilename(upload.filename) || (await looksLikeAabArchive(upload.path)) ? "aab" : "apk";
+      if (kind === "aab" && !resolveBundletool().ok) {
+        throw new Error(
+          `安装 AAB 需要本机 bundletool + java。${BUNDLETOOL_SETUP}`
+        );
+      }
       const job = createJob("install", {
         filename: upload.filename,
         serials,
         replace,
         allowDowngrade,
+        kind,
       });
       setImmediate(() => {
         runInstallJob(job, upload, serials, { replace, allowDowngrade }).catch((err) => {
           touchJob(job, { status: "error", error: err.message || String(err), message: "安装异常" });
         });
       });
-      sendJson(res, 200, { ok: true, job: publicJob(job) }, origin);
+      sendJson(res, 200, { ok: true, job: publicJob(job), kind }, origin);
       return;
     }
 
@@ -4681,8 +5274,8 @@ async function handleApi(req, res, url) {
     if (url.pathname === "/apk/info" && req.method === "POST") {
       const body = parseJsonBody(await readBody(req, 1024 * 1024));
       const upload = UPLOADS.get(body.uploadId);
-      if (!upload) throw new Error("找不到已上传的 APK，请先上传");
-      sendJson(res, 200, await analyzeLocalApk(upload.path, upload.filename), origin);
+      if (!upload) throw new Error("找不到已上传的包，请先上传 APK/AAB");
+      sendJson(res, 200, await analyzeLocalPackage(upload.path, upload.filename), origin);
       return;
     }
 

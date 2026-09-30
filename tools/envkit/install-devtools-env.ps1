@@ -227,6 +227,20 @@ function Show-Report {
     $v = Get-Ver $n
     if ($v) { Write-Ok "$n · $v" } else { Write-Miss "$n 未安装" }
   }
+  $bt = $env:DEVTOOLS_BUNDLETOOL
+  $vendorJar = Join-Path $BridgeDir "adb-bridge\vendor\bundletool.jar"
+  if (Have-Cmd "bundletool") {
+    Write-Ok "bundletool · $(Get-Command bundletool | Select-Object -ExpandProperty Source)"
+  } elseif ($bt -and (Test-Path -LiteralPath $bt)) {
+    Write-Ok "bundletool · $bt"
+  } elseif (Test-Path -LiteralPath $vendorJar) {
+    Write-Ok "bundletool · $vendorJar"
+  } else {
+    Write-Info "bundletool 未安装（可选；装 AAB 才需要）：https://github.com/google/bundletool/releases"
+  }
+  if (-not (Have-Cmd "java")) {
+    Write-Info "java 未安装（可选；AAB/部分签名分析需要 JDK）"
+  }
   Write-Host "桥目录：$BridgeDir"
 }
 
