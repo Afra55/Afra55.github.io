@@ -2,11 +2,7 @@
 /* eslint-disable no-restricted-globals */
 "use strict";
 
-<<<<<<< HEAD
-const SHELL_CACHE = "devtools-shell-20260930-125053";
-=======
-const SHELL_CACHE = "devtools-shell-20260930-124842";
->>>>>>> cf53605 (feat(tools): 多需求一次落地（imgb64/备忘录/扫码/滚动/黑盒10MB）)
+const SHELL_CACHE = "devtools-shell-20260930-125147";
 const PRECACHE = [
   "./",
   "./index.html",

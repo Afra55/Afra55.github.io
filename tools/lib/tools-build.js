@@ -1,10 +1,6 @@
 (() => {
   "use strict";
-<<<<<<< HEAD
-  const BUILD = "2026.09.30-125053";
-=======
-  const BUILD = "2026.09.30-124842";
->>>>>>> cf53605 (feat(tools): 多需求一次落地（imgb64/备忘录/扫码/滚动/黑盒10MB）)
+  const BUILD = "2026.09.30-125147";
   window.TOOLS_BUILD = BUILD;
   window.TOOLS_VERSION = BUILD;
 
