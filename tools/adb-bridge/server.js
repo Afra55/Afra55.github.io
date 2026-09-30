@@ -38,7 +38,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.9.37";
+const BRIDGE_VERSION = "0.9.38";
 const INSTANCE_LOCK = path.join(__dirname, ".bridge-instance.lock");
 let ACTIVE_PORT = PORT;
 const scrcpyMirror = require("./scrcpy-mirror");
@@ -463,12 +463,26 @@ async function probeOneTool(name) {
   const which = whichSync(name);
   let ok = Boolean(which || (resolved && resolved !== name && fs.existsSync(resolved)));
   let binPath = which || (ok ? resolved : "") || "";
+  if (name === "apksigner") {
+    const inv = resolveApksignerInvocation();
+    if (inv.display && fs.existsSync(inv.display)) {
+      ok = true;
+      binPath = inv.display;
+    } else if (inv.jar && fs.existsSync(inv.jar)) {
+      ok = true;
+      binPath = inv.jar;
+    }
+  }
   if (!ok) {
     const bin = resolved || name;
     try {
-      await execFileAsync(bin, name === "openssl" ? ["version"] : name === "adb" ? ["version"] : ["-help"], {
-        timeout: 5000,
-      });
+      if (name === "apksigner") {
+        await execApksigner(["--help"], { timeout: 8000 });
+      } else {
+        await execFileAsync(bin, name === "openssl" ? ["version"] : name === "adb" ? ["version"] : ["-help"], {
+          timeout: 5000,
+        });
+      }
       ok = true;
       binPath = binPath || bin;
     } catch (err) {
@@ -1892,44 +1906,88 @@ function parseKeytoolCertText(text) {
 }
 
 function parseApksignerCertText(text) {
-  const blocks = String(text || "").split(/Signer #\d+/i).slice(1);
-  const signers = [];
+  const raw = String(text || "");
   const schemes = [];
-  if (/Verified using v1 scheme/i.test(text)) schemes.push("v1");
-  if (/Verified using v2 scheme/i.test(text)) schemes.push("v2");
-  if (/Verified using v3 scheme/i.test(text)) schemes.push("v3");
-  if (/Verified using v3\.1 scheme/i.test(text)) schemes.push("v3.1");
-  if (/Verified using v4 scheme/i.test(text)) schemes.push("v4");
-  for (let i = 0; i < blocks.length; i++) {
-    const block = blocks[i];
-    const dn =
-      (block.match(/certificate DN:\s*(.+)/i) || [])[1]?.trim() ||
-      (block.match(/Signer certificate DN:\s*(.+)/i) || [])[1]?.trim() ||
-      "";
-    const sha256 =
-      (block.match(/SHA-256 digest:\s*([0-9A-Fa-f:]+)/i) || [])[1] ||
-      (block.match(/SHA256 digest:\s*([0-9A-Fa-f:]+)/i) || [])[1] ||
-      "";
-    const sha1 =
-      (block.match(/SHA-1 digest:\s*([0-9A-Fa-f:]+)/i) || [])[1] ||
-      (block.match(/SHA1 digest:\s*([0-9A-Fa-f:]+)/i) || [])[1] ||
-      "";
-    const md5 = (block.match(/MD5 digest:\s*([0-9A-Fa-f:]+)/i) || [])[1] || "";
-    signers.push({
-      index: i + 1,
-      alias: "",
-      owner: dn,
-      cn: parseDnField(dn, "CN"),
-      issuer: "",
-      serial: "",
-      valid: "",
-      sha1: formatFingerprint(sha1),
-      sha256: formatFingerprint(sha256),
-      md5: formatFingerprint(md5),
-      sigAlg: "",
-      source: "apksigner",
-    });
+  if (/Verified using v1 scheme/i.test(raw)) schemes.push("v1");
+  if (/Verified using v2 scheme/i.test(raw)) schemes.push("v2");
+  if (/Verified using v3 scheme/i.test(raw)) schemes.push("v3");
+  if (/Verified using v3\.1 scheme/i.test(raw)) schemes.push("v3.1");
+  if (/Verified using v4 scheme/i.test(raw)) schemes.push("v4");
+
+  // apksigner prints multiple "Signer #1 certificate …" lines; group by index.
+  const byIndex = new Map();
+  const lineRe =
+    /Signer #(\d+)\s+certificate\s+(DN|SHA-256 digest|SHA-1 digest|SHA1 digest|SHA256 digest|MD5 digest):\s*(.+)/gi;
+  let m;
+  while ((m = lineRe.exec(raw))) {
+    const index = Number(m[1]) || 1;
+    const kind = String(m[2] || "").toLowerCase();
+    const value = String(m[3] || "").trim();
+    if (!byIndex.has(index)) {
+      byIndex.set(index, {
+        index,
+        alias: "",
+        owner: "",
+        cn: "",
+        issuer: "",
+        serial: "",
+        valid: "",
+        sha1: "",
+        sha256: "",
+        md5: "",
+        sigAlg: "",
+        source: "apksigner",
+      });
+    }
+    const signer = byIndex.get(index);
+    if (kind === "dn") {
+      signer.owner = value;
+      signer.cn = parseDnField(value, "CN");
+    } else if (kind.includes("256")) {
+      signer.sha256 = formatFingerprint(value);
+    } else if (kind.includes("md5")) {
+      signer.md5 = formatFingerprint(value);
+    } else if (kind.includes("1") || kind.includes("sha-1") || kind.includes("sha1")) {
+      signer.sha1 = formatFingerprint(value);
+    }
   }
+
+  // Fallback for alternate layouts that use a single "Signer #N" header block.
+  if (!byIndex.size) {
+    const blocks = raw.split(/Signer #\d+/i).slice(1);
+    for (let i = 0; i < blocks.length; i++) {
+      const block = blocks[i];
+      const dn =
+        (block.match(/certificate DN:\s*(.+)/i) || [])[1]?.trim() ||
+        (block.match(/Signer certificate DN:\s*(.+)/i) || [])[1]?.trim() ||
+        "";
+      const sha256 =
+        (block.match(/SHA-256 digest:\s*([0-9A-Fa-f:]+)/i) || [])[1] ||
+        (block.match(/SHA256 digest:\s*([0-9A-Fa-f:]+)/i) || [])[1] ||
+        "";
+      const sha1 =
+        (block.match(/SHA-1 digest:\s*([0-9A-Fa-f:]+)/i) || [])[1] ||
+        (block.match(/SHA1 digest:\s*([0-9A-Fa-f:]+)/i) || [])[1] ||
+        "";
+      const md5 = (block.match(/MD5 digest:\s*([0-9A-Fa-f:]+)/i) || [])[1] || "";
+      byIndex.set(i + 1, {
+        index: i + 1,
+        alias: "",
+        owner: dn,
+        cn: parseDnField(dn, "CN"),
+        issuer: "",
+        serial: "",
+        valid: "",
+        sha1: formatFingerprint(sha1),
+        sha256: formatFingerprint(sha256),
+        md5: formatFingerprint(md5),
+        sigAlg: "",
+        source: "apksigner",
+      });
+    }
+  }
+
+  const signers = [...byIndex.values()].sort((a, b) => a.index - b.index);
   return { schemes, signers };
 }
 
@@ -1963,11 +2021,34 @@ async function listApkMetaInfSignerEntries(filePath) {
   }
 }
 
+function whichViaWhere(bin) {
+  if (process.platform !== "win32") return "";
+  try {
+    const { execFileSync } = require("child_process");
+    const out = execFileSync("where.exe", [bin], {
+      encoding: "utf8",
+      timeout: 5000,
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const line = String(out || "")
+      .split(/\r?\n/)
+      .map((s) => s.trim().replace(/^"(.*)"$/, "$1"))
+      .find((s) => s && fs.existsSync(s));
+    return line || "";
+  } catch {
+    return "";
+  }
+}
+
 function whichSync(bin) {
   const pathEnv = String(process.env.PATH || "");
   const sep = process.platform === "win32" ? ";" : ":";
   const exts = process.platform === "win32" ? [".exe", ".bat", ".cmd", ""] : [""];
-  for (const dir of pathEnv.split(sep)) {
+  for (const rawDir of pathEnv.split(sep)) {
+    const dir = String(rawDir || "")
+      .trim()
+      .replace(/^"(.*)"$/, "$1");
     if (!dir) continue;
     for (const ext of exts) {
       const full = path.join(dir, bin + ext);
@@ -1975,6 +2056,217 @@ function whichSync(bin) {
         if (fs.existsSync(full)) return full;
       } catch {
         /* ignore */
+      }
+    }
+  }
+  if (process.platform === "win32") {
+    const viaWhere = whichViaWhere(bin);
+    if (viaWhere) return viaWhere;
+  }
+  return "";
+}
+
+function compareBuildToolsVersion(a, b) {
+  const pa = String(a || "")
+    .split(/[^\d]+/)
+    .filter(Boolean)
+    .map((n) => Number(n) || 0);
+  const pb = String(b || "")
+    .split(/[^\d]+/)
+    .filter(Boolean)
+    .map((n) => Number(n) || 0);
+  const n = Math.max(pa.length, pb.length);
+  for (let i = 0; i < n; i++) {
+    const da = pa[i] || 0;
+    const db = pb[i] || 0;
+    if (da !== db) return da - db;
+  }
+  return String(a).localeCompare(String(b));
+}
+
+function uniqExistingDirs(dirs) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of dirs) {
+    const dir = String(raw || "")
+      .trim()
+      .replace(/^"(.*)"$/, "$1");
+    if (!dir) continue;
+    let resolved = dir;
+    try {
+      resolved = fs.existsSync(dir) ? fs.realpathSync(dir) : dir;
+    } catch {
+      /* keep dir */
+    }
+    const key = process.platform === "win32" ? resolved.toLowerCase() : resolved;
+    if (seen.has(key)) continue;
+    try {
+      if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    seen.add(key);
+    out.push(resolved);
+  }
+  return out;
+}
+
+function sdkRootsFromPathEnv() {
+  const roots = [];
+  const sep = process.platform === "win32" ? ";" : ":";
+  for (const rawDir of String(process.env.PATH || "").split(sep)) {
+    const dir = String(rawDir || "")
+      .trim()
+      .replace(/^"(.*)"$/, "$1");
+    if (!dir) continue;
+    if (/[\\/]platform-tools$/i.test(dir)) roots.push(path.dirname(dir));
+    const bt = dir.match(/^(.*)[\\/]build-tools[\\/][^\\/]+$/i);
+    if (bt) roots.push(bt[1]);
+  }
+  return roots;
+}
+
+function sdkRootsFromAdbBinary() {
+  const roots = [];
+  const adbPath = whichSync("adb");
+  if (!adbPath) return roots;
+  let real = adbPath;
+  try {
+    const { execFileSync } = require("child_process");
+    const ver = execFileSync(adbPath, ["version"], {
+      encoding: "utf8",
+      timeout: 5000,
+      windowsHide: true,
+    });
+    const m = String(ver || "").match(/Installed as\s+(.+?)(?:\r?\n|$)/i);
+    if (m && m[1]) real = m[1].trim().replace(/^"(.*)"$/, "$1");
+  } catch {
+    /* keep shim path */
+  }
+  const dir = path.dirname(real);
+  if (/[\\/]platform-tools$/i.test(dir)) {
+    const parent = path.dirname(dir);
+    roots.push(parent);
+    // chocolatey: .../lib/adb/tools/platform-tools → also try .../lib/adb and sibling Sdk
+    if (/[\\/]tools$/i.test(parent)) roots.push(path.dirname(parent));
+  }
+  return roots;
+}
+
+function sdkRootsFromAndroidStudio() {
+  const roots = [];
+  const bases = [
+    process.env.APPDATA ? path.join(process.env.APPDATA, "Google") : "",
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Google") : "",
+    path.join(os.homedir(), ".android"),
+  ].filter(Boolean);
+  const pathRe =
+    /(?:androidSdkPath|sdk\.dir|Android\\Sdk|Android\/Sdk)[^A-Za-z0-9_\\/\-:]*([A-Za-z]:[^"'<\n]+|\/[^"'<\n]+)/i;
+  for (const base of bases) {
+    try {
+      if (!fs.existsSync(base)) continue;
+      const stack = [base];
+      let visited = 0;
+      while (stack.length && visited < 80) {
+        const cur = stack.pop();
+        visited += 1;
+        let ents = [];
+        try {
+          ents = fs.readdirSync(cur, { withFileTypes: true });
+        } catch {
+          continue;
+        }
+        for (const ent of ents) {
+          const full = path.join(cur, ent.name);
+          if (ent.isDirectory()) {
+            if (/^AndroidStudio/i.test(ent.name) || ent.name === "options" || ent.name === ".android") {
+              stack.push(full);
+            }
+            continue;
+          }
+          if (!/\.(xml|properties|cfg)$/i.test(ent.name)) continue;
+          let text = "";
+          try {
+            text = fs.readFileSync(full, "utf8");
+          } catch {
+            continue;
+          }
+          const m = text.match(pathRe);
+          if (m && m[1]) {
+            const cand = m[1].trim().replace(/[\\/]+$/, "").replace(/&amp;/g, "&");
+            if (cand) roots.push(cand);
+          }
+          const sdkDir = text.match(/^\s*sdk\.dir\s*=\s*(.+)\s*$/im);
+          if (sdkDir && sdkDir[1]) roots.push(sdkDir[1].trim().replace(/\\:/g, ":"));
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return roots;
+}
+
+let cachedAndroidSdkRoots = null;
+
+function listAndroidSdkRoots() {
+  if (cachedAndroidSdkRoots) return cachedAndroidSdkRoots;
+  const home = os.homedir();
+  const driveLetters =
+    process.platform === "win32"
+      ? ["C", "D", "E", "F", "G"].flatMap((d) => [
+          `${d}:\\Android\\Sdk`,
+          `${d}:\\Android`,
+          `${d}:\\Sdk`,
+          `${d}:\\AndroidSDK`,
+          `${d}:\\android-sdk`,
+        ])
+      : [];
+  cachedAndroidSdkRoots = uniqExistingDirs([
+    process.env.ANDROID_HOME,
+    process.env.ANDROID_SDK_ROOT,
+    process.env.ANDROID_SDK,
+    path.join(home, "Library/Android/sdk"),
+    path.join(home, "Android/Sdk"),
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Android", "Sdk") : "",
+    path.join(home, "AppData", "Local", "Android", "Sdk"),
+    ...driveLetters,
+    ...sdkRootsFromPathEnv(),
+    ...sdkRootsFromAdbBinary(),
+    ...sdkRootsFromAndroidStudio(),
+  ]);
+  return cachedAndroidSdkRoots;
+}
+
+function findInBuildTools(name) {
+  const win = process.platform === "win32";
+  const fileName =
+    name === "apksigner" ? (win ? "apksigner.bat" : "apksigner") : win ? `${name}.exe` : name;
+  for (const root of listAndroidSdkRoots()) {
+    const bt = path.join(root, "build-tools");
+    let versions = [];
+    try {
+      if (!fs.existsSync(bt)) continue;
+      versions = fs
+        .readdirSync(bt)
+        .filter((ver) => {
+          try {
+            return fs.statSync(path.join(bt, ver)).isDirectory();
+          } catch {
+            return false;
+          }
+        })
+        .sort(compareBuildToolsVersion)
+        .reverse();
+    } catch {
+      continue;
+    }
+    for (const ver of versions) {
+      const cand = path.join(bt, ver, fileName);
+      if (fs.existsSync(cand)) return cand;
+      if (name === "apksigner") {
+        const unixCand = path.join(bt, ver, "apksigner");
+        if (fs.existsSync(unixCand)) return unixCand;
       }
     }
   }
@@ -2070,39 +2362,38 @@ function resolveTool(name) {
     if (fromJava) return fromJava;
   }
   if (name === "apksigner" || name === "aapt" || name === "aapt2") {
-    const sdk =
-      process.env.ANDROID_HOME ||
-      process.env.ANDROID_SDK_ROOT ||
-      process.env.ANDROID_SDK ||
-      "";
-    const roots = [
-      sdk,
-      path.join(os.homedir(), "Library/Android/sdk"),
-      path.join(os.homedir(), "Android/Sdk"),
-      process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "Android", "Sdk") : "",
-      path.join(os.homedir(), "AppData", "Local", "Android", "Sdk"),
-    ].filter(Boolean);
-    for (const root of roots) {
-      const bt = path.join(root, "build-tools");
-      try {
-        if (!fs.existsSync(bt)) continue;
-        const versions = fs.readdirSync(bt).sort().reverse();
-        for (const ver of versions) {
-          const base = path.join(bt, ver);
-          if (name === "apksigner") {
-            const cand = path.join(base, process.platform === "win32" ? "apksigner.bat" : "apksigner");
-            if (fs.existsSync(cand)) return cand;
-          } else {
-            const cand = path.join(base, process.platform === "win32" ? `${name}.exe` : name);
-            if (fs.existsSync(cand)) return cand;
-          }
-        }
-      } catch {
-        /* ignore */
-      }
-    }
+    const fromSdk = findInBuildTools(name);
+    if (fromSdk) return fromSdk;
   }
   return name; // fall back to PATH resolution by execFile
+}
+
+/** Prefer java -jar apksigner.jar on Windows to avoid .bat/shell quoting pitfalls. */
+function resolveApksignerInvocation() {
+  const resolved = resolveTool("apksigner");
+  const binPath = resolved && resolved !== "apksigner" && fs.existsSync(resolved) ? resolved : whichSync("apksigner");
+  if (!binPath) {
+    return { mode: "bin", bin: "apksigner", display: "", jar: "" };
+  }
+  const dir = path.dirname(binPath);
+  const jarCandidates = [path.join(dir, "lib", "apksigner.jar"), path.join(dir, "apksigner.jar")];
+  const jar = jarCandidates.find((p) => fs.existsSync(p)) || "";
+  if (jar) {
+    const java = resolveTool("java");
+    if (java && java !== "java" && fs.existsSync(java)) {
+      return { mode: "jar", bin: java, jar, display: binPath };
+    }
+  }
+  return { mode: "bin", bin: binPath, display: binPath, jar };
+}
+
+async function execApksigner(args, opts = {}) {
+  const inv = resolveApksignerInvocation();
+  const env = opts.env || toolProcessEnv();
+  if (inv.mode === "jar") {
+    return execFileAsync(inv.bin, ["-jar", inv.jar, ...args], { ...opts, env, shell: false });
+  }
+  return execFileAsync(inv.bin, args, { ...opts, env });
 }
 
 function parseOpensslCertText(text) {
@@ -2163,32 +2454,43 @@ async function analyzeApkSigning(filePath) {
     errors: [],
   };
 
-  const apksigner = resolveTool("apksigner");
+  const apksignerInv = resolveApksignerInvocation();
+  const apksigner = apksignerInv.display || apksignerInv.bin;
   const keytool = resolveTool("keytool");
   const openssl = resolveTool("openssl");
   const jar = resolveTool("jar");
   const env = toolProcessEnv();
   result.resolvedPaths = {
-    apksigner: apksigner !== "apksigner" ? apksigner : whichSync("apksigner") || "",
+    apksigner: apksignerInv.display || (apksigner !== "apksigner" ? apksigner : whichSync("apksigner") || ""),
+    apksignerJar: apksignerInv.jar || "",
+    apksignerMode: apksignerInv.mode || "",
     keytool: keytool !== "keytool" ? keytool : whichSync("keytool") || "",
     openssl: openssl !== "openssl" ? openssl : whichSync("openssl") || "",
     jar: jar !== "jar" ? jar : whichSync("jar") || "",
     JAVA_HOME: env.JAVA_HOME || "",
   };
   result.toolsFound = {
-    apksigner: Boolean(whichSync("apksigner") || (apksigner && apksigner !== "apksigner" && fs.existsSync(apksigner))),
+    apksigner: Boolean(
+      (apksignerInv.display && fs.existsSync(apksignerInv.display)) ||
+        (apksignerInv.jar && fs.existsSync(apksignerInv.jar)) ||
+        whichSync("apksigner")
+    ),
     keytool: Boolean(whichSync("keytool") || (keytool && keytool !== "keytool" && fs.existsSync(keytool))),
     openssl: Boolean(whichSync("openssl") || (openssl && openssl !== "openssl" && fs.existsSync(openssl))),
   };
   // also mark true if bare name works via PATH in this environment
   for (const [name, bin] of [
-    ["apksigner", apksigner],
+    ["apksigner", apksignerInv.display || apksignerInv.bin],
     ["keytool", keytool],
     ["openssl", openssl],
   ]) {
     if (result.toolsFound[name]) continue;
     try {
-      await execFileAsync(bin, name === "openssl" ? ["version"] : ["-help"], { timeout: 5000, env });
+      if (name === "apksigner") {
+        await execApksigner(["--help"], { timeout: 8000, env });
+      } else {
+        await execFileAsync(bin, name === "openssl" ? ["version"] : ["-help"], { timeout: 5000, env });
+      }
       result.toolsFound[name] = true;
     } catch (err) {
       // keytool -help exits 0 usually; apksigner may exit non-zero but still exists
@@ -2213,7 +2515,7 @@ async function analyzeApkSigning(filePath) {
 
   // Prefer apksigner (v1–v4). verify may exit non-zero yet still print cert digests.
   try {
-    const { stdout, stderr } = await execFileAsync(apksigner, ["verify", "--print-certs", filePath], {
+    const { stdout, stderr } = await execApksigner(["verify", "--print-certs", filePath], {
       timeout: 45000,
       maxBuffer: 4 * 1024 * 1024,
       env,

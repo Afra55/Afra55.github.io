@@ -59,17 +59,36 @@ if errorlevel 1 (
 
 rem Prepend Android SDK build-tools (apksigner.bat) when missing from PATH
 where apksigner >nul 2>&1
-if errorlevel 1 (
-  if not defined ANDROID_HOME if defined ANDROID_SDK_ROOT set "ANDROID_HOME=%ANDROID_SDK_ROOT%"
-  if not defined ANDROID_HOME if exist "%LOCALAPPDATA%\Android\Sdk" set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
-  if not defined ANDROID_HOME if exist "%USERPROFILE%\AppData\Local\Android\Sdk" set "ANDROID_HOME=%USERPROFILE%\AppData\Local\Android\Sdk"
-  if defined ANDROID_HOME if exist "%ANDROID_HOME%\build-tools" (
-    for /f "delims=" %%V in ('dir /b /ad /o-n "%ANDROID_HOME%\build-tools" 2^>nul') do (
-      if exist "%ANDROID_HOME%\build-tools\%%V\apksigner.bat" (
-        set "PATH=%ANDROID_HOME%\build-tools\%%V;%PATH%"
-        echo [OK] Prepended build-tools %%V>> "%LOG_FILE%"
-        goto :apksigner_path_done
+if not errorlevel 1 goto :apksigner_path_done
+
+if not defined ANDROID_HOME if defined ANDROID_SDK_ROOT set "ANDROID_HOME=%ANDROID_SDK_ROOT%"
+if not defined ANDROID_HOME if exist "%LOCALAPPDATA%\Android\Sdk" set "ANDROID_HOME=%LOCALAPPDATA%\Android\Sdk"
+if not defined ANDROID_HOME if exist "%USERPROFILE%\AppData\Local\Android\Sdk" set "ANDROID_HOME=%USERPROFILE%\AppData\Local\Android\Sdk"
+rem Derive SDK root from adb's real install path (platform-tools sibling → build-tools)
+if not defined ANDROID_HOME (
+  for /f "delims=" %%A in ('where adb 2^>nul') do (
+    if not defined ANDROID_HOME (
+      for %%P in ("%%~dpA.") do (
+        if /I "%%~nxP"=="platform-tools" (
+          for %%S in ("%%~dpP.") do (
+            if exist "%%~fS\build-tools" set "ANDROID_HOME=%%~fS"
+          )
+        )
       )
+    )
+  )
+)
+rem Common custom SDK locations
+if not defined ANDROID_HOME if exist "C:\Android\Sdk\build-tools" set "ANDROID_HOME=C:\Android\Sdk"
+if not defined ANDROID_HOME if exist "D:\Android\Sdk\build-tools" set "ANDROID_HOME=D:\Android\Sdk"
+if not defined ANDROID_HOME if exist "E:\Android\Sdk\build-tools" set "ANDROID_HOME=E:\Android\Sdk"
+if not defined ANDROID_HOME if exist "F:\Android\Sdk\build-tools" set "ANDROID_HOME=F:\Android\Sdk"
+if defined ANDROID_HOME if exist "%ANDROID_HOME%\build-tools" (
+  for /f "delims=" %%V in ('dir /b /ad /o-n "%ANDROID_HOME%\build-tools" 2^>nul') do (
+    if exist "%ANDROID_HOME%\build-tools\%%V\apksigner.bat" (
+      set "PATH=%ANDROID_HOME%\build-tools\%%V;%PATH%"
+      echo [OK] Prepended build-tools %%V from %ANDROID_HOME%>> "%LOG_FILE%"
+      goto :apksigner_path_done
     )
   )
 )

@@ -10,7 +10,16 @@ echo ""
 # Finder 双击时 PATH 很短，补上常见安装位置
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$HOME/Library/Android/sdk/platform-tools:$HOME/Android/Sdk/platform-tools:$PATH"
 # Prepend newest build-tools (apksigner / aapt)
-for sdk in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Library/Android/sdk" "$HOME/Android/Sdk"; do
+# Also derive SDK from `adb` realpath (…/platform-tools → sibling build-tools)
+_adb_bin="$(command -v adb 2>/dev/null || true)"
+_adb_sdk=""
+if [ -n "$_adb_bin" ]; then
+  _adb_dir="$(cd "$(dirname "$_adb_bin")" 2>/dev/null && pwd -P || true)"
+  if [ -n "$_adb_dir" ] && [ "$(basename "$_adb_dir")" = "platform-tools" ]; then
+    _adb_sdk="$(dirname "$_adb_dir")"
+  fi
+fi
+for sdk in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$_adb_sdk" "$HOME/Library/Android/sdk" "$HOME/Android/Sdk"; do
   [ -n "$sdk" ] || continue
   if [ -d "$sdk/build-tools" ]; then
     newest="$(ls -1 "$sdk/build-tools" 2>/dev/null | sort -V | tail -n 1 || true)"
@@ -20,6 +29,7 @@ for sdk in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Library/Android/sd
     fi
   fi
 done
+unset _adb_bin _adb_dir _adb_sdk newest sdk
 # Homebrew OpenJDK 常为 keg-only，不会进 /opt/homebrew/bin
 for jdk in \
   /opt/homebrew/opt/openjdk \

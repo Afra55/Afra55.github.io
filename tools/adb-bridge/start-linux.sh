@@ -9,7 +9,16 @@ echo ""
 
 export PATH="$HOME/Android/Sdk/platform-tools:/usr/local/bin:/usr/bin:$PATH"
 # Prepend newest build-tools (apksigner / aapt) when SDK is present
-for sdk in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Android/Sdk"; do
+# Also derive SDK from `adb` realpath (…/platform-tools → sibling build-tools)
+_adb_bin="$(command -v adb 2>/dev/null || true)"
+_adb_sdk=""
+if [ -n "$_adb_bin" ]; then
+  _adb_dir="$(cd "$(dirname "$_adb_bin")" 2>/dev/null && pwd -P || true)"
+  if [ -n "$_adb_dir" ] && [ "$(basename "$_adb_dir")" = "platform-tools" ]; then
+    _adb_sdk="$(dirname "$_adb_dir")"
+  fi
+fi
+for sdk in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$_adb_sdk" "$HOME/Android/Sdk"; do
   [ -n "$sdk" ] || continue
   if [ -d "$sdk/build-tools" ]; then
     newest="$(ls -1 "$sdk/build-tools" 2>/dev/null | sort -V | tail -n 1 || true)"
@@ -19,6 +28,7 @@ for sdk in "${ANDROID_HOME:-}" "${ANDROID_SDK_ROOT:-}" "$HOME/Android/Sdk"; do
     fi
   fi
 done
+unset _adb_bin _adb_dir _adb_sdk newest sdk
 # Debian/Ubuntu OpenJDK 与常见自装路径
 for jdk in /usr/lib/jvm/default-java /usr/lib/jvm/java-21-openjdk-amd64 /usr/lib/jvm/java-17-openjdk-amd64; do
   if [ -d "${jdk}/bin" ]; then

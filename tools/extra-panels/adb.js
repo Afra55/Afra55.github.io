@@ -3214,6 +3214,8 @@
         const pathBits = ["apksigner", "keytool", "openssl"]
           .map((k) => (paths[k] ? `${k}=${paths[k]}` : ""))
           .filter(Boolean);
+        if (paths.apksignerJar) pathBits.push(`apksigner.jar=${paths.apksignerJar}`);
+        if (paths.apksignerMode) pathBits.push(`mode=${paths.apksignerMode}`);
         if (pathBits.length) lines.push(`工具路径: ${pathBits.join(" · ")}`);
         if (paths.JAVA_HOME) lines.push(`JAVA_HOME: ${paths.JAVA_HOME}`);
         if (signing.note) lines.push(signing.note);
@@ -3229,7 +3231,7 @@
           if (found.length) {
             if (!found.includes("apksigner")) {
               lines.push(
-                "说明：已检测到本机签名工具，但该 APK 可能只有 v2/v3 签名。请安装 Android build-tools 的 apksigner（不必重装 JDK/keytool），然后重启 ADB 桥再分析。"
+                "说明：已检测到本机签名工具，但未找到可用的 apksigner（分析 v2/v3 签名需要它）。请确认 Android SDK build-tools 已安装，或把含 apksigner.bat 的目录加入 PATH，然后重启 ADB 桥再分析。"
               );
             } else {
               lines.push(
