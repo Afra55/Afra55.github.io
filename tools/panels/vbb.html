@@ -4,53 +4,19 @@
       </div>
       <div class="panel-body">
         <div class="vbb-scroll-anchor" aria-hidden="true"></div>
-        <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.55rem">
+        <div class="field-row vbb-input-type-row" style="flex-wrap:wrap;align-items:center;gap:0.55rem">
           <span class="seg" role="group" aria-label="输入类型">
             <button type="button" class="seg-btn is-active" id="vbb-input-video">视频</button>
             <button type="button" class="seg-btn" id="vbb-input-images">多图</button>
           </span>
-          <label for="vbb-max-mb">黑盒上限</label>
-          <select id="vbb-max-mb" class="mono meta-input num-choice" title="点击选择上限 MB" aria-label="黑盒上限 MB">
-            <option value="5">5</option>
-            <option value="6">6</option>
-            <option value="8">8</option>
-            <option value="10" selected>10</option>
-            <option value="12">12</option>
-            <option value="15">15</option>
-            <option value="20">20</option>
-            <option value="30">30</option>
-            <option value="50">50</option>
-          </select>
-          <span class="hint tight">MB</span>
-          <label for="vbb-perf">性能</label>
-          <select id="vbb-perf" class="mono meta-input" title="自动按手机能力选档；拉满尽量单次 gifski，多选时并行 2 路">
-            <option value="auto">自动</option>
-            <option value="max">拉满</option>
-            <option value="balanced">均衡</option>
-            <option value="eco">省电</option>
-          </select>
         </div>
         <div data-vbb-video>
-        <div class="btn-row tool-actions">
-          <label class="file-btn" for="vbb-file">选择视频（可多选）</label>
+        <div class="btn-row tool-actions vbb-pick-row">
+          <label class="file-btn" for="vbb-file">① 选择视频（可多选）</label>
           <input id="vbb-file" type="file" accept="video/*,.mov,.mp4,.webm,.m4v" multiple hidden />
           <button type="button" class="ghost-btn" id="vbb-clear">清空</button>
         </div>
         <p class="hint" id="vbb-meta"></p>
-        <div class="field-row" id="vbb-notify-row" style="flex-wrap:wrap;align-items:center;margin-top:0.4rem;gap:0.85rem">
-          <label class="flag" for="vbb-wake-lock"><input type="checkbox" id="vbb-wake-lock" /> 处理时防止息屏</label>
-          <label class="flag" for="vbb-notify-sound"><input type="checkbox" id="vbb-notify-sound" /> 完成提示音</label>
-          <label class="flag" for="vbb-notify-vibrate"><input type="checkbox" id="vbb-notify-vibrate" /> 完成震动</label>
-          <label class="flag" for="vbb-notify-scope">提示范围
-            <select id="vbb-notify-scope" class="mono meta-input">
-              <option value="each">每个都提示</option>
-              <option value="done">仅全部完成</option>
-            </select>
-          </label>
-        </div>
-        <div class="field-row" id="vbb-process-row" style="flex-wrap:wrap;align-items:center;margin-top:0.4rem;gap:0.85rem">
-          <label class="flag" for="vbb-auto-crop"><input type="checkbox" id="vbb-auto-crop" /> 自动裁剪纯色边框（去黑边/白边等）</label>
-        </div>
         <p class="hint tight" id="vbb-ffmpeg-warm" aria-live="polite">首次进入将准备本地视频编码器（约 30MB，仅下载一次，不上传视频）</p>
         <div class="gif-progress" id="vbb-ffmpeg-warm-progress" hidden>
           <div class="gif-progress-track" aria-hidden="true"><span class="gif-progress-fill" id="vbb-ffmpeg-warm-progress-fill"></span></div>
@@ -59,7 +25,7 @@
         <div class="vbb-batch-list" id="vbb-batch-list" hidden aria-live="polite"></div>
         <div class="field-row blackbox-workflow-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
           <span class="seg" role="group" aria-label="黑盒模式">
-            <button type="button" class="seg-btn is-active" id="vbb-workflow-single" data-vbb-workflow="single">整段视频</button>
+            <button type="button" class="seg-btn is-active" id="vbb-workflow-single" data-vbb-workflow="single">② 整段视频</button>
             <button type="button" class="seg-btn" id="vbb-workflow-split" data-vbb-workflow="split">长视频切片</button>
             <button type="button" class="seg-btn" id="vbb-workflow-manual" data-vbb-workflow="manual">手动打点</button>
           </span>
@@ -155,51 +121,110 @@
         </div>
 
         <div class="btn-row tool-actions vbb-main-actions" style="margin-top:1rem;flex-wrap:wrap">
-          <button type="button" class="primary-btn" id="vbb-oneclick" disabled>一键黑盒</button>
+          <button type="button" class="primary-btn" id="vbb-oneclick" disabled>③ 一键黑盒</button>
           <button type="button" class="secondary-btn" id="vbb-merge-video" disabled title="把已选的多个视频按顺序拼成一个视频，然后当作一个视频走黑盒生成 GIF">拼接后转黑盒</button>
           <button type="button" class="secondary-btn" id="vbb-merge" disabled title="合并各段 GIF；宽高不一致会自动统一尺寸并补边；超限会自动压黑盒">合并 GIF</button>
           <button type="button" class="ghost-btn" id="vbb-abort" hidden>取消</button>
           <button type="button" class="secondary-btn" id="vbb-zip" disabled title="把已生成的 GIF 打成一个 zip">打包下载</button>
           <a class="secondary-btn" id="vbb-merged-dl" href="#" download="blackbox-merged.gif" hidden>下载合并 GIF</a>
-          <label class="flag" style="margin-left:0.15rem" title="默认关闭。开启后转 GIF 成功时自动打 zip 并下载；与视频切片共用，会记住选择">
-            <input type="checkbox" id="vbb-auto-pack" data-auto-pack-zip /> 产出后自动打包下载
-          </label>
-          <label class="flag" style="margin-left:0.15rem" title="默认关闭。每编完一个 GIF 就立刻下载该文件（多选/多段逐个下）；仍可再合并或打包 zip，会记住选择">
-            <input type="checkbox" id="vbb-auto-dl-each" /> 每段完成后自动下载
-          </label>
-          <label class="flag" data-auto-share-gallery-wrap hidden style="margin-left:0.15rem" title="网页不能静默写入相册。开启后完成后调起系统分享，你可在列表里选相册/图库保存。会记住选择">
-            <input type="checkbox" id="vbb-auto-share" data-auto-share-gallery /> 完成后分享到相册
-          </label>
         </div>
-        <div class="field-row" id="vbb-speed-row" style="flex-wrap:wrap;align-items:center;margin-top:0.55rem">
-          <label class="flag" for="vbb-speed-limit"><input type="checkbox" id="vbb-speed-limit" /> 压缩时长到</label>
-          <select id="vbb-speed-sec" class="mono meta-input num-choice" title="点击选择压缩目标秒数" aria-label="压缩时长到秒">
-            <option value="10">10</option>
-            <option value="12">12</option>
-            <option value="15">15</option>
-            <option value="16">16</option>
-            <option value="20" selected>20</option>
-            <option value="24">24</option>
-            <option value="30">30</option>
-          </select>
-          <span class="hint tight">秒</span>
-        </div>
-        <div class="field-row vbb-chunk-row only-coarse" style="flex-wrap:wrap;align-items:center;margin-top:0.4rem;gap:0.55rem">
-          <label class="flag" for="vbb-chunk-enable"><input type="checkbox" id="vbb-chunk-enable" checked /> 分块编码</label>
-          <label for="vbb-chunk-count">块数</label>
-          <select id="vbb-chunk-count" class="mono meta-input num-choice" title="点击选择分块数；留空档=自动" aria-label="分块数">
-            <option value="" selected>自动</option>
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-            <option value="6">6</option>
-            <option value="8">8</option>
-            <option value="12">12</option>
-            <option value="16">16</option>
-          </select>
-          <span class="hint tight" id="vbb-chunk-hint">块数越少画质/体积越好，但越吃内存</span>
-        </div>
+
+        <details class="vbb-more" id="vbb-more-limit">
+          <summary>上限 / 性能</summary>
+          <div class="vbb-more-body field-row" style="flex-wrap:wrap;align-items:center;gap:0.55rem">
+            <label for="vbb-max-mb">黑盒上限</label>
+            <select id="vbb-max-mb" class="mono meta-input num-choice" title="点击选择上限 MB" aria-label="黑盒上限 MB">
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="8">8</option>
+              <option value="10" selected>10</option>
+              <option value="12">12</option>
+              <option value="15">15</option>
+              <option value="20">20</option>
+              <option value="30">30</option>
+              <option value="50">50</option>
+            </select>
+            <span class="hint tight">MB</span>
+            <label for="vbb-perf">性能</label>
+            <select id="vbb-perf" class="mono meta-input" title="自动按手机能力选档；拉满尽量单次 gifski，多选时并行 2 路">
+              <option value="auto">自动</option>
+              <option value="max">拉满</option>
+              <option value="balanced">均衡</option>
+              <option value="eco">省电</option>
+            </select>
+          </div>
+        </details>
+
+        <details class="vbb-more" id="vbb-more-process">
+          <summary>处理选项</summary>
+          <div class="vbb-more-body">
+            <div class="field-row" id="vbb-notify-row" style="flex-wrap:wrap;align-items:center;gap:0.85rem">
+              <label class="flag" for="vbb-wake-lock"><input type="checkbox" id="vbb-wake-lock" /> 处理时防止息屏</label>
+              <label class="flag" for="vbb-notify-sound"><input type="checkbox" id="vbb-notify-sound" /> 完成提示音</label>
+              <label class="flag" for="vbb-notify-vibrate"><input type="checkbox" id="vbb-notify-vibrate" /> 完成震动</label>
+              <label class="flag" for="vbb-notify-scope">提示范围
+                <select id="vbb-notify-scope" class="mono meta-input">
+                  <option value="each">每个都提示</option>
+                  <option value="done">仅全部完成</option>
+                </select>
+              </label>
+            </div>
+            <div class="field-row" id="vbb-process-row" style="flex-wrap:wrap;align-items:center;margin-top:0.4rem;gap:0.85rem">
+              <label class="flag" for="vbb-auto-crop"><input type="checkbox" id="vbb-auto-crop" /> 自动裁剪纯色边框（去黑边/白边等）</label>
+            </div>
+          </div>
+        </details>
+
+        <details class="vbb-more" id="vbb-more-download">
+          <summary>下载选项</summary>
+          <div class="vbb-more-body field-row" style="flex-wrap:wrap;align-items:center;gap:0.85rem">
+            <label class="flag" title="默认关闭。开启后转 GIF 成功时自动打 zip 并下载；与视频切片共用，会记住选择">
+              <input type="checkbox" id="vbb-auto-pack" data-auto-pack-zip /> 产出后自动打包下载
+            </label>
+            <label class="flag" title="默认关闭。每编完一个 GIF 就立刻下载该文件（多选/多段逐个下）；仍可再合并或打包 zip，会记住选择">
+              <input type="checkbox" id="vbb-auto-dl-each" /> 每段完成后自动下载
+            </label>
+            <label class="flag" data-auto-share-gallery-wrap hidden title="网页不能静默写入相册。开启后完成后调起系统分享，你可在列表里选相册/图库保存。会记住选择">
+              <input type="checkbox" id="vbb-auto-share" data-auto-share-gallery /> 完成后分享到相册
+            </label>
+          </div>
+        </details>
+
+        <details class="vbb-more" id="vbb-more-advanced">
+          <summary>高级</summary>
+          <div class="vbb-more-body">
+            <div class="field-row" id="vbb-speed-row" style="flex-wrap:wrap;align-items:center;gap:0.55rem">
+              <label class="flag" for="vbb-speed-limit"><input type="checkbox" id="vbb-speed-limit" /> 压缩时长到</label>
+              <select id="vbb-speed-sec" class="mono meta-input num-choice" title="点击选择压缩目标秒数" aria-label="压缩时长到秒">
+                <option value="10">10</option>
+                <option value="12">12</option>
+                <option value="15">15</option>
+                <option value="16">16</option>
+                <option value="20" selected>20</option>
+                <option value="24">24</option>
+                <option value="30">30</option>
+              </select>
+              <span class="hint tight">秒（加速播放，观感帧率会变低）</span>
+            </div>
+            <div class="field-row vbb-chunk-row only-coarse" style="flex-wrap:wrap;align-items:center;margin-top:0.4rem;gap:0.55rem">
+              <label class="flag" for="vbb-chunk-enable"><input type="checkbox" id="vbb-chunk-enable" checked /> 分块编码</label>
+              <label for="vbb-chunk-count">块数</label>
+              <select id="vbb-chunk-count" class="mono meta-input num-choice" title="点击选择分块数；留空档=自动" aria-label="分块数">
+                <option value="" selected>自动</option>
+                <option value="1">1</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="6">6</option>
+                <option value="8">8</option>
+                <option value="12">12</option>
+                <option value="16">16</option>
+              </select>
+              <span class="hint tight" id="vbb-chunk-hint">块数越少画质/体积越好，但越吃内存</span>
+            </div>
+          </div>
+        </details>
+
         <div class="gif-progress" id="vbb-progress" hidden>
           <div class="gif-progress-head">
             <p class="hint gif-progress-title" id="vbb-progress-text">准备中…</p>

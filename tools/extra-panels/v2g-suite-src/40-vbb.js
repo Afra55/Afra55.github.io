@@ -928,6 +928,7 @@
 
       function maybeAutoDownloadVbbGif(clip, idx) {
         if (!isVbbAutoDlEachEnabled() || !clip?.gifBlob) return false;
+        if (clip.error || clip.gifBlob.size > V2G_BLACKBOX_MAX_BYTES) return false;
         try {
           triggerLocalDownload(clip.gifBlob, vbbGifDownloadName(clip, idx));
           return true;
@@ -1447,7 +1448,10 @@
         if (!clip || !encoded) return;
         clip.gifOutW = Number(encoded.outW) || 0;
         clip.gifOutH = Number(encoded.outH) || 0;
-        clip.gifFps = Number(encoded.fps) || 0;
+        // UI 帧率用成片有效播放 fps（GIF 厘秒量化后），避免「标20实际更卡」
+        const play = Number(encoded.playbackFps) || (typeof gifEffectivePlaybackFps === "function" ? gifEffectivePlaybackFps(encoded.fps) : 0);
+        clip.gifFps = play || Number(encoded.fps) || 0;
+        clip.gifSpeed = Math.max(1, Number(encoded.speed) || 1);
         clip.gifDuration = vbbEncodedGifDurationSec(encoded);
       }
   
@@ -1518,7 +1522,15 @@
         // 顺序固定：帧率 · 尺寸 · 体积 · 时长（其余附加信息尽量少）
         const bits = [];
         const fps = Number(c.gifFps) || 0;
-        if (fps) bits.push(`${fps}FPS`);
+        const speed = Math.max(1, Number(c.gifSpeed) || 1);
+        if (fps) {
+          if (speed > 1.02) {
+            const feel = Math.round((fps / speed) * 10) / 10;
+            bits.push(`${fps}FPS·加速${speed.toFixed(1)}×≈${feel}`);
+          } else {
+            bits.push(`${fps}FPS`);
+          }
+        }
         const w = Number(c.gifOutW) || 0;
         const h = Number(c.gifOutH) || 0;
         if (w && h) bits.push(`${w}×${h}`);
@@ -1541,6 +1553,16 @@
   
       function applyVbbClipEncoded(clip, encoded, extraBits = []) {
         if (!clip || !encoded?.blob) return;
+        // 硬闸：超上限绝不挂成功下载（编码层也会抛错；此处双保险）
+        if (encoded.blob.size > V2G_BLACKBOX_MAX_BYTES) {
+          clip.gifBlob = null;
+          clip.gifUrl = "";
+          clip.error = `超过 ${blackboxBudgetLabel()}（${formatKb(encoded.blob.size)}）· 未交付下载`;
+          clip.gifNote = "";
+          attachVbbEncodedMeta(clip, encoded);
+          return;
+        }
+        clip.error = "";
         clip.gifBlob = encoded.blob;
         clip.gifUrl = "";
         attachVbbEncodedMeta(clip, encoded);
@@ -1548,7 +1570,13 @@
         extraBits.forEach((b) => {
           if (b) bits.push(b);
         });
-        if (encoded.fps) bits.push(`${encoded.fps} FPS`);
+        const fpsLabel =
+          typeof formatBlackboxFpsLabel === "function"
+            ? formatBlackboxFpsLabel(encoded)
+            : encoded.fps
+              ? `${encoded.fps} FPS`
+              : "";
+        if (fpsLabel) bits.push(fpsLabel.replace(/FPS$/i, "FPS"));
         if (encoded.outW && encoded.outH) bits.push(`${encoded.outW}×${encoded.outH}`);
         // 质量档位：gifski 显示自适应量化 quality，ffmpeg 回退显示色数
         if (encoded.engine === "gifski" && Number.isFinite(Number(encoded.gifskiQuality))) {
@@ -2514,10 +2542,13 @@
               },
             });
             if (abortVbb) throw new Error("已取消");
-            vbbClips[i].gifBlob = encoded.blob;
-            vbbClips[i].gifUrl = "";
             applyVbbClipEncoded(vbbClips[i], encoded, reuse.fromCache ? ["沿用方案"] : []);
-            if (!vbbClips[i].error) saveVbbSpanScheme(r.span, snapshotVbbEncodeSeed(encoded, {}), "blackbox");
+            if (vbbClips[i].error || !vbbClips[i].gifBlob) {
+              setVbbClipJob(i, { status: "error", progress: 1, text: "失败" });
+              refreshVbbClipRow(i);
+              continue;
+            }
+            saveVbbSpanScheme(r.span, snapshotVbbEncodeSeed(encoded, {}), "blackbox");
             setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
             notifyVbbProgress(i, ranges.length);
             maybeAutoDownloadVbbGif(vbbClips[i], i);
@@ -3532,6 +3563,9 @@
                 if (encoded?.maxW) usedWidth = encoded.maxW;
               }
               if (!encoded?.blob) throw new Error("未产出 GIF");
+              if (encoded.blob.size > V2G_BLACKBOX_MAX_BYTES) {
+                throw new Error(`仍超 ${blackboxBudgetLabel()}（${formatKb(encoded.blob.size)}）`);
+              }
               attachVbbEncodedMeta(clip, encoded);
               // 延迟创建 ObjectURL：列表默认不解码预览
               clip.gifUrl = "";
@@ -3540,7 +3574,7 @@
               else if (reuseSeed) bits.push("沿用#01");
               if (usedFallback) bits.push("超限");
               else if (isWide && usedWidth !== (plan.maxW || V2G_BLACKBOX_BASE_W)) bits.push(`已降宽${usedWidth}`);
-              if (encoded.fps) bits.push(`${encoded.fps}FPS`);
+              if (encoded.fps) bits.push(`${encoded.playbackFps || encoded.fps}FPS`);
               if (encoded.outW && encoded.outH) bits.push(`${encoded.outW}×${encoded.outH}`);
               if (encoded.compressRounds > 0) bits.push(`已压 ${encoded.compressRounds} 轮`);
               if (encoded.maxW) bits.push(`宽≤${encoded.maxW}`);
@@ -3548,24 +3582,20 @@
               if (encoded.framesCapped) bits.push(`已抽稀 ${encoded.frameCount} 帧`);
               clip.gifBlob = encoded.blob;
               clip.gifNote = bits.join(" · ");
-              if (encoded.blob.size > V2G_BLACKBOX_MAX_BYTES) {
-                clip.error = `仍超 ${blackboxBudgetLabel()}（${formatKb(encoded.blob.size)}）`;
-              }
+              clip.error = "";
               if (i === 0) firstSeed = snapshotVbbEncodeSeed(encoded, { usedWidth, usedFallback });
-              if (!clip.error) {
-                saveVbbSpanScheme(
-                  r.span,
-                  snapshotVbbEncodeSeed(encoded, { usedWidth, usedFallback }),
-                  usedFallback ? "blackbox" : activeEncode
-                );
-              }
+              saveVbbSpanScheme(
+                r.span,
+                snapshotVbbEncodeSeed(encoded, { usedWidth, usedFallback }),
+                usedFallback ? "blackbox" : activeEncode
+              );
               setVbbClipJob(i, {
-                status: clip.error ? "error" : "done",
+                status: "done",
                 progress: 1,
-                text: clip.error ? "完成（超限）" : "完成",
+                text: "完成",
               });
-              if (!clip.error) notifyVbbProgress(i, plan.ranges.length);
-              if (clip.gifBlob) maybeAutoDownloadVbbGif(clip, i);
+              notifyVbbProgress(i, plan.ranges.length);
+              maybeAutoDownloadVbbGif(clip, i);
             } catch (err) {
               if (String(err && err.message) === "已取消") throw err;
               clip.error = err.message || String(err);
@@ -3658,11 +3688,14 @@
             , () => abortVbb);
             blob = compressed.blob;
             compressRounds = compressed.compressRounds || 0;
-            if (!compressed.ok) {
+            if (!compressed.ok || blob.size > V2G_BLACKBOX_MAX_BYTES) {
               setError(
                 vbbError,
-                `合并后仍超 ${blackboxBudgetLabel()}（${formatKb(blob.size)}）· 已压 ${compressRounds} 轮，建议减少段数或缩短片段`
+                `合并后仍超 ${blackboxBudgetLabel()}（${formatKb(blob.size)}）· 已压 ${compressRounds} 轮，未提供下载。建议减少段数或缩短片段`
               );
+              setVbbProgress(true, 1, `合并失败 · 仍超 ${blackboxBudgetLabel()}`);
+              toast(`合并失败：仍超 ${blackboxBudgetLabel()}（${formatKb(blob.size)}）`);
+              return;
             }
           }
           showVbbMergedBlock(blob, {
@@ -3670,9 +3703,8 @@
             compressRounds,
             downloadName: "blackbox-merged.gif",
           });
-          const okTip = blob.size <= V2G_BLACKBOX_MAX_BYTES ? `≤${blackboxBudgetLabel()}` : `仍超 ${blackboxBudgetLabel()}`;
-          setVbbProgress(true, 1, `合并完成 · ${formatKb(blob.size)} · ${okTip}`);
-          toast(blob.size <= V2G_BLACKBOX_MAX_BYTES ? "已合并为一条 GIF" : `已合并，但体积仍超 ${blackboxBudgetLabel()}（${formatKb(blob.size)}）`);
+          setVbbProgress(true, 1, `合并完成 · ${formatKb(blob.size)} · ≤${blackboxBudgetLabel()}`);
+          toast("已合并为一条 GIF");
         } catch (err) {
           setVbbProgress(false, 0, "");
           setError(vbbError, err.message || String(err));
@@ -4146,6 +4178,13 @@
                 }
               }
               if (myGen !== st.gen) return; // 期间又改了时长 → 丢弃这次结果
+              if (blob.size > budget) {
+                if (isManual) {
+                  setErr(`无法压到 ${Math.round(budget / (1024 * 1024))}MB（当前 ${fmt(blob.size)}）· 未提供下载`);
+                  setProg(false, 0);
+                }
+                return;
+              }
               if (st.url) {
                 try {
                   URL.revokeObjectURL(st.url);

@@ -475,3 +475,56 @@ select.meta-input.num-choice {
 }
 .vbb-chunk-row #vbb-chunk-count { width: 5rem; }
 .vbb-chunk-row #vbb-chunk-count:disabled { opacity: 0.5; }
+
+/* 次要选项：默认折叠，主路径（选片→模式→一键）更清爽 */
+#vbb .vbb-more {
+  margin-top: 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--bg-0) 58%, transparent);
+  padding: 0.15rem 0.65rem 0.15rem;
+}
+#vbb .vbb-more > summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--muted);
+  font-size: 0.82rem;
+  padding: 0.45rem 0.1rem;
+  user-select: none;
+}
+#vbb .vbb-more > summary::-webkit-details-marker { display: none; }
+#vbb .vbb-more > summary::before {
+  content: "▸ ";
+  color: var(--muted);
+}
+#vbb .vbb-more[open] > summary {
+  color: var(--ink);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0.35rem;
+}
+#vbb .vbb-more[open] > summary::before { content: "▾ "; }
+#vbb .vbb-more-body {
+  padding: 0.15rem 0 0.55rem;
+}
+#vbb .vbb-main-actions .primary-btn {
+  min-width: 8.5rem;
+}
+@media (max-width: 900px) {
+  #vbb .vbb-main-actions {
+    gap: 0.45rem;
+  }
+  #vbb .vbb-main-actions .primary-btn {
+    flex: 1 1 100%;
+    min-height: 2.6rem;
+  }
+  #vbb .vbb-more {
+    margin-top: 0.4rem;
+  }
+  #vbb .blackbox-workflow-row .seg {
+    width: 100%;
+  }
+  #vbb .blackbox-workflow-row .seg-btn {
+    flex: 1 1 0;
+    text-align: center;
+  }
+}

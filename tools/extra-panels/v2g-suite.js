@@ -1219,6 +1219,7 @@
             frameCount,
             span: effSpan,
             fps,
+            playbackFps: gifEffectivePlaybackFps(fps),
             speed,
             outW,
             outH,
@@ -1303,6 +1304,33 @@
           for (let i = 0; i < stride; i++) if (view[offA + i] !== view[offB + i]) return false;
           return true;
         };
+      }
+
+      /**
+       * GIF 时基只有百分之一秒：为目标 fps 生成逐帧 delay（毫秒）。
+       * 用累计厘秒取整，保证总时长贴合 frameCount/fps，且 20fps→每帧精确 50ms。
+       */
+      function buildUniformGifDurationsMs(frameCount, fps) {
+        const n = Math.max(1, Math.floor(Number(frameCount) || 1));
+        const f = Math.max(1, Number(fps) || 15);
+        const durations = new Uint32Array(n);
+        const perFrameCs = 100 / f;
+        let accCs = 0;
+        let prevCs = 0;
+        for (let i = 0; i < n; i++) {
+          accCs += perFrameCs;
+          const cs = Math.round(accCs);
+          durations[i] = Math.max(1, cs - prevCs) * 10;
+          prevCs = cs;
+        }
+        return durations;
+      }
+
+      /** 标称 fps 经 GIF 厘秒量化后的有效播放 fps（20→20，15→≈14.3，12→12.5） */
+      function gifEffectivePlaybackFps(fps) {
+        const f = Math.max(1, Number(fps) || 15);
+        const cs = Math.max(1, Math.round(100 / f));
+        return Math.round((100 / cs) * 10) / 10;
       }
 
       /**
@@ -1571,12 +1599,12 @@
                 vbbLog(`[vbb-phase] gifski 静止帧合并 ${n} → ${merged.count} 帧（省 ${merged.saved} 帧）`);
               }
             } catch (_) {}
-            const mergedView = durations ? view.subarray(0, encodedFrames * stride) : view;
+            // 一律显式写 delay（毫秒→厘秒）：20fps 保证均匀 50ms；避免只传整数 fps 时库内取整不透明
+            if (!durations) durations = buildUniformGifDurationsMs(encodedFrames, fps);
+            const mergedView = view.subarray(0, encodedFrames * stride);
             // gifski.encode 是同步 wasm 调用，期间主线程会卡住；共享 memory 不可并发 → 上锁
             const gifBytes = await withGifskiEncodeLock(() =>
-              durations
-                ? mod.encode(mergedView, encodedFrames, outW, outH, undefined, durations, gifskiQuality)
-                : mod.encode(mergedView, encodedFrames, outW, outH, fps, undefined, gifskiQuality)
+              mod.encode(mergedView, encodedFrames, outW, outH, undefined, durations, gifskiQuality)
             );
             if (!gifBytes || !gifBytes.length) throw new Error("gifski 未产出 GIF");
             return { blob: new Blob([gifBytes], { type: "image/gif" }), n, mergedOut: encodedFrames };
@@ -1621,11 +1649,13 @@
           vbbLog(
             `[vbb-phase] gifski编码 ${Math.round(performance.now() - tPhase)}ms(累计) · ${formatKb(blob.size)} q=${gifskiQuality}${chunkCount > 1 ? ` · ${chunkCount}段` : ""}`
           );
+          const playbackFps = gifEffectivePlaybackFps(fps);
           return {
             blob,
             frameCount: actualFrames,
             span: effSpan,
             fps,
+            playbackFps,
             speed,
             outW,
             outH,
@@ -1684,6 +1714,22 @@
         }
       }
 
+      /** UI 展示用帧率：优先成片有效播放 fps；加速时附带观感提示 */
+      function formatBlackboxFpsLabel(c) {
+        if (!c) return "";
+        const play = Number(c.playbackFps) || gifEffectivePlaybackFps(c.fps) || Number(c.fps) || 0;
+        const speed = Math.max(1, Number(c.speed) || 1);
+        if (!(play > 0)) return "";
+        if (speed > 1.02) {
+          const feel = Math.round((play / speed) * 10) / 10;
+          return `${play}FPS·加速${speed.toFixed(1)}×≈观感${feel}`;
+        }
+        const target = Number(c.fps) || play;
+        // 标称与有效差 ≥0.6 时如实显示有效值，避免「标15实际≈14」
+        if (Math.abs(play - target) >= 0.6) return `${play}FPS`;
+        return `${Math.round(play)}FPS`;
+      }
+
       function describeBlackboxCandidate(c) {
         if (!c) return "";
         const compressTip = c.compressRounds > 0 ? ` · 已压 ${c.compressRounds} 轮` : " · 未压缩";
@@ -1702,7 +1748,8 @@
         } else if (c.maxColors) {
           qTip = ` · ${c.maxColors} 色`;
         }
-        return `${c.fps} FPS${widthTip} · ${c.outW}×${c.outH} · ${formatKb(c.blob.size)}${qTip}${compressTip}${capTip}`;
+        const fpsTip = formatBlackboxFpsLabel(c) || `${c.fps} FPS`;
+        return `${fpsTip}${widthTip} · ${c.outW}×${c.outH} · ${formatKb(c.blob.size)}${qTip}${compressTip}${capTip}`;
       }
   
       function summarizeBlackboxCandidates(list) {
@@ -2134,7 +2181,7 @@
         };
       }
   
-      /** 黑盒编码对外入口：选优 → gifsicle -O3 → 若 O3 腾出预算再加宽一次 */
+      /** 黑盒编码对外入口：选优 → gifsicle -O3 → 若 O3 腾出预算再加宽一次 → 硬闸 ≤上限 */
       async function encodeBlackboxClip(clipOpts) {
         let result = await encodeBlackboxClipCore(clipOpts);
         if (!result?.blob || !(result.blob.size > 0)) return result;
@@ -2155,14 +2202,17 @@
           }
         } catch (_) {}
 
-        // O3 常再瘦一点：若仍 <95% 上限且宽未到顶，用腾出的预算再加宽（不加 lossy）
+        // O3 常再瘦一点：仅当已在上限内且仍 <95% 时试加宽（超限走硬闸，禁止把超限当完成）
         try {
-          if (result.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return result;
-          if (clipOpts.isAborted?.()) return result;
+          if (
+            result.blob.size <= V2G_BLACKBOX_MAX_BYTES &&
+            result.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.95 &&
+            !clipOpts.isAborted?.()
+          ) {
           const srcW = Number(clipOpts.srcW) || 0;
           const hardMax = Math.min(srcW > 0 ? srcW : V2G_ENCODE_HARD_W, V2G_ENCODE_HARD_W);
           let curW = Math.max(64, Number(result.maxW) || Number(result.outW) || V2G_BLACKBOX_BASE_W);
-          if (curW >= hardMax - 2) return result;
+          if (curW < hardMax - 2) {
           const fps = Number(result.fps) || 15;
           // 必须沿用核心阶段的加速倍率：clipOpts 只有 speedLimitSec，直接展开会丢掉 speed → 缩时长失效
           const speed = Math.max(1, Number(result.speed) || 1);
@@ -2224,9 +2274,116 @@
             );
             result = best;
           }
+          }
+          }
         } catch (_) {}
 
-        return result;
+        return await enforceBlackboxMaxBytes(result, clipOpts);
+      }
+
+      /**
+       * 最后一道硬闸：bytes 必须 ≤ V2G_BLACKBOX_MAX_BYTES（含边界）。
+       * 超限则继续压缩/缩宽/降质/降帧；仍超则抛错，禁止把超限文件当成功结果。
+       */
+      async function enforceBlackboxMaxBytes(result, clipOpts) {
+        if (!result?.blob) return result;
+        if (result.blob.size <= V2G_BLACKBOX_MAX_BYTES) return result;
+        const onProgress = clipOpts?.onProgress || (() => {});
+        const isAborted = clipOpts?.isAborted || (() => abortV2g);
+        const speed = Math.max(1, Number(result.speed) || 1);
+        let best = result;
+
+        // 1) gifsicle 硬压（含缩放档）
+        if (typeof compressExistingGifToBlackbox === "function") {
+          onProgress(0.97, `硬闸压缩到 ${blackboxBudgetLabel()}…`);
+          try {
+            const c = await compressExistingGifToBlackbox(
+              best.blob,
+              (ratio, text) => onProgress(0.97 + Math.min(0.01, (ratio || 0) * 0.01), text || "硬闸压缩"),
+              isAborted
+            );
+            if (c?.blob && c.blob.size < best.blob.size) {
+              best = {
+                ...best,
+                blob: c.blob,
+                compressRounds: (best.compressRounds || 0) + (c.compressRounds || 0),
+              };
+            }
+            if (best.blob.size <= V2G_BLACKBOX_MAX_BYTES) return best;
+          } catch (err) {
+            if (String(err && err.message) === "已取消") throw err;
+          }
+        }
+
+        // 2) 重编码阶梯：缩宽 → 降质 → 底线 12fps
+        const w0 = Math.max(
+          V2G_BLACKBOX_RETRY_MIN_W,
+          Number(best.maxW) || Number(best.outW) || V2G_BLACKBOX_BASE_W
+        );
+        const ladder = [
+          { fps: Math.min(Number(best.fps) || 12, 15), wScale: 0.82, q: 18, gq: 55 },
+          { fps: 12, wScale: 0.7, q: 22, gq: 45 },
+          { fps: 12, wScale: 0.58, q: 30, gq: 40 },
+          { fps: 12, wScale: 0.48, q: 30, gq: 35 },
+        ];
+        for (let i = 0; i < ladder.length; i++) {
+          if (isAborted()) throw new Error("已取消");
+          const step = ladder[i];
+          const w = Math.max(V2G_BLACKBOX_RETRY_MIN_W, Math.round((w0 * step.wScale) / 2) * 2);
+          onProgress(0.98, `硬闸重编 · ${step.fps}FPS 宽${w}`);
+          vbbLog(
+            `[vbb-phase] 硬闸重编 #${i + 1} ${step.fps}fps 宽${w} · 当前 ${formatKb(best.blob.size)} > ${blackboxBudgetLabel()}`
+          );
+          try {
+            const enc = await encodeBlackboxGif({
+              file: clipOpts.file,
+              startSec: clipOpts.startSec,
+              span: clipOpts.span,
+              srcW: clipOpts.srcW,
+              srcH: clipOpts.srcH,
+              crop: clipOpts.crop || null,
+              chunkCount: clipOpts.chunkCount,
+              ffmpeg: clipOpts.ffmpeg || null,
+              isAborted,
+              speed,
+              fps: step.fps,
+              maxW: w,
+              quality: step.q,
+              gifskiQuality: step.gq,
+              allowWide: true,
+              skipWatermark: true,
+              skipBright: true,
+              brightness: 0,
+              stageLabel: `硬闸·${step.fps}FPS·宽${w}`,
+              onProgress: (local, text) =>
+                onProgress(0.98 + Math.min(0.015, (local || 0) * 0.015), text || `硬闸重编宽${w}`),
+            });
+            let cand = { ...enc, compressRounds: 0, maxW: w, speed };
+            if (cand.blob.size > V2G_BLACKBOX_MAX_BYTES && typeof compressExistingGifToBlackbox === "function") {
+              const c2 = await compressExistingGifToBlackbox(
+                cand.blob,
+                (ratio, text) => onProgress(0.99, text || "硬闸再压"),
+                isAborted
+              );
+              if (c2?.blob && c2.blob.size < cand.blob.size) {
+                cand = {
+                  ...cand,
+                  blob: c2.blob,
+                  compressRounds: c2.compressRounds || 0,
+                };
+              }
+            }
+            if (cand.blob.size < best.blob.size) best = cand;
+            if (best.blob.size <= V2G_BLACKBOX_MAX_BYTES) return best;
+          } catch (err) {
+            if (String(err && err.message) === "已取消") throw err;
+            vbbLog(`[vbb-phase] 硬闸重编失败：${err && err.message ? err.message : err}`);
+          }
+        }
+
+        throw new Error(
+          `无法压到 ${blackboxBudgetLabel()}（当前 ${formatKb(best.blob.size)}）。请缩短片段、关掉「压缩时长」或略降上限后再试`
+        );
       }
 
       async function encodeBlackboxClipCore(clipOpts) {
@@ -2849,19 +3006,13 @@
             },
           });
           if (!result?.blob) throw new Error("黑盒转换失败");
-          if (result.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
-            applyBlackboxSuccess(result, "黑盒完成");
-            return;
+          if (result.blob.size > V2G_BLACKBOX_MAX_BYTES) {
+            throw new Error(
+              `无法压到 ${blackboxBudgetLabel()}（${formatKb(result.blob.size)}）。请缩短「最长秒数」后重试`
+            );
           }
-          applyV2gOutput(result.blob, { resetCompress: true, format: "gif" });
-          v2gCompressRound = result.compressRounds || 0;
-          setV2gCompressEnabled(true);
-          if (v2gMeta) {
-            v2gMeta.textContent = `黑盒已尽力 · 仍超过 ${blackboxBudgetLabel()} · 已保留 ${describeBlackboxCandidate(result)} · 建议缩短「最长秒数」`;
-          }
-          setV2gProgress(true, 1, `仍超 ${blackboxBudgetLabel()} · ${formatKb(result.blob.size)}`);
-          setError(v2gError, `自动压到 ${blackboxBudgetLabel()} 失败：片段可能过长或画面过复杂，请缩短「最长秒数」后重试`);
-          toast(`黑盒未达 ${blackboxBudgetLabel()}，已保留 ${formatKb(result.blob.size)}`);
+          applyBlackboxSuccess(result, "黑盒完成");
+          return;
         } catch (err) {
           if (String(err && err.message) !== "已取消") {
             setError(v2gError, err.message || String(err));
@@ -6544,6 +6695,7 @@
 
       function maybeAutoDownloadVbbGif(clip, idx) {
         if (!isVbbAutoDlEachEnabled() || !clip?.gifBlob) return false;
+        if (clip.error || clip.gifBlob.size > V2G_BLACKBOX_MAX_BYTES) return false;
         try {
           triggerLocalDownload(clip.gifBlob, vbbGifDownloadName(clip, idx));
           return true;
@@ -7063,7 +7215,10 @@
         if (!clip || !encoded) return;
         clip.gifOutW = Number(encoded.outW) || 0;
         clip.gifOutH = Number(encoded.outH) || 0;
-        clip.gifFps = Number(encoded.fps) || 0;
+        // UI 帧率用成片有效播放 fps（GIF 厘秒量化后），避免「标20实际更卡」
+        const play = Number(encoded.playbackFps) || (typeof gifEffectivePlaybackFps === "function" ? gifEffectivePlaybackFps(encoded.fps) : 0);
+        clip.gifFps = play || Number(encoded.fps) || 0;
+        clip.gifSpeed = Math.max(1, Number(encoded.speed) || 1);
         clip.gifDuration = vbbEncodedGifDurationSec(encoded);
       }
   
@@ -7134,7 +7289,15 @@
         // 顺序固定：帧率 · 尺寸 · 体积 · 时长（其余附加信息尽量少）
         const bits = [];
         const fps = Number(c.gifFps) || 0;
-        if (fps) bits.push(`${fps}FPS`);
+        const speed = Math.max(1, Number(c.gifSpeed) || 1);
+        if (fps) {
+          if (speed > 1.02) {
+            const feel = Math.round((fps / speed) * 10) / 10;
+            bits.push(`${fps}FPS·加速${speed.toFixed(1)}×≈${feel}`);
+          } else {
+            bits.push(`${fps}FPS`);
+          }
+        }
         const w = Number(c.gifOutW) || 0;
         const h = Number(c.gifOutH) || 0;
         if (w && h) bits.push(`${w}×${h}`);
@@ -7157,6 +7320,16 @@
   
       function applyVbbClipEncoded(clip, encoded, extraBits = []) {
         if (!clip || !encoded?.blob) return;
+        // 硬闸：超上限绝不挂成功下载（编码层也会抛错；此处双保险）
+        if (encoded.blob.size > V2G_BLACKBOX_MAX_BYTES) {
+          clip.gifBlob = null;
+          clip.gifUrl = "";
+          clip.error = `超过 ${blackboxBudgetLabel()}（${formatKb(encoded.blob.size)}）· 未交付下载`;
+          clip.gifNote = "";
+          attachVbbEncodedMeta(clip, encoded);
+          return;
+        }
+        clip.error = "";
         clip.gifBlob = encoded.blob;
         clip.gifUrl = "";
         attachVbbEncodedMeta(clip, encoded);
@@ -7164,7 +7337,13 @@
         extraBits.forEach((b) => {
           if (b) bits.push(b);
         });
-        if (encoded.fps) bits.push(`${encoded.fps} FPS`);
+        const fpsLabel =
+          typeof formatBlackboxFpsLabel === "function"
+            ? formatBlackboxFpsLabel(encoded)
+            : encoded.fps
+              ? `${encoded.fps} FPS`
+              : "";
+        if (fpsLabel) bits.push(fpsLabel.replace(/FPS$/i, "FPS"));
         if (encoded.outW && encoded.outH) bits.push(`${encoded.outW}×${encoded.outH}`);
         // 质量档位：gifski 显示自适应量化 quality，ffmpeg 回退显示色数
         if (encoded.engine === "gifski" && Number.isFinite(Number(encoded.gifskiQuality))) {
@@ -8130,10 +8309,13 @@
               },
             });
             if (abortVbb) throw new Error("已取消");
-            vbbClips[i].gifBlob = encoded.blob;
-            vbbClips[i].gifUrl = "";
             applyVbbClipEncoded(vbbClips[i], encoded, reuse.fromCache ? ["沿用方案"] : []);
-            if (!vbbClips[i].error) saveVbbSpanScheme(r.span, snapshotVbbEncodeSeed(encoded, {}), "blackbox");
+            if (vbbClips[i].error || !vbbClips[i].gifBlob) {
+              setVbbClipJob(i, { status: "error", progress: 1, text: "失败" });
+              refreshVbbClipRow(i);
+              continue;
+            }
+            saveVbbSpanScheme(r.span, snapshotVbbEncodeSeed(encoded, {}), "blackbox");
             setVbbClipJob(i, { status: "done", progress: 1, text: "完成" });
             notifyVbbProgress(i, ranges.length);
             maybeAutoDownloadVbbGif(vbbClips[i], i);
@@ -9148,6 +9330,9 @@
                 if (encoded?.maxW) usedWidth = encoded.maxW;
               }
               if (!encoded?.blob) throw new Error("未产出 GIF");
+              if (encoded.blob.size > V2G_BLACKBOX_MAX_BYTES) {
+                throw new Error(`仍超 ${blackboxBudgetLabel()}（${formatKb(encoded.blob.size)}）`);
+              }
               attachVbbEncodedMeta(clip, encoded);
               // 延迟创建 ObjectURL：列表默认不解码预览
               clip.gifUrl = "";
@@ -9156,7 +9341,7 @@
               else if (reuseSeed) bits.push("沿用#01");
               if (usedFallback) bits.push("超限");
               else if (isWide && usedWidth !== (plan.maxW || V2G_BLACKBOX_BASE_W)) bits.push(`已降宽${usedWidth}`);
-              if (encoded.fps) bits.push(`${encoded.fps}FPS`);
+              if (encoded.fps) bits.push(`${encoded.playbackFps || encoded.fps}FPS`);
               if (encoded.outW && encoded.outH) bits.push(`${encoded.outW}×${encoded.outH}`);
               if (encoded.compressRounds > 0) bits.push(`已压 ${encoded.compressRounds} 轮`);
               if (encoded.maxW) bits.push(`宽≤${encoded.maxW}`);
@@ -9164,24 +9349,20 @@
               if (encoded.framesCapped) bits.push(`已抽稀 ${encoded.frameCount} 帧`);
               clip.gifBlob = encoded.blob;
               clip.gifNote = bits.join(" · ");
-              if (encoded.blob.size > V2G_BLACKBOX_MAX_BYTES) {
-                clip.error = `仍超 ${blackboxBudgetLabel()}（${formatKb(encoded.blob.size)}）`;
-              }
+              clip.error = "";
               if (i === 0) firstSeed = snapshotVbbEncodeSeed(encoded, { usedWidth, usedFallback });
-              if (!clip.error) {
-                saveVbbSpanScheme(
-                  r.span,
-                  snapshotVbbEncodeSeed(encoded, { usedWidth, usedFallback }),
-                  usedFallback ? "blackbox" : activeEncode
-                );
-              }
+              saveVbbSpanScheme(
+                r.span,
+                snapshotVbbEncodeSeed(encoded, { usedWidth, usedFallback }),
+                usedFallback ? "blackbox" : activeEncode
+              );
               setVbbClipJob(i, {
-                status: clip.error ? "error" : "done",
+                status: "done",
                 progress: 1,
-                text: clip.error ? "完成（超限）" : "完成",
+                text: "完成",
               });
-              if (!clip.error) notifyVbbProgress(i, plan.ranges.length);
-              if (clip.gifBlob) maybeAutoDownloadVbbGif(clip, i);
+              notifyVbbProgress(i, plan.ranges.length);
+              maybeAutoDownloadVbbGif(clip, i);
             } catch (err) {
               if (String(err && err.message) === "已取消") throw err;
               clip.error = err.message || String(err);
@@ -9274,11 +9455,14 @@
             , () => abortVbb);
             blob = compressed.blob;
             compressRounds = compressed.compressRounds || 0;
-            if (!compressed.ok) {
+            if (!compressed.ok || blob.size > V2G_BLACKBOX_MAX_BYTES) {
               setError(
                 vbbError,
-                `合并后仍超 ${blackboxBudgetLabel()}（${formatKb(blob.size)}）· 已压 ${compressRounds} 轮，建议减少段数或缩短片段`
+                `合并后仍超 ${blackboxBudgetLabel()}（${formatKb(blob.size)}）· 已压 ${compressRounds} 轮，未提供下载。建议减少段数或缩短片段`
               );
+              setVbbProgress(true, 1, `合并失败 · 仍超 ${blackboxBudgetLabel()}`);
+              toast(`合并失败：仍超 ${blackboxBudgetLabel()}（${formatKb(blob.size)}）`);
+              return;
             }
           }
           showVbbMergedBlock(blob, {
@@ -9286,9 +9470,8 @@
             compressRounds,
             downloadName: "blackbox-merged.gif",
           });
-          const okTip = blob.size <= V2G_BLACKBOX_MAX_BYTES ? `≤${blackboxBudgetLabel()}` : `仍超 ${blackboxBudgetLabel()}`;
-          setVbbProgress(true, 1, `合并完成 · ${formatKb(blob.size)} · ${okTip}`);
-          toast(blob.size <= V2G_BLACKBOX_MAX_BYTES ? "已合并为一条 GIF" : `已合并，但体积仍超 ${blackboxBudgetLabel()}（${formatKb(blob.size)}）`);
+          setVbbProgress(true, 1, `合并完成 · ${formatKb(blob.size)} · ≤${blackboxBudgetLabel()}`);
+          toast("已合并为一条 GIF");
         } catch (err) {
           setVbbProgress(false, 0, "");
           setError(vbbError, err.message || String(err));
@@ -9762,6 +9945,13 @@
                 }
               }
               if (myGen !== st.gen) return; // 期间又改了时长 → 丢弃这次结果
+              if (blob.size > budget) {
+                if (isManual) {
+                  setErr(`无法压到 ${Math.round(budget / (1024 * 1024))}MB（当前 ${fmt(blob.size)}）· 未提供下载`);
+                  setProg(false, 0);
+                }
+                return;
+              }
               if (st.url) {
                 try {
                   URL.revokeObjectURL(st.url);
