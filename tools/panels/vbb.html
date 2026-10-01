@@ -36,11 +36,11 @@
         </div>
         <div class="vbb-file-edit" id="vbb-file-edit" hidden>
           <div class="field-row" style="flex-wrap:wrap;align-items:center;gap:0.55rem">
-            <p class="hint tight" id="vbb-file-edit-label" style="margin:0;flex:1 1 auto">可选编辑 · 裁时长 / 裁画面后再转 GIF</p>
+            <p class="hint tight" id="vbb-file-edit-label" style="margin:0;flex:1 1 auto">可选编辑</p>
             <button type="button" class="secondary-btn" id="vbb-edit-open" disabled>编辑</button>
             <button type="button" class="ghost-btn" id="vbb-edit-reset" disabled>重置编辑</button>
           </div>
-          <p class="hint tight" id="vbb-edit-hint">点「编辑」打开与「视频修剪」相同的修剪/裁画面页；未编辑则用原片（或上方自动裁边）。</p>
+          <p class="hint tight" id="vbb-edit-hint" hidden></p>
         </div>
         <div class="vsplit-manual-transport vbb-manual-transport" id="vbb-manual-panel" hidden>
           <div class="vsplit-transport">
@@ -74,15 +74,14 @@
               <button type="button" class="ghost-btn" id="vbb-mark-clear" disabled>清空</button>
             </div>
             <p class="hint tight" id="vbb-manual-draft" hidden></p>
-            <p class="hint tight" id="vbb-manual-batch-hint" hidden>打点仅作用于当前预览视频；切换列表条目会保留各自的点。</p>
-            <p class="hint tight" id="vbb-long-hint" hidden>超过 3 分钟的视频：建议只拖动定位、少点播放；拖动时自动暂停以减轻内存压力。也可先在「视频切分」打点再转黑盒。</p>
-            <p class="hint tight">拖到起点后点「打起点」，再拖到终点点「打终点」；进度条绿/橙点可点跳转；标记多段后点上方「一键黑盒」。</p>
+            <p class="hint tight" id="vbb-manual-batch-hint" hidden>打点仅作用于当前预览视频</p>
+            <p class="hint tight" id="vbb-long-hint" hidden>超长视频建议只拖进度、少播放</p>
           </div>
         </div>
 
         <div class="vbb-split-panel" id="vbb-split-panel" hidden>
           <h2 class="subhead">长视频切片</h2>
-          <p class="hint tight" id="vbb-split-intro">先分析出方案，满意后再按方案逐段生成。</p>
+          <p class="hint tight" id="vbb-split-intro">先分析再生成</p>
           <div class="btn-row tool-actions vbb-split-actions" style="margin-top:0.65rem;flex-wrap:wrap">
             <button type="button" class="primary-btn" id="vbb-analyze" disabled>① 分析切分方案</button>
             <button type="button" class="primary-btn" id="vbb-run" disabled>② 按方案生成 GIF</button>
@@ -204,7 +203,7 @@
                 <option value="24">24</option>
                 <option value="30">30</option>
               </select>
-              <span class="hint tight">秒（默认关；开启=倍速缩短成片时长，帧率仍按目标均匀刷新）</span>
+              <span class="hint tight">秒</span>
             </div>
             <div class="field-row vbb-chunk-row only-coarse" style="flex-wrap:wrap;align-items:center;margin-top:0.4rem;gap:0.55rem">
               <label class="flag" for="vbb-chunk-enable"><input type="checkbox" id="vbb-chunk-enable" checked /> 分块编码</label>
@@ -220,7 +219,7 @@
                 <option value="12">12</option>
                 <option value="16">16</option>
               </select>
-              <span class="hint tight" id="vbb-chunk-hint">块数越少画质/体积越好，但越吃内存</span>
+              <span class="hint tight" id="vbb-chunk-hint" hidden></span>
             </div>
           </div>
         </details>
@@ -291,7 +290,7 @@
               <p class="hint tight" id="vbb-img-preview-note"></p>
             </div>
           </div>
-          <p class="hint tight" id="vbb-img-meta">拖入图片即可预览；宽度、帧率、颜色由黑盒规则自动决定，不用填。</p>
+          <p class="hint tight" id="vbb-img-meta">拖入图片即可</p>
           <div class="gif-progress" id="vbb-img-progress" hidden>
             <div class="gif-progress-head">
               <p class="hint gif-progress-title" id="vbb-img-progress-text">准备中…</p>

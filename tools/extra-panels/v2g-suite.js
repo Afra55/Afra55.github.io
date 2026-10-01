@@ -5839,7 +5839,7 @@
       const VBB_DEFAULT_META = "";
       const VBB_WORKFLOW_HINTS = {
         single:
-          "整段视频输出一个 GIF（≤16s 主 20fps；≈20s 主 15、有余量冲 20；≈30s 主 12；压缩时长=倍速缩短成片，帧率仍均匀；不自动切两段）。选视频后可点「编辑」裁时长/画面，再点「一键黑盒」。",
+          "选视频 → 可选编辑 → 一键黑盒。",
         split: "长视频切片：先点「① 分析切分方案」查看段数与预估，调整满意后点「② 按方案生成 GIF」。",
         manual: "手动打点：拖到起点/终点点「打起点」「打终点」，标记多段后点「一键黑盒」。",
       };
@@ -7726,7 +7726,7 @@
         if (mode === "clarity") return `不压缩 · ≤${blackboxBudgetLabel()}`;
         if (mode === "sharp") return `缩短加宽 · 不压缩 · ≤${blackboxBudgetLabel()}`;
         if (mode === "duration")
-          return `≤16s 主 20fps；≈20s 主 15、有余量冲 20；≈30s 主 12；压缩时长=倍速（帧率仍均匀）；超限缩宽→降质→12${compressTip} · ≤${blackboxBudgetLabel()}`;
+          return `≤${blackboxBudgetLabel()}${compressTip}`;
         if (targetSpan < clarityMax - 0.05) {
           return `短于清晰档 · 目标宽${maxW || "?"} · 不压缩`;
         }
@@ -9583,10 +9583,8 @@
               if (!userSet) countEl.value = "";
             }
             if (hintEl) {
-              const p = currentMediaPerf();
-              hintEl.textContent = rec
-                ? `自动约 ${rec} 块 · ${p.label}档 · 点选可强制块数`
-                : `${p.label}档 · 选「自动」按内存预算；越少画质/体积越好`;
+              hintEl.textContent = "";
+              hintEl.hidden = true;
             }
           };
           const persist = () => {
