@@ -10028,7 +10028,7 @@
           });
           $("#vbb-img-clear", root)?.addEventListener("click", () => {
             clearItems();
-            setMeta("拖入图片即可预览；宽度、颜色由黑盒规则自动决定，不用填。");
+            setMeta("拖入图片即可");
           });
           holdRange.addEventListener("input", () => syncHold(holdRange.value, true));
           holdNum?.addEventListener("change", () => syncHold(holdNum.value, false));
@@ -10175,7 +10175,7 @@
 
           // 初始：按黑盒默认值
           syncHold(holdRange.value, true);
-          setMeta("拖入图片即可预览；宽度、颜色由黑盒规则自动决定，不用填。");
+          setMeta("拖入图片即可");
         })();
 
         const vbbSpeedChk = $("#vbb-speed-limit", root);
