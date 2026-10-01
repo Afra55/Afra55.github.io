@@ -52,6 +52,7 @@
        * 「压缩时长」= 倍速缩短成片时长，帧延迟仍按目标 fps 均匀写，不是更顿的原因。
        * 小于规则：加宽 → 提帧；超过规则：缩宽 → 降质 → 降帧到 12。
        * 短片（≤24s）加宽上限直接到源宽/1280，目标贴满 ~99% 预算；长片仍限约 2× 控成本。
+       * 难压：高质量近超限先轻压再深降质；贴满但宽<420 时可降帧换可读宽。
        */
       const V2G_BLACKBOX_MAX_FPS = 20;
       const V2G_BLACKBOX_FPS_LIST = [20, 15, 12];
@@ -2488,6 +2489,51 @@
           if (isShortFill && cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.95) {
             await widenPass("短片有余 · 再加宽吃满");
           }
+          // 可读宽优先：已接近贴满但宽 <420（录屏字偏糊）→ 降一档帧率换宽度
+          {
+            const curMaxW = Number(cur.maxW) || V2G_BLACKBOX_BASE_W;
+            const readableMin = V2G_BLACKBOX_BASE_W;
+            if (
+              curMaxW < readableMin - 0.5 &&
+              cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.88 &&
+              !atCap()
+            ) {
+              const lowerFps =
+                fpsNow >= V2G_BLACKBOX_HIGH_FPS - 0.01
+                  ? 15
+                  : fpsNow >= 15 - 0.01
+                    ? 12
+                    : 0;
+              const floor = blackboxFpsFloor(effSpan);
+              if (lowerFps >= floor - 0.01) {
+                const scale = Math.sqrt(
+                  (fpsNow / lowerFps) * ((V2G_BLACKBOX_MAX_BYTES * 0.98) / Math.max(1, cur.blob.size))
+                );
+                const targetW = Math.min(
+                  Number(hardMax) || curMaxW,
+                  Math.max(readableMin, Math.round((curMaxW * scale) / 2) * 2)
+                );
+                if (targetW >= readableMin && targetW > curMaxW + 36) {
+                  onProgress(0.96, `偏窄 · 降到 ${lowerFps}fps 换宽`);
+                  vbbLog(
+                    `[vbb-phase] 可读宽优先 ${fpsNow}fps·宽${curMaxW} ${formatKb(cur.blob.size)} → 试 ${lowerFps}fps·宽${targetW}`
+                  );
+                  const swapped = await encodeAtWidthFps(lowerFps, targetW);
+                  if (
+                    swapped?.blob?.size &&
+                    swapped.blob.size <= V2G_BLACKBOX_MAX_BYTES &&
+                    (Number(swapped.maxW) || Number(swapped.outW) || 0) >= curMaxW + 36
+                  ) {
+                    cur = { ...swapped, compressRounds: 0, maxW: targetW };
+                    fpsNow = lowerFps;
+                    if (cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.95) {
+                      await widenPass("降帧后 · 再加宽");
+                    }
+                  }
+                }
+              }
+            }
+          }
           if (!cur?.blob) return cur;
           // 帧率也到顶、预算仍有富余 → gifski 质量从 92 上探到 100（源很窄/很短时用得上）
           // 省电/均衡不做：多一次编码就多一份 wasm 堆占用
@@ -2687,13 +2733,34 @@
           );
           return enc.blob.size <= V2G_BLACKBOX_MAX_BYTES ? enc : null;
         };
-        // 对某帧率做「宽度 420→400→380（步进 20）→ 底线宽度上降质量档」梯度尝试，返回第一个进预算的
+        // 对某帧率做「宽度 420→400→380 →（近超限则先轻压）→ 底线宽度上降质量档」
         const fitFps = async (fps) => {
           const wTop = Math.max(floorW, Math.min(srcCap, V2G_BLACKBOX_BASE_W));
           for (let w = wTop; w >= floorW; w -= V2G_BLACKBOX_WIDTH_STEP) {
             const e = await trial(fps, w, V2G_BLACKBOX_QUALITY);
             if (e) return e;
             if (w - V2G_BLACKBOX_WIDTH_STEP < floorW) break;
+          }
+          // 高质量全面超限：对「最近超限」候选先轻柔压缩进预算，再落入深质量档（少糊字）
+          {
+            const overs = tried
+              .filter(
+                (t) =>
+                  Math.abs((Number(t.fps) || 0) - fps) < 0.01 &&
+                  (Number(t.quality) || V2G_BLACKBOX_QUALITY) <= V2G_BLACKBOX_QUALITY + 0.01 &&
+                  t.blob?.size > V2G_BLACKBOX_MAX_BYTES &&
+                  t.blob.size <= V2G_BLACKBOX_MAX_BYTES * 1.45
+              )
+              .sort((a, b) => a.blob.size - b.blob.size);
+            if (overs[0]) {
+              onProgress(0.55, `近超限轻压 · ${fps}FPS`);
+              vbbLog(
+                `[vbb-phase] ${fps}fps 近超限 ${formatKb(overs[0].blob.size)} → 先轻压再降质`
+              );
+              const soft = await compressAt(overs[0], fps, false, 0.55);
+              tried.push(soft);
+              if (soft.blob.size <= V2G_BLACKBOX_MAX_BYTES) return soft;
+            }
           }
           // ≥15fps 只允许让渡到档 15（gifski 73）：再往下不如用更低帧的高质量
           const maxQi = fps >= 15 - 0.01 ? 2 : V2G_BLACKBOX_QUALITY_LADDER.length - 1;
