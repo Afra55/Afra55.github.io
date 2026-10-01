@@ -51,6 +51,7 @@
        *   > MID：主试 12 @ 420；很松抬 15 再加宽
        * 「压缩时长」= 倍速缩短成片时长，帧延迟仍按目标 fps 均匀写，不是更顿的原因。
        * 小于规则：加宽 → 提帧；超过规则：缩宽 → 降质 → 降帧到 12。
+       * 短片（≤24s）加宽上限直接到源宽/1280，目标贴满 ~99% 预算；长片仍限约 2× 控成本。
        */
       const V2G_BLACKBOX_MAX_FPS = 20;
       const V2G_BLACKBOX_FPS_LIST = [20, 15, 12];
@@ -2158,7 +2159,7 @@
           }
         } catch (_) {}
 
-        // O3 常再瘦一点：仅当已在上限内且仍 <95% 时试加宽（超限走硬闸，禁止把超限当完成）
+        // O3 常再瘦一点：已在上限内且仍 <95% 时再加宽；短片直接探到源宽吃满，长片仍限约 1.5×
         try {
           if (
             result.blob.size <= V2G_BLACKBOX_MAX_BYTES &&
@@ -2172,20 +2173,27 @@
           const fps = Number(result.fps) || 15;
           // 必须沿用核心阶段的加速倍率：clipOpts 只有 speedLimitSec，直接展开会丢掉 speed → 缩时长失效
           const speed = Math.max(1, Number(result.speed) || 1);
+          const effSpan = Math.max(0.05, Number(clipOpts.span) || 0) / speed;
+          const isShortFill = effSpan <= V2G_BLACKBOX_SHORT_SPAN_SEC + 0.01;
           const quality = Number(result.quality) || V2G_BLACKBOX_QUALITY;
           const gifskiQuality = Number.isFinite(Number(result.gifskiQuality))
             ? Number(result.gifskiQuality)
             : undefined;
           const onProgress = clipOpts.onProgress || (() => {});
-          const widenMax = Math.min(
-            hardMax,
-            Math.max(curW + V2G_BLACKBOX_WIDTH_STEP, Math.round(curW * 1.5))
-          );
+          const widenMax = isShortFill
+            ? hardMax
+            : Math.min(
+                hardMax,
+                Math.max(curW + V2G_BLACKBOX_WIDTH_STEP, Math.round(curW * 1.5))
+              );
           let best = result;
           let lo = curW;
           let hiW = widenMax;
           const capBytes = Math.round(V2G_BLACKBOX_MAX_BYTES * 0.99);
-          const maxProbes = Math.max(1, Math.min(3, Number(currentMediaPerf().widenProbes) || 2));
+          const baseProbes = Math.max(1, Number(currentMediaPerf().widenProbes) || 2);
+          const maxProbes = isShortFill
+            ? Math.max(3, Math.min(6, baseProbes + 2))
+            : Math.max(1, Math.min(3, baseProbes));
           for (let i = 0; i < maxProbes && hiW - lo > 16; i++) {
             if (clipOpts.isAborted?.()) break;
             const w =
@@ -2429,11 +2437,31 @@
           let fpsNow = Number(cur.fps) || curFps;
           const effSpan = span / speed;
           const isLong = effSpan > V2G_BLACKBOX_MID_SPAN_SEC + 0.01;
+          // ≤24s：预算优先换成宽度（吃满上限）；更长仍限 2× 控探测成本
+          const isShortFill = !isLong;
           const atCap = () =>
             (srcW > 0 && cur.outW >= srcW - 2) || (Number(cur.maxW) || 0) >= Number(hardMax) - 2;
           const widthOkForRaise = () => {
             const w = Number(cur.maxW) || V2G_BLACKBOX_BASE_W;
             return w >= V2G_BLACKBOX_HIGH_FPS_MIN_W - 0.5 || atCap();
+          };
+          const resolveWidenMax = () => {
+            const curMaxW = Number(cur.maxW) || V2G_BLACKBOX_BASE_W;
+            if (isShortFill) return Math.max(curMaxW, Number(hardMax) || curMaxW);
+            return Math.min(
+              Number(hardMax) || curMaxW,
+              Math.max(V2G_BLACKBOX_BASE_W, Math.round(curMaxW * 2))
+            );
+          };
+          const widenPass = async (label) => {
+            if (atCap() || cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return;
+            onProgress(0.95, label);
+            const widenMax = resolveWidenMax();
+            const wider = await blackboxWidenBest(cur, (w) => encodeAtWidthFps(fpsNow, w), {
+              minW: Math.max(64, Number(cur.maxW) || V2G_BLACKBOX_BASE_W),
+              maxW: widenMax,
+            });
+            if (wider?.blob?.size) cur = wider;
           };
           // ≈30s：很松时先抬到 15，再加宽（避免 12@很宽占满预算后抬不动帧）
           if (isLong && cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.75 && fpsNow < 15 - 0.01) {
@@ -2448,23 +2476,17 @@
           }
           if (cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return cur;
           // 小于规则：先加宽，再用余量提帧
-          if (!atCap()) {
-            onProgress(0.95, "体积有余 · 自动增宽");
-            // gifski 已支持分段编码（内部自动切段），不再有「帧数/内存超限回退」问题；
-            // 这里只把二分探测上限压到 2× 当前宽度，避免长视频对超预算宽度做整段（分段）编码白跑。
-            const widenMax = Math.min(hardMax, Math.max(V2G_BLACKBOX_BASE_W, Math.round((Number(cur.maxW) || V2G_BLACKBOX_BASE_W) * 2)));
-            const wider = await blackboxWidenBest(cur, (w) => encodeAtWidthFps(fpsNow, w), {
-              minW: Math.max(64, Number(cur.maxW) || V2G_BLACKBOX_BASE_W),
-              maxW: widenMax,
-            });
-            if (wider?.blob?.size) cur = wider;
-          }
+          await widenPass(isShortFill ? "短片有余 · 加宽吃满预算" : "体积有余 · 自动增宽");
           if (cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return cur;
           // 加宽后再提帧（短片源可整除才冲 20；长片抬 15）
           if (widthOkForRaise()) {
             const srcFpsNow = await detectSourceFps(file).catch(() => 0);
             cur = await raiseBlackboxFps(cur, Number(cur.fps) || fpsNow, encodeAtWidthFps, srcFpsNow, effSpan);
             fpsNow = Number(cur.fps) || fpsNow;
+          }
+          // 短片提帧后若又腾出预算（或提帧未动），再加宽一轮吃满
+          if (isShortFill && cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.95) {
+            await widenPass("短片有余 · 再加宽吃满");
           }
           if (!cur?.blob) return cur;
           // 帧率也到顶、预算仍有富余 → gifski 质量从 92 上探到 100（源很窄/很短时用得上）
