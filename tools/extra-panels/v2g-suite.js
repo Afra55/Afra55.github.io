@@ -8549,7 +8549,9 @@
         }
       }
 
-      // 把已选的多个视频按顺序拼接成一个 MP4（先试视频+音频，失败回退纯视频）
+      // 把已选的多个视频按顺序拼接成一个 MP4，再走单段黑盒。
+      // 只要画面：音频在 concat 里会为对齐 A/V 复制/丢帧，观感像「前半段一顿一顿」；
+      // 黑盒 GIF 也不需要声。中间片保留 60fps，后面抽 20 才够匀。
       async function mergeVbbVideosToOne() {
         if (!isVbbBatchMode() || vbbBusy) return;
         abortVbb = false;
@@ -8576,36 +8578,39 @@
           }
           const W = Math.max(2, Math.round((items[0].srcW || 1280) / 2) * 2);
           const H = Math.max(2, Math.round((items[0].srcH || 720) / 2) * 2);
+          // 每段：统一尺寸 → 重置时基 → CFR 60，避免低中间帧率 + 带声 concat 造成顿挫
           const vparts = names
             .map(
               (_, i) =>
-                `[${i}:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=30[v${i}]`
+                `[${i}:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,setpts=PTS-STARTPTS,fps=60[v${i}]`
             )
             .join(";");
           const vlist = names.map((_, i) => `[v${i}]`).join("");
           const baseArgs = [];
           names.forEach((nm) => baseArgs.push("-i", nm));
-          const enc = ["-c:v", "libx264", "-preset", "ultrafast", "-crf", "23", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-y", "merged.mp4"];
-          const runConcat = async (withAudio) => {
-            const aparts = withAudio
-              ? ";" +
-                names
-                  .map((_, i) => `[${i}:a]aresample=async=1:first_pts=0[a${i}]`)
-                  .join(";")
-              : "";
-            const alist = withAudio ? names.map((_, i) => `[a${i}]`).join("") : "";
-            // concat 输入必须按段交错：[v0][a0][v1][a1]…
-            const concatInputs = withAudio
-              ? names.map((_, i) => `[v${i}][a${i}]`).join("")
-              : vlist;
-            const filter = `${vparts}${aparts};${concatInputs}concat=n=${total}:v=1:a=${withAudio ? 1 : 0}[v]${withAudio ? "[a]" : ""}`;
-            const mapArgs = withAudio ? ["-map", "[v]", "-map", "[a]", "-c:a", "aac", "-b:a", "160k"] : ["-map", "[v]"];
-            const args = [...baseArgs, "-filter_complex", filter, ...mapArgs, ...enc];
-            return ffmpeg.exec(args);
-          };
+          const filter = `${vparts};${vlist}concat=n=${total}:v=1:a=0[v]`;
+          const args = [
+            ...baseArgs,
+            "-filter_complex",
+            filter,
+            "-map",
+            "[v]",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "ultrafast",
+            "-crf",
+            "18",
+            "-pix_fmt",
+            "yuv420p",
+            "-movflags",
+            "+faststart",
+            "-y",
+            "merged.mp4",
+          ];
           setVbbProgress(true, 0.5, "拼接编码中…", { busy: true });
-          let code = await runConcat(true).catch(() => 1);
-          if (code !== 0 && !abortVbb) code = await runConcat(false).catch(() => 1);
+          const code = await ffmpeg.exec(args).catch(() => 1);
           if (abortVbb) throw new Error("已取消");
           if (code !== 0) throw new Error(`拼接失败（code=${code}）`);
           const data = await ffmpeg.readFile("merged.mp4");
