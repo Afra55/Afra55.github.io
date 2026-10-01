@@ -276,6 +276,25 @@ select.meta-input.text-choice {
   overflow: hidden;
 }
 
+.vbb-preview-wrap.is-edit-preview {
+  box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.vbb-preview-wrap.is-edit-preview::after {
+  content: "编辑预览";
+  position: absolute;
+  top: 0.45rem;
+  left: 0.45rem;
+  z-index: 2;
+  padding: 0.15rem 0.4rem;
+  border-radius: 6px;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  color: var(--ink);
+  background: color-mix(in srgb, var(--bg-0) 72%, var(--accent));
+  pointer-events: none;
+}
+
 .vbb-file-edit {
   margin-top: 0.65rem;
   padding: 0.7rem 0.8rem;

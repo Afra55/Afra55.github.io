@@ -454,7 +454,7 @@
   /** @type {object[]} */
   let history = [];
   let applyingHistory = false;
-  const SNAP_SEC = 0.12;
+  const SNAP_SEC = 0.06;
   const HISTORY_MAX = 30;
 
   const DEFAULT_META =
@@ -1204,18 +1204,20 @@
   }
 
   function snapTime(t, which) {
+    const fps = 30;
+    let next = Math.round(clamp(t, 0, duration) * fps) / fps;
     if (which === "start") {
-      if (t <= SNAP_SEC) {
-        if (t > 0) hapticLight();
+      if (next <= SNAP_SEC) {
+        if (next > 0) hapticLight();
         return 0;
       }
-      return t;
+      return next;
     }
-    if (t >= duration - SNAP_SEC) {
-      if (t < duration) hapticLight();
+    if (next >= duration - SNAP_SEC) {
+      if (next < duration) hapticLight();
       return duration;
     }
-    return t;
+    return next;
   }
 
   function setStart(t, { preview = true, record = false } = {}) {
@@ -1258,11 +1260,11 @@
     if (!drag) return;
     if (drag.kind === "start") {
       const snapped = snapTime(startSec, "start");
-      if (snapped !== startSec) setStart(snapped, { preview: true });
+      setStart(snapped, { preview: true });
       pushHistory();
     } else if (drag.kind === "end") {
       const snapped = snapTime(endSec, "end");
-      if (snapped !== endSec) setEnd(snapped, { preview: true });
+      setEnd(snapped, { preview: true });
       pushHistory();
     } else if (drag.kind === "window") {
       pushHistory();

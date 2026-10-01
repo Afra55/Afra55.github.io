@@ -8,7 +8,10 @@
   if (window.DevToolsVtrimEditor?.open) return;
 
   const MIN_SPAN = 0.5;
-  const SNAP_SEC = 0.12;
+  /** 仅贴片头/片尾时吸附；过大易在抬手时「跳一下」 */
+  const SNAP_EDGE_SEC = 0.06;
+  /** 拖拽中预览 seek 节流（ms），对齐系统相册：手势跟手、画面稍后跟上 */
+  const DRAG_SEEK_MS = 72;
   let uidSeq = 0;
 
   function toast(msg) {
@@ -230,6 +233,7 @@
     let activeHandle = "start";
     let scrubSeekWanted = null;
     let scrubSeekInflight = false;
+    let dragSeekTimer = 0;
     let playheadRaf = 0;
     let cropLiveRaf = 0;
     let filmGen = 0;
@@ -397,9 +401,21 @@
       } catch (_) {}
     }
 
-    function previewSeek(t) {
+    function previewSeek(t, { throttle = false } = {}) {
       scrubSeekWanted = clamp(t, 0, Math.max(0, duration - 0.04));
-      pumpPreviewScrubSeek();
+      if (!throttle) {
+        if (dragSeekTimer) {
+          clearTimeout(dragSeekTimer);
+          dragSeekTimer = 0;
+        }
+        pumpPreviewScrubSeek();
+        return;
+      }
+      if (dragSeekTimer) return;
+      dragSeekTimer = window.setTimeout(() => {
+        dragSeekTimer = 0;
+        pumpPreviewScrubSeek();
+      }, DRAG_SEEK_MS);
     }
 
     function updateLabels() {
@@ -423,7 +439,12 @@
       }
       const sPct = (startSec / duration) * 100;
       const ePct = (endSec / duration) * 100;
-      const pPct = ((video.currentTime || 0) / duration) * 100;
+      // 拖片头/片尾时播放头跟手柄，避免 seek 滞后造成抬手「回弹」
+      let playT = Number(video.currentTime) || 0;
+      if (drag?.kind === "start") playT = startSec;
+      else if (drag?.kind === "end") playT = Math.max(startSec, endSec - 0.04);
+      else if (drag?.kind === "window") playT = startSec;
+      const pPct = (playT / duration) * 100;
       selEl.style.setProperty("--vtrim-start", `${sPct}%`);
       selEl.style.setProperty("--vtrim-end", `${ePct}%`);
       selEl.style.setProperty("--vtrim-play", `${clamp(pPct, 0, 100)}%`);
@@ -567,22 +588,35 @@
       paintTimeline();
     }
 
-    function snapTime(t, which) {
-      if (which === "start") {
-        if (t <= SNAP_SEC) {
-          if (t > 0) hapticLight();
-          return 0;
-        }
-        return t;
-      }
-      if (t >= duration - SNAP_SEC) {
-        if (t < duration) hapticLight();
-        return duration;
-      }
-      return t;
+    function frameFps() {
+      const r = Number(video?.getVideoPlaybackQuality?.()?.totalVideoFrames) || 0;
+      void r;
+      // 多数手机源 24–60；用 30 对齐帧格足够稳，且不会在抬手时大幅跳动
+      return 30;
     }
 
-    function setStart(t, { preview = true } = {}) {
+    function snapToFrame(t) {
+      const fps = frameFps();
+      return Math.round(clamp(t, 0, duration) * fps) / fps;
+    }
+
+    function snapTime(t, which) {
+      let next = snapToFrame(t);
+      if (which === "start") {
+        if (next <= SNAP_EDGE_SEC) {
+          if (next > 0) hapticLight();
+          return 0;
+        }
+        return next;
+      }
+      if (next >= duration - SNAP_EDGE_SEC) {
+        if (next < duration) hapticLight();
+        return duration;
+      }
+      return next;
+    }
+
+    function setStart(t, { preview = true, immediateSeek = false } = {}) {
       const prev = startSec;
       startSec = clamp(t, 0, endSec - MIN_SPAN);
       activeHandle = "start";
@@ -593,12 +627,12 @@
         timeline?.classList.add("is-pulse");
         hapticLight();
       }
-      if (preview) previewSeek(startSec);
+      if (preview) previewSeek(startSec, { throttle: Boolean(drag) && !immediateSeek });
       paintTimeline();
       updateLabels();
     }
 
-    function setEnd(t, { preview = true } = {}) {
+    function setEnd(t, { preview = true, immediateSeek = false } = {}) {
       const prev = endSec;
       endSec = clamp(t, startSec + MIN_SPAN, duration);
       activeHandle = "end";
@@ -609,7 +643,7 @@
         timeline?.classList.add("is-pulse");
         hapticLight();
       }
-      if (preview) previewSeek(Math.max(startSec, endSec - 0.04));
+      if (preview) previewSeek(Math.max(startSec, endSec - 0.04), { throttle: Boolean(drag) && !immediateSeek });
       paintTimeline();
       updateLabels();
     }
@@ -620,19 +654,28 @@
       nextStart = clamp(nextStart, 0, duration - span);
       startSec = nextStart;
       endSec = nextStart + span;
-      previewSeek(startSec);
+      previewSeek(startSec, { throttle: Boolean(drag) });
       paintTimeline();
       updateLabels();
     }
 
     function finishTrimDrag() {
       if (!drag) return;
-      if (drag.kind === "start") {
+      const kind = drag.kind;
+      // 抬手只用已提交的 start/end，不再读 pointer 坐标（防手指抬起位移）
+      if (kind === "start") {
         const snapped = snapTime(startSec, "start");
-        if (snapped !== startSec) setStart(snapped, { preview: true });
-      } else if (drag.kind === "end") {
+        setStart(snapped, { preview: true, immediateSeek: true });
+      } else if (kind === "end") {
         const snapped = snapTime(endSec, "end");
-        if (snapped !== endSec) setEnd(snapped, { preview: true });
+        setEnd(snapped, { preview: true, immediateSeek: true });
+      } else if (kind === "window") {
+        startSec = snapToFrame(startSec);
+        endSec = clamp(startSec + Math.max(MIN_SPAN, endSec - startSec), startSec + MIN_SPAN, duration);
+        if (endSec >= duration - SNAP_EDGE_SEC) endSec = duration;
+        previewSeek(startSec, { throttle: false });
+        paintTimeline();
+        updateLabels();
       }
     }
 
@@ -853,6 +896,7 @@
       timeline?.classList.remove("is-dragging-window", "is-dragging");
       drag = null;
       syncHandleTips();
+      e.preventDefault();
     }
     timeline?.addEventListener("pointerdown", onTimelinePointerDown);
     timeline?.addEventListener("pointermove", onTimelinePointerMove);

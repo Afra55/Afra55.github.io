@@ -760,9 +760,11 @@
             };
             clampVbbEdit(item.edit, item.duration, item.srcW, item.srcH);
             if (!isVbbBatchMode()) vbbSingleEdit = item.edit;
+            applyVbbSeek(Number(item.edit.trimStart) || 0, { keepPlaying: false });
+            syncVbbEditPreview();
             toast(
               vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)
-                ? "已保存编辑"
+                ? "已保存编辑 · 预览为裁切后片段"
                 : "已恢复为原片范围"
             );
           } else {
@@ -784,9 +786,57 @@
         item.edit = makeVbbEditState(item.duration, item.srcW, item.srcH);
         if (!isVbbBatchMode()) vbbSingleEdit = item.edit;
         syncVbbEditUi();
+        syncVbbEditPreview();
+        applyVbbSeek(0, { keepPlaying: false });
         renderVbbBatchList({ keepSelection: true });
         syncVbbBatchMeta();
         toast("已重置该视频的编辑");
+      }
+
+      /** 主预览跟随当前编辑：裁时长循环 + 裁画面 clip-path */
+      function syncVbbEditPreview() {
+        const item = getActiveVbbEditItem();
+        const video = vbbVideo;
+        const wrap = vbbPreviewWrap;
+        if (!video) return;
+        if (!item?.edit || !vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)) {
+          video.style.clipPath = "";
+          video.style.webkitClipPath = "";
+          wrap?.classList.remove("is-edit-preview");
+          return;
+        }
+        wrap?.classList.add("is-edit-preview");
+        const edit = item.edit;
+        if (edit.cropOn && edit.crop && item.srcW > 0 && item.srcH > 0) {
+          const c = edit.crop;
+          const top = (Math.max(0, c.y) / item.srcH) * 100;
+          const left = (Math.max(0, c.x) / item.srcW) * 100;
+          const bottom = Math.max(0, 100 - ((c.y + c.h) / item.srcH) * 100);
+          const right = Math.max(0, 100 - ((c.x + c.w) / item.srcW) * 100);
+          const inset = `inset(${top}% ${right}% ${bottom}% ${left}%)`;
+          video.style.clipPath = inset;
+          video.style.webkitClipPath = inset;
+        } else {
+          video.style.clipPath = "";
+          video.style.webkitClipPath = "";
+        }
+      }
+
+      function enforceVbbEditPlaybackWindow() {
+        if (isVbbManualMode() || vbbBusy || !vbbVideo?.src) return;
+        const item = getActiveVbbEditItem();
+        if (!item?.edit || !vbbEditIsDirty(item.edit, item.duration, item.srcW, item.srcH)) return;
+        const start = Math.max(0, Number(item.edit.trimStart) || 0);
+        const end = Math.max(start + VBB_MIN_SPAN, Number(item.edit.trimEnd) || item.duration);
+        const t = Number(vbbVideo.currentTime) || 0;
+        if (t < start - 0.08) {
+          applyVbbSeek(start, { keepPlaying: !vbbVideo.paused });
+          return;
+        }
+        if (t >= end - 0.05) {
+          if (!vbbVideo.paused) applyVbbSeek(start, { keepPlaying: true });
+          else applyVbbSeek(Math.max(start, end - 0.05), { keepPlaying: false });
+        }
       }
 
       async function selectVbbBatchItem(idx, { force = false } = {}) {
@@ -827,6 +877,7 @@
         applyVbbSeek(seekTo, { keepPlaying: false });
         renderVbbBatchList({ keepSelection: true });
         syncVbbEditUi();
+        syncVbbEditPreview();
         paintVbbManualUi();
         setVbbButtons();
       }
@@ -2781,8 +2832,8 @@
       }
 
       // 把已选的多个视频按顺序拼接成一个 MP4，再走单段黑盒。
-      // 只要画面：音频在 concat 里会为对齐 A/V 复制/丢帧，观感像「前半段一顿一顿」；
-      // 黑盒 GIF 也不需要声。中间片保留 60fps，后面抽 20 才够匀。
+      // 只要画面：音频在 concat 里会为对齐 A/V 复制/丢帧，观感像「前半段一顿一顿」。
+      // 中间片帧率对齐黑盒主档（短片 20 / 中 15 / 长 12），避免 源→60→20 双重抽帧导致第一段顿挫。
       async function mergeVbbVideosToOne() {
         if (!isVbbBatchMode() || vbbBusy) return;
         abortVbb = false;
@@ -2809,11 +2860,16 @@
           }
           const W = Math.max(2, Math.round((items[0].srcW || 1280) / 2) * 2);
           const H = Math.max(2, Math.round((items[0].srcH || 720) / 2) * 2);
-          // 每段：统一尺寸 → 重置时基 → CFR 60，避免低中间帧率 + 带声 concat 造成顿挫
+          const totalSpan = items.reduce((s, it) => s + Math.max(0, Number(it.duration) || 0), 0);
+          const mergeFps = Math.max(
+            12,
+            Math.min(30, Math.round(Number(typeof blackboxPrimaryFps === "function" ? blackboxPrimaryFps(totalSpan) : 20) || 20))
+          );
+          // 每段：统一尺寸 → 重置时基 → CFR=黑盒主档帧率（单次抽帧）
           const vparts = names
             .map(
               (_, i) =>
-                `[${i}:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,setpts=PTS-STARTPTS,fps=60[v${i}]`
+                `[${i}:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2,setsar=1,format=yuv420p,setpts=PTS-STARTPTS,fps=${mergeFps}[v${i}]`
             )
             .join(";");
           const vlist = names.map((_, i) => `[v${i}]`).join("");
@@ -2840,7 +2896,7 @@
             "-y",
             "merged.mp4",
           ];
-          setVbbProgress(true, 0.5, "拼接编码中…", { busy: true });
+          setVbbProgress(true, 0.5, `拼接编码中（${mergeFps}fps）…`, { busy: true });
           const code = await ffmpeg.exec(args).catch(() => 1);
           if (abortVbb) throw new Error("已取消");
           if (code !== 0) throw new Error(`拼接失败（code=${code}）`);
@@ -2852,7 +2908,6 @@
           if (!blob.size) throw new Error("拼接结果为空");
           const mergedFile = new File([blob], `merged-${Date.now()}.mp4`, { type: "video/mp4" });
           setVbbProgress(true, 0.92, `拼接完成 · ${formatKb(blob.size)} · 开始转黑盒 GIF…`);
-          // 合并结果当作一个视频：设为当前源视频，直接走单视频黑盒流程
           vbbBusy = false;
           if (vbbAbort) vbbAbort.hidden = true;
           await loadVbbFile(mergedFile);
@@ -4720,8 +4775,11 @@
         if (vbbPlay) vbbPlay.textContent = "播放";
       });
       vbbVideo?.addEventListener("timeupdate", () => {
-        if (!isVbbManualMode() || vbbScrubbing) return;
-        paintVbbNow();
+        if (isVbbManualMode()) {
+          if (!vbbScrubbing) paintVbbNow();
+          return;
+        }
+        enforceVbbEditPlaybackWindow();
       });
       vbbVideo?.addEventListener("seeked", () => {
         if (!isVbbManualMode()) return;

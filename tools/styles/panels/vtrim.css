@@ -447,13 +447,78 @@ body.vtrim-editor-open {
   z-index: 2;
 }
 @media (max-width: 640px) {
-  .vtrim-editor-overlay { padding: 0; }
+  .vtrim-editor-overlay {
+    padding: 0;
+    overflow-x: hidden;
+    width: 100%;
+    max-width: 100vw;
+  }
   .vtrim-editor-sheet {
     width: 100%;
+    max-width: 100%;
     max-height: 100%;
     height: 100%;
+    height: 100dvh;
     border-radius: 0;
     border: 0;
+    min-width: 0;
+  }
+  .vtrim-editor-body {
+    overflow-x: hidden;
+    overflow-y: auto;
+    padding: 0.55rem 0.7rem 0.35rem;
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .vtrim-editor-body .vtrim-stage,
+  .vtrim-editor-body .field-row,
+  .vtrim-editor-body .btn-row,
+  .vtrim-editor-body .vtrim-transport,
+  .vtrim-editor-body .vtrim-trim-tools,
+  .vtrim-editor-body .vtrim-crop-tools,
+  .vtrim-editor-body .vtrim-timeline,
+  .vtrim-editor-body .seg {
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+  }
+  .vtrim-editor-body .field-row {
+    gap: 0.4rem;
+  }
+  .vtrim-preview-wrap {
+    height: min(42dvh, 280px);
+    min-height: 150px;
+  }
+  .vtrim-transport {
+    flex-wrap: wrap;
+    gap: 0.4rem 0.55rem;
+  }
+  .vtrim-transport .mono,
+  .vtrim-transport .hint {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .vtrim-nudge {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.35rem;
+    width: 100%;
+  }
+  .vtrim-nudge .ghost-btn {
+    min-width: 0;
+    width: 100%;
+    justify-content: center;
+  }
+  .vtrim-editor-body .seg {
+    display: inline-flex;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .vtrim-editor-body .field-row .seg .seg-btn {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: center;
   }
   /* 底栏固定完成/关闭；模式分段减少与预览打架 */
   .vtrim-editor-foot {
@@ -466,12 +531,5 @@ body.vtrim-editor-open {
   .vtrim-editor-foot .primary-btn {
     flex: 1 1 0;
     min-height: 2.75rem;
-  }
-  .vtrim-editor-body .field-row .seg {
-    width: 100%;
-  }
-  .vtrim-editor-body .field-row .seg .seg-btn {
-    flex: 1 1 0;
-    min-height: 2.4rem;
   }
 }
