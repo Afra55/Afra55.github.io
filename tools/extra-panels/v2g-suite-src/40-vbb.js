@@ -70,7 +70,7 @@
       const VBB_DEFAULT_META = "";
       const VBB_WORKFLOW_HINTS = {
         single:
-          "整段视频输出一个 GIF（≈20s 主 15fps、≈30s 主 12fps；短片源适合才冲 20；有余量先加宽再提帧；不为 30s 自动切两段）。选视频后可点「编辑」裁时长/画面，再点「一键黑盒」。",
+          "整段视频输出一个 GIF（≤16s 主 20fps；≈20s 主 15、有余量冲 20；≈30s 主 12；压缩时长=倍速缩短成片，帧率仍均匀；不自动切两段）。选视频后可点「编辑」裁时长/画面，再点「一键黑盒」。",
         split: "长视频切片：先点「① 分析切分方案」查看段数与预估，调整满意后点「② 按方案生成 GIF」。",
         manual: "手动打点：拖到起点/终点点「打起点」「打终点」，标记多段后点「一键黑盒」。",
       };
@@ -1448,7 +1448,7 @@
         if (!clip || !encoded) return;
         clip.gifOutW = Number(encoded.outW) || 0;
         clip.gifOutH = Number(encoded.outH) || 0;
-        // UI 帧率用成片有效播放 fps（GIF 厘秒量化后），避免「标20实际更卡」
+        // UI 帧率用成片有效播放 fps（GIF 厘秒量化后）
         const play = Number(encoded.playbackFps) || (typeof gifEffectivePlaybackFps === "function" ? gifEffectivePlaybackFps(encoded.fps) : 0);
         clip.gifFps = play || Number(encoded.fps) || 0;
         clip.gifSpeed = Math.max(1, Number(encoded.speed) || 1);
@@ -1525,8 +1525,7 @@
         const speed = Math.max(1, Number(c.gifSpeed) || 1);
         if (fps) {
           if (speed > 1.02) {
-            const feel = Math.round((fps / speed) * 10) / 10;
-            bits.push(`${fps}FPS·加速${speed.toFixed(1)}×≈${feel}`);
+            bits.push(`${fps}FPS·${speed.toFixed(1)}×倍速`);
           } else {
             bits.push(`${fps}FPS`);
           }
@@ -1958,7 +1957,7 @@
         if (mode === "clarity") return `不压缩 · ≤${blackboxBudgetLabel()}`;
         if (mode === "sharp") return `缩短加宽 · 不压缩 · ≤${blackboxBudgetLabel()}`;
         if (mode === "duration")
-          return `≈20s 主 15fps、≈30s 主 12fps；短片源适合才冲 20；有余量先加宽再提帧（超限缩宽→降质→12，不用 10fps）${compressTip} · ≤${blackboxBudgetLabel()}`;
+          return `≤16s 主 20fps；≈20s 主 15、有余量冲 20；≈30s 主 12；压缩时长=倍速（帧率仍均匀）；超限缩宽→降质→12${compressTip} · ≤${blackboxBudgetLabel()}`;
         if (targetSpan < clarityMax - 0.05) {
           return `短于清晰档 · 目标宽${maxW || "?"} · 不压缩`;
         }
