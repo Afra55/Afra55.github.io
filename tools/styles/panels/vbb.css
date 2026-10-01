@@ -1,16 +1,99 @@
 @import url("./gif-shared.css");
 
-/* 数字档位：点选弹出列表（手机友好），比自由填数更稳 */
+/* 数字档位：点选弹出列表（手机友好），比自由填数更稳；只占数字宽度 */
 select.meta-input.num-choice {
   appearance: auto;
   -webkit-appearance: menulist;
   width: auto;
-  min-width: 4.6rem;
-  max-width: 7.5rem;
+  min-width: 3.1rem;
+  max-width: 4.8rem;
+  flex: 0 0 auto;
   text-align: right;
   text-align-last: right;
   cursor: pointer;
+  padding-right: 0.28rem;
+}
+
+/* 短文案档位（性能 / 提示范围）：按字宽撑开，勿截断 */
+select.meta-input.text-choice {
+  appearance: auto;
+  -webkit-appearance: menulist;
+  width: auto;
+  min-width: 5.5rem;
+  max-width: none;
+  flex: 0 0 auto;
+  text-align: left;
+  text-align-last: left;
+  cursor: pointer;
   padding-right: 0.35rem;
+}
+
+/* 标签 + 控件 + 单位：始终挤在同一簇，不拆两行 */
+#vbb .vbb-opt-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  min-width: 0;
+}
+#vbb .vbb-opt-inline > label {
+  margin: 0;
+  white-space: nowrap;
+}
+#vbb .vbb-opt-inline > .hint {
+  margin: 0;
+}
+
+/* 视频/多图、整段/切片/打点：一整行分段，按钮均分 */
+#vbb .vbb-input-type-row,
+#vbb .blackbox-workflow-row {
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.65rem;
+}
+#vbb .vbb-input-type-row .seg,
+#vbb .blackbox-workflow-row .seg {
+  display: inline-flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+#vbb .vbb-input-type-row .seg-btn,
+#vbb .blackbox-workflow-row .seg-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: center;
+  white-space: nowrap;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+#vbb .blackbox-workflow-row .seg-btn {
+  min-width: 0;
+  font-size: 0.84rem;
+}
+
+/* 上限/性能、压缩时长、分块、提示范围：一行内多簇并排 */
+#vbb .vbb-compact-row {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.45rem 0.85rem;
+  margin-bottom: 0.55rem;
+}
+#vbb .vbb-compact-row > label.flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  width: auto;
+  min-height: 0;
+  white-space: nowrap;
+}
+#vbb .vbb-compact-row > label.flag select {
+  margin-left: 0.15rem;
 }
 
 .vbb-split-actions {
@@ -473,7 +556,11 @@ select.meta-input.num-choice {
 @media (pointer: fine) {
   #vbb .only-coarse { display: none !important; }
 }
-.vbb-chunk-row #vbb-chunk-count { width: 5rem; }
+.vbb-chunk-row #vbb-chunk-count {
+  width: auto;
+  min-width: 3.6rem;
+  max-width: 5.2rem;
+}
 .vbb-chunk-row #vbb-chunk-count:disabled { opacity: 0.5; }
 
 /* 次要选项：默认折叠，主路径（选片→模式→一键）更清爽 */
@@ -520,60 +607,78 @@ select.meta-input.num-choice {
   #vbb .vbb-more {
     margin-top: 0.4rem;
   }
-  /* 手机：每个选项占满一整行，避免并排挤多个 */
-  #vbb .field-row,
-  #vbb .vbb-more-body.field-row,
+  /* 手机：分段仍横排一行；选项簇并排，控件按内容宽度，不占满屏 */
   #vbb .vbb-input-type-row,
   #vbb .blackbox-workflow-row {
-    flex-direction: column;
-    align-items: stretch !important;
-    gap: 0.45rem !important;
+    flex-direction: row;
+    flex-wrap: nowrap;
+    align-items: center !important;
+    gap: 0.35rem !important;
   }
-  #vbb .field-row > label.flag,
-  #vbb .vbb-more-body .flag,
-  #vbb .field-row > label:not(.visually-hidden),
-  #vbb .field-row > select,
-  #vbb .field-row > input:not([type="checkbox"]):not([type="range"]):not([hidden]),
-  #vbb .field-row > .hint,
-  #vbb .field-row > .seg,
-  #vbb .vbb-more-body > .field-row > * {
-    width: 100%;
-    max-width: 100%;
-    box-sizing: border-box;
-  }
-  #vbb .seg {
-    display: flex;
-    flex-direction: column;
-    width: 100%;
-    gap: 0.35rem;
-  }
-  #vbb .seg-btn {
-    width: 100%;
-    flex: 1 1 auto;
-    text-align: center;
-    min-height: 2.5rem;
-  }
+  #vbb .vbb-input-type-row .seg,
   #vbb .blackbox-workflow-row .seg {
+    display: inline-flex;
+    flex-direction: row;
     width: 100%;
+    gap: 0;
   }
+  #vbb .vbb-input-type-row .seg-btn,
   #vbb .blackbox-workflow-row .seg-btn {
-    flex: 1 1 auto;
-    text-align: center;
+    flex: 1 1 0;
+    width: auto;
+    min-width: 0;
+    min-height: 2.35rem;
+    padding-left: 0.35rem;
+    padding-right: 0.35rem;
+    font-size: 0.82rem;
   }
-  #vbb label.flag {
-    display: flex;
-    align-items: center;
-    gap: 0.45rem;
-    width: 100%;
-    min-height: 2.4rem;
+  #vbb .vbb-compact-row,
+  #vbb .vbb-more-body.field-row,
+  #vbb .vbb-more-body > .field-row {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center !important;
+    gap: 0.4rem 0.75rem !important;
+  }
+  #vbb .vbb-compact-row > label:not(.flag),
+  #vbb .vbb-compact-row > select,
+  #vbb .vbb-compact-row > .hint,
+  #vbb .vbb-opt-inline,
+  #vbb .vbb-opt-inline > select,
+  #vbb .vbb-opt-inline > .hint {
+    width: auto;
+    max-width: none;
+    flex: 0 0 auto;
+  }
+  #vbb .vbb-compact-row > label.flag {
+    width: auto;
+    max-width: 100%;
+    min-height: 2.2rem;
+  }
+  #vbb select.meta-input.num-choice {
+    width: auto;
+    min-width: 3.1rem;
+    max-width: 4.8rem;
+  }
+  #vbb select.meta-input.text-choice {
+    width: auto;
+    min-width: 6.2rem;
+    max-width: none;
   }
   #vbb .vbb-hold-row {
-    flex-direction: column;
-    align-items: stretch;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 0.65rem;
   }
-  #vbb .vbb-hold-row .vbb-hold-range,
+  #vbb .vbb-hold-row .vbb-hold-range {
+    flex: 1 1 8rem;
+    min-width: 6rem;
+    width: auto;
+  }
   #vbb .vbb-hold-row .meta-input {
-    width: 100%;
-    min-width: 0;
+    width: auto;
+    min-width: 3.1rem;
+    max-width: 4.8rem;
   }
 }

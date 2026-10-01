@@ -4,7 +4,7 @@
       </div>
       <div class="panel-body">
         <div class="vbb-scroll-anchor" aria-hidden="true"></div>
-        <div class="field-row vbb-input-type-row" style="flex-wrap:wrap;align-items:center;gap:0.55rem">
+        <div class="field-row vbb-input-type-row">
           <span class="seg" role="group" aria-label="输入类型">
             <button type="button" class="seg-btn is-active" id="vbb-input-video">视频</button>
             <button type="button" class="seg-btn" id="vbb-input-images">多图</button>
@@ -23,7 +23,7 @@
           <p class="hint" id="vbb-ffmpeg-warm-progress-text">准备编码器…</p>
         </div>
         <div class="vbb-batch-list" id="vbb-batch-list" hidden aria-live="polite"></div>
-        <div class="field-row blackbox-workflow-row" style="flex-wrap:wrap;margin-top:0.55rem;align-items:center">
+        <div class="field-row blackbox-workflow-row">
           <span class="seg" role="group" aria-label="黑盒模式">
             <button type="button" class="seg-btn is-active" id="vbb-workflow-single" data-vbb-workflow="single">② 整段视频</button>
             <button type="button" class="seg-btn" id="vbb-workflow-split" data-vbb-workflow="split">长视频切片</button>
@@ -130,39 +130,43 @@
 
         <details class="vbb-more" id="vbb-more-limit">
           <summary>上限 / 性能</summary>
-          <div class="vbb-more-body field-row" style="flex-wrap:wrap;align-items:center;gap:0.55rem">
-            <label for="vbb-max-mb">黑盒上限</label>
-            <select id="vbb-max-mb" class="mono meta-input num-choice" title="点击选择上限 MB" aria-label="黑盒上限 MB">
-              <option value="5">5</option>
-              <option value="6">6</option>
-              <option value="8">8</option>
-              <option value="10" selected>10</option>
-              <option value="12">12</option>
-              <option value="15">15</option>
-              <option value="20">20</option>
-              <option value="30">30</option>
-              <option value="50">50</option>
-            </select>
-            <span class="hint tight">MB</span>
-            <label for="vbb-perf">性能</label>
-            <select id="vbb-perf" class="mono meta-input" title="自动按手机能力选档；拉满尽量单次 gifski，多选时并行 2 路">
-              <option value="auto">自动</option>
-              <option value="max">拉满</option>
-              <option value="balanced">均衡</option>
-              <option value="eco">省电</option>
-            </select>
+          <div class="vbb-more-body field-row vbb-compact-row">
+            <span class="vbb-opt-inline">
+              <label for="vbb-max-mb">黑盒上限</label>
+              <select id="vbb-max-mb" class="mono meta-input num-choice" title="点击选择上限 MB" aria-label="黑盒上限 MB">
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="8">8</option>
+                <option value="10" selected>10</option>
+                <option value="12">12</option>
+                <option value="15">15</option>
+                <option value="20">20</option>
+                <option value="30">30</option>
+                <option value="50">50</option>
+              </select>
+              <span class="hint tight">MB</span>
+            </span>
+            <span class="vbb-opt-inline">
+              <label for="vbb-perf">性能</label>
+              <select id="vbb-perf" class="mono meta-input text-choice" title="自动按手机能力选档；拉满尽量单次 gifski，多选时并行 2 路" aria-label="性能档位">
+                <option value="auto">自动</option>
+                <option value="max">拉满</option>
+                <option value="balanced">均衡</option>
+                <option value="eco">省电</option>
+              </select>
+            </span>
           </div>
         </details>
 
         <details class="vbb-more" id="vbb-more-process">
           <summary>处理选项</summary>
           <div class="vbb-more-body">
-            <div class="field-row" id="vbb-notify-row" style="flex-wrap:wrap;align-items:center;gap:0.85rem">
+            <div class="field-row vbb-compact-row" id="vbb-notify-row">
               <label class="flag" for="vbb-wake-lock"><input type="checkbox" id="vbb-wake-lock" /> 处理时防止息屏</label>
               <label class="flag" for="vbb-notify-sound"><input type="checkbox" id="vbb-notify-sound" /> 完成提示音</label>
               <label class="flag" for="vbb-notify-vibrate"><input type="checkbox" id="vbb-notify-vibrate" /> 完成震动</label>
-              <label class="flag" for="vbb-notify-scope">提示范围
-                <select id="vbb-notify-scope" class="mono meta-input">
+              <label class="flag vbb-opt-inline" for="vbb-notify-scope">提示范围
+                <select id="vbb-notify-scope" class="mono meta-input text-choice" aria-label="提示范围">
                   <option value="each">每个都提示</option>
                   <option value="done">仅全部完成</option>
                 </select>
@@ -192,34 +196,38 @@
         <details class="vbb-more" id="vbb-more-advanced">
           <summary>高级</summary>
           <div class="vbb-more-body">
-            <div class="field-row" id="vbb-speed-row" style="flex-wrap:wrap;align-items:center;gap:0.55rem">
-              <label class="flag" for="vbb-speed-limit"><input type="checkbox" id="vbb-speed-limit" /> 压缩时长到</label>
-              <select id="vbb-speed-sec" class="mono meta-input num-choice" title="点击选择压缩目标秒数" aria-label="压缩时长到秒">
-                <option value="10">10</option>
-                <option value="12">12</option>
-                <option value="15">15</option>
-                <option value="16">16</option>
-                <option value="20" selected>20</option>
-                <option value="24">24</option>
-                <option value="30">30</option>
-              </select>
-              <span class="hint tight">秒</span>
+            <div class="field-row vbb-compact-row" id="vbb-speed-row">
+              <span class="vbb-opt-inline">
+                <label class="flag" for="vbb-speed-limit"><input type="checkbox" id="vbb-speed-limit" /> 压缩时长到</label>
+                <select id="vbb-speed-sec" class="mono meta-input num-choice" title="点击选择压缩目标秒数" aria-label="压缩时长到秒">
+                  <option value="10">10</option>
+                  <option value="12">12</option>
+                  <option value="15">15</option>
+                  <option value="16">16</option>
+                  <option value="20" selected>20</option>
+                  <option value="24">24</option>
+                  <option value="30">30</option>
+                </select>
+                <span class="hint tight">秒</span>
+              </span>
             </div>
-            <div class="field-row vbb-chunk-row only-coarse" style="flex-wrap:wrap;align-items:center;margin-top:0.4rem;gap:0.55rem">
-              <label class="flag" for="vbb-chunk-enable"><input type="checkbox" id="vbb-chunk-enable" checked /> 分块编码</label>
-              <label for="vbb-chunk-count">块数</label>
-              <select id="vbb-chunk-count" class="mono meta-input num-choice" title="点击选择分块数；留空档=自动" aria-label="分块数">
-                <option value="" selected>自动</option>
-                <option value="1">1</option>
-                <option value="2">2</option>
-                <option value="3">3</option>
-                <option value="4">4</option>
-                <option value="6">6</option>
-                <option value="8">8</option>
-                <option value="12">12</option>
-                <option value="16">16</option>
-              </select>
-              <span class="hint tight" id="vbb-chunk-hint" hidden></span>
+            <div class="field-row vbb-chunk-row vbb-compact-row only-coarse" id="vbb-chunk-row">
+              <span class="vbb-opt-inline">
+                <label class="flag" for="vbb-chunk-enable"><input type="checkbox" id="vbb-chunk-enable" checked /> 分块编码</label>
+                <label for="vbb-chunk-count">块数</label>
+                <select id="vbb-chunk-count" class="mono meta-input num-choice" title="点击选择分块数；留空档=自动" aria-label="分块数">
+                  <option value="" selected>自动</option>
+                  <option value="1">1</option>
+                  <option value="2">2</option>
+                  <option value="3">3</option>
+                  <option value="4">4</option>
+                  <option value="6">6</option>
+                  <option value="8">8</option>
+                  <option value="12">12</option>
+                  <option value="16">16</option>
+                </select>
+                <span class="hint tight" id="vbb-chunk-hint" hidden></span>
+              </span>
             </div>
           </div>
         </details>
