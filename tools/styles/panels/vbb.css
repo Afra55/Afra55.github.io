@@ -520,11 +520,60 @@ select.meta-input.num-choice {
   #vbb .vbb-more {
     margin-top: 0.4rem;
   }
+  /* 手机：每个选项占满一整行，避免并排挤多个 */
+  #vbb .field-row,
+  #vbb .vbb-more-body.field-row,
+  #vbb .vbb-input-type-row,
+  #vbb .blackbox-workflow-row {
+    flex-direction: column;
+    align-items: stretch !important;
+    gap: 0.45rem !important;
+  }
+  #vbb .field-row > label.flag,
+  #vbb .vbb-more-body .flag,
+  #vbb .field-row > label:not(.visually-hidden),
+  #vbb .field-row > select,
+  #vbb .field-row > input:not([type="checkbox"]):not([type="range"]):not([hidden]),
+  #vbb .field-row > .hint,
+  #vbb .field-row > .seg,
+  #vbb .vbb-more-body > .field-row > * {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  #vbb .seg {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    gap: 0.35rem;
+  }
+  #vbb .seg-btn {
+    width: 100%;
+    flex: 1 1 auto;
+    text-align: center;
+    min-height: 2.5rem;
+  }
   #vbb .blackbox-workflow-row .seg {
     width: 100%;
   }
   #vbb .blackbox-workflow-row .seg-btn {
-    flex: 1 1 0;
+    flex: 1 1 auto;
     text-align: center;
+  }
+  #vbb label.flag {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    width: 100%;
+    min-height: 2.4rem;
+  }
+  #vbb .vbb-hold-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  #vbb .vbb-hold-row .vbb-hold-range,
+  #vbb .vbb-hold-row .meta-input {
+    width: 100%;
+    min-width: 0;
   }
 }

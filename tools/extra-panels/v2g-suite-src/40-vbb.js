@@ -70,7 +70,7 @@
       const VBB_DEFAULT_META = "";
       const VBB_WORKFLOW_HINTS = {
         single:
-          "整段视频输出一个 GIF（≈20s 主 15fps、≈30s 主 12fps、更短可冲 20；有余量先加宽再提帧；不为 30s 自动切两段）。选视频后可点「编辑」裁时长/画面，再点「一键黑盒」。",
+          "整段视频输出一个 GIF（≈20s 主 15fps、≈30s 主 12fps；短片源适合才冲 20；有余量先加宽再提帧；不为 30s 自动切两段）。选视频后可点「编辑」裁时长/画面，再点「一键黑盒」。",
         split: "长视频切片：先点「① 分析切分方案」查看段数与预估，调整满意后点「② 按方案生成 GIF」。",
         manual: "手动打点：拖到起点/终点点「打起点」「打终点」，标记多段后点「一键黑盒」。",
       };
@@ -1865,7 +1865,7 @@
   
       /**
        * 对齐 encodeBlackboxClip：
-       * - ≤16s 从 20 起；≈20s 从 15 起；≈30s 从 12 起
+       * - ≤24s 从 15 起；≈30s 从 12 起（20 仅短片余量提帧，估算不预判）
        * - 每档先 420 宽；超限轻柔压缩；体积有余再加宽
        */
       function estimateVbbBlackboxPlan(bps15, span, srcW) {
@@ -1958,7 +1958,7 @@
         if (mode === "clarity") return `不压缩 · ≤${blackboxBudgetLabel()}`;
         if (mode === "sharp") return `缩短加宽 · 不压缩 · ≤${blackboxBudgetLabel()}`;
         if (mode === "duration")
-          return `≈20s 主 15fps、≈30s 主 12fps、更短可冲 20；有余量先加宽再提帧（超限缩宽→降质→12，不用 10fps）${compressTip} · ≤${blackboxBudgetLabel()}`;
+          return `≈20s 主 15fps、≈30s 主 12fps；短片源适合才冲 20；有余量先加宽再提帧（超限缩宽→降质→12，不用 10fps）${compressTip} · ≤${blackboxBudgetLabel()}`;
         if (targetSpan < clarityMax - 0.05) {
           return `短于清晰档 · 目标宽${maxW || "?"} · 不压缩`;
         }

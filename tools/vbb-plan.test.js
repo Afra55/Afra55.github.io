@@ -16,9 +16,9 @@ const VBB_CLARITY_MAX_SPAN = 20;
 const VBB_DURATION_MAX_SPAN = 30;
 const VBB_SAMPLE_SPAN = 2.5;
 const VBB_SOFT_COMPRESS_KEEP = 0.72;
-const V2G_BLACKBOX_SHORT_SPAN_SEC = 16;
+const V2G_BLACKBOX_SHORT_SPAN_SEC = 24;
 const V2G_BLACKBOX_MID_SPAN_SEC = 24;
-const V2G_BLACKBOX_FPS_LIST = [20, 15, 12];
+const V2G_BLACKBOX_FPS_LIST = [15, 12];
 
 function buildVbbRanges(duration, targetSpan, equalize) {
   const d = Number(duration) || 0;
@@ -83,8 +83,7 @@ function estimateVbbBytesAtFpsWidth(bps15, span, fps, width, srcW) {
 
 function resolveBlackboxEstimateFpsList(span) {
   const s = Math.max(VBB_MIN_SPAN, Number(span) || VBB_MIN_SPAN);
-  if (s <= V2G_BLACKBOX_SHORT_SPAN_SEC + 0.01) return V2G_BLACKBOX_FPS_LIST.slice();
-  if (s <= V2G_BLACKBOX_MID_SPAN_SEC + 0.01) return [15, 12];
+  if (s <= V2G_BLACKBOX_MID_SPAN_SEC + 0.01) return V2G_BLACKBOX_FPS_LIST.slice();
   return [12];
 }
 
@@ -324,7 +323,11 @@ function almost(a, b, eps = 1e-6) {
   assert(e4 <= V2G_BLACKBOX_MAX_BYTES, "short blackbox under 10MB");
   assert(e20 <= V2G_BLACKBOX_MAX_BYTES, "long blackbox under 10MB");
   assert(e20 >= 4 * 1024 * 1024, `long blackbox should be sizable, got ${e20}`);
-  assert(estimateVbbFps(bps, 4, "duration") === 20, "short ≤16s blackbox tries 20fps");
+  assert(estimateVbbFps(bps, 4, "duration") === 15, "short ≤24s blackbox primary 15fps");
+  assert(
+    JSON.stringify(resolveBlackboxEstimateFpsList(4)) === JSON.stringify([15, 12]),
+    "short try order is 15→12"
+  );
   assert(
     JSON.stringify(resolveBlackboxEstimateFpsList(20)) === JSON.stringify([15, 12]),
     "≈20s try order is 15→12"
@@ -353,7 +356,7 @@ function almost(a, b, eps = 1e-6) {
   // 短段够小应预估加宽（有余量门槛）
   const bps = (2.0 * 1024 * 1024) / 4; // 4s @420 ≈ 2MB
   const plan = estimateVbbBlackboxPlan(bps, 4, 1280);
-  assert(plan.fps === 20, "small 4s primary 20fps");
+  assert(plan.fps === 15, "small 4s primary 15fps");
   assert(plan.compressRounds === 0, "small 4s no compress");
   assert(plan.maxW > 420, `small 4s should widen, got maxW=${plan.maxW}`);
   assert(plan.bytes > 2 * 1024 * 1024, "widened estimate > base");
@@ -478,12 +481,12 @@ function almost(a, b, eps = 1e-6) {
 }
 
 {
-  const cal = { fps: 20, span: 2.5, bytes: 1.8 * 1024 * 1024, compressRounds: 0, maxW: 480 };
+  const cal = { fps: 15, span: 2.5, bytes: 1.8 * 1024 * 1024, compressRounds: 0, maxW: 480 };
   const bps = cal.bytes / cal.span;
   const e25 = estimateVbbBlackboxBytesCalibrated(bps, 2.5, cal, 1280);
   assert(Math.abs(e25 - cal.bytes) < 64 * 1024, `same span should match cal, got ${e25}`);
   const e10 = estimateVbbBlackboxBytesCalibrated(bps, 10, cal, 1280);
-  // 10s 仍 ≤16 → 主档 20fps，约 4× 标定段
+  // 10s ≤24 → 主档 15fps，约 4× 标定段
   assert(e10 > cal.bytes * 3 && e10 < cal.bytes * 4.2, `10s should scale ~4x, got ${e10}`);
   assert(e10 <= V2G_BLACKBOX_MAX_BYTES, "scaled est under 10MB");
 }
