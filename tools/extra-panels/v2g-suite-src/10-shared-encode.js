@@ -1608,10 +1608,14 @@
             if (n > chunkFrames) n = chunkFrames;
             const view = n * stride === frames.length ? frames : frames.subarray(0, n * stride);
             // 静止帧合并：可变长 delay 在连续动作里易「一顿一顿」。
-            // ≥18fps（含 20）一律均匀 delay 保流畅；15/12 仍可合并省体积。
+            // ≥18fps 一律均匀 delay；短片（≤16s）即使 15/12 也不合并，优先跟手不卡。
             let encodedFrames = n;
             let durations = null;
-            if (fps < 18) {
+            const effSpanForMerge =
+              Math.max(0.05, Number(opts.span) || 0) / Math.max(1, Number(opts.speed) || 1);
+            const allowStillMerge =
+              fps < 18 - 0.01 && effSpanForMerge > V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC + 0.01;
+            if (allowStillMerge) {
               try {
                 const merged = mergeStaticFramesInPlace(view, n, stride, fps);
                 if (merged && merged.count >= 2) {
@@ -2700,20 +2704,29 @@
               const target = V2G_BLACKBOX_MAX_BYTES * 0.9;
               const k = Math.min(1, Math.sqrt(target / Math.max(1, candidate.blob.size)));
               const rw = Math.max(V2G_BLACKBOX_RETRY_MIN_W, Math.floor((width * k) / 2) * 2);
-              // 帧率底线跟时长走：一律不低于 12，宁可靠压缩/减色兜
-              const rf = Math.max(blackboxFpsFloor(span / speed), Math.round(fps * k * 2) / 2);
-              // 帧率已到 12fps 底线、体积还不够 → 优先「减色」而不是继续掉帧率
-              // （减色比降帧率便宜得多：见 V2G_BLACKBOX_RETRY_QUALITY 注释）
               const keepQ = Number(candidate.quality) || Number(common.quality) || V2G_BLACKBOX_QUALITY;
-              const retryQuality =
-                rf <= V2G_BLACKBOX_RETRY_MIN_FPS + 0.01 && k < 0.92
-                  ? V2G_BLACKBOX_RETRY_QUALITY
-                  : keepQ;
-              if (rw < width - 4 || rf < fps - 0.4) {
+              const shortFluent = span / speed <= V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC + 0.01;
+              // 短片（≤16s）保帧率：15→13.5 / 20→16 会明显卡；优先同帧率减色，再走 gifsicle
+              let rf;
+              let retryQuality;
+              if (shortFluent && fps >= 15 - 0.01) {
+                rf = fps;
+                retryQuality =
+                  keepQ < V2G_BLACKBOX_RETRY_QUALITY
+                    ? V2G_BLACKBOX_RETRY_QUALITY
+                    : Math.min(30, Math.max(keepQ, V2G_BLACKBOX_RETRY_QUALITY) + 7);
+              } else {
+                rf = Math.max(blackboxFpsFloor(span / speed), Math.round(fps * k * 2) / 2);
+                retryQuality =
+                  rf <= V2G_BLACKBOX_RETRY_MIN_FPS + 0.01 && k < 0.92
+                    ? V2G_BLACKBOX_RETRY_QUALITY
+                    : keepQ;
+              }
+              if (rw < width - 4 || rf < fps - 0.4 || retryQuality > keepQ + 0.01) {
                 vbbLog(
                   `[vbb-phase] 超预算 ${formatKb(candidate.blob.size)} → 无损重编 ${rf}fps 宽${rw}${
-                    retryQuality !== keepQ ? " 减色" : ""
-                  }（避免 --lossy）`
+                    retryQuality !== keepQ ? ` 减色q${retryQuality}` : ""
+                  }${shortFluent && Math.abs(rf - fps) < 0.01 ? " · 短片保帧" : "（避免 --lossy）"}`
                 );
                 const retry = await encodeAt(rf, rw, progressBase, 0.18, `${rf}FPS·宽${rw}·无损重编`, retryQuality);
                 if (!(retry.blob.size > V2G_BLACKBOX_MAX_BYTES)) return retry;
@@ -2872,6 +2885,7 @@
         };
         // 对某帧率做「宽度 420→400→380 →（近超限则先轻压）→ 底线宽度上降质量档」
         const fitFps = async (fps) => {
+          const shortFluent = effSpanForPick <= V2G_BLACKBOX_HIGH_PRIMARY_SPAN_SEC + 0.01;
           const wTop = Math.max(floorW, Math.min(srcCap, V2G_BLACKBOX_BASE_W));
           for (let w = wTop; w >= floorW; w -= V2G_BLACKBOX_WIDTH_STEP) {
             const e = await trial(fps, w, V2G_BLACKBOX_QUALITY);
@@ -2897,8 +2911,9 @@
               let pressed = await compressAt(overs[0], fps, false, 0.55);
               tried.push(pressed);
               if (pressed.blob.size <= V2G_BLACKBOX_MAX_BYTES) return pressed;
-              // 轻压不动且仍接近上限：再硬压一轮（比直接掉到 q22 糊字更值）
-              if (pressed.blob.size <= V2G_BLACKBOX_MAX_BYTES * 1.22) {
+              // 短片高帧：1.45× 内也硬压，避免 20fps@13.7MB 因旧 1.22 门槛被直接放弃
+              const hardGate = shortFluent && fps >= 18 - 0.01 ? 1.45 : 1.22;
+              if (pressed.blob.size <= V2G_BLACKBOX_MAX_BYTES * hardGate) {
                 vbbLog(
                   `[vbb-phase] ${fps}fps 轻压后 ${formatKb(pressed.blob.size)} → 硬压一轮`
                 );
@@ -2908,21 +2923,25 @@
               }
             }
           }
-          // ≥15fps 只允许让渡到档 15（gifski 73）：再往下不如用更低帧的高质量
-          const maxQi = fps >= 15 - 0.01 ? 2 : V2G_BLACKBOX_QUALITY_LADDER.length - 1;
+          // 短片保 20fps：允许走到 q22/q30；长片 ≥15 仍只让到档 15，再掉帧更划算
+          const maxQi =
+            shortFluent || fps < 15 - 0.01
+              ? V2G_BLACKBOX_QUALITY_LADDER.length - 1
+              : 2;
           for (let qi = 1; qi <= maxQi; qi++) {
             const e = await trial(fps, floorW, V2G_BLACKBOX_QUALITY_LADDER[qi]);
             if (e) return e;
-            // q15 仍超但接近：硬压该档，避免无谓掉到 q22
+            // 仍超：短片/高帧放宽硬压门槛（旧 1.2× 会丢掉 20fps@13.7MB）
+            const hardQiGate = shortFluent && fps >= 18 - 0.01 ? 1.45 : 1.2;
             if (qi >= 2) {
               const last = tried[tried.length - 1];
               if (
                 last?.blob &&
                 last.blob.size > V2G_BLACKBOX_MAX_BYTES &&
-                last.blob.size <= V2G_BLACKBOX_MAX_BYTES * 1.2
+                last.blob.size <= V2G_BLACKBOX_MAX_BYTES * hardQiGate
               ) {
                 vbbLog(
-                  `[vbb-phase] ${fps}fps q${V2G_BLACKBOX_QUALITY_LADDER[qi]} ${formatKb(last.blob.size)} → 硬压保画质`
+                  `[vbb-phase] ${fps}fps q${V2G_BLACKBOX_QUALITY_LADDER[qi]} ${formatKb(last.blob.size)} → 硬压保帧率`
                 );
                 const pressed = await compressAt(last, fps, true, 0.6);
                 tried.push(pressed);
