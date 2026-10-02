@@ -1,12 +1,25 @@
 /**
  * 原生 GIF 编码（优先 gifski，否则 ffmpeg palettegen）。
  * 挂在 ffmpeg-bridge，由统一桥 /ff 暴露。
+ * gifski 可自动下载到本桥目录 ffmpeg-bridge/vendor/gifski/（用户解压目录内）。
  */
 "use strict";
 
 const { execFile, spawn } = require("child_process");
+const crypto = require("crypto");
 const fs = require("fs");
+const http = require("http");
+const https = require("https");
+const os = require("os");
 const path = require("path");
+
+/** 官方 release 包内含 win/mac/linux 预编译 CLI */
+const GIFSKI_RELEASE = {
+  version: "1.34.0",
+  url: "https://github.com/ImageOptim/gifski/releases/download/1.34.0/gifski-1.34.0.tar.xz",
+  sha256: "b9b6591aa163123d737353d9c8581efdf3234d28eeaa45329b31da905cd5a996",
+  archiveName: "gifski-1.34.0.tar.xz",
+};
 
 function whichSync(bin) {
   const pathEnv = String(process.env.PATH || "");
@@ -27,16 +40,25 @@ function whichSync(bin) {
   return "";
 }
 
-function vendorGifskiPath() {
-  const base = path.join(__dirname, "vendor", "gifski");
-  const exe = process.platform === "win32" ? "gifski.exe" : "gifski";
-  return path.join(base, exe);
+function vendorDir(baseDir) {
+  return path.join(baseDir || __dirname, "vendor", "gifski");
 }
 
-function findGifski() {
+function vendorGifskiPath(baseDir) {
+  const exe = process.platform === "win32" ? "gifski.exe" : "gifski";
+  return path.join(vendorDir(baseDir), exe);
+}
+
+function archiveMemberForPlatform() {
+  if (process.platform === "win32") return "win/gifski.exe";
+  if (process.platform === "darwin") return "mac/gifski";
+  return "linux/gifski";
+}
+
+function findGifski(baseDir) {
   const fromPath = whichSync("gifski");
   if (fromPath) return { path: fromPath, source: "path" };
-  const vend = vendorGifskiPath();
+  const vend = vendorGifskiPath(baseDir);
   try {
     if (fs.existsSync(vend)) return { path: vend, source: "vendor" };
   } catch (_) {}
@@ -60,6 +82,135 @@ function execFileAsync(file, args, opts = {}) {
   });
 }
 
+function downloadUrl(url, dest) {
+  return new Promise((resolve, reject) => {
+    const mod = url.startsWith("https") ? https : http;
+    const tmp = `${dest}.part`;
+    fs.mkdirSync(path.dirname(dest), { recursive: true });
+    const req = mod.get(url, { headers: { "User-Agent": "devtools-ffmpeg-bridge-gifski" } }, (res) => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        downloadUrl(res.headers.location, dest).then(resolve, reject);
+        return;
+      }
+      if (res.statusCode !== 200) {
+        reject(new Error(`下载 gifski 失败 HTTP ${res.statusCode}`));
+        return;
+      }
+      const out = fs.createWriteStream(tmp);
+      res.pipe(out);
+      out.on("finish", () => {
+        out.close(() => {
+          try {
+            fs.renameSync(tmp, dest);
+            resolve(dest);
+          } catch (err) {
+            reject(err);
+          }
+        });
+      });
+      out.on("error", (err) => {
+        req.destroy();
+        fs.unlink(tmp, () => {});
+        reject(err);
+      });
+    });
+    req.on("error", (err) => {
+      fs.unlink(tmp, () => {});
+      reject(err);
+    });
+  });
+}
+
+function sha256File(file) {
+  const hash = crypto.createHash("sha256");
+  hash.update(fs.readFileSync(file));
+  return hash.digest("hex");
+}
+
+async function extractGifskiFromArchive(archivePath, destExe) {
+  const member = archiveMemberForPlatform();
+  const extractRoot = fs.mkdtempSync(path.join(os.tmpdir(), "gifski-extract-"));
+  try {
+    // Windows 10+/macOS/Linux 自带 tar 可解 xz
+    await execFileAsync("tar", ["-xJf", archivePath, "-C", extractRoot, member], { timeout: 120000 });
+    const extracted = path.join(extractRoot, ...member.split("/"));
+    if (!fs.existsSync(extracted)) {
+      throw new Error(`压缩包内未找到 ${member}`);
+    }
+    fs.mkdirSync(path.dirname(destExe), { recursive: true });
+    fs.copyFileSync(extracted, destExe);
+    try {
+      fs.chmodSync(destExe, 0o755);
+    } catch (_) {}
+  } finally {
+    try {
+      fs.rmSync(extractRoot, { recursive: true, force: true });
+    } catch (_) {}
+  }
+}
+
+/**
+ * 把官方 CLI 下载到指定桥目录（默认本模块旁 vendor/gifski）。
+ * @param {{ force?: boolean, baseDir?: string }} [opts]
+ */
+async function ensureInstalled(opts = {}) {
+  const baseDir = opts.baseDir ? path.resolve(opts.baseDir) : __dirname;
+  const dest = vendorGifskiPath(baseDir);
+  if (!opts.force) {
+    const hit = findGifski(baseDir);
+    if (hit) {
+      const probed = await probeGifski(hit.path);
+      if (probed.ok) {
+        return {
+          ok: true,
+          installed: hit.source === "vendor",
+          already: true,
+          path: hit.path,
+          source: hit.source,
+          version: probed.version,
+          installDir: vendorDir(baseDir),
+        };
+      }
+    }
+  }
+
+  const cacheDir = path.join(os.tmpdir(), "devtools-gifski-cache");
+  fs.mkdirSync(cacheDir, { recursive: true });
+  const archivePath = path.join(cacheDir, GIFSKI_RELEASE.archiveName);
+  let needDl = true;
+  if (fs.existsSync(archivePath)) {
+    try {
+      if (sha256File(archivePath).toLowerCase() === GIFSKI_RELEASE.sha256) needDl = false;
+    } catch (_) {}
+  }
+  if (needDl) {
+    await downloadUrl(GIFSKI_RELEASE.url, archivePath);
+    const got = sha256File(archivePath).toLowerCase();
+    if (got !== GIFSKI_RELEASE.sha256) {
+      try {
+        fs.unlinkSync(archivePath);
+      } catch (_) {}
+      throw new Error(`gifski 包校验失败（期望 ${GIFSKI_RELEASE.sha256.slice(0, 12)}…）`);
+    }
+  }
+
+  await extractGifskiFromArchive(archivePath, dest);
+  const probed = await probeGifski(dest);
+  if (!probed.ok) {
+    throw new Error(`安装后无法运行 gifski：${probed.error || "unknown"}`);
+  }
+  return {
+    ok: true,
+    installed: true,
+    already: false,
+    path: dest,
+    source: "vendor",
+    version: probed.version,
+    installDir: vendorDir(baseDir),
+    release: GIFSKI_RELEASE.version,
+  };
+}
+
 async function probeGifski(binPath) {
   try {
     const { stdout, stderr } = await execFileAsync(binPath, ["--version"], { timeout: 8000 });
@@ -70,8 +221,15 @@ async function probeGifski(binPath) {
   }
 }
 
-async function status() {
-  const hit = findGifski();
+async function status(opts = {}) {
+  if (opts.autoInstall) {
+    try {
+      await ensureInstalled({ force: Boolean(opts.forceInstall) });
+    } catch (_) {
+      /* 安装失败仍回报当前状态 */
+    }
+  }
+  const hit = findGifski(opts.baseDir);
   const ffmpeg = findFfmpeg();
   let gifski = { ok: false, available: false };
   if (hit) {
@@ -89,6 +247,9 @@ async function status() {
     /** 有 gifski 或 ffmpeg 即可走原生编码 */
     nativeEncode: Boolean(gifski.available || ffmpegOk),
     engine: gifski.available ? "gifski" : ffmpegOk ? "ffmpeg-palette" : "none",
+    installDir: vendorDir(opts.baseDir),
+    canInstall: true,
+    release: GIFSKI_RELEASE.version,
   };
 }
 
@@ -231,6 +392,12 @@ async function encodeWithFfmpegPalette(ffmpegBin, inputPath, outPath, rawOpts = 
 }
 
 async function encodeNative(inputPath, outPath, opts = {}) {
+  // 缺 gifski 时自动下到本桥 vendor（用户解压目录内），失败则继续 palette
+  if (!findGifski() && opts.autoInstall !== false) {
+    try {
+      await ensureInstalled();
+    } catch (_) {}
+  }
   const st = await status();
   if (!st.nativeEncode) {
     throw new Error("本机无 gifski 且无 ffmpeg，无法原生编码");
@@ -252,4 +419,8 @@ module.exports = {
   encodeNative,
   encodeWithGifski,
   encodeWithFfmpegPalette,
+  ensureInstalled,
+  vendorGifskiPath,
+  vendorDir,
+  GIFSKI_RELEASE,
 };

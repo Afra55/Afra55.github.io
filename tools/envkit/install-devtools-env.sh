@@ -307,6 +307,51 @@ download_file() {
   fi
 }
 
+install_gifski_vendor() {
+  # 官方 release tar.xz → $BRIDGE_DIR/ffmpeg-bridge/vendor/gifski/
+  local dest_dir="$BRIDGE_DIR/ffmpeg-bridge/vendor/gifski"
+  local dest_bin="$dest_dir/gifski"
+  if [[ -x "$dest_bin" ]] && [[ -s "$dest_bin" ]]; then
+    ok "gifski 已在 $dest_dir"
+    return 0
+  fi
+  local ver="1.34.0"
+  local url="https://github.com/ImageOptim/gifski/releases/download/${ver}/gifski-${ver}.tar.xz"
+  local expect="b9b6591aa163123d737353d9c8581efdf3234d28eeaa45329b31da905cd5a996"
+  local cache="${TMPDIR:-/tmp}/devtools-gifski-cache"
+  mkdir -p "$cache"
+  local archive="$cache/gifski-${ver}.tar.xz"
+  local member="linux/gifski"
+  case "$(uname -s 2>/dev/null || echo unknown)" in
+    Darwin*) member="mac/gifski" ;;
+    Linux*) member="linux/gifski" ;;
+  esac
+  info "下载 gifski ${ver} → 桥目录 vendor…"
+  if ! download_file "$url" "$archive"; then
+    warn "gifski 下载失败（编码仍可用 ffmpeg palette）"
+    return 0
+  fi
+  if command -v shasum >/dev/null 2>&1; then
+    local got
+    got=$(shasum -a 256 "$archive" | awk '{print $1}')
+    if [[ "$got" != "$expect" ]]; then
+      warn "gifski 校验失败"
+      return 0
+    fi
+  fi
+  local extract="$cache/extract-${ver}"
+  rm -rf "$extract"
+  mkdir -p "$extract"
+  if ! tar -xJf "$archive" -C "$extract" "$member" 2>/dev/null; then
+    warn "gifski 解压失败"
+    return 0
+  fi
+  mkdir -p "$dest_dir"
+  cp -f "$extract/$member" "$dest_bin"
+  chmod +x "$dest_bin" 2>/dev/null || true
+  ok "gifski 已安装到 $dest_dir"
+}
+
 sync_bridges() {
   say ""
   say "== 同步本机桥文件 → ${BRIDGE_DIR} =="
@@ -385,6 +430,8 @@ sync_bridges() {
   else
     warn "桥文件校验有问题，请重跑 bridges 或检查网络"
   fi
+
+  install_gifski_vendor
 
   # 便捷启动器
   cat >"$BRIDGE_DIR/start-all-hint.txt" <<EOF

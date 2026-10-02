@@ -150,6 +150,45 @@ function Download-File([string]$Url, [string]$Dest) {
   Move-Item -Force "$Dest.tmp" $Dest
 }
 
+function Install-GifskiVendor {
+  # 官方 release tar.xz 内含 win/mac/linux CLI → 桥解压目录 ffmpeg-bridge/vendor/gifski/
+  $destDir = Join-Path $BridgeDir "ffmpeg-bridge\vendor\gifski"
+  $destExe = Join-Path $destDir "gifski.exe"
+  if ((Test-Path -LiteralPath $destExe) -and (Get-Item $destExe).Length -gt 100000) {
+    Write-Ok "gifski 已在 $destDir"
+    return
+  }
+  $ver = "1.34.0"
+  $url = "https://github.com/ImageOptim/gifski/releases/download/$ver/gifski-$ver.tar.xz"
+  $expect = "b9b6591aa163123d737353d9c8581efdf3234d28eeaa45329b31da905cd5a996"
+  $cache = Join-Path $env:TEMP "devtools-gifski-cache"
+  New-Item -ItemType Directory -Force -Path $cache | Out-Null
+  $archive = Join-Path $cache "gifski-$ver.tar.xz"
+  try {
+    $need = $true
+    if (Test-Path -LiteralPath $archive) {
+      $h = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+      if ($h -eq $expect) { $need = $false }
+    }
+    if ($need) {
+      Write-Info "下载 gifski $ver → 桥目录 vendor…"
+      Download-File $url $archive
+      $h = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+      if ($h -ne $expect) { throw "gifski 校验失败" }
+    }
+    $extract = Join-Path $cache "extract-$ver"
+    if (Test-Path $extract) { Remove-Item -Recurse -Force $extract }
+    New-Item -ItemType Directory -Force -Path $extract | Out-Null
+    & tar -xJf $archive -C $extract "win/gifski.exe"
+    if (-not (Test-Path (Join-Path $extract "win\gifski.exe"))) { throw "压缩包内无 win/gifski.exe" }
+    New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+    Copy-Item -Force (Join-Path $extract "win\gifski.exe") $destExe
+    Write-Ok "gifski 已安装到 $destDir"
+  } catch {
+    Write-Miss "gifski 自动安装失败：$($_.Exception.Message)（编码仍可用 ffmpeg palette）"
+  }
+}
+
 function Sync-Bridges {
   Write-Host ""
   Write-Host "== 同步本机桥文件 → $BridgeDir =="
@@ -196,6 +235,8 @@ function Sync-Bridges {
     }
   }
   if (-not $bad) { Write-Ok "关键文件校验通过" } else { Write-Miss "桥文件校验有问题" }
+
+  Install-GifskiVendor
 
   @"
 DevTools 桥目录：$BridgeDir

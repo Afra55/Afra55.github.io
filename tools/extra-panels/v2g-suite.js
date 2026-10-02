@@ -1408,7 +1408,8 @@
         ];
         for (const c of candidates) {
           try {
-            const res = await fetch(`${c.base}${c.prefix}/gifski/status`, {
+            // auto=1：缺 gifski 时自动下载到桥解压目录 vendor/gifski/
+            const res = await fetch(`${c.base}${c.prefix}/gifski/status?auto=1`, {
               method: "GET",
               headers: nativeGifskiHeaders(),
               cache: "no-store",
@@ -1417,12 +1418,49 @@
             if (!res.ok) continue;
             const data = await res.json();
             if (data?.nativeEncode || data?.ok) {
+              // 仍无 gifski 二进制时，再显式装一次（可带用户记住的解压目录）
+              if (!data?.gifski?.available && data?.canInstall) {
+                try {
+                  let installDir = "";
+                  try {
+                    installDir = String(localStorage.getItem("devtools-bridge-install-dir") || "").trim();
+                  } catch (_) {}
+                  await fetch(`${c.base}${c.prefix}/gifski/install`, {
+                    method: "POST",
+                    headers: {
+                      ...nativeGifskiHeaders(),
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify(installDir ? { dir: installDir } : {}),
+                    mode: "cors",
+                  });
+                  const res2 = await fetch(`${c.base}${c.prefix}/gifski/status`, {
+                    method: "GET",
+                    headers: nativeGifskiHeaders(),
+                    cache: "no-store",
+                    mode: "cors",
+                  });
+                  const data2 = res2.ok ? await res2.json() : data;
+                  nativeGifskiProbe = {
+                    at: Date.now(),
+                    ok: Boolean(data2.nativeEncode),
+                    base: c.base,
+                    prefix: c.prefix,
+                    engine: data2.engine || "",
+                    gifski: Boolean(data2.gifski?.available),
+                    installDir: data2.installDir || "",
+                  };
+                  return nativeGifskiProbe;
+                } catch (_) {}
+              }
               nativeGifskiProbe = {
                 at: now,
                 ok: Boolean(data.nativeEncode),
                 base: c.base,
                 prefix: c.prefix,
                 engine: data.engine || "",
+                gifski: Boolean(data.gifski?.available),
+                installDir: data.installDir || "",
               };
               return nativeGifskiProbe;
             }

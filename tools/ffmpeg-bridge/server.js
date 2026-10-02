@@ -37,7 +37,7 @@ const ALLOWED_ORIGINS = new Set(
     .filter(Boolean)
 );
 
-const BRIDGE_VERSION = "0.5.3";
+const BRIDGE_VERSION = "0.5.4";
 const FEATURES = [
   "local-fs",
   "probe",
@@ -3996,7 +3996,7 @@ async function handleRequest(req, res, opts = {}) {
             gifski:
               gifski?.gifski?.available
                 ? ""
-                : "可选：安装 gifski 到 PATH，或放到 ffmpeg-bridge/vendor/gifski/；无则用 ffmpeg palette",
+                : "可自动安装：POST /ff/gifski/install 下载到桥目录 ffmpeg-bridge/vendor/gifski/；无则编码时用 ffmpeg palette",
           },
           roots: localFsRoots(),
           ytdlpMount: "/ytdlp",
@@ -4243,8 +4243,45 @@ async function handleRequest(req, res, opts = {}) {
         sendJson(res, 503, { ok: false, error: "gifski 模块未加载" }, origin);
         return;
       }
-      const st = await gifskiCore.status();
+      const auto = url.searchParams.get("auto") === "1" || url.searchParams.get("install") === "1";
+      const st = await gifskiCore.status({ autoInstall: auto });
       sendJson(res, 200, st, origin);
+      return;
+    }
+
+    if (req.method === "POST" && pathname === "/gifski/install") {
+      if (!gifskiCore) {
+        sendJson(res, 503, { ok: false, error: "gifski 模块未加载" }, origin);
+        return;
+      }
+      let body = {};
+      try {
+        body = parseJsonBody(await readBody(req, 64 * 1024));
+      } catch (_) {
+        body = {};
+      }
+      // 默认写到本桥旁 vendor/gifski（即用户「桥解压目录」内）。
+      // 若传 baseDir，须落在已允许的本机根下，且会落到该目录的 ffmpeg-bridge/vendor/gifski 或直接 vendor/gifski。
+      let baseDir = __dirname;
+      const want = String(body.baseDir || body.dir || body.installDir || "").trim();
+      if (want) {
+        const real = await resolveLocalPath(want, { mustExist: true });
+        const st = fs.statSync(real);
+        if (!st.isDirectory()) throw Object.assign(new Error("安装目录不是文件夹"), { status: 400 });
+        // 用户填的是桥根目录时，落到其下 ffmpeg-bridge；已是 ffmpeg-bridge 则直接用
+        const asFf = path.join(real, "ffmpeg-bridge");
+        if (fs.existsSync(path.join(real, "gifski-core.js")) || fs.existsSync(path.join(real, "server.js"))) {
+          baseDir = real;
+        } else if (fs.existsSync(path.join(asFf, "server.js")) || fs.existsSync(path.join(asFf, "gifski-core.js"))) {
+          baseDir = asFf;
+        } else {
+          // 任意允许目录：在其下建 ffmpeg-bridge/vendor/gifski 结构
+          baseDir = asFf;
+          fs.mkdirSync(baseDir, { recursive: true });
+        }
+      }
+      const result = await gifskiCore.ensureInstalled({ force: Boolean(body.force), baseDir });
+      sendJson(res, 200, result, origin);
       return;
     }
 
