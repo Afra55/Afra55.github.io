@@ -101,7 +101,7 @@
       <p class="hint tight vtrim-editor-sub" id="${p("sub")}" hidden>裁切画面 · 修剪时长 · 删中间</p>
     </header>
     <div class="vtrim-editor-body">
-      <div class="vtrim-stage is-mode-crop" id="${p("stage")}">
+      <div class="vtrim-stage is-mode-trim" id="${p("stage")}">
         <div class="vtrim-preview-wrap" id="${p("preview-wrap")}">
           <video id="${p("video")}" class="vtrim-video" playsinline muted preload="metadata"></video>
           <button type="button" class="vtrim-tap-play" id="${p("tap-play")}" hidden aria-label="播放或暂停"></button>
@@ -126,13 +126,13 @@
         </div>
         <div class="field-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center;gap:0.55rem">
           <span class="seg" role="group" aria-label="编辑模式">
-            <button type="button" class="seg-btn is-active" data-vte-mode="crop">裁切画面</button>
-            <button type="button" class="seg-btn" data-vte-mode="trim">修剪时长</button>
+            <button type="button" class="seg-btn is-active" data-vte-mode="trim">修剪时长</button>
+            <button type="button" class="seg-btn" data-vte-mode="crop">裁切画面</button>
             <button type="button" class="seg-btn" data-vte-mode="cut">删中间</button>
           </span>
           <span class="hint tight" id="${p("mode-hint")}"></span>
         </div>
-        <div class="vtrim-trim-tools" id="${p("trim-tools")}" hidden>
+        <div class="vtrim-trim-tools" id="${p("trim-tools")}">
           <div class="vtrim-timeline" id="${p("timeline")}" aria-label="修剪片头片尾或删除中间段">
             <canvas id="${p("filmstrip")}" class="vtrim-filmstrip" width="640" height="56" aria-hidden="true"></canvas>
             <div class="vtrim-sel" id="${p("sel")}">
@@ -159,7 +159,7 @@
             <button type="button" class="ghost-btn" id="${p("cut-clear")}" title="清空全部删除段">清空</button>
           </div>
         </div>
-        <div class="vtrim-crop-tools" id="${p("crop-panel")}">
+        <div class="vtrim-crop-tools" id="${p("crop-panel")}" hidden>
           <div class="field-row vtrim-crop-tools-row" style="flex-wrap:wrap;margin-top:0.35rem;align-items:center">
             <span class="seg" role="group" aria-label="裁剪比例">
               <button type="button" class="seg-btn is-active" data-vte-aspect="free">自由</button>
@@ -304,8 +304,8 @@
     /** @type {{ start: number, end: number }[]} */
     let cutouts = [];
     let selectedCutout = -1;
-    const initMode = String(opts.initialMode || "crop");
-    let editMode = initMode === "trim" || initMode === "cut" ? initMode : "crop";
+    const initMode = String(opts.initialMode || "trim");
+    let editMode = initMode === "crop" || initMode === "cut" ? initMode : "trim";
     let drag = null;
     let cropDrag = null;
     let previewScrub = null;
@@ -494,9 +494,11 @@
     }
 
     function syncCropBoxVisibility() {
-      const on = editMode === "crop" && Boolean(cropEnable?.checked) && duration > 0;
+      // 裁剪框默认常显（修剪/删中间时也能看到范围）；仅「裁切画面」模式可拖
+      const on = Boolean(cropEnable?.checked) && duration > 0;
       if (cropBox) cropBox.hidden = !on;
       previewWrap?.classList.toggle("is-cropping", on);
+      cropBox?.classList.toggle("is-interactive", on && editMode === "crop");
     }
 
     function displaySize() {
@@ -1562,7 +1564,7 @@
           if (cropEnable) cropEnable.checked = true;
         } else {
           crop = { x: 0, y: 0, w: srcW, h: srcH };
-          // 默认启用裁剪框（自由=整幅）；用户缩框后才真正 cropOn
+          // 默认显示裁剪框（自由=整幅）；用户缩框后才真正 cropOn
           if (cropEnable) cropEnable.checked = initial.cropOn !== false;
         }
         syncMuteUi();

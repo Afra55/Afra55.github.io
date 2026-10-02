@@ -869,12 +869,12 @@
           if (batch) {
             el.append(`「${name || "视频"}」 `, tag);
           } else {
-            el.append(tag, " · 可裁画面 / 时长 / 删中间");
+            el.append(tag, " · 可裁时长 / 画面 / 删中间");
           }
         } else if (batch) {
           el.textContent = `「${name || "视频"}」 · 未编辑`;
         } else {
-          el.textContent = "未编辑 · 默认可裁画面，也可裁时长 / 删中间";
+          el.textContent = "未编辑 · 默认可裁片头片尾，绿框可裁画面 / 删中间";
         }
       }
 
@@ -988,7 +988,7 @@
             file: item.file,
             title: item.file.name || "视频",
             initial: draft,
-            initialMode: "crop",
+            initialMode: "trim",
           });
           editorOpened = true;
           boot.remove();

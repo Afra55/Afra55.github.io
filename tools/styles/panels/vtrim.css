@@ -77,6 +77,10 @@
   cursor: grab;
   touch-action: none;
   z-index: 2;
+  pointer-events: none;
+}
+.vtrim-crop-box.is-interactive {
+  pointer-events: auto;
 }
 
 .vtrim-crop-grid {
