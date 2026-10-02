@@ -731,7 +731,8 @@
         if (hasDuration) {
           for (let i = 0; i < frameCount; i++) {
             if (abortV2g) throw new Error("已取消");
-            const t = startSec + (span * i) / Math.max(1, frameCount - 1);
+            // 半开 [start, end)：末帧落在 end 前，不取到片尾点上的下一画面
+            const t = startSec + (span * i) / frameCount;
             await seekVideo(video, t);
             await waitFrame();
             paint();
@@ -6746,6 +6747,25 @@
         return window.DevToolsVtrimEditor;
       }
 
+      function prefetchVbbVtrimEditor() {
+        ensureVbbVtrimEditor().catch(() => {});
+      }
+
+      function unlockVbbEditBootScroll(lockY, shell, shellY) {
+        document.body.classList.remove("vtrim-editor-open");
+        document.body.style.position = "";
+        document.body.style.top = "";
+        document.body.style.left = "";
+        document.body.style.right = "";
+        document.body.style.width = "";
+        document.body.style.overflow = "";
+        if (shell) {
+          shell.style.overflow = "";
+          shell.scrollTop = shellY;
+        }
+        window.scrollTo(0, lockY);
+      }
+
       async function openVbbEditEditor(targetItem) {
         if (vbbBusy || vbbEditOpening) return;
         const item = targetItem || getActiveVbbEditItem();
@@ -6762,16 +6782,48 @@
           crop: item.edit.crop ? { ...item.edit.crop } : { x: 0, y: 0, w: item.srcW, h: item.srcH },
         };
         vbbEditOpening = true;
+        // 先失焦再锁位：手机点按钮会把焦点控件滚进视口，看起来像「先滚一下再出编辑框」
+        try {
+          document.activeElement?.blur?.();
+        } catch (_) {}
+        const scrollRoot = typeof vbbScrollRoot === "function" ? vbbScrollRoot() : null;
+        const shell =
+          scrollRoot && scrollRoot !== document.documentElement && scrollRoot !== document.scrollingElement
+            ? scrollRoot
+            : document.querySelector("main.shell, .shell");
+        const lockY = window.scrollY || document.documentElement.scrollTop || 0;
+        const shellY = shell ? shell.scrollTop || 0 : 0;
+        const boot = document.createElement("div");
+        boot.className = "vtrim-editor-boot";
+        boot.setAttribute("aria-busy", "true");
+        // 内联兜底：vtrim.css 可能尚未加载，避免空白间隙里底层页被滚走
+        boot.style.cssText =
+          "position:fixed;inset:0;z-index:9195;display:grid;place-items:center;background:rgba(11,18,32,0.72);";
+        boot.innerHTML = `<div class="vtrim-editor-boot-card" style="padding:0.85rem 1.15rem;border-radius:12px;background:#121826;color:#e8eefc;font-size:0.95rem;">正在打开编辑…</div>`;
+        document.body.classList.add("vtrim-editor-open");
+        document.body.style.position = "fixed";
+        document.body.style.top = `-${lockY}px`;
+        document.body.style.left = "0";
+        document.body.style.right = "0";
+        document.body.style.width = "100%";
+        document.body.style.overflow = "hidden";
+        if (shell) shell.style.overflow = "hidden";
+        document.body.appendChild(boot);
         syncVbbEditUi();
         renderVbbBatchList({ keepSelection: true });
+        let editorOpened = false;
         try {
           const editor = await ensureVbbVtrimEditor();
           pauseVbbPreview();
-          const next = await editor.open({
+          // open 同步挂上真正编辑层后再撤 boot，中间不露底层
+          const openP = editor.open({
             file: item.file,
             title: item.file.name || "视频",
             initial: draft,
           });
+          editorOpened = true;
+          boot.remove();
+          const next = await openP;
           if (next) {
             item.edit = {
               trimStart: Number(next.trimStart) || 0,
@@ -6796,6 +6848,10 @@
         } catch (err) {
           setError(vbbError, err?.message || String(err));
         } finally {
+          try {
+            boot.remove();
+          } catch (_) {}
+          if (!editorOpened) unlockVbbEditBootScroll(lockY, shell, shellY);
           vbbEditOpening = false;
           syncVbbEditUi();
           renderVbbBatchList({ keepSelection: true });
@@ -7225,6 +7281,7 @@
           btn.hidden = isVbbManualMode();
           btn.addEventListener("click", (e) => {
             e.stopPropagation();
+            blurVbbActionButton(btn);
             openVbbEditEditor(item).catch((err) => setError(vbbError, err.message || String(err)));
           });
           const previewBtn = document.createElement("button");
@@ -8574,6 +8631,7 @@
         syncVbbBatchMeta();
         setVbbButtons();
         await selectVbbBatchItem(0, { force: true });
+        prefetchVbbVtrimEditor();
         toast("全部视频已就绪 · 可逐个预览/打点或「编辑」，点 × 可移除，再「一键黑盒」");
       }
   
@@ -8607,6 +8665,7 @@
         syncVbbWorkflowUi();
         syncVbbEditUi();
         setVbbButtons();
+        prefetchVbbVtrimEditor();
         toast(vbbWorkflow === "single" ? "视频已就绪 · 可点「编辑」裁时长/画面，再「一键黑盒」" : "视频已就绪，点「一键黑盒」即可");
       }
   
@@ -10810,7 +10869,8 @@
         vbbFileEditLabel = $("#vbb-file-edit-label", root);
         vbbEditOpen = $("#vbb-edit-open", root);
         vbbEditReset = $("#vbb-edit-reset", root);
-        vbbEditOpen?.addEventListener("click", () => {
+        vbbEditOpen?.addEventListener("click", (ev) => {
+          blurVbbActionButton(ev?.currentTarget || vbbEditOpen);
           openVbbEditEditor().catch((err) => setError(vbbError, err?.message || String(err)));
         });
         vbbEditReset?.addEventListener("click", () => resetActiveVbbEdit());

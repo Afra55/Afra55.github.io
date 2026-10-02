@@ -169,6 +169,59 @@
 </div>`;
   }
 
+  let pageScrollLockY = 0;
+  let pageScrollLocked = false;
+  /** @type {HTMLElement | null} */
+  let pageScrollShell = null;
+  let pageScrollShellY = 0;
+
+  function lockPageScroll() {
+    const b = document.body;
+    const shell = document.querySelector("main.shell, .shell");
+    // 调用方（黑盒）可能已先锁滚动并盖 boot；勿把 Y 读成 0
+    if (pageScrollLocked || (b.classList.contains("vtrim-editor-open") && b.style.position === "fixed")) {
+      pageScrollLocked = true;
+      const m = /^(-?\d+(?:\.\d+)?)px$/.exec(b.style.top || "");
+      if (m) pageScrollLockY = Math.abs(Number(m[1]) || 0);
+      pageScrollShell = shell;
+      pageScrollShellY = shell ? shell.scrollTop || 0 : 0;
+      if (shell) shell.style.overflow = "hidden";
+      b.classList.add("vtrim-editor-open");
+      return;
+    }
+    pageScrollLocked = true;
+    pageScrollLockY = window.scrollY || document.documentElement.scrollTop || 0;
+    pageScrollShell = shell;
+    pageScrollShellY = shell ? shell.scrollTop || 0 : 0;
+    b.classList.add("vtrim-editor-open");
+    b.style.position = "fixed";
+    b.style.top = `-${pageScrollLockY}px`;
+    b.style.left = "0";
+    b.style.right = "0";
+    b.style.width = "100%";
+    b.style.overflow = "hidden";
+    if (shell) shell.style.overflow = "hidden";
+  }
+
+  function unlockPageScroll() {
+    const b = document.body;
+    pageScrollLocked = false;
+    b.classList.remove("vtrim-editor-open");
+    b.style.position = "";
+    b.style.top = "";
+    b.style.left = "";
+    b.style.right = "";
+    b.style.width = "";
+    b.style.overflow = "";
+    const shell = pageScrollShell || document.querySelector("main.shell, .shell");
+    if (shell) {
+      shell.style.overflow = "";
+      if (pageScrollShell) shell.scrollTop = pageScrollShellY;
+    }
+    pageScrollShell = null;
+    window.scrollTo(0, pageScrollLockY);
+  }
+
   function openEditor(opts = {}) {
     ensureVtrimCss();
     const file = opts.file;
@@ -178,8 +231,9 @@
     const wrap = document.createElement("div");
     wrap.innerHTML = buildOverlayHtml(id);
     const overlay = wrap.firstElementChild;
+    // 先锁滚动再挂层，避免手机点编辑时底层页先滚一下
+    lockPageScroll();
     document.body.appendChild(overlay);
-    document.body.classList.add("vtrim-editor-open");
 
     const $ = (name) => overlay.querySelector(`#${id}-${name}`);
     const stage = $("stage");
@@ -777,7 +831,7 @@
         } catch (_) {}
         objectUrl = "";
       }
-      document.body.classList.remove("vtrim-editor-open");
+      unlockPageScroll();
       overlay.remove();
       window.removeEventListener("pointermove", onCropPointerMove);
       window.removeEventListener("pointerup", onCropPointerUp);
@@ -1166,7 +1220,15 @@
         updateLabels();
         layoutCropBox();
         buildFilmstrip().catch(() => {});
-        $("done")?.focus?.();
+        // 手机 focus 完成按钮会连带把底层页滚一下；触控设备不抢焦点
+        const coarse =
+          typeof window.matchMedia === "function" &&
+          window.matchMedia("(hover: none), (pointer: coarse)").matches;
+        if (!coarse) {
+          try {
+            $("done")?.focus?.({ preventScroll: true });
+          } catch (_) {}
+        }
       };
       const onErr = () => {
         video.removeEventListener("loadedmetadata", onMeta);
