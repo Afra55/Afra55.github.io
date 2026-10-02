@@ -2433,7 +2433,11 @@
 
         async function finishBlackbox(best, curFps, encodeAtWidthFps, hardMax) {
           if (!best?.blob) return best;
-          if (best.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return best; // 已用满预算
+          const startW = Number(best.maxW) || Number(best.outW) || 0;
+          // 已贴满且宽度够可读才跳过；偏窄时继续走「降帧换宽」
+          if (best.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95 && startW >= V2G_BLACKBOX_BASE_W - 0.5) {
+            return best;
+          }
           let cur = best;
           let fpsNow = Number(cur.fps) || curFps;
           const effSpan = span / speed;
@@ -2454,11 +2458,19 @@
               Math.max(V2G_BLACKBOX_BASE_W, Math.round(curMaxW * 2))
             );
           };
+          // 加宽必须沿用当前画质档，否则 q65 入选后会用 q92 重探导致全失败白跑
+          const encodeKeepQ = (f, w) =>
+            encodeAtWidthFps(
+              f,
+              w,
+              Number(cur.quality) || V2G_BLACKBOX_QUALITY,
+              Number.isFinite(Number(cur.gifskiQuality)) ? Number(cur.gifskiQuality) : undefined
+            );
           const widenPass = async (label) => {
             if (atCap() || cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return;
             onProgress(0.95, label);
             const widenMax = resolveWidenMax();
-            const wider = await blackboxWidenBest(cur, (w) => encodeAtWidthFps(fpsNow, w), {
+            const wider = await blackboxWidenBest(cur, (w) => encodeKeepQ(fpsNow, w), {
               minW: Math.max(64, Number(cur.maxW) || V2G_BLACKBOX_BASE_W),
               maxW: widenMax,
             });
@@ -2467,7 +2479,7 @@
           // ≈30s：很松时先抬到 15，再加宽（避免 12@很宽占满预算后抬不动帧）
           if (isLong && cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.75 && fpsNow < 15 - 0.01) {
             const srcFpsEarly = await detectSourceFps(file).catch(() => 0);
-            const raised = await raiseBlackboxFps(cur, fpsNow, encodeAtWidthFps, srcFpsEarly, effSpan, {
+            const raised = await raiseBlackboxFps(cur, fpsNow, encodeKeepQ, srcFpsEarly, effSpan, {
               maxFps: 15,
             });
             if (raised?.blob) {
@@ -2475,14 +2487,24 @@
               fpsNow = Number(cur.fps) || fpsNow;
             }
           }
-          if (cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return cur;
+          if (
+            cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95 &&
+            (Number(cur.maxW) || 0) >= V2G_BLACKBOX_BASE_W - 0.5
+          ) {
+            return cur;
+          }
           // 小于规则：先加宽，再用余量提帧
           await widenPass(isShortFill ? "短片有余 · 加宽吃满预算" : "体积有余 · 自动增宽");
-          if (cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95) return cur;
+          if (
+            cur.blob.size >= V2G_BLACKBOX_MAX_BYTES * 0.95 &&
+            (Number(cur.maxW) || 0) >= V2G_BLACKBOX_BASE_W - 0.5
+          ) {
+            return cur;
+          }
           // 加宽后再提帧（短片源可整除才冲 20；长片抬 15）
-          if (widthOkForRaise()) {
+          if (widthOkForRaise() && cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.95) {
             const srcFpsNow = await detectSourceFps(file).catch(() => 0);
-            cur = await raiseBlackboxFps(cur, Number(cur.fps) || fpsNow, encodeAtWidthFps, srcFpsNow, effSpan);
+            cur = await raiseBlackboxFps(cur, Number(cur.fps) || fpsNow, encodeKeepQ, srcFpsNow, effSpan);
             fpsNow = Number(cur.fps) || fpsNow;
           }
           // 短片提帧后若又腾出预算（或提帧未动），再加宽一轮吃满
@@ -2506,29 +2528,64 @@
                     : 0;
               const floor = blackboxFpsFloor(effSpan);
               if (lowerFps >= floor - 0.01) {
+                // 0.93 留余量：实测等比换算常略超（12@434≈10.00 被硬闸挡回）
                 const scale = Math.sqrt(
-                  (fpsNow / lowerFps) * ((V2G_BLACKBOX_MAX_BYTES * 0.98) / Math.max(1, cur.blob.size))
+                  (fpsNow / lowerFps) * ((V2G_BLACKBOX_MAX_BYTES * 0.93) / Math.max(1, cur.blob.size))
                 );
-                const targetW = Math.min(
+                const scaledW = Math.min(
                   Number(hardMax) || curMaxW,
                   Math.max(readableMin, Math.round((curMaxW * scale) / 2) * 2)
                 );
-                if (targetW >= readableMin && targetW > curMaxW + 36) {
-                  onProgress(0.96, `偏窄 · 降到 ${lowerFps}fps 换宽`);
+                // 先试可读底线 420，再试保守加宽；略超限允许轻压进预算
+                // 门槛用 +24：388→420 只多 32px，旧 +36 会整段跳过
+                const tryWs = [];
+                if (readableMin >= curMaxW + 24) tryWs.push(readableMin);
+                if (
+                  scaledW >= curMaxW + 24 &&
+                  (tryWs.length === 0 || scaledW >= tryWs[0] + 24)
+                ) {
+                  tryWs.push(scaledW);
+                }
+                for (const targetW of tryWs) {
+                  onProgress(0.96, `偏窄 · 降到 ${lowerFps}fps 换宽${targetW}`);
                   vbbLog(
                     `[vbb-phase] 可读宽优先 ${fpsNow}fps·宽${curMaxW} ${formatKb(cur.blob.size)} → 试 ${lowerFps}fps·宽${targetW}`
                   );
-                  const swapped = await encodeAtWidthFps(lowerFps, targetW);
+                  let swapped = await encodeKeepQ(lowerFps, targetW);
+                  if (!swapped?.blob?.size) continue;
+                  const gotW = Number(swapped.maxW) || Number(swapped.outW) || 0;
+                  const wideEnough = gotW >= readableMin - 0.5 || gotW >= curMaxW + 24;
+                  if (!wideEnough) continue;
                   if (
-                    swapped?.blob?.size &&
-                    swapped.blob.size <= V2G_BLACKBOX_MAX_BYTES &&
-                    (Number(swapped.maxW) || Number(swapped.outW) || 0) >= curMaxW + 36
+                    swapped.blob.size > V2G_BLACKBOX_MAX_BYTES &&
+                    swapped.blob.size <= V2G_BLACKBOX_MAX_BYTES * 1.06 &&
+                    typeof compressExistingGifToBlackbox === "function"
                   ) {
-                    cur = { ...swapped, compressRounds: 0, maxW: targetW };
+                    try {
+                      const c = await compressExistingGifToBlackbox(
+                        swapped.blob,
+                        (ratio, text) =>
+                          onProgress(0.961 + Math.min(0.01, (ratio || 0) * 0.01), text || "换宽轻压"),
+                        isAborted
+                      );
+                      if (c?.blob && c.blob.size < swapped.blob.size) {
+                        swapped = {
+                          ...swapped,
+                          blob: c.blob,
+                          compressRounds: (swapped.compressRounds || 0) + (c.compressRounds || 0),
+                        };
+                      }
+                    } catch (err) {
+                      if (String(err && err.message) === "已取消") throw err;
+                    }
+                  }
+                  if (swapped.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
+                    cur = { ...swapped, compressRounds: swapped.compressRounds || 0, maxW: targetW };
                     fpsNow = lowerFps;
                     if (cur.blob.size < V2G_BLACKBOX_MAX_BYTES * 0.95) {
                       await widenPass("降帧后 · 再加宽");
                     }
+                    break;
                   }
                 }
               }
@@ -2537,7 +2594,12 @@
           if (!cur?.blob) return cur;
           // 帧率也到顶、预算仍有富余 → gifski 质量从 92 上探到 100（源很窄/很短时用得上）
           // 省电/均衡不做：多一次编码就多一份 wasm 堆占用
-          if (currentMediaPerf().allowQualityBoost && cur.blob.size < V2G_BLACKBOX_WIDEN_BYTES && (Number(cur.gifskiQuality) || 0) < 100) {
+          if (
+            currentMediaPerf().allowQualityBoost &&
+            cur.blob.size < V2G_BLACKBOX_WIDEN_BYTES &&
+            (Number(cur.gifskiQuality) || 0) < 100 &&
+            (Number(cur.quality) || V2G_BLACKBOX_QUALITY) <= V2G_BLACKBOX_QUALITY + 0.01
+          ) {
             onProgress(0.97, "体积有余 · 画质上探");
             const hi = await encodeAtWidthFps(
               Number(cur.fps) || fpsNow,
@@ -2653,6 +2715,13 @@
               best = { ...enc, compressRounds: 0, maxW: w };
               lo = w;
               if (best.outW > 0 && best.outW < w - 2) break; // 已达源宽
+              // 按剩余预算收紧上界，避免短片 hardMax=源宽时下一次中点跳到近 2× 白跑
+              const headroomGuess =
+                Math.round((lo * Math.min(4, Math.sqrt(capBytes / Math.max(1, best.blob.size)))) / 2) * 2;
+              if (Number.isFinite(headroomGuess)) {
+                if (headroomGuess <= lo + 2) break; // 几乎贴满，别再二分跳到源宽中点
+                hiW = Math.min(hiW, Math.max(lo + 2, headroomGuess + Math.max(32, headroomGuess - lo)));
+              }
             } else {
               hiW = w;
             }
@@ -2757,9 +2826,18 @@
               vbbLog(
                 `[vbb-phase] ${fps}fps 近超限 ${formatKb(overs[0].blob.size)} → 先轻压再降质`
               );
-              const soft = await compressAt(overs[0], fps, false, 0.55);
-              tried.push(soft);
-              if (soft.blob.size <= V2G_BLACKBOX_MAX_BYTES) return soft;
+              let pressed = await compressAt(overs[0], fps, false, 0.55);
+              tried.push(pressed);
+              if (pressed.blob.size <= V2G_BLACKBOX_MAX_BYTES) return pressed;
+              // 轻压不动且仍接近上限：再硬压一轮（比直接掉到 q22 糊字更值）
+              if (pressed.blob.size <= V2G_BLACKBOX_MAX_BYTES * 1.22) {
+                vbbLog(
+                  `[vbb-phase] ${fps}fps 轻压后 ${formatKb(pressed.blob.size)} → 硬压一轮`
+                );
+                pressed = await compressAt(pressed, fps, true, 0.58);
+                tried.push(pressed);
+                if (pressed.blob.size <= V2G_BLACKBOX_MAX_BYTES) return pressed;
+              }
             }
           }
           // ≥15fps 只允许让渡到档 15（gifski 73）：再往下不如用更低帧的高质量
@@ -2767,6 +2845,22 @@
           for (let qi = 1; qi <= maxQi; qi++) {
             const e = await trial(fps, floorW, V2G_BLACKBOX_QUALITY_LADDER[qi]);
             if (e) return e;
+            // q15 仍超但接近：硬压该档，避免无谓掉到 q22
+            if (qi >= 2) {
+              const last = tried[tried.length - 1];
+              if (
+                last?.blob &&
+                last.blob.size > V2G_BLACKBOX_MAX_BYTES &&
+                last.blob.size <= V2G_BLACKBOX_MAX_BYTES * 1.2
+              ) {
+                vbbLog(
+                  `[vbb-phase] ${fps}fps q${V2G_BLACKBOX_QUALITY_LADDER[qi]} ${formatKb(last.blob.size)} → 硬压保画质`
+                );
+                const pressed = await compressAt(last, fps, true, 0.6);
+                tried.push(pressed);
+                if (pressed.blob.size <= V2G_BLACKBOX_MAX_BYTES) return pressed;
+              }
+            }
           }
           return null;
         };
@@ -2853,10 +2947,20 @@
           tried.push(candidate);
         }
         if (candidate.blob.size <= V2G_BLACKBOX_MAX_BYTES) {
+          const qKeep = Number(candidate.quality) || V2G_BLACKBOX_QUALITY;
+          const gqKeep = Number.isFinite(Number(candidate.gifskiQuality))
+            ? Number(candidate.gifskiQuality)
+            : undefined;
           return await finishBlackbox(
             candidate,
             chosen.fps,
-            (f, w) => encodeAtWidthFps(f, w, chosenQuality),
+            (f, w, q, gq) =>
+              encodeAtWidthFps(
+                f,
+                w,
+                Number.isFinite(Number(q)) ? q : qKeep,
+                Number.isFinite(Number(gq)) ? gq : gqKeep
+              ),
             srcCap
           );
         }
