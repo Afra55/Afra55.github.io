@@ -1491,12 +1491,12 @@
     } catch (_) {}
     try {
       const cores = Number(navigator.hardwareConcurrency) || 0;
-      // 骁龙 8 系常见 ≥8 逻辑核；触屏无 deviceMemory 时用核数抬档
-      if (cores >= 8) return "max";
-      if (cores >= 6) return "balanced";
+      // 多数中高端机 ≥6 逻辑核；触屏无 deviceMemory 时用核数抬档（旧 ≥8 偏严，容易落均衡变慢）
+      if (cores >= 6) return "max";
+      if (cores >= 4) return "balanced";
     } catch (_) {}
-    // 触屏未知机型：默认均衡（不再一律当弱机）
-    return "balanced";
+    // 触屏未知机型：默认拉满（可手动改均衡/省电）；旧默认均衡会分块+少并行，体感偏慢
+    return "max";
   }
 
   /**

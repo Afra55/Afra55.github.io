@@ -3021,12 +3021,19 @@
           })
         );
         if (!(maxFps >= 12)) maxFps = 30; // 探测失败时用 30，避免默认 20 误伤 25 源
+        // 片源已是清晰整数（25/30）时直接用，勿再「就近吸附」误收到 24
+        const rounded = Math.round(maxFps);
+        if (Math.abs(maxFps - rounded) <= 0.6) {
+          return Math.max(12, Math.min(60, rounded));
+        }
         const common = [24, 25, 30, 50, 60];
-        let best = Math.round(maxFps);
+        let best = rounded;
+        let bestDist = Infinity;
         for (const c of common) {
-          if (Math.abs(maxFps - c) <= 1.25) {
+          const d = Math.abs(maxFps - c);
+          if (d <= 1.25 && d < bestDist - 1e-9) {
             best = c;
-            break;
+            bestDist = d;
           }
         }
         return Math.max(12, Math.min(60, best));
@@ -4995,6 +5002,13 @@
         getSrcW: () => vbbAnalysis?.srcW ?? 0,
         getActivePlan: () => (vbbAnalysis ? resolveActiveVbbPlan() : null),
         getClips: () => vbbClips.slice(),
+        getBatchFiles: () => vbbBatchFiles.slice(),
+        syncUi: () => {
+          syncVbbEditUi();
+          renderVbbBatchList({ keepSelection: true });
+          syncVbbBatchMeta();
+          setVbbButtons();
+        },
         formatClipTitle: (c, idx) => formatVbbClipTitle(c, idx),
         formatClipMeta: (c, opts) => formatVbbClipMeta(c, opts || {}),
         shouldReuseFirstPlan: (ranges, index) => shouldReuseVbbFirstPlan(ranges, index),
