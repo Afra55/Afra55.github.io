@@ -124,12 +124,6 @@
           <span class="hint tight" id="${p("mode-hint")}"></span>
         </div>
         <div class="vtrim-trim-tools" id="${p("trim-tools")}">
-          <div class="btn-row tool-actions vtrim-nudge" aria-label="微调时长">
-            <button type="button" class="ghost-btn" id="${p("nudge-start-m")}" title="片头 −0.1s">片头 −0.1</button>
-            <button type="button" class="ghost-btn" id="${p("nudge-start-p")}" title="片头 +0.1s">片头 +0.1</button>
-            <button type="button" class="ghost-btn" id="${p("nudge-end-m")}" title="片尾 −0.1s">片尾 −0.1</button>
-            <button type="button" class="ghost-btn" id="${p("nudge-end-p")}" title="片尾 +0.1s">片尾 +0.1</button>
-          </div>
           <div class="vtrim-timeline" id="${p("timeline")}" aria-label="修剪片头片尾">
             <canvas id="${p("filmstrip")}" class="vtrim-filmstrip" width="640" height="56" aria-hidden="true"></canvas>
             <div class="vtrim-sel" id="${p("sel")}">
@@ -142,6 +136,12 @@
               </span>
               <span class="vtrim-playhead" id="${p("playhead")}" aria-hidden="true"></span>
             </div>
+          </div>
+          <div class="btn-row tool-actions vtrim-nudge" aria-label="微调时长（可长按）">
+            <button type="button" class="ghost-btn" id="${p("nudge-start-m")}" title="片头 −0.1s，可长按">片头−</button>
+            <button type="button" class="ghost-btn" id="${p("nudge-start-p")}" title="片头 +0.1s，可长按">片头+</button>
+            <button type="button" class="ghost-btn" id="${p("nudge-end-m")}" title="片尾 −0.1s，可长按">片尾−</button>
+            <button type="button" class="ghost-btn" id="${p("nudge-end-p")}" title="片尾 +0.1s，可长按">片尾+</button>
           </div>
         </div>
         <div class="vtrim-crop-tools" id="${p("crop-panel")}" hidden>
@@ -588,20 +588,9 @@
       paintTimeline();
     }
 
-    function frameFps() {
-      const r = Number(video?.getVideoPlaybackQuality?.()?.totalVideoFrames) || 0;
-      void r;
-      // 多数手机源 24–60；用 30 对齐帧格足够稳，且不会在抬手时大幅跳动
-      return 30;
-    }
-
-    function snapToFrame(t) {
-      const fps = frameFps();
-      return Math.round(clamp(t, 0, duration) * fps) / fps;
-    }
-
-    function snapTime(t, which) {
-      let next = snapToFrame(t);
+    /** 仅贴两端磁吸；中间保持拖拽精确秒数（抬手再按 30fps 取整会往前跳几帧） */
+    function snapEdgeOnly(t, which) {
+      const next = clamp(t, 0, duration);
       if (which === "start") {
         if (next <= SNAP_EDGE_SEC) {
           if (next > 0) hapticLight();
@@ -614,6 +603,11 @@
         return duration;
       }
       return next;
+    }
+
+    /** 毫秒对齐，避免浮点噪点；不改变用户拖到的画面 */
+    function quantizeTrimSec(t) {
+      return Math.round(clamp(t, 0, duration) * 1000) / 1000;
     }
 
     function setStart(t, { preview = true, immediateSeek = false } = {}) {
@@ -662,17 +656,23 @@
     function finishTrimDrag() {
       if (!drag) return;
       const kind = drag.kind;
-      // 抬手只用已提交的 start/end，不再读 pointer 坐标（防手指抬起位移）
+      // 抬手只用已提交的 start/end，不再读 pointer 坐标；不按帧格回跳（否则播放/成片会比预览靠前）
       if (kind === "start") {
-        const snapped = snapTime(startSec, "start");
-        setStart(snapped, { preview: true, immediateSeek: true });
+        setStart(quantizeTrimSec(snapEdgeOnly(startSec, "start")), {
+          preview: true,
+          immediateSeek: true,
+        });
       } else if (kind === "end") {
-        const snapped = snapTime(endSec, "end");
-        setEnd(snapped, { preview: true, immediateSeek: true });
+        setEnd(quantizeTrimSec(snapEdgeOnly(endSec, "end")), {
+          preview: true,
+          immediateSeek: true,
+        });
       } else if (kind === "window") {
-        startSec = snapToFrame(startSec);
-        endSec = clamp(startSec + Math.max(MIN_SPAN, endSec - startSec), startSec + MIN_SPAN, duration);
-        if (endSec >= duration - SNAP_EDGE_SEC) endSec = duration;
+        const span = Math.max(MIN_SPAN, endSec - startSec);
+        startSec = quantizeTrimSec(snapEdgeOnly(startSec, "start"));
+        endSec = clamp(startSec + span, startSec + MIN_SPAN, duration);
+        endSec = quantizeTrimSec(snapEdgeOnly(endSec, "end"));
+        if (endSec - startSec < MIN_SPAN) endSec = Math.min(duration, startSec + MIN_SPAN);
         previewSeek(startSec, { throttle: false });
         paintTimeline();
         updateLabels();
@@ -698,13 +698,38 @@
       return "seek";
     }
 
+    async function seekPlayheadExact(t) {
+      const target = clamp(t, startSec, Math.max(startSec, endSec - 0.04));
+      scrubSeekWanted = null;
+      if (dragSeekTimer) {
+        clearTimeout(dragSeekTimer);
+        dragSeekTimer = 0;
+      }
+      // 先落到目标再 play，避免浏览器从上一关键帧「往前多播几帧」
+      try {
+        video.pause();
+      } catch (_) {}
+      try {
+        video.currentTime = target;
+      } catch (_) {}
+      await waitSeek(video);
+      if ((Number(video.currentTime) || 0) < startSec - 0.001) {
+        try {
+          video.currentTime = startSec;
+        } catch (_) {}
+        await waitSeek(video);
+      }
+      return target;
+    }
+
     async function togglePlay() {
       if (!video.src) return;
       if (video.paused) {
-        if (video.currentTime < startSec || video.currentTime >= endSec - 0.04) {
-          previewSeek(startSec);
-          await waitSeek(video);
-        }
+        const cur = Number(video.currentTime) || 0;
+        const needStart =
+          cur < startSec - 0.01 || cur >= endSec - 0.04 || Math.abs(cur - startSec) < 0.02;
+        // 刚拖完片头时 currentTime≈startSec，仍强制精确 seek 再播，锁住用户拖到的位置
+        await seekPlayheadExact(needStart ? startSec : cur);
         await video.play().catch(() => {});
       } else {
         video.pause();
@@ -721,8 +746,8 @@
         Math.abs(crop.w - srcW) < 2 &&
         Math.abs(crop.h - srcH) < 2;
       return {
-        trimStart: startSec,
-        trimEnd: endSec,
+        trimStart: quantizeTrimSec(startSec),
+        trimEnd: quantizeTrimSec(endSec),
         // 勾选但全幅仍记 cropOn=false，避免误标「已编辑」
         cropOn: enabled && !full,
         crop: {
@@ -828,10 +853,46 @@
       fitCropToAspect();
       toast("已重置裁剪框");
     });
-    $("nudge-start-m")?.addEventListener("click", () => setStart(startSec - 0.1));
-    $("nudge-start-p")?.addEventListener("click", () => setStart(startSec + 0.1));
-    $("nudge-end-m")?.addEventListener("click", () => setEnd(endSec - 0.1));
-    $("nudge-end-p")?.addEventListener("click", () => setEnd(endSec + 0.1));
+    function bindNudgeHold(btn, stepFn) {
+      if (!btn) return;
+      let holdTimer = 0;
+      let holdRepeat = 0;
+      const clearHold = () => {
+        if (holdTimer) {
+          clearTimeout(holdTimer);
+          holdTimer = 0;
+        }
+        if (holdRepeat) {
+          clearInterval(holdRepeat);
+          holdRepeat = 0;
+        }
+      };
+      const fire = () => {
+        stepFn();
+      };
+      btn.addEventListener("pointerdown", (e) => {
+        if (e.button != null && e.button !== 0) return;
+        e.preventDefault();
+        try {
+          btn.setPointerCapture?.(e.pointerId);
+        } catch (_) {}
+        fire();
+        clearHold();
+        holdTimer = window.setTimeout(() => {
+          holdTimer = 0;
+          holdRepeat = window.setInterval(fire, 70);
+        }, 280);
+      });
+      btn.addEventListener("pointerup", clearHold);
+      btn.addEventListener("pointercancel", clearHold);
+      btn.addEventListener("lostpointercapture", clearHold);
+      // 避免 click 再触发一次
+      btn.addEventListener("click", (e) => e.preventDefault());
+    }
+    bindNudgeHold($("nudge-start-m"), () => setStart(startSec - 0.1, { immediateSeek: true }));
+    bindNudgeHold($("nudge-start-p"), () => setStart(startSec + 0.1, { immediateSeek: true }));
+    bindNudgeHold($("nudge-end-m"), () => setEnd(endSec - 0.1, { immediateSeek: true }));
+    bindNudgeHold($("nudge-end-p"), () => setEnd(endSec + 0.1, { immediateSeek: true }));
     playBtn?.addEventListener("click", () => togglePlay().catch(() => {}));
     muteBtn?.addEventListener("click", () => {
       muted = !muted;
@@ -1034,9 +1095,16 @@
     }
     video.addEventListener("timeupdate", () => {
       if (!duration) return;
-      if (!video.paused && video.currentTime >= endSec - 0.05) {
-        previewSeek(startSec);
-        video.play().catch(() => {});
+      if (!video.paused) {
+        const cur = Number(video.currentTime) || 0;
+        if (cur < startSec - 0.02) {
+          seekPlayheadExact(startSec).then(() => video.play().catch(() => {}));
+          return;
+        }
+        if (cur >= endSec - 0.05) {
+          seekPlayheadExact(startSec).then(() => video.play().catch(() => {}));
+          return;
+        }
       }
       if (!playheadRaf) {
         paintTimeline();

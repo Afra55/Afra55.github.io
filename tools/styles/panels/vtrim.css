@@ -137,13 +137,27 @@
 }
 
 .vtrim-clock { font-size: 0.92rem; }
-.vtrim-nudge { margin: 0; gap: 0.4rem; }
+.vtrim-nudge {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.35rem;
+  width: 100%;
+  margin: 0.45rem 0 0;
+  touch-action: manipulation;
+  user-select: none;
+}
+.vtrim-nudge .ghost-btn {
+  min-width: 0;
+  padding: 0.45rem 0.25rem;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
 
 .vtrim-timeline {
   position: relative;
   width: 100%;
   height: 64px;
-  margin-top: 1.35rem;
+  margin-top: 0.55rem;
   border-radius: 10px;
   overflow: visible;
   border: 1px solid var(--line);
@@ -501,12 +515,14 @@ body.vtrim-editor-open {
   }
   .vtrim-nudge {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.35rem;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 0.3rem;
     width: 100%;
   }
   .vtrim-nudge .ghost-btn {
     min-width: 0;
+    font-size: 0.78rem;
+    padding: 0.42rem 0.15rem;
     width: 100%;
     justify-content: center;
   }

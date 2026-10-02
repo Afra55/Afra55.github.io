@@ -1083,22 +1083,48 @@
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
             mapProgress(0.18, `${stageLabel}抽取片段…`);
-            const cutCode = await ffmpeg.exec([
-              "-ss",
-              String(startSec),
-              "-t",
-              String(Math.min(span + 0.15, span * 1.05 + 0.05)),
-              "-i",
-              inName,
-              "-c",
-              "copy",
-              "-avoid_negative_ts",
-              "make_zero",
-              "-movflags",
-              "+faststart",
-              "-y",
-              segName,
-            ]);
+            // 有片头偏移时禁用 copy（会贴前一关键帧，比编辑预览往前多几帧）；-ss 放 -i 后按解码裁
+            const cutDur = Math.min(span + 0.15, span * 1.05 + 0.05);
+            const cutArgs =
+              startSec > 0.05
+                ? [
+                    "-i",
+                    inName,
+                    "-ss",
+                    String(startSec),
+                    "-t",
+                    String(cutDur),
+                    "-an",
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "ultrafast",
+                    "-crf",
+                    "18",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-movflags",
+                    "+faststart",
+                    "-y",
+                    segName,
+                  ]
+                : [
+                    "-i",
+                    inName,
+                    "-ss",
+                    String(startSec),
+                    "-t",
+                    String(cutDur),
+                    "-c",
+                    "copy",
+                    "-avoid_negative_ts",
+                    "make_zero",
+                    "-movflags",
+                    "+faststart",
+                    "-y",
+                    segName,
+                  ];
+            const cutCode = await ffmpeg.exec(cutArgs);
             if (aborted()) throw new Error("已取消");
             if (cutCode === 0) {
               encodeInput = segName;
@@ -1144,9 +1170,9 @@
 
           ticker.setPhase(`${stageLabel}双通道调色板编码`);
           ticker.setProgress(0.05);
-          const baseArgs = [];
+          const baseArgs = ["-i", encodeInput];
           if (encodeSs > 0.001) baseArgs.push("-ss", String(encodeSs));
-          baseArgs.push("-t", String(encodeT), "-i", encodeInput);
+          baseArgs.push("-t", String(encodeT));
           if (usedWm) baseArgs.push("-i", wmName);
           const outArgs = ["-frames:v", String(frameCount), "-loop", "0", "-y", outName];
           const useDenoise = needDenoise(effW, outW);
@@ -1471,22 +1497,47 @@
             segName = `seg-${Date.now().toString(36)}.${ext}`;
             ticker.setPhase(`${stageLabel}抽取片段`);
             mapProgress(0.18, `${stageLabel}抽取片段…`);
-            const cutCode = await ffmpeg.exec([
-              "-ss",
-              String(startSec),
-              "-t",
-              String(Math.min(span + 0.15, span * 1.05 + 0.05)),
-              "-i",
-              inName,
-              "-c",
-              "copy",
-              "-avoid_negative_ts",
-              "make_zero",
-              "-movflags",
-              "+faststart",
-              "-y",
-              segName,
-            ]);
+            const cutDur = Math.min(span + 0.15, span * 1.05 + 0.05);
+            const cutArgs =
+              startSec > 0.05
+                ? [
+                    "-i",
+                    inName,
+                    "-ss",
+                    String(startSec),
+                    "-t",
+                    String(cutDur),
+                    "-an",
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "ultrafast",
+                    "-crf",
+                    "18",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-movflags",
+                    "+faststart",
+                    "-y",
+                    segName,
+                  ]
+                : [
+                    "-i",
+                    inName,
+                    "-ss",
+                    String(startSec),
+                    "-t",
+                    String(cutDur),
+                    "-c",
+                    "copy",
+                    "-avoid_negative_ts",
+                    "make_zero",
+                    "-movflags",
+                    "+faststart",
+                    "-y",
+                    segName,
+                  ];
+            const cutCode = await ffmpeg.exec(cutArgs);
             if (aborted()) throw new Error("已取消");
             if (cutCode === 0) {
               encodeInput = segName;
@@ -1527,9 +1578,10 @@
             const startEff = chunkStartFrame / fps; // effSpan 时间轴（秒）
             const ss = encodeSs + startEff * speed; // 原始时间轴
             const dur = (chunkFrames / fps) * speed + 0.15; // 略多给一点，避免末帧被切
-            const baseArgs = [];
+            // -ss 在 -i 后：与编辑器片头对齐，避免关键帧往前多取
+            const baseArgs = ["-i", encodeInput];
             if (ss > 0.001) baseArgs.push("-ss", String(ss));
-            baseArgs.push("-t", String(dur), "-i", encodeInput);
+            baseArgs.push("-t", String(dur));
             if (usedWm) baseArgs.push("-i", wmName);
             const outArgs = ["-frames:v", String(chunkFrames), "-f", "rawvideo", "-pix_fmt", "rgba", "-y", rawName];
             const useDenoise = needDenoise(effW, outW);
@@ -2639,14 +2691,15 @@
               const rf = Math.max(blackboxFpsFloor(span / speed), Math.round(fps * k * 2) / 2);
               // 帧率已到 12fps 底线、体积还不够 → 优先「减色」而不是继续掉帧率
               // （减色比降帧率便宜得多：见 V2G_BLACKBOX_RETRY_QUALITY 注释）
+              const keepQ = Number(candidate.quality) || Number(common.quality) || V2G_BLACKBOX_QUALITY;
               const retryQuality =
                 rf <= V2G_BLACKBOX_RETRY_MIN_FPS + 0.01 && k < 0.92
                   ? V2G_BLACKBOX_RETRY_QUALITY
-                  : quality || common.quality;
+                  : keepQ;
               if (rw < width - 4 || rf < fps - 0.4) {
                 vbbLog(
                   `[vbb-phase] 超预算 ${formatKb(candidate.blob.size)} → 无损重编 ${rf}fps 宽${rw}${
-                    retryQuality !== (quality || common.quality) ? " 减色" : ""
+                    retryQuality !== keepQ ? " 减色" : ""
                   }（避免 --lossy）`
                 );
                 const retry = await encodeAt(rf, rw, progressBase, 0.18, `${rf}FPS·宽${rw}·无损重编`, retryQuality);
